@@ -4487,6 +4487,38 @@ export {
 
 
 // ===================== FloatingCalculator =====================
+// 사용자가 제공한 "톤수별 차량 규격표" 원본(구분/적재함 길이/폭 참고/실무상 명칭)을
+// 차량제원 팝업의 "카고 차량 제원표"에 그대로 표시하기 위한 원본 그대로의 데이터.
+// LOAD_VEHICLES(계산기용, cm 단위로 환산)와 별개로 이 표는 원본 문구(범위 표기 등)를
+// 그대로 보여주는 용도라 값을 가공하지 않는다.
+const CARGO_VEHICLE_SPEC_TABLE = [
+  { ton: "1톤",    category: "일반",        bedLength: "2.7~2.85m",   widthRef: "약 1.6m",       name: "1톤" },
+  { ton: "",        category: "장축",        bedLength: "3.0~3.1m",    widthRef: "약 1.6m",       name: "1톤 장축" },
+  { ton: "1.4톤",  category: "일반",        bedLength: "2.9~3.1m",    widthRef: "약 1.6~1.7m",   name: "1.4톤" },
+  { ton: "",        category: "장축",        bedLength: "3.4m 전후",   widthRef: "약 1.7m",       name: "1.4톤 장축" },
+  { ton: "2.5톤",  category: "일반",        bedLength: "4.2~4.3m",    widthRef: "약 1.8m",       name: "2.5톤" },
+  { ton: "3.5톤",  category: "일반",        bedLength: "4.5~4.9m",    widthRef: "약 2.05m",      name: "3.5톤" },
+  { ton: "",        category: "장축/초장축", bedLength: "5.0~5.5m 전후", widthRef: "약 2.05~2.3m", name: "3.5톤 장축" },
+  { ton: "",        category: "와이드/광폭", bedLength: "5.2~6.2m",    widthRef: "2.3m 전후",     name: "3.5톤 와이드" },
+  { ton: "5톤",    category: "일반",        bedLength: "6.2~6.3m",    widthRef: "2.15~2.3m",     name: "5톤" },
+  { ton: "",        category: "장축/플러스", bedLength: "6.7~7.3m",    widthRef: "약 2.3m",       name: "5톤 플러스" },
+  { ton: "",        category: "축차/플러스축", bedLength: "7.3~8.5m",  widthRef: "약 2.3~2.4m",   name: "5톤 축" },
+  { ton: "",        category: "초장축/특장", bedLength: "9.0~9.7m",    widthRef: "약 2.4m",       name: "5톤/5.5톤/8.5톤 증톤 등" },
+  { ton: "8톤",    category: "일반/장축",   bedLength: "7.3~8m 전후", widthRef: "약 2.35m",      name: "8톤" },
+  { ton: "",        category: "장축/특장",   bedLength: "8~9m대",      widthRef: "약 2.4m",       name: "8톤" },
+  { ton: "9.5톤",  category: "일반/장축",   bedLength: "8~9.5m 전후", widthRef: "약 2.35~2.4m",  name: "9.5톤" },
+  { ton: "11톤",   category: "일반",        bedLength: "9.0m 전후",   widthRef: "약 2.35m",      name: "11톤" },
+  { ton: "",        category: "장축",        bedLength: "9.6m 전후",   widthRef: "약 2.4m",       name: "11톤 장축" },
+  { ton: "",        category: "초장축/후축", bedLength: "10.0~10.2m", widthRef: "2.4m 전후",     name: "11톤 후축" },
+  { ton: "14톤",   category: "일반",        bedLength: "9.0m 전후",   widthRef: "약 2.35m",      name: "14톤" },
+  { ton: "",        category: "장축/후축",   bedLength: "9.6~10.2m",  widthRef: "약 2.4m",       name: "14톤 후축" },
+  { ton: "18톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "18톤" },
+  { ton: "22톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "22톤" },
+  { ton: "25톤",   category: "일반/후축",   bedLength: "10.0~10.2m", widthRef: "약 2.4m",       name: "25톤" },
+  { ton: "추레라", category: "표준",        bedLength: "12m",         widthRef: "약 2.4m",       name: "24/25톤 추레라" },
+  { ton: "",        category: "특장",        bedLength: "12m 이상/별도", widthRef: "차종별",      name: "저상·평판 등" },
+];
+
 // 파렛트 종류별 규격·자체무게 — "RUN박성우충괄팀장님의 메시지" 기준표를 그대로 반영.
 // EL14처럼 무게가 범위로 안내된 경우 kg은 계산용 평균값을 쓰고 kgLabel에 원래
 // 범위 문구를 별도로 남긴다.
@@ -4523,18 +4555,40 @@ function TruckIcon({ size = 18, color = "currentColor" }) {
   );
 }
 
+// 사용자가 제공한 톤수별 차량 규격표(구분/적재함 길이/폭 참고/실무상 명칭) 기준으로
+// 재작성. 장축·초장축·축차·특장 등 세부 구분까지 각각 별도 차량으로 등록해야
+// "5톤 초장축이면 16파렛이 실리는데 계산기는 11톤부터라고 한다" 같은 오차가
+// 안 생긴다. 적재함 길이/폭이 범위로 안내된 값은 중간값을 cm로 환산해서 쓰고,
+// 자체 무게(maxKg)는 원표에 없어 톤수 표기 그대로(1톤=1,000kg 등)를 적용했다.
+// 높이(h)도 원표에 없는 값이라 인접 톤수 실측치를 참고해 추정한 값이다.
 const LOAD_VEHICLES = [
-  { name: "다마스",  l: 170,  w: 120,  h: 110, maxKg: 300   },
-  { name: "라보",    l: 200,  w: 145,  h: 130, maxKg: 500   },
-  { name: "1톤",     l: 250,  w: 162,  h: 170, maxKg: 1000  },
-  { name: "1.4톤",   l: 280,  w: 170,  h: 180, maxKg: 1400  },
-  { name: "2.5톤",   l: 420,  w: 183,  h: 190, maxKg: 2500  },
-  { name: "3.5톤",   l: 500,  w: 200,  h: 190, maxKg: 3500  },
-  { name: "5톤",     l: 620,  w: 220,  h: 200, maxKg: 5000  },
-  { name: "5톤 축",  l: 720,  w: 220,  h: 200, maxKg: 5000  },
-  { name: "8톤",     l: 800,  w: 225,  h: 210, maxKg: 8000  },
-  { name: "11톤",    l: 960,  w: 230,  h: 210, maxKg: 11000 },
-  { name: "25톤",    l: 1360, w: 240,  h: 240, maxKg: 25000 },
+  { name: "다마스",       l: 170,  w: 120, h: 110, maxKg: 300   },
+  { name: "라보",         l: 200,  w: 145, h: 130, maxKg: 500   },
+  { name: "1톤",          l: 278,  w: 160, h: 170, maxKg: 1000  },
+  { name: "1톤 장축",     l: 305,  w: 160, h: 170, maxKg: 1000  },
+  { name: "1.4톤",        l: 300,  w: 165, h: 180, maxKg: 1400  },
+  { name: "1.4톤 장축",   l: 340,  w: 170, h: 180, maxKg: 1400  },
+  { name: "2.5톤",        l: 425,  w: 180, h: 190, maxKg: 2500  },
+  { name: "3.5톤",        l: 470,  w: 205, h: 190, maxKg: 3500  },
+  { name: "3.5톤 장축",   l: 525,  w: 218, h: 190, maxKg: 3500  },
+  { name: "3.5톤 와이드", l: 570,  w: 230, h: 190, maxKg: 3500  },
+  { name: "5톤",          l: 625,  w: 223, h: 200, maxKg: 5000  },
+  { name: "5톤 플러스",   l: 700,  w: 230, h: 200, maxKg: 5000  },
+  { name: "5톤 축",       l: 790,  w: 235, h: 200, maxKg: 5000  },
+  { name: "5톤 초장축",   l: 935,  w: 240, h: 200, maxKg: 5000  },
+  { name: "8톤",          l: 765,  w: 235, h: 210, maxKg: 8000  },
+  { name: "8톤 특장",     l: 850,  w: 240, h: 210, maxKg: 8000  },
+  { name: "9.5톤",        l: 875,  w: 238, h: 210, maxKg: 9500  },
+  { name: "11톤",         l: 900,  w: 235, h: 210, maxKg: 11000 },
+  { name: "11톤 장축",    l: 960,  w: 240, h: 210, maxKg: 11000 },
+  { name: "11톤 후축",    l: 1010, w: 240, h: 210, maxKg: 11000 },
+  { name: "14톤",         l: 900,  w: 235, h: 220, maxKg: 14000 },
+  { name: "14톤 후축",    l: 990,  w: 240, h: 220, maxKg: 14000 },
+  { name: "18톤",         l: 1010, w: 240, h: 230, maxKg: 18000 },
+  { name: "22톤",         l: 1010, w: 240, h: 230, maxKg: 22000 },
+  { name: "25톤",         l: 1010, w: 240, h: 240, maxKg: 25000 },
+  { name: "추레라",       l: 1200, w: 240, h: 240, maxKg: 25000 },
+  { name: "추레라 특장",  l: 1200, w: 240, h: 240, maxKg: 25000 },
 ];
 
 function PalletDiagram({ item, qty, layers, palW_mm, palD_mm }) {
@@ -14065,34 +14119,30 @@ className={`
       <div>
         <div className="flex justify-between items-center mb-2">
           <h3 className="font-semibold text-sm">카고 차량 제원표</h3>
-          <span className="text-xs text-gray-500">*1100 × 1100 파렛트 규격 기준</span>
+          <span className="text-xs text-gray-500">톤수별 적재함 길이·폭 참고 기준</span>
         </div>
 
         <table className="w-full text-sm border border-gray-300">
           <thead className="bg-blue-50 text-blue-900">
             <tr>
-              <th className="border px-2 py-1">차량톤수</th>
-              <th className="border px-2 py-1">길이 (mm)</th>
-              <th className="border px-2 py-1">너비 (mm)</th>
-              <th className="border px-2 py-1">높이 (mm)</th>
-              <th className="border px-2 py-1">최대 적재 중량</th>
-              <th className="border px-2 py-1">최대 적재 파렛</th>
+              <th className="border px-2 py-1">톤수</th>
+              <th className="border px-2 py-1">구분</th>
+              <th className="border px-2 py-1">적재함 길이</th>
+              <th className="border px-2 py-1">폭 참고</th>
+              <th className="border px-2 py-1">실무상 명칭</th>
             </tr>
           </thead>
 
           <tbody>
-            <tr><td className="border px-2 py-1 text-center">1톤</td><td className="border px-2 py-1 text-center">2,750</td><td className="border px-2 py-1 text-center">1,600</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">1.3 t</td><td className="border px-2 py-1 text-center">2개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">1.2톤</td><td className="border px-2 py-1 text-center">3,100</td><td className="border px-2 py-1 text-center">1,700</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">2 t</td><td className="border px-2 py-1 text-center">2~3개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">2.5톤</td><td className="border px-2 py-1 text-center">4,300</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">2,000</td><td className="border px-2 py-1 text-center">3 t</td><td className="border px-2 py-1 text-center">3~4개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">3.5톤</td><td className="border px-2 py-1 text-center">4,700</td><td className="border px-2 py-1 text-center">1,920</td><td className="border px-2 py-1 text-center">2,000</td><td className="border px-2 py-1 text-center">4 t</td><td className="border px-2 py-1 text-center">6개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">5톤</td><td className="border px-2 py-1 text-center">6,200</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">7 t</td><td className="border px-2 py-1 text-center">10개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">5톤플러스</td><td className="border px-2 py-1 text-center">7,500</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">7 t</td><td className="border px-2 py-1 text-center">12개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">5톤축</td><td className="border px-2 py-1 text-center">7,500</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">11 t</td><td className="border px-2 py-1 text-center">12개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">11톤</td><td className="border px-2 py-1 text-center">9,100</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">12 t</td><td className="border px-2 py-1 text-center">16개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">11톤축</td><td className="border px-2 py-1 text-center">9,600</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">12 t</td><td className="border px-2 py-1 text-center">16개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">18톤</td><td className="border px-2 py-1 text-center">10,200</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">20 t</td><td className="border px-2 py-1 text-center">18개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">25톤</td><td className="border px-2 py-1 text-center">10,200</td><td className="border px-2 py-1 text-center">2,400</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">27 t</td><td className="border px-2 py-1 text-center">18개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">트레일러</td><td className="border px-2 py-1 text-center">12,000</td><td className="border px-2 py-1 text-center">2,400</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">27 t</td><td className="border px-2 py-1 text-center">18개</td></tr>
+            {CARGO_VEHICLE_SPEC_TABLE.map((v, i) => (
+              <tr key={i}>
+                <td className="border px-2 py-1 text-center font-semibold">{v.ton}</td>
+                <td className="border px-2 py-1 text-center">{v.category}</td>
+                <td className="border px-2 py-1 text-center">{v.bedLength}</td>
+                <td className="border px-2 py-1 text-center">{v.widthRef}</td>
+                <td className="border px-2 py-1 text-center">{v.name}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
         {/* ================= 윙바디 차량 ================= */}

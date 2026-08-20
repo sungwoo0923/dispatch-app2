@@ -7770,8 +7770,12 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
   const [saving, setSaving] = useState(false);
 
   const nd = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
+  // 등록된 차량번호에 다른 기사 정보를 입력했을 때 조용히 기존 기사로 되돌리지
+  // 않도록, 실시간 입력 중에는 추천 목록만 채우고 아래 안내문구로 알려준다.
+  const [smartConflictNote, setSmartConflictNote] = useState("");
 
   const handleSmartSearch = (val) => {
+    setSmartConflictNote("");
     if (!val.trim()) { setSmartMatched([]); return; }
     const { plate, phone, name } = parseDriverText(val);
     if (plate) {
@@ -7789,18 +7793,11 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
         return 0;
       });
       setSmartMatched(sorted.slice(0, 6));
-      if (sorted.length === 0) { setCarNo(plate); setDriverName(name || ""); setDriverPhone(phone || ""); }
-      else {
-        const nameMatch = name ? sorted.find(d => ndL(d.이름) === ndL(name)) : null;
-        const best = nameMatch || sorted[0];
-        setCarNo(best.차량번호 || ""); setDriverName(best.이름 || ""); setDriverPhone(best.전화번호 || "");
-      }
       return;
     }
     if (phone) {
       const results = (drivers || []).filter(d => nd(d.전화번호) === nd(phone));
       setSmartMatched(results.slice(0, 6));
-      if (results.length > 0) { setCarNo(results[0].차량번호 || ""); setDriverName(results[0].이름 || ""); setDriverPhone(results[0].전화번호 || ""); }
       return;
     }
     if (name && name.length >= 2) {
@@ -7809,12 +7806,51 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
     }
   };
 
+  // ⭐ 검색창에서 포커스가 빠질 때(다음 칸 이동 등) 최종 확정한다 — 예전엔 실시간
+  // 입력만으로 첫 번째 매칭 결과를 조용히 확정해버려서, 같은 차량번호에 다른
+  // 기사 이름을 입력해도 아무 확인 없이 기존 기사 정보로 저장되는 버그가 있었다.
+  const applySmartCommit = (val) => {
+    if (!val.trim()) return;
+    const { plate, phone, name } = parseDriverText(val);
+    if (!plate && !name && !phone) return;
+    if (!plate) {
+      if (name || phone) { setCarNo(""); setDriverName(name || ""); setDriverPhone(phone || ""); }
+      return;
+    }
+    const existing = (drivers || []).find(d => nd(d.차량번호) === nd(plate));
+    if (!existing) { setCarNo(plate); setDriverName(name || ""); setDriverPhone(phone || ""); setSmartConflictNote(""); return; }
+    if (!name || nd(existing.이름) === nd(name)) {
+      setCarNo(existing.차량번호 || ""); setDriverName(existing.이름 || ""); setDriverPhone(existing.전화번호 || "");
+      setSmartMatched([]); setSmartConflictNote("");
+      if (smartRef.current) smartRef.current.value = "";
+      return;
+    }
+    // 차량번호는 같은데 이름이 다름 → 조용히 덮어쓰지 않고 목록에서 직접 고르게 안내
+    setSmartConflictNote(`이미 등록된 차량번호입니다 (${existing.이름} · ${existing.전화번호 || "-"}) — 아래 목록에서 확인 후 선택해주세요`);
+  };
+
   const selectDriver = (d) => {
     setCarNo(d.차량번호 || "");
     setDriverName(d.이름 || "");
     setDriverPhone(d.전화번호 || "");
     setSmartMatched([]);
+    setSmartConflictNote("");
     if (smartRef.current) smartRef.current.value = "";
+  };
+
+  // 차량번호/기사명 칸에 직접 입력하는 경우에도 동일하게 충돌을 감지한다.
+  const checkManualConflict = () => {
+    const pl = carNo.trim();
+    const nm = driverName.trim();
+    if (!pl) { setSmartConflictNote(""); return; }
+    const existing = (drivers || []).find(d => nd(d.차량번호) === nd(pl));
+    if (!existing) { setSmartConflictNote(""); return; }
+    if (!nm || nd(existing.이름) === nd(nm)) {
+      setCarNo(existing.차량번호 || ""); setDriverName(existing.이름 || ""); setDriverPhone(existing.전화번호 || "");
+      setSmartConflictNote("");
+      return;
+    }
+    setSmartConflictNote(`이미 등록된 차량번호입니다 (${existing.이름} · ${existing.전화번호 || "-"}) — 다른 기사로 등록하려면 그대로 저장하세요`);
   };
 
   const handleSave = async () => {
@@ -7928,7 +7964,10 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
         <div className="mb-3">
           <label className={labelCls}>기사 스마트검색</label>
           <div className="relative">
-            <SmartTextarea textareaRef={smartRef} onSearch={handleSmartSearch} />
+            <SmartTextarea textareaRef={smartRef} onSearch={handleSmartSearch} onCommit={applySmartCommit} />
+            {smartConflictNote && (
+              <div className="mt-1.5 text-[11px] text-rose-600 font-semibold leading-relaxed">{smartConflictNote}</div>
+            )}
             {smartMatched.length > 0 && (
               <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 overflow-hidden">
                 {smartMatched.map((d, i) => (
@@ -7948,11 +7987,11 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
         <div className="grid grid-cols-3 gap-2 mb-5">
           <div>
             <label className={labelCls}>차량번호</label>
-            <input autoComplete="off" className={inputCls} value={carNo} onChange={e => setCarNo(e.target.value)} placeholder="00가0000" />
+            <input autoComplete="off" className={inputCls} value={carNo} onChange={e => setCarNo(e.target.value)} onBlur={checkManualConflict} placeholder="00가0000" />
           </div>
           <div>
             <label className={labelCls}>기사명</label>
-            <input autoComplete="off" className={inputCls} value={driverName} onChange={e => setDriverName(e.target.value)} placeholder="이름" />
+            <input autoComplete="off" className={inputCls} value={driverName} onChange={e => setDriverName(e.target.value)} onBlur={checkManualConflict} placeholder="이름" />
           </div>
           <div>
             <label className={labelCls}>연락처</label>
@@ -8697,7 +8736,7 @@ function parseDriverText(text) {
   return { phone, plate, name };
 }
 
-const SmartTextarea = React.memo(function SmartTextarea({ onSearch, textareaRef }) {
+const SmartTextarea = React.memo(function SmartTextarea({ onSearch, onCommit, textareaRef }) {
   const timerRef = React.useRef(null);
   return (
     <textarea
@@ -8714,6 +8753,14 @@ const SmartTextarea = React.memo(function SmartTextarea({ onSearch, textareaRef 
         const val = e.target.value;
         if (timerRef.current) clearTimeout(timerRef.current);
         timerRef.current = setTimeout(() => onSearch(val), 150);
+      }}
+      onBlur={e => {
+        // ⭐ 입력창에서 포커스가 빠질 때(다음 칸으로 이동 등) 최종 확정 + 충돌 감지를
+        // 실행한다 — 이게 안 붙어 있으면 실시간 입력만으로는 아무것도 확정되지 않아
+        // 차량번호/기사정보가 계속 비어있거나, 예전 로직처럼 조용히 기존 기사로
+        // 되돌아가는 문제가 생긴다.
+        if (timerRef.current) clearTimeout(timerRef.current);
+        onCommit?.(e.target.value);
       }}
     />
   );
@@ -9227,8 +9274,14 @@ const pickupTimeText = order.상차시간
   const driversRef = React.useRef(drivers);
   React.useEffect(() => { driversRef.current = drivers; }, [drivers]);
 
+ // ⭐ 실시간 입력 중에는 추천 목록(smartMatched)만 갱신하고 차량번호/이름/전화번호는
+ // 절대 조용히 덮어쓰지 않는다 — 예전엔 차량번호가 같은데 이름이 다른 값을 입력해도
+ // "결과가 있으니" 그 중 첫 번째(기존 등록된 기사)로 자동 확정해버려서, 사용자가
+ // 새로 입력한 다른 기사 이름/번호가 조용히 기존 기사 정보로 되돌아가는 버그가 있었다.
+ // 실제 확정(및 충돌 감지)은 blur/추천 선택 시(applySmartDriverInput/selectSmartDriver)에만
+ // 일어나도록 PC(DispatchApp.jsx handleSmartDriverInput)와 동일하게 맞췄다.
  const handleSmartInputCb = React.useCallback((val) => {
-  if (!val.trim()) { setSmartMatched([]); setIsNewDriver(false); setCarNo(""); setName(""); setPhone(""); return; }
+  if (!val.trim()) { setSmartMatched([]); return; }
   const { plate: pl, name: nm, phone: ph } = parseDriverText(val);
   const nd = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
 
@@ -9244,16 +9297,6 @@ const pickupTimeText = order.상차시간
         return 0;
       });
     setSmartMatched(results.slice(0, 8));
-    if (results.length === 0) {
-      setCarNo(pl); setName(nm || ""); setPhone(ph || ""); setIsNewDriver(true);
-    } else {
-      const exactMatch = results.find(d => nd(d.이름) === nd(nm));
-      if (exactMatch) {
-        setCarNo(exactMatch.차량번호); setName(exactMatch.이름 || ""); setPhone(exactMatch.전화번호 || ""); setIsNewDriver(false);
-      } else {
-        setCarNo(results[0].차량번호); setName(results[0].이름 || ""); setPhone(results[0].전화번호 || ""); setIsNewDriver(false);
-      }
-    }
     return;
   }
 
@@ -9261,9 +9304,6 @@ const pickupTimeText = order.상차시간
   if (ph) {
     const results = driversRef.current.filter(d => nd(d.전화번호) === nd(ph));
     setSmartMatched(results.slice(0, 8));
-    if (results.length === 0) {
-      setName(nm || ""); setPhone(ph); setIsNewDriver(true);
-    }
     return;
   }
 
@@ -9274,9 +9314,19 @@ const pickupTimeText = order.상차시간
     return;
   }
 
-  setSmartMatched([]); setIsNewDriver(false);
+  setSmartMatched([]);
 }, []);
   const selectSmartDriver = (d) => {
+    // ⚠️ 드롭다운 추천 항목을 고를 때도, 사용자가 검색창에 입력해둔 전화번호가 그
+    // 항목과 다르면(번호가 바뀐 기사 등) 조용히 옛 번호로 덮어쓰지 않고 확인 팝업을
+    // 띄운다 — PC(DispatchApp.jsx selectSmartDriver)와 동일한 안전장치.
+    const typedRaw = smartTextareaRef.current?.value || "";
+    const { phone: typedPhone } = parseDriverText(typedRaw);
+    if (typedPhone && normD(d.전화번호) !== normD(typedPhone)) {
+      clearSmartInput();
+      setDriverConflictPopup({ mode: "phone_diff", existing: d, input: { plate: d.차량번호, name: d.이름, phone: typedPhone } });
+      return;
+    }
     setCarNo(d.차량번호 || "");
     setName(d.이름 || "");
     setPhone(d.전화번호 || "");
@@ -9324,6 +9374,25 @@ const pickupTimeText = order.상차시간
     // 기존 없음 → 신규 등록 확인 팝업
     clearSmartInput();
     setDriverConflictPopup({ mode: "new_driver", existing: null, input: { plate: pl, name: nm, phone: ph } });
+  };
+
+  // ⭐ 스마트검색을 쓰지 않고 차량번호/이름 칸에 직접 타이핑하는 경우에도 동일하게
+  // 충돌을 감지한다 — 이 검사가 없으면 "경기81자7612"에 이미 등록된 정상민이 있는데
+  // 오상준을 입력해도 아무 확인 없이 그대로 저장돼버린다. 두 필드 중 하나에서 포커스가
+  // 빠질 때(onBlur) 호출한다.
+  const checkManualDriverConflict = () => {
+    const pl = carNo.trim();
+    const nm = name.trim();
+    if (!pl) return;
+    const existing = drivers.find(d => normD(d.차량번호) === normD(pl));
+    if (!existing) return; // 등록되지 않은 차량번호는 그대로 신규로 둔다
+    if (!nm || normD(existing.이름) === normD(nm)) {
+      // 이름을 아직 안 썼거나 동일하면 최신 등록 정보로 자동완성만 해준다
+      setCarNo(existing.차량번호); setName(existing.이름 || ""); setPhone(existing.전화번호 || ""); setIsNewDriver(false);
+      return;
+    }
+    // 차량번호는 같은데 이름이 다름 → 충돌 팝업
+    setDriverConflictPopup({ mode: "name_diff", existing, input: { plate: pl, name: nm, phone: phone.trim() } });
   };
 
   const openMap = (type) => {
@@ -9744,7 +9813,7 @@ const handleAssignClick = () => {
         <>
           <div className="text-[11px] font-semibold text-gray-500 mb-1.5">기사 검색 (이름 · 차량번호 · 연락처 · 문자복붙)</div>
           <div className="relative mb-3">
-            <SmartTextarea textareaRef={smartTextareaRef} onSearch={handleSmartInputCb} />
+            <SmartTextarea textareaRef={smartTextareaRef} onSearch={handleSmartInputCb} onCommit={applySmartDriverInput} />
             {smartMatched.length > 0 && (
               <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 overflow-hidden">
                 {smartMatched.map((d, i) => (
@@ -9802,8 +9871,8 @@ const handleAssignClick = () => {
               <span className="text-[11px] text-gray-400">저장 시 기사관리에 등록됩니다</span>
             </div>
           )}
-          <input autoComplete="off" className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="차량번호" value={carNo} onChange={e => { setCarNo(e.target.value); setIsNewDriver(false); }} />
-          <input autoComplete="off" className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="기사 이름" value={name} onChange={e => setName(e.target.value)} />
+          <input autoComplete="off" className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="차량번호" value={carNo} onChange={e => { setCarNo(e.target.value); setIsNewDriver(false); }} onBlur={checkManualDriverConflict} />
+          <input autoComplete="off" className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="기사 이름" value={name} onChange={e => setName(e.target.value)} onBlur={checkManualDriverConflict} />
           <input autoComplete="off" className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="기사 연락처" value={phone} onChange={e => setPhone(e.target.value)} />
         </div>
       )}
