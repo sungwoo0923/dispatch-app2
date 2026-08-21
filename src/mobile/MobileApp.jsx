@@ -9742,41 +9742,48 @@ const handleAssignClick = () => {
           </div>
         </div>
       )}
-      {/* 배차방식/지급방식/이동거리·시간 — 화물정보와 구분되는 별도 그룹 */}
+      {/* 배차방식/지급방식/이동거리/소요시간 — 청구운임·기사운임·수수료와 동일한
+          "캡션 위 + 값 아래" 통계칸 형식으로 통일해, 배차방식과 지급방식 값이 라벨
+          없이 나란히 붙어 구분이 안 되던 문제를 해결하고 화면 전체 시각언어도 맞춘다. */}
       {(order.배차방식 || order.지급방식 || order.상차지주소) && (
         <div className={`px-4 pt-2 pb-2.5 border-t bg-gray-50/60 ${cardVersionB ? "border-[#1B2B4B]/10" : "border-blue-100"}`}>
-          <div className="grid grid-cols-2 gap-x-3">
-            <div>
-              <div className={`text-[10px] font-bold mb-1 ${cardVersionB ? "text-[#1B2B4B]/50" : "text-blue-300"}`}>배차/지급방식</div>
-              <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-bold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>
-                {order.배차방식 && <span>{order.배차방식}</span>}
-                {order.지급방식 && <span>{order.지급방식}</span>}
-                {!order.배차방식 && !order.지급방식 && <span className="text-gray-300 font-normal">-</span>}
+          <div className="grid grid-cols-4">
+            <div className="text-center">
+              <div className="text-[10px] text-gray-400 mb-0.5">배차방식</div>
+              <div className={`text-[12px] font-extrabold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>{order.배차방식 || "-"}</div>
+            </div>
+            <div className="text-center border-l border-gray-200">
+              <div className="text-[10px] text-gray-400 mb-0.5">지급방식</div>
+              <div className={`text-[12px] font-extrabold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>{order.지급방식 || "-"}</div>
+            </div>
+            <div className="text-center border-l border-gray-200">
+              <div className="text-[10px] text-gray-400 mb-0.5">이동거리</div>
+              <div className={`text-[12px] font-extrabold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>
+                {routeInfo === "loading" ? <span className="text-gray-300 font-normal text-[11px]">조회중</span>
+                  : routeInfo === "error" || !routeInfo ? "-"
+                  : `${routeInfo.distanceKm.toFixed(1)}km`}
               </div>
             </div>
-            <div className="border-l border-gray-200 pl-3">
-              <div className={`text-[10px] font-bold mb-1 ${cardVersionB ? "text-[#1B2B4B]/50" : "text-blue-300"}`}>이동거리·시간</div>
-              <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-bold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>
-                {routeInfo === "loading" ? (
-                  <span className="text-gray-300 font-normal">조회 중...</span>
-                ) : routeInfo === "error" || !routeInfo ? (
-                  <span className="text-gray-300 font-normal">-</span>
-                ) : (
-                  <>
-                    <span>{routeInfo.distanceKm.toFixed(1)}km</span>
-                    <span>{routeInfo.durationText}</span>
-                    <button
-                      type="button"
-                      onClick={() => setShowRouteMap(true)}
-                      className={`ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded border ${cardVersionB ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-blue-600 text-blue-700"}`}
-                    >
-                      경로보기
-                    </button>
-                  </>
-                )}
+            <div className="text-center border-l border-gray-200">
+              <div className="text-[10px] text-gray-400 mb-0.5">소요시간</div>
+              <div className={`text-[12px] font-extrabold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>
+                {routeInfo === "loading" ? <span className="text-gray-300 font-normal text-[11px]">조회중</span>
+                  : routeInfo === "error" || !routeInfo ? "-"
+                  : routeInfo.durationText}
               </div>
             </div>
           </div>
+          {routeInfo && routeInfo !== "loading" && routeInfo !== "error" && (
+            <div className="text-right mt-1.5">
+              <button
+                type="button"
+                onClick={() => setShowRouteMap(true)}
+                className={`px-2 py-0.5 text-[10px] font-bold rounded border ${cardVersionB ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-blue-600 text-blue-700"}`}
+              >
+                경로보기
+              </button>
+            </div>
+          )}
         </div>
       )}
       {showRouteMap && (
