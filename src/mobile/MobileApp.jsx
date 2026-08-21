@@ -9713,35 +9713,61 @@ const handleAssignClick = () => {
           </div>
         </div>
       </div>
-      {/* 화물정보 — 톤수/화물내용/차량종류 */}
-      {((order.차량톤수 || order.톤수) || (order.차량종류 || order.차종) || order.화물내용 || order.혼적여부) && (
-        <div className="px-4 pt-2.5 pb-2 border-t border-gray-100 bg-gray-50/60">
-          <div className="text-[10px] font-bold text-gray-400 mb-1">화물정보</div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-gray-700">
-            {(order.차량톤수 || order.톤수) && (
-              <span className="inline-flex items-center gap-1">
-                <Scale className="w-3 h-3 text-gray-400 shrink-0" />
-                {hasWaypointCargo && totalKg > 0 ? toTonUnit(`${totalKg}kg`) : toTonUnit(order.차량톤수 || order.톤수)}
-              </span>
-            )}
-            {order.화물내용 && (
-              <span className="inline-flex items-center gap-1">
-                <Package className="w-3 h-3 text-gray-400 shrink-0" />
-                {hasWaypointCargo && totalPallet > 0 ? `${totalPallet}파레트` : order.화물내용}
-              </span>
-            )}
-            {(order.차량종류 || order.차종) && (
-              <span className="inline-flex items-center gap-1">
-                <VehicleTypeIcon type={order.차량종류 || order.차종} className="w-3 h-3 text-gray-400 shrink-0" />
-                {order.차량종류 || order.차종}
-              </span>
-            )}
-            {order.혼적여부 && order.혼적여부 !== "독차" && (
-              <span className="text-gray-500">{order.혼적여부}</span>
-            )}
+      {/* 화물정보 — 톤수/화물내용/차량종류/혼적여부. 아이콘+텍스트를 한 줄에 나열하던
+          방식을 아래 배차방식/지급방식/이동거리 블록과 동일한 "캡션 위 + 값 아래"
+          그리드로 바꿔, 항목 간 구분이 뚜렷하도록 통일한다. */}
+      {(() => {
+        const cargoFlags = [
+          !!(order.차량톤수 || order.톤수),
+          !!order.화물내용,
+          !!(order.차량종류 || order.차종),
+          !!(order.혼적여부 && order.혼적여부 !== "독차"),
+        ];
+        const cargoCount = cargoFlags.filter(Boolean).length;
+        if (!cargoCount) return null;
+        const cargoGridCls = cargoCount >= 4 ? "grid-cols-4" : cargoCount === 3 ? "grid-cols-3" : cargoCount === 2 ? "grid-cols-2" : "grid-cols-1";
+        return (
+          <div className="px-4 pt-2.5 pb-2 border-t border-gray-100 bg-gray-50/60">
+            <div className="text-[10px] font-bold text-gray-400 mb-1">화물정보</div>
+            <div className={`grid ${cargoGridCls}`}>
+              {(order.차량톤수 || order.톤수) && (
+                <div className="text-center border-l border-gray-200 first:border-l-0">
+                  <div className="flex items-center justify-center gap-0.5 text-[9px] text-gray-400 mb-0.5">
+                    <Scale className="w-2.5 h-2.5" />톤수
+                  </div>
+                  <div className="text-[12px] font-extrabold text-gray-800">
+                    {hasWaypointCargo && totalKg > 0 ? toTonUnit(`${totalKg}kg`) : toTonUnit(order.차량톤수 || order.톤수)}
+                  </div>
+                </div>
+              )}
+              {order.화물내용 && (
+                <div className="text-center border-l border-gray-200 first:border-l-0">
+                  <div className="flex items-center justify-center gap-0.5 text-[9px] text-gray-400 mb-0.5">
+                    <Package className="w-2.5 h-2.5" />화물내용
+                  </div>
+                  <div className="text-[12px] font-extrabold text-gray-800">
+                    {hasWaypointCargo && totalPallet > 0 ? `${totalPallet}파레트` : order.화물내용}
+                  </div>
+                </div>
+              )}
+              {(order.차량종류 || order.차종) && (
+                <div className="text-center border-l border-gray-200 first:border-l-0">
+                  <div className="flex items-center justify-center gap-0.5 text-[9px] text-gray-400 mb-0.5">
+                    <VehicleTypeIcon type={order.차량종류 || order.차종} className="w-2.5 h-2.5" />차량종류
+                  </div>
+                  <div className="text-[12px] font-extrabold text-gray-800">{order.차량종류 || order.차종}</div>
+                </div>
+              )}
+              {order.혼적여부 && order.혼적여부 !== "독차" && (
+                <div className="text-center border-l border-gray-200 first:border-l-0">
+                  <div className="text-[9px] text-gray-400 mb-0.5">혼적여부</div>
+                  <div className="text-[12px] font-extrabold text-gray-800">{order.혼적여부}</div>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
       {/* 배차방식/지급방식/이동거리/소요시간 — 청구운임·기사운임·수수료와 동일한
           "캡션 위 + 값 아래" 통계칸 형식으로 통일해, 배차방식과 지급방식 값이 라벨
           없이 나란히 붙어 구분이 안 되던 문제를 해결하고 화면 전체 시각언어도 맞춘다. */}
@@ -9766,24 +9792,24 @@ const handleAssignClick = () => {
             </div>
             <div className="text-center border-l border-gray-200">
               <div className="text-[10px] text-gray-400 mb-0.5">소요시간</div>
-              <div className={`text-[12px] font-extrabold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>
+              <div className={`flex items-center justify-center gap-1.5 text-[12px] font-extrabold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>
                 {routeInfo === "loading" ? <span className="text-gray-300 font-normal text-[11px]">조회중</span>
                   : routeInfo === "error" || !routeInfo ? "-"
-                  : routeInfo.durationText}
+                  : (
+                    <>
+                      <span>{routeInfo.durationText}</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowRouteMap(true)}
+                        className={`px-1.5 py-0.5 text-[9px] font-bold rounded border ${cardVersionB ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-blue-600 text-blue-700"}`}
+                      >
+                        경로보기
+                      </button>
+                    </>
+                  )}
               </div>
             </div>
           </div>
-          {routeInfo && routeInfo !== "loading" && routeInfo !== "error" && (
-            <div className="text-right mt-1.5">
-              <button
-                type="button"
-                onClick={() => setShowRouteMap(true)}
-                className={`px-2 py-0.5 text-[10px] font-bold rounded border ${cardVersionB ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-blue-600 text-blue-700"}`}
-              >
-                경로보기
-              </button>
-            </div>
-          )}
         </div>
       )}
       {showRouteMap && (
