@@ -3138,7 +3138,9 @@ const addDispatch = async (record) => {
     // 처음부터 기사 정보를 포함해 등록되는 오더(오더복사/스마트검색 등으로 즉시
     // 배차완료 상태로 만들어지는 경우)는 patchDispatch를 거치지 않아 이 필드가
     // 영영 비어있었다 — "배차한시간이 전부 다 안 나온다"는 신고의 원인.
-    ...(record?.배차상태 === "배차완료" && !record?.배차확정일시 ? { 배차확정일시: serverTimestamp() } : {}),
+    ...(record?.배차상태 === "배차완료" && !record?.배차확정일시
+      ? { 배차확정일시: serverTimestamp(), 배차확정자: myRealName || user?.displayName || user?.email?.split("@")[0] || "" }
+      : {}),
   });
 
   await setDoc(
@@ -3265,6 +3267,7 @@ const patchDispatch = async (_id, patch, knownPrev) => {
     patch.업체전달상태 = "미전달";
     // 배차가 취소되어 다시 배차중으로 돌아가면 "배차한시간"도 미확정 상태로 되돌린다.
     patch.배차확정일시 = null;
+    patch.배차확정자 = null;
     // 차량정보가 빠지면 그 배차 자체가 무효화되는 것이므로, 배차방식(직접배차/24시
     // 등)도 다시 "선택없음"으로 되돌린다 — 남아있으면 실제로는 배차가 취소됐는데
     // 배차방식만 이전 값으로 남아있어 헷갈린다는 피드백.
@@ -3290,6 +3293,9 @@ const patchDispatch = async (_id, patch, knownPrev) => {
     const nextStatus = patch.배차상태 !== undefined ? patch.배차상태 : prev?.배차상태;
     if (nextStatus === "배차완료" && prev?.배차상태 !== "배차완료") {
       patch.배차확정일시 = serverTimestamp();
+      // ⭐ "배차완료" 뱃지 팝업(모바일)/등록일 툴팁(PC)에서 배차한 사람 이름을
+      // 보여주기 위한 필드 — PC/모바일 어느 쪽에서 확정했든 같은 필드를 쓴다.
+      patch.배차확정자 = myRealName || user?.displayName || user?.email?.split("@")[0] || "";
     }
   }
 
@@ -19763,6 +19769,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
       <div>등록시간: <span className="text-yellow-300">{formatKstDateTime(getCreatedMs(r))}</span></div>
       <div>마지막수정: <span className="text-green-300">{formatKstDateTime(getUpdatedMs(r))}</span></div>
       <div>배차한시간: <span className="text-purple-300">{r.배차확정일시 ? formatKstDateTime(getDispatchConfirmedMs(r)) : "-"}</span></div>
+      {r.배차확정자 && <div>배차한사람: <span className="text-purple-300">{r.배차확정자}</span></div>}
       <div>등록자: <span className="text-blue-300">{getCreatorLabel(r)}</span></div>
       <div>등록기기: <span className="text-orange-300">{r.등록기기 || "-"}</span></div>
     </>}
@@ -34635,6 +34642,7 @@ return (
       <div>등록시간: <span className="text-yellow-300">{_fmtKst(row.createdAt || row.등록일시 || row.등록시간 || (row.등록일 && `${row.등록일}T00:00:00`))}</span></div>
       <div>마지막수정: <span className="text-green-300">{_fmtKst(row.updatedAt || row.lastUpdated)}</span></div>
       <div>배차한시간: <span className="text-purple-300">{row.배차확정일시 ? _fmtKst(row.배차확정일시) : "-"}</span></div>
+      {row.배차확정자 && <div>배차한사람: <span className="text-purple-300">{row.배차확정자}</span></div>}
       <div>등록자: <span className="text-blue-300">{_creatorLabel(row, userNameMap)}</span></div>
       <div>등록기기: <span className="text-orange-300">{row.등록기기 || "-"}</span></div>
     </>}

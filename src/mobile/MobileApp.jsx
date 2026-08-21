@@ -1269,6 +1269,40 @@ function DispatchRequestModal({ order, onApprove, onReject, onClose }) {
   );
 }
 
+// 배차 확정 정보 팝업 ("배차완료" 뱃지 클릭 시) — 배차한 사람과 확정 일시를 보여준다.
+// PC(DispatchApp)와 모바일 양쪽 어디서 배차완료 처리했든 같은 필드(배차확정일시/
+// 배차확정자)를 읽으므로 플랫폼에 상관없이 동일하게 뜬다. toMillis는 PC가 남긴
+// 숫자(Date.now())와 모바일이 남긴 Firestore Timestamp를 모두 처리한다.
+function DispatchConfirmModal({ order, cardVersionB, onClose }) {
+  const ms = toMillis(order.배차확정일시) || toMillis(order.배차완료일시);
+  const dateStr = ms
+    ? new Date(ms).toLocaleString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+    : "-";
+  const accent = cardVersionB ? "#1B2B4B" : "#1d4ed8";
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center px-6" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/50" />
+      <div className="relative bg-white rounded-2xl w-full max-w-xs p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="text-[15px] font-bold text-gray-800 mb-4">배차 확정 정보</div>
+        <div className="space-y-3.5 mb-5">
+          <div>
+            <div className="text-[11px] text-gray-400 mb-0.5">배차한 사람</div>
+            <div className="text-[15px] font-extrabold" style={{ color: accent }}>{order.배차확정자 || "-"}</div>
+          </div>
+          <div>
+            <div className="text-[11px] text-gray-400 mb-0.5">배차 확정 일시</div>
+            <div className="text-[15px] font-extrabold" style={{ color: accent }}>{dateStr}</div>
+          </div>
+        </div>
+        <button onClick={onClose} className="w-full py-2.5 rounded-xl text-white text-[14px] font-semibold" style={{ background: accent }}>
+          닫기
+        </button>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 // 화주사 수정요청 승인/거절 팝업 (배차완료 오더를 화주사가 수정 요청했을 때)
 function EditRequestModal({ order, onApprove, onReject, onClose }) {
   const pending = order.수정요청데이터 || {};
@@ -1456,6 +1490,21 @@ export default function MobileApp({ role, user, userCompany = "" }) {
   const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("fontScale") || "1"));
   const [easyMode, setEasyMode] = useState(() => localStorage.getItem("easyMode") === "1");
   const effectiveScale = fontScale;
+
+  // ★ 배차확정자(=이 계정으로 배차완료 처리한 사람) 표시용 실명 — PC(DispatchApp)의
+  // myRealName과 동일하게 users/{uid}.name을 우선 사용한다. 이메일 앞부분(계정 아이디)이
+  // 아니라 실명이 "배차완료" 뱃지 팝업에 뜨게 하기 위함.
+  const [myRealName, setMyRealName] = useState("");
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) { setMyRealName(""); return; }
+    let cancelled = false;
+    getDoc(doc(db, "users", uid)).then(snap => {
+      if (!cancelled) setMyRealName(snap.exists() ? (snap.data().name || "") : "");
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [user?.uid]);
+  const dispatcherName = myRealName || user?.displayName || user?.email?.split("@")[0] || "";
 
   useEffect(() => {
     const root = document.getElementById("root");
@@ -3234,7 +3283,7 @@ const groupedByDate = useMemo(() => {
           등록기기: rowData.등록기기 || "모바일",
           // ⭐ 기사 정보까지 채워서 등록과 동시에 배차완료 상태로 저장되는 경우, PC의
           // "배차한시간" 툴팁이 읽는 배차확정일시도 같이 남겨야 한다(없으면 항상 "-").
-          ...(rowData.배차상태 === "배차완료" && !rowData.배차확정일시 ? { 배차확정일시: serverTimestamp() } : {}),
+          ...(rowData.배차상태 === "배차완료" && !rowData.배차확정일시 ? { 배차확정일시: serverTimestamp(), 배차확정자: dispatcherName } : {}),
         });
 
         // 🔥 Firestore 문서 고유 ID 확정 저장
@@ -3524,6 +3573,8 @@ const deleteSingleOrder = async (order) => {
       // 아니라 배차확정일시다 — 모바일에서 배차를 확정해도 이 필드가 없어 PC에서
       // "배차한시간"이 항상 "-"로 보이던 버그.
       배차확정일시: serverTimestamp(),
+      // ⭐ "배차완료" 뱃지 팝업에서 배차한 사람 이름을 보여주기 위한 필드.
+      배차확정자: dispatcherName,
       updatedAt: serverTimestamp(),
       _lastModified: Date.now(),
     };
@@ -3560,6 +3611,7 @@ const deleteSingleOrder = async (order) => {
   상태: "배차중",
   배차완료일시: null,
   배차확정일시: null,
+  배차확정자: null,
   // 차량정보가 빠지면 그 배차 자체가 무효화되는 것이므로, 배차방식(직접배차/24시
   // 등)도 다시 "선택없음"으로 되돌린다 — PC와 동일.
   배차방식: "선택없음",
@@ -3789,6 +3841,7 @@ const deleteSingleOrder = async (order) => {
         상태: "배차완료",
         배차완료일시: serverTimestamp(),
         배차확정일시: serverTimestamp(),
+        배차확정자: dispatcherName,
         updatedAt: serverTimestamp(),
         _lastModified: Date.now(),
       });
@@ -5030,6 +5083,7 @@ onGoAttendance={() => {
 
         {page === "list" && ordersLoaded && (
           <MobileOrderList
+            dispatcherName={dispatcherName}
             groupedByDate={groupedByDate}
             statusTab={statusTab}
             setStatusTab={setStatusTab}
@@ -5160,6 +5214,7 @@ setOpenMemo={setOpenMemo}
         {page === "detail" && selectedOrder && (
           <MobileOrderDetail
             order={selectedOrder}
+            dispatcherName={dispatcherName}
             onOrderUpdate={(id, patch) => {
     setOrders(prev => prev.map(o => (o.id === id || o._id === id) ? { ...o, ...patch } : o));
   }}
@@ -5240,6 +5295,7 @@ setOpenMemo={setOpenMemo}
 
         {page === "unassigned" && (
   <MobileUnassignedList
+    dispatcherName={dispatcherName}
     title="미배차 / 정보미전달"
     orders={{
       unassigned: unassignedOrders,
@@ -6501,6 +6557,7 @@ function MobileOrderList({
   multiSelectMode,
   setMultiSelectMode,
   cardVersionB,
+  dispatcherName = "",
   drivers,
   onOrderUpdate,
   showToast,
@@ -7249,6 +7306,7 @@ const summary = useMemo(() => {
         order={quickEditOrder}
         drivers={drivers || []}
         cardVersionB={cardVersionB}
+        dispatcherName={dispatcherName}
         onClose={() => setQuickEditOrder(null)}
         onSuccess={() => {}}
       />
@@ -7816,7 +7874,7 @@ function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriv
 // ────────────────────────────────────────────────────────────────
 // 일부 수정 모달
 // ────────────────────────────────────────────────────────────────
-function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
+function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, dispatcherName = "" }) {
   const isShipperOrder = order.source === "shipper" || order.source === "shipper_mobile";
   const smartRef = useRef(null);
   const [smartMatched, setSmartMatched] = useState([]);
@@ -7941,6 +7999,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
           patch.상태 = "배차완료";
           patch.배차완료일시 = serverTimestamp();
           patch.배차확정일시 = serverTimestamp();
+          patch.배차확정자 = dispatcherName;
         }
       }
       await updateDoc(doc(db, col, id), patch);
@@ -8847,8 +8906,10 @@ function MobileOrderDetail({
   setPrevPage,
   onGoFare,
   cardVersionB = false,
+  dispatcherName = "",
 }) {
   const [confirmDeliver, setConfirmDeliver] = useState(false);
+  const [showConfirmInfo, setShowConfirmInfo] = useState(false);
   const [confirmUndoDeliver, setConfirmUndoDeliver] = useState(false);
   const [showMemoPopup, setShowMemoPopup] = useState(false);
   const [showNoticePopup, setShowNoticePopup] = useState(false);
@@ -9487,6 +9548,7 @@ const handleAssignClick = () => {
   상태: "배차완료",
   배차완료일시: serverTimestamp(),
   배차확정일시: serverTimestamp(),
+  배차확정자: dispatcherName,
   updatedAt: serverTimestamp(),
   _lastModified: Date.now(),
 };
@@ -9671,14 +9733,20 @@ const handleAssignClick = () => {
               요청
             </button>
           )}
-          <TransportStatusBadge order={order} className="text-[10px]" onClick={() => setShowReqModal(true)} flat={!cardVersionB} />
-          {state === "배차완료" && order.배차완료일시?.seconds && (
-            <span className="text-[9px] text-gray-400">
-              {new Date(order.배차완료일시.seconds * 1000).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
-            </span>
+          {/* 배차완료 상태일 땐 뱃지 옆 날짜 텍스트로 밀리는 대신, 뱃지를 눌러
+              배차한 사람/확정일시를 팝업으로 보게 한다(아래 DispatchConfirmModal). */}
+          {state === "배차완료" ? (
+            <button type="button" onClick={() => setShowConfirmInfo(true)} className="active:scale-95 transition-transform">
+              <TransportStatusBadge order={order} className="text-[10px] cursor-pointer" flat={!cardVersionB} />
+            </button>
+          ) : (
+            <TransportStatusBadge order={order} className="text-[10px]" onClick={() => setShowReqModal(true)} flat={!cardVersionB} />
           )}
         </div>
       </div>
+      {showConfirmInfo && (
+        <DispatchConfirmModal order={order} cardVersionB={cardVersionB} onClose={() => setShowConfirmInfo(false)} />
+      )}
 
       {/* ── 하차지 블록 ── */}
       <div className="px-4 pt-2 pb-3">
@@ -9773,42 +9841,44 @@ const handleAssignClick = () => {
           없이 나란히 붙어 구분이 안 되던 문제를 해결하고 화면 전체 시각언어도 맞춘다. */}
       {(order.배차방식 || order.지급방식 || order.상차지주소) && (
         <div className={`px-4 pt-2 pb-2.5 border-t bg-gray-50/60 ${cardVersionB ? "border-[#1B2B4B]/10" : "border-blue-100"}`}>
-          <div className="grid grid-cols-4">
+          <div className={`grid ${routeInfo && routeInfo !== "loading" && routeInfo !== "error" ? "grid-cols-5" : "grid-cols-4"}`}>
             <div className="text-center">
-              <div className="text-[10px] text-gray-400 mb-0.5">배차방식</div>
-              <div className={`text-[12px] font-extrabold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>{order.배차방식 || "-"}</div>
+              <div className="text-[10px] text-gray-400 mb-0.5 whitespace-nowrap">배차방식</div>
+              <div className={`text-[12px] font-extrabold whitespace-nowrap ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>{order.배차방식 || "-"}</div>
             </div>
             <div className="text-center border-l border-gray-200">
-              <div className="text-[10px] text-gray-400 mb-0.5">지급방식</div>
-              <div className={`text-[12px] font-extrabold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>{order.지급방식 || "-"}</div>
+              <div className="text-[10px] text-gray-400 mb-0.5 whitespace-nowrap">지급방식</div>
+              <div className={`text-[12px] font-extrabold whitespace-nowrap ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>{order.지급방식 || "-"}</div>
             </div>
             <div className="text-center border-l border-gray-200">
-              <div className="text-[10px] text-gray-400 mb-0.5">이동거리</div>
-              <div className={`text-[12px] font-extrabold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>
+              <div className="text-[10px] text-gray-400 mb-0.5 whitespace-nowrap">이동거리</div>
+              <div className={`text-[12px] font-extrabold whitespace-nowrap ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>
                 {routeInfo === "loading" ? <span className="text-gray-300 font-normal text-[11px]">조회중</span>
                   : routeInfo === "error" || !routeInfo ? "-"
                   : `${routeInfo.distanceKm.toFixed(1)}km`}
               </div>
             </div>
             <div className="text-center border-l border-gray-200">
-              <div className="text-[10px] text-gray-400 mb-0.5">소요시간</div>
-              <div className={`flex items-center justify-center gap-1.5 text-[12px] font-extrabold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>
+              <div className="text-[10px] text-gray-400 mb-0.5 whitespace-nowrap">소요시간</div>
+              <div className={`text-[12px] font-extrabold whitespace-nowrap ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>
                 {routeInfo === "loading" ? <span className="text-gray-300 font-normal text-[11px]">조회중</span>
                   : routeInfo === "error" || !routeInfo ? "-"
-                  : (
-                    <>
-                      <span>{routeInfo.durationText}</span>
-                      <button
-                        type="button"
-                        onClick={() => setShowRouteMap(true)}
-                        className={`px-1.5 py-0.5 text-[9px] font-bold rounded border ${cardVersionB ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-blue-600 text-blue-700"}`}
-                      >
-                        경로보기
-                      </button>
-                    </>
-                  )}
+                  : routeInfo.durationText}
               </div>
             </div>
+            {/* 경로보기 전용 칸 — 소요시간과 한 칸을 같이 쓰면 좁은 화면에서 줄바꿈이
+                생기던 문제가 있어, 값이 있을 때만 5번째 칸을 통째로 내준다. */}
+            {routeInfo && routeInfo !== "loading" && routeInfo !== "error" && (
+              <div className="flex items-center justify-center border-l border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setShowRouteMap(true)}
+                  className={`px-1.5 py-1 text-[10px] font-bold rounded border whitespace-nowrap ${cardVersionB ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-blue-600 text-blue-700"}`}
+                >
+                  경로보기
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -17793,6 +17863,7 @@ function MobileUnassignedList({
   onOrderUpdate,
   showToast,
   showSuccess,
+  dispatcherName = "",
 }) {
     // ============================
   // 🔢 미배차 요약 계산
@@ -18180,6 +18251,7 @@ return (
         order={quickEditOrder}
         drivers={drivers}
         cardVersionB={cardVersionB}
+        dispatcherName={dispatcherName}
         onClose={() => setQuickEditOrder(null)}
         onSuccess={() => {}}
       />
