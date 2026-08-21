@@ -3265,6 +3265,10 @@ const patchDispatch = async (_id, patch, knownPrev) => {
     patch.업체전달상태 = "미전달";
     // 배차가 취소되어 다시 배차중으로 돌아가면 "배차한시간"도 미확정 상태로 되돌린다.
     patch.배차확정일시 = null;
+    // 차량정보가 빠지면 그 배차 자체가 무효화되는 것이므로, 배차방식(직접배차/24시
+    // 등)도 다시 "선택없음"으로 되돌린다 — 남아있으면 실제로는 배차가 취소됐는데
+    // 배차방식만 이전 값으로 남아있어 헷갈린다는 피드백.
+    patch.배차방식 = "선택없음";
   } else {
     const basePlate = patch.차량번호 || prev?.차량번호;
     if (basePlate) {
@@ -16001,17 +16005,20 @@ className={`
             className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition"
             onClick={async () => {
               const patch = { [confirmChange.key]: confirmChange.after };
+              // ⭐ 이미 화면에 있는 행 데이터를 알고 있으니(rows.find), patchDispatch가
+              // 다시 캐시/서버 조회를 하지 않도록 knownPrev로 바로 넘긴다 — 이 팝업의
+              // "변경" 버튼을 눌렀을 때 느껴지던 지연의 유력한 원인이었다.
+              const row = rows.find(r => r._id === confirmChange.rowId);
 if (confirmChange.key === "지급방식") {
   if (confirmChange.after === "취소") {
     patch.배차상태 = "배차취소";
   } else {
-    const row = rows.find(r => r._id === confirmChange.rowId);
     if (row?.배차상태 === "배차취소") {
       patch.배차상태 = row?.차량번호 && (row?.이름 || row?.전화번호) ? "배차완료" : "배차중";
     }
   }
 }
-await patchDispatch(confirmChange.rowId, patch);
+patchDispatch(confirmChange.rowId, patch, row).catch(console.error);
 setConfirmChange(null);
             }}
           >
@@ -18458,11 +18465,11 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]"
           onClick={() => setOpen(false)}
           onKeyDown={e => { if (e.key === "Enter") e.stopPropagation(); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-[460px] max-h-[75vh] overflow-hidden"
+          <div className="bg-white rounded-2xl shadow-2xl w-[520px] max-w-[92vw] max-h-[85vh] flex flex-col overflow-hidden"
             onClick={e => e.stopPropagation()}>
 
             {/* 헤더 */}
-            <div className="px-6 py-4 flex items-center justify-between bg-[#1B2B4B]">
+            <div className="px-6 py-4 flex items-center justify-between bg-[#1B2B4B] shrink-0">
               <h3 className="text-white font-bold text-[16px]">
                 {label} ({count}곳)
               </h3>
@@ -18477,7 +18484,7 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
             </div>
 
             {/* 본문 - 읽기 전용 */}
-            <div className="p-5 space-y-4 overflow-y-auto max-h-[50vh]">
+            <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
               <p className="text-[12px] text-gray-500 -mt-1">전체 경유지 상세 정보</p>
               {list.map((s, i) => {
                 const cargo = (() => {
@@ -18496,6 +18503,12 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
                   if (!val) return "";
                   return toTonUnit(tp && tp !== "없음" ? `${val}${tp}` : val);
                 })();
+                const Row = (label2, value) => value ? (
+                  <div className="flex gap-1 text-[13px] pb-1.5 border-b border-gray-200 min-w-0">
+                    <span className="text-gray-500 shrink-0">{label2} :</span>
+                    <span className="text-gray-800 font-semibold break-words min-w-0">{value}</span>
+                  </div>
+                ) : null;
                 return (
                   <div key={i} className="rounded-xl border border-gray-200 p-5 bg-gray-50">
                     <div className="flex items-center gap-2 mb-3">
@@ -18503,42 +18516,22 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
                         text-[12px] font-bold text-white bg-[#1B2B4B]">{i + 1}</span>
                       <span className="text-[15px] font-bold text-gray-900">{s.업체명 || "-"}</span>
                     </div>
-                    {s.주소 && <div className="text-[14px] text-gray-700 mb-2">{s.주소}</div>}
-                    {(s.담당자 || s.담당자번호) && (
-                      <div className="text-[13px] text-gray-600 mb-2">
-                        담당자 : {s.담당자 || "-"}{s.담당자번호 && ` (${s.담당자번호})`}
-                      </div>
-                    )}
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {cargo && (
-                        <span className="px-2 py-1 rounded bg-white border border-gray-200 text-[12px] text-gray-700">
-                          화물내용<br/>{cargo}
-                        </span>
-                      )}
-                      {ton && (
-                        <span className="px-2 py-1 rounded bg-white border border-gray-200 text-[12px] text-gray-700">
-                          화물톤수<br/>{ton}
-                        </span>
-                      )}
-                      {s.상차시간 && (
-                        <span className="px-2 py-0.5 rounded-full bg-white border border-gray-200 text-[12px] text-gray-600">
-                          상차시간 : {s.상차시간}
-                        </span>
-                      )}
-                      {s.하차시간 && (
-                        <span className="px-2 py-0.5 rounded-full bg-white border border-gray-200 text-[12px] text-gray-600">
-                          하차시간 : {s.하차시간}
-                        </span>
-                      )}
+                    <div className="space-y-2">
+                      {Row("주소", s.주소)}
+                      {Row("담당자", (s.담당자 || s.담당자번호) ? `${s.담당자 || "-"}${s.담당자번호 ? ` (${s.담당자번호})` : ""}` : "")}
+                      {Row("화물내용", cargo)}
+                      {Row("화물톤수", ton)}
+                      {Row("상차시간", s.상차시간)}
+                      {Row("하차시간", s.하차시간)}
+                      {s.메모 && <div className="text-[12px] text-gray-500 pt-0.5">메모 : {s.메모}</div>}
                     </div>
-                    {s.메모 && <div className="mt-2 text-[12px] text-gray-500">메모 : {s.메모}</div>}
                   </div>
                 );
               })}
             </div>
 
             {/* 하단 버튼 */}
-            <div className="px-5 py-4 border-t border-gray-100 bg-gray-50 flex items-center gap-3">
+            <div className="px-5 py-4 border-t border-gray-100 bg-gray-50 flex items-center gap-3 shrink-0">
               {(editable || onEdit) && (
                 <button onClick={() => { setOpen(false); setEditModalOpen(true); }}
                   className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600
@@ -18927,14 +18920,14 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
         ))}
 
         {/* 하단 버튼 */}
-        <div className="flex justify-between pt-3">
-          <button type="button" className="px-3 py-1.5 text-sm border rounded"
+        <div className="flex justify-between items-center pt-3">
+          <button type="button" className="text-[11px] font-bold px-2.5 py-1.5 rounded-full border transition bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
             onClick={()=>setEditList(prev=>[...prev,emptyStop()])}>
             + 경유 추가
           </button>
           <div className="flex gap-2">
-            <button type="button" className="px-3 py-1.5 text-sm border rounded" onClick={onClose}>취소</button>
-            <button type="button" className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded" onClick={handleSave}>저장</button>
+            <button type="button" className="px-4 py-2 rounded-lg text-[13px] font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200" onClick={onClose}>취소</button>
+            <button type="button" className="px-4 py-2 rounded-lg text-[13px] font-bold text-white bg-[#1B2B4B] hover:bg-[#243a60] transition" onClick={handleSave}>저장</button>
           </div>
         </div>
 
@@ -24414,9 +24407,13 @@ const handleCloseFileUpload = async (e) => {
     }
 
     if (key === "상차일" || key === "하차일") {
+      // ⭐ 이 위(24406/24413)의 읽기전용 분기에서만 clsFor(굵게+색)가 적용되고,
+      // 편집 가능한 상태(canEdit=true)에선 CustomDatePicker가 아무 글자 스타일 없이
+      // 그려져서 상차일/하차일이 다시 얇고 검은 기본 글씨로 보이던 버그 —
+      // 편집 가능할 때도 동일한 스타일을 그대로 이어서 적용한다.
       return (
         <CustomDatePicker
-          className="border p-1 rounded w-full"
+          className={`border p-1 rounded w-full ${clsFor(key)}`}
           value={val || ""}
           onChange={(e) => handleEditChange(rowId, key, e.target.value)}
         />
@@ -29553,11 +29550,17 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
               <div className="flex gap-2">
                 <button className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition" onClick={() => setConfirmChange(null)}>취소</button>
                 <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition"
-                  onClick={async () => {
+                  onClick={() => {
                    const patch = {
                       [confirmChange.key]: confirmChange.after,
                       updatedAt: Date.now(),
                     };
+                    // ⭐ 이미 화면에 있는 행 데이터를 알고 있으니(dispatchData.find),
+                    // patchDispatch가 다시 캐시/서버 조회를 하지 않도록 knownPrev로
+                    // 바로 넘긴다 — 이 팝업의 "변경" 버튼을 눌렀을 때 느껴지던 지연의
+                    // 유력한 원인이었다. 저장 자체도 기다리지 않고(fire-and-forget)
+                    // 즉시 팝업을 닫아 끊김 없이 반응하게 한다.
+                    const row = dispatchData.find(r => r._id === confirmChange.rowId);
 
                     if (confirmChange.key === "배차상태" && confirmChange.after === "배차중") {
                       patch.차량번호 = "";
@@ -29566,7 +29569,6 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
                       // 기사취소로 배차중 복귀 — 화주사가 걸어둔 취소요청(기사취소요청)이 있었다면
                       // 목적이 이미 달성된 것이므로 함께 해제해, 화주사 화면이 "취소요청중"에
                       // 계속 멈춰있지 않도록 한다.
-                      const row = dispatchData.find(r => r._id === confirmChange.rowId);
                       if (row?.취소요청) {
                         patch.취소요청 = false;
                         patch.취소요청일시 = null;
@@ -29586,13 +29588,12 @@ if (confirmChange.key === "지급방식") {
   if (confirmChange.after === "취소") {
     patch.배차상태 = "배차취소";
   } else {
-    const row = dispatchData.find(r => r._id === confirmChange.rowId);
     if (row?.배차상태 === "배차취소") {
       patch.배차상태 = row?.차량번호 && (row?.이름 || row?.전화번호) ? "배차완료" : "배차중";
     }
   }
 }
-await patchDispatch(confirmChange.rowId, patch);
+patchDispatch(confirmChange.rowId, patch, row).catch(console.error);
 flashRow(confirmChange.rowId);
 setConfirmChange(null);
                   }}
@@ -38541,7 +38542,7 @@ setCopyPlaceOptions(list);
               </div>
               <div className="flex gap-2">
                 <button className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition" onClick={() => setConfirmChange(null)}>취소</button>
-                <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition" onClick={async () => {
+                <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition" onClick={() => {
                   const patch = { [confirmChange.field]: confirmChange.after };
                   if (confirmChange.field === "업체전달상태") {
                     patch.업체전달일시 = confirmChange.after === "전달완료" ? Date.now() : null;
@@ -38551,7 +38552,8 @@ setCopyPlaceOptions(list);
                   if (confirmChange.field === "지급방식" && confirmChange.after === "취소") {
                     patch.배차상태 = "배차취소";
                   }
-                  await patchDispatch(confirmChange.id, patch);
+                  // 저장을 기다리지 않고 즉시 팝업을 닫아 끊김 없이 반응하게 한다.
+                  patchDispatch(confirmChange.id, patch).catch(console.error);
                   setConfirmChange(null);
                 }}>변경</button>
               </div>
@@ -51938,6 +51940,138 @@ const compressClientImage = (file) => new Promise((resolve) => {
   reader.readAsDataURL(file);
 });
 
+// ⭐ 사업자등록증 OCR 인식 결과 텍스트에서 필드를 뽑아낸다. 거래처명은 사업자등록증상의
+// 상호와 사용자가 실제 입력한 거래처명이 다를 수 있어(예: 약칭/별칭 사용) 의도적으로
+// 스캔 대상에서 제외한다. 인식되지 않은 항목은 빈 문자열로 두고, 호출 쪽에서 빈
+// 문자열은 아예 적용하지 않는다(기존 값을 지우지 않는다).
+function parseBizRegText(raw) {
+  const norm = String(raw || "").replace(/\r/g, "");
+  const result = { 사업자번호: "", 대표자: "", 업태: "", 종목: "", 이메일: "", 주소: "" };
+
+  const bizNoMatch = norm.match(/\d{3}\s*-\s*\d{2}\s*-\s*\d{5}/);
+  if (bizNoMatch) result.사업자번호 = bizNoMatch[0].replace(/\s+/g, "");
+
+  const emailMatch = norm.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  if (emailMatch) result.이메일 = emailMatch[0];
+
+  // "대표자"/"성명" 라벨 뒤의 한글 이름 — 사업자등록증 양식상 대표자 이름은 보통
+  // 한글 2~10자다. 뒤에 다른 라벨(생년월일 등)이 바로 붙는 경우가 많아 공백/줄바꿈까지만 취한다.
+  const nameMatch = norm.match(/(?:대\s*표\s*자|성\s*명)\s*[:：]?\s*([가-힣]{2,10})/);
+  if (nameMatch) result.대표자 = nameMatch[1];
+
+  // 업태/종목은 양식상 한 줄에 나란히 붙어 나오는 경우가 많아, "종목" 라벨이 나오기
+  // 전까지만 업태 값으로 취한다.
+  const upteMatch = norm.match(/업\s*태\s*[:：]?\s*([^\n]+?)(?=\s{2,}종\s*목|종\s*목|\n|$)/);
+  if (upteMatch) result.업태 = upteMatch[1].trim();
+
+  const jongmokMatch = norm.match(/종\s*목\s*[:：]?\s*([^\n]+)/);
+  if (jongmokMatch) result.종목 = jongmokMatch[1].trim().slice(0, 40);
+
+  const addrMatch = norm.match(/(?:사업장\s*소재지|소\s*재\s*지)\s*[:：]?\s*([^\n]+)/);
+  if (addrMatch) result.주소 = addrMatch[1].trim();
+
+  Object.keys(result).forEach((k) => {
+    if (result[k]) result[k] = result[k].replace(/\s{2,}/g, " ").trim();
+  });
+  return result;
+}
+
+// ⭐ 사업자등록증 이미지를 첨부하면 네이버 영수증리뷰 스캔처럼 화면 중앙 팝업에서
+// OCR로 내용을 읽어 사업자번호/대표자/업태/종목/이메일/주소를 자동 인식해 보여준다.
+// 실제 Firestore 저장은 사용자가 "인식된 내용 적용"을 눌러야 반영된다(오인식 방지).
+function BizRegOcrModal({ imageBase64, onClose, onApply }) {
+  const [status, setStatus] = React.useState("scanning"); // scanning | done | error
+  const [progress, setProgress] = React.useState(0);
+  const [fields, setFields] = React.useState(null);
+  const ranRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (ranRef.current) return;
+    ranRef.current = true;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { createWorker } = await import("tesseract.js");
+        const worker = await createWorker("kor+eng", 1, {
+          logger: (m) => {
+            if (cancelled) return;
+            if (m.status === "recognizing text" && typeof m.progress === "number") {
+              setProgress(Math.round(m.progress * 100));
+            }
+          },
+        });
+        const { data: { text } } = await worker.recognize(imageBase64);
+        worker.terminate().catch(() => {});
+        if (cancelled) return;
+        setFields(parseBizRegText(text));
+        setStatus("done");
+      } catch (e) {
+        console.error("사업자등록증 스캔 실패:", e);
+        if (!cancelled) setStatus("error");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [imageBase64]);
+
+  const FIELD_LABELS = [["사업자번호", "사업자번호"], ["대표자", "대표자"], ["업태", "업태"], ["종목", "종목"], ["이메일", "이메일"], ["주소", "주소"]];
+  const recognizedCount = fields ? Object.values(fields).filter((v) => v && v.trim()).length : 0;
+
+  return (
+    <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[420px] max-w-[92vw] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+          <h3 className="text-white font-bold text-[15px]">사업자등록증 스캔</h3>
+          <button onClick={onClose} className="text-white/60 hover:text-white text-xl">✕</button>
+        </div>
+        <div className="px-6 py-6">
+          {status === "scanning" && (
+            <div className="text-center space-y-4">
+              <div className="w-14 h-14 mx-auto rounded-full border-4 border-gray-100 border-t-[#1B2B4B] animate-spin" />
+              <div className="text-[13px] font-semibold text-gray-700">스캔 중입니다... {progress}%</div>
+              <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full bg-[#1B2B4B] transition-all" style={{ width: `${progress}%` }} />
+              </div>
+            </div>
+          )}
+          {status === "error" && (
+            <div className="text-center space-y-2">
+              <div className="text-[13px] font-bold text-red-500">스캔에 실패했습니다.</div>
+              <div className="text-[12px] text-gray-500">이미지가 선명한지 확인 후 다시 시도해주세요.</div>
+            </div>
+          )}
+          {status === "done" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-[13px] font-bold text-[#1B2B4B]">
+                <span className="inline-flex w-5 h-5 rounded-full bg-[#1B2B4B] text-white items-center justify-center text-[11px]">✓</span>
+                스캔완료 {recognizedCount > 0 ? `(${recognizedCount}개 항목 인식)` : "(인식된 항목 없음)"}
+              </div>
+              <div className="border border-gray-100 rounded-xl divide-y divide-gray-100">
+                {FIELD_LABELS.map(([key, label]) => (
+                  <div key={key} className="flex px-3 py-2 gap-2 items-start">
+                    <span className="w-16 shrink-0 text-[12px] text-gray-500 font-semibold">{label}</span>
+                    <span className={`text-[12px] flex-1 break-words ${fields?.[key] ? "text-gray-800 font-semibold" : "text-gray-300"}`}>
+                      {fields?.[key] || "인식 안됨"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="text-[11px] text-gray-400">거래처명은 사업자등록증상 상호와 다를 수 있어 자동입력 대상에서 제외됩니다. 인식이 부정확하면 직접 입력칸에서 고쳐주세요.</div>
+            </div>
+          )}
+        </div>
+        <div className="px-6 pb-5 flex gap-3">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">닫기</button>
+          {status === "done" && (
+            <button onClick={() => { onApply(fields); onClose(); }} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">
+              인식된 내용 적용
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlace, places: placesProp = [], showAlert = (m) => alert(m), hideTabs = false, initialTab = "하차지" }) {
   const normalizePlaceRow = (d) => {
     const primary = Array.isArray(d.contacts) && d.contacts.length
@@ -52068,6 +52202,8 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const [q, setQ] = React.useState("");
   const [showAllClients, setShowAllClients] = React.useState(false);
   const [rows, setRows] = React.useState(() => (clients || []).map((c) => ({ ...c })));
+  // 사업자등록증 OCR 스캔 팝업 — 열려있는 동안 스캔 대상 이미지를 들고 있는다
+  const [ocrScanImage, setOcrScanImage] = React.useState(null);
   const [selected, setSelected] = React.useState(new Set());
   const [newForm, setNewForm] = React.useState({
     거래처명: "", 사업자번호: "", 대표자: "", 업태: "", 종목: "",
@@ -53334,13 +53470,20 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                               <span className="text-[13px] text-gray-600 font-semibold">{editClientModal.첨부파일명}</span>
                             </div>
                           )}
-                          <div className="flex items-center justify-center gap-3">
+                          <div className="flex items-center justify-center gap-3 flex-wrap">
                             <span className="text-[12px] text-gray-500">{editClientModal.첨부파일명}</span>
                             <button
                               className="text-[12px] text-[#1B2B4B] font-semibold hover:underline"
                               onClick={() => setFilePreview({ base64: editClientModal.첨부파일Base64, type: editClientModal.첨부파일타입, name: editClientModal.첨부파일명 })}>
                               미리보기
                             </button>
+                            {editClientModal.첨부파일타입?.startsWith("image/") && (
+                              <button
+                                className="text-[12px] text-[#1B2B4B] font-semibold hover:underline"
+                                onClick={() => setOcrScanImage(editClientModal.첨부파일Base64)}>
+                                사업자등록증 스캔
+                              </button>
+                            )}
                             <button
                               className="text-[12px] text-red-500 font-semibold hover:text-red-700"
                               onClick={() => setEditClientModal(p => ({ ...p, 첨부파일Base64: null, 첨부파일명: null, 첨부파일타입: null }))}>
@@ -53373,6 +53516,22 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
               type={filePreview.type}
               name={filePreview.name}
               onClose={() => setFilePreview(null)}
+            />
+          )}
+
+          {ocrScanImage && (
+            <BizRegOcrModal
+              imageBase64={ocrScanImage}
+              onClose={() => setOcrScanImage(null)}
+              onApply={(fields) => {
+                setEditClientModal(p => {
+                  if (!p) return p;
+                  const next = { ...p };
+                  Object.entries(fields).forEach(([k, v]) => { if (v && v.trim()) next[k] = v; });
+                  return next;
+                });
+                showAlert("스캔 결과를 적용했습니다.");
+              }}
             />
           )}
 

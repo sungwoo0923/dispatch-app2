@@ -372,6 +372,13 @@ if (typeof document !== "undefined" && !document.getElementById("__mobile-badge-
     .card-status-blink {
       animation: cardStatusGlow 1.8s ease-in-out infinite;
     }
+    @keyframes memoBlink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+    .memo-blink {
+      animation: memoBlink 2.4s ease-in-out infinite;
+    }
   `;
   document.head.appendChild(s);
 }
@@ -3085,7 +3092,9 @@ const groupedByDate = useMemo(() => {
       하차시간: form.하차시간 || "",
       하차시간기준: form.하차시간기준 || null,
       지급방식: form.지급방식 || "",
-      배차방식: form.배차방식 || "",
+      // 차량정보가 비어있으면(배차중으로 되돌아감) 배차방식(직접배차/24시 등)도
+      // 다시 선택없음으로 되돌린다 — 화면에서 배차방식만 안 지우고 저장해도 어긋나지 않게.
+      배차방식: (form.차량번호 || "").trim() ? (form.배차방식 || "") : "선택없음",
       혼적여부: form.혼적여부 || "독차",
       혼적: form.혼적여부 === "혼적",   // ← PC boolean 호환
       긴급: form.긴급 === true,          // ← PC 긴급 버튼과 동일 필드
@@ -3550,6 +3559,10 @@ const deleteSingleOrder = async (order) => {
   배차상태: "배차중",
   상태: "배차중",
   배차완료일시: null,
+  배차확정일시: null,
+  // 차량정보가 빠지면 그 배차 자체가 무효화되는 것이므로, 배차방식(직접배차/24시
+  // 등)도 다시 "선택없음"으로 되돌린다 — PC와 동일.
+  배차방식: "선택없음",
   // 배차완료 → 배차중으로 되돌아가는 건 보통 재배차 상황이라, 이전에 전달된
   // 전달상태(화주사/기사 전달)도 함께 초기화해야 다시 전달 확인을 받을 수 있다.
   업체전달상태: "미전달",
@@ -8256,7 +8269,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             {(order.메모 || order.적요) && (
               <button
                 onClick={(e) => { e.stopPropagation(); onOpenMemo(order); }}
-                className="text-[0.68em] text-gray-400 font-semibold"
+                className="memo-blink text-[0.7em] text-[#1B2B4B] font-extrabold"
               >
                 메모
               </button>
@@ -8433,7 +8446,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
     {(order.메모 || order.적요) && (
       <button
         onClick={(e) => { e.stopPropagation(); onOpenMemo(order); }}
-        className="shrink-0 px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-500 border border-blue-200 text-[10px] font-semibold"
+        className="memo-blink shrink-0 px-1.5 py-0.5 rounded-full bg-[#1B2B4B] text-white border border-[#1B2B4B] text-[10px] font-extrabold"
       >메모</button>
     )}
   </div>
