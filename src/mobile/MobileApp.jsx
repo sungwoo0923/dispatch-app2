@@ -9793,11 +9793,12 @@ const handleAssignClick = () => {
         ];
         const cargoCount = cargoFlags.filter(Boolean).length;
         if (!cargoCount) return null;
-        const cargoGridCls = cargoCount >= 4 ? "grid-cols-4" : cargoCount === 3 ? "grid-cols-3" : cargoCount === 2 ? "grid-cols-2" : "grid-cols-1";
+        const cargoGridCls = cargoCount >= 4 ? "grid-cols-[repeat(4,minmax(max-content,1fr))]" : cargoCount === 3 ? "grid-cols-[repeat(3,minmax(max-content,1fr))]" : cargoCount === 2 ? "grid-cols-[repeat(2,minmax(max-content,1fr))]" : "grid-cols-1";
         return (
           <div className="px-4 pt-2.5 pb-2 border-t border-gray-100 bg-gray-50/60">
             <div className="text-[10px] font-bold text-gray-400 mb-1">화물정보</div>
-            <div className={`grid ${cargoGridCls}`}>
+            <div className="overflow-x-auto">
+            <div className={`grid ${cargoGridCls} min-w-full`}>
               {(order.차량톤수 || order.톤수) && (
                 <div className="text-center border-l border-gray-200 first:border-l-0">
                   <div className="flex items-center justify-center gap-0.5 text-[9px] text-gray-400 mb-0.5">
@@ -9833,6 +9834,7 @@ const handleAssignClick = () => {
                 </div>
               )}
             </div>
+            </div>
           </div>
         );
       })()}
@@ -9841,16 +9843,22 @@ const handleAssignClick = () => {
           없이 나란히 붙어 구분이 안 되던 문제를 해결하고 화면 전체 시각언어도 맞춘다. */}
       {(order.배차방식 || order.지급방식 || order.상차지주소) && (
         <div className={`px-4 pt-2 pb-2.5 border-t bg-gray-50/60 ${cardVersionB ? "border-[#1B2B4B]/10" : "border-blue-100"}`}>
-          <div className={`grid ${routeInfo && routeInfo !== "loading" && routeInfo !== "error" ? "grid-cols-5" : "grid-cols-4"}`}>
-            <div className="text-center">
+          {/* ⚠️ Tailwind의 grid-cols-N은 내부적으로 minmax(0,1fr)이라, 분할화면처럼
+              뷰포트가 아주 좁아지면 칸이 내용 폭보다 더 줄어들면서 경로보기 버튼이
+              옆 칸(소요시간) 글자와 겹쳐 보이는 문제가 있었다. minmax(max-content,1fr)로
+              바꿔 칸이 내용보다 작아지지 않게 하고, 그래도 안 들어가면 줄바꿈/겹침 대신
+              가로 스크롤이 되도록 감싼다. */}
+          <div className="overflow-x-auto">
+          <div className={`grid ${routeInfo && routeInfo !== "loading" && routeInfo !== "error" ? "grid-cols-[repeat(5,minmax(max-content,1fr))]" : "grid-cols-[repeat(4,minmax(max-content,1fr))]"} min-w-full`}>
+            <div className="text-center px-1">
               <div className="text-[10px] text-gray-400 mb-0.5 whitespace-nowrap">배차방식</div>
               <div className={`text-[12px] font-extrabold whitespace-nowrap ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>{order.배차방식 || "-"}</div>
             </div>
-            <div className="text-center border-l border-gray-200">
+            <div className="text-center border-l border-gray-200 px-1">
               <div className="text-[10px] text-gray-400 mb-0.5 whitespace-nowrap">지급방식</div>
               <div className={`text-[12px] font-extrabold whitespace-nowrap ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>{order.지급방식 || "-"}</div>
             </div>
-            <div className="text-center border-l border-gray-200">
+            <div className="text-center border-l border-gray-200 px-1">
               <div className="text-[10px] text-gray-400 mb-0.5 whitespace-nowrap">이동거리</div>
               <div className={`text-[12px] font-extrabold whitespace-nowrap ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>
                 {routeInfo === "loading" ? <span className="text-gray-300 font-normal text-[11px]">조회중</span>
@@ -9858,7 +9866,7 @@ const handleAssignClick = () => {
                   : `${routeInfo.distanceKm.toFixed(1)}km`}
               </div>
             </div>
-            <div className="text-center border-l border-gray-200">
+            <div className="text-center border-l border-gray-200 px-1">
               <div className="text-[10px] text-gray-400 mb-0.5 whitespace-nowrap">소요시간</div>
               <div className={`text-[12px] font-extrabold whitespace-nowrap ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>
                 {routeInfo === "loading" ? <span className="text-gray-300 font-normal text-[11px]">조회중</span>
@@ -9869,7 +9877,7 @@ const handleAssignClick = () => {
             {/* 경로보기 전용 칸 — 소요시간과 한 칸을 같이 쓰면 좁은 화면에서 줄바꿈이
                 생기던 문제가 있어, 값이 있을 때만 5번째 칸을 통째로 내준다. */}
             {routeInfo && routeInfo !== "loading" && routeInfo !== "error" && (
-              <div className="flex items-center justify-center border-l border-gray-200">
+              <div className="flex items-center justify-center border-l border-gray-200 px-1">
                 <button
                   type="button"
                   onClick={() => setShowRouteMap(true)}
@@ -9879,6 +9887,7 @@ const handleAssignClick = () => {
                 </button>
               </div>
             )}
+          </div>
           </div>
         </div>
       )}
