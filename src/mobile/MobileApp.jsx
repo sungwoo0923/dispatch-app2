@@ -1288,10 +1288,12 @@ function resolveCreatorName(order, mobileUsers) {
   return match?.name || raw;
 }
 
-// mode="confirm"(기본) — "배차완료" 뱃지 클릭 시 배차등록자/배차확정일시.
-// mode="cancel" — 취소내역의 "배차취소" 뱃지 클릭 시 취소한 사람/취소일시.
+// mode="confirm"(기본) — "배차완료" 뱃지 클릭 시 등록정보+배차등록자/배차확정일시.
+// mode="cancel" — 취소내역의 "배차취소" 뱃지 클릭 시 등록정보+취소한 사람/취소일시.
+// mode="register" — "배차중" 뱃지 클릭 시 등록정보만(아직 배차 전이라 배차/취소 행 없음).
 function DispatchConfirmModal({ order, cardVersionB, mobileUsers, mode = "confirm", onClose }) {
   const isCancel = mode === "cancel";
+  const isRegisterOnly = mode === "register";
   const actionMs = isCancel
     ? toMillis(order.취소일시)
     : (toMillis(order.배차확정일시) || toMillis(order.배차완료일시));
@@ -1307,14 +1309,16 @@ function DispatchConfirmModal({ order, cardVersionB, mobileUsers, mode = "confir
     ["등록일", regDateStr],
     ["작성자", resolveCreatorName(order, mobileUsers) || "-"],
     ["등록기기", order.등록기기 || "-"],
-    [isCancel ? "취소한 사람" : "배차등록자", (isCancel ? order.취소자 : order.배차확정자) || "-"],
-    [isCancel ? "취소일시" : "배차확정일시", actionDateStr],
+    ...(isRegisterOnly ? [] : [
+      [isCancel ? "취소한 사람" : "배차등록자", (isCancel ? order.취소자 : order.배차확정자) || "-"],
+      [isCancel ? "취소일시" : "배차확정일시", actionDateStr],
+    ]),
   ];
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center px-6" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50" />
       <div className="relative bg-white rounded-2xl w-full max-w-xs p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="text-[15px] font-bold text-gray-800 mb-4">{isCancel ? "오더 취소 정보" : "배차 확정 정보"}</div>
+        <div className="text-[15px] font-bold text-gray-800 mb-4">{isCancel ? "오더 취소 정보" : isRegisterOnly ? "오더 등록 정보" : "배차 확정 정보"}</div>
         <div className="space-y-3 mb-5">
           {rows.map(([label, value]) => (
             <div key={label} className="flex items-baseline justify-between gap-3 pb-2 border-b border-gray-100 last:border-b-0 last:pb-0">
@@ -9836,19 +9840,26 @@ const handleAssignClick = () => {
               요청
             </button>
           )}
-          {/* 배차완료 상태일 땐 뱃지 옆 날짜 텍스트로 밀리는 대신, 뱃지를 눌러
-              배차한 사람/확정일시를 팝업으로 보게 한다(아래 DispatchConfirmModal). */}
-          {state === "배차완료" ? (
-            <button type="button" onClick={() => setShowConfirmInfo(true)} className="active:scale-95 transition-transform">
-              <TransportStatusBadge order={order} className="text-[10px] cursor-pointer" flat={!cardVersionB} />
-            </button>
-          ) : (
-            <TransportStatusBadge order={order} className="text-[10px]" onClick={() => setShowReqModal(true)} flat={!cardVersionB} />
-          )}
+          {/* 배차완료/배차중 어느 쪽이든 뱃지 옆 날짜 텍스트로 밀리는 대신, 뱃지를
+              눌러 등록/배차 정보를 팝업으로 보게 한다(아래 DispatchConfirmModal).
+              단, 화주사 요청(배차취소/기사변경/수정)이 걸려있는 뱃지는 기존처럼
+              그 요청을 확인하는 팝업이 우선이다. */}
+          {(() => {
+            const { isPending, isHold } = getTransportBadgeInfo(order);
+            const requestClickable = isPending || isHold;
+            if (requestClickable) {
+              return <TransportStatusBadge order={order} className="text-[10px]" onClick={() => setShowReqModal(true)} flat={!cardVersionB} />;
+            }
+            return (
+              <button type="button" onClick={() => setShowConfirmInfo(true)} className="active:scale-95 transition-transform">
+                <TransportStatusBadge order={order} className="text-[10px] cursor-pointer" flat={!cardVersionB} />
+              </button>
+            );
+          })()}
         </div>
       </div>
       {showConfirmInfo && (
-        <DispatchConfirmModal order={order} cardVersionB={cardVersionB} mobileUsers={mobileUsers} onClose={() => setShowConfirmInfo(false)} />
+        <DispatchConfirmModal order={order} cardVersionB={cardVersionB} mobileUsers={mobileUsers} mode={state === "배차완료" ? "confirm" : "register"} onClose={() => setShowConfirmInfo(false)} />
       )}
 
       {/* ── 하차지 블록 ── */}
@@ -18037,8 +18048,10 @@ function MobileStatusTable({ title, orders, onBack }) {
 // ======================================================================
 function MobileCanceledList({ orders = [], onBack, cardVersionB = false, mobileUsers = [] }) {
   const [confirmInfo, setConfirmInfo] = useState(null);
+  const [detailInfo, setDetailInfo] = useState(null);
   const [restoreTarget, setRestoreTarget] = useState(null);
   const [purgeTarget, setPurgeTarget] = useState(null);
+  const [purgeAll, setPurgeAll] = useState(false);
   const [busy, setBusy] = useState(false);
   const [toastMsg, setToastMsg] = useState("");
 
@@ -18086,11 +18099,36 @@ function MobileCanceledList({ orders = [], onBack, cardVersionB = false, mobileU
     }
   };
 
+  const handlePurgeAll = async () => {
+    if (!sorted.length || busy) return;
+    setBusy(true);
+    try {
+      await Promise.all(sorted.map((o) => deleteDoc(doc(db, o.__col, o.id))));
+      setPurgeAll(false);
+      flash("전체 삭제 완료");
+    } catch (e) {
+      alert("전체 삭제 중 오류가 발생했습니다: " + e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="px-4 pt-3 pb-24">
-      <p className="text-[12px] text-gray-400 mb-3">
-        취소된 오더 {sorted.length}건 — 재등록하면 취소 전 상태로 돌아가고, 완전삭제하면 복구할 수 없습니다.
-      </p>
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <p className="text-[12px] text-gray-400">
+          취소된 오더 {sorted.length}건 — 재등록하면 취소 전 상태로 돌아가고, 완전삭제하면 복구할 수 없습니다.
+        </p>
+        {!!sorted.length && (
+          <button
+            type="button"
+            onClick={() => setPurgeAll(true)}
+            className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold border border-red-200 text-red-500 bg-red-50"
+          >
+            전체삭제
+          </button>
+        )}
+      </div>
 
       {!sorted.length && (
         <div className="flex flex-col items-center justify-center py-24 text-gray-300">
@@ -18103,12 +18141,16 @@ function MobileCanceledList({ orders = [], onBack, cardVersionB = false, mobileU
 
       <div className="space-y-3">
         {sorted.map((o) => (
-          <div key={o.id || o._id} className="bg-white rounded-xl border border-gray-200 p-4">
+          <div
+            key={o.id || o._id}
+            onClick={() => setDetailInfo(o)}
+            className="bg-white rounded-xl border border-gray-200 p-4 active:bg-gray-50 transition cursor-pointer"
+          >
             <div className="flex items-center justify-between gap-2 mb-2">
               <div className="text-[13px] font-bold text-gray-800 truncate">{o.거래처명 || "-"}</div>
               <button
                 type="button"
-                onClick={() => setConfirmInfo(o)}
+                onClick={(e) => { e.stopPropagation(); setConfirmInfo(o); }}
                 className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-500 border border-red-200"
               >
                 배차취소
@@ -18125,7 +18167,7 @@ function MobileCanceledList({ orders = [], onBack, cardVersionB = false, mobileU
                 <span>기사 {Number(o.기사운임 || 0).toLocaleString()}원</span>
               </div>
             )}
-            <div className="flex gap-2">
+            <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
               <button
                 onClick={() => setRestoreTarget(o)}
                 className={`flex-1 py-2 rounded-lg text-[12px] font-bold text-white ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
@@ -18185,12 +18227,131 @@ function MobileCanceledList({ orders = [], onBack, cardVersionB = false, mobileU
         </div>
       )}
 
+      {purgeAll && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center px-6" onClick={() => !busy && setPurgeAll(false)}>
+          <div className="absolute inset-0 bg-black/50" />
+          <div className="relative bg-white rounded-2xl w-full max-w-xs p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="text-[15px] font-bold text-gray-800 mb-2">전체삭제하시겠습니까?</div>
+            <div className="text-[13px] text-gray-500 mb-5">
+              취소내역 {sorted.length}건을 모두 완전삭제합니다.<br />
+              완전삭제하면 다시 복구할 수 없습니다.
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setPurgeAll(false)} disabled={busy} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-[13px] font-semibold">닫기</button>
+              <button onClick={handlePurgeAll} disabled={busy} className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-[13px] font-bold">
+                {busy ? "처리 중..." : "전체삭제"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {detailInfo && (
+        <CanceledOrderDetailModal
+          order={detailInfo}
+          cardVersionB={cardVersionB}
+          mobileUsers={mobileUsers}
+          onClose={() => setDetailInfo(null)}
+        />
+      )}
+
       {toastMsg && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-black/80 text-white text-[12px] font-semibold z-[10000]">
           {toastMsg}
         </div>
       )}
     </div>
+  );
+}
+
+// ⭐ 취소내역 카드를 클릭했을 때 뜨는 "오더 전체 정보" 읽기 전용 팝업.
+// DispatchConfirmModal(mode="cancel")은 등록/취소 메타데이터 5줄만 보여주는
+// 반면, 이 팝업은 상/하차지·화물정보·배차정보 등 오더 전체 내용을 보여준다.
+function CanceledOrderDetailModal({ order: o, cardVersionB = false, mobileUsers = [], onClose }) {
+  const accent = cardVersionB ? "#1B2B4B" : "#1d4ed8";
+  const regMs = toMillis(o.createdAt) || toMillis(o.등록일시) || (o.등록일 ? new Date(`${o.등록일}T00:00:00`).getTime() : 0);
+  const regDateStr = regMs
+    ? new Date(regMs).toLocaleString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+    : "-";
+  const cancelMs = toMillis(o.취소일시);
+  const cancelDateStr = cancelMs
+    ? new Date(cancelMs).toLocaleString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+    : "-";
+
+  const Section = ({ title, children }) => (
+    <div className="mb-4">
+      <div className="text-[11px] font-bold mb-1.5" style={{ color: accent }}>{title}</div>
+      <div className="space-y-1.5">{children}</div>
+    </div>
+  );
+  const Row = ({ label, value }) => (
+    !value ? null : (
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-[11px] text-gray-400 shrink-0">{label}</span>
+        <span className="text-[12.5px] text-gray-800 font-semibold text-right break-all">{value}</span>
+      </div>
+    )
+  );
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center px-5" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/50" />
+      <div className="relative bg-white rounded-2xl w-full max-w-sm max-h-[85vh] overflow-y-auto p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-[15px] font-bold text-gray-800">오더 전체 정보</div>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-500 border border-red-200">배차취소</span>
+        </div>
+
+        <Section title="기본정보">
+          <Row label="거래처명" value={o.거래처명} />
+          <Row label="상차지" value={[o.상차지명, o.상차지주소].filter(Boolean).join(" · ")} />
+          <Row label="상차 담당자" value={[o.상차지담당자, o.상차지담당자번호].filter(Boolean).join(" · ")} />
+          <Row label="상차일시" value={[o.상차일, o.상차시간].filter(Boolean).join(" ")} />
+          <Row label="하차지" value={[o.하차지명, o.하차지주소].filter(Boolean).join(" · ")} />
+          <Row label="하차 담당자" value={[o.하차지담당자, o.하차지담당자번호].filter(Boolean).join(" · ")} />
+          <Row label="하차일시" value={[o.하차일, o.하차시간].filter(Boolean).join(" ")} />
+        </Section>
+
+        <Section title="화물정보">
+          <Row label="톤수/차종" value={[o.톤수 || o.차량톤수, o.차종 || o.차량종류].filter(Boolean).join(" / ")} />
+          <Row label="화물내용" value={o.화물내용} />
+          <Row label="상/하차방법" value={[o.상차방법, o.하차방법].filter(Boolean).join(" / ")} />
+          <Row label="혼적여부" value={o.혼적여부} />
+        </Section>
+
+        <Section title="배차정보">
+          <Row label="배차방식" value={o.배차방식} />
+          <Row label="지급방식" value={o.지급방식} />
+          <Row label="차량번호" value={o.차량번호} />
+          <Row label="기사명" value={o.기사명} />
+          <Row label="기사 연락처" value={o.전화번호} />
+          <Row label="청구운임" value={o.청구운임 ? `${Number(o.청구운임).toLocaleString()}원` : ""} />
+          <Row label="기사운임" value={o.기사운임 ? `${Number(o.기사운임).toLocaleString()}원` : ""} />
+          <Row label="수수료" value={o.수수료 ? `${Number(o.수수료).toLocaleString()}원` : ""} />
+        </Section>
+
+        {(o.메모 || o.전달사항 || o.특이사항) && (
+          <Section title="메모/전달사항">
+            <Row label="메모" value={o.메모} />
+            <Row label="전달사항" value={o.전달사항} />
+            <Row label="특이사항" value={o.특이사항} />
+          </Section>
+        )}
+
+        <Section title="등록/취소 정보">
+          <Row label="등록일" value={regDateStr} />
+          <Row label="작성자" value={resolveCreatorName(o, mobileUsers) || "-"} />
+          <Row label="등록기기" value={o.등록기기} />
+          <Row label="취소한 사람" value={o.취소자} />
+          <Row label="취소일시" value={cancelDateStr} />
+        </Section>
+
+        <button onClick={onClose} className="w-full py-2.5 rounded-xl text-white text-[14px] font-semibold mt-1" style={{ background: accent }}>
+          닫기
+        </button>
+      </div>
+    </div>,
+    document.body
   );
 }
 
