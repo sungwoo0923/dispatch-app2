@@ -1273,26 +1273,46 @@ function DispatchRequestModal({ order, onApprove, onReject, onClose }) {
 // PC(DispatchApp)와 모바일 양쪽 어디서 배차완료 처리했든 같은 필드(배차확정일시/
 // 배차확정자)를 읽으므로 플랫폼에 상관없이 동일하게 뜬다. toMillis는 PC가 남긴
 // 숫자(Date.now())와 모바일이 남긴 Firestore Timestamp를 모두 처리한다.
-function DispatchConfirmModal({ order, cardVersionB, onClose }) {
-  const ms = toMillis(order.배차확정일시) || toMillis(order.배차완료일시);
-  const dateStr = ms
-    ? new Date(ms).toLocaleString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+// 작성자/등록자 값이 이메일이나 계정ID로 남아있는 예전 데이터도, users 컬렉션에서
+// 실명을 찾아 보여준다 — PC(DispatchApp)의 getCreatorLabel/_creatorLabel과 동일한 방식.
+function resolveCreatorName(order, mobileUsers) {
+  const raw = order?.등록자명 || order?.createdByName || order?.등록자 || order?.createdByEmail || order?.createdBy || order?.작성자 || "";
+  if (!raw) return "";
+  if (/[가-힣]/.test(raw) && !raw.includes("@")) return raw; // 이미 한글 실명
+  const key = String(raw).trim().toLowerCase();
+  const match = (mobileUsers || []).find((u) => u.id === raw || (u.email && u.email.trim().toLowerCase() === key));
+  return match?.name || raw;
+}
+
+function DispatchConfirmModal({ order, cardVersionB, mobileUsers, onClose }) {
+  const confirmMs = toMillis(order.배차확정일시) || toMillis(order.배차완료일시);
+  const confirmDateStr = confirmMs
+    ? new Date(confirmMs).toLocaleString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+    : "-";
+  const regMs = toMillis(order.createdAt) || toMillis(order.등록일시) || (order.등록일 ? new Date(`${order.등록일}T00:00:00`).getTime() : 0);
+  const regDateStr = regMs
+    ? new Date(regMs).toLocaleString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
     : "-";
   const accent = cardVersionB ? "#1B2B4B" : "#1d4ed8";
+  const rows = [
+    ["등록일", regDateStr],
+    ["작성자", resolveCreatorName(order, mobileUsers) || "-"],
+    ["등록기기", order.등록기기 || "-"],
+    ["배차등록자", order.배차확정자 || "-"],
+    ["배차확정일시", confirmDateStr],
+  ];
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center px-6" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50" />
       <div className="relative bg-white rounded-2xl w-full max-w-xs p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="text-[15px] font-bold text-gray-800 mb-4">배차 확정 정보</div>
-        <div className="space-y-3.5 mb-5">
-          <div>
-            <div className="text-[11px] text-gray-400 mb-0.5">배차한 사람</div>
-            <div className="text-[15px] font-extrabold" style={{ color: accent }}>{order.배차확정자 || "-"}</div>
-          </div>
-          <div>
-            <div className="text-[11px] text-gray-400 mb-0.5">배차 확정 일시</div>
-            <div className="text-[15px] font-extrabold" style={{ color: accent }}>{dateStr}</div>
-          </div>
+        <div className="space-y-3 mb-5">
+          {rows.map(([label, value]) => (
+            <div key={label} className="flex items-baseline justify-between gap-3 pb-2 border-b border-gray-100 last:border-b-0 last:pb-0">
+              <span className="text-[12px] text-gray-400 shrink-0">{label}</span>
+              <span className="text-[14px] font-extrabold text-right" style={{ color: accent }}>{value}</span>
+            </div>
+          ))}
         </div>
         <button onClick={onClose} className="w-full py-2.5 rounded-xl text-white text-[14px] font-semibold" style={{ background: accent }}>
           닫기
@@ -3281,6 +3301,11 @@ const groupedByDate = useMemo(() => {
           createdAt: serverTimestamp(),
           // ⭐ 등록일 hover 툴팁에서 "PC로 등록/모바일로 등록"을 보여주기 위한 등록기기
           등록기기: rowData.등록기기 || "모바일",
+          // ⭐ 오더등록/복사/불러오기 등 어떤 방법으로 새 오더를 만들든, PC와 동일하게
+          // 작성자(이메일)·등록자명(실명)을 반드시 남긴다 — 예전엔 이 필드 자체가
+          // 빠져있어 등록일 팝업/툴팁에서 작성자가 항상 비어 보이던 원인이었다.
+          작성자: auth.currentUser?.email || "",
+          등록자명: dispatcherName || "",
           // ⭐ 기사 정보까지 채워서 등록과 동시에 배차완료 상태로 저장되는 경우, PC의
           // "배차한시간" 툴팁이 읽는 배차확정일시도 같이 남겨야 한다(없으면 항상 "-").
           ...(rowData.배차상태 === "배차완료" && !rowData.배차확정일시 ? { 배차확정일시: serverTimestamp(), 배차확정자: dispatcherName } : {}),
@@ -3594,7 +3619,7 @@ const deleteSingleOrder = async (order) => {
         : prev
     );
 
-    alert(`기사 배차 완료: ${이름} (${차량번호})`);
+    showSuccess(`기사 배차 완료: ${이름} (${차량번호})`);
   };
 
   const cancelAssign = async () => {
@@ -3788,6 +3813,8 @@ const deleteSingleOrder = async (order) => {
         등록일: today,
         createdAt: serverTimestamp(),
         등록기기: "모바일",
+        작성자: auth.currentUser?.email || "",
+        등록자명: dispatcherName || "",
       });
 
       await updateDoc(doc(db, collName, ref.id), {
@@ -5215,6 +5242,7 @@ setOpenMemo={setOpenMemo}
           <MobileOrderDetail
             order={selectedOrder}
             dispatcherName={dispatcherName}
+            mobileUsers={mobileUsers}
             onOrderUpdate={(id, patch) => {
     setOrders(prev => prev.map(o => (o.id === id || o._id === id) ? { ...o, ...patch } : o));
   }}
@@ -7308,7 +7336,7 @@ const summary = useMemo(() => {
         cardVersionB={cardVersionB}
         dispatcherName={dispatcherName}
         onClose={() => setQuickEditOrder(null)}
-        onSuccess={() => {}}
+        onSuccess={() => showSuccess("수정 완료")}
       />
     )}
 
@@ -8907,6 +8935,7 @@ function MobileOrderDetail({
   onGoFare,
   cardVersionB = false,
   dispatcherName = "",
+  mobileUsers = [],
 }) {
   const [confirmDeliver, setConfirmDeliver] = useState(false);
   const [showConfirmInfo, setShowConfirmInfo] = useState(false);
@@ -9745,7 +9774,7 @@ const handleAssignClick = () => {
         </div>
       </div>
       {showConfirmInfo && (
-        <DispatchConfirmModal order={order} cardVersionB={cardVersionB} onClose={() => setShowConfirmInfo(false)} />
+        <DispatchConfirmModal order={order} cardVersionB={cardVersionB} mobileUsers={mobileUsers} onClose={() => setShowConfirmInfo(false)} />
       )}
 
       {/* ── 하차지 블록 ── */}
@@ -18262,7 +18291,7 @@ return (
         cardVersionB={cardVersionB}
         dispatcherName={dispatcherName}
         onClose={() => setQuickEditOrder(null)}
-        onSuccess={() => {}}
+        onSuccess={() => showSuccess("수정 완료")}
       />
     )}
 
