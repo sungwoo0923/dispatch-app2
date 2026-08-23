@@ -9595,9 +9595,11 @@ const pickupTimeText = order.상차시간
       return;
     }
 
-    // 기존 없음 → 신규 등록 확인 팝업
+    // ⭐ 기존 없음 → 완전히 새로운 기사이므로 팝업으로 확인받지 않고 바로 적용한다.
+    // "신규 기사" 표시만 뜨고, 실제 기사관리 등록은 저장 시(기사 배차하기/직접입력
+    // 저장 둘 다 이미 isNewDriver를 보고 upsertDriver를 호출한다) 자동으로 처리된다.
+    setCarNo(pl); setName(nm || ""); setPhone(fmtPhone(ph || "")); setIsNewDriver(true);
     clearSmartInput();
-    setDriverConflictPopup({ mode: "new_driver", existing: null, input: { plate: pl, name: nm, phone: ph } });
   };
 
   // ⭐ 스마트검색을 쓰지 않고 차량번호/이름 칸에 직접 타이핑하는 경우에도 동일하게
@@ -10143,7 +10145,7 @@ const handleAssignClick = () => {
         <div className="space-y-2 mb-3">
           {isNewDriver && (
             <div className="flex items-center gap-1.5 px-1 mb-1">
-              <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 text-[11px] font-bold border border-orange-300">신규 기사</span>
+              <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${cardVersionB ? "bg-[#1B2B4B]/5 text-[#1B2B4B] border-[#1B2B4B]/30" : "bg-blue-50 text-blue-700 border-blue-300"}`}>신규 기사</span>
               <span className="text-[11px] text-gray-400">저장 시 기사관리에 등록됩니다</span>
             </div>
           )}
@@ -10444,7 +10446,7 @@ const handleAssignClick = () => {
                   </div>
                   <button
                     style={{ touchAction: "manipulation" }}
-                    className="w-full py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold"
+                    className="w-full py-3 rounded-xl bg-white border border-[#1B2B4B] text-[#1B2B4B] text-sm font-bold"
                     onClick={async () => {
                       const { plate, name: nm, phone: ph } = driverConflictPopup.input;
                       await upsertDriver({ 차량번호: plate, 이름: nm, 전화번호: ph });
@@ -10456,26 +10458,6 @@ const handleAssignClick = () => {
                 </>
               )}
               {/* 완전 신규: 2버튼 */}
-              {!driverConflictPopup.existing && (
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    style={{ touchAction: "manipulation" }}
-                    className="py-3 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold"
-                    onClick={() => setDriverConflictPopup(null)}
-                  >취소</button>
-                  <button
-                    style={{ touchAction: "manipulation" }}
-                    className="py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold"
-                    onClick={async () => {
-                      const { plate, name: nm, phone: ph } = driverConflictPopup.input;
-                      await upsertDriver({ 차량번호: plate, 이름: nm, 전화번호: ph });
-                      setCarNo(plate); setName(nm); setPhone(fmtPhone(ph));
-                      setDriverConflictPopup(null);
-                      showToast(`신규 기사 등록: ${nm || plate}`);
-                    }}
-                  >신규 기사 등록</button>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -11489,6 +11471,9 @@ const chooseClient = (c) => {
 };
 
 const [showNewDriver, setShowNewDriver] = useState(false);
+// ⭐ 기사 스마트검색에서 차량번호는 같은데 이름이 다른 기사를 입력했을 때 확인받는
+// 충돌 팝업 — 상세보기(MobileOrderDetail)와 동일한 개념이지만 이 폼 전용 state다.
+const [formConflictPopup, setFormConflictPopup] = useState(null);
 const [showOrderCopyModal, setShowOrderCopyModal] = useState(false);
 const [showClientPickerModal, setShowClientPickerModal] = useState(false);
 const [clientPickerSearch, setClientPickerSearch] = useState("");
@@ -11760,6 +11745,46 @@ const handleFormSmartSearch = (val) => {
 
   setFormSmartMatched([]);
 };
+
+// ⭐ 입력창에서 포커스가 빠질 때(다른 곳 클릭/완료 등) 최종 확정 + 충돌 감지 —
+// 예전엔 이게 없어서 차량번호는 같은데 이름이 다른 기사를 입력해도 드롭다운만
+// 뜬 채로 아무 확인 없이 그대로 방치되던 버그가 있었다(상세보기 스마트검색과 동일한
+// 로직을 이 폼에도 붙인다).
+const handleFormSmartCommit = (val) => {
+  if (!val.trim()) return;
+  const nd = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
+  const { plate, phone, name } = parseDriverText(val);
+  if (!plate && !name && !phone) return;
+
+  setFormSmartMatched([]);
+  if (formSmartRef.current) formSmartRef.current.value = "";
+
+  if (!plate) {
+    if (name || phone) {
+      update("차량번호", ""); update("기사명", name || ""); update("전화번호", phone || "");
+      setShowNewDriver(false);
+    }
+    return;
+  }
+
+  const existing = (drivers || []).find(d => nd(d.차량번호) === nd(plate));
+  if (existing) {
+    const sameName = !name || nd(existing.이름) === nd(name);
+    if (sameName) {
+      update("차량번호", existing.차량번호); update("기사명", existing.이름 || ""); update("전화번호", existing.전화번호 || "");
+      setShowNewDriver(false);
+    } else {
+      // 차량번호는 같은데 이름이 다름 → 충돌 팝업으로 확인받는다.
+      setFormConflictPopup({ existing, input: { plate, name, phone } });
+    }
+    return;
+  }
+
+  // 기존 없음 → 팝업 없이 바로 신규로 적용(저장 시 자동 등록됨)
+  update("차량번호", plate); update("기사명", name || ""); update("전화번호", phone || "");
+  setShowNewDriver(true);
+};
+
 const [orderCopySearch, setOrderCopySearch] = useState("");
 const [orderCopySearchField, setOrderCopySearchField] = useState("all"); // 이 줄을 추가합니다.
 
@@ -13050,7 +13075,7 @@ const pickDrop = (c) => {
       <div className="border-t border-gray-100 p-3">
         <div className="text-[11px] text-gray-500 font-semibold mb-1.5">기사 검색 (차량번호/이름/번호 입력)</div>
         <div className="relative">
-          <SmartTextarea textareaRef={formSmartRef} onSearch={handleFormSmartSearch} />
+          <SmartTextarea textareaRef={formSmartRef} onSearch={handleFormSmartSearch} onCommit={handleFormSmartCommit} />
           {formSmartMatched.length > 0 && (
             <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 overflow-hidden">
               {formSmartMatched.map((d, i) => (
@@ -13068,7 +13093,7 @@ const pickDrop = (c) => {
                   {d._isNew ? (
                     <>
                       <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 text-[11px] font-bold border border-orange-300">신규기사</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${cardVersionB ? "bg-[#1B2B4B]/5 text-[#1B2B4B] border-[#1B2B4B]/30" : "bg-blue-50 text-blue-700 border-blue-300"}`}>신규기사</span>
                         <span className="font-bold text-[13px] text-gray-900">{d.이름 || "(이름 없음)"}</span>
                       </div>
                       <div className="text-[11px] text-gray-400">{d.차량번호 || "-"} · {d.전화번호 || "-"}</div>
@@ -13154,22 +13179,14 @@ const pickDrop = (c) => {
         />
       </div>
 
-      {/* 신규 기사 등록 버튼 */}
+      {/* ⭐ 등록되지 않은 차량번호면 "신규 기사"만 표시하고, 클릭 없이 오더 저장 시
+          자동으로 기사관리에 등록한다(아래 onSave 버튼 참고) — 예전엔 이 버튼을
+          따로 눌러야만 등록돼서 안 누르면 기사관리에 안 남는 문제가 있었다. */}
       {showNewDriver && (
-        <button
-          onClick={() => {
-            upsertDriver({
-              차량번호: form.차량번호,
-              이름: form.기사명 || "",
-              전화번호: form.전화번호 || "",
-            });
-            showToast("신규 기사 등록 완료");
-            setShowNewDriver(false);
-          }}
-          className="w-full py-2 mt-2 rounded bg-green-600 text-white text-sm font-semibold"
-        >
-          신규 기사 등록하기
-        </button>
+        <div className={`flex items-center gap-1.5 mt-2 px-1 py-1.5 rounded-lg text-[11px] font-semibold ${cardVersionB ? "bg-[#1B2B4B]/5 text-[#1B2B4B]" : "bg-blue-50 text-blue-700"}`}>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${cardVersionB ? "bg-white text-[#1B2B4B] border-[#1B2B4B]/30" : "bg-white text-blue-700 border-blue-300"}`}>신규 기사</span>
+          <span className="text-gray-500 font-normal">저장 시 기사관리에 자동 등록됩니다</span>
+        </div>
       )}
 
       {/* 적요 */}
@@ -13286,7 +13303,13 @@ const pickDrop = (c) => {
 
       <div className="mt-4 mb-8 space-y-2">
         <button
-          onClick={onSave}
+          onClick={() => {
+            // ⭐ 신규 기사면 여기서 자동 등록 — 아래 저장/등록과 별도 버튼을 누를 필요 없다.
+            if (showNewDriver && (form.차량번호 || "").trim()) {
+              upsertDriver({ 차량번호: form.차량번호, 이름: form.기사명 || "", 전화번호: form.전화번호 || "" });
+            }
+            onSave();
+          }}
           className={`w-full py-3 rounded-lg text-white text-base font-semibold shadow ${
             cardVersionB ? "bg-[#1B2B4B] hover:bg-[#243a60]" : "bg-blue-500"
           }`}
@@ -14488,6 +14511,68 @@ const pickDrop = (c) => {
       <div className="px-5 pb-5 flex gap-2">
         <button type="button" onClick={() => setOrderMemoPopup(null)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold">취소</button>
         <button type="button" onClick={() => saveOrderMemo(orderMemoPopup.memo, orderMemoPopup.팝업표시)} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold">저장</button>
+      </div>
+    </div>
+  </div>
+)}
+
+{formConflictPopup && (
+  <div className="fixed inset-0 bg-black/50 z-[9999] flex items-end justify-center" onClick={() => setFormConflictPopup(null)}>
+    <div className="bg-white rounded-t-2xl w-full max-w-md pb-6" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#1B2B4B] px-5 py-4 rounded-t-2xl flex items-start justify-between">
+        <div>
+          <div className="text-white font-bold text-sm">기사 정보 충돌</div>
+          <div className="text-white/60 text-xs mt-0.5">동일 차량번호에 다른 기사 정보가 감지되었습니다</div>
+        </div>
+        <button onClick={() => setFormConflictPopup(null)} className="text-white/50 text-xl leading-none ml-3">✕</button>
+      </div>
+      <div className="px-5 pt-4 space-y-3">
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+          <div className="text-xs font-semibold text-gray-500 mb-1">기존 등록 정보</div>
+          <div className="text-sm font-bold text-gray-800">{formConflictPopup.existing.이름}</div>
+          <div className="text-xs text-gray-500 mt-0.5">{formConflictPopup.existing.차량번호} · {formatPhone(formConflictPopup.existing.전화번호)}</div>
+        </div>
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+          <div className="text-xs font-semibold text-blue-600 mb-1">새로 입력한 정보</div>
+          <div className="text-sm font-bold text-gray-800">{formConflictPopup.input.name}</div>
+          <div className="text-xs text-gray-500 mt-0.5">{formConflictPopup.input.plate} · {formatPhone(formConflictPopup.input.phone)}</div>
+        </div>
+      </div>
+      <div className="px-5 pt-4 space-y-2">
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            style={{ touchAction: "manipulation" }}
+            className="py-3 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold"
+            onClick={() => {
+              const d = formConflictPopup.existing;
+              update("차량번호", d.차량번호); update("기사명", d.이름 || ""); update("전화번호", d.전화번호 || "");
+              setShowNewDriver(false);
+              setFormConflictPopup(null);
+            }}
+          >기존 정보 사용</button>
+          <button
+            style={{ touchAction: "manipulation" }}
+            className="py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold"
+            onClick={async () => {
+              const { plate, name: nm, phone: ph } = formConflictPopup.input;
+              await upsertDriver({ 차량번호: plate, 이름: nm, 전화번호: ph });
+              update("차량번호", plate); update("기사명", nm || ""); update("전화번호", ph || "");
+              setShowNewDriver(false);
+              setFormConflictPopup(null);
+              showToast("기사 정보를 덮어썼습니다");
+            }}
+          >기존 정보 덮어쓰기</button>
+        </div>
+        <button
+          style={{ touchAction: "manipulation" }}
+          className="w-full py-3 rounded-xl bg-white border border-[#1B2B4B] text-[#1B2B4B] text-sm font-bold"
+          onClick={() => {
+            const { plate, name: nm, phone: ph } = formConflictPopup.input;
+            update("차량번호", plate); update("기사명", nm || ""); update("전화번호", ph || "");
+            setShowNewDriver(true);
+            setFormConflictPopup(null);
+          }}
+        >신규 기사로 별도 등록</button>
       </div>
     </div>
   </div>
