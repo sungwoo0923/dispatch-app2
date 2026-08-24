@@ -1,9 +1,9 @@
 // src/planner/PlannerMiniGames.jsx — "미니게임" 메뉴 (PC/모바일 공용).
-// 배우자와 재미로 하는 가위바위보 / 반응속도 게임. 점수는 계속 누적된다.
-import React, { useEffect, useRef, useState } from "react";
+// 배우자와 재미로 하는 가위바위보 / 구슬 터뜨리기. 안에 게임별 속메뉴(탭)로 나뉘어
+// 있고, 점수는 계속 누적된다.
+import React, { useState } from "react";
 import {
   usePlannerGameState, usePlannerGameScores, submitRpsChoice, RPS_CHOICES,
-  startReactionRound, submitReactionTime,
 } from "../adminPlannerData";
 import { useGroupMembers } from "./plannerAuth";
 import PlannerMatchGame from "./PlannerMatchGame";
@@ -74,82 +74,6 @@ function RockPaperScissors({ groupId, myUid, myName, otherUid, otherName, state,
   );
 }
 
-function ReactionGame({ groupId, myUid, myName, otherUid, otherName, state, scores }) {
-  const reaction = state.reaction || {};
-  const [localPhase, setLocalPhase] = useState("idle"); // idle | waiting | go | submitted
-  const [goAt, setGoAt] = useState(0);
-  const timeoutRef = useRef(null);
-  const seenStartRef = useRef(null);
-
-  useEffect(() => {
-    if (reaction.phase === "waiting" && reaction.startedAt && seenStartRef.current !== reaction.startedAt?.seconds) {
-      seenStartRef.current = reaction.startedAt?.seconds;
-      setLocalPhase("waiting");
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = setTimeout(() => {
-        setGoAt(Date.now());
-        setLocalPhase("go");
-      }, reaction.delayMs || 2000);
-    }
-    if (reaction.phase === "idle") {
-      clearTimeout(timeoutRef.current);
-      setLocalPhase("idle");
-    }
-    return () => clearTimeout(timeoutRef.current);
-  }, [reaction.phase, reaction.startedAt, reaction.delayMs]);
-
-  const start = async () => { await startReactionRound(groupId); };
-  const tap = async () => {
-    if (localPhase !== "go") return;
-    const ms = Date.now() - goAt;
-    setLocalPhase("submitted");
-    await submitReactionTime(groupId, myUid, myName, ms, otherUid);
-  };
-
-  const myScore = scores[myUid]?.reaction || { w: 0, l: 0, d: 0 };
-  const theirScore = scores[otherUid]?.reaction || { w: 0, l: 0, d: 0 };
-  const lastResult = reaction.lastResult;
-  const resultLabel = lastResult?.myUid === myUid
-    ? (lastResult.result === "win" ? "내가 더 빨랐어요!" : lastResult.result === "lose" ? "상대가 더 빨랐어요" : "동시에 눌렀어요")
-    : (lastResult?.result === "win" ? "상대가 더 빨랐어요" : lastResult?.result === "lose" ? "내가 더 빨랐어요!" : lastResult ? "동시에 눌렀어요" : "");
-
-  return (
-    <div className="bg-white border rounded-xl p-4" style={{ borderColor: ACCENT_BORDER }}>
-      <div className="text-[13px] font-bold text-gray-700 mb-3">반응속도 게임</div>
-
-      {localPhase === "idle" && (
-        <button onClick={start} className="w-full py-3 rounded-lg text-white text-[13px] font-bold" style={{ background: ACCENT }}>
-          라운드 시작
-        </button>
-      )}
-      {localPhase === "waiting" && (
-        <div className="w-full py-6 rounded-lg text-center text-[13px] font-bold text-gray-400 border" style={{ borderColor: ACCENT_BORDER }}>
-          신호를 기다리세요...
-        </div>
-      )}
-      {localPhase === "go" && (
-        <button onClick={tap} className="w-full py-6 rounded-lg text-white text-[15px] font-extrabold" style={{ background: ACCENT }}>
-          지금 눌러요!
-        </button>
-      )}
-      {localPhase === "submitted" && (
-        <div className="w-full py-6 rounded-lg text-center text-[12.5px] text-gray-400 border" style={{ borderColor: ACCENT_BORDER }}>
-          {otherName || "배우자"}님을 기다리는 중...
-        </div>
-      )}
-
-      {lastResult && (
-        <div className="rounded-lg p-2.5 my-3 text-center" style={{ background: ACCENT_SOFT }}>
-          <div className="text-[12.5px] font-bold" style={{ color: ACCENT }}>{resultLabel}</div>
-          <div className="text-[11px] text-gray-500 mt-0.5">나: {lastResult.myUid === myUid ? lastResult.mineMs : lastResult.theirsMs}ms · {otherName || "배우자"}: {lastResult.myUid === myUid ? lastResult.theirsMs : lastResult.mineMs}ms</div>
-        </div>
-      )}
-
-      <ScoreRow label="누적 전적" mine={myScore} theirs={theirScore} otherName={otherName} />
-    </div>
-  );
-}
-
 // Bejeweled/Candy Crush류 매치 퍼즐 게임 — 60초 도전제라 실시간 대전이 아니라
 // "각자 도전해서 최고 점수 겨루기" 방식이라 카드에서 바로 시작할 수 있게 한다.
 function MatchGameCard({ account, other, scores, onPlay }) {
@@ -170,12 +94,18 @@ function MatchGameCard({ account, other, scores, onPlay }) {
   );
 }
 
+const GAME_TABS = [
+  ["rps", "가위바위보"],
+  ["match", "구슬 터뜨리기"],
+];
+
 export default function PlannerMiniGames({ account }) {
   const members = useGroupMembers(account.groupId);
   const other = members.find((m) => m.uid !== account.uid);
   const state = usePlannerGameState(account.groupId);
   const scores = usePlannerGameScores(account.groupId);
   const [showMatchGame, setShowMatchGame] = useState(false);
+  const [tab, setTab] = useState("rps");
 
   if (!other) {
     return (
@@ -188,9 +118,26 @@ export default function PlannerMiniGames({ account }) {
   return (
     <div className="max-w-lg mx-auto space-y-4">
       <div className="text-[12.5px] text-gray-500">배우자와 즐기는 미니게임이에요. 점수는 계속 쌓여요.</div>
-      <MatchGameCard account={account} other={other} scores={scores} onPlay={() => setShowMatchGame(true)} />
-      <RockPaperScissors groupId={account.groupId} myUid={account.uid} myName={account.name} otherUid={other.uid} otherName={other.name} state={state} scores={scores} />
-      <ReactionGame groupId={account.groupId} myUid={account.uid} myName={account.name} otherUid={other.uid} otherName={other.name} state={state} scores={scores} />
+
+      <div className="flex gap-2">
+        {GAME_TABS.map(([v, l]) => (
+          <button
+            key={v}
+            onClick={() => setTab(v)}
+            className="flex-1 py-2.5 rounded-lg text-[12.5px] font-bold border"
+            style={tab === v ? { background: ACCENT, color: "#fff", borderColor: ACCENT } : { color: ACCENT, borderColor: ACCENT_BORDER }}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {tab === "rps" && (
+        <RockPaperScissors groupId={account.groupId} myUid={account.uid} myName={account.name} otherUid={other.uid} otherName={other.name} state={state} scores={scores} />
+      )}
+      {tab === "match" && (
+        <MatchGameCard account={account} other={other} scores={scores} onPlay={() => setShowMatchGame(true)} />
+      )}
 
       {showMatchGame && (
         <PlannerMatchGame

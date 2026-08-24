@@ -18,17 +18,14 @@ export default function PlannerMyInfo({ account, onUpdated }) {
   const resolvedGroupName = members.find((m) => m.groupName)?.groupName || account.groupName || "우리 가족";
 
   const [name, setName] = useState(account.name || "");
+  const [groupName, setGroupName] = useState(resolvedGroupName);
+  useEffect(() => { setGroupName(resolvedGroupName); }, [resolvedGroupName]);
+  const [birthday, setBirthday] = useState(account.birthday || "");
+
+  // ⭐ 이름/가족 이름/생년월일마다 따로 저장 버튼이 있던 것을, 아래쪽 오른쪽의
+  // 저장 버튼 하나로 한꺼번에 저장하도록 통합했다.
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
-
-  const [groupName, setGroupName] = useState(resolvedGroupName);
-  const [groupSaving, setGroupSaving] = useState(false);
-  const [groupSavedFlash, setGroupSavedFlash] = useState(false);
-  useEffect(() => { setGroupName(resolvedGroupName); }, [resolvedGroupName]);
-
-  const [birthday, setBirthday] = useState(account.birthday || "");
-  const [birthdaySaving, setBirthdaySaving] = useState(false);
-  const [birthdaySavedFlash, setBirthdaySavedFlash] = useState(false);
 
   const [codeCopied, setCodeCopied] = useState(false);
   const copyCode = async () => {
@@ -46,48 +43,22 @@ export default function PlannerMyInfo({ account, onUpdated }) {
   const [leaving, setLeaving] = useState(false);
   const isMaster = account.email === TOTAL_MASTER_EMAIL;
 
-  const saveName = async () => {
-    if (!name.trim()) return;
+  const saveAll = async () => {
+    if (!name.trim()) { alert("이름을 입력해 주세요."); return; }
+    if (!groupName.trim()) { alert("가족 이름을 입력해 주세요."); return; }
     setSaving(true);
     try {
-      await updateMyProfile(account.uid, { name: name.trim() });
-      onUpdated?.({ ...account, name: name.trim() });
+      await Promise.all([
+        updateMyProfile(account.uid, { name: name.trim(), birthday }),
+        updateGroupName(account.groupId, groupName.trim()),
+      ]);
+      onUpdated?.({ ...account, name: name.trim(), birthday, groupName: groupName.trim() });
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 1600);
     } catch (e) {
       alert("저장 중 오류가 발생했습니다: " + e.message);
     } finally {
       setSaving(false);
-    }
-  };
-
-  const saveGroupName = async () => {
-    if (!groupName.trim()) return;
-    setGroupSaving(true);
-    try {
-      await updateGroupName(account.groupId, groupName.trim());
-      onUpdated?.({ ...account, groupName: groupName.trim() });
-      setGroupSavedFlash(true);
-      setTimeout(() => setGroupSavedFlash(false), 1600);
-    } catch (e) {
-      alert("저장 중 오류가 발생했습니다: " + e.message);
-    } finally {
-      setGroupSaving(false);
-    }
-  };
-
-  const saveBirthday = async (next) => {
-    setBirthday(next);
-    setBirthdaySaving(true);
-    try {
-      await updateMyProfile(account.uid, { birthday: next });
-      onUpdated?.({ ...account, birthday: next });
-      setBirthdaySavedFlash(true);
-      setTimeout(() => setBirthdaySavedFlash(false), 1600);
-    } catch (e) {
-      alert("저장 중 오류가 발생했습니다: " + e.message);
-    } finally {
-      setBirthdaySaving(false);
     }
   };
 
@@ -118,32 +89,22 @@ export default function PlannerMyInfo({ account, onUpdated }) {
     <div className="max-w-sm space-y-5">
       <div>
         <div className="text-[12px] font-semibold text-gray-600 mb-1.5">이름</div>
-        <div className="flex gap-2">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="flex-1 min-w-0 border rounded-lg px-3 py-2.5 text-[13.5px] focus:outline-none"
-            style={{ borderColor: ACCENT_BORDER }}
-          />
-          <button onClick={saveName} disabled={saving} className="shrink-0 whitespace-nowrap px-4 rounded-lg text-white text-[12.5px] font-bold" style={{ background: ACCENT }}>
-            {saving ? "저장 중" : savedFlash ? "저장됨" : "저장"}
-          </button>
-        </div>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="w-full border rounded-lg px-3 py-2.5 text-[13.5px] focus:outline-none"
+          style={{ borderColor: ACCENT_BORDER }}
+        />
       </div>
 
       <div>
         <div className="text-[12px] font-semibold text-gray-600 mb-1.5">가족 이름</div>
-        <div className="flex gap-2">
-          <input
-            value={groupName}
-            onChange={(e) => setGroupName(e.target.value)}
-            className="flex-1 min-w-0 border rounded-lg px-3 py-2.5 text-[13.5px] focus:outline-none"
-            style={{ borderColor: ACCENT_BORDER }}
-          />
-          <button onClick={saveGroupName} disabled={groupSaving} className="shrink-0 whitespace-nowrap px-4 rounded-lg text-white text-[12.5px] font-bold" style={{ background: ACCENT }}>
-            {groupSaving ? "저장 중" : groupSavedFlash ? "저장됨" : "저장"}
-          </button>
-        </div>
+        <input
+          value={groupName}
+          onChange={(e) => setGroupName(e.target.value)}
+          className="w-full border rounded-lg px-3 py-2.5 text-[13.5px] focus:outline-none"
+          style={{ borderColor: ACCENT_BORDER }}
+        />
         <div className="text-[10.5px] text-gray-500 mt-1">초대한 사람, 초대받은 사람 누구나 바꿀 수 있어요.</div>
       </div>
 
@@ -162,14 +123,18 @@ export default function PlannerMyInfo({ account, onUpdated }) {
           <div className="text-[12px] font-semibold text-gray-600 mb-1.5">생년월일</div>
           <PlannerDatePicker
             value={birthday}
-            onChange={saveBirthday}
+            onChange={setBirthday}
             placeholder="생일 선택"
             className="w-full text-left border rounded-lg px-3 py-2.5 text-[13px]"
           />
-          <div className="text-[10px] mt-1 leading-relaxed" style={{ color: birthdaySaving || birthdaySavedFlash ? ACCENT : "#6b7280" }}>
-            {birthdaySaving ? "저장 중..." : birthdaySavedFlash ? "저장됐어요" : "다가오면 알림에 나와요."}
-          </div>
+          <div className="text-[10px] text-gray-500 mt-1 leading-relaxed">다가오면 알림에 나와요.</div>
         </div>
+      </div>
+
+      <div className="flex justify-end">
+        <button onClick={saveAll} disabled={saving} className="px-6 py-2.5 rounded-lg text-white text-[13px] font-bold" style={{ background: ACCENT }}>
+          {saving ? "저장 중..." : savedFlash ? "저장됨" : "저장"}
+        </button>
       </div>
 
       <div className="bg-white border rounded-xl p-3.5 space-y-1.5" style={{ borderColor: ACCENT_BORDER, background: ACCENT_SOFT }}>
