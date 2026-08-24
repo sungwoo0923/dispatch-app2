@@ -1,7 +1,7 @@
 // src/planner/PlannerRoot.jsx — 로그인 이후 KP-Planner 메인 화면.
 // 배차프로그램 화면과는 완전히 별개의 셸(헤더/메뉴)이고, 안의 내용만
 // AdminPlanner(PC)/AdminPlannerMobile(모바일)을 그대로 재사용한다.
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Navigate } from "react-router-dom";
 import KPPlannerLogo from "./KPPlannerLogo";
 import PlannerSplash from "./PlannerSplash";
@@ -114,15 +114,38 @@ function PlannerDesktopShell({ account, onUpdated }) {
   );
 }
 
+// ⭐ 앱을 처음 열 때 로고가 반짝 나타났다 순식간에 사라지는 느낌이 아니라, 스플래시
+// 화면답게 최소 이 시간만큼은 보여준 뒤 천천히 사라지게 한다(로그인 확인이
+// 아무리 빨리 끝나도 최소 노출 시간을 보장 + 사라질 때 페이드아웃 시간을 기다렸다가
+// 다음 화면으로 넘어간다).
+const MIN_SPLASH_MS = 1200;
+const SPLASH_FADE_MS = 450;
+
 export default function PlannerRoot() {
   const { loading, user, account } = usePlannerAccount();
   const [accountOverride, setAccountOverride] = useState(null);
+  const [splashPhase, setSplashPhase] = useState("visible"); // "visible" | "fading" | "done"
+  const mountedAt = useRef(Date.now());
   useEffect(() => { document.title = "KP-Planner"; }, []);
   useEffect(() => { setAccountOverride(null); }, [account]);
 
+  useEffect(() => {
+    if (loading) return;
+    const elapsed = Date.now() - mountedAt.current;
+    const wait = Math.max(0, MIN_SPLASH_MS - elapsed);
+    const t = setTimeout(() => setSplashPhase("fading"), wait);
+    return () => clearTimeout(t);
+  }, [loading]);
+
+  useEffect(() => {
+    if (splashPhase !== "fading") return;
+    const t = setTimeout(() => setSplashPhase("done"), SPLASH_FADE_MS);
+    return () => clearTimeout(t);
+  }, [splashPhase]);
+
   const effectiveAccount = accountOverride || account;
 
-  if (loading) return <PlannerSplash />;
+  if (splashPhase !== "done") return <PlannerSplash fadeOut={splashPhase === "fading"} />;
   if (!user) return <Navigate to="/planner-login" replace />;
 
   if (!effectiveAccount) {
