@@ -17,7 +17,7 @@ import {
   nextOccurrence, recurringDateInYear, mergeCategoryOptions, budgetStatusLabel,
   usePlannerWallet, computeWalletBalance, usePlannerDebts, totalDebtAmount,
 } from "./adminPlannerData";
-import { ACCENT, ACCENT_BORDER } from "./planner/plannerTheme";
+import { ACCENT, ACCENT_BORDER, ACCENT_SOFT } from "./planner/plannerTheme";
 import PlannerDatePicker from "./planner/PlannerDatePicker";
 import PlannerTimePicker from "./planner/PlannerTimePicker";
 import PlannerCategorySelect from "./planner/PlannerCategorySelect";
@@ -83,16 +83,18 @@ function Field({ label, children }) {
 // ⭐ DispatchApp.jsx에도 이름이 같은 Metric이 있지만, 이 파일은 별도 모듈이라
 // 그 쪽 스코프를 공유하지 못한다("Metric is not defined" 오류의 원인이었다) —
 // 이 파일 전용으로 다시 선언한다.
-function Metric({ label, value, valueClass = "text-gray-800" }) {
+function Metric({ label, value, valueClass = "text-gray-800", valueStyle }) {
   return (
     <div className="rounded-lg bg-white border border-gray-200 px-3 py-2.5">
       <p className="text-[12px] font-semibold text-gray-500 mb-0.5">{label}</p>
-      <p className={`text-[16px] font-bold ${valueClass}`}>{value}</p>
+      <p className={`text-[16px] font-bold ${valueClass}`} style={valueStyle}>{value}</p>
     </div>
   );
 }
 
-const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#EC6FA0]";
+// ⭐ focus:border는 순수 CSS 상태라 인라인 style로는 못 바꿔서, plannerTheme.js가
+// applyGenderTheme() 때마다 갱신해두는 --planner-accent CSS 변수를 참조한다.
+const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[var(--planner-accent)]";
 
 // ────────────────────────────────────────────────
 // 수입/지출 등록·수정 모달
@@ -150,9 +152,8 @@ function LedgerEntryModal({ initial, defaultType = "expense", companyName, actor
               key={v}
               type="button"
               onClick={() => { setType(v); setCategory(""); }}
-              className={`flex-1 py-2 rounded-lg text-[13px] font-bold border ${
-                type === v ? "bg-[#EC6FA0] text-white border-[#EC6FA0]" : "bg-white text-gray-500 border-gray-200"
-              }`}
+              className="flex-1 py-2 rounded-lg text-[13px] font-bold border"
+              style={type === v ? { background: ACCENT, color: "#fff", borderColor: ACCENT } : { background: "#fff", color: "#6b7280", borderColor: "#e5e7eb" }}
             >
               {l}
             </button>
@@ -370,9 +371,8 @@ function FamilyMemberModal({ initial, group, companyName, actorName, onClose }) 
               key={v}
               type="button"
               onClick={() => setSide(v)}
-              className={`flex-1 py-2 rounded-lg text-[12.5px] font-bold border ${
-                side === v ? "bg-[#EC6FA0] text-white border-[#EC6FA0]" : "bg-white text-gray-500 border-gray-200"
-              }`}
+              className="flex-1 py-2 rounded-lg text-[12.5px] font-bold border"
+              style={side === v ? { background: ACCENT, color: "#fff", borderColor: ACCENT } : { background: "#fff", color: "#6b7280", borderColor: "#e5e7eb" }}
             >
               {v}
             </button>
@@ -471,7 +471,8 @@ function RecurringManagerModal({ templates, companyName, actorName, onClose }) {
         <div className="flex gap-1.5">
           {[["expense", "지출"], ["income", "수입"]].map(([v, l]) => (
             <button key={v} type="button" onClick={() => setEntryType(v)}
-              className={`flex-1 py-2 rounded-lg text-[12.5px] font-bold border ${entryType === v ? "bg-[#EC6FA0] text-white border-[#EC6FA0]" : "bg-white text-gray-500 border-gray-200"}`}>
+              className="flex-1 py-2 rounded-lg text-[12.5px] font-bold border"
+              style={entryType === v ? { background: ACCENT, color: "#fff", borderColor: ACCENT } : { background: "#fff", color: "#6b7280", borderColor: "#e5e7eb" }}>
               {l}
             </button>
           ))}
@@ -734,14 +735,16 @@ export default function AdminPlanner({ userCompany, myRealName, myUid, myGender,
         </div>
       </div>
 
+      {/* ⭐ 예전엔 탭 색이 #EC6FA0(핑크)로 고정돼 있어서, 남자 계정(네이비 테마)으로
+          로그인해도 이 탭 줄만 계속 핑크로 보이는 불일치가 있었다 — ACCENT로 바꿔서
+          성별 테마와 항상 맞게 했다. */}
       <div className="flex gap-2 mb-5 flex-wrap">
         {TAB_ITEMS.map(([v, l]) => (
           <button
             key={v}
             onClick={() => setTab(v)}
-            className={`px-4 py-2 text-[13px] font-bold rounded-lg transition border ${
-              tab === v ? "bg-[#EC6FA0] text-white border-[#EC6FA0]" : "bg-white text-[#EC6FA0] border-[#EC6FA0] hover:bg-[#EC6FA0] hover:text-white"
-            }`}
+            className="px-4 py-2 text-[13px] font-bold rounded-lg transition border"
+            style={tab === v ? { background: ACCENT, color: "#fff", borderColor: ACCENT } : { background: "#fff", color: ACCENT, borderColor: ACCENT }}
           >
             {l}
           </button>
@@ -821,7 +824,7 @@ function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <div className="flex items-center justify-between mb-1">
             <div className="text-[11px] font-bold text-gray-400">{year}년 총예산 목표</div>
-            <button onClick={() => setEditingBudget((v) => !v)} className="text-[11px] font-semibold text-[#EC6FA0] hover:underline">수정</button>
+            <button onClick={() => setEditingBudget((v) => !v)} className="text-[11px] font-semibold hover:underline" style={{ color: ACCENT }}>수정</button>
           </div>
           {editingBudget ? (
             <div className="flex gap-1 mt-1">
@@ -994,7 +997,8 @@ function LedgerTab({ rows, companyName, actorName, recurringTemplates, entries }
             <div className="flex gap-1">
               {[["all", "전체"], ["income", "수입"], ["expense", "지출"]].map(([v, l]) => (
                 <button key={v} onClick={() => setFilters((d) => ({ ...d, kind: v }))}
-                  className={`px-3 py-1.5 rounded-lg text-[12px] font-bold border ${filters.kind === v ? "bg-[#EC6FA0] text-white border-[#EC6FA0]" : "bg-white text-gray-500 border-gray-200"}`}>
+                  className="px-3 py-1.5 rounded-lg text-[12px] font-bold border"
+                  style={filters.kind === v ? { background: ACCENT, color: "#fff", borderColor: ACCENT } : { background: "#fff", color: "#6b7280", borderColor: "#e5e7eb" }}>
                   {l}
                 </button>
               ))}
@@ -1044,7 +1048,7 @@ function LedgerTab({ rows, companyName, actorName, recurringTemplates, entries }
       <div className="grid grid-cols-3 gap-3 mb-5 max-w-xl">
         <Metric label="수입" value={fmtWon(totalIncome)} />
         <Metric label="지출" value={fmtWon(totalExpense)} valueClass="text-red-600" />
-        <Metric label="잔액" value={fmtWon(walletBalance != null ? walletBalance : totalIncome - totalExpense)} valueClass="text-[#EC6FA0]" />
+        <Metric label="잔액" value={fmtWon(walletBalance != null ? walletBalance : totalIncome - totalExpense)} valueClass="" valueStyle={{ color: ACCENT }} />
       </div>
 
       {categoryTotals.length > 0 && (
@@ -1189,9 +1193,9 @@ function CalendarTab({ year, schedules, companyName, actorName }) {
     <div>
       <div className="bg-white border border-gray-200 rounded-xl p-4">
         <div className="flex items-center justify-between mb-3">
-          <button onClick={() => goMonth(-1)} className="w-8 h-8 rounded-lg hover:bg-gray-100 text-[#EC6FA0] font-bold">‹</button>
-          <div className="text-[14px] font-bold text-[#EC6FA0]">{viewYear}년 {viewMonth + 1}월</div>
-          <button onClick={() => goMonth(1)} className="w-8 h-8 rounded-lg hover:bg-gray-100 text-[#EC6FA0] font-bold">›</button>
+          <button onClick={() => goMonth(-1)} className="w-8 h-8 rounded-lg hover:bg-gray-100 font-bold" style={{ color: ACCENT }}>‹</button>
+          <div className="text-[14px] font-bold" style={{ color: ACCENT }}>{viewYear}년 {viewMonth + 1}월</div>
+          <button onClick={() => goMonth(1)} className="w-8 h-8 rounded-lg hover:bg-gray-100 font-bold" style={{ color: ACCENT }}>›</button>
         </div>
         <div className="grid grid-cols-7 gap-1 mb-1">
           {["일", "월", "화", "수", "목", "금", "토"].map((w, i) => (
@@ -1211,7 +1215,7 @@ function CalendarTab({ year, schedules, companyName, actorName }) {
               <div
                 key={i}
                 onClick={() => setSelectedDate(dateStr)}
-                className={`min-h-[92px] rounded-lg border p-1.5 cursor-pointer hover:border-[#EC6FA0] transition ${isSelected ? "border-2" : isToday ? "border-2 border-gray-300" : "border-gray-100"}`}
+                className={`min-h-[92px] rounded-lg border p-1.5 cursor-pointer hover:border-[var(--planner-accent)] transition ${isSelected ? "border-2" : isToday ? "border-2 border-gray-300" : "border-gray-100"}`}
                 style={isSelected ? { borderColor: ACCENT } : undefined}
               >
                 <div className={`text-[12px] font-bold mb-1 ${holidayName || dow === 0 ? "text-red-500" : dow === 6 ? "text-blue-500" : "text-gray-600"}`}>
@@ -1349,7 +1353,7 @@ function EventBudgetCard({ g, rows, companyName, onAddMember, onEditMember }) {
     return (
       <button
         onClick={toggle}
-        className="w-full bg-white border border-gray-200 rounded-2xl px-5 py-3.5 flex items-center justify-between hover:border-[#EC6FA0] transition text-left"
+        className="w-full bg-white border border-gray-200 rounded-2xl px-5 py-3.5 flex items-center justify-between hover:border-[var(--planner-accent)] transition text-left"
       >
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-gray-300">▸</span>
@@ -1373,13 +1377,13 @@ function EventBudgetCard({ g, rows, companyName, onAddMember, onEditMember }) {
         <div className="flex items-center gap-2">
           <button
             onClick={() => exportTableToExcel(`${g}_이벤트예산`, rows, { title: "이름", category: "구분", amount: "금액", memo: "메모" })}
-            className="text-[12px] font-semibold text-gray-500 hover:text-[#EC6FA0]"
+            className="text-[12px] font-semibold text-gray-500 hover:text-[var(--planner-accent)]"
           >
             엑셀
           </button>
           <button
             onClick={() => exportPrintableToPdf(printRef.current, `${g}_이벤트예산`)}
-            className="text-[12px] font-semibold text-gray-500 hover:text-[#EC6FA0]"
+            className="text-[12px] font-semibold text-gray-500 hover:text-[var(--planner-accent)]"
           >
             PDF
           </button>
@@ -1419,7 +1423,7 @@ function EventBudgetCard({ g, rows, companyName, onAddMember, onEditMember }) {
         </div>
       )}
 
-      <div className="px-5 py-3 bg-[#EC6FA0]/[0.04] flex items-center justify-between border-t border-gray-100">
+      <div className="px-5 py-3 flex items-center justify-between border-t border-gray-100" style={{ background: ACCENT_SOFT }}>
         <span className="text-[13px] font-semibold text-gray-600">총 인원수 {rows.length}명</span>
         <span className="text-[15px] font-extrabold" style={{ color: ACCENT }}>총 {fmtWon(total)}</span>
       </div>

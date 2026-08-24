@@ -32,4 +32,16 @@ export function applyGenderTheme(gender) {
   } else {
     ACCENT = PINK; ACCENT_DARK = PINK_DARK; ACCENT_SOFT = PINK_SOFT; ACCENT_BORDER = PINK_BORDER; BG = "#fffafc";
   }
+  // ⭐ Tailwind arbitrary-value 클래스(예: focus:border-[var(--planner-accent)])는 JS
+  // 값이 아니라 CSS 값만 참조할 수 있어서, ACCENT가 바뀔 때마다 CSS 변수도 같이 갱신해둔다.
+  // 이게 없으면 :focus/:hover 같은 순수 CSS 상태 전용 스타일은 남자(네이비) 테마에서도
+  // 계속 분홍색으로 하드코딩된 채 남아있게 된다.
+  if (typeof document !== "undefined") {
+    document.documentElement.style.setProperty("--planner-accent", ACCENT);
+    document.documentElement.style.setProperty("--planner-accent-border", ACCENT_BORDER);
+  }
+}
+if (typeof document !== "undefined") {
+  document.documentElement.style.setProperty("--planner-accent", ACCENT);
+  document.documentElement.style.setProperty("--planner-accent-border", ACCENT_BORDER);
 }

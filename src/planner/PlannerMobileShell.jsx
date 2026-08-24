@@ -38,6 +38,14 @@ export const PLANNER_MENU_ITEMS = [
   ["settings", "설정"],
 ];
 
+// ⭐ 메뉴 항목이 11개까지 늘어나면서 그냥 쭉 나열하면 복잡해 보여서, 성격이
+// 비슷한 것끼리 소제목으로 묶었다(라우팅 키는 그대로, 드로어 표시 순서만 그룹핑).
+const PLANNER_MENU_GROUPS = [
+  { label: "가계부·일정", keys: ["dashboard", "ledger", "calendar", "family", "eventMoney"] },
+  { label: "우리 둘", keys: ["ourStory", "timeCapsule", "cycle", "games"] },
+  { label: "계정", keys: ["myinfo", "settings"] },
+];
+
 function ChatIconButton({ onClick, unreadCount = 0 }) {
   return (
     <button onClick={onClick} style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", position: "relative" }}>
@@ -144,22 +152,38 @@ export default function PlannerMobileShell({ account, onUpdated, previewMode = f
               <div style={{ fontSize: 11.5, color: "#7d6a75", marginTop: 2 }}>{account.groupName || "우리 가족"}</div>
             </div>
             <div style={{ flex: 1, padding: "8px 0", overflowY: "auto" }}>
-              {menuItems.map(([v, l]) => (
-                <button
-                  key={v}
-                  onClick={() => {
-                    setShowMenu(false);
-                    if (v === "__admin__") setShowAdmin(true);
-                    else setPage(v);
-                  }}
-                  style={{
-                    width: "100%", textAlign: "left", padding: "12px 20px", fontSize: 13.5, fontWeight: 600, border: "none", cursor: "pointer",
-                    background: page === v ? ACCENT : "transparent",
-                    color: page === v ? "#fff" : v === "__admin__" ? ACCENT : "#4A2E3D",
-                  }}
-                >
-                  {l}
-                </button>
+              {PLANNER_MENU_GROUPS.map((group) => {
+                const items = menuItems.filter(([v]) => group.keys.includes(v));
+                if (items.length === 0) return null;
+                return (
+                  <div key={group.label}>
+                    <div style={{ padding: "12px 20px 4px", fontSize: 10.5, fontWeight: 800, color: "#c9b3c0", letterSpacing: 0.3 }}>{group.label}</div>
+                    {items.map(([v, l]) => (
+                      <button
+                        key={v}
+                        onClick={() => { setShowMenu(false); setPage(v); }}
+                        style={{
+                          width: "100%", textAlign: "left", padding: "12px 20px", fontSize: 13.5, fontWeight: 600, border: "none", cursor: "pointer",
+                          background: page === v ? ACCENT : "transparent",
+                          color: page === v ? "#fff" : "#4A2E3D",
+                        }}
+                      >
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })}
+              {menuItems.filter(([v]) => v === "__admin__").map(([v, l]) => (
+                <div key={v}>
+                  <div style={{ padding: "12px 20px 4px", fontSize: 10.5, fontWeight: 800, color: "#c9b3c0", letterSpacing: 0.3 }}>관리자</div>
+                  <button
+                    onClick={() => { setShowMenu(false); setShowAdmin(true); }}
+                    style={{ width: "100%", textAlign: "left", padding: "12px 20px", fontSize: 13.5, fontWeight: 600, border: "none", cursor: "pointer", background: "transparent", color: ACCENT }}
+                  >
+                    {l}
+                  </button>
+                </div>
               ))}
             </div>
             <div style={{ padding: "16px 20px", borderTop: "1px solid #f9e6ee" }}>
