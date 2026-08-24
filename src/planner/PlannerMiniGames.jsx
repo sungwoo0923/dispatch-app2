@@ -85,7 +85,7 @@ function MatchGameCard({ account, other, scores, onPlay }) {
         <div className="text-[13px] font-bold text-gray-700">구슬 터뜨리기</div>
         <button onClick={onPlay} className="text-[11.5px] font-bold px-3 py-1.5 rounded-full text-white" style={{ background: ACCENT }}>플레이</button>
       </div>
-      <div className="text-[11.5px] text-gray-400 mb-2.5">60초 동안 같은 색 구슬 5개를 한 줄로 모아 터뜨려 보세요.</div>
+      <div className="text-[11.5px] text-gray-400 mb-2.5">60초 동안 같은 색 구슬 3개 이상을 한 줄로 모아 터뜨려 보세요.</div>
       <div className="flex items-center justify-between text-[12px] font-bold" style={{ color: ACCENT }}>
         <span>나 최고 {myBest}</span>
         <span className="text-gray-400 font-semibold">{other.name || "배우자"} 최고 {theirBest}</span>
