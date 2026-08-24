@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useGroupMembers, updateMyProfile } from "./plannerAuth";
 import { ACCENT, ACCENT_SOFT, ACCENT_BORDER } from "./plannerTheme";
 import PlannerMobileShell from "./PlannerMobileShell";
+import PlannerUserManagement from "./PlannerUserManagement";
 
 const GENDER_LABEL = { male: "남자", female: "여자" };
 const ROLE_LABEL = { owner: "최고관리자", member: "구성원" };
@@ -93,6 +94,10 @@ export default function PlannerAdminPanel({ account, onClose, onUpdated }) {
             </div>
           </Section>
 
+          <Section title="가입자 관리">
+            <PlannerUserManagement />
+          </Section>
+
           <Section title="모바일 화면 미리보기">
             <div style={{ fontSize: 11.5, color: "#9b9ba3", marginBottom: 10 }}>실제 휴대폰과 동일한 화면 폭으로 보여줍니다.</div>
             <div
@@ -117,5 +122,5 @@ export default function PlannerAdminPanel({ account, onClose, onUpdated }) {
 // 그대로 재사용한다 — 예전엔 AdminPlannerMobile을 직접 불러서 옛날 탭바 UI가
 // 미리보기에 보이는 불일치가 있었는데, 공용 컴포넌트로 추출해서 해결했다.
 function PlannerAdminPanelMobilePreview({ account }) {
-  return <PlannerMobileShell account={account} />;
+  return <PlannerMobileShell account={account} previewMode />;
 }

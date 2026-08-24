@@ -1,17 +1,26 @@
 // src/planner/PlannerMyInfo.jsx — "내정보" 메뉴 (PC/모바일 공용, 모든 구성원이 접근 가능).
 // 이름은 스스로 수정할 수 있다. 성별은 가입할 때 정한 값으로 고정되고(화면 색상
 // 테마와 연결돼 있어서 나중에 바꾸면 배우자와 화면이 뒤섞일 수 있다), 여기서는
-// 읽기 전용으로만 보여준다.
+// 읽기 전용으로만 보여준다. 배우자 초대 공유와 회원 탈퇴도 여기서 처리한다.
 import React, { useState } from "react";
-import { updateMyProfile, TOTAL_MASTER_EMAIL } from "./plannerAuth";
+import { useNavigate } from "react-router-dom";
+import { updateMyProfile, leavePlannerAccount, TOTAL_MASTER_EMAIL } from "./plannerAuth";
+import { shareInvite } from "./plannerInvite";
 import { ACCENT, ACCENT_SOFT, ACCENT_BORDER } from "./plannerTheme";
 
 const GENDER_LABEL = { male: "남자", female: "여자" };
 
 export default function PlannerMyInfo({ account, onUpdated }) {
+  const navigate = useNavigate();
   const [name, setName] = useState(account.name || "");
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [shareFlash, setShareFlash] = useState("");
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [leaveInput, setLeaveInput] = useState("");
+  const [leaving, setLeaving] = useState(false);
+  const isMaster = account.email === TOTAL_MASTER_EMAIL;
 
   const saveName = async () => {
     if (!name.trim()) return;
@@ -25,6 +34,29 @@ export default function PlannerMyInfo({ account, onUpdated }) {
       alert("저장 중 오류가 발생했습니다: " + e.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const invite = async () => {
+    setSharing(true);
+    try {
+      const result = await shareInvite({ groupCode: account.groupId, groupName: account.groupName, myName: account.name, myGender: account.gender });
+      if (result === "copied") { setShareFlash("초대 문구를 복사했어요. 카카오톡 등에 붙여넣어 보내주세요."); setTimeout(() => setShareFlash(""), 3000); }
+      if (result === "failed") { alert("공유에 실패했어요. 다시 시도해 주세요."); }
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const doLeave = async () => {
+    if (leaveInput.trim() !== "탈퇴") { alert('"탈퇴"라고 정확히 입력해 주세요.'); return; }
+    setLeaving(true);
+    try {
+      await leavePlannerAccount();
+      navigate("/planner-login", { replace: true });
+    } catch (e) {
+      alert("탈퇴 처리 중 오류가 발생했습니다: " + e.message);
+      setLeaving(false);
     }
   };
 
@@ -60,8 +92,47 @@ export default function PlannerMyInfo({ account, onUpdated }) {
         <div className="flex justify-between text-[12.5px]"><span className="text-gray-500">이메일</span><span className="font-semibold text-gray-700">{account.email}</span></div>
         <div className="flex justify-between text-[12.5px]"><span className="text-gray-500">가족 이름</span><span className="font-semibold text-gray-700">{account.groupName || "우리 가족"}</span></div>
         <div className="flex justify-between text-[12.5px]"><span className="text-gray-500">가족 코드</span><span className="font-bold" style={{ color: ACCENT }}>{account.groupId}</span></div>
-        <div className="flex justify-between text-[12.5px]"><span className="text-gray-500">역할</span><span className="font-semibold text-gray-700">{account.email === TOTAL_MASTER_EMAIL ? "최고관리자" : "구성원"}</span></div>
+        <div className="flex justify-between text-[12.5px]"><span className="text-gray-500">역할</span><span className="font-semibold text-gray-700">{isMaster ? "최고관리자" : "구성원"}</span></div>
       </div>
+
+      <div>
+        <button onClick={invite} disabled={sharing} className="w-full py-2.5 rounded-xl text-white text-[13px] font-bold" style={{ background: ACCENT }}>
+          {sharing ? "준비 중..." : "배우자에게 초대 공유하기"}
+        </button>
+        {shareFlash && <div className="text-[11px] text-gray-400 mt-1.5">{shareFlash}</div>}
+      </div>
+
+      {!isMaster && (
+        <div className="pt-2 border-t" style={{ borderColor: ACCENT_SOFT }}>
+          {!confirmLeave ? (
+            <button onClick={() => setConfirmLeave(true)} className="text-[12px] font-semibold text-gray-400 mt-3">
+              회원 탈퇴
+            </button>
+          ) : (
+            <div className="mt-3 p-3.5 rounded-xl border border-red-200 bg-red-50">
+              <div className="text-[12px] font-bold text-red-500 mb-1.5">정말 탈퇴하시겠어요?</div>
+              <div className="text-[11px] text-red-400 mb-2.5 leading-relaxed">
+                탈퇴하면 이 가족({account.groupName || "우리 가족"})에서 나가게 되고, 다시 쓰려면 재가입해야 해요.
+                (로그인 계정 자체는 그대로 유지돼요.) 계속하려면 아래에 "탈퇴"라고 입력해 주세요.
+              </div>
+              <input
+                value={leaveInput}
+                onChange={(e) => setLeaveInput(e.target.value)}
+                placeholder="탈퇴"
+                className="w-full border border-red-200 rounded-lg px-3 py-2 text-[13px] mb-2 focus:outline-none"
+              />
+              <div className="flex gap-2">
+                <button onClick={() => { setConfirmLeave(false); setLeaveInput(""); }} className="flex-1 py-2 rounded-lg bg-white border border-gray-200 text-gray-500 text-[12.5px] font-semibold">
+                  취소
+                </button>
+                <button onClick={doLeave} disabled={leaving} className="flex-1 py-2 rounded-lg bg-red-500 text-white text-[12.5px] font-bold">
+                  {leaving ? "처리 중..." : "탈퇴하기"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

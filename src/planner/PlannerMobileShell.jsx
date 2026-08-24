@@ -2,13 +2,18 @@
 // PlannerRoot(실제 모바일 화면)와 PlannerAdminPanel(관리자 메뉴의 "모바일 미리보기")가
 // 완전히 동일한 컴포넌트를 그대로 재사용한다 — 예전엔 미리보기가 AdminPlannerMobile을
 // 직접 불러서 옛날 탭 UI가 보이는 불일치가 있었는데, 이 파일로 추출해서 해결했다.
-import React, { useState } from "react";
+import React, { Suspense, useState } from "react";
 import AdminPlannerMobile from "../mobile/AdminPlannerMobile";
 import PlannerCycleTracker from "./PlannerCycleTracker";
 import PlannerMessenger from "./PlannerMessenger";
 import PlannerMyInfo from "./PlannerMyInfo";
-import { plannerLogout } from "./plannerAuth";
+import { plannerLogout, TOTAL_MASTER_EMAIL } from "./plannerAuth";
 import { ACCENT } from "./plannerTheme";
+
+// ⭐ PlannerAdminPanel.jsx는 "모바일 미리보기"에서 이 파일을 그대로 불러 쓴다 — 여기서
+// 그 파일을 정적으로 import하면 순환참조가 생기므로, 실제로 열 때만 lazy 로드한다
+// (미리보기 안에서는 previewMode=true라 애초에 관리자 메뉴 항목 자체가 안 보인다).
+const PlannerAdminPanel = React.lazy(() => import("./PlannerAdminPanel"));
 
 export const PLANNER_MENU_ITEMS = [
   ["dashboard", "홈"],
@@ -44,9 +49,14 @@ function GroupCodeBadge({ groupId }) {
   );
 }
 
-export default function PlannerMobileShell({ account, onUpdated }) {
+// previewMode: 관리자 메뉴의 "모바일 미리보기" 안에서 렌더링될 때 true — 이 안에서는
+// 관리자 메뉴로 또 들어가는 항목 자체를 숨긴다(미리보기 안에 미리보기가 열리는 걸 방지).
+export default function PlannerMobileShell({ account, onUpdated, previewMode = false }) {
   const [page, setPage] = useState("dashboard");
   const [showMenu, setShowMenu] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const isMaster = account.email === TOTAL_MASTER_EMAIL;
+  const menuItems = isMaster && !previewMode ? [...PLANNER_MENU_ITEMS, ["__admin__", "관리자 메뉴"]] : PLANNER_MENU_ITEMS;
   const pageTitle = PLANNER_MENU_ITEMS.find(([v]) => v === page)?.[1] || "홈";
 
   return (
@@ -93,14 +103,18 @@ export default function PlannerMobileShell({ account, onUpdated }) {
               <div style={{ fontSize: 11.5, color: "#a58a97", marginTop: 2 }}>{account.groupName || "우리 가족"}</div>
             </div>
             <div style={{ flex: 1, padding: "8px 0", overflowY: "auto" }}>
-              {PLANNER_MENU_ITEMS.map(([v, l]) => (
+              {menuItems.map(([v, l]) => (
                 <button
                   key={v}
-                  onClick={() => { setPage(v); setShowMenu(false); }}
+                  onClick={() => {
+                    setShowMenu(false);
+                    if (v === "__admin__") setShowAdmin(true);
+                    else setPage(v);
+                  }}
                   style={{
                     width: "100%", textAlign: "left", padding: "12px 20px", fontSize: 13.5, fontWeight: 600, border: "none", cursor: "pointer",
                     background: page === v ? ACCENT : "transparent",
-                    color: page === v ? "#fff" : "#4A2E3D",
+                    color: page === v ? "#fff" : v === "__admin__" ? ACCENT : "#4A2E3D",
                   }}
                 >
                   {l}
@@ -114,6 +128,12 @@ export default function PlannerMobileShell({ account, onUpdated }) {
             </div>
           </div>
         </div>
+      )}
+
+      {showAdmin && (
+        <Suspense fallback={null}>
+          <PlannerAdminPanel account={account} onClose={() => setShowAdmin(false)} onUpdated={onUpdated} />
+        </Suspense>
       )}
     </div>
   );

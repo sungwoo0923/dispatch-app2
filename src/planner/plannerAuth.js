@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import { onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 import { plannerAuth as auth, plannerDb as db } from "./plannerFirebase";
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, query, where, limit, getDocs, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, query, where, limit, getDocs, onSnapshot } from "firebase/firestore";
 
 export const PLANNER_ACCOUNTS = "plannerAccounts";
 
@@ -185,4 +185,35 @@ export function useGroupMembers(groupId) {
 
 export async function updateMyProfile(uid, patch) {
   await updateDoc(doc(db, PLANNER_ACCOUNTS, uid), patch);
+}
+
+// ⭐ 최고관리자 전용 "가입자 관리" 화면에서 쓴다 — 전체 plannerAccounts를 그룹 구분
+//없이 다 구독한다. PlannerAdminPanel(owner에게만 렌더링됨) 밖에서는 쓰지 않는다.
+export function useAllPlannerAccounts() {
+  const [accounts, setAccounts] = useState([]);
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, PLANNER_ACCOUNTS), (snap) => {
+      setAccounts(snap.docs.map((d) => ({ uid: d.id, ...d.data() })));
+    }, () => {});
+    return () => unsub();
+  }, []);
+  return accounts;
+}
+
+// 최고관리자가 특정 가입자를 강제로 탈퇴 처리한다(프로필만 제거 — 로그인 계정
+// 자체는 배차프로그램 등과 공유되므로 건드리지 않는다).
+export async function adminRemovePlannerProfile(uid) {
+  await deleteDoc(doc(db, PLANNER_ACCOUNTS, uid));
+}
+
+// ⭐ 회원 탈퇴(내정보에서 스스로) — plannerAccounts 프로필만 지운다. Firebase Auth
+// 로그인 자체(이메일/비밀번호)는 배차프로그램 등과 같은 프로젝트를 공유하는
+// 계정이라 여기서 지우면 다른 프로그램 로그인까지 없어질 수 있어 건드리지 않는다.
+// 프로필만 없어지면 이 가족/이 프로그램에서는 완전히 탈퇴한 상태가 된다(다시
+// 쓰려면 재가입).
+export async function leavePlannerAccount() {
+  const user = auth.currentUser;
+  if (!user) return;
+  await deleteDoc(doc(db, PLANNER_ACCOUNTS, user.uid));
+  await signOut(auth);
 }

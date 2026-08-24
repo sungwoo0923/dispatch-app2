@@ -655,7 +655,7 @@ export default function AdminPlanner({ userCompany, myRealName, myUid, myGender 
       <div className="flex items-center justify-between mb-5">
         <div>
           <div className="text-[17px] font-extrabold text-gray-800">나의 플래너</div>
-          <div className="text-[12px] text-gray-400 mt-0.5">배차 등 다른 데이터와는 전혀 연동되지 않는 개인 기록입니다.</div>
+          <div className="text-[12px] text-gray-400 mt-0.5">가족과 함께 기록하는 우리집 수입·지출, 일정, 이벤트 예산</div>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setYear((y) => y - 1)} className="w-8 h-8 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500">‹</button>
