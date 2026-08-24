@@ -115,23 +115,27 @@ function PlannerDesktopShell({ account, onUpdated }) {
   );
 }
 
-// ⭐ 앱을 처음 열 때 로고가 반짝 나타났다 순식간에 사라지는 느낌이 아니라, 스플래시
-// 화면답게 최소 이 시간만큼은 보여준 뒤 천천히 사라지게 한다(로그인 확인이
-// 아무리 빨리 끝나도 최소 노출 시간을 보장 + 사라질 때 페이드아웃 시간을 기다렸다가
-// 다음 화면으로 넘어간다).
+// ⭐ 앱을 "처음" 열 때만 로고가 천천히 나타났다가(최소 노출시간 보장) 천천히
+// 사라지는 스플래시를 보여준다 — 로그인 화면에서 로그인 버튼을 눌러 /planner로
+// 넘어올 때처럼, 이미 이번 세션에서 한 번 스플래시를 본 뒤에는 다시 보여주지
+// 않고 로그인 확인이 끝나는 즉시 바로 화면을 넘긴다("로그인하면 바로 홈으로").
+let firstSplashShown = false;
 const MIN_SPLASH_MS = 1200;
 const SPLASH_FADE_MS = 450;
 
 export default function PlannerRoot() {
   const { loading, user, account } = usePlannerAccount();
   const [accountOverride, setAccountOverride] = useState(null);
-  const [splashPhase, setSplashPhase] = useState("visible"); // "visible" | "fading" | "done"
+  const isFirstShowRef = useRef(!firstSplashShown);
+  if (isFirstShowRef.current) firstSplashShown = true;
+  const [splashPhase, setSplashPhase] = useState(() => (isFirstShowRef.current ? "visible" : (loading ? "visible" : "done")));
   const mountedAt = useRef(Date.now());
   useEffect(() => { document.title = "KP-Planner"; }, []);
   useEffect(() => { setAccountOverride(null); }, [account]);
 
   useEffect(() => {
     if (loading) return;
+    if (!isFirstShowRef.current) { setSplashPhase("done"); return; }
     const elapsed = Date.now() - mountedAt.current;
     const wait = Math.max(0, MIN_SPLASH_MS - elapsed);
     const t = setTimeout(() => setSplashPhase("fading"), wait);

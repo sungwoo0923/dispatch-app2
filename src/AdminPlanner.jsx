@@ -15,7 +15,7 @@ import {
   EXPENSE_CATEGORIES, INCOME_CATEGORIES, dDayLabel, ensureRecurringInstances,
   nextOccurrence, recurringDateInYear, mergeCategoryOptions, budgetStatusLabel,
 } from "./adminPlannerData";
-import { ACCENT } from "./planner/plannerTheme";
+import { ACCENT, ACCENT_BORDER } from "./planner/plannerTheme";
 import PlannerDatePicker from "./planner/PlannerDatePicker";
 import PlannerTimePicker from "./planner/PlannerTimePicker";
 import PlannerCategorySelect from "./planner/PlannerCategorySelect";
@@ -1218,13 +1218,14 @@ function FamilyMemberColumn({ title, rows, onEdit }) {
         <div className="text-[13.5px] font-bold text-gray-700">{title}</div>
         <div className="text-[12px] font-semibold text-gray-500">{rows.length}명</div>
       </div>
-      <div className="bg-gray-50 rounded-xl border border-gray-200 overflow-hidden flex-1">
+      <div className="bg-white rounded-xl border overflow-hidden flex-1" style={{ borderColor: ACCENT_BORDER }}>
         {rows.length === 0 && <div className="py-6 text-center text-[12px] text-gray-400">등록된 인원이 없습니다</div>}
         {rows.map((r, idx) => (
           <div
             key={r.id}
             onClick={() => onEdit(r)}
-            className={`flex items-center justify-between px-3 py-2.5 text-[13px] hover:bg-white cursor-pointer ${idx > 0 ? "border-t-2 border-gray-200" : ""}`}
+            className="flex items-center justify-between px-3 py-2.5 text-[13px] cursor-pointer"
+            style={idx > 0 ? { borderTop: `2px solid ${ACCENT_BORDER}` } : undefined}
           >
             <div className="min-w-0">
               <div className="text-gray-900 font-semibold truncate">{r.title}</div>
@@ -1313,9 +1314,13 @@ function EventBudgetCard({ g, rows, companyName, onAddMember, onEditMember }) {
         </div>
       </div>
 
-      <div className="p-4 flex items-stretch gap-4 divide-x-2 divide-gray-200">
+      <div className="p-4 flex items-stretch gap-4">
         {bySide.map(([side, sideRows]) => (
-          <div key={side} className={side === FAMILY_SIDES[1] ? "pl-4 flex-1 min-w-0" : "flex-1 min-w-0"}>
+          <div
+            key={side}
+            className={side === FAMILY_SIDES[1] ? "pl-4 flex-1 min-w-0" : "flex-1 min-w-0"}
+            style={side === FAMILY_SIDES[1] ? { borderLeft: `2px solid ${ACCENT_BORDER}` } : undefined}
+          >
             <FamilyMemberColumn title={side} rows={sideRows} onEdit={(r) => onEditMember(g, r)} />
           </div>
         ))}
@@ -1324,10 +1329,10 @@ function EventBudgetCard({ g, rows, companyName, onAddMember, onEditMember }) {
       {etc.length > 0 && (
         <div className="px-4 pb-4">
           <div className="text-[13.5px] font-bold text-gray-700 mb-2 px-0.5">기타</div>
-          <div className="bg-gray-50 rounded-xl border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: ACCENT_BORDER }}>
             {etc.map((r, idx) => (
               <div key={r.id} onClick={() => onEditMember(g, r)}
-                className={`flex items-center justify-between px-3 py-2.5 text-[13px] hover:bg-white cursor-pointer ${idx > 0 ? "border-t-2 border-gray-200" : ""}`}>
+                className="flex items-center justify-between px-3 py-2.5 text-[13px] cursor-pointer" style={idx > 0 ? { borderTop: `2px solid ${ACCENT_BORDER}` } : undefined}>
                 <span className="text-gray-900 font-semibold truncate">{r.title}</span>
                 <span className="text-gray-800 font-bold shrink-0 ml-2">{fmtWon(r.amount)}</span>
               </div>

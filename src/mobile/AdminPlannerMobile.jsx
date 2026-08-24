@@ -15,7 +15,7 @@ import {
   EXPENSE_CATEGORIES, INCOME_CATEGORIES, dDayLabel, ensureRecurringInstances,
   nextOccurrence, recurringDateInYear, mergeCategoryOptions, budgetStatusLabel,
 } from "../adminPlannerData";
-import { ACCENT } from "../planner/plannerTheme";
+import { ACCENT, ACCENT_BORDER, ACCENT_SOFT } from "../planner/plannerTheme";
 import { captureNodeAsImage } from "../planner/plannerCapture";
 import PlannerDatePicker from "../planner/PlannerDatePicker";
 import PlannerTimePicker from "../planner/PlannerTimePicker";
@@ -454,9 +454,6 @@ export default function AdminPlannerMobile({ userCompany, dispatcherName, active
 
   return (
     <div className="px-4 pt-3 pb-24">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-[12px] text-gray-400">우리 가족만 보는 개인 기록입니다.</div>
-      </div>
       <div className="flex items-center justify-center gap-3 mb-3">
         <button onClick={() => setYear((y) => y - 1)} className="w-7 h-7 rounded-lg border border-gray-200 text-gray-500">‹</button>
         <div className="text-[14px] font-bold text-gray-700">{year}년</div>
@@ -536,7 +533,7 @@ function MobileDashboard({ year, budgetTarget, totalIncome, totalExpense, schedu
 
         <div className="px-3.5 pb-3.5">
           <div className="text-[11.5px] font-bold mb-2" style={{ color: accent }}>예산</div>
-          <div className="bg-gray-50 rounded-xl p-3.5 mb-2.5">
+          <div className="bg-white border rounded-xl p-3.5 mb-2.5" style={{ borderColor: ACCENT_BORDER }}>
             <div className="flex items-center justify-between mb-1">
               <div className="text-[11px] font-bold text-gray-500">{year}년 총예산 목표</div>
               <button onClick={() => setEditingBudget((v) => !v)} className="text-[11px] font-semibold" style={{ color: accent }}>수정</button>
@@ -555,7 +552,7 @@ function MobileDashboard({ year, budgetTarget, totalIncome, totalExpense, schedu
             const pct = (totalExpense / budgetTarget) * 100;
             const status = budgetStatusLabel(pct);
             return (
-              <div className="bg-gray-50 rounded-xl p-3.5">
+              <div className="bg-white border rounded-xl p-3.5" style={{ borderColor: ACCENT_BORDER }}>
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-1.5">
                     <div className="text-[11px] font-bold text-gray-600">예산 대비 지출</div>
@@ -574,16 +571,16 @@ function MobileDashboard({ year, budgetTarget, totalIncome, totalExpense, schedu
         <div className="border-t-2 border-gray-100 px-3.5 py-3.5">
           <div className="text-[11.5px] font-bold mb-2" style={{ color: accent }}>수입·지출</div>
           <div className="grid grid-cols-2 gap-2.5 mb-2.5">
-            <div className="bg-gray-50 rounded-xl p-3">
+            <div className="bg-white border rounded-xl p-3" style={{ borderColor: ACCENT_BORDER }}>
               <div className="text-[11px] font-bold text-gray-500 mb-1">총 수입</div>
               <PlannerDialNumber value={totalIncome} className="text-[15px] font-extrabold text-gray-700" />
             </div>
-            <div className="bg-gray-50 rounded-xl p-3">
+            <div className="bg-white border rounded-xl p-3" style={{ borderColor: ACCENT_BORDER }}>
               <div className="text-[11px] font-bold text-gray-500 mb-1">총 지출</div>
               <PlannerDialNumber value={totalExpense} className="text-[15px] font-extrabold text-red-600" />
             </div>
           </div>
-          <div className="bg-gray-50 rounded-xl p-3">
+          <div className="bg-white border rounded-xl p-3" style={{ borderColor: ACCENT_BORDER }}>
             <div className="text-[11px] font-bold text-gray-500 mb-1">잔액</div>
             <PlannerDialNumber value={balance} className="text-[16px] font-extrabold" style={{ color: balance >= 0 ? accent : "#dc2626" }} />
           </div>
@@ -734,15 +731,15 @@ function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates
         </div>
 
         <div className="grid grid-cols-3 gap-2 mb-3">
-          <div className="bg-gray-50 rounded-lg px-2.5 py-2">
+          <div className="bg-white border rounded-lg px-2.5 py-2" style={{ borderColor: ACCENT_BORDER }}>
             <div className="text-[10px] text-gray-500">수입</div>
             <PlannerDialNumber value={totalIncome} className="text-[12.5px] font-bold text-gray-700" />
           </div>
-          <div className="bg-gray-50 rounded-lg px-2.5 py-2">
+          <div className="bg-white border rounded-lg px-2.5 py-2" style={{ borderColor: ACCENT_BORDER }}>
             <div className="text-[10px] text-gray-500">지출</div>
             <PlannerDialNumber value={totalExpense} className="text-[12.5px] font-bold text-red-600" />
           </div>
-          <div className="bg-gray-50 rounded-lg px-2.5 py-2">
+          <div className="bg-white border rounded-lg px-2.5 py-2" style={{ borderColor: ACCENT_BORDER }}>
             <div className="text-[10px] text-gray-500">잔액</div>
             <PlannerDialNumber value={totalIncome - totalExpense} className="text-[12.5px] font-bold" style={{ color: accent }} />
           </div>
@@ -781,10 +778,10 @@ function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates
                   <div className="text-[11px] font-bold text-gray-500 mb-1.5 px-0.5">{dateLabelKoM(date)}</div>
                   <div className="space-y-1.5">
                     {items.map((r) => (
-                      <div key={r.id} onClick={() => setEditing(r)} className="bg-gray-50 border border-gray-100 rounded-xl p-3 active:bg-gray-100">
+                      <div key={r.id} onClick={() => setEditing(r)} className="bg-white border rounded-xl p-3" style={{ borderColor: ACCENT_BORDER }}>
                         <div className="flex items-center justify-between mb-0.5">
                           <div className="flex items-center gap-1.5 min-w-0">
-                            <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9.5px] font-bold ${r.type === "income" ? "bg-gray-100 text-gray-600" : "bg-red-50 text-red-500"}`}>
+                            <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9.5px] font-bold ${r.type === "income" ? "text-gray-600" : "bg-red-50 text-red-500"}`} style={r.type === "income" ? { background: ACCENT_SOFT } : undefined}>
                               {r.type === "income" ? "수입" : "지출"}
                             </span>
                             {r.receiptURL && <span className="shrink-0 text-[11px]">📎</span>}
@@ -929,10 +926,10 @@ function MobileFamilyColumn({ title, rows, accent, onEdit }) {
         <div className="text-[12.5px] font-bold text-gray-700">{title}</div>
         <div className="text-[11px] font-semibold text-gray-500">{rows.length}명</div>
       </div>
-      <div className="bg-gray-50 rounded-lg border border-gray-200 overflow-hidden flex-1">
+      <div className="bg-white rounded-lg border overflow-hidden flex-1" style={{ borderColor: ACCENT_BORDER }}>
         {rows.length === 0 && <div className="py-4 text-center text-[11.5px] text-gray-400">없음</div>}
         {rows.map((r, idx) => (
-          <div key={r.id} onClick={() => onEdit(r)} className={`flex items-center justify-between gap-2 px-2.5 py-2 active:bg-white ${idx > 0 ? "border-t-2 border-gray-200" : ""}`}>
+          <div key={r.id} onClick={() => onEdit(r)} className="flex items-center justify-between gap-2 px-2.5 py-2" style={idx > 0 ? { borderTop: `2px solid ${ACCENT_BORDER}` } : undefined}>
             <div className="min-w-0">
               <div className="text-[13px] font-semibold text-gray-900 truncate">{r.title}</div>
               {r.createdByName && <div className="text-[10.5px] text-gray-400 truncate">{r.createdByName}</div>}
@@ -960,7 +957,7 @@ function MobileEventBudgetCard({ g, rows, companyName, accent, onAddMember, onEd
 
   if (collapsed) {
     return (
-      <button onClick={toggle} className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-3 flex items-center justify-between text-left">
+      <button onClick={toggle} className="w-full bg-white border rounded-xl px-3.5 py-3 flex items-center justify-between text-left" style={{ borderColor: ACCENT_BORDER }}>
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="text-gray-300 text-[11px]">▸</span>
           <span className="text-[13px] font-bold text-gray-800 truncate">{g} 이벤트</span>
@@ -974,8 +971,8 @@ function MobileEventBudgetCard({ g, rows, companyName, accent, onAddMember, onEd
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-      <div className="px-3.5 py-3 border-b border-gray-100">
+    <div className="bg-white border rounded-xl overflow-hidden" style={{ borderColor: ACCENT_BORDER }}>
+      <div className="px-3.5 py-3 border-b" style={{ borderColor: ACCENT_SOFT }}>
         <button onClick={toggle} className="flex items-center gap-1.5 mb-1.5">
           <span className="text-gray-300 text-[11px]">▾</span>
           <span className="text-[13px] font-bold text-gray-800">{g}</span>
@@ -987,9 +984,9 @@ function MobileEventBudgetCard({ g, rows, companyName, accent, onAddMember, onEd
         </div>
       </div>
 
-      <div className="p-3 grid grid-cols-2 gap-3 divide-x-2 divide-gray-200">
+      <div className="p-3 grid grid-cols-2 gap-3">
         {bySide.map(([side, sideRows]) => (
-          <div key={side} className={side === FAMILY_SIDES_M[1] ? "pl-3" : ""}>
+          <div key={side} className={side === FAMILY_SIDES_M[1] ? "pl-3" : ""} style={side === FAMILY_SIDES_M[1] ? { borderLeft: `2px solid ${ACCENT_BORDER}` } : undefined}>
             <MobileFamilyColumn title={side} rows={sideRows} accent={accent} onEdit={(r) => onEditMember(g, r)} />
           </div>
         ))}
@@ -998,9 +995,9 @@ function MobileEventBudgetCard({ g, rows, companyName, accent, onAddMember, onEd
       {etc.length > 0 && (
         <div className="px-3 pb-3">
           <div className="text-[11.5px] font-bold text-gray-600 mb-1.5">기타</div>
-          <div className="bg-gray-50 rounded-lg border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-lg border overflow-hidden" style={{ borderColor: ACCENT_BORDER }}>
             {etc.map((r, idx) => (
-              <div key={r.id} onClick={() => onEditMember(g, r)} className={`flex items-center justify-between px-2.5 py-2 ${idx > 0 ? "border-t-2 border-gray-200" : ""}`}>
+              <div key={r.id} onClick={() => onEditMember(g, r)} className="flex items-center justify-between px-2.5 py-2" style={idx > 0 ? { borderTop: `2px solid ${ACCENT_BORDER}` } : undefined}>
                 <span className="text-[12px] font-semibold text-gray-800 truncate">{r.title}</span>
                 <span className="text-[11px] font-bold text-gray-600 shrink-0 ml-2">{fmtWon(r.amount)}</span>
               </div>

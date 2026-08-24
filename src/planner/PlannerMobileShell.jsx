@@ -46,15 +46,21 @@ export default function PlannerMobileShell({ account, onUpdated, previewMode = f
   const [showMessenger, setShowMessenger] = useState(false);
   const isMaster = account.email === TOTAL_MASTER_EMAIL;
   const menuItems = isMaster && !previewMode ? [...PLANNER_MENU_ITEMS, ["__admin__", "관리자 메뉴"]] : PLANNER_MENU_ITEMS;
+  const pageTitle = PLANNER_MENU_ITEMS.find(([v]) => v === page)?.[1] || "홈";
 
   return (
     <div style={{ width: "100%", minHeight: "100vh", display: "flex", flexDirection: "column", background: BG }}>
-      <div style={{ background: ACCENT, padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ width: 32 }} />
-        <div style={{ color: "#fff", fontWeight: 800, fontSize: 16, textAlign: "center", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      {/* ⭐ 3분할 그리드(1fr auto 1fr) — 좌/우 폭이 서로 달라도 가운데(가족 이름)가
+          항상 화면 정중앙에 오도록 한다(flex+빈 스페이서 방식은 좌우 폭이 다르면
+          중앙이 어긋났다). */}
+      <div style={{ background: ACCENT, padding: "14px 16px", display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", columnGap: 8 }}>
+        <div style={{ color: "rgba(255,255,255,0.85)", fontWeight: 600, fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {pageTitle}
+        </div>
+        <div style={{ color: "#fff", fontWeight: 800, fontSize: 16, textAlign: "center", whiteSpace: "nowrap" }}>
           {account.groupName || "우리 가족"}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4 }}>
           <ChatIconButton onClick={() => setShowMessenger(true)} />
           <PlannerNotificationBell groupId={account.groupId} />
           <button onClick={() => setShowMenu(true)} style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none" }}>
