@@ -630,28 +630,29 @@ function MobileCalendar({ year, schedules, companyName, actorName, accent }) {
 // grid-cols-2로 나란히 배치하면 구분이 뚜렷하다. 맨 아래엔 총 인원수·총 금액.
 const FAMILY_SIDES_M = ["본가", "처가/외가"];
 
+// ⭐ 인원 적은 쪽 소계가 위로 붙던 문제 — 칸을 세로 flex로 만들고 목록 박스를
+// flex-1로 늘려 소계가 항상 양쪽 같은 줄(맨 아래)에 맞춰지게 했다. 글씨도
+// 전체적으로 크고 진하게(너무 작고 흐리다는 피드백).
 function MobileFamilyColumn({ title, rows, accent, onEdit }) {
   const total = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
   return (
-    <div className="min-w-0">
+    <div className="min-w-0 flex flex-col">
       <div className="flex items-center justify-between mb-1.5">
-        <div className="text-[11.5px] font-bold text-gray-600">{title}</div>
-        <div className="text-[10px] text-gray-400">{rows.length}명</div>
+        <div className="text-[12.5px] font-bold text-gray-700">{title}</div>
+        <div className="text-[11px] font-semibold text-gray-500">{rows.length}명</div>
       </div>
-      <div className="bg-gray-50 rounded-lg border border-gray-100 overflow-hidden">
-        {rows.length === 0 && <div className="py-4 text-center text-[10.5px] text-gray-300">없음</div>}
+      <div className="bg-gray-50 rounded-lg border border-gray-100 overflow-hidden flex-1">
+        {rows.length === 0 && <div className="py-4 text-center text-[11.5px] text-gray-400">없음</div>}
         {rows.map((r) => (
           <div key={r.id} onClick={() => onEdit(r)} className="px-2.5 py-2 border-b border-white last:border-b-0 active:bg-white">
-            <div className="text-[12px] font-semibold text-gray-800 truncate">{r.title}</div>
-            <div className="text-[11px] font-bold text-gray-600">{fmtWon(r.amount)}</div>
+            <div className="text-[13px] font-semibold text-gray-900 truncate">{r.title}</div>
+            <div className="text-[12px] font-bold text-gray-700">{fmtWon(r.amount)}</div>
           </div>
         ))}
       </div>
-      {rows.length > 0 && (
-        <div className="flex items-center justify-between text-[10.5px] mt-1 text-gray-500">
-          <span>소계</span><span className="font-bold" style={{ color: accent }}>{fmtWon(total)}</span>
-        </div>
-      )}
+      <div className="flex items-center justify-between text-[12px] mt-1.5 text-gray-600 font-semibold">
+        <span>소계</span><span className="font-bold text-[12.5px]" style={{ color: accent }}>{fmtWon(total)}</span>
+      </div>
     </div>
   );
 }

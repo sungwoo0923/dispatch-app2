@@ -50,6 +50,18 @@ function Field({ label, children }) {
   );
 }
 
+// ⭐ DispatchApp.jsx에도 이름이 같은 Metric이 있지만, 이 파일은 별도 모듈이라
+// 그 쪽 스코프를 공유하지 못한다("Metric is not defined" 오류의 원인이었다) —
+// 이 파일 전용으로 다시 선언한다.
+function Metric({ label, value, valueClass = "text-gray-800" }) {
+  return (
+    <div className="rounded-lg bg-white border border-gray-200 px-3 py-2.5">
+      <p className="text-[12px] font-semibold text-gray-500 mb-0.5">{label}</p>
+      <p className={`text-[16px] font-bold ${valueClass}`}>{value}</p>
+    </div>
+  );
+}
+
 const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]";
 
 // ────────────────────────────────────────────────
@@ -685,7 +697,7 @@ function LedgerTab({ year, rows, companyName, actorName }) {
       <div className="grid grid-cols-3 gap-3 mb-5 max-w-xl">
         <Metric label="수입" value={fmtWon(totalIncome)} />
         <Metric label="지출" value={fmtWon(totalExpense)} valueClass="text-red-600" />
-        <Metric label="잔액" value={fmtWon(totalIncome - totalExpense)} valueClass="" />
+        <Metric label="잔액" value={fmtWon(totalIncome - totalExpense)} valueClass="text-[#1B2B4B]" />
       </div>
 
       {categoryTotals.length > 0 && (
@@ -728,19 +740,19 @@ function LedgerTab({ year, rows, companyName, actorName }) {
                     <div
                       key={r.id}
                       onClick={() => setEditing(r)}
-                      className="flex items-center justify-between px-4 py-2.5 text-[12.5px] border-b border-gray-50 last:border-b-0 hover:bg-gray-50 cursor-pointer"
+                      className="flex items-center justify-between px-4 py-3 text-[13.5px] border-b border-gray-50 last:border-b-0 hover:bg-gray-50 cursor-pointer"
                     >
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold ${r.type === "income" ? "bg-gray-100 text-gray-600" : "bg-red-50 text-red-500"}`}>
+                        <span className={`shrink-0 px-1.5 py-0.5 rounded text-[11px] font-bold ${r.type === "income" ? "bg-gray-100 text-gray-700" : "bg-red-50 text-red-600"}`}>
                           {r.type === "income" ? "수입" : "지출"}
                         </span>
-                        <span className="text-gray-800 font-semibold truncate">{r.title}</span>
-                        {r.category && <span className="text-[11px] text-gray-400 shrink-0">{r.category}</span>}
-                        {r.memo && <span className="text-[11px] text-gray-300 truncate">· {r.memo}</span>}
+                        <span className="text-gray-900 font-semibold truncate">{r.title}</span>
+                        {r.category && <span className="text-[12px] text-gray-500 shrink-0">{r.category}</span>}
+                        {r.memo && <span className="text-[12px] text-gray-400 truncate">· {r.memo}</span>}
                       </div>
                       <div className="flex items-center gap-2 shrink-0 ml-2">
-                        {r.createdByName && <span className="text-[10px] text-gray-300">{r.createdByName}</span>}
-                        <span className={`font-bold ${r.type === "income" ? "text-gray-700" : "text-red-600"}`}>{fmtWon(r.amount)}</span>
+                        {r.createdByName && <span className="text-[11px] text-gray-400">{r.createdByName}</span>}
+                        <span className={`font-bold ${r.type === "income" ? "text-gray-800" : "text-red-600"}`}>{fmtWon(r.amount)}</span>
                       </div>
                     </div>
                   ))}
@@ -858,39 +870,41 @@ function CalendarTab({ year, schedules, companyName, actorName }) {
 // 맨 아래에 별도 줄로). 카드 폭도 max-w로 제한해 예전처럼 가로로 늘어지지 않게 했다.
 const FAMILY_SIDES = ["본가", "처가/외가"];
 
+// ⭐ 인원수가 다른 두 칸이 나란히 있을 때, 인원이 적은 쪽의 "소계"가 위로
+// 붙어버리던 문제 — 칸 전체를 세로 flex로 만들고 목록 박스를 flex-1로 늘려
+// 남는 높이를 목록 쪽이 흡수하게 해서, 소계는 항상 두 칸 모두 같은 줄(맨 아래)에
+// 맞춰지게 했다. 글씨도 전체적으로 크고 진하게 키웠다(너무 작고 흐리다는 피드백).
 function FamilyMemberColumn({ title, rows, accentBg, onEdit }) {
   const total = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
   return (
-    <div className="flex-1 min-w-0">
+    <div className="flex-1 min-w-0 flex flex-col">
       <div className="flex items-center justify-between mb-2 px-0.5">
-        <div className="text-[12.5px] font-bold text-gray-600">{title}</div>
-        <div className="text-[11px] text-gray-400">{rows.length}명</div>
+        <div className="text-[13.5px] font-bold text-gray-700">{title}</div>
+        <div className="text-[12px] font-semibold text-gray-500">{rows.length}명</div>
       </div>
-      <div className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
-        {rows.length === 0 && <div className="py-6 text-center text-[11.5px] text-gray-300">등록된 인원이 없습니다</div>}
+      <div className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden flex-1">
+        {rows.length === 0 && <div className="py-6 text-center text-[12px] text-gray-400">등록된 인원이 없습니다</div>}
         {rows.map((r) => (
           <div
             key={r.id}
             onClick={() => onEdit(r)}
-            className="flex items-center justify-between px-3 py-2 text-[12.5px] border-b border-white last:border-b-0 hover:bg-white cursor-pointer"
+            className="flex items-center justify-between px-3 py-2.5 text-[13px] border-b border-white last:border-b-0 hover:bg-white cursor-pointer"
           >
             <div className="min-w-0">
-              <div className="text-gray-800 font-semibold truncate">{r.title}</div>
+              <div className="text-gray-900 font-semibold truncate">{r.title}</div>
               {(r.memo || r.createdByName) && (
-                <div className="text-[10.5px] text-gray-400 truncate">
+                <div className="text-[11.5px] text-gray-500 truncate">
                   {r.memo}{r.memo && r.createdByName ? " · " : ""}{r.createdByName}
                 </div>
               )}
             </div>
-            <span className="text-gray-700 font-bold shrink-0 ml-2">{fmtWon(r.amount)}</span>
+            <span className="text-gray-800 font-bold shrink-0 ml-2">{fmtWon(r.amount)}</span>
           </div>
         ))}
       </div>
-      {rows.length > 0 && (
-        <div className="flex items-center justify-between text-[11.5px] mt-1.5 px-0.5 text-gray-500">
-          <span>소계</span><span className="font-bold" style={accentBg}>{fmtWon(total)}</span>
-        </div>
-      )}
+      <div className="flex items-center justify-between text-[13px] mt-2 px-0.5 text-gray-600 font-semibold">
+        <span>소계</span><span className="font-bold text-[13.5px]" style={accentBg}>{fmtWon(total)}</span>
+      </div>
     </div>
   );
 }
@@ -927,13 +941,13 @@ function FamilyTab({ groups, companyName, actorName }) {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => exportTableToExcel(`${g}_가족예산`, rows, { title: "이름", category: "구분", amount: "금액", memo: "메모" })}
-                    className="text-[11px] font-semibold text-gray-400 hover:text-[#1B2B4B]"
+                    className="text-[12px] font-semibold text-gray-500 hover:text-[#1B2B4B]"
                   >
                     엑셀
                   </button>
                   <button
                     onClick={() => exportPrintableToPdf(printRefs.current[g].current, `${g}_가족예산`)}
-                    className="text-[11px] font-semibold text-gray-400 hover:text-[#1B2B4B]"
+                    className="text-[12px] font-semibold text-gray-500 hover:text-[#1B2B4B]"
                   >
                     PDF
                   </button>
@@ -946,7 +960,7 @@ function FamilyTab({ groups, companyName, actorName }) {
                 </div>
               </div>
 
-              <div className="p-4 flex gap-4">
+              <div className="p-4 flex items-stretch gap-4">
                 {bySide.map(([side, sideRows]) => (
                   <FamilyMemberColumn key={side} title={side} rows={sideRows} accentBg={{ color: NAVY }} onEdit={(r) => setEditingMember({ group: g, entry: r })} />
                 ))}
@@ -954,13 +968,13 @@ function FamilyTab({ groups, companyName, actorName }) {
 
               {etc.length > 0 && (
                 <div className="px-4 pb-4">
-                  <div className="text-[12.5px] font-bold text-gray-600 mb-2 px-0.5">기타</div>
+                  <div className="text-[13.5px] font-bold text-gray-700 mb-2 px-0.5">기타</div>
                   <div className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
                     {etc.map((r) => (
                       <div key={r.id} onClick={() => setEditingMember({ group: g, entry: r })}
-                        className="flex items-center justify-between px-3 py-2 text-[12.5px] border-b border-white last:border-b-0 hover:bg-white cursor-pointer">
-                        <span className="text-gray-800 font-semibold truncate">{r.title}</span>
-                        <span className="text-gray-700 font-bold shrink-0 ml-2">{fmtWon(r.amount)}</span>
+                        className="flex items-center justify-between px-3 py-2.5 text-[13px] border-b border-white last:border-b-0 hover:bg-white cursor-pointer">
+                        <span className="text-gray-900 font-semibold truncate">{r.title}</span>
+                        <span className="text-gray-800 font-bold shrink-0 ml-2">{fmtWon(r.amount)}</span>
                       </div>
                     ))}
                   </div>
@@ -968,8 +982,8 @@ function FamilyTab({ groups, companyName, actorName }) {
               )}
 
               <div className="px-5 py-3 bg-[#1B2B4B]/[0.04] flex items-center justify-between border-t border-gray-100">
-                <span className="text-[12px] font-semibold text-gray-500">총 인원수 {rows.length}명</span>
-                <span className="text-[14px] font-extrabold" style={{ color: NAVY }}>총 {fmtWon(total)}</span>
+                <span className="text-[13px] font-semibold text-gray-600">총 인원수 {rows.length}명</span>
+                <span className="text-[15px] font-extrabold" style={{ color: NAVY }}>총 {fmtWon(total)}</span>
               </div>
 
               <PrintableFamily innerRef={printRefs.current[g]} companyName={companyName} group={g} rows={rows} total={total} />
