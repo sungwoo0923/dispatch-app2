@@ -15,6 +15,7 @@ import {
   EXPENSE_CATEGORIES, INCOME_CATEGORIES, RECURRING_EXPENSE_CATEGORIES, RECURRING_INCOME_CATEGORIES,
   dDayLabel, ensureRecurringInstances,
   nextOccurrence, recurringDateInYear, mergeCategoryOptions, budgetStatusLabel,
+  usePlannerWallet, computeWalletBalance,
 } from "../adminPlannerData";
 import { ACCENT, ACCENT_BORDER, ACCENT_SOFT } from "../planner/plannerTheme";
 import { captureNodeAsImage } from "../planner/plannerCapture";
@@ -660,6 +661,7 @@ function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates
   const [showDetail, setShowDetail] = useState(false);
   const printRef = useRef(null);
   const viewRef = useRef(null);
+  const wallet = usePlannerWallet(companyName);
 
   const runQuery = () => setKeywordApplied(keywordDraft);
 
@@ -677,6 +679,7 @@ function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates
 
   const totalIncome = filtered.filter((r) => r.type === "income").reduce((s, r) => s + Number(r.amount || 0), 0);
   const totalExpense = filtered.filter((r) => r.type === "expense").reduce((s, r) => s + Number(r.amount || 0), 0);
+  const walletBalance = computeWalletBalance(wallet, totalIncome, totalExpense);
 
   const categoryTotals = useMemo(() => {
     const map = new Map();
@@ -730,19 +733,18 @@ function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates
         <div className="flex items-center justify-between mb-3">
           <div className="text-[12.5px] font-bold text-gray-700">수입·지출 내역</div>
           <div className="flex items-center gap-1.5">
-            <button onClick={() => setShowWallet(true)} className="w-7 h-7 rounded-md border border-gray-200 flex items-center justify-center shrink-0" style={{ color: accent }} title="지갑">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <button onClick={() => setShowWallet(true)} className="px-2 py-1 rounded-md border border-gray-200 flex items-center gap-1 shrink-0 text-[11px] font-semibold" style={{ color: accent }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
                 <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
                 <path d="M18 12a2 2 0 0 0 0 4h4v-4z" />
               </svg>
+              내지갑
             </button>
             <button onClick={() => setEditing({})} className="px-2.5 py-1 rounded-md text-white text-[11px] font-bold" style={{ background: accent }}>내역 추가</button>
             <button onClick={saveImage} disabled={saving} className="px-2.5 py-1 rounded-md border border-gray-200 text-[11px] font-semibold text-gray-500">
               {saving ? "저장중" : "저장"}
             </button>
-            <button onClick={() => exportPrintableToPdf(printRef.current, `수입지출_${filters.start}_${filters.end}`)}
-              className="px-2.5 py-1 rounded-md border border-gray-200 text-[11px] font-semibold text-gray-500">PDF</button>
           </div>
         </div>
 
@@ -757,7 +759,7 @@ function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates
           </div>
           <div className="bg-white border rounded-lg px-2.5 py-2" style={{ borderColor: ACCENT_BORDER }}>
             <div className="text-[10px] text-gray-500">잔액</div>
-            <PlannerDialNumber value={totalIncome - totalExpense} className="text-[12.5px] font-bold" style={{ color: accent }} />
+            <PlannerDialNumber value={walletBalance != null ? walletBalance : totalIncome - totalExpense} className="text-[12.5px] font-bold" style={{ color: accent }} />
           </div>
         </div>
 
@@ -833,7 +835,7 @@ function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates
         />
       )}
       {showRecurring && <RecurringManagerSheet templates={recurringTemplates} companyName={companyName} actorName={actorName} accent={accent} onClose={() => setShowRecurring(false)} />}
-      {showWallet && <PlannerWalletModal groupId={companyName} myName={actorName} entries={entries} onClose={() => setShowWallet(false)} />}
+      {showWallet && <PlannerWalletModal groupId={companyName} myName={actorName} totalIncome={totalIncome} totalExpense={totalExpense} onClose={() => setShowWallet(false)} />}
     </div>
   );
 }

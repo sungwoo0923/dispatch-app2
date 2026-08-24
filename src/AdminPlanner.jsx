@@ -15,6 +15,7 @@ import {
   EXPENSE_CATEGORIES, INCOME_CATEGORIES, RECURRING_EXPENSE_CATEGORIES, RECURRING_INCOME_CATEGORIES,
   dDayLabel, ensureRecurringInstances,
   nextOccurrence, recurringDateInYear, mergeCategoryOptions, budgetStatusLabel,
+  usePlannerWallet, computeWalletBalance,
 } from "./adminPlannerData";
 import { ACCENT, ACCENT_BORDER } from "./planner/plannerTheme";
 import PlannerDatePicker from "./planner/PlannerDatePicker";
@@ -931,6 +932,7 @@ function LedgerTab({ rows, companyName, actorName, recurringTemplates, entries }
   const [showRecurring, setShowRecurring] = useState(false);
   const [showWallet, setShowWallet] = useState(false);
   const printRef = useRef(null);
+  const wallet = usePlannerWallet(companyName);
 
   const runQuery = () => setKeywordApplied(keywordDraft);
 
@@ -948,6 +950,7 @@ function LedgerTab({ rows, companyName, actorName, recurringTemplates, entries }
 
   const totalIncome = filtered.filter((r) => r.type === "income").reduce((s, r) => s + Number(r.amount || 0), 0);
   const totalExpense = filtered.filter((r) => r.type === "expense").reduce((s, r) => s + Number(r.amount || 0), 0);
+  const walletBalance = computeWalletBalance(wallet, totalIncome, totalExpense);
 
   const categoryTotals = useMemo(() => {
     const map = new Map();
@@ -1017,26 +1020,19 @@ function LedgerTab({ rows, companyName, actorName, recurringTemplates, entries }
             onClick={() => setShowWallet(true)}
             className="px-3 py-1.5 rounded-lg border text-[12px] font-semibold flex items-center gap-1.5"
             style={{ borderColor: ACCENT_BORDER, color: ACCENT }}
-            title="지갑"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
               <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
               <path d="M18 12a2 2 0 0 0 0 4h4v-4z" />
             </svg>
-            지갑
+            내지갑
           </button>
           <button
             onClick={() => exportTableToExcel(`수입지출_${filters.start}_${filters.end}`, filtered, { date: "날짜", type: "구분", title: "항목명", category: "분류", amount: "금액", memo: "메모" })}
             className="px-3 py-1.5 rounded-lg border border-gray-200 text-[12px] font-semibold text-gray-600 hover:bg-gray-50"
           >
             엑셀 다운로드
-          </button>
-          <button
-            onClick={() => exportPrintableToPdf(printRef.current, `수입지출_${filters.start}_${filters.end}`)}
-            className="px-3 py-1.5 rounded-lg border border-gray-200 text-[12px] font-semibold text-gray-600 hover:bg-gray-50"
-          >
-            PDF 다운로드
           </button>
           <button onClick={() => setEditing({})} className="px-3 py-1.5 rounded-lg text-white text-[12px] font-bold" style={{ background: ACCENT }}>
             내역 추가
@@ -1047,7 +1043,7 @@ function LedgerTab({ rows, companyName, actorName, recurringTemplates, entries }
       <div className="grid grid-cols-3 gap-3 mb-5 max-w-xl">
         <Metric label="수입" value={fmtWon(totalIncome)} />
         <Metric label="지출" value={fmtWon(totalExpense)} valueClass="text-red-600" />
-        <Metric label="잔액" value={fmtWon(totalIncome - totalExpense)} valueClass="text-[#EC6FA0]" />
+        <Metric label="잔액" value={fmtWon(walletBalance != null ? walletBalance : totalIncome - totalExpense)} valueClass="text-[#EC6FA0]" />
       </div>
 
       {categoryTotals.length > 0 && (
@@ -1133,7 +1129,7 @@ function LedgerTab({ rows, companyName, actorName, recurringTemplates, entries }
         <RecurringManagerModal templates={recurringTemplates} companyName={companyName} actorName={actorName} onClose={() => setShowRecurring(false)} />
       )}
       {showWallet && (
-        <PlannerWalletModal groupId={companyName} myName={actorName} entries={entries} onClose={() => setShowWallet(false)} />
+        <PlannerWalletModal groupId={companyName} myName={actorName} totalIncome={totalIncome} totalExpense={totalExpense} onClose={() => setShowWallet(false)} />
       )}
     </div>
   );

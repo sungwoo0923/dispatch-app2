@@ -739,9 +739,11 @@ export function buildMonthlyBriefing({ incomeExpense, budgetTarget, savingsGoal,
 }
 
 // ────────────────────────────────────────────────
-// 7. 지갑 — "현재 우리 재산(잔액)"을 한 번 설정해두고, 그 이후로는 +/- 로 조정만
-// 누적한다. 초기값은 가족당 문서 하나(id=groupId), 조정 내역은 entries 컬렉션에
-// type:"walletAdjustment"로 쌓는다(다른 화면의 income/expense 집계에는 안 걸림).
+// 7. 지갑 — 기준 재산(+마이너스통장 채무)을 설정해두면, 수입·지출 내역이 실제로
+// 등록/삭제될 때마다 자동으로 반영되는 잔액을 보여준다. 예전엔 입금/출금을
+// 따로 기록해서 누적하는 방식이었는데, "수입·지출 내역과 연동돼야 한다"는
+// 피드백으로 폐기 — 기준 재산·마이너스통장은 가족당 문서 하나(id=groupId)만
+// 두고, 잔액은 그때그때 income/expense 합계로 계산한다(별도 내역 없음).
 // ────────────────────────────────────────────────
 export const PLANNER_WALLET = "plannerWallet";
 
@@ -757,29 +759,22 @@ export function usePlannerWallet(groupId) {
   return wallet;
 }
 
-export async function setPlannerWalletInitial(groupId, amount, actorName) {
+// overdraftDebt(마이너스통장으로 쓴 빚)는 잔액에서 빼야 하는 금액이라 항상
+// 0 이상의 절대값으로 저장한다(양수로 입력받아 계산할 때만 빼줌).
+export async function setPlannerWallet(groupId, { baseAssets, overdraftDebt }, actorName) {
   await setDoc(doc(db, PLANNER_WALLET, groupId), {
-    groupId, initialBalance: Number(amount) || 0, setByName: actorName || "", updatedAt: serverTimestamp(),
-  });
+    groupId,
+    baseAssets: Number(baseAssets) || 0,
+    overdraftDebt: Math.abs(Number(overdraftDebt) || 0),
+    setByName: actorName || "", updatedAt: serverTimestamp(),
+  }, { merge: true });
 }
 
-export function walletAdjustmentEntries(entries) {
-  return (entries || [])
-    .filter((e) => e.type === "walletAdjustment")
-    .sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-}
-
-export function walletAdjustmentTotal(entries) {
-  return walletAdjustmentEntries(entries).reduce((s, e) => s + Number(e.amount || 0), 0);
-}
-
-export async function addWalletAdjustment({ groupId, amount, memo, actorName }) {
-  const amt = Number(amount) || 0;
-  if (!amt) return;
-  await addPlannerEntry({
-    type: "walletAdjustment", companyName: groupId, amount: amt, memo: (memo || "").trim(),
-    createdByName: actorName || "", date: todayStr(),
-  });
+// 지갑 잔액 = 기준 재산 - 마이너스통장 빚 + (그 기간의) 수입 - 지출.
+// wallet이 아예 설정 안 됐으면 null(= "지갑 미설정" 의미, 화면에서 구분해서 씀).
+export function computeWalletBalance(wallet, totalIncome, totalExpense) {
+  if (!wallet) return null;
+  return (wallet.baseAssets || 0) - (wallet.overdraftDebt || 0) + (Number(totalIncome) || 0) - (Number(totalExpense) || 0);
 }
 
 // ────────────────────────────────────────────────
