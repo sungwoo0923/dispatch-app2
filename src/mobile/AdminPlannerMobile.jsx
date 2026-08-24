@@ -13,11 +13,13 @@ import {
   usePlannerEntries, addPlannerEntry, updatePlannerEntry, deletePlannerEntry,
   upsertBudgetTarget, fmtWon, todayStr, formatAmountInput, parseAmountInput,
   EXPENSE_CATEGORIES, INCOME_CATEGORIES, dDayLabel, ensureRecurringInstances,
+  nextOccurrence, recurringDateInYear,
 } from "../adminPlannerData";
 import { ACCENT } from "../planner/plannerTheme";
 import { captureNodeAsImage } from "../planner/plannerCapture";
 import PlannerDatePicker from "../planner/PlannerDatePicker";
 import PlannerTimePicker from "../planner/PlannerTimePicker";
+import PlannerDialNumber from "../planner/PlannerDialNumber";
 import PlannerCategorySelect from "../planner/PlannerCategorySelect";
 import PlannerReceiptCapture from "../planner/PlannerReceiptCapture";
 
@@ -126,14 +128,15 @@ function ScheduleEntryModal({ initial, defaultDate, companyName, actorName, acce
   const [date, setDate] = useState(initial?.date || defaultDate || todayStr());
   const [time, setTime] = useState(initial?.time || "");
   const [memo, setMemo] = useState(initial?.memo || "");
+  const [recurring, setRecurring] = useState(!!initial?.recurring);
   const [saving, setSaving] = useState(false);
-  const dday = dDayLabel(date);
+  const dday = dDayLabel(recurring ? nextOccurrence(date, todayStr()) : date);
 
   const save = async () => {
     if (!title.trim()) { alert("일정 제목을 입력해 주세요."); return; }
     setSaving(true);
     try {
-      const payload = { type: "schedule", companyName, title: title.trim(), date, time, memo: memo.trim(), createdByName: actorName || "" };
+      const payload = { type: "schedule", companyName, title: title.trim(), date, time, memo: memo.trim(), createdByName: actorName || "", recurring };
       if (initial?.id) await updatePlannerEntry(initial.id, payload);
       else await addPlannerEntry(payload);
       onClose();
@@ -146,6 +149,10 @@ function ScheduleEntryModal({ initial, defaultDate, companyName, actorName, acce
       <Field label="제목"><input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 세무사 미팅" /></Field>
       <Field label={`날짜${dday ? ` · ${dday}` : ""}`}><PlannerDatePicker value={date} onChange={setDate} className={inputCls + " text-left"} /></Field>
       <Field label="시간(선택)"><PlannerTimePicker value={time} onChange={setTime} className={inputCls + " text-left"} /></Field>
+      <label className="flex items-center gap-2 mb-3 -mt-1 cursor-pointer select-none">
+        <input type="checkbox" checked={recurring} onChange={(e) => setRecurring(e.target.checked)} className="w-4 h-4" style={{ accentColor: accent }} />
+        <span className="text-[12.5px] font-semibold text-gray-600">매년 반복 (생일/기념일)</span>
+      </label>
       <Field label="메모"><textarea className={inputCls} rows={3} value={memo} onChange={(e) => setMemo(e.target.value)} /></Field>
       <div className="flex gap-2 mt-4">
         {initial?.id && (
@@ -449,7 +456,11 @@ function MobileDashboard({ year, budgetTarget, totalIncome, totalExpense, schedu
   const printRef = useRef(null);
   const upcoming = useMemo(() => {
     const t = todayStr();
-    return schedules.filter((s) => (s.date || "") >= t).sort((a, b) => (a.date || "").localeCompare(b.date || "")).slice(0, 5);
+    return schedules
+      .map((s) => ({ ...s, effectiveDate: s.recurring ? nextOccurrence(s.date, t) : s.date }))
+      .filter((s) => (s.effectiveDate || "") >= t)
+      .sort((a, b) => (a.effectiveDate || "").localeCompare(b.effectiveDate || ""))
+      .slice(0, 5);
   }, [schedules]);
   const familyTotal = useMemo(() => groups.reduce((sum, [, rows]) => sum + rows.reduce((s, r) => s + Number(r.amount || 0), 0), 0), [groups]);
   const { first, last } = thisMonthRange();
@@ -476,87 +487,101 @@ function MobileDashboard({ year, budgetTarget, totalIncome, totalExpense, schedu
   };
 
   return (
-    <div className="space-y-3">
-      <button onClick={shareMonthly} disabled={sharing} className="w-full py-2.5 rounded-xl text-white text-[12.5px] font-bold" style={{ background: accent }}>
-        {sharing ? "생성 중..." : "이번 달 요약 카톡 공유"}
-      </button>
-      <div className="bg-white border border-gray-200 rounded-xl p-4">
-        <div className="flex items-center justify-between mb-1">
-          <div className="text-[11px] font-bold text-gray-400">{year}년 총예산 목표</div>
-          <button onClick={() => setEditingBudget((v) => !v)} className="text-[11px] font-semibold" style={{ color: accent }}>수정</button>
+    <div>
+      {/* ⭐ 예전엔 예산/수입지출/일정/이벤트예산이 각각 다른 카드로 따로 떨어져
+          있었다. 카드 하나로 합치고, 그 안을 주제별로 구분선/소제목으로 나눴다. */}
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="p-3.5">
+          <button onClick={shareMonthly} disabled={sharing} className="w-full py-2.5 rounded-xl text-white text-[12.5px] font-bold" style={{ background: accent }}>
+            {sharing ? "생성 중..." : "이번 달 요약 카톡 공유"}
+          </button>
         </div>
-        {editingBudget ? (
-          <div className="flex gap-1.5 mt-1">
-            <input className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" type="text" inputMode="numeric" value={formatAmountInput(budgetInput)} onChange={(e) => setBudgetInput(parseAmountInput(e.target.value))} />
-            <button onClick={async () => { await upsertBudgetTarget({ companyName, year, amount: budgetInput, entries, actorName }); setEditingBudget(false); }}
-              className="px-3 rounded-lg text-white text-[12px] font-bold" style={{ background: accent }}>저장</button>
-          </div>
-        ) : (
-          <div className="text-[18px] font-extrabold" style={{ color: accent }}>{fmtWon(budgetTarget)}</div>
-        )}
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-white border border-gray-200 rounded-xl p-3.5">
-          <div className="text-[11px] font-bold text-gray-400 mb-1">총 수입</div>
-          <div className="text-[16px] font-extrabold text-gray-700">{fmtWon(totalIncome)}</div>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-3.5">
-          <div className="text-[11px] font-bold text-gray-400 mb-1">총 지출</div>
-          <div className="text-[16px] font-extrabold text-red-600">{fmtWon(totalExpense)}</div>
-        </div>
-      </div>
-      <div className="bg-white border border-gray-200 rounded-xl p-3.5">
-        <div className="text-[11px] font-bold text-gray-400 mb-1">잔액</div>
-        <div className="text-[17px] font-extrabold" style={{ color: balance >= 0 ? accent : "#dc2626" }}>{fmtWon(balance)}</div>
-      </div>
 
-      {budgetTarget > 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl p-3.5">
-          <div className="flex items-center justify-between mb-1.5">
-            <div className="text-[11px] font-bold text-gray-600">예산 대비 지출</div>
-            <div className="text-[10.5px] font-semibold text-gray-400">{Math.round((totalExpense / budgetTarget) * 100)}%</div>
-          </div>
-          <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-            <div className="h-full rounded-full" style={{ width: `${Math.min(100, (totalExpense / budgetTarget) * 100)}%`, background: totalExpense > budgetTarget ? "#dc2626" : accent }} />
-          </div>
-        </div>
-      )}
-
-      <div className="bg-white border border-gray-200 rounded-xl p-4">
-        <div className="text-[13px] font-bold text-gray-700 mb-2.5">다가오는 일정</div>
-        {upcoming.length === 0 && <div className="text-[12px] text-gray-400 py-3 text-center">등록된 일정이 없습니다</div>}
-        <div className="space-y-2">
-          {upcoming.map((s) => {
-            const dday = dDayLabel(s.date);
-            const soon = dday === "D-DAY" || dday === "D-1";
-            return (
-              <div key={s.id} className="flex items-center justify-between text-[12.5px] border-b border-gray-50 last:border-b-0 pb-2 last:pb-0">
-                <span className="text-gray-700 font-semibold truncate flex items-center gap-1.5 min-w-0">
-                  {dday && <span className="shrink-0 px-1.5 py-0.5 rounded text-[9.5px] font-extrabold" style={soon ? { background: accent, color: "#fff" } : { background: "#f3f4f6", color: "#6b7280" }}>{dday}</span>}
-                  <span className="truncate">{s.title}</span>
-                </span>
-                <span className="text-gray-400 shrink-0 ml-2">{s.date}{s.time ? ` ${s.time}` : ""}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      <div className="bg-white border border-gray-200 rounded-xl p-4">
-        <div className="text-[13px] font-bold text-gray-700 mb-2.5">이벤트 예산</div>
-        {groups.length === 0 && <div className="text-[12px] text-gray-400 py-3 text-center">등록된 이벤트 예산이 없습니다</div>}
-        <div className="space-y-2">
-          {groups.map(([g, rows]) => (
-            <div key={g} className="flex items-center justify-between text-[12.5px] border-b border-gray-50 last:border-b-0 pb-2 last:pb-0">
-              <span className="text-gray-700 font-semibold truncate">{g}</span>
-              <span className="text-gray-500 shrink-0 ml-2">{fmtWon(rows.reduce((s, r) => s + Number(r.amount || 0), 0))}</span>
+        <div className="px-3.5 pb-3.5">
+          <div className="text-[11.5px] font-bold mb-2" style={{ color: accent }}>예산</div>
+          <div className="bg-gray-50 rounded-xl p-3.5 mb-2.5">
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-[11px] font-bold text-gray-500">{year}년 총예산 목표</div>
+              <button onClick={() => setEditingBudget((v) => !v)} className="text-[11px] font-semibold" style={{ color: accent }}>수정</button>
             </div>
-          ))}
-        </div>
-        {groups.length > 0 && (
-          <div className="flex items-center justify-between text-[12.5px] mt-2 pt-2 border-t border-gray-100 font-bold" style={{ color: accent }}>
-            <span>합계</span><span>{fmtWon(familyTotal)}</span>
+            {editingBudget ? (
+              <div className="flex gap-1.5 mt-1">
+                <input className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" type="text" inputMode="numeric" value={formatAmountInput(budgetInput)} onChange={(e) => setBudgetInput(parseAmountInput(e.target.value))} />
+                <button onClick={async () => { await upsertBudgetTarget({ companyName, year, amount: budgetInput, entries, actorName }); setEditingBudget(false); }}
+                  className="px-3 rounded-lg text-white text-[12px] font-bold" style={{ background: accent }}>저장</button>
+              </div>
+            ) : (
+              <PlannerDialNumber value={budgetTarget} className="text-[18px] font-extrabold" style={{ color: accent }} />
+            )}
           </div>
-        )}
+          {budgetTarget > 0 && (
+            <div className="bg-gray-50 rounded-xl p-3.5">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="text-[11px] font-bold text-gray-600">예산 대비 지출</div>
+                <div className="text-[10.5px] font-semibold text-gray-500">{Math.round((totalExpense / budgetTarget) * 100)}%</div>
+              </div>
+              <div className="h-2 rounded-full bg-gray-200 overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${Math.min(100, (totalExpense / budgetTarget) * 100)}%`, background: totalExpense > budgetTarget ? "#dc2626" : accent }} />
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="border-t-2 border-gray-100 px-3.5 py-3.5">
+          <div className="text-[11.5px] font-bold mb-2" style={{ color: accent }}>수입·지출</div>
+          <div className="grid grid-cols-2 gap-2.5 mb-2.5">
+            <div className="bg-gray-50 rounded-xl p-3">
+              <div className="text-[11px] font-bold text-gray-500 mb-1">총 수입</div>
+              <PlannerDialNumber value={totalIncome} className="text-[15px] font-extrabold text-gray-700" />
+            </div>
+            <div className="bg-gray-50 rounded-xl p-3">
+              <div className="text-[11px] font-bold text-gray-500 mb-1">총 지출</div>
+              <PlannerDialNumber value={totalExpense} className="text-[15px] font-extrabold text-red-600" />
+            </div>
+          </div>
+          <div className="bg-gray-50 rounded-xl p-3">
+            <div className="text-[11px] font-bold text-gray-500 mb-1">잔액</div>
+            <PlannerDialNumber value={balance} className="text-[16px] font-extrabold" style={{ color: balance >= 0 ? accent : "#dc2626" }} />
+          </div>
+        </div>
+
+        <div className="border-t-2 border-gray-100 px-3.5 py-3.5">
+          <div className="text-[11.5px] font-bold mb-2" style={{ color: accent }}>다가오는 일정</div>
+          {upcoming.length === 0 && <div className="text-[12px] text-gray-500 py-3 text-center">등록된 일정이 없습니다</div>}
+          <div className="space-y-2">
+            {upcoming.map((s) => {
+              const dday = dDayLabel(s.effectiveDate);
+              const soon = dday === "D-DAY" || dday === "D-1";
+              return (
+                <div key={s.id} className="flex items-center justify-between text-[12.5px] border-b border-gray-100 last:border-b-0 pb-2 last:pb-0">
+                  <span className="text-gray-700 font-semibold truncate flex items-center gap-1.5 min-w-0">
+                    {dday && <span className="shrink-0 px-1.5 py-0.5 rounded text-[9.5px] font-extrabold" style={soon ? { background: accent, color: "#fff" } : { background: "#f3f4f6", color: "#6b7280" }}>{dday}</span>}
+                    <span className="truncate">{s.title}{s.recurring && <span className="text-[10px] text-gray-500 font-normal"> (매년)</span>}</span>
+                  </span>
+                  <span className="text-gray-500 shrink-0 ml-2">{s.effectiveDate}{s.time ? ` ${s.time}` : ""}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="border-t-2 border-gray-100 px-3.5 py-3.5">
+          <div className="text-[11.5px] font-bold mb-2" style={{ color: accent }}>이벤트 예산</div>
+          {groups.length === 0 && <div className="text-[12px] text-gray-500 py-3 text-center">등록된 이벤트 예산이 없습니다</div>}
+          <div className="space-y-2">
+            {groups.map(([g, rows]) => (
+              <div key={g} className="flex items-center justify-between text-[12.5px] border-b border-gray-100 last:border-b-0 pb-2 last:pb-0">
+                <span className="text-gray-700 font-semibold truncate">{g}</span>
+                <span className="text-gray-600 shrink-0 ml-2">{fmtWon(rows.reduce((s, r) => s + Number(r.amount || 0), 0))}</span>
+              </div>
+            ))}
+          </div>
+          {groups.length > 0 && (
+            <div className="flex items-center justify-between text-[12.5px] mt-2 pt-2 border-t border-gray-100 font-bold" style={{ color: accent }}>
+              <span>합계</span><PlannerDialNumber value={familyTotal} />
+            </div>
+          )}
+        </div>
       </div>
       <PrintableLedger innerRef={printRef} companyName={companyName} label={`${first.slice(0, 7)} 이번 달 요약`} rows={monthRows} totalIncome={monthIncome} totalExpense={monthExpense} accent={accent} />
     </div>
@@ -665,16 +690,16 @@ function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates
 
         <div className="grid grid-cols-3 gap-2 mb-3">
           <div className="bg-gray-50 rounded-lg px-2.5 py-2">
-            <div className="text-[10px] text-gray-400">수입</div>
-            <div className="text-[12.5px] font-bold text-gray-700">{fmtWon(totalIncome)}</div>
+            <div className="text-[10px] text-gray-500">수입</div>
+            <PlannerDialNumber value={totalIncome} className="text-[12.5px] font-bold text-gray-700" />
           </div>
           <div className="bg-gray-50 rounded-lg px-2.5 py-2">
-            <div className="text-[10px] text-gray-400">지출</div>
-            <div className="text-[12.5px] font-bold text-red-600">{fmtWon(totalExpense)}</div>
+            <div className="text-[10px] text-gray-500">지출</div>
+            <PlannerDialNumber value={totalExpense} className="text-[12.5px] font-bold text-red-600" />
           </div>
           <div className="bg-gray-50 rounded-lg px-2.5 py-2">
-            <div className="text-[10px] text-gray-400">잔액</div>
-            <div className="text-[12.5px] font-bold" style={{ color: accent }}>{fmtWon(totalIncome - totalExpense)}</div>
+            <div className="text-[10px] text-gray-500">잔액</div>
+            <PlannerDialNumber value={totalIncome - totalExpense} className="text-[12.5px] font-bold" style={{ color: accent }} />
           </div>
         </div>
 
@@ -745,11 +770,18 @@ function MobileCalendar({ year, schedules, companyName, actorName, accent }) {
   const [editing, setEditing] = useState(null);
   React.useEffect(() => { setViewYear(year); }, [year]);
 
+  // ⭐ 매년 반복(생일/기념일)은 보고 있는 연도(viewYear) 기준 월/일로 다시 계산해서
+  // 매년 같은 날에 나타나게 한다.
   const byDate = useMemo(() => {
     const map = new Map();
-    schedules.forEach((s) => { if (!s.date) return; if (!map.has(s.date)) map.set(s.date, []); map.get(s.date).push(s); });
+    schedules.forEach((s) => {
+      if (!s.date) return;
+      const key = s.recurring ? recurringDateInYear(s.date, viewYear) : s.date;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(s);
+    });
     return map;
-  }, [schedules]);
+  }, [schedules, viewYear]);
 
   const first = new Date(viewYear, viewMonth, 1);
   const startDow = first.getDay();
@@ -801,7 +833,7 @@ function MobileCalendar({ year, schedules, companyName, actorName, accent }) {
       {dayItems.length === 0 && <div className="bg-white border border-gray-200 rounded-xl py-8 text-center text-[12px] text-gray-400">등록된 일정이 없습니다</div>}
       <div className="space-y-2">
         {dayItems.map((it) => {
-          const dday = dDayLabel(it.date);
+          const dday = dDayLabel(it.recurring ? nextOccurrence(it.date, todayStr()) : it.date);
           return (
             <div key={it.id} onClick={() => setEditing(it)} className="bg-white border border-gray-200 rounded-xl p-3 active:bg-gray-50">
               <div className="text-[13px] font-bold text-gray-800 flex items-center gap-1.5">
@@ -853,7 +885,7 @@ function MobileFamilyColumn({ title, rows, accent, onEdit }) {
         ))}
       </div>
       <div className="flex items-center justify-between text-[12px] mt-1.5 text-gray-600 font-semibold">
-        <span>소계</span><span className="font-bold text-[12.5px]" style={{ color: accent }}>{fmtWon(total)}</span>
+        <span>소계</span><PlannerDialNumber value={total} className="font-bold text-[12.5px]" style={{ color: accent }} />
       </div>
     </div>
   );
@@ -878,7 +910,7 @@ function MobileEventBudgetCard({ g, rows, companyName, accent, onAddMember, onEd
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <span className="text-[11px] font-semibold text-gray-500">{rows.length}명</span>
-          <span className="text-[13px] font-extrabold" style={{ color: accent }}>{fmtWon(total)}</span>
+          <PlannerDialNumber value={total} className="text-[13px] font-extrabold" style={{ color: accent }} />
         </div>
       </button>
     );
@@ -922,7 +954,7 @@ function MobileEventBudgetCard({ g, rows, companyName, accent, onAddMember, onEd
 
       <div className="px-3.5 py-2.5 flex items-center justify-between border-t border-gray-100" style={{ background: `${accent}0a` }}>
         <span className="text-[11px] font-semibold text-gray-500">총 {rows.length}명</span>
-        <span className="text-[13px] font-extrabold" style={{ color: accent }}>{fmtWon(total)}</span>
+        <PlannerDialNumber value={total} className="text-[13px] font-extrabold" style={{ color: accent }} />
       </div>
 
       <PrintableFamily innerRef={printRef} companyName={companyName} group={g} rows={rows} total={total} accent={accent} />

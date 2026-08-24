@@ -109,6 +109,25 @@ export function parseAmountInput(displayValue) {
   return String(displayValue || "").replace(/[^0-9]/g, "");
 }
 
+// ⭐ 생일/기념일처럼 "매년 반복"되는 일정 — 저장된 날짜의 월/일만 쓰고, 연도는
+// 매번 새로 계산한다. fromDateStr(기본 오늘) 기준으로 "돌아오는" 날짜를 구한다
+// (이미 지난 올해 날짜면 내년으로 넘긴다).
+export function nextOccurrence(dateStr, fromDateStr) {
+  if (!dateStr) return dateStr;
+  const from = fromDateStr || todayStr();
+  const mmdd = dateStr.slice(5, 10);
+  const fromYear = Number(from.slice(0, 4));
+  let candidate = `${fromYear}-${mmdd}`;
+  if (candidate < from) candidate = `${fromYear + 1}-${mmdd}`;
+  return candidate;
+}
+
+// 달력에서 특정 연도에 매년 반복 일정이 표시될 날짜(그 해의 월/일)를 구한다.
+export function recurringDateInYear(dateStr, year) {
+  if (!dateStr) return dateStr;
+  return `${year}-${dateStr.slice(5, 10)}`;
+}
+
 // ⭐ 일정 D-day 계산 — 오늘부터 며칠 남았는지. 지났으면 null.
 export function dDayLabel(dateStr) {
   if (!dateStr) return null;

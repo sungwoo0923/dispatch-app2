@@ -8,8 +8,10 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import KPPlannerLogo from "./KPPlannerLogo";
-import { signupCreateGroup, signupJoinGroup, randomGroupCode } from "./plannerAuth";
+import PlannerDatePicker from "./PlannerDatePicker";
+import { signupCreateGroup, signupJoinGroup, randomGroupCode, normalizeGroupCode } from "./plannerAuth";
 import { shareInvite } from "./plannerInvite";
+import { addPlannerEntry } from "../adminPlannerData";
 import { ACCENT, ACCENT_DARK, ACCENT_SOFT, ACCENT_BORDER, applyGenderTheme } from "./plannerTheme";
 
 export default function PlannerSignup() {
@@ -25,6 +27,7 @@ export default function PlannerSignup() {
   const [gender, setGender] = useState(urlGenderValid ? urlJoinGender : "female"); // "male" | "female" — 로그인 후(및 이 화면에서도) 전체 테마에 즉시 반영
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [birthday, setBirthday] = useState("");
   const [groupName, setGroupName] = useState("");
   const [groupCode, setGroupCode] = useState(() => randomGroupCode());
   const [joinCode, setJoinCode] = useState(urlCode || "");
@@ -41,6 +44,20 @@ export default function PlannerSignup() {
 
   const genderLocked = mode === "join" && urlGenderValid;
 
+  // ⭐ 생일을 입력했으면 "매년 반복" 일정으로 자동 등록해둔다 — 항상 등록돼 있고,
+  // 나중에 일정 메뉴에서 삭제도 가능하다(생일/기념일 요구사항).
+  const addBirthdaySchedule = async (groupId) => {
+    if (!birthday) return;
+    try {
+      await addPlannerEntry({
+        type: "schedule", companyName: groupId, title: `${name.trim()}님 생일`,
+        date: birthday, category: "생일", recurring: true, createdByName: name.trim(),
+      });
+    } catch {
+      // 생일 일정 등록 실패는 가입 자체를 막지 않는다.
+    }
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     if (!name.trim()) return setError("이름을 입력해 주세요.");
@@ -52,10 +69,12 @@ export default function PlannerSignup() {
     setError("");
     try {
       if (mode === "create") {
-        const { groupId } = await signupCreateGroup({ email, password, name, gender, groupCode, groupName });
+        const { groupId } = await signupCreateGroup({ email, password, name, gender, groupCode, groupName, birthday });
+        await addBirthdaySchedule(groupId);
         setDoneCode(groupId);
       } else {
-        await signupJoinGroup({ email, password, name, gender, groupCode: joinCode });
+        await signupJoinGroup({ email, password, name, gender, groupCode: joinCode, birthday });
+        await addBirthdaySchedule(normalizeGroupCode(joinCode));
         navigate("/planner", { replace: true });
       }
     } catch (err) {
@@ -95,9 +114,9 @@ export default function PlannerSignup() {
         <div style={{ width: "100%", maxWidth: 380, textAlign: "center" }}>
           <KPPlannerLogo size="md" />
           <div style={{ marginTop: 28, padding: "22px 20px", border: `1px solid ${ACCENT_BORDER}`, borderRadius: 16, background: ACCENT_SOFT }}>
-            <div style={{ fontSize: 13, color: "#8b7480", marginBottom: 8, fontWeight: 600 }}>우리 가족 코드</div>
+            <div style={{ fontSize: 13, color: "#6e5c67", marginBottom: 8, fontWeight: 600 }}>우리 가족 코드</div>
             <div style={{ fontSize: 30, fontWeight: 900, letterSpacing: 4, color: ACCENT_DARK }}>{doneCode}</div>
-            <div style={{ fontSize: 12.5, color: "#a58a97", marginTop: 10, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 12.5, color: "#7d6a75", marginTop: 10, lineHeight: 1.6 }}>
               이 코드를 배우자 등 함께 쓸 사람에게 알려주세요.<br />
               아래 "배우자에게 공유하기"를 누르면 가입 링크와 코드가 한번에 전달돼요.
             </div>
@@ -105,7 +124,7 @@ export default function PlannerSignup() {
           <button onClick={invite} disabled={sharing} style={{ ...buttonStyle, marginTop: 20 }}>
             {sharing ? "준비 중..." : "배우자에게 공유하기"}
           </button>
-          {shareFlash && <div style={{ fontSize: 11.5, color: "#a58a97", marginTop: 8 }}>{shareFlash}</div>}
+          {shareFlash && <div style={{ fontSize: 11.5, color: "#7d6a75", marginTop: 8 }}>{shareFlash}</div>}
           <button
             onClick={() => navigate("/planner", { replace: true })}
             style={{ ...buttonStyle, marginTop: 10, background: "#fff", color: ACCENT, border: `1px solid ${ACCENT_BORDER}` }}
@@ -134,7 +153,7 @@ export default function PlannerSignup() {
                 flex: 1, padding: "10px 6px", fontSize: 13, fontWeight: 700, borderRadius: 10,
                 border: `1px solid ${mode === v ? ACCENT : ACCENT_BORDER}`,
                 background: mode === v ? ACCENT : "#fff",
-                color: mode === v ? "#fff" : "#a58a97",
+                color: mode === v ? "#fff" : "#7d6a75",
                 cursor: "pointer",
               }}
             >
@@ -146,7 +165,7 @@ export default function PlannerSignup() {
         <form onSubmit={submit}>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="이름" style={{ ...inputStyle, marginBottom: 12 }} />
           <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 12, color: "#a58a97", marginBottom: 6, fontWeight: 600 }}>
+            <div style={{ fontSize: 12, color: "#7d6a75", marginBottom: 6, fontWeight: 600 }}>
               성별 (화면 색상에 바로 반영돼요){genderLocked ? " — 배우자 초대로 자동 지정됨" : ""}
             </div>
             {genderLocked ? (
@@ -164,7 +183,7 @@ export default function PlannerSignup() {
                       flex: 1, padding: "10px 6px", fontSize: 13, fontWeight: 700, borderRadius: 10,
                       border: `1px solid ${gender === v ? ACCENT : ACCENT_BORDER}`,
                       background: gender === v ? ACCENT : "#fff",
-                      color: gender === v ? "#fff" : "#a58a97",
+                      color: gender === v ? "#fff" : "#7d6a75",
                       cursor: "pointer",
                     }}
                   >
@@ -176,12 +195,16 @@ export default function PlannerSignup() {
           </div>
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="이메일" style={{ ...inputStyle, marginBottom: 12 }} />
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="비밀번호 (6자 이상)" style={{ ...inputStyle, marginBottom: 12 }} />
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: "#7d6a75", marginBottom: 6, fontWeight: 600 }}>생일 (선택 — 다가오면 알림에 나와요)</div>
+            <PlannerDatePicker value={birthday} onChange={setBirthday} placeholder="생일 선택" />
+          </div>
 
           {mode === "create" ? (
             <>
               <input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="가족 이름 (예: 우리 가족, 선택)" style={{ ...inputStyle, marginBottom: 12 }} />
               <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 12, color: "#a58a97", marginBottom: 6, fontWeight: 600 }}>가족 코드 (배우자 초대용, 원하는 대로 바꿀 수 있어요)</div>
+                <div style={{ fontSize: 12, color: "#7d6a75", marginBottom: 6, fontWeight: 600 }}>가족 코드 (배우자 초대용, 원하는 대로 바꿀 수 있어요)</div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <input
                     value={groupCode}
@@ -209,7 +232,7 @@ export default function PlannerSignup() {
           </button>
         </form>
 
-        <div style={{ textAlign: "center", marginTop: 20, fontSize: 13, color: "#8b7480" }}>
+        <div style={{ textAlign: "center", marginTop: 20, fontSize: 13, color: "#6e5c67" }}>
           이미 계정이 있으신가요?{" "}
           <Link to="/planner-login" style={{ color: ACCENT, fontWeight: 700, textDecoration: "none" }}>
             로그인

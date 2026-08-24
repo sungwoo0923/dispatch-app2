@@ -8,6 +8,7 @@ import PlannerSplash from "./PlannerSplash";
 import PlannerAdminPanel from "./PlannerAdminPanel";
 import PlannerMobileShell from "./PlannerMobileShell";
 import PlannerMyInfo from "./PlannerMyInfo";
+import PlannerNotificationBell from "./PlannerNotificationBell";
 import { usePlannerAccount, plannerLogout, useGroupMembers, TOTAL_MASTER_EMAIL } from "./plannerAuth";
 import { ACCENT, applyGenderTheme } from "./plannerTheme";
 import AdminPlanner from "../AdminPlanner";
@@ -72,6 +73,7 @@ function PlannerDesktopShell({ account, onUpdated }) {
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <span style={{ color: "rgba(255,255,255,0.85)", fontSize: 12.5 }}>{account.name}님 · {otherLabel}</span>
           <GroupCodeBadge groupId={account.groupId} />
+          <PlannerNotificationBell groupId={account.groupId} />
           <button
             onClick={() => setShowMyInfo(true)}
             style={{ fontSize: 12.5, fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.35)", borderRadius: 8, padding: "5px 12px", cursor: "pointer" }}
@@ -102,7 +104,7 @@ function PlannerDesktopShell({ account, onUpdated }) {
           <div style={{ position: "relative", width: 420, maxWidth: "100%", background: "#fff", borderRadius: 20, padding: 24, boxShadow: "0 10px 30px rgba(0,0,0,0.18)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: "#2a2a30" }}>내정보</div>
-              <button onClick={() => setShowMyInfo(false)} style={{ background: "none", border: "none", fontSize: 20, color: "#9ca3af", cursor: "pointer" }}>✕</button>
+              <button onClick={() => setShowMyInfo(false)} style={{ background: "none", border: "none", fontSize: 20, color: "#6b7280", cursor: "pointer" }}>✕</button>
             </div>
             <PlannerMyInfo account={account} onUpdated={onUpdated} />
           </div>
@@ -128,7 +130,7 @@ export default function PlannerRoot() {
       <div style={{ minHeight: "100vh", width: "100%", background: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
         <div style={{ textAlign: "center" }}>
           <KPPlannerLogo size="md" />
-          <div style={{ marginTop: 24, fontSize: 13.5, color: "#8b7480", lineHeight: 1.7 }}>
+          <div style={{ marginTop: 24, fontSize: 13.5, color: "#6e5c67", lineHeight: 1.7 }}>
             이 계정은 KP-Planner 계정이 아닙니다.<br />
             다른 계정으로 다시 로그인해 주세요.
           </div>

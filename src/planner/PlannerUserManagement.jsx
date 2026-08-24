@@ -21,8 +21,8 @@ function UserRow({ u, busyUid, onChangeGender, onRemove }) {
           <div style={{ fontSize: 13, fontWeight: 700, color: "#2a2a30" }}>
             {u.name || "(이름 없음)"} {isMaster && <span style={{ fontSize: 10, fontWeight: 700, color: ACCENT }}>· 최고관리자</span>}
           </div>
-          <div style={{ fontSize: 11, color: "#9ca3af", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</div>
-          <div style={{ fontSize: 10.5, color: "#b3aab0", marginTop: 2 }}>
+          <div style={{ fontSize: 11, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</div>
+          <div style={{ fontSize: 10.5, color: "#7a7a85", marginTop: 2 }}>
             {u.groupName || "우리 가족"} · {u.groupId} · 가입 {fmtDate(u.createdAt)}
           </div>
         </div>
@@ -36,7 +36,7 @@ function UserRow({ u, busyUid, onChangeGender, onRemove }) {
                 padding: "5px 9px", fontSize: 11, fontWeight: 700, borderRadius: 8,
                 border: `1px solid ${(u.gender || "female") === v ? ACCENT : ACCENT_BORDER}`,
                 background: (u.gender || "female") === v ? ACCENT : "#fff",
-                color: (u.gender || "female") === v ? "#fff" : "#9b9ba3",
+                color: (u.gender || "female") === v ? "#fff" : "#6b7280",
                 cursor: "pointer",
               }}
             >
@@ -109,9 +109,9 @@ export default function PlannerUserManagement() {
         placeholder="이름/이메일/가족이름/가족코드 검색"
         style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", fontSize: 12.5, border: `1px solid ${ACCENT_BORDER}`, borderRadius: 10, outline: "none", marginBottom: 10 }}
       />
-      <div style={{ fontSize: 11, color: "#b3aab0", marginBottom: 8 }}>전체 {accounts.length}명{keyword ? ` · 검색결과 ${filtered.length}명` : ""}</div>
+      <div style={{ fontSize: 11, color: "#7a7a85", marginBottom: 8 }}>전체 {accounts.length}명{keyword ? ` · 검색결과 ${filtered.length}명` : ""}</div>
       <div style={{ border: `1px solid ${ACCENT_BORDER}`, borderRadius: 12, overflow: "hidden", maxHeight: 420, overflowY: "auto" }}>
-        {filtered.length === 0 && <div style={{ padding: 20, textAlign: "center", fontSize: 12.5, color: "#9ca3af" }}>가입자가 없습니다</div>}
+        {filtered.length === 0 && <div style={{ padding: 20, textAlign: "center", fontSize: 12.5, color: "#6b7280" }}>가입자가 없습니다</div>}
         {filtered.map((u) => (
           <UserRow key={u.uid} u={u} busyUid={busyUid} onChangeGender={changeGender} onRemove={remove} />
         ))}

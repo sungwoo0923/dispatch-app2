@@ -7,6 +7,7 @@ import AdminPlannerMobile from "../mobile/AdminPlannerMobile";
 import PlannerCycleTracker from "./PlannerCycleTracker";
 import PlannerMessenger from "./PlannerMessenger";
 import PlannerMyInfo from "./PlannerMyInfo";
+import PlannerNotificationBell from "./PlannerNotificationBell";
 import { plannerLogout, TOTAL_MASTER_EMAIL } from "./plannerAuth";
 import { ACCENT } from "./plannerTheme";
 
@@ -65,6 +66,7 @@ export default function PlannerMobileShell({ account, onUpdated, previewMode = f
         <div style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>{pageTitle}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <GroupCodeBadge groupId={account.groupId} />
+          <PlannerNotificationBell groupId={account.groupId} />
           <button onClick={() => setShowMenu(true)} style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none" }}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round">
               <path d="M4 7h16M4 12h16M4 17h16" />
@@ -100,7 +102,7 @@ export default function PlannerMobileShell({ account, onUpdated, previewMode = f
           <div style={{ position: "relative", marginLeft: "auto", width: 260, height: "100%", background: "#fff", display: "flex", flexDirection: "column" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ padding: "18px 20px", borderBottom: "1px solid #f9e6ee" }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: "#4A2E3D" }}>메뉴</div>
-              <div style={{ fontSize: 11.5, color: "#a58a97", marginTop: 2 }}>{account.groupName || "우리 가족"}</div>
+              <div style={{ fontSize: 11.5, color: "#7d6a75", marginTop: 2 }}>{account.groupName || "우리 가족"}</div>
             </div>
             <div style={{ flex: 1, padding: "8px 0", overflowY: "auto" }}>
               {menuItems.map(([v, l]) => (
@@ -122,7 +124,7 @@ export default function PlannerMobileShell({ account, onUpdated, previewMode = f
               ))}
             </div>
             <div style={{ padding: "16px 20px", borderTop: "1px solid #f9e6ee" }}>
-              <button onClick={plannerLogout} style={{ fontSize: 13, fontWeight: 600, color: "#a58a97", background: "none", border: "none", cursor: "pointer" }}>
+              <button onClick={plannerLogout} style={{ fontSize: 13, fontWeight: 600, color: "#7d6a75", background: "none", border: "none", cursor: "pointer" }}>
                 로그아웃
               </button>
             </div>

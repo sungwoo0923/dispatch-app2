@@ -61,7 +61,7 @@ function MiniCalendar({ info, lastPeriodStart, periodLength }) {
           const dateStr = fmt(viewYear, viewMonth, d);
           const kind = dayKind(dateStr);
           const isToday = dateStr === todayS;
-          let style = { color: "#9ca3af" };
+          let style = { color: "#6b7280" };
           if (kind === "period") style = { background: "#fecaca", color: "#b91c1c", fontWeight: 800 };
           else if (kind === "ovulation") style = { background: ACCENT, color: "#fff", fontWeight: 900 };
           else if (kind === "fertile") style = { background: ACCENT_SOFT, color: ACCENT, fontWeight: 800 };

@@ -3,7 +3,7 @@
 // plannerAccounts 컬렉션을 쓴다. Firebase Auth(로그인 자체)는 같은 프로젝트를
 // 공유하지만, "회사"가 아니라 "가족(그룹) 코드"로 데이터를 나눈다.
 import { useEffect, useState } from "react";
-import { onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import { onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, deleteUser } from "firebase/auth";
 import { plannerAuth as auth, plannerDb as db } from "./plannerFirebase";
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, query, where, limit, getDocs, onSnapshot } from "firebase/firestore";
 
@@ -13,6 +13,25 @@ export const PLANNER_ACCOUNTS = "plannerAccounts";
 // 문서가 없어도) "이 계정은 KP-Planner 계정이 아닙니다" 화면 없이 무조건 들어가져야
 // 한다는 요구사항. 처음 로그인하는 순간 plannerAccounts 프로필을 자동으로 만들어준다.
 export const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
+
+// ⭐ 이 Firebase 프로젝트는 배차프로그램과 Auth를 공유한다 — 배차프로그램에 이미
+// 가입된 이메일로 KP-Planner에 가입하려 하면 "이미 사용 중인 이메일" 오류가 나서
+// (그 프로그램의 비밀번호를 모르니) 가입 자체가 막혀버렸다. "배차프로그램에 가입한
+// 적 있어도 KP-Planner는 완전히 상관없이 가입되어야 한다"는 요구사항에 따라, 실제
+// Firebase Auth 계정은 입력한 이메일 뒤에 "+kpplanner"를 붙여 별도로 만든다(예:
+// sw@naver.com → sw+kpplanner@naver.com — 형식은 유효한 이메일이라 Firebase가
+// 그대로 받아들이지만, 실제 발송되는 메일함과는 무관하고 배차프로그램 계정과도
+// 완전히 다른 별개의 Auth 유저다). 화면에 보이는/저장되는 email 필드는 사용자가
+// 입력한 원래 이메일 그대로다 — 이 변환은 Firebase Auth 호출에서만 쓰인다.
+const PLANNER_EMAIL_TAG = "+kpplanner";
+function toPlannerAuthEmail(email) {
+  const trimmed = String(email || "").trim().toLowerCase();
+  const at = trimmed.indexOf("@");
+  if (at < 0) return trimmed;
+  if (trimmed.slice(0, at).endsWith(PLANNER_EMAIL_TAG)) return trimmed; // 이미 변환된 값이면 그대로
+  return `${trimmed.slice(0, at)}${PLANNER_EMAIL_TAG}${trimmed.slice(at)}`;
+}
+const TOTAL_MASTER_AUTH_EMAIL = toPlannerAuthEmail(TOTAL_MASTER_EMAIL);
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 0/O, 1/I처럼 헷갈리는 문자는 뺐다
 
@@ -50,22 +69,22 @@ function koreanAuthError(err) {
   return map[code] || "처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
-// ⭐ 배차프로그램 등 이 Firebase 프로젝트 어딘가에 이미 등록된 이메일이어도
-// KP-Planner는 "완전히 새로운 프로그램"이라 상관없이 가입되어야 한다는 요구사항 —
-// Firebase Auth는 같은 이메일로 계정을 두 개 만들 수 없으므로(auth/email-already-
-// in-use), 새로 만드는 대신 "같은 이메일/비밀번호로 로그인"해서 같은 계정에
-// plannerAccounts 프로필만 새로 붙이는 방식으로 처리한다.
+// ⭐ toPlannerAuthEmail로 네임스페이스를 씌우기 때문에, 이 함수에서 만나는
+// "이미 사용 중"은 배차프로그램 계정과의 충돌이 아니라 진짜로 이 이메일로
+// KP-Planner에 먼저 가입한 적이 있는 경우다 — 그때는 같은 비밀번호면 로그인,
+// 다르면 안내한다.
 async function getOrCreateAuthUser(email, password) {
+  const authEmail = toPlannerAuthEmail(email);
   try {
-    const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+    const cred = await createUserWithEmailAndPassword(auth, authEmail, password);
     return cred.user;
   } catch (err) {
     if (err?.code === "auth/email-already-in-use") {
       try {
-        const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+        const cred = await signInWithEmailAndPassword(auth, authEmail, password);
         return cred.user;
       } catch {
-        throw new Error("이미 사용 중인 이메일입니다. 비밀번호가 다르다면, 그 계정의 비밀번호를 입력해 주세요.");
+        throw new Error("이미 이 이메일로 KP-Planner에 가입되어 있어요. 비밀번호가 다르다면, 가입할 때 쓴 비밀번호를 입력해 주세요.");
       }
     }
     throw new Error(koreanAuthError(err));
@@ -90,9 +109,9 @@ export function usePlannerAccount() {
       try {
         const ref = doc(db, PLANNER_ACCOUNTS, user.uid);
         let snap = await getDoc(ref);
-        if (!snap.exists() && user.email === TOTAL_MASTER_EMAIL) {
+        if (!snap.exists() && (user.email === TOTAL_MASTER_AUTH_EMAIL || user.email === TOTAL_MASTER_EMAIL)) {
           const autoProfile = {
-            email: user.email,
+            email: TOTAL_MASTER_EMAIL,
             name: "관리자",
             groupId: randomGroupCode(),
             groupName: "관리자",
@@ -113,11 +132,19 @@ export function usePlannerAccount() {
   return state;
 }
 
+// ⭐ 네임스페이스(+kpplanner) 도입 "이전"에 만들어진 계정(원래 이메일 그대로 Auth
+// 계정이 생성된 경우)도 계속 로그인할 수 있도록, 네임스페이스 이메일로 먼저
+// 시도하고 실패하면 원래 이메일로 한 번 더 시도한다.
 export async function plannerLogin(email, password) {
+  const trimmed = String(email || "").trim();
   try {
-    await signInWithEmailAndPassword(auth, email.trim(), password);
+    await signInWithEmailAndPassword(auth, toPlannerAuthEmail(trimmed), password);
   } catch (err) {
-    throw new Error(koreanAuthError(err));
+    try {
+      await signInWithEmailAndPassword(auth, trimmed, password);
+    } catch {
+      throw new Error(koreanAuthError(err));
+    }
   }
 }
 
@@ -131,7 +158,7 @@ export async function plannerLogout() {
 // 누구도 최고관리자 메뉴가 보이면 안 된다는 요구사항이라, 가족을 새로 만든
 // 사람이라고 해서 owner가 되지 않는다(예전엔 여기서 owner를 줬던 게 "새로 가입한
 // 계정에 관리자 메뉴가 보인다" 버그의 원인이었다).
-export async function signupCreateGroup({ email, password, name, gender, groupCode, groupName }) {
+export async function signupCreateGroup({ email, password, name, gender, groupCode, groupName, birthday }) {
   const code = normalizeGroupCode(groupCode || randomGroupCode());
   if (code.length < 4) throw new Error("가족 코드는 4자 이상으로 만들어 주세요.");
   if (await groupCodeTaken(code)) throw new Error("이미 사용 중인 가족 코드입니다. 다른 코드를 입력해 주세요.");
@@ -145,13 +172,14 @@ export async function signupCreateGroup({ email, password, name, gender, groupCo
     groupId: code,
     groupName: groupName?.trim() || "우리 가족",
     role: "member",
+    birthday: birthday || "",
     createdAt: serverTimestamp(),
   });
   return { uid: user.uid, groupId: code };
 }
 
 // "코드로 참여하기" — 배우자 등 기존 가족 코드를 받은 사람이 같은 그룹에 합류한다.
-export async function signupJoinGroup({ email, password, name, gender, groupCode }) {
+export async function signupJoinGroup({ email, password, name, gender, groupCode, birthday }) {
   const code = normalizeGroupCode(groupCode);
   if (!code) throw new Error("가족 코드를 입력해 주세요.");
   if (!(await groupCodeTaken(code))) throw new Error("존재하지 않는 가족 코드입니다. 코드를 다시 확인해 주세요.");
@@ -163,6 +191,7 @@ export async function signupJoinGroup({ email, password, name, gender, groupCode
     name: name.trim(),
     gender: gender || "female",
     groupId: code,
+    birthday: birthday || "",
     role: "member",
     createdAt: serverTimestamp(),
   });
@@ -187,6 +216,15 @@ export async function updateMyProfile(uid, patch) {
   await updateDoc(doc(db, PLANNER_ACCOUNTS, uid), patch);
 }
 
+// ⭐ 가족 이름은 사람마다 각자 문서에 흩어져 저장돼 있어서(초대받은 사람은 원래
+// 이 필드가 비어 있었다) 초대자/받은 사람 누구나 바꿀 수 있게 하려면 그룹의 모든
+// 구성원 문서에 한꺼번에 반영해야 서로 다른 값이 보이지 않는다.
+export async function updateGroupName(groupId, groupName) {
+  const q = query(collection(db, PLANNER_ACCOUNTS), where("groupId", "==", groupId));
+  const snap = await getDocs(q);
+  await Promise.all(snap.docs.map((d) => updateDoc(d.ref, { groupName })));
+}
+
 // ⭐ 최고관리자 전용 "가입자 관리" 화면에서 쓴다 — 전체 plannerAccounts를 그룹 구분
 //없이 다 구독한다. PlannerAdminPanel(owner에게만 렌더링됨) 밖에서는 쓰지 않는다.
 export function useAllPlannerAccounts() {
@@ -206,14 +244,19 @@ export async function adminRemovePlannerProfile(uid) {
   await deleteDoc(doc(db, PLANNER_ACCOUNTS, uid));
 }
 
-// ⭐ 회원 탈퇴(내정보에서 스스로) — plannerAccounts 프로필만 지운다. Firebase Auth
-// 로그인 자체(이메일/비밀번호)는 배차프로그램 등과 같은 프로젝트를 공유하는
-// 계정이라 여기서 지우면 다른 프로그램 로그인까지 없어질 수 있어 건드리지 않는다.
-// 프로필만 없어지면 이 가족/이 프로그램에서는 완전히 탈퇴한 상태가 된다(다시
-// 쓰려면 재가입).
+// ⭐ 회원 탈퇴(내정보에서 스스로) — plannerAccounts 프로필을 지우고, 로그인
+// 계정(Firebase Auth)도 함께 삭제한다. toPlannerAuthEmail로 이메일을 네임스페이스
+// 처리해두었기 때문에(sw@naver.com → sw+kpplanner@naver.com) 이 Auth 계정은
+// 배차프로그램 등 다른 프로그램과 완전히 별개라 안전하게 지울 수 있다. 최근
+// 로그인이 아니어서 삭제가 거부되면(auth/requires-recent-login) 프로필만 지우고
+// 로그아웃한다 — 남은 로그인 정보는 다시 로그인 후 재시도하면 지워진다.
 export async function leavePlannerAccount() {
   const user = auth.currentUser;
   if (!user) return;
   await deleteDoc(doc(db, PLANNER_ACCOUNTS, user.uid));
-  await signOut(auth);
+  try {
+    await deleteUser(user);
+  } catch {
+    await signOut(auth);
+  }
 }

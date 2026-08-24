@@ -13,6 +13,7 @@ import {
   usePlannerEntries, addPlannerEntry, updatePlannerEntry, deletePlannerEntry,
   upsertBudgetTarget, fmtWon, todayStr, formatAmountInput, parseAmountInput,
   EXPENSE_CATEGORIES, INCOME_CATEGORIES, dDayLabel, ensureRecurringInstances,
+  nextOccurrence, recurringDateInYear,
 } from "./adminPlannerData";
 import { ACCENT } from "./planner/plannerTheme";
 import PlannerDatePicker from "./planner/PlannerDatePicker";
@@ -200,14 +201,15 @@ function ScheduleEntryModal({ initial, defaultDate, companyName, actorName, onCl
   const [date, setDate] = useState(initial?.date || defaultDate || todayStr());
   const [time, setTime] = useState(initial?.time || "");
   const [memo, setMemo] = useState(initial?.memo || "");
+  const [recurring, setRecurring] = useState(!!initial?.recurring);
   const [saving, setSaving] = useState(false);
-  const dday = dDayLabel(date);
+  const dday = dDayLabel(recurring ? nextOccurrence(date, todayStr()) : date);
 
   const save = async () => {
     if (!title.trim()) { alert("일정 제목을 입력해 주세요."); return; }
     setSaving(true);
     try {
-      const payload = { type: "schedule", companyName, title: title.trim(), date, time, memo: memo.trim(), createdByName: actorName || "" };
+      const payload = { type: "schedule", companyName, title: title.trim(), date, time, memo: memo.trim(), createdByName: actorName || "", recurring };
       if (initial?.id) await updatePlannerEntry(initial.id, payload);
       else await addPlannerEntry(payload);
       onClose();
@@ -232,6 +234,10 @@ function ScheduleEntryModal({ initial, defaultDate, companyName, actorName, onCl
       <Field label="시간(선택)">
         <PlannerTimePicker value={time} onChange={setTime} />
       </Field>
+      <label className="flex items-center gap-2 mb-3 -mt-1 cursor-pointer select-none">
+        <input type="checkbox" checked={recurring} onChange={(e) => setRecurring(e.target.checked)} className="w-4 h-4" style={{ accentColor: ACCENT }} />
+        <span className="text-[12.5px] font-semibold text-gray-600">매년 반복 (생일/기념일)</span>
+      </label>
       <Field label="메모">
         <textarea className={inputCls} rows={3} value={memo} onChange={(e) => setMemo(e.target.value)} />
       </Field>
@@ -712,7 +718,13 @@ function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules
   const printRef = useRef(null);
   const upcoming = useMemo(() => {
     const t = todayStr();
-    return schedules.filter((s) => (s.date || "") >= t).sort((a, b) => (a.date || "").localeCompare(b.date || "")).slice(0, 5);
+    // ⭐ 매년 반복(생일/기념일)은 저장된 날짜가 과거라도 "올해/내년 돌아오는 날짜"로
+    // 계산해서 다가오는 일정에 함께 보여준다.
+    return schedules
+      .map((s) => ({ ...s, effectiveDate: s.recurring ? nextOccurrence(s.date, t) : s.date }))
+      .filter((s) => (s.effectiveDate || "") >= t)
+      .sort((a, b) => (a.effectiveDate || "").localeCompare(b.effectiveDate || ""))
+      .slice(0, 5);
   }, [schedules]);
   const familyTotal = useMemo(() => groups.reduce((sum, [, rows]) => sum + rows.reduce((s, r) => s + Number(r.amount || 0), 0), 0), [groups]);
 
@@ -800,7 +812,7 @@ function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules
           {upcoming.length === 0 && <div className="text-[12px] text-gray-400 py-4 text-center">등록된 일정이 없습니다</div>}
           <div className="space-y-2">
             {upcoming.map((s) => {
-              const dday = dDayLabel(s.date);
+              const dday = dDayLabel(s.effectiveDate);
               const soon = dday === "D-DAY" || dday === "D-1";
               return (
                 <div key={s.id} className="flex items-center justify-between text-[12.5px] border-b border-gray-50 last:border-b-0 pb-2 last:pb-0">
@@ -813,9 +825,9 @@ function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules
                         {dday}
                       </span>
                     )}
-                    {s.title}
+                    {s.title}{s.recurring && <span className="text-[10px] text-gray-400 font-normal">(매년)</span>}
                   </span>
-                  <span className="text-gray-400 shrink-0 ml-2">{s.date}{s.time ? ` ${s.time}` : ""}</span>
+                  <span className="text-gray-400 shrink-0 ml-2">{s.effectiveDate}{s.time ? ` ${s.time}` : ""}</span>
                 </div>
               );
             })}
@@ -1060,15 +1072,19 @@ function CalendarTab({ year, schedules, companyName, actorName }) {
   const [editing, setEditing] = useState(null); // null | {date} | entry
   React.useEffect(() => { setViewYear(year); }, [year]);
 
+  // ⭐ 매년 반복(생일/기념일)은 저장된 연도와 상관없이, 지금 보고 있는 달력의
+  // 연도(viewYear) 기준 월/일로 매번 다시 계산해서 꽂아준다 — 그래야 몇 년을
+  // 넘겨봐도 매년 같은 날에 나타난다.
   const byDate = useMemo(() => {
     const map = new Map();
     schedules.forEach((s) => {
       if (!s.date) return;
-      if (!map.has(s.date)) map.set(s.date, []);
-      map.get(s.date).push(s);
+      const key = s.recurring ? recurringDateInYear(s.date, viewYear) : s.date;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(s);
     });
     return map;
-  }, [schedules]);
+  }, [schedules, viewYear]);
 
   const first = new Date(viewYear, viewMonth, 1);
   const startDow = first.getDay();

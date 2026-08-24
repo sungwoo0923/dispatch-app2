@@ -65,7 +65,7 @@ export default function PlannerLogin() {
           </button>
         </form>
 
-        <div style={{ textAlign: "center", marginTop: 20, fontSize: 13, color: "#8b7480" }}>
+        <div style={{ textAlign: "center", marginTop: 20, fontSize: 13, color: "#6e5c67" }}>
           아직 계정이 없으신가요?{" "}
           <Link to="/planner-signup" style={{ color: PINK, fontWeight: 700, textDecoration: "none" }}>
             회원가입
