@@ -42493,18 +42493,9 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   }, [userCompany]);
 
   const [activeTab, setActiveTab] = React.useState("overview"); // overview | client_compare
-  const [rangeStart, setRangeStart] = React.useState("2026-01");
-  const [rangeEnd, setRangeEnd] = React.useState("2026-02");
-  const [rangeClients, setRangeClients] = React.useState([]);
-  const [clientSearch, setClientSearch] = React.useState("");
   const [targetMonth, setTargetMonth] = React.useState(
     new Date().toISOString().slice(0, 7)
   );
-  const toggleClient = (c) => {
-    setRangeClients((prev) =>
-      prev.includes(c) ? prev.filter((v) => v !== c) : [...prev, c]
-    );
-  };
   const [selectedYear, setSelectedYear] = React.useState(
     new Date().getFullYear()
   );
@@ -42622,60 +42613,6 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   }), [fixedRows]);
 
   const rows = React.useMemo(() => [...dispatchRows, ...fixedMapped], [dispatchRows, fixedMapped]);
-
-  const allClients = React.useMemo(() => {
-    return Array.from(
-      new Set(
-        [
-          ...rows.map((r) => r.거래처명 || ""),
-          ...clients.map((c) => c.거래처명 || ""),
-          ...places.map((p) => p.업체명 || ""),
-        ].filter(Boolean)
-      )
-    ).sort();
-  }, [rows, clients, places]);
-
-  const filteredClients = React.useMemo(() => {
-    if (!clientSearch) return [];
-    return allClients
-      .filter((c) => c.toLowerCase().includes(clientSearch.toLowerCase()))
-      .slice(0, 10);
-  }, [clientSearch, allClients]);
-
-  const rangeRows = React.useMemo(() => rows.filter((r) => {
-    if (!r.상차일) return false;
-    const ym = r.상차일.slice(0, 7);
-    if (ym < rangeStart || ym > rangeEnd) return false;
-    if (rangeClients.length > 0) {
-      const ok = rangeClients.some(
-        (c) =>
-          (r.거래처명 || "").includes(c) ||
-          (r.상차지명 || "").includes(c) ||
-          (r.하차지명 || "").includes(c)
-      );
-      if (!ok) return false;
-    }
-    return true;
-  }), [rows, rangeStart, rangeEnd, rangeClients]);
-
-  const rangeMonthly = React.useMemo(() => {
-    const map = {};
-    rangeRows.forEach((r) => {
-      const ym = r.상차일.slice(0, 7);
-      if (!map[ym]) map[ym] = { ym, sale: 0, driver: 0, fee: 0 };
-      map[ym].sale += toInt(r.청구운임);
-      map[ym].driver += toInt(r.기사운임);
-      map[ym].fee += toInt(r.수수료);
-    });
-    return Object.values(map).sort((a, b) => a.ym.localeCompare(b.ym));
-  }, [rangeRows]);
-
-  const rangeSummary = rangeMonthly.reduce(
-    (a, r) => { a.sale += r.sale; a.driver += r.driver; a.fee += r.fee; return a; },
-    { sale: 0, driver: 0, fee: 0 }
-  );
-  const rangeProfit = rangeSummary.fee;
-  const rangeProfitRate = rangeSummary.sale === 0 ? 0 : (rangeSummary.fee / rangeSummary.sale) * 100;
 
   const dayRows = React.useMemo(() => rows.filter((r) => (r.상차일 || "") === kpiDay), [rows, kpiDay]);
   const monthRows = React.useMemo(() => rows.filter((r) => (r.상차일 || "").startsWith(monthKey)), [rows, monthKey]);
@@ -43003,74 +42940,99 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
       {activeTab === "overview" && (
       <div className="px-8 py-6 grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 
-        {/* ================= LEFT PANEL ================= */}
-        <div className="space-y-6 flex-1">
-
-          <SettlementMonthlyHeader
-            targetMonth={targetMonth}
-            setTargetMonth={setTargetMonth}
-            monthRows={monthRows}
-            forecast={forecast}
-            forecast2026={forecast2026}
-          />
-
-          {/* ================= 🎯 연간 목표 대비 실적 · 2026 매출 전망 ================= */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="bg-[#1B2B4B] px-6 py-4">
-              <h3 className="text-[15px] font-bold text-white">연간 목표 대비 실적 · 2026 매출 전망</h3>
-              <p className="text-[11px] text-white/50 mt-0.5">전년 대비 성장 분석 및 시나리오 예측</p>
+        {/* ================= LEFT PANEL =================
+            누적현황 및 월 예상지표 ~ 신규거래처까지 카드 하나로 합쳐 하나의 리포트처럼
+            보이게 한다. 섹션마다 있던 반복된 네이비 헤더는 없애고, 카드 전체에 헤더
+            하나(+월 선택)만 두고 내부는 작은 소제목 + 구분선으로 나눈다. */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+            <div>
+              <h3 className="text-[15px] font-bold text-white">매출 현황 리포트</h3>
+              <p className="text-[11px] text-white/50 mt-0.5">누적현황 · 목표 대비 실적 · 거래처 분석</p>
             </div>
-            <div className="p-6 space-y-8">
-
-              {/* 순수 운송 매출 — 제외 거래처가 없으면 "총 운송료"와 완전히 같은 숫자라
-                  구분 의미가 없으므로 라벨만 "운송 매출"로 단순화한다. */}
-              <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
-                <p className="text-sm font-semibold text-gray-800 mb-4">{hasExcludedClients ? "순수 운송 매출" : "운송 매출"}</p>
-                <div className="grid grid-cols-4 gap-4 text-center">
-                  <Metric label="작년" value={won(lastYearPure.sale)} />
-                  <Metric label="목표" value={PURE_TARGET_2026 > 0 ? won(PURE_TARGET_2026) : "미설정"} valueClass="text-indigo-700" />
-                  <Metric label="현재" value={won(yPure.sale)} valueClass="text-gray-900" />
-                  <Metric label="달성률" value={PURE_TARGET_2026 > 0 ? `${achieveRate(yPure.sale, PURE_TARGET_2026).toFixed(1)}%` : "—"} valueClass="text-indigo-800" />
-                </div>
-              </div>
-
-              {/* 제외 거래처 매출 — 거래처관리에서 "순수매출제외"로 체크한 거래처가
-                  하나라도 있을 때만 보여준다 (예전엔 "후레쉬 물류"로 고정돼있었음). */}
-              {hasExcludedClients && (
-                <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
-                  <p className="text-sm font-semibold text-gray-700 mb-4">제외 거래처 매출</p>
-                  <div className="grid grid-cols-4 gap-4 text-center">
-                    <Metric label="작년" value={won(lastYearFresh.sale)} />
-                    <Metric label="목표" value={won(FRESH_TARGET_2026)} valueClass="text-indigo-700" />
-                    <Metric label="현재" value={won(yFresh.sale)} valueClass="text-gray-900" />
-                    <Metric label="달성률" value={`${achieveRate(yFresh.sale, FRESH_TARGET_2026).toFixed(1)}%`} valueClass="text-indigo-800" />
-                  </div>
-                </div>
-              )}
-
-              {/* 구분선 */}
-              <div className="flex items-center gap-3 pt-2">
-                <span className="text-xs font-semibold text-gray-500">2026 매출 전망 (순수 운송)</span>
-                <div className="flex-1 border-t border-gray-300" />
-              </div>
-
-              {/* 2026 매출 전망 */}
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <ScenarioCard title="보수적 시나리오" value={forecast2026.conservative} tone="gray" />
-                <ScenarioCard title="기준 시나리오" value={forecast2026.normal} tone="indigo" highlight />
-                <ScenarioCard title="공격적 시나리오" value={forecast2026.aggressive} tone="gray" />
-              </div>
-
-            </div>
+            <CustomSelect
+              className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-1.5 text-[13px] focus:outline-none"
+              value={targetMonth}
+              onChange={(e) => setTargetMonth(e.target.value)}
+            >
+              {Array.from({ length: 12 }, (_, i) => {
+                const d = new Date();
+                d.setMonth(d.getMonth() - i);
+                return (
+                  <option key={i} className="text-gray-900">
+                    {d.toISOString().slice(0, 7)}
+                  </option>
+                );
+              })}
+            </CustomSelect>
           </div>
 
-          {/* ================= KPI – 총 운송료 ================= */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="bg-[#1B2B4B] px-6 py-3 flex items-center justify-between">
-              <h3 className="text-[14px] font-bold text-white">{hasExcludedClients ? "총 운송료 (전체 거래처)" : "총 운송료"}</h3>
-              <span className="text-[11px] text-white/40">배차 + 고정거래처</span>
-            </div>
-            <div className="p-6">
+          <div className="p-6 space-y-8">
+
+            <SettlementMonthlyHeader
+              monthRows={monthRows}
+              forecast={forecast}
+              forecast2026={forecast2026}
+              targetMonth={targetMonth}
+            />
+
+            <div className="border-t border-gray-200" />
+
+            {/* ================= 🎯 연간 목표 대비 실적 · 2026 매출 전망 ================= */}
+            <section>
+              <h4 className="text-[13px] font-bold text-[#1B2B4B] mb-3">연간 목표 대비 실적 · 2026 매출 전망</h4>
+              <div className="space-y-6">
+
+                {/* 순수 운송 매출 — 제외 거래처가 없으면 "총 운송료"와 완전히 같은 숫자라
+                    구분 의미가 없으므로 라벨만 "운송 매출"로 단순화한다. */}
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
+                  <p className="text-sm font-semibold text-gray-800 mb-4">{hasExcludedClients ? "순수 운송 매출" : "운송 매출"}</p>
+                  <div className="grid grid-cols-4 gap-4 text-center">
+                    <Metric label="작년" value={won(lastYearPure.sale)} />
+                    <Metric label="목표" value={PURE_TARGET_2026 > 0 ? won(PURE_TARGET_2026) : "미설정"} valueClass="text-indigo-700" />
+                    <Metric label="현재" value={won(yPure.sale)} valueClass="text-gray-900" />
+                    <Metric label="달성률" value={PURE_TARGET_2026 > 0 ? `${achieveRate(yPure.sale, PURE_TARGET_2026).toFixed(1)}%` : "—"} valueClass="text-indigo-800" />
+                  </div>
+                </div>
+
+                {/* 제외 거래처 매출 — 거래처관리에서 "순수매출제외"로 체크한 거래처가
+                    하나라도 있을 때만 보여준다 (예전엔 "후레쉬 물류"로 고정돼있었음). */}
+                {hasExcludedClients && (
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
+                    <p className="text-sm font-semibold text-gray-700 mb-4">제외 거래처 매출</p>
+                    <div className="grid grid-cols-4 gap-4 text-center">
+                      <Metric label="작년" value={won(lastYearFresh.sale)} />
+                      <Metric label="목표" value={won(FRESH_TARGET_2026)} valueClass="text-indigo-700" />
+                      <Metric label="현재" value={won(yFresh.sale)} valueClass="text-gray-900" />
+                      <Metric label="달성률" value={`${achieveRate(yFresh.sale, FRESH_TARGET_2026).toFixed(1)}%`} valueClass="text-indigo-800" />
+                    </div>
+                  </div>
+                )}
+
+                {/* 구분선 */}
+                <div className="flex items-center gap-3 pt-2">
+                  <span className="text-xs font-semibold text-gray-500">2026 매출 전망 (순수 운송)</span>
+                  <div className="flex-1 border-t border-gray-300" />
+                </div>
+
+                {/* 2026 매출 전망 */}
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <ScenarioCard title="보수적 시나리오" value={forecast2026.conservative} tone="gray" />
+                  <ScenarioCard title="기준 시나리오" value={forecast2026.normal} tone="indigo" highlight />
+                  <ScenarioCard title="공격적 시나리오" value={forecast2026.aggressive} tone="gray" />
+                </div>
+
+              </div>
+            </section>
+
+            <div className="border-t border-gray-200" />
+
+            {/* ================= KPI – 총 운송료 ================= */}
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-[13px] font-bold text-[#1B2B4B]">{hasExcludedClients ? "총 운송료 (전체 거래처)" : "총 운송료"}</h4>
+                <span className="text-[11px] text-gray-400">배차 + 고정거래처</span>
+              </div>
               <table className="w-full text-[13px] border-collapse text-center">
                 <thead className="bg-gray-50 text-gray-600">
                   <tr>
@@ -43100,152 +43062,99 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
                   ))}
                 </tbody>
               </table>
-            </div>
-          </div>
+            </section>
 
-          {/* ================= KPI – 순수 운송 =================
-              제외 거래처가 없으면 위 "총 운송료"와 완전히 같은 숫자라 통째로 숨긴다. */}
-          {hasExcludedClients && (
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="bg-[#1B2B4B] px-6 py-3">
-                <h3 className="text-[14px] font-bold text-white">순수 운송료 (제외 거래처 미포함)</h3>
-              </div>
-              <div className="p-6">
-                <table className="w-full text-[13px] border-collapse text-center">
-                  <thead className="bg-gray-50 text-gray-600">
-                    <tr>
-                      <th className="border p-2">구분</th>
-                      <th className="border p-2">매출</th>
-                      <th className="border p-2">운반비</th>
-                      <th className="border p-2">수익</th>
-                      <th className="border p-2">수익률</th>
-                      <th className="border p-2">전월대비</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[
-                      ["일", dPure, null],
-                      ["월", mPure, "month"],
-                      ["년", yPure, null],
-                    ].map(([label, data, key], i) => (
-                      <tr key={i} className="font-semibold">
-                        <td className="border p-2 bg-gray-50">{label}</td>
-                        <td className="border p-2 text-indigo-700">{won(data.sale)}</td>
-                        <td className="border p-2 text-gray-600">{won(data.driver)}</td>
-                        <td className="border p-2 text-emerald-600">{won(data.profit)}</td>
-                        <td className="border p-2 text-indigo-700">{ratePct(profitRate(data.sale, data.profit))}</td>
-                        <td className={`border p-2 ${key ? rateClass(vrPure[key]) : "text-gray-500"}`}>
-                          {key ? rateText(vrPure[key]) : "—"}
-                        </td>
+            {/* ================= KPI – 순수 운송 =================
+                제외 거래처가 없으면 위 "총 운송료"와 완전히 같은 숫자라 통째로 숨긴다. */}
+            {hasExcludedClients && (
+              <>
+                <div className="border-t border-gray-200" />
+                <section>
+                  <h4 className="text-[13px] font-bold text-[#1B2B4B] mb-3">순수 운송료 (제외 거래처 미포함)</h4>
+                  <table className="w-full text-[13px] border-collapse text-center">
+                    <thead className="bg-gray-50 text-gray-600">
+                      <tr>
+                        <th className="border p-2">구분</th>
+                        <th className="border p-2">매출</th>
+                        <th className="border p-2">운반비</th>
+                        <th className="border p-2">수익</th>
+                        <th className="border p-2">수익률</th>
+                        <th className="border p-2">전월대비</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+                    </thead>
+                    <tbody>
+                      {[
+                        ["일", dPure, null],
+                        ["월", mPure, "month"],
+                        ["년", yPure, null],
+                      ].map(([label, data, key], i) => (
+                        <tr key={i} className="font-semibold">
+                          <td className="border p-2 bg-gray-50">{label}</td>
+                          <td className="border p-2 text-indigo-700">{won(data.sale)}</td>
+                          <td className="border p-2 text-gray-600">{won(data.driver)}</td>
+                          <td className="border p-2 text-emerald-600">{won(data.profit)}</td>
+                          <td className="border p-2 text-indigo-700">{ratePct(profitRate(data.sale, data.profit))}</td>
+                          <td className={`border p-2 ${key ? rateClass(vrPure[key]) : "text-gray-500"}`}>
+                            {key ? rateText(vrPure[key]) : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </section>
+              </>
+            )}
 
-          <SettlementClientAnalysis
-            topRows={monthRows.filter((r) => !isExcludedClient(r.거래처명))}
-            dropRows={rows.filter((r) => !isExcludedClient(r.거래처명))}
-            newClients={newClients}
-            targetMonth={targetMonth}
-          />
-
-        </div>
-
-        {/* ================= RIGHT PANEL ================= */}
-        <div className="flex flex-col gap-6 flex-1">
-
-          {/* 연간 요약 차트 */}
-          <div className="flex-1 space-y-6">
-
-            <YearlySummaryChart
-              rows={rows}
-              year={selectedYear}
-              setYear={setSelectedYear}
-              onAI={(mode) => setAiMode(mode)}
-              clients={clients}
-              places={places}
+            <SettlementClientAnalysis
+              topRows={monthRows.filter((r) => !isExcludedClient(r.거래처명))}
+              dropRows={rows.filter((r) => !isExcludedClient(r.거래처명))}
+              newClients={newClients}
+              targetMonth={targetMonth}
             />
 
-            {/* 기간별 추이 */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="bg-[#1B2B4B] px-6 py-4">
-                <h3 className="text-[15px] font-bold text-white">기간별 매출 · 운임 · 수수료 추이</h3>
-                <p className="text-[11px] text-white/50 mt-0.5">거래처별 필터링 및 월별 트렌드 분석</p>
+          </div>
+        </div>
+
+        {/* ================= RIGHT PANEL =================
+            월별 매출·수익·수익률 요약 + 요일별 수주 분석 + 거래처별 기간 조회를
+            카드 하나로 합쳤다("기간별 매출·운임·수수료 추이"·"스마트 인사이트"는
+            제거하고, 그 자리에 새로 만든 거래처별 기간 조회로 대체). */}
+        <div className="flex flex-col gap-6 flex-1">
+          <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-[15px] font-bold text-white">매출 리포트</h3>
+                <p className="text-[11px] text-white/50 mt-0.5">월별 요약 · 요일별 수주 · 거래처별 기간 조회</p>
               </div>
-              <div className="p-6 space-y-5">
-
-                {/* 조회 조건 */}
-                <div className="grid grid-cols-3 gap-3">
-                  <input autoComplete="off"
-                    type="month"
-                    value={rangeStart}
-                    onChange={(e) => setRangeStart(e.target.value)}
-                    className="border border-gray-200 rounded-lg p-2 text-[13px] focus:outline-none focus:border-blue-400"
-                  />
-                  <input autoComplete="off"
-                    type="month"
-                    value={rangeEnd}
-                    onChange={(e) => setRangeEnd(e.target.value)}
-                    className="border border-gray-200 rounded-lg p-2 text-[13px] focus:outline-none focus:border-blue-400"
-                  />
-                  <div className="col-span-3 space-y-3">
-                    <div className="text-[12px] font-semibold text-gray-600">거래처 검색</div>
-                    <input autoComplete="off"
-                      type="text"
-                      placeholder="거래처 검색 (예: 태영, 케이씨)"
-                      value={clientSearch}
-                      onChange={(e) => setClientSearch(e.target.value)}
-                      className="border border-gray-200 rounded-lg p-2 text-[13px] w-full focus:outline-none focus:border-blue-400"
-                    />
-                    {clientSearch && (
-                      <div className="flex flex-wrap gap-2">
-                        {allClients
-                          .filter((c) => c.toLowerCase().includes(clientSearch.toLowerCase()))
-                          .slice(0, 10)
-                          .map((c) => (
-                            <button
-                              key={c}
-                              onClick={() => toggleClient(c)}
-                              className="px-3 py-1 text-xs rounded-full border bg-white text-gray-700 border-gray-300 hover:bg-gray-100 transition"
-                            >
-                              {c}
-                            </button>
-                          ))}
-                      </div>
-                    )}
-                    {rangeClients.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {rangeClients.map((c) => (
-                          <button
-                            key={c}
-                            onClick={() => toggleClient(c)}
-                            className="px-3 py-1 text-xs rounded-full bg-indigo-600 text-white border border-indigo-600"
-                          >
-                            {c} ✕
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <div className="text-[11px] text-gray-500">선택: {rangeClients.length}개</div>
-                  </div>
-                </div>
-
-                <PeriodTrendChart data={rangeMonthly} />
-                <PeriodSummaryTable data={rangeMonthly} />
-
+              <div className="flex items-center gap-2">
+                <button onClick={() => setAiMode("summary")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20">AI 요약</button>
+                <button onClick={() => setAiMode("suggest")} className="px-3 py-1.5 rounded-lg bg-emerald-500/80 text-white text-[12px] font-semibold hover:bg-emerald-500 transition">AI 제안</button>
+                <button onClick={() => setAiMode("report")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20">보고서</button>
+                <CustomSelect
+                  className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-1.5 text-[13px] focus:outline-none ml-1"
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(Number(e.target.value))}
+                >
+                  {Array.from(new Set(rows.map((r) => r.상차일?.slice(0, 4)).filter(Boolean)))
+                    .sort((a, b) => b - a)
+                    .map((y) => (
+                      <option key={y} value={Number(y)} className="text-gray-900">{y}년</option>
+                    ))}
+                </CustomSelect>
               </div>
             </div>
 
-            {/* 스마트 인사이트 */}
-            <SalesInsightPanel monthRows={monthRows} allRows={rows} targetMonth={targetMonth} />
+            <div className="p-6 space-y-8">
+              <YearlySummaryChart rows={rows} year={selectedYear} clients={clients} places={places} />
 
-            {/* 요일별 수주 분석 */}
-            <WeekdayAnalysisChart monthRows={monthRows} />
+              <div className="border-t border-gray-200" />
 
+              <WeekdayAnalysisChart monthRows={monthRows} />
 
+              <div className="border-t border-gray-200" />
+
+              <ClientPeriodQuery rows={rows} clients={clients} />
+            </div>
           </div>
         </div>
 
@@ -43276,177 +43185,214 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
 /* ================== 서브 컴포넌트 ================================== */
 /* ================================================================= */
 
-function PeriodTrendChart({ data = [] }) {
-  if (!data.length) {
-    return (
-      <div className="h-[260px] flex items-center justify-center text-[13px] text-gray-500">
-        조회된 데이터가 없습니다
-      </div>
-    );
-  }
-  return (
-    <div className="h-[260px]">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
-          <Legend
-            verticalAlign="top"
-            align="right"
-            iconType="circle"
-            wrapperStyle={{ fontSize: 12, color: "#374151", paddingBottom: 8 }}
-            formatter={(value) => {
-              if (value === "sale") return "청구운임";
-              if (value === "driver") return "기사운임";
-              if (value === "fee") return "수수료";
-              return value;
-            }}
-          />
-          <CartesianGrid stroke="#E5E7EB" strokeDasharray="3 3" />
-          <XAxis dataKey="ym" tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-          <YAxis tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`} tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-          <Tooltip
-            contentStyle={{ background: "#fff", borderRadius: 12, border: "1px solid #E5E7EB", fontSize: 12 }}
-            formatter={(v, n) => [
-              `${v.toLocaleString()}원`,
-              n === "sale" ? "청구운임" : n === "driver" ? "기사운임" : "수수료",
-            ]}
-          />
-          <Line type="monotone" dataKey="sale" stroke="#6366F1" strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} />
-          <Line type="monotone" dataKey="driver" stroke="#10B981" strokeWidth={2} dot={false} />
-          <Line type="monotone" dataKey="fee" stroke="#F59E0B" strokeWidth={2} dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
+// ⭐ "거래처별 기간 조회" — 예전 "기간별 매출·운임·수수료 추이"(월별 라인차트)와
+// "스마트 인사이트" 자리를 대신한다. 달력(CustomDatePicker, 프로그램 전체와 동일한
+// 달력)으로 기간을 고르고, 기본거래처(clients)만 검색/드롭다운으로 선택해 조회
+// 버튼을 눌러야 결과가 뜬다 — 라이브 필터가 아니라 명시적 조회 방식.
+function ClientPeriodQuery({ rows = [], clients = [] }) {
+  const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+  const [startDate, setStartDate] = React.useState("");
+  const [endDate, setEndDate] = React.useState("");
+  const [clientQuery, setClientQuery] = React.useState("");
+  const [selectedClient, setSelectedClient] = React.useState("");
+  const [showDropdown, setShowDropdown] = React.useState(false);
+  const [searched, setSearched] = React.useState(false);
+  const [queryState, setQueryState] = React.useState(null);
+  const wrapRef = React.useRef(null);
+
+  const basicClientNames = React.useMemo(
+    () => Array.from(new Set((clients || []).map((c) => c.거래처명).filter(Boolean))).sort(),
+    [clients]
   );
-}
+  const suggestions = React.useMemo(() => {
+    if (!clientQuery.trim()) return [];
+    const q = clientQuery.trim().toLowerCase();
+    return basicClientNames.filter((c) => c.toLowerCase().includes(q)).slice(0, 8);
+  }, [clientQuery, basicClientNames]);
 
-function PeriodSummaryTable({ data = [] }) {
-  if (!data.length) return null;
-  const sumKey = (key) => data.reduce((a, r) => a + r[key], 0);
-  const totalSale = sumKey("sale");
-  const totalDriver = sumKey("driver");
-  const totalFee = sumKey("fee");
-  const totalRate = totalSale ? (totalFee / totalSale) * 100 : 0;
+  React.useEffect(() => {
+    const onDocClick = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setShowDropdown(false); };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
 
-  return (
-    <div className="overflow-auto">
-      <table className="w-full text-[13px] border-collapse text-center">
-        <thead className="bg-gray-50 text-gray-600">
-          <tr>
-            <th className="border p-2">월</th>
-            <th className="border p-2">청구운임</th>
-            <th className="border p-2">기사운임</th>
-            <th className="border p-2">수수료(수익)</th>
-            <th className="border p-2">수익률</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((r) => {
-            const rate = r.sale ? (r.fee / r.sale) * 100 : 0;
-            return (
-              <tr key={r.ym} className="hover:bg-gray-50">
-                <td className="border p-2 font-semibold">{r.ym}</td>
-                <td className="border p-2 text-indigo-600">{r.sale.toLocaleString()}원</td>
-                <td className="border p-2">{r.driver.toLocaleString()}원</td>
-                <td className="border p-2 text-emerald-600 font-semibold">{r.fee.toLocaleString()}원</td>
-                <td className="border p-2">{rate.toFixed(1)}%</td>
-              </tr>
-            );
-          })}
-          <tr className="font-bold bg-gray-100">
-            <td className="border p-2">합계</td>
-            <td className="border p-2 text-indigo-700">{totalSale.toLocaleString()}원</td>
-            <td className="border p-2 text-gray-700">{totalDriver.toLocaleString()}원</td>
-            <td className="border p-2 text-emerald-700">{totalFee.toLocaleString()}원</td>
-            <td className="border p-2">{totalRate.toFixed(1)}%</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+  const runQuery = () => {
+    if (!startDate || !endDate) { globalShowAlert("조회할 기간(시작일/종료일)을 선택해 주세요."); return; }
+    setQueryState({ start: startDate, end: endDate, client: selectedClient });
+    setSearched(true);
+    setShowDropdown(false);
+  };
+
+  const results = React.useMemo(() => {
+    if (!queryState) return [];
+    const { start, end, client } = queryState;
+    const filtered = rows.filter((r) => {
+      if (!r.상차일) return false;
+      if (r.상차일 < start || r.상차일 > end) return false;
+      if (client && (r.거래처명 || "") !== client) return false;
+      return true;
+    });
+    const map = new Map();
+    filtered.forEach((r) => {
+      const d = r.상차일;
+      if (!map.has(d)) map.set(d, { date: d, sale: 0, driver: 0, fee: 0, count: 0 });
+      const e = map.get(d);
+      e.sale += toInt(r.청구운임);
+      e.driver += toInt(r.기사운임);
+      e.fee += toInt(r.수수료);
+      e.count += 1;
+    });
+    return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }, [rows, queryState]);
+
+  const totals = results.reduce(
+    (a, r) => ({ sale: a.sale + r.sale, driver: a.driver + r.driver, fee: a.fee + r.fee, count: a.count + r.count }),
+    { sale: 0, driver: 0, fee: 0, count: 0 }
   );
-}
-
-// ===================== 스마트 인사이트 =====================
-function SalesInsightPanel({ monthRows = [], allRows = [], targetMonth = "" }) {
-  const toInt = (v) => Number(String(v || "").replace(/[^\d]/g, "")) || 0;
-
-  if (!monthRows.length) return null;
-
-  const prevMonth = (() => {
-    const d = new Date(targetMonth + "-01");
-    d.setMonth(d.getMonth() - 1);
-    return d.toISOString().slice(0, 7);
-  })();
-  const prevRows = allRows.filter(r => r.상차일?.startsWith(prevMonth));
-
-  const totalSale = monthRows.reduce((s, r) => s + toInt(r.청구운임), 0);
-  const prevSale = prevRows.reduce((s, r) => s + toInt(r.청구운임), 0);
-  const growthPct = prevSale > 0 ? ((totalSale - prevSale) / prevSale * 100).toFixed(1) : null;
-
-  // 건당 평균 운임
-  const avgFare = monthRows.length > 0 ? Math.round(totalSale / monthRows.length) : 0;
-
-  // 최고 거래처
-  const byClient = {};
-  monthRows.forEach(r => {
-    const c = r.거래처명 || "미지정";
-    byClient[c] = (byClient[c] || 0) + toInt(r.청구운임);
-  });
-  const topClient = Object.entries(byClient).sort((a, b) => b[1] - a[1])[0];
-
-  // 수익률
-  const totalFee = monthRows.reduce((s, r) => s + (toInt(r.청구운임) - toInt(r.기사운임)), 0);
-  const profitRate = totalSale > 0 ? (totalFee / totalSale * 100).toFixed(1) : "0.0";
-
-  const insights = [
-    growthPct !== null ? {
-      icon: parseFloat(growthPct) >= 0 ? "▲" : "▼",
-      label: "전월 대비 매출",
-      value: `${parseFloat(growthPct) >= 0 ? "+" : ""}${growthPct}%`,
-      sub: `${Math.abs(totalSale - prevSale).toLocaleString()}원 ${parseFloat(growthPct) >= 0 ? "증가" : "감소"}`,
-      positive: parseFloat(growthPct) >= 0,
-    } : null,
-    topClient ? {
-      icon: "①",
-      label: "이달 최고 거래처",
-      value: topClient[0],
-      sub: `${topClient[1].toLocaleString()}원 · 점유 ${Math.round(topClient[1]/totalSale*100)||0}%`,
-      positive: true,
-    } : null,
-    {
-      icon: "≈",
-      label: "건당 평균 청구운임",
-      value: `${avgFare.toLocaleString()}원`,
-      sub: `총 ${monthRows.length}건 수주`,
-      positive: true,
-    },
-    {
-      icon: "%",
-      label: "수익률",
-      value: `${profitRate}%`,
-      sub: `수익 ${totalFee.toLocaleString()}원`,
-      positive: parseFloat(profitRate) >= 10,
-    },
-  ].filter(Boolean);
+  const totalRate = totals.sale ? (totals.fee / totals.sale) * 100 : 0;
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="bg-[#1B2B4B] px-6 py-4">
-        <h3 className="text-[15px] font-bold text-white">스마트 인사이트</h3>
-        <p className="text-[11px] text-white/50 mt-0.5">AI 기반 월별 분석 요약</p>
-      </div>
-      <div className="divide-y divide-gray-50">
-        {insights.map((ins, i) => (
-          <div key={i} className="flex items-center gap-4 px-6 py-3.5">
-            <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-[13px] font-bold shrink-0 ${ins.positive ? "bg-gray-100 text-gray-600" : "bg-rose-50 text-rose-500"}`}>{ins.icon}</span>
-            <div className="flex-1 min-w-0">
-              <div className="text-[11px] text-gray-500">{ins.label}</div>
-              <div className={`text-[14px] font-bold truncate ${ins.positive ? "text-gray-800" : "text-rose-600"}`}>{ins.value}</div>
+    <section>
+      <h4 className="text-[13px] font-bold text-[#1B2B4B] mb-0.5">거래처별 기간 조회</h4>
+      <p className="text-[11px] text-gray-400 mb-4">기간과 거래처(기본거래처)를 선택해 조회하면 날짜별 매출·수익 현황을 확인할 수 있습니다</p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1.4fr_auto] gap-3 items-end mb-2">
+        <div>
+          <div className="text-[11px] font-semibold text-gray-500 mb-1">시작일</div>
+          <CustomDatePicker
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+          />
+        </div>
+        <div>
+          <div className="text-[11px] font-semibold text-gray-500 mb-1">종료일</div>
+          <CustomDatePicker
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+          />
+        </div>
+        <div className="relative" ref={wrapRef}>
+          <div className="text-[11px] font-semibold text-gray-500 mb-1">거래처 (기본거래처)</div>
+          <input
+            autoComplete="off"
+            type="text"
+            value={selectedClient || clientQuery}
+            onChange={(e) => { setSelectedClient(""); setClientQuery(e.target.value); setShowDropdown(true); }}
+            onFocus={() => setShowDropdown(true)}
+            placeholder="전체 거래처 (검색해서 선택)"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+          />
+          {selectedClient && (
+            <button
+              type="button"
+              onClick={() => { setSelectedClient(""); setClientQuery(""); }}
+              className="absolute right-2.5 top-[34px] text-gray-400 hover:text-gray-600 text-[12px]"
+            >
+              ✕
+            </button>
+          )}
+          {showDropdown && suggestions.length > 0 && (
+            <div className="absolute z-20 top-full left-0 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+              {suggestions.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => { setSelectedClient(c); setClientQuery(""); setShowDropdown(false); }}
+                  className="w-full text-left px-3 py-2 text-[13px] text-gray-700 hover:bg-gray-50"
+                >
+                  {c}
+                </button>
+              ))}
             </div>
-            <div className="text-[11px] text-gray-500 text-right shrink-0">{ins.sub}</div>
-          </div>
-        ))}
+          )}
+        </div>
+        <button
+          onClick={runQuery}
+          className="px-5 py-2 rounded-lg text-white text-[13px] font-bold bg-[#1B2B4B] hover:bg-[#243a60] transition h-[38px]"
+        >
+          조회
+        </button>
       </div>
-    </div>
+
+      {searched && (
+        results.length === 0 ? (
+          <div className="mt-6 py-10 text-center text-[13px] text-gray-400">조회된 데이터가 없습니다</div>
+        ) : (
+          <div className="mt-6 space-y-5">
+            <div className="grid grid-cols-5 gap-3 text-center">
+              <Metric label="오더건수" value={`${totals.count}건`} />
+              <Metric label="청구운임" value={`${totals.sale.toLocaleString()}원`} valueClass="text-[#1B2B4B]" />
+              <Metric label="기사운임" value={`${totals.driver.toLocaleString()}원`} />
+              <Metric label="수수료" value={`${totals.fee.toLocaleString()}원`} valueClass="text-emerald-600" />
+              <Metric label="수익률" value={`${totalRate.toFixed(1)}%`} valueClass="text-[#1B2B4B]" />
+            </div>
+
+            <div className="h-[260px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={results} barGap={4} barCategoryGap="24%">
+                  <CartesianGrid stroke="#E5E7EB" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} />
+                  <YAxis tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`} tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{ background: "#fff", borderRadius: 12, border: "1px solid #E5E7EB", fontSize: 12 }}
+                    formatter={(v, n) => [`${Number(v).toLocaleString()}원`, n === "sale" ? "청구운임" : "기사운임"]}
+                  />
+                  <Legend
+                    verticalAlign="top"
+                    align="right"
+                    iconType="circle"
+                    wrapperStyle={{ fontSize: 12, color: "#374151" }}
+                    formatter={(value) => (value === "sale" ? "청구운임" : "기사운임")}
+                  />
+                  <Bar dataKey="sale" fill="#1B2B4B" radius={[5, 5, 0, 0]} maxBarSize={40} />
+                  <Bar dataKey="driver" fill="#AEB8C9" radius={[5, 5, 0, 0]} maxBarSize={40} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="overflow-auto">
+              <table className="w-full text-[13px] border-collapse text-center">
+                <thead className="bg-gray-50 text-gray-600">
+                  <tr>
+                    <th className="border p-2">날짜</th>
+                    <th className="border p-2">오더건수</th>
+                    <th className="border p-2">청구운임</th>
+                    <th className="border p-2">기사운임</th>
+                    <th className="border p-2">수수료</th>
+                    <th className="border p-2">수익률</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((r) => {
+                    const rate = r.sale ? (r.fee / r.sale) * 100 : 0;
+                    return (
+                      <tr key={r.date} className="hover:bg-gray-50">
+                        <td className="border p-2 font-semibold">{r.date}</td>
+                        <td className="border p-2">{r.count}건</td>
+                        <td className="border p-2 text-[#1B2B4B] font-semibold">{r.sale.toLocaleString()}원</td>
+                        <td className="border p-2 text-gray-600">{r.driver.toLocaleString()}원</td>
+                        <td className="border p-2 text-emerald-600 font-semibold">{r.fee.toLocaleString()}원</td>
+                        <td className="border p-2">{rate.toFixed(1)}%</td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="font-bold bg-gray-100">
+                    <td className="border p-2">합계</td>
+                    <td className="border p-2">{totals.count}건</td>
+                    <td className="border p-2 text-[#1B2B4B]">{totals.sale.toLocaleString()}원</td>
+                    <td className="border p-2 text-gray-700">{totals.driver.toLocaleString()}원</td>
+                    <td className="border p-2 text-emerald-700">{totals.fee.toLocaleString()}원</td>
+                    <td className="border p-2">{totalRate.toFixed(1)}%</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
+      )}
+    </section>
   );
 }
 
@@ -43470,41 +43416,37 @@ function WeekdayAnalysisChart({ monthRows = [] }) {
   const maxCount = Math.max(...byDay.map(d => d.건수), 1);
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="bg-[#1B2B4B] px-6 py-4">
-        <h3 className="text-[15px] font-bold text-white">요일별 수주 분석</h3>
-        <p className="text-[11px] text-white/50 mt-0.5">어느 요일에 가장 많이 출하하는지 파악</p>
+    <section>
+      <h4 className="text-[13px] font-bold text-[#1B2B4B] mb-0.5">요일별 수주 분석</h4>
+      <p className="text-[11px] text-gray-400 mb-3">어느 요일에 가장 많이 출하하는지 파악</p>
+      <div className="h-[200px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={byDay} barSize={28}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+            <XAxis dataKey="day" tick={{ fontSize: 12, fill: "#374151" }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} allowDecimals={false} />
+            <Tooltip
+              contentStyle={{ borderRadius: 10, fontSize: 12 }}
+              formatter={(v, n) => [n === "매출" ? `${v.toLocaleString()}원` : `${v}건`, n]}
+            />
+            <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+            <Bar dataKey="건수" fill="#1B2B4B" radius={[4, 4, 0, 0]}>
+              {byDay.map((entry, i) => (
+                <Cell key={i} fill={entry.건수 === maxCount ? "#1B2B4B" : "#AEB8C9"} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
       </div>
-      <div className="p-5">
-        <div className="h-[200px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={byDay} barSize={28}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-              <XAxis dataKey="day" tick={{ fontSize: 12, fill: "#374151" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} allowDecimals={false} />
-              <Tooltip
-                contentStyle={{ borderRadius: 10, fontSize: 12 }}
-                formatter={(v, n) => [n === "매출" ? `${v.toLocaleString()}원` : `${v}건`, n]}
-              />
-              <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="건수" fill="#6366F1" radius={[4, 4, 0, 0]}>
-                {byDay.map((entry, i) => (
-                  <Cell key={i} fill={entry.건수 === maxCount ? "#4F46E5" : "#A5B4FC"} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[11px]">
-          {byDay.map((d, i) => (
-            <div key={i} className={`rounded-lg py-1.5 ${d.건수 === maxCount ? "bg-indigo-100 text-indigo-800 font-bold" : "bg-gray-50 text-gray-500"}`}>
-              <div className="font-bold">{d.day}</div>
-              <div>{d.건수}건</div>
-            </div>
-          ))}
-        </div>
+      <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[11px]">
+        {byDay.map((d, i) => (
+          <div key={i} className={`rounded-lg py-1.5 ${d.건수 === maxCount ? "bg-[#1B2B4B]/10 text-[#1B2B4B] font-bold" : "bg-gray-50 text-gray-500"}`}>
+            <div className="font-bold">{d.day}</div>
+            <div>{d.건수}건</div>
+          </div>
+        ))}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -43562,72 +43504,49 @@ function AIInsightModal({ mode, monthRows = [], forecast2026, onClose }) {
 
 function SettlementClientAnalysis({ topRows = [], dropRows = [], newClients = [], targetMonth }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="bg-[#1B2B4B] px-6 py-4">
-        <h3 className="text-[15px] font-bold text-white">거래처 분석 요약</h3>
-        <p className="text-[11px] text-white/50 mt-0.5">Top 10 · 매출 감소 · 신규 거래처</p>
-      </div>
-      <div className="p-6 space-y-8">
+    <>
+      <div className="border-t border-gray-200" />
 
-        <section>
-          <h4 className="text-[13px] font-bold text-[#1B2B4B] mb-3">월 매출 Top 10 거래처</h4>
-          <SettlementTop10 rows={topRows} allRows={dropRows} targetMonth={targetMonth} />
-        </section>
+      <section>
+        <h4 className="text-[13px] font-bold text-[#1B2B4B] mb-3">월 매출 Top 10 거래처</h4>
+        <SettlementTop10 rows={topRows} allRows={dropRows} targetMonth={targetMonth} />
+      </section>
 
-        <div className="border-t border-gray-200" />
+      <div className="border-t border-gray-200" />
 
-        <section>
-          <h4 className="text-[13px] font-bold text-[#1B2B4B] mb-3">전월 대비 매출 감소 TOP10</h4>
-          <SettlementTop10Drop rows={dropRows} targetMonth={targetMonth} />
-        </section>
+      <section>
+        <h4 className="text-[13px] font-bold text-[#1B2B4B] mb-3">전월 대비 매출 감소 TOP10</h4>
+        <SettlementTop10Drop rows={dropRows} targetMonth={targetMonth} />
+      </section>
 
-        <div className="border-t border-gray-200" />
+      <div className="border-t border-gray-200" />
 
-        <section>
-          <h4 className="text-[13px] font-bold text-[#1B2B4B] mb-3">신규 거래처 (당월)</h4>
-          {newClients.length ? (
-            <SettlementNewClients rows={newClients} />
-          ) : (
-            <div className="text-[13px] text-gray-500 text-center py-4">신규 거래처가 없습니다</div>
-          )}
-        </section>
-
-      </div>
-    </div>
+      <section>
+        <h4 className="text-[13px] font-bold text-[#1B2B4B] mb-3">신규 거래처 (당월)</h4>
+        {newClients.length ? (
+          <SettlementNewClients rows={newClients} />
+        ) : (
+          <div className="text-[13px] text-gray-500 text-center py-4">신규 거래처가 없습니다</div>
+        )}
+      </section>
+    </>
   );
 }
 
-function SettlementMonthlyHeader({ targetMonth, setTargetMonth, monthRows, forecast, forecast2026 }) {
+// ⭐ 매출관리 화면 개편 — 예전엔 이 컴포넌트가 "누적현황 및 월 예상지표" 카드
+// 하나를 통째로(네이비 헤더+월 선택 포함) 그렸지만, 지금은 매출 현황 리포트
+// 카드 하나에 여러 섹션 중 하나로 합쳐져서 렌더링된다. 월 선택은 이제 그 상위
+// 카드의 공통 헤더가 담당하므로 setTargetMonth는 더 이상 받지 않는다.
+function SettlementMonthlyHeader({ targetMonth, monthRows, forecast, forecast2026 }) {
   const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
   const totalSale = monthRows.reduce((a, r) => a + toInt(r.청구운임), 0);
   const totalCnt = monthRows.length;
   const avgSale = totalCnt ? totalSale / totalCnt : 0;
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-        <div>
-          <h3 className="text-[15px] font-bold text-white">누적현황 및 월 예상지표</h3>
-          <p className="text-[11px] text-white/50 mt-0.5">선택 월 기준 실적 및 예측</p>
-        </div>
-        <CustomSelect
-          className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-1.5 text-[13px] focus:outline-none"
-          value={targetMonth}
-          onChange={(e) => setTargetMonth(e.target.value)}
-        >
-          {Array.from({ length: 12 }, (_, i) => {
-            const d = new Date();
-            d.setMonth(d.getMonth() - i);
-            return (
-              <option key={i} className="text-gray-900">
-                {d.toISOString().slice(0, 7)}
-              </option>
-            );
-          })}
-        </CustomSelect>
-      </div>
-
-      <div className="p-6 space-y-6">
+    <section>
+      <h4 className="text-[13px] font-bold text-[#1B2B4B] mb-3">누적현황 및 월 예상지표</h4>
+      <div className="space-y-6">
 
         {/* 현재 누적 실적 */}
         <div className="grid grid-cols-3 gap-4 text-center">
@@ -43653,7 +43572,7 @@ function SettlementMonthlyHeader({ targetMonth, setTargetMonth, monthRows, forec
         <AIPremiumInsight rows={monthRows} targetMonth={targetMonth} forecast2026={forecast2026} yPure={null} />
 
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -43963,7 +43882,10 @@ function AIPremiumInsight({ rows = [], targetMonth, forecast2026, yPure }) {
   );
 }
 
-function YearlySummaryChart({ rows = [], year, setYear, onAI, clients = [], places = [] }) {
+// ⭐ 매출관리 화면 개편 — 예전엔 이 컴포넌트가 카드(네이비 헤더+연도 선택+AI 버튼)
+// 하나를 통째로 그렸지만, 지금은 "매출 리포트" 카드 안의 한 섹션으로 합쳐져서
+// 렌더링된다. 연도 선택/AI 버튼은 그 상위 카드의 공통 헤더가 담당한다.
+function YearlySummaryChart({ rows = [], year, clients = [], places = [] }) {
   const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
   // ⭐ 성능 최적화 — clients/places가 바뀔 때만 이름→플래그 Map을 새로 만들어
   // 매달 오더를 순수매출제외 여부로 나눌 때 매번 배열 스캔을 하지 않게 한다.
@@ -44010,31 +43932,9 @@ function YearlySummaryChart({ rows = [], year, setYear, onAI, clients = [], plac
   );
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-        <div>
-          <h3 className="text-[15px] font-bold text-white">{year}년 월별 매출 · 수익 · 수익률 요약</h3>
-          <p className="text-[11px] text-white/50 mt-0.5">{hasExcludedClients ? "전체 / 순수 운송 / 제외 거래처 구분" : "월별 매출·수익 요약"}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => onAI("summary")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20">AI 요약</button>
-          <button onClick={() => onAI("suggest")} className="px-3 py-1.5 rounded-lg bg-emerald-500/80 text-white text-[12px] font-semibold hover:bg-emerald-500 transition">AI 제안</button>
-          <button onClick={() => onAI("report")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20">보고서</button>
-          <CustomSelect
-            className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-1.5 text-[13px] focus:outline-none ml-1"
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-          >
-            {Array.from(new Set(rows.map((r) => r.상차일?.slice(0, 4)).filter(Boolean)))
-              .sort((a, b) => b - a)
-              .map((y) => (
-                <option key={y} value={Number(y)} className="text-gray-900">{y}년</option>
-              ))}
-          </CustomSelect>
-        </div>
-      </div>
-
-      <div className="p-6">
+    <section>
+      <h4 className="text-[13px] font-bold text-[#1B2B4B] mb-0.5">{year}년 월별 매출 · 수익 · 수익률 요약</h4>
+      <p className="text-[11px] text-gray-400 mb-3">{hasExcludedClients ? "전체 / 순수 운송 / 제외 거래처 구분" : "월별 매출·수익 요약"}</p>
         <table className="w-full text-[13px] border-collapse text-center">
           <thead>
             <tr className="bg-gray-100 text-gray-700 text-[13px]">
@@ -44094,8 +43994,7 @@ function YearlySummaryChart({ rows = [], year, setYear, onAI, clients = [], plac
             </tr>
           </tbody>
         </table>
-      </div>
-    </div>
+    </section>
   );
 }
 
