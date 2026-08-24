@@ -91,3 +91,13 @@ export function todayStr() {
   const pad = (x) => String(x).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
+
+// ⭐ 금액 입력칸에 타이핑하는 동안 자동으로 천단위 콤마(,)가 보이게 한다.
+// state에는 콤마 없는 순수 숫자 문자열을 저장하고, 화면에 보여줄 때만 콤마를 붙인다.
+export function formatAmountInput(raw) {
+  if (raw === "" || raw == null) return "";
+  return Number(raw).toLocaleString("ko-KR");
+}
+export function parseAmountInput(displayValue) {
+  return String(displayValue || "").replace(/[^0-9]/g, "");
+}

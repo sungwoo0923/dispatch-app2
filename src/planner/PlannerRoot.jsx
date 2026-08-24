@@ -5,8 +5,9 @@ import React, { useState, useEffect } from "react";
 import { Navigate } from "react-router-dom";
 import KPPlannerLogo from "./KPPlannerLogo";
 import PlannerSplash from "./PlannerSplash";
+import PlannerAdminPanel from "./PlannerAdminPanel";
 import { usePlannerAccount, plannerLogout } from "./plannerAuth";
-import { PINK } from "./plannerTheme";
+import { ACCENT, applyGenderTheme } from "./plannerTheme";
 import AdminPlanner from "../AdminPlanner";
 import AdminPlannerMobile from "../mobile/AdminPlannerMobile";
 
@@ -58,7 +59,7 @@ function PlannerMobileShell({ account }) {
 
   return (
     <div style={{ width: "100%", minHeight: "100vh", display: "flex", flexDirection: "column", background: "#fffafc" }}>
-      <div style={{ background: PINK, padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div style={{ background: ACCENT, padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>{pageTitle}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <GroupCodeBadge groupId={account.groupId} />
@@ -89,7 +90,7 @@ function PlannerMobileShell({ account }) {
                   onClick={() => { setPage(v); setShowMenu(false); }}
                   style={{
                     width: "100%", textAlign: "left", padding: "12px 20px", fontSize: 13.5, fontWeight: 600, border: "none", cursor: "pointer",
-                    background: page === v ? PINK : "transparent",
+                    background: page === v ? ACCENT : "transparent",
                     color: page === v ? "#fff" : "#4A2E3D",
                   }}
                 >
@@ -109,10 +110,12 @@ function PlannerMobileShell({ account }) {
   );
 }
 
-function PlannerDesktopShell({ account }) {
+function PlannerDesktopShell({ account, onUpdated }) {
+  const [showAdmin, setShowAdmin] = useState(false);
+  const isOwner = account.role === "owner";
   return (
     <div style={{ width: "100%", minHeight: "100vh", background: "#fffafc" }}>
-      <div style={{ background: PINK, padding: "12px 28px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div style={{ background: ACCENT, padding: "12px 28px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center" }}>
           <div style={{ filter: "brightness(0) invert(1)" }}>
             <KPPlannerLogo size="sm" showTagline={false} />
@@ -121,24 +124,40 @@ function PlannerDesktopShell({ account }) {
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <span style={{ color: "rgba(255,255,255,0.85)", fontSize: 12.5 }}>{account.name}님 · {account.groupName || "우리 가족"}</span>
           <GroupCodeBadge groupId={account.groupId} />
+          {isOwner && (
+            <button
+              onClick={() => setShowAdmin(true)}
+              style={{ fontSize: 12.5, fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.35)", borderRadius: 8, padding: "5px 12px", cursor: "pointer" }}
+            >
+              관리자 메뉴
+            </button>
+          )}
           <button onClick={plannerLogout} style={{ fontSize: 12.5, fontWeight: 600, color: "rgba(255,255,255,0.85)", background: "none", border: "none", cursor: "pointer" }}>
             로그아웃
           </button>
         </div>
       </div>
       <AdminPlanner userCompany={account.groupId} myRealName={account.name} />
+
+      {showAdmin && (
+        <PlannerAdminPanel account={account} onClose={() => setShowAdmin(false)} onUpdated={onUpdated} />
+      )}
     </div>
   );
 }
 
 export default function PlannerRoot() {
   const { loading, user, account } = usePlannerAccount();
+  const [accountOverride, setAccountOverride] = useState(null);
   useEffect(() => { document.title = "KP-Planner"; }, []);
+  useEffect(() => { setAccountOverride(null); }, [account]);
+
+  const effectiveAccount = accountOverride || account;
 
   if (loading) return <PlannerSplash />;
   if (!user) return <Navigate to="/planner-login" replace />;
 
-  if (!account) {
+  if (!effectiveAccount) {
     return (
       <div style={{ minHeight: "100vh", width: "100%", background: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
         <div style={{ textAlign: "center" }}>
@@ -149,7 +168,7 @@ export default function PlannerRoot() {
           </div>
           <button
             onClick={plannerLogout}
-            style={{ marginTop: 18, padding: "10px 20px", fontSize: 13, fontWeight: 700, color: "#fff", background: PINK, border: "none", borderRadius: 10, cursor: "pointer" }}
+            style={{ marginTop: 18, padding: "10px 20px", fontSize: 13, fontWeight: 700, color: "#fff", background: "#EC6FA0", border: "none", borderRadius: 10, cursor: "pointer" }}
           >
             로그아웃
           </button>
@@ -158,5 +177,13 @@ export default function PlannerRoot() {
     );
   }
 
-  return isSmartPhone() ? <PlannerMobileShell account={account} /> : <PlannerDesktopShell account={account} />;
+  // ⭐ 화면을 그리기 전에, 로그인한 계정의 성별에 맞는 팔레트를 반영한다(남자는
+  // 네이비+화이트, 여자/기본은 핑크). AdminPlanner/AdminPlannerMobile은 모듈에서
+  // 이 값을 직접 읽으므로, 이 호출이 먼저 끝난 뒤에 아래에서 그 컴포넌트들이
+  // 렌더링돼야 첫 화면부터 올바른 색이 보인다.
+  applyGenderTheme(effectiveAccount.gender);
+
+  return isSmartPhone()
+    ? <PlannerMobileShell account={effectiveAccount} />
+    : <PlannerDesktopShell account={effectiveAccount} onUpdated={setAccountOverride} />;
 }

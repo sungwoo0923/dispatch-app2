@@ -82,6 +82,14 @@
 
 <title>KP-Flow Logistics</title>
 
+    <!-- ⭐ og:*/apple-mobile-web-app-title/아이콘/manifest 태그들 — KP-Planner를
+         별도 Vercel 프로젝트(VITE_PLANNER_SITE=1)로 빌드할 때 vite.config.js의
+         post-build 단계에서 이 블록 전체를 KP-Planner용 값으로 통째로 바꿔친다.
+         원본(배차프로그램)에는 아무 영향이 없다. -->
+    <meta property="og:site_name" content="KP-Flow Logistics" />
+    <meta property="og:title" content="KP-Flow Logistics" />
+    <meta property="og:image" content="/icons/sflow-icon.png" />
+
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
 
     <meta name="apple-mobile-web-app-capable" content="yes" />

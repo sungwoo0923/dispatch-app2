@@ -12,6 +12,7 @@ export default function PlannerSignup() {
   useEffect(() => { document.title = "KP-Planner"; }, []);
   const [mode, setMode] = useState("create"); // "create" | "join"
   const [name, setName] = useState("");
+  const [gender, setGender] = useState("female"); // "male" | "female" — 남자는 로그인 후 전체 네이비 테마
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [groupName, setGroupName] = useState("");
@@ -32,10 +33,10 @@ export default function PlannerSignup() {
     setError("");
     try {
       if (mode === "create") {
-        const { groupId } = await signupCreateGroup({ email, password, name, groupCode, groupName });
+        const { groupId } = await signupCreateGroup({ email, password, name, gender, groupCode, groupName });
         setDoneCode(groupId);
       } else {
-        await signupJoinGroup({ email, password, name, groupCode: joinCode });
+        await signupJoinGroup({ email, password, name, gender, groupCode: joinCode });
         navigate("/planner", { replace: true });
       }
     } catch (err) {
@@ -94,6 +95,27 @@ export default function PlannerSignup() {
 
         <form onSubmit={submit}>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="이름" style={{ ...inputStyle, marginBottom: 12 }} />
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: "#a58a97", marginBottom: 6, fontWeight: 600 }}>성별 (로그인 후 화면 색상에 반영돼요)</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {[["female", "여자"], ["male", "남자"]].map(([v, l]) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setGender(v)}
+                  style={{
+                    flex: 1, padding: "10px 6px", fontSize: 13, fontWeight: 700, borderRadius: 10,
+                    border: `1px solid ${gender === v ? PINK : PINK_BORDER}`,
+                    background: gender === v ? PINK : "#fff",
+                    color: gender === v ? "#fff" : "#a58a97",
+                    cursor: "pointer",
+                  }}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="이메일" style={{ ...inputStyle, marginBottom: 12 }} />
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="비밀번호 (6자 이상)" style={{ ...inputStyle, marginBottom: 12 }} />
 

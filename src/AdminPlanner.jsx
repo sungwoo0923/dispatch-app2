@@ -11,9 +11,9 @@ import * as XLSX from "xlsx";
 import { KOREAN_HOLIDAYS, shortHolidayLabel } from "./CustomDatePicker";
 import {
   usePlannerEntries, addPlannerEntry, updatePlannerEntry, deletePlannerEntry,
-  upsertBudgetTarget, fmtWon, todayStr,
+  upsertBudgetTarget, fmtWon, todayStr, formatAmountInput, parseAmountInput,
 } from "./adminPlannerData";
-import { PINK as ACCENT } from "./planner/plannerTheme";
+import { ACCENT } from "./planner/plannerTheme";
 
 const CATEGORY_SUGGESTIONS = ["생활비", "경조사", "명절", "세금/공과금", "보험", "여행", "자녀", "부모님", "기타"];
 
@@ -128,7 +128,7 @@ function LedgerEntryModal({ initial, defaultType = "expense", companyName, actor
         </datalist>
       </Field>
       <Field label="금액(원)">
-        <input className={inputCls} type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
+        <input className={inputCls} type="text" inputMode="numeric" value={formatAmountInput(amount)} onChange={(e) => setAmount(parseAmountInput(e.target.value))} placeholder="0" />
       </Field>
       <Field label="날짜">
         <input className={inputCls} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -277,7 +277,7 @@ function FamilyMemberModal({ initial, group, companyName, actorName, onClose }) 
         </div>
       </Field>
       <Field label="금액(원)">
-        <input className={inputCls} type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
+        <input className={inputCls} type="text" inputMode="numeric" value={formatAmountInput(amount)} onChange={(e) => setAmount(parseAmountInput(e.target.value))} placeholder="0" />
       </Field>
       <Field label="메모">
         <textarea className={inputCls} rows={2} value={memo} onChange={(e) => setMemo(e.target.value)} />
@@ -543,7 +543,7 @@ function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules
           </div>
           {editingBudget ? (
             <div className="flex gap-1 mt-1">
-              <input className="flex-1 border border-gray-200 rounded-lg px-2 py-1 text-[13px]" type="number" value={budgetInput} onChange={(e) => setBudgetInput(e.target.value)} />
+              <input className="flex-1 border border-gray-200 rounded-lg px-2 py-1 text-[13px]" type="text" inputMode="numeric" value={formatAmountInput(budgetInput)} onChange={(e) => setBudgetInput(parseAmountInput(e.target.value))} />
               <button
                 onClick={async () => { await upsertBudgetTarget({ companyName, year, amount: budgetInput, entries, actorName }); setEditingBudget(false); }}
                 className="px-3 rounded-lg text-white text-[12px] font-bold" style={{ background: ACCENT }}

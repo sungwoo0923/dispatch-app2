@@ -9,9 +9,9 @@ import * as XLSX from "xlsx";
 import { KOREAN_HOLIDAYS, shortHolidayLabel } from "../CustomDatePicker";
 import {
   usePlannerEntries, addPlannerEntry, updatePlannerEntry, deletePlannerEntry,
-  upsertBudgetTarget, fmtWon, todayStr,
+  upsertBudgetTarget, fmtWon, todayStr, formatAmountInput, parseAmountInput,
 } from "../adminPlannerData";
-import { PINK } from "../planner/plannerTheme";
+import { ACCENT } from "../planner/plannerTheme";
 
 const CATEGORY_SUGGESTIONS = ["생활비", "경조사", "명절", "세금/공과금", "보험", "여행", "자녀", "부모님", "기타"];
 function todayY() { return new Date().getFullYear(); }
@@ -82,7 +82,7 @@ function LedgerEntryModal({ initial, companyName, actorName, accent, onClose }) 
         <input className={inputCls} value={category} onChange={(e) => setCategory(e.target.value)} placeholder="예: 생활비" list="planner-category-list-m" />
         <datalist id="planner-category-list-m">{CATEGORY_SUGGESTIONS.map((c) => <option key={c} value={c} />)}</datalist>
       </Field>
-      <Field label="금액(원)"><input className={inputCls} type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" /></Field>
+      <Field label="금액(원)"><input className={inputCls} type="text" inputMode="numeric" value={formatAmountInput(amount)} onChange={(e) => setAmount(parseAmountInput(e.target.value))} placeholder="0" /></Field>
       <Field label="날짜"><input className={inputCls} type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
       <Field label="메모"><textarea className={inputCls} rows={2} value={memo} onChange={(e) => setMemo(e.target.value)} /></Field>
       <div className="flex gap-2 mt-4">
@@ -171,7 +171,7 @@ function FamilyMemberModal({ initial, group, companyName, actorName, accent, onC
           ))}
         </div>
       </Field>
-      <Field label="금액(원)"><input className={inputCls} type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" /></Field>
+      <Field label="금액(원)"><input className={inputCls} type="text" inputMode="numeric" value={formatAmountInput(amount)} onChange={(e) => setAmount(parseAmountInput(e.target.value))} placeholder="0" /></Field>
       <Field label="메모"><textarea className={inputCls} rows={2} value={memo} onChange={(e) => setMemo(e.target.value)} /></Field>
       <div className="flex gap-2 mt-4">
         {initial?.id && (
@@ -289,7 +289,7 @@ function PrintableFamily({ innerRef, companyName, group, rows, total, accent }) 
 // 그대로 따른다 — 그 외(최고관리자가 일반 메뉴에서 들어온 경우)에는 예전처럼
 // 내부 탭바로 스스로 탭을 관리한다.
 export default function AdminPlannerMobile({ userCompany, dispatcherName, activeTab, onTabChange, hideTabBar = false }) {
-  const accent = PINK;
+  const accent = ACCENT;
   const companyName = userCompany || localStorage.getItem("userCompany") || "";
   const { entries } = usePlannerEntries(companyName);
   const [internalTab, setInternalTab] = useState("dashboard");
@@ -362,7 +362,7 @@ function MobileDashboard({ year, budgetTarget, totalIncome, totalExpense, schedu
         </div>
         {editingBudget ? (
           <div className="flex gap-1.5 mt-1">
-            <input className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" type="number" value={budgetInput} onChange={(e) => setBudgetInput(e.target.value)} />
+            <input className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" type="text" inputMode="numeric" value={formatAmountInput(budgetInput)} onChange={(e) => setBudgetInput(parseAmountInput(e.target.value))} />
             <button onClick={async () => { await upsertBudgetTarget({ companyName, year, amount: budgetInput, entries, actorName }); setEditingBudget(false); }}
               className="px-3 rounded-lg text-white text-[12px] font-bold" style={{ background: accent }}>저장</button>
           </div>

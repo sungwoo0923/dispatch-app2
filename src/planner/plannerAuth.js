@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import { onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 import { plannerAuth as auth, plannerDb as db } from "./plannerFirebase";
-import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, limit, getDocs } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, query, where, limit, getDocs, onSnapshot } from "firebase/firestore";
 
 export const PLANNER_ACCOUNTS = "plannerAccounts";
 
@@ -102,7 +102,7 @@ export function usePlannerAccount() {
           await setDoc(ref, autoProfile);
           snap = await getDoc(ref);
         }
-        setState({ loading: false, user, account: snap.exists() ? snap.data() : null });
+        setState({ loading: false, user, account: snap.exists() ? { uid: user.uid, ...snap.data() } : null });
       } catch {
         setState({ loading: false, user, account: null });
       }
@@ -127,7 +127,7 @@ export async function plannerLogout() {
 
 // "새 가족 만들기" — 이 계정이 그룹의 owner가 되고, 원하는 코드를 직접 정할 수
 // 있다(기본값은 무작위 추천 코드). 스포이스/가족을 초대할 때 이 코드를 알려주면 된다.
-export async function signupCreateGroup({ email, password, name, groupCode, groupName }) {
+export async function signupCreateGroup({ email, password, name, gender, groupCode, groupName }) {
   const code = normalizeGroupCode(groupCode || randomGroupCode());
   if (code.length < 4) throw new Error("가족 코드는 4자 이상으로 만들어 주세요.");
   if (await groupCodeTaken(code)) throw new Error("이미 사용 중인 가족 코드입니다. 다른 코드를 입력해 주세요.");
@@ -137,6 +137,7 @@ export async function signupCreateGroup({ email, password, name, groupCode, grou
   await setDoc(doc(db, PLANNER_ACCOUNTS, user.uid), {
     email: email.trim(),
     name: name.trim(),
+    gender: gender || "female",
     groupId: code,
     groupName: groupName?.trim() || "우리 가족",
     role: "owner",
@@ -146,7 +147,7 @@ export async function signupCreateGroup({ email, password, name, groupCode, grou
 }
 
 // "코드로 참여하기" — 배우자 등 기존 가족 코드를 받은 사람이 같은 그룹에 합류한다.
-export async function signupJoinGroup({ email, password, name, groupCode }) {
+export async function signupJoinGroup({ email, password, name, gender, groupCode }) {
   const code = normalizeGroupCode(groupCode);
   if (!code) throw new Error("가족 코드를 입력해 주세요.");
   if (!(await groupCodeTaken(code))) throw new Error("존재하지 않는 가족 코드입니다. 코드를 다시 확인해 주세요.");
@@ -156,9 +157,28 @@ export async function signupJoinGroup({ email, password, name, groupCode }) {
   await setDoc(doc(db, PLANNER_ACCOUNTS, user.uid), {
     email: email.trim(),
     name: name.trim(),
+    gender: gender || "female",
     groupId: code,
     role: "member",
     createdAt: serverTimestamp(),
   });
   return { uid: user.uid, groupId: code };
+}
+
+// ⭐ 최고관리자(owner) 전용 관리자 메뉴에서 쓰는 헬퍼들.
+export function useGroupMembers(groupId) {
+  const [members, setMembers] = useState([]);
+  useEffect(() => {
+    if (!groupId) { setMembers([]); return; }
+    const q = query(collection(db, PLANNER_ACCOUNTS), where("groupId", "==", groupId));
+    const unsub = onSnapshot(q, (snap) => {
+      setMembers(snap.docs.map((d) => ({ uid: d.id, ...d.data() })));
+    });
+    return () => unsub();
+  }, [groupId]);
+  return members;
+}
+
+export async function updateMyProfile(uid, patch) {
+  await updateDoc(doc(db, PLANNER_ACCOUNTS, uid), patch);
 }
