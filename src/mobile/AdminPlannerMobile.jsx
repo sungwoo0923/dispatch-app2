@@ -15,7 +15,7 @@ import {
   EXPENSE_CATEGORIES, INCOME_CATEGORIES, RECURRING_EXPENSE_CATEGORIES, RECURRING_INCOME_CATEGORIES,
   dDayLabel, ensureRecurringInstances,
   nextOccurrence, recurringDateInYear, mergeCategoryOptions, budgetStatusLabel,
-  usePlannerWallet, computeWalletBalance,
+  usePlannerWallet, computeWalletBalance, usePlannerDebts, totalDebtAmount,
 } from "../adminPlannerData";
 import { ACCENT, ACCENT_BORDER, ACCENT_SOFT } from "../planner/plannerTheme";
 import { captureNodeAsImage } from "../planner/plannerCapture";
@@ -662,6 +662,7 @@ function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates
   const printRef = useRef(null);
   const viewRef = useRef(null);
   const wallet = usePlannerWallet(companyName);
+  const debts = usePlannerDebts(companyName);
 
   const runQuery = () => setKeywordApplied(keywordDraft);
 
@@ -679,7 +680,7 @@ function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates
 
   const totalIncome = filtered.filter((r) => r.type === "income").reduce((s, r) => s + Number(r.amount || 0), 0);
   const totalExpense = filtered.filter((r) => r.type === "expense").reduce((s, r) => s + Number(r.amount || 0), 0);
-  const walletBalance = computeWalletBalance(wallet, totalIncome, totalExpense);
+  const walletBalance = computeWalletBalance(wallet, totalIncome, totalExpense, totalDebtAmount(debts));
 
   const categoryTotals = useMemo(() => {
     const map = new Map();

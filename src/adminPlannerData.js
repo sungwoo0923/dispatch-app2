@@ -741,11 +741,13 @@ export function buildMonthlyBriefing({ incomeExpense, budgetTarget, savingsGoal,
 }
 
 // ────────────────────────────────────────────────
-// 7. 지갑 — 기준 재산(+마이너스통장 채무)을 설정해두면, 수입·지출 내역이 실제로
-// 등록/삭제될 때마다 자동으로 반영되는 잔액을 보여준다. 예전엔 입금/출금을
-// 따로 기록해서 누적하는 방식이었는데, "수입·지출 내역과 연동돼야 한다"는
-// 피드백으로 폐기 — 기준 재산·마이너스통장은 가족당 문서 하나(id=groupId)만
-// 두고, 잔액은 그때그때 income/expense 합계로 계산한다(별도 내역 없음).
+// 7. 지갑 — 기준 재산을 설정해두면, 수입·지출 내역이 실제로 등록/삭제될 때마다
+// 자동으로 반영되는 잔액을 보여준다. 대출금/마이너스통장 같은 빚은 "기준 재산"
+// 안의 숫자 하나로 뭉뚱그리지 않고, 종류(분류)·회차·만기일까지 따로 남길 수 있게
+// 별도 항목(plannerDebts)으로 관리한다. ⭐ 자산 설정/빚 항목은 실제 "거래"가
+// 아니라 잔액을 구성하는 값이라, 수입·지출 상세내역에는 일부러 안 섞는다 —
+// 섞으면 "언제 얼마를 썼다"는 거래 기록과 "지금 얼마를 갖고 있다/빚졌다"는 잔액
+// 정보가 뒤엉켜서 오히려 헷갈린다. 대신 지갑 화면 안에서 항목별로 다 볼 수 있다.
 // ────────────────────────────────────────────────
 export const PLANNER_WALLET = "plannerWallet";
 
@@ -761,22 +763,59 @@ export function usePlannerWallet(groupId) {
   return wallet;
 }
 
-// overdraftDebt(마이너스통장으로 쓴 빚)는 잔액에서 빼야 하는 금액이라 항상
-// 0 이상의 절대값으로 저장한다(양수로 입력받아 계산할 때만 빼줌).
-export async function setPlannerWallet(groupId, { baseAssets, overdraftDebt }, actorName) {
+export async function setPlannerWalletBase(groupId, baseAssets, actorName) {
   await setDoc(doc(db, PLANNER_WALLET, groupId), {
-    groupId,
-    baseAssets: Number(baseAssets) || 0,
-    overdraftDebt: Math.abs(Number(overdraftDebt) || 0),
+    groupId, baseAssets: Number(baseAssets) || 0,
     setByName: actorName || "", updatedAt: serverTimestamp(),
   }, { merge: true });
 }
 
-// 지갑 잔액 = 기준 재산 - 마이너스통장 빚 + (그 기간의) 수입 - 지출.
+// 대출금/마이너스통장/카드값 등 "빚" 항목 — 회차·만기일도 선택적으로 남길 수 있다.
+export const PLANNER_DEBTS = "plannerDebts";
+export const DEBT_CATEGORIES = ["마이너스통장", "대출금", "카드값", "기타"];
+
+export function usePlannerDebts(groupId) {
+  const [debts, setDebts] = useState([]);
+  useEffect(() => {
+    if (!groupId) { setDebts([]); return; }
+    const q = query(collection(db, PLANNER_DEBTS), where("groupId", "==", groupId));
+    const unsub = onSnapshot(q, (snap) => {
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      rows.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setDebts(rows);
+    }, () => {});
+    return () => unsub();
+  }, [groupId]);
+  return debts;
+}
+
+export async function addPlannerDebt({ groupId, category, amount, installmentNo, installmentTotal, dueDate, memo, actorName }) {
+  await addDoc(collection(db, PLANNER_DEBTS), {
+    groupId,
+    category: (category || "").trim() || "기타",
+    amount: Number(amount) || 0,
+    installmentNo: installmentNo ? Number(installmentNo) : null,
+    installmentTotal: installmentTotal ? Number(installmentTotal) : null,
+    dueDate: dueDate || "",
+    memo: (memo || "").trim(),
+    createdByName: actorName || "",
+    createdAt: serverTimestamp(),
+  });
+}
+
+export async function deletePlannerDebt(id) {
+  await deleteDoc(doc(db, PLANNER_DEBTS, id));
+}
+
+export function totalDebtAmount(debts) {
+  return (debts || []).reduce((s, d) => s + Number(d.amount || 0), 0);
+}
+
+// 지갑 잔액 = 기준 재산 - 빚 합계 + (그 기간의) 수입 - 지출.
 // wallet이 아예 설정 안 됐으면 null(= "지갑 미설정" 의미, 화면에서 구분해서 씀).
-export function computeWalletBalance(wallet, totalIncome, totalExpense) {
+export function computeWalletBalance(wallet, totalIncome, totalExpense, totalDebt = 0) {
   if (!wallet) return null;
-  return (wallet.baseAssets || 0) - (wallet.overdraftDebt || 0) + (Number(totalIncome) || 0) - (Number(totalExpense) || 0);
+  return (wallet.baseAssets || 0) - (Number(totalDebt) || 0) + (Number(totalIncome) || 0) - (Number(totalExpense) || 0);
 }
 
 // ────────────────────────────────────────────────

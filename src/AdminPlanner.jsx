@@ -15,7 +15,7 @@ import {
   EXPENSE_CATEGORIES, INCOME_CATEGORIES, RECURRING_EXPENSE_CATEGORIES, RECURRING_INCOME_CATEGORIES,
   dDayLabel, ensureRecurringInstances,
   nextOccurrence, recurringDateInYear, mergeCategoryOptions, budgetStatusLabel,
-  usePlannerWallet, computeWalletBalance,
+  usePlannerWallet, computeWalletBalance, usePlannerDebts, totalDebtAmount,
 } from "./adminPlannerData";
 import { ACCENT, ACCENT_BORDER } from "./planner/plannerTheme";
 import PlannerDatePicker from "./planner/PlannerDatePicker";
@@ -933,6 +933,7 @@ function LedgerTab({ rows, companyName, actorName, recurringTemplates, entries }
   const [showWallet, setShowWallet] = useState(false);
   const printRef = useRef(null);
   const wallet = usePlannerWallet(companyName);
+  const debts = usePlannerDebts(companyName);
 
   const runQuery = () => setKeywordApplied(keywordDraft);
 
@@ -950,7 +951,7 @@ function LedgerTab({ rows, companyName, actorName, recurringTemplates, entries }
 
   const totalIncome = filtered.filter((r) => r.type === "income").reduce((s, r) => s + Number(r.amount || 0), 0);
   const totalExpense = filtered.filter((r) => r.type === "expense").reduce((s, r) => s + Number(r.amount || 0), 0);
-  const walletBalance = computeWalletBalance(wallet, totalIncome, totalExpense);
+  const walletBalance = computeWalletBalance(wallet, totalIncome, totalExpense, totalDebtAmount(debts));
 
   const categoryTotals = useMemo(() => {
     const map = new Map();
