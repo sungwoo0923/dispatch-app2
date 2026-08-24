@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { updateMyProfile, updateGroupName, useGroupMembers, leavePlannerAccount, TOTAL_MASTER_EMAIL } from "./plannerAuth";
 import { shareInvite } from "./plannerInvite";
 import { ACCENT, ACCENT_SOFT, ACCENT_BORDER } from "./plannerTheme";
+import PlannerDatePicker from "./PlannerDatePicker";
 
 const GENDER_LABEL = { male: "남자", female: "여자" };
 
@@ -24,6 +25,10 @@ export default function PlannerMyInfo({ account, onUpdated }) {
   const [groupSaving, setGroupSaving] = useState(false);
   const [groupSavedFlash, setGroupSavedFlash] = useState(false);
   useEffect(() => { setGroupName(resolvedGroupName); }, [resolvedGroupName]);
+
+  const [birthday, setBirthday] = useState(account.birthday || "");
+  const [birthdaySaving, setBirthdaySaving] = useState(false);
+  const [birthdaySavedFlash, setBirthdaySavedFlash] = useState(false);
 
   const [codeCopied, setCodeCopied] = useState(false);
   const copyCode = async () => {
@@ -68,6 +73,21 @@ export default function PlannerMyInfo({ account, onUpdated }) {
       alert("저장 중 오류가 발생했습니다: " + e.message);
     } finally {
       setGroupSaving(false);
+    }
+  };
+
+  const saveBirthday = async (next) => {
+    setBirthday(next);
+    setBirthdaySaving(true);
+    try {
+      await updateMyProfile(account.uid, { birthday: next });
+      onUpdated?.({ ...account, birthday: next });
+      setBirthdaySavedFlash(true);
+      setTimeout(() => setBirthdaySavedFlash(false), 1600);
+    } catch (e) {
+      alert("저장 중 오류가 발생했습니다: " + e.message);
+    } finally {
+      setBirthdaySaving(false);
     }
   };
 
@@ -127,15 +147,29 @@ export default function PlannerMyInfo({ account, onUpdated }) {
         <div className="text-[10.5px] text-gray-500 mt-1">초대한 사람, 초대받은 사람 누구나 바꿀 수 있어요.</div>
       </div>
 
-      <div>
-        <div className="text-[12px] font-semibold text-gray-600 mb-1.5">성별</div>
-        <div
-          className="py-2.5 px-3.5 rounded-lg text-[13px] font-bold border"
-          style={{ background: ACCENT_SOFT, color: ACCENT, borderColor: ACCENT_BORDER }}
-        >
-          {GENDER_LABEL[account.gender || "female"]}
+      <div className="grid grid-cols-2 gap-2.5">
+        <div>
+          <div className="text-[12px] font-semibold text-gray-600 mb-1.5">성별</div>
+          <div
+            className="py-2.5 px-3.5 rounded-lg text-[13px] font-bold border text-center"
+            style={{ background: ACCENT_SOFT, color: ACCENT, borderColor: ACCENT_BORDER }}
+          >
+            {GENDER_LABEL[account.gender || "female"]}
+          </div>
+          <div className="text-[10px] text-gray-500 mt-1 leading-relaxed">화면 색상 테마와 연결돼 있어 변경할 수 없어요.</div>
         </div>
-        <div className="text-[10.5px] text-gray-500 mt-1">가입할 때 정한 성별은 화면 색상 테마와 연결돼 있어 변경할 수 없어요.</div>
+        <div>
+          <div className="text-[12px] font-semibold text-gray-600 mb-1.5">생년월일</div>
+          <PlannerDatePicker
+            value={birthday}
+            onChange={saveBirthday}
+            placeholder="생일 선택"
+            className="w-full text-left border rounded-lg px-3 py-2.5 text-[13px]"
+          />
+          <div className="text-[10px] mt-1 leading-relaxed" style={{ color: birthdaySaving || birthdaySavedFlash ? ACCENT : "#6b7280" }}>
+            {birthdaySaving ? "저장 중..." : birthdaySavedFlash ? "저장됐어요" : "다가오면 알림에 나와요."}
+          </div>
+        </div>
       </div>
 
       <div className="bg-white border rounded-xl p-3.5 space-y-1.5" style={{ borderColor: ACCENT_BORDER, background: ACCENT_SOFT }}>
