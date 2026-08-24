@@ -56,7 +56,7 @@ export default function PlannerMyInfo({ account, onUpdated }) {
       </div>
 
       <div>
-        <div className="text-[12px] font-semibold text-gray-500 mb-1.5">성별 (화면 색상 테마 — 남자는 네이비, 여자는 핑크)</div>
+        <div className="text-[12px] font-semibold text-gray-500 mb-1.5">성별</div>
         <div className="flex gap-2">
           {[["female", "여자"], ["male", "남자"]].map(([v, l]) => (
             <button

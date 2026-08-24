@@ -639,8 +639,8 @@ function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates
         </div>
         <div className="flex gap-1.5">
           <input value={draft.keyword} onChange={(e) => setDraft((d) => ({ ...d, keyword: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") runQuery(); }}
-            placeholder="항목명/분류/메모 검색" className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px]" />
-          <button onClick={runQuery} className="px-4 rounded-lg text-white text-[12px] font-bold" style={{ background: accent }}>조회</button>
+            placeholder="항목명/분류/메모 검색" className="flex-1 min-w-0 border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px]" />
+          <button onClick={runQuery} className="shrink-0 whitespace-nowrap px-4 py-1.5 rounded-lg text-white text-[12px] font-bold" style={{ background: accent }}>조회</button>
         </div>
       </div>
 
@@ -810,10 +810,14 @@ function MobileCalendar({ year, schedules, companyName, actorName, accent }) {
 // 구분선을 넣었다("구분이 부족해 보인다"는 피드백 반영).
 const FAMILY_SIDES_M = ["본가", "처가/외가"];
 
+// ⭐ 부모(MobileFamily의 grid)는 두 칸의 높이를 자동으로 같게 늘려주지만(grid 기본
+// align-items: stretch), 이 컴포넌트 자신이 h-full로 그 높이를 실제로 채우고 안의
+// 목록 박스가 flex-1로 남는 공간을 흡수해야 "소계"가 양쪽 다 같은 줄(맨 아래)에
+// 맞춰진다 — h-full이 빠져있던 게 인원수가 다를 때 소계 위치가 어긋나던 원인이었다.
 function MobileFamilyColumn({ title, rows, accent, onEdit }) {
   const total = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
   return (
-    <div className="min-w-0 flex flex-col">
+    <div className="min-w-0 h-full flex flex-col">
       <div className="flex items-center justify-between mb-1.5">
         <div className="text-[12.5px] font-bold text-gray-700">{title}</div>
         <div className="text-[11px] font-semibold text-gray-500">{rows.length}명</div>
@@ -821,9 +825,12 @@ function MobileFamilyColumn({ title, rows, accent, onEdit }) {
       <div className="bg-gray-50 rounded-lg border border-gray-200 overflow-hidden flex-1">
         {rows.length === 0 && <div className="py-4 text-center text-[11.5px] text-gray-400">없음</div>}
         {rows.map((r, idx) => (
-          <div key={r.id} onClick={() => onEdit(r)} className={`px-2.5 py-2 active:bg-white ${idx > 0 ? "border-t-2 border-gray-200" : ""}`}>
-            <div className="text-[13px] font-semibold text-gray-900 truncate">{r.title}</div>
-            <div className="text-[12px] font-bold text-gray-700">{fmtWon(r.amount)}</div>
+          <div key={r.id} onClick={() => onEdit(r)} className={`flex items-center justify-between gap-2 px-2.5 py-2 active:bg-white ${idx > 0 ? "border-t-2 border-gray-200" : ""}`}>
+            <div className="min-w-0">
+              <div className="text-[13px] font-semibold text-gray-900 truncate">{r.title}</div>
+              {r.createdByName && <div className="text-[10.5px] text-gray-400 truncate">{r.createdByName}</div>}
+            </div>
+            <span className="text-[12px] font-bold text-gray-700 shrink-0">{fmtWon(r.amount)}</span>
           </div>
         ))}
       </div>

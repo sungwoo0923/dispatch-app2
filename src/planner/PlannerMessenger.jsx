@@ -62,13 +62,13 @@ export default function PlannerMessenger({ groupId, myUid, myName }) {
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") send(); }}
           placeholder="메시지 입력..."
-          className="flex-1 border rounded-full px-4 py-2.5 text-[13px] focus:outline-none"
+          className="flex-1 min-w-0 border rounded-full px-4 py-2.5 text-[13px] focus:outline-none"
           style={{ borderColor: ACCENT_BORDER }}
         />
         <button
           onClick={send}
           disabled={sending || !text.trim()}
-          className="px-5 py-2.5 rounded-full text-white text-[13px] font-bold disabled:opacity-50"
+          className="shrink-0 whitespace-nowrap px-5 py-2.5 rounded-full text-white text-[13px] font-bold disabled:opacity-50"
           style={{ background: ACCENT }}
         >
           전송
