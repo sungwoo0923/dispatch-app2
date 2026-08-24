@@ -125,6 +125,7 @@ export default function PlannerMobileShell({ account, onUpdated, previewMode = f
               <button onClick={plannerLogout} style={{ fontSize: 13, fontWeight: 600, color: "#7d6a75", background: "none", border: "none", cursor: "pointer" }}>
                 로그아웃
               </button>
+              <div style={{ fontSize: 10.5, fontFamily: "monospace", color: "#c9b8c2", marginTop: 10 }}>v{__APP_VERSION__}</div>
             </div>
           </div>
         </div>

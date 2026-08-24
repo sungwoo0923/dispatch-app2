@@ -187,6 +187,7 @@ export default function PlannerMyInfo({ account, onUpdated }) {
           )}
         </div>
       )}
+      <div className="text-center text-[10.5px] font-mono text-gray-300 mt-5">v{__APP_VERSION__}</div>
     </div>
   );
 }
