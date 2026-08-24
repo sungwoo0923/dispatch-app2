@@ -140,11 +140,17 @@ export function usePlannerAccount() {
         // ⭐ "코드로 참여하기"에 groupName을 안 채워주던 예전 버그로 이미 만들어진
         // 계정 대비 — 내 문서에 groupName이 비어 있으면 같은 가족의 다른 구성원
         // 문서에서 가져와 보정해준다(다음부턴 다시 안 겪게 내 문서에도 저장).
+        // ⭐ 이 보정 자체가 실패해도(네트워크 오류 등) 로그인/계정 로딩까지
+        // 통째로 실패해서는 안 되므로 별도 try/catch로 감싼다.
         if (account && !account.groupName && account.groupId) {
-          const { groupName: peerGroupName } = await findExistingGroup(account.groupId);
-          if (peerGroupName) {
-            account = { ...account, groupName: peerGroupName };
-            updateDoc(ref, { groupName: peerGroupName }).catch(() => {});
+          try {
+            const { groupName: peerGroupName } = await findExistingGroup(account.groupId);
+            if (peerGroupName) {
+              account = { ...account, groupName: peerGroupName };
+              updateDoc(ref, { groupName: peerGroupName }).catch(() => {});
+            }
+          } catch {
+            // 보정 실패는 무시 — 다음 로그인 때 다시 시도된다
           }
         }
         setState({ loading: false, user, account });
