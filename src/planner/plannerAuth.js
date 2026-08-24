@@ -54,6 +54,18 @@ async function groupCodeTaken(code) {
   return !snap.empty;
 }
 
+// ⭐ 코드로 참여할 때, 이미 그 가족에 있는 다른 구성원 문서에서 가족 이름을
+// 그대로 가져와 같이 저장한다 — 이게 없으면 초대받은 사람 문서에는 groupName이
+// 비어 있어서, 초대한 사람 화면에는 설정한 이름이 보이는데 받은 사람 화면
+// 상단엔 기본값("우리 가족")만 보이는 불일치가 생긴다. exists 여부도 같이
+// 반환해서 groupCodeTaken을 또 호출하지 않아도 되게 한다.
+async function findExistingGroup(code) {
+  const q = query(collection(db, PLANNER_ACCOUNTS), where("groupId", "==", code), limit(1));
+  const snap = await getDocs(q);
+  if (snap.empty) return { exists: false, groupName: "" };
+  return { exists: true, groupName: snap.docs[0].data()?.groupName || "" };
+}
+
 // ⭐ Firebase 에러 코드를 화면에 그대로 노출하지 않고("Firebase: Error
 // (auth/email-already-in-use).") 명확한 한글 사유로 바꿔서 보여준다.
 function koreanAuthError(err) {
@@ -124,7 +136,18 @@ export function usePlannerAccount() {
           await setDoc(ref, autoProfile);
           snap = await getDoc(ref);
         }
-        setState({ loading: false, user, account: snap.exists() ? { uid: user.uid, ...snap.data() } : null });
+        let account = snap.exists() ? { uid: user.uid, ...snap.data() } : null;
+        // ⭐ "코드로 참여하기"에 groupName을 안 채워주던 예전 버그로 이미 만들어진
+        // 계정 대비 — 내 문서에 groupName이 비어 있으면 같은 가족의 다른 구성원
+        // 문서에서 가져와 보정해준다(다음부턴 다시 안 겪게 내 문서에도 저장).
+        if (account && !account.groupName && account.groupId) {
+          const { groupName: peerGroupName } = await findExistingGroup(account.groupId);
+          if (peerGroupName) {
+            account = { ...account, groupName: peerGroupName };
+            updateDoc(ref, { groupName: peerGroupName }).catch(() => {});
+          }
+        }
+        setState({ loading: false, user, account });
       } catch {
         setState({ loading: false, user, account: null });
       }
@@ -192,7 +215,8 @@ export async function signupCreateGroup({ email, password, name, gender, groupCo
 export async function signupJoinGroup({ email, password, name, gender, groupCode, birthday }) {
   const code = normalizeGroupCode(groupCode);
   if (!code) throw new Error("가족 코드를 입력해 주세요.");
-  if (!(await groupCodeTaken(code))) throw new Error("존재하지 않는 가족 코드입니다. 코드를 다시 확인해 주세요.");
+  const { exists, groupName: existingGroupName } = await findExistingGroup(code);
+  if (!exists) throw new Error("존재하지 않는 가족 코드입니다. 코드를 다시 확인해 주세요.");
 
   const user = await getOrCreateAuthUser(email, password);
   await assertNoExistingPlannerProfile(user.uid);
@@ -201,6 +225,7 @@ export async function signupJoinGroup({ email, password, name, gender, groupCode
     name: name.trim(),
     gender: gender || "female",
     groupId: code,
+    groupName: existingGroupName || "우리 가족",
     birthday: birthday || "",
     role: "member",
     createdAt: serverTimestamp(),
