@@ -11,6 +11,7 @@ import PlannerMyInfo from "./PlannerMyInfo";
 import PlannerMessenger from "./PlannerMessenger";
 import PlannerNotificationBell from "./PlannerNotificationBell";
 import { usePlannerAccount, plannerLogout, useGroupMembers, TOTAL_MASTER_EMAIL } from "./plannerAuth";
+import { usePlannerUnreadCount } from "../adminPlannerData";
 import { ACCENT, BG, applyGenderTheme } from "./plannerTheme";
 import AdminPlanner from "../AdminPlanner";
 
@@ -40,6 +41,7 @@ function PlannerDesktopShell({ account, onUpdated }) {
   const [showMessenger, setShowMessenger] = useState(false);
   const isOwner = account.email === TOTAL_MASTER_EMAIL;
   const otherLabel = useOtherMembersLabel(account);
+  const unreadCount = usePlannerUnreadCount(account.groupId, account.uid);
   return (
     <div style={{ width: "100%", minHeight: "100vh", background: BG }}>
       <div style={{ background: ACCENT, padding: "12px 28px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -53,12 +55,17 @@ function PlannerDesktopShell({ account, onUpdated }) {
           <span style={{ color: "rgba(255,255,255,0.85)", fontSize: 12.5 }}>{account.name}님 · {otherLabel}</span>
           <button
             onClick={() => setShowMessenger(true)}
-            style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", cursor: "pointer" }}
+            style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", cursor: "pointer", position: "relative" }}
             title="메신저"
           >
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
             </svg>
+            {unreadCount > 0 && (
+              <span style={{ position: "absolute", top: 0, right: 0, minWidth: 14, height: 14, borderRadius: 999, background: "#ef4444", color: "#fff", fontSize: 9, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
           </button>
           <PlannerNotificationBell groupId={account.groupId} />
           <button

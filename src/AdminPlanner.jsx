@@ -12,7 +12,8 @@ import { KOREAN_HOLIDAYS, shortHolidayLabel } from "./CustomDatePicker";
 import {
   usePlannerEntries, addPlannerEntry, updatePlannerEntry, deletePlannerEntry,
   upsertBudgetTarget, fmtWon, todayStr, formatAmountInput, parseAmountInput,
-  EXPENSE_CATEGORIES, INCOME_CATEGORIES, dDayLabel, ensureRecurringInstances,
+  EXPENSE_CATEGORIES, INCOME_CATEGORIES, RECURRING_EXPENSE_CATEGORIES, RECURRING_INCOME_CATEGORIES,
+  dDayLabel, ensureRecurringInstances,
   nextOccurrence, recurringDateInYear, mergeCategoryOptions, budgetStatusLabel,
 } from "./adminPlannerData";
 import { ACCENT, ACCENT_BORDER } from "./planner/plannerTheme";
@@ -439,7 +440,7 @@ function RecurringManagerModal({ templates, companyName, actorName, onClose }) {
   const [amount, setAmount] = useState("");
   const [dayOfMonth, setDayOfMonth] = useState("1");
   const [saving, setSaving] = useState(false);
-  const categoryOptions = mergeCategoryOptions(entryType === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES, templates, entryType);
+  const categoryOptions = mergeCategoryOptions(entryType === "income" ? RECURRING_INCOME_CATEGORIES : RECURRING_EXPENSE_CATEGORIES, templates, entryType);
 
   const add = async () => {
     if (!title.trim() || !amount) { alert("이름과 금액을 입력해 주세요."); return; }

@@ -1,8 +1,17 @@
 // src/planner/PlannerMessenger.jsx — 가족/커플 메신저 (PC/모바일 공용).
 // 초대한 사람과 초대받은 사람(같은 가족 코드 구성원)끼리만 대화가 오간다.
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { usePlannerMessages, sendPlannerMessage } from "../adminPlannerData";
+import {
+  usePlannerMessages, sendPlannerMessage, uploadMessengerImage,
+  markMessengerRead, usePlannerMessengerReads,
+} from "../adminPlannerData";
+import { useGroupMembers } from "./plannerAuth";
 import { ACCENT, ACCENT_SOFT, ACCENT_BORDER } from "./plannerTheme";
+
+function tsMillis(ts) {
+  if (!ts?.seconds) return 0;
+  return ts.seconds * 1000 + Math.floor((ts.nanoseconds || 0) / 1e6);
+}
 
 function tsLabel(ts) {
   if (!ts?.seconds) return "";
@@ -27,15 +36,33 @@ function dayLabel(ts) {
 
 export default function PlannerMessenger({ groupId, myUid, myName }) {
   const messages = usePlannerMessages(groupId);
+  const reads = usePlannerMessengerReads(groupId);
+  const members = useGroupMembers(groupId);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
   }, [messages.length]);
   useEffect(() => { inputRef.current?.focus(); }, []);
+
+  // ⭐ 메신저를 열어둔 동안엔("마운트돼 있는 동안") 새 메시지가 와도 바로바로
+  // "읽음" 처리되게 한다 — 카톡처럼 대화창을 보고 있으면 안읽음 숫자가 즉시 사라져야 함.
+  useEffect(() => {
+    markMessengerRead(groupId, myUid);
+  }, [groupId, myUid, messages.length]);
+
+  // 나 말고 이 가족의 다른 구성원들 — 내가 보낸 메시지를 "몇 명이 아직 안 읽었는지" 계산할 때 씀.
+  const otherMembers = useMemo(() => members.filter((m) => m.uid !== myUid), [members, myUid]);
+  const unreadByOthers = (createdAt) => {
+    const sentAt = tsMillis(createdAt);
+    if (!sentAt) return otherMembers.length; // 방금 보내서 서버 시각이 아직 안 붙은 경우 = 당연히 안읽음
+    return otherMembers.filter((m) => tsMillis(reads[m.uid]) < sentAt).length;
+  };
 
   const send = async () => {
     if (!text.trim() || sending) return;
@@ -46,6 +73,21 @@ export default function PlannerMessenger({ groupId, myUid, myName }) {
     } finally {
       setSending(false);
       inputRef.current?.focus();
+    }
+  };
+
+  const handlePickImage = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploading(true);
+    try {
+      const url = await uploadMessengerImage(groupId, file);
+      await sendPlannerMessage({ groupId, senderUid: myUid, senderName: myName, text: "", imageURL: url });
+    } catch {
+      // 업로드 실패 시 조용히 무시 — 다시 시도하면 됨
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -76,11 +118,27 @@ export default function PlannerMessenger({ groupId, myUid, myName }) {
             <div key={item.id} className={`flex ${item.senderUid === myUid ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[75%] ${item.senderUid === myUid ? "items-end" : "items-start"} flex flex-col`}>
                 {item.senderUid !== myUid && <div className="text-[10.5px] text-gray-500 mb-0.5 px-1">{item.senderName}</div>}
-                <div
-                  className="px-3 py-2 rounded-2xl text-[13px] leading-relaxed break-words"
-                  style={item.senderUid === myUid ? { background: ACCENT, color: "#fff", borderBottomRightRadius: 4 } : { background: ACCENT_SOFT, color: "#374151", borderBottomLeftRadius: 4 }}
-                >
-                  {item.text}
+                <div className={`flex items-end gap-1 ${item.senderUid === myUid ? "flex-row" : "flex-row-reverse"}`}>
+                  {item.senderUid === myUid && (() => {
+                    const n = unreadByOthers(item.createdAt);
+                    return n > 0 ? <span className="text-[10px] font-bold shrink-0 mb-0.5" style={{ color: ACCENT }}>{n}</span> : null;
+                  })()}
+                  {item.imageURL ? (
+                    <img
+                      src={item.imageURL}
+                      alt="첨부 이미지"
+                      className="max-w-[220px] max-h-[220px] rounded-2xl object-cover border cursor-pointer"
+                      style={{ borderColor: ACCENT_BORDER }}
+                      onClick={() => window.open(item.imageURL, "_blank")}
+                    />
+                  ) : (
+                    <div
+                      className="px-3 py-2 rounded-2xl text-[13px] leading-relaxed break-words"
+                      style={item.senderUid === myUid ? { background: ACCENT, color: "#fff", borderBottomRightRadius: 4 } : { background: ACCENT_SOFT, color: "#374151", borderBottomLeftRadius: 4 }}
+                    >
+                      {item.text}
+                    </div>
+                  )}
                 </div>
                 <div className="text-[9.5px] text-gray-400 mt-0.5 px-1">{tsLabel(item.createdAt)}</div>
               </div>
@@ -89,7 +147,18 @@ export default function PlannerMessenger({ groupId, myUid, myName }) {
         )}
         <div ref={bottomRef} />
       </div>
-      <div className="flex gap-2 mt-2.5 shrink-0">
+      <div className="flex gap-2 mt-2.5 shrink-0 items-center">
+        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePickImage} />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="shrink-0 w-10 h-10 rounded-full border flex items-center justify-center text-[16px] disabled:opacity-50"
+          style={{ borderColor: ACCENT_BORDER, color: ACCENT }}
+          title="사진 첨부"
+        >
+          {uploading ? "…" : "📷"}
+        </button>
         <input
           ref={inputRef}
           value={text}

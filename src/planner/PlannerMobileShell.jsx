@@ -9,6 +9,7 @@ import PlannerMessenger from "./PlannerMessenger";
 import PlannerMyInfo from "./PlannerMyInfo";
 import PlannerNotificationBell from "./PlannerNotificationBell";
 import { plannerLogout, TOTAL_MASTER_EMAIL } from "./plannerAuth";
+import { usePlannerUnreadCount } from "../adminPlannerData";
 import { ACCENT, BG } from "./plannerTheme";
 
 // ⭐ PlannerAdminPanel.jsx는 "모바일 미리보기"에서 이 파일을 그대로 불러 쓴다 — 여기서
@@ -27,12 +28,17 @@ export const PLANNER_MENU_ITEMS = [
   ["myinfo", "내정보"],
 ];
 
-function ChatIconButton({ onClick }) {
+function ChatIconButton({ onClick, unreadCount = 0 }) {
   return (
-    <button onClick={onClick} style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none" }}>
+    <button onClick={onClick} style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", position: "relative" }}>
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
       </svg>
+      {unreadCount > 0 && (
+        <span style={{ position: "absolute", top: 2, right: 2, minWidth: 14, height: 14, borderRadius: 999, background: "#ef4444", color: "#fff", fontSize: 9, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
+          {unreadCount > 99 ? "99+" : unreadCount}
+        </span>
+      )}
     </button>
   );
 }
@@ -47,6 +53,7 @@ export default function PlannerMobileShell({ account, onUpdated, previewMode = f
   const isMaster = account.email === TOTAL_MASTER_EMAIL;
   const menuItems = isMaster && !previewMode ? [...PLANNER_MENU_ITEMS, ["__admin__", "관리자 메뉴"]] : PLANNER_MENU_ITEMS;
   const pageTitle = PLANNER_MENU_ITEMS.find(([v]) => v === page)?.[1] || "홈";
+  const unreadCount = usePlannerUnreadCount(account.groupId, account.uid);
 
   return (
     <div style={{ width: "100%", minHeight: "100vh", display: "flex", flexDirection: "column", background: BG }}>
@@ -61,7 +68,7 @@ export default function PlannerMobileShell({ account, onUpdated, previewMode = f
           {account.groupName || "우리 가족"}
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4 }}>
-          <ChatIconButton onClick={() => setShowMessenger(true)} />
+          <ChatIconButton onClick={() => setShowMessenger(true)} unreadCount={unreadCount} />
           <PlannerNotificationBell groupId={account.groupId} />
           <button onClick={() => setShowMenu(true)} style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none" }}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round">

@@ -31,6 +31,13 @@ export const PLANNER_TYPE_LABEL = {
 export const EXPENSE_CATEGORIES = ["생활비", "경조사", "명절", "세금/공과금", "보험", "여행", "자녀", "부모님", "기타"];
 export const INCOME_CATEGORIES = ["급여", "부수입", "용돈", "상여금", "이자/배당", "환급/지원금", "경조사수입", "기타"];
 
+// ⭐ "정기 지출/수입 자동등록"은 매달 반복되는 고정 지출/수입 성격이라, 위의
+// 일반 내역 분류(경조사/명절/여행 등 일회성 성격)와는 어울리지 않는다는
+// 피드백 — 구독료/보험료/통신비 등 실제로 매달 자동으로 나가는 항목 위주로
+// 별도 분류 목록을 둔다(직접입력은 PlannerCategorySelect에서 그대로 가능).
+export const RECURRING_EXPENSE_CATEGORIES = ["구독료", "보험료", "통신비", "월세/관리비", "대출/이자", "학원/교육비", "정기후원", "세금/공과금", "기타"];
+export const RECURRING_INCOME_CATEGORIES = ["급여", "용돈", "부수입", "이자/배당", "연금", "기타"];
+
 // ⭐ 사용자가 분류를 직접입력하면(기본 목록에 없는 값), 그 가족이 실제로 쓴
 // entries에서 이미 저장돼 있는 값이므로 — 별도 저장 없이 entries에서 다시
 // 뽑아내기만 해도 "계속 저장돼 있는" 효과가 난다. 기본 분류 + 그동안 실제로 쓴
@@ -337,9 +344,67 @@ export function usePlannerMessages(groupId) {
   return messages;
 }
 
-export async function sendPlannerMessage({ groupId, senderUid, senderName, text }) {
-  if (!text?.trim()) return;
+// text와 imageURL 둘 중 하나만 있어도 보낼 수 있다(사진만 보내는 경우 text는 빈 문자열).
+export async function sendPlannerMessage({ groupId, senderUid, senderName, text, imageURL }) {
+  const trimmed = (text || "").trim();
+  if (!trimmed && !imageURL) return;
   await addDoc(collection(db, PLANNER_MESSAGES), {
-    groupId, senderUid, senderName: senderName || "", text: text.trim(), createdAt: serverTimestamp(),
+    groupId, senderUid, senderName: senderName || "", text: trimmed, imageURL: imageURL || "", createdAt: serverTimestamp(),
   });
+}
+
+export async function uploadMessengerImage(groupId, file) {
+  const path = `kp-planner/${groupId}/messages/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
+  const r = ref(storage, path);
+  await uploadBytes(r, file);
+  return getDownloadURL(r);
+}
+
+// ────────────────────────────────────────────────
+// 메신저 읽음/안읽음(카톡처럼 대화별 안읽은 숫자 + 상단 아이콘 뱃지)
+// ────────────────────────────────────────────────
+export const PLANNER_MESSENGER_READS = "plannerMessengerReads";
+
+// 문서 id를 "groupId_uid"로 고정해 항상 한 사람당 문서 하나만 존재하게 한다.
+function readDocId(groupId, uid) {
+  return `${groupId}_${uid}`;
+}
+
+// 메신저를 열었을 때(그리고 열려있는 동안 새 메시지가 올 때) 호출해서
+// "여기까지 읽었다" 시각을 저장한다.
+export async function markMessengerRead(groupId, uid) {
+  if (!groupId || !uid) return;
+  await setDoc(doc(db, PLANNER_MESSENGER_READS, readDocId(groupId, uid)), {
+    groupId, uid, lastReadAt: serverTimestamp(),
+  }, { merge: true });
+}
+
+// 같은 가족(groupId) 구성원들의 "마지막으로 읽은 시각"을 실시간으로 구독한다.
+// { [uid]: Timestamp } 형태의 맵으로 반환.
+export function usePlannerMessengerReads(groupId) {
+  const [reads, setReads] = useState({});
+  useEffect(() => {
+    if (!groupId) { setReads({}); return; }
+    const q = query(collection(db, PLANNER_MESSENGER_READS), where("groupId", "==", groupId));
+    const unsub = onSnapshot(q, (snap) => {
+      const map = {};
+      snap.docs.forEach((d) => { map[d.data().uid] = d.data().lastReadAt; });
+      setReads(map);
+    }, () => {});
+    return () => unsub();
+  }, [groupId]);
+  return reads;
+}
+
+function tsMillis(ts) {
+  if (!ts?.seconds) return 0;
+  return ts.seconds * 1000 + Math.floor((ts.nanoseconds || 0) / 1e6);
+}
+
+// 상단 채팅 아이콘에 띄우는 숫자 뱃지 — 내가 아직 안 읽은(상대가 보낸) 메시지 수.
+export function usePlannerUnreadCount(groupId, myUid) {
+  const messages = usePlannerMessages(groupId);
+  const reads = usePlannerMessengerReads(groupId);
+  const myReadAt = tsMillis(reads[myUid]);
+  return messages.filter((m) => m.senderUid !== myUid && tsMillis(m.createdAt) > myReadAt).length;
 }
