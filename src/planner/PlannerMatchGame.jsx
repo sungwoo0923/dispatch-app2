@@ -1,6 +1,10 @@
 // src/planner/PlannerMatchGame.jsx — "구슬 터뜨리기" 미니게임(비주얼 레퍼런스는
 // Bejeweled/Candy Crush류의 매치 퍼즐). 보드에 색깔 구슬이 꽉 차 있고, 인접한
-// 두 구슬을 상하좌우로 맞바꿔서 같은 색 5개 이상을 한 줄로 모으면 터진다.
+// 두 구슬을 상하좌우로 맞바꿔서 같은 색 3개 이상을 한 줄로 모으면 터진다.
+// ⭐ 처음엔 "5개 이상"으로 만들었는데, 인접한 두 칸만 맞바꾸는 방식에서는 한 번의
+// 스왑으로 5줄을 완성하는 경우가 사실상 거의 없어서(4개가 이미 나란히 있어야
+// 함) 거의 매번 "옮겼다가 그대로 되돌아가는" 것처럼 보이는 문제가 있었다.
+// Bejeweled/Candy Crush 등 실제 매치 게임들도 전부 3개 기준이라 그에 맞춰 낮췄다.
 // 터진 자리는 위에서 새 구슬이 랜덤으로 떨어져 채운다. 60초 동안 혼자 플레이해서
 // 점수를 내고, 배우자와는 최고 점수로 겨룬다(동시 조작 아님 — 각자 도전 후 비교).
 import React, { useEffect, useRef, useState } from "react";
@@ -32,8 +36,8 @@ function makeBoard() {
         tries++;
       } while (
         tries < 10 &&
-        ((c >= 4 && board[r * COLS + c - 1] === v && board[r * COLS + c - 2] === v && board[r * COLS + c - 3] === v && board[r * COLS + c - 4] === v) ||
-          (r >= 4 && board[(r - 1) * COLS + c] === v && board[(r - 2) * COLS + c] === v && board[(r - 3) * COLS + c] === v && board[(r - 4) * COLS + c] === v))
+        ((c >= 2 && board[r * COLS + c - 1] === v && board[r * COLS + c - 2] === v) ||
+          (r >= 2 && board[(r - 1) * COLS + c] === v && board[(r - 2) * COLS + c] === v))
       );
       board[r * COLS + c] = v;
     }
@@ -49,7 +53,7 @@ function findMatches(board) {
       const cur = c < COLS ? board[r * COLS + c] : -1;
       const prev = board[r * COLS + c - 1];
       if (cur !== prev) {
-        if (c - runStart >= 5) for (let k = runStart; k < c; k++) matched.add(r * COLS + k);
+        if (c - runStart >= 3) for (let k = runStart; k < c; k++) matched.add(r * COLS + k);
         runStart = c;
       }
     }
@@ -60,7 +64,7 @@ function findMatches(board) {
       const cur = r < ROWS ? board[r * COLS + c] : -1;
       const prev = board[(r - 1) * COLS + c];
       if (cur !== prev) {
-        if (r - runStart >= 5) for (let k = runStart; k < r; k++) matched.add(k * COLS + c);
+        if (r - runStart >= 3) for (let k = runStart; k < r; k++) matched.add(k * COLS + c);
         runStart = r;
       }
     }
@@ -137,6 +141,13 @@ export default function PlannerMatchGame({ groupId, myUid, myName, myBest, other
     setSecondsLeft(GAME_SECONDS);
     setSelected(null);
     setPhase("playing");
+  };
+
+  // ⭐ 연쇄 반응(resolveCascade) 도중엔 중단 버튼 자체를 안 보이게 해서, 끝나고
+  // resolveCascade가 phase를 "playing"으로 되돌리며 중단 상태를 덮어쓰는 충돌을 막는다.
+  const quit = () => {
+    setPhase("over");
+    submitMatchGameScore(groupId, myUid, myName, score).catch(() => {});
   };
 
   const onCellClick = (idx) => {
@@ -221,7 +232,14 @@ export default function PlannerMatchGame({ groupId, myUid, myName, myBest, other
           </div>
         )}
         {(phase === "playing" || phase === "resolving") && (
-          <div className="text-center text-[11px] text-gray-400 mt-2.5">구슬 두 개를 눌러서 자리를 바꿔보세요. 같은 색 5개가 한 줄이 되면 터져요.</div>
+          <>
+            <div className="text-center text-[11px] text-gray-400 mt-2.5 mb-2.5">구슬 두 개를 눌러서 자리를 바꿔보세요. 같은 색 3개 이상이 한 줄이 되면 터져요.</div>
+            {phase === "playing" && (
+              <button onClick={quit} className="w-full py-2 rounded-lg border text-[12px] font-semibold text-gray-500" style={{ borderColor: ACCENT_BORDER }}>
+                게임 중단
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
