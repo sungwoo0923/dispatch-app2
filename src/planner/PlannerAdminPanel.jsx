@@ -2,9 +2,10 @@
 // 가족 정보 수정, 구성원 목록, 모바일 화면 미리보기를 한 곳에서 다룬다.
 import React, { useState } from "react";
 import { useGroupMembers, updateGroupName } from "./plannerAuth";
-import { ACCENT, ACCENT_SOFT, ACCENT_BORDER } from "./plannerTheme";
+import { ACCENT, ACCENT_SOFT, ACCENT_BORDER, BG } from "./plannerTheme";
 import PlannerMobileShell from "./PlannerMobileShell";
 import PlannerUserManagement from "./PlannerUserManagement";
+import useBodyScrollLock from "./useBodyScrollLock";
 
 const GENDER_LABEL = { male: "남자", female: "여자" };
 const ROLE_LABEL = { owner: "최고관리자", member: "구성원" };
@@ -19,6 +20,7 @@ function Section({ title, children }) {
 }
 
 export default function PlannerAdminPanel({ account, onClose, onUpdated }) {
+  useBodyScrollLock();
   const members = useGroupMembers(account.groupId);
   const [groupName, setGroupName] = useState(account.groupName || "우리 가족");
   const [saving, setSaving] = useState(false);
@@ -62,12 +64,12 @@ export default function PlannerAdminPanel({ account, onClose, onUpdated }) {
               <input
                 value={groupName}
                 onChange={(e) => setGroupName(e.target.value)}
-                style={{ flex: 1, padding: "10px 12px", fontSize: 13, border: `1px solid ${ACCENT_BORDER}`, borderRadius: 10, outline: "none" }}
+                style={{ flex: 1, minWidth: 0, padding: "10px 12px", fontSize: 13, border: `1px solid ${ACCENT_BORDER}`, borderRadius: 10, outline: "none" }}
               />
               <button
                 onClick={saveGroupName}
                 disabled={saving}
-                style={{ padding: "0 16px", fontSize: 12.5, fontWeight: 700, color: "#fff", background: ACCENT, border: "none", borderRadius: 10, cursor: "pointer" }}
+                style={{ flexShrink: 0, whiteSpace: "nowrap", padding: "0 16px", fontSize: 12.5, fontWeight: 700, color: "#fff", background: ACCENT, border: "none", borderRadius: 10, cursor: "pointer" }}
               >
                 {saving ? "저장 중..." : savedFlash ? "저장됨" : "저장"}
               </button>
@@ -107,7 +109,7 @@ export default function PlannerAdminPanel({ account, onClose, onUpdated }) {
                 boxShadow: "0 10px 30px rgba(0,0,0,0.18)", position: "relative",
               }}
             >
-              <div style={{ width: "100%", height: "100%", overflowY: "auto", background: "#fffafc" }}>
+              <div style={{ width: "100%", height: "100%", overflowY: "auto", background: BG }}>
                 <PlannerAdminPanelMobilePreview account={account} />
               </div>
             </div>

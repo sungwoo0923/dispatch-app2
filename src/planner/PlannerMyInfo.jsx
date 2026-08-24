@@ -25,6 +25,15 @@ export default function PlannerMyInfo({ account, onUpdated }) {
   const [groupSavedFlash, setGroupSavedFlash] = useState(false);
   useEffect(() => { setGroupName(resolvedGroupName); }, [resolvedGroupName]);
 
+  const [codeCopied, setCodeCopied] = useState(false);
+  const copyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(account.groupId);
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 1500);
+    } catch {}
+  };
+
   const [sharing, setSharing] = useState(false);
   const [shareFlash, setShareFlash] = useState("");
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -131,7 +140,12 @@ export default function PlannerMyInfo({ account, onUpdated }) {
 
       <div className="bg-white border rounded-xl p-3.5 space-y-1.5" style={{ borderColor: ACCENT_BORDER, background: ACCENT_SOFT }}>
         <div className="flex justify-between text-[12.5px]"><span className="text-gray-600">이메일</span><span className="font-semibold text-gray-700">{account.email}</span></div>
-        <div className="flex justify-between text-[12.5px]"><span className="text-gray-600">가족 코드</span><span className="font-bold" style={{ color: ACCENT }}>{account.groupId}</span></div>
+        <div className="flex justify-between items-center text-[12.5px]">
+          <span className="text-gray-600">가족 코드</span>
+          <button onClick={copyCode} className="font-bold" style={{ color: ACCENT }} title="눌러서 복사">
+            {codeCopied ? "복사됨" : account.groupId}
+          </button>
+        </div>
         <div className="flex justify-between text-[12.5px]"><span className="text-gray-600">역할</span><span className="font-semibold text-gray-700">{isMaster ? "최고관리자" : "구성원"}</span></div>
       </div>
 

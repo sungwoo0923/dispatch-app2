@@ -8,9 +8,10 @@ import PlannerSplash from "./PlannerSplash";
 import PlannerAdminPanel from "./PlannerAdminPanel";
 import PlannerMobileShell from "./PlannerMobileShell";
 import PlannerMyInfo from "./PlannerMyInfo";
+import PlannerMessenger from "./PlannerMessenger";
 import PlannerNotificationBell from "./PlannerNotificationBell";
 import { usePlannerAccount, plannerLogout, useGroupMembers, TOTAL_MASTER_EMAIL } from "./plannerAuth";
-import { ACCENT, applyGenderTheme } from "./plannerTheme";
+import { ACCENT, BG, applyGenderTheme } from "./plannerTheme";
 import AdminPlanner from "../AdminPlanner";
 
 function isSmartPhone() {
@@ -21,30 +22,6 @@ function isSmartPhone() {
   const isPhoneUA = /iphone|ipod|android(?!.*tablet)/.test(ua);
   const isSmallScreen = window.innerWidth < 768;
   return isPhoneUA || isSmallScreen;
-}
-
-function GroupCodeBadge({ groupId }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(groupId);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {}
-  };
-  return (
-    <button
-      onClick={copy}
-      title="눌러서 복사 — 배우자 초대용 가족 코드"
-      style={{
-        fontSize: 11.5, fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.28)",
-        border: "1px solid rgba(255,255,255,0.4)", borderRadius: 999, padding: "4px 10px", cursor: "pointer",
-        letterSpacing: 1,
-      }}
-    >
-      {copied ? "복사됨" : groupId}
-    </button>
-  );
 }
 
 // ⭐ 헤더에 "내 이름 · 가족 이름"이 아니라 "내 이름 · 배우자 이름"으로 보이길
@@ -60,19 +37,29 @@ function useOtherMembersLabel(account) {
 function PlannerDesktopShell({ account, onUpdated }) {
   const [showAdmin, setShowAdmin] = useState(false);
   const [showMyInfo, setShowMyInfo] = useState(false);
+  const [showMessenger, setShowMessenger] = useState(false);
   const isOwner = account.email === TOTAL_MASTER_EMAIL;
   const otherLabel = useOtherMembersLabel(account);
   return (
-    <div style={{ width: "100%", minHeight: "100vh", background: "#fffafc" }}>
+    <div style={{ width: "100%", minHeight: "100vh", background: BG }}>
       <div style={{ background: ACCENT, padding: "12px 28px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ filter: "brightness(0) invert(1)" }}>
             <KPPlannerLogo size="sm" showTagline={false} />
           </div>
+          <div style={{ color: "rgba(255,255,255,0.9)", fontSize: 14, fontWeight: 700 }}>{account.groupName || "우리 가족"}</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <span style={{ color: "rgba(255,255,255,0.85)", fontSize: 12.5 }}>{account.name}님 · {otherLabel}</span>
-          <GroupCodeBadge groupId={account.groupId} />
+          <button
+            onClick={() => setShowMessenger(true)}
+            style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", cursor: "pointer" }}
+            title="메신저"
+          >
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+            </svg>
+          </button>
           <PlannerNotificationBell groupId={account.groupId} />
           <button
             onClick={() => setShowMyInfo(true)}
@@ -107,6 +94,20 @@ function PlannerDesktopShell({ account, onUpdated }) {
               <button onClick={() => setShowMyInfo(false)} style={{ background: "none", border: "none", fontSize: 20, color: "#6b7280", cursor: "pointer" }}>✕</button>
             </div>
             <PlannerMyInfo account={account} onUpdated={onUpdated} />
+          </div>
+        </div>
+      )}
+      {showMessenger && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)" }} onClick={() => setShowMessenger(false)} />
+          <div style={{ position: "relative", width: 480, maxWidth: "100%", height: 600, maxHeight: "85vh", background: "#fff", borderRadius: 20, padding: 20, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#2a2a30" }}>메신저</div>
+              <button onClick={() => setShowMessenger(false)} style={{ background: "none", border: "none", fontSize: 20, color: "#6b7280", cursor: "pointer" }}>✕</button>
+            </div>
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <PlannerMessenger groupId={account.groupId} myUid={account.uid} myName={account.name} />
+            </div>
           </div>
         </div>
       )}

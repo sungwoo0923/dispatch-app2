@@ -13,7 +13,7 @@ import {
   usePlannerEntries, addPlannerEntry, updatePlannerEntry, deletePlannerEntry,
   upsertBudgetTarget, fmtWon, todayStr, formatAmountInput, parseAmountInput,
   EXPENSE_CATEGORIES, INCOME_CATEGORIES, dDayLabel, ensureRecurringInstances,
-  nextOccurrence, recurringDateInYear,
+  nextOccurrence, recurringDateInYear, mergeCategoryOptions, budgetStatusLabel,
 } from "./adminPlannerData";
 import { ACCENT } from "./planner/plannerTheme";
 import PlannerDatePicker from "./planner/PlannerDatePicker";
@@ -22,6 +22,7 @@ import PlannerCategorySelect from "./planner/PlannerCategorySelect";
 import PlannerReceiptCapture from "./planner/PlannerReceiptCapture";
 import PlannerCycleTracker from "./planner/PlannerCycleTracker";
 import PlannerMessenger from "./planner/PlannerMessenger";
+import useBodyScrollLock from "./planner/useBodyScrollLock";
 
 function todayY() { return new Date().getFullYear(); }
 function thisMonthRange() {
@@ -39,11 +40,16 @@ function thisMonthRange() {
 // ⭐ 바깥(빈 곳)을 클릭해도 닫히지 않는다 — 입력하다가 실수로 밖을 눌러 내용이
 // 날아가는 문제가 반복 신고되어, 닫기는 오직 "닫기/✕" 버튼으로만 하게 했다.
 function Modal({ title, onClose, children, wide }) {
+  useBodyScrollLock();
+  const modalRef = useRef(null);
+  useEffect(() => { modalRef.current?.focus(); }, []);
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4">
       <div className="absolute inset-0 bg-black/50" />
       <div
-        className={`relative bg-white rounded-2xl w-full ${wide ? "max-w-lg" : "max-w-sm"} max-h-[88vh] overflow-y-auto p-5 shadow-xl`}
+        ref={modalRef}
+        tabIndex={-1}
+        className={`relative bg-white rounded-2xl w-full ${wide ? "max-w-lg" : "max-w-sm"} max-h-[88vh] overflow-y-auto overscroll-contain p-5 shadow-xl outline-none`}
       >
         <div className="flex items-center justify-between mb-4">
           <div className="text-[15px] font-bold text-gray-800">{title}</div>
@@ -196,22 +202,44 @@ function LedgerEntryModal({ initial, defaultType = "expense", companyName, actor
 // ────────────────────────────────────────────────
 // 일정 등록·수정 모달
 // ────────────────────────────────────────────────
+// 시작~종료일 사이의 모든 날짜를 "YYYY-MM-DD" 문자열로 나열한다(둘 다 포함).
+function datesBetween(start, end) {
+  const out = [];
+  const d = new Date(start + "T00:00:00");
+  const last = new Date(end + "T00:00:00");
+  while (d <= last) {
+    const pad = (n) => String(n).padStart(2, "0");
+    out.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+
 function ScheduleEntryModal({ initial, defaultDate, companyName, actorName, onClose }) {
   const [title, setTitle] = useState(initial?.title || "");
   const [date, setDate] = useState(initial?.date || defaultDate || todayStr());
   const [time, setTime] = useState(initial?.time || "");
   const [memo, setMemo] = useState(initial?.memo || "");
   const [recurring, setRecurring] = useState(!!initial?.recurring);
+  const [multiDay, setMultiDay] = useState(false);
+  const [endDate, setEndDate] = useState(initial?.date || defaultDate || todayStr());
   const [saving, setSaving] = useState(false);
   const dday = dDayLabel(recurring ? nextOccurrence(date, todayStr()) : date);
 
   const save = async () => {
     if (!title.trim()) { alert("일정 제목을 입력해 주세요."); return; }
+    if (multiDay && endDate < date) { alert("종료일이 시작일보다 빠릅니다."); return; }
     setSaving(true);
     try {
-      const payload = { type: "schedule", companyName, title: title.trim(), date, time, memo: memo.trim(), createdByName: actorName || "", recurring };
-      if (initial?.id) await updatePlannerEntry(initial.id, payload);
-      else await addPlannerEntry(payload);
+      const base = { type: "schedule", companyName, title: title.trim(), time, memo: memo.trim(), createdByName: actorName || "", recurring };
+      if (initial?.id) {
+        await updatePlannerEntry(initial.id, { ...base, date });
+      } else if (multiDay && endDate !== date) {
+        const days = datesBetween(date, endDate);
+        await Promise.all(days.map((d) => addPlannerEntry({ ...base, date: d })));
+      } else {
+        await addPlannerEntry({ ...base, date });
+      }
       onClose();
     } catch (e) {
       alert("저장 중 오류가 발생했습니다: " + e.message);
@@ -228,9 +256,20 @@ function ScheduleEntryModal({ initial, defaultDate, companyName, actorName, onCl
       <Field label="제목">
         <input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 세무사 미팅" />
       </Field>
-      <Field label={`날짜${dday ? ` · ${dday}` : ""}`}>
-        <PlannerDatePicker value={date} onChange={setDate} />
+      <Field label={multiDay ? "시작일" : `날짜${dday ? ` · ${dday}` : ""}`}>
+        <PlannerDatePicker value={date} onChange={(v) => { setDate(v); if (v > endDate) setEndDate(v); }} />
       </Field>
+      {!initial?.id && (
+        <label className="flex items-center gap-2 mb-3 -mt-1 cursor-pointer select-none">
+          <input type="checkbox" checked={multiDay} onChange={(e) => setMultiDay(e.target.checked)} className="w-4 h-4" style={{ accentColor: ACCENT }} />
+          <span className="text-[12.5px] font-semibold text-gray-600">여러 날 동일 일정으로 등록 (예: 1일~3일)</span>
+        </label>
+      )}
+      {multiDay && !initial?.id && (
+        <Field label="종료일">
+          <PlannerDatePicker value={endDate} onChange={setEndDate} />
+        </Field>
+      )}
       <Field label="시간(선택)">
         <PlannerTimePicker value={time} onChange={setTime} />
       </Field>
@@ -400,6 +439,7 @@ function RecurringManagerModal({ templates, companyName, actorName, onClose }) {
   const [amount, setAmount] = useState("");
   const [dayOfMonth, setDayOfMonth] = useState("1");
   const [saving, setSaving] = useState(false);
+  const categoryOptions = mergeCategoryOptions(entryType === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES, templates, entryType);
 
   const add = async () => {
     if (!title.trim() || !amount) { alert("이름과 금액을 입력해 주세요."); return; }
@@ -430,7 +470,7 @@ function RecurringManagerModal({ templates, companyName, actorName, onClose }) {
         </div>
       </div>
       <div className="grid grid-cols-3 gap-2 mb-3">
-        <input className={inputCls} value={category} onChange={(e) => setCategory(e.target.value)} placeholder="분류(선택)" />
+        <PlannerCategorySelect value={category} onChange={setCategory} options={categoryOptions} className={inputCls} placeholder="분류 선택/입력" />
         <input className={inputCls} type="text" inputMode="numeric" value={formatAmountInput(amount)} onChange={(e) => setAmount(parseAmountInput(e.target.value))} placeholder="금액" />
         <input className={inputCls} type="number" min={1} max={28} value={dayOfMonth} onChange={(e) => setDayOfMonth(e.target.value)} placeholder="매월 며칠" />
       </div>
@@ -758,10 +798,10 @@ function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules
           </div>
           {editingBudget ? (
             <div className="flex gap-1 mt-1">
-              <input className="flex-1 border border-gray-200 rounded-lg px-2 py-1 text-[13px]" type="text" inputMode="numeric" value={formatAmountInput(budgetInput)} onChange={(e) => setBudgetInput(parseAmountInput(e.target.value))} />
+              <input className="flex-1 min-w-0 border border-gray-200 rounded-lg px-2 py-1 text-[13px]" type="text" inputMode="numeric" value={formatAmountInput(budgetInput)} onChange={(e) => setBudgetInput(parseAmountInput(e.target.value))} />
               <button
                 onClick={async () => { await upsertBudgetTarget({ companyName, year, amount: budgetInput, entries, actorName }); setEditingBudget(false); }}
-                className="px-3 rounded-lg text-white text-[12px] font-bold" style={{ background: ACCENT }}
+                className="shrink-0 whitespace-nowrap px-3 rounded-lg text-white text-[12px] font-bold" style={{ background: ACCENT }}
               >
                 저장
               </button>
@@ -786,25 +826,26 @@ function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules
 
       {/* ⭐ 예산 대비 지출 진행률 — 부부가 같이 보는 화면이니 "이번 해 예산을 얼마나
           썼는지"를 막대 하나로 바로 알아볼 수 있게 한다(총예산 목표를 설정했을 때만). */}
-      {budgetTarget > 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-[12px] font-bold text-gray-600">예산 대비 지출</div>
-            <div className="text-[12px] font-semibold text-gray-400">
-              {fmtWon(totalExpense)} / {fmtWon(budgetTarget)} ({Math.round((totalExpense / budgetTarget) * 100)}%)
+      {budgetTarget > 0 && (() => {
+        const pct = (totalExpense / budgetTarget) * 100;
+        const status = budgetStatusLabel(pct);
+        return (
+          <div className="bg-white border border-gray-200 rounded-xl p-4 mb-6">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className="text-[12px] font-bold text-gray-600">예산 대비 지출</div>
+                <span className="px-2 py-0.5 rounded-full text-[10.5px] font-extrabold text-white" style={{ background: status.color }}>{status.label}</span>
+              </div>
+              <div className="text-[12px] font-semibold text-gray-500">
+                {fmtWon(totalExpense)} / {fmtWon(budgetTarget)} ({Math.round(pct)}%)
+              </div>
+            </div>
+            <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden">
+              <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, pct)}%`, background: status.color }} />
             </div>
           </div>
-          <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all"
-              style={{
-                width: `${Math.min(100, (totalExpense / budgetTarget) * 100)}%`,
-                background: totalExpense > budgetTarget ? "#dc2626" : ACCENT,
-              }}
-            />
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-white border border-gray-200 rounded-xl p-4">

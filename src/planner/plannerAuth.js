@@ -3,7 +3,10 @@
 // plannerAccounts 컬렉션을 쓴다. Firebase Auth(로그인 자체)는 같은 프로젝트를
 // 공유하지만, "회사"가 아니라 "가족(그룹) 코드"로 데이터를 나눈다.
 import { useEffect, useState } from "react";
-import { onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, deleteUser } from "firebase/auth";
+import {
+  onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, deleteUser,
+  setPersistence, browserLocalPersistence, browserSessionPersistence,
+} from "firebase/auth";
 import { plannerAuth as auth, plannerDb as db } from "./plannerFirebase";
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, query, where, limit, getDocs, onSnapshot } from "firebase/firestore";
 
@@ -135,8 +138,15 @@ export function usePlannerAccount() {
 // ⭐ 네임스페이스(+kpplanner) 도입 "이전"에 만들어진 계정(원래 이메일 그대로 Auth
 // 계정이 생성된 경우)도 계속 로그인할 수 있도록, 네임스페이스 이메일로 먼저
 // 시도하고 실패하면 원래 이메일로 한 번 더 시도한다.
-export async function plannerLogin(email, password) {
+// keepSignedIn=false면 브라우저를 닫으면 로그인이 풀리는 세션 전용 유지로 바꾼다
+// (기본은 true — 브라우저를 다시 열어도 로그인이 유지되는 "자동로그인").
+export async function plannerLogin(email, password, keepSignedIn = true) {
   const trimmed = String(email || "").trim();
+  try {
+    await setPersistence(auth, keepSignedIn ? browserLocalPersistence : browserSessionPersistence);
+  } catch {
+    // 일부 환경(프라이빗 브라우징 등)에서 persistence 설정이 막힐 수 있다 — 로그인 자체는 계속 진행
+  }
   try {
     await signInWithEmailAndPassword(auth, toPlannerAuthEmail(trimmed), password);
   } catch (err) {

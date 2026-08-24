@@ -22,11 +22,14 @@ export let ACCENT = PINK;
 export let ACCENT_DARK = PINK_DARK;
 export let ACCENT_SOFT = PINK_SOFT;
 export let ACCENT_BORDER = PINK_BORDER;
+// ⭐ 화면 전체 배경 — 여자 테마는 은은한 분홍기가 도는 화이트, 남자 테마는 순수
+// 화이트("배경이 분홍색느낌인데 화이트색감으로 바꿔줘" 요청 반영).
+export let BG = "#fffafc";
 
 export function applyGenderTheme(gender) {
   if (gender === "male") {
-    ACCENT = NAVY; ACCENT_DARK = NAVY_DARK; ACCENT_SOFT = NAVY_SOFT; ACCENT_BORDER = NAVY_BORDER;
+    ACCENT = NAVY; ACCENT_DARK = NAVY_DARK; ACCENT_SOFT = NAVY_SOFT; ACCENT_BORDER = NAVY_BORDER; BG = "#ffffff";
   } else {
-    ACCENT = PINK; ACCENT_DARK = PINK_DARK; ACCENT_SOFT = PINK_SOFT; ACCENT_BORDER = PINK_BORDER;
+    ACCENT = PINK; ACCENT_DARK = PINK_DARK; ACCENT_SOFT = PINK_SOFT; ACCENT_BORDER = PINK_BORDER; BG = "#fffafc";
   }
 }

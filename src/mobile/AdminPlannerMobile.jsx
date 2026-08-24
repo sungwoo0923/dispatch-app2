@@ -13,7 +13,7 @@ import {
   usePlannerEntries, addPlannerEntry, updatePlannerEntry, deletePlannerEntry,
   upsertBudgetTarget, fmtWon, todayStr, formatAmountInput, parseAmountInput,
   EXPENSE_CATEGORIES, INCOME_CATEGORIES, dDayLabel, ensureRecurringInstances,
-  nextOccurrence, recurringDateInYear,
+  nextOccurrence, recurringDateInYear, mergeCategoryOptions, budgetStatusLabel,
 } from "../adminPlannerData";
 import { ACCENT } from "../planner/plannerTheme";
 import { captureNodeAsImage } from "../planner/plannerCapture";
@@ -22,8 +22,21 @@ import PlannerTimePicker from "../planner/PlannerTimePicker";
 import PlannerDialNumber from "../planner/PlannerDialNumber";
 import PlannerCategorySelect from "../planner/PlannerCategorySelect";
 import PlannerReceiptCapture from "../planner/PlannerReceiptCapture";
+import useBodyScrollLock from "../planner/useBodyScrollLock";
 
 function todayY() { return new Date().getFullYear(); }
+// 시작~종료일 사이의 모든 날짜를 "YYYY-MM-DD" 문자열로 나열한다(둘 다 포함).
+function datesBetween(start, end) {
+  const out = [];
+  const d = new Date(start + "T00:00:00");
+  const last = new Date(end + "T00:00:00");
+  while (d <= last) {
+    const pad = (n) => String(n).padStart(2, "0");
+    out.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
 function thisMonthRange() {
   const d = new Date();
   const y = d.getFullYear(), m = d.getMonth();
@@ -34,10 +47,13 @@ function thisMonthRange() {
 // ⭐ 바깥(빈 곳)을 눌러도 닫히지 않는다 — 입력 중 실수로 밖을 눌러 내용이
 // 날아가는 문제 때문에, 닫기는 "닫기/✕" 버튼으로만 하게 했다.
 function Sheet({ title, onClose, children, accent }) {
+  useBodyScrollLock();
+  const sheetRef = useRef(null);
+  React.useEffect(() => { sheetRef.current?.focus(); }, []);
   return (
     <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/50" />
-      <div className="relative bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm max-h-[88vh] overflow-y-auto p-5 shadow-xl">
+      <div ref={sheetRef} tabIndex={-1} className="relative bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm max-h-[88vh] overflow-y-auto overscroll-contain p-5 shadow-xl outline-none">
         <div className="flex items-center justify-between mb-4">
           <div className="text-[15px] font-bold text-gray-800">{title}</div>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400">✕</button>
@@ -129,16 +145,25 @@ function ScheduleEntryModal({ initial, defaultDate, companyName, actorName, acce
   const [time, setTime] = useState(initial?.time || "");
   const [memo, setMemo] = useState(initial?.memo || "");
   const [recurring, setRecurring] = useState(!!initial?.recurring);
+  const [multiDay, setMultiDay] = useState(false);
+  const [endDate, setEndDate] = useState(initial?.date || defaultDate || todayStr());
   const [saving, setSaving] = useState(false);
   const dday = dDayLabel(recurring ? nextOccurrence(date, todayStr()) : date);
 
   const save = async () => {
     if (!title.trim()) { alert("일정 제목을 입력해 주세요."); return; }
+    if (multiDay && endDate < date) { alert("종료일이 시작일보다 빠릅니다."); return; }
     setSaving(true);
     try {
-      const payload = { type: "schedule", companyName, title: title.trim(), date, time, memo: memo.trim(), createdByName: actorName || "", recurring };
-      if (initial?.id) await updatePlannerEntry(initial.id, payload);
-      else await addPlannerEntry(payload);
+      const base = { type: "schedule", companyName, title: title.trim(), time, memo: memo.trim(), createdByName: actorName || "", recurring };
+      if (initial?.id) {
+        await updatePlannerEntry(initial.id, { ...base, date });
+      } else if (multiDay && endDate !== date) {
+        const days = datesBetween(date, endDate);
+        await Promise.all(days.map((d) => addPlannerEntry({ ...base, date: d })));
+      } else {
+        await addPlannerEntry({ ...base, date });
+      }
       onClose();
     } catch (e) { alert("저장 중 오류: " + e.message); } finally { setSaving(false); }
   };
@@ -147,7 +172,18 @@ function ScheduleEntryModal({ initial, defaultDate, companyName, actorName, acce
     <Sheet title={initial?.id ? "일정 수정" : "일정 등록"} onClose={onClose} accent={accent}>
       {initial?.createdByName && <div className="text-[11px] text-gray-400 mb-3 -mt-2">등록: {initial.createdByName}</div>}
       <Field label="제목"><input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 세무사 미팅" /></Field>
-      <Field label={`날짜${dday ? ` · ${dday}` : ""}`}><PlannerDatePicker value={date} onChange={setDate} className={inputCls + " text-left"} /></Field>
+      <Field label={multiDay ? "시작일" : `날짜${dday ? ` · ${dday}` : ""}`}>
+        <PlannerDatePicker value={date} onChange={(v) => { setDate(v); if (v > endDate) setEndDate(v); }} className={inputCls + " text-left"} />
+      </Field>
+      {!initial?.id && (
+        <label className="flex items-center gap-2 mb-3 -mt-1 cursor-pointer select-none">
+          <input type="checkbox" checked={multiDay} onChange={(e) => setMultiDay(e.target.checked)} className="w-4 h-4" style={{ accentColor: accent }} />
+          <span className="text-[12.5px] font-semibold text-gray-600">여러 날 동일 일정 등록 (예: 1일~3일)</span>
+        </label>
+      )}
+      {multiDay && !initial?.id && (
+        <Field label="종료일"><PlannerDatePicker value={endDate} onChange={setEndDate} className={inputCls + " text-left"} /></Field>
+      )}
       <Field label="시간(선택)"><PlannerTimePicker value={time} onChange={setTime} className={inputCls + " text-left"} /></Field>
       <label className="flex items-center gap-2 mb-3 -mt-1 cursor-pointer select-none">
         <input type="checkbox" checked={recurring} onChange={(e) => setRecurring(e.target.checked)} className="w-4 h-4" style={{ accentColor: accent }} />
@@ -250,6 +286,7 @@ function RecurringManagerSheet({ templates, companyName, actorName, accent, onCl
   const [amount, setAmount] = useState("");
   const [dayOfMonth, setDayOfMonth] = useState("1");
   const [saving, setSaving] = useState(false);
+  const categoryOptions = mergeCategoryOptions(entryType === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES, templates, entryType);
 
   const add = async () => {
     if (!title.trim() || !amount) { alert("이름과 금액을 입력해 주세요."); return; }
@@ -272,7 +309,7 @@ function RecurringManagerSheet({ templates, companyName, actorName, accent, onCl
           ))}
         </div>
       </Field>
-      <Field label="분류(선택)"><input className={inputCls} value={category} onChange={(e) => setCategory(e.target.value)} /></Field>
+      <Field label="분류(선택)"><PlannerCategorySelect value={category} onChange={setCategory} options={categoryOptions} className={inputCls} placeholder="분류 선택/입력" /></Field>
       <div className="grid grid-cols-2 gap-2 mb-3">
         <input className={inputCls} type="text" inputMode="numeric" value={formatAmountInput(amount)} onChange={(e) => setAmount(parseAmountInput(e.target.value))} placeholder="금액" />
         <input className={inputCls} type="number" min={1} max={28} value={dayOfMonth} onChange={(e) => setDayOfMonth(e.target.value)} placeholder="매월 며칠" />
@@ -506,25 +543,32 @@ function MobileDashboard({ year, budgetTarget, totalIncome, totalExpense, schedu
             </div>
             {editingBudget ? (
               <div className="flex gap-1.5 mt-1">
-                <input className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" type="text" inputMode="numeric" value={formatAmountInput(budgetInput)} onChange={(e) => setBudgetInput(parseAmountInput(e.target.value))} />
+                <input className="flex-1 min-w-0 border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" type="text" inputMode="numeric" value={formatAmountInput(budgetInput)} onChange={(e) => setBudgetInput(parseAmountInput(e.target.value))} />
                 <button onClick={async () => { await upsertBudgetTarget({ companyName, year, amount: budgetInput, entries, actorName }); setEditingBudget(false); }}
-                  className="px-3 rounded-lg text-white text-[12px] font-bold" style={{ background: accent }}>저장</button>
+                  className="shrink-0 whitespace-nowrap px-3 rounded-lg text-white text-[12px] font-bold" style={{ background: accent }}>저장</button>
               </div>
             ) : (
               <PlannerDialNumber value={budgetTarget} className="text-[18px] font-extrabold" style={{ color: accent }} />
             )}
           </div>
-          {budgetTarget > 0 && (
-            <div className="bg-gray-50 rounded-xl p-3.5">
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="text-[11px] font-bold text-gray-600">예산 대비 지출</div>
-                <div className="text-[10.5px] font-semibold text-gray-500">{Math.round((totalExpense / budgetTarget) * 100)}%</div>
+          {budgetTarget > 0 && (() => {
+            const pct = (totalExpense / budgetTarget) * 100;
+            const status = budgetStatusLabel(pct);
+            return (
+              <div className="bg-gray-50 rounded-xl p-3.5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <div className="text-[11px] font-bold text-gray-600">예산 대비 지출</div>
+                    <span className="px-1.5 py-0.5 rounded-full text-[9.5px] font-extrabold text-white" style={{ background: status.color }}>{status.label}</span>
+                  </div>
+                  <div className="text-[10.5px] font-semibold text-gray-500">{Math.round(pct)}%</div>
+                </div>
+                <div className="h-2 rounded-full bg-gray-200 overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${Math.min(100, pct)}%`, background: status.color }} />
+                </div>
               </div>
-              <div className="h-2 rounded-full bg-gray-200 overflow-hidden">
-                <div className="h-full rounded-full" style={{ width: `${Math.min(100, (totalExpense / budgetTarget) * 100)}%`, background: totalExpense > budgetTarget ? "#dc2626" : accent }} />
-              </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
 
         <div className="border-t-2 border-gray-100 px-3.5 py-3.5">
@@ -607,6 +651,7 @@ function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates
   const [editing, setEditing] = useState(null);
   const [showRecurring, setShowRecurring] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
   const printRef = useRef(null);
   const viewRef = useRef(null);
 
@@ -703,49 +748,61 @@ function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates
           </div>
         </div>
 
-        {categoryTotals.length > 0 && (
-          <div className="mb-3">
-            <div className="text-[11px] font-bold text-gray-500 mb-1.5">분류별 합계</div>
-            <div className="flex gap-1.5 overflow-x-auto pb-1">
-              {categoryTotals.map(([cat, amt]) => (
-                <div key={cat} className="shrink-0 px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white">
-                  <span className="text-[10.5px] text-gray-400 mr-1">{cat}</span>
-                  <span className={`text-[11.5px] font-bold whitespace-nowrap ${amt < 0 ? "text-red-600" : "text-gray-700"}`}>
-                    {amt >= 0 ? "+" : ""}{amt.toLocaleString()}원
-                  </span>
+        <button
+          onClick={() => setShowDetail((v) => !v)}
+          className="w-full py-2 rounded-lg border text-[12px] font-bold mb-1"
+          style={{ borderColor: accent, color: accent }}
+        >
+          {showDetail ? "상세내역 닫기 ▲" : "상세내역보기 ▼"}
+        </button>
+
+        {showDetail && (
+          <>
+            {categoryTotals.length > 0 && (
+              <div className="mb-3 mt-2">
+                <div className="text-[11px] font-bold text-gray-500 mb-1.5">분류별 합계</div>
+                <div className="flex gap-1.5 overflow-x-auto pb-1">
+                  {categoryTotals.map(([cat, amt]) => (
+                    <div key={cat} className="shrink-0 px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white">
+                      <span className="text-[10.5px] text-gray-400 mr-1">{cat}</span>
+                      <span className={`text-[11.5px] font-bold whitespace-nowrap ${amt < 0 ? "text-red-600" : "text-gray-700"}`}>
+                        {amt >= 0 ? "+" : ""}{amt.toLocaleString()}원
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {dateGroups.length === 0 && <div className="py-10 text-center text-[12.5px] text-gray-400">등록된 내역이 없습니다</div>}
+            <div className="space-y-3">
+              {dateGroups.map(([date, items]) => (
+                <div key={date}>
+                  <div className="text-[11px] font-bold text-gray-500 mb-1.5 px-0.5">{dateLabelKoM(date)}</div>
+                  <div className="space-y-1.5">
+                    {items.map((r) => (
+                      <div key={r.id} onClick={() => setEditing(r)} className="bg-gray-50 border border-gray-100 rounded-xl p-3 active:bg-gray-100">
+                        <div className="flex items-center justify-between mb-0.5">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9.5px] font-bold ${r.type === "income" ? "bg-gray-100 text-gray-600" : "bg-red-50 text-red-500"}`}>
+                              {r.type === "income" ? "수입" : "지출"}
+                            </span>
+                            {r.receiptURL && <span className="shrink-0 text-[11px]">📎</span>}
+                            <span className="text-[13px] font-bold text-gray-800 truncate">{r.title}</span>
+                          </div>
+                          <span className={`text-[13px] font-extrabold shrink-0 ml-2 ${r.type === "income" ? "text-gray-700" : "text-red-600"}`}>{fmtWon(r.amount)}</span>
+                        </div>
+                        <div className="text-[10.5px] text-gray-400">
+                          {r.category || "미분류"}{r.memo ? ` · ${r.memo}` : ""}{r.createdByName ? ` · ${r.createdByName}` : ""}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
-          </div>
+          </>
         )}
-
-        {dateGroups.length === 0 && <div className="py-10 text-center text-[12.5px] text-gray-400">등록된 내역이 없습니다</div>}
-        <div className="space-y-3">
-          {dateGroups.map(([date, items]) => (
-            <div key={date}>
-              <div className="text-[11px] font-bold text-gray-500 mb-1.5 px-0.5">{dateLabelKoM(date)}</div>
-              <div className="space-y-1.5">
-                {items.map((r) => (
-                  <div key={r.id} onClick={() => setEditing(r)} className="bg-gray-50 border border-gray-100 rounded-xl p-3 active:bg-gray-100">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9.5px] font-bold ${r.type === "income" ? "bg-gray-100 text-gray-600" : "bg-red-50 text-red-500"}`}>
-                          {r.type === "income" ? "수입" : "지출"}
-                        </span>
-                        {r.receiptURL && <span className="shrink-0 text-[11px]">📎</span>}
-                        <span className="text-[13px] font-bold text-gray-800 truncate">{r.title}</span>
-                      </div>
-                      <span className={`text-[13px] font-extrabold shrink-0 ml-2 ${r.type === "income" ? "text-gray-700" : "text-red-600"}`}>{fmtWon(r.amount)}</span>
-                    </div>
-                    <div className="text-[10.5px] text-gray-400">
-                      {r.category || "미분류"}{r.memo ? ` · ${r.memo}` : ""}{r.createdByName ? ` · ${r.createdByName}` : ""}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
       <PrintableLedger innerRef={printRef} companyName={companyName} label={`${filters.start} ~ ${filters.end}`} rows={filtered} totalIncome={totalIncome} totalExpense={totalExpense} accent={accent} />
       {editing && (

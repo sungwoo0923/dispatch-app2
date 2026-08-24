@@ -27,6 +27,7 @@ export default function PlannerSignup() {
   const [gender, setGender] = useState(urlGenderValid ? urlJoinGender : "female"); // "male" | "female" — 로그인 후(및 이 화면에서도) 전체 테마에 즉시 반영
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [password2, setPassword2] = useState("");
   const [birthday, setBirthday] = useState("");
   const [groupName, setGroupName] = useState("");
   const [groupCode, setGroupCode] = useState(() => randomGroupCode());
@@ -63,6 +64,7 @@ export default function PlannerSignup() {
     if (!name.trim()) return setError("이름을 입력해 주세요.");
     if (!email.trim()) return setError("이메일을 입력해 주세요.");
     if (password.length < 6) return setError("비밀번호는 6자 이상이어야 합니다.");
+    if (password !== password2) return setError("비밀번호가 서로 일치하지 않습니다.");
     if (mode === "join" && !joinCode.trim()) return setError("가족 코드를 입력해 주세요.");
 
     setLoading(true);
@@ -195,6 +197,12 @@ export default function PlannerSignup() {
           </div>
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="이메일" style={{ ...inputStyle, marginBottom: 12 }} />
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="비밀번호 (6자 이상)" style={{ ...inputStyle, marginBottom: 12 }} />
+          <input type="password" value={password2} onChange={(e) => setPassword2(e.target.value)} placeholder="비밀번호 확인" style={{ ...inputStyle, marginBottom: 6, borderColor: password2 ? (password === password2 ? "#86efac" : "#fca5a5") : ACCENT_BORDER }} />
+          {password2 && (
+            <div style={{ fontSize: 11.5, fontWeight: 600, marginBottom: 12, color: password === password2 ? "#16a34a" : "#dc2626" }}>
+              {password === password2 ? "비밀번호가 일치해요" : "비밀번호가 일치하지 않아요"}
+            </div>
+          )}
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 12, color: "#7d6a75", marginBottom: 6, fontWeight: 600 }}>생일 (선택 — 다가오면 알림에 나와요)</div>
             <PlannerDatePicker value={birthday} onChange={setBirthday} placeholder="생일 선택" />

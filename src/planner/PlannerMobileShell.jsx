@@ -9,43 +9,30 @@ import PlannerMessenger from "./PlannerMessenger";
 import PlannerMyInfo from "./PlannerMyInfo";
 import PlannerNotificationBell from "./PlannerNotificationBell";
 import { plannerLogout, TOTAL_MASTER_EMAIL } from "./plannerAuth";
-import { ACCENT } from "./plannerTheme";
+import { ACCENT, BG } from "./plannerTheme";
 
 // ⭐ PlannerAdminPanel.jsx는 "모바일 미리보기"에서 이 파일을 그대로 불러 쓴다 — 여기서
 // 그 파일을 정적으로 import하면 순환참조가 생기므로, 실제로 열 때만 lazy 로드한다
 // (미리보기 안에서는 previewMode=true라 애초에 관리자 메뉴 항목 자체가 안 보인다).
 const PlannerAdminPanel = React.lazy(() => import("./PlannerAdminPanel"));
 
+// ⭐ 메신저는 메뉴 목록이 아니라 상단 헤더의 종 아이콘 옆 채팅 아이콘으로 바로 연다
+// (메뉴에 묻혀있는 것보다 접근성이 낫다는 요청).
 export const PLANNER_MENU_ITEMS = [
   ["dashboard", "홈"],
   ["ledger", "수입·지출"],
   ["calendar", "일정"],
   ["family", "이벤트 예산"],
   ["cycle", "생리주기"],
-  ["messenger", "메신저"],
   ["myinfo", "내정보"],
 ];
 
-function GroupCodeBadge({ groupId }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(groupId);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {}
-  };
+function ChatIconButton({ onClick }) {
   return (
-    <button
-      onClick={copy}
-      title="눌러서 복사 — 배우자 초대용 가족 코드"
-      style={{
-        fontSize: 11.5, fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.28)",
-        border: "1px solid rgba(255,255,255,0.4)", borderRadius: 999, padding: "4px 10px", cursor: "pointer",
-        letterSpacing: 1,
-      }}
-    >
-      {copied ? "복사됨" : groupId}
+    <button onClick={onClick} style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none" }}>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+      </svg>
     </button>
   );
 }
@@ -56,16 +43,19 @@ export default function PlannerMobileShell({ account, onUpdated, previewMode = f
   const [page, setPage] = useState("dashboard");
   const [showMenu, setShowMenu] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showMessenger, setShowMessenger] = useState(false);
   const isMaster = account.email === TOTAL_MASTER_EMAIL;
   const menuItems = isMaster && !previewMode ? [...PLANNER_MENU_ITEMS, ["__admin__", "관리자 메뉴"]] : PLANNER_MENU_ITEMS;
-  const pageTitle = PLANNER_MENU_ITEMS.find(([v]) => v === page)?.[1] || "홈";
 
   return (
-    <div style={{ width: "100%", minHeight: "100vh", display: "flex", flexDirection: "column", background: "#fffafc" }}>
+    <div style={{ width: "100%", minHeight: "100vh", display: "flex", flexDirection: "column", background: BG }}>
       <div style={{ background: ACCENT, padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>{pageTitle}</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <GroupCodeBadge groupId={account.groupId} />
+        <div style={{ width: 32 }} />
+        <div style={{ color: "#fff", fontWeight: 800, fontSize: 16, textAlign: "center", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {account.groupName || "우리 가족"}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <ChatIconButton onClick={() => setShowMessenger(true)} />
           <PlannerNotificationBell groupId={account.groupId} />
           <button onClick={() => setShowMenu(true)} style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none" }}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round">
@@ -82,11 +72,6 @@ export default function PlannerMobileShell({ account, onUpdated, previewMode = f
         {page === "cycle" && (
           <div className="px-4 pt-4 pb-24">
             <PlannerCycleTracker groupId={account.groupId} myUid={account.uid} myGender={account.gender} myName={account.name} />
-          </div>
-        )}
-        {page === "messenger" && (
-          <div className="px-4 pt-4 pb-4" style={{ height: "calc(100vh - 56px)" }}>
-            <PlannerMessenger groupId={account.groupId} myUid={account.uid} myName={account.name} />
           </div>
         )}
         {page === "myinfo" && (
@@ -128,6 +113,18 @@ export default function PlannerMobileShell({ account, onUpdated, previewMode = f
                 로그아웃
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showMessenger && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: BG, display: "flex", flexDirection: "column" }}>
+          <div style={{ background: ACCENT, padding: "14px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+            <button onClick={() => setShowMessenger(false)} style={{ background: "none", border: "none", color: "#fff", fontSize: 20, cursor: "pointer" }}>‹</button>
+            <div style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>메신저</div>
+          </div>
+          <div className="flex-1 px-4 pt-3 pb-3 min-h-0">
+            <PlannerMessenger groupId={account.groupId} myUid={account.uid} myName={account.name} />
           </div>
         </div>
       )}

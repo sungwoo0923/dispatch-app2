@@ -5,10 +5,14 @@ import KPPlannerLogo from "./KPPlannerLogo";
 import { plannerLogin } from "./plannerAuth";
 import { PINK, PINK_BORDER, INK } from "./plannerTheme";
 
+const SAVED_EMAIL_KEY = "kpplanner_saved_email";
+
 export default function PlannerLogin() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => { try { return localStorage.getItem(SAVED_EMAIL_KEY) || ""; } catch { return ""; } });
   const [password, setPassword] = useState("");
+  const [rememberId, setRememberId] = useState(() => { try { return !!localStorage.getItem(SAVED_EMAIL_KEY); } catch { return false; } });
+  const [keepSignedIn, setKeepSignedIn] = useState(true);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -22,7 +26,11 @@ export default function PlannerLogin() {
     setLoading(true);
     setError("");
     try {
-      await plannerLogin(email, password);
+      await plannerLogin(email, password, keepSignedIn);
+      try {
+        if (rememberId) localStorage.setItem(SAVED_EMAIL_KEY, email.trim());
+        else localStorage.removeItem(SAVED_EMAIL_KEY);
+      } catch {}
       navigate("/planner", { replace: true });
     } catch (err) {
       setError(err.message || "로그인에 실패했습니다.");
@@ -49,7 +57,7 @@ export default function PlannerLogin() {
               style={inputStyle}
             />
           </div>
-          <div style={{ marginBottom: 14 }}>
+          <div style={{ marginBottom: 12 }}>
             <input
               type="password"
               autoComplete="current-password"
@@ -58,6 +66,16 @@ export default function PlannerLogin() {
               placeholder="비밀번호"
               style={inputStyle}
             />
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, fontSize: 12.5, color: "#6e5c67" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+              <input type="checkbox" checked={rememberId} onChange={(e) => setRememberId(e.target.checked)} style={{ accentColor: PINK }} />
+              아이디 저장
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+              <input type="checkbox" checked={keepSignedIn} onChange={(e) => setKeepSignedIn(e.target.checked)} style={{ accentColor: PINK }} />
+              자동 로그인
+            </label>
           </div>
           {error && <div style={{ color: "#dc2626", fontSize: 13, fontWeight: 600, marginBottom: 14 }}>{error}</div>}
           <button type="submit" disabled={loading} style={buttonStyle}>

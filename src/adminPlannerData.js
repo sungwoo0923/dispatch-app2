@@ -31,6 +31,21 @@ export const PLANNER_TYPE_LABEL = {
 export const EXPENSE_CATEGORIES = ["생활비", "경조사", "명절", "세금/공과금", "보험", "여행", "자녀", "부모님", "기타"];
 export const INCOME_CATEGORIES = ["급여", "부수입", "용돈", "상여금", "이자/배당", "환급/지원금", "경조사수입", "기타"];
 
+// ⭐ 사용자가 분류를 직접입력하면(기본 목록에 없는 값), 그 가족이 실제로 쓴
+// entries에서 이미 저장돼 있는 값이므로 — 별도 저장 없이 entries에서 다시
+// 뽑아내기만 해도 "계속 저장돼 있는" 효과가 난다. 기본 분류 + 그동안 실제로 쓴
+// 분류(중복 제거)를 합쳐서 드롭다운에 보여준다.
+export function mergeCategoryOptions(base, entries, entryType) {
+  const used = new Set(
+    (entries || [])
+      .filter((e) => e.type === entryType || e.entryType === entryType)
+      .map((e) => (e.category || "").trim())
+      .filter(Boolean)
+  );
+  const extra = [...used].filter((c) => !base.includes(c));
+  return [...base, ...extra];
+}
+
 export function usePlannerEntries(companyName) {
   const [entries, setEntries] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -126,6 +141,15 @@ export function nextOccurrence(dateStr, fromDateStr) {
 export function recurringDateInYear(dateStr, year) {
   if (!dateStr) return dateStr;
   return `${year}-${dateStr.slice(5, 10)}`;
+}
+
+// ⭐ 예산 대비 지출 비율을 신용도/부채 현황 그래프처럼 "안정/다소 높음/높음/위험"
+// 단계로 보여준다 — 퍼센트 숫자만 있는 것보다 한눈에 상태를 알아보기 쉽다.
+export function budgetStatusLabel(pct) {
+  if (pct >= 100) return { label: "위험", color: "#dc2626" };
+  if (pct >= 90) return { label: "높음", color: "#f97316" };
+  if (pct >= 70) return { label: "다소 높음", color: "#eab308" };
+  return { label: "안정", color: "#22c55e" };
 }
 
 // ⭐ 일정 D-day 계산 — 오늘부터 며칠 남았는지. 지났으면 null.
