@@ -55,7 +55,7 @@ function Field({ label, children }) {
 }
 const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none";
 
-function LedgerEntryModal({ initial, companyName, actorName, accent, onClose }) {
+function LedgerEntryModal({ initial, companyName, actorName, accent, onClose, onOpenRecurring }) {
   const [type, setType] = useState(initial?.type || "expense");
   const [title, setTitle] = useState(initial?.title || "");
   const [category, setCategory] = useState(initial?.category || "");
@@ -81,6 +81,11 @@ function LedgerEntryModal({ initial, companyName, actorName, accent, onClose }) 
   return (
     <Sheet title={initial?.id ? "내역 수정" : "수입/지출 등록"} onClose={onClose} accent={accent}>
       {initial?.createdByName && <div className="text-[11px] text-gray-400 mb-3 -mt-2">등록: {initial.createdByName}</div>}
+      {!initial?.id && onOpenRecurring && (
+        <button type="button" onClick={() => { onClose(); onOpenRecurring(); }} className="w-full mb-3 -mt-1 text-[11.5px] font-semibold text-left" style={{ color: accent }}>
+          매달 반복되는 지출/수입인가요? 정기 등록 관리 →
+        </button>
+      )}
       <Field label="구분">
         <div className="flex gap-2">
           {[["expense", "지출"], ["income", "수입"]].map(([v, l]) => (
@@ -565,33 +570,34 @@ function dateLabelKoM(dateStr) {
   return `${dateStr}(${WEEKDAY_KO_M[d.getDay()]})`;
 }
 
-// ⭐ 예전엔 카드 하나에 날짜·분류가 다 뒤섞여 있었다. 위에는 분류별 합계 칩을(가로
-// 스크롤 — 화면이 아래로 밀리지 않는다), 아래는 날짜별로 소제목을 나눠서 목록을
-// 보여준다. 검색은 "조회" 버튼을 눌러야 반영된다. "엑셀 다운로드" 대신 지금 보이는
-// 화면 그대로 이미지로 저장하는 "이미지 저장" 버튼을 쓴다(모바일 전용 요청).
+// ⭐ 시작일/종료일/구분은 누르는 즉시 바로 반영된다(내역을 등록하면 결과에 바로
+// 나와야 한다는 요구사항) — 검색어만 "조회" 버튼(또는 Enter)을 눌러야 반영된다.
+// 내역추가/저장(이미지)/PDF/분류별합계/날짜별목록을 카드 하나로 합쳤고, 저장·PDF는
+// 상단 오른쪽에 작은 버튼으로 뺐다. 정기 지출 등록은 "내역 추가" 안에서 연결된다.
 function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates }) {
   const monthDefault = thisMonthRange();
-  const [draft, setDraft] = useState({ start: monthDefault.first, end: monthDefault.last, keyword: "", kind: "all" });
-  const [applied, setApplied] = useState(draft);
+  const [filters, setFilters] = useState({ start: monthDefault.first, end: monthDefault.last, kind: "all" });
+  const [keywordDraft, setKeywordDraft] = useState("");
+  const [keywordApplied, setKeywordApplied] = useState("");
   const [editing, setEditing] = useState(null);
   const [showRecurring, setShowRecurring] = useState(false);
   const [saving, setSaving] = useState(false);
   const printRef = useRef(null);
   const viewRef = useRef(null);
 
-  const runQuery = () => setApplied(draft);
+  const runQuery = () => setKeywordApplied(keywordDraft);
 
   const filtered = useMemo(() => {
     return rows
-      .filter((r) => (!applied.start || (r.date || "") >= applied.start) && (!applied.end || (r.date || "") <= applied.end))
-      .filter((r) => applied.kind === "all" || r.type === applied.kind)
+      .filter((r) => (!filters.start || (r.date || "") >= filters.start) && (!filters.end || (r.date || "") <= filters.end))
+      .filter((r) => filters.kind === "all" || r.type === filters.kind)
       .filter((r) => {
-        if (!applied.keyword.trim()) return true;
-        const k = applied.keyword.trim().toLowerCase();
+        if (!keywordApplied.trim()) return true;
+        const k = keywordApplied.trim().toLowerCase();
         return (r.title || "").toLowerCase().includes(k) || (r.category || "").toLowerCase().includes(k) || (r.memo || "").toLowerCase().includes(k);
       })
       .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-  }, [rows, applied]);
+  }, [rows, filters, keywordApplied]);
 
   const totalIncome = filtered.filter((r) => r.type === "income").reduce((s, r) => s + Number(r.amount || 0), 0);
   const totalExpense = filtered.filter((r) => r.type === "expense").reduce((s, r) => s + Number(r.amount || 0), 0);
@@ -613,108 +619,120 @@ function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates
 
   const saveImage = async () => {
     setSaving(true);
-    try { await captureNodeAsImage(viewRef.current, `수입지출_${applied.start}_${applied.end}`); } finally { setSaving(false); }
+    try { await captureNodeAsImage(viewRef.current, `수입지출_${filters.start}_${filters.end}`); } finally { setSaving(false); }
   };
 
   return (
-    <div ref={viewRef}>
+    <div>
       <div className="bg-white border border-gray-200 rounded-xl p-3 mb-3 space-y-2">
         <div className="grid grid-cols-2 gap-2">
           <div>
             <div className="text-[10.5px] font-semibold text-gray-400 mb-1">시작일</div>
-            <PlannerDatePicker value={draft.start} onChange={(v) => setDraft((d) => ({ ...d, start: v }))} className="w-full text-left border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px]" />
+            <PlannerDatePicker value={filters.start} onChange={(v) => setFilters((d) => ({ ...d, start: v }))} className="w-full text-left border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px]" />
           </div>
           <div>
             <div className="text-[10.5px] font-semibold text-gray-400 mb-1">종료일</div>
-            <PlannerDatePicker value={draft.end} onChange={(v) => setDraft((d) => ({ ...d, end: v }))} className="w-full text-left border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px]" />
+            <PlannerDatePicker value={filters.end} onChange={(v) => setFilters((d) => ({ ...d, end: v }))} className="w-full text-left border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px]" />
           </div>
         </div>
         <div className="flex gap-1.5">
           {[["all", "전체"], ["income", "수입"], ["expense", "지출"]].map(([v, l]) => (
-            <button key={v} onClick={() => setDraft((d) => ({ ...d, kind: v }))}
-              className="flex-1 py-1.5 rounded-lg text-[11.5px] font-bold border" style={draft.kind === v ? { background: accent, color: "#fff", borderColor: accent } : { color: "#6b7280", borderColor: "#e5e7eb" }}>
+            <button key={v} onClick={() => setFilters((d) => ({ ...d, kind: v }))}
+              className="flex-1 py-1.5 rounded-lg text-[11.5px] font-bold border" style={filters.kind === v ? { background: accent, color: "#fff", borderColor: accent } : { color: "#6b7280", borderColor: "#e5e7eb" }}>
               {l}
             </button>
           ))}
         </div>
         <div className="flex gap-1.5">
-          <input value={draft.keyword} onChange={(e) => setDraft((d) => ({ ...d, keyword: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") runQuery(); }}
+          <input value={keywordDraft} onChange={(e) => setKeywordDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") runQuery(); }}
             placeholder="항목명/분류/메모 검색" className="flex-1 min-w-0 border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px]" />
           <button onClick={runQuery} className="shrink-0 whitespace-nowrap px-4 py-1.5 rounded-lg text-white text-[12px] font-bold" style={{ background: accent }}>조회</button>
         </div>
       </div>
 
-      <div className="flex items-center gap-2 mb-3">
-        <button onClick={() => setShowRecurring(true)} className="px-3 py-1.5 rounded-lg border border-gray-200 text-[11.5px] font-semibold text-gray-600">정기지출</button>
-        <button onClick={() => setEditing({})} className="ml-auto px-3 py-1.5 rounded-lg text-white text-[12px] font-bold" style={{ background: accent }}>내역 추가</button>
-      </div>
-      <div className="flex gap-2 mb-3">
-        <button onClick={saveImage} disabled={saving} className="flex-1 py-1.5 rounded-lg border border-gray-200 text-[11.5px] font-semibold text-gray-600">
-          {saving ? "저장 중..." : "이미지저장"}
-        </button>
-        <button onClick={() => exportPrintableToPdf(printRef.current, `수입지출_${applied.start}_${applied.end}`)}
-          className="flex-1 py-1.5 rounded-lg border border-gray-200 text-[11.5px] font-semibold text-gray-600">PDF 다운로드</button>
-      </div>
-      <div className="grid grid-cols-3 gap-2 mb-4">
-        <div className="bg-white border border-gray-200 rounded-lg px-2.5 py-2">
-          <div className="text-[10px] text-gray-400">수입</div>
-          <div className="text-[12.5px] font-bold text-gray-700">{fmtWon(totalIncome)}</div>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-lg px-2.5 py-2">
-          <div className="text-[10px] text-gray-400">지출</div>
-          <div className="text-[12.5px] font-bold text-red-600">{fmtWon(totalExpense)}</div>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-lg px-2.5 py-2">
-          <div className="text-[10px] text-gray-400">잔액</div>
-          <div className="text-[12.5px] font-bold" style={{ color: accent }}>{fmtWon(totalIncome - totalExpense)}</div>
-        </div>
-      </div>
-
-      {categoryTotals.length > 0 && (
-        <div className="mb-4">
-          <div className="text-[11px] font-bold text-gray-500 mb-1.5">분류별 합계</div>
-          <div className="flex gap-1.5 overflow-x-auto pb-1">
-            {categoryTotals.map(([cat, amt]) => (
-              <div key={cat} className="shrink-0 px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white">
-                <span className="text-[10.5px] text-gray-400 mr-1">{cat}</span>
-                <span className={`text-[11.5px] font-bold whitespace-nowrap ${amt < 0 ? "text-red-600" : "text-gray-700"}`}>
-                  {amt >= 0 ? "+" : ""}{amt.toLocaleString()}원
-                </span>
-              </div>
-            ))}
+      <div ref={viewRef} className="bg-white border border-gray-200 rounded-xl p-3">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-[12.5px] font-bold text-gray-700">수입·지출 내역</div>
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => setEditing({})} className="px-2.5 py-1 rounded-md text-white text-[11px] font-bold" style={{ background: accent }}>내역 추가</button>
+            <button onClick={saveImage} disabled={saving} className="px-2.5 py-1 rounded-md border border-gray-200 text-[11px] font-semibold text-gray-500">
+              {saving ? "저장중" : "저장"}
+            </button>
+            <button onClick={() => exportPrintableToPdf(printRef.current, `수입지출_${filters.start}_${filters.end}`)}
+              className="px-2.5 py-1 rounded-md border border-gray-200 text-[11px] font-semibold text-gray-500">PDF</button>
           </div>
         </div>
-      )}
 
-      {dateGroups.length === 0 && <div className="bg-white border border-gray-200 rounded-xl py-10 text-center text-[12.5px] text-gray-400">등록된 내역이 없습니다</div>}
-      <div className="space-y-3">
-        {dateGroups.map(([date, items]) => (
-          <div key={date}>
-            <div className="text-[11px] font-bold text-gray-500 mb-1.5 px-0.5">{dateLabelKoM(date)}</div>
-            <div className="space-y-1.5">
-              {items.map((r) => (
-                <div key={r.id} onClick={() => setEditing(r)} className="bg-white border border-gray-200 rounded-xl p-3 active:bg-gray-50">
-                  <div className="flex items-center justify-between mb-0.5">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9.5px] font-bold ${r.type === "income" ? "bg-gray-100 text-gray-600" : "bg-red-50 text-red-500"}`}>
-                        {r.type === "income" ? "수입" : "지출"}
-                      </span>
-                      {r.receiptURL && <span className="shrink-0 text-[11px]">📎</span>}
-                      <span className="text-[13px] font-bold text-gray-800 truncate">{r.title}</span>
-                    </div>
-                    <span className={`text-[13px] font-extrabold shrink-0 ml-2 ${r.type === "income" ? "text-gray-700" : "text-red-600"}`}>{fmtWon(r.amount)}</span>
-                  </div>
-                  <div className="text-[10.5px] text-gray-400">
-                    {r.category || "미분류"}{r.memo ? ` · ${r.memo}` : ""}{r.createdByName ? ` · ${r.createdByName}` : ""}
-                  </div>
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <div className="bg-gray-50 rounded-lg px-2.5 py-2">
+            <div className="text-[10px] text-gray-400">수입</div>
+            <div className="text-[12.5px] font-bold text-gray-700">{fmtWon(totalIncome)}</div>
+          </div>
+          <div className="bg-gray-50 rounded-lg px-2.5 py-2">
+            <div className="text-[10px] text-gray-400">지출</div>
+            <div className="text-[12.5px] font-bold text-red-600">{fmtWon(totalExpense)}</div>
+          </div>
+          <div className="bg-gray-50 rounded-lg px-2.5 py-2">
+            <div className="text-[10px] text-gray-400">잔액</div>
+            <div className="text-[12.5px] font-bold" style={{ color: accent }}>{fmtWon(totalIncome - totalExpense)}</div>
+          </div>
+        </div>
+
+        {categoryTotals.length > 0 && (
+          <div className="mb-3">
+            <div className="text-[11px] font-bold text-gray-500 mb-1.5">분류별 합계</div>
+            <div className="flex gap-1.5 overflow-x-auto pb-1">
+              {categoryTotals.map(([cat, amt]) => (
+                <div key={cat} className="shrink-0 px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white">
+                  <span className="text-[10.5px] text-gray-400 mr-1">{cat}</span>
+                  <span className={`text-[11.5px] font-bold whitespace-nowrap ${amt < 0 ? "text-red-600" : "text-gray-700"}`}>
+                    {amt >= 0 ? "+" : ""}{amt.toLocaleString()}원
+                  </span>
                 </div>
               ))}
             </div>
           </div>
-        ))}
+        )}
+
+        {dateGroups.length === 0 && <div className="py-10 text-center text-[12.5px] text-gray-400">등록된 내역이 없습니다</div>}
+        <div className="space-y-3">
+          {dateGroups.map(([date, items]) => (
+            <div key={date}>
+              <div className="text-[11px] font-bold text-gray-500 mb-1.5 px-0.5">{dateLabelKoM(date)}</div>
+              <div className="space-y-1.5">
+                {items.map((r) => (
+                  <div key={r.id} onClick={() => setEditing(r)} className="bg-gray-50 border border-gray-100 rounded-xl p-3 active:bg-gray-100">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9.5px] font-bold ${r.type === "income" ? "bg-gray-100 text-gray-600" : "bg-red-50 text-red-500"}`}>
+                          {r.type === "income" ? "수입" : "지출"}
+                        </span>
+                        {r.receiptURL && <span className="shrink-0 text-[11px]">📎</span>}
+                        <span className="text-[13px] font-bold text-gray-800 truncate">{r.title}</span>
+                      </div>
+                      <span className={`text-[13px] font-extrabold shrink-0 ml-2 ${r.type === "income" ? "text-gray-700" : "text-red-600"}`}>{fmtWon(r.amount)}</span>
+                    </div>
+                    <div className="text-[10.5px] text-gray-400">
+                      {r.category || "미분류"}{r.memo ? ` · ${r.memo}` : ""}{r.createdByName ? ` · ${r.createdByName}` : ""}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
-      <PrintableLedger innerRef={printRef} companyName={companyName} label={`${applied.start} ~ ${applied.end}`} rows={filtered} totalIncome={totalIncome} totalExpense={totalExpense} accent={accent} />
-      {editing && <LedgerEntryModal initial={editing.id ? editing : null} companyName={companyName} actorName={actorName} accent={accent} onClose={() => setEditing(null)} />}
+      <PrintableLedger innerRef={printRef} companyName={companyName} label={`${filters.start} ~ ${filters.end}`} rows={filtered} totalIncome={totalIncome} totalExpense={totalExpense} accent={accent} />
+      {editing && (
+        <LedgerEntryModal
+          initial={editing.id ? editing : null}
+          companyName={companyName}
+          actorName={actorName}
+          accent={accent}
+          onClose={() => setEditing(null)}
+          onOpenRecurring={() => setShowRecurring(true)}
+        />
+      )}
       {showRecurring && <RecurringManagerSheet templates={recurringTemplates} companyName={companyName} actorName={actorName} accent={accent} onClose={() => setShowRecurring(false)} />}
     </div>
   );

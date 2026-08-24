@@ -1,14 +1,17 @@
 // src/planner/PlannerMyInfo.jsx — "내정보" 메뉴 (PC/모바일 공용, 모든 구성원이 접근 가능).
-// 이름/성별을 스스로 수정할 수 있다(성별은 화면 색상 테마에 반영).
+// 이름은 스스로 수정할 수 있다. 성별은 가입할 때 정한 값으로 고정되고(화면 색상
+// 테마와 연결돼 있어서 나중에 바꾸면 배우자와 화면이 뒤섞일 수 있다), 여기서는
+// 읽기 전용으로만 보여준다.
 import React, { useState } from "react";
 import { updateMyProfile, TOTAL_MASTER_EMAIL } from "./plannerAuth";
 import { ACCENT, ACCENT_SOFT, ACCENT_BORDER } from "./plannerTheme";
+
+const GENDER_LABEL = { male: "남자", female: "여자" };
 
 export default function PlannerMyInfo({ account, onUpdated }) {
   const [name, setName] = useState(account.name || "");
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
-  const [genderSaving, setGenderSaving] = useState(false);
 
   const saveName = async () => {
     if (!name.trim()) return;
@@ -22,19 +25,6 @@ export default function PlannerMyInfo({ account, onUpdated }) {
       alert("저장 중 오류가 발생했습니다: " + e.message);
     } finally {
       setSaving(false);
-    }
-  };
-
-  const changeGender = async (g) => {
-    if (g === account.gender || genderSaving) return;
-    setGenderSaving(true);
-    try {
-      await updateMyProfile(account.uid, { gender: g });
-      onUpdated?.({ ...account, gender: g });
-    } catch (e) {
-      alert("저장 중 오류가 발생했습니다: " + e.message);
-    } finally {
-      setGenderSaving(false);
     }
   };
 
@@ -57,23 +47,13 @@ export default function PlannerMyInfo({ account, onUpdated }) {
 
       <div>
         <div className="text-[12px] font-semibold text-gray-500 mb-1.5">성별</div>
-        <div className="flex gap-2">
-          {[["female", "여자"], ["male", "남자"]].map(([v, l]) => (
-            <button
-              key={v}
-              onClick={() => changeGender(v)}
-              disabled={genderSaving}
-              className="flex-1 py-2.5 rounded-lg text-[13px] font-bold border"
-              style={
-                (account.gender || "female") === v
-                  ? { background: ACCENT, color: "#fff", borderColor: ACCENT }
-                  : { color: "#9ca3af", borderColor: ACCENT_BORDER }
-              }
-            >
-              {l}
-            </button>
-          ))}
+        <div
+          className="py-2.5 px-3.5 rounded-lg text-[13px] font-bold border"
+          style={{ background: ACCENT_SOFT, color: ACCENT, borderColor: ACCENT_BORDER }}
+        >
+          {GENDER_LABEL[account.gender || "female"]}
         </div>
+        <div className="text-[10.5px] text-gray-400 mt-1">가입할 때 정한 성별은 화면 색상 테마와 연결돼 있어 변경할 수 없어요.</div>
       </div>
 
       <div className="bg-white border rounded-xl p-3.5 space-y-1.5" style={{ borderColor: ACCENT_BORDER, background: ACCENT_SOFT }}>

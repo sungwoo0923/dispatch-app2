@@ -22,7 +22,6 @@ export default function PlannerAdminPanel({ account, onClose, onUpdated }) {
   const [groupName, setGroupName] = useState(account.groupName || "우리 가족");
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
-  const [genderSaving, setGenderSaving] = useState(false);
 
   const saveGroupName = async () => {
     if (!groupName.trim()) return;
@@ -39,19 +38,6 @@ export default function PlannerAdminPanel({ account, onClose, onUpdated }) {
     }
   };
 
-  const changeGender = async (g) => {
-    if (g === account.gender || genderSaving) return;
-    setGenderSaving(true);
-    try {
-      await updateMyProfile(account.uid, { gender: g });
-      onUpdated?.({ ...account, gender: g });
-    } catch (e) {
-      alert("저장 중 오류가 발생했습니다: " + e.message);
-    } finally {
-      setGenderSaving(false);
-    }
-  };
-
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", justifyContent: "flex-end" }}>
       <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)" }} onClick={onClose} />
@@ -63,25 +49,11 @@ export default function PlannerAdminPanel({ account, onClose, onUpdated }) {
 
         <div style={{ padding: "22px 24px" }}>
           <Section title="내 정보">
-            <div style={{ fontSize: 12, color: "#9b9ba3", marginBottom: 6, fontWeight: 600 }}>성별 (화면 색상에 반영돼요 — 남자는 네이비, 여자는 핑크)</div>
-            <div style={{ display: "flex", gap: 8 }}>
-              {[["female", "여자"], ["male", "남자"]].map(([v, l]) => (
-                <button
-                  key={v}
-                  onClick={() => changeGender(v)}
-                  disabled={genderSaving}
-                  style={{
-                    flex: 1, padding: "9px 6px", fontSize: 12.5, fontWeight: 700, borderRadius: 10,
-                    border: `1px solid ${(account.gender || "female") === v ? ACCENT : ACCENT_BORDER}`,
-                    background: (account.gender || "female") === v ? ACCENT : "#fff",
-                    color: (account.gender || "female") === v ? "#fff" : "#9b9ba3",
-                    cursor: "pointer",
-                  }}
-                >
-                  {l}
-                </button>
-              ))}
+            <div style={{ fontSize: 12, color: "#9b9ba3", marginBottom: 6, fontWeight: 600 }}>성별</div>
+            <div style={{ padding: "9px 12px", fontSize: 12.5, fontWeight: 700, borderRadius: 10, border: `1px solid ${ACCENT_BORDER}`, background: ACCENT_SOFT, color: ACCENT, display: "inline-block" }}>
+              {GENDER_LABEL[account.gender || "female"]}
             </div>
+            <div style={{ fontSize: 10.5, color: "#b3aab0", marginTop: 6 }}>가입할 때 정한 성별은 변경할 수 없어요.</div>
           </Section>
 
           <Section title="가족 정보">

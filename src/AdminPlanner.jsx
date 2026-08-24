@@ -82,7 +82,7 @@ const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px]
 // ────────────────────────────────────────────────
 // 수입/지출 등록·수정 모달
 // ────────────────────────────────────────────────
-function LedgerEntryModal({ initial, defaultType = "expense", companyName, actorName, onClose }) {
+function LedgerEntryModal({ initial, defaultType = "expense", companyName, actorName, onClose, onOpenRecurring }) {
   const [type, setType] = useState(initial?.type || defaultType);
   const [title, setTitle] = useState(initial?.title || "");
   const [category, setCategory] = useState(initial?.category || "");
@@ -117,6 +117,16 @@ function LedgerEntryModal({ initial, defaultType = "expense", companyName, actor
     <Modal title={initial?.id ? "내역 수정" : "수입/지출 등록"} onClose={onClose}>
       {initial?.createdByName && (
         <div className="text-[11px] text-gray-400 mb-3 -mt-2">등록: {initial.createdByName}</div>
+      )}
+      {!initial?.id && onOpenRecurring && (
+        <button
+          type="button"
+          onClick={() => { onClose(); onOpenRecurring(); }}
+          className="w-full mb-3 -mt-1 text-[11.5px] font-semibold text-left"
+          style={{ color: ACCENT }}
+        >
+          매달 반복되는 지출/수입인가요? 정기 등록 관리 →
+        </button>
       )}
       <Field label="구분">
         <div className="flex gap-2">
@@ -845,28 +855,31 @@ function dateLabelKo(dateStr) {
 // ⭐ 예전엔 6열짜리 표 하나가 화면 끝까지 늘어져 있었다. 대신 (1) 분류별 합계를
 // 위에 한눈에 보여주고(가로 스크롤 — 카드가 늘어나도 화면이 아래로 밀리지 않는다)
 // (2) 목록은 날짜별로 묶어서, 폭도 max-w로 제한한 좁은 카드 리스트로 보여준다.
-// (3) 검색은 "조회" 버튼을 눌러야 반영된다(배차프로그램과 같은 조회 방식).
+// (3) 시작일/종료일/구분은 누르는 즉시 바로 반영되고(내역을 추가하면 그 결과가
+// 바로바로 보여야 한다는 요구사항), 검색어만 "조회" 버튼(또는 Enter)을 눌러야
+// 반영된다 — 자유 텍스트 검색만 배차프로그램의 조회 방식을 따른다.
 function LedgerTab({ rows, companyName, actorName, recurringTemplates }) {
   const monthDefault = thisMonthRange();
-  const [draft, setDraft] = useState({ start: monthDefault.first, end: monthDefault.last, keyword: "", kind: "all" });
-  const [applied, setApplied] = useState(draft);
+  const [filters, setFilters] = useState({ start: monthDefault.first, end: monthDefault.last, kind: "all" });
+  const [keywordDraft, setKeywordDraft] = useState("");
+  const [keywordApplied, setKeywordApplied] = useState("");
   const [editing, setEditing] = useState(null); // null | {} | entry
   const [showRecurring, setShowRecurring] = useState(false);
   const printRef = useRef(null);
 
-  const runQuery = () => setApplied(draft);
+  const runQuery = () => setKeywordApplied(keywordDraft);
 
   const filtered = useMemo(() => {
     return rows
-      .filter((r) => (!applied.start || (r.date || "") >= applied.start) && (!applied.end || (r.date || "") <= applied.end))
-      .filter((r) => applied.kind === "all" || r.type === applied.kind)
+      .filter((r) => (!filters.start || (r.date || "") >= filters.start) && (!filters.end || (r.date || "") <= filters.end))
+      .filter((r) => filters.kind === "all" || r.type === filters.kind)
       .filter((r) => {
-        if (!applied.keyword.trim()) return true;
-        const k = applied.keyword.trim().toLowerCase();
+        if (!keywordApplied.trim()) return true;
+        const k = keywordApplied.trim().toLowerCase();
         return (r.title || "").toLowerCase().includes(k) || (r.category || "").toLowerCase().includes(k) || (r.memo || "").toLowerCase().includes(k);
       })
       .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-  }, [rows, applied]);
+  }, [rows, filters, keywordApplied]);
 
   const totalIncome = filtered.filter((r) => r.type === "income").reduce((s, r) => s + Number(r.amount || 0), 0);
   const totalExpense = filtered.filter((r) => r.type === "expense").reduce((s, r) => s + Number(r.amount || 0), 0);
@@ -893,7 +906,7 @@ function LedgerTab({ rows, companyName, actorName, recurringTemplates }) {
     return Array.from(map.entries()); // filtered가 이미 날짜 내림차순 정렬됨
   }, [filtered]);
 
-  const rangeLabel = `${applied.start || "전체"} ~ ${applied.end || "전체"}`;
+  const rangeLabel = `${filters.start || "전체"} ~ ${filters.end || "전체"}`;
 
   return (
     <div>
@@ -901,18 +914,18 @@ function LedgerTab({ rows, companyName, actorName, recurringTemplates }) {
         <div className="flex flex-wrap items-end gap-2.5">
           <div>
             <div className="text-[11px] font-semibold text-gray-400 mb-1">시작일</div>
-            <PlannerDatePicker value={draft.start} onChange={(v) => setDraft((d) => ({ ...d, start: v }))} className="border rounded-lg px-3 py-1.5 text-[12.5px] border-gray-200" />
+            <PlannerDatePicker value={filters.start} onChange={(v) => setFilters((d) => ({ ...d, start: v }))} className="border rounded-lg px-3 py-1.5 text-[12.5px] border-gray-200" />
           </div>
           <div>
             <div className="text-[11px] font-semibold text-gray-400 mb-1">종료일</div>
-            <PlannerDatePicker value={draft.end} onChange={(v) => setDraft((d) => ({ ...d, end: v }))} className="border rounded-lg px-3 py-1.5 text-[12.5px] border-gray-200" />
+            <PlannerDatePicker value={filters.end} onChange={(v) => setFilters((d) => ({ ...d, end: v }))} className="border rounded-lg px-3 py-1.5 text-[12.5px] border-gray-200" />
           </div>
           <div>
             <div className="text-[11px] font-semibold text-gray-400 mb-1">구분</div>
             <div className="flex gap-1">
               {[["all", "전체"], ["income", "수입"], ["expense", "지출"]].map(([v, l]) => (
-                <button key={v} onClick={() => setDraft((d) => ({ ...d, kind: v }))}
-                  className={`px-3 py-1.5 rounded-lg text-[12px] font-bold border ${draft.kind === v ? "bg-[#EC6FA0] text-white border-[#EC6FA0]" : "bg-white text-gray-500 border-gray-200"}`}>
+                <button key={v} onClick={() => setFilters((d) => ({ ...d, kind: v }))}
+                  className={`px-3 py-1.5 rounded-lg text-[12px] font-bold border ${filters.kind === v ? "bg-[#EC6FA0] text-white border-[#EC6FA0]" : "bg-white text-gray-500 border-gray-200"}`}>
                   {l}
                 </button>
               ))}
@@ -921,8 +934,8 @@ function LedgerTab({ rows, companyName, actorName, recurringTemplates }) {
           <div className="flex-1 min-w-[140px]">
             <div className="text-[11px] font-semibold text-gray-400 mb-1">검색어</div>
             <input
-              value={draft.keyword}
-              onChange={(e) => setDraft((d) => ({ ...d, keyword: e.target.value }))}
+              value={keywordDraft}
+              onChange={(e) => setKeywordDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") runQuery(); }}
               placeholder="항목명/분류/메모"
               className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[12.5px]"
@@ -935,17 +948,14 @@ function LedgerTab({ rows, companyName, actorName, recurringTemplates }) {
       <div className="flex items-center justify-between mb-4">
         <div className="text-[12px] font-semibold text-gray-500">{rangeLabel}</div>
         <div className="flex gap-2 flex-wrap">
-          <button onClick={() => setShowRecurring(true)} className="px-3 py-1.5 rounded-lg border border-gray-200 text-[12px] font-semibold text-gray-600 hover:bg-gray-50">
-            정기 지출 관리
-          </button>
           <button
-            onClick={() => exportTableToExcel(`수입지출_${applied.start}_${applied.end}`, filtered, { date: "날짜", type: "구분", title: "항목명", category: "분류", amount: "금액", memo: "메모" })}
+            onClick={() => exportTableToExcel(`수입지출_${filters.start}_${filters.end}`, filtered, { date: "날짜", type: "구분", title: "항목명", category: "분류", amount: "금액", memo: "메모" })}
             className="px-3 py-1.5 rounded-lg border border-gray-200 text-[12px] font-semibold text-gray-600 hover:bg-gray-50"
           >
             엑셀 다운로드
           </button>
           <button
-            onClick={() => exportPrintableToPdf(printRef.current, `수입지출_${applied.start}_${applied.end}`)}
+            onClick={() => exportPrintableToPdf(printRef.current, `수입지출_${filters.start}_${filters.end}`)}
             className="px-3 py-1.5 rounded-lg border border-gray-200 text-[12px] font-semibold text-gray-600 hover:bg-gray-50"
           >
             PDF 다운로드
@@ -1029,7 +1039,13 @@ function LedgerTab({ rows, companyName, actorName, recurringTemplates }) {
       <PrintableLedger innerRef={printRef} companyName={companyName} label={rangeLabel} rows={filtered} totalIncome={totalIncome} totalExpense={totalExpense} />
 
       {editing && (
-        <LedgerEntryModal initial={editing.id ? editing : null} companyName={companyName} actorName={actorName} onClose={() => setEditing(null)} />
+        <LedgerEntryModal
+          initial={editing.id ? editing : null}
+          companyName={companyName}
+          actorName={actorName}
+          onClose={() => setEditing(null)}
+          onOpenRecurring={() => setShowRecurring(true)}
+        />
       )}
       {showRecurring && (
         <RecurringManagerModal templates={recurringTemplates} companyName={companyName} actorName={actorName} onClose={() => setShowRecurring(false)} />
