@@ -897,3 +897,87 @@ export async function submitReactionTime(groupId, uid, name, ms, otherUid) {
     }, { merge: true });
   });
 }
+
+// ────────────────────────────────────────────────
+// 9. 타임라인(옛 "우리 이야기") — 대표 사진 + 만난 지 며칠째인지, 100일/1000일
+// 같은 절편 기념일이 언제인지를 계산해서 보여준다. 사진은 가족당 1장(문서
+// id=groupId).
+// ────────────────────────────────────────────────
+export const PLANNER_TIMELINE_PHOTO = "plannerTimelinePhoto";
+
+export function useTimelinePhoto(groupId) {
+  const [photoURL, setPhotoURLState] = useState("");
+  useEffect(() => {
+    if (!groupId) { setPhotoURLState(""); return; }
+    const unsub = onSnapshot(doc(db, PLANNER_TIMELINE_PHOTO, groupId), (snap) => {
+      setPhotoURLState(snap.exists() ? snap.data().photoURL || "" : "");
+    }, () => {});
+    return () => unsub();
+  }, [groupId]);
+  return photoURL;
+}
+
+export async function setTimelinePhoto(groupId, photoURL) {
+  await setDoc(doc(db, PLANNER_TIMELINE_PHOTO, groupId), { groupId, photoURL, updatedAt: serverTimestamp() });
+}
+
+export async function uploadTimelinePhoto(groupId, file) {
+  const path = `kp-planner/${groupId}/timeline/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
+  const r = ref(storage, path);
+  await uploadBytes(r, file);
+  const url = await getDownloadURL(r);
+  await setTimelinePhoto(groupId, url);
+  return url;
+}
+
+// 시작일 기준 "N년 M개월 D일" — 달력 상 실제 차이(윤년/월 길이 반영)로 계산한다.
+export function durationParts(startStr, todayStrArg) {
+  const start = new Date(startStr + "T00:00:00");
+  const end = new Date((todayStrArg || todayStr()) + "T00:00:00");
+  let years = end.getFullYear() - start.getFullYear();
+  let months = end.getMonth() - start.getMonth();
+  let days = end.getDate() - start.getDate();
+  if (days < 0) {
+    months -= 1;
+    const prevMonthLastDay = new Date(end.getFullYear(), end.getMonth(), 0).getDate();
+    days += prevMonthLastDay;
+  }
+  if (months < 0) { years -= 1; months += 12; }
+  return { years, months, days };
+}
+
+const DAY_MILESTONES = [5, 10, 30, 50, 100, 200, 300, 500, 1000, 1500, 2000, 3000, 5000, 10000];
+
+// 시작일을 1일째로 세는 절편 기념일(5일/100일/1000일...)과 매년 돌아오는 N주년을
+// 한 목록으로 합쳐 날짜순으로 반환한다.
+export function generateAnniversaries(startStr) {
+  const start = new Date(startStr + "T00:00:00");
+  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const rows = [{ label: "시작일", date: fmt(start) }];
+  DAY_MILESTONES.forEach((n) => {
+    const d = new Date(start); d.setDate(d.getDate() + n - 1); // 시작일 = 1일째
+    rows.push({ label: `${n.toLocaleString("ko-KR")}일`, date: fmt(d) });
+  });
+  for (let y = 1; y <= 20; y++) {
+    const d = new Date(start); d.setFullYear(d.getFullYear() + y);
+    rows.push({ label: `${y}주년`, date: fmt(d) });
+  }
+  return rows.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// 매월 14일마다 이름 붙은 "커플 기념일" 시리즈 — 오늘 기준 다음 순서가 언제인지,
+// 지난 14일부터 얼마나 진행됐는지(%)를 계산한다.
+const DAY14_NAMES = ["다이어리데이", "발렌타인데이", "화이트데이", "블랙데이", "로즈데이", "키스데이", "실버데이", "그린데이", "포토데이", "와인데이", "무비데이", "허그데이"];
+
+export function next14DayInfo(todayStrArg) {
+  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const today = new Date((todayStrArg || todayStr()) + "T00:00:00");
+  let candidate = new Date(today.getFullYear(), today.getMonth(), 14);
+  if (candidate < today) candidate = new Date(today.getFullYear(), today.getMonth() + 1, 14);
+  const prevCandidate = new Date(candidate.getFullYear(), candidate.getMonth() - 1, 14);
+  const cycleLen = Math.max(1, Math.round((candidate - prevCandidate) / 86400000));
+  const elapsed = Math.round((today - prevCandidate) / 86400000);
+  const daysLeft = Math.round((candidate - today) / 86400000);
+  const pct = Math.min(100, Math.max(0, Math.round((elapsed / cycleLen) * 100)));
+  return { name: DAY14_NAMES[candidate.getMonth()], daysLeft, pct, date: fmt(candidate) };
+}

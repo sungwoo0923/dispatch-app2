@@ -9,7 +9,7 @@ import PlannerMessenger from "./PlannerMessenger";
 import PlannerMyInfo from "./PlannerMyInfo";
 import PlannerNotificationBell from "./PlannerNotificationBell";
 import PlannerEventMoney from "./PlannerEventMoney";
-import PlannerOurStory from "./PlannerOurStory";
+import PlannerTimeline from "./PlannerTimeline";
 import PlannerTimeCapsule from "./PlannerTimeCapsule";
 import PlannerMiniGames from "./PlannerMiniGames";
 import PlannerSettings from "./PlannerSettings";
@@ -30,7 +30,7 @@ export const PLANNER_MENU_ITEMS = [
   ["calendar", "일정"],
   ["family", "이벤트 예산"],
   ["eventMoney", "경조사"],
-  ["ourStory", "우리 이야기"],
+  ["ourStory", "타임라인"],
   ["timeCapsule", "타임캡슐"],
   ["cycle", "생리주기"],
   ["games", "미니게임"],
@@ -110,7 +110,7 @@ export default function PlannerMobileShell({ account, onUpdated, previewMode = f
         )}
         {page === "ourStory" && (
           <div className="px-4 pt-4 pb-24">
-            <PlannerOurStory account={account} onCoupleStartDateChange={(next) => onUpdated?.({ ...account, coupleStartDate: next })} />
+            <PlannerTimeline account={account} onCoupleStartDateChange={(next) => onUpdated?.({ ...account, coupleStartDate: next })} />
           </div>
         )}
         {page === "timeCapsule" && (

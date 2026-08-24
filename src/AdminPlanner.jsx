@@ -23,7 +23,7 @@ import PlannerCategorySelect from "./planner/PlannerCategorySelect";
 import PlannerReceiptCapture from "./planner/PlannerReceiptCapture";
 import PlannerCycleTracker from "./planner/PlannerCycleTracker";
 import PlannerEventMoney from "./planner/PlannerEventMoney";
-import PlannerOurStory from "./planner/PlannerOurStory";
+import PlannerTimeline from "./planner/PlannerTimeline";
 import PlannerTimeCapsule from "./planner/PlannerTimeCapsule";
 import PlannerMiniGames from "./planner/PlannerMiniGames";
 import PlannerHomeExtras from "./planner/PlannerHomeExtras";
@@ -668,7 +668,7 @@ const TAB_ITEMS = [
   ["calendar", "일정"],
   ["family", "이벤트 예산"],
   ["eventMoney", "경조사"],
-  ["ourStory", "우리 이야기"],
+  ["ourStory", "타임라인"],
   ["timeCapsule", "타임캡슐"],
   ["cycle", "생리주기"],
   ["games", "미니게임"],
@@ -767,7 +767,7 @@ export default function AdminPlanner({ userCompany, myRealName, myUid, myGender,
         <PlannerCycleTracker groupId={companyName} myUid={myUid} myGender={myGender} myName={myRealName} />
       )}
       {tab === "eventMoney" && <PlannerEventMoney account={homeAccount} />}
-      {tab === "ourStory" && <PlannerOurStory account={homeAccount} onCoupleStartDateChange={handleCoupleStartDateChange} />}
+      {tab === "ourStory" && <PlannerTimeline account={homeAccount} onCoupleStartDateChange={handleCoupleStartDateChange} />}
       {tab === "timeCapsule" && <PlannerTimeCapsule account={homeAccount} />}
       {tab === "games" && <PlannerMiniGames account={homeAccount} />}
     </div>
