@@ -22,6 +22,7 @@ import DispatchFormNew from "./DispatchFormNew";
 import AiAssistant from "./AiAssistant";
 import DeliverySignaturePage from "./DeliverySignaturePage";
 import ExecutiveDashboard from "./ExecutiveDashboard";
+import AdminPlanner from "./AdminPlanner";
 import InternalMessenger from "./InternalMessenger";
 import { calcLeaveBalance } from "./leaveUtils";
 import { TEAM_OPTIONS, POSITION_OPTIONS, TEAM_BADGE_CLASS, TEAM_BADGE_CLASS_UNASSIGNED } from "./hrConstants";
@@ -2349,7 +2350,13 @@ function HoverInfoTrigger({ label, tooltipRows, className }) {
         className={className}
         onMouseEnter={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();
-          setPos({ top: rect.bottom + 4, left: rect.left + rect.width / 2 });
+          // ⭐ 표 아래쪽(특히 마지막 행 근처)에서 마우스를 올리면 툴팁이 뷰포트
+          // 바깥(브라우저 창 밑)으로 잘려 보이던 문제 — 아래쪽 여백이 부족하면
+          // 트리거 위쪽으로 펼치도록 방향을 바꾼다. 좌우도 화면 밖으로 안 나가게 clamp.
+          const spaceBelow = window.innerHeight - rect.bottom;
+          const openUp = spaceBelow < 170;
+          const left = Math.min(Math.max(rect.left + rect.width / 2, 90), window.innerWidth - 90);
+          setPos({ top: openUp ? rect.top - 4 : rect.bottom + 4, left, openUp });
         }}
         onMouseLeave={() => setPos(null)}
       >
@@ -2358,7 +2365,7 @@ function HoverInfoTrigger({ label, tooltipRows, className }) {
       {pos && createPortal(
         <div
           className="pointer-events-none fixed z-[99999] w-max"
-          style={{ top: pos.top, left: pos.left, transform: "translateX(-50%)" }}
+          style={{ top: pos.top, left: pos.left, transform: `translate(-50%, ${pos.openUp ? "-100%" : "0"})` }}
         >
           <div className="bg-gray-800 text-white text-[11px] rounded-lg px-3 py-2 shadow-xl leading-5 border border-gray-700">
             {tooltipRows}
@@ -3170,8 +3177,26 @@ const addDispatch = async (record) => {
   return _id;
 };
   // 🔥 undefined 깊이 제거 (중첩 객체까지 안전)
+  // ⭐ "배차한시간(배차확정일시)이 항상 -로 보인다"는 신고의 진짜 원인 —
+  // serverTimestamp()가 반환하는 값은 겉보기엔 평범한 object지만 실제로는
+  // Object.entries에 딱 한 개(_methodName)만 노출하는 Firestore 전용 sentinel
+  // 클래스 인스턴스다. 예전 코드는 이걸 그냥 "중첩 객체"로 보고 재귀적으로
+  // Object.entries→Object.fromEntries를 돌려 새 plain object로 다시 조립했는데,
+  // 그 순간 클래스 정체성이 사라져 Firestore가 더 이상 "서버 시각으로 채워라"는
+  // 지시로 인식하지 못하고 { _methodName: "serverTimestamp" }라는 의미 없는
+  // 맵 값을 그대로 저장해버린다 — 읽을 때 toMs()가 이 값에서 시각을 뽑아내지
+  // 못해 항상 0(="-")으로 보였다. serverTimestamp/deleteField/increment/
+  // arrayUnion 같은 FieldValue sentinel과 Date/Timestamp/GeoPoint 인스턴스는
+  // 재귀하지 않고 그대로(원본 그대로) 통과시켜야 한다.
   const stripUndefinedDeep = (obj) => {
     if (obj === null || typeof obj !== "object") return obj;
+
+    const ctorName = obj.constructor?.name || "";
+    if (obj instanceof Date || /FieldValue|Timestamp|GeoPoint/i.test(ctorName)) return obj;
+
+    if (Array.isArray(obj)) {
+      return obj.filter((v) => v !== undefined).map((v) => stripUndefinedDeep(v));
+    }
 
     return Object.fromEntries(
       Object.entries(obj)
@@ -6903,7 +6928,7 @@ return (
         {menu === "관리센터" && role === "totalMaster" && (
           <div>
             <div className="flex gap-2 px-4 pt-4 pb-4">
-              {["경영인텔리전스", "가입신청관리"].map(tab => (
+              {["경영인텔리전스", "가입신청관리", "나의 플래너"].map(tab => (
                 <button key={tab} onClick={() => set관리센터Tab(tab)}
                   className={`px-5 py-2 text-[13px] font-bold rounded-lg transition border ${
                     관리센터Tab === tab
@@ -6919,6 +6944,9 @@ return (
             )}
             {관리센터Tab === "가입신청관리" && (
               <CompanyApplications />
+            )}
+            {관리센터Tab === "나의 플래너" && (
+              <AdminPlanner userCompany={userCompany || localStorage.getItem("userCompany") || ""} myRealName={myRealName} />
             )}
           </div>
         )}
@@ -19742,7 +19770,7 @@ onDoubleClick={(e) => {
 
 
     className={`
-cursor-pointer transition-[background-color,border-color,opacity] duration-300
+cursor-pointer select-none transition-[background-color,border-color,opacity] duration-300
 ${isFading ? "opacity-0" : "opacity-100"}
 ${
   r.긴급 === true &&
@@ -20510,8 +20538,12 @@ React.useEffect(() => {
   // 완전히 끝낸다(반복 타이머 없음). 표시용 툴팁 필드일 뿐이라 남은 레거시
   // 오더는 이후 세션에서 나눠서 천천히 채워져도 문제 없다.
   const timer = setTimeout(() => {
+    // ⚠️ stripUndefinedDeep이 serverTimestamp()를 손상시키던 예전 버그(수정됨) 탓에
+    // 일부 레거시 오더는 배차확정일시 필드 자체는 "있지만"({_methodName: "serverTimestamp"}
+    // 같은 의미 없는 값) 실제 시각을 뽑아낼 수 없다 — !r.배차확정일시만으로는 이런 값이
+    // "있는 값"으로 취급돼 건너뛰어지므로, toMs()로 실제 파싱 가능 여부까지 함께 본다.
     const candidates = (backfillDispatchDataRef.current || []).filter(r =>
-      r?._id && r.배차상태 === "배차완료" && !r.배차확정일시 && !backfilledConfirmRef.current.has(r._id)
+      r?._id && r.배차상태 === "배차완료" && toMs(r.배차확정일시) === 0 && !backfilledConfirmRef.current.has(r._id)
     ).slice(0, 5);
     candidates.forEach(r => {
       backfilledConfirmRef.current.add(r._id);
@@ -30759,8 +30791,12 @@ React.useEffect(() => {
   // 완전히 끝낸다(반복 타이머 없음). 표시용 툴팁 필드일 뿐이라 남은 레거시
   // 오더는 이후 세션에서 나눠서 천천히 채워져도 문제 없다.
   const timer = setTimeout(() => {
+    // ⚠️ stripUndefinedDeep이 serverTimestamp()를 손상시키던 예전 버그(수정됨) 탓에
+    // 일부 레거시 오더는 배차확정일시 필드 자체는 "있지만"({_methodName: "serverTimestamp"}
+    // 같은 의미 없는 값) 실제 시각을 뽑아낼 수 없다 — !r.배차확정일시만으로는 이런 값이
+    // "있는 값"으로 취급돼 건너뛰어지므로, toMs()로 실제 파싱 가능 여부까지 함께 본다.
     const candidates = (backfillDispatchDataRef.current || []).filter(r =>
-      r?._id && r.배차상태 === "배차완료" && !r.배차확정일시 && !backfilledConfirmRef.current.has(r._id)
+      r?._id && r.배차상태 === "배차완료" && toMs(r.배차확정일시) === 0 && !backfilledConfirmRef.current.has(r._id)
     ).slice(0, 5);
     candidates.forEach(r => {
       backfilledConfirmRef.current.add(r._id);
@@ -34621,7 +34657,7 @@ return (
   setCopyPanelOpen(true);
 }}
 
-      className={`cursor-pointer transition-[background-color,border-color,opacity] duration-300 ${fadingIds.has(id) ? "opacity-0" : "opacity-100"} ${justMovedIds.has(id) ? "row-highlight" : ""} ${
+      className={`cursor-pointer select-none transition-[background-color,border-color,opacity] duration-300 ${fadingIds.has(id) ? "opacity-0" : "opacity-100"} ${justMovedIds.has(id) ? "row-highlight" : ""} ${
         selected.has(id)
           ? "bg-blue-50 hover:bg-blue-100"
           : r.긴급 === true && row.배차상태 === "배차중"

@@ -3,6 +3,7 @@ import MobileFleetView from "./MobileFleetView";
 import MobileEasyMode from "./MobileEasyMode";
 import MobileAttendanceBoard from "./MobileAttendanceBoard";
 import MobileIntelView from "./MobileIntelView";
+import AdminPlannerMobile from "./AdminPlannerMobile";
 import InternalMessenger from "../InternalMessenger";
 import MobileMapFare from "./MobileMapFare";
 import PalletSimulator from "../PalletSimulator";
@@ -3973,6 +3974,7 @@ const title =
   : page === "settings" ? "설정"
   : page === "fleet" ? "지입차관리"
   : page === "intel" ? "경영인텔리전스"
+  : page === "planner" ? "나의 플래너"
   : "상세보기";
 
   // ------------------------------------------------------------------
@@ -4257,7 +4259,7 @@ const title =
             setPage("list");
           }
         }
-    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "planner"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
@@ -4421,6 +4423,7 @@ onGoAttendance={() => {
           role={role}
           onGoFleet={() => { setPage("fleet"); setShowMenu(false); }}
           onGoIntel={() => { setPage("intel"); setShowMenu(false); }}
+          onGoPlanner={() => { setPage("planner"); setShowMenu(false); }}
           onDeleteAll={deleteAllOrders}
           setUiScale={setUiScale}
           uiScale={uiScale}
@@ -5373,6 +5376,9 @@ setOpenMemo={setOpenMemo}
         )}
         {page === "fleet" && <MobileFleetView />}
         {page === "intel" && <MobileIntelView dispatchData={orders} cardVersionB={cardVersionB} />}
+        {page === "planner" && (
+          <AdminPlannerMobile userCompany={userCompany} dispatcherName={dispatcherName} cardVersionB={cardVersionB} />
+        )}
 
         {page === "unassigned" && (
   <MobileUnassignedList
@@ -6169,6 +6175,7 @@ function MobileSideMenu({
   role,
   onGoFleet,
   onGoIntel,
+  onGoPlanner,
 }) {
   const myName =
     mobileUsers?.find(u => u.id === currentUser?.uid)?.name ||
@@ -6294,6 +6301,7 @@ function MobileSideMenu({
             <MenuSection title="관리자 전용" dark={dark}>
               <MenuItem label="지입차관리" onClick={onGoFleet} dark={dark} />
               <MenuItem label="경영인텔리전스" onClick={onGoIntel} dark={dark} />
+              <MenuItem label="나의 플래너" onClick={onGoPlanner} dark={dark} />
               <MenuItem label="회사코드조회" onClick={openCodeLookup} dark={dark} />
             </MenuSection>
           )}
