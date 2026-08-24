@@ -12,7 +12,7 @@ export const PLANNER_ACCOUNTS = "plannerAccounts";
 // ⭐ 관리자 겸 개발자 계정 — KP-Planner에 아직 회원가입한 적이 없어도(plannerAccounts
 // 문서가 없어도) "이 계정은 KP-Planner 계정이 아닙니다" 화면 없이 무조건 들어가져야
 // 한다는 요구사항. 처음 로그인하는 순간 plannerAccounts 프로필을 자동으로 만들어준다.
-const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
+export const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 0/O, 1/I처럼 헷갈리는 문자는 뺐다
 
@@ -125,8 +125,12 @@ export async function plannerLogout() {
   await signOut(auth);
 }
 
-// "새 가족 만들기" — 이 계정이 그룹의 owner가 되고, 원하는 코드를 직접 정할 수
-// 있다(기본값은 무작위 추천 코드). 스포이스/가족을 초대할 때 이 코드를 알려주면 된다.
+// "새 가족 만들기" — 원하는 가족 코드를 직접 정할 수 있다(기본값은 무작위 추천
+// 코드). 배우자/가족을 초대할 때 이 코드를 알려주면 된다.
+// ⭐ role은 항상 "member"다 — "관리자 겸 개발자" 계정(tjddnqkf@naver.com) 말고는
+// 누구도 최고관리자 메뉴가 보이면 안 된다는 요구사항이라, 가족을 새로 만든
+// 사람이라고 해서 owner가 되지 않는다(예전엔 여기서 owner를 줬던 게 "새로 가입한
+// 계정에 관리자 메뉴가 보인다" 버그의 원인이었다).
 export async function signupCreateGroup({ email, password, name, gender, groupCode, groupName }) {
   const code = normalizeGroupCode(groupCode || randomGroupCode());
   if (code.length < 4) throw new Error("가족 코드는 4자 이상으로 만들어 주세요.");
@@ -140,7 +144,7 @@ export async function signupCreateGroup({ email, password, name, gender, groupCo
     gender: gender || "female",
     groupId: code,
     groupName: groupName?.trim() || "우리 가족",
-    role: "owner",
+    role: "member",
     createdAt: serverTimestamp(),
   });
   return { uid: user.uid, groupId: code };

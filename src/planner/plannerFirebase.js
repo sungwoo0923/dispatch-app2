@@ -9,6 +9,7 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { initializeFirestore, getFirestore, persistentLocalCache, persistentSingleTabManager } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDaCTK03VbaXQCEKEiD7yp2KIzzX5x64a4",
@@ -40,3 +41,7 @@ function createPlannerDb() {
   }
 }
 export const plannerDb = createPlannerDb();
+
+// 영수증 사진 업로드용 — plannerAccounts/plannerEntries와 같은 프로젝트를 쓰되,
+// 파일은 kp-planner/ 하위 경로에만 저장한다(배차프로그램 파일과 섞이지 않게).
+export const plannerStorage = getStorage(plannerApp);

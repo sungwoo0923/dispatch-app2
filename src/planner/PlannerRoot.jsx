@@ -6,10 +6,11 @@ import { Navigate } from "react-router-dom";
 import KPPlannerLogo from "./KPPlannerLogo";
 import PlannerSplash from "./PlannerSplash";
 import PlannerAdminPanel from "./PlannerAdminPanel";
-import { usePlannerAccount, plannerLogout } from "./plannerAuth";
+import PlannerMobileShell from "./PlannerMobileShell";
+import PlannerMyInfo from "./PlannerMyInfo";
+import { usePlannerAccount, plannerLogout, useGroupMembers, TOTAL_MASTER_EMAIL } from "./plannerAuth";
 import { ACCENT, applyGenderTheme } from "./plannerTheme";
 import AdminPlanner from "../AdminPlanner";
-import AdminPlannerMobile from "../mobile/AdminPlannerMobile";
 
 function isSmartPhone() {
   const ua = navigator.userAgent.toLowerCase();
@@ -20,13 +21,6 @@ function isSmartPhone() {
   const isSmallScreen = window.innerWidth < 768;
   return isPhoneUA || isSmallScreen;
 }
-
-const PLANNER_MENU_ITEMS = [
-  ["dashboard", "홈"],
-  ["ledger", "수입·지출"],
-  ["calendar", "일정"],
-  ["family", "가족 예산"],
-];
 
 function GroupCodeBadge({ groupId }) {
   const [copied, setCopied] = useState(false);
@@ -52,67 +46,21 @@ function GroupCodeBadge({ groupId }) {
   );
 }
 
-function PlannerMobileShell({ account }) {
-  const [page, setPage] = useState("dashboard");
-  const [showMenu, setShowMenu] = useState(false);
-  const pageTitle = PLANNER_MENU_ITEMS.find(([v]) => v === page)?.[1] || "홈";
-
-  return (
-    <div style={{ width: "100%", minHeight: "100vh", display: "flex", flexDirection: "column", background: "#fffafc" }}>
-      <div style={{ background: ACCENT, padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>{pageTitle}</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <GroupCodeBadge groupId={account.groupId} />
-          <button onClick={() => setShowMenu(true)} style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none" }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round">
-              <path d="M4 7h16M4 12h16M4 17h16" />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      <div style={{ flex: 1, overflowY: "auto" }}>
-        <AdminPlannerMobile userCompany={account.groupId} dispatcherName={account.name} activeTab={page} onTabChange={setPage} hideTabBar />
-      </div>
-
-      {showMenu && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex" }} onClick={() => setShowMenu(false)}>
-          <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)" }} />
-          <div style={{ position: "relative", marginLeft: "auto", width: 260, height: "100%", background: "#fff", display: "flex", flexDirection: "column" }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ padding: "18px 20px", borderBottom: "1px solid #f9e6ee" }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#4A2E3D" }}>메뉴</div>
-              <div style={{ fontSize: 11.5, color: "#a58a97", marginTop: 2 }}>{account.groupName || "우리 가족"}</div>
-            </div>
-            <div style={{ flex: 1, padding: "8px 0" }}>
-              {PLANNER_MENU_ITEMS.map(([v, l]) => (
-                <button
-                  key={v}
-                  onClick={() => { setPage(v); setShowMenu(false); }}
-                  style={{
-                    width: "100%", textAlign: "left", padding: "12px 20px", fontSize: 13.5, fontWeight: 600, border: "none", cursor: "pointer",
-                    background: page === v ? ACCENT : "transparent",
-                    color: page === v ? "#fff" : "#4A2E3D",
-                  }}
-                >
-                  {l}
-                </button>
-              ))}
-            </div>
-            <div style={{ padding: "16px 20px", borderTop: "1px solid #f9e6ee" }}>
-              <button onClick={plannerLogout} style={{ fontSize: 13, fontWeight: 600, color: "#a58a97", background: "none", border: "none", cursor: "pointer" }}>
-                로그아웃
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+// ⭐ 헤더에 "내 이름 · 가족 이름"이 아니라 "내 이름 · 배우자 이름"으로 보이길
+// 원해서, 같은 가족 코드의 다른 구성원 이름에도 "님"을 붙여서 보여준다(아직
+// 배우자가 가입 전이라 나 혼자뿐이면 가족 이름으로 대체).
+function useOtherMembersLabel(account) {
+  const members = useGroupMembers(account.groupId);
+  const others = members.filter((m) => m.uid !== account.uid);
+  if (others.length === 0) return account.groupName || "우리 가족";
+  return others.map((m) => `${m.name || "이름없음"}님`).join(" · ");
 }
 
 function PlannerDesktopShell({ account, onUpdated }) {
   const [showAdmin, setShowAdmin] = useState(false);
-  const isOwner = account.role === "owner";
+  const [showMyInfo, setShowMyInfo] = useState(false);
+  const isOwner = account.email === TOTAL_MASTER_EMAIL;
+  const otherLabel = useOtherMembersLabel(account);
   return (
     <div style={{ width: "100%", minHeight: "100vh", background: "#fffafc" }}>
       <div style={{ background: ACCENT, padding: "12px 28px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -122,8 +70,14 @@ function PlannerDesktopShell({ account, onUpdated }) {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <span style={{ color: "rgba(255,255,255,0.85)", fontSize: 12.5 }}>{account.name}님 · {account.groupName || "우리 가족"}</span>
+          <span style={{ color: "rgba(255,255,255,0.85)", fontSize: 12.5 }}>{account.name}님 · {otherLabel}</span>
           <GroupCodeBadge groupId={account.groupId} />
+          <button
+            onClick={() => setShowMyInfo(true)}
+            style={{ fontSize: 12.5, fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.35)", borderRadius: 8, padding: "5px 12px", cursor: "pointer" }}
+          >
+            내정보
+          </button>
           {isOwner && (
             <button
               onClick={() => setShowAdmin(true)}
@@ -137,10 +91,22 @@ function PlannerDesktopShell({ account, onUpdated }) {
           </button>
         </div>
       </div>
-      <AdminPlanner userCompany={account.groupId} myRealName={account.name} />
+      <AdminPlanner userCompany={account.groupId} myRealName={account.name} myUid={account.uid} myGender={account.gender} />
 
       {showAdmin && (
         <PlannerAdminPanel account={account} onClose={() => setShowAdmin(false)} onUpdated={onUpdated} />
+      )}
+      {showMyInfo && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)" }} onClick={() => setShowMyInfo(false)} />
+          <div style={{ position: "relative", width: 420, maxWidth: "100%", background: "#fff", borderRadius: 20, padding: 24, boxShadow: "0 10px 30px rgba(0,0,0,0.18)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#2a2a30" }}>내정보</div>
+              <button onClick={() => setShowMyInfo(false)} style={{ background: "none", border: "none", fontSize: 20, color: "#9ca3af", cursor: "pointer" }}>✕</button>
+            </div>
+            <PlannerMyInfo account={account} onUpdated={onUpdated} />
+          </div>
+        </div>
       )}
     </div>
   );
@@ -184,6 +150,6 @@ export default function PlannerRoot() {
   applyGenderTheme(effectiveAccount.gender);
 
   return isSmartPhone()
-    ? <PlannerMobileShell account={effectiveAccount} />
+    ? <PlannerMobileShell account={effectiveAccount} onUpdated={setAccountOverride} />
     : <PlannerDesktopShell account={effectiveAccount} onUpdated={setAccountOverride} />;
 }

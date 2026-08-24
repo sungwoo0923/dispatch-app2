@@ -1,10 +1,10 @@
 // src/AdminPlanner.jsx — "나의 플래너"(KP-Planner) PC 화면의 실제 내용.
 // ⭐ 배차프로그램과는 완전히 분리된 별도 앱(src/planner/)에서만 쓰인다 —
 // 로그인/가입도 별도이고, 배차/오더/거래처 등 어떤 데이터와도 연관되지 않는다.
-// 수입/지출 가계부, 일정 달력, 명절·가족 예산을 자유롭게 기록하고 PDF/엑셀로
-// 내보낼 수 있다. userCompany prop에는 회사명이 아니라 planner/plannerAuth.js가
+// 수입/지출 가계부, 일정 달력, 이벤트(명절/여행 등) 예산을 자유롭게 기록하고
+// PDF/엑셀로 내보낼 수 있다. userCompany prop에는 회사명이 아니라 planner/plannerAuth.js가
 // 발급하는 "가족 코드"(groupId)가 들어온다(이 값을 기준으로 데이터가 나뉜다).
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
@@ -12,12 +12,25 @@ import { KOREAN_HOLIDAYS, shortHolidayLabel } from "./CustomDatePicker";
 import {
   usePlannerEntries, addPlannerEntry, updatePlannerEntry, deletePlannerEntry,
   upsertBudgetTarget, fmtWon, todayStr, formatAmountInput, parseAmountInput,
+  EXPENSE_CATEGORIES, INCOME_CATEGORIES, dDayLabel, ensureRecurringInstances,
 } from "./adminPlannerData";
 import { ACCENT } from "./planner/plannerTheme";
-
-const CATEGORY_SUGGESTIONS = ["생활비", "경조사", "명절", "세금/공과금", "보험", "여행", "자녀", "부모님", "기타"];
+import PlannerDatePicker from "./planner/PlannerDatePicker";
+import PlannerTimePicker from "./planner/PlannerTimePicker";
+import PlannerCategorySelect from "./planner/PlannerCategorySelect";
+import PlannerReceiptCapture from "./planner/PlannerReceiptCapture";
+import PlannerCycleTracker from "./planner/PlannerCycleTracker";
+import PlannerMessenger from "./planner/PlannerMessenger";
 
 function todayY() { return new Date().getFullYear(); }
+function thisMonthRange() {
+  const d = new Date();
+  const y = d.getFullYear(), m = d.getMonth();
+  const pad = (n) => String(n).padStart(2, "0");
+  const first = `${y}-${pad(m + 1)}-01`;
+  const last = `${y}-${pad(m + 1)}-${pad(new Date(y, m + 1, 0).getDate())}`;
+  return { first, last };
+}
 
 // ────────────────────────────────────────────────
 // 공통 UI 조각
@@ -76,7 +89,10 @@ function LedgerEntryModal({ initial, defaultType = "expense", companyName, actor
   const [amount, setAmount] = useState(initial?.amount ? String(initial.amount) : "");
   const [date, setDate] = useState(initial?.date || todayStr());
   const [memo, setMemo] = useState(initial?.memo || "");
+  const [receiptURL, setReceiptURL] = useState(initial?.receiptURL || "");
   const [saving, setSaving] = useState(false);
+
+  const categoryOptions = type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
   const save = async () => {
     if (!title.trim()) { alert("항목명을 입력해 주세요."); return; }
@@ -85,7 +101,7 @@ function LedgerEntryModal({ initial, defaultType = "expense", companyName, actor
     try {
       const payload = {
         type, companyName, title: title.trim(), category: category.trim(),
-        amount: Number(amount), date, memo: memo.trim(), createdByName: actorName || "",
+        amount: Number(amount), date, memo: memo.trim(), createdByName: actorName || "", receiptURL: receiptURL || "",
       };
       if (initial?.id) await updatePlannerEntry(initial.id, payload);
       else await addPlannerEntry(payload);
@@ -108,7 +124,7 @@ function LedgerEntryModal({ initial, defaultType = "expense", companyName, actor
             <button
               key={v}
               type="button"
-              onClick={() => setType(v)}
+              onClick={() => { setType(v); setCategory(""); }}
               className={`flex-1 py-2 rounded-lg text-[13px] font-bold border ${
                 type === v ? "bg-[#EC6FA0] text-white border-[#EC6FA0]" : "bg-white text-gray-500 border-gray-200"
               }`}
@@ -122,17 +138,24 @@ function LedgerEntryModal({ initial, defaultType = "expense", companyName, actor
         <input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 사무실 임대료" />
       </Field>
       <Field label="분류">
-        <input className={inputCls} value={category} onChange={(e) => setCategory(e.target.value)} placeholder="예: 생활비" list="planner-category-list" />
-        <datalist id="planner-category-list">
-          {CATEGORY_SUGGESTIONS.map((c) => <option key={c} value={c} />)}
-        </datalist>
+        <PlannerCategorySelect value={category} onChange={setCategory} options={categoryOptions} className={inputCls} />
       </Field>
       <Field label="금액(원)">
         <input className={inputCls} type="text" inputMode="numeric" value={formatAmountInput(amount)} onChange={(e) => setAmount(parseAmountInput(e.target.value))} placeholder="0" />
       </Field>
       <Field label="날짜">
-        <input className={inputCls} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <PlannerDatePicker value={date} onChange={setDate} />
       </Field>
+      {type === "expense" && (
+        <Field label="영수증(선택)">
+          <PlannerReceiptCapture
+            groupId={companyName}
+            photoURL={receiptURL}
+            onPhotoChange={setReceiptURL}
+            onScanned={(amt) => setAmount(String(amt))}
+          />
+        </Field>
+      )}
       <Field label="메모">
         <textarea className={inputCls} rows={2} value={memo} onChange={(e) => setMemo(e.target.value)} />
       </Field>
@@ -168,6 +191,7 @@ function ScheduleEntryModal({ initial, defaultDate, companyName, actorName, onCl
   const [time, setTime] = useState(initial?.time || "");
   const [memo, setMemo] = useState(initial?.memo || "");
   const [saving, setSaving] = useState(false);
+  const dday = dDayLabel(date);
 
   const save = async () => {
     if (!title.trim()) { alert("일정 제목을 입력해 주세요."); return; }
@@ -192,11 +216,11 @@ function ScheduleEntryModal({ initial, defaultDate, companyName, actorName, onCl
       <Field label="제목">
         <input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 세무사 미팅" />
       </Field>
-      <Field label="날짜">
-        <input className={inputCls} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+      <Field label={`날짜${dday ? ` · ${dday}` : ""}`}>
+        <PlannerDatePicker value={date} onChange={setDate} />
       </Field>
       <Field label="시간(선택)">
-        <input className={inputCls} type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+        <PlannerTimePicker value={time} onChange={setTime} />
       </Field>
       <Field label="메모">
         <textarea className={inputCls} rows={3} value={memo} onChange={(e) => setMemo(e.target.value)} />
@@ -225,17 +249,22 @@ function ScheduleEntryModal({ initial, defaultDate, companyName, actorName, onCl
 }
 
 // ────────────────────────────────────────────────
-// 가족/명절 예산 구성원 등록·수정 모달
+// 이벤트 예산 구성원 등록·수정 모달
 // ────────────────────────────────────────────────
+// ⭐ "닫기/저장" 대신 "저장(끝내기)/추가(이 사람 저장하고 바로 다음 사람 입력)"로
+// 바꿔달라는 요청 — 신규 등록일 때만 "추가" 버튼이 뜨고, 누르면 폼이 초기화된 채
+// 모달이 계속 열려있어 구성원을 연달아 입력할 수 있다.
 function FamilyMemberModal({ initial, group, companyName, actorName, onClose }) {
+  const isEdit = !!initial?.id;
   const [name, setName] = useState(initial?.title || "");
   const [side, setSide] = useState(initial?.category || "본가");
   const [amount, setAmount] = useState(initial?.amount ? String(initial.amount) : "");
   const [memo, setMemo] = useState(initial?.memo || "");
   const [saving, setSaving] = useState(false);
+  const [addedFlash, setAddedFlash] = useState(false);
 
-  const save = async () => {
-    if (!name.trim()) { alert("이름을 입력해 주세요."); return; }
+  const doSave = async () => {
+    if (!name.trim()) { alert("이름을 입력해 주세요."); return false; }
     setSaving(true);
     try {
       const payload = {
@@ -244,21 +273,32 @@ function FamilyMemberModal({ initial, group, companyName, actorName, onClose }) 
       };
       if (initial?.id) await updatePlannerEntry(initial.id, payload);
       else await addPlannerEntry(payload);
-      onClose();
+      return true;
     } catch (e) {
       alert("저장 중 오류가 발생했습니다: " + e.message);
+      return false;
     } finally {
       setSaving(false);
     }
   };
 
+  const saveAndClose = async () => { if (await doSave()) onClose(); };
+  const saveAndAddNext = async () => {
+    if (await doSave()) {
+      setName(""); setAmount(""); setMemo("");
+      setAddedFlash(true);
+      setTimeout(() => setAddedFlash(false), 1200);
+    }
+  };
+
   return (
-    <Modal title={initial?.id ? "구성원 수정" : "구성원 추가"} onClose={onClose}>
+    <Modal title={isEdit ? "구성원 수정" : "구성원 추가"} onClose={onClose}>
       {initial?.createdByName && (
         <div className="text-[11px] text-gray-400 mb-3 -mt-2">등록: {initial.createdByName}</div>
       )}
+      {addedFlash && <div className="text-[12px] font-bold mb-3 -mt-1" style={{ color: ACCENT }}>추가됐어요 — 다음 구성원을 입력해 주세요</div>}
       <Field label="이름">
-        <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 아버지" />
+        <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 아버지" autoFocus />
       </Field>
       <Field label="구분">
         <div className="flex gap-2">
@@ -283,7 +323,7 @@ function FamilyMemberModal({ initial, group, companyName, actorName, onClose }) 
         <textarea className={inputCls} rows={2} value={memo} onChange={(e) => setMemo(e.target.value)} />
       </Field>
       <div className="flex gap-2 mt-4">
-        {initial?.id && (
+        {isEdit && (
           <button
             type="button"
             onClick={async () => {
@@ -296,23 +336,28 @@ function FamilyMemberModal({ initial, group, companyName, actorName, onClose }) 
             삭제
           </button>
         )}
-        <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-[13px] font-semibold">닫기</button>
-        <button onClick={save} disabled={saving} className="flex-1 py-2.5 rounded-xl text-white text-[13px] font-bold" style={{ background: ACCENT }}>
+        <button onClick={onClose} className="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-[13px] font-semibold">닫기</button>
+        <button onClick={saveAndClose} disabled={saving} className="flex-1 py-2.5 rounded-xl text-white text-[13px] font-bold" style={{ background: ACCENT }}>
           {saving ? "저장 중..." : "저장"}
         </button>
+        {!isEdit && (
+          <button onClick={saveAndAddNext} disabled={saving} className="flex-1 py-2.5 rounded-xl text-white text-[13px] font-bold border" style={{ background: "#fff", color: ACCENT, borderColor: ACCENT }}>
+            추가
+          </button>
+        )}
       </div>
     </Modal>
   );
 }
 
 // ────────────────────────────────────────────────
-// 새 명절/가족예산 묶음 생성 모달
+// 새 이벤트 예산 묶음 생성 모달
 // ────────────────────────────────────────────────
 function NewGroupModal({ onClose, onCreate }) {
   const [name, setName] = useState("");
   return (
-    <Modal title="새 예산 묶음 만들기" onClose={onClose}>
-      <Field label="묶음 이름">
+    <Modal title="새 이벤트 예산 만들기" onClose={onClose}>
+      <Field label="이벤트 이름">
         <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 2026년 추석" autoFocus />
       </Field>
       <div className="flex gap-2 mt-4">
@@ -324,6 +369,86 @@ function NewGroupModal({ onClose, onCreate }) {
         >
           만들기
         </button>
+      </div>
+    </Modal>
+  );
+}
+
+// ────────────────────────────────────────────────
+// 정기 지출(월세/보험료 등) 자동 반복 등록 관리
+// ────────────────────────────────────────────────
+function RecurringManagerModal({ templates, companyName, actorName, onClose }) {
+  const [title, setTitle] = useState("");
+  const [entryType, setEntryType] = useState("expense");
+  const [category, setCategory] = useState("");
+  const [amount, setAmount] = useState("");
+  const [dayOfMonth, setDayOfMonth] = useState("1");
+  const [saving, setSaving] = useState(false);
+
+  const add = async () => {
+    if (!title.trim() || !amount) { alert("이름과 금액을 입력해 주세요."); return; }
+    setSaving(true);
+    try {
+      await addPlannerEntry({
+        type: "recurringTemplate", companyName, title: title.trim(), entryType, category: category.trim(),
+        amount: Number(amount) || 0, dayOfMonth: Number(dayOfMonth) || 1, active: true, createdByName: actorName || "",
+      });
+      setTitle(""); setAmount(""); setCategory(""); setDayOfMonth("1");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="정기 지출/수입 자동 등록" onClose={onClose} wide>
+      <div className="text-[11.5px] text-gray-400 mb-3">매달 지정한 날짜가 되면 수입/지출 내역에 자동으로 등록돼요 (예: 월세, 보험료, 구독료).</div>
+      <div className="grid grid-cols-2 gap-2 mb-2.5">
+        <input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="이름 (예: 월세)" />
+        <div className="flex gap-1.5">
+          {[["expense", "지출"], ["income", "수입"]].map(([v, l]) => (
+            <button key={v} type="button" onClick={() => setEntryType(v)}
+              className={`flex-1 py-2 rounded-lg text-[12.5px] font-bold border ${entryType === v ? "bg-[#EC6FA0] text-white border-[#EC6FA0]" : "bg-white text-gray-500 border-gray-200"}`}>
+              {l}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        <input className={inputCls} value={category} onChange={(e) => setCategory(e.target.value)} placeholder="분류(선택)" />
+        <input className={inputCls} type="text" inputMode="numeric" value={formatAmountInput(amount)} onChange={(e) => setAmount(parseAmountInput(e.target.value))} placeholder="금액" />
+        <input className={inputCls} type="number" min={1} max={28} value={dayOfMonth} onChange={(e) => setDayOfMonth(e.target.value)} placeholder="매월 며칠" />
+      </div>
+      <button onClick={add} disabled={saving} className="w-full py-2.5 rounded-xl text-white text-[13px] font-bold mb-4" style={{ background: ACCENT }}>
+        정기 항목 추가
+      </button>
+
+      <div className="text-[12px] font-bold text-gray-500 mb-2">등록된 정기 항목</div>
+      <div className="border border-gray-200 rounded-xl overflow-hidden">
+        {templates.length === 0 && <div className="py-8 text-center text-[12px] text-gray-400">등록된 정기 항목이 없습니다</div>}
+        {templates.map((t) => (
+          <div key={t.id} className="flex items-center justify-between px-3.5 py-2.5 border-b border-gray-50 last:border-b-0">
+            <div className="min-w-0">
+              <div className="text-[13px] font-semibold text-gray-800 truncate">
+                {t.title} <span className="text-[11px] text-gray-400 font-normal">매월 {t.dayOfMonth}일 · {t.entryType === "income" ? "수입" : "지출"}</span>
+              </div>
+              <div className="text-[12px] font-bold" style={{ color: ACCENT }}>{fmtWon(t.amount)}</div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 ml-2">
+              <button
+                onClick={() => updatePlannerEntry(t.id, { active: t.active === false })}
+                className="text-[11px] font-semibold px-2 py-1 rounded-md border border-gray-200 text-gray-500"
+              >
+                {t.active === false ? "재개" : "일시중지"}
+              </button>
+              <button
+                onClick={async () => { if (window.confirm("삭제하시겠습니까?")) await deletePlannerEntry(t.id); }}
+                className="text-[11px] font-semibold px-2 py-1 rounded-md border border-red-200 text-red-500"
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     </Modal>
   );
@@ -344,7 +469,7 @@ function exportTableToExcel(filename, rows, headerMap) {
   XLSX.writeFile(wb, `${filename}.xlsx`);
 }
 
-async function exportPrintableToPdf(node, filename) {
+async function buildPdfBlob(node) {
   const canvas = await html2canvas(node, { scale: 2, backgroundColor: "#ffffff" });
   const img = canvas.toDataURL("image/png");
   const pdf = new jsPDF("p", "mm", "a4");
@@ -362,25 +487,49 @@ async function exportPrintableToPdf(node, filename) {
     pdf.addImage(img, "PNG", 0, y, imgW, imgH);
     heightLeft -= pageH;
   }
+  return pdf;
+}
+
+async function exportPrintableToPdf(node, filename) {
+  const pdf = await buildPdfBlob(node);
   pdf.save(`${filename}.pdf`);
 }
 
-function PrintableLedger({ innerRef, companyName, year, month, rows, totalIncome, totalExpense }) {
+// ⭐ "월간 요약 PDF를 카톡으로 공유" 요청 — 카카오 SDK 연동(앱키/도메인 등록 필요)
+// 없이도 되는 방법으로, 표준 Web Share API를 쓴다. 카카오톡 등 설치된 공유 대상
+// 앱 목록이 뜨고 그중 카카오톡을 고르면 PDF 파일이 그대로 전달된다. 미지원 환경
+// (일부 PC 브라우저 등)에서는 자동으로 파일 다운로드로 대체된다.
+async function shareOrDownloadPdf(node, filename) {
+  const pdf = await buildPdfBlob(node);
+  const blob = pdf.output("blob");
+  const file = new File([blob], `${filename}.pdf`, { type: "application/pdf" });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: filename });
+      return;
+    } catch {
+      // 사용자가 공유를 취소한 경우 등 — 조용히 다운로드로 대체
+    }
+  }
+  pdf.save(`${filename}.pdf`);
+}
+
+function PrintableLedger({ innerRef, companyName, label, rows, totalIncome, totalExpense }) {
   return (
     <div style={{ position: "fixed", left: -99999, top: 0, width: 780 }}>
       <div ref={innerRef} style={{ width: 780, background: "#fff", padding: 28, fontFamily: "'Noto Sans KR', sans-serif" }}>
         <div style={{ fontSize: 20, fontWeight: 800, color: ACCENT, marginBottom: 2 }}>수입·지출 내역서</div>
         <div style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>
-          {companyName} · {year}년{month ? ` ${month}월` : " 전체"} · 생성일 {todayStr()}
+          {companyName} · {label} · 생성일 {todayStr()}
         </div>
         <div style={{ display: "flex", gap: 12, marginBottom: 18 }}>
           {[
             ["총 수입", fmtWon(totalIncome)],
             ["총 지출", fmtWon(totalExpense)],
             ["잔액", fmtWon(totalIncome - totalExpense)],
-          ].map(([label, val]) => (
-            <div key={label} style={{ flex: 1, border: `1px solid #e2e8f0`, borderRadius: 10, padding: "10px 14px" }}>
-              <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>{label}</div>
+          ].map(([label2, val]) => (
+            <div key={label2} style={{ flex: 1, border: `1px solid #e2e8f0`, borderRadius: 10, padding: "10px 14px" }}>
+              <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>{label2}</div>
               <div style={{ fontSize: 16, fontWeight: 800, color: ACCENT }}>{val}</div>
             </div>
           ))}
@@ -415,7 +564,7 @@ function PrintableFamily({ innerRef, companyName, group, rows, total }) {
   return (
     <div style={{ position: "fixed", left: -99999, top: 0, width: 700 }}>
       <div ref={innerRef} style={{ width: 700, background: "#fff", padding: 28, fontFamily: "'Noto Sans KR', sans-serif" }}>
-        <div style={{ fontSize: 20, fontWeight: 800, color: ACCENT, marginBottom: 2 }}>{group} — 가족 예산표</div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: ACCENT, marginBottom: 2 }}>{group} — 이벤트 예산표</div>
         <div style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>{companyName} · 생성일 {todayStr()}</div>
         <div style={{ marginBottom: 16, border: "1px solid #e2e8f0", borderRadius: 10, padding: "10px 14px", display: "inline-block" }}>
           <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>총 예산</div>
@@ -448,7 +597,16 @@ function PrintableFamily({ innerRef, companyName, group, rows, total }) {
 // ────────────────────────────────────────────────
 // 메인 컴포넌트
 // ────────────────────────────────────────────────
-export default function AdminPlanner({ userCompany, myRealName }) {
+const TAB_ITEMS = [
+  ["dashboard", "홈"],
+  ["ledger", "수입·지출"],
+  ["calendar", "일정"],
+  ["family", "이벤트 예산"],
+  ["cycle", "생리주기"],
+  ["messenger", "메신저"],
+];
+
+export default function AdminPlanner({ userCompany, myRealName, myUid, myGender }) {
   const companyName = userCompany || localStorage.getItem("userCompany") || "";
   const { entries } = usePlannerEntries(companyName);
   const [tab, setTab] = useState("dashboard");
@@ -457,10 +615,16 @@ export default function AdminPlanner({ userCompany, myRealName }) {
   const incomeExpense = useMemo(() => entries.filter((e) => e.type === "income" || e.type === "expense"), [entries]);
   const schedules = useMemo(() => entries.filter((e) => e.type === "schedule"), [entries]);
   const familyEntries = useMemo(() => entries.filter((e) => e.type === "familyBudget"), [entries]);
+  const recurringTemplates = useMemo(() => entries.filter((e) => e.type === "recurringTemplate"), [entries]);
   const budgetTarget = useMemo(
     () => entries.find((e) => e.type === "budgetTarget" && String(e.year) === String(year))?.amount || 0,
     [entries, year]
   );
+
+  // ⭐ 정기 지출/수입 자동 등록 — 이번 달에 아직 생성되지 않은 항목만 조용히 채워 넣는다.
+  useEffect(() => {
+    if (companyName && entries.length >= 0) ensureRecurringInstances(companyName, entries, myRealName);
+  }, [companyName, entries, myRealName]);
 
   const yearRows = useMemo(() => incomeExpense.filter((e) => String(e.date || "").slice(0, 4) === String(year)), [incomeExpense, year]);
   const totalIncome = useMemo(() => yearRows.filter((r) => r.type === "income").reduce((s, r) => s + Number(r.amount || 0), 0), [yearRows]);
@@ -490,8 +654,8 @@ export default function AdminPlanner({ userCompany, myRealName }) {
         </div>
       </div>
 
-      <div className="flex gap-2 mb-5">
-        {[["dashboard", "홈"], ["ledger", "수입·지출"], ["calendar", "일정"], ["family", "가족 예산"]].map(([v, l]) => (
+      <div className="flex gap-2 mb-5 flex-wrap">
+        {TAB_ITEMS.map(([v, l]) => (
           <button
             key={v}
             onClick={() => setTab(v)}
@@ -508,10 +672,11 @@ export default function AdminPlanner({ userCompany, myRealName }) {
         <DashboardTab
           year={year} budgetTarget={budgetTarget} totalIncome={totalIncome} totalExpense={totalExpense}
           schedules={schedules} groups={groups} companyName={companyName} actorName={myRealName} entries={entries}
+          incomeExpense={incomeExpense}
         />
       )}
       {tab === "ledger" && (
-        <LedgerTab year={year} rows={yearRows} companyName={companyName} actorName={myRealName} />
+        <LedgerTab rows={incomeExpense} companyName={companyName} actorName={myRealName} recurringTemplates={recurringTemplates} />
       )}
       {tab === "calendar" && (
         <CalendarTab year={year} schedules={schedules} companyName={companyName} actorName={myRealName} />
@@ -519,22 +684,50 @@ export default function AdminPlanner({ userCompany, myRealName }) {
       {tab === "family" && (
         <FamilyTab groups={groups} companyName={companyName} actorName={myRealName} />
       )}
+      {tab === "cycle" && (
+        <PlannerCycleTracker groupId={companyName} myUid={myUid} myGender={myGender} myName={myRealName} />
+      )}
+      {tab === "messenger" && (
+        <PlannerMessenger groupId={companyName} myUid={myUid} myName={myRealName} />
+      )}
     </div>
   );
 }
 
-function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules, groups, companyName, actorName, entries }) {
+function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules, groups, companyName, actorName, entries, incomeExpense }) {
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState(String(budgetTarget || ""));
+  const [sharing, setSharing] = useState(false);
   const balance = totalIncome - totalExpense;
+  const printRef = useRef(null);
   const upcoming = useMemo(() => {
     const t = todayStr();
     return schedules.filter((s) => (s.date || "") >= t).sort((a, b) => (a.date || "").localeCompare(b.date || "")).slice(0, 5);
   }, [schedules]);
   const familyTotal = useMemo(() => groups.reduce((sum, [, rows]) => sum + rows.reduce((s, r) => s + Number(r.amount || 0), 0), 0), [groups]);
 
+  const { first, last } = thisMonthRange();
+  const monthRows = useMemo(() => incomeExpense.filter((r) => (r.date || "") >= first && (r.date || "") <= last), [incomeExpense, first, last]);
+  const monthIncome = monthRows.filter((r) => r.type === "income").reduce((s, r) => s + Number(r.amount || 0), 0);
+  const monthExpense = monthRows.filter((r) => r.type === "expense").reduce((s, r) => s + Number(r.amount || 0), 0);
+
+  const shareMonthly = async () => {
+    setSharing(true);
+    try {
+      await shareOrDownloadPdf(printRef.current, `이달의요약_${first.slice(0, 7)}`);
+    } finally {
+      setSharing(false);
+    }
+  };
+
   return (
     <div>
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[13px] font-bold text-gray-700">{year}년 요약</div>
+        <button onClick={shareMonthly} disabled={sharing} className="text-[12px] font-bold px-3 py-1.5 rounded-lg" style={{ background: ACCENT, color: "#fff" }}>
+          {sharing ? "생성 중..." : "이번 달 요약 카톡 공유"}
+        </button>
+      </div>
       <div className="grid grid-cols-4 gap-3 mb-6">
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <div className="flex items-center justify-between mb-1">
@@ -596,17 +789,31 @@ function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules
           <div className="text-[13px] font-bold text-gray-700 mb-3">다가오는 일정</div>
           {upcoming.length === 0 && <div className="text-[12px] text-gray-400 py-4 text-center">등록된 일정이 없습니다</div>}
           <div className="space-y-2">
-            {upcoming.map((s) => (
-              <div key={s.id} className="flex items-center justify-between text-[12.5px] border-b border-gray-50 last:border-b-0 pb-2 last:pb-0">
-                <span className="text-gray-700 font-semibold truncate">{s.title}</span>
-                <span className="text-gray-400 shrink-0 ml-2">{s.date}{s.time ? ` ${s.time}` : ""}</span>
-              </div>
-            ))}
+            {upcoming.map((s) => {
+              const dday = dDayLabel(s.date);
+              const soon = dday === "D-DAY" || dday === "D-1";
+              return (
+                <div key={s.id} className="flex items-center justify-between text-[12.5px] border-b border-gray-50 last:border-b-0 pb-2 last:pb-0">
+                  <span className="text-gray-700 font-semibold truncate flex items-center gap-1.5">
+                    {dday && (
+                      <span
+                        className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-extrabold"
+                        style={soon ? { background: ACCENT, color: "#fff" } : { background: "#f3f4f6", color: "#6b7280" }}
+                      >
+                        {dday}
+                      </span>
+                    )}
+                    {s.title}
+                  </span>
+                  <span className="text-gray-400 shrink-0 ml-2">{s.date}{s.time ? ` ${s.time}` : ""}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="text-[13px] font-bold text-gray-700 mb-3">가족 예산 묶음</div>
-          {groups.length === 0 && <div className="text-[12px] text-gray-400 py-4 text-center">등록된 예산 묶음이 없습니다</div>}
+          <div className="text-[13px] font-bold text-gray-700 mb-3">이벤트 예산</div>
+          {groups.length === 0 && <div className="text-[12px] text-gray-400 py-4 text-center">등록된 이벤트 예산이 없습니다</div>}
           <div className="space-y-2">
             {groups.map(([g, rows]) => (
               <div key={g} className="flex items-center justify-between text-[12.5px] border-b border-gray-50 last:border-b-0 pb-2 last:pb-0">
@@ -622,6 +829,8 @@ function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules
           )}
         </div>
       </div>
+
+      <PrintableLedger innerRef={printRef} companyName={companyName} label={`${first.slice(0, 7)} 이번 달 요약`} rows={monthRows} totalIncome={monthIncome} totalExpense={monthExpense} />
     </div>
   );
 }
@@ -634,17 +843,31 @@ function dateLabelKo(dateStr) {
 }
 
 // ⭐ 예전엔 6열짜리 표 하나가 화면 끝까지 늘어져 있었다. 대신 (1) 분류별 합계를
-// 위에 한눈에 보여주고 (2) 목록은 날짜별로 묶어서, 폭도 max-w로 제한한 좁은
-// 카드 리스트로 보여준다 — 항목이 많아도 분류/날짜 기준으로 딱딱 나뉘어 보인다.
-function LedgerTab({ year, rows, companyName, actorName }) {
-  const [month, setMonth] = useState(0); // 0 = 전체
+// 위에 한눈에 보여주고(가로 스크롤 — 카드가 늘어나도 화면이 아래로 밀리지 않는다)
+// (2) 목록은 날짜별로 묶어서, 폭도 max-w로 제한한 좁은 카드 리스트로 보여준다.
+// (3) 검색은 "조회" 버튼을 눌러야 반영된다(배차프로그램과 같은 조회 방식).
+function LedgerTab({ rows, companyName, actorName, recurringTemplates }) {
+  const monthDefault = thisMonthRange();
+  const [draft, setDraft] = useState({ start: monthDefault.first, end: monthDefault.last, keyword: "", kind: "all" });
+  const [applied, setApplied] = useState(draft);
   const [editing, setEditing] = useState(null); // null | {} | entry
+  const [showRecurring, setShowRecurring] = useState(false);
   const printRef = useRef(null);
 
-  const filtered = useMemo(
-    () => (month ? rows.filter((r) => Number(String(r.date || "").slice(5, 7)) === month) : rows).sort((a, b) => (b.date || "").localeCompare(a.date || "")),
-    [rows, month]
-  );
+  const runQuery = () => setApplied(draft);
+
+  const filtered = useMemo(() => {
+    return rows
+      .filter((r) => (!applied.start || (r.date || "") >= applied.start) && (!applied.end || (r.date || "") <= applied.end))
+      .filter((r) => applied.kind === "all" || r.type === applied.kind)
+      .filter((r) => {
+        if (!applied.keyword.trim()) return true;
+        const k = applied.keyword.trim().toLowerCase();
+        return (r.title || "").toLowerCase().includes(k) || (r.category || "").toLowerCase().includes(k) || (r.memo || "").toLowerCase().includes(k);
+      })
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  }, [rows, applied]);
+
   const totalIncome = filtered.filter((r) => r.type === "income").reduce((s, r) => s + Number(r.amount || 0), 0);
   const totalExpense = filtered.filter((r) => r.type === "expense").reduce((s, r) => s + Number(r.amount || 0), 0);
 
@@ -670,22 +893,59 @@ function LedgerTab({ year, rows, companyName, actorName }) {
     return Array.from(map.entries()); // filtered가 이미 날짜 내림차순 정렬됨
   }, [filtered]);
 
+  const rangeLabel = `${applied.start || "전체"} ~ ${applied.end || "전체"}`;
+
   return (
     <div>
+      <div className="bg-white border border-gray-200 rounded-xl p-3.5 mb-4">
+        <div className="flex flex-wrap items-end gap-2.5">
+          <div>
+            <div className="text-[11px] font-semibold text-gray-400 mb-1">시작일</div>
+            <PlannerDatePicker value={draft.start} onChange={(v) => setDraft((d) => ({ ...d, start: v }))} className="border rounded-lg px-3 py-1.5 text-[12.5px] border-gray-200" />
+          </div>
+          <div>
+            <div className="text-[11px] font-semibold text-gray-400 mb-1">종료일</div>
+            <PlannerDatePicker value={draft.end} onChange={(v) => setDraft((d) => ({ ...d, end: v }))} className="border rounded-lg px-3 py-1.5 text-[12.5px] border-gray-200" />
+          </div>
+          <div>
+            <div className="text-[11px] font-semibold text-gray-400 mb-1">구분</div>
+            <div className="flex gap-1">
+              {[["all", "전체"], ["income", "수입"], ["expense", "지출"]].map(([v, l]) => (
+                <button key={v} onClick={() => setDraft((d) => ({ ...d, kind: v }))}
+                  className={`px-3 py-1.5 rounded-lg text-[12px] font-bold border ${draft.kind === v ? "bg-[#EC6FA0] text-white border-[#EC6FA0]" : "bg-white text-gray-500 border-gray-200"}`}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex-1 min-w-[140px]">
+            <div className="text-[11px] font-semibold text-gray-400 mb-1">검색어</div>
+            <input
+              value={draft.keyword}
+              onChange={(e) => setDraft((d) => ({ ...d, keyword: e.target.value }))}
+              onKeyDown={(e) => { if (e.key === "Enter") runQuery(); }}
+              placeholder="항목명/분류/메모"
+              className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[12.5px]"
+            />
+          </div>
+          <button onClick={runQuery} className="px-4 py-2 rounded-lg text-white text-[12.5px] font-bold" style={{ background: ACCENT }}>조회</button>
+        </div>
+      </div>
+
       <div className="flex items-center justify-between mb-4">
-        <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="border border-gray-200 rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-gray-600">
-          <option value={0}>전체 월</option>
-          {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{m}월</option>)}
-        </select>
-        <div className="flex gap-2">
+        <div className="text-[12px] font-semibold text-gray-500">{rangeLabel}</div>
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={() => setShowRecurring(true)} className="px-3 py-1.5 rounded-lg border border-gray-200 text-[12px] font-semibold text-gray-600 hover:bg-gray-50">
+            정기 지출 관리
+          </button>
           <button
-            onClick={() => exportTableToExcel(`수입지출_${year}${month ? `_${month}월` : ""}`, filtered, { date: "날짜", type: "구분", title: "항목명", category: "분류", amount: "금액", memo: "메모" })}
+            onClick={() => exportTableToExcel(`수입지출_${applied.start}_${applied.end}`, filtered, { date: "날짜", type: "구분", title: "항목명", category: "분류", amount: "금액", memo: "메모" })}
             className="px-3 py-1.5 rounded-lg border border-gray-200 text-[12px] font-semibold text-gray-600 hover:bg-gray-50"
           >
             엑셀 다운로드
           </button>
           <button
-            onClick={() => exportPrintableToPdf(printRef.current, `수입지출_${year}${month ? `_${month}월` : ""}`)}
+            onClick={() => exportPrintableToPdf(printRef.current, `수입지출_${applied.start}_${applied.end}`)}
             className="px-3 py-1.5 rounded-lg border border-gray-200 text-[12px] font-semibold text-gray-600 hover:bg-gray-50"
           >
             PDF 다운로드
@@ -705,11 +965,11 @@ function LedgerTab({ year, rows, companyName, actorName }) {
       {categoryTotals.length > 0 && (
         <div className="mb-6">
           <div className="text-[12px] font-bold text-gray-500 mb-2">분류별 합계</div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex gap-2 overflow-x-auto pb-1">
             {categoryTotals.map(([cat, { income, expense }]) => (
-              <div key={cat} className="px-3 py-2 rounded-lg border border-gray-200 bg-white min-w-[100px]">
+              <div key={cat} className="shrink-0 px-3 py-2 rounded-lg border border-gray-200 bg-white min-w-[110px]">
                 <div className="text-[11px] text-gray-400 mb-0.5">{cat}</div>
-                <div className="text-[12.5px] font-bold">
+                <div className="text-[12.5px] font-bold whitespace-nowrap">
                   {!!expense && <span className="text-red-600">-{expense.toLocaleString()}</span>}
                   {!!expense && !!income && <span className="text-gray-300 mx-0.5">/</span>}
                   {!!income && <span className="text-gray-700">+{income.toLocaleString()}</span>}
@@ -748,6 +1008,7 @@ function LedgerTab({ year, rows, companyName, actorName }) {
                         <span className={`shrink-0 px-1.5 py-0.5 rounded text-[11px] font-bold ${r.type === "income" ? "bg-gray-100 text-gray-700" : "bg-red-50 text-red-600"}`}>
                           {r.type === "income" ? "수입" : "지출"}
                         </span>
+                        {r.receiptURL && <span className="shrink-0 text-[11px]" title="영수증 첨부됨">📎</span>}
                         <span className="text-gray-900 font-semibold truncate">{r.title}</span>
                         {r.category && <span className="text-[12px] text-gray-500 shrink-0">{r.category}</span>}
                         {r.memo && <span className="text-[12px] text-gray-400 truncate">· {r.memo}</span>}
@@ -765,10 +1026,13 @@ function LedgerTab({ year, rows, companyName, actorName }) {
         </div>
       </div>
 
-      <PrintableLedger innerRef={printRef} companyName={companyName} year={year} month={month} rows={filtered} totalIncome={totalIncome} totalExpense={totalExpense} />
+      <PrintableLedger innerRef={printRef} companyName={companyName} label={rangeLabel} rows={filtered} totalIncome={totalIncome} totalExpense={totalExpense} />
 
       {editing && (
         <LedgerEntryModal initial={editing.id ? editing : null} companyName={companyName} actorName={actorName} onClose={() => setEditing(null)} />
+      )}
+      {showRecurring && (
+        <RecurringManagerModal templates={recurringTemplates} companyName={companyName} actorName={actorName} onClose={() => setShowRecurring(false)} />
       )}
     </div>
   );
@@ -869,14 +1133,11 @@ function CalendarTab({ year, schedules, companyName, actorName }) {
 
 // ⭐ 본가/처가·외가를 한 줄 리스트에 섞어 보여주던 예전 방식 대신, 묶음 하나를
 // "본가 | 처가·외가" 두 패널로 딱 나눠서 좌우로 보여준다("기타"로 등록한 인원은
-// 맨 아래에 별도 줄로). 카드 폭도 max-w로 제한해 예전처럼 가로로 늘어지지 않게 했다.
+// 맨 아래에 별도 줄로). 두 칸 사이에는 뚜렷한 세로 구분선을, 카드끼리는 뚜렷한
+// 가로 구분선을 넣어서 "구분이 부족하다"는 피드백을 반영했다.
 const FAMILY_SIDES = ["본가", "처가/외가"];
 
-// ⭐ 인원수가 다른 두 칸이 나란히 있을 때, 인원이 적은 쪽의 "소계"가 위로
-// 붙어버리던 문제 — 칸 전체를 세로 flex로 만들고 목록 박스를 flex-1로 늘려
-// 남는 높이를 목록 쪽이 흡수하게 해서, 소계는 항상 두 칸 모두 같은 줄(맨 아래)에
-// 맞춰지게 했다. 글씨도 전체적으로 크고 진하게 키웠다(너무 작고 흐리다는 피드백).
-function FamilyMemberColumn({ title, rows, accentBg, onEdit }) {
+function FamilyMemberColumn({ title, rows, onEdit }) {
   const total = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
   return (
     <div className="flex-1 min-w-0 flex flex-col">
@@ -884,13 +1145,13 @@ function FamilyMemberColumn({ title, rows, accentBg, onEdit }) {
         <div className="text-[13.5px] font-bold text-gray-700">{title}</div>
         <div className="text-[12px] font-semibold text-gray-500">{rows.length}명</div>
       </div>
-      <div className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden flex-1">
+      <div className="bg-gray-50 rounded-xl border border-gray-200 overflow-hidden flex-1">
         {rows.length === 0 && <div className="py-6 text-center text-[12px] text-gray-400">등록된 인원이 없습니다</div>}
-        {rows.map((r) => (
+        {rows.map((r, idx) => (
           <div
             key={r.id}
             onClick={() => onEdit(r)}
-            className="flex items-center justify-between px-3 py-2.5 text-[13px] border-b border-white last:border-b-0 hover:bg-white cursor-pointer"
+            className={`flex items-center justify-between px-3 py-2.5 text-[13px] hover:bg-white cursor-pointer ${idx > 0 ? "border-t-2 border-gray-200" : ""}`}
           >
             <div className="min-w-0">
               <div className="text-gray-900 font-semibold truncate">{r.title}</div>
@@ -905,8 +1166,109 @@ function FamilyMemberColumn({ title, rows, accentBg, onEdit }) {
         ))}
       </div>
       <div className="flex items-center justify-between text-[13px] mt-2 px-0.5 text-gray-600 font-semibold">
-        <span>소계</span><span className="font-bold text-[13.5px]" style={accentBg}>{fmtWon(total)}</span>
+        <span>소계</span><span className="font-bold text-[13.5px]" style={{ color: ACCENT }}>{fmtWon(total)}</span>
       </div>
+    </div>
+  );
+}
+
+// ⭐ 접기/펴기 상태를 localStorage에 묶음 이름별로 저장 — 재접속해도 접어둔 카드는
+// 접힌 채로, 펴둔 카드는 펴진 채로 그대로 유지된다.
+function collapseKey(g) { return `kpplanner_collapse_${g}`; }
+
+function EventBudgetCard({ g, rows, companyName, onAddMember, onEditMember }) {
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem(collapseKey(g)) === "1"; } catch { return false; }
+  });
+  const toggle = () => {
+    setCollapsed((v) => {
+      const next = !v;
+      try { localStorage.setItem(collapseKey(g), next ? "1" : "0"); } catch {}
+      return next;
+    });
+  };
+
+  const total = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
+  const bySide = FAMILY_SIDES.map((side) => [side, rows.filter((r) => r.category === side)]);
+  const etc = rows.filter((r) => !FAMILY_SIDES.includes(r.category));
+  const printRef = useRef(null);
+
+  if (collapsed) {
+    return (
+      <button
+        onClick={toggle}
+        className="w-full bg-white border border-gray-200 rounded-2xl px-5 py-3.5 flex items-center justify-between hover:border-[#EC6FA0] transition text-left"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-gray-300">▸</span>
+          <span className="text-[14px] font-bold text-gray-800 truncate">{g} 이벤트</span>
+        </div>
+        <div className="flex items-center gap-4 shrink-0">
+          <span className="text-[12.5px] font-semibold text-gray-500">{rows.length}명</span>
+          <span className="text-[14px] font-extrabold" style={{ color: ACCENT }}>{fmtWon(total)}</span>
+        </div>
+      </button>
+    );
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+        <button onClick={toggle} className="flex items-center gap-2 text-left">
+          <span className="text-gray-300">▾</span>
+          <span className="text-[14px] font-bold text-gray-800">{g}</span>
+        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => exportTableToExcel(`${g}_이벤트예산`, rows, { title: "이름", category: "구분", amount: "금액", memo: "메모" })}
+            className="text-[12px] font-semibold text-gray-500 hover:text-[#EC6FA0]"
+          >
+            엑셀
+          </button>
+          <button
+            onClick={() => exportPrintableToPdf(printRef.current, `${g}_이벤트예산`)}
+            className="text-[12px] font-semibold text-gray-500 hover:text-[#EC6FA0]"
+          >
+            PDF
+          </button>
+          <button
+            onClick={() => onAddMember(g)}
+            className="text-[11px] font-semibold text-white px-2.5 py-1 rounded-md" style={{ background: ACCENT }}
+          >
+            구성원 추가
+          </button>
+        </div>
+      </div>
+
+      <div className="p-4 flex items-stretch gap-4 divide-x-2 divide-gray-200">
+        {bySide.map(([side, sideRows]) => (
+          <div key={side} className={side === FAMILY_SIDES[1] ? "pl-4 flex-1 min-w-0" : "flex-1 min-w-0"}>
+            <FamilyMemberColumn title={side} rows={sideRows} onEdit={(r) => onEditMember(g, r)} />
+          </div>
+        ))}
+      </div>
+
+      {etc.length > 0 && (
+        <div className="px-4 pb-4">
+          <div className="text-[13.5px] font-bold text-gray-700 mb-2 px-0.5">기타</div>
+          <div className="bg-gray-50 rounded-xl border border-gray-200 overflow-hidden">
+            {etc.map((r, idx) => (
+              <div key={r.id} onClick={() => onEditMember(g, r)}
+                className={`flex items-center justify-between px-3 py-2.5 text-[13px] hover:bg-white cursor-pointer ${idx > 0 ? "border-t-2 border-gray-200" : ""}`}>
+                <span className="text-gray-900 font-semibold truncate">{r.title}</span>
+                <span className="text-gray-800 font-bold shrink-0 ml-2">{fmtWon(r.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="px-5 py-3 bg-[#EC6FA0]/[0.04] flex items-center justify-between border-t border-gray-100">
+        <span className="text-[13px] font-semibold text-gray-600">총 인원수 {rows.length}명</span>
+        <span className="text-[15px] font-extrabold" style={{ color: ACCENT }}>총 {fmtWon(total)}</span>
+      </div>
+
+      <PrintableFamily innerRef={printRef} companyName={companyName} group={g} rows={rows} total={total} />
     </div>
   );
 }
@@ -914,84 +1276,32 @@ function FamilyMemberColumn({ title, rows, accentBg, onEdit }) {
 function FamilyTab({ groups, companyName, actorName }) {
   const [showNewGroup, setShowNewGroup] = useState(false);
   const [editingMember, setEditingMember] = useState(null); // {group} | {group, entry}
-  const printRefs = useRef({});
 
   return (
     <div>
       <div className="flex justify-end mb-3">
         <button onClick={() => setShowNewGroup(true)} className="px-3 py-1.5 rounded-lg text-white text-[12px] font-bold" style={{ background: ACCENT }}>
-          새 예산 묶음
+          새 이벤트 예산
         </button>
       </div>
 
       {groups.length === 0 && (
         <div className="bg-white border border-gray-200 rounded-xl py-16 text-center text-[13px] text-gray-400">
-          등록된 예산 묶음이 없습니다. "새 예산 묶음"으로 명절·경조사 등 예산표를 만들어 보세요.
+          등록된 이벤트 예산이 없습니다. "새 이벤트 예산"으로 명절·경조사·여행 등의 예산표를 만들어 보세요.
         </div>
       )}
 
       <div className="space-y-4 max-w-3xl">
-        {groups.map(([g, rows]) => {
-          const total = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
-          const bySide = FAMILY_SIDES.map((side) => [side, rows.filter((r) => r.category === side)]);
-          const etc = rows.filter((r) => !FAMILY_SIDES.includes(r.category));
-          if (!printRefs.current[g]) printRefs.current[g] = React.createRef();
-          return (
-            <div key={g} className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
-                <div className="text-[14px] font-bold text-gray-800">{g}</div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => exportTableToExcel(`${g}_가족예산`, rows, { title: "이름", category: "구분", amount: "금액", memo: "메모" })}
-                    className="text-[12px] font-semibold text-gray-500 hover:text-[#EC6FA0]"
-                  >
-                    엑셀
-                  </button>
-                  <button
-                    onClick={() => exportPrintableToPdf(printRefs.current[g].current, `${g}_가족예산`)}
-                    className="text-[12px] font-semibold text-gray-500 hover:text-[#EC6FA0]"
-                  >
-                    PDF
-                  </button>
-                  <button
-                    onClick={() => setEditingMember({ group: g })}
-                    className="text-[11px] font-semibold text-white px-2.5 py-1 rounded-md" style={{ background: ACCENT }}
-                  >
-                    구성원 추가
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-4 flex items-stretch gap-4">
-                {bySide.map(([side, sideRows]) => (
-                  <FamilyMemberColumn key={side} title={side} rows={sideRows} accentBg={{ color: ACCENT }} onEdit={(r) => setEditingMember({ group: g, entry: r })} />
-                ))}
-              </div>
-
-              {etc.length > 0 && (
-                <div className="px-4 pb-4">
-                  <div className="text-[13.5px] font-bold text-gray-700 mb-2 px-0.5">기타</div>
-                  <div className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
-                    {etc.map((r) => (
-                      <div key={r.id} onClick={() => setEditingMember({ group: g, entry: r })}
-                        className="flex items-center justify-between px-3 py-2.5 text-[13px] border-b border-white last:border-b-0 hover:bg-white cursor-pointer">
-                        <span className="text-gray-900 font-semibold truncate">{r.title}</span>
-                        <span className="text-gray-800 font-bold shrink-0 ml-2">{fmtWon(r.amount)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="px-5 py-3 bg-[#EC6FA0]/[0.04] flex items-center justify-between border-t border-gray-100">
-                <span className="text-[13px] font-semibold text-gray-600">총 인원수 {rows.length}명</span>
-                <span className="text-[15px] font-extrabold" style={{ color: ACCENT }}>총 {fmtWon(total)}</span>
-              </div>
-
-              <PrintableFamily innerRef={printRefs.current[g]} companyName={companyName} group={g} rows={rows} total={total} />
-            </div>
-          );
-        })}
+        {groups.map(([g, rows]) => (
+          <EventBudgetCard
+            key={g}
+            g={g}
+            rows={rows}
+            companyName={companyName}
+            onAddMember={(group) => setEditingMember({ group })}
+            onEditMember={(group, entry) => setEditingMember({ group, entry })}
+          />
+        ))}
       </div>
 
       {showNewGroup && (

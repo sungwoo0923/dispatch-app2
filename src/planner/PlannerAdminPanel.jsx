@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useGroupMembers, updateMyProfile } from "./plannerAuth";
 import { ACCENT, ACCENT_SOFT, ACCENT_BORDER } from "./plannerTheme";
-import AdminPlannerMobile from "../mobile/AdminPlannerMobile";
+import PlannerMobileShell from "./PlannerMobileShell";
 
 const GENDER_LABEL = { male: "남자", female: "여자" };
 const ROLE_LABEL = { owner: "최고관리자", member: "구성원" };
@@ -141,12 +141,9 @@ export default function PlannerAdminPanel({ account, onClose, onUpdated }) {
   );
 }
 
-// 미리보기 안에서는 실제 하단 탭바를 그대로 보여준다(관리 화면과 별개로 내부 탭
-// 전환이 되어야 "미리보기"로서 의미가 있다).
+// ⭐ 실제 모바일 화면(PlannerRoot)과 완전히 똑같은 컴포넌트(PlannerMobileShell)를
+// 그대로 재사용한다 — 예전엔 AdminPlannerMobile을 직접 불러서 옛날 탭바 UI가
+// 미리보기에 보이는 불일치가 있었는데, 공용 컴포넌트로 추출해서 해결했다.
 function PlannerAdminPanelMobilePreview({ account }) {
-  return (
-    <div style={{ paddingTop: 8 }}>
-      <AdminPlannerMobile userCompany={account.groupId} dispatcherName={account.name} />
-    </div>
-  );
+  return <PlannerMobileShell account={account} />;
 }
