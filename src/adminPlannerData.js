@@ -1,8 +1,11 @@
 // src/adminPlannerData.js
-// ⭐ "나의 플래너" — 최고관리자 전용, 배차/오더 등 다른 어떤 화면·데이터와도
-// 전혀 연관되지 않는 완전히 독립된 Firestore 컬렉션(adminPlanner)을 쓴다.
+// ⭐ KP-Planner("나의 플래너") — 배차/오더 등 다른 어떤 화면·데이터와도 전혀
+// 연관되지 않는 완전히 독립된 Firestore 컬렉션(adminPlanner)을 쓴다.
 // PC(AdminPlanner.jsx)와 모바일(mobile/AdminPlannerMobile.jsx)이 이 모듈을
-// 함께 사용해 동일한 데이터를 실시간으로 공유한다(회사 단위로 격리).
+// 함께 사용해 동일한 데이터를 실시간으로 공유한다.
+// ⚠️ 아래 함수들이 받는 companyName 파라미터/Firestore 필드는 이름만 그대로일 뿐,
+// 실제로는 회사명이 아니라 planner/plannerAuth.js가 발급하는 "가족 코드"
+// (groupId)가 들어온다 — 이 격리 키를 기준으로 데이터가 나뉜다.
 import { useEffect, useState } from "react";
 import {
   collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot,

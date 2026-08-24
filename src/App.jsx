@@ -20,6 +20,12 @@ const DispatchApp = React.lazy(() => import("./DispatchApp"));
 const MobileApp = React.lazy(() => import("./mobile/MobileApp"));
 const ShipperMobileApp = React.lazy(() => import("./mobile/ShipperMobileApp"));
 
+// ⭐ KP-Planner — 배차프로그램과는 완전히 분리된 별도 앱(별도 로그인/가입/화면).
+// 같은 Firebase 프로젝트를 쓰지만 dispatch의 users/role 시스템과는 무관하다.
+const PlannerLogin = React.lazy(() => import("./planner/PlannerLogin"));
+const PlannerSignup = React.lazy(() => import("./planner/PlannerSignup"));
+const PlannerRoot = React.lazy(() => import("./planner/PlannerRoot"));
+
 import DriverHome from "./driver/DriverHome";
 import DriverLogin from "./driver/DriverLogin";
 import DriverRegister from "./driver/DriverRegister";
@@ -633,6 +639,14 @@ export default function App() {
                 : <Navigate to="/login" replace />
             }
           />
+
+          {/* ⭐ KP-Planner — 배차프로그램 로그인/권한 체계와 완전히 분리된 별도 앱.
+              /planner-login, /planner-signup, /planner는 PlannerRoot(＋
+              usePlannerAccount)가 스스로 로그인 상태를 확인하므로, 위쪽의
+              dispatch용 user/role 가드와는 무관하게 독립적으로 동작한다. */}
+          <Route path="/planner-login" element={<PlannerLogin />} />
+          <Route path="/planner-signup" element={<PlannerSignup />} />
+          <Route path="/planner" element={<PlannerRoot />} />
 
           <Route path="/change-password" element={<ChangePassword />} />
           <Route path="/standard-fare" element={<StandardFare />} />

@@ -1,5 +1,6 @@
-// src/mobile/AdminPlannerMobile.jsx — "나의 플래너" (모바일, 최고관리자 전용)
-// ⭐ 배차/오더 등 다른 화면 데이터와 전혀 연관되지 않는 최고관리자 개인 기록.
+// src/mobile/AdminPlannerMobile.jsx — "나의 플래너"(KP-Planner) 모바일 화면의 실제 내용.
+// ⭐ 배차프로그램과는 완전히 분리된 별도 앱(src/planner/)에서만 쓰인다 — 로그인/
+// 가입도 별도이고, 배차/오더 등 어떤 데이터와도 연관되지 않는다.
 // PC(../AdminPlanner.jsx)와 같은 Firestore 컬렉션(adminPlannerData.js)을 공유한다.
 import React, { useMemo, useRef, useState } from "react";
 import html2canvas from "html2canvas";
@@ -311,7 +312,7 @@ export default function AdminPlannerMobile({ userCompany, dispatcherName, cardVe
   return (
     <div className="px-4 pt-3 pb-24">
       <div className="flex items-center justify-between mb-3">
-        <div className="text-[12px] text-gray-400">최고관리자 전용 · 배차 데이터와 연동되지 않는 개인 기록입니다.</div>
+        <div className="text-[12px] text-gray-400">우리 가족만 보는 개인 기록입니다.</div>
       </div>
       <div className="flex items-center justify-center gap-3 mb-3">
         <button onClick={() => setYear((y) => y - 1)} className="w-7 h-7 rounded-lg border border-gray-200 text-gray-500">‹</button>

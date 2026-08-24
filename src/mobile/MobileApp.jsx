@@ -3,7 +3,6 @@ import MobileFleetView from "./MobileFleetView";
 import MobileEasyMode from "./MobileEasyMode";
 import MobileAttendanceBoard from "./MobileAttendanceBoard";
 import MobileIntelView from "./MobileIntelView";
-import AdminPlannerMobile from "./AdminPlannerMobile";
 import InternalMessenger from "../InternalMessenger";
 import MobileMapFare from "./MobileMapFare";
 import PalletSimulator from "../PalletSimulator";
@@ -2615,10 +2614,6 @@ const [detailFrom, setDetailFrom] = useState(null);
   const [statusTab, setStatusTab] = useState("전체");
   const [showMenu, setShowMenu] = useState(false);
   const [cardVersionB, setCardVersionB] = useState(() => localStorage.getItem("cardVersion") === "B");
-  // ⭐ "플래너 전용" 권한 전용 상태 — 아래쪽 최소 셸(role === "plannerOnly")에서만
-  // 쓰이지만, 훅은 항상 최상단에서 무조건 호출되어야 하므로 여기서 선언한다.
-  const [plannerPage, setPlannerPage] = useState("dashboard");
-  const [showPlannerMenu, setShowPlannerMenu] = useState(false);
 
   useEffect(() => {
     if (!showMenu) return;
@@ -3978,70 +3973,7 @@ const title =
   : page === "settings" ? "설정"
   : page === "fleet" ? "지입차관리"
   : page === "intel" ? "경영인텔리전스"
-  : page === "planner" ? "나의 플래너"
   : "상세보기";
-
-  // ⭐ "플래너 전용" 권한 — 배차/오더 등 다른 메뉴는 전혀 안 보이고 "나의 플래너"만
-  // 접속할 수 있는 계정(예: 배우자 계정)을 위한 완전히 별도의 최소 화면. 정상
-  // 메뉴/페이지 트리는 아예 렌더링하지 않는다. 햄버거 메뉴를 누르면 홈/수입·지출/
-  // 일정/가족 예산 4개 항목만 뜨고, 누르면 그 내용으로 바로 이동한다.
-  if (role === "plannerOnly") {
-    const plannerMenuItems = [
-      ["dashboard", "홈"],
-      ["ledger", "수입·지출"],
-      ["calendar", "일정"],
-      ["family", "가족 예산"],
-    ];
-    const plannerPageTitle = plannerMenuItems.find(([v]) => v === plannerPage)?.[1] || "홈";
-    return (
-      <div className="w-full min-h-screen flex flex-col relative bg-gray-50">
-        <div className="shrink-0 px-4 py-3.5 flex items-center justify-between" style={{ background: cardVersionB ? "#1B2B4B" : "#1d4ed8" }}>
-          <div className="text-white font-bold text-[16px]">{plannerPageTitle}</div>
-          <button onClick={() => setShowPlannerMenu(true)} className="w-8 h-8 flex items-center justify-center text-white">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M4 7h16M4 12h16M4 17h16" />
-            </svg>
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          <AdminPlannerMobile
-            userCompany={userCompany}
-            dispatcherName={dispatcherName}
-            cardVersionB={cardVersionB}
-            activeTab={plannerPage}
-            onTabChange={setPlannerPage}
-            hideTabBar
-          />
-        </div>
-
-        {showPlannerMenu && (
-          <div className="fixed inset-0 z-[9999] flex" onClick={() => setShowPlannerMenu(false)}>
-            <div className="absolute inset-0 bg-black/40" />
-            <div className="relative ml-auto w-64 h-full bg-white shadow-xl flex flex-col" onClick={(e) => e.stopPropagation()}>
-              <div className="px-5 py-4 border-b border-gray-100">
-                <div className="text-[14px] font-bold text-gray-800">메뉴</div>
-              </div>
-              <div className="flex-1 py-2">
-                {plannerMenuItems.map(([v, l]) => (
-                  <button
-                    key={v}
-                    onClick={() => { setPlannerPage(v); setShowPlannerMenu(false); }}
-                    className={`w-full text-left px-5 py-3 text-[13.5px] font-semibold ${plannerPage === v ? "text-white" : "text-gray-700 hover:bg-gray-50"}`}
-                    style={plannerPage === v ? { background: cardVersionB ? "#1B2B4B" : "#1d4ed8" } : undefined}
-                  >
-                    {l}
-                  </button>
-                ))}
-              </div>
-              <div className="px-5 py-4 border-t border-gray-100">
-                <button onClick={logout} className="text-[13px] font-semibold text-gray-400">로그아웃</button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
 
   // ------------------------------------------------------------------
   // 렌더링
@@ -4325,7 +4257,7 @@ const title =
             setPage("list");
           }
         }
-    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "planner"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
@@ -4489,7 +4421,6 @@ onGoAttendance={() => {
           role={role}
           onGoFleet={() => { setPage("fleet"); setShowMenu(false); }}
           onGoIntel={() => { setPage("intel"); setShowMenu(false); }}
-          onGoPlanner={() => { setPage("planner"); setShowMenu(false); }}
           onDeleteAll={deleteAllOrders}
           setUiScale={setUiScale}
           uiScale={uiScale}
@@ -5442,9 +5373,6 @@ setOpenMemo={setOpenMemo}
         )}
         {page === "fleet" && <MobileFleetView />}
         {page === "intel" && <MobileIntelView dispatchData={orders} cardVersionB={cardVersionB} />}
-        {page === "planner" && (
-          <AdminPlannerMobile userCompany={userCompany} dispatcherName={dispatcherName} cardVersionB={cardVersionB} />
-        )}
 
         {page === "unassigned" && (
   <MobileUnassignedList
@@ -6241,7 +6169,6 @@ function MobileSideMenu({
   role,
   onGoFleet,
   onGoIntel,
-  onGoPlanner,
 }) {
   const myName =
     mobileUsers?.find(u => u.id === currentUser?.uid)?.name ||
@@ -6367,7 +6294,6 @@ function MobileSideMenu({
             <MenuSection title="관리자 전용" dark={dark}>
               <MenuItem label="지입차관리" onClick={onGoFleet} dark={dark} />
               <MenuItem label="경영인텔리전스" onClick={onGoIntel} dark={dark} />
-              <MenuItem label="나의 플래너" onClick={onGoPlanner} dark={dark} />
               <MenuItem label="회사코드조회" onClick={openCodeLookup} dark={dark} />
             </MenuSection>
           )}

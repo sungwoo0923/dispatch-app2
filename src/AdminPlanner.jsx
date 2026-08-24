@@ -1,7 +1,9 @@
-// src/AdminPlanner.jsx — "나의 플래너" (관리센터 > 최고관리자 전용 탭)
-// ⭐ 배차/오더/거래처 등 이 프로그램의 다른 어떤 데이터와도 전혀 연관되지 않는
-// 최고관리자 개인용 메뉴다. 수입/지출 가계부, 일정 달력, 명절·가족 예산을
-// 자유롭게 기록하고 PDF/엑셀로 내보낼 수 있다.
+// src/AdminPlanner.jsx — "나의 플래너"(KP-Planner) PC 화면의 실제 내용.
+// ⭐ 배차프로그램과는 완전히 분리된 별도 앱(src/planner/)에서만 쓰인다 —
+// 로그인/가입도 별도이고, 배차/오더/거래처 등 어떤 데이터와도 연관되지 않는다.
+// 수입/지출 가계부, 일정 달력, 명절·가족 예산을 자유롭게 기록하고 PDF/엑셀로
+// 내보낼 수 있다. userCompany prop에는 회사명이 아니라 planner/plannerAuth.js가
+// 발급하는 "가족 코드"(groupId)가 들어온다(이 값을 기준으로 데이터가 나뉜다).
 import React, { useMemo, useRef, useState } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";

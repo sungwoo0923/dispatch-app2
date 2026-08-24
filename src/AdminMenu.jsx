@@ -54,9 +54,6 @@ const ROLE_LABELS = {
   driver: "기사",
   shipper: "화주",
   test: "경리/회계",
-  // ⭐ "나의 플래너"만 볼 수 있는 개인용 권한 — 배우자 등 제3자 계정에 부여해
-  // 배차 관련 메뉴는 전혀 안 보이고 나의 플래너만 보이게 한다.
-  plannerOnly: "플래너 전용",
 };
 
 const DotBadge = ({ active, label, activeLabel, inactiveLabel }) => (
@@ -123,7 +120,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const customRoles = useCustomRoles();
   const roleLabels = { ...ROLE_LABELS, ...Object.fromEntries(customRoles.map(r => [r.key, r.label])) };
   const ROLES = isTotalMaster
-    ? ["totalMaster", "admin", "hrManager", "user", "viewer", "driver", "shipper", "test", "plannerOnly", ...customRoles.map(r => r.key)]
+    ? ["totalMaster", "admin", "hrManager", "user", "viewer", "driver", "shipper", "test", ...customRoles.map(r => r.key)]
     : ["admin", "user", "viewer", "driver", "shipper", "test", ...customRoles.map(r => r.key)];
   const effectiveCompany = myCompany || parentCompany || localStorage.getItem("userCompany") || "돌캐";
 
@@ -217,7 +214,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     );
   }, [users, isTotalMaster, effectiveCompany]);
 
-  const ROLE_ORDER = ["totalMaster","admin","user","test","viewer","driver","shipper","plannerOnly"];
+  const ROLE_ORDER = ["totalMaster","admin","user","test","viewer","driver","shipper"];
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return visibleUsers
@@ -527,7 +524,6 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     if (!editName.trim()) return alert("이름을 입력하세요.");
     if (editRole === "totalMaster" && !isTotalMaster) return alert("totalMaster 권한은 부여할 수 없습니다.");
     if (editRole === "hrManager" && !isTotalMaster) return alert("인사관리자 권한은 최고관리자만 부여할 수 있습니다.");
-    if (editRole === "plannerOnly" && !isTotalMaster) return alert("플래너 전용 권한은 최고관리자만 부여할 수 있습니다.");
     const history = [...(manageUser.personnelHistory || [])];
     const prevPosition = manageUser.position || "";
     const nextPosition = editPosition.trim();

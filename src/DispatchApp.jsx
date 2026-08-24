@@ -22,7 +22,6 @@ import DispatchFormNew from "./DispatchFormNew";
 import AiAssistant from "./AiAssistant";
 import DeliverySignaturePage from "./DeliverySignaturePage";
 import ExecutiveDashboard from "./ExecutiveDashboard";
-import AdminPlanner from "./AdminPlanner";
 import InternalMessenger from "./InternalMessenger";
 import { calcLeaveBalance } from "./leaveUtils";
 import { TEAM_OPTIONS, POSITION_OPTIONS, TEAM_BADGE_CLASS, TEAM_BADGE_CLASS_UNASSIGNED } from "./hrConstants";
@@ -5520,7 +5519,6 @@ const ROLE_LABELS = {
   driver: "기사",
   shipper: "화주",
   test: "경리/회계",
-  plannerOnly: "플래너 전용",
 };
 
 // ================================
@@ -6265,25 +6263,6 @@ React.useEffect(() => {
     );
   }
 
-  // ⭐ "플래너 전용" 권한 — 배차/오더 등 이 프로그램의 다른 메뉴는 전혀 안 보이고
-  // "나의 플래너"만 접속할 수 있는 계정(예: 배우자 계정)을 위한 완전히 별도의
-  // 최소 화면. 정상 사이드바/메뉴 트리는 아예 렌더링하지 않는다.
-  if (role === "plannerOnly") {
-    return (
-      <ToastProvider>
-        <CustomAlert message={alertMsg} onClose={closeAlert} />
-        <div className="w-full min-h-screen flex flex-col" style={{ background: "#f8fafc" }}>
-          <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
-            <div className="text-white font-bold text-[16px]">나의 플래너</div>
-            <button onClick={logout} className="text-white/70 hover:text-white text-[13px] font-semibold">로그아웃</button>
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            <AdminPlanner userCompany={userCompany || localStorage.getItem("userCompany") || ""} myRealName={myRealName} />
-          </div>
-        </div>
-      </ToastProvider>
-    );
-  }
   // ---------------- 화주사 푸시 알림 (상차 임박 시 화주사가 보낸 푸시 — 확인 전까지 중앙 팝업 유지) ----------------
   // ⚡ 렌더마다 dispatchData 전체를 filter/sort 하지 않도록 useMemo로 스코프 (pendingShipperRequests와 동일 패턴)
   const pendingNudges = React.useMemo(
@@ -6949,7 +6928,7 @@ return (
         {menu === "관리센터" && role === "totalMaster" && (
           <div>
             <div className="flex gap-2 px-4 pt-4 pb-4">
-              {["경영인텔리전스", "가입신청관리", "나의 플래너"].map(tab => (
+              {["경영인텔리전스", "가입신청관리"].map(tab => (
                 <button key={tab} onClick={() => set관리센터Tab(tab)}
                   className={`px-5 py-2 text-[13px] font-bold rounded-lg transition border ${
                     관리센터Tab === tab
@@ -6965,9 +6944,6 @@ return (
             )}
             {관리센터Tab === "가입신청관리" && (
               <CompanyApplications />
-            )}
-            {관리센터Tab === "나의 플래너" && (
-              <AdminPlanner userCompany={userCompany || localStorage.getItem("userCompany") || ""} myRealName={myRealName} />
             )}
           </div>
         )}
@@ -55060,7 +55036,6 @@ const ROLE_LABELS_HR = {
   driver: "기사",
   shipper: "화주",
   test: "경리/회계",
-  plannerOnly: "플래너 전용",
 };
 
 // ─────────── PC ERP 관리 ───────────
