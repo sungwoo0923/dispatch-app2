@@ -558,6 +558,14 @@ export default function App() {
     </div>
   );
 
+  // ⭐ 같은 코드/저장소를 Vercel에서 "완전히 다른 프로젝트"로 한 번 더 배포해서
+  // KP-Planner 전용 도메인으로 쓸 수 있게 하는 스위치. 그 새 Vercel 프로젝트의
+  // 환경변수에 VITE_PLANNER_SITE=1 만 추가하면, 그 도메인은 루트(/)부터
+  // KP-Planner 로그인 화면으로 시작한다(배차프로그램 쪽 dispatch-app2 프로젝트는
+  // 이 환경변수가 없으니 지금처럼 그대로 동작한다).
+  const isPlannerSite = import.meta.env.VITE_PLANNER_SITE === "1";
+  const rootRedirect = isPlannerSite ? "/planner-login" : "/login";
+
   return (
     <>
       {/* 자동 업데이트 배너 (팝업 없이 상단 배너로 표시 후 자동 새로고침) */}
@@ -566,7 +574,7 @@ export default function App() {
       <Router>
         <React.Suspense fallback={routeFallback}>
         <Routes>
-          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/" element={<Navigate to={rootRedirect} replace />} />
 
           <Route
             path="/login"
@@ -678,7 +686,7 @@ export default function App() {
                   : role === "driver"
                     ? <Navigate to="/driver-home" replace />
                     : <Navigate to="/app" replace />
-                : <Navigate to="/login" replace />
+                : <Navigate to={rootRedirect} replace />
             }
           />
         </Routes>
