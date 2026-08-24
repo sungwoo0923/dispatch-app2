@@ -6,7 +6,7 @@ import KPPlannerLogo from "./KPPlannerLogo";
 export default function PlannerSplash() {
   return (
     <div style={{ minHeight: "100vh", width: "100%", background: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <KPPlannerLogo scale={0.95} />
+      <KPPlannerLogo size="lg" />
     </div>
   );
 }

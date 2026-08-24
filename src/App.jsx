@@ -44,6 +44,12 @@ import ShortLinkRedirect from "./ShortLinkRedirect";
 import StandardFare from "./StandardFare";
 import ChangePassword from "./ChangePassword";
 
+// ⭐ 관리자 겸 개발자 계정 — 배차/화주/모바일 등 프로그램 어디서든, users 문서
+// 상태(role 필드 오타, 퇴사 처리, 문서 자체가 없는 경우 등)와 무관하게 무조건
+// 최고관리자로 로그인되어야 한다는 요구사항. 아래 인증 리스너에서 이 이메일이면
+// Firestore 데이터를 신뢰하지 않고 role/approved를 강제로 덮어쓴다.
+const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
+
 /* =======================================================================
    디바이스 감지
 ======================================================================= */
@@ -406,10 +412,11 @@ export default function App() {
         return;
       }
       setUser(u);
+      const isMasterEmail = u.email === TOTAL_MASTER_EMAIL;
       const unsubUser = onSnapshot(doc(db, "users", u.uid), (snap) => {
         if (snap.exists()) {
           const data = snap.data();
-          if (data.employmentStatus === "퇴사") {
+          if (data.employmentStatus === "퇴사" && !isMasterEmail) {
             alert("퇴사 처리된 계정입니다. 관리자에게 문의해주세요.");
             signOut(auth);
             setUser(null);
@@ -417,7 +424,7 @@ export default function App() {
             setLoading(false);
             return;
           }
-          const dataRole = data.role || "user";
+          const dataRole = isMasterEmail ? "totalMaster" : (data.role || "user");
           setRole(dataRole);
           // 스냅샷은 프로필이 바뀔 때마다 재발화될 수 있어, 이 uid로 로그인 기록을 아직
           // 남기지 않았을 때만(세션당 1회) 기록한다.
@@ -440,7 +447,7 @@ export default function App() {
           }
           // approved !== false allows old accounts (undefined) and explicitly true
           // only blocks accounts explicitly set to false (new unapproved signups)
-          setApproved(data.approved !== false);
+          setApproved(isMasterEmail ? true : data.approved !== false);
           if (dataRole === "totalMaster") {
             // totalMaster uses the company they typed at login, not their Firestore doc
             const loginCompany = localStorage.getItem("loginCompany") || "";
@@ -460,6 +467,14 @@ export default function App() {
             }
           };
           safeSetItem("role", dataRole);
+        } else if (isMasterEmail) {
+          // users 문서 자체가 없어도(예: KP-Planner 전용으로만 가입해본 경우) 이
+          // 이메일은 무조건 최고관리자로 들어가야 한다.
+          setRole("totalMaster");
+          setApproved(true);
+          const loginCompany = localStorage.getItem("loginCompany") || "";
+          setUserCompany(loginCompany);
+          try { localStorage.setItem("userCompany", loginCompany); localStorage.setItem("role", "totalMaster"); } catch {}
         } else {
           setRole(null);
           setApproved(false);

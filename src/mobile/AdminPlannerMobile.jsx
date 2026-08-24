@@ -11,6 +11,7 @@ import {
   usePlannerEntries, addPlannerEntry, updatePlannerEntry, deletePlannerEntry,
   upsertBudgetTarget, fmtWon, todayStr,
 } from "../adminPlannerData";
+import { PINK } from "../planner/plannerTheme";
 
 const CATEGORY_SUGGESTIONS = ["생활비", "경조사", "명절", "세금/공과금", "보험", "여행", "자녀", "부모님", "기타"];
 function todayY() { return new Date().getFullYear(); }
@@ -287,8 +288,8 @@ function PrintableFamily({ innerRef, companyName, group, rows, total, accent }) 
 // 메뉴가 탭 이동을 대신 담당하는 경우) 내부 탭바를 안 그리고 바깥에서 준 탭을
 // 그대로 따른다 — 그 외(최고관리자가 일반 메뉴에서 들어온 경우)에는 예전처럼
 // 내부 탭바로 스스로 탭을 관리한다.
-export default function AdminPlannerMobile({ userCompany, dispatcherName, cardVersionB = false, activeTab, onTabChange, hideTabBar = false }) {
-  const accent = cardVersionB ? "#1B2B4B" : "#1d4ed8";
+export default function AdminPlannerMobile({ userCompany, dispatcherName, activeTab, onTabChange, hideTabBar = false }) {
+  const accent = PINK;
   const companyName = userCompany || localStorage.getItem("userCompany") || "";
   const { entries } = usePlannerEntries(companyName);
   const [internalTab, setInternalTab] = useState("dashboard");

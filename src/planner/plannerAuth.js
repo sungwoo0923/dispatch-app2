@@ -27,6 +27,51 @@ async function groupCodeTaken(code) {
   return !snap.empty;
 }
 
+// ⭐ Firebase 에러 코드를 화면에 그대로 노출하지 않고("Firebase: Error
+// (auth/email-already-in-use).") 명확한 한글 사유로 바꿔서 보여준다.
+function koreanAuthError(err) {
+  const code = err?.code || "";
+  const map = {
+    "auth/invalid-email": "이메일 형식이 올바르지 않습니다.",
+    "auth/weak-password": "비밀번호가 너무 약합니다. 6자 이상으로 입력해 주세요.",
+    "auth/wrong-password": "비밀번호가 올바르지 않습니다.",
+    "auth/invalid-credential": "이메일 또는 비밀번호가 올바르지 않습니다.",
+    "auth/invalid-login-credentials": "이메일 또는 비밀번호가 올바르지 않습니다.",
+    "auth/user-not-found": "등록되지 않은 이메일입니다.",
+    "auth/user-disabled": "사용이 제한된 계정입니다.",
+    "auth/too-many-requests": "너무 여러 번 시도했습니다. 잠시 후 다시 시도해 주세요.",
+    "auth/network-request-failed": "네트워크 연결을 확인해 주세요.",
+  };
+  return map[code] || "처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.";
+}
+
+// ⭐ 배차프로그램 등 이 Firebase 프로젝트 어딘가에 이미 등록된 이메일이어도
+// KP-Planner는 "완전히 새로운 프로그램"이라 상관없이 가입되어야 한다는 요구사항 —
+// Firebase Auth는 같은 이메일로 계정을 두 개 만들 수 없으므로(auth/email-already-
+// in-use), 새로 만드는 대신 "같은 이메일/비밀번호로 로그인"해서 같은 계정에
+// plannerAccounts 프로필만 새로 붙이는 방식으로 처리한다.
+async function getOrCreateAuthUser(email, password) {
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+    return cred.user;
+  } catch (err) {
+    if (err?.code === "auth/email-already-in-use") {
+      try {
+        const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+        return cred.user;
+      } catch {
+        throw new Error("이미 사용 중인 이메일입니다. 비밀번호가 다르다면, 그 계정의 비밀번호를 입력해 주세요.");
+      }
+    }
+    throw new Error(koreanAuthError(err));
+  }
+}
+
+async function assertNoExistingPlannerProfile(uid) {
+  const snap = await getDoc(doc(db, PLANNER_ACCOUNTS, uid));
+  if (snap.exists()) throw new Error("이미 KP-Planner에 가입되어 있는 계정입니다. 로그인해 주세요.");
+}
+
 // 로그인 상태 + plannerAccounts 문서를 함께 구독한다.
 export function usePlannerAccount() {
   const [state, setState] = useState({ loading: true, user: null, account: null });
@@ -51,7 +96,11 @@ export function usePlannerAccount() {
 }
 
 export async function plannerLogin(email, password) {
-  await signInWithEmailAndPassword(auth, email.trim(), password);
+  try {
+    await signInWithEmailAndPassword(auth, email.trim(), password);
+  } catch (err) {
+    throw new Error(koreanAuthError(err));
+  }
 }
 
 export async function plannerLogout() {
@@ -65,8 +114,9 @@ export async function signupCreateGroup({ email, password, name, groupCode, grou
   if (code.length < 4) throw new Error("가족 코드는 4자 이상으로 만들어 주세요.");
   if (await groupCodeTaken(code)) throw new Error("이미 사용 중인 가족 코드입니다. 다른 코드를 입력해 주세요.");
 
-  const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-  await setDoc(doc(db, PLANNER_ACCOUNTS, cred.user.uid), {
+  const user = await getOrCreateAuthUser(email, password);
+  await assertNoExistingPlannerProfile(user.uid);
+  await setDoc(doc(db, PLANNER_ACCOUNTS, user.uid), {
     email: email.trim(),
     name: name.trim(),
     groupId: code,
@@ -74,7 +124,7 @@ export async function signupCreateGroup({ email, password, name, groupCode, grou
     role: "owner",
     createdAt: serverTimestamp(),
   });
-  return { uid: cred.user.uid, groupId: code };
+  return { uid: user.uid, groupId: code };
 }
 
 // "코드로 참여하기" — 배우자 등 기존 가족 코드를 받은 사람이 같은 그룹에 합류한다.
@@ -83,13 +133,14 @@ export async function signupJoinGroup({ email, password, name, groupCode }) {
   if (!code) throw new Error("가족 코드를 입력해 주세요.");
   if (!(await groupCodeTaken(code))) throw new Error("존재하지 않는 가족 코드입니다. 코드를 다시 확인해 주세요.");
 
-  const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-  await setDoc(doc(db, PLANNER_ACCOUNTS, cred.user.uid), {
+  const user = await getOrCreateAuthUser(email, password);
+  await assertNoExistingPlannerProfile(user.uid);
+  await setDoc(doc(db, PLANNER_ACCOUNTS, user.uid), {
     email: email.trim(),
     name: name.trim(),
     groupId: code,
     role: "member",
     createdAt: serverTimestamp(),
   });
-  return { uid: cred.user.uid, groupId: code };
+  return { uid: user.uid, groupId: code };
 }
