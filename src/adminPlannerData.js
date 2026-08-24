@@ -354,9 +354,11 @@ export async function sendPlannerMessage({ groupId, senderUid, senderName, text,
 }
 
 export async function uploadMessengerImage(groupId, file) {
+  let payload = file;
+  try { payload = await compressImageFile(file); } catch { /* 압축 실패 시 원본으로라도 업로드 시도 */ }
   const path = `kp-planner/${groupId}/messages/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
   const r = ref(storage, path);
-  await uploadBytes(r, file);
+  await uploadBytes(r, payload);
   return getDownloadURL(r);
 }
 
@@ -916,10 +918,38 @@ export async function setTimelinePhoto(groupId, photoURL) {
   await setDoc(doc(db, PLANNER_TIMELINE_PHOTO, groupId), { groupId, photoURL, updatedAt: serverTimestamp() });
 }
 
+// ⭐ 휴대폰 사진첩에서 고른 원본 사진은 수 MB~수십 MB(고화질/HEIC)일 수 있어서,
+// 모바일 네트워크에서 업로드가 느리거나 조용히 실패하는 원인이 됐다("업로드
+// 중"만 잠깐 뜨고 아무 반응 없이 원래대로 돌아감). 캔버스로 리사이즈+JPEG
+// 재인코딩해서 용량을 크게 줄이고, 실패하면 원본 파일로라도 한 번 더 시도한다.
+export function compressImageFile(file, maxDim = 1600, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        if (width > height) { height = Math.round((height * maxDim) / width); width = maxDim; }
+        else { width = Math.round((width * maxDim) / height); height = maxDim; }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(url);
+      canvas.toBlob((blob) => { blob ? resolve(blob) : reject(new Error("이미지 변환 실패")); }, "image/jpeg", quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("이미지를 불러오지 못했습니다")); };
+    img.src = url;
+  });
+}
+
 export async function uploadTimelinePhoto(groupId, file) {
+  let payload = file;
+  try { payload = await compressImageFile(file); } catch { /* 압축 실패 시 원본으로라도 업로드 시도 */ }
   const path = `kp-planner/${groupId}/timeline/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
   const r = ref(storage, path);
-  await uploadBytes(r, file);
+  await uploadBytes(r, payload);
   const url = await getDownloadURL(r);
   await setTimelinePhoto(groupId, url);
   return url;

@@ -84,8 +84,10 @@ export default function PlannerMessenger({ groupId, myUid, myName }) {
     try {
       const url = await uploadMessengerImage(groupId, file);
       await sendPlannerMessage({ groupId, senderUid: myUid, senderName: myName, text: "", imageURL: url });
-    } catch {
-      // 업로드 실패 시 조용히 무시 — 다시 시도하면 됨
+    } catch (err) {
+      // ⭐ 예전엔 실패해도 아무 알림 없이 그냥 사라져서 왜 안 보내졌는지 알 수
+      // 없었다 — 실패 사유를 눈에 보이게 알려준다.
+      alert(err?.message ? `사진 전송에 실패했어요 (${err.message})` : "사진 전송에 실패했어요. 다시 시도해 주세요.");
     } finally {
       setUploading(false);
     }

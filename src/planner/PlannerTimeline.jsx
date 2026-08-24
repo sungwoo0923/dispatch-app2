@@ -25,16 +25,27 @@ function PhotoPicker({ groupId }) {
   const photoURL = useTimelinePhoto(groupId);
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef(null);
+  const [error, setError] = useState("");
 
   const handlePick = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    setError("");
     setUploading(true);
-    try { await uploadTimelinePhoto(groupId, file); } finally { setUploading(false); }
+    try {
+      await uploadTimelinePhoto(groupId, file);
+    } catch (err) {
+      // ⭐ 예전엔 여기서 실패가 조용히 무시돼서, "업로드 중"만 잠깐 뜨고
+      // 아무 반응 없이 원래대로 돌아가는 것처럼 보이는 버그가 있었다.
+      setError(err?.message ? `업로드에 실패했어요 (${err.message})` : "업로드에 실패했어요. 다시 시도해 주세요.");
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
+    <div>
     <button
       onClick={() => inputRef.current?.click()}
       className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-gray-50 border flex items-center justify-center"
@@ -60,6 +71,8 @@ function PhotoPicker({ groupId }) {
         <div className="absolute bottom-2 right-2 bg-black/45 text-white text-[10.5px] font-semibold px-2.5 py-1 rounded-full">사진 변경</div>
       )}
     </button>
+    {error && <div className="text-[11px] text-red-500 mt-1.5 text-center">{error}</div>}
+    </div>
   );
 }
 
