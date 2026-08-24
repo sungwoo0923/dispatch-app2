@@ -11,8 +11,7 @@ import {
   collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot,
   query, where, serverTimestamp, setDoc, runTransaction,
 } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { plannerDb as db, plannerStorage as storage } from "./planner/plannerFirebase";
+import { plannerDb as db } from "./planner/plannerFirebase";
 
 export const PLANNER_COLLECTION = "adminPlanner";
 
@@ -209,10 +208,7 @@ export async function ensureRecurringInstances(companyName, entries, actorName) 
 // 영수증 사진 업로드 + OCR 금액 인식
 // ────────────────────────────────────────────────
 export async function uploadReceiptPhoto(groupId, file) {
-  const path = `kp-planner/${groupId}/receipts/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
-  const r = ref(storage, path);
-  await uploadBytes(r, file);
-  return getDownloadURL(r);
+  return compressToDataURL(file);
 }
 
 // 영수증 이미지에서 텍스트를 스캔하고, 가장 그럴듯한 "합계 금액"을 추정한다.
@@ -354,12 +350,7 @@ export async function sendPlannerMessage({ groupId, senderUid, senderName, text,
 }
 
 export async function uploadMessengerImage(groupId, file) {
-  let payload = file;
-  try { payload = await compressImageFile(file); } catch { /* 압축 실패 시 원본으로라도 업로드 시도 */ }
-  const path = `kp-planner/${groupId}/messages/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
-  const r = ref(storage, path);
-  await uploadBytes(r, payload);
-  return getDownloadURL(r);
+  return compressToDataURL(file);
 }
 
 // ────────────────────────────────────────────────
@@ -983,15 +974,50 @@ export function compressImageFile(file, maxDim = 1600, quality = 0.85) {
   });
 }
 
+// ⭐ Firebase Storage 버킷이 요금제(Blaze) 연결 없이는 storage/quota-exceeded로
+// 막혀 있어서(용량이 아니라 버킷 자체가 잠긴 상태), KP-Planner의 사진 업로드
+// 기능(타임라인 대표사진/영수증/메신저 이미지)이 전부 이 오류로 실패했다.
+// 배차프로그램의 사업자등록증 업로드(DispatchApp.jsx)에서 이미 쓰고 있는 방식과
+// 동일하게 Storage를 아예 거치지 않고, 압축한 이미지를 base64로 인코딩해
+// Firestore 문서에 직접 저장한다. Firestore 문서 용량 한도(1MiB)를 넘지 않도록
+// 용량이 큰 경우 점점 더 세게 압축해 재시도한다.
+const PLANNER_IMAGE_BYTE_BUDGET = 700 * 1024; // base64로 부풀어도 1MiB 한도 아래로 여유
+const PLANNER_IMAGE_COMPRESS_STEPS = [
+  { maxDim: 1280, quality: 0.75 },
+  { maxDim: 960, quality: 0.65 },
+  { maxDim: 720, quality: 0.55 },
+  { maxDim: 480, quality: 0.45 },
+];
+
+function blobToDataURL(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("이미지를 읽지 못했습니다"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+export async function compressToDataURL(file) {
+  let lastDataUrl = null;
+  for (const step of PLANNER_IMAGE_COMPRESS_STEPS) {
+    let blob;
+    try {
+      blob = await compressImageFile(file, step.maxDim, step.quality);
+    } catch {
+      continue; // 이 단계 압축 실패 — 다음(더 작은) 단계로 시도
+    }
+    lastDataUrl = await blobToDataURL(blob);
+    if (blob.size <= PLANNER_IMAGE_BYTE_BUDGET) return lastDataUrl;
+  }
+  if (lastDataUrl) return lastDataUrl; // 다 커도 마지막(가장 작게 압축된) 결과라도 사용
+  return blobToDataURL(file); // 압축이 전부 실패한 경우 원본으로라도 시도
+}
+
 export async function uploadTimelinePhoto(groupId, file) {
-  let payload = file;
-  try { payload = await compressImageFile(file); } catch { /* 압축 실패 시 원본으로라도 업로드 시도 */ }
-  const path = `kp-planner/${groupId}/timeline/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
-  const r = ref(storage, path);
-  await uploadBytes(r, payload);
-  const url = await getDownloadURL(r);
-  await setTimelinePhoto(groupId, url);
-  return url;
+  const dataUrl = await compressToDataURL(file);
+  await setTimelinePhoto(groupId, dataUrl);
+  return dataUrl;
 }
 
 // 시작일 기준 "N년 M개월 D일" — 달력 상 실제 차이(윤년/월 길이 반영)로 계산한다.

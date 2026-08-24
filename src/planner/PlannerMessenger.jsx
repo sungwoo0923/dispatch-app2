@@ -131,7 +131,18 @@ export default function PlannerMessenger({ groupId, myUid, myName }) {
                       alt="첨부 이미지"
                       className="max-w-[220px] max-h-[220px] rounded-2xl object-cover border cursor-pointer"
                       style={{ borderColor: ACCENT_BORDER }}
-                      onClick={() => window.open(item.imageURL, "_blank")}
+                      onClick={() => {
+                        // ⭐ 사진이 이제 Storage URL이 아니라 base64 data URL이라서,
+                        // window.open(dataURL)은 브라우저가 팝업 보안상 막아버린다
+                        // (about:blank#blocked). 빈 창을 먼저 띄운 뒤 그 안에
+                        // <img>로 그려 넣으면 우회할 수 있다.
+                        const win = window.open("", "_blank");
+                        if (win) {
+                          win.document.write(
+                            `<title>사진</title><body style="margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${item.imageURL}" style="max-width:100%;max-height:100vh"/></body>`
+                          );
+                        }
+                      }}
                     />
                   ) : (
                     <div
