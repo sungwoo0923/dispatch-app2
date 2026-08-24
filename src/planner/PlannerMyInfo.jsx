@@ -1,7 +1,7 @@
 // src/planner/PlannerMyInfo.jsx — "내정보" 메뉴 (PC/모바일 공용, 모든 구성원이 접근 가능).
 // 이름/성별을 스스로 수정할 수 있다(성별은 화면 색상 테마에 반영).
 import React, { useState } from "react";
-import { updateMyProfile } from "./plannerAuth";
+import { updateMyProfile, TOTAL_MASTER_EMAIL } from "./plannerAuth";
 import { ACCENT, ACCENT_SOFT, ACCENT_BORDER } from "./plannerTheme";
 
 export default function PlannerMyInfo({ account, onUpdated }) {
@@ -80,7 +80,7 @@ export default function PlannerMyInfo({ account, onUpdated }) {
         <div className="flex justify-between text-[12.5px]"><span className="text-gray-500">이메일</span><span className="font-semibold text-gray-700">{account.email}</span></div>
         <div className="flex justify-between text-[12.5px]"><span className="text-gray-500">가족 이름</span><span className="font-semibold text-gray-700">{account.groupName || "우리 가족"}</span></div>
         <div className="flex justify-between text-[12.5px]"><span className="text-gray-500">가족 코드</span><span className="font-bold" style={{ color: ACCENT }}>{account.groupId}</span></div>
-        <div className="flex justify-between text-[12.5px]"><span className="text-gray-500">역할</span><span className="font-semibold text-gray-700">{account.role === "owner" ? "최고관리자" : "구성원"}</span></div>
+        <div className="flex justify-between text-[12.5px]"><span className="text-gray-500">역할</span><span className="font-semibold text-gray-700">{account.email === TOTAL_MASTER_EMAIL ? "최고관리자" : "구성원"}</span></div>
       </div>
     </div>
   );
