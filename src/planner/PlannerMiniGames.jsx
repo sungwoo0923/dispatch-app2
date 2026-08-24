@@ -6,6 +6,7 @@ import {
   startReactionRound, submitReactionTime,
 } from "../adminPlannerData";
 import { useGroupMembers } from "./plannerAuth";
+import PlannerMatchGame from "./PlannerMatchGame";
 import { ACCENT, ACCENT_SOFT, ACCENT_BORDER } from "./plannerTheme";
 
 function ScoreRow({ label, mine, theirs, otherName }) {
@@ -149,11 +150,32 @@ function ReactionGame({ groupId, myUid, myName, otherUid, otherName, state, scor
   );
 }
 
+// Bejeweled/Candy Crush류 매치 퍼즐 게임 — 60초 도전제라 실시간 대전이 아니라
+// "각자 도전해서 최고 점수 겨루기" 방식이라 카드에서 바로 시작할 수 있게 한다.
+function MatchGameCard({ account, other, scores, onPlay }) {
+  const myBest = scores[account.uid]?.matchGame?.best || 0;
+  const theirBest = scores[other.uid]?.matchGame?.best || 0;
+  return (
+    <div className="bg-white border rounded-xl p-4" style={{ borderColor: ACCENT_BORDER }}>
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="text-[13px] font-bold text-gray-700">구슬 터뜨리기</div>
+        <button onClick={onPlay} className="text-[11.5px] font-bold px-3 py-1.5 rounded-full text-white" style={{ background: ACCENT }}>플레이</button>
+      </div>
+      <div className="text-[11.5px] text-gray-400 mb-2.5">60초 동안 같은 색 구슬 5개를 한 줄로 모아 터뜨려 보세요.</div>
+      <div className="flex items-center justify-between text-[12px] font-bold" style={{ color: ACCENT }}>
+        <span>나 최고 {myBest}</span>
+        <span className="text-gray-400 font-semibold">{other.name || "배우자"} 최고 {theirBest}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function PlannerMiniGames({ account }) {
   const members = useGroupMembers(account.groupId);
   const other = members.find((m) => m.uid !== account.uid);
   const state = usePlannerGameState(account.groupId);
   const scores = usePlannerGameScores(account.groupId);
+  const [showMatchGame, setShowMatchGame] = useState(false);
 
   if (!other) {
     return (
@@ -165,9 +187,22 @@ export default function PlannerMiniGames({ account }) {
 
   return (
     <div className="max-w-lg mx-auto space-y-4">
-      <div className="text-[12.5px] text-gray-500">배우자와 실시간으로 즐기는 미니게임이에요. 점수는 계속 쌓여요.</div>
+      <div className="text-[12.5px] text-gray-500">배우자와 즐기는 미니게임이에요. 점수는 계속 쌓여요.</div>
+      <MatchGameCard account={account} other={other} scores={scores} onPlay={() => setShowMatchGame(true)} />
       <RockPaperScissors groupId={account.groupId} myUid={account.uid} myName={account.name} otherUid={other.uid} otherName={other.name} state={state} scores={scores} />
       <ReactionGame groupId={account.groupId} myUid={account.uid} myName={account.name} otherUid={other.uid} otherName={other.name} state={state} scores={scores} />
+
+      {showMatchGame && (
+        <PlannerMatchGame
+          groupId={account.groupId}
+          myUid={account.uid}
+          myName={account.name}
+          myBest={scores[account.uid]?.matchGame?.best || 0}
+          otherName={other.name}
+          otherBest={scores[other.uid]?.matchGame?.best || 0}
+          onClose={() => setShowMatchGame(false)}
+        />
+      )}
     </div>
   );
 }

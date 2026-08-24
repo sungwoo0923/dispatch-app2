@@ -981,3 +981,23 @@ export function next14DayInfo(todayStrArg) {
   const pct = Math.min(100, Math.max(0, Math.round((elapsed / cycleLen) * 100)));
   return { name: DAY14_NAMES[candidate.getMonth()], daysLeft, pct, date: fmt(candidate) };
 }
+
+// ────────────────────────────────────────────────
+// 10. 매치 게임(구슬 터뜨리기) — 각자 60초 동안 혼자 플레이하고, 최고 점수를
+// 기록해서 배우자와 점수로 겨룬다(동시 조작이 아니라 "누가 더 잘 터뜨렸나" 비교
+// 방식이라 실시간 트랜잭션 없이 내 점수만 기록하면 된다).
+// ────────────────────────────────────────────────
+export async function submitMatchGameScore(groupId, uid, name, score) {
+  const scoreRef = doc(db, PLANNER_GAME_SCORES, groupId);
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(scoreRef);
+    const scores = snap.exists() ? { ...snap.data() } : {};
+    const cur = scores[uid]?.matchGame || { best: 0, plays: 0 };
+    scores[uid] = {
+      ...(scores[uid] || {}),
+      name: name || scores[uid]?.name || "",
+      matchGame: { best: Math.max(cur.best || 0, score), lastScore: score, plays: (cur.plays || 0) + 1 },
+    };
+    tx.set(scoreRef, scores, { merge: true });
+  });
+}
