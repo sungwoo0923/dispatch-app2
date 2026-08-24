@@ -153,11 +153,18 @@ export default function PlannerMessenger({ groupId, myUid, myName }) {
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
-          className="shrink-0 w-10 h-10 rounded-full border flex items-center justify-center text-[16px] disabled:opacity-50"
+          className="shrink-0 w-10 h-10 rounded-full border flex items-center justify-center disabled:opacity-50"
           style={{ borderColor: ACCENT_BORDER, color: ACCENT }}
           title="사진 첨부"
         >
-          {uploading ? "…" : "📷"}
+          {uploading ? (
+            <span className="text-[11px] font-bold">…</span>
+          ) : (
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" />
+              <circle cx="12" cy="14" r="3.5" />
+            </svg>
+          )}
         </button>
         <input
           ref={inputRef}

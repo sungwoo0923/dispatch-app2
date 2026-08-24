@@ -8,6 +8,9 @@ import PlannerCycleTracker from "./PlannerCycleTracker";
 import PlannerMessenger from "./PlannerMessenger";
 import PlannerMyInfo from "./PlannerMyInfo";
 import PlannerNotificationBell from "./PlannerNotificationBell";
+import PlannerEventMoney from "./PlannerEventMoney";
+import PlannerOurStory from "./PlannerOurStory";
+import PlannerTimeCapsule from "./PlannerTimeCapsule";
 import { plannerLogout, TOTAL_MASTER_EMAIL } from "./plannerAuth";
 import { usePlannerUnreadCount } from "../adminPlannerData";
 import { ACCENT, BG } from "./plannerTheme";
@@ -24,6 +27,9 @@ export const PLANNER_MENU_ITEMS = [
   ["ledger", "수입·지출"],
   ["calendar", "일정"],
   ["family", "이벤트 예산"],
+  ["eventMoney", "경조사"],
+  ["ourStory", "우리 이야기"],
+  ["timeCapsule", "타임캡슐"],
   ["cycle", "생리주기"],
   ["myinfo", "내정보"],
 ];
@@ -80,11 +86,29 @@ export default function PlannerMobileShell({ account, onUpdated, previewMode = f
 
       <div style={{ flex: 1, overflowY: "auto" }}>
         {(page === "dashboard" || page === "ledger" || page === "calendar" || page === "family") && (
-          <AdminPlannerMobile userCompany={account.groupId} dispatcherName={account.name} activeTab={page} onTabChange={setPage} hideTabBar />
+          <AdminPlannerMobile
+            userCompany={account.groupId} dispatcherName={account.name} activeTab={page} onTabChange={setPage} hideTabBar
+            myUid={account.uid} coupleStartDate={account.coupleStartDate}
+          />
         )}
         {page === "cycle" && (
           <div className="px-4 pt-4 pb-24">
             <PlannerCycleTracker groupId={account.groupId} myUid={account.uid} myGender={account.gender} myName={account.name} />
+          </div>
+        )}
+        {page === "eventMoney" && (
+          <div className="px-4 pt-4 pb-24">
+            <PlannerEventMoney account={account} />
+          </div>
+        )}
+        {page === "ourStory" && (
+          <div className="px-4 pt-4 pb-24">
+            <PlannerOurStory account={account} onCoupleStartDateChange={(next) => onUpdated?.({ ...account, coupleStartDate: next })} />
+          </div>
+        )}
+        {page === "timeCapsule" && (
+          <div className="px-4 pt-4 pb-24">
+            <PlannerTimeCapsule account={account} />
           </div>
         )}
         {page === "myinfo" && (

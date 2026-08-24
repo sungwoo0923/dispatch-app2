@@ -52,7 +52,11 @@ export default function PlannerReceiptCapture({ groupId, photoURL, onScanned, on
           className="w-full py-2.5 rounded-lg border border-dashed text-[12.5px] font-semibold flex items-center justify-center gap-1.5"
           style={{ borderColor: ACCENT_BORDER, color: ACCENT }}
         >
-          📷 영수증 촬영/사진 선택 — 자동으로 금액을 읽어드려요
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+            <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" />
+            <circle cx="12" cy="14" r="3.5" />
+          </svg>
+          영수증 촬영/사진 선택 — 자동으로 금액을 읽어드려요
         </button>
       )}
       {error && <div className="text-[11px] text-gray-400 mt-1">{error}</div>}

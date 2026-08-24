@@ -266,6 +266,15 @@ export async function updateGroupName(groupId, groupName) {
   await Promise.all(snap.docs.map((d) => updateDoc(d.ref, { groupName })));
 }
 
+// ⭐ "우리 이야기"(D-day/연표)에서 쓰는 관계 시작일(연애/결혼 시작일)도 가족
+// 이름과 같은 이유로 구성원 전체 문서에 동일하게 반영한다 — 한쪽에서 정하면
+// 배우자 화면에도 똑같은 D-day가 보여야 하니까.
+export async function updateCoupleStartDate(groupId, coupleStartDate) {
+  const q = query(collection(db, PLANNER_ACCOUNTS), where("groupId", "==", groupId));
+  const snap = await getDocs(q);
+  await Promise.all(snap.docs.map((d) => updateDoc(d.ref, { coupleStartDate })));
+}
+
 // ⭐ 최고관리자 전용 "가입자 관리" 화면에서 쓴다 — 전체 plannerAccounts를 그룹 구분
 //없이 다 구독한다. PlannerAdminPanel(owner에게만 렌더링됨) 밖에서는 쓰지 않는다.
 export function useAllPlannerAccounts() {

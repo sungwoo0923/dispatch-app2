@@ -22,7 +22,10 @@ import PlannerTimePicker from "./planner/PlannerTimePicker";
 import PlannerCategorySelect from "./planner/PlannerCategorySelect";
 import PlannerReceiptCapture from "./planner/PlannerReceiptCapture";
 import PlannerCycleTracker from "./planner/PlannerCycleTracker";
-import PlannerMessenger from "./planner/PlannerMessenger";
+import PlannerEventMoney from "./planner/PlannerEventMoney";
+import PlannerOurStory from "./planner/PlannerOurStory";
+import PlannerTimeCapsule from "./planner/PlannerTimeCapsule";
+import PlannerHomeExtras from "./planner/PlannerHomeExtras";
 import useBodyScrollLock from "./planner/useBodyScrollLock";
 
 function todayY() { return new Date().getFullYear(); }
@@ -654,20 +657,31 @@ function PrintableFamily({ innerRef, companyName, group, rows, total }) {
 // ────────────────────────────────────────────────
 // 메인 컴포넌트
 // ────────────────────────────────────────────────
+// ⭐ 메신저는 예전엔 여기 탭이었지만, 상단 헤더의 채팅 아이콘(뱃지 포함)으로
+// 옮겨서 더 이상 여기 탭 목록엔 없다(모바일 쪽도 이미 그렇게 정리돼 있음).
 const TAB_ITEMS = [
   ["dashboard", "홈"],
   ["ledger", "수입·지출"],
   ["calendar", "일정"],
   ["family", "이벤트 예산"],
+  ["eventMoney", "경조사"],
+  ["ourStory", "우리 이야기"],
+  ["timeCapsule", "타임캡슐"],
   ["cycle", "생리주기"],
-  ["messenger", "메신저"],
 ];
 
-export default function AdminPlanner({ userCompany, myRealName, myUid, myGender }) {
+export default function AdminPlanner({ userCompany, myRealName, myUid, myGender, coupleStartDate, onAccountUpdated }) {
   const companyName = userCompany || localStorage.getItem("userCompany") || "";
   const { entries } = usePlannerEntries(companyName);
   const [tab, setTab] = useState("dashboard");
   const [year, setYear] = useState(todayY());
+  const [localCoupleStartDate, setLocalCoupleStartDate] = useState(coupleStartDate || "");
+  useEffect(() => { setLocalCoupleStartDate(coupleStartDate || ""); }, [coupleStartDate]);
+  const homeAccount = { groupId: companyName, uid: myUid, name: myRealName, coupleStartDate: localCoupleStartDate };
+  const handleCoupleStartDateChange = (next) => {
+    setLocalCoupleStartDate(next);
+    onAccountUpdated?.({ coupleStartDate: next });
+  };
 
   const incomeExpense = useMemo(() => entries.filter((e) => e.type === "income" || e.type === "expense"), [entries]);
   const schedules = useMemo(() => entries.filter((e) => e.type === "schedule"), [entries]);
@@ -729,7 +743,7 @@ export default function AdminPlanner({ userCompany, myRealName, myUid, myGender 
         <DashboardTab
           year={year} budgetTarget={budgetTarget} totalIncome={totalIncome} totalExpense={totalExpense}
           schedules={schedules} groups={groups} companyName={companyName} actorName={myRealName} entries={entries}
-          incomeExpense={incomeExpense}
+          incomeExpense={incomeExpense} myUid={myUid} coupleStartDate={localCoupleStartDate}
         />
       )}
       {tab === "ledger" && (
@@ -744,14 +758,14 @@ export default function AdminPlanner({ userCompany, myRealName, myUid, myGender 
       {tab === "cycle" && (
         <PlannerCycleTracker groupId={companyName} myUid={myUid} myGender={myGender} myName={myRealName} />
       )}
-      {tab === "messenger" && (
-        <PlannerMessenger groupId={companyName} myUid={myUid} myName={myRealName} />
-      )}
+      {tab === "eventMoney" && <PlannerEventMoney account={homeAccount} />}
+      {tab === "ourStory" && <PlannerOurStory account={homeAccount} onCoupleStartDateChange={handleCoupleStartDateChange} />}
+      {tab === "timeCapsule" && <PlannerTimeCapsule account={homeAccount} />}
     </div>
   );
 }
 
-function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules, groups, companyName, actorName, entries, incomeExpense }) {
+function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules, groups, companyName, actorName, entries, incomeExpense, myUid, coupleStartDate }) {
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState(String(budgetTarget || ""));
   const [sharing, setSharing] = useState(false);
@@ -785,6 +799,10 @@ function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules
 
   return (
     <div>
+      <PlannerHomeExtras
+        groupId={companyName} myUid={myUid} myName={actorName} coupleStartDate={coupleStartDate}
+        entries={entries} incomeExpense={incomeExpense} budgetTarget={budgetTarget}
+      />
       <div className="flex items-center justify-between mb-3">
         <div className="text-[13px] font-bold text-gray-700">{year}년 요약</div>
         <button onClick={shareMonthly} disabled={sharing} className="text-[12px] font-bold px-3 py-1.5 rounded-lg" style={{ background: ACCENT, color: "#fff" }}>
@@ -1072,7 +1090,11 @@ function LedgerTab({ rows, companyName, actorName, recurringTemplates }) {
                         <span className={`shrink-0 px-1.5 py-0.5 rounded text-[11px] font-bold ${r.type === "income" ? "bg-gray-100 text-gray-700" : "bg-red-50 text-red-600"}`}>
                           {r.type === "income" ? "수입" : "지출"}
                         </span>
-                        {r.receiptURL && <span className="shrink-0 text-[11px]" title="영수증 첨부됨">📎</span>}
+                        {r.receiptURL && (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0" title="영수증 첨부됨">
+                            <path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                          </svg>
+                        )}
                         <span className="text-gray-900 font-semibold truncate">{r.title}</span>
                         {r.category && <span className="text-[12px] text-gray-500 shrink-0">{r.category}</span>}
                         {r.memo && <span className="text-[12px] text-gray-400 truncate">· {r.memo}</span>}

@@ -87,7 +87,10 @@ function PlannerDesktopShell({ account, onUpdated }) {
           </button>
         </div>
       </div>
-      <AdminPlanner userCompany={account.groupId} myRealName={account.name} myUid={account.uid} myGender={account.gender} />
+      <AdminPlanner
+        userCompany={account.groupId} myRealName={account.name} myUid={account.uid} myGender={account.gender}
+        coupleStartDate={account.coupleStartDate} onAccountUpdated={(patch) => onUpdated?.({ ...account, ...patch })}
+      />
 
       {showAdmin && (
         <PlannerAdminPanel account={account} onClose={() => setShowAdmin(false)} onUpdated={onUpdated} />

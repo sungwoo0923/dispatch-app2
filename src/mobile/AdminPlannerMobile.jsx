@@ -23,6 +23,7 @@ import PlannerTimePicker from "../planner/PlannerTimePicker";
 import PlannerDialNumber from "../planner/PlannerDialNumber";
 import PlannerCategorySelect from "../planner/PlannerCategorySelect";
 import PlannerReceiptCapture from "../planner/PlannerReceiptCapture";
+import PlannerHomeExtras from "../planner/PlannerHomeExtras";
 import useBodyScrollLock from "../planner/useBodyScrollLock";
 
 function todayY() { return new Date().getFullYear(); }
@@ -426,7 +427,7 @@ function PrintableFamily({ innerRef, companyName, group, rows, total, accent }) 
 // 메뉴가 탭 이동을 대신 담당하는 경우) 내부 탭바를 안 그리고 바깥에서 준 탭을
 // 그대로 따른다 — 그 외(최고관리자가 일반 메뉴에서 들어온 경우)에는 예전처럼
 // 내부 탭바로 스스로 탭을 관리한다.
-export default function AdminPlannerMobile({ userCompany, dispatcherName, activeTab, onTabChange, hideTabBar = false }) {
+export default function AdminPlannerMobile({ userCompany, dispatcherName, activeTab, onTabChange, hideTabBar = false, myUid, coupleStartDate }) {
   const accent = ACCENT;
   const companyName = userCompany || localStorage.getItem("userCompany") || "";
   const { entries } = usePlannerEntries(companyName);
@@ -474,7 +475,8 @@ export default function AdminPlannerMobile({ userCompany, dispatcherName, active
 
       {tab === "dashboard" && (
         <MobileDashboard year={year} budgetTarget={budgetTarget} totalIncome={totalIncome} totalExpense={totalExpense}
-          schedules={schedules} groups={groups} companyName={companyName} actorName={dispatcherName} entries={entries} accent={accent} incomeExpense={incomeExpense} />
+          schedules={schedules} groups={groups} companyName={companyName} actorName={dispatcherName} entries={entries} accent={accent} incomeExpense={incomeExpense}
+          myUid={myUid} coupleStartDate={coupleStartDate} />
       )}
       {tab === "ledger" && <MobileLedger rows={incomeExpense} companyName={companyName} actorName={dispatcherName} accent={accent} recurringTemplates={recurringTemplates} />}
       {tab === "calendar" && <MobileCalendar year={year} schedules={schedules} companyName={companyName} actorName={dispatcherName} accent={accent} />}
@@ -483,7 +485,7 @@ export default function AdminPlannerMobile({ userCompany, dispatcherName, active
   );
 }
 
-function MobileDashboard({ year, budgetTarget, totalIncome, totalExpense, schedules, groups, companyName, actorName, entries, accent, incomeExpense }) {
+function MobileDashboard({ year, budgetTarget, totalIncome, totalExpense, schedules, groups, companyName, actorName, entries, accent, incomeExpense, myUid, coupleStartDate }) {
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState(String(budgetTarget || ""));
   const [sharing, setSharing] = useState(false);
@@ -523,6 +525,10 @@ function MobileDashboard({ year, budgetTarget, totalIncome, totalExpense, schedu
 
   return (
     <div>
+      <PlannerHomeExtras
+        groupId={companyName} myUid={myUid} myName={actorName} coupleStartDate={coupleStartDate}
+        entries={entries} incomeExpense={incomeExpense} budgetTarget={budgetTarget}
+      />
       {/* ⭐ 예전엔 예산/수입지출/일정/이벤트예산이 각각 다른 카드로 따로 떨어져
           있었다. 카드 하나로 합치고, 그 안을 주제별로 구분선/소제목으로 나눴다. */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
@@ -785,7 +791,11 @@ function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates
                             <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9.5px] font-bold ${r.type === "income" ? "text-gray-600" : "bg-red-50 text-red-500"}`} style={r.type === "income" ? { background: ACCENT_SOFT } : undefined}>
                               {r.type === "income" ? "수입" : "지출"}
                             </span>
-                            {r.receiptURL && <span className="shrink-0 text-[11px]">📎</span>}
+                            {r.receiptURL && (
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                                <path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                              </svg>
+                            )}
                             <span className="text-[13px] font-bold text-gray-800 truncate">{r.title}</span>
                           </div>
                           <span className={`text-[13px] font-extrabold shrink-0 ml-2 ${r.type === "income" ? "text-gray-700" : "text-red-600"}`}>{fmtWon(r.amount)}</span>

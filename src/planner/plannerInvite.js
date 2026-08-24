@@ -15,14 +15,14 @@ export function buildInviteLink(groupCode, myGender) {
 export function buildInviteMessage({ groupCode, groupName, myName, myGender }) {
   const link = buildInviteLink(groupCode, myGender);
   return [
-    `${myName ? `${myName}님이 ` : ""}KP-Planner(우리 가족 다이어리)에 초대했어요! 💌`,
+    `${myName ? `${myName}님이 ` : ""}KP-Planner(우리 가족 다이어리)에 초대했어요.`,
     "",
     `아래 링크를 누르면 "${groupName || "우리 가족"}" 가족에 바로 합류할 수 있어요.`,
     link,
     "",
     `가족코드: ${groupCode} (링크를 열면 자동으로 입력돼 있어요)`,
     "",
-    "함께 수입·지출, 일정, 이벤트 예산을 관리해요 😊",
+    "함께 수입·지출, 일정, 이벤트 예산을 관리해요.",
   ].join("\n");
 }
 
