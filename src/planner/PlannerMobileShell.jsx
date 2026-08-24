@@ -11,6 +11,8 @@ import PlannerNotificationBell from "./PlannerNotificationBell";
 import PlannerEventMoney from "./PlannerEventMoney";
 import PlannerOurStory from "./PlannerOurStory";
 import PlannerTimeCapsule from "./PlannerTimeCapsule";
+import PlannerMiniGames from "./PlannerMiniGames";
+import PlannerSettings from "./PlannerSettings";
 import { plannerLogout, TOTAL_MASTER_EMAIL } from "./plannerAuth";
 import { usePlannerUnreadCount } from "../adminPlannerData";
 import { ACCENT, BG } from "./plannerTheme";
@@ -31,7 +33,9 @@ export const PLANNER_MENU_ITEMS = [
   ["ourStory", "우리 이야기"],
   ["timeCapsule", "타임캡슐"],
   ["cycle", "생리주기"],
+  ["games", "미니게임"],
   ["myinfo", "내정보"],
+  ["settings", "설정"],
 ];
 
 function ChatIconButton({ onClick, unreadCount = 0 }) {
@@ -70,9 +74,12 @@ export default function PlannerMobileShell({ account, onUpdated, previewMode = f
         <div style={{ color: "rgba(255,255,255,0.85)", fontWeight: 600, fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {pageTitle}
         </div>
-        <div style={{ color: "#fff", fontWeight: 800, fontSize: 16, textAlign: "center", whiteSpace: "nowrap" }}>
+        <button
+          onClick={() => setPage("dashboard")}
+          style={{ color: "#fff", fontWeight: 800, fontSize: 16, textAlign: "center", whiteSpace: "nowrap", background: "none", border: "none" }}
+        >
           {account.groupName || "우리 가족"}
-        </div>
+        </button>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4 }}>
           <ChatIconButton onClick={() => setShowMessenger(true)} unreadCount={unreadCount} />
           <PlannerNotificationBell groupId={account.groupId} />
@@ -88,7 +95,7 @@ export default function PlannerMobileShell({ account, onUpdated, previewMode = f
         {(page === "dashboard" || page === "ledger" || page === "calendar" || page === "family") && (
           <AdminPlannerMobile
             userCompany={account.groupId} dispatcherName={account.name} activeTab={page} onTabChange={setPage} hideTabBar
-            myUid={account.uid} coupleStartDate={account.coupleStartDate}
+            myUid={account.uid} myGender={account.gender} coupleStartDate={account.coupleStartDate}
           />
         )}
         {page === "cycle" && (
@@ -111,9 +118,19 @@ export default function PlannerMobileShell({ account, onUpdated, previewMode = f
             <PlannerTimeCapsule account={account} />
           </div>
         )}
+        {page === "games" && (
+          <div className="px-4 pt-4 pb-24">
+            <PlannerMiniGames account={account} />
+          </div>
+        )}
         {page === "myinfo" && (
           <div className="px-4 pt-4 pb-24">
             <PlannerMyInfo account={account} onUpdated={onUpdated} />
+          </div>
+        )}
+        {page === "settings" && (
+          <div className="px-4 pt-4 pb-24">
+            <PlannerSettings account={account} onUpdated={onUpdated} />
           </div>
         )}
       </div>

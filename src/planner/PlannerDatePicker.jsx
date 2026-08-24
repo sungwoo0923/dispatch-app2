@@ -85,9 +85,15 @@ export default function PlannerDatePicker({ value, onChange, placeholder = "날�
       >
         {value ? labelOf(value) : <span className="text-gray-400">{placeholder}</span>}
       </button>
+      {/* ⭐ 예전엔 버튼 바로 아래(absolute)에 떴는데, 버튼이 화면 오른쪽에 가까우면
+          팝업이 화면 밖으로 잘리고 그 여백만큼 페이지 전체가 가로로 스크롤되는
+          문제가 있었다("내정보"에서 특히 심함) — 버튼 위치와 무관하게 항상 화면
+          정중앙에 고정(fixed)으로 띄워서 원천적으로 막는다. */}
       {open && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4" onClick={() => setOpen(false)}>
         <div
-          className="absolute z-[10000] mt-1.5 bg-white rounded-xl shadow-2xl p-3 w-[300px] max-w-[90vw]"
+          className="bg-white rounded-xl shadow-2xl p-3 w-[300px] max-w-[90vw]"
+          onClick={(e) => e.stopPropagation()}
           style={{ border: `1px solid ${ACCENT_BORDER}` }}
         >
           <div className="flex items-center justify-between mb-2">
@@ -173,6 +179,7 @@ export default function PlannerDatePicker({ value, onChange, placeholder = "날�
               </div>
             </>
           )}
+        </div>
         </div>
       )}
     </div>

@@ -8,10 +8,12 @@ import PlannerSplash from "./PlannerSplash";
 import PlannerAdminPanel from "./PlannerAdminPanel";
 import PlannerMobileShell from "./PlannerMobileShell";
 import PlannerMyInfo from "./PlannerMyInfo";
+import PlannerSettings from "./PlannerSettings";
 import PlannerMessenger from "./PlannerMessenger";
 import PlannerNotificationBell from "./PlannerNotificationBell";
 import { usePlannerAccount, plannerLogout, useGroupMembers, TOTAL_MASTER_EMAIL } from "./plannerAuth";
 import { usePlannerUnreadCount } from "../adminPlannerData";
+import PlannerAlertBanner from "./PlannerAlertBanner";
 import { ACCENT, BG, applyGenderTheme } from "./plannerTheme";
 import AdminPlanner from "../AdminPlanner";
 
@@ -38,19 +40,25 @@ function useOtherMembersLabel(account) {
 function PlannerDesktopShell({ account, onUpdated }) {
   const [showAdmin, setShowAdmin] = useState(false);
   const [showMyInfo, setShowMyInfo] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [showMessenger, setShowMessenger] = useState(false);
+  const [homeSignal, setHomeSignal] = useState(0);
   const isOwner = account.email === TOTAL_MASTER_EMAIL;
   const otherLabel = useOtherMembersLabel(account);
   const unreadCount = usePlannerUnreadCount(account.groupId, account.uid);
   return (
     <div style={{ width: "100%", minHeight: "100vh", background: BG }}>
       <div style={{ background: ACCENT, padding: "12px 28px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <button
+          onClick={() => setHomeSignal((v) => v + 1)}
+          style={{ display: "flex", alignItems: "center", gap: 14, background: "none", border: "none", cursor: "pointer" }}
+          title="홈으로"
+        >
           <div style={{ filter: "brightness(0) invert(1)" }}>
             <KPPlannerLogo size="sm" showTagline={false} />
           </div>
           <div style={{ color: "rgba(255,255,255,0.9)", fontSize: 14, fontWeight: 700 }}>{account.groupName || "우리 가족"}</div>
-        </div>
+        </button>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <span style={{ color: "rgba(255,255,255,0.85)", fontSize: 12.5 }}>{account.name}님 · {otherLabel}</span>
           <button
@@ -74,6 +82,12 @@ function PlannerDesktopShell({ account, onUpdated }) {
           >
             내정보
           </button>
+          <button
+            onClick={() => setShowSettings(true)}
+            style={{ fontSize: 12.5, fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.35)", borderRadius: 8, padding: "5px 12px", cursor: "pointer" }}
+          >
+            설정
+          </button>
           {isOwner && (
             <button
               onClick={() => setShowAdmin(true)}
@@ -90,6 +104,7 @@ function PlannerDesktopShell({ account, onUpdated }) {
       <AdminPlanner
         userCompany={account.groupId} myRealName={account.name} myUid={account.uid} myGender={account.gender}
         coupleStartDate={account.coupleStartDate} onAccountUpdated={(patch) => onUpdated?.({ ...account, ...patch })}
+        goHomeSignal={homeSignal}
       />
 
       {showAdmin && (
@@ -104,6 +119,18 @@ function PlannerDesktopShell({ account, onUpdated }) {
               <button onClick={() => setShowMyInfo(false)} style={{ background: "none", border: "none", fontSize: 20, color: "#6b7280", cursor: "pointer" }}>✕</button>
             </div>
             <PlannerMyInfo account={account} onUpdated={onUpdated} />
+          </div>
+        </div>
+      )}
+      {showSettings && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)" }} onClick={() => setShowSettings(false)} />
+          <div style={{ position: "relative", width: 420, maxWidth: "100%", background: "#fff", borderRadius: 20, padding: 24, boxShadow: "0 10px 30px rgba(0,0,0,0.18)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#2a2a30" }}>설정</div>
+              <button onClick={() => setShowSettings(false)} style={{ background: "none", border: "none", fontSize: 20, color: "#6b7280", cursor: "pointer" }}>✕</button>
+            </div>
+            <PlannerSettings account={account} onUpdated={onUpdated} />
           </div>
         </div>
       )}
@@ -189,7 +216,12 @@ export default function PlannerRoot() {
   // 렌더링돼야 첫 화면부터 올바른 색이 보인다.
   applyGenderTheme(effectiveAccount.gender);
 
-  return isSmartPhone()
-    ? <PlannerMobileShell account={effectiveAccount} onUpdated={setAccountOverride} />
-    : <PlannerDesktopShell account={effectiveAccount} onUpdated={setAccountOverride} />;
+  return (
+    <>
+      <PlannerAlertBanner account={effectiveAccount} />
+      {isSmartPhone()
+        ? <PlannerMobileShell account={effectiveAccount} onUpdated={setAccountOverride} />
+        : <PlannerDesktopShell account={effectiveAccount} onUpdated={setAccountOverride} />}
+    </>
+  );
 }

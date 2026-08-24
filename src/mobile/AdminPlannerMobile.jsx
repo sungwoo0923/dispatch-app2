@@ -24,6 +24,8 @@ import PlannerDialNumber from "../planner/PlannerDialNumber";
 import PlannerCategorySelect from "../planner/PlannerCategorySelect";
 import PlannerReceiptCapture from "../planner/PlannerReceiptCapture";
 import PlannerHomeExtras from "../planner/PlannerHomeExtras";
+import PlannerUpcomingSchedule from "../planner/PlannerUpcomingSchedule";
+import PlannerWalletModal from "../planner/PlannerWalletModal";
 import useBodyScrollLock from "../planner/useBodyScrollLock";
 
 function todayY() { return new Date().getFullYear(); }
@@ -427,7 +429,7 @@ function PrintableFamily({ innerRef, companyName, group, rows, total, accent }) 
 // 메뉴가 탭 이동을 대신 담당하는 경우) 내부 탭바를 안 그리고 바깥에서 준 탭을
 // 그대로 따른다 — 그 외(최고관리자가 일반 메뉴에서 들어온 경우)에는 예전처럼
 // 내부 탭바로 스스로 탭을 관리한다.
-export default function AdminPlannerMobile({ userCompany, dispatcherName, activeTab, onTabChange, hideTabBar = false, myUid, coupleStartDate }) {
+export default function AdminPlannerMobile({ userCompany, dispatcherName, activeTab, onTabChange, hideTabBar = false, myUid, myGender, coupleStartDate }) {
   const accent = ACCENT;
   const companyName = userCompany || localStorage.getItem("userCompany") || "";
   const { entries } = usePlannerEntries(companyName);
@@ -476,19 +478,20 @@ export default function AdminPlannerMobile({ userCompany, dispatcherName, active
       {tab === "dashboard" && (
         <MobileDashboard year={year} budgetTarget={budgetTarget} totalIncome={totalIncome} totalExpense={totalExpense}
           schedules={schedules} groups={groups} companyName={companyName} actorName={dispatcherName} entries={entries} accent={accent} incomeExpense={incomeExpense}
-          myUid={myUid} coupleStartDate={coupleStartDate} />
+          myUid={myUid} myGender={myGender} coupleStartDate={coupleStartDate} />
       )}
-      {tab === "ledger" && <MobileLedger rows={incomeExpense} companyName={companyName} actorName={dispatcherName} accent={accent} recurringTemplates={recurringTemplates} />}
+      {tab === "ledger" && <MobileLedger rows={incomeExpense} companyName={companyName} actorName={dispatcherName} accent={accent} recurringTemplates={recurringTemplates} entries={entries} />}
       {tab === "calendar" && <MobileCalendar year={year} schedules={schedules} companyName={companyName} actorName={dispatcherName} accent={accent} />}
       {tab === "family" && <MobileFamily groups={groups} companyName={companyName} actorName={dispatcherName} accent={accent} />}
     </div>
   );
 }
 
-function MobileDashboard({ year, budgetTarget, totalIncome, totalExpense, schedules, groups, companyName, actorName, entries, accent, incomeExpense, myUid, coupleStartDate }) {
+function MobileDashboard({ year, budgetTarget, totalIncome, totalExpense, schedules, groups, companyName, actorName, entries, accent, incomeExpense, myUid, myGender, coupleStartDate }) {
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState(String(budgetTarget || ""));
   const [sharing, setSharing] = useState(false);
+  const [scheduleModal, setScheduleModal] = useState(null); // null | "new" | 일정 entry 객체
   const balance = totalIncome - totalExpense;
   const printRef = useRef(null);
   const upcoming = useMemo(() => {
@@ -496,8 +499,7 @@ function MobileDashboard({ year, budgetTarget, totalIncome, totalExpense, schedu
     return schedules
       .map((s) => ({ ...s, effectiveDate: s.recurring ? nextOccurrence(s.date, t) : s.date }))
       .filter((s) => (s.effectiveDate || "") >= t)
-      .sort((a, b) => (a.effectiveDate || "").localeCompare(b.effectiveDate || ""))
-      .slice(0, 5);
+      .sort((a, b) => (a.effectiveDate || "").localeCompare(b.effectiveDate || ""));
   }, [schedules]);
   const familyTotal = useMemo(() => groups.reduce((sum, [, rows]) => sum + rows.reduce((s, r) => s + Number(r.amount || 0), 0), 0), [groups]);
   const { first, last } = thisMonthRange();
@@ -525,10 +527,7 @@ function MobileDashboard({ year, budgetTarget, totalIncome, totalExpense, schedu
 
   return (
     <div>
-      <PlannerHomeExtras
-        groupId={companyName} myUid={myUid} myName={actorName} coupleStartDate={coupleStartDate}
-        entries={entries} incomeExpense={incomeExpense} budgetTarget={budgetTarget}
-      />
+      <PlannerHomeExtras groupId={companyName} myUid={myUid} myName={actorName} myGender={myGender} coupleStartDate={coupleStartDate} />
       {/* ⭐ 예전엔 예산/수입지출/일정/이벤트예산이 각각 다른 카드로 따로 떨어져
           있었다. 카드 하나로 합치고, 그 안을 주제별로 구분선/소제목으로 나눴다. */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
@@ -594,23 +593,14 @@ function MobileDashboard({ year, budgetTarget, totalIncome, totalExpense, schedu
         </div>
 
         <div className="border-t-2 border-gray-100 px-3.5 py-3.5">
-          <div className="text-[11.5px] font-bold mb-2" style={{ color: accent }}>다가오는 일정</div>
-          {upcoming.length === 0 && <div className="text-[12px] text-gray-500 py-3 text-center">등록된 일정이 없습니다</div>}
-          <div className="space-y-2">
-            {upcoming.map((s) => {
-              const dday = dDayLabel(s.effectiveDate);
-              const soon = dday === "D-DAY" || dday === "D-1";
-              return (
-                <div key={s.id} className="flex items-center justify-between text-[12.5px] border-b border-gray-100 last:border-b-0 pb-2 last:pb-0">
-                  <span className="text-gray-700 font-semibold truncate flex items-center gap-1.5 min-w-0">
-                    {dday && <span className="shrink-0 px-1.5 py-0.5 rounded text-[9.5px] font-extrabold" style={soon ? { background: accent, color: "#fff" } : { background: "#f3f4f6", color: "#6b7280" }}>{dday}</span>}
-                    <span className="truncate">{s.title}{s.recurring && <span className="text-[10px] text-gray-500 font-normal"> (매년)</span>}</span>
-                  </span>
-                  <span className="text-gray-500 shrink-0 ml-2">{s.effectiveDate}{s.time ? ` ${s.time}` : ""}</span>
-                </div>
-              );
-            })}
-          </div>
+          <PlannerUpcomingSchedule
+            upcoming={upcoming}
+            onAdd={() => setScheduleModal("new")}
+            onSelect={(s) => setScheduleModal(s)}
+            bare
+            titleClassName="text-[11.5px] font-bold mb-2"
+            titleColor={accent}
+          />
         </div>
 
         <div className="border-t-2 border-gray-100 px-3.5 py-3.5">
@@ -632,6 +622,17 @@ function MobileDashboard({ year, budgetTarget, totalIncome, totalExpense, schedu
         </div>
       </div>
       <PrintableLedger innerRef={printRef} companyName={companyName} label={`${first.slice(0, 7)} 이번 달 요약`} rows={monthRows} totalIncome={monthIncome} totalExpense={monthExpense} accent={accent} />
+
+      {scheduleModal && (
+        <ScheduleEntryModal
+          initial={scheduleModal === "new" ? null : scheduleModal}
+          defaultDate={todayStr()}
+          companyName={companyName}
+          actorName={actorName}
+          accent={accent}
+          onClose={() => setScheduleModal(null)}
+        />
+      )}
     </div>
   );
 }
@@ -647,13 +648,14 @@ function dateLabelKoM(dateStr) {
 // 나와야 한다는 요구사항) — 검색어만 "조회" 버튼(또는 Enter)을 눌러야 반영된다.
 // 내역추가/저장(이미지)/PDF/분류별합계/날짜별목록을 카드 하나로 합쳤고, 저장·PDF는
 // 상단 오른쪽에 작은 버튼으로 뺐다. 정기 지출 등록은 "내역 추가" 안에서 연결된다.
-function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates }) {
+function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates, entries }) {
   const monthDefault = thisMonthRange();
   const [filters, setFilters] = useState({ start: monthDefault.first, end: monthDefault.last, kind: "all" });
   const [keywordDraft, setKeywordDraft] = useState("");
   const [keywordApplied, setKeywordApplied] = useState("");
   const [editing, setEditing] = useState(null);
   const [showRecurring, setShowRecurring] = useState(false);
+  const [showWallet, setShowWallet] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const printRef = useRef(null);
@@ -728,6 +730,13 @@ function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates
         <div className="flex items-center justify-between mb-3">
           <div className="text-[12.5px] font-bold text-gray-700">수입·지출 내역</div>
           <div className="flex items-center gap-1.5">
+            <button onClick={() => setShowWallet(true)} className="w-7 h-7 rounded-md border border-gray-200 flex items-center justify-center shrink-0" style={{ color: accent }} title="지갑">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
+                <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
+                <path d="M18 12a2 2 0 0 0 0 4h4v-4z" />
+              </svg>
+            </button>
             <button onClick={() => setEditing({})} className="px-2.5 py-1 rounded-md text-white text-[11px] font-bold" style={{ background: accent }}>내역 추가</button>
             <button onClick={saveImage} disabled={saving} className="px-2.5 py-1 rounded-md border border-gray-200 text-[11px] font-semibold text-gray-500">
               {saving ? "저장중" : "저장"}
@@ -824,6 +833,7 @@ function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates
         />
       )}
       {showRecurring && <RecurringManagerSheet templates={recurringTemplates} companyName={companyName} actorName={actorName} accent={accent} onClose={() => setShowRecurring(false)} />}
+      {showWallet && <PlannerWalletModal groupId={companyName} myName={actorName} entries={entries} onClose={() => setShowWallet(false)} />}
     </div>
   );
 }
@@ -855,7 +865,21 @@ function MobileCalendar({ year, schedules, companyName, actorName, accent }) {
   const fmt = (y, m, d) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
   const todayS = todayStr();
   const goMonth = (delta) => { let m = viewMonth + delta, y = viewYear; if (m < 0) { m = 11; y -= 1; } else if (m > 11) { m = 0; y += 1; } setViewMonth(m); setViewYear(y); };
-  const dayItems = byDate.get(selectedDate) || [];
+  // ⭐ 예전엔 선택한 날짜의 일정만 보였는데, 이번 달 전체에 등록된 일정을 아래에
+  // 쭉 보여주고, 날짜를 선택하면 그 날 일정만 맨 위로 올라오는 방식으로 바꿨다.
+  // "새로고침"을 누르면 선택 날짜가 오늘로 리셋되며 원래 순서로 돌아온다.
+  const monthItems = useMemo(() => {
+    const mm = String(viewMonth + 1).padStart(2, "0");
+    const prefix = `${viewYear}-${mm}`;
+    const rows = [];
+    byDate.forEach((items, dateKey) => { if (dateKey.startsWith(prefix)) rows.push(...items.map((it) => ({ ...it, __effDate: dateKey }))); });
+    return rows.sort((a, b) => (a.__effDate || "").localeCompare(b.__effDate || ""));
+  }, [byDate, viewYear, viewMonth]);
+  const displayItems = useMemo(() => {
+    const selected = monthItems.filter((it) => it.__effDate === selectedDate);
+    const rest = monthItems.filter((it) => it.__effDate !== selectedDate);
+    return [...selected, ...rest];
+  }, [monthItems, selectedDate]);
 
   return (
     <div>
@@ -892,18 +916,28 @@ function MobileCalendar({ year, schedules, companyName, actorName, accent }) {
       </div>
 
       <div className="flex items-center justify-between mb-2">
-        <div className="text-[12.5px] font-bold text-gray-600">{selectedDate}</div>
-        <button onClick={() => setEditing({ date: selectedDate })} className="px-2.5 py-1 rounded-lg text-white text-[11px] font-bold" style={{ background: accent }}>일정 추가</button>
+        <div className="text-[12.5px] font-bold text-gray-600">{viewYear}년 {viewMonth + 1}월 등록된 일정</div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button onClick={() => setSelectedDate(todayS)} className="px-2 py-1 rounded-lg border text-[11px] font-bold" style={{ color: accent, borderColor: accent }}>새로고침</button>
+          <button onClick={() => setEditing({ date: selectedDate })} className="px-2.5 py-1 rounded-lg text-white text-[11px] font-bold" style={{ background: accent }}>일정 추가</button>
+        </div>
       </div>
-      {dayItems.length === 0 && <div className="bg-white border border-gray-200 rounded-xl py-8 text-center text-[12px] text-gray-400">등록된 일정이 없습니다</div>}
+      {displayItems.length === 0 && <div className="bg-white border border-gray-200 rounded-xl py-8 text-center text-[12px] text-gray-400">등록된 일정이 없습니다</div>}
       <div className="space-y-2">
-        {dayItems.map((it) => {
+        {displayItems.map((it) => {
           const dday = dDayLabel(it.recurring ? nextOccurrence(it.date, todayStr()) : it.date);
+          const isSelected = it.__effDate === selectedDate;
           return (
-            <div key={it.id} onClick={() => setEditing(it)} className="bg-white border border-gray-200 rounded-xl p-3 active:bg-gray-50">
+            <div
+              key={it.id}
+              onClick={() => setEditing(it)}
+              className="bg-white border rounded-xl p-3 active:bg-gray-50"
+              style={{ borderColor: isSelected ? accent : "#e5e7eb", borderWidth: isSelected ? 1.5 : 1 }}
+            >
               <div className="text-[13px] font-bold text-gray-800 flex items-center gap-1.5">
                 {dday && <span className="px-1.5 py-0.5 rounded text-[9.5px] font-extrabold" style={{ background: accent, color: "#fff" }}>{dday}</span>}
                 {it.title}
+                <span className="text-[10.5px] text-gray-400 font-normal">{it.__effDate}</span>
               </div>
               <div className="text-[11px] text-gray-400 mt-0.5">
                 {it.time ? `${it.time} · ` : ""}{it.memo || ""}{it.createdByName ? ` · ${it.createdByName}` : ""}

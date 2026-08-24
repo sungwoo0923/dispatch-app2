@@ -25,7 +25,10 @@ import PlannerCycleTracker from "./planner/PlannerCycleTracker";
 import PlannerEventMoney from "./planner/PlannerEventMoney";
 import PlannerOurStory from "./planner/PlannerOurStory";
 import PlannerTimeCapsule from "./planner/PlannerTimeCapsule";
+import PlannerMiniGames from "./planner/PlannerMiniGames";
 import PlannerHomeExtras from "./planner/PlannerHomeExtras";
+import PlannerUpcomingSchedule from "./planner/PlannerUpcomingSchedule";
+import PlannerWalletModal from "./planner/PlannerWalletModal";
 import useBodyScrollLock from "./planner/useBodyScrollLock";
 
 function todayY() { return new Date().getFullYear(); }
@@ -668,15 +671,20 @@ const TAB_ITEMS = [
   ["ourStory", "우리 이야기"],
   ["timeCapsule", "타임캡슐"],
   ["cycle", "생리주기"],
+  ["games", "미니게임"],
 ];
 
-export default function AdminPlanner({ userCompany, myRealName, myUid, myGender, coupleStartDate, onAccountUpdated }) {
+export default function AdminPlanner({ userCompany, myRealName, myUid, myGender, coupleStartDate, onAccountUpdated, goHomeSignal }) {
   const companyName = userCompany || localStorage.getItem("userCompany") || "";
   const { entries } = usePlannerEntries(companyName);
   const [tab, setTab] = useState("dashboard");
   const [year, setYear] = useState(todayY());
   const [localCoupleStartDate, setLocalCoupleStartDate] = useState(coupleStartDate || "");
   useEffect(() => { setLocalCoupleStartDate(coupleStartDate || ""); }, [coupleStartDate]);
+  // ⭐ 상단 헤더의 가족 이름을 누르면 항상 홈 탭으로 돌아가야 한다는 요구사항 —
+  // 헤더는 이 컴포넌트 밖(PlannerDesktopShell)에 있어서, 클릭할 때마다 값이
+  // 바뀌는 신호(goHomeSignal)를 내려받아 감시하는 방식으로 처리한다.
+  useEffect(() => { if (goHomeSignal) setTab("dashboard"); }, [goHomeSignal]);
   const homeAccount = { groupId: companyName, uid: myUid, name: myRealName, coupleStartDate: localCoupleStartDate };
   const handleCoupleStartDateChange = (next) => {
     setLocalCoupleStartDate(next);
@@ -743,11 +751,11 @@ export default function AdminPlanner({ userCompany, myRealName, myUid, myGender,
         <DashboardTab
           year={year} budgetTarget={budgetTarget} totalIncome={totalIncome} totalExpense={totalExpense}
           schedules={schedules} groups={groups} companyName={companyName} actorName={myRealName} entries={entries}
-          incomeExpense={incomeExpense} myUid={myUid} coupleStartDate={localCoupleStartDate}
+          incomeExpense={incomeExpense} myUid={myUid} myGender={myGender} coupleStartDate={localCoupleStartDate}
         />
       )}
       {tab === "ledger" && (
-        <LedgerTab rows={incomeExpense} companyName={companyName} actorName={myRealName} recurringTemplates={recurringTemplates} />
+        <LedgerTab rows={incomeExpense} companyName={companyName} actorName={myRealName} recurringTemplates={recurringTemplates} entries={entries} />
       )}
       {tab === "calendar" && (
         <CalendarTab year={year} schedules={schedules} companyName={companyName} actorName={myRealName} />
@@ -761,25 +769,27 @@ export default function AdminPlanner({ userCompany, myRealName, myUid, myGender,
       {tab === "eventMoney" && <PlannerEventMoney account={homeAccount} />}
       {tab === "ourStory" && <PlannerOurStory account={homeAccount} onCoupleStartDateChange={handleCoupleStartDateChange} />}
       {tab === "timeCapsule" && <PlannerTimeCapsule account={homeAccount} />}
+      {tab === "games" && <PlannerMiniGames account={homeAccount} />}
     </div>
   );
 }
 
-function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules, groups, companyName, actorName, entries, incomeExpense, myUid, coupleStartDate }) {
+function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules, groups, companyName, actorName, entries, incomeExpense, myUid, myGender, coupleStartDate }) {
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState(String(budgetTarget || ""));
   const [sharing, setSharing] = useState(false);
+  const [scheduleModal, setScheduleModal] = useState(null); // null | "new" | 일정 entry 객체
   const balance = totalIncome - totalExpense;
   const printRef = useRef(null);
   const upcoming = useMemo(() => {
     const t = todayStr();
     // ⭐ 매년 반복(생일/기념일)은 저장된 날짜가 과거라도 "올해/내년 돌아오는 날짜"로
-    // 계산해서 다가오는 일정에 함께 보여준다.
+    // 계산해서 다가오는 일정에 함께 보여준다. 홈에서는 5개씩 페이지를 넘겨가며
+    // 보므로 여기서는 자르지 않고 전부 넘긴다.
     return schedules
       .map((s) => ({ ...s, effectiveDate: s.recurring ? nextOccurrence(s.date, t) : s.date }))
       .filter((s) => (s.effectiveDate || "") >= t)
-      .sort((a, b) => (a.effectiveDate || "").localeCompare(b.effectiveDate || ""))
-      .slice(0, 5);
+      .sort((a, b) => (a.effectiveDate || "").localeCompare(b.effectiveDate || ""));
   }, [schedules]);
   const familyTotal = useMemo(() => groups.reduce((sum, [, rows]) => sum + rows.reduce((s, r) => s + Number(r.amount || 0), 0), 0), [groups]);
 
@@ -799,10 +809,7 @@ function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules
 
   return (
     <div>
-      <PlannerHomeExtras
-        groupId={companyName} myUid={myUid} myName={actorName} coupleStartDate={coupleStartDate}
-        entries={entries} incomeExpense={incomeExpense} budgetTarget={budgetTarget}
-      />
+      <PlannerHomeExtras groupId={companyName} myUid={myUid} myName={actorName} myGender={myGender} coupleStartDate={coupleStartDate} />
       <div className="flex items-center justify-between mb-3">
         <div className="text-[13px] font-bold text-gray-700">{year}년 요약</div>
         <button onClick={shareMonthly} disabled={sharing} className="text-[12px] font-bold px-3 py-1.5 rounded-lg" style={{ background: ACCENT, color: "#fff" }}>
@@ -867,32 +874,7 @@ function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules
       })()}
 
       <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="text-[13px] font-bold text-gray-700 mb-3">다가오는 일정</div>
-          {upcoming.length === 0 && <div className="text-[12px] text-gray-400 py-4 text-center">등록된 일정이 없습니다</div>}
-          <div className="space-y-2">
-            {upcoming.map((s) => {
-              const dday = dDayLabel(s.effectiveDate);
-              const soon = dday === "D-DAY" || dday === "D-1";
-              return (
-                <div key={s.id} className="flex items-center justify-between text-[12.5px] border-b border-gray-50 last:border-b-0 pb-2 last:pb-0">
-                  <span className="text-gray-700 font-semibold truncate flex items-center gap-1.5">
-                    {dday && (
-                      <span
-                        className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-extrabold"
-                        style={soon ? { background: ACCENT, color: "#fff" } : { background: "#f3f4f6", color: "#6b7280" }}
-                      >
-                        {dday}
-                      </span>
-                    )}
-                    {s.title}{s.recurring && <span className="text-[10px] text-gray-400 font-normal">(매년)</span>}
-                  </span>
-                  <span className="text-gray-400 shrink-0 ml-2">{s.effectiveDate}{s.time ? ` ${s.time}` : ""}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <PlannerUpcomingSchedule upcoming={upcoming} onAdd={() => setScheduleModal("new")} onSelect={(s) => setScheduleModal(s)} />
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <div className="text-[13px] font-bold text-gray-700 mb-3">이벤트 예산</div>
           {groups.length === 0 && <div className="text-[12px] text-gray-400 py-4 text-center">등록된 이벤트 예산이 없습니다</div>}
@@ -913,6 +895,16 @@ function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules
       </div>
 
       <PrintableLedger innerRef={printRef} companyName={companyName} label={`${first.slice(0, 7)} 이번 달 요약`} rows={monthRows} totalIncome={monthIncome} totalExpense={monthExpense} />
+
+      {scheduleModal && (
+        <ScheduleEntryModal
+          initial={scheduleModal === "new" ? null : scheduleModal}
+          defaultDate={todayStr()}
+          companyName={companyName}
+          actorName={actorName}
+          onClose={() => setScheduleModal(null)}
+        />
+      )}
     </div>
   );
 }
@@ -930,13 +922,14 @@ function dateLabelKo(dateStr) {
 // (3) 시작일/종료일/구분은 누르는 즉시 바로 반영되고(내역을 추가하면 그 결과가
 // 바로바로 보여야 한다는 요구사항), 검색어만 "조회" 버튼(또는 Enter)을 눌러야
 // 반영된다 — 자유 텍스트 검색만 배차프로그램의 조회 방식을 따른다.
-function LedgerTab({ rows, companyName, actorName, recurringTemplates }) {
+function LedgerTab({ rows, companyName, actorName, recurringTemplates, entries }) {
   const monthDefault = thisMonthRange();
   const [filters, setFilters] = useState({ start: monthDefault.first, end: monthDefault.last, kind: "all" });
   const [keywordDraft, setKeywordDraft] = useState("");
   const [keywordApplied, setKeywordApplied] = useState("");
   const [editing, setEditing] = useState(null); // null | {} | entry
   const [showRecurring, setShowRecurring] = useState(false);
+  const [showWallet, setShowWallet] = useState(false);
   const printRef = useRef(null);
 
   const runQuery = () => setKeywordApplied(keywordDraft);
@@ -1020,6 +1013,19 @@ function LedgerTab({ rows, companyName, actorName, recurringTemplates }) {
       <div className="flex items-center justify-between mb-4">
         <div className="text-[12px] font-semibold text-gray-500">{rangeLabel}</div>
         <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => setShowWallet(true)}
+            className="px-3 py-1.5 rounded-lg border text-[12px] font-semibold flex items-center gap-1.5"
+            style={{ borderColor: ACCENT_BORDER, color: ACCENT }}
+            title="지갑"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
+              <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
+              <path d="M18 12a2 2 0 0 0 0 4h4v-4z" />
+            </svg>
+            지갑
+          </button>
           <button
             onClick={() => exportTableToExcel(`수입지출_${filters.start}_${filters.end}`, filtered, { date: "날짜", type: "구분", title: "항목명", category: "분류", amount: "금액", memo: "메모" })}
             className="px-3 py-1.5 rounded-lg border border-gray-200 text-[12px] font-semibold text-gray-600 hover:bg-gray-50"
@@ -1126,6 +1132,9 @@ function LedgerTab({ rows, companyName, actorName, recurringTemplates }) {
       {showRecurring && (
         <RecurringManagerModal templates={recurringTemplates} companyName={companyName} actorName={actorName} onClose={() => setShowRecurring(false)} />
       )}
+      {showWallet && (
+        <PlannerWalletModal groupId={companyName} myName={actorName} entries={entries} onClose={() => setShowWallet(false)} />
+      )}
     </div>
   );
 }
@@ -1134,6 +1143,7 @@ function CalendarTab({ year, schedules, companyName, actorName }) {
   const [viewMonth, setViewMonth] = useState(new Date().getMonth());
   const [viewYear, setViewYear] = useState(year);
   const [editing, setEditing] = useState(null); // null | {date} | entry
+  const [selectedDate, setSelectedDate] = useState(todayStr());
   React.useEffect(() => { setViewYear(year); }, [year]);
 
   // ⭐ 매년 반복(생일/기념일)은 저장된 연도와 상관없이, 지금 보고 있는 달력의
@@ -1149,6 +1159,21 @@ function CalendarTab({ year, schedules, companyName, actorName }) {
     });
     return map;
   }, [schedules, viewYear]);
+
+  // ⭐ 아래에 그 달에 등록된 일정을 전부 시간순으로 보여주고, 날짜를 선택(클릭)하면
+  // 그 날 일정이 맨 위로 올라온다. "새로고침"을 누르면 선택 날짜가 오늘로 리셋된다.
+  const monthItems = useMemo(() => {
+    const mm = String(viewMonth + 1).padStart(2, "0");
+    const prefix = `${viewYear}-${mm}`;
+    const rows = [];
+    byDate.forEach((items, dateKey) => { if (dateKey.startsWith(prefix)) rows.push(...items.map((it) => ({ ...it, __effDate: dateKey }))); });
+    return rows.sort((a, b) => (a.__effDate || "").localeCompare(b.__effDate || ""));
+  }, [byDate, viewYear, viewMonth]);
+  const displayItems = useMemo(() => {
+    const selected = monthItems.filter((it) => it.__effDate === selectedDate);
+    const rest = monthItems.filter((it) => it.__effDate !== selectedDate);
+    return [...selected, ...rest];
+  }, [monthItems, selectedDate]);
 
   const first = new Date(viewYear, viewMonth, 1);
   const startDow = first.getDay();
@@ -1184,11 +1209,13 @@ function CalendarTab({ year, schedules, companyName, actorName }) {
             const holidayName = KOREAN_HOLIDAYS[dateStr];
             const isToday = dateStr === todayS;
             const items = byDate.get(dateStr) || [];
+            const isSelected = dateStr === selectedDate;
             return (
               <div
                 key={i}
-                onClick={() => setEditing({ date: dateStr })}
-                className={`min-h-[92px] rounded-lg border p-1.5 cursor-pointer hover:border-[#EC6FA0] transition ${isToday ? "border-2 border-[#EC6FA0]" : "border-gray-100"}`}
+                onClick={() => setSelectedDate(dateStr)}
+                className={`min-h-[92px] rounded-lg border p-1.5 cursor-pointer hover:border-[#EC6FA0] transition ${isSelected ? "border-2" : isToday ? "border-2 border-gray-300" : "border-gray-100"}`}
+                style={isSelected ? { borderColor: ACCENT } : undefined}
               >
                 <div className={`text-[12px] font-bold mb-1 ${holidayName || dow === 0 ? "text-red-500" : dow === 6 ? "text-blue-500" : "text-gray-600"}`}>
                   {d}
@@ -1208,6 +1235,37 @@ function CalendarTab({ year, schedules, companyName, actorName }) {
                   ))}
                   {items.length > 3 && <div className="text-[9.5px] text-gray-400 font-semibold">+{items.length - 3}건</div>}
                 </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-xl p-4 mt-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-[13px] font-bold text-gray-700">{viewYear}년 {viewMonth + 1}월 등록된 일정</div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={() => setSelectedDate(todayS)} className="text-[11.5px] font-bold px-2.5 py-1 rounded-lg border" style={{ color: ACCENT, borderColor: ACCENT }}>새로고침</button>
+            <button onClick={() => setEditing({ date: selectedDate })} className="text-[11.5px] font-bold px-2.5 py-1 rounded-lg" style={{ background: ACCENT, color: "#fff" }}>+ 등록</button>
+          </div>
+        </div>
+        {displayItems.length === 0 && <div className="text-[12px] text-gray-400 py-6 text-center">등록된 일정이 없습니다</div>}
+        <div className="space-y-2">
+          {displayItems.map((it) => {
+            const dday = dDayLabel(it.recurring ? nextOccurrence(it.date, todayStr()) : it.date);
+            const isSel = it.__effDate === selectedDate;
+            return (
+              <div
+                key={it.id}
+                onClick={() => setEditing(it)}
+                className="flex items-center justify-between text-[12.5px] rounded-lg px-2.5 py-2 cursor-pointer border"
+                style={{ borderColor: isSel ? ACCENT : "#f3f4f6" }}
+              >
+                <span className="text-gray-700 font-semibold truncate flex items-center gap-1.5 min-w-0">
+                  {dday && <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-extrabold" style={{ background: ACCENT, color: "#fff" }}>{dday}</span>}
+                  <span className="truncate">{it.title}{it.recurring && <span className="text-[10px] text-gray-400 font-normal">(매년)</span>}</span>
+                </span>
+                <span className="text-gray-400 shrink-0 ml-2">{it.__effDate}{it.time ? ` ${it.time}` : ""}</span>
               </div>
             );
           })}

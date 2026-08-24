@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import {
   collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot,
-  query, where, serverTimestamp, setDoc,
+  query, where, serverTimestamp, setDoc, runTransaction,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { plannerDb as db, plannerStorage as storage } from "./planner/plannerFirebase";
@@ -483,9 +483,14 @@ export function savingsContributedTotal(entries) {
 // ────────────────────────────────────────────────
 export const PLANNER_MOOD_CHECKS = "plannerMoodChecks";
 export const MOOD_OPTIONS = [
+  { value: "happy", label: "행복" },
   { value: "good", label: "좋음" },
+  { value: "excited", label: "설렘" },
   { value: "normal", label: "보통" },
   { value: "tired", label: "지침" },
+  { value: "anxious", label: "불안" },
+  { value: "sad", label: "우울" },
+  { value: "angry", label: "분노" },
 ];
 
 export async function setPlannerMood(groupId, uid, name, date, mood) {
@@ -522,6 +527,61 @@ export const WEEKLY_MISSIONS = [
   "좋아하는 노래 하나씩 공유하기",
   "잠들기 전 오늘 하루 칭찬 한마디씩 하기",
   "다음 데이트 코스 같이 짜보기",
+  "서로 사진첩에서 제일 좋아하는 사진 골라 보여주기",
+  "같이 요리 하나 만들어보기",
+  "손편지 짧게 한 장씩 써주기",
+  "10년 뒤 우리 모습 상상해서 이야기해보기",
+  "서로 좋아하는 영화 하나씩 골라서 같이 보기",
+  "오늘 하루 중 제일 행복했던 순간 말해주기",
+  "같이 산책하며 동네 맛집 하나 찾아보기",
+  "서로에게 안마 3분씩 해주기",
+  "다음 달 가계부 같이 점검하기",
+  "서로의 장점 세 가지씩 말해주기",
+  "같이 사진 찍고 배경화면으로 바꾸기",
+  "예전에 찍은 사진/영상 같이 보며 추억 이야기하기",
+  "서로에게 버킷리스트 하나씩 알려주기",
+  "이번 주 제일 힘들었던 일 들어주고 위로해주기",
+  "같이 새로운 카페/식당 가보기",
+  "서로 어깨 마사지 3분씩 해주기",
+  "같이 방 청소하고 정리하기",
+  "서로에게 요즘 고민 하나씩 말해주기",
+  "다음 명절/기념일 계획 같이 세워보기",
+  "함께 스트레칭이나 운동 10분 하기",
+  "서로 좋아하는 향수/향 소개해주기",
+  "같이 드라이브하며 아무 얘기나 하기",
+  "서로에게 어울리는 색 하나씩 골라주기",
+  "오늘 저녁은 서로 좋아하는 메뉴로 번갈아 만들어주기",
+  "함께 다음 여행 예산 짜보기",
+  "서로에게 배우고 싶은 것 하나씩 알려주기",
+  "잠들기 전 오늘 감사한 일 세 가지씩 말하기",
+  "같이 보드게임이나 카드게임 한 판 하기",
+  "서로 눈 감고 목소리만으로 표정 맞히기 놀이하기",
+  "함께 좋아하는 노래로 플레이리스트 만들기",
+];
+
+// ⭐ 19금 버전 미션 — 노골적인 성적 묘사 없이, 부부/커플 사이의 스킨십·설렘을
+// 자연스럽게 유도하는 수위로만 구성한다.
+export const WEEKLY_MISSIONS_ADULT = [
+  "핸드폰 내려놓고 서로에게만 집중하는 밤 보내기",
+  "서로에게 은밀한 칭찬 한마디씩 속삭여주기",
+  "평소보다 오래, 진하게 안아주기",
+  "서로 좋아하는 향으로 마사지 오일 발라 마사지해주기",
+  "함께 샤워하거나 반신욕하며 오붓한 시간 보내기",
+  "서로에게 듣고 싶은 말 한마디씩 해주기",
+  "불 끄고 촛불만 켜둔 채 둘만의 시간 보내기",
+  "서로 눈 맞추고 1분간 아무 말 없이 안아주기",
+  "오늘 밤은 평소보다 스킨십에 조금 더 대담해지기",
+  "서로에게 매력적이라고 생각하는 부분 말해주기",
+  "잠들기 전 서로 귀에 대고 사랑한다고 속삭여주기",
+  "함께 야한 농담 하나씩 주고받으며 웃기",
+  "서로가 좋아하는 스킨십 방식 솔직하게 이야기해보기",
+  "오늘 하루는 애칭으로만 서로 부르기",
+  "서로에게 관능적인 춤 한 소절씩 춰주기",
+  "손 마사지하며 서로 눈 계속 마주치기",
+  "오늘 밤 데이트는 침대 위에서 마무리하기",
+  "서로 옷 입은 채로 뒤에서 꼭 안아주고 목에 입맞춤하기",
+  "서로에게 판타지(하고 싶은 것) 하나씩 살짝 말해보기",
+  "오늘은 평소보다 애정표현을 스킨십으로 더 많이 하기",
 ];
 
 export const PLANNER_MISSION_CHECKS = "plannerMissionChecks";
@@ -535,23 +595,57 @@ function isoWeekKey(d = new Date()) {
   return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
 }
 
-export function currentWeekMission() {
-  const weekKey = isoWeekKey();
-  const weekNum = Number(weekKey.split("-W")[1]);
-  const text = WEEKLY_MISSIONS[weekNum % WEEKLY_MISSIONS.length];
-  return { weekKey, text };
+// 문자열을 결정적인(항상 같은 결과가 나오는) 숫자로 바꾼다 — Firestore에 아직
+// 아무것도 저장되지 않은 최초 상태에서도, 새로고침 전까지는 둘 다 같은 미션이
+// 보이도록 하는 기본값 계산에 쓴다.
+function hashStr(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) | 0; }
+  return Math.abs(h);
 }
 
-export function useWeekMissionCheck(groupId, weekKey) {
+function missionPoolFor(pool) {
+  return pool === "adult" ? WEEKLY_MISSIONS_ADULT : WEEKLY_MISSIONS;
+}
+
+// 이번 주 미션 상태(문구/완료여부/성인모드 여부)를 실시간 구독한다. 문서가 아직
+// 없으면 weekKey를 시드로 한 결정적 기본 미션을 보여준다(둘 다 같은 걸 봄).
+export function useWeekMission(groupId) {
+  const weekKey = isoWeekKey();
   const [state, setState] = useState(null);
   useEffect(() => {
-    if (!groupId || !weekKey) { setState(null); return; }
+    if (!groupId) { setState(null); return; }
     const unsub = onSnapshot(doc(db, PLANNER_MISSION_CHECKS, `${groupId}_${weekKey}`), (snap) => {
       setState(snap.exists() ? snap.data() : null);
     }, () => {});
     return () => unsub();
   }, [groupId, weekKey]);
-  return state;
+
+  const pool = state?.pool === "adult" ? "adult" : "normal";
+  const list = missionPoolFor(pool);
+  const index = Number.isInteger(state?.missionIndex) ? state.missionIndex : hashStr(weekKey) % list.length;
+  const text = list[index] || list[0];
+
+  return { weekKey, text, pool, index, done: !!state?.done, doneByName: state?.doneByName || "" };
+}
+
+// 새로고침 — 같은 주 안에서 다른 미션으로 무작위 교체(완료 여부는 초기화).
+export async function rerollWeekMission(groupId, weekKey, pool, currentIndex) {
+  const list = missionPoolFor(pool);
+  let index = Math.floor(Math.random() * list.length);
+  // 방금 본 것과 똑같은 게 다시 나오면 새로고침한 느낌이 안 나니, 목록이 2개
+  // 이상이면 현재 인덱스와 겹치지 않을 때까지 다시 뽑는다.
+  if (list.length > 1 && Number.isInteger(currentIndex)) {
+    while (index === currentIndex) index = Math.floor(Math.random() * list.length);
+  }
+  await setDoc(doc(db, PLANNER_MISSION_CHECKS, `${groupId}_${weekKey}`), {
+    groupId, weekKey, pool, missionIndex: index, done: false, doneByName: "", doneAt: null,
+  }, { merge: true });
+}
+
+// 성인 모드 on/off — 바뀌는 즉시 그 모드의 미션으로 새로 하나 뽑아준다.
+export async function setWeekMissionPool(groupId, weekKey, pool) {
+  await rerollWeekMission(groupId, weekKey, pool);
 }
 
 export async function togglePlannerMissionDone(groupId, weekKey, done, actorName) {
@@ -642,4 +736,164 @@ export function buildMonthlyBriefing({ incomeExpense, budgetTarget, savingsGoal,
   }
 
   return lines;
+}
+
+// ────────────────────────────────────────────────
+// 7. 지갑 — "현재 우리 재산(잔액)"을 한 번 설정해두고, 그 이후로는 +/- 로 조정만
+// 누적한다. 초기값은 가족당 문서 하나(id=groupId), 조정 내역은 entries 컬렉션에
+// type:"walletAdjustment"로 쌓는다(다른 화면의 income/expense 집계에는 안 걸림).
+// ────────────────────────────────────────────────
+export const PLANNER_WALLET = "plannerWallet";
+
+export function usePlannerWallet(groupId) {
+  const [wallet, setWallet] = useState(null);
+  useEffect(() => {
+    if (!groupId) { setWallet(null); return; }
+    const unsub = onSnapshot(doc(db, PLANNER_WALLET, groupId), (snap) => {
+      setWallet(snap.exists() ? snap.data() : null);
+    }, () => {});
+    return () => unsub();
+  }, [groupId]);
+  return wallet;
+}
+
+export async function setPlannerWalletInitial(groupId, amount, actorName) {
+  await setDoc(doc(db, PLANNER_WALLET, groupId), {
+    groupId, initialBalance: Number(amount) || 0, setByName: actorName || "", updatedAt: serverTimestamp(),
+  });
+}
+
+export function walletAdjustmentEntries(entries) {
+  return (entries || [])
+    .filter((e) => e.type === "walletAdjustment")
+    .sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+}
+
+export function walletAdjustmentTotal(entries) {
+  return walletAdjustmentEntries(entries).reduce((s, e) => s + Number(e.amount || 0), 0);
+}
+
+export async function addWalletAdjustment({ groupId, amount, memo, actorName }) {
+  const amt = Number(amount) || 0;
+  if (!amt) return;
+  await addPlannerEntry({
+    type: "walletAdjustment", companyName: groupId, amount: amt, memo: (memo || "").trim(),
+    createdByName: actorName || "", date: todayStr(),
+  });
+}
+
+// ────────────────────────────────────────────────
+// 8. 미니게임(가위바위보 / 반응속도 게임) — 재미로 하는 것이지만 점수는 계속
+// 누적된다. 두 사람이 동시에 뭔가를 제출하는 구조라, 승부 판정은 트랜잭션으로
+// 딱 한 번만 반영되게 한다(두 기기가 거의 동시에 계산해도 중복 반영 안 됨).
+// ────────────────────────────────────────────────
+export const PLANNER_GAME_STATE = "plannerGameState"; // 문서 id = groupId
+export const PLANNER_GAME_SCORES = "plannerGameScores"; // 문서 id = groupId
+
+export function usePlannerGameState(groupId) {
+  const [state, setState] = useState(null);
+  useEffect(() => {
+    if (!groupId) { setState(null); return; }
+    const unsub = onSnapshot(doc(db, PLANNER_GAME_STATE, groupId), (snap) => setState(snap.exists() ? snap.data() : {}), () => {});
+    return () => unsub();
+  }, [groupId]);
+  return state || {};
+}
+
+export function usePlannerGameScores(groupId) {
+  const [scores, setScores] = useState({});
+  useEffect(() => {
+    if (!groupId) { setScores({}); return; }
+    const unsub = onSnapshot(doc(db, PLANNER_GAME_SCORES, groupId), (snap) => setScores(snap.exists() ? snap.data() : {}), () => {});
+    return () => unsub();
+  }, [groupId]);
+  return scores;
+}
+
+const RPS_BEATS = { 가위: "보", 바위: "가위", 보: "바위" };
+export const RPS_CHOICES = ["가위", "바위", "보"];
+
+// 가위바위보 한 수를 낸다. 상대(otherUid)가 아직 안 냈으면 내 선택만 저장해두고
+// 기다리고, 둘 다 냈으면 그 자리에서 승부를 가려 점수에 반영한 뒤 라운드를 초기화한다.
+export async function submitRpsChoice(groupId, uid, name, choice, otherUid) {
+  const stateRef = doc(db, PLANNER_GAME_STATE, groupId);
+  const scoreRef = doc(db, PLANNER_GAME_SCORES, groupId);
+  await runTransaction(db, async (tx) => {
+    const stateSnap = await tx.get(stateRef);
+    const state = stateSnap.exists() ? stateSnap.data() : {};
+    const prevChoices = state.rps?.choices || {};
+    const choices = { ...prevChoices, [uid]: { choice, name: name || "" } };
+
+    if (!otherUid || !choices[otherUid]) {
+      tx.set(stateRef, { ...state, rps: { choices } }, { merge: true });
+      return;
+    }
+
+    const mine = choices[uid].choice;
+    const theirs = choices[otherUid].choice;
+    const result = mine === theirs ? "draw" : RPS_BEATS[mine] === theirs ? "win" : "lose";
+
+    const scoreSnap = await tx.get(scoreRef);
+    const scores = scoreSnap.exists() ? { ...scoreSnap.data() } : {};
+    const bump = (u, key, displayName) => {
+      const cur = scores[u]?.rps || { w: 0, l: 0, d: 0 };
+      scores[u] = { ...(scores[u] || {}), name: displayName || scores[u]?.name || "", rps: { ...cur, [key]: (cur[key] || 0) + 1 } };
+    };
+    if (result === "draw") { bump(uid, "d", name); bump(otherUid, "d", choices[otherUid].name); }
+    else if (result === "win") { bump(uid, "w", name); bump(otherUid, "l", choices[otherUid].name); }
+    else { bump(uid, "l", name); bump(otherUid, "w", choices[otherUid].name); }
+
+    tx.set(scoreRef, scores, { merge: true });
+    tx.set(stateRef, {
+      ...state,
+      rps: {
+        choices: {},
+        lastResult: { mine, theirs, myUid: uid, result, at: Date.now() },
+      },
+    }, { merge: true });
+  });
+}
+
+// 반응속도 게임 — 신호가 뜨면 최대한 빨리 눌러서 반응시간(ms)을 겨루는 미니게임.
+export async function startReactionRound(groupId) {
+  const delayMs = 1200 + Math.floor(Math.random() * 2500);
+  await setDoc(doc(db, PLANNER_GAME_STATE, groupId), {
+    reaction: { phase: "waiting", startedAt: serverTimestamp(), delayMs, reactions: {} },
+  }, { merge: true });
+}
+
+export async function submitReactionTime(groupId, uid, name, ms, otherUid) {
+  const stateRef = doc(db, PLANNER_GAME_STATE, groupId);
+  const scoreRef = doc(db, PLANNER_GAME_SCORES, groupId);
+  await runTransaction(db, async (tx) => {
+    const stateSnap = await tx.get(stateRef);
+    const state = stateSnap.exists() ? stateSnap.data() : {};
+    const prevReactions = state.reaction?.reactions || {};
+    const reactions = { ...prevReactions, [uid]: { ms, name: name || "" } };
+
+    if (!otherUid || !reactions[otherUid]) {
+      tx.set(stateRef, { ...state, reaction: { ...state.reaction, phase: "waiting", reactions } }, { merge: true });
+      return;
+    }
+
+    const mineMs = reactions[uid].ms;
+    const theirsMs = reactions[otherUid].ms;
+    const result = mineMs === theirsMs ? "draw" : mineMs < theirsMs ? "win" : "lose";
+
+    const scoreSnap = await tx.get(scoreRef);
+    const scores = scoreSnap.exists() ? { ...scoreSnap.data() } : {};
+    const bump = (u, key, displayName) => {
+      const cur = scores[u]?.reaction || { w: 0, l: 0, d: 0 };
+      scores[u] = { ...(scores[u] || {}), name: displayName || scores[u]?.name || "", reaction: { ...cur, [key]: (cur[key] || 0) + 1 } };
+    };
+    if (result === "draw") { bump(uid, "d", name); bump(otherUid, "d", reactions[otherUid].name); }
+    else if (result === "win") { bump(uid, "w", name); bump(otherUid, "l", reactions[otherUid].name); }
+    else { bump(uid, "l", name); bump(otherUid, "w", reactions[otherUid].name); }
+
+    tx.set(scoreRef, scores, { merge: true });
+    tx.set(stateRef, {
+      ...state,
+      reaction: { phase: "idle", reactions: {}, lastResult: { mineMs, theirsMs, myUid: uid, result, at: Date.now() } },
+    }, { merge: true });
+  });
 }
