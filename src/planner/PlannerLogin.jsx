@@ -1,5 +1,5 @@
 // src/planner/PlannerLogin.jsx — KP-Planner 전용 로그인 화면(배차프로그램 로그인과 완전히 별개)
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import KPPlannerLogo from "./KPPlannerLogo";
 import { plannerLogin } from "./plannerAuth";
@@ -11,6 +11,10 @@ export default function PlannerLogin() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // 탭 제목이 배차프로그램의 "KP-Flow Logistics"로 그대로 보여서 분리가 안 된
+  // 것처럼 보인다는 피드백 — 이 화면에 들어오면 탭 제목을 KP-Planner로 바꾼다.
+  useEffect(() => { document.title = "KP-Planner"; }, []);
 
   const submit = async (e) => {
     e.preventDefault();

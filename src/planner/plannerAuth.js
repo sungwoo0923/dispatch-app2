@@ -4,10 +4,15 @@
 // 공유하지만, "회사"가 아니라 "가족(그룹) 코드"로 데이터를 나눈다.
 import { useEffect, useState } from "react";
 import { onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
-import { auth, db } from "../firebase";
+import { plannerAuth as auth, plannerDb as db } from "./plannerFirebase";
 import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, limit, getDocs } from "firebase/firestore";
 
 export const PLANNER_ACCOUNTS = "plannerAccounts";
+
+// ⭐ 관리자 겸 개발자 계정 — KP-Planner에 아직 회원가입한 적이 없어도(plannerAccounts
+// 문서가 없어도) "이 계정은 KP-Planner 계정이 아닙니다" 화면 없이 무조건 들어가져야
+// 한다는 요구사항. 처음 로그인하는 순간 plannerAccounts 프로필을 자동으로 만들어준다.
+const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 0/O, 1/I처럼 헷갈리는 문자는 뺐다
 
@@ -83,7 +88,20 @@ export function usePlannerAccount() {
         return;
       }
       try {
-        const snap = await getDoc(doc(db, PLANNER_ACCOUNTS, user.uid));
+        const ref = doc(db, PLANNER_ACCOUNTS, user.uid);
+        let snap = await getDoc(ref);
+        if (!snap.exists() && user.email === TOTAL_MASTER_EMAIL) {
+          const autoProfile = {
+            email: user.email,
+            name: "관리자",
+            groupId: randomGroupCode(),
+            groupName: "관리자",
+            role: "owner",
+            createdAt: serverTimestamp(),
+          };
+          await setDoc(ref, autoProfile);
+          snap = await getDoc(ref);
+        }
         setState({ loading: false, user, account: snap.exists() ? snap.data() : null });
       } catch {
         setState({ loading: false, user, account: null });

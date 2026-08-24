@@ -1,7 +1,7 @@
 // src/planner/PlannerSignup.jsx — KP-Planner 전용 회원가입.
 // "새 가족 만들기"(그룹 코드를 새로 만드는 사람 = owner) 또는
 // "코드로 참여하기"(배우자 등, 이미 만들어진 가족 코드로 합류 = member) 중 선택.
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import KPPlannerLogo from "./KPPlannerLogo";
 import { signupCreateGroup, signupJoinGroup, randomGroupCode } from "./plannerAuth";
@@ -9,6 +9,7 @@ import { PINK, PINK_SOFT, PINK_BORDER, INK } from "./plannerTheme";
 
 export default function PlannerSignup() {
   const navigate = useNavigate();
+  useEffect(() => { document.title = "KP-Planner"; }, []);
   const [mode, setMode] = useState("create"); // "create" | "join"
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");

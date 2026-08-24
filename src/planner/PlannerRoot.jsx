@@ -1,7 +1,7 @@
 // src/planner/PlannerRoot.jsx — 로그인 이후 KP-Planner 메인 화면.
 // 배차프로그램 화면과는 완전히 별개의 셸(헤더/메뉴)이고, 안의 내용만
 // AdminPlanner(PC)/AdminPlannerMobile(모바일)을 그대로 재사용한다.
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Navigate } from "react-router-dom";
 import KPPlannerLogo from "./KPPlannerLogo";
 import PlannerSplash from "./PlannerSplash";
@@ -133,6 +133,7 @@ function PlannerDesktopShell({ account }) {
 
 export default function PlannerRoot() {
   const { loading, user, account } = usePlannerAccount();
+  useEffect(() => { document.title = "KP-Planner"; }, []);
 
   if (loading) return <PlannerSplash />;
   if (!user) return <Navigate to="/planner-login" replace />;

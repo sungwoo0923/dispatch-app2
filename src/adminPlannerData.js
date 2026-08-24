@@ -11,7 +11,7 @@ import {
   collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot,
   query, where, serverTimestamp,
 } from "firebase/firestore";
-import { db } from "./firebase";
+import { plannerDb as db } from "./planner/plannerFirebase";
 
 export const PLANNER_COLLECTION = "adminPlanner";
 
