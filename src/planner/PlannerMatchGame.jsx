@@ -25,12 +25,14 @@ const ROWS = 8;
 const COLS = 8;
 const GAME_SECONDS = 60;
 const SLIDE_MS = 190; // 스왑 슬라이딩 속도 — 너무 느리지 않으면서 눈에 보이게
+const SHARD_ANGLES = [0, 60, 120, 180, 240, 300]; // 폭발 파편이 튀는 방향(6방향)
+// ⭐ 색 종류가 적을수록 우연히 같은 색이 나란히 놓일 확률이 높아져서 콤보(연쇄)가
+// 더 자주 터진다 — 색이 너무 적으면 밋밋해지니, 6개였던 걸 5개로만 살짝 줄였다.
 export const COLORS = [
   "#ef4444", // 빨강
   "#f97316", // 주황
   "#eab308", // 노랑
   "#22c55e", // 초록
-  "#14b8a6", // 청록
   "#a855f7", // 보라
 ];
 
@@ -211,12 +213,15 @@ export default function PlannerMatchGame({
     let cur = startBoard;
     let gained = 0;
     let chain = 0;
+    // ⭐ 콤보(연쇄)가 이어질수록 점수가 2배씩 뛰도록 — 1연쇄는 그대로, 2연쇄는
+    // 2배, 3연쇄는 4배... 식으로 뒤로 갈수록 폭발적으로 점수가 오른다.
+    let multiplier = 1;
     // eslint-disable-next-line no-constant-condition
     while (true) {
       const matched = findMatches(cur);
       if (matched.size === 0) break;
       chain += 1;
-      gained += matched.size;
+      gained += matched.size * multiplier;
       setPopping(matched);
       vibrate(chain > 1 ? [25, 30, 25] : 30);
       if (chain > 1) {
@@ -232,6 +237,7 @@ export default function PlannerMatchGame({
       cur = collapseAndRefill(cur, matched);
       setBoard(cur);
       setPopping(new Set());
+      multiplier *= 2;
       await new Promise((res) => setTimeout(res, 160));
     }
     if (gained > 0) setScore((s) => s + gained);
@@ -418,6 +424,7 @@ export default function PlannerMatchGame({
                   disabled={phase !== "playing" || swapping}
                   className="rounded-full"
                   style={{
+                    position: "relative",
                     touchAction: "none",
                     background: v == null ? "transparent" : ballGradient(COLORS[v]),
                     // ⭐ 선택 표시를 칙칙한 검은 테두리 대신 흰 링 + 컬러 글로우로 바꿔서
@@ -440,7 +447,31 @@ export default function PlannerMatchGame({
                       ? "transform 320ms cubic-bezier(.34,1.56,.64,1), opacity 320ms ease"
                       : "transform 160ms ease, box-shadow 160ms ease",
                   }}
-                />
+                >
+                  {/* ⭐ 그냥 사라지는 대신 폭발하는 느낌을 주려고, 터지는 순간
+                      충격파 링 + 사방으로 튀는 파편을 같이 띄운다. */}
+                  {isPopping && v != null && (
+                    <>
+                      <span
+                        className="absolute inset-0 rounded-full pointer-events-none"
+                        style={{ border: `3px solid ${COLORS[v]}`, animation: "kpShockwave 380ms ease-out forwards" }}
+                      />
+                      {SHARD_ANGLES.map((deg) => (
+                        <span
+                          key={deg}
+                          className="absolute rounded-full pointer-events-none"
+                          style={{
+                            width: 6, height: 6, top: "50%", left: "50%", marginTop: -3, marginLeft: -3,
+                            background: COLORS[v],
+                            "--tx": `${Math.round(Math.cos((deg * Math.PI) / 180) * 28)}px`,
+                            "--ty": `${Math.round(Math.sin((deg * Math.PI) / 180) * 28)}px`,
+                            animation: "kpShard 380ms ease-out forwards",
+                          }}
+                        />
+                      ))}
+                    </>
+                  )}
+                </button>
               );
             })}
           </div>
@@ -492,6 +523,14 @@ export default function PlannerMatchGame({
           }
           .kp-bet-blink { animation: kpBetBlink 1.6s ease-in-out infinite; }
           @keyframes kpBetBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+          @keyframes kpShockwave {
+            0% { transform: scale(0.3); opacity: 0.9; }
+            100% { transform: scale(2.4); opacity: 0; }
+          }
+          @keyframes kpShard {
+            0% { transform: translate(0, 0) scale(1); opacity: 1; }
+            100% { transform: translate(var(--tx), var(--ty)) scale(0.2); opacity: 0; }
+          }
         `}</style>
 
         {phase === "ready" && (

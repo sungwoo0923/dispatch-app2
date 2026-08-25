@@ -124,7 +124,7 @@ export default function PlannerUnlinkPanel({ account, other }) {
             {other.name || "상대방"}님과의 연동을 끊어요. 상대방이 동의해야 실제로 끊어지고, 이 가족의 모든 데이터가 함께 삭제돼요.
           </div>
           <button onClick={() => setShowConfirm(true)} className="text-[12px] font-semibold text-red-500">
-            연동끊기
+            연동끊기 요청하기
           </button>
         </>
       )}

@@ -166,8 +166,12 @@ function MatchGameCard({ account, other, solo, scores, betText, roundScores, rou
   const theirGame = other ? (scores[other.uid]?.matchGame || {}) : {};
   // ⭐ 최고관리자가 상대방 없이 테스트할 때는(solo) 기다리거나 결과를 가릴
   // 상대가 없으니, 라운드 잠금/블러 로직을 아예 건너뛴다.
+  // ⭐ otherPlayed는 other.uid로 대조하지 않고, 라운드 점수에 "나 아닌 다른
+  // 사람"의 기록이 있는지로 직접 판단한다 — 구성원 목록 구독 타이밍 등으로
+  // other가 잠깐 어긋나도 "상대가 다 했는데 계속 대기 중"이라고 뜨는 일이
+  // 없게 하기 위함.
   const myPlayed = !solo && roundScores[account.uid] != null;
-  const otherPlayed = !solo && other && roundScores[other.uid] != null;
+  const otherPlayed = !solo && Object.keys(roundScores).some((k) => k !== account.uid);
   const waiting = myPlayed && !otherPlayed;
   const showResultGate = !solo && roundComplete && !resultSeen;
   const blurred = waiting || showResultGate;
@@ -287,7 +291,7 @@ export default function PlannerMiniGames({ account }) {
   }
 
   const myPlayed = !solo && roundScores[account.uid] != null;
-  const otherPlayed = !solo && other && roundScores[other.uid] != null;
+  const otherPlayed = !solo && Object.keys(roundScores).some((k) => k !== account.uid);
   // 내기 변경: solo면 언제나 가능. 아니면 아무도 아직 안 냈거나(새 라운드 시작
   // 전), 라운드가 완전히 끝났을 때만 가능.
   const canChangeBet = solo || (!myPlayed && !otherPlayed) || roundComplete;
@@ -333,7 +337,8 @@ export default function PlannerMiniGames({ account }) {
       {showResult && other && (
         <MatchResultModal
           myName={account.name} otherName={other.name}
-          myScore={roundScores[account.uid] || 0} otherScore={roundScores[other.uid] || 0}
+          myScore={roundScores[account.uid] || 0}
+          otherScore={roundScores[Object.keys(roundScores).find((k) => k !== account.uid)] || 0}
           onClose={() => { setShowResult(false); setResultSeen(true); }}
         />
       )}

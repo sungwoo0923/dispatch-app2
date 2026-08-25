@@ -1369,19 +1369,26 @@ export async function submitMatchGameScore(groupId, uid, name, score, otherUid) 
     const roundScores = { ...(round.scores || {}), [uid]: score };
     let nextRound = { ...round, scores: roundScores };
 
-    if (otherUid && roundScores[otherUid] != null && !round.settled) {
-      const mine = roundScores[uid], theirs = roundScores[otherUid];
+    // ⭐ 호출자가 넘긴 otherUid를 그대로 신뢰하지 않고, 라운드에 실제로 점수를
+    // 남긴 "나 아닌 다른 참가자"를 라운드 데이터 자체에서 찾는다 — 두 사람 중
+    // 한쪽 화면에서 상대 uid가 잘못됐거나 늦게 갱신돼도(구독 타이밍 등) 결과
+    // 판정이 영영 막히지 않게 하기 위한 방어 코드다("상대가 다 했는데도 계속
+    // 진행 중이라고 뜨는" 버그의 재발 방지).
+    const actualOtherUid = Object.keys(roundScores).find((k) => k !== uid) || otherUid;
+
+    if (actualOtherUid && roundScores[actualOtherUid] != null && !round.settled) {
+      const mine = roundScores[uid], theirs = roundScores[actualOtherUid];
       const myGame = scores[uid].matchGame;
-      const otherPrev = scores[otherUid]?.matchGame || { best: 0, plays: 0, wins: 0, losses: 0, draws: 0 };
+      const otherPrev = scores[actualOtherUid]?.matchGame || { best: 0, plays: 0, wins: 0, losses: 0, draws: 0 };
       if (mine > theirs) {
         scores[uid].matchGame = { ...myGame, wins: (myGame.wins || 0) + 1 };
-        scores[otherUid] = { ...(scores[otherUid] || {}), matchGame: { ...otherPrev, losses: (otherPrev.losses || 0) + 1 } };
+        scores[actualOtherUid] = { ...(scores[actualOtherUid] || {}), matchGame: { ...otherPrev, losses: (otherPrev.losses || 0) + 1 } };
       } else if (mine < theirs) {
         scores[uid].matchGame = { ...myGame, losses: (myGame.losses || 0) + 1 };
-        scores[otherUid] = { ...(scores[otherUid] || {}), matchGame: { ...otherPrev, wins: (otherPrev.wins || 0) + 1 } };
+        scores[actualOtherUid] = { ...(scores[actualOtherUid] || {}), matchGame: { ...otherPrev, wins: (otherPrev.wins || 0) + 1 } };
       } else {
         scores[uid].matchGame = { ...myGame, draws: (myGame.draws || 0) + 1 };
-        scores[otherUid] = { ...(scores[otherUid] || {}), matchGame: { ...otherPrev, draws: (otherPrev.draws || 0) + 1 } };
+        scores[actualOtherUid] = { ...(scores[actualOtherUid] || {}), matchGame: { ...otherPrev, draws: (otherPrev.draws || 0) + 1 } };
       }
       nextRound.settled = true;
     }
