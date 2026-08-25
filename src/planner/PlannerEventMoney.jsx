@@ -136,16 +136,41 @@ function AddModal({ groupId, actorUid, actorName, entries, onClose }) {
 }
 
 const TEMPLATE_HEADERS = ["이름", "관계", "종류", "방향(냈어요/받았어요)", "금액", "날짜(YYYY-MM-DD)", "메모"];
+const DIRECTION_OPTIONS = ["냈어요", "받았어요"];
 
-function downloadTemplate() {
-  const sample = [{
-    [TEMPLATE_HEADERS[0]]: "김철수", [TEMPLATE_HEADERS[1]]: "친구", [TEMPLATE_HEADERS[2]]: "결혼식",
-    [TEMPLATE_HEADERS[3]]: "냈어요", [TEMPLATE_HEADERS[4]]: 50000, [TEMPLATE_HEADERS[5]]: todayStr(), [TEMPLATE_HEADERS[6]]: "",
-  }];
-  const ws = XLSX.utils.json_to_sheet(sample);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "경조사");
-  XLSX.writeFile(wb, "경조사_업로드양식.xlsx");
+// ⭐ 그냥 텍스트 예시만 넣어주던 걸, "관계/종류/방향" 칸은 실제 엑셀 드롭다운
+// (데이터 유효성 검사)으로 눌러서 고를 수 있게 바꿨다. 이건 읽기용 xlsx 패키지로는
+// 못 만들어서(데이터 유효성 검사 쓰기 미지원), 쓰기 전용으로 exceljs를 쓴다 —
+// 업로드된 파일을 읽는 쪽은 그대로 xlsx를 쓰므로 셀 값이 일반 텍스트로만
+// 들어오는 한 아무 문제 없다. exceljs는 용량이 커서, 이 버튼을 실제로 누를 때만
+// 동적으로 불러온다(정적 import하면 KP-Planner 첫 화면 번들이 900KB 넘게 커짐).
+async function downloadTemplate() {
+  const { default: ExcelJS } = await import("exceljs");
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("경조사");
+  ws.columns = TEMPLATE_HEADERS.map((h, i) => ({ header: h, key: `c${i}`, width: i === 6 ? 22 : i === 3 ? 22 : 14 }));
+  ws.addRow(["김철수", "친구", "결혼식", "냈어요", 50000, todayStr(), ""]);
+  ws.getRow(1).font = { bold: true };
+
+  const relationList = `"${EVENT_MONEY_RELATIONS.join(",")}"`;
+  const typeList = `"${EVENT_MONEY_TYPES.join(",")}"`;
+  const directionList = `"${DIRECTION_OPTIONS.join(",")}"`;
+  for (let r = 2; r <= 200; r++) {
+    ws.getCell(`B${r}`).dataValidation = { type: "list", allowBlank: true, formulae: [relationList] };
+    ws.getCell(`C${r}`).dataValidation = { type: "list", allowBlank: true, formulae: [typeList] };
+    ws.getCell(`D${r}`).dataValidation = { type: "list", allowBlank: true, formulae: [directionList] };
+  }
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "경조사_업로드양식.xlsx";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ⭐ PC는 엑셀 양식을, 모바일은 카톡/메일로 받은 파일이나 파일 앱에 저장해둔 파일을
@@ -157,8 +182,14 @@ function BulkUploadModal({ groupId, actorUid, actorName, onClose }) {
   const [rows, setRows] = useState([]);
   const [fileName, setFileName] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [templating, setTemplating] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef(null);
+
+  const handleDownloadTemplate = async () => {
+    setTemplating(true);
+    try { await downloadTemplate(); } finally { setTemplating(false); }
+  };
 
   const handleFile = async (e) => {
     const file = e.target.files?.[0];
@@ -225,8 +256,8 @@ function BulkUploadModal({ groupId, actorUid, actorName, onClose }) {
           여러 명 경조사비를 한 번에 등록할 수 있어요. 양식을 내려받아 채운 뒤 업로드해 주세요.
           모바일에서도 카카오톡·메일로 받은 파일이나 파일 앱에 저장된 엑셀 파일을 그대로 선택하면 돼요.
         </div>
-        <button onClick={downloadTemplate} className="w-full py-2.5 rounded-lg border text-[12.5px] font-bold mb-2" style={fieldStyle()}>
-          양식 다운로드
+        <button onClick={handleDownloadTemplate} disabled={templating} className="w-full py-2.5 rounded-lg border text-[12.5px] font-bold mb-2 disabled:opacity-60" style={fieldStyle()}>
+          {templating ? "양식 만드는 중..." : "양식 다운로드"}
         </button>
         <button onClick={() => inputRef.current?.click()} className="w-full py-2.5 rounded-lg text-white text-[12.5px] font-bold" style={{ background: ACCENT }}>
           엑셀 파일 선택

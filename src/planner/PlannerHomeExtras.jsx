@@ -87,6 +87,9 @@ function DdayAndCycleBanner({ groupId, myUid, myGender, myName, coupleStartDate 
   );
 }
 
+// ⭐ 예전엔 제목 있는 Card 하나를 통째로 차지하는 드롭다운이었는데, "화면을 너무
+// 크게 차지한다"는 피드백으로 얇은 한 줄짜리 알약 버튼 행으로 바꿨다 — 누르는
+// 즉시 바로 선택되고(드롭다운을 열 필요 없음), 상대방 기분은 옆에 짧게 표시.
 function MoodCheckin({ groupId, myUid, myName }) {
   const today = todayStr();
   const moods = usePlannerTodayMoods(groupId, today);
@@ -95,29 +98,33 @@ function MoodCheckin({ groupId, myUid, myName }) {
   const [saving, setSaving] = useState(false);
 
   const pick = async (value) => {
-    if (!value) return;
+    if (!value || value === mine?.mood || saving) return;
     setSaving(true);
     try { await setPlannerMood(groupId, myUid, myName, today, value); } finally { setSaving(false); }
   };
 
   return (
-    <Card title="오늘의 기분">
-      <select
-        value={mine?.mood || ""}
-        onChange={(e) => pick(e.target.value)}
-        disabled={saving}
-        className="w-full border rounded-lg px-3 py-2 text-[12.5px] font-bold focus:outline-none bg-white"
-        style={{ borderColor: ACCENT_BORDER, color: mine?.mood ? ACCENT : "#9ca3af" }}
-      >
-        <option value="" disabled>오늘 기분을 골라주세요</option>
-        {MOOD_OPTIONS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-      </select>
+    <div className="flex items-center gap-2 bg-white border rounded-xl px-2.5 py-2" style={{ borderColor: ACCENT_BORDER }}>
+      <span className="text-[10.5px] font-bold text-gray-400 shrink-0">오늘 기분</span>
+      <div className="flex items-center gap-1 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+        {MOOD_OPTIONS.map((m) => (
+          <button
+            key={m.value}
+            onClick={() => pick(m.value)}
+            disabled={saving}
+            className="shrink-0 px-2.5 py-1 rounded-full text-[11px] font-bold border whitespace-nowrap"
+            style={mine?.mood === m.value ? { background: ACCENT, color: "#fff", borderColor: ACCENT } : { color: "#6b7280", borderColor: "#e5e7eb" }}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
       {others.length > 0 && (
-        <div className="mt-2 text-[11px] text-gray-500">
-          {others.map((o) => `${o.name || "배우자"} · ${MOOD_OPTIONS.find((m) => m.value === o.mood)?.label || ""}`).join("  ")}
-        </div>
+        <span className="shrink-0 text-[10px] text-gray-400 ml-auto pl-1">
+          {others.map((o) => `${o.name || "배우자"} ${MOOD_OPTIONS.find((m) => m.value === o.mood)?.label || ""}`).join(" ")}
+        </span>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -173,10 +180,10 @@ export default function PlannerHomeExtras({ groupId, myUid, myName, myGender, co
   return (
     <div className="space-y-2.5 mb-5">
       <DdayAndCycleBanner groupId={groupId} myUid={myUid} myGender={myGender} myName={myName} coupleStartDate={coupleStartDate} />
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-        <MoodCheckin groupId={groupId} myUid={myUid} myName={myName} />
-        <WeeklyMission groupId={groupId} myName={myName} />
-      </div>
+      {/* ⭐ 오늘의 기분은 이제 얇은 한 줄이라, 카드형인 이번 주 미션과 2단 그리드로
+          묶으면 높이를 억지로 맞추려 늘어나 보였다 — 각자 전체 폭으로 세로 배치. */}
+      <MoodCheckin groupId={groupId} myUid={myUid} myName={myName} />
+      <WeeklyMission groupId={groupId} myName={myName} />
     </div>
   );
 }

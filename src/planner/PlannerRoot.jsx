@@ -14,6 +14,7 @@ import PlannerNotificationBell from "./PlannerNotificationBell";
 import { usePlannerAccount, plannerLogout, useGroupMembers, TOTAL_MASTER_EMAIL } from "./plannerAuth";
 import { usePlannerUnreadCount } from "../adminPlannerData";
 import PlannerAlertBanner from "./PlannerAlertBanner";
+import PlannerMoodToast from "./PlannerMoodToast";
 import { ACCENT, BG, applyGenderTheme } from "./plannerTheme";
 import AdminPlanner from "../AdminPlanner";
 
@@ -219,6 +220,7 @@ export default function PlannerRoot() {
   return (
     <>
       <PlannerAlertBanner account={effectiveAccount} />
+      <PlannerMoodToast groupId={effectiveAccount.groupId} myUid={effectiveAccount.uid} />
       {isSmartPhone()
         ? <PlannerMobileShell account={effectiveAccount} onUpdated={setAccountOverride} />
         : <PlannerDesktopShell account={effectiveAccount} onUpdated={setAccountOverride} />}

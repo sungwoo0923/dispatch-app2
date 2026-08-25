@@ -9,9 +9,10 @@
 import { useEffect, useState } from "react";
 import {
   collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot,
-  query, where, serverTimestamp, setDoc, runTransaction,
+  query, where, serverTimestamp, setDoc, runTransaction, getDocs,
 } from "firebase/firestore";
 import { plannerDb as db } from "./planner/plannerFirebase";
+import { PLANNER_ACCOUNTS } from "./planner/plannerAuth";
 
 export const PLANNER_COLLECTION = "adminPlanner";
 
@@ -502,6 +503,20 @@ export async function setPlannerMood(groupId, uid, name, date, mood) {
   await setDoc(doc(db, PLANNER_MOOD_CHECKS, `${groupId}_${uid}_${date}`), {
     groupId, uid, name: name || "", date, mood, updatedAt: serverTimestamp(),
   }, { merge: true });
+
+  // ⭐ 기분을 바꿀 때마다 그룹의 다른 구성원에게 "하나씩 순서대로" 떴다 사라지는
+  // 알림을 남긴다(PlannerMoodToast가 소비). 그룹원 조회가 실패해도 기분 저장
+  // 자체는 이미 끝난 뒤라, 알림만 조용히 실패시킨다.
+  try {
+    const q = query(collection(db, PLANNER_ACCOUNTS), where("groupId", "==", groupId));
+    const snap = await getDocs(q);
+    const others = snap.docs.map((d) => d.id).filter((otherUid) => otherUid !== uid);
+    await Promise.all(others.map((forUid) =>
+      addDoc(collection(db, PLANNER_MOOD_NOTIFS), {
+        groupId, forUid, fromUid: uid, fromName: name || "", mood, createdAt: serverTimestamp(),
+      })
+    ));
+  } catch {}
 }
 
 // 오늘 하루치 — 같은 가족 구성원들의 체크인만 실시간 구독.
@@ -514,6 +529,30 @@ export function usePlannerTodayMoods(groupId, date) {
     return () => unsub();
   }, [groupId, date]);
   return moods;
+}
+
+// ⭐ 기분 변경 알림 — 배우자가 기분을 바꿀 때마다 하나씩 쌓이고, 화면에서 하나
+// 보여준 뒤 consumeMoodNotification으로 지우면 큐의 다음 알림이 이어서 뜬다.
+// (한꺼번에 다 뜨지 않고 "하나 뜨고 사라졌다가 다음 것" 요청 반영.)
+export const PLANNER_MOOD_NOTIFS = "plannerMoodNotifications";
+
+export function usePlannerMoodNotifications(groupId, myUid) {
+  const [list, setList] = useState([]);
+  useEffect(() => {
+    if (!groupId || !myUid) { setList([]); return; }
+    const q = query(collection(db, PLANNER_MOOD_NOTIFS), where("groupId", "==", groupId), where("forUid", "==", myUid));
+    const unsub = onSnapshot(q, (snap) => {
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      rows.sort((a, b) => (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0));
+      setList(rows);
+    }, () => {});
+    return () => unsub();
+  }, [groupId, myUid]);
+  return list;
+}
+
+export async function consumeMoodNotification(id) {
+  await deleteDoc(doc(db, PLANNER_MOOD_NOTIFS, id));
 }
 
 // ────────────────────────────────────────────────
