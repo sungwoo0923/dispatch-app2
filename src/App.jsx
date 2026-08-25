@@ -90,6 +90,13 @@ export default function App() {
   // updateReady 팝업 제거됨 - UpdateBanner가 자동 처리
   const [splashDone, setSplashDone] = useState(false);
 
+  // ⭐ KP-Planner 전용 도메인(VITE_PLANNER_SITE=1) 여부 — 아래 "로딩/스플래시"
+  // 분기에서 바로 써야 해서 최상단으로 끌어올렸다(예전엔 이 값을 훨씬 아래에서만
+  // 계산해서, KP-Planner 사이트에서도 이 배차프로그램 전용 스플래시(KP-Flow 로고)를
+  // 먼저 거친 뒤에야 PlannerRoot의 KP-Planner 스플래시로 넘어가는 "이중 스플래시"
+  // 버그가 있었다).
+  const isPlannerSite = import.meta.env.VITE_PLANNER_SITE === "1";
+
   // ★ 태블릿 감지 상태
   const [isTablet, setIsTablet] = useState(false);
 
@@ -501,8 +508,10 @@ export default function App() {
     return <Router><Routes><Route path="*" element={<ShortLinkRedirect code={shortLinkMatch[1]} />} /></Routes></Router>;
   }
 
-  // 로딩/스플래시
-  if (loading || !splashDone) {
+  // 로딩/스플래시 — KP-Planner 사이트는 이 배차프로그램 전용 스플래시를 건너뛰고
+  // 바로 라우터로 넘어간다(PlannerRoot가 자기만의 로그인 확인 + PlannerSplash를
+  // 따로 갖고 있어서, 위 주석대로 위 조건에 걸리지 않는 게 맞다).
+  if ((loading || !splashDone) && !isPlannerSite) {
     return (
       <div style={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", backgroundColor: "#ffffff", userSelect: "none", WebkitUserSelect: "none" }}>
         <style>{`
@@ -562,8 +571,8 @@ export default function App() {
   // KP-Planner 전용 도메인으로 쓸 수 있게 하는 스위치. 그 새 Vercel 프로젝트의
   // 환경변수에 VITE_PLANNER_SITE=1 만 추가하면, 그 도메인은 루트(/)부터
   // KP-Planner 로그인 화면으로 시작한다(배차프로그램 쪽 dispatch-app2 프로젝트는
-  // 이 환경변수가 없으니 지금처럼 그대로 동작한다).
-  const isPlannerSite = import.meta.env.VITE_PLANNER_SITE === "1";
+  // 이 환경변수가 없으니 지금처럼 그대로 동작한다). isPlannerSite 자체는 위쪽
+  // 스플래시 분기에서 먼저 써야 해서 이 컴포넌트 최상단에서 계산해뒀다.
   const rootRedirect = isPlannerSite ? "/planner-login" : "/login";
 
   return (

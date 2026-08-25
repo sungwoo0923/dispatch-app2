@@ -15,8 +15,13 @@ export default function PlannerSplash({ fadeOut = false }) {
 
   const shown = visible && !fadeOut;
 
+  // ⭐ 예전엔 minHeight:100vh인 일반 문서 흐름 안의 div였는데, 모바일 브라우저의
+  // 100vh는 주소창이 접힌 상태 기준이라 실제 보이는 화면보다 살짝 크다 — 그
+  // 차이만큼 페이지가 스크롤 가능해져서, 로고가 정중앙보다 아래에 있거나 손으로
+  // 화면을 스크롤하면 같이 움직이는 문제가 있었다. position:fixed + inset:0으로
+  // 뷰포트에 완전히 고정해서 스크롤과 무관하게 항상 정중앙에 있게 한다.
   return (
-    <div style={{ minHeight: "100vh", width: "100%", background: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ position: "fixed", inset: 0, background: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", touchAction: "none", overscrollBehavior: "none" }}>
       <div
         style={{
           opacity: shown ? 1 : 0,
@@ -25,7 +30,13 @@ export default function PlannerSplash({ fadeOut = false }) {
           width: "min(78vw, 380px)",
         }}
       >
-        <img src="/planner/kp-planner-logo-full.png" alt="KP-Planner" style={{ width: "100%", display: "block" }} />
+        <img
+          src="/planner/kp-planner-logo-full.png"
+          alt="KP-Planner"
+          draggable={false}
+          onDragStart={(e) => e.preventDefault()}
+          style={{ width: "100%", display: "block", userSelect: "none", WebkitUserSelect: "none" }}
+        />
       </div>
     </div>
   );
