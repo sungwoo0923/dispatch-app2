@@ -9,7 +9,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import KPPlannerLogo from "./KPPlannerLogo";
 import PlannerDatePicker from "./PlannerDatePicker";
-import { signupCreateGroup, signupJoinGroup, randomGroupCode, normalizeGroupCode } from "./plannerAuth";
+import { signupCreateGroup, signupJoinGroup, signupRejoinGroup, randomGroupCode, normalizeGroupCode } from "./plannerAuth";
 import { shareInvite } from "./plannerInvite";
 import { addPlannerEntry } from "../adminPlannerData";
 import { ACCENT, ACCENT_DARK, ACCENT_SOFT, ACCENT_BORDER, applyGenderTheme } from "./plannerTheme";
@@ -20,9 +20,10 @@ export default function PlannerSignup() {
   const urlCode = (searchParams.get("code") || "").trim().toUpperCase();
   const urlJoinGender = searchParams.get("joinGender");
   const urlGenderValid = urlJoinGender === "male" || urlJoinGender === "female";
+  const isRejoinMode = searchParams.get("mode") === "rejoin";
 
   useEffect(() => { document.title = "KP-Planner"; }, []);
-  const [mode, setMode] = useState(urlCode ? "join" : "create"); // "create" | "join"
+  const [mode, setMode] = useState(isRejoinMode ? "rejoin" : (urlCode ? "join" : "create")); // "create" | "join" | "rejoin"
   const [name, setName] = useState("");
   const [gender, setGender] = useState(urlGenderValid ? urlJoinGender : "female"); // "male" | "female" — 로그인 후(및 이 화면에서도) 전체 테마에 즉시 반영
   const [email, setEmail] = useState("");
@@ -74,6 +75,10 @@ export default function PlannerSignup() {
         const { groupId } = await signupCreateGroup({ email, password, name, gender, groupCode, groupName, birthday });
         await addBirthdaySchedule(groupId);
         setDoneCode(groupId);
+      } else if (mode === "rejoin") {
+        const { groupId } = await signupRejoinGroup({ email, password, name, gender, birthday });
+        await addBirthdaySchedule(groupId);
+        navigate("/planner", { replace: true });
       } else {
         await signupJoinGroup({ email, password, name, gender, groupCode: joinCode, birthday });
         await addBirthdaySchedule(normalizeGroupCode(joinCode));
@@ -145,24 +150,31 @@ export default function PlannerSignup() {
           <KPPlannerLogo size="md" />
         </div>
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 22 }}>
-          {[["create", "새 가족 만들기"], ["join", "코드로 참여하기"]].map(([v, l]) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setMode(v)}
-              style={{
-                flex: 1, padding: "10px 6px", fontSize: 13, fontWeight: 700, borderRadius: 10,
-                border: `1px solid ${mode === v ? ACCENT : ACCENT_BORDER}`,
-                background: mode === v ? ACCENT : "#fff",
-                color: mode === v ? "#fff" : "#7d6a75",
-                cursor: "pointer",
-              }}
-            >
-              {l}
-            </button>
-          ))}
-        </div>
+        {isRejoinMode ? (
+          <div style={{ padding: "12px 14px", borderRadius: 12, border: `1px solid ${ACCENT_BORDER}`, background: ACCENT_SOFT, marginBottom: 20, fontSize: 12, color: "#7d6a75", lineHeight: 1.6 }}>
+            이전에 가입했던 이메일과 이름/성별을 입력해 주세요. 예전 가족 코드를 몰라도, 탈퇴 전에 쓰던
+            이메일이면 자동으로 예전 가족에 다시 연결돼요.
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: 8, marginBottom: 22 }}>
+            {[["create", "새 가족 만들기"], ["join", "코드로 참여하기"]].map(([v, l]) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setMode(v)}
+                style={{
+                  flex: 1, padding: "10px 6px", fontSize: 13, fontWeight: 700, borderRadius: 10,
+                  border: `1px solid ${mode === v ? ACCENT : ACCENT_BORDER}`,
+                  background: mode === v ? ACCENT : "#fff",
+                  color: mode === v ? "#fff" : "#7d6a75",
+                  cursor: "pointer",
+                }}
+              >
+                {l}
+              </button>
+            ))}
+          </div>
+        )}
 
         <form onSubmit={submit}>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="이름" style={{ ...inputStyle, marginBottom: 12 }} />
@@ -208,7 +220,7 @@ export default function PlannerSignup() {
             <PlannerDatePicker value={birthday} onChange={setBirthday} placeholder="생일 선택" />
           </div>
 
-          {mode === "create" ? (
+          {mode === "create" && (
             <>
               <input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="가족 이름 (예: 우리 가족, 선택)" style={{ ...inputStyle, marginBottom: 12 }} />
               <div style={{ marginBottom: 14 }}>
@@ -225,7 +237,8 @@ export default function PlannerSignup() {
                 </div>
               </div>
             </>
-          ) : (
+          )}
+          {mode === "join" && (
             <input
               value={joinCode}
               onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
@@ -236,7 +249,7 @@ export default function PlannerSignup() {
 
           {error && <div style={{ color: "#dc2626", fontSize: 13, fontWeight: 600, marginBottom: 14 }}>{error}</div>}
           <button type="submit" disabled={loading} style={buttonStyle}>
-            {loading ? "처리 중..." : "회원가입"}
+            {loading ? "처리 중..." : mode === "rejoin" ? "재가입하기" : "회원가입"}
           </button>
         </form>
 

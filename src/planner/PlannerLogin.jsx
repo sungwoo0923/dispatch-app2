@@ -89,6 +89,12 @@ export default function PlannerLogin() {
             회원가입
           </Link>
         </div>
+        <div style={{ textAlign: "center", marginTop: 10, fontSize: 12.5, color: "#9a8890" }}>
+          이전 가입자인가요?{" "}
+          <Link to="/planner-signup?mode=rejoin" style={{ color: PINK, fontWeight: 700, textDecoration: "none" }}>
+            재가입하기
+          </Link>
+        </div>
       </div>
     </div>
   );

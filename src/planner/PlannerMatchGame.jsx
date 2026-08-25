@@ -12,7 +12,7 @@
 // +진동+경고음을 주도록 손맛을 더했다. 시작 전엔 3-2-1-START 카운트다운이 뜬다.
 // ⭐ 선택 표시는 칙칙한 검은 테두리 대신 흰 링+컬러 글로우로, 스왑은 순간이동이
 // 아니라 슥- 밀리는 슬라이딩으로, 콤보엔 화면이 흔들리는 임팩트를 추가했다.
-// ⭐ 내기가 걸린 라운드에서는 "다시 하기"가 상대(가상 파트너 포함)가 이번
+// ⭐ 내기가 걸린 라운드에서는 "다시 하기"가 상대가 이번
 // 라운드를 끝낼 때까지 잠긴다 — 안 그러면 먼저 끝낸 사람이 계속 재도전해서
 // 점수가 바뀌어버리는 문제가 있었다. 기다리는 동안엔 실시간으로 상대(나) 화면을
 // 보드/점수/남은시간을 저장해서, 상대가 "지켜보기"로 볼 수 있게 한다.
@@ -127,7 +127,7 @@ function cellDir(a, b) {
 const COUNTDOWN_STEPS = ["3", "2", "1", "START!"];
 
 export default function PlannerMatchGame({
-  groupId, myUid, myName, myBest, otherUid, otherName, otherBest, betText, roundComplete, otherIsVirtual, onClose,
+  groupId, myUid, myName, myBest, otherUid, otherName, otherBest, betText, roundComplete, onClose,
 }) {
   const [board, setBoard] = useState(makeBoard);
   const [selected, setSelected] = useState(null);
@@ -143,7 +143,6 @@ export default function PlannerMatchGame({
   const [combo, setCombo] = useState(null); // { key, chain } — 콤보 임팩트 문구
   const busyRef = useRef(false);
   const shakeTimerRef = useRef(null);
-  const virtualTimerRef = useRef(null);
 
   // ⭐ 이미 내가 이번 라운드 점수를 냈는데 상대(otherUid)는 아직이면, 상대가
   // 끝날 때까지 "다시 하기"를 잠근다 — 안 그러면 내기 점수가 자꾸 바뀐다.
@@ -154,7 +153,6 @@ export default function PlannerMatchGame({
     if (secondsLeft <= 0) {
       setPhase("over");
       submitMatchGameScore(groupId, myUid, myName, score, otherUid).catch(() => {});
-      if (otherIsVirtual && otherUid) scheduleVirtualOpponentScore(score);
       return;
     }
     const t = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
@@ -195,27 +193,9 @@ export default function PlannerMatchGame({
     return () => {
       clearLiveMatchSnapshot(groupId).catch(() => {});
       if (shakeTimerRef.current) clearTimeout(shakeTimerRef.current);
-      // ⭐ 가상 파트너 응답 타이머는 여기서 지우면 안 된다 — "닫기"만 눌러도
-      // 이 컴포넌트가 곧바로 unmount되는데, 그때 같이 취소되면 가상 파트너가
-      // 영영 응답을 안 해서 대기 화면에 계속 갇히는 버그가 생긴다. 예약된
-      // Firestore 호출은 화면이 닫힌 뒤에도 그대로 실행되게 둔다.
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // ⭐ 상대가 "가상 파트너"(관리자 테스트용)면 실제로 응답할 사람이 없으니, 내가
-  // 끝낸 뒤 잠깐 기다렸다가(진짜 상대가 플레이하는 것처럼) 자동으로 그럴듯한
-  // 점수를 대신 채워 라운드를 완료시킨다 — 그래야 대기/결과발표/전적 UI를
-  // 관리자 혼자서도 끝까지 테스트해볼 수 있다.
-  const scheduleVirtualOpponentScore = (myScore) => {
-    if (virtualTimerRef.current) clearTimeout(virtualTimerRef.current);
-    const delay = 1400 + Math.random() * 1700;
-    virtualTimerRef.current = setTimeout(() => {
-      const variance = 0.55 + Math.random() * 0.9;
-      const virtualScore = Math.max(15, Math.round((myScore || 30) * variance));
-      submitMatchGameScore(groupId, otherUid, "가상 파트너", virtualScore, myUid).catch(() => {});
-    }, delay);
-  };
 
   const triggerShake = (chain) => {
     if (shakeTimerRef.current) clearTimeout(shakeTimerRef.current);
@@ -283,7 +263,6 @@ export default function PlannerMatchGame({
     setPhase("over");
     submitMatchGameScore(groupId, myUid, myName, score, otherUid).catch(() => {});
     clearLiveMatchSnapshot(groupId).catch(() => {});
-    if (otherIsVirtual && otherUid) scheduleVirtualOpponentScore(score);
   };
 
   // 두 칸을 슬라이딩으로 서로 밀어 자리를 바꾼다 — 애니메이션이 끝난 뒤에야
@@ -480,7 +459,7 @@ export default function PlannerMatchGame({
             {waitingForPartner ? (
               <div className="rounded-xl px-3.5 py-3 text-center" style={{ background: ACCENT_SOFT, border: `1px solid ${ACCENT_BORDER}` }}>
                 <div className="text-[12px] font-bold" style={{ color: ACCENT }}>
-                  {otherIsVirtual ? "가상 파트너가 플레이 중이에요..." : `${otherName || "상대방"}이 끝날 때까지 다시 하기가 잠겨요`}
+                  {`${otherName || "상대방"}이 끝날 때까지 다시 하기가 잠겨요`}
                 </div>
                 <div className="text-[10.5px] text-gray-400 mt-1 leading-relaxed">내기 점수가 계속 바뀌면 안 되니까, 상대방이 끝난 뒤에 다시 도전할 수 있어요.</div>
                 <button onClick={onClose} className="w-full mt-3 py-2.5 rounded-xl border text-gray-600 text-[13px] font-semibold bg-white" style={{ borderColor: ACCENT_BORDER }}>닫기</button>

@@ -11,8 +11,9 @@ import {
   collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot,
   query, where, serverTimestamp, setDoc, runTransaction, getDocs, getDoc,
 } from "firebase/firestore";
-import { plannerDb as db } from "./planner/plannerFirebase";
-import { PLANNER_ACCOUNTS } from "./planner/plannerAuth";
+import { EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
+import { plannerDb as db, plannerAuth as fbAuth } from "./planner/plannerFirebase";
+import { PLANNER_ACCOUNTS, randomGroupCode } from "./planner/plannerAuth";
 
 export const PLANNER_COLLECTION = "adminPlanner";
 
@@ -1373,21 +1374,6 @@ export async function submitMatchGameScore(groupId, uid, name, score, otherUid) 
   });
 }
 
-// ⭐ 최고관리자 전용 "재시도" 버튼에서 쓴다 — 가상 파트너는 실존하지 않아서
-// 자동 응답(1.4~3.1초 지연)을 기다리지 않고 즉시 라운드를 끝내고 싶을 때,
-// 화면에 남아있는 값(닫힌 지 오래된 stale closure일 수 있음) 대신 지금 이 순간
-// Firestore에 실제로 저장된 내 점수를 다시 읽어와서 확실하게 처리한다.
-export async function resolveVirtualPartnerNow(groupId, myUid, virtualUid) {
-  const stateSnap = await getDoc(doc(db, PLANNER_GAME_STATE, groupId));
-  const round = stateSnap.exists() ? (stateSnap.data().matchRound || {}) : {};
-  if (round.settled) return; // 이미 끝난 라운드면 할 게 없다.
-  const myScore = round.scores?.[myUid];
-  if (myScore == null) throw new Error("아직 내 점수가 없어요. 먼저 플레이해 주세요.");
-  const variance = 0.55 + Math.random() * 0.9;
-  const virtualScore = Math.max(15, Math.round((myScore || 30) * variance));
-  await submitMatchGameScore(groupId, virtualUid, "가상 파트너", virtualScore, myUid);
-}
-
 // 라운드가 끝난 뒤(둘 다 플레이 완료) 다시 도전할 때 — 같은 내기로 점수만 새로
 // 초기화한다. 아직 아무도 안 낸 라운드에서는 호출할 필요 없다(이미 비어있음).
 export async function startNewMatchRound(groupId, betText) {
@@ -1414,4 +1400,120 @@ export async function clearLiveMatchSnapshot(groupId) {
   try {
     await setDoc(doc(db, PLANNER_GAME_STATE, groupId), { liveMatch: null }, { merge: true });
   } catch {}
+}
+
+// ────────────────────────────────────────────────
+// 10. 연동 끊기 — 한쪽이 요청하면 상대방이 동의해야 실제로 끊어진다. 동의하면
+// 이 가족(groupId)의 모든 데이터(가계부·일정·경조사·사이클·메신저·기분·
+// 미션·타임캡슐·빚·지갑·미니게임·타임라인 사진 등)를 전부 지우고, 두 사람
+// 모두 각자 새(빈) 그룹으로 분리된다. 되돌릴 수 없는 작업이다. 상대방이
+// 거절하면 연동은 그대로 유지되고, 요청한 사람은 최고관리자에게 문의(에스컬
+// 레이션)할 수 있다 — 관리자는 상대방 동의 없이 강제로 끊을 수 있다.
+// ────────────────────────────────────────────────
+export const PLANNER_UNLINK_REQUESTS = "plannerUnlinkRequests"; // 문서 id = groupId
+
+export function usePlannerUnlinkRequest(groupId) {
+  const [req, setReq] = useState(null);
+  useEffect(() => {
+    if (!groupId) { setReq(null); return; }
+    const unsub = onSnapshot(doc(db, PLANNER_UNLINK_REQUESTS, groupId), (snap) => {
+      setReq(snap.exists() ? snap.data() : null);
+    }, () => {});
+    return () => unsub();
+  }, [groupId]);
+  return req;
+}
+
+// 최고관리자가 관리자 메뉴에서 "관리자에게 문의"된 요청들을 한눈에 보기 위한 구독.
+export function useEscalatedUnlinkRequests() {
+  const [rows, setRows] = useState([]);
+  useEffect(() => {
+    const q = query(collection(db, PLANNER_UNLINK_REQUESTS), where("adminRequested", "==", true));
+    const unsub = onSnapshot(q, (snap) => {
+      setRows(snap.docs.map((d) => ({ groupId: d.id, ...d.data() })));
+    }, () => {});
+    return () => unsub();
+  }, []);
+  return rows;
+}
+
+// 비밀번호로 본인 확인(재인증) — 되돌릴 수 없는 연동 끊기 요청 전에 반드시 거친다.
+async function verifyMyPassword(password) {
+  const user = fbAuth.currentUser;
+  if (!user || !user.email) throw new Error("로그인 정보를 확인할 수 없어요.");
+  try {
+    await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, password));
+  } catch {
+    throw new Error("비밀번호가 올바르지 않아요.");
+  }
+}
+
+// 연동 끊기 요청 — 비밀번호 확인 후 상대방의 동의를 기다리는 상태가 된다.
+export async function requestUnlink(groupId, uid, name, password) {
+  await verifyMyPassword(password);
+  await setDoc(doc(db, PLANNER_UNLINK_REQUESTS, groupId), {
+    groupId, requestedByUid: uid, requestedByName: name || "",
+    status: "pending", requestedAt: serverTimestamp(), respondedAt: null,
+    adminRequested: false, adminRequestedAt: null,
+  });
+}
+
+// 요청한 사람이 답이 오기 전에 스스로 취소한다.
+export async function cancelUnlinkRequest(groupId) {
+  await deleteDoc(doc(db, PLANNER_UNLINK_REQUESTS, groupId)).catch(() => {});
+}
+
+// 그룹의 모든 데이터를 지운다 — connectedGroupId 기준으로 흩어진 모든 컬렉션을
+// 훑어서 지우는 되돌릴 수 없는 작업. 연동 끊기(동의/관리자 승인) 경로에서만 호출한다.
+async function deleteAllGroupData(groupId) {
+  if (!groupId) return;
+  const byField = [
+    [PLANNER_COLLECTION, "companyName"],
+    [PLANNER_CYCLES, "groupId"],
+    [PLANNER_MESSAGES, "groupId"],
+    [PLANNER_MESSENGER_READS, "groupId"],
+    [PLANNER_MOOD_CHECKS, "groupId"],
+    [PLANNER_MOOD_NOTIFS, "groupId"],
+    [PLANNER_MISSION_CHECKS, "groupId"],
+    [PLANNER_TIME_CAPSULES, "groupId"],
+    [PLANNER_DEBTS, "groupId"],
+  ];
+  for (const [name, field] of byField) {
+    const snap = await getDocs(query(collection(db, name), where(field, "==", groupId)));
+    await Promise.all(snap.docs.map((d) => deleteDoc(d.ref).catch(() => {})));
+  }
+  const singletonDocs = [PLANNER_SAVINGS_GOALS, PLANNER_WALLET, PLANNER_GAME_STATE, PLANNER_GAME_SCORES, PLANNER_TIMELINE_PHOTO];
+  await Promise.all(singletonDocs.map((name) => deleteDoc(doc(db, name, groupId)).catch(() => {})));
+}
+
+// 두 사람 각자를 완전히 분리된 새(빈) 그룹으로 되돌린다 — 이후 서로 다시
+// 만나지 않도록 각자 새 무작위 코드를 받는다.
+async function detachMembersToFreshGroups(memberUids) {
+  await Promise.all(
+    (memberUids || []).map((uid) => updateDoc(doc(db, PLANNER_ACCOUNTS, uid), { groupId: randomGroupCode() }).catch(() => {}))
+  );
+}
+
+// 상대방이 요청에 응답한다 — 동의하면 실제로 모든 데이터를 지우고 완전히
+// 분리하고, 거절하면 연동은 그대로 유지된 채 상태만 남긴다.
+export async function respondUnlink(groupId, memberUids, agree) {
+  if (agree) {
+    await deleteAllGroupData(groupId);
+    await detachMembersToFreshGroups(memberUids);
+    await deleteDoc(doc(db, PLANNER_UNLINK_REQUESTS, groupId)).catch(() => {});
+  } else {
+    await setDoc(doc(db, PLANNER_UNLINK_REQUESTS, groupId), { status: "declined", respondedAt: serverTimestamp() }, { merge: true });
+  }
+}
+
+// 상대방이 거절했을 때, 요청한 사람이 최고관리자에게 문의(에스컬레이션)한다.
+export async function escalateUnlinkToAdmin(groupId) {
+  await setDoc(doc(db, PLANNER_UNLINK_REQUESTS, groupId), { adminRequested: true, adminRequestedAt: serverTimestamp() }, { merge: true });
+}
+
+// 최고관리자가 상대방 동의 없이 강제로 끊는다.
+export async function adminForceUnlink(groupId, memberUids) {
+  await deleteAllGroupData(groupId);
+  await detachMembersToFreshGroups(memberUids);
+  await deleteDoc(doc(db, PLANNER_UNLINK_REQUESTS, groupId)).catch(() => {});
 }

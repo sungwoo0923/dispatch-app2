@@ -11,6 +11,14 @@ import { plannerAuth as auth, plannerDb as db } from "./plannerFirebase";
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, query, where, limit, getDocs, onSnapshot } from "firebase/firestore";
 
 export const PLANNER_ACCOUNTS = "plannerAccounts";
+// ⭐ 탈퇴해도 "연동"(가족 그룹) 자체는 끊는 게 아니라는 요구사항 — 탈퇴 순간
+// 이메일 기준으로 groupId 등을 여기에 남겨두고, 나중에 같은 이메일로 재가입하면
+// 자동으로 예전 그룹에 다시 연결한다(plannerSignupRejoinGroup).
+export const PLANNER_LEFT_ACCOUNTS = "plannerLeftAccounts"; // 문서 id = 정규화된 이메일
+
+function normalizeEmailKey(email) {
+  return String(email || "").trim().toLowerCase();
+}
 
 // ⭐ 관리자 겸 개발자 계정 — KP-Planner에 아직 회원가입한 적이 없어도(plannerAccounts
 // 문서가 없어도) "이 계정은 KP-Planner 계정이 아닙니다" 화면 없이 무조건 들어가져야
@@ -239,41 +247,42 @@ export async function signupJoinGroup({ email, password, name, gender, groupCode
   return { uid: user.uid, groupId: code };
 }
 
-// ⭐ 최고관리자는 실제 배우자를 연동하지 않고도 "상대방이 있어야 보이는" 모든
-// 기능(커플미션 교대, 미니게임 VS/내기, 기분 알림 등)을 테스트할 수 있어야
-// 한다는 요구사항 — 관리자 혼자뿐인 그룹에는 진짜 Firestore 문서를 만들지
-// 않고, 화면단에서만 가상의 파트너 한 명을 끼워넣어 "연동된 사람이 있는
-// 상태"처럼 보이게 한다. Firestore 문서가 실제로 없는 우이드라, 이 가상
-// 파트너를 대상으로 plannerAccounts 문서를 직접 갱신/삭제하는 코드가 있다면
-// 오류가 나므로 — uid 필드로만 값을 저장하는 게임/알림류 컬렉션에는 안전하다.
-export const VIRTUAL_PARTNER_UID = "virtual-partner-test";
-function makeVirtualPartner(adminMember) {
-  const adminMillis = adminMember.createdAt?.toMillis?.() || Date.now();
-  // 관리자보다 일주일 먼저 "생성"된 것으로 잡아, 미션 교대 계산에서 관리자가
-  // 초대받은 사람 턴(홀수 주)도 확인해볼 수 있게 한다.
-  const virtualMillis = adminMillis - 7 * 24 * 3600 * 1000;
-  return {
-    uid: VIRTUAL_PARTNER_UID,
-    email: "virtual.partner@kpplanner.test",
-    name: "가상 파트너",
-    gender: adminMember.gender === "male" ? "female" : "male",
-    groupId: adminMember.groupId,
-    groupName: adminMember.groupName,
+// ⭐ "이전 가입자인가요? 재가입" — 탈퇴할 때 남겨둔 기록(같은 이메일)을 찾아서,
+// 예전과 똑같은 groupId로 새 프로필을 만들어준다. 연동을 끊은 게 아니라
+// 탈퇴만 했던 거라, 상대방 쪽 데이터는 그대로 남아 있어서 다시 합류하는
+// 순간 예전 가계부/기록이 그대로 이어진다.
+export async function signupRejoinGroup({ email, password, name, gender, birthday }) {
+  const tombRef = doc(db, PLANNER_LEFT_ACCOUNTS, normalizeEmailKey(email));
+  const tombSnap = await getDoc(tombRef);
+  if (!tombSnap.exists()) {
+    throw new Error("이전 가입 기록을 찾을 수 없어요. 이메일을 다시 확인하거나, 처음이라면 일반 회원가입을 이용해 주세요.");
+  }
+  const tomb = tombSnap.data();
+
+  const user = await getOrCreateAuthUser(email, password);
+  await assertNoExistingPlannerProfile(user.uid);
+  await setDoc(doc(db, PLANNER_ACCOUNTS, user.uid), {
+    email: email.trim(),
+    name: name.trim(),
+    gender: gender || tomb.gender || "female",
+    groupId: tomb.groupId,
+    groupName: tomb.groupName || "우리 가족",
     role: "member",
-    isVirtual: true,
-    createdAt: { toMillis: () => virtualMillis, seconds: Math.floor(virtualMillis / 1000) },
-  };
+    birthday: birthday || tomb.birthday || "",
+    createdAt: serverTimestamp(),
+  });
+  await deleteDoc(tombRef).catch(() => {});
+  return { uid: user.uid, groupId: tomb.groupId };
 }
 
+// ⭐ 최고관리자 전용 관리자 메뉴에서 쓰는 헬퍼들.
 export function useGroupMembers(groupId) {
   const [members, setMembers] = useState([]);
   useEffect(() => {
     if (!groupId) { setMembers([]); return; }
     const q = query(collection(db, PLANNER_ACCOUNTS), where("groupId", "==", groupId));
     const unsub = onSnapshot(q, (snap) => {
-      const list = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
-      const isAdminSolo = list.length === 1 && list[0].email === TOTAL_MASTER_EMAIL;
-      setMembers(isAdminSolo ? [...list, makeVirtualPartner(list[0])] : list);
+      setMembers(snap.docs.map((d) => ({ uid: d.id, ...d.data() })));
     });
     return () => unsub();
   }, [groupId]);
@@ -327,9 +336,25 @@ export async function adminRemovePlannerProfile(uid) {
 // 배차프로그램 등 다른 프로그램과 완전히 별개라 안전하게 지울 수 있다. 최근
 // 로그인이 아니어서 삭제가 거부되면(auth/requires-recent-login) 프로필만 지우고
 // 로그아웃한다 — 남은 로그인 정보는 다시 로그인 후 재시도하면 지워진다.
+// ⭐ 탈퇴는 "연동 끊기"가 아니다 — 상대방 쪽 그룹/데이터는 그대로 남아있고,
+// 내가 나가기 전에 이메일 기준으로 groupId를 남겨둔다. 나중에 같은 이메일로
+// "재가입"하면 이 기록을 찾아서 자동으로 예전 그룹에 다시 연결된다.
 export async function leavePlannerAccount() {
   const user = auth.currentUser;
   if (!user) return;
+  try {
+    const snap = await getDoc(doc(db, PLANNER_ACCOUNTS, user.uid));
+    if (snap.exists()) {
+      const data = snap.data();
+      await setDoc(doc(db, PLANNER_LEFT_ACCOUNTS, normalizeEmailKey(data.email || user.email)), {
+        groupId: data.groupId || "", groupName: data.groupName || "",
+        gender: data.gender || "female", birthday: data.birthday || "",
+        leftAt: serverTimestamp(),
+      });
+    }
+  } catch {
+    // 재가입용 기록 저장이 실패해도 탈퇴 자체는 계속 진행한다.
+  }
   await deleteDoc(doc(db, PLANNER_ACCOUNTS, user.uid));
   try {
     await deleteUser(user);

@@ -5,7 +5,7 @@
 // 재도전도 잠긴다 — 둘 다 끝나야 결과(승/패)를 확인하고 다음 라운드로 넘어간다.
 import React, { useEffect, useState } from "react";
 import {
-  usePlannerGameState, usePlannerGameScores, setPlannerGameBet, GAME_BET_OPTIONS, resolveVirtualPartnerNow,
+  usePlannerGameState, usePlannerGameScores, setPlannerGameBet, GAME_BET_OPTIONS,
 } from "../adminPlannerData";
 import { useGroupMembers, TOTAL_MASTER_EMAIL } from "./plannerAuth";
 import PlannerMatchGame from "./PlannerMatchGame";
@@ -161,7 +161,7 @@ function MatchResultModal({ myName, otherName, myScore, otherScore, onClose }) {
 // Bejeweled/Candy Crush류 매치 퍼즐 게임 — 60초 도전제라 실시간 대전이 아니라
 // "각자 도전해서 최고 점수 겨루기" 방식. VS 카드 형태로 서로의 최고점/전적을
 // 보여주고, 라운드(같은 내기) 진행 상태에 따라 카드가 흐려지며 안내가 뜬다.
-function MatchGameCard({ account, other, solo, scores, betText, roundScores, roundComplete, resultSeen, liveMatch, onPlay, onShowResult, onOpenBet, onSpectate, onRetryVirtual, retrying, canChangeBet }) {
+function MatchGameCard({ account, other, solo, scores, betText, roundScores, roundComplete, resultSeen, liveMatch, onPlay, onShowResult, onOpenBet, onSpectate, canChangeBet }) {
   const myGame = scores[account.uid]?.matchGame || {};
   const theirGame = other ? (scores[other.uid]?.matchGame || {}) : {};
   // ⭐ 최고관리자가 배우자 없이 테스트할 때는(solo) 기다리거나 결과를 가릴
@@ -192,10 +192,7 @@ function MatchGameCard({ account, other, solo, scores, betText, roundScores, rou
             <>
               <div className="text-[17px] font-extrabold shrink-0" style={{ color: ACCENT }}>VS</div>
               <div className="flex-1 min-w-0 text-center">
-                <div className="text-[12.5px] font-extrabold text-gray-800 truncate">
-                  {other.name || "배우자"}
-                  {other.isVirtual && <span className="ml-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full align-middle" style={{ background: ACCENT_SOFT, color: ACCENT }}>가상</span>}
-                </div>
+                <div className="text-[12.5px] font-extrabold text-gray-800 truncate">{other.name || "배우자"}</div>
                 <div className="text-[10.5px] text-gray-400 mt-0.5">최고 {theirGame.best || 0}</div>
                 <div className="text-[10px] font-bold text-gray-400 mt-0.5">{theirGame.wins || 0}승 {theirGame.losses || 0}패{theirGame.draws ? ` ${theirGame.draws}무` : ""}</div>
               </div>
@@ -232,21 +229,11 @@ function MatchGameCard({ account, other, solo, scores, betText, roundScores, rou
           <div className="bg-white rounded-xl px-4 py-3 text-center shadow-lg border" style={{ borderColor: ACCENT_BORDER, maxWidth: 240 }}>
             <div className="text-[12.5px] font-bold text-gray-700">상대방이 아직 진행 중이에요</div>
             <div className="text-[11px] text-gray-400 mt-1">끝나면 결과를 확인할 수 있어요</div>
-            <div className="flex items-center justify-center gap-1.5 mt-2.5 flex-wrap">
-              {canSpectate && (
-                <button onClick={onSpectate} className="text-[11px] font-bold px-3 py-1.5 rounded-full text-white" style={{ background: ACCENT }}>
-                  지켜보기
-                </button>
-              )}
-              {/* ⭐ 상대가 가상 파트너(실존하지 않음)일 때만 — 최고관리자가 자동
-                  응답을 기다리지 않고 바로 라운드를 끝내고 다음 테스트로 넘어갈
-                  수 있게 하는 버튼. 실제 배우자와의 대전에는 뜨지 않는다. */}
-              {other?.isVirtual && (
-                <button onClick={onRetryVirtual} disabled={retrying} className="text-[11px] font-bold px-3 py-1.5 rounded-full border disabled:opacity-50" style={{ borderColor: ACCENT, color: ACCENT, background: "#fff" }}>
-                  {retrying ? "처리 중..." : "재시도"}
-                </button>
-              )}
-            </div>
+            {canSpectate && (
+              <button onClick={onSpectate} className="mt-2.5 text-[11px] font-bold px-3 py-1.5 rounded-full text-white" style={{ background: ACCENT }}>
+                지켜보기
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -275,14 +262,12 @@ export default function PlannerMiniGames({ account }) {
   const [showResult, setShowResult] = useState(false);
   const [showSpectator, setShowSpectator] = useState(false);
   const [resultSeen, setResultSeen] = useState(false);
-  const [retrying, setRetrying] = useState(false);
 
   const betText = state?.bet?.text || "";
   const round = state?.matchRound || {};
   const roundScores = round.scores || {};
   const roundComplete = !!round.settled;
   const liveMatch = state?.liveMatch || null;
-  const otherIsVirtual = !!other?.isVirtual;
 
   // 새 라운드(내기가 바뀌었거나 다시 시작됨)가 되면 "결과 확인함" 표시를 초기화.
   useEffect(() => { if (!roundComplete) setResultSeen(false); }, [roundComplete, round.betText]);
@@ -301,23 +286,6 @@ export default function PlannerMiniGames({ account }) {
   // 전), 라운드가 완전히 끝났을 때만 가능.
   const canChangeBet = solo || (!myPlayed && !otherPlayed) || roundComplete;
 
-  // ⭐ 가상 파트너는 실존하지 않아서 정해진 지연(약 1.4~3.1초) 뒤에나 자동으로
-  // 응답한다 — 최고관리자가 그 몇 초조차 기다리지 않고 바로 라운드를 끝내고
-  // 싶을 때 쓰는 즉시 응답 버튼. 화면에 남아있는 값 대신 지금 Firestore에 실제
-  // 저장된 라운드를 다시 읽어와서 처리하고, 실패하면 이유를 바로 알려준다
-  // (예전엔 실패가 조용히 무시돼서 눌러도 아무 반응이 없는 것처럼 보였다).
-  const retryVirtual = async () => {
-    if (!other?.isVirtual || retrying) return;
-    setRetrying(true);
-    try {
-      await resolveVirtualPartnerNow(account.groupId, account.uid, other.uid);
-    } catch (err) {
-      alert(err?.message ? `재시도에 실패했어요 (${err.message})` : "재시도에 실패했어요. 잠시 후 다시 시도해 주세요.");
-    } finally {
-      setRetrying(false);
-    }
-  };
-
   return (
     <div className="max-w-lg mx-auto space-y-3">
       <div className="flex justify-end">
@@ -334,8 +302,6 @@ export default function PlannerMiniGames({ account }) {
         onOpenBet={() => canChangeBet && setShowBet(true)}
         onShowResult={() => setShowResult(true)}
         onSpectate={() => setShowSpectator(true)}
-        onRetryVirtual={retryVirtual}
-        retrying={retrying}
       />
 
       {showSpectator && liveMatch && (
@@ -365,7 +331,6 @@ export default function PlannerMiniGames({ account }) {
           otherBest={other ? (scores[other.uid]?.matchGame?.best || 0) : 0}
           betText={betText}
           roundComplete={solo ? false : roundComplete}
-          otherIsVirtual={otherIsVirtual}
           onClose={() => setShowMatchGame(false)}
         />
       )}

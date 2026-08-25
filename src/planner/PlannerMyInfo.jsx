@@ -9,12 +9,14 @@ import { updateMyProfile, updateGroupName, useGroupMembers, leavePlannerAccount,
 import { shareInvite } from "./plannerInvite";
 import { ACCENT, ACCENT_SOFT, ACCENT_BORDER } from "./plannerTheme";
 import PlannerDatePicker from "./PlannerDatePicker";
+import PlannerUnlinkPanel from "./PlannerUnlinkPanel";
 
 const GENDER_LABEL = { male: "남자", female: "여자" };
 
 export default function PlannerMyInfo({ account, onUpdated }) {
   const navigate = useNavigate();
   const members = useGroupMembers(account.groupId);
+  const other = members.find((m) => m.uid !== account.uid);
   const resolvedGroupName = members.find((m) => m.groupName)?.groupName || account.groupName || "우리 가족";
 
   const [name, setName] = useState(account.name || "");
@@ -150,10 +152,12 @@ export default function PlannerMyInfo({ account, onUpdated }) {
 
       <div>
         <button onClick={invite} disabled={sharing} className="w-full py-2.5 rounded-xl text-white text-[13px] font-bold" style={{ background: ACCENT }}>
-          {sharing ? "준비 중..." : "배우자에게 초대 공유하기"}
+          {sharing ? "준비 중..." : "상대방에게 초대 공유하기"}
         </button>
         {shareFlash && <div className="text-[11px] text-gray-500 mt-1.5">{shareFlash}</div>}
       </div>
+
+      <PlannerUnlinkPanel account={account} other={other} />
 
       {!isMaster && (
         <div className="pt-2 border-t" style={{ borderColor: ACCENT_SOFT }}>
@@ -165,8 +169,9 @@ export default function PlannerMyInfo({ account, onUpdated }) {
             <div className="mt-3 p-3.5 rounded-xl border border-red-200 bg-red-50">
               <div className="text-[12px] font-bold text-red-500 mb-1.5">정말 탈퇴하시겠어요?</div>
               <div className="text-[11px] text-red-400 mb-2.5 leading-relaxed">
-                탈퇴하면 이 가족({resolvedGroupName})에서 나가게 되고, 로그인 계정도 함께 삭제돼요. 다시 쓰려면 재가입해야 해요.
-                계속하려면 아래에 "탈퇴"라고 입력해 주세요.
+                탈퇴하면 이 가족({resolvedGroupName})에서 나가게 되고, 로그인 계정도 함께 삭제돼요. 연동을 끊는 건 아니라서
+                이 가족의 데이터는 그대로 남아있고, 나중에 로그인 화면의 "이전 가입자인가요?"에서 같은 이메일로
+                재가입하면 자동으로 다시 연결돼요. 계속하려면 아래에 "탈퇴"라고 입력해 주세요.
               </div>
               <input
                 value={leaveInput}

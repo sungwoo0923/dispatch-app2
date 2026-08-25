@@ -1,7 +1,8 @@
 // src/planner/PlannerAdminPanel.jsx — 최고관리자(owner)만 보이는 관리자 메뉴.
 // 가족 정보 수정, 구성원 목록, 모바일 화면 미리보기를 한 곳에서 다룬다.
 import React, { useState } from "react";
-import { useGroupMembers, updateGroupName } from "./plannerAuth";
+import { useGroupMembers, updateGroupName, useAllPlannerAccounts } from "./plannerAuth";
+import { useEscalatedUnlinkRequests, adminForceUnlink } from "../adminPlannerData";
 import { ACCENT, ACCENT_SOFT, ACCENT_BORDER, BG } from "./plannerTheme";
 import PlannerMobileShell from "./PlannerMobileShell";
 import PlannerUserManagement from "./PlannerUserManagement";
@@ -9,6 +10,41 @@ import useBodyScrollLock from "./useBodyScrollLock";
 
 const GENDER_LABEL = { male: "남자", female: "여자" };
 const ROLE_LABEL = { owner: "최고관리자", member: "구성원" };
+
+// ⭐ 상대방이 연동 해제를 거절해서, 요청한 사람이 최고관리자에게 문의한
+// 건들만 여기 모아 보여준다 — 관리자는 상대방 동의 없이 강제로 끊을 수 있다.
+function UnlinkEscalationRow({ req, accounts, onForce }) {
+  const members = accounts.filter((a) => a.groupId === req.groupId);
+  const [busy, setBusy] = useState(false);
+  const force = async () => {
+    if (!window.confirm(`"${members.map((m) => m.name).join(", ") || req.groupId}" 가족의 연동을 강제로 끊을까요? 모든 데이터가 삭제됩니다.`)) return;
+    setBusy(true);
+    try {
+      await onForce(req.groupId, members.map((m) => m.uid));
+    } catch (e) {
+      alert("처리 중 오류가 발생했습니다: " + e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div style={{ padding: "12px 14px", borderBottom: `1px solid ${ACCENT_SOFT}` }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#2a2a30" }}>
+        {members.map((m) => m.name || m.email).join(" · ") || req.groupId}
+      </div>
+      <div style={{ fontSize: 10.5, color: "#7a7a85", marginTop: 2 }}>
+        요청자: {req.requestedByName || "-"} · 가족코드 {req.groupId}
+      </div>
+      <button
+        onClick={force}
+        disabled={busy}
+        style={{ marginTop: 8, fontSize: 11, fontWeight: 700, color: "#fff", background: "#dc2626", border: "none", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}
+      >
+        {busy ? "처리 중..." : "강제로 연동 끊기"}
+      </button>
+    </div>
+  );
+}
 
 function Section({ title, children }) {
   return (
@@ -22,6 +58,8 @@ function Section({ title, children }) {
 export default function PlannerAdminPanel({ account, onClose, onUpdated }) {
   useBodyScrollLock();
   const members = useGroupMembers(account.groupId);
+  const allAccounts = useAllPlannerAccounts();
+  const escalatedUnlinks = useEscalatedUnlinkRequests();
   const [groupName, setGroupName] = useState(account.groupName || "우리 가족");
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
@@ -95,6 +133,16 @@ export default function PlannerAdminPanel({ account, onClose, onUpdated }) {
               ))}
             </div>
           </Section>
+
+          {escalatedUnlinks.length > 0 && (
+            <Section title={`연동끊기 문의 (${escalatedUnlinks.length}건)`}>
+              <div style={{ border: `1px solid ${ACCENT_BORDER}`, borderRadius: 12, overflow: "hidden" }}>
+                {escalatedUnlinks.map((req) => (
+                  <UnlinkEscalationRow key={req.groupId} req={req} accounts={allAccounts} onForce={adminForceUnlink} />
+                ))}
+              </div>
+            </Section>
+          )}
 
           <Section title="가입자 관리">
             <PlannerUserManagement />
