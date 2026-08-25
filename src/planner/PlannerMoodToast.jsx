@@ -35,7 +35,7 @@ export default function PlannerMoodToast({ groupId, myUid }) {
   }, [current]);
 
   if (!current) return null;
-  const label = MOOD_OPTIONS.find((m) => m.value === current.mood)?.label || current.mood;
+  const partnerLabel = MOOD_OPTIONS.find((m) => m.value === current.mood)?.partnerLabel || current.mood;
 
   return (
     <div
@@ -47,7 +47,7 @@ export default function PlannerMoodToast({ groupId, myUid }) {
       }}
     >
       <div style={{ background: ACCENT, color: "#fff", padding: "9px 18px", borderRadius: 999, fontSize: 12.5, fontWeight: 700, boxShadow: "0 8px 24px rgba(0,0,0,0.18)", whiteSpace: "nowrap" }}>
-        {current.fromName || "상대방"}님의 기분 · {label}
+        오늘 {current.fromName || "상대방"}님은 기분이 {partnerLabel}
       </div>
     </div>
   );

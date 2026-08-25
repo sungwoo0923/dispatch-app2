@@ -2,12 +2,14 @@
 // 등록된 일정을 나열하던 예전 방식 대신, 만난 날 기준 100일/1000일 같은 절편
 // 기념일과 매년 돌아오는 N주년이 언제인지 계산해서 보여준다. 화면 중앙에는 커플
 // 사진을 올려둘 수 있다.
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   todayStr, durationParts, generateAnniversaries, next14DayInfo, uploadTimelinePhoto, useTimelinePhoto,
+  usePlannerEntries, syncAnniversarySchedules,
 } from "../adminPlannerData";
 import { updateCoupleStartDate } from "./plannerAuth";
 import PlannerDatePicker from "./PlannerDatePicker";
+import PlannerImageCropper from "./PlannerImageCropper";
 import { ACCENT, ACCENT_SOFT, ACCENT_BORDER } from "./plannerTheme";
 
 function daysBetween(fromStr, toStr) {
@@ -24,17 +26,23 @@ function weekdayLabel(dateStr) {
 function PhotoPicker({ groupId }) {
   const photoURL = useTimelinePhoto(groupId);
   const [uploading, setUploading] = useState(false);
+  const [pickedFile, setPickedFile] = useState(null); // 크롭 대기중인 원본 파일
   const inputRef = useRef(null);
   const [error, setError] = useState("");
 
-  const handlePick = async (e) => {
+  const handlePick = (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     setError("");
+    setPickedFile(file); // 바로 업로드하지 않고, 먼저 크롭 화면에서 위치/확대를 맞춘다.
+  };
+
+  const handleCropConfirm = async (blob) => {
+    setPickedFile(null);
     setUploading(true);
     try {
-      await uploadTimelinePhoto(groupId, file);
+      await uploadTimelinePhoto(groupId, blob);
     } catch (err) {
       // ⭐ 예전엔 여기서 실패가 조용히 무시돼서, "업로드 중"만 잠깐 뜨고
       // 아무 반응 없이 원래대로 돌아가는 것처럼 보이는 버그가 있었다.
@@ -72,6 +80,9 @@ function PhotoPicker({ groupId }) {
       )}
     </button>
     {error && <div className="text-[11px] text-red-500 mt-1.5 text-center">{error}</div>}
+    {pickedFile && (
+      <PlannerImageCropper file={pickedFile} onCancel={() => setPickedFile(null)} onConfirm={handleCropConfirm} />
+    )}
     </div>
   );
 }
@@ -80,6 +91,10 @@ export default function PlannerTimeline({ account, onBack, onCoupleStartDateChan
   const [editing, setEditing] = useState(!account.coupleStartDate);
   const [draft, setDraft] = useState(account.coupleStartDate || "");
   const [saving, setSaving] = useState(false);
+  // ⭐ 100일 이상 절편 기념일/N주년을 일정에도 자동 등록해서, 그걸 이미 처리하고
+  // 있는 PlannerAlertBanner(D-30/D-7/D-0)로 서로 알림이 가게 한다.
+  const { entries: syncEntries, loaded: syncEntriesLoaded } = usePlannerEntries(account.groupId);
+  const syncedRef = useRef(false);
 
   const saveStartDate = async (next) => {
     setDraft(next);
@@ -88,10 +103,19 @@ export default function PlannerTimeline({ account, onBack, onCoupleStartDateChan
       await updateCoupleStartDate(account.groupId, next);
       onCoupleStartDateChange?.(next);
       setEditing(false);
+      await syncAnniversarySchedules(account.groupId, next, syncEntries);
     } finally {
       setSaving(false);
     }
   };
+
+  // 이미 시작일이 등록돼 있던 기존 사용자를 위한 1회성 보정 — 마운트 후 그룹
+  // entries가 처음 로드되면 한 번만 동기화를 시도한다(계속 반복 쓰기 방지).
+  useEffect(() => {
+    if (!account.coupleStartDate || !syncEntriesLoaded || syncedRef.current) return;
+    syncedRef.current = true;
+    syncAnniversarySchedules(account.groupId, account.coupleStartDate, syncEntries);
+  }, [account.coupleStartDate, account.groupId, syncEntries, syncEntriesLoaded]);
 
   const today = todayStr();
   const anniversaries = useMemo(

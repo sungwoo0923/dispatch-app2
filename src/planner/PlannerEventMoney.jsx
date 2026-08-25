@@ -11,8 +11,24 @@ import {
 } from "../adminPlannerData";
 import PlannerDatePicker from "./PlannerDatePicker";
 import PlannerCategorySelect from "./PlannerCategorySelect";
+import PlannerInfoTip from "./PlannerInfoTip";
 import useBodyScrollLock from "./useBodyScrollLock";
 import { ACCENT, ACCENT_SOFT, ACCENT_BORDER } from "./plannerTheme";
+
+// 기간 필터용 년/월 select — 화면 곳곳의 년도 표시를 드롭다운으로 바꾼 것과 같은
+// 스타일(테두리/글자색이 성별 테마 ACCENT를 그대로 따라간다: 남자=네이비, 여자=분홍).
+function YMSelect({ value, onChange, options, suffix }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(Number(e.target.value))}
+      className="border rounded-lg px-2 py-1.5 text-[12px] font-bold focus:outline-none bg-white"
+      style={{ borderColor: ACCENT_BORDER, color: ACCENT }}
+    >
+      {options.map((v) => <option key={v} value={v}>{v}{suffix}</option>)}
+    </select>
+  );
+}
 
 function fieldStyle() {
   return { borderColor: ACCENT_BORDER };
@@ -291,19 +307,29 @@ function BulkUploadModal({ groupId, actorUid, actorName, onClose }) {
   );
 }
 
+const nowY = new Date().getFullYear();
+const YEAR_OPTIONS = Array.from({ length: 26 }, (_, i) => nowY + 5 - i); // nowY+5 ~ nowY-20
+const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => i + 1);
+function lastDayOf(year, month) { return new Date(year, month, 0).getDate(); }
+
 export default function PlannerEventMoney({ account }) {
   const { entries } = usePlannerEntries(account.groupId);
   const [keyword, setKeyword] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
   const [openPerson, setOpenPerson] = useState(null);
-  const [filters, setFilters] = useState({ start: "", end: "" });
+  // ⭐ 기간 필터는 날짜 하나하나가 아니라 "몇 년 몇 월부터 몇 년 몇 월까지"로 월
+  // 단위 드롭다운을 쓴다(요청 반영) — 실제 비교용 날짜 범위는 아래서 계산한다.
+  const [range, setRange] = useState({ startYear: nowY, startMonth: 1, endYear: nowY, endMonth: 12 });
+  const isDefaultRange = range.startYear === nowY && range.startMonth === 1 && range.endYear === nowY && range.endMonth === 12;
 
   const eventEntries = useMemo(() => entries.filter((e) => e.type === "eventMoney"), [entries]);
-  const dateFiltered = useMemo(
-    () => eventEntries.filter((e) => (!filters.start || (e.date || "") >= filters.start) && (!filters.end || (e.date || "") <= filters.end)),
-    [eventEntries, filters]
-  );
+  const dateFiltered = useMemo(() => {
+    const pad = (n) => String(n).padStart(2, "0");
+    const start = `${range.startYear}-${pad(range.startMonth)}-01`;
+    const end = `${range.endYear}-${pad(range.endMonth)}-${pad(lastDayOf(range.endYear, range.endMonth))}`;
+    return eventEntries.filter((e) => (e.date || "") >= start && (e.date || "") <= end);
+  }, [eventEntries, range]);
 
   const people = useMemo(() => eventMoneyBalanceByPerson(dateFiltered), [dateFiltered]);
   const filtered = useMemo(
@@ -318,43 +344,50 @@ export default function PlannerEventMoney({ account }) {
 
   return (
     <div className="max-w-lg mx-auto space-y-4">
-      <div className="text-[12.5px] text-gray-500 leading-relaxed">
-        경조사비를 주고받은 내역을 이름별로 기록해두면, 나중에 그 사람에게 경조사가 생겼을 때 얼마를 줬었는지 바로 확인할 수 있어요.
-      </div>
-
-      <div className="flex gap-2">
-        <input
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          placeholder="이름으로 검색"
-          className="flex-1 min-w-0 border rounded-full px-4 py-2.5 text-[13px] focus:outline-none"
-          style={fieldStyle()}
+      <div className="flex justify-end">
+        <PlannerInfoTip
+          align="right"
+          text="경조사비를 주고받은 내역을 이름별로 기록해두면, 나중에 그 사람에게 경조사가 생겼을 때 얼마를 줬었는지 바로 확인할 수 있어요."
         />
-        <button onClick={() => setShowBulk(true)} className="shrink-0 whitespace-nowrap px-3.5 rounded-full border text-[12.5px] font-bold" style={{ color: ACCENT, borderColor: ACCENT_BORDER }}>
-          엑셀 일괄 등록
-        </button>
-        <button onClick={() => setShowAdd(true)} className="shrink-0 whitespace-nowrap px-4 rounded-full text-white text-[12.5px] font-bold" style={{ background: ACCENT }}>
-          + 기록 추가
-        </button>
       </div>
 
-      <div className="flex items-end gap-2 bg-white border rounded-xl p-2.5" style={fieldStyle()}>
-        <div className="flex-1 min-w-0">
-          <div className="text-[10.5px] font-semibold text-gray-400 mb-1">시작일</div>
-          <PlannerDatePicker value={filters.start} onChange={(v) => setFilters((d) => ({ ...d, start: v }))} className="w-full text-left border rounded-lg px-2.5 py-1.5 text-[12px]" />
+      {/* ⭐ 검색/버튼/기간 필터가 각각 따로 떨어져 있던 걸 카드 하나로 묶었다. */}
+      <div className="bg-white border rounded-xl p-3 space-y-3" style={fieldStyle()}>
+        <div className="flex gap-2">
+          <input
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="이름으로 검색"
+            className="flex-1 min-w-0 border rounded-lg px-3 py-2 text-[13px] focus:outline-none"
+            style={fieldStyle()}
+          />
+          <button onClick={() => setShowBulk(true)} className="shrink-0 whitespace-nowrap px-3 rounded-lg border text-[12px] font-bold" style={{ color: ACCENT, borderColor: ACCENT_BORDER }}>
+            일괄업로드
+          </button>
+          <button onClick={() => setShowAdd(true)} className="shrink-0 whitespace-nowrap px-3.5 rounded-lg text-white text-[12px] font-bold" style={{ background: ACCENT }}>
+            + 기록 추가
+          </button>
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-[10.5px] font-semibold text-gray-400 mb-1">종료일</div>
-          <PlannerDatePicker value={filters.end} onChange={(v) => setFilters((d) => ({ ...d, end: v }))} className="w-full text-left border rounded-lg px-2.5 py-1.5 text-[12px]" />
+
+        <div className="flex items-center gap-1.5 flex-wrap pt-2.5 border-t" style={{ borderColor: ACCENT_SOFT }}>
+          <span className="text-[11px] font-semibold text-gray-400 shrink-0 mr-0.5">기간</span>
+          <YMSelect value={range.startYear} onChange={(v) => setRange((r) => ({ ...r, startYear: v }))} options={YEAR_OPTIONS} suffix="년" />
+          <YMSelect value={range.startMonth} onChange={(v) => setRange((r) => ({ ...r, startMonth: v }))} options={MONTH_OPTIONS} suffix="월" />
+          <span className="text-[11px] text-gray-400 shrink-0">부터</span>
+          <YMSelect value={range.endYear} onChange={(v) => setRange((r) => ({ ...r, endYear: v }))} options={YEAR_OPTIONS} suffix="년" />
+          <YMSelect value={range.endMonth} onChange={(v) => setRange((r) => ({ ...r, endMonth: v }))} options={MONTH_OPTIONS} suffix="월" />
+          <span className="text-[11px] text-gray-400 shrink-0">까지</span>
+          {!isDefaultRange && (
+            <button onClick={() => setRange({ startYear: nowY, startMonth: 1, endYear: nowY, endMonth: 12 })} className="ml-auto shrink-0 text-[11px] font-semibold" style={{ color: ACCENT }}>
+              초기화
+            </button>
+          )}
         </div>
-        {(filters.start || filters.end) && (
-          <button onClick={() => setFilters({ start: "", end: "" })} className="shrink-0 px-3 py-1.5 rounded-lg border text-[11.5px] font-semibold text-gray-500" style={fieldStyle()}>전체</button>
-        )}
       </div>
 
       {filtered.length === 0 ? (
         <div className="text-[12.5px] text-gray-400 text-center py-10 bg-white border rounded-xl" style={fieldStyle()}>
-          {keyword || filters.start || filters.end ? "해당하는 기록이 없어요." : "아직 등록된 경조사 기록이 없어요."}
+          {keyword || !isDefaultRange ? "해당하는 기록이 없어요." : "아직 등록된 경조사 기록이 없어요."}
         </div>
       ) : (
         <div className="space-y-2">

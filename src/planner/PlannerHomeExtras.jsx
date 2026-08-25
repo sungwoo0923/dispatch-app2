@@ -5,12 +5,12 @@
 import React, { useMemo, useState } from "react";
 import {
   todayStr, usePlannerTodayMoods, setPlannerMood, MOOD_OPTIONS,
-  useWeekMission, togglePlannerMissionDone, rerollWeekMission, setWeekMissionPool,
+  useWeekMission, rerollWeekMission, setWeekMissionPool,
   useGroupCycles, computeCycleInfo, dDayLabel,
 } from "../adminPlannerData";
 import { useGroupMembers } from "./plannerAuth";
 import PlannerCycleTracker from "./PlannerCycleTracker";
-import { ACCENT, ACCENT_SOFT, ACCENT_BORDER } from "./plannerTheme";
+import { ACCENT, ACCENT_BORDER } from "./plannerTheme";
 
 function Card({ title, right, children }) {
   return (
@@ -87,9 +87,9 @@ function DdayAndCycleBanner({ groupId, myUid, myGender, myName, coupleStartDate 
   );
 }
 
-// ⭐ 예전엔 제목 있는 Card 하나를 통째로 차지하는 드롭다운이었는데, "화면을 너무
-// 크게 차지한다"는 피드백으로 얇은 한 줄짜리 알약 버튼 행으로 바꿨다 — 누르는
-// 즉시 바로 선택되고(드롭다운을 열 필요 없음), 상대방 기분은 옆에 짧게 표시.
+// ⭐ 알약 버튼 행 대신, 문장형 선택지를 고르는 얇은 드롭다운 한 줄로 바꿨다.
+// 드롭다운은 폭을 억지로 늘리지 않고 고른 문장 길이에 맞게 자연스럽게 표시되고,
+// 바로 아래에 상대방 기분이 "오늘 OOO님은 기분이 ○○○" 한 줄로만 나온다.
 function MoodCheckin({ groupId, myUid, myName }) {
   const today = todayStr();
   const moods = usePlannerTodayMoods(groupId, today);
@@ -104,39 +104,34 @@ function MoodCheckin({ groupId, myUid, myName }) {
   };
 
   return (
-    <div className="flex items-center gap-2 bg-white border rounded-xl px-2.5 py-2" style={{ borderColor: ACCENT_BORDER }}>
-      <span className="text-[10.5px] font-bold text-gray-400 shrink-0">오늘 기분</span>
-      <div className="flex items-center gap-1 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
-        {MOOD_OPTIONS.map((m) => (
-          <button
-            key={m.value}
-            onClick={() => pick(m.value)}
-            disabled={saving}
-            className="shrink-0 px-2.5 py-1 rounded-full text-[11px] font-bold border whitespace-nowrap"
-            style={mine?.mood === m.value ? { background: ACCENT, color: "#fff", borderColor: ACCENT } : { color: "#6b7280", borderColor: "#e5e7eb" }}
-          >
-            {m.label}
-          </button>
-        ))}
+    <div className="bg-white border rounded-xl px-2.5 py-2" style={{ borderColor: ACCENT_BORDER }}>
+      <div className="flex items-center gap-2">
+        <span className="text-[10.5px] font-bold text-gray-400 shrink-0">오늘 기분</span>
+        <select
+          value={mine?.mood || ""}
+          onChange={(e) => pick(e.target.value)}
+          disabled={saving}
+          className="min-w-0 max-w-full border rounded-lg px-2 py-1.5 text-[11.5px] font-bold focus:outline-none bg-white"
+          style={{ borderColor: ACCENT_BORDER, color: mine?.mood ? ACCENT : "#9ca3af" }}
+        >
+          <option value="" disabled>오늘 기분을 골라주세요</option>
+          {MOOD_OPTIONS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+        </select>
       </div>
       {others.length > 0 && (
-        <span className="shrink-0 text-[10px] text-gray-400 ml-auto pl-1">
-          {others.map((o) => `${o.name || "배우자"} ${MOOD_OPTIONS.find((m) => m.value === o.mood)?.label || ""}`).join(" ")}
-        </span>
+        <div className="mt-1.5 text-[11px] text-gray-500 truncate">
+          {others.map((o) => `오늘 ${o.name || "배우자"}님은 기분이 ${MOOD_OPTIONS.find((m) => m.value === o.mood)?.partnerLabel || ""}`).join(" · ")}
+        </div>
       )}
     </div>
   );
 }
 
 function WeeklyMission({ groupId, myName }) {
-  const { weekKey, text, pool, index, done, doneByName } = useWeekMission(groupId);
+  const { weekKey, text, pool, index } = useWeekMission(groupId);
   const [busy, setBusy] = useState(false);
   const isAdult = pool === "adult";
 
-  const toggleDone = async () => {
-    setBusy(true);
-    try { await togglePlannerMissionDone(groupId, weekKey, !done, myName); } finally { setBusy(false); }
-  };
   const reroll = async () => {
     setBusy(true);
     try { await rerollWeekMission(groupId, weekKey, pool, index); } finally { setBusy(false); }
@@ -151,26 +146,15 @@ function WeeklyMission({ groupId, myName }) {
       title="이번 주 커플 미션"
       right={
         <button onClick={reroll} disabled={busy} className="text-[11px] font-bold shrink-0" style={{ color: ACCENT }}>
-          새로고침
+          다른 미션
         </button>
       }
     >
-      <div className={`text-[13px] font-bold ${done ? "text-gray-400 line-through" : "text-gray-700"}`}>{text}</div>
-      <div className="flex items-center justify-between gap-2 mt-2.5">
-        <label className="flex items-center gap-1.5 cursor-pointer select-none">
-          <input type="checkbox" checked={isAdult} onChange={toggleAdult} disabled={busy} className="w-3.5 h-3.5" style={{ accentColor: ACCENT }} />
-          <span className="text-[10.5px] font-semibold text-gray-500">19금 버전</span>
-        </label>
-        <button
-          onClick={toggleDone}
-          disabled={busy}
-          className="shrink-0 whitespace-nowrap text-[11.5px] font-bold px-3 py-1.5 rounded-full border"
-          style={done ? { background: ACCENT_SOFT, color: ACCENT, borderColor: ACCENT_BORDER } : { color: ACCENT, borderColor: ACCENT_BORDER }}
-        >
-          {done ? "완료됨" : "완료하기"}
-        </button>
-      </div>
-      {done && doneByName && <div className="text-[10.5px] text-gray-400 mt-1">{doneByName}님이 완료 처리했어요</div>}
+      <div className="text-[13px] font-bold text-gray-700">{text}</div>
+      <label className="flex items-center gap-1.5 cursor-pointer select-none mt-2.5">
+        <input type="checkbox" checked={isAdult} onChange={toggleAdult} disabled={busy} className="w-3.5 h-3.5" style={{ accentColor: ACCENT }} />
+        <span className="text-[10.5px] font-semibold text-gray-500">19금 버전</span>
+      </label>
     </Card>
   );
 }

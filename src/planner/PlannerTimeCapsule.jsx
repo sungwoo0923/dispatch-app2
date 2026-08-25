@@ -5,6 +5,7 @@
 import React, { useMemo, useState } from "react";
 import { usePlannerTimeCapsules, addPlannerTimeCapsule, deletePlannerTimeCapsule, todayStr, dDayLabel } from "../adminPlannerData";
 import PlannerDatePicker from "./PlannerDatePicker";
+import PlannerInfoTip from "./PlannerInfoTip";
 import useBodyScrollLock from "./useBodyScrollLock";
 import { ACCENT, ACCENT_SOFT, ACCENT_BORDER } from "./plannerTheme";
 
@@ -90,8 +91,11 @@ export default function PlannerTimeCapsule({ account }) {
 
   return (
     <div className="max-w-lg mx-auto space-y-5">
-      <div className="text-[12.5px] text-gray-500 leading-relaxed">
-        지금 쓴 메시지를 미래의 날짜에 열어볼 수 있게 잠가둘 수 있어요. 기념일에 맞춰 미리 편지를 써두거나, 다음 생일에 열어볼 말을 남겨보세요.
+      <div className="flex justify-end">
+        <PlannerInfoTip
+          align="right"
+          text="지금 쓴 메시지를 미래의 날짜에 열어볼 수 있게 잠가둘 수 있어요. 기념일에 맞춰 미리 편지를 써두거나, 다음 생일에 열어볼 말을 남겨보세요."
+        />
       </div>
 
       <button onClick={() => setShowAdd(true)} className="w-full py-3 rounded-xl text-white text-[13.5px] font-bold" style={{ background: ACCENT }}>

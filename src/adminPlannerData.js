@@ -488,15 +488,17 @@ export function savingsContributedTotal(entries) {
 // 문서 id를 "groupId_uid_date"로 고정해 하루에 한 명당 하나만 존재하게 한다.
 // ────────────────────────────────────────────────
 export const PLANNER_MOOD_CHECKS = "plannerMoodChecks";
+// ⭐ label은 본인이 고를 때 보이는 문장형 표현("오늘 너무너무 행복해요"), partnerLabel은
+// 상대방 화면에 "오늘 OOO님은 기분이 ○○○" 한 줄로 보여줄 때 붙는 서술어다.
 export const MOOD_OPTIONS = [
-  { value: "happy", label: "행복" },
-  { value: "good", label: "좋음" },
-  { value: "excited", label: "설렘" },
-  { value: "normal", label: "보통" },
-  { value: "tired", label: "지침" },
-  { value: "anxious", label: "불안" },
-  { value: "sad", label: "우울" },
-  { value: "angry", label: "분노" },
+  { value: "happy", label: "오늘 너무너무 행복해요", partnerLabel: "매우 좋습니다" },
+  { value: "good", label: "오늘 기분이 좋아요", partnerLabel: "좋습니다" },
+  { value: "excited", label: "오늘 설레는 하루예요", partnerLabel: "설렙니다" },
+  { value: "normal", label: "오늘 그냥 그런 하루예요", partnerLabel: "그저 그렇습니다" },
+  { value: "tired", label: "오늘 조금 지쳐요", partnerLabel: "조금 지쳐 있습니다" },
+  { value: "anxious", label: "오늘 마음이 좀 불안해요", partnerLabel: "조금 불안합니다" },
+  { value: "sad", label: "오늘 조금 우울해요", partnerLabel: "조금 우울합니다" },
+  { value: "angry", label: "오늘 화가 나요", partnerLabel: "화가 나 있습니다" },
 ];
 
 export async function setPlannerMood(groupId, uid, name, date, mood) {
@@ -605,27 +607,30 @@ export const WEEKLY_MISSIONS = [
 
 // ⭐ 19금 버전 미션 — 노골적인 성적 묘사 없이, 부부/커플 사이의 스킨십·설렘을
 // 자연스럽게 유도하는 수위로만 구성한다.
+// ⭐ "더 야하게 바꿔달라"는 요청으로 한 단계 더 대담하게 손봤다 — 다만 특정
+// 행위를 노골적으로 묘사하지 않고, 서로 솔직해지고 대담해지는 "제안/대화 주제"
+// 형태는 그대로 유지했다.
 export const WEEKLY_MISSIONS_ADULT = [
-  "핸드폰 내려놓고 서로에게만 집중하는 밤 보내기",
-  "서로에게 은밀한 칭찬 한마디씩 속삭여주기",
-  "평소보다 오래, 진하게 안아주기",
-  "서로 좋아하는 향으로 마사지 오일 발라 마사지해주기",
-  "함께 샤워하거나 반신욕하며 오붓한 시간 보내기",
-  "서로에게 듣고 싶은 말 한마디씩 해주기",
-  "불 끄고 촛불만 켜둔 채 둘만의 시간 보내기",
-  "서로 눈 맞추고 1분간 아무 말 없이 안아주기",
-  "오늘 밤은 평소보다 스킨십에 조금 더 대담해지기",
-  "서로에게 매력적이라고 생각하는 부분 말해주기",
-  "잠들기 전 서로 귀에 대고 사랑한다고 속삭여주기",
-  "함께 야한 농담 하나씩 주고받으며 웃기",
-  "서로가 좋아하는 스킨십 방식 솔직하게 이야기해보기",
-  "오늘 하루는 애칭으로만 서로 부르기",
-  "서로에게 관능적인 춤 한 소절씩 춰주기",
-  "손 마사지하며 서로 눈 계속 마주치기",
-  "오늘 밤 데이트는 침대 위에서 마무리하기",
-  "서로 옷 입은 채로 뒤에서 꼭 안아주고 목에 입맞춤하기",
-  "서로에게 판타지(하고 싶은 것) 하나씩 살짝 말해보기",
-  "오늘은 평소보다 애정표현을 스킨십으로 더 많이 하기",
+  "핸드폰 다 끄고, 오늘 밤은 서로에게만 완전히 집중하기",
+  "귓가에 대고 오늘 밤 하고 싶은 말 솔직하게 속삭여주기",
+  "따뜻한 오일로 서로 몸 구석구석 마사지해주기",
+  "함께 샤워하며 서로 씻겨주는 시간 갖기",
+  "촛불만 켜둔 방에서 아무 방해 없이 둘만의 시간 보내기",
+  "가장 설레는 스킨십이 뭔지 솔직하게 물어보고 그대로 해주기",
+  "오늘은 평소보다 훨씬 대담하게 다가가 보기",
+  "서로에게 가장 매력적으로 느껴지는 순간을 솔직히 말해주기",
+  "관능적인 춤이나 몸짓으로 상대를 유혹해보기",
+  "눈을 가리고 상대의 손길만으로 어디인지 맞혀보는 게임하기",
+  "발끝부터 천천히 입맞춤하며 올라오기",
+  "은밀한 판타지 하나씩 솔직하게 이야기 나누기",
+  "오늘 밤 데이트는 침실에서 마무리하기로 약속하기",
+  "서로에게 야릇한 문자 한 통 미리 보내고 만나기",
+  "오늘 밤은 리드를 완전히 상대방에게 맡기고 따라가 보기",
+  "속삭이듯 낮은 목소리로 서로를 애칭으로만 부르기",
+  "얼음이나 초콜릿처럼 색다른 소품으로 스킨십 즐기기",
+  "서로 몸에 살짝살짝 입맞춤하며 사랑한다고 말해주기",
+  "잠들기 전, 오늘 가장 설레고 흥분됐던 순간 나누기",
+  "오늘 밤은 시간에 쫓기지 말고 천천히, 오래 사랑을 나누기",
 ];
 
 export const PLANNER_MISSION_CHECKS = "plannerMissionChecks";
@@ -1110,6 +1115,41 @@ export function generateAnniversaries(startStr) {
     rows.push({ label: `${y}주년`, date: fmt(d) });
   }
   return rows.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// ⭐ 타임라인이 계산해서 보여주기만 하던 100일 이상 절편 기념일/N주년을, 서로
+// 알림 받을 수 있게 진짜 "일정"(schedule)으로도 자동 등록해준다 — 일정에 등록되면
+// PlannerAlertBanner가 이미 D-30/D-7/D-0 알림을 처리하고 있어서 여기선 등록만
+// 하면 된다. anniversaryKey("100일", "1주년"...)로 각 그룹당 항목을 하나씩만
+// 유지하고, 시작일이 바뀌면 날짜만 갱신한다(중복 생성 방지).
+export async function syncAnniversarySchedules(groupId, coupleStartDate, entries) {
+  if (!groupId || !coupleStartDate) return;
+  const milestones = generateAnniversaries(coupleStartDate).filter((row) => {
+    const m = row.label.match(/^([\d,]+)일$/);
+    if (m) return Number(m[1].replace(/,/g, "")) >= 100; // "100일부터는 다" 요청 반영
+    return /주년$/.test(row.label);
+  });
+
+  const existing = (entries || []).filter((e) => e.type === "schedule" && e.anniversaryKey && e.companyName === groupId);
+  const existingByKey = new Map(existing.map((e) => [e.anniversaryKey, e]));
+
+  const writes = milestones.map((row) => {
+    const found = existingByKey.get(row.label);
+    if (found) {
+      existingByKey.delete(row.label);
+      if (found.date !== row.date) return updatePlannerEntry(found.id, { date: row.date });
+      return null;
+    }
+    return addPlannerEntry({
+      type: "schedule", companyName: groupId, title: `사랑한지 ${row.label}`,
+      date: row.date, memo: "", recurring: false, anniversaryKey: row.label, createdByName: "타임라인",
+    });
+  }).filter(Boolean);
+
+  // 목록에 더 이상 없는(예: 계산 규칙이 바뀐) 옛 자동등록 항목은 정리.
+  existingByKey.forEach((e) => writes.push(deletePlannerEntry(e.id)));
+
+  await Promise.all(writes);
 }
 
 // 매월 14일마다 이름 붙은 "커플 기념일" 시리즈 — 오늘 기준 다음 순서가 언제인지,
