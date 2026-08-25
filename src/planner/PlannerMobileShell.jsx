@@ -89,9 +89,21 @@ export default function PlannerMobileShell({ account, onUpdated, previewMode = f
           항상 화면 정중앙에 오도록 한다(flex+빈 스페이서 방식은 좌우 폭이 다르면
           중앙이 어긋났다). */}
       <div style={{ background: ACCENT, padding: "14px 16px", display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", columnGap: 8 }}>
-        <div style={{ color: "rgba(255,255,255,0.85)", fontWeight: 600, fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {pageTitle}
-        </div>
+        {/* ⭐ 홈이 아닌 모든 메뉴에서 뒤로가기 버튼(누르면 홈)이 있어야 한다는
+            요청 — 페이지마다 따로 만드는 대신, 여기 헤더 한 곳에서 공통으로
+            처리한다(그래야 어떤 메뉴를 새로 추가해도 자동으로 적용됨). */}
+        {page === "dashboard" ? (
+          <div style={{ color: "rgba(255,255,255,0.85)", fontWeight: 600, fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {pageTitle}
+          </div>
+        ) : (
+          <button
+            onClick={() => setPage("dashboard")}
+            style={{ display: "flex", alignItems: "center", gap: 3, color: "#fff", fontWeight: 700, fontSize: 12.5, background: "none", border: "none", padding: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          >
+            <span style={{ fontSize: 17, lineHeight: 1 }}>‹</span> 뒤로
+          </button>
+        )}
         <button
           onClick={() => setPage("dashboard")}
           style={{ color: "#fff", fontWeight: 800, fontSize: 16, textAlign: "center", whiteSpace: "nowrap", background: "none", border: "none" }}
@@ -128,7 +140,7 @@ export default function PlannerMobileShell({ account, onUpdated, previewMode = f
         )}
         {page === "ourStory" && (
           <div className="px-4 pt-4 pb-24">
-            <PlannerTimeline account={account} onBack={() => setPage("dashboard")} onCoupleStartDateChange={(next) => onUpdated?.({ ...account, coupleStartDate: next })} />
+            <PlannerTimeline account={account} onCoupleStartDateChange={(next) => onUpdated?.({ ...account, coupleStartDate: next })} />
           </div>
         )}
         {page === "timeCapsule" && (

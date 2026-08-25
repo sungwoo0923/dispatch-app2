@@ -18,21 +18,38 @@ function getCtx() {
   }
 }
 
-// 구슬 터질 때 — pitch를 연쇄마다 조금씩 올려주면 콤보가 이어질수록 경쾌해진다.
+// 구슬 터질 때 — 풍선 터지듯 "퐁!" 하고 두 겹으로 겹쳐 울리게 해서 더 통통 튀고
+// 중독성 있게. pitch를 연쇄마다 조금씩 올려주면 콤보가 이어질수록 경쾌해진다.
 export function playPopSound(pitch = 1) {
   const c = getCtx();
   if (!c) return;
   const now = c.currentTime;
-  const osc = c.createOscillator();
-  const gain = c.createGain();
-  osc.type = "sine";
-  osc.frequency.setValueAtTime(560 * pitch, now);
-  osc.frequency.exponentialRampToValueAtTime(190 * pitch, now + 0.15);
-  gain.gain.setValueAtTime(0.18, now);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
-  osc.connect(gain).connect(c.destination);
-  osc.start(now);
-  osc.stop(now + 0.17);
+
+  // 낮은 "퍽" 레이어(타격감)
+  const thump = c.createOscillator();
+  const thumpGain = c.createGain();
+  thump.type = "triangle";
+  thump.frequency.setValueAtTime(140 * pitch, now);
+  thump.frequency.exponentialRampToValueAtTime(60 * pitch, now + 0.09);
+  thumpGain.gain.setValueAtTime(0.22, now);
+  thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+  thump.connect(thumpGain).connect(c.destination);
+  thump.start(now);
+  thump.stop(now + 0.1);
+
+  // 높은 "퐁" 레이어(경쾌함) — 살짝 늦게 겹쳐서 이중 타격감을 준다.
+  const pop = c.createOscillator();
+  const popGain = c.createGain();
+  pop.type = "sine";
+  pop.frequency.setValueAtTime(720 * pitch, now + 0.02);
+  pop.frequency.exponentialRampToValueAtTime(1100 * pitch, now + 0.07);
+  pop.frequency.exponentialRampToValueAtTime(300 * pitch, now + 0.18);
+  popGain.gain.setValueAtTime(0.0001, now);
+  popGain.gain.linearRampToValueAtTime(0.22, now + 0.03);
+  popGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+  pop.connect(popGain).connect(c.destination);
+  pop.start(now);
+  pop.stop(now + 0.2);
 }
 
 // 이동할 수 없는 자리로 옮기려고 할 때 — 짧고 낮은 "안 돼요" 느낌의 알림음.

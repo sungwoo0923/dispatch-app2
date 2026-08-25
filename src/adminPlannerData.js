@@ -1039,6 +1039,8 @@ export const GAME_BET_OPTIONS = [
 export async function setPlannerGameBet(groupId, text, uid, name) {
   await setDoc(doc(db, PLANNER_GAME_STATE, groupId), {
     bet: { text, setByUid: uid, setByName: name || "", setAt: serverTimestamp() },
+    // 새 내기 = 새 라운드 — 이전 라운드 점수는 지운다.
+    matchRound: { betText: text, scores: {}, settled: false },
   }, { merge: true });
 }
 
@@ -1327,17 +1329,54 @@ export function next14DayInfo(todayStrArg) {
 // 기록해서 배우자와 점수로 겨룬다(동시 조작이 아니라 "누가 더 잘 터뜨렸나" 비교
 // 방식이라 실시간 트랜잭션 없이 내 점수만 기록하면 된다).
 // ────────────────────────────────────────────────
-export async function submitMatchGameScore(groupId, uid, name, score) {
+// ⭐ 라운드(=지금 걸린 내기 단위) 점수도 같이 남긴다 — 둘 다 이번 라운드에 점수를
+// 남기면 그 순간 승부가 갈리고 승/패/무 전적에 반영된다. otherUid를 안 넘기면
+// (배우자가 아직 없는 등) 라운드 판정 없이 누적 기록만 남긴다.
+export async function submitMatchGameScore(groupId, uid, name, score, otherUid) {
   const scoreRef = doc(db, PLANNER_GAME_SCORES, groupId);
+  const stateRef = doc(db, PLANNER_GAME_STATE, groupId);
   await runTransaction(db, async (tx) => {
-    const snap = await tx.get(scoreRef);
-    const scores = snap.exists() ? { ...snap.data() } : {};
-    const cur = scores[uid]?.matchGame || { best: 0, plays: 0 };
+    const scoreSnap = await tx.get(scoreRef);
+    const stateSnap = await tx.get(stateRef);
+    const scores = scoreSnap.exists() ? { ...scoreSnap.data() } : {};
+    const state = stateSnap.exists() ? stateSnap.data() : {};
+    const cur = scores[uid]?.matchGame || { best: 0, plays: 0, wins: 0, losses: 0, draws: 0 };
     scores[uid] = {
       ...(scores[uid] || {}),
       name: name || scores[uid]?.name || "",
-      matchGame: { best: Math.max(cur.best || 0, score), lastScore: score, plays: (cur.plays || 0) + 1 },
+      matchGame: { ...cur, best: Math.max(cur.best || 0, score), lastScore: score, plays: (cur.plays || 0) + 1 },
     };
+
+    const round = state.matchRound || { scores: {} };
+    const roundScores = { ...(round.scores || {}), [uid]: score };
+    let nextRound = { ...round, scores: roundScores };
+
+    if (otherUid && roundScores[otherUid] != null && !round.settled) {
+      const mine = roundScores[uid], theirs = roundScores[otherUid];
+      const myGame = scores[uid].matchGame;
+      const otherPrev = scores[otherUid]?.matchGame || { best: 0, plays: 0, wins: 0, losses: 0, draws: 0 };
+      if (mine > theirs) {
+        scores[uid].matchGame = { ...myGame, wins: (myGame.wins || 0) + 1 };
+        scores[otherUid] = { ...(scores[otherUid] || {}), matchGame: { ...otherPrev, losses: (otherPrev.losses || 0) + 1 } };
+      } else if (mine < theirs) {
+        scores[uid].matchGame = { ...myGame, losses: (myGame.losses || 0) + 1 };
+        scores[otherUid] = { ...(scores[otherUid] || {}), matchGame: { ...otherPrev, wins: (otherPrev.wins || 0) + 1 } };
+      } else {
+        scores[uid].matchGame = { ...myGame, draws: (myGame.draws || 0) + 1 };
+        scores[otherUid] = { ...(scores[otherUid] || {}), matchGame: { ...otherPrev, draws: (otherPrev.draws || 0) + 1 } };
+      }
+      nextRound.settled = true;
+    }
+
     tx.set(scoreRef, scores, { merge: true });
+    tx.set(stateRef, { ...state, matchRound: nextRound }, { merge: true });
   });
+}
+
+// 라운드가 끝난 뒤(둘 다 플레이 완료) 다시 도전할 때 — 같은 내기로 점수만 새로
+// 초기화한다. 아직 아무도 안 낸 라운드에서는 호출할 필요 없다(이미 비어있음).
+export async function startNewMatchRound(groupId, betText) {
+  await setDoc(doc(db, PLANNER_GAME_STATE, groupId), {
+    matchRound: { betText: betText || "", scores: {}, settled: false },
+  }, { merge: true });
 }

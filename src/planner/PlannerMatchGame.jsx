@@ -11,9 +11,9 @@
 // 줬고, 터질 때 진동+효과음+더 큰 임팩트를, 못 옮기는 자리를 누르면 빨간 테두리
 // +진동+경고음을 주도록 손맛을 더했다. 시작 전엔 3-2-1-START 카운트다운이 뜬다.
 import React, { useEffect, useRef, useState } from "react";
-import { submitMatchGameScore } from "../adminPlannerData";
+import { submitMatchGameScore, startNewMatchRound } from "../adminPlannerData";
 import { playPopSound, playErrorSound, vibrate } from "./plannerSound";
-import { ACCENT, ACCENT_BORDER } from "./plannerTheme";
+import { ACCENT, ACCENT_SOFT, ACCENT_BORDER } from "./plannerTheme";
 
 const ROWS = 8;
 const COLS = 8;
@@ -111,7 +111,7 @@ function isAdjacent(a, b) {
 
 const COUNTDOWN_STEPS = ["3", "2", "1", "START!"];
 
-export default function PlannerMatchGame({ groupId, myUid, myName, myBest, otherName, otherBest, betText, onClose }) {
+export default function PlannerMatchGame({ groupId, myUid, myName, myBest, otherUid, otherName, otherBest, betText, roundComplete, onClose }) {
   const [board, setBoard] = useState(makeBoard);
   const [selected, setSelected] = useState(null);
   const [popping, setPopping] = useState(new Set());
@@ -120,19 +120,19 @@ export default function PlannerMatchGame({ groupId, myUid, myName, myBest, other
   const [secondsLeft, setSecondsLeft] = useState(GAME_SECONDS);
   const [phase, setPhase] = useState("ready"); // ready | countdown | playing | resolving | over
   const [countdownStep, setCountdownStep] = useState(0);
+  const [combo, setCombo] = useState(null); // { key, chain } — 콤보 임팩트 문구
   const busyRef = useRef(false);
-  const comboRef = useRef(0);
 
   useEffect(() => {
     if (phase !== "playing") return;
     if (secondsLeft <= 0) {
       setPhase("over");
-      submitMatchGameScore(groupId, myUid, myName, score).catch(() => {});
+      submitMatchGameScore(groupId, myUid, myName, score, otherUid).catch(() => {});
       return;
     }
     const t = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
     return () => clearTimeout(t);
-  }, [phase, secondsLeft, groupId, myUid, myName, score]);
+  }, [phase, secondsLeft, groupId, myUid, myName, score, otherUid]);
 
   // 3-2-1-START 카운트다운 — 끝나면 바로 playing으로 전환.
   useEffect(() => {
@@ -160,6 +160,9 @@ export default function PlannerMatchGame({ groupId, myUid, myName, myBest, other
       setPopping(matched);
       vibrate(chain > 1 ? [25, 30, 25] : 30);
       playPopSound(1 + (chain - 1) * 0.12);
+      // ⭐ 콤보(연쇄) 임팩트 — 한 번의 스왑으로 2연쇄 이상 터지면 화면 중앙에
+      // "N COMBO!" 문구가 팍 떴다 사라진다.
+      if (chain > 1) setCombo({ key: Date.now(), chain });
       await new Promise((res) => setTimeout(res, 320));
       cur = collapseAndRefill(cur, matched);
       setBoard(cur);
@@ -171,13 +174,19 @@ export default function PlannerMatchGame({ groupId, myUid, myName, myBest, other
     busyRef.current = false;
   };
 
-  const start = () => {
+  const start = async () => {
+    // ⭐ 이미 둘 다 이번 내기로 플레이를 끝낸 뒤 다시 도전하는 경우엔, 같은
+    // 내기로 라운드 점수만 새로 초기화해야 다음 결과 판정이 꼬이지 않는다.
+    if (roundComplete) {
+      try { await startNewMatchRound(groupId, betText); } catch {}
+    }
     setBoard(makeBoard());
     setScore(0);
     setSecondsLeft(GAME_SECONDS);
     setSelected(null);
     setInvalidPair(new Set());
     setCountdownStep(0);
+    setCombo(null);
     setPhase("countdown");
   };
 
@@ -185,7 +194,7 @@ export default function PlannerMatchGame({ groupId, myUid, myName, myBest, other
   // resolveCascade가 phase를 "playing"으로 되돌리며 중단 상태를 덮어쓰는 충돌을 막는다.
   const quit = () => {
     setPhase("over");
-    submitMatchGameScore(groupId, myUid, myName, score).catch(() => {});
+    submitMatchGameScore(groupId, myUid, myName, score, otherUid).catch(() => {});
   };
 
   const onCellClick = (idx) => {
@@ -218,18 +227,21 @@ export default function PlannerMatchGame({ groupId, myUid, myName, myBest, other
     <div className="fixed inset-0 z-[10025] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={phase === "playing" ? undefined : onClose} />
       <div className="relative bg-white rounded-2xl p-4 w-full max-w-[420px] max-h-[92vh] overflow-y-auto">
+        {betText && (
+          <div
+            className="rounded-lg px-3 py-2 mb-3 text-[12px] font-extrabold text-center kp-bet-blink"
+            style={{ background: ACCENT, color: "#fff" }}
+          >
+            오늘의 내기 : {betText}
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-3">
           <div className="text-[14px] font-extrabold text-gray-800">구슬 터뜨리기</div>
           {phase !== "playing" && phase !== "countdown" && (
             <button onClick={onClose} className="text-gray-400 text-[18px] leading-none">✕</button>
           )}
         </div>
-
-        {betText && (
-          <div className="rounded-lg px-3 py-2 mb-2.5 text-[11.5px] font-bold text-center" style={{ background: "#fff7ed", color: "#c2410c", border: "1px solid #fed7aa" }}>
-            내기: {betText}
-          </div>
-        )}
 
         <div className="flex items-center justify-between mb-2.5 text-[12.5px] font-bold">
           <span style={{ color: ACCENT }}>점수 {score}</span>
@@ -281,6 +293,23 @@ export default function PlannerMatchGame({ groupId, myUid, myName, myBest, other
               </div>
             </div>
           )}
+
+          {combo && (
+            <div key={combo.key} className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div
+                className="font-extrabold text-center"
+                style={{
+                  color: ACCENT,
+                  fontSize: 30,
+                  WebkitTextStroke: "1.5px #ffffff",
+                  textShadow: "0 3px 10px rgba(0,0,0,0.25)",
+                  animation: "kpComboPop 0.7s cubic-bezier(.34,1.56,.64,1) forwards",
+                }}
+              >
+                {combo.chain} COMBO!
+              </div>
+            </div>
+          )}
         </div>
         <style>{`
           @keyframes kpMatchCountdownPop {
@@ -288,6 +317,14 @@ export default function PlannerMatchGame({ groupId, myUid, myName, myBest, other
             60% { opacity: 1; transform: scale(1.15); }
             100% { opacity: 1; transform: scale(1); }
           }
+          @keyframes kpComboPop {
+            0% { opacity: 0; transform: scale(0.5) rotate(-6deg); }
+            35% { opacity: 1; transform: scale(1.25) rotate(3deg); }
+            60% { transform: scale(1) rotate(0deg); }
+            100% { opacity: 0; transform: scale(1.15) translateY(-14px); }
+          }
+          .kp-bet-blink { animation: kpBetBlink 1.6s ease-in-out infinite; }
+          @keyframes kpBetBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
         `}</style>
 
         {phase === "ready" && (
