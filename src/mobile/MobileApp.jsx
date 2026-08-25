@@ -3559,10 +3559,25 @@ const deleteSingleOrder = async (order) => {
   // --------------------------------------------------
   // 🔵 모바일 전용 upsertDriver
   // --------------------------------------------------
-  const upsertDriver = async ({ 차량번호, 이름, 전화번호 }) => {
+  const upsertDriver = async ({ id, 차량번호, 이름, 전화번호 }) => {
     if (!차량번호) return;
 
     const norm = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
+
+    // ⭐ id가 명시적으로 넘어오면(예: "신규 기사로 별도 등록") 차량번호로 기존 문서를
+    // 찾지 않고 항상 새 문서를 만든다 — PC(DispatchApp.jsx)와 동일하게, 같은
+    // 차량번호라도 "별도 등록"을 눌렀는데 기존 기사(예: 이봉우)를 그대로 덮어써버리는
+    // 버그를 막는다.
+    if (id) {
+      await setDoc(doc(db, "drivers", id), {
+        차량번호: 차량번호 || "",
+        이름: 이름 || "",
+        전화번호: 전화번호 || "",
+        메모: "",
+        createdAt: serverTimestamp(),
+      });
+      return id;
+    }
 
     const existing = drivers.find(
       (d) => norm(d.차량번호) === norm(차량번호)
@@ -5205,6 +5220,7 @@ setOpenMemo={setOpenMemo}
             }}
             showToast={showToast}
             showSuccess={showSuccess}
+            upsertDriver={upsertDriver}
           />
         )}
 {page === "sales" && (
@@ -5407,6 +5423,7 @@ setOpenMemo={setOpenMemo}
     }}
     showToast={showToast}
     showSuccess={showSuccess}
+    upsertDriver={upsertDriver}
   />
 )}
 
@@ -6654,6 +6671,7 @@ function MobileOrderList({
   onOrderUpdate,
   showToast,
   showSuccess,
+  upsertDriver,
 }) {
   const [attachViewOrder, setAttachViewOrder] = useState(null);
   const handleOpenAttach = (order) => {
@@ -7400,6 +7418,8 @@ const summary = useMemo(() => {
         drivers={drivers || []}
         cardVersionB={cardVersionB}
         dispatcherName={dispatcherName}
+        upsertDriver={upsertDriver}
+        showToast={showToast}
         onClose={() => setQuickEditOrder(null)}
         onSuccess={() => showSuccess("수정 완료")}
       />
@@ -7967,7 +7987,7 @@ function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriv
 // ────────────────────────────────────────────────────────────────
 // 일부 수정 모달
 // ────────────────────────────────────────────────────────────────
-function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, dispatcherName = "" }) {
+function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, dispatcherName = "", upsertDriver, showToast }) {
   const isShipperOrder = order.source === "shipper" || order.source === "shipper_mobile";
   const smartRef = useRef(null);
   const [smartMatched, setSmartMatched] = useState([]);
@@ -7980,26 +8000,38 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
   const [dispType, setDispType] = useState(order.배차방식 || "");
   const [deliverState, setDeliverState] = useState(order.업체전달상태 || "미전달");
   const [saving, setSaving] = useState(false);
+  // ⭐ 등록되지 않은 차량번호를 입력했을 때 — 상세보기/등록폼과 동일하게 "신규 기사"
+  // 뱃지를 보여주고, 저장 시 기사관리에 자동 등록한다.
+  const [isNewDriver, setIsNewDriver] = useState(false);
+  // ⭐ 차량번호는 같은데 이름/전화번호가 다른 기존 기사가 감지되면, 조용히 덮어쓰지
+  // 않고 PC(DispatchApp.jsx)와 동일하게 선택 팝업을 띄운다.
+  const [driverConflictPopup, setDriverConflictPopup] = useState(null);
 
   const nd = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
-  // 등록된 차량번호에 다른 기사 정보를 입력했을 때 조용히 기존 기사로 되돌리지
-  // 않도록, 실시간 입력 중에는 추천 목록만 채우고 아래 안내문구로 알려준다.
-  const [smartConflictNote, setSmartConflictNote] = useState("");
+  const fmtPhone = (p) => { const d = String(p || "").replace(/[^\d]/g, ""); if (d.length === 11) return `${d.slice(0,3)}-${d.slice(3,7)}-${d.slice(7)}`; if (d.length === 10) return `${d.slice(0,3)}-${d.slice(3,6)}-${d.slice(6)}`; return p || "-"; };
+  const clearSmartInput = () => {
+    if (smartRef.current) smartRef.current.value = "";
+    setSmartMatched([]);
+  };
 
   const handleSmartSearch = (val) => {
-    setSmartConflictNote("");
     if (!val.trim()) { setSmartMatched([]); return; }
     const { plate, phone, name } = parseDriverText(val);
     if (plate) {
-      const ndL = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
-      const results = (drivers || []).filter(d => ndL(d.차량번호).includes(ndL(plate)));
+      const results = (drivers || []).filter(d => nd(d.차량번호) === nd(plate));
+      if (results.length === 0) {
+        // ⭐ 완전히 새로운 차량번호 → 드롭다운에 "신규기사" 항목으로 표시한다
+        // (등록된 기사 검색과 동일한 스마트검색/등록폼과 같은 동작).
+        setSmartMatched([{ 차량번호: plate, 이름: name || "", 전화번호: phone || "", _isNew: true }]);
+        return;
+      }
       const sorted = [...results].sort((a, b) => {
-        const aExact = ndL(a.이름) === ndL(name) && ndL(a.전화번호) === ndL(phone);
-        const bExact = ndL(b.이름) === ndL(name) && ndL(b.전화번호) === ndL(phone);
+        const aExact = nd(a.이름) === nd(name) && nd(a.전화번호) === nd(phone);
+        const bExact = nd(b.이름) === nd(name) && nd(b.전화번호) === nd(phone);
         if (aExact && !bExact) return -1;
         if (!aExact && bExact) return 1;
-        const aName = name && ndL(a.이름) === ndL(name);
-        const bName = name && ndL(b.이름) === ndL(name);
+        const aName = name && nd(a.이름) === nd(name);
+        const bName = name && nd(b.이름) === nd(name);
         if (aName && !bName) return -1;
         if (!aName && bName) return 1;
         return 0;
@@ -8015,54 +8047,76 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
     if (name && name.length >= 2) {
       const results = (drivers || []).filter(d => d.이름 && d.이름.includes(name));
       setSmartMatched(results.slice(0, 6));
+      return;
     }
+    setSmartMatched([]);
   };
 
   // ⭐ 검색창에서 포커스가 빠질 때(다음 칸 이동 등) 최종 확정한다 — 예전엔 실시간
   // 입력만으로 첫 번째 매칭 결과를 조용히 확정해버려서, 같은 차량번호에 다른
   // 기사 이름을 입력해도 아무 확인 없이 기존 기사 정보로 저장되는 버그가 있었다.
+  // 완전 신규 차량번호는 팝업 없이 바로 적용하고 "신규 기사" 뱃지로만 안내하며,
+  // 기존 기사와 이름/전화번호가 다르면 PC와 동일한 선택 팝업으로 확인받는다.
   const applySmartCommit = (val) => {
     if (!val.trim()) return;
     const { plate, phone, name } = parseDriverText(val);
     if (!plate && !name && !phone) return;
     if (!plate) {
-      if (name || phone) { setCarNo(""); setDriverName(name || ""); setDriverPhone(phone || ""); }
+      if (name || phone) { setCarNo(""); setDriverName(name || ""); setDriverPhone(phone || ""); setIsNewDriver(false); }
       return;
     }
     const existing = (drivers || []).find(d => nd(d.차량번호) === nd(plate));
-    if (!existing) { setCarNo(plate); setDriverName(name || ""); setDriverPhone(phone || ""); setSmartConflictNote(""); return; }
-    if (!name || nd(existing.이름) === nd(name)) {
-      setCarNo(existing.차량번호 || ""); setDriverName(existing.이름 || ""); setDriverPhone(existing.전화번호 || "");
-      setSmartMatched([]); setSmartConflictNote("");
-      if (smartRef.current) smartRef.current.value = "";
+    if (!existing) {
+      setCarNo(plate); setDriverName(name || ""); setDriverPhone(formatPhone(phone || "")); setIsNewDriver(true);
+      clearSmartInput();
       return;
     }
-    // 차량번호는 같은데 이름이 다름 → 조용히 덮어쓰지 않고 목록에서 직접 고르게 안내
-    setSmartConflictNote(`이미 등록된 차량번호입니다 (${existing.이름} · ${existing.전화번호 || "-"}) — 아래 목록에서 확인 후 선택해주세요`);
+    const sameName = !name || nd(existing.이름) === nd(name);
+    const samePhone = !phone || nd(existing.전화번호) === nd(phone);
+    if (sameName && samePhone) {
+      setCarNo(existing.차량번호 || ""); setDriverName(existing.이름 || ""); setDriverPhone(existing.전화번호 || "");
+      setIsNewDriver(false);
+      clearSmartInput();
+      return;
+    }
+    // 차량번호는 같은데 이름/전화번호가 다름 → 조용히 덮어쓰지 않고 선택 팝업으로 확인받는다.
+    clearSmartInput();
+    setDriverConflictPopup({ mode: sameName ? "phone_diff" : "name_diff", existing, input: { plate, name: name || existing.이름 || "", phone: phone || "" } });
   };
 
   const selectDriver = (d) => {
+    if (d._isNew) {
+      setCarNo(d.차량번호 || ""); setDriverName(d.이름 || ""); setDriverPhone(formatPhone(d.전화번호 || "")); setIsNewDriver(true);
+      clearSmartInput();
+      return;
+    }
     setCarNo(d.차량번호 || "");
     setDriverName(d.이름 || "");
     setDriverPhone(d.전화번호 || "");
-    setSmartMatched([]);
-    setSmartConflictNote("");
-    if (smartRef.current) smartRef.current.value = "";
+    setIsNewDriver(false);
+    clearSmartInput();
   };
 
-  // 차량번호/기사명 칸에 직접 입력하는 경우에도 동일하게 충돌을 감지한다.
+  // 차량번호/기사명/연락처 칸에 직접 입력하는 경우에도 동일하게 충돌을 감지한다.
   const checkManualConflict = () => {
     const pl = carNo.trim();
     const nm = driverName.trim();
-    if (!pl) { setSmartConflictNote(""); return; }
+    const ph = driverPhone.trim();
+    if (!pl) { setIsNewDriver(false); return; }
     const existing = (drivers || []).find(d => nd(d.차량번호) === nd(pl));
-    if (!existing) { setSmartConflictNote(""); return; }
-    if (!nm || nd(existing.이름) === nd(nm)) {
-      setCarNo(existing.차량번호 || ""); setDriverName(existing.이름 || ""); setDriverPhone(existing.전화번호 || "");
-      setSmartConflictNote("");
+    if (!existing) {
+      // 등록되지 않은 차량번호 → 이름을 입력했을 때만 "신규 기사" 뱃지를 표시한다.
+      setIsNewDriver(!!nm);
       return;
     }
-    setSmartConflictNote(`이미 등록된 차량번호입니다 (${existing.이름} · ${existing.전화번호 || "-"}) — 다른 기사로 등록하려면 그대로 저장하세요`);
+    const sameName = !nm || nd(existing.이름) === nd(nm);
+    const samePhone = !ph || nd(existing.전화번호) === nd(ph);
+    if (sameName && samePhone) {
+      setCarNo(existing.차량번호 || ""); setDriverName(existing.이름 || ""); setDriverPhone(existing.전화번호 || "");
+      setIsNewDriver(false);
+      return;
+    }
+    setDriverConflictPopup({ mode: sameName ? "phone_diff" : "name_diff", existing, input: { plate: pl, name: nm || existing.이름 || "", phone: ph } });
   };
 
   const handleSave = async () => {
@@ -8097,6 +8151,13 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
       }
       await updateDoc(doc(db, col, id), patch);
       syncShipperMirrorMobile(order, patch).catch(() => {});
+      // ⭐ 신규 기사면 다른 화면들과 동일하게 기사관리에도 자동 등록한다.
+      if (isNewDriver && carNo && typeof upsertDriver === "function") {
+        const already = (drivers || []).find(d => nd(d.차량번호) === nd(carNo));
+        if (!already) {
+          await upsertDriver({ 차량번호: carNo, 이름: driverName || "", 전화번호: driverPhone || "" });
+        }
+      }
       onSuccess?.();
       onClose();
     } catch (e) {
@@ -8179,17 +8240,26 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
           <label className={labelCls}>기사 스마트검색</label>
           <div className="relative">
             <SmartTextarea textareaRef={smartRef} onSearch={handleSmartSearch} onCommit={applySmartCommit} />
-            {smartConflictNote && (
-              <div className="mt-1.5 text-[11px] text-rose-600 font-semibold leading-relaxed">{smartConflictNote}</div>
-            )}
             {smartMatched.length > 0 && (
               <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 overflow-hidden">
                 {smartMatched.map((d, i) => (
-                  <button key={i} className="w-full px-3 py-2.5 text-left border-b border-gray-50 last:border-0 active:bg-blue-50 transition"
-                    onClick={() => selectDriver(d)}>
-                    <span className="font-bold text-[13px] text-gray-800">{d.차량번호}</span>
-                    <span className="text-gray-400 text-[12px] ml-2">{d.이름}</span>
-                    <span className="text-gray-300 text-[11px] ml-1">{d.전화번호}</span>
+                  <button key={i} type="button" className="w-full px-3 py-2.5 text-left border-b border-gray-50 last:border-0 active:bg-blue-50 transition"
+                    onPointerDown={e => { e.preventDefault(); selectDriver(d); }}>
+                    {d._isNew ? (
+                      <>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${bStyle ? "bg-[#1B2B4B]/5 text-[#1B2B4B] border-[#1B2B4B]/30" : "bg-blue-50 text-blue-700 border-blue-300"}`}>신규기사</span>
+                          <span className="font-bold text-[13px] text-gray-900">{d.이름 || "(이름 없음)"}</span>
+                        </div>
+                        <div className="text-[11px] text-gray-400 mt-0.5">{d.차량번호 || "-"} · {d.전화번호 || "-"}</div>
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-bold text-[13px] text-gray-800">{d.차량번호}</span>
+                        <span className="text-gray-400 text-[12px] ml-2">{d.이름}</span>
+                        <span className="text-gray-300 text-[11px] ml-1">{d.전화번호}</span>
+                      </>
+                    )}
                   </button>
                 ))}
               </div>
@@ -8198,18 +8268,26 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
         </div>
 
         {/* 기사 정보 */}
-        <div className="grid grid-cols-3 gap-2 mb-5">
-          <div>
-            <label className={labelCls}>차량번호</label>
-            <input autoComplete="off" className={inputCls} value={carNo} onChange={e => setCarNo(e.target.value)} onBlur={checkManualConflict} placeholder="00가0000" />
-          </div>
-          <div>
-            <label className={labelCls}>기사명</label>
-            <input autoComplete="off" className={inputCls} value={driverName} onChange={e => setDriverName(e.target.value)} onBlur={checkManualConflict} placeholder="이름" />
-          </div>
-          <div>
-            <label className={labelCls}>연락처</label>
-            <input autoComplete="off" className={inputCls} value={driverPhone} onChange={e => setDriverPhone(formatPhone(e.target.value))} placeholder="010-0000-0000" inputMode="tel" />
+        <div className="mb-5">
+          {isNewDriver && (
+            <div className={`flex items-center gap-1.5 mb-2 px-1 py-1.5 rounded-lg text-[11px] font-semibold ${bStyle ? "bg-[#1B2B4B]/5 text-[#1B2B4B]" : "bg-blue-50 text-blue-700"}`}>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${bStyle ? "bg-white text-[#1B2B4B] border-[#1B2B4B]/30" : "bg-white text-blue-700 border-blue-300"}`}>신규 기사</span>
+              <span className="text-gray-500 font-normal">저장 시 기사관리에 자동 등록됩니다</span>
+            </div>
+          )}
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className={labelCls}>차량번호</label>
+              <input autoComplete="off" className={inputCls} value={carNo} onChange={e => { setCarNo(e.target.value); setIsNewDriver(false); }} onBlur={checkManualConflict} placeholder="00가0000" />
+            </div>
+            <div>
+              <label className={labelCls}>기사명</label>
+              <input autoComplete="off" className={inputCls} value={driverName} onChange={e => setDriverName(e.target.value)} onBlur={checkManualConflict} placeholder="이름" />
+            </div>
+            <div>
+              <label className={labelCls}>연락처</label>
+              <input autoComplete="off" className={inputCls} value={driverPhone} onChange={e => setDriverPhone(formatPhone(e.target.value))} onBlur={checkManualConflict} placeholder="010-0000-0000" inputMode="tel" />
+            </div>
           </div>
         </div>
 
@@ -8218,6 +8296,71 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
           {saving ? "저장 중..." : "저장"}
         </button>
       </div>
+
+      {/* 기사 정보 충돌 팝업 — PC(DispatchApp.jsx)/상세보기와 동일한 선택지 */}
+      {driverConflictPopup && (
+        <div className="fixed inset-0 bg-black/50 z-[10001] flex items-end justify-center" onClick={e => { e.stopPropagation(); setDriverConflictPopup(null); }}>
+          <div className="bg-white rounded-t-2xl w-full max-w-md pb-6" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-5 py-4 rounded-t-2xl flex items-start justify-between">
+              <div>
+                <div className="text-white font-bold text-sm">기사 정보 충돌</div>
+                <div className="text-white/60 text-xs mt-0.5">동일 차량번호에 다른 기사 정보가 감지되었습니다</div>
+              </div>
+              <button onClick={() => setDriverConflictPopup(null)} className="text-white/50 text-xl leading-none ml-3">✕</button>
+            </div>
+            <div className="px-5 pt-4 space-y-3">
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+                <div className="text-xs font-semibold text-gray-500 mb-1">기존 등록 정보</div>
+                <div className="text-sm font-bold text-gray-800">{driverConflictPopup.existing.이름}</div>
+                <div className="text-xs text-gray-500 mt-0.5">{driverConflictPopup.existing.차량번호} · {fmtPhone(driverConflictPopup.existing.전화번호)}</div>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+                <div className="text-xs font-semibold text-blue-600 mb-1">새로 입력한 정보</div>
+                <div className="text-sm font-bold text-gray-800">{driverConflictPopup.input.name}</div>
+                <div className="text-xs text-gray-500 mt-0.5">{driverConflictPopup.input.plate} · {fmtPhone(driverConflictPopup.input.phone)}</div>
+              </div>
+            </div>
+            <div className="px-5 pt-4 space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  style={{ touchAction: "manipulation" }}
+                  className="py-3 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold"
+                  onClick={() => {
+                    const d = driverConflictPopup.existing;
+                    setCarNo(d.차량번호 || ""); setDriverName(d.이름 || ""); setDriverPhone(d.전화번호 || "");
+                    setIsNewDriver(false);
+                    setDriverConflictPopup(null);
+                  }}
+                >기존 정보 사용</button>
+                <button
+                  style={{ touchAction: "manipulation" }}
+                  className="py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold"
+                  onClick={async () => {
+                    const { plate, name: nm, phone: ph } = driverConflictPopup.input;
+                    if (typeof upsertDriver === "function") await upsertDriver({ 차량번호: plate, 이름: nm, 전화번호: ph });
+                    setCarNo(plate); setDriverName(nm); setDriverPhone(formatPhone(ph));
+                    setIsNewDriver(false);
+                    setDriverConflictPopup(null);
+                    showToast?.("기사 정보를 덮어썼습니다");
+                  }}
+                >기존 정보 덮어쓰기</button>
+              </div>
+              <button
+                style={{ touchAction: "manipulation" }}
+                className="w-full py-3 rounded-xl bg-white border border-[#1B2B4B] text-[#1B2B4B] text-sm font-bold"
+                onClick={async () => {
+                  const { plate, name: nm, phone: ph } = driverConflictPopup.input;
+                  if (typeof upsertDriver === "function") await upsertDriver({ id: crypto.randomUUID(), 차량번호: plate, 이름: nm, 전화번호: ph });
+                  setCarNo(plate); setDriverName(nm); setDriverPhone(formatPhone(ph));
+                  setIsNewDriver(false);
+                  setDriverConflictPopup(null);
+                  showToast?.(`신규 기사로 등록: ${nm || plate}`);
+                }}
+              >신규 기사로 별도 등록</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -18385,6 +18528,7 @@ function MobileUnassignedList({
   showToast,
   showSuccess,
   dispatcherName = "",
+  upsertDriver,
 }) {
     // ============================
   // 🔢 미배차 요약 계산
@@ -18774,6 +18918,8 @@ return (
         drivers={drivers}
         cardVersionB={cardVersionB}
         dispatcherName={dispatcherName}
+        upsertDriver={upsertDriver}
+        showToast={showToast}
         onClose={() => setQuickEditOrder(null)}
         onSuccess={() => showSuccess("수정 완료")}
       />
