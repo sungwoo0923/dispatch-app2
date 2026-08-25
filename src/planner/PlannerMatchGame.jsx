@@ -17,7 +17,7 @@
 // 점수가 바뀌어버리는 문제가 있었다. 기다리는 동안엔 실시간으로 상대(나) 화면을
 // 보드/점수/남은시간을 저장해서, 상대가 "지켜보기"로 볼 수 있게 한다.
 import React, { useEffect, useRef, useState } from "react";
-import { submitMatchGameScore, startNewMatchRound, updateLiveMatchSnapshot, clearLiveMatchSnapshot } from "../adminPlannerData";
+import { submitMatchGameScore, updateLiveMatchSnapshot, clearLiveMatchSnapshot } from "../adminPlannerData";
 import { playPopSound, playComboSound, playErrorSound, vibrate } from "./plannerSound";
 import { ACCENT, ACCENT_SOFT, ACCENT_BORDER } from "./plannerTheme";
 
@@ -239,12 +239,13 @@ export default function PlannerMatchGame({
     busyRef.current = false;
   };
 
-  const start = async () => {
-    // ⭐ 이미 둘 다 이번 내기로 플레이를 끝낸 뒤 다시 도전하는 경우엔, 같은
-    // 내기로 라운드 점수만 새로 초기화해야 다음 결과 판정이 꼬이지 않는다.
-    if (roundComplete) {
-      try { await startNewMatchRound(groupId, betText); } catch {}
-    }
+  const start = () => {
+    // ⭐ 라운드가 이미 끝난 뒤 다시 도전하는 경우, 예전엔 여기서 별도로
+    // startNewMatchRound를 미리 호출해 라운드를 초기화했는데 — 두 사람이 거의
+    // 동시에 재도전하면 그 초기화 쓰기가 상대가 방금 낸 점수를 지워버리는
+    // 경합이 생겼다. 이제는 점수를 제출하는 submitMatchGameScore 트랜잭션이
+    // "이미 끝난 라운드"를 알아서 새 라운드로 취급하므로, 여기서는 그냥 내
+    // 화면만 초기화하면 된다.
     setBoard(makeBoard());
     setScore(0);
     setSecondsLeft(GAME_SECONDS);
@@ -281,21 +282,18 @@ export default function PlannerMatchGame({
     }, SLIDE_MS);
   });
 
-  const onCellClick = async (idx) => {
+  // 두 칸을 실제로 맞바꿔보고, 매치가 안 되면 손맛(빨간 테두리+진동+경고음)을
+  // 주고 되돌리고, 매치가 되면 연쇄 반응을 시작한다 — 탭으로 선택해서
+  // 바꾸는 방식과 스와이프 방식 둘 다 이 함수 하나를 공유한다.
+  const attemptSwap = async (a, b) => {
     if (phase !== "playing" || busyRef.current || swapping) return;
-    if (selected == null) { setSelected(idx); return; }
-    if (selected === idx) { setSelected(null); return; }
-    if (!isAdjacent(selected, idx)) { setSelected(idx); return; }
-
-    const a = selected, b = idx;
+    if (a == null || b == null || a === b || !isAdjacent(a, b)) return;
     setSelected(null);
     setSwapping(true);
     const swapped = await slideSwap(a, b);
 
     const matched = findMatches(swapped);
     if (matched.size === 0) {
-      // ⭐ 매치가 안 되는 이동 — 손맛을 위해 빨간 테두리 + 진동 + 경고음을 주고
-      // 슬라이딩으로 되돌린다.
       setInvalidPair(new Set([a, b]));
       vibrate(60);
       playErrorSound();
@@ -307,6 +305,59 @@ export default function PlannerMatchGame({
     setSwapping(false);
     resolveCascade(swapped);
   };
+
+  // 탭 방식 — 구슬 하나를 누르고, 인접한 다른 구슬을 다시 누르면 자리가 바뀐다.
+  const onCellClick = (idx) => {
+    if (phase !== "playing" || busyRef.current || swapping) return;
+    // ⭐ 방금 스와이프로 이미 처리된 동작이면, 뒤이어 자동으로 따라오는 click
+    // 이벤트는 무시해야 한다(안 그러면 스와이프+클릭이 중복으로 처리된다).
+    // dragRef는 pointerup에서 바로 비워지므로, 이 판단에는 별도 플래그를 쓴다.
+    if (suppressClickRef.current) { suppressClickRef.current = false; return; }
+    if (selected == null) { setSelected(idx); return; }
+    if (selected === idx) { setSelected(null); return; }
+    if (!isAdjacent(selected, idx)) { setSelected(idx); return; }
+    attemptSwap(selected, idx);
+  };
+
+  // ⭐ 스와이프 방식 — 구슬을 누른 채로 상하좌우 어느 방향으로든 밀면, 그 방향의
+  // 인접 칸과 바로 자리가 바뀐다(따로 두 번 탭할 필요 없음). 드래그 시작점에서
+  // 일정 거리(SWIPE_THRESHOLD) 이상 움직인 방향으로 판정한다.
+  const dragRef = useRef(null); // { idx, x, y, moved }
+  const suppressClickRef = useRef(false);
+  const SWIPE_THRESHOLD = 16;
+
+  const onCellPointerDown = (idx, e) => {
+    if (phase !== "playing" || busyRef.current || swapping) return;
+    dragRef.current = { idx, x: e.clientX, y: e.clientY, moved: false };
+  };
+
+  useEffect(() => {
+    if (phase !== "playing") return;
+    const onMove = (e) => {
+      const d = dragRef.current;
+      if (!d || d.moved) return;
+      const dx = e.clientX - d.x, dy = e.clientY - d.y;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_THRESHOLD) return;
+      d.moved = true;
+      suppressClickRef.current = true;
+      const ra = Math.floor(d.idx / COLS), ca = d.idx % COLS;
+      let ta = ra, tc = ca;
+      if (Math.abs(dx) > Math.abs(dy)) tc += dx > 0 ? 1 : -1;
+      else ta += dy > 0 ? 1 : -1;
+      if (ta < 0 || ta >= ROWS || tc < 0 || tc >= COLS) return;
+      attemptSwap(d.idx, ta * COLS + tc);
+    };
+    const onUp = () => { dragRef.current = null; };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, swapping]);
 
   return (
     <div className="fixed inset-0 z-[10025] flex items-center justify-center p-4">
@@ -346,7 +397,7 @@ export default function PlannerMatchGame({
           )}
           <div
             className="grid gap-[3px] rounded-xl p-2 mx-auto"
-            style={{ gridTemplateColumns: `repeat(${COLS}, 1fr)`, background: "#f3f4f6", width: "100%", aspectRatio: "1 / 1", maxWidth: 380 }}
+            style={{ position: "relative", zIndex: 0, gridTemplateColumns: `repeat(${COLS}, 1fr)`, background: "#f3f4f6", width: "100%", aspectRatio: "1 / 1", maxWidth: 380 }}
           >
             {board.map((v, idx) => {
               const isPopping = popping.has(idx);
@@ -363,9 +414,11 @@ export default function PlannerMatchGame({
                 <button
                   key={idx}
                   onClick={() => onCellClick(idx)}
+                  onPointerDown={(e) => onCellPointerDown(idx, e)}
                   disabled={phase !== "playing" || swapping}
                   className="rounded-full"
                   style={{
+                    touchAction: "none",
                     background: v == null ? "transparent" : ballGradient(COLORS[v]),
                     // ⭐ 선택 표시를 칙칙한 검은 테두리 대신 흰 링 + 컬러 글로우로 바꿔서
                     // 게임다운 "광이 나는" 느낌을 주고, 잘못된 이동만 빨간 테두리로 경고한다.
@@ -393,7 +446,7 @@ export default function PlannerMatchGame({
           </div>
 
           {phase === "countdown" && (
-            <div className="absolute inset-0 flex items-center justify-center rounded-xl" style={{ background: "rgba(17,24,39,0.55)" }}>
+            <div className="absolute inset-0 flex items-center justify-center rounded-xl" style={{ zIndex: 30, background: "rgba(17,24,39,0.55)" }}>
               <div
                 key={countdownStep}
                 className="font-extrabold text-white"
@@ -409,7 +462,7 @@ export default function PlannerMatchGame({
           )}
 
           {combo && (
-            <div key={combo.key} className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div key={combo.key} className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 30 }}>
               <div
                 className="font-extrabold text-center"
                 style={{

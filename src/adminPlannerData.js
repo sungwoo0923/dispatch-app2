@@ -1055,6 +1055,15 @@ export function usePlannerGameScores(groupId) {
   return scores;
 }
 
+// ⭐ 미니게임 점수는 계속 쌓이기만 하는 게 기본이지만(최고점/승패 누적), 원하면
+// 언제든 본인 전적만 초기화할 수 있어야 한다는 요구사항 — 표시 이름은 그대로
+// 두고 매치게임 통계만 0으로 되돌린다. 상대방 전적/현재 라운드에는 영향 없다.
+export async function resetMyMatchGameStats(groupId, uid) {
+  await setDoc(doc(db, PLANNER_GAME_SCORES, groupId), {
+    [uid]: { matchGame: { best: 0, plays: 0, wins: 0, losses: 0, draws: 0, lastScore: 0 } },
+  }, { merge: true });
+}
+
 const RPS_BEATS = { 가위: "보", 바위: "가위", 보: "바위" };
 export const RPS_CHOICES = ["가위", "바위", "보"];
 
@@ -1348,7 +1357,15 @@ export async function submitMatchGameScore(groupId, uid, name, score, otherUid) 
       matchGame: { ...cur, best: Math.max(cur.best || 0, score), lastScore: score, plays: (cur.plays || 0) + 1 },
     };
 
-    const round = state.matchRound || { scores: {} };
+    // ⭐ 이전 라운드가 이미 끝나 있었다면(settled) 지금 내는 점수는 새 라운드의
+    // 시작이다 — 예전엔 클라이언트가 "다시 하기"를 누를 때 별도의(트랜잭션
+    // 밖) startNewMatchRound 쓰기로 라운드를 초기화했는데, 두 사람이 거의
+    // 동시에 재도전하면 그 초기화 쓰기가 상대의 방금 낸 점수를 지워버리는
+    // 경합이 생겨 "상대가 다 했는데도 계속 진행 중이라고 뜨는" 버그와 "점수가
+    // 0으로 보이는" 버그로 이어졌다. 여기(트랜잭션 안)에서 원자적으로 판단해
+    // 새 라운드를 시작하면 그 경합 자체가 없어진다.
+    let round = state.matchRound || { scores: {} };
+    if (round.settled) round = { betText: state.bet?.text || round.betText || "", scores: {}, settled: false };
     const roundScores = { ...(round.scores || {}), [uid]: score };
     let nextRound = { ...round, scores: roundScores };
 
@@ -1374,13 +1391,6 @@ export async function submitMatchGameScore(groupId, uid, name, score, otherUid) 
   });
 }
 
-// 라운드가 끝난 뒤(둘 다 플레이 완료) 다시 도전할 때 — 같은 내기로 점수만 새로
-// 초기화한다. 아직 아무도 안 낸 라운드에서는 호출할 필요 없다(이미 비어있음).
-export async function startNewMatchRound(groupId, betText) {
-  await setDoc(doc(db, PLANNER_GAME_STATE, groupId), {
-    matchRound: { betText: betText || "", scores: {}, settled: false },
-  }, { merge: true });
-}
 
 // ⭐ 상대가 기다리는 동안 "지켜보기"를 누르면 실시간으로 화면을 볼 수 있게,
 // 플레이 중인 사람의 보드/점수/남은시간을 짧은 주기로 같이 저장해둔다. 조작하는

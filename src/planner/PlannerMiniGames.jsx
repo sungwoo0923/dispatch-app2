@@ -5,7 +5,7 @@
 // 재도전도 잠긴다 — 둘 다 끝나야 결과(승/패)를 확인하고 다음 라운드로 넘어간다.
 import React, { useEffect, useState } from "react";
 import {
-  usePlannerGameState, usePlannerGameScores, setPlannerGameBet, GAME_BET_OPTIONS,
+  usePlannerGameState, usePlannerGameScores, setPlannerGameBet, GAME_BET_OPTIONS, resetMyMatchGameStats,
 } from "../adminPlannerData";
 import { useGroupMembers, TOTAL_MASTER_EMAIL } from "./plannerAuth";
 import PlannerMatchGame from "./PlannerMatchGame";
@@ -161,7 +161,7 @@ function MatchResultModal({ myName, otherName, myScore, otherScore, onClose }) {
 // Bejeweled/Candy Crush류 매치 퍼즐 게임 — 60초 도전제라 실시간 대전이 아니라
 // "각자 도전해서 최고 점수 겨루기" 방식. VS 카드 형태로 서로의 최고점/전적을
 // 보여주고, 라운드(같은 내기) 진행 상태에 따라 카드가 흐려지며 안내가 뜬다.
-function MatchGameCard({ account, other, solo, scores, betText, roundScores, roundComplete, resultSeen, liveMatch, onPlay, onShowResult, onOpenBet, onSpectate, canChangeBet }) {
+function MatchGameCard({ account, other, solo, scores, betText, roundScores, roundComplete, resultSeen, liveMatch, onPlay, onShowResult, onOpenBet, onSpectate, onResetStats, canChangeBet }) {
   const myGame = scores[account.uid]?.matchGame || {};
   const theirGame = other ? (scores[other.uid]?.matchGame || {}) : {};
   // ⭐ 최고관리자가 배우자 없이 테스트할 때는(solo) 기다리거나 결과를 가릴
@@ -244,6 +244,12 @@ function MatchGameCard({ account, other, solo, scores, betText, roundScores, rou
           </button>
         </div>
       )}
+
+      {/* ⭐ 전적 초기화는 라운드 진행 상태와 무관하게 "언제든" 가능해야 해서,
+          맨 뒤에 둬서 대기/결과 오버레이보다 항상 위에서 눌리게 한다. */}
+      <div className="relative px-4 pb-3 pt-1 text-center">
+        <button onClick={onResetStats} className="text-[9.5px] text-gray-300 underline">내 전적 초기화</button>
+      </div>
     </div>
   );
 }
@@ -286,6 +292,17 @@ export default function PlannerMiniGames({ account }) {
   // 전), 라운드가 완전히 끝났을 때만 가능.
   const canChangeBet = solo || (!myPlayed && !otherPlayed) || roundComplete;
 
+  // ⭐ 누적 점수(최고점/승패)는 계속 쌓이는 게 기본이지만, 원하면 언제든 내
+  // 전적만 초기화할 수 있게 한다 — 진행 중인 라운드/내기와는 무관.
+  const resetStats = async () => {
+    if (!confirm("내 미니게임 전적(최고점·승/패)을 초기화할까요? 되돌릴 수 없어요.")) return;
+    try {
+      await resetMyMatchGameStats(account.groupId, account.uid);
+    } catch (e) {
+      alert("초기화 중 오류가 발생했습니다: " + e.message);
+    }
+  };
+
   return (
     <div className="max-w-lg mx-auto space-y-3">
       <div className="flex justify-end">
@@ -302,6 +319,7 @@ export default function PlannerMiniGames({ account }) {
         onOpenBet={() => canChangeBet && setShowBet(true)}
         onShowResult={() => setShowResult(true)}
         onSpectate={() => setShowSpectator(true)}
+        onResetStats={resetStats}
       />
 
       {showSpectator && liveMatch && (
