@@ -663,6 +663,12 @@ const TAB_ITEMS = [
   ["games", "미니게임"],
 ];
 
+// ⭐ 왼쪽 사이드바에서 모바일 메뉴 드로어와 동일한 그룹으로 묶어서 보여준다.
+const TAB_GROUPS = [
+  { label: "가계부·일정", keys: ["dashboard", "ledger", "calendar", "family", "eventMoney"] },
+  { label: "커플라운지", keys: ["ourStory", "timeCapsule", "cycle", "games"] },
+];
+
 export default function AdminPlanner({ userCompany, myRealName, myUid, myGender, coupleStartDate, onAccountUpdated, goHomeSignal }) {
   const companyName = userCompany || localStorage.getItem("userCompany") || "";
   const { entries } = usePlannerEntries(companyName);
@@ -715,11 +721,35 @@ export default function AdminPlanner({ userCompany, myRealName, myUid, myGender,
   }, [familyEntries]);
 
   return (
-    <div className="px-6 py-5">
+    <div className="flex items-start">
+      {/* ⭐ 예전엔 탭이 화면 위쪽에 버튼들이 쭉 나열되는 형태였는데, 모바일 메뉴처럼
+          왼쪽 사이드바로 옮기고 성격이 비슷한 것끼리 그룹으로 묶었다(모바일의
+          "가계부·일정"/"커플라운지" 그룹과 동일한 구성). */}
+      <nav className="w-52 shrink-0 border-r border-gray-100 min-h-screen px-3 py-5 sticky top-0">
+        <div className="px-2.5 mb-5">
+          <div className="text-[15px] font-extrabold text-gray-800">나의 플래너</div>
+        </div>
+        {TAB_GROUPS.map((group) => (
+          <div key={group.label} className="mb-4">
+            <div className="px-2.5 mb-1 text-[10.5px] font-extrabold text-gray-400 tracking-wide">{group.label}</div>
+            {TAB_ITEMS.filter(([v]) => group.keys.includes(v)).map(([v, l]) => (
+              <button
+                key={v}
+                onClick={() => setTab(v)}
+                className="w-full text-left px-2.5 py-2 rounded-lg text-[13px] font-bold mb-0.5 transition"
+                style={tab === v ? { background: ACCENT, color: "#fff" } : { background: "transparent", color: "#4b5563" }}
+              >
+                {l}
+              </button>
+            ))}
+          </div>
+        ))}
+      </nav>
+
+      <div className="flex-1 min-w-0 px-6 py-5">
       <div className="flex items-center justify-between mb-5">
         <div>
-          <div className="text-[17px] font-extrabold text-gray-800">나의 플래너</div>
-          <div className="text-[12px] text-gray-400 mt-0.5">가족과 함께 기록하는 우리집 수입·지출, 일정, 이벤트 예산</div>
+          <div className="text-[12px] text-gray-400">가족과 함께 기록하는 우리집 수입·지출, 일정, 이벤트 예산</div>
         </div>
         <div className="flex items-center gap-2">
           {/* ⭐ 홈 탭에서만 의미가 있어서 홈 탭일 때만 보여준다 — 년도 있는 곳(이 줄)
@@ -742,22 +772,6 @@ export default function AdminPlanner({ userCompany, myRealName, myUid, myGender,
             </>
           )}
         </div>
-      </div>
-
-      {/* ⭐ 예전엔 탭 색이 #EC6FA0(핑크)로 고정돼 있어서, 남자 계정(네이비 테마)으로
-          로그인해도 이 탭 줄만 계속 핑크로 보이는 불일치가 있었다 — ACCENT로 바꿔서
-          성별 테마와 항상 맞게 했다. */}
-      <div className="flex gap-2 mb-5 flex-wrap">
-        {TAB_ITEMS.map(([v, l]) => (
-          <button
-            key={v}
-            onClick={() => setTab(v)}
-            className="px-4 py-2 text-[13px] font-bold rounded-lg transition border"
-            style={tab === v ? { background: ACCENT, color: "#fff", borderColor: ACCENT } : { background: "#fff", color: ACCENT, borderColor: ACCENT }}
-          >
-            {l}
-          </button>
-        ))}
       </div>
 
       {tab === "dashboard" && (
@@ -783,6 +797,7 @@ export default function AdminPlanner({ userCompany, myRealName, myUid, myGender,
       {tab === "ourStory" && <PlannerTimeline account={homeAccount} onCoupleStartDateChange={handleCoupleStartDateChange} />}
       {tab === "timeCapsule" && <PlannerTimeCapsule account={homeAccount} />}
       {tab === "games" && <PlannerMiniGames account={homeAccount} />}
+      </div>
     </div>
   );
 }
