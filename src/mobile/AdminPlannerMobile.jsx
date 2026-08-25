@@ -28,6 +28,10 @@ import PlannerHomeExtras from "../planner/PlannerHomeExtras";
 import PlannerUpcomingSchedule from "../planner/PlannerUpcomingSchedule";
 import PlannerWalletModal from "../planner/PlannerWalletModal";
 import useBodyScrollLock from "../planner/useBodyScrollLock";
+import { YearDropdownLabel, MonthDropdownLabel } from "../planner/PlannerYearPicker";
+import PlannerMonthlyShareButton from "../planner/PlannerShareCard";
+import longPressHandlers from "../planner/useLongPress";
+import PlannerEntryActionSheet from "../planner/PlannerEntryActionSheet";
 
 function todayY() { return new Date().getFullYear(); }
 // 시작~종료일 사이의 모든 날짜를 "YYYY-MM-DD" 문자열로 나열한다(둘 다 포함).
@@ -78,7 +82,7 @@ function Field({ label, children }) {
 }
 const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none";
 
-function LedgerEntryModal({ initial, companyName, actorName, accent, onClose, onOpenRecurring }) {
+function LedgerEntryModal({ initial, companyName, actorName, accent, entries, onClose, onOpenRecurring }) {
   const [type, setType] = useState(initial?.type || "expense");
   const [title, setTitle] = useState(initial?.title || "");
   const [category, setCategory] = useState(initial?.category || "");
@@ -87,7 +91,8 @@ function LedgerEntryModal({ initial, companyName, actorName, accent, onClose, on
   const [memo, setMemo] = useState(initial?.memo || "");
   const [receiptURL, setReceiptURL] = useState(initial?.receiptURL || "");
   const [saving, setSaving] = useState(false);
-  const categoryOptions = type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  // ⭐ 직접 입력한 분류가 다음에도 계속 남아있도록 그룹 공용 entries와 합쳐서 보여준다.
+  const categoryOptions = mergeCategoryOptions(type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES, entries, type);
 
   const save = async () => {
     if (!title.trim()) { alert("항목명을 입력해 주세요."); return; }
@@ -447,6 +452,10 @@ export default function AdminPlannerMobile({ userCompany, dispatcherName, active
   const yearRows = useMemo(() => incomeExpense.filter((e) => String(e.date || "").slice(0, 4) === String(year)), [incomeExpense, year]);
   const totalIncome = useMemo(() => yearRows.filter((r) => r.type === "income").reduce((s, r) => s + Number(r.amount || 0), 0), [yearRows]);
   const totalExpense = useMemo(() => yearRows.filter((r) => r.type === "expense").reduce((s, r) => s + Number(r.amount || 0), 0), [yearRows]);
+  // ⭐ "이번 달 요약 공유" 아이콘을 상단(년도 옆)에 두기 위한 이번 달 합계.
+  const { first: monthFirst, last: monthLast } = thisMonthRange();
+  const monthIncome = useMemo(() => incomeExpense.filter((r) => r.type === "income" && (r.date || "") >= monthFirst && (r.date || "") <= monthLast).reduce((s, r) => s + Number(r.amount || 0), 0), [incomeExpense, monthFirst, monthLast]);
+  const monthExpense = useMemo(() => incomeExpense.filter((r) => r.type === "expense" && (r.date || "") >= monthFirst && (r.date || "") <= monthLast).reduce((s, r) => s + Number(r.amount || 0), 0), [incomeExpense, monthFirst, monthLast]);
   const groups = useMemo(() => {
     const map = new Map();
     familyEntries.forEach((e) => { const g = e.group || "미지정"; if (!map.has(g)) map.set(g, []); map.get(g).push(e); });
@@ -459,10 +468,29 @@ export default function AdminPlannerMobile({ userCompany, dispatcherName, active
 
   return (
     <div className="px-4 pt-3 pb-24">
-      <div className="flex items-center justify-center gap-3 mb-3">
-        <button onClick={() => setYear((y) => y - 1)} className="w-7 h-7 rounded-lg border border-gray-200 text-gray-500">‹</button>
-        <div className="text-[14px] font-bold text-gray-700">{year}년</div>
-        <button onClick={() => setYear((y) => y + 1)} className="w-7 h-7 rounded-lg border border-gray-200 text-gray-500">›</button>
+      <div className="grid grid-cols-3 items-center mb-3">
+        <div />
+        <div className="flex items-center justify-center gap-3">
+          {/* ⭐ 일정 탭은 달력 안에 자체 년/월 선택이 있어서 여기 년도와 중복돼
+              보인다는 피드백으로, 그 탭에서는 숨긴다. */}
+          {tab !== "calendar" && (
+            <>
+              <button onClick={() => setYear((y) => y - 1)} className="w-7 h-7 rounded-lg border border-gray-200 text-gray-500">‹</button>
+              <YearDropdownLabel year={year} onChange={setYear} className="text-[14px] font-bold text-gray-700" />
+              <button onClick={() => setYear((y) => y + 1)} className="w-7 h-7 rounded-lg border border-gray-200 text-gray-500">›</button>
+            </>
+          )}
+        </div>
+        <div className="flex justify-end">
+          {tab === "dashboard" && (
+            <PlannerMonthlyShareButton
+              label={monthFirst.slice(0, 7)}
+              totalIncome={monthIncome}
+              totalExpense={monthExpense}
+              className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center"
+            />
+          )}
+        </div>
       </div>
       {!hideTabBar && (
         <div className="flex gap-1.5 mb-4 overflow-x-auto">
@@ -491,10 +519,8 @@ export default function AdminPlannerMobile({ userCompany, dispatcherName, active
 function MobileDashboard({ year, budgetTarget, totalIncome, totalExpense, schedules, groups, companyName, actorName, entries, accent, incomeExpense, myUid, myGender, coupleStartDate }) {
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState(String(budgetTarget || ""));
-  const [sharing, setSharing] = useState(false);
   const [scheduleModal, setScheduleModal] = useState(null); // null | "new" | 일정 entry 객체
   const balance = totalIncome - totalExpense;
-  const printRef = useRef(null);
   const upcoming = useMemo(() => {
     const t = todayStr();
     return schedules
@@ -503,42 +529,15 @@ function MobileDashboard({ year, budgetTarget, totalIncome, totalExpense, schedu
       .sort((a, b) => (a.effectiveDate || "").localeCompare(b.effectiveDate || ""));
   }, [schedules]);
   const familyTotal = useMemo(() => groups.reduce((sum, [, rows]) => sum + rows.reduce((s, r) => s + Number(r.amount || 0), 0), 0), [groups]);
-  const { first, last } = thisMonthRange();
-  const monthRows = useMemo(() => incomeExpense.filter((r) => (r.date || "") >= first && (r.date || "") <= last), [incomeExpense, first, last]);
-  const monthIncome = monthRows.filter((r) => r.type === "income").reduce((s, r) => s + Number(r.amount || 0), 0);
-  const monthExpense = monthRows.filter((r) => r.type === "expense").reduce((s, r) => s + Number(r.amount || 0), 0);
-
-  const shareMonthly = async () => {
-    setSharing(true);
-    try {
-      const canvas = await html2canvas(printRef.current, { scale: 2, backgroundColor: "#ffffff" });
-      const pdf = new jsPDF("p", "mm", "a4");
-      const imgW = pdf.internal.pageSize.getWidth();
-      const imgH = (canvas.height * imgW) / canvas.width;
-      pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, imgW, imgH);
-      const blob = pdf.output("blob");
-      const file = new File([blob], `이달의요약_${first.slice(0, 7)}.pdf`, { type: "application/pdf" });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try { await navigator.share({ files: [file], title: "이달의 요약" }); } catch {}
-      } else {
-        pdf.save(`이달의요약_${first.slice(0, 7)}.pdf`);
-      }
-    } finally { setSharing(false); }
-  };
 
   return (
     <div>
       <PlannerHomeExtras groupId={companyName} myUid={myUid} myName={actorName} myGender={myGender} coupleStartDate={coupleStartDate} />
       {/* ⭐ 예전엔 예산/수입지출/일정/이벤트예산이 각각 다른 카드로 따로 떨어져
-          있었다. 카드 하나로 합치고, 그 안을 주제별로 구분선/소제목으로 나눴다. */}
+          있었다. 카드 하나로 합치고, 그 안을 주제별로 구분선/소제목으로 나눴다.
+          "이번 달 요약 공유" 버튼은 상단(년도 옆)으로 옮겼다. */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="p-3.5">
-          <button onClick={shareMonthly} disabled={sharing} className="w-full py-2.5 rounded-xl text-white text-[12.5px] font-bold" style={{ background: accent }}>
-            {sharing ? "생성 중..." : "이번 달 요약 카톡 공유"}
-          </button>
-        </div>
-
-        <div className="px-3.5 pb-3.5">
+        <div className="px-3.5 pt-3.5">
           <div className="text-[11.5px] font-bold mb-2" style={{ color: accent }}>예산</div>
           <div className="bg-white border rounded-xl p-3.5 mb-2.5" style={{ borderColor: ACCENT_BORDER }}>
             <div className="flex items-center justify-between mb-1">
@@ -622,7 +621,6 @@ function MobileDashboard({ year, budgetTarget, totalIncome, totalExpense, schedu
           )}
         </div>
       </div>
-      <PrintableLedger innerRef={printRef} companyName={companyName} label={`${first.slice(0, 7)} 이번 달 요약`} rows={monthRows} totalIncome={monthIncome} totalExpense={monthExpense} accent={accent} />
 
       {scheduleModal && (
         <ScheduleEntryModal
@@ -655,6 +653,7 @@ function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates
   const [keywordDraft, setKeywordDraft] = useState("");
   const [keywordApplied, setKeywordApplied] = useState("");
   const [editing, setEditing] = useState(null);
+  const [actionFor, setActionFor] = useState(null); // 길게 누른 행 — 수정/삭제 선택 팝업
   const [showRecurring, setShowRecurring] = useState(false);
   const [showWallet, setShowWallet] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -797,7 +796,7 @@ function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates
                   <div className="text-[11px] font-bold text-gray-500 mb-1.5 px-0.5">{dateLabelKoM(date)}</div>
                   <div className="space-y-1.5">
                     {items.map((r) => (
-                      <div key={r.id} onClick={() => setEditing(r)} className="bg-white border rounded-xl p-3" style={{ borderColor: ACCENT_BORDER }}>
+                      <div key={r.id} {...longPressHandlers(() => setActionFor(r), () => setEditing(r))} className="bg-white border rounded-xl p-3" style={{ borderColor: ACCENT_BORDER }}>
                         <div className="flex items-center justify-between mb-0.5">
                           <div className="flex items-center gap-1.5 min-w-0">
                             <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9.5px] font-bold ${r.type === "income" ? "text-gray-600" : "bg-red-50 text-red-500"}`} style={r.type === "income" ? { background: ACCENT_SOFT } : undefined}>
@@ -831,8 +830,17 @@ function MobileLedger({ rows, companyName, actorName, accent, recurringTemplates
           companyName={companyName}
           actorName={actorName}
           accent={accent}
+          entries={entries}
           onClose={() => setEditing(null)}
           onOpenRecurring={() => setShowRecurring(true)}
+        />
+      )}
+      {actionFor && (
+        <PlannerEntryActionSheet
+          entry={actionFor}
+          label={`${actionFor.title} · ${fmtWon(actionFor.amount)}`}
+          onEdit={(r) => setEditing(r)}
+          onClose={() => setActionFor(null)}
         />
       )}
       {showRecurring && <RecurringManagerSheet templates={recurringTemplates} companyName={companyName} actorName={actorName} accent={accent} onClose={() => setShowRecurring(false)} />}
@@ -889,7 +897,10 @@ function MobileCalendar({ year, schedules, companyName, actorName, accent }) {
       <div className="bg-white border border-gray-200 rounded-xl p-3 mb-3">
         <div className="flex items-center justify-between mb-2">
           <button onClick={() => goMonth(-1)} className="w-7 h-7 rounded-lg text-base font-bold" style={{ color: accent }}>‹</button>
-          <div className="text-[13px] font-bold" style={{ color: accent }}>{viewYear}년 {viewMonth + 1}월</div>
+          <div className="flex items-center gap-1">
+            <YearDropdownLabel year={viewYear} onChange={setViewYear} className="text-[13px] font-bold" style={{ color: accent }} />
+            <MonthDropdownLabel month={viewMonth} onChange={setViewMonth} className="text-[13px] font-bold" style={{ color: accent }} />
+          </div>
           <button onClick={() => goMonth(1)} className="w-7 h-7 rounded-lg text-base font-bold" style={{ color: accent }}>›</button>
         </div>
         <div className="grid grid-cols-7 gap-1 mb-1">

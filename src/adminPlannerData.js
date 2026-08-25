@@ -419,6 +419,18 @@ export function usePlannerUnreadCount(groupId, myUid) {
 export const EVENT_MONEY_TYPES = ["결혼식", "장례식", "돌잔치", "회갑/칠순", "출산", "병문안", "기타"];
 export const EVENT_MONEY_RELATIONS = ["본가", "처가/외가", "친구", "직장", "기타"];
 
+// ⭐ 직접 입력한 관계/종류가 다음에도 계속 선택지에 남아있어야 한다는 요청 —
+// entries는 그룹(=커플 둘 다) 공용 Firestore 데이터라, 한쪽이 새 값을 입력해 저장한
+// 순간부터 두 계정 모두에서 mergeCategoryOptions와 같은 방식으로 보이게 된다.
+export function mergeEventMoneyRelationOptions(entries) {
+  const used = new Set((entries || []).filter((e) => e.type === "eventMoney").map((e) => (e.relation || "").trim()).filter(Boolean));
+  return [...EVENT_MONEY_RELATIONS, ...[...used].filter((c) => !EVENT_MONEY_RELATIONS.includes(c))];
+}
+export function mergeEventMoneyTypeOptions(entries) {
+  const used = new Set((entries || []).filter((e) => e.type === "eventMoney").map((e) => (e.eventType || "").trim()).filter(Boolean));
+  return [...EVENT_MONEY_TYPES, ...[...used].filter((c) => !EVENT_MONEY_TYPES.includes(c))];
+}
+
 // 같은 사람에게 그동안 준 돈 - 받은 돈 = 잔액(양수면 내가 더 줬으니 받을 차례,
 // 음수면 내가 더 받았으니 줄 차례). 이름으로 검색해서 그동안의 내역을 한눈에 본다.
 export function eventMoneyBalanceByPerson(entries) {
@@ -764,6 +776,12 @@ export async function setPlannerWalletBase(groupId, baseAssets, actorName) {
 // 대출금/마이너스통장/카드값 등 "빚" 항목 — 회차·만기일도 선택적으로 남길 수 있다.
 export const PLANNER_DEBTS = "plannerDebts";
 export const DEBT_CATEGORIES = ["마이너스통장", "대출금", "카드값", "기타"];
+
+// 직접 입력한 빚 분류도 그룹(커플 둘 다)에 계속 남아있게 — 위 이벤트머니와 동일한 방식.
+export function mergeDebtCategoryOptions(debts) {
+  const used = new Set((debts || []).map((d) => (d.category || "").trim()).filter(Boolean));
+  return [...DEBT_CATEGORIES, ...[...used].filter((c) => !DEBT_CATEGORIES.includes(c))];
+}
 
 export function usePlannerDebts(groupId) {
   const [debts, setDebts] = useState([]);

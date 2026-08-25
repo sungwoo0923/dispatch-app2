@@ -31,6 +31,10 @@ import PlannerHomeExtras from "./planner/PlannerHomeExtras";
 import PlannerUpcomingSchedule from "./planner/PlannerUpcomingSchedule";
 import PlannerWalletModal from "./planner/PlannerWalletModal";
 import useBodyScrollLock from "./planner/useBodyScrollLock";
+import { YearDropdownLabel, MonthDropdownLabel } from "./planner/PlannerYearPicker";
+import PlannerMonthlyShareButton from "./planner/PlannerShareCard";
+import longPressHandlers from "./planner/useLongPress";
+import PlannerEntryActionSheet from "./planner/PlannerEntryActionSheet";
 
 function todayY() { return new Date().getFullYear(); }
 function thisMonthRange() {
@@ -99,7 +103,7 @@ const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px]
 // ────────────────────────────────────────────────
 // 수입/지출 등록·수정 모달
 // ────────────────────────────────────────────────
-function LedgerEntryModal({ initial, defaultType = "expense", companyName, actorName, onClose, onOpenRecurring }) {
+function LedgerEntryModal({ initial, defaultType = "expense", companyName, actorName, entries, onClose, onOpenRecurring }) {
   const [type, setType] = useState(initial?.type || defaultType);
   const [title, setTitle] = useState(initial?.title || "");
   const [category, setCategory] = useState(initial?.category || "");
@@ -109,7 +113,9 @@ function LedgerEntryModal({ initial, defaultType = "expense", companyName, actor
   const [receiptURL, setReceiptURL] = useState(initial?.receiptURL || "");
   const [saving, setSaving] = useState(false);
 
-  const categoryOptions = type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  // ⭐ 직접 입력한 분류가 다음에도 계속 선택지에 남아있도록, 그룹 공용 entries에
+  // 이미 쓰인 분류명을 프리셋과 합쳐서 보여준다(둘 중 누가 입력해도 둘 다에게 보임).
+  const categoryOptions = mergeCategoryOptions(type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES, entries, type);
 
   const save = async () => {
     if (!title.trim()) { alert("항목명을 입력해 주세요."); return; }
@@ -560,25 +566,6 @@ async function exportPrintableToPdf(node, filename) {
   pdf.save(`${filename}.pdf`);
 }
 
-// ⭐ "월간 요약 PDF를 카톡으로 공유" 요청 — 카카오 SDK 연동(앱키/도메인 등록 필요)
-// 없이도 되는 방법으로, 표준 Web Share API를 쓴다. 카카오톡 등 설치된 공유 대상
-// 앱 목록이 뜨고 그중 카카오톡을 고르면 PDF 파일이 그대로 전달된다. 미지원 환경
-// (일부 PC 브라우저 등)에서는 자동으로 파일 다운로드로 대체된다.
-async function shareOrDownloadPdf(node, filename) {
-  const pdf = await buildPdfBlob(node);
-  const blob = pdf.output("blob");
-  const file = new File([blob], `${filename}.pdf`, { type: "application/pdf" });
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: filename });
-      return;
-    } catch {
-      // 사용자가 공유를 취소한 경우 등 — 조용히 다운로드로 대체
-    }
-  }
-  pdf.save(`${filename}.pdf`);
-}
-
 function PrintableLedger({ innerRef, companyName, label, rows, totalIncome, totalExpense }) {
   return (
     <div style={{ position: "fixed", left: -99999, top: 0, width: 780 }}>
@@ -711,6 +698,12 @@ export default function AdminPlanner({ userCompany, myRealName, myUid, myGender,
   const totalIncome = useMemo(() => yearRows.filter((r) => r.type === "income").reduce((s, r) => s + Number(r.amount || 0), 0), [yearRows]);
   const totalExpense = useMemo(() => yearRows.filter((r) => r.type === "expense").reduce((s, r) => s + Number(r.amount || 0), 0), [yearRows]);
 
+  // ⭐ "이번 달 요약 공유" 아이콘을 홈 탭 안이 아니라 상단(년도 옆)으로 옮기면서,
+  // 이번 달 수입/지출 합계도 여기서 같이 계산해둔다.
+  const { first: monthFirst, last: monthLast } = thisMonthRange();
+  const monthIncome = useMemo(() => incomeExpense.filter((r) => r.type === "income" && (r.date || "") >= monthFirst && (r.date || "") <= monthLast).reduce((s, r) => s + Number(r.amount || 0), 0), [incomeExpense, monthFirst, monthLast]);
+  const monthExpense = useMemo(() => incomeExpense.filter((r) => r.type === "expense" && (r.date || "") >= monthFirst && (r.date || "") <= monthLast).reduce((s, r) => s + Number(r.amount || 0), 0), [incomeExpense, monthFirst, monthLast]);
+
   const groups = useMemo(() => {
     const map = new Map();
     familyEntries.forEach((e) => {
@@ -729,9 +722,25 @@ export default function AdminPlanner({ userCompany, myRealName, myUid, myGender,
           <div className="text-[12px] text-gray-400 mt-0.5">가족과 함께 기록하는 우리집 수입·지출, 일정, 이벤트 예산</div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setYear((y) => y - 1)} className="w-8 h-8 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500">‹</button>
-          <div className="text-[14px] font-bold text-gray-700 w-16 text-center">{year}년</div>
-          <button onClick={() => setYear((y) => y + 1)} className="w-8 h-8 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500">›</button>
+          {/* ⭐ 홈 탭에서만 의미가 있어서 홈 탭일 때만 보여준다 — 년도 있는 곳(이 줄)
+              우측 끝에 두고, 누르면 미리보기 팝업에서 실제 공유를 확정한다. */}
+          {tab === "dashboard" && (
+            <PlannerMonthlyShareButton
+              label={monthFirst.slice(0, 7)}
+              totalIncome={monthIncome}
+              totalExpense={monthExpense}
+              className="w-8 h-8 rounded-lg border border-gray-200 hover:bg-gray-50 flex items-center justify-center"
+            />
+          )}
+          {/* ⭐ 일정(달력) 탭은 달력 안에 자체 년/월 선택이 이미 있어서, 위쪽의 이
+              년도 선택과 중복돼 보인다는 피드백으로 그 탭에서는 숨긴다. */}
+          {tab !== "calendar" && (
+            <>
+              <button onClick={() => setYear((y) => y - 1)} className="w-8 h-8 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500">‹</button>
+              <YearDropdownLabel year={year} onChange={setYear} className="text-[14px] font-bold text-gray-700 w-16 text-center" />
+              <button onClick={() => setYear((y) => y + 1)} className="w-8 h-8 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500">›</button>
+            </>
+          )}
         </div>
       </div>
 
@@ -781,10 +790,8 @@ export default function AdminPlanner({ userCompany, myRealName, myUid, myGender,
 function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules, groups, companyName, actorName, entries, incomeExpense, myUid, myGender, coupleStartDate }) {
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState(String(budgetTarget || ""));
-  const [sharing, setSharing] = useState(false);
   const [scheduleModal, setScheduleModal] = useState(null); // null | "new" | 일정 entry 객체
   const balance = totalIncome - totalExpense;
-  const printRef = useRef(null);
   const upcoming = useMemo(() => {
     const t = todayStr();
     // ⭐ 매년 반복(생일/기념일)은 저장된 날짜가 과거라도 "올해/내년 돌아오는 날짜"로
@@ -797,29 +804,12 @@ function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules
   }, [schedules]);
   const familyTotal = useMemo(() => groups.reduce((sum, [, rows]) => sum + rows.reduce((s, r) => s + Number(r.amount || 0), 0), 0), [groups]);
 
-  const { first, last } = thisMonthRange();
-  const monthRows = useMemo(() => incomeExpense.filter((r) => (r.date || "") >= first && (r.date || "") <= last), [incomeExpense, first, last]);
-  const monthIncome = monthRows.filter((r) => r.type === "income").reduce((s, r) => s + Number(r.amount || 0), 0);
-  const monthExpense = monthRows.filter((r) => r.type === "expense").reduce((s, r) => s + Number(r.amount || 0), 0);
-
-  const shareMonthly = async () => {
-    setSharing(true);
-    try {
-      await shareOrDownloadPdf(printRef.current, `이달의요약_${first.slice(0, 7)}`);
-    } finally {
-      setSharing(false);
-    }
-  };
-
   return (
     <div>
       <PlannerHomeExtras groupId={companyName} myUid={myUid} myName={actorName} myGender={myGender} coupleStartDate={coupleStartDate} />
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-[13px] font-bold text-gray-700">{year}년 요약</div>
-        <button onClick={shareMonthly} disabled={sharing} className="text-[12px] font-bold px-3 py-1.5 rounded-lg" style={{ background: ACCENT, color: "#fff" }}>
-          {sharing ? "생성 중..." : "이번 달 요약 카톡 공유"}
-        </button>
-      </div>
+      {/* ⭐ "이번 달 요약 공유" 버튼은 상단(년도 옆)으로 옮겼다 — 여기 남아있던
+          버튼/PDF 생성 로직은 제거. */}
+      <div className="text-[13px] font-bold text-gray-700 mb-3">{year}년 요약</div>
       <div className="grid grid-cols-4 gap-3 mb-6">
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <div className="flex items-center justify-between mb-1">
@@ -898,8 +888,6 @@ function DashboardTab({ year, budgetTarget, totalIncome, totalExpense, schedules
         </div>
       </div>
 
-      <PrintableLedger innerRef={printRef} companyName={companyName} label={`${first.slice(0, 7)} 이번 달 요약`} rows={monthRows} totalIncome={monthIncome} totalExpense={monthExpense} />
-
       {scheduleModal && (
         <ScheduleEntryModal
           initial={scheduleModal === "new" ? null : scheduleModal}
@@ -932,6 +920,7 @@ function LedgerTab({ rows, companyName, actorName, recurringTemplates, entries }
   const [keywordDraft, setKeywordDraft] = useState("");
   const [keywordApplied, setKeywordApplied] = useState("");
   const [editing, setEditing] = useState(null); // null | {} | entry
+  const [actionFor, setActionFor] = useState(null); // 길게 누른 행 — 수정/삭제 선택 팝업
   const [showRecurring, setShowRecurring] = useState(false);
   const [showWallet, setShowWallet] = useState(false);
   const printRef = useRef(null);
@@ -1090,7 +1079,7 @@ function LedgerTab({ rows, companyName, actorName, recurringTemplates, entries }
                   {items.map((r) => (
                     <div
                       key={r.id}
-                      onClick={() => setEditing(r)}
+                      {...longPressHandlers(() => setActionFor(r), () => setEditing(r))}
                       className="flex items-center justify-between px-4 py-3 text-[13.5px] border-b border-gray-50 last:border-b-0 hover:bg-gray-50 cursor-pointer"
                     >
                       <div className="flex items-center gap-2 min-w-0">
@@ -1126,8 +1115,17 @@ function LedgerTab({ rows, companyName, actorName, recurringTemplates, entries }
           initial={editing.id ? editing : null}
           companyName={companyName}
           actorName={actorName}
+          entries={entries}
           onClose={() => setEditing(null)}
           onOpenRecurring={() => setShowRecurring(true)}
+        />
+      )}
+      {actionFor && (
+        <PlannerEntryActionSheet
+          entry={actionFor}
+          label={`${actionFor.title} · ${fmtWon(actionFor.amount)}`}
+          onEdit={(r) => setEditing(r)}
+          onClose={() => setActionFor(null)}
         />
       )}
       {showRecurring && (
@@ -1194,7 +1192,10 @@ function CalendarTab({ year, schedules, companyName, actorName }) {
       <div className="bg-white border border-gray-200 rounded-xl p-4">
         <div className="flex items-center justify-between mb-3">
           <button onClick={() => goMonth(-1)} className="w-8 h-8 rounded-lg hover:bg-gray-100 font-bold" style={{ color: ACCENT }}>‹</button>
-          <div className="text-[14px] font-bold" style={{ color: ACCENT }}>{viewYear}년 {viewMonth + 1}월</div>
+          <div className="flex items-center gap-1.5">
+            <YearDropdownLabel year={viewYear} onChange={setViewYear} className="text-[14px] font-bold" style={{ color: ACCENT }} />
+            <MonthDropdownLabel month={viewMonth} onChange={setViewMonth} className="text-[14px] font-bold" style={{ color: ACCENT }} />
+          </div>
           <button onClick={() => goMonth(1)} className="w-8 h-8 rounded-lg hover:bg-gray-100 font-bold" style={{ color: ACCENT }}>›</button>
         </div>
         <div className="grid grid-cols-7 gap-1 mb-1">

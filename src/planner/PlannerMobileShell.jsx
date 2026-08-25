@@ -16,6 +16,7 @@ import PlannerSettings from "./PlannerSettings";
 import { plannerLogout, TOTAL_MASTER_EMAIL } from "./plannerAuth";
 import { usePlannerUnreadCount } from "../adminPlannerData";
 import { ACCENT, BG } from "./plannerTheme";
+import useBodyScrollLock from "./useBodyScrollLock";
 
 // ⭐ PlannerAdminPanel.jsx는 "모바일 미리보기"에서 이 파일을 그대로 불러 쓴다 — 여기서
 // 그 파일을 정적으로 import하면 순환참조가 생기므로, 실제로 열 때만 lazy 로드한다
@@ -40,9 +41,10 @@ export const PLANNER_MENU_ITEMS = [
 
 // ⭐ 메뉴 항목이 11개까지 늘어나면서 그냥 쭉 나열하면 복잡해 보여서, 성격이
 // 비슷한 것끼리 소제목으로 묶었다(라우팅 키는 그대로, 드로어 표시 순서만 그룹핑).
+// "우리 둘"이라는 이름이 어색하다는 피드백으로 "커플라운지"로 변경.
 const PLANNER_MENU_GROUPS = [
   { label: "가계부·일정", keys: ["dashboard", "ledger", "calendar", "family", "eventMoney"] },
-  { label: "우리 둘", keys: ["ourStory", "timeCapsule", "cycle", "games"] },
+  { label: "커플라운지", keys: ["ourStory", "timeCapsule", "cycle", "games"] },
   { label: "계정", keys: ["myinfo", "settings"] },
 ];
 
@@ -59,6 +61,14 @@ function ChatIconButton({ onClick, unreadCount = 0 }) {
       )}
     </button>
   );
+}
+
+// ⭐ 메뉴 드로어가 떠 있는 동안 위아래로 스크롤하면 뒤에 깔린 화면(홈 등)까지
+// 같이 스크롤되던 문제 — 드로어가 열려 있을 때만 마운트되는 이 컴포넌트 안에서
+// useBodyScrollLock을 걸어서, 드로어가 스크롤 포커스를 온전히 가져가게 한다.
+function MenuDrawer({ children }) {
+  useBodyScrollLock();
+  return children;
 }
 
 // previewMode: 관리자 메뉴의 "모바일 미리보기" 안에서 렌더링될 때 true — 이 안에서는
@@ -118,7 +128,7 @@ export default function PlannerMobileShell({ account, onUpdated, previewMode = f
         )}
         {page === "ourStory" && (
           <div className="px-4 pt-4 pb-24">
-            <PlannerTimeline account={account} onCoupleStartDateChange={(next) => onUpdated?.({ ...account, coupleStartDate: next })} />
+            <PlannerTimeline account={account} onBack={() => setPage("dashboard")} onCoupleStartDateChange={(next) => onUpdated?.({ ...account, coupleStartDate: next })} />
           </div>
         )}
         {page === "timeCapsule" && (
@@ -144,6 +154,7 @@ export default function PlannerMobileShell({ account, onUpdated, previewMode = f
       </div>
 
       {showMenu && (
+        <MenuDrawer>
         <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex" }} onClick={() => setShowMenu(false)}>
           <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)" }} />
           <div style={{ position: "relative", marginLeft: "auto", width: 260, height: "100%", background: "#fff", display: "flex", flexDirection: "column" }} onClick={(e) => e.stopPropagation()}>
@@ -194,6 +205,7 @@ export default function PlannerMobileShell({ account, onUpdated, previewMode = f
             </div>
           </div>
         </div>
+        </MenuDrawer>
       )}
 
       {showMessenger && (

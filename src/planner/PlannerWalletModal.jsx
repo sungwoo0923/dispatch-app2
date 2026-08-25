@@ -5,7 +5,7 @@
 import React, { useState } from "react";
 import {
   usePlannerWallet, setPlannerWalletBase, computeWalletBalance,
-  usePlannerDebts, addPlannerDebt, deletePlannerDebt, totalDebtAmount, DEBT_CATEGORIES,
+  usePlannerDebts, addPlannerDebt, deletePlannerDebt, totalDebtAmount, mergeDebtCategoryOptions,
   fmtWon, formatAmountInput, parseAmountInput,
 } from "../adminPlannerData";
 import PlannerCategorySelect from "./PlannerCategorySelect";
@@ -13,7 +13,7 @@ import PlannerDatePicker from "./PlannerDatePicker";
 import useBodyScrollLock from "./useBodyScrollLock";
 import { ACCENT, ACCENT_SOFT, ACCENT_BORDER } from "./plannerTheme";
 
-function AddDebtForm({ groupId, myName, onDone }) {
+function AddDebtForm({ groupId, myName, debts, onDone }) {
   const [category, setCategory] = useState("");
   const [amount, setAmount] = useState("");
   const [useInstallment, setUseInstallment] = useState(false);
@@ -42,7 +42,7 @@ function AddDebtForm({ groupId, myName, onDone }) {
     <div className="rounded-xl border p-3 space-y-2.5 mb-3" style={{ borderColor: ACCENT_BORDER, background: ACCENT_SOFT }}>
       <div>
         <div className="text-[11px] font-semibold text-gray-600 mb-1">분류</div>
-        <PlannerCategorySelect value={category} onChange={setCategory} options={DEBT_CATEGORIES} placeholder="예: 마이너스통장" className="w-full border rounded-lg px-3 py-2 text-[12.5px] focus:outline-none bg-white" />
+        <PlannerCategorySelect value={category} onChange={setCategory} options={mergeDebtCategoryOptions(debts)} placeholder="예: 마이너스통장" className="w-full border rounded-lg px-3 py-2 text-[12.5px] focus:outline-none bg-white" />
       </div>
       <div>
         <div className="text-[11px] font-semibold text-gray-600 mb-1">금액</div>
@@ -171,7 +171,7 @@ export default function PlannerWalletModal({ groupId, myName, totalIncome, total
             )}
           </div>
 
-          {showAddDebt && <AddDebtForm groupId={groupId} myName={myName} onDone={() => setShowAddDebt(false)} />}
+          {showAddDebt && <AddDebtForm groupId={groupId} myName={myName} debts={debts} onDone={() => setShowAddDebt(false)} />}
 
           {debts.length === 0 ? (
             <div className="text-[11.5px] text-gray-400 text-center py-4 border rounded-xl" style={{ borderColor: ACCENT_BORDER }}>

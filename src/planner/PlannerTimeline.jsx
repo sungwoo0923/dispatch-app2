@@ -76,7 +76,7 @@ function PhotoPicker({ groupId }) {
   );
 }
 
-export default function PlannerTimeline({ account, onCoupleStartDateChange }) {
+export default function PlannerTimeline({ account, onBack, onCoupleStartDateChange }) {
   const [editing, setEditing] = useState(!account.coupleStartDate);
   const [draft, setDraft] = useState(account.coupleStartDate || "");
   const [saving, setSaving] = useState(false);
@@ -104,8 +104,13 @@ export default function PlannerTimeline({ account, onCoupleStartDateChange }) {
   if (!account.coupleStartDate || editing) {
     return (
       <div className="max-w-lg mx-auto space-y-4">
+        {onBack && (
+          <button onClick={onBack} className="flex items-center gap-1 text-[13px] font-bold" style={{ color: ACCENT }}>
+            <span className="text-[17px] leading-none">‹</span> 뒤로
+          </button>
+        )}
         <div className="rounded-2xl p-6 text-center" style={{ background: ACCENT }}>
-          <div className="text-[13px] font-bold text-white mb-3">우리가 시작된 날을 기록해두면{"\n"}100일·1000일 같은 기념일을 미리 알려드려요</div>
+          <div className="text-[13px] font-bold text-white mb-3">처음 만난날을 입력하세요</div>
           <div className="bg-white rounded-xl p-1">
             <PlannerDatePicker value={draft} onChange={saveStartDate} placeholder="시작일 선택" />
           </div>
@@ -120,6 +125,11 @@ export default function PlannerTimeline({ account, onCoupleStartDateChange }) {
 
   return (
     <div className="max-w-lg mx-auto space-y-5">
+      {onBack && (
+        <button onClick={onBack} className="flex items-center gap-1 text-[13px] font-bold -mb-1" style={{ color: ACCENT }}>
+          <span className="text-[17px] leading-none">‹</span> 뒤로
+        </button>
+      )}
       <div>
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-[11.5px] font-bold" style={{ color: ACCENT }}>{day14.name}</span>
