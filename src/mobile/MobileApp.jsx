@@ -3082,23 +3082,23 @@ const groupedByDate = useMemo(() => {
       }
     };
 
-    // 상차지 동기화
-    await syncOne(
-      docData.상차지명,
-      docData.상차지주소,
-      docData.상차지담당자,
-      docData.상차지담당자번호,
-      extra.pickup || {}
-    );
-
-    // 하차지 동기화
-    await syncOne(
-      docData.하차지명,
-      docData.하차지주소,
-      docData.하차지담당자,
-      docData.하차지담당자번호,
-      extra.drop || {}
-    );
+    // 상차지/하차지 동기화 — 서로 무관한 두 곳이라 순차로 기다리지 않고 동시에 처리한다.
+    await Promise.all([
+      syncOne(
+        docData.상차지명,
+        docData.상차지주소,
+        docData.상차지담당자,
+        docData.상차지담당자번호,
+        extra.pickup || {}
+      ),
+      syncOne(
+        docData.하차지명,
+        docData.하차지주소,
+        docData.하차지담당자,
+        docData.하차지담당자번호,
+        extra.drop || {}
+      ),
+    ]);
   };
 
   // 거래처명 미입력 시 빨간 테두리로 깜빡이며 포커스를 옮겨 알려주기 위한 상태
@@ -3266,8 +3266,11 @@ const groupedByDate = useMemo(() => {
       // 화주사 화면(사본)에는 예전 값이 그대로 남아있던 버그가 있었다.
       syncShipperMirrorMobile(selectedOrder, docData).catch(() => {});
 
-      // ★ PC 거래처관리(places) 동기화
-      await syncPlaceFromOrder(docData, pendingMemoExtra);
+      // ★ PC 거래처관리(places) 동기화 — 오더 자체 저장과는 무관한 주소록 동기화라서
+      // 화주사 사본 동기화(바로 위)와 동일하게 기다리지 않고 백그라운드로 돌린다.
+      // 예전엔 이걸 기다리느라(상/하차지 순차 Firestore 쓰기 2번) "수정하기"를 눌러도
+      // 한참 뒤에야 "수정 완료"가 뜨고 화면이 넘어가는 딜레이가 있었다.
+      syncPlaceFromOrder(docData, pendingMemoExtra).catch(() => {});
 
       // selectedOrder 최신화 (상세보기로 돌아갈 때 최신 데이터 반영)
       const updated = { ...selectedOrder, ...docData, _id: form._editId, id: form._editId };
