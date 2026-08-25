@@ -175,11 +175,21 @@ export default function PlannerMatchGame({
 
   // ⭐ 플레이 중일 때만, 보드/점수/남은시간이 바뀔 때마다 실시간 스냅샷을 남겨서
   // 상대가 "지켜보기"로 볼 수 있게 한다. 게임이 끝나거나 창을 닫으면 지운다.
+  // ⭐ 매 초/매 스왑마다 그때그때 쓰기(write)를 하면 Firestore 일일 할당량을
+  // 금방 소진해버릴 수 있어서, 최신 값은 ref로만 들고 있다가 2.5초 주기로 한
+  // 번씩만 저장한다 — 관전 화면이 살짝 덜 촘촘히 업데이트되는 정도의 트레이드
+  // 오프로 실제 쓰기 횟수를 크게 줄인다.
+  const liveSnapshotRef = useRef({ board, score, secondsLeft });
+  useEffect(() => { liveSnapshotRef.current = { board, score, secondsLeft }; }, [board, score, secondsLeft]);
   useEffect(() => {
     if (phase !== "playing" && phase !== "resolving") return;
-    updateLiveMatchSnapshot(groupId, myUid, myName, { board, score, secondsLeft });
+    updateLiveMatchSnapshot(groupId, myUid, myName, liveSnapshotRef.current);
+    const t = setInterval(() => {
+      updateLiveMatchSnapshot(groupId, myUid, myName, liveSnapshotRef.current);
+    }, 2500);
+    return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [board, score, secondsLeft, phase]);
+  }, [phase]);
 
   useEffect(() => {
     return () => {
