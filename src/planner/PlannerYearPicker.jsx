@@ -25,7 +25,7 @@ export function YearDropdownLabel({ year, onChange, className, style, align = "c
   return (
     <div ref={ref} className="relative inline-block">
       <button type="button" onClick={() => setOpen((v) => !v)} className={className} style={style}>
-        {year}년 <span style={{ fontSize: 9, opacity: 0.7 }}>{open ? "▲" : "▼"}</span>
+        {year}년
       </button>
       {open && (
         <div
@@ -57,7 +57,7 @@ export function MonthDropdownLabel({ month, onChange, className, style, align = 
   return (
     <div ref={ref} className="relative inline-block">
       <button type="button" onClick={() => setOpen((v) => !v)} className={className} style={style}>
-        {month + 1}월 <span style={{ fontSize: 9, opacity: 0.7 }}>{open ? "▲" : "▼"}</span>
+        {month + 1}월
       </button>
       {open && (
         <div

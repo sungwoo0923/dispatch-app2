@@ -2,15 +2,17 @@
 // 다른 캘린더/가계부 앱에는 없는 요소들 — 커플 D-day(+생리 예정일), 오늘의 기분
 // 체크인, 이번 주 미션(새로고침/19금 모드) — 을 한데 모아 보여준다.
 // PC(DashboardTab)/모바일(MobileDashboard) 양쪽 대시보드 맨 위에서 그대로 재사용.
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   todayStr, usePlannerTodayMoods, setPlannerMood, MOOD_OPTIONS,
-  useWeekMission, rerollWeekMission, setWeekMissionPool,
+  useWeekMission, rerollWeekMission, setWeekMissionPool, computeMissionTurnUid,
+  MISSION_VERSIONS, WEEKLY_MISSIONS, WEEKLY_MISSIONS_FUNNY, WEEKLY_MISSIONS_HONEST, WEEKLY_MISSIONS_ADULT,
   useGroupCycles, computeCycleInfo, dDayLabel,
 } from "../adminPlannerData";
-import { useGroupMembers } from "./plannerAuth";
+import { useGroupMembers, TOTAL_MASTER_EMAIL } from "./plannerAuth";
 import PlannerCycleTracker from "./PlannerCycleTracker";
-import { ACCENT, ACCENT_BORDER } from "./plannerTheme";
+import useBodyScrollLock from "./useBodyScrollLock";
+import { ACCENT, ACCENT_SOFT, ACCENT_BORDER } from "./plannerTheme";
 
 function Card({ title, right, children }) {
   return (
@@ -127,34 +129,176 @@ function MoodCheckin({ groupId, myUid, myName }) {
   );
 }
 
-function WeeklyMission({ groupId, myName }) {
-  const { weekKey, text, pool, index } = useWeekMission(groupId);
+// 미션 버전 전체(랜덤 룰렛용) — key별 목록을 한 곳에 모아둔다.
+const ALL_MISSION_POOLS = { normal: WEEKLY_MISSIONS, funny: WEEKLY_MISSIONS_FUNNY, honest: WEEKLY_MISSIONS_HONEST, adult: WEEKLY_MISSIONS_ADULT };
+function randomPoolAndIndex() {
+  const keys = Object.keys(ALL_MISSION_POOLS);
+  const pool = keys[Math.floor(Math.random() * keys.length)];
+  const list = ALL_MISSION_POOLS[pool];
+  const index = Math.floor(Math.random() * list.length);
+  return { pool, index, text: list[index] };
+}
+
+// ⭐ "랜덤 버전"을 고르면 넷 중 하나가 슬롯머신처럼 빠르게 바뀌다가, STOP을
+// 누르면 점점 느려지며 멈추고 최종 미션이 확정된다.
+function MissionRoulette({ onConfirm, onCancel }) {
+  const [current, setCurrent] = useState(() => randomPoolAndIndex());
+  const [spinning, setSpinning] = useState(true);
+  const [settled, setSettled] = useState(false);
+  const intervalRef = useRef(null);
+
+  useEffect(() => {
+    intervalRef.current = setInterval(() => setCurrent(randomPoolAndIndex()), 70);
+    return () => clearInterval(intervalRef.current);
+  }, []);
+
+  const stop = () => {
+    if (!spinning) return;
+    clearInterval(intervalRef.current);
+    setSpinning(false);
+    const delays = [90, 130, 190, 270, 380, 520, 700];
+    let i = 0;
+    const step = () => {
+      setCurrent(randomPoolAndIndex());
+      i += 1;
+      if (i < delays.length) setTimeout(step, delays[i]);
+      else setSettled(true);
+    };
+    setTimeout(step, delays[0]);
+  };
+
+  const versionLabel = MISSION_VERSIONS.find((v) => v.key === current.pool)?.label || current.pool;
+
+  return (
+    <div>
+      <div className="rounded-xl p-5 mb-4 min-h-[96px] flex flex-col items-center justify-center text-center" style={{ background: ACCENT_SOFT }}>
+        <div className="text-[10.5px] font-bold mb-1.5" style={{ color: ACCENT }}>{versionLabel}</div>
+        <div className="text-[13.5px] font-bold text-gray-800" style={{ opacity: settled ? 1 : 0.65 }}>{current.text}</div>
+      </div>
+      {!settled ? (
+        <button onClick={stop} disabled={!spinning} className="w-full py-3 rounded-xl text-white text-[14px] font-extrabold disabled:opacity-50" style={{ background: ACCENT }}>
+          STOP
+        </button>
+      ) : (
+        <div className="flex gap-2">
+          <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl border text-gray-600 text-[13px] font-semibold" style={{ borderColor: ACCENT_BORDER }}>취소</button>
+          <button onClick={() => onConfirm(current)} className="flex-1 py-2.5 rounded-xl text-white text-[13px] font-bold" style={{ background: ACCENT }}>이걸로 확정</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VersionPickerModal({ groupId, weekKey, currentPool, myUid, allowed, otherName, onClose }) {
+  useBodyScrollLock();
+  const [mode, setMode] = useState("pick"); // pick | roulette
+  const [saving, setSaving] = useState(false);
+
+  const apply = async (pool, missionIndex, pickedRandom = false) => {
+    setSaving(true);
+    try {
+      await setWeekMissionPool(groupId, weekKey, pool, { actorUid: myUid, missionIndex, pickedRandom, allowed });
+      onClose();
+    } catch (err) {
+      alert(err.message || "변경할 수 없어요.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[10035] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl p-5 w-full max-w-[380px] max-h-[85vh] overflow-y-auto overscroll-contain">
+        <div className="flex items-center justify-between mb-1">
+          <div className="text-[14.5px] font-extrabold text-gray-800">미션 버전 변경</div>
+          <button onClick={onClose} className="text-gray-400 text-[18px] leading-none">✕</button>
+        </div>
+        {!allowed && (
+          <div className="text-[11px] text-red-500 mt-2 mb-1 leading-relaxed">
+            버전 변경은 매주 한 번, 번갈아가며 할 수 있어요 — 이번 주는 {otherName || "배우자"}님 차례예요.
+          </div>
+        )}
+        {mode === "pick" ? (
+          <div className="space-y-2 mt-3">
+            {MISSION_VERSIONS.map((v) => (
+              <button
+                key={v.key}
+                onClick={() => apply(v.key)}
+                disabled={!allowed || saving}
+                className="w-full flex items-center justify-between px-4 py-3 rounded-xl border text-left disabled:opacity-40"
+                style={currentPool === v.key ? { background: ACCENT_SOFT, borderColor: ACCENT, color: ACCENT } : { borderColor: ACCENT_BORDER, color: "#374151" }}
+              >
+                <span className="text-[13px] font-bold">{v.label}</span>
+                {currentPool === v.key && <span className="text-[10.5px] font-bold">현재</span>}
+              </button>
+            ))}
+            <button
+              onClick={() => setMode("roulette")}
+              disabled={!allowed || saving}
+              className="w-full flex items-center justify-between px-4 py-3 rounded-xl border text-left disabled:opacity-40"
+              style={{ borderColor: ACCENT_BORDER, color: "#374151" }}
+            >
+              <span className="text-[13px] font-bold">랜덤 버전</span>
+              <span className="text-[10.5px] text-gray-400">룰렛으로 뽑기</span>
+            </button>
+          </div>
+        ) : (
+          <div className="mt-3">
+            <MissionRoulette onCancel={() => setMode("pick")} onConfirm={(r) => apply(r.pool, r.index, true)} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function WeeklyMission({ groupId, myUid, myName }) {
+  const { weekKey, text, pool, index, versionChanged, pickedRandom } = useWeekMission(groupId);
   const [busy, setBusy] = useState(false);
-  const isAdult = pool === "adult";
+  const [showVersionPicker, setShowVersionPicker] = useState(false);
+  const members = useGroupMembers(groupId);
+
+  const me = members.find((m) => m.uid === myUid);
+  const other = members.find((m) => m.uid !== myUid);
+  const isOwner = me?.email === TOTAL_MASTER_EMAIL;
+  const turnUid = computeMissionTurnUid(members, weekKey);
+  // 배우자가 아직 가입 전이면(혼자뿐이면) 항상 내 차례로 취급.
+  const isMyTurn = members.length < 2 || myUid === turnUid;
+  const allowed = isOwner || (isMyTurn && !versionChanged);
+  const currentVersionLabel = MISSION_VERSIONS.find((v) => v.key === pool)?.label || "일상 버전";
 
   const reroll = async () => {
     setBusy(true);
     try { await rerollWeekMission(groupId, weekKey, pool, index); } finally { setBusy(false); }
-  };
-  const toggleAdult = async () => {
-    setBusy(true);
-    try { await setWeekMissionPool(groupId, weekKey, isAdult ? "normal" : "adult"); } finally { setBusy(false); }
   };
 
   return (
     <Card
       title="이번 주 커플 미션"
       right={
-        <button onClick={reroll} disabled={busy} className="text-[11px] font-bold shrink-0" style={{ color: ACCENT }}>
-          다른 미션
-        </button>
+        <div className="flex items-center gap-2.5 shrink-0">
+          <button onClick={reroll} disabled={busy} className="text-[11px] font-bold" style={{ color: ACCENT }}>
+            다른 미션
+          </button>
+          <button onClick={() => setShowVersionPicker(true)} className="text-[11px] font-bold" style={{ color: ACCENT }}>
+            버전변경
+          </button>
+        </div>
       }
     >
+      <div className="text-[9.5px] font-bold text-gray-400 mb-1">
+        {currentVersionLabel}{pickedRandom && " · 랜덤으로 뽑힘"}
+      </div>
       <div className="text-[13px] font-bold text-gray-700">{text}</div>
-      <label className="flex items-center gap-1.5 cursor-pointer select-none mt-2.5">
-        <input type="checkbox" checked={isAdult} onChange={toggleAdult} disabled={busy} className="w-3.5 h-3.5" style={{ accentColor: ACCENT }} />
-        <span className="text-[10.5px] font-semibold text-gray-500">19금 버전</span>
-      </label>
+
+      {showVersionPicker && (
+        <VersionPickerModal
+          groupId={groupId} weekKey={weekKey} currentPool={pool} myUid={myUid}
+          allowed={allowed} otherName={other?.name}
+          onClose={() => setShowVersionPicker(false)}
+        />
+      )}
     </Card>
   );
 }
@@ -167,7 +311,7 @@ export default function PlannerHomeExtras({ groupId, myUid, myName, myGender, co
       {/* ⭐ 오늘의 기분은 이제 얇은 한 줄이라, 카드형인 이번 주 미션과 2단 그리드로
           묶으면 높이를 억지로 맞추려 늘어나 보였다 — 각자 전체 폭으로 세로 배치. */}
       <MoodCheckin groupId={groupId} myUid={myUid} myName={myName} />
-      <WeeklyMission groupId={groupId} myName={myName} />
+      <WeeklyMission groupId={groupId} myUid={myUid} myName={myName} />
     </div>
   );
 }

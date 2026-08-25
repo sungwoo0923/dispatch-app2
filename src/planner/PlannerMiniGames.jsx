@@ -1,91 +1,106 @@
 // src/planner/PlannerMiniGames.jsx — "미니게임" 메뉴 (PC/모바일 공용).
-// 배우자와 재미로 하는 가위바위보 / 구슬 터뜨리기. 안에 게임별 속메뉴(탭)로 나뉘어
-// 있고, 점수는 계속 누적된다.
-import React, { useState } from "react";
+// 배우자와 내기를 걸고 하는 구슬 터뜨리기. 점수는 계속 누적된다.
+// ⭐ 가위바위보는 없앴고(구슬 터뜨리기만 남김), 플레이 전에 반드시 내기를 먼저
+// 정해야 시작할 수 있다.
+import React, { useMemo, useState } from "react";
 import {
-  usePlannerGameState, usePlannerGameScores, submitRpsChoice, RPS_CHOICES,
+  usePlannerGameState, usePlannerGameScores, setPlannerGameBet, GAME_BET_OPTIONS,
 } from "../adminPlannerData";
 import { useGroupMembers } from "./plannerAuth";
 import PlannerMatchGame from "./PlannerMatchGame";
+import PlannerInfoTip from "./PlannerInfoTip";
+import PlannerCategorySelect from "./PlannerCategorySelect";
+import useBodyScrollLock from "./useBodyScrollLock";
 import { ACCENT, ACCENT_SOFT, ACCENT_BORDER } from "./plannerTheme";
 
-function ScoreRow({ label, mine, theirs, otherName }) {
-  return (
-    <div className="flex items-center justify-between text-[12px] py-1">
-      <span className="text-gray-500">{label}</span>
-      <span className="font-bold text-gray-700">
-        나 {mine.w}승 {mine.l}패 {mine.d}무 <span className="text-gray-300 mx-1">·</span> {otherName || "배우자"} {theirs.w}승 {theirs.l}패 {theirs.d}무
-      </span>
-    </div>
-  );
-}
+// 플레이 전에 무슨 내기를 걸지 정하는 팝업 — 화면 중앙에 뜨고, 목록은 위아래로
+// 스크롤해서 볼 수 있다. 목록에 없으면 직접 입력도 가능.
+function BetPickerModal({ groupId, myUid, myName, currentText, onClose }) {
+  useBodyScrollLock();
+  const [picked, setPicked] = useState(currentText || "");
+  const [saving, setSaving] = useState(false);
 
-function RockPaperScissors({ groupId, myUid, myName, otherUid, otherName, state, scores }) {
-  const [picking, setPicking] = useState(false);
-  const rps = state.rps || {};
-  const myChoice = rps.choices?.[myUid];
-  const theirChoice = rps.choices?.[otherUid];
-  const lastResult = rps.lastResult;
-
-  const pick = async (choice) => {
-    setPicking(true);
-    try { await submitRpsChoice(groupId, myUid, myName, choice, otherUid); } finally { setPicking(false); }
+  const save = async () => {
+    if (!picked.trim()) { alert("내기를 골라주세요."); return; }
+    setSaving(true);
+    try {
+      await setPlannerGameBet(groupId, picked.trim(), myUid, myName);
+      onClose();
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const myScore = scores[myUid]?.rps || { w: 0, l: 0, d: 0 };
-  const theirScore = scores[otherUid]?.rps || { w: 0, l: 0, d: 0 };
-  const resultLabel = lastResult?.myUid === myUid
-    ? (lastResult.result === "win" ? "이겼어요!" : lastResult.result === "lose" ? "졌어요" : "비겼어요")
-    : (lastResult?.result === "win" ? "졌어요" : lastResult?.result === "lose" ? "이겼어요!" : lastResult ? "비겼어요" : "");
-
   return (
-    <div className="bg-white border rounded-xl p-4" style={{ borderColor: ACCENT_BORDER }}>
-      <div className="text-[13px] font-bold text-gray-700 mb-3">가위바위보</div>
+    <div className="fixed inset-0 z-[10030] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl p-5 w-full max-w-[380px] max-h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between mb-1">
+          <div className="text-[14.5px] font-extrabold text-gray-800">무슨 내기를 할까요?</div>
+          <button onClick={onClose} className="text-gray-400 text-[18px] leading-none">✕</button>
+        </div>
+        <div className="text-[11px] text-gray-400 mb-3">이번 판에서 지면 뭘 해줄지 정해보세요.</div>
 
-      {myChoice && !theirChoice ? (
-        <div className="text-center py-4 text-[12.5px] text-gray-500">냈어요! {otherName || "배우자"}님이 낼 때까지 기다리는 중...</div>
-      ) : (
-        <div className="grid grid-cols-3 gap-2 mb-3">
-          {RPS_CHOICES.map((c) => (
+        <div className="mb-3">
+          <PlannerCategorySelect
+            value={picked}
+            onChange={setPicked}
+            options={GAME_BET_OPTIONS}
+            placeholder="목록에서 고르거나 직접 입력"
+            className="w-full border rounded-lg px-3 py-2 text-[13px] focus:outline-none bg-white"
+          />
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain border rounded-xl" style={{ borderColor: ACCENT_BORDER }}>
+          {GAME_BET_OPTIONS.map((b) => (
             <button
-              key={c}
-              onClick={() => pick(c)}
-              disabled={picking}
-              className="py-3 rounded-lg text-[13px] font-bold border"
-              style={{ color: ACCENT, borderColor: ACCENT_BORDER }}
+              key={b}
+              onClick={() => setPicked(b)}
+              className="w-full text-left px-3.5 py-2.5 text-[12.5px] font-semibold border-b last:border-b-0"
+              style={picked === b ? { background: ACCENT_SOFT, color: ACCENT, borderColor: ACCENT_SOFT } : { color: "#4b5563", borderColor: "#f3f4f6" }}
             >
-              {c}
+              {b}
             </button>
           ))}
         </div>
-      )}
 
-      {lastResult && (
-        <div className="rounded-lg p-2.5 mb-3 text-center" style={{ background: ACCENT_SOFT }}>
-          <div className="text-[12.5px] font-bold" style={{ color: ACCENT }}>{resultLabel}</div>
-          <div className="text-[11px] text-gray-500 mt-0.5">
-            나: {lastResult.myUid === myUid ? lastResult.mine : lastResult.theirs} · {otherName || "배우자"}: {lastResult.myUid === myUid ? lastResult.theirs : lastResult.mine}
-          </div>
+        <div className="flex gap-2 mt-4">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border text-gray-600 text-[13px] font-semibold" style={{ borderColor: ACCENT_BORDER }}>취소</button>
+          <button onClick={save} disabled={saving} className="flex-1 py-2.5 rounded-xl text-white text-[13px] font-bold disabled:opacity-50" style={{ background: ACCENT }}>
+            {saving ? "저장 중..." : "저장"}
+          </button>
         </div>
-      )}
-
-      <ScoreRow label="누적 전적" mine={myScore} theirs={theirScore} otherName={otherName} />
+      </div>
     </div>
   );
 }
 
 // Bejeweled/Candy Crush류 매치 퍼즐 게임 — 60초 도전제라 실시간 대전이 아니라
 // "각자 도전해서 최고 점수 겨루기" 방식이라 카드에서 바로 시작할 수 있게 한다.
-function MatchGameCard({ account, other, scores, onPlay }) {
+function MatchGameCard({ account, other, scores, betText, onPlay, onOpenBet }) {
   const myBest = scores[account.uid]?.matchGame?.best || 0;
   const theirBest = scores[other.uid]?.matchGame?.best || 0;
   return (
     <div className="bg-white border rounded-xl p-4" style={{ borderColor: ACCENT_BORDER }}>
       <div className="flex items-center justify-between mb-1.5">
         <div className="text-[13px] font-bold text-gray-700">구슬 터뜨리기</div>
-        <button onClick={onPlay} className="text-[11.5px] font-bold px-3 py-1.5 rounded-full text-white" style={{ background: ACCENT }}>플레이</button>
+        <button
+          onClick={betText ? onPlay : onOpenBet}
+          className="text-[11.5px] font-bold px-3 py-1.5 rounded-full text-white"
+          style={{ background: ACCENT }}
+        >
+          플레이
+        </button>
       </div>
       <div className="text-[11.5px] text-gray-400 mb-2.5">60초 동안 같은 색 구슬 3개 이상을 한 줄로 모아 터뜨려 보세요.</div>
+
+      <button onClick={onOpenBet} className="w-full flex items-center justify-between rounded-lg px-3 py-2 mb-2.5 text-left" style={{ background: betText ? "#fff7ed" : ACCENT_SOFT, border: `1px solid ${betText ? "#fed7aa" : ACCENT_BORDER}` }}>
+        <span className="text-[11.5px] font-bold" style={{ color: betText ? "#c2410c" : ACCENT }}>
+          {betText ? `내기: ${betText}` : "내기를 먼저 정해주세요"}
+        </span>
+        <span className="text-[10.5px] font-semibold" style={{ color: betText ? "#c2410c" : ACCENT }}>{betText ? "변경" : "정하기"}</span>
+      </button>
+
       <div className="flex items-center justify-between text-[12px] font-bold" style={{ color: ACCENT }}>
         <span>나 최고 {myBest}</span>
         <span className="text-gray-400 font-semibold">{other.name || "배우자"} 최고 {theirBest}</span>
@@ -94,18 +109,14 @@ function MatchGameCard({ account, other, scores, onPlay }) {
   );
 }
 
-const GAME_TABS = [
-  ["rps", "가위바위보"],
-  ["match", "구슬 터뜨리기"],
-];
-
 export default function PlannerMiniGames({ account }) {
   const members = useGroupMembers(account.groupId);
   const other = members.find((m) => m.uid !== account.uid);
   const state = usePlannerGameState(account.groupId);
   const scores = usePlannerGameScores(account.groupId);
   const [showMatchGame, setShowMatchGame] = useState(false);
-  const [tab, setTab] = useState("rps");
+  const [showBet, setShowBet] = useState(false);
+  const betText = state?.bet?.text || "";
 
   if (!other) {
     return (
@@ -117,26 +128,18 @@ export default function PlannerMiniGames({ account }) {
 
   return (
     <div className="max-w-lg mx-auto space-y-4">
-      <div className="text-[12.5px] text-gray-500">배우자와 즐기는 미니게임이에요. 점수는 계속 쌓여요.</div>
-
-      <div className="flex gap-2">
-        {GAME_TABS.map(([v, l]) => (
-          <button
-            key={v}
-            onClick={() => setTab(v)}
-            className="flex-1 py-2.5 rounded-lg text-[12.5px] font-bold border"
-            style={tab === v ? { background: ACCENT, color: "#fff", borderColor: ACCENT } : { color: ACCENT, borderColor: ACCENT_BORDER }}
-          >
-            {l}
-          </button>
-        ))}
+      <div className="flex justify-end">
+        <PlannerInfoTip align="right" text="상대방과 내기할 수 있는 미니게임이에요. 내기를 정하고 플레이를 시작하세요." />
       </div>
 
-      {tab === "rps" && (
-        <RockPaperScissors groupId={account.groupId} myUid={account.uid} myName={account.name} otherUid={other.uid} otherName={other.name} state={state} scores={scores} />
-      )}
-      {tab === "match" && (
-        <MatchGameCard account={account} other={other} scores={scores} onPlay={() => setShowMatchGame(true)} />
+      <MatchGameCard
+        account={account} other={other} scores={scores} betText={betText}
+        onPlay={() => setShowMatchGame(true)}
+        onOpenBet={() => setShowBet(true)}
+      />
+
+      {showBet && (
+        <BetPickerModal groupId={account.groupId} myUid={account.uid} myName={account.name} currentText={betText} onClose={() => setShowBet(false)} />
       )}
 
       {showMatchGame && (
@@ -147,6 +150,7 @@ export default function PlannerMiniGames({ account }) {
           myBest={scores[account.uid]?.matchGame?.best || 0}
           otherName={other.name}
           otherBest={scores[other.uid]?.matchGame?.best || 0}
+          betText={betText}
           onClose={() => setShowMatchGame(false)}
         />
       )}

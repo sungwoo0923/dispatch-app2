@@ -7,8 +7,12 @@
 // Bejeweled/Candy Crush 등 실제 매치 게임들도 전부 3개 기준이라 그에 맞춰 낮췄다.
 // 터진 자리는 위에서 새 구슬이 랜덤으로 떨어져 채운다. 60초 동안 혼자 플레이해서
 // 점수를 내고, 배우자와는 최고 점수로 겨룬다(동시 조작 아님 — 각자 도전 후 비교).
+// ⭐ 구슬이 납작한 동전 같다는 피드백으로 방사형 그라데이션+하이라이트로 입체감을
+// 줬고, 터질 때 진동+효과음+더 큰 임팩트를, 못 옮기는 자리를 누르면 빨간 테두리
+// +진동+경고음을 주도록 손맛을 더했다. 시작 전엔 3-2-1-START 카운트다운이 뜬다.
 import React, { useEffect, useRef, useState } from "react";
 import { submitMatchGameScore } from "../adminPlannerData";
+import { playPopSound, playErrorSound, vibrate } from "./plannerSound";
 import { ACCENT, ACCENT_BORDER } from "./plannerTheme";
 
 const ROWS = 8;
@@ -22,6 +26,18 @@ const COLORS = [
   "#14b8a6", // 청록
   "#a855f7", // 보라
 ];
+
+// 구슬에 입체감을 주기 위한 방사형 그라데이션(위 왼쪽에 광원) — 단색 배경 대신
+// 밝은 하이라이트 → 원색 → 어두운 그림자 순으로 번지게 해서 실제 유리구슬처럼 보이게 한다.
+function shade(hex, amt) {
+  const num = parseInt(hex.slice(1), 16);
+  let r = (num >> 16) + amt, g = ((num >> 8) & 0xff) + amt, b = (num & 0xff) + amt;
+  r = Math.max(0, Math.min(255, r)); g = Math.max(0, Math.min(255, g)); b = Math.max(0, Math.min(255, b));
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
+}
+function ballGradient(hex) {
+  return `radial-gradient(circle at 32% 26%, ${shade(hex, 90)} 0%, ${hex} 48%, ${shade(hex, -55)} 100%)`;
+}
 
 function randColor() { return Math.floor(Math.random() * COLORS.length); }
 
@@ -93,14 +109,19 @@ function isAdjacent(a, b) {
   return (ra === rb && Math.abs(ca - cb) === 1) || (ca === cb && Math.abs(ra - rb) === 1);
 }
 
-export default function PlannerMatchGame({ groupId, myUid, myName, myBest, otherName, otherBest, onClose }) {
+const COUNTDOWN_STEPS = ["3", "2", "1", "START!"];
+
+export default function PlannerMatchGame({ groupId, myUid, myName, myBest, otherName, otherBest, betText, onClose }) {
   const [board, setBoard] = useState(makeBoard);
   const [selected, setSelected] = useState(null);
   const [popping, setPopping] = useState(new Set());
+  const [invalidPair, setInvalidPair] = useState(new Set());
   const [score, setScore] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(GAME_SECONDS);
-  const [phase, setPhase] = useState("ready"); // ready | playing | resolving | over
+  const [phase, setPhase] = useState("ready"); // ready | countdown | playing | resolving | over
+  const [countdownStep, setCountdownStep] = useState(0);
   const busyRef = useRef(false);
+  const comboRef = useRef(0);
 
   useEffect(() => {
     if (phase !== "playing") return;
@@ -113,18 +134,33 @@ export default function PlannerMatchGame({ groupId, myUid, myName, myBest, other
     return () => clearTimeout(t);
   }, [phase, secondsLeft, groupId, myUid, myName, score]);
 
+  // 3-2-1-START 카운트다운 — 끝나면 바로 playing으로 전환.
+  useEffect(() => {
+    if (phase !== "countdown") return;
+    if (countdownStep >= COUNTDOWN_STEPS.length) {
+      setPhase("playing");
+      return;
+    }
+    const t = setTimeout(() => setCountdownStep((s) => s + 1), countdownStep === COUNTDOWN_STEPS.length - 1 ? 420 : 620);
+    return () => clearTimeout(t);
+  }, [phase, countdownStep]);
+
   const resolveCascade = async (startBoard) => {
     busyRef.current = true;
     setPhase("resolving");
     let cur = startBoard;
     let gained = 0;
+    let chain = 0;
     // eslint-disable-next-line no-constant-condition
     while (true) {
       const matched = findMatches(cur);
       if (matched.size === 0) break;
+      chain += 1;
       gained += matched.size;
       setPopping(matched);
-      await new Promise((res) => setTimeout(res, 260));
+      vibrate(chain > 1 ? [25, 30, 25] : 30);
+      playPopSound(1 + (chain - 1) * 0.12);
+      await new Promise((res) => setTimeout(res, 320));
       cur = collapseAndRefill(cur, matched);
       setBoard(cur);
       setPopping(new Set());
@@ -140,7 +176,9 @@ export default function PlannerMatchGame({ groupId, myUid, myName, myBest, other
     setScore(0);
     setSecondsLeft(GAME_SECONDS);
     setSelected(null);
-    setPhase("playing");
+    setInvalidPair(new Set());
+    setCountdownStep(0);
+    setPhase("countdown");
   };
 
   // ⭐ 연쇄 반응(resolveCascade) 도중엔 중단 버튼 자체를 안 보이게 해서, 끝나고
@@ -158,13 +196,18 @@ export default function PlannerMatchGame({ groupId, myUid, myName, myBest, other
 
     const swapped = [...board];
     [swapped[selected], swapped[idx]] = [swapped[idx], swapped[selected]];
+    const pair = new Set([selected, idx]);
     setSelected(null);
 
     const matched = findMatches(swapped);
     if (matched.size === 0) {
-      // 매치가 안 되면 잠깐 보여줬다가 원래대로 되돌린다.
+      // ⭐ 매치가 안 되는 이동 — 손맛을 위해 빨간 테두리 + 진동 + 경고음을 주고
+      // 잠깐 보여줬다가 원래대로 되돌린다.
+      setInvalidPair(pair);
+      vibrate(60);
+      playErrorSound();
       setBoard(swapped);
-      setTimeout(() => setBoard(board), 160);
+      setTimeout(() => { setBoard(board); setInvalidPair(new Set()); }, 220);
       return;
     }
     setBoard(swapped);
@@ -177,38 +220,75 @@ export default function PlannerMatchGame({ groupId, myUid, myName, myBest, other
       <div className="relative bg-white rounded-2xl p-4 w-full max-w-[420px] max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-3">
           <div className="text-[14px] font-extrabold text-gray-800">구슬 터뜨리기</div>
-          {phase !== "playing" && (
+          {phase !== "playing" && phase !== "countdown" && (
             <button onClick={onClose} className="text-gray-400 text-[18px] leading-none">✕</button>
           )}
         </div>
+
+        {betText && (
+          <div className="rounded-lg px-3 py-2 mb-2.5 text-[11.5px] font-bold text-center" style={{ background: "#fff7ed", color: "#c2410c", border: "1px solid #fed7aa" }}>
+            내기: {betText}
+          </div>
+        )}
 
         <div className="flex items-center justify-between mb-2.5 text-[12.5px] font-bold">
           <span style={{ color: ACCENT }}>점수 {score}</span>
           <span className="text-gray-500">{phase === "playing" || phase === "resolving" ? `남은 시간 ${secondsLeft}초` : "60초 도전"}</span>
         </div>
 
-        <div
-          className="grid gap-[3px] rounded-xl p-2 mx-auto"
-          style={{ gridTemplateColumns: `repeat(${COLS}, 1fr)`, background: "#f3f4f6", width: "100%", aspectRatio: "1 / 1", maxWidth: 380 }}
-        >
-          {board.map((v, idx) => (
-            <button
-              key={idx}
-              onClick={() => onCellClick(idx)}
-              disabled={phase !== "playing"}
-              className="rounded-full flex items-center justify-center"
-              style={{
-                background: v == null ? "transparent" : COLORS[v],
-                outline: selected === idx ? "2.5px solid #111827" : "none",
-                outlineOffset: -2,
-                transform: popping.has(idx) ? "scale(1.35)" : "scale(1)",
-                opacity: popping.has(idx) ? 0 : 1,
-                transition: "transform 220ms ease, opacity 220ms ease",
-                boxShadow: v == null ? "none" : "inset 0 -3px 4px rgba(0,0,0,0.18), inset 0 2px 3px rgba(255,255,255,0.5)",
-              }}
-            />
-          ))}
+        <div className="relative">
+          <div
+            className="grid gap-[3px] rounded-xl p-2 mx-auto"
+            style={{ gridTemplateColumns: `repeat(${COLS}, 1fr)`, background: "#f3f4f6", width: "100%", aspectRatio: "1 / 1", maxWidth: 380 }}
+          >
+            {board.map((v, idx) => {
+              const isPopping = popping.has(idx);
+              const isInvalid = invalidPair.has(idx);
+              return (
+                <button
+                  key={idx}
+                  onClick={() => onCellClick(idx)}
+                  disabled={phase !== "playing"}
+                  className="rounded-full"
+                  style={{
+                    background: v == null ? "transparent" : ballGradient(COLORS[v]),
+                    outline: isInvalid ? "2.5px solid #ef4444" : selected === idx ? "2.5px solid #111827" : "none",
+                    outlineOffset: -2,
+                    transform: isPopping ? "scale(1.9) rotate(12deg)" : isInvalid ? "scale(0.88)" : "scale(1)",
+                    opacity: isPopping ? 0 : 1,
+                    transition: isPopping ? "transform 320ms cubic-bezier(.34,1.56,.64,1), opacity 320ms ease" : "transform 160ms ease",
+                    boxShadow: v == null ? "none" : isPopping
+                      ? `0 0 16px 4px ${COLORS[v]}, inset 0 -3px 5px rgba(0,0,0,0.25), inset 0 3px 4px rgba(255,255,255,0.7)`
+                      : "0 2px 3px rgba(0,0,0,0.28), inset 0 -3px 5px rgba(0,0,0,0.28), inset 0 3px 4px rgba(255,255,255,0.75)",
+                  }}
+                />
+              );
+            })}
+          </div>
+
+          {phase === "countdown" && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-xl" style={{ background: "rgba(17,24,39,0.55)" }}>
+              <div
+                key={countdownStep}
+                className="font-extrabold text-white"
+                style={{
+                  fontSize: countdownStep === COUNTDOWN_STEPS.length - 1 ? 44 : 72,
+                  textShadow: "0 4px 18px rgba(0,0,0,0.5)",
+                  animation: "kpMatchCountdownPop 0.5s cubic-bezier(.34,1.56,.64,1)",
+                }}
+              >
+                {COUNTDOWN_STEPS[countdownStep] || ""}
+              </div>
+            </div>
+          )}
         </div>
+        <style>{`
+          @keyframes kpMatchCountdownPop {
+            0% { opacity: 0; transform: scale(0.4); }
+            60% { opacity: 1; transform: scale(1.15); }
+            100% { opacity: 1; transform: scale(1); }
+          }
+        `}</style>
 
         {phase === "ready" && (
           <button onClick={start} className="w-full mt-4 py-3 rounded-xl text-white text-[14px] font-extrabold" style={{ background: ACCENT }}>

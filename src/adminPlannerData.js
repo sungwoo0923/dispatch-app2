@@ -633,6 +633,103 @@ export const WEEKLY_MISSIONS_ADULT = [
   "오늘 밤은 시간에 쫓기지 말고 천천히, 오래 사랑을 나누기",
 ];
 
+// ⭐ "웃음 버전" — 로맨틱한 것보다 그냥 둘이 깔깔대고 웃을 수 있는 장난스러운 미션.
+export const WEEKLY_MISSIONS_FUNNY = [
+  "서로 성대모사 하나씩 해서 웃겨보기",
+  "3분 동안 아무 말 없이 웃긴 표정만으로 대화하기",
+  "상대방 흉내내며 오늘 하루 재연해보기",
+  "이상한 억양으로 사랑한다고 말해보기",
+  "말 안 하고 몸짓으로만 저녁 메뉴 설명하기",
+  "서로에게 아재개그 3개씩 던지기",
+  "눈 감고 상대방 목소리만 듣고 지금 기분 맞히기",
+  "제일 웃긴 흑역사 사진 하나씩 공개하기",
+  "즉석에서 랩으로 오늘 하루 요약해보기",
+  "상대방이 정해준 이상한 포즈로 사진 찍기",
+  "5초 안에 아무 동물 흉내 내기",
+  "서로 별명을 웃기게 새로 지어주기",
+  "말도 안 되는 이유로 서로를 칭찬해보기",
+  "웃긴 표정으로 셀카 대결하기",
+  "즉흥 콩트 1분씩 보여주기",
+  "상대방 성대모사로 '사랑해' 말하기",
+  "옛날 유행어로만 대화해보기",
+  "제일 부끄러운 춤 하나씩 춰보기",
+  "서로에게 엉뚱한 별명 붙여서 하루종일 불러보기",
+  "말 더듬는 척하며 오늘 있었던 일 설명하기",
+  "상대방 표정 따라하기 게임하기",
+  "웃음 참기 대결 — 먼저 웃는 사람이 설거지하기",
+  "제일 이상한 표정 사진 찾아서 서로 보여주기",
+  "서로 모창으로 좋아하는 가수 노래 불러주기",
+  "즉석에서 커플 은어(암호) 하나 만들기",
+  "손으로만 오늘 있었던 일 설명하고 맞히기",
+  "서로 애교 대결하기 — 더 웃긴 사람이 승리",
+  "제일 못생기게 나온 사진 찾아서 보여주기",
+  "상대방이 낸 문제로 스무고개 하기",
+  "말끝마다 '~다냥'을 붙여서 대화하기",
+  "서로 로봇 흉내내며 대화하기",
+  "웃긴 필터로 셀카 찍고 저장하기",
+  "3초 안에 아무 노래나 개사해서 부르기",
+  "상대방 성대모사로 뉴스 앵커처럼 오늘 하루 브리핑하기",
+  "제일 부끄러운 흑역사 이야기 하나씩 고백하기",
+  "서로 눈 마주치고 안 웃기 게임하기(먼저 웃는 사람이 지는 것)",
+  "이상한 나라 말투로 인사해보기",
+  "손가락 하트 대신 제일 이상한 하트 포즈 만들어보기",
+  "상대방이 좋아하는 밈으로만 대화하기",
+  "제일 웃긴 표정으로 인생네컷 찍기",
+];
+
+// ⭐ "진솔한 버전" — 장난이나 스킨십이 아니라, 서로에게 솔직해지는 깊은 대화 주제.
+export const WEEKLY_MISSIONS_HONEST = [
+  "요즘 가장 힘든 고민 솔직하게 털어놓기",
+  "서로에게 가장 고마웠던 순간 이야기하기",
+  "연애 초반과 지금, 서로에 대한 마음이 어떻게 달라졌는지 말해보기",
+  "미래에 대해 가장 걱정되는 것 솔직히 말하기",
+  "서로에게 서운했던 점 하나씩 조심스럽게 이야기하기",
+  "10년 후 우리는 어떤 모습일지 진지하게 이야기 나누기",
+  "서로의 가족에 대해 어떻게 생각하는지 솔직히 말해보기",
+  "요즘 스스로에게 가장 만족스럽지 않은 부분 이야기하기",
+  "우리 관계에서 가장 소중하게 생각하는 게 뭔지 말해보기",
+  "서로에게 바라는 점 하나씩 솔직하게 말하기",
+  "결혼·미래 계획에 대한 생각을 솔직히 나눠보기",
+  "요즘 느끼는 불안이나 두려움 이야기하기",
+  "서로를 처음 만났을 때 느낌이 어땠는지 솔직히 말해주기",
+  "돈·경제관념에 대한 생각 솔직하게 이야기하기",
+  "서로에게 가장 배우고 싶은 점 말해주기",
+  "지금 이 순간 가장 감사한 것 세 가지 나누기",
+  "우리가 함께 극복한 가장 힘들었던 순간 이야기하기",
+  "서로의 꿈·목표를 얼마나 지지하고 있는지 이야기하기",
+  "관계에서 고치고 싶은 나의 습관 하나 고백하기",
+  "서로에게 진짜 하고 싶었지만 못했던 말 해보기",
+  "부모가 되는 것에 대한 생각 솔직히 나누기",
+  "서로의 일·커리어에 대해 어떻게 생각하는지 말해보기",
+  "지금 우리 관계에서 가장 행복한 부분이 뭔지 말하기",
+  "다투고 나서 스스로 부족했다고 느낀 점 이야기하기",
+  "우리 사이에서 더 노력하고 싶은 부분 이야기하기",
+  "요즘 서로에게 소홀했던 부분이 있는지 솔직히 말하기",
+  "인생에서 가장 후회되는 선택 이야기해보기",
+  "서로에게 가장 의지가 되는 순간이 언제인지 말해주기",
+  "우리 사랑을 한 문장으로 표현해보기",
+  "지금 사랑이 처음과 어떻게 다른지 솔직히 이야기하기",
+  "서로의 콤플렉스에 대해 어떻게 생각하는지 진솔하게 말하기",
+  "우리 관계에서 바꾸고 싶은 게 있다면 솔직히 말해보기",
+  "가장 최근에 상대방 때문에 울컥했던 순간 이야기하기",
+  "10년 뒤에도 함께이고 싶은 이유 말해보기",
+  "요즘 서로에게 느끼는 거리감이 있다면 솔직히 이야기하기",
+  "특별한 날에 진짜 바라는 게 뭔지 말하기",
+  "서로를 있는 그대로 받아들이고 있는지 진솔하게 이야기하기",
+  "지금 이 사람과 함께여서 가장 좋은 이유 말해주기",
+  "서로에게 마지막으로 하고 싶은 진심 어린 한마디 남기기",
+  "오늘 이 대화를 하고 나서 드는 생각 서로 나누기",
+];
+
+// ⭐ 버전(분위기) 목록 — "버전변경" 팝업에서 고르는 선택지. random은 실제
+// 저장되는 pool이 아니라 룰렛으로 넷 중 하나를 뽑는 특수 옵션이다.
+export const MISSION_VERSIONS = [
+  { key: "normal", label: "일상 버전" },
+  { key: "funny", label: "웃음 버전" },
+  { key: "honest", label: "진솔한 버전" },
+  { key: "adult", label: "19금 버전" },
+];
+
 export const PLANNER_MISSION_CHECKS = "plannerMissionChecks";
 
 function isoWeekKey(d = new Date()) {
@@ -653,11 +750,17 @@ function hashStr(s) {
   return Math.abs(h);
 }
 
+const MISSION_POOL_MAP = {
+  normal: WEEKLY_MISSIONS,
+  funny: WEEKLY_MISSIONS_FUNNY,
+  honest: WEEKLY_MISSIONS_HONEST,
+  adult: WEEKLY_MISSIONS_ADULT,
+};
 function missionPoolFor(pool) {
-  return pool === "adult" ? WEEKLY_MISSIONS_ADULT : WEEKLY_MISSIONS;
+  return MISSION_POOL_MAP[pool] || WEEKLY_MISSIONS;
 }
 
-// 이번 주 미션 상태(문구/완료여부/성인모드 여부)를 실시간 구독한다. 문서가 아직
+// 이번 주 미션 상태(문구/완료여부/버전)를 실시간 구독한다. 문서가 아직
 // 없으면 weekKey를 시드로 한 결정적 기본 미션을 보여준다(둘 다 같은 걸 봄).
 export function useWeekMission(groupId) {
   const weekKey = isoWeekKey();
@@ -670,20 +773,23 @@ export function useWeekMission(groupId) {
     return () => unsub();
   }, [groupId, weekKey]);
 
-  const pool = state?.pool === "adult" ? "adult" : "normal";
+  const pool = MISSION_POOL_MAP[state?.pool] ? state.pool : "normal";
   const list = missionPoolFor(pool);
   const index = Number.isInteger(state?.missionIndex) ? state.missionIndex : hashStr(weekKey) % list.length;
   const text = list[index] || list[0];
 
-  return { weekKey, text, pool, index, done: !!state?.done, doneByName: state?.doneByName || "" };
+  return {
+    weekKey, text, pool, index, done: !!state?.done, doneByName: state?.doneByName || "",
+    versionChanged: !!state?.versionChanged, versionChangedBy: state?.versionChangedBy || "",
+    pickedRandom: !!state?.pickedRandom,
+  };
 }
 
-// 새로고침 — 같은 주 안에서 다른 미션으로 무작위 교체(완료 여부는 초기화).
+// 새로고침("다른 미션") — 같은 주, 같은 버전 안에서 다른 미션으로 무작위 교체
+// (버전 자체는 안 바뀌므로 주 1회 제한과 무관하게 언제든 할 수 있다).
 export async function rerollWeekMission(groupId, weekKey, pool, currentIndex) {
   const list = missionPoolFor(pool);
   let index = Math.floor(Math.random() * list.length);
-  // 방금 본 것과 똑같은 게 다시 나오면 새로고침한 느낌이 안 나니, 목록이 2개
-  // 이상이면 현재 인덱스와 겹치지 않을 때까지 다시 뽑는다.
   if (list.length > 1 && Number.isInteger(currentIndex)) {
     while (index === currentIndex) index = Math.floor(Math.random() * list.length);
   }
@@ -692,9 +798,29 @@ export async function rerollWeekMission(groupId, weekKey, pool, currentIndex) {
   }, { merge: true });
 }
 
-// 성인 모드 on/off — 바뀌는 즉시 그 모드의 미션으로 새로 하나 뽑아준다.
-export async function setWeekMissionPool(groupId, weekKey, pool) {
-  await rerollWeekMission(groupId, weekKey, pool);
+// ⭐ "버전변경"의 차례를 정한다 — 그룹을 먼저 만든 사람(가입일이 더 이른 쪽)이
+// 짝수 주, 그 다음 합류한 사람이 홀수 주. 최고관리자는 caller 쪽에서 별도로
+// 언제나 허용하므로 이 함수는 순수하게 "짝/홀 주 담당자"만 계산한다.
+export function computeMissionTurnUid(members, weekKey) {
+  const sorted = [...(members || [])].sort((a, b) => (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0));
+  if (sorted.length === 0) return null;
+  if (sorted.length === 1) return sorted[0].uid;
+  const wn = Number((weekKey || "").split("-W")[1] || 0);
+  return wn % 2 === 0 ? sorted[0].uid : sorted[1].uid;
+}
+
+// 버전(분위기) 변경 — 진짜 미션 교체(reroll)와 달리 "주 1회, 차례인 사람만"
+// 제한이 있다(호출하는 쪽에서 이미 자격을 확인했다는 전제 — allowed=false로
+// 넘어오면 여기서도 한 번 더 막는다). random으로 뽑았을 때는 룰렛이 이미
+// 정한 pool/missionIndex를 그대로 넘겨받아 저장만 한다.
+export async function setWeekMissionPool(groupId, weekKey, pool, { actorUid, missionIndex, pickedRandom = false, allowed = true } = {}) {
+  if (!allowed) throw new Error("이번 주는 버전을 바꿀 수 없어요.");
+  const list = missionPoolFor(pool);
+  const index = Number.isInteger(missionIndex) ? missionIndex : Math.floor(Math.random() * list.length);
+  await setDoc(doc(db, PLANNER_MISSION_CHECKS, `${groupId}_${weekKey}`), {
+    groupId, weekKey, pool, missionIndex: index, done: false, doneByName: "", doneAt: null,
+    versionChanged: true, versionChangedBy: actorUid || "", pickedRandom,
+  }, { merge: true });
 }
 
 export async function togglePlannerMissionDone(groupId, weekKey, done, actorName) {
@@ -887,6 +1013,33 @@ export function usePlannerGameState(groupId) {
     return () => unsub();
   }, [groupId]);
   return state || {};
+}
+
+// 내기 선택 팝업에서 고를 수 있는 항목들 — 커플이 실제로 걸어볼 만한 것 위주로
+// 최대한 다양하게 준비했다. 목록에 없으면 직접 입력도 가능하다(PlannerCategorySelect류).
+export const GAME_BET_OPTIONS = [
+  "설거지 일주일 담당하기", "저녁 메뉴 정하기 권한 넘기기", "치킨 쏘기", "커피·디저트 사주기",
+  "하루 종일 상대방 심부름 들어주기", "다음 데이트 코스 전부 맡기기", "이불 개기 한 달 담당",
+  "빨래 널고 개기 일주일 담당", "청소 한 번 통째로 맡기기", "설거지+분리수거 오늘 하루 담당",
+  "5만원 이하 갖고 싶은 거 사주기", "안마 10분 해주기", "하루종일 애교 부리기",
+  "보고 싶은 영화·드라마 결정권 넘기기", "장보기·택배 심부름 대신 해주기", "설거지 대신 해주기(1회)",
+  "다음 여행지 정하기 권한 몰아주기", "손편지 써주기", "아침밥 일주일 차려주기",
+  "사진 찍을 때 원하는 포즈 다 해주기(1일)", "듣고 싶은 노래 신청하면 불러주기",
+  "하루 종일 존댓말 쓰기", "다음 정주행 컨텐츠 결정권 넘기기", "설거지+요리 오늘 하루 다 맡기기",
+  "SNS에 애정표현 게시물 하나 올리기", "원하는 코스요리 사주기", "차 태워다주기(원하는 곳, 1회)",
+  "핸드폰 배경화면 원하는 사진으로 바꾸기(1주일)", "설거지 대신+커피 사주기", "다음 주말 계획 전부 맡기기",
+  "머리 감겨주기", "발 마사지 해주기", "다음에 싸우면 무조건 먼저 화해하기",
+  "포옹·뽀뽀 무제한 요청권(1일)", "다음 게임 한 번 봐주기", "설거지+청소기 돌리기 오늘 담당",
+  "듣고 싶은 칭찬 5개 해주기", "치킨·피자 등 야식 쏘기", "노래방 가서 원하는 노래 다 불러주기",
+  "다음 커플사진 원하는 컨셉대로 찍기",
+];
+
+// ⭐ 미니게임을 시작하기 전에 "무슨 내기를 할지" 정해두는 기능 — plannerGameState
+// 문서의 bet 필드에 저장해서 둘 다 실시간으로 같은 내기를 본다.
+export async function setPlannerGameBet(groupId, text, uid, name) {
+  await setDoc(doc(db, PLANNER_GAME_STATE, groupId), {
+    bet: { text, setByUid: uid, setByName: name || "", setAt: serverTimestamp() },
+  }, { merge: true });
 }
 
 export function usePlannerGameScores(groupId) {

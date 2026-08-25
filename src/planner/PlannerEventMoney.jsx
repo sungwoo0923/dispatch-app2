@@ -376,7 +376,6 @@ export default function PlannerEventMoney({ account }) {
           <span className="text-[11px] text-gray-400 shrink-0">부터</span>
           <YMSelect value={range.endYear} onChange={(v) => setRange((r) => ({ ...r, endYear: v }))} options={YEAR_OPTIONS} suffix="년" />
           <YMSelect value={range.endMonth} onChange={(v) => setRange((r) => ({ ...r, endMonth: v }))} options={MONTH_OPTIONS} suffix="월" />
-          <span className="text-[11px] text-gray-400 shrink-0">까지</span>
           {!isDefaultRange && (
             <button onClick={() => setRange({ startYear: nowY, startMonth: 1, endYear: nowY, endMonth: 12 })} className="ml-auto shrink-0 text-[11px] font-semibold" style={{ color: ACCENT }}>
               초기화
