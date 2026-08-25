@@ -151,7 +151,7 @@ export default function PlannerCycleTracker({ groupId, myUid, myGender, myName }
   if (myGender === "female") {
     return (
       <div className="space-y-4 max-w-xl">
-        <div className="text-[12px] text-gray-400">직접 입력한 기록은 나만 수정할 수 있고, 남편(배우자)은 결과만 볼 수 있어요.</div>
+        <div className="text-[12px] text-gray-400">직접 입력한 기록은 나만 수정할 수 있고, 상대방은 결과만 볼 수 있어요.</div>
         <div className="bg-white border rounded-xl p-4" style={{ borderColor: ACCENT_BORDER }}>
           <div className="grid grid-cols-1 gap-3">
             <div>
@@ -191,7 +191,7 @@ export default function PlannerCycleTracker({ groupId, myUid, myGender, myName }
 
   return (
     <div className="space-y-4 max-w-xl">
-      <div className="text-[12px] text-gray-400">배우자가 입력한 생리주기 기록을 볼 수 있어요 (입력은 할 수 없어요).</div>
+      <div className="text-[12px] text-gray-400">상대방이 입력한 생리주기 기록을 볼 수 있어요 (입력은 할 수 없어요).</div>
       {entries.length === 0 && (
         <div className="bg-white border rounded-xl py-16 text-center text-[13px] text-gray-400" style={{ borderColor: ACCENT_BORDER }}>
           아직 등록된 기록이 없습니다.

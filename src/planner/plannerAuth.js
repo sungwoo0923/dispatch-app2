@@ -200,7 +200,7 @@ export async function plannerLogout() {
 }
 
 // "새 가족 만들기" — 원하는 가족 코드를 직접 정할 수 있다(기본값은 무작위 추천
-// 코드). 배우자/가족을 초대할 때 이 코드를 알려주면 된다.
+// 코드). 상대방/가족을 초대할 때 이 코드를 알려주면 된다.
 // ⭐ role은 항상 "member"다 — "관리자 겸 개발자" 계정(tjddnqkf@naver.com) 말고는
 // 누구도 최고관리자 메뉴가 보이면 안 된다는 요구사항이라, 가족을 새로 만든
 // 사람이라고 해서 owner가 되지 않는다(예전엔 여기서 owner를 줬던 게 "새로 가입한
@@ -225,7 +225,7 @@ export async function signupCreateGroup({ email, password, name, gender, groupCo
   return { uid: user.uid, groupId: code };
 }
 
-// "코드로 참여하기" — 배우자 등 기존 가족 코드를 받은 사람이 같은 그룹에 합류한다.
+// "코드로 참여하기" — 상대방 등 기존 가족 코드를 받은 사람이 같은 그룹에 합류한다.
 export async function signupJoinGroup({ email, password, name, gender, groupCode, birthday }) {
   const code = normalizeGroupCode(groupCode);
   if (!code) throw new Error("가족 코드를 입력해 주세요.");
@@ -304,7 +304,7 @@ export async function updateGroupName(groupId, groupName) {
 
 // ⭐ "우리 이야기"(D-day/연표)에서 쓰는 관계 시작일(연애/결혼 시작일)도 가족
 // 이름과 같은 이유로 구성원 전체 문서에 동일하게 반영한다 — 한쪽에서 정하면
-// 배우자 화면에도 똑같은 D-day가 보여야 하니까.
+// 상대방 화면에도 똑같은 D-day가 보여야 하니까.
 export async function updateCoupleStartDate(groupId, coupleStartDate) {
   const q = query(collection(db, PLANNER_ACCOUNTS), where("groupId", "==", groupId));
   const snap = await getDocs(q);

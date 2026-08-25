@@ -64,7 +64,7 @@ function DdayAndCycleBanner({ groupId, myUid, myGender, myName, coupleStartDate 
             className="w-full px-4 py-2.5 flex items-center justify-between text-left"
             style={{ borderTop: coupleStartDate ? "1px solid rgba(255,255,255,0.2)" : "none" }}
           >
-            <span className="text-[12px] font-semibold text-white/85">{femaleWithCycle.member.name || "배우자"}님 생리 예정일</span>
+            <span className="text-[12px] font-semibold text-white/85">{femaleWithCycle.member.name || "상대방"}님 생리 예정일</span>
             <span className="text-[12.5px] font-bold text-white">{femaleWithCycle.info?.nextPeriodStart}{periodDday ? ` · ${periodDday}` : ""}</span>
           </button>
         )}
@@ -122,7 +122,7 @@ function MoodCheckin({ groupId, myUid, myName }) {
       </div>
       {others.length > 0 && (
         <div className="mt-1.5 text-[11px] text-gray-500 truncate">
-          {others.map((o) => `오늘 ${o.name || "배우자"}님은 기분이 ${MOOD_OPTIONS.find((m) => m.value === o.mood)?.partnerLabel || ""}`).join(" · ")}
+          {others.map((o) => `오늘 ${o.name || "상대방"}님은 기분이 ${MOOD_OPTIONS.find((m) => m.value === o.mood)?.partnerLabel || ""}`).join(" · ")}
         </div>
       )}
     </div>
@@ -216,7 +216,7 @@ function VersionPickerModal({ groupId, weekKey, currentPool, myUid, allowed, oth
         </div>
         {!allowed && (
           <div className="text-[11px] text-red-500 mt-2 mb-1 leading-relaxed">
-            버전 변경은 매주 한 번, 번갈아가며 할 수 있어요 — 이번 주는 {otherName || "배우자"}님 차례예요.
+            버전 변경은 매주 한 번, 번갈아가며 할 수 있어요 — 이번 주는 {otherName || "상대방"}님 차례예요.
           </div>
         )}
         {mode === "pick" ? (
@@ -263,7 +263,7 @@ function WeeklyMission({ groupId, myUid, myName }) {
   const other = members.find((m) => m.uid !== myUid);
   const isOwner = me?.email === TOTAL_MASTER_EMAIL;
   const turnUid = computeMissionTurnUid(members, weekKey);
-  // 배우자가 아직 가입 전이면(혼자뿐이면) 항상 내 차례로 취급.
+  // 상대방이 아직 가입 전이면(혼자뿐이면) 항상 내 차례로 취급.
   const isMyTurn = members.length < 2 || myUid === turnUid;
   const allowed = isOwner || (isMyTurn && !versionChanged);
   const currentVersionLabel = MISSION_VERSIONS.find((v) => v.key === pool)?.label || "일상 버전";

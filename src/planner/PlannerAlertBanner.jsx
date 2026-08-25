@@ -1,5 +1,5 @@
 // src/planner/PlannerAlertBanner.jsx — 화면 상단에 뜨는 알림 배너.
-// (1) 배우자 생리 예정일이 3일 이내로 다가오면 남편 화면에 안내
+// (1) 상대방 생리 예정일이 3일 이내로 다가오면 여성이 아닌 쪽 화면에 안내
 // (2) 등록된 기념일이 한 달 전/일주일 전/당일에 안내
 // 둘 다 "설정 > 알림"이 꺼져 있으면 전혀 뜨지 않고, 한 번 닫으면 그날은 다시
 // 뜨지 않는다(localStorage로 오늘 날짜 기준 기억).
@@ -25,7 +25,7 @@ function daysBetween(fromStr, toStr) {
   return Math.round((b - a) / 86400000);
 }
 
-// 생리 D-2/D-1에 보여줄 가벼운 멘트 — 예민해질 수 있는 시기니 배우자가 좀 더
+// 생리 D-2/D-1에 보여줄 가벼운 멘트 — 예민해질 수 있는 시기니 상대방이 좀 더
 // 다정하게 챙겨줬으면 하는 마음을 유쾌하게 담았다.
 const CYCLE_FUN_MESSAGES = [
   (name, d) => `${name}님 생리 D-${d}! 오늘은 그냥 다 받아주는 날로 정하는 거 어때요?`,
@@ -48,7 +48,7 @@ export default function PlannerAlertBanner({ account }) {
     const today = todayStr();
     const out = [];
 
-    // 1) 생리 예정일 — 남편(=여성이 아닌 배우자) 화면에만.
+    // 1) 생리 예정일 — 여성이 아닌 상대방 화면에만.
     if (gender !== "female") {
       const females = members.filter((m) => m.gender === "female");
       females.forEach((f) => {
@@ -61,8 +61,8 @@ export default function PlannerAlertBanner({ account }) {
         const key = `cycle_${f.uid}_${d}`;
         if (isDismissed(key)) return;
         const text = d === 3
-          ? `${f.name || "배우자"}님의 생리가 3일 남았어요.`
-          : CYCLE_FUN_MESSAGES[(f.uid.length + d) % CYCLE_FUN_MESSAGES.length](f.name || "배우자", d);
+          ? `${f.name || "상대방"}님의 생리가 3일 남았어요.`
+          : CYCLE_FUN_MESSAGES[(f.uid.length + d) % CYCLE_FUN_MESSAGES.length](f.name || "상대방", d);
         out.push({ key, text });
       });
     }

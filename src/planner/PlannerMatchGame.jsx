@@ -6,7 +6,7 @@
 // 함) 거의 매번 "옮겼다가 그대로 되돌아가는" 것처럼 보이는 문제가 있었다.
 // Bejeweled/Candy Crush 등 실제 매치 게임들도 전부 3개 기준이라 그에 맞춰 낮췄다.
 // 터진 자리는 위에서 새 구슬이 랜덤으로 떨어져 채운다. 60초 동안 혼자 플레이해서
-// 점수를 내고, 배우자와는 최고 점수로 겨룬다(동시 조작 아님 — 각자 도전 후 비교).
+// 점수를 내고, 상대방과는 최고 점수로 겨룬다(동시 조작 아님 — 각자 도전 후 비교).
 // ⭐ 구슬이 납작한 동전 같다는 피드백으로 방사형 그라데이션+하이라이트로 입체감을
 // 줬고, 터질 때 진동+효과음+더 큰 임팩트를, 못 옮기는 자리를 누르면 빨간 테두리
 // +진동+경고음을 주도록 손맛을 더했다. 시작 전엔 3-2-1-START 카운트다운이 뜬다.
@@ -507,7 +507,7 @@ export default function PlannerMatchGame({
             </div>
             <div className="flex items-center justify-between text-[12px] text-gray-500 mb-3 px-1">
               <span>나 최고 {Math.max(myBest || 0, score)}</span>
-              <span>{otherName || "배우자"} 최고 {otherBest || 0}</span>
+              <span>{otherName || "상대방"} 최고 {otherBest || 0}</span>
             </div>
             {waitingForPartner ? (
               <div className="rounded-xl px-3.5 py-3 text-center" style={{ background: ACCENT_SOFT, border: `1px solid ${ACCENT_BORDER}` }}>

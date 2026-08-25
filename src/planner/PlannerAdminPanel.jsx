@@ -112,7 +112,7 @@ export default function PlannerAdminPanel({ account, onClose, onUpdated }) {
                 {saving ? "저장 중..." : savedFlash ? "저장됨" : "저장"}
               </button>
             </div>
-            <div style={{ fontSize: 11.5, color: "#6b7280" }}>가족 코드: <b style={{ color: "#4b4b55" }}>{account.groupId}</b> (배우자 초대용, 변경 불가)</div>
+            <div style={{ fontSize: 11.5, color: "#6b7280" }}>가족 코드: <b style={{ color: "#4b4b55" }}>{account.groupId}</b> (상대방 초대용, 변경 불가)</div>
           </Section>
 
           <Section title={`구성원 (${members.length}명)`}>

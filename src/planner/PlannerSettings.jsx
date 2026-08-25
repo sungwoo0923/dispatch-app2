@@ -25,12 +25,12 @@ function Toggle({ on, onChange }) {
 // 즉시 띄워준다 — 실데이터를 건드리지 않는 순수 미리보기용이라 최고관리자가
 // 언제든 안전하게 눌러볼 수 있다.
 const NOTIF_PREVIEWS = [
-  { key: "cycle_d3", label: "생리 예정일 D-3 알림", kind: "banner", text: "배우자님의 생리가 3일 남았어요." },
-  { key: "cycle_fun", label: "생리 예정일 D-2·D-1 (다정 멘트)", kind: "banner", text: "배우자님 생리 D-2! 오늘은 그냥 다 받아주는 날로 정하는 거 어때요?" },
+  { key: "cycle_d3", label: "생리 예정일 D-3 알림", kind: "banner", text: "상대방님의 생리가 3일 남았어요." },
+  { key: "cycle_fun", label: "생리 예정일 D-2·D-1 (다정 멘트)", kind: "banner", text: "상대방님 생리 D-2! 오늘은 그냥 다 받아주는 날로 정하는 거 어때요?" },
   { key: "anniv_30", label: "기념일 D-30 알림", kind: "banner", text: "\"사랑한지 100일\"이(가) 한 달 뒤예요." },
   { key: "anniv_7", label: "기념일 D-7 알림", kind: "banner", text: "\"사랑한지 100일\"이(가) 일주일 뒤예요." },
   { key: "anniv_0", label: "기념일 당일(D-0) 알림", kind: "banner", text: "\"사랑한지 100일\"이(가) 오늘이에요." },
-  { key: "mood", label: "오늘의 기분 변경 알림(토스트)", kind: "toast", text: "오늘 배우자님은 기분이 매우 좋습니다" },
+  { key: "mood", label: "오늘의 기분 변경 알림(토스트)", kind: "toast", text: "오늘 상대방님은 기분이 매우 좋습니다" },
 ];
 
 function NotificationPreviewPanel() {

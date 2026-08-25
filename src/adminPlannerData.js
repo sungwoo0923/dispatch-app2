@@ -485,7 +485,7 @@ export function savingsContributedTotal(entries) {
 }
 
 // ────────────────────────────────────────────────
-// 3. 오늘의 기분 체크인 — 매일 한 번, 나/배우자가 오늘 컨디션을 가볍게 공유.
+// 3. 오늘의 기분 체크인 — 매일 한 번, 나/상대방이 오늘 컨디션을 가볍게 공유.
 // 문서 id를 "groupId_uid_date"로 고정해 하루에 한 명당 하나만 존재하게 한다.
 // ────────────────────────────────────────────────
 export const PLANNER_MOOD_CHECKS = "plannerMoodChecks";
@@ -534,7 +534,7 @@ export function usePlannerTodayMoods(groupId, date) {
   return moods;
 }
 
-// ⭐ 기분 변경 알림 — 배우자가 기분을 바꿀 때마다 하나씩 쌓이고, 화면에서 하나
+// ⭐ 기분 변경 알림 — 상대방이 기분을 바꿀 때마다 하나씩 쌓이고, 화면에서 하나
 // 보여준 뒤 consumeMoodNotification으로 지우면 큐의 다음 알림이 이어서 뜬다.
 // (한꺼번에 다 뜨지 않고 "하나 뜨고 사라졌다가 다음 것" 요청 반영.)
 export const PLANNER_MOOD_NOTIFS = "plannerMoodNotifications";
@@ -1336,12 +1336,12 @@ export function next14DayInfo(todayStrArg) {
 
 // ────────────────────────────────────────────────
 // 10. 매치 게임(구슬 터뜨리기) — 각자 60초 동안 혼자 플레이하고, 최고 점수를
-// 기록해서 배우자와 점수로 겨룬다(동시 조작이 아니라 "누가 더 잘 터뜨렸나" 비교
+// 기록해서 상대방과 점수로 겨룬다(동시 조작이 아니라 "누가 더 잘 터뜨렸나" 비교
 // 방식이라 실시간 트랜잭션 없이 내 점수만 기록하면 된다).
 // ────────────────────────────────────────────────
 // ⭐ 라운드(=지금 걸린 내기 단위) 점수도 같이 남긴다 — 둘 다 이번 라운드에 점수를
 // 남기면 그 순간 승부가 갈리고 승/패/무 전적에 반영된다. otherUid를 안 넘기면
-// (배우자가 아직 없는 등) 라운드 판정 없이 누적 기록만 남긴다.
+// (상대방이 아직 없는 등) 라운드 판정 없이 누적 기록만 남긴다.
 export async function submitMatchGameScore(groupId, uid, name, score, otherUid) {
   const scoreRef = doc(db, PLANNER_GAME_SCORES, groupId);
   const stateRef = doc(db, PLANNER_GAME_STATE, groupId);

@@ -28,9 +28,9 @@ function isSmartPhone() {
   return isPhoneUA || isSmallScreen;
 }
 
-// ⭐ 헤더에 "내 이름 · 가족 이름"이 아니라 "내 이름 · 배우자 이름"으로 보이길
+// ⭐ 헤더에 "내 이름 · 가족 이름"이 아니라 "내 이름 · 상대방 이름"으로 보이길
 // 원해서, 같은 가족 코드의 다른 구성원 이름에도 "님"을 붙여서 보여준다(아직
-// 배우자가 가입 전이라 나 혼자뿐이면 가족 이름으로 대체).
+// 상대방이 가입 전이라 나 혼자뿐이면 가족 이름으로 대체).
 function useOtherMembersLabel(account) {
   const members = useGroupMembers(account.groupId);
   const others = members.filter((m) => m.uid !== account.uid);

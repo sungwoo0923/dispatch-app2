@@ -45,14 +45,14 @@ function AddModal({ groupId, myUid, myName, onClose }) {
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div ref={modalRef} tabIndex={-1} className="relative bg-white rounded-t-2xl sm:rounded-2xl p-5 w-full sm:w-[420px] max-h-[88vh] overflow-y-auto overscroll-contain outline-none">
         <div className="text-[15px] font-extrabold text-gray-800 mb-1">타임캡슐 남기기</div>
-        <div className="text-[11.5px] text-gray-400 mb-4">정한 날짜가 되기 전까지는 배우자도 열어볼 수 없어요.</div>
+        <div className="text-[11.5px] text-gray-400 mb-4">정한 날짜가 되기 전까지는 상대방도 열어볼 수 없어요.</div>
 
         <div className="text-[11.5px] font-semibold text-gray-600 mb-1">내용</div>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={5}
-          placeholder="미래의 우리에게, 혹은 배우자에게 남기고 싶은 말을 적어보세요"
+          placeholder="미래의 우리에게, 혹은 상대방에게 남기고 싶은 말을 적어보세요"
           className="w-full border rounded-lg px-3 py-2.5 text-[13px] focus:outline-none resize-none"
           style={{ borderColor: ACCENT_BORDER }}
         />

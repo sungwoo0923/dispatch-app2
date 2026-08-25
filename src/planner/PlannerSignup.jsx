@@ -1,7 +1,7 @@
 // src/planner/PlannerSignup.jsx — KP-Planner 전용 회원가입.
 // "새 가족 만들기"(그룹 코드를 새로 만드는 사람) 또는
-// "코드로 참여하기"(배우자 등, 이미 만들어진 가족 코드로 합류) 중 선택.
-// ⭐ 배우자 초대 링크(?code=XXXXXX&joinGender=female)로 들어오면 "코드로 참여하기"
+// "코드로 참여하기"(상대방 등, 이미 만들어진 가족 코드로 합류) 중 선택.
+// ⭐ 상대방 초대 링크(?code=XXXXXX&joinGender=female)로 들어오면 "코드로 참여하기"
 // 모드로 자동 전환되고 코드가 채워지며, 성별도 자동으로 고정된다(초대한 사람이
 // 이미 자기 성별을 알고 있으니 "반대 성별"을 링크에 실어 보낸 것 — Firestore
 // 조회 없이 비로그인 상태에서도 항상 동작한다).
@@ -124,12 +124,12 @@ export default function PlannerSignup() {
             <div style={{ fontSize: 13, color: "#6e5c67", marginBottom: 8, fontWeight: 600 }}>우리 가족 코드</div>
             <div style={{ fontSize: 30, fontWeight: 900, letterSpacing: 4, color: ACCENT_DARK }}>{doneCode}</div>
             <div style={{ fontSize: 12.5, color: "#7d6a75", marginTop: 10, lineHeight: 1.6 }}>
-              이 코드를 배우자 등 함께 쓸 사람에게 알려주세요.<br />
-              아래 "배우자에게 공유하기"를 누르면 가입 링크와 코드가 한번에 전달돼요.
+              이 코드를 상대방 등 함께 쓸 사람에게 알려주세요.<br />
+              아래 "상대방에게 공유하기"를 누르면 가입 링크와 코드가 한번에 전달돼요.
             </div>
           </div>
           <button onClick={invite} disabled={sharing} style={{ ...buttonStyle, marginTop: 20 }}>
-            {sharing ? "준비 중..." : "배우자에게 공유하기"}
+            {sharing ? "준비 중..." : "상대방에게 공유하기"}
           </button>
           {shareFlash && <div style={{ fontSize: 11.5, color: "#7d6a75", marginTop: 8 }}>{shareFlash}</div>}
           <button
@@ -180,11 +180,11 @@ export default function PlannerSignup() {
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="이름" style={{ ...inputStyle, marginBottom: 12 }} />
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 12, color: "#7d6a75", marginBottom: 6, fontWeight: 600 }}>
-              성별 (화면 색상에 바로 반영돼요){genderLocked ? " — 배우자 초대로 자동 지정됨" : ""}
+              성별 (화면 색상에 바로 반영돼요){genderLocked ? " — 상대방 초대로 자동 지정됨" : ""}
             </div>
             {genderLocked ? (
               <div style={{ padding: "10px 12px", fontSize: 13, fontWeight: 700, borderRadius: 10, border: `1px solid ${ACCENT_BORDER}`, background: ACCENT_SOFT, color: ACCENT }}>
-                {gender === "male" ? "남자" : "여자"}로 가입돼요 (초대한 배우자와 반대 성별로 자동 지정)
+                {gender === "male" ? "남자" : "여자"}로 가입돼요 (초대한 상대방과 반대 성별로 자동 지정)
               </div>
             ) : (
               <div style={{ display: "flex", gap: 8 }}>
@@ -224,7 +224,7 @@ export default function PlannerSignup() {
             <>
               <input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="가족 이름 (예: 우리 가족, 선택)" style={{ ...inputStyle, marginBottom: 12 }} />
               <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 12, color: "#7d6a75", marginBottom: 6, fontWeight: 600 }}>가족 코드 (배우자 초대용, 원하는 대로 바꿀 수 있어요)</div>
+                <div style={{ fontSize: 12, color: "#7d6a75", marginBottom: 6, fontWeight: 600 }}>가족 코드 (상대방 초대용, 원하는 대로 바꿀 수 있어요)</div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <input
                     value={groupCode}

@@ -1,5 +1,5 @@
 // src/planner/PlannerMiniGames.jsx — "미니게임" 메뉴 (PC/모바일 공용).
-// 배우자와 내기를 걸고 하는 구슬 터뜨리기. 점수는 계속 누적된다.
+// 상대방과 내기를 걸고 하는 구슬 터뜨리기. 점수는 계속 누적된다.
 // ⭐ 가위바위보는 없앴고(구슬 터뜨리기만 남김), 플레이 전에 반드시 내기를 먼저
 // 정해야 시작할 수 있다. 한쪽이 먼저 플레이하면 상대가 끝날 때까지 내기 변경도,
 // 재도전도 잠긴다 — 둘 다 끝나야 결과(승/패)를 확인하고 다음 라운드로 넘어간다.
@@ -134,7 +134,7 @@ function MatchResultModal({ myName, otherName, myScore, otherScore, onClose }) {
   const maxScore = Math.max(myScore, otherScore, 1);
   const iWin = myScore > otherScore;
   const draw = myScore === otherScore;
-  const winnerLabel = draw ? "무승부!" : `${iWin ? (myName || "나") : (otherName || "배우자")}님 승리!`;
+  const winnerLabel = draw ? "무승부!" : `${iWin ? (myName || "나") : (otherName || "상대방")}님 승리!`;
 
   return (
     <div className="fixed inset-0 z-[10032] flex items-center justify-center p-4">
@@ -144,7 +144,7 @@ function MatchResultModal({ myName, otherName, myScore, otherScore, onClose }) {
         <div className="flex items-end justify-center gap-4 mb-2">
           <ResultBar label={myName || "나"} score={myScore} maxScore={maxScore} isWinner={!draw && iWin} />
           <div className="text-[14px] font-extrabold pb-16 shrink-0" style={{ color: ACCENT }}>VS</div>
-          <ResultBar label={otherName || "배우자"} score={otherScore} maxScore={maxScore} isWinner={!draw && !iWin} />
+          <ResultBar label={otherName || "상대방"} score={otherScore} maxScore={maxScore} isWinner={!draw && !iWin} />
         </div>
         <div
           className="text-[19px] font-extrabold mt-3 mb-5"
@@ -164,7 +164,7 @@ function MatchResultModal({ myName, otherName, myScore, otherScore, onClose }) {
 function MatchGameCard({ account, other, solo, scores, betText, roundScores, roundComplete, resultSeen, liveMatch, onPlay, onShowResult, onOpenBet, onSpectate, onResetStats, canChangeBet }) {
   const myGame = scores[account.uid]?.matchGame || {};
   const theirGame = other ? (scores[other.uid]?.matchGame || {}) : {};
-  // ⭐ 최고관리자가 배우자 없이 테스트할 때는(solo) 기다리거나 결과를 가릴
+  // ⭐ 최고관리자가 상대방 없이 테스트할 때는(solo) 기다리거나 결과를 가릴
   // 상대가 없으니, 라운드 잠금/블러 로직을 아예 건너뛴다.
   const myPlayed = !solo && roundScores[account.uid] != null;
   const otherPlayed = !solo && other && roundScores[other.uid] != null;
@@ -192,7 +192,7 @@ function MatchGameCard({ account, other, solo, scores, betText, roundScores, rou
             <>
               <div className="text-[17px] font-extrabold shrink-0" style={{ color: ACCENT }}>VS</div>
               <div className="flex-1 min-w-0 text-center">
-                <div className="text-[12.5px] font-extrabold text-gray-800 truncate">{other.name || "배우자"}</div>
+                <div className="text-[12.5px] font-extrabold text-gray-800 truncate">{other.name || "상대방"}</div>
                 <div className="text-[10.5px] text-gray-400 mt-0.5">최고 {theirGame.best || 0}</div>
                 <div className="text-[10px] font-bold text-gray-400 mt-0.5">{theirGame.wins || 0}승 {theirGame.losses || 0}패{theirGame.draws ? ` ${theirGame.draws}무` : ""}</div>
               </div>
@@ -258,7 +258,7 @@ export default function PlannerMiniGames({ account }) {
   const members = useGroupMembers(account.groupId);
   const other = members.find((m) => m.uid !== account.uid);
   const isOwner = account.email === TOTAL_MASTER_EMAIL;
-  // ⭐ 최고관리자는 배우자(연결 상대)가 없어도 테스트할 수 있어야 한다는 요청 —
+  // ⭐ 최고관리자는 상대방(연결 상대)이 없어도 테스트할 수 있어야 한다는 요청 —
   // 혼자서도 내기 걸고 플레이할 수 있는 solo 모드로 진행한다.
   const solo = !other && isOwner;
   const state = usePlannerGameState(account.groupId);
@@ -281,7 +281,7 @@ export default function PlannerMiniGames({ account }) {
   if (!other && !isOwner) {
     return (
       <div className="max-w-lg mx-auto text-center py-14 text-[12.5px] text-gray-400 bg-white border rounded-xl" style={{ borderColor: ACCENT_BORDER }}>
-        배우자가 아직 가입하지 않았어요. 배우자를 초대하면 미니게임을 같이 즐길 수 있어요.
+        상대방이 아직 가입하지 않았어요. 상대방을 초대하면 미니게임을 같이 즐길 수 있어요.
       </div>
     );
   }

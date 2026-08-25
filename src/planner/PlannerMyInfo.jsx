@@ -1,8 +1,8 @@
 // src/planner/PlannerMyInfo.jsx — "내정보" 메뉴 (PC/모바일 공용, 모든 구성원이 접근 가능).
 // 이름/가족 이름은 스스로 수정할 수 있다(가족 이름은 초대자·받은 사람 누구나 바꿀
 // 수 있고, 바뀌면 같은 가족 구성원 전체에 반영된다). 성별은 가입할 때 정한 값으로
-// 고정되고(화면 색상 테마와 연결돼 있어서 나중에 바꾸면 배우자와 화면이 뒤섞일 수
-// 있다), 여기서는 읽기 전용으로만 보여준다. 배우자 초대 공유와 회원 탈퇴도 여기서.
+// 고정되고(화면 색상 테마와 연결돼 있어서 나중에 바꾸면 상대방과 화면이 뒤섞일 수
+// 있다), 여기서는 읽기 전용으로만 보여준다. 상대방 초대 공유와 회원 탈퇴도 여기서.
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { updateMyProfile, updateGroupName, useGroupMembers, leavePlannerAccount, TOTAL_MASTER_EMAIL } from "./plannerAuth";
