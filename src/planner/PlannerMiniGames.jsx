@@ -7,7 +7,7 @@ import React, { useEffect, useState } from "react";
 import {
   usePlannerGameState, usePlannerGameScores, setPlannerGameBet, GAME_BET_OPTIONS,
 } from "../adminPlannerData";
-import { useGroupMembers } from "./plannerAuth";
+import { useGroupMembers, TOTAL_MASTER_EMAIL } from "./plannerAuth";
 import PlannerMatchGame from "./PlannerMatchGame";
 import PlannerInfoTip from "./PlannerInfoTip";
 import PlannerCategorySelect from "./PlannerCategorySelect";
@@ -160,19 +160,24 @@ function MatchResultModal({ myName, otherName, myScore, otherScore, onClose }) {
 // Bejeweled/Candy Crush류 매치 퍼즐 게임 — 60초 도전제라 실시간 대전이 아니라
 // "각자 도전해서 최고 점수 겨루기" 방식. VS 카드 형태로 서로의 최고점/전적을
 // 보여주고, 라운드(같은 내기) 진행 상태에 따라 카드가 흐려지며 안내가 뜬다.
-function MatchGameCard({ account, other, scores, betText, roundScores, roundComplete, resultSeen, onPlay, onShowResult, onOpenBet, canChangeBet }) {
+function MatchGameCard({ account, other, solo, scores, betText, roundScores, roundComplete, resultSeen, onPlay, onShowResult, onOpenBet, canChangeBet }) {
   const myGame = scores[account.uid]?.matchGame || {};
-  const theirGame = scores[other.uid]?.matchGame || {};
-  const myPlayed = roundScores[account.uid] != null;
-  const otherPlayed = roundScores[other.uid] != null;
+  const theirGame = other ? (scores[other.uid]?.matchGame || {}) : {};
+  // ⭐ 최고관리자가 배우자 없이 테스트할 때는(solo) 기다리거나 결과를 가릴
+  // 상대가 없으니, 라운드 잠금/블러 로직을 아예 건너뛴다.
+  const myPlayed = !solo && roundScores[account.uid] != null;
+  const otherPlayed = !solo && other && roundScores[other.uid] != null;
   const waiting = myPlayed && !otherPlayed;
-  const showResultGate = roundComplete && !resultSeen;
+  const showResultGate = !solo && roundComplete && !resultSeen;
   const blurred = waiting || showResultGate;
 
   return (
     <div className="bg-white border rounded-2xl overflow-hidden relative" style={{ borderColor: ACCENT_BORDER }}>
       <div className={blurred ? "pointer-events-none" : ""} style={blurred ? { filter: "blur(3px)", opacity: 0.55 } : undefined}>
-        <div className="px-4 pt-3.5 pb-2 text-[13px] font-bold text-gray-700">구슬 터뜨리기</div>
+        <div className="px-4 pt-3.5 pb-2 text-[13px] font-bold text-gray-700 flex items-center justify-between">
+          <span>구슬 터뜨리기</span>
+          {solo && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: ACCENT_SOFT, color: ACCENT }}>테스트 모드(혼자 플레이)</span>}
+        </div>
 
         <div className="flex items-center justify-center gap-3 px-4 pb-3">
           <div className="flex-1 min-w-0 text-center">
@@ -180,12 +185,16 @@ function MatchGameCard({ account, other, scores, betText, roundScores, roundComp
             <div className="text-[10.5px] text-gray-400 mt-0.5">최고 {myGame.best || 0}</div>
             <div className="text-[10px] font-bold mt-0.5" style={{ color: ACCENT }}>{myGame.wins || 0}승 {myGame.losses || 0}패{myGame.draws ? ` ${myGame.draws}무` : ""}</div>
           </div>
-          <div className="text-[17px] font-extrabold shrink-0" style={{ color: ACCENT }}>VS</div>
-          <div className="flex-1 min-w-0 text-center">
-            <div className="text-[12.5px] font-extrabold text-gray-800 truncate">{other.name || "배우자"}</div>
-            <div className="text-[10.5px] text-gray-400 mt-0.5">최고 {theirGame.best || 0}</div>
-            <div className="text-[10px] font-bold text-gray-400 mt-0.5">{theirGame.wins || 0}승 {theirGame.losses || 0}패{theirGame.draws ? ` ${theirGame.draws}무` : ""}</div>
-          </div>
+          {!solo && (
+            <>
+              <div className="text-[17px] font-extrabold shrink-0" style={{ color: ACCENT }}>VS</div>
+              <div className="flex-1 min-w-0 text-center">
+                <div className="text-[12.5px] font-extrabold text-gray-800 truncate">{other.name || "배우자"}</div>
+                <div className="text-[10.5px] text-gray-400 mt-0.5">최고 {theirGame.best || 0}</div>
+                <div className="text-[10px] font-bold text-gray-400 mt-0.5">{theirGame.wins || 0}승 {theirGame.losses || 0}패{theirGame.draws ? ` ${theirGame.draws}무` : ""}</div>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="px-4 pb-4">
@@ -234,6 +243,10 @@ function MatchGameCard({ account, other, scores, betText, roundScores, roundComp
 export default function PlannerMiniGames({ account }) {
   const members = useGroupMembers(account.groupId);
   const other = members.find((m) => m.uid !== account.uid);
+  const isOwner = account.email === TOTAL_MASTER_EMAIL;
+  // ⭐ 최고관리자는 배우자(연결 상대)가 없어도 테스트할 수 있어야 한다는 요청 —
+  // 혼자서도 내기 걸고 플레이할 수 있는 solo 모드로 진행한다.
+  const solo = !other && isOwner;
   const state = usePlannerGameState(account.groupId);
   const scores = usePlannerGameScores(account.groupId);
   const [showMatchGame, setShowMatchGame] = useState(false);
@@ -249,7 +262,7 @@ export default function PlannerMiniGames({ account }) {
   // 새 라운드(내기가 바뀌었거나 다시 시작됨)가 되면 "결과 확인함" 표시를 초기화.
   useEffect(() => { if (!roundComplete) setResultSeen(false); }, [roundComplete, round.betText]);
 
-  if (!other) {
+  if (!other && !isOwner) {
     return (
       <div className="max-w-lg mx-auto text-center py-14 text-[12.5px] text-gray-400 bg-white border rounded-xl" style={{ borderColor: ACCENT_BORDER }}>
         배우자가 아직 가입하지 않았어요. 배우자를 초대하면 미니게임을 같이 즐길 수 있어요.
@@ -257,10 +270,11 @@ export default function PlannerMiniGames({ account }) {
     );
   }
 
-  const myPlayed = roundScores[account.uid] != null;
-  const otherPlayed = roundScores[other.uid] != null;
-  // 내기 변경: 아무도 아직 안 냈거나(새 라운드 시작 전), 라운드가 완전히 끝났을 때만 가능.
-  const canChangeBet = (!myPlayed && !otherPlayed) || roundComplete;
+  const myPlayed = !solo && roundScores[account.uid] != null;
+  const otherPlayed = !solo && other && roundScores[other.uid] != null;
+  // 내기 변경: solo면 언제나 가능. 아니면 아무도 아직 안 냈거나(새 라운드 시작
+  // 전), 라운드가 완전히 끝났을 때만 가능.
+  const canChangeBet = solo || (!myPlayed && !otherPlayed) || roundComplete;
 
   return (
     <div className="max-w-lg mx-auto space-y-3">
@@ -271,7 +285,7 @@ export default function PlannerMiniGames({ account }) {
       <TodayBetBanner text={betText} />
 
       <MatchGameCard
-        account={account} other={other} scores={scores} betText={betText}
+        account={account} other={other} solo={solo} scores={scores} betText={betText}
         roundScores={roundScores} roundComplete={roundComplete} resultSeen={resultSeen}
         canChangeBet={canChangeBet}
         onPlay={() => setShowMatchGame(true)}
@@ -283,7 +297,7 @@ export default function PlannerMiniGames({ account }) {
         <BetPickerModal groupId={account.groupId} myUid={account.uid} myName={account.name} currentText={betText} onClose={() => setShowBet(false)} />
       )}
 
-      {showResult && (
+      {showResult && other && (
         <MatchResultModal
           myName={account.name} otherName={other.name}
           myScore={roundScores[account.uid] || 0} otherScore={roundScores[other.uid] || 0}
@@ -297,11 +311,11 @@ export default function PlannerMiniGames({ account }) {
           myUid={account.uid}
           myName={account.name}
           myBest={scores[account.uid]?.matchGame?.best || 0}
-          otherUid={other.uid}
-          otherName={other.name}
-          otherBest={scores[other.uid]?.matchGame?.best || 0}
+          otherUid={other?.uid}
+          otherName={other?.name}
+          otherBest={other ? (scores[other.uid]?.matchGame?.best || 0) : 0}
           betText={betText}
-          roundComplete={roundComplete}
+          roundComplete={solo ? false : roundComplete}
           onClose={() => setShowMatchGame(false)}
         />
       )}
