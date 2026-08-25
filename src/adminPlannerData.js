@@ -492,14 +492,14 @@ export const PLANNER_MOOD_CHECKS = "plannerMoodChecks";
 // ⭐ label은 본인이 고를 때 보이는 문장형 표현("오늘 너무너무 행복해요"), partnerLabel은
 // 상대방 화면에 "오늘 OOO님은 기분이 ○○○" 한 줄로 보여줄 때 붙는 서술어다.
 export const MOOD_OPTIONS = [
-  { value: "happy", label: "오늘 너무너무 행복해요", partnerLabel: "매우 좋습니다" },
-  { value: "good", label: "오늘 기분이 좋아요", partnerLabel: "좋습니다" },
-  { value: "excited", label: "오늘 설레는 하루예요", partnerLabel: "설렙니다" },
-  { value: "normal", label: "오늘 그냥 그런 하루예요", partnerLabel: "그저 그렇습니다" },
-  { value: "tired", label: "오늘 조금 지쳐요", partnerLabel: "조금 지쳐 있습니다" },
-  { value: "anxious", label: "오늘 마음이 좀 불안해요", partnerLabel: "조금 불안합니다" },
-  { value: "sad", label: "오늘 조금 우울해요", partnerLabel: "조금 우울합니다" },
-  { value: "angry", label: "오늘 화가 나요", partnerLabel: "화가 나 있습니다" },
+  { value: "happy", label: "너무너무 행복해요", partnerLabel: "매우 좋습니다" },
+  { value: "good", label: "기분이 좋아요", partnerLabel: "좋습니다" },
+  { value: "excited", label: "설레는 하루예요", partnerLabel: "설렙니다" },
+  { value: "normal", label: "그냥 그런 하루예요", partnerLabel: "그저 그렇습니다" },
+  { value: "tired", label: "조금 지쳐요", partnerLabel: "조금 지쳐 있습니다" },
+  { value: "anxious", label: "마음이 좀 불안해요", partnerLabel: "조금 불안합니다" },
+  { value: "sad", label: "조금 우울해요", partnerLabel: "조금 우울합니다" },
+  { value: "angry", label: "화가 나요", partnerLabel: "화가 나 있습니다" },
 ];
 
 export async function setPlannerMood(groupId, uid, name, date, mood) {

@@ -116,7 +116,7 @@ function MoodCheckin({ groupId, myUid, myName }) {
           className="min-w-0 max-w-full border rounded-lg px-2 py-1.5 text-[11.5px] font-bold focus:outline-none bg-white"
           style={{ borderColor: ACCENT_BORDER, color: mine?.mood ? ACCENT : "#9ca3af" }}
         >
-          <option value="" disabled>오늘 기분을 골라주세요</option>
+          <option value="" disabled>기분을 골라주세요</option>
           {MOOD_OPTIONS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
         </select>
       </div>
