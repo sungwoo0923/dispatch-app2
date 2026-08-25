@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import {
   collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot,
-  query, where, serverTimestamp, setDoc, runTransaction, getDocs,
+  query, where, serverTimestamp, setDoc, runTransaction, getDocs, getDoc,
 } from "firebase/firestore";
 import { plannerDb as db } from "./planner/plannerFirebase";
 import { PLANNER_ACCOUNTS } from "./planner/plannerAuth";
@@ -1371,6 +1371,21 @@ export async function submitMatchGameScore(groupId, uid, name, score, otherUid) 
     tx.set(scoreRef, scores, { merge: true });
     tx.set(stateRef, { ...state, matchRound: nextRound }, { merge: true });
   });
+}
+
+// ⭐ 최고관리자 전용 "재시도" 버튼에서 쓴다 — 가상 파트너는 실존하지 않아서
+// 자동 응답(1.4~3.1초 지연)을 기다리지 않고 즉시 라운드를 끝내고 싶을 때,
+// 화면에 남아있는 값(닫힌 지 오래된 stale closure일 수 있음) 대신 지금 이 순간
+// Firestore에 실제로 저장된 내 점수를 다시 읽어와서 확실하게 처리한다.
+export async function resolveVirtualPartnerNow(groupId, myUid, virtualUid) {
+  const stateSnap = await getDoc(doc(db, PLANNER_GAME_STATE, groupId));
+  const round = stateSnap.exists() ? (stateSnap.data().matchRound || {}) : {};
+  if (round.settled) return; // 이미 끝난 라운드면 할 게 없다.
+  const myScore = round.scores?.[myUid];
+  if (myScore == null) throw new Error("아직 내 점수가 없어요. 먼저 플레이해 주세요.");
+  const variance = 0.55 + Math.random() * 0.9;
+  const virtualScore = Math.max(15, Math.round((myScore || 30) * variance));
+  await submitMatchGameScore(groupId, virtualUid, "가상 파트너", virtualScore, myUid);
 }
 
 // 라운드가 끝난 뒤(둘 다 플레이 완료) 다시 도전할 때 — 같은 내기로 점수만 새로

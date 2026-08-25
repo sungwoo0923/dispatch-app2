@@ -5,7 +5,7 @@
 // 재도전도 잠긴다 — 둘 다 끝나야 결과(승/패)를 확인하고 다음 라운드로 넘어간다.
 import React, { useEffect, useState } from "react";
 import {
-  usePlannerGameState, usePlannerGameScores, setPlannerGameBet, GAME_BET_OPTIONS, submitMatchGameScore,
+  usePlannerGameState, usePlannerGameScores, setPlannerGameBet, GAME_BET_OPTIONS, resolveVirtualPartnerNow,
 } from "../adminPlannerData";
 import { useGroupMembers, TOTAL_MASTER_EMAIL } from "./plannerAuth";
 import PlannerMatchGame from "./PlannerMatchGame";
@@ -161,7 +161,7 @@ function MatchResultModal({ myName, otherName, myScore, otherScore, onClose }) {
 // Bejeweled/Candy Crush류 매치 퍼즐 게임 — 60초 도전제라 실시간 대전이 아니라
 // "각자 도전해서 최고 점수 겨루기" 방식. VS 카드 형태로 서로의 최고점/전적을
 // 보여주고, 라운드(같은 내기) 진행 상태에 따라 카드가 흐려지며 안내가 뜬다.
-function MatchGameCard({ account, other, solo, scores, betText, roundScores, roundComplete, resultSeen, liveMatch, onPlay, onShowResult, onOpenBet, onSpectate, onRetryVirtual, canChangeBet }) {
+function MatchGameCard({ account, other, solo, scores, betText, roundScores, roundComplete, resultSeen, liveMatch, onPlay, onShowResult, onOpenBet, onSpectate, onRetryVirtual, retrying, canChangeBet }) {
   const myGame = scores[account.uid]?.matchGame || {};
   const theirGame = other ? (scores[other.uid]?.matchGame || {}) : {};
   // ⭐ 최고관리자가 배우자 없이 테스트할 때는(solo) 기다리거나 결과를 가릴
@@ -242,8 +242,8 @@ function MatchGameCard({ account, other, solo, scores, betText, roundScores, rou
                   응답을 기다리지 않고 바로 라운드를 끝내고 다음 테스트로 넘어갈
                   수 있게 하는 버튼. 실제 배우자와의 대전에는 뜨지 않는다. */}
               {other?.isVirtual && (
-                <button onClick={onRetryVirtual} className="text-[11px] font-bold px-3 py-1.5 rounded-full border" style={{ borderColor: ACCENT, color: ACCENT, background: "#fff" }}>
-                  재시도
+                <button onClick={onRetryVirtual} disabled={retrying} className="text-[11px] font-bold px-3 py-1.5 rounded-full border disabled:opacity-50" style={{ borderColor: ACCENT, color: ACCENT, background: "#fff" }}>
+                  {retrying ? "처리 중..." : "재시도"}
                 </button>
               )}
             </div>
@@ -275,6 +275,7 @@ export default function PlannerMiniGames({ account }) {
   const [showResult, setShowResult] = useState(false);
   const [showSpectator, setShowSpectator] = useState(false);
   const [resultSeen, setResultSeen] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   const betText = state?.bet?.text || "";
   const round = state?.matchRound || {};
@@ -302,15 +303,19 @@ export default function PlannerMiniGames({ account }) {
 
   // ⭐ 가상 파트너는 실존하지 않아서 정해진 지연(약 1.4~3.1초) 뒤에나 자동으로
   // 응답한다 — 최고관리자가 그 몇 초조차 기다리지 않고 바로 라운드를 끝내고
-  // 싶을 때 쓰는 즉시 응답 버튼.
+  // 싶을 때 쓰는 즉시 응답 버튼. 화면에 남아있는 값 대신 지금 Firestore에 실제
+  // 저장된 라운드를 다시 읽어와서 처리하고, 실패하면 이유를 바로 알려준다
+  // (예전엔 실패가 조용히 무시돼서 눌러도 아무 반응이 없는 것처럼 보였다).
   const retryVirtual = async () => {
-    if (!other?.isVirtual) return;
-    const myScore = roundScores[account.uid] || 0;
-    const variance = 0.55 + Math.random() * 0.9;
-    const virtualScore = Math.max(15, Math.round((myScore || 30) * variance));
+    if (!other?.isVirtual || retrying) return;
+    setRetrying(true);
     try {
-      await submitMatchGameScore(account.groupId, other.uid, "가상 파트너", virtualScore, account.uid);
-    } catch {}
+      await resolveVirtualPartnerNow(account.groupId, account.uid, other.uid);
+    } catch (err) {
+      alert(err?.message ? `재시도에 실패했어요 (${err.message})` : "재시도에 실패했어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setRetrying(false);
+    }
   };
 
   return (
@@ -330,6 +335,7 @@ export default function PlannerMiniGames({ account }) {
         onShowResult={() => setShowResult(true)}
         onSpectate={() => setShowSpectator(true)}
         onRetryVirtual={retryVirtual}
+        retrying={retrying}
       />
 
       {showSpectator && liveMatch && (
