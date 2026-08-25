@@ -185,7 +185,10 @@ export default function PlannerMatchGame({
     return () => {
       clearLiveMatchSnapshot(groupId).catch(() => {});
       if (shakeTimerRef.current) clearTimeout(shakeTimerRef.current);
-      if (virtualTimerRef.current) clearTimeout(virtualTimerRef.current);
+      // ⭐ 가상 파트너 응답 타이머는 여기서 지우면 안 된다 — "닫기"만 눌러도
+      // 이 컴포넌트가 곧바로 unmount되는데, 그때 같이 취소되면 가상 파트너가
+      // 영영 응답을 안 해서 대기 화면에 계속 갇히는 버그가 생긴다. 예약된
+      // Firestore 호출은 화면이 닫힌 뒤에도 그대로 실행되게 둔다.
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -5,7 +5,7 @@
 // 재도전도 잠긴다 — 둘 다 끝나야 결과(승/패)를 확인하고 다음 라운드로 넘어간다.
 import React, { useEffect, useState } from "react";
 import {
-  usePlannerGameState, usePlannerGameScores, setPlannerGameBet, GAME_BET_OPTIONS,
+  usePlannerGameState, usePlannerGameScores, setPlannerGameBet, GAME_BET_OPTIONS, submitMatchGameScore,
 } from "../adminPlannerData";
 import { useGroupMembers, TOTAL_MASTER_EMAIL } from "./plannerAuth";
 import PlannerMatchGame from "./PlannerMatchGame";
@@ -161,7 +161,7 @@ function MatchResultModal({ myName, otherName, myScore, otherScore, onClose }) {
 // Bejeweled/Candy Crush류 매치 퍼즐 게임 — 60초 도전제라 실시간 대전이 아니라
 // "각자 도전해서 최고 점수 겨루기" 방식. VS 카드 형태로 서로의 최고점/전적을
 // 보여주고, 라운드(같은 내기) 진행 상태에 따라 카드가 흐려지며 안내가 뜬다.
-function MatchGameCard({ account, other, solo, scores, betText, roundScores, roundComplete, resultSeen, liveMatch, onPlay, onShowResult, onOpenBet, onSpectate, canChangeBet }) {
+function MatchGameCard({ account, other, solo, scores, betText, roundScores, roundComplete, resultSeen, liveMatch, onPlay, onShowResult, onOpenBet, onSpectate, onRetryVirtual, canChangeBet }) {
   const myGame = scores[account.uid]?.matchGame || {};
   const theirGame = other ? (scores[other.uid]?.matchGame || {}) : {};
   // ⭐ 최고관리자가 배우자 없이 테스트할 때는(solo) 기다리거나 결과를 가릴
@@ -232,11 +232,21 @@ function MatchGameCard({ account, other, solo, scores, betText, roundScores, rou
           <div className="bg-white rounded-xl px-4 py-3 text-center shadow-lg border" style={{ borderColor: ACCENT_BORDER, maxWidth: 240 }}>
             <div className="text-[12.5px] font-bold text-gray-700">상대방이 아직 진행 중이에요</div>
             <div className="text-[11px] text-gray-400 mt-1">끝나면 결과를 확인할 수 있어요</div>
-            {canSpectate && (
-              <button onClick={onSpectate} className="mt-2.5 text-[11px] font-bold px-3 py-1.5 rounded-full text-white" style={{ background: ACCENT }}>
-                지켜보기
-              </button>
-            )}
+            <div className="flex items-center justify-center gap-1.5 mt-2.5 flex-wrap">
+              {canSpectate && (
+                <button onClick={onSpectate} className="text-[11px] font-bold px-3 py-1.5 rounded-full text-white" style={{ background: ACCENT }}>
+                  지켜보기
+                </button>
+              )}
+              {/* ⭐ 상대가 가상 파트너(실존하지 않음)일 때만 — 최고관리자가 자동
+                  응답을 기다리지 않고 바로 라운드를 끝내고 다음 테스트로 넘어갈
+                  수 있게 하는 버튼. 실제 배우자와의 대전에는 뜨지 않는다. */}
+              {other?.isVirtual && (
+                <button onClick={onRetryVirtual} className="text-[11px] font-bold px-3 py-1.5 rounded-full border" style={{ borderColor: ACCENT, color: ACCENT, background: "#fff" }}>
+                  재시도
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -290,6 +300,19 @@ export default function PlannerMiniGames({ account }) {
   // 전), 라운드가 완전히 끝났을 때만 가능.
   const canChangeBet = solo || (!myPlayed && !otherPlayed) || roundComplete;
 
+  // ⭐ 가상 파트너는 실존하지 않아서 정해진 지연(약 1.4~3.1초) 뒤에나 자동으로
+  // 응답한다 — 최고관리자가 그 몇 초조차 기다리지 않고 바로 라운드를 끝내고
+  // 싶을 때 쓰는 즉시 응답 버튼.
+  const retryVirtual = async () => {
+    if (!other?.isVirtual) return;
+    const myScore = roundScores[account.uid] || 0;
+    const variance = 0.55 + Math.random() * 0.9;
+    const virtualScore = Math.max(15, Math.round((myScore || 30) * variance));
+    try {
+      await submitMatchGameScore(account.groupId, other.uid, "가상 파트너", virtualScore, account.uid);
+    } catch {}
+  };
+
   return (
     <div className="max-w-lg mx-auto space-y-3">
       <div className="flex justify-end">
@@ -306,6 +329,7 @@ export default function PlannerMiniGames({ account }) {
         onOpenBet={() => canChangeBet && setShowBet(true)}
         onShowResult={() => setShowResult(true)}
         onSpectate={() => setShowSpectator(true)}
+        onRetryVirtual={retryVirtual}
       />
 
       {showSpectator && liveMatch && (
