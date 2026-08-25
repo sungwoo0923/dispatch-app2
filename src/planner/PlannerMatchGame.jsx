@@ -143,8 +143,23 @@ export default function PlannerMatchGame({
   const [phase, setPhase] = useState("ready"); // ready | countdown | playing | resolving | over
   const [countdownStep, setCountdownStep] = useState(0);
   const [combo, setCombo] = useState(null); // { key, chain } — 콤보 임팩트 문구
+  const [submitError, setSubmitError] = useState(""); // 점수 저장이 실패했을 때 안내
   const busyRef = useRef(false);
   const shakeTimerRef = useRef(null);
+
+  // ⭐ 예전엔 submitMatchGameScore 실패를 그냥 .catch(() => {})로 조용히
+  // 무시해서, Firestore 오류(할당량 초과 등)가 나도 사용자는 점수가 잘
+  // 저장된 줄 알고 있었다 — "이겼는데 최고점이 0으로 보인다"는 혼란의
+  // 실제 원인이었다. 이제는 실패하면 화면에 이유를 보여주고 다시 시도할
+  // 수 있게 한다.
+  const submitScore = async (finalScore) => {
+    try {
+      await submitMatchGameScore(groupId, myUid, myName, finalScore, otherUid);
+      setSubmitError("");
+    } catch (err) {
+      setSubmitError(err?.message ? `점수 저장에 실패했어요 (${err.message})` : "점수 저장에 실패했어요. 네트워크를 확인해 주세요.");
+    }
+  };
 
   // ⭐ 이미 내가 이번 라운드 점수를 냈는데 상대(otherUid)는 아직이면, 상대가
   // 끝날 때까지 "다시 하기"를 잠근다 — 안 그러면 내기 점수가 자꾸 바뀐다.
@@ -154,7 +169,7 @@ export default function PlannerMatchGame({
     if (phase !== "playing") return;
     if (secondsLeft <= 0) {
       setPhase("over");
-      submitMatchGameScore(groupId, myUid, myName, score, otherUid).catch(() => {});
+      submitScore(score);
       return;
     }
     const t = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
@@ -268,7 +283,7 @@ export default function PlannerMatchGame({
   // resolveCascade가 phase를 "playing"으로 되돌리며 중단 상태를 덮어쓰는 충돌을 막는다.
   const quit = () => {
     setPhase("over");
-    submitMatchGameScore(groupId, myUid, myName, score, otherUid).catch(() => {});
+    submitScore(score);
     clearLiveMatchSnapshot(groupId).catch(() => {});
   };
 
@@ -548,6 +563,14 @@ export default function PlannerMatchGame({
               <span>나 최고 {Math.max(myBest || 0, score)}</span>
               <span>{otherName || "상대방"} 최고 {otherBest || 0}</span>
             </div>
+            {submitError && (
+              <div className="rounded-xl px-3.5 py-2.5 mb-3 text-center bg-red-50 border border-red-200">
+                <div className="text-[11.5px] font-bold text-red-500">{submitError}</div>
+                <button onClick={() => submitScore(score)} className="mt-2 text-[11px] font-bold px-3 py-1.5 rounded-full bg-red-500 text-white">
+                  다시 저장하기
+                </button>
+              </div>
+            )}
             {waitingForPartner ? (
               <div className="rounded-xl px-3.5 py-3 text-center" style={{ background: ACCENT_SOFT, border: `1px solid ${ACCENT_BORDER}` }}>
                 <div className="text-[12px] font-bold" style={{ color: ACCENT }}>

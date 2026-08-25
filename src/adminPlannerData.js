@@ -1064,18 +1064,6 @@ export async function resetMyMatchGameStats(groupId, uid) {
   }, { merge: true });
 }
 
-// ⭐ 라운드/내기/관전 상태가 어떤 이유로든 꼬여서 "상대방이 아직 진행 중이에요"
-// 화면에 영영 갇혀버렸을 때 쓰는 비상 초기화 — 지금 걸린 내기와 이번 라운드
-// 점수, 관전용 실시간 스냅샷을 전부 지우고 "내기를 먼저 정해주세요" 상태로
-// 완전히 되돌린다. 최고점/승패 누적 전적(전적 초기화)에는 영향 없다.
-export async function resetMiniGameRound(groupId) {
-  await setDoc(doc(db, PLANNER_GAME_STATE, groupId), {
-    bet: null,
-    matchRound: { betText: "", scores: {}, settled: false },
-    liveMatch: null,
-  }, { merge: true });
-}
-
 const RPS_BEATS = { 가위: "보", 바위: "가위", 보: "바위" };
 export const RPS_CHOICES = ["가위", "바위", "보"];
 

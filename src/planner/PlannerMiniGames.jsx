@@ -5,7 +5,7 @@
 // 재도전도 잠긴다 — 둘 다 끝나야 결과(승/패)를 확인하고 다음 라운드로 넘어간다.
 import React, { useEffect, useState } from "react";
 import {
-  usePlannerGameState, usePlannerGameScores, setPlannerGameBet, GAME_BET_OPTIONS, resetMyMatchGameStats, resetMiniGameRound,
+  usePlannerGameState, usePlannerGameScores, setPlannerGameBet, GAME_BET_OPTIONS, resetMyMatchGameStats,
 } from "../adminPlannerData";
 import { useGroupMembers, TOTAL_MASTER_EMAIL } from "./plannerAuth";
 import PlannerMatchGame from "./PlannerMatchGame";
@@ -161,7 +161,7 @@ function MatchResultModal({ myName, otherName, myScore, otherScore, onClose }) {
 // Bejeweled/Candy Crush류 매치 퍼즐 게임 — 60초 도전제라 실시간 대전이 아니라
 // "각자 도전해서 최고 점수 겨루기" 방식. VS 카드 형태로 서로의 최고점/전적을
 // 보여주고, 라운드(같은 내기) 진행 상태에 따라 카드가 흐려지며 안내가 뜬다.
-function MatchGameCard({ account, other, solo, scores, betText, roundScores, roundComplete, resultSeen, liveMatch, onPlay, onShowResult, onOpenBet, onSpectate, onResetStats, onResetRound, canChangeBet }) {
+function MatchGameCard({ account, other, solo, scores, betText, roundScores, roundComplete, resultSeen, liveMatch, onPlay, onShowResult, onOpenBet, onSpectate, onResetStats, canChangeBet }) {
   const myGame = scores[account.uid]?.matchGame || {};
   const theirGame = other ? (scores[other.uid]?.matchGame || {}) : {};
   // ⭐ 최고관리자가 상대방 없이 테스트할 때는(solo) 기다리거나 결과를 가릴
@@ -233,18 +233,11 @@ function MatchGameCard({ account, other, solo, scores, betText, roundScores, rou
           <div className="bg-white rounded-xl px-4 py-3 text-center shadow-lg border" style={{ borderColor: ACCENT_BORDER, maxWidth: 240 }}>
             <div className="text-[12.5px] font-bold text-gray-700">상대방이 아직 진행 중이에요</div>
             <div className="text-[11px] text-gray-400 mt-1">끝나면 결과를 확인할 수 있어요</div>
-            <div className="flex items-center justify-center gap-1.5 mt-2.5 flex-wrap">
-              {canSpectate && (
-                <button onClick={onSpectate} className="text-[11px] font-bold px-3 py-1.5 rounded-full text-white" style={{ background: ACCENT }}>
-                  지켜보기
-                </button>
-              )}
-              {/* ⭐ 화면이 계속 이 상태로 안 풀릴 때 쓰는 비상 탈출구 — 지금 걸린
-                  내기/라운드를 통째로 지우고 "내기를 정해주세요" 상태로 되돌린다. */}
-              <button onClick={onResetRound} className="text-[11px] font-semibold px-3 py-1.5 rounded-full border text-gray-500 bg-white" style={{ borderColor: ACCENT_BORDER }}>
-                게임 초기화
+            {canSpectate && (
+              <button onClick={onSpectate} className="mt-2.5 text-[11px] font-bold px-3 py-1.5 rounded-full text-white" style={{ background: ACCENT }}>
+                지켜보기
               </button>
-            </div>
+            )}
           </div>
         </div>
       )}
@@ -256,11 +249,10 @@ function MatchGameCard({ account, other, solo, scores, betText, roundScores, rou
         </div>
       )}
 
-      {/* ⭐ 전적/게임 초기화는 라운드 진행 상태와 무관하게 "언제든" 가능해야 해서,
+      {/* ⭐ 전적 초기화는 라운드 진행 상태와 무관하게 "언제든" 가능해야 해서,
           맨 뒤에 둬서 대기/결과 오버레이보다 항상 위에서 눌리게 한다. */}
-      <div className="relative px-4 pb-3 pt-1 flex items-center justify-center gap-3">
+      <div className="relative px-4 pb-3 pt-1 text-center">
         <button onClick={onResetStats} className="text-[9.5px] text-gray-300 underline">내 전적 초기화</button>
-        {!solo && <button onClick={onResetRound} className="text-[9.5px] text-gray-300 underline">게임 초기화</button>}
       </div>
     </div>
   );
@@ -315,21 +307,6 @@ export default function PlannerMiniGames({ account }) {
     }
   };
 
-  // ⭐ 라운드/내기/관전 상태가 꼬여서 화면이 안 풀릴 때 쓰는 비상 초기화 —
-  // 지금 걸린 내기를 지우고 "내기를 먼저 정해주세요" 상태로 완전히 되돌린다.
-  const resetRound = async () => {
-    if (!confirm("지금 걸린 내기와 이번 라운드를 초기화할까요? 두 사람 모두 다시 내기를 정해야 해요.")) return;
-    try {
-      await resetMiniGameRound(account.groupId);
-      setShowMatchGame(false);
-      setShowResult(false);
-      setShowSpectator(false);
-      setResultSeen(false);
-    } catch (e) {
-      alert("초기화 중 오류가 발생했습니다: " + e.message);
-    }
-  };
-
   return (
     <div className="max-w-lg mx-auto space-y-3">
       <div className="flex justify-end">
@@ -347,7 +324,6 @@ export default function PlannerMiniGames({ account }) {
         onShowResult={() => setShowResult(true)}
         onSpectate={() => setShowSpectator(true)}
         onResetStats={resetStats}
-        onResetRound={resetRound}
       />
 
       {showSpectator && liveMatch && (
