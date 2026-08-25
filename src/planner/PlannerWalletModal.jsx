@@ -131,7 +131,7 @@ export default function PlannerWalletModal({ groupId, myName, totalIncome, total
           {wallet && (
             <div className="text-[10.5px] text-white/70 mt-1">
               기준 재산 {fmtWon(wallet.baseAssets || 0)}
-              {debtTotal > 0 && ` · 빚 -${fmtWon(debtTotal)}`}
+              {debtTotal > 0 && ` · 채무 -${fmtWon(debtTotal)}`}
               {" "}· 수입·지출 반영 {totalIncome - totalExpense >= 0 ? "+" : ""}{fmtWon(totalIncome - totalExpense)}
             </div>
           )}
@@ -163,7 +163,7 @@ export default function PlannerWalletModal({ groupId, myName, totalIncome, total
 
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <div className="text-[11.5px] font-bold text-gray-500">빚 항목 (대출금·마이너스통장 등)</div>
+            <div className="text-[11.5px] font-bold text-gray-500">우리 채무 현황 (대출금·마이너스통장 등)</div>
             {!showAddDebt && (
               <button onClick={() => setShowAddDebt(true)} className="text-[11.5px] font-bold px-2.5 py-1 rounded-full text-white" style={{ background: ACCENT }}>
                 + 추가
@@ -175,7 +175,7 @@ export default function PlannerWalletModal({ groupId, myName, totalIncome, total
 
           {debts.length === 0 ? (
             <div className="text-[11.5px] text-gray-400 text-center py-4 border rounded-xl" style={{ borderColor: ACCENT_BORDER }}>
-              등록된 빚 항목이 없어요.
+              등록된 채무 항목이 없어요.
             </div>
           ) : (
             <div className="space-y-1.5">

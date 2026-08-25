@@ -239,14 +239,41 @@ export async function signupJoinGroup({ email, password, name, gender, groupCode
   return { uid: user.uid, groupId: code };
 }
 
-// ⭐ 최고관리자(owner) 전용 관리자 메뉴에서 쓰는 헬퍼들.
+// ⭐ 최고관리자는 실제 배우자를 연동하지 않고도 "상대방이 있어야 보이는" 모든
+// 기능(커플미션 교대, 미니게임 VS/내기, 기분 알림 등)을 테스트할 수 있어야
+// 한다는 요구사항 — 관리자 혼자뿐인 그룹에는 진짜 Firestore 문서를 만들지
+// 않고, 화면단에서만 가상의 파트너 한 명을 끼워넣어 "연동된 사람이 있는
+// 상태"처럼 보이게 한다. Firestore 문서가 실제로 없는 우이드라, 이 가상
+// 파트너를 대상으로 plannerAccounts 문서를 직접 갱신/삭제하는 코드가 있다면
+// 오류가 나므로 — uid 필드로만 값을 저장하는 게임/알림류 컬렉션에는 안전하다.
+export const VIRTUAL_PARTNER_UID = "virtual-partner-test";
+function makeVirtualPartner(adminMember) {
+  const adminMillis = adminMember.createdAt?.toMillis?.() || Date.now();
+  // 관리자보다 일주일 먼저 "생성"된 것으로 잡아, 미션 교대 계산에서 관리자가
+  // 초대받은 사람 턴(홀수 주)도 확인해볼 수 있게 한다.
+  const virtualMillis = adminMillis - 7 * 24 * 3600 * 1000;
+  return {
+    uid: VIRTUAL_PARTNER_UID,
+    email: "virtual.partner@kpplanner.test",
+    name: "가상 파트너",
+    gender: adminMember.gender === "male" ? "female" : "male",
+    groupId: adminMember.groupId,
+    groupName: adminMember.groupName,
+    role: "member",
+    isVirtual: true,
+    createdAt: { toMillis: () => virtualMillis, seconds: Math.floor(virtualMillis / 1000) },
+  };
+}
+
 export function useGroupMembers(groupId) {
   const [members, setMembers] = useState([]);
   useEffect(() => {
     if (!groupId) { setMembers([]); return; }
     const q = query(collection(db, PLANNER_ACCOUNTS), where("groupId", "==", groupId));
     const unsub = onSnapshot(q, (snap) => {
-      setMembers(snap.docs.map((d) => ({ uid: d.id, ...d.data() })));
+      const list = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+      const isAdminSolo = list.length === 1 && list[0].email === TOTAL_MASTER_EMAIL;
+      setMembers(isAdminSolo ? [...list, makeVirtualPartner(list[0])] : list);
     });
     return () => unsub();
   }, [groupId]);

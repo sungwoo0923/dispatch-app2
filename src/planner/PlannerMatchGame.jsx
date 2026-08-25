@@ -10,15 +10,22 @@
 // ⭐ 구슬이 납작한 동전 같다는 피드백으로 방사형 그라데이션+하이라이트로 입체감을
 // 줬고, 터질 때 진동+효과음+더 큰 임팩트를, 못 옮기는 자리를 누르면 빨간 테두리
 // +진동+경고음을 주도록 손맛을 더했다. 시작 전엔 3-2-1-START 카운트다운이 뜬다.
+// ⭐ 선택 표시는 칙칙한 검은 테두리 대신 흰 링+컬러 글로우로, 스왑은 순간이동이
+// 아니라 슥- 밀리는 슬라이딩으로, 콤보엔 화면이 흔들리는 임팩트를 추가했다.
+// ⭐ 내기가 걸린 라운드에서는 "다시 하기"가 상대(가상 파트너 포함)가 이번
+// 라운드를 끝낼 때까지 잠긴다 — 안 그러면 먼저 끝낸 사람이 계속 재도전해서
+// 점수가 바뀌어버리는 문제가 있었다. 기다리는 동안엔 실시간으로 상대(나) 화면을
+// 보드/점수/남은시간을 저장해서, 상대가 "지켜보기"로 볼 수 있게 한다.
 import React, { useEffect, useRef, useState } from "react";
-import { submitMatchGameScore, startNewMatchRound } from "../adminPlannerData";
-import { playPopSound, playErrorSound, vibrate } from "./plannerSound";
+import { submitMatchGameScore, startNewMatchRound, updateLiveMatchSnapshot, clearLiveMatchSnapshot } from "../adminPlannerData";
+import { playPopSound, playComboSound, playErrorSound, vibrate } from "./plannerSound";
 import { ACCENT, ACCENT_SOFT, ACCENT_BORDER } from "./plannerTheme";
 
 const ROWS = 8;
 const COLS = 8;
 const GAME_SECONDS = 60;
-const COLORS = [
+const SLIDE_MS = 190; // 스왑 슬라이딩 속도 — 너무 느리지 않으면서 눈에 보이게
+export const COLORS = [
   "#ef4444", // 빨강
   "#f97316", // 주황
   "#eab308", // 노랑
@@ -35,7 +42,7 @@ function shade(hex, amt) {
   r = Math.max(0, Math.min(255, r)); g = Math.max(0, Math.min(255, g)); b = Math.max(0, Math.min(255, b));
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
 }
-function ballGradient(hex) {
+export function ballGradient(hex) {
   return `radial-gradient(circle at 32% 26%, ${shade(hex, 90)} 0%, ${hex} 48%, ${shade(hex, -55)} 100%)`;
 }
 
@@ -109,29 +116,50 @@ function isAdjacent(a, b) {
   return (ra === rb && Math.abs(ca - cb) === 1) || (ca === cb && Math.abs(ra - rb) === 1);
 }
 
+// 두 인접 칸 사이의 방향(-1/0/1) — 슬라이딩 애니메이션에서 어느 쪽으로 얼마나
+// 밀어야 하는지 계산할 때 쓴다.
+function cellDir(a, b) {
+  const ra = Math.floor(a / COLS), ca = a % COLS;
+  const rb = Math.floor(b / COLS), cb = b % COLS;
+  return { dx: cb - ca, dy: rb - ra };
+}
+
 const COUNTDOWN_STEPS = ["3", "2", "1", "START!"];
 
-export default function PlannerMatchGame({ groupId, myUid, myName, myBest, otherUid, otherName, otherBest, betText, roundComplete, onClose }) {
+export default function PlannerMatchGame({
+  groupId, myUid, myName, myBest, otherUid, otherName, otherBest, betText, roundComplete, otherIsVirtual, onClose,
+}) {
   const [board, setBoard] = useState(makeBoard);
   const [selected, setSelected] = useState(null);
   const [popping, setPopping] = useState(new Set());
   const [invalidPair, setInvalidPair] = useState(new Set());
+  const [slide, setSlide] = useState(null); // { a, b } — 슬라이딩 중인 두 칸
+  const [swapping, setSwapping] = useState(false);
+  const [shake, setShake] = useState(null); // { name, magnitude } — 화면 흔들림
   const [score, setScore] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(GAME_SECONDS);
   const [phase, setPhase] = useState("ready"); // ready | countdown | playing | resolving | over
   const [countdownStep, setCountdownStep] = useState(0);
   const [combo, setCombo] = useState(null); // { key, chain } — 콤보 임팩트 문구
   const busyRef = useRef(false);
+  const shakeTimerRef = useRef(null);
+  const virtualTimerRef = useRef(null);
+
+  // ⭐ 이미 내가 이번 라운드 점수를 냈는데 상대(otherUid)는 아직이면, 상대가
+  // 끝날 때까지 "다시 하기"를 잠근다 — 안 그러면 내기 점수가 자꾸 바뀐다.
+  const waitingForPartner = !!otherUid && !roundComplete;
 
   useEffect(() => {
     if (phase !== "playing") return;
     if (secondsLeft <= 0) {
       setPhase("over");
       submitMatchGameScore(groupId, myUid, myName, score, otherUid).catch(() => {});
+      if (otherIsVirtual && otherUid) scheduleVirtualOpponentScore(score);
       return;
     }
     const t = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, secondsLeft, groupId, myUid, myName, score, otherUid]);
 
   // 3-2-1-START 카운트다운 — 끝나면 바로 playing으로 전환.
@@ -144,6 +172,45 @@ export default function PlannerMatchGame({ groupId, myUid, myName, myBest, other
     const t = setTimeout(() => setCountdownStep((s) => s + 1), countdownStep === COUNTDOWN_STEPS.length - 1 ? 420 : 620);
     return () => clearTimeout(t);
   }, [phase, countdownStep]);
+
+  // ⭐ 플레이 중일 때만, 보드/점수/남은시간이 바뀔 때마다 실시간 스냅샷을 남겨서
+  // 상대가 "지켜보기"로 볼 수 있게 한다. 게임이 끝나거나 창을 닫으면 지운다.
+  useEffect(() => {
+    if (phase !== "playing" && phase !== "resolving") return;
+    updateLiveMatchSnapshot(groupId, myUid, myName, { board, score, secondsLeft });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [board, score, secondsLeft, phase]);
+
+  useEffect(() => {
+    return () => {
+      clearLiveMatchSnapshot(groupId).catch(() => {});
+      if (shakeTimerRef.current) clearTimeout(shakeTimerRef.current);
+      if (virtualTimerRef.current) clearTimeout(virtualTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ⭐ 상대가 "가상 파트너"(관리자 테스트용)면 실제로 응답할 사람이 없으니, 내가
+  // 끝낸 뒤 잠깐 기다렸다가(진짜 상대가 플레이하는 것처럼) 자동으로 그럴듯한
+  // 점수를 대신 채워 라운드를 완료시킨다 — 그래야 대기/결과발표/전적 UI를
+  // 관리자 혼자서도 끝까지 테스트해볼 수 있다.
+  const scheduleVirtualOpponentScore = (myScore) => {
+    if (virtualTimerRef.current) clearTimeout(virtualTimerRef.current);
+    const delay = 1400 + Math.random() * 1700;
+    virtualTimerRef.current = setTimeout(() => {
+      const variance = 0.55 + Math.random() * 0.9;
+      const virtualScore = Math.max(15, Math.round((myScore || 30) * variance));
+      submitMatchGameScore(groupId, otherUid, "가상 파트너", virtualScore, myUid).catch(() => {});
+    }, delay);
+  };
+
+  const triggerShake = (chain) => {
+    if (shakeTimerRef.current) clearTimeout(shakeTimerRef.current);
+    const name = `kpShake${Date.now()}_${Math.round(Math.random() * 1e6)}`;
+    const magnitude = Math.min(11, 3 + chain * 2.2);
+    setShake({ name, magnitude });
+    shakeTimerRef.current = setTimeout(() => setShake(null), 320);
+  };
 
   const resolveCascade = async (startBoard) => {
     busyRef.current = true;
@@ -159,7 +226,12 @@ export default function PlannerMatchGame({ groupId, myUid, myName, myBest, other
       gained += matched.size;
       setPopping(matched);
       vibrate(chain > 1 ? [25, 30, 25] : 30);
-      playPopSound(1 + (chain - 1) * 0.12);
+      if (chain > 1) {
+        playComboSound(chain);
+      } else {
+        playPopSound(1);
+      }
+      triggerShake(chain);
       // ⭐ 콤보(연쇄) 임팩트 — 한 번의 스왑으로 2연쇄 이상 터지면 화면 중앙에
       // "N COMBO!" 문구가 팍 떴다 사라진다.
       if (chain > 1) setCombo({ key: Date.now(), chain });
@@ -185,6 +257,8 @@ export default function PlannerMatchGame({ groupId, myUid, myName, myBest, other
     setSecondsLeft(GAME_SECONDS);
     setSelected(null);
     setInvalidPair(new Set());
+    setSlide(null);
+    setSwapping(false);
     setCountdownStep(0);
     setCombo(null);
     setPhase("countdown");
@@ -195,31 +269,50 @@ export default function PlannerMatchGame({ groupId, myUid, myName, myBest, other
   const quit = () => {
     setPhase("over");
     submitMatchGameScore(groupId, myUid, myName, score, otherUid).catch(() => {});
+    clearLiveMatchSnapshot(groupId).catch(() => {});
+    if (otherIsVirtual && otherUid) scheduleVirtualOpponentScore(score);
   };
 
-  const onCellClick = (idx) => {
-    if (phase !== "playing" || busyRef.current) return;
+  // 두 칸을 슬라이딩으로 서로 밀어 자리를 바꾼다 — 애니메이션이 끝난 뒤에야
+  // 실제 board 데이터를 바꾸고, 바뀐 배열을 그대로 돌려준다(같은 함수를 다시
+  // 호출하면 되돌리기 애니메이션도 된다).
+  const slideSwap = (aIdx, bIdx) => new Promise((resolve) => {
+    setSlide({ a: aIdx, b: bIdx });
+    setTimeout(() => {
+      setBoard((prev) => {
+        const next = [...prev];
+        [next[aIdx], next[bIdx]] = [next[bIdx], next[aIdx]];
+        resolve(next);
+        return next;
+      });
+      setSlide(null);
+    }, SLIDE_MS);
+  });
+
+  const onCellClick = async (idx) => {
+    if (phase !== "playing" || busyRef.current || swapping) return;
     if (selected == null) { setSelected(idx); return; }
     if (selected === idx) { setSelected(null); return; }
     if (!isAdjacent(selected, idx)) { setSelected(idx); return; }
 
-    const swapped = [...board];
-    [swapped[selected], swapped[idx]] = [swapped[idx], swapped[selected]];
-    const pair = new Set([selected, idx]);
+    const a = selected, b = idx;
     setSelected(null);
+    setSwapping(true);
+    const swapped = await slideSwap(a, b);
 
     const matched = findMatches(swapped);
     if (matched.size === 0) {
       // ⭐ 매치가 안 되는 이동 — 손맛을 위해 빨간 테두리 + 진동 + 경고음을 주고
-      // 잠깐 보여줬다가 원래대로 되돌린다.
-      setInvalidPair(pair);
+      // 슬라이딩으로 되돌린다.
+      setInvalidPair(new Set([a, b]));
       vibrate(60);
       playErrorSound();
-      setBoard(swapped);
-      setTimeout(() => { setBoard(board); setInvalidPair(new Set()); }, 220);
+      await slideSwap(a, b);
+      setInvalidPair(new Set());
+      setSwapping(false);
       return;
     }
-    setBoard(swapped);
+    setSwapping(false);
     resolveCascade(swapped);
   };
 
@@ -248,7 +341,17 @@ export default function PlannerMatchGame({ groupId, myUid, myName, myBest, other
           <span className="text-gray-500">{phase === "playing" || phase === "resolving" ? `남은 시간 ${secondsLeft}초` : "60초 도전"}</span>
         </div>
 
-        <div className="relative">
+        <div className="relative" style={{ animation: shake ? `${shake.name} 300ms ease` : undefined }}>
+          {shake && (
+            <style>{`
+              @keyframes ${shake.name} {
+                10%, 90% { transform: translate(-${shake.magnitude}px, 0); }
+                20%, 80% { transform: translate(${shake.magnitude}px, 0); }
+                30%, 50%, 70% { transform: translate(-${shake.magnitude}px, ${shake.magnitude / 2}px); }
+                40%, 60% { transform: translate(${shake.magnitude}px, -${shake.magnitude / 2}px); }
+              }
+            `}</style>
+          )}
           <div
             className="grid gap-[3px] rounded-xl p-2 mx-auto"
             style={{ gridTemplateColumns: `repeat(${COLS}, 1fr)`, background: "#f3f4f6", width: "100%", aspectRatio: "1 / 1", maxWidth: 380 }}
@@ -256,22 +359,41 @@ export default function PlannerMatchGame({ groupId, myUid, myName, myBest, other
             {board.map((v, idx) => {
               const isPopping = popping.has(idx);
               const isInvalid = invalidPair.has(idx);
+              const isSelected = selected === idx;
+              const isSliding = slide && (slide.a === idx || slide.b === idx);
+              let slideTransform = "";
+              if (isSliding) {
+                const dir = slide.a === idx ? cellDir(slide.a, slide.b) : cellDir(slide.b, slide.a);
+                slideTransform = `translate(${dir.dx * 100}%, ${dir.dy * 100}%) `;
+              }
+              const scalePart = isPopping ? "scale(1.9) rotate(12deg)" : isInvalid ? "scale(0.88)" : isSelected ? "scale(1.1)" : "scale(1)";
               return (
                 <button
                   key={idx}
                   onClick={() => onCellClick(idx)}
-                  disabled={phase !== "playing"}
+                  disabled={phase !== "playing" || swapping}
                   className="rounded-full"
                   style={{
                     background: v == null ? "transparent" : ballGradient(COLORS[v]),
-                    outline: isInvalid ? "2.5px solid #ef4444" : selected === idx ? "2.5px solid #111827" : "none",
+                    // ⭐ 선택 표시를 칙칙한 검은 테두리 대신 흰 링 + 컬러 글로우로 바꿔서
+                    // 게임다운 "광이 나는" 느낌을 주고, 잘못된 이동만 빨간 테두리로 경고한다.
+                    outline: isInvalid ? "2.5px solid #ef4444" : "none",
                     outlineOffset: -2,
-                    transform: isPopping ? "scale(1.9) rotate(12deg)" : isInvalid ? "scale(0.88)" : "scale(1)",
-                    opacity: isPopping ? 0 : 1,
-                    transition: isPopping ? "transform 320ms cubic-bezier(.34,1.56,.64,1), opacity 320ms ease" : "transform 160ms ease",
-                    boxShadow: v == null ? "none" : isPopping
+                    boxShadow: v == null ? "none" : isInvalid
+                      ? "0 2px 3px rgba(0,0,0,0.28), inset 0 -3px 5px rgba(0,0,0,0.28), inset 0 3px 4px rgba(255,255,255,0.75)"
+                      : isSelected
+                      ? `0 0 0 2.5px #fff, 0 0 15px 5px ${COLORS[v]}, inset 0 -3px 5px rgba(0,0,0,0.2), inset 0 3px 5px rgba(255,255,255,0.9)`
+                      : isPopping
                       ? `0 0 16px 4px ${COLORS[v]}, inset 0 -3px 5px rgba(0,0,0,0.25), inset 0 3px 4px rgba(255,255,255,0.7)`
                       : "0 2px 3px rgba(0,0,0,0.28), inset 0 -3px 5px rgba(0,0,0,0.28), inset 0 3px 4px rgba(255,255,255,0.75)",
+                    transform: `${slideTransform}${scalePart}`,
+                    opacity: isPopping ? 0 : 1,
+                    zIndex: isSliding ? 5 : isSelected ? 3 : 1,
+                    transition: isSliding
+                      ? `transform ${SLIDE_MS}ms ease-in-out`
+                      : isPopping
+                      ? "transform 320ms cubic-bezier(.34,1.56,.64,1), opacity 320ms ease"
+                      : "transform 160ms ease, box-shadow 160ms ease",
                   }}
                 />
               );
@@ -342,10 +464,20 @@ export default function PlannerMatchGame({ groupId, myUid, myName, myBest, other
               <span>나 최고 {Math.max(myBest || 0, score)}</span>
               <span>{otherName || "배우자"} 최고 {otherBest || 0}</span>
             </div>
-            <div className="flex gap-2">
-              <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border text-gray-600 text-[13px] font-semibold" style={{ borderColor: ACCENT_BORDER }}>닫기</button>
-              <button onClick={start} className="flex-1 py-2.5 rounded-xl text-white text-[13px] font-bold" style={{ background: ACCENT }}>다시 하기</button>
-            </div>
+            {waitingForPartner ? (
+              <div className="rounded-xl px-3.5 py-3 text-center" style={{ background: ACCENT_SOFT, border: `1px solid ${ACCENT_BORDER}` }}>
+                <div className="text-[12px] font-bold" style={{ color: ACCENT }}>
+                  {otherIsVirtual ? "가상 파트너가 플레이 중이에요..." : `${otherName || "상대방"}이 끝날 때까지 다시 하기가 잠겨요`}
+                </div>
+                <div className="text-[10.5px] text-gray-400 mt-1 leading-relaxed">내기 점수가 계속 바뀌면 안 되니까, 상대방이 끝난 뒤에 다시 도전할 수 있어요.</div>
+                <button onClick={onClose} className="w-full mt-3 py-2.5 rounded-xl border text-gray-600 text-[13px] font-semibold bg-white" style={{ borderColor: ACCENT_BORDER }}>닫기</button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border text-gray-600 text-[13px] font-semibold" style={{ borderColor: ACCENT_BORDER }}>닫기</button>
+                <button onClick={start} className="flex-1 py-2.5 rounded-xl text-white text-[13px] font-bold" style={{ background: ACCENT }}>다시 하기</button>
+              </div>
+            )}
           </div>
         )}
         {(phase === "playing" || phase === "resolving") && (

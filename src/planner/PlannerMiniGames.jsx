@@ -9,6 +9,7 @@ import {
 } from "../adminPlannerData";
 import { useGroupMembers, TOTAL_MASTER_EMAIL } from "./plannerAuth";
 import PlannerMatchGame from "./PlannerMatchGame";
+import PlannerMatchSpectator from "./PlannerMatchSpectator";
 import PlannerInfoTip from "./PlannerInfoTip";
 import PlannerCategorySelect from "./PlannerCategorySelect";
 import useBodyScrollLock from "./useBodyScrollLock";
@@ -160,7 +161,7 @@ function MatchResultModal({ myName, otherName, myScore, otherScore, onClose }) {
 // Bejeweled/Candy Crush류 매치 퍼즐 게임 — 60초 도전제라 실시간 대전이 아니라
 // "각자 도전해서 최고 점수 겨루기" 방식. VS 카드 형태로 서로의 최고점/전적을
 // 보여주고, 라운드(같은 내기) 진행 상태에 따라 카드가 흐려지며 안내가 뜬다.
-function MatchGameCard({ account, other, solo, scores, betText, roundScores, roundComplete, resultSeen, onPlay, onShowResult, onOpenBet, canChangeBet }) {
+function MatchGameCard({ account, other, solo, scores, betText, roundScores, roundComplete, resultSeen, liveMatch, onPlay, onShowResult, onOpenBet, onSpectate, canChangeBet }) {
   const myGame = scores[account.uid]?.matchGame || {};
   const theirGame = other ? (scores[other.uid]?.matchGame || {}) : {};
   // ⭐ 최고관리자가 배우자 없이 테스트할 때는(solo) 기다리거나 결과를 가릴
@@ -170,6 +171,8 @@ function MatchGameCard({ account, other, solo, scores, betText, roundScores, rou
   const waiting = myPlayed && !otherPlayed;
   const showResultGate = !solo && roundComplete && !resultSeen;
   const blurred = waiting || showResultGate;
+  // 상대가 지금 플레이 중이라는 실시간 스냅샷이 있어야 "지켜보기"를 보여준다.
+  const canSpectate = waiting && liveMatch && liveMatch.uid && liveMatch.uid !== account.uid;
 
   return (
     <div className="bg-white border rounded-2xl overflow-hidden relative" style={{ borderColor: ACCENT_BORDER }}>
@@ -189,7 +192,10 @@ function MatchGameCard({ account, other, solo, scores, betText, roundScores, rou
             <>
               <div className="text-[17px] font-extrabold shrink-0" style={{ color: ACCENT }}>VS</div>
               <div className="flex-1 min-w-0 text-center">
-                <div className="text-[12.5px] font-extrabold text-gray-800 truncate">{other.name || "배우자"}</div>
+                <div className="text-[12.5px] font-extrabold text-gray-800 truncate">
+                  {other.name || "배우자"}
+                  {other.isVirtual && <span className="ml-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full align-middle" style={{ background: ACCENT_SOFT, color: ACCENT }}>가상</span>}
+                </div>
                 <div className="text-[10.5px] text-gray-400 mt-0.5">최고 {theirGame.best || 0}</div>
                 <div className="text-[10px] font-bold text-gray-400 mt-0.5">{theirGame.wins || 0}승 {theirGame.losses || 0}패{theirGame.draws ? ` ${theirGame.draws}무` : ""}</div>
               </div>
@@ -226,6 +232,11 @@ function MatchGameCard({ account, other, solo, scores, betText, roundScores, rou
           <div className="bg-white rounded-xl px-4 py-3 text-center shadow-lg border" style={{ borderColor: ACCENT_BORDER, maxWidth: 240 }}>
             <div className="text-[12.5px] font-bold text-gray-700">상대방이 아직 진행 중이에요</div>
             <div className="text-[11px] text-gray-400 mt-1">끝나면 결과를 확인할 수 있어요</div>
+            {canSpectate && (
+              <button onClick={onSpectate} className="mt-2.5 text-[11px] font-bold px-3 py-1.5 rounded-full text-white" style={{ background: ACCENT }}>
+                지켜보기
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -252,12 +263,15 @@ export default function PlannerMiniGames({ account }) {
   const [showMatchGame, setShowMatchGame] = useState(false);
   const [showBet, setShowBet] = useState(false);
   const [showResult, setShowResult] = useState(false);
+  const [showSpectator, setShowSpectator] = useState(false);
   const [resultSeen, setResultSeen] = useState(false);
 
   const betText = state?.bet?.text || "";
   const round = state?.matchRound || {};
   const roundScores = round.scores || {};
   const roundComplete = !!round.settled;
+  const liveMatch = state?.liveMatch || null;
+  const otherIsVirtual = !!other?.isVirtual;
 
   // 새 라운드(내기가 바뀌었거나 다시 시작됨)가 되면 "결과 확인함" 표시를 초기화.
   useEffect(() => { if (!roundComplete) setResultSeen(false); }, [roundComplete, round.betText]);
@@ -286,12 +300,17 @@ export default function PlannerMiniGames({ account }) {
 
       <MatchGameCard
         account={account} other={other} solo={solo} scores={scores} betText={betText}
-        roundScores={roundScores} roundComplete={roundComplete} resultSeen={resultSeen}
+        roundScores={roundScores} roundComplete={roundComplete} resultSeen={resultSeen} liveMatch={liveMatch}
         canChangeBet={canChangeBet}
         onPlay={() => setShowMatchGame(true)}
         onOpenBet={() => canChangeBet && setShowBet(true)}
         onShowResult={() => setShowResult(true)}
+        onSpectate={() => setShowSpectator(true)}
       />
+
+      {showSpectator && liveMatch && (
+        <PlannerMatchSpectator liveMatch={liveMatch} onClose={() => setShowSpectator(false)} />
+      )}
 
       {showBet && (
         <BetPickerModal groupId={account.groupId} myUid={account.uid} myName={account.name} currentText={betText} onClose={() => setShowBet(false)} />
@@ -316,6 +335,7 @@ export default function PlannerMiniGames({ account }) {
           otherBest={other ? (scores[other.uid]?.matchGame?.best || 0) : 0}
           betText={betText}
           roundComplete={solo ? false : roundComplete}
+          otherIsVirtual={otherIsVirtual}
           onClose={() => setShowMatchGame(false)}
         />
       )}

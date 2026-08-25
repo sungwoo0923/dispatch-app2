@@ -100,10 +100,20 @@ export default function PlannerTimeline({ account, onBack, onCoupleStartDateChan
     setDraft(next);
     setSaving(true);
     try {
+      // ⭐ 예전엔 이 줄에서 오류가 나면(네트워크/그룹ID 미확정 등) 아무 안내 없이
+      // "처음 만난날을 입력하세요" 화면에 그대로 멈춰 있는 것처럼 보이는 버그가
+      // 있었다 — 실패를 사용자에게 알려주고, 성공한 부분(날짜 저장)까지 뒤엎지
+      // 않도록 기념일 동기화는 별도로 감싼다.
       await updateCoupleStartDate(account.groupId, next);
       onCoupleStartDateChange?.(next);
       setEditing(false);
-      await syncAnniversarySchedules(account.groupId, next, syncEntries);
+      try {
+        await syncAnniversarySchedules(account.groupId, next, syncEntries);
+      } catch {
+        // 기념일 자동 등록만 실패해도 시작일 저장 자체는 이미 끝났으니 무시한다.
+      }
+    } catch (err) {
+      alert(err?.message ? `저장에 실패했어요 (${err.message})` : "저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
     } finally {
       setSaving(false);
     }

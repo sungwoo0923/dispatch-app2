@@ -68,6 +68,39 @@ export function playErrorSound() {
   osc.stop(now + 0.12);
 }
 
+// 콤보(연쇄)가 이어질 때 — 기본 퐁 소리 위에 상승하는 "휘리릭" 스윕 레이어를
+// 겹쳐서 더 짜릿하고 임팩트 있게. chain이 클수록 스윕을 더 굵고 높게 쌓는다.
+export function playComboSound(chain = 2) {
+  const c = getCtx();
+  if (!c) return;
+  const now = c.currentTime;
+  const n = Math.min(chain, 6);
+
+  const sweep = c.createOscillator();
+  const sweepGain = c.createGain();
+  sweep.type = "sawtooth";
+  sweep.frequency.setValueAtTime(260 + n * 40, now);
+  sweep.frequency.exponentialRampToValueAtTime(1500 + n * 160, now + 0.16);
+  sweepGain.gain.setValueAtTime(0.0001, now);
+  sweepGain.gain.linearRampToValueAtTime(0.16 + n * 0.02, now + 0.05);
+  sweepGain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+  sweep.connect(sweepGain).connect(c.destination);
+  sweep.start(now);
+  sweep.stop(now + 0.24);
+
+  // 낮은 임팩트 "쿵" — 콤보가 커질수록 더 굵게.
+  const boom = c.createOscillator();
+  const boomGain = c.createGain();
+  boom.type = "triangle";
+  boom.frequency.setValueAtTime(90, now);
+  boom.frequency.exponentialRampToValueAtTime(40, now + 0.14);
+  boomGain.gain.setValueAtTime(0.05 + n * 0.045, now);
+  boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+  boom.connect(boomGain).connect(c.destination);
+  boom.start(now);
+  boom.stop(now + 0.2);
+}
+
 export function vibrate(pattern) {
   try { navigator.vibrate?.(pattern); } catch {}
 }

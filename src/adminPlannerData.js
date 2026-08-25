@@ -1380,3 +1380,23 @@ export async function startNewMatchRound(groupId, betText) {
     matchRound: { betText: betText || "", scores: {}, settled: false },
   }, { merge: true });
 }
+
+// ⭐ 상대가 기다리는 동안 "지켜보기"를 누르면 실시간으로 화면을 볼 수 있게,
+// 플레이 중인 사람의 보드/점수/남은시간을 짧은 주기로 같이 저장해둔다. 조작하는
+// 사람 쪽에서만 쓰고, 게임이 끝나면(닫기/시간종료) 지워서 다음 판 대기화면과
+// 안 섞이게 한다. 실패해도(오프라인 등) 게임 자체 진행에는 영향 없어야 해서
+// 에러는 조용히 무시한다.
+export async function updateLiveMatchSnapshot(groupId, uid, name, snapshot) {
+  if (!groupId) return;
+  try {
+    await setDoc(doc(db, PLANNER_GAME_STATE, groupId), {
+      liveMatch: { uid, name: name || "", ...snapshot, updatedAt: serverTimestamp() },
+    }, { merge: true });
+  } catch {}
+}
+export async function clearLiveMatchSnapshot(groupId) {
+  if (!groupId) return;
+  try {
+    await setDoc(doc(db, PLANNER_GAME_STATE, groupId), { liveMatch: null }, { merge: true });
+  } catch {}
+}
