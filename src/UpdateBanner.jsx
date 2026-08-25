@@ -2,9 +2,12 @@
 import React from "react";
 
 // 배포를 자주 하는 동안 "새 버전이 준비되었습니다" 배너가 계속 뜨는 게 번거로울 때
-// 이 값을 false로 꺼두면 배너는 안 뜨지만, 서비스워커 업데이트 자체는 그대로 백그라운드에서
-// 진행되어 다음 새로고침 시 자동으로 최신 버전이 반영된다. 다시 배너를 켜려면 true로.
-const SHOW_UPDATE_BANNER = false;
+// 이 값을 false로 꺼두면 배너는 안 뜨지만, 서비스워커 업데이트 자체는 백그라운드에서
+// 계속 준비만 된 채로 대기한다 — 정작 화면은 이미 열려있는 예전 코드로 계속 돌아가고
+// 있어서, 사용자가 직접 앱을 완전히 껐다가 다시 켜지 않는 이상 "새 버전이 안 보인다"는
+// 혼란으로 이어졌다(실제로 겪은 문제). 그래서 다시 켜둔다 — 배포마다 배너가 뜨는 게
+// 다소 번거롭더라도, 사용자가 최신 버전을 못 받는 것보다는 낫다.
+const SHOW_UPDATE_BANNER = true;
 
 // 업데이트 버튼 클릭 시 단순 새로고침만으로는, 이전에 설치된 서비스워커/캐시가
 // 새 배포와 꼬여있는 경우(구버전 SW가 새 index.html은 네트워크로 받아오면서도
@@ -72,15 +75,14 @@ export default function UpdateBanner() {
     };
   }, []);
 
-  // Auto-blink after 10s then fade away after another 3s
+  // ⭐ 예전엔 10초 뒤 깜빡이다 13초에 저절로 사라졌는데, 그 사이에 화면을 안
+  // 보고 있으면 배너를 놓치고 계속 예전 버전으로 남는 문제가 있었다 — 이제는
+  // 10초 뒤 살짝 깜빡이기만 하고, 사용자가 직접 닫거나 업데이트를 누르기
+  // 전까지는 계속 떠 있는다.
   React.useEffect(() => {
     if (!visible) return;
     const blinkTimer = setTimeout(() => setBlinking(true), 10000);
-    const fadeTimer = setTimeout(() => setVisible(false), 13000);
-    return () => {
-      clearTimeout(blinkTimer);
-      clearTimeout(fadeTimer);
-    };
+    return () => clearTimeout(blinkTimer);
   }, [visible]);
 
   if (!visible) return null;
@@ -96,15 +98,11 @@ export default function UpdateBanner() {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.25; }
         }
-        @keyframes bannerFade {
-          from { opacity: 1; }
-          to   { opacity: 0; }
-        }
         .update-banner {
           animation: bannerDown 0.4s ease-out forwards;
         }
         .update-banner-blink {
-          animation: bannerBlink 0.7s ease-in-out infinite, bannerFade 3s ease-in forwards;
+          animation: bannerBlink 1.4s ease-in-out infinite;
         }
       `}</style>
       <div
