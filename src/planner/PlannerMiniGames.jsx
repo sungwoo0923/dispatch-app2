@@ -158,6 +158,32 @@ function MatchResultModal({ myName, otherName, myScore, otherScore, onClose }) {
   );
 }
 
+// ⭐ PlannerMatchGame이 게임 시작/종료/점수 제출 시도마다 localStorage
+// ("kpMiniGameDiag")에 남기는 기록을 관리자 진단 패널에 그대로 보여준다 —
+// "제출 시도 자체가 없었는지" vs "시도했는데 실패했는지"를 구분하기 위함.
+// 이 기기 로컬 기록이라 다른 기기 값은 안 보이지만, 지금 보고 있는 바로 이
+// 화면에서 무슨 일이 있었는지는 확인할 수 있다.
+function DiagLogView() {
+  const [log, setLog] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("kpMiniGameDiag") || "[]"); } catch { return []; }
+  });
+  useEffect(() => {
+    const t = setInterval(() => {
+      try { setLog(JSON.parse(localStorage.getItem("kpMiniGameDiag") || "[]")); } catch {}
+    }, 2000);
+    return () => clearInterval(t);
+  }, []);
+  if (!log.length) return <div>이 기기의 게임 로그: (없음)</div>;
+  return (
+    <div>
+      <div>이 기기의 최근 게임 로그(최신순):</div>
+      {log.map((e, i) => (
+        <div key={i}>· {e.at?.slice(11, 19)} {e.step}{e.finalScore != null ? ` (점수 ${e.finalScore})` : ""}{e.error ? ` — ${e.error}` : ""}</div>
+      ))}
+    </div>
+  );
+}
+
 // Bejeweled/Candy Crush류 매치 퍼즐 게임 — 60초 도전제라 실시간 대전이 아니라
 // "각자 도전해서 최고 점수 겨루기" 방식. VS 카드 형태로 서로의 최고점/전적을
 // 보여주고, 라운드(같은 내기) 진행 상태에 따라 카드가 흐려지며 안내가 뜬다.
@@ -355,11 +381,13 @@ export default function PlannerMiniGames({ account }) {
           또 재현되면 이 값을 그대로 캡처해서 실제 저장된 uid/라운드 데이터를
           바로 확인할 수 있다. 일반 사용자에게는 절대 안 보인다. */}
       {isOwner && (
-        <div className="text-[9.5px] text-gray-300 bg-gray-50 border border-gray-100 rounded-lg p-2 leading-relaxed break-all">
+        <div className="text-[9.5px] text-gray-300 bg-gray-50 border border-gray-100 rounded-lg p-2 leading-relaxed break-all space-y-1">
+          <div>groupId: {account.groupId}</div>
           <div>내 uid: {account.uid}</div>
           <div>상대 uid: {other?.uid || "(없음)"}</div>
           <div>roundScores: {JSON.stringify(roundScores)}</div>
           <div>settled: {String(roundComplete)}</div>
+          <DiagLogView />
         </div>
       )}
 

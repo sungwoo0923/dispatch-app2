@@ -225,13 +225,29 @@ export default function PlannerMatchGame({
   // 무시해서, Firestore 오류(할당량 초과 등)가 나도 사용자는 점수가 잘
   // 저장된 줄 알고 있었다 — "이겼는데 최고점이 0으로 보인다"는 혼란의
   // 실제 원인이었다. 이제는 실패하면 화면에 이유를 보여주고 다시 시도할
+  // ⭐ "제출이 안 됐다"는 제보가 반복되는데, 화면의 실패 배너를 못 보고
+  // 넘어갔는지 / 애초에 제출 시도 자체가 없었는지를 구분할 수가 없었다.
+  // 그래서 시도할 때마다 이 기기의 localStorage에 그대로 기록을 남긴다 —
+  // PlannerMiniGames의 관리자 전용 진단 패널에서 이 기록을 그대로 보여준다.
+  const logDiag = (entry) => {
+    try {
+      const key = "kpMiniGameDiag";
+      const prev = JSON.parse(localStorage.getItem(key) || "[]");
+      const next = [{ at: new Date().toISOString(), groupId, myUid, otherUid, ...entry }, ...prev].slice(0, 5);
+      localStorage.setItem(key, JSON.stringify(next));
+    } catch {}
+  };
+
   // 수 있게 하고, 일시적인 오류(네트워크 순단 등)는 자동으로 몇 번 재시도한다.
   const submitScore = async (finalScore, attempt = 0) => {
+    logDiag({ step: "submitScore 호출", finalScore, attempt });
     try {
       await submitMatchGameScore(groupId, myUid, myName, finalScore, otherUid);
       setSubmitError("");
+      logDiag({ step: "저장 성공", finalScore, attempt });
     } catch (err) {
       console.error("[미니게임] 점수 저장 실패", err);
+      logDiag({ step: "저장 실패", finalScore, attempt, error: String(err?.message || err) });
       if (attempt < 2) {
         await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
         return submitScore(finalScore, attempt + 1);
@@ -245,6 +261,7 @@ export default function PlannerMatchGame({
   // 빠뜨리는 버그가 있었다. 이제는 "게임을 끝낸다"는 동작이 이 함수 하나로
   // 통일돼 있어서, 어느 경로로 끝나든 항상 점수가 제출된다.
   const endGame = (finalScore) => {
+    logDiag({ step: "endGame 호출", finalScore });
     setPhase("over");
     submitScore(finalScore);
     clearLiveMatchSnapshot(groupId).catch(() => {});
@@ -320,9 +337,13 @@ export default function PlannerMatchGame({
       const p = phaseRef.current;
       if (p === "playing" || p === "resolving") {
         const { score: lastScore } = liveSnapshotRef.current;
-        submitMatchGameScore(groupId, myUid, myName, lastScore, otherUid).catch((err) => {
-          console.error("[미니게임] 종료 시 안전 저장 실패", err);
-        });
+        logDiag({ step: "언마운트 안전 저장 시도", phase: p, finalScore: lastScore });
+        submitMatchGameScore(groupId, myUid, myName, lastScore, otherUid)
+          .then(() => logDiag({ step: "언마운트 안전 저장 성공", phase: p, finalScore: lastScore }))
+          .catch((err) => {
+            console.error("[미니게임] 종료 시 안전 저장 실패", err);
+            logDiag({ step: "언마운트 안전 저장 실패", phase: p, finalScore: lastScore, error: String(err?.message || err) });
+          });
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -426,6 +447,7 @@ export default function PlannerMatchGame({
   };
 
   const start = () => {
+    logDiag({ step: "게임 시작(시작하기 클릭)", difficulty });
     // ⭐ 라운드가 이미 끝난 뒤 다시 도전하는 경우, 예전엔 여기서 별도로
     // startNewMatchRound를 미리 호출해 라운드를 초기화했는데 — 두 사람이 거의
     // 동시에 재도전하면 그 초기화 쓰기가 상대가 방금 낸 점수를 지워버리는
