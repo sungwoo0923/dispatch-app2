@@ -198,11 +198,19 @@ function MatchGameCard({ account, other, solo, scores, betText, roundScores, rou
   // 없게 하기 위함.
   const myPlayed = !solo && roundScores[account.uid] != null;
   const otherPlayed = !solo && Object.keys(roundScores).some((k) => k !== account.uid);
-  const waiting = myPlayed && !otherPlayed;
+  // ⭐ "상대가 지금 한창 플레이 중인데도 내 화면은 계속 플레이 가능 상태"라는
+  // 제보의 실제 원인 — 예전엔 상대가 "점수를 다 내야만"(otherPlayed) 잠기는
+  // 걸로 착각했는데, 실제 요구사항은 상대가 "시작한 순간부터" 끝날 때까지
+  // 잠겨야 하는 것이었다. roundScores만으로는 "누가 지금 한창 플레이 중"인지
+  // 알 수 없어서(그건 다 끝나야 채워지는 값), 관전 기능을 위해 이미 만들어둔
+  // liveMatch(실시간 스냅샷)를 잠금 판정에도 같이 쓴다.
+  const otherIsLive = !solo && !!(liveMatch && liveMatch.uid && other && liveMatch.uid === other.uid);
+  const waiting = (myPlayed && !otherPlayed) || (otherIsLive && !myPlayed);
   const showResultGate = !solo && roundComplete && !resultSeen;
   const blurred = waiting || showResultGate;
-  // 상대가 지금 플레이 중이라는 실시간 스냅샷이 있어야 "지켜보기"를 보여준다.
-  const canSpectate = waiting && liveMatch && liveMatch.uid && liveMatch.uid !== account.uid;
+  // 상대가 지금 플레이 중이라는 실시간 스냅샷이 있으면 언제든(내가 아직
+  // 플레이하기 전이어도) "지켜보기"를 보여준다.
+  const canSpectate = otherIsLive;
 
   return (
     <div className="bg-white border rounded-2xl overflow-hidden relative" style={{ borderColor: ACCENT_BORDER }}>
@@ -326,9 +334,10 @@ export default function PlannerMiniGames({ account }) {
 
   const myPlayed = !solo && roundScores[account.uid] != null;
   const otherPlayed = !solo && Object.keys(roundScores).some((k) => k !== account.uid);
-  // 내기 변경: solo면 언제나 가능. 아니면 아무도 아직 안 냈거나(새 라운드 시작
-  // 전), 라운드가 완전히 끝났을 때만 가능.
-  const canChangeBet = solo || (!myPlayed && !otherPlayed) || roundComplete;
+  const otherIsLive = !solo && !!(liveMatch && liveMatch.uid && other && liveMatch.uid === other.uid);
+  // 내기 변경: solo면 언제나 가능. 아니면 아무도 아직 안 냈고 상대가 지금 한창
+  // 플레이 중도 아닐 때(새 라운드 시작 전), 또는 라운드가 완전히 끝났을 때만 가능.
+  const canChangeBet = solo || (!myPlayed && !otherPlayed && !otherIsLive) || roundComplete;
 
   // ⭐ 누적 점수(최고점/승패)는 계속 쌓이는 게 기본이지만, 원하면 언제든 내
   // 전적만 초기화할 수 있게 한다 — 진행 중인 라운드/내기와는 무관.
@@ -387,6 +396,8 @@ export default function PlannerMiniGames({ account }) {
           <div>상대 uid: {other?.uid || "(없음)"}</div>
           <div>roundScores: {JSON.stringify(roundScores)}</div>
           <div>settled: {String(roundComplete)}</div>
+          <div>liveMatch: {JSON.stringify(liveMatch ? { uid: liveMatch.uid, score: liveMatch.score, secondsLeft: liveMatch.secondsLeft } : null)}</div>
+          <div>otherIsLive: {String(otherIsLive)}</div>
           <DiagLogView />
         </div>
       )}
