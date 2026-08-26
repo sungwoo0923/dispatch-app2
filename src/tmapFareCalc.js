@@ -27,22 +27,98 @@ export const VEHICLE_TYPES = [
 
 const DEFAULT_VEHICLE = VEHICLE_TYPES.find(v => v.id === "1ton");
 
-// "5톤 냉동윙", "3.5톤(광폭)" 같은 자유 입력 텍스트에서 가장 근접한 요율 항목을 찾는다.
-export function matchVehicleType(vehicleText = "", tonText = "") {
+// ⭐ "820kg", "1.5톤", "800g", "5t" 등 단위가 섞인 톤수 텍스트를 항상 "톤" 단위
+// 숫자로 정규화한다. 예전엔 숫자만 남기고 단위를 통째로 버려서("820kg"도 그냥
+// 820으로 취급) 820kg(0.82톤)짜리 소형 화물이 가장 가까운 톤급을 찾다가 25톤
+// 트레일러 요금으로 잡혀버리는 심각한 오류가 있었다(11km인데 24만~33만원으로
+// 나오던 원인). DispatchApp.jsx의 toTonUnit과 동일한 파싱 규칙을 쓴다.
+function parseTonValue(text = "") {
+  const str = String(text || "").trim();
+  const m = str.match(/([\d.]+)\s*(kg|g|톤|ton|t)?/i);
+  if (!m) return null;
+  const num = parseFloat(m[1]);
+  if (isNaN(num) || num <= 0) return null;
+  const unit = (m[2] || "톤").toLowerCase();
+  if (unit === "kg") return num / 1000;
+  if (unit === "g") return num / 1000000;
+  return num; // 톤 / ton / t
+}
+
+// ⭐ 키워드가 텍스트 안에 있어도, 바로 앞이 숫자면(=더 큰 숫자의 뒷부분과 우연히
+// 겹친 것) 매칭으로 인정하지 않는다. 예전엔 단순 text.includes(keyword)라서
+// "11톤"을 입력해도 "1톤"(1ton) 키워드가 그 안에 그대로 들어있어(1[1톤]) 항상
+// 1톤 요금으로 먼저 잡혀버렸다("25톤"도 "5톤"에 걸려 5톤 요금으로 잡히는 등,
+// 숫자가 겹치는 모든 차종에서 발생하던 문제) — 실제로는 절대 원하는 동작이
+// 아니므로, 숫자 키워드 앞에 다른 숫자가 붙어있으면 무시하도록 경계를 둔다.
+function keywordMatches(text, keyword) {
+  const idx = text.indexOf(keyword);
+  if (idx === -1) return false;
+  const prevChar = text[idx - 1];
+  if (prevChar && /[0-9.]/.test(prevChar)) return false;
+  return true;
+}
+
+// 화물내용 텍스트에서 파레트 수량을 추출한다 ("5파레트", "10파렛트", "10 pallet" 등 —
+// DispatchApp.jsx 화물내용 입력이 "{숫자}{화물타입}" 형태로 저장되는 것과 동일한 형식).
+function extractPalletCount(cargoText = "") {
+  const m = String(cargoText || "").match(/(\d+)\s*(?:파레트|파렛트|팔레트|pallet|plt)/i);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+// ⭐ 파레트 수량 → 대략적인 필요 차량 톤급 근사표. 표준 파레트(1100×1100mm) 적재
+// 기준의 업계 통상치를 참고한 근사값이라 실제 화물 부피/중량에 따라 달라질 수
+// 있다 — 톤수/차종이 명확하지 않을 때 화물량에 맞는 최소 차량 크기를 가늠하는
+// 용도로만 쓰고, 아래 matchVehicleType에서 실제 선택된 톤수보다 작게는 절대
+// 쓰지 않는다(파레트 수가 많으면 더 큰 차량 쪽으로만 보정).
+const PALLET_VEHICLE_STEPS = [
+  { maxPallet: 2, id: "1ton" },
+  { maxPallet: 4, id: "1.4ton" },
+  { maxPallet: 6, id: "2.5ton" },
+  { maxPallet: 9, id: "3.5ton" },
+  { maxPallet: 12, id: "5ton" },
+  { maxPallet: 16, id: "5tonAx" },
+  { maxPallet: 20, id: "11ton" },
+  { maxPallet: 28, id: "18ton" },
+  { maxPallet: Infinity, id: "25ton" },
+];
+function vehicleFromPalletCount(count) {
+  const step = PALLET_VEHICLE_STEPS.find(s => count <= s.maxPallet);
+  return VEHICLE_TYPES.find(v => v.id === (step || PALLET_VEHICLE_STEPS.at(-1)).id) || null;
+}
+
+// "5톤 냉동윙", "3.5톤(광폭)" 같은 자유 입력 텍스트 + 톤수 + 화물내용(파레트 수량)을
+// 종합해 가장 적합한 요율 항목을 찾는다.
+//  1) 차종/톤수 텍스트에 명시적인 톤급 키워드가 있으면 최우선으로 신뢰한다.
+//  2) 톤수가 숫자로 들어온 경우(kg/g/톤 단위 모두 지원) 가장 가까운 톤급으로 매칭.
+//  3) 화물내용에서 읽은 파레트 수량이, 위에서 찾은 차량으로는 다 못 실을 만큼
+//     크면(예: 같은 조건인데 5파레트 vs 10파레트) 더 큰 차량 쪽으로 끌어올린다 —
+//     화물량이 차량 크기보다 작은 쪽으로는 절대 보정하지 않는다(운임 과소추정 방지).
+export function matchVehicleType(vehicleText = "", tonText = "", cargoText = "") {
   const text = `${vehicleText} ${tonText}`;
-  for (const v of VEHICLE_TYPES) {
-    if (v.keywords.some(k => text.includes(k))) return v;
-  }
-  // 톤수만 숫자로 들어온 경우 (예: "5", "5t") 가장 가까운 톤급으로 폴백
-  const num = parseFloat(String(tonText || vehicleText).replace(/[^0-9.]/g, ""));
-  if (!isNaN(num) && num > 0) {
-    const byTon = [...VEHICLE_TYPES].filter(v => /ton/i.test(v.id)).sort((a, b) => {
+  const byKeyword = VEHICLE_TYPES.find(v => v.keywords.some(k => keywordMatches(text, k)));
+
+  const tonNum = parseTonValue(tonText) ?? parseTonValue(vehicleText);
+  let byTon = null;
+  if (tonNum != null) {
+    const sorted = [...VEHICLE_TYPES].filter(v => /ton/i.test(v.id)).sort((a, b) => {
       const an = parseFloat(a.id) || 0, bn = parseFloat(b.id) || 0;
-      return Math.abs(an - num) - Math.abs(bn - num);
+      return Math.abs(an - tonNum) - Math.abs(bn - tonNum);
     });
-    if (byTon[0]) return byTon[0];
+    byTon = sorted[0] || null;
   }
-  return DEFAULT_VEHICLE;
+
+  const base = byKeyword || byTon || null;
+
+  const palletCount = extractPalletCount(cargoText);
+  const byPallet = palletCount != null ? vehicleFromPalletCount(palletCount) : null;
+
+  if (base && byPallet) {
+    // min(최소운임)을 차량 크기의 대리 지표로 써서, 파레트 기준 차량이 더 크면 그쪽을 쓴다.
+    return byPallet.min > base.min ? byPallet : base;
+  }
+  return base || byPallet || DEFAULT_VEHICLE;
 }
 
 export function haversineKm(la1, lo1, la2, lo2) {
@@ -101,7 +177,7 @@ export async function estimateDistanceFare({ pickupAddr, dropAddr, vehicleText, 
   if (!from || !to) return null;
 
   const roadDist = Math.round(haversineKm(from.lat, from.lon, to.lat, to.lon) * 1.25);
-  const vt = matchVehicleType(vehicleText, tonText) || DEFAULT_VEHICLE;
+  const vt = matchVehicleType(vehicleText, tonText, cargoText) || DEFAULT_VEHICLE;
   const base = vt.base + vt.perKm * roadDist;
   const surcharged = Math.max(vt.min, base) * (1 + cargoSurcharge(cargoText));
   const avg = Math.round(surcharged / 5000) * 5000;
