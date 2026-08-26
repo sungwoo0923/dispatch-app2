@@ -15421,6 +15421,12 @@ className={`
     tabIndex={-1}
     ref={(el) => { if (el && editingContactIdx === null && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
     onKeyDown={(e) => {
+      // ⭐ 담당자 이름/전화번호를 인라인 수정 중일 때는 이 컨테이너 레벨의
+      // 방향키 이동/검색창 자동포커스 로직을 절대 가로채면 안 된다. 수정 폼의
+      // input들은 onKeyDown에서 stopPropagation을 하지 않고 그대로 버블링되므로,
+      // 이 가드가 없으면 이름/전화번호 입력칸에서 Backspace(또는 아무 글자)를
+      // 칠 때마다 매번 검색창으로 포커스가 튕겨 나가 수정 자체가 불가능해진다.
+      if (editingContactIdx !== null) return;
       if (e.key === "ArrowDown") {
         e.preventDefault();
         setContactActive(i => Math.min(i + 1, visible.length - 1));
