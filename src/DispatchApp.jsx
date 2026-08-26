@@ -6090,6 +6090,30 @@ useEffect(() => {
     navigate("/login");
   };
 
+  // ---------------- 업데이트 알림 배너 on/off (최고관리자 전용) ----------------
+  // "새 버전이 준비되었습니다" 배너를 최고관리자가 직접 켜고 끌 수 있게 한다.
+  // Firestore(appSettings/updateBanner)에 저장해 전체 사용자(PC/모바일)에게
+  // 실시간으로 동일하게 반영되고, 문서가 아직 없거나 로딩 전에는 안전하게
+  // 꺼짐(false)으로 취급한다 — 배포 시 기본값도 OFF.
+  const [updateBannerEnabled, setUpdateBannerEnabledState] = useState(false);
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "appSettings", "updateBanner"), (snap) => {
+      setUpdateBannerEnabledState(snap.exists() ? !!snap.data()?.enabled : false);
+    }, () => {});
+    return () => unsub();
+  }, []);
+  const toggleUpdateBanner = async () => {
+    try {
+      await setDoc(doc(db, "appSettings", "updateBanner"), {
+        enabled: !updateBannerEnabled,
+        updatedAt: serverTimestamp(),
+        updatedBy: user?.email || "",
+      }, { merge: true });
+    } catch (e) {
+      showAlert("업데이트 알림 설정 변경 실패: " + e.message);
+    }
+  };
+
   // ---------------- 옵션 리스트 ----------------
   const timeOptions = useMemo(
     () =>
@@ -6440,6 +6464,25 @@ return (
                 </svg>
               )}
             </button>
+
+            {/* 업데이트 알림 배너 on/off — 최고관리자에게만 보임. 켜면 전체
+                사용자에게 "새 버전이 준비되었습니다" 배너가 뜨고, 끄면 아무에게도
+                안 뜬다(현재 배포 기본값: OFF). */}
+            {role === "totalMaster" && (
+              <button
+                onClick={toggleUpdateBanner}
+                className={`px-2.5 py-1.5 rounded-md text-[11px] font-bold transition whitespace-nowrap ${
+                  updateBannerEnabled
+                    ? "bg-emerald-500/90 hover:bg-emerald-500 text-white"
+                    : "bg-white/10 hover:bg-white/20 text-white/70"
+                }`}
+                title={updateBannerEnabled
+                  ? "업데이트 알림 배너: 전체 ON — 클릭 시 끄기"
+                  : "업데이트 알림 배너: 전체 OFF — 클릭 시 켜기"}
+              >
+                업데이트알림 {updateBannerEnabled ? "ON" : "OFF"}
+              </button>
+            )}
 
             {/* 글씨 크기 조절 버튼 */}
             <div className="relative">
