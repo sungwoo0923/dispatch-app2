@@ -294,6 +294,11 @@ export default function PlannerMatchGame({
   // 오프로 실제 쓰기 횟수를 크게 줄인다.
   const liveSnapshotRef = useRef({ board, score, secondsLeft });
   useEffect(() => { liveSnapshotRef.current = { board, score, secondsLeft }; }, [board, score, secondsLeft]);
+  // ⭐ 아래 언마운트 안전장치에서 "지금 게임이 진행 중이었는지/점수가 얼마였는지"를
+  // 알아야 하는데, 언마운트 시점의 클린업 함수는 마운트 당시 값만 기억하고 있어서
+  // (deps가 빈 배열) ref로 항상 최신 값을 따라가게 해둔다.
+  const phaseRef = useRef(phase);
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => {
     if (phase !== "playing" && phase !== "resolving") return;
     updateLiveMatchSnapshot(groupId, myUid, myName, liveSnapshotRef.current);
@@ -308,6 +313,17 @@ export default function PlannerMatchGame({
     return () => {
       clearLiveMatchSnapshot(groupId).catch(() => {});
       if (shakeTimerRef.current) clearTimeout(shakeTimerRef.current);
+      // ⭐ 안전장치 — 배경 탭 실수(방금 고침) 말고도 뒤로가기 제스처 등 아직
+      // 못 찾은 다른 경로로 게임 진행 중(playing/resolving)에 모달 자체가
+      // 사라지는 경우까지 대비해서, 마지막으로 알던 점수를 최선을 다해 제출한다.
+      // endGame을 거쳐 이미 끝난 경우(phase "over")엔 중복 제출하지 않는다.
+      const p = phaseRef.current;
+      if (p === "playing" || p === "resolving") {
+        const { score: lastScore } = liveSnapshotRef.current;
+        submitMatchGameScore(groupId, myUid, myName, lastScore, otherUid).catch((err) => {
+          console.error("[미니게임] 종료 시 안전 저장 실패", err);
+        });
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -541,7 +557,17 @@ export default function PlannerMatchGame({
 
   return (
     <div className="fixed inset-0 z-[10025] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50" onClick={phase === "playing" ? undefined : onClose} />
+      {/* ⭐ 진짜 원인을 찾았다 — "playing" 중에는 배경 탭으로 안 닫히게 막아뒀는데,
+          "resolving"(콤보 연쇄 처리 중)과 "countdown"(3-2-1 카운트다운)은 빠져
+          있었다. 그래서 마지막 콤보가 터지는 바로 그 순간(게임이 사실상 다
+          끝나가는 시점, 손이 급해져서 화면 아무 데나 탭하기 가장 쉬운 타이밍)에
+          배경을 탭하면 점수 제출 없이(endGame 호출 자체가 안 된 채로) 모달이
+          그냥 닫혀버렸다 — "게임 다 했는데 최고점도 그대로고 상대방 대기 상태로도
+          안 바뀐다"는 버그의 실제 원인이 바로 이거였다. */}
+      <div
+        className="absolute inset-0 bg-black/50"
+        onClick={(phase === "playing" || phase === "resolving" || phase === "countdown") ? undefined : onClose}
+      />
       <div className="relative bg-white rounded-2xl p-4 w-full max-w-[420px] max-h-[92vh] overflow-y-auto">
         {betText && (
           <div
