@@ -1006,13 +1006,36 @@ export function computeWalletBalance(wallet, totalIncome, totalExpense, totalDeb
 export const PLANNER_GAME_STATE = "plannerGameState"; // 문서 id = groupId
 export const PLANNER_GAME_SCORES = "plannerGameScores"; // 문서 id = groupId
 
+// ⭐ 미니게임 화면에서 "상대는 이미 다 했는데 내 화면은 계속 옛날 상태로
+// 멈춰있다"는 제보가 반복돼서 의심되는 원인 중 하나 — 모바일 브라우저가
+// 화면을 백그라운드로 보냈다가 다시 열 때, onSnapshot 리스너가 재연결은
+// 됐다고 표시되면서도 실제로는 최신 문서를 못 받아온 채(오래된 캐시 값)
+// 멈춰있는 경우가 있다. 화면이 다시 보이거나 포커스를 받을 때마다 리스너
+// 자체를 통째로 새로 구독하도록 강제해서, 이런 "멈춘 실시간 구독"을 원천
+// 차단한다.
+function useResubscribeSignal() {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setTick((t) => t + 1);
+    const onVisible = () => { if (document.visibilityState === "visible") bump(); };
+    window.addEventListener("focus", bump);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", bump);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+  return tick;
+}
+
 export function usePlannerGameState(groupId) {
   const [state, setState] = useState(null);
+  const resubscribeTick = useResubscribeSignal();
   useEffect(() => {
     if (!groupId) { setState(null); return; }
     const unsub = onSnapshot(doc(db, PLANNER_GAME_STATE, groupId), (snap) => setState(snap.exists() ? snap.data() : {}), () => {});
     return () => unsub();
-  }, [groupId]);
+  }, [groupId, resubscribeTick]);
   return state || {};
 }
 
@@ -1047,11 +1070,12 @@ export async function setPlannerGameBet(groupId, text, uid, name) {
 
 export function usePlannerGameScores(groupId) {
   const [scores, setScores] = useState({});
+  const resubscribeTick = useResubscribeSignal();
   useEffect(() => {
     if (!groupId) { setScores({}); return; }
     const unsub = onSnapshot(doc(db, PLANNER_GAME_SCORES, groupId), (snap) => setScores(snap.exists() ? snap.data() : {}), () => {});
     return () => unsub();
-  }, [groupId]);
+  }, [groupId, resubscribeTick]);
   return scores;
 }
 

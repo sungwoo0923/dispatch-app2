@@ -350,6 +350,19 @@ export default function PlannerMiniGames({ account }) {
         onResetRound={resetRound}
       />
 
+      {/* ⭐ "상대는 다 했는데 내 화면은 계속 옛날 상태" 류 버그가 여러 번 고쳐도
+          재발해서, 최고관리자에게만 보이는 진단용 패널을 잠깐 남겨둔다 — 문제가
+          또 재현되면 이 값을 그대로 캡처해서 실제 저장된 uid/라운드 데이터를
+          바로 확인할 수 있다. 일반 사용자에게는 절대 안 보인다. */}
+      {isOwner && (
+        <div className="text-[9.5px] text-gray-300 bg-gray-50 border border-gray-100 rounded-lg p-2 leading-relaxed break-all">
+          <div>내 uid: {account.uid}</div>
+          <div>상대 uid: {other?.uid || "(없음)"}</div>
+          <div>roundScores: {JSON.stringify(roundScores)}</div>
+          <div>settled: {String(roundComplete)}</div>
+        </div>
+      )}
+
       {showSpectator && liveMatch && (
         <PlannerMatchSpectator liveMatch={liveMatch} onClose={() => setShowSpectator(false)} />
       )}
