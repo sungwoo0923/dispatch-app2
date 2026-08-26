@@ -1,19 +1,23 @@
 // src/UpdateBanner.jsx
 import React from "react";
 
-// 배포를 자주 하는 동안 "새 버전이 준비되었습니다" 배너가 계속 뜨는 게 번거로울 때
-// 이 값을 false로 꺼두면 배너는 안 뜨지만, 서비스워커 업데이트 자체는 백그라운드에서
-// 계속 준비만 된 채로 대기한다 — 정작 화면은 이미 열려있는 예전 코드로 계속 돌아가고
-// 있어서, 사용자가 직접 앱을 완전히 껐다가 다시 켜지 않는 이상 "새 버전이 안 보인다"는
-// 혼란으로 이어졌다(실제로 겪은 문제). 그래서 다시 켜둔다 — 배포마다 배너가 뜨는 게
-// 다소 번거롭더라도, 사용자가 최신 버전을 못 받는 것보다는 낫다.
-const SHOW_UPDATE_BANNER = true;
+// ⭐ 2026-08-26 사용자 명시적 요청(KP-Flow 배차프로그램): 배포할 때마다
+// "새 버전이 준비되었습니다" 배너/버튼이 뜨는 게 불편하니 꺼달라고 함 —
+// 의도적으로 false로 잠가둔 값이니 별도 지시 없이 다시 true로 되돌리지 말 것.
+//
+// 처음엔 배너만 끄고 새 버전은 백그라운드에서 조용히 자동 적용했었는데(그래서
+// 화면이 갑자기 바뀌는 것처럼 느껴짐), 이어서 "새로고침해야 버전이 업데이트되게
+// 해달라"는 요청이 추가로 와서, 아래 useEffect와 main.jsx 양쪽에서 배차프로그램
+// 한정으로 자동 APPLY_UPDATE(skipWaiting) 전송도 함께 껐다(isPlannerSite 분기
+// 참고). 그래서 지금은: 배포해도 지금 열려있는 화면은 그대로 예전 코드로 계속
+// 돌아가고, 사용자가 직접 새로고침하거나 앱을 완전히 껐다 켜야만 최신 버전이
+// 적용된다.
+const SHOW_UPDATE_BANNER = false;
 
-// ⭐ KP-Planner(VITE_PLANNER_SITE=1로 빌드되는 별도 Vercel 프로젝트)에는 원래부터
-// 이 배너 UI가 뜬 적이 없었다 — 배차프로그램 전용 UX다. 그래서 배너 "화면"만
-// KP-Planner에서 숨기고, 새 서비스워커를 감지해 조용히 적용(skipWaiting)하는
-// 아래 백그라운드 로직은 그대로 둔다. 컴포넌트 자체를 아예 안 그리면 이 로직도
-// 안 돌아서, KP-Planner는 배포해도 새 버전이 영원히 적용 안 되는 문제가 생긴다.
+// KP-Planner(VITE_PLANNER_SITE=1로 빌드되는 별도 Vercel 프로젝트)는 배차프로그램과
+// 별개의 제품이라 위 요청들과 무관하다 — 배너는 원래부터 뜬 적이 없고, 새
+// 서비스워커가 설치되면 지금까지처럼 조용히 즉시 자동 적용된다(아래 useEffect의
+// isPlannerSite 분기, main.jsx도 동일). 여기 손대지 말 것.
 const isPlannerSite = import.meta.env.VITE_PLANNER_SITE === "1";
 
 // 업데이트 버튼 클릭 시 단순 새로고침만으로는, 이전에 설치된 서비스워커/캐시가
@@ -52,20 +56,26 @@ export default function UpdateBanner() {
       activateUpdate();
     });
 
-    navigator.serviceWorker.ready.then(reg => {
-      if (reg.waiting) {
-        reg.waiting.postMessage({ type: "APPLY_UPDATE" });
-      }
-      reg.addEventListener("updatefound", () => {
-        const newWorker = reg.installing;
-        if (!newWorker) return;
-        newWorker.addEventListener("statechange", () => {
-          if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-            newWorker.postMessage({ type: "APPLY_UPDATE" });
-          }
+    // ⭐ 배차프로그램(KP-Flow)에서는 새 서비스워커를 감지해도 자동으로
+    // APPLY_UPDATE(skipWaiting)를 보내지 않는다 — 사용자가 새로고침하거나 앱을
+    // 완전히 껐다 켜야만 새 버전이 적용되게 해달라는 요청. main.jsx도 동일하게
+    // 처리돼 있다. KP-Planner는 원래 동작(조용히 즉시 자동 적용)을 그대로 둔다.
+    if (isPlannerSite) {
+      navigator.serviceWorker.ready.then(reg => {
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: "APPLY_UPDATE" });
+        }
+        reg.addEventListener("updatefound", () => {
+          const newWorker = reg.installing;
+          if (!newWorker) return;
+          newWorker.addEventListener("statechange", () => {
+            if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+              newWorker.postMessage({ type: "APPLY_UPDATE" });
+            }
+          });
         });
       });
-    });
+    }
 
     const interval = setInterval(() => {
       navigator.serviceWorker.ready.then(reg => reg.update()).catch(() => {});
