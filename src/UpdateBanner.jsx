@@ -9,6 +9,13 @@ import React from "react";
 // 다소 번거롭더라도, 사용자가 최신 버전을 못 받는 것보다는 낫다.
 const SHOW_UPDATE_BANNER = true;
 
+// ⭐ KP-Planner(VITE_PLANNER_SITE=1로 빌드되는 별도 Vercel 프로젝트)에는 원래부터
+// 이 배너 UI가 뜬 적이 없었다 — 배차프로그램 전용 UX다. 그래서 배너 "화면"만
+// KP-Planner에서 숨기고, 새 서비스워커를 감지해 조용히 적용(skipWaiting)하는
+// 아래 백그라운드 로직은 그대로 둔다. 컴포넌트 자체를 아예 안 그리면 이 로직도
+// 안 돌아서, KP-Planner는 배포해도 새 버전이 영원히 적용 안 되는 문제가 생긴다.
+const isPlannerSite = import.meta.env.VITE_PLANNER_SITE === "1";
+
 // 업데이트 버튼 클릭 시 단순 새로고침만으로는, 이전에 설치된 서비스워커/캐시가
 // 새 배포와 꼬여있는 경우(구버전 SW가 새 index.html은 네트워크로 받아오면서도
 // 그 안에서 참조하는 새 JS 청크는 아직 캐시에 없다는 이유로 못 받아오는 등) 계속
@@ -36,7 +43,7 @@ export default function UpdateBanner() {
     if (!("serviceWorker" in navigator)) return;
 
     const activateUpdate = () => {
-      if (!SHOW_UPDATE_BANNER) return;
+      if (!SHOW_UPDATE_BANNER || isPlannerSite) return;
       setVisible(true);
       window.dispatchEvent(new Event("appUpdateAvailable"));
     };

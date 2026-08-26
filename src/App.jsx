@@ -577,7 +577,12 @@ export default function App() {
 
   return (
     <>
-      {/* 자동 업데이트 배너 (팝업 없이 상단 배너로 표시 후 자동 새로고침) */}
+      {/* 자동 업데이트 배너 (팝업 없이 상단 배너로 표시 후 자동 새로고침).
+          KP-Planner 사이트에서는 배너 UI만 안 뜨도록 UpdateBanner.jsx 내부에서
+          분기한다 — 컴포넌트 자체는 항상 마운트해서, 새 서비스워커를 감지해
+          조용히 skipWaiting 적용하는 백그라운드 로직은 KP-Planner에서도 그대로
+          동작하게 둔다(안 그러면 배너가 없는 KP-Planner는 새 버전이 영원히
+          적용 안 되는 문제가 생긴다). */}
       <UpdateBanner />
 
       <Router>
