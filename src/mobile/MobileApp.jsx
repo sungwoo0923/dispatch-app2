@@ -742,6 +742,24 @@ const normalizeKoreanTime = (t = "") => {
   }
   return t;
 };
+
+// "오전/오후 N시(30분)" 또는 이미 "HH:mm" 형태인 문자열을 24시간 "HH:mm"으로 변환.
+// (PC DispatchApp.jsx의 normalizeTime과 동일 로직 — 30분 단위 미배차 임박 알림처럼
+// 분 단위 정확도가 필요한 계산에 쓴다. normalizeKoreanTime은 정시(:00)만 다뤄서 부족함.)
+const normalizeTimeHM = (t) => {
+  if (!t) return "";
+  let s = String(t).trim().replace("시 ", ":").replace("시", ":").replace("분", "");
+  if (/:\s*$/.test(s)) s += "00";
+  if (/^\d{1,2}:\d{2}$/.test(s)) return s.padStart(5, "0");
+  const m = s.match(/(오전|오후)\s*(\d{1,2}):?(\d{2})?/);
+  if (!m) return "";
+  let [, ampm, hh, mm] = m;
+  mm = mm ?? "00";
+  hh = parseInt(hh, 10);
+  if (ampm === "오후" && hh < 12) hh += 12;
+  if (ampm === "오전" && hh === 12) hh = 0;
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+};
 // ✅ ✅ ✅ 여기 추가 (이 위치!)
 const buildHalfHourTimes = () => {
   const list = [];
@@ -2301,6 +2319,87 @@ useEffect(() => {
 
   return () => clearInterval(timer);
 }, [orders, alarmEnabled]);
+
+// --------------------------------------------------
+// 🔔🚨 미배차 임박 알림 (상차 30분 전, 배차중 + 차량번호 미입력)
+// PC 실시간배차현황 화면의 "미배차 임박 알림" 팝업과 동일 조건이다 — PC에만 있고
+// 모바일엔 없어서 추가함. PC는 화면 중앙 팝업이지만 모바일은 화면을 계속 보고
+// 있지 않으므로, 화면 상단에 계속 깜빡이는 배너로 띄우고 여러 건이면 한 번에
+// 하나씩(상차시간이 가장 급한 순) 순서대로 보여준다 — 닫기를 누르면 그 건만
+// 사라지고 곧바로 다음 건이 이어서 뜬다.
+// --------------------------------------------------
+const [urgentUnassignedTick, setUrgentUnassignedTick] = useState(0);
+useEffect(() => {
+  const timer = setInterval(() => setUrgentUnassignedTick((n) => n + 1), 60 * 1000);
+  return () => clearInterval(timer);
+}, []);
+
+const urgentUnassignedOrders = React.useMemo(() => {
+  const now = new Date();
+  const withDt = (orders || [])
+    .filter((o) => {
+      if (o.배차상태 !== "배차중") return false;
+      if (o.차량번호 && String(o.차량번호).trim() !== "") return false;
+      if (!o.상차일 || !o.상차시간) return false;
+      return true;
+    })
+    .map((o) => {
+      const t24 = normalizeTimeHM(o.상차시간);
+      if (!t24) return null;
+      const dt = new Date(`${o.상차일}T${t24}:00`);
+      if (isNaN(dt.getTime())) return null;
+      return { order: o, dt };
+    })
+    .filter(Boolean)
+    .filter(({ dt }) => {
+      const diff = dt.getTime() - now.getTime();
+      return diff > 0 && diff <= 30 * 60 * 1000;
+    });
+  withDt.sort((a, b) => a.dt.getTime() - b.dt.getTime());
+  return withDt.map(({ order }) => order);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [orders, urgentUnassignedTick]);
+
+const [dismissedUrgentIds, setDismissedUrgentIds] = useState(() => {
+  const email = auth.currentUser?.email || user?.email || "guest";
+  try {
+    return new Set(JSON.parse(localStorage.getItem(`mobileUrgentSeen_${email}`) || "[]"));
+  } catch {
+    return new Set();
+  }
+});
+
+const urgentUnassignedQueue = React.useMemo(
+  () => urgentUnassignedOrders.filter((o) => !dismissedUrgentIds.has(o.id || o._id)),
+  [urgentUnassignedOrders, dismissedUrgentIds]
+);
+const activeUrgentUnassigned = urgentUnassignedQueue[0] || null;
+
+// 새 건이 뜰 때마다 진동으로 한 번 더 알린다(소리는 alarmEnabled 설정을 따름).
+const lastVibratedUrgentIdRef = useRef(null);
+useEffect(() => {
+  const id = activeUrgentUnassigned ? (activeUrgentUnassigned.id || activeUrgentUnassigned._id) : null;
+  if (id && id !== lastVibratedUrgentIdRef.current) {
+    lastVibratedUrgentIdRef.current = id;
+    if (alarmEnabled) navigator.vibrate?.([200, 100, 200]);
+  }
+  if (!id) lastVibratedUrgentIdRef.current = null;
+}, [activeUrgentUnassigned, alarmEnabled]);
+
+const dismissUrgentUnassigned = React.useCallback(() => {
+  const id = activeUrgentUnassigned ? (activeUrgentUnassigned.id || activeUrgentUnassigned._id) : null;
+  if (!id) return;
+  const email = auth.currentUser?.email || user?.email || "guest";
+  setDismissedUrgentIds((prev) => {
+    const next = new Set(prev);
+    next.add(id);
+    try {
+      localStorage.setItem(`mobileUrgentSeen_${email}`, JSON.stringify([...next].slice(-500)));
+    } catch {}
+    return next;
+  });
+}, [activeUrgentUnassigned, user]);
+
 // 긴급 오더 등록 즉시 알림 (등록되는 순간 1회)
 useEffect(() => {
   if (!alarmEnabled || !orders.length) return;
@@ -4089,15 +4188,56 @@ const title =
             : "1.25rem",  // 아주 크게
       }}
     >
-      {/* 화주사 오더 등록/취소 상단 배너 (FCM 왕복과 무관하게 Firestore 변경 감지로 즉시 표시) */}
-      {topOrderBanner && (
-        <div className="fixed top-0 left-0 right-0 z-[9998] px-4 py-3 text-white text-sm font-semibold shadow-lg cursor-pointer"
-          style={{ background: "#1B2B4B", animation: "bannerDownMT 0.25s ease-out" }}
-          onClick={() => setTopOrderBanner(null)}>
-          {topOrderBanner.text}
-        </div>
-      )}
-      <style>{`@keyframes bannerDownMT { from { transform: translateY(-100%); } to { transform: translateY(0); } }`}</style>
+      {/* 화면 상단 배너 스택 — 화주사 오더 등록/취소 배너와 미배차 임박 배너를 겹치지 않게
+          위아래로 쌓는다(둘 다 fixed top이라 따로 두면 서로 덮어씀). */}
+      <div className="fixed top-0 left-0 right-0 z-[9998] flex flex-col">
+        {/* 화주사 오더 등록/취소 상단 배너 (FCM 왕복과 무관하게 Firestore 변경 감지로 즉시 표시) */}
+        {topOrderBanner && (
+          <div className="px-4 py-3 text-white text-sm font-semibold shadow-lg cursor-pointer"
+            style={{ background: "#1B2B4B", animation: "bannerDownMT 0.25s ease-out" }}
+            onClick={() => setTopOrderBanner(null)}>
+            {topOrderBanner.text}
+          </div>
+        )}
+
+        {/* 🚨 미배차 임박 알림 (상차 30분 전, 배차중 + 차량번호 미입력) — PC의 미배차 임박
+            팝업과 동일 조건. 여러 건이면 한 번에 하나씩, 상차시간이 급한 순서대로 뜨고
+            닫기를 누르면 그 건만 사라지고 다음 건이 이어서 뜬다. */}
+        {activeUrgentUnassigned && (
+          <div
+            className="px-4 py-3 text-white shadow-lg"
+            style={{ background: "#b91c1c", animation: "bannerDownMT 0.25s ease-out, urgentUnassignedBlink 1.1s ease-in-out infinite" }}
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="text-base leading-none shrink-0">🚨</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-bold text-white/80">
+                  미배차 임박 알림 · 상차 30분 전
+                  {urgentUnassignedQueue.length > 1 ? ` (${urgentUnassignedQueue.length}건 중 1번째)` : ""}
+                </div>
+                <div className="text-[13px] font-bold truncate">
+                  {(activeUrgentUnassigned.상차지명 || "상차지 미입력")}
+                  {" → "}
+                  {(activeUrgentUnassigned.하차지명 || "하차지 미입력")}
+                  {" · 상차 "}{activeUrgentUnassigned.상차시간}
+                  {" · 차량 미배정"}
+                </div>
+              </div>
+              <button
+                onClick={dismissUrgentUnassigned}
+                className="text-white/80 hover:text-white text-lg font-bold shrink-0 px-1 leading-none"
+                aria-label="닫기"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+      <style>{`
+        @keyframes bannerDownMT { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+        @keyframes urgentUnassignedBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+      `}</style>
 
       {/* 🔔 토스트 알림 */}
       {toast && (
