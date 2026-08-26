@@ -20,12 +20,6 @@ const DispatchApp = React.lazy(() => import("./DispatchApp"));
 const MobileApp = React.lazy(() => import("./mobile/MobileApp"));
 const ShipperMobileApp = React.lazy(() => import("./mobile/ShipperMobileApp"));
 
-// ⭐ KP-Planner — 배차프로그램과는 완전히 분리된 별도 앱(별도 로그인/가입/화면).
-// 같은 Firebase 프로젝트를 쓰지만 dispatch의 users/role 시스템과는 무관하다.
-const PlannerLogin = React.lazy(() => import("./planner/PlannerLogin"));
-const PlannerSignup = React.lazy(() => import("./planner/PlannerSignup"));
-const PlannerRoot = React.lazy(() => import("./planner/PlannerRoot"));
-
 import DriverHome from "./driver/DriverHome";
 import DriverLogin from "./driver/DriverLogin";
 import DriverRegister from "./driver/DriverRegister";
@@ -89,13 +83,6 @@ export default function App() {
   const [userCompany, setUserCompany] = useState("");
   // updateReady 팝업 제거됨 - UpdateBanner가 자동 처리
   const [splashDone, setSplashDone] = useState(false);
-
-  // ⭐ KP-Planner 전용 도메인(VITE_PLANNER_SITE=1) 여부 — 아래 "로딩/스플래시"
-  // 분기에서 바로 써야 해서 최상단으로 끌어올렸다(예전엔 이 값을 훨씬 아래에서만
-  // 계산해서, KP-Planner 사이트에서도 이 배차프로그램 전용 스플래시(KP-Flow 로고)를
-  // 먼저 거친 뒤에야 PlannerRoot의 KP-Planner 스플래시로 넘어가는 "이중 스플래시"
-  // 버그가 있었다).
-  const isPlannerSite = import.meta.env.VITE_PLANNER_SITE === "1";
 
   // ★ 태블릿 감지 상태
   const [isTablet, setIsTablet] = useState(false);
@@ -508,10 +495,8 @@ export default function App() {
     return <Router><Routes><Route path="*" element={<ShortLinkRedirect code={shortLinkMatch[1]} />} /></Routes></Router>;
   }
 
-  // 로딩/스플래시 — KP-Planner 사이트는 이 배차프로그램 전용 스플래시를 건너뛰고
-  // 바로 라우터로 넘어간다(PlannerRoot가 자기만의 로그인 확인 + PlannerSplash를
-  // 따로 갖고 있어서, 위 주석대로 위 조건에 걸리지 않는 게 맞다).
-  if ((loading || !splashDone) && !isPlannerSite) {
+  // 로딩/스플래시
+  if (loading || !splashDone) {
     return (
       <div style={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", backgroundColor: "#ffffff", userSelect: "none", WebkitUserSelect: "none" }}>
         <style>{`
@@ -567,22 +552,11 @@ export default function App() {
     </div>
   );
 
-  // ⭐ 같은 코드/저장소를 Vercel에서 "완전히 다른 프로젝트"로 한 번 더 배포해서
-  // KP-Planner 전용 도메인으로 쓸 수 있게 하는 스위치. 그 새 Vercel 프로젝트의
-  // 환경변수에 VITE_PLANNER_SITE=1 만 추가하면, 그 도메인은 루트(/)부터
-  // KP-Planner 로그인 화면으로 시작한다(배차프로그램 쪽 dispatch-app2 프로젝트는
-  // 이 환경변수가 없으니 지금처럼 그대로 동작한다). isPlannerSite 자체는 위쪽
-  // 스플래시 분기에서 먼저 써야 해서 이 컴포넌트 최상단에서 계산해뒀다.
-  const rootRedirect = isPlannerSite ? "/planner-login" : "/login";
+  const rootRedirect = "/login";
 
   return (
     <>
-      {/* 자동 업데이트 배너 (팝업 없이 상단 배너로 표시 후 자동 새로고침).
-          KP-Planner 사이트에서는 배너 UI만 안 뜨도록 UpdateBanner.jsx 내부에서
-          분기한다 — 컴포넌트 자체는 항상 마운트해서, 새 서비스워커를 감지해
-          조용히 skipWaiting 적용하는 백그라운드 로직은 KP-Planner에서도 그대로
-          동작하게 둔다(안 그러면 배너가 없는 KP-Planner는 새 버전이 영원히
-          적용 안 되는 문제가 생긴다). */}
+      {/* 자동 업데이트 배너 (팝업 없이 상단 배너로 표시 후 자동 새로고침). */}
       <UpdateBanner />
 
       <Router>
@@ -676,14 +650,6 @@ export default function App() {
                 : <Navigate to="/login" replace />
             }
           />
-
-          {/* ⭐ KP-Planner — 배차프로그램 로그인/권한 체계와 완전히 분리된 별도 앱.
-              /planner-login, /planner-signup, /planner는 PlannerRoot(＋
-              usePlannerAccount)가 스스로 로그인 상태를 확인하므로, 위쪽의
-              dispatch용 user/role 가드와는 무관하게 독립적으로 동작한다. */}
-          <Route path="/planner-login" element={<PlannerLogin />} />
-          <Route path="/planner-signup" element={<PlannerSignup />} />
-          <Route path="/planner" element={<PlannerRoot />} />
 
           <Route path="/change-password" element={<ChangePassword />} />
           <Route path="/standard-fare" element={<StandardFare />} />

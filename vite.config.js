@@ -87,33 +87,6 @@ export default defineConfig({
         }
       },
     },
-    // ⭐ KP-Planner를 별도 Vercel 프로젝트(VITE_PLANNER_SITE=1 환경변수)로 배포할
-    // 때, 그 프로젝트의 빌드 결과물만 manifest.json/파비콘/설치 아이콘/링크
-    // 미리보기(OG) 태그를 KP-Planner용으로 바꿔치기한다. 배차프로그램 프로젝트는
-    // 이 환경변수가 없으니 dist 결과물이 지금처럼 그대로 나간다.
-    {
-      name: "planner-site-branding",
-      closeBundle() {
-        if (process.env.VITE_PLANNER_SITE !== "1") return;
-        const manifestSrc = "./public/manifest-planner.json";
-        const manifestDst = "./dist/manifest.json";
-        if (fs.existsSync(manifestSrc)) {
-          fs.copyFileSync(manifestSrc, manifestDst);
-        }
-        const htmlPath = "./dist/index.html";
-        if (fs.existsSync(htmlPath)) {
-          let html = fs.readFileSync(htmlPath, "utf-8");
-          html = html
-            .replace(/<title>KP-Flow Logistics<\/title>/, "<title>KP-Planner</title>")
-            .replace(/content="KP-Flow Logistics"/g, 'content="KP-Planner"')
-            .replace(/content="\/icons\/sflow-icon\.png"/, 'content="/icons/kp-planner-icon-512.png"')
-            .replace(/content="KP-Flow"/, 'content="KP-Planner"')
-            .replace(/href="\/icons\/sflow-icon\.png"/g, 'href="/icons/kp-planner-icon-192.png"');
-          fs.writeFileSync(htmlPath, html);
-          console.log("✅ KP-Planner 브랜딩(title/manifest/아이콘/OG) 적용됨");
-        }
-      },
-    },
   ],
 
   server: {

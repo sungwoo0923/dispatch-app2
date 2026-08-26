@@ -3,27 +3,20 @@ import React from "react";
 import { db } from "./firebase";
 import { doc, onSnapshot } from "firebase/firestore";
 
-// ⭐ 2026-08-26 사용자 요청 히스토리(KP-Flow 배차프로그램):
+// ⭐ 2026-08-26 사용자 요청 히스토리:
 // 1) 배포할 때마다 "새 버전이 준비되었습니다" 배너가 뜨는 게 불편하니 꺼달라고 함.
 // 2) 이어서, 배너와 별개로 새 버전이 화면이 열려있는 동안 백그라운드에서 조용히
 //    자동 적용되는 것도 꺼서 "새로고침해야 버전이 업데이트되게" 해달라고 함 —
-//    그래서 아래 useEffect와 main.jsx 양쪽에서 배차프로그램 한정으로 자동
-//    APPLY_UPDATE(skipWaiting) 전송을 껐다(isPlannerSite 분기 참고). 배포해도
-//    지금 열려있는 화면은 예전 코드로 계속 돌아가고, 사용자가 새로고침하거나
-//    앱을 완전히 껐다 켜야만 최신 버전이 적용된다 — 이 동작은 아래 3)의 배너
-//    on/off 토글과 무관하게 항상 그렇다.
+//    그래서 아래 useEffect와 main.jsx 양쪽에서 자동 APPLY_UPDATE(skipWaiting)
+//    전송을 껐다. 배포해도 지금 열려있는 화면은 예전 코드로 계속 돌아가고,
+//    사용자가 새로고침하거나 앱을 완전히 껐다 켜야만 최신 버전이 적용된다 —
+//    이 동작은 아래 3)의 배너 on/off 토글과 무관하게 항상 그렇다.
 // 3) 최고관리자가 헤더의 "업데이트알림 ON/OFF" 버튼(DispatchApp.jsx 참고)으로
 //    이 배너를 실시간으로 직접 켜고 끌 수 있게 해달라고 함 — Firestore
 //    appSettings/updateBanner 문서의 enabled 값을 그대로 따른다(아래
 //    bannerEnabled state 참고). 문서가 아직 없으면(기본 배포 상태) 자동으로
 //    OFF다. 코드에 박아둔 상수로 다시 되돌리지 말 것 — 최고관리자가 UI로 켜고
 //    끄는 게 지금의 정상 동작이다.
-
-// KP-Planner(VITE_PLANNER_SITE=1로 빌드되는 별도 Vercel 프로젝트)는 배차프로그램과
-// 별개의 제품이라 위 요청들과 무관하다 — 배너는 원래부터 뜬 적이 없고, 새
-// 서비스워커가 설치되면 지금까지처럼 조용히 즉시 자동 적용된다(아래 useEffect의
-// isPlannerSite 분기, main.jsx도 동일). 여기 손대지 말 것.
-const isPlannerSite = import.meta.env.VITE_PLANNER_SITE === "1";
 
 // 업데이트 버튼 클릭 시 단순 새로고침만으로는, 이전에 설치된 서비스워커/캐시가
 // 새 배포와 꼬여있는 경우(구버전 SW가 새 index.html은 네트워크로 받아오면서도
@@ -57,7 +50,6 @@ export default function UpdateBanner() {
   React.useEffect(() => { bannerEnabledRef.current = bannerEnabled; }, [bannerEnabled]);
 
   React.useEffect(() => {
-    if (isPlannerSite) return; // Planner는 이 설정을 아예 구독하지 않는다.
     const unsub = onSnapshot(doc(db, "appSettings", "updateBanner"), (snap) => {
       setBannerEnabled(snap.exists() ? !!snap.data()?.enabled : false);
     }, () => {});
@@ -68,7 +60,7 @@ export default function UpdateBanner() {
     if (!("serviceWorker" in navigator)) return;
 
     const activateUpdate = () => {
-      if (isPlannerSite || !bannerEnabledRef.current) return;
+      if (!bannerEnabledRef.current) return;
       setVisible(true);
       window.dispatchEvent(new Event("appUpdateAvailable"));
     };
@@ -77,26 +69,9 @@ export default function UpdateBanner() {
       activateUpdate();
     });
 
-    // ⭐ 배차프로그램(KP-Flow)에서는 새 서비스워커를 감지해도 자동으로
-    // APPLY_UPDATE(skipWaiting)를 보내지 않는다 — 사용자가 새로고침하거나 앱을
-    // 완전히 껐다 켜야만 새 버전이 적용되게 해달라는 요청. main.jsx도 동일하게
-    // 처리돼 있다. KP-Planner는 원래 동작(조용히 즉시 자동 적용)을 그대로 둔다.
-    if (isPlannerSite) {
-      navigator.serviceWorker.ready.then(reg => {
-        if (reg.waiting) {
-          reg.waiting.postMessage({ type: "APPLY_UPDATE" });
-        }
-        reg.addEventListener("updatefound", () => {
-          const newWorker = reg.installing;
-          if (!newWorker) return;
-          newWorker.addEventListener("statechange", () => {
-            if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-              newWorker.postMessage({ type: "APPLY_UPDATE" });
-            }
-          });
-        });
-      });
-    }
+    // ⭐ 새 서비스워커를 감지해도 자동으로 APPLY_UPDATE(skipWaiting)를 보내지
+    // 않는다 — 사용자가 새로고침하거나 앱을 완전히 껐다 켜야만 새 버전이
+    // 적용되게 해달라는 요청. main.jsx도 동일하게 처리돼 있다.
 
     const interval = setInterval(() => {
       navigator.serviceWorker.ready.then(reg => reg.update()).catch(() => {});
