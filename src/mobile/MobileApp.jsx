@@ -28,6 +28,7 @@ import {
 import {
   collection,
   getDocs,
+  getDocsFromServer,
   addDoc,
   updateDoc,
   deleteDoc,
@@ -2105,6 +2106,57 @@ collections.forEach((name) => {
 
   return () => unsubs.forEach((u) => u());
 }, [refreshKey]);
+
+// ⭐ 앱을 백그라운드에 뒀다가(다른 화면 보다가/화면을 꺼뒀다가) 다시 열면, PC나
+// 다른 기기에서 그 사이 등록/수정/배차/취소한 내용이 즉시 반영돼야 하는데, 실시간
+// 리스너(onSnapshot)가 재연결되기까지 시간이 걸려 한참 전 오더현황이 계속 보이다가
+// 앱을 완전히 껐다 켜야만(그리고 몇 초 뒤에야) 최신 상태가 보이던 문제가 있었다.
+// 화면이 다시 보이는 시점에 캐시를 거치지 않고(persistentLocalCache 설정 때문에
+// getDocs가 오래된 로컬 캐시를 그대로 돌려줄 수 있다) 서버에서 직접(getDocsFromServer)
+// 한 번 확실하게 새로 읽어와 화면 상태만 즉시 갱신한다. 위쪽 onSnapshot 리스너는
+// 그대로 두고 알림/푸시 로직은 건드리지 않는다 — 재구독 방식은 새 리스너의 첫
+// 스냅샷이 기존 문서를 전부 "added"로 돌려줘 신규오더 푸시알림이 중복 발송될
+// 위험이 있어 쓰지 않는다.
+useEffect(() => {
+  const lastRefreshAtRef = { current: 0 };
+  const REFRESH_COOLDOWN_MS = 3000;
+
+  const refreshNow = async () => {
+    const now = Date.now();
+    if (now - lastRefreshAtRef.current < REFRESH_COOLDOWN_MS) return;
+    lastRefreshAtRef.current = now;
+    try {
+      const [dispatchSnap, ordersSnap] = await Promise.all([
+        getDocsFromServer(collection(db, "dispatch")),
+        getDocsFromServer(collection(db, "orders")),
+      ]);
+      const mapAll = (snap, col) => snap.docs
+        .map((d) => ({ _id: d.id, id: d.id, __col: col, ...d.data() }))
+        .filter((o) => o.source !== "transport_transmit");
+
+      const merged = [...mapAll(dispatchSnap, "dispatch"), ...mapAll(ordersSnap, "orders")];
+      setOrders(merged.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태)));
+      setCanceledOrders(merged.filter((o) => CANCELED_STATUS_LIST.includes(o.상태)));
+    } catch {
+      // 오프라인 등으로 서버 조회가 실패하면 조용히 무시 — onSnapshot이 재연결되는 대로 반영된다.
+    }
+  };
+
+  const onVisible = () => {
+    if (document.visibilityState === "visible") refreshNow();
+  };
+
+  document.addEventListener("visibilitychange", onVisible);
+  window.addEventListener("focus", refreshNow);
+  window.addEventListener("pageshow", refreshNow);
+
+  return () => {
+    document.removeEventListener("visibilitychange", onVisible);
+    window.removeEventListener("focus", refreshNow);
+    window.removeEventListener("pageshow", refreshNow);
+  };
+}, []);
+
 useEffect(() => {
   // pull-to-refresh is disabled — keep refs clean only
   return () => {
