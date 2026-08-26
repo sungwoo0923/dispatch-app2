@@ -1,18 +1,23 @@
 // src/UpdateBanner.jsx
 import React from "react";
+import { db } from "./firebase";
+import { doc, onSnapshot } from "firebase/firestore";
 
-// ⭐ 2026-08-26 사용자 명시적 요청(KP-Flow 배차프로그램): 배포할 때마다
-// "새 버전이 준비되었습니다" 배너/버튼이 뜨는 게 불편하니 꺼달라고 함 —
-// 의도적으로 false로 잠가둔 값이니 별도 지시 없이 다시 true로 되돌리지 말 것.
-//
-// 처음엔 배너만 끄고 새 버전은 백그라운드에서 조용히 자동 적용했었는데(그래서
-// 화면이 갑자기 바뀌는 것처럼 느껴짐), 이어서 "새로고침해야 버전이 업데이트되게
-// 해달라"는 요청이 추가로 와서, 아래 useEffect와 main.jsx 양쪽에서 배차프로그램
-// 한정으로 자동 APPLY_UPDATE(skipWaiting) 전송도 함께 껐다(isPlannerSite 분기
-// 참고). 그래서 지금은: 배포해도 지금 열려있는 화면은 그대로 예전 코드로 계속
-// 돌아가고, 사용자가 직접 새로고침하거나 앱을 완전히 껐다 켜야만 최신 버전이
-// 적용된다.
-const SHOW_UPDATE_BANNER = false;
+// ⭐ 2026-08-26 사용자 요청 히스토리(KP-Flow 배차프로그램):
+// 1) 배포할 때마다 "새 버전이 준비되었습니다" 배너가 뜨는 게 불편하니 꺼달라고 함.
+// 2) 이어서, 배너와 별개로 새 버전이 화면이 열려있는 동안 백그라운드에서 조용히
+//    자동 적용되는 것도 꺼서 "새로고침해야 버전이 업데이트되게" 해달라고 함 —
+//    그래서 아래 useEffect와 main.jsx 양쪽에서 배차프로그램 한정으로 자동
+//    APPLY_UPDATE(skipWaiting) 전송을 껐다(isPlannerSite 분기 참고). 배포해도
+//    지금 열려있는 화면은 예전 코드로 계속 돌아가고, 사용자가 새로고침하거나
+//    앱을 완전히 껐다 켜야만 최신 버전이 적용된다 — 이 동작은 아래 3)의 배너
+//    on/off 토글과 무관하게 항상 그렇다.
+// 3) 최고관리자가 헤더의 "업데이트알림 ON/OFF" 버튼(DispatchApp.jsx 참고)으로
+//    이 배너를 실시간으로 직접 켜고 끌 수 있게 해달라고 함 — Firestore
+//    appSettings/updateBanner 문서의 enabled 값을 그대로 따른다(아래
+//    bannerEnabled state 참고). 문서가 아직 없으면(기본 배포 상태) 자동으로
+//    OFF다. 코드에 박아둔 상수로 다시 되돌리지 말 것 — 최고관리자가 UI로 켜고
+//    끄는 게 지금의 정상 동작이다.
 
 // KP-Planner(VITE_PLANNER_SITE=1로 빌드되는 별도 Vercel 프로젝트)는 배차프로그램과
 // 별개의 제품이라 위 요청들과 무관하다 — 배너는 원래부터 뜬 적이 없고, 새
@@ -43,11 +48,27 @@ export default function UpdateBanner() {
   const [visible, setVisible] = React.useState(false);
   const [blinking, setBlinking] = React.useState(false);
 
+  // 최고관리자가 켠 상태인지 실시간 구독 — 문서가 없으면(기본 배포 상태) false.
+  // ref로도 같이 들고 있는 이유: 아래 activateUpdate가 []-dep useEffect 안에서
+  // 한 번만 만들어지므로, state를 직접 참조하면 클로저에 갇힌 초깃값(false)만
+  // 계속 보게 된다 — ref를 통해 항상 최신 값을 읽는다.
+  const [bannerEnabled, setBannerEnabled] = React.useState(false);
+  const bannerEnabledRef = React.useRef(false);
+  React.useEffect(() => { bannerEnabledRef.current = bannerEnabled; }, [bannerEnabled]);
+
+  React.useEffect(() => {
+    if (isPlannerSite) return; // Planner는 이 설정을 아예 구독하지 않는다.
+    const unsub = onSnapshot(doc(db, "appSettings", "updateBanner"), (snap) => {
+      setBannerEnabled(snap.exists() ? !!snap.data()?.enabled : false);
+    }, () => {});
+    return () => unsub();
+  }, []);
+
   React.useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
     const activateUpdate = () => {
-      if (!SHOW_UPDATE_BANNER || isPlannerSite) return;
+      if (isPlannerSite || !bannerEnabledRef.current) return;
       setVisible(true);
       window.dispatchEvent(new Event("appUpdateAvailable"));
     };
