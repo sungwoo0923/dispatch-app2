@@ -1,22 +1,23 @@
 // src/UpdateBanner.jsx
 import React from "react";
 
-// ⭐ 2026-08-25 사용자 명시적 요청(KP-Flow 배차프로그램): 배포할 때마다
+// ⭐ 2026-08-26 사용자 명시적 요청(KP-Flow 배차프로그램): 배포할 때마다
 // "새 버전이 준비되었습니다" 배너/버튼이 뜨는 게 불편하니 꺼달라고 함 —
 // 의도적으로 false로 잠가둔 값이니 별도 지시 없이 다시 true로 되돌리지 말 것.
 //
-// false로 꺼둬도 업데이트 자체가 안 되는 건 아니다: 아래 useEffect가 새
-// 서비스워커가 설치되는 즉시 APPLY_UPDATE를 보내 skipWaiting()·clients.claim()을
-// 실행하므로(+ main.jsx에도 동일한 로직이 한 번 더 있음), 지금 열려있는 화면은
-// 그대로 예전 코드로 계속 돌아가되(중간에 화면이 깨지는 것 방지) 사용자가
-// 다음에 앱을 자연스럽게 껐다 켜는 순간부터는 자동으로 최신 버전이 로드된다.
-// 배너만 안 보일 뿐, 최신 버전을 못 받는 문제와는 다르다.
+// 처음엔 배너만 끄고 새 버전은 백그라운드에서 조용히 자동 적용했었는데(그래서
+// 화면이 갑자기 바뀌는 것처럼 느껴짐), 이어서 "새로고침해야 버전이 업데이트되게
+// 해달라"는 요청이 추가로 와서, 아래 useEffect와 main.jsx 양쪽에서 배차프로그램
+// 한정으로 자동 APPLY_UPDATE(skipWaiting) 전송도 함께 껐다(isPlannerSite 분기
+// 참고). 그래서 지금은: 배포해도 지금 열려있는 화면은 그대로 예전 코드로 계속
+// 돌아가고, 사용자가 직접 새로고침하거나 앱을 완전히 껐다 켜야만 최신 버전이
+// 적용된다.
 const SHOW_UPDATE_BANNER = false;
 
 // KP-Planner(VITE_PLANNER_SITE=1로 빌드되는 별도 Vercel 프로젝트)는 배차프로그램과
-// 별개의 제품이라 원래부터 이 배너 UI가 뜬 적이 없었다 — SHOW_UPDATE_BANNER가
-// false인 지금은 사실상 없어도 되지만, 나중에 배차프로그램 쪽만 다시 켜는
-// 경우에도 KP-Planner에는 절대 안 뜨도록 안전하게 남겨둔다.
+// 별개의 제품이라 위 요청들과 무관하다 — 배너는 원래부터 뜬 적이 없고, 새
+// 서비스워커가 설치되면 지금까지처럼 조용히 즉시 자동 적용된다(아래 useEffect의
+// isPlannerSite 분기, main.jsx도 동일). 여기 손대지 말 것.
 const isPlannerSite = import.meta.env.VITE_PLANNER_SITE === "1";
 
 // 업데이트 버튼 클릭 시 단순 새로고침만으로는, 이전에 설치된 서비스워커/캐시가
@@ -55,20 +56,26 @@ export default function UpdateBanner() {
       activateUpdate();
     });
 
-    navigator.serviceWorker.ready.then(reg => {
-      if (reg.waiting) {
-        reg.waiting.postMessage({ type: "APPLY_UPDATE" });
-      }
-      reg.addEventListener("updatefound", () => {
-        const newWorker = reg.installing;
-        if (!newWorker) return;
-        newWorker.addEventListener("statechange", () => {
-          if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-            newWorker.postMessage({ type: "APPLY_UPDATE" });
-          }
+    // ⭐ 배차프로그램(KP-Flow)에서는 새 서비스워커를 감지해도 자동으로
+    // APPLY_UPDATE(skipWaiting)를 보내지 않는다 — 사용자가 새로고침하거나 앱을
+    // 완전히 껐다 켜야만 새 버전이 적용되게 해달라는 요청. main.jsx도 동일하게
+    // 처리돼 있다. KP-Planner는 원래 동작(조용히 즉시 자동 적용)을 그대로 둔다.
+    if (isPlannerSite) {
+      navigator.serviceWorker.ready.then(reg => {
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: "APPLY_UPDATE" });
+        }
+        reg.addEventListener("updatefound", () => {
+          const newWorker = reg.installing;
+          if (!newWorker) return;
+          newWorker.addEventListener("statechange", () => {
+            if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+              newWorker.postMessage({ type: "APPLY_UPDATE" });
+            }
+          });
         });
       });
-    });
+    }
 
     const interval = setInterval(() => {
       navigator.serviceWorker.ready.then(reg => reg.update()).catch(() => {});
