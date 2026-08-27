@@ -6660,6 +6660,8 @@ return (
           menu={menu}
             dispatchData={dispatchDataFiltered}
             liveDataReady={liveDataReady}
+            timeOptions={timeOptions}
+            tonOptions={tonOptions}
             drivers={drivers}
             clients={clients}
             addDispatch={addDispatchSafe}
@@ -13027,7 +13029,7 @@ shadow-sm
                 <label className={mrLabelCls}>상차시간</label>
                 <CustomSelect className={mrInputCls} value={currentMultiSlot.상차시간 || ""} onChange={e => updateMultiSlot("상차시간", e.target.value)}>
                   <option value="">시간 선택</option>
-                  {timeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                  {(timeOptions || []).map(t => <option key={t} value={t}>{t}</option>)}
                 </CustomSelect>
               </div>
 
@@ -13056,7 +13058,7 @@ shadow-sm
                 <label className={mrLabelCls}>하차시간</label>
                 <CustomSelect className={mrInputCls} value={currentMultiSlot.하차시간 || ""} onChange={e => updateMultiSlot("하차시간", e.target.value)}>
                   <option value="">시간 선택</option>
-                  {timeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                  {(timeOptions || []).map(t => <option key={t} value={t}>{t}</option>)}
                 </CustomSelect>
               </div>
 
