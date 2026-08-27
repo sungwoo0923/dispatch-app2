@@ -7543,13 +7543,31 @@ return (
 // 화면 좌표(getBoundingClientRect)를 따라 위치를 계산해 어떤 조상의
 // overflow에도 잘리지 않게 한다. 방향키 이동/Enter 선택/Escape 닫기까지
 // 표준 콤보박스 키보드 조작을 지원한다.
-function MultiRegCombo({ value, onChange, onSelect, items, placeholder, className, renderItem }) {
+function MultiRegCombo({ id, value, onChange, onSelect, items, placeholder, className, renderItem }) {
   const [open, setOpen] = React.useState(false);
   const [activeIdx, setActiveIdx] = React.useState(0);
   const wrapRef = React.useRef(null);
+  const listRef = React.useRef(null);
   const [coords, setCoords] = React.useState({ top: 0, left: 0, width: 0 });
 
   React.useEffect(() => { setActiveIdx(0); }, [items]);
+
+  // ⭐ 방향키로 activeIdx가 바뀔 때, 목록이 스크롤 컨테이너 안에 있으니
+  // 하이라이트된 항목이 화면 밖으로 밀려나면(위/아래 어느 쪽이든) 그 항목이
+  // 보이도록 스크롤도 같이 따라가게 한다 — 하이라이트만 바뀌고 스크롤은 그대로면
+  // 목록 아래쪽/위쪽 항목을 고를 때 커서가 어디 있는지 보이지 않는 문제가 있었다.
+  React.useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const item = list.children[activeIdx];
+    if (!item) return;
+    const itemTop = item.offsetTop;
+    const itemBottom = itemTop + item.offsetHeight;
+    const viewTop = list.scrollTop;
+    const viewBottom = viewTop + list.clientHeight;
+    if (itemBottom > viewBottom) list.scrollTop = itemBottom - list.clientHeight;
+    else if (itemTop < viewTop) list.scrollTop = itemTop;
+  }, [activeIdx]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -7573,6 +7591,7 @@ function MultiRegCombo({ value, onChange, onSelect, items, placeholder, classNam
   return (
     <div className="relative" ref={wrapRef}>
       <input autoComplete="off"
+        id={id}
         className={className}
         placeholder={placeholder}
         value={value}
@@ -7601,6 +7620,7 @@ function MultiRegCombo({ value, onChange, onSelect, items, placeholder, classNam
       />
       {showList && createPortal(
         <div
+          ref={listRef}
           className="fixed z-[999999] bg-white border border-gray-200 rounded-lg shadow-lg overflow-auto"
           style={{ top: coords.top, left: coords.left, width: coords.width, maxHeight: 240 }}
         >
@@ -9677,6 +9697,7 @@ const [multiRegStep, setMultiRegStep] = React.useState("setup"); // "setup" | "f
 const makeMultiRegGroup = () => ({
   key: Math.random().toString(36).slice(2),
   거래처명: "", 상차지명: "", 상차지주소: "", 상차지담당자: "", 상차지담당자번호: "",
+  경유상차목록: [],
   query: "", count: 1,
 });
 const [multiRegGroups, setMultiRegGroups] = React.useState(() => [makeMultiRegGroup()]);
@@ -9685,6 +9706,70 @@ const [multiRegIdx, setMultiRegIdx] = React.useState(0);
 const [multiRegDropQuery, setMultiRegDropQuery] = React.useState("");
 const [multiRegVehicleQuery, setMultiRegVehicleQuery] = React.useState("");
 const [multiRegSaving, setMultiRegSaving] = React.useState(false);
+// ⭐ 팝업을 마우스로 끌어 옮길 수 있게(요청사항) — 헤더를 누른 채 드래그하면
+// translate로 위치만 옮기고, 열 때마다 원위치(0,0)로 초기화한다.
+const [multiRegPos, setMultiRegPos] = React.useState({ x: 0, y: 0 });
+const multiRegDragRef = React.useRef(null); // { startX, startY, baseX, baseY } | null
+React.useEffect(() => {
+  if (!multiRegOpen) return;
+  const onMove = (e) => {
+    const d = multiRegDragRef.current;
+    if (!d) return;
+    setMultiRegPos({ x: d.baseX + (e.clientX - d.startX), y: d.baseY + (e.clientY - d.startY) });
+  };
+  const onUp = () => { multiRegDragRef.current = null; };
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+  return () => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+  };
+}, [multiRegOpen]);
+const startMultiRegDrag = (e) => {
+  multiRegDragRef.current = { startX: e.clientX, startY: e.clientY, baseX: multiRegPos.x, baseY: multiRegPos.y };
+};
+
+// ⭐ 다중등록 전용 오더메모 팝업 — 단일 등록폼의 orderMemoPopup/saveOrderMemo와
+// 화면은 완전히 동일하지만, 등록 시점까지 form에 대기시켰다가 반영하는 단일
+// 등록폼과 달리 다중등록에는 그런 단일 제출 시점이 없어 선택한 거래처 문서에
+// 바로 저장한다.
+const [multiRegOrderMemoPopup, setMultiRegOrderMemoPopup] = React.useState(null);
+const openMultiRegOrderMemoEditor = (type, groupKey) => {
+  const name = (type === "pickup"
+    ? multiRegGroups.find(g => g.key === groupKey)?.상차지명
+    : currentMultiSlot?.하차지명 || "").trim();
+  if (!name) { showAlert(`${type === "pickup" ? "상차지명" : "하차지명"}을 먼저 입력하세요.`); return; }
+  const found = mergedClients.find(c => normalizeKey(c.업체명 || "") === normalizeKey(name));
+  setMultiRegOrderMemoPopup({
+    type, groupKey, name,
+    memo: found?.오더메모 || "",
+    팝업표시: found?.팝업표시 !== undefined ? found.팝업표시 : true,
+    notice: found?.기사전달주의사항 !== undefined ? found.기사전달주의사항 : defaultDriverNoticeTemplate(name),
+  });
+};
+const hasMultiRegOrderMemoFor = (type, groupKey) => {
+  const name = (type === "pickup"
+    ? multiRegGroups.find(g => g.key === groupKey)?.상차지명
+    : currentMultiSlot?.하차지명 || "").trim();
+  if (!name) return false;
+  const found = mergedClients.find(c => normalizeKey(c.업체명 || "") === normalizeKey(name));
+  return !!String(found?.오더메모 || "").trim();
+};
+const saveMultiRegOrderMemo = (memo, popupShow, notice) => {
+  if (!multiRegOrderMemoPopup) return;
+  const { name } = multiRegOrderMemoPopup;
+  const clientMatch = (clients || []).find(c => normalizeKey(c.업체명 || c.거래처명) === normalizeKey(name));
+  if (clientMatch) {
+    upsertClient?.({ id: clientMatch.id, 거래처명: clientMatch.거래처명 || name, 오더메모: memo, 팝업표시: popupShow, 기사전달주의사항: notice }).catch(() => {});
+  } else {
+    const placeMatch = (placeList || []).find(p => normalizeKey(p.업체명 || "") === normalizeKey(name));
+    if (placeMatch) {
+      upsertPlace?.({ _id: placeMatch._id, 업체명: placeMatch.업체명, 주소: placeMatch.주소 || "", 오더메모: memo, 팝업표시: popupShow, 기사전달주의사항: notice }).catch(() => {});
+    }
+  }
+  setMultiRegOrderMemoPopup(null);
+  showAlert("오더메모가 저장되었습니다.");
+};
 
 // 슬롯(오더)을 옮길 때마다 이전 슬롯에서 쓰던 하차지/차량종류 자동완성 검색어가
 // 남아있으면 안 되므로 매번 비운다.
@@ -9704,6 +9789,7 @@ const openMultiRegister = () => {
   setMultiRegStep("setup");
   setMultiRegSlots([]);
   setMultiRegIdx(0);
+  setMultiRegPos({ x: 0, y: 0 });
   setMultiRegOpen(true);
 };
 
@@ -9717,20 +9803,38 @@ const applyMultiRegGroupClient = (groupKey, clientRec) => {
     상차지담당자번호: clientRec.담당자번호 || "",
     query: clientRec.업체명,
   } : g));
+
+  // ⭐ 3파트 등록폼과 동일하게: 담당자가 여러 명이면 선택 팝업을, 등급(블랙/주의/
+  // 이탈)·메모가 있으면 안내 팝업을 띄우고, 전부 끝나면 하차지 입력창으로
+  // 포커스를 옮긴다(closeContactPopup/showClientAlertChain을 그대로 재사용).
+  const alertTarget = getAlertTargetForSelectedPlace(clientRec);
+  const contacts = (clientRec.contacts || []).filter(c => c.name?.trim());
+  const uniqueContacts = [...new Map(contacts.map(c => [c.name.trim(), c])).values()];
+  const contactItems = uniqueContacts.length > 1
+    ? [{ type: "pickup", place: clientRec, contacts: uniqueContacts, __multiReg: "group", __multiRegKey: groupKey }]
+    : [];
+  showClientAlertChain(
+    alertTarget ? [{ ...alertTarget, 업체명: alertTarget.업체명 || alertTarget.거래처명 || clientRec.업체명 }] : [],
+    { contactItems, finalFocusId: "mr-drop-input" }
+  );
 };
 
 const makeMultiRegSlot = (group) => ({
   거래처명: group.거래처명, 상차지명: group.상차지명, 상차지주소: group.상차지주소,
   상차지담당자: group.상차지담당자, 상차지담당자번호: group.상차지담당자번호,
+  경유상차목록: group.경유상차목록 || [],
   상차일: _todayStr(), 상차시간: "",
   하차지명: "", 하차지주소: "", 하차지담당자: "", 하차지담당자번호: "",
+  경유하차목록: [],
   하차일: "", 하차시간: "",
   상차방법: "", 하차방법: "",
   차량종류: "",
   화물타입: "파레트", 화물수량: "",
   톤수타입: "톤", 톤수값: "",
   운행유형: "편도",
-  청구운임: "", 기사운임: "",
+  지급방식: "", 배차방식: "",
+  차량번호: "", 이름: "", 전화번호: "",
+  청구운임: "", 기사운임: "", 수수료: "",
   메모: "",
   긴급: false,
   _groupKey: group.key, _groupLabel: group.거래처명,
@@ -9764,6 +9868,15 @@ const updateMultiSlot = (key, value) => {
     if (key === "하차지명" && value.trim() === "") {
       return { ...s, 하차지명: "", 하차지주소: "", 하차지담당자: "", 하차지담당자번호: "" };
     }
+    // ⭐ 3파트 등록폼과 동일: 청구운임/기사운임을 입력할 때마다 수수료(차액)를
+    // 자동으로 다시 계산한다.
+    if (key === "청구운임" || key === "기사운임") {
+      const next = { ...s, [key]: value };
+      const sale = parseInt(next.청구운임 || 0, 10) || 0;
+      const drv = parseInt(next.기사운임 || 0, 10) || 0;
+      next.수수료 = String(sale - drv);
+      return next;
+    }
     return { ...s, [key]: value };
   }));
 };
@@ -9774,6 +9887,19 @@ const applyMultiSlotDrop = (place) => {
     하차지명: place.업체명, 하차지주소: place.주소 || "",
     하차지담당자: place.담당자 || "", 하차지담당자번호: place.담당자번호 || "",
   } : s));
+
+  // ⭐ 하차지도 상차지와 동일하게: 담당자 여러 명이면 선택 팝업, 등급/메모가
+  // 있으면 안내 팝업을 띄운다.
+  const alertTarget = getAlertTargetForSelectedPlace(place);
+  const contacts = (place.contacts || []).filter(c => c.name?.trim());
+  const uniqueContacts = [...new Map(contacts.map(c => [c.name.trim(), c])).values()];
+  const contactItems = uniqueContacts.length > 1
+    ? [{ type: "drop", place, contacts: uniqueContacts, __multiReg: "drop" }]
+    : [];
+  showClientAlertChain(
+    alertTarget ? [{ ...alertTarget, 업체명: alertTarget.업체명 || alertTarget.거래처명 || place.업체명 }] : [],
+    { contactItems, finalFocusId: null }
+  );
 };
 
 const currentMultiSlot = multiRegSlots[multiRegIdx] || null;
@@ -9807,19 +9933,23 @@ const submitMultiRegister = async () => {
         ...emptyForm,
         거래처명: s.거래처명, 상차지명: s.상차지명, 상차지주소: s.상차지주소,
         상차지담당자: s.상차지담당자, 상차지담당자번호: s.상차지담당자번호,
+        경유상차목록: s.경유상차목록 || [], 경유지_상차: s.경유상차목록 || [],
         하차지명: s.하차지명, 하차지주소: s.하차지주소,
         하차지담당자: s.하차지담당자, 하차지담당자번호: s.하차지담당자번호,
+        경유하차목록: s.경유하차목록 || [], 경유지_하차: s.경유하차목록 || [],
         상차일: s.상차일 || _todayStr(), 상차시간: s.상차시간 || "",
         하차일: s.하차일 || s.상차일 || _todayStr(), 하차시간: s.하차시간 || "",
         상차방법: s.상차방법 || "", 하차방법: s.하차방법 || "",
         차량종류: s.차량종류 || "", 차량톤수,
         화물타입: s.화물타입 || "", 화물내용,
         운행유형: s.운행유형 || "편도",
+        지급방식: s.지급방식 || "", 배차방식: s.배차방식 || "",
+        차량번호: s.차량번호 || "", 이름: s.이름 || "", 전화번호: s.전화번호 || "",
         청구운임: s.청구운임 || "", 기사운임: s.기사운임 || "",
         수수료: String((parseInt(s.청구운임 || 0, 10) || 0) - (parseInt(s.기사운임 || 0, 10) || 0)),
         메모: s.메모 || "",
         긴급: !!s.긴급,
-        배차상태: "배차중",
+        배차상태: s.지급방식 === "취소" ? "배차취소" : (s.차량번호?.trim() ? "배차완료" : "배차중"),
         등록일: _todayStr(),
       });
     }));
@@ -10472,10 +10602,20 @@ const openContactPickerFor = (type) => {
 
 const closeContactPopup = (selectedContact) => {
   if (selectedContact && contactPopup) {
-    const field = contactPopup.type === "pickup"
-      ? { 상차지담당자: selectedContact.name || "", 상차지담당자번호: selectedContact.phone || "" }
-      : { 하차지담당자: selectedContact.name || "", 하차지담당자번호: selectedContact.phone || "" };
-    setForm(prev => ({ ...prev, ...field }));
+    // ⭐ 다중등록 팝업에서 연 담당자선택이면 form이 아니라 다중등록 쪽 상태에
+    // 반영한다 — 팝업 자체(검색/키보드 이동/편집)는 완전히 같은 것을 그대로
+    // 재사용하고, 선택 결과를 어디에 쓸지만 갈라준다.
+    if (contactPopup.__multiReg === "group") {
+      const gk = contactPopup.__multiRegKey;
+      setMultiRegGroups(prev => prev.map(g => g.key === gk ? { ...g, 상차지담당자: selectedContact.name || "", 상차지담당자번호: selectedContact.phone || "" } : g));
+    } else if (contactPopup.__multiReg === "drop") {
+      setMultiRegSlots(prev => prev.map((s, i) => i === multiRegIdx ? { ...s, 하차지담당자: selectedContact.name || "", 하차지담당자번호: selectedContact.phone || "" } : s));
+    } else {
+      const field = contactPopup.type === "pickup"
+        ? { 상차지담당자: selectedContact.name || "", 상차지담당자번호: selectedContact.phone || "" }
+        : { 하차지담당자: selectedContact.name || "", 하차지담당자번호: selectedContact.phone || "" };
+      setForm(prev => ({ ...prev, ...field }));
+    }
   }
   setContactPopup(null);
   setContactSearchQ("");
@@ -12944,9 +13084,14 @@ shadow-sm
 
 {/* ================== 다중등록(서로 다른 오더 일괄등록) 팝업 ================== */}
 {multiRegOpen && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={() => setMultiRegOpen(false)}>
-    <div className="bg-white rounded-2xl shadow-2xl w-[760px] max-w-[95vw] max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
+  // ⭐ 바깥(배경) 클릭으로는 닫히지 않는다 — 팝업이 떠 있는 동안은 팝업 자체에
+  // 포커스/조작이 유지돼야 한다는 요청. 닫기는 오직 우측 상단 × 버튼으로만.
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]">
+    <div className="bg-white rounded-2xl shadow-2xl w-[760px] max-w-[95vw] max-h-[90vh] flex flex-col overflow-hidden"
+      style={{ transform: `translate(${multiRegPos.x}px, ${multiRegPos.y}px)` }}>
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0 cursor-move select-none"
+        onMouseDown={startMultiRegDrag}
+        title="드래그해서 팝업 위치를 옮길 수 있습니다">
         <div>
           <h3 className="text-white font-bold text-[16px]">다중등록</h3>
           <p className="text-white/60 text-[12px] mt-0.5">
@@ -12955,7 +13100,7 @@ shadow-sm
               : `${currentMultiSlot?._groupLabel || ""} · ${multiRegIdx + 1} / ${multiRegSlots.length}건`}
           </p>
         </div>
-        <button type="button" onClick={() => setMultiRegOpen(false)}
+        <button type="button" onClick={() => setMultiRegOpen(false)} onMouseDown={e => e.stopPropagation()}
           className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-lg shrink-0">×</button>
       </div>
 
@@ -12971,7 +13116,19 @@ shadow-sm
                 )}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className={mrLabelCls}>거래처명 (=상차지)</label>
+                    <div className="flex items-center h-[20px] overflow-visible justify-between mb-1">
+                      <label className={`${mrLabelCls} mb-0`}>거래처명 (=상차지)</label>
+                      <div className="flex items-center gap-1">
+                        <OrderMemoIconButton onClick={() => openMultiRegOrderMemoEditor("pickup", g.key)} title="상차지 오더메모" hasMemo={hasMultiRegOrderMemoFor("pickup", g.key)} size={18} />
+                        {g.거래처명 && <ContactPickerIconButton onClick={() => {
+                          const place = mergedClients.find(c => normalizeKey(c.업체명 || "") === normalizeKey(g.거래처명));
+                          const contacts = (place?.contacts || []).filter(c => c.name?.trim());
+                          const uniqueContacts = [...new Map(contacts.map(c => [c.name.trim(), c])).values()];
+                          if (!uniqueContacts.length) return showAlert("등록된 담당자가 없습니다.");
+                          openContactPopup([{ type: "pickup", place, contacts: uniqueContacts, __multiReg: "group", __multiRegKey: g.key }]);
+                        }} title="상차지 담당자 선택" />}
+                      </div>
+                    </div>
                     <MultiRegCombo
                       className={mrInputCls}
                       placeholder="거래처 검색/입력"
@@ -12984,8 +13141,18 @@ shadow-sm
                       onSelect={(it) => applyMultiRegGroupClient(g.key, it.raw)}
                     />
                     {g.거래처명 && (
-                      <div className="text-[11px] text-emerald-600 font-semibold mt-1">✓ 상차지 고정: {g.상차지주소 || g.상차지명}</div>
+                      <div className="text-[11px] text-emerald-600 font-semibold mt-1">
+                        ✓ 상차지 고정: {g.상차지주소 || g.상차지명}{g.상차지담당자 ? ` · ${g.상차지담당자}${g.상차지담당자번호 ? ` (${g.상차지담당자번호})` : ""}` : ""}
+                      </div>
                     )}
+                    <WaypointSection
+                      stops={g.경유상차목록 || []}
+                      type="pickup"
+                      onSave={(list) => setMultiRegGroups(prev => prev.map(x => x.key === g.key ? { ...x, 경유상차목록: list } : x))}
+                      placeRows={mergedClients}
+                      timeOptions={timeOptions}
+                      className="mt-1.5"
+                    />
                   </div>
                   <div>
                     <label className={mrLabelCls}>건수</label>
@@ -13023,19 +13190,38 @@ shadow-sm
             <div className="grid grid-cols-2 gap-x-6 gap-y-4">
               <div>
                 <label className={mrLabelCls}>상차일</label>
-                <input type="date" className={mrInputCls} value={currentMultiSlot.상차일 || ""} onChange={e => updateMultiSlot("상차일", e.target.value)} />
+                <CustomDatePicker
+                  value={currentMultiSlot.상차일 || ""}
+                  showIcon
+                  className={mrInputCls}
+                  onChange={(e) => updateMultiSlot("상차일", e.target.value)}
+                />
               </div>
               <div>
                 <label className={mrLabelCls}>상차시간</label>
-                <CustomSelect className={mrInputCls} value={currentMultiSlot.상차시간 || ""} onChange={e => updateMultiSlot("상차시간", e.target.value)}>
-                  <option value="">시간 선택</option>
-                  {(timeOptions || []).map(t => <option key={t} value={t}>{t}</option>)}
-                </CustomSelect>
+                <TimeAmPmPicker
+                  value={currentMultiSlot.상차시간 || ""}
+                  onChange={(v) => updateMultiSlot("상차시간", v)}
+                  selectCls={mrInputCls}
+                />
               </div>
 
               <div>
-                <label className={mrLabelCls}>하차지 {reqStar}</label>
+                <div className="flex items-center h-[20px] overflow-visible justify-between mb-1">
+                  <label className={`${mrLabelCls} mb-0`}>하차지 {reqStar}</label>
+                  <div className="flex items-center gap-1">
+                    <OrderMemoIconButton onClick={() => openMultiRegOrderMemoEditor("drop")} title="하차지 오더메모" hasMemo={hasMultiRegOrderMemoFor("drop")} size={18} />
+                    {currentMultiSlot.하차지명 && <ContactPickerIconButton onClick={() => {
+                      const place = filterPlaces(currentMultiSlot.하차지명)[0] || mergedClients.find(c => normalizeKey(c.업체명 || "") === normalizeKey(currentMultiSlot.하차지명));
+                      const contacts = (place?.contacts || []).filter(c => c.name?.trim());
+                      const uniqueContacts = [...new Map(contacts.map(c => [c.name.trim(), c])).values()];
+                      if (!uniqueContacts.length) return showAlert("등록된 담당자가 없습니다.");
+                      openContactPopup([{ type: "drop", place, contacts: uniqueContacts, __multiReg: "drop" }]);
+                    }} title="하차지 담당자 선택" />}
+                  </div>
+                </div>
                 <MultiRegCombo
+                  id="mr-drop-input"
                   className={mrInputCls}
                   placeholder="하차지 검색/입력"
                   value={multiRegDropQuery || currentMultiSlot.하차지명}
@@ -13044,6 +13230,14 @@ shadow-sm
                   renderItem={(it) => (<><div className="font-medium">{it.label}</div>{it.sub && <div className="text-[11px] text-gray-500">{it.sub}</div>}</>)}
                   onSelect={(it) => { applyMultiSlotDrop(it.raw); setMultiRegDropQuery(it.raw.업체명); }}
                 />
+                <WaypointSection
+                  stops={currentMultiSlot.경유하차목록 || []}
+                  type="drop"
+                  onSave={(list) => updateMultiSlot("경유하차목록", list)}
+                  placeRows={mergedClients}
+                  timeOptions={timeOptions}
+                  className="mt-1.5"
+                />
               </div>
               <div>
                 <label className={mrLabelCls}>하차지주소</label>
@@ -13051,29 +13245,44 @@ shadow-sm
               </div>
 
               <div>
+                <label className={mrLabelCls}>하차지 담당자</label>
+                <input autoComplete="off" className={mrInputCls} placeholder="담당자명" value={currentMultiSlot.하차지담당자 || ""} onChange={e => updateMultiSlot("하차지담당자", e.target.value)} />
+              </div>
+              <div>
+                <label className={mrLabelCls}>하차지 담당자 연락처</label>
+                <input autoComplete="off" className={mrInputCls} placeholder="연락처" value={currentMultiSlot.하차지담당자번호 || ""} onChange={e => updateMultiSlot("하차지담당자번호", formatPhone(e.target.value))} />
+              </div>
+
+              <div>
                 <label className={mrLabelCls}>하차일</label>
-                <input type="date" className={mrInputCls} value={currentMultiSlot.하차일 || currentMultiSlot.상차일 || ""} onChange={e => updateMultiSlot("하차일", e.target.value)} />
+                <CustomDatePicker
+                  value={currentMultiSlot.하차일 || currentMultiSlot.상차일 || ""}
+                  showIcon
+                  className={mrInputCls}
+                  onChange={(e) => updateMultiSlot("하차일", e.target.value)}
+                />
               </div>
               <div>
                 <label className={mrLabelCls}>하차시간</label>
-                <CustomSelect className={mrInputCls} value={currentMultiSlot.하차시간 || ""} onChange={e => updateMultiSlot("하차시간", e.target.value)}>
-                  <option value="">시간 선택</option>
-                  {(timeOptions || []).map(t => <option key={t} value={t}>{t}</option>)}
-                </CustomSelect>
+                <TimeAmPmPicker
+                  value={currentMultiSlot.하차시간 || ""}
+                  onChange={(v) => updateMultiSlot("하차시간", v)}
+                  selectCls={mrInputCls}
+                />
               </div>
 
               <div>
                 <label className={mrLabelCls}>상차방법</label>
                 <CustomSelect className={mrInputCls} value={currentMultiSlot.상차방법 || ""} onChange={e => updateMultiSlot("상차방법", e.target.value)}>
-                  <option value="">선택</option>
-                  {["수작업","지게차","호이스트","크레인","기타"].map(v => <option key={v} value={v}>{v}</option>)}
+                  <option value="">선택 ▾</option>
+                  {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => <option key={v} value={v}>{v}</option>)}
                 </CustomSelect>
               </div>
               <div>
                 <label className={mrLabelCls}>하차방법</label>
                 <CustomSelect className={mrInputCls} value={currentMultiSlot.하차방법 || ""} onChange={e => updateMultiSlot("하차방법", e.target.value)}>
-                  <option value="">선택</option>
-                  {["수작업","지게차","호이스트","크레인","기타"].map(v => <option key={v} value={v}>{v}</option>)}
+                  <option value="">선택 ▾</option>
+                  {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => <option key={v} value={v}>{v}</option>)}
                 </CustomSelect>
               </div>
 
@@ -13135,17 +13344,54 @@ shadow-sm
               </div>
 
               <div>
+                <label className={mrLabelCls}>지급방식</label>
+                <CustomSelect className={mrInputCls} value={currentMultiSlot.지급방식 || ""} onChange={e => updateMultiSlot("지급방식", e.target.value)}>
+                  <option value="">선택 ▾</option>
+                  {PAY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+                </CustomSelect>
+              </div>
+              <div>
+                <label className={mrLabelCls}>배차방식</label>
+                <CustomSelect className={mrInputCls} value={currentMultiSlot.배차방식 || ""} onChange={e => updateMultiSlot("배차방식", e.target.value)}>
+                  <option value="">선택 ▾</option>
+                  {DISPATCH_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+                </CustomSelect>
+              </div>
+
+              <div>
+                <label className={mrLabelCls}>차량번호</label>
+                <input autoComplete="off" className={mrInputCls} placeholder="차량번호 입력" value={currentMultiSlot.차량번호 || ""} onChange={e => updateMultiSlot("차량번호", e.target.value)} />
+              </div>
+              <div>
+                <label className={mrLabelCls}>기사명</label>
+                <input autoComplete="off" className={mrInputCls} placeholder="기사명 입력" value={currentMultiSlot.이름 || ""} onChange={e => updateMultiSlot("이름", e.target.value)} />
+              </div>
+
+              <div>
+                <label className={mrLabelCls}>전화번호</label>
+                <input autoComplete="off" className={mrInputCls} placeholder="전화번호 입력" value={currentMultiSlot.전화번호 || ""} onChange={e => updateMultiSlot("전화번호", formatPhone(e.target.value))} />
+              </div>
+              <div />
+
+              <div>
                 <label className={mrLabelCls}>청구운임</label>
                 <input autoComplete="off" type="text" inputMode="numeric" className={mrInputCls} placeholder="금액"
-                  value={currentMultiSlot.청구운임 || ""}
+                  value={currentMultiSlot.청구운임 ? Number(currentMultiSlot.청구운임).toLocaleString() : ""}
                   onChange={e => updateMultiSlot("청구운임", e.target.value.replace(/[^\d]/g, ""))} />
               </div>
               <div>
                 <label className={mrLabelCls}>기사운임</label>
                 <input autoComplete="off" type="text" inputMode="numeric" className={mrInputCls} placeholder="금액"
-                  value={currentMultiSlot.기사운임 || ""}
+                  value={currentMultiSlot.기사운임 ? Number(currentMultiSlot.기사운임).toLocaleString() : ""}
                   onChange={e => updateMultiSlot("기사운임", e.target.value.replace(/[^\d]/g, ""))} />
               </div>
+
+              <div>
+                <label className={mrLabelCls}>수수료</label>
+                <input autoComplete="off" readOnly className={`${mrInputCls} bg-gray-100`}
+                  value={currentMultiSlot.수수료 ? Number(currentMultiSlot.수수료).toLocaleString() : currentMultiSlot.수수료 || ""} />
+              </div>
+              <div />
 
               <div className="col-span-2">
                 <label className={mrLabelCls}>메모</label>
@@ -13205,6 +13451,59 @@ shadow-sm
             )}
           </>
         )}
+      </div>
+    </div>
+  </div>
+)}
+
+{/* 다중등록 전용 오더메모 팝업 — 단일 등록폼 orderMemoPopup과 화면은 동일 */}
+{multiRegOrderMemoPopup && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]">
+    <div className="bg-white rounded-2xl shadow-2xl w-[420px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+        <div>
+          <h3 className="text-white text-[15px] font-bold">{multiRegOrderMemoPopup.type === "pickup" ? "상차지" : "하차지"} 오더메모</h3>
+          <p className="text-white/55 text-[12px] mt-0.5">{multiRegOrderMemoPopup.name}</p>
+        </div>
+        <button onClick={() => setMultiRegOrderMemoPopup(null)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
+      </div>
+      <div className="px-6 py-5 space-y-3">
+        <textarea
+          autoFocus
+          rows={5}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] resize-none"
+          placeholder="이 거래처를 상/하차지명에 입력할 때마다 안내 팝업으로 뜰 메모"
+          value={multiRegOrderMemoPopup.memo}
+          onChange={(e) => setMultiRegOrderMemoPopup(p => ({ ...p, memo: e.target.value }))}
+        />
+        <div>
+          <div className="text-[13px] font-semibold text-gray-700 mb-1.5">기사전달주의사항</div>
+          <div className="text-[11px] text-gray-500 mb-1.5">이 상/하차지가 포함된 오더를 "기사전달용"으로 복사할 때 자동으로 함께 붙습니다</div>
+          <textarea
+            rows={4}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] resize-none"
+            placeholder="예: 안전화 착용 필수"
+            value={multiRegOrderMemoPopup.notice ?? defaultDriverNoticeTemplate(multiRegOrderMemoPopup.name)}
+            onChange={(e) => setMultiRegOrderMemoPopup(p => ({ ...p, notice: e.target.value }))}
+          />
+        </div>
+        <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
+          <div>
+            <div className="text-[13px] font-semibold text-gray-700">등록 시 오더메모/등급 팝업 표시</div>
+            <div className="text-[11px] text-gray-500 mt-0.5">꺼두면 이 거래처를 어디서 입력하든 오더메모·등급 안내 팝업이 뜨지 않습니다</div>
+          </div>
+          <button type="button"
+            onClick={() => setMultiRegOrderMemoPopup(p => ({ ...p, 팝업표시: p.팝업표시 === false ? true : false }))}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${multiRegOrderMemoPopup.팝업표시 === false ? "bg-gray-300" : "bg-[#1B2B4B]"}`}>
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${multiRegOrderMemoPopup.팝업표시 === false ? "translate-x-1" : "translate-x-6"}`} />
+          </button>
+        </div>
+      </div>
+      <div className="px-6 pb-5 flex gap-3">
+        <button onClick={() => setMultiRegOrderMemoPopup(null)}
+          className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
+        <button onClick={() => saveMultiRegOrderMemo(multiRegOrderMemoPopup.memo, multiRegOrderMemoPopup.팝업표시, multiRegOrderMemoPopup.notice ?? defaultDriverNoticeTemplate(multiRegOrderMemoPopup.name))}
+          className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">저장</button>
       </div>
     </div>
   </div>
