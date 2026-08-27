@@ -82,6 +82,39 @@ function isReversedDateOrder(pickup, drop) {
 }
 const REVERSED_DATE_ORDER_MSG = "하차일은 상차일보다 빠를 수 없습니다. 날짜를 다시 확인해주세요.";
 
+// ⭐ 첨부파일을 안 올린 기사에게 첨부파일 팝업에서 원버튼으로 업로드 요청 문자를
+// 보낼 때 쓰는 메시지 — 오더의 날짜/상·하차지명을 자동으로 채운다. 브라우저(웹앱)는
+// 보안정책상 SMS를 직접 발송할 수 없어(iOS/안드로이드 공통 제약), sms: 링크로
+// 기사 폰의 문자 앱을 이 내용으로 미리 채워 열어주는 데까지만 가능하다 — 마지막
+// 전송 버튼은 문자 앱에서 기사가 아니라 배차담당자가 직접 한 번 더 눌러야 한다.
+function buildAttachUploadSmsMobile(order) {
+  const baseUrl = window.location.origin;
+  const date = (order?.상차일 || "").slice(0, 10);
+  let dateLabel = "";
+  if (date) {
+    const [, m, d] = date.split("-");
+    if (m && d) dateLabel = `${parseInt(m)}월 ${parseInt(d)}일`;
+  }
+  const from = (order?.상차지명 || "").trim();
+  const to = (order?.하차지명 || "").trim();
+  const route = from && to ? `${from} → ${to}` : (from || to || "");
+  const params = new URLSearchParams();
+  if (date) params.set("date", date);
+  const vehicle = (order?.차량번호 || "").replace(/\s/g, "");
+  if (vehicle) params.set("vehicle", vehicle);
+  const name = (order?.이름 || order?.기사명 || "").trim();
+  if (name) params.set("name", name);
+  const url = `${baseUrl}/driver-upload?${params.toString()}`;
+  return [
+    `안녕하세요. ${[dateLabel, route].filter(Boolean).join(" ")} 건 관련하여 연락드립니다.`,
+    "여기를 눌러 관련 서류를 업로드해주세요",
+    url,
+    "",
+    "날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.",
+    "미업로드 시 운임 정산이 지연될 수 있습니다.",
+  ].join("\n");
+}
+
 // ⭐ 첨부파일 전체저장 시 파일명 규칙 — PC(DispatchApp)의 isSignatureItem/
 // attachFileExt/buildAttachFileName과 동일 로직("날짜(YYYYMMDD)거래처명_하차지명"
 // 형식, 서명 이미지는 제외하고 순번은 서명을 뺀 목록 기준). 저장 파일 이름이
@@ -7476,7 +7509,7 @@ const summary = useMemo(() => {
     </div>
 
     {attachViewOrder && (
-      <CardAttachViewer order={attachViewOrder} onClose={() => setAttachViewOrder(null)} />
+      <CardAttachViewer order={attachViewOrder} onClose={() => setAttachViewOrder(null)} showToast={showToast} showSuccess={showSuccess} />
     )}
 
     {/* ── 삭제 확인 모달 ── */}
@@ -7782,7 +7815,7 @@ function dayBadgeClass(label) {
 // ======================================================================
 // 카드에서 바로 열리는 첨부파일 뷰어 (하단 시트)
 // ======================================================================
-function CardAttachViewer({ order, onClose }) {
+function CardAttachViewer({ order, onClose, showToast, showSuccess }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
@@ -7792,6 +7825,7 @@ function CardAttachViewer({ order, onClose }) {
   });
   const [confirmItem, setConfirmItem] = useState(null);
   const [unlocking, setUnlocking] = useState(false);
+  const [smsUploadConfirm, setSmsUploadConfirm] = useState(false);
 
   const col = order.__col || order._col || "dispatch";
   const docId = order._id || order.id;
@@ -7903,6 +7937,17 @@ function CardAttachViewer({ order, onClose }) {
     targets.forEach((item, i) => setTimeout(() => doSave(item, buildAttachFileNameMobile(order, item, i, targets.length)), i * 400));
   };
 
+  // ⭐ 첨부파일을 안 올린 기사에게 원버튼으로 업로드 요청 문자를 보낸다. 웹앱은
+  // SMS를 직접 발송할 수 없어 sms: 링크로 문자 앱을 내용까지 채워 열어주는
+  // 데까지만 가능하다 — 전송은 문자 앱에서 한 번 더 눌러야 한다.
+  const handleSendUploadSms = () => {
+    const phone = (order.전화번호 || "").replace(/[^0-9]/g, "");
+    if (!phone) { showToast?.("기사 전화번호가 없어 문자를 보낼 수 없습니다."); return; }
+    const msg = buildAttachUploadSmsMobile(order);
+    window.location.href = `sms:${phone}?body=${encodeURIComponent(msg)}`;
+    (showSuccess || showToast)?.("문자 앱을 열었습니다. 전송 버튼을 눌러 완료해주세요.");
+  };
+
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col justify-end">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
@@ -7974,6 +8019,12 @@ function CardAttachViewer({ order, onClose }) {
             <div className="flex flex-col items-center justify-center py-16 gap-2">
               <div className="text-sm text-gray-400 font-medium">업로드된 파일이 없습니다</div>
               <div className="text-xs text-gray-300">기사님께 인수증 업로드를 요청하세요</div>
+              <button
+                onClick={() => setSmsUploadConfirm(true)}
+                className="mt-3 px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold"
+              >
+                업로드 요청 문자 보내기
+              </button>
             </div>
           )}
           {!loading && items.length > 0 && (
@@ -8031,6 +8082,20 @@ function CardAttachViewer({ order, onClose }) {
             <div className="flex gap-2">
               <button onClick={() => setConfirmItem(null)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-[13px]">취소</button>
               <button onClick={() => { doSave(confirmItem); setConfirmItem(null); }} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold text-[13px]">다시 저장</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {smsUploadConfirm && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/50" onClick={() => setSmsUploadConfirm(false)}>
+          <div className="bg-white rounded-2xl mx-6 p-5 w-full max-w-xs shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="text-[15px] font-bold text-[#1B2B4B] mb-2">업로드 요청 문자 발송</div>
+            <div className="text-[13px] text-gray-500 mb-4">
+              <span className="font-semibold text-[#1B2B4B]">{order.기사명 || order.이름 || "기사"}</span>님에게 서류 업로드 요청 문자를 보내시겠습니까?
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setSmsUploadConfirm(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-[13px]">아니오</button>
+              <button onClick={() => { handleSendUploadSms(); setSmsUploadConfirm(false); }} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold text-[13px]">예</button>
             </div>
           </div>
         </div>
@@ -9477,6 +9542,7 @@ function MobileOrderDetail({
     try { return JSON.parse(localStorage.getItem(`saved_attach_${order._id || order.id}`) || "{}"); } catch { return {}; }
   });
   const [attachConfirmItem, setAttachConfirmItem] = useState(null);
+  const [smsUploadConfirm, setSmsUploadConfirm] = useState(false);
   const [showDetailFareHistory, setShowDetailFareHistory] = useState(false);
   const [fareAppliedPopup, setFareAppliedPopup] = React.useState(null);
   const [detailFareFilter, setDetailFareFilter] = useState("all");
@@ -9903,6 +9969,17 @@ const pickupTimeText = order.상차시간
     const targets = attachItems.filter(it => !isSignatureItemMobile(it));
     if (!targets.length) return;
     targets.forEach((item, i) => setTimeout(() => doAttachSave(item, buildAttachFileNameMobile(order, item, i, targets.length)), i * 400));
+  };
+
+  // ⭐ 첨부파일을 안 올린 기사에게 원버튼으로 업로드 요청 문자를 보낸다. 웹앱은
+  // SMS를 직접 발송할 수 없어 sms: 링크로 문자 앱을 내용까지 채워 열어주는
+  // 데까지만 가능하다 — 전송은 문자 앱에서 한 번 더 눌러야 한다.
+  const handleSendUploadSms = () => {
+    const phone = (order.전화번호 || "").replace(/[^0-9]/g, "");
+    if (!phone) { showToast?.("기사 전화번호가 없어 문자를 보낼 수 없습니다."); return; }
+    const msg = buildAttachUploadSmsMobile(order);
+    window.location.href = `sms:${phone}?body=${encodeURIComponent(msg)}`;
+    (showSuccess || showToast)?.("문자 앱을 열었습니다. 전송 버튼을 눌러 완료해주세요.");
   };
 
   const normD = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
@@ -10736,6 +10813,12 @@ const handleAssignClick = () => {
                   </div>
                   <div className="text-sm text-gray-400 font-medium">업로드된 파일이 없습니다</div>
                   <div className="text-xs text-gray-300">기사님께 인수증 업로드를 요청하세요</div>
+                  <button
+                    onClick={() => setSmsUploadConfirm(true)}
+                    className="mt-1 px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold"
+                  >
+                    업로드 요청 문자 보내기
+                  </button>
                 </div>
               )}
               {!attachLoading && attachItems.length > 0 && (
@@ -10815,6 +10898,20 @@ const handleAssignClick = () => {
                 <div className="flex gap-2">
                   <button onClick={() => setAttachConfirmItem(null)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-[13px]">취소</button>
                   <button onClick={() => { doAttachSave(attachConfirmItem); setAttachConfirmItem(null); }} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold text-[13px]">다시 저장</button>
+                </div>
+              </div>
+            </div>
+          )}
+          {smsUploadConfirm && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/50" onClick={() => setSmsUploadConfirm(false)}>
+              <div className="bg-white rounded-2xl mx-6 p-5 w-full max-w-xs shadow-2xl" onClick={e => e.stopPropagation()}>
+                <div className="text-[15px] font-bold text-[#1B2B4B] mb-2">업로드 요청 문자 발송</div>
+                <div className="text-[13px] text-gray-500 mb-4">
+                  <span className="font-semibold text-[#1B2B4B]">{order.기사명 || order.이름 || "기사"}</span>님에게 서류 업로드 요청 문자를 보내시겠습니까?
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setSmsUploadConfirm(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-[13px]">아니오</button>
+                  <button onClick={() => { handleSendUploadSms(); setSmsUploadConfirm(false); }} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold text-[13px]">예</button>
                 </div>
               </div>
             </div>
