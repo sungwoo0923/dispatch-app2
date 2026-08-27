@@ -9579,6 +9579,170 @@ React.useEffect(() => {
   setOrderDropDates(Array.from({ length: multiCount }, () => form.상차일 || ""));
 }, [multiCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
+// ============================================================
+// ⭐ 다중등록(서로 다른 오더 일괄등록) — 위 multiCount(수량)는 "완전히 똑같은
+// 오더를 N번" 등록하는 기능이라, 거래처/상차지만 같고 나머지(하차지·화물·
+// 톤수·운임 등)가 전부 다른 오더 여러 건을 등록할 때는 맞지 않는다. 이 팝업은
+// 거래처(=상차지)별로 "그룹"을 만들고(여러 거래처를 섞어도 됨), 그룹마다 건수를
+// 정한 뒤, 오더 한 건씩 순서대로("다음") 나머지 항목만 입력해 한 번에 등록한다.
+// ============================================================
+const [multiRegOpen, setMultiRegOpen] = React.useState(false);
+const [multiRegStep, setMultiRegStep] = React.useState("setup"); // "setup" | "fill"
+const makeMultiRegGroup = () => ({
+  key: Math.random().toString(36).slice(2),
+  거래처명: "", 상차지명: "", 상차지주소: "", 상차지담당자: "", 상차지담당자번호: "",
+  query: "", dropdownOpen: false, count: 1,
+});
+const [multiRegGroups, setMultiRegGroups] = React.useState(() => [makeMultiRegGroup()]);
+const [multiRegSlots, setMultiRegSlots] = React.useState([]);
+const [multiRegIdx, setMultiRegIdx] = React.useState(0);
+const [multiRegDropQuery, setMultiRegDropQuery] = React.useState("");
+const [multiRegDropOpen, setMultiRegDropOpen] = React.useState(false);
+const [multiRegVehicleQuery, setMultiRegVehicleQuery] = React.useState("");
+const [multiRegVehicleOpen, setMultiRegVehicleOpen] = React.useState(false);
+const [multiRegSaving, setMultiRegSaving] = React.useState(false);
+
+// 슬롯(오더)을 옮길 때마다 이전 슬롯에서 쓰던 하차지/차량종류 자동완성 검색어가
+// 남아있으면 안 되므로 매번 비운다.
+React.useEffect(() => {
+  setMultiRegDropQuery("");
+  setMultiRegDropOpen(false);
+  setMultiRegVehicleQuery("");
+  setMultiRegVehicleOpen(false);
+}, [multiRegIdx]);
+
+const filterMultiRegClients = (q) => {
+  const query = String(q || "").trim().toLowerCase();
+  if (!query) return [];
+  return mergedClients.filter(c => (c.업체명 || "").toLowerCase().includes(query)).slice(0, 15);
+};
+
+const openMultiRegister = () => {
+  setMultiRegGroups([makeMultiRegGroup()]);
+  setMultiRegStep("setup");
+  setMultiRegSlots([]);
+  setMultiRegIdx(0);
+  setMultiRegOpen(true);
+};
+
+const applyMultiRegGroupClient = (groupKey, clientRec) => {
+  setMultiRegGroups(prev => prev.map(g => g.key === groupKey ? {
+    ...g,
+    거래처명: clientRec.업체명,
+    상차지명: clientRec.업체명,
+    상차지주소: clientRec.주소 || "",
+    상차지담당자: clientRec.담당자 || "",
+    상차지담당자번호: clientRec.담당자번호 || "",
+    query: clientRec.업체명,
+    dropdownOpen: false,
+  } : g));
+};
+
+const makeMultiRegSlot = (group) => ({
+  거래처명: group.거래처명, 상차지명: group.상차지명, 상차지주소: group.상차지주소,
+  상차지담당자: group.상차지담당자, 상차지담당자번호: group.상차지담당자번호,
+  상차일: _todayStr(), 상차시간: "",
+  하차지명: "", 하차지주소: "", 하차지담당자: "", 하차지담당자번호: "",
+  하차일: "", 하차시간: "",
+  상차방법: "", 하차방법: "",
+  차량종류: "",
+  화물타입: "파레트", 화물수량: "",
+  톤수타입: "톤", 톤수값: "",
+  운행유형: "편도",
+  청구운임: "", 기사운임: "",
+  메모: "",
+  긴급: false,
+  _groupKey: group.key, _groupLabel: group.거래처명,
+});
+
+const startMultiRegisterFill = () => {
+  const validGroups = multiRegGroups.filter(g => g.거래처명.trim());
+  if (!validGroups.length) { showAlert("거래처를 1개 이상 선택하세요."); return; }
+  const slots = validGroups.flatMap(g =>
+    Array.from({ length: Math.max(1, Math.min(30, Number(g.count) || 1)) }, () => makeMultiRegSlot(g))
+  );
+  setMultiRegSlots(slots);
+  setMultiRegIdx(0);
+  setMultiRegStep("fill");
+};
+
+const updateMultiSlot = (key, value) => {
+  setMultiRegSlots(prev => prev.map((s, i) => {
+    if (i !== multiRegIdx) return s;
+    // ⭐ 3파트 등록폼과 동일한 규칙: 상차방법을 바꾸면(하차방법이 비어있거나
+    // 지금까지 상차방법과 같았다면) 하차방법도 같이 따라간다.
+    if (key === "상차방법") {
+      const autoSync = !s.하차방법 || s.하차방법 === s.상차방법;
+      return { ...s, 상차방법: value, 하차방법: autoSync ? value : s.하차방법 };
+    }
+    if (key === "차량종류" && value === "오토바이") {
+      return { ...s, 차량종류: value, 상차방법: "수작업", 하차방법: "수작업" };
+    }
+    return { ...s, [key]: value };
+  }));
+};
+
+const applyMultiSlotDrop = (place) => {
+  setMultiRegSlots(prev => prev.map((s, i) => i === multiRegIdx ? {
+    ...s,
+    하차지명: place.업체명, 하차지주소: place.주소 || "",
+    하차지담당자: place.담당자 || "", 하차지담당자번호: place.담당자번호 || "",
+  } : s));
+};
+
+const currentMultiSlot = multiRegSlots[multiRegIdx] || null;
+
+const goMultiRegNext = () => {
+  const slot = multiRegSlots[multiRegIdx];
+  if (!slot?.하차지명?.trim()) { showAlert("하차지를 입력하세요."); return; }
+  if (isReversedDateOrder(slot.상차일, slot.하차일 || slot.상차일)) { showAlert(REVERSED_DATE_ORDER_MSG); return; }
+  if (multiRegIdx < multiRegSlots.length - 1) setMultiRegIdx(i => i + 1);
+};
+const goMultiRegPrev = () => { if (multiRegIdx > 0) setMultiRegIdx(i => i - 1); };
+
+const submitMultiRegister = async () => {
+  const slot = multiRegSlots[multiRegIdx];
+  if (!slot?.하차지명?.trim()) { showAlert("하차지를 입력하세요."); return; }
+  for (const s of multiRegSlots) {
+    if (isReversedDateOrder(s.상차일, s.하차일 || s.상차일)) { showAlert(REVERSED_DATE_ORDER_MSG); return; }
+  }
+  setMultiRegSaving(true);
+  try {
+    await Promise.all(multiRegSlots.map(s => {
+      const 화물내용 = s.화물수량 ? `${s.화물수량}${s.화물타입 || ""}` : "";
+      const 차량톤수 = s.톤수값 ? `${s.톤수값}${s.톤수타입 || ""}` : "";
+      return addDispatch({
+        거래처명: s.거래처명, 상차지명: s.상차지명, 상차지주소: s.상차지주소,
+        상차지담당자: s.상차지담당자, 상차지담당자번호: s.상차지담당자번호,
+        하차지명: s.하차지명, 하차지주소: s.하차지주소,
+        하차지담당자: s.하차지담당자, 하차지담당자번호: s.하차지담당자번호,
+        상차일: s.상차일 || _todayStr(), 상차시간: s.상차시간 || "",
+        하차일: s.하차일 || s.상차일 || _todayStr(), 하차시간: s.하차시간 || "",
+        상차방법: s.상차방법 || "", 하차방법: s.하차방법 || "",
+        차량종류: s.차량종류 || "", 차량톤수,
+        화물타입: s.화물타입 || "", 화물내용,
+        운행유형: s.운행유형 || "편도",
+        청구운임: s.청구운임 || "", 기사운임: s.기사운임 || "",
+        수수료: String((parseInt(s.청구운임 || 0, 10) || 0) - (parseInt(s.기사운임 || 0, 10) || 0)),
+        메모: s.메모 || "",
+        긴급: !!s.긴급,
+        배차상태: "배차중",
+        등록일: _todayStr(),
+      });
+    }));
+    setMultiRegOpen(false);
+    showAlert(`${multiRegSlots.length}건 등록되었습니다.`);
+  } catch (e) {
+    showAlert("등록 중 오류가 발생했습니다: " + (e?.message || e));
+  } finally {
+    setMultiRegSaving(false);
+  }
+};
+
+const mrLabelCls = "flex items-center h-[20px] overflow-visible text-[13px] font-semibold text-gray-700 mb-1";
+const mrInputCls = "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] font-bold text-gray-900 bg-transparent focus:outline-none focus:border-[#1B2B4B] transition";
+const mrTextareaCls = "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] font-bold text-gray-900 bg-transparent resize-none focus:outline-none focus:border-[#1B2B4B] transition";
+
 // ⭐ 연휴/성수기 자동감지 — 상차일이 바뀔 때마다 공휴일 캘린더 기준으로 다시
 // 판단해서 제안한다. 사용자가 직접 토글을 눌러 수동으로 정한 값은 존중하고 덮어쓰지
 // 않는다(다음 상차일 변경 시에는 다시 자동감지로 리셋 — 새 날짜엔 새 판단이 맞음).
@@ -12670,13 +12834,328 @@ shadow-sm
     <span className="text-[14px] font-bold text-white tracking-wide">
       오더 정보
     </span>
-    <button type="button" onClick={toggleOrderCardStyle}
-      className="px-3 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white text-[13px] font-bold transition"
-      title="입력창 스타일 전환 (A: 카드형 / B: 밑줄형)">
-      {orderCardStyle}
-    </button>
+    <div className="flex items-center gap-1.5">
+      <button type="button" onClick={openMultiRegister}
+        className="px-3 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white text-[13px] font-bold transition"
+        title="거래처(상차지)는 고정하고, 하차지·화물 등이 서로 다른 오더 여러 건을 한 번에 등록">
+        다중등록
+      </button>
+      <button type="button" onClick={toggleOrderCardStyle}
+        className="px-3 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white text-[13px] font-bold transition"
+        title="입력창 스타일 전환 (A: 카드형 / B: 밑줄형)">
+        {orderCardStyle}
+      </button>
+    </div>
   </div>
 </div>
+
+{/* ================== 다중등록(서로 다른 오더 일괄등록) 팝업 ================== */}
+{multiRegOpen && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={() => setMultiRegOpen(false)}>
+    <div className="bg-white rounded-2xl shadow-2xl w-[760px] max-w-[95vw] max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
+        <div>
+          <h3 className="text-white font-bold text-[16px]">다중등록</h3>
+          <p className="text-white/60 text-[12px] mt-0.5">
+            {multiRegStep === "setup"
+              ? "거래처별로 상차지를 고정하고, 등록할 건수를 정하세요"
+              : `${currentMultiSlot?._groupLabel || ""} · ${multiRegIdx + 1} / ${multiRegSlots.length}건`}
+          </p>
+        </div>
+        <button type="button" onClick={() => setMultiRegOpen(false)}
+          className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-lg shrink-0">×</button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-6 py-5">
+        {multiRegStep === "setup" ? (
+          <div className="space-y-4">
+            {multiRegGroups.map((g) => (
+              <div key={g.key} className="border border-gray-200 rounded-xl p-4 relative">
+                {multiRegGroups.length > 1 && (
+                  <button type="button"
+                    onClick={() => setMultiRegGroups(prev => prev.filter(x => x.key !== g.key))}
+                    className="absolute top-3 right-3 text-gray-400 hover:text-red-500 text-[12px] font-bold">삭제</button>
+                )}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="relative">
+                    <label className={mrLabelCls}>거래처명 (=상차지)</label>
+                    <input autoComplete="off"
+                      className={mrInputCls}
+                      placeholder="거래처 검색/입력"
+                      value={g.query}
+                      onFocus={() => setMultiRegGroups(prev => prev.map(x => x.key === g.key ? { ...x, dropdownOpen: true } : x))}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setMultiRegGroups(prev => prev.map(x => x.key === g.key ? { ...x, query: v, dropdownOpen: true, ...(v.trim() === "" ? { 거래처명: "", 상차지명: "", 상차지주소: "", 상차지담당자: "", 상차지담당자번호: "" } : {}) } : x));
+                      }}
+                      onBlur={() => setTimeout(() => setMultiRegGroups(prev => prev.map(x => x.key === g.key ? { ...x, dropdownOpen: false } : x)), 150)}
+                    />
+                    {g.dropdownOpen && g.query.trim() && (
+                      <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto mt-1">
+                        {filterMultiRegClients(g.query).length === 0 ? (
+                          <div className="px-3 py-2 text-[13px] text-gray-500">검색 결과 없음 — 등록된 거래처만 선택할 수 있습니다</div>
+                        ) : filterMultiRegClients(g.query).map((c, i) => (
+                          <div key={i}
+                            className="px-3 py-2 text-[13px] hover:bg-gray-50 cursor-pointer"
+                            onMouseDown={() => applyMultiRegGroupClient(g.key, c)}>
+                            <div className="font-medium">{c.업체명}</div>
+                            {c.주소 && <div className="text-[11px] text-gray-500">{c.주소}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {g.거래처명 && (
+                      <div className="text-[11px] text-emerald-600 font-semibold mt-1">✓ 상차지 고정: {g.상차지주소 || g.상차지명}</div>
+                    )}
+                  </div>
+                  <div>
+                    <label className={mrLabelCls}>건수</label>
+                    <div className="flex items-center gap-2">
+                      <button type="button"
+                        className="w-8 h-8 rounded-lg border border-gray-300 text-gray-600 font-bold hover:bg-gray-50"
+                        onClick={() => setMultiRegGroups(prev => prev.map(x => x.key === g.key ? { ...x, count: Math.max(1, (Number(x.count) || 1) - 1) } : x))}
+                      >-</button>
+                      <span className="w-10 text-center font-bold text-[15px]">{g.count}</span>
+                      <button type="button"
+                        className="w-8 h-8 rounded-lg border border-gray-300 text-gray-600 font-bold hover:bg-gray-50"
+                        onClick={() => setMultiRegGroups(prev => prev.map(x => x.key === g.key ? { ...x, count: Math.min(30, (Number(x.count) || 1) + 1) } : x))}
+                      >+</button>
+                      <span className="text-[12px] text-gray-400">건</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            <button type="button"
+              onClick={() => setMultiRegGroups(prev => [...prev, makeMultiRegGroup()])}
+              className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-300 text-gray-500 text-[13px] font-bold hover:border-[#1B2B4B] hover:text-[#1B2B4B] transition"
+            >
+              + 다른 거래처 추가 (서로 다른 거래처를 한 번에 등록하려면)
+            </button>
+          </div>
+        ) : currentMultiSlot ? (
+          <div className="space-y-4">
+            <div className="bg-gray-50 rounded-xl px-4 py-3 flex flex-wrap items-center gap-2 text-[13px]">
+              <span className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold shrink-0">고정</span>
+              <span className="font-bold text-[#1B2B4B]">{currentMultiSlot.거래처명}</span>
+              {currentMultiSlot.상차지주소 && (<><span className="text-gray-400">·</span><span className="text-gray-600">{currentMultiSlot.상차지주소}</span></>)}
+            </div>
+
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+              <div>
+                <label className={mrLabelCls}>상차일</label>
+                <input type="date" className={mrInputCls} value={currentMultiSlot.상차일 || ""} onChange={e => updateMultiSlot("상차일", e.target.value)} />
+              </div>
+              <div>
+                <label className={mrLabelCls}>상차시간</label>
+                <CustomSelect className={mrInputCls} value={currentMultiSlot.상차시간 || ""} onChange={e => updateMultiSlot("상차시간", e.target.value)}>
+                  <option value="">시간 선택</option>
+                  {timeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                </CustomSelect>
+              </div>
+
+              <div className="relative">
+                <label className={mrLabelCls}>하차지 {reqStar}</label>
+                <input autoComplete="off"
+                  className={mrInputCls}
+                  placeholder="하차지 검색/입력"
+                  value={multiRegDropQuery || currentMultiSlot.하차지명}
+                  onFocus={() => setMultiRegDropOpen(true)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setMultiRegDropQuery(v);
+                    updateMultiSlot("하차지명", v);
+                    setMultiRegDropOpen(true);
+                  }}
+                  onBlur={() => setTimeout(() => setMultiRegDropOpen(false), 150)}
+                />
+                {multiRegDropOpen && multiRegDropQuery.trim() && filterPlaces(multiRegDropQuery).length > 0 && (
+                  <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto mt-1">
+                    {filterPlaces(multiRegDropQuery).map((p, i) => (
+                      <div key={i} className="px-3 py-2 text-[13px] hover:bg-gray-50 cursor-pointer"
+                        onMouseDown={() => { applyMultiSlotDrop(p); setMultiRegDropQuery(p.업체명); setMultiRegDropOpen(false); }}>
+                        <div className="font-medium">{p.업체명}</div>
+                        {p.주소 && <div className="text-[11px] text-gray-500">{p.주소}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className={mrLabelCls}>하차지주소</label>
+                <input autoComplete="off" className={mrInputCls} value={currentMultiSlot.하차지주소 || ""} onChange={e => updateMultiSlot("하차지주소", e.target.value)} />
+              </div>
+
+              <div>
+                <label className={mrLabelCls}>하차일</label>
+                <input type="date" className={mrInputCls} value={currentMultiSlot.하차일 || currentMultiSlot.상차일 || ""} onChange={e => updateMultiSlot("하차일", e.target.value)} />
+              </div>
+              <div>
+                <label className={mrLabelCls}>하차시간</label>
+                <CustomSelect className={mrInputCls} value={currentMultiSlot.하차시간 || ""} onChange={e => updateMultiSlot("하차시간", e.target.value)}>
+                  <option value="">시간 선택</option>
+                  {timeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                </CustomSelect>
+              </div>
+
+              <div>
+                <label className={mrLabelCls}>상차방법</label>
+                <CustomSelect className={mrInputCls} value={currentMultiSlot.상차방법 || ""} onChange={e => updateMultiSlot("상차방법", e.target.value)}>
+                  <option value="">선택</option>
+                  {["수작업","지게차","호이스트","크레인","기타"].map(v => <option key={v} value={v}>{v}</option>)}
+                </CustomSelect>
+              </div>
+              <div>
+                <label className={mrLabelCls}>하차방법</label>
+                <CustomSelect className={mrInputCls} value={currentMultiSlot.하차방법 || ""} onChange={e => updateMultiSlot("하차방법", e.target.value)}>
+                  <option value="">선택</option>
+                  {["수작업","지게차","호이스트","크레인","기타"].map(v => <option key={v} value={v}>{v}</option>)}
+                </CustomSelect>
+              </div>
+
+              <div className="relative">
+                <label className={mrLabelCls}>차량종류</label>
+                <input autoComplete="off"
+                  className={mrInputCls}
+                  placeholder="차량종류 입력 또는 선택"
+                  value={multiRegVehicleQuery || currentMultiSlot.차량종류}
+                  onFocus={() => setMultiRegVehicleOpen(true)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setMultiRegVehicleQuery(v);
+                    updateMultiSlot("차량종류", v);
+                    setMultiRegVehicleOpen(true);
+                  }}
+                  onBlur={() => setTimeout(() => setMultiRegVehicleOpen(false), 150)}
+                />
+                {multiRegVehicleOpen && (
+                  <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto mt-1">
+                    {VEHICLE_TYPES.filter(v => v.includes(multiRegVehicleQuery || "")).map((v, i) => (
+                      <div key={i} className="px-3 py-2 text-[13px] hover:bg-gray-50 cursor-pointer"
+                        onMouseDown={() => { updateMultiSlot("차량종류", v); setMultiRegVehicleQuery(v); setMultiRegVehicleOpen(false); }}>
+                        {v}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className={mrLabelCls}>화물내용</label>
+                  <input autoComplete="off" type="text" inputMode="decimal" className={mrInputCls} placeholder="숫자만 입력"
+                    value={currentMultiSlot.화물수량 || ""}
+                    onChange={e => updateMultiSlot("화물수량", e.target.value.replace(/[^\d.]/g, ""))} />
+                </div>
+                <div className="w-24">
+                  <label className={mrLabelCls}>&nbsp;</label>
+                  <CustomSelect className={mrInputCls} value={currentMultiSlot.화물타입 || ""} onChange={e => updateMultiSlot("화물타입", e.target.value)}>
+                    <option value="">없음</option>
+                    <option value="파레트">파레트</option>
+                    <option value="박스">박스</option>
+                    <option value="통">통</option>
+                  </CustomSelect>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className={mrLabelCls}>차량톤수</label>
+                  <input autoComplete="off" type="text" inputMode="decimal" className={mrInputCls} placeholder="예: 5"
+                    value={currentMultiSlot.톤수값 || ""}
+                    onChange={e => updateMultiSlot("톤수값", e.target.value.replace(/[^\d.]/g, ""))} />
+                </div>
+                <div className="w-24">
+                  <label className={mrLabelCls}>&nbsp;</label>
+                  <CustomSelect className={mrInputCls} value={currentMultiSlot.톤수타입 || ""} onChange={e => updateMultiSlot("톤수타입", e.target.value)}>
+                    <option value="">없음</option>
+                    <option value="톤">톤</option>
+                    <option value="kg">kg</option>
+                  </CustomSelect>
+                </div>
+              </div>
+              <div>
+                <label className={mrLabelCls}>운행유형</label>
+                <CustomSelect className={mrInputCls} value={currentMultiSlot.운행유형 || "편도"} onChange={e => updateMultiSlot("운행유형", e.target.value)}>
+                  <option value="편도">편도</option>
+                  <option value="왕복">왕복</option>
+                </CustomSelect>
+              </div>
+
+              <div>
+                <label className={mrLabelCls}>청구운임</label>
+                <input autoComplete="off" type="text" inputMode="numeric" className={mrInputCls} placeholder="금액"
+                  value={currentMultiSlot.청구운임 || ""}
+                  onChange={e => updateMultiSlot("청구운임", e.target.value.replace(/[^\d]/g, ""))} />
+              </div>
+              <div>
+                <label className={mrLabelCls}>기사운임</label>
+                <input autoComplete="off" type="text" inputMode="numeric" className={mrInputCls} placeholder="금액"
+                  value={currentMultiSlot.기사운임 || ""}
+                  onChange={e => updateMultiSlot("기사운임", e.target.value.replace(/[^\d]/g, ""))} />
+              </div>
+
+              <div className="col-span-2">
+                <label className={mrLabelCls}>메모</label>
+                <textarea className={mrTextareaCls} rows={2} value={currentMultiSlot.메모 || ""} onChange={e => updateMultiSlot("메모", e.target.value)} />
+              </div>
+
+              <div className="col-span-2 flex items-center gap-2">
+                <input type="checkbox" id="mrUrgent" checked={!!currentMultiSlot.긴급} onChange={e => updateMultiSlot("긴급", e.target.checked)} />
+                <label htmlFor="mrUrgent" className="text-[13px] font-bold text-gray-700 cursor-pointer">긴급 오더</label>
+              </div>
+            </div>
+
+            {/* 슬롯 진행상황 미리보기 */}
+            <div className="flex flex-wrap gap-1.5 pt-3 border-t border-gray-100">
+              {multiRegSlots.map((s, i) => (
+                <button type="button" key={i} onClick={() => setMultiRegIdx(i)}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-bold border transition ${
+                    i === multiRegIdx ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                    : s.하차지명 ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : "bg-white text-gray-400 border-gray-200"
+                  }`}
+                  title={`${s._groupLabel} ${i + 1}건`}
+                >{i + 1}</button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between shrink-0">
+        {multiRegStep === "setup" ? (
+          <>
+            <span className="text-[12px] text-gray-500">
+              총 {multiRegGroups.reduce((sum, g) => sum + (g.거래처명 ? (Number(g.count) || 0) : 0), 0)}건 등록 예정
+            </span>
+            <button type="button" onClick={startMultiRegisterFill}
+              className="px-5 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold text-[13px] hover:opacity-90 transition">
+              다음
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" disabled={multiRegIdx === 0} onClick={goMultiRegPrev}
+              className="px-4 py-2.5 rounded-xl border border-gray-300 text-gray-600 font-bold text-[13px] disabled:opacity-40 hover:bg-gray-50 transition">
+              이전
+            </button>
+            {multiRegIdx < multiRegSlots.length - 1 ? (
+              <button type="button" onClick={goMultiRegNext}
+                className="px-5 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold text-[13px] hover:opacity-90 transition">
+                다음 오더 ({multiRegIdx + 2}/{multiRegSlots.length})
+              </button>
+            ) : (
+              <button type="button" disabled={multiRegSaving} onClick={submitMultiRegister}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-[13px] hover:opacity-90 transition disabled:opacity-50">
+                {multiRegSaving ? "등록 중..." : `전체 ${multiRegSlots.length}건 등록하기`}
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  </div>
+)}
 
 {/* 거래처 + 신규등록 */}
 <div className="col-span-2">
