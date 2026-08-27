@@ -17689,7 +17689,7 @@ function attachMirrorTargetOf(row) {
 }
 // ── 첨부파일 뷰어 컴포넌트 ──
 // ── 첨부파일 뷰어 컴포넌트 ──
-function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer = false }) {
+function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, onSaved, isViewer = false }) {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [selected, setSelected] = React.useState(null);
@@ -17827,6 +17827,7 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
       a.href = canvas.toDataURL("image/jpeg", 0.92);
       a.download = downloadFileName(item);
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      onSaved?.();
     };
     img.src = item.base64 || item.url;
   };
@@ -17849,6 +17850,7 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, isViewer
     a.href = item.base64 || item.url;
     a.download = downloadFileName(item);
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    onSaved?.();
   };
 
   // ✅ 전체 개별 다운로드 (서명 이미지는 제외)
@@ -19671,6 +19673,17 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
             const mirror = attachMirrorTargetOf(viewRow);
             if (mirror) updateDoc(doc(db, mirror.col, mirror.id), { attachViewed: nextVal }).catch(() => {});
           }}
+          onSaved={() => {
+            // ⭐ 파일을 1장 이상 실제로 저장했을 때만 "확인" 처리한다 — 단순히 열어서
+            // 미리보기만 한 경우는 확인으로 치지 않는다.
+            if (viewRow.attachViewed) return;
+            setResults(prev => prev.map(x => x._id === viewRow._id ? { ...x, attachViewed: true } : x));
+            setViewRow(prev => prev ? { ...prev, attachViewed: true } : prev);
+            const col = viewRow.__col || "orders";
+            updateDoc(doc(db, col, viewRow._id), { attachViewed: true }).catch(() => {});
+            const mirror = attachMirrorTargetOf(viewRow);
+            if (mirror) updateDoc(doc(db, mirror.col, mirror.id), { attachViewed: true }).catch(() => {});
+          }}
         />
       )}
     </div>
@@ -20137,7 +20150,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                   {/* 첨부 */}
                   <td className={cell}>
                     <button
-                      onClick={() => { setAttachViewer(r); if (!r.attachViewed) { setRows(prev => prev.map(x => x._id === r._id ? { ...x, attachViewed: true } : x)); } updateDoc(doc(db, r.__col || "orders", r._id), { attachViewed: true }).catch(() => {}); }}
+                      onClick={() => setAttachViewer(r)}
                       className={`relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto ${r.업로드잠금해제만료 && new Date(r.업로드잠금해제만료).getTime() > Date.now() ? "ring-2 ring-amber-400 animate-pulse" : ""}`}
                       title="첨부파일 보기"
                     >
@@ -24754,6 +24767,7 @@ const head = isDark
     onClose={() => setAttachViewer(null)}
     isViewed={rows.find(r => r._id === attachViewer?._id)?.attachViewed ?? false}
     onToggleViewed={() => { const r2 = rows.find(r => r._id === attachViewer?._id); const nextVal = !r2?.attachViewed; setRows(prev => prev.map(x => x._id === attachViewer._id ? { ...x, attachViewed: nextVal } : x)); updateDoc(doc(db, attachViewer.__col || "orders", attachViewer._id), { attachViewed: nextVal }).catch(() => {}); }}
+    onSaved={() => { const r2 = rows.find(r => r._id === attachViewer?._id); if (r2?.attachViewed) return; setRows(prev => prev.map(x => x._id === attachViewer._id ? { ...x, attachViewed: true } : x)); updateDoc(doc(db, attachViewer.__col || "orders", attachViewer._id), { attachViewed: true }).catch(() => {}); }}
     isViewer={isViewer}
   />
 )}
@@ -34127,6 +34141,7 @@ return (
     onClose={() => setAttachViewer(null)}
     isViewed={filtered.find(r => getId(r) === getId(attachViewer))?.attachViewed ?? false}
     onToggleViewed={() => { const r2 = filtered.find(r => getId(r) === getId(attachViewer)); const nextVal = !r2?.attachViewed; const aid = getId(attachViewer); setLocalOverrides(prev => ({ ...prev, [aid]: { ...(prev[aid] || {}), attachViewed: nextVal } })); updateDoc(doc(db, attachViewer.__col || "orders", aid), { attachViewed: nextVal }).catch(() => {}); }}
+    onSaved={() => { const r2 = filtered.find(r => getId(r) === getId(attachViewer)); if (r2?.attachViewed) return; const aid = getId(attachViewer); setLocalOverrides(prev => ({ ...prev, [aid]: { ...(prev[aid] || {}), attachViewed: true } })); updateDoc(doc(db, attachViewer.__col || "orders", aid), { attachViewed: true }).catch(() => {}); }}
     isViewer={isViewer}
   />
 )}
@@ -35038,7 +35053,7 @@ return (
                {/* 첨부 */}
                   <td className="border text-center whitespace-nowrap">
                     <button
-                      onClick={() => { setAttachViewer(row); if (!row.attachViewed) { const rid = getId(row); setLocalOverrides(prev => ({ ...prev, [rid]: { ...(prev[rid] || {}), attachViewed: true } })); } updateDoc(doc(db, row.__col || "orders", row._id), { attachViewed: true }).catch(() => {}); }}
+                      onClick={() => setAttachViewer(row)}
                       className={`relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto ${row.업로드잠금해제만료 && new Date(row.업로드잠금해제만료).getTime() > Date.now() ? "ring-2 ring-amber-400 animate-pulse" : ""}`}
                       title="첨부파일 보기"
                     >

@@ -82,6 +82,30 @@ function isReversedDateOrder(pickup, drop) {
 }
 const REVERSED_DATE_ORDER_MSG = "하차일은 상차일보다 빠를 수 없습니다. 날짜를 다시 확인해주세요.";
 
+// ⭐ 첨부파일 전체저장 시 파일명 규칙 — PC(DispatchApp)의 isSignatureItem/
+// attachFileExt/buildAttachFileName과 동일 로직("날짜(YYYYMMDD)거래처명_하차지명"
+// 형식, 서명 이미지는 제외하고 순번은 서명을 뺀 목록 기준). 저장 파일 이름이
+// PC와 모바일에서 서로 다르면 나중에 정산/서류 정리 때 헷갈리므로 반드시 맞춘다.
+function isSignatureItemMobile(item) {
+  return item?.source === "driver_signature" || item?.name === "서명.png";
+}
+function attachFileExtMobile(item) {
+  const fromName = (item?.name || "").match(/\.([a-zA-Z0-9]+)$/);
+  if (fromName) return fromName[1].toLowerCase();
+  const src = item?.base64 || item?.url || "";
+  const m = src.match(/^data:(image\/\w+|application\/pdf)/);
+  if (m) return m[1] === "application/pdf" ? "pdf" : (m[1].split("/")[1] || "jpg");
+  return "jpg";
+}
+function buildAttachFileNameMobile(order, item, index = 0, total = 1) {
+  const dateStr = (order?.상차일 || "").replace(/-/g, "");
+  const client = (order?.거래처명 || "").trim();
+  const drop = (order?.하차지명 || "").trim();
+  const base = `${dateStr}${client}${client && drop ? "_" : ""}${drop}`.trim() || "첨부파일";
+  const seq = total > 1 ? `-${index + 1}` : "";
+  return `${base}${seq}.${attachFileExtMobile(item)}`;
+}
+
 // 기사전달용 업로드 링크 단축 — PC(DispatchApp)의 buildShortUploadUrl과 동일한 규칙으로
 // /u/{code}를 발급한다(code는 토큰에서 파생되어 재복사해도 항상 같은 링크).
 function buildShortUploadUrlMobile(orderId, token) {
@@ -1892,6 +1916,10 @@ const quickRange = (days) => {
   // --------------------------------------------------
   const [orders, setOrders] = useState([]);
   const [canceledOrders, setCanceledOrders] = useState([]); // ⭐ 취소내역 화면용
+  // ⭐ 앱을 백그라운드에 뒀다가 다시 열었을 때, 서버 재조회가 오래 걸리는 동안(기기가
+  // 막 깨어나 네트워크 재연결이 느릴 때) 화면에 남아있던 오래된 오더 상태를 보거나
+  // 그걸 보고 조작하는 일이 없도록 잠깐 화면을 덮어두는 오버레이 — refreshNow 참고.
+  const [resyncOverlay, setResyncOverlay] = useState(false);
   const pullStartYRef = useRef(0);
   const pullDistanceRef = useRef(0);
 const [isRefreshing, setIsRefreshing] = useState(false);
@@ -2143,6 +2171,11 @@ useEffect(() => {
     const now = Date.now();
     if (now - lastRefreshAtRef.current < REFRESH_COOLDOWN_MS) return;
     lastRefreshAtRef.current = now;
+    // ⭐ 재조회가 곧바로 끝나면(캐시가 이미 최신이거나 네트워크가 빠른 경우) 화면
+    // 깜빡임 없이 조용히 넘어가고, 네트워크 재연결이 오래 걸려 응답이 지연될 때만
+    // (예: 화면을 꺼뒀다 켜서 기기가 막 깨어난 직후) 잠깐이라도 화면을 덮어
+    // "한참 전 상태"가 눈에 보이거나 그 상태로 조작하는 일 자체를 막는다.
+    const overlayTimer = setTimeout(() => setResyncOverlay(true), 400);
     try {
       const [dispatchSnap, ordersSnap] = await Promise.all([
         getDocsFromServer(collection(db, "dispatch")),
@@ -2157,6 +2190,9 @@ useEffect(() => {
       setCanceledOrders(merged.filter((o) => CANCELED_STATUS_LIST.includes(o.상태)));
     } catch {
       // 오프라인 등으로 서버 조회가 실패하면 조용히 무시 — onSnapshot이 재연결되는 대로 반영된다.
+    } finally {
+      clearTimeout(overlayTimer);
+      setResyncOverlay(false);
     }
   };
 
@@ -4150,6 +4186,14 @@ const title =
  return (
 <div className="w-full min-h-screen flex flex-col relative"
   style={{ backgroundColor: "var(--bg-app)", color: "var(--text-primary)", transition: "background-color 0.3s, color 0.3s" }}>
+    {/* ⭐ 백그라운드에서 돌아왔을 때 최신화 대기 오버레이 — 오래된 오더 상태를
+        보거나 그 상태로 조작하는 걸 막기 위해 재조회가 끝날 때까지 화면을 덮는다 */}
+    {resyncOverlay && (
+      <div className="fixed inset-0 z-[100000] flex flex-col items-center justify-center gap-3 bg-white/90 backdrop-blur-sm">
+        <div className="w-8 h-8 border-[3px] border-gray-200 border-t-[#1B2B4B] rounded-full animate-spin" />
+        <div className="text-[13px] font-bold text-gray-600">최신 오더 상황 확인 중...</div>
+      </div>
+    )}
     {/* 📝 메모 전체 보기 모달 */}
 {openMemo && (
   <div
@@ -6870,11 +6914,9 @@ function MobileOrderList({
 }) {
   const [attachViewOrder, setAttachViewOrder] = useState(null);
   const handleOpenAttach = (order) => {
+    // ⭐ 열기만 해서는 확인 처리하지 않는다 — 실제로 파일을 1장 이상 저장했을 때만
+    // attachViewed를 true로 바꾼다(CardAttachViewer의 markAttachViewedSaved 참고).
     setAttachViewOrder(order);
-    // PC(DispatchApp.jsx)와 동일한 attachViewed 필드를 사용해 확인 상태를 실시간 연동한다.
-    const col = order.__col || order._col || "dispatch";
-    const docId = order._id || order.id;
-    if (docId) updateDoc(doc(db, col, docId), { attachViewed: true }).catch(() => {});
   };
   const [selectedIds, setSelectedIds] = useState(new Set());
   // ── 오더필터(일반오더/오토바이/냉장·냉동) — 기존 차종선택(vehicleFilter)과 별개로,
@@ -7780,6 +7822,18 @@ function CardAttachViewer({ order, onClose }) {
     return null;
   };
 
+  // ⭐ 첨부파일을 "열람"만 해서는 확인 처리하지 않고, 실제로 1장 이상 저장했을
+  // 때만 attachViewed를 true로 바꾼다(PC와 동일 기준). 팝업이 열려있는 동안
+  // 중복 기록만 막으면 되므로 ref로 한 번만 쓰게 한다.
+  const attachViewedWrittenRef = React.useRef(order.attachViewed === true);
+  const markAttachViewedSaved = () => {
+    if (attachViewedWrittenRef.current) return;
+    attachViewedWrittenRef.current = true;
+    updateDoc(doc(db, col, docId), { attachViewed: true }).catch(() => {});
+    const mirror = getMirrorTarget();
+    if (mirror) updateDoc(doc(db, mirror.col, mirror.id), { attachViewed: true }).catch(() => {});
+  };
+
   const [nowTick, setNowTick] = useState(Date.now());
   const unlockExpiryTs = liveLock?.업로드잠금해제만료 ? new Date(liveLock.업로드잠금해제만료).getTime() : 0;
   const unlockRemainMs = unlockExpiryTs - nowTick;
@@ -7822,17 +7876,18 @@ function CardAttachViewer({ order, onClose }) {
     };
   }, [order]);
 
-  const doSave = (item) => {
+  const doSave = (item, filename) => {
     try {
       const a = document.createElement("a");
       a.href = item.base64 || item.url;
-      a.download = item.name || "attachment.jpg";
+      a.download = filename || item.name || "attachment.jpg";
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setSaveStates(prev => {
         const next = { ...prev, [item.id]: "success" };
         try { localStorage.setItem(attachStorageKey, JSON.stringify(next)); } catch {}
         return next;
       });
+      markAttachViewedSaved();
     } catch {
       setSaveStates(prev => ({ ...prev, [item.id]: "fail" }));
     }
@@ -7840,6 +7895,12 @@ function CardAttachViewer({ order, onClose }) {
   const handleSave = (item) => {
     if (saveStates[item.id] === "success") { setConfirmItem(item); return; }
     doSave(item);
+  };
+  // ✅ 전체저장 (서명 이미지는 제외, PC와 동일한 파일명 규칙)
+  const handleSaveAll = () => {
+    const targets = items.filter(it => !isSignatureItemMobile(it));
+    if (!targets.length) return;
+    targets.forEach((item, i) => setTimeout(() => doSave(item, buildAttachFileNameMobile(order, item, i, targets.length)), i * 400));
   };
 
   return (
@@ -7869,6 +7930,16 @@ function CardAttachViewer({ order, onClose }) {
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 text-lg font-bold">×</button>
         </div>
+        {items.length > 1 && (
+          <div className="px-4 pt-3 shrink-0">
+            <button
+              onClick={handleSaveAll}
+              className="w-full py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold"
+            >
+              전체저장 ({items.length}장)
+            </button>
+          </div>
+        )}
         {liveLock?.재업로드완료알림 === true && (
           <div className="mx-4 mt-3 flex items-center gap-1.5 px-3 py-2 bg-emerald-500 text-white text-[12px] font-bold rounded-lg shrink-0 animate-pulse">
             ✓ 기사가 재업로드를 완료했습니다
@@ -9794,17 +9865,31 @@ const pickupTimeText = order.상차시간
     return () => unsub();
   }, [showAttachments]);
 
-  const doAttachSave = (item) => {
+  // ⭐ 첨부파일을 "열람"만 해서는 확인 처리하지 않고, 실제로 1장 이상 저장했을
+  // 때만 attachViewed를 true로 바꾼다(PC와 동일 기준). 팝업이 열려있는 동안
+  // 중복 기록만 막으면 되므로 ref로 한 번만 쓰게 한다.
+  const attachViewedWrittenRef = useRef(order.attachViewed === true);
+  const markAttachViewed = () => {
+    if (attachViewedWrittenRef.current) return;
+    attachViewedWrittenRef.current = true;
+    const col = order.__col || "orders";
+    const docId = order._id || order.id;
+    updateDoc(doc(db, col, docId), { attachViewed: true }).catch(() => {});
+    if (typeof onOrderUpdate === "function") onOrderUpdate(order.id, { attachViewed: true });
+  };
+
+  const doAttachSave = (item, filename) => {
     try {
       const a = document.createElement("a");
       a.href = item.base64 || item.url;
-      a.download = item.name || "attachment.jpg";
+      a.download = filename || item.name || "attachment.jpg";
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setAttachSaveStates(prev => {
         const next = { ...prev, [item.id]: "success" };
         try { localStorage.setItem(detailAttachStorageKey, JSON.stringify(next)); } catch {}
         return next;
       });
+      markAttachViewed();
     } catch {
       setAttachSaveStates(prev => ({ ...prev, [item.id]: "fail" }));
     }
@@ -9812,6 +9897,12 @@ const pickupTimeText = order.상차시간
   const handleAttachSave = (item) => {
     if (attachSaveStates[item.id] === "success") { setAttachConfirmItem(item); return; }
     doAttachSave(item);
+  };
+  // ✅ 전체저장 (서명 이미지는 제외, PC와 동일한 파일명 규칙)
+  const handleAttachSaveAll = () => {
+    const targets = attachItems.filter(it => !isSignatureItemMobile(it));
+    if (!targets.length) return;
+    targets.forEach((item, i) => setTimeout(() => doAttachSave(item, buildAttachFileNameMobile(order, item, i, targets.length)), i * 400));
   };
 
   const normD = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
@@ -10388,12 +10479,7 @@ const handleAssignClick = () => {
     {/* 첨부파일 */}
     <div className="border-b border-gray-100">
       <button
-        onClick={() => {
-          setShowAttachments(true);
-          const col = order.__col || order._col || "dispatch";
-          const docId = order._id || order.id;
-          if (docId) updateDoc(doc(db, col, docId), { attachViewed: true }).catch(() => {});
-        }}
+        onClick={() => setShowAttachments(true)}
         style={{ touchAction: "manipulation" }}
         className="w-full flex items-center justify-between px-4 py-3"
       >
@@ -10622,6 +10708,16 @@ const handleAssignClick = () => {
                 ×
               </button>
             </div>
+            {attachItems.length > 1 && (
+              <div className="px-5 pt-3 shrink-0">
+                <button
+                  onClick={handleAttachSaveAll}
+                  className="w-full py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold"
+                >
+                  전체저장 ({attachItems.length}장)
+                </button>
+              </div>
+            )}
             {/* 본문 */}
             <div className="flex-1 overflow-y-auto p-4">
               {attachLoading && (
