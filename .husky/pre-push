@@ -12,13 +12,20 @@ if [ "$SKIP_BUMP" = "1" ]; then
 fi
 
 REMOTE="$1"
-BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
 
 # push할 커밋이 실제로 있는지 확인 (stdin에서 ref 정보 읽기)
+# ⚠️ 예전에는 여기서 항상 "지금 체크아웃된 브랜치"(git symbolic-ref)로 다시
+# push했는데, 그러면 "main으로 push"를 실행해도 훅이 몰래 현재 브랜치(예:
+# claude/... 작업 브랜치)에도 추가로 push해버려 커밋 1개당 배포가 2배로
+# 트리거되는 원인이 됐다(Vercel 무료 플랜의 하루 배포 횟수 한도를 반복해서
+# 넘김). 실제로 push하려는 원격 ref(remote_ref, 예: refs/heads/main)를 그대로
+# 써서, 사용자가 지정한 대상에만 정확히 한 번 push되게 한다.
 HAS_PUSH=0
+DEST_REF=""
 while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
   if [ -n "$local_sha" ] && [ "$local_sha" != "0000000000000000000000000000000000000000" ]; then
     HAS_PUSH=1
+    DEST_REF="$remote_ref"
   fi
 done
 
@@ -47,8 +54,9 @@ git commit -m "chore: version $VERSION"
 echo "✅ Committed version $VERSION"
 echo ""
 
-# 버전 커밋 포함해서 push (재귀 방지 플래그 사용)
-SKIP_BUMP=1 git push -u "$REMOTE" "$BRANCH"
+# 버전 커밋 포함해서 push (재귀 방지 플래그 사용) — 지금 체크아웃된 브랜치가
+# 아니라, 사용자가 실제로 지정한 원격 ref(DEST_REF)로 정확히 보낸다.
+SKIP_BUMP=1 git push "$REMOTE" "HEAD:$DEST_REF"
 EXIT_CODE=$?
 
 exit $EXIT_CODE
