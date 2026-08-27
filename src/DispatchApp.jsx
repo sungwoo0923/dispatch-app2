@@ -7534,6 +7534,90 @@ return (
   );
 });
 
+// ⭐ 다중등록 팝업 전용 자동완성 콤보박스 — 팝업 자체가 스크롤 컨테이너
+// (overflow-y-auto) 안에 있어서, 드롭다운을 그냥 absolute로 띄우면 팝업
+// 하단에서 잘려버린다(overflow 조상은 z-index와 무관하게 넘치는 자손을
+// 그대로 잘라낸다). createPortal로 document.body에 직접 띄우고 입력창의
+// 화면 좌표(getBoundingClientRect)를 따라 위치를 계산해 어떤 조상의
+// overflow에도 잘리지 않게 한다. 방향키 이동/Enter 선택/Escape 닫기까지
+// 표준 콤보박스 키보드 조작을 지원한다.
+function MultiRegCombo({ value, onChange, onSelect, items, placeholder, className, renderItem }) {
+  const [open, setOpen] = React.useState(false);
+  const [activeIdx, setActiveIdx] = React.useState(0);
+  const wrapRef = React.useRef(null);
+  const [coords, setCoords] = React.useState({ top: 0, left: 0, width: 0 });
+
+  React.useEffect(() => { setActiveIdx(0); }, [items]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const updateCoords = () => {
+      const el = wrapRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setCoords({ top: r.bottom + 4, left: r.left, width: r.width });
+    };
+    updateCoords();
+    window.addEventListener("scroll", updateCoords, true);
+    window.addEventListener("resize", updateCoords);
+    return () => {
+      window.removeEventListener("scroll", updateCoords, true);
+      window.removeEventListener("resize", updateCoords);
+    };
+  }, [open]);
+
+  const showList = open && items.length > 0;
+
+  return (
+    <div className="relative" ref={wrapRef}>
+      <input autoComplete="off"
+        className={className}
+        placeholder={placeholder}
+        value={value}
+        onFocus={() => setOpen(true)}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown") {
+            if (!open) { setOpen(true); return; }
+            e.preventDefault();
+            setActiveIdx((i) => Math.min(i + 1, items.length - 1));
+          } else if (e.key === "ArrowUp") {
+            if (!open) return;
+            e.preventDefault();
+            setActiveIdx((i) => Math.max(i - 1, 0));
+          } else if (e.key === "Enter") {
+            if (open && items[activeIdx]) {
+              e.preventDefault();
+              onSelect(items[activeIdx]);
+              setOpen(false);
+            }
+          } else if (e.key === "Escape") {
+            if (open) { e.preventDefault(); setOpen(false); }
+          }
+        }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {showList && createPortal(
+        <div
+          className="fixed z-[999999] bg-white border border-gray-200 rounded-lg shadow-lg overflow-auto"
+          style={{ top: coords.top, left: coords.left, width: coords.width, maxHeight: 240 }}
+        >
+          {items.map((it, i) => (
+            <div key={it.key ?? i}
+              className={`px-3 py-2 text-[13px] cursor-pointer ${i === activeIdx ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50"}`}
+              onMouseEnter={() => setActiveIdx(i)}
+              onMouseDown={(e) => { e.preventDefault(); onSelect(it); setOpen(false); }}
+            >
+              {renderItem ? renderItem(it, i === activeIdx) : it.label}
+            </div>
+          ))}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
  function DispatchManagement({
     dispatchData, liveDataReady = true, drivers, clients, menu, timeOptions, tonOptions,
     addDispatch, upsertDriver, upsertClient, upsertPlace,
@@ -9591,24 +9675,20 @@ const [multiRegStep, setMultiRegStep] = React.useState("setup"); // "setup" | "f
 const makeMultiRegGroup = () => ({
   key: Math.random().toString(36).slice(2),
   거래처명: "", 상차지명: "", 상차지주소: "", 상차지담당자: "", 상차지담당자번호: "",
-  query: "", dropdownOpen: false, count: 1,
+  query: "", count: 1,
 });
 const [multiRegGroups, setMultiRegGroups] = React.useState(() => [makeMultiRegGroup()]);
 const [multiRegSlots, setMultiRegSlots] = React.useState([]);
 const [multiRegIdx, setMultiRegIdx] = React.useState(0);
 const [multiRegDropQuery, setMultiRegDropQuery] = React.useState("");
-const [multiRegDropOpen, setMultiRegDropOpen] = React.useState(false);
 const [multiRegVehicleQuery, setMultiRegVehicleQuery] = React.useState("");
-const [multiRegVehicleOpen, setMultiRegVehicleOpen] = React.useState(false);
 const [multiRegSaving, setMultiRegSaving] = React.useState(false);
 
 // 슬롯(오더)을 옮길 때마다 이전 슬롯에서 쓰던 하차지/차량종류 자동완성 검색어가
 // 남아있으면 안 되므로 매번 비운다.
 React.useEffect(() => {
   setMultiRegDropQuery("");
-  setMultiRegDropOpen(false);
   setMultiRegVehicleQuery("");
-  setMultiRegVehicleOpen(false);
 }, [multiRegIdx]);
 
 const filterMultiRegClients = (q) => {
@@ -9634,7 +9714,6 @@ const applyMultiRegGroupClient = (groupKey, clientRec) => {
     상차지담당자: clientRec.담당자 || "",
     상차지담당자번호: clientRec.담당자번호 || "",
     query: clientRec.업체명,
-    dropdownOpen: false,
   } : g));
 };
 
@@ -9678,6 +9757,11 @@ const updateMultiSlot = (key, value) => {
     if (key === "차량종류" && value === "오토바이") {
       return { ...s, 차량종류: value, 상차방법: "수작업", 하차방법: "수작업" };
     }
+    // ⭐ 자동완성으로 채워둔 하차지명을 사용자가 지우면, 남아있는 주소/담당자도
+    // 같이 비워야 한다(상차지명 handlePickupName과 동일한 규칙).
+    if (key === "하차지명" && value.trim() === "") {
+      return { ...s, 하차지명: "", 하차지주소: "", 하차지담당자: "", 하차지담당자번호: "" };
+    }
     return { ...s, [key]: value };
   }));
 };
@@ -9711,7 +9795,14 @@ const submitMultiRegister = async () => {
     await Promise.all(multiRegSlots.map(s => {
       const 화물내용 = s.화물수량 ? `${s.화물수량}${s.화물타입 || ""}` : "";
       const 차량톤수 = s.톤수값 ? `${s.톤수값}${s.톤수타입 || ""}` : "";
+      // ⭐ emptyForm을 기반으로 스프레드해야 한다 — 그리드/목록 화면 곳곳이
+      // 경유상차목록/경유하차목록/근무일자목록 같은 배열 필드가 항상 존재한다고
+      // 가정하고 그대로 .map()을 돌리는 경우가 있어(단일 등록폼은 emptyForm을
+      // 기반으로 하니 항상 채워져 있었음), 이 필드들이 아예 없는 채로 저장하면
+      // 방금 등록한 오더가 목록에 반영되는 순간 "Cannot read properties of
+      // undefined (reading 'map')" 에러가 난다.
       return addDispatch({
+        ...emptyForm,
         거래처명: s.거래처명, 상차지명: s.상차지명, 상차지주소: s.상차지주소,
         상차지담당자: s.상차지담당자, 상차지담당자번호: s.상차지담당자번호,
         하차지명: s.하차지명, 하차지주소: s.하차지주소,
@@ -12877,33 +12968,19 @@ shadow-sm
                     className="absolute top-3 right-3 text-gray-400 hover:text-red-500 text-[12px] font-bold">삭제</button>
                 )}
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="relative">
+                  <div>
                     <label className={mrLabelCls}>거래처명 (=상차지)</label>
-                    <input autoComplete="off"
+                    <MultiRegCombo
                       className={mrInputCls}
                       placeholder="거래처 검색/입력"
                       value={g.query}
-                      onFocus={() => setMultiRegGroups(prev => prev.map(x => x.key === g.key ? { ...x, dropdownOpen: true } : x))}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setMultiRegGroups(prev => prev.map(x => x.key === g.key ? { ...x, query: v, dropdownOpen: true, ...(v.trim() === "" ? { 거래처명: "", 상차지명: "", 상차지주소: "", 상차지담당자: "", 상차지담당자번호: "" } : {}) } : x));
+                      onChange={(v) => {
+                        setMultiRegGroups(prev => prev.map(x => x.key === g.key ? { ...x, query: v, ...(v.trim() === "" ? { 거래처명: "", 상차지명: "", 상차지주소: "", 상차지담당자: "", 상차지담당자번호: "" } : {}) } : x));
                       }}
-                      onBlur={() => setTimeout(() => setMultiRegGroups(prev => prev.map(x => x.key === g.key ? { ...x, dropdownOpen: false } : x)), 150)}
+                      items={filterMultiRegClients(g.query).map((c, i) => ({ key: i, label: c.업체명, sub: c.주소, raw: c }))}
+                      renderItem={(it) => (<><div className="font-medium">{it.label}</div>{it.sub && <div className="text-[11px] text-gray-500">{it.sub}</div>}</>)}
+                      onSelect={(it) => applyMultiRegGroupClient(g.key, it.raw)}
                     />
-                    {g.dropdownOpen && g.query.trim() && (
-                      <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto mt-1">
-                        {filterMultiRegClients(g.query).length === 0 ? (
-                          <div className="px-3 py-2 text-[13px] text-gray-500">검색 결과 없음 — 등록된 거래처만 선택할 수 있습니다</div>
-                        ) : filterMultiRegClients(g.query).map((c, i) => (
-                          <div key={i}
-                            className="px-3 py-2 text-[13px] hover:bg-gray-50 cursor-pointer"
-                            onMouseDown={() => applyMultiRegGroupClient(g.key, c)}>
-                            <div className="font-medium">{c.업체명}</div>
-                            {c.주소 && <div className="text-[11px] text-gray-500">{c.주소}</div>}
-                          </div>
-                        ))}
-                      </div>
-                    )}
                     {g.거래처명 && (
                       <div className="text-[11px] text-emerald-600 font-semibold mt-1">✓ 상차지 고정: {g.상차지주소 || g.상차지명}</div>
                     )}
@@ -12954,32 +13031,17 @@ shadow-sm
                 </CustomSelect>
               </div>
 
-              <div className="relative">
+              <div>
                 <label className={mrLabelCls}>하차지 {reqStar}</label>
-                <input autoComplete="off"
+                <MultiRegCombo
                   className={mrInputCls}
                   placeholder="하차지 검색/입력"
                   value={multiRegDropQuery || currentMultiSlot.하차지명}
-                  onFocus={() => setMultiRegDropOpen(true)}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setMultiRegDropQuery(v);
-                    updateMultiSlot("하차지명", v);
-                    setMultiRegDropOpen(true);
-                  }}
-                  onBlur={() => setTimeout(() => setMultiRegDropOpen(false), 150)}
+                  onChange={(v) => { setMultiRegDropQuery(v); updateMultiSlot("하차지명", v); }}
+                  items={filterPlaces(multiRegDropQuery || currentMultiSlot.하차지명).map((p, i) => ({ key: i, label: p.업체명, sub: p.주소, raw: p }))}
+                  renderItem={(it) => (<><div className="font-medium">{it.label}</div>{it.sub && <div className="text-[11px] text-gray-500">{it.sub}</div>}</>)}
+                  onSelect={(it) => { applyMultiSlotDrop(it.raw); setMultiRegDropQuery(it.raw.업체명); }}
                 />
-                {multiRegDropOpen && multiRegDropQuery.trim() && filterPlaces(multiRegDropQuery).length > 0 && (
-                  <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto mt-1">
-                    {filterPlaces(multiRegDropQuery).map((p, i) => (
-                      <div key={i} className="px-3 py-2 text-[13px] hover:bg-gray-50 cursor-pointer"
-                        onMouseDown={() => { applyMultiSlotDrop(p); setMultiRegDropQuery(p.업체명); setMultiRegDropOpen(false); }}>
-                        <div className="font-medium">{p.업체명}</div>
-                        {p.주소 && <div className="text-[11px] text-gray-500">{p.주소}</div>}
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
               <div>
                 <label className={mrLabelCls}>하차지주소</label>
@@ -13013,31 +13075,20 @@ shadow-sm
                 </CustomSelect>
               </div>
 
-              <div className="relative">
+              <div>
                 <label className={mrLabelCls}>차량종류</label>
-                <input autoComplete="off"
+                <MultiRegCombo
                   className={mrInputCls}
                   placeholder="차량종류 입력 또는 선택"
                   value={multiRegVehicleQuery || currentMultiSlot.차량종류}
-                  onFocus={() => setMultiRegVehicleOpen(true)}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setMultiRegVehicleQuery(v);
-                    updateMultiSlot("차량종류", v);
-                    setMultiRegVehicleOpen(true);
-                  }}
-                  onBlur={() => setTimeout(() => setMultiRegVehicleOpen(false), 150)}
+                  onChange={(v) => { setMultiRegVehicleQuery(v); updateMultiSlot("차량종류", v); }}
+                  items={(() => {
+                    const q = (multiRegVehicleQuery || currentMultiSlot.차량종류 || "").trim();
+                    const list = q ? VEHICLE_TYPES.filter(v => v.includes(q)) : VEHICLE_TYPES;
+                    return list.map((v, i) => ({ key: i, label: v, raw: v }));
+                  })()}
+                  onSelect={(it) => { updateMultiSlot("차량종류", it.raw); setMultiRegVehicleQuery(it.raw); }}
                 />
-                {multiRegVehicleOpen && (
-                  <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto mt-1">
-                    {VEHICLE_TYPES.filter(v => v.includes(multiRegVehicleQuery || "")).map((v, i) => (
-                      <div key={i} className="px-3 py-2 text-[13px] hover:bg-gray-50 cursor-pointer"
-                        onMouseDown={() => { updateMultiSlot("차량종류", v); setMultiRegVehicleQuery(v); setMultiRegVehicleOpen(false); }}>
-                        {v}
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
               <div className="flex gap-2">
                 <div className="flex-1">
