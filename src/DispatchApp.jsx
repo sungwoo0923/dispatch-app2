@@ -3293,9 +3293,14 @@ const patchDispatch = async (_id, patch, knownPrev) => {
     patch.배차확정일시 = null;
     patch.배차확정자 = null;
     // 차량정보가 빠지면 그 배차 자체가 무효화되는 것이므로, 배차방식(직접배차/24시
-    // 등)도 다시 "선택없음"으로 되돌린다 — 남아있으면 실제로는 배차가 취소됐는데
+    // 등)도 다시 미선택 상태로 되돌린다 — 남아있으면 실제로는 배차가 취소됐는데
     // 배차방식만 이전 값으로 남아있어 헷갈린다는 피드백.
-    patch.배차방식 = "선택없음";
+    // ⭐ 예전엔 여기에 "선택없음"이라는 문자열을 그대로 저장했는데, 배차방식
+    // 드롭다운들의 빈값 옵션은 전부 value=""(라벨만 "선택"/"선택없음")이라
+    // "선택없음"이라는 문자열 자체와는 일치하는 옵션이 없어 드롭다운이 아무 라벨도
+    // 못 찾고 완전히 공란으로 보이는 원인이었다. 실제 "미선택" 값은 다른 곳과
+    // 동일하게 빈 문자열로 저장해야 드롭다운에 플레이스홀더("선택")가 정상 표시된다.
+    patch.배차방식 = "";
   } else {
     const basePlate = patch.차량번호 || prev?.차량번호;
     if (basePlate) {
@@ -8993,7 +8998,6 @@ const filterPlaces = (q) => {
     const cargoTypeTabbedRef = React.useRef(false); // 화물타입 "없음" 선택이 Tab으로 확정됐는지 추적(아래 참고)
     const tonInputRef = React.useRef(null);
     const payTypeRef = React.useRef(null);
-    const dispatchTypeRef = React.useRef(null);
     // 필수값 미입력 필드를 빨간 테두리로 깜빡여 알려주기 위한 상태
     const [requiredErrors, setRequiredErrors] = React.useState(new Set());
     const [form, setForm] = React.useState(() => {
@@ -10896,13 +10900,10 @@ function checkDuplicateDispatch(form, dispatchData) {
         : !String(f.차량톤수 || "").trim();
       if (차량톤수비어있음) { miss.push("차량톤수"); missKeys.push("차량톤수"); }
       if (!f.지급방식) { miss.push("지급방식"); missKeys.push("지급방식"); }
-      // ⭐ 주석에는 원래부터 필수값으로 적혀 있었지만 실제 검사 코드가 빠져 있어
-      // 배차방식을 선택하지 않고도 그냥 등록이 되던 버그 — 지급방식과 동일하게 추가.
-      if (!f.배차방식) { miss.push("배차방식"); missKeys.push("배차방식"); }
       if (miss.length) {
         setRequiredErrors(new Set(missKeys));
         setTimeout(() => setRequiredErrors(new Set()), 2500);
-        const refMap = { 화물내용: cargoInputRef, 차량톤수: tonInputRef, 지급방식: payTypeRef, 배차방식: dispatchTypeRef };
+        const refMap = { 화물내용: cargoInputRef, 차량톤수: tonInputRef, 지급방식: payTypeRef };
         const firstRefKey = missKeys.find(k => refMap[k]?.current);
         if (firstRefKey) {
           refMap[firstRefKey].current.focus?.();
@@ -15255,8 +15256,8 @@ className={`
   </div>
 
   <div>
-    <label className={labelCls}>배차방식 {reqStar}</label>
-    <CustomSelect ref={dispatchTypeRef} className={`${inputCls}${requiredErrors.has("배차방식") ? " border-red-500 ring-2 ring-red-300 animate-pulse" : ""}`} value={form.배차방식} onChange={(e) => onChange("배차방식", e.target.value)}>
+    <label className={labelCls}>배차방식</label>
+    <CustomSelect className={inputCls} value={form.배차방식} onChange={(e) => onChange("배차방식", e.target.value)}>
       <option value="">선택 ▾</option>
       {DISPATCH_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
     </CustomSelect>
@@ -25392,18 +25393,23 @@ const handleCloseFileUpload = async (e) => {
     }
 
     if (key === "배차방식") {
+      // ⭐ 예전에 patchDispatch가 미선택 상태를 "선택없음"이라는 문자열 그대로
+      // 저장하던 시절의 잔여 데이터는 어떤 옵션의 value("")와도 일치하지 않아
+      // 드롭다운이 완전히 공란으로 보였다 — 새로 저장되는 값은 빈 문자열이지만,
+      // 이미 저장된 옛 데이터도 여기서 같이 정규화해 "선택"이 보이게 한다.
+      const dispatchVal = val === "선택없음" ? "" : (val || "");
       return (
         <CustomSelect
           className="border rounded px-1 py-0.5 w-full text-center"
-          value={val || ""}
+          value={dispatchVal}
           onChange={(e) => {
             const next = e.target.value;
-            if (next === val) return;
+            if (next === dispatchVal) return;
 
             setConfirmChange({
               rowId,
               key: "배차방식",
-              before: val || "",
+              before: dispatchVal,
               after: next,
             });
           }}
@@ -27321,7 +27327,7 @@ value={copyTarget?.화물수량 || ""}
 <Field label="배차방식">
   <CustomSelect
     className={inputStyle}
-    value={copyTarget?.배차방식 ?? ""}
+    value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")}
     onChange={(e)=>setCopyTarget(p=>({...p, 배차방식:e.target.value}))}
   >
     <option value="">선택</option>
@@ -29107,7 +29113,7 @@ value={copyTarget?.화물수량 || ""}
                 <label>배차방식</label>
                 <CustomSelect
                   className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500"
-                  value={editTarget.배차방식 || ""}
+                  value={editTarget.배차방식 === "선택없음" ? "" : (editTarget.배차방식 || "")}
                   onChange={(e) =>
                     setEditTarget((p) => ({ ...p, 배차방식: e.target.value }))
                   }
@@ -35863,7 +35869,7 @@ return (
                   <td className="border text-center">
                     <CustomSelect
                       className="border rounded px-1 py-0.5 w-full text-center"
-                      value={row.배차방식 || ""}
+                      value={row.배차방식 === "선택없음" ? "" : (row.배차방식 || "")}
                       onChange={(e) =>
                         handleImmediateSelectChange(row, "배차방식", e.target.value)
                       }
@@ -36983,7 +36989,7 @@ return (
                 <label>배차방식</label>
                 <CustomSelect
                   className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500"
-                  value={editTarget.배차방식 || ""}
+                  value={editTarget.배차방식 === "선택없음" ? "" : (editTarget.배차방식 || "")}
                   onChange={(e) =>
                     setEditTarget((p) => ({ ...p, 배차방식: e.target.value }))
                   }
@@ -38294,7 +38300,7 @@ setCopyPlaceOptions(list);
 <Field label="배차방식">
   <CustomSelect
     className={inputStyle}
-    value={copyTarget?.배차방식 ?? ""}
+    value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")}
     onChange={(e)=>setCopyTarget(p=>({...p, 배차방식:e.target.value}))}
   >
     <option value="">선택</option>
@@ -41148,7 +41154,7 @@ function NewOrderPopup({
               <label>배차방식</label>
               <CustomSelect
                 className="border p-2 rounded w-full"
-                value={newOrder.배차방식}
+                value={newOrder.배차방식 === "선택없음" ? "" : newOrder.배차방식}
                 onChange={(e) => handleChange("배차방식", e.target.value)}
               >
                 <option value="">선택없음</option>
@@ -46809,7 +46815,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       </CustomSelect>
                     </Field>
                     <Field label="배차방식">
-                      <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.배차방식 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 배차방식: e.target.value}))}>
+                      <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")} onChange={(e) => setCopyTarget(p => ({...p, 배차방식: e.target.value}))}>
                         <option value="">선택</option><option value="24시">24시</option><option value="직접배차">직접배차</option><option value="인성">인성</option>
                       </CustomSelect>
                     </Field>
