@@ -8993,6 +8993,7 @@ const filterPlaces = (q) => {
     const cargoTypeTabbedRef = React.useRef(false); // 화물타입 "없음" 선택이 Tab으로 확정됐는지 추적(아래 참고)
     const tonInputRef = React.useRef(null);
     const payTypeRef = React.useRef(null);
+    const dispatchTypeRef = React.useRef(null);
     // 필수값 미입력 필드를 빨간 테두리로 깜빡여 알려주기 위한 상태
     const [requiredErrors, setRequiredErrors] = React.useState(new Set());
     const [form, setForm] = React.useState(() => {
@@ -10895,10 +10896,13 @@ function checkDuplicateDispatch(form, dispatchData) {
         : !String(f.차량톤수 || "").trim();
       if (차량톤수비어있음) { miss.push("차량톤수"); missKeys.push("차량톤수"); }
       if (!f.지급방식) { miss.push("지급방식"); missKeys.push("지급방식"); }
+      // ⭐ 주석에는 원래부터 필수값으로 적혀 있었지만 실제 검사 코드가 빠져 있어
+      // 배차방식을 선택하지 않고도 그냥 등록이 되던 버그 — 지급방식과 동일하게 추가.
+      if (!f.배차방식) { miss.push("배차방식"); missKeys.push("배차방식"); }
       if (miss.length) {
         setRequiredErrors(new Set(missKeys));
         setTimeout(() => setRequiredErrors(new Set()), 2500);
-        const refMap = { 화물내용: cargoInputRef, 차량톤수: tonInputRef, 지급방식: payTypeRef };
+        const refMap = { 화물내용: cargoInputRef, 차량톤수: tonInputRef, 지급방식: payTypeRef, 배차방식: dispatchTypeRef };
         const firstRefKey = missKeys.find(k => refMap[k]?.current);
         if (firstRefKey) {
           refMap[firstRefKey].current.focus?.();
@@ -15251,8 +15255,8 @@ className={`
   </div>
 
   <div>
-    <label className={labelCls}>배차방식</label>
-    <CustomSelect className={inputCls} value={form.배차방식} onChange={(e) => onChange("배차방식", e.target.value)}>
+    <label className={labelCls}>배차방식 {reqStar}</label>
+    <CustomSelect ref={dispatchTypeRef} className={`${inputCls}${requiredErrors.has("배차방식") ? " border-red-500 ring-2 ring-red-300 animate-pulse" : ""}`} value={form.배차방식} onChange={(e) => onChange("배차방식", e.target.value)}>
       <option value="">선택 ▾</option>
       {DISPATCH_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
     </CustomSelect>
@@ -30533,6 +30537,13 @@ if (confirmChange.key === "지급방식") {
     }
   }
 }
+// ⭐ 이 화면의 grid는 dispatchData가 아니라 별도 로컬 rows 상태(마운트 시점
+// 스냅샷)를 그대로 filtered로 파생해서 그리는데, patchDispatch는 공용
+// dispatchData만 낙관적으로 갱신하고 이 컴포넌트의 rows는 건드리지 않는다.
+// 그래서 이 팝업으로 배차방식 등을 바꾸고 저장해도 Firestore엔 정상 반영되지만
+// 화면(그리드)에는 그대로 예전 값이 남아있어 "안 바뀐 것처럼" 보이던 버그의
+// 원인이었다 — rows도 함께 갱신해 화면이 즉시 따라오게 한다.
+setRows(prev => prev.map(x => x._id === confirmChange.rowId ? { ...x, ...patch } : x));
 patchDispatch(confirmChange.rowId, patch, row).catch(console.error);
 flashRow(confirmChange.rowId);
 setConfirmChange(null);
