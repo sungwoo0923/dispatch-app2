@@ -9783,6 +9783,209 @@ React.useEffect(() => {
   setMultiRegVehicleQuery("");
 }, [multiRegIdx]);
 
+// ================================================================
+// ⭐ 다중등록 전용 "기사 스마트검색" + 차량번호 자동매칭 + 신규기사등록 —
+// 단일 등록폼(smartDriverQuery/handleCarNoChange/checkNewDriver)과 완전히
+// 동일한 로직을, form이 아니라 "현재 편집 중인 슬롯"에 반영하도록 다시 연결한다.
+// ================================================================
+const [mrSmartDriverQuery, setMrSmartDriverQuery] = React.useState("");
+const [mrSmartDriverMatched, setMrSmartDriverMatched] = React.useState([]);
+const [mrSmartDriverActiveIdx, setMrSmartDriverActiveIdx] = React.useState(-1);
+const [mrDriverDropdownOpen, setMrDriverDropdownOpen] = React.useState(false);
+const [mrDriverCandidates, setMrDriverCandidates] = React.useState([]);
+const [mrDriverActive, setMrDriverActive] = React.useState(0);
+const [mrDriverConflictPopup, setMrDriverConflictPopup] = React.useState(null);
+
+React.useEffect(() => {
+  setMrSmartDriverQuery(""); setMrSmartDriverMatched([]); setMrSmartDriverActiveIdx(-1);
+  setMrDriverDropdownOpen(false); setMrDriverCandidates([]); setMrDriverActive(0);
+}, [multiRegIdx]);
+
+const applyMultiSlotDriver = (patch) => {
+  setMultiRegSlots(prev => prev.map((s, i) => i === multiRegIdx ? { ...s, ...patch } : s));
+};
+
+// 📌 차량번호 입력(타이핑) — 기존 기사와 자동매칭, 여러 명이면 드롭다운
+const handleMultiRegCarNoChange = (value) => {
+  const clean = (value || "").trim().replace(/\s+/g, "");
+  if (!clean) {
+    applyMultiSlotDriver({ 차량번호: "", 이름: "", 전화번호: "", 배차상태: "배차중" });
+    setMrDriverDropdownOpen(false);
+    return;
+  }
+  applyMultiSlotDriver({ 차량번호: clean });
+
+  const list = driverMap.get(clean);
+  if (list && list.length > 1) {
+    setMrDriverCandidates(list);
+    setMrDriverActive(0);
+    setMrDriverDropdownOpen(true);
+    return;
+  }
+  if (list && list.length === 1) {
+    const grade = list[0]?.등급 || list[0]?.grade || list[0]?.상태 || "";
+    if (grade === "블랙") setBlackAlert(list[0]);
+    else if (shouldShowDriverMemoAlert(list[0])) {
+      window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: list[0] }));
+    }
+    applyMultiSlotDriver({ 차량번호: clean, 이름: list[0].이름 || "", 전화번호: list[0].전화번호 || "", 배차상태: "배차완료" });
+    setMrDriverDropdownOpen(false);
+    return;
+  }
+  applyMultiSlotDriver({ 이름: "", 전화번호: "", 배차상태: "배차중" });
+  setMrDriverDropdownOpen(false);
+};
+
+// 📌 차량번호 확정(Enter/blur) — 매칭되는 기존 기사가 없으면 신규등록 팝업
+const checkMultiRegNewDriver = (carNo) => {
+  const clean = (carNo || "").trim().replace(/\s+/g, "");
+  if (!clean) return;
+  const list = driverMap.get(clean);
+  if (!list || list.length === 0) {
+    // 스마트검색으로 이미 이름이 세팅돼있으면(=이미 대응됨) 건드리지 않는다.
+    if (currentMultiSlot?.이름 && currentMultiSlot.이름.trim()) return;
+    const slotKey = multiRegIdx;
+    setDriverModal({
+      open: true,
+      carNo: clean,
+      name: "",
+      phone: "",
+      onConfirm: (info) => {
+        setMultiRegSlots(prev => prev.map((s, i) => i === slotKey ? {
+          ...s, 차량번호: info.차량번호, 이름: info.이름, 전화번호: info.전화번호, 배차상태: "배차완료",
+        } : s));
+      },
+    });
+    applyMultiSlotDriver({ 차량번호: clean, 이름: "", 전화번호: "", 배차상태: "배차중" });
+  }
+};
+
+// 📌 기사 스마트검색(붙여넣기) — parseDriverText/normD는 단일 등록폼의 것을 그대로 재사용
+const handleMultiRegSmartDriverInput = (text) => {
+  setMrSmartDriverQuery(text);
+  setMrSmartDriverActiveIdx(-1);
+  if (!text.trim()) { setMrSmartDriverMatched([]); return; }
+  const { phone, plate, name } = parseDriverText(text);
+  const results = plate
+    ? (drivers || [])
+        .filter(d => normD(d.차량번호) === normD(plate))
+        .sort((a, b) => {
+          const aExact = normD(a.이름) === normD(name) && normD(a.전화번호) === normD(phone);
+          const bExact = normD(b.이름) === normD(name) && normD(b.전화번호) === normD(phone);
+          if (aExact && !bExact) return -1;
+          if (!aExact && bExact) return 1;
+          return 0;
+        })
+    : (name && name.length >= 2)
+    ? (drivers || []).filter(d => d.이름 && d.이름.includes(name))
+    : [];
+  setMrSmartDriverMatched(results.slice(0, 8));
+};
+
+const selectMultiRegSmartDriver = (d) => {
+  const { phone: typedPhone } = parseDriverText(mrSmartDriverQuery);
+  if (typedPhone && normD(d.전화번호) !== normD(typedPhone)) {
+    setMrSmartDriverQuery(""); setMrSmartDriverMatched([]); setMrSmartDriverActiveIdx(-1);
+    setMrDriverConflictPopup({ mode: "phone_diff", existing: d, input: { plate: d.차량번호, name: d.이름, phone: typedPhone } });
+    return;
+  }
+  const grade = d?.등급 || d?.grade || "";
+  if (grade === "블랙") setBlackAlert(d);
+  else if (shouldShowDriverMemoAlert(d)) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: d }));
+  applyMultiSlotDriver({ 차량번호: d.차량번호, 이름: d.이름 || "", 전화번호: formatPhone(d.전화번호 || ""), 배차상태: "배차완료" });
+  setMrSmartDriverQuery(""); setMrSmartDriverMatched([]); setMrSmartDriverActiveIdx(-1);
+};
+
+const handleMultiRegSmartDriverKeyDown = (e) => {
+  if (mrSmartDriverMatched.length > 0 && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+    e.preventDefault();
+    setMrSmartDriverActiveIdx(prev => {
+      const next = e.key === "ArrowDown" ? prev + 1 : prev - 1;
+      if (next < 0) return mrSmartDriverMatched.length - 1;
+      if (next >= mrSmartDriverMatched.length) return 0;
+      return next;
+    });
+    return;
+  }
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    if (mrSmartDriverMatched.length > 0 && mrSmartDriverActiveIdx >= 0 && mrSmartDriverActiveIdx < mrSmartDriverMatched.length) {
+      selectMultiRegSmartDriver(mrSmartDriverMatched[mrSmartDriverActiveIdx]);
+    } else {
+      applyMultiRegSmartDriverInput(mrSmartDriverQuery);
+    }
+    return;
+  }
+  if (e.key === "Escape" && mrSmartDriverMatched.length > 0) {
+    e.preventDefault();
+    setMrSmartDriverMatched([]); setMrSmartDriverActiveIdx(-1);
+  }
+};
+
+const applyMultiRegSmartDriverInput = async (text) => {
+  if (!text.trim()) return;
+  const { phone, plate, name } = parseDriverText(text);
+  if (!plate && !name && !phone) return;
+  const byPlate = plate ? (drivers || []).filter(d => normD(d.차량번호) === normD(plate)) : [];
+  if (byPlate.length > 0) {
+    const existing = byPlate[0];
+    const sameName = normD(existing.이름) === normD(name);
+    const samePhone = normD(existing.전화번호) === normD(phone);
+    if (sameName && samePhone) {
+      const grade = existing?.등급 || existing?.grade || "";
+      if (grade === "블랙") setBlackAlert(existing);
+      else if (shouldShowDriverMemoAlert(existing)) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: existing }));
+      applyMultiSlotDriver({ 차량번호: existing.차량번호, 이름: existing.이름, 전화번호: formatPhone(existing.전화번호), 배차상태: "배차완료" });
+      setMrSmartDriverQuery(""); setMrSmartDriverMatched([]);
+    } else if (sameName && !samePhone) {
+      setMrSmartDriverQuery(""); setMrSmartDriverMatched([]);
+      setMrDriverConflictPopup({ mode: "phone_diff", existing, input: { plate, name, phone } });
+    } else if (!sameName && name) {
+      setMrSmartDriverQuery(""); setMrSmartDriverMatched([]);
+      setMrDriverConflictPopup({ mode: "name_diff", existing, input: { plate, name, phone } });
+    } else {
+      const grade = existing?.등급 || existing?.grade || "";
+      if (grade === "블랙") setBlackAlert(existing);
+      else if (shouldShowDriverMemoAlert(existing)) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: existing }));
+      applyMultiSlotDriver({ 차량번호: existing.차량번호, 이름: existing.이름, 전화번호: formatPhone(existing.전화번호), 배차상태: "배차완료" });
+      setMrSmartDriverQuery(""); setMrSmartDriverMatched([]);
+    }
+    return;
+  }
+  if (plate || name || phone) {
+    applyMultiSlotDriver({ 차량번호: plate, 이름: name, 전화번호: formatPhone(phone), 배차상태: plate ? "배차완료" : "배차중" });
+    setMrSmartDriverQuery(""); setMrSmartDriverMatched([]);
+  }
+};
+
+// 📌 기사명/전화번호를 손으로 직접 고쳐 적었을 때(blur) — 단일 등록폼의
+// checkDriverConflict()와 동일하게, 차량번호는 있는데 매칭되는 기사가 없으면
+// 신규등록 확인을, 있는데 이름/전화번호가 다르면 충돌 확인을 띄운다.
+const checkMultiRegDriverConflict = () => {
+  const s = currentMultiSlot;
+  if (!s) return;
+  const plate = (s.차량번호 || "").trim().replace(/\s+/g, "");
+  const name = (s.이름 || "").trim();
+  const phone = (s.전화번호 || "").replace(/[^\d]/g, "");
+  if (!plate || !name) return;
+  const list = driverMap.get(plate);
+  if (!list || list.length === 0) {
+    if (name && phone) {
+      setMrDriverConflictPopup({ mode: "new_driver", existing: null, input: { plate, name, phone: formatPhone(phone) } });
+    }
+    return;
+  }
+  const existing = list[0];
+  const existName = (existing.이름 || "").trim();
+  const existPhone = (existing.전화번호 || "").replace(/[^\d]/g, "");
+  const sameName = existName === name;
+  const samePhone = existPhone === phone;
+  if (sameName && samePhone) return;
+  if (!sameName || !samePhone) {
+    setMrDriverConflictPopup({ mode: !sameName ? "name_diff" : "phone_diff", existing, input: { plate, name, phone: formatPhone(phone) } });
+  }
+};
+
 const filterMultiRegClients = (q) => {
   const query = String(q || "").trim().toLowerCase();
   if (!query) return [];
@@ -9928,6 +10131,15 @@ const submitMultiRegister = async () => {
     await Promise.all(multiRegSlots.map(s => {
       const 화물내용 = s.화물수량 ? `${s.화물수량}${s.화물타입 || ""}` : "";
       const 차량톤수 = s.톤수값 ? `${s.톤수값}${s.톤수타입 || ""}` : "";
+      // ⭐ 단일 등록폼과 동일: 스마트검색 등으로 아직 기사관리에 없는 차량번호+
+      // 기사명이 입력돼있으면, 실제 오더 저장과 함께 조용히 신규 기사로도
+      // upsert한다(이미 있는 차량번호면 건드리지 않음).
+      if (s.차량번호 && s.이름) {
+        const existing = driverMap.get(String(s.차량번호).replace(/\s+/g, ""));
+        if (!existing || existing.length === 0) {
+          upsertDriver({ 차량번호: s.차량번호, 이름: s.이름, 전화번호: s.전화번호 }).catch(() => {});
+        }
+      }
       // ⭐ emptyForm을 기반으로 스프레드해야 한다 — 그리드/목록 화면 곳곳이
       // 경유상차목록/경유하차목록/근무일자목록 같은 배열 필드가 항상 존재한다고
       // 가정하고 그대로 .map()을 돌리는 경우가 있어(단일 등록폼은 emptyForm을
@@ -13363,18 +13575,108 @@ shadow-sm
                 </CustomSelect>
               </div>
 
-              <div>
+              <div className="col-span-2 relative">
+                <label className={mrLabelCls}>스마트검색</label>
+                <textarea
+                  className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-2.5 text-[13px] resize-none bg-white shadow-[0_0_0_1px_rgba(27,43,75,0.08),0_2px_8px_rgba(27,43,75,0.06)] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30 focus:border-[#1B2B4B] focus:shadow-[0_0_0_1px_rgba(27,43,75,0.15),0_4px_12px_rgba(27,43,75,0.1)] placeholder:text-gray-500 transition-all"
+                  rows={2}
+                  placeholder="기사 스마트 검색 "
+                  value={mrSmartDriverQuery}
+                  onChange={e => handleMultiRegSmartDriverInput(e.target.value)}
+                  onKeyDown={handleMultiRegSmartDriverKeyDown}
+                  onBlur={e => {
+                    setTimeout(() => {
+                      if (e.target.value.trim().length > 4) applyMultiRegSmartDriverInput(e.target.value);
+                      setMrSmartDriverMatched([]);
+                      setMrSmartDriverActiveIdx(-1);
+                    }, 200);
+                  }}
+                />
+                {mrSmartDriverMatched.length > 0 && (
+                  <div className="absolute z-50 w-full bg-white border-2 border-[#1B2B4B] rounded-xl shadow-2xl mt-0.5 overflow-hidden">
+                    <div className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[11px] font-semibold">
+                      등록된 기사 {mrSmartDriverMatched.length}명
+                    </div>
+                    {mrSmartDriverMatched.map((d, i) => (
+                      <div key={i}
+                        className={`px-4 py-3 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between ${i === mrSmartDriverActiveIdx ? "bg-blue-100" : "hover:bg-blue-50"}`}
+                        onMouseEnter={() => setMrSmartDriverActiveIdx(i)}
+                        onMouseDown={() => selectMultiRegSmartDriver(d)}
+                      >
+                        <div>
+                          <div className="font-bold text-gray-900 text-[14px]">{d.이름 || "-"}</div>
+                          <div className="text-[12px] text-gray-500 mt-0.5">{d.차량번호} &nbsp;|&nbsp; {formatPhone(d.전화번호)}</div>
+                        </div>
+                        {d.등급 === "블랙" && (
+                          <span className="px-2 py-0.5 bg-gray-900 text-white text-[10px] rounded-full font-bold">블랙</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="relative">
                 <label className={mrLabelCls}>차량번호</label>
-                <input autoComplete="off" className={mrInputCls} placeholder="차량번호 입력" value={currentMultiSlot.차량번호 || ""} onChange={e => updateMultiSlot("차량번호", e.target.value)} />
+                <input autoComplete="off" className={mrInputCls} placeholder="차량번호 입력"
+                  value={currentMultiSlot.차량번호 || ""}
+                  onChange={e => handleMultiRegCarNoChange(e.target.value)}
+                  onKeyDown={e => {
+                    if (!mrDriverDropdownOpen) {
+                      if (e.key === "Enter") { e.preventDefault(); checkMultiRegNewDriver(e.currentTarget.value); }
+                      return;
+                    }
+                    if (e.key === "ArrowDown") { e.preventDefault(); setMrDriverActive(i => Math.min(i + 1, mrDriverCandidates.length - 1)); }
+                    if (e.key === "ArrowUp") { e.preventDefault(); setMrDriverActive(i => Math.max(i - 1, 0)); }
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const selected = mrDriverCandidates[mrDriverActive];
+                      if (!selected) return;
+                      applyMultiSlotDriver({ 이름: selected.이름, 전화번호: formatPhone(selected.전화번호), 배차상태: "배차완료" });
+                      setMrDriverDropdownOpen(false);
+                    }
+                    if (e.key === "Escape") setMrDriverDropdownOpen(false);
+                    if (e.key === "Tab") {
+                      const selected = mrDriverCandidates[mrDriverActive];
+                      if (selected) {
+                        applyMultiSlotDriver({ 이름: selected.이름, 전화번호: formatPhone(selected.전화번호), 배차상태: "배차완료" });
+                        setMrDriverDropdownOpen(false);
+                      }
+                    }
+                  }}
+                  onBlur={e => {
+                    if (!currentMultiSlot?.이름?.trim()) checkMultiRegNewDriver(e.currentTarget.value);
+                    setTimeout(() => setMrDriverDropdownOpen(false), 150);
+                  }}
+                />
+                {mrDriverDropdownOpen && mrDriverCandidates && mrDriverCandidates.length > 1 && (
+                  <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
+                    {mrDriverCandidates.map((d, i) => (
+                      <div key={i}
+                        className={`px-3 py-2 text-sm cursor-pointer ${i === mrDriverActive ? "bg-blue-50" : "hover:bg-gray-50"}`}
+                        onMouseEnter={() => setMrDriverActive(i)}
+                        onMouseDown={() => {
+                          const grade = d?.등급 || d?.grade || d?.상태 || "";
+                          if (grade === "블랙") setBlackAlert(d);
+                          applyMultiSlotDriver({ 이름: d.이름, 전화번호: formatPhone(d.전화번호), 배차상태: "배차완료" });
+                          setMrDriverDropdownOpen(false);
+                        }}
+                      >
+                        <div className="font-medium">{d.이름} · {d.차량번호}</div>
+                        <div className="text-xs text-gray-500">{formatPhone(d.전화번호)}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div>
                 <label className={mrLabelCls}>기사명</label>
-                <input autoComplete="off" className={mrInputCls} placeholder="기사명 입력" value={currentMultiSlot.이름 || ""} onChange={e => updateMultiSlot("이름", e.target.value)} />
+                <input autoComplete="off" className={mrInputCls} placeholder="기사명 입력" value={currentMultiSlot.이름 || ""} onChange={e => updateMultiSlot("이름", e.target.value)} onBlur={checkMultiRegDriverConflict} />
               </div>
 
               <div>
                 <label className={mrLabelCls}>전화번호</label>
-                <input autoComplete="off" className={mrInputCls} placeholder="전화번호 입력" value={currentMultiSlot.전화번호 || ""} onChange={e => updateMultiSlot("전화번호", formatPhone(e.target.value))} />
+                <input autoComplete="off" className={mrInputCls} placeholder="전화번호 입력" value={currentMultiSlot.전화번호 || ""} onChange={e => updateMultiSlot("전화번호", formatPhone(e.target.value))} onBlur={checkMultiRegDriverConflict} />
               </div>
               <div />
 
@@ -13455,6 +13757,114 @@ shadow-sm
               </button>
             )}
           </>
+        )}
+      </div>
+    </div>
+  </div>
+)}
+
+{/* 다중등록 전용 "기사 정보 충돌/신규 확인" 팝업 — 단일 등록폼의 driverConflictPopup과
+    화면은 완전히 동일하되, form이 아니라 현재 편집 중인 슬롯에 반영한다. */}
+{mrDriverConflictPopup && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]">
+    <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden border">
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between">
+        <div>
+          <h3 className="text-white font-bold text-[15px]">
+            {mrDriverConflictPopup.existing ? "⚠️ 기사 정보 충돌" : "🆕 신규 기사 등록 확인"}
+          </h3>
+          <p className="text-white/60 text-[12px] mt-0.5">
+            {mrDriverConflictPopup.existing
+              ? "동일 차량번호에 다른 기사 정보가 감지되었습니다"
+              : "등록되지 않은 기사입니다. 신규 등록하시겠습니까?"}
+          </p>
+        </div>
+        <button onClick={() => setMrDriverConflictPopup(null)} className="text-white/50 hover:text-white text-xl leading-none ml-4 mt-0.5 flex-shrink-0">✕</button>
+      </div>
+      <div className="px-6 py-5 space-y-4">
+        {mrDriverConflictPopup.existing && (
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+            <div className="text-[11px] font-semibold text-gray-500 mb-2">기존 등록 정보</div>
+            <div className="text-[14px] font-bold text-gray-800">{mrDriverConflictPopup.existing.이름}</div>
+            <div className="text-[13px] text-gray-600 mt-1">
+              {mrDriverConflictPopup.existing.차량번호} &nbsp;|&nbsp; {formatPhone(mrDriverConflictPopup.existing.전화번호)}
+            </div>
+          </div>
+        )}
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <div className="text-[11px] font-semibold text-blue-600 mb-2">
+            {mrDriverConflictPopup.existing ? "새로 입력한 정보" : "신규 등록할 정보"}
+          </div>
+          <div className="text-[14px] font-bold text-gray-800">{mrDriverConflictPopup.input.name}</div>
+          <div className="text-[13px] text-gray-600 mt-1">
+            {mrDriverConflictPopup.input.plate} &nbsp;|&nbsp; {formatPhone(mrDriverConflictPopup.input.phone)}
+          </div>
+        </div>
+      </div>
+      <div className="px-6 pb-6 space-y-3">
+        {mrDriverConflictPopup.existing && (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                className="py-2.5 rounded-xl bg-white border-2 border-gray-300 text-gray-700 text-[13px] font-semibold hover:bg-gray-50 transition"
+                onClick={() => {
+                  const ex = mrDriverConflictPopup.existing;
+                  applyMultiSlotDriver({ 차량번호: ex.차량번호, 이름: ex.이름, 전화번호: formatPhone(ex.전화번호), 배차상태: "배차완료" });
+                  setMrSmartDriverQuery(""); setMrSmartDriverMatched([]);
+                  setMrDriverConflictPopup(null);
+                }}
+              >
+                기존 정보 사용
+              </button>
+              <button
+                className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"
+                onClick={async () => {
+                  const { plate, name, phone } = mrDriverConflictPopup.input;
+                  await upsertDriver({ 차량번호: plate, 이름: name, 전화번호: phone });
+                  applyMultiSlotDriver({ 차량번호: plate, 이름: name, 전화번호: formatPhone(phone), 배차상태: "배차완료" });
+                  setMrSmartDriverQuery(""); setMrSmartDriverMatched([]);
+                  setMrDriverConflictPopup(null);
+                }}
+              >
+                기존 정보 덮어쓰기
+              </button>
+            </div>
+            <button
+              className="w-full py-2.5 rounded-xl bg-emerald-600 text-white text-[13px] font-bold hover:bg-emerald-700 transition"
+              onClick={async () => {
+                const { plate, name, phone } = mrDriverConflictPopup.input;
+                await upsertDriver({ id: crypto.randomUUID(), 차량번호: plate, 이름: name, 전화번호: phone });
+                applyMultiSlotDriver({ 차량번호: plate, 이름: name, 전화번호: formatPhone(phone), 배차상태: "배차완료" });
+                setMrSmartDriverQuery(""); setMrSmartDriverMatched([]);
+                setMrDriverConflictPopup(null);
+              }}
+            >
+              신규 기사로 별도 등록
+            </button>
+          </>
+        )}
+        {!mrDriverConflictPopup.existing && (
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              className="py-2.5 rounded-xl bg-white border-2 border-gray-300 text-gray-700 text-[13px] font-semibold hover:bg-gray-50 transition"
+              onClick={() => setMrDriverConflictPopup(null)}
+            >
+              취소
+            </button>
+            <button
+              className="py-2.5 rounded-xl bg-emerald-600 text-white text-[13px] font-bold hover:bg-emerald-700 transition"
+              onClick={async () => {
+                const { plate, name, phone } = mrDriverConflictPopup.input;
+                await upsertDriver({ 차량번호: plate, 이름: name, 전화번호: phone });
+                applyMultiSlotDriver({ 차량번호: plate, 이름: name, 전화번호: formatPhone(phone), 배차상태: "배차완료" });
+                setMrSmartDriverQuery(""); setMrSmartDriverMatched([]);
+                setMrDriverConflictPopup(null);
+                showAlert("✅ 신규 기사가 등록되었습니다.");
+              }}
+            >
+              신규 기사 등록
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -16807,7 +17217,9 @@ className={`
 
 {/* ================= 신규 기사 등록 모달 ================= */}
 {driverModal.open && (
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]">
+  // ⭐ z-index를 다중등록 팝업(z-[999999])보다 높게 — 다중등록 안에서 차량번호
+  // 입력으로 이 모달이 열릴 때도 뒤에 가려지지 않고 항상 위에 떠야 한다.
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999999]">
     <div className="bg-white rounded-xl p-6 w-[420px] shadow-xl border border-gray-200">
       <h3 className="text-lg font-bold mb-4">신규 기사 등록</h3>
 
@@ -16887,13 +17299,24 @@ className={`
               전화번호: rawPhone,
             });
 
-            setForm((p) => ({
-              ...p,
-              차량번호: driverModal.carNo,
-              이름: driverModal.name,
-              전화번호: formatPhone(rawPhone),
-              배차상태: "배차완료",
-            }));
+            // ⭐ 다중등록 모달에서 열린 경우엔 form이 아니라 해당 슬롯에 반영해야
+            // 해서, 호출자가 onConfirm 콜백을 넘겨줬으면 그걸 대신 사용한다 —
+            // 넘기지 않은 기존 호출(단일 배차등록 폼)은 그대로 form에 반영.
+            if (driverModal.onConfirm) {
+              driverModal.onConfirm({
+                차량번호: driverModal.carNo,
+                이름: driverModal.name,
+                전화번호: formatPhone(rawPhone),
+              });
+            } else {
+              setForm((p) => ({
+                ...p,
+                차량번호: driverModal.carNo,
+                이름: driverModal.name,
+                전화번호: formatPhone(rawPhone),
+                배차상태: "배차완료",
+              }));
+            }
 
             setDriverModal({ open: false });
           }}
