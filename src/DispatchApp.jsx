@@ -10,6 +10,7 @@ import JSZip from "jszip";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import { hardReloadForUpdate } from "./UpdateBanner";
 import CustomDatePicker, { specialDemandInfo, KOREAN_HOLIDAYS, shortHolidayLabel } from "./CustomDatePicker";
+import { ensureWeatherLoaded, getWeatherSpecialInfo } from "./weatherUtil";
 import AdminMenu from "./AdminMenu";
 import CompanyApplications from "./CompanyApplications";
 import { calcFare } from "./fareUtil";
@@ -34,6 +35,39 @@ import { estimateDistanceFare, geocodeAddress, haversineKm } from "./tmapFareCal
 import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
 import RouteMapModal from "./RouteMapModal";
 import { generateMonthlyReportPPT, PPT_TEMPLATES } from "./pptReportUtil";
+
+// ⭐ html2canvas로 캡처한 캔버스를 A4 PDF로 저장할 때 공용으로 쓰는 다중 페이지
+// 헬퍼 — 예전엔 캡처한 이미지 전체를 페이지마다 음수 좌표로 반복해서 그대로
+// 붙이는 방식이었는데, 내용이 길면(거래명세서처럼 건수가 많으면) 이미지 한
+// 장이 너무 커져 일부 PDF 뷰어에서 페이지가 깨지거나, A4 폭(210mm)에 억지로
+// 맞추다 보니 글씨가 통째로 조그맣게 뭉개지는 원인이었다. 대신 캔버스를 실제
+// 페이지 높이만큼 "잘라서" 페이지마다 별도의 이미지로 추가한다 — 페이지 수는
+// 내용 길이에 따라 자연스럽게 늘어나고(강제로 1페이지에 욱여넣지 않음), 각
+// 페이지의 글씨/이미지 크기는 화면에 보이는 것과 동일한 비율로 유지된다.
+function addCanvasAsMultiPagePdf(pdf, canvas, { format = "PNG", quality } = {}) {
+  const pageWidthMm = 210, pageHeightMm = 297;
+  const pageHeightPx = Math.floor((canvas.width * pageHeightMm) / pageWidthMm);
+  let renderedPx = 0;
+  let pageIdx = 0;
+  while (renderedPx < canvas.height) {
+    const sliceHeightPx = Math.min(pageHeightPx, canvas.height - renderedPx);
+    const pageCanvas = document.createElement("canvas");
+    pageCanvas.width = canvas.width;
+    pageCanvas.height = sliceHeightPx;
+    const ctx = pageCanvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+    ctx.drawImage(canvas, 0, renderedPx, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx);
+    const mime = format === "JPEG" ? "image/jpeg" : "image/png";
+    const sliceImgData = quality != null ? pageCanvas.toDataURL(mime, quality) : pageCanvas.toDataURL(mime);
+    const sliceHeightMm = (sliceHeightPx * pageWidthMm) / canvas.width;
+    if (pageIdx > 0) pdf.addPage();
+    pdf.addImage(sliceImgData, format, 0, 0, pageWidthMm, sliceHeightMm);
+    renderedPx += sliceHeightPx;
+    pageIdx++;
+  }
+  return pdf;
+}
 
 // ================= 카운트 애니메이션 =================
 function CountUp({ value, duration = 900 }) {
@@ -692,14 +726,17 @@ function WorkDatesEditModal({ row, companyName, onClose, onSave }) {
   );
 }
 
-// 오더에 저장된 특수운임(연휴·성수기) 여부를 판단한다. 이 기능이 추가되기 전에
-// 이미 등록돼있던 오더는 이 필드 자체가 없는데, 그런 오더도 상차일을 공휴일
-// 캘린더에 다시 대조해서 특수일이면 특수운임으로 취급한다(StandardFare.jsx의
-// isSpecialDemandRow와 동일한 판단 기준).
+// 오더에 저장된 특수운임(연휴·성수기·기상) 여부를 판단한다. 이 기능이 추가되기
+// 전에 이미 등록돼있던 오더는 이 필드 자체가 없는데, 그런 오더도 상차일을
+// 공휴일 캘린더 + 그 날 실제 강수/적설 여부(weatherUtil)에 다시 대조해서
+// 특수일이면 특수운임으로 취급한다(StandardFare.jsx의 isSpecialDemandRow와
+// 동일한 판단 기준). 비/눈으로 배차가 어려워 운임이 평소보다 높게 형성된
+// 날도 연휴와 동일하게 자사운임표·AI추천 평균 계산에서 자동으로 제외된다.
 function isSpecialDemandOrder(r) {
   if (r?.특수운임 === true) return true;
   if (r?.특수운임 === false) return false;
-  return !!specialDemandInfo(r?.상차일)?.special;
+  if (specialDemandInfo(r?.상차일)?.special) return true;
+  return !!getWeatherSpecialInfo(r?.상차일)?.special;
 }
 
 // ⭐ 복수근무일(묶음 오더)의 근무일자목록을 안전하게 배열로 복원한다.
@@ -5664,6 +5701,10 @@ function CargoExtraChips({ value }) {
 export default function DispatchApp({ role, user, userCompany = "" }) {
   const isTest = role === "test";
   const navigate = useNavigate();
+  // ⭐ 오늘 비/눈이 왔는지 자동 인식 — 자사운임표·AI추천 등 운임조회 전반이
+  // 참고하는 특수운임 판정에 쓰인다(weatherUtil.js). 앱 진입 시 한 번만
+  // 받아오면 되므로 최상위 컴포넌트에서 호출한다.
+  useEffect(() => { ensureWeatherLoaded(); }, []);
   // ⭐ 고정거래처 매출 실시간 구독
   const [fixedRows, setFixedRows] = useState([]);
 // ⭐ 고정거래처 매출 Firestore 실시간 구독
@@ -10183,12 +10224,23 @@ const mrLabelCls = "flex items-center h-[20px] overflow-visible text-[13px] font
 const mrInputCls = "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] font-bold text-gray-900 bg-transparent focus:outline-none focus:border-[#1B2B4B] transition";
 const mrTextareaCls = "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] font-bold text-gray-900 bg-transparent resize-none focus:outline-none focus:border-[#1B2B4B] transition";
 
-// ⭐ 연휴/성수기 자동감지 — 상차일이 바뀔 때마다 공휴일 캘린더 기준으로 다시
-// 판단해서 제안한다. 사용자가 직접 토글을 눌러 수동으로 정한 값은 존중하고 덮어쓰지
-// 않는다(다음 상차일 변경 시에는 다시 자동감지로 리셋 — 새 날짜엔 새 판단이 맞음).
+// ⭐ 연휴/성수기 + 그 날 실제 비/눈이 왔는지(weatherUtil)를 합쳐서 판단한다 —
+// 공휴일이 아니어도 우천/폭설로 배차가 어려워 운임이 오른 날이면 동일하게
+// "특수일"로 자동 제안한다.
+const getAutoSpecialInfo = (dateStr) => {
+  const holiday = specialDemandInfo(dateStr);
+  if (holiday.special) return holiday;
+  const weather = getWeatherSpecialInfo(dateStr);
+  if (weather.special) return weather;
+  return { special: false, reason: "" };
+};
+
+// ⭐ 연휴/성수기·기상 자동감지 — 상차일이 바뀔 때마다 다시 판단해서 제안한다.
+// 사용자가 직접 토글을 눌러 수동으로 정한 값은 존중하고 덮어쓰지 않는다
+// (다음 상차일 변경 시에는 다시 자동감지로 리셋 — 새 날짜엔 새 판단이 맞음).
 React.useEffect(() => {
   if (form.특수운임수동) return;
-  const info = specialDemandInfo(form.상차일);
+  const info = getAutoSpecialInfo(form.상차일);
   setForm((p) => (p.특수운임수동 ? p : { ...p, 특수운임: info.special, 특수운임사유: info.reason }));
 }, [form.상차일]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -11512,7 +11564,7 @@ await Promise.all(Array.from({ length: saveCount }, (_, i) => {
   const specialPatch = rec.특수운임수동
     ? {}
     : (() => {
-        const info = specialDemandInfo(dateForOrder);
+        const info = getAutoSpecialInfo(dateForOrder);
         return { 특수운임: info.special, 특수운임사유: info.reason };
       })();
   return addDispatch({ ...rec, 상차일: dateForOrder, 하차일: dropDateForOrder, ...specialPatch });
@@ -14715,7 +14767,7 @@ className={`
               ? "bg-black border-black text-white"
               : "bg-white border-gray-300 text-gray-400"
           }`}
-          title={`연휴·성수기 등 특수 상황으로 운임이 평소보다 높게(또는 낮게) 형성된 오더면 체크하세요. 자사운임표·AI추천 평균에서 제외됩니다.${form.특수운임 && form.특수운임사유 ? `\n(${form.특수운임사유})` : ""}`}
+          title={`연휴·성수기·우천/폭설 등 특수 상황으로 운임이 평소보다 높게(또는 낮게) 형성된 오더면 체크하세요. 우천/폭설은 자동 감지됩니다. 자사운임표·AI추천 평균에서 제외됩니다.${form.특수운임 && form.특수운임사유 ? `\n(${form.특수운임사유})` : ""}`}
         >
           <input
             type="checkbox"
@@ -47982,19 +48034,8 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   const savePDF = async () => {
     const area = document.getElementById("invoiceArea");
     const canvas = await html2canvas(area, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
-    const imgData = canvas.toDataURL("image/png");
     const pdf = new jsPDF("p", "mm", "a4");
-    const imgWidth = 210, pageHeight = 297;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-    let heightLeft = imgHeight, position = 0;
-    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
-    while (heightLeft > 0) {
-      position = heightLeft - imgHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-    }
+    addCanvasAsMultiPagePdf(pdf, canvas, { format: "PNG" });
     pdf.save(`${client || "거래명세서"}.pdf`);
   };
 
@@ -50073,19 +50114,8 @@ const handleBatchSettle = async (targetStatus) => {
                   await new Promise(r => setTimeout(r, 200));
                   const canvas = await html2canvas(div, { scale: 1.5, backgroundColor: "#ffffff", useCORS: true });
                   document.body.removeChild(div);
-                  const imgData = canvas.toDataURL("image/jpeg", 0.85);
                   const pdf = new jsPDF("p", "mm", "a4");
-                  const imgWidth = 210;
-                  const imgHeight = (canvas.height * imgWidth) / canvas.width;
-                  let heightLeft = imgHeight, position = 0;
-                  pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
-                  heightLeft -= 297;
-                  while (heightLeft > 0) {
-                    position = heightLeft - imgHeight;
-                    pdf.addPage();
-                    pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
-                    heightLeft -= 297;
-                  }
+                  addCanvasAsMultiPagePdf(pdf, canvas, { format: "JPEG", quality: 0.85 });
                   attachments.push({
                     filename: `거래명세서_${item.name}_${item.start}~${item.end}.pdf`,
                     content: pdf.output("datauristring").split(",")[1],
@@ -50306,19 +50336,8 @@ const handleBatchSettle = async (targetStatus) => {
                         const area = document.getElementById("invoiceArea");
                         if (area) {
                           const canvas = await html2canvas(area, { scale: 1.5, backgroundColor: "#ffffff", useCORS: true });
-                          const imgData = canvas.toDataURL("image/jpeg", 0.85);
                           const pdf = new jsPDF("p", "mm", "a4");
-                          const imgWidth = 210;
-                          const imgHeight = (canvas.height * imgWidth) / canvas.width;
-                          let heightLeft = imgHeight, position = 0;
-                          pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
-                          heightLeft -= 297;
-                          while (heightLeft > 0) {
-                            position = heightLeft - imgHeight;
-                            pdf.addPage();
-                            pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
-                            heightLeft -= 297;
-                          }
+                          addCanvasAsMultiPagePdf(pdf, canvas, { format: "JPEG", quality: 0.85 });
                           fileAttachments.push({
                             filename: `거래명세서_${client}_${start||""}~${end||""}.pdf`,
                             content: pdf.output("datauristring").split(",")[1],

@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { db } from "./firebase";
 import { collection, onSnapshot } from "firebase/firestore";
 import { specialDemandInfo, KOREAN_HOLIDAYS } from "./CustomDatePicker";
+import { ensureWeatherLoaded, getWeatherSpecialInfo } from "./weatherUtil";
 
 const VEHICLE_TYPES = [
   "전체","다마스","라보","라보/다마스","카고","윙/카고","윙바디",
@@ -169,12 +170,33 @@ function classifyFare(fare, avg, row) {
   return "SPIKE";
 }
 
-// 오더 저장 당시 명시적으로 "특수운임(연휴·성수기)"으로 표시됐는지. 이 필드가 없는
-// 과거 오더는 상차일 기준으로 공휴일 캘린더에 다시 대조해 판단한다(연휴 인접일 포함).
+// 오더 저장 당시 명시적으로 "특수운임(연휴·성수기·기상)"으로 표시됐는지. 이
+// 필드가 없는 과거 오더는 상차일 기준으로 공휴일 캘린더 + 그 날 실제 강수/
+// 적설 여부(weatherUtil)에 다시 대조해 판단한다(연휴 인접일 포함).
 function isSpecialDemandRow(row) {
   if (row?.특수운임 === true) return true;
   if (row?.특수운임 === false) return false;
-  return !!specialDemandInfo(row?.상차일)?.special;
+  if (specialDemandInfo(row?.상차일)?.special) return true;
+  return !!getWeatherSpecialInfo(row?.상차일)?.special;
+}
+
+// 배지/툴팁에 보여줄 구체적인 사유 — 저장된 사유가 있으면 그대로, 없으면
+// 공휴일→기상 순으로 다시 판단한다.
+function getSpecialReasonText(row) {
+  if (row?.특수운임사유) return row.특수운임사유;
+  const h = specialDemandInfo(row?.상차일);
+  if (h.special) return h.reason;
+  const w = getWeatherSpecialInfo(row?.상차일);
+  if (w.special) return w.reason;
+  return "";
+}
+// 표 안 배지는 좁아서 "우천(12mm)"처럼 괄호 상세까지 넣으면 지저분해 보여,
+// 짧은 라벨(우천/강설)만 쓰고 상세 수치는 title 툴팁으로만 보여준다.
+function getSpecialBadgeLabel(row) {
+  const reason = getSpecialReasonText(row);
+  if (/^우천/.test(reason)) return "우천";
+  if (/^강설/.test(reason)) return "강설";
+  return "특수일";
 }
 
 function isTransitStop(r) {
@@ -531,6 +553,8 @@ const VEHICLE_CATEGORIES = [
 ];
 
 export default function StandardFare({ embedded = false, defaultTab = "표준운임" }) {
+  // ⭐ 오늘/최근 비·눈이 왔는지 자동 인식 — isSpecialDemandRow가 참고한다.
+  useEffect(() => { ensureWeatherLoaded(); }, []);
   const [dispatchData, setDispatchData] = useState([]);
   const [activeTab, setActiveTab] = useState(embedded ? defaultTab : "표준운임"); // "표준운임" | "전국운임표"
 
@@ -1042,9 +1066,9 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
               <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={includeViaOrders} onChange={() => setIncludeViaOrders(v => !v)} />
               <span className="text-[12px] font-semibold text-gray-600">경유지 있는 오더도 결과·평균에 포함</span>
             </label>
-            <label className="flex items-center gap-1.5 mb-4 cursor-pointer select-none w-fit" title="연휴·성수기 등 특수일로 표시된 오더는 평소보다 운임이 높게 형성된 경우가 많아 기본적으로 평균 계산에서 제외됩니다. 켜면 특수일 포함 전체 기준으로 다시 계산합니다.">
+            <label className="flex items-center gap-1.5 mb-4 cursor-pointer select-none w-fit" title="연휴·성수기·우천/폭설 등 특수일로 표시된 오더는 평소보다 운임이 높게 형성된 경우가 많아 기본적으로 평균 계산에서 제외됩니다(우천/폭설은 자동 감지). 켜면 특수일 포함 전체 기준으로 다시 계산합니다.">
               <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={includeSpecial} onChange={() => setIncludeSpecial(v => !v)} />
-              <span className="text-[12px] font-semibold text-gray-600">특수일(연휴·성수기)도 평균에 포함</span>
+              <span className="text-[12px] font-semibold text-gray-600">특수일(연휴·성수기·기상)도 평균에 포함</span>
             </label>
 
             <div className="space-y-4 mb-5">
@@ -1153,9 +1177,9 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                                 {isSpecialDemandRow(r) && (
                                   <span
                                     className="ml-1 px-1.5 py-0.5 rounded bg-black text-white text-[10px] font-extrabold align-middle"
-                                    title={`연휴·성수기 등 특수 상황 배차로 표시된 오더입니다.${includeSpecial ? "" : " 평균 운임 계산에서는 제외됩니다."}`}
+                                    title={`${getSpecialReasonText(r) || "연휴·성수기 등 특수 상황"} 배차로 표시된 오더입니다.${includeSpecial ? "" : " 평균 운임 계산에서는 제외됩니다."}`}
                                   >
-                                    특수일
+                                    {getSpecialBadgeLabel(r)}
                                   </span>
                                 )}
                               </td>
