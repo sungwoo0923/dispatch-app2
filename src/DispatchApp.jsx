@@ -23285,6 +23285,11 @@ setFarePanelOpen(true);
 const [editStopOpen, setEditStopOpen] = React.useState(false);
 const [editStopType, setEditStopType] = React.useState("pickup");
   const [editPopupOpen, setEditPopupOpen] = React.useState(false);
+  // ⭐ 일마감 검증 팝업의 오류/경고/24시콜 목록에서 오더를 클릭해 오더복사/수정
+  // 패널(copyTarget)을 열었을 때만 채워지는, 해당 오더의 검증 문제점 목록 —
+  // 패널 상단에 "문제점" 배너로 보여주고, 저장 시 일마감 검증을 자동으로
+  // 다시 계산한다.
+  const [dailyCloseIssueCtx, setDailyCloseIssueCtx] = React.useState(null);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
 const [copyTarget, setCopyTarget] = React.useState(null);
 const [copyPanelWorkDatesOpen, setCopyPanelWorkDatesOpen] = React.useState(false); // 오더복사수정패널 근무일(묶음) 수정 팝업
@@ -25687,6 +25692,35 @@ const bulkFixCloseFileIssues = async (items, fieldKey, value) => {
   }, 300);
 };
 
+// ⭐ 일마감 검증 팝업의 오류/경고/24시콜 목록에서 오더를 클릭했을 때 — 팝업을
+// 닫고 그리드로 스크롤만 하던 것 대신, 그 오더의 상세 내용이 담긴 "선택수정"
+// 팝업을 일마감 검증보다 앞에 띄우고 어떤 문제가 있는지 배너로 보여준다.
+const openDailyCloseIssueDetail = (rowId) => {
+  const row = dispatchData.find(r => r._id === rowId) || rows.find(r => r._id === rowId);
+  if (!row) { showAlert("오더 정보를 찾을 수 없습니다."); return; }
+  const issues = [
+    ...(dailyCloseResult?.errors || []).filter(x => x.rowId === rowId).map(x => ({ ...x, level: "오류" })),
+    ...(dailyCloseResult?.warnings || []).filter(x => x.rowId === rowId).map(x => ({ ...x, level: "경고" })),
+    ...(closeFileResult || []).filter(x => x.rowId === rowId).map(x => ({ ...x, level: "24시콜" })),
+  ];
+  // 아래 정규화(화물수량/화물타입/톤수값/톤수타입 분리)는 우클릭 메뉴의 "수정"
+  // 버튼이 오더복사/수정 패널(copyTarget)을 열 때 하는 것과 동일하다.
+  const raw = String(row?.화물내용 || "");
+  const KNOWN_SUFFIXES = ["파레트", "파렛트", "박스", "통"];
+  let cargoNum = "", cargoType = "";
+  const rawBase = raw.split("+")[0];
+  for (const s of KNOWN_SUFFIXES) {
+    if (rawBase.endsWith(s)) { cargoNum = rawBase.slice(0, -s.length).trim(); cargoType = s; break; }
+  }
+  if (!cargoType) { cargoNum = rawBase; cargoType = ""; }
+  const ton = row.차량톤수 || "";
+  const tonValue = ton.match(/[\d.]+/)?.[0] || "";
+  const tonType = ton.includes("kg") ? "kg" : ton.includes("톤") ? "톤" : "";
+  setCopyTarget({ ...row, 화물내용: raw, 화물수량: cargoNum, 화물타입: cargoType, 톤수값: tonValue, 톤수타입: tonType });
+  setDailyCloseIssueCtx(issues);
+  setCopyPanelOpen(true);
+};
+
   // =======================
   // 🔥 팝업에서 실제 삭제 실행
   // =======================
@@ -26718,7 +26752,7 @@ const head = isDark
 {/* ================= 복사 슬라이드 패널 (FULL LABEL VERSION) ================= */}
 {copyPanelOpen && copyTarget && (
   <div
-  className="fixed inset-0 z-[99999]"
+  className={`fixed inset-0 ${dailyCloseIssueCtx ? "z-[9999999]" : "z-[99999]"}`}
   onKeyDown={(e) => {
     if (e.key === "Enter") {
       e.stopPropagation();
@@ -26727,7 +26761,7 @@ const head = isDark
 >
     <div
       className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-      onClick={() => setCopyPanelOpen(false)}
+      onClick={() => { setCopyPanelOpen(false); setDailyCloseIssueCtx(null); }}
     />
 
     <div
@@ -26802,6 +26836,12 @@ const head = isDark
 const savedId = copyTarget._id;
     showAlert("오더 수정 완료");
     setCopyPanelOpen(false);
+    // ⭐ 일마감 검증에서 열었던 수정이면, 방금 고친 내용이 반영되도록 검증을
+    // 자동으로 다시 계산한다(오류/경고 + 24시콜 비교결과 모두).
+    if (dailyCloseIssueCtx) {
+      setDailyCloseIssueCtx(null);
+      setTimeout(() => { runDailyClose(); closeFileRawRef.current?.(); }, 300);
+    }
     React.startTransition(() => {
       setRows(prev => prev.map(r => r._id === savedId ? { ...r, ...payload } : r));
     });
@@ -26843,6 +26883,7 @@ flashRow(savedId);
     if (ok === false) return;
     showAlert("복사 등록 완료");
     setCopyPanelOpen(false);
+    setDailyCloseIssueCtx(null);
     if (copyTarget.상차지명) savePlaceSmart(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "", null, undefined,
       (copyTarget.상차지오더메모 !== undefined || copyTarget.상차지오더메모팝업표시 !== undefined || copyTarget.상차지기사전달주의사항 !== undefined) ? { 오더메모: copyTarget.상차지오더메모, 팝업표시: copyTarget.상차지오더메모팝업표시, 기사전달주의사항: copyTarget.상차지기사전달주의사항 } : undefined
     ).catch(console.error);
@@ -26864,7 +26905,7 @@ flashRow(savedId);
 
     {/* 닫기 */}
      <button
-      onClick={() => setCopyPanelOpen(false)}
+      onClick={() => { setCopyPanelOpen(false); setDailyCloseIssueCtx(null); }}
       className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:text-red-500 hover:border-red-200 transition text-lg"
     >
       ✕
@@ -26872,6 +26913,22 @@ flashRow(savedId);
 
   </div>
 </div>
+
+{/* ⭐ 일마감 검증 목록에서 클릭해 이 패널을 열었을 때만 나타나는 문제점 배너 —
+    오류/경고/24시콜 비교불일치 중 이 오더에 해당하는 항목을 전부 모아 보여준다. */}
+{dailyCloseIssueCtx && dailyCloseIssueCtx.length > 0 && (
+  <div className="bg-gray-50 border border-gray-200 rounded-xl px-5 py-4">
+    <div className="text-[13px] font-bold text-[#1B2B4B] mb-2">일마감 검증 — 이 오더의 문제점 ({dailyCloseIssueCtx.length}건)</div>
+    <div className="space-y-1.5">
+      {dailyCloseIssueCtx.map((it, i) => (
+        <div key={i} className="text-[12px] text-gray-700 flex items-start gap-2">
+          <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold border ${it.level === "오류" ? "bg-red-50 text-red-700 border-red-200" : "bg-white text-gray-600 border-gray-300"}`}>{it.level}</span>
+          <span>{it.msg}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
 {/* ================= 오더 유형 버튼 ================= */}
 <div className="flex items-center gap-2 flex-wrap bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
   <button type="button"
@@ -31323,22 +31380,7 @@ setConfirmChange(null);
                   <div
                     key={i}
                     className="flex items-start gap-3 px-4 py-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition bg-white"
-                    onClick={() => {
-                      setDailyCloseOpen(false);
-                      setDailyCloseFilter("all");
-                      setTimeout(() => {
-                        const el = document.getElementById(`row-${e.rowId}`);
-                        if (el) {
-                          el.scrollIntoView({ behavior: "smooth", block: "center" });
-                          el.setAttribute("tabindex", "-1");
-                          el.focus({ preventScroll: true });
-                          el.classList.remove("row-highlight");
-                          void el.offsetWidth; // reflow 강제
-                          el.classList.add("row-highlight");
-                          setTimeout(() => el.classList.remove("row-highlight"), 2200);
-                        }
-                      }, 250);
-                    }}
+                    onClick={() => openDailyCloseIssueDetail(e.rowId)}
                   >
                     <div className="w-6 h-6 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold flex items-center justify-center shrink-0">
                       {e.seq}
@@ -31367,22 +31409,7 @@ setConfirmChange(null);
                   <div
                     key={i}
                     className="flex items-start gap-3 px-4 py-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition"
-                    onClick={() => {
-                      setDailyCloseOpen(false);
-                      setDailyCloseFilter("all");
-                      setTimeout(() => {
-                        const el = document.getElementById(`row-${w.rowId}`);
-                        if (el) {
-                          el.scrollIntoView({ behavior: "smooth", block: "center" });
-                          el.setAttribute("tabindex", "-1");
-                          el.focus({ preventScroll: true });
-                          el.classList.remove("row-highlight");
-                          void el.offsetWidth;
-                          el.classList.add("row-highlight");
-                          setTimeout(() => el.classList.remove("row-highlight"), 2200);
-                        }
-                      }, 250);
-                    }}
+                    onClick={() => openDailyCloseIssueDetail(w.rowId)}
                   >
                     <div className="w-6 h-6 rounded-full bg-gray-400 text-white text-[11px] font-bold flex items-center justify-center shrink-0">
                       {w.seq}
@@ -31425,18 +31452,7 @@ setConfirmChange(null);
                 // 옅은 빨강으로 구분하고, 나머지는 프로그램 전반의 회색/네이비 톤에
                 // 맞춘 중립 배지로 통일(알록달록하다는 피드백 반영).
                 const typeCls = (t) => t === "fare" ? "bg-red-50 text-red-700 border border-red-100" : "bg-gray-100 text-gray-600 border border-gray-200";
-                const goRow = (rowId) => {
-                  setDailyCloseOpen(false);
-                  setDailyCloseFilter("all");
-                  setTimeout(() => {
-                    const el = document.getElementById(`row-${rowId}`);
-                    if (el) {
-                      el.scrollIntoView({ behavior: "smooth", block: "center" });
-                      el.classList.add("row-highlight");
-                      setTimeout(() => el.classList.remove("row-highlight"), 3000);
-                    }
-                  }, 200);
-                };
+                const goRow = (rowId) => openDailyCloseIssueDetail(rowId);
                 const Card = (f, i) => (
                   <div key={i}
                     className="flex items-start gap-3 px-4 py-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition"
@@ -33179,6 +33195,35 @@ const bulkFixCloseFileIssues = async (items, fieldKey, value) => {
     if (closeFileRawRef.current) setCloseFileResult(computeCloseFileIssues(closeFileRawRef.current));
   }, 300);
 };
+
+// ⭐ 일마감 검증 팝업의 오류/경고/24시콜 목록에서 오더를 클릭했을 때 — 팝업을
+// 닫고 그리드로 스크롤만 하던 것 대신, 그 오더의 상세 내용이 담긴 "선택수정"
+// 팝업을 일마감 검증보다 앞에 띄우고 어떤 문제가 있는지 배너로 보여준다.
+const openDailyCloseIssueDetail = (rowId) => {
+  const row = (dispatchData || []).find(r => r._id === rowId);
+  if (!row) { showAlert("오더 정보를 찾을 수 없습니다."); return; }
+  const issues = [
+    ...(dailyCloseResult?.errors || []).filter(x => x.rowId === rowId).map(x => ({ ...x, level: "오류" })),
+    ...(dailyCloseResult?.warnings || []).filter(x => x.rowId === rowId).map(x => ({ ...x, level: "경고" })),
+    ...(closeFileResult || []).filter(x => x.rowId === rowId).map(x => ({ ...x, level: "24시콜" })),
+  ];
+  // 아래 정규화(화물수량/화물타입/톤수값/톤수타입 분리)는 우클릭 메뉴의 "수정"
+  // 버튼이 오더복사/수정 패널(copyTarget)을 열 때 하는 것과 동일하다.
+  const raw = String(row?.화물내용 || "");
+  const KNOWN_SUFFIXES = ["파레트", "파렛트", "박스", "통"];
+  let cargoNum = "", cargoType = "";
+  const rawBase = raw.split("+")[0];
+  for (const s of KNOWN_SUFFIXES) {
+    if (rawBase.endsWith(s)) { cargoNum = rawBase.slice(0, -s.length).trim(); cargoType = s; break; }
+  }
+  if (!cargoType) { cargoNum = rawBase; cargoType = ""; }
+  const ton = row.차량톤수 || "";
+  const tonValue = ton.match(/[\d.]+/)?.[0] || "";
+  const tonType = ton.includes("kg") ? "kg" : ton.includes("톤") ? "톤" : "";
+  setCopyTarget({ ...row, 화물내용: raw, 화물수량: cargoNum, 화물타입: cargoType, 톤수값: tonValue, 톤수타입: tonType });
+  setDailyCloseIssueCtx(issues);
+  setCopyPanelOpen(true);
+};
 const [statusFilter, setStatusFilter] = React.useState("ALL");
   const [q, setQ] = React.useState(() => {
     try {
@@ -33442,6 +33487,9 @@ const flashRow = React.useCallback((id) => {
   const [edited, setEdited] = React.useState({});
   const [justSaved, setJustSaved] = React.useState([]);
   const [editPopupOpen, setEditPopupOpen] = React.useState(false);
+  // ⭐ 일마감 검증 팝업의 오류/경고/24시콜 목록에서 오더를 클릭해 이 선택수정
+  // 팝업을 열었을 때만 채워지는, 해당 오더의 검증 문제점 목록.
+  const [dailyCloseIssueCtx, setDailyCloseIssueCtx] = React.useState(null);
   const [bulkRows, setBulkRows] = React.useState([]);
   const [loaded, setLoaded] = React.useState(false);   // ⭐ 복구완료 여부
   const [matchedDrivers, setMatchedDrivers] = React.useState([]);
@@ -37851,7 +37899,7 @@ return (
       {/* ================= 복사 슬라이드 패널 (FULL LABEL VERSION) ================= */}
 {copyPanelOpen && copyTarget && (
   <div
-  className="fixed inset-0 z-[99999]"
+  className={`fixed inset-0 ${dailyCloseIssueCtx ? "z-[9999999]" : "z-[99999]"}`}
   onKeyDown={(e) => {
     if (e.key === "Enter") {
       e.stopPropagation();
@@ -37860,7 +37908,7 @@ return (
 >
     <div
       className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-      onClick={() => setCopyPanelOpen(false)}
+      onClick={() => { setCopyPanelOpen(false); setDailyCloseIssueCtx(null); }}
     />
 
     <div
@@ -37936,6 +37984,15 @@ return (
     setCopyPanelOpen(false);
     showAlert("오더 수정 완료");
     setEdited(prev => { const next = { ...prev }; delete next[id]; return next; });
+    // ⭐ 일마감 검증에서 열었던 수정이면, 방금 고친 내용이 반영되도록 검증을
+    // 자동으로 다시 계산한다(오류/경고 + 24시콜 비교결과 모두).
+    if (dailyCloseIssueCtx) {
+      setDailyCloseIssueCtx(null);
+      setTimeout(() => {
+        runDailyClose();
+        if (closeFileRawRef.current) setCloseFileResult(computeCloseFileIssues(closeFileRawRef.current));
+      }, 300);
+    }
 
     // ✅ 백그라운드 저장
     patchDispatch(id, payload).catch(console.error);
@@ -37977,6 +38034,7 @@ return (
     showAlert("복사 등록 완료");
 
     setCopyPanelOpen(false);
+    setDailyCloseIssueCtx(null);
     if (copyTarget.상차지명) savePlaceSmart(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "", null, undefined,
       (copyTarget.상차지오더메모 !== undefined || copyTarget.상차지오더메모팝업표시 !== undefined || copyTarget.상차지기사전달주의사항 !== undefined) ? { 오더메모: copyTarget.상차지오더메모, 팝업표시: copyTarget.상차지오더메모팝업표시, 기사전달주의사항: copyTarget.상차지기사전달주의사항 } : undefined
     ).catch(console.error);
@@ -38000,7 +38058,7 @@ return (
 
 {/* 닫기 */}
 <button
-  onClick={() => setCopyPanelOpen(false)}
+  onClick={() => { setCopyPanelOpen(false); setDailyCloseIssueCtx(null); }}
   className="text-slate-500 hover:text-red-500 text-xl"
 >
   ✕
@@ -38008,6 +38066,22 @@ return (
 
   </div>
 </div>
+
+{/* ⭐ 일마감 검증 목록에서 클릭해 이 패널을 열었을 때만 나타나는 문제점 배너 —
+    오류/경고/24시콜 비교불일치 중 이 오더에 해당하는 항목을 전부 모아 보여준다. */}
+{dailyCloseIssueCtx && dailyCloseIssueCtx.length > 0 && (
+  <div className="bg-gray-50 border border-gray-200 rounded-xl px-5 py-4">
+    <div className="text-[13px] font-bold text-[#1B2B4B] mb-2">일마감 검증 — 이 오더의 문제점 ({dailyCloseIssueCtx.length}건)</div>
+    <div className="space-y-1.5">
+      {dailyCloseIssueCtx.map((it, i) => (
+        <div key={i} className="text-[12px] text-gray-700 flex items-start gap-2">
+          <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold border ${it.level === "오류" ? "bg-red-50 text-red-700 border-red-200" : "bg-white text-gray-600 border-gray-300"}`}>{it.level}</span>
+          <span>{it.msg}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
 {/* ================= 오더 유형 버튼 ================= */}
 <div className="flex items-center gap-2 flex-wrap bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
   <button type="button"
@@ -40269,22 +40343,7 @@ setCopyPlaceOptions(list);
                 {dailyCloseResult.errors.map((e, i) => (
                   <div key={i}
                     className="flex items-start gap-3 px-4 py-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition"
-                    onClick={() => {
-                      setDailyCloseOpen(false);
-                      setDailyCloseFilter("all");
-                      setTimeout(() => {
-                        const el = document.getElementById(`row-${e.rowId}`);
-                        if (el) {
-                          el.scrollIntoView({ behavior: "smooth", block: "center" });
-                          el.setAttribute("tabindex", "-1");
-                          el.focus({ preventScroll: true });
-                          el.classList.remove("row-highlight");
-                          void el.offsetWidth;
-                          el.classList.add("row-highlight");
-                          setTimeout(() => el.classList.remove("row-highlight"), 2200);
-                        }
-                      }, 250);
-                    }}>
+                    onClick={() => openDailyCloseIssueDetail(e.rowId)}>
                     <div className="w-6 h-6 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold flex items-center justify-center shrink-0">{e.seq}</div>
                     <div className="flex-1 min-w-0">
                       <div className="text-[13px] font-bold text-gray-900 truncate">{e.label}</div>
@@ -40305,28 +40364,13 @@ setCopyPlaceOptions(list);
                 {dailyCloseResult.warnings.map((w, i) => (
                   <div key={i}
                     className="flex items-start gap-3 px-4 py-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition"
-                    onClick={() => {
-                      setDailyCloseOpen(false);
-                      setDailyCloseFilter("all");
-                      setTimeout(() => {
-                        const el = document.getElementById(`row-${w.rowId}`);
-                        if (el) {
-                          el.scrollIntoView({ behavior: "smooth", block: "center" });
-                          el.setAttribute("tabindex", "-1");
-                          el.focus({ preventScroll: true });
-                          el.classList.remove("row-highlight");
-                          void el.offsetWidth;
-                          el.classList.add("row-highlight");
-                          setTimeout(() => el.classList.remove("row-highlight"), 2200);
-                        }
-                      }, 250);
-                    }}>
+                    onClick={() => openDailyCloseIssueDetail(w.rowId)}>
                     <div className="w-6 h-6 rounded-full bg-gray-400 text-white text-[11px] font-bold flex items-center justify-center shrink-0">{w.seq}</div>
                     <div className="flex-1 min-w-0">
                       <div className="text-[13px] font-bold text-gray-900 truncate">{w.label}</div>
-                      <div className="text-[12px] font-semibold text-orange-600 mt-0.5 truncate">{w.msg}</div>
+                      <div className="text-[12px] font-semibold text-gray-500 mt-0.5 truncate">{w.msg}</div>
                     </div>
-                    <span className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-orange-100 text-orange-700">
+                    <span className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-gray-100 text-gray-600 border border-gray-200">
                       {w.type === "margin" ? "마진" : w.type === "driver" ? "기사" : w.type === "phone" ? "번호" : w.type === "zero" ? "0원" : w.type === "high" ? "고액" : w.type}
                     </span>
                   </div>
@@ -40356,18 +40400,7 @@ setCopyPlaceOptions(list);
                 // 옅은 빨강으로 구분하고, 나머지는 프로그램 전반의 회색/네이비 톤에
                 // 맞춘 중립 배지로 통일(알록달록하다는 피드백 반영).
                 const typeCls = (t) => t === "fare" ? "bg-red-50 text-red-700 border border-red-100" : "bg-gray-100 text-gray-600 border border-gray-200";
-                const goRow = (rowId) => {
-                  setDailyCloseOpen(false);
-                  setDailyCloseFilter("all");
-                  setTimeout(() => {
-                    const el = document.getElementById(`row-${rowId}`);
-                    if (el) {
-                      el.scrollIntoView({ behavior: "smooth", block: "center" });
-                      el.classList.add("row-highlight");
-                      setTimeout(() => el.classList.remove("row-highlight"), 3000);
-                    }
-                  }, 200);
-                };
+                const goRow = (rowId) => openDailyCloseIssueDetail(rowId);
                 const Card = (f, i) => (
                   <div key={i} className="flex items-start gap-3 px-4 py-3 border border-gray-200 rounded-xl bg-white cursor-pointer hover:bg-gray-50 transition"
                     onClick={() => goRow(f.rowId)}>
