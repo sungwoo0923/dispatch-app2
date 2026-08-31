@@ -23116,6 +23116,12 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
   const [dailyCloseResult, setDailyCloseResult] = React.useState(null);
   const [dailyCloseFilter, setDailyCloseFilter] = React.useState("all");
   const [closeFileResult, setCloseFileResult] = React.useState(null);
+  // ⭐ 24시콜 파일 재비교(재검증)를 위해, 업로드했던 파일을 다시 읽지 않고도
+  // 파싱된 원본(json/컬럼 인덱스)을 기억해뒀다가 재사용한다.
+  const closeFileRawRef = React.useRef(null);
+  // ⭐ 24시콜 비교불일치를 업체별로 묶어서 볼지 여부 + 업체별 일괄수정에 쓰는 선택값
+  const [closeFileGroupMode, setCloseFileGroupMode] = React.useState(false);
+  const [closeFileBulkValue, setCloseFileBulkValue] = React.useState({});
 
   // === 유사 운임조회 (선택수정 전용 업그레이드) ===
   const handleFareSearch = () => {
@@ -25470,6 +25476,10 @@ const handleCloseFileUpload = async (e) => {
     }
   }
 
+  // ⭐ 실제 매칭/판정 로직은 별도 함수로 감싸서 closeFileRawRef에 저장해둔다 —
+  // "재검증" 버튼을 누르면 파일을 다시 업로드하지 않고도 이 함수를 다시 호출해,
+  // 그 사이 사용자가 고친 최신 rows 기준으로 24시콜 비교불일치를 재계산할 수 있다.
+  const runCloseFileMatch = () => {
   let targetDate = todayKST();
   if (dayMode === "yesterday") targetDate = yesterdayKST();
   if (dayMode === "tomorrow") targetDate = tomorrowKST();
@@ -25556,6 +25566,7 @@ const handleCloseFileUpload = async (e) => {
       const seq = rows.indexOf(mr) + 1;
       const dateLabel = fileDate ? ` (${fileDate})` : "";
       const label = `${seq}번 [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}${dateLabel}`;
+      const 거래처명 = mr.거래처명 || "(미입력)";
 
       // 1. 배차방식 검증: 24시콜 파일에 있으면 배차방식이 "24시"여야 함
       const dispatch = (mr.배차방식 || "").trim();
@@ -25565,6 +25576,7 @@ const handleCloseFileUpload = async (e) => {
           seq,
           label,
           type: "dispatch",
+          거래처명,
           msg: `24시콜 파일에 존재하나 배차방식이 "${dispatch}"(으)로 등록됨 (차량: ${row[plateCol]}, 기사: ${fileName})`,
         });
       }
@@ -25577,14 +25589,14 @@ const handleCloseFileUpload = async (e) => {
         if (fileFeeType === "인수증") {
           if (programPay && programPay !== "계산서") {
             fileIssues.push({
-              rowId: mr._id, seq, label, type: "payment",
+              rowId: mr._id, seq, label, type: "payment", 거래처명,
               msg: `24시콜: 인수증(계산서) / 프로그램: "${programPay}" — 지급방식 불일치 (차량: ${row[plateCol]})`,
             });
           }
         } else if (fileFeeType === "선/착불" || fileFeeType === "선착불") {
           if (programPay && programPay !== "선불" && programPay !== "착불") {
             fileIssues.push({
-              rowId: mr._id, seq, label, type: "payment",
+              rowId: mr._id, seq, label, type: "payment", 거래처명,
               msg: `24시콜: 선/착불 / 프로그램: "${programPay}" — 지급방식 불일치 (차량: ${row[plateCol]})`,
             });
           }
@@ -25599,14 +25611,14 @@ const handleCloseFileUpload = async (e) => {
         if (isSongsil) {
           if (fileFare > 0 && programFare > 0 && fileFare !== programFare) {
             fileIssues.push({
-              rowId: mr._id, seq, label, type: "fare",
+              rowId: mr._id, seq, label, type: "fare", 거래처명,
               msg: `[손실] 24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원 — 운임 불일치 (차량: ${row[plateCol]})`,
             });
           }
         } else {
           if (fileFare > 0 && programFare > 0 && fileFare !== programFare) {
             fileIssues.push({
-              rowId: mr._id, seq, label, type: "fare",
+              rowId: mr._id, seq, label, type: "fare", 거래처명,
               msg: `24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원 — 운임 불일치 (차량: ${row[plateCol]})`,
             });
           }
@@ -25649,12 +25661,30 @@ const handleCloseFileUpload = async (e) => {
         seq,
         label,
         type: "missing",
+        거래처명: mr.거래처명 || "(미입력)",
         msg: `배차방식이 "24시"이나 24시콜 파일에 차량번호 없음 (차량: ${mr.차량번호}, 기사: ${mr.이름 || "-"}) — 배차방식 오등록 의심`,
       });
     }
   });
 
   setCloseFileResult(fileIssues);
+  };
+  closeFileRawRef.current = runCloseFileMatch;
+  runCloseFileMatch();
+};
+
+// ⭐ 24시콜 비교불일치 업체별 일괄수정 — 같은 거래처의 지급방식/배차방식 불일치
+// 건들을 골라 한 번에 새 값으로 patchDispatch하고, 곧바로 오류/경고와 24시콜
+// 비교결과를 전부 재계산해 팝업을 최신 상태로 되돌린다.
+const bulkFixCloseFileIssues = async (items, fieldKey, value) => {
+  if (!value) { showAlert("적용할 값을 먼저 선택하세요."); return; }
+  const ids = [...new Set(items.map(it => it.rowId))];
+  await Promise.all(ids.map(id => patchDispatch(id, { [fieldKey]: value })));
+  showAlert(`${ids.length}건의 ${fieldKey}이(가) "${value}"(으)로 일괄 수정되었습니다.`);
+  setTimeout(() => {
+    runDailyClose();
+    closeFileRawRef.current?.();
+  }, 300);
 };
 
   // =======================
@@ -31217,7 +31247,7 @@ setConfirmChange(null);
     onClick={() => setDailyCloseOpen(false)}
   >
     <div
-      className="bg-white rounded-2xl shadow-2xl w-[640px] max-h-[85vh] flex flex-col overflow-hidden"
+      className="bg-white rounded-2xl shadow-2xl w-[1240px] max-w-[95vw] max-h-[90vh] flex flex-col overflow-hidden"
       onClick={e => e.stopPropagation()}
     >
       {/* 헤더 */}
@@ -31288,7 +31318,7 @@ setConfirmChange(null);
               <div className="text-[13px] font-bold text-gray-800 mb-3">
                 오류 ({dailyCloseResult.errors.length}건) - 필수 수정
               </div>
-              <div className="space-y-2 max-h-[220px] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-2">
                 {dailyCloseResult.errors.map((e, i) => (
                   <div
                     key={i}
@@ -31315,7 +31345,7 @@ setConfirmChange(null);
                     </div>
                    <div className="flex-1 min-w-0">
                       <div className="text-[13px] font-bold text-gray-900 truncate">{e.label}</div>
-                      <div className="text-[12px] font-semibold text-red-600 mt-0.5">{e.msg}</div>
+                      <div className="text-[12px] font-semibold text-red-600 mt-0.5 truncate">{e.msg}</div>
                     </div>
                     <span className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-red-100 text-red-700">
                       누락
@@ -31332,7 +31362,7 @@ setConfirmChange(null);
               <div className="text-[13px] font-bold text-gray-800 mb-3">
                 경고 ({dailyCloseResult.warnings.length}건) - 확인 필요
               </div>
-              <div className="space-y-2 max-h-[220px] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-2">
                 {dailyCloseResult.warnings.map((w, i) => (
                   <div
                     key={i}
@@ -31359,7 +31389,7 @@ setConfirmChange(null);
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-[13px] font-bold text-gray-900 truncate">{w.label}</div>
-                      <div className="text-[12px] font-semibold text-orange-600 mt-0.5">{w.msg}</div>
+                      <div className="text-[12px] font-semibold text-orange-600 mt-0.5 truncate">{w.msg}</div>
                     </div>
                     <span className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-orange-100 text-orange-700">
                       {w.type === "margin" ? "마진" :
@@ -31377,48 +31407,113 @@ setConfirmChange(null);
           {/* 24시콜 파일 비교 결과 */}
           {(dailyCloseFilter === "all" || dailyCloseFilter === "warnings") && closeFileResult && closeFileResult.length > 0 && (
             <div className="px-6 py-4 border-b border-gray-100">
-              <div className="text-[13px] font-bold text-gray-800 mb-3">
-                24시콜 비교 불일치 ({closeFileResult.length}건)
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-[13px] font-bold text-gray-800">24시콜 비교 불일치 ({closeFileResult.length}건)</div>
+                <div className="flex rounded-lg border border-gray-300 overflow-hidden text-[11px] font-semibold">
+                  <button type="button"
+                    className={`px-3 py-1 transition ${!closeFileGroupMode ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+                    onClick={() => setCloseFileGroupMode(false)}>전체보기</button>
+                  <button type="button"
+                    className={`px-3 py-1 transition ${closeFileGroupMode ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+                    onClick={() => setCloseFileGroupMode(true)}>업체별보기</button>
+                </div>
               </div>
-              <div className="space-y-2 max-h-[220px] overflow-y-auto">
-                {closeFileResult.map((f, i) => (
-                  <div
-                    key={i}
+
+              {(() => {
+                const typeBadge = (t) => t === "dispatch" ? "배차방식" : t === "fare" ? "운임차이" : t === "missing" ? "파일누락" : "지급방식";
+                const typeCls = (t) => t === "fare" ? "bg-red-100 text-red-700" : t === "dispatch" ? "bg-amber-100 text-amber-700" : t === "missing" ? "bg-rose-100 text-rose-700" : "bg-blue-100 text-blue-700";
+                const goRow = (rowId) => {
+                  setDailyCloseOpen(false);
+                  setDailyCloseFilter("all");
+                  setTimeout(() => {
+                    const el = document.getElementById(`row-${rowId}`);
+                    if (el) {
+                      el.scrollIntoView({ behavior: "smooth", block: "center" });
+                      el.classList.add("row-highlight");
+                      setTimeout(() => el.classList.remove("row-highlight"), 3000);
+                    }
+                  }, 200);
+                };
+                const Card = (f, i) => (
+                  <div key={i}
                     className="flex items-start gap-3 px-4 py-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition"
-                    onClick={() => {
-                      setDailyCloseOpen(false);
-                      setDailyCloseFilter("all");
-                      setTimeout(() => {
-                        const el = document.getElementById(`row-${f.rowId}`);
-                        if (el) {
-                          el.scrollIntoView({ behavior: "smooth", block: "center" });
-                          el.classList.add("row-highlight");
-                          setTimeout(() => el.classList.remove("row-highlight"), 3000);
-                        }
-                      }, 200);
-                    }}
-                  >
-                    <div className="w-6 h-6 rounded-full bg-gray-400 text-white text-[11px] font-bold flex items-center justify-center shrink-0">
-                      {f.seq}
-                    </div>
+                    onClick={() => goRow(f.rowId)}>
+                    <div className="w-6 h-6 rounded-full bg-gray-400 text-white text-[11px] font-bold flex items-center justify-center shrink-0">{f.seq}</div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-bold text-gray-900">{f.label}</div>
-                      <div className="text-[12px] text-gray-700 mt-1 leading-snug">{f.msg}</div>
+                      <div className="text-[13px] font-bold text-gray-900 truncate">{f.label}</div>
+                      <div className="text-[12px] text-gray-700 mt-1 leading-snug truncate">{f.msg}</div>
                     </div>
-                    <span className={`shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold ${
-                      f.type === "fare"
-  ? "bg-red-100 text-red-700"
-  : f.type === "dispatch"
-  ? "bg-amber-100 text-amber-700"
-  : f.type === "missing"
-  ? "bg-rose-100 text-rose-700"
-  : "bg-blue-100 text-blue-700"
-                    }`}>
-                      {f.type === "dispatch" ? "배차방식" : f.type === "fare" ? "운임차이" : f.type === "missing" ? "파일누락" : "지급방식"}
-                    </span>
+                    <span className={`shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold ${typeCls(f.type)}`}>{typeBadge(f.type)}</span>
                   </div>
-                ))}
-              </div>
+                );
+
+                if (!closeFileGroupMode) {
+                  return <div className="grid grid-cols-2 gap-2">{closeFileResult.map(Card)}</div>;
+                }
+
+                const groups = new Map();
+                closeFileResult.forEach(f => {
+                  const key = f.거래처명 || "(미입력)";
+                  if (!groups.has(key)) groups.set(key, []);
+                  groups.get(key).push(f);
+                });
+                const sorted = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
+
+                return (
+                  <div className="space-y-4">
+                    {sorted.map(([client, items]) => {
+                      const paymentItems = items.filter(f => f.type === "payment");
+                      const dispatchItems = items.filter(f => f.type === "dispatch");
+                      const payKey = `${client}__지급방식`;
+                      const dispKey = `${client}__배차방식`;
+                      return (
+                        <div key={client} className="border border-gray-200 rounded-xl overflow-hidden">
+                          <div className="bg-gray-100 px-4 py-2 text-[13px] font-bold text-gray-800">{client} ({items.length}건)</div>
+                          <div className="p-3 space-y-2">
+                            {(paymentItems.length > 0 || dispatchItems.length > 0) && (
+                              <div className="flex flex-wrap gap-2 mb-1">
+                                {paymentItems.length > 0 && (
+                                  <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-1.5">
+                                    <span className="text-[11px] font-semibold text-blue-700">지급방식 불일치 {paymentItems.length}건 →</span>
+                                    <select className="border border-blue-200 rounded px-1.5 py-0.5 text-[11px]"
+                                      value={closeFileBulkValue[payKey] || ""}
+                                      onChange={e => setCloseFileBulkValue(p => ({ ...p, [payKey]: e.target.value }))}>
+                                      <option value="">선택</option>
+                                      {["계산서", "착불", "선불", "손실", "개인", "취소"].map(v => <option key={v} value={v}>{v}</option>)}
+                                    </select>
+                                    <button type="button"
+                                      className="px-2 py-0.5 rounded bg-blue-600 text-white text-[11px] font-bold hover:bg-blue-700 transition"
+                                      onClick={() => bulkFixCloseFileIssues(paymentItems, "지급방식", closeFileBulkValue[payKey])}>
+                                      일괄적용
+                                    </button>
+                                  </div>
+                                )}
+                                {dispatchItems.length > 0 && (
+                                  <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                                    <span className="text-[11px] font-semibold text-amber-700">배차방식 불일치 {dispatchItems.length}건 →</span>
+                                    <select className="border border-amber-200 rounded px-1.5 py-0.5 text-[11px]"
+                                      value={closeFileBulkValue[dispKey] || ""}
+                                      onChange={e => setCloseFileBulkValue(p => ({ ...p, [dispKey]: e.target.value }))}>
+                                      <option value="">선택</option>
+                                      {["24시", "직접배차", "인성", "고정기사"].map(v => <option key={v} value={v}>{v}</option>)}
+                                    </select>
+                                    <button type="button"
+                                      className="px-2 py-0.5 rounded bg-amber-600 text-white text-[11px] font-bold hover:bg-amber-700 transition"
+                                      onClick={() => bulkFixCloseFileIssues(dispatchItems, "배차방식", closeFileBulkValue[dispKey])}>
+                                      일괄적용
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            <div className="grid grid-cols-2 gap-2">{items.map(Card)}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -31574,6 +31669,9 @@ setConfirmChange(null);
           className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition"
           onClick={() => {
             runDailyClose();
+            // ⭐ 24시콜 파일을 업로드해둔 상태였다면, 파일을 다시 올리지 않아도
+            // 방금 고친 내용이 반영된 최신 데이터로 비교결과도 다시 계산한다.
+            closeFileRawRef.current?.();
             setReVerifyToast("재검증이 완료되었습니다");
             setTimeout(() => setReVerifyToast(null), 2500);
           }}
@@ -32388,6 +32486,14 @@ const [dailyCloseOpen, setDailyCloseOpen] = React.useState(false);
 const [dailyCloseResult, setDailyCloseResult] = React.useState(null);
 const [dailyCloseFilter, setDailyCloseFilter] = React.useState("all");
 const [closeFileResult, setCloseFileResult] = React.useState(null);
+// ⭐ 24시콜 파일 재비교(재검증)를 위해, 업로드했던 파일을 다시 읽지 않고도
+// 파싱된 원본(json/컬럼 인덱스)을 기억해뒀다가 재사용한다 — "재검증" 버튼을
+// 눌렀을 때 오류/경고뿐 아니라 24시콜 비교불일치도 최신 데이터로 다시 계산.
+const closeFileRawRef = React.useRef(null);
+// ⭐ 24시콜 비교불일치를 업체별로 묶어서 볼지 여부 + 업체별 일괄수정에 쓰는
+// 선택값(거래처명__필드명 단위로 각각 기억)
+const [closeFileGroupMode, setCloseFileGroupMode] = React.useState(false);
+const [closeFileBulkValue, setCloseFileBulkValue] = React.useState({});
 const [filterErrorIds, setFilterErrorIds] = React.useState(null);
 const [reVerifyToast, setReVerifyToast] = React.useState(null);
 const lastWarnedRef = React.useRef(null);
@@ -32457,7 +32563,9 @@ const runDailyClose = () => {
 
   viewRows.forEach((row, idx) => {
     const seq = idx + 1;
-    const label = `${seq}번 [${row.거래처명 || "-"}] ${row.상차지명 || ""} → ${row.하차지명 || ""}`;
+    // ⭐ 조회기간이 하루가 아니라 여러 날짜에 걸칠 수 있어(범위 조회), 번호만으로는
+    // 어느 날짜 오더인지 알 수 없다는 피드백 — 상차일을 라벨에 항상 표시.
+    const label = `${seq}번 (${row.상차일 || "-"}) [${row.거래처명 || "-"}] ${row.상차지명 || ""} → ${row.하차지명 || ""}`;
 
     const requiredFields = [
       { key: "차량번호", name: "차량번호" },
@@ -32903,6 +33011,18 @@ const handleCloseFileUpload = async (e) => {
     }
   }
 
+  const raw = { json, headerIdx, plateCol, nameCol, phoneCol, feeTypeCol, commCol, fareCol, effectiveDateCol, parseExcelDate };
+  closeFileRawRef.current = raw;
+  setCloseFileResult(computeCloseFileIssues(raw));
+};
+
+// ⭐ 업로드된 24시콜 파일(raw)을 현재 조회기간의 최신 dispatchData와 다시
+// 비교해 불일치 목록을 계산 — 업로드 시점뿐 아니라 "재검증" 버튼으로도
+// (사용자가 오류를 고친 뒤) 같은 파일을 다시 읽지 않고 재사용할 수 있도록
+// handleCloseFileUpload에서 분리했다.
+const computeCloseFileIssues = (raw) => {
+  const { json, headerIdx, plateCol, nameCol, phoneCol, feeTypeCol, commCol, fareCol, effectiveDateCol, parseExcelDate } = raw;
+
   // 조회 기간 전체 rows (appliedStartDate ~ appliedEndDate)
   const rangeStart = appliedStartDate || todayKST();
   const rangeEnd   = appliedEndDate   || todayKST();
@@ -32951,13 +33071,14 @@ const handleCloseFileUpload = async (e) => {
 
     matched.forEach(mr => {
       const seq = viewRows.indexOf(mr) + 1;
-      const dateLabel = fileDate ? ` (${fileDate})` : "";
-      const label = `${seq}번 [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}${dateLabel}`;
+      const dateLabel = ` (${mr.상차일 || fileDate || "-"})`;
+      const label = `${seq}번${dateLabel} [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}`;
+      const 거래처명 = mr.거래처명 || "(미입력)";
 
       const dispatch = (mr.배차방식 || "").trim();
       if (dispatch && dispatch !== "24시" && dispatch !== "24시(고정기사)") {
         fileIssues.push({
-          rowId: mr._id, seq, label, type: "dispatch",
+          rowId: mr._id, seq, label, type: "dispatch", 거래처명,
           msg: `24시콜 파일에 존재하나 배차방식이 "${dispatch}"(으)로 등록됨 (차량: ${row[plateCol]}, 기사: ${fileName})`,
         });
       }
@@ -32969,14 +33090,14 @@ const handleCloseFileUpload = async (e) => {
         if (fileFeeType === "인수증") {
           if (programPay && programPay !== "계산서") {
             fileIssues.push({
-              rowId: mr._id, seq, label, type: "payment",
+              rowId: mr._id, seq, label, type: "payment", 거래처명,
               msg: `24시콜: 인수증(계산서) / 프로그램: "${programPay}" — 지급방식 불일치 (차량: ${row[plateCol]})`,
             });
           }
         } else if (fileFeeType === "선/착불" || fileFeeType === "선착불") {
           if (programPay && programPay !== "선불" && programPay !== "착불") {
             fileIssues.push({
-              rowId: mr._id, seq, label, type: "payment",
+              rowId: mr._id, seq, label, type: "payment", 거래처명,
               msg: `24시콜: 선/착불 / 프로그램: "${programPay}" — 지급방식 불일치 (차량: ${row[plateCol]})`,
             });
           }
@@ -32989,14 +33110,14 @@ const handleCloseFileUpload = async (e) => {
         if (isSongsil) {
           if (fileFare > 0 && programFare > 0 && fileFare !== programFare) {
             fileIssues.push({
-              rowId: mr._id, seq, label, type: "fare",
+              rowId: mr._id, seq, label, type: "fare", 거래처명,
               msg: `[손실] 24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원 — 운임 불일치 (차량: ${row[plateCol]})`,
             });
           }
         } else {
           if (fileFare > 0 && programFare > 0 && fileFare !== programFare) {
             fileIssues.push({
-              rowId: mr._id, seq, label, type: "fare",
+              rowId: mr._id, seq, label, type: "fare", 거래처명,
               msg: `24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원 — 운임 불일치 (차량: ${row[plateCol]})`,
             });
           }
@@ -33031,15 +33152,29 @@ const handleCloseFileUpload = async (e) => {
 
     if (!inFile) {
       const seq = viewRows.indexOf(mr) + 1;
-      const label = `${seq}번 [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}`;
+      const label = `${seq}번 (${mr.상차일 || "-"}) [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}`;
       fileIssues.push({
-        rowId: mr._id, seq, label, type: "missing",
+        rowId: mr._id, seq, label, type: "missing", 거래처명: mr.거래처명 || "(미입력)",
         msg: `배차방식이 "24시"이나 24시콜 파일에 차량번호 없음 (차량: ${mr.차량번호}, 기사: ${mr.이름 || "-"}) — 배차방식 오등록 의심`,
       });
     }
   });
 
-  setCloseFileResult(fileIssues);
+  return fileIssues;
+};
+
+// ⭐ 24시콜 비교불일치 업체별 일괄수정 — 같은 거래처의 지급방식/배차방식
+// 불일치 건들을 골라 한 번에 새 값으로 patchDispatch하고, 곧바로 오류/경고와
+// 24시콜 비교결과를 전부 재계산해 팝업을 최신 상태로 되돌린다.
+const bulkFixCloseFileIssues = async (items, fieldKey, value) => {
+  if (!value) { showAlert("적용할 값을 먼저 선택하세요."); return; }
+  const ids = [...new Set(items.map(it => it.rowId))];
+  await Promise.all(ids.map(id => patchDispatch(id, { [fieldKey]: value })));
+  showAlert(`${ids.length}건의 ${fieldKey}이(가) "${value}"(으)로 일괄 수정되었습니다.`);
+  setTimeout(() => {
+    runDailyClose();
+    if (closeFileRawRef.current) setCloseFileResult(computeCloseFileIssues(closeFileRawRef.current));
+  }, 300);
 };
 const [statusFilter, setStatusFilter] = React.useState("ALL");
   const [q, setQ] = React.useState(() => {
@@ -40071,7 +40206,11 @@ setCopyPlaceOptions(list);
       {/* ===================== 일마감 모달 ===================== */}
 {dailyCloseOpen && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-    <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+    {/* ⭐ 좁은 640px 고정폭이라 라벨/메모가 줄바꿈되며 카드 하나가 너무 커져
+        섹션마다 내부 스크롤이 따로 생기던 문제 — 화면을 넓게 써서 한 줄에
+        들어오게 하고(가로형식), 아래 각 목록도 2열 그리드로 세로로 여러 건이
+        한 번에 보이게 바꿨다. */}
+    <div className="bg-white rounded-2xl shadow-2xl w-[1240px] max-w-[95vw] max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
 
       {/* 헤더 */}
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
@@ -40123,7 +40262,7 @@ setCopyPlaceOptions(list);
           {(dailyCloseFilter === "all" || dailyCloseFilter === "errors") && dailyCloseResult.errors.length > 0 && (
             <div className="px-6 py-4 border-b border-gray-100">
               <div className="text-[13px] font-bold text-gray-800 mb-3">오류 ({dailyCloseResult.errors.length}건) - 필수 수정</div>
-              <div className="space-y-2 max-h-[220px] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-2">
                 {dailyCloseResult.errors.map((e, i) => (
                   <div key={i}
                     className="flex items-start gap-3 px-4 py-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition"
@@ -40146,7 +40285,7 @@ setCopyPlaceOptions(list);
                     <div className="w-6 h-6 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold flex items-center justify-center shrink-0">{e.seq}</div>
                     <div className="flex-1 min-w-0">
                       <div className="text-[13px] font-bold text-gray-900 truncate">{e.label}</div>
-                      <div className="text-[12px] font-semibold text-red-600 mt-0.5">{e.msg}</div>
+                      <div className="text-[12px] font-semibold text-red-600 mt-0.5 truncate">{e.msg}</div>
                     </div>
                     <span className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-red-100 text-red-700">누락</span>
                   </div>
@@ -40159,7 +40298,7 @@ setCopyPlaceOptions(list);
           {(dailyCloseFilter === "all" || dailyCloseFilter === "warnings") && dailyCloseResult.warnings.length > 0 && (
             <div className="px-6 py-4 border-b border-gray-100">
               <div className="text-[13px] font-bold text-gray-800 mb-3">경고 ({dailyCloseResult.warnings.length}건) - 확인 필요</div>
-              <div className="space-y-2 max-h-[220px] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-2">
                 {dailyCloseResult.warnings.map((w, i) => (
                   <div key={i}
                     className="flex items-start gap-3 px-4 py-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition"
@@ -40182,7 +40321,7 @@ setCopyPlaceOptions(list);
                     <div className="w-6 h-6 rounded-full bg-gray-400 text-white text-[11px] font-bold flex items-center justify-center shrink-0">{w.seq}</div>
                     <div className="flex-1 min-w-0">
                       <div className="text-[13px] font-bold text-gray-900 truncate">{w.label}</div>
-                      <div className="text-[12px] font-semibold text-orange-600 mt-0.5">{w.msg}</div>
+                      <div className="text-[12px] font-semibold text-orange-600 mt-0.5 truncate">{w.msg}</div>
                     </div>
                     <span className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-orange-100 text-orange-700">
                       {w.type === "margin" ? "마진" : w.type === "driver" ? "기사" : w.type === "phone" ? "번호" : w.type === "zero" ? "0원" : w.type === "high" ? "고액" : w.type}
@@ -40196,18 +40335,114 @@ setCopyPlaceOptions(list);
           {/* 24시콜 비교 불일치 */}
           {(dailyCloseFilter === "all" || dailyCloseFilter === "warnings") && closeFileResult && closeFileResult.length > 0 && (
             <div className="px-6 py-4 border-b border-gray-100">
-              <div className="text-[13px] font-bold text-gray-800 mb-3">24시콜 비교 불일치 ({closeFileResult.length}건)</div>
-              <div className="space-y-2 max-h-[180px] overflow-y-auto">
-                {closeFileResult.map((f, i) => (
-                  <div key={i} className="flex items-start gap-3 px-4 py-3 border border-orange-200 rounded-xl bg-orange-50">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-[13px] font-bold text-gray-800">24시콜 비교 불일치 ({closeFileResult.length}건)</div>
+                <div className="flex rounded-lg border border-gray-300 overflow-hidden text-[11px] font-semibold">
+                  <button type="button"
+                    className={`px-3 py-1 transition ${!closeFileGroupMode ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+                    onClick={() => setCloseFileGroupMode(false)}>전체보기</button>
+                  <button type="button"
+                    className={`px-3 py-1 transition ${closeFileGroupMode ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+                    onClick={() => setCloseFileGroupMode(true)}>업체별보기</button>
+                </div>
+              </div>
+
+              {(() => {
+                const typeBadge = (t) => t === "dispatch" ? "배차방식" : t === "fare" ? "운임차이" : t === "missing" ? "파일누락" : "지급방식";
+                const typeCls = (t) => t === "fare" ? "bg-red-100 text-red-700" : t === "dispatch" ? "bg-amber-100 text-amber-700" : t === "missing" ? "bg-rose-100 text-rose-700" : "bg-blue-100 text-blue-700";
+                const goRow = (rowId) => {
+                  setDailyCloseOpen(false);
+                  setDailyCloseFilter("all");
+                  setTimeout(() => {
+                    const el = document.getElementById(`row-${rowId}`);
+                    if (el) {
+                      el.scrollIntoView({ behavior: "smooth", block: "center" });
+                      el.classList.add("row-highlight");
+                      setTimeout(() => el.classList.remove("row-highlight"), 3000);
+                    }
+                  }, 200);
+                };
+                const Card = (f, i) => (
+                  <div key={i} className="flex items-start gap-3 px-4 py-3 border border-orange-200 rounded-xl bg-orange-50 cursor-pointer hover:bg-orange-100 transition"
+                    onClick={() => goRow(f.rowId)}>
                     <div className="w-6 h-6 rounded-full bg-orange-400 text-white text-[11px] font-bold flex items-center justify-center shrink-0">{f.seq}</div>
                     <div className="flex-1 min-w-0">
                       <div className="text-[13px] font-bold text-gray-900 truncate">{f.label}</div>
-                      <div className="text-[12px] font-semibold text-orange-600 mt-0.5">{f.plate} — {f.msg}</div>
+                      <div className="text-[12px] font-semibold text-orange-600 mt-0.5 truncate">{f.msg}</div>
                     </div>
+                    <span className={`shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold ${typeCls(f.type)}`}>{typeBadge(f.type)}</span>
                   </div>
-                ))}
-              </div>
+                );
+
+                if (!closeFileGroupMode) {
+                  return <div className="grid grid-cols-2 gap-2">{closeFileResult.map(Card)}</div>;
+                }
+
+                // 업체별 그룹 — 건수 많은 순
+                const groups = new Map();
+                closeFileResult.forEach(f => {
+                  const key = f.거래처명 || "(미입력)";
+                  if (!groups.has(key)) groups.set(key, []);
+                  groups.get(key).push(f);
+                });
+                const sorted = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
+
+                return (
+                  <div className="space-y-4">
+                    {sorted.map(([client, items]) => {
+                      const paymentItems = items.filter(f => f.type === "payment");
+                      const dispatchItems = items.filter(f => f.type === "dispatch");
+                      const payKey = `${client}__지급방식`;
+                      const dispKey = `${client}__배차방식`;
+                      return (
+                        <div key={client} className="border border-gray-200 rounded-xl overflow-hidden">
+                          <div className="bg-gray-100 px-4 py-2 text-[13px] font-bold text-gray-800">{client} ({items.length}건)</div>
+                          <div className="p-3 space-y-2">
+                            {/* 업체 단위 일괄수정 — 같은 원인끼리 한 번에 수정 */}
+                            {(paymentItems.length > 0 || dispatchItems.length > 0) && (
+                              <div className="flex flex-wrap gap-2 mb-1">
+                                {paymentItems.length > 0 && (
+                                  <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-1.5">
+                                    <span className="text-[11px] font-semibold text-blue-700">지급방식 불일치 {paymentItems.length}건 →</span>
+                                    <select className="border border-blue-200 rounded px-1.5 py-0.5 text-[11px]"
+                                      value={closeFileBulkValue[payKey] || ""}
+                                      onChange={e => setCloseFileBulkValue(p => ({ ...p, [payKey]: e.target.value }))}>
+                                      <option value="">선택</option>
+                                      {["계산서", "착불", "선불", "손실", "개인", "취소"].map(v => <option key={v} value={v}>{v}</option>)}
+                                    </select>
+                                    <button type="button"
+                                      className="px-2 py-0.5 rounded bg-blue-600 text-white text-[11px] font-bold hover:bg-blue-700 transition"
+                                      onClick={() => bulkFixCloseFileIssues(paymentItems, "지급방식", closeFileBulkValue[payKey])}>
+                                      일괄적용
+                                    </button>
+                                  </div>
+                                )}
+                                {dispatchItems.length > 0 && (
+                                  <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                                    <span className="text-[11px] font-semibold text-amber-700">배차방식 불일치 {dispatchItems.length}건 →</span>
+                                    <select className="border border-amber-200 rounded px-1.5 py-0.5 text-[11px]"
+                                      value={closeFileBulkValue[dispKey] || ""}
+                                      onChange={e => setCloseFileBulkValue(p => ({ ...p, [dispKey]: e.target.value }))}>
+                                      <option value="">선택</option>
+                                      {["24시", "직접배차", "인성", "고정기사"].map(v => <option key={v} value={v}>{v}</option>)}
+                                    </select>
+                                    <button type="button"
+                                      className="px-2 py-0.5 rounded bg-amber-600 text-white text-[11px] font-bold hover:bg-amber-700 transition"
+                                      onClick={() => bulkFixCloseFileIssues(dispatchItems, "배차방식", closeFileBulkValue[dispKey])}>
+                                      일괄적용
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            <div className="grid grid-cols-2 gap-2">{items.map(Card)}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -40337,6 +40572,9 @@ setCopyPlaceOptions(list);
         <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition"
           onClick={() => {
             runDailyClose();
+            // ⭐ 24시콜 파일을 업로드해둔 상태였다면, 파일을 다시 올리지 않아도
+            // 방금 고친 내용이 반영된 최신 dispatchData로 비교결과도 다시 계산한다.
+            if (closeFileRawRef.current) setCloseFileResult(computeCloseFileIssues(closeFileRawRef.current));
             setReVerifyToast("🔄 재검증이 완료되었습니다");
             setTimeout(() => setReVerifyToast(null), 2500);
           }}>
