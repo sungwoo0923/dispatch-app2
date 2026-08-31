@@ -31389,9 +31389,9 @@ setConfirmChange(null);
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-[13px] font-bold text-gray-900 truncate">{w.label}</div>
-                      <div className="text-[12px] font-semibold text-orange-600 mt-0.5 truncate">{w.msg}</div>
+                      <div className="text-[12px] font-semibold text-gray-500 mt-0.5 truncate">{w.msg}</div>
                     </div>
-                    <span className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-orange-100 text-orange-700">
+                    <span className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-gray-100 text-gray-600 border border-gray-200">
                       {w.type === "margin" ? "마진" :
                        w.type === "driver" ? "기사" :
                        w.type === "phone" ? "번호" :
@@ -31421,7 +31421,10 @@ setConfirmChange(null);
 
               {(() => {
                 const typeBadge = (t) => t === "dispatch" ? "배차방식" : t === "fare" ? "운임차이" : t === "missing" ? "파일누락" : "지급방식";
-                const typeCls = (t) => t === "fare" ? "bg-red-100 text-red-700" : t === "dispatch" ? "bg-amber-100 text-amber-700" : t === "missing" ? "bg-rose-100 text-rose-700" : "bg-blue-100 text-blue-700";
+                // ⭐ 검증/분석 화면답게 톤을 낮췄다 — 실제 금액이 틀린 건(운임차이)만
+                // 옅은 빨강으로 구분하고, 나머지는 프로그램 전반의 회색/네이비 톤에
+                // 맞춘 중립 배지로 통일(알록달록하다는 피드백 반영).
+                const typeCls = (t) => t === "fare" ? "bg-red-50 text-red-700 border border-red-100" : "bg-gray-100 text-gray-600 border border-gray-200";
                 const goRow = (rowId) => {
                   setDailyCloseOpen(false);
                   setDailyCloseFilter("all");
@@ -31468,37 +31471,37 @@ setConfirmChange(null);
                       const dispKey = `${client}__배차방식`;
                       return (
                         <div key={client} className="border border-gray-200 rounded-xl overflow-hidden">
-                          <div className="bg-gray-100 px-4 py-2 text-[13px] font-bold text-gray-800">{client} ({items.length}건)</div>
+                          <div className="bg-[#1B2B4B]/5 px-4 py-2 text-[13px] font-bold text-[#1B2B4B]">{client} ({items.length}건)</div>
                           <div className="p-3 space-y-2">
                             {(paymentItems.length > 0 || dispatchItems.length > 0) && (
                               <div className="flex flex-wrap gap-2 mb-1">
                                 {paymentItems.length > 0 && (
-                                  <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-1.5">
-                                    <span className="text-[11px] font-semibold text-blue-700">지급방식 불일치 {paymentItems.length}건 →</span>
-                                    <select className="border border-blue-200 rounded px-1.5 py-0.5 text-[11px]"
+                                  <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
+                                    <span className="text-[11px] font-semibold text-gray-600">지급방식 불일치 {paymentItems.length}건 →</span>
+                                    <select className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white"
                                       value={closeFileBulkValue[payKey] || ""}
                                       onChange={e => setCloseFileBulkValue(p => ({ ...p, [payKey]: e.target.value }))}>
                                       <option value="">선택</option>
                                       {["계산서", "착불", "선불", "손실", "개인", "취소"].map(v => <option key={v} value={v}>{v}</option>)}
                                     </select>
                                     <button type="button"
-                                      className="px-2 py-0.5 rounded bg-blue-600 text-white text-[11px] font-bold hover:bg-blue-700 transition"
+                                      className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"
                                       onClick={() => bulkFixCloseFileIssues(paymentItems, "지급방식", closeFileBulkValue[payKey])}>
                                       일괄적용
                                     </button>
                                   </div>
                                 )}
                                 {dispatchItems.length > 0 && (
-                                  <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
-                                    <span className="text-[11px] font-semibold text-amber-700">배차방식 불일치 {dispatchItems.length}건 →</span>
-                                    <select className="border border-amber-200 rounded px-1.5 py-0.5 text-[11px]"
+                                  <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
+                                    <span className="text-[11px] font-semibold text-gray-600">배차방식 불일치 {dispatchItems.length}건 →</span>
+                                    <select className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white"
                                       value={closeFileBulkValue[dispKey] || ""}
                                       onChange={e => setCloseFileBulkValue(p => ({ ...p, [dispKey]: e.target.value }))}>
                                       <option value="">선택</option>
                                       {["24시", "직접배차", "인성", "고정기사"].map(v => <option key={v} value={v}>{v}</option>)}
                                     </select>
                                     <button type="button"
-                                      className="px-2 py-0.5 rounded bg-amber-600 text-white text-[11px] font-bold hover:bg-amber-700 transition"
+                                      className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"
                                       onClick={() => bulkFixCloseFileIssues(dispatchItems, "배차방식", closeFileBulkValue[dispKey])}>
                                       일괄적용
                                     </button>
@@ -40349,7 +40352,10 @@ setCopyPlaceOptions(list);
 
               {(() => {
                 const typeBadge = (t) => t === "dispatch" ? "배차방식" : t === "fare" ? "운임차이" : t === "missing" ? "파일누락" : "지급방식";
-                const typeCls = (t) => t === "fare" ? "bg-red-100 text-red-700" : t === "dispatch" ? "bg-amber-100 text-amber-700" : t === "missing" ? "bg-rose-100 text-rose-700" : "bg-blue-100 text-blue-700";
+                // ⭐ 검증/분석 화면답게 톤을 낮췄다 — 실제 금액이 틀린 건(운임차이)만
+                // 옅은 빨강으로 구분하고, 나머지는 프로그램 전반의 회색/네이비 톤에
+                // 맞춘 중립 배지로 통일(알록달록하다는 피드백 반영).
+                const typeCls = (t) => t === "fare" ? "bg-red-50 text-red-700 border border-red-100" : "bg-gray-100 text-gray-600 border border-gray-200";
                 const goRow = (rowId) => {
                   setDailyCloseOpen(false);
                   setDailyCloseFilter("all");
@@ -40363,12 +40369,12 @@ setCopyPlaceOptions(list);
                   }, 200);
                 };
                 const Card = (f, i) => (
-                  <div key={i} className="flex items-start gap-3 px-4 py-3 border border-orange-200 rounded-xl bg-orange-50 cursor-pointer hover:bg-orange-100 transition"
+                  <div key={i} className="flex items-start gap-3 px-4 py-3 border border-gray-200 rounded-xl bg-white cursor-pointer hover:bg-gray-50 transition"
                     onClick={() => goRow(f.rowId)}>
-                    <div className="w-6 h-6 rounded-full bg-orange-400 text-white text-[11px] font-bold flex items-center justify-center shrink-0">{f.seq}</div>
+                    <div className="w-6 h-6 rounded-full bg-gray-400 text-white text-[11px] font-bold flex items-center justify-center shrink-0">{f.seq}</div>
                     <div className="flex-1 min-w-0">
                       <div className="text-[13px] font-bold text-gray-900 truncate">{f.label}</div>
-                      <div className="text-[12px] font-semibold text-orange-600 mt-0.5 truncate">{f.msg}</div>
+                      <div className="text-[12px] font-semibold text-gray-500 mt-0.5 truncate">{f.msg}</div>
                     </div>
                     <span className={`shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold ${typeCls(f.type)}`}>{typeBadge(f.type)}</span>
                   </div>
@@ -40396,38 +40402,38 @@ setCopyPlaceOptions(list);
                       const dispKey = `${client}__배차방식`;
                       return (
                         <div key={client} className="border border-gray-200 rounded-xl overflow-hidden">
-                          <div className="bg-gray-100 px-4 py-2 text-[13px] font-bold text-gray-800">{client} ({items.length}건)</div>
+                          <div className="bg-[#1B2B4B]/5 px-4 py-2 text-[13px] font-bold text-[#1B2B4B]">{client} ({items.length}건)</div>
                           <div className="p-3 space-y-2">
                             {/* 업체 단위 일괄수정 — 같은 원인끼리 한 번에 수정 */}
                             {(paymentItems.length > 0 || dispatchItems.length > 0) && (
                               <div className="flex flex-wrap gap-2 mb-1">
                                 {paymentItems.length > 0 && (
-                                  <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-1.5">
-                                    <span className="text-[11px] font-semibold text-blue-700">지급방식 불일치 {paymentItems.length}건 →</span>
-                                    <select className="border border-blue-200 rounded px-1.5 py-0.5 text-[11px]"
+                                  <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
+                                    <span className="text-[11px] font-semibold text-gray-600">지급방식 불일치 {paymentItems.length}건 →</span>
+                                    <select className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white"
                                       value={closeFileBulkValue[payKey] || ""}
                                       onChange={e => setCloseFileBulkValue(p => ({ ...p, [payKey]: e.target.value }))}>
                                       <option value="">선택</option>
                                       {["계산서", "착불", "선불", "손실", "개인", "취소"].map(v => <option key={v} value={v}>{v}</option>)}
                                     </select>
                                     <button type="button"
-                                      className="px-2 py-0.5 rounded bg-blue-600 text-white text-[11px] font-bold hover:bg-blue-700 transition"
+                                      className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"
                                       onClick={() => bulkFixCloseFileIssues(paymentItems, "지급방식", closeFileBulkValue[payKey])}>
                                       일괄적용
                                     </button>
                                   </div>
                                 )}
                                 {dispatchItems.length > 0 && (
-                                  <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
-                                    <span className="text-[11px] font-semibold text-amber-700">배차방식 불일치 {dispatchItems.length}건 →</span>
-                                    <select className="border border-amber-200 rounded px-1.5 py-0.5 text-[11px]"
+                                  <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
+                                    <span className="text-[11px] font-semibold text-gray-600">배차방식 불일치 {dispatchItems.length}건 →</span>
+                                    <select className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white"
                                       value={closeFileBulkValue[dispKey] || ""}
                                       onChange={e => setCloseFileBulkValue(p => ({ ...p, [dispKey]: e.target.value }))}>
                                       <option value="">선택</option>
                                       {["24시", "직접배차", "인성", "고정기사"].map(v => <option key={v} value={v}>{v}</option>)}
                                     </select>
                                     <button type="button"
-                                      className="px-2 py-0.5 rounded bg-amber-600 text-white text-[11px] font-bold hover:bg-amber-700 transition"
+                                      className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"
                                       onClick={() => bulkFixCloseFileIssues(dispatchItems, "배차방식", closeFileBulkValue[dispKey])}>
                                       일괄적용
                                     </button>
