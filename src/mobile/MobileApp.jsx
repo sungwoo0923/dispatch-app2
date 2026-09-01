@@ -2186,19 +2186,30 @@ collections.forEach((name) => {
   return () => unsubs.forEach((u) => u());
 }, [refreshKey]);
 
-// ⭐ 앱을 백그라운드에 뒀다가(다른 화면 보다가/화면을 꺼뒀다가) 다시 열면, PC나
+// ⭐ 앱을 완전히 껐다가(오래 백그라운드에 두거나 종료했다가) 다시 열면, PC나
 // 다른 기기에서 그 사이 등록/수정/배차/취소한 내용이 즉시 반영돼야 하는데, 실시간
 // 리스너(onSnapshot)가 재연결되기까지 시간이 걸려 한참 전 오더현황이 계속 보이다가
-// 앱을 완전히 껐다 켜야만(그리고 몇 초 뒤에야) 최신 상태가 보이던 문제가 있었다.
-// 화면이 다시 보이는 시점에 캐시를 거치지 않고(persistentLocalCache 설정 때문에
-// getDocs가 오래된 로컬 캐시를 그대로 돌려줄 수 있다) 서버에서 직접(getDocsFromServer)
-// 한 번 확실하게 새로 읽어와 화면 상태만 즉시 갱신한다. 위쪽 onSnapshot 리스너는
-// 그대로 두고 알림/푸시 로직은 건드리지 않는다 — 재구독 방식은 새 리스너의 첫
-// 스냅샷이 기존 문서를 전부 "added"로 돌려줘 신규오더 푸시알림이 중복 발송될
-// 위험이 있어 쓰지 않는다.
+// 몇 초 뒤에야 최신 상태가 보이던 문제가 있었다. 화면이 다시 보이는 시점에 캐시를
+// 거치지 않고(persistentLocalCache 설정 때문에 getDocs가 오래된 로컬 캐시를 그대로
+// 돌려줄 수 있다) 서버에서 직접(getDocsFromServer) 한 번 확실하게 새로 읽어와 화면
+// 상태만 즉시 갱신한다. 위쪽 onSnapshot 리스너는 그대로 두고 알림/푸시 로직은
+// 건드리지 않는다 — 재구독 방식은 새 리스너의 첫 스냅샷이 기존 문서를 전부
+// "added"로 돌려줘 신규오더 푸시알림이 중복 발송될 위험이 있어 쓰지 않는다.
+//
+// ⚠️ 예전엔 focus/pageshow/visibilitychange 이벤트마다 무조건 재조회했는데, 이
+// 이벤트들은 "앱을 껐다 켬"뿐 아니라 카카오톡 등 다른 앱을 잠깐 확인하고 돌아오는
+// 것만으로도(특히 화면분할 모드에서는 훨씬 더 잦게) 계속 발생해서, 사용 중에
+// "최신 오더 상황 확인 중..." 팝업이 너무 자주 뜨는 원인이었다. 화면이 "충분히
+// 오래"(HIDDEN_THRESHOLD_MS) 안 보였다가 다시 보일 때만 — 즉 실제로 앱을 켰다 끈
+// 것과 사실상 같은 상황에만 — 재조회하도록 바꿨다. onSnapshot이 계속 살아있는
+// 짧은 전환(다른 앱 잠깐 확인 등)에는 이미 실시간으로 반영되고 있으므로 이 재조회
+// 자체가 필요 없다. window.focus는 화면분할 모드에서 실제 백그라운드 전환 없이도
+// 계속 발생해 가장 오작동이 심했던 트리거라 완전히 제거했다.
 useEffect(() => {
   const lastRefreshAtRef = { current: 0 };
   const REFRESH_COOLDOWN_MS = 3000;
+  const HIDDEN_THRESHOLD_MS = 2 * 60 * 1000; // 2분 이상 안 보였다 돌아온 경우만 "재시작"으로 취급
+  let hiddenAt = 0;
 
   const refreshNow = async () => {
     const now = Date.now();
@@ -2207,8 +2218,9 @@ useEffect(() => {
     // ⭐ 재조회가 곧바로 끝나면(캐시가 이미 최신이거나 네트워크가 빠른 경우) 화면
     // 깜빡임 없이 조용히 넘어가고, 네트워크 재연결이 오래 걸려 응답이 지연될 때만
     // (예: 화면을 꺼뒀다 켜서 기기가 막 깨어난 직후) 잠깐이라도 화면을 덮어
-    // "한참 전 상태"가 눈에 보이거나 그 상태로 조작하는 일 자체를 막는다.
-    const overlayTimer = setTimeout(() => setResyncOverlay(true), 400);
+    // "한참 전 상태"가 눈에 보이거나 그 상태로 조작하는 일 자체를 막는다. 지연
+    // 체감을 줄이기 위해 대기 시간을 400ms→200ms로 단축.
+    const overlayTimer = setTimeout(() => setResyncOverlay(true), 200);
     try {
       const [dispatchSnap, ordersSnap] = await Promise.all([
         getDocsFromServer(collection(db, "dispatch")),
@@ -2230,17 +2242,27 @@ useEffect(() => {
   };
 
   const onVisible = () => {
-    if (document.visibilityState === "visible") refreshNow();
+    if (document.visibilityState !== "visible") {
+      hiddenAt = Date.now();
+      return;
+    }
+    // hiddenAt이 없으면(예: 첫 마운트 직후 이벤트) 재조회 대상이 아니다 — 최초
+    // 로드는 onSnapshot 첫 스냅샷이 이미 처리한다.
+    if (hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) refreshNow();
+  };
+
+  // bfcache(뒤로가기 등으로 페이지가 통째로 캐시에서 복원)로 돌아온 경우도 같은
+  // 기준으로 취급 — persisted가 아니면(=일반적인 최초 로드) 건드리지 않는다.
+  const onPageShow = (e) => {
+    if (e.persisted && hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) refreshNow();
   };
 
   document.addEventListener("visibilitychange", onVisible);
-  window.addEventListener("focus", refreshNow);
-  window.addEventListener("pageshow", refreshNow);
+  window.addEventListener("pageshow", onPageShow);
 
   return () => {
     document.removeEventListener("visibilitychange", onVisible);
-    window.removeEventListener("focus", refreshNow);
-    window.removeEventListener("pageshow", refreshNow);
+    window.removeEventListener("pageshow", onPageShow);
   };
 }, []);
 
@@ -4219,12 +4241,14 @@ const title =
  return (
 <div className="w-full min-h-screen flex flex-col relative"
   style={{ backgroundColor: "var(--bg-app)", color: "var(--text-primary)", transition: "background-color 0.3s, color 0.3s" }}>
-    {/* ⭐ 백그라운드에서 돌아왔을 때 최신화 대기 오버레이 — 오래된 오더 상태를
-        보거나 그 상태로 조작하는 걸 막기 위해 재조회가 끝날 때까지 화면을 덮는다 */}
+    {/* ⭐ 오래 백그라운드에 있다가(=사실상 껐다 켠 것과 같은 상황) 돌아왔을 때만
+        뜨는 최적화(재조회) 대기 오버레이 — 오래된 오더 상태를 보거나 그 상태로
+        조작하는 걸 막기 위해 재조회가 끝날 때까지 화면을 덮는다. 짧은 앱 전환
+        (다른 앱 잠깐 확인 등)에는 뜨지 않는다. */}
     {resyncOverlay && (
       <div className="fixed inset-0 z-[100000] flex flex-col items-center justify-center gap-3 bg-white/90 backdrop-blur-sm">
         <div className="w-8 h-8 border-[3px] border-gray-200 border-t-[#1B2B4B] rounded-full animate-spin" />
-        <div className="text-[13px] font-bold text-gray-600">최신 오더 상황 확인 중...</div>
+        <div className="text-[13px] font-bold text-gray-600">최적화 중...</div>
       </div>
     )}
     {/* 📝 메모 전체 보기 모달 */}
