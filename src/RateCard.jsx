@@ -7,14 +7,36 @@ import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, where
 // 단가표 메뉴 전체에서 쓰는 표준 차량톤수 목록 — 다목적지 단가표의 기본(삭제 불가) 컬럼으로도 사용된다.
 const STANDARD_TON_LABELS = ["다마스/라보","1톤","1.4톤","2.5톤","3.5톤","3.5톤광폭","5톤","5톤축","5톤플축","8톤","11톤","11톤축","15톤","18톤","25톤"];
 
-const COMPANY = {
-  name: "RUN25",
-  manager: "박성우 팀장",
-  phone: "010-5504-1821",
-  email: "sungwoo0923@nate.com",
-  address: "인천 서구 청마로19번길 21 (성주빌딩) 4층",
-  tel: "1533-2525",
-};
+// ⚠️ 예전엔 특정 운송사(RUN25) 정보가 여기 문자열로 고정 박혀있어서, 다른 운송사가
+// 로그인해도 단가표 출력물에 항상 그 정보가 찍혔다. 지금은 로그인한 회사의
+// transportApplications(가입 시 등록한 사업자정보) 문서를 실시간으로 읽어와
+// 회사마다 자기 정보로 찍히게 한다 — RateCard 컴포넌트 안 useCompanyInfo 훅 참고.
+const EMPTY_COMPANY = { name: "", manager: "", phone: "", email: "", address: "", tel: "" };
+
+export function useCompanyInfo(userCompany) {
+  const [info, setInfo] = useState(EMPTY_COMPANY);
+  useEffect(() => {
+    const co = (userCompany || "").trim();
+    if (!co) { setInfo(EMPTY_COMPANY); return; }
+    const unsub = onSnapshot(collection(db, "transportApplications"), (snap) => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      let found = docs.find(d => (d.companyName || "").trim() === co && d.type === "신규" && d.status === "approved");
+      if (!found) found = docs.find(d => (d.companyName || "").trim() === co && d.type === "신규");
+      if (!found) found = docs.find(d => (d.companyName || "").trim() === co && d.status === "approved");
+      const d = found || {};
+      setInfo({
+        name: co,
+        manager: d.representative || d.대표자 || d.ceo || "",
+        phone: d.phone || d.연락처 || "",
+        email: d.email || "",
+        address: d.address || d.주소 || "",
+        tel: d.fax || d.팩스 || d.팩스번호 || "",
+      });
+    }, () => {});
+    return () => unsub();
+  }, [userCompany]);
+  return info;
+}
 
 const TON_BUCKETS = [
   { label: "다마스/라보", min: 0,    max: 0.6,  display: "다마스/라보" },
@@ -189,6 +211,7 @@ function BaseNameAutocomplete({ initialValue, clients = [], onCommit }) {
 }
 
 export default function RateCard({ dispatchData = [], userCompany = "", clients = [] }) {
+  const COMPANY = useCompanyInfo(userCompany);
   const [pickup, setPickup] = useState("");
   const [drop, setDrop] = useState("");
   const [vGroup, setVGroup] = useState("");
@@ -1078,7 +1101,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-4 overflow-hidden">
             <div className="bg-[#1B2B4B] px-6 py-5 flex justify-between items-center">
               <div>
-                <div className="text-[22px] font-black text-white tracking-tight">RUN25</div>
+                <div className="text-[22px] font-black text-white tracking-tight">{COMPANY.name}</div>
                 <div className="text-[11px] text-white/60 mt-0.5">화물 운송 전문</div>
               </div>
               <div className="text-right text-[12px] text-white/80 leading-6">

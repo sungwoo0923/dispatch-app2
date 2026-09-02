@@ -1,4 +1,5 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
+import { useCompanyInfo } from "../RateCard";
 import MobileFleetView from "./MobileFleetView";
 import MobileEasyMode from "./MobileEasyMode";
 import MobileAttendanceBoard from "./MobileAttendanceBoard";
@@ -5653,6 +5654,7 @@ setOpenMemo={setOpenMemo}
             dispatchData={orders}
             onBack={() => setPage("list")}
             cardVersionB={cardVersionB}
+            userCompany={userCompany}
           />
         )}
         {page === "myinfo" && (
@@ -18179,7 +18181,8 @@ const runNationalFareInPopup = async () => {
 // ======================================================================
 // 📌 모바일 단가표
 // ======================================================================
-function MobileRateCard({ dispatchData = [], onBack, cardVersionB = false }) {
+function MobileRateCard({ dispatchData = [], onBack, cardVersionB = false, userCompany = "" }) {
+  const COMPANY = useCompanyInfo(userCompany);
   const TON_BUCKETS = [
     { label: "다마스/라보", min: 0,    max: 0.6,  display: "다마스/라보" },
     { label: "1톤",         min: 0.6,  max: 1.2,  display: "1톤" },
@@ -18368,7 +18371,7 @@ function MobileRateCard({ dispatchData = [], onBack, cardVersionB = false }) {
         <div className="space-y-3">
           {/* 헤더 정보 */}
           <div className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} rounded-2xl px-4 py-4`}>
-            <div className="text-[20px] font-black text-white tracking-tight mb-1">RUN25</div>
+            <div className="text-[20px] font-black text-white tracking-tight mb-1">{COMPANY.name}</div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-white font-bold text-[14px]">{result.pickup}</span>
               <span className="text-blue-300 font-bold">→</span>
@@ -18434,10 +18437,12 @@ function MobileRateCard({ dispatchData = [], onBack, cardVersionB = false }) {
             <div className="text-[11px] text-gray-400">본 자료는 영업 참고용입니다</div>
             <div className="flex items-center gap-2">
               <div className="text-right text-[11px] text-gray-600">
-                <div className="font-bold text-[#1B2B4B]">RUN25</div>
-                <div>박성우 팀장 010-5504-1821</div>
+                <div className="font-bold text-[#1B2B4B]">{COMPANY.name}</div>
+                <div>{[COMPANY.manager, COMPANY.phone].filter(Boolean).join(" ")}</div>
               </div>
-              <div className="w-10 h-10 rounded-full border-2 border-[#1B2B4B] flex items-center justify-center text-[9px] font-black text-[#1B2B4B] text-center leading-tight">RUN<br/>25</div>
+              <div className="w-10 h-10 rounded-full border-2 border-[#1B2B4B] flex items-center justify-center text-[10px] font-black text-[#1B2B4B] text-center leading-tight px-0.5">
+                {COMPANY.name ? COMPANY.name.slice(0, 4) : "-"}
+              </div>
             </div>
           </div>
         </div>

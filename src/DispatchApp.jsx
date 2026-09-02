@@ -25359,7 +25359,7 @@ const handleDailyReport = async () => {
   </table>
 
   <div class="report-footer">
-    <div class="footer-note">본 보고서는 RUN25 배차관리 시스템에서 자동 생성된 문서입니다.</div>
+    <div class="footer-note">본 보고서는 KP-Flow 배차관리 시스템에서 자동 생성된 문서입니다.</div>
     <div class="footer-right">출력일시: ${printDate} &nbsp;|&nbsp; 담당자: ${printerLabel}</div>
   </div>
 </div>
@@ -32969,7 +32969,7 @@ const handleDailyReport = async () => {
     </tbody>
   </table>
   <div class="report-footer">
-    <div class="footer-note">본 보고서는 RUN25 배차관리 시스템에서 자동 생성된 문서입니다.</div>
+    <div class="footer-note">본 보고서는 KP-Flow 배차관리 시스템에서 자동 생성된 문서입니다.</div>
     <div class="footer-right">출력일시: ${printDate} &nbsp;|&nbsp; 담당자: ${printerLabel}</div>
   </div>
 </div>
@@ -48894,7 +48894,7 @@ if (total === 0) return `<td class="zero">-</td>`;
   </table>
 
   <div class="report-footer">
-    <div class="footer-note">본 보고서는 RUN25 배차관리 시스템에서 자동 생성된 문서입니다.</div>
+    <div class="footer-note">본 보고서는 KP-Flow 배차관리 시스템에서 자동 생성된 문서입니다.</div>
     <div class="footer-right">출력일시: ${printDate} &nbsp;|&nbsp; 담당자: ${printerLabel}</div>
   </div>
 </div>
@@ -57006,6 +57006,35 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
     }
   };
 
+  // ★ 직인(도장) 이미지 업로드 — 거래명세서/보고서 등 도장이 찍히는 모든 곳(COMPANY_PRINT.seal,
+  // fetchCompanyPrintInfo)이 이 필드(직인이미지)를 읽어가므로, 여기서 한 번만 업로드해두면
+  // 프로그램 어디든 자동으로 반영된다. 사업자등록증 업로드와 같은 방식(base64로 Firestore 저장).
+  const [sealUploading, setSealUploading] = React.useState(false);
+  const sealFileRef = React.useRef(null);
+  const handleSealUpload = async (file) => {
+    if (!file) return;
+    if (!appData?.id) { showMsg("회사 정보가 아직 등록되지 않아 도장을 저장할 수 없습니다."); return; }
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.type)) { showMsg("JPG, PNG, WEBP 이미지만 업로드 가능합니다."); return; }
+    if (file.size > 1 * 1024 * 1024) { showMsg("도장 이미지는 1MB 이하여야 합니다."); return; }
+    setSealUploading(true);
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      await updateDoc(doc(db, "transportApplications", appData.id), { 직인이미지: base64 });
+      setAppData(prev => ({ ...prev, 직인이미지: base64 }));
+      showMsg("도장 이미지가 저장되었습니다. 거래명세서 등에 바로 반영됩니다.");
+    } catch (err) {
+      showMsg("업로드 실패: " + (err.message || "알 수 없는 오류"));
+    } finally {
+      setSealUploading(false);
+    }
+  };
+
   const handleCopyImage = async () => {
     const src = appData?.사업자등록증Base64 || appData?.사업자등록증URL;
     if (!src) return;
@@ -57325,6 +57354,42 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                 </svg>
                 <p className="text-[13px] font-semibold text-gray-500">클릭 또는 드래그하여 업로드</p>
                 <p className="text-[12px] text-gray-500 mt-1">JPG, PNG, WEBP, PDF / 최대 3MB</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 직인(도장) 이미지 카드 — 여기 업로드하면 거래명세서 등 도장이 찍히는 모든 곳에 자동 반영 */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">직인(도장) 이미지</p>
+              <p className="text-[11px] text-gray-400 mt-1">거래명세서 등 도장이 필요한 모든 화면에 자동으로 적용됩니다.</p>
+            </div>
+            <button
+              className="px-3 py-1.5 text-[12px] font-semibold rounded-lg border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/5 transition disabled:opacity-40 shrink-0"
+              onClick={() => sealFileRef.current?.click()}
+              disabled={sealUploading}
+            >
+              {sealUploading ? "업로드 중..." : appData?.직인이미지 ? "다시 업로드" : "이미지 선택"}
+            </button>
+            <input autoComplete="off" ref={sealFileRef} type="file" accept="image/*" className="hidden"
+              onChange={e => handleSealUpload(e.target.files?.[0])} />
+          </div>
+          <div
+            className="border-2 border-dashed rounded-xl transition min-h-[140px] max-w-[420px] flex items-center justify-center cursor-pointer border-gray-200 bg-gray-50"
+            onClick={() => sealFileRef.current?.click()}
+          >
+            {appData?.직인이미지 ? (
+              <img src={appData.직인이미지} alt="직인" className="max-h-[120px] max-w-[160px] object-contain" style={{ mixBlendMode: "multiply" }} />
+            ) : (
+              <div className="flex flex-col items-center py-6">
+                <svg className="w-9 h-9 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l1.5-3h15L21 8v11a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
+                </svg>
+                <p className="text-[13px] font-semibold text-gray-500">클릭하여 도장 이미지 업로드</p>
+                <p className="text-[12px] text-gray-500 mt-1">배경이 투명한 PNG 권장 / 최대 1MB</p>
               </div>
             )}
           </div>
