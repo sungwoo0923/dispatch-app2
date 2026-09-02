@@ -3,7 +3,11 @@
 // "require(esm)" 방식으로 동기 로드하려다 실패하는 사례(Functions codebase
 // could not be analyzed successfully)가 있어, 어떤 환경에서도 안정적으로
 // 동작하는 CommonJS로 통일한다.
-const functions = require("firebase-functions");
+// firebase-functions v6+는 기본 진입점이 v2 API로 바뀌어 functions.firestore.document(),
+// functions.pubsub.schedule() 같은 v1 스타일 트리거 함수가 사라졌다(배포 시
+// "Functions codebase could not be analyzed successfully" 오류의 원인이었음).
+// 이 파일 전체가 v1 스타일로 작성돼 있으므로 v1 서브패스에서 명시적으로 가져온다.
+const functions = require("firebase-functions/v1");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
