@@ -163,6 +163,12 @@ function normalizeTimeToHHMM(t) {
   return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
 }
 
+// ⚠️ 예전엔 "등록자"에게만 보냈는데(등록자명/createdByName 같은 "실명" 필드로
+// users 목록에서 토큰을 찾으려 했음), 정작 토큰 맵은 uid/이메일로만 키를
+// 만들어놔서 실명으로는 절대 매칭이 안 됐다 — 그래서 이 알림이 사실상 한 번도
+// 안 뜨고 있었던 것으로 보인다. 긴급오더 알림(notifyNewDispatch)과 똑같이
+// 전체 사용자에게 보내도록 바꿔 이 매칭 문제 자체를 없앴다 — 미배차 임박은
+// 등록자 한 명만의 문제가 아니라 팀 전체가 알아야 할 상황이기도 하다.
 exports.notifyUnassignedUrgent = functions.pubsub
   .schedule("every 5 minutes")
   .timeZone("Asia/Seoul")
@@ -170,17 +176,9 @@ exports.notifyUnassignedUrgent = functions.pubsub
     const nowMs = Date.now();
     const nowKst = new Date(nowMs + 9 * 60 * 60 * 1000);
     const todayStr = nowKst.toISOString().slice(0, 10);
+    const URGENT_WINDOW_MIN = 60; // 상차 1시간 전부터 임박으로 취급
 
-    // users 컬렉션은 작아서 매 실행마다 전부 불러와 이메일/uid → fcmToken 맵을 만든다
-    // (PC의 userNameMap 조회와 동일한 방식 — 오더별로 매번 쿼리하지 않는다).
-    const usersSnap = await db.collection("users").get();
-    const tokenByKey = new Map();
-    usersSnap.docs.forEach((d) => {
-      const data = d.data() || {};
-      if (!data.fcmToken) return;
-      tokenByKey.set(d.id, data.fcmToken);
-      if (data.email) tokenByKey.set(String(data.email).trim().toLowerCase(), data.fcmToken);
-    });
+    const tokens = await getAllTokens();
 
     let sent = 0;
     for (const col of ["dispatch", "orders"]) {
@@ -203,19 +201,13 @@ exports.notifyUnassignedUrgent = functions.pubsub
         if (!t24) continue;
         const dt = new Date(`${data["상차일"]}T${t24}:00+09:00`);
         const diffMin = (dt.getTime() - nowMs) / 60000;
-        if (diffMin <= 0 || diffMin > 30) continue; // 30분 이내로 임박한 것만
+        if (diffMin <= 0 || diffMin > URGENT_WINDOW_MIN) continue;
 
-        const creatorRaw =
-          data["등록자명"] || data["createdByName"] || data["등록자"] ||
-          data["createdByEmail"] || data["createdBy"] || data["작성자"] || "";
-        if (!creatorRaw) continue;
-
-        const token = tokenByKey.get(creatorRaw) || tokenByKey.get(String(creatorRaw).trim().toLowerCase());
-        if (!token) continue;
+        if (!tokens.length) continue;
 
         try {
-          await messaging.send({
-            token,
+          await messaging.sendEachForMulticast({
+            tokens,
             notification: {
               title: "⏰ 미배차 임박",
               body: `${data["거래처명"] || ""} ${data["상차지명"] || "-"} → ${data["하차지명"] || "-"} (${data["상차시간"] || ""} 상차 예정, 아직 미배차)`,
