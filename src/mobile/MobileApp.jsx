@@ -3361,9 +3361,6 @@ const groupedByDate = useMemo(() => {
     setOrderDropDates(Array.from({ length: multiCount }, () => form.하차일 || form.상차일 || ""));
   }, [multiCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 등록 완료 후 간단한 요약 팝업에 띄울 정보
-  const [registeredSummary, setRegisteredSummary] = useState(null);
-
   // ⭐ 완전히 동일한 오더 중복 등록 알림 — 저장을 막지는 않고, 사용자가 직접
   // 판단할 수 있게 알림창만 띄운다(계속 등록/취소 선택).
   const [dupOrderMatches, setDupOrderMatches] = useState(null);
@@ -3612,7 +3609,11 @@ const groupedByDate = useMemo(() => {
         saved.push(await saveOne(i));
       }
 
-      setRegisteredSummary(saved);
+      // ⭐ 예전엔 확인 버튼을 눌러야 닫히는 팝업(registeredSummary)을 띄웠는데, 그
+      // 한 번의 클릭이 강제로 끼어들면서 등록이 느리게 느껴지는 원인이었다 —
+      // 수정하기(showSuccess("수정 완료"))와 동일하게 화면 중앙에 잠깐 떴다 자동으로
+      // 사라지는 알림으로 바꿔서 별도 클릭 없이 바로 다음 화면으로 넘어가게 한다.
+      showSuccess(saved.length > 1 ? `${saved.length}건 등록 완료` : "등록 완료");
       setMultiCount(1);
       setUseSeparateDates(false);
       setPage("list");
@@ -5568,43 +5569,6 @@ setOpenMemo={setOpenMemo}
           />
         )}
 
-        {/* ===== 등록 완료 요약 팝업 ===== */}
-        {registeredSummary && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] px-6" onClick={() => setRegisteredSummary(null)}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[360px] overflow-hidden" onClick={e => e.stopPropagation()}>
-              <div className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} px-5 py-4 flex items-center gap-2`}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-                <h3 className="text-white font-bold text-[15px]">
-                  {registeredSummary.length > 1 ? `${registeredSummary.length}건 등록 완료` : "등록 완료"}
-                </h3>
-              </div>
-              <div className="max-h-[50vh] overflow-y-auto divide-y divide-gray-100">
-                {registeredSummary.map((o, i) => (
-                  <div key={i} className="px-5 py-3 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[13px] font-bold text-gray-800 truncate">{o.상차지명} → {o.하차지명}</span>
-                      <span className="text-[11px] text-gray-400 shrink-0 ml-2">{o.상차일}</span>
-                    </div>
-                    <div className="text-[12px] text-gray-500 truncate">
-                      {o.거래처명 || "-"}{o.차량톤수 ? ` · ${o.차량톤수}` : ""}{o.차량종류 ? ` · ${o.차량종류}` : ""}
-                    </div>
-                    {o.청구운임 > 0 && (
-                      <div className={`text-[12px] font-semibold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"}`}>{fmtMoney(o.청구운임)}</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <div className="px-5 py-4">
-                <button
-                  onClick={() => setRegisteredSummary(null)}
-                  className={`w-full py-3 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white rounded-xl font-bold text-[14px]`}
-                >
-                  확인
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {page === "detail" && selectedOrder && (
           <MobileOrderDetail
@@ -19493,6 +19457,51 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     }
   };
 
+  // ⭐ "알림 테스트" — 서버(FCM)를 거치지 않고 이 기기의 서비스워커에 바로 알림을
+  // 띄워달라고 해서, 알림 권한/화면이 정상 작동하는지 즉시(가상으로) 확인만 한다.
+  const handleTestNotification = async () => {
+    try {
+      if (!("Notification" in window)) { alert("이 브라우저는 알림을 지원하지 않습니다."); return; }
+      let permission = Notification.permission;
+      if (permission === "default") permission = await Notification.requestPermission();
+      if (permission !== "granted") { alert("알림 권한이 허용돼 있지 않습니다. 브라우저/기기 설정에서 알림을 허용해주세요."); return; }
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification("🔔 테스트 알림", {
+        body: "이렇게 화면에 뜨면 알림창 자체는 정상 작동하는 거예요.",
+        icon: "/icons/sflow-icon.png",
+        badge: "/icons/sflow-icon.png",
+      });
+    } catch (e) {
+      alert("테스트 알림 실행 실패: " + (e?.message || e));
+    }
+  };
+
+  // ⭐ "전체 푸시 발송" — 관리자가 제목/내용을 직접 써서 앱 설치한 모든 사람에게
+  // 실제 FCM 푸시를 보낸다(서버의 sendPushNotification Cloud Function 호출).
+  const [pushComposeOpen, setPushComposeOpen] = useState(false);
+  const [pushTitle, setPushTitle] = useState("");
+  const [pushBody, setPushBody] = useState("");
+  const [pushSending, setPushSending] = useState(false);
+  const [pushResult, setPushResult] = useState("");
+  const sendBroadcastPush = async () => {
+    if (!pushTitle.trim() && !pushBody.trim()) { alert("제목 또는 내용을 입력해주세요."); return; }
+    if (!window.confirm("앱을 설치한 모든 사람에게 푸시 알림을 보냅니다. 계속할까요?")) return;
+    setPushSending(true);
+    setPushResult("");
+    try {
+      const res = await fetch("https://us-central1-dispatch-app-9b92f.cloudfunctions.net/sendPushNotification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "kpflow-push-2026", title: pushTitle.trim(), body: pushBody.trim() }),
+      });
+      setPushResult(await res.text());
+    } catch (e) {
+      setPushResult(`요청 실패: ${e?.message || e}`);
+    } finally {
+      setPushSending(false);
+    }
+  };
+
   const SectionHeader = ({ title }) => (
     <div className="px-4 pt-5 pb-1.5">
       <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">{title}</span>
@@ -19606,6 +19615,18 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
                 onClick={() => setBackfillOpen(true)}
                 right={<span className="text-[12px] text-blue-500 font-semibold">열기</span>}
               />
+              <SettingRow
+                label="알림 테스트"
+                sub="서버로 안 보내고 이 기기에서 바로 알림창만 확인"
+                onClick={handleTestNotification}
+                right={<span className="text-[12px] text-blue-500 font-semibold">실행</span>}
+              />
+              <SettingRow
+                label="전체 푸시 발송"
+                sub="제목·내용을 직접 써서 앱 설치한 모든 사람에게 발송"
+                onClick={() => setPushComposeOpen(true)}
+                right={<span className="text-[12px] text-blue-500 font-semibold">열기</span>}
+              />
             </div>
           </>
         )}
@@ -19672,6 +19693,61 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
             )}
             <div className="px-5 pt-4">
               <button onClick={() => setBackfillOpen(false)} className="w-full py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold">닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 전체 푸시 발송 모달 (최고관리자 전용) */}
+      {pushComposeOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/45" onClick={() => !pushSending && setPushComposeOpen(false)}>
+          <div className="w-full max-w-md bg-white rounded-t-2xl pb-8 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-3 pb-2">
+              <div className="w-10 h-1 rounded-full bg-gray-200" />
+            </div>
+            <div className="px-5 pb-2">
+              <div className="font-bold text-[15px] text-gray-900">전체 푸시 발송</div>
+              <div className="text-[12px] text-gray-400 mt-1 leading-relaxed">
+                앱을 설치한 모든 사람에게 실제로 푸시 알림이 발송됩니다. 신중하게 작성해주세요.
+              </div>
+            </div>
+            <div className="px-5 py-2 space-y-3">
+              <div>
+                <label className="text-[12px] font-semibold text-gray-600 block mb-1.5">제목</label>
+                <input
+                  value={pushTitle}
+                  onChange={e => setPushTitle(e.target.value)}
+                  placeholder="예: 공지사항"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px]"
+                />
+              </div>
+              <div>
+                <label className="text-[12px] font-semibold text-gray-600 block mb-1.5">내용</label>
+                <textarea
+                  value={pushBody}
+                  onChange={e => setPushBody(e.target.value)}
+                  placeholder="보낼 내용을 입력하세요"
+                  rows={4}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] resize-none"
+                />
+              </div>
+            </div>
+            <div className="px-5 pt-2">
+              <button
+                onClick={sendBroadcastPush}
+                disabled={pushSending}
+                className={`w-full py-3 rounded-xl text-white text-[13px] font-bold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} disabled:opacity-40`}
+              >
+                {pushSending ? "발송 중..." : "전체 발송"}
+              </button>
+            </div>
+            {pushResult && (
+              <div className="mx-5 mt-4 bg-gray-50 rounded-xl px-4 py-3 text-[12px] text-gray-700 whitespace-pre-wrap break-words">
+                {pushResult}
+              </div>
+            )}
+            <div className="px-5 pt-4">
+              <button onClick={() => setPushComposeOpen(false)} className="w-full py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold">닫기</button>
             </div>
           </div>
         </div>

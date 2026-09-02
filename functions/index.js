@@ -313,6 +313,57 @@ exports.notifyChatMessage = functions.firestore
   });
 
 /* ==============================================================
+   🔔 관리자 발신 푸시 (최고관리자 전용) — 제목/내용을 직접 써서 전체 발송,
+   또는 특정 uid 한 명(테스트용)에게만 발송.
+================================================================== */
+const PUSH_SEND_KEY = "kpflow-push-2026";
+
+exports.sendPushNotification = functions.https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (req.method !== "POST") { res.status(405).send("POST만 허용됩니다."); return; }
+
+  let body = req.body;
+  if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
+  body = body || {};
+
+  if (body.key !== PUSH_SEND_KEY) { res.status(403).send("forbidden"); return; }
+
+  const title = String(body.title || "").trim();
+  const text = String(body.body || "").trim();
+  if (!title && !text) { res.status(400).send("title 또는 body가 필요합니다."); return; }
+
+  let tokens = [];
+  try {
+    if (body.uid) {
+      const uSnap = await db.collection("users").doc(String(body.uid)).get();
+      const t = uSnap.data()?.fcmToken;
+      if (t) tokens = [t];
+    } else {
+      tokens = await getAllTokens();
+    }
+  } catch (e) {
+    res.status(500).send(`대상 조회 실패: ${e?.message || e}`);
+    return;
+  }
+  if (!tokens.length) { res.status(200).send("보낼 대상이 없습니다(등록된 푸시 토큰 없음)."); return; }
+
+  try {
+    const result = await messaging.sendEachForMulticast({
+      tokens,
+      notification: { title: title || "알림", body: text },
+      android: { priority: "high" },
+      apns: { payload: { aps: { sound: "default" } } },
+    });
+    res.status(200).send(`발송 완료 — 성공 ${result.successCount}건, 실패 ${result.failureCount}건 (대상 ${tokens.length}명)`);
+  } catch (e) {
+    res.status(500).send(`오류: ${e?.message || e}`);
+  }
+});
+
+/* ==============================================================
    📊 구글시트(배차현황) 실시간 연동
    ----------------------------------------------------------------
    돌캐(userCompany==="돌캐")가 배차프로그램에 오더를 등록/수정할 때마다,
