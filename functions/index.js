@@ -400,6 +400,45 @@ async function ensureGsheetMonthTab(tabName) {
   return newProps;
 }
 
+// 신규 오더를 어느 행에 넣을지 정한다 — B열(상차일)만 본다. 아직 안 쓴 나머지 행에도
+// K~R 등에 기본값을 채워주는 수식이 미리 깔려있어("배차중", "정보 없음" 등) 그 칸들까지
+// "데이터"로 치면 항상 시트 맨 끝(1000행 근처)으로 밀려버리는데, 진짜 오더가 있는 행만
+// B열(상차일)이 채워져 있다는 점을 이용해 진짜 데이터의 끝을 정확히 찾는다.
+// - 마지막 진짜 행과 상차일이 같으면 바로 다음 행에 이어붙인다(같은 날짜끼리 뭉침).
+// - 다르면(=새로운 날짜) 그 사이에 빈 줄 하나를 넣어 날짜 블록을 시각적으로 분리한다.
+async function findGsheetInsertPosition(tabName, targetDate) {
+  const res = await gsheetApi("GET", `/values/${encodeURIComponent(`${quoteTab(tabName)}!B2:B2000`)}`);
+  const values = res.values || [];
+  let lastRealRow = 1; // 1행=헤더. 진짜 데이터가 하나도 없으면 그대로 1.
+  let lastRealDate = null;
+  for (let i = 0; i < values.length; i++) {
+    const v = String(values[i]?.[0] || "").trim();
+    if (!v) break; // 중간에 빈 칸이 나오면 진짜 데이터는 거기서 끝난 것으로 본다
+    lastRealRow = i + 2; // values[0] == B2
+    lastRealDate = v;
+  }
+  if (lastRealRow === 1) return { insertRow: 2, needsSeparator: false };
+  if (lastRealDate === String(targetDate || "").trim()) return { insertRow: lastRealRow + 1, needsSeparator: false };
+  return { insertRow: lastRealRow + 2, needsSeparator: true };
+}
+
+// 실제 행 삽입(구조적 삽입 — 기존 행들을 아래로 밀어냄, 값은 안 딸려오고 서식만 위 행에서
+// 이어받음). count=2면 [빈 분리 줄, 데이터가 들어갈 줄] 순서로 두 줄을 한 번에 넣는다.
+async function insertGsheetRows(sheetId, startRow1Based, count) {
+  await gsheetApi("POST", ":batchUpdate", {
+    data: {
+      requests: [
+        {
+          insertDimension: {
+            range: { sheetId, dimension: "ROWS", startIndex: startRow1Based - 1, endIndex: startRow1Based - 1 + count },
+            inheritFromBefore: startRow1Based > 2, // 헤더(1행) 바로 다음이면 헤더 서식을 이어받지 않는다
+          },
+        },
+      ],
+    },
+  });
+}
+
 // "고유값" 시트에 이 차량번호가 없으면(=배차프로그램에서 새로 등록된 기사) 맨 아래에
 // 기사명/차량번호/전화번호를 새 행으로 추가한다 — 기존 시트의 차량번호→기사명/전화번호
 // 자동매칭 수식이 새 기사도 바로 찾을 수 있게 된다.
@@ -502,22 +541,23 @@ async function syncOneDispatchToGsheet(docId, data) {
     }
   }
 
-  // 신규 — 대상 월 탭을 준비하고(없으면 자동 생성) B~V로 append, 실제 들어간 행 번호를 받아
-  // A(순번=행번호-1)/Q(수수료=O-P)/R(매익율=Q/O) 수식을 그 행에 채운다.
+  // 신규 — 대상 월 탭을 준비하고(없으면 자동 생성) 진짜 데이터 끝(같은 날짜면 바로 다음,
+  // 다른 날짜면 빈 줄 하나 띄우고 그 다음)에 정확히 행을 삽입한 뒤 그 행에 값을 채운다.
+  // (예전엔 values.append를 썼는데, 아직 안 쓴 뒷줄에도 수식이 미리 깔려있어 늘 시트
+  // 맨 끝/1000행 근처로 밀려버리는 문제가 있었다.)
   await ensureGsheetMonthTab(tabName);
-  const appendRes = await gsheetApi(
-    "POST",
-    `/values/${encodeURIComponent(`${quoteTab(tabName)}!B:V`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+  const sheetProps = (await getGsheetSheetList()).find((s) => s.title === tabName);
+  if (!sheetProps) throw new Error(`탭을 찾을 수 없습니다: ${tabName}`);
+
+  const { insertRow, needsSeparator } = await findGsheetInsertPosition(tabName, data["상차일"]);
+  const row = insertRow; // 실제 데이터가 들어갈 행
+  await insertGsheetRows(sheetProps.sheetId, needsSeparator ? row - 1 : row, needsSeparator ? 2 : 1);
+
+  await gsheetApi(
+    "PUT",
+    `/values/${encodeURIComponent(`${quoteTab(tabName)}!B${row}:V${row}`)}?valueInputOption=USER_ENTERED`,
     { data: { values: [buildGsheetRowBVForCreate(data)] } }
   );
-  const updatedRange = appendRes.updates?.updatedRange || "";
-  const rowMatch = updatedRange.match(/![A-Z]+(\d+):/);
-  if (!rowMatch) throw new Error(`추가된 행 번호를 확인할 수 없습니다: ${updatedRange}`);
-  const row = parseInt(rowMatch[1], 10);
-
-  // ⭐ A/Q/R만 별도로 정확히 그 두 범위에만 쓴다 — B~P는 방금 append로 이미 값이
-  // 들어가 있으므로, 여기서 A:R처럼 넓은 범위를 한 번에 덮어쓰면(중간 칸을 빈
-  // 문자열로 채우게 되어) 방금 넣은 데이터를 도로 지워버리는 사고가 난다.
   await gsheetApi(
     "PUT",
     `/values/${encodeURIComponent(`${quoteTab(tabName)}!A${row}`)}?valueInputOption=USER_ENTERED`,
