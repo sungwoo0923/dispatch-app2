@@ -1989,15 +1989,17 @@ const handleRefresh = () => {
   if (isRefreshing) return;
 
   setIsRefreshing(true);
-  showToast("새로고침 중...");
+  showToast("최적화 중...");
+  setRefreshKey(prev => prev + 1); // ⭐ 핵심 — 누르자마자 바로 재구독 시작(예전엔 일부러
+  // 500ms를 기다렸다가 시작했는데, "눌러도 바로 안 되는" 느낌만 줄 뿐 이득이 없어 없앴다)
 
+  // "최적화 중..." 토스트가 눈에 보일 최소한의 틈만 두고(0ms면 아래 "완료" 토스트가
+  // 곧바로 덮어써서 위 토스트가 아예 안 보이게 된다) 바로 완료 처리한다.
   setTimeout(() => {
-    setRefreshKey(prev => prev + 1); // ⭐ 핵심
     setIsRefreshing(false);
     pullDistanceRef.current = 0;
-
     showToast("최신 데이터 반영 완료");
-  }, 500);
+  }, 150);
 };
 // 🔥 모든 로그인 사용자 FCM 토큰 저장
 useEffect(() => {
@@ -15505,7 +15507,21 @@ const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 �
      복사 로직
   =============================== */
 
+  // ⭐ "기사 전달용" 버튼을 눌러도 반응이 없던 버그 — 아래 로직 중간(특히 업로드
+  // 링크용 토큰 발급 부분)에서 예외가 나면 async 함수가 그냥 조용히 실패해서
+  // 클립보드 복사도, 문자 앱 열기 팝업도, 에러 표시도 전혀 안 뜨고 아무 반응이
+  // 없는 것처럼 보였다. 전체를 try/catch로 감싸 무슨 일이 있어도 최소한
+  // 사용자에게 실패했다는 걸 보여주고 콘솔에 원인을 남긴다.
   const copy = async (type) => {
+    try {
+      await copyImpl(type);
+    } catch (e) {
+      console.error("복사 실패:", e);
+      alert("복사에 실패했습니다: " + (e?.message || e));
+    }
+  };
+
+  const copyImpl = async (type) => {
     let text = "";
 
     /* =========================
@@ -15601,12 +15617,17 @@ ${Number(order.청구운임||0).toLocaleString()}원 ${(()=>{const pt=order.지�
         let token = order.업로드토큰;
         if (!token || order.업로드잠금) {
           token = crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-          const patch = { 업로드토큰: token, 업로드잠금: false };
-          updateDoc(doc(db, col, oid), patch).catch(() => {});
-          if (order._transmittedOrderId) {
-            updateDoc(doc(db, "orders", order._transmittedOrderId), patch).catch(() => {});
-          } else if (order.originCol && order.originId) {
-            updateDoc(doc(db, order.originCol, order.originId), patch).catch(() => {});
+          // ⭐ oid가 없으면(드물게 order 객체가 id를 못 들고 있는 경우) doc()이 그
+          // 자리에서 예외를 던져 전체 복사 자체가 조용히 실패했다 — oid가 있을 때만
+          // 문서 갱신을 시도하고, 없어도 링크 자체는(토큰만으로) 계속 만들어준다.
+          if (oid) {
+            const patch = { 업로드토큰: token, 업로드잠금: false };
+            updateDoc(doc(db, col, oid), patch).catch(() => {});
+            if (order._transmittedOrderId) {
+              updateDoc(doc(db, "orders", order._transmittedOrderId), patch).catch(() => {});
+            } else if (order.originCol && order.originId) {
+              updateDoc(doc(db, order.originCol, order.originId), patch).catch(() => {});
+            }
           }
         }
         return buildShortUploadUrlMobile(oid, token);
