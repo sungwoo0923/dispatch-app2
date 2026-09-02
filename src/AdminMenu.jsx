@@ -742,6 +742,14 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
         )}
         {isTotalMaster && (
           <button
+            onClick={() => setAdminTab("gsheetBackfill")}
+            className={`px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "gsheetBackfill" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
+          >
+            구글시트 백필
+          </button>
+        )}
+        {isTotalMaster && (
+          <button
             onClick={() => setAdminTab("landingInquiries")}
             className={`relative px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "landingInquiries" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
           >
@@ -1321,6 +1329,11 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
           {adminTab === "permissions" && isTotalMaster && (
             <RolePermissionsPanel />
           )}
+
+          {/* ====== 구글시트 백필 탭 (최고관리자 전용, 임시 · 1회성) ====== */}
+          {adminTab === "gsheetBackfill" && isTotalMaster && (
+            <GsheetBackfillPanel />
+          )}
         </div>
 
         {/* 모바일 미리보기 */}
@@ -1636,6 +1649,73 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
 // 화주사 클라이언트가 자체 서비스워커 갱신을 놓치는 경우에 대비해, 최고관리자가
 // systemConfig/forceUpdate 문서의 minVersion을 직접 올리면 화주사 프로그램(ShipperApp.jsx)이
 // 자신의 __APP_VERSION__과 비교해 뒤처진 경우 강제로 업데이트 배너를 띄운다.
+// ⚠️ 임시 기능 — 구글시트 실시간 연동을 붙이기 전에 이미 등록/수정돼 있던 오더를
+// 한 번에 시트로 밀어넣기 위한 1회성 버튼. Cloud Function(backfillGsheetMonth)이
+// 그 달 탭을 통째로 비우고 프로그램(앱) 기준으로 다시 채워넣는다 — 그래서 매번
+// 눌러도 결과는 항상 "지금 프로그램에 있는 내용 그대로"로 수렴한다(중복 걱정 없음).
+// 다 쓰면(백필 다 끝내면) 이 패널/탭은 지워도 된다.
+function GsheetBackfillPanel() {
+  const now = new Date();
+  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const [month, setMonth] = useState(defaultMonth);
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState("");
+
+  const handleRun = async () => {
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      alert("월 형식이 올바르지 않습니다. 예: 2026-09");
+      return;
+    }
+    if (!window.confirm(`"${month}" 탭을 통째로 비우고, 프로그램에 지금 있는 오더로 다시 채웁니다.\n(그 탭에 시트에서만 직접 입력해둔 값이 있었다면 사라집니다)\n계속할까요?`)) return;
+
+    setRunning(true);
+    setResult("");
+    try {
+      const url = `https://us-central1-dispatch-app-9b92f.cloudfunctions.net/backfillGsheetMonth?key=dolkae-backfill-2026&month=${encodeURIComponent(month)}`;
+      const res = await fetch(url);
+      const text = await res.text();
+      setResult(text);
+    } catch (e) {
+      setResult(`요청 실패: ${e?.message || e}`);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 max-w-xl">
+      <div className="text-[14px] font-bold text-gray-800 mb-1">구글시트 백필 (임시 · 1회성)</div>
+      <p className="text-[12px] text-gray-500 mb-5 leading-relaxed">
+        구글시트 실시간 연동이 붙기 전에 이미 등록/수정돼 있던 오더를, 지정한 달 전체
+        기준으로 시트에 한 번에 밀어넣습니다. 대상 탭을 통째로 비운 뒤 프로그램(앱)
+        기준으로 다시 채우는 방식이라, 여러 번 눌러도 결과는 항상 지금 프로그램에
+        있는 내용 그대로로 맞춰집니다.
+      </p>
+      <div className="flex items-center gap-2 mb-4">
+        <label className="text-[12px] text-gray-600 font-semibold">대상 월</label>
+        <input
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+          placeholder="2026-09"
+          className="border border-gray-300 rounded-lg px-3 py-1.5 text-[13px] w-32"
+        />
+      </div>
+      <button
+        onClick={handleRun}
+        disabled={running}
+        className="px-5 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition disabled:opacity-40"
+      >
+        {running ? "실행 중... (몇 분 걸릴 수 있어요)" : `"${month}" 백필 실행`}
+      </button>
+      {result && (
+        <div className="mt-4 bg-gray-50 rounded-lg px-4 py-3 text-[12px] text-gray-700 whitespace-pre-wrap break-words">
+          {result}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ShipperForceUpdatePanel({ currentVersion }) {
   const [minVersion, setMinVersion] = useState(null);
   const [updatedAt, setUpdatedAt] = useState(null);
