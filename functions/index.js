@@ -792,6 +792,16 @@ const GSHEET_BACKFILL_KEY = "dolkae-backfill-2026";
 exports.backfillGsheetMonth = functions
   .runWith({ timeoutSeconds: 540, memory: "256MB" })
   .https.onRequest(async (req, res) => {
+    // ⭐ 관리자 메뉴 안 버튼이 fetch()로 이 함수를 호출하는데(브라우저 주소창에 직접
+    // URL을 쳐서 "방문"하는 것과 달리, fetch()로 부르는 건 교차 출처 요청이라 CORS
+    // 허용 헤더가 없으면 브라우저가 응답을 읽지 못하고 "Failed to fetch"로 실패한다
+    // (서버 쪽 작업 자체는 이미 진행됐을 수 있음 — 응답을 못 읽는 것뿐).
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Methods", "GET");
+    if (req.method === "OPTIONS") {
+      res.status(204).send("");
+      return;
+    }
     if (req.query.key !== GSHEET_BACKFILL_KEY) {
       res.status(403).send("forbidden");
       return;
