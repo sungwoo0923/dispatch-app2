@@ -345,6 +345,38 @@ async function gsheetApi(method, path, opts = {}, retriesLeft = 5) {
   }
 }
 
+// 여러 오더가 짧은 시간에 동시에 등록/수정되면(다중등록, 엑셀 업로드 등) Cloud
+// Functions가 각 오더마다 동시에 실행돼, 같은 시트 탭에 대해 "지금 어디까지 뭐가
+// 있나" 계산을 서로 못 보고 겹쳐써서 행 순서가 뒤죽박죽되거나 서식이 깨지는 사고가
+// 실제로 있었다(백필을 두 번 동시 실행했을 때도 동일 증상). 탭 이름 단위로 잠깐
+// 순서를 강제해(한 번에 한 작업만 그 탭을 건드리게) 막는다 — Firestore 문서 하나를
+// 잠금으로 쓰는 단순한 방식.
+async function withGsheetTabLock(tabName, fn) {
+  const lockRef = db.doc(`systemConfig/gsheetTabLock_${encodeURIComponent(tabName)}`);
+  const staleMs = 60 * 1000; // 이보다 오래된 잠금은 죽은 실행으로 보고 무시
+  const deadline = Date.now() + 45 * 1000;
+  for (;;) {
+    const got = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(lockRef);
+      const existing = snap.exists ? snap.data() : null;
+      if (existing?.lockedAt && Date.now() - existing.lockedAt < staleMs) return false;
+      tx.set(lockRef, { lockedAt: Date.now() });
+      return true;
+    });
+    if (got) break;
+    if (Date.now() > deadline) {
+      console.warn(`구글시트 탭 잠금 대기 초과(${tabName}) — 잠금 없이 그냥 진행`);
+      break;
+    }
+    await sleep(400 + Math.random() * 400);
+  }
+  try {
+    return await fn();
+  } finally {
+    await lockRef.delete().catch(() => {});
+  }
+}
+
 // A1 표기에 쓸 시트 이름 — 작은따옴표로 감싸 특수문자/숫자 시작 이름도 안전하게.
 function quoteTab(tabName) {
   return `'${tabName.replace(/'/g, "''")}'`;
@@ -443,16 +475,21 @@ async function findGsheetInsertPosition(tabName, targetDate) {
   return { insertRow: lastRealRow + 2, needsSeparator: true };
 }
 
-// 실제 행 삽입(구조적 삽입 — 기존 행들을 아래로 밀어냄, 값은 안 딸려오고 서식만 위 행에서
-// 이어받음). count=2면 [빈 분리 줄, 데이터가 들어갈 줄] 순서로 두 줄을 한 번에 넣는다.
-async function insertGsheetRows(sheetId, startRow1Based, count) {
+// 시트 맨 끝(현재 rowCount 다음)에 서식(테두리 등)을 바로 위 행에서 이어받은 빈 행을
+// 하나 추가한다. (예전엔 목표 위치에 직접 insertDimension으로 끼워넣었는데, 헤더
+// 바로 다음처럼 "위에 이어받을 서식 있는 행이 없는" 자리에 처음 삽입될 때 서식 없이
+// 시작되고, 그 서식 없음이 이후 모든 삽입에 계속 이어받아지며 번져서 테두리가 통째로
+// 사라지는 문제가 있었다. 항상 맨 끝에서만 이어붙이면, 맨 처음 한 줄은 초기화 때
+// 남겨둔 서식 있는 빈 줄(clearGsheetDataRows 참고)을 그대로 쓰게 되고, 그 다음부터는
+// 쭉 그 서식을 이어받아 끊기지 않는다.)
+async function appendGsheetBufferRow(sheetId, rowCount) {
   await gsheetApi("POST", ":batchUpdate", {
     data: {
       requests: [
         {
           insertDimension: {
-            range: { sheetId, dimension: "ROWS", startIndex: startRow1Based - 1, endIndex: startRow1Based - 1 + count },
-            inheritFromBefore: startRow1Based > 2, // 헤더(1행) 바로 다음이면 헤더 서식을 이어받지 않는다
+            range: { sheetId, dimension: "ROWS", startIndex: rowCount, endIndex: rowCount + 1 },
+            inheritFromBefore: true,
           },
         },
       ],
@@ -460,38 +497,52 @@ async function insertGsheetRows(sheetId, startRow1Based, count) {
   });
 }
 
+// targetRow번째 행까지 실제로 존재하도록(비어있는 버퍼 행 포함) 시트 끝에 필요한 만큼
+// 행을 추가한다 — 이미 존재하면(버퍼 행이 미리 마련돼 있으면) 아무것도 안 하고 그대로
+// 반환한다. 반환값은 이 호출 이후의 실제 rowCount.
+async function ensureGsheetRowsUpTo(sheetId, rowCount, targetRow) {
+  let count = rowCount;
+  while (count < targetRow) {
+    await appendGsheetBufferRow(sheetId, count);
+    count++;
+  }
+  return count;
+}
+
 // 시트에서 특정 행을 통째로 구조적으로 지운다(값만 비우는 게 아니라 행 자체가
 // 없어지고 아래 행들이 위로 당겨짐). 같은 탭에서 이 행보다 아래에 이미 동기화되어
 // 있던 다른 오더들의 _gsheetSync.row 포인터도 함께 -1 보정해줘야, 그 오더들을 다음에
 // 수정할 때 엉뚱한 행을 덮어쓰지 않는다.
 async function removeGsheetRow(tabName, row) {
-  const sheets = await getGsheetSheetList();
-  const sheet = sheets.find((s) => s.title === tabName);
-  if (!sheet) return; // 탭 자체가 이미 없으면(수동 삭제 등) 할 일 없음
+  await withGsheetTabLock(tabName, async () => {
+    const sheets = await getGsheetSheetList();
+    const sheet = sheets.find((s) => s.title === tabName);
+    if (!sheet) return; // 탭 자체가 이미 없으면(수동 삭제 등) 할 일 없음
 
-  await gsheetApi("POST", ":batchUpdate", {
-    data: {
-      requests: [
-        { deleteDimension: { range: { sheetId: sheet.sheetId, dimension: "ROWS", startIndex: row - 1, endIndex: row } } },
-      ],
-    },
+    await gsheetApi("POST", ":batchUpdate", {
+      data: {
+        requests: [
+          { deleteDimension: { range: { sheetId: sheet.sheetId, dimension: "ROWS", startIndex: row - 1, endIndex: row } } },
+        ],
+      },
+    });
+
+    for (const col of ["orders", "dispatch"]) {
+      let snap;
+      try {
+        snap = await db.collection(col).where("_gsheetSync.tab", "==", tabName).get();
+      } catch (e) {
+        console.warn(`_gsheetSync 포인터 보정용 조회 실패(${col}):`, e?.message || e);
+        continue;
+      }
+      const targets = snap.docs.filter((d) => (d.data()?._gsheetSync?.row || 0) > row);
+      for (let i = 0; i < targets.length; i += 500) {
+        const batch = db.batch();
+        targets.slice(i, i + 500).forEach((d) => batch.update(d.ref, { "_gsheetSync.row": FieldValue.increment(-1) }));
+        await batch.commit();
+      }
+    }
   });
-
-  for (const col of ["orders", "dispatch"]) {
-    let snap;
-    try {
-      snap = await db.collection(col).where("_gsheetSync.tab", "==", tabName).get();
-    } catch (e) {
-      console.warn(`_gsheetSync 포인터 보정용 조회 실패(${col}):`, e?.message || e);
-      continue;
-    }
-    const targets = snap.docs.filter((d) => (d.data()?._gsheetSync?.row || 0) > row);
-    for (let i = 0; i < targets.length; i += 500) {
-      const batch = db.batch();
-      targets.slice(i, i + 500).forEach((d) => batch.update(d.ref, { "_gsheetSync.row": FieldValue.increment(-1) }));
-      await batch.commit();
-    }
-  }
 }
 
 // 오더 하나를 시트에서 제거한다(완전삭제 또는 배차취소로 인한 제거) — _gsheetSync가
@@ -535,9 +586,11 @@ async function ensureDriverInGsheetUniqueTab(plate, name, phone) {
   }
 }
 
-// dispatch 문서 → 시트 B~P열(15개) 값 배열. A(순번)/Q(수수료)/R(매익율)은 수식,
-// U(비고(고유값고정값))는 용도 불명이라 사용자가 직접 관리하므로 건드리지 않는다.
-function buildGsheetRowBP(d) {
+// dispatch 문서 → 시트 B~J열(9개) 값 배열. K(배차상태)는 시트 자체의 배열수식
+// (=ARRAYFORMULA(IF(A2:A="","",IF(L2:L<>"","배차완료","배차중")))이 K2 하나에만 걸려서
+// A/L열을 보고 전체 열에 자동으로 계산되므로 — 여기서 값을 쓰면 그 배열수식이 깨진다
+// (#REF! 오류) — 절대 건드리지 않는다.
+function buildGsheetRowBJ(d) {
   return [
     d["상차일"] || "",       // B 상차일
     d["거래처명"] || "",     // C 거래처명
@@ -548,24 +601,29 @@ function buildGsheetRowBP(d) {
     d["화물내용"] || "",     // H 화물정보
     d["차량톤수"] || "",     // I 차량톤수
     d["차량종류"] || "",     // J 차량종류
-    d["배차상태"] || "",     // K 배차상태
-    d["차량번호"] || "",     // L 차량번호
-    d["이름"] || "",         // M 기사명
-    d["전화번호"] || "",     // N 전화번호
-    d["청구운임"] || "",     // O 청구운임
-    d["기사운임"] || "",     // P 기사운임
   ];
+}
+// O(청구운임)/P(기사운임) 값 배열. M(기사명)/N(전화번호)은 행마다 걸린
+// INDEX/MATCH 수식(고유값 시트에서 L열=차량번호로 찾아옴)이라 여기서 값을
+// 직접 쓰지 않는다 — 새 행을 만들 때만(수식 자체가 없으므로) 별도로 써준다.
+function buildGsheetRowOP(d) {
+  return [d["청구운임"] || "", d["기사운임"] || ""];
 }
 // S(프로그램=배차방식)/T(지급방식) 값 배열.
 function buildGsheetRowST(d) {
   return [d["배차방식"] || "", d["지급방식"] || ""];
 }
-// 신규 행을 만들 때(append)만 쓰는, B~V 전체(21개) 값 배열 — 이 시점엔 Q/R/U가
-// 아직 빈 칸(새 행)이라 여기서 빈 문자열로 채워도 지울 기존 값이 없어 안전하다.
-// 기존 행을 갱신할 때는 이 배열을 쓰지 않고 buildGsheetRowBP/ST를 따로 나눠 써서
-// Q(수수료)/R(매익율) 수식과 U(비고(고유값고정값))를 보존한다.
-function buildGsheetRowBVForCreate(d) {
-  return [...buildGsheetRowBP(d), "", "", ...buildGsheetRowST(d), "", d["메모"] || ""];
+// 새 행을 만들 때만 쓰는 수식들 — M(기사명)/N(전화번호)은 고유값 시트에서
+// L(차량번호)로 찾아오는 INDEX/MATCH, Q(수수료)/R(매익율)은 O/P 기준 계산식.
+// 사용자가 실제로 쓰고 있는 시트의 수식을 그대로 재현한다(행 번호만 그 행에 맞게 대입).
+function gsheetFormulaMN(row) {
+  return [
+    `=IFERROR(INDEX('고유값'!$A$2:$A$102971, MATCH(L${row}, '고유값'!$B$2:$B$102971, 0)), "정보 없음")`,
+    `=IFERROR(INDEX('고유값'!$C$2:$C$102971, MATCH(L${row}, '고유값'!$B$2:$B$102971, 0)), "정보 없음")`,
+  ];
+}
+function gsheetFormulaQR(row) {
+  return [`=O${row}-P${row}`, `=SUM(Q${row}/O${row})`];
 }
 
 async function syncOneDispatchToGsheet(docId, data) {
@@ -587,15 +645,26 @@ async function syncOneDispatchToGsheet(docId, data) {
   const existingRef = data._gsheetSync;
 
   if (existingRef && existingRef.tab && existingRef.row) {
-    // 이미 시트에 적혀있는 오더 — B~P, S~T, V만 나눠서 덮어쓴다. A(순번)는 =ROW()-1이라
-    // 안 바뀌고, Q(수수료)/R(매익율) 수식과 U(비고(고유값고정값))는 그대로 보존한다
-    // (이 세 범위를 건드리면 기존 수식/사용자가 직접 적은 값을 지우게 된다).
+    // 이미 시트에 적혀있는 오더 — B~J, L, O~P, S~T, V만 나눠서 덮어쓴다.
+    // A(순번)/Q(수수료)/R(매익율)/K(배차상태)/M(기사명)/N(전화번호)은 전부 시트 자체
+    // 수식이 계산해주는 칸이라(수식이 A/L열을 보고 자동 계산) 절대 건드리지 않는다 —
+    // 여기 값을 쓰면 수식이 깨진다. U(비고(고유값고정값))도 용도 불명이라 그대로 둔다.
     // ⭐ 상차일이 바뀌어 월이 달라졌으면(드문 케이스) 예전 행은 지우고 새 탭에 다시 만든다.
     if (existingRef.tab === tabName) {
       await gsheetApi(
         "PUT",
-        `/values/${encodeURIComponent(`${quoteTab(existingRef.tab)}!B${existingRef.row}:P${existingRef.row}`)}?valueInputOption=USER_ENTERED`,
-        { data: { values: [buildGsheetRowBP(data)] } }
+        `/values/${encodeURIComponent(`${quoteTab(existingRef.tab)}!B${existingRef.row}:J${existingRef.row}`)}?valueInputOption=USER_ENTERED`,
+        { data: { values: [buildGsheetRowBJ(data)] } }
+      );
+      await gsheetApi(
+        "PUT",
+        `/values/${encodeURIComponent(`${quoteTab(existingRef.tab)}!L${existingRef.row}`)}?valueInputOption=USER_ENTERED`,
+        { data: { values: [[data["차량번호"] || ""]] } }
+      );
+      await gsheetApi(
+        "PUT",
+        `/values/${encodeURIComponent(`${quoteTab(existingRef.tab)}!O${existingRef.row}:P${existingRef.row}`)}?valueInputOption=USER_ENTERED`,
+        { data: { values: [buildGsheetRowOP(data)] } }
       );
       await gsheetApi(
         "PUT",
@@ -610,48 +679,82 @@ async function syncOneDispatchToGsheet(docId, data) {
       await ensureDriverInGsheetUniqueTab(data["차량번호"], data["이름"], data["전화번호"]);
       return;
     }
-    // 월이 바뀐 경우 — 이전 행은 비우고(다른 오더로 착각되지 않도록) 새 탭에 새로 만든다.
+    // 월이 바뀐 경우 — 이전 행은 지우고(다른 오더로 착각되지 않도록, 아래 행들 당겨짐 +
+    // 다른 오더 포인터 보정까지 removeGsheetRow가 처리) 새 탭에 새로 만든다.
     try {
-      await gsheetApi("POST", `/values/${encodeURIComponent(`${quoteTab(existingRef.tab)}!A${existingRef.row}:V${existingRef.row}`)}:clear`, { data: {} });
+      await removeGsheetRow(existingRef.tab, existingRef.row);
     } catch (e) {
       console.warn("이전 월 행 정리 실패(무시):", e?.message || e);
     }
   }
 
   // 신규 — 대상 월 탭을 준비하고(없으면 자동 생성) 진짜 데이터 끝(같은 날짜면 바로 다음,
-  // 다른 날짜면 빈 줄 하나 띄우고 그 다음)에 정확히 행을 삽입한 뒤 그 행에 값을 채운다.
-  // (예전엔 values.append를 썼는데, 아직 안 쓴 뒷줄에도 수식이 미리 깔려있어 늘 시트
-  // 맨 끝/1000행 근처로 밀려버리는 문제가 있었다.)
+  // 다른 날짜면 빈 줄 하나 띄우고 그 다음)에 필요한 만큼 시트 맨 끝에 행을 추가한 뒤
+  // 그 행에 값+수식을 채운다. (중간에 행을 끼워넣지 않고 항상 맨 끝에서만 늘리는 이유는
+  // appendGsheetBufferRow 주석 참고 — 테두리 등 서식이 깨지지 않게 하기 위해서다.)
+  // ⭐ 다중등록 등으로 여러 오더가 거의 동시에 들어오면 "지금 어디까지 있나" 판단이
+  // 서로 겹쳐써서 순서가 꼬일 수 있어(withGsheetTabLock 주석 참고), 같은 탭에 대한
+  // 위치 계산~쓰기 전체를 잠금으로 감싸 한 번에 하나씩만 처리되게 한다.
   await ensureGsheetMonthTab(tabName);
-  const sheetProps = (await getGsheetSheetList()).find((s) => s.title === tabName);
-  if (!sheetProps) throw new Error(`탭을 찾을 수 없습니다: ${tabName}`);
 
-  const { insertRow, needsSeparator } = await findGsheetInsertPosition(tabName, data["상차일"]);
-  const row = insertRow; // 실제 데이터가 들어갈 행
-  await insertGsheetRows(sheetProps.sheetId, needsSeparator ? row - 1 : row, needsSeparator ? 2 : 1);
+  const row = await withGsheetTabLock(tabName, async () => {
+    const sheetProps = (await getGsheetSheetList()).find((s) => s.title === tabName);
+    if (!sheetProps) throw new Error(`탭을 찾을 수 없습니다: ${tabName}`);
 
-  await gsheetApi(
-    "PUT",
-    `/values/${encodeURIComponent(`${quoteTab(tabName)}!B${row}:V${row}`)}?valueInputOption=USER_ENTERED`,
-    { data: { values: [buildGsheetRowBVForCreate(data)] } }
-  );
-  await gsheetApi(
-    "PUT",
-    `/values/${encodeURIComponent(`${quoteTab(tabName)}!A${row}`)}?valueInputOption=USER_ENTERED`,
-    { data: { values: [["=ROW()-1"]] } }
-  );
-  await gsheetApi(
-    "PUT",
-    `/values/${encodeURIComponent(`${quoteTab(tabName)}!Q${row}:R${row}`)}?valueInputOption=USER_ENTERED`,
-    {
-      data: {
-        values: [[
-          `=IFERROR(O${row}-P${row},"")`,
-          `=IFERROR((O${row}-P${row})/O${row},"")`,
-        ]],
-      },
+    const { insertRow } = await findGsheetInsertPosition(tabName, data["상차일"]);
+    const r = insertRow; // 실제 데이터가 들어갈 행
+    await ensureGsheetRowsUpTo(sheetProps.sheetId, sheetProps.gridProperties?.rowCount || 1, r);
+
+    await gsheetApi(
+      "PUT",
+      `/values/${encodeURIComponent(`${quoteTab(tabName)}!B${r}:J${r}`)}?valueInputOption=USER_ENTERED`,
+      { data: { values: [buildGsheetRowBJ(data)] } }
+    );
+    await gsheetApi(
+      "PUT",
+      `/values/${encodeURIComponent(`${quoteTab(tabName)}!L${r}`)}?valueInputOption=USER_ENTERED`,
+      { data: { values: [[data["차량번호"] || ""]] } }
+    );
+    await gsheetApi(
+      "PUT",
+      `/values/${encodeURIComponent(`${quoteTab(tabName)}!M${r}:N${r}`)}?valueInputOption=USER_ENTERED`,
+      { data: { values: [gsheetFormulaMN(r)] } }
+    );
+    await gsheetApi(
+      "PUT",
+      `/values/${encodeURIComponent(`${quoteTab(tabName)}!O${r}:P${r}`)}?valueInputOption=USER_ENTERED`,
+      { data: { values: [buildGsheetRowOP(data)] } }
+    );
+    await gsheetApi(
+      "PUT",
+      `/values/${encodeURIComponent(`${quoteTab(tabName)}!Q${r}:R${r}`)}?valueInputOption=USER_ENTERED`,
+      { data: { values: [gsheetFormulaQR(r)] } }
+    );
+    await gsheetApi(
+      "PUT",
+      `/values/${encodeURIComponent(`${quoteTab(tabName)}!S${r}:T${r}`)}?valueInputOption=USER_ENTERED`,
+      { data: { values: [buildGsheetRowST(data)] } }
+    );
+    await gsheetApi(
+      "PUT",
+      `/values/${encodeURIComponent(`${quoteTab(tabName)}!V${r}`)}?valueInputOption=USER_ENTERED`,
+      { data: { values: [[data["메모"] || ""]] } }
+    );
+    await gsheetApi(
+      "PUT",
+      `/values/${encodeURIComponent(`${quoteTab(tabName)}!A${r}`)}?valueInputOption=USER_ENTERED`,
+      { data: { values: [["=ROW()-1"]] } }
+    );
+
+    // 방금 쓴 행이 시트의 마지막 행이면, 다음 오더를 위해 서식 이어받은 빈 버퍼 행을
+    // 하나 더 마련해둔다(항상 맨 끝에 빈 줄 하나가 대기하고 있도록 유지).
+    const sheetPropsAfter = (await getGsheetSheetList()).find((s) => s.title === tabName);
+    const rowCountNow = sheetPropsAfter?.gridProperties?.rowCount || r;
+    if (sheetPropsAfter && rowCountNow <= r) {
+      await appendGsheetBufferRow(sheetPropsAfter.sheetId, rowCountNow);
     }
-  );
+    return r;
+  });
 
   await ensureDriverInGsheetUniqueTab(data["차량번호"], data["이름"], data["전화번호"]);
   await db.doc(docId).update({ _gsheetSync: { tab: tabName, row } });
@@ -689,6 +792,25 @@ exports.backfillGsheetMonth = functions
     const monthPrefix = String(req.query.month || "").trim(); // 예: "2026-09"
     if (!/^\d{4}-\d{2}$/.test(monthPrefix)) {
       res.status(400).send("사용법: ?key=...&month=YYYY-MM (예: month=2026-09)");
+      return;
+    }
+
+    // ⭐ 동시에 두 번 실행되는 걸 막는 잠금 — 같은 탭에 두 실행이 동시에 행을
+    // 끼워넣으면 서로의 위치 계산을 못 보고 끼어들어 순서가 뒤죽박죽되고 빈 줄이
+    // 중간중간 섞이는 사고가 실제로 있었다. 15분 넘은 잠금은 죽은 실행으로 보고 무시.
+    const lockRef = db.doc("systemConfig/gsheetBackfillLock");
+    const gotLock = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(lockRef);
+      const existing = snap.exists ? snap.data() : null;
+      const staleMs = 15 * 60 * 1000;
+      if (existing?.month && existing?.startedAt && Date.now() - existing.startedAt < staleMs) {
+        return false;
+      }
+      tx.set(lockRef, { month: monthPrefix, startedAt: Date.now() });
+      return true;
+    });
+    if (!gotLock) {
+      res.status(409).send("이미 다른 백필이 진행 중입니다 — 잠시 후 다시 시도해주세요.");
       return;
     }
 
@@ -759,6 +881,8 @@ exports.backfillGsheetMonth = functions
     } catch (e) {
       console.error("백필 오류:", e);
       res.status(500).send(`오류: ${e?.message || e}`);
+    } finally {
+      await lockRef.delete().catch(() => {});
     }
   });
 
