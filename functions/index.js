@@ -636,6 +636,116 @@ async function syncOneDispatchToGsheet(docId, data) {
   await db.doc(docId).update({ _gsheetSync: { tab: tabName, row } });
 }
 
+/* ==============================================================
+   📊 (1회성) 이미 등록돼 있던 오더를 구글시트로 일괄 반영 — 관리자용
+   ----------------------------------------------------------------
+   실시간 동기화(syncDispatchToGoogleSheet)는 "배포된 시점 이후" 새로
+   등록/수정되는 오더만 반영한다. 이 함수는 그 전에 이미 등록돼 있던
+   과거분을 한 번에 밀어넣기 위한 1회성 엔드포인트다.
+
+   대상 월 탭의 기존 데이터 행을 전부 비운 뒤(헤더만 남기고), 프로그램에
+   있는 그 달 오더를 상차일→순번 순으로 하나씩 다시 써넣는다 — "지금
+   프로그램에 있는 그대로"를 보장하기 위해, 시트에 이미 있던 값과 병합하지
+   않고 통째로 다시 만든다(그 전에 시트에서만 손으로 입력해둔 값이 있었다면
+   사라짐 — 실행 전 사용자에게 이미 안내/확인됨).
+
+   여러 오더를 동시에 처리하면 "삽입 위치 계산"이 서로 꼬이므로(같은
+   시트를 동시에 읽고 쓰면 서로의 결과를 못 보고 같은 자리에 끼어들 수
+   있음) 반드시 순서대로(하나 끝나고 다음) 처리한다. 오더 수가 많으면
+   오래 걸릴 수 있어 타임아웃을 9분으로 늘려둔다.
+
+   호출: https://.../backfillGsheetMonth?key=<GSHEET_BACKFILL_KEY>&month=YYYY-MM
+================================================================== */
+const GSHEET_BACKFILL_KEY = "dolkae-backfill-2026";
+
+exports.backfillGsheetMonth = functions
+  .runWith({ timeoutSeconds: 540, memory: "256MB" })
+  .https.onRequest(async (req, res) => {
+    if (req.query.key !== GSHEET_BACKFILL_KEY) {
+      res.status(403).send("forbidden");
+      return;
+    }
+    const monthPrefix = String(req.query.month || "").trim(); // 예: "2026-09"
+    if (!/^\d{4}-\d{2}$/.test(monthPrefix)) {
+      res.status(400).send("사용법: ?key=...&month=YYYY-MM (예: month=2026-09)");
+      return;
+    }
+
+    try {
+      const tabName = gsheetMonthTabName(`${monthPrefix}-01`);
+      await ensureGsheetMonthTab(tabName);
+
+      // 대상 탭의 기존 데이터 행을 전부 비운다(헤더만 남김) — 프로그램 기준으로
+      // 통째로 다시 채우기 위해.
+      const sheets = await getGsheetSheetList();
+      const sheet = sheets.find((s) => s.title === tabName);
+      const rowCount = sheet?.gridProperties?.rowCount || 1;
+      if (sheet && rowCount > 1) {
+        await gsheetApi("POST", ":batchUpdate", {
+          data: {
+            requests: [
+              { deleteDimension: { range: { sheetId: sheet.sheetId, dimension: "ROWS", startIndex: 1, endIndex: rowCount } } },
+            ],
+          },
+        });
+      }
+
+      // 이 탭을 가리키던 _gsheetSync 포인터는 방금 다 지운 행을 가리키므로 전부
+      // 무효 — 클리어해서 아래 루프가 전부 "신규"로 다시 써넣게 한다.
+      for (const col of ["orders", "dispatch"]) {
+        let snap;
+        try {
+          snap = await db.collection(col).where("_gsheetSync.tab", "==", tabName).get();
+        } catch (e) {
+          console.warn(`_gsheetSync 초기화용 조회 실패(${col}):`, e?.message || e);
+          continue;
+        }
+        for (let i = 0; i < snap.docs.length; i += 500) {
+          const batch = db.batch();
+          snap.docs.slice(i, i + 500).forEach((d) => batch.update(d.ref, { _gsheetSync: FieldValue.delete() }));
+          await batch.commit();
+        }
+      }
+
+      // 프로그램에 있는 그 달 오더를 전부 모아 상차일→순번 순으로 정렬 — 등록된
+      // 순서 그대로 시트에도 쌓이게 하기 위해.
+      const items = [];
+      for (const col of ["orders", "dispatch"]) {
+        const snap = await db.collection(col).where("companyName", "==", GSHEET_TARGET_COMPANY).get();
+        snap.docs.forEach((d) => {
+          const data = d.data();
+          if (String(data["상차일"] || "").startsWith(monthPrefix)) {
+            items.push({ docId: `${col}/${d.id}`, data });
+          }
+        });
+      }
+      items.sort((a, b) => {
+        const dcmp = String(a.data["상차일"] || "").localeCompare(String(b.data["상차일"] || ""));
+        if (dcmp !== 0) return dcmp;
+        return (Number(a.data["순번"]) || 0) - (Number(b.data["순번"]) || 0);
+      });
+
+      let created = 0, canceled = 0, failed = 0;
+      for (const { docId, data } of items) {
+        if (data["배차상태"] === "배차취소") { canceled++; continue; } // 취소된 오더는 시트에 안 올림
+        try {
+          await syncOneDispatchToGsheet(docId, data);
+          created++;
+        } catch (e) {
+          failed++;
+          console.error(`백필 실패 ${docId}:`, e?.message || e);
+        }
+      }
+
+      res.status(200).send(
+        `완료 — 탭 "${tabName}" 초기화 후 반영 ${created}건, 배차취소(제외) ${canceled}건, 실패 ${failed}건 (대상 ${items.length}건)`
+      );
+    } catch (e) {
+      console.error("백필 오류:", e);
+      res.status(500).send(`오류: ${e?.message || e}`);
+    }
+  });
+
 exports.syncDispatchToGoogleSheet =
   functions.firestore
     .document("{col}/{dispatchId}")
