@@ -317,14 +317,32 @@ async function getGsheetAuthClient() {
 
 // Sheets API v4 REST 호출 공용 래퍼 — path는 "/values/...:append" 처럼
 // 스프레드시트 ID 뒤에 붙는 부분만 넘긴다.
-async function gsheetApi(method, path, opts = {}) {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// 구글시트 API는 분당 호출 제한(사용자당 60회/100초)이 있어서, 백필처럼 짧은 시간에
+// 오더 하나당 여러 번씩 연달아 호출하면(수백 건이면 수천 번) 중간부터 계속
+// 429(RESOURCE_EXHAUSTED)로 실패하기 시작한다 — 실제로 134건 중 107건이 이렇게
+// 실패한 적이 있음. 429/5xx를 만나면 잠깐 쉬었다가 자동으로 다시 시도한다.
+async function gsheetApi(method, path, opts = {}, retriesLeft = 5) {
   const client = await getGsheetAuthClient();
-  const res = await client.request({
-    url: `https://sheets.googleapis.com/v4/spreadsheets/${GSHEET_SPREADSHEET_ID}${path}`,
-    method,
-    ...opts,
-  });
-  return res.data;
+  try {
+    const res = await client.request({
+      url: `https://sheets.googleapis.com/v4/spreadsheets/${GSHEET_SPREADSHEET_ID}${path}`,
+      method,
+      ...opts,
+    });
+    return res.data;
+  } catch (e) {
+    const status = e?.response?.status || e?.code;
+    const retryable = status === 429 || (typeof status === "number" && status >= 500);
+    if (retryable && retriesLeft > 0) {
+      const wait = 1000 * Math.pow(2, 5 - retriesLeft); // 1s,2s,4s,8s,16s
+      console.warn(`구글시트 API ${status} — ${wait}ms 후 재시도(${retriesLeft}회 남음): ${method} ${path}`);
+      await sleep(wait);
+      return gsheetApi(method, path, opts, retriesLeft - 1);
+    }
+    throw e;
+  }
 }
 
 // A1 표기에 쓸 시트 이름 — 작은따옴표로 감싸 특수문자/숫자 시작 이름도 안전하게.
@@ -720,6 +738,7 @@ exports.backfillGsheetMonth = functions
       });
 
       let created = 0, canceled = 0, failed = 0;
+      const failedIds = [];
       for (const { docId, data } of items) {
         if (data["배차상태"] === "배차취소") { canceled++; continue; } // 취소된 오더는 시트에 안 올림
         try {
@@ -727,12 +746,15 @@ exports.backfillGsheetMonth = functions
           created++;
         } catch (e) {
           failed++;
+          failedIds.push(docId);
           console.error(`백필 실패 ${docId}:`, e?.message || e);
         }
+        await sleep(300); // 요청 제한(429)에 걸리지 않도록 오더 사이에 텀을 둔다
       }
 
       res.status(200).send(
-        `완료 — 탭 "${tabName}" 초기화 후 반영 ${created}건, 배차취소(제외) ${canceled}건, 실패 ${failed}건 (대상 ${items.length}건)`
+        `완료 — 탭 "${tabName}" 초기화 후 반영 ${created}건, 배차취소(제외) ${canceled}건, 실패 ${failed}건 (대상 ${items.length}건)` +
+        (failedIds.length ? `\n실패 목록(최대 20건): ${failedIds.slice(0, 20).join(", ")}` : "")
       );
     } catch (e) {
       console.error("백필 오류:", e);
