@@ -651,31 +651,18 @@ async function syncOneDispatchToGsheet(docId, data) {
     // 여기 값을 쓰면 수식이 깨진다. U(비고(고유값고정값))도 용도 불명이라 그대로 둔다.
     // ⭐ 상차일이 바뀌어 월이 달라졌으면(드문 케이스) 예전 행은 지우고 새 탭에 다시 만든다.
     if (existingRef.tab === tabName) {
-      await gsheetApi(
-        "PUT",
-        `/values/${encodeURIComponent(`${quoteTab(existingRef.tab)}!B${existingRef.row}:J${existingRef.row}`)}?valueInputOption=USER_ENTERED`,
-        { data: { values: [buildGsheetRowBJ(data)] } }
-      );
-      await gsheetApi(
-        "PUT",
-        `/values/${encodeURIComponent(`${quoteTab(existingRef.tab)}!L${existingRef.row}`)}?valueInputOption=USER_ENTERED`,
-        { data: { values: [[data["차량번호"] || ""]] } }
-      );
-      await gsheetApi(
-        "PUT",
-        `/values/${encodeURIComponent(`${quoteTab(existingRef.tab)}!O${existingRef.row}:P${existingRef.row}`)}?valueInputOption=USER_ENTERED`,
-        { data: { values: [buildGsheetRowOP(data)] } }
-      );
-      await gsheetApi(
-        "PUT",
-        `/values/${encodeURIComponent(`${quoteTab(existingRef.tab)}!S${existingRef.row}:T${existingRef.row}`)}?valueInputOption=USER_ENTERED`,
-        { data: { values: [buildGsheetRowST(data)] } }
-      );
-      await gsheetApi(
-        "PUT",
-        `/values/${encodeURIComponent(`${quoteTab(existingRef.tab)}!V${existingRef.row}`)}?valueInputOption=USER_ENTERED`,
-        { data: { values: [[data["메모"] || ""]] } }
-      );
+      await gsheetApi("POST", "/values:batchUpdate", {
+        data: {
+          valueInputOption: "USER_ENTERED",
+          data: [
+            { range: `${quoteTab(existingRef.tab)}!B${existingRef.row}:J${existingRef.row}`, values: [buildGsheetRowBJ(data)] },
+            { range: `${quoteTab(existingRef.tab)}!L${existingRef.row}`, values: [[data["차량번호"] || ""]] },
+            { range: `${quoteTab(existingRef.tab)}!O${existingRef.row}:P${existingRef.row}`, values: [buildGsheetRowOP(data)] },
+            { range: `${quoteTab(existingRef.tab)}!S${existingRef.row}:T${existingRef.row}`, values: [buildGsheetRowST(data)] },
+            { range: `${quoteTab(existingRef.tab)}!V${existingRef.row}`, values: [[data["메모"] || ""]] },
+          ],
+        },
+      });
       await ensureDriverInGsheetUniqueTab(data["차량번호"], data["이름"], data["전화번호"]);
       return;
     }
@@ -703,56 +690,33 @@ async function syncOneDispatchToGsheet(docId, data) {
 
     const { insertRow } = await findGsheetInsertPosition(tabName, data["상차일"]);
     const r = insertRow; // 실제 데이터가 들어갈 행
+    // ensureGsheetRowsUpTo는 정확히 r행까지만 늘리므로, 끝나고 나면 rowCount는 항상 r다
+    // (아래에서 다시 조회할 필요 없음 — 대량 백필 시 오더당 API 호출 수를 줄여 처리
+    // 시간이 함수 제한시간(9분)을 넘기지 않게 하기 위해 왕복을 최대한 줄인다).
     await ensureGsheetRowsUpTo(sheetProps.sheetId, sheetProps.gridProperties?.rowCount || 1, r);
 
-    await gsheetApi(
-      "PUT",
-      `/values/${encodeURIComponent(`${quoteTab(tabName)}!B${r}:J${r}`)}?valueInputOption=USER_ENTERED`,
-      { data: { values: [buildGsheetRowBJ(data)] } }
-    );
-    await gsheetApi(
-      "PUT",
-      `/values/${encodeURIComponent(`${quoteTab(tabName)}!L${r}`)}?valueInputOption=USER_ENTERED`,
-      { data: { values: [[data["차량번호"] || ""]] } }
-    );
-    await gsheetApi(
-      "PUT",
-      `/values/${encodeURIComponent(`${quoteTab(tabName)}!M${r}:N${r}`)}?valueInputOption=USER_ENTERED`,
-      { data: { values: [gsheetFormulaMN(r)] } }
-    );
-    await gsheetApi(
-      "PUT",
-      `/values/${encodeURIComponent(`${quoteTab(tabName)}!O${r}:P${r}`)}?valueInputOption=USER_ENTERED`,
-      { data: { values: [buildGsheetRowOP(data)] } }
-    );
-    await gsheetApi(
-      "PUT",
-      `/values/${encodeURIComponent(`${quoteTab(tabName)}!Q${r}:R${r}`)}?valueInputOption=USER_ENTERED`,
-      { data: { values: [gsheetFormulaQR(r)] } }
-    );
-    await gsheetApi(
-      "PUT",
-      `/values/${encodeURIComponent(`${quoteTab(tabName)}!S${r}:T${r}`)}?valueInputOption=USER_ENTERED`,
-      { data: { values: [buildGsheetRowST(data)] } }
-    );
-    await gsheetApi(
-      "PUT",
-      `/values/${encodeURIComponent(`${quoteTab(tabName)}!V${r}`)}?valueInputOption=USER_ENTERED`,
-      { data: { values: [[data["메모"] || ""]] } }
-    );
-    await gsheetApi(
-      "PUT",
-      `/values/${encodeURIComponent(`${quoteTab(tabName)}!A${r}`)}?valueInputOption=USER_ENTERED`,
-      { data: { values: [["=ROW()-1"]] } }
-    );
+    // 값/수식 쓰기를 한 번의 batchUpdate로 묶는다(예전엔 PUT 7번을 따로 보냈는데,
+    // 오더 수가 많을 때(백필) 왕복이 너무 많아 함수 제한시간을 넘기고 중간에 끊기는
+    // 사고가 있었다).
+    await gsheetApi("POST", "/values:batchUpdate", {
+      data: {
+        valueInputOption: "USER_ENTERED",
+        data: [
+          { range: `${quoteTab(tabName)}!B${r}:J${r}`, values: [buildGsheetRowBJ(data)] },
+          { range: `${quoteTab(tabName)}!L${r}`, values: [[data["차량번호"] || ""]] },
+          { range: `${quoteTab(tabName)}!M${r}:N${r}`, values: [gsheetFormulaMN(r)] },
+          { range: `${quoteTab(tabName)}!O${r}:P${r}`, values: [buildGsheetRowOP(data)] },
+          { range: `${quoteTab(tabName)}!Q${r}:R${r}`, values: [gsheetFormulaQR(r)] },
+          { range: `${quoteTab(tabName)}!S${r}:T${r}`, values: [buildGsheetRowST(data)] },
+          { range: `${quoteTab(tabName)}!V${r}`, values: [[data["메모"] || ""]] },
+          { range: `${quoteTab(tabName)}!A${r}`, values: [["=ROW()-1"]] },
+        ],
+      },
+    });
 
-    // 방금 쓴 행이 시트의 마지막 행이면, 다음 오더를 위해 서식 이어받은 빈 버퍼 행을
-    // 하나 더 마련해둔다(항상 맨 끝에 빈 줄 하나가 대기하고 있도록 유지).
-    const sheetPropsAfter = (await getGsheetSheetList()).find((s) => s.title === tabName);
-    const rowCountNow = sheetPropsAfter?.gridProperties?.rowCount || r;
-    if (sheetPropsAfter && rowCountNow <= r) {
-      await appendGsheetBufferRow(sheetPropsAfter.sheetId, rowCountNow);
-    }
+    // 다음 오더를 위해 서식 이어받은 빈 버퍼 행을 하나 더 마련해둔다(항상 맨 끝에
+    // 빈 줄 하나가 대기하고 있도록 유지) — 방금 쓴 행(r)이 곧 현재 rowCount다.
+    await appendGsheetBufferRow(sheetProps.sheetId, r);
     return r;
   });
 
@@ -871,7 +835,7 @@ exports.backfillGsheetMonth = functions
           failedIds.push(docId);
           console.error(`백필 실패 ${docId}:`, e?.message || e);
         }
-        await sleep(300); // 요청 제한(429)에 걸리지 않도록 오더 사이에 텀을 둔다
+        await sleep(120); // 요청 제한(429)에 걸리지 않도록 오더 사이에 살짝 텀을 둔다(batchUpdate로 오더당 호출 수를 줄여서 짧게 잡아도 됨)
       }
 
       res.status(200).send(
