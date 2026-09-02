@@ -353,6 +353,22 @@ async function getGsheetSheetList() {
   return (data.sheets || []).map((s) => s.properties);
 }
 
+// 2행부터 rowCount행까지(헤더 제외 데이터 행 전체)를 최대한 지운다. 시트 API는
+// "고정(freeze)되지 않은 행을 100% 다 지우는" 걸 허용하지 않아서(이 시트는 1행이
+// 고정돼있음) 마지막 한 줄은 남겨두고 그 앞까지만 지운다 — 남는 한 줄은 어차피 빈
+// placeholder 줄이라 문제 없다.
+async function clearGsheetDataRows(sheetId, rowCount) {
+  const endIndex = rowCount - 1;
+  if (endIndex <= 1) return; // 지울 데이터 행이 사실상 없음
+  await gsheetApi("POST", ":batchUpdate", {
+    data: {
+      requests: [
+        { deleteDimension: { range: { sheetId, dimension: "ROWS", startIndex: 1, endIndex } } },
+      ],
+    },
+  });
+}
+
 // 대상 월 탭이 없으면, 가장 최근 월 탭을 복제해서(서식/함수 그대로 유지) 만들고
 // 그 안의 기존 데이터 행(헤더 제외)은 전부 지운다 — 새 탭은 헤더만 있는 빈 상태로 시작.
 async function ensureGsheetMonthTab(tabName) {
@@ -382,21 +398,8 @@ async function ensureGsheetMonthTab(tabName) {
   });
   const newProps = dup.replies[0].duplicateSheet.properties;
 
-  // 복제된 탭에서 1행(헤더)만 남기고 나머지 데이터 행은 통째로 삭제한다.
-  const rowCount = newProps.gridProperties?.rowCount || 1;
-  if (rowCount > 1) {
-    await gsheetApi("POST", ":batchUpdate", {
-      data: {
-        requests: [
-          {
-            deleteDimension: {
-              range: { sheetId: newProps.sheetId, dimension: "ROWS", startIndex: 1, endIndex: rowCount },
-            },
-          },
-        ],
-      },
-    });
-  }
+  // 복제된 탭에서 1행(헤더)만 남기고 나머지 데이터 행은 최대한 삭제한다.
+  await clearGsheetDataRows(newProps.sheetId, newProps.gridProperties?.rowCount || 1);
   return newProps;
 }
 
@@ -675,20 +678,11 @@ exports.backfillGsheetMonth = functions
       const tabName = gsheetMonthTabName(`${monthPrefix}-01`);
       await ensureGsheetMonthTab(tabName);
 
-      // 대상 탭의 기존 데이터 행을 전부 비운다(헤더만 남김) — 프로그램 기준으로
+      // 대상 탭의 기존 데이터 행을 최대한 비운다(헤더만 남김) — 프로그램 기준으로
       // 통째로 다시 채우기 위해.
       const sheets = await getGsheetSheetList();
       const sheet = sheets.find((s) => s.title === tabName);
-      const rowCount = sheet?.gridProperties?.rowCount || 1;
-      if (sheet && rowCount > 1) {
-        await gsheetApi("POST", ":batchUpdate", {
-          data: {
-            requests: [
-              { deleteDimension: { range: { sheetId: sheet.sheetId, dimension: "ROWS", startIndex: 1, endIndex: rowCount } } },
-            ],
-          },
-        });
-      }
+      if (sheet) await clearGsheetDataRows(sheet.sheetId, sheet.gridProperties?.rowCount || 1);
 
       // 이 탭을 가리키던 _gsheetSync 포인터는 방금 다 지운 행을 가리키므로 전부
       // 무효 — 클리어해서 아래 루프가 전부 "신규"로 다시 써넣게 한다.
