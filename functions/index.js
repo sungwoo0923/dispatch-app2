@@ -439,6 +439,53 @@ async function insertGsheetRows(sheetId, startRow1Based, count) {
   });
 }
 
+// 시트에서 특정 행을 통째로 구조적으로 지운다(값만 비우는 게 아니라 행 자체가
+// 없어지고 아래 행들이 위로 당겨짐). 같은 탭에서 이 행보다 아래에 이미 동기화되어
+// 있던 다른 오더들의 _gsheetSync.row 포인터도 함께 -1 보정해줘야, 그 오더들을 다음에
+// 수정할 때 엉뚱한 행을 덮어쓰지 않는다.
+async function removeGsheetRow(tabName, row) {
+  const sheets = await getGsheetSheetList();
+  const sheet = sheets.find((s) => s.title === tabName);
+  if (!sheet) return; // 탭 자체가 이미 없으면(수동 삭제 등) 할 일 없음
+
+  await gsheetApi("POST", ":batchUpdate", {
+    data: {
+      requests: [
+        { deleteDimension: { range: { sheetId: sheet.sheetId, dimension: "ROWS", startIndex: row - 1, endIndex: row } } },
+      ],
+    },
+  });
+
+  for (const col of ["orders", "dispatch"]) {
+    let snap;
+    try {
+      snap = await db.collection(col).where("_gsheetSync.tab", "==", tabName).get();
+    } catch (e) {
+      console.warn(`_gsheetSync 포인터 보정용 조회 실패(${col}):`, e?.message || e);
+      continue;
+    }
+    const targets = snap.docs.filter((d) => (d.data()?._gsheetSync?.row || 0) > row);
+    for (let i = 0; i < targets.length; i += 500) {
+      const batch = db.batch();
+      targets.slice(i, i + 500).forEach((d) => batch.update(d.ref, { "_gsheetSync.row": FieldValue.increment(-1) }));
+      await batch.commit();
+    }
+  }
+}
+
+// 오더 하나를 시트에서 제거한다(완전삭제 또는 배차취소로 인한 제거) — _gsheetSync가
+// 있을 때만(=이미 시트에 올라간 적 있을 때만) 동작. docId가 있으면(문서가 아직
+// 존재 — 배차취소로 남아있는 소프트삭제) 그 문서의 _gsheetSync도 지워서, 나중에
+// "재등록"으로 되살아나면 새 행으로 다시 만들어지게 한다.
+async function removeOneDispatchFromGsheet(dataWithSyncRef, docId) {
+  const ref = dataWithSyncRef?._gsheetSync;
+  if (!ref?.tab || !ref?.row) return;
+  await removeGsheetRow(ref.tab, ref.row);
+  if (docId) {
+    await db.doc(docId).update({ _gsheetSync: FieldValue.delete() });
+  }
+}
+
 // "고유값" 시트에 이 차량번호가 없으면(=배차프로그램에서 새로 등록된 기사) 맨 아래에
 // 기사명/차량번호/전화번호를 새 행으로 추가한다 — 기존 시트의 차량번호→기사명/전화번호
 // 자동매칭 수식이 새 기사도 바로 찾을 수 있게 된다.
@@ -503,6 +550,15 @@ function buildGsheetRowBVForCreate(d) {
 async function syncOneDispatchToGsheet(docId, data) {
   if (!data) return;
   if ((data.companyName || "") !== GSHEET_TARGET_COMPANY) return;
+
+  // 배차취소(앱의 "삭제"는 실제 문서삭제가 아니라 배차상태를 배차취소로 바꾸는
+  // 소프트삭제라 여기로 update가 들어온다) — 이미 시트에 올라간 행이 있으면 그
+  // 행 자체를 지운다. 취소되기 전에 한 번도 동기화된 적 없는 오더는 애초에 새로
+  // 만들지 않고 그냥 스킵(취소된 오더를 새로 시트에 올릴 이유가 없음).
+  if (data["배차상태"] === "배차취소") {
+    if (data._gsheetSync) await removeOneDispatchFromGsheet(data, docId);
+    return;
+  }
 
   const tabName = gsheetMonthTabName(data["상차일"]);
   if (!tabName) return; // 상차일이 없으면 어느 달 탭인지 알 수 없어 스킵
@@ -588,11 +644,23 @@ exports.syncDispatchToGoogleSheet =
       if (!["dispatch", "orders"].includes(col)) return;
 
       const after = change.after.exists ? change.after.data() : null;
-      if (!after) return; // 삭제는 반영하지 않는다
+      const before = change.before.exists ? change.before.data() : null;
+
+      if (!after) {
+        // 문서 자체가 완전삭제된 경우(예: 화주사 전송사본 삭제 등) — 시트에 이미
+        // 올라간 행이 있으면 그 행을 지운다.
+        if (before && (before.companyName || "") === GSHEET_TARGET_COMPANY) {
+          try {
+            await removeOneDispatchFromGsheet(before, null);
+          } catch (e) {
+            console.error("📊 구글시트 행 삭제 실패:", e?.message || e);
+          }
+        }
+        return;
+      }
 
       // ⭐ 무한루프 방지 — 이 함수 자신이 _gsheetSync를 써서 생기는 재호출을 걸러낸다.
       // (_gsheetSync만 바뀌고 그 외 필드는 동일하면 스킵)
-      const before = change.before.exists ? change.before.data() : null;
       if (before) {
         const a = { ...after }; delete a._gsheetSync; delete a.updatedAt;
         const b = { ...before }; delete b._gsheetSync; delete b.updatedAt;
