@@ -47917,6 +47917,33 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     return () => unsub();
   }, [userCompany]);
 
+  // ★ 거래명세서 미리보기에서 도장 아이콘을 바로 클릭해서 즉시 교체할 수 있게 —
+  // 회사정보 탭까지 안 가도 여기서 바로 업로드하면 companyInfoDoc의 onSnapshot이
+  // 자동으로 반영해서 화면이 바로 갱신된다. 회사정보 탭의 handleSealUpload와 동일한 방식.
+  const sealQuickUploadRef = React.useRef(null);
+  const [sealQuickUploading, setSealQuickUploading] = React.useState(false);
+  const handleSealQuickUpload = async (file) => {
+    if (!file) return;
+    if (!companyInfoDoc?.id) { showAlert("회사 정보가 아직 등록되지 않아 도장을 저장할 수 없습니다."); return; }
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.type)) { showAlert("JPG, PNG, WEBP 이미지만 업로드 가능합니다."); return; }
+    if (file.size > 1 * 1024 * 1024) { showAlert("도장 이미지는 1MB 이하여야 합니다."); return; }
+    setSealQuickUploading(true);
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      await updateDoc(doc(db, "transportApplications", companyInfoDoc.id), { 직인이미지: base64 });
+    } catch (err) {
+      showAlert("도장 업로드 실패: " + (err.message || "알 수 없는 오류"));
+    } finally {
+      setSealQuickUploading(false);
+    }
+  };
+
   const COMPANY_PRINT = React.useMemo(() => {
     const d = companyInfoDoc || {};
     const co = (userCompany || d.companyName || "").trim();
@@ -47995,7 +48022,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
                 <div style="display:flex;align-items:center">
                   <span style="flex:1">${cp.ceo}</span>
                   <span style="position:relative;display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;margin-right:4px">
-                    <img src="/stamp.png" alt="직인" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:46px;height:46px;opacity:0.9;pointer-events:none;mix-blend-mode:multiply" />
+                    <img src="${cp.seal}" alt="직인" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:46px;height:46px;opacity:0.9;pointer-events:none;mix-blend-mode:multiply" />
                     <span style="position:relative;z-index:1;font-size:13px;color:#333">(인)</span>
                   </span>
                 </div>
@@ -49566,17 +49593,23 @@ const handleBatchSettle = async (targetStatus) => {
         <td className="py-1.5 font-medium text-gray-900">
           <div style={{ display: "flex", alignItems: "center" }}>
             <span style={{ flex: 1 }}>{COMPANY_PRINT.ceo}</span>
-            <span style={{
-              position: "relative",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 52,
-              height: 52,
-              marginRight: 4,
-            }}>
+            <span
+              title="클릭하여 도장 이미지 바로 변경"
+              onClick={() => sealQuickUploadRef.current?.click()}
+              style={{
+                position: "relative",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 52,
+                height: 52,
+                marginRight: 4,
+                cursor: "pointer",
+                opacity: sealQuickUploading ? 0.4 : 1,
+              }}
+            >
               <img
-                src="/stamp.png"
+                src={COMPANY_PRINT.seal}
                 alt="직인"
                 style={{
                   position: "absolute",
@@ -49590,7 +49623,16 @@ const handleBatchSettle = async (targetStatus) => {
                   mixBlendMode: "multiply",
                 }}
               />
-              <span style={{ position: "relative", zIndex: 1, fontSize: 13, color: "#333" }}>(인)</span>
+              <span style={{ position: "relative", zIndex: 1, fontSize: 13, color: "#333", pointerEvents: "none" }}>(인)</span>
+              <input
+                autoComplete="off"
+                ref={sealQuickUploadRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => handleSealQuickUpload(e.target.files?.[0])}
+              />
             </span>
           </div>
         </td>
