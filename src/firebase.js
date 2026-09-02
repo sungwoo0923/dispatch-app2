@@ -116,10 +116,19 @@ export const messagingPromise = isSupported().then((supported) => {
 export async function saveFcmToken(user) {
   if (!user) return;
   const messaging = await messagingPromise;
-  if (!messaging) return;
+  if (!messaging) { console.warn("[FCM] 이 브라우저는 푸시 메시징을 지원하지 않습니다."); return; }
   const permission = await Notification.requestPermission();
-  if (permission !== "granted") return;
+  if (permission !== "granted") { console.warn("[FCM] 알림 권한이 허용되지 않았습니다:", permission); return; }
   const vapidKey = import.meta.env.VITE_FCM_VAPID_KEY;
+  // ⭐ VAPID 키가 설정 안 돼 있으면 getToken()이 아예 토큰을 발급 못 받는다 — 이러면
+  // 서비스워커/권한이 전부 정상이어도 푸시 자체가 불가능하다(fcmToken이 저장 안 되니
+  // Cloud Function이 보낼 대상이 없음). Vercel 프로젝트 환경변수에
+  // VITE_FCM_VAPID_KEY가 설정돼 있는지 꼭 확인해야 한다(Firebase 콘솔 → 프로젝트 설정
+  // → 클라우드 메시징 → 웹 구성 → 키 쌍 생성).
+  if (!vapidKey) {
+    console.error("[FCM] VITE_FCM_VAPID_KEY가 설정되지 않았습니다 — 푸시 토큰을 발급받을 수 없습니다.");
+    return;
+  }
   // ⭐ serviceWorkerRegistration을 안 넘기면 getToken()이 자기가 알아서
   // "/firebase-messaging-sw.js"를 새로 등록하려 든다 — 이 앱은 이미 main.jsx에서
   // "/sw.js"를 루트 스코프에 등록해두고 있어서(그리고 그 안에서 FCM 처리까지
@@ -132,9 +141,14 @@ export async function saveFcmToken(user) {
   } catch {
     swRegistration = undefined;
   }
-  const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: swRegistration });
-  if (!token) return;
-  await updateDoc(doc(db, "users", user.uid), { fcmToken: token });
+  try {
+    const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: swRegistration });
+    if (!token) { console.warn("[FCM] 토큰을 발급받지 못했습니다."); return; }
+    await updateDoc(doc(db, "users", user.uid), { fcmToken: token });
+    console.log("[FCM] 토큰 저장 완료");
+  } catch (e) {
+    console.error("[FCM] 토큰 발급/저장 실패:", e);
+  }
 }
 
 export async function initForegroundFCM(cb) {
