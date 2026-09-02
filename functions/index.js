@@ -278,6 +278,49 @@ exports.cleanupOldAttachments = functions.pubsub
   });
 
 /* ==============================================================
+   🔔 사내 메신저 새 메시지 알림 (백그라운드 푸시)
+   ----------------------------------------------------------------
+   앱이 백그라운드/완전종료 상태여도 카카오톡처럼 알림창이 뜨게 하는 부분
+   중 하나 — 새 메시지(chat_messages)가 생기면 그 방(chat_rooms) 멤버 중
+   보낸 사람을 뺀 나머지에게 FCM 푸시를 보낸다.
+================================================================== */
+exports.notifyChatMessage = functions.firestore
+  .document("chat_messages/{msgId}")
+  .onCreate(async (snap) => {
+    const data = snap.data();
+    if (!data?.roomId || !data?.senderUid) return;
+
+    const roomSnap = await db.collection("chat_rooms").doc(data.roomId).get();
+    if (!roomSnap.exists) return;
+    const members = (roomSnap.data()?.members || []).filter((uid) => uid !== data.senderUid);
+    if (!members.length) return;
+
+    const tokens = [];
+    await Promise.all(members.map(async (uid) => {
+      try {
+        const uSnap = await db.collection("users").doc(uid).get();
+        const token = uSnap.data()?.fcmToken;
+        if (token) tokens.push(token);
+      } catch (e) {
+        console.warn("메신저 알림용 토큰 조회 실패:", uid, e?.message || e);
+      }
+    }));
+    if (!tokens.length) return;
+
+    const body = data.type === "image" ? "사진을 보냈습니다" : String(data.text || "").slice(0, 80);
+    try {
+      await messaging.sendEachForMulticast({
+        tokens,
+        notification: { title: `💬 ${data.senderName || "사내 메신저"}`, body },
+        android: { priority: "high" },
+        apns: { payload: { aps: { sound: "default" } } },
+      });
+    } catch (e) {
+      console.warn("사내 메신저 알림 발송 실패:", e?.message || e);
+    }
+  });
+
+/* ==============================================================
    📊 구글시트(배차현황) 실시간 연동
    ----------------------------------------------------------------
    돌캐(userCompany==="돌캐")가 배차프로그램에 오더를 등록/수정할 때마다,

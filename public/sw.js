@@ -4,6 +4,53 @@ const CACHE_NAME = `dispatch-app-cache-${VERSION}`;
 console.log("[SW] Loaded", VERSION);
 
 // --------------------------------------------------
+// 🔔 FCM 백그라운드 푸시 — 카카오톡처럼 앱이 백그라운드/완전종료 상태에서도
+// 알림창이 뜨게 하는 부분.
+// ⚠️ 예전엔 이 처리를 firebase-messaging-sw.js라는 별도 서비스워커에 따로
+// 두고 있었는데, 이 파일(/sw.js)이 루트 스코프("/")에서 별도로 등록되면서
+// activate 시 self.clients.claim()으로 제어권을 가져가버려 두 서비스워커가
+// 같은 스코프를 두고 충돌했다 — 앱을 완전히 꺼둔 상태에서 푸시가 안 오거나
+// 불안정했던 원인으로 보인다. 서비스워커를 하나로 합쳐(app이 등록하는 이
+// /sw.js 안에 FCM 처리까지 같이 넣어) 충돌 자체를 없앤다.
+importScripts("https://www.gstatic.com/firebasejs/9.6.11/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/9.6.11/firebase-messaging-compat.js");
+
+firebase.initializeApp({
+  apiKey: "AIzaSyDaCTK03VbaXQCEKEiD7yp2KIzzX5x64a4",
+  projectId: "dispatch-app-9b92f",
+  messagingSenderId: "273115387263",
+  appId: "1:273115387263:web:8ae6946cb01e265e55764a",
+});
+
+const messaging = firebase.messaging();
+
+messaging.onBackgroundMessage((payload) => {
+  console.log("[SW][FCM] Background message:", payload);
+
+  const title = payload?.notification?.title || payload?.data?.title || "새 알림";
+  const body = payload?.notification?.body || payload?.data?.body || "";
+
+  self.registration.showNotification(title, {
+    body,
+    icon: "/icons/sflow-icon.png",
+    badge: "/icons/sflow-icon.png",
+    data: payload?.data || {},
+  });
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if ("focus" in client) return client.focus();
+      }
+      if (clients.openWindow) return clients.openWindow("/app");
+    })
+  );
+});
+
+// --------------------------------------------------
 // MESSAGE — 업데이트 즉시 적용
 // --------------------------------------------------
 self.addEventListener("message", (event) => {

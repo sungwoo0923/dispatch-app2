@@ -120,7 +120,19 @@ export async function saveFcmToken(user) {
   const permission = await Notification.requestPermission();
   if (permission !== "granted") return;
   const vapidKey = import.meta.env.VITE_FCM_VAPID_KEY;
-  const token = await getToken(messaging, { vapidKey });
+  // ⭐ serviceWorkerRegistration을 안 넘기면 getToken()이 자기가 알아서
+  // "/firebase-messaging-sw.js"를 새로 등록하려 든다 — 이 앱은 이미 main.jsx에서
+  // "/sw.js"를 루트 스코프에 등록해두고 있어서(그리고 그 안에서 FCM 처리까지
+  // 합쳐뒀다, public/sw.js 참고), 서비스워커가 같은 스코프에 두 개 등록되며 충돌해
+  // 백그라운드 푸시가 불안정했다. 이미 등록/활성화된 그 서비스워커를 그대로 써서
+  // 충돌 자체를 없앤다.
+  let swRegistration;
+  try {
+    swRegistration = ("serviceWorker" in navigator) ? await navigator.serviceWorker.ready : undefined;
+  } catch {
+    swRegistration = undefined;
+  }
+  const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: swRegistration });
   if (!token) return;
   await updateDoc(doc(db, "users", user.uid), { fcmToken: token });
 }

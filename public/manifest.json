@@ -1,6 +1,6 @@
 {
-  "name": "S-Flow Logistics",
-  "short_name": "S-Flow Logistics",
+  "name": "KP-Flow Logistics",
+  "short_name": "KP-Flow",
   "start_url": "/app",
   "scope": "/app",
   "display": "standalone",
