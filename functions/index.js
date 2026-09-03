@@ -30,11 +30,17 @@ async function getAllTokens() {
   return tokens;
 }
 
-// 알림 종류(type)별로 각자 켜고 끌 수 있게 — users/{uid}.pushPrefs.{type}이 명시적으로
-// false인 사람만 그 종류의 발송 대상에서 제외한다. 필드가 아예 없거나(기존 사용자)
-// 특정 종류 키가 없으면 "켜짐"으로 취급 — 예전처럼 전체 발송되던 기본 동작을 그대로
-// 유지하면서, 모바일 설정(알림 종류별 설정)에서 끈 사람만 조용해진다.
+// 알림 종류(type)별로 각자 켜고 끌 수 있게 — users/{uid}.pushPrefs.{type}에 값이
+// 명시적으로 있으면(true/false) 그 값을 그대로 따르고, 한 번도 안 건드려 값이 없으면
+// PUSH_TYPES_DEFAULT_ON에 있는 종류(긴급배차/미배차)만 기본으로 켜진 것으로 취급한다 —
+// 나머지(배차등록/배차완료/재배차/배차취소)는 사용자가 모바일에서 직접 켜야 온다.
 const PUSH_TYPES = ["배차등록", "긴급배차", "배차완료", "재배차", "미배차", "배차취소"];
+const PUSH_TYPES_DEFAULT_ON = ["긴급배차", "미배차"];
+function isPushTypeEnabled(prefs, type) {
+  const v = prefs?.[type];
+  if (v === true || v === false) return v;
+  return PUSH_TYPES_DEFAULT_ON.includes(type);
+}
 async function getTokensForType(type) {
   const snap = await db.collection("users").get();
   const tokens = [];
@@ -42,7 +48,7 @@ async function getTokensForType(type) {
     const u = d.data();
     const token = u.fcmToken;
     if (!token) return;
-    if (u.pushPrefs?.[type] === false) return;
+    if (!isPushTypeEnabled(u.pushPrefs, type)) return;
     tokens.push(token);
   });
   return tokens;
