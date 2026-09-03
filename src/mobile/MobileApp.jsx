@@ -1745,6 +1745,7 @@ useEffect(() => {
   };
 }, []);
 const alarmEnabledRef = useRef(true);              // 🔔 알람 ref
+const toastMutedRef = useRef(false);               // 🔔 토스트 음소거 ref
 const initialLoadDoneRef = useRef({});             // 🔔 최초로드 구분
 const dispatchPrevStatus = React.useRef({});       // 🔔 배차상태 추적
 const notifiedOrderIdsRef = useRef(new Set());     // 🔔 중복알림 방지
@@ -1840,6 +1841,11 @@ const clearSelectedNotifs = (ids) => {
 useEffect(() => {
   alarmEnabledRef.current = alarmEnabled;
 }, [alarmEnabled]);
+
+// 🔔 toastMuted → ref 동기화
+useEffect(() => {
+  toastMutedRef.current = toastMuted;
+}, [toastMuted]);
 
 // 🔔 알림 권한 요청 (최초 1회)
 useEffect(() => {
@@ -2013,13 +2019,22 @@ useEffect(() => {
 }, []);
 
 // 🔔 앱 켜져 있을 때 알림 표시 (FCM 포그라운드)
+// ⭐ [alarmEnabled, toastMuted]를 의존성에 두면 두 값이 바뀔 때마다(설정 토글 등)
+// 이 effect가 매번 재실행되며 onMessage 리스너를 새로 만든다 — cleanup이 비동기
+// import().then() 완료 전에 먼저 실행될 수 있어(await 완료 전에 다음 렌더가 옴)
+// 예전 리스너가 정리 안 된 채 새 리스너가 쌓이는 경합이 있었다(게다가
+// initForegroundFCM 자체가 구독해제 함수를 안 돌려주던 별도 버그까지 겹쳐 있었음
+// — firebase.js에서 같이 고침). 최신 값은 ref로 읽고, 리스너 등록 자체는 마운트 시
+// 딱 한 번만 하도록 바꿔 재구독 자체가 안 일어나게 한다.
 useEffect(() => {
+  let cancelled = false;
   let unsubscribe;
 
   import("../firebase").then(({ initForegroundFCM }) => {
-    unsubscribe = initForegroundFCM((payload) => {
-      if (!alarmEnabled) return;
-      if (toastMuted) return;
+    if (cancelled) return;
+    initForegroundFCM((payload) => {
+      if (!alarmEnabledRef.current) return;
+      if (toastMutedRef.current) return;
 
       const title = payload.notification?.title || "";
       const body = payload.notification?.body || "";
@@ -2028,15 +2043,19 @@ useEffect(() => {
 
       setToast(`${title} ${body}`.trim());
       navigator.vibrate?.(200);
+    }).then((unsub) => {
+      if (cancelled) { unsub?.(); return; }
+      unsubscribe = unsub;
     });
   });
 
   return () => {
+    cancelled = true;
     if (typeof unsubscribe === "function") {
       unsubscribe();
     }
   };
-}, [alarmEnabled, toastMuted]);
+}, []);
 
 
   useEffect(() => {
@@ -19472,6 +19491,29 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     }
   };
 
+  // ⭐ 거래처(기본거래처/하차지거래처) 백필 — 위 오더 백필과 동일한 방식이지만
+  // 월 구분 없이 "기본거래처관리"/"하차지거래처관리" 탭 전체를 한 번에 갱신한다.
+  const [clientBackfillRunning, setClientBackfillRunning] = useState(false);
+  const [clientBackfillResult, setClientBackfillResult] = useState("");
+  const runClientBackfill = async () => {
+    if (!window.confirm(`"기본거래처관리"/"하차지거래처관리" 탭을 통째로 비우고, 프로그램에 지금 등록된 거래처로 다시 채웁니다.\n계속할까요?`)) return;
+    setClientBackfillRunning(true);
+    setClientBackfillResult("");
+    try {
+      const url = `https://us-central1-dispatch-app-9b92f.cloudfunctions.net/backfillGsheetClients?key=dolkae-backfill-2026`;
+      const res = await fetch(url);
+      const text = await res.text();
+      setClientBackfillResult(text);
+      alert(text);
+    } catch (e) {
+      const msg = `요청 실패: ${e?.message || e}`;
+      setClientBackfillResult(msg);
+      alert(msg);
+    } finally {
+      setClientBackfillRunning(false);
+    }
+  };
+
   // ⭐ "알림 테스트" — 서버(FCM)를 거치지 않고 이 기기의 서비스워커에 바로 알림을
   // 띄워달라고 해서, 알림 권한/화면이 정상 작동하는지 즉시(가상으로) 확인만 한다.
   const handleTestNotification = async () => {
@@ -19679,6 +19721,12 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
                 sub="임시·1회성 — 연동 전 오더를 시트로 일괄 반영"
                 onClick={() => setBackfillOpen(true)}
                 right={<span className="text-[12px] text-blue-500 font-semibold">열기</span>}
+              />
+              <SettingRow
+                label="거래처 구글시트 전송"
+                sub={clientBackfillRunning ? "전송 중..." : "기본거래처/하차지거래처를 시트로 일괄 반영"}
+                onClick={runClientBackfill}
+                right={<span className="text-[12px] text-blue-500 font-semibold">{clientBackfillRunning ? "..." : "실행"}</span>}
               />
               <SettingRow
                 label="알림 테스트"

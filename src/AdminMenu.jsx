@@ -1332,7 +1332,10 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
 
           {/* ====== 구글시트 백필 탭 (최고관리자 전용, 임시 · 1회성) ====== */}
           {adminTab === "gsheetBackfill" && isTotalMaster && (
-            <GsheetBackfillPanel />
+            <>
+              <GsheetBackfillPanel />
+              <GsheetClientBackfillPanel />
+            </>
           )}
         </div>
 
@@ -1706,6 +1709,54 @@ function GsheetBackfillPanel() {
         className="px-5 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition disabled:opacity-40"
       >
         {running ? "실행 중... (몇 분 걸릴 수 있어요)" : `"${month}" 백필 실행`}
+      </button>
+      {result && (
+        <div className="mt-4 bg-gray-50 rounded-lg px-4 py-3 text-[12px] text-gray-700 whitespace-pre-wrap break-words">
+          {result}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ⭐ 기본거래처(clients)/하차지거래처(places)를 구글시트로 전송 — "기본거래처관리"/
+// "하차지거래처관리" 탭은 미리 만들어져 있어야 한다(Cloud Function이 그 탭의 실제
+// 헤더 텍스트로 열 위치를 찾아 쓰므로, 탭 자체가 없으면 실패 메시지가 온다).
+function GsheetClientBackfillPanel() {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState("");
+
+  const handleRun = async () => {
+    if (!window.confirm(`"기본거래처관리"/"하차지거래처관리" 탭을 통째로 비우고, 프로그램에 지금 등록된 거래처로 다시 채웁니다.\n계속할까요?`)) return;
+    setRunning(true);
+    setResult("");
+    try {
+      const url = `https://us-central1-dispatch-app-9b92f.cloudfunctions.net/backfillGsheetClients?key=dolkae-backfill-2026`;
+      const res = await fetch(url);
+      const text = await res.text();
+      setResult(text);
+    } catch (e) {
+      setResult(`요청 실패: ${e?.message || e}`);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 max-w-xl mt-6">
+      <div className="text-[14px] font-bold text-gray-800 mb-1">거래처 구글시트 전송</div>
+      <p className="text-[12px] text-gray-500 mb-5 leading-relaxed">
+        기본거래처/하차지거래처에 등록된 정보를 "기본거래처관리"/"하차지거래처관리" 탭에
+        한 번에 반영합니다. 두 탭 모두 미리 만들어두고 원하는 컬럼명으로 헤더를 넣어두면
+        그 헤더에 맞춰 값을 채웁니다. 여러 번 실행해도 결과는 항상 지금 프로그램에 있는
+        내용 그대로로 맞춰집니다.
+      </p>
+      <button
+        onClick={handleRun}
+        disabled={running}
+        className="px-5 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition disabled:opacity-40"
+      >
+        {running ? "실행 중..." : "거래처 전송 실행"}
       </button>
       {result && (
         <div className="mt-4 bg-gray-50 rounded-lg px-4 py-3 text-[12px] text-gray-700 whitespace-pre-wrap break-words">

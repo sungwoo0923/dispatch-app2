@@ -537,6 +537,179 @@ const GSHEET_UNIQUE_TAB = "고유값";
 // 함께 잡아야 화면과 시트의 "취소 제외" 기준이 일치한다.
 const GSHEET_CANCELED_STATUS_LIST = ["취소", "배차취소", "오더취소", "취소됨"];
 
+/* ------------------------------------------------------------------
+   ⭐ 열 위치를 하드코딩(B~J, K, L, M:N ...)하지 않고 매번 그 탭의 1행(헤더)을
+   읽어서 이름으로 찾는다.
+
+   원래 K열이 배차상태였는데, 사용자가 시트에 "경유지" 열을 손으로 끼워넣으면서
+   그 뒤 모든 열(배차상태 K→L, 차량번호 L→M, ...)이 한 칸씩 밀렸다 — 코드는 여전히
+   K를 배차상태로 알고 그 자리에 배차완료/배차중 계산용 배열수식을 다시 심다 보니
+   실제로는 차량종류 칸에 수식이 들어가고, 정작 배차상태 칸(L)의 수식은 사라진 채로
+   남아 #REF! 오류가 났다. 게다가 다른 달 탭들을 보면 "하차지"/"하차지주소" 순서가
+   탭마다 다르기도 해서, 애초에 "이 순서가 항상 고정"이라는 전제 자체가 틀렸다.
+
+   그래서 열 위치를 코드에 고정하는 대신, 매번 그 탭의 실제 헤더 텍스트를 읽어서
+   "이 이름이 몇 번째 열에 있나"로 찾는다 — 사용자가 나중에 또 열을 끼워넣거나
+   순서를 바꿔도 헤더 텍스트만 그대로면 자동으로 맞는 열을 찾아 쓴다.
+------------------------------------------------------------------ */
+// 내부 필드명 → 시트에 실제로 쓰여있을 수 있는 헤더 텍스트 후보(오탈자/동의어 포함,
+// 실제 여러 달 탭을 확인해보니 "상하지주소"(상차지주소의 오타로 보임), "기사님요금"
+// (기사운임), "선/착불"(지급방식) 같은 표기가 섞여 있었다). 앞에 있는 후보를 우선한다.
+const GSHEET_FIELD_HEADER_CANDIDATES = {
+  순번: ["순번"],
+  상차일: ["상차일"],
+  거래처명: ["거래처명"],
+  상차지: ["상차지"],
+  경유지: ["경유지"],
+  상차지주소: ["상차지주소", "상하지주소"],
+  하차지: ["하차지"],
+  하차지주소: ["하차지주소"],
+  화물정보: ["화물정보"],
+  차량톤수: ["차량톤수"],
+  차량종류: ["차량종류"],
+  배차상태: ["배차상태"],
+  차량번호: ["차량번호"],
+  기사명: ["기사명"],
+  전화번호: ["전화번호"],
+  청구운임: ["청구운임"],
+  기사운임: ["기사운임", "기사님요금"],
+  수수료: ["수수료"],
+  매익율: ["매익율"],
+  프로그램: ["프로그램"],
+  지급방식: ["지급방식", "선/착불"],
+  메모: ["메모"],
+};
+
+// 0-based 열 인덱스 → 시트 열 문자(0→A, 25→Z, 26→AA, ...).
+function gsheetColLetter(idx) {
+  let n = idx + 1, s = "";
+  while (n > 0) {
+    const r = (n - 1) % 26;
+    s = String.fromCharCode(65 + r) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+// 탭 이름 → { 상차일:"B", 경유지:"E", 배차상태:"L", ... } 이런 필드명→열문자 맵.
+// 헤더 텍스트가 살짝 바뀌어도(새 열이 끼워들거나 순서가 바뀌어도) 항상 그 탭의
+// 실제 1행을 읽어서 다시 계산하므로 코드에 열 위치를 고정해두지 않아도 된다.
+// 같은 탭을 짧은 시간에 여러 번 쓸 때(다중등록, 백필 등) 매번 다시 읽지 않도록
+// 30초짜리 아주 짧은 캐시만 둔다(헤더 행은 거의 안 바뀌는 값이라 안전).
+// cacheKeyPrefix로 캐시를 구분하는 이유는, 같은 탭 이름이라도(이럴 일은 거의
+// 없지만) 오더 탭용 후보 목록과 거래처 탭용 후보 목록이 다르기 때문 — 실제로는
+// 서로 다른 탭 이름을 쓰므로 실질적인 충돌은 없다.
+const _gsheetColMapCache = new Map(); // cacheKey -> { map, ts }
+async function getGsheetColumnMapFor(tabName, candidatesMap, cacheKeyPrefix = "") {
+  const cacheKey = cacheKeyPrefix + tabName;
+  const cached = _gsheetColMapCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < 30 * 1000) return cached.map;
+
+  const res = await gsheetApi("GET", `/values/${encodeURIComponent(`${quoteTab(tabName)}!1:1`)}`);
+  const headerRow = (res.values && res.values[0]) || [];
+  const letterByText = {};
+  headerRow.forEach((h, i) => {
+    const t = String(h || "").trim();
+    if (t && !(t in letterByText)) letterByText[t] = gsheetColLetter(i);
+  });
+
+  const map = {};
+  for (const [field, candidates] of Object.entries(candidatesMap)) {
+    for (const c of candidates) {
+      if (letterByText[c]) { map[field] = letterByText[c]; break; }
+    }
+  }
+  _gsheetColMapCache.set(cacheKey, { map, ts: Date.now() });
+  return map;
+}
+async function getGsheetColumnMap(tabName) {
+  return getGsheetColumnMapFor(tabName, GSHEET_FIELD_HEADER_CANDIDATES, "order:");
+}
+
+// 경유지 열에 쓸 텍스트 — 화면에 표시되는 "경유상차/하차 이름 목록"과 같은 방식으로
+// 각 경유지 객체의 업체명만 뽑아 이어붙인다(주소는 넣지 않음, 사용자 요청).
+// 경유지_상차/경유상차목록, 경유지_하차/경유하차목록은 같은 데이터를 가리키는
+// 동의어 필드쌍이라(DispatchApp.jsx의 필드 정규화 로직과 동일한 우선순위) 각 쌍에서
+// 하나씩만 골라 상차 경유지 + 하차 경유지 순서로 합친다.
+function extractGsheetWaypointNames(data) {
+  const pickupList = Array.isArray(data?.경유지_상차) ? data.경유지_상차 : (Array.isArray(data?.경유상차목록) ? data.경유상차목록 : []);
+  const dropList = Array.isArray(data?.경유지_하차) ? data.경유지_하차 : (Array.isArray(data?.경유하차목록) ? data.경유하차목록 : []);
+  return [...pickupList, ...dropList]
+    .map((s) => String(s?.업체명 || "").trim())
+    .filter(Boolean)
+    .join(", ");
+}
+
+/* ------------------------------------------------------------------
+   📇 거래처(기본거래처=clients / 하차지거래처=places) 마스터 데이터를
+   구글시트로 전송 — 관리자용. 오더 백필과 동일하게 그 탭의 실제 헤더
+   텍스트로 열 위치를 찾아 쓴다(탭은 사용자가 미리 만들어둠). 사업자등록증
+   같은 첨부 이미지나 등급변경일/팝업표시 같은 내부 메타데이터, 오더메모/
+   기사전달주의사항 같은 안내성 필드는 빼고 실제 입력 정보만 내보낸다.
+------------------------------------------------------------------ */
+const GSHEET_CLIENT_FIELD_CANDIDATES = {
+  거래처명: ["거래처명"],
+  사업자번호: ["사업자번호", "사업자등록번호"],
+  대표자: ["대표자"],
+  업태: ["업태"],
+  종목: ["종목"],
+  주소: ["주소"],
+  담당자: ["담당자"],
+  연락처: ["연락처", "전화번호"],
+  이메일: ["이메일"],
+  메모: ["메모"],
+  등급: ["등급"],
+  점심시작시간: ["점심시작시간"],
+  점심종료시간: ["점심종료시간"],
+};
+const GSHEET_PLACE_FIELD_CANDIDATES = {
+  업체명: ["업체명"],
+  주소: ["주소"],
+  담당자: ["담당자"],
+  담당자번호: ["담당자번호", "연락처", "전화번호"],
+  등급: ["등급"],
+  메모: ["메모"],
+  점심시작시간: ["점심시작시간"],
+  점심종료시간: ["점심종료시간"],
+};
+// 담당자가 여러 명(contacts 배열)이면 그 중 대표(주 담당자)만 뽑는다 — 화면
+// 목록에 보여주는 것과 동일한 방식.
+function gsheetPrimaryContact(d) {
+  if (!Array.isArray(d?.contacts) || !d.contacts.length) return null;
+  return d.contacts.find((c) => c?.isPrimary) || d.contacts[0];
+}
+function buildGsheetClientFieldValues(d) {
+  const primary = gsheetPrimaryContact(d);
+  return {
+    거래처명: d["거래처명"] || "",
+    사업자번호: d["사업자번호"] || "",
+    대표자: d["대표자"] || "",
+    업태: d["업태"] || "",
+    종목: d["종목"] || "",
+    주소: d["주소"] || "",
+    담당자: primary?.name || d["담당자"] || "",
+    연락처: primary?.phone || d["연락처"] || "",
+    이메일: d["이메일"] || "",
+    메모: d["메모"] || "",
+    등급: d["등급"] || "",
+    점심시작시간: d["점심시작시간"] || "",
+    점심종료시간: d["점심종료시간"] || "",
+  };
+}
+function buildGsheetPlaceFieldValues(d) {
+  const primary = gsheetPrimaryContact(d);
+  return {
+    업체명: d["업체명"] || "",
+    주소: d["주소"] || "",
+    담당자: primary?.name || d["담당자"] || "",
+    담당자번호: primary?.phone || d["담당자번호"] || "",
+    등급: d["등급"] || "",
+    메모: d["메모"] || "",
+    점심시작시간: d["점심시작시간"] || "",
+    점심종료시간: d["점심종료시간"] || "",
+  };
+}
+
 const GSHEET_SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
 let _gsheetAuthClient = null;
 async function getGsheetAuthClient() {
@@ -634,16 +807,27 @@ async function getGsheetSheetList() {
   return (data.sheets || []).map((s) => s.properties);
 }
 
+// 배차상태 열은 (배차상태 헤더가 있는) 열 2행 셀 하나에만 있는 =ARRAYFORMULA(...)가
+// 그 아래 전체를 자동으로 채우는 구조라(순번열 전체 참조라 몇 행이 새로 생기든 자동으로
+// 따라간다), 이 값을 다시 심어야 할 때마다 지금 그 탭의 실제 순번/배차상태/차량번호
+// 열 위치를 반영해 수식 텍스트 자체를 새로 만든다 — 예전엔 이 수식 텍스트를
+// "=ARRAYFORMULA(IF(A2:A=\"\",\"\",IF(L2:L<>\"\",...)))"로 고정해두고 K2에 박아넣었는데,
+// 사용자가 시트에 "경유지" 열을 끼워넣어 실제 배차상태/차량번호 열이 L/M으로 밀리면서
+// 이 하드코딩이 완전히 어긋나 배차상태 칸에 #REF! 오류가 나는 사고가 있었다.
+function buildGsheetStatusFormula(colMap) {
+  const seqCol = colMap.순번 || "A";
+  const carCol = colMap.차량번호 || "L";
+  return `=ARRAYFORMULA(IF(${seqCol}2:${seqCol}="","",IF(${carCol}2:${carCol}<>"","배차완료","배차중")))`;
+}
+
 // 2행부터 rowCount행까지(헤더 제외 데이터 행 전체)를 최대한 지운다. 시트 API는
 // "고정(freeze)되지 않은 행을 100% 다 지우는" 걸 허용하지 않아서(이 시트는 1행이
 // 고정돼있음) 마지막 한 줄은 남겨두고 그 앞까지만 지운다 — 남는 한 줄은 어차피 빈
 // placeholder 줄이라 문제 없다.
-// ⭐ K열(배차상태)은 K2 셀 하나에만 있는 =ARRAYFORMULA(...)가 그 아래 전체를 자동으로
-// 채우는 구조라(A2:A 전체 참조라 몇 행이 새로 생기든 자동으로 따라간다), 이 함수가 항상
-// 지우는 2행(row index 1)이 하필 그 수식이 들어있는 셀이다 — 지우고 나면 배차상태 칸
-// 전체가 그냥 빈 칸이 돼버리는 사고가 있었다. tabName을 넘겨주면 지운 직후 K2에 그
-// 수식을 다시 심어서 복구한다.
-const GSHEET_STATUS_FORMULA = '=ARRAYFORMULA(IF(A2:A="","",IF(L2:L<>"","배차완료","배차중")))';
+// ⭐ 배차상태 열은 그 열 2행 셀 하나에만 있는 =ARRAYFORMULA(...)가 그 아래 전체를
+// 자동으로 채우는 구조인데, 이 함수가 항상 지우는 2행(row index 1)이 하필 그 수식이
+// 들어있는 셀이다 — 지우고 나면 배차상태 칸 전체가 그냥 빈 칸이 돼버리는 사고가
+// 있었다. tabName을 넘겨주면 지운 직후 그 열 2행에 수식을 다시 심어서 복구한다.
 async function clearGsheetDataRows(sheetId, rowCount, tabName) {
   const endIndex = rowCount - 1;
   if (endIndex <= 1) return; // 지울 데이터 행이 사실상 없음
@@ -655,12 +839,18 @@ async function clearGsheetDataRows(sheetId, rowCount, tabName) {
     },
   });
   if (tabName) {
-    await gsheetApi("POST", "/values:batchUpdate", {
-      data: {
-        valueInputOption: "USER_ENTERED",
-        data: [{ range: `${quoteTab(tabName)}!K2`, values: [[GSHEET_STATUS_FORMULA]] }],
-      },
-    });
+    const colMap = await getGsheetColumnMap(tabName);
+    const statusCol = colMap.배차상태;
+    if (statusCol) {
+      await gsheetApi("POST", "/values:batchUpdate", {
+        data: {
+          valueInputOption: "USER_ENTERED",
+          data: [{ range: `${quoteTab(tabName)}!${statusCol}2`, values: [[buildGsheetStatusFormula(colMap)]] }],
+        },
+      });
+    } else {
+      console.warn(`⚠️ "${tabName}" 탭에서 배차상태 헤더를 못 찾아 배차상태 수식을 다시 심지 못했습니다.`);
+    }
   }
 }
 
@@ -698,14 +888,15 @@ async function ensureGsheetMonthTab(tabName) {
   return newProps;
 }
 
-// 신규 오더를 어느 행에 넣을지 정한다 — B열(상차일)만 본다. 아직 안 쓴 나머지 행에도
-// K~R 등에 기본값을 채워주는 수식이 미리 깔려있어("배차중", "정보 없음" 등) 그 칸들까지
+// 신규 오더를 어느 행에 넣을지 정한다 — 상차일 열만 본다. 아직 안 쓴 나머지 행에도
+// 기본값을 채워주는 수식이 미리 깔려있어("배차중", "정보 없음" 등) 그 칸들까지
 // "데이터"로 치면 항상 시트 맨 끝(1000행 근처)으로 밀려버리는데, 진짜 오더가 있는 행만
-// B열(상차일)이 채워져 있다는 점을 이용해 진짜 데이터의 끝을 정확히 찾는다.
+// 상차일 열이 채워져 있다는 점을 이용해 진짜 데이터의 끝을 정확히 찾는다.
 // - 마지막 진짜 행과 상차일이 같으면 바로 다음 행에 이어붙인다(같은 날짜끼리 뭉침).
 // - 다르면(=새로운 날짜) 그 사이에 빈 줄 하나를 넣어 날짜 블록을 시각적으로 분리한다.
-async function findGsheetInsertPosition(tabName, targetDate) {
-  const res = await gsheetApi("GET", `/values/${encodeURIComponent(`${quoteTab(tabName)}!B2:B2000`)}`);
+async function findGsheetInsertPosition(tabName, targetDate, colMap) {
+  const dateCol = colMap?.상차일 || "B";
+  const res = await gsheetApi("GET", `/values/${encodeURIComponent(`${quoteTab(tabName)}!${dateCol}2:${dateCol}2000`)}`);
   const values = res.values || [];
   let lastRealRow = 1; // 1행=헤더. 진짜 데이터가 하나도 없으면 그대로 1.
   let lastRealDate = null;
@@ -772,16 +963,19 @@ async function removeGsheetRow(tabName, row) {
       },
     });
 
-    // ⭐ 이 달의 첫 동기화 오더(2행)가 지워지는 경우, K2에 있던 배차상태 ARRAYFORMULA
+    // ⭐ 이 달의 첫 동기화 오더(2행)가 지워지는 경우, 배차상태 열 2행에 있던 ARRAYFORMULA
     // 소스 셀 자체가 같이 삭제된다 — clearGsheetDataRows와 동일한 이유로 매번 재심는다
     // (2행이 아닐 때는 그냥 같은 값을 덮어쓰는 것뿐이라 부작용 없음).
     if (row === 2) {
-      await gsheetApi("POST", "/values:batchUpdate", {
-        data: {
-          valueInputOption: "USER_ENTERED",
-          data: [{ range: `${quoteTab(tabName)}!K2`, values: [[GSHEET_STATUS_FORMULA]] }],
-        },
-      });
+      const colMap = await getGsheetColumnMap(tabName);
+      if (colMap.배차상태) {
+        await gsheetApi("POST", "/values:batchUpdate", {
+          data: {
+            valueInputOption: "USER_ENTERED",
+            data: [{ range: `${quoteTab(tabName)}!${colMap.배차상태}2`, values: [[buildGsheetStatusFormula(colMap)]] }],
+          },
+        });
+      }
     }
 
     for (const col of ["orders", "dispatch"]) {
@@ -843,71 +1037,86 @@ async function ensureDriverInGsheetUniqueTab(plate, name, phone) {
   }
 }
 
-// dispatch 문서 → 시트 B~J열(9개) 값 배열. K(배차상태)는 시트 자체의 배열수식
-// (=ARRAYFORMULA(IF(A2:A="","",IF(L2:L<>"","배차완료","배차중")))이 K2 하나에만 걸려서
-// A/L열을 보고 전체 열에 자동으로 계산되므로 — 여기서 값을 쓰면 그 배열수식이 깨진다
-// (#REF! 오류) — 절대 건드리지 않는다.
-function buildGsheetRowBJ(d) {
+// dispatch 문서 → 필드명 기준 값 맵(배차상태는 제외 — 그 열은 절대 값으로 안 쓰고
+// ARRAYFORMULA 하나가 전체를 자동 계산한다). 실제로 어느 열에 쓸지는 이 함수가 정하지
+// 않는다 — writeGsheetOrderRow가 그 탭의 실제 헤더에서 찾은 열 위치(colMap)에 맞춰
+// 하나씩 배치한다. 경유지가 없는 오더는 빈 문자열이 되고, 그 탭에 경유지 헤더 자체가
+// 없으면(옛날 탭 등) writeGsheetOrderRow가 그 필드를 통째로 건너뛴다.
+function buildGsheetFieldValues(d) {
+  return {
+    상차일: d["상차일"] || "",
+    거래처명: d["거래처명"] || "",
+    상차지: d["상차지명"] || "",
+    경유지: extractGsheetWaypointNames(d),
+    상차지주소: d["상차지주소"] || "",
+    하차지: d["하차지명"] || "",
+    하차지주소: d["하차지주소"] || "",
+    화물정보: d["화물내용"] || "",
+    차량톤수: d["차량톤수"] || "",
+    차량종류: d["차량종류"] || "",
+    차량번호: d["차량번호"] || "",
+    청구운임: d["청구운임"] || "",
+    기사운임: d["기사운임"] || "",
+    프로그램: d["배차방식"] || "",
+    지급방식: d["지급방식"] || "",
+    메모: d["메모"] || "",
+  };
+}
+// 새 행을 만들 때만 쓰는 수식들 — 기사명/전화번호는 고유값 시트에서 차량번호로
+// 찾아오는 INDEX/MATCH, 수수료/매익율은 청구운임/기사운임 기준 계산식. 전부 그 탭의
+// 실제 열 위치(colMap)를 참조해 수식 텍스트를 만든다 — 열이 어디에 있든 항상 맞는
+// 셀을 가리키게 하기 위함(사용자가 실제로 쓰던 수식의 로직은 그대로 재현).
+function gsheetFormulaMN(row, colMap) {
+  const carCol = colMap.차량번호 || "L";
   return [
-    d["상차일"] || "",       // B 상차일
-    d["거래처명"] || "",     // C 거래처명
-    d["상차지명"] || "",     // D 상차지
-    d["상차지주소"] || "",   // E 상차지주소
-    d["하차지명"] || "",     // F 하차지
-    d["하차지주소"] || "",   // G 하차지주소
-    d["화물내용"] || "",     // H 화물정보
-    d["차량톤수"] || "",     // I 차량톤수
-    d["차량종류"] || "",     // J 차량종류
+    `=IFERROR(INDEX('고유값'!$A$2:$A$102971, MATCH(${carCol}${row}, '고유값'!$B$2:$B$102971, 0)), "정보 없음")`,
+    `=IFERROR(INDEX('고유값'!$C$2:$C$102971, MATCH(${carCol}${row}, '고유값'!$B$2:$B$102971, 0)), "정보 없음")`,
   ];
 }
-// O(청구운임)/P(기사운임) 값 배열. M(기사명)/N(전화번호)은 행마다 걸린
-// INDEX/MATCH 수식(고유값 시트에서 L열=차량번호로 찾아옴)이라 여기서 값을
-// 직접 쓰지 않는다 — 새 행을 만들 때만(수식 자체가 없으므로) 별도로 써준다.
-function buildGsheetRowOP(d) {
-  return [d["청구운임"] || "", d["기사운임"] || ""];
+function gsheetFormulaQR(row, colMap) {
+  const chargeCol = colMap.청구운임 || "O";
+  const driverFareCol = colMap.기사운임 || "P";
+  const feeCol = colMap.수수료 || "Q";
+  return [`=${chargeCol}${row}-${driverFareCol}${row}`, `=SUM(${feeCol}${row}/${chargeCol}${row})`];
 }
-// S(프로그램=배차방식)/T(지급방식) 값 배열.
-function buildGsheetRowST(d) {
-  return [d["배차방식"] || "", d["지급방식"] || ""];
-}
-// 새 행을 만들 때만 쓰는 수식들 — M(기사명)/N(전화번호)은 고유값 시트에서
-// L(차량번호)로 찾아오는 INDEX/MATCH, Q(수수료)/R(매익율)은 O/P 기준 계산식.
-// 사용자가 실제로 쓰고 있는 시트의 수식을 그대로 재현한다(행 번호만 그 행에 맞게 대입).
-function gsheetFormulaMN(row) {
-  return [
-    `=IFERROR(INDEX('고유값'!$A$2:$A$102971, MATCH(L${row}, '고유값'!$B$2:$B$102971, 0)), "정보 없음")`,
-    `=IFERROR(INDEX('고유값'!$C$2:$C$102971, MATCH(L${row}, '고유값'!$B$2:$B$102971, 0)), "정보 없음")`,
-  ];
-}
-function gsheetFormulaQR(row) {
-  return [`=O${row}-P${row}`, `=SUM(Q${row}/O${row})`];
-}
-// A(순번) — 예전엔 그냥 "=ROW()-1"(시트 전체 기준 절대 행번호)이었는데, 날짜가 바뀌면
-// 1부터 다시 시작하길 원해서 COUNTIF로 "이 행까지 B열(상차일)에 같은 날짜가 몇 번
-// 나왔나"를 센다 — 날짜 블록 사이에 넣는 빈 구분줄은 B가 비어있어 카운트에 안 잡히고,
-// 날짜가 바뀌면 그 값도 바뀌므로 새 날짜에서 자연스럽게 1부터 다시 시작한다.
-function gsheetFormulaA(row) {
-  return `=IF(B${row}="","",COUNTIF($B$2:B${row},B${row}))`;
+// 순번 — 예전엔 그냥 "=ROW()-1"(시트 전체 기준 절대 행번호)이었는데, 날짜가 바뀌면
+// 1부터 다시 시작하길 원해서 COUNTIF로 "이 행까지 상차일 열에 같은 날짜가 몇 번
+// 나왔나"를 센다 — 날짜 블록 사이에 넣는 빈 구분줄은 상차일이 비어있어 카운트에 안
+// 잡히고, 날짜가 바뀌면 그 값도 바뀌므로 새 날짜에서 자연스럽게 1부터 다시 시작한다.
+function gsheetFormulaA(row, colMap) {
+  const dateCol = colMap.상차일 || "B";
+  return `=IF(${dateCol}${row}="","",COUNTIF($${dateCol}$2:${dateCol}${row},${dateCol}${row}))`;
 }
 
 // dispatch 문서 하나를 이미 정해진 행(row)에 값+수식으로 쓴다 — 어디에 쓸지(행 번호)는
 // 이 함수가 판단하지 않는다(호출하는 쪽이 정함). 실시간 동기화와 백필(대량 처리) 양쪽이
-// 공유해서 쓴다.
-async function writeGsheetOrderRow(tabName, row, data) {
+// 공유해서 쓴다. colMap을 안 넘기면(단건 호출) 이 함수가 직접 조회한다 — 여러 행을
+// 연달아 쓰는 쪽(백필)은 미리 한 번만 조회해서 넘겨 API 호출을 아낀다.
+async function writeGsheetOrderRow(tabName, row, data, colMap) {
+  colMap = colMap || (await getGsheetColumnMap(tabName));
+  const rangesData = [];
+  const fieldValues = buildGsheetFieldValues(data);
+  for (const [field, value] of Object.entries(fieldValues)) {
+    const col = colMap[field];
+    if (!col) continue; // 이 탭에 해당 헤더가 없으면(예: 경유지 헤더가 없는 옛날 탭) 조용히 건너뜀
+    rangesData.push({ range: `${quoteTab(tabName)}!${col}${row}`, values: [[value]] });
+  }
+  if (colMap.기사명 && colMap.전화번호) {
+    const [mFormula, nFormula] = gsheetFormulaMN(row, colMap);
+    rangesData.push({ range: `${quoteTab(tabName)}!${colMap.기사명}${row}`, values: [[mFormula]] });
+    rangesData.push({ range: `${quoteTab(tabName)}!${colMap.전화번호}${row}`, values: [[nFormula]] });
+  }
+  if (colMap.수수료 && colMap.매익율) {
+    const [qFormula, rFormula] = gsheetFormulaQR(row, colMap);
+    rangesData.push({ range: `${quoteTab(tabName)}!${colMap.수수료}${row}`, values: [[qFormula]] });
+    rangesData.push({ range: `${quoteTab(tabName)}!${colMap.매익율}${row}`, values: [[rFormula]] });
+  }
+  if (colMap.순번) {
+    rangesData.push({ range: `${quoteTab(tabName)}!${colMap.순번}${row}`, values: [[gsheetFormulaA(row, colMap)]] });
+  }
+  if (!rangesData.length) return;
   await gsheetApi("POST", "/values:batchUpdate", {
-    data: {
-      valueInputOption: "USER_ENTERED",
-      data: [
-        { range: `${quoteTab(tabName)}!B${row}:J${row}`, values: [buildGsheetRowBJ(data)] },
-        { range: `${quoteTab(tabName)}!L${row}`, values: [[data["차량번호"] || ""]] },
-        { range: `${quoteTab(tabName)}!M${row}:N${row}`, values: [gsheetFormulaMN(row)] },
-        { range: `${quoteTab(tabName)}!O${row}:P${row}`, values: [buildGsheetRowOP(data)] },
-        { range: `${quoteTab(tabName)}!Q${row}:R${row}`, values: [gsheetFormulaQR(row)] },
-        { range: `${quoteTab(tabName)}!S${row}:T${row}`, values: [buildGsheetRowST(data)] },
-        { range: `${quoteTab(tabName)}!V${row}`, values: [[data["메모"] || ""]] },
-        { range: `${quoteTab(tabName)}!A${row}`, values: [[gsheetFormulaA(row)]] },
-      ],
-    },
+    data: { valueInputOption: "USER_ENTERED", data: rangesData },
   });
 }
 
@@ -942,24 +1151,24 @@ async function syncOneDispatchToGsheet(docId, data) {
   const existingRef = data._gsheetSync;
 
   if (existingRef && existingRef.tab && existingRef.row) {
-    // 이미 시트에 적혀있는 오더 — B~J, L, O~P, S~T, V만 나눠서 덮어쓴다.
-    // A(순번)/Q(수수료)/R(매익율)/K(배차상태)/M(기사명)/N(전화번호)은 전부 시트 자체
-    // 수식이 계산해주는 칸이라(수식이 A/L열을 보고 자동 계산) 절대 건드리지 않는다 —
-    // 여기 값을 쓰면 수식이 깨진다. U(비고(고유값고정값))도 용도 불명이라 그대로 둔다.
+    // 이미 시트에 적혀있는 오더 — 값 칸(상차일~메모, 경유지 포함)만 나눠서 덮어쓴다.
+    // 순번/수수료/매익율/배차상태/기사명/전화번호는 전부 시트 자체 수식이 계산해주는
+    // 칸이라(수식이 다른 열을 보고 자동 계산) 절대 건드리지 않는다 — 여기 값을 쓰면
+    // 수식이 깨진다. 비고(고유값고정값)도 용도 불명이라 그대로 둔다.
     // ⭐ 상차일이 바뀌어 월이 달라졌으면(드문 케이스) 예전 행은 지우고 새 탭에 다시 만든다.
     if (existingRef.tab === tabName) {
-      await gsheetApi("POST", "/values:batchUpdate", {
-        data: {
-          valueInputOption: "USER_ENTERED",
-          data: [
-            { range: `${quoteTab(existingRef.tab)}!B${existingRef.row}:J${existingRef.row}`, values: [buildGsheetRowBJ(data)] },
-            { range: `${quoteTab(existingRef.tab)}!L${existingRef.row}`, values: [[data["차량번호"] || ""]] },
-            { range: `${quoteTab(existingRef.tab)}!O${existingRef.row}:P${existingRef.row}`, values: [buildGsheetRowOP(data)] },
-            { range: `${quoteTab(existingRef.tab)}!S${existingRef.row}:T${existingRef.row}`, values: [buildGsheetRowST(data)] },
-            { range: `${quoteTab(existingRef.tab)}!V${existingRef.row}`, values: [[data["메모"] || ""]] },
-          ],
-        },
-      });
+      const colMap = await getGsheetColumnMap(existingRef.tab);
+      const rangesData = [];
+      for (const [field, value] of Object.entries(buildGsheetFieldValues(data))) {
+        const col = colMap[field];
+        if (!col) continue;
+        rangesData.push({ range: `${quoteTab(existingRef.tab)}!${col}${existingRef.row}`, values: [[value]] });
+      }
+      if (rangesData.length) {
+        await gsheetApi("POST", "/values:batchUpdate", {
+          data: { valueInputOption: "USER_ENTERED", data: rangesData },
+        });
+      }
       await ensureDriverInGsheetUniqueTab(data["차량번호"], data["이름"], data["전화번호"]);
       return;
     }
@@ -985,14 +1194,15 @@ async function syncOneDispatchToGsheet(docId, data) {
     const sheetProps = (await getGsheetSheetList()).find((s) => s.title === tabName);
     if (!sheetProps) throw new Error(`탭을 찾을 수 없습니다: ${tabName}`);
 
-    const { insertRow } = await findGsheetInsertPosition(tabName, data["상차일"]);
+    const colMap = await getGsheetColumnMap(tabName);
+    const { insertRow } = await findGsheetInsertPosition(tabName, data["상차일"], colMap);
     const r = insertRow; // 실제 데이터가 들어갈 행
     // ensureGsheetRowsUpTo는 정확히 r행까지만 늘리므로, 끝나고 나면 rowCount는 항상 r다
     // (아래에서 다시 조회할 필요 없음 — 대량 백필 시 오더당 API 호출 수를 줄여 처리
     // 시간이 함수 제한시간(9분)을 넘기지 않게 하기 위해 왕복을 최대한 줄인다).
     await ensureGsheetRowsUpTo(sheetProps.sheetId, sheetProps.gridProperties?.rowCount || 1, r);
 
-    await writeGsheetOrderRow(tabName, r, data);
+    await writeGsheetOrderRow(tabName, r, data, colMap);
 
     // 다음 오더를 위해 서식 이어받은 빈 버퍼 행을 하나 더 마련해둔다(항상 맨 끝에
     // 빈 줄 하나가 대기하고 있도록 유지) — 방금 쓴 행(r)이 곧 현재 rowCount다.
@@ -1160,6 +1370,10 @@ exports.backfillGsheetMonth = functions
           if (!sheetProps) throw new Error(`탭을 찾을 수 없습니다: ${tabName}`);
           const sheetId = sheetProps.sheetId;
           let rowCount = sheetProps.gridProperties?.rowCount || 1;
+          // 여러 오더를 연달아 쓰는 이 백필 전체가 같은 탭 하나를 대상으로 하므로,
+          // 열 위치는 한 번만 조회해서 재사용한다(오더마다 다시 조회하면 API 호출이
+          // 오더 수만큼 늘어나 분당 쓰기 한도에 다시 걸린다).
+          const colMap = await getGsheetColumnMap(tabName);
 
           // ⭐ 구글시트 API는 "분당 쓰기 60회"라는 계정 단위 한도가 있다 — 오더 하나당
           // API 호출을 여러 번(행 삽입 + 값쓰기 + 고유값 등록) 하면 149건만 돼도 수백
@@ -1198,16 +1412,24 @@ exports.backfillGsheetMonth = functions
           const writeChunk = async (chunk) => {
             const rangesData = [];
             chunk.forEach(({ row, data }) => {
-              rangesData.push(
-                { range: `${quoteTab(tabName)}!B${row}:J${row}`, values: [buildGsheetRowBJ(data)] },
-                { range: `${quoteTab(tabName)}!L${row}`, values: [[data["차량번호"] || ""]] },
-                { range: `${quoteTab(tabName)}!M${row}:N${row}`, values: [gsheetFormulaMN(row)] },
-                { range: `${quoteTab(tabName)}!O${row}:P${row}`, values: [buildGsheetRowOP(data)] },
-                { range: `${quoteTab(tabName)}!Q${row}:R${row}`, values: [gsheetFormulaQR(row)] },
-                { range: `${quoteTab(tabName)}!S${row}:T${row}`, values: [buildGsheetRowST(data)] },
-                { range: `${quoteTab(tabName)}!V${row}`, values: [[data["메모"] || ""]] },
-                { range: `${quoteTab(tabName)}!A${row}`, values: [[gsheetFormulaA(row)]] },
-              );
+              for (const [field, value] of Object.entries(buildGsheetFieldValues(data))) {
+                const col = colMap[field];
+                if (!col) continue;
+                rangesData.push({ range: `${quoteTab(tabName)}!${col}${row}`, values: [[value]] });
+              }
+              if (colMap.기사명 && colMap.전화번호) {
+                const [mFormula, nFormula] = gsheetFormulaMN(row, colMap);
+                rangesData.push({ range: `${quoteTab(tabName)}!${colMap.기사명}${row}`, values: [[mFormula]] });
+                rangesData.push({ range: `${quoteTab(tabName)}!${colMap.전화번호}${row}`, values: [[nFormula]] });
+              }
+              if (colMap.수수료 && colMap.매익율) {
+                const [qFormula, rFormula] = gsheetFormulaQR(row, colMap);
+                rangesData.push({ range: `${quoteTab(tabName)}!${colMap.수수료}${row}`, values: [[qFormula]] });
+                rangesData.push({ range: `${quoteTab(tabName)}!${colMap.매익율}${row}`, values: [[rFormula]] });
+              }
+              if (colMap.순번) {
+                rangesData.push({ range: `${quoteTab(tabName)}!${colMap.순번}${row}`, values: [[gsheetFormulaA(row, colMap)]] });
+              }
             });
             try {
               await gsheetApi("POST", "/values:batchUpdate", { data: { valueInputOption: "USER_ENTERED", data: rangesData } });
@@ -1280,7 +1502,9 @@ exports.backfillGsheetMonth = functions
       // (예: 위 재시도로도 못 넘긴 경우) 여기서 바로 드러난다.
       let actualRowCount = null;
       try {
-        const verifySnap = await gsheetApi("GET", `/values/${encodeURIComponent(`${quoteTab(tabName)}!B2:B2000`)}`);
+        const verifyColMap = await getGsheetColumnMap(tabName);
+        const dateCol = verifyColMap.상차일 || "B";
+        const verifySnap = await gsheetApi("GET", `/values/${encodeURIComponent(`${quoteTab(tabName)}!${dateCol}2:${dateCol}2000`)}`);
         actualRowCount = (verifySnap.values || []).filter((r) => String(r?.[0] || "").trim()).length;
       } catch (e) {
         console.warn("백필 결과 검증용 재조회 실패(무시):", e?.message || e);
@@ -1296,6 +1520,120 @@ exports.backfillGsheetMonth = functions
       res.status(500).send(`오류: ${e?.message || e}`);
     } finally {
       await lockRef.delete().catch(() => {});
+    }
+  });
+
+/* ==============================================================
+   📇 (1회성/반복 가능) 기본거래처(clients)/하차지거래처(places)를
+   구글시트로 일괄 반영 — 관리자용.
+   ----------------------------------------------------------------
+   사용자가 미리 만들어둔 "기본거래처관리"/"하차지거래처관리" 탭에, 그
+   탭의 실제 헤더 텍스트로 열 위치를 찾아 프로그램에 등록된 정보 그대로
+   채운다(사업자등록증 같은 첨부 이미지, 등급변경일/팝업표시 같은 내부
+   메타데이터, 오더메모/기사전달주의사항 같은 안내성 필드는 제외).
+   오더 백필과 마찬가지로 실행할 때마다 그 탭의 기존 데이터 행을 비우고
+   지금 프로그램에 있는 그대로 다시 채우므로, 여러 번 실행해도 결과는
+   항상 지금 프로그램 상태로 수렴한다. 테두리 등 서식이 깨지지 않도록
+   위와 동일한 방식(맨 끝에서 서식을 이어받아 행을 늘리는 방식)을 쓴다.
+
+   호출: https://.../backfillGsheetClients?key=<GSHEET_BACKFILL_KEY>
+================================================================== */
+async function backfillGsheetClientTab({ tabName, collectionName, candidatesMap, buildFieldValues, sortField }) {
+  const sheets = await getGsheetSheetList();
+  const sheet = sheets.find((s) => s.title === tabName);
+  if (!sheet) {
+    return { ok: false, message: `탭 "${tabName}"을 찾을 수 없습니다 — 먼저 그 이름으로 탭을 만들고 헤더를 넣어주세요.` };
+  }
+
+  const snap = await db.collection(collectionName).get();
+  const items = [];
+  snap.docs.forEach((d) => {
+    const data = d.data();
+    if ((data.companyName || "돌캐") !== GSHEET_TARGET_COMPANY) return;
+    items.push(data);
+  });
+  items.sort((a, b) => String(a[sortField] || "").localeCompare(String(b[sortField] || ""), "ko"));
+
+  return await withGsheetTabLock(tabName, async () => {
+    // 기존 데이터 행을 최대한 비운다(서식 있는 마지막 한 줄만 남김) — 오더 백필의
+    // clearGsheetDataRows와 동일한 이유/방식. 여기는 배차상태 수식이 없는 탭이라
+    // tabName 인자를 안 넘겨 재심기 로직은 건너뛴다.
+    await clearGsheetDataRows(sheet.sheetId, sheet.gridProperties?.rowCount || 1);
+
+    const colMap = await getGsheetColumnMapFor(tabName, candidatesMap, "client:");
+    if (!Object.keys(colMap).length) {
+      return { ok: false, message: `탭 "${tabName}"의 1행(헤더)에서 알아볼 수 있는 컬럼명을 하나도 못 찾았습니다 — 헤더 텍스트를 확인해주세요.` };
+    }
+
+    if (!items.length) {
+      return { ok: true, message: `탭 "${tabName}" — 대상 0건(등록된 데이터 없음), 헤더만 남기고 비웠습니다.` };
+    }
+
+    const finalRow = items.length + 1; // 2행부터 시작
+    const sheets2 = await getGsheetSheetList();
+    const freshSheet = sheets2.find((s) => s.title === tabName);
+    const rowCount = freshSheet.gridProperties?.rowCount || 1;
+    if (finalRow > rowCount) {
+      await gsheetApi("POST", ":batchUpdate", {
+        data: {
+          requests: [
+            { insertDimension: { range: { sheetId: sheet.sheetId, dimension: "ROWS", startIndex: rowCount, endIndex: finalRow }, inheritFromBefore: true } },
+          ],
+        },
+      });
+    }
+
+    const rangesData = [];
+    items.forEach((data, i) => {
+      const row = i + 2;
+      for (const [field, value] of Object.entries(buildFieldValues(data))) {
+        const col = colMap[field];
+        if (!col) continue;
+        rangesData.push({ range: `${quoteTab(tabName)}!${col}${row}`, values: [[value]] });
+      }
+    });
+
+    // 값쓰기도 오더 백필과 동일하게 청크로 나눠 보낸다(분당 쓰기 한도 안전).
+    const CHUNK_SIZE = 400; // 필드 수가 적어(행당 8~13칸) 오더 백필보다 청크를 넉넉히 잡아도 안전
+    for (let i = 0; i < rangesData.length; i += CHUNK_SIZE) {
+      await gsheetApi("POST", "/values:batchUpdate", {
+        data: { valueInputOption: "USER_ENTERED", data: rangesData.slice(i, i + CHUNK_SIZE) },
+      });
+      if (i + CHUNK_SIZE < rangesData.length) await sleep(1200);
+    }
+
+    return { ok: true, message: `탭 "${tabName}" — ${items.length}건 반영 완료.` };
+  });
+}
+
+exports.backfillGsheetClients = functions
+  .runWith({ timeoutSeconds: 300, memory: "256MB" })
+  .https.onRequest(async (req, res) => {
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Methods", "GET");
+    if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+    if (req.query.key !== GSHEET_BACKFILL_KEY) { res.status(403).send("forbidden"); return; }
+
+    try {
+      const results = [];
+      results.push(await backfillGsheetClientTab({
+        tabName: "기본거래처관리",
+        collectionName: "clients",
+        candidatesMap: GSHEET_CLIENT_FIELD_CANDIDATES,
+        buildFieldValues: buildGsheetClientFieldValues,
+        sortField: "거래처명",
+      }));
+      results.push(await backfillGsheetClientTab({
+        tabName: "하차지거래처관리",
+        collectionName: "places",
+        candidatesMap: GSHEET_PLACE_FIELD_CANDIDATES,
+        buildFieldValues: buildGsheetPlaceFieldValues,
+        sortField: "업체명",
+      }));
+      res.status(200).send(results.map((r) => r.message).join("\n"));
+    } catch (e) {
+      console.error("거래처 백필 오류:", e);
+      res.status(500).send(`오류: ${e?.message || e}`);
     }
   });
 
