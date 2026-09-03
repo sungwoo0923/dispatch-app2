@@ -943,46 +943,98 @@ exports.backfillGsheetMonth = functions
           if (!sheetProps) throw new Error(`탭을 찾을 수 없습니다: ${tabName}`);
           const sheetId = sheetProps.sheetId;
           let rowCount = sheetProps.gridProperties?.rowCount || 1;
+
+          // ⭐ 구글시트 API는 "분당 쓰기 60회"라는 계정 단위 한도가 있다 — 오더 하나당
+          // API 호출을 여러 번(행 삽입 + 값쓰기 + 고유값 등록) 하면 149건만 돼도 수백
+          // 번이 되어 이 한도에 정면으로 걸린다(실제로 발생한 오류: Quota exceeded ...
+          // Write requests per minute). 그래서 여기서는:
+          //   1) 행 위치는 전부 메모리에서만 미리 계산(시트를 전혀 안 건드림)
+          //   2) 필요한 행 전체(빈 분리 줄 포함)를 단 한 번의 구조적 삽입으로 만든다
+          //   3) 값/수식 쓰기는 여러 오더를 묶어(청크) 한 번의 batchUpdate로 보낸다
+          //   4) 신규 기사 등록도 전체를 모아 한 번에 append한다
+          // 이렇게 하면 오더 수와 상관없이 API 호출이 총 10회 안팎으로 끝난다.
+          const plan = [];
           let lastRow = 1; // 1=헤더뿐(진짜 데이터 아직 없음) sentinel
           let lastDate = null;
-
-          for (const { docId, data } of toWrite) {
-            const thisDate = String(data["상차일"] || "").trim();
+          for (const item of toWrite) {
+            const thisDate = String(item.data["상차일"] || "").trim();
             const row = lastRow === 1 ? 2 : (lastDate === thisDate ? lastRow + 1 : lastRow + 2);
-
-            while (rowCount < row) {
-              await appendGsheetBufferRow(sheetId, rowCount);
-              rowCount++;
-            }
-
-            try {
-              await writeGsheetOrderRow(tabName, row, data);
-            } catch (e) {
-              failed++;
-              failedIds.push(docId);
-              console.error(`백필 실패(시트쓰기) ${docId}:`, e?.message || e);
-              await sleep(120);
-              continue; // 이 행엔 아직 아무것도 안 쓰였으니, 다음 오더가 같은 행을 다시 시도한다
-            }
+            plan.push({ ...item, row });
             lastRow = row;
             lastDate = thisDate;
-            created++;
+          }
+          const finalRow = lastRow;
 
-            try {
-              await ensureDriverInGsheetUniqueTab(data["차량번호"], data["이름"], data["전화번호"]);
-            } catch (e) {
-              console.warn(`고유값 등록 실패(무시) ${docId}:`, e?.message || e);
-            }
-            try {
-              await db.doc(docId).update({ _gsheetSync: { tab: tabName, row } });
-            } catch (e) {
-              console.warn(`_gsheetSync 기록 실패(무시) ${docId}:`, e?.message || e);
-            }
-
-            await sleep(120); // 요청 제한(429)에 걸리지 않도록 오더 사이에 살짝 텀을 둔다
+          if (finalRow > rowCount) {
+            await gsheetApi("POST", ":batchUpdate", {
+              data: {
+                requests: [
+                  { insertDimension: { range: { sheetId, dimension: "ROWS", startIndex: rowCount, endIndex: finalRow }, inheritFromBefore: true } },
+                ],
+              },
+            });
+            rowCount = finalRow;
           }
 
-          if (rowCount <= lastRow) await appendGsheetBufferRow(sheetId, rowCount); // 다음 실시간 등록을 위한 버퍼 행 보충
+          const CHUNK_SIZE = 25; // 오더 25건씩 묶어서 한 번의 batchUpdate로 값을 쓴다
+          for (let i = 0; i < plan.length; i += CHUNK_SIZE) {
+            const chunk = plan.slice(i, i + CHUNK_SIZE);
+            const rangesData = [];
+            chunk.forEach(({ row, data }) => {
+              rangesData.push(
+                { range: `${quoteTab(tabName)}!B${row}:J${row}`, values: [buildGsheetRowBJ(data)] },
+                { range: `${quoteTab(tabName)}!L${row}`, values: [[data["차량번호"] || ""]] },
+                { range: `${quoteTab(tabName)}!M${row}:N${row}`, values: [gsheetFormulaMN(row)] },
+                { range: `${quoteTab(tabName)}!O${row}:P${row}`, values: [buildGsheetRowOP(data)] },
+                { range: `${quoteTab(tabName)}!Q${row}:R${row}`, values: [gsheetFormulaQR(row)] },
+                { range: `${quoteTab(tabName)}!S${row}:T${row}`, values: [buildGsheetRowST(data)] },
+                { range: `${quoteTab(tabName)}!V${row}`, values: [[data["메모"] || ""]] },
+                { range: `${quoteTab(tabName)}!A${row}`, values: [["=ROW()-1"]] },
+              );
+            });
+            try {
+              await gsheetApi("POST", "/values:batchUpdate", { data: { valueInputOption: "USER_ENTERED", data: rangesData } });
+              created += chunk.length;
+              for (let j = 0; j < chunk.length; j += 500) {
+                const fsBatch = db.batch();
+                chunk.slice(j, j + 500).forEach(({ docId, row }) => fsBatch.update(db.doc(docId), { _gsheetSync: { tab: tabName, row } }));
+                await fsBatch.commit().catch((e) => console.warn("_gsheetSync 일괄 기록 실패(무시):", e?.message || e));
+              }
+            } catch (e) {
+              failed += chunk.length;
+              chunk.forEach(({ docId }) => failedIds.push(docId));
+              console.error(`백필 청크 실패(행 ${chunk[0].row}~${chunk[chunk.length - 1].row}):`, e?.message || e);
+            }
+            if (i + CHUNK_SIZE < plan.length) await sleep(1500); // 분당 쓰기 한도(60회)에 안전하게 걸치도록 청크 사이 텀
+          }
+
+          // 신규 기사(차량번호 기준)를 전부 모아 "고유값" 탭에 한 번에 등록.
+          try {
+            const uniqueData = await gsheetApi("GET", `/values/${encodeURIComponent(`${quoteTab(GSHEET_UNIQUE_TAB)}!A:D`)}`);
+            const norm = (s) => String(s || "").replace(/\s+/g, "");
+            const existingPlates = new Set((uniqueData.values || []).map((r) => norm(r?.[1])));
+            const seen = new Set();
+            const newDriverRows = [];
+            plan.forEach(({ data }) => {
+              const plate = String(data["차량번호"] || "").trim();
+              if (!plate) return;
+              const key = norm(plate);
+              if (existingPlates.has(key) || seen.has(key)) return;
+              seen.add(key);
+              newDriverRows.push([data["이름"] || "", plate, data["전화번호"] || "", ""]);
+            });
+            if (newDriverRows.length) {
+              await gsheetApi(
+                "POST",
+                `/values/${encodeURIComponent(`${quoteTab(GSHEET_UNIQUE_TAB)}!A:D`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+                { data: { values: newDriverRows } }
+              );
+            }
+          } catch (e) {
+            console.warn("고유값 일괄 등록 실패(무시):", e?.message || e);
+          }
+
+          await appendGsheetBufferRow(sheetId, rowCount); // 다음 실시간 등록을 위한 버퍼 행 1개 보충
         });
       }
 
