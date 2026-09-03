@@ -900,9 +900,18 @@ async function findGsheetInsertPosition(tabName, targetDate, colMap) {
   const values = res.values || [];
   let lastRealRow = 1; // 1행=헤더. 진짜 데이터가 하나도 없으면 그대로 1.
   let lastRealDate = null;
+  // ⭐ 실사용 버그 수정: 예전엔 "중간에 빈 칸이 나오면 그걸로 데이터 끝"이라고 보고
+  // 바로 break 했는데, 정작 이 함수 자신이 날짜가 바뀔 때마다(needsSeparator) 빈 줄을
+  // 하나씩 심어두기 때문에 두 번째 날짜 블록부터는 항상 그 직전의 "구분용 빈 줄"에서
+  // 멈춰버렸다. 그 결과 실제 데이터가 훨씬 아래(예: 9/3~9/4)까지 있어도 이 함수는
+  // "9/1 블록 다음 빈 줄"을 데이터 끝으로 착각해, 새 오더(9/4)를 9/1과 9/2 사이의 그
+  // 구분용 빈 줄 자리에 그대로 덮어써버렸다(그 자리가 실은 9/2 블록 시작 행이었던 경우
+  // 기존 9/2 데이터까지 덮어써지며 값이 뒤섞여 보이는 문제로 이어짐). 구분용 빈 줄은
+  // 건너뛰고 끝까지 훑어서 "진짜 마지막" 데이터 행/날짜를 찾아야 한다(API가 응답 자체를
+  // 마지막 값이 있는 행까지만 주므로, 배열 끝까지 다 봐도 그 뒤엔 어차피 값이 없다).
   for (let i = 0; i < values.length; i++) {
     const v = String(values[i]?.[0] || "").trim();
-    if (!v) break; // 중간에 빈 칸이 나오면 진짜 데이터는 거기서 끝난 것으로 본다
+    if (!v) continue; // 날짜 블록 사이 구분용 빈 줄 — 건너뛰고 계속 찾는다
     lastRealRow = i + 2; // values[0] == B2
     lastRealDate = v;
   }
