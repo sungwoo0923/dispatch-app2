@@ -5662,6 +5662,7 @@ setOpenMemo={setOpenMemo}
             appVersion={appVersion}
             showSuccess={showSuccess}
             onLogout={logout}
+            currentUser={currentUser}
             userCompany={userCompany}
             role={role}
           />
@@ -19442,7 +19443,7 @@ return (
 );
 }
 
-function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnabled, toggleAlarm, fontScale, setFontScale, easyMode, setEasyMode, appVersion, showSuccess, onLogout, userCompany, role }) {
+function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnabled, toggleAlarm, fontScale, setFontScale, easyMode, setEasyMode, appVersion, showSuccess, onLogout, userCompany, role, currentUser }) {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const isTotalMaster = role === "totalMaster";
 
@@ -19480,13 +19481,50 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
       if (permission === "default") permission = await Notification.requestPermission();
       if (permission !== "granted") { alert("알림 권한이 허용돼 있지 않습니다. 브라우저/기기 설정에서 알림을 허용해주세요."); return; }
       const reg = await navigator.serviceWorker.ready;
-      await reg.showNotification("🔔 테스트 알림", {
+      await reg.showNotification("테스트 알림", {
         body: "이렇게 화면에 뜨면 알림창 자체는 정상 작동하는 거예요.",
-        icon: "/icons/sflow-icon.png",
-        badge: "/icons/sflow-icon.png",
+        icon: "/icons/icon-192x192.png",
+        badge: "/icons/icon-192x192.png",
+        vibrate: [200, 100, 200],
+        tag: "kpflow-test",
+        renotify: true,
       });
     } catch (e) {
       alert("테스트 알림 실행 실패: " + (e?.message || e));
+    }
+  };
+
+  // ⭐ 알림 종류별 켜고 끄기 — users/{uid}.pushPrefs에 저장한다. 필드가 아예
+  // 없거나(기존 사용자) 특정 종류 키가 없으면 "켜짐"으로 취급한다(예전처럼
+  // 전체 발송되던 기본 동작 유지) — Cloud Functions 쪽 발송 필터도 같은
+  // 기본값(명시적으로 false인 사람만 제외)을 쓴다.
+  const PUSH_PREF_TYPES = [
+    { key: "배차등록", label: "배차등록 알림", sub: "새 오더가 등록되면" },
+    { key: "긴급배차", label: "긴급배차 알림", sub: "긴급 오더가 등록되면" },
+    { key: "배차완료", label: "배차완료 알림", sub: "기사가 배정되면" },
+    { key: "재배차", label: "재배차 알림", sub: "배정됐던 기사가 빠져 다시 배차중이 되면" },
+    { key: "미배차", label: "미배차 임박 알림", sub: "상차 1시간 전인데 아직 미배차면" },
+    { key: "배차취소", label: "배차취소 알림", sub: "오더가 취소되거나 삭제되면" },
+  ];
+  const [pushPrefsOpen, setPushPrefsOpen] = useState(false);
+  const [pushPrefs, setPushPrefs] = useState(null); // null=로딩중
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    const ref = doc(db, "users", currentUser.uid);
+    const unsub = onSnapshot(ref, (snap) => {
+      setPushPrefs(snap.data()?.pushPrefs || {});
+    }, () => setPushPrefs({}));
+    return () => unsub();
+  }, [currentUser?.uid]);
+  const togglePushPref = async (key) => {
+    if (!currentUser?.uid) return;
+    const nextVal = !(pushPrefs?.[key] !== false);
+    setPushPrefs((prev) => ({ ...(prev || {}), [key]: nextVal })); // 낙관적 갱신
+    try {
+      await updateDoc(doc(db, "users", currentUser.uid), { [`pushPrefs.${key}`]: nextVal });
+    } catch (e) {
+      console.error("푸시 알림 설정 저장 실패:", e);
+      setPushPrefs((prev) => ({ ...(prev || {}), [key]: !nextVal })); // 롤백
     }
   };
 
@@ -19600,6 +19638,12 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
             label="푸시 알림"
             sub="신규 오더·배차 알림"
             right={<Toggle value={alarmEnabled} onChange={toggleAlarm} />}
+          />
+          <SettingRow
+            label="알림 종류별 설정"
+            sub="배차완료·배차등록·긴급배차 등 원하는 알림만 받기"
+            onClick={() => setPushPrefsOpen(true)}
+            right={<span className="text-[12px] text-blue-500 font-semibold">설정</span>}
           />
         </div>
 
@@ -19762,6 +19806,36 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
             )}
             <div className="px-5 pt-4">
               <button onClick={() => setPushComposeOpen(false)} className="w-full py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold">닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pushPrefsOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/45" onClick={() => setPushPrefsOpen(false)}>
+          <div className="w-full max-w-md bg-white rounded-t-2xl pb-8 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-3 pb-2">
+              <div className="w-10 h-1 rounded-full bg-gray-200" />
+            </div>
+            <div className="px-5 pb-2">
+              <div className="font-bold text-[15px] text-gray-900">알림 종류별 설정</div>
+              <div className="text-[12px] text-gray-400 mt-1 leading-relaxed">
+                원하는 알림만 켜두면, 꺼둔 종류는 이 기기로 푸시가 오지 않습니다.
+              </div>
+            </div>
+            <div className="mx-5 mt-2 rounded-2xl overflow-hidden border border-gray-100">
+              {PUSH_PREF_TYPES.map(({ key, label, sub }) => (
+                <div key={key} className="flex items-center justify-between px-4 py-3.5 bg-white border-b border-gray-50 last:border-b-0">
+                  <div className="text-left">
+                    <div className="text-[13px] font-semibold text-gray-800">{label}</div>
+                    <div className="text-[11px] text-gray-400 mt-0.5">{sub}</div>
+                  </div>
+                  <Toggle value={pushPrefs?.[key] !== false} onChange={() => togglePushPref(key)} />
+                </div>
+              ))}
+            </div>
+            <div className="px-5 pt-5">
+              <button onClick={() => setPushPrefsOpen(false)} className="w-full py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold">닫기</button>
             </div>
           </div>
         </div>

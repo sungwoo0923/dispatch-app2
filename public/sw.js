@@ -30,10 +30,19 @@ messaging.onBackgroundMessage((payload) => {
   const title = payload?.notification?.title || payload?.data?.title || "새 알림";
   const body = payload?.notification?.body || payload?.data?.body || "";
 
+  // ⭐ vibrate/tag/renotify — 안드로이드에서 "시스템 알림음만 나고 배너(헤드업)는
+  // 안 뜬다"는 문제 리포트가 있었다. 헤드업 표시 여부 자체는 안드로이드가 그
+  // 사이트/앱의 알림 채널 중요도(설정 > 앱 > 알림)로 최종 결정해 웹 코드로 100%
+  // 강제할 수는 없지만, vibrate(진동 패턴이 있으면 더 눈에 띄는 알림으로 취급되는
+  // 경향이 있음)와 tag+renotify(같은 태그로 여러 번 와도 매번 다시 알려줌 — 기본값은
+  // 조용히 이전 알림을 덮어쓰기만 함)를 채워주면 실제로 체감되는 경우가 많다.
   self.registration.showNotification(title, {
     body,
-    icon: "/icons/sflow-icon.png",
-    badge: "/icons/sflow-icon.png",
+    icon: "/icons/icon-192x192.png",
+    badge: "/icons/icon-192x192.png",
+    vibrate: [200, 100, 200],
+    tag: payload?.data?.tag || `kpflow-${Date.now()}`,
+    renotify: true,
     data: payload?.data || {},
   });
 });
