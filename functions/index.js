@@ -54,6 +54,56 @@ async function getTokensForType(type) {
   return tokens;
 }
 
+// ⭐ "알림 설정은 다 켜놨는데 특정 기기(특히 아이폰)에서만 알림이 갑자기 안 뜬다"는
+// 리포트의 흔한 원인 하나 — FCM 토큰이 조용히 무효화된 경우다. iOS Safari PWA는
+// iOS/Safari 업데이트, 홈 화면에서 지웠다가 다시 추가, 오래 앱을 안 열어둠 등으로
+// 토큰이 만료·무효화되는 일이 꽤 잦은데, sendEachForMulticast는 이런 토큰이 섞여
+// 있어도 전체 호출 자체는 "성공"으로 끝나버려서(개별 토큰 실패는 응답 배열 안에만
+// 조용히 담김) 지금까지는 이 실패가 로그에도 안 남고, 무효 토큰이 users 문서에
+// 계속 남아있어 다음 알림에서도 똑같이 조용히 실패하는 게 반복됐다. 여기서 결과를
+// 반드시 확인해 로그로 남기고, "이 토큰은 더 이상 유효하지 않다"는 응답이 온
+// 토큰은 users 문서에서 지워서 다음에 앱을 열 때 saveFcmToken()이 새 토큰으로
+// 자동 재등록하게 한다.
+const STALE_FCM_TOKEN_ERROR_CODES = new Set([
+  "messaging/registration-token-not-registered",
+  "messaging/invalid-registration-token",
+  "messaging/invalid-argument",
+]);
+async function sendPushAndCleanup(tokens, message, label) {
+  if (!tokens.length) return undefined;
+  let res;
+  try {
+    res = await messaging.sendEachForMulticast({ tokens, ...message });
+  } catch (e) {
+    console.error(`🚫 ${label} 발송 자체 실패:`, e?.message || e);
+    return undefined;
+  }
+  console.log(`✅ ${label} 발송: 성공 ${res.successCount} / 실패 ${res.failureCount}`);
+  const staleTokens = [];
+  res.responses.forEach((r, i) => {
+    if (r.success) return;
+    const code = r.error?.code;
+    console.warn(`⚠️ ${label} 발송 실패 (token #${i}): ${code || ""} ${r.error?.message || ""}`);
+    if (code && STALE_FCM_TOKEN_ERROR_CODES.has(code)) staleTokens.push(tokens[i]);
+  });
+  if (!staleTokens.length) return res;
+  try {
+    // Firestore "in" 쿼리는 한 번에 최대 30개까지만 허용된다.
+    for (let i = 0; i < staleTokens.length; i += 30) {
+      const chunk = staleTokens.slice(i, i + 30);
+      const snap = await db.collection("users").where("fcmToken", "in", chunk).get();
+      if (snap.empty) continue;
+      const batch = db.batch();
+      snap.docs.forEach((d) => batch.update(d.ref, { fcmToken: FieldValue.delete() }));
+      await batch.commit();
+      console.log(`🧹 만료된 FCM 토큰 ${snap.size}개 정리 완료`);
+    }
+  } catch (e) {
+    console.warn("만료 FCM 토큰 정리 실패(무시):", e?.message || e);
+  }
+  return res;
+}
+
 /* ==============================
    🔔 신규 오더 알림
 ============================== */
@@ -81,17 +131,14 @@ exports.notifyNewDispatch =
         return;
       }
 
-      await messaging.sendEachForMulticast({
-        tokens,
+      await sendPushAndCleanup(tokens, {
         notification: {
           title: isUrgent ? "긴급 오더 등록" : "신규 오더 등록",
           body: `${data["거래처명"] || ""} ${data["상차지명"] || "-"} → ${data["하차지명"] || "-"}`,
         },
         android: { priority: "high" },
         apns: { payload: { aps: { sound: "default" } } },
-      });
-
-      console.log(`✅ ${type} 알림 완료`);
+      }, type);
     });
 
 /* ==============================
@@ -117,17 +164,14 @@ exports.notifyDispatchDone =
       const tokens = await getTokensForType("배차완료");
       if (!tokens.length) return;
 
-      await messaging.sendEachForMulticast({
-        tokens,
+      await sendPushAndCleanup(tokens, {
         notification: {
           title: "배차완료",
           body: `${after["거래처명"] || ""} ${after["상차지명"] || "-"} → ${after["하차지명"] || "-"}\n${after["기사명"] || ""} (${nextCar})`,
         },
         android: { priority: "high" },
         apns: { payload: { aps: { sound: "default" } } },
-      });
-
-      console.log("✅ 배차완료 알림 완료");
+      }, "배차완료");
     });
 
 /* ==============================
@@ -157,17 +201,14 @@ exports.notifyRedispatch =
       const tokens = await getTokensForType("재배차");
       if (!tokens.length) return;
 
-      await messaging.sendEachForMulticast({
-        tokens,
+      await sendPushAndCleanup(tokens, {
         notification: {
           title: "재배차 필요",
           body: `${after["거래처명"] || ""} ${after["상차지명"] || "-"} → ${after["하차지명"] || "-"}\n배정됐던 기사(${prevCar})가 취소되어 다시 배차중입니다.`,
         },
         android: { priority: "high" },
         apns: { payload: { aps: { sound: "default" } } },
-      });
-
-      console.log("✅ 재배차 알림 완료");
+      }, "재배차");
     });
 
 /* ==============================
@@ -193,17 +234,14 @@ exports.notifyDispatchCanceled =
       const tokens = await getTokensForType("배차취소");
       if (!tokens.length) return;
 
-      await messaging.sendEachForMulticast({
-        tokens,
+      await sendPushAndCleanup(tokens, {
         notification: {
           title: "배차취소",
           body: `${after["거래처명"] || ""} ${after["상차지명"] || "-"} → ${after["하차지명"] || "-"} 오더가 취소되었습니다.`,
         },
         android: { priority: "high" },
         apns: { payload: { aps: { sound: "default" } } },
-      });
-
-      console.log("✅ 배차취소 알림 완료(취소상태 전환)");
+      }, "배차취소(취소상태 전환)");
     });
 
 exports.notifyDispatchDeleted =
@@ -223,17 +261,14 @@ exports.notifyDispatchDeleted =
       const tokens = await getTokensForType("배차취소");
       if (!tokens.length) return;
 
-      await messaging.sendEachForMulticast({
-        tokens,
+      await sendPushAndCleanup(tokens, {
         notification: {
           title: "배차취소",
           body: `${data["거래처명"] || ""} ${data["상차지명"] || "-"} → ${data["하차지명"] || "-"} 오더가 삭제되었습니다.`,
         },
         android: { priority: "high" },
         apns: { payload: { aps: { sound: "default" } } },
-      });
-
-      console.log("✅ 배차취소 알림 완료(완전삭제)");
+      }, "배차취소(완전삭제)");
     });
 
 /* ==============================
@@ -346,15 +381,14 @@ exports.notifyUnassignedUrgent = functions.pubsub
         if (!tokens.length) continue;
 
         try {
-          await messaging.sendEachForMulticast({
-            tokens,
+          await sendPushAndCleanup(tokens, {
             notification: {
               title: "미배차 임박",
               body: `${data["거래처명"] || ""} ${data["상차지명"] || "-"} → ${data["하차지명"] || "-"} (${data["상차시간"] || ""} 상차 예정, 아직 미배차)`,
             },
             android: { priority: "high" },
             apns: { payload: { aps: { sound: "default" } } },
-          });
+          }, "미배차 임박");
           sent++;
         } catch (e) {
           console.warn("⏰ 미배차 임박 알림 발송 실패:", e?.message || e);
@@ -440,16 +474,11 @@ exports.notifyChatMessage = functions.firestore
     if (!tokens.length) return;
 
     const body = data.type === "image" ? "사진을 보냈습니다" : String(data.text || "").slice(0, 80);
-    try {
-      await messaging.sendEachForMulticast({
-        tokens,
-        notification: { title: data.senderName || "사내 메신저", body },
-        android: { priority: "high" },
-        apns: { payload: { aps: { sound: "default" } } },
-      });
-    } catch (e) {
-      console.warn("사내 메신저 알림 발송 실패:", e?.message || e);
-    }
+    await sendPushAndCleanup(tokens, {
+      notification: { title: data.senderName || "사내 메신저", body },
+      android: { priority: "high" },
+      apns: { payload: { aps: { sound: "default" } } },
+    }, "사내 메신저");
   });
 
 /* ==============================================================
@@ -491,13 +520,16 @@ exports.sendPushNotification = functions.https.onRequest(async (req, res) => {
   if (!tokens.length) { res.status(200).send("보낼 대상이 없습니다(등록된 푸시 토큰 없음)."); return; }
 
   try {
-    const result = await messaging.sendEachForMulticast({
-      tokens,
+    const result = await sendPushAndCleanup(tokens, {
       notification: { title: title || "알림", body: text },
       android: { priority: "high" },
       apns: { payload: { aps: { sound: "default" } } },
-    });
-    res.status(200).send(`발송 완료 — 성공 ${result.successCount}건, 실패 ${result.failureCount}건 (대상 ${tokens.length}명)`);
+    }, "관리자 발신 푸시");
+    res.status(200).send(
+      result
+        ? `발송 완료 — 성공 ${result.successCount}건, 실패 ${result.failureCount}건 (대상 ${tokens.length}명)`
+        : `발송 실패 (대상 ${tokens.length}명) — 로그를 확인해주세요.`
+    );
   } catch (e) {
     res.status(500).send(`오류: ${e?.message || e}`);
   }
