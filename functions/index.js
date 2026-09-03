@@ -735,7 +735,11 @@ async function writeGsheetOrderRow(tabName, row, data) {
 
 async function syncOneDispatchToGsheet(docId, data) {
   if (!data) return;
-  if ((data.companyName || "") !== GSHEET_TARGET_COMPANY) return;
+  // ⭐ 백필과 동일하게 화면 표시 폴백((companyName || "돌캐"))과 맞춰준다 — 이 필드가
+  // 없는 문서(과거 모바일 등록분 등)도 돌캐 소속으로 취급해 실시간 동기화 대상에
+  // 포함시킨다. (모바일 등록 화면은 이제 companyName을 항상 써넣도록 고쳤지만,
+  // 이미 만들어진 문서나 다른 경로로 생성된 문서를 위한 안전장치.)
+  if ((data.companyName || "돌캐") !== GSHEET_TARGET_COMPANY) return;
 
   // 배차취소(앱의 "삭제"는 실제 문서삭제가 아니라 배차상태를 배차취소로 바꾸는
   // 소프트삭제라 여기로 update가 들어온다) — 이미 시트에 올라간 행이 있으면 그
@@ -907,12 +911,28 @@ exports.backfillGsheetMonth = functions
 
       // 프로그램에 있는 그 달 오더를 전부 모아 상차일→순번 순으로 정렬 — 등록된
       // 순서 그대로 시트에도 쌓이게 하기 위해.
+      //
+      // ⭐ 원래 where("companyName","==",GSHEET_TARGET_COMPANY)로 걸렀었는데, 이건
+      // Firestore 등호(==) 필터의 특성상 companyName 필드가 아예 없는 문서를
+      // 통째로 조회 결과에서 제외해버린다. 화면 표시는 (companyName || "돌캐")
+      // 폴백이 곳곳에 있어 정상으로 보였지만, 실제로 모바일 등록 화면이 이 필드를
+      // 아예 안 써넣고 있었던 게 뒤늦게 발견됨 — 그 결과 모바일로 등록한 오더가
+      // 백필에서 전부 빠지고 있었다(1일 52건 중 42건만 전송되는 등). 그래서
+      // companyName으로 미리 거르지 않고 그 달 상차일 범위로만 조회한 뒤, 표시와
+      // 동일한 (companyName || "돌캐") 폴백으로 메모리에서 걸러 다른 회사 오더가
+      // 섞이지 않게 한다.
+      const monthStart = `${monthPrefix}-01`;
+      const monthEndExclusive = `${monthPrefix}~`; // "~"(0x7E)는 숫자/하이픈보다 뒤이므로 그 달 모든 날짜를 포함
       const items = [];
       for (const col of ["orders", "dispatch"]) {
-        const snap = await db.collection(col).where("companyName", "==", GSHEET_TARGET_COMPANY).get();
+        const snap = await db
+          .collection(col)
+          .where("상차일", ">=", monthStart)
+          .where("상차일", "<", monthEndExclusive)
+          .get();
         snap.docs.forEach((d) => {
           const data = d.data();
-          if (String(data["상차일"] || "").startsWith(monthPrefix)) {
+          if ((data.companyName || "돌캐") === GSHEET_TARGET_COMPANY) {
             items.push({ docId: `${col}/${d.id}`, data });
           }
         });
@@ -1095,7 +1115,7 @@ exports.syncDispatchToGoogleSheet =
       if (!after) {
         // 문서 자체가 완전삭제된 경우(예: 화주사 전송사본 삭제 등) — 시트에 이미
         // 올라간 행이 있으면 그 행을 지운다.
-        if (before && (before.companyName || "") === GSHEET_TARGET_COMPANY) {
+        if (before && (before.companyName || "돌캐") === GSHEET_TARGET_COMPANY) {
           try {
             await removeOneDispatchFromGsheet(before, null);
           } catch (e) {

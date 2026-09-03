@@ -3436,6 +3436,14 @@ const groupedByDate = useMemo(() => {
       전달사항: form.전달사항 || "",
       전달사항고정: form.전달사항고정 === true,
 
+      // ⭐ PC(addDispatch)는 항상 companyName을 명시적으로 써넣는데 모바일 등록은
+      // 이 필드 자체가 아예 빠져있었다 — 화면 표시는 (companyName || "돌캐") 방식의
+      // 폴백이 곳곳에 있어 정상으로 보였지만, 구글시트 백필처럼 Firestore
+      // where("companyName","==","돌캐")로 정확히 매칭하는 서버 쪽 조회에서는
+      // 이 필드가 없는 문서 자체가 통째로 걸러져 모바일로 등록한 오더가 전부
+      // 빠지는 원인이었다.
+      companyName: userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "돌캐",
+
       차량번호: form.차량번호 || "",
       기사명: form.기사명 || "",
       전화번호: form.전화번호 || "",
@@ -4093,6 +4101,12 @@ const deleteSingleOrder = async (order) => {
       메모: "",
       전달사항: "",
       전달사항고정: false,
+
+      // ⭐ PC(addDispatch)는 항상 companyName을 명시적으로 써넣는데 모바일 등록은
+      // 이 필드 자체가 아예 빠져있었다 — 구글시트 백필/실시간 동기화가
+      // Firestore where("companyName","==","돌캐")로 정확히 매칭하는데,
+      // 이 필드가 없는 문서는 통째로 걸러져 모바일로 등록한 오더가 전부 빠졌음.
+      companyName: userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "돌캐",
 
       차량번호: "",
       기사명: "",
