@@ -161,6 +161,60 @@ export async function saveFcmToken(user) {
   }
 }
 
+// ⭐ "설정은 다 켜놨는데 이 기기만 푸시가 안 온다"는 리포트가 나올 때, 지금까지는
+// saveFcmToken()이 실패해도 console 로그만 남기고 조용히 return해서, 특히
+// 아이폰처럼 사용자가 개발자도구를 열어 확인하기 어려운 기기에서는 "어디서
+// 왜 막혔는지"를 전혀 알 수 없었다. saveFcmToken()과 똑같은 단계를 그대로
+// 밟되, 각 단계에서 실패하면 그 이유를 사람이 읽을 수 있는 문자열로 돌려준다
+// (alert()으로 그 기기 화면에 바로 띄워서 확인할 수 있게 — 모바일 설정의
+// "FCM 토큰 진단" 버튼에서 사용).
+export async function diagnoseFcmToken(user) {
+  if (!user) return { ok: false, reason: "로그인 정보가 없습니다." };
+  if (!("Notification" in window)) return { ok: false, reason: "이 브라우저는 알림(Notification API)을 지원하지 않습니다." };
+
+  const messaging = await messagingPromise;
+  if (!messaging) {
+    return {
+      ok: false,
+      reason:
+        "이 브라우저/환경은 Firebase 메시징을 지원하지 않는다고 판단됐습니다(isSupported()===false). " +
+        "아이폰의 경우 홈 화면에 앱을 추가해 그 아이콘으로 실행 중인지 확인해주세요 — Safari 탭에서 직접 열면 지원되지 않을 수 있습니다.",
+    };
+  }
+
+  let permission = Notification.permission;
+  if (permission === "default") {
+    try { permission = await Notification.requestPermission(); } catch (e) { return { ok: false, reason: `권한 요청 자체가 실패했습니다: ${e?.message || e}` }; }
+  }
+  if (permission !== "granted") {
+    return { ok: false, reason: `알림 권한이 "${permission}" 상태입니다. 기기 설정 > 이 앱 > 알림에서 허용으로 바꿔주세요.` };
+  }
+
+  const vapidKey = import.meta.env.VITE_FCM_VAPID_KEY;
+  if (!vapidKey) {
+    return { ok: false, reason: "VITE_FCM_VAPID_KEY가 설정되어 있지 않습니다(배포 환경변수 누락) — 개발자에게 알려주세요." };
+  }
+
+  let swRegistration;
+  try {
+    swRegistration = ("serviceWorker" in navigator) ? await navigator.serviceWorker.ready : undefined;
+  } catch (e) {
+    return { ok: false, reason: `서비스워커 준비 확인 중 오류: ${e?.message || e}` };
+  }
+  if (!swRegistration) {
+    return { ok: false, reason: "서비스워커가 등록돼 있지 않습니다 — 앱을 완전히 종료했다가 다시 열어주세요." };
+  }
+
+  try {
+    const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: swRegistration });
+    if (!token) return { ok: false, reason: "getToken()이 토큰 없이 빈 값을 반환했습니다(원인 불명 — iOS Safari 자체 버그일 수 있음)." };
+    await updateDoc(doc(db, "users", user.uid), { fcmToken: token });
+    return { ok: true, token };
+  } catch (e) {
+    return { ok: false, reason: `토큰 발급 중 오류: ${e?.name || ""} ${e?.message || e}` };
+  }
+}
+
 // ⭐ onMessage()가 돌려주는 구독 해제 함수를 그대로 반환해야 한다 — 예전엔
 // 이 async 함수가 그 값을 안 돌려주고 있어서(암묵적으로 undefined 반환),
 // 호출하는 쪽(MobileApp.jsx)이 "unsubscribe = initForegroundFCM(...)"로

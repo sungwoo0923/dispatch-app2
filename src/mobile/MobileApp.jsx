@@ -19538,6 +19538,29 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     }
   };
 
+  // ⭐ "FCM 토큰 진단" — 위 "알림 테스트"와 달리 서버(FCM)까지 실제로 거쳐서
+  // 토큰을 발급받아본다. "설정은 다 켜놨는데 이 기기만 실제 알림이 안 온다"는
+  // 리포트가 나올 때, 어느 단계에서 왜 막히는지(권한/VAPID키/서비스워커/
+  // getToken 자체 실패 등) 이 화면에서 바로 알 수 있게 한다.
+  const [fcmDiagRunning, setFcmDiagRunning] = useState(false);
+  const runFcmDiagnosis = async () => {
+    if (fcmDiagRunning) return;
+    setFcmDiagRunning(true);
+    try {
+      const { diagnoseFcmToken } = await import("../firebase");
+      const result = await diagnoseFcmToken(currentUser);
+      if (result.ok) {
+        alert(`✅ 토큰 발급/저장 성공\n\n${result.token.slice(0, 28)}...\n\n이 기기는 서버와 정상 연결됐습니다. 그래도 실제 알림이 안 오면 종류별 설정(위 알림 종류별 설정)을 다시 확인해주세요.`);
+      } else {
+        alert(`❌ 실패\n\n${result.reason}`);
+      }
+    } catch (e) {
+      alert(`진단 중 예외 발생: ${e?.message || e}`);
+    } finally {
+      setFcmDiagRunning(false);
+    }
+  };
+
   // ⭐ 알림 종류별 켜고 끄기 — users/{uid}.pushPrefs에 저장한다. 특정 종류 키에
   // 값이 명시적으로 있으면(true/false) 그 값을 그대로 따르고, 한 번도 안 건드려
   // 값이 없으면 PUSH_PREF_DEFAULT_ON(긴급배차/미배차)만 기본으로 켜진 것으로
@@ -19735,6 +19758,12 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
                 sub="서버로 안 보내고 이 기기에서 바로 알림창만 확인"
                 onClick={handleTestNotification}
                 right={<span className="text-[12px] text-blue-500 font-semibold">실행</span>}
+              />
+              <SettingRow
+                label="FCM 토큰 진단"
+                sub="서버(FCM)까지 실제로 거쳐서 이 기기가 왜 안 되는지 확인"
+                onClick={runFcmDiagnosis}
+                right={<span className="text-[12px] text-blue-500 font-semibold">{fcmDiagRunning ? "..." : "실행"}</span>}
               />
               <SettingRow
                 label="전체 푸시 발송"
