@@ -30,6 +30,24 @@ async function getAllTokens() {
   return tokens;
 }
 
+// 알림 종류(type)별로 각자 켜고 끌 수 있게 — users/{uid}.pushPrefs.{type}이 명시적으로
+// false인 사람만 그 종류의 발송 대상에서 제외한다. 필드가 아예 없거나(기존 사용자)
+// 특정 종류 키가 없으면 "켜짐"으로 취급 — 예전처럼 전체 발송되던 기본 동작을 그대로
+// 유지하면서, 모바일 설정(알림 종류별 설정)에서 끈 사람만 조용해진다.
+const PUSH_TYPES = ["배차등록", "긴급배차", "배차완료", "재배차", "미배차", "배차취소"];
+async function getTokensForType(type) {
+  const snap = await db.collection("users").get();
+  const tokens = [];
+  snap.docs.forEach((d) => {
+    const u = d.data();
+    const token = u.fcmToken;
+    if (!token) return;
+    if (u.pushPrefs?.[type] === false) return;
+    tokens.push(token);
+  });
+  return tokens;
+}
+
 /* ==============================
    🔔 신규 오더 알림
 ============================== */
@@ -43,7 +61,15 @@ exports.notifyNewDispatch =
       const data = snap.data();
       if (!data) return;
 
-      const tokens = await getAllTokens();
+      // ⭐ 화주사 전송 사본(source==="transport_transmit")은 이미 있던 오더를
+      // 화주사 화면용으로 미러링만 한 문서라, 그대로 두면 "신규 오더 등록"이
+      // 원본 생성 + 사본 생성으로 같은 오더에 두 번 뜬다(구글시트 중복과 동일한
+      // 원인). 화면(DispatchApp.jsx)도 이 사본은 별도 알림을 안 띄운다.
+      if (data.source === "transport_transmit") return;
+
+      const isUrgent = data["긴급"] === true;
+      const type = isUrgent ? "긴급배차" : "배차등록";
+      const tokens = await getTokensForType(type);
       if (!tokens.length) {
         console.log("🚫 FCM 토큰 없음");
         return;
@@ -52,14 +78,14 @@ exports.notifyNewDispatch =
       await messaging.sendEachForMulticast({
         tokens,
         notification: {
-          title: "📦 신규 오더 등록",
+          title: isUrgent ? "긴급 오더 등록" : "신규 오더 등록",
           body: `${data["거래처명"] || ""} ${data["상차지명"] || "-"} → ${data["하차지명"] || "-"}`,
         },
         android: { priority: "high" },
         apns: { payload: { aps: { sound: "default" } } },
       });
 
-      console.log("✅ 신규 오더 알림 완료");
+      console.log(`✅ ${type} 알림 완료`);
     });
 
 /* ==============================
@@ -75,19 +101,20 @@ exports.notifyDispatchDone =
       const before = change.before.data();
       const after = change.after.data();
       if (!before || !after) return;
+      if (after.source === "transport_transmit") return; // 위와 동일한 이유로 사본은 스킵
 
       // 차량번호가 새로 생긴 경우만
       const prevCar = String(before["차량번호"] || "").trim();
       const nextCar = String(after["차량번호"] || "").trim();
       if (prevCar || !nextCar) return;
 
-      const tokens = await getAllTokens();
+      const tokens = await getTokensForType("배차완료");
       if (!tokens.length) return;
 
       await messaging.sendEachForMulticast({
         tokens,
         notification: {
-          title: "🚚 배차완료",
+          title: "배차완료",
           body: `${after["거래처명"] || ""} ${after["상차지명"] || "-"} → ${after["하차지명"] || "-"}\n${after["기사명"] || ""} (${nextCar})`,
         },
         android: { priority: "high" },
@@ -95,6 +122,112 @@ exports.notifyDispatchDone =
       });
 
       console.log("✅ 배차완료 알림 완료");
+    });
+
+/* ==============================
+   🔄 재배차 알림 — 배차완료(기사 배정) 상태였다가, 그 기사가 빠지고 다시
+   "배차중" 상태로 돌아간 경우("재배차 필요"). notifyDispatchDone과 반대 방향.
+============================== */
+exports.notifyRedispatch =
+  functions.firestore
+    .document("{col}/{dispatchId}")
+    .onUpdate(async (change, context) => {
+      const { col } = context.params;
+      if (!["dispatch", "orders"].includes(col)) return;
+
+      const before = change.before.data();
+      const after = change.after.data();
+      if (!before || !after) return;
+      if (after.source === "transport_transmit") return;
+
+      const prevCar = String(before["차량번호"] || "").trim();
+      const nextCar = String(after["차량번호"] || "").trim();
+      const nextStatus = String(after["배차상태"] || "").trim();
+      // 기사가 배정돼 있었다가(prevCar 있음) 빠지고(nextCar 없음), 배차취소가
+      // 아니라 다시 배차 대기(배차중) 상태로 돌아간 경우만 — 배차취소는
+      // notifyDispatchCanceled가 별도로 처리한다.
+      if (!prevCar || nextCar || nextStatus !== "배차중") return;
+
+      const tokens = await getTokensForType("재배차");
+      if (!tokens.length) return;
+
+      await messaging.sendEachForMulticast({
+        tokens,
+        notification: {
+          title: "재배차 필요",
+          body: `${after["거래처명"] || ""} ${after["상차지명"] || "-"} → ${after["하차지명"] || "-"}\n배정됐던 기사(${prevCar})가 취소되어 다시 배차중입니다.`,
+        },
+        android: { priority: "high" },
+        apns: { payload: { aps: { sound: "default" } } },
+      });
+
+      console.log("✅ 재배차 알림 완료");
+    });
+
+/* ==============================
+   ❌ 배차취소 알림 — 오더가 취소(소프트: 배차상태→배차취소)되거나
+   완전삭제된 경우.
+============================== */
+exports.notifyDispatchCanceled =
+  functions.firestore
+    .document("{col}/{dispatchId}")
+    .onUpdate(async (change, context) => {
+      const { col } = context.params;
+      if (!["dispatch", "orders"].includes(col)) return;
+
+      const before = change.before.data();
+      const after = change.after.data();
+      if (!before || !after) return;
+      if (after.source === "transport_transmit") return;
+
+      const prevStatus = String(before["배차상태"] || "").trim();
+      const nextStatus = String(after["배차상태"] || "").trim();
+      if (prevStatus === "배차취소" || nextStatus !== "배차취소") return; // 새로 취소된 경우만
+
+      const tokens = await getTokensForType("배차취소");
+      if (!tokens.length) return;
+
+      await messaging.sendEachForMulticast({
+        tokens,
+        notification: {
+          title: "배차취소",
+          body: `${after["거래처명"] || ""} ${after["상차지명"] || "-"} → ${after["하차지명"] || "-"} 오더가 취소되었습니다.`,
+        },
+        android: { priority: "high" },
+        apns: { payload: { aps: { sound: "default" } } },
+      });
+
+      console.log("✅ 배차취소 알림 완료(취소상태 전환)");
+    });
+
+exports.notifyDispatchDeleted =
+  functions.firestore
+    .document("{col}/{dispatchId}")
+    .onDelete(async (snap, context) => {
+      const { col } = context.params;
+      if (!["dispatch", "orders"].includes(col)) return;
+
+      const data = snap.data();
+      if (!data) return;
+      if (data.source === "transport_transmit") return;
+      // 배차취소로 먼저 바뀐 뒤 나중에 완전삭제된 문서는 위 notifyDispatchCanceled에서
+      // 이미 알림을 보냈으니 여기서 또 보내지 않는다(중복 방지).
+      if (data["배차상태"] === "배차취소") return;
+
+      const tokens = await getTokensForType("배차취소");
+      if (!tokens.length) return;
+
+      await messaging.sendEachForMulticast({
+        tokens,
+        notification: {
+          title: "배차취소",
+          body: `${data["거래처명"] || ""} ${data["상차지명"] || "-"} → ${data["하차지명"] || "-"} 오더가 삭제되었습니다.`,
+        },
+        android: { priority: "high" },
+        apns: { payload: { aps: { sound: "default" } } },
+      });
+
+      console.log("✅ 배차취소 알림 완료(완전삭제)");
     });
 
 /* ==============================
@@ -178,7 +311,7 @@ exports.notifyUnassignedUrgent = functions.pubsub
     const todayStr = nowKst.toISOString().slice(0, 10);
     const URGENT_WINDOW_MIN = 60; // 상차 1시간 전부터 임박으로 취급
 
-    const tokens = await getAllTokens();
+    const tokens = await getTokensForType("미배차");
 
     let sent = 0;
     for (const col of ["dispatch", "orders"]) {
@@ -195,6 +328,7 @@ exports.notifyUnassignedUrgent = functions.pubsub
 
       for (const docSnap of snap.docs) {
         const data = docSnap.data();
+        if (data.source === "transport_transmit") continue; // 원본(dispatch)과 중복 방지
         if (data.urgentPushSentAt) continue; // 이미 이 오더는 알림을 보냈음
 
         const t24 = normalizeTimeToHHMM(data["상차시간"]);
@@ -209,7 +343,7 @@ exports.notifyUnassignedUrgent = functions.pubsub
           await messaging.sendEachForMulticast({
             tokens,
             notification: {
-              title: "⏰ 미배차 임박",
+              title: "미배차 임박",
               body: `${data["거래처명"] || ""} ${data["상차지명"] || "-"} → ${data["하차지명"] || "-"} (${data["상차시간"] || ""} 상차 예정, 아직 미배차)`,
             },
             android: { priority: "high" },
@@ -303,7 +437,7 @@ exports.notifyChatMessage = functions.firestore
     try {
       await messaging.sendEachForMulticast({
         tokens,
-        notification: { title: `💬 ${data.senderName || "사내 메신저"}`, body },
+        notification: { title: data.senderName || "사내 메신저", body },
         android: { priority: "high" },
         apns: { payload: { aps: { sound: "default" } } },
       });
