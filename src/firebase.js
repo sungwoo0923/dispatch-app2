@@ -151,10 +151,17 @@ export async function saveFcmToken(user) {
   }
 }
 
+// ⭐ onMessage()가 돌려주는 구독 해제 함수를 그대로 반환해야 한다 — 예전엔
+// 이 async 함수가 그 값을 안 돌려주고 있어서(암묵적으로 undefined 반환),
+// 호출하는 쪽(MobileApp.jsx)이 "unsubscribe = initForegroundFCM(...)"로
+// 받은 게 사실 Promise였고, cleanup에서 "typeof unsubscribe === 'function'"이
+// 항상 false라 구독 해제가 한 번도 안 됐다. 그 결과 리스너가 리렌더될 때마다
+// (알림음소거/알람 토글 등으로 이 effect가 재실행될 때마다) 계속 쌓여서, 포그라운드
+// 알림 하나에 토스트가 2번·4번씩 겹쳐 뜨는 원인이 됐다.
 export async function initForegroundFCM(cb) {
   const messaging = await messagingPromise;
-  if (!messaging) return;
-  onMessage(messaging, (payload) => cb?.(payload));
+  if (!messaging) return () => {};
+  return onMessage(messaging, (payload) => cb?.(payload));
 }
 
 // ======================= END =======================
