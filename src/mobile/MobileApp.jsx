@@ -19494,10 +19494,11 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     }
   };
 
-  // ⭐ 알림 종류별 켜고 끄기 — users/{uid}.pushPrefs에 저장한다. 필드가 아예
-  // 없거나(기존 사용자) 특정 종류 키가 없으면 "켜짐"으로 취급한다(예전처럼
-  // 전체 발송되던 기본 동작 유지) — Cloud Functions 쪽 발송 필터도 같은
-  // 기본값(명시적으로 false인 사람만 제외)을 쓴다.
+  // ⭐ 알림 종류별 켜고 끄기 — users/{uid}.pushPrefs에 저장한다. 특정 종류 키에
+  // 값이 명시적으로 있으면(true/false) 그 값을 그대로 따르고, 한 번도 안 건드려
+  // 값이 없으면 PUSH_PREF_DEFAULT_ON(긴급배차/미배차)만 기본으로 켜진 것으로
+  // 취급한다 — 나머지는 기본 꺼짐, 사용자가 직접 켜야 온다. Cloud Functions 쪽
+  // 발송 필터(isPushTypeEnabled)도 동일한 기본값을 쓴다.
   const PUSH_PREF_TYPES = [
     { key: "배차등록", label: "배차등록 알림", sub: "새 오더가 등록되면" },
     { key: "긴급배차", label: "긴급배차 알림", sub: "긴급 오더가 등록되면" },
@@ -19506,6 +19507,12 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     { key: "미배차", label: "미배차 임박 알림", sub: "상차 1시간 전인데 아직 미배차면" },
     { key: "배차취소", label: "배차취소 알림", sub: "오더가 취소되거나 삭제되면" },
   ];
+  const PUSH_PREF_DEFAULT_ON = ["긴급배차", "미배차"];
+  const isPushPrefOn = (prefs, key) => {
+    const v = prefs?.[key];
+    if (v === true || v === false) return v;
+    return PUSH_PREF_DEFAULT_ON.includes(key);
+  };
   const [pushPrefsOpen, setPushPrefsOpen] = useState(false);
   const [pushPrefs, setPushPrefs] = useState(null); // null=로딩중
   useEffect(() => {
@@ -19518,7 +19525,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
   }, [currentUser?.uid]);
   const togglePushPref = async (key) => {
     if (!currentUser?.uid) return;
-    const nextVal = !(pushPrefs?.[key] !== false);
+    const nextVal = !isPushPrefOn(pushPrefs, key);
     setPushPrefs((prev) => ({ ...(prev || {}), [key]: nextVal })); // 낙관적 갱신
     try {
       await updateDoc(doc(db, "users", currentUser.uid), { [`pushPrefs.${key}`]: nextVal });
@@ -19830,7 +19837,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
                     <div className="text-[13px] font-semibold text-gray-800">{label}</div>
                     <div className="text-[11px] text-gray-400 mt-0.5">{sub}</div>
                   </div>
-                  <Toggle value={pushPrefs?.[key] !== false} onChange={() => togglePushPref(key)} />
+                  <Toggle value={isPushPrefOn(pushPrefs, key)} onChange={() => togglePushPref(key)} />
                 </div>
               ))}
             </div>
