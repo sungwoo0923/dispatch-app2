@@ -642,43 +642,47 @@ function extractGsheetWaypointNames(data) {
 
 /* ------------------------------------------------------------------
    📇 거래처(기본거래처=clients / 하차지거래처=places) 마스터 데이터를
-   구글시트로 전송 — 관리자용. 오더 백필과 동일하게 그 탭의 실제 헤더
-   텍스트로 열 위치를 찾아 쓴다(탭은 사용자가 미리 만들어둠). 사업자등록증
-   같은 첨부 이미지나 등급변경일/팝업표시 같은 내부 메타데이터, 오더메모/
-   기사전달주의사항 같은 안내성 필드는 빼고 실제 입력 정보만 내보낸다.
+   구글시트로 전송 — 관리자용.
+   사용자 요청: "컬럼명은 지금 프로그램에 있는거 그대로 전송이 되어야해
+   내가 설정하는게 아니라" — 그래서 오더 백필처럼 시트에 미리 있는
+   헤더를 찾는 게 아니라, 프로그램 화면(거래처관리 목록)이 실제로 쓰는
+   컬럼명과 순서를 코드에 그대로 옮겨적어두고, 실행할 때마다 이 헤더를
+   포함해 시트에 통째로 다시 쓴다. 아래 컬럼 목록은 src/DispatchApp.jsx의
+   ClientManagement 목록 테이블 헤더(<th>)와 정확히 동일하게 맞춘 것 —
+   화면에서 컬럼이 추가/변경되면 이 목록도 같이 고쳐야 함.
+   사용자 요청대로 제외한 것: 기본거래처는 등급/안내사항, 하차지거래처는
+   등급/안내사항/삭제(삭제는 화면 전용 버튼이라 애초에 데이터 아님).
+   "안내사항"은 기사전달주의사항 필드, "일반메모"는 메모 필드를 가리킨다
+   (화면 헤더 텍스트와 Firestore 필드명이 다른 지점).
 ------------------------------------------------------------------ */
-const GSHEET_CLIENT_FIELD_CANDIDATES = {
-  거래처명: ["거래처명"],
-  사업자번호: ["사업자번호", "사업자등록번호"],
-  대표자: ["대표자"],
-  업태: ["업태"],
-  종목: ["종목"],
-  주소: ["주소"],
-  담당자: ["담당자"],
-  연락처: ["연락처", "전화번호"],
-  이메일: ["이메일"],
-  메모: ["메모"],
-  등급: ["등급"],
-  점심시작시간: ["점심시작시간"],
-  점심종료시간: ["점심종료시간"],
-};
-const GSHEET_PLACE_FIELD_CANDIDATES = {
-  업체명: ["업체명"],
-  주소: ["주소"],
-  담당자: ["담당자"],
-  담당자번호: ["담당자번호", "연락처", "전화번호"],
-  등급: ["등급"],
-  메모: ["메모"],
-  점심시작시간: ["점심시작시간"],
-  점심종료시간: ["점심종료시간"],
-};
+const GSHEET_CLIENT_COLUMNS = [
+  { field: "거래처명", header: "거래처명" },
+  { field: "사업자번호", header: "사업자번호" },
+  { field: "대표자", header: "대표자" },
+  { field: "업태", header: "업태" },
+  { field: "종목", header: "종목" },
+  { field: "주소", header: "주소" },
+  { field: "담당자", header: "담당자" },
+  { field: "연락처", header: "연락처" },
+  { field: "이메일", header: "이메일" },
+  { field: "메모", header: "일반메모" },
+  { field: "오더메모", header: "오더메모" },
+];
+const GSHEET_PLACE_COLUMNS = [
+  { field: "업체명", header: "업체명" },
+  { field: "주소", header: "주소" },
+  { field: "담당자", header: "담당자" },
+  { field: "담당자번호", header: "담당자번호" },
+  { field: "메모", header: "일반메모" },
+  { field: "오더메모", header: "오더메모" },
+];
 // 담당자가 여러 명(contacts 배열)이면 그 중 대표(주 담당자)만 뽑는다 — 화면
 // 목록에 보여주는 것과 동일한 방식.
 function gsheetPrimaryContact(d) {
   if (!Array.isArray(d?.contacts) || !d.contacts.length) return null;
   return d.contacts.find((c) => c?.isPrimary) || d.contacts[0];
 }
-function buildGsheetClientFieldValues(d) {
+function buildGsheetClientRow(d) {
   const primary = gsheetPrimaryContact(d);
   return {
     거래처명: d["거래처명"] || "",
@@ -691,22 +695,18 @@ function buildGsheetClientFieldValues(d) {
     연락처: primary?.phone || d["연락처"] || "",
     이메일: d["이메일"] || "",
     메모: d["메모"] || "",
-    등급: d["등급"] || "",
-    점심시작시간: d["점심시작시간"] || "",
-    점심종료시간: d["점심종료시간"] || "",
+    오더메모: d["오더메모"] || "",
   };
 }
-function buildGsheetPlaceFieldValues(d) {
+function buildGsheetPlaceRow(d) {
   const primary = gsheetPrimaryContact(d);
   return {
     업체명: d["업체명"] || "",
     주소: d["주소"] || "",
     담당자: primary?.name || d["담당자"] || "",
     담당자번호: primary?.phone || d["담당자번호"] || "",
-    등급: d["등급"] || "",
     메모: d["메모"] || "",
-    점심시작시간: d["점심시작시간"] || "",
-    점심종료시간: d["점심종료시간"] || "",
+    오더메모: d["오더메모"] || "",
   };
 }
 
@@ -1527,22 +1527,28 @@ exports.backfillGsheetMonth = functions
    📇 (1회성/반복 가능) 기본거래처(clients)/하차지거래처(places)를
    구글시트로 일괄 반영 — 관리자용.
    ----------------------------------------------------------------
-   사용자가 미리 만들어둔 "기본거래처관리"/"하차지거래처관리" 탭에, 그
-   탭의 실제 헤더 텍스트로 열 위치를 찾아 프로그램에 등록된 정보 그대로
-   채운다(사업자등록증 같은 첨부 이미지, 등급변경일/팝업표시 같은 내부
-   메타데이터, 오더메모/기사전달주의사항 같은 안내성 필드는 제외).
-   오더 백필과 마찬가지로 실행할 때마다 그 탭의 기존 데이터 행을 비우고
-   지금 프로그램에 있는 그대로 다시 채우므로, 여러 번 실행해도 결과는
-   항상 지금 프로그램 상태로 수렴한다. 테두리 등 서식이 깨지지 않도록
-   위와 동일한 방식(맨 끝에서 서식을 이어받아 행을 늘리는 방식)을 쓴다.
+   사용자 요청: "컬럼명은 지금 프로그램에 있는거 그대로 전송이 되어야해
+   내가 설정하는게 아니라" — 그래서 시트에 미리 헤더를 만들어둘 필요가
+   없다. "기본거래처관리"/"하차지거래처관리" 탭이 없으면 새로 만들고,
+   실행할 때마다 GSHEET_CLIENT_COLUMNS/GSHEET_PLACE_COLUMNS 순서 그대로
+   헤더 행부터 다시 써서 컬럼명까지 프로그램과 항상 똑같이 맞춘다. 값
+   내용도 매번 그 탭 전체를 비우고 지금 프로그램에 있는 그대로 다시
+   채우므로, 여러 번 실행해도 결과는 항상 지금 프로그램 상태로 수렴한다.
+   테두리 등 서식은 값만 지우는 values:clear로 보존한다(행 자체를
+   지우고 다시 만들지 않음).
 
    호출: https://.../backfillGsheetClients?key=<GSHEET_BACKFILL_KEY>
 ================================================================== */
-async function backfillGsheetClientTab({ tabName, collectionName, candidatesMap, buildFieldValues, sortField }) {
-  const sheets = await getGsheetSheetList();
-  const sheet = sheets.find((s) => s.title === tabName);
+async function backfillGsheetClientTab({ tabName, collectionName, columns, buildRow, sortField }) {
+  let sheets = await getGsheetSheetList();
+  let sheet = sheets.find((s) => s.title === tabName);
   if (!sheet) {
-    return { ok: false, message: `탭 "${tabName}"을 찾을 수 없습니다 — 먼저 그 이름으로 탭을 만들고 헤더를 넣어주세요.` };
+    // 탭이 아예 없으면 새로 만든다 — 헤더도 아래에서 프로그램이 직접 써주므로
+    // 사용자가 미리 이름 말고는 아무것도 준비할 필요가 없다.
+    const created = await gsheetApi("POST", ":batchUpdate", {
+      data: { requests: [{ addSheet: { properties: { title: tabName } } }] },
+    });
+    sheet = created.replies[0].addSheet.properties;
   }
 
   const snap = await db.collection(collectionName).get();
@@ -1555,54 +1561,24 @@ async function backfillGsheetClientTab({ tabName, collectionName, candidatesMap,
   items.sort((a, b) => String(a[sortField] || "").localeCompare(String(b[sortField] || ""), "ko"));
 
   return await withGsheetTabLock(tabName, async () => {
-    // 기존 데이터 행을 최대한 비운다(서식 있는 마지막 한 줄만 남김) — 오더 백필의
-    // clearGsheetDataRows와 동일한 이유/방식. 여기는 배차상태 수식이 없는 탭이라
-    // tabName 인자를 안 넘겨 재심기 로직은 건너뛴다.
-    await clearGsheetDataRows(sheet.sheetId, sheet.gridProperties?.rowCount || 1);
+    // 값만 지운다(서식/테두리는 그대로 유지) — 행 개수가 고정 소수라 오더 탭처럼
+    // deleteDimension/insertDimension으로 구조를 건드릴 필요가 없다.
+    await gsheetApi("POST", `/values/${encodeURIComponent(quoteTab(tabName))}:clear`, { data: {} });
 
-    const colMap = await getGsheetColumnMapFor(tabName, candidatesMap, "client:");
-    if (!Object.keys(colMap).length) {
-      return { ok: false, message: `탭 "${tabName}"의 1행(헤더)에서 알아볼 수 있는 컬럼명을 하나도 못 찾았습니다 — 헤더 텍스트를 확인해주세요.` };
-    }
-
-    if (!items.length) {
-      return { ok: true, message: `탭 "${tabName}" — 대상 0건(등록된 데이터 없음), 헤더만 남기고 비웠습니다.` };
-    }
-
-    const finalRow = items.length + 1; // 2행부터 시작
-    const sheets2 = await getGsheetSheetList();
-    const freshSheet = sheets2.find((s) => s.title === tabName);
-    const rowCount = freshSheet.gridProperties?.rowCount || 1;
-    if (finalRow > rowCount) {
-      await gsheetApi("POST", ":batchUpdate", {
-        data: {
-          requests: [
-            { insertDimension: { range: { sheetId: sheet.sheetId, dimension: "ROWS", startIndex: rowCount, endIndex: finalRow }, inheritFromBefore: true } },
-          ],
-        },
-      });
-    }
-
-    const rangesData = [];
-    items.forEach((data, i) => {
-      const row = i + 2;
-      for (const [field, value] of Object.entries(buildFieldValues(data))) {
-        const col = colMap[field];
-        if (!col) continue;
-        rangesData.push({ range: `${quoteTab(tabName)}!${col}${row}`, values: [[value]] });
-      }
+    const headerRow = columns.map((c) => c.header);
+    const dataRows = items.map((data) => {
+      const row = buildRow(data);
+      return columns.map((c) => row[c.field] ?? "");
     });
 
-    // 값쓰기도 오더 백필과 동일하게 청크로 나눠 보낸다(분당 쓰기 한도 안전).
-    const CHUNK_SIZE = 400; // 필드 수가 적어(행당 8~13칸) 오더 백필보다 청크를 넉넉히 잡아도 안전
-    for (let i = 0; i < rangesData.length; i += CHUNK_SIZE) {
-      await gsheetApi("POST", "/values:batchUpdate", {
-        data: { valueInputOption: "USER_ENTERED", data: rangesData.slice(i, i + CHUNK_SIZE) },
-      });
-      if (i + CHUNK_SIZE < rangesData.length) await sleep(1200);
-    }
+    await gsheetApi("POST", "/values:batchUpdate", {
+      data: {
+        valueInputOption: "USER_ENTERED",
+        data: [{ range: `${quoteTab(tabName)}!A1`, values: [headerRow, ...dataRows] }],
+      },
+    });
 
-    return { ok: true, message: `탭 "${tabName}" — ${items.length}건 반영 완료.` };
+    return { ok: true, message: `탭 "${tabName}" — ${items.length}건 반영 완료(컬럼: ${headerRow.join(", ")}).` };
   });
 }
 
@@ -1619,15 +1595,15 @@ exports.backfillGsheetClients = functions
       results.push(await backfillGsheetClientTab({
         tabName: "기본거래처관리",
         collectionName: "clients",
-        candidatesMap: GSHEET_CLIENT_FIELD_CANDIDATES,
-        buildFieldValues: buildGsheetClientFieldValues,
+        columns: GSHEET_CLIENT_COLUMNS,
+        buildRow: buildGsheetClientRow,
         sortField: "거래처명",
       }));
       results.push(await backfillGsheetClientTab({
         tabName: "하차지거래처관리",
         collectionName: "places",
-        candidatesMap: GSHEET_PLACE_FIELD_CANDIDATES,
-        buildFieldValues: buildGsheetPlaceFieldValues,
+        columns: GSHEET_PLACE_COLUMNS,
+        buildRow: buildGsheetPlaceRow,
         sortField: "업체명",
       }));
       res.status(200).send(results.map((r) => r.message).join("\n"));
