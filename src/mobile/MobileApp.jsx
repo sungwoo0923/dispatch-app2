@@ -1842,11 +1842,6 @@ useEffect(() => {
   alarmEnabledRef.current = alarmEnabled;
 }, [alarmEnabled]);
 
-// 🔔 toastMuted → ref 동기화
-useEffect(() => {
-  toastMutedRef.current = toastMuted;
-}, [toastMuted]);
-
 // 🔔 알림 권한 요청 (최초 1회)
 useEffect(() => {
   if (typeof Notification !== "undefined" && Notification.permission === "default") {
@@ -1932,6 +1927,10 @@ const quickRange = (days) => {
 
   const [toast, setToast] = useState("");
   const [toastMuted, setToastMuted] = useState(false);
+  // 🔔 toastMuted → ref 동기화
+  useEffect(() => {
+    toastMutedRef.current = toastMuted;
+  }, [toastMuted]);
   const [topOrderBanner, setTopOrderBanner] = useState(null); // { text }
   const showTopOrderBanner = (text) => {
     setTopOrderBanner({ text });
