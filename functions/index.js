@@ -976,9 +976,9 @@ exports.backfillGsheetMonth = functions
             rowCount = finalRow;
           }
 
-          const CHUNK_SIZE = 25; // 오더 25건씩 묶어서 한 번의 batchUpdate로 값을 쓴다
-          for (let i = 0; i < plan.length; i += CHUNK_SIZE) {
-            const chunk = plan.slice(i, i + CHUNK_SIZE);
+          // 청크 하나(오더 여러 건)를 한 번의 batchUpdate로 쓰고, 성공/실패한 원소를
+          // 그대로 돌려준다 — 아래에서 실패분만 다시 돌리는 재시도 라운드에 재사용한다.
+          const writeChunk = async (chunk) => {
             const rangesData = [];
             chunk.forEach(({ row, data }) => {
               rangesData.push(
@@ -1000,13 +1000,33 @@ exports.backfillGsheetMonth = functions
                 chunk.slice(j, j + 500).forEach(({ docId, row }) => fsBatch.update(db.doc(docId), { _gsheetSync: { tab: tabName, row } }));
                 await fsBatch.commit().catch((e) => console.warn("_gsheetSync 일괄 기록 실패(무시):", e?.message || e));
               }
+              return [];
             } catch (e) {
-              failed += chunk.length;
-              chunk.forEach(({ docId }) => failedIds.push(docId));
               console.error(`백필 청크 실패(행 ${chunk[0].row}~${chunk[chunk.length - 1].row}):`, e?.message || e);
+              return chunk; // 실패한 원소 그대로 반환 — 재시도 라운드에서 다시 씀
             }
-            if (i + CHUNK_SIZE < plan.length) await sleep(1500); // 분당 쓰기 한도(60회)에 안전하게 걸치도록 청크 사이 텀
+          };
+
+          const CHUNK_SIZE = 25; // 오더 25건씩 묶어서 한 번의 batchUpdate로 값을 쓴다
+          let pending = plan;
+          // ⭐ 요청하신 "안 된 것만 골라서 다시 보내기"를 매번 수동으로 확인 안 해도
+          // 되도록, 실패한 청크는 자동으로 최대 2번 더 재시도한다(청크 하나가 어쩌다
+          // 일시적 오류로 실패해도 전체가 누락되지 않게).
+          for (let round = 0; round < 3 && pending.length; round++) {
+            if (round > 0) {
+              console.log(`백필 재시도 라운드 ${round} — 대상 ${pending.length}건`);
+              await sleep(3000);
+            }
+            const stillFailed = [];
+            for (let i = 0; i < pending.length; i += CHUNK_SIZE) {
+              const chunk = pending.slice(i, i + CHUNK_SIZE);
+              stillFailed.push(...(await writeChunk(chunk)));
+              if (i + CHUNK_SIZE < pending.length) await sleep(1500); // 분당 쓰기 한도(60회)에 안전하게 걸치도록 청크 사이 텀
+            }
+            pending = stillFailed;
           }
+          failed += pending.length;
+          pending.forEach(({ docId }) => failedIds.push(docId));
 
           // 신규 기사(차량번호 기준)를 전부 모아 "고유값" 탭에 한 번에 등록.
           try {
@@ -1038,8 +1058,20 @@ exports.backfillGsheetMonth = functions
         });
       }
 
+      // ⭐ "정말 다 들어갔는지" 결과 문구만 믿지 말고, 시트를 다시 읽어서 실제로 몇
+      // 행이 채워졌는지 직접 세어 보여준다 — created 숫자와 실제 시트 상태가 어긋나면
+      // (예: 위 재시도로도 못 넘긴 경우) 여기서 바로 드러난다.
+      let actualRowCount = null;
+      try {
+        const verifySnap = await gsheetApi("GET", `/values/${encodeURIComponent(`${quoteTab(tabName)}!B2:B2000`)}`);
+        actualRowCount = (verifySnap.values || []).filter((r) => String(r?.[0] || "").trim()).length;
+      } catch (e) {
+        console.warn("백필 결과 검증용 재조회 실패(무시):", e?.message || e);
+      }
+
       res.status(200).send(
         `완료 — 탭 "${tabName}" 초기화 후 반영 ${created}건, 배차취소(제외) ${canceled}건, 실패 ${failed}건 (대상 ${items.length}건)` +
+        (actualRowCount !== null ? `\n검증: 시트에 실제로 채워진 행 ${actualRowCount}개` : "") +
         (failedIds.length ? `\n실패 목록(최대 20건): ${failedIds.slice(0, 20).join(", ")}` : "")
       );
     } catch (e) {
