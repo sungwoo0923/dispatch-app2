@@ -6,6 +6,49 @@ import ErrorBoundary from "./ErrorBoundary.jsx";
 import "./index.css";
 
 // --------------------------------------------------
+// ⭐ Firestore 로컬 저장공간(localStorage) 한도 초과 시 자동 복구
+// --------------------------------------------------
+// firebase.js는 이제 원래대로 persistentSingleTabManager를 쓰지만, 혹시라도
+// 다른 이유(브라우저 저장공간이 다른 사이트/오래된 캐시로 이미 꽉 찬 경우 등)로
+// 이 오류가 다시 나면 ErrorBoundary가 잡는 "렌더링 중 오류"가 아니라 처리 안 된
+// Promise 거부(unhandledrejection)라 화면이 그냥 먹통이 되고 사용자는 원인도 모른
+// 채 "캐시 초기화" 메뉴를 직접 찾아 눌러야 했다. 이 특정 오류 신호(localStorage
+// 용량 초과 → Firestore 내부 상태 깨짐)를 감지하면, 안내 없이 로컬 저장공간을
+// 자동으로 비우고 딱 한 번만 새로고침한다(sessionStorage 플래그로 무한 새로고침
+// 방지 — 그래도 안 되면 사용자가 알아차릴 수 있게 반복하지 않고 그대로 둠).
+(function setupFirestoreQuotaRecovery() {
+  const RELOAD_GUARD_KEY = "__firestoreQuotaRecoveryReloaded";
+  const isQuotaOrFirestoreCorruption = (msg) =>
+    /QuotaExceededError/i.test(msg) || (/FIRESTORE/.test(msg) && /INTERNAL ASSERTION FAILED/i.test(msg));
+
+  async function recoverAndReload() {
+    if (sessionStorage.getItem(RELOAD_GUARD_KEY)) return; // 이미 한 번 시도했으면 반복 안 함
+    sessionStorage.setItem(RELOAD_GUARD_KEY, "1");
+    console.warn("[APP] Firestore 로컬 저장공간 문제 감지 — 캐시 정리 후 새로고침합니다.");
+    try { localStorage.clear(); } catch {}
+    try {
+      if (indexedDB.databases) {
+        const dbs = await indexedDB.databases();
+        await Promise.all(
+          (dbs || [])
+            .filter((d) => d?.name?.includes("firestore"))
+            .map((d) => new Promise((resolve) => {
+              const req = indexedDB.deleteDatabase(d.name);
+              req.onsuccess = req.onerror = req.onblocked = () => resolve();
+            }))
+        );
+      }
+    } catch {}
+    window.location.reload();
+  }
+
+  window.addEventListener("unhandledrejection", (event) => {
+    const msg = String(event?.reason?.message || event?.reason || "");
+    if (isQuotaOrFirestoreCorruption(msg)) recoverAndReload();
+  });
+})();
+
+// --------------------------------------------------
 // React Render
 // --------------------------------------------------
 // ⭐ ErrorBoundary로 전체를 감싼다 — 화면 어딘가에서 예상 못한 JS 오류가 나도

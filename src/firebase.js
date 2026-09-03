@@ -11,7 +11,7 @@ import {
   initializeFirestore,
   getFirestore,
   persistentLocalCache,
-  persistentMultipleTabManager,
+  persistentSingleTabManager,
   doc,
   updateDoc,
   getDoc,
@@ -49,17 +49,21 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
 // IndexedDB 영구 캐시 시도 → 실패 시 기본 메모리 캐시로 폴백.
-// ⭐ persistentSingleTabManager → persistentMultipleTabManager로 변경: 관리자 화면의
-// "모바일 미리보기"(같은 origin의 iframe으로 앱을 한 번 더 로드)를 열면, 같은
-// IndexedDB를 두고 기존 탭과 미리보기가 서로 독점 접근권을 다투다 미리보기 쪽이
-// "Failed to obtain exclusive access to persistence layer" 오류로 캐시 없이(메모리
-// 전용) 동작하던 문제가 있었다. 여러 탭/프레임이 동시에 열려도 서로 캐시를 공유하며
-// 정상 동작하게 한다.
+// ⭐ 한 라운드 persistentMultipleTabManager로 바꿔봤었는데(관리자 화면 "모바일
+// 미리보기" iframe이 캐시 독점권을 못 얻어 뜨던 경고를 없애려는 목적), 그게
+// 오히려 훨씬 심각한 사고를 냈다 — multiple-tab 모드는 탭 간 조율(리더 선출/변경
+// 알림)에 localStorage를 많이 쓰는데, 이 프로그램은 오더 등록/수정이 잦아 그
+// localStorage 용량 한도(수 MB)를 실제로 넘겨버렸다. 그 결과 "QuotaExceededError:
+// Failed to execute 'setItem' on 'Storage'"가 나면서 Firestore SDK 내부 상태가
+// 깨지고("FIRESTORE INTERNAL ASSERTION FAILED: Unexpected state") 화면 자체가
+// 정상적으로 안 뜨는 사고로 이어졌다(실사용 환경에서 재현 확인됨). "미리보기
+// 캐시 경고"는 미리보기가 메모리 캐시로 도는 것뿐인 경미한 문제였는데, 그걸 고치려다
+// 훨씬 큰 문제(전체 사용자 화면 크래시)를 만든 셈이라 원래 방식으로 되돌린다.
 function createDb() {
   try {
     return initializeFirestore(app, {
       localCache: persistentLocalCache({
-        tabManager: persistentMultipleTabManager(),
+        tabManager: persistentSingleTabManager({ forceOwnership: false }),
       }),
     });
   } catch {
