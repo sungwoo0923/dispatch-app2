@@ -712,6 +712,27 @@ function gsheetFormulaQR(row) {
   return [`=O${row}-P${row}`, `=SUM(Q${row}/O${row})`];
 }
 
+// dispatch 문서 하나를 이미 정해진 행(row)에 값+수식으로 쓴다 — 어디에 쓸지(행 번호)는
+// 이 함수가 판단하지 않는다(호출하는 쪽이 정함). 실시간 동기화와 백필(대량 처리) 양쪽이
+// 공유해서 쓴다.
+async function writeGsheetOrderRow(tabName, row, data) {
+  await gsheetApi("POST", "/values:batchUpdate", {
+    data: {
+      valueInputOption: "USER_ENTERED",
+      data: [
+        { range: `${quoteTab(tabName)}!B${row}:J${row}`, values: [buildGsheetRowBJ(data)] },
+        { range: `${quoteTab(tabName)}!L${row}`, values: [[data["차량번호"] || ""]] },
+        { range: `${quoteTab(tabName)}!M${row}:N${row}`, values: [gsheetFormulaMN(row)] },
+        { range: `${quoteTab(tabName)}!O${row}:P${row}`, values: [buildGsheetRowOP(data)] },
+        { range: `${quoteTab(tabName)}!Q${row}:R${row}`, values: [gsheetFormulaQR(row)] },
+        { range: `${quoteTab(tabName)}!S${row}:T${row}`, values: [buildGsheetRowST(data)] },
+        { range: `${quoteTab(tabName)}!V${row}`, values: [[data["메모"] || ""]] },
+        { range: `${quoteTab(tabName)}!A${row}`, values: [["=ROW()-1"]] },
+      ],
+    },
+  });
+}
+
 async function syncOneDispatchToGsheet(docId, data) {
   if (!data) return;
   if ((data.companyName || "") !== GSHEET_TARGET_COMPANY) return;
@@ -781,24 +802,7 @@ async function syncOneDispatchToGsheet(docId, data) {
     // 시간이 함수 제한시간(9분)을 넘기지 않게 하기 위해 왕복을 최대한 줄인다).
     await ensureGsheetRowsUpTo(sheetProps.sheetId, sheetProps.gridProperties?.rowCount || 1, r);
 
-    // 값/수식 쓰기를 한 번의 batchUpdate로 묶는다(예전엔 PUT 7번을 따로 보냈는데,
-    // 오더 수가 많을 때(백필) 왕복이 너무 많아 함수 제한시간을 넘기고 중간에 끊기는
-    // 사고가 있었다).
-    await gsheetApi("POST", "/values:batchUpdate", {
-      data: {
-        valueInputOption: "USER_ENTERED",
-        data: [
-          { range: `${quoteTab(tabName)}!B${r}:J${r}`, values: [buildGsheetRowBJ(data)] },
-          { range: `${quoteTab(tabName)}!L${r}`, values: [[data["차량번호"] || ""]] },
-          { range: `${quoteTab(tabName)}!M${r}:N${r}`, values: [gsheetFormulaMN(r)] },
-          { range: `${quoteTab(tabName)}!O${r}:P${r}`, values: [buildGsheetRowOP(data)] },
-          { range: `${quoteTab(tabName)}!Q${r}:R${r}`, values: [gsheetFormulaQR(r)] },
-          { range: `${quoteTab(tabName)}!S${r}:T${r}`, values: [buildGsheetRowST(data)] },
-          { range: `${quoteTab(tabName)}!V${r}`, values: [[data["메모"] || ""]] },
-          { range: `${quoteTab(tabName)}!A${r}`, values: [["=ROW()-1"]] },
-        ],
-      },
-    });
+    await writeGsheetOrderRow(tabName, r, data);
 
     // 다음 오더를 위해 서식 이어받은 빈 버퍼 행을 하나 더 마련해둔다(항상 맨 끝에
     // 빈 줄 하나가 대기하고 있도록 유지) — 방금 쓴 행(r)이 곧 현재 rowCount다.
@@ -919,19 +923,67 @@ exports.backfillGsheetMonth = functions
         return (Number(a.data["순번"]) || 0) - (Number(b.data["순번"]) || 0);
       });
 
-      let created = 0, canceled = 0, failed = 0;
+      // ⭐ 실제로 149건 백필 도중 같은 행(예: 44행)이 계속 다른 오더로 덮어써지고
+      // 9/2 하루치가 통째로 건너뛰는 사고가 있었다 — 원인은 syncOneDispatchToGsheet를
+      // 오더마다 그대로 호출하면 매번 findGsheetInsertPosition이 시트를 다시 읽어서
+      // "지금 어디까지 있나"를 판단하는데, 구글시트 API가 방금 막 쓴 값을 곧바로
+      // 반영해서 돌려준다는 보장이 없어(쓰기 직후 읽기 지연) 방금 쓴 행이 아직 안
+      // 보이는 상태로 다음 오더가 같은 행을 또 targetting 했던 것. 백필은 한 프로세스
+      // 안에서 순서대로 도는 루프이므로, 시트를 다시 읽지 않고 지금까지 쓴 행/날짜를
+      // 메모리에서 직접 추적한다 — 이러면 그 지연 문제 자체가 성립하지 않는다.
+      const toWrite = items.filter(({ data }) => data["배차상태"] !== "배차취소");
+      let created = 0;
+      const canceled = items.length - toWrite.length;
+      let failed = 0;
       const failedIds = [];
-      for (const { docId, data } of items) {
-        if (data["배차상태"] === "배차취소") { canceled++; continue; } // 취소된 오더는 시트에 안 올림
-        try {
-          await syncOneDispatchToGsheet(docId, data);
-          created++;
-        } catch (e) {
-          failed++;
-          failedIds.push(docId);
-          console.error(`백필 실패 ${docId}:`, e?.message || e);
-        }
-        await sleep(120); // 요청 제한(429)에 걸리지 않도록 오더 사이에 살짝 텀을 둔다(batchUpdate로 오더당 호출 수를 줄여서 짧게 잡아도 됨)
+
+      if (toWrite.length) {
+        await withGsheetTabLock(tabName, async () => {
+          const sheetProps = (await getGsheetSheetList()).find((s) => s.title === tabName);
+          if (!sheetProps) throw new Error(`탭을 찾을 수 없습니다: ${tabName}`);
+          const sheetId = sheetProps.sheetId;
+          let rowCount = sheetProps.gridProperties?.rowCount || 1;
+          let lastRow = 1; // 1=헤더뿐(진짜 데이터 아직 없음) sentinel
+          let lastDate = null;
+
+          for (const { docId, data } of toWrite) {
+            const thisDate = String(data["상차일"] || "").trim();
+            const row = lastRow === 1 ? 2 : (lastDate === thisDate ? lastRow + 1 : lastRow + 2);
+
+            while (rowCount < row) {
+              await appendGsheetBufferRow(sheetId, rowCount);
+              rowCount++;
+            }
+
+            try {
+              await writeGsheetOrderRow(tabName, row, data);
+            } catch (e) {
+              failed++;
+              failedIds.push(docId);
+              console.error(`백필 실패(시트쓰기) ${docId}:`, e?.message || e);
+              await sleep(120);
+              continue; // 이 행엔 아직 아무것도 안 쓰였으니, 다음 오더가 같은 행을 다시 시도한다
+            }
+            lastRow = row;
+            lastDate = thisDate;
+            created++;
+
+            try {
+              await ensureDriverInGsheetUniqueTab(data["차량번호"], data["이름"], data["전화번호"]);
+            } catch (e) {
+              console.warn(`고유값 등록 실패(무시) ${docId}:`, e?.message || e);
+            }
+            try {
+              await db.doc(docId).update({ _gsheetSync: { tab: tabName, row } });
+            } catch (e) {
+              console.warn(`_gsheetSync 기록 실패(무시) ${docId}:`, e?.message || e);
+            }
+
+            await sleep(120); // 요청 제한(429)에 걸리지 않도록 오더 사이에 살짝 텀을 둔다
+          }
+
+          if (rowCount <= lastRow) await appendGsheetBufferRow(sheetId, rowCount); // 다음 실시간 등록을 위한 버퍼 행 보충
+        });
       }
 
       res.status(200).send(
