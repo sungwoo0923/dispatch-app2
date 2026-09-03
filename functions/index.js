@@ -392,6 +392,11 @@ const GSHEET_TARGET_COMPANY = "돌캐";
 // "차량번호로 기사명/전화번호 자동매칭"에 쓰이는 기준표 시트 이름(A:기사명, B:차량정보(차량번호), C:전화번호, D:비고).
 const GSHEET_UNIQUE_TAB = "고유값";
 
+// ⭐ 프로그램 화면(DispatchApp.jsx의 dispatchData 합성 로직)이 취소된 오더를 걸러낼 때
+// 쓰는 것과 동일한 기준 — 배차상태뿐 아니라 상태(화주사 취소 등)로만 표시되는 취소도
+// 함께 잡아야 화면과 시트의 "취소 제외" 기준이 일치한다.
+const GSHEET_CANCELED_STATUS_LIST = ["취소", "배차취소", "오더취소", "취소됨"];
+
 const GSHEET_SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
 let _gsheetAuthClient = null;
 async function getGsheetAuthClient() {
@@ -493,7 +498,13 @@ async function getGsheetSheetList() {
 // "고정(freeze)되지 않은 행을 100% 다 지우는" 걸 허용하지 않아서(이 시트는 1행이
 // 고정돼있음) 마지막 한 줄은 남겨두고 그 앞까지만 지운다 — 남는 한 줄은 어차피 빈
 // placeholder 줄이라 문제 없다.
-async function clearGsheetDataRows(sheetId, rowCount) {
+// ⭐ K열(배차상태)은 K2 셀 하나에만 있는 =ARRAYFORMULA(...)가 그 아래 전체를 자동으로
+// 채우는 구조라(A2:A 전체 참조라 몇 행이 새로 생기든 자동으로 따라간다), 이 함수가 항상
+// 지우는 2행(row index 1)이 하필 그 수식이 들어있는 셀이다 — 지우고 나면 배차상태 칸
+// 전체가 그냥 빈 칸이 돼버리는 사고가 있었다. tabName을 넘겨주면 지운 직후 K2에 그
+// 수식을 다시 심어서 복구한다.
+const GSHEET_STATUS_FORMULA = '=ARRAYFORMULA(IF(A2:A="","",IF(L2:L<>"","배차완료","배차중")))';
+async function clearGsheetDataRows(sheetId, rowCount, tabName) {
   const endIndex = rowCount - 1;
   if (endIndex <= 1) return; // 지울 데이터 행이 사실상 없음
   await gsheetApi("POST", ":batchUpdate", {
@@ -503,6 +514,14 @@ async function clearGsheetDataRows(sheetId, rowCount) {
       ],
     },
   });
+  if (tabName) {
+    await gsheetApi("POST", "/values:batchUpdate", {
+      data: {
+        valueInputOption: "USER_ENTERED",
+        data: [{ range: `${quoteTab(tabName)}!K2`, values: [[GSHEET_STATUS_FORMULA]] }],
+      },
+    });
+  }
 }
 
 // 대상 월 탭이 없으면, 가장 최근 월 탭을 복제해서(서식/함수 그대로 유지) 만들고
@@ -535,7 +554,7 @@ async function ensureGsheetMonthTab(tabName) {
   const newProps = dup.replies[0].duplicateSheet.properties;
 
   // 복제된 탭에서 1행(헤더)만 남기고 나머지 데이터 행은 최대한 삭제한다.
-  await clearGsheetDataRows(newProps.sheetId, newProps.gridProperties?.rowCount || 1);
+  await clearGsheetDataRows(newProps.sheetId, newProps.gridProperties?.rowCount || 1, tabName);
   return newProps;
 }
 
@@ -612,6 +631,18 @@ async function removeGsheetRow(tabName, row) {
         ],
       },
     });
+
+    // ⭐ 이 달의 첫 동기화 오더(2행)가 지워지는 경우, K2에 있던 배차상태 ARRAYFORMULA
+    // 소스 셀 자체가 같이 삭제된다 — clearGsheetDataRows와 동일한 이유로 매번 재심는다
+    // (2행이 아닐 때는 그냥 같은 값을 덮어쓰는 것뿐이라 부작용 없음).
+    if (row === 2) {
+      await gsheetApi("POST", "/values:batchUpdate", {
+        data: {
+          valueInputOption: "USER_ENTERED",
+          data: [{ range: `${quoteTab(tabName)}!K2`, values: [[GSHEET_STATUS_FORMULA]] }],
+        },
+      });
+    }
 
     for (const col of ["orders", "dispatch"]) {
       let snap;
@@ -711,6 +742,13 @@ function gsheetFormulaMN(row) {
 function gsheetFormulaQR(row) {
   return [`=O${row}-P${row}`, `=SUM(Q${row}/O${row})`];
 }
+// A(순번) — 예전엔 그냥 "=ROW()-1"(시트 전체 기준 절대 행번호)이었는데, 날짜가 바뀌면
+// 1부터 다시 시작하길 원해서 COUNTIF로 "이 행까지 B열(상차일)에 같은 날짜가 몇 번
+// 나왔나"를 센다 — 날짜 블록 사이에 넣는 빈 구분줄은 B가 비어있어 카운트에 안 잡히고,
+// 날짜가 바뀌면 그 값도 바뀌므로 새 날짜에서 자연스럽게 1부터 다시 시작한다.
+function gsheetFormulaA(row) {
+  return `=IF(B${row}="","",COUNTIF($B$2:B${row},B${row}))`;
+}
 
 // dispatch 문서 하나를 이미 정해진 행(row)에 값+수식으로 쓴다 — 어디에 쓸지(행 번호)는
 // 이 함수가 판단하지 않는다(호출하는 쪽이 정함). 실시간 동기화와 백필(대량 처리) 양쪽이
@@ -727,7 +765,7 @@ async function writeGsheetOrderRow(tabName, row, data) {
         { range: `${quoteTab(tabName)}!Q${row}:R${row}`, values: [gsheetFormulaQR(row)] },
         { range: `${quoteTab(tabName)}!S${row}:T${row}`, values: [buildGsheetRowST(data)] },
         { range: `${quoteTab(tabName)}!V${row}`, values: [[data["메모"] || ""]] },
-        { range: `${quoteTab(tabName)}!A${row}`, values: [["=ROW()-1"]] },
+        { range: `${quoteTab(tabName)}!A${row}`, values: [[gsheetFormulaA(row)]] },
       ],
     },
   });
@@ -741,11 +779,19 @@ async function syncOneDispatchToGsheet(docId, data) {
   // 이미 만들어진 문서나 다른 경로로 생성된 문서를 위한 안전장치.)
   if ((data.companyName || "돌캐") !== GSHEET_TARGET_COMPANY) return;
 
+  // ⭐ 화주사 전송 사본(source==="transport_transmit")은 운송사가 오더를 화주사에게
+  // 보낼 때 "orders" 컬렉션에 자동으로 만들어지는, 원본(dispatch)과 동일한 오더를
+  // 가리키는 화주사 화면 전용 미러다. 화면(DispatchApp.jsx)도 dispatchData 합성 시
+  // 이 사본을 제외하는데, 여기서 걸러내지 않으면 원본과 이 사본이 둘 다 시트에
+  // 올라가 오더 하나가 행 두 개로 중복된다.
+  if (data.source === "transport_transmit") return;
+
   // 배차취소(앱의 "삭제"는 실제 문서삭제가 아니라 배차상태를 배차취소로 바꾸는
   // 소프트삭제라 여기로 update가 들어온다) — 이미 시트에 올라간 행이 있으면 그
   // 행 자체를 지운다. 취소되기 전에 한 번도 동기화된 적 없는 오더는 애초에 새로
-  // 만들지 않고 그냥 스킵(취소된 오더를 새로 시트에 올릴 이유가 없음).
-  if (data["배차상태"] === "배차취소") {
+  // 만들지 않고 그냥 스킵(취소된 오더를 새로 시트에 올릴 이유가 없음). 배차상태
+  // 외에 상태(화주사 취소 등)로만 취소가 표시되는 경우도 화면과 동일하게 포함.
+  if (data["배차상태"] === "배차취소" || GSHEET_CANCELED_STATUS_LIST.includes(data["상태"])) {
     if (data._gsheetSync) await removeOneDispatchFromGsheet(data, docId);
     return;
   }
@@ -890,7 +936,7 @@ exports.backfillGsheetMonth = functions
       // 통째로 다시 채우기 위해.
       const sheets = await getGsheetSheetList();
       const sheet = sheets.find((s) => s.title === tabName);
-      if (sheet) await clearGsheetDataRows(sheet.sheetId, sheet.gridProperties?.rowCount || 1);
+      if (sheet) await clearGsheetDataRows(sheet.sheetId, sheet.gridProperties?.rowCount || 1, tabName);
 
       // 이 탭을 가리키던 _gsheetSync 포인터는 방금 다 지운 행을 가리키므로 전부
       // 무효 — 클리어해서 아래 루프가 전부 "신규"로 다시 써넣게 한다.
@@ -921,6 +967,12 @@ exports.backfillGsheetMonth = functions
       // companyName으로 미리 거르지 않고 그 달 상차일 범위로만 조회한 뒤, 표시와
       // 동일한 (companyName || "돌캐") 폴백으로 메모리에서 걸러 다른 회사 오더가
       // 섞이지 않게 한다.
+      // ⭐ "orders" 컬렉션에는 화주사가 직접 등록한 오더뿐 아니라, 운송사가 dispatch의
+      // 오더를 화주사에게 전송할 때 자동 생성되는 사본(source==="transport_transmit")도
+      // 함께 들어있다 — 이 사본은 원본(dispatch)과 완전히 같은 오더를 가리키는 화주사
+      // 화면 전용 미러라서, 걸러내지 않으면 전송된 오더마다 시트에 행이 두 개씩 생긴다
+      // (화면(DispatchApp.jsx)도 dispatchData 합성 시 이 사본을 제외하는 것과 동일한
+      // 기준). 여기서 아예 items 단계에서 빼서 아래 순번/재고 계산에도 안 끼게 한다.
       const monthStart = `${monthPrefix}-01`;
       const monthEndExclusive = `${monthPrefix}~`; // "~"(0x7E)는 숫자/하이픈보다 뒤이므로 그 달 모든 날짜를 포함
       const items = [];
@@ -932,6 +984,7 @@ exports.backfillGsheetMonth = functions
           .get();
         snap.docs.forEach((d) => {
           const data = d.data();
+          if (data.source === "transport_transmit") return;
           if ((data.companyName || "돌캐") === GSHEET_TARGET_COMPANY) {
             items.push({ docId: `${col}/${d.id}`, data });
           }
@@ -951,7 +1004,11 @@ exports.backfillGsheetMonth = functions
       // 보이는 상태로 다음 오더가 같은 행을 또 targetting 했던 것. 백필은 한 프로세스
       // 안에서 순서대로 도는 루프이므로, 시트를 다시 읽지 않고 지금까지 쓴 행/날짜를
       // 메모리에서 직접 추적한다 — 이러면 그 지연 문제 자체가 성립하지 않는다.
-      const toWrite = items.filter(({ data }) => data["배차상태"] !== "배차취소");
+      // 배차상태 외에 상태(화주사가 취소한 경우 등)로만 취소가 표시되는 경우도
+      // 화면(DispatchApp.jsx)과 동일한 기준으로 함께 제외한다.
+      const toWrite = items.filter(
+        ({ data }) => data["배차상태"] !== "배차취소" && !GSHEET_CANCELED_STATUS_LIST.includes(data["상태"])
+      );
       let created = 0;
       const canceled = items.length - toWrite.length;
       let failed = 0;
@@ -1009,7 +1066,7 @@ exports.backfillGsheetMonth = functions
                 { range: `${quoteTab(tabName)}!Q${row}:R${row}`, values: [gsheetFormulaQR(row)] },
                 { range: `${quoteTab(tabName)}!S${row}:T${row}`, values: [buildGsheetRowST(data)] },
                 { range: `${quoteTab(tabName)}!V${row}`, values: [[data["메모"] || ""]] },
-                { range: `${quoteTab(tabName)}!A${row}`, values: [["=ROW()-1"]] },
+                { range: `${quoteTab(tabName)}!A${row}`, values: [[gsheetFormulaA(row)]] },
               );
             });
             try {
