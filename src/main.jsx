@@ -2,14 +2,20 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
+import ErrorBoundary from "./ErrorBoundary.jsx";
 import "./index.css";
 
 // --------------------------------------------------
 // React Render
 // --------------------------------------------------
+// ⭐ ErrorBoundary로 전체를 감싼다 — 화면 어딘가에서 예상 못한 JS 오류가 나도
+// 백지 화면 대신 "새로고침" 안내가 뜨게 하기 위함(특히 모바일에서 발생 시
+// 사용자가 복구할 방법이 전혀 없었음).
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>
 );
 

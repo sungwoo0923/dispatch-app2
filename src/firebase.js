@@ -11,7 +11,7 @@ import {
   initializeFirestore,
   getFirestore,
   persistentLocalCache,
-  persistentSingleTabManager,
+  persistentMultipleTabManager,
   doc,
   updateDoc,
   getDoc,
@@ -48,12 +48,18 @@ const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 
-// IndexedDB 영구 캐시 시도 → 실패 시 기본 메모리 캐시로 폴백
+// IndexedDB 영구 캐시 시도 → 실패 시 기본 메모리 캐시로 폴백.
+// ⭐ persistentSingleTabManager → persistentMultipleTabManager로 변경: 관리자 화면의
+// "모바일 미리보기"(같은 origin의 iframe으로 앱을 한 번 더 로드)를 열면, 같은
+// IndexedDB를 두고 기존 탭과 미리보기가 서로 독점 접근권을 다투다 미리보기 쪽이
+// "Failed to obtain exclusive access to persistence layer" 오류로 캐시 없이(메모리
+// 전용) 동작하던 문제가 있었다. 여러 탭/프레임이 동시에 열려도 서로 캐시를 공유하며
+// 정상 동작하게 한다.
 function createDb() {
   try {
     return initializeFirestore(app, {
       localCache: persistentLocalCache({
-        tabManager: persistentSingleTabManager({ forceOwnership: false }),
+        tabManager: persistentMultipleTabManager(),
       }),
     });
   } catch {

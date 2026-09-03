@@ -1720,8 +1720,10 @@ function GsheetBackfillPanel() {
 }
 
 // ⭐ 기본거래처(clients)/하차지거래처(places)를 구글시트로 전송 — "기본거래처관리"/
-// "하차지거래처관리" 탭은 미리 만들어져 있어야 한다(Cloud Function이 그 탭의 실제
-// 헤더 텍스트로 열 위치를 찾아 쓰므로, 탭 자체가 없으면 실패 메시지가 온다).
+// "하차지거래처관리" 탭은 미리 만들어둘 필요 없다(없으면 Cloud Function이 새로
+// 만든다). 컬럼명/순서는 화면(거래처관리 목록)에 있는 그대로 코드에 고정돼 있어서,
+// 실행할 때마다 헤더까지 항상 그 컬럼명으로 다시 써준다 — 사용자가 시트에 헤더를
+// 미리 넣어둘 필요가 없다.
 function GsheetClientBackfillPanel() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState("");
@@ -1747,9 +1749,9 @@ function GsheetClientBackfillPanel() {
       <div className="text-[14px] font-bold text-gray-800 mb-1">거래처 구글시트 전송</div>
       <p className="text-[12px] text-gray-500 mb-5 leading-relaxed">
         기본거래처/하차지거래처에 등록된 정보를 "기본거래처관리"/"하차지거래처관리" 탭에
-        한 번에 반영합니다. 두 탭 모두 미리 만들어두고 원하는 컬럼명으로 헤더를 넣어두면
-        그 헤더에 맞춰 값을 채웁니다. 여러 번 실행해도 결과는 항상 지금 프로그램에 있는
-        내용 그대로로 맞춰집니다.
+        한 번에 반영합니다. 탭이 없으면 새로 만들고, 컬럼명도 화면에 있는 그대로(제외:
+        기본거래처는 등급/안내사항, 하차지거래처는 등급/안내사항/삭제) 실행할 때마다
+        다시 써줍니다 — 컬럼명을 미리 준비할 필요 없이 그냥 실행만 하면 됩니다.
       </p>
       <button
         onClick={handleRun}

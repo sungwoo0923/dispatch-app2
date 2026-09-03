@@ -93,7 +93,10 @@ export default defineConfig({
     host: true,
   },
 
-  build: { outDir: "dist" },
+  // sourcemap: true — 배포 후에도 DevTools에서 실제 파일명/변수명으로 오류를 볼 수
+  // 있게 한다(지금까지는 꺼져 있어서 오류가 나도 index-xxxx.js:41:12345 같은 압축된
+  // 위치만 보였다). 사용자는 다운로드하지 않는 파일이라 로딩 속도에는 영향 없음.
+  build: { outDir: "dist", sourcemap: true },
 
   define: {
     __APP_VERSION__: JSON.stringify(getAppVersion()),
