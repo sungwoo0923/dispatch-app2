@@ -64,16 +64,35 @@ async function getTokensForType(type) {
 // 반드시 확인해 로그로 남기고, "이 토큰은 더 이상 유효하지 않다"는 응답이 온
 // 토큰은 users 문서에서 지워서 다음에 앱을 열 때 saveFcmToken()이 새 토큰으로
 // 자동 재등록하게 한다.
+// ⚠️ "messaging/invalid-argument"는 일부러 뺐다 — 토큰 자체가 아니라 메시지
+// 내용(페이로드 형식 등) 문제로도 뜰 수 있는 코드라, 여기 넣으면 멀쩡한 토큰을
+// 오진단으로 지워버릴 위험이 있다. 진짜 "이 토큰은 더 이상 못 쓴다"고 FCM이
+// 명확히 알려주는 코드만 남긴다.
 const STALE_FCM_TOKEN_ERROR_CODES = new Set([
   "messaging/registration-token-not-registered",
   "messaging/invalid-registration-token",
-  "messaging/invalid-argument",
 ]);
 async function sendPushAndCleanup(tokens, message, label) {
   if (!tokens.length) return undefined;
+  // ⭐ 안드로이드에서 같은 알림이 아이콘만 다르게 두 번(중복) 뜨던 문제의 실제 원인 —
+  // FCM 메시지에 notification 필드가 있으면, 앱이 백그라운드일 때 브라우저가 그 내용을
+  // "자기 마음대로"(기본 파비콘/알파벳 아이콘 등으로) 알아서 한 번 띄우고, 그와는 별개로
+  // 이 서비스워커의 onBackgroundMessage 핸들러도 똑같은 메시지를 받아 우리가 원하는
+  // 아이콘/진동으로 또 한 번 showNotification()을 호출한다 — 그래서 알림이 두 개(브라우저
+  // 기본 렌더링 + 우리 커스텀 렌더링) 뜨고, 그중 브라우저가 자체적으로 띄운 쪽은 우리
+  // 아이콘 설정을 안 타서 다른 모양으로 보인다. notification 필드를 아예 안 보내고
+  // data로만 보내면 브라우저의 자동 표시가 안 일어나고, 오직 우리 서비스워커 코드만
+  // showNotification()을 호출하게 되어 항상 하나만, 항상 같은 모양으로 뜬다
+  // (public/sw.js의 onBackgroundMessage는 이미 payload.data.title/body를 읽도록
+  // 돼있었다 — 이 데이터 전용 방식으로 가려던 것을 발송 쪽에서 안 맞춰주고 있었던 셈).
+  const { notification, ...restMessage } = message;
+  const data = { ...(message.data || {}) };
+  if (notification?.title) data.title = String(notification.title);
+  if (notification?.body) data.body = String(notification.body);
+  delete restMessage.data;
   let res;
   try {
-    res = await messaging.sendEachForMulticast({ tokens, ...message });
+    res = await messaging.sendEachForMulticast({ tokens, data, ...restMessage });
   } catch (e) {
     console.error(`🚫 ${label} 발송 자체 실패:`, e?.message || e);
     return undefined;

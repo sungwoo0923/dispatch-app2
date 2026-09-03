@@ -2035,8 +2035,11 @@ useEffect(() => {
       if (!alarmEnabledRef.current) return;
       if (toastMutedRef.current) return;
 
-      const title = payload.notification?.title || "";
-      const body = payload.notification?.body || "";
+      // ⭐ 서버가 이제 notification이 아니라 data로만 보낸다(안드로이드 중복 알림
+      // 버그 수정 — functions/index.js의 sendPushAndCleanup 주석 참고). 그래도
+      // 혹시 모를 다른 발송 경로를 위해 notification도 폴백으로 남겨둔다.
+      const title = payload.data?.title || payload.notification?.title || "";
+      const body = payload.data?.body || payload.notification?.body || "";
 
       if (!title && !body) return;
 
