@@ -7050,7 +7050,7 @@ return (
           <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
               <div>
-                <h3 className="text-white font-bold text-[16px]">오더 복사 / 수정 패널</h3>
+                <h3 className="text-white font-bold text-[16px]"><EditableText id="copyPanel.title" defaultText="오더 복사 / 수정 패널" /></h3>
                 <p className="text-white/50 text-[12px] mt-0.5">{homeClickedOrder.거래처명} · {homeClickedOrder.상차지명} → {homeClickedOrder.하차지명}</p>
               </div>
               <button onClick={() => setHomeClickedOrder(null)} className="text-white/60 hover:text-white text-xl transition">✕</button>
@@ -26839,7 +26839,7 @@ const head = isDark
   style={copyPanelStyle === "B" ? { cursor: "grab" } : undefined}
 >
   <div>
-    <h2 className="text-[18px] font-bold text-[#1B2B4B]">오더 복사 / 수정 패널</h2>
+    <h2 className="text-[18px] font-bold text-[#1B2B4B]"><EditableText id="copyPanel.title" defaultText="오더 복사 / 수정 패널" /></h2>
     <p className="text-[13px] text-gray-500 mt-0.5">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</p>
   </div>
   <div className="flex gap-2 items-center">
@@ -26859,7 +26859,7 @@ const head = isDark
         text-white shadow-md hover:shadow-lg
       "
     >
-      운임조회
+      <EditableText id="copyPanel.운임조회" defaultText="운임조회" />
     </button>
     {/* 수정 저장 */}
     <button
@@ -26924,7 +26924,7 @@ flashRow(savedId);
   }}
   className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-[13px] font-bold hover:bg-emerald-700 transition"
 >
-  수정 저장
+  <EditableText id="copyPanel.수정저장" defaultText="수정 저장" />
 </button>
 
 
@@ -26955,7 +26955,7 @@ flashRow(savedId);
   }}
   className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold hover:bg-[#243a60] transition"
 >
-  복사 등록
+  <EditableText id="copyPanel.복사등록" defaultText="복사 등록" />
 </button>
 
 
@@ -27006,7 +27006,7 @@ flashRow(savedId);
 </div>
 {/* ================= 거래처 정보 ================= */}
 <section className="bg-white rounded-xl border border-gray-200 shadow-sm">
-  <div className="bg-[#1B2B4B] px-6 py-3 rounded-t-xl"><h3 className="text-[14px] font-bold text-white">거래처 정보</h3></div>
+  <div className="bg-[#1B2B4B] px-6 py-3 rounded-t-xl"><h3 className="text-[14px] font-bold text-white"><EditableText id="copyPanel.section.거래처정보" defaultText="거래처 정보" /></h3></div>
   <div className="p-6">
 
   <div className="space-y-1">
@@ -27113,7 +27113,7 @@ checkWarningStatus(c.거래처명, "거래처");
 </section>
         {/* ================= 상하차 정보 ================= */}
 <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">상하차 정보</h3></div>
+  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white"><EditableText id="copyPanel.section.상하차정보" defaultText="상하차 정보" /></h3></div>
   <div className="p-6">
 
   <div className="grid grid-cols-2 gap-16">
@@ -37986,7 +37986,7 @@ return (
   style={copyPanelStyle === "B" ? { cursor: "grab" } : undefined}
 >
   <div>
-    <h2 className="text-[18px] font-bold text-[#1B2B4B]">오더 복사 / 수정 패널</h2>
+    <h2 className="text-[18px] font-bold text-[#1B2B4B]"><EditableText id="copyPanel.title" defaultText="오더 복사 / 수정 패널" /></h2>
     <p className="text-[13px] text-gray-500 mt-0.5">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</p>
   </div>
   <div className="flex gap-2 items-center">
@@ -38003,7 +38003,7 @@ return (
       hover:from-amber-600 hover:to-orange-600
       text-white shadow-md hover:shadow-lg"
   >
-    운임조회
+    <EditableText id="copyPanel.운임조회" defaultText="운임조회" />
   </button>
 
     {/* 수정 저장 */}
@@ -38071,7 +38071,7 @@ return (
   }}
   className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold"
 >
-  수정 저장
+  <EditableText id="copyPanel.수정저장" defaultText="수정 저장" />
 </button>
 
 
@@ -38107,7 +38107,7 @@ return (
   }}
     className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold hover:bg-[#243a60] transition"
 >
-  복사 등록
+  <EditableText id="copyPanel.복사등록" defaultText="복사 등록" />
 </button>
 
 
@@ -38159,7 +38159,7 @@ return (
 </div>
 {/* ================= 거래처 정보 ================= */}
 <section className="bg-white rounded-xl border border-gray-200 shadow-sm">
-  <div className="bg-[#1B2B4B] px-6 py-3 rounded-t-xl"><h3 className="text-[14px] font-bold text-white">거래처 정보</h3></div>
+  <div className="bg-[#1B2B4B] px-6 py-3 rounded-t-xl"><h3 className="text-[14px] font-bold text-white"><EditableText id="copyPanel.section.거래처정보" defaultText="거래처 정보" /></h3></div>
   <div className="p-6">
 
   <div className="space-y-1">
@@ -38265,7 +38265,7 @@ setCopyTarget(prev=>({
 </section>
         {/* ================= 상하차 정보 ================= */}
 <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">상하차 정보</h3></div>
+  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white"><EditableText id="copyPanel.section.상하차정보" defaultText="상하차 정보" /></h3></div>
   <div className="p-6">
 
   <div className="grid grid-cols-2 gap-16">
@@ -47070,7 +47070,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
               {/* 패널 헤더 */}
               <div className="flex justify-between items-center bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
                 <div>
-                  <h2 className="text-[18px] font-bold text-[#1B2B4B]">오더 복사 / 수정 패널</h2>
+                  <h2 className="text-[18px] font-bold text-[#1B2B4B]"><EditableText id="copyPanel.title" defaultText="오더 복사 / 수정 패널" /></h2>
                   <p className="text-[12px] text-gray-500 mt-0.5">{copyTarget.거래처명} · {copyTarget.상차지명} → {copyTarget.하차지명}</p>
                 </div>
                 <div className="flex gap-2 items-center">
@@ -47090,7 +47090,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     }}
                     className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-[13px] font-bold hover:bg-emerald-700 transition"
                   >
-                    수정 저장
+                    <EditableText id="copyPanel.수정저장" defaultText="수정 저장" />
                   </button>
                   <button
                     onClick={async () => {
@@ -47106,7 +47106,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     }}
                     className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold hover:bg-[#243a60] transition"
                   >
-                    복사 등록
+                    <EditableText id="copyPanel.복사등록" defaultText="복사 등록" />
                   </button>
                   <button onClick={() => setCopyPanelOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:text-red-500 hover:border-red-200 transition text-lg">✕</button>
                 </div>
@@ -47411,7 +47411,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
              {/* 기사정보 */}
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="bg-[#1B2B4B] px-6 py-3">
-                  <h3 className="text-[14px] font-bold text-white">기사정보</h3>
+                  <h3 className="text-[14px] font-bold text-white"><EditableText id="copyPanel.section.기사정보" defaultText="기사정보" /></h3>
                 </div>
                 <div className="p-6 space-y-4">
 
@@ -47517,7 +47517,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
               {/* 화물정보 */}
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="bg-[#1B2B4B] px-6 py-3">
-                  <h3 className="text-[14px] font-bold text-white">화물정보</h3>
+                  <h3 className="text-[14px] font-bold text-white"><EditableText id="copyPanel.section.화물정보" defaultText="화물정보" /></h3>
                 </div>
                 <div className="p-6">
                   <div className="grid grid-cols-3 gap-6">
@@ -47550,7 +47550,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
               {/* 결제 정보 */}
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="bg-[#1B2B4B] px-6 py-3">
-                  <h3 className="text-[14px] font-bold text-white">결제 정보</h3>
+                  <h3 className="text-[14px] font-bold text-white"><EditableText id="copyPanel.section.결제정보" defaultText="결제 정보" /></h3>
                 </div>
                 <div className="p-6">
                   <div className="grid grid-cols-5 gap-6">
@@ -47582,7 +47582,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
               {/* 메모 */}
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="bg-[#1B2B4B] px-6 py-3">
-                  <h3 className="text-[14px] font-bold text-white">메모</h3>
+                  <h3 className="text-[14px] font-bold text-white"><EditableText id="copyPanel.section.메모" defaultText="메모" /></h3>
                 </div>
                 <div className="p-6">
                   <textarea className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] h-24 focus:outline-none focus:border-blue-400 resize-none" value={copyTarget?.메모 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 메모: e.target.value}))} />
