@@ -1531,7 +1531,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
           <div className="bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden">
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-              <h3 className="text-white font-bold text-[15px]">거절 사유 입력</h3>
+              <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.거절 사유 입력" defaultText="거절 사유 입력" /></h3>
               <button onClick={() => { setShowRejectLinked(false); setRejectLinkedReason(""); }} className="text-white/60 hover:text-white text-lg">✕</button>
             </div>
             <div className="p-6">

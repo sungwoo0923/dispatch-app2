@@ -7122,7 +7122,7 @@ return (
           {/* 사이드바 헤더 */}
           <div className="bg-[#1B2B4B] px-5 py-5 flex items-center justify-between shrink-0">
             <div>
-              <h2 className="text-white font-bold text-[16px]">내 정보</h2>
+              <h2 className="text-white font-bold text-[16px]"><EditableText id="popup.title.내 정보 사이드바" defaultText="내 정보" /></h2>
               <p className="text-white/50 text-[12px] mt-0.5">{user?.email}</p>
             </div>
             <button
@@ -17968,7 +17968,7 @@ setConfirmChange(null);
       onKeyDown={e => { if (e.key === "Escape") setNewClientModalOpen(false); }}>
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
         <div>
-          <h3 className="text-white font-bold text-[16px]">거래처 신규등록</h3>
+          <h3 className="text-white font-bold text-[16px]"><EditableText id="popup.title.거래처 신규등록" defaultText="거래처 신규등록" /></h3>
           <p className="text-white/60 text-[12px] mt-0.5">새 거래처 정보를 입력하세요</p>
         </div>
         <button className="text-white/50 hover:text-white text-xl transition" onClick={() => setNewClientModalOpen(false)}>✕</button>
@@ -26229,7 +26229,7 @@ const head = isDark
       onKeyDown={e => { if (e.key === "Escape") setNewClientModalOpen(false); }}>
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
         <div>
-          <h3 className="text-white font-bold text-[16px]">거래처 신규등록</h3>
+          <h3 className="text-white font-bold text-[16px]"><EditableText id="popup.title.거래처 신규등록" defaultText="거래처 신규등록" /></h3>
           <p className="text-white/60 text-[12px] mt-0.5">새 거래처 정보를 입력하세요</p>
         </div>
         <button className="text-white/50 hover:text-white text-xl transition" onClick={() => setNewClientModalOpen(false)}>✕</button>
@@ -35703,7 +35703,7 @@ return (
       onKeyDown={e => { if (e.key === "Escape") setNewClientModalOpen(false); }}>
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
         <div>
-          <h3 className="text-white font-bold text-[16px]">거래처 신규등록</h3>
+          <h3 className="text-white font-bold text-[16px]"><EditableText id="popup.title.거래처 신규등록" defaultText="거래처 신규등록" /></h3>
           <p className="text-white/60 text-[12px] mt-0.5">새 거래처 정보를 입력하세요</p>
         </div>
         <button className="text-white/50 hover:text-white text-xl transition" onClick={() => setNewClientModalOpen(false)}>✕</button>
@@ -46890,7 +46890,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             onKeyDown={e => { if (e.key === "Escape") setNewClientModalOpen(false); }}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
               <div>
-                <h3 className="text-white font-bold text-[16px]">거래처 신규등록</h3>
+                <h3 className="text-white font-bold text-[16px]"><EditableText id="popup.title.거래처 신규등록" defaultText="거래처 신규등록" /></h3>
                 <p className="text-white/60 text-[12px] mt-0.5">새 거래처 정보를 입력하세요</p>
               </div>
               <button className="text-white/50 hover:text-white text-xl transition" onClick={() => setNewClientModalOpen(false)}>✕</button>
