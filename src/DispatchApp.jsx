@@ -44452,21 +44452,21 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
       <div className="bg-white px-8 py-6 border-b border-gray-200">
   <div className="flex items-center justify-between">
     <div>
-      <h1 className="text-[20px] font-bold text-[#1B2B4B] tracking-tight">매출관리</h1>
-      <p className="text-[12px] text-gray-500 mt-1">매출 · 수익 · 거래처 분석 리포트</p>
+      <h1 className="text-[20px] font-bold text-[#1B2B4B] tracking-tight"><EditableText id="settlement.header.title" defaultText="매출관리" /></h1>
+      <p className="text-[12px] text-gray-500 mt-1"><EditableText id="settlement.header.subtitle" defaultText="매출 · 수익 · 거래처 분석 리포트" /></p>
     </div>
     <div className="flex items-center gap-2">
       <button
         onClick={() => exportSettlementCapture("png")}
         className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-[13px] font-semibold hover:bg-gray-200 transition border border-gray-200"
       >
-        PNG 캡쳐
+        <EditableText id="settlement.header.PNG캡쳐" defaultText="PNG 캡쳐" />
       </button>
       <button
         onClick={() => exportSettlementCapture("pdf")}
         className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-[13px] font-semibold hover:bg-indigo-500 transition"
       >
-        PDF 저장
+        <EditableText id="settlement.header.PDF저장" defaultText="PDF 저장" />
       </button>
       <button
         onClick={() => {
@@ -44485,7 +44485,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
               }}
                className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold hover:bg-emerald-500 transition"
             >
-              CSV 내보내기
+              <EditableText id="settlement.header.CSV내보내기" defaultText="CSV 내보내기" />
             </button>
           </div>
         </div>
@@ -44514,7 +44514,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
                       : "border-transparent text-gray-500 hover:text-gray-600"
                   }`}
                 >
-                  {tab.label}
+                  <EditableText id={`settlement.tab.${tab.key}`} defaultText={tab.label} />
                   <span className="text-[10px] text-gray-400">▾</span>
                 </button>
                 <div className="absolute left-0 top-full z-20 pt-1 opacity-0 invisible -translate-y-1 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:visible group-hover:translate-y-0">
@@ -44525,7 +44525,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
                         activeTab === "ppt_report" ? "text-[#1B2B4B] bg-gray-50" : "text-gray-600 hover:bg-gray-50 hover:text-[#1B2B4B]"
                       }`}
                     >
-                      PPT 리포트 생성
+                      <EditableText id="settlement.tab.ppt_report" defaultText="PPT 리포트 생성" />
                     </button>
                   </div>
                 </div>
@@ -44540,7 +44540,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
                     : "border-transparent text-gray-500 hover:text-gray-600"
                 }`}
               >
-                {tab.label}
+                <EditableText id={`settlement.tab.${tab.key}`} defaultText={tab.label} />
               </button>
             )
           ))}
@@ -44788,13 +44788,13 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
           <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
               <div>
-                <h3 className="text-[15px] font-bold text-white">매출 리포트</h3>
-                <p className="text-[11px] text-white/50 mt-0.5">월별 요약 · 요일별 수주 · 거래처별 기간 조회</p>
+                <h3 className="text-[15px] font-bold text-white"><EditableText id="settlement.report.title" defaultText="매출 리포트" /></h3>
+                <p className="text-[11px] text-white/50 mt-0.5"><EditableText id="settlement.report.subtitle" defaultText="월별 요약 · 요일별 수주 · 거래처별 기간 조회" /></p>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => setAiMode("summary")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20">AI 요약</button>
-                <button onClick={() => setAiMode("suggest")} className="px-3 py-1.5 rounded-lg bg-emerald-500/80 text-white text-[12px] font-semibold hover:bg-emerald-500 transition">AI 제안</button>
-                <button onClick={() => setAiMode("report")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20">보고서</button>
+                <button onClick={() => setAiMode("summary")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20"><EditableText id="settlement.report.AI요약" defaultText="AI 요약" /></button>
+                <button onClick={() => setAiMode("suggest")} className="px-3 py-1.5 rounded-lg bg-emerald-500/80 text-white text-[12px] font-semibold hover:bg-emerald-500 transition"><EditableText id="settlement.report.AI제안" defaultText="AI 제안" /></button>
+                <button onClick={() => setAiMode("report")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20"><EditableText id="settlement.report.보고서" defaultText="보고서" /></button>
                 <CustomSelect
                   className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-1.5 text-[13px] focus:outline-none ml-1"
                   value={selectedYear}
@@ -44977,7 +44977,7 @@ function ClientPeriodQuery({ rows = [], clients = [] }) {
           onClick={runQuery}
           className="px-5 py-2 rounded-lg text-white text-[13px] font-bold bg-[#1B2B4B] hover:bg-[#243a60] transition h-[38px]"
         >
-          조회
+          <EditableText id="settlement.query.조회" defaultText="조회" />
         </button>
       </div>
 
@@ -52949,35 +52949,35 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
 
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-[18px] font-bold text-[#1B2B4B]">기사관리</h2>
+        <h2 className="text-[18px] font-bold text-[#1B2B4B]"><EditableText id="driver.header.title" defaultText="기사관리" /></h2>
         <div className="flex gap-2">
           <button
             onClick={() => setShowAddForm(true)}
             className="px-4 py-2 rounded-lg text-[13px] font-bold transition bg-[#1B2B4B] text-white hover:bg-[#243a60]"
           >
-            + 기사 등록
+            + <EditableText id="driver.toolbar.기사등록" defaultText="기사 등록" />
           </button>
           <button
             onClick={() => { setShowAll(v=>!v); setQ(""); setSearched(false); setGradeFilter("전체"); }}
             className={`px-4 py-2 rounded-lg text-[13px] font-bold transition ${showAll ? "bg-[#1B2B4B] text-white" : "bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}
           >
-            {showAll ? "전체보기 닫기" : "전체보기"}
+            {showAll ? <EditableText id="driver.toolbar.전체보기닫기" defaultText="전체보기 닫기" /> : <EditableText id="driver.toolbar.전체보기" defaultText="전체보기" />}
           </button>
           <label className="px-4 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold cursor-pointer hover:bg-[#1B2B4B] hover:text-white transition">
-            엑셀 업로드
+            <EditableText id="driver.toolbar.엑셀업로드" defaultText="엑셀 업로드" />
             <input autoComplete="off" type="file" accept=".xlsx,.xls" onChange={onExcel} className="hidden" />
           </label>
           <button onClick={downloadExcel} className="px-4 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#1B2B4B] hover:text-white transition">
-            엑셀 다운로드
+            <EditableText id="driver.toolbar.엑셀다운로드" defaultText="엑셀 다운로드" />
           </button>
           <button
             onClick={() => { setCleanupOpen(true); setCleanupQ(""); setCleanupQField("전체"); setCleanupSelected(new Set()); setCleanupDone(false); }}
             className="px-4 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#1B2B4B] hover:text-white transition"
           >
-            기사정리
+            <EditableText id="driver.toolbar.기사정리" defaultText="기사정리" />
           </button>
           <button onClick={removeSelected} className="px-4 py-2 rounded-lg bg-red-600 text-white text-[13px] font-bold hover:bg-red-700 transition">
-            선택 삭제
+            <EditableText id="driver.toolbar.선택삭제" defaultText="선택 삭제" />
           </button>
         </div>
       </div>
@@ -52994,7 +52994,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
           <button key={key} onClick={() => { setGradeFilter(key); setShowAll(true); }}
             className={`rounded-xl border p-4 text-center shadow-sm transition ${gradeFilter===key ? "bg-[#1B2B4B] border-[#1B2B4B]" : "bg-white border-gray-200 hover:border-[#1B2B4B]"}`}>
             <div className={`text-[24px] font-extrabold ${gradeFilter===key ? "text-white" : "text-[#1B2B4B]"}`}>{val}</div>
-            <div className={`text-[12px] font-semibold mt-0.5 ${gradeFilter===key ? "text-white/70" : "text-gray-500"}`}>{label}</div>
+            <div className={`text-[12px] font-semibold mt-0.5 ${gradeFilter===key ? "text-white/70" : "text-gray-500"}`}><EditableText id={`driver.kpi.${label}`} defaultText={label} /></div>
           </button>
         ))}
       </div>
@@ -53004,7 +53004,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-2xl shadow-2xl w-[600px] overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-              <h3 className="text-white font-bold text-[15px]">신규 기사 등록</h3>
+              <h3 className="text-white font-bold text-[15px]"><EditableText id="driver.addPopup.title" defaultText="신규 기사 등록" /></h3>
               <button onClick={() => setShowAddForm(false)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
             </div>
             <div className="px-6 py-5 grid grid-cols-2 gap-4">
