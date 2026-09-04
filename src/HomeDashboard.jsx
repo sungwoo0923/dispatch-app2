@@ -1052,7 +1052,7 @@ React.useEffect(() => {
                 await addDoc(collection(db, "notices"), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content, audience: noticeForm.audience || "internal", authorUid: user?.uid || "", createdAt: serverTimestamp(), companyName: getViewCompany() });
               }
               setNoticeForm({ category: "공지사항", author: "", content: "", audience: "internal" }); setNoticeOpen(false); setSelectedNotice(null);
-            }} className="w-full bg-[#1B2B4B] text-white py-2.5 rounded-lg font-semibold text-[14px] hover:bg-[#243a60] transition">저장</button>
+            }} className="w-full bg-[#1B2B4B] text-white py-2.5 rounded-lg font-semibold text-[14px] hover:bg-[#243a60] transition"><EditableText id="misc.btn.1055.저장" defaultText="저장" /></button>
           </div>
         </Modal>
       )}
@@ -1155,7 +1155,7 @@ React.useEffect(() => {
                 }
               }
               setScheduleForm({ type: "휴가", authorName: "", start: "", end: "", memo: "", approvers: [] }); setScheduleOpen(false);
-            }} className="w-full bg-[#1B2B4B] text-white py-2.5 rounded-lg font-semibold text-[14px] hover:bg-[#243a60] transition">저장</button>
+            }} className="w-full bg-[#1B2B4B] text-white py-2.5 rounded-lg font-semibold text-[14px] hover:bg-[#243a60] transition"><EditableText id="misc.btn.1158.저장" defaultText="저장" /></button>
           </div>
         </Modal>
       )}
@@ -1333,7 +1333,7 @@ React.useEffect(() => {
               }
               setHandoverForm({ text: "", author: me?.name || "", authorUid: user?.uid || "", receiver: "", receiverUid: "", date: todayStr });
               setHandoverOpen(false); setSelectedHandover(null); isEditingHandoverRef.current = false;
-            }} className="w-full bg-[#1B2B4B] text-white py-2.5 rounded-lg font-semibold text-[14px] hover:bg-[#243a60] transition">저장</button>
+            }} className="w-full bg-[#1B2B4B] text-white py-2.5 rounded-lg font-semibold text-[14px] hover:bg-[#243a60] transition"><EditableText id="misc.btn.1336.저장" defaultText="저장" /></button>
           </div>
         </Modal>
       )}
