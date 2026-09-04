@@ -49788,7 +49788,7 @@ const handleBatchSettle = async (targetStatus) => {
                     className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 transition"
                     onClick={() => setOrderPopup(null)}
                   >
-                    닫기
+                    <EditableText id="orderPopup.닫기" defaultText="닫기" />
                   </button>
                   <button
                     className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition"
@@ -49804,7 +49804,7 @@ const handleBatchSettle = async (targetStatus) => {
                       }
                     }}
                   >
-                    수정 저장
+                    <EditableText id="orderPopup.수정저장" defaultText="수정 저장" />
                   </button>
                   <button
                     className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold hover:bg-[#243a60] transition"
@@ -54935,13 +54935,13 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">일반메모</label>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1"><EditableText id="clientEdit.label.일반메모" defaultText="일반메모" /></label>
                     <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                       value={newForm.메모||""}
                       onChange={(e) => setNewForm(p => ({ ...p, 메모: e.target.value }))} />
                   </div>
                   <div className="col-span-2">
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">오더메모</label>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1"><EditableText id="clientEdit.label.오더메모" defaultText="오더메모" /></label>
                     <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                       placeholder="이 거래처명을 입력할 때마다 안내 팝업으로 뜰 메모"
                       value={newForm.오더메모||""}
@@ -54963,33 +54963,33 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
               <div className="bg-white rounded-2xl shadow-2xl w-[700px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
-                  <h3 className="text-white font-bold text-[15px]">거래처 수정 — {editClientModal.거래처명}</h3>
+                  <h3 className="text-white font-bold text-[15px]"><EditableText id="clientEdit.title" defaultText="거래처 수정" /> — {editClientModal.거래처명}</h3>
                   <button onClick={() => setEditClientModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
                 </div>
                 <div className="px-6 py-5 grid grid-cols-2 gap-4">
                   {[["거래처명 *","거래처명"],["사업자번호","사업자번호"],["대표자","대표자"],["업태","업태"],["종목","종목"],["이메일","이메일"]].map(([label, key]) => (
                     <div key={key}>
-                      <label className="block text-[12px] font-semibold text-gray-500 mb-1">{label}</label>
+                      <label className="block text-[12px] font-semibold text-gray-500 mb-1"><EditableText id={`clientEdit.label.${key}`} defaultText={label} /></label>
                       <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                         value={editClientModal[key]||""}
                         onChange={(e) => setEditClientModal(p => ({ ...p, [key]: e.target.value }))} />
                     </div>
                   ))}
                   <div className="col-span-2">
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">주소</label>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1"><EditableText id="clientEdit.label.주소" defaultText="주소" /></label>
                     <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                       value={editClientModal.주소||""}
                       onChange={(e) => setEditClientModal(p => ({ ...p, 주소: e.target.value }))} />
                   </div>
                   <div className="col-span-2">
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">담당자 목록</label>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1"><EditableText id="clientEdit.label.담당자목록" defaultText="담당자 목록" /></label>
                     <ContactListEditor
                       contacts={editClientModal.contacts}
                       onChange={(next) => setEditClientModal(p => ({ ...p, contacts: next }))}
                     />
                   </div>
                   <div>
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">등급</label>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1"><EditableText id="clientEdit.label.등급" defaultText="등급" /></label>
                     <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
                       value={editClientModal.등급||"일반"}
                       onChange={(e) => setEditClientModal(p => ({ ...p, 등급: e.target.value }))}>
@@ -55000,20 +55000,20 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">일반메모</label>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1"><EditableText id="clientEdit.label.일반메모" defaultText="일반메모" /></label>
                     <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                       value={editClientModal.메모||""}
                       onChange={(e) => setEditClientModal(p => ({ ...p, 메모: e.target.value }))} />
                   </div>
                   <div className="col-span-2">
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">오더메모</label>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1"><EditableText id="clientEdit.label.오더메모" defaultText="오더메모" /></label>
                     <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                       placeholder="이 거래처명을 입력할 때마다 안내 팝업으로 뜰 메모"
                       value={editClientModal.오더메모||""}
                       onChange={(e) => setEditClientModal(p => ({ ...p, 오더메모: e.target.value }))} />
                   </div>
                   <div className="col-span-2">
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">안내사항 (기사전달주의사항)</label>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1"><EditableText id="clientEdit.label.안내사항" defaultText="안내사항 (기사전달주의사항)" /></label>
                     <div className="text-[11px] text-gray-500 mb-1">이 거래처가 상/하차지로 포함된 오더를 "기사전달용"으로 복사할 때 자동으로 함께 붙습니다. 하차지거래처에 같은 이름이 있으면 자동으로 동기화됩니다.</div>
                     <textarea rows={3} className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none resize-y"
                       placeholder="예: 안전화 착용 필수"
@@ -55021,7 +55021,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                       onChange={(e) => setEditClientModal(p => ({ ...p, 기사전달주의사항: e.target.value }))} />
                   </div>
                   <div className="col-span-2">
-                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">점심시간</label>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1"><EditableText id="clientEdit.label.점심시간" defaultText="점심시간" /></label>
                     <div className="text-[11px] text-gray-500 mb-1">실시간배차현황/배차현황에서 상/하차지명 옆에 표시되고, 상/하차시간이 이 시간대와 겹치면 경고로 알려줍니다.</div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <TimeAmPmPicker
@@ -55129,9 +55129,9 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                 </div>
                 <div className="px-6 pb-5 flex gap-3">
                   <button onClick={() => setEditClientModal(null)}
-                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
+                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"><EditableText id="clientEdit.취소" defaultText="취소" /></button>
                   <button onClick={saveEditClient}
-                    className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">저장</button>
+                    className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition"><EditableText id="clientEdit.저장" defaultText="저장" /></button>
                 </div>
               </div>
             </div>
