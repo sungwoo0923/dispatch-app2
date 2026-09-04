@@ -53015,7 +53015,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                 {label:"메모", key:"메모", placeholder:"메모"},
               ].map(({label,key,placeholder,border}) => (
                 <div key={key}>
-                  <label className="text-[11px] font-semibold text-gray-500 mb-1 block">{label}</label>
+                  <label className="text-[11px] font-semibold text-gray-500 mb-1 block"><EditableText id={`driver.addForm.label.${key}`} defaultText={label} /></label>
                   <input autoComplete="off"
                     className={`border-2 ${border||"border-gray-200"} rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]`}
                     placeholder={placeholder}
@@ -53028,7 +53028,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                 </div>
               ))}
               <div>
-                <label className="text-[11px] font-semibold text-gray-500 mb-1 block">등급</label>
+                <label className="text-[11px] font-semibold text-gray-500 mb-1 block"><EditableText id="driver.addForm.label.등급" defaultText="등급" /></label>
                 <CustomSelect className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]"
                   value={newForm.등급} onChange={e=>setNewForm(p=>({...p,등급:e.target.value}))}>
                   <option value="일반">일반</option>
@@ -53041,7 +53041,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
               {(newForm.등급 === "지입" || newForm.등급 === "직영") && (
                 <>
                   <div>
-                    <label className="text-[11px] font-semibold text-gray-500 mb-1 block">거주지</label>
+                    <label className="text-[11px] font-semibold text-gray-500 mb-1 block"><EditableText id="driver.addForm.label.거주지" defaultText="거주지" /></label>
                     <input autoComplete="off"
                       className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]"
                       placeholder="예: 경기 김포시"
@@ -53050,7 +53050,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                     />
                   </div>
                   <div className="col-span-2">
-                    <label className="text-[11px] font-semibold text-gray-500 mb-1 block">근무가능요일</label>
+                    <label className="text-[11px] font-semibold text-gray-500 mb-1 block"><EditableText id="driver.addForm.label.근무가능요일" defaultText="근무가능요일" /></label>
                     <div className="flex gap-1.5">
                       {WEEKDAYS.map(d => {
                         const on = (newForm.근무요일 || []).includes(d);
@@ -53072,8 +53072,8 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
               )}
             </div>
             <div className="px-6 pb-5 flex gap-3">
-              <button onClick={()=>setShowAddForm(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
-              <button onClick={addNew} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">등록</button>
+              <button onClick={()=>setShowAddForm(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"><EditableText id="driver.addForm.취소" defaultText="취소" /></button>
+              <button onClick={addNew} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition"><EditableText id="driver.addForm.등록" defaultText="등록" /></button>
             </div>
           </div>
         </div>
@@ -53352,8 +53352,8 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
             {/* 헤더 */}
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
               <div>
-                <h3 className="text-white font-bold text-[16px]">기사정리</h3>
-                <p className="text-white/50 text-[12px] mt-0.5">연락처 정규화 및 중복 기사 통합 관리</p>
+                <h3 className="text-white font-bold text-[16px]"><EditableText id="driver.cleanup.title" defaultText="기사정리" /></h3>
+                <p className="text-white/50 text-[12px] mt-0.5"><EditableText id="driver.cleanup.subtitle" defaultText="연락처 정규화 및 중복 기사 통합 관리" /></p>
               </div>
               <button onClick={() => setCleanupOpen(false)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
             </div>
@@ -53362,7 +53362,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
               {["연락처정규화","중복기사정리"].map(tab => (
                 <button key={tab} onClick={() => { setCleanupTab(tab); setCleanupQ(""); setCleanupQField("전체"); setCleanupSelected(new Set()); setCleanupDone(false); }}
                   className={`px-6 py-3 text-[13px] font-bold transition border-b-2 ${cleanupTab === tab ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-transparent text-gray-500 hover:text-gray-600"}`}>
-                  {tab}
+                  <EditableText id={`driver.cleanup.tab.${tab}`} defaultText={tab} />
                 </button>
               ))}
             </div>
@@ -53391,7 +53391,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                     showAlert(`${phoneNormTargets.length}건 정규화 완료`);
                   }}
                   className="ml-auto px-4 py-1.5 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">
-                  전체 정규화 ({phoneNormTargets.length}건)
+                  <EditableText id="driver.cleanup.전체정규화" defaultText="전체 정규화" /> ({phoneNormTargets.length}건)
                 </button>
               )}
               {cleanupTab === "중복기사정리" && cleanupSelected.size > 0 && (
@@ -53404,7 +53404,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                     showAlert(`${cleanupSelected.size}건 삭제 완료`);
                   }}
                   className="ml-auto px-4 py-1.5 bg-red-600 text-white text-[13px] font-bold rounded-lg hover:bg-red-700 transition">
-                  선택 삭제 ({cleanupSelected.size}건)
+                  <EditableText id="driver.cleanup.선택삭제" defaultText="선택 삭제" /> ({cleanupSelected.size}건)
                 </button>
               )}
             </div>

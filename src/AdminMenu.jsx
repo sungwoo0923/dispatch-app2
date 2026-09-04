@@ -1350,7 +1350,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
           <div className="w-[420px] shrink-0">
             <div className="sticky top-4 bg-white border border-gray-200 rounded-2xl shadow-lg overflow-hidden">
               <div className="bg-[#1B2B4B] px-4 py-3 flex items-center justify-between">
-                <span className="text-white font-semibold text-[14px]">모바일 미리보기</span>
+                <span className="text-white font-semibold text-[14px]"><EditableText id="adminMenu.mobilePreview.title" defaultText="모바일 미리보기" /></span>
                 <button onClick={() => setShowMobilePreview(false)} className="text-white/60 hover:text-white text-lg">✕</button>
               </div>
               <div className="p-3">
