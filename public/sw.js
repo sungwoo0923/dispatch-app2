@@ -137,6 +137,19 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // ⭐ 아이콘/매니페스트도 HTML과 동일하게 항상 네트워크 — 파일명이 고정돼 있어서
+  // (dist/assets의 JS/CSS와 달리 내용이 바뀌어도 해시가 안 붙음) 한 번 캐시되면
+  // 그 이후로는 새 버전을 올려도 계속 예전 파일을 그대로 돌려주는 문제가 있었다
+  // (아이콘 디자인을 몇 번 고쳐도 기기에서 계속 옛날 아이콘이 뜨던 원인).
+  // 아이콘은 자주 안 바뀌니 캐시 우선이어도 평소엔 문제 없지만, 바뀔 때 확실히
+  // 반영되는 게 더 중요해서 HTML과 같은 방식으로 뺀다.
+  if (url.pathname === "/manifest.json" || url.pathname.startsWith("/icons/")) {
+    event.respondWith(
+      fetch(event.request, { cache: "no-store" }).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
   // 나머지: 캐시 우선, 없으면 네트워크
   event.respondWith(
     caches.match(event.request).then((cached) => {
