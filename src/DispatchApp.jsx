@@ -17986,7 +17986,7 @@ setConfirmChange(null);
           />
         </div>
         <div>
-          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">주소</label>
+          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.주소" defaultText="주소" /></label>
           <input autoComplete="off"
             id="nc-addr"
             className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
@@ -17998,7 +17998,7 @@ setConfirmChange(null);
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">담당자</label>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.담당자" defaultText="담당자" /></label>
             <input autoComplete="off"
               id="nc-manager"
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
@@ -18009,7 +18009,7 @@ setConfirmChange(null);
             />
           </div>
           <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">연락처</label>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.연락처" defaultText="연락처" /></label>
             <input autoComplete="off"
               id="nc-phone"
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
@@ -18021,7 +18021,7 @@ setConfirmChange(null);
           </div>
         </div>
         <div>
-          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">이메일</label>
+          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.이메일" defaultText="이메일" /></label>
           <input autoComplete="off"
             id="nc-email"
             className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
@@ -18033,7 +18033,7 @@ setConfirmChange(null);
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">등급</label>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.등급" defaultText="등급" /></label>
             <CustomSelect
               id="nc-grade"
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 bg-white"
@@ -18049,7 +18049,7 @@ setConfirmChange(null);
           </div>
         </div>
         <div>
-          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">메모</label>
+          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.메모" defaultText="메모" /></label>
           <textarea
             id="nc-memo"
             className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 resize-none"
@@ -26246,7 +26246,7 @@ const head = isDark
           />
         </div>
         <div>
-          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">주소</label>
+          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.주소" defaultText="주소" /></label>
           <input autoComplete="off"
             className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
             placeholder="주소 입력 (선택)"
@@ -26256,7 +26256,7 @@ const head = isDark
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">담당자</label>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.담당자" defaultText="담당자" /></label>
             <input autoComplete="off"
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
               placeholder="담당자명 (선택)"
@@ -26265,7 +26265,7 @@ const head = isDark
             />
           </div>
           <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">연락처</label>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.연락처" defaultText="연락처" /></label>
             <input autoComplete="off"
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
               placeholder="010-0000-0000 (선택)"
@@ -26275,7 +26275,7 @@ const head = isDark
           </div>
         </div>
         <div>
-          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">이메일</label>
+          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.이메일" defaultText="이메일" /></label>
           <input autoComplete="off"
             className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
             placeholder="example@email.com (선택)"
@@ -26285,7 +26285,7 @@ const head = isDark
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">등급</label>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.등급" defaultText="등급" /></label>
             <CustomSelect
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 bg-white"
               value={newClientModalData.grade}
@@ -26299,7 +26299,7 @@ const head = isDark
           </div>
         </div>
         <div>
-          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">메모</label>
+          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.메모" defaultText="메모" /></label>
           <textarea
             className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 resize-none"
             placeholder="메모 (선택)"
@@ -29040,15 +29040,15 @@ value={copyTarget?.화물수량 || ""}
             </div>
             <div className="grid grid-cols-3 gap-3 mb-3">
               <div>
-                <label className="text-sm font-medium">상차지 담당자</label>
+                <label className="text-sm font-medium"><EditableText id="selectEdit.label.상차지담당자" defaultText="상차지 담당자" /></label>
                 <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차지담당자 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자: e.target.value }))} />
               </div>
               <div>
-                <label className="text-sm font-medium">상차지 연락처</label>
+                <label className="text-sm font-medium"><EditableText id="selectEdit.label.상차지연락처" defaultText="상차지 연락처" /></label>
                 <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자번호: formatPhone(e.target.value) }))} />
               </div>
               <div>
-                <label className="text-sm font-medium">상차방법</label>
+                <label className="text-sm font-medium"><EditableText id="selectEdit.label.상차방법" defaultText="상차방법" /></label>
                 <CustomSelect className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차방법: e.target.value }))}>
                   <option value="">선택</option>
                   <option value="지게차">지게차</option>
@@ -29209,15 +29209,15 @@ value={copyTarget?.화물수량 || ""}
             </div>
             <div className="grid grid-cols-3 gap-3 mb-3">
               <div>
-                <label className="text-sm font-medium">하차지 담당자</label>
+                <label className="text-sm font-medium"><EditableText id="selectEdit.label.하차지담당자" defaultText="하차지 담당자" /></label>
                 <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차지담당자 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자: e.target.value }))} />
               </div>
               <div>
-                <label className="text-sm font-medium">하차지 연락처</label>
+                <label className="text-sm font-medium"><EditableText id="selectEdit.label.하차지연락처" defaultText="하차지 연락처" /></label>
                 <input autoComplete="off" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자번호: formatPhone(e.target.value) }))} />
               </div>
               <div>
-                <label className="text-sm font-medium">하차방법</label>
+                <label className="text-sm font-medium"><EditableText id="selectEdit.label.하차방법" defaultText="하차방법" /></label>
                 <CustomSelect className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차방법: e.target.value }))}>
                   <option value="">선택</option>
                   <option value="지게차">지게차</option>
@@ -35720,7 +35720,7 @@ return (
           />
         </div>
         <div>
-          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">주소</label>
+          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.주소" defaultText="주소" /></label>
           <input autoComplete="off"
             className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
             placeholder="주소 입력 (선택)"
@@ -35730,7 +35730,7 @@ return (
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">담당자</label>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.담당자" defaultText="담당자" /></label>
             <input autoComplete="off"
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
               placeholder="담당자명 (선택)"
@@ -35739,7 +35739,7 @@ return (
             />
           </div>
           <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">연락처</label>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.연락처" defaultText="연락처" /></label>
             <input autoComplete="off"
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
               placeholder="010-0000-0000 (선택)"
@@ -35749,7 +35749,7 @@ return (
           </div>
         </div>
         <div>
-          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">이메일</label>
+          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.이메일" defaultText="이메일" /></label>
           <input autoComplete="off"
             className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
             placeholder="example@email.com (선택)"
@@ -35759,7 +35759,7 @@ return (
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">등급</label>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.등급" defaultText="등급" /></label>
             <CustomSelect
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 bg-white"
               value={newClientModalData.grade}
@@ -35773,7 +35773,7 @@ return (
           </div>
         </div>
         <div>
-          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">메모</label>
+          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.메모" defaultText="메모" /></label>
           <textarea
             className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 resize-none"
             placeholder="메모 (선택)"
@@ -36826,7 +36826,7 @@ return (
 
   {/* 상차일 */}
   <div>
-    <label className="text-sm font-medium">상차일</label>
+    <label className="text-sm font-medium"><EditableText id="waypoint.label.상차일" defaultText="상차일" /></label>
     <CustomDatePicker
       className="border p-2 rounded w-full"
       value={editTarget.상차일 || ""}
@@ -36869,7 +36869,7 @@ return (
 
   {/* 하차일 */}
   <div>
-    <label className="text-sm font-medium">하차일</label>
+    <label className="text-sm font-medium"><EditableText id="waypoint.label.하차일" defaultText="하차일" /></label>
     <CustomDatePicker
       className="border p-2 rounded w-full"
       value={editTarget.하차일 || ""}
@@ -37044,7 +37044,7 @@ return (
             {/* ================= 상차지 담당자/연락처/방법 ================= */}
             <div className="grid grid-cols-3 gap-3 mb-3">
               <div>
-                <label className="text-sm font-medium">상차지 담당자</label>
+                <label className="text-sm font-medium"><EditableText id="selectEdit.label.상차지담당자" defaultText="상차지 담당자" /></label>
                 <input autoComplete="off"
                   className="border p-2 rounded w-full"
                   value={editTarget.상차지담당자 || ""}
@@ -37052,7 +37052,7 @@ return (
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">상차지 연락처</label>
+                <label className="text-sm font-medium"><EditableText id="selectEdit.label.상차지연락처" defaultText="상차지 연락처" /></label>
                 <input autoComplete="off"
                   className="border p-2 rounded w-full"
                   value={editTarget.상차지담당자번호 || ""}
@@ -37060,7 +37060,7 @@ return (
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">상차 방법</label>
+                <label className="text-sm font-medium"><EditableText id="selectEdit.label.상차방법" defaultText="상차 방법" /></label>
                 <CustomSelect
                   className="border p-2 rounded w-full"
                   value={editTarget.상차방법 || ""}
@@ -37216,7 +37216,7 @@ return (
             {/* ================= 하차지 담당자/연락처/방법 ================= */}
             <div className="grid grid-cols-3 gap-3 mb-3">
               <div>
-                <label className="text-sm font-medium">하차지 담당자</label>
+                <label className="text-sm font-medium"><EditableText id="selectEdit.label.하차지담당자" defaultText="하차지 담당자" /></label>
 
                 <input autoComplete="off"
                   className="border p-2 rounded w-full"
@@ -37225,7 +37225,7 @@ return (
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">하차지 연락처</label>
+                <label className="text-sm font-medium"><EditableText id="selectEdit.label.하차지연락처" defaultText="하차지 연락처" /></label>
                 <input autoComplete="off"
                   className="border p-2 rounded w-full"
                   value={editTarget.하차지담당자번호 || ""}
@@ -37233,7 +37233,7 @@ return (
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">하차 방법</label>
+                <label className="text-sm font-medium"><EditableText id="selectEdit.label.하차방법" defaultText="하차 방법" /></label>
                 <CustomSelect
                   className="border p-2 rounded w-full"
                   value={editTarget.하차방법 || ""}
@@ -46907,7 +46907,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                 />
               </div>
               <div>
-                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">주소</label>
+                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.주소" defaultText="주소" /></label>
                 <input autoComplete="off"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
                   placeholder="주소 입력 (선택)"
@@ -46917,7 +46917,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">담당자</label>
+                  <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.담당자" defaultText="담당자" /></label>
                   <input autoComplete="off"
                     className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
                     placeholder="담당자명 (선택)"
@@ -46926,7 +46926,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                   />
                 </div>
                 <div>
-                  <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">연락처</label>
+                  <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.연락처" defaultText="연락처" /></label>
                   <input autoComplete="off"
                     className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
                     placeholder="010-0000-0000 (선택)"
@@ -46936,7 +46936,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                 </div>
               </div>
               <div>
-                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">이메일</label>
+                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.이메일" defaultText="이메일" /></label>
                 <input autoComplete="off"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
                   placeholder="example@email.com (선택)"
@@ -46946,7 +46946,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">등급</label>
+                  <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.등급" defaultText="등급" /></label>
                   <CustomSelect
                     className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 bg-white"
                     value={newClientModalData.grade}
@@ -46960,7 +46960,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                 </div>
               </div>
               <div>
-                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">메모</label>
+                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.메모" defaultText="메모" /></label>
                 <textarea
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 resize-none"
                   placeholder="메모 (선택)"
