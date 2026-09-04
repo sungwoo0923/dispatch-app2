@@ -15810,19 +15810,19 @@ className={`
   const SpecTable = ({ title, note, rows, tableKey }) => (
     <div>
       <div className="flex justify-between items-center mb-2">
-        <h3 className="font-semibold text-sm">{title}</h3>
+        <h3 className="font-semibold text-sm"><EditableText id={`vehicleSpec.card.${title}`} defaultText={title} /></h3>
         <span className="text-xs text-gray-500">{note}{canEditVehicleSpec ? " · 행을 더블클릭하면 수정할 수 있습니다" : ""}</span>
       </div>
       <table className="w-full text-sm border border-gray-300">
         <thead className="bg-blue-50 text-blue-900">
           <tr>
-            <th className="border px-2 py-1">톤수</th>
-            <th className="border px-2 py-1">구분</th>
-            <th className="border px-2 py-1">적재함 길이</th>
-            <th className="border px-2 py-1">폭 참고</th>
-            <th className="border px-2 py-1">실무상 명칭</th>
-            <th className="border px-2 py-1">최대 적재 중량</th>
-            <th className="border px-2 py-1">최대 적재 파렛</th>
+            <th className="border px-2 py-1"><EditableText id="vehicleSpec.cargo.header.톤수" defaultText="톤수" /></th>
+            <th className="border px-2 py-1"><EditableText id="vehicleSpec.cargo.header.구분" defaultText="구분" /></th>
+            <th className="border px-2 py-1"><EditableText id="vehicleSpec.cargo.header.적재함길이" defaultText="적재함 길이" /></th>
+            <th className="border px-2 py-1"><EditableText id="vehicleSpec.cargo.header.폭참고" defaultText="폭 참고" /></th>
+            <th className="border px-2 py-1"><EditableText id="vehicleSpec.cargo.header.실무상명칭" defaultText="실무상 명칭" /></th>
+            <th className="border px-2 py-1"><EditableText id="vehicleSpec.cargo.header.최대적재중량" defaultText="최대 적재 중량" /></th>
+            <th className="border px-2 py-1"><EditableText id="vehicleSpec.cargo.header.최대적재파렛" defaultText="최대 적재 파렛" /></th>
           </tr>
         </thead>
         <tbody>
@@ -15857,7 +15857,7 @@ className={`
     <div className="bg-white rounded-xl shadow-xl p-6 w-[1180px] max-w-[95vw] max-h-[85vh] overflow-auto">
 
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-bold">차량·파렛 제원표</h2>
+        <h2 className="text-lg font-bold"><EditableText id="vehicleSpec.title" defaultText="차량·파렛 제원표" /></h2>
         <button
           onClick={() => setVehicleSpecOpen(false)}
           className="text-gray-500 hover:text-black text-lg"
@@ -15875,7 +15875,7 @@ className={`
             onClick={() => setVehicleSpecTab(t)}
             className={`px-4 py-1.5 rounded-md text-[13px] font-bold transition ${vehicleSpecTab === t ? "bg-[#1B2B4B] text-white" : "text-gray-500 hover:text-[#1B2B4B]"}`}
           >
-            {l}
+            <EditableText id={`vehicleSpec.tab.${t}`} defaultText={l} />
           </button>
         ))}
       </div>
@@ -15884,19 +15884,19 @@ className={`
       {/* ================= 퀵 차량 ================= */}
       <div className="mb-8">
         <div className="flex justify-between items-center mb-2">
-          <h3 className="font-semibold text-sm">퀵 차량 제원표</h3>
+          <h3 className="font-semibold text-sm"><EditableText id="vehicleSpec.quick.title" defaultText="퀵 차량 제원표" /></h3>
           <span className="text-xs text-gray-500">*1100 × 1100 파렛트 규격 기준</span>
         </div>
 
         <table className="w-full text-sm border border-gray-300">
           <thead className="bg-blue-50 text-blue-900">
             <tr>
-              <th className="border px-2 py-1">차량톤수</th>
-              <th className="border px-2 py-1">길이 (mm)</th>
-              <th className="border px-2 py-1">너비 (mm)</th>
-              <th className="border px-2 py-1">높이 (mm)</th>
-              <th className="border px-2 py-1">최대 적재 중량</th>
-              <th className="border px-2 py-1">최대 적재 파렛</th>
+              <th className="border px-2 py-1"><EditableText id="vehicleSpec.quick.header.차량톤수" defaultText="차량톤수" /></th>
+              <th className="border px-2 py-1"><EditableText id="vehicleSpec.quick.header.길이" defaultText="길이 (mm)" /></th>
+              <th className="border px-2 py-1"><EditableText id="vehicleSpec.quick.header.너비" defaultText="너비 (mm)" /></th>
+              <th className="border px-2 py-1"><EditableText id="vehicleSpec.quick.header.높이" defaultText="높이 (mm)" /></th>
+              <th className="border px-2 py-1"><EditableText id="vehicleSpec.quick.header.최대적재중량" defaultText="최대 적재 중량" /></th>
+              <th className="border px-2 py-1"><EditableText id="vehicleSpec.quick.header.최대적재파렛" defaultText="최대 적재 파렛" /></th>
             </tr>
           </thead>
           <tbody>
@@ -15944,15 +15944,15 @@ className={`
       {vehicleSpecTab === "pallet" && (
         <div>
           <div className="flex justify-between items-center mb-2">
-            <h3 className="font-semibold text-sm">파렛트 제원표</h3>
+            <h3 className="font-semibold text-sm"><EditableText id="vehicleSpec.pallet.title" defaultText="파렛트 제원표" /></h3>
             <span className="text-xs text-gray-500">규격(가로×세로×높이) · 자체무게</span>
           </div>
           <table className="w-full text-sm border border-gray-300">
             <thead className="bg-blue-50 text-blue-900">
               <tr>
-                <th className="border px-2 py-1">파렛트</th>
-                <th className="border px-2 py-1">규격 (가로×세로×높이)</th>
-                <th className="border px-2 py-1">자체 무게</th>
+                <th className="border px-2 py-1"><EditableText id="vehicleSpec.pallet.header.파렛트" defaultText="파렛트" /></th>
+                <th className="border px-2 py-1"><EditableText id="vehicleSpec.pallet.header.규격" defaultText="규격 (가로×세로×높이)" /></th>
+                <th className="border px-2 py-1"><EditableText id="vehicleSpec.pallet.header.자체무게" defaultText="자체 무게" /></th>
               </tr>
             </thead>
             <tbody>
