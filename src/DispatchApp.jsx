@@ -45690,14 +45690,14 @@ function SettlementDetailPopup({ client, rows = [], onClose }) {
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center">
       <div className="bg-white rounded-2xl w-[480px] max-h-[80vh] overflow-hidden shadow-2xl">
         <div className="bg-[#1B2B4B] px-6 py-4 flex justify-between items-center">
-          <h3 className="text-[14px] font-bold text-white">거래처 상세 · {client}</h3>
+          <h3 className="text-[14px] font-bold text-white"><EditableText id="settlement.detailPopup.title" defaultText="거래처 상세" /> · {client}</h3>
           <button onClick={onClose} className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/20 transition">✕</button>
         </div>
         <div className="p-6 overflow-y-auto max-h-[calc(80vh-60px)]">
           <div className="space-y-2 text-[13px] mb-4">
-            <div className="flex justify-between"><span>총 매출</span><span className="font-semibold">{sale.toLocaleString()}원</span></div>
-            <div className="flex justify-between"><span>총 운반비</span><span>{driver.toLocaleString()}원</span></div>
-            <div className="flex justify-between font-semibold"><span>총 수익</span><span className="text-emerald-600">{profit.toLocaleString()}원</span></div>
+            <div className="flex justify-between"><span><EditableText id="settlement.detailPopup.총매출" defaultText="총 매출" /></span><span className="font-semibold">{sale.toLocaleString()}원</span></div>
+            <div className="flex justify-between"><span><EditableText id="settlement.detailPopup.총운반비" defaultText="총 운반비" /></span><span>{driver.toLocaleString()}원</span></div>
+            <div className="flex justify-between font-semibold"><span><EditableText id="settlement.detailPopup.총수익" defaultText="총 수익" /></span><span className="text-emerald-600">{profit.toLocaleString()}원</span></div>
           </div>
           <table className="w-full text-[12px] border-collapse text-center">
             <thead className="bg-gray-50">
