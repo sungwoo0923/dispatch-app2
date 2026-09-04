@@ -1071,8 +1071,8 @@ React.useEffect(() => {
             if (!isNoticeAuthor) return null;
             return (
             <div className="flex gap-2 mt-4 pt-4 border-t">
-              <button onClick={() => setConfirmDialog({ message: "공지사항을 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); } })} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>
-              <button onClick={() => { setNoticeForm({ category: selectedNotice.category || "공지사항", author: selectedNotice.author, content: selectedNotice.content, audience: selectedNotice.audience || "internal" }); setNoticeOpen(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>
+              <button onClick={() => setConfirmDialog({ message: "공지사항을 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); } })} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition"><EditableText id="home.notice.삭제" defaultText="삭제" /></button>
+              <button onClick={() => { setNoticeForm({ category: selectedNotice.category || "공지사항", author: selectedNotice.author, content: selectedNotice.content, audience: selectedNotice.audience || "internal" }); setNoticeOpen(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"><EditableText id="home.notice.수정" defaultText="수정" /></button>
             </div>
             );
           })()}
@@ -1284,7 +1284,7 @@ React.useEffect(() => {
                   const resetApprovers = approvers.map(a => ({ ...a, status: "pending" }));
                   await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: resetApprovers, isReRequest: false });
                   setSelectedSchedule(null);
-                }} className="w-full mb-3 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">재결재 요청</button>
+                }} className="w-full mb-3 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"><EditableText id="home.schedule.재결재요청" defaultText="재결재 요청" /></button>
               )}
               {isAuthor && overallStatus === "rejected" && (
                 <button onClick={async () => {
@@ -1298,12 +1298,12 @@ React.useEffect(() => {
                     }
                   }
                   setSelectedSchedule(null);
-                }} className="w-full mb-3 py-2.5 rounded-xl bg-[#DC2626] text-white text-[13px] font-semibold hover:bg-[#b91c1c] transition">재요청</button>
+                }} className="w-full mb-3 py-2.5 rounded-xl bg-[#DC2626] text-white text-[13px] font-semibold hover:bg-[#b91c1c] transition"><EditableText id="home.schedule.재요청" defaultText="재요청" /></button>
               )}
               {(canEdit || canDelete) && !isViewer && (
                 <div className="flex gap-2 pt-3 border-t border-gray-100">
-                  {canDelete && <button onClick={() => setConfirmDialog({ message: "일정을 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "schedules", selectedSchedule.id)); setSelectedSchedule(null); } })} className="flex-1 py-2.5 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>}
-                  {canEdit && <button onClick={() => { setScheduleForm({ type: selectedSchedule.type, authorName: selectedSchedule.name || "", start: selectedSchedule.start, end: selectedSchedule.end, memo: selectedSchedule.memo || "", approvers: selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName || "" }] : []) }); setScheduleOpen(true); }} className="flex-1 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>}
+                  {canDelete && <button onClick={() => setConfirmDialog({ message: "일정을 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "schedules", selectedSchedule.id)); setSelectedSchedule(null); } })} className="flex-1 py-2.5 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition"><EditableText id="home.schedule.삭제" defaultText="삭제" /></button>}
+                  {canEdit && <button onClick={() => { setScheduleForm({ type: selectedSchedule.type, authorName: selectedSchedule.name || "", start: selectedSchedule.start, end: selectedSchedule.end, memo: selectedSchedule.memo || "", approvers: selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName || "" }] : []) }); setScheduleOpen(true); }} className="flex-1 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"><EditableText id="home.schedule.수정" defaultText="수정" /></button>}
                 </div>
               )}
             </div>
@@ -1349,12 +1349,12 @@ React.useEffect(() => {
               <input type="date" className={formInput} value={handoverForm.date} onChange={e => setHandoverForm({ ...handoverForm, date: e.target.value })} />
               <textarea rows={4} className={formInput} value={handoverForm.text} onChange={e => setHandoverForm({ ...handoverForm, text: e.target.value })} />
               <div className="flex gap-2">
-                <button className="flex-1 py-2 rounded-lg bg-gray-100 text-gray-600 text-[13px] font-semibold" onClick={() => setHandoverEditMode(false)}>취소</button>
+                <button className="flex-1 py-2 rounded-lg bg-gray-100 text-gray-600 text-[13px] font-semibold" onClick={() => setHandoverEditMode(false)}><EditableText id="home.handover.취소" defaultText="취소" /></button>
                 <button className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold" onClick={async () => {
                   const me = users.find(u => u.id === user?.uid);
                   await updateDoc(doc(db, "handovers", selectedHandover.id), { ...handoverForm, author: me?.name || "사용자", authorUid: user?.uid });
                   setHandoverEditMode(false); setSelectedHandover(null);
-                }}>저장</button>
+                }}><EditableText id="home.handover.저장" defaultText="저장" /></button>
               </div>
             </div>
           ) : (
@@ -1371,8 +1371,8 @@ React.useEffect(() => {
                 if (!isHAuthor) return null;
                 return (
                 <div className="flex gap-2 mt-4 pt-4 border-t">
-                  <button onClick={() => setConfirmDialog({ message: "인수인계를 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "handovers", selectedHandover.id)); setSelectedHandover(null); setHandoverEditMode(false); } })} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>
-                  <button onClick={() => { isEditingHandoverRef.current = true; setHandoverForm({ text: selectedHandover.text, author: selectedHandover.author, authorUid: selectedHandover.authorUid, receiver: selectedHandover.receiver, receiverUid: selectedHandover.receiverUid, date: selectedHandover.date }); setHandoverEditMode(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">수정</button>
+                  <button onClick={() => setConfirmDialog({ message: "인수인계를 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "handovers", selectedHandover.id)); setSelectedHandover(null); setHandoverEditMode(false); } })} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition"><EditableText id="home.handover.삭제" defaultText="삭제" /></button>
+                  <button onClick={() => { isEditingHandoverRef.current = true; setHandoverForm({ text: selectedHandover.text, author: selectedHandover.author, authorUid: selectedHandover.authorUid, receiver: selectedHandover.receiver, receiverUid: selectedHandover.receiverUid, date: selectedHandover.date }); setHandoverEditMode(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"><EditableText id="home.handover.수정" defaultText="수정" /></button>
                 </div>
                 );
               })()}
@@ -1465,8 +1465,8 @@ React.useEffect(() => {
           <div className="bg-white rounded-xl shadow-xl p-6 w-[300px] flex flex-col gap-4">
             <div className="text-[14px] font-semibold text-gray-800 text-center">{confirmDialog.message}</div>
             <div className="flex gap-2">
-              <button onClick={() => setConfirmDialog(null)} className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
-              <button onClick={async () => { const fn = confirmDialog.onConfirm; setConfirmDialog(null); await fn(); }} className="flex-1 py-2 rounded-lg bg-red-600 text-white text-[13px] font-semibold hover:bg-red-700 transition">삭제</button>
+              <button onClick={() => setConfirmDialog(null)} className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"><EditableText id="home.confirmDialog.취소" defaultText="취소" /></button>
+              <button onClick={async () => { const fn = confirmDialog.onConfirm; setConfirmDialog(null); await fn(); }} className="flex-1 py-2 rounded-lg bg-red-600 text-white text-[13px] font-semibold hover:bg-red-700 transition"><EditableText id="home.confirmDialog.삭제" defaultText="삭제" /></button>
             </div>
           </div>
         </div>
