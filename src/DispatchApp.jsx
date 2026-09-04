@@ -20927,12 +20927,12 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
             <table className="w-full text-[14px]">
               <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-5 py-3 text-left font-bold text-gray-700 whitespace-nowrap">날짜</th>
-                  <th className="px-5 py-3 text-left font-bold text-gray-700 whitespace-nowrap">거래처</th>
-                  <th className="px-5 py-3 text-left font-bold text-gray-700 whitespace-nowrap">상차지</th>
-                  <th className="px-5 py-3 text-left font-bold text-gray-700 whitespace-nowrap">하차지</th>
-                  <th className="px-5 py-3 text-center font-bold text-gray-700 whitespace-nowrap">첨부 상태</th>
-                  <th className="px-5 py-3 text-center font-bold text-gray-700 whitespace-nowrap">처리</th>
+                  <th className="px-5 py-3 text-left font-bold text-gray-700 whitespace-nowrap"><EditableText id="attachStatus.resultTable.header.날짜" defaultText="날짜" /></th>
+                  <th className="px-5 py-3 text-left font-bold text-gray-700 whitespace-nowrap"><EditableText id="attachStatus.resultTable.header.거래처" defaultText="거래처" /></th>
+                  <th className="px-5 py-3 text-left font-bold text-gray-700 whitespace-nowrap"><EditableText id="attachStatus.resultTable.header.상차지" defaultText="상차지" /></th>
+                  <th className="px-5 py-3 text-left font-bold text-gray-700 whitespace-nowrap"><EditableText id="attachStatus.resultTable.header.하차지" defaultText="하차지" /></th>
+                  <th className="px-5 py-3 text-center font-bold text-gray-700 whitespace-nowrap"><EditableText id="attachStatus.resultTable.header.첨부상태" defaultText="첨부 상태" /></th>
+                  <th className="px-5 py-3 text-center font-bold text-gray-700 whitespace-nowrap"><EditableText id="attachStatus.resultTable.header.처리" defaultText="처리" /></th>
                 </tr>
               </thead>
               <tbody>
@@ -45430,11 +45430,11 @@ function SettlementNewClients({ rows = [] }) {
       <table className="w-full text-[13px] text-center border-collapse">
         <thead className="bg-gray-50">
           <tr>
-            <th className="border p-2">거래처</th>
-            <th className="border p-2">첫 거래일</th>
-            <th className="border p-2">건수</th>
-            <th className="border p-2">매출</th>
-            <th className="border p-2">수익</th>
+            <th className="border p-2"><EditableText id="settlement.newClients.header.거래처" defaultText="거래처" /></th>
+            <th className="border p-2"><EditableText id="settlement.newClients.header.첫거래일" defaultText="첫 거래일" /></th>
+            <th className="border p-2"><EditableText id="settlement.newClients.header.건수" defaultText="건수" /></th>
+            <th className="border p-2"><EditableText id="settlement.newClients.header.매출" defaultText="매출" /></th>
+            <th className="border p-2"><EditableText id="settlement.newClients.header.수익" defaultText="수익" /></th>
           </tr>
         </thead>
         <tbody>
@@ -45847,7 +45847,7 @@ const tableData = React.useMemo(() => {
       className="border-b border-gray-200 px-3 py-3 text-[12px] font-bold text-gray-500 cursor-pointer select-none hover:text-[#1B2B4B] whitespace-nowrap"
       onClick={() => toggleSort(k)}
     >
-      {label} {sortKey === k ? (sortDir === "desc" ? "↓" : "↑") : ""}
+      <EditableText id={`settlement.clientCompare.header.${label}`} defaultText={label} /> {sortKey === k ? (sortDir === "desc" ? "↓" : "↑") : ""}
     </th>
   );
 
@@ -45913,11 +45913,11 @@ const tableData = React.useMemo(() => {
           <table className="w-full text-[13px] border-collapse">
             <thead>
               <tr className="bg-gray-50 text-center">
-                <th className="border-b border-gray-200 px-3 py-3 text-[12px] font-bold text-gray-500 text-left sticky left-0 bg-gray-50">거래처</th>
-                <th colSpan={3} className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-bold text-[#1B2B4B] bg-[#1B2B4B]/5">당월</th>
-                <th colSpan={3} className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-bold text-gray-500 bg-gray-50">전월 동기</th>
-                <th colSpan={3} className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-bold text-gray-500 bg-gray-50">작년 동월</th>
-                <th colSpan={2} className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-bold text-indigo-600 bg-indigo-50">증감</th>
+                <th className="border-b border-gray-200 px-3 py-3 text-[12px] font-bold text-gray-500 text-left sticky left-0 bg-gray-50"><EditableText id="settlement.clientCompare.거래처" defaultText="거래처" /></th>
+                <th colSpan={3} className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-bold text-[#1B2B4B] bg-[#1B2B4B]/5"><EditableText id="settlement.clientCompare.당월" defaultText="당월" /></th>
+                <th colSpan={3} className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-bold text-gray-500 bg-gray-50"><EditableText id="settlement.clientCompare.전월동기" defaultText="전월 동기" /></th>
+                <th colSpan={3} className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-bold text-gray-500 bg-gray-50"><EditableText id="settlement.clientCompare.작년동월" defaultText="작년 동월" /></th>
+                <th colSpan={2} className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-bold text-indigo-600 bg-indigo-50"><EditableText id="settlement.clientCompare.증감" defaultText="증감" /></th>
               </tr>
               <tr className="bg-gray-50 text-center">
                 <th className="border-b border-gray-200 px-3 py-2 text-left sticky left-0 bg-gray-50 text-[11px] text-gray-500">전체 {clientNames.length}개</th>
@@ -45925,12 +45925,12 @@ const tableData = React.useMemo(() => {
                 <SortTh k="curSale"   label="매출" />
                 <SortTh k="curProfit" label="수익" />
                 <SortTh k="curCnt"    label="건수" />
-                <th className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-500">매출</th>
-                <th className="border-b border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-500">수익</th>
-                <th className="border-b border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-500">건수</th>
-                <th className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-500">매출</th>
-                <th className="border-b border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-500">수익</th>
-                <th className="border-b border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-500">건수</th>
+                <th className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-500"><EditableText id="settlement.clientCompare.header.매출" defaultText="매출" /></th>
+                <th className="border-b border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-500"><EditableText id="settlement.clientCompare.header.수익" defaultText="수익" /></th>
+                <th className="border-b border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-500"><EditableText id="settlement.clientCompare.header.건수" defaultText="건수" /></th>
+                <th className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-500"><EditableText id="settlement.clientCompare.header.매출" defaultText="매출" /></th>
+                <th className="border-b border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-500"><EditableText id="settlement.clientCompare.header.수익" defaultText="수익" /></th>
+                <th className="border-b border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-500"><EditableText id="settlement.clientCompare.header.건수" defaultText="건수" /></th>
                 <SortTh k="saleDiff"   label="전월比" />
                 <SortTh k="saleDiffLY" label="작년比" />
               </tr>
