@@ -4,6 +4,7 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend,
 } from "recharts";
+import { EditableText } from "./EditMode";
 
 // ─────────────────────────────────────────────────────────
 //  PIN GATE
@@ -458,7 +459,9 @@ function OverviewTab({ data }) {
               <thead>
                 <tr style={{ borderBottom: "2px solid #f3f4f6" }}>
                   {["월","오더","총 매출","기사 운임","수익","마진율","전월 대비"].map(h => (
-                    <th key={h} className="text-left py-2.5 px-3 font-semibold text-gray-400 whitespace-nowrap">{h}</th>
+                    <th key={h} className="text-left py-2.5 px-3 font-semibold text-gray-400 whitespace-nowrap">
+                      <EditableText id={`executive.table.header.${h}`} defaultText={h} />
+                    </th>
                   ))}
                 </tr>
               </thead>

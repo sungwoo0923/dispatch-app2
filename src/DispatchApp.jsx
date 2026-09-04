@@ -55914,8 +55914,8 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
     <div className="p-6 max-w-2xl">
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="bg-[#1B2B4B] px-6 py-4">
-          <h2 className="text-white font-bold text-[16px]">내 정보</h2>
-          <p className="text-white/60 text-[12px] mt-0.5">계정 정보 및 개인 통계</p>
+          <h2 className="text-white font-bold text-[16px]"><EditableText id="myProfile.title" defaultText="내 정보" /></h2>
+          <p className="text-white/60 text-[12px] mt-0.5"><EditableText id="myProfile.subtitle" defaultText="계정 정보 및 개인 통계" /></p>
         </div>
         <div className="p-6 space-y-6">
           {/* 계정 정보 */}
@@ -56098,7 +56098,7 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
                 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
                 : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
             }`}>
-            {t}
+            <EditableText id={`companyMgmt.tab.${t}`} defaultText={t} />
           </button>
         ))}
       </div>
@@ -56466,7 +56466,7 @@ function HRManagementPage({ userCompany, role, userId }) {
       {/* 좌측: 팀별 인원 목록 */}
       <div className="w-[300px] flex-shrink-0 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col" style={{ maxHeight: 780 }}>
         <div className="p-3 border-b border-gray-100">
-          <h2 className="text-[16px] font-black text-[#1B2B4B] mb-2">인사관리부</h2>
+          <h2 className="text-[16px] font-black text-[#1B2B4B] mb-2"><EditableText id="hr.title" defaultText="인사관리부" /></h2>
           <input autoComplete="off" value={search} onChange={e => setSearch(e.target.value)} placeholder="이름/직책 검색"
             className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B] mb-2" />
           <div className="flex flex-wrap gap-1">
@@ -56769,7 +56769,7 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
         <button onClick={()=>setSubPage(null)} className="flex items-center gap-1.5 text-[#1B2B4B] text-[13px] font-semibold mb-5">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg> ERP 목록으로
         </button>
-        <h3 className="text-[17px] font-bold text-gray-900 mb-4">직원관리</h3>
+        <h3 className="text-[17px] font-bold text-gray-900 mb-4"><EditableText id="hr.erp.employee.title" defaultText="직원관리" /></h3>
         {!employees.length ? <div className="text-gray-500 text-[13px]">등록된 직원이 없습니다</div> : (
           <div className="grid grid-cols-2 gap-3">
             {employees.map(emp=>(
@@ -56798,7 +56798,7 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg> ERP 목록으로
         </button>
         <div className="flex items-center gap-3 mb-4">
-          <h3 className="text-[17px] font-bold text-gray-900">차량관리</h3>
+          <h3 className="text-[17px] font-bold text-gray-900"><EditableText id="hr.erp.vehicle.title" defaultText="차량관리" /></h3>
           <span style={{ background:accent+"15",color:accent,fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:20 }}>{drivers.length}대</span>
         </div>
         <input autoComplete="off" value={search} onChange={e=>setSearch(e.target.value)} placeholder="기사명 · 차량번호 검색"
@@ -56829,7 +56829,7 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg> ERP 목록으로
         </button>
         <div className="flex items-center gap-3 mb-4">
-          <h3 className="text-[17px] font-bold text-gray-900">거래처관리</h3>
+          <h3 className="text-[17px] font-bold text-gray-900"><EditableText id="hr.erp.client.title" defaultText="거래처관리" /></h3>
           <span style={{ background:accent+"15",color:accent,fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:20 }}>{allClients.length}곳</span>
         </div>
         <input autoComplete="off" value={search} onChange={e=>setSearch(e.target.value)} placeholder="거래처명 검색"
@@ -56860,7 +56860,7 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg> ERP 목록으로
         </button>
         <div className="flex items-center gap-4 mb-5">
-          <h3 className="text-[17px] font-bold text-gray-900">급여관리</h3>
+          <h3 className="text-[17px] font-bold text-gray-900"><EditableText id="hr.erp.payroll.title" defaultText="급여관리" /></h3>
           <div className="flex items-center gap-1.5">
             <button onClick={()=>{let m=payMonth-1,y=payYear;if(m<1){m=12;y--;}setPayMonth(m);setPayYear(y);}} className="w-7 h-7 border border-gray-200 rounded-lg flex items-center justify-center hover:bg-gray-50">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
@@ -56882,7 +56882,7 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
         {!payRows.length ? <div className="text-gray-500 text-[13px]">이 달 운행 기록이 없습니다</div> : (
           <table style={{ width:"100%",borderCollapse:"separate",borderSpacing:"0 6px" }}>
             <thead><tr style={{ fontSize:11,color:"#9ca3af",textAlign:"left" }}>
-              <th style={{ padding:"0 12px 4px" }}>기사명</th><th>차량번호</th><th style={{ textAlign:"right" }}>운행건수</th><th style={{ textAlign:"right",paddingRight:12 }}>기사운임</th><th style={{ textAlign:"right",paddingRight:12 }}>건당평균</th>
+              <th style={{ padding:"0 12px 4px" }}><EditableText id="hr.erp.payroll.header.기사명" defaultText="기사명" /></th><th><EditableText id="hr.erp.payroll.header.차량번호" defaultText="차량번호" /></th><th style={{ textAlign:"right" }}><EditableText id="hr.erp.payroll.header.운행건수" defaultText="운행건수" /></th><th style={{ textAlign:"right",paddingRight:12 }}><EditableText id="hr.erp.payroll.header.기사운임" defaultText="기사운임" /></th><th style={{ textAlign:"right",paddingRight:12 }}><EditableText id="hr.erp.payroll.header.건당평균" defaultText="건당평균" /></th>
             </tr></thead>
             <tbody>
               {payRows.map((r,i)=>(
@@ -57218,7 +57218,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999999]">
           <div className="bg-white rounded-2xl w-[440px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4">
-              <h3 className="text-white font-bold text-[15px]">회사 정보 수정 요청 결과</h3>
+              <h3 className="text-white font-bold text-[15px]"><EditableText id="companyProfile.resultModal.title" defaultText="회사 정보 수정 요청 결과" /></h3>
             </div>
             <div className="px-6 py-5 space-y-3">
               <div className={`flex items-center gap-2 px-4 py-3 rounded-xl border ${resolvedNotice.status === "approved" ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
@@ -57251,7 +57251,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
         {/* 상단 헤더 카드 */}
         <div className="bg-[#1B2B4B] rounded-2xl px-6 py-5 flex items-center justify-between shadow-sm">
           <div>
-            <h2 className="text-white font-bold text-[16px]">회사 정보</h2>
+            <h2 className="text-white font-bold text-[16px]"><EditableText id="companyProfile.title" defaultText="회사 정보" /></h2>
             <p className="text-white/50 text-[12px] mt-0.5">{appData?.companyName || companyName}</p>
           </div>
           {isAdmin && appData && (

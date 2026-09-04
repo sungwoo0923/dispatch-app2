@@ -4,6 +4,7 @@ import { db, auth } from "./firebase";
 import {
   collection, onSnapshot, doc, updateDoc, getDoc, serverTimestamp, query, where, deleteDoc, addDoc,
 } from "firebase/firestore";
+import { EditableText } from "./EditMode";
 
 const generateCompanyCode = () => {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -670,7 +671,9 @@ export default function CompanyApplications() {
             <thead>
               <tr className="bg-[#1B2B4B]">
                 {["신청일시", "유형", "회사명", "사업자번호", "이름", "연락처", "직책", "약관동의", "상태", "관리"].map((h) => (
-                  <th key={h} className="px-3 py-3 text-center text-[12px] font-semibold text-white whitespace-nowrap">{h}</th>
+                  <th key={h} className="px-3 py-3 text-center text-[12px] font-semibold text-white whitespace-nowrap">
+                    <EditableText id={`companyApp.table1.header.${h}`} defaultText={h} />
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -743,7 +746,9 @@ export default function CompanyApplications() {
             <thead>
               <tr className="bg-[#1B2B4B]">
                 {["신청일시", "이름", "차량번호", "차종", "연락처", "상태", "관리"].map((h) => (
-                  <th key={h} className="px-3 py-3 text-center text-[12px] font-semibold text-white whitespace-nowrap">{h}</th>
+                  <th key={h} className="px-3 py-3 text-center text-[12px] font-semibold text-white whitespace-nowrap">
+                    <EditableText id={`companyApp.table2.header.${h}`} defaultText={h} />
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -1210,10 +1215,10 @@ export default function CompanyApplications() {
                   <table className="w-full text-[13px]">
                     <thead className="sticky top-0 bg-gray-50 border-b border-gray-100">
                       <tr>
-                        <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500">회사명</th>
-                        <th className="px-4 py-2.5 text-center text-[11px] font-semibold text-gray-500">유형</th>
-                        <th className="px-4 py-2.5 text-center text-[11px] font-semibold text-gray-500">회사코드</th>
-                        <th className="px-4 py-2.5 text-center text-[11px] font-semibold text-gray-500">복사</th>
+                        <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500"><EditableText id="companyApp.linkTable.header.회사명" defaultText="회사명" /></th>
+                        <th className="px-4 py-2.5 text-center text-[11px] font-semibold text-gray-500"><EditableText id="companyApp.linkTable.header.유형" defaultText="유형" /></th>
+                        <th className="px-4 py-2.5 text-center text-[11px] font-semibold text-gray-500"><EditableText id="companyApp.linkTable.header.회사코드" defaultText="회사코드" /></th>
+                        <th className="px-4 py-2.5 text-center text-[11px] font-semibold text-gray-500"><EditableText id="companyApp.linkTable.header.복사" defaultText="복사" /></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
