@@ -1527,7 +1527,7 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
       )}
       <div className="bg-white rounded-2xl shadow-2xl w-[980px] max-h-[90vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between bg-[#1B2B4B] px-5 py-3 shrink-0">
-          <h3 className="text-white font-bold text-[15px]">선택 오더 일괄수정 <span className="text-white/60 font-semibold text-[12px] ml-1">({rows.length}건)</span></h3>
+          <h3 className="text-white font-bold text-[15px]"><EditableText id="bulkEdit.title" defaultText="선택 오더 일괄수정" /> <span className="text-white/60 font-semibold text-[12px] ml-1">({rows.length}건)</span></h3>
           <div className="flex items-center gap-2">
             {/* ⭐ 날짜 일괄 이동 — 우클릭 메뉴에 따로 두지 않고, 일괄수정 안에서
                 바로 열 수 있게 버튼으로 넣었다. 지금 선택한 오더 그대로
@@ -1536,7 +1536,7 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
               <button type="button" onClick={onDateShift}
                 className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[12px] font-bold hover:bg-gray-100 transition flex items-center gap-1.5">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 15l3 3 5-5"/></svg>
-                날짜 일괄 이동
+                <EditableText id="bulkEdit.날짜일괄이동" defaultText="날짜 일괄 이동" />
               </button>
             )}
             <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-lg font-bold transition">×</button>
@@ -1549,13 +1549,13 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
           <table className="w-full text-[12px] border-collapse">
             <thead>
               <tr>
-                <th className="border border-gray-200 bg-gray-100 px-2.5 py-2 font-bold text-gray-600 text-left w-[230px]">오더</th>
+                <th className="border border-gray-200 bg-gray-100 px-2.5 py-2 font-bold text-gray-600 text-left w-[230px]"><EditableText id="bulkEdit.table.header.오더" defaultText="오더" /></th>
                 {BULK_EDIT_FIELDS.map(f => (
-                  <th key={f.key} className="border border-gray-200 bg-gray-100 px-2 py-2 font-bold text-gray-600 min-w-[130px]">{f.label}</th>
+                  <th key={f.key} className="border border-gray-200 bg-gray-100 px-2 py-2 font-bold text-gray-600 min-w-[130px]"><EditableText id={`bulkEdit.table.header.${f.key}`} defaultText={f.label} /></th>
                 ))}
               </tr>
               <tr>
-                <td className="border border-gray-200 px-2.5 py-1.5 text-[11px] font-extrabold text-gray-500 bg-gray-50">일괄입력</td>
+                <td className="border border-gray-200 px-2.5 py-1.5 text-[11px] font-extrabold text-gray-500 bg-gray-50"><EditableText id="bulkEdit.table.일괄입력" defaultText="일괄입력" /></td>
                 {BULK_EDIT_FIELDS.map(f => (
                   <td key={f.key} className="border border-gray-200 px-2 py-1.5 bg-gray-50">
                     <div className="flex gap-1">
@@ -1569,7 +1569,7 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
                       ) : (
                         <input autoComplete="off" className="flex-1 border border-gray-300 rounded px-1 py-1 text-[11px]" value={bulkValues[f.key] ?? ""} onChange={(e) => setBulkValues(v => ({ ...v, [f.key]: e.target.value }))} />
                       )}
-                      <button type="button" onClick={() => applyBulk(f.key)} className="px-1.5 py-1 rounded bg-[#1B2B4B] text-white text-[10px] font-bold shrink-0 hover:opacity-90 transition">전체적용</button>
+                      <button type="button" onClick={() => applyBulk(f.key)} className="px-1.5 py-1 rounded bg-[#1B2B4B] text-white text-[10px] font-bold shrink-0 hover:opacity-90 transition"><EditableText id="bulkEdit.전체적용" defaultText="전체적용" /></button>
                     </div>
                   </td>
                 ))}
@@ -1606,9 +1606,9 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
           </table>
         </div>
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-white shrink-0">
-          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"><EditableText id="bulkEdit.취소" defaultText="취소" /></button>
           <button type="button" disabled={saving} onClick={handleSave} className="px-5 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:opacity-90 transition disabled:opacity-50">
-            {saving ? "저장 중..." : `${rows.length}건 저장`}
+            {saving ? <EditableText id="bulkEdit.저장중" defaultText="저장 중..." /> : `${rows.length}건 저장`}
           </button>
         </div>
       </div>
