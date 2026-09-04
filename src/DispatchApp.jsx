@@ -232,7 +232,7 @@ function FareCertModal({ row, companyName, onClose }) {
       <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
         {/* 헤더 툴바 */}
         <div className="flex items-center justify-between bg-[#1B2B4B] px-5 py-3 shrink-0">
-          <h3 className="text-white font-bold text-[15px]">운임정보 미리보기</h3>
+          <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.운임정보 미리보기" defaultText="운임정보 미리보기" /></h3>
           <div className="flex items-center gap-1.5">
             <button type="button" onClick={() => setZoom((z) => Math.max(0.6, +(z - 0.1).toFixed(2)))}
               className="w-7 h-7 rounded bg-white/10 text-white hover:bg-white/20 text-[14px] font-bold transition">−</button>
@@ -4383,7 +4383,7 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
       <div className="bg-white rounded-2xl shadow-2xl w-fit max-w-[92vw] min-w-[480px] max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
         <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0">
           <div>
-            <h3 className="text-white font-bold text-[15px]">오더정보</h3>
+            <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.오더정보" defaultText="오더정보" /></h3>
             <p className="text-white/75 font-semibold text-[12px] mt-0.5">{row.상차일 || ""} {row.거래처명 ? `· ${row.거래처명}` : ""}</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-lg font-bold transition">×</button>
@@ -7287,7 +7287,7 @@ return (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]">
     <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
       <div className="bg-[#1B2B4B] px-6 py-4 shrink-0">
-        <h3 className="text-white font-bold text-[15px]">화주사 수정요청</h3>
+        <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.화주사 수정요청" defaultText="화주사 수정요청" /></h3>
         {editReqPopup.수정요청일시 && (
           <p className="text-white/70 text-[12px] mt-0.5">{_fmtKst(editReqPopup.수정요청일시)} 요청</p>
         )}
@@ -14854,7 +14854,7 @@ className={`
             <path d="M12 22v-4" /><path d="m18.6 20.6-2.8-2.8" /><path d="M22 13h-4" /><path d="m18.6 5.4-2.8 2.8" />
             <circle cx="12" cy="13" r="3.5" />
           </svg>
-          <h3 className="text-white font-bold text-[15px]">AI 운임 추천</h3>
+          <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.AI 운임 추천" defaultText="AI 운임 추천" /></h3>
         </div>
         <button onClick={() => setAiPopupOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-lg font-bold transition">×</button>
       </div>
@@ -17388,7 +17388,7 @@ className={`
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
     <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden">
       <div className="bg-[#1B2B4B] px-5 py-4">
-        <h3 className="text-white font-bold text-[15px]">상태 변경</h3>
+        <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.상태 변경" defaultText="상태 변경" /></h3>
       </div>
       <div className="p-5">
         <div className="bg-gray-50 rounded-xl px-4 py-3 mb-5 border border-gray-100">
@@ -18327,7 +18327,7 @@ setConfirmChange(null);
     <div className="bg-white rounded-2xl shadow-2xl w-[720px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
         <div>
-          <h3 className="text-white font-bold text-[15px]">단가표 조회</h3>
+          <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.단가표 조회" defaultText="단가표 조회" /></h3>
           <p className="text-white/60 text-[12px] mt-0.5">
             {(form.하차지명 || "").trim() ? `"${form.하차지명}"와(과) 일치하는 등록된 단가표` : "하차지명을 입력하면 단가표 메뉴에 등록된 단가와 매칭해 보여줍니다"}
           </p>
@@ -26185,7 +26185,7 @@ const head = isDark
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
     <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
       <div className="bg-[#1B2B4B] px-6 py-4">
-        <h3 className="text-white font-bold text-[15px]">주소 전체보기</h3>
+        <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.주소 전체보기" defaultText="주소 전체보기" /></h3>
       </div>
       <div className="px-6 py-5">
         <p className="text-[14px] text-gray-800 leading-relaxed whitespace-pre-wrap break-words">{addrPopup}</p>
@@ -26200,7 +26200,7 @@ const head = isDark
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
     <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
       <div className="bg-[#1B2B4B] px-6 py-4">
-        <h3 className="text-white font-bold text-[15px]">화물내용 전체보기</h3>
+        <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.화물내용 전체보기" defaultText="화물내용 전체보기" /></h3>
       </div>
       <div className="px-6 py-5">
         <p className="text-[14px] text-gray-800 leading-relaxed whitespace-pre-wrap break-words">{cargoPopup}</p>
@@ -26775,7 +26775,7 @@ const head = isDark
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
       <div className="bg-white rounded-2xl shadow-2xl w-[460px] overflow-hidden border">
         <div className="bg-[#1B2B4B] px-6 py-4">
-          <h3 className="text-white font-bold text-[15px]">거래처 주소 불일치</h3>
+          <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.거래처 주소 불일치" defaultText="거래처 주소 불일치" /></h3>
           <p className="text-white/60 text-[12px] mt-0.5">'{item.name}' 거래처의 기존 주소와 다릅니다</p>
         </div>
         <div className="px-6 py-4 space-y-3 text-[13px]">
@@ -28243,7 +28243,7 @@ value={copyTarget?.화물수량 || ""}
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
     <div className="bg-white rounded-2xl shadow-2xl w-[320px] overflow-hidden border">
       <div className="bg-[#1B2B4B] px-6 py-4">
-        <h3 className="text-white font-bold text-[15px]">거래처 적용</h3>
+        <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.거래처 적용" defaultText="거래처 적용" /></h3>
         <p className="text-white/60 text-[12px] mt-0.5">'{clientApplyPopup.거래처명}'을(를) 어디에 적용할까요?</p>
       </div>
       <div className="px-6 py-4 flex flex-col gap-2">
@@ -28323,7 +28323,7 @@ value={copyTarget?.화물수량 || ""}
                 <div className="bg-white rounded-2xl shadow-2xl w-[720px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
                   <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
                     <div>
-                      <h3 className="text-white font-bold text-[15px]">단가표 조회</h3>
+                      <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.단가표 조회" defaultText="단가표 조회" /></h3>
                       <p className="text-white/60 text-[12px] mt-0.5">
                         {(editTarget?.하차지명 || "").trim() ? `"${editTarget.하차지명}"와(과) 일치하는 등록된 단가표` : "하차지명이 있어야 단가표 메뉴에 등록된 단가와 매칭해 보여줍니다"}
                       </p>
@@ -30115,7 +30115,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
 
             {/* 헤더 */}
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-              <h3 className="text-white font-bold text-[15px]">기사 정보 확인</h3>
+              <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.기사 정보 확인" defaultText="기사 정보 확인" /></h3>
               <button
                 className="text-white/50 hover:text-white text-lg transition"
                 onClick={() => setDriverConfirmOpen(false)}
@@ -30350,7 +30350,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
           <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden border" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex justify-between items-center">
               <div>
-                <h3 className="text-white font-bold text-[15px]">기사 선택</h3>
+                <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.기사 선택" defaultText="기사 선택" /></h3>
                 <p className="text-white/60 text-[12px] mt-0.5">동일 차량번호에 기사 {copyDriverPick.list?.length}명이 등록되어 있습니다</p>
               </div>
               <button className="text-white/60 hover:text-white text-lg" onClick={() => setCopyDriverPick(null)}>✕</button>
@@ -30386,7 +30386,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
       {smart4ConflictPopup && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]">
           <div className="bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden border">
-            <div className="bg-[#1B2B4B] px-6 py-4 flex justify-between items-center"><div><h3 className="text-white font-bold text-[15px]">⚠️ 기사 정보 확인</h3><p className="text-white/60 text-[12px] mt-0.5">동일 차량번호, 다른 기사 정보가 감지되었습니다</p></div><button className="text-white/60 hover:text-white text-lg" onClick={()=>setSmart4ConflictPopup(null)}>✕</button></div>
+            <div className="bg-[#1B2B4B] px-6 py-4 flex justify-between items-center"><div><h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.⚠️ 기사 정보 확인" defaultText="⚠️ 기사 정보 확인" /></h3><p className="text-white/60 text-[12px] mt-0.5">동일 차량번호, 다른 기사 정보가 감지되었습니다</p></div><button className="text-white/60 hover:text-white text-lg" onClick={()=>setSmart4ConflictPopup(null)}>✕</button></div>
             <div className="px-6 py-5 space-y-4">
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-4"><div className="text-[11px] font-semibold text-gray-500 mb-2">기존 등록 정보</div><div className="font-bold text-[14px]">{smart4ConflictPopup.existing.이름}</div><div className="text-[13px] text-gray-600 mt-1">{smart4ConflictPopup.existing.차량번호} | {formatPhone(smart4ConflictPopup.existing.전화번호)}</div></div>
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4"><div className="text-[11px] font-semibold text-blue-600 mb-2">새로 입력한 정보</div><div className="font-bold text-[14px]">{smart4ConflictPopup.input.name}</div><div className="text-[13px] text-gray-600 mt-1">{smart4ConflictPopup.input.plate} | {formatPhone(smart4ConflictPopup.input.phone)}</div></div>
@@ -30609,7 +30609,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
           <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
         </div>
         <div>
-          <h3 className="text-white font-bold text-[15px]">운임 이력 없음</h3>
+          <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.운임 이력 없음" defaultText="운임 이력 없음" /></h3>
           <p className="text-white/60 text-[12px] mt-0.5">동일 상/하차지 운임 이력이 없습니다</p>
         </div>
       </div>
@@ -30955,7 +30955,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
                 <svg className="w-5 h-5 text-red-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
               </div>
               <div>
-                <h3 className="text-white font-bold text-[15px]">선택한 오더를 삭제하시겠습니까?</h3>
+                <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.선택한 오더를 삭제하시겠습니까?" defaultText="선택한 오더를 삭제하시겠습니까?" /></h3>
                 <p className="text-white/60 text-[12px] mt-0.5">삭제 후에도 되돌리기로 복구할 수 있습니다</p>
               </div>
             </div>
@@ -31052,7 +31052,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100000]">
           <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden">
             <div className="bg-[#1B2B4B] px-5 py-4">
-              <h3 className="text-white font-bold text-[15px]">상태 변경</h3>
+              <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.상태 변경" defaultText="상태 변경" /></h3>
             </div>
             <div className="p-5">
               <div className="bg-gray-50 rounded-xl px-4 py-3 mb-5 border border-gray-100">
@@ -31185,7 +31185,7 @@ setConfirmChange(null);
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]">
           <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="bg-gradient-to-br from-red-500 to-red-800 px-6 py-4 shrink-0">
-              <h3 className="text-white font-bold text-[15px]">화주사 배차취소 요청</h3>
+              <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.화주사 배차취소 요청" defaultText="화주사 배차취소 요청" /></h3>
               {cancelReqPopup.취소요청일시 && (
                 <p className="text-white/70 text-[12px] mt-0.5">{_fmtKst(cancelReqPopup.취소요청일시)} 요청</p>
               )}
@@ -31229,7 +31229,7 @@ setConfirmChange(null);
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100002]">
           <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden">
             <div className="bg-[#1B2B4B] px-5 py-4">
-              <h3 className="text-white font-bold text-[15px]">문자 메시지 전송</h3>
+              <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.문자 메시지 전송" defaultText="문자 메시지 전송" /></h3>
             </div>
             <div className="p-5">
               <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4 border border-gray-100 text-[13px] text-gray-700">
@@ -31257,7 +31257,7 @@ setConfirmChange(null);
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100002]">
           <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden">
             <div className="bg-[#1B2B4B] px-5 py-4">
-              <h3 className="text-white font-bold text-[15px]">업로드 안내 메시지 전송</h3>
+              <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.업로드 안내 메시지 전송" defaultText="업로드 안내 메시지 전송" /></h3>
             </div>
             <div className="p-5">
               <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4 border border-gray-100 text-[13px] text-gray-700">
@@ -31768,7 +31768,7 @@ setConfirmChange(null);
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]">
           <div className="bg-white rounded-2xl w-[480px] max-h-[85vh] flex flex-col shadow-2xl overflow-hidden" onClick={e=>e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between shrink-0">
-              <h3 className="text-white font-bold text-[15px]">정렬 / 필터 설정</h3>
+              <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.정렬 / 필터 설정" defaultText="정렬 / 필터 설정" /></h3>
               <button className="text-white/60 hover:text-white text-xl leading-none" onClick={()=>setSortModalOpen(false)}>×</button>
             </div>
             <div className="overflow-y-auto flex-1 p-5 space-y-5">
@@ -37922,7 +37922,7 @@ return (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
             <div className="bg-white rounded-2xl shadow-2xl w-[460px] overflow-hidden border">
               <div className="bg-[#1B2B4B] px-6 py-4">
-                <h3 className="text-white font-bold text-[15px]">거래처 주소 불일치</h3>
+                <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.거래처 주소 불일치" defaultText="거래처 주소 불일치" /></h3>
                 <p className="text-white/60 text-[12px] mt-0.5">'{item.name}' 거래처의 기존 주소와 다릅니다</p>
               </div>
               <div className="px-6 py-4 space-y-3 text-[13px]">
@@ -39353,7 +39353,7 @@ setCopyPlaceOptions(list);
           <div className="bg-white rounded-2xl shadow-2xl w-[720px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
               <div>
-                <h3 className="text-white font-bold text-[15px]">단가표 조회</h3>
+                <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.단가표 조회" defaultText="단가표 조회" /></h3>
                 <p className="text-white/60 text-[12px] mt-0.5">
                   {(editTarget?.하차지명 || "").trim() ? `"${editTarget.하차지명}"와(과) 일치하는 등록된 단가표` : "하차지명이 있어야 단가표 메뉴에 등록된 단가와 매칭해 보여줍니다"}
                 </p>
@@ -39650,7 +39650,7 @@ setCopyPlaceOptions(list);
           >
             {/* 헤더 */}
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-              <h3 className="text-white font-bold text-[15px]">기사 정보 확인</h3>
+              <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.기사 정보 확인" defaultText="기사 정보 확인" /></h3>
               <button
                 className="text-white/50 hover:text-white text-lg transition"
                 onClick={() => { setDriverConfirmInfo(null); setQuickRegMode5(false); setQuickRegName5(""); setQuickRegPhone5(""); }}>
@@ -39902,7 +39902,7 @@ setCopyPlaceOptions(list);
                 <svg className="w-5 h-5 text-red-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
               </div>
               <div>
-                <h3 className="text-white font-bold text-[15px]">선택한 오더를 삭제하시겠습니까?</h3>
+                <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.선택한 오더를 삭제하시겠습니까?" defaultText="선택한 오더를 삭제하시겠습니까?" /></h3>
                 <p className="text-white/60 text-[12px] mt-0.5">삭제 후에도 되돌리기로 복구할 수 있습니다</p>
               </div>
             </div>
@@ -39965,7 +39965,7 @@ setCopyPlaceOptions(list);
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
           <div className="bg-white rounded-2xl shadow-2xl w-[320px] overflow-hidden">
             <div className="bg-[#1B2B4B] px-5 py-4">
-              <h3 className="text-white font-bold text-[15px]">복사 방식 선택</h3>
+              <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.복사 방식 선택" defaultText="복사 방식 선택" /></h3>
             </div>
             <div className="p-4 space-y-2">
               <button onClick={() => copyMessage("basic")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
@@ -40002,7 +40002,7 @@ setCopyPlaceOptions(list);
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100002]">
           <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden">
             <div className="bg-[#1B2B4B] px-5 py-4">
-              <h3 className="text-white font-bold text-[15px]">문자 메시지 전송</h3>
+              <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.문자 메시지 전송" defaultText="문자 메시지 전송" /></h3>
             </div>
             <div className="p-5">
               <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4 border border-gray-100 text-[13px] text-gray-700">
@@ -40032,7 +40032,7 @@ setCopyPlaceOptions(list);
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100002]">
           <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden">
             <div className="bg-[#1B2B4B] px-5 py-4">
-              <h3 className="text-white font-bold text-[15px]">업로드 안내 메시지 전송</h3>
+              <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.업로드 안내 메시지 전송" defaultText="업로드 안내 메시지 전송" /></h3>
             </div>
             <div className="p-5">
               <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4 border border-gray-100 text-[13px] text-gray-700">
@@ -40114,7 +40114,7 @@ setCopyPlaceOptions(list);
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]">
           <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="bg-gradient-to-br from-red-500 to-red-800 px-6 py-4 shrink-0">
-              <h3 className="text-white font-bold text-[15px]">화주사 배차취소 요청</h3>
+              <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.화주사 배차취소 요청" defaultText="화주사 배차취소 요청" /></h3>
               {cancelReqPopup.취소요청일시 && (
                 <p className="text-white/70 text-[12px] mt-0.5">{_fmtKst(cancelReqPopup.취소요청일시)} 요청</p>
               )}
@@ -40177,7 +40177,7 @@ setCopyPlaceOptions(list);
         >
           <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden">
             <div className="bg-[#1B2B4B] px-5 py-4">
-              <h3 className="text-white font-bold text-[15px]">상태 변경</h3>
+              <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.상태 변경" defaultText="상태 변경" /></h3>
             </div>
             <div className="p-5">
               <div className="bg-gray-50 rounded-xl px-4 py-3 mb-5 border border-gray-100">
@@ -40220,7 +40220,7 @@ setCopyPlaceOptions(list);
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100000]">
           <div className="bg-white rounded-2xl w-[480px] max-h-[85vh] flex flex-col shadow-2xl overflow-hidden" onClick={e=>e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between shrink-0">
-              <h3 className="text-white font-bold text-[15px]">정렬 / 필터 설정</h3>
+              <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.정렬 / 필터 설정" defaultText="정렬 / 필터 설정" /></h3>
               <button className="text-white/60 hover:text-white text-xl leading-none" onClick={()=>setSortModalOpen(false)}>×</button>
             </div>
             <div className="overflow-y-auto flex-1 p-5 space-y-5">
@@ -40282,7 +40282,7 @@ setCopyPlaceOptions(list);
           <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden border" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex justify-between items-center">
               <div>
-                <h3 className="text-white font-bold text-[15px]">기사 선택</h3>
+                <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.기사 선택" defaultText="기사 선택" /></h3>
                 <p className="text-white/60 text-[12px] mt-0.5">동일 차량번호에 기사 {copyDriverPick.list?.length}명이 등록되어 있습니다</p>
               </div>
               <button className="text-white/60 hover:text-white text-lg" onClick={() => setCopyDriverPick(null)}>✕</button>
@@ -40319,7 +40319,7 @@ setCopyPlaceOptions(list);
           <div className="bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden border">
             <div className="bg-[#1B2B4B] px-6 py-4 flex justify-between items-center">
               <div>
-                <h3 className="text-white font-bold text-[15px]">⚠️ 기사 정보 확인</h3>
+                <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.⚠️ 기사 정보 확인" defaultText="⚠️ 기사 정보 확인" /></h3>
                 <p className="text-white/60 text-[12px] mt-0.5">동일 차량번호, 다른 기사 정보가 감지되었습니다</p>
               </div>
               <button className="text-white/60 hover:text-white text-lg" onClick={()=>setSmart5ConflictPopup(null)}>✕</button>
@@ -40942,7 +40942,7 @@ setCopyPlaceOptions(list);
           <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
         </div>
         <div>
-          <h3 className="text-white font-bold text-[15px]">운임 이력 없음</h3>
+          <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.운임 이력 없음" defaultText="운임 이력 없음" /></h3>
           <p className="text-white/60 text-[12px] mt-0.5">동일 상/하차지 운임 이력이 없습니다</p>
         </div>
       </div>
@@ -41310,7 +41310,7 @@ setCopyPlaceOptions(list);
             onClick={(e) => e.stopPropagation()}
           >
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-              <h3 className="text-white font-bold text-[15px]">기사 정보 확인</h3>
+              <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.기사 정보 확인" defaultText="기사 정보 확인" /></h3>
               <button className="text-white/50 hover:text-white text-lg transition" onClick={() => setDriverConfirmOpen5(false)}>✕</button>
             </div>
             <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
@@ -46786,7 +46786,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                 <svg className="w-5 h-5 text-red-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
               </div>
               <div>
-                <h3 className="text-white font-bold text-[15px]">선택한 오더를 삭제하시겠습니까?</h3>
+                <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.선택한 오더를 삭제하시겠습니까?" defaultText="선택한 오더를 삭제하시겠습니까?" /></h3>
                 <p className="text-white/60 text-[12px] mt-0.5">삭제된 오더는 복구되지 않습니다</p>
               </div>
             </div>
@@ -49744,7 +49744,7 @@ const handleBatchSettle = async (targetStatus) => {
               <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 {/* 헤더 */}
                 <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between rounded-t-2xl">
-                  <h3 className="text-white font-bold text-[15px]">오더 상세</h3>
+                  <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.오더 상세" defaultText="오더 상세" /></h3>
                   <button className="text-white/60 hover:text-white text-lg" onClick={() => setOrderPopup(null)}>✕</button>
                 </div>
 
@@ -50514,7 +50514,7 @@ const handleBatchSettle = async (targetStatus) => {
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
               <div className="bg-white rounded-2xl shadow-2xl w-[460px] overflow-hidden">
                 <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-                  <h3 className="text-white font-bold text-[15px]">거래처 정보 수정</h3>
+                  <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.거래처 정보 수정" defaultText="거래처 정보 수정" /></h3>
                   <button className="text-white/60 hover:text-white text-lg" onClick={()=>setShowEdit(false)}>✕</button>
                 </div>
                 <div className="p-6 space-y-3">
@@ -51260,7 +51260,7 @@ const handleBatchSettle = async (targetStatus) => {
                 {/* 헤더 */}
                 <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between rounded-t-2xl">
                   <div>
-                    <h3 className="text-white font-bold text-[15px]">입금 매칭 결과</h3>
+                    <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.입금 매칭 결과" defaultText="입금 매칭 결과" /></h3>
                     <p className="text-white/60 text-[12px] mt-0.5">
                       업로드 {bankMatchResult.deposits.length}건 중 매칭 {bankMatchResult.matches.length}건
                     </p>
@@ -53647,7 +53647,7 @@ function BizRegOcrModal({ imageBase64, onClose, onApply }) {
     <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/50" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-[420px] max-w-[92vw] overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-          <h3 className="text-white font-bold text-[15px]">사업자등록증 스캔</h3>
+          <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.사업자등록증 스캔" defaultText="사업자등록증 스캔" /></h3>
           <button onClick={onClose} className="text-white/60 hover:text-white text-xl">✕</button>
         </div>
         <div className="px-6 py-6">
@@ -54905,7 +54905,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
               <div className="bg-white rounded-2xl shadow-2xl w-[600px] overflow-hidden" onClick={e => e.stopPropagation()}>
                 <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-                  <h3 className="text-white font-bold text-[15px]">신규 기본 거래처 등록</h3>
+                  <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.신규 기본 거래처 등록" defaultText="신규 기본 거래처 등록" /></h3>
                   <button onClick={() => setShowNewClientModal(false)} className="text-white/60 hover:text-white text-xl">✕</button>
                 </div>
                 <div className="px-6 py-5 grid grid-cols-2 gap-4">
@@ -55167,7 +55167,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
               <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
                 <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-                  <h3 className="text-white font-bold text-[15px]">메모</h3>
+                  <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.메모" defaultText="메모" /></h3>
                   <button onClick={() => setMemoPopup(null)} className="text-white/60 hover:text-white text-xl">✕</button>
                 </div>
                 <div className="px-6 py-5">
