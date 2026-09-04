@@ -12901,7 +12901,7 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
       <>
         <div className="flex items-center gap-4 mb-3">
 
-  <h2 className="text-lg font-bold">배차관리</h2>
+  <h2 className="text-lg font-bold"><EditableText id="popup.title.배차관리 폼" defaultText="배차관리" /></h2>
 
   <FuelSlideWidget />
 
@@ -16192,7 +16192,7 @@ className={`
                 <div className="flex items-center gap-3">
                   <div className="w-1.5 h-6 bg-blue-400 rounded-full" />
                   <div>
-                    <h2 className="text-[16px] font-bold text-white">24시콜 전송</h2>
+                    <h2 className="text-[16px] font-bold text-white"><EditableText id="popup.title.24시콜 전송" defaultText="24시콜 전송" /></h2>
                     <p className="text-[11px] text-blue-200 mt-0.5">전송 전 내용을 확인하고 필요 시 수정하세요</p>
                   </div>
                 </div>
@@ -16422,7 +16422,7 @@ className={`
                 <div className="flex items-center gap-3">
                   <div className="w-1.5 h-5 bg-blue-400 rounded-full" />
                   <div>
-                    <h2 className="text-[16px] font-bold text-white">오더복사</h2>
+                    <h2 className="text-[16px] font-bold text-white"><EditableText id="popup.title.오더복사" defaultText="오더복사" /></h2>
                     <p className="text-[11px] text-white/50 mt-0.5">더블클릭으로 바로 복사 · 체크 후 복사 버튼 사용 가능</p>
                   </div>
                 </div>
@@ -35963,7 +35963,7 @@ return (
     to   { opacity: 1; transform: translateY(0); }
   }
 `}</style>
-      <h2 className="text-lg font-bold mb-2">배차현황</h2>
+      <h2 className="text-lg font-bold mb-2"><EditableText id="popup.title.배차현황 폼" defaultText="배차현황" /></h2>
 
       {/* ===== 상차 임박 경고 배너 — 접기/펼치기 ===== */}
       {dsWarningList.length > 0 && (
@@ -42459,7 +42459,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], pla
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h2 className="text-[16px] font-bold text-[#1B2B4B]">손익보고서</h2>
+          <h2 className="text-[16px] font-bold text-[#1B2B4B]"><EditableText id="settlement.profitLoss.title" defaultText="손익보고서" /></h2>
           <p className="text-[12px] text-gray-500 mt-0.5">자동 집계 항목 외 수동 입력 항목은 셀을 클릭하거나 엑셀로 업로드하세요</p>
         </div>
         <div className="flex items-center gap-2">
@@ -42816,7 +42816,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
     <div className="px-8 py-6">
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h2 className="text-[16px] font-bold text-[#1B2B4B]">회계자료</h2>
+          <h2 className="text-[16px] font-bold text-[#1B2B4B]"><EditableText id="settlement.accounting.title" defaultText="회계자료" /></h2>
           <p className="text-[12px] text-gray-500 mt-0.5">미수금·지급현황·부가세·원가분석을 한 곳에서 관리하세요</p>
         </div>
         <div className="flex items-center gap-2">
@@ -46567,8 +46567,8 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
       {/* 페이지 헤더 */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-[18px] font-bold text-[#1B2B4B]">미배차현황</h2>
-          <p className="text-[12px] text-gray-500 mt-0.5">배차 대기 중인 오더 목록 — 더블클릭으로 수정/복사</p>
+          <h2 className="text-[18px] font-bold text-[#1B2B4B]"><EditableText id="unassigned.title" defaultText="미배차현황" /></h2>
+          <p className="text-[12px] text-gray-500 mt-0.5"><EditableText id="unassigned.subtitle" defaultText="배차 대기 중인 오더 목록 — 더블클릭으로 수정/복사" /></p>
         </div>
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2">
           <span className="text-[12px] text-gray-500">대기</span>
@@ -49555,7 +49555,7 @@ const handleBatchSettle = async (targetStatus) => {
               {/* 헤더 */}
               <div className="bg-[#1B2B4B] px-8 py-5 flex items-center justify-between">
                 <div>
-                  <h2 className="text-[22px] font-extrabold text-white">거래명세서</h2>
+                  <h2 className="text-[22px] font-extrabold text-white"><EditableText id="popup.title.거래명세서" defaultText="거래명세서" /></h2>
                   {(start || end) && (
                     <p className="text-white/60 text-[13px] mt-1">거래기간 : {start||"시작일"} ~ {end||"종료일"}</p>
                   )}
@@ -52278,8 +52278,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
       {/* ── 헤더 ── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-[20px] font-bold text-[#1B2B4B]">지급관리</h2>
-          <p className="text-[12px] text-gray-500 mt-0.5">배차완료 오더의 기사운임 지급 현황 관리</p>
+          <h2 className="text-[20px] font-bold text-[#1B2B4B]"><EditableText id="payment.title" defaultText="지급관리" /></h2>
+          <p className="text-[12px] text-gray-500 mt-0.5"><EditableText id="payment.subtitle" defaultText="배차완료 오더의 기사운임 지급 현황 관리" /></p>
         </div>
         <div className="flex gap-2 items-center flex-wrap">
           <div className="flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-[12px]">
