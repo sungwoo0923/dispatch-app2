@@ -49676,7 +49676,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <thead>
                     <tr className="bg-[#1B2B4B]">
                       {["No","날짜","상차지","하차지","경유지","화물명","기사명","차량번호","공급가액","세액(10%)","합계"].map(h=>(
-                        <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
+                        <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap"><EditableText id={`taxInvoice.table.header.${h}`} defaultText={h} /></th>
                       ))}
                     </tr>
                   </thead>
@@ -50837,11 +50837,11 @@ const handleBatchSettle = async (targetStatus) => {
               <table className="w-full border-2 border-gray-300 text-center text-[14px]">
                 <thead className="bg-[#1B2B4B] text-white">
                   <tr>
-                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold">거래일</th>
-                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold">적요(입금자명)</th>
-                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold">입금액</th>
-                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold">잔액</th>
-                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold">비고</th>
+                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold"><EditableText id="settlement.bankSample.header.거래일" defaultText="거래일" /></th>
+                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold"><EditableText id="settlement.bankSample.header.적요" defaultText="적요(입금자명)" /></th>
+                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold"><EditableText id="settlement.bankSample.header.입금액" defaultText="입금액" /></th>
+                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold"><EditableText id="settlement.bankSample.header.잔액" defaultText="잔액" /></th>
+                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold"><EditableText id="settlement.bankSample.header.비고" defaultText="비고" /></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -53493,7 +53493,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                                     }} />
                                 </th>
                                 {["차량번호","기사명","연락처","등급","비고"].map(h => (
-                                  <th key={h} className="px-3 py-2 text-[12px] font-bold text-gray-500 text-left whitespace-nowrap">{h}</th>
+                                  <th key={h} className="px-3 py-2 text-[12px] font-bold text-gray-500 text-left whitespace-nowrap"><EditableText id={`driver.cleanup.dupTable.header.${h}`} defaultText={h} /></th>
                                 ))}
                               </tr>
                             </thead>
@@ -54755,12 +54755,12 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                     <thead>
                       <tr className="border-b border-gray-100 bg-gray-50">
                         <th className="px-3 py-2 text-center w-8"></th>
-                        <th className="px-3 py-2 text-center">구분</th>
-                        <th className="px-3 py-2 text-center">업체명</th>
-                        <th className="px-3 py-2 text-center">주소</th>
-                        <th className="px-3 py-2 text-center">담당자</th>
-                        <th className="px-3 py-2 text-center">연락처</th>
-                        <th className="px-3 py-2 text-center">등급</th>
+                        <th className="px-3 py-2 text-center"><EditableText id="client.dupPopup.byNameTable.header.구분" defaultText="구분" /></th>
+                        <th className="px-3 py-2 text-center"><EditableText id="client.dupPopup.byNameTable.header.업체명" defaultText="업체명" /></th>
+                        <th className="px-3 py-2 text-center"><EditableText id="client.dupPopup.byNameTable.header.주소" defaultText="주소" /></th>
+                        <th className="px-3 py-2 text-center"><EditableText id="client.dupPopup.byNameTable.header.담당자" defaultText="담당자" /></th>
+                        <th className="px-3 py-2 text-center"><EditableText id="client.dupPopup.byNameTable.header.연락처" defaultText="연락처" /></th>
+                        <th className="px-3 py-2 text-center"><EditableText id="client.dupPopup.byNameTable.header.등급" defaultText="등급" /></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -56646,7 +56646,7 @@ function HRManagementPage({ userCompany, role, userId }) {
                           { l: "결재 대기 건", v: `${selected.pendingApprovals}건` },
                         ].map(s => (
                           <tr key={s.l} className="border-b border-gray-100">
-                            <th className="text-left py-2.5 pr-4 text-gray-500 font-semibold w-[180px] align-top">{s.l}</th>
+                            <th className="text-left py-2.5 pr-4 text-gray-500 font-semibold w-[180px] align-top"><EditableText id={`hr.attendancePreview.label.${s.l}`} defaultText={s.l} /></th>
                             <td className="py-2.5 text-gray-800 font-bold">{s.v}</td>
                           </tr>
                         ))}
