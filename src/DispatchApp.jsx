@@ -6841,7 +6841,7 @@ return (
                     ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
                     : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
                 }`}>
-                {tab}
+                <EditableText id={`nav.거래처관리.${tab}`} defaultText={tab} />
               </button>
             ))}
           </div>
@@ -16510,15 +16510,15 @@ className={`
                 <table className="w-full min-w-max text-[13px]">
                   <thead>
   <tr className="bg-[#1B2B4B]/5 text-[#1B2B4B]">
-    <th className="px-3 py-3 text-center font-bold text-[12px] rounded-l-lg w-10">선택</th>
-    <th className="px-3 py-3 text-left font-bold text-[12px] w-24">상차일</th>
-    <th className="px-3 py-3 text-left font-bold text-[12px]">거래처명</th>
-    <th className="px-3 py-3 text-left font-bold text-[12px]">상차지명</th>
-    <th className="px-3 py-3 text-left font-bold text-[12px]">하차지명</th>
-    <th className="px-3 py-3 text-left font-bold text-[12px]">화물내용</th>
-    <th className="px-3 py-3 text-left font-bold text-[12px]">차량종류</th>
-    <th className="px-3 py-3 text-left font-bold text-[12px]">차량톤수</th>
-    <th className="px-3 py-3 text-left font-bold text-[12px] rounded-r-lg">메모</th>
+    <th className="px-3 py-3 text-center font-bold text-[12px] rounded-l-lg w-10"><EditableText id="dispatch.table.header.선택" defaultText="선택" /></th>
+    <th className="px-3 py-3 text-left font-bold text-[12px] w-24"><EditableText id="dispatch.table.header.상차일" defaultText="상차일" /></th>
+    <th className="px-3 py-3 text-left font-bold text-[12px]"><EditableText id="dispatch.table.header.거래처명" defaultText="거래처명" /></th>
+    <th className="px-3 py-3 text-left font-bold text-[12px]"><EditableText id="dispatch.table.header.상차지명" defaultText="상차지명" /></th>
+    <th className="px-3 py-3 text-left font-bold text-[12px]"><EditableText id="dispatch.table.header.하차지명" defaultText="하차지명" /></th>
+    <th className="px-3 py-3 text-left font-bold text-[12px]"><EditableText id="dispatch.table.header.화물내용" defaultText="화물내용" /></th>
+    <th className="px-3 py-3 text-left font-bold text-[12px]"><EditableText id="dispatch.table.header.차량종류" defaultText="차량종류" /></th>
+    <th className="px-3 py-3 text-left font-bold text-[12px]"><EditableText id="dispatch.table.header.차량톤수" defaultText="차량톤수" /></th>
+    <th className="px-3 py-3 text-left font-bold text-[12px] rounded-r-lg"><EditableText id="dispatch.table.header.메모" defaultText="메모" /></th>
   </tr>
 </thead>
 
@@ -36166,7 +36166,7 @@ return (
                       onChange={() => toggleAll(filtered)}
                       checked={filtered.length && filtered.every((r) => selected.has(getId(r)))}
                     />
-                  ) : h}
+                  ) : <EditableText id={`status.table.header.${h}`} defaultText={h} />}
                 </th>
               ))}
             </tr>
@@ -44701,12 +44701,12 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
               <table className="w-full text-[13px] border-collapse text-center">
                 <thead className="bg-gray-50 text-gray-600">
                   <tr>
-                    <th className="border p-2">구분</th>
-                    <th className="border p-2">매출</th>
-                    <th className="border p-2">운반비</th>
-                    <th className="border p-2">수익</th>
-                    <th className="border p-2">수익률</th>
-                    <th className="border p-2">전월대비</th>
+                    <th className="border p-2"><EditableText id="settlement.table.header.구분" defaultText="구분" /></th>
+                    <th className="border p-2"><EditableText id="settlement.table.header.매출" defaultText="매출" /></th>
+                    <th className="border p-2"><EditableText id="settlement.table.header.운반비" defaultText="운반비" /></th>
+                    <th className="border p-2"><EditableText id="settlement.table.header.수익" defaultText="수익" /></th>
+                    <th className="border p-2"><EditableText id="settlement.table.header.수익률" defaultText="수익률" /></th>
+                    <th className="border p-2"><EditableText id="settlement.table.header.전월대비" defaultText="전월대비" /></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -53167,7 +53167,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                       />
                     </th>
                     {[["순번",""],["차량번호","w-[92px]"],["이름",""],["전화번호",""],["등록일",""],["담당자",""],["거주지",""],["근무가능요일",""],["등급",""],["메모",""],["팝업",""],["삭제",""]].map(([h,w]) => (
-                      <th key={h} className={`px-3 py-3 text-white font-bold text-center whitespace-nowrap ${w}`}>{h}</th>
+                      <th key={h} className={`px-3 py-3 text-white font-bold text-center whitespace-nowrap ${w}`}><EditableText id={`driver.table.header.${h}`} defaultText={h} /></th>
                     ))}
                   </tr>
                 </thead>
@@ -53420,9 +53420,9 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                     <thead className="sticky top-0 bg-[#1B2B4B]">
                       <tr>
                         {["차량번호","기사명","현재 연락처","정규화 후"].map(h => (
-                          <th key={h} className="px-4 py-3 text-white font-bold text-left whitespace-nowrap">{h}</th>
+                          <th key={h} className="px-4 py-3 text-white font-bold text-left whitespace-nowrap"><EditableText id={`driver.table.header.${h}`} defaultText={h} /></th>
                         ))}
-                        <th className="px-4 py-3 text-white font-bold text-center whitespace-nowrap">개별 정규화</th>
+                        <th className="px-4 py-3 text-white font-bold text-center whitespace-nowrap"><EditableText id="driver.table.header.개별 정규화" defaultText="개별 정규화" /></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -54558,7 +54558,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                           checked={filteredPlaces.length > 0 && placeSelected.size === filteredPlaces.length} />
                       </th>
                       {["업체명","주소","담당자","담당자번호","등급","일반메모","오더메모","안내사항","삭제"].map((h) => (
-                        <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
+                        <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap"><EditableText id={`client.table.header.${h}`} defaultText={h} /></th>
                       ))}
                     </tr>
                   </thead>
@@ -55193,7 +55193,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                           checked={filtered.length > 0 && selected.size === filtered.length} />
                       </th>
                       {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일","등급","일반메모","오더메모","안내사항"].map(h => (
-                        <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
+                        <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap"><EditableText id={`client.table.header.${h}`} defaultText={h} /></th>
                       ))}
                     </tr>
                   </thead>
