@@ -54631,7 +54631,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
     <div className="bg-white rounded-2xl shadow-2xl w-[820px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
-        <h3 className="text-white font-bold text-[15px]">하차지거래처 중복정리</h3>
+        <h3 className="text-white font-bold text-[15px]"><EditableText id="client.dupPopup.title" defaultText="하차지거래처 중복정리" /></h3>
         <button onClick={() => setPlaceDupOpen(false)} className="text-white/60 hover:text-white text-xl">✕</button>
       </div>
       <div className="flex-1 overflow-y-auto p-6">
@@ -54658,7 +54658,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                 }
                 setPlaceDupDone(true);
               }} className="h-[32px] px-4 rounded-lg text-[13px] font-semibold bg-[#1B2B4B] text-white hover:bg-[#243a60] transition">
-                전체 자동 병합
+                <EditableText id="client.dupPopup.전체자동병합" defaultText="전체 자동 병합" />
               </button>
             </div>
             <div className="space-y-3">
@@ -54676,7 +54676,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                       const dupIds = new Set(duplicates.map(d => d.id));
                       setPlaceRows(prev => prev.filter(p => !dupIds.has(p.id)).map(p => p.id === primary.id ? { ...p, 담당자: allContacts.map(c => c.name).join(" / "), 담당자번호: allContacts.map(c => c.phone).join(" / ") } : p));
                     }} className="h-[26px] px-3 rounded-lg text-[12px] font-semibold border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white transition">
-                      병합
+                      <EditableText id="client.dupPopup.병합" defaultText="병합" />
                     </button>
                   </div>
                   <table className="w-full text-[12px]">
@@ -54721,7 +54721,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                   }}
                   disabled={placeDupSelected.size === 0}
                   className="h-[32px] px-4 rounded-lg text-[13px] font-semibold border border-red-300 text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition">
-                  선택 삭제 {placeDupSelected.size > 0 && `(${placeDupSelected.size})`}
+                  <EditableText id="client.dupPopup.선택삭제" defaultText="선택 삭제" /> {placeDupSelected.size > 0 && `(${placeDupSelected.size})`}
                 </button>
               </div>
             )}
@@ -55410,7 +55410,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
           <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-h-[85vh] flex flex-col overflow-hidden">
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
               <div>
-                <h3 className="text-white font-bold text-[15px]">담당자 불일치 복구</h3>
+                <h3 className="text-white font-bold text-[15px]"><EditableText id="client.mismatchPopup.title" defaultText="담당자 불일치 복구" /></h3>
                 <p className="text-white/55 text-[12px] mt-0.5">이름이 같은 기본거래처/하차지거래처인데 담당자 목록이 서로 다른 항목입니다. 선택하면 양쪽 담당자를 합쳐서 반영하고, 이후로는 자동으로 서로 동기화됩니다.</p>
               </div>
               <button onClick={() => setShowMismatchPopup(false)}
@@ -55421,7 +55421,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
               <button
                 onClick={() => setMismatchSelected(prev => prev.size === mismatchCandidates.length ? new Set() : new Set(mismatchCandidates.map(m => m.client.id || m.client.거래처명)))}
                 className="text-[12px] text-[#1B2B4B] font-semibold underline">
-                {mismatchSelected.size === mismatchCandidates.length ? "전체 해제" : "전체 선택"}
+                {mismatchSelected.size === mismatchCandidates.length ? <EditableText id="client.mismatchPopup.전체해제" defaultText="전체 해제" /> : <EditableText id="client.mismatchPopup.전체선택" defaultText="전체 선택" />}
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-3">
@@ -55454,10 +55454,10 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             </div>
             <div className="px-5 py-4 border-t border-gray-100 flex gap-3 shrink-0">
               <button onClick={() => setShowMismatchPopup(false)}
-                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"><EditableText id="client.mismatchPopup.취소" defaultText="취소" /></button>
               <button onClick={runMismatchFix} disabled={mismatchRunning || mismatchSelected.size === 0}
                 className="flex-1 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[13px] font-bold transition">
-                {mismatchRunning ? "복구 중..." : `선택 항목 복구 (${mismatchSelected.size})`}
+                {mismatchRunning ? <EditableText id="client.mismatchPopup.복구중" defaultText="복구 중..." /> : <><EditableText id="client.mismatchPopup.선택항목복구" defaultText="선택 항목 복구" /> {`(${mismatchSelected.size})`}</>}
               </button>
             </div>
           </div>
@@ -55470,14 +55470,14 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
           <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-h-[85vh] flex flex-col overflow-hidden">
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
               <div>
-                <h3 className="text-white font-bold text-[15px]">하차지에서 기본 거래처 불러오기</h3>
-                <p className="text-white/55 text-[12px] mt-0.5">담당자, 연락처, 메모 정보가 그대로 반영됩니다</p>
+                <h3 className="text-white font-bold text-[15px]"><EditableText id="client.importPopup.title" defaultText="하차지에서 기본 거래처 불러오기" /></h3>
+                <p className="text-white/55 text-[12px] mt-0.5"><EditableText id="client.importPopup.subtitle" defaultText="담당자, 연락처, 메모 정보가 그대로 반영됩니다" /></p>
               </div>
               <button onClick={() => setShowImportPopup(false)}
                 className="text-white/60 hover:text-white text-xl leading-none">×</button>
             </div>
             <div className="px-5 pt-4 shrink-0">
-              <div className="text-[12px] font-semibold text-gray-500 mb-1.5">업체명 검색 후 선택 (방향키 / 엔터)</div>
+              <div className="text-[12px] font-semibold text-gray-500 mb-1.5"><EditableText id="client.importPopup.검색안내" defaultText="업체명 검색 후 선택 (방향키 / 엔터)" /></div>
               <div className="relative" ref={importDropRef}>
                 <input autoComplete="off"
                   ref={importInputRef}
@@ -55553,13 +55553,13 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             </div>
             <div className="px-5 py-4 border-t border-gray-100 bg-gray-50 flex gap-3 shrink-0">
               <button onClick={() => setShowImportPopup(false)}
-                className="flex-1 py-2.5 rounded-xl bg-white border border-gray-300 text-gray-700 font-semibold text-[13px] hover:bg-gray-100 transition">취소</button>
+                className="flex-1 py-2.5 rounded-xl bg-white border border-gray-300 text-gray-700 font-semibold text-[13px] hover:bg-gray-100 transition"><EditableText id="client.importPopup.취소" defaultText="취소" /></button>
               <button onClick={saveImport}
                 disabled={importSelected.length === 0}
                 className={`flex-1 py-2.5 rounded-xl text-white font-bold text-[13px] transition ${
                   importSelected.length > 0 ? "bg-[#1B2B4B] hover:bg-[#243a60]" : "bg-gray-300 cursor-not-allowed"
                 }`}>
-                {importSelected.length > 0 ? `${importSelected.length}건 기본 거래처로 추가` : "업체를 선택하세요"}
+                {importSelected.length > 0 ? <><span>{importSelected.length}</span><EditableText id="client.importPopup.건기본거래처로추가" defaultText="건 기본 거래처로 추가" /></> : <EditableText id="client.importPopup.업체를선택하세요" defaultText="업체를 선택하세요" />}
               </button>
             </div>
           </div>
