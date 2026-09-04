@@ -13366,7 +13366,7 @@ shadow-sm
         onMouseDown={startMultiRegDrag}
         title="드래그해서 팝업 위치를 옮길 수 있습니다">
         <div>
-          <h3 className="text-white font-bold text-[16px]">다중등록</h3>
+          <h3 className="text-white font-bold text-[16px]"><EditableText id="orderForm.multi.title" defaultText="다중등록" /></h3>
           <p className="text-white/60 text-[12px] mt-0.5">
             {multiRegStep === "setup"
               ? "거래처별로 상차지를 고정하고, 등록할 건수를 정하세요"
@@ -13390,7 +13390,7 @@ shadow-sm
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <div className="flex items-center h-[20px] overflow-visible justify-between mb-1">
-                      <label className={`${mrLabelCls} mb-0`}>거래처명 (=상차지)</label>
+                      <label className={`${mrLabelCls} mb-0`}><EditableText id="orderForm.multi.label.거래처명상차지" defaultText="거래처명 (=상차지)" /></label>
                       <div className="flex items-center gap-1">
                         <OrderMemoIconButton onClick={() => openMultiRegOrderMemoEditor("pickup", g.key)} title="상차지 오더메모" hasMemo={hasMultiRegOrderMemoFor("pickup", g.key)} size={18} />
                         {g.거래처명 && <ContactPickerIconButton onClick={() => {
@@ -13428,7 +13428,7 @@ shadow-sm
                     />
                   </div>
                   <div>
-                    <label className={mrLabelCls}>건수</label>
+                    <label className={mrLabelCls}><EditableText id="orderForm.multi.label.건수" defaultText="건수" /></label>
                     <div className="flex items-center gap-2">
                       <button type="button"
                         className="w-8 h-8 rounded-lg border border-gray-300 text-gray-600 font-bold hover:bg-gray-50"
@@ -13462,7 +13462,7 @@ shadow-sm
 
             <div className="grid grid-cols-2 gap-x-6 gap-y-4">
               <div>
-                <label className={mrLabelCls}>상차일</label>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.상차일" defaultText="상차일" /></label>
                 <CustomDatePicker
                   value={currentMultiSlot.상차일 || ""}
                   showIcon
@@ -13471,7 +13471,7 @@ shadow-sm
                 />
               </div>
               <div>
-                <label className={mrLabelCls}>상차시간</label>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.상차시간" defaultText="상차시간" /></label>
                 <TimeAmPmPicker
                   value={currentMultiSlot.상차시간 || ""}
                   onChange={(v) => updateMultiSlot("상차시간", v)}
@@ -13481,7 +13481,7 @@ shadow-sm
 
               <div>
                 <div className="flex items-center h-[20px] overflow-visible justify-between mb-1">
-                  <label className={`${mrLabelCls} mb-0`}>하차지 {reqStar}</label>
+                  <label className={`${mrLabelCls} mb-0`}><EditableText id="orderForm.multi.label.하차지" defaultText="하차지" /> {reqStar}</label>
                   <div className="flex items-center gap-1">
                     <OrderMemoIconButton onClick={() => openMultiRegOrderMemoEditor("drop")} title="하차지 오더메모" hasMemo={hasMultiRegOrderMemoFor("drop")} size={18} />
                     {currentMultiSlot.하차지명 && <ContactPickerIconButton onClick={() => {
@@ -13513,21 +13513,21 @@ shadow-sm
                 />
               </div>
               <div>
-                <label className={mrLabelCls}>하차지주소</label>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.하차지주소" defaultText="하차지주소" /></label>
                 <input autoComplete="off" className={mrInputCls} value={currentMultiSlot.하차지주소 || ""} onChange={e => updateMultiSlot("하차지주소", e.target.value)} />
               </div>
 
               <div>
-                <label className={mrLabelCls}>하차지 담당자</label>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.하차지담당자" defaultText="하차지 담당자" /></label>
                 <input autoComplete="off" className={mrInputCls} placeholder="담당자명" value={currentMultiSlot.하차지담당자 || ""} onChange={e => updateMultiSlot("하차지담당자", e.target.value)} />
               </div>
               <div>
-                <label className={mrLabelCls}>하차지 담당자 연락처</label>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.하차지담당자연락처" defaultText="하차지 담당자 연락처" /></label>
                 <input autoComplete="off" className={mrInputCls} placeholder="연락처" value={currentMultiSlot.하차지담당자번호 || ""} onChange={e => updateMultiSlot("하차지담당자번호", formatPhone(e.target.value))} />
               </div>
 
               <div>
-                <label className={mrLabelCls}>하차일</label>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.하차일" defaultText="하차일" /></label>
                 <CustomDatePicker
                   value={currentMultiSlot.하차일 || currentMultiSlot.상차일 || ""}
                   showIcon
@@ -13536,7 +13536,7 @@ shadow-sm
                 />
               </div>
               <div>
-                <label className={mrLabelCls}>하차시간</label>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.하차시간" defaultText="하차시간" /></label>
                 <TimeAmPmPicker
                   value={currentMultiSlot.하차시간 || ""}
                   onChange={(v) => updateMultiSlot("하차시간", v)}
@@ -13545,14 +13545,14 @@ shadow-sm
               </div>
 
               <div>
-                <label className={mrLabelCls}>상차방법</label>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.상차방법" defaultText="상차방법" /></label>
                 <CustomSelect className={mrInputCls} value={currentMultiSlot.상차방법 || ""} onChange={e => updateMultiSlot("상차방법", e.target.value)}>
                   <option value="">선택 ▾</option>
                   {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => <option key={v} value={v}>{v}</option>)}
                 </CustomSelect>
               </div>
               <div>
-                <label className={mrLabelCls}>하차방법</label>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.하차방법" defaultText="하차방법" /></label>
                 <CustomSelect className={mrInputCls} value={currentMultiSlot.하차방법 || ""} onChange={e => updateMultiSlot("하차방법", e.target.value)}>
                   <option value="">선택 ▾</option>
                   {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => <option key={v} value={v}>{v}</option>)}
@@ -13560,7 +13560,7 @@ shadow-sm
               </div>
 
               <div>
-                <label className={mrLabelCls}>차량종류</label>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.차량종류" defaultText="차량종류" /></label>
                 <MultiRegCombo
                   className={mrInputCls}
                   placeholder="차량종류 입력 또는 선택"
@@ -13576,7 +13576,7 @@ shadow-sm
               </div>
               <div className="flex gap-2">
                 <div className="flex-1">
-                  <label className={mrLabelCls}>화물내용</label>
+                  <label className={mrLabelCls}><EditableText id="orderForm.multi.label.화물내용" defaultText="화물내용" /></label>
                   <input autoComplete="off" type="text" inputMode="decimal" className={mrInputCls} placeholder="숫자만 입력"
                     value={currentMultiSlot.화물수량 || ""}
                     onChange={e => updateMultiSlot("화물수량", e.target.value.replace(/[^\d.]/g, ""))} />
@@ -13594,7 +13594,7 @@ shadow-sm
 
               <div className="flex gap-2">
                 <div className="flex-1">
-                  <label className={mrLabelCls}>차량톤수</label>
+                  <label className={mrLabelCls}><EditableText id="orderForm.multi.label.차량톤수" defaultText="차량톤수" /></label>
                   <input autoComplete="off" type="text" inputMode="decimal" className={mrInputCls} placeholder="예: 5"
                     value={currentMultiSlot.톤수값 || ""}
                     onChange={e => updateMultiSlot("톤수값", e.target.value.replace(/[^\d.]/g, ""))} />
@@ -13609,7 +13609,7 @@ shadow-sm
                 </div>
               </div>
               <div>
-                <label className={mrLabelCls}>운행유형</label>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.운행유형" defaultText="운행유형" /></label>
                 <CustomSelect className={mrInputCls} value={currentMultiSlot.운행유형 || "편도"} onChange={e => updateMultiSlot("운행유형", e.target.value)}>
                   <option value="편도">편도</option>
                   <option value="왕복">왕복</option>
@@ -13617,14 +13617,14 @@ shadow-sm
               </div>
 
               <div>
-                <label className={mrLabelCls}>지급방식</label>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.지급방식" defaultText="지급방식" /></label>
                 <CustomSelect className={mrInputCls} value={currentMultiSlot.지급방식 || ""} onChange={e => updateMultiSlot("지급방식", e.target.value)}>
                   <option value="">선택 ▾</option>
                   {PAY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
                 </CustomSelect>
               </div>
               <div>
-                <label className={mrLabelCls}>배차방식</label>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.배차방식" defaultText="배차방식" /></label>
                 <CustomSelect className={mrInputCls} value={currentMultiSlot.배차방식 || ""} onChange={e => updateMultiSlot("배차방식", e.target.value)}>
                   <option value="">선택 ▾</option>
                   {DISPATCH_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
@@ -13632,7 +13632,7 @@ shadow-sm
               </div>
 
               <div className="col-span-2 relative">
-                <label className={mrLabelCls}>스마트검색</label>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.스마트검색" defaultText="스마트검색" /></label>
                 <textarea
                   className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-2.5 text-[13px] resize-none bg-white shadow-[0_0_0_1px_rgba(27,43,75,0.08),0_2px_8px_rgba(27,43,75,0.06)] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30 focus:border-[#1B2B4B] focus:shadow-[0_0_0_1px_rgba(27,43,75,0.15),0_4px_12px_rgba(27,43,75,0.1)] placeholder:text-gray-500 transition-all"
                   rows={2}
@@ -13673,7 +13673,7 @@ shadow-sm
               </div>
 
               <div className="relative">
-                <label className={mrLabelCls}>차량번호</label>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.차량번호" defaultText="차량번호" /></label>
                 <input autoComplete="off" className={mrInputCls} placeholder="차량번호 입력"
                   value={currentMultiSlot.차량번호 || ""}
                   onChange={e => handleMultiRegCarNoChange(e.target.value)}
@@ -13726,38 +13726,38 @@ shadow-sm
                 )}
               </div>
               <div>
-                <label className={mrLabelCls}>기사명</label>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.기사명" defaultText="기사명" /></label>
                 <input autoComplete="off" className={mrInputCls} placeholder="기사명 입력" value={currentMultiSlot.이름 || ""} onChange={e => updateMultiSlot("이름", e.target.value)} onBlur={checkMultiRegDriverConflict} />
               </div>
 
               <div>
-                <label className={mrLabelCls}>전화번호</label>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.전화번호" defaultText="전화번호" /></label>
                 <input autoComplete="off" className={mrInputCls} placeholder="전화번호 입력" value={currentMultiSlot.전화번호 || ""} onChange={e => updateMultiSlot("전화번호", formatPhone(e.target.value))} onBlur={checkMultiRegDriverConflict} />
               </div>
               <div />
 
               <div>
-                <label className={mrLabelCls}>청구운임</label>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.청구운임" defaultText="청구운임" /></label>
                 <input autoComplete="off" type="text" inputMode="numeric" className={mrInputCls} placeholder="금액"
                   value={currentMultiSlot.청구운임 ? Number(currentMultiSlot.청구운임).toLocaleString() : ""}
                   onChange={e => updateMultiSlot("청구운임", e.target.value.replace(/[^\d]/g, ""))} />
               </div>
               <div>
-                <label className={mrLabelCls}>기사운임</label>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.기사운임" defaultText="기사운임" /></label>
                 <input autoComplete="off" type="text" inputMode="numeric" className={mrInputCls} placeholder="금액"
                   value={currentMultiSlot.기사운임 ? Number(currentMultiSlot.기사운임).toLocaleString() : ""}
                   onChange={e => updateMultiSlot("기사운임", e.target.value.replace(/[^\d]/g, ""))} />
               </div>
 
               <div>
-                <label className={mrLabelCls}>수수료</label>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.수수료" defaultText="수수료" /></label>
                 <input autoComplete="off" readOnly className={`${mrInputCls} bg-gray-100`}
                   value={currentMultiSlot.수수료 ? Number(currentMultiSlot.수수료).toLocaleString() : currentMultiSlot.수수료 || ""} />
               </div>
               <div />
 
               <div className="col-span-2">
-                <label className={mrLabelCls}>메모</label>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.메모" defaultText="메모" /></label>
                 <textarea className={mrTextareaCls} rows={2} value={currentMultiSlot.메모 || ""} onChange={e => updateMultiSlot("메모", e.target.value)} />
               </div>
 

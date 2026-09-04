@@ -23,6 +23,7 @@ import { POSITION_OPTIONS, TEAM_OPTIONS, EMPLOYMENT_STATUS_OPTIONS } from "./hrC
 import { CustomSelect } from "./CustomSelect";
 import RolePermissionsPanel from "./RolePermissionsPanel";
 import { useCustomRoles } from "./customRoles";
+import { EditableText } from "./EditMode";
 
 const todayStr = () => {
   const d = new Date();
@@ -689,27 +690,27 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-[22px] font-bold text-[#1B2B4B]">관리자 메뉴</h1>
-          <p className="text-[13px] text-gray-500 mt-0.5">사용자 계정 권한 및 승인 관리</p>
+          <h1 className="text-[22px] font-bold text-[#1B2B4B]"><EditableText id="adminMenu.header.title" defaultText="관리자 메뉴" /></h1>
+          <p className="text-[13px] text-gray-500 mt-0.5"><EditableText id="adminMenu.header.subtitle" defaultText="사용자 계정 권한 및 승인 관리" /></p>
         </div>
         <div className="flex items-center gap-3">
           <div className="bg-[#1B2B4B]/10 rounded-xl px-4 py-2 text-center">
             <div className="text-[22px] font-bold text-[#1B2B4B]">{visibleUsers.length}</div>
-            <div className="text-[11px] text-gray-500">전체 사용자</div>
+            <div className="text-[11px] text-gray-500"><EditableText id="adminMenu.header.전체사용자" defaultText="전체 사용자" /></div>
           </div>
           <div className="bg-emerald-50 rounded-xl px-4 py-2 text-center">
             <div className="text-[22px] font-bold text-emerald-600">{visibleUsers.filter(u => u.approved).length}</div>
-            <div className="text-[11px] text-gray-500">승인 완료</div>
+            <div className="text-[11px] text-gray-500"><EditableText id="adminMenu.header.승인완료" defaultText="승인 완료" /></div>
           </div>
           <div className="bg-amber-50 rounded-xl px-4 py-2 text-center">
             <div className="text-[22px] font-bold text-amber-500">{visibleUsers.filter(u => !u.approved).length}</div>
-            <div className="text-[11px] text-gray-500">승인 대기</div>
+            <div className="text-[11px] text-gray-500"><EditableText id="adminMenu.header.승인대기" defaultText="승인 대기" /></div>
           </div>
           <button
             onClick={() => setShowMobilePreview(v => !v)}
             className={`px-4 py-2.5 rounded-xl text-[13px] font-semibold shadow-sm transition ${showMobilePreview ? "bg-gray-700 text-white" : "bg-[#1B2B4B] text-white hover:bg-[#243a60]"}`}
           >
-            모바일 미리보기
+            <EditableText id="adminMenu.header.모바일미리보기" defaultText="모바일 미리보기" />
           </button>
         </div>
       </div>
@@ -726,7 +727,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
               onClick={() => setAdminTab(group.tabs[0])}
               className={`relative px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${active ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
             >
-              {group.label}
+              <EditableText id={`adminMenu.group.${group.key}`} defaultText={group.label} />
               {badge > 0 && (
                 <span className={`absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${active ? "bg-white text-[#1B2B4B]" : "bg-[#1B2B4B] text-white"}`}>
                   {badge}
@@ -748,7 +749,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                 onClick={() => setAdminTab(t)}
                 className={`relative px-4 py-1.5 rounded-md text-[12px] font-semibold border transition ${active ? "bg-[#2C4270] text-white border-[#2C4270]" : "bg-white text-gray-400 border-gray-200 hover:bg-gray-50"}`}
               >
-                {TAB_LABELS[t]}
+                <EditableText id={`adminMenu.tab.${t}`} defaultText={TAB_LABELS[t]} />
                 {badge > 0 && (
                   <span className={`absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center ${active ? "bg-white text-[#2C4270]" : "bg-[#2C4270] text-white"}`}>
                     {badge}
@@ -836,12 +837,12 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                         </div>
                         {canManage && !editMode && (
                           <div className="flex items-center gap-2">
-                            <button onClick={() => setEditMode(true)} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/10 transition">정보 수정</button>
+                            <button onClick={() => setEditMode(true)} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/10 transition"><EditableText id="adminMenu.members.정보수정" defaultText="정보 수정" /></button>
                             <button onClick={() => setResignStatus(u, !resigned)} className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition ${resigned ? "border-gray-200 text-gray-600 hover:bg-gray-50" : "border-red-200 text-red-500 hover:bg-red-50"}`}>
-                              {resigned ? "복직 처리" : "퇴사 처리"}
+                              {resigned ? <EditableText id="adminMenu.members.복직처리" defaultText="복직 처리" /> : <EditableText id="adminMenu.members.퇴사처리" defaultText="퇴사 처리" />}
                             </button>
                             {me?.uid !== u.id && (
-                              <button onClick={() => removeUser(u)} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-gray-200 text-gray-500 hover:bg-gray-50 transition">계정 삭제</button>
+                              <button onClick={() => removeUser(u)} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-gray-200 text-gray-500 hover:bg-gray-50 transition"><EditableText id="adminMenu.members.계정삭제" defaultText="계정 삭제" /></button>
                             )}
                           </div>
                         )}
@@ -859,20 +860,20 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                               ["회사명", u.companyName || "-"],
                             ].map(([label, value], i) => (
                               <div key={label} className={`flex items-center px-4 py-3 ${i % 2 === 0 ? "border-r border-gray-100" : ""} ${i < 4 ? "border-b border-gray-50" : ""}`}>
-                                <span className="text-[12px] text-gray-500 w-16 shrink-0">{label}</span>
+                                <span className="text-[12px] text-gray-500 w-16 shrink-0"><EditableText id={`adminMenu.members.infoLabel.${label}`} defaultText={label} /></span>
                                 <span className="text-[13px] font-medium text-gray-800">{value}</span>
                               </div>
                             ))}
                           </div>
                           <div className="flex items-center gap-2 mb-2">
                             <button onClick={() => toggleApprove(u)} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
-                              {u.approved ? "승인 해제" : "승인"}
+                              {u.approved ? <EditableText id="adminMenu.members.승인해제" defaultText="승인 해제" /> : <EditableText id="adminMenu.members.승인" defaultText="승인" />}
                             </button>
                           </div>
 
                           {/* 인사발령 이력 */}
                           <div className="mt-5">
-                            <div className="text-[12.5px] font-bold text-gray-600 border-l-4 border-[#1B2B4B] pl-2 mb-2">인사발령 이력</div>
+                            <div className="text-[12.5px] font-bold text-gray-600 border-l-4 border-[#1B2B4B] pl-2 mb-2"><EditableText id="adminMenu.members.인사발령이력" defaultText="인사발령 이력" /></div>
                             {(u.personnelHistory || []).length === 0 ? (
                               <div className="text-[12px] text-gray-400 px-1">등록된 발령 이력이 없습니다</div>
                             ) : (
@@ -998,7 +999,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                         ? ["신청일시", "유형", "화주사명", "이름", "연락처", "연결 운송사", "1차 승인자", "상태", "관리"]
                         : ["신청일시", "유형", "화주사명", "이름", "연락처", "상태", "관리"]
                       ).map(h => (
-                        <th key={h} className="px-3 py-3 text-center text-[12px] font-semibold text-white whitespace-nowrap">{h}</th>
+                        <th key={h} className="px-3 py-3 text-center text-[12px] font-semibold text-white whitespace-nowrap"><EditableText id={`adminMenu.applyTable.header.${h}`} defaultText={h} /></th>
                       ))}
                     </tr>
                   </thead>
@@ -1142,11 +1143,11 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                   <table className="w-full text-[12px]">
                     <thead>
                       <tr className="bg-[#1B2B4B] text-white">
-                        <th className="px-3 py-2 text-left font-semibold">상차일</th>
-                        <th className="px-3 py-2 text-left font-semibold">상차지</th>
-                        <th className="px-3 py-2 text-left font-semibold">하차지</th>
-                        <th className="px-3 py-2 text-left font-semibold">청구운임</th>
-                        <th className="px-3 py-2 text-center font-semibold">상태</th>
+                        <th className="px-3 py-2 text-left font-semibold"><EditableText id="adminMenu.transmitTable.header.상차일" defaultText="상차일" /></th>
+                        <th className="px-3 py-2 text-left font-semibold"><EditableText id="adminMenu.transmitTable.header.상차지" defaultText="상차지" /></th>
+                        <th className="px-3 py-2 text-left font-semibold"><EditableText id="adminMenu.transmitTable.header.하차지" defaultText="하차지" /></th>
+                        <th className="px-3 py-2 text-left font-semibold"><EditableText id="adminMenu.transmitTable.header.청구운임" defaultText="청구운임" /></th>
+                        <th className="px-3 py-2 text-center font-semibold"><EditableText id="adminMenu.transmitTable.header.상태" defaultText="상태" /></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -1179,11 +1180,11 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                 <table className="w-full text-[13px]">
                   <thead>
                     <tr className="bg-[#1B2B4B] text-white">
-                      <th className="px-4 py-2.5 text-left font-semibold">회사</th>
-                      <th className="px-4 py-2.5 text-left font-semibold">제목</th>
-                      <th className="px-4 py-2.5 text-left font-semibold">작성자</th>
-                      <th className="px-4 py-2.5 text-center font-semibold">등록일</th>
-                      <th className="px-4 py-2.5 text-center font-semibold">상태</th>
+                      <th className="px-4 py-2.5 text-left font-semibold"><EditableText id="adminMenu.inquiryTable.header.회사" defaultText="회사" /></th>
+                      <th className="px-4 py-2.5 text-left font-semibold"><EditableText id="adminMenu.inquiryTable.header.제목" defaultText="제목" /></th>
+                      <th className="px-4 py-2.5 text-left font-semibold"><EditableText id="adminMenu.inquiryTable.header.작성자" defaultText="작성자" /></th>
+                      <th className="px-4 py-2.5 text-center font-semibold"><EditableText id="adminMenu.inquiryTable.header.등록일" defaultText="등록일" /></th>
+                      <th className="px-4 py-2.5 text-center font-semibold"><EditableText id="adminMenu.inquiryTable.header.상태" defaultText="상태" /></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -1233,12 +1234,12 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                 <table className="w-full text-[13px]">
                   <thead>
                     <tr className="bg-[#1B2B4B] text-white">
-                      <th className="px-2 py-2.5 text-center font-semibold w-[70px]">구분</th>
-                      <th className="px-2 py-2.5 text-center font-semibold">회사명</th>
-                      <th className="px-2 py-2.5 text-center font-semibold">이름</th>
-                      <th className="px-2 py-2.5 text-center font-semibold">이메일</th>
-                      <th className="px-2 py-2.5 text-center font-semibold w-[80px]">권한</th>
-                      <th className="px-2 py-2.5 text-center font-semibold w-[140px]">시각</th>
+                      <th className="px-2 py-2.5 text-center font-semibold w-[70px]"><EditableText id="adminMenu.sessionLogTable.header.구분" defaultText="구분" /></th>
+                      <th className="px-2 py-2.5 text-center font-semibold"><EditableText id="adminMenu.sessionLogTable.header.회사명" defaultText="회사명" /></th>
+                      <th className="px-2 py-2.5 text-center font-semibold"><EditableText id="adminMenu.sessionLogTable.header.이름" defaultText="이름" /></th>
+                      <th className="px-2 py-2.5 text-center font-semibold"><EditableText id="adminMenu.sessionLogTable.header.이메일" defaultText="이메일" /></th>
+                      <th className="px-2 py-2.5 text-center font-semibold w-[80px]"><EditableText id="adminMenu.sessionLogTable.header.권한" defaultText="권한" /></th>
+                      <th className="px-2 py-2.5 text-center font-semibold w-[140px]"><EditableText id="adminMenu.sessionLogTable.header.시각" defaultText="시각" /></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -1293,11 +1294,11 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                 <table className="w-full text-[13px]">
                   <thead>
                     <tr className="bg-[#1B2B4B] text-white">
-                      <th className="px-4 py-2.5 text-left font-semibold">회사명</th>
-                      <th className="px-4 py-2.5 text-left font-semibold">담당자</th>
-                      <th className="px-4 py-2.5 text-left font-semibold">연락처</th>
-                      <th className="px-4 py-2.5 text-center font-semibold">접수일</th>
-                      <th className="px-4 py-2.5 text-center font-semibold">상태</th>
+                      <th className="px-4 py-2.5 text-left font-semibold"><EditableText id="adminMenu.landingInquiryTable.header.회사명" defaultText="회사명" /></th>
+                      <th className="px-4 py-2.5 text-left font-semibold"><EditableText id="adminMenu.landingInquiryTable.header.담당자" defaultText="담당자" /></th>
+                      <th className="px-4 py-2.5 text-left font-semibold"><EditableText id="adminMenu.landingInquiryTable.header.연락처" defaultText="연락처" /></th>
+                      <th className="px-4 py-2.5 text-center font-semibold"><EditableText id="adminMenu.landingInquiryTable.header.접수일" defaultText="접수일" /></th>
+                      <th className="px-4 py-2.5 text-center font-semibold"><EditableText id="adminMenu.landingInquiryTable.header.상태" defaultText="상태" /></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
