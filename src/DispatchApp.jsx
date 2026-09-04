@@ -295,7 +295,7 @@ function FareCertModal({ row, companyName, onClose }) {
           <button type="button" onClick={savePdf}
             className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">PDF저장</button>
           <button type="button" onClick={handlePrint}
-            className="px-4 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:opacity-90 transition">인쇄</button>
+            className="px-4 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:opacity-90 transition"><EditableText id="misc.btn.298.인쇄" defaultText="인쇄" /></button>
         </div>
       </div>
     </div>
@@ -1392,7 +1392,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
           <button type="button" onClick={savePdf}
             className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">PDF저장</button>
           <button type="button" onClick={handlePrint}
-            className="px-4 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:opacity-90 transition">인쇄</button>
+            className="px-4 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:opacity-90 transition"><EditableText id="misc.btn.1395.인쇄" defaultText="인쇄" /></button>
         </div>
       </div>
     </div>
@@ -2620,12 +2620,12 @@ function FilePreviewModal({ base64, type, name, onClose }) {
           {isImage && (
             <>
               <button onClick={() => setZoom(z => Math.max(0.25, +(z - 0.25).toFixed(2)))}
-                className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[13px] font-semibold hover:bg-white/20 transition">축소</button>
+                className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[13px] font-semibold hover:bg-white/20 transition"><EditableText id="misc.btn.2623.축소" defaultText="축소" /></button>
               <span className="text-white/70 text-[12px] w-11 text-center">{Math.round(zoom * 100)}%</span>
               <button onClick={() => setZoom(z => Math.min(4, +(z + 0.25).toFixed(2)))}
-                className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[13px] font-semibold hover:bg-white/20 transition">확대</button>
+                className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[13px] font-semibold hover:bg-white/20 transition"><EditableText id="misc.btn.2626.확대" defaultText="확대" /></button>
               <button onClick={() => setRotate(r => (r + 90) % 360)}
-                className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[13px] font-semibold hover:bg-white/20 transition">회전</button>
+                className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[13px] font-semibold hover:bg-white/20 transition"><EditableText id="misc.btn.2628.회전" defaultText="회전" /></button>
             </>
           )}
           <button onClick={handleSave}
@@ -4507,7 +4507,7 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
           )}
         </div>
         <div className="px-6 pb-5">
-          <button className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl font-bold text-[13px] hover:bg-[#263d6b] transition" onClick={onClose}>닫기</button>
+          <button className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl font-bold text-[13px] hover:bg-[#263d6b] transition" onClick={onClose}><EditableText id="misc.btn.4510.닫기" defaultText="닫기" /></button>
         </div>
       </div>
     </div>
@@ -5386,7 +5386,7 @@ function FloatingCalculator({ onClose }) {
                     </div>
                     <div><label style={lblSt}>kg/파렛</label><input autoComplete="off" type="number" min="0" placeholder="선택" style={inpSt} value={palKg} onChange={e => setPalKg(e.target.value)} /></div>
                   </div>
-                  <button onClick={handlePalletSearch} style={{ width: "100%", padding: "10px", background: "#1B2B4B", border: "none", borderRadius: 9, fontSize: 14, color: "white", cursor: "pointer", fontWeight: 700 }}>조회</button>
+                  <button onClick={handlePalletSearch} style={{ width: "100%", padding: "10px", background: "#1B2B4B", border: "none", borderRadius: 9, fontSize: 14, color: "white", cursor: "pointer", fontWeight: 700 }}><EditableText id="misc.btn.5389.조회" defaultText="조회" /></button>
 
                   {palResults && (
                     <div>
@@ -5458,7 +5458,7 @@ function FloatingCalculator({ onClose }) {
                     </select>
                   </div>
                   <div><label style={lblSt}>수량 (개)</label><input autoComplete="off" type="number" min="0" placeholder="예: 2" style={inpSt} value={palTypeQty} onChange={e => setPalTypeQty(e.target.value)} /></div>
-                  <button onClick={handlePalTypeSearch} style={{ width: "100%", padding: "10px", background: "#1B2B4B", border: "none", borderRadius: 9, fontSize: 14, color: "white", cursor: "pointer", fontWeight: 700 }}>조회</button>
+                  <button onClick={handlePalTypeSearch} style={{ width: "100%", padding: "10px", background: "#1B2B4B", border: "none", borderRadius: 9, fontSize: 14, color: "white", cursor: "pointer", fontWeight: 700 }}><EditableText id="misc.btn.5461.조회" defaultText="조회" /></button>
 
                   {palTypeResult && (
                     <div style={{ background: "#1B2B4B", borderRadius: 12, padding: "16px 14px", textAlign: "center" }}>
@@ -5506,7 +5506,7 @@ function FloatingCalculator({ onClose }) {
                   </div>
                 </div>
                 <div><label style={lblSt}>수량 (개)</label><input autoComplete="off" type="number" min="0" placeholder="예: 200" style={inpSt} value={boxQty} onChange={e => setBoxQty(e.target.value)} /></div>
-                <button onClick={handleBoxSearch} style={{ width: "100%", padding: "10px", background: "#1B2B4B", border: "none", borderRadius: 9, fontSize: 14, color: "white", cursor: "pointer", fontWeight: 700 }}>조회</button>
+                <button onClick={handleBoxSearch} style={{ width: "100%", padding: "10px", background: "#1B2B4B", border: "none", borderRadius: 9, fontSize: 14, color: "white", cursor: "pointer", fontWeight: 700 }}><EditableText id="misc.btn.5509.조회" defaultText="조회" /></button>
 
                 {boxResults && (
                   <div>
@@ -7315,11 +7315,11 @@ return (
         <button
           onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await rejectEditRequestPC(o); }}
           className="px-4 py-2 rounded-lg border border-red-300 text-red-600 text-[13px] font-bold hover:bg-red-50 transition"
-        >거절</button>
+        ><EditableText id="misc.btn.7318.거절" defaultText="거절" /></button>
         <button
           onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await approveEditRequestPC(o); }}
           className="px-4 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition"
-        >승인</button>
+        ><EditableText id="misc.btn.7322.승인" defaultText="승인" /></button>
       </div>
     </div>
   </div>
@@ -7401,9 +7401,9 @@ return (
               cargoAddPopup.onCommit(newVal);
               _setCargoAddQty(""); _setCargoAddType("");
             }
-          }}>추가</button>
+          }}><EditableText id="misc.btn.7404.추가" defaultText="추가" /></button>
         <button className="w-full py-2 rounded-xl bg-gray-100 text-gray-700 text-[13px] font-semibold"
-          onClick={() => { setCargoAddPopup(null); _setCargoAddQty(""); _setCargoAddType(""); }}>닫기</button>
+          onClick={() => { setCargoAddPopup(null); _setCargoAddQty(""); _setCargoAddType(""); }}><EditableText id="misc.btn.7406.닫기" defaultText="닫기" /></button>
       </div>
     </div>
   </div>
@@ -15471,7 +15471,7 @@ className={`
                 else onChange("경유하차목록", []);
                 setStopPopupOpen(false);
               } else { setStopList(next); }
-            }}>예</button>
+            }}><EditableText id="misc.btn.15474.예" defaultText="예" /></button>
         </div>
       </div>
     </div>
@@ -18235,7 +18235,7 @@ setConfirmChange(null);
       </div>
 
       <div className="px-5 py-3 border-t shrink-0 text-right">
-        <button onClick={() => setFareHistoryOpen(false)} className="px-5 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">닫기</button>
+        <button onClick={() => setFareHistoryOpen(false)} className="px-5 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"><EditableText id="misc.btn.18238.닫기" defaultText="닫기" /></button>
       </div>
     </div>
   </div>
@@ -18397,7 +18397,7 @@ setConfirmChange(null);
         )}
       </div>
       <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
-        <button onClick={() => setRateSheetLookupOpen(false)} className="px-5 py-2 text-[13px] text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition">닫기</button>
+        <button onClick={() => setRateSheetLookupOpen(false)} className="px-5 py-2 text-[13px] text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition"><EditableText id="misc.btn.18400.닫기" defaultText="닫기" /></button>
       </div>
     </div>
   </div>
@@ -19785,7 +19785,7 @@ function StopBadge({ count, list, type = "pickup", onSave, placeRows = [], timeO
                   className="flex-1 py-2 rounded-xl bg-amber-500 text-white text-[13px] font-bold hover:bg-amber-600 transition"><EditableText id="misc.btn.19785.수정" defaultText="수정" /></button>
               )}
               <button type="button" onClick={() => setOpen(false)}
-                className="flex-1 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">닫기</button>
+                className="flex-1 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"><EditableText id="misc.btn.19788.닫기" defaultText="닫기" /></button>
             </div>
           </div>
         </div>
@@ -19946,7 +19946,7 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
               )}
               <button onClick={() => setOpen(false)}
                 className="flex-1 py-2.5 rounded-xl bg-gray-200 hover:bg-gray-300
-                  text-[#1B2B4B] text-[13px] font-bold">닫기</button>
+                  text-[#1B2B4B] text-[13px] font-bold"><EditableText id="misc.btn.19949.닫기" defaultText="닫기" /></button>
             </div>
           </div>
         </div>
@@ -20353,7 +20353,7 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                     setDeleteIdx(null);
                     if (next.length === 0) { onSave([]); onClose(); }
                     else setEditList(next);
-                  }}>예</button>
+                  }}><EditableText id="misc.btn.20356.예" defaultText="예" /></button>
               </div>
             </div>
           </div>
@@ -20643,8 +20643,8 @@ function TimeAmPmPicker({ value, onChange, selectCls, showError, disabled = fals
 
   return (
     <div className="flex items-center gap-1 flex-nowrap">
-      <button type="button" disabled={disabled} className={`${btnBase} shrink-0 whitespace-nowrap ${ampm === "오전" ? act : needsError ? errInact : inact} disabled:opacity-40 disabled:cursor-not-allowed`} onClick={() => handleAmpm("오전")}>오전</button>
-      <button type="button" disabled={disabled} className={`${btnBase} shrink-0 whitespace-nowrap ${ampm === "오후" ? act : needsError ? errInact : inact} disabled:opacity-40 disabled:cursor-not-allowed`} onClick={() => handleAmpm("오후")}>오후</button>
+      <button type="button" disabled={disabled} className={`${btnBase} shrink-0 whitespace-nowrap ${ampm === "오전" ? act : needsError ? errInact : inact} disabled:opacity-40 disabled:cursor-not-allowed`} onClick={() => handleAmpm("오전")}><EditableText id="misc.btn.20646.오전" defaultText="오전" /></button>
+      <button type="button" disabled={disabled} className={`${btnBase} shrink-0 whitespace-nowrap ${ampm === "오후" ? act : needsError ? errInact : inact} disabled:opacity-40 disabled:cursor-not-allowed`} onClick={() => handleAmpm("오후")}><EditableText id="misc.btn.20647.오후" defaultText="오후" /></button>
       <CustomSelect
         value={value || ""}
         disabled={disabled}
@@ -20953,7 +20953,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
                       <td className="px-5 py-3.5 text-center">
                         <div className="flex items-center justify-center gap-2">
                           <button onClick={() => setViewRow(r)}
-                            className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-bold hover:bg-gray-100 transition">보기</button>
+                            className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-bold hover:bg-gray-100 transition"><EditableText id="misc.btn.20956.보기" defaultText="보기" /></button>
                           <button onClick={() => handleSend(r)}
                             className={`px-3 py-1.5 rounded-lg text-[13px] font-bold transition ${sendDone === r._id ? "bg-[#1B2B4B] text-white" : "border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
                             {sendDone === r._id ? "복사됨" : "즉시전송"}
@@ -20969,7 +20969,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
         </div>
         {/* 푸터 */}
         <div className="px-6 py-3 border-t border-gray-200 shrink-0 bg-gray-50 flex justify-end">
-          <button onClick={onClose} className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-[#1B2B4B] text-[14px] font-bold rounded-lg transition">닫기</button>
+          <button onClick={onClose} className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-[#1B2B4B] text-[14px] font-bold rounded-lg transition"><EditableText id="misc.btn.20972.닫기" defaultText="닫기" /></button>
         </div>
       </div>
       {viewRow && (
@@ -21798,7 +21798,7 @@ function OptimalMatchModal({ row, dispatchData, onClose, companyName }) {
         <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3 flex-nowrap shrink-0">
           <span className="text-[12px] text-gray-500 truncate min-w-0">{selected.size > 0 ? `${selected.size}명 선택됨` : "여러 명을 체크하면 한 번에 문자를 보낼 수 있습니다"}</span>
           <div className="flex gap-2 shrink-0 whitespace-nowrap">
-            <button onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition whitespace-nowrap">닫기</button>
+            <button onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition whitespace-nowrap"><EditableText id="misc.btn.21801.닫기" defaultText="닫기" /></button>
             <button
               onClick={() => sendTo(selectedPhones)}
               disabled={selectedPhones.length === 0}
@@ -25257,7 +25257,7 @@ const handleDailyReport = async () => {
   <span class="orient-label">용지 방향</span>
   <button class="tb-btn orient" id="orientBtn" onclick="toggleOrient()">가로형 (현재)</button>
   <div class="divider"></div>
-  <button class="tb-btn print" onclick="window.print()">인쇄</button>
+  <button class="tb-btn print" onclick="window.print()"><EditableText id="misc.btn.25260.인쇄" defaultText="인쇄" /></button>
   <button class="tb-btn pdf" onclick="savePDF()">PDF 저장</button>
   <button class="tb-btn img" onclick="saveImage()">이미지 저장</button>
 </div>
@@ -26191,7 +26191,7 @@ const head = isDark
         <p className="text-[14px] text-gray-800 leading-relaxed whitespace-pre-wrap break-words">{addrPopup}</p>
       </div>
       <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
-        <button onClick={() => setAddrPopup(null)} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">닫기</button>
+        <button onClick={() => setAddrPopup(null)} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition"><EditableText id="misc.btn.26194.닫기" defaultText="닫기" /></button>
       </div>
     </div>
   </div>
@@ -26206,7 +26206,7 @@ const head = isDark
         <p className="text-[14px] text-gray-800 leading-relaxed whitespace-pre-wrap break-words">{cargoPopup}</p>
       </div>
       <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
-        <button onClick={() => setCargoPopup(null)} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">닫기</button>
+        <button onClick={() => setCargoPopup(null)} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition"><EditableText id="misc.btn.26209.닫기" defaultText="닫기" /></button>
       </div>
     </div>
   </div>
@@ -26525,7 +26525,7 @@ const head = isDark
       placeholder="검색어"
       className="px-2 h-full text-[11px] w-20 outline-none"
     />
-    <button onClick={() => setQ(qInputRef.current?.value ?? "")} className="h-full px-2 bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition">조회</button>
+    <button onClick={() => setQ(qInputRef.current?.value ?? "")} className="h-full px-2 bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"><EditableText id="misc.btn.26528.조회" defaultText="조회" /></button>
   </div>
   {/* 날짜 버튼 */}
   {["yesterday","today","tomorrow"].map((mode,i)=>{
@@ -26990,19 +26990,19 @@ flashRow(savedId);
   <button type="button"
     onClick={() => setCopyTarget(p => ({ ...p, 독차: !p.독차, 혼적: p.독차 ? p.혼적 : false }))}
     className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.독차 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
-  >독차</button>
+  ><EditableText id="misc.btn.26993.독차" defaultText="독차" /></button>
   <button type="button"
     onClick={() => setCopyTarget(p => ({ ...p, 혼적: !p.혼적, 독차: p.혼적 ? p.독차 : false }))}
     className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
-  >혼적</button>
+  ><EditableText id="misc.btn.26997.혼적" defaultText="혼적" /></button>
   <button type="button"
     onClick={() => setCopyTarget(p => ({ ...p, 운행유형: p.운행유형 === "왕복" ? "편도" : "왕복" }))}
     className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.운행유형 === "왕복" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
-  >왕복</button>
+  ><EditableText id="misc.btn.27001.왕복" defaultText="왕복" /></button>
   <button type="button"
     onClick={() => setCopyTarget(p => ({ ...p, 긴급: !p.긴급 }))}
     className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.긴급 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
-  >긴급</button>
+  ><EditableText id="misc.btn.27005.긴급" defaultText="긴급" /></button>
 </div>
 {/* ================= 거래처 정보 ================= */}
 <section className="bg-white rounded-xl border border-gray-200 shadow-sm">
@@ -28392,7 +28392,7 @@ value={copyTarget?.화물수량 || ""}
                     )}
                   </div>
                   <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
-                    <button onClick={() => setRateSheetLookupOpen4(false)} className="px-5 py-2 text-[13px] text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition">닫기</button>
+                    <button onClick={() => setRateSheetLookupOpen4(false)} className="px-5 py-2 text-[13px] text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition"><EditableText id="misc.btn.28395.닫기" defaultText="닫기" /></button>
                   </div>
                 </div>
               </div>
@@ -31165,11 +31165,11 @@ setConfirmChange(null);
                   <button
                     onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await rejectEditRequest(o); }}
                     className="px-4 py-2 rounded-lg border border-red-300 text-red-600 text-[13px] font-bold hover:bg-red-50 transition"
-                  >거절</button>
+                  ><EditableText id="misc.btn.31168.거절" defaultText="거절" /></button>
                   <button
                     onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await approveEditRequest(o); }}
                     className="px-4 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition"
-                  >승인</button>
+                  ><EditableText id="misc.btn.31172.승인" defaultText="승인" /></button>
                 </>
               ) : (
                 <button
@@ -31204,21 +31204,21 @@ setConfirmChange(null);
               <button
                 onClick={() => setCancelReqPopup(null)}
                 className="px-4 py-2 rounded-lg text-gray-500 text-[13px] font-bold hover:bg-gray-100 transition"
-              >닫기</button>
+              ><EditableText id="misc.btn.31207.닫기" defaultText="닫기" /></button>
               <button
                 onClick={async () => {
                   if (isViewer) return showAlert("조회전용 권한으로는 처리할 수 없습니다.");
                   const o = cancelReqPopup; setCancelReqPopup(null); await rejectCancelRequestPC(o);
                 }}
                 className="px-4 py-2 rounded-lg border border-red-300 text-red-600 text-[13px] font-bold hover:bg-red-50 transition"
-              >거절</button>
+              ><EditableText id="misc.btn.31214.거절" defaultText="거절" /></button>
               <button
                 onClick={async () => {
                   if (isViewer) return showAlert("조회전용 권한으로는 처리할 수 없습니다.");
                   const o = cancelReqPopup; setCancelReqPopup(null); await approveCancelRequestPC(o);
                 }}
                 className="px-4 py-2 bg-red-600 text-white text-[13px] font-bold rounded-lg hover:bg-red-700 transition"
-              >승인</button>
+              ><EditableText id="misc.btn.31221.승인" defaultText="승인" /></button>
             </div>
           </div>
         </div>
@@ -31347,7 +31347,7 @@ setConfirmChange(null);
                     });
                     patchDispatch(deliveryConfirm.rowId, patch).catch(console.error);
                   }}
-                >변경</button>
+                ><EditableText id="misc.btn.31350.변경" defaultText="변경" /></button>
               </div>
             </div>
           </div>
@@ -31818,7 +31818,7 @@ setConfirmChange(null);
               <button className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition" onClick={()=>{setTempSortKey("");setTempSortDir("asc");setTempFilterConditions([]);}}>초기화</button>
               <div className="flex gap-2">
                 <button className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition" onClick={()=>setSortModalOpen(false)}><EditableText id="misc.btn.31820.취소" defaultText="취소" /></button>
-                <button className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-semibold hover:bg-[#243a60] transition" onClick={()=>{setSortKey(tempSortKey);setSortDir(tempSortDir);setFilterConditions(tempFilterConditions.filter(c=>c.field&&c.value));setSortModalOpen(false);}}>적용</button>
+                <button className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-semibold hover:bg-[#243a60] transition" onClick={()=>{setSortKey(tempSortKey);setSortDir(tempSortDir);setFilterConditions(tempFilterConditions.filter(c=>c.field&&c.value));setSortModalOpen(false);}}><EditableText id="misc.btn.31821.적용" defaultText="적용" /></button>
               </div>
             </div>
           </div>
@@ -32089,7 +32089,7 @@ function MemoIconCell({ text = "", urgency = "" }) {
               <p className="text-[14px] text-gray-700 whitespace-pre-wrap leading-relaxed">{clean}</p>
             </div>
             <div className="px-5 pb-4 flex justify-end border-t border-gray-100 pt-3">
-              <button onClick={() => setOpen(false)} className="px-5 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-semibold hover:opacity-90 transition">닫기</button>
+              <button onClick={() => setOpen(false)} className="px-5 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-semibold hover:opacity-90 transition"><EditableText id="misc.btn.32092.닫기" defaultText="닫기" /></button>
             </div>
           </div>
         </div>
@@ -32161,7 +32161,7 @@ function NoteIconCell({ value = "", onSave }) {
               ) : (
                 <>
                   {onSave && <button onClick={() => setEditing(true)} className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-[13px] font-semibold hover:opacity-90 transition border border-gray-200"><EditableText id="misc.btn.32163.수정" defaultText="수정" /></button>}
-                  <button onClick={() => setOpen(false)} className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-semibold hover:opacity-90 transition">닫기</button>
+                  <button onClick={() => setOpen(false)} className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-semibold hover:opacity-90 transition"><EditableText id="misc.btn.32164.닫기" defaultText="닫기" /></button>
                 </>
               )}
             </div>
@@ -32921,7 +32921,7 @@ const handleDailyReport = async () => {
   <span class="orient-label">용지 방향</span>
   <button class="tb-btn orient" id="orientBtn" onclick="toggleOrient()">가로형 (현재)</button>
   <div class="divider"></div>
-  <button class="tb-btn print" onclick="window.print()">인쇄</button>
+  <button class="tb-btn print" onclick="window.print()"><EditableText id="misc.btn.32924.인쇄" defaultText="인쇄" /></button>
   <button class="tb-btn pdf" onclick="savePDF()">PDF 저장</button>
   <button class="tb-btn img" onclick="saveImage()">이미지 저장</button>
 </div>
@@ -38143,19 +38143,19 @@ return (
   <button type="button"
     onClick={() => setCopyTarget(p => ({ ...p, 독차: !p.독차, 혼적: p.독차 ? p.혼적 : false }))}
     className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.독차 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
-  >독차</button>
+  ><EditableText id="misc.btn.38146.독차" defaultText="독차" /></button>
   <button type="button"
     onClick={() => setCopyTarget(p => ({ ...p, 혼적: !p.혼적, 독차: p.혼적 ? p.독차 : false }))}
     className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
-  >혼적</button>
+  ><EditableText id="misc.btn.38150.혼적" defaultText="혼적" /></button>
   <button type="button"
     onClick={() => setCopyTarget(p => ({ ...p, 운행유형: p.운행유형 === "왕복" ? "편도" : "왕복" }))}
     className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.운행유형 === "왕복" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
-  >왕복</button>
+  ><EditableText id="misc.btn.38154.왕복" defaultText="왕복" /></button>
   <button type="button"
     onClick={() => setCopyTarget(p => ({ ...p, 긴급: !p.긴급 }))}
     className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.긴급 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
-  >긴급</button>
+  ><EditableText id="misc.btn.38158.긴급" defaultText="긴급" /></button>
 </div>
 {/* ================= 거래처 정보 ================= */}
 <section className="bg-white rounded-xl border border-gray-200 shadow-sm">
@@ -39422,7 +39422,7 @@ setCopyPlaceOptions(list);
               )}
             </div>
             <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
-              <button onClick={() => setRateSheetLookupOpen5(false)} className="px-5 py-2 text-[13px] text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition">닫기</button>
+              <button onClick={() => setRateSheetLookupOpen5(false)} className="px-5 py-2 text-[13px] text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition"><EditableText id="misc.btn.39425.닫기" defaultText="닫기" /></button>
             </div>
           </div>
         </div>
@@ -40094,11 +40094,11 @@ setCopyPlaceOptions(list);
                   <button
                     onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await rejectEditRequest(o); }}
                     className="px-4 py-2 rounded-lg border border-red-300 text-red-600 text-[13px] font-bold hover:bg-red-50 transition"
-                  >거절</button>
+                  ><EditableText id="misc.btn.40097.거절" defaultText="거절" /></button>
                   <button
                     onClick={async () => { const o = editReqPopup; setEditReqPopup(null); await approveEditRequest(o); }}
                     className="px-4 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition"
-                  >승인</button>
+                  ><EditableText id="misc.btn.40101.승인" defaultText="승인" /></button>
                 </>
               ) : (
                 <button
@@ -40133,21 +40133,21 @@ setCopyPlaceOptions(list);
               <button
                 onClick={() => setCancelReqPopup(null)}
                 className="px-4 py-2 rounded-lg text-gray-500 text-[13px] font-bold hover:bg-gray-100 transition"
-              >닫기</button>
+              ><EditableText id="misc.btn.40136.닫기" defaultText="닫기" /></button>
               <button
                 onClick={async () => {
                   if (isViewer) return;
                   const o = cancelReqPopup; setCancelReqPopup(null); await rejectCancelRequestPC(o);
                 }}
                 className="px-4 py-2 rounded-lg border border-red-300 text-red-600 text-[13px] font-bold hover:bg-red-50 transition"
-              >거절</button>
+              ><EditableText id="misc.btn.40143.거절" defaultText="거절" /></button>
               <button
                 onClick={async () => {
                   if (isViewer) return;
                   const o = cancelReqPopup; setCancelReqPopup(null); await approveCancelRequestPC(o);
                 }}
                 className="px-4 py-2 bg-red-600 text-white text-[13px] font-bold rounded-lg hover:bg-red-700 transition"
-              >승인</button>
+              ><EditableText id="misc.btn.40150.승인" defaultText="승인" /></button>
             </div>
           </div>
         </div>
@@ -40209,7 +40209,7 @@ setCopyPlaceOptions(list);
                   // 저장을 기다리지 않고 즉시 팝업을 닫아 끊김 없이 반응하게 한다.
                   patchDispatch(confirmChange.id, patch).catch(console.error);
                   setConfirmChange(null);
-                }}>변경</button>
+                }}><EditableText id="misc.btn.40212.변경" defaultText="변경" /></button>
               </div>
             </div>
           </div>
@@ -40270,7 +40270,7 @@ setCopyPlaceOptions(list);
               <button className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition" onClick={()=>{setTempSortKey("");setTempSortDir("asc");setTempFilterConditions([]);}}>초기화</button>
               <div className="flex gap-2">
                 <button className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition" onClick={()=>setSortModalOpen(false)}><EditableText id="misc.btn.40272.취소" defaultText="취소" /></button>
-                <button className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-semibold hover:bg-[#243a60] transition" onClick={()=>{setSortKey(tempSortKey);setSortDir(tempSortDir);setFilterConditions(tempFilterConditions.filter(c=>c.field&&c.value));setSortModalOpen(false);}}>적용</button>
+                <button className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-semibold hover:bg-[#243a60] transition" onClick={()=>{setSortKey(tempSortKey);setSortDir(tempSortDir);setFilterConditions(tempFilterConditions.filter(c=>c.field&&c.value));setSortModalOpen(false);}}><EditableText id="misc.btn.40273.적용" defaultText="적용" /></button>
               </div>
             </div>
           </div>
@@ -41464,7 +41464,7 @@ function AddressCell({ text = "", max = 5, valueClassName = "", popupTitle = "�
               <p className="text-[14px] text-gray-800 leading-relaxed whitespace-pre-wrap break-words">{clean}</p>
             </div>
             <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
-              <button onClick={() => setOpen(false)} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">닫기</button>
+              <button onClick={() => setOpen(false)} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition"><EditableText id="misc.btn.41467.닫기" defaultText="닫기" /></button>
             </div>
           </div>
         </div>
@@ -42601,7 +42601,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], pla
             </div>
             <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end shrink-0">
               <button className="px-5 py-2 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50" onClick={() => setImportPreview(null)}><EditableText id="misc.btn.42603.취소" defaultText="취소" /></button>
-              <button className="px-5 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a]" onClick={applyImport}>적용</button>
+              <button className="px-5 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a]" onClick={applyImport}><EditableText id="misc.btn.42604.적용" defaultText="적용" /></button>
             </div>
           </div>
         </div>
@@ -46696,7 +46696,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <td className={cellBase}>
                         {r.상차지주소 && r.상차지주소.length > 10 ? (
                           openLoadAddrs.has(r._id) ? (
-                            <span>{r.상차지주소}{" "}<button onClick={() => setOpenLoadAddrs((prev) => { const next = new Set(prev); next.delete(r._id); return next; })} className="text-blue-500 underline text-xs">접기</button></span>
+                            <span>{r.상차지주소}{" "}<button onClick={() => setOpenLoadAddrs((prev) => { const next = new Set(prev); next.delete(r._id); return next; })} className="text-blue-500 underline text-xs"><EditableText id="misc.btn.46699.접기" defaultText="접기" /></button></span>
                           ) : (
                             <span>{r.상차지주소.slice(0, 10)}...<button onClick={() => setOpenLoadAddrs((prev) => new Set(prev).add(r._id))} className="text-blue-500 underline text-xs">더보기</button></span>
                           )
@@ -46706,7 +46706,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <td className={cellBase}>
                         {r.하차지주소 && r.하차지주소.length > 10 ? (
                           openUnloadAddrs.has(r._id) ? (
-                            <span>{r.하차지주소}{" "}<button onClick={() => setOpenUnloadAddrs((prev) => { const next = new Set(prev); next.delete(r._id); return next; })} className="text-blue-500 underline text-xs">접기</button></span>
+                            <span>{r.하차지주소}{" "}<button onClick={() => setOpenUnloadAddrs((prev) => { const next = new Set(prev); next.delete(r._id); return next; })} className="text-blue-500 underline text-xs"><EditableText id="misc.btn.46709.접기" defaultText="접기" /></button></span>
                           ) : (
                             <span>{r.하차지주소.slice(0, 10)}...<button onClick={() => setOpenUnloadAddrs((prev) => new Set(prev).add(r._id))} className="text-blue-500 underline text-xs">더보기</button></span>
                           )
@@ -46754,7 +46754,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <td className={`${cellBase} max-w-[260px] text-left`}>
                         {r.메모 && r.메모.length > 40 ? (
                           openMemos.has(r._id) ? (
-                            <span className="whitespace-pre-wrap">{r.메모}{" "}<button onClick={() => setOpenMemos(prev => { const next = new Set(prev); next.delete(r._id); return next; })} className="text-blue-500 underline text-xs ml-1">접기</button></span>
+                            <span className="whitespace-pre-wrap">{r.메모}{" "}<button onClick={() => setOpenMemos(prev => { const next = new Set(prev); next.delete(r._id); return next; })} className="text-blue-500 underline text-xs ml-1"><EditableText id="misc.btn.46757.접기" defaultText="접기" /></button></span>
                           ) : (
                             <span>{r.메모.slice(0, 40)}...<button onClick={() => setOpenMemos(prev => new Set(prev).add(r._id))} className="text-blue-500 underline text-xs ml-1">더보기</button></span>
                           )
@@ -48843,7 +48843,7 @@ if (total === 0) return `<td class="zero">-</td>`;
   <span class="orient-label">용지 방향</span>
   <button class="tb-btn orient" id="orientBtn" onclick="toggleOrient()">가로형 (현재)</button>
   <div class="divider"></div>
-  <button class="tb-btn print" onclick="window.print()">인쇄</button>
+  <button class="tb-btn print" onclick="window.print()"><EditableText id="misc.btn.48846.인쇄" defaultText="인쇄" /></button>
   <button class="tb-btn img" onclick="saveImage()">이미지 저장</button>
 </div>
 
@@ -49329,9 +49329,9 @@ const handleBatchSettle = async (targetStatus) => {
                 초기화
               </button>
               <div className="ml-auto flex gap-2 flex-wrap items-center">
-                <button onClick={downloadInvoiceExcel} className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition">엑셀</button>
+                <button onClick={downloadInvoiceExcel} className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition"><EditableText id="misc.btn.49332.엑셀" defaultText="엑셀" /></button>
                 <button onClick={savePDF} className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition">PDF</button>
-                <button onClick={handlePrint} className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition">인쇄</button>
+                <button onClick={handlePrint} className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition"><EditableText id="misc.btn.49334.인쇄" defaultText="인쇄" /></button>
                 <div className="w-px h-5 bg-gray-200 mx-0.5" />
                 <button
                   onClick={() => {
@@ -50261,7 +50261,7 @@ const handleBatchSettle = async (targetStatus) => {
                   )}
                 </div>
                 <div className="px-6 py-4 border-t border-gray-100 shrink-0">
-                  <button onClick={() => setScheduledEmailListOpen(false)} className="w-full py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px] transition">닫기</button>
+                  <button onClick={() => setScheduledEmailListOpen(false)} className="w-full py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px] transition"><EditableText id="misc.btn.50264.닫기" defaultText="닫기" /></button>
                 </div>
               </div>
             </div>
@@ -50679,7 +50679,7 @@ const handleBatchSettle = async (targetStatus) => {
                   className={`px-3 py-2 rounded-lg text-[13px] font-bold transition border ${monthRows.length?"bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white":"bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed"}`}>
                   전체 정산완료
                 </button>
-                <button onClick={downloadMonthExcel} className="px-3 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">엑셀</button>
+                <button onClick={downloadMonthExcel} className="px-3 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition"><EditableText id="misc.btn.50682.엑셀" defaultText="엑셀" /></button>
                 <label className="px-3 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition cursor-pointer">
                   입금확인(엑셀)
                   <input autoComplete="off" type="file" accept=".xlsx,.xls,.csv" hidden onChange={handleBankExcelUpload} />
@@ -52370,7 +52370,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
           <input autoComplete="off" placeholder="기사명" className="border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] w-24 outline-none focus:border-[#1B2B4B]" value={nameQ} onChange={e => setNameQ(e.target.value)} />
           <input autoComplete="off" placeholder="거래처명" className="border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] w-28 outline-none focus:border-[#1B2B4B]" value={clientQ} onChange={e => setClientQ(e.target.value)} />
           <button onClick={() => setSearched(true)}
-            className="px-4 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition">조회</button>
+            className="px-4 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition"><EditableText id="misc.btn.52373.조회" defaultText="조회" /></button>
           <button onClick={() => { setStatusFilter("전체"); setPayMethodFilter("전체"); setDispatchMethodFilter("전체"); setCarNoQ(""); setNameQ(""); setClientQ(""); setSearched(false); }}
             className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition">초기화</button>
 
@@ -53687,7 +53687,7 @@ function BizRegOcrModal({ imageBase64, onClose, onApply }) {
           )}
         </div>
         <div className="px-6 pb-5 flex gap-3">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">닫기</button>
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"><EditableText id="misc.btn.53690.닫기" defaultText="닫기" /></button>
           {status === "done" && (
             <button onClick={() => { onApply(fields); onClose(); }} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">
               인식된 내용 적용
@@ -54793,7 +54793,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       </div>
       <div className="px-6 py-4 border-t border-gray-100 shrink-0">
         <button onClick={() => setPlaceDupOpen(false)}
-          className="w-full py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">닫기</button>
+          className="w-full py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition"><EditableText id="misc.btn.54796.닫기" defaultText="닫기" /></button>
       </div>
     </div>
   </div>
@@ -55175,7 +55175,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                 </div>
                 <div className="px-6 pb-5">
                   <button onClick={() => setMemoPopup(null)}
-                    className="w-full py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">닫기</button>
+                    className="w-full py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition"><EditableText id="misc.btn.55178.닫기" defaultText="닫기" /></button>
                 </div>
               </div>
             </div>
@@ -56179,7 +56179,7 @@ function HRResumePrintButton({ row, resume, photo }) {
     setTimeout(() => { win.print(); }, 300);
   };
   return (
-    <button onClick={handlePrint} className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-[12px] font-bold hover:bg-gray-50 transition">인쇄</button>
+    <button onClick={handlePrint} className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-[12px] font-bold hover:bg-gray-50 transition"><EditableText id="misc.btn.56182.인쇄" defaultText="인쇄" /></button>
   );
 }
 
@@ -56217,7 +56217,7 @@ function HRAttendancePrintButton({ row }) {
     setTimeout(() => { win.print(); }, 300);
   };
   return (
-    <button onClick={handlePrint} className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-[12px] font-bold hover:bg-gray-50 transition">인쇄</button>
+    <button onClick={handlePrint} className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-[12px] font-bold hover:bg-gray-50 transition"><EditableText id="misc.btn.56220.인쇄" defaultText="인쇄" /></button>
   );
 }
 
