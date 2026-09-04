@@ -54488,17 +54488,17 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
               <div className="bg-white rounded-2xl shadow-2xl w-[600px] overflow-hidden" onClick={e => e.stopPropagation()}>
                 <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-                  <h3 className="text-white font-bold text-[15px]">신규 하차지 등록</h3>
+                  <h3 className="text-white font-bold text-[15px]"><EditableText id="client.newPlaceForm.title" defaultText="신규 하차지 등록" /></h3>
                   <button onClick={() => setShowNewPlaceForm(false)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
                 </div>
                 <div className="px-6 py-5 grid grid-cols-2 gap-4">
                   <div>
-                    <div className="text-xs text-gray-500 font-semibold mb-1">업체명 *</div>
+                    <div className="text-xs text-gray-500 font-semibold mb-1"><EditableText id="client.newPlaceForm.label.업체명" defaultText="업체명 *" /></div>
                     <input autoComplete="off" className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
                       value={placeNewForm.업체명} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 업체명: e.target.value }))} />
                   </div>
                   <div>
-                    <div className="text-xs text-gray-500 font-semibold mb-1">등급</div>
+                    <div className="text-xs text-gray-500 font-semibold mb-1"><EditableText id="client.newPlaceForm.label.등급" defaultText="등급" /></div>
                     <CustomSelect className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
                       value={placeNewForm.등급} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 등급: e.target.value }))}>
                       <option value="일반">일반</option>
@@ -54508,29 +54508,29 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                     </CustomSelect>
                   </div>
                   <div className="col-span-2">
-                    <div className="text-xs text-gray-500 font-semibold mb-1">주소 *</div>
+                    <div className="text-xs text-gray-500 font-semibold mb-1"><EditableText id="client.newPlaceForm.label.주소" defaultText="주소 *" /></div>
                     <input autoComplete="off" className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
                       value={placeNewForm.주소} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 주소: e.target.value }))} />
                   </div>
                   <div>
-                    <div className="text-xs text-gray-500 font-semibold mb-1">담당자</div>
+                    <div className="text-xs text-gray-500 font-semibold mb-1"><EditableText id="client.newPlaceForm.label.담당자" defaultText="담당자" /></div>
                     <input autoComplete="off" className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
                       value={placeNewForm.담당자} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 담당자: e.target.value }))} />
                   </div>
                   <div>
-                    <div className="text-xs text-gray-500 font-semibold mb-1">담당자번호</div>
+                    <div className="text-xs text-gray-500 font-semibold mb-1"><EditableText id="client.newPlaceForm.label.담당자번호" defaultText="담당자번호" /></div>
                     <input autoComplete="off" className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
                       value={placeNewForm.담당자번호} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 담당자번호: formatPhone(e.target.value) }))} />
                   </div>
                   <div className="col-span-2">
-                    <div className="text-xs text-gray-500 font-semibold mb-1">메모</div>
+                    <div className="text-xs text-gray-500 font-semibold mb-1"><EditableText id="client.newPlaceForm.label.메모" defaultText="메모" /></div>
                     <input autoComplete="off" className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
                       value={placeNewForm.메모} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 메모: e.target.value }))} />
                   </div>
                 </div>
                 <div className="px-6 pb-5 flex gap-3">
-                  <button onClick={() => setShowNewPlaceForm(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
-                  <button onClick={addNewPlace} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">등록</button>
+                  <button onClick={() => setShowNewPlaceForm(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"><EditableText id="client.newPlaceForm.취소" defaultText="취소" /></button>
+                  <button onClick={addNewPlace} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition"><EditableText id="client.newPlaceForm.등록" defaultText="등록" /></button>
                 </div>
               </div>
             </div>
