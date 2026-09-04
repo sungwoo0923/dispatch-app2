@@ -55,11 +55,16 @@ self.addEventListener("push", (event) => {
   //   무시하고 알파(투명도) 정보만으로 실루엣을 그려서 단색으로 보여주는데,
   //   불투명한 이미지를 주면 실루엣이 아니라 도형 전체가 흰색으로 꽉 찬
   //   것처럼 나온다.
+  // ⭐ 아이콘 URL에 빌드 버전을 쿼리스트링으로 붙인다 — 아이콘은 캐시 우선으로
+  // 돌아가므로(위 fetch 핸들러 참고), 새 아이콘을 배포해도 파일명이 그대로면
+  // 계속 옛 캐시를 돌려준다. 버전이 바뀔 때마다 URL 자체가 달라지게 하면
+  // 캐시 키가 자동으로 새로 생겨서, push 처리 중 네트워크를 타지 않고도
+  // 배포마다 확실히 새 아이콘을 받아온다.
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
-      icon: "/icons/icon-192x192-notif.png",
-      badge: "/icons/icon-192x192.png",
+      icon: `/icons/icon-192x192-notif.png?v=${VERSION}`,
+      badge: `/icons/icon-192x192.png?v=${VERSION}`,
       vibrate: [200, 100, 200],
       tag: data.tag || `kpflow-${Date.now()}`,
       renotify: true,
@@ -137,15 +142,40 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // ⭐ 아이콘/매니페스트도 HTML과 동일하게 항상 네트워크 — 파일명이 고정돼 있어서
-  // (dist/assets의 JS/CSS와 달리 내용이 바뀌어도 해시가 안 붙음) 한 번 캐시되면
-  // 그 이후로는 새 버전을 올려도 계속 예전 파일을 그대로 돌려주는 문제가 있었다
-  // (아이콘 디자인을 몇 번 고쳐도 기기에서 계속 옛날 아이콘이 뜨던 원인).
-  // 아이콘은 자주 안 바뀌니 캐시 우선이어도 평소엔 문제 없지만, 바뀔 때 확실히
-  // 반영되는 게 더 중요해서 HTML과 같은 방식으로 뺀다.
-  if (url.pathname === "/manifest.json" || url.pathname.startsWith("/icons/")) {
+  // ⭐ manifest.json은 HTML과 동일하게 항상 네트워크 — 설치 프롬프트가 오래된
+  // 정보를 계속 캐시에서 보여주는 문제가 있었다. (아이콘은 여기 안 넣는다 —
+  // 아래 설명 참고.)
+  if (url.pathname === "/manifest.json") {
     event.respondWith(
       fetch(event.request, { cache: "no-store" }).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // ⚠️ 아이콘(/icons/)은 한때 여기서 manifest.json과 같이 "항상 네트워크"로
+  // 뺐었는데, 이게 아이폰 백그라운드 푸시를 깨뜨렸다 — showNotification()이
+  // icon/badge 이미지를 불러올 때도 이 서비스워커의 fetch 처리를 거치는데,
+  // iOS는 푸시 이벤트 처리에 쓸 수 있는 시간을 아주 짧게 제한한다. 아이콘을
+  // 매번 네트워크로 새로 받아오게 하면, 마침 기기가 막 깨어난 직후라 네트워크가
+  // 아직 준비 안 된 타이밍에 그 짧은 시간 안에 못 끝나서 알림 자체가 통째로
+  // 안 뜨는 일이 있었다(안드로이드는 이 시간 제한이 느슨해 괜찮았지만 아이폰만
+  // 갑자기 푸시가 안 오는 걸로 나타났다). 아이콘은 원래대로 캐시 우선(즉시,
+  // 네트워크 의존 없음)으로 되돌리고, "새 아이콘을 올려도 캐시에 갇혀서 안 바뀌는"
+  // 문제는 대신 URL에 빌드 버전을 붙여 캐시를 무효화하는 방식으로 해결한다 —
+  // showNotification() 호출부(위)에서 아이콘 경로에 `?v=${VERSION}`을 붙였다.
+  if (url.pathname.startsWith("/icons/")) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => {
+        if (cached) return cached;
+        return fetch(event.request)
+          .then((res) => {
+            if (!res || res.status !== 200) return res;
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+            return res;
+          })
+          .catch(() => new Response("", { status: 404 }));
+      })
     );
     return;
   }
