@@ -50,7 +50,7 @@ const StatusBadge = ({ status }) => {
 
 const InfoRow = ({ label, value }) => (
   <div className="flex items-start px-4 py-3 border-b border-gray-50 last:border-b-0 odd:bg-gray-50/50">
-    <span className="text-[12px] text-gray-400 w-28 shrink-0">{label}</span>
+    <span className="text-[12px] text-gray-400 w-28 shrink-0"><EditableText id={`companyApp.infoRow.${label}`} defaultText={label} /></span>
     <span className="text-[13px] font-medium text-gray-800">{value || "-"}</span>
   </div>
 );
@@ -445,9 +445,9 @@ export default function CompanyApplications() {
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-[22px] font-bold text-[#1B2B4B]">가입신청 관리</h1>
+          <h1 className="text-[22px] font-bold text-[#1B2B4B]"><EditableText id="companyApp.header.title" defaultText="가입신청 관리" /></h1>
           <p className="text-[13px] text-gray-400 mt-0.5">
-            {activeTab === "화주" ? "화주 신청 관리" : activeTab === "운송" ? "운송사 신청 관리" : "기사 신청 관리"}
+            {activeTab === "화주" ? <EditableText id="companyApp.header.subtitle.화주" defaultText="화주 신청 관리" /> : activeTab === "운송" ? <EditableText id="companyApp.header.subtitle.운송" defaultText="운송사 신청 관리" /> : <EditableText id="companyApp.header.subtitle.기사" defaultText="기사 신청 관리" />}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -455,14 +455,14 @@ export default function CompanyApplications() {
             onClick={() => { setShowCodeLookup(true); setCodeLookupQuery(""); }}
             className="px-4 py-2 rounded-lg text-[13px] font-semibold bg-[#1B2B4B] text-white hover:bg-[#243d6a] transition"
           >
-            회사코드 조회
+            <EditableText id="companyApp.header.회사코드조회" defaultText="회사코드 조회" />
           </button>
           {activeTab !== "수정요청" && (
           <div className="grid grid-cols-4 gap-3">
             {statsCards.map(({ label, value, color, bg }) => (
               <div key={label} className={`${bg} rounded-xl px-4 py-2.5 text-center`}>
                 <div className={`text-[22px] font-bold ${color}`}>{value}</div>
-                <div className="text-[11px] text-gray-500">{label}</div>
+                <div className="text-[11px] text-gray-500"><EditableText id={`companyApp.stat.${label}`} defaultText={label} /></div>
               </div>
             ))}
           </div>
@@ -487,7 +487,7 @@ export default function CompanyApplications() {
                 : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"
             }`}
           >
-            {label}
+            <EditableText id={`companyApp.tab.${key}`} defaultText={label} />
             {badge > 0 && (
               <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
                 {badge}
@@ -518,14 +518,14 @@ export default function CompanyApplications() {
                       </div>
                     </div>
                     <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${req.status === "approved" ? "bg-emerald-50 border-emerald-200 text-emerald-700" : req.status === "rejected" ? "bg-red-50 border-red-200 text-red-700" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
-                      {req.status === "approved" ? "승인됨" : req.status === "rejected" ? "거절됨" : "검토 대기"}
+                      {req.status === "approved" ? <EditableText id="companyApp.editReq.승인됨" defaultText="승인됨" /> : req.status === "rejected" ? <EditableText id="companyApp.editReq.거절됨" defaultText="거절됨" /> : <EditableText id="companyApp.editReq.검토대기" defaultText="검토 대기" />}
                     </span>
                   </div>
                   {req.status === "pending" && (
                     <button
                       className="px-4 py-2 bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[12px] font-semibold rounded-lg transition"
                       onClick={() => { setReviewingEdit(req); setEditRejectReason(""); setShowEditRejectInput(false); }}>
-                      검토
+                      <EditableText id="companyApp.editReq.검토" defaultText="검토" />
                     </button>
                   )}
                 </div>
@@ -539,7 +539,7 @@ export default function CompanyApplications() {
               <div className="bg-white rounded-2xl w-[560px] shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0">
                   <div>
-                    <h3 className="text-white font-bold text-[15px]">회사 정보 수정 요청 검토</h3>
+                    <h3 className="text-white font-bold text-[15px]"><EditableText id="companyApp.editReviewModal.title" defaultText="회사 정보 수정 요청 검토" /></h3>
                     <p className="text-white/55 text-[12px] mt-0.5">{reviewingEdit.companyName} — {reviewingEdit.requestedByEmail}</p>
                   </div>
                   <button className="text-white/50 hover:text-white text-lg transition" onClick={() => setReviewingEdit(null)}>✕</button>
@@ -560,7 +560,7 @@ export default function CompanyApplications() {
                       const changed = orig !== req;
                       return (
                         <div key={key} className={`rounded-xl p-3 border ${changed ? "border-[#1B2B4B]/30 bg-[#1B2B4B]/5" : "border-gray-100 bg-gray-50"}`}>
-                          <div className="text-[11px] font-semibold text-gray-400 mb-1">{label}</div>
+                          <div className="text-[11px] font-semibold text-gray-400 mb-1"><EditableText id={`companyApp.editReviewModal.label.${key}`} defaultText={label} /></div>
                           <div className="text-[12px] text-gray-500 line-through">{orig}</div>
                           <div className={`text-[13px] font-bold ${changed ? "text-[#1B2B4B]" : "text-gray-600"}`}>{req}</div>
                         </div>
@@ -570,12 +570,12 @@ export default function CompanyApplications() {
 
                   {showEditRejectInput && (
                     <div>
-                      <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">거절 사유</label>
+                      <label className="block text-[12px] font-semibold text-gray-500 mb-1.5"><EditableText id="companyApp.editReviewModal.거절사유" defaultText="거절 사유" /></label>
                       <div className="flex gap-2 mb-2 flex-wrap">
                         {["정보 불일치", "서류 미첨부", "사업자번호 오류", "직접 입력"].map(r => (
                           <button key={r} className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition ${editRejectReason === r ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
                             onClick={() => setEditRejectReason(r === "직접 입력" ? "" : r)}>
-                            {r}
+                            <EditableText id={`companyApp.rejectReason.${r}`} defaultText={r} />
                           </button>
                         ))}
                       </div>
@@ -595,13 +595,13 @@ export default function CompanyApplications() {
                       <button
                         className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"
                         onClick={() => setShowEditRejectInput(true)}>
-                        거절
+                        <EditableText id="companyApp.editReviewModal.거절" defaultText="거절" />
                       </button>
                       <button
                         className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition disabled:opacity-50"
                         disabled={processing}
                         onClick={() => approveEditRequest(reviewingEdit)}>
-                        {processing ? "처리 중..." : "승인"}
+                        {processing ? <EditableText id="companyApp.처리중" defaultText="처리 중..." /> : <EditableText id="companyApp.editReviewModal.승인" defaultText="승인" />}
                       </button>
                     </>
                   ) : (
@@ -609,13 +609,13 @@ export default function CompanyApplications() {
                       <button
                         className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"
                         onClick={() => setShowEditRejectInput(false)}>
-                        취소
+                        <EditableText id="companyApp.editReviewModal.취소" defaultText="취소" />
                       </button>
                       <button
                         className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-[13px] font-bold transition disabled:opacity-50"
                         disabled={processing || !editRejectReason.trim()}
                         onClick={() => rejectEditRequest(reviewingEdit, editRejectReason)}>
-                        {processing ? "처리 중..." : "거절 확정"}
+                        {processing ? <EditableText id="companyApp.처리중" defaultText="처리 중..." /> : <EditableText id="companyApp.editReviewModal.거절확정" defaultText="거절 확정" />}
                       </button>
                     </>
                   )}
@@ -795,7 +795,7 @@ export default function CompanyApplications() {
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0">
               <div>
                 <h3 className="text-white font-bold text-[15px]">
-                  {activeTab === "기사" ? "기사 신청 관리" : `가입신청 관리`}
+                  {activeTab === "기사" ? <EditableText id="companyApp.managingApp.title.기사" defaultText="기사 신청 관리" /> : <EditableText id="companyApp.managingApp.title.기본" defaultText="가입신청 관리" />}
                 </h3>
                 <p className="text-white/60 text-[12px] mt-0.5">
                   {activeTab === "기사"
@@ -810,7 +810,7 @@ export default function CompanyApplications() {
               {/* 기본 정보 */}
               <div className="border border-gray-100 rounded-xl overflow-hidden">
                 <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                  {activeTab === "기사" ? "기사 정보" : "신청 정보"}
+                  {activeTab === "기사" ? <EditableText id="companyApp.managingApp.section.기사정보" defaultText="기사 정보" /> : <EditableText id="companyApp.managingApp.section.신청정보" defaultText="신청 정보" />}
                 </div>
                 {activeTab !== "기사" ? (
                   <>
@@ -841,7 +841,7 @@ export default function CompanyApplications() {
               {activeTab === "화주" && managingApp.linkedTransportCompany && (
                 <div className="border border-gray-100 rounded-xl overflow-hidden">
                   <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    연결 운송사
+                    <EditableText id="companyApp.managingApp.section.연결운송사" defaultText="연결 운송사" />
                   </div>
                   <InfoRow label="운송사명" value={managingApp.linkedTransportCompany.companyName} />
                   <InfoRow label="운송사 코드" value={managingApp.linkedTransportCompany.companyCode} />
@@ -849,10 +849,10 @@ export default function CompanyApplications() {
                   {managingApp.transportApprovalStatus === "approved" && (
                     <>
                       <div className="flex items-center gap-2 px-4 py-3 border-t border-gray-50">
-                        <span className="text-[12px] text-gray-400 w-28 shrink-0">운송사 승인</span>
+                        <span className="text-[12px] text-gray-400 w-28 shrink-0"><EditableText id="companyApp.managingApp.운송사승인" defaultText="운송사 승인" /></span>
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          1차 승인 완료
+                          <EditableText id="companyApp.managingApp.1차승인완료" defaultText="1차 승인 완료" />
                         </span>
                       </div>
                       <InfoRow label="1차 승인자" value={managingApp.transportApprovedBy} />
@@ -860,10 +860,10 @@ export default function CompanyApplications() {
                   )}
                   {managingApp.transportApprovalStatus === "rejected" && (
                     <div className="flex items-center gap-2 px-4 py-3 border-t border-gray-50">
-                      <span className="text-[12px] text-gray-400 w-28 shrink-0">운송사 결과</span>
+                      <span className="text-[12px] text-gray-400 w-28 shrink-0"><EditableText id="companyApp.managingApp.운송사결과" defaultText="운송사 결과" /></span>
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold border bg-red-50 text-red-600 border-red-200">
                         <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                        운송사 거절
+                        <EditableText id="companyApp.managingApp.운송사거절" defaultText="운송사 거절" />
                       </span>
                     </div>
                   )}
@@ -874,16 +874,16 @@ export default function CompanyApplications() {
               {activeTab !== "기사" && (
                 <div className="border border-gray-100 rounded-xl overflow-hidden">
                   <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    약관 동의
+                    <EditableText id="companyApp.managingApp.section.약관동의" defaultText="약관 동의" />
                   </div>
                   {[
                     ["서비스 이용약관", managingApp.termsAgreed],
                     ["개인정보처리방침", managingApp.privacyAgreed],
                   ].map(([label, agreed]) => (
                     <div key={label} className="flex items-center justify-between px-4 py-3 border-t border-gray-50 first:border-t-0">
-                      <span className="text-[13px] text-gray-600">{label}</span>
+                      <span className="text-[13px] text-gray-600"><EditableText id={`companyApp.managingApp.terms.${label}`} defaultText={label} /></span>
                       <span className={`text-[12px] font-bold ${agreed ? "text-emerald-600" : "text-red-500"}`}>
-                        {agreed ? "동의" : "미동의"}
+                        {agreed ? <EditableText id="companyApp.managingApp.동의" defaultText="동의" /> : <EditableText id="companyApp.managingApp.미동의" defaultText="미동의" />}
                       </span>
                     </div>
                   ))}
@@ -892,7 +892,7 @@ export default function CompanyApplications() {
 
               {/* 처리 상태 */}
               <div className="border border-gray-100 rounded-xl overflow-hidden">
-                <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">처리 상태</div>
+                <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100"><EditableText id="companyApp.managingApp.section.처리상태" defaultText="처리 상태" /></div>
                 <div className="px-4 py-3 flex items-center justify-between">
                   {(() => {
                     const st = activeTab === "기사" ? driverStatus(managingApp) : managingApp.status;
@@ -920,7 +920,7 @@ export default function CompanyApplications() {
                 </div>
                 {(managingApp.status === "rejected" || driverStatus(managingApp) === "rejected") && managingApp.rejectionReason && (
                   <div className="px-4 py-3 border-t border-gray-50">
-                    <span className="text-[12px] text-gray-400 block mb-1">거절 사유</span>
+                    <span className="text-[12px] text-gray-400 block mb-1"><EditableText id="companyApp.managingApp.거절사유" defaultText="거절 사유" /></span>
                     <span className="text-[13px] text-gray-700">{managingApp.rejectionReason}</span>
                   </div>
                 )}
@@ -930,20 +930,20 @@ export default function CompanyApplications() {
               {activeTab === "화주" && managingApp.status === "approved" && (
                 <div className="border border-gray-100 rounded-xl overflow-hidden">
                   <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    운송목록 조회기간 제한
+                    <EditableText id="companyApp.managingApp.section.조회기간제한" defaultText="운송목록 조회기간 제한" />
                   </div>
                   <div className="px-4 py-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-[13px] text-gray-600">현재 상태</span>
+                      <span className="text-[13px] text-gray-600"><EditableText id="companyApp.managingApp.현재상태" defaultText="현재 상태" /></span>
                       {managingApp.viewLimitUnlockedUntil && managingApp.viewLimitUnlockedUntil >= todayStr() ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          {managingApp.viewLimitUnlockedUntil}까지 확장 허용
+                          {managingApp.viewLimitUnlockedUntil}<EditableText id="companyApp.managingApp.까지확장허용" defaultText="까지 확장 허용" />
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
                           <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
-                          기본 6개월 제한 적용 중
+                          <EditableText id="companyApp.managingApp.기본6개월제한" defaultText="기본 6개월 제한 적용 중" />
                         </span>
                       )}
                     </div>
@@ -952,13 +952,13 @@ export default function CompanyApplications() {
                         className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-[13px]" />
                       <button onClick={() => saveViewLimitUnlock(viewLimitDraft)} disabled={processing || !viewLimitDraft}
                         className="px-3 py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-semibold hover:bg-[#243a60] transition disabled:opacity-50 whitespace-nowrap">
-                        확장 허용
+                        <EditableText id="companyApp.managingApp.확장허용" defaultText="확장 허용" />
                       </button>
                     </div>
                     {managingApp.viewLimitUnlockedUntil && (
                       <button onClick={() => saveViewLimitUnlock(null)} disabled={processing}
                         className="w-full py-2 rounded-lg border border-gray-200 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 transition disabled:opacity-50">
-                        지금 다시 잠그기
+                        <EditableText id="companyApp.managingApp.지금다시잠그기" defaultText="지금 다시 잠그기" />
                       </button>
                     )}
                     <p className="text-[11px] text-gray-400">해제 만료일까지는 6개월 이전 데이터도 화주사 화면(PC/모바일)에서 조회할 수 있습니다.</p>
@@ -969,7 +969,7 @@ export default function CompanyApplications() {
               {/* 권한 관리 (화주 탭 + userId 있는 경우) */}
               {activeTab === "화주" && managingApp.userId && appUserPerms !== null && (
                 <div className="border border-gray-100 rounded-xl overflow-hidden">
-                  <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">권한 관리</div>
+                  <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100"><EditableText id="companyApp.managingApp.section.권한관리" defaultText="권한 관리" /></div>
                   <div className="px-4 py-4">
                     <div className="grid grid-cols-4 gap-2 mb-3">
                     {[
@@ -986,8 +986,8 @@ export default function CompanyApplications() {
                           className="w-4 h-4 rounded"
                         />
                         <div className="text-center">
-                          <div className="text-[12px] font-semibold text-gray-800">{label}</div>
-                          <div className="text-[10px] text-gray-400 leading-tight">{desc}</div>
+                          <div className="text-[12px] font-semibold text-gray-800"><EditableText id={`companyApp.managingApp.perm.${key}.label`} defaultText={label} /></div>
+                          <div className="text-[10px] text-gray-400 leading-tight"><EditableText id={`companyApp.managingApp.perm.${key}.desc`} defaultText={desc} /></div>
                         </div>
                       </label>
                     ))}</div>
@@ -998,7 +998,7 @@ export default function CompanyApplications() {
                       }}
                       className="w-full py-2 mt-1 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"
                     >
-                      권한 저장
+                      <EditableText id="companyApp.managingApp.권한저장" defaultText="권한 저장" />
                     </button>
                   </div>
                 </div>
@@ -1013,11 +1013,11 @@ export default function CompanyApplications() {
                       <>
                         <button onClick={() => handleApprove(managingApp)} disabled={processing}
                           className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition disabled:opacity-50">
-                          승인
+                          <EditableText id="companyApp.managingApp.승인" defaultText="승인" />
                         </button>
                         <button onClick={() => setShowRejectModal(true)}
                           className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
-                          거절
+                          <EditableText id="companyApp.managingApp.거절" defaultText="거절" />
                         </button>
                       </>
                     );
@@ -1029,22 +1029,22 @@ export default function CompanyApplications() {
                           <>
                             <button onClick={() => changeUserStatus(managingApp, "suspended")} disabled={processing}
                               className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-50">
-                              사용 정지
+                              <EditableText id="companyApp.managingApp.사용정지" defaultText="사용 정지" />
                             </button>
                             <button onClick={() => changeUserStatus(managingApp, "banned")} disabled={processing}
                               className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-50">
-                              영구 정지
+                              <EditableText id="companyApp.managingApp.영구정지" defaultText="영구 정지" />
                             </button>
                           </>
                         ) : (
                           <button onClick={() => changeUserStatus(managingApp, "active")} disabled={processing}
                             className="w-full py-2.5 rounded-xl border border-[#1B2B4B]/40 text-[13px] font-semibold text-[#1B2B4B] hover:bg-[#1B2B4B]/10 transition disabled:opacity-50">
-                            정지 해제
+                            <EditableText id="companyApp.managingApp.정지해제" defaultText="정지 해제" />
                           </button>
                         )}
                         <button onClick={() => deleteAccount(managingApp)} disabled={processing}
                           className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-500 hover:bg-gray-50 transition disabled:opacity-50">
-                          삭제 (가입 전 초기화)
+                          <EditableText id="companyApp.managingApp.삭제초기화" defaultText="삭제 (가입 전 초기화)" />
                         </button>
                       </>
                     );
@@ -1053,7 +1053,7 @@ export default function CompanyApplications() {
                     return (
                       <button onClick={() => deleteAccount(managingApp)} disabled={processing}
                         className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-500 hover:bg-gray-50 transition disabled:opacity-50">
-                        삭제 (가입 전 초기화)
+                        <EditableText id="companyApp.managingApp.삭제초기화" defaultText="삭제 (가입 전 초기화)" />
                       </button>
                     );
                   }
@@ -1070,7 +1070,7 @@ export default function CompanyApplications() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
           <div className="bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden">
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-              <h3 className="text-white font-bold text-[15px]">거절 사유 입력</h3>
+              <h3 className="text-white font-bold text-[15px]"><EditableText id="companyApp.rejectModal.title" defaultText="거절 사유 입력" /></h3>
               <button onClick={() => { setShowRejectModal(false); setRejectReason(""); }} className="text-white/60 hover:text-white text-lg">✕</button>
             </div>
             <div className="p-6">
@@ -1089,11 +1089,11 @@ export default function CompanyApplications() {
               <div className="flex gap-3">
                 <button onClick={() => { setShowRejectModal(false); setRejectReason(""); }}
                   className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition">
-                  취소
+                  <EditableText id="companyApp.rejectModal.취소" defaultText="취소" />
                 </button>
                 <button onClick={() => handleReject(managingApp, rejectReason)} disabled={processing}
                   className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition disabled:opacity-50">
-                  거절 확인
+                  <EditableText id="companyApp.rejectModal.거절확인" defaultText="거절 확인" />
                 </button>
               </div>
             </div>
@@ -1109,27 +1109,27 @@ export default function CompanyApplications() {
             onClick={(e) => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
               <div>
-                <h3 className="text-white font-bold text-[15px]">승인 완료 — 코드 발급</h3>
+                <h3 className="text-white font-bold text-[15px]"><EditableText id="companyApp.codeNotice.title" defaultText="승인 완료 — 코드 발급" /></h3>
                 <p className="text-white/60 text-[12px] mt-0.5">{codeNotice.companyName} ({codeNotice.appType})</p>
               </div>
               <button onClick={() => setCodeNotice(null)} className="text-white/60 hover:text-white text-lg">✕</button>
             </div>
             <div className="p-6">
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 text-center mb-5">
-                <p className="text-[12px] text-gray-500 mb-2">발급된 회사코드</p>
+                <p className="text-[12px] text-gray-500 mb-2"><EditableText id="companyApp.codeNotice.발급된회사코드" defaultText="발급된 회사코드" /></p>
                 <p className="text-[28px] font-extrabold text-[#1B2B4B] tracking-widest font-mono">{codeNotice.companyCode}</p>
                 <button
                   onClick={() => navigator.clipboard.writeText(codeNotice.companyCode)}
                   className="mt-3 px-4 py-1.5 rounded-lg text-[12px] font-semibold bg-[#1B2B4B] text-white hover:bg-[#243d6a] transition"
                 >
-                  클립보드 복사
+                  <EditableText id="companyApp.codeNotice.클립보드복사" defaultText="클립보드 복사" />
                 </button>
               </div>
               <div className="border border-gray-100 rounded-xl overflow-hidden mb-5">
-                <div className="bg-gray-50 px-4 py-2 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">신청자 연락처</div>
+                <div className="bg-gray-50 px-4 py-2 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100"><EditableText id="companyApp.codeNotice.신청자연락처" defaultText="신청자 연락처" /></div>
                 {[["이메일", codeNotice.email || "-"], ["핸드폰", codeNotice.phone || "-"]].map(([label, value]) => (
                   <div key={label} className="flex items-center justify-between px-4 py-3 border-t border-gray-50 first:border-t-0">
-                    <span className="text-[12px] text-gray-400">{label}</span>
+                    <span className="text-[12px] text-gray-400"><EditableText id={`companyApp.codeNotice.label.${label}`} defaultText={label} /></span>
                     <span className="text-[13px] font-semibold text-gray-800">{value}</span>
                   </div>
                 ))}
@@ -1140,20 +1140,20 @@ export default function CompanyApplications() {
                     href={`mailto:${codeNotice.email}?subject=${encodeURIComponent("[S-Flow] 가입 승인 및 회사코드 안내")}&body=${encodeURIComponent(`안녕하세요, ${codeNotice.companyName} 담당자님.\n\nS-Flow 물류 관리 시스템 가입이 승인되었습니다.\n\n발급된 회사코드: ${codeNotice.companyCode}\n\n로그인 시 회사코드를 입력해주세요.\n\n감사합니다.\nS-Flow 관리팀`)}`}
                     className="flex items-center justify-between w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 transition"
                   >
-                    <span className="text-[13px] font-semibold text-gray-700">이메일로 코드 발송</span>
+                    <span className="text-[13px] font-semibold text-gray-700"><EditableText id="companyApp.codeNotice.이메일로코드발송" defaultText="이메일로 코드 발송" /></span>
                     <span className="text-[12px] text-gray-500">{codeNotice.email}</span>
                   </a>
                 )}
                 {codeNotice.phone && (
                   <div className="flex items-center justify-between w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50">
-                    <span className="text-[13px] font-semibold text-gray-700">핸드폰으로 직접 전달</span>
+                    <span className="text-[13px] font-semibold text-gray-700"><EditableText id="companyApp.codeNotice.핸드폰으로직접전달" defaultText="핸드폰으로 직접 전달" /></span>
                     <span className="text-[12px] font-mono text-gray-600">{codeNotice.phone}</span>
                   </div>
                 )}
               </div>
               <button onClick={() => setCodeNotice(null)}
                 className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold text-[14px] hover:bg-[#243d6a] transition">
-                확인
+                <EditableText id="companyApp.codeNotice.확인" defaultText="확인" />
               </button>
             </div>
           </div>
@@ -1186,8 +1186,8 @@ export default function CompanyApplications() {
               onClick={e => e.stopPropagation()}>
               <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
                 <div>
-                  <h3 className="text-white font-bold text-[15px]">회사코드 조회</h3>
-                  <p className="text-white/60 text-[12px] mt-0.5">회사명으로 코드를 검색합니다</p>
+                  <h3 className="text-white font-bold text-[15px]"><EditableText id="companyApp.codeLookup.title" defaultText="회사코드 조회" /></h3>
+                  <p className="text-white/60 text-[12px] mt-0.5"><EditableText id="companyApp.codeLookup.subtitle" defaultText="회사명으로 코드를 검색합니다" /></p>
                 </div>
                 <button onClick={() => setShowCodeLookup(false)} className="text-white/60 hover:text-white text-lg">✕</button>
               </div>
