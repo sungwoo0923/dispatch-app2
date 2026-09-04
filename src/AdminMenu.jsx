@@ -1266,13 +1266,13 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                     onClick={() => setSessionLogPage(p => Math.max(1, p - 1))}
                     disabled={page <= 1}
                     className="px-2.5 py-1 rounded-md text-[12px] font-semibold border border-gray-200 text-gray-500 disabled:opacity-40 hover:bg-gray-50"
-                  >이전</button>
+                  ><EditableText id="misc.btn.1269.이전" defaultText="이전" /></button>
                   <span className="text-[12px] text-gray-500 px-2">{page} / {totalPages}</span>
                   <button
                     onClick={() => setSessionLogPage(p => Math.min(totalPages, p + 1))}
                     disabled={page >= totalPages}
                     className="px-2.5 py-1 rounded-md text-[12px] font-semibold border border-gray-200 text-gray-500 disabled:opacity-40 hover:bg-gray-50"
-                  >다음</button>
+                  ><EditableText id="misc.btn.1275.다음" defaultText="다음" /></button>
                 </div>
                 </>
               )}
