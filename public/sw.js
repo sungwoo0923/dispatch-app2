@@ -45,10 +45,20 @@ self.addEventListener("push", (event) => {
   // 강제할 수는 없지만, vibrate(진동 패턴이 있으면 더 눈에 띄는 알림으로 취급되는
   // 경향이 있음)와 tag+renotify(같은 태그로 여러 번 와도 매번 다시 알려줌 — 기본값은
   // 조용히 이전 알림을 덮어쓰기만 함)를 채워주면 실제로 체감되는 경우가 많다.
+  // ⭐ icon과 badge는 용도가 정반대라 파일을 분리했다 —
+  // - icon(알림 배너에 크게 뜨는 아이콘, 아이폰이 실제로 쓰는 자리): 흰
+  //   배경이 있는 불투명 버전(icon-192x192-notif.png)을 쓴다. 투명 배경
+  //   버전을 쓰면 아이폰(Safari)이 투명한 부분을 검은색으로 채워버려서
+  //   로고가 검은 사각형 안에 담긴 것처럼 보이는 문제가 있었다.
+  // - badge(안드로이드 잠금화면/상태바의 작은 아이콘): 반대로 투명 배경
+  //   버전(icon-192x192.png)을 써야 한다. 안드로이드는 이 자리를 색상은
+  //   무시하고 알파(투명도) 정보만으로 실루엣을 그려서 단색으로 보여주는데,
+  //   불투명한 이미지를 주면 실루엣이 아니라 도형 전체가 흰색으로 꽉 찬
+  //   것처럼 나온다.
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
-      icon: "/icons/icon-192x192.png",
+      icon: "/icons/icon-192x192-notif.png",
       badge: "/icons/icon-192x192.png",
       vibrate: [200, 100, 200],
       tag: data.tag || `kpflow-${Date.now()}`,

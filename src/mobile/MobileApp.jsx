@@ -19527,8 +19527,8 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
       const reg = await navigator.serviceWorker.ready;
       await reg.showNotification("테스트 알림", {
         body: "이렇게 화면에 뜨면 알림창 자체는 정상 작동하는 거예요.",
-        icon: "/icons/icon-192x192.png",
-        badge: "/icons/icon-192x192.png",
+        icon: "/icons/icon-192x192-notif.png", // 흰 배경 버전 — sw.js의 실제 발송과 동일하게 맞춤
+        badge: "/icons/icon-192x192.png", // 투명 배경 버전(안드로이드 배지용)
         vibrate: [200, 100, 200],
         tag: "kpflow-test",
         renotify: true,
