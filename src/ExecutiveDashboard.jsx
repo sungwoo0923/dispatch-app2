@@ -197,8 +197,8 @@ function DateRangePicker({ range, onChange, allData }) {
         {months.map(m => <option key={m} value={m}>{m}월</option>)}
       </select>
       <span className="text-[13px] text-gray-400 font-medium">까지</span>
-      <button style={btnStyle(isThisYear)} onClick={setThisYear}>올해</button>
-      <button style={btnStyle(isAll)} onClick={setAll}>전체</button>
+      <button style={btnStyle(isThisYear)} onClick={setThisYear}><EditableText id="executive.dateRange.올해" defaultText="올해" /></button>
+      <button style={btnStyle(isAll)} onClick={setAll}><EditableText id="executive.dateRange.전체" defaultText="전체" /></button>
     </div>
   );
 }
@@ -245,7 +245,7 @@ function Card({ title, subtitle, children, className = "" }) {
     <div className={`bg-white rounded-xl border border-gray-100 overflow-hidden ${className}`}>
       {title && (
         <div className="px-6 py-4 border-b border-gray-50 flex items-baseline justify-between">
-          <div className="text-[14px] font-bold text-[#1B2B4B]">{title}</div>
+          <div className="text-[14px] font-bold text-[#1B2B4B]"><EditableText id={`executive.card.${title}`} defaultText={title} /></div>
           {subtitle && <div className="text-[12px] text-gray-400">{subtitle}</div>}
         </div>
       )}
@@ -1148,7 +1148,7 @@ export default function ExecutiveDashboard({ dispatchData = [], fixedRows = [] }
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between rounded-t-xl mb-0">
         <div>
           <div className="text-[10px] font-bold tracking-[0.25em] text-white/30 uppercase mb-1">CONFIDENTIAL — EXECUTIVE USE ONLY</div>
-          <h1 className="text-[18px] font-extrabold text-white">경영 인텔리전스 대시보드</h1>
+          <h1 className="text-[18px] font-extrabold text-white"><EditableText id="executive.header.title" defaultText="경영 인텔리전스 대시보드" /></h1>
           <div className="text-[12px] text-white/40 mt-0.5">배차 {dispatchData.length.toLocaleString()}건 + 고정거래처 {fixedRows.length.toLocaleString()}건 통합</div>
         </div>
         <div className="text-right shrink-0">
@@ -1157,7 +1157,7 @@ export default function ExecutiveDashboard({ dispatchData = [], fixedRows = [] }
           </div>
           <button onClick={() => { sessionStorage.removeItem("exec_intel_ok"); setVerified(false); }}
             className="text-[11px] text-white/25 hover:text-white/60 mt-1 transition block">
-            잠금
+            <EditableText id="executive.header.잠금" defaultText="잠금" />
           </button>
         </div>
       </div>
@@ -1172,7 +1172,7 @@ export default function ExecutiveDashboard({ dispatchData = [], fixedRows = [] }
                 borderBottomColor: activeTab === t.id ? "#1B2B4B" : "transparent",
                 color: activeTab === t.id ? "#1B2B4B" : "#9ca3af",
               }}>
-              {t.label}
+              <EditableText id={`executive.tab.${t.id}`} defaultText={t.label} />
             </button>
           ))}
         </div>
