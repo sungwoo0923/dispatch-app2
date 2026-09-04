@@ -15301,7 +15301,7 @@ className={`
         {/* 🔥 새로 추가: 상차시간 / 하차시간 */}
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block">상차시간</label>
+            <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block"><EditableText id="waypoint.label.상차시간" defaultText="상차시간" /></label>
             <CustomSelect
               className={inputCls}
               value={stop.상차시간 || ""}
@@ -15321,7 +15321,7 @@ className={`
             </CustomSelect>
           </div>
           <div>
-            <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block">하차시간</label>
+            <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block"><EditableText id="waypoint.label.하차시간" defaultText="하차시간" /></label>
             <CustomSelect
               className={inputCls}
               value={stop.하차시간 || ""}
@@ -20289,7 +20289,7 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
             {/* 상차시간 / 하차시간 */}
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block">상차시간</label>
+                <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block"><EditableText id="waypoint.label.상차시간" defaultText="상차시간" /></label>
                 <select className={inputCls} value={stop.상차시간||""}
                   onChange={e=>{const v=e.target.value;setEditList(prev=>{const c=[...prev];c[idx].상차시간=v;return c;});}}>
                   <option value="">시간 선택</option>
@@ -20297,7 +20297,7 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                 </select>
               </div>
               <div>
-                <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block">하차시간</label>
+                <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block"><EditableText id="waypoint.label.하차시간" defaultText="하차시간" /></label>
                 <select className={inputCls} value={stop.하차시간||""}
                   onChange={e=>{const v=e.target.value;setEditList(prev=>{const c=[...prev];c[idx].하차시간=v;return c;});}}>
                   <option value="">시간 선택</option>
@@ -28851,7 +28851,7 @@ value={copyTarget?.화물수량 || ""}
 
   {/* ================= 상차시간 + 기준 ================= */}
   <div>
-    <label>상차시간</label>
+    <label><EditableText id="waypoint.label.상차시간" defaultText="상차시간" /></label>
     <div className="flex items-center gap-1 flex-nowrap">
       <TimeAmPmPicker
         value={editTarget.상차시간 || ""}
@@ -28889,7 +28889,7 @@ value={copyTarget?.화물수량 || ""}
 
   {/* ================= 하차시간 + 기준 ================= */}
   <div>
-    <label>하차시간</label>
+    <label><EditableText id="waypoint.label.하차시간" defaultText="하차시간" /></label>
     <div className="flex items-center gap-1 flex-nowrap">
       <TimeAmPmPicker
         value={editTarget.하차시간 || ""}
@@ -36838,7 +36838,7 @@ return (
 
   {/* 상차시간 + 이전/이후 */}
   <div>
-    <label className="text-sm font-medium">상차시간</label>
+    <label className="text-sm font-medium"><EditableText id="waypoint.label.상차시간" defaultText="상차시간" /></label>
     <div className="flex items-center gap-1 flex-nowrap">
       <TimeAmPmPicker
         value={editTarget.상차시간 || ""}
@@ -36881,7 +36881,7 @@ return (
 
   {/* 하차시간 + 이전/이후 */}
   <div>
-    <label className="text-sm font-medium">하차시간</label>
+    <label className="text-sm font-medium"><EditableText id="waypoint.label.하차시간" defaultText="하차시간" /></label>
     <div className="flex items-center gap-1 flex-nowrap">
       <TimeAmPmPicker
         value={editTarget.하차시간 || ""}
@@ -41673,7 +41673,7 @@ function NewOrderPopup({
             </div>
 
             <div>
-  <label>상차시간</label>
+  <label><EditableText id="waypoint.label.상차시간" defaultText="상차시간" /></label>
   <CustomSelect
     className="border p-2 rounded w-full"
     value={newOrder.상차시간}
@@ -41729,7 +41729,7 @@ function NewOrderPopup({
 </div>
 
 <div>
-  <label>하차시간</label>
+  <label><EditableText id="waypoint.label.하차시간" defaultText="하차시간" /></label>
   <CustomSelect
     className="border p-2 rounded w-full"
     value={newOrder.하차시간}
