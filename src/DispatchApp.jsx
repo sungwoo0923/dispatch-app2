@@ -1273,14 +1273,14 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
                         <table className="text-[12px] border border-gray-200 border-collapse">
                           <thead>
                             <tr>
-                              <th className={`${thCls} w-[64px]`}>상차시간</th>
-                              <th className={thCls}>노선 (상차지 → 하차지)</th>
-                              <th className={`${thCls} w-[72px]`}>기사명</th>
-                              <th className={`${thCls} w-[96px]`}>연락처</th>
-                              <th className={`${thCls} w-[88px]`}>차량번호</th>
-                              <th className={`${thCls} w-[84px]`}>차종/톤수</th>
-                              {showFareCharge && <th className={`${thCls} w-[84px]`}>청구운임</th>}
-                              {showFareDriver && <th className={`${thCls} w-[84px]`}>기사운임</th>}
+                              <th className={`${thCls} w-[64px]`}><EditableText id="schedule.table.header.상차시간" defaultText="상차시간" /></th>
+                              <th className={thCls}><EditableText id="schedule.table.header.노선" defaultText="노선 (상차지 → 하차지)" /></th>
+                              <th className={`${thCls} w-[72px]`}><EditableText id="schedule.table.header.기사명" defaultText="기사명" /></th>
+                              <th className={`${thCls} w-[96px]`}><EditableText id="schedule.table.header.연락처" defaultText="연락처" /></th>
+                              <th className={`${thCls} w-[88px]`}><EditableText id="schedule.table.header.차량번호" defaultText="차량번호" /></th>
+                              <th className={`${thCls} w-[84px]`}><EditableText id="schedule.table.header.차종톤수" defaultText="차종/톤수" /></th>
+                              {showFareCharge && <th className={`${thCls} w-[84px]`}><EditableText id="schedule.table.header.청구운임" defaultText="청구운임" /></th>}
+                              {showFareDriver && <th className={`${thCls} w-[84px]`}><EditableText id="schedule.table.header.기사운임" defaultText="기사운임" /></th>}
                             </tr>
                           </thead>
                           <tbody>
@@ -26644,7 +26644,7 @@ const head = isDark
                           : Array.from(new Set([...prev, ...filteredIds])));
                       }}
                     />
-                  ) : h}
+                  ) : <EditableText id={`realtime.table.header.${h}`} defaultText={h} />}
                 </th>
               ))}
             </tr>
@@ -30159,9 +30159,9 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
       <table className="w-full text-[13px]">
         <thead className="bg-red-50">
           <tr>
-            <th className="px-3 py-2 text-left text-gray-500 font-medium">구분</th>
-            <th className="px-3 py-2 text-left text-gray-500 font-medium">기사명</th>
-            <th className="px-3 py-2 text-left text-gray-500 font-medium">연락처</th>
+            <th className="px-3 py-2 text-left text-gray-500 font-medium"><EditableText id="realtime.risk.header.구분" defaultText="구분" /></th>
+            <th className="px-3 py-2 text-left text-gray-500 font-medium"><EditableText id="realtime.risk.header.기사명" defaultText="기사명" /></th>
+            <th className="px-3 py-2 text-left text-gray-500 font-medium"><EditableText id="realtime.risk.header.연락처" defaultText="연락처" /></th>
           </tr>
         </thead>
         <tbody>
@@ -31610,11 +31610,11 @@ setConfirmChange(null);
                 <table className="w-full text-[12px]">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-3 py-2 text-left font-bold text-gray-600">거래처</th>
-                      <th className="px-3 py-2 text-center font-bold text-gray-600">건수</th>
-                      <th className="px-3 py-2 text-right font-bold text-gray-600">청구합계</th>
-                      <th className="px-3 py-2 text-right font-bold text-gray-600">기사합계</th>
-                      <th className="px-3 py-2 text-right font-bold text-gray-600">마진합계</th>
+                      <th className="px-3 py-2 text-left font-bold text-gray-600"><EditableText id="summary.header.거래처" defaultText="거래처" /></th>
+                      <th className="px-3 py-2 text-center font-bold text-gray-600"><EditableText id="summary.header.건수" defaultText="건수" /></th>
+                      <th className="px-3 py-2 text-right font-bold text-gray-600"><EditableText id="summary.header.청구합계" defaultText="청구합계" /></th>
+                      <th className="px-3 py-2 text-right font-bold text-gray-600"><EditableText id="summary.header.기사합계" defaultText="기사합계" /></th>
+                      <th className="px-3 py-2 text-right font-bold text-gray-600"><EditableText id="summary.header.마진합계" defaultText="마진합계" /></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -40549,11 +40549,11 @@ setCopyPlaceOptions(list);
                 <table className="w-full text-[12px]">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-3 py-2 text-left font-bold text-gray-600">거래처</th>
-                      <th className="px-3 py-2 text-center font-bold text-gray-600">건수</th>
-                      <th className="px-3 py-2 text-right font-bold text-gray-600">청구합계</th>
-                      <th className="px-3 py-2 text-right font-bold text-gray-600">기사합계</th>
-                      <th className="px-3 py-2 text-right font-bold text-gray-600">마진합계</th>
+                      <th className="px-3 py-2 text-left font-bold text-gray-600"><EditableText id="summary.header.거래처" defaultText="거래처" /></th>
+                      <th className="px-3 py-2 text-center font-bold text-gray-600"><EditableText id="summary.header.건수" defaultText="건수" /></th>
+                      <th className="px-3 py-2 text-right font-bold text-gray-600"><EditableText id="summary.header.청구합계" defaultText="청구합계" /></th>
+                      <th className="px-3 py-2 text-right font-bold text-gray-600"><EditableText id="summary.header.기사합계" defaultText="기사합계" /></th>
+                      <th className="px-3 py-2 text-right font-bold text-gray-600"><EditableText id="summary.header.마진합계" defaultText="마진합계" /></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -43847,10 +43847,10 @@ function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMont
           <table className="w-full text-[13px] border-collapse text-center">
             <thead>
               <tr className="bg-gray-100 text-gray-700">
-                <th className="border p-2">지표</th>
+                <th className="border p-2"><EditableText id="settlement.kpiCompare.header.지표" defaultText="지표" /></th>
                 <th className="border p-2">{monthA}</th>
                 <th className="border p-2">{monthB}</th>
-                <th className="border p-2">증감</th>
+                <th className="border p-2"><EditableText id="settlement.kpiCompare.header.증감" defaultText="증감" /></th>
               </tr>
             </thead>
             <tbody>
@@ -43947,7 +43947,7 @@ function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMont
                     <table className="w-full text-[13px] border-collapse text-center">
                       <thead>
                         <tr className="bg-gray-100 text-gray-700">
-                          <th className="border p-2">구분</th>
+                          <th className="border p-2"><EditableText id="settlement.distCompare.header.구분" defaultText="구분" /></th>
                           <th className="border p-2">{monthA}</th>
                           <th className="border p-2">{monthB}</th>
                         </tr>
@@ -45295,11 +45295,11 @@ function SettlementTop10({ rows = [], allRows = [], targetMonth }) {
       <table className="w-full text-[13px] border-collapse text-center">
         <thead className="bg-gray-50 text-gray-600">
           <tr>
-            <th className="border p-2">순위</th>
-            <th className="border p-2">거래처</th>
-            <th className="border p-2">매출</th>
-            <th className="border p-2">수익</th>
-            <th className="border p-2">건수</th>
+            <th className="border p-2"><EditableText id="settlement.newClients.header.순위" defaultText="순위" /></th>
+            <th className="border p-2"><EditableText id="settlement.newClients.header.거래처" defaultText="거래처" /></th>
+            <th className="border p-2"><EditableText id="settlement.newClients.header.매출" defaultText="매출" /></th>
+            <th className="border p-2"><EditableText id="settlement.newClients.header.수익" defaultText="수익" /></th>
+            <th className="border p-2"><EditableText id="settlement.newClients.header.건수" defaultText="건수" /></th>
           </tr>
         </thead>
         <tbody>
@@ -45603,21 +45603,21 @@ function YearlySummaryChart({ rows = [], year, clients = [], places = [] }) {
         <table className="w-full text-[13px] border-collapse text-center">
           <thead>
             <tr className="bg-gray-100 text-gray-700 text-[13px]">
-              <th rowSpan={2} className="border p-2">월</th>
-              <th colSpan={3} className="border p-2 bg-indigo-50">전체 매출</th>
+              <th rowSpan={2} className="border p-2"><EditableText id="settlement.monthlySummary.header.월" defaultText="월" /></th>
+              <th colSpan={3} className="border p-2 bg-indigo-50"><EditableText id="settlement.monthlySummary.header.전체매출" defaultText="전체 매출" /></th>
               {hasExcludedClients && (
                 <>
-                  <th colSpan={3} className="border p-2 bg-emerald-50">순수 운송 (제외 거래처 미포함)</th>
-                  <th colSpan={3} className="border p-2 bg-rose-50">제외 거래처</th>
+                  <th colSpan={3} className="border p-2 bg-emerald-50"><EditableText id="settlement.monthlySummary.header.순수운송" defaultText="순수 운송 (제외 거래처 미포함)" /></th>
+                  <th colSpan={3} className="border p-2 bg-rose-50"><EditableText id="settlement.monthlySummary.header.제외거래처" defaultText="제외 거래처" /></th>
                 </>
               )}
             </tr>
             <tr className="bg-gray-50 text-gray-600 text-[11px]">
-              <th className="border p-2">매출</th><th className="border p-2">수익</th><th className="border p-2">수익률</th>
+              <th className="border p-2"><EditableText id="settlement.monthlySummary.subheader.매출" defaultText="매출" /></th><th className="border p-2"><EditableText id="settlement.monthlySummary.subheader.수익" defaultText="수익" /></th><th className="border p-2"><EditableText id="settlement.monthlySummary.subheader.수익률" defaultText="수익률" /></th>
               {hasExcludedClients && (
                 <>
-                  <th className="border p-2">매출</th><th className="border p-2">수익</th><th className="border p-2">수익률</th>
-                  <th className="border p-2">매출</th><th className="border p-2">수익</th><th className="border p-2">수익률</th>
+                  <th className="border p-2"><EditableText id="settlement.monthlySummary.subheader.매출2" defaultText="매출" /></th><th className="border p-2"><EditableText id="settlement.monthlySummary.subheader.수익2" defaultText="수익" /></th><th className="border p-2"><EditableText id="settlement.monthlySummary.subheader.수익률2" defaultText="수익률" /></th>
+                  <th className="border p-2"><EditableText id="settlement.monthlySummary.subheader.매출3" defaultText="매출" /></th><th className="border p-2"><EditableText id="settlement.monthlySummary.subheader.수익3" defaultText="수익" /></th><th className="border p-2"><EditableText id="settlement.monthlySummary.subheader.수익률3" defaultText="수익률" /></th>
                 </>
               )}
             </tr>
@@ -45702,9 +45702,9 @@ function SettlementDetailPopup({ client, rows = [], onClose }) {
           <table className="w-full text-[12px] border-collapse text-center">
             <thead className="bg-gray-50">
               <tr>
-                <th className="border p-1.5">상차일</th>
-                <th className="border p-1.5">매출</th>
-                <th className="border p-1.5">수익</th>
+                <th className="border p-1.5"><EditableText id="settlement.byLoadDate.header.상차일" defaultText="상차일" /></th>
+                <th className="border p-1.5"><EditableText id="settlement.byLoadDate.header.매출" defaultText="매출" /></th>
+                <th className="border p-1.5"><EditableText id="settlement.byLoadDate.header.수익" defaultText="수익" /></th>
               </tr>
             </thead>
             <tbody>
@@ -46630,7 +46630,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                   </th>
                 )}
                 {headers.map((h) => (
-                  <th key={h} className={headBase}>{h}</th>
+                  <th key={h} className={headBase}><EditableText id={`generic.table.header.${h}`} defaultText={h} /></th>
                 ))}
               </tr>
             </thead>
@@ -49466,13 +49466,13 @@ const handleBatchSettle = async (targetStatus) => {
                   <thead>
                     <tr className="bg-gray-50 sticky top-0">
                       <th className="px-2 py-2 w-8"></th>
-                      <th className="px-2 py-2 text-center">날짜</th>
-                      <th className="px-2 py-2 text-center">상차지</th>
-                      <th className="px-2 py-2 text-center">하차지</th>
-                      <th className="px-2 py-2 text-center">경유지</th>
-                      <th className="px-2 py-2 text-center">화물명</th>
-                      <th className="px-2 py-2 text-center">차량번호</th>
-                      <th className="px-2 py-2 text-right">청구운임</th>
+                      <th className="px-2 py-2 text-center"><EditableText id="settlement.detail.header.날짜" defaultText="날짜" /></th>
+                      <th className="px-2 py-2 text-center"><EditableText id="settlement.detail.header.상차지" defaultText="상차지" /></th>
+                      <th className="px-2 py-2 text-center"><EditableText id="settlement.detail.header.하차지" defaultText="하차지" /></th>
+                      <th className="px-2 py-2 text-center"><EditableText id="settlement.detail.header.경유지" defaultText="경유지" /></th>
+                      <th className="px-2 py-2 text-center"><EditableText id="settlement.detail.header.화물명" defaultText="화물명" /></th>
+                      <th className="px-2 py-2 text-center"><EditableText id="settlement.detail.header.차량번호" defaultText="차량번호" /></th>
+                      <th className="px-2 py-2 text-right"><EditableText id="settlement.detail.header.청구운임" defaultText="청구운임" /></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -50767,7 +50767,7 @@ const handleBatchSettle = async (targetStatus) => {
                     />
                   </th>
                   {["순번","청구월","건수","총 청구금액","정산상태","정산일","메모"].map(label=>(
-                    <th key={label} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{label}</th>
+                    <th key={label} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap"><EditableText id={`settlement.monthly.header.${label}`} defaultText={label} /></th>
                   ))}
                 </tr>
               </thead>
@@ -52413,7 +52413,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
               <thead>
                 <tr className="bg-[#1B2B4B]">
                   {["", "순번", "상차일", "거래처명", "상차지", "하차지", "차량번호", "기사명", "전화번호", "청구운임", "기사운임", "부가세(10%)", `산재보험료(${insuranceRate}%)`, "수수료", "지급방식", "배차방식", "지급상태", "지급일"].map(h => (
-                    <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap border-b border-white/10">{h}</th>
+                    <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap border-b border-white/10">{h ? <EditableText id={`settlement.table.header.${h}`} defaultText={h} /> : h}</th>
                   ))}
                 </tr>
               </thead>
@@ -52485,7 +52485,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
               <thead>
                 <tr className="bg-[#1B2B4B]">
                   {["차량번호", "기사명", "전화번호", "총 건수", "기사운임 합계", "지급완료", "미지급 건수", "미지급 금액", "일괄 지급"].map(h => (
-                    <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap border-b border-white/10">{h}</th>
+                    <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap border-b border-white/10"><EditableText id={`settlement.byDriver.header.${h}`} defaultText={h} /></th>
                   ))}
                 </tr>
               </thead>
@@ -52593,7 +52593,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                           <thead>
                             <tr className="bg-emerald-50">
                               {["엑셀행","차량번호","기사명","상차일","운송료(엑셀)","기사운임(프로그램)","금액일치","산재보험료","지급일"].map(h=>(
-                                <th key={h} className="px-3 py-2 text-center font-bold text-emerald-800 border border-emerald-200">{h}</th>
+                                <th key={h} className="px-3 py-2 text-center font-bold text-emerald-800 border border-emerald-200"><EditableText id={`settlement.match.header.${h}`} defaultText={h} /></th>
                               ))}
                             </tr>
                           </thead>
@@ -52641,7 +52641,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                               <thead>
                                 <tr className="bg-gray-50">
                                   {["#","상차일","상차지","하차지","기사운임"].map(h=>(
-                                    <th key={h} className="px-3 py-1.5 text-center font-semibold text-gray-500 border-b border-gray-200">{h}</th>
+                                    <th key={h} className="px-3 py-1.5 text-center font-semibold text-gray-500 border-b border-gray-200"><EditableText id={`settlement.matchDetail.header.${h}`} defaultText={h} /></th>
                                   ))}
                                 </tr>
                               </thead>
@@ -52678,7 +52678,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                           <thead>
                             <tr className="bg-red-50">
                               {["엑셀행","차량번호","기사명","상차일","운송료","미매칭 사유"].map(h=>(
-                                <th key={h} className="px-3 py-2 text-center font-bold text-red-700 border border-red-200">{h}</th>
+                                <th key={h} className="px-3 py-2 text-center font-bold text-red-700 border border-red-200"><EditableText id={`settlement.unmatched.header.${h}`} defaultText={h} /></th>
                               ))}
                             </tr>
                           </thead>
@@ -56675,9 +56675,9 @@ function HRManagementPage({ userCompany, role, userId }) {
                       <table className="w-full border-collapse text-[12.5px]">
                         <thead>
                           <tr className="border-b border-gray-200 text-gray-500">
-                            <th className="text-left py-2 pr-4 font-semibold w-[120px]">일자</th>
-                            <th className="text-left py-2 pr-4 font-semibold w-[100px]">구분</th>
-                            <th className="text-left py-2 font-semibold">내용</th>
+                            <th className="text-left py-2 pr-4 font-semibold w-[120px]"><EditableText id="personnel.history.header.일자" defaultText="일자" /></th>
+                            <th className="text-left py-2 pr-4 font-semibold w-[100px]"><EditableText id="personnel.history.header.구분" defaultText="구분" /></th>
+                            <th className="text-left py-2 font-semibold"><EditableText id="personnel.history.header.내용" defaultText="내용" /></th>
                           </tr>
                         </thead>
                         <tbody>
