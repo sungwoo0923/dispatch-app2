@@ -1,6 +1,6 @@
 // src/AdminMenu.jsx
 import React, { useEffect, useState, useMemo } from "react";
-import { auth, db } from "./firebase";
+import { auth, db, storage } from "./firebase";
 import {
   collection,
   addDoc,
@@ -17,6 +17,7 @@ import {
   orderBy,
   limit,
 } from "firebase/firestore";
+import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 
 import { POSITION_OPTIONS, TEAM_OPTIONS, EMPLOYMENT_STATUS_OPTIONS } from "./hrConstants";
 import { CustomSelect } from "./CustomSelect";
@@ -650,6 +651,39 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     ? linkedShipperApps.length
     : linkedShipperApps.filter(a => !a.transportApprovalStatus || a.transportApprovalStatus === "pending").length;
 
+  // ⭐ 관리자메뉴 상단 버튼이 한 줄에 9개까지 늘어서 지저분해 보인다는 요청 —
+  // 관련 있는 것끼리 묶어 "그룹(1단 탭) 안에 하위 탭(2단 탭)" 구조로 재구성했다.
+  // REQUIRES_MASTER에 있는 하위 탭은 최고관리자에게만 보인다(기존 isTotalMaster
+  // 게이팅과 동일한 기준을 그대로 옮긴 것 — 권한 자체는 안 바뀜).
+  const REQUIRES_MASTER_TABS = new Set([
+    "landingInquiries", "sessionLogs", "forceUpdate", "permissions", "gsheetBackfill",
+    "landingEdit", "notifTemplate",
+  ]);
+  const TAB_LABELS = {
+    members: "회원 관리",
+    linked: "연동 화주사",
+    transmit: "화주사 전송",
+    inquiries: "화주사 문의",
+    landingInquiries: "도입 문의",
+    sessionLogs: "접속이력",
+    forceUpdate: "화주사 강제 업데이트",
+    permissions: "권한 관리",
+    gsheetBackfill: "구글시트 백필",
+    landingEdit: "랜딩페이지 편집",
+    notifTemplate: "알림 문구 설정",
+  };
+  const tabGroups = [
+    { key: "members", label: "회원 관리", tabs: ["members"] },
+    { key: "shipperMgmt", label: "화주사 관리", tabs: ["linked", "transmit", "inquiries", "landingInquiries"] },
+    { key: "ops", label: "운영 관리", tabs: ["sessionLogs", "forceUpdate", "permissions", "gsheetBackfill"] },
+    { key: "settings", label: "환경 설정", tabs: ["landingEdit", "notifTemplate"] },
+  ]
+    .map((g) => ({ ...g, tabs: g.tabs.filter((t) => !REQUIRES_MASTER_TABS.has(t) || isTotalMaster) }))
+    .filter((g) => g.tabs.length > 0);
+  const activeGroup = tabGroups.find((g) => g.tabs.includes(adminTab)) || tabGroups[0];
+  const tabBadgeCounts = { linked: linkedPendingCount, inquiries: unansweredInquiryCount, landingInquiries: newLandingInquiryCount };
+  const groupBadgeTotal = (g) => g.tabs.reduce((sum, t) => sum + (tabBadgeCounts[t] || 0), 0);
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       {/* 헤더 */}
@@ -680,88 +714,53 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
         </div>
       </div>
 
-      {/* 탭 */}
-      <div className="flex gap-2 mb-4">
-        <button
-          onClick={() => setAdminTab("members")}
-          className={`px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "members" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
-        >
-          회원 관리
-        </button>
-        <button
-          onClick={() => setAdminTab("linked")}
-          className={`relative px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "linked" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
-        >
-          연동 화주사
-          {linkedPendingCount > 0 && (
-            <span className={`absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${adminTab === "linked" ? "bg-white text-[#1B2B4B]" : "bg-[#1B2B4B] text-white"}`}>
-              {linkedPendingCount}
-            </span>
-          )}
-        </button>
-        <button
-          onClick={() => setAdminTab("transmit")}
-          className={`px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "transmit" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
-        >
-          화주사 전송
-        </button>
-        <button
-          onClick={() => setAdminTab("inquiries")}
-          className={`relative px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "inquiries" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
-        >
-          화주사 문의
-          {unansweredInquiryCount > 0 && (
-            <span className={`absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${adminTab === "inquiries" ? "bg-white text-[#1B2B4B]" : "bg-[#1B2B4B] text-white"}`}>
-              {unansweredInquiryCount}
-            </span>
-          )}
-        </button>
-        {isTotalMaster && (
-          <button
-            onClick={() => setAdminTab("sessionLogs")}
-            className={`px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "sessionLogs" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
-          >
-            접속이력
-          </button>
-        )}
-        {isTotalMaster && (
-          <button
-            onClick={() => setAdminTab("forceUpdate")}
-            className={`px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "forceUpdate" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
-          >
-            화주사 강제 업데이트
-          </button>
-        )}
-        {isTotalMaster && (
-          <button
-            onClick={() => setAdminTab("permissions")}
-            className={`px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "permissions" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
-          >
-            권한 관리
-          </button>
-        )}
-        {isTotalMaster && (
-          <button
-            onClick={() => setAdminTab("gsheetBackfill")}
-            className={`px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "gsheetBackfill" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
-          >
-            구글시트 백필
-          </button>
-        )}
-        {isTotalMaster && (
-          <button
-            onClick={() => setAdminTab("landingInquiries")}
-            className={`relative px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${adminTab === "landingInquiries" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
-          >
-            도입 문의
-            {newLandingInquiryCount > 0 && (
-              <span className={`absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${adminTab === "landingInquiries" ? "bg-white text-[#1B2B4B]" : "bg-[#1B2B4B] text-white"}`}>
-                {newLandingInquiryCount}
-              </span>
-            )}
-          </button>
-        )}
+      {/* 탭 — 1단(그룹) + 2단(하위 탭) 구조. 그룹 안에 탭이 하나뿐이면(회원 관리)
+          하위 탭 줄 자체를 안 그린다. */}
+      <div className="flex gap-2 mb-2 flex-wrap">
+        {tabGroups.map((group) => {
+          const active = group.key === activeGroup.key;
+          const badge = groupBadgeTotal(group);
+          return (
+            <button
+              key={group.key}
+              onClick={() => setAdminTab(group.tabs[0])}
+              className={`relative px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${active ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
+            >
+              {group.label}
+              {badge > 0 && (
+                <span className={`absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${active ? "bg-white text-[#1B2B4B]" : "bg-[#1B2B4B] text-white"}`}>
+                  {badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
+
+      {activeGroup.tabs.length > 1 ? (
+        <div className="flex gap-2 mb-4 pl-3 ml-1 border-l-2 border-gray-200 flex-wrap">
+          {activeGroup.tabs.map((t) => {
+            const active = adminTab === t;
+            const badge = tabBadgeCounts[t] || 0;
+            return (
+              <button
+                key={t}
+                onClick={() => setAdminTab(t)}
+                className={`relative px-4 py-1.5 rounded-md text-[12px] font-semibold border transition ${active ? "bg-[#2C4270] text-white border-[#2C4270]" : "bg-white text-gray-400 border-gray-200 hover:bg-gray-50"}`}
+              >
+                {TAB_LABELS[t]}
+                {badge > 0 && (
+                  <span className={`absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center ${active ? "bg-white text-[#2C4270]" : "bg-[#2C4270] text-white"}`}>
+                    {badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mb-4" />
+      )}
 
       <div className="flex gap-6">
         <div className="flex-1 min-w-0">
@@ -1337,6 +1336,12 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
               <GsheetClientBackfillPanel />
             </>
           )}
+
+          {/* ====== 랜딩페이지 편집 탭 (최고관리자 전용) ====== */}
+          {adminTab === "landingEdit" && isTotalMaster && <LandingPageEditPanel />}
+
+          {/* ====== 알림 문구 설정 탭 (최고관리자 전용) ====== */}
+          {adminTab === "notifTemplate" && isTotalMaster && <NotifTemplatePanel />}
         </div>
 
         {/* 모바일 미리보기 */}
@@ -1765,6 +1770,391 @@ function GsheetClientBackfillPanel() {
           {result}
         </div>
       )}
+    </div>
+  );
+}
+
+// ⭐ 알림 문구 설정 — 최고관리자가 푸시 알림 본문에 어떤 필드를 넣을지 종류별로
+// 고른다(제목은 고정값이라 여기선 안 건드림). 실제 발송 로직(functions/index.js)의
+// NOTIF_TEMPLATE_FIELD_LABELS/NOTIF_TEMPLATE_DEFAULTS와 필드 키/순서를 반드시
+// 맞춰야 한다 — 여기서 저장하는 값을 Cloud Functions가 그대로 읽어서 쓴다.
+const NOTIF_FIELD_OPTIONS = [
+  { key: "거래처명", label: "거래처명" },
+  { key: "상차지명", label: "상차지" },
+  { key: "하차지명", label: "하차지" },
+  { key: "상차일", label: "상차일" },
+  { key: "상차시간", label: "상차시간" },
+  { key: "화물내용", label: "화물정보" },
+  { key: "차량톤수", label: "차량톤수" },
+  { key: "차량종류", label: "차량종류" },
+  { key: "차량번호", label: "차량번호" },
+  { key: "기사명", label: "기사명" },
+  { key: "전화번호", label: "전화번호" },
+];
+const NOTIF_TYPE_DEFS = [
+  { key: "배차등록", label: "배차등록 (일반 신규오더 등록)", defaultFields: ["거래처명", "상차지명", "하차지명"] },
+  { key: "긴급배차", label: "긴급배차 (긴급 신규오더 등록)", defaultFields: ["거래처명", "상차지명", "하차지명"] },
+  { key: "배차완료", label: "배차완료 (기사 배정됨)", defaultFields: ["거래처명", "상차지명", "하차지명", "기사명", "차량번호"] },
+  { key: "미배차", label: "미배차 임박", defaultFields: ["거래처명", "상차지명", "하차지명", "상차시간"] },
+];
+function notifFieldsFor(cfg, typeKey, defaultFields) {
+  const f = cfg?.[typeKey]?.fields;
+  return Array.isArray(f) && f.length ? f : defaultFields;
+}
+
+function NotifTemplatePanel() {
+  const [config, setConfig] = useState(null); // null = 로딩중
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const unsub = onSnapshot(
+      doc(db, "siteConfig", "notificationTemplate"),
+      (snap) => setConfig(snap.exists() ? snap.data() || {} : {}),
+      () => setConfig({})
+    );
+    return () => unsub();
+  }, []);
+
+  const toggleField = (typeKey, defaultFields, fieldKey) => {
+    setConfig((prev) => {
+      const cur = new Set(notifFieldsFor(prev, typeKey, defaultFields));
+      if (cur.has(fieldKey)) cur.delete(fieldKey);
+      else cur.add(fieldKey);
+      // 항상 NOTIF_FIELD_OPTIONS 정의 순서로 정렬해서 저장한다 — 발송 쪽에서
+      // "상차지 바로 다음에 하차지가 오면 화살표로 잇는다"는 로직이 순서에
+      // 의존하기 때문에, 체크한 순서가 아니라 항상 같은 순서를 유지해야 한다.
+      const ordered = NOTIF_FIELD_OPTIONS.map((o) => o.key).filter((k) => cur.has(k));
+      return { ...(prev || {}), [typeKey]: { fields: ordered } };
+    });
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await setDoc(doc(db, "siteConfig", "notificationTemplate"), config || {}, { merge: true });
+      alert("저장했습니다. 다음 알림부터 바로 반영됩니다.");
+    } catch (e) {
+      alert("저장 실패: " + (e?.message || e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 max-w-3xl">
+      <div className="text-[14px] font-bold text-gray-800 mb-1">알림 문구 설정</div>
+      <p className="text-[12px] text-gray-500 mb-5 leading-relaxed">
+        푸시 알림의 제목은 고정이고, 본문에 어떤 정보를 넣을지만 알림 종류별로 고를 수
+        있습니다. 상차지·하차지를 둘 다 선택하면 "상차지 → 하차지"로 화살표로
+        이어집니다. (재배차·배차취소 알림은 정해진 안내 문구라 여기서 설정할 수
+        없습니다.)
+      </p>
+      {config === null ? (
+        <div className="text-[13px] text-gray-400 py-8 text-center">불러오는 중...</div>
+      ) : (
+        <div className="space-y-4">
+          {NOTIF_TYPE_DEFS.map(({ key, label, defaultFields }) => {
+            const selected = new Set(notifFieldsFor(config, key, defaultFields));
+            return (
+              <div key={key} className="border border-gray-100 rounded-lg p-4">
+                <div className="text-[13px] font-bold text-gray-700 mb-2">{label}</div>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {NOTIF_FIELD_OPTIONS.map((opt) => {
+                    const on = selected.has(opt.key);
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => toggleField(key, defaultFields, opt.key)}
+                        className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border transition ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="text-[11px] text-gray-400">
+                  미리보기: {NOTIF_FIELD_OPTIONS.filter((o) => selected.has(o.key)).map((o) => o.label).join(" · ") || "(선택 없음)"}
+                </div>
+              </div>
+            );
+          })}
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-5 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition disabled:opacity-40"
+          >
+            {saving ? "저장 중..." : "저장"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ⭐ 랜딩페이지 편집 — 로그인 전 첫 화면(src/Login.jsx)의 배경/문구/색/글씨체를
+// 최고관리자가 바꾼다. siteConfig/landing 문서 하나에 다 저장하고, Login.jsx가
+// 그 문서를 실시간 구독해서 반영한다(firestore.rules에서 이 문서는 get은 누구나,
+// write는 최고관리자만 되도록 막아뒀다).
+const DEFAULT_BADGE = "물류 관리 플랫폼";
+const DEFAULT_HEADLINE_1 = "더 스마트한";
+const DEFAULT_HEADLINE_2 = "물류 관리";
+const DEFAULT_SUBTITLE_1 = "배차 관리부터 차주 관리, 운임 정산까지";
+const DEFAULT_SUBTITLE_2 = "KP-Flow 하나로 물류 업무를 최적화하세요.";
+const DEFAULT_CTA_TRANSPORT = "운송사 시작하기";
+const DEFAULT_CTA_DRIVER = "차주 시작하기";
+const DEFAULT_CTA_SHIPPER = "화주사 시작하기";
+const DEFAULT_FOOTER = "© 2025 KP-Flow Logistics. All rights reserved.";
+const DEFAULT_LANDING_FEATURES = [
+  { title: "배차 관리", desc: "실시간 배차 등록 및 현황 관리" },
+  { title: "차주 관리", desc: "차주 정보 및 운행 현황 통합 관리" },
+  { title: "운임 정산", desc: "청구운임 및 기사운임 자동 정산" },
+  { title: "거래처 관리", desc: "화주사 및 거래처 통합 관리" },
+];
+const LANDING_FONT_OPTIONS = [
+  { key: "noto", label: "Noto Sans KR (기본)" },
+  { key: "nanum", label: "나눔고딕" },
+  { key: "gothicA1", label: "Gothic A1" },
+];
+
+function FieldRow({ label, value, onChange, placeholder }) {
+  return (
+    <div>
+      <div className="text-[11px] font-semibold text-gray-500 mb-1">{label}</div>
+      <input
+        value={value || ""}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-[13px]"
+      />
+    </div>
+  );
+}
+
+function LandingPageEditPanel() {
+  const [form, setForm] = useState(null); // null = 로딩중
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    const unsub = onSnapshot(
+      doc(db, "siteConfig", "landing"),
+      (snap) => setForm(snap.exists() ? { ...snap.data() } : {}),
+      () => setForm({})
+    );
+    return () => unsub();
+  }, []);
+
+  const set = (key, value) => setForm((prev) => ({ ...(prev || {}), [key]: value }));
+  const setFeature = (idx, key, value) => {
+    setForm((prev) => {
+      const base = Array.isArray(prev?.features) && prev.features.length === 4
+        ? prev.features.map((f) => ({ ...f }))
+        : DEFAULT_LANDING_FEATURES.map((f) => ({ ...f }));
+      base[idx] = { ...base[idx], [key]: value };
+      return { ...(prev || {}), features: base };
+    });
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { alert("이미지 파일만 업로드할 수 있습니다."); return; }
+    if (file.size > 8 * 1024 * 1024) { alert("이미지 용량은 8MB 이하로 올려주세요."); return; }
+    setUploading(true);
+    try {
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const path = `siteConfig/landing-bg-${Date.now()}.${ext}`;
+      const r = storageRef(storage, path);
+      await uploadBytes(r, file);
+      const url = await getDownloadURL(r);
+      set("backgroundImageUrl", url);
+      // 이미지는 올리자마자 바로 저장/반영 — 아래 다른 텍스트/색상은 "저장" 버튼으로 따로 적용.
+      await setDoc(doc(db, "siteConfig", "landing"), { backgroundImageUrl: url }, { merge: true });
+    } catch (e) {
+      alert("이미지 업로드 실패: " + (e?.message || e));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleRemoveImage = async () => {
+    set("backgroundImageUrl", "");
+    try {
+      await setDoc(doc(db, "siteConfig", "landing"), { backgroundImageUrl: "" }, { merge: true });
+    } catch {}
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await setDoc(doc(db, "siteConfig", "landing"), form || {}, { merge: true });
+      alert("저장했습니다. 로그인 전 첫 화면에 바로 반영됩니다.");
+    } catch (e) {
+      alert("저장 실패: " + (e?.message || e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (form === null) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-[13px] text-gray-400">
+        불러오는 중...
+      </div>
+    );
+  }
+
+  const features = Array.isArray(form.features) && form.features.length === 4 ? form.features : DEFAULT_LANDING_FEATURES;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 max-w-3xl">
+      <div className="text-[14px] font-bold text-gray-800 mb-1">랜딩페이지 편집</div>
+      <p className="text-[12px] text-gray-500 mb-5 leading-relaxed">
+        로그인 전 첫 화면(PC/모바일 공통)의 배경·문구·색·글씨체를 바꿉니다. 저장하면
+        방문자 화면에 새로고침 없이 바로 반영됩니다.
+      </p>
+
+      {/* 배경 이미지 */}
+      <div className="mb-6">
+        <div className="text-[12px] font-bold text-gray-600 mb-2">배경 이미지</div>
+        {form.backgroundImageUrl ? (
+          <img
+            src={form.backgroundImageUrl}
+            alt="배경 미리보기"
+            className="w-full max-w-md h-32 object-cover rounded-lg border border-gray-200 mb-2"
+          />
+        ) : (
+          <div className="text-[11px] text-gray-400 mb-2">
+            설정 안 함 — 기본 영상 배경(/videos/bg-truck.mp4)이 그대로 나갑니다.
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <label className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-[12px] font-semibold cursor-pointer hover:bg-gray-200 transition">
+            {uploading ? "업로드 중..." : "이미지 업로드"}
+            <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploading} />
+          </label>
+          {form.backgroundImageUrl && (
+            <button
+              onClick={handleRemoveImage}
+              className="px-4 py-2 rounded-lg bg-white border border-gray-300 text-gray-500 text-[12px] font-semibold hover:bg-gray-50 transition"
+            >
+              이미지 제거(영상으로 복귀)
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 오버레이 색상 */}
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <div>
+          <div className="text-[12px] font-bold text-gray-600 mb-1">배경 위 오버레이 색</div>
+          <input
+            type="color"
+            value={form.overlayColor || "#0B2554"}
+            onChange={(e) => set("overlayColor", e.target.value)}
+            className="w-full h-9 rounded border border-gray-300"
+          />
+        </div>
+        <div>
+          <div className="text-[12px] font-bold text-gray-600 mb-1">오버레이 진하기 ({form.overlayOpacity ?? 82}%)</div>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={form.overlayOpacity ?? 82}
+            onChange={(e) => set("overlayOpacity", Number(e.target.value))}
+            className="w-full"
+          />
+        </div>
+      </div>
+
+      {/* 글씨체 */}
+      <div className="mb-6">
+        <div className="text-[12px] font-bold text-gray-600 mb-1">글씨체</div>
+        <select
+          value={form.fontFamily || "noto"}
+          onChange={(e) => set("fontFamily", e.target.value)}
+          className="border border-gray-300 rounded-lg px-3 py-1.5 text-[13px]"
+        >
+          {LANDING_FONT_OPTIONS.map((o) => (
+            <option key={o.key} value={o.key}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* 문구 색상 */}
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <div>
+          <div className="text-[12px] font-bold text-gray-600 mb-1">기본 글씨 색</div>
+          <input
+            type="color"
+            value={form.textColor || "#ffffff"}
+            onChange={(e) => set("textColor", e.target.value)}
+            className="w-full h-9 rounded border border-gray-300"
+          />
+        </div>
+        <div>
+          <div className="text-[12px] font-bold text-gray-600 mb-1">강조 글씨 색(헤드라인 2번째 줄)</div>
+          <input
+            type="color"
+            value={form.accentColor || "#93c5fd"}
+            onChange={(e) => set("accentColor", e.target.value)}
+            className="w-full h-9 rounded border border-gray-300"
+          />
+        </div>
+      </div>
+
+      {/* 텍스트 */}
+      <div className="space-y-3 mb-6">
+        <FieldRow label="상단 배지 문구" value={form.badgeText} onChange={(v) => set("badgeText", v)} placeholder={DEFAULT_BADGE} />
+        <div className="grid grid-cols-2 gap-3">
+          <FieldRow label="헤드라인 1번째 줄" value={form.headlineLine1} onChange={(v) => set("headlineLine1", v)} placeholder={DEFAULT_HEADLINE_1} />
+          <FieldRow label="헤드라인 2번째 줄(강조색)" value={form.headlineLine2} onChange={(v) => set("headlineLine2", v)} placeholder={DEFAULT_HEADLINE_2} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FieldRow label="부제목 1번째 줄" value={form.subtitleLine1} onChange={(v) => set("subtitleLine1", v)} placeholder={DEFAULT_SUBTITLE_1} />
+          <FieldRow label="부제목 2번째 줄" value={form.subtitleLine2} onChange={(v) => set("subtitleLine2", v)} placeholder={DEFAULT_SUBTITLE_2} />
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <FieldRow label="운송사 버튼 문구" value={form.ctaTransportLabel} onChange={(v) => set("ctaTransportLabel", v)} placeholder={DEFAULT_CTA_TRANSPORT} />
+          <FieldRow label="차주 버튼 문구" value={form.ctaDriverLabel} onChange={(v) => set("ctaDriverLabel", v)} placeholder={DEFAULT_CTA_DRIVER} />
+          <FieldRow label="화주사 버튼 문구" value={form.ctaShipperLabel} onChange={(v) => set("ctaShipperLabel", v)} placeholder={DEFAULT_CTA_SHIPPER} />
+        </div>
+        <FieldRow label="하단 푸터 문구" value={form.footerText} onChange={(v) => set("footerText", v)} placeholder={DEFAULT_FOOTER} />
+      </div>
+
+      {/* 기능 카드 4개 */}
+      <div className="mb-6">
+        <div className="text-[12px] font-bold text-gray-600 mb-2">기능 카드 4개</div>
+        <div className="grid grid-cols-2 gap-3">
+          {features.map((f, i) => (
+            <div key={i} className="border border-gray-100 rounded-lg p-3">
+              <input
+                value={f.title || ""}
+                onChange={(e) => setFeature(i, "title", e.target.value)}
+                placeholder={DEFAULT_LANDING_FEATURES[i].title}
+                className="w-full border border-gray-300 rounded px-2 py-1 text-[12px] font-bold mb-1"
+              />
+              <input
+                value={f.desc || ""}
+                onChange={(e) => setFeature(i, "desc", e.target.value)}
+                placeholder={DEFAULT_LANDING_FEATURES[i].desc}
+                className="w-full border border-gray-300 rounded px-2 py-1 text-[11px]"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="px-5 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition disabled:opacity-40"
+      >
+        {saving ? "저장 중..." : "저장"}
+      </button>
     </div>
   );
 }

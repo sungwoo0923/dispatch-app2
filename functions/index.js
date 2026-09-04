@@ -124,6 +124,95 @@ async function sendPushAndCleanup(tokens, message, label) {
 }
 
 /* ==============================
+   ✏️ 푸시 알림 내용(본문) 커스터마이징 — 최고관리자가 PC 관리자메뉴에서
+   설정한다(제목은 고정, 본문에 어떤 필드를 넣을지만 설정 가능).
+   설정값은 siteConfig/notificationTemplate 문서 하나에 타입별로 저장된다.
+   { 배차등록: { fields: [...] }, 긴급배차: {...}, 배차완료: {...}, 미배차: {...} }
+   문서가 없거나 특정 타입 설정이 없으면 기존 하드코딩과 동일한 기본값을 쓴다
+   — 그래서 이 기능을 배포해도 아무도 설정을 안 건드리면 기존 알림 문구가
+   그대로 유지된다. 재배차/배차취소는 "누구 기사가 빠졌다" 같은 고정 서술문이라
+   설정 대상에서 뺐다(사용자 요청 범위와도 일치).
+============================== */
+const NOTIF_TEMPLATE_FIELD_LABELS = {
+  거래처명: "거래처명",
+  상차지명: "상차지",
+  하차지명: "하차지",
+  상차일: "상차일",
+  상차시간: "상차시간",
+  화물내용: "화물정보",
+  차량톤수: "차량톤수",
+  차량종류: "차량종류",
+  차량번호: "차량번호",
+  기사명: "기사명",
+  전화번호: "전화번호",
+};
+const NOTIF_TEMPLATE_DEFAULTS = {
+  배차등록: ["거래처명", "상차지명", "하차지명"],
+  긴급배차: ["거래처명", "상차지명", "하차지명"],
+  배차완료: ["거래처명", "상차지명", "하차지명", "기사명", "차량번호"],
+  미배차: ["거래처명", "상차지명", "하차지명", "상차시간"],
+};
+let _notifTemplateCache = null;
+let _notifTemplateCacheAt = 0;
+async function getNotificationTemplateConfig() {
+  const now = Date.now();
+  if (_notifTemplateCache && now - _notifTemplateCacheAt < 30000) return _notifTemplateCache;
+  try {
+    const snap = await db.doc("siteConfig/notificationTemplate").get();
+    _notifTemplateCache = snap.exists ? snap.data() || {} : {};
+  } catch (e) {
+    console.warn("알림 문구 설정 조회 실패(기본값 사용):", e?.message || e);
+    _notifTemplateCache = {};
+  }
+  _notifTemplateCacheAt = now;
+  return _notifTemplateCache;
+}
+function getNotifFieldsForType(config, type) {
+  const fields = config?.[type]?.fields;
+  if (Array.isArray(fields) && fields.length) {
+    return fields.filter((f) => NOTIF_TEMPLATE_FIELD_LABELS[f]);
+  }
+  return NOTIF_TEMPLATE_DEFAULTS[type] || [];
+}
+function notifFieldValue(key, d) {
+  switch (key) {
+    case "거래처명": return d["거래처명"] || "";
+    case "상차지명": return d["상차지명"] || "-";
+    case "하차지명": return d["하차지명"] || "-";
+    case "상차일": return d["상차일"] || "";
+    case "상차시간": return d["상차시간"] || "";
+    case "화물내용": return d["화물내용"] || "";
+    case "차량톤수": return d["차량톤수"] || "";
+    case "차량종류": return d["차량종류"] || "";
+    case "차량번호": return d["차량번호"] || "";
+    // ⚠️ 표시 라벨은 "기사명"이지만 실제 문서 필드는 "이름"이다(DispatchApp.jsx
+    // 기준 — applyMultiSlotDriver 등에서 항상 "이름"으로 저장함). 예전 하드코딩
+    // 알림 문구가 존재하지도 않는 after["기사명"]을 읽어 항상 빈 문자열이었던
+    // 버그를 여기서 같이 바로잡는다.
+    case "기사명": return d["이름"] || "";
+    case "전화번호": return d["전화번호"] || "";
+    default: return "";
+  }
+}
+// 선택된 필드들을 사람이 읽기 좋게 이어붙인다 — 상차지명 바로 다음에 하차지명이
+// 오면(둘 다 선택된 기본 케이스) 그 둘만 "출발 → 도착"처럼 화살표로 잇고,
+// 나머지는 가운뎃점으로 구분한다.
+function buildNotifBody(fieldKeys, d) {
+  const segments = [];
+  for (let i = 0; i < fieldKeys.length; i++) {
+    const key = fieldKeys[i];
+    if (key === "하차지명" && fieldKeys[i - 1] === "상차지명") continue; // 위에서 화살표로 이미 처리
+    if (key === "상차지명" && fieldKeys[i + 1] === "하차지명") {
+      segments.push(`${notifFieldValue("상차지명", d)} → ${notifFieldValue("하차지명", d)}`);
+      continue;
+    }
+    const v = notifFieldValue(key, d);
+    if (v) segments.push(v);
+  }
+  return segments.join(" · ");
+}
+
+/* ==============================
    🔔 신규 오더 알림
 ============================== */
 exports.notifyNewDispatch =
@@ -150,10 +239,13 @@ exports.notifyNewDispatch =
         return;
       }
 
+      const templateConfig = await getNotificationTemplateConfig();
+      const body = buildNotifBody(getNotifFieldsForType(templateConfig, type), data);
+
       await sendPushAndCleanup(tokens, {
         notification: {
           title: isUrgent ? "긴급 오더 등록" : "신규 오더 등록",
-          body: `${data["거래처명"] || ""} ${data["상차지명"] || "-"} → ${data["하차지명"] || "-"}`,
+          body,
         },
         android: { priority: "high" },
         apns: { payload: { aps: { sound: "default" } } },
@@ -183,10 +275,13 @@ exports.notifyDispatchDone =
       const tokens = await getTokensForType("배차완료");
       if (!tokens.length) return;
 
+      const templateConfig = await getNotificationTemplateConfig();
+      const body = buildNotifBody(getNotifFieldsForType(templateConfig, "배차완료"), after);
+
       await sendPushAndCleanup(tokens, {
         notification: {
           title: "배차완료",
-          body: `${after["거래처명"] || ""} ${after["상차지명"] || "-"} → ${after["하차지명"] || "-"}\n${after["기사명"] || ""} (${nextCar})`,
+          body,
         },
         android: { priority: "high" },
         apns: { payload: { aps: { sound: "default" } } },
@@ -372,6 +467,8 @@ exports.notifyUnassignedUrgent = functions.pubsub
     const URGENT_WINDOW_MIN = 60; // 상차 1시간 전부터 임박으로 취급
 
     const tokens = await getTokensForType("미배차");
+    const templateConfig = await getNotificationTemplateConfig();
+    const notifFields = getNotifFieldsForType(templateConfig, "미배차");
 
     let sent = 0;
     for (const col of ["dispatch", "orders"]) {
@@ -403,7 +500,7 @@ exports.notifyUnassignedUrgent = functions.pubsub
           await sendPushAndCleanup(tokens, {
             notification: {
               title: "미배차 임박",
-              body: `${data["거래처명"] || ""} ${data["상차지명"] || "-"} → ${data["하차지명"] || "-"} (${data["상차시간"] || ""} 상차 예정, 아직 미배차)`,
+              body: buildNotifBody(notifFields, data),
             },
             android: { priority: "high" },
             apns: { payload: { aps: { sound: "default" } } },

@@ -1,4 +1,6 @@
 @import url("https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap");
+/* 랜딩페이지 편집(관리자메뉴)에서 글씨체 선택지로 쓰는 추가 폰트 2종 */
+@import url("https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700;800&family=Gothic+A1:wght@400;500;700;800&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -7,6 +9,16 @@
 @keyframes successBannerIn {
   0%   { opacity: 0; transform: scale(0.85) translateY(8px); }
   100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* 가로 스크롤은 되지만 스크롤바는 안 보이게(모바일 랜딩페이지 네비/버튼 줄 등,
+   화면이 너무 좁을 때 줄바꿈 대신 조용히 가로로만 스크롤되는 안전장치용) */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 /* ================= 공통 컴포넌트 ================= */
