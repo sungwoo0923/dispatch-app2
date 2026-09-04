@@ -57308,11 +57308,11 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
 
         {/* 계좌 정보 카드 */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-5">계좌 정보</p>
+          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-5"><EditableText id="companyProfile.section.계좌정보" defaultText="계좌 정보" /></p>
           <div className="max-w-[420px] space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">은행</label>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1.5"><EditableText id="companyProfile.bankForm.label.은행" defaultText="은행" /></label>
                 <select
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] bg-white"
                   value={bankForm.bank}
@@ -57325,7 +57325,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                 </select>
               </div>
               <div>
-                <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">예금주</label>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1.5"><EditableText id="companyProfile.bankForm.label.예금주" defaultText="예금주" /></label>
                 <input autoComplete="off"
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
                   placeholder="예금주 이름"
@@ -57335,7 +57335,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
               </div>
             </div>
             <div>
-              <label className="block text-[12px] font-semibold text-gray-500 mb-1.5">계좌번호</label>
+              <label className="block text-[12px] font-semibold text-gray-500 mb-1.5"><EditableText id="companyProfile.bankForm.label.계좌번호" defaultText="계좌번호" /></label>
               <input autoComplete="off"
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
                 placeholder="숫자만 입력 (하이픈 제외)"
@@ -57474,21 +57474,21 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999999]">
           <div className="bg-white rounded-2xl w-[440px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4">
-              <h3 className="text-white font-bold text-[15px]">계좌 정보 확인</h3>
-              <p className="text-white/55 text-[12px] mt-0.5">입력하신 정보가 맞는지 확인해 주세요</p>
+              <h3 className="text-white font-bold text-[15px]"><EditableText id="companyProfile.bankConfirm.title" defaultText="계좌 정보 확인" /></h3>
+              <p className="text-white/55 text-[12px] mt-0.5"><EditableText id="companyProfile.bankConfirm.subtitle" defaultText="입력하신 정보가 맞는지 확인해 주세요" /></p>
             </div>
             <div className="px-6 py-5 space-y-3">
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-semibold text-gray-500 w-20">은행</span>
+                  <span className="text-[13px] font-semibold text-gray-500 w-20"><EditableText id="companyProfile.bankConfirm.은행" defaultText="은행" /></span>
                   <span className="text-[14px] font-bold text-[#1B2B4B]">{bankForm.bank}</span>
                 </div>
                 <div className="flex items-center justify-between border-t border-gray-100 pt-3">
-                  <span className="text-[13px] font-semibold text-gray-500 w-20">계좌번호</span>
+                  <span className="text-[13px] font-semibold text-gray-500 w-20"><EditableText id="companyProfile.bankConfirm.계좌번호" defaultText="계좌번호" /></span>
                   <span className="text-[14px] font-bold text-[#1B2B4B] font-mono">{bankForm.accountNumber}</span>
                 </div>
                 <div className="flex items-center justify-between border-t border-gray-100 pt-3">
-                  <span className="text-[13px] font-semibold text-gray-500 w-20">예금주</span>
+                  <span className="text-[13px] font-semibold text-gray-500 w-20"><EditableText id="companyProfile.bankConfirm.예금주" defaultText="예금주" /></span>
                   <span className="text-[14px] font-bold text-[#1B2B4B]">{bankForm.accountHolder}</span>
                 </div>
               </div>
@@ -57497,13 +57497,13 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
               <button
                 className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"
                 onClick={() => setBankConfirmOpen(false)}>
-                아니오, 다시 수정
+                <EditableText id="companyProfile.bankConfirm.다시수정" defaultText="아니오, 다시 수정" />
               </button>
               <button
                 className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition disabled:opacity-50"
                 disabled={bankSaving}
                 onClick={saveBank}>
-                {bankSaving ? "저장 중..." : "예, 저장합니다"}
+                {bankSaving ? <EditableText id="companyProfile.bankConfirm.저장중" defaultText="저장 중..." /> : <EditableText id="companyProfile.bankConfirm.저장합니다" defaultText="예, 저장합니다" />}
               </button>
             </div>
           </div>
@@ -57516,8 +57516,8 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
           <div className="bg-white rounded-2xl w-[520px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
               <div>
-                <h3 className="text-white font-bold text-[15px]">회사 정보 수정 요청</h3>
-                <p className="text-white/55 text-[12px] mt-0.5">최고관리자 승인 후 반영됩니다</p>
+                <h3 className="text-white font-bold text-[15px]"><EditableText id="companyProfile.editModal.title" defaultText="회사 정보 수정 요청" /></h3>
+                <p className="text-white/55 text-[12px] mt-0.5"><EditableText id="companyProfile.editModal.subtitle" defaultText="최고관리자 승인 후 반영됩니다" /></p>
               </div>
               <button className="text-white/50 hover:text-white text-lg transition" onClick={() => setEditModalOpen(false)}>✕</button>
             </div>
@@ -57532,7 +57532,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                 { label: "이메일", key: "email" },
               ].map(({ label, key }) => (
                 <div key={key}>
-                  <label className="block text-[12px] font-semibold text-gray-500 mb-1">{label}</label>
+                  <label className="block text-[12px] font-semibold text-gray-500 mb-1"><EditableText id={`companyProfile.editModal.label.${key}`} defaultText={label} /></label>
                   <input autoComplete="off"
                     className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
                     value={editForm[key] || ""}
@@ -57545,13 +57545,13 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
               <button
                 className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"
                 onClick={() => setEditModalOpen(false)}>
-                취소
+                <EditableText id="companyProfile.editModal.취소" defaultText="취소" />
               </button>
               <button
                 className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition disabled:opacity-50"
                 disabled={submittingEdit}
                 onClick={submitEditRequest}>
-                {submittingEdit ? "요청 중..." : "수정 요청 제출"}
+                {submittingEdit ? <EditableText id="companyProfile.editModal.요청중" defaultText="요청 중..." /> : <EditableText id="companyProfile.editModal.수정요청제출" defaultText="수정 요청 제출" />}
               </button>
             </div>
           </div>
