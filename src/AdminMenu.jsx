@@ -1368,7 +1368,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0">
               <div>
                 <h3 className="text-white font-bold text-[15px]">
-                  {isTotalMaster ? "2차 최종 승인" : "화주사 승인 관리"}
+                  {isTotalMaster ? <EditableText id="adminMenu.linkedPopup.title2" defaultText="2차 최종 승인" /> : <EditableText id="adminMenu.linkedPopup.title1" defaultText="화주사 승인 관리" />}
                 </h3>
                 <p className="text-white/60 text-[12px] mt-0.5">{managingLinkedApp.companyName} / {managingLinkedApp.name}</p>
               </div>
@@ -1387,7 +1387,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
 
               {/* 신청 정보 */}
               <div className="border border-gray-100 rounded-xl overflow-hidden mb-5">
-                <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">신청 정보</div>
+                <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100"><EditableText id="adminMenu.linkedPopup.section.신청정보" defaultText="신청 정보" /></div>
                 {[
                   ["신청 유형", managingLinkedApp.type === "신규" ? "신규 가입" : "기존 회사 추가"],
                   ["화주사명", managingLinkedApp.companyName],
@@ -1399,7 +1399,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                   ["신청일", fmtDate(managingLinkedApp.createdAt)],
                 ].map(([label, value]) => (
                   <div key={label} className="flex items-start px-4 py-3 border-b border-gray-50 last:border-b-0 odd:bg-gray-50/50">
-                    <span className="text-[12px] text-gray-500 w-28 shrink-0">{label}</span>
+                    <span className="text-[12px] text-gray-500 w-28 shrink-0"><EditableText id={`adminMenu.linkedPopup.label.${label}`} defaultText={label} /></span>
                     <span className="text-[13px] font-medium text-gray-800">{value}</span>
                   </div>
                 ))}
@@ -1408,20 +1408,20 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
               {/* 연결 운송사 */}
               {managingLinkedApp.linkedTransportCompany && (
                 <div className="border border-gray-100 rounded-xl overflow-hidden mb-5">
-                  <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">연결 운송사</div>
+                  <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100"><EditableText id="adminMenu.linkedPopup.section.연결운송사" defaultText="연결 운송사" /></div>
                   {[
                     ["운송사명", managingLinkedApp.linkedTransportCompany.companyName || "-"],
                     ["운송사 코드", managingLinkedApp.linkedTransportCompany.companyCode || "-"],
                     ["대표자", managingLinkedApp.linkedTransportCompany.representative || "-"],
                   ].map(([label, value]) => (
                     <div key={label} className="flex items-start px-4 py-3 border-b border-gray-50 last:border-b-0 odd:bg-gray-50/50">
-                      <span className="text-[12px] text-gray-500 w-28 shrink-0">{label}</span>
+                      <span className="text-[12px] text-gray-500 w-28 shrink-0"><EditableText id={`adminMenu.linkedPopup.label.${label}`} defaultText={label} /></span>
                       <span className="text-[13px] font-medium text-gray-800">{value}</span>
                     </div>
                   ))}
                   {managingLinkedApp.transportApprovalStatus === "approved" && (
                     <div className="flex items-start px-4 py-3 border-t border-gray-50 odd:bg-gray-50/50">
-                      <span className="text-[12px] text-gray-500 w-28 shrink-0">1차 승인자</span>
+                      <span className="text-[12px] text-gray-500 w-28 shrink-0"><EditableText id="adminMenu.linkedPopup.label.1차승인자" defaultText="1차 승인자" /></span>
                       <span className="text-[13px] font-medium text-gray-800">{managingLinkedApp.transportApprovedBy || "-"}</span>
                     </div>
                   )}
@@ -1431,7 +1431,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
               {/* 권한 관리 (최고관리자 전용) */}
               {isTotalMaster && managingLinkedApp.userId && appUserPerms !== null && (
                 <div className="border border-gray-100 rounded-xl overflow-hidden mb-5">
-                  <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">권한 관리</div>
+                  <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100"><EditableText id="adminMenu.linkedPopup.section.권한관리" defaultText="권한 관리" /></div>
                   <div className="px-4 py-4 space-y-3">
                     {[
                       { key: "master", label: "마스터", desc: "전체 권한" },
@@ -1447,8 +1447,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                           className="w-4 h-4 rounded"
                         />
                         <div>
-                          <div className="text-[13px] font-semibold text-gray-800">{label}</div>
-                          <div className="text-[10px] text-gray-500">{desc}</div>
+                          <div className="text-[13px] font-semibold text-gray-800"><EditableText id={`adminMenu.linkedPopup.perm.${key}.label`} defaultText={label} /></div>
+                          <div className="text-[10px] text-gray-500"><EditableText id={`adminMenu.linkedPopup.perm.${key}.desc`} defaultText={desc} /></div>
                         </div>
                       </label>
                     ))}
@@ -1464,7 +1464,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                       }}
                       className="w-full py-2 mt-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold"
                     >
-                      권한 저장
+                      <EditableText id="adminMenu.linkedPopup.권한저장" defaultText="권한 저장" />
                     </button>
                   </div>
                 </div>
@@ -1478,13 +1478,13 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                       onClick={() => approveShipper2nd(managingLinkedApp)}
                       className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"
                     >
-                      최종 승인
+                      <EditableText id="adminMenu.linkedPopup.최종승인" defaultText="최종 승인" />
                     </button>
                     <button
                       onClick={() => setShowRejectLinked(true)}
                       className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition"
                     >
-                      거절
+                      <EditableText id="adminMenu.linkedPopup.거절" defaultText="거절" />
                     </button>
                   </>
                 ) : (
@@ -1497,7 +1497,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             onClick={() => approveShipper1st(managingLinkedApp)}
                             className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"
                           >
-                            1차 승인
+                            <EditableText id="adminMenu.linkedPopup.1차승인" defaultText="1차 승인" />
                           </button>
                         )}
                         {tStatus !== "rejected" && (
@@ -1505,7 +1505,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             onClick={() => setShowRejectLinked(true)}
                             className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition"
                           >
-                            {tStatus === "approved" ? "1차 승인 취소" : "거절"}
+                            {tStatus === "approved" ? <EditableText id="adminMenu.linkedPopup.1차승인취소" defaultText="1차 승인 취소" /> : <EditableText id="adminMenu.linkedPopup.거절" defaultText="거절" />}
                           </button>
                         )}
                         {tStatus === "rejected" && (
