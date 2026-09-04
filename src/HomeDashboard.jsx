@@ -9,6 +9,7 @@ import {
   serverTimestamp, doc, deleteDoc, updateDoc, where, setDoc, getDoc, arrayUnion,
 } from "firebase/firestore";
 import { db, auth } from "./firebase";
+import { EditableText } from "./EditMode";
 
 /* ===== 공통 Modal ===== */
 function Modal({ title, onClose, children }) {
@@ -35,7 +36,9 @@ function KpiCard({ title, value, unit = "", color = "blue" }) {
   };
   return (
     <div className={`bg-white rounded-xl border border-gray-200 border-l-4 ${colors[color]} shadow-sm p-4`}>
-      <div className="text-[12px] font-semibold text-gray-500 mb-1">{title}</div>
+      <div className="text-[12px] font-semibold text-gray-500 mb-1">
+        <EditableText id={`home.kpi.${title}`} defaultText={title} />
+      </div>
       <div className="text-[22px] font-bold text-gray-900">
         {typeof value === "number" ? value.toLocaleString() : value}
         {unit && <span className="text-[14px] font-semibold text-gray-500 ml-1">{unit}</span>}
@@ -50,7 +53,9 @@ function SectionCard({ title, action, children }) {
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
       {title && (
         <div className="flex justify-between items-center px-5 py-3 bg-[#1B2B4B]">
-          <h3 className="text-[14px] font-bold text-white">{title}</h3>
+          <h3 className="text-[14px] font-bold text-white">
+            <EditableText id={`home.section.${title}`} defaultText={title} />
+          </h3>
           {action && <div>{action}</div>}
         </div>
       )}
@@ -98,7 +103,7 @@ function BoardTable({ headers, rows }) {
           {headers.map((h, i) => (
             <th key={i} className={`px-3 py-2.5 font-semibold text-gray-500 text-[12px] whitespace-nowrap ${h.align || "text-center"}`}
               style={{ width: h.width }}>
-              {h.label}
+              <EditableText id={`home.table.header.${h.label}`} defaultText={h.label} />
             </th>
           ))}
         </tr>
@@ -814,7 +819,7 @@ React.useEffect(() => {
                         : "text-gray-500 border-transparent hover:text-gray-600"
                     }`}
                   >
-                    {key}
+                    <EditableText id={`home.board.tab.${key}`} defaultText={key} />
                     {badge > 0 && (
                       <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold">{badge}</span>
                     )}

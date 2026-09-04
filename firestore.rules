@@ -122,6 +122,14 @@ service cloud.firestore {
       allow list: if false;
       allow write: if isTotalMasterUser();
     }
+    // siteConfig/labels(프로그램 전체 편집모드의 글자 오버라이드)는 전체 사용자
+    // 화면에 반영돼야 하니 읽기는 로그인한 사용자 전체 허용, 쓰기(=편집)만
+    // 최고관리자로 제한한다 — landing과 같은 이유의 예외.
+    match /siteConfig/labels {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow write: if isTotalMasterUser();
+    }
     match /siteConfig/{docId} {
       allow get, list: if isTotalMasterUser();
       allow write: if isTotalMasterUser();

@@ -17,6 +17,7 @@ import { calcFare } from "./fareUtil";
 import FixedClients from "./FixedClients";
 import FleetManagement from "./FleetManagement";
 import HomeDashboard from "./HomeDashboard";
+import { EditModeProvider, EditableText, EditModeToggleButton } from "./EditMode";
 import StandardFare from "./StandardFare";
 import RateCard from "./RateCard";
 import DispatchFormNew from "./DispatchFormNew";
@@ -6374,6 +6375,7 @@ React.useEffect(() => {
 
   // ---------------- 메뉴 UI ----------------
 return (
+    <EditModeProvider role={role}>
     <ToastProvider>
       <CustomAlert message={alertMsg} onClose={closeAlert} />
       {weekendCheckPopup && (
@@ -6418,6 +6420,7 @@ return (
                 ) : (
                   <span className="text-[13px] font-mono text-white/60 shrink-0">v{__APP_VERSION__}</span>
                 )}
+                <EditModeToggleButton className="ml-1" />
               </div>
             );
           })()}
@@ -6469,7 +6472,7 @@ return (
                         : "text-white/60 hover:text-white hover:bg-[#28406b] hover:ring-1 hover:ring-emerald-400/30"
                     }`}
                 >
-                  {m}
+                  <EditableText id={`nav.${m}`} defaultText={m} />
                   {!isBlocked && isActive && (
                     <span className="absolute left-1/2 -translate-x-1/2 -bottom-[3px] w-4 h-[2px] bg-blue-400 rounded-full" />
                   )}
@@ -7026,7 +7029,7 @@ return (
                       ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
                       : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
                   }`}>
-                  {tab}
+                  <EditableText id={`nav.관리센터.${tab}`} defaultText={tab} />
                 </button>
               ))}
             </div>
@@ -7407,6 +7410,7 @@ return (
 )}
 
     </ToastProvider>
+    </EditModeProvider>
   );
 }
 // ===================== DispatchApp.jsx (PART 2/8) — END =====================
