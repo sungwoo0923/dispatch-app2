@@ -42553,7 +42553,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], pla
           <div className="bg-white rounded-2xl shadow-2xl w-[680px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
               <div>
-                <div className="text-white font-bold text-[15px]">업로드 미리보기</div>
+                <div className="text-white font-bold text-[15px]"><EditableText id="settlement.uploadPreview.title" defaultText="업로드 미리보기" /></div>
                 <div className="text-white/50 text-[12px] mt-0.5">{importPreview.fileName} · {Object.keys(importPreview.parsed).length}개 항목 인식됨</div>
               </div>
               <button className="text-white/50 hover:text-white text-xl leading-none" onClick={() => setImportPreview(null)}>×</button>
@@ -42562,7 +42562,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], pla
               <table className="w-full text-[12px] border-collapse">
                 <thead>
                   <tr className="bg-gray-50">
-                    <th className="text-left px-3 py-2 border border-gray-200 font-semibold text-gray-600 w-[160px]">항목</th>
+                    <th className="text-left px-3 py-2 border border-gray-200 font-semibold text-gray-600 w-[160px]"><EditableText id="settlement.uploadPreview.header.항목" defaultText="항목" /></th>
                     {MONTH_LABELS.map((m, i) => (
                       <th key={m} className="px-1 py-2 border border-gray-200 font-semibold text-gray-600 text-center w-[44px]">{m}</th>
                     ))}
@@ -42795,7 +42795,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
 
   const KpiCard = ({ label, value, sub, highlight }) => (
     <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: "16px 20px" }}>
-      <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1">{label}</div>
+      <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1"><EditableText id={`settlement.accounting.kpi.${label}`} defaultText={label} /></div>
       <div className={`text-[20px] font-bold ${highlight === "danger" ? "text-red-600" : highlight === "ok" ? "text-emerald-700" : "text-[#1B2B4B]"}`}>
         {value}
       </div>
@@ -42834,7 +42834,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
         {[["ar","미수금 현황"],["ap","지급 현황"],["vat","부가세 자료"],["cost","원가 분석"]].map(([k, label]) => (
           <button key={k} onClick={() => setSubTab(k)}
             className={`px-5 py-2.5 text-[13px] font-semibold border-b-2 transition-colors ${subTab === k ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-transparent text-gray-500 hover:text-gray-600"}`}>
-            {label}
+            <EditableText id={`settlement.accounting.subtab.${k}`} defaultText={label} />
           </button>
         ))}
       </div>
@@ -42853,7 +42853,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
               <thead>
                 <tr>
                   {["거래처","청구액","수금액","미수금","연체 구분",""].map((h, i) => (
-                    <th key={i} style={{ ...thStyle, textAlign: i >= 1 && i <= 3 ? "right" : "left" }}>{h}</th>
+                    <th key={i} style={{ ...thStyle, textAlign: i >= 1 && i <= 3 ? "right" : "left" }}>{h && <EditableText id={`settlement.ar.header.${h}`} defaultText={h} />}</th>
                   ))}
                 </tr>
               </thead>
@@ -42911,7 +42911,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
               <thead>
                 <tr>
                   {["기사명","차량번호","기사운임 합계","지급액","미지급",""].map((h, i) => (
-                    <th key={i} style={{ ...thStyle, textAlign: i >= 2 && i <= 4 ? "right" : "left" }}>{h}</th>
+                    <th key={i} style={{ ...thStyle, textAlign: i >= 2 && i <= 4 ? "right" : "left" }}>{h && <EditableText id={`settlement.ap.header.${h}`} defaultText={h} />}</th>
                   ))}
                 </tr>
               </thead>
@@ -42983,7 +42983,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
               <thead>
                 <tr>
                   {["월","공급가액(매출)","매출세액","매입공급가액","매입세액","납부세액"].map((h, i) => (
-                    <th key={i} style={{ ...thStyle, textAlign: i === 0 ? "left" : "right" }}>{h}</th>
+                    <th key={i} style={{ ...thStyle, textAlign: i === 0 ? "left" : "right" }}><EditableText id={`settlement.vatMonthly.header.${h}`} defaultText={h} /></th>
                   ))}
                 </tr>
               </thead>
@@ -43029,14 +43029,14 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
           {/* 차량 종류별 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-gray-100 bg-[#1B2B4B]">
-              <span className="text-[13px] font-bold text-white">차량 종류별 원가 분석</span>
+              <span className="text-[13px] font-bold text-white"><EditableText id="settlement.costByType.title" defaultText="차량 종류별 원가 분석" /></span>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full border-collapse">
                 <thead>
                   <tr>
                     {["차량 종류","건수","매출","원가(기사운임)","이익","이익률"].map((h, i) => (
-                      <th key={i} style={{ ...thStyle, textAlign: i >= 1 ? "right" : "left" }}>{h}</th>
+                      <th key={i} style={{ ...thStyle, textAlign: i >= 1 ? "right" : "left" }}><EditableText id={`settlement.costByType.header.${h}`} defaultText={h} /></th>
                     ))}
                   </tr>
                 </thead>
@@ -43078,14 +43078,14 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
           {/* 배차방식별 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-gray-100 bg-[#1B2B4B]">
-              <span className="text-[13px] font-bold text-white">배차 방식별 원가 분석</span>
+              <span className="text-[13px] font-bold text-white"><EditableText id="settlement.costByMethod.title" defaultText="배차 방식별 원가 분석" /></span>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full border-collapse">
                 <thead>
                   <tr>
                     {["배차 방식","건수","매출","원가","이익","이익률"].map((h, i) => (
-                      <th key={i} style={{ ...thStyle, textAlign: i >= 1 ? "right" : "left" }}>{h}</th>
+                      <th key={i} style={{ ...thStyle, textAlign: i >= 1 ? "right" : "left" }}><EditableText id={`settlement.costByMethod.header.${h}`} defaultText={h} /></th>
                     ))}
                   </tr>
                 </thead>
@@ -43112,14 +43112,14 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
           {/* 월별 이익률 추이 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-gray-100 bg-[#1B2B4B]">
-              <span className="text-[13px] font-bold text-white">월별 매출·이익 추이</span>
+              <span className="text-[13px] font-bold text-white"><EditableText id="settlement.monthlyTrend.title" defaultText="월별 매출·이익 추이" /></span>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full border-collapse">
                 <thead>
                   <tr>
                     {["월","매출","원가","이익","이익률"].map((h, i) => (
-                      <th key={i} style={{ ...thStyle, textAlign: i === 0 ? "left" : "right" }}>{h}</th>
+                      <th key={i} style={{ ...thStyle, textAlign: i === 0 ? "left" : "right" }}><EditableText id={`settlement.monthlyTrend.header.${h}`} defaultText={h} /></th>
                     ))}
                   </tr>
                 </thead>
@@ -44735,16 +44735,16 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
               <>
                 <div className="border-t border-gray-200" />
                 <section>
-                  <h4 className="text-[13px] font-bold text-[#1B2B4B] mb-3">순수 운송료 (제외 거래처 미포함)</h4>
+                  <h4 className="text-[13px] font-bold text-[#1B2B4B] mb-3"><EditableText id="settlement.pureRevenue.title" defaultText="순수 운송료 (제외 거래처 미포함)" /></h4>
                   <table className="w-full text-[13px] border-collapse text-center">
                     <thead className="bg-gray-50 text-gray-600">
                       <tr>
-                        <th className="border p-2">구분</th>
-                        <th className="border p-2">매출</th>
-                        <th className="border p-2">운반비</th>
-                        <th className="border p-2">수익</th>
-                        <th className="border p-2">수익률</th>
-                        <th className="border p-2">전월대비</th>
+                        <th className="border p-2"><EditableText id="settlement.pureRevenue.header.구분" defaultText="구분" /></th>
+                        <th className="border p-2"><EditableText id="settlement.pureRevenue.header.매출" defaultText="매출" /></th>
+                        <th className="border p-2"><EditableText id="settlement.pureRevenue.header.운반비" defaultText="운반비" /></th>
+                        <th className="border p-2"><EditableText id="settlement.pureRevenue.header.수익" defaultText="수익" /></th>
+                        <th className="border p-2"><EditableText id="settlement.pureRevenue.header.수익률" defaultText="수익률" /></th>
+                        <th className="border p-2"><EditableText id="settlement.pureRevenue.header.전월대비" defaultText="전월대비" /></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -45021,12 +45021,12 @@ function ClientPeriodQuery({ rows = [], clients = [] }) {
               <table className="w-full text-[13px] border-collapse text-center">
                 <thead className="bg-gray-50 text-gray-600">
                   <tr>
-                    <th className="border p-2">날짜</th>
-                    <th className="border p-2">오더건수</th>
-                    <th className="border p-2">청구운임</th>
-                    <th className="border p-2">기사운임</th>
-                    <th className="border p-2">수수료</th>
-                    <th className="border p-2">수익률</th>
+                    <th className="border p-2"><EditableText id="settlement.dateQuery.header.날짜" defaultText="날짜" /></th>
+                    <th className="border p-2"><EditableText id="settlement.dateQuery.header.오더건수" defaultText="오더건수" /></th>
+                    <th className="border p-2"><EditableText id="settlement.dateQuery.header.청구운임" defaultText="청구운임" /></th>
+                    <th className="border p-2"><EditableText id="settlement.dateQuery.header.기사운임" defaultText="기사운임" /></th>
+                    <th className="border p-2"><EditableText id="settlement.dateQuery.header.수수료" defaultText="수수료" /></th>
+                    <th className="border p-2"><EditableText id="settlement.dateQuery.header.수익률" defaultText="수익률" /></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -45396,13 +45396,13 @@ function SettlementTop10Drop({ rows = [], targetMonth }) {
       <table className="w-full text-[13px] border-collapse text-center">
         <thead className="bg-gray-50 text-gray-600">
           <tr>
-            <th className="border p-2">순위</th>
-            <th className="border p-2">거래처</th>
-            <th className="border p-2">전월 매출</th>
-            <th className="border p-2">당월 매출</th>
-            <th className="border p-2">거래량</th>
-            <th className="border p-2">감소액</th>
-            <th className="border p-2">원인 분석</th>
+            <th className="border p-2"><EditableText id="settlement.top10Drop.header.순위" defaultText="순위" /></th>
+            <th className="border p-2"><EditableText id="settlement.top10Drop.header.거래처" defaultText="거래처" /></th>
+            <th className="border p-2"><EditableText id="settlement.top10Drop.header.전월매출" defaultText="전월 매출" /></th>
+            <th className="border p-2"><EditableText id="settlement.top10Drop.header.당월매출" defaultText="당월 매출" /></th>
+            <th className="border p-2"><EditableText id="settlement.top10Drop.header.거래량" defaultText="거래량" /></th>
+            <th className="border p-2"><EditableText id="settlement.top10Drop.header.감소액" defaultText="감소액" /></th>
+            <th className="border p-2"><EditableText id="settlement.top10Drop.header.원인분석" defaultText="원인 분석" /></th>
           </tr>
         </thead>
         <tbody>
