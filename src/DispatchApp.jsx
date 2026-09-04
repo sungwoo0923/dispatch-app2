@@ -13338,13 +13338,13 @@ shadow-sm
 <div className="col-span-8 -mx-6 -mt-0 mb-3">
   <div className="bg-[#1B2B4B] px-6 py-3 flex items-center justify-between">
     <span className="text-[14px] font-bold text-white tracking-wide">
-      오더 정보
+      <EditableText id="orderForm.header.오더정보" defaultText="오더 정보" />
     </span>
     <div className="flex items-center gap-1.5">
       <button type="button" onClick={openMultiRegister}
         className="px-3 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white text-[13px] font-bold transition"
         title="거래처(상차지)는 고정하고, 하차지·화물 등이 서로 다른 오더 여러 건을 한 번에 등록">
-        다중등록
+        <EditableText id="orderForm.header.다중등록" defaultText="다중등록" />
       </button>
       <button type="button" onClick={toggleOrderCardStyle}
         className="px-3 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white text-[13px] font-bold transition"
@@ -13983,7 +13983,7 @@ shadow-sm
 {/* 거래처 + 신규등록 */}
 <div className="col-span-2">
 
-    <label className={labelCls}>거래처 {reqStar}</label>
+    <label className={labelCls}><EditableText id="orderForm.label.거래처" defaultText="거래처" /> {reqStar}</label>
     <div className="flex gap-2">
       <div className="relative flex-1" ref={comboRef}>
         <input autoComplete="off"
@@ -14123,7 +14123,7 @@ const similar = placeList.filter(p => {
   {/* 상차지명 + 자동완성 */}
   <div className="relative">
     <label className="flex items-center h-[22px] overflow-visible gap-1.5 text-[16px] font-bold text-blue-600 mb-1">
-  상차지 {reqStar}
+  <EditableText id="orderForm.label.상차지" defaultText="상차지" /> {reqStar}
   <OrderMemoIconButton onClick={() => openOrderMemoEditor("pickup")} title="상차지 오더메모" hasMemo={hasOrderMemoFor("pickup")} size={20} />
 </label>
 
@@ -14215,7 +14215,7 @@ const similar = placeList.filter(p => {
 <div>
   <div className="flex items-center h-[22px] overflow-visible justify-between mb-1">
     <label className={`${labelCls} mb-0`}>
-      상차지주소 <AutoBadge show={autoPickMatched} />
+      <EditableText id="orderForm.label.상차지주소" defaultText="상차지주소" /> <AutoBadge show={autoPickMatched} />
     </label>
 
     {/* ⭐ 여기로 이동 (핵심) */}
@@ -14258,7 +14258,7 @@ className={`
 <div>
   <div className="flex items-center h-[22px] overflow-visible justify-between mb-1">
     <label className={`${labelCls} mb-0`}>
-      상차지 담당자
+      <EditableText id="orderForm.label.상차지담당자" defaultText="상차지 담당자" />
     </label>
     <ContactPickerIconButton onClick={() => openContactPickerFor("pickup")} title="상차지 담당자 선택" />
   </div>
@@ -14278,7 +14278,7 @@ className={`
 
 {/* 상차지 연락처 */}
 <div>
-  <label className={labelCls}>상차지 연락처</label>
+  <label className={labelCls}><EditableText id="orderForm.label.상차지연락처" defaultText="상차지 연락처" /></label>
   <input autoComplete="off"
     id="pickup-phone"
     data-arrownav
@@ -14294,7 +14294,7 @@ className={`
 {/* 하차지명 + 자동완성 */}
 <div className="relative">
   <label className="flex items-center h-[22px] overflow-visible gap-1.5 text-[16px] font-bold text-red-500 mb-1">
-    하차지 {reqStar}
+    <EditableText id="orderForm.label.하차지" defaultText="하차지" /> {reqStar}
     <OrderMemoIconButton onClick={() => openOrderMemoEditor("drop")} title="하차지 오더메모" hasMemo={hasOrderMemoFor("drop")} size={20} />
   </label>
 
@@ -14391,7 +14391,7 @@ className={`
   <div className="flex items-center h-[22px] overflow-visible justify-between mb-1">
 
     <label className={`${labelCls} mb-0`}>
-      하차지주소 <AutoBadge show={autoDropMatched} />
+      <EditableText id="orderForm.label.하차지주소" defaultText="하차지주소" /> <AutoBadge show={autoDropMatched} />
     </label>
 
     {/* ⭐ 여기로 이동 */}
@@ -14436,7 +14436,7 @@ className={`
 <div>
   <div className="flex items-center h-[22px] overflow-visible justify-between mb-1">
     <label className={`${labelCls} mb-0`}>
-      하차지 담당자
+      <EditableText id="orderForm.label.하차지담당자" defaultText="하차지 담당자" />
     </label>
     <ContactPickerIconButton onClick={() => openContactPickerFor("drop")} title="하차지 담당자 선택" />
   </div>
@@ -14456,7 +14456,7 @@ className={`
 </div>
 
 <div>
-  <label className={labelCls}>하차지 연락처</label>
+  <label className={labelCls}><EditableText id="orderForm.label.하차지연락처" defaultText="하차지 연락처" /></label>
   <input autoComplete="off"
     id="drop-phone"
     data-arrownav
@@ -14474,7 +14474,7 @@ className={`
 
 <div className="relative">
   <label className={labelCls + " flex items-center gap-1 flex-wrap"}>
-    화물내용 {reqStar}
+    <EditableText id="orderForm.label.화물내용" defaultText="화물내용" /> {reqStar}
     <button type="button"
       tabIndex={-1}
       className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer whitespace-nowrap"
@@ -14570,7 +14570,7 @@ className={`
   onClick={(e) => e.stopPropagation()}
 >
   <label className={`${labelCls} mb-0`}>
-    차량종류
+    <EditableText id="orderForm.label.차량종류" defaultText="차량종류" />
   </label>
 
  <button
@@ -14664,7 +14664,7 @@ className={`
 </div>
 
 <div className="relative">
-  <label className={labelCls}>차량톤수 {reqStar}</label>
+  <label className={labelCls}><EditableText id="orderForm.label.차량톤수" defaultText="차량톤수" /> {reqStar}</label>
 
   <div className="relative">
 
@@ -14735,7 +14735,7 @@ className={`
           이 바깥쪽은 htmlFor로 입력과 연결된 적이 없어 순수 스타일용이었으므로
           div로 바꿔도 기능은 그대로다. */}
       <div className={`${labelCls} flex items-center gap-2 flex-wrap`}>
-        청구운임
+        <EditableText id="orderForm.label.청구운임" defaultText="청구운임" />
 
         {fareCompare.sale === "high" && (
           <span className="text-[11px] font-semibold text-red-600">
@@ -14797,7 +14797,7 @@ className={`
     {/* 기사운임 */}
     <div>
       <label className={`${labelCls} flex items-center gap-2`}>
-        기사운임
+        <EditableText id="orderForm.label.기사운임" defaultText="기사운임" />
 
         {fareCompare.driver === "high" && (
           <span className="text-[11px] font-semibold text-red-600">
@@ -14829,7 +14829,7 @@ className={`
 
     {/* 수수료 */}
     <div>
-      <label className={labelCls}>수수료</label>
+      <label className={labelCls}><EditableText id="orderForm.label.수수료" defaultText="수수료" /></label>
       <input autoComplete="off"
         className={`${inputCls} bg-gray-100`}
         value={form.수수료 ? Number(form.수수료).toLocaleString() : form.수수료}
@@ -15481,7 +15481,7 @@ className={`
 
  {/* ===== 스마트검색 (독립 컬럼) ===== */}
 <div className="relative">
-  <label className={labelCls}>스마트검색</label>
+  <label className={labelCls}><EditableText id="orderForm.label.스마트검색" defaultText="스마트검색" /></label>
 
   <div className="relative">
     <textarea
@@ -15549,7 +15549,7 @@ className={`
 
 {/* ===== 차량번호 (독립 컬럼) ===== */}
 <div className="relative">
-  <label className={labelCls}>차량번호</label>
+  <label className={labelCls}><EditableText id="orderForm.label.차량번호" defaultText="차량번호" /></label>
 
   <input autoComplete="off"
     data-arrownav
@@ -15663,7 +15663,7 @@ className={`
 
 {/* ===== 기사명 (수정 가능) ===== */}
 <div>
-  <label className={labelCls}>기사명</label>
+  <label className={labelCls}><EditableText id="orderForm.label.기사명" defaultText="기사명" /></label>
   <input autoComplete="off"
     data-arrownav
     className={inputCls}
@@ -15676,7 +15676,7 @@ className={`
 
 {/* ===== 전화번호 (수정 가능) ===== */}
 <div>
-  <label className={labelCls}>전화번호</label>
+  <label className={labelCls}><EditableText id="orderForm.label.전화번호" defaultText="전화번호" /></label>
   <input autoComplete="off"
     data-arrownav
     className={inputCls}
@@ -15689,7 +15689,7 @@ className={`
 
   {/* 상/하차 방법 */}
   <div>
-    <label className={labelCls}>상차방법</label>
+    <label className={labelCls}><EditableText id="orderForm.label.상차방법" defaultText="상차방법" /></label>
     <CustomSelect className={inputCls} value={form.상차방법} onChange={(e) => onChange("상차방법", e.target.value)}>
       <option value="">선택 ▾</option>
       {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => <option key={v} value={v}>{v}</option>)}
@@ -15697,7 +15697,7 @@ className={`
   </div>
 
   <div>
-    <label className={labelCls}>하차방법</label>
+    <label className={labelCls}><EditableText id="orderForm.label.하차방법" defaultText="하차방법" /></label>
     <CustomSelect className={inputCls} value={form.하차방법} onChange={(e) => onChange("하차방법", e.target.value)}>
       <option value="">선택 ▾</option>
       {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => <option key={v} value={v}>{v}</option>)}
@@ -15706,7 +15706,7 @@ className={`
 
   {/* 결제 */}
   <div>
-    <label className={labelCls}>지급방식 {reqStar}</label>
+    <label className={labelCls}><EditableText id="orderForm.label.지급방식" defaultText="지급방식" /> {reqStar}</label>
    <CustomSelect ref={payTypeRef} className={`${inputCls}${requiredErrors.has("지급방식") ? " border-red-500 ring-2 ring-red-300 animate-pulse" : ""}`} value={form.지급방식} onChange={(e) => {
   const v = e.target.value;
   onChange("지급방식", v);
@@ -15722,7 +15722,7 @@ className={`
   </div>
 
   <div>
-    <label className={labelCls}>배차방식</label>
+    <label className={labelCls}><EditableText id="orderForm.label.배차방식" defaultText="배차방식" /></label>
     <CustomSelect className={inputCls} value={form.배차방식} onChange={(e) => onChange("배차방식", e.target.value)}>
       <option value="">선택 ▾</option>
       {DISPATCH_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
@@ -15737,7 +15737,7 @@ className={`
   {/* ── 메모 ── */}
   <div>
     <div className="flex items-center gap-2 mb-2">
-      <label className={labelCls}>메모</label>
+      <label className={labelCls}><EditableText id="orderForm.label.메모" defaultText="메모" /></label>
 
       {[
         { key: "NORMAL",   label: "일반",  activeCls: "bg-[#1B2B4B] text-white border-[#1B2B4B]" },
@@ -15774,7 +15774,7 @@ className={`
   {/* ── 전달사항 ── */}
   <div>
     <div className="flex items-center gap-2 mb-2">
-      <label className={labelCls}>전달사항</label>
+      <label className={labelCls}><EditableText id="orderForm.label.전달사항" defaultText="전달사항" /></label>
 
       <button
         type="button"
@@ -26550,8 +26550,8 @@ const head = isDark
   </CustomSelect>
 
   <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
-    <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-2 py-1 rounded-lg text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}>정렬/필터{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
-    <button onClick={()=>{if(!selected.length)return showAlert("복사할 오더를 선택하세요.");if(selected.length>1)return showAlert("복사는 1개의 오더만 가능합니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">기사복사</button>
+    <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-2 py-1 rounded-lg text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}><EditableText id="realtime.toolbar.정렬필터" defaultText="정렬/필터" />{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
+    <button onClick={()=>{if(!selected.length)return showAlert("복사할 오더를 선택하세요.");if(selected.length>1)return showAlert("복사는 1개의 오더만 가능합니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="realtime.toolbar.기사복사" defaultText="기사복사" /></button>
     <button onClick={()=>{
   const selRows = rows.filter(r => selected.includes(r._id));
   const phones = [...new Set(selRows.map(r => String(r.전화번호||"").replace(/[^\d]/g,"")).filter(Boolean))];
@@ -26567,11 +26567,11 @@ const head = isDark
   const url = `${window.location.origin}/driver-upload`;
   const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n여기를 눌러 업로드해주세요\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
   setBulkUploadConfirm4({ phones, body: msg });
-}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크{selected.length>1?` (${selected.length})`:""}</button>
-    <button onClick={()=>setDailyCloseOpen(true)} className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">일마감</button>
+}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="realtime.toolbar.업로드링크" defaultText="업로드링크" />{selected.length>1?` (${selected.length})`:""}</button>
+    <button onClick={()=>setDailyCloseOpen(true)} className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="realtime.toolbar.일마감" defaultText="일마감" /></button>
 
-    <button onClick={()=>{if(!selected.length)return showAlert("삭제할 항목을 선택하세요.");const list=rows.filter(r=>selected.includes(r._id));setDeleteList(list);setDeleteConfirmOpen(true);}} className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">선택삭제</button>
-    <button onClick={()=>setSelected([])} className="px-2 py-1 rounded-lg bg-gray-300 text-gray-800 text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">선택초기화</button>
+    <button onClick={()=>{if(!selected.length)return showAlert("삭제할 항목을 선택하세요.");const list=rows.filter(r=>selected.includes(r._id));setDeleteList(list);setDeleteConfirmOpen(true);}} className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="realtime.toolbar.선택삭제" defaultText="선택삭제" /></button>
+    <button onClick={()=>setSelected([])} className="px-2 py-1 rounded-lg bg-gray-300 text-gray-800 text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="realtime.toolbar.선택초기화" defaultText="선택초기화" /></button>
     <button onClick={()=>{
   if(!filtered.length)return showAlert("내보낼 데이터가 없습니다.");
   const _sp=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
@@ -26590,7 +26590,7 @@ const head = isDark
     return row;
   });
   const ws=XLSX.utils.json_to_sheet(rowsExcel);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"실시간배차현황");XLSX.writeFile(wb,"실시간배차현황.xlsx");
-}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">엑셀다운</button>
+}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="realtime.toolbar.엑셀다운" defaultText="엑셀다운" /></button>
     </div>
 </div>
 
@@ -30429,7 +30429,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            기사복사
+            <EditableText id="realtime.ctxMenu.기사복사" defaultText="기사복사" />
           </button>
           {/* 업로드링크 */}
           <button
@@ -30443,7 +30443,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-            업로드링크
+            <EditableText id="realtime.ctxMenu.업로드링크" defaultText="업로드링크" />
           </button>
           <div className="border-t border-gray-100 my-1"/>
           {/* 오더정보 */}
@@ -30452,7 +30452,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             onClick={() => { setOrderInfoRow4(contextMenu.row); setContextMenu(null); }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            오더정보
+            <EditableText id="realtime.ctxMenu.오더정보" defaultText="오더정보" />
           </button>
           {/* 수정 — 오더복사수정패널을 연다 (선택한 오더 수정 팝업은 폐지) */}
           <button
@@ -30475,7 +30475,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            수정
+            <EditableText id="realtime.ctxMenu.수정" defaultText="수정" />
           </button>
           {/* 운임정보 — 기사 운임 증빙서(운임확인서) 미리보기 */}
           <button
@@ -30486,7 +30486,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg>
-            운임정보
+            <EditableText id="realtime.ctxMenu.운임정보" defaultText="운임정보" />
           </button>
           {/* 운임조회 */}
           <button
@@ -30498,7 +30498,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
-            운임조회
+            <EditableText id="realtime.ctxMenu.운임조회" defaultText="운임조회" />
           </button>
           {/* 첨부현황 */}
           <button
@@ -30510,7 +30510,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-            첨부현황
+            <EditableText id="realtime.ctxMenu.첨부현황" defaultText="첨부현황" />
           </button>
           {/* 문자보내기 — 체크박스로 여러 건을 선택해둔 채 우클릭하면 선택된 오더 전체의
               기사 번호를 받는사람으로 한 번에 연결한다(휴대폰 연결 앱은 sms: URI에 쉼표로
@@ -30537,7 +30537,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            문자보내기{selected.length > 1 ? ` (${selected.length}명)` : ""}
+            <EditableText id="realtime.ctxMenu.문자보내기" defaultText="문자보내기" />{selected.length > 1 ? ` (${selected.length}명)` : ""}
           </button>
           {/* 최적매칭 — 이 노선을 과거에 다녀간 기사를 찾아 배차 가능 여부를 문자로 확인 */}
           <button
@@ -30545,7 +30545,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             onClick={() => { setOptimalMatchRow4(contextMenu.row); setContextMenu(null); }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/><path d="M8 11h6M11 8v6"/></svg>
-            최적매칭
+            <EditableText id="realtime.ctxMenu.최적매칭" defaultText="최적매칭" />
           </button>
           {/* 스케줄표 — 선택한(없으면 우클릭한 1건) 오더들을 날짜별/기사별로 정리해
               미리보기하고, 이미지/PDF저장·인쇄까지 할 수 있는 팝업을 연다. */}
@@ -30559,7 +30559,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            스케줄표{selected.length > 1 ? ` (${selected.length}건)` : ""}
+            <EditableText id="realtime.ctxMenu.스케줄표" defaultText="스케줄표" />{selected.length > 1 ? ` (${selected.length}건)` : ""}
           </button>
           {/* 일괄수정 — 2건 이상 선택했을 때만 활성화. 선택한 오더들을 한 화면에
               늘어놓고 운임/메모/전달사항 등을 일괄 또는 개별로 고쳐 한 번에 저장. */}
@@ -30572,7 +30572,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
               }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              일괄수정 ({selected.length}건)
+              <EditableText id="realtime.ctxMenu.일괄수정" defaultText="일괄수정" /> ({selected.length}건)
             </button>
           )}
           <div className="border-t border-gray-100 my-1"/>
@@ -30586,7 +30586,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-            삭제
+            <EditableText id="realtime.ctxMenu.삭제" defaultText="삭제" />
             <span className="ml-auto text-[11px] text-gray-500 font-mono">Del</span>
           </button>
         </div>
@@ -36081,20 +36081,20 @@ return (
                 : "bg-[#1B2B4B] hover:bg-[#243a60]"
             }`}
           >
-            조회
+            <EditableText id="status.toolbar.조회" defaultText="조회" />
           </button>
         </div>
 
         {/* 날짜 버튼들 */}
-        <button onClick={()=>{const t=yesterdayKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setQInput("");setPage(0);}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">어제</button>
-        <button onClick={()=>{const t=todayKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setQInput("");setPage(0);}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">당일</button>
-        <button onClick={()=>{const t=tomorrowKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setQInput("");setPage(0);}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">내일</button>
-        <button onClick={()=>{const{first,last}=getMonthRange();setStartDate(first);setEndDate(last);setAppliedStartDate(first);setAppliedEndDate(last);setQ("");setQInput("");setPage(0);setLoaded(true);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:first,endDate:last,appliedStartDate:first,appliedEndDate:last}));}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">전체</button>
+        <button onClick={()=>{const t=yesterdayKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setQInput("");setPage(0);}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0"><EditableText id="status.toolbar.어제" defaultText="어제" /></button>
+        <button onClick={()=>{const t=todayKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setQInput("");setPage(0);}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0"><EditableText id="status.toolbar.당일" defaultText="당일" /></button>
+        <button onClick={()=>{const t=tomorrowKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setQInput("");setPage(0);}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0"><EditableText id="status.toolbar.내일" defaultText="내일" /></button>
+        <button onClick={()=>{const{first,last}=getMonthRange();setStartDate(first);setEndDate(last);setAppliedStartDate(first);setAppliedEndDate(last);setQ("");setQInput("");setPage(0);setLoaded(true);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:first,endDate:last,appliedStartDate:first,appliedEndDate:last}));}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0"><EditableText id="status.toolbar.전체" defaultText="전체" /></button>
 
         {/* 우측 버튼들 */}
         <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
-          <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-2 py-1 rounded-lg text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}>정렬/필터{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
-          <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">기사복사</button>
+          <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-2 py-1 rounded-lg text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}><EditableText id="status.toolbar.정렬필터" defaultText="정렬/필터" />{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
+          <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="status.toolbar.기사복사" defaultText="기사복사" /></button>
           <button onClick={()=>{
   const selArr=[...selected];
   const selRows = filtered.filter(r => selected.has(getId(r)));
@@ -36111,12 +36111,12 @@ return (
   const url = `${window.location.origin}/driver-upload`;
   const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n여기를 눌러 업로드해주세요\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
   setBulkUploadConfirm5({ phones, body: msg });
-}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크{selected.size>1?` (${selected.size})`:""}</button>
-          <label className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 cursor-pointer whitespace-nowrap">대용량 업로드<input autoComplete="off" type="file" accept=".xlsx,.xls" hidden onChange={handleBulkFile}/></label>
-          <button className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>{if(!selected.size)return showAlert("삭제할 항목이 없습니다.");setShowDeletePopup(true);}}>선택삭제</button>
-          <button className="px-2 py-1 rounded-lg bg-gray-300 text-gray-800 text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>setSelected(new Set())}>선택초기화</button>
-          <button className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={downloadExcel}>엑셀다운</button>
-          <button onClick={() => setDailyCloseOpen(true)} className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">일마감</button>
+}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="status.toolbar.업로드링크" defaultText="업로드링크" />{selected.size>1?` (${selected.size})`:""}</button>
+          <label className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 cursor-pointer whitespace-nowrap"><EditableText id="status.toolbar.대용량업로드" defaultText="대용량 업로드" /><input autoComplete="off" type="file" accept=".xlsx,.xls" hidden onChange={handleBulkFile}/></label>
+          <button className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>{if(!selected.size)return showAlert("삭제할 항목이 없습니다.");setShowDeletePopup(true);}}><EditableText id="status.toolbar.선택삭제" defaultText="선택삭제" /></button>
+          <button className="px-2 py-1 rounded-lg bg-gray-300 text-gray-800 text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>setSelected(new Set())}><EditableText id="status.toolbar.선택초기화" defaultText="선택초기화" /></button>
+          <button className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={downloadExcel}><EditableText id="status.toolbar.엑셀다운" defaultText="엑셀다운" /></button>
+          <button onClick={() => setDailyCloseOpen(true)} className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="status.toolbar.일마감" defaultText="일마감" /></button>
         </div>
       </div>
 
@@ -54457,28 +54457,28 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                 onKeyDown={(e) => { if (e.key === "Enter") setPlaceSearched(true); }} />
             </div>
             <button onClick={() => setPlaceSearched(true)}
-              className="h-[34px] px-4 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:bg-[#243a60] transition">검색</button>
+              className="h-[34px] px-4 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:bg-[#243a60] transition"><EditableText id="client.dropPlace.toolbar.검색" defaultText="검색" /></button>
             {(placeSearched || placeGradeFilter !== "전체") && (
               <span className="text-xs text-gray-500">검색결과 {filteredPlaces.length}건</span>
             )}
             <div className="ml-auto flex items-center gap-2">
               <button onClick={() => setShowNewPlaceForm(true)}
                 className="h-[34px] px-4 rounded-lg text-sm font-semibold border transition border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white">
-                + 신규등록
+                + <EditableText id="client.dropPlace.toolbar.신규등록" defaultText="신규등록" />
               </button>
               <label className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg cursor-pointer text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition flex items-center">
-                엑셀 업로드
+                <EditableText id="client.dropPlace.toolbar.엑셀업로드" defaultText="엑셀 업로드" />
                 <input autoComplete="off" type="file" accept=".xlsx,.xls" onChange={onExcelPlaces} className="hidden" />
               </label>
               <button onClick={downloadPlaceExcel}
-                className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">다운로드</button>
+                className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition"><EditableText id="client.dropPlace.toolbar.다운로드" defaultText="다운로드" /></button>
               <button onClick={() => { setPlaceDupOpen(true); setPlaceDupDone(false); setPlaceDupSelected(new Set()); }}
                 className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">
-                거래처정리
+                <EditableText id="client.dropPlace.toolbar.거래처정리" defaultText="거래처정리" />
               </button>
               <button onClick={removeSelectedPlaces}
                 className="h-[34px] px-4 border border-red-300 rounded-lg text-sm text-red-600 font-semibold hover:bg-red-50 transition">
-                선택삭제 {placeSelected.size > 0 && `(${placeSelected.size})`}
+                <EditableText id="client.dropPlace.toolbar.선택삭제" defaultText="선택삭제" /> {placeSelected.size > 0 && `(${placeSelected.size})`}
               </button>
             </div>
           </div>
@@ -54859,28 +54859,28 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             <button
               onClick={() => { setShowAllClients(v => !v); setQ(""); }}
               className={`h-[34px] px-4 rounded-lg text-sm font-semibold transition ${showAllClients ? "bg-[#1B2B4B] text-white" : "bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
-              {showAllClients ? "전체보기 닫기" : "전체보기"}
+              {showAllClients ? <EditableText id="client.baseClient.toolbar.전체보기닫기" defaultText="전체보기 닫기" /> : <EditableText id="client.baseClient.toolbar.전체보기" defaultText="전체보기" />}
             </button>
             <div className="ml-auto flex items-center gap-2">
               <button onClick={() => { setShowImportPopup(true); setImportQ(""); setImportSelected([]); }}
                 className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">
-                하차지에서 불러오기
+                <EditableText id="client.baseClient.toolbar.하차지에서불러오기" defaultText="하차지에서 불러오기" />
               </button>
               {mismatchCandidates.length > 0 && (
                 <button onClick={() => { setMismatchSelected(new Set(mismatchCandidates.map(m => m.client.id || m.client.거래처명))); setShowMismatchPopup(true); }}
                   className="h-[34px] px-4 border border-orange-400 rounded-lg text-sm text-orange-600 font-semibold hover:bg-orange-500 hover:text-white hover:border-orange-500 transition">
-                  담당자 불일치 복구 ({mismatchCandidates.length})
+                  <EditableText id="client.baseClient.toolbar.담당자불일치복구" defaultText="담당자 불일치 복구" /> ({mismatchCandidates.length})
                 </button>
               )}
               <label className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg cursor-pointer text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition flex items-center">
-                엑셀 업로드
+                <EditableText id="client.baseClient.toolbar.엑셀업로드" defaultText="엑셀 업로드" />
                 <input autoComplete="off" type="file" accept=".xlsx,.xls" onChange={onExcel} className="hidden" />
               </label>
               <button onClick={downloadClientExcel}
-                className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">다운로드</button>
+                className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition"><EditableText id="client.baseClient.toolbar.다운로드" defaultText="다운로드" /></button>
               <button onClick={removeSelectedFn}
                 className="h-[34px] px-4 border border-red-300 rounded-lg text-sm text-red-600 font-semibold hover:bg-red-50 transition">
-                선택삭제 {selected.size > 0 && `(${selected.size})`}
+                <EditableText id="client.baseClient.toolbar.선택삭제" defaultText="선택삭제" /> {selected.size > 0 && `(${selected.size})`}
               </button>
               <button
                 onClick={() => {
@@ -54891,7 +54891,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                   if (row) setEditClientModal({ ...row, 기사전달주의사항: (row.기사전달주의사항 || "").trim() ? row.기사전달주의사항 : defaultDriverNoticeTemplate(row.거래처명) });
                 }}
                 className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">
-                선택수정 {selected.size === 1 && "(1)"}
+                <EditableText id="client.baseClient.toolbar.선택수정" defaultText="선택수정" /> {selected.size === 1 && "(1)"}
               </button>
               <button onClick={() => setShowNewClientModal(true)}
                 className="h-[34px] px-4 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:bg-[#243a60] transition">
