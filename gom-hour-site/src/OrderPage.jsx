@@ -238,7 +238,7 @@ export default function OrderPage() {
         <Header />
 
         {notice && (
-          <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl px-4 py-3 mb-4 whitespace-pre-wrap">
+          <div className="bg-cream border border-line text-[#6B5842] text-sm rounded-xl px-4 py-3 mb-4 whitespace-pre-wrap">
             {notice}
           </div>
         )}
@@ -246,7 +246,7 @@ export default function OrderPage() {
         {submitted ? (
           <SuccessCard totalPrice={totalPrice} onNewOrder={handleNewOrder} />
         ) : (
-          <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm p-5 space-y-6">
+          <form onSubmit={handleSubmit} className="bg-white border border-line rounded-2xl shadow-sm p-5 space-y-6">
             <BasicInfoSection form={form} setForm={setForm} />
             <KindSection form={form} setForm={setForm} prices={prices} isDateFull={isDateFull} capacityInfo={capacityInfo} />
             {form.kind && (
@@ -259,7 +259,7 @@ export default function OrderPage() {
 
             {error && <p className="text-sm text-red-600">{error}</p>}
 
-            <div className="border-t pt-4 flex items-center justify-between">
+            <div className="border-t border-line pt-4 flex items-center justify-between">
               <span className="text-sm text-gray-500">예상 금액</span>
               <span className="text-xl font-bold text-primary">{formatWon(totalPrice)}</span>
             </div>
@@ -306,7 +306,7 @@ function BasicInfoSection({ form, setForm }) {
           type="text"
           value={form.name}
           onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          className="w-full border rounded-lg px-3 py-2 text-sm"
+          className="w-full border border-line rounded-lg px-3 py-2 text-sm"
           placeholder="주문자 성함"
         />
       </div>
@@ -316,7 +316,7 @@ function BasicInfoSection({ form, setForm }) {
           type="tel"
           value={form.phone}
           onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-          className="w-full border rounded-lg px-3 py-2 text-sm"
+          className="w-full border border-line rounded-lg px-3 py-2 text-sm"
           placeholder="010-0000-0000"
         />
       </div>
@@ -327,7 +327,7 @@ function BasicInfoSection({ form, setForm }) {
             type="date"
             value={form.pickupDate}
             onChange={(e) => setForm((f) => ({ ...f, pickupDate: e.target.value }))}
-            className="w-full border rounded-lg px-3 py-2 text-sm"
+            className="w-full border border-line rounded-lg px-3 py-2 text-sm"
           />
         </div>
         <div className="flex-1">
@@ -336,7 +336,7 @@ function BasicInfoSection({ form, setForm }) {
             type="time"
             value={form.pickupTime}
             onChange={(e) => setForm((f) => ({ ...f, pickupTime: e.target.value }))}
-            className="w-full border rounded-lg px-3 py-2 text-sm"
+            className="w-full border border-line rounded-lg px-3 py-2 text-sm"
           />
         </div>
       </div>
@@ -372,7 +372,7 @@ function KindSection({ form, setForm, prices, isDateFull, capacityInfo }) {
                 key={k.id}
                 onClick={() => setForm((f) => ({ ...f, kind: k.id }))}
                 className={`rounded-xl border px-3 py-3 text-sm text-left ${
-                  form.kind === k.id ? "border-primary bg-primary/5 font-semibold" : "border-gray-200"
+                  form.kind === k.id ? "border-primary bg-primary/5 font-semibold" : "border-line"
                 }`}
               >
                 <div>{k.label}</div>
@@ -401,7 +401,7 @@ function OptionsSection({ visibleOptions, optionValues, updateOptionValue }) {
 function OptionRow({ option, value, onChange }) {
   if (option.type === "checkbox") {
     return (
-      <label className="flex items-center justify-between border rounded-xl px-3 py-2 text-sm">
+      <label className="flex items-center justify-between border border-line rounded-xl px-3 py-2 text-sm">
         <span className="flex items-center gap-2">
           <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} />
           {option.label}
@@ -414,7 +414,7 @@ function OptionRow({ option, value, onChange }) {
   if (option.type === "checkbox_qty") {
     const checked = (value || 0) > 0;
     return (
-      <div className="flex items-center justify-between border rounded-xl px-3 py-2 text-sm">
+      <div className="flex items-center justify-between border border-line rounded-xl px-3 py-2 text-sm">
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -426,11 +426,11 @@ function OptionRow({ option, value, onChange }) {
         <div className="flex items-center gap-2">
           {checked && (
             <>
-              <button type="button" onClick={() => onChange(Math.max(1, (value || 1) - 1))} className="w-6 h-6 border rounded">
+              <button type="button" onClick={() => onChange(Math.max(1, (value || 1) - 1))} className="w-6 h-6 border border-line rounded">
                 -
               </button>
               <span>{value}</span>
-              <button type="button" onClick={() => onChange((value || 0) + 1)} className="w-6 h-6 border rounded">
+              <button type="button" onClick={() => onChange((value || 0) + 1)} className="w-6 h-6 border border-line rounded">
                 +
               </button>
             </>
@@ -443,7 +443,7 @@ function OptionRow({ option, value, onChange }) {
 
   if (option.type === "select") {
     return (
-      <div className="border rounded-xl px-3 py-2 text-sm">
+      <div className="border border-line rounded-xl px-3 py-2 text-sm">
         <p className="mb-1">{option.label}</p>
         <div className="flex flex-wrap gap-2">
           {option.choices?.map((c) => (
@@ -451,8 +451,8 @@ function OptionRow({ option, value, onChange }) {
               type="button"
               key={c.id}
               onClick={() => onChange(c.id)}
-              className={`px-3 py-1 rounded-full border text-xs ${
-                value === c.id ? "border-primary bg-primary/5 font-semibold" : "border-gray-200"
+              className={`px-3 py-1 rounded-full border border-line text-xs ${
+                value === c.id ? "border-primary bg-primary/5 font-semibold" : "border-line"
               }`}
             >
               {c.label}
@@ -466,7 +466,7 @@ function OptionRow({ option, value, onChange }) {
 
   if (option.type === "text") {
     return (
-      <div className="border rounded-xl px-3 py-2 text-sm">
+      <div className="border border-line rounded-xl px-3 py-2 text-sm">
         <div className="flex items-center justify-between mb-1">
           <span>{option.label}</span>
           <span className="text-gray-500">+{formatWon(option.price)}</span>

@@ -105,3 +105,22 @@ export const DEFAULT_OPTIONS = [
 export function formatWon(n) {
   return (n || 0).toLocaleString("ko-KR") + "원";
 }
+
+// 관리자페이지에서 옵션을 추가/수정할 때 쓰는 선택지
+export const OPTION_CATEGORIES = [
+  { id: "flavor", label: "맛 변경" },
+  { id: "candle", label: "곰돌이 초" },
+  { id: "singleBearAdd", label: "싱글곰 추가" },
+  { id: "coupleBearChange", label: "커플곰 변경" },
+  { id: "coupleBearAdd", label: "커플곰 추가" },
+  { id: "lettering", label: "레터링" },
+  { id: "specialBox", label: "스페셜 박스" },
+  { id: "custom", label: "기타" },
+];
+
+export const OPTION_TYPES = [
+  { id: "checkbox", label: "단순 추가(체크)" },
+  { id: "checkbox_qty", label: "수량 선택(체크+수량)" },
+  { id: "select", label: "택1 선택" },
+  { id: "text", label: "문구 입력" },
+];

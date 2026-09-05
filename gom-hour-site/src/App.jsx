@@ -4,12 +4,15 @@
 import React from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import OrderPage from "./OrderPage";
+import AdminLogin from "./AdminLogin";
+import AdminDashboard from "./AdminDashboard";
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* TODO: 관리자페이지 구현 시 <Route path="/admin/*" element={<AdminApp />} /> 추가 */}
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin/*" element={<AdminDashboard />} />
         <Route path="/*" element={<OrderPage />} />
       </Routes>
     </BrowserRouter>
