@@ -146,6 +146,17 @@ service cloud.firestore {
       allow delete: if isSignedIn();
     }
 
+    // 주문조회(이름+연락처) — OrderPage.jsx가 주문 접수 시 전화번호를 문서 id로
+    // 써서 요약을 남기고, OrderLookupPage.jsx가 정확한 전화번호를 알 때만 그
+    // 문서를 get할 수 있다. list는 막아서 전체 전화번호 목록이 열거되지 않는다.
+    // 'orders' 필드만 쓰도록 제한해 이 컬렉션이 다른 용도로 오남용되지 않게 한다.
+    match /gomOrderLookup/{phone} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if request.resource.data.keys().hasOnly(['orders']);
+      allow delete: if isSignedIn();
+    }
+
     // 재료 재고 — 고객이 주문을 넣을 때 gomRecipes를 참고해 트랜잭션으로 stock을
     // 차감한다(inventoryUtil.js). 그 트랜잭션의 tx.get이 read 권한을 요구하므로
     // get은 공개하되, 전체 목록(재고 현황판)은 관리자만 볼 수 있게 list는 막는다.
