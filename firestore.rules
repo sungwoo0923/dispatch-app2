@@ -125,6 +125,12 @@ service cloud.firestore {
       allow get, list: if true;
       allow create, update, delete: if isSignedIn();
     }
+    // 종류(박스형 2구 등) 관리 — 이름/가격을 관리자가 계속 바꾸고 새 종류를
+    // 추가할 수 있어야 하니 gomOptions와 동일한 패턴(조회 공개, 변경은 관리자만).
+    match /gomKinds/{kindId} {
+      allow get, list: if true;
+      allow create, update, delete: if isSignedIn();
+    }
     match /gomSettings/{docId} {
       allow get, list: if true;
       allow create, update, delete: if isSignedIn();
