@@ -61,7 +61,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-secondary">
-      <div className="max-w-2xl mx-auto px-4 py-6">
+      <div className="max-w-5xl mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-lg font-bold text-primary">GOM_Hour 관리자</h1>
           <button onClick={() => signOut(auth)} className="text-xs text-gray-400">
@@ -69,22 +69,25 @@ export default function AdminDashboard() {
           </button>
         </div>
 
-        <div className="flex gap-2 mb-4 overflow-x-auto">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap border ${
-                tab === t.id ? "bg-primary text-white border-primary" : "border-line text-gray-600"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        {/* PC(md 이상)에서는 좌측 세로 탭 + 넓은 본문, 모바일에서는 위쪽 가로 스크롤 탭 */}
+        <div className="md:flex md:items-start md:gap-6">
+          <div className="flex gap-2 mb-4 overflow-x-auto md:flex-col md:w-44 md:mb-0 md:shrink-0">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap border md:w-full md:text-left md:rounded-xl md:py-2 ${
+                  tab === t.id ? "bg-primary text-white border-primary" : "border-line text-gray-600"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
 
-        <div className="bg-white border border-line rounded-2xl p-4">
-          <Active />
+          <div className="bg-white border border-line rounded-2xl p-4 md:flex-1 md:min-w-0">
+            <Active />
+          </div>
         </div>
       </div>
     </div>
