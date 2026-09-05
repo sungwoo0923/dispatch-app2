@@ -181,6 +181,13 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
+    // 디자인 포트폴리오 — 고객이 주문페이지의 "디자인 둘러보기" 팝업에서 보는
+    // 완성작 사진 목록. 조회는 공개, 등록/삭제는 관리자만.
+    match /gomPortfolio/{itemId} {
+      allow get, list: if true;
+      allow create, update, delete: if isSignedIn();
+    }
+
     // GOM_Hour 관리자 명단 — "가장 먼저 회원가입하는 사람이 최고관리자가 된다"
     // (AdminSignup.jsx). gomSettings/adminBootstrap 문서(claimed)가 아직 없거나
     // false일 때만 자기 자신의 gomAdmins/{uid} 문서를 만들 수 있고, 그 다음부터는
