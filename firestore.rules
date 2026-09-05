@@ -112,6 +112,41 @@ service cloud.firestore {
     }
 
     // ────────────────────────────────────────────────────────────
+    // GOM_Hour 주문페이지(gom-hour-site) — 링크로 들어온 비로그인 고객이
+    // 바로 주문을 넣을 수 있어야 하므로 gomOrders는 create만 공개, 조회/수정은
+    // 관리자(로그인)만. 옵션/가격/공지/픽업수량은 주문페이지가 실시간으로
+    // 읽어야 하니 조회는 공개, 변경은 관리자(로그인)만 가능하다.
+    // ────────────────────────────────────────────────────────────
+    match /gomOrders/{orderId} {
+      allow create: if true;
+      allow get, list, update, delete: if isSignedIn();
+    }
+    match /gomOptions/{optionId} {
+      allow get, list: if true;
+      allow create, update, delete: if isSignedIn();
+    }
+    match /gomSettings/{docId} {
+      allow get, list: if true;
+      allow create, update, delete: if isSignedIn();
+    }
+    match /gomPickupCapacity/{date} {
+      allow get, list: if true;
+      // 주문 제출 시 트랜잭션으로 currentCount를 늘려야 하므로 비로그인도 써야
+      // 한다. 단, 정원(maxCount)은 관리자만 정할 수 있어야 하므로:
+      // - 문서가 아직 없을 때(create)는 maxCount를 반드시 null로만 만들 수 있게 하고
+      // - 이미 있을 때(update)는 currentCount 외 필드는 값이 바뀌지 못하게 막는다
+      //   (diff().affectedKeys()는 실제로 값이 변한 필드만 담기니, maxCount를
+      //   그대로 다시 써도 걸리지 않는다).
+      allow create: if isSignedIn() ||
+        (request.resource.data.keys().hasOnly(['maxCount', 'currentCount']) &&
+          request.resource.data.maxCount == null &&
+          request.resource.data.currentCount is int);
+      allow update: if isSignedIn() ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentCount']);
+      allow delete: if isSignedIn();
+    }
+
+    // ────────────────────────────────────────────────────────────
     // 프로그램 전역 설정 — 최고관리자만 설정/열람 가능(요청사항).
     // 단 siteConfig/landing(로그인 전 랜딩페이지 커스터마이징)은 그 페이지 자체가
     // 로그인 없이 열리므로 읽기만은 누구나 가능해야 한다 — 그래야 방문자 화면에
