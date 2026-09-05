@@ -23,6 +23,7 @@ import {
   DEFAULT_OPTIONS,
   formatWon,
 } from "./gomConstants";
+import { collectRecipeTargets, applyRecipeDeductions } from "./inventoryUtil";
 
 const EMPTY_FORM = { name: "", phone: "", pickupDate: "", pickupTime: "", kind: "" };
 
@@ -212,6 +213,9 @@ export default function OrderPage() {
         pickedUp: false,
         createdAt: serverTimestamp(),
       });
+
+      // 재료 재고 자동 차감(관리자가 레시피를 등록해둔 경우에만 동작, 실패해도 주문엔 영향 없음)
+      applyRecipeDeductions(collectRecipeTargets(form.kind, visibleOptions, optionValues));
 
       setSubmitted(true);
     } catch (err) {

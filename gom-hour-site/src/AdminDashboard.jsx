@@ -19,6 +19,8 @@ import {
   query,
   orderBy,
   limit,
+  increment,
+  serverTimestamp,
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import {
@@ -53,7 +55,7 @@ export default function AdminDashboard() {
     { id: "options", label: "옵션관리", Comp: OptionsTab },
     { id: "capacity", label: "픽업수량", Comp: CapacityTab },
     { id: "orders", label: "주문/매출", Comp: OrdersTab },
-    { id: "expense", label: "지출/재고", Comp: ExpenseStubTab },
+    { id: "inventory", label: "지출/재고", Comp: InventoryTab },
   ];
   const Active = TABS.find((t) => t.id === tab)?.Comp || NoticePricingTab;
 
@@ -520,7 +522,318 @@ function OrdersTab() {
   );
 }
 
-// ───────────────────────── 지출/재고 관리 (다음 단계) ─────────────────────────
-function ExpenseStubTab() {
-  return <p className="text-xs text-gray-400">지출/재고 관리 기능은 다음 단계에서 추가될 예정입니다.</p>;
+// ───────────────────────── 지출/재고 관리 ─────────────────────────
+// 재료(gomMaterials) 마스터를 만들고, 레시피(gomRecipes)로 "이 종류/옵션을
+// 고르면 이 재료를 몇 개 쓴다"를 연결해두면, 주문페이지(OrderPage.jsx →
+// inventoryUtil.js)가 주문이 들어올 때마다 자동으로 재고를 차감한다.
+// 지출을 기록하면(입고) 그 수량만큼 재고가 자동으로 늘어난다.
+function InventoryTab() {
+  const [materials, setMaterials] = useState([]);
+  const [recipes, setRecipes] = useState([]);
+  const [options, setOptions] = useState([]);
+  const [section, setSection] = useState("materials"); // materials | recipes | expenses
+
+  useEffect(
+    () => onSnapshot(collection(db, "gomMaterials"), (snap) => setMaterials(snap.docs.map((d) => ({ id: d.id, ...d.data() })))),
+    []
+  );
+  useEffect(
+    () => onSnapshot(collection(db, "gomRecipes"), (snap) => setRecipes(snap.docs.map((d) => ({ id: d.id, ...d.data() })))),
+    []
+  );
+  useEffect(
+    () => onSnapshot(collection(db, "gomOptions"), (snap) => setOptions(snap.docs.map((d) => ({ id: d.id, ...d.data() })))),
+    []
+  );
+
+  // 레시피에서 고를 수 있는 대상(종류 / 옵션 / 옵션의 선택지) 전체 목록
+  const targetChoices = [
+    ...KIND_OPTIONS.map((k) => ({ id: k.id, label: `[종류] ${k.label}` })),
+    ...options.map((o) => ({ id: o.id, label: `[옵션] ${o.label}` })),
+    ...options.flatMap((o) => (o.choices || []).map((c) => ({ id: c.id, label: `[옵션 선택지] ${o.label} - ${c.label}` }))),
+  ];
+
+  const SECTIONS = [
+    { id: "materials", label: "재료" },
+    { id: "recipes", label: "레시피" },
+    { id: "expenses", label: "지출" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2">
+        {SECTIONS.map((s) => (
+          <button
+            key={s.id}
+            onClick={() => setSection(s.id)}
+            className={`px-3 py-1 rounded-full text-xs border ${
+              section === s.id ? "bg-primary text-white border-primary" : "border-line text-gray-600"
+            }`}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {section === "materials" && <MaterialsSection materials={materials} />}
+      {section === "recipes" && <RecipesSection recipes={recipes} materials={materials} targetChoices={targetChoices} />}
+      {section === "expenses" && <ExpensesSection materials={materials} />}
+    </div>
+  );
+}
+
+function MaterialsSection({ materials }) {
+  const [name, setName] = useState("");
+  const [unit, setUnit] = useState("");
+  const [stock, setStock] = useState("");
+
+  async function handleAdd() {
+    if (!name.trim()) return;
+    await addDoc(collection(db, "gomMaterials"), { name: name.trim(), unit: unit.trim(), stock: Number(stock) || 0 });
+    setName("");
+    setUnit("");
+    setStock("");
+  }
+
+  async function handleDelete(id) {
+    if (!window.confirm("이 재료를 삭제할까요? (연결된 레시피는 남아있으니 함께 정리해주세요)")) return;
+    await deleteDoc(doc(db, "gomMaterials", id));
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2 flex-wrap items-end">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">재료명</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} className="border border-line rounded-lg px-2 py-1.5 text-sm" placeholder="예: 크림치즈" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">단위</label>
+          <input value={unit} onChange={(e) => setUnit(e.target.value)} className="w-20 border border-line rounded-lg px-2 py-1.5 text-sm" placeholder="개/g" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">초기 재고</label>
+          <input type="number" value={stock} onChange={(e) => setStock(e.target.value)} className="w-24 border border-line rounded-lg px-2 py-1.5 text-sm" />
+        </div>
+        <button onClick={handleAdd} className="text-xs bg-primary text-white rounded-lg px-4 py-2">
+          + 재료 추가
+        </button>
+      </div>
+
+      <div className="space-y-2">
+        {materials.length === 0 && <p className="text-xs text-gray-400">등록된 재료가 없습니다.</p>}
+        {materials.map((m) => (
+          <MaterialRow key={m.id} material={m} onDelete={handleDelete} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MaterialRow({ material, onDelete }) {
+  const [stock, setStock] = useState(material.stock ?? 0);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, "gomMaterials", material.id), { stock: Number(stock) || 0 });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2 border border-line rounded-lg px-3 py-2 text-sm flex-wrap">
+      <span className="font-medium">
+        {material.name} <span className="text-xs text-gray-400">({material.unit || "단위없음"})</span>
+      </span>
+      <div className="flex items-center gap-2">
+        <input type="number" value={stock} onChange={(e) => setStock(e.target.value)} className="w-24 border border-line rounded-lg px-2 py-1 text-xs text-right" />
+        <button onClick={handleSave} disabled={saving} className="text-xs bg-primary text-white rounded-lg px-3 py-1 disabled:opacity-50">
+          {saving ? "저장 중..." : "재고 수정"}
+        </button>
+        <button onClick={() => onDelete(material.id)} className="text-xs text-red-500">
+          삭제
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RecipesSection({ recipes, materials, targetChoices }) {
+  async function handleAdd() {
+    if (targetChoices.length === 0 || materials.length === 0) {
+      return window.alert("먼저 종류/옵션과 재료가 하나 이상 있어야 레시피를 만들 수 있어요.");
+    }
+    await addDoc(collection(db, "gomRecipes"), {
+      targetId: targetChoices[0].id,
+      materialId: materials[0].id,
+      qtyPerUnit: 1,
+    });
+  }
+
+  async function handleDelete(id) {
+    await deleteDoc(doc(db, "gomRecipes", id));
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-500">종류/옵션을 고르면 재료가 얼마나 소모되는지 연결합니다.</p>
+        <button onClick={handleAdd} className="text-xs bg-primary text-white rounded-lg px-3 py-1.5">
+          + 레시피 추가
+        </button>
+      </div>
+      {recipes.length === 0 && <p className="text-xs text-gray-400">등록된 레시피가 없습니다. (재고는 자동 차감되지 않습니다)</p>}
+      {recipes.map((r) => (
+        <RecipeRow key={r.id} recipe={r} materials={materials} targetChoices={targetChoices} onDelete={handleDelete} />
+      ))}
+    </div>
+  );
+}
+
+function RecipeRow({ recipe, materials, targetChoices, onDelete }) {
+  const [targetId, setTargetId] = useState(recipe.targetId);
+  const [materialId, setMaterialId] = useState(recipe.materialId);
+  const [qtyPerUnit, setQtyPerUnit] = useState(recipe.qtyPerUnit ?? 1);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, "gomRecipes", recipe.id), { targetId, materialId, qtyPerUnit: Number(qtyPerUnit) || 0 });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="border border-line rounded-xl p-3 space-y-2 bg-white">
+      <div className="flex gap-2 flex-wrap">
+        <select value={targetId} onChange={(e) => setTargetId(e.target.value)} className="border border-line rounded-lg px-2 py-1 text-xs flex-1 min-w-[140px]">
+          {targetChoices.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+        <select value={materialId} onChange={(e) => setMaterialId(e.target.value)} className="border border-line rounded-lg px-2 py-1 text-xs">
+          {materials.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
+        </select>
+        <input
+          type="number"
+          value={qtyPerUnit}
+          onChange={(e) => setQtyPerUnit(e.target.value)}
+          className="w-20 border border-line rounded-lg px-2 py-1 text-xs"
+          title="1회 선택 시 소모량"
+        />
+      </div>
+      <div className="flex justify-end gap-2">
+        <button onClick={() => onDelete(recipe.id)} className="text-xs text-red-500 px-3 py-1">
+          삭제
+        </button>
+        <button onClick={handleSave} disabled={saving} className="text-xs bg-primary text-white rounded-lg px-3 py-1 disabled:opacity-50">
+          {saving ? "저장 중..." : "저장"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ExpensesSection({ materials }) {
+  const [expenses, setExpenses] = useState([]);
+  const [materialId, setMaterialId] = useState("");
+  const [qty, setQty] = useState("");
+  const [unitCost, setUnitCost] = useState("");
+  const [memo, setMemo] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const q = query(collection(db, "gomExpenses"), orderBy("createdAt", "desc"), limit(200));
+    return onSnapshot(q, (snap) => setExpenses(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
+  }, []);
+
+  const totalSpent = expenses.reduce((sum, e) => sum + (e.totalCost || 0), 0);
+
+  async function handleAdd() {
+    const material = materials.find((m) => m.id === materialId);
+    if (!material) return window.alert("재료를 먼저 선택해주세요.");
+    const qtyNum = Number(qty) || 0;
+    const unitCostNum = Number(unitCost) || 0;
+    if (qtyNum <= 0) return window.alert("수량을 입력해주세요.");
+
+    setSaving(true);
+    try {
+      await addDoc(collection(db, "gomExpenses"), {
+        materialId,
+        materialName: material.name,
+        qty: qtyNum,
+        unitCost: unitCostNum,
+        totalCost: qtyNum * unitCostNum,
+        memo: memo.trim(),
+        createdAt: serverTimestamp(),
+      });
+      // 지출(입고) 등록 시 그 수량만큼 재고 자동 증가
+      await setDoc(doc(db, "gomMaterials", materialId), { stock: increment(qtyNum) }, { merge: true });
+
+      setQty("");
+      setUnitCost("");
+      setMemo("");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2 flex-wrap items-end">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">재료</label>
+          <select value={materialId} onChange={(e) => setMaterialId(e.target.value)} className="border border-line rounded-lg px-2 py-1.5 text-sm">
+            <option value="">선택</option>
+            {materials.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">입고 수량</label>
+          <input type="number" value={qty} onChange={(e) => setQty(e.target.value)} className="w-24 border border-line rounded-lg px-2 py-1.5 text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">개당 단가</label>
+          <input type="number" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} className="w-24 border border-line rounded-lg px-2 py-1.5 text-sm" />
+        </div>
+        <div className="flex-1 min-w-[120px]">
+          <label className="block text-xs text-gray-500 mb-1">메모</label>
+          <input value={memo} onChange={(e) => setMemo(e.target.value)} className="w-full border border-line rounded-lg px-2 py-1.5 text-sm" />
+        </div>
+        <button onClick={handleAdd} disabled={saving} className="text-xs bg-primary text-white rounded-lg px-4 py-2 disabled:opacity-50">
+          {saving ? "저장 중..." : "지출 등록"}
+        </button>
+      </div>
+
+      <p className="text-xs font-semibold text-primary">누적 지출 {formatWon(totalSpent)}</p>
+
+      <div className="space-y-2">
+        {expenses.length === 0 && <p className="text-xs text-gray-400">등록된 지출이 없습니다.</p>}
+        {expenses.map((e) => (
+          <div key={e.id} className="border border-line rounded-lg px-3 py-2 text-xs bg-white flex justify-between flex-wrap gap-1">
+            <span>
+              {e.materialName} {e.qty}개 × {formatWon(e.unitCost)}
+              {e.memo ? ` · ${e.memo}` : ""}
+            </span>
+            <span className="font-semibold text-primary">{formatWon(e.totalCost)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }

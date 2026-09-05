@@ -6,9 +6,14 @@
 
 - 본체와 공유하는 것은 오직 **Firebase 프로젝트**뿐입니다 — Firestore의
   `gomOrders`(주문) / `gomOptions`(추가 옵션) / `gomSettings`(가격·공지) /
-  `gomPickupCapacity`(픽업일자별 주문 수량) 컬렉션을 씁니다.
-- 관리자페이지(`/admin`)는 다음 단계에서 구현 예정입니다. 지금은 `src/App.jsx`가
-  모든 경로를 주문페이지(`OrderPage.jsx`)로 연결합니다.
+  `gomPickupCapacity`(픽업일자별 주문 수량) / `gomMaterials`(재료 재고) /
+  `gomRecipes`(종류·옵션→재료 사용량) / `gomExpenses`(지출 장부) 컬렉션을 씁니다.
+- 관리자페이지는 `/admin/login`(로그인) → `/admin`(대시보드)입니다. 계정은
+  Firebase 콘솔 → Authentication → Users에서 이메일/비밀번호로 직접 추가합니다.
+  대시보드 탭: 공지/가격, 옵션관리, 픽업수량, 주문/매출, 지출/재고(재료·레시피·지출).
+  레시피를 등록해두면 고객이 주문할 때마다 `src/inventoryUtil.js`가 재료 재고를
+  자동으로 차감합니다(레시피가 없으면 아무 일도 일어나지 않음, 실패해도 주문
+  접수 자체는 막지 않음).
 
 ## 지금 당장 해야 할 것
 

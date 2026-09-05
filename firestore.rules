@@ -146,6 +146,30 @@ service cloud.firestore {
       allow delete: if isSignedIn();
     }
 
+    // 재료 재고 — 고객이 주문을 넣을 때 gomRecipes를 참고해 트랜잭션으로 stock을
+    // 차감한다(inventoryUtil.js). 그 트랜잭션의 tx.get이 read 권한을 요구하므로
+    // get은 공개하되, 전체 목록(재고 현황판)은 관리자만 볼 수 있게 list는 막는다.
+    // write도 gomPickupCapacity와 같은 방식으로 stock 필드만 공개 허용한다.
+    match /gomMaterials/{materialId} {
+      allow get: if true;
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() ||
+        (request.resource.data.keys().hasOnly(['stock']) && request.resource.data.stock is number);
+      allow update: if isSignedIn() ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock']);
+      allow delete: if isSignedIn();
+    }
+    // 종류/옵션 → 재료 사용량 매핑. 주문 접수 시 고객 기기에서 읽어 차감량을
+    // 계산해야 하므로 조회는 공개, 등록/수정은 관리자만.
+    match /gomRecipes/{recipeId} {
+      allow get, list: if true;
+      allow create, update, delete: if isSignedIn();
+    }
+    // 지출 장부 — 관리자 전용 기능이라 로그인 사용자만 접근.
+    match /gomExpenses/{expenseId} {
+      allow read, write: if isSignedIn();
+    }
+
     // ────────────────────────────────────────────────────────────
     // 프로그램 전역 설정 — 최고관리자만 설정/열람 가능(요청사항).
     // 단 siteConfig/landing(로그인 전 랜딩페이지 커스터마이징)은 그 페이지 자체가
