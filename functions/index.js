@@ -90,6 +90,19 @@ async function sendPushAndCleanup(tokens, message, label) {
   if (notification?.title) data.title = String(notification.title);
   if (notification?.body) data.body = String(notification.body);
   delete restMessage.data;
+  // ⭐ 안드로이드에서 "소리/진동은 나는데 카카오톡처럼 화면 위에 배너(헤드업)로
+  // 뜨지는 않는다"는 리포트 — 발송하는 토큰은 실제로는 웹푸시(브라우저) 토큰이라,
+  // 위의 android.priority는 네이티브 안드로이드 앱에만 적용되는 필드라 이 경우엔
+  // 사실상 무시된다. 웹푸시가 실제로 타는 경로에 긴급도를 알리는 표준 필드는
+  // webpush.headers.Urgency다 — 이걸 "high"로 채워 브라우저/OS가 이 알림을
+  // 더 급한 알림으로 취급하도록 힌트를 준다.
+  // ⚠️ 다만 이것만으로 100% 헤드업이 보장되진 않는다 — 안드로이드는 사이트별
+  // 알림 채널의 "중요도"를 최초 생성 시 자체적으로 정하고, 이후엔 사용자가
+  // 기기 설정(설정 > 앱 > 알림 > 이 사이트/앱 > 중요도/팝업 표시)에서 직접
+  // 올려야 바뀌는 구조라, 코드만으로는 이미 만들어진 채널의 등급을 못 바꾼다.
+  if (!restMessage.webpush) restMessage.webpush = {};
+  if (!restMessage.webpush.headers) restMessage.webpush.headers = {};
+  if (!restMessage.webpush.headers.Urgency) restMessage.webpush.headers.Urgency = "high";
   let res;
   try {
     res = await messaging.sendEachForMulticast({ tokens, data, ...restMessage });
