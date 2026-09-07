@@ -1,4 +1,5 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
+import html2canvas from "html2canvas";
 import { useCompanyInfo } from "../RateCard";
 import MobileFleetView from "./MobileFleetView";
 import MobileEasyMode from "./MobileEasyMode";
@@ -5514,6 +5515,7 @@ onGoAttendance={() => {
         {page === "list" && ordersLoaded && (
           <MobileOrderList
             dispatcherName={dispatcherName}
+            userCompany={userCompany}
             groupedByDate={groupedByDate}
             statusTab={statusTab}
             setStatusTab={setStatusTab}
@@ -6935,6 +6937,268 @@ function UploadLinkModal({ orders = [], onClose }) {
 }
 
 // ======================================================================
+// 거래처 오더 내역서 이미지 공유 모달
+// ⭐ PC 버전 "스케줄표" 이미지공유 기능(DispatchApp.jsx의 ScheduleChartModal,
+// html2canvas로 캡처 → navigator.share로 파일 첨부 공유, 미지원 환경은 다운로드+문자앱
+// 폴백)과 동일한 방식을 모바일 다중선택에도 적용한다. 거래처에 "이 기간에 이런 오더들을
+// 이 운임으로 진행했다"를 보여주는 내역서 이미지를 만들어 그대로 카톡/문자로 전달할 수
+// 있게 하는 용도라, 실제 서류처럼 보이도록 표 디자인에 신경썼다(중앙정렬/제목/합계박스/
+// 발행사 정보 푸터).
+// ======================================================================
+function MobileEstimateModal({ orders = [], userCompany = "", onClose }) {
+  const COMPANY = useCompanyInfo(userCompany);
+  const captureRef = useRef(null);
+  const [includeVat, setIncludeVat] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  // 선택한 오더가 뒤죽박죽 섞여 들어와도 문서에는 날짜순으로 정리해서 보여준다.
+  const sortedOrders = useMemo(() => {
+    return [...orders].sort((a, b) => {
+      const da = a.상차일 || "";
+      const dbb = b.상차일 || "";
+      if (da !== dbb) return da < dbb ? -1 : 1;
+      return (a.하차지명 || "").localeCompare(b.하차지명 || "");
+    });
+  }, [orders]);
+
+  // 거래처명 — 선택한 오더가 전부 같은 거래처면 그 이름을, 섞여있으면 "다수 거래처"로 표시
+  const clientName = useMemo(() => {
+    const names = [...new Set(sortedOrders.map(o => (o.거래처명 || "").trim()).filter(Boolean))];
+    if (names.length === 1) return names[0];
+    if (names.length > 1) return "다수 거래처";
+    return "";
+  }, [sortedOrders]);
+
+  const dateRangeLabel = useMemo(() => {
+    const dates = [...new Set(sortedOrders.map(o => (o.상차일 || "").slice(0, 10)).filter(Boolean))].sort();
+    if (!dates.length) return "";
+    const fmt = (d) => {
+      const [y, m, dd] = d.split("-");
+      return y && m && dd ? `${y}.${m}.${dd}` : d;
+    };
+    return dates.length === 1 ? fmt(dates[0]) : `${fmt(dates[0])} ~ ${fmt(dates[dates.length - 1])}`;
+  }, [sortedOrders]);
+
+  const totalFare = useMemo(
+    () => sortedOrders.reduce((sum, o) => sum + (Number(o.청구운임) || 0), 0),
+    [sortedOrders]
+  );
+  const vatAmount = Math.round(totalFare * 0.1);
+  const totalWithVat = totalFare + vatAmount;
+
+  const fmtDate = (dateStr) => {
+    const date = (dateStr || "").slice(0, 10);
+    if (!date) return "-";
+    const [, m, d] = date.split("-");
+    if (!m || !d) return date;
+    const w = ["일", "월", "화", "수", "목", "금", "토"];
+    const wd = new Date(date).getDay();
+    return `${parseInt(m)}/${parseInt(d)}(${w[wd]})`;
+  };
+
+  const captureCanvas = () => captureRef.current
+    ? html2canvas(captureRef.current, { scale: 2, backgroundColor: "#ffffff", useCORS: true })
+    : null;
+
+  const fileTitle = `${clientName || "오더내역서"}_${dateRangeLabel || ""}`.replace(/[\s/]/g, "");
+
+  const handleShare = async () => {
+    setSending(true);
+    try {
+      const canvas = await captureCanvas();
+      if (!canvas) return;
+      await new Promise((resolve) => {
+        canvas.toBlob(async (blob) => {
+          if (!blob) { resolve(); return; }
+          const fileName = `${fileTitle}.png`;
+          const file = new File([blob], fileName, { type: "image/png" });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try {
+              await navigator.share({ files: [file], title: "오더 내역서", text: `${clientName ? clientName + " " : ""}오더 내역서입니다.` });
+              resolve();
+              return;
+            } catch (err) {
+              // 사용자가 공유시트를 취소한 경우는 조용히 종료, 그 외 실패만 폴백으로 진행
+              if (err?.name === "AbortError") { resolve(); return; }
+            }
+          }
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.download = fileName;
+          link.href = url;
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 4000);
+          resolve();
+        }, "image/png");
+      });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const saveImage = async () => {
+    setSending(true);
+    try {
+      const canvas = await captureCanvas();
+      if (!canvas) return;
+      const link = document.createElement("a");
+      link.download = `${fileTitle}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] flex flex-col bg-black/50">
+      {/* 헤더 */}
+      <div className="flex items-center justify-between px-4 py-3 bg-white flex-shrink-0" data-html2canvas-ignore="true">
+        <span className="text-[15px] font-bold text-gray-800">오더 내역서 공유</span>
+        <button onClick={onClose} className="text-gray-400 text-2xl leading-none">&times;</button>
+      </div>
+
+      {/* 부가세 옵션 */}
+      <div className="px-4 py-3 bg-white border-t border-gray-100 flex-shrink-0" data-html2canvas-ignore="true">
+        <button
+          type="button"
+          onClick={() => setIncludeVat(v => !v)}
+          className="w-full flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2.5"
+        >
+          <span className="text-[13px] font-semibold text-gray-700">부가세 포함 금액 표시</span>
+          <div className={`w-11 h-6 rounded-full transition-colors relative ${includeVat ? "bg-[#1B2B4B]" : "bg-gray-300"}`}>
+            <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${includeVat ? "translate-x-[22px]" : "translate-x-0.5"}`} />
+          </div>
+        </button>
+        <p className="text-[11px] text-gray-400 mt-1.5 px-1">
+          {includeVat ? "부가세 포함 금액과 공급가액을 함께 표시합니다." : "\"부가세 별도\" 문구가 표시됩니다."}
+        </p>
+      </div>
+
+      {/* 미리보기 (캡처 영역) */}
+      <div className="flex-1 overflow-y-auto bg-gray-100 px-3 py-4">
+        <div ref={captureRef} className="bg-white mx-auto rounded-lg overflow-hidden shadow-sm" style={{ maxWidth: 520 }}>
+          {/* 문서 헤더 */}
+          <div className="bg-[#1B2B4B] px-5 py-5 text-center">
+            <div className="text-white text-[17px] font-extrabold tracking-wide">오더 내역서</div>
+            <div className="text-white/70 text-[11px] mt-1 tracking-widest">ORDER STATEMENT</div>
+          </div>
+
+          <div className="px-5 pt-4 pb-2">
+            <div className="text-center mb-1">
+              <span className="text-[15px] font-bold text-gray-900">{clientName || "귀사"} 귀중</span>
+            </div>
+            <div className="text-center text-[11px] text-gray-500">
+              {dateRangeLabel && <span>조회기간 {dateRangeLabel}</span>}
+              <span className="mx-1.5">·</span>
+              <span>총 {sortedOrders.length}건</span>
+            </div>
+          </div>
+
+          {/* 표 */}
+          <div className="px-4 pt-3 pb-1">
+            <table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
+              <thead>
+                <tr className="bg-[#1B2B4B]/[0.06]">
+                  <th className="border border-gray-200 py-2 text-[11px] font-bold text-[#1B2B4B]" style={{ width: "16%" }}>날짜</th>
+                  <th className="border border-gray-200 py-2 text-[11px] font-bold text-[#1B2B4B]" style={{ width: includeVat ? "34%" : "44%" }}>노선</th>
+                  <th className="border border-gray-200 py-2 text-[11px] font-bold text-[#1B2B4B]" style={{ width: includeVat ? "22%" : "20%" }}>화물내용</th>
+                  <th className="border border-gray-200 py-2 text-[11px] font-bold text-[#1B2B4B]" style={{ width: includeVat ? "14%" : "20%" }}>공급가액</th>
+                  {includeVat && (
+                    <th className="border border-gray-200 py-2 text-[11px] font-bold text-[#1B2B4B]" style={{ width: "14%" }}>부가세포함</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {sortedOrders.map((o, i) => {
+                  const fare = Number(o.청구운임) || 0;
+                  return (
+                    <tr key={o.id || o._id || i} className={i % 2 === 1 ? "bg-gray-50" : "bg-white"}>
+                      <td className="border border-gray-200 px-1 py-2 text-[11px] text-center text-gray-700">{fmtDate(o.상차일)}</td>
+                      <td className="border border-gray-200 px-1.5 py-2 text-[11px] text-center text-gray-800 font-medium break-keep">
+                        {o.상차지명 || "-"}<span className="text-gray-400 mx-0.5">→</span>{o.하차지명 || "-"}
+                      </td>
+                      <td className="border border-gray-200 px-1 py-2 text-[10.5px] text-center text-gray-600 break-keep">{o.화물내용 || "-"}</td>
+                      <td className="border border-gray-200 px-1 py-2 text-[11px] text-center text-gray-800 font-semibold">{fare.toLocaleString()}</td>
+                      {includeVat && (
+                        <td className="border border-gray-200 px-1 py-2 text-[11px] text-center text-[#1B2B4B] font-semibold">{Math.round(fare * 1.1).toLocaleString()}</td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 합계 */}
+          <div className="mx-4 mt-3 mb-1 rounded-xl bg-[#1B2B4B]/[0.04] border border-[#1B2B4B]/10 px-4 py-3">
+            {includeVat ? (
+              <>
+                <div className="flex items-center justify-between text-[12px] text-gray-600 mb-1">
+                  <span>공급가액 합계</span>
+                  <span className="font-semibold text-gray-700">{totalFare.toLocaleString()}원</span>
+                </div>
+                <div className="flex items-center justify-between text-[12px] text-gray-600 mb-1.5">
+                  <span>부가세 (10%)</span>
+                  <span className="font-semibold text-gray-700">{vatAmount.toLocaleString()}원</span>
+                </div>
+                <div className="h-px bg-[#1B2B4B]/10 mb-1.5" />
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] font-bold text-[#1B2B4B]">합계금액 (VAT포함)</span>
+                  <span className="text-[16px] font-extrabold text-[#1B2B4B]">{totalWithVat.toLocaleString()}원</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] font-bold text-[#1B2B4B]">합계금액</span>
+                  <span className="text-[16px] font-extrabold text-[#1B2B4B]">{totalFare.toLocaleString()}원</span>
+                </div>
+                <div className="text-right text-[10.5px] text-gray-400 mt-1">* 상기 금액은 부가세 별도입니다</div>
+              </>
+            )}
+          </div>
+
+          {/* 푸터 — 발행 회사 정보 */}
+          <div className="px-5 pt-3 pb-5 mt-1 border-t border-gray-100">
+            <div className="text-center text-[11px] text-gray-500 leading-relaxed">
+              <div className="font-bold text-gray-700 text-[12px] mb-0.5">{COMPANY.name || userCompany || ""}</div>
+              {(COMPANY.manager || COMPANY.phone) && (
+                <div>{[COMPANY.manager, COMPANY.phone].filter(Boolean).join(" · ")}</div>
+              )}
+              {COMPANY.address && <div>{COMPANY.address}</div>}
+            </div>
+            <div className="text-center text-[10px] text-gray-300 mt-2">발행일 {todayKST()}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* 하단 버튼 */}
+      <div className="flex-shrink-0 bg-white border-t border-gray-200 px-4 pt-3 pb-safe-bottom" data-html2canvas-ignore="true">
+        <div className="flex gap-2 pb-3">
+          <button
+            type="button"
+            onClick={saveImage}
+            disabled={sending || sortedOrders.length === 0}
+            className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-700 text-[13px] font-bold disabled:opacity-40 active:scale-[0.97] transition"
+          >
+            이미지 저장
+          </button>
+          <button
+            type="button"
+            onClick={handleShare}
+            disabled={sending || sortedOrders.length === 0}
+            className="flex-1 py-3 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold disabled:opacity-40 active:scale-[0.97] transition"
+          >
+            {sending ? "전송 준비중..." : "업체에 공유하기"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ======================================================================
 // 등록내역 리스트
 // ======================================================================
 function MobileOrderList({
@@ -6968,6 +7232,7 @@ function MobileOrderList({
   setMultiSelectMode,
   cardVersionB,
   dispatcherName = "",
+  userCompany = "",
   drivers,
   onOrderUpdate,
   showToast,
@@ -7006,6 +7271,7 @@ function MobileOrderList({
         return next;
       })();
   const [uploadLinkModal, setUploadLinkModal] = useState(false);
+  const [estimateModal, setEstimateModal] = useState(false);
   const [deleteConfirmOrder, setDeleteConfirmOrder] = useState(null);
   const [copyModalOrder, setCopyModalOrder] = useState(null);
   // 전체상세 복사 후 "전달상태를 전달완료로 바꿀까요?" 확인 팝업 대상 오더
@@ -7761,14 +8027,21 @@ const summary = useMemo(() => {
           <button
             onClick={handleUploadLink}
             disabled={selectedIds.size === 0}
-            className="flex-1 py-3 rounded-xl bg-indigo-600 text-white text-[13px] font-bold disabled:opacity-40 active:scale-[0.97] transition"
+            className="flex-1 py-3 rounded-xl bg-indigo-600 text-white text-[12px] font-bold disabled:opacity-40 active:scale-[0.97] transition whitespace-nowrap"
           >
-            업로드링크 발송
+            업로드링크
+          </button>
+          <button
+            onClick={() => setEstimateModal(true)}
+            disabled={selectedIds.size === 0}
+            className="flex-1 py-3 rounded-xl bg-[#1B2B4B] text-white text-[12px] font-bold disabled:opacity-40 active:scale-[0.97] transition whitespace-nowrap"
+          >
+            이미지공유
           </button>
           <button
             onClick={handleDeleteSelected}
             disabled={selectedIds.size === 0}
-            className="flex-1 py-3 rounded-xl bg-rose-600 text-white text-[13px] font-bold disabled:opacity-40 active:scale-[0.97] transition"
+            className="flex-1 py-3 rounded-xl bg-rose-600 text-white text-[12px] font-bold disabled:opacity-40 active:scale-[0.97] transition whitespace-nowrap"
           >
             선택삭제
           </button>
@@ -7781,6 +8054,15 @@ const summary = useMemo(() => {
       <UploadLinkModal
         orders={selectedOrders}
         onClose={() => setUploadLinkModal(false)}
+      />
+    )}
+
+    {/* ── 거래처 오더 내역서 이미지 공유 모달 ── */}
+    {estimateModal && (
+      <MobileEstimateModal
+        orders={selectedOrders}
+        userCompany={userCompany}
+        onClose={() => setEstimateModal(false)}
       />
     )}
 
