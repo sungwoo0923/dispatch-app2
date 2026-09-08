@@ -6948,6 +6948,10 @@ function UploadLinkModal({ orders = [], onClose }) {
 function MobileEstimateModal({ orders = [], userCompany = "", onClose }) {
   const COMPANY = useCompanyInfo(userCompany);
   const captureRef = useRef(null);
+  // ⭐ "금액을 아예 안 보내고 싶을 수도 있다" — 청구금액 자체를 통째로 켜고 끄는
+  // 최상위 토글. 이게 꺼지면 공급가액/부가세포함 모두 표에서 사라지고 합계 박스도
+  // 아예 렌더링하지 않는다(날짜/노선/화물내용만 남는 문서가 됨).
+  const [showAmount, setShowAmount] = useState(true);
   const [includeVat, setIncludeVat] = useState(false);
   // ⭐ 공급가액(부가세 별도 원 금액) 노출 여부 — 부가세포함 금액만 보여주고 싶을 때
   // (마진이 드러나는 원 단가는 감추고 최종 청구금액만 공개) 끌 수 있게 별도 토글로 분리.
@@ -6955,7 +6959,8 @@ function MobileEstimateModal({ orders = [], userCompany = "", onClose }) {
   // 취급하고(강제 on), 부가세 토글이 켜졌을 때만 이 토글을 실제로 만질 수 있다.
   const [showSupply, setShowSupply] = useState(true);
   const [sending, setSending] = useState(false);
-  const supplyOn = includeVat ? showSupply : true;
+  const vatOn = showAmount && includeVat;
+  const supplyOn = showAmount && (includeVat ? showSupply : true);
 
   // 선택한 오더가 뒤죽박죽 섞여 들어와도 문서에는 날짜순으로 정리해서 보여준다.
   const sortedOrders = useMemo(() => {
@@ -6991,8 +6996,8 @@ function MobileEstimateModal({ orders = [], userCompany = "", onClose }) {
   );
   const vatAmount = Math.round(totalFare * 0.1);
   const totalWithVat = totalFare + vatAmount;
-  // 켜져 있는 금액 컬럼 수(공급가액/부가세포함) — 1개면 넓게, 2개면 반씩 나눠 표에 반영
-  const amtColCount = (supplyOn ? 1 : 0) + (includeVat ? 1 : 0);
+  // 켜져 있는 금액 컬럼 수(공급가액/부가세포함) — 0개(금액표시 자체 꺼짐)/1개/2개에 맞춰 표에 반영
+  const amtColCount = (supplyOn ? 1 : 0) + (vatOn ? 1 : 0);
 
   const fmtDate = (dateStr) => {
     const date = (dateStr || "").slice(0, 10);
@@ -7076,22 +7081,33 @@ function MobileEstimateModal({ orders = [], userCompany = "", onClose }) {
         <div className="w-10" />
       </div>
 
-      {/* 부가세/공급가액 노출 옵션 */}
+      {/* 금액 노출 옵션 — 청구금액 자체 on/off + (켜졌을 때만) 부가세포함/공급가액 세부 on/off */}
       <div className="px-4 py-3 bg-white border-b border-gray-100 flex-shrink-0 space-y-2" data-html2canvas-ignore="true">
         <button
           type="button"
-          onClick={() => setIncludeVat(v => !v)}
+          onClick={() => setShowAmount(v => !v)}
           className="w-full flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2.5"
         >
-          <span className="text-[13px] font-semibold text-gray-700">부가세 포함 금액 표시</span>
-          <div className={`w-11 h-6 rounded-full transition-colors relative ${includeVat ? "bg-[#1B2B4B]" : "bg-gray-300"}`}>
-            <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${includeVat ? "translate-x-[22px]" : "translate-x-0.5"}`} />
+          <span className="text-[13px] font-semibold text-gray-700">청구금액 표시</span>
+          <div className={`w-11 h-6 rounded-full transition-colors relative ${showAmount ? "bg-[#1B2B4B]" : "bg-gray-300"}`}>
+            <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${showAmount ? "translate-x-[22px]" : "translate-x-0.5"}`} />
           </div>
         </button>
         <button
           type="button"
-          onClick={() => includeVat && setShowSupply(v => !v)}
-          disabled={!includeVat}
+          onClick={() => showAmount && setIncludeVat(v => !v)}
+          disabled={!showAmount}
+          className="w-full flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2.5 disabled:opacity-40"
+        >
+          <span className="text-[13px] font-semibold text-gray-700">부가세 포함 금액 표시</span>
+          <div className={`w-11 h-6 rounded-full transition-colors relative ${vatOn ? "bg-[#1B2B4B]" : "bg-gray-300"}`}>
+            <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${vatOn ? "translate-x-[22px]" : "translate-x-0.5"}`} />
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => showAmount && includeVat && setShowSupply(v => !v)}
+          disabled={!showAmount || !includeVat}
           className="w-full flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2.5 disabled:opacity-40"
         >
           <span className="text-[13px] font-semibold text-gray-700">공급가액(부가세 별도금액) 노출</span>
@@ -7100,9 +7116,11 @@ function MobileEstimateModal({ orders = [], userCompany = "", onClose }) {
           </div>
         </button>
         <p className="text-[11px] text-gray-400 px-1">
-          {includeVat
-            ? (supplyOn ? "부가세 포함 금액과 공급가액을 함께 표시합니다." : "부가세 포함 금액만 표시하고 공급가액은 감춥니다.")
-            : "\"부가세 별도\" 문구가 표시됩니다."}
+          {!showAmount
+            ? "금액 없이 오더 내역(날짜·노선·화물내용)만 표시합니다."
+            : includeVat
+              ? (supplyOn ? "부가세 포함 금액과 공급가액을 함께 표시합니다." : "부가세 포함 금액만 표시하고 공급가액은 감춥니다.")
+              : "\"부가세 별도\" 문구가 표시됩니다."}
         </p>
       </div>
 
@@ -7126,21 +7144,25 @@ function MobileEstimateModal({ orders = [], userCompany = "", onClose }) {
             </div>
           </div>
 
-          {/* 표 — 화면 폭에 맞춰 칸이 절대 겹치거나 벗어나지 않도록, 켜진 금액 컬럼 수(1개/2개)에
-              따라 나머지 컬럼 너비를 다시 배분한다. 셀 안 텍스트도 break-words로 강제 줄바꿈해
-              (break-keep은 공백 없는 지명이 길면 칸 밖으로 흘러넘치는 문제가 있었음) 항상 칸
-              안에서만 줄바꿈되게 한다. */}
+          {/* 표 — 화면 폭에 맞춰 칸이 절대 겹치거나 벗어나지 않도록, 켜진 금액 컬럼 수(0/1/2개)에
+              따라 나머지 컬럼 너비를 다시 배분한다.
+              ⚠️ 이전 버전은 td에 break-words만 주고 끝냈는데, table-layout:fixed는 "칸 너비"만
+              고정할 뿐 내용이 넘칠 때 잘라주지는 않아서 — 공백 없이 긴 상호명(예: "굿모닝패밀리
+              마트")이 줄바꿈되며 셀 높이가 늘어나는 대신 옆 칸/아래 행 위로 겹쳐 보이는 문제가
+              있었다. 노선/화물내용처럼 길어질 수 있는 칸은 안에 -webkit-line-clamp로 최대 2줄까지만
+              박스를 만들고(그 이상은 …로 자름) overflow:hidden까지 걸어, 어떤 텍스트가 와도 절대
+              그 칸의 사각형 밖으로 나가지 못하게 물리적으로 막는다. */}
           <div className="px-3 pt-3 pb-1">
             <table className="w-full border-collapse table-fixed">
               <thead>
                 <tr className="bg-[#1B2B4B]/[0.06]">
-                  <th className="border border-gray-200 py-2 px-0.5 text-[10px] font-bold text-[#1B2B4B] break-words" style={{ width: "13%" }}>날짜</th>
-                  <th className="border border-gray-200 py-2 px-0.5 text-[10px] font-bold text-[#1B2B4B] break-words" style={{ width: amtColCount === 2 ? "30%" : "37%" }}>노선</th>
-                  <th className="border border-gray-200 py-2 px-0.5 text-[10px] font-bold text-[#1B2B4B] break-words" style={{ width: amtColCount === 2 ? "18%" : "22%" }}>화물내용</th>
+                  <th className="border border-gray-200 py-2 px-0.5 text-[10px] font-bold text-[#1B2B4B] break-words" style={{ width: amtColCount ? "13%" : "16%" }}>날짜</th>
+                  <th className="border border-gray-200 py-2 px-0.5 text-[10px] font-bold text-[#1B2B4B] break-words" style={{ width: amtColCount === 2 ? "30%" : amtColCount === 1 ? "37%" : "46%" }}>노선</th>
+                  <th className="border border-gray-200 py-2 px-0.5 text-[10px] font-bold text-[#1B2B4B] break-words" style={{ width: amtColCount === 2 ? "18%" : amtColCount === 1 ? "22%" : "38%" }}>화물내용</th>
                   {supplyOn && (
                     <th className="border border-gray-200 py-2 px-0.5 text-[10px] font-bold text-[#1B2B4B] break-words" style={{ width: amtColCount === 2 ? "19.5%" : "28%" }}>공급가액</th>
                   )}
-                  {includeVat && (
+                  {vatOn && (
                     <th className="border border-gray-200 py-2 px-0.5 text-[10px] font-bold text-[#1B2B4B] break-words" style={{ width: amtColCount === 2 ? "19.5%" : "28%" }}>부가세포함</th>
                   )}
                 </tr>
@@ -7150,16 +7172,26 @@ function MobileEstimateModal({ orders = [], userCompany = "", onClose }) {
                   const fare = Number(o.청구운임) || 0;
                   return (
                     <tr key={o.id || o._id || i} className={i % 2 === 1 ? "bg-gray-50" : "bg-white"}>
-                      <td className="border border-gray-200 px-0.5 py-2 text-[10px] text-center text-gray-700 break-words">{fmtDate(o.상차일)}</td>
-                      <td className="border border-gray-200 px-1 py-2 text-[10.5px] text-center text-gray-800 font-medium break-words">
-                        {o.상차지명 || "-"}<span className="text-gray-400 mx-0.5">→</span>{o.하차지명 || "-"}
+                      <td className="border border-gray-200 px-0.5 py-2 text-[10px] text-center text-gray-700 align-middle">
+                        <div className="break-words" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                          {fmtDate(o.상차일)}
+                        </div>
                       </td>
-                      <td className="border border-gray-200 px-0.5 py-2 text-[10px] text-center text-gray-600 break-words">{o.화물내용 || "-"}</td>
+                      <td className="border border-gray-200 px-1 py-2 text-[10.5px] text-center text-gray-800 font-medium align-middle">
+                        <div className="break-words" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                          {o.상차지명 || "-"}<span className="text-gray-400 mx-0.5">→</span>{o.하차지명 || "-"}
+                        </div>
+                      </td>
+                      <td className="border border-gray-200 px-0.5 py-2 text-[10px] text-center text-gray-600 align-middle">
+                        <div className="break-words" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                          {o.화물내용 || "-"}
+                        </div>
+                      </td>
                       {supplyOn && (
-                        <td className="border border-gray-200 px-0.5 py-2 text-[10.5px] text-center text-gray-800 font-semibold break-words">{fare.toLocaleString()}</td>
+                        <td className="border border-gray-200 px-0.5 py-2 text-[10.5px] text-center text-gray-800 font-semibold break-words align-middle">{fare.toLocaleString()}</td>
                       )}
-                      {includeVat && (
-                        <td className="border border-gray-200 px-0.5 py-2 text-[10.5px] text-center text-[#1B2B4B] font-semibold break-words">{Math.round(fare * 1.1).toLocaleString()}</td>
+                      {vatOn && (
+                        <td className="border border-gray-200 px-0.5 py-2 text-[10.5px] text-center text-[#1B2B4B] font-semibold break-words align-middle">{Math.round(fare * 1.1).toLocaleString()}</td>
                       )}
                     </tr>
                   );
@@ -7168,38 +7200,41 @@ function MobileEstimateModal({ orders = [], userCompany = "", onClose }) {
             </table>
           </div>
 
-          {/* 합계 — 부가세/공급가액 노출 조합 4가지(둘다/VAT만/공급가액만=OFF상태) 각각에 맞게 표시 */}
-          <div className="mx-4 mt-3 mb-1 rounded-xl bg-[#1B2B4B]/[0.04] border border-[#1B2B4B]/10 px-4 py-3">
-            {includeVat ? (
-              <>
-                {supplyOn && (
-                  <>
-                    <div className="flex items-center justify-between text-[12px] text-gray-600 mb-1">
-                      <span>공급가액 합계</span>
-                      <span className="font-semibold text-gray-700">{totalFare.toLocaleString()}원</span>
-                    </div>
-                    <div className="flex items-center justify-between text-[12px] text-gray-600 mb-1.5">
-                      <span>부가세 (10%)</span>
-                      <span className="font-semibold text-gray-700">{vatAmount.toLocaleString()}원</span>
-                    </div>
-                    <div className="h-px bg-[#1B2B4B]/10 mb-1.5" />
-                  </>
-                )}
-                <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-bold text-[#1B2B4B]">합계금액 (VAT포함)</span>
-                  <span className="text-[16px] font-extrabold text-[#1B2B4B]">{totalWithVat.toLocaleString()}원</span>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-bold text-[#1B2B4B]">합계금액</span>
-                  <span className="text-[16px] font-extrabold text-[#1B2B4B]">{totalFare.toLocaleString()}원</span>
-                </div>
-                <div className="text-right text-[10.5px] text-gray-400 mt-1">* 상기 금액은 부가세 별도입니다</div>
-              </>
-            )}
-          </div>
+          {/* 합계 — 청구금액 표시가 꺼지면 합계 박스 자체를 아예 렌더링하지 않는다.
+              켜졌을 때는 부가세/공급가액 노출 조합에 맞게 표시. */}
+          {showAmount && (
+            <div className="mx-4 mt-3 mb-1 rounded-xl bg-[#1B2B4B]/[0.04] border border-[#1B2B4B]/10 px-4 py-3">
+              {vatOn ? (
+                <>
+                  {supplyOn && (
+                    <>
+                      <div className="flex items-center justify-between text-[12px] text-gray-600 mb-1">
+                        <span>공급가액 합계</span>
+                        <span className="font-semibold text-gray-700">{totalFare.toLocaleString()}원</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[12px] text-gray-600 mb-1.5">
+                        <span>부가세 (10%)</span>
+                        <span className="font-semibold text-gray-700">{vatAmount.toLocaleString()}원</span>
+                      </div>
+                      <div className="h-px bg-[#1B2B4B]/10 mb-1.5" />
+                    </>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13px] font-bold text-[#1B2B4B]">합계금액 (VAT포함)</span>
+                    <span className="text-[16px] font-extrabold text-[#1B2B4B]">{totalWithVat.toLocaleString()}원</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13px] font-bold text-[#1B2B4B]">합계금액</span>
+                    <span className="text-[16px] font-extrabold text-[#1B2B4B]">{totalFare.toLocaleString()}원</span>
+                  </div>
+                  <div className="text-right text-[10.5px] text-gray-400 mt-1">* 상기 금액은 부가세 별도입니다</div>
+                </>
+              )}
+            </div>
+          )}
 
           {/* 푸터 — 발행 회사 정보 */}
           <div className="px-5 pt-3 pb-5 mt-1 border-t border-gray-100">
