@@ -1049,36 +1049,103 @@ async function ensureGsheetMonthTab(tabName) {
   return newProps;
 }
 
-// 신규 오더를 어느 행에 넣을지 정한다 — 상차일 열만 본다. 아직 안 쓴 나머지 행에도
-// 기본값을 채워주는 수식이 미리 깔려있어("배차중", "정보 없음" 등) 그 칸들까지
-// "데이터"로 치면 항상 시트 맨 끝(1000행 근처)으로 밀려버리는데, 진짜 오더가 있는 행만
-// 상차일 열이 채워져 있다는 점을 이용해 진짜 데이터의 끝을 정확히 찾는다.
-// - 마지막 진짜 행과 상차일이 같으면 바로 다음 행에 이어붙인다(같은 날짜끼리 뭉침).
-// - 다르면(=새로운 날짜) 그 사이에 빈 줄 하나를 넣어 날짜 블록을 시각적으로 분리한다.
+// 신규(또는 상차일이 바뀌어 다시 넣어야 하는) 오더를 어느 행에 넣을지 정한다 — 상차일
+// 열 전체를 훑어 "같은 날짜가 연달아 있는 구간"을 블록 단위로 찾아내고(블록 사이는
+// 빈 줄 하나로 구분돼 있다는 전제), 그 블록들 사이에서 targetDate가 있어야 할 자리를
+// 정한다. 반환하는 mode:
+//  - "append-to-block": 이미 그 날짜 블록이 있고, 그 블록이 시트에서 가장 아래(마지막)
+//    블록이다 — 기존처럼 시트 맨 끝에 그대로 이어붙이면 된다(가장 흔한 경우라 별도
+//    행 삽입 없이 저렴하게 처리).
+//  - "insert-into-block": 이미 그 날짜 블록이 있지만 다른 블록들보다 위(중간)에 있다
+//    — 그 블록 끝에 실제로 한 행을 구조적으로 끼워넣어야 한다.
+//  - "new-block-before": 그 날짜 블록이 아직 없고, 그 날짜보다 늦은 블록이 있다 — 그
+//    블록 바로 앞에 새 블록(데이터 1행 + 구분용 빈 줄 1행)을 통째로 끼워넣는다.
+//  - "append-at-end": 그 날짜 블록이 없고, 기존 블록이 하나도 없거나 전부 그 날짜보다
+//    이르다 — 시트 맨 끝에 새 블록을 이어붙인다(서식 이어받은 빈 버퍼 행을 그대로 씀).
+// ⭐ 예전엔 "마지막 진짜 행"만 보고 항상 그 뒤에 이어붙였는데, 그러면 등록 순서가
+// 날짜 순서와 다를 때(예: 9/17 오더를 먼저 넣고 나중에 9/3 오더를 넣는 경우) 같은
+// 날짜가 시트 여러 군데에 흩어져버렸다 — 이 함수가 그 버그의 원인이었다.
 async function findGsheetInsertPosition(tabName, targetDate, colMap) {
   const dateCol = colMap?.상차일 || "B";
+  const target = String(targetDate || "").trim();
   const res = await gsheetApi("GET", `/values/${encodeURIComponent(`${quoteTab(tabName)}!${dateCol}2:${dateCol}2000`)}`);
   const values = res.values || [];
-  let lastRealRow = 1; // 1행=헤더. 진짜 데이터가 하나도 없으면 그대로 1.
-  let lastRealDate = null;
-  // ⭐ 실사용 버그 수정: 예전엔 "중간에 빈 칸이 나오면 그걸로 데이터 끝"이라고 보고
-  // 바로 break 했는데, 정작 이 함수 자신이 날짜가 바뀔 때마다(needsSeparator) 빈 줄을
-  // 하나씩 심어두기 때문에 두 번째 날짜 블록부터는 항상 그 직전의 "구분용 빈 줄"에서
-  // 멈춰버렸다. 그 결과 실제 데이터가 훨씬 아래(예: 9/3~9/4)까지 있어도 이 함수는
-  // "9/1 블록 다음 빈 줄"을 데이터 끝으로 착각해, 새 오더(9/4)를 9/1과 9/2 사이의 그
-  // 구분용 빈 줄 자리에 그대로 덮어써버렸다(그 자리가 실은 9/2 블록 시작 행이었던 경우
-  // 기존 9/2 데이터까지 덮어써지며 값이 뒤섞여 보이는 문제로 이어짐). 구분용 빈 줄은
-  // 건너뛰고 끝까지 훑어서 "진짜 마지막" 데이터 행/날짜를 찾아야 한다(API가 응답 자체를
-  // 마지막 값이 있는 행까지만 주므로, 배열 끝까지 다 봐도 그 뒤엔 어차피 값이 없다).
+
+  // 상차일 열을 위에서부터 훑어 연속된 같은 날짜 구간(블록)들을 모은다. 구분용 빈
+  // 줄이 나오면 지금 열려있는 블록을 닫는다(이후 같은 날짜가 다시 나와도 별개 블록).
+  const blocks = []; // { date, startRow, endRow } — startRow/endRow는 시트 행 번호(1-based)
+  let open = null;
   for (let i = 0; i < values.length; i++) {
     const v = String(values[i]?.[0] || "").trim();
-    if (!v) continue; // 날짜 블록 사이 구분용 빈 줄 — 건너뛰고 계속 찾는다
-    lastRealRow = i + 2; // values[0] == B2
-    lastRealDate = v;
+    const row = i + 2; // values[0] == 2행(1행=헤더)
+    if (!v) { open = null; continue; }
+    if (open && open.date === v) { open.endRow = row; continue; }
+    open = { date: v, startRow: row, endRow: row };
+    blocks.push(open);
   }
-  if (lastRealRow === 1) return { insertRow: 2, needsSeparator: false };
-  if (lastRealDate === String(targetDate || "").trim()) return { insertRow: lastRealRow + 1, needsSeparator: false };
-  return { insertRow: lastRealRow + 2, needsSeparator: true };
+
+  if (!blocks.length) return { mode: "append-at-end", insertRow: 2 };
+
+  const sameBlock = blocks.find((b) => b.date === target);
+  if (sameBlock) {
+    const isLastBlock = sameBlock === blocks[blocks.length - 1];
+    return isLastBlock
+      ? { mode: "append-at-end", insertRow: sameBlock.endRow + 1 }
+      : { mode: "insert-into-block", insertRow: sameBlock.endRow + 1 };
+  }
+
+  const nextBlock = blocks.find((b) => b.date > target);
+  if (nextBlock) return { mode: "new-block-before", anchorRow: nextBlock.startRow };
+
+  const last = blocks[blocks.length - 1];
+  return { mode: "append-at-end", insertRow: last.endRow + 2 };
+}
+
+// sheetId의 atRow(1-based)행 앞에 count개의 새 행을 구조적으로 끼워넣는다(그 아래
+// 모든 행은 그만큼 밀려 내려감). inheritFromBefore가 true면 바로 위 행에서, false면
+// 바로 아래(밀려날) 행에서 서식(테두리 등)을 이어받는다 — appendGsheetBufferRow와
+// 동일한 이유로, 위에 이어받을 서식 있는 행이 없는 자리(헤더 바로 다음)에 끼워넣을
+// 때만 false를 써야 서식이 깨지지 않는다.
+async function insertGsheetDataRows(sheetId, atRow, count, inheritFromBefore) {
+  await gsheetApi("POST", ":batchUpdate", {
+    data: {
+      requests: [
+        {
+          insertDimension: {
+            range: { sheetId, dimension: "ROWS", startIndex: atRow - 1, endIndex: atRow - 1 + count },
+            inheritFromBefore,
+          },
+        },
+      ],
+    },
+  });
+}
+
+// fromRow(포함) 이상을 가리키던 다른 오더들의 _gsheetSync.row 포인터를 delta만큼
+// 밀어준다 — 이 탭 중간에 새 행을 구조적으로 끼워넣어(insertGsheetDataRows) 그 아래
+// 행들이 전부 밀려 내려갔을 때, 그 행들을 가리키던 포인터도 같이 보정해야 다음에
+// 그 오더를 수정할 때 엉뚱한 행을 덮어쓰지 않는다(removeGsheetRow의 반대 방향).
+// excludeDocPath("col/id")로 넘긴 문서는 제외한다 — 지금 막 옮기는 중인 그 문서
+// 자신이 아직 예전 _gsheetSync(옮기기 전 행 번호)를 들고 있어 잘못 걸릴 수 있어서.
+async function shiftGsheetRowPointersFrom(tabName, fromRow, delta, excludeDocPath) {
+  for (const col of ["orders", "dispatch"]) {
+    let snap;
+    try {
+      snap = await db.collection(col).where("_gsheetSync.tab", "==", tabName).get();
+    } catch (e) {
+      console.warn(`_gsheetSync 포인터 보정용 조회 실패(${col}):`, e?.message || e);
+      continue;
+    }
+    const targets = snap.docs.filter((d) => {
+      if (excludeDocPath && `${col}/${d.id}` === excludeDocPath) return false;
+      return (d.data()?._gsheetSync?.row || 0) >= fromRow;
+    });
+    for (let i = 0; i < targets.length; i += 500) {
+      const batch = db.batch();
+      targets.slice(i, i + 500).forEach((d) => batch.update(d.ref, { "_gsheetSync.row": FieldValue.increment(delta) }));
+      await batch.commit();
+    }
+  }
 }
 
 // 시트 맨 끝(현재 rowCount 다음)에 서식(테두리 등)을 바로 위 행에서 이어받은 빈 행을
@@ -1325,36 +1392,59 @@ async function syncOneDispatchToGsheet(docId, data) {
     // 순번/수수료/매익율/배차상태/기사명/전화번호는 전부 시트 자체 수식이 계산해주는
     // 칸이라(수식이 다른 열을 보고 자동 계산) 절대 건드리지 않는다 — 여기 값을 쓰면
     // 수식이 깨진다. 비고(고유값고정값)도 용도 불명이라 그대로 둔다.
-    // ⭐ 상차일이 바뀌어 월이 달라졌으면(드문 케이스) 예전 행은 지우고 새 탭에 다시 만든다.
     if (existingRef.tab === tabName) {
       const colMap = await getGsheetColumnMap(existingRef.tab);
-      const rangesData = [];
-      for (const [field, value] of Object.entries(buildGsheetFieldValues(data))) {
-        const col = colMap[field];
-        if (!col) continue;
-        rangesData.push({ range: `${quoteTab(existingRef.tab)}!${col}${existingRef.row}`, values: [[value]] });
+      // ⭐ 상차일이 수정돼(같은 달 안에서의 날짜 정정 등) 이 오더가 있어야 할 날짜
+      // 블록 자체가 바뀌었으면 값만 덮어써선 안 된다 — 행 위치가 예전 날짜 블록에
+      // 그대로 남아 그 블록이 뒤섞인다(실사용에서 실제로 발생한 문제). 시트에 지금
+      // 실제로 적혀있는 상차일과 비교해 바뀌었으면 아래 "새로 만들기" 경로로 넘어가
+      // 올바른 날짜 위치로 옮긴다.
+      const dateCol = colMap.상차일;
+      let sheetDate = null;
+      if (dateCol) {
+        const cell = await gsheetApi(
+          "GET",
+          `/values/${encodeURIComponent(`${quoteTab(existingRef.tab)}!${dateCol}${existingRef.row}`)}`
+        );
+        sheetDate = String(cell.values?.[0]?.[0] || "").trim();
       }
-      if (rangesData.length) {
-        await gsheetApi("POST", "/values:batchUpdate", {
-          data: { valueInputOption: "USER_ENTERED", data: rangesData },
-        });
+      const targetDate = String(data["상차일"] || "").trim();
+      if (!dateCol || sheetDate === targetDate) {
+        const rangesData = [];
+        for (const [field, value] of Object.entries(buildGsheetFieldValues(data))) {
+          const col = colMap[field];
+          if (!col) continue;
+          rangesData.push({ range: `${quoteTab(existingRef.tab)}!${col}${existingRef.row}`, values: [[value]] });
+        }
+        if (rangesData.length) {
+          await gsheetApi("POST", "/values:batchUpdate", {
+            data: { valueInputOption: "USER_ENTERED", data: rangesData },
+          });
+        }
+        await ensureDriverInGsheetUniqueTab(data["차량번호"], data["이름"], data["전화번호"]);
+        return;
       }
-      await ensureDriverInGsheetUniqueTab(data["차량번호"], data["이름"], data["전화번호"]);
-      return;
-    }
-    // 월이 바뀐 경우 — 이전 행은 지우고(다른 오더로 착각되지 않도록, 아래 행들 당겨짐 +
-    // 다른 오더 포인터 보정까지 removeGsheetRow가 처리) 새 탭에 새로 만든다.
-    try {
-      await removeGsheetRow(existingRef.tab, existingRef.row);
-    } catch (e) {
-      console.warn("이전 월 행 정리 실패(무시):", e?.message || e);
+      // 날짜가 바뀜 — 기존 행을 지우고 아래에서 올바른 날짜 블록 위치에 새로 만든다.
+      try {
+        await removeGsheetRow(existingRef.tab, existingRef.row);
+      } catch (e) {
+        console.warn("날짜 정정으로 인한 기존 행 정리 실패(무시):", e?.message || e);
+      }
+    } else {
+      // 월이 바뀐 경우 — 이전 행은 지우고(다른 오더로 착각되지 않도록, 아래 행들 당겨짐 +
+      // 다른 오더 포인터 보정까지 removeGsheetRow가 처리) 새 탭에 새로 만든다.
+      try {
+        await removeGsheetRow(existingRef.tab, existingRef.row);
+      } catch (e) {
+        console.warn("이전 월 행 정리 실패(무시):", e?.message || e);
+      }
     }
   }
 
-  // 신규 — 대상 월 탭을 준비하고(없으면 자동 생성) 진짜 데이터 끝(같은 날짜면 바로 다음,
-  // 다른 날짜면 빈 줄 하나 띄우고 그 다음)에 필요한 만큼 시트 맨 끝에 행을 추가한 뒤
-  // 그 행에 값+수식을 채운다. (중간에 행을 끼워넣지 않고 항상 맨 끝에서만 늘리는 이유는
-  // appendGsheetBufferRow 주석 참고 — 테두리 등 서식이 깨지지 않게 하기 위해서다.)
+  // 신규(또는 위에서 날짜/월이 바뀌어 기존 행을 지운 경우) — 대상 월 탭을 준비하고
+  // (없으면 자동 생성) 그 상차일이 있어야 할 날짜 블록 위치를 찾아(findGsheetInsertPosition)
+  // 값+수식을 채운다. 이미 그 날짜 블록이 시트 맨 끝에 있으면 기존처럼 그냥 이어붙이고,
+  // 그 외(날짜 순서상 중간에 들어가야 하는 경우)에는 실제로 행을 구조적으로 끼워넣는다.
   // ⭐ 다중등록 등으로 여러 오더가 거의 동시에 들어오면 "지금 어디까지 있나" 판단이
   // 서로 겹쳐써서 순서가 꼬일 수 있어(withGsheetTabLock 주석 참고), 같은 탭에 대한
   // 위치 계산~쓰기 전체를 잠금으로 감싸 한 번에 하나씩만 처리되게 한다.
@@ -1365,18 +1455,42 @@ async function syncOneDispatchToGsheet(docId, data) {
     if (!sheetProps) throw new Error(`탭을 찾을 수 없습니다: ${tabName}`);
 
     const colMap = await getGsheetColumnMap(tabName);
-    const { insertRow } = await findGsheetInsertPosition(tabName, data["상차일"], colMap);
-    const r = insertRow; // 실제 데이터가 들어갈 행
-    // ensureGsheetRowsUpTo는 정확히 r행까지만 늘리므로, 끝나고 나면 rowCount는 항상 r다
-    // (아래에서 다시 조회할 필요 없음 — 대량 백필 시 오더당 API 호출 수를 줄여 처리
-    // 시간이 함수 제한시간(9분)을 넘기지 않게 하기 위해 왕복을 최대한 줄인다).
-    await ensureGsheetRowsUpTo(sheetProps.sheetId, sheetProps.gridProperties?.rowCount || 1, r);
+    const pos = await findGsheetInsertPosition(tabName, data["상차일"], colMap);
 
+    if (pos.mode === "append-at-end") {
+      const r = pos.insertRow;
+      // ensureGsheetRowsUpTo는 정확히 r행까지만 늘리므로, 끝나고 나면 rowCount는 항상 r다
+      // (아래에서 다시 조회할 필요 없음 — 대량 백필 시 오더당 API 호출 수를 줄여 처리
+      // 시간이 함수 제한시간(9분)을 넘기지 않게 하기 위해 왕복을 최대한 줄인다).
+      await ensureGsheetRowsUpTo(sheetProps.sheetId, sheetProps.gridProperties?.rowCount || 1, r);
+      await writeGsheetOrderRow(tabName, r, data, colMap);
+      // 다음 오더를 위해 서식 이어받은 빈 버퍼 행을 하나 더 마련해둔다(항상 맨 끝에
+      // 빈 줄 하나가 대기하고 있도록 유지) — 방금 쓴 행(r)이 곧 현재 rowCount다.
+      await appendGsheetBufferRow(sheetProps.sheetId, r);
+      return r;
+    }
+
+    if (pos.mode === "insert-into-block") {
+      // 이미 있는 날짜 블록이지만 시트 중간에 있는 경우 — 그 블록 끝 바로 다음 행에
+      // 실제로 한 행을 구조적으로 끼워넣는다(그 아래 모든 행은 한 칸씩 밀려 내려감).
+      const r = pos.insertRow;
+      await insertGsheetDataRows(sheetProps.sheetId, r, 1, true); // 바로 위(같은 날짜) 행 서식을 이어받음
+      await shiftGsheetRowPointersFrom(tabName, r, 1, docId);
+      await writeGsheetOrderRow(tabName, r, data, colMap);
+      return r;
+    }
+
+    // mode === "new-block-before": 날짜 오름차순을 지키기 위해 기존 블록들 사이에
+    // 새 날짜 블록(데이터 1행 + 구분용 빈 줄 1행)을 통째로 끼워넣는다.
+    const r = pos.anchorRow;
+    // 맨 위(헤더 바로 다음)에 끼워넣는 경우엔 위쪽에 이어받을 서식 있는 행이 없어(그
+    // 자리는 곧 헤더), 대신 아래쪽(밀려날 기존 첫 블록)의 서식을 이어받는다 — 위에서
+    // 이어받으면 헤더 서식(테두리 없음 등)이 그대로 복사돼 이후 삽입마다 계속 번지는
+    // 사고가 있었다(appendGsheetBufferRow 주석 참고).
+    await insertGsheetDataRows(sheetProps.sheetId, r, 2, r > 2);
+    await shiftGsheetRowPointersFrom(tabName, r, 2, docId);
     await writeGsheetOrderRow(tabName, r, data, colMap);
-
-    // 다음 오더를 위해 서식 이어받은 빈 버퍼 행을 하나 더 마련해둔다(항상 맨 끝에
-    // 빈 줄 하나가 대기하고 있도록 유지) — 방금 쓴 행(r)이 곧 현재 rowCount다.
-    await appendGsheetBufferRow(sheetProps.sheetId, r);
+    // r+1행은 새 블록과 다음 블록을 구분하는 빈 줄로 비워둔다(값을 쓰지 않음).
     return r;
   });
 

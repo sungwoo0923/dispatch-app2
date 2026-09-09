@@ -11090,8 +11090,18 @@ const checkDriverConflict = () => {
   }
 };
 
-const nextSeq = () =>
-  Math.max(0, ...(dispatchData || []).map((r) => Number(r.순번) || 0)) + 1;
+// ⭐ 순번은 "전체 통틀어 계속 증가하는 값"이 아니라 "그 상차일 안에서 1번부터
+// 시작하는 값"이어야 한다(구글시트에도 날짜별로 1번부터 다시 매겨져야 함) — 예전엔
+// targetDate 구분 없이 dispatchData 전체에서 최댓값+1을 매겨서, 날짜가 섞여 들어오면
+// 순번이 날짜와 무관하게 계속 커지기만 했다. 같은 상차일을 가진 오더끼리만 비교해
+// 그 안에서의 최댓값+1을 매긴다.
+const nextSeq = (targetDate) =>
+  Math.max(
+    0,
+    ...(dispatchData || [])
+      .filter((r) => r.상차일 === targetDate)
+      .map((r) => Number(r.순번) || 0)
+  ) + 1;
 // ================================
 // ⛔ 기사 중복 배차 체크 유틸
 // ================================
@@ -11504,7 +11514,7 @@ const rec = {
   ...moneyPatch,
   상차일: lockYear(form.상차일),
   하차일: lockYear(form.하차일),
-  순번: nextSeq(),
+  순번: nextSeq(lockYear(form.상차일)),
   배차상태: status,
   createdAt: now,
   updatedAt: now,
