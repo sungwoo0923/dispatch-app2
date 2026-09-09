@@ -19884,9 +19884,13 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
       if (permission === "default") permission = await Notification.requestPermission();
       if (permission !== "granted") { alert("알림 권한이 허용돼 있지 않습니다. 브라우저/기기 설정에서 알림을 허용해주세요."); return; }
       const reg = await navigator.serviceWorker.ready;
+      // ⭐ sw.js의 실제 push 핸들러와 동일한 기준(안드로이드만 네이비 라운드사각
+      // KP+트럭 아이콘)으로 맞춘다 — 여기서 다르게 하드코딩돼 있으면 이 버튼으로
+      // 테스트했을 때 실제 발송과 다른 아이콘이 떠서 헷갈리게 된다.
+      const isAndroidTest = /android/i.test(navigator.userAgent || "");
       await reg.showNotification("테스트 알림", {
         body: "이렇게 화면에 뜨면 알림창 자체는 정상 작동하는 거예요.",
-        icon: "/icons/icon-192x192-notif.png", // 흰 배경 버전 — sw.js의 실제 발송과 동일하게 맞춤
+        icon: isAndroidTest ? "/icons/icon-192x192-notif-android.png" : "/icons/icon-192x192-notif.png",
         badge: "/icons/icon-192x192.png", // 투명 배경 버전(안드로이드 배지용)
         vibrate: [200, 100, 200],
         tag: "kpflow-test",
