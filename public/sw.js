@@ -130,6 +130,17 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(event.request.url);
 
+  // ⭐ 우리 앱(같은 origin) 요청만 다룬다 — Cloud Functions 호출(예: 관리자메뉴
+  // "구글시트 백필" 버튼이 부르는 backfillGsheetMonth 등)처럼 다른 도메인으로
+  // 나가는 요청까지 여기서 가로채고 있었다. 그 요청이 (일시적 네트워크 문제/
+  // CORS/콜드스타트 등) 어떤 이유로든 실패하면 아래 catch가 진짜 에러 대신
+  // "Offline"이라는 캐시-폴백 문구를 대신 돌려줘서, 실제로는 서버 응답과 무관한
+  // 화면에 정체불명의 "Offline"만 뜨는 문제가 있었다(이 앱 자체가 오프라인인 것도
+  // 아닌데 그렇게 보였음). 외부 주소는 이 서비스워커의 캐시/오프라인 처리 대상이
+  // 아니므로 아예 건드리지 않고 브라우저 기본 동작에 맡겨, 실패하면 그 진짜
+  // 에러(네트워크 오류/CORS 등)가 호출부에 그대로 전달되게 한다.
+  if (url.origin !== self.location.origin) return;
+
   // sw.js 자체는 캐시하지 않음
   if (url.pathname === "/sw.js") return;
 
