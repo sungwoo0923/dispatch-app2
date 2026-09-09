@@ -1086,12 +1086,16 @@ async function findGsheetInsertPosition(tabName, targetDate, colMap) {
 
   if (!blocks.length) return { mode: "append-at-end", insertRow: 2 };
 
+  // ⭐ 사용자 요청(2026-09-09): 새로 등록되는 오더는 프로그램 화면에서 그 날짜의
+  // 맨 위(순번 1)에 표시된다 — 배차를 아직 안 한 신규 오더가 그날 첫 줄로 보이는
+  // 것과 동일하게, 시트에서도 항상 그 날짜 블록의 "맨 위"에 구조적으로 끼워넣는다.
+  // 기존에 있던 그 날짜 오더들은 전부 한 칸씩 밀려나고, 순번 열(gsheetFormulaA의
+  // COUNTIF 수식)이 셀 스스로 다시 계산하므로 별도 처리 없이 항상 1부터 다시 매겨진다.
+  // (예전엔 블록 "끝"에 이어붙였는데, 그러면 등록된 순서 그대로 아래로 쌓여
+  // 화면(최신 등록이 위)과 정반대 순서가 됐다 — 이게 그 버그였다.)
   const sameBlock = blocks.find((b) => b.date === target);
   if (sameBlock) {
-    const isLastBlock = sameBlock === blocks[blocks.length - 1];
-    return isLastBlock
-      ? { mode: "append-at-end", insertRow: sameBlock.endRow + 1 }
-      : { mode: "insert-into-block", insertRow: sameBlock.endRow + 1 };
+    return { mode: "insert-into-block", insertRow: sameBlock.startRow };
   }
 
   const nextBlock = blocks.find((b) => b.date > target);
@@ -1471,10 +1475,13 @@ async function syncOneDispatchToGsheet(docId, data) {
     }
 
     if (pos.mode === "insert-into-block") {
-      // 이미 있는 날짜 블록이지만 시트 중간에 있는 경우 — 그 블록 끝 바로 다음 행에
-      // 실제로 한 행을 구조적으로 끼워넣는다(그 아래 모든 행은 한 칸씩 밀려 내려감).
+      // 이미 있는 그 날짜 블록의 맨 위에 실제로 한 행을 구조적으로 끼워넣는다(그
+      // 블록에 있던 기존 행들 + 그 아래 모든 행은 한 칸씩 밀려 내려감). 바로 위 행은
+      // 이전 블록의 구분용 빈 줄(또는 맨 첫 블록이면 헤더)이라 서식이 없거나 다르므로,
+      // inheritFromBefore:false로 대신 바로 아래(밀려날, 같은 날짜) 행에서 서식을
+      // 이어받는다 — new-block-before 케이스와 동일한 이유.
       const r = pos.insertRow;
-      await insertGsheetDataRows(sheetProps.sheetId, r, 1, true); // 바로 위(같은 날짜) 행 서식을 이어받음
+      await insertGsheetDataRows(sheetProps.sheetId, r, 1, false);
       await shiftGsheetRowPointersFrom(tabName, r, 1, docId);
       await writeGsheetOrderRow(tabName, r, data, colMap);
       return r;
@@ -1627,7 +1634,16 @@ exports.backfillGsheetMonth = functions
       items.sort((a, b) => {
         const dcmp = String(a.data["상차일"] || "").localeCompare(String(b.data["상차일"] || ""));
         if (dcmp !== 0) return dcmp;
-        return (Number(a.data["순번"]) || 0) - (Number(b.data["순번"]) || 0);
+        // ⭐ 같은 날짜 안에서는 "나중에 등록한 오더가 위로" — 실시간 동기화
+        // (findGsheetInsertPosition)가 새 오더를 항상 그 날짜 블록 맨 위에 끼워넣는
+        // 것과 동일한 순서로, 백필도 같은 결과가 나오게 맞춘다. createdAt(서버
+        // 타임스탬프)이 클라이언트에서 계산하는 순번 필드(nextSeq — 동시 등록 시
+        // 값이 겹칠 수 있음)보다 신뢰도가 높아 우선 쓰고, 그 필드가 없는 옛 문서만
+        // 순번으로 대체한다.
+        const at = a.data.createdAt?.toMillis ? a.data.createdAt.toMillis() : 0;
+        const bt = b.data.createdAt?.toMillis ? b.data.createdAt.toMillis() : 0;
+        if (at || bt) return bt - at;
+        return (Number(b.data["순번"]) || 0) - (Number(a.data["순번"]) || 0);
       });
 
       // ⭐ 실제로 149건 백필 도중 같은 행(예: 44행)이 계속 다른 오더로 덮어써지고
