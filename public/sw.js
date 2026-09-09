@@ -60,10 +60,18 @@ self.addEventListener("push", (event) => {
   // 계속 옛 캐시를 돌려준다. 버전이 바뀔 때마다 URL 자체가 달라지게 하면
   // 캐시 키가 자동으로 새로 생겨서, push 처리 중 네트워크를 타지 않고도
   // 배포마다 확실히 새 아이콘을 받아온다.
+  // ⭐ 2026-09-09 요청 — 알림 배너에 크게 뜨는 icon을 안드로이드에서만 새
+  // 네이비 라운드사각 "KP+트럭" 버전(icon-*-notif-android.png)으로 바꾼다.
+  // 아이폰은 지금 정상이라 절대 안 건드리는 게 요구사항이라, 서비스워커
+  // 안에서 self.navigator.userAgent로 안드로이드인지 직접 구분해서 안드로이드일
+  // 때만 다른 파일을 쓰고, 그 외(아이폰 포함 전부)는 기존 icon-192x192-notif.png
+  // 그대로 쓴다. badge(작은 실루콘 아이콘)는 이번 변경과 무관 — 그대로 유지.
+  const isAndroid = /android/i.test(self.navigator?.userAgent || "");
+  const iconFile = isAndroid ? "icon-192x192-notif-android.png" : "icon-192x192-notif.png";
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
-      icon: `/icons/icon-192x192-notif.png?v=${VERSION}`,
+      icon: `/icons/${iconFile}?v=${VERSION}`,
       badge: `/icons/icon-192x192.png?v=${VERSION}`,
       vibrate: [200, 100, 200],
       tag: data.tag || `kpflow-${Date.now()}`,
