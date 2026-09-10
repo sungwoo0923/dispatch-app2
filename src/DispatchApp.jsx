@@ -7801,6 +7801,10 @@ const [placeConflictOpen, setPlaceConflictOpen] = React.useState(false);
       // 차량제원표 관리자 수정(더블클릭) — 카고/윙바디 표를 회사별로 독립적으로 override.
       const [specOverrides, setSpecOverrides] = React.useState({ cargo: {}, wing: {} });
       const [vehicleSpecEdit, setVehicleSpecEdit] = React.useState(null); // { table: "cargo"|"wing", index }
+      // ⭐ 차량·파렛 제원표 이미지저장용 캡처 대상 ref — 훅은 조건부 렌더 블록
+      // ({vehicleSpecOpen && (...)}) 안이 아니라 항상 호출되는 이 위치에 둬야 한다
+      // (안 그러면 팝업 열고 닫을 때마다 훅 호출 개수가 달라져 React error #310 발생).
+      const specCaptureRef = React.useRef(null);
       React.useEffect(() => {
         if (!vehicleSpecOpen || !userCompany) return;
         let alive = true;
@@ -15831,8 +15835,8 @@ className={`
 
   // ⭐ 지금 열려있는 탭(차량제원/파렛트제원) 표를 그대로 이미지로 저장 — 스케줄표
   // 이미지저장과 동일하게 html2canvas로 캡처한다. data-html2canvas-ignore를 준 버튼/탭
-  // 전환 UI는 캡처에서 제외되고, 표 내용만 이미지에 담긴다.
-  const specCaptureRef = React.useRef(null);
+  // 전환 UI는 캡처에서 제외되고, 표 내용만 이미지에 담긴다. (ref 자체는 훅 규칙 때문에
+  // 이 조건부 블록 밖 — 위쪽 vehicleSpecOpen state 옆 — 에 선언돼 있고 여기선 재사용만 한다.)
   const saveSpecImage = async () => {
     if (!specCaptureRef.current) return;
     const canvas = await html2canvas(specCaptureRef.current, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
