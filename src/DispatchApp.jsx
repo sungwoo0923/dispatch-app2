@@ -8832,6 +8832,12 @@ const mergedClients = React.useMemo(() => {
     const key = mkKey(name, c.주소);
     if (!normalizeKey(name)) return;
     map.set(key, {
+      // ⭐ id를 안 넘기면 이 기본거래처 항목으로 연 담당자선택 팝업에서 담당자를
+      // 삭제/수정할 때(updateContactInPlace) 어느 문서를 갱신해야 할지 몰라 이름만으로
+      // 다시 찾아야 했다 — 같은 이름에 주소가 다른 거래처가 여러 개 있으면 엉뚱한
+      // 문서를 갱신해서(수정은 반영 안 되고) 원래 문서는 그대로 남아 있어 "삭제했는데
+      // 다시 열면 되살아나 있다"는 버그로 이어졌다. id를 그대로 실어보내 그 문제 자체를 없앤다.
+      id: c.id,
       업체명: name,
       주소: c.주소 || "",
       담당자: c.담당자 || "",
@@ -10904,8 +10910,14 @@ const closeContactPopup = (selectedContact) => {
   setTimeout(() => { advancePopupChain(); }, 60);
 };
 
-// place._id가 있으면(진짜 하차지거래처 문서) 그 문서를 갱신하고, 없으면(기본거래처에서
-// 병합되어 들어온 항목) 같은 업체명의 기본거래처 문서를 갱신한다.
+// place._id가 있으면(진짜 하차지거래처 문서) 그 문서를 갱신하고, place.id가 있으면
+// (mergedClients에서 넘어온 기본거래처 항목) 그 id로 기본거래처 문서를 직접 갱신한다.
+// 둘 다 없을 때만(아주 오래된 호출부 등) 이름으로 다시 찾는 예전 방식으로 대체한다.
+// ⭐ 예전엔 place._id가 없으면 항상 이름만으로 clients를 다시 검색했는데, 같은
+// 업체명에 주소가 다른 거래처가 여러 개 있으면 엉뚱한(먼저 매칭된) 문서를 갱신해버려
+// "담당자를 삭제했는데 다시 열어보면 그대로 있다"는 버그로 이어졌다 — 실제로는
+// 원래 보고 있던 문서가 아니라 동명이인 다른 거래처 문서가 수정된 것. mergedClients가
+// 이제 기본거래처 항목에도 id를 그대로 실어보내므로, 이름 재검색 없이 그 id를 바로 쓴다.
 const updateContactInPlace = async (place, newContacts) => {
   if (!place?.업체명) return;
   try {
@@ -10913,9 +10925,9 @@ const updateContactInPlace = async (place, newContacts) => {
       await updateDoc(doc(db, "places", place._id), { contacts: newContacts });
     } else {
       const primary = newContacts.find(c => c.isPrimary) || newContacts[0];
-      const clientMatch = (clients || []).find(c => normalizeKey(c.업체명 || c.거래처명) === normalizeKey(place.업체명));
+      const clientMatch = place.id ? null : (clients || []).find(c => normalizeKey(c.업체명 || c.거래처명) === normalizeKey(place.업체명));
       await upsertClient?.({
-        id: clientMatch?.id || place.업체명,
+        id: place.id || clientMatch?.id || place.업체명,
         거래처명: clientMatch?.거래처명 || place.업체명,
         주소: clientMatch?.주소 || place.주소 || "",
         담당자: primary?.name || "",
@@ -15817,6 +15829,19 @@ className={`
   // 함께 true가 되는 별개 용도라 여기서는 role만으로 다시 엄격하게 판별한다.
   const canEditVehicleSpec = role === "admin" || role === "totalMaster";
 
+  // ⭐ 지금 열려있는 탭(차량제원/파렛트제원) 표를 그대로 이미지로 저장 — 스케줄표
+  // 이미지저장과 동일하게 html2canvas로 캡처한다. data-html2canvas-ignore를 준 버튼/탭
+  // 전환 UI는 캡처에서 제외되고, 표 내용만 이미지에 담긴다.
+  const specCaptureRef = React.useRef(null);
+  const saveSpecImage = async () => {
+    if (!specCaptureRef.current) return;
+    const canvas = await html2canvas(specCaptureRef.current, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+    const link = document.createElement("a");
+    link.download = `${vehicleSpecTab === "vehicle" ? "차량제원표" : "파렛트제원표"}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  };
+
   const SpecTable = ({ title, note, rows, tableKey }) => (
     <div>
       <div className="flex justify-between items-center mb-2">
@@ -15868,15 +15893,24 @@ className={`
 
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-lg font-bold"><EditableText id="vehicleSpec.title" defaultText="차량·파렛 제원표" /></h2>
-        <button
-          onClick={() => setVehicleSpecOpen(false)}
-          className="text-gray-500 hover:text-black text-lg"
-        >
-          ✕
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={saveSpecImage}
+            className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition"
+          >
+            <EditableText id="vehicleSpec.btn.이미지저장" defaultText="이미지 저장" />
+          </button>
+          <button
+            onClick={() => setVehicleSpecOpen(false)}
+            className="text-gray-500 hover:text-black text-lg"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
-      {/* 차량제원 / 파렛트제원 탭 */}
+      {/* 차량제원 / 파렛트제원 탭 — 이미지 캡처 대상 밖(탭 전환 UI 자체는 이미지에 안 담김) */}
       <div className="flex gap-1 mb-5 bg-gray-100 rounded-lg p-1 w-fit">
         {[["vehicle","차량제원"],["pallet","파렛트제원"]].map(([t,l]) => (
           <button
@@ -15890,6 +15924,7 @@ className={`
         ))}
       </div>
 
+      <div ref={specCaptureRef} className="bg-white">
       {vehicleSpecTab === "vehicle" && (<>
       {/* ================= 퀵 차량 ================= */}
       <div className="mb-8">
@@ -15977,6 +16012,7 @@ className={`
           </table>
         </div>
       )}
+      </div>
 
     </div>
   </div>
@@ -21863,7 +21899,7 @@ const mergedClients = React.useMemo(() => {
     const name = c.업체명 || c.거래처명 || "";
     if (!name.trim()) return;
     const k = mkKey(name, c.주소);
-    map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", 오더메모: c.오더메모 || "", 기사전달주의사항: c.기사전달주의사항 || "", 등급: c.등급 || "일반", 팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true, contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
+    map.set(k, { id: c.id, 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", 오더메모: c.오더메모 || "", 기사전달주의사항: c.기사전달주의사항 || "", 등급: c.등급 || "일반", 팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true, contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
   });
   // 기본거래처와 이름이 같은 하차지거래처는 이제 서로 동기화되므로(주소가 우연히
   // 다르게 남아있어도) 자동완성 드롭다운에 기본거래처 항목 하나만 뜨도록 건너뛴다.
@@ -32246,7 +32282,7 @@ const mergedClients = React.useMemo(() => {
     const name = c.업체명 || c.거래처명 || "";
     if (!name.trim()) return;
     const k = mkKey(name, c.주소);
-    map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", 오더메모: c.오더메모 || "", 기사전달주의사항: c.기사전달주의사항 || "", 등급: c.등급 || "일반", 팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true, contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
+    map.set(k, { id: c.id, 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", 오더메모: c.오더메모 || "", 기사전달주의사항: c.기사전달주의사항 || "", 등급: c.등급 || "일반", 팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true, contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
   });
   // 기본거래처와 이름이 같은 하차지거래처는 이제 서로 동기화되므로(주소가 우연히
   // 다르게 남아있어도) 자동완성 드롭다운에 기본거래처 항목 하나만 뜨도록 건너뛴다.
