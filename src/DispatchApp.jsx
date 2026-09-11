@@ -20975,28 +20975,66 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
 
   if (!open) return null;
 
-  const handleSearch = () => {
+  // ⭐ 이 화면(첨부현황)을 여는 부모(실시간배차현황/배차현황)의 dispatchData는
+  // 화면마다 스코프가 다르다 — 실시간배차현황은 어제~내일 3일치만, 배차현황도
+  // 최근 13개월까지만 실시간으로 들고 있다. 그런데 첨부현황은 "아무 년/월이나
+  // 골라 조회"하는 화면이라 그 범위를 넘어서면(예: 지난달) 데이터가 아예 없는
+  // 것처럼 보였다 — 부모가 들고 있는 배열을 필터링하는 대신, 선택한 기간을
+  // Firestore에서 직접 조회해 항상 정확하게 나오도록 고친다.
+  const [searching, setSearching] = React.useState(false);
+  const handleSearch = async () => {
+    if (searching) return;
     const q = clientQ.trim();
-    const filtered = (dispatchData || []).filter(r => {
-      if (q && !(r.거래처명 || "").includes(q)) return false;
-      const d = (r.상차일 || "").slice(0, 10);
-      if (dateFrom && d < dateFrom) return false;
-      if (dateTo && d > dateTo) return false;
-      return true;
-    });
-    setResults(filtered);
-    setSearched(true);
-    setSortMode("date");
+    setSearching(true);
+    try {
+      const myCompany = companyName || "돌캐";
+      const fetchOne = async (colName) => {
+        const qy = query(
+          collection(db, colName),
+          where("상차일", ">=", dateFrom),
+          where("상차일", "<=", dateTo)
+        );
+        const snap = await getDocs(qy);
+        return snap.docs.map(d => ({ _id: d.id, __col: colName, ...d.data() }));
+      };
+      const [orders, dispatch] = await Promise.all([fetchOne("orders"), fetchOne("dispatch")]);
+      const merged = [...orders, ...dispatch].filter(r =>
+        r.source !== "transport_transmit" &&
+        r.배차상태 !== "배차취소" &&
+        !["취소", "배차취소", "오더취소", "취소됨"].includes(r.상태) &&
+        (r.companyName || "돌캐") === myCompany &&
+        (!q || (r.거래처명 || "").includes(q))
+      );
+      setResults(merged);
+      setSearched(true);
+      setSortMode("date");
+    } catch (e) {
+      console.error("첨부현황 조회 실패:", e);
+      alert("조회 중 오류가 발생했습니다: " + (e?.message || e));
+    } finally {
+      setSearching(false);
+    }
   };
 
   // ⭐ 첨부파일 선택삭제/전체삭제 — 오더 자체는 그대로 두고 첨부 사진/서류만
   // 지운다. 삭제 후에도 "완료처리" 상태는 유지해야 하므로(요청사항), attachCount는
   // 0으로 낮추되 attachViewed를 true로 함께 찍어 isDone()이 계속 완료로 보이게 한다.
-  const handleDeleteAttachments = async (targets) => {
+  // 브라우저 기본 confirm() 대신 프로그램 톤에 맞는 팝업으로 확인받고, 삭제 중에는
+  // 몇 건이 끝났는지(N/전체) 실시간으로 보여준다 — 속도를 위해 건별로는 병렬 처리하되
+  // (Promise.all), 하나 끝날 때마다 진행 카운터만 올려서 순차 처리처럼 느리지 않다.
+  const [deleteConfirmTargets, setDeleteConfirmTargets] = React.useState(null);
+  const [bulkDeleteProgress, setBulkDeleteProgress] = React.useState({ done: 0, total: 0 });
+  const requestDeleteAttachments = (targets) => {
     if (isViewer) { alert("조회전용 권한으로는 삭제할 수 없습니다."); return; }
     if (!targets.length) return;
-    if (!window.confirm(`선택한 ${targets.length}건의 첨부파일을 전부 삭제하시겠습니까?\n(오더 자체는 삭제되지 않고, 완료 처리 상태는 유지됩니다)`)) return;
+    setDeleteConfirmTargets(targets);
+  };
+  const executeDeleteAttachments = async () => {
+    const targets = deleteConfirmTargets || [];
+    setDeleteConfirmTargets(null);
+    if (!targets.length) return;
     setDeletingAttach(true);
+    setBulkDeleteProgress({ done: 0, total: targets.length });
     try {
       await Promise.all(targets.map(async (r) => {
         const col = r.__col || "orders";
@@ -21010,6 +21048,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
         if (mirror) {
           try { await wipeOne(mirror.col, mirror.id); } catch (e) { console.warn("첨부 동기화 삭제 실패(무시):", e); }
         }
+        setBulkDeleteProgress(prev => ({ ...prev, done: prev.done + 1 }));
       }));
       setVerifiedCounts(prev => {
         const next = { ...prev };
@@ -21175,7 +21214,9 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
                 <span className="text-gray-500 text-[13px] font-medium">까지</span>
               </div>
             </div>
-            <button onClick={handleSearch} className="px-6 py-2 bg-[#1B2B4B] text-white text-[14px] font-bold rounded-lg hover:opacity-90 transition"><EditableText id="attachStatus.조회" defaultText="조회" /></button>
+            <button onClick={handleSearch} disabled={searching} className="px-6 py-2 bg-[#1B2B4B] text-white text-[14px] font-bold rounded-lg hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed">
+              {searching ? "조회 중..." : <EditableText id="attachStatus.조회" defaultText="조회" />}
+            </button>
           </div>
         </div>
         {/* 결과 헤더 (정렬 + 전체저장) */}
@@ -21207,14 +21248,14 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
                     <span className="text-[12px] font-semibold text-gray-500">{selectedIds.size}건 선택됨</span>
                   )}
                   <button
-                    onClick={() => handleDeleteAttachments(sortedResults.filter(r => selectedIds.has(r._id)))}
+                    onClick={() => requestDeleteAttachments(sortedResults.filter(r => selectedIds.has(r._id)))}
                     disabled={deletingAttach || selectedIds.size === 0}
                     className="px-3 py-1.5 text-[12px] font-bold rounded-lg bg-red-600 text-white hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {deletingAttach ? "삭제 중..." : "선택삭제"}
                   </button>
                   <button
-                    onClick={() => handleDeleteAttachments(sortedResults)}
+                    onClick={() => requestDeleteAttachments(sortedResults)}
                     disabled={deletingAttach || sortedResults.length === 0}
                     className="px-3 py-1.5 text-[12px] font-bold rounded-lg border border-red-600 text-red-600 hover:bg-red-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
                   >
@@ -21326,6 +21367,47 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
             if (mirror) updateDoc(doc(db, mirror.col, mirror.id), { attachViewed: true }).catch(() => {});
           }}
         />
+      )}
+
+      {/* 첨부파일 삭제 확인 — 브라우저 기본 confirm() 대신 프로그램 톤에 맞춘 팝업 */}
+      {deleteConfirmTargets && (
+        <div className="fixed inset-0 bg-black/50 z-[100000] flex items-center justify-center p-4" onClick={() => setDeleteConfirmTargets(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[420px] max-w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-red-500/25 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-red-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+              </div>
+              <div>
+                <h3 className="text-white font-bold text-[15px]">첨부파일 삭제</h3>
+                <p className="text-white/60 text-[12px] mt-0.5">오더는 삭제되지 않고, 완료 처리 상태는 유지됩니다</p>
+              </div>
+            </div>
+            <div className="px-6 py-5 text-[14px] text-gray-700">
+              선택한 <b className="text-[#1B2B4B]">{deleteConfirmTargets.length}건</b>의 첨부파일을 전부 삭제하시겠습니까?
+            </div>
+            <div className="px-6 pb-6 flex gap-3">
+              <button onClick={() => setDeleteConfirmTargets(null)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-semibold text-[13px] hover:bg-gray-50 transition">취소</button>
+              <button onClick={executeDeleteAttachments} className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-bold text-[13px] hover:bg-red-700 transition">삭제</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 첨부파일 삭제 진행 중 — 몇 건 처리됐는지 실시간으로 보여준다 */}
+      {deletingAttach && (
+        <div className="fixed inset-0 bg-black/50 z-[100001] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-[300px] px-6 py-8 flex flex-col items-center gap-4">
+            <div className="w-10 h-10 border-4 border-gray-200 border-t-[#1B2B4B] rounded-full animate-spin" />
+            <div className="text-[14px] font-bold text-[#1B2B4B]">첨부파일 삭제 중...</div>
+            <div className="text-[13px] text-gray-500 font-semibold">{bulkDeleteProgress.done} / {bulkDeleteProgress.total}건</div>
+            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-[#1B2B4B] transition-all duration-200"
+                style={{ width: `${bulkDeleteProgress.total ? (bulkDeleteProgress.done / bulkDeleteProgress.total) * 100 : 0}%` }}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
