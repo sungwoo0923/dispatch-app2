@@ -5136,6 +5136,44 @@ function PalletDiagram({ item, qty, layers, palW_mm, palD_mm }) {
   );
 }
 
+// ⭐ 배차요청장 "예상 운임"용 반원 다이얼 게이지 — 최소~최대 추정범위 안에서
+// 평균(추천값)이 어디쯤인지 바늘로 보여준다. 데이터가 이상하면(min>=max 등)
+// 조용히 아무것도 그리지 않는다(에러로 전체 팝업이 죽는 것을 방지).
+function FareGauge({ min, avg, max, size = 132 }) {
+  if (![min, avg, max].every(Number.isFinite) || max <= min) return null;
+  const w = size, h = Math.round(size / 2) + 30;
+  const cx = w / 2, cy = Math.round(size / 2) + 4;
+  const r = size / 2 - 12;
+  const lo = min, hi = max;
+  const toXY = (angleDeg) => {
+    const rad = (angleDeg * Math.PI) / 180;
+    return { x: cx + r * Math.cos(rad), y: cy - r * Math.sin(rad) };
+  };
+  const angleFor = (v) => {
+    const t = Math.min(1, Math.max(0, (v - lo) / (hi - lo)));
+    return 180 - t * 180; // t=0(최소) → 180°(좌측), t=1(최대) → 0°(우측)
+  };
+  const arcPath = (a1, a2) => {
+    const p1 = toXY(a1), p2 = toXY(a2);
+    return `M ${p1.x.toFixed(1)} ${p1.y.toFixed(1)} A ${r} ${r} 0 0 1 ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  };
+  const needleAngle = angleFor(avg);
+  const needleTip = toXY(needleAngle);
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="mx-auto block">
+      {/* 배경 트랙 */}
+      <path d={arcPath(180, 0)} stroke="#e5e7eb" strokeWidth="9" fill="none" strokeLinecap="round" />
+      {/* 최소~최대 추정 구간 */}
+      <path d={arcPath(180, 0)} stroke="#93c5fd" strokeWidth="9" fill="none" strokeLinecap="round" />
+      {/* 바늘 */}
+      <line x1={cx} y1={cy} x2={needleTip.x} y2={needleTip.y} stroke="#1B2B4B" strokeWidth="3" strokeLinecap="round" />
+      <circle cx={cx} cy={cy} r="4.5" fill="#1B2B4B" />
+      <text x={toXY(180).x} y={h - 6} fontSize="9" fill="#6b7280" textAnchor="start">{Math.round(min / 10000)}만</text>
+      <text x={toXY(0).x} y={h - 6} fontSize="9" fill="#6b7280" textAnchor="end">{Math.round(max / 10000)}만</text>
+    </svg>
+  );
+}
+
 function FloatingCalculator({ onClose }) {
   const [tab, setTab] = React.useState("calc"); // "calc" | "ton" | "load"
   const [display, setDisplay] = React.useState("0");
@@ -11225,10 +11263,24 @@ const checkDriverConflict = () => {
 // targetDate 구분 없이 dispatchData 전체에서 최댓값+1을 매겨서, 날짜가 섞여 들어오면
 // 순번이 날짜와 무관하게 계속 커지기만 했다. 같은 상차일을 가진 오더끼리만 비교해
 // 그 안에서의 최댓값+1을 매긴다.
+// ⭐ 저장 시 발생하던 체감 딜레이 완화 — 예전엔 이 계산이 항상 dispatchData
+// 전체(최근 13개월치, 오더 많은 회사는 수만 건)를 훑었다. 실제로 등록하는
+// 날짜는 거의 항상 어제~내일(실시간배차현황과 동일 범위) 안이므로, 그 범위
+// 안이면 훨씬 작은 recentDispatchData만 훑고, 범위 밖(예약 등록 등 먼 날짜)일
+// 때만 예전처럼 dispatchData 전체를 쓴다.
+const isWithinRecentWindow = (targetDate) => {
+  if (!targetDate) return false;
+  const y = new Date(); y.setMinutes(y.getMinutes() - y.getTimezoneOffset()); y.setDate(y.getDate() - 1);
+  const t = new Date(); t.setMinutes(t.getMinutes() - t.getTimezoneOffset()); t.setDate(t.getDate() + 1);
+  return targetDate >= y.toISOString().slice(0, 10) && targetDate <= t.toISOString().slice(0, 10);
+};
+const pickDataSourceForDate = (targetDate) =>
+  (isWithinRecentWindow(targetDate) && recentDispatchData?.length) ? recentDispatchData : (dispatchData || []);
+
 const nextSeq = (targetDate) =>
   Math.max(
     0,
-    ...(dispatchData || [])
+    ...pickDataSourceForDate(targetDate)
       .filter((r) => r.상차일 === targetDate)
       .map((r) => Number(r.순번) || 0)
   ) + 1;
@@ -11563,7 +11615,7 @@ const doSave = async (shareToCafe = false) => {
   // 버튼이 "저장 중..."에서 영원히 멈춰버렸다(사용자에게는 딜레이/먹통처럼 보임).
   try {
     // ⛔ 기사 중복 배차 방지
-  const dup = checkDuplicateDispatch(form, dispatchData);
+  const dup = checkDuplicateDispatch(form, pickDataSourceForDate(form.상차일));
   if (dup) {
     // 교체 후
 showAlert(
@@ -11579,7 +11631,7 @@ showAlert(
   // ⭐ 완전히 동일한 오더 중복 등록 알림 — 저장을 막지는 않고, 이미 같은 조건의
   // 오더가 등록돼 있으면 알려서 사용자가 직접 판단하게 한다(여러 담당자가 같은
   // 오더를 모르고 중복 등록하는 것을 방지). "그래도 등록"을 누르면 계속 진행.
-  const dupOrders = findDuplicateOrders(form, dispatchData);
+  const dupOrders = findDuplicateOrders(form, pickDataSourceForDate(form.상차일));
   if (dupOrders.length > 0) {
     const proceed = await confirmDuplicateOrder(dupOrders);
     if (!proceed) { setIsSaving(false); return; }
@@ -17614,8 +17666,11 @@ setConfirmChange(null);
   >
     <div className="bg-white rounded-xl shadow-xl w-[1300px] h-[650px] flex overflow-hidden border">
 
-     {/* ================= 지도 영역 ================= */}
-<div className="flex-1 bg-gray-200 relative" style={{ minWidth: '500px', height: '500px' }}>
+     {/* ================= 지도 영역 =================
+          ⭐ 예전엔 여기 height:'500px'가 고정돼 있어서, 모달 전체 높이(650px)보다
+          작게 잡혀 지도 아래로 빈 흰 여백이 생겼다. h-full로 부모(플렉스 행)
+          높이에 꽉 차게 늘어나도록 고친다. */}
+<div className="flex-1 h-full bg-gray-200 relative" style={{ minWidth: '500px' }}>
   
   <div
     id="route-map"
@@ -17662,9 +17717,22 @@ setConfirmChange(null);
       <b className="text-lg">
         {fareStats?.fare
           ? `${fareStats.fare.toLocaleString()}원~`
+          : distanceFareEstimate?.avg
+          ? `${distanceFareEstimate.avg.toLocaleString()}원~`
           : "데이터 없음"}
       </b>
     </div>
+
+    {/* ================= 🔥 과거 이력 기반 데이터가 없을 때 — 티맵 거리+톤수/화물
+         기준 추정치를 다이얼로 보여준다 ================= */}
+    {!fareStats && distanceFareEstimate && (
+      <div className="pt-1 pb-1">
+        <FareGauge min={distanceFareEstimate.min} avg={distanceFareEstimate.avg} max={distanceFareEstimate.max} />
+        <div className="text-[11px] text-gray-500 text-center -mt-1">
+          티맵 {distanceFareEstimate.distance}km · {distanceFareEstimate.min.toLocaleString()}~{distanceFareEstimate.max.toLocaleString()}원 추정
+        </div>
+      </div>
+    )}
 
     {/* ================= 🔥 추천 근거 ================= */}
     {fareStats && (
@@ -17913,11 +17981,11 @@ setConfirmChange(null);
               <span className="text-[10px] font-semibold text-gray-500 ml-0.5">분</span>
             </div>
           </div>
-          {fareStats?.fare > 0 && (
+          {(fareStats?.fare > 0 || distanceFareEstimate?.avg > 0) && (
             <div className="flex-1 border border-gray-200 rounded-lg py-2 text-center bg-gray-50">
               <div className="text-[10px] text-gray-500 mb-0.5">예상 운임</div>
               <div className="text-[13px] font-black text-[#1B2B4B]">
-                {fareStats.fare.toLocaleString()}
+                {(fareStats?.fare || distanceFareEstimate?.avg).toLocaleString()}
                 <span className="text-[10px] font-semibold text-gray-500 ml-0.5">원~</span>
               </div>
             </div>
