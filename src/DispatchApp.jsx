@@ -2700,8 +2700,16 @@ function useRealtimeCollections(user, userCompany, role) {
     }, 60000);
     return () => clearInterval(t);
   }, []);
-  let ordersCache = [];
-let dispatchCache = [];
+  // ⭐ 삭제/수정 딜레이의 실제 원인 — 예전엔 이게 그냥 let 지역변수라 매 렌더마다
+  // (이 훅 안의 어떤 state라도 바뀌면 함수 본문 전체가 다시 실행되므로 아주 자주)
+  // 새 빈 배열로 다시 선언됐다. 그런데 실제로 캐시를 채워넣는 onSnapshot 콜백은
+  // 최초 마운트 시 단 한 번 만들어진 클로저라서 "그때의" 배열만 계속 채웠고,
+  // removeDispatch/patchDispatch는 매번 "그 순간 렌더"의 새 빈 배열을 참조해
+  // 사실상 캐시가 거의 항상 비어있었다(→ getDoc 왕복이 매번 발생, 삭제/수정
+  // 지연의 원인). useRef로 바꾸면 렌더와 무관하게 항상 같은 객체를 참조해
+  // onSnapshot이 채워둔 최신 값을 그대로 볼 수 있다.
+  const ordersCacheRef = React.useRef([]);
+  const dispatchCacheRef = React.useRef([]);
   // ⚡ localStorage 저장은 오프라인 캐시 용도일 뿐 화면 표시와 무관하므로,
   //    쓰기 한 번마다 전체 목록을 동기적으로 JSON.stringify + localStorage.setItem 하면
   //    (특히 orders 컬렉션이 커질수록) 저장 직후 메인스레드가 블로킹되어 "끊김"의 주 원인이 된다.
@@ -2883,9 +2891,9 @@ const liveWindowStart = getMonthsAgoKST(13);
         !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태)
       );
 
-      ordersCache = filteredArr;
+      ordersCacheRef.current = filteredArr;
       React.startTransition(() => {
-        setDispatchData([...ordersCache, ...dispatchCache]);
+        setDispatchData([...ordersCacheRef.current, ...dispatchCacheRef.current]);
       });
       scheduleDispatchSave(filteredArr);
 
@@ -3072,11 +3080,11 @@ const liveWindowStart = getMonthsAgoKST(13);
       const arr2 = Array.from(dispatchRowMap.values());
 
       // 배차상태가 "배차취소"인 오더는 화주사의 "배차취소" 목록에만 남아야 하므로 제외한다.
-      dispatchCache = arr2.filter(row =>
+      dispatchCacheRef.current = arr2.filter(row =>
         row.배차상태 !== "배차취소" && !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태)
       );
       React.startTransition(() => {
-        setDispatchData([...ordersCache, ...dispatchCache]);
+        setDispatchData([...ordersCacheRef.current, ...dispatchCacheRef.current]);
       });
       scheduleDispatchSave(arr2);
 
@@ -3372,7 +3380,7 @@ const patchDispatch = async (_id, patch, knownPrev) => {
   // 팝업, 오더복사/수정 패널 등) knownPrev로 넘겨주면, 오더가 많은 회사에서 실시간
   // 캐시가 아직 그 문서를 못 담고 있는 드문 순간에도 getDoc 왕복 없이 바로 저장한다 —
   // 실사이트에서 "저장이 지연되고 있습니다" 타임아웃까지 걸리던 지연의 유력한 원인.
-  const cached = knownPrev || ordersCache.find(d => d._id === _id) || dispatchCache.find(d => d._id === _id);
+  const cached = knownPrev || ordersCacheRef.current.find(d => d._id === _id) || dispatchCacheRef.current.find(d => d._id === _id);
 
   let ref, prev;
   if (cached) {
@@ -3659,7 +3667,7 @@ const removeDispatch = async (arg) => {
   // ★ 메모리 캐시에서 먼저 찾기 (patchDispatch와 동일한 이유 — getDoc 왕복을 건너뛰어
   //   여러 건 선택삭제 시 순번대로 네트워크 왕복이 쌓여 버벅이던 지연을 줄인다.
   //   배열을 매번 새로 합치지 않고 각 캐시에서 순서대로 찾는다.)
-  const cached = ordersCache.find(d => d._id === id) || dispatchCache.find(d => d._id === id);
+  const cached = ordersCacheRef.current.find(d => d._id === id) || dispatchCacheRef.current.find(d => d._id === id);
   let ref, data;
   if (cached) {
     ref = doc(db, cached.__col || "dispatch", id);
@@ -24979,6 +24987,49 @@ if (sortKey) {
       return withStops;
     });
   }, [rows, q, sortKey, sortDir, dayMode, statusFilter, filterErrorIds, filterConditions]);
+
+  // ⭐ 행 순서가 바뀔 때(수정으로 배차상태가 바뀌어 위/아래로 옮겨가는 등) 그냥
+  // React가 새 순서로 다시 그려서 "뚝뚝 끊기며 순간이동"하던 것을, FLIP 기법으로
+  // 이전 화면 위치 → 새 위치까지 부드럽게 슬라이드해 보이도록 한다. 실제 DOM
+  // 순서는 이미 바뀐 상태에서, 각 행에 "방금 있던 자리"만큼 반대로 밀어둔 뒤
+  // 다음 프레임에 transition으로 제자리(0)까지 되돌리는 방식이라 레이아웃 계산은
+  // 그대로 두고 시각 효과만 추가한다 — 실패해도(엘리먼트를 못 찾는 등) 애니메이션만
+  // 생략될 뿐 기능에는 전혀 영향 없다.
+  const rowPositionsRef = React.useRef(new Map()); // id -> 직전 렌더의 화면상 top(px)
+  const rowOrderKey = React.useMemo(() => filtered.map(r => r._id).join(","), [filtered]);
+  React.useLayoutEffect(() => {
+    const prevPositions = rowPositionsRef.current;
+    const nextPositions = new Map();
+    let animatedCount = 0;
+    try {
+      filtered.forEach((r) => {
+        const el = document.getElementById(`row-${r._id}`);
+        if (!el) return;
+        const top = el.getBoundingClientRect().top;
+        nextPositions.set(r._id, top);
+        const prevTop = prevPositions.get(r._id);
+        if (prevTop != null && Math.abs(prevTop - top) > 2 && animatedCount < 80) {
+          const dy = prevTop - top;
+          el.style.transition = "none";
+          el.style.transform = `translateY(${dy}px)`;
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              el.style.transition = "transform 420ms cubic-bezier(0.22, 1, 0.36, 1)";
+              el.style.transform = "";
+              // ⭐ 여기서 inline transition을 계속 남겨두면(원래 className이 갖고 있던
+              // background-color/opacity 트랜지션을 인라인 style이 덮어써서) 삭제
+              // 페이드아웃/하이라이트 배경전환이 조용히 멈춰버린다 — 애니메이션이
+              // 끝나면 인라인 transition을 지워 className의 트랜지션으로 되돌린다.
+              setTimeout(() => { if (el.style.transform === "") el.style.transition = ""; }, 440);
+            });
+          });
+          animatedCount++;
+        }
+      });
+    } catch {}
+    rowPositionsRef.current = nextPositions;
+  }, [rowOrderKey]);
+
   // 화면에 보이는 순서상 그 상/하차지명이 처음 등장하는 행의 _id만 모아둔다 —
   // 같은 업체가 여러 건이어도 휴게(점심시간) 아이콘이 첫 행에만 뜨게 하기 위함
   // (RestCell의 isFirst prop으로 전달, 겹침 경고는 이 dedup과 무관하게 항상 표시).
@@ -32100,13 +32151,14 @@ setConfirmChange(null);
   }
 
 @keyframes highlightFade {
-    0%   { background-color: rgba(27, 43, 75, 0.13); }
-    100% { background-color: transparent; }
+    0%   { background-color: rgba(27, 43, 75, 0.13); box-shadow: inset 3px 0 0 0 #3b82f6, 0 0 16px 1px rgba(59,130,246,0.35); }
+    70%  { background-color: rgba(59, 130, 246, 0.10); box-shadow: inset 3px 0 0 0 #3b82f6, 0 0 10px 1px rgba(59,130,246,0.18); }
+    100% { background-color: transparent; box-shadow: inset 3px 0 0 0 transparent, 0 0 0 0 rgba(59,130,246,0); }
   }
 
   .row-highlight {
-    animation: highlightFade 2.5s ease-out forwards !important;
-    will-change: background-color;
+    animation: highlightFade 1.1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    will-change: background-color, box-shadow;
   }
 `}</style>
 
