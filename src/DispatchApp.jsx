@@ -4284,6 +4284,13 @@ function fmtDispatchTime(v, gubun) {
     const base = `${isAM ? "오전" : "오후"} ${h12}시${m > 0 ? ` ${m}분` : ""}`;
     return gubun && gubun !== "정각" ? `${base} ${gubun}` : base;
   }
+  // ⭐ 실제 배차관리 등록폼(TimeAmPmPicker)은 상차시간을 "HH:MM"이 아니라
+  // "오전 9시"/"오후 3시 30분" 형식 그대로 저장한다 — 예전엔 위 정규식에 안 걸려서
+  // 그냥 raw만 돌려주고 이전/이후(gubun)를 붙이지 않았다. 이미 문자열 안에 들어있지
+  // 않을 때만(중복 방지) 뒤에 붙여준다.
+  if (gubun && gubun !== "정각" && !raw.includes(gubun)) {
+    return `${raw} ${gubun}`;
+  }
   return raw; // 이미 운송프로그램 형식으로 저장된 값
 }
 // ================================
