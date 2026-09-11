@@ -7214,46 +7214,61 @@ function MobileEstimateModal({ orders = [], userCompany = "", onClose }) {
 
           {/* 표 — 화면 폭에 맞춰 칸이 절대 겹치거나 벗어나지 않도록, 켜진 금액 컬럼 수(0/1/2개)에
               따라 나머지 컬럼 너비를 다시 배분한다.
-              ⚠️ 이전 버전은 td에 break-words만 주고 끝냈는데, table-layout:fixed는 "칸 너비"만
-              고정할 뿐 내용이 넘칠 때 잘라주지는 않아서 — 공백 없이 긴 상호명(예: "굿모닝패밀리
-              마트")이 줄바꿈되며 셀 높이가 늘어나는 대신 옆 칸/아래 행 위로 겹쳐 보이는 문제가
-              있었다. 노선/화물내용처럼 길어질 수 있는 칸은 안에 -webkit-line-clamp로 최대 2줄까지만
-              박스를 만들고(그 이상은 …로 자름) overflow:hidden까지 걸어, 어떤 텍스트가 와도 절대
-              그 칸의 사각형 밖으로 나가지 못하게 물리적으로 막는다. */}
+              ⚠️ 이전 버전은 노선/화물내용처럼 길어질 수 있는 칸에 -webkit-line-clamp로 최대 2줄까지만
+              보여주고 그 이상은 …로 잘라버렸는데, 이러면 이미지로 저장/공유할 때도 실제 내용(예: 긴
+              장소명)이 통째로 잘려 보이는 문제가 있었다 — 화면 미리보기에서만 살짝 잘려 보이는 건
+              괜찮지만, 저장되는 이미지에는 내용이 짤림없이 전부 나와야 한다(PC 스케줄표와 동일).
+              그래서 line-clamp/overflow:hidden을 걷어내고 break-all로 긴 텍스트가 셀 너비 안에서
+              자연스럽게 줄바꿈되며 행 높이가 늘어나도록 했다 — table-layout:fixed라 칸 너비는
+              고정된 채로, 내용이 길면 셀/행이 아래로 길어질 뿐 옆 칸을 침범하지 않는다. */}
           <div className="px-3 pt-3 pb-1">
             <table className="w-full border-collapse table-fixed">
               <thead>
                 <tr className="bg-[#1B2B4B]/[0.06]">
-                  <th className="border border-gray-200 py-2 px-0.5 text-[10px] font-bold text-[#1B2B4B] break-words" style={{ width: amtColCount ? "13%" : "16%" }}>날짜</th>
-                  <th className="border border-gray-200 py-2 px-0.5 text-[10px] font-bold text-[#1B2B4B] break-words" style={{ width: amtColCount === 2 ? "30%" : amtColCount === 1 ? "37%" : "46%" }}>노선</th>
-                  <th className="border border-gray-200 py-2 px-0.5 text-[10px] font-bold text-[#1B2B4B] break-words" style={{ width: amtColCount === 2 ? "18%" : amtColCount === 1 ? "22%" : "38%" }}>화물내용</th>
+                  <th className="border border-gray-200 py-2 px-0.5 text-[10px] font-bold text-[#1B2B4B] break-words" style={{ width: amtColCount === 2 ? "11%" : amtColCount === 1 ? "12%" : "14%" }}>날짜</th>
+                  <th className="border border-gray-200 py-2 px-0.5 text-[10px] font-bold text-[#1B2B4B] break-words" style={{ width: amtColCount === 2 ? "22%" : amtColCount === 1 ? "26%" : "34%" }}>노선</th>
+                  <th className="border border-gray-200 py-2 px-0.5 text-[10px] font-bold text-[#1B2B4B] break-words" style={{ width: amtColCount === 2 ? "14%" : amtColCount === 1 ? "16%" : "24%" }}>화물내용</th>
+                  <th className="border border-gray-200 py-2 px-0.5 text-[10px] font-bold text-[#1B2B4B] break-words" style={{ width: amtColCount === 2 ? "17%" : amtColCount === 1 ? "20%" : "28%" }}>기사정보</th>
                   {supplyOn && (
-                    <th className="border border-gray-200 py-2 px-0.5 text-[10px] font-bold text-[#1B2B4B] break-words" style={{ width: amtColCount === 2 ? "19.5%" : "28%" }}>공급가액</th>
+                    <th className="border border-gray-200 py-2 px-0.5 text-[10px] font-bold text-[#1B2B4B] break-words" style={{ width: amtColCount === 2 ? "18%" : "26%" }}>공급가액</th>
                   )}
                   {vatOn && (
-                    <th className="border border-gray-200 py-2 px-0.5 text-[10px] font-bold text-[#1B2B4B] break-words" style={{ width: amtColCount === 2 ? "19.5%" : "28%" }}>부가세포함</th>
+                    <th className="border border-gray-200 py-2 px-0.5 text-[10px] font-bold text-[#1B2B4B] break-words" style={{ width: amtColCount === 2 ? "18%" : "26%" }}>부가세포함</th>
                   )}
                 </tr>
               </thead>
               <tbody>
                 {sortedOrders.map((o, i) => {
                   const fare = Number(o.청구운임) || 0;
+                  const driverCar = (o.차량번호 || "").trim();
+                  const driverName = (o.이름 || o.기사명 || "").trim();
+                  const driverPhone = formatPhone(o.전화번호 || "");
+                  const hasDriverInfo = driverCar || driverName || driverPhone;
                   return (
                     <tr key={o.id || o._id || i} className={i % 2 === 1 ? "bg-gray-50" : "bg-white"}>
                       <td className="border border-gray-200 px-0.5 py-2 text-[10px] text-center text-gray-700 align-middle">
-                        <div className="break-words" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                        <div className="break-words" style={{ wordBreak: "break-all" }}>
                           {fmtDate(o.상차일)}
                         </div>
                       </td>
                       <td className="border border-gray-200 px-1 py-2 text-[10.5px] text-center text-gray-800 font-medium align-middle">
-                        <div className="break-words" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                        <div className="break-words" style={{ wordBreak: "break-all" }}>
                           {o.상차지명 || "-"}<span className="text-gray-400 mx-0.5">→</span>{o.하차지명 || "-"}
                         </div>
                       </td>
                       <td className="border border-gray-200 px-0.5 py-2 text-[10px] text-center text-gray-600 align-middle">
-                        <div className="break-words" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                        <div className="break-words" style={{ wordBreak: "break-all" }}>
                           {o.화물내용 || "-"}
                         </div>
+                      </td>
+                      <td className="border border-gray-200 px-0.5 py-2 text-[10px] text-center text-gray-600 align-middle">
+                        {hasDriverInfo ? (
+                          <div className="break-words leading-tight" style={{ wordBreak: "break-all" }}>
+                            {driverCar && <div className="font-semibold text-gray-800">{driverCar}</div>}
+                            {driverName && <div>{driverName}</div>}
+                            {driverPhone && <div className="text-gray-500">{driverPhone}</div>}
+                          </div>
+                        ) : "-"}
                       </td>
                       {supplyOn && (
                         <td className="border border-gray-200 px-0.5 py-2 text-[10.5px] text-center text-gray-800 font-semibold break-words align-middle">{fare.toLocaleString()}</td>
