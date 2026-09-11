@@ -66,38 +66,6 @@ const tomorrowLocal = () => {
 
 const fmtMoney = (v) => `${(Number(v) || 0).toLocaleString("ko-KR")}원`;
 
-// 숫자를 한글 금액으로 — 홈 화면 "오늘 매출"용(예: 15,000,000 → "천오백만원").
-// 억/만 단위로 4자리씩 끊어 각 그룹을 한글로 읽고, 그룹 맨 앞자리가 1이면
-// (일천/일백/일십처럼) 일상적으로 "일"을 생략하는 관용적 표기를 따른다.
-const KOR_DIGITS = ["", "일", "이", "삼", "사", "오", "육", "칠", "팔", "구"];
-const KOR_SMALL_UNITS = ["", "십", "백", "천"];
-const KOR_BIG_UNITS = ["", "만", "억", "조"];
-const fourDigitToKorean = (n) => {
-  const s = String(n).padStart(4, "0");
-  let out = "";
-  for (let i = 0; i < 4; i++) {
-    const d = Number(s[i]);
-    if (d === 0) continue;
-    const unit = KOR_SMALL_UNITS[3 - i];
-    out += d === 1 && unit ? unit : KOR_DIGITS[d] + unit;
-  }
-  return out;
-};
-const numberToKorean = (num) => {
-  const n0 = Math.round(Math.abs(Number(num) || 0));
-  if (n0 === 0) return "0";
-  const groups = [];
-  let n = n0;
-  while (n > 0) { groups.push(n % 10000); n = Math.floor(n / 10000); }
-  let out = "";
-  for (let i = groups.length - 1; i >= 0; i--) {
-    if (groups[i] === 0) continue;
-    out += fourDigitToKorean(groups[i]) + KOR_BIG_UNITS[i];
-  }
-  return out || "0";
-};
-const fmtKoreanWon = (v) => `${numberToKorean(v)}원`;
-
 const onlyDigits = (v = "") => String(v).replace(/[^\d]/g, "");
 
 const normalizeText = (s = "") => String(s).toLowerCase().replace(/\s+/g, "");
@@ -171,6 +139,24 @@ function DirBadge({ dir }) {
     >
       {dir}
     </span>
+  );
+}
+
+// 배차상세에서 상차 정보/하차 정보를 한눈에 구분되게 묶는 섹션 — DirBadge와
+// 동일한 색(파랑=상, 회색=하)의 왼쪽 띠 + 작은 제목으로 그룹을 표시한다.
+function InfoSection({ dir, title, children }) {
+  const isPickup = dir === "상";
+  return (
+    <div
+      className="pl-3 mb-4 border-l-4 rounded-sm"
+      style={{ borderColor: isPickup ? "#3b82f6" : "#6b7280" }}
+    >
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <DirBadge dir={dir} />
+        <span className="text-sm font-extrabold text-gray-500">{title}</span>
+      </div>
+      <div className="flex flex-col">{children}</div>
+    </div>
   );
 }
 
@@ -554,11 +540,13 @@ function OrderCard({ order, onClick, variant, onOpenFare }) {
       <ExpandableMemo text={order.메모} />
       {hasCar && (
         <div className="mt-2 text-base text-gray-600 font-semibold inline-flex items-center gap-1 flex-wrap">
-          {/* ⭐ 전화번호는 최대한 이름 옆에 가로로 붙여서 보여주되, 화면이 좁아 한
-              줄에 다 안 들어가면(flex-wrap) 잘리는 대신 자동으로 다음 줄로 넘어간다.
-              아이콘 하나 뺀 만큼 한 줄에 들어갈 여유가 더 생긴다. */}
           <Truck className="w-4 h-4 shrink-0" /> {order.차량번호} · {driverName}
-          {(order.전화번호 || order.전화) && <> · {order.전화번호 || order.전화}</>}
+          {(order.전화번호 || order.전화) && (
+            <span className="inline-flex items-center gap-1">
+              <span className="text-gray-300">·</span>
+              <Phone className="w-4 h-4 shrink-0" /> {order.전화번호 || order.전화}
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -624,7 +612,7 @@ function HomeScreen({ unassignedCount, todayRevenue, todayOrderCount, onNavigate
             다시 계산된다(부모의 1분 간격 날짜 체크 참고). 한 줄 안에서 벗어나지
             않도록 각 값은 shrink/truncate로 보호한다. */}
         <div className="mt-2 bg-white/10 rounded-2xl px-4 py-3 flex items-center justify-between gap-2">
-          <span className="text-white/90 text-base font-bold truncate">
+          <span className="text-white/90 text-base font-bold truncate min-w-0">
             오늘 매출 <span className="text-white font-extrabold">{todayRevenue}</span>
           </span>
           <span className="text-white/90 text-base font-bold shrink-0">
@@ -1103,18 +1091,31 @@ function OrderDetailSheet({ order, onClose, onOpenFare, onEdit }) {
             </button>
           </div>
         </div>
-        <div className="flex flex-col gap-3 text-lg">
-          <Row label="거래처명" value={order.거래처명} />
+        {order.거래처명 && (
+          <div className="text-lg font-bold text-gray-500 mb-4">{order.거래처명}</div>
+        )}
+        {/* ⭐ 상차/하차 정보를 각각 색 있는 왼쪽 띠 + 굵은 구분선으로 묶어서, 어디까지가
+            상차 정보고 어디부터가 하차 정보인지 한눈에 구분되게 했다(상=파랑, 하=회색 —
+            카드의 DirBadge 색상과 동일하게 맞춤). */}
+        <InfoSection dir="상" title="상차 정보">
           <Row label="상차지" value={order.상차지명} />
-          <Row label="상차지 주소" value={order.상차지주소} />
+          <Row label="상차주소" value={order.상차지주소} />
           <Row label="상차일" value={getPickupDate(order)} highlight />
           <Row label="상차시간" value={fmtOrderTime(order.상차시간, order.상차시간기준)} />
           <Row label="상차방법" value={order.상차방법} />
+        </InfoSection>
+
+        <InfoSection dir="하" title="하차 정보">
           <Row label="하차지" value={order.하차지명} />
-          <Row label="하차지 주소" value={order.하차지주소} />
+          <Row label="하차주소" value={order.하차지주소} />
           <Row label="하차일" value={String(order.하차일 || "").slice(0, 10)} />
           <Row label="하차시간" value={fmtOrderTime(order.하차시간, order.하차시간기준)} />
           <Row label="하차방법" value={order.하차방법} />
+        </InfoSection>
+
+        <div className="border-t-2 border-gray-100 my-4" />
+
+        <div className="flex flex-col gap-3 text-lg">
           <Row label="화물내용" value={order.화물내용} />
           <Row label="차량종류" value={order.차량종류} />
           <Row label="톤수" value={order.차량톤수 || order.톤수} />
@@ -1159,10 +1160,15 @@ function OrderDetailSheet({ order, onClose, onOpenFare, onEdit }) {
 
 // highlight=true(상차일)면 눈에 띄게 굵고 빨간 글씨로 강조한다.
 function Row({ label, value, highlight }) {
+  // ⭐ 라벨(상차주소 등)은 값이 길어 줄바꿈돼도 절대 함께 깨지지 않게
+  // shrink-0 + whitespace-nowrap으로 고정하고, 값 쪽만 여러 줄로 자연스럽게
+  // 넘어가도록 한다("상차지\n주소"처럼 라벨 글자가 쪼개져 보이던 문제 수정).
   return (
-    <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-      <span className={highlight ? "font-extrabold text-red-600" : "text-gray-400 font-semibold"}>{label}</span>
-      <span className={`text-right ${highlight ? "font-extrabold text-red-600 text-xl" : "font-bold text-gray-900"}`}>
+    <div className="flex items-start justify-between gap-3 border-b border-gray-100 py-2">
+      <span className={`shrink-0 whitespace-nowrap ${highlight ? "font-extrabold text-red-600" : "text-gray-400 font-semibold"}`}>
+        {label}
+      </span>
+      <span className={`text-right break-words ${highlight ? "font-extrabold text-red-600 text-xl" : "font-bold text-gray-900"}`}>
         {value || "-"}
       </span>
     </div>
@@ -1856,7 +1862,7 @@ export default function MobileEasyMode({
           easyScale={easyScale}
           onChangeEasyScale={onChangeEasyScale}
           unassignedCount={todayUnassignedCount}
-          todayRevenue={fmtKoreanWon(todayStats.revenue)}
+          todayRevenue={fmtMoney(todayStats.revenue)}
           todayOrderCount={todayStats.count}
           onNavigate={setScreen}
           onExitEasyMode={onExitEasyMode}
