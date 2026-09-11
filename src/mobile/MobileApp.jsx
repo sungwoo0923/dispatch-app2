@@ -4244,6 +4244,64 @@ const deleteSingleOrder = async (order) => {
     }
   };
 
+  // ⭐ 쉬운모드 "배차 수정" — 배차상태/차량번호(기사배정)는 건드리지 않고
+  // 오더 내용(상/하차지, 일시, 화물, 운임 등)만 patch한다.
+  const easyModeUpdateOrder = async (order, simple) => {
+    if (role === "viewer") {
+      return { ok: false, error: "조회전용 권한으로는 수정할 수 없습니다." };
+    }
+    if (!order) return { ok: false, error: "오더 정보가 없습니다." };
+    if (!simple?.상차지명 || !simple?.하차지명) {
+      return { ok: false, error: "상차지 / 하차지는 필수입니다." };
+    }
+    const 상차일 = simple.상차일 || todayKST();
+    const 하차일 = simple.하차일 || 상차일;
+    if (isReversedDateOrder(상차일, 하차일)) {
+      return { ok: false, error: REVERSED_DATE_ORDER_MSG };
+    }
+    const 청구운임 = toNumber(simple.청구운임);
+    const 기사운임 = toNumber(simple.기사운임);
+    try {
+      const colName = order.__col || collName;
+      const docId = order._id || order.id;
+      await updateDoc(doc(db, colName, docId), {
+        거래처명: simple.거래처명 || "",
+        상차지명: simple.상차지명,
+        상차지주소: simple.상차지주소 || "",
+        상차지담당자: simple.상차지담당자 || "",
+        상차지담당자번호: simple.상차지담당자번호 || "",
+        하차지명: simple.하차지명,
+        하차지주소: simple.하차지주소 || "",
+        하차지담당자: simple.하차지담당자 || "",
+        하차지담당자번호: simple.하차지담당자번호 || "",
+        화물내용: simple.화물내용 || "",
+        차량종류: simple.차량종류 || "",
+        차량톤수: toTonUnit(simple.톤수) || "",
+        상차방법: simple.상차방법 || "",
+        하차방법: simple.하차방법 || "",
+        상차일,
+        상차시간: simple.상차시간 || "",
+        상차시간기준: simple.상차시간기준 || null,
+        하차일,
+        하차시간: simple.하차시간 || "",
+        하차시간기준: simple.하차시간기준 || null,
+        지급방식: simple.지급방식 || "",
+        배차방식: simple.배차방식 || "",
+        청구운임,
+        기사운임,
+        수수료: 청구운임 - 기사운임,
+        updatedAt: serverTimestamp(),
+        _lastModified: Date.now(),
+      });
+      await syncPlaceFromOrder(simple);
+      showSuccess("수정 완료");
+      return { ok: true };
+    } catch (e) {
+      console.error("배차 수정 오류:", e);
+      return { ok: false, error: e?.message || "수정 실패" };
+    }
+  };
+
   if (easyMode) {
     return (
       <MobileEasyMode
@@ -4257,6 +4315,7 @@ const deleteSingleOrder = async (order) => {
         role={role}
         onExitEasyMode={() => { setEasyMode(false); localStorage.setItem("easyMode", "0"); }}
         onSubmitRegister={easyModeSubmitRegister}
+        onSubmitEdit={easyModeUpdateOrder}
         onAssignVehicle={easyModeAssignVehicle}
         showToast={showToast}
         showSuccess={showSuccess}

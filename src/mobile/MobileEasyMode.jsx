@@ -66,6 +66,38 @@ const tomorrowLocal = () => {
 
 const fmtMoney = (v) => `${(Number(v) || 0).toLocaleString("ko-KR")}원`;
 
+// 숫자를 한글 금액으로 — 홈 화면 "오늘 매출"용(예: 15,000,000 → "천오백만원").
+// 억/만 단위로 4자리씩 끊어 각 그룹을 한글로 읽고, 그룹 맨 앞자리가 1이면
+// (일천/일백/일십처럼) 일상적으로 "일"을 생략하는 관용적 표기를 따른다.
+const KOR_DIGITS = ["", "일", "이", "삼", "사", "오", "육", "칠", "팔", "구"];
+const KOR_SMALL_UNITS = ["", "십", "백", "천"];
+const KOR_BIG_UNITS = ["", "만", "억", "조"];
+const fourDigitToKorean = (n) => {
+  const s = String(n).padStart(4, "0");
+  let out = "";
+  for (let i = 0; i < 4; i++) {
+    const d = Number(s[i]);
+    if (d === 0) continue;
+    const unit = KOR_SMALL_UNITS[3 - i];
+    out += d === 1 && unit ? unit : KOR_DIGITS[d] + unit;
+  }
+  return out;
+};
+const numberToKorean = (num) => {
+  const n0 = Math.round(Math.abs(Number(num) || 0));
+  if (n0 === 0) return "0";
+  const groups = [];
+  let n = n0;
+  while (n > 0) { groups.push(n % 10000); n = Math.floor(n / 10000); }
+  let out = "";
+  for (let i = groups.length - 1; i >= 0; i--) {
+    if (groups[i] === 0) continue;
+    out += fourDigitToKorean(groups[i]) + KOR_BIG_UNITS[i];
+  }
+  return out || "0";
+};
+const fmtKoreanWon = (v) => `${numberToKorean(v)}원`;
+
 const onlyDigits = (v = "") => String(v).replace(/[^\d]/g, "");
 
 const normalizeText = (s = "") => String(s).toLowerCase().replace(/\s+/g, "");
@@ -84,6 +116,13 @@ const fmtDateHeader = (dateStr, todayStr, tomorrowStr) => {
   const parts = dateStr.split("-");
   if (parts.length !== 3) return dateStr;
   return `${Number(parts[1])}/${Number(parts[2])}${tag}`;
+};
+
+// 상/하차 시간 표시 — 시간을 아예 선택 안 했으면 "즉시", 선택했으면
+// "오전 9시" 또는 "오전 9시 이전"처럼 시간기준까지 붙여 보여준다.
+const fmtOrderTime = (time, basis) => {
+  if (!time) return "즉시";
+  return basis ? `${time} ${basis}` : time;
 };
 
 const buildHalfHourTimes = () => {
@@ -414,6 +453,30 @@ function ContactPickerModal({ contacts, onSelect, onClose }) {
   );
 }
 
+// 메모가 길어도 카드 밖으로 넘치지 않게 한 줄로 줄이고, "더보기"를 누르면
+// 그 자리에서 펼쳐서 전체를 보여준다(다른 화면으로 이동하지 않음).
+function ExpandableMemo({ text }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!text) return null;
+  const isLong = text.length > 22;
+  return (
+    <div className="mt-1.5 flex items-start gap-1 text-base text-gray-500 font-semibold min-w-0">
+      <StickyNote className="w-4 h-4 shrink-0 mt-0.5" />
+      <span className={expanded ? "break-words" : "truncate"}>{text}</span>
+      {isLong && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
+          className="shrink-0 text-sm font-bold underline"
+          style={{ color: NAVY }}
+        >
+          {expanded ? "접기" : "더보기"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function OrderCard({ order, onClick, variant, onOpenFare }) {
   const hasCar = !!String(order.차량번호 || "").trim();
   // ⭐ 기사명 필드 — PC/일반모바일은 항상 "이름"에 저장한다("기사명"은 쉬운모드
@@ -448,13 +511,19 @@ function OrderCard({ order, onClick, variant, onOpenFare }) {
         <div className="text-base font-bold text-gray-500 mb-1 truncate">{order.거래처명}</div>
       )}
       <div className="flex flex-col gap-1 mb-1">
-        <div className="flex items-center gap-1.5 text-xl font-extrabold text-gray-900 leading-snug break-keep">
+        <div className="flex items-center gap-1.5 text-xl font-extrabold text-gray-900 leading-snug break-keep flex-wrap">
           <DirBadge dir="상" />
           <span>{order.상차지명 || "-"}</span>
+          <span className="text-sm font-bold text-gray-400">
+            {fmtOrderTime(order.상차시간, order.상차시간기준)}
+          </span>
         </div>
-        <div className="flex items-center gap-1.5 text-xl font-extrabold text-gray-900 leading-snug break-keep">
+        <div className="flex items-center gap-1.5 text-xl font-extrabold text-gray-900 leading-snug break-keep flex-wrap">
           <DirBadge dir="하" />
           <span>{order.하차지명 || "-"}</span>
+          <span className="text-sm font-bold text-gray-400">
+            {fmtOrderTime(order.하차시간, order.하차시간기준)}
+          </span>
         </div>
       </div>
       <div className="flex items-center justify-between mt-3">
@@ -467,7 +536,7 @@ function OrderCard({ order, onClick, variant, onOpenFare }) {
       </div>
       {/* ⭐ 차량종류(냉장/냉동 여부)·톤수는 배차현황/미배차현황 어디서든 항상 보여야
           한다 — 예전엔 미배차현황(variant="unassigned")에서만 보였다. */}
-      {(order.차량종류 || order.차량톤수 || order.톤수 || order.메모) && (
+      {(order.차량종류 || order.차량톤수 || order.톤수) && (
         <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-base text-gray-900 font-bold">
           {order.차량종류 && (
             <span className="inline-flex items-center gap-1">
@@ -479,22 +548,17 @@ function OrderCard({ order, onClick, variant, onOpenFare }) {
               <Scale className="w-4 h-4 text-gray-500 shrink-0" /> {order.차량톤수 || order.톤수}
             </span>
           )}
-          {order.메모 && (
-            <span className="text-gray-500 font-semibold truncate inline-flex items-center gap-1">
-              <StickyNote className="w-4 h-4 shrink-0" /> {order.메모}
-            </span>
-          )}
         </div>
       )}
+      {/* ⭐ 메모가 길어도 카드 밖으로 넘치지 않게 한 줄로 줄이고 "더보기"로 펼친다. */}
+      <ExpandableMemo text={order.메모} />
       {hasCar && (
         <div className="mt-2 text-base text-gray-600 font-semibold inline-flex items-center gap-1 flex-wrap">
+          {/* ⭐ 전화번호는 최대한 이름 옆에 가로로 붙여서 보여주되, 화면이 좁아 한
+              줄에 다 안 들어가면(flex-wrap) 잘리는 대신 자동으로 다음 줄로 넘어간다.
+              아이콘 하나 뺀 만큼 한 줄에 들어갈 여유가 더 생긴다. */}
           <Truck className="w-4 h-4 shrink-0" /> {order.차량번호} · {driverName}
-          {(order.전화번호 || order.전화) && (
-            <span className="inline-flex items-center gap-1">
-              <span className="text-gray-300">·</span>
-              <Phone className="w-4 h-4 shrink-0" /> {order.전화번호 || order.전화}
-            </span>
-          )}
+          {(order.전화번호 || order.전화) && <> · {order.전화번호 || order.전화}</>}
         </div>
       )}
     </div>
@@ -504,7 +568,7 @@ function OrderCard({ order, onClick, variant, onOpenFare }) {
 // ==================================================================
 // 홈 화면
 // ==================================================================
-function HomeScreen({ unassignedCount, onNavigate, onExitEasyMode, onLogout, easyScale, onChangeEasyScale }) {
+function HomeScreen({ unassignedCount, todayRevenue, todayOrderCount, onNavigate, onExitEasyMode, onLogout, easyScale, onChangeEasyScale }) {
   return (
     <div className="flex-1 flex flex-col">
       <div
@@ -556,6 +620,17 @@ function HomeScreen({ unassignedCount, onNavigate, onExitEasyMode, onLogout, eas
             오늘 미배차 {unassignedCount}건
           </span>
         </div>
+        {/* ⭐ 자정이 지나면 today가 바뀌면서 이 값들도 자동으로 새 날짜 기준으로
+            다시 계산된다(부모의 1분 간격 날짜 체크 참고). 한 줄 안에서 벗어나지
+            않도록 각 값은 shrink/truncate로 보호한다. */}
+        <div className="mt-2 bg-white/10 rounded-2xl px-4 py-3 flex items-center justify-between gap-2">
+          <span className="text-white/90 text-base font-bold truncate">
+            오늘 매출 <span className="text-white font-extrabold">{todayRevenue}</span>
+          </span>
+          <span className="text-white/90 text-base font-bold shrink-0">
+            오늘 거래량 <span className="text-white font-extrabold">{todayOrderCount}건</span>
+          </span>
+        </div>
       </div>
 
       <div className="flex-1 px-5 py-6 flex flex-col gap-4" style={{ backgroundColor: "#F4F6F9" }}>
@@ -591,31 +666,32 @@ function HomeScreen({ unassignedCount, onNavigate, onExitEasyMode, onLogout, eas
 // ==================================================================
 // 배차등록 화면
 // ==================================================================
-function RegisterScreen({ clients, places, role, onSubmitRegister, onBack, onDone }) {
-  const [거래처명, set거래처명] = useState("");
-  const [상차지명, set상차지명] = useState("");
-  const [상차지주소, set상차지주소] = useState("");
-  const [상차지담당자, set상차지담당자] = useState("");
-  const [상차지담당자번호, set상차지담당자번호] = useState("");
-  const [하차지명, set하차지명] = useState("");
-  const [하차지주소, set하차지주소] = useState("");
-  const [하차지담당자, set하차지담당자] = useState("");
-  const [하차지담당자번호, set하차지담당자번호] = useState("");
-  const [상차일, set상차일] = useState(todayLocal());
-  const [상차시간, set상차시간] = useState("");
-  const [상차시간기준, set상차시간기준] = useState(null);
-  const [하차일, set하차일] = useState(todayLocal());
-  const [하차시간, set하차시간] = useState("");
-  const [하차시간기준, set하차시간기준] = useState(null);
-  const [상차방법, set상차방법] = useState("");
-  const [하차방법, set하차방법] = useState("");
-  const [지급방식, set지급방식] = useState("");
-  const [배차방식, set배차방식] = useState("");
-  const [화물내용, set화물내용] = useState("");
-  const [차량종류, set차량종류] = useState("");
-  const [톤수, set톤수] = useState("");
-  const [청구운임Digits, set청구운임Digits] = useState("");
-  const [기사운임Digits, set기사운임Digits] = useState("");
+function RegisterScreen({ clients, places, role, onSubmitRegister, onBack, onDone, initialOrder = null, title = "배차등록", submitLabel = "등록하기", doneText = "등록 완료" }) {
+  const io = initialOrder || {};
+  const [거래처명, set거래처명] = useState(io.거래처명 || "");
+  const [상차지명, set상차지명] = useState(io.상차지명 || "");
+  const [상차지주소, set상차지주소] = useState(io.상차지주소 || "");
+  const [상차지담당자, set상차지담당자] = useState(io.상차지담당자 || "");
+  const [상차지담당자번호, set상차지담당자번호] = useState(io.상차지담당자번호 || "");
+  const [하차지명, set하차지명] = useState(io.하차지명 || "");
+  const [하차지주소, set하차지주소] = useState(io.하차지주소 || "");
+  const [하차지담당자, set하차지담당자] = useState(io.하차지담당자 || "");
+  const [하차지담당자번호, set하차지담당자번호] = useState(io.하차지담당자번호 || "");
+  const [상차일, set상차일] = useState(() => getPickupDate(io) || todayLocal());
+  const [상차시간, set상차시간] = useState(io.상차시간 || "");
+  const [상차시간기준, set상차시간기준] = useState(io.상차시간기준 || null);
+  const [하차일, set하차일] = useState(() => String(io.하차일 || "").slice(0, 10) || todayLocal());
+  const [하차시간, set하차시간] = useState(io.하차시간 || "");
+  const [하차시간기준, set하차시간기준] = useState(io.하차시간기준 || null);
+  const [상차방법, set상차방법] = useState(io.상차방법 || "");
+  const [하차방법, set하차방법] = useState(io.하차방법 || "");
+  const [지급방식, set지급방식] = useState(io.지급방식 || "");
+  const [배차방식, set배차방식] = useState(io.배차방식 || "");
+  const [화물내용, set화물내용] = useState(io.화물내용 || "");
+  const [차량종류, set차량종류] = useState(io.차량종류 || "");
+  const [톤수, set톤수] = useState(io.차량톤수 || io.톤수 || "");
+  const [청구운임Digits, set청구운임Digits] = useState(onlyDigits(String(io.청구운임 || "")));
+  const [기사운임Digits, set기사운임Digits] = useState(onlyDigits(String(io.기사운임 || "")));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
@@ -692,13 +768,13 @@ function RegisterScreen({ clients, places, role, onSubmitRegister, onBack, onDon
       setDone(true);
       setTimeout(onDone, 1200);
     } else {
-      setError(result?.error || "등록에 실패했습니다. 다시 시도해주세요.");
+      setError(result?.error || "저장에 실패했습니다. 다시 시도해주세요.");
     }
   };
 
   return (
     <div className="flex-1 flex flex-col" style={{ backgroundColor: "#F4F6F9" }}>
-      <TopBar title="배차등록" onBack={onBack} />
+      <TopBar title={title} onBack={onBack} />
       <div className="flex-1 overflow-y-auto px-5 py-5">
         <ErrorBanner text={error} />
         {isViewer && (
@@ -857,11 +933,11 @@ function RegisterScreen({ clients, places, role, onSubmitRegister, onBack, onDon
 
       <div className="px-5 py-4 shrink-0 bg-white border-t border-gray-100">
         <PrimaryButton onClick={handleSubmit} disabled={!canSubmit}>
-          {submitting ? "등록 중..." : "등록하기"}
+          {submitting ? "저장 중..." : submitLabel}
         </PrimaryButton>
       </div>
 
-      {done && <SuccessOverlay text="등록 완료" onDone={onDone} />}
+      {done && <SuccessOverlay text={doneText} onDone={onDone} />}
       {contactPickerFor && (
         <ContactPickerModal
           contacts={pendingContacts}
@@ -999,28 +1075,46 @@ function OrderListScreen({
   );
 }
 
-function OrderDetailSheet({ order, onClose, onOpenFare }) {
+function OrderDetailSheet({ order, onClose, onOpenFare, onEdit }) {
   if (!order) return null;
   const driverPhone = order.전화번호 || order.전화 || "";
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-end" onClick={onClose}>
       <div
-        className="bg-white w-full rounded-t-3xl px-6 py-6 max-h-[80vh] overflow-y-auto"
+        className="bg-white w-full rounded-t-3xl px-6 py-6 max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
           <div className="text-xl font-extrabold" style={{ color: NAVY }}>
             배차 상세
           </div>
-          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-full active:bg-gray-100">
-            <X className="w-6 h-6 text-gray-500" />
-          </button>
+          <div className="flex items-center gap-2">
+            {onEdit && (
+              <button
+                onClick={() => onEdit(order)}
+                className="px-4 py-2 rounded-full text-sm font-bold text-white"
+                style={{ backgroundColor: NAVY }}
+              >
+                수정
+              </button>
+            )}
+            <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-full active:bg-gray-100">
+              <X className="w-6 h-6 text-gray-500" />
+            </button>
+          </div>
         </div>
         <div className="flex flex-col gap-3 text-lg">
           <Row label="거래처명" value={order.거래처명} />
           <Row label="상차지" value={order.상차지명} />
+          <Row label="상차지 주소" value={order.상차지주소} />
+          <Row label="상차일" value={getPickupDate(order)} highlight />
+          <Row label="상차시간" value={fmtOrderTime(order.상차시간, order.상차시간기준)} />
+          <Row label="상차방법" value={order.상차방법} />
           <Row label="하차지" value={order.하차지명} />
-          <Row label="상차일" value={getPickupDate(order)} />
+          <Row label="하차지 주소" value={order.하차지주소} />
+          <Row label="하차일" value={String(order.하차일 || "").slice(0, 10)} />
+          <Row label="하차시간" value={fmtOrderTime(order.하차시간, order.하차시간기준)} />
+          <Row label="하차방법" value={order.하차방법} />
           <Row label="화물내용" value={order.화물내용} />
           <Row label="차량종류" value={order.차량종류} />
           <Row label="톤수" value={order.차량톤수 || order.톤수} />
@@ -1063,11 +1157,14 @@ function OrderDetailSheet({ order, onClose, onOpenFare }) {
   );
 }
 
-function Row({ label, value }) {
+// highlight=true(상차일)면 눈에 띄게 굵고 빨간 글씨로 강조한다.
+function Row({ label, value, highlight }) {
   return (
     <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-      <span className="text-gray-400 font-semibold">{label}</span>
-      <span className="font-bold text-gray-900 text-right">{value || "-"}</span>
+      <span className={highlight ? "font-extrabold text-red-600" : "text-gray-400 font-semibold"}>{label}</span>
+      <span className={`text-right ${highlight ? "font-extrabold text-red-600 text-xl" : "font-bold text-gray-900"}`}>
+        {value || "-"}
+      </span>
     </div>
   );
 }
@@ -1651,6 +1748,7 @@ export default function MobileEasyMode({
   role,
   onExitEasyMode,
   onSubmitRegister,
+  onSubmitEdit,
   onAssignVehicle,
   showToast,
   showSuccess,
@@ -1660,6 +1758,8 @@ export default function MobileEasyMode({
   const [assignOrder, setAssignOrder] = useState(null);
   const [assignFrom, setAssignFrom] = useState("list");
   const [detailOrder, setDetailOrder] = useState(null);
+  const [editOrder, setEditOrder] = useState(null);
+  const [editFrom, setEditFrom] = useState("home");
   const [fareMatchOrder, setFareMatchOrder] = useState(null);
   const [listDateMode, setListDateMode] = useState("today");
   // 쉬운모드 자체 글자크기 배율(기본/크게/아주크게) — 일반모드의 fontScale과는 별도로
@@ -1670,12 +1770,34 @@ export default function MobileEasyMode({
     localStorage.setItem("easyModeScale", String(v));
   };
 
+  // ⭐ 자정이 지나면 "오늘"이 바뀌어야 하는데, 아무 데이터 변경 없이 화면만
+  // 계속 켜두면 리렌더가 안 일어나 today가 그대로 굳어있을 수 있다 — 1분마다
+  // 날짜만 조용히 확인해서, 실제로 날짜가 바뀐 순간에만 리렌더를 트리거한다.
+  const [dayTick, setDayTick] = useState(() => todayLocal());
+  React.useEffect(() => {
+    const t = setInterval(() => {
+      const d = todayLocal();
+      setDayTick((prev) => (prev === d ? prev : d));
+    }, 60000);
+    return () => clearInterval(t);
+  }, []);
+
   const today = todayLocal();
   const tomorrow = tomorrowLocal();
   const todayUnassignedCount = useMemo(
     () => unassignedOrders.filter((o) => getPickupDate(o) === today).length,
-    [unassignedOrders, today]
+    [unassignedOrders, today, dayTick]
   );
+  // ⭐ 홈 화면 "오늘 매출/거래량" — 오늘 상차 예정인 오더 기준 청구운임 합계·건수.
+  const todayStats = useMemo(() => {
+    let revenue = 0, count = 0;
+    orders.forEach((o) => {
+      if (getPickupDate(o) !== today) return;
+      revenue += Number(o.청구운임) || 0;
+      count += 1;
+    });
+    return { revenue, count };
+  }, [orders, today, dayTick]);
 
   // ⭐ PC/일반모바일 배차현황과 동일하게 배차중이 항상 위, 배차완료가 아래로
   // 먼저 묶이고, 그 안에서만 최신순으로 정렬한다 — 예전엔 등록시각으로만 섞여서
@@ -1717,6 +1839,13 @@ export default function MobileEasyMode({
     setScreen("assign");
   };
 
+  const openEdit = (order) => {
+    setEditOrder(order);
+    setEditFrom(screen);
+    setDetailOrder(null);
+    setScreen("edit");
+  };
+
   return (
     <div
       className="w-full min-h-screen flex flex-col relative"
@@ -1727,6 +1856,8 @@ export default function MobileEasyMode({
           easyScale={easyScale}
           onChangeEasyScale={onChangeEasyScale}
           unassignedCount={todayUnassignedCount}
+          todayRevenue={fmtKoreanWon(todayStats.revenue)}
+          todayOrderCount={todayStats.count}
           onNavigate={setScreen}
           onExitEasyMode={onExitEasyMode}
           onLogout={onLogout}
@@ -1793,8 +1924,31 @@ export default function MobileEasyMode({
 
       {screen === "fare" && <FareScreen orders={orders} clients={clients} places={places} onBack={goHome} />}
 
+      {screen === "edit" && (
+        <RegisterScreen
+          clients={clients}
+          places={places}
+          role={role}
+          initialOrder={editOrder}
+          title="배차 수정"
+          submitLabel="수정 완료"
+          doneText="수정 완료"
+          onSubmitRegister={(fields) => onSubmitEdit(editOrder, fields)}
+          onBack={() => setScreen(editFrom)}
+          onDone={() => {
+            setEditOrder(null);
+            setScreen(editFrom);
+          }}
+        />
+      )}
+
       {detailOrder && (
-        <OrderDetailSheet order={detailOrder} onClose={() => setDetailOrder(null)} onOpenFare={setFareMatchOrder} />
+        <OrderDetailSheet
+          order={detailOrder}
+          onClose={() => setDetailOrder(null)}
+          onOpenFare={setFareMatchOrder}
+          onEdit={onSubmitEdit ? openEdit : undefined}
+        />
       )}
 
       {fareMatchOrder && (
