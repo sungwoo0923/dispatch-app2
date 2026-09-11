@@ -21166,6 +21166,9 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
 
   const doneCount = results.filter(isDone).length;
   const undoneCount = results.length - doneCount;
+  // "완료" 표시(attachViewed만으로도 완료 처리될 수 있음)와 달리, 삭제 대상 판단에는
+  // 실제 첨부파일이 있는지(getCnt>0)만 본다.
+  const realAttachCount = results.filter(r => getCnt(r) > 0).length;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[99998] flex items-center justify-center p-4">
@@ -21241,22 +21244,26 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
                 {bulkSaving ? (bulkProgress || "저장 중...") : <EditableText id="attachStatus.전체저장" defaultText="전체저장" />}
               </button>
               {/* ⭐ 첨부파일 선택삭제/전체삭제 — 오더는 안 지워지고 첨부만 지워지며,
-                  완료처리 상태는 유지된다. 조회전용 권한은 버튼 자체를 숨긴다. */}
+                  완료처리 상태는 유지된다. 조회전용 권한은 버튼 자체를 숨긴다.
+                  ⚠️ 삭제 대상은 "완료" 표시가 아니라 실제 첨부파일이 있는(getCnt>0)
+                  오더로만 한정한다 — 파일 없이 수동으로 완료처리만 해둔 오더까지
+                  "전체삭제"에 포함되면 의미 없는 삭제만 수백 건 실행하게 된다. */}
               {!isViewer && (
                 <>
                   {selectedIds.size > 0 && (
                     <span className="text-[12px] font-semibold text-gray-500">{selectedIds.size}건 선택됨</span>
                   )}
                   <button
-                    onClick={() => requestDeleteAttachments(sortedResults.filter(r => selectedIds.has(r._id)))}
+                    onClick={() => requestDeleteAttachments(sortedResults.filter(r => selectedIds.has(r._id) && getCnt(r) > 0))}
                     disabled={deletingAttach || selectedIds.size === 0}
                     className="px-3 py-1.5 text-[12px] font-bold rounded-lg bg-red-600 text-white hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {deletingAttach ? "삭제 중..." : "선택삭제"}
                   </button>
                   <button
-                    onClick={() => requestDeleteAttachments(sortedResults)}
-                    disabled={deletingAttach || sortedResults.length === 0}
+                    onClick={() => requestDeleteAttachments(sortedResults.filter(r => getCnt(r) > 0))}
+                    disabled={deletingAttach || realAttachCount === 0}
+                    title="실제 첨부파일이 있는 오더만 대상입니다(파일 없이 완료처리만 해둔 오더는 제외)"
                     className="px-3 py-1.5 text-[12px] font-bold rounded-lg border border-red-600 text-red-600 hover:bg-red-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     전체삭제
@@ -21277,8 +21284,9 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
                   {!isViewer && (
                     <th className="px-5 py-3 text-center font-bold text-gray-700 whitespace-nowrap w-10">
                       <input type="checkbox"
-                        checked={sortedResults.length > 0 && selectedIds.size === sortedResults.length}
-                        onChange={e => setSelectedIds(e.target.checked ? new Set(sortedResults.map(r => r._id)) : new Set())}
+                        title="실제 첨부파일이 있는 오더만 선택됩니다"
+                        checked={realAttachCount > 0 && selectedIds.size === realAttachCount}
+                        onChange={e => setSelectedIds(e.target.checked ? new Set(sortedResults.filter(r => getCnt(r) > 0).map(r => r._id)) : new Set())}
                         className="w-4 h-4 cursor-pointer" />
                     </th>
                   )}
@@ -21299,13 +21307,15 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
                       {!isViewer && (
                         <td className="px-5 py-3.5 text-center">
                           <input type="checkbox"
+                            disabled={cnt === 0}
+                            title={cnt === 0 ? "실제 첨부파일이 없어 삭제 대상이 아닙니다" : undefined}
                             checked={selectedIds.has(r._id)}
                             onChange={e => setSelectedIds(prev => {
                               const next = new Set(prev);
                               if (e.target.checked) next.add(r._id); else next.delete(r._id);
                               return next;
                             })}
-                            className="w-4 h-4 cursor-pointer" />
+                            className="w-4 h-4 cursor-pointer disabled:cursor-not-allowed disabled:opacity-30" />
                         </td>
                       )}
                       <td className="px-5 py-3.5 text-gray-800 font-medium whitespace-nowrap">{r.상차일 || "-"}</td>
