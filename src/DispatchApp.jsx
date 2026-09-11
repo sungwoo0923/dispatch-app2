@@ -20912,10 +20912,16 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
   const [sortMode, setSortMode] = React.useState("date"); // "date" | "done" | "undone"
   const [viewRow, setViewRow] = React.useState(null);
   const [sendDone, setSendDone] = React.useState(null);
+  // ⭐ 첨부파일 선택삭제/전체삭제용 — 조회전용 권한은 아예 못 쓰게 막는다.
+  const [selectedIds, setSelectedIds] = React.useState(() => new Set());
+  const [deletingAttach, setDeletingAttach] = React.useState(false);
 
   React.useEffect(() => {
     if (open && initialClient) setClientQ(initialClient);
   }, [open, initialClient]);
+
+  // 새로 조회하면 이전 선택은 초기화한다.
+  React.useEffect(() => { setSelectedIds(new Set()); }, [results]);
 
   // ⭐ 첨부 상태 실시간 검증 — 그리드에 보이는 attachCount(캐시된 필드)와 이 화면이
   // 신뢰하는 값이 어긋나 "그리드는 완료인데 여기는 미완료"로 보이는 문제가 있었다.
@@ -20945,9 +20951,13 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
             const mirrorSnap = await getCountFromServer(collection(db, mirror.col, mirror.id, "attachments"));
             count = Math.max(count, mirrorSnap.data().count);
           }
-          if (count !== (r.attachCount || 0)) {
-            updateDoc(doc(db, col, r._id), { attachCount: count }).catch(() => {});
-          }
+          // ⚠️ 예전엔 여기서 어긋난 값을 바로 updateDoc으로 고쳐 썼는데, 그 write가
+          // 실시간배차현황의 "파일 업로드 감지" 이펙트(원본 attachCount 증가를 감시)에
+          // 그대로 잡혀서, 기간을 넓게 잡고 조회할 때마다(어긋난 문서 수만큼) "서류
+          // 업로드 알림" 토스트+알림음이 한꺼번에 쏟아졌다 — 진짜 새 업로드가 아니라
+          // 캐시 보정일 뿐인데 새 업로드처럼 오인된 것. 이 화면(첨부현황)에서 보여주는
+          // 값은 어차피 verifiedCounts state로 항상 정확하므로, 문서 자체를 고쳐쓰지
+          // 않아도 화면 표시에는 지장이 없다 — 조용히 읽기만 하고 쓰기는 하지 않는다.
           return [r._id, count];
         } catch {
           return [r._id, r.attachCount || 0];
@@ -20977,6 +20987,39 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
     setResults(filtered);
     setSearched(true);
     setSortMode("date");
+  };
+
+  // ⭐ 첨부파일 선택삭제/전체삭제 — 오더 자체는 그대로 두고 첨부 사진/서류만
+  // 지운다. 삭제 후에도 "완료처리" 상태는 유지해야 하므로(요청사항), attachCount는
+  // 0으로 낮추되 attachViewed를 true로 함께 찍어 isDone()이 계속 완료로 보이게 한다.
+  const handleDeleteAttachments = async (targets) => {
+    if (isViewer) { alert("조회전용 권한으로는 삭제할 수 없습니다."); return; }
+    if (!targets.length) return;
+    if (!window.confirm(`선택한 ${targets.length}건의 첨부파일을 전부 삭제하시겠습니까?\n(오더 자체는 삭제되지 않고, 완료 처리 상태는 유지됩니다)`)) return;
+    setDeletingAttach(true);
+    try {
+      await Promise.all(targets.map(async (r) => {
+        const col = r.__col || "orders";
+        const wipeOne = async (colName, id) => {
+          const snap = await getDocs(collection(db, colName, id, "attachments"));
+          await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+          await updateDoc(doc(db, colName, id), { attachCount: 0, attachViewed: true });
+        };
+        try { await wipeOne(col, r._id); } catch (e) { console.error("첨부 삭제 실패:", r._id, e); }
+        const mirror = attachMirrorTargetOf(r);
+        if (mirror) {
+          try { await wipeOne(mirror.col, mirror.id); } catch (e) { console.warn("첨부 동기화 삭제 실패(무시):", e); }
+        }
+      }));
+      setVerifiedCounts(prev => {
+        const next = { ...prev };
+        targets.forEach(r => { next[r._id] = 0; });
+        return next;
+      });
+      setSelectedIds(new Set());
+    } finally {
+      setDeletingAttach(false);
+    }
   };
 
   const sortedResults = React.useMemo(() => {
@@ -21156,6 +21199,29 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
               >
                 {bulkSaving ? (bulkProgress || "저장 중...") : <EditableText id="attachStatus.전체저장" defaultText="전체저장" />}
               </button>
+              {/* ⭐ 첨부파일 선택삭제/전체삭제 — 오더는 안 지워지고 첨부만 지워지며,
+                  완료처리 상태는 유지된다. 조회전용 권한은 버튼 자체를 숨긴다. */}
+              {!isViewer && (
+                <>
+                  {selectedIds.size > 0 && (
+                    <span className="text-[12px] font-semibold text-gray-500">{selectedIds.size}건 선택됨</span>
+                  )}
+                  <button
+                    onClick={() => handleDeleteAttachments(sortedResults.filter(r => selectedIds.has(r._id)))}
+                    disabled={deletingAttach || selectedIds.size === 0}
+                    className="px-3 py-1.5 text-[12px] font-bold rounded-lg bg-red-600 text-white hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {deletingAttach ? "삭제 중..." : "선택삭제"}
+                  </button>
+                  <button
+                    onClick={() => handleDeleteAttachments(sortedResults)}
+                    disabled={deletingAttach || sortedResults.length === 0}
+                    className="px-3 py-1.5 text-[12px] font-bold rounded-lg border border-red-600 text-red-600 hover:bg-red-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    전체삭제
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -21167,6 +21233,14 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
             <table className="w-full text-[14px]">
               <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
                 <tr>
+                  {!isViewer && (
+                    <th className="px-5 py-3 text-center font-bold text-gray-700 whitespace-nowrap w-10">
+                      <input type="checkbox"
+                        checked={sortedResults.length > 0 && selectedIds.size === sortedResults.length}
+                        onChange={e => setSelectedIds(e.target.checked ? new Set(sortedResults.map(r => r._id)) : new Set())}
+                        className="w-4 h-4 cursor-pointer" />
+                    </th>
+                  )}
                   <th className="px-5 py-3 text-left font-bold text-gray-700 whitespace-nowrap"><EditableText id="attachStatus.resultTable.header.날짜" defaultText="날짜" /></th>
                   <th className="px-5 py-3 text-left font-bold text-gray-700 whitespace-nowrap"><EditableText id="attachStatus.resultTable.header.거래처" defaultText="거래처" /></th>
                   <th className="px-5 py-3 text-left font-bold text-gray-700 whitespace-nowrap"><EditableText id="attachStatus.resultTable.header.상차지" defaultText="상차지" /></th>
@@ -21181,6 +21255,18 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
                   const done = isDone(r);
                   return (
                     <tr key={r._id} className="border-b border-gray-100 hover:bg-gray-50">
+                      {!isViewer && (
+                        <td className="px-5 py-3.5 text-center">
+                          <input type="checkbox"
+                            checked={selectedIds.has(r._id)}
+                            onChange={e => setSelectedIds(prev => {
+                              const next = new Set(prev);
+                              if (e.target.checked) next.add(r._id); else next.delete(r._id);
+                              return next;
+                            })}
+                            className="w-4 h-4 cursor-pointer" />
+                        </td>
+                      )}
                       <td className="px-5 py-3.5 text-gray-800 font-medium whitespace-nowrap">{r.상차일 || "-"}</td>
                       <td className="px-5 py-3.5 text-gray-800 font-medium whitespace-nowrap">{r.거래처명 || "-"}</td>
                       <td className="px-5 py-3.5 text-gray-800">{r.상차지명 || "-"}</td>
@@ -24174,6 +24260,11 @@ React.useEffect(() => {
           count: cur - prev,
           total: cur,
           time: Date.now(),
+          // ⭐ time(ms)만으로 key/삭제를 구분하면, 같은 tick에 여러 건이 한꺼번에
+          // 감지될 때(예: 검색 결과 여러 건이 비슷한 시점에 갱신) time 값이 겹쳐서
+          // "X" 눌러 하나만 닫으려 해도 같은 time을 가진 다른 알림까지 같이 필터링
+          // 되거나, React key 중복으로 클릭이 엉뚱한 토스트에 먹히는 문제가 있었다.
+          uid: `${id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           row: r, // 클릭 시 뷰어 열기용
         });
 
@@ -30218,14 +30309,14 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
       <div className="fixed bottom-5 right-5 flex flex-col gap-2 z-[9999] pointer-events-none">
         {notificationsEnabled && uploadAlerts.map((a) => (
           <div
-            key={a.time}
+            key={a.uid}
             className="pointer-events-auto w-[300px] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden cursor-pointer"
             style={{ animation: "slideInRight 0.3s ease-out" }}
             onClick={() => {
               // 열어봤다고 기록
               viewedAttachRef.current[a.id] = a.total;
               // 이 알림 제거
-              setUploadAlerts(prev => prev.filter(x => x.time !== a.time));
+              setUploadAlerts(prev => prev.filter(x => x.uid !== a.uid));
               // AttachmentViewer 열기
               setAttachViewer(a.row);
             }}
@@ -30240,7 +30331,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
                 className="text-white/50 hover:text-white text-lg leading-none px-1"
                 onClick={e => {
                   e.stopPropagation();
-                  setUploadAlerts(prev => prev.filter(x => x.time !== a.time));
+                  setUploadAlerts(prev => prev.filter(x => x.uid !== a.uid));
                 }}
               >×</button>
             </div>
