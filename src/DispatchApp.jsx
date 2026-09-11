@@ -22161,7 +22161,7 @@ React.useEffect(() => {
     ).slice(0, 5);
     candidates.forEach(r => {
       backfilledConfirmRef.current.add(r._id);
-      patchDispatch(r._id, { 배차확정일시: r.배차완료일시 || serverTimestamp() }).catch(() => {});
+      patchDispatch(r._id, { 배차확정일시: r.배차완료일시 || serverTimestamp(), __system: true }).catch(() => {});
     });
   }, 10000);
   return () => clearTimeout(timer);
@@ -32588,7 +32588,7 @@ React.useEffect(() => {
     ).slice(0, 5);
     candidates.forEach(r => {
       backfilledConfirmRef.current.add(r._id);
-      patchDispatch(r._id, { 배차확정일시: r.배차완료일시 || serverTimestamp() }).catch(() => {});
+      patchDispatch(r._id, { 배차확정일시: r.배차완료일시 || serverTimestamp(), __system: true }).catch(() => {});
     });
   }, 10000);
   return () => clearTimeout(timer);
