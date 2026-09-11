@@ -6821,6 +6821,8 @@ return (
           menu={menu}
             dispatchData={dispatchDataFiltered}
             liveDataReady={liveDataReady}
+            recentDispatchData={recentDispatchDataFiltered}
+            recentLiveDataReady={recentLiveDataReady}
             timeOptions={timeOptions}
             tonOptions={tonOptions}
             drivers={drivers}
@@ -7803,7 +7805,7 @@ function MultiRegCombo({ id, value, onChange, onSelect, items, placeholder, clas
 }
 
  function DispatchManagement({
-    dispatchData, liveDataReady = true, drivers, clients, menu, timeOptions, tonOptions,
+    dispatchData, liveDataReady = true, recentDispatchData = [], recentLiveDataReady = true, drivers, clients, menu, timeOptions, tonOptions,
     addDispatch, upsertDriver, upsertClient, upsertPlace,
     patchDispatch, removeDispatch,
     placeRows = [],
