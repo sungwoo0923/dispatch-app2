@@ -21,6 +21,8 @@ import {
   Bike,
   Forklift,
   StickyNote,
+  Phone,
+  MessageSquare,
 } from "lucide-react";
 
 const NAVY = "#1B2B4B";
@@ -485,8 +487,14 @@ function OrderCard({ order, onClick, variant, onOpenFare }) {
         </div>
       )}
       {hasCar && (
-        <div className="mt-2 text-base text-gray-600 font-semibold inline-flex items-center gap-1">
+        <div className="mt-2 text-base text-gray-600 font-semibold inline-flex items-center gap-1 flex-wrap">
           <Truck className="w-4 h-4 shrink-0" /> {order.차량번호} · {driverName}
+          {(order.전화번호 || order.전화) && (
+            <span className="inline-flex items-center gap-1">
+              <span className="text-gray-300">·</span>
+              <Phone className="w-4 h-4 shrink-0" /> {order.전화번호 || order.전화}
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -993,6 +1001,7 @@ function OrderListScreen({
 
 function OrderDetailSheet({ order, onClose, onOpenFare }) {
   if (!order) return null;
+  const driverPhone = order.전화번호 || order.전화 || "";
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-end" onClick={onClose}>
       <div
@@ -1018,13 +1027,32 @@ function OrderDetailSheet({ order, onClose, onOpenFare }) {
           <Row label="메모" value={order.메모} />
           <Row label="차량번호" value={order.차량번호} />
           <Row label="기사명" value={order.이름 || order.기사명} />
+          <Row label="연락처" value={driverPhone} />
           <Row label="청구운임" value={fmtMoney(order.청구운임)} />
           <Row label="기사운임" value={fmtMoney(order.기사운임)} />
         </div>
+        {driverPhone && (
+          <div className="grid grid-cols-2 gap-3 mt-5">
+            <a
+              href={`tel:${onlyDigits(driverPhone)}`}
+              className="py-4 rounded-2xl text-white text-lg font-extrabold text-center flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+              style={{ backgroundColor: NAVY }}
+            >
+              <Phone className="w-5 h-5" /> 전화
+            </a>
+            <a
+              href={`sms:${onlyDigits(driverPhone)}`}
+              className="py-4 rounded-2xl text-lg font-extrabold text-center flex items-center justify-center gap-2 border-2 active:scale-[0.98] transition-transform"
+              style={{ borderColor: NAVY, color: NAVY }}
+            >
+              <MessageSquare className="w-5 h-5" /> 문자
+            </a>
+          </div>
+        )}
         {onOpenFare && (
           <button
             onClick={() => onOpenFare(order)}
-            className="w-full mt-5 py-4 rounded-2xl text-white text-lg font-extrabold active:scale-[0.98] transition-transform"
+            className="w-full mt-3 py-4 rounded-2xl text-white text-lg font-extrabold active:scale-[0.98] transition-transform"
             style={{ backgroundColor: NAVY }}
           >
             운임조회
