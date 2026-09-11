@@ -25014,13 +25014,13 @@ if (sortKey) {
           el.style.transform = `translateY(${dy}px)`;
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
-              el.style.transition = "transform 420ms cubic-bezier(0.22, 1, 0.36, 1)";
+              el.style.transition = "transform 200ms cubic-bezier(0.16, 1, 0.3, 1)";
               el.style.transform = "";
               // ⭐ 여기서 inline transition을 계속 남겨두면(원래 className이 갖고 있던
               // background-color/opacity 트랜지션을 인라인 style이 덮어써서) 삭제
               // 페이드아웃/하이라이트 배경전환이 조용히 멈춰버린다 — 애니메이션이
               // 끝나면 인라인 transition을 지워 className의 트랜지션으로 되돌린다.
-              setTimeout(() => { if (el.style.transform === "") el.style.transition = ""; }, 440);
+              setTimeout(() => { if (el.style.transform === "") el.style.transition = ""; }, 220);
             });
           });
           animatedCount++;

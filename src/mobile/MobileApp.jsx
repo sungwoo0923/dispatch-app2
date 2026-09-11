@@ -4193,7 +4193,7 @@ const deleteSingleOrder = async (order) => {
     }
   };
 
-  const easyModeAssignVehicle = async (order, { 차량번호, 기사명, 전화번호 }) => {
+  const easyModeAssignVehicle = async (order, { 차량번호, 기사명, 전화번호, 청구운임, 기사운임 }) => {
     if (role === "viewer") {
       return { ok: false, error: "조회전용 권한으로는 배차할 수 없습니다." };
     }
@@ -4205,12 +4205,21 @@ const deleteSingleOrder = async (order) => {
       const colName = order.__col || collName;
       const docId = order._id || order.id;
 
+      // ⭐ 배차완료 화면에서 운임도 함께 입력할 수 있게 됨 — 값을 입력했을 때만
+      // 반영하고, 비워두면(기존 등록 시 이미 입력했을 수 있으니) 기존 값을 덮어쓰지 않는다.
+      const 청구 = toNumber(청구운임);
+      const 기사 = toNumber(기사운임);
+      const farePatch = {};
+      if (String(청구운임 || "").trim()) { farePatch.청구운임 = 청구; farePatch.수수료 = 청구 - 기사; }
+      if (String(기사운임 || "").trim()) { farePatch.기사운임 = 기사; farePatch.수수료 = (farePatch.청구운임 ?? Number(order.청구운임) ?? 0) - 기사; }
+
       await updateDoc(doc(db, colName, docId), {
         차량번호,
         기사명: 기사명 || "",
         이름: 기사명 || "",
         전화번호: 전화번호 || "",
         전화: 전화번호 || "",
+        ...farePatch,
         배차상태: "배차완료",
         상태: "배차완료",
         배차완료일시: serverTimestamp(),

@@ -414,7 +414,10 @@ function ContactPickerModal({ contacts, onSelect, onClose }) {
 
 function OrderCard({ order, onClick, variant, onOpenFare }) {
   const hasCar = !!String(order.차량번호 || "").trim();
-  const showExtra = variant === "unassigned";
+  // ⭐ 기사명 필드 — PC/일반모바일은 항상 "이름"에 저장한다("기사명"은 쉬운모드
+  // 자체 배차완료 흐름에서만 함께 써준 호환용 필드라, PC에서 배차완료된 오더는
+  // "기사명"이 비어 있어 이름/번호가 안 보였다). 둘 다 지원.
+  const driverName = order.이름 || order.기사명 || "-";
   return (
     <div
       onClick={onClick}
@@ -423,8 +426,8 @@ function OrderCard({ order, onClick, variant, onOpenFare }) {
       className="w-full text-left bg-white rounded-3xl p-5 shadow-sm border border-black/5 active:scale-[0.98] transition-transform cursor-pointer"
     >
       <div className="flex items-center justify-between mb-2">
-        <StatusPill order={order} />
         <div className="flex items-center gap-2">
+          <StatusPill order={order} />
           {onOpenFare && (
             <button
               onClick={(e) => { e.stopPropagation(); onOpenFare(order); }}
@@ -434,11 +437,14 @@ function OrderCard({ order, onClick, variant, onOpenFare }) {
               운임조회
             </button>
           )}
-          <span className="text-sm font-bold text-gray-400">
-            {getPickupDate(order) || "-"}
-          </span>
         </div>
+        <span className="text-sm font-bold text-gray-400 shrink-0">
+          {getPickupDate(order) || "-"}
+        </span>
       </div>
+      {order.거래처명 && (
+        <div className="text-base font-bold text-gray-500 mb-1 truncate">{order.거래처명}</div>
+      )}
       <div className="flex flex-col gap-1 mb-1">
         <div className="flex items-center gap-1.5 text-xl font-extrabold text-gray-900 leading-snug break-keep">
           <DirBadge dir="상" />
@@ -457,7 +463,9 @@ function OrderCard({ order, onClick, variant, onOpenFare }) {
           {fmtMoney(order.청구운임)}
         </span>
       </div>
-      {showExtra && (order.차량종류 || order.차량톤수 || order.톤수 || order.메모) && (
+      {/* ⭐ 차량종류(냉장/냉동 여부)·톤수는 배차현황/미배차현황 어디서든 항상 보여야
+          한다 — 예전엔 미배차현황(variant="unassigned")에서만 보였다. */}
+      {(order.차량종류 || order.차량톤수 || order.톤수 || order.메모) && (
         <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-base text-gray-900 font-bold">
           {order.차량종류 && (
             <span className="inline-flex items-center gap-1">
@@ -478,7 +486,7 @@ function OrderCard({ order, onClick, variant, onOpenFare }) {
       )}
       {hasCar && (
         <div className="mt-2 text-base text-gray-600 font-semibold inline-flex items-center gap-1">
-          <Truck className="w-4 h-4 shrink-0" /> {order.차량번호} · {order.기사명 || "-"}
+          <Truck className="w-4 h-4 shrink-0" /> {order.차량번호} · {driverName}
         </div>
       )}
     </div>
@@ -1000,6 +1008,7 @@ function OrderDetailSheet({ order, onClose, onOpenFare }) {
           </button>
         </div>
         <div className="flex flex-col gap-3 text-lg">
+          <Row label="거래처명" value={order.거래처명} />
           <Row label="상차지" value={order.상차지명} />
           <Row label="하차지" value={order.하차지명} />
           <Row label="상차일" value={getPickupDate(order)} />
@@ -1008,7 +1017,7 @@ function OrderDetailSheet({ order, onClose, onOpenFare }) {
           <Row label="톤수" value={order.차량톤수 || order.톤수} />
           <Row label="메모" value={order.메모} />
           <Row label="차량번호" value={order.차량번호} />
-          <Row label="기사명" value={order.기사명} />
+          <Row label="기사명" value={order.이름 || order.기사명} />
           <Row label="청구운임" value={fmtMoney(order.청구운임)} />
           <Row label="기사운임" value={fmtMoney(order.기사운임)} />
         </div>
@@ -1061,7 +1070,15 @@ function FareMatchModal({ order, orders, onClose }) {
         return { order: o, tagLabel };
       })
       .filter(Boolean)
-      .sort((a, b) => getCreatedMs(b.order) - getCreatedMs(a.order))
+      // ⭐ 정렬 우선순위 — 예전엔 최신순으로만 섞여서 6파레트 오더인데 다른 화물이
+      // 먼저 보이곤 했다. 화물내용+톤수가 완전히 같은 이력이 최우선, 그다음 부분
+      // 일치, 그다음 노선만 일치 — 각 구간 안에서는 최신순으로 정렬한다.
+      .sort((a, b) => {
+        const rank = { 완전일치: 2, 부분일치: 1, 노선일치: 0 };
+        const rd = rank[b.tagLabel] - rank[a.tagLabel];
+        if (rd !== 0) return rd;
+        return getCreatedMs(b.order) - getCreatedMs(a.order);
+      })
       .slice(0, 15);
   }, [order, orders]);
 
@@ -1152,8 +1169,14 @@ function FareMatchModal({ order, orders, onClose }) {
                     <span className="text-xs text-gray-400 font-semibold">{getPickupDate(o) || "-"}</span>
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-base text-gray-700 font-semibold truncate inline-flex items-center gap-1">
+                    <span className="text-base text-gray-700 font-semibold truncate inline-flex items-center gap-1 flex-wrap">
                       <Package className="w-4 h-4 text-gray-400 shrink-0" /> {o.화물내용 || "-"}
+                      {(o.차량톤수 || o.톤수) && (
+                        <span className="inline-flex items-center gap-1">
+                          <span className="text-gray-300">·</span>
+                          <Scale className="w-4 h-4 text-gray-400 shrink-0" /> {o.차량톤수 || o.톤수}
+                        </span>
+                      )}
                     </span>
                     <span className="text-xl font-extrabold shrink-0" style={{ color: NAVY }}>{fmtMoney(o.청구운임)}</span>
                   </div>
@@ -1176,43 +1199,32 @@ function AssignScreen({ order, drivers, role, onAssignVehicle, onBack, onDone, o
   const [전화번호, set전화번호] = useState("");
   const [showPlateList, setShowPlateList] = useState(false);
   const [showNameList, setShowNameList] = useState(false);
+  const [청구운임Digits, set청구운임Digits] = useState(() => onlyDigits(String(order?.청구운임 || "")));
+  const [기사운임Digits, set기사운임Digits] = useState(() => onlyDigits(String(order?.기사운임 || "")));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
 
   const isViewer = role === "viewer";
   const canSubmit = 차량번호.trim() && !submitting && !isViewer;
+  const 수수료 = Math.max(0, (Number(청구운임Digits) || 0) - (Number(기사운임Digits) || 0));
 
-  const recentDrivers = useMemo(() => {
-    const list = [...(drivers || [])];
-    list.sort((a, b) => {
-      const ta = a.updatedAt?.seconds || a.createdAt?.seconds || 0;
-      const tb = b.updatedAt?.seconds || b.createdAt?.seconds || 0;
-      return tb - ta;
-    });
-    const seen = new Set();
-    const out = [];
-    for (const d of list) {
-      const key = normalizeText(d.차량번호);
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      out.push(d);
-      if (out.length >= 3) break;
-    }
-    return out;
-  }, [drivers]);
-
-  // 스마트검색: 차량번호/이름 입력 시 기사 목록에서 유사한 항목을 드롭다운으로 보여준다
+  // ⭐ 스마트검색 — 차량번호 입력창 하나에서 일반모바일/PC처럼 차량번호든 기사이름이든
+  // 입력한 대로 매칭되게 한다(예전엔 차량번호 필드만 보고 이름을 치면 아무것도 안 나왔다).
   const plateMatches = useMemo(() => {
     const q = normalizeText(차량번호);
     if (!q) return [];
-    return (drivers || []).filter((d) => normalizeText(d.차량번호).includes(q)).slice(0, 8);
+    return (drivers || [])
+      .filter((d) => normalizeText(d.차량번호).includes(q) || (d.이름 && normalizeText(d.이름).includes(q)))
+      .slice(0, 8);
   }, [drivers, 차량번호]);
 
   const nameMatches = useMemo(() => {
     const q = normalizeText(기사명);
     if (!q) return [];
-    return (drivers || []).filter((d) => d.이름 && normalizeText(d.이름).includes(q)).slice(0, 8);
+    return (drivers || [])
+      .filter((d) => (d.이름 && normalizeText(d.이름).includes(q)) || normalizeText(d.차량번호).includes(q))
+      .slice(0, 8);
   }, [drivers, 기사명]);
 
   const applyDriver = (d) => {
@@ -1229,6 +1241,8 @@ function AssignScreen({ order, drivers, role, onAssignVehicle, onBack, onDone, o
       차량번호: 차량번호.trim(),
       기사명: 기사명.trim(),
       전화번호: 전화번호.trim(),
+      청구운임: 청구운임Digits,
+      기사운임: 기사운임Digits,
     });
     setSubmitting(false);
     if (result?.ok) {
@@ -1302,20 +1316,6 @@ function AssignScreen({ order, drivers, role, onAssignVehicle, onBack, onDone, o
           </div>
         </div>
 
-        {recentDrivers.length > 0 && (
-          <div className="mb-5 flex flex-wrap gap-2">
-            {recentDrivers.map((d) => (
-              <button
-                key={d.id}
-                onClick={() => applyDriver(d)}
-                className="px-4 py-2.5 rounded-2xl bg-white border-2 border-gray-200 text-base font-bold text-gray-700 active:scale-95 transition-transform"
-              >
-                {d.차량번호} {d.이름 ? `· ${d.이름}` : ""}
-              </button>
-            ))}
-          </div>
-        )}
-
         <div className="mb-5">
           <FieldLabel>기사명 (스마트검색)</FieldLabel>
           <div className="relative">
@@ -1353,6 +1353,39 @@ function AssignScreen({ order, drivers, role, onAssignVehicle, onBack, onDone, o
             placeholder="01012345678"
             inputMode="tel"
           />
+        </div>
+
+        <div className="mb-5">
+          <FieldLabel>청구운임</FieldLabel>
+          <div className="relative">
+            <BigInput
+              value={청구운임Digits ? Number(청구운임Digits).toLocaleString("ko-KR") : ""}
+              onChange={(e) => set청구운임Digits(onlyDigits(e.target.value))}
+              placeholder="0"
+              inputMode="numeric"
+              className="pr-14"
+            />
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-lg font-bold text-gray-400">원</span>
+          </div>
+        </div>
+        <div className="mb-5">
+          <FieldLabel>기사운임 (선택)</FieldLabel>
+          <div className="relative">
+            <BigInput
+              value={기사운임Digits ? Number(기사운임Digits).toLocaleString("ko-KR") : ""}
+              onChange={(e) => set기사운임Digits(onlyDigits(e.target.value))}
+              placeholder="0"
+              inputMode="numeric"
+              className="pr-14"
+            />
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-lg font-bold text-gray-400">원</span>
+          </div>
+        </div>
+        <div className="mb-6">
+          <FieldLabel>수수료 (자동계산)</FieldLabel>
+          <div className="w-full text-lg rounded-2xl border-2 border-gray-100 bg-gray-50 px-4 py-4 text-gray-500 font-bold">
+            {fmtMoney(수수료)}
+          </div>
         </div>
       </div>
 
@@ -1413,7 +1446,11 @@ function FareScreen({ orders, clients, places, onBack }) {
         const od = normalizeText(o.하차지명) + normalizeText(o.하차지주소);
         if (p && !op.includes(p)) return false;
         if (d && !od.includes(d)) return false;
-        if (차량종류 && o.차량종류 !== 차량종류) return false;
+        // ⭐ 정확히 같은 문자열만 인정하면(예전 코드) PC에서 등록된 오더는 "5톤 냉장탑"처럼
+        // 자유 텍스트로 저장돼 있어 쉬운모드 드롭다운의 "냉장탑"과 글자가 완전히 같지
+        // 않으면 전부 걸러졌다 — 그 결과 쉬운모드 자체등록분(같은 문자열)만 남아 특정
+        // 거래처 한두 곳으로만 결과가 좁아지는 원인이었다. 부분일치로 완화한다.
+        if (차량종류 && !normalizeText(o.차량종류 || "").includes(normalizeText(차량종류))) return false;
         if (톤수 && normalizeText(o.차량톤수 || o.톤수) !== normalizeText(톤수)) return false;
         if (화물내용 && !normalizeText(o.화물내용).includes(normalizeText(화물내용))) return false;
         return true;
@@ -1612,8 +1649,22 @@ export default function MobileEasyMode({
     [unassignedOrders, today]
   );
 
+  // ⭐ PC/일반모바일 배차현황과 동일하게 배차중이 항상 위, 배차완료가 아래로
+  // 먼저 묶이고, 그 안에서만 최신순으로 정렬한다 — 예전엔 등록시각으로만 섞여서
+  // 배차완료·배차중이 뒤죽박죽 보였다.
+  const getStatusRank = (o) => {
+    const s = String(o?.배차상태 || "");
+    if (s === "배차중") return 0;
+    if (s === "배차완료") return 1;
+    if (s === "배차취소") return 2;
+    return 3;
+  };
   const sortedListOrders = useMemo(() => {
-    return [...orders].sort((a, b) => getCreatedMs(b) - getCreatedMs(a));
+    return [...orders].sort((a, b) => {
+      const rd = getStatusRank(a) - getStatusRank(b);
+      if (rd !== 0) return rd;
+      return getCreatedMs(b) - getCreatedMs(a);
+    });
   }, [orders]);
 
   // 배차현황: 항상 당일(또는 내일) 기준으로만 보여준다 — 전체 데이터를 한번에 보여주지 않는다.
