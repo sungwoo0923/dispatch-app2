@@ -2683,6 +2683,23 @@ function useRealtimeCollections(user, userCompany, role) {
   // 변경사항이 재실행 시 한꺼번에 알림으로 쏟아지던 원인). 두 리스너 모두 첫 실응답을
   // 받은 시점을 하위 화면에 알려주기 위한 플래그.
   const [liveDataReady, setLiveDataReady] = useState(false);
+  // ⭐ 실시간배차현황/배차관리 하단부 전용 — 어제~내일(딱 3일)만 담는 훨씬 작은
+  // 실시간 데이터. 위 dispatchData(최근 13개월)보다도 훨씬 작아서, 그 화면들이
+  // 매번 큰 배열을 필터링/재계산하며 겪던 버벅임과 저장 후 팝업 딜레이를 줄여준다.
+  const [recentDispatchData, setRecentDispatchData] = useState([]);
+  const [recentLiveDataReady, setRecentLiveDataReady] = useState(false);
+  // 날짜가 바뀌면(자정 경과) 아래 "어제~내일" 실시간 구독 범위도 하루 밀려야 하므로,
+  // 창을 열어둔 채 자정을 넘겨도 자동으로 갱신되도록 KST 기준 날짜가 바뀔 때만 값이
+  // 바뀌는 상태를 두고, 이걸 구독 effect의 의존성으로 써서 자정에 재구독시킨다.
+  const toKstDateStr = (d) => { const x = new Date(d); x.setMinutes(x.getMinutes() - x.getTimezoneOffset()); return x.toISOString().slice(0, 10); };
+  const [todayKstKey, setTodayKstKey] = useState(() => toKstDateStr(new Date()));
+  useEffect(() => {
+    const t = setInterval(() => {
+      const k = toKstDateStr(new Date());
+      setTodayKstKey((prev) => (prev === k ? prev : k));
+    }, 60000);
+    return () => clearInterval(t);
+  }, []);
   let ordersCache = [];
 let dispatchCache = [];
   // ⚡ localStorage 저장은 오프라인 캐시 용도일 뿐 화면 표시와 무관하므로,
@@ -2757,18 +2774,21 @@ useEffect(() => {
   const userRole = localStorage.getItem("role") || "user";
 const collName = "orders";
 
-const getSixMonthsAgo = () => {
+// ⭐ Firestore 읽기 절감 — 예전엔 where() 없이 orders/dispatch 두 컬렉션을 무제한으로
+// 구독해서, 회사가 쌓아온 배차 이력이 몇 년치든 로그인할 때마다(그리고 이후 누군가
+// 아무 오더나 한 건만 수정해도 접속 중인 모든 사람 화면에서 다시) 전부 읽어들였다 —
+// 이게 매일 무료 읽기 한도를 초과하는 주된 원인이었다. HOME 대시보드의 연매출 등
+// 통계도 "올해" 데이터까지만 필요하므로(HomeDashboard.jsx의 yearRevenue 참고),
+// 최근 13개월(연초부터 계산해도 여유 있게 걸치도록)만 실시간 구독한다. 그보다
+// 오래된 데이터가 필요한 조회(배차현황의 기간검색 등)는 그 화면에서 필요할 때만
+// 별도로 getDocs 조회한다.
+const getMonthsAgoKST = (months) => {
   const d = new Date();
-  d.setMonth(d.getMonth() - 6);
-
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-
-  return `${y}-${m}-${day}`;
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  d.setMonth(d.getMonth() - months);
+  return d.toISOString().slice(0, 10);
 };
-
-const sixMonthsAgo = getSixMonthsAgo();
+const liveWindowStart = getMonthsAgoKST(13);
   // orders/dispatch 두 리스너 모두 "캐시가 아닌 진짜" 첫 응답을 받으면 liveDataReady를 켠다.
   let ordersRealFirstDone = false;
   let dispatchRealFirstDone = false;
@@ -2823,7 +2843,7 @@ const sixMonthsAgo = getSixMonthsAgo();
   });
 
   unsubs.push(
-    onSnapshot(collection(db, collName), (snap) => {
+    onSnapshot(query(collection(db, collName), where("상차일", ">=", liveWindowStart)), (snap) => {
       const changes = snap.docChanges();
       let hasSignificantChange = ordersFirstLoad;
       changes.forEach((ch) => {
@@ -3025,7 +3045,7 @@ const sixMonthsAgo = getSixMonthsAgo();
   });
 
   unsubs.push(
-    onSnapshot(collection(db, "dispatch"), (snap) => {
+    onSnapshot(query(collection(db, "dispatch"), where("상차일", ">=", liveWindowStart)), (snap) => {
       const changes = snap.docChanges();
       let hasSignificantChange = dispatchFirstLoad;
       changes.forEach((ch) => {
@@ -3158,6 +3178,80 @@ const sixMonthsAgo = getSixMonthsAgo();
 
     return () => unsubs.forEach(u => u && u());
   }, [user, userCompany, role]);
+
+  // ===================== 실시간배차현황 전용 — 어제~내일만 실시간 구독 =====================
+  // ⭐ 실시간배차현황(그리고 배차관리 하단부의 동일 컴포넌트)은 화면에 어제/당일/내일
+  // 버튼밖에 없고 그 외 조회 기능이 없다 — 즉 이 화면이 실제로 필요한 데이터는 항상
+  // 이 3일치뿐이다. 위 메인 리스너(최근 13개월)를 그대로 필터링해 쓰는 대신, 아예
+  // orders/dispatch 두 컬렉션을 이 좁은 날짜범위로만 별도 구독해서 훨씬 작은 배열을
+  // 유지한다 — 오더가 많은 회사일수록 저장/렌더 시 다시 계산해야 하는 배열 크기가
+  // 확 줄어 체감 딜레이가 줄고, Firestore 읽기량도 더 줄어든다.
+  useEffect(() => {
+    if (!user) { setRecentDispatchData([]); setRecentLiveDataReady(false); return; }
+
+    const toKstStr = (d) => {
+      const x = new Date(d);
+      x.setMinutes(x.getMinutes() - x.getTimezoneOffset());
+      return x.toISOString().slice(0, 10);
+    };
+    const now = new Date();
+    const from = toKstStr(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+    const to = toKstStr(new Date(now.getTime() + 24 * 60 * 60 * 1000));
+
+    const parseWaypoints = (v) => {
+      if (Array.isArray(v) && v.length > 0) return v;
+      if (typeof v === "string" && v.startsWith("[")) try { const p = JSON.parse(v); if (Array.isArray(p) && p.length > 0) return p; } catch {}
+      if (v && typeof v === "object" && !Array.isArray(v)) {
+        const ks = Object.keys(v);
+        if (ks.length > 0 && ks.every(k => /^\d+$/.test(k))) return ks.sort((a, b) => Number(a) - Number(b)).map(k => v[k]);
+        if (v.업체명) return [v];
+      }
+      return null;
+    };
+    const buildRow = (id, col, data) => ({
+      _id: id,
+      __col: col,
+      ...data,
+      경유지_상차: parseWaypoints(data.경유지_상차) || parseWaypoints(data.경유상차목록) || [],
+      경유지_하차: parseWaypoints(data.경유지_하차) || parseWaypoints(data.경유하차목록) || [],
+    });
+
+    let ordersPart = [];
+    let dispatchPart = [];
+    let ordersReady = false, dispatchReady = false;
+    const recompute = () => setRecentDispatchData([...ordersPart, ...dispatchPart]);
+    const markReady = (which) => {
+      if (which === "orders") ordersReady = true; else dispatchReady = true;
+      if (ordersReady && dispatchReady) setRecentLiveDataReady(true);
+    };
+
+    const unsub1 = onSnapshot(
+      query(collection(db, "orders"), where("상차일", ">=", from), where("상차일", "<=", to)),
+      (snap) => {
+        ordersPart = snap.docs
+          .map((d) => buildRow(d.id, "orders", d.data() || {}))
+          .filter((row) =>
+            row.source !== "transport_transmit" &&
+            row.배차상태 !== "배차취소" &&
+            !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태)
+          );
+        recompute();
+        markReady("orders");
+      }
+    );
+    const unsub2 = onSnapshot(
+      query(collection(db, "dispatch"), where("상차일", ">=", from), where("상차일", "<=", to)),
+      (snap) => {
+        dispatchPart = snap.docs
+          .map((d) => buildRow(d.id, "dispatch", d.data() || {}))
+          .filter((row) => row.배차상태 !== "배차취소" && !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태));
+        recompute();
+        markReady("dispatch");
+      }
+    );
+
+    return () => { unsub1(); unsub2(); };
+  }, [user, todayKstKey]);
 
 const addDispatch = async (record) => {
   // 🚫 하차일이 상차일보다 빠른 역순 등록 방지
@@ -3771,6 +3865,8 @@ const markEditRequestSeen = async (order) => {
     dispatchData,
     setDispatchData,   // ★ 추가
     liveDataReady,
+    recentDispatchData,
+    recentLiveDataReady,
     drivers,
     clients,
     places,
@@ -5916,6 +6012,8 @@ useEffect(() => {
     dispatchData,
     setDispatchData,   // ★ 추가
     liveDataReady,
+    recentDispatchData,
+    recentLiveDataReady,
     drivers,
     clients,
     places,
@@ -5940,18 +6038,20 @@ useEffect(() => {
   const customRoles = useCustomRoles();
 
   // 🔍 admin = 전체 데이터, 일반 user = 본인 작성 데이터만
-  const dispatchDataFiltered = useMemo(() => {
-    if (!dispatchData || !user) return [];
+  // ⭐ 회사/권한 기준 필터 로직 — dispatchData(최근 13개월)와 recentDispatchData(어제~내일)
+  // 양쪽에 그대로 재사용한다(둘 다 raw 배열만 다르고 걸러내는 규칙은 동일하다).
+  const filterByCompanyAndRole = React.useCallback((data) => {
+    if (!data || !user) return [];
 
     // 총마스터는 입력한 회사명 기준으로 필터
     if (role === "totalMaster") {
       const viewCompany = localStorage.getItem("loginCompany") || userCompany || "돌캐";
-      return dispatchData.filter(o => (o?.companyName || "돌캐") === viewCompany);
+      return data.filter(o => (o?.companyName || "돌캐") === viewCompany);
     }
 
     // 회사명 기준 필터 (없으면 "돌캐"로 간주)
     const myCompany = userCompany || localStorage.getItem("userCompany") || "돌캐";
-    const byCompany = dispatchData.filter(o => {
+    const byCompany = data.filter(o => {
       const docCompany = o?.companyName || "돌캐";
       return docCompany === myCompany;
     });
@@ -5974,7 +6074,19 @@ useEffect(() => {
     return byCompany.filter(o =>
       !o?.작성자 || o?.작성자 === user.email
     );
-  }, [dispatchData, user, role, userCompany, customRoles]);
+  }, [user, role, userCompany, customRoles]);
+
+  const dispatchDataFiltered = useMemo(
+    () => filterByCompanyAndRole(dispatchData),
+    [dispatchData, filterByCompanyAndRole]
+  );
+
+  // ⭐ 실시간배차현황/배차관리 하단부 전용 — 어제~내일만 담긴 훨씬 작은 배열을
+  // 같은 규칙으로 필터링한 버전. 이 두 화면은 이 값을 쓰도록 아래에서 교체한다.
+  const recentDispatchDataFiltered = useMemo(
+    () => filterByCompanyAndRole(recentDispatchData),
+    [recentDispatchData, filterByCompanyAndRole]
+  );
 
 
   // ⭐ 내 정보 통계 계산
@@ -6738,8 +6850,8 @@ return (
             role={role}
             userCompany={userCompany}
             menu={menu}
-            dispatchData={dispatchDataFiltered}
-            liveDataReady={liveDataReady}
+            dispatchData={recentDispatchDataFiltered}
+            liveDataReady={recentLiveDataReady}
             timeOptions={timeOptions}
             tonOptions={tonOptions}
             drivers={drivers}
@@ -18927,8 +19039,8 @@ setConfirmChange(null);
       role={role}
       userCompany={userCompany}
       menu={menu}
-      dispatchData={dispatchData}
-      liveDataReady={liveDataReady}
+      dispatchData={recentDispatchData}
+      liveDataReady={recentLiveDataReady}
       drivers={drivers}
       clients={clients}
       placeRows={placeRows}
@@ -33356,6 +33468,51 @@ const [statusFilter, setStatusFilter] = React.useState("ALL");
   const [endDate, setEndDate] = React.useState("");
   const [appliedStartDate, setAppliedStartDate] = React.useState("");
 const [appliedEndDate, setAppliedEndDate] = React.useState("");
+  // ⭐ dispatchData(부모가 내려주는 실시간 데이터)는 이제 최근 13개월치만 담겨 있다
+  // (Firestore 읽기 절감을 위한 변경 — DispatchApp.jsx의 liveWindowStart 참고).
+  // 조회 기간이 그보다 더 과거로 잡히면(최고관리자는 3개월 제한이 없어 더 오래된
+  // 데이터도 조회할 수 있다) 실시간 데이터에는 없는 구간이므로, 그 구간만 별도로
+  // getDocs로 한 번 불러와 합쳐준다.
+  const [extraHistoricalRows, setExtraHistoricalRows] = React.useState([]);
+  const [extraHistoricalLoading, setExtraHistoricalLoading] = React.useState(false);
+  React.useEffect(() => {
+    if (!appliedStartDate || !appliedEndDate) { setExtraHistoricalRows([]); return; }
+    const liveWindowStart = (() => {
+      const d = new Date();
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      d.setMonth(d.getMonth() - 13);
+      return d.toISOString().slice(0, 10);
+    })();
+    // 조회 시작일이 실시간 구독 범위(최근 13개월) 안이면 이미 dispatchData에 다 있다 — 추가 조회 불필요.
+    if (appliedStartDate >= liveWindowStart) { setExtraHistoricalRows([]); return; }
+    let cancelled = false;
+    setExtraHistoricalLoading(true);
+    (async () => {
+      try {
+        const fetchOlder = async (collName) => {
+          const qy = query(
+            collection(db, collName),
+            where("상차일", ">=", appliedStartDate),
+            where("상차일", "<", liveWindowStart)
+          );
+          const snap = await getDocs(qy);
+          return snap.docs.map(d => ({ _id: d.id, __col: collName, ...d.data() }));
+        };
+        const [oldOrders, oldDispatch] = await Promise.all([fetchOlder("orders"), fetchOlder("dispatch")]);
+        if (cancelled) return;
+        const merged = [...oldOrders, ...oldDispatch].filter(row =>
+          row.배차상태 !== "배차취소" && !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태)
+        );
+        setExtraHistoricalRows(merged);
+      } catch (e) {
+        console.error("과거(13개월 이전) 배차 데이터 조회 실패:", e);
+        if (!cancelled) setExtraHistoricalRows([]);
+      } finally {
+        if (!cancelled) setExtraHistoricalLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [appliedStartDate, appliedEndDate]);
   const [sortKey, setSortKey] = React.useState("");
   const [sortDir, setSortDir] = React.useState("asc");
   const [sortKey2, setSortKey2] = React.useState("");
@@ -35257,12 +35414,17 @@ const filtered = React.useMemo(() => {
     // dispatchData를 map()으로 새로 순회/복사하면 오더가 많아질수록(수천~수만 건)
     // 그 자체로 무거워진다 — 실제로 override가 있을 때만 map을 수행한다.
     const hasOverrides = Object.keys(localOverrides).length > 0;
+    // ⭐ dispatchData(최근 13개월 실시간)에 없는, 그보다 오래된 구간을 조회할 때만
+    // 별도로 getDocs 조회해둔 extraHistoricalRows를 여기서 합친다(평소엔 빈 배열).
+    const baseData = extraHistoricalRows.length > 0
+      ? [...(dispatchData || []), ...extraHistoricalRows]
+      : (dispatchData || []);
     let data = hasOverrides
-      ? (dispatchData || []).map(d => {
+      ? baseData.map(d => {
           const id = getId(d);
           return localOverrides[id] ? { ...d, ...localOverrides[id] } : d;
         })
-      : (dispatchData || []);
+      : baseData;
 
   // 🔥 조회 버튼 누르기 전 → 전체
   if (!loaded) return data;
@@ -35452,7 +35614,7 @@ const save = {
   } catch (err) {
     console.error("DispatchStatus 상태 저장 실패", err);
   }
-}, [q, startDate, endDate, appliedStartDate, appliedEndDate, page, selected, edited, editMode]);
+}, [q, startDate, endDate, appliedStartDate, appliedEndDate, page, selected, edited, editMode, extraHistoricalRows]);
   // ★ focusOrderId 하이라이트 + 스크롤
   React.useEffect(() => {
     if (!focusOrderId) return;
