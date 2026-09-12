@@ -7220,9 +7220,21 @@ function MobileEstimateModal({ orders = [], userCompany = "", onClose }) {
               괜찮지만, 저장되는 이미지에는 내용이 짤림없이 전부 나와야 한다(PC 스케줄표와 동일).
               그래서 line-clamp/overflow:hidden을 걷어내고 break-all로 긴 텍스트가 셀 너비 안에서
               자연스럽게 줄바꿈되며 행 높이가 늘어나도록 했다 — table-layout:fixed라 칸 너비는
-              고정된 채로, 내용이 길면 셀/행이 아래로 길어질 뿐 옆 칸을 침범하지 않는다. */}
+              고정된 채로, 내용이 길면 셀/행이 아래로 길어질 뿐 옆 칸을 침범하지 않는다.
+              ⭐ 그런데 App.css에 전역으로 걸린 `table td { white-space: nowrap !important; }` 규칙이
+              모든 테이블의 td에 적용되어 break-all을 무시하고 한 줄로 강제되면서, 넘친 텍스트가
+              옆 칸/아래 행 위로 겹쳐 보이는 버그가 있었다(글씨가 서로 겹쳐 보이던 원인). !important는
+              같은 !important끼리는 CSS 명시도(specificity)로 우선순위가 갈리므로, 이 표에만 붙는
+              클래스로 더 높은 명시도의 !important 규칙을 줘서 확실히 덮어쓴다. */}
+          <style>{`
+            .orderStatementTable td {
+              white-space: normal !important;
+              word-break: break-all !important;
+              overflow-wrap: break-word !important;
+            }
+          `}</style>
           <div className="px-3 pt-3 pb-1">
-            <table className="w-full border-collapse table-fixed">
+            <table className="orderStatementTable w-full border-collapse table-fixed">
               <thead>
                 <tr className="bg-[#1B2B4B]/[0.06]">
                   <th className="border border-gray-200 py-2 px-0.5 text-[10px] font-bold text-[#1B2B4B] break-words" style={{ width: amtColCount === 2 ? "11%" : amtColCount === 1 ? "12%" : "14%" }}>날짜</th>
