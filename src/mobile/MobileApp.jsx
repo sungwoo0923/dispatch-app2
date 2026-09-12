@@ -7030,6 +7030,30 @@ function MobileEstimateModal({ orders = [], userCompany = "", onClose }) {
   const vatOn = showAmount && includeVat;
   const supplyOn = showAmount && (includeVat ? showSupply : true);
 
+  // ⭐ 세로모드일 때는 화면폭이 좁아 표 칸이 좁을 수밖에 없는데, 문서 폭을 항상 520px로
+  // 고정해버리면 가로모드로 돌려도(화면이 실제로 넓어졌는데도) 여전히 좁은 문서 그대로
+  // 캡처되어 글씨가 겹치거나 잘려 보인다. 실제 화면 폭(가로/세로 회전)에 맞춰 문서 최대
+  // 폭을 늘려주면, 가로모드에서는 칸이 넓어진 만큼 줄바꿈이 훨씬 줄어들어 PC 스케줄표처럼
+  // 여유있게 한 줄로 보일 가능성이 커진다 — html2canvas는 캡처 시점의 실제 DOM 크기를
+  // 그대로 캡처하므로, 이 값을 넓히면 저장되는 이미지도 같이 넓어진다.
+  const [viewportW, setViewportW] = useState(() => (typeof window !== "undefined" ? window.innerWidth : 520));
+  useEffect(() => {
+    const update = () => setViewportW(window.innerWidth);
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    // 회전 직후에는 innerWidth가 아직 갱신되기 전에 이벤트가 먼저 올 때가 있어 살짝 지연 후 한 번 더 확인
+    const t = setTimeout(update, 300);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+      clearTimeout(t);
+    };
+  }, []);
+  // 세로모드(좁은 화면)에서는 기존과 동일하게 520px, 가로모드로 화면이 넓어지면 그만큼
+  // 문서도 넓어지되(최대 880px), 화면보다 커서 잘리는 일은 없도록 여백(40px)을 뺀 값을 상한으로 둔다.
+  const docMaxWidth = Math.min(880, Math.max(520, viewportW - 40));
+
   // 선택한 오더가 뒤죽박죽 섞여 들어와도 문서에는 날짜순으로 정리해서 보여준다.
   const sortedOrders = useMemo(() => {
     return [...orders].sort((a, b) => {
@@ -7194,7 +7218,7 @@ function MobileEstimateModal({ orders = [], userCompany = "", onClose }) {
 
       {/* 미리보기 (캡처 영역) */}
       <div className="flex-1 overflow-y-auto bg-gray-100 px-3 py-4">
-        <div ref={captureRef} className="bg-white mx-auto rounded-lg overflow-hidden shadow-sm" style={{ maxWidth: 520 }}>
+        <div ref={captureRef} className="bg-white mx-auto rounded-lg overflow-hidden shadow-sm" style={{ maxWidth: docMaxWidth }}>
           {/* 문서 헤더 */}
           <div className="bg-[#1B2B4B] px-5 py-5 text-center">
             <div className="text-white text-[17px] font-extrabold tracking-wide">오더 내역서</div>
