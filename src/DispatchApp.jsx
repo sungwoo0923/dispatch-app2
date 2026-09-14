@@ -1047,14 +1047,32 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
     link.href = canvas.toDataURL("image/png");
     link.click();
   };
+  // captureRef 기준 상대 offsetTop(줌/transform:scale의 영향을 받지 않는 실제 레이아웃
+  // 좌표) — getBoundingClientRect는 미리보기의 확대/축소(zoom) transform이 적용된 값이라
+  // html2canvas가 그리는 캔버스(줌과 무관하게 원본 크기로 렌더링됨)와 좌표계가 어긋난다.
+  const offsetTopWithin = (el, ancestor) => {
+    let top = 0, node = el;
+    while (node && node !== ancestor) { top += node.offsetTop || 0; node = node.offsetParent; }
+    return top;
+  };
+
   // ⭐ 예전엔 캡처한 이미지를 통째로 A4 한 페이지에 폭(210mm) 기준으로만 맞춰
   // 욱여넣어서, 스케줄 기간이 길어(예: 9/2~9/14) 이미지 높이가 A4 한 페이지
   // 높이(297mm)를 넘으면 그 아래 내용이 페이지 밖으로 벗어나며 통째로 잘려서
   // PDF에 안 보이는 버그가 있었다 — 이미지 자체는 다 캡처됐는데 PDF에 담는
   // 과정에서 한 페이지만 쓰다 보니 잘린 것처럼 저장된 것. 이제 페이지 높이를
   // 넘으면 원본 캔버스를 페이지 높이 단위(px)로 나눠 여러 페이지로 이어붙인다.
+  //
+  // ⚠️ 처음엔 그냥 고정 픽셀 높이로 뚝뚝 잘랐는데, 그러면 표의 한 행이 하필 그
+  // 경계에 걸려 반으로 잘리는 경우가 생겨(아래쪽 페이지엔 그 행의 아랫부분만
+  // 남음) 글자가 칸 아래쪽에 몰려붙은 것처럼 보였다 — 실제로는 반듯하게
+  // 가운데 정렬돼 있었는데 위쪽 절반이 이전 페이지에서 잘려나간 것.
+  // 그래서 각 <tr>(표 행) / 카드 블록의 경계를 미리 구해두고, 페이지가 넘어가는
+  // 지점을 그 중 가장 가까운(넘지 않는) 안전한 경계로 스냅해서 행이 반으로
+  // 잘리는 일이 없게 한다.
   const savePdf = async () => {
-    const canvas = await captureCanvas(captureRef.current);
+    const node = captureRef.current;
+    const canvas = await captureCanvas(node);
     if (!canvas) return;
     const pdf = new jsPDF("p", "mm", "a4");
     const pdfWidth = 210;
@@ -1065,11 +1083,25 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
       const imgData = canvas.toDataURL("image/png");
       pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, totalHeightMm);
     } else {
+      const scaleRatio = canvas.width / node.offsetWidth;
+      const safeCuts = Array.from(node.querySelectorAll("tr, [data-pdf-block]"))
+        .map((el) => Math.round((offsetTopWithin(el, node) + el.offsetHeight) * scaleRatio))
+        .filter((v) => v > 0 && v < canvas.height)
+        .sort((a, b) => a - b);
+
       const pageHeightPx = Math.floor((pdfPageHeight * canvas.width) / pdfWidth);
       let renderedPx = 0;
       let pageIndex = 0;
       while (renderedPx < canvas.height) {
-        const sliceHeightPx = Math.min(pageHeightPx, canvas.height - renderedPx);
+        const naiveBreak = Math.min(renderedPx + pageHeightPx, canvas.height);
+        let cut = naiveBreak;
+        if (naiveBreak < canvas.height) {
+          // naiveBreak를 넘지 않는 안전한 경계 중 가장 큰 값(=가장 꽉 채우는 값)을 찾는다.
+          for (let i = safeCuts.length - 1; i >= 0; i--) {
+            if (safeCuts[i] > renderedPx && safeCuts[i] <= naiveBreak) { cut = safeCuts[i]; break; }
+          }
+        }
+        const sliceHeightPx = cut - renderedPx;
         const pageCanvas = document.createElement("canvas");
         pageCanvas.width = canvas.width;
         pageCanvas.height = sliceHeightPx;
@@ -1081,7 +1113,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
         const sliceHeightMm = (sliceHeightPx * pdfWidth) / canvas.width;
         if (pageIndex > 0) pdf.addPage();
         pdf.addImage(sliceData, "PNG", 0, 0, pdfWidth, sliceHeightMm);
-        renderedPx += sliceHeightPx;
+        renderedPx = cut;
         pageIndex++;
       }
     }
@@ -1167,7 +1199,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
     const rWorkDates = _parseWorkDates(r.근무일자목록);
     const isMultiWork = rWorkDates.length > 1;
     return (
-      <div className="border border-gray-200 rounded-lg overflow-hidden">
+      <div className="border border-gray-200 rounded-lg overflow-hidden" data-pdf-block="1">
         <div className="bg-gray-100 px-3 py-1.5 flex items-center gap-2 border-b border-gray-200">
           <span className="text-[12px] font-extrabold text-[#1B2B4B]">
             {dateOverride ? _scheduleDateLabel(dateOverride) : isMultiWork ? _compressWorkDates(rWorkDates) : _scheduleDateLabel(r.상차일)} {r.상차시간 || "즉시"}
@@ -1413,20 +1445,21 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
                 </div>
               )}
 
-              {showFare && (
-                <div className="mt-4 pt-3 border-t-2 border-[#1B2B4B]/20 flex items-center justify-end gap-6">
-                  {showFareCharge && (
-                    <div className="text-[13px] font-bold text-gray-600">
-                      총 청구운임 <span className="text-[15px] font-extrabold text-[#1B2B4B] ml-1">{fmtWon(totalFareCharge)}</span>
-                    </div>
-                  )}
-                  {showFareDriver && (
-                    <div className="text-[13px] font-bold text-gray-600">
-                      총 기사운임 <span className="text-[15px] font-extrabold text-[#1B2B4B] ml-1">{fmtWon(totalFareDriver)}</span>
-                    </div>
-                  )}
+              <div className="mt-4 pt-3 border-t-2 border-[#1B2B4B]/20 flex items-center justify-end gap-6">
+                <div className="text-[13px] font-bold text-gray-600">
+                  총 건수 <span className="text-[15px] font-extrabold text-[#1B2B4B] ml-1">{filteredRows.length}건</span>
                 </div>
-              )}
+                {showFareCharge && (
+                  <div className="text-[13px] font-bold text-gray-600">
+                    총 청구운임 <span className="text-[15px] font-extrabold text-[#1B2B4B] ml-1">{fmtWon(totalFareCharge)}</span>
+                  </div>
+                )}
+                {showFareDriver && (
+                  <div className="text-[13px] font-bold text-gray-600">
+                    총 기사운임 <span className="text-[15px] font-extrabold text-[#1B2B4B] ml-1">{fmtWon(totalFareDriver)}</span>
+                  </div>
+                )}
+              </div>
               {showFareCharge && (
                 <div className="mt-2 text-[11px] font-bold text-gray-500 text-right">※ 상기 청구운임은 부가세 별도 금액입니다.</div>
               )}
