@@ -1025,6 +1025,14 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
     return dates.length === 1 ? _scheduleDateLabel(dates[0]) : `${_scheduleDateLabel(dates[0])} ~ ${_scheduleDateLabel(dates[dates.length - 1])}`;
   }, [rows, isDateFiltered, activeDateSet]);
 
+  // ⭐ 총 청구운임/기사운임 — 오더 단위(filteredRows)로 합산한다. 날짜별 보기에서는
+  // 복수근무일(묶음) 오더가 근무일마다 여러 날짜 섹션에 중복으로 나타나는데, 그
+  // 운임은 오더 1건당 금액이지 날짜마다 새로 발생하는 금액이 아니므로 날짜별로
+  // 합치면 중복 계산된다 — 실제 오더 건수 기준인 filteredRows로 합산해야 정확하다.
+  const toWonNum = (v) => Number(String(v || "0").replace(/[^\d]/g, "")) || 0;
+  const totalFareCharge = React.useMemo(() => (filteredRows || []).reduce((s, r) => s + toWonNum(r.청구운임), 0), [filteredRows]);
+  const totalFareDriver = React.useMemo(() => (filteredRows || []).reduce((s, r) => s + toWonNum(r.기사운임), 0), [filteredRows]);
+
   if (!rows || rows.length === 0) return null;
 
   const captureCanvas = (node) => node
@@ -1039,14 +1047,44 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
     link.href = canvas.toDataURL("image/png");
     link.click();
   };
+  // ⭐ 예전엔 캡처한 이미지를 통째로 A4 한 페이지에 폭(210mm) 기준으로만 맞춰
+  // 욱여넣어서, 스케줄 기간이 길어(예: 9/2~9/14) 이미지 높이가 A4 한 페이지
+  // 높이(297mm)를 넘으면 그 아래 내용이 페이지 밖으로 벗어나며 통째로 잘려서
+  // PDF에 안 보이는 버그가 있었다 — 이미지 자체는 다 캡처됐는데 PDF에 담는
+  // 과정에서 한 페이지만 쓰다 보니 잘린 것처럼 저장된 것. 이제 페이지 높이를
+  // 넘으면 원본 캔버스를 페이지 높이 단위(px)로 나눠 여러 페이지로 이어붙인다.
   const savePdf = async () => {
     const canvas = await captureCanvas(captureRef.current);
     if (!canvas) return;
-    const imgData = canvas.toDataURL("image/png");
     const pdf = new jsPDF("p", "mm", "a4");
     const pdfWidth = 210;
-    const imgHeight = (canvas.height * pdfWidth) / canvas.width;
-    pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, imgHeight);
+    const pdfPageHeight = 297;
+    const totalHeightMm = (canvas.height * pdfWidth) / canvas.width;
+
+    if (totalHeightMm <= pdfPageHeight) {
+      const imgData = canvas.toDataURL("image/png");
+      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, totalHeightMm);
+    } else {
+      const pageHeightPx = Math.floor((pdfPageHeight * canvas.width) / pdfWidth);
+      let renderedPx = 0;
+      let pageIndex = 0;
+      while (renderedPx < canvas.height) {
+        const sliceHeightPx = Math.min(pageHeightPx, canvas.height - renderedPx);
+        const pageCanvas = document.createElement("canvas");
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sliceHeightPx;
+        const ctx = pageCanvas.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, pageCanvas.width, sliceHeightPx);
+        ctx.drawImage(canvas, 0, renderedPx, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx);
+        const sliceData = pageCanvas.toDataURL("image/png");
+        const sliceHeightMm = (sliceHeightPx * pdfWidth) / canvas.width;
+        if (pageIndex > 0) pdf.addPage();
+        pdf.addImage(sliceData, "PNG", 0, 0, pdfWidth, sliceHeightMm);
+        renderedPx += sliceHeightPx;
+        pageIndex++;
+      }
+    }
     pdf.save(`스케줄표_${dateRangeLabel || "선택오더"}.pdf`);
   };
   const handlePrint = async () => {
@@ -1375,8 +1413,22 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
                 </div>
               )}
 
+              {showFare && (
+                <div className="mt-4 pt-3 border-t-2 border-[#1B2B4B]/20 flex items-center justify-end gap-6">
+                  {showFareCharge && (
+                    <div className="text-[13px] font-bold text-gray-600">
+                      총 청구운임 <span className="text-[15px] font-extrabold text-[#1B2B4B] ml-1">{fmtWon(totalFareCharge)}</span>
+                    </div>
+                  )}
+                  {showFareDriver && (
+                    <div className="text-[13px] font-bold text-gray-600">
+                      총 기사운임 <span className="text-[15px] font-extrabold text-[#1B2B4B] ml-1">{fmtWon(totalFareDriver)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
               {showFareCharge && (
-                <div className="mt-4 text-[11px] font-bold text-gray-500 text-right">※ 상기 청구운임은 부가세 별도 금액입니다.</div>
+                <div className="mt-2 text-[11px] font-bold text-gray-500 text-right">※ 상기 청구운임은 부가세 별도 금액입니다.</div>
               )}
               <div className="mt-6 pt-4 border-t border-dashed border-gray-300 text-[11px] font-semibold text-gray-500 text-center">
                 본 스케줄표는 배차관리 프로그램에서 선택한 오더를 기준으로 자동 생성되었습니다.
