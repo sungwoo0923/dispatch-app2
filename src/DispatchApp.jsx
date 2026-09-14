@@ -6906,6 +6906,7 @@ return (
             userCompany={userCompany}
             menu={menu}
             dispatchData={recentDispatchDataFiltered}
+            historyDispatchData={dispatchDataFiltered}
             liveDataReady={recentLiveDataReady}
             timeOptions={timeOptions}
             tonOptions={tonOptions}
@@ -19125,6 +19126,7 @@ setConfirmChange(null);
       userCompany={userCompany}
       menu={menu}
       dispatchData={recentDispatchData}
+      historyDispatchData={dispatchData}
       liveDataReady={recentLiveDataReady}
       drivers={drivers}
       clients={clients}
@@ -22240,6 +22242,15 @@ function OptimalMatchModal({ row, dispatchData, onClose, companyName }) {
 
 function RealtimeStatus({
   dispatchData,
+  // ⭐ dispatchData는 이 화면(실시간배차현황) 표시용으로 어제~내일 3일치만 담아 전달되는
+  // 좁은 창(narrow window)이다 — 화면 성능을 위해 의도적으로 좁힌 것. 문제는 운임조회/
+  // 최적매칭처럼 "과거 이력"을 통째로 뒤져야 하는 기능들도 예전엔 이 dispatchData 하나만
+  // 보고 동작했었는데(그때는 dispatchData 자체가 13개월치 전체였음), 좁은 창으로 바뀐 뒤에도
+  // 그 함수들이 그대로 dispatchData를 참조하면서 "동일 상/하차지 운임 이력이 없습니다"가
+  // 실제로는 이력이 있는데도 항상 뜨는 버그가 생겼다 — 3일 밖의 이력은 아예 안 보이니까.
+  // historyDispatchData는 그 함수들 전용으로 넘겨받는 13개월 전체 범위 데이터다(호출부에서
+  // 못 넘겨줘도 최소한 dispatchData로라도 동작하도록 기본값을 그것으로 둔다).
+  historyDispatchData = dispatchData,
   liveDataReady = true,
   drivers,
   clients,
@@ -23623,7 +23634,7 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
     const inputDropStops = getRouteStops(row, "drop");
     const sameStops = (a, b) => a.length === b.length && a.every((n, i) => n.trim() === b[i].trim());
     const _todayKst4sel = new Date(new Date().getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const base = (dispatchData || []).filter(r => {
+    const base = (historyDispatchData || []).filter(r => {
       if ((r.상차일 || "").slice(0, 10) === _todayKst4sel) return false;
       if (!r.청구운임) return false;
       const rPickupStops = getRouteStops(r, "pickup");
@@ -23703,7 +23714,7 @@ setFarePanelOpen(true);
     const _copyPickupStops = getRouteStops(copyTarget, "pickup");
     const _copyDropStops = getRouteStops(copyTarget, "drop");
     const _copySameStops = (a, b) => a.length === b.length && a.every((n, i) => n.trim() === b[i].trim());
-    const base = (dispatchData || []).filter(r => {
+    const base = (historyDispatchData || []).filter(r => {
       if ((r.상차일 || "").slice(0, 10) === _todayKstCopy) return false;
       if (!r.청구운임) return false;
       if (!_copySameStops(_copyPickupStops, getRouteStops(r, "pickup"))) return false;
@@ -23972,7 +23983,7 @@ React.useEffect(() => {
     const _ctx4DropStops = getRouteStops(row, "drop");
     const _todayKstCtx4 = new Date(new Date().getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const _ctx4Same = (a, b) => a.length === b.length && a.every((n, i) => n.trim() === b[i].trim());
-    const base = (dispatchData || []).filter(r => {
+    const base = (historyDispatchData || []).filter(r => {
       if ((r.상차일 || "").slice(0, 10) === _todayKstCtx4) return false;
       if (!r.청구운임) return false;
       if (!_ctx4Same(_ctx4PickupStops, getRouteStops(r, "pickup"))) return false;
@@ -24025,7 +24036,7 @@ React.useEffect(() => {
     const targetClient = row ? String(row.거래처 || "").trim() : "";
     const _todayKstAddr4 = new Date(new Date().getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    const matchDir = (pk, dk) => (dispatchData || []).filter(r => {
+    const matchDir = (pk, dk) => (historyDispatchData || []).filter(r => {
       if ((r.상차일 || "").slice(0, 10) === _todayKstAddr4) return false;
       if (!r.청구운임) return false;
       const rPickup = String(r.상차지명 || "") + " " + String(r.상차지주소 || "");
@@ -24563,7 +24574,7 @@ const handleUrgentSnooze = (minutes) => {
       return;
     }
 
-    const result = calcFare(dispatchData, {
+    const result = calcFare(historyDispatchData, {
       pickup: newOrder.상차지명,
       drop: newOrder.하차지명,
       vehicle: newOrder.차량종류,
@@ -31753,7 +31764,7 @@ setConfirmChange(null);
       )}
 
       {optimalMatchRow4 && (
-        <OptimalMatchModal row={optimalMatchRow4} dispatchData={dispatchData} companyName={userCompany} onClose={() => setOptimalMatchRow4(null)} />
+        <OptimalMatchModal row={optimalMatchRow4} dispatchData={historyDispatchData} companyName={userCompany} onClose={() => setOptimalMatchRow4(null)} />
       )}
 
       {deliveryConfirm && (
