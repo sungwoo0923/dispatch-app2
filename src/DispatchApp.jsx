@@ -35875,6 +35875,27 @@ const filtered = React.useMemo(() => {
     return filtered.slice(start, end);
   }, [filtered, page]);
 
+  // ⭐ Shift+←/→ 로 이전/다음 페이지 이동 — 목록을 스크롤해서 아래쪽까지 내려간
+  // 상태에서도(위쪽 페이지 버튼까지 다시 스크롤할 필요 없이) 바로 페이지를 넘길 수
+  // 있게. 입력창(텍스트/셀렉트/textarea)에 포커스가 있을 때는 그 안에서의 커서
+  // 이동/브라우저 기본 동작을 방해하지 않도록 무시한다.
+  React.useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!e.shiftKey) return;
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const tag = (e.target?.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select" || e.target?.isContentEditable) return;
+      const lastPage = Math.max(0, Math.ceil(filtered.length / pageSize) - 1);
+      if (e.key === "ArrowLeft") {
+        setPage((p) => Math.max(0, p - 1));
+      } else {
+        setPage((p) => Math.min(lastPage, p + 1));
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [filtered.length, pageSize]);
+
   // 화면(현재 페이지)에 보이는 순서상 그 상/하차지명이 처음 등장하는 행의 id만
   // 모아둔다 — 같은 업체가 여러 건이어도 휴게(점심시간) 아이콘이 첫 행에만 뜨게
   // 하기 위함(RestCell의 isFirst prop으로 전달, 겹침 경고는 이 dedup과 무관하게 항상 표시).
@@ -37172,6 +37193,21 @@ return (
         </table>
       </div>
       <StickyHScrollbar targetRef={dsTableWrapRef} />
+      </div>
+
+      {/* ⭐ 하단 페이지 이동 — 목록을 끝까지 스크롤한 뒤에도 맨 위로 다시 올라가지
+          않고 바로 이전/다음 페이지로 넘어갈 수 있게, 상단과 동일한 버튼을 표 아래에도
+          둔다(Shift+←/→ 키로도 동일하게 이동 가능). */}
+      <div className="flex items-center justify-center gap-2 py-3">
+        <button disabled={page===0} onClick={()=>setPage(p=>Math.max(0,p-1))}
+          className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border whitespace-nowrap ${page===0?"bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed":"bg-white text-gray-700 border-gray-300 hover:bg-gray-100 shadow-sm"}`}>
+          ◀ 이전
+        </button>
+        <span className="text-[12px] font-semibold text-gray-600 px-1 whitespace-nowrap">{page+1}<span className="text-gray-500"> / {Math.max(1, Math.ceil(filtered.length/pageSize))}</span></span>
+        <button disabled={(page+1)*pageSize>=filtered.length} onClick={()=>setPage(p=>p+1)}
+          className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border whitespace-nowrap ${(page+1)*pageSize>=filtered.length?"bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed":"bg-white text-gray-700 border-gray-300 hover:bg-gray-100 shadow-sm"}`}>
+          다음 ▶
+        </button>
       </div>
 
       {/* ---------------------------------------------------------

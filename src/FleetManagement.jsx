@@ -1228,7 +1228,9 @@ function InfoField({ label, value, children, mono }) {
   return (
     <div style={{ minWidth: 0 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: ".03em", marginBottom: 3 }}>{label}</div>
-      <div style={{ fontSize: 14, fontWeight: 700, color: "#1f2937", fontFamily: mono ? "monospace" : undefined, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+      {/* ⭐ 차량번호/연락처 등 값 글씨가 잘 안 보인다는 피드백 — 쉬운모드 수준으로
+          진하고 크게: 색을 이름과 동일한 진한 색(#111827)으로, 글자 크기/굵기도 키움. */}
+      <div style={{ fontSize: 15, fontWeight: 800, color: "#111827", fontFamily: mono ? "monospace" : undefined, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
         {children != null ? children : (value || "-")}
       </div>
     </div>
@@ -1283,7 +1285,7 @@ function handleSendToDriver(driver, orders, selectedDate) {
 
 // ─── 기사별 노선 카드 ─────────────────────────────────────────────────────────
 
-const ROUTE_COLS = ["상태", "상차지", "하차지", "상차", "하차", "이동정보", "배차담당자", "거래처"];
+const ROUTE_COLS = ["상태", "거래처", "상차지", "하차지", "상차", "하차", "이동정보", "배차담당자"];
 
 // 오더를 등록/배차한 담당자 표시 — 3파트 등록폼과 동일한 우선순위로 폴백한다.
 function creatorLabel(r) {
@@ -1365,21 +1367,25 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
                           <span style={{ fontSize: 13, fontWeight: 700, color: "#374151" }}>{meta.label}</span>
                         </span>
                       </td>
-                      <td style={{ padding: "10px 16px" }}>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{r.상차지명 || "-"}</div>
-                        <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 1 }}>{r.상차일 || "-"} · {abbrevAddr(r.상차지주소) || "-"}</div>
+                      <td style={{ padding: "10px 16px", fontSize: 13, fontWeight: 700, color: "#374151", whiteSpace: "nowrap" }}>{r.거래처명 || "-"}</td>
+                      {/* ⭐ 상차지/하차지 — 예전엔 이름 아래 줄바꿈으로 "날짜 · 주소"가 작고 흐리게
+                          있었는데, 날짜는 상차/하차 컬럼으로 옮기고 주소는 이름 옆에 가로로,
+                          더 잘 보이는 색/굵기로 붙인다. */}
+                      <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{r.상차지명 || "-"}</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "#4b5563", marginLeft: 8 }}>{abbrevAddr(r.상차지주소) || "-"}</span>
                       </td>
-                      <td style={{ padding: "10px 16px" }}>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{r.하차지명 || "-"}</div>
-                        <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 1 }}>{r.하차일 || "-"} · {abbrevAddr(r.하차지주소) || "-"}</div>
+                      <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{r.하차지명 || "-"}</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "#4b5563", marginLeft: 8 }}>{abbrevAddr(r.하차지주소) || "-"}</span>
                       </td>
-                      <td style={{ padding: "10px 16px", fontSize: 13, color: "#374151", fontWeight: 600, whiteSpace: "nowrap" }}>{r.상차시간 || "즉시"}</td>
-                      <td style={{ padding: "10px 16px", fontSize: 13, color: "#374151", fontWeight: 600, whiteSpace: "nowrap" }}>{r.하차시간 || "즉시"}</td>
+                      {/* ⭐ 상차/하차 — 상차지/하차지 칸에 있던 날짜를 여기로 옮겨 시간과 함께 표시 */}
+                      <td style={{ padding: "10px 16px", fontSize: 13, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>{r.상차일 || "-"} {r.상차시간 || "즉시"}</td>
+                      <td style={{ padding: "10px 16px", fontSize: 13, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>{r.하차일 || "-"} {r.하차시간 || "즉시"}</td>
                       <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
                         <RouteDistanceBadge fromAddr={r.상차지주소} toAddr={r.하차지주소} />
                       </td>
-                      <td style={{ padding: "10px 16px", fontSize: 13, color: "#6b7280", whiteSpace: "nowrap" }}>{creatorLabel(r)}</td>
-                      <td style={{ padding: "10px 16px", fontSize: 13, color: "#6b7280" }}>{r.거래처명 || "-"}</td>
+                      <td style={{ padding: "10px 16px", fontSize: 13, color: "#374151", fontWeight: 600, whiteSpace: "nowrap" }}>{creatorLabel(r)}</td>
                     </tr>
                   );
                 })}
