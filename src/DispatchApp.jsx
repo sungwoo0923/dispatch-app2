@@ -12485,6 +12485,7 @@ const [call24EndDong, setCall24EndDong] = React.useState([]);
 const [call24CargoTon, setCall24CargoTon] = React.useState([]);
 const [call24TruckType, setCall24TruckType] = React.useState([]);
 const [call24MetaLoading, setCall24MetaLoading] = React.useState(false);
+const [call24MetaError, setCall24MetaError] = React.useState(null);
 const fetchCall24Meta = async (body) => {
   try {
     const res = await fetch("/api/call24-meta", {
@@ -12493,8 +12494,11 @@ const fetchCall24Meta = async (body) => {
       body: JSON.stringify(body),
     });
     const json = await res.json();
-    return json?.success ? (json.list || []) : [];
-  } catch {
+    if (json?.success) { setCall24MetaError(null); return json.list || []; }
+    setCall24MetaError({ code: json?.code, message: json?.message || "조회 실패", serverIp: json?.serverIp });
+    return [];
+  } catch (e) {
+    setCall24MetaError({ code: "-", message: e.message });
     return [];
   }
 };
@@ -12503,6 +12507,7 @@ React.useEffect(() => {
   let cancelled = false;
   (async () => {
     setCall24MetaLoading(true);
+    setCall24MetaError(null);
     const [sido, cargoTon] = await Promise.all([
       fetchCall24Meta({ type: "addr" }),
       fetchCall24Meta({ type: "cargoTon" }),
@@ -16658,6 +16663,17 @@ className={`
 
               {/* 바디 */}
               <div className="overflow-y-auto flex-1 p-6 space-y-5">
+                {call24MetaError && (
+                  <div className="rounded-xl px-5 py-3 text-[12px] font-semibold border bg-amber-50 border-amber-200 text-amber-800">
+                    {`주소/톤수/차종 목록을 24시콜에서 불러오지 못했습니다 — 코드: ${call24MetaError.code} / ${call24MetaError.message}`}
+                    {call24MetaError.serverIp && (
+                      <div className="mt-1 text-[11px] font-normal opacity-80">
+                        서버 IP: <span className="font-bold">{call24MetaError.serverIp}</span>
+                        {" — 24시콜 마이페이지 허용 IP와 다르면 이 IP를 등록하세요"}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {/* 상차지 */}
                 <div>
                   <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">상차지</div>

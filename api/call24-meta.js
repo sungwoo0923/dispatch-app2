@@ -31,6 +31,19 @@ function decryptAES(base64Str) {
   return dec;
 }
 
+function httpsGet(url, timeoutMs = 4000) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const req = https.get({ hostname: u.hostname, port: parseInt(u.port) || 443, path: u.pathname + u.search, timeout: timeoutMs }, (res) => {
+      const chunks = [];
+      res.on("data", c => chunks.push(c));
+      res.on("end", () => resolve(Buffer.concat(chunks).toString("utf8").trim()));
+    });
+    req.on("error", reject);
+    req.on("timeout", () => req.destroy(new Error("timeout")));
+  });
+}
+
 function httpsPost(url, body, reqHeaders) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
@@ -95,7 +108,23 @@ export default async function handler(req, res) {
     } else {
       return res.status(400).json({ success: false, error: "invalid type" });
     }
-    return res.status(200).json({ success: result.code === 1, code: result.code, message: result.message, list: result.list });
+    // ⚠️ 목록이 비어 왔다(실패)면 진단을 위해 실제 아웃바운드 IP를 함께
+    // 확인해 내려준다 — send24.js(주문 등록)와 이 함수(마스터데이터 조회)는
+    // 서로 다른 서버리스 함수라 같은 리전이라도 실제 발신 IP가 다를 수
+    // 있고, 24시콜은 IP당 1개만 등록 가능해 등록된 IP와 다르면 -13으로
+    // 거부된다.
+    let outboundIp;
+    if (result.code !== 1) {
+      const ipServices = ["https://checkip.amazonaws.com", "https://api4.ipify.org", "https://ipv4.icanhazip.com"];
+      for (const svc of ipServices) {
+        try {
+          const ip = await httpsGet(svc, 3000);
+          if (/^\d+\.\d+\.\d+\.\d+$/.test(ip)) { outboundIp = ip; break; }
+        } catch (_) {}
+      }
+    }
+    console.log("call24-meta", type, "code:", result.code, "message:", result.message, "outboundIp:", outboundIp);
+    return res.status(200).json({ success: result.code === 1, code: result.code, message: result.message, list: result.list, serverIp: outboundIp });
   } catch (err) {
     console.error("call24-meta 오류:", err.message);
     return res.status(500).json({ success: false, error: err.message, list: [] });
