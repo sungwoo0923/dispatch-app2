@@ -3,20 +3,25 @@ import https from "node:https";
 
 /* ─── 환경변수 (Vercel 대시보드 미설정 시 fallback) ─── */
 const AES_KEY = process.env.CALL24_AES_KEY || "946e5bf1c0a86333688d1d01561e06e3";
-const AES_IV  = (process.env.CALL24_AES_IV  || "4eff880a505c8136").padEnd(32, "0");
+const AES_IV  = process.env.CALL24_AES_IV  || "4eff880a505c8136";
 const API_KEY = process.env.CALL24_API_KEY  || "946e5bf1c0a863332f1c2a6977b9f08e";
 const BASE_URL = "https://api.15887924.com:18099";
 
-/* ─── AES 암호화 (키 길이에 따라 AES-128 또는 AES-256 자동 선택) ─── */
+/* ─── AES 암호화 (키 길이에 따라 AES-128 또는 AES-256 자동 선택) ───
+   ⚠️ CALL24_AES_KEY/IV는 hex 문자열이 아니라, 발급받은 문자열 자체를
+   바이트로 그대로 쓰는 값이다(키 32자 → 32바이트 → AES-256-CBC, PDF 스펙과
+   일치 / IV 16자 → 16바이트, CBC에 필요한 블록 크기와 정확히 일치).
+   과거 hex로 디코딩하던 코드는 키가 16바이트(AES-128)로, IV가 8바이트로
+   줄어들어(0으로 패딩) 수신측과 다른 값이 되어 매번 "data 복호화 실패"가
+   났었다. */
 function encryptAES(str) {
-  const key = Buffer.from(AES_KEY, "hex");
-  const iv  = Buffer.from(AES_IV,  "hex");
-  // PDF 스펙: Key size 256bit → 32바이트(64 hex자)이면 aes-256-cbc, 16바이트면 aes-128-cbc
+  const key = Buffer.from(AES_KEY, "utf8");
+  const iv  = Buffer.from(AES_IV,  "utf8");
   const algo = key.length === 32 ? "aes-256-cbc" : "aes-128-cbc";
   const cipher = createCipheriv(algo, key, iv);
   let enc = cipher.update(str, "utf8", "base64");
   enc += cipher.final("base64");
-  console.log("send24 암호화 알고리즘:", algo, "/ 키 길이:", key.length, "바이트");
+  console.log("send24 암호화 알고리즘:", algo, "/ 키 길이:", key.length, "바이트 / IV 길이:", iv.length, "바이트");
   return enc;
 }
 
