@@ -1,4 +1,4 @@
-import { createCipheriv } from "crypto";
+import { createCipheriv, createDecipheriv } from "crypto";
 import https from "node:https";
 
 /* ─── 환경변수 (Vercel 대시보드 미설정 시 fallback) ─── */
@@ -24,6 +24,18 @@ function encryptAES(str) {
   enc += cipher.final("base64");
   console.log("send24 암호화 알고리즘:", algo, "/ 키 길이:", key.length, "바이트 / IV 길이:", iv.length, "바이트");
   return enc;
+}
+
+/* ─── AES 복호화 — 응답의 "data" 필드(성공 시 {ordNo:...} 등)는 암호화되어
+   있어 그대로는 읽을 수 없다. 공통 스펙상 code/message는 평문, data만 암호문. ─── */
+function decryptAES(base64Str) {
+  const key = Buffer.from(AES_KEY, "utf8");
+  const iv  = Buffer.from(AES_IV,  "utf8");
+  const algo = key.length === 32 ? "aes-256-cbc" : "aes-128-cbc";
+  const decipher = createDecipheriv(algo, key, iv);
+  let dec = decipher.update(base64Str, "base64", "utf8");
+  dec += decipher.final("utf8");
+  return dec;
 }
 
 /* ─── HTTPS GET (IP 조회용) ─── */
@@ -112,9 +124,11 @@ async function convertToJibun(address) {
 /* ─── 상/하차지 주소 → {wide, sgg, dong, detail}
    ⚠️ "인천 서구 북항로 28-29"처럼 도로명 주소는 세 번째 토큰이 실제 읍/면/동이
    아니라 도로명(OO로/OO길)이라, 그대로 startDong/endDong에 넣으면 24시콜
-   서버가 실제 행정동과 대조해 "올바른 주소가 아닙니다"(-99)로 거부한다.
-   세 번째 토큰이 도로명으로 보이면 지번 주소로 변환해 실제 동 이름을 구하고,
-   상세주소(번지/건물명 등)는 사용자가 입력한 원본 그대로 유지한다. ─── */
+   서버가 실제 행정동과 대조해 거부한다("-99 기타 오류"로 표시됨).
+   시/도·구/군(첫 두 토큰)은 사용자가 입력한 원본이 이미 24시콜이 쓰는
+   짧은 표기("인천", "경기" 등)라 그대로 두고, 동만 지번 변환으로 구한
+   실제 행정동으로 교체한다 — 지번 변환 결과의 시/도는 "인천광역시"처럼
+   정식 명칭이라 그대로 쓰면 오히려 24시콜 마스터 데이터와 불일치한다. ─── */
 async function resolveAddrParts(addr = "") {
   const original = splitAddr(addr);
   if (!/[로길]$/.test(original.dong)) return original;
@@ -122,12 +136,7 @@ async function resolveAddrParts(addr = "") {
   if (!jibun) return original;
   const jibunParts = splitAddr(jibun);
   if (!jibunParts.dong || /[로길]$/.test(jibunParts.dong)) return original;
-  return {
-    wide: jibunParts.wide || original.wide,
-    sgg: jibunParts.sgg || original.sgg,
-    dong: jibunParts.dong,
-    detail: original.detail,
-  };
+  return { ...original, dong: jibunParts.dong };
 }
 
 /* ─── Dispatch → 24시 매핑 ─── */
@@ -215,14 +224,24 @@ export default async function handler(req, res) {
     try { result = JSON.parse(text); }
     catch { return res.status(200).json({ success: false, raw: text, httpStatus: apiRes.status }); }
 
-    if (result?.ordNo) {
-      return res.status(200).json({ success: true, ordNo: result.ordNo, resultMsg: result.resultMsg || "성공" });
+    // ⚠️ 공식 스펙: code/message는 평문, 실제 결과(ordNo 등)는 data 필드에
+    // 암호화되어 담겨온다. 과거 코드는 result.ordNo를 최상위에서 찾고
+    // 있었는데, 그 자리엔 항상 암호문 문자열만 있어 성공해도 실패로
+    // 보고되고 있었다.
+    if (result?.code === 1 && result?.data) {
+      try {
+        const decrypted = JSON.parse(decryptAES(result.data));
+        return res.status(200).json({ success: true, ordNo: decrypted.ordNo, resultMsg: result.message || "성공" });
+      } catch (e) {
+        console.error("send24 응답 복호화 실패:", e.message);
+        return res.status(200).json({ success: false, resultCode: result.code, resultMsg: "응답 복호화 실패: " + e.message, _serverIp: outboundIp });
+      }
     }
 
     return res.status(200).json({
       success:    false,
-      resultCode: result?.resultCode || result?.code || "",
-      resultMsg:  result?.resultMsg  || result?.message || JSON.stringify(result),
+      resultCode: result?.code ?? "",
+      resultMsg:  result?.message || JSON.stringify(result),
       response:   result,
       _serverIp:  outboundIp,
       _keyLen:    Buffer.from(AES_KEY, "utf8").length,

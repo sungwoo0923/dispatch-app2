@@ -12473,6 +12473,80 @@ const [send24Data, setSend24Data] = React.useState(null);
 const [send24Sending, setSend24Sending] = React.useState(false);
 const [send24Result, setSend24Result] = React.useState(null);
 
+// ⭐ 24시콜은 시/도·구/군·읍/면/동, 차량톤수, 차량종류를 전부 자기네 마스터
+// 데이터와 글자 하나까지 정확히 일치해야만 받아준다(다르면 "-99 기타 오류").
+// 자유 입력 대신 24시콜이 실제로 제공하는 값만 드롭다운으로 고를 수 있게
+// 해서 전송 실패를 원천적으로 막는다.
+const [call24Sido, setCall24Sido] = React.useState([]);
+const [call24StartSgg, setCall24StartSgg] = React.useState([]);
+const [call24StartDong, setCall24StartDong] = React.useState([]);
+const [call24EndSgg, setCall24EndSgg] = React.useState([]);
+const [call24EndDong, setCall24EndDong] = React.useState([]);
+const [call24CargoTon, setCall24CargoTon] = React.useState([]);
+const [call24TruckType, setCall24TruckType] = React.useState([]);
+const [call24MetaLoading, setCall24MetaLoading] = React.useState(false);
+const fetchCall24Meta = async (body) => {
+  try {
+    const res = await fetch("/api/call24-meta", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json();
+    return json?.success ? (json.list || []) : [];
+  } catch {
+    return [];
+  }
+};
+React.useEffect(() => {
+  if (!send24PreviewOpen || !send24Data) return;
+  let cancelled = false;
+  (async () => {
+    setCall24MetaLoading(true);
+    const [sido, cargoTon] = await Promise.all([
+      fetchCall24Meta({ type: "addr" }),
+      fetchCall24Meta({ type: "cargoTon" }),
+    ]);
+    if (cancelled) return;
+    setCall24Sido(sido);
+    setCall24CargoTon(cargoTon);
+    const [startSgg, endSgg, truckType] = await Promise.all([
+      send24Data.startWide ? fetchCall24Meta({ type: "addr", sido: send24Data.startWide }) : Promise.resolve([]),
+      send24Data.endWide ? fetchCall24Meta({ type: "addr", sido: send24Data.endWide }) : Promise.resolve([]),
+      send24Data.cargoTon ? fetchCall24Meta({ type: "truckType", cargoTon: send24Data.cargoTon }) : Promise.resolve([]),
+    ]);
+    if (cancelled) return;
+    setCall24StartSgg(startSgg);
+    setCall24EndSgg(endSgg);
+    setCall24TruckType(truckType);
+    const [startDong, endDong] = await Promise.all([
+      send24Data.startWide && send24Data.startSgg ? fetchCall24Meta({ type: "addr", sido: send24Data.startWide, gugun: send24Data.startSgg }) : Promise.resolve([]),
+      send24Data.endWide && send24Data.endSgg ? fetchCall24Meta({ type: "addr", sido: send24Data.endWide, gugun: send24Data.endSgg }) : Promise.resolve([]),
+    ]);
+    if (cancelled) return;
+    setCall24StartDong(startDong);
+    setCall24EndDong(endDong);
+    setCall24MetaLoading(false);
+  })();
+  return () => { cancelled = true; };
+}, [send24PreviewOpen]);
+const handleCall24WideChange = async (prefix, v) => {
+  setSend24Data(d => ({ ...d, [`${prefix}Wide`]: v, [`${prefix}Sgg`]: "", [`${prefix}Dong`]: "" }));
+  if (prefix === "start") setCall24StartDong([]); else setCall24EndDong([]);
+  const list = v ? await fetchCall24Meta({ type: "addr", sido: v }) : [];
+  if (prefix === "start") setCall24StartSgg(list); else setCall24EndSgg(list);
+};
+const handleCall24SggChange = async (prefix, wideVal, v) => {
+  setSend24Data(d => ({ ...d, [`${prefix}Sgg`]: v, [`${prefix}Dong`]: "" }));
+  const list = v ? await fetchCall24Meta({ type: "addr", sido: wideVal, gugun: v }) : [];
+  if (prefix === "start") setCall24StartDong(list); else setCall24EndDong(list);
+};
+const handleCall24CargoTonChange = async (v) => {
+  setSend24Data(d => ({ ...d, cargoTon: v, truckType: "" }));
+  const list = v ? await fetchCall24Meta({ type: "truckType", cargoTon: v }) : [];
+  setCall24TruckType(list);
+};
+
 // 🔎 오더복사용 상태
 const [copyOpen, setCopyOpen] = React.useState(false);
 const [copyQ, setCopyQ] = React.useState("");
@@ -16588,7 +16662,34 @@ className={`
                 <div>
                   <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">상차지</div>
                   <div className="grid grid-cols-4 gap-3">
-                    {[["시도","startWide"],["시군구","startSgg"],["읍면동","startDong"],["상세주소","startDetail"],
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] text-gray-500 font-medium">시도</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        value={send24Data.startWide ?? ""} disabled={send24Sending || call24MetaLoading}
+                        onChange={e => handleCall24WideChange("start", e.target.value)}>
+                        <option value="">선택</option>
+                        {call24Sido.map(v => <option key={v} value={v}>{v}</option>)}
+                      </CustomSelect>
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] text-gray-500 font-medium">시군구</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        value={send24Data.startSgg ?? ""} disabled={send24Sending || call24MetaLoading || !send24Data.startWide}
+                        onChange={e => handleCall24SggChange("start", send24Data.startWide, e.target.value)}>
+                        <option value="">선택</option>
+                        {call24StartSgg.map(v => <option key={v} value={v}>{v}</option>)}
+                      </CustomSelect>
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] text-gray-500 font-medium">읍면동</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        value={send24Data.startDong ?? ""} disabled={send24Sending || call24MetaLoading || !send24Data.startSgg}
+                        onChange={e => setSend24Data(d => ({ ...d, startDong: e.target.value }))}>
+                        <option value="">선택</option>
+                        {call24StartDong.map(v => <option key={v} value={v}>{v}</option>)}
+                      </CustomSelect>
+                    </div>
+                    {[["상세주소","startDetail"],
                       ["상차예정일 (YYYYMMDD)","startPlanDt"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
                         <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
@@ -16602,7 +16703,7 @@ className={`
                       <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                         value={send24Data.startLoad ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, startLoad: e.target.value }))}>
-                        {["수작업","지게차","호이스트","크레인","기타"].map(v => <option key={v} value={v}>{v}</option>)}
+                        {["수작업","지게차","호이스트","크레인","컨베이어","기타"].map(v => <option key={v} value={v}>{v}</option>)}
                       </CustomSelect>
                     </div>
                   </div>
@@ -16612,7 +16713,34 @@ className={`
                 <div>
                   <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">하차지</div>
                   <div className="grid grid-cols-4 gap-3">
-                    {[["시도","endWide"],["시군구","endSgg"],["읍면동","endDong"],["상세주소","endDetail"],
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] text-gray-500 font-medium">시도</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        value={send24Data.endWide ?? ""} disabled={send24Sending || call24MetaLoading}
+                        onChange={e => handleCall24WideChange("end", e.target.value)}>
+                        <option value="">선택</option>
+                        {call24Sido.map(v => <option key={v} value={v}>{v}</option>)}
+                      </CustomSelect>
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] text-gray-500 font-medium">시군구</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        value={send24Data.endSgg ?? ""} disabled={send24Sending || call24MetaLoading || !send24Data.endWide}
+                        onChange={e => handleCall24SggChange("end", send24Data.endWide, e.target.value)}>
+                        <option value="">선택</option>
+                        {call24EndSgg.map(v => <option key={v} value={v}>{v}</option>)}
+                      </CustomSelect>
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] text-gray-500 font-medium">읍면동</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        value={send24Data.endDong ?? ""} disabled={send24Sending || call24MetaLoading || !send24Data.endSgg}
+                        onChange={e => setSend24Data(d => ({ ...d, endDong: e.target.value }))}>
+                        <option value="">선택</option>
+                        {call24EndDong.map(v => <option key={v} value={v}>{v}</option>)}
+                      </CustomSelect>
+                    </div>
+                    {[["상세주소","endDetail"],
                       ["하차예정일 (YYYYMMDD)","endPlanDt"],["하차지연락처","endAreaPhone"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
                         <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
@@ -16626,7 +16754,7 @@ className={`
                       <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                         value={send24Data.endLoad ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, endLoad: e.target.value }))}>
-                        {["수작업","지게차","호이스트","크레인","기타"].map(v => <option key={v} value={v}>{v}</option>)}
+                        {["수작업","지게차","호이스트","크레인","컨베이어","기타"].map(v => <option key={v} value={v}>{v}</option>)}
                       </CustomSelect>
                     </div>
                   </div>
@@ -16636,7 +16764,25 @@ className={`
                 <div>
                   <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">화물 / 차량</div>
                   <div className="grid grid-cols-4 gap-3">
-                    {[["차량톤수","cargoTon"],["차량종류","truckType"],["화물중량(t)","frgton"],["화물내용","cargoDsc"]].map(([lbl,key]) => (
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] text-gray-500 font-medium">차량톤수</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        value={send24Data.cargoTon ?? ""} disabled={send24Sending || call24MetaLoading}
+                        onChange={e => handleCall24CargoTonChange(e.target.value)}>
+                        <option value="">선택</option>
+                        {call24CargoTon.map(v => <option key={v} value={v}>{v}</option>)}
+                      </CustomSelect>
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] text-gray-500 font-medium">차량종류</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        value={send24Data.truckType ?? ""} disabled={send24Sending || call24MetaLoading || !send24Data.cargoTon}
+                        onChange={e => setSend24Data(d => ({ ...d, truckType: e.target.value }))}>
+                        <option value="">선택</option>
+                        {call24TruckType.map(v => <option key={v} value={v}>{v}</option>)}
+                      </CustomSelect>
+                    </div>
+                    {[["화물중량(t)","frgton"],["화물내용","cargoDsc"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
                         <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
                         <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
@@ -16664,7 +16810,7 @@ className={`
                       <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                         value={send24Data.farePaytype ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, farePaytype: e.target.value }))}>
-                        {["인수증","선불","착불","카드"].map(v => <option key={v} value={v}>{v}</option>)}
+                        {["인수증","선착불","카드"].map(v => <option key={v} value={v}>{v}</option>)}
                       </CustomSelect>
                     </div>
                     <div className="flex flex-col gap-0.5">
