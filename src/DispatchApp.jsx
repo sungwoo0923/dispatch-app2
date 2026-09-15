@@ -7109,6 +7109,7 @@ return (
               showAlert={showAlert}
               initialTab={거래처관리Tab === "기본거래처" ? "기본" : "하차지"}
               hideTabs={true}
+              userCompany={userCompany}
             />
           )}
           {거래처관리Tab === "고정거래처관리" && (
@@ -54355,7 +54356,7 @@ function BizRegOcrModal({ imageBase64, onClose, onApply }) {
   );
 }
 
-function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlace, places: placesProp = [], showAlert = (m) => alert(m), hideTabs = false, initialTab = "하차지" }) {
+function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlace, places: placesProp = [], showAlert = (m) => alert(m), hideTabs = false, initialTab = "하차지", userCompany = "" }) {
   const normalizePlaceRow = (d) => {
     const primary = Array.isArray(d.contacts) && d.contacts.length
       ? d.contacts.find(c => c.isPrimary) || d.contacts[0] : null;
@@ -54679,10 +54680,73 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     setEditClientModal(p => ({ ...p, 첨부파일Base64: base64, 첨부파일명: file.name, 첨부파일타입: file.type }));
   };
 
+  // ⭐ 거래처관리(기본거래처/하차지거래처)에서 주소·담당자를 고쳐도, 이미 등록된
+  // 과거 오더들에는 그 정보가 "등록 당시 스냅샷"으로 그대로 남아있어 배차현황/
+  // 실시간배차현황 화면에 바로 반영되지 않았다 — 오더복사/수정 패널에 들어가
+  // 상/하차지명을 다시 선택(드롭다운 재선택)해야만 새 정보가 채워지는 불편이
+  // 있었다. 아래에서 이름이 일치하는 모든 오더(orders/dispatch 두 컬렉션 모두)를
+  // 찾아 바뀐 필드만 조용히(이력/updatedAt 건드리지 않고) 함께 갱신한다.
+  // companyName 필드가 없는 옛 문서는 "돌캐"로 취급하는 게 이 코드베이스 전반의
+  // 관례라, Firestore where절만으로는 그 폴백을 표현할 수 없어 매칭 이름으로 일단
+  // 가져온 뒤 companyName은 클라이언트에서 다시 한 번 걸러 다른 회사 데이터를
+  // 실수로 건드리지 않게 한다.
+  const propagateFieldsToOrders = async (matchField, name, patchByField) => {
+    const trimmedName = (name || "").trim();
+    if (!trimmedName || !patchByField || !Object.keys(patchByField).length) return 0;
+    const myCompany = (userCompany || "돌캐").trim() || "돌캐";
+    let updated = 0;
+    for (const colName of ["orders", "dispatch"]) {
+      try {
+        const snap = await getDocs(query(collection(db, colName), where(matchField, "==", trimmedName)));
+        await Promise.all(snap.docs.map(async (d) => {
+          const cur = d.data();
+          if ((cur.companyName || "돌캐") !== myCompany) return;
+          const patch = {};
+          Object.entries(patchByField).forEach(([k, v]) => {
+            if ((cur[k] || "") !== (v || "")) patch[k] = v;
+          });
+          if (!Object.keys(patch).length) return;
+          await updateDoc(doc(db, colName, d.id), patch);
+          updated++;
+        }));
+      } catch (e) {
+        console.error(`propagateFieldsToOrders(${colName}) 오류:`, e);
+      }
+    }
+    return updated;
+  };
+
+  // ⭐ 거래처명/업체명 자체가 바뀐 경우(상호 변경, 예: "후레쉬2공장" → "행담") — 운임조회/
+  // 매출집계/신규거래처 판정 등은 전부 이름이 일치해야 같은 거래처로 인식하므로, 이름만
+  // 바꾸고 두면 새 이름은 이력이 하나도 없는 "신규 거래처"로 보이고 예전 이력은 옛 이름에
+  // 그대로 남아 서로 끊어진다. 실제로는 같은 사업자이므로 과거 오더의 이름 필드 자체를
+  // 새 이름으로 함께 바꿔(cascade rename) 하나의 이력으로 계속 이어지게 한다.
+  const renameAcrossOrders = async (matchField, oldName, newName) => {
+    const from = (oldName || "").trim();
+    const to = (newName || "").trim();
+    if (!from || !to || from === to) return 0;
+    const myCompany = (userCompany || "돌캐").trim() || "돌캐";
+    let updated = 0;
+    for (const colName of ["orders", "dispatch"]) {
+      try {
+        const snap = await getDocs(query(collection(db, colName), where(matchField, "==", from)));
+        await Promise.all(snap.docs.map(async (d) => {
+          if ((d.data().companyName || "돌캐") !== myCompany) return;
+          await updateDoc(doc(db, colName, d.id), { [matchField]: to });
+          updated++;
+        }));
+      } catch (e) {
+        console.error(`renameAcrossOrders(${colName}) 오류:`, e);
+      }
+    }
+    return updated;
+  };
+
   const saveEditClient = async () => {
     if (!editClientModal) return;
     const id = editClientModal.id || editClientModal.거래처명;
     if (!id) return;
+    const original = rows.find(r => (r.id || r.거래처명) === id) || {};
     const { _dragOver, ...data } = editClientModal;
     // 담당자 목록에서 대표(또는 첫 번째) 담당자를 평면 필드(담당자/연락처)에도 반영 —
     // 여러 화면이 아직 이 평면 필드를 폴백으로 읽고 있어 계속 맞춰줘야 한다.
@@ -54691,6 +54755,19 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     data.contacts = contacts;
     data.담당자 = primaryContact?.name || "";
     data.연락처 = primaryContact?.phone || "";
+
+    const oldName = (original.거래처명 || "").trim();
+    const newName = (data.거래처명 || "").trim();
+    const nameChanged = !!oldName && !!newName && oldName !== newName;
+    let cascadeRename = false;
+    if (nameChanged) {
+      cascadeRename = window.confirm(
+        `거래처명을 "${oldName}" → "${newName}"(으)로 변경합니다.\n\n` +
+        `과거 "${oldName}"으로 등록된 모든 오더의 거래처명도 함께 "${newName}"(으)로 바꿔야 운임조회·매출 이력이 끊기지 않고 계속 이어집니다.\n` +
+        `함께 바꾸시겠습니까?\n\n(취소를 누르면 거래처명만 바뀌고, 과거 오더들은 예전 이름 "${oldName}" 그대로 남습니다 — 새 이름은 이력 없는 신규 거래처로 보이게 됩니다)`
+      );
+    }
+
     try {
       await upsertClient?.({ ...data, id });
     } catch (e) {
@@ -54700,13 +54777,34 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     }
     setRows(prev => prev.map(r => (r.id || r.거래처명) === id ? { ...data } : r));
     setEditClientModal(null);
-    showAlert("수정 완료");
+
+    let syncedCount = 0;
+    try {
+      if (nameChanged && cascadeRename) {
+        syncedCount += await renameAcrossOrders("거래처명", oldName, newName);
+      }
+      // 이름을 안 바꿨거나(nameChanged=false) 바꿨지만 cascade를 취소한 경우, 과거 오더는
+      // 여전히 oldName을 갖고 있으므로 그 이름 기준으로 주소/담당자만이라도 맞춰준다.
+      const matchName = nameChanged && cascadeRename ? newName : oldName || newName;
+      const patch = {};
+      if ((original.주소 || "") !== (data.주소 || "")) patch.거래처주소 = data.주소 || "";
+      if ((original.담당자 || "") !== (data.담당자 || "")) patch.거래처담당자 = data.담당자 || "";
+      if ((original.연락처 || "") !== (data.연락처 || "")) patch.거래처연락처 = data.연락처 || "";
+      if (Object.keys(patch).length) {
+        syncedCount += await propagateFieldsToOrders("거래처명", matchName, patch);
+      }
+    } catch (e) {
+      console.error("거래처 정보 오더 동기화 오류:", e);
+    }
+
+    showAlert(syncedCount > 0 ? `수정 완료 (연결된 오더 ${syncedCount}건 정보 동기화)` : "수정 완료");
   };
 
   const saveEditPlace = async () => {
     if (!editPlaceModal) return;
     const id = editPlaceModal.id || editPlaceModal.업체명;
     if (!id) return;
+    const original = placeRows.find(r => (r.id || r.업체명) === id) || {};
     // upsertPlace는 place._id로 대상 문서를 찾는데, editPlaceModal은 .id만 갖고 있어
     // _id가 한 번도 전달되지 않았다. 그 결과 매번 업체명으로 문서를 다시 찾는 폴백
     // 경로를 타게 되어, 같은 업체명의 문서가 여러 개면 엉뚱한 문서를 수정/조회하게
@@ -54720,6 +54818,19 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     const primary = contacts.find(c => c.isPrimary) || contacts[0] || null;
     const 담당자 = primary?.name || "";
     const 담당자번호 = primary?.phone || "";
+
+    const oldName = (original.업체명 || "").trim();
+    const newName = (editPlaceModal.업체명 || "").trim();
+    const nameChanged = !!oldName && !!newName && oldName !== newName;
+    let cascadeRename = false;
+    if (nameChanged) {
+      cascadeRename = window.confirm(
+        `업체명을 "${oldName}" → "${newName}"(으)로 변경합니다.\n\n` +
+        `과거 "${oldName}"으로 등록된 모든 오더의 상차지명/하차지명도 함께 "${newName}"(으)로 바꿔야 운임조회 이력이 끊기지 않고 계속 이어집니다.\n` +
+        `함께 바꾸시겠습니까?\n\n(취소를 누르면 업체명만 바뀌고, 과거 오더들은 예전 이름 "${oldName}" 그대로 남습니다)`
+      );
+    }
+
     await upsertPlace?.({ ...editPlaceModal, _id: editPlaceModal.id, id, contacts, 담당자, 담당자번호 });
     // ⚠️ 더블클릭으로 다시 열 때는 담당자 목록을 contacts가 아니라 _rawContacts에서 다시
     // 채운다(위 주석 참고) — 여기서 _rawContacts도 함께 갱신하지 않으면, 저장 직후 실시간
@@ -54727,7 +54838,26 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     // _rawContacts)이 그대로 보이는 문제가 있었다.
     setPlaceRows(prev => prev.map(r => (r.id || r.업체명) === id ? { ...editPlaceModal, contacts, 담당자, 담당자번호, _rawContacts: contacts } : r));
     setEditPlaceModal(null);
-    showAlert("수정 완료");
+
+    let syncedCount = 0;
+    try {
+      if (nameChanged && cascadeRename) {
+        syncedCount += await renameAcrossOrders("상차지명", oldName, newName);
+        syncedCount += await renameAcrossOrders("하차지명", oldName, newName);
+      }
+      const matchName = nameChanged && cascadeRename ? newName : oldName || newName;
+      const newAddr = editPlaceModal.주소 || "";
+      const patchPickup = {}, patchDrop = {};
+      if ((original.주소 || "") !== newAddr) { patchPickup.상차지주소 = newAddr; patchDrop.하차지주소 = newAddr; }
+      if ((original.담당자 || "") !== 담당자) { patchPickup.상차지담당자 = 담당자; patchDrop.하차지담당자 = 담당자; }
+      if ((original.담당자번호 || "") !== 담당자번호) { patchPickup.상차지담당자번호 = 담당자번호; patchDrop.하차지담당자번호 = 담당자번호; }
+      if (Object.keys(patchPickup).length) syncedCount += await propagateFieldsToOrders("상차지명", matchName, patchPickup);
+      if (Object.keys(patchDrop).length) syncedCount += await propagateFieldsToOrders("하차지명", matchName, patchDrop);
+    } catch (e) {
+      console.error("하차지거래처 정보 오더 동기화 오류:", e);
+    }
+
+    showAlert(syncedCount > 0 ? `수정 완료 (연결된 오더 ${syncedCount}건 정보 동기화)` : "수정 완료");
   };
 
   const removeSelectedFn = async () => {
