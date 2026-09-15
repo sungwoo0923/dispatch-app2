@@ -1,7 +1,7 @@
 // ======================= src/StandardFare.jsx =======================
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { db } from "./firebase";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { collection, onSnapshot, query, where, getDocs } from "firebase/firestore";
 import { specialDemandInfo, KOREAN_HOLIDAYS } from "./CustomDatePicker";
 import { ensureWeatherLoaded, getWeatherSpecialInfo } from "./weatherUtil";
 
@@ -575,6 +575,9 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
   // 표준운임 이력이 없을 때, 화면 전환 없이 팝업 안에서 바로 전국표준운임표로
   // 조회해 결과를 보여주기 위한 상태 (전국운임 탭의 nfFrom/nfTo/nfResult 등을 그대로 재사용)
   const [showNoResultPopup, setShowNoResultPopup] = useState(false);
+  // ⭐ 최근 13개월 실시간 데이터(dispatchData)에 매칭이 없을 때, 그보다 오래된 이력에
+  // 정확히 같은 상/하차지명의 기록이 있는지 한 번만 추가로 확인 중임을 보여주는 상태.
+  const [checkingOldHistory, setCheckingOldHistory] = useState(false);
 
   // 표준운임 경유지 포함 토글 — 검색어가 경유지명에도 매치될지 여부
   const [includeVia, setIncludeVia] = useState(false);
@@ -796,8 +799,11 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
 
   // 상/하차지(명·주소) + 화물/톤수/차량/거래처 조건으로 필터링만 하는 순수 함수 —
   // 정방향 검색과 "반대 노선 이력 확인"에 동일하게 재사용한다.
-  const runFilter = (pk, pAddr, dr, dAddr) => {
-    let list = [...dispatchData];
+  // ⭐ extraList — 최근 13개월 실시간 데이터(dispatchData)에는 없지만, 그보다 오래된
+  // 이력에서 정확히 같은 상/하차지명으로 추가 조회해온 결과가 있으면 여기 병합해서
+  // 같은 필터(화물/톤수/차량/거래처 등)를 동일하게 적용한다.
+  const runFilter = (pk, pAddr, dr, dAddr, extraList = []) => {
+    let list = [...dispatchData, ...extraList];
     list = list.filter(r => {
       const name = clean(r.상차지명||""), addr = clean(r.상차지주소||"");
       const p = clean(pk), pa = clean(pAddr);
@@ -897,7 +903,34 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     return withLevel.length;
   };
 
-  const search = () => {
+  // ⭐ 최근 13개월 실시간 데이터(dispatchData)에 매칭이 없을 때만, 그보다 오래된
+  // 이력에 정확히 같은 상/하차지명의 기록이 있는지 1회성으로 추가 조회한다.
+  // (주소로 검색 모드는 부분일치/지역검색이라 Firestore 쿼리로 그대로 재현할 수
+  // 없어 이 폴백은 이름으로 검색 모드에서만 동작한다.) 두 필드 모두 등호(==)
+  // 조건이라 별도 복합색인 없이도 안전하게 동작한다.
+  const fetchOlderExactMatches = async (pk, dr) => {
+    try {
+      const fetchOne = async (col) => {
+        const snap = await getDocs(query(collection(db, col), where("상차지명", "==", pk), where("하차지명", "==", dr)));
+        return snap.docs.map(d => {
+          const data = d.data();
+          return { _id: d.id, ...data, 등록일: toYMD(data.등록일), 상차일: toYMD(data.상차일), 하차일: toYMD(data.하차일) };
+        });
+      };
+      const [a, b] = await Promise.all([fetchOne("dispatch"), fetchOne("orders")]);
+      const known = new Set(dispatchData.map(r => r._id));
+      const merged = [...a, ...b].filter(r => r.source !== "transport_transmit" && !known.has(r._id));
+      // 중복 id 제거(dispatch/orders 양쪽에 같은 id로 들어있는 경우 대비)
+      const dedup = new Map();
+      merged.forEach(r => dedup.set(r._id, r));
+      return Array.from(dedup.values());
+    } catch (e) {
+      console.error("13개월 이전 운임 이력 조회 실패:", e);
+      return [];
+    }
+  };
+
+  const search = async () => {
     if (!pickup.trim() && !pickupAddr.trim()) { alert("상차지명 또는 주소를 입력하세요."); return; }
     if (!drop.trim() && !dropAddr.trim()) { alert("하차지명 또는 주소를 입력하세요."); return; }
 
@@ -910,7 +943,17 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     const dArg = searchMode === "address" ? "" : drop;
     const daArg = searchMode === "address" ? dropAddr : "";
 
-    const forward = runFilter(pArg, paArg, dArg, daArg);
+    let extraOld = [];
+    if (searchMode !== "address" && pArg.trim() && dArg.trim()) {
+      const quickForward = runFilter(pArg, paArg, dArg, daArg);
+      if (quickForward.length === 0) {
+        setCheckingOldHistory(true);
+        extraOld = await fetchOlderExactMatches(pArg.trim(), dArg.trim());
+        setCheckingOldHistory(false);
+      }
+    }
+
+    const forward = runFilter(pArg, paArg, dArg, daArg, extraOld);
     if (forward.length === 0) {
       // 정방향 이력이 없으면, 상/하차지를 뒤바꾼 반대 노선 이력이 있는지 같은
       // 화물/톤수/차량/거래처 조건으로 한 번 더 확인해 물어봐준다. 매칭 자체는
@@ -1118,7 +1161,9 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
 
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
-                <button onClick={search} className="flex-1 px-4 py-2 bg-[#1B2B4B] text-white text-[13px] font-semibold rounded-lg hover:bg-[#243a60] transition">조회</button>
+                <button onClick={search} disabled={checkingOldHistory} className="flex-1 px-4 py-2 bg-[#1B2B4B] text-white text-[13px] font-semibold rounded-lg hover:bg-[#243a60] transition disabled:opacity-60">
+                  {checkingOldHistory ? "이전 이력 확인 중..." : "조회"}
+                </button>
                 <button onClick={reset} className="flex-1 px-4 py-2 bg-white text-gray-500 text-[13px] font-semibold rounded-lg border border-gray-200 hover:bg-gray-50 transition">초기화</button>
               </div>
               <div className="text-[12px] text-gray-500">Enter 키로도 조회</div>

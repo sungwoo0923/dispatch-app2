@@ -17861,6 +17861,8 @@ function MobileStandardFare({ onBack, cardVersionB = false }) {
   const [showSimilarPopup, setShowSimilarPopup] = useState(false);
 const [fallbackData, setFallbackData] = useState([]);
   const [showNoResultPopup, setShowNoResultPopup] = useState(false);
+  // ⭐ 최근 13개월 실시간 데이터에 매칭이 없을 때, 그보다 오래된 이력을 추가 조회 중임을 표시
+  const [checkingOldHistory, setCheckingOldHistory] = useState(false);
   // 자사운임표 결과 없음 팝업 안에서 바로 전국표준운임표로 조회하기 위한 상태
   const [nrLoading, setNrLoading] = useState(false);
   const [nrError, setNrError] = useState("");
@@ -18113,7 +18115,29 @@ const classifyFareLevel = (fare, avg, row) => {
   return "SPIKE";
 };
 
-const calcFareMobile = () => {
+// ⭐ 최근 13개월 실시간 데이터(dispatchData)에 매칭이 없을 때, 그보다 오래된 이력에
+// 정확히 같은 상/하차지명의 기록이 있는지 1회성으로 추가 조회한다(PC StandardFare.jsx와
+// 동일한 방식) — 두 필드 모두 등호(==) 조건이라 별도 복합색인 없이도 안전하게 동작한다.
+const fetchOlderExactMatchesMobile = async (pk, dr, known) => {
+  try {
+    const fetchOne = async (col) => {
+      const snap = await getDocs(query(collection(db, col), where("상차지명", "==", pk), where("하차지명", "==", dr)));
+      return snap.docs.map(d => {
+        const data = d.data();
+        return { id: d.id, ...data, 등록일: toYMD(data.등록일), 상차일: toYMD(data.상차일), 하차일: toYMD(data.하차일) };
+      });
+    };
+    const [a, b] = await Promise.all([fetchOne("dispatch"), fetchOne("orders")]);
+    const dedup = new Map();
+    [...a, ...b].forEach(r => { if (!known.has(r.id)) dedup.set(r.id, r); });
+    return Array.from(dedup.values());
+  } catch (e) {
+    console.error("13개월 이전 운임 이력 조회 실패:", e);
+    return [];
+  }
+};
+
+const calcFareMobile = async () => {
   if (!pickup.trim() && !pickupAddr.trim()) { alert("상차지명 또는 주소를 입력하세요."); return; }
   if (!drop.trim() && !dropAddr.trim()) { alert("하차지명 또는 주소를 입력하세요."); return; }
 
@@ -18122,9 +18146,7 @@ const calcFareMobile = () => {
   const getPickupVias = r => [..._saVia(r.경유상차목록||[]), ..._saVia(r.경유지_상차||[]), ..._saVia(r.경유지상차||[])].map(_viaName).filter(Boolean);
   const getDropVias = r => [..._saVia(r.경유하차목록||[]), ..._saVia(r.경유지_하차||[]), ..._saVia(r.경유지하차||[])].map(_viaName).filter(Boolean);
 
-  let list = [...dispatchData];
-
-  list = list.filter(r => {
+  const matchPickup = r => {
     const name = clean(r.상차지명||""), addr = clean(r.상차지주소||"");
     const p = clean(pickup), pa = clean(pickupAddr);
     if (!p && !pa) return true;
@@ -18132,8 +18154,8 @@ const calcFareMobile = () => {
     if (mainMatches) return true;
     if (includeVia && p) return getPickupVias(r).some(n => clean(n).includes(p));
     return false;
-  });
-  list = list.filter(r => {
+  };
+  const matchDrop = r => {
     const name = clean(r.하차지명||""), addr = clean(r.하차지주소||"");
     const d = clean(drop), da = clean(dropAddr);
     if (!d && !da) return true;
@@ -18141,7 +18163,22 @@ const calcFareMobile = () => {
     if (mainMatches) return true;
     if (includeVia && d) return getDropVias(r).some(n => clean(n).includes(d));
     return false;
-  });
+  };
+
+  let extraOld = [];
+  if (pickup.trim() && drop.trim()) {
+    const quickHit = dispatchData.some(r => matchPickup(r) && matchDrop(r));
+    if (!quickHit) {
+      setCheckingOldHistory(true);
+      extraOld = await fetchOlderExactMatchesMobile(pickup.trim(), drop.trim(), new Set(dispatchData.map(r => r.id)));
+      setCheckingOldHistory(false);
+    }
+  }
+
+  let list = [...dispatchData, ...extraOld];
+
+  list = list.filter(matchPickup);
+  list = list.filter(matchDrop);
   // 경유지 포함 시 비교 기준 화물내용/톤수 = 본 오더 + 경유지 전체 합산
   const mergedCargoOf = r => includeVia ? mergeViaCargoText(r.화물내용, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]) : (r.화물내용 || "");
   const mergedTonOf = r => includeVia ? mergeViaTonnage(r.차량톤수, [r.경유상차목록, r.경유하차목록, r.경유지_상차, r.경유지_하차]) : (r.차량톤수 || "");
@@ -18407,9 +18444,9 @@ const runNationalFareInPopup = async () => {
             </div>
           </div>
           <div className="flex gap-2 pt-1">
-            <button id="fare-search-button" onClick={calcFareMobile}
-              className={`flex-1 py-3 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white text-[14px] font-bold rounded-xl active:scale-95 transition`}>
-              조회하기
+            <button id="fare-search-button" onClick={calcFareMobile} disabled={checkingOldHistory}
+              className={`flex-1 py-3 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white text-[14px] font-bold rounded-xl active:scale-95 transition disabled:opacity-60`}>
+              {checkingOldHistory ? "이전 이력 확인 중..." : "조회하기"}
             </button>
             <button onClick={() => {
                 setPickup(""); setDrop(""); setPickupAddr(""); setDropAddr(""); setTon(""); setCargo("");

@@ -1349,6 +1349,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
                               <th className={`${thCls} w-[96px]`}><EditableText id="schedule.table.header.연락처" defaultText="연락처" /></th>
                               <th className={`${thCls} w-[88px]`}><EditableText id="schedule.table.header.차량번호" defaultText="차량번호" /></th>
                               <th className={`${thCls} w-[84px]`}><EditableText id="schedule.table.header.차종톤수" defaultText="차종/톤수" /></th>
+                              <th className={`${thCls} w-[100px]`}><EditableText id="schedule.table.header.화물내용" defaultText="화물내용" /></th>
                               {showFareCharge && <th className={`${thCls} w-[84px]`}><EditableText id="schedule.table.header.청구운임" defaultText="청구운임" /></th>}
                               {showFareDriver && <th className={`${thCls} w-[84px]`}><EditableText id="schedule.table.header.기사운임" defaultText="기사운임" /></th>}
                             </tr>
@@ -1359,6 +1360,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
                                 <td className={`${tdCls} text-center font-bold`}>{r.상차시간 || "즉시"}</td>
                                 <td className={`${tdCls} font-extrabold text-[#1B2B4B]`}>
                                   {r.상차지명 || "-"} → {r.하차지명 || "-"}
+                                  {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
                                   {_parseWorkDates(r.근무일자목록).length > 1 && (
                                     <span className="ml-1 bg-black text-white text-[10px] font-extrabold rounded px-1 py-0.5 leading-none align-middle">묶음</span>
                                   )}
@@ -1367,6 +1369,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
                                 <td className={`${tdCls} text-center`}>{formatPhone(r.전화번호) || "-"}</td>
                                 <td className={`${tdCls} text-center font-bold text-gray-900`}>{r.차량번호 || "-"}</td>
                                 <td className={`${tdCls} text-center`}>{r.차량종류 || "-"} / {r.차량톤수 || "-"}</td>
+                                <td className={`${tdCls} text-center`}>{r.화물내용 || "-"}</td>
                                 {showFareCharge && <td className={`${tdCls} text-center font-bold`}>{fmtWon(r.청구운임)}</td>}
                                 {showFareDriver && <td className={`${tdCls} text-center font-bold`}>{fmtWon(r.기사운임)}</td>}
                               </tr>
@@ -1412,6 +1415,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
                                 <th className={`${thCls} w-[64px]`}>상차시간</th>
                                 <th className={thCls}>노선 (상차지 → 하차지)</th>
                                 <th className={`${thCls} w-[84px]`}>차종/톤수</th>
+                                <th className={`${thCls} w-[100px]`}>화물내용</th>
                                 {showFareCharge && <th className={`${thCls} w-[84px]`}>청구운임</th>}
                                 {showFareDriver && <th className={`${thCls} w-[84px]`}>기사운임</th>}
                               </tr>
@@ -1430,8 +1434,12 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
                                     })()}
                                   </td>
                                   <td className={`${tdCls} text-center font-bold`}>{r.상차시간 || "즉시"}</td>
-                                  <td className={`${tdCls} font-bold text-gray-900`}>{r.상차지명 || "-"} → {r.하차지명 || "-"}</td>
+                                  <td className={`${tdCls} font-bold text-gray-900`}>
+                                    {r.상차지명 || "-"} → {r.하차지명 || "-"}
+                                    {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
+                                  </td>
                                   <td className={`${tdCls} text-center`}>{r.차량종류 || "-"} / {r.차량톤수 || "-"}</td>
+                                  <td className={`${tdCls} text-center`}>{r.화물내용 || "-"}</td>
                                   {showFareCharge && <td className={`${tdCls} text-center font-bold`}>{fmtWon(r.청구운임)}</td>}
                                   {showFareDriver && <td className={`${tdCls} text-center font-bold`}>{fmtWon(r.기사운임)}</td>}
                                 </tr>
@@ -5978,6 +5986,21 @@ useEffect(() => {
     return () => unsub();
   }, []);
 
+  // ⭐ "최적화" 버튼 — 새로고침(전체 재접속/전체 재읽기) 없이, 오래 켜두고 오더를
+  // 많이 등록/조회하다 보면 배차관리/실시간배차현황/배차현황 화면 안에 쌓이는
+  // 렌더링 상태(행 이동 애니메이션 좌표 캐시, 하이라이트 추적, DOM 노드 등)만
+  // 가볍게 비워준다. Firestore 리스너(dispatchData 등)는 DispatchApp 이 컴포넌트
+  // 자체에 있어 그대로 유지되므로(추가 읽기 발생 없음), 현재 보고 있는 화면
+  // 컴포넌트만 key를 바꿔 강제로 다시 마운트시키는 방식이다 — 브라우저 새로고침과
+  // 달리 다른 탭에 열어둔 팝업/스크롤 위치 등은 그대로 두고 지금 화면만 초기화된다.
+  const [viewResetKey, setViewResetKey] = React.useState(0);
+  const [optimizing, setOptimizing] = React.useState(false);
+  const handleOptimizeClick = () => {
+    setOptimizing(true);
+    setViewResetKey((k) => k + 1);
+    setTimeout(() => setOptimizing(false), 900);
+  };
+
   // ⭐ 예약 이메일 발송 체커 — 진짜 서버 크론이 아니라, 이 회사 소속 계정이 프로그램을
   // 열어두고 있는 동안 1분마다 예약시각이 지난 이메일을 대신 발송해주는 방식이다(브라우저
   // 기반 best-effort 스케줄러). 여러 탭/계정이 동시에 켜져 있어도 상태를 먼저 "sending"으로
@@ -6804,6 +6827,17 @@ return (
               </button>
             )}
 
+            {/* ⭐ 최적화 버튼 — 새로고침 없이 현재 화면(배차관리/실시간배차현황/배차현황)의
+                누적된 렌더링 상태만 가볍게 초기화한다. */}
+            <button
+              onClick={handleOptimizeClick}
+              disabled={optimizing}
+              className="px-2.5 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition disabled:opacity-50 whitespace-nowrap"
+              title="오더를 많이 등록/조회하다 화면이 버벅이면 눌러주세요 — 새로고침 없이 현재 화면만 가볍게 초기화합니다"
+            >
+              {optimizing ? "⚡ 최적화 중..." : "⚡ 최적화"}
+            </button>
+
             {/* 글씨 크기 조절 버튼 */}
             <div className="relative">
               <button
@@ -6977,6 +7011,7 @@ return (
 
         {menu === "배차관리" && (
           <DispatchManagement
+          key={`dm-${viewResetKey}`}
           menu={menu}
             dispatchData={dispatchDataFiltered}
             liveDataReady={liveDataReady}
@@ -7033,7 +7068,7 @@ return (
             rejectEditRequest={rejectEditRequestSafe}
             markEditRequestSeen={markEditRequestSeen}
             approvedShippers={approvedShippers}
-            key={menu}
+            key={`${menu}-${viewResetKey}`}
           />
         )}
 
@@ -7053,6 +7088,7 @@ return (
             </div>
             {배차현황Tab === "배차현황" && (
               <DispatchStatus
+                key={`ds-${viewResetKey}`}
                 role={role}
                 userCompany={userCompany}
                 dispatchData={dispatchDataFiltered}
