@@ -20847,6 +20847,227 @@ function _creatorLabel(r, userNameMap) {
   return resolved || raw;
 }
 
+/* -------------------------------------------------
+   물류기기(파렛트) 이동전표 발행 — 오더 우클릭 메뉴 "전표발행"에서 연다.
+   KPP/아주파렛트 같은 실제 풀회사 양식(로고·바코드·관리번호)을 그대로 복제하는
+   대신, 같은 정보를 담는 우리 프로그램 자체 전표를 만든다 — 발송처용/
+   파렛트회사용/운송회사용 3부가 나란히 나오는 구조는 동일하게 맞췄다.
+   발송지는 상차지가 아니라 거래처(청구 대상) 기준, 도착지는 하차지 기준.
+--------------------------------------------------*/
+function PalletSlipModal({ row, userCompany, userNameMap, onClose }) {
+  const [poolCompany, setPoolCompany] = React.useState("KPP");
+  const [senderManager, setSenderManager] = React.useState(row?.거래처담당자 || "");
+  const [senderPhone, setSenderPhone] = React.useState(row?.거래처연락처 || "");
+  const [item, setItem] = React.useState("");
+  const [note, setNote] = React.useState("");
+  const [typeRows, setTypeRows] = React.useState([{ type: "", qty: "" }]);
+  const [zoom, setZoom] = React.useState(1);
+  const [sending, setSending] = React.useState(false);
+  const captureRef = React.useRef(null);
+
+  if (!row) return null;
+
+  const updateTypeRow = (i, key, val) => {
+    setTypeRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, [key]: val } : r)));
+  };
+  const addTypeRow = () => setTypeRows((prev) => [...prev, { type: "", qty: "" }]);
+  const removeTypeRow = (i) => setTypeRows((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
+
+  const senderName = row.거래처명 || "-";
+  const arriveName = row.하차지명 || "-";
+  const arriveManager = row.하차지담당자 || "";
+  const arrivePhone = row.하차지담당자번호 || "";
+  const carPlate = row.차량번호 || "";
+  const carManager = _creatorLabel(row, userNameMap);
+  // 실제 물류기기 이동전표 양식과 동일하게 "2026년 9월 14일" 전체 표기로 보여준다.
+  const fmtFullDate = (d) => {
+    if (!d) return "-";
+    const dt = new Date(`${d}T00:00:00`);
+    if (isNaN(dt.getTime())) return d;
+    return `${dt.getFullYear()}년 ${dt.getMonth() + 1}월 ${dt.getDate()}일`;
+  };
+
+  const captureCanvas = () => captureRef.current
+    ? html2canvas(captureRef.current, { scale: 2, backgroundColor: "#ffffff", useCORS: true })
+    : null;
+
+  const fileTitle = `물류기기이동전표_${row.상차일 || ""}_${senderName}`.replace(/[\s/]/g, "");
+
+  const saveImage = async () => {
+    setSending(true);
+    try {
+      const canvas = await captureCanvas();
+      if (!canvas) return;
+      const link = document.createElement("a");
+      link.download = `${fileTitle}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } finally {
+      setSending(false);
+    }
+  };
+  const savePdf = async () => {
+    setSending(true);
+    try {
+      const canvas = await captureCanvas();
+      if (!canvas) return;
+      const pdf = new jsPDF("l", "mm", "a4");
+      const pdfWidth = 297, pdfHeight = 210;
+      const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+      const finalHeight = Math.min(imgHeight, pdfHeight);
+      const finalWidth = imgHeight > pdfHeight ? (canvas.width * pdfHeight) / canvas.height : pdfWidth;
+      pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, finalWidth, finalHeight);
+      pdf.save(`${fileTitle}.pdf`);
+    } finally {
+      setSending(false);
+    }
+  };
+  const handlePrint = async () => {
+    const canvas = await captureCanvas();
+    if (!canvas) return;
+    const imgData = canvas.toDataURL("image/png");
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write(`<!doctype html><html><head><title>물류기기 이동전표</title><style>
+      @page { size: A4 landscape; margin: 8mm; }
+      body { margin:0; display:flex; justify-content:center; background:#fff; }
+      img { width:100%; max-width:281mm; }
+    </style></head><body><img src="${imgData}" onload="window.print()" /></body></html>`);
+    w.document.close();
+  };
+
+  const thStyle = "border border-gray-400 bg-gray-50 px-1.5 py-1 text-[10px] font-bold text-gray-700 whitespace-nowrap";
+  const tdStyle = "border border-gray-400 px-1.5 py-1 text-[10px] text-gray-800";
+
+  // 발송처용/파렛트회사용/운송회사용 — 세 부 모두 내용은 동일하고 표지 라벨만 다르다.
+  const SlipCard = ({ label }) => (
+    <div className="border-2 border-[#1B2B4B]" style={{ width: 270 }}>
+      <div className="text-center py-2 border-b-2 border-[#1B2B4B]">
+        <div className="text-[13px] font-extrabold text-[#1B2B4B] tracking-wide">물류기기 이동전표</div>
+        <div className="text-[10px] font-bold text-gray-500 mt-0.5">({label})</div>
+        <div className="text-[9px] font-semibold text-indigo-600 mt-0.5">{poolCompany}</div>
+      </div>
+      <table className="w-full border-collapse">
+        <tbody>
+          <tr><td className={`${thStyle} w-[70px]`}>발송일</td><td className={tdStyle} colSpan={2}>{fmtFullDate(row.상차일)}</td></tr>
+          <tr><td className={thStyle} rowSpan={3}>발송지</td><td className={`${thStyle} w-[60px]`}>회사명</td><td className={tdStyle}>{senderName}</td></tr>
+          <tr><td className={thStyle}>담당자</td><td className={tdStyle}>{senderManager || ""}</td></tr>
+          <tr><td className={thStyle}>연락처</td><td className={tdStyle}>{senderPhone || ""}</td></tr>
+          <tr><td className={thStyle}>도착일</td><td className={tdStyle} colSpan={2}>{fmtFullDate(row.하차일)}</td></tr>
+          <tr><td className={thStyle} rowSpan={3}>도착지</td><td className={thStyle}>회사명</td><td className={tdStyle}>{arriveName}</td></tr>
+          <tr><td className={thStyle}>담당자</td><td className={tdStyle}>{arriveManager}</td></tr>
+          <tr><td className={thStyle}>연락처</td><td className={tdStyle}>{arrivePhone}</td></tr>
+          <tr><td className={thStyle} rowSpan={3}>운송회사</td><td className={thStyle}>회사명</td><td className={tdStyle}>{userCompany || "-"}</td></tr>
+          <tr><td className={thStyle}>차량번호</td><td className={tdStyle}>{carPlate}</td></tr>
+          <tr><td className={thStyle}>담당자</td><td className={tdStyle}>{carManager && carManager !== "-" ? carManager : ""}</td></tr>
+        </tbody>
+      </table>
+      <table className="w-full border-collapse border-t-2 border-[#1B2B4B]">
+        <thead>
+          <tr><th className={thStyle}>유형</th><th className={thStyle}>수량</th></tr>
+        </thead>
+        <tbody>
+          {typeRows.map((tr, i) => (
+            <tr key={i}><td className={`${tdStyle} text-center`}>{tr.type || "-"}</td><td className={`${tdStyle} text-center`}>{tr.qty || "-"}</td></tr>
+          ))}
+        </tbody>
+      </table>
+      <table className="w-full border-collapse">
+        <tbody>
+          <tr><td className={`${thStyle} w-[60px]`}>품목</td><td className={tdStyle}>{item}</td></tr>
+          <tr><td className={thStyle}>비고</td><td className={tdStyle}>{note}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center p-6">
+      <div className="bg-white rounded-2xl shadow-2xl w-fit max-w-[95vw] max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between bg-[#1B2B4B] px-5 py-3 shrink-0">
+          <h3 className="text-white font-bold text-[15px]">물류기기 이동전표 발행</h3>
+          <div className="flex items-center gap-1.5">
+            <button type="button" onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)))} className="w-7 h-7 rounded bg-white/10 text-white hover:bg-white/20 text-[14px] font-bold transition">−</button>
+            <span className="text-white/80 text-[12px] w-10 text-center">{Math.round(zoom * 100)}%</span>
+            <button type="button" onClick={() => setZoom((z) => Math.min(2, +(z + 0.1).toFixed(2)))} className="w-7 h-7 rounded bg-white/10 text-white hover:bg-white/20 text-[14px] font-bold transition">+</button>
+            <button type="button" onClick={onClose} className="ml-2 text-white/70 hover:text-white text-lg leading-none">✕</button>
+          </div>
+        </div>
+
+        {/* 입력 영역 */}
+        <div className="flex flex-wrap items-start gap-x-6 gap-y-3 px-5 py-3 border-b border-gray-100 bg-gray-50 shrink-0 max-h-[40vh] overflow-y-auto">
+          <div>
+            <div className="text-[12px] font-bold text-gray-500 mb-1">파렛트 회사</div>
+            <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+              {["KPP", "아주파렛트"].map((v) => (
+                <button key={v} type="button" onClick={() => setPoolCompany(v)}
+                  className={`px-3 py-1.5 text-[12px] font-bold transition ${poolCompany === v ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-600 hover:bg-gray-100"}`}>
+                  {v}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="text-[12px] font-bold text-gray-500 mb-1">발송지(거래처) 담당자</div>
+            <input value={senderManager} onChange={(e) => setSenderManager(e.target.value)} placeholder="담당자명"
+              className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-[12px] w-[140px]" />
+          </div>
+          <div>
+            <div className="text-[12px] font-bold text-gray-500 mb-1">발송지(거래처) 연락처</div>
+            <input value={senderPhone} onChange={(e) => setSenderPhone(e.target.value)} placeholder="연락처"
+              className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-[12px] w-[140px]" />
+          </div>
+          <div>
+            <div className="text-[12px] font-bold text-gray-500 mb-1">품목</div>
+            <input value={item} onChange={(e) => setItem(e.target.value)} placeholder="선택 입력"
+              className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-[12px] w-[140px]" />
+          </div>
+          <div>
+            <div className="text-[12px] font-bold text-gray-500 mb-1">비고</div>
+            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="예: 용차"
+              className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-[12px] w-[140px]" />
+          </div>
+          <div className="w-full">
+            <div className="text-[12px] font-bold text-gray-500 mb-1">유형 / 수량 (직접 입력)</div>
+            <div className="space-y-1.5">
+              {typeRows.map((tr, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <input value={tr.type} onChange={(e) => updateTypeRow(i, "type", e.target.value)} placeholder="예: N11"
+                    className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-[12px] w-[100px]" />
+                  <input value={tr.qty} onChange={(e) => updateTypeRow(i, "qty", e.target.value.replace(/[^\d]/g, ""))} placeholder="수량"
+                    className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-[12px] w-[70px]" />
+                  <button type="button" onClick={() => removeTypeRow(i)} disabled={typeRows.length === 1}
+                    className="w-7 h-7 rounded-lg border border-gray-300 text-gray-400 hover:bg-gray-100 disabled:opacity-30 text-[13px]">✕</button>
+                </div>
+              ))}
+              <button type="button" onClick={addTypeRow} className="text-[11px] font-bold text-[#1B2B4B] hover:underline">+ 유형 추가</button>
+            </div>
+          </div>
+        </div>
+
+        {/* 미리보기 */}
+        <div className="flex-1 overflow-auto bg-gray-100 p-6">
+          <div style={{ transform: `scale(${zoom})`, transformOrigin: "top center", transition: "transform .15s" }}>
+            <div ref={captureRef} className="bg-white p-6 flex gap-4 w-fit mx-auto">
+              <SlipCard label="발송처용" />
+              <div className="border-l-2 border-dashed border-gray-300" />
+              <SlipCard label="파렛트회사용" />
+              <div className="border-l-2 border-dashed border-gray-300" />
+              <SlipCard label="운송회사용" />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-white shrink-0">
+          <button type="button" onClick={saveImage} disabled={sending} className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition disabled:opacity-50">이미지저장</button>
+          <button type="button" onClick={savePdf} disabled={sending} className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition disabled:opacity-50">PDF저장</button>
+          <button type="button" onClick={handlePrint} disabled={sending} className="px-4 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:opacity-90 transition disabled:opacity-50">인쇄</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ===== 신규 기사 등록 모달 컴포넌트 =====
 function NewDriverModal({ data, onClose, onConfirm }) {
   const [form, setForm] = React.useState({
@@ -23701,6 +23922,7 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
   const [contextMenu, setContextMenu] = React.useState(null); // { x, y, row }
   const [fareCertRow, setFareCertRow] = React.useState(null); // 운임정보 미리보기 대상 오더
   const [scheduleChartRows, setScheduleChartRows] = React.useState(null); // 스케줄표 대상 오더들
+  const [palletSlipRow, setPalletSlipRow] = React.useState(null); // 전표발행(물류기기 이동전표) 대상 오더
   const [bulkEditRows, setBulkEditRows] = React.useState(null); // 일괄수정 대상 오더들
   const [dateShiftRows, setDateShiftRows] = React.useState(null); // 날짜 일괄 이동 대상 오더들
 
@@ -23857,7 +24079,13 @@ setFarePanelOpen(true);
     });
 
     if (!base.length) {
-      showAlert("📭 동일 상/하차지 운임 이력이 없습니다.");
+      // ⭐ 동일 상/하차지명 이력이 없으면(신규 거래처/신규 하차지 등) 바로 포기하지
+      // 않고, 주소 기준으로 검색할지 물어본다 — 실시간배차현황 컨텍스트메뉴
+      // 운임조회와 동일한 흐름.
+      setCopyAddrClient(copyTarget.거래처명 || "");
+      setCopyAddrPickup(copyTarget.상차지주소 || "");
+      setCopyAddrDrop(copyTarget.하차지주소 || "");
+      setCopyAddrConfirmOpen(true);
       return;
     }
 
@@ -23903,6 +24131,78 @@ setFarePanelOpen(true);
     setCopyFarePanelOpen(true);
     } catch (e) {
       console.error("운임조회 오류:", e);
+      showAlert("운임조회 중 오류가 발생했습니다.\n" + (e?.message || e));
+    }
+  };
+
+  // ⭐ 오더복사/수정 패널 전용 — 주소 기준 운임조회. 거래처명 입력창을 비워두면
+  // (사용자가 직접 지운 경우) 거래처 구분 없이 해당 상/하차 지역의 모든 이력을 검색한다.
+  const handleCopyAddrSearch = () => {
+    const row = copyTarget;
+    if (!row) return;
+    const pickupKw = copyAddrPickup.trim();
+    const dropKw = copyAddrDrop.trim();
+    if (!pickupKw || !dropKw) { showAlert("상차지 주소와 하차지 주소를 입력해주세요."); return; }
+    const clientKw = copyAddrClient.trim();
+
+    try {
+      const targetGroup = getVehicleGroup(row.차량종류);
+      const _todayKstCopyAddr = new Date(new Date().getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+      const matchDir = (pk, dk) => (historyDispatchData || []).filter(r => {
+        if ((r.상차일 || "").slice(0, 10) === _todayKstCopyAddr) return false;
+        if (!r.청구운임) return false;
+        const rPickup = String(r.상차지명 || "") + " " + String(r.상차지주소 || "");
+        const rDrop = String(r.하차지명 || "") + " " + String(r.하차지주소 || "");
+        if (!rPickup.includes(pk)) return false;
+        if (!rDrop.includes(dk)) return false;
+        const rGroup = getVehicleGroup(r.차량종류);
+        if (rGroup !== targetGroup) return false;
+        if (clientKw && String(r.거래처명 || "").trim() !== clientKw) return false;
+        return true;
+      });
+
+      // 입력한 방향으로 이력이 없으면, 상/하차 지역을 뒤바꾼 반대노선 이력도 확인한다.
+      let base = matchDir(pickupKw, dropKw);
+      let reversedMatch = false;
+      if (!base.length) {
+        base = matchDir(dropKw, pickupKw);
+        reversedMatch = base.length > 0;
+      }
+
+      if (!base.length) {
+        showAlert("해당 조건의 운임 이력이 없습니다.");
+        return;
+      }
+
+      const scored = base.map(r => ({
+        ...r,
+        _score: scoreCtxFareRow(r, row),
+        _match: {
+          cargo: String(row.화물내용 || "").trim() && r.화물내용 && r.화물내용.includes(String(row.화물내용 || "").trim()),
+          ton: getTotalTonFromOrder(row) != null && getTotalTonFromOrder(r) === getTotalTonFromOrder(row),
+        },
+        _time: r.updatedAt || r.등록일 || 0,
+        _reverseRoute: reversedMatch,
+      }));
+      scored.sort((a, b) => b._score !== a._score ? b._score - a._score : b._time - a._time);
+
+      const fares = scored.map(r => Number(String(r.청구운임 || "0").replace(/[^\d]/g, "")));
+      setFareResult({
+        records: scored,
+        count: fares.length,
+        avg: Math.round(fares.reduce((a, b) => a + b, 0) / fares.length),
+        min: Math.min(...fares),
+        max: Math.max(...fares),
+        latest: scored[0],
+      });
+      setCopyAddrSearchOpen(false);
+      setCopyFarePanelOpen(true);
+      if (reversedMatch) {
+        showAlert(`"${pickupKw} → ${dropKw}" 방향 이력은 없어, 반대 방향 이력 ${scored.length}건을 표시합니다.`);
+      }
+    } catch (e) {
+      console.error("주소 운임조회 오류:", e);
       showAlert("운임조회 중 오류가 발생했습니다.\n" + (e?.message || e));
     }
   };
@@ -24014,6 +24314,15 @@ React.useEffect(() => {
   const [farePanelOpen, setFarePanelOpen] = React.useState(false);
   const [copyFarePanelOpen, setCopyFarePanelOpen] = React.useState(false);
   const [copyFareFilter, setCopyFareFilter] = React.useState("all");
+  // ⭐ 오더복사/수정 패널 운임조회 — 동일 상/하차지 이력이 없을 때, 실시간배차현황
+  // 컨텍스트메뉴 운임조회의 "주소로 검색" 팝업과 동일한 흐름을 여기서도 제공한다.
+  // 거래처명은 기본으로 이 오더의 거래처명이 채워지되, 지우면 전체 거래처 대상으로
+  // 넓혀 검색할 수 있도록 편집 가능한 입력창으로 둔다(체크박스 토글이 아님).
+  const [copyAddrConfirmOpen, setCopyAddrConfirmOpen] = React.useState(false);
+  const [copyAddrSearchOpen, setCopyAddrSearchOpen] = React.useState(false);
+  const [copyAddrClient, setCopyAddrClient] = React.useState("");
+  const [copyAddrPickup, setCopyAddrPickup] = React.useState("");
+  const [copyAddrDrop, setCopyAddrDrop] = React.useState("");
   const [driverPick, setDriverPick] = React.useState(null);
   const [markDeliveredOnSave, setMarkDeliveredOnSave] = React.useState(false);
   React.useEffect(() => {
@@ -27415,6 +27724,9 @@ const head = isDark
 {scheduleChartRows && (
   <ScheduleChartModal rows={scheduleChartRows} companyName={userCompany} authorName={userNameMap.get(String(auth.currentUser?.email || "").trim().toLowerCase()) || ""} onClose={() => setScheduleChartRows(null)} />
 )}
+{palletSlipRow && (
+  <PalletSlipModal row={palletSlipRow} userCompany={userCompany} userNameMap={userNameMap} onClose={() => setPalletSlipRow(null)} />
+)}
 {bulkEditRows && (
   <BulkEditModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} onDateShift={() => setDateShiftRows(bulkEditRows)} />
 )}
@@ -28563,6 +28875,108 @@ value={copyTarget?.화물수량 || ""}
           <span className="text-gray-700"><span className="font-semibold">{h.field}</span>: <span className="text-gray-500">{String(h.before ?? "없음")}</span> → <span className="font-semibold text-[#1B2B4B]">{String(h.after ?? "없음")}</span></span>
         </div>
       ))}
+    </div>
+  </div>
+)}
+
+{/* ===================== 복사패널 운임조회 - 이력없음 확인 ===================== */}
+{copyAddrConfirmOpen && (
+  <div
+    className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
+    tabIndex={-1}
+    ref={el => { if (el) setTimeout(() => el.focus(), 0); }}
+    onKeyDown={e => {
+      if (e.key === "Enter") { e.preventDefault(); setCopyAddrConfirmOpen(false); setCopyAddrSearchOpen(true); }
+      if (e.key === "Escape") setCopyAddrConfirmOpen(false);
+    }}
+  >
+    <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center gap-3">
+        <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center shrink-0">
+          <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        </div>
+        <div>
+          <h3 className="text-white font-bold text-[15px]">운임 이력 없음</h3>
+          <p className="text-white/60 text-[12px] mt-0.5">동일 상/하차지 운임 이력이 없습니다</p>
+        </div>
+      </div>
+      <div className="px-6 py-5">
+        <p className="text-gray-700 text-[14px] leading-relaxed">동일 상/하차지 운임 이력이 없습니다.<br/>주소로 검색하시겠습니까?</p>
+      </div>
+      <div className="px-6 pb-5 flex gap-3">
+        <button
+          className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px] transition"
+          onClick={() => setCopyAddrConfirmOpen(false)}>
+          아니요
+        </button>
+        <button
+          className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition"
+          onClick={() => { setCopyAddrConfirmOpen(false); setCopyAddrSearchOpen(true); }}>
+          예 (Enter)
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* ===================== 복사패널 운임조회 - 주소 검색 ===================== */}
+{copyAddrSearchOpen && (
+  <div
+    className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999] p-4"
+    onKeyDown={e => { if (e.key === "Escape") setCopyAddrSearchOpen(false); }}
+  >
+    <div className="bg-white rounded-2xl w-[520px] max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between shrink-0">
+        <div>
+          <div className="text-white font-bold text-[17px] tracking-tight">주소 운임 조회</div>
+          <div className="text-white/55 text-[12px] mt-1 font-medium">지역명으로 운임 이력을 검색합니다</div>
+        </div>
+        <button onClick={() => setCopyAddrSearchOpen(false)}
+          className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white text-xl flex items-center justify-center transition mt-0.5">
+          ×
+        </button>
+      </div>
+      <div className="px-6 py-5 border-b border-gray-100 space-y-3 shrink-0">
+        <div>
+          <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">거래처명 (비우면 전체 거래처 대상)</label>
+          <input autoComplete="off"
+            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30"
+            placeholder="예: 반찬단지 (비워두면 전체)"
+            value={copyAddrClient}
+            onChange={e => setCopyAddrClient(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") handleCopyAddrSearch(); }}
+          />
+        </div>
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">상차지 주소</label>
+            <input autoComplete="off"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30"
+              placeholder="예: 인천"
+              value={copyAddrPickup}
+              onChange={e => setCopyAddrPickup(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleCopyAddrSearch(); }}
+            />
+          </div>
+          <div className="flex-1">
+            <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">하차지 주소</label>
+            <input autoComplete="off"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30"
+              placeholder="예: 화성"
+              value={copyAddrDrop}
+              onChange={e => setCopyAddrDrop(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleCopyAddrSearch(); }}
+            />
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <button
+            className="px-5 py-2 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition active:scale-95"
+            onClick={handleCopyAddrSearch}>
+            검색
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 )}
@@ -31176,6 +31590,18 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
             <EditableText id="realtime.ctxMenu.스케줄표" defaultText="스케줄표" />{selected.length > 1 ? ` (${selected.length}건)` : ""}
+          </button>
+          {/* 전표발행 — 물류기기(파렛트) 이동전표를 발송처용/파렛트회사용/운송회사용
+              3부로 만들어 이미지·PDF저장/인쇄할 수 있는 팝업을 연다(우클릭한 1건 기준). */}
+          <button
+            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              setPalletSlipRow(contextMenu.row);
+              setContextMenu(null);
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+            <EditableText id="realtime.ctxMenu.전표발행" defaultText="전표발행" />
           </button>
           {/* 일괄수정 — 2건 이상 선택했을 때만 활성화. 선택한 오더들을 한 화면에
               늘어놓고 운임/메모/전달사항 등을 일괄 또는 개별로 고쳐 한 번에 저장. */}
@@ -34413,6 +34839,12 @@ const [copyFarePanelOpen, setCopyFarePanelOpen] = React.useState(false);
 const [fareResult, setFareResult] = React.useState(null);
 const [fareSortMode, setFareSortMode] = React.useState("relevance");
 const [copyFareFilter, setCopyFareFilter] = React.useState("all");
+// ⭐ 오더복사/수정 패널 운임조회 — 동일 상/하차지 이력이 없을 때 주소로 검색하는 폴백(Part 4와 동일)
+const [copyAddrConfirmOpen, setCopyAddrConfirmOpen] = React.useState(false);
+const [copyAddrSearchOpen, setCopyAddrSearchOpen] = React.useState(false);
+const [copyAddrClient, setCopyAddrClient] = React.useState("");
+const [copyAddrPickup, setCopyAddrPickup] = React.useState("");
+const [copyAddrDrop, setCopyAddrDrop] = React.useState("");
   const [fareSourceData, setFareSourceData] = React.useState([]);
   // 🔥 운임조회용 원본 데이터 (날짜 필터 무시)
   React.useEffect(() => {
@@ -35194,7 +35626,15 @@ if (mode === "driver") {
       return _isCopyCold ? rCold : !rCold;
     });
 
-    if (!base.length) { showAlert("📭 동일 상/하차지 운임 이력이 없습니다."); return; }
+    if (!base.length) {
+      // ⭐ 동일 상/하차지명 이력이 없으면(신규 거래처/신규 하차지 등) 주소 기준으로
+      // 검색할지 물어본다 — RealtimeStatus 컨텍스트메뉴 운임조회와 동일한 흐름.
+      setCopyAddrClient(copyTarget.거래처명 || "");
+      setCopyAddrPickup(copyTarget.상차지주소 || "");
+      setCopyAddrDrop(copyTarget.하차지주소 || "");
+      setCopyAddrConfirmOpen(true);
+      return;
+    }
 
     const targetCargo = String(copyTarget.화물내용 || "").trim();
     const targetTon = String(copyTarget.차량톤수 || "").trim();
@@ -35237,6 +35677,76 @@ if (mode === "driver") {
     setCopyFarePanelOpen(true);
     } catch (e) {
       console.error("운임조회 오류:", e);
+      showAlert("운임조회 중 오류가 발생했습니다.\n" + (e?.message || e));
+    }
+  };
+
+  // ⭐ 오더복사/수정 패널 전용 — 주소 기준 운임조회(Part 4와 동일한 흐름).
+  // 거래처명 입력창을 비워두면 거래처 구분 없이 해당 상/하차 지역의 모든 이력을 검색한다.
+  const handleCopyAddrSearch = () => {
+    const row = copyTarget;
+    if (!row) return;
+    const pickupKw = copyAddrPickup.trim();
+    const dropKw = copyAddrDrop.trim();
+    if (!pickupKw || !dropKw) { showAlert("상차지 주소와 하차지 주소를 입력해주세요."); return; }
+    const clientKw = copyAddrClient.trim();
+
+    try {
+      const targetGroup = getVehicleGroup5(row.차량종류);
+      const _todayKstCopyAddr5 = new Date(new Date().getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+      const matchDir = (pk, dk) => (dispatchData || []).filter(r => {
+        if ((r.상차일 || "").slice(0, 10) === _todayKstCopyAddr5) return false;
+        if (!r.청구운임) return false;
+        const rPickup = String(r.상차지명 || "") + " " + String(r.상차지주소 || "");
+        const rDrop = String(r.하차지명 || "") + " " + String(r.하차지주소 || "");
+        if (!rPickup.includes(pk)) return false;
+        if (!rDrop.includes(dk)) return false;
+        const rGroup = getVehicleGroup5(r.차량종류);
+        if (rGroup !== targetGroup) return false;
+        if (clientKw && String(r.거래처명 || "").trim() !== clientKw) return false;
+        return true;
+      });
+
+      let base = matchDir(pickupKw, dropKw);
+      let reversedMatch = false;
+      if (!base.length) {
+        base = matchDir(dropKw, pickupKw);
+        reversedMatch = base.length > 0;
+      }
+
+      if (!base.length) {
+        showAlert("해당 조건의 운임 이력이 없습니다.");
+        return;
+      }
+
+      const scored = base.map(r => ({
+        ...r,
+        _score: scoreCtxFareRow5(r, row),
+        _match: {
+          cargo: String(row.화물내용 || "").trim() && r.화물내용 && r.화물내용.includes(String(row.화물내용 || "").trim()),
+          ton: getTotalTonFromOrder(row) != null && getTotalTonFromOrder(r) === getTotalTonFromOrder(row),
+        },
+        _time: r.updatedAt || r.등록일 || 0,
+        _reverseRoute: reversedMatch,
+      }));
+      scored.sort((a, b) => b._score !== a._score ? b._score - a._score : b._time - a._time);
+
+      const fares = scored.map(r => Number(String(r.청구운임 || "0").replace(/[^\d]/g, "")));
+      setFareResult({
+        records: scored,
+        count: fares.length,
+        avg: Math.round(fares.reduce((a, b) => a + b, 0) / fares.length),
+        min: Math.min(...fares),
+        max: Math.max(...fares),
+      });
+      setCopyAddrSearchOpen(false);
+      setCopyFarePanelOpen(true);
+      if (reversedMatch) {
+        showAlert(`"${pickupKw} → ${dropKw}" 방향 이력은 없어, 반대 방향 이력 ${scored.length}건을 표시합니다.`);
+      }
+    } catch (e) {
+      console.error("주소 운임조회 오류:", e);
       showAlert("운임조회 중 오류가 발생했습니다.\n" + (e?.message || e));
     }
   };
@@ -36093,6 +36603,7 @@ const save = {
   const [contextMenuDS, setContextMenuDS] = React.useState(null);
   const [fareCertRow, setFareCertRow] = React.useState(null); // 운임정보 미리보기 대상 오더
   const [scheduleChartRows, setScheduleChartRows] = React.useState(null); // 스케줄표 대상 오더들
+  const [palletSlipRow, setPalletSlipRow] = React.useState(null); // 전표발행(물류기기 이동전표) 대상 오더
   const [bulkEditRows, setBulkEditRows] = React.useState(null); // 일괄수정 대상 오더들
   const [dateShiftRows, setDateShiftRows] = React.useState(null); // 날짜 일괄 이동 대상 오더들
   React.useEffect(() => {
@@ -38633,6 +39144,9 @@ return (
       {scheduleChartRows && (
         <ScheduleChartModal rows={scheduleChartRows} companyName={userCompany} authorName={userNameMap.get(String(auth.currentUser?.email || "").trim().toLowerCase()) || ""} onClose={() => setScheduleChartRows(null)} />
       )}
+      {palletSlipRow && (
+        <PalletSlipModal row={palletSlipRow} userCompany={userCompany} userNameMap={userNameMap} onClose={() => setPalletSlipRow(null)} />
+      )}
       {bulkEditRows && (
         <BulkEditModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} onDateShift={() => setDateShiftRows(bulkEditRows)} />
       )}
@@ -39732,6 +40246,108 @@ setCopyPlaceOptions(list);
           <span className="text-gray-700"><span className="font-semibold">{h.field}</span>: <span className="text-gray-500">{String(h.before ?? "없음")}</span> → <span className="font-semibold text-[#1B2B4B]">{String(h.after ?? "없음")}</span></span>
         </div>
       ))}
+    </div>
+  </div>
+)}
+
+{/* ===================== 복사패널 운임조회(Part5) - 이력없음 확인 ===================== */}
+{copyAddrConfirmOpen && (
+  <div
+    className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
+    tabIndex={-1}
+    ref={el => { if (el) setTimeout(() => el.focus(), 0); }}
+    onKeyDown={e => {
+      if (e.key === "Enter") { e.preventDefault(); setCopyAddrConfirmOpen(false); setCopyAddrSearchOpen(true); }
+      if (e.key === "Escape") setCopyAddrConfirmOpen(false);
+    }}
+  >
+    <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center gap-3">
+        <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center shrink-0">
+          <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        </div>
+        <div>
+          <h3 className="text-white font-bold text-[15px]">운임 이력 없음</h3>
+          <p className="text-white/60 text-[12px] mt-0.5">동일 상/하차지 운임 이력이 없습니다</p>
+        </div>
+      </div>
+      <div className="px-6 py-5">
+        <p className="text-gray-700 text-[14px] leading-relaxed">동일 상/하차지 운임 이력이 없습니다.<br/>주소로 검색하시겠습니까?</p>
+      </div>
+      <div className="px-6 pb-5 flex gap-3">
+        <button
+          className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px] transition"
+          onClick={() => setCopyAddrConfirmOpen(false)}>
+          아니요
+        </button>
+        <button
+          className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition"
+          onClick={() => { setCopyAddrConfirmOpen(false); setCopyAddrSearchOpen(true); }}>
+          예 (Enter)
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* ===================== 복사패널 운임조회(Part5) - 주소 검색 ===================== */}
+{copyAddrSearchOpen && (
+  <div
+    className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999] p-4"
+    onKeyDown={e => { if (e.key === "Escape") setCopyAddrSearchOpen(false); }}
+  >
+    <div className="bg-white rounded-2xl w-[520px] max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between shrink-0">
+        <div>
+          <div className="text-white font-bold text-[17px] tracking-tight">주소 운임 조회</div>
+          <div className="text-white/55 text-[12px] mt-1 font-medium">지역명으로 운임 이력을 검색합니다</div>
+        </div>
+        <button onClick={() => setCopyAddrSearchOpen(false)}
+          className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white text-xl flex items-center justify-center transition mt-0.5">
+          ×
+        </button>
+      </div>
+      <div className="px-6 py-5 border-b border-gray-100 space-y-3 shrink-0">
+        <div>
+          <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">거래처명 (비우면 전체 거래처 대상)</label>
+          <input autoComplete="off"
+            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30"
+            placeholder="예: 반찬단지 (비워두면 전체)"
+            value={copyAddrClient}
+            onChange={e => setCopyAddrClient(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") handleCopyAddrSearch(); }}
+          />
+        </div>
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">상차지 주소</label>
+            <input autoComplete="off"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30"
+              placeholder="예: 인천"
+              value={copyAddrPickup}
+              onChange={e => setCopyAddrPickup(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleCopyAddrSearch(); }}
+            />
+          </div>
+          <div className="flex-1">
+            <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">하차지 주소</label>
+            <input autoComplete="off"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30"
+              placeholder="예: 화성"
+              value={copyAddrDrop}
+              onChange={e => setCopyAddrDrop(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleCopyAddrSearch(); }}
+            />
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <button
+            className="px-5 py-2 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition active:scale-95"
+            onClick={handleCopyAddrSearch}>
+            검색
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 )}
@@ -41589,6 +42205,16 @@ setCopyPlaceOptions(list);
             }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
             <EditableText id="status.ctxMenu.스케줄표" defaultText="스케줄표" />{selected.size > 1 ? ` (${selected.size}건)` : ""}
+          </button>
+          {/* 전표발행 — 물류기기(파렛트) 이동전표를 발송처용/파렛트회사용/운송회사용
+              3부로 만들어 이미지·PDF저장/인쇄할 수 있는 팝업을 연다(우클릭한 1건 기준). */}
+          <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              setPalletSlipRow(contextMenuDS.row);
+              setContextMenuDS(null);
+            }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+            <EditableText id="status.ctxMenu.전표발행" defaultText="전표발행" />
           </button>
           {/* 일괄수정 — 2건 이상 선택했을 때만 활성화. 선택한 오더들을 한 화면에
               늘어놓고 운임/메모/전달사항 등을 일괄 또는 개별로 고쳐 한 번에 저장. */}
