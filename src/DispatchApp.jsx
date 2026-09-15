@@ -6835,7 +6835,7 @@ return (
               className="px-2.5 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition disabled:opacity-50 whitespace-nowrap"
               title="오더를 많이 등록/조회하다 화면이 버벅이면 눌러주세요 — 새로고침 없이 현재 화면만 가볍게 초기화합니다"
             >
-              {optimizing ? "⚡ 최적화 중..." : "⚡ 최적화"}
+              {optimizing ? "최적화 중..." : "최적화"}
             </button>
 
             {/* 글씨 크기 조절 버튼 */}
