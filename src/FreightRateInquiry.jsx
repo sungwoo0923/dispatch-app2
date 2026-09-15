@@ -3,7 +3,7 @@ import southKorea from "@svg-maps/south-korea";
 import PalletSimulator from "./PalletSimulator";
 import StandardFare from "./StandardFare";
 import { db } from "./firebase";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 
 // ─── 한국 지도 SVG 경로 (실제 지리 데이터) ─────────────────────────────
 // viewBox="0 0 524 631" — @svg-maps/south-korea 패키지 기준
@@ -518,12 +518,17 @@ function NationalFareTab() {
   const provinces=Object.keys(PROVINCE_PATHS);
   const SMALL=["서울","인천","세종","대전","대구","광주","울산","부산","제주"];
 
+  // ⭐ Firestore 읽기 절감 — where() 없이 orders/dispatch 전체를 무제한 실시간 구독하면
+  // 오더 이력이 쌓일수록(그리고 누가 오더 하나만 수정해도 접속 중인 모두의 화면에서
+  // 다시) 전체를 읽어들인다 — 운임 매칭에 충분한 최근 13개월치만 구독하도록 좁힌다.
   useEffect(()=>{
+    const d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); d.setMonth(d.getMonth()-13);
+    const liveWindowStart=d.toISOString().slice(0,10);
     let c1=[],c2=[];
     const merge=()=>{const m=new Map();[...c1,...c2].forEach(r=>m.set(r._id,r));setDispatchData([...m.values()]);};
     const mapDoc=d=>({_id:d.id,...d.data()});
-    const u1=onSnapshot(collection(db,"dispatch"),s=>{c1=s.docs.map(mapDoc);merge();});
-    const u2=onSnapshot(collection(db,"orders"),s=>{c2=s.docs.map(mapDoc);merge();});
+    const u1=onSnapshot(query(collection(db,"dispatch"),where("상차일",">=",liveWindowStart)),s=>{c1=s.docs.map(mapDoc);merge();});
+    const u2=onSnapshot(query(collection(db,"orders"),where("상차일",">=",liveWindowStart)),s=>{c2=s.docs.map(mapDoc);merge();});
     return()=>{u1();u2();};
   },[]);
   useEffect(()=>{

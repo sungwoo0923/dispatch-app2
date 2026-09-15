@@ -1,7 +1,7 @@
 // ======================= src/StandardFare.jsx =======================
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { db } from "./firebase";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { specialDemandInfo, KOREAN_HOLIDAYS } from "./CustomDatePicker";
 import { ensureWeatherLoaded, getWeatherSpecialInfo } from "./weatherUtil";
 
@@ -692,6 +692,19 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     } finally { setNfLoading(false); }
   };
 
+  // ⭐ Firestore 읽기 절감 — 예전엔 where() 없이 orders/dispatch 두 컬렉션을 통째로
+  // 무제한 실시간 구독해서, 오더 이력이 쌓일수록(그리고 어디서든 오더 하나만
+  // 수정돼도 접속 중인 모든 사람 화면에서 다시) 전체를 읽어들였다 — DispatchApp.jsx의
+  // 배차관리/배차현황에 적용한 것과 같은 방식으로, 운임 매칭에 충분한 최근
+  // 13개월치만 실시간 구독하도록 범위를 좁힌다.
+  const getMonthsAgoKST = (months) => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    d.setMonth(d.getMonth() - months);
+    return d.toISOString().slice(0, 10);
+  };
+  const liveWindowStart = useMemo(() => getMonthsAgoKST(13), []);
+
   useEffect(() => {
     let dispatchCache = [];
     let ordersCache = [];
@@ -713,17 +726,17 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
       };
     };
 
-    const unsub1 = onSnapshot(collection(db, "dispatch"), (snap) => { dispatchCache = snap.docs.map(mapDoc); merge(); });
+    const unsub1 = onSnapshot(query(collection(db, "dispatch"), where("상차일", ">=", liveWindowStart)), (snap) => { dispatchCache = snap.docs.map(mapDoc); merge(); });
     // "orders" 컬렉션에는 이 운송사가 직접 등록한 오더 외에, autoTransmitToShipper로
     // 화주사 화면에 전송한 사본(source: "transport_transmit")도 함께 들어있다. 이
     // 사본은 originId로 가리키는 원본이 "dispatch"(또는 "orders") 쪽에 이미 별도
     // 문서로 존재하므로, 그대로 합치면 같은 오더가 서로 다른 id로 두 번 집계된다.
-    const unsub2 = onSnapshot(collection(db, "orders"), (snap) => {
+    const unsub2 = onSnapshot(query(collection(db, "orders"), where("상차일", ">=", liveWindowStart)), (snap) => {
       ordersCache = snap.docs.map(mapDoc).filter(r => r.source !== "transport_transmit");
       merge();
     });
     return () => { unsub1(); unsub2(); };
-  }, []);
+  }, [liveWindowStart]);
 
   useEffect(() => {
     const save=(k,v)=>{try{localStorage.setItem(k,v);}catch{}};

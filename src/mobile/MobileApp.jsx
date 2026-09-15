@@ -2553,20 +2553,26 @@ useEffect(() => {
 
 
   useEffect(() => {
+    // ⭐ PC(DispatchApp.jsx)는 drivers 구독에 companyName 필터가 있는데, 모바일은 이
+    // 필터가 통째로 빠져있어 다른 회사의 기사 목록까지 그대로 받아오고 있었다 —
+    // PC와 동일한 기준(companyName 없는 옛 문서는 "돌캐"로 취급)으로 맞춘다.
+    const co = userCompany || localStorage.getItem("userCompany") || "돌캐";
     const unsub = onSnapshot(collection(db, "drivers"), (snap) => {
-      const list = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
+      const list = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((d) => (d.companyName || "돌캐") === co);
       setDrivers(list);
     });
     return () => unsub();
-  }, []);
+  }, [userCompany]);
 
   // 🔥 하차지 거래처(places)도 clients에 병합
 useEffect(() => {
+  // ⭐ PC(DispatchApp.jsx)의 places 구독과 동일하게 companyName 필터를 맞춘다 —
+  // 이 필터가 없어서 다른 회사의 하차지거래처까지 그대로 받아오고 있었다.
+  const co = userCompany || localStorage.getItem("userCompany") || "돌캐";
   const unsub = onSnapshot(collection(db, "places"), (snap) => {
-    const list = snap.docs.map((d) => {
+    const list = snap.docs.filter((d) => ((d.data() || {}).companyName || "돌캐") === co).map((d) => {
       const data = d.data();
 
       const name =
@@ -2610,7 +2616,7 @@ useEffect(() => {
   });
 
   return () => unsub();
-}, []);
+}, [userCompany]);
 
 // 고정거래처관리 리스너
 useEffect(() => {
@@ -17874,7 +17880,12 @@ const [showAddressConfirmPopup, setShowAddressConfirmPopup] = useState(false);
   const [fareDetailItemStd, setFareDetailItemStd] = useState(null);
 
   // 🔥 Firestore 로딩 — PC(StandardFare.jsx)와 동일하게 dispatch+orders를 실시간 병합
+  // ⭐ Firestore 읽기 절감 — where() 없이 전체를 무제한 구독하면 오더 이력이 쌓일수록
+  // (그리고 누가 오더 하나만 수정해도) 전체를 다시 읽어들인다 — 운임 매칭에 충분한
+  // 최근 13개월치만 구독하도록 좁힌다(PC와 동일한 범위).
   useEffect(() => {
+    const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); d.setMonth(d.getMonth() - 13);
+    const liveWindowStart = d.toISOString().slice(0, 10);
     let dispatchCache = [];
     let ordersCache = [];
     const merge = () => {
@@ -17887,8 +17898,8 @@ const [showAddressConfirmPopup, setShowAddressConfirmPopup] = useState(false);
       const data = d.data();
       return { id: d.id, ...data, 등록일: toYMD(data.등록일), 상차일: toYMD(data.상차일), 하차일: toYMD(data.하차일) };
     };
-    const unsub1 = onSnapshot(collection(db, "dispatch"), (snap) => { dispatchCache = snap.docs.map(mapDoc); merge(); });
-    const unsub2 = onSnapshot(collection(db, "orders"), (snap) => { ordersCache = snap.docs.map(mapDoc); merge(); });
+    const unsub1 = onSnapshot(query(collection(db, "dispatch"), where("상차일", ">=", liveWindowStart)), (snap) => { dispatchCache = snap.docs.map(mapDoc); merge(); });
+    const unsub2 = onSnapshot(query(collection(db, "orders"), where("상차일", ">=", liveWindowStart)), (snap) => { ordersCache = snap.docs.map(mapDoc); merge(); });
     return () => { unsub1(); unsub2(); };
   }, []);
 

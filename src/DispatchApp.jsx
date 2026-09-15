@@ -5957,6 +5957,27 @@ useEffect(() => {
   return () => unsub();
 }, [userCompany, role]);
 
+  // ⭐ 등록자 표시용 — 오더에 찍힌 등록자 값이 이메일/계정아이디여도, 그 계정이
+  // users/{uid}.name에 설정해 둔 실명으로 바꿔서 보여준다. 예전엔 RealtimeStatus와
+  // DispatchStatus가 각각 독립적으로 이 users 컬렉션 전체를 실시간 구독해서
+  // (탭을 오갈 때마다 매번 재구독 + 전체 재다운로드) 읽기가 중복 낭비됐다 — 최상위
+  // (DispatchApp)에서 한 번만 구독해 두 화면에 동일한 userNameMap을 props로 내려준다.
+  const [userNameMap, setUserNameMap] = React.useState(new Map());
+  React.useEffect(() => {
+    const unsub = onSnapshot(collection(db, "users"), (snap) => {
+      const map = new Map();
+      snap.docs.forEach(d => {
+        const data = d.data() || {};
+        const name = (data.name || "").trim();
+        if (!name) return;
+        map.set(d.id, name);
+        if (data.email) map.set(String(data.email).trim().toLowerCase(), name);
+      });
+      setUserNameMap(map);
+    }, () => {});
+    return () => unsub();
+  }, []);
+
   // ⭐ 예약 이메일 발송 체커 — 진짜 서버 크론이 아니라, 이 회사 소속 계정이 프로그램을
   // 열어두고 있는 동안 1분마다 예약시각이 지난 이메일을 대신 발송해주는 방식이다(브라우저
   // 기반 best-effort 스케줄러). 여러 탭/계정이 동시에 켜져 있어도 상태를 먼저 "sending"으로
@@ -6961,6 +6982,7 @@ return (
             liveDataReady={liveDataReady}
             recentDispatchData={recentDispatchDataFiltered}
             recentLiveDataReady={recentLiveDataReady}
+            userNameMap={userNameMap}
             timeOptions={timeOptions}
             tonOptions={tonOptions}
             drivers={drivers}
@@ -7003,6 +7025,7 @@ return (
             removeDispatch={removeDispatchSafe}
             upsertDriver={upsertDriver}
             upsertClient={upsertClient}
+            userNameMap={userNameMap}
             darkMode={darkMode}
             isViewer={isViewer}
             setCargoAddPopup={setCargoAddPopup}
@@ -7039,6 +7062,7 @@ return (
                 clients={clients}
                 places={places}
                 placeRows={places}
+                userNameMap={userNameMap}
                 addDispatch={addDispatchSafe}
                 patchDispatch={patchDispatchSafe}
                 removeDispatch={removeDispatchSafe}
@@ -7954,6 +7978,7 @@ function MultiRegCombo({ id, value, onChange, onSelect, items, placeholder, clas
     isViewer = false,
     showAlert = (msg) => showAlert(msg),  // ★ 추가 (폴백 포함)
     userCompany = "",
+    userNameMap = new Map(),
     setCargoAddPopup = () => {},
     approveEditRequest = () => {},
     rejectEditRequest = () => {},
@@ -19224,6 +19249,7 @@ setConfirmChange(null);
       removeDispatch={removeDispatchSafe}
       upsertDriver={upsertDriver}
       upsertClient={upsertClient}
+      userNameMap={userNameMap}
       filterType={filterType}
       filterValue={filterValue}
       setConfirmChange={setConfirmChange}
@@ -22354,6 +22380,10 @@ function RealtimeStatus({
   darkMode = false,
   isEmbedded = false,
   isViewer = false,
+  // ⭐ 등록자 표시용(users/{uid}.name) 맵 — DispatchApp에서 한 번만 구독해 내려주는
+  // 값이다(예전엔 이 컴포넌트가 users 컬렉션을 직접 통째로 구독해 DispatchStatus와
+  // 중복으로 읽어들였다).
+  userNameMap = new Map(),
   setCargoAddPopup = () => {},
   approveEditRequest = () => {},
   rejectEditRequest = () => {},
@@ -22392,28 +22422,8 @@ const mergedClients = React.useMemo(() => {
 // 상/하차지명 옆 점심시간 표시 + 상/하차시간 겹침 경고용 조회 맵
 const lunchByName = React.useMemo(() => buildLunchByName(clients, placeRows), [clients, placeRows]);
 
-// 등록자 표시용 — 오더에 찍힌 등록자 값이 이메일/계정아이디여도, 그 계정이
-// users/{uid}.name에 설정해 둔 실명으로 바꿔서 보여주기 위해 한 번 불러온다.
-const [userNameMap, setUserNameMap] = React.useState(new Map());
-// ⚠️ 예전엔 getDocs 1회성 조회였는데, 그 한 번의 조회가 (네트워크 순간 오류 등으로)
-// 실패하면 catch가 조용히 삼켜버려서 등록자 칸이 이후 계속 계정ID로만 표시되는
-// 버그가 있었다("탭 갔다왔더니 이름이 ID로 바뀜" — 메뉴 이동으로 컴포넌트가
-// 재마운트될 때마다 이 조회가 다시 실패할 수 있었음). onSnapshot 실시간 구독으로
-// 바꿔서 최초 실패해도 다음 스냅샷에서 자동 복구되게 한다.
-React.useEffect(() => {
-  const unsub = onSnapshot(collection(db, "users"), (snap) => {
-    const map = new Map();
-    snap.docs.forEach(d => {
-      const data = d.data() || {};
-      const name = (data.name || "").trim();
-      if (!name) return;
-      map.set(d.id, name);
-      if (data.email) map.set(String(data.email).trim().toLowerCase(), name);
-    });
-    setUserNameMap(map);
-  }, () => {});
-  return () => unsub();
-}, []);
+// ⭐ 등록자 표시용(users/{uid}.name) userNameMap은 이제 DispatchApp에서 한 번만
+// 구독해 props로 내려받는다(중복 users 컬렉션 구독 제거 — 읽기 절감).
 
 // ⭐ 배차확정일시 소급 보정 — "배차한시간이 항상 -로 보인다"는 신고의 원인은,
 // 이 필드를 등록/배차 즉시 남기도록 고치기 전까지는 아예 기록되지 않았기
@@ -32779,6 +32789,10 @@ function DispatchStatus({
   isViewer = false,
   setCargoAddPopup = () => {},
   approvedShippers = [],
+  // ⭐ 등록자 표시용(users/{uid}.name) 맵 — DispatchApp에서 한 번만 구독해 내려주는
+  // 값이다(예전엔 이 컴포넌트가 users 컬렉션을 직접 통째로 구독해 RealtimeStatus와
+  // 중복으로 읽어들였다).
+  userNameMap = new Map(),
 }) {
 const dsTableWrapRef = React.useRef(null);
 const [companyBankData, setCompanyBankData] = React.useState(null);
@@ -32824,28 +32838,8 @@ const mergedClients = React.useMemo(() => {
 // 상/하차지명 옆 점심시간 표시 + 상/하차시간 겹침 경고용 조회 맵
 const lunchByName = React.useMemo(() => buildLunchByName(clients, placeRows), [clients, placeRows]);
 
-// 등록자 표시용 — 오더에 찍힌 등록자 값이 이메일/계정아이디여도, 그 계정이
-// users/{uid}.name에 설정해 둔 실명으로 바꿔서 보여주기 위해 한 번 불러온다.
-const [userNameMap, setUserNameMap] = React.useState(new Map());
-// ⚠️ 예전엔 getDocs 1회성 조회였는데, 그 한 번의 조회가 (네트워크 순간 오류 등으로)
-// 실패하면 catch가 조용히 삼켜버려서 등록자 칸이 이후 계속 계정ID로만 표시되는
-// 버그가 있었다("탭 갔다왔더니 이름이 ID로 바뀜" — 메뉴 이동으로 컴포넌트가
-// 재마운트될 때마다 이 조회가 다시 실패할 수 있었음). onSnapshot 실시간 구독으로
-// 바꿔서 최초 실패해도 다음 스냅샷에서 자동 복구되게 한다.
-React.useEffect(() => {
-  const unsub = onSnapshot(collection(db, "users"), (snap) => {
-    const map = new Map();
-    snap.docs.forEach(d => {
-      const data = d.data() || {};
-      const name = (data.name || "").trim();
-      if (!name) return;
-      map.set(d.id, name);
-      if (data.email) map.set(String(data.email).trim().toLowerCase(), name);
-    });
-    setUserNameMap(map);
-  }, () => {});
-  return () => unsub();
-}, []);
+// ⭐ 등록자 표시용(users/{uid}.name) userNameMap은 이제 DispatchApp에서 한 번만
+// 구독해 props로 내려받는다(중복 users 컬렉션 구독 제거 — 읽기 절감).
 
 // ⭐ 배차확정일시 소급 보정 — "배차한시간이 항상 -로 보인다"는 신고의 원인은,
 // 이 필드를 등록/배차 즉시 남기도록 고치기 전까지는 아예 기록되지 않았기
