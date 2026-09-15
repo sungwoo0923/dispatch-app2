@@ -45935,53 +45935,18 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
           {[
             { key: "overview", label: "매출 개요" },
             { key: "client_compare", label: "거래처 동향 분석" },
-            { key: "profit_loss", label: "손익보고서" },
-            { key: "accounting", label: "회계자료" },
-            // ⭐ AI 월간비교분석 — 최고관리자 전용. 실제 LLM 호출 없이 매출·건수·평균단가·
-            // 거래처·차종/톤수·특수일 비중을 규칙 기반으로 비교해서 "건수는 늘었는데 매출은
-            // 왜 줄었나" 같은 질문에 구체적인 원인을 짚어주는 통계 분석 엔진. 마우스를
-            // 올리면 하위 메뉴로 "PPT 리포트 생성"(별도 화면)이 천천히 나타난다.
-            ...(role === "totalMaster" ? [{ key: "ai_compare", label: "AI 월간비교분석", hasSubmenu: true }] : []),
           ].map(tab => (
-            tab.hasSubmenu ? (
-              <div key={tab.key} className="relative group">
-                <button
-                  onClick={() => setActiveTab(tab.key)}
-                  className={`px-5 py-3 text-[13px] font-semibold border-b-2 transition-colors flex items-center gap-1 ${
-                    (activeTab === "ai_compare" || activeTab === "ppt_report")
-                      ? "border-[#1B2B4B] text-[#1B2B4B]"
-                      : "border-transparent text-gray-500 hover:text-gray-600"
-                  }`}
-                >
-                  <EditableText id={`settlement.tab.${tab.key}`} defaultText={tab.label} />
-                  <span className="text-[10px] text-gray-400">▾</span>
-                </button>
-                <div className="absolute left-0 top-full z-20 pt-1 opacity-0 invisible -translate-y-1 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:visible group-hover:translate-y-0">
-                  <div className="bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[168px]">
-                    <button
-                      onClick={() => setActiveTab("ppt_report")}
-                      className={`w-full text-left px-4 py-2.5 text-[12.5px] font-semibold transition-colors ${
-                        activeTab === "ppt_report" ? "text-[#1B2B4B] bg-gray-50" : "text-gray-600 hover:bg-gray-50 hover:text-[#1B2B4B]"
-                      }`}
-                    >
-                      <EditableText id="settlement.tab.ppt_report" defaultText="PPT 리포트 생성" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`px-5 py-3 text-[13px] font-semibold border-b-2 transition-colors ${
-                  activeTab === tab.key
-                    ? "border-[#1B2B4B] text-[#1B2B4B]"
-                    : "border-transparent text-gray-500 hover:text-gray-600"
-                }`}
-              >
-                <EditableText id={`settlement.tab.${tab.key}`} defaultText={tab.label} />
-              </button>
-            )
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-5 py-3 text-[13px] font-semibold border-b-2 transition-colors ${
+                activeTab === tab.key
+                  ? "border-[#1B2B4B] text-[#1B2B4B]"
+                  : "border-transparent text-gray-500 hover:text-gray-600"
+              }`}
+            >
+              <EditableText id={`settlement.tab.${tab.key}`} defaultText={tab.label} />
+            </button>
           ))}
         </div>
         <div className="ml-auto">
@@ -46008,37 +45973,6 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
           fixedRows={fixedRows}
           clients={clients}
         />
-      )}
-      {/* ================= 손익보고서 탭 ================= */}
-      {activeTab === "profit_loss" && (
-        <ProfitLossReport
-          dispatchData={dispatchData}
-          fixedRows={fixedRows}
-          clients={clients}
-          places={places}
-          isViewer={isViewer}
-        />
-      )}
-      {/* ================= 회계자료 탭 ================= */}
-      {activeTab === "accounting" && (
-        <AccountingDashboard
-          dispatchData={dispatchData}
-          fixedRows={fixedRows}
-          clients={clients}
-          isViewer={isViewer}
-        />
-      )}
-      {/* ================= AI 월간비교분석 탭 (최고관리자 전용) ================= */}
-      {activeTab === "ai_compare" && role === "totalMaster" && (
-        <div className="px-8 py-6">
-          <MonthCompareInsight rows={rows} monthA={aiCompareMonthA} setMonthA={setAiCompareMonthA} monthB={aiCompareMonthB} setMonthB={setAiCompareMonthB} />
-        </div>
-      )}
-      {/* ================= PPT 리포트 생성 (AI 월간비교분석 하위 메뉴, 최고관리자 전용) ================= */}
-      {activeTab === "ppt_report" && role === "totalMaster" && (
-        <div className="px-8 py-6">
-          <MonthlyPPTReportPanel rows={rows} monthA={aiCompareMonthA} setMonthA={setAiCompareMonthA} monthB={aiCompareMonthB} setMonthB={setAiCompareMonthB} companyName={userCompany} />
-        </div>
       )}
 {/* ================= 매출 개요 탭 ================= */}
       {activeTab === "overview" && (
