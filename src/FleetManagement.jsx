@@ -4,7 +4,7 @@ import "leaflet/dist/leaflet.css";
 import { db, auth } from "./firebase";
 import {
   collection, onSnapshot, doc, updateDoc, setDoc, getDoc, getDocs,
-  query, where, orderBy, limit, deleteDoc, writeBatch,
+  query, where, orderBy, limit, deleteDoc, writeBatch, documentId,
 } from "firebase/firestore";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap } from "react-leaflet";
 import L from "leaflet";
@@ -1774,49 +1774,52 @@ function HistoryTab({ drivers, defaultDriverId }) {
   const [driverPhotos, setDriverPhotos] = useState([]); // photos for applied driver+date range
   const [histPhotoLightbox, setHistPhotoLightbox] = useState(null); // { photos[], index, rotation }
 
+  // ⭐ Firestore 읽기/연결 절감 — 과거 특정 기간을 조회하는 화면인데도 onSnapshot
+  // (실시간 지속 연결)을 써서, 조회 중 그 기사의 새 로그가 하나만 찍혀도 다시
+  // 전체를 재조회하고 있었다. 실시간으로 갱신될 필요가 없는 이력조회이므로
+  // getDocs(1회성)로 바꿔 연결을 계속 열어두지 않게 한다.
   useEffect(() => {
     if (!applied) return;
+    let cancelled = false;
     setLoading(true);
     setLogs([]);
     setGpsDist(null);
     const from = new Date(applied.from + "T00:00:00+09:00");
     const to = new Date(applied.to + "T23:59:59+09:00");
 
-    const logUnsub = onSnapshot(
-      query(collection(db, "driver_logs"), where("uid", "==", applied.driverId)),
-      (snap) => {
-        const filtered = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    (async () => {
+      try {
+        const [logSnap, gpsSnap, photoSnap] = await Promise.all([
+          getDocs(query(collection(db, "driver_logs"), where("uid", "==", applied.driverId))),
+          getDocs(query(collection(db, "gps_tracks"), where("driverId", "==", applied.driverId), limit(2000))),
+          getDocs(query(collection(db, "driver_photo_logs"), where("uid", "==", applied.driverId))),
+        ]);
+        if (cancelled) return;
+
+        const filtered = logSnap.docs.map(d => ({ id: d.id, ...d.data() }))
           .filter(l => { const t = resolveTs(l.timestamp); return t && t >= from && t <= to; })
           .sort((a, b) => (resolveTs(a.timestamp)?.getTime()||0) - (resolveTs(b.timestamp)?.getTime()||0));
         setLogs(filtered);
-        setLoading(false);
-      },
-      () => setLoading(false)
-    );
 
-    const gpsUnsub = onSnapshot(
-      query(collection(db, "gps_tracks"), where("driverId", "==", applied.driverId), limit(2000)),
-      (snap) => {
-        const tracks = snap.docs.map(d => d.data())
+        const tracks = gpsSnap.docs.map(d => d.data())
           .filter(t => { const ts = resolveTs(t.timestamp); return ts && ts >= from && ts <= to; })
           .sort((a, b) => (resolveTs(a.timestamp)?.getTime()||0) - (resolveTs(b.timestamp)?.getTime()||0));
         let dist = 0;
         for (let i = 1; i < tracks.length; i++) dist += haversineKm(tracks[i-1].lat, tracks[i-1].lng, tracks[i].lat, tracks[i].lng);
         setGpsDist(dist > 0.01 ? dist : null);
-      }
-    );
 
-    const photoUnsub = onSnapshot(
-      query(collection(db, "driver_photo_logs"), where("uid", "==", applied.driverId)),
-      (snap) => {
-        const photos = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        const photos = photoSnap.docs.map(d => ({ id: d.id, ...d.data() }))
           .filter(p => { const t = resolveTs(p.timestamp); return t && t >= from && t <= to; })
           .sort((a, b) => (resolveTs(a.timestamp)?.getTime()||0) - (resolveTs(b.timestamp)?.getTime()||0));
         setDriverPhotos(photos);
+      } catch (e) {
+        console.error("이력조회 오류:", e);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    );
+    })();
 
-    return () => { logUnsub(); gpsUnsub(); photoUnsub(); };
+    return () => { cancelled = true; };
   }, [applied]);
 
   const summary = useMemo(() => {
@@ -2335,10 +2338,23 @@ function TemperatureTab({ drivers }) {
   const [activeOnly, setActiveOnly] = useState(false);
   const [newAlarm, setNewAlarm] = useState({ name: "", minA: "", maxA: "", minB: "", maxB: "", condition: "하나 이상 이탈 시" });
 
+  // ⭐ Firestore 읽기/연결 절감 — 예전엔 기사 1명당 onSnapshot(doc(...)) 리스너를 하나씩
+  // 만들어서, 기사 수만큼 개별 실시간 연결이 동시에 열려있었다(기사 100명이면 연결
+  // 100개). drivers 배열의 참조가 바뀔 때마다(리렌더로 새 배열이 생성될 때마다) 전부
+  // 해제 후 재생성되기도 했다. documentId()로 최대 30개씩 묶어(Firestore 'in' 쿼리
+  // 한도) 훨씬 적은 수의 리스너로 합친다.
   useEffect(() => {
-    const unsubs = drivers.map(d =>
-      onSnapshot(doc(db, "cargo_temp", d.id), snap => {
-        if (snap.exists()) setTempData(prev => ({ ...prev, [d.id]: snap.data() }));
+    const ids = drivers.map(d => d.id).filter(Boolean);
+    if (!ids.length) { setTempData({}); return; }
+    const chunks = [];
+    for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30));
+    const unsubs = chunks.map(chunk =>
+      onSnapshot(query(collection(db, "cargo_temp"), where(documentId(), "in", chunk)), snap => {
+        setTempData(prev => {
+          const next = { ...prev };
+          snap.docs.forEach(d => { next[d.id] = d.data(); });
+          return next;
+        });
       }, () => {})
     );
     return () => unsubs.forEach(u => u());
