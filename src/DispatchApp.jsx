@@ -24203,8 +24203,8 @@ setFarePanelOpen(true);
       // 않고, 주소 기준으로 검색할지 물어본다 — 실시간배차현황 컨텍스트메뉴
       // 운임조회와 동일한 흐름.
       setCopyAddrClient(copyTarget.거래처명 || "");
-      setCopyAddrPickup(copyTarget.상차지주소 || "");
-      setCopyAddrDrop(copyTarget.하차지주소 || "");
+      setCopyAddrPickup(extractAddrArea(copyTarget.상차지주소 || copyTarget.상차지명));
+      setCopyAddrDrop(extractAddrArea(copyTarget.하차지주소 || copyTarget.하차지명));
       setCopyAddrConfirmOpen(true);
       return;
     }
@@ -35753,8 +35753,8 @@ if (mode === "driver") {
       // ⭐ 동일 상/하차지명 이력이 없으면(신규 거래처/신규 하차지 등) 주소 기준으로
       // 검색할지 물어본다 — RealtimeStatus 컨텍스트메뉴 운임조회와 동일한 흐름.
       setCopyAddrClient(copyTarget.거래처명 || "");
-      setCopyAddrPickup(copyTarget.상차지주소 || "");
-      setCopyAddrDrop(copyTarget.하차지주소 || "");
+      setCopyAddrPickup(extractAddrArea5(copyTarget.상차지주소 || copyTarget.상차지명));
+      setCopyAddrDrop(extractAddrArea5(copyTarget.하차지주소 || copyTarget.하차지명));
       setCopyAddrConfirmOpen(true);
       return;
     }
