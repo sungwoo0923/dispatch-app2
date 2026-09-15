@@ -6,6 +6,7 @@ const AES_KEY = process.env.CALL24_AES_KEY || "946e5bf1c0a86333688d1d01561e06e3"
 const AES_IV  = process.env.CALL24_AES_IV  || "4eff880a505c8136";
 const API_KEY = process.env.CALL24_API_KEY  || "946e5bf1c0a863332f1c2a6977b9f08e";
 const BASE_URL = "https://api.15887924.com:18099";
+const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
 
 /* ─── AES 암호화 (키 길이에 따라 AES-128 또는 AES-256 자동 선택) ───
    ⚠️ CALL24_AES_KEY/IV는 hex 문자열이 아니라, 발급받은 문자열 자체를
@@ -89,10 +90,52 @@ function splitAddr(addr = "") {
   };
 }
 
+/* ─── 도로명 → 지번 변환 (TMAP) ─── */
+async function convertToJibun(address) {
+  try {
+    const res = await fetch(
+      "https://apis.openapi.sk.com/tmap/geo/convertAddress?version=1&format=json",
+      {
+        method: "POST",
+        headers: { appKey: TMAP_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ address, coordType: "WGS84GEO" }),
+      }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.addressInfo?.fullAddress || null;
+  } catch {
+    return null;
+  }
+}
+
+/* ─── 상/하차지 주소 → {wide, sgg, dong, detail}
+   ⚠️ "인천 서구 북항로 28-29"처럼 도로명 주소는 세 번째 토큰이 실제 읍/면/동이
+   아니라 도로명(OO로/OO길)이라, 그대로 startDong/endDong에 넣으면 24시콜
+   서버가 실제 행정동과 대조해 "올바른 주소가 아닙니다"(-99)로 거부한다.
+   세 번째 토큰이 도로명으로 보이면 지번 주소로 변환해 실제 동 이름을 구하고,
+   상세주소(번지/건물명 등)는 사용자가 입력한 원본 그대로 유지한다. ─── */
+async function resolveAddrParts(addr = "") {
+  const original = splitAddr(addr);
+  if (!/[로길]$/.test(original.dong)) return original;
+  const jibun = await convertToJibun(addr.trim());
+  if (!jibun) return original;
+  const jibunParts = splitAddr(jibun);
+  if (!jibunParts.dong || /[로길]$/.test(jibunParts.dong)) return original;
+  return {
+    wide: jibunParts.wide || original.wide,
+    sgg: jibunParts.sgg || original.sgg,
+    dong: jibunParts.dong,
+    detail: original.detail,
+  };
+}
+
 /* ─── Dispatch → 24시 매핑 ─── */
-function mapTo24Order(row) {
-  const up   = splitAddr(row.상차지주소 || "");
-  const down = splitAddr(row.하차지주소 || "");
+async function mapTo24Order(row) {
+  const [up, down] = await Promise.all([
+    resolveAddrParts(row.상차지주소 || ""),
+    resolveAddrParts(row.하차지주소 || ""),
+  ]);
   const fare      = Number(row.fare      ?? row.청구운임 ?? 0);
   const fee       = Number(row.fee       ?? Math.max(fare - Number(row.기사운임 ?? 0), 0));
   const frgton    = row.frgton || String(
@@ -152,7 +195,7 @@ export default async function handler(req, res) {
 
   try {
     const row     = req.body;
-    const payload = mapTo24Order(row);
+    const payload = await mapTo24Order(row);
 
     console.log("24시 전송:", JSON.stringify({ ddID: payload.ddID, startPlanDt: payload.startPlanDt }));
 
@@ -182,8 +225,8 @@ export default async function handler(req, res) {
       resultMsg:  result?.resultMsg  || result?.message || JSON.stringify(result),
       response:   result,
       _serverIp:  outboundIp,
-      _keyLen:    Buffer.from(AES_KEY, "hex").length,
-      _algo:      Buffer.from(AES_KEY, "hex").length === 32 ? "aes-256-cbc" : "aes-128-cbc",
+      _keyLen:    Buffer.from(AES_KEY, "utf8").length,
+      _algo:      Buffer.from(AES_KEY, "utf8").length === 32 ? "aes-256-cbc" : "aes-128-cbc",
     });
 
   } catch (err) {

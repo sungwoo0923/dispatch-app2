@@ -16729,7 +16729,7 @@ className={`
                       ? `전송 완료  오더번호: ${send24Result.ordNo || "-"}  /  ${send24Result.msg}`
                       : <>
                           {`전송 실패  코드: ${send24Result.code}  /  ${send24Result.msg}`}
-                          {send24Result.serverIp && (
+                          {send24Result.serverIp && /ip/i.test(send24Result.msg || "") && (
                             <div className="mt-1 text-[11px] font-normal opacity-80">
                               서버 IP: <span className="font-bold">{send24Result.serverIp}</span>
                               {" — 이 IP를 24시콜 마이페이지 허용 IP에 등록하세요"}
