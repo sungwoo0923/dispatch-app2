@@ -21272,6 +21272,9 @@ function PalletSlipModal({ rows, clients = [], userCompany, userNameMap, patchDi
   const thStyle = "border border-gray-400 bg-gray-50 px-1.5 py-1 text-[10px] font-bold text-gray-700 whitespace-nowrap";
   const tdStyle = "border border-gray-400 px-1.5 py-1 text-[10px] text-gray-800";
   const inputCls = "border border-gray-300 rounded-lg px-2.5 py-1.5 text-[12px] w-[140px]";
+  // ⭐ 파렛트 회사 뱃지에 실제 인쇄용 영문 표기(KPP 로고/AJ네트웍스 라벨 참고) — 화면
+  // 선택 버튼은 그대로 한글이지만, 전표에 찍히는 이름만 영문으로 바꾼다.
+  const POOL_COMPANY_LABEL = { KPP: "KPP", 아주파렛트: "AJ PALLET" };
 
   // 발송처용/파렛트회사용/운송회사용 — 세 부 모두 내용은 동일하고 표지 라벨만 다르다.
   const SlipCard = ({ r, f, label }) => {
@@ -21286,9 +21289,13 @@ function PalletSlipModal({ rows, clients = [], userCompany, userNameMap, patchDi
         <div className="text-center py-2 border-b-2 border-[#1B2B4B]">
           <div className="text-[13px] font-extrabold text-[#1B2B4B] tracking-wide">물류기기 이동전표</div>
           <div className="text-[10px] font-bold text-gray-500 mt-0.5">({label})</div>
-          <div className="text-[9px] font-semibold text-indigo-600 mt-0.5">{poolCompany}</div>
+          <div className="text-[17px] font-black text-black mt-1 tracking-wide">{POOL_COMPANY_LABEL[poolCompany] || poolCompany}</div>
         </div>
-        <table className="w-full border-collapse">
+        {/* ⭐ border-collapse 테이블은 html2canvas로 캡쳐(인쇄/이미지/PDF 저장 모두 이
+            캡쳐를 거침)할 때 오른쪽·아래쪽 경계선이 간헐적으로 안 그려지는 문제가
+            있다 — border-separate + spacing 0으로 바꿔서 각 칸 테두리가 항상 온전히
+            찍히도록 한다(카드 폭 270px에 딱 맞춰 3장 모두 오른쪽 선까지 일치). */}
+        <table className="w-full border-separate border-spacing-0">
           <tbody>
             <tr><td className={`${thStyle} w-[70px]`}>발송일</td><td className={tdStyle} colSpan={2}>{fmtFullDate(r.상차일)}</td></tr>
             <tr><td className={thStyle} rowSpan={3}>발송지</td><td className={`${thStyle} w-[60px]`}>회사명</td><td className={tdStyle}>{senderName}</td></tr>
@@ -21303,7 +21310,7 @@ function PalletSlipModal({ rows, clients = [], userCompany, userNameMap, patchDi
             <tr><td className={thStyle}>담당자</td><td className={tdStyle}>{carManager && carManager !== "-" ? carManager : ""}</td></tr>
           </tbody>
         </table>
-        <table className="w-full border-collapse border-t-2 border-[#1B2B4B]">
+        <table className="w-full border-separate border-spacing-0 border-t-2 border-[#1B2B4B]">
           <thead>
             <tr><th className={thStyle}>유형</th><th className={thStyle}>수량</th></tr>
           </thead>
@@ -21313,7 +21320,7 @@ function PalletSlipModal({ rows, clients = [], userCompany, userNameMap, patchDi
             ))}
           </tbody>
         </table>
-        <table className="w-full border-collapse">
+        <table className="w-full border-separate border-spacing-0">
           <tbody>
             <tr><td className={`${thStyle} w-[60px]`}>품목</td><td className={tdStyle}>{f.item}</td></tr>
             <tr><td className={thStyle}>비고</td><td className={tdStyle}>{f.note}</td></tr>
