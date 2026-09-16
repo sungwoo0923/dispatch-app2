@@ -839,6 +839,66 @@ function DuplicateOrderModal({ matches, onCancel, onProceed }) {
   );
 }
 
+// ⭐ 일마감 검증 팝업의 "24시콜 비교 불일치" 카드를 클릭했을 때 뜨는 비교 팝업 —
+// 예전엔 클릭하면 곧바로 오더복사/수정 패널이 열려서 무엇이 어떻게 다른지 한눈에
+// 안 보였다. 24시콜 파일 기준 값과 배차 프로그램 기준 값을 나란히 대비해서 보여주고,
+// 필요하면 "이 오더 수정하기"로 기존 수정 패널로 넘어갈 수 있게 한다.
+function CloseFileCompareModal({ item, programRow, onClose, onEdit }) {
+  if (!item) return null;
+  const typeBadge = (t) => t === "dispatch" ? "배차방식 불일치" : t === "fare" ? "운임 불일치" : t === "missing" ? "파일 누락" : t === "payment" ? "지급방식 불일치" : t;
+  const fmtVal = (v) => v === undefined || v === null || v === "" ? "-" : item.isMoney ? `${Number(v).toLocaleString()}원` : String(v);
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100000000] p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-w-full overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+          <div className="min-w-0">
+            <div className="text-white font-bold text-[15px]">24시콜 비교 불일치</div>
+            <div className="text-white/60 text-[12px] mt-0.5 truncate">{item.label}</div>
+          </div>
+          <button type="button" onClick={onClose} className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white text-lg flex items-center justify-center shrink-0">×</button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="px-2.5 py-1 rounded-lg text-[12px] font-bold bg-red-50 text-red-700 border border-red-100">{typeBadge(item.type)}</span>
+            {item.거래처명 && <span className="text-[13px] text-gray-500">거래처 {item.거래처명}</span>}
+          </div>
+
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[12px] bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+            <div><span className="text-gray-500">차량번호</span> <b className="text-gray-800 ml-1">{item.vehicle || programRow?.차량번호 || "-"}</b></div>
+            <div><span className="text-gray-500">기사명</span> <b className="text-gray-800 ml-1">{item.driverName || programRow?.이름 || "-"}</b></div>
+            <div className="col-span-2"><span className="text-gray-500">오더</span> <b className="text-gray-800 ml-1">{programRow?.상차지명 || "-"} → {programRow?.하차지명 || "-"}</b></div>
+          </div>
+
+          {item.fieldLabel && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="border border-gray-200 rounded-xl p-4">
+                <div className="text-[11px] font-bold text-gray-500 mb-2">24시콜 파일 기준</div>
+                <div className="text-[12px] text-gray-500 mb-0.5">{item.fieldLabel}</div>
+                <div className="text-[19px] font-black text-gray-800 break-words">{fmtVal(item.fileValue)}</div>
+              </div>
+              <div className="border-2 border-red-200 bg-red-50/50 rounded-xl p-4">
+                <div className="text-[11px] font-bold text-red-500 mb-2">배차 프로그램 기준</div>
+                <div className="text-[12px] text-gray-500 mb-0.5">{item.fieldLabel}</div>
+                <div className="text-[19px] font-black text-red-700 break-words">{fmtVal(item.programValue)}</div>
+              </div>
+            </div>
+          )}
+
+          <div className="text-[12px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 break-words leading-relaxed">
+            {item.msg}
+          </div>
+        </div>
+
+        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-[13px] font-semibold border border-gray-300 text-gray-600 hover:bg-gray-50 transition">닫기</button>
+          <button type="button" onClick={onEdit} className="px-4 py-2 rounded-lg text-[13px] font-bold bg-[#1B2B4B] text-white hover:bg-[#243a60] transition">이 오더 수정하기</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // 스케줄표 안에서 상세정보(기사용) 카드로 보여줄 때 쓰는 담당자 한 줄 표시.
 // 이름/번호 중 있는 것만 붙이고, 번호는 항상 하이픈을 채워서 보여준다.
 function _scheduleContactLine(name, phone) {
@@ -24241,6 +24301,9 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
   // ⭐ 24시콜 비교불일치를 업체별로 묶어서 볼지 여부 + 업체별 일괄수정에 쓰는 선택값
   const [closeFileGroupMode, setCloseFileGroupMode] = React.useState(false);
   const [closeFileBulkValue, setCloseFileBulkValue] = React.useState({});
+  // ⭐ 24시콜 비교 불일치 카드를 클릭했을 때 — 오더 수정 패널 대신 "24시콜 값 vs
+  // 프로그램 값"을 나란히 비교해서 보여주는 팝업에 쓸 대상.
+  const [closeFileCompareItem, setCloseFileCompareItem] = React.useState(null);
 
   // === 유사 운임조회 (선택수정 전용 업그레이드) ===
   const handleFareSearch = () => {
@@ -26798,27 +26861,46 @@ const handleCloseFileUpload = async (e) => {
       }
     }
 
-    // ── 주소 기반 1:1 정밀 매칭 ─────────────────────────────────────────
-    // 같은 기사가 당일 여러 건일 때, 24시콜 각 행을 주소로 올바른 프로그램 레코드와 짝지음.
-    // 이 처리 없으면 24시콜 행 A의 운임이 프로그램 레코드 B와 비교되어 false positive 발생.
+    // ── 1:1 정밀 매칭 ─────────────────────────────────────────
+    // 같은 기사가 당일 우리 오더를 여러 건 진행했을 때, 24시콜 각 행을 올바른
+    // 프로그램 레코드 하나와 짝지어야 한다. 이 처리 없으면 24시콜 행 A(예:12만원)의
+    // 운임이 프로그램의 다른 오더 B(예:15만원)와도 비교되어, 둘 다 정상 등록인데도
+    // "운임 불일치"로 잘못 표시된다.
     let matchedForRow = matched;
     if (!isSumFareMatch && matched.length >= 2) {
-      const fp = filePickupAddrCol !== -1 ? String(row[filePickupAddrCol] || "").trim() : "";
-      const fd = fileDropAddrCol   !== -1 ? String(row[fileDropAddrCol]   || "").trim() : "";
-      if (fp || fd) {
-        const scored = matched.map(mr => {
-          let s = 0;
-          // 하차지(목적지)가 구별력 높으므로 가중치 높게
-          if (fd) { s += addrMatchScore(fd, mr.하차지주소 || "") * 3; s += addrMatchScore(fd, mr.하차지명 || "") * 2; }
-          if (fp) { s += addrMatchScore(fp, mr.상차지주소 || "") * 2; s += addrMatchScore(fp, mr.상차지명 || ""); }
-          return { mr, s };
-        });
-        scored.sort((a, b) => b.s - a.s);
-        // 1등이 2등보다 확연히 높을 때만 좁힘 (동점이면 모호 → 원래대로 전체 비교)
-        if (scored[0].s > 0 && (scored.length < 2 || scored[0].s > scored[1].s)) {
-          matchedForRow = [scored[0].mr];
+      // 1순위: 운임이 정확히 일치하는 후보가 단 하나뿐이면 가장 확실한 신호이므로 그걸로 확정.
+      let narrowed = null;
+      if (fareCol !== -1) {
+        const fileFareForRow = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
+        if (fileFareForRow > 0) {
+          const fareMatched = matched.filter(mr =>
+            Number(String(mr.기사운임 || "0").replace(/[^\d]/g, "")) === fileFareForRow
+          );
+          if (fareMatched.length === 1) narrowed = fareMatched;
         }
       }
+
+      // 2순위: 운임으로 못 좁히면 기존대로 주소 유사도로 시도.
+      if (!narrowed) {
+        const fp = filePickupAddrCol !== -1 ? String(row[filePickupAddrCol] || "").trim() : "";
+        const fd = fileDropAddrCol   !== -1 ? String(row[fileDropAddrCol]   || "").trim() : "";
+        if (fp || fd) {
+          const scored = matched.map(mr => {
+            let s = 0;
+            // 하차지(목적지)가 구별력 높으므로 가중치 높게
+            if (fd) { s += addrMatchScore(fd, mr.하차지주소 || "") * 3; s += addrMatchScore(fd, mr.하차지명 || "") * 2; }
+            if (fp) { s += addrMatchScore(fp, mr.상차지주소 || "") * 2; s += addrMatchScore(fp, mr.상차지명 || ""); }
+            return { mr, s };
+          });
+          scored.sort((a, b) => b.s - a.s);
+          // 1등이 2등보다 확연히 높을 때만 좁힘 (동점이면 모호 → 원래대로 전체 비교)
+          if (scored[0].s > 0 && (scored.length < 2 || scored[0].s > scored[1].s)) {
+            narrowed = [scored[0].mr];
+          }
+        }
+      }
+
+      if (narrowed) matchedForRow = narrowed;
     }
 
     matchedForRow.forEach(mr => {
@@ -26836,6 +26918,8 @@ const handleCloseFileUpload = async (e) => {
           label,
           type: "dispatch",
           거래처명,
+          vehicle: row[plateCol], driverName: fileName,
+          fieldLabel: "배차방식", fileValue: "24시", programValue: dispatch,
           msg: `24시콜 파일에 존재하나 배차방식이 "${dispatch}"(으)로 등록됨 (차량: ${row[plateCol]}, 기사: ${fileName})`,
         });
       }
@@ -26849,6 +26933,8 @@ const handleCloseFileUpload = async (e) => {
           if (programPay && programPay !== "계산서") {
             fileIssues.push({
               rowId: mr._id, seq, label, type: "payment", 거래처명,
+              vehicle: row[plateCol], driverName: fileName,
+              fieldLabel: "지급방식", fileValue: fileFeeType, programValue: programPay,
               msg: `24시콜: 인수증(계산서) / 프로그램: "${programPay}" — 지급방식 불일치 (차량: ${row[plateCol]})`,
             });
           }
@@ -26856,6 +26942,8 @@ const handleCloseFileUpload = async (e) => {
           if (programPay && programPay !== "선불" && programPay !== "착불") {
             fileIssues.push({
               rowId: mr._id, seq, label, type: "payment", 거래처명,
+              vehicle: row[plateCol], driverName: fileName,
+              fieldLabel: "지급방식", fileValue: fileFeeType, programValue: programPay,
               msg: `24시콜: 선/착불 / 프로그램: "${programPay}" — 지급방식 불일치 (차량: ${row[plateCol]})`,
             });
           }
@@ -26871,6 +26959,8 @@ const handleCloseFileUpload = async (e) => {
           if (fileFare > 0 && programFare > 0 && fileFare !== programFare) {
             fileIssues.push({
               rowId: mr._id, seq, label, type: "fare", 거래처명,
+              vehicle: row[plateCol], driverName: fileName,
+              fieldLabel: "운임(기사)", fileValue: fileFare, programValue: programFare, isMoney: true,
               msg: `[손실] 24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원 — 운임 불일치 (차량: ${row[plateCol]})`,
             });
           }
@@ -26878,6 +26968,8 @@ const handleCloseFileUpload = async (e) => {
           if (fileFare > 0 && programFare > 0 && fileFare !== programFare) {
             fileIssues.push({
               rowId: mr._id, seq, label, type: "fare", 거래처명,
+              vehicle: row[plateCol], driverName: fileName,
+              fieldLabel: "운임(기사)", fileValue: fileFare, programValue: programFare, isMoney: true,
               msg: `24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원 — 운임 불일치 (차량: ${row[plateCol]})`,
             });
           }
@@ -26921,6 +27013,8 @@ const handleCloseFileUpload = async (e) => {
         label,
         type: "missing",
         거래처명: mr.거래처명 || "(미입력)",
+        vehicle: mr.차량번호, driverName: mr.이름 || "-",
+        fieldLabel: "24시콜 파일 등록 여부", fileValue: "파일에 없음", programValue: `배차방식: ${mr.배차방식 || "24시"}`,
         msg: `배차방식이 "24시"이나 24시콜 파일에 차량번호 없음 (차량: ${mr.차량번호}, 기사: ${mr.이름 || "-"}) — 배차방식 오등록 의심`,
       });
     }
@@ -32678,7 +32772,7 @@ setConfirmChange(null);
     onClick={() => setDailyCloseOpen(false)}
   >
     <div
-      className="bg-white rounded-2xl shadow-2xl w-[1240px] max-w-[95vw] max-h-[90vh] flex flex-col overflow-hidden"
+      className="bg-white rounded-2xl shadow-2xl w-[1600px] max-w-[96vw] max-h-[90vh] flex flex-col overflow-hidden"
       onClick={e => e.stopPropagation()}
     >
       {/* 헤더 */}
@@ -32760,8 +32854,8 @@ setConfirmChange(null);
                       {e.seq}
                     </div>
                    <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-bold text-gray-900 truncate">{e.label}</div>
-                      <div className="text-[12px] font-semibold text-red-600 mt-0.5 truncate">{e.msg}</div>
+                      <div className="text-[13px] font-bold text-gray-900 break-words">{e.label}</div>
+                      <div className="text-[12px] font-semibold text-red-600 mt-0.5 break-words">{e.msg}</div>
                     </div>
                     <span className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-red-100 text-red-700">
                       누락
@@ -32789,8 +32883,8 @@ setConfirmChange(null);
                       {w.seq}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-bold text-gray-900 truncate">{w.label}</div>
-                      <div className="text-[12px] font-semibold text-gray-500 mt-0.5 truncate">{w.msg}</div>
+                      <div className="text-[13px] font-bold text-gray-900 break-words">{w.label}</div>
+                      <div className="text-[12px] font-semibold text-gray-500 mt-0.5 break-words">{w.msg}</div>
                     </div>
                     <span className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-gray-100 text-gray-600 border border-gray-200">
                       {w.type === "margin" ? "마진" :
@@ -32826,15 +32920,16 @@ setConfirmChange(null);
                 // 옅은 빨강으로 구분하고, 나머지는 프로그램 전반의 회색/네이비 톤에
                 // 맞춘 중립 배지로 통일(알록달록하다는 피드백 반영).
                 const typeCls = (t) => t === "fare" ? "bg-red-50 text-red-700 border border-red-100" : "bg-gray-100 text-gray-600 border border-gray-200";
-                const goRow = (rowId) => openDailyCloseIssueDetail(rowId);
+                // ⭐ 클릭하면 바로 오더수정 패널을 여는 대신, 24시콜 값과 프로그램 값을
+                // 나란히 비교해 보여주는 팝업(CloseFileCompareModal)을 먼저 띄운다.
                 const Card = (f, i) => (
                   <div key={i}
                     className="flex items-start gap-3 px-4 py-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition"
-                    onClick={() => goRow(f.rowId)}>
+                    onClick={() => setCloseFileCompareItem(f)}>
                     <div className="w-6 h-6 rounded-full bg-gray-400 text-white text-[11px] font-bold flex items-center justify-center shrink-0">{f.seq}</div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-bold text-gray-900 truncate">{f.label}</div>
-                      <div className="text-[12px] text-gray-700 mt-1 leading-snug truncate">{f.msg}</div>
+                      <div className="text-[13px] font-bold text-gray-900 break-words">{f.label}</div>
+                      <div className="text-[12px] text-gray-700 mt-1 leading-snug break-words">{f.msg}</div>
                     </div>
                     <span className={`shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold ${typeCls(f.type)}`}>{typeBadge(f.type)}</span>
                   </div>
@@ -32990,8 +33085,8 @@ setConfirmChange(null);
         return (
           <div className="px-6 py-3 border-t border-gray-100 bg-[#1B2B4B]/5 shrink-0 flex items-center justify-between gap-4">
             <div>
-              <div className="text-[11px] font-bold text-[#1B2B4B]">전달상태 일괄 변경</div>
-              <div className="text-[10px] text-gray-500 mt-0.5">{doneCnt}/{targets.length}건 전달완료</div>
+              <div className="text-[14px] font-bold text-[#1B2B4B]">전달상태 일괄 변경</div>
+              <div className="text-[13px] font-semibold text-gray-600 mt-1">{doneCnt}/{targets.length}건 전달완료</div>
             </div>
             <button
               onClick={async () => {
@@ -33081,6 +33176,17 @@ setConfirmChange(null);
     </div>
   </div>
 )}
+      {/* ⭐ 24시콜 값 vs 프로그램 값 비교 팝업 — 일마감 검증 팝업보다 앞(z-index 높음)에 뜬다 */}
+      <CloseFileCompareModal
+        item={closeFileCompareItem}
+        programRow={closeFileCompareItem ? (dispatchData.find(r => r._id === closeFileCompareItem.rowId) || rows.find(r => r._id === closeFileCompareItem.rowId)) : null}
+        onClose={() => setCloseFileCompareItem(null)}
+        onEdit={() => {
+          const rowId = closeFileCompareItem?.rowId;
+          setCloseFileCompareItem(null);
+          if (rowId) openDailyCloseIssueDetail(rowId);
+        }}
+      />
       {/* ===================== 정렬/필터 설정 팝업 ===================== */}
       {sortModalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]">
@@ -33872,6 +33978,9 @@ const closeFileRawRef = React.useRef(null);
 // 선택값(거래처명__필드명 단위로 각각 기억)
 const [closeFileGroupMode, setCloseFileGroupMode] = React.useState(false);
 const [closeFileBulkValue, setCloseFileBulkValue] = React.useState({});
+// ⭐ 24시콜 비교 불일치 카드를 클릭했을 때 — 오더 수정 패널 대신 "24시콜 값 vs
+// 프로그램 값"을 나란히 비교해서 보여주는 팝업에 쓸 대상.
+const [closeFileCompareItem, setCloseFileCompareItem] = React.useState(null);
 const [filterErrorIds, setFilterErrorIds] = React.useState(null);
 const [reVerifyToast, setReVerifyToast] = React.useState(null);
 const lastWarnedRef = React.useRef(null);
@@ -34447,7 +34556,22 @@ const computeCloseFileIssues = (raw) => {
       }
     }
 
-    matched.forEach(mr => {
+    // ⭐ 같은 기사가 같은 날 우리 오더를 여러 건 진행한 경우, 24시콜 이 파일 행의
+    // 운임과 정확히 일치하는 프로그램 오더가 하나뿐이면 그 오더로 확정한다. 이게
+    // 없으면 이 파일 행이 그날의 "다른" 오더와도 비교되어, 둘 다 정상 등록인데도
+    // 운임이 서로 다르다는 이유만으로 양쪽 다 불일치로 잘못 표시된다.
+    let matchedForRow = matched;
+    if (fareCol !== -1 && matched.length >= 2) {
+      const fileFareForRow = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
+      if (fileFareForRow > 0) {
+        const fareMatched = matched.filter(mr =>
+          Number(String(mr.기사운임 || "0").replace(/[^\d]/g, "")) === fileFareForRow
+        );
+        if (fareMatched.length === 1) matchedForRow = fareMatched;
+      }
+    }
+
+    matchedForRow.forEach(mr => {
       const seq = viewRows.indexOf(mr) + 1;
       const dateLabel = ` (${mr.상차일 || fileDate || "-"})`;
       const label = `${seq}번${dateLabel} [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}`;
@@ -34457,6 +34581,8 @@ const computeCloseFileIssues = (raw) => {
       if (dispatch && dispatch !== "24시" && dispatch !== "24시(고정기사)") {
         fileIssues.push({
           rowId: mr._id, seq, label, type: "dispatch", 거래처명,
+          vehicle: row[plateCol], driverName: fileName,
+          fieldLabel: "배차방식", fileValue: "24시", programValue: dispatch,
           msg: `24시콜 파일에 존재하나 배차방식이 "${dispatch}"(으)로 등록됨 (차량: ${row[plateCol]}, 기사: ${fileName})`,
         });
       }
@@ -34469,6 +34595,8 @@ const computeCloseFileIssues = (raw) => {
           if (programPay && programPay !== "계산서") {
             fileIssues.push({
               rowId: mr._id, seq, label, type: "payment", 거래처명,
+              vehicle: row[plateCol], driverName: fileName,
+              fieldLabel: "지급방식", fileValue: fileFeeType, programValue: programPay,
               msg: `24시콜: 인수증(계산서) / 프로그램: "${programPay}" — 지급방식 불일치 (차량: ${row[plateCol]})`,
             });
           }
@@ -34476,6 +34604,8 @@ const computeCloseFileIssues = (raw) => {
           if (programPay && programPay !== "선불" && programPay !== "착불") {
             fileIssues.push({
               rowId: mr._id, seq, label, type: "payment", 거래처명,
+              vehicle: row[plateCol], driverName: fileName,
+              fieldLabel: "지급방식", fileValue: fileFeeType, programValue: programPay,
               msg: `24시콜: 선/착불 / 프로그램: "${programPay}" — 지급방식 불일치 (차량: ${row[plateCol]})`,
             });
           }
@@ -34489,6 +34619,8 @@ const computeCloseFileIssues = (raw) => {
           if (fileFare > 0 && programFare > 0 && fileFare !== programFare) {
             fileIssues.push({
               rowId: mr._id, seq, label, type: "fare", 거래처명,
+              vehicle: row[plateCol], driverName: fileName,
+              fieldLabel: "운임(기사)", fileValue: fileFare, programValue: programFare, isMoney: true,
               msg: `[손실] 24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원 — 운임 불일치 (차량: ${row[plateCol]})`,
             });
           }
@@ -34496,6 +34628,8 @@ const computeCloseFileIssues = (raw) => {
           if (fileFare > 0 && programFare > 0 && fileFare !== programFare) {
             fileIssues.push({
               rowId: mr._id, seq, label, type: "fare", 거래처명,
+              vehicle: row[plateCol], driverName: fileName,
+              fieldLabel: "운임(기사)", fileValue: fileFare, programValue: programFare, isMoney: true,
               msg: `24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원 — 운임 불일치 (차량: ${row[plateCol]})`,
             });
           }
@@ -34533,6 +34667,8 @@ const computeCloseFileIssues = (raw) => {
       const label = `${seq}번 (${mr.상차일 || "-"}) [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}`;
       fileIssues.push({
         rowId: mr._id, seq, label, type: "missing", 거래처명: mr.거래처명 || "(미입력)",
+        vehicle: mr.차량번호, driverName: mr.이름 || "-",
+        fieldLabel: "24시콜 파일 등록 여부", fileValue: "파일에 없음", programValue: `배차방식: ${mr.배차방식 || "24시"}`,
         msg: `배차방식이 "24시"이나 24시콜 파일에 차량번호 없음 (차량: ${mr.차량번호}, 기사: ${mr.이름 || "-"}) — 배차방식 오등록 의심`,
       });
     }
@@ -41922,7 +42058,7 @@ setCopyPlaceOptions(list);
         섹션마다 내부 스크롤이 따로 생기던 문제 — 화면을 넓게 써서 한 줄에
         들어오게 하고(가로형식), 아래 각 목록도 2열 그리드로 세로로 여러 건이
         한 번에 보이게 바꿨다. */}
-    <div className="bg-white rounded-2xl shadow-2xl w-[1240px] max-w-[95vw] max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+    <div className="bg-white rounded-2xl shadow-2xl w-[1600px] max-w-[96vw] max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
 
       {/* 헤더 */}
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
@@ -41981,8 +42117,8 @@ setCopyPlaceOptions(list);
                     onClick={() => openDailyCloseIssueDetail(e.rowId)}>
                     <div className="w-6 h-6 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold flex items-center justify-center shrink-0">{e.seq}</div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-bold text-gray-900 truncate">{e.label}</div>
-                      <div className="text-[12px] font-semibold text-red-600 mt-0.5 truncate">{e.msg}</div>
+                      <div className="text-[13px] font-bold text-gray-900 break-words">{e.label}</div>
+                      <div className="text-[12px] font-semibold text-red-600 mt-0.5 break-words">{e.msg}</div>
                     </div>
                     <span className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-red-100 text-red-700">누락</span>
                   </div>
@@ -42002,8 +42138,8 @@ setCopyPlaceOptions(list);
                     onClick={() => openDailyCloseIssueDetail(w.rowId)}>
                     <div className="w-6 h-6 rounded-full bg-gray-400 text-white text-[11px] font-bold flex items-center justify-center shrink-0">{w.seq}</div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-bold text-gray-900 truncate">{w.label}</div>
-                      <div className="text-[12px] font-semibold text-gray-500 mt-0.5 truncate">{w.msg}</div>
+                      <div className="text-[13px] font-bold text-gray-900 break-words">{w.label}</div>
+                      <div className="text-[12px] font-semibold text-gray-500 mt-0.5 break-words">{w.msg}</div>
                     </div>
                     <span className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-gray-100 text-gray-600 border border-gray-200">
                       {w.type === "margin" ? "마진" : w.type === "driver" ? "기사" : w.type === "phone" ? "번호" : w.type === "zero" ? "0원" : w.type === "high" ? "고액" : w.type}
@@ -42035,14 +42171,15 @@ setCopyPlaceOptions(list);
                 // 옅은 빨강으로 구분하고, 나머지는 프로그램 전반의 회색/네이비 톤에
                 // 맞춘 중립 배지로 통일(알록달록하다는 피드백 반영).
                 const typeCls = (t) => t === "fare" ? "bg-red-50 text-red-700 border border-red-100" : "bg-gray-100 text-gray-600 border border-gray-200";
-                const goRow = (rowId) => openDailyCloseIssueDetail(rowId);
+                // ⭐ 클릭하면 바로 오더수정 패널을 여는 대신, 24시콜 값과 프로그램 값을
+                // 나란히 비교해 보여주는 팝업(CloseFileCompareModal)을 먼저 띄운다.
                 const Card = (f, i) => (
                   <div key={i} className="flex items-start gap-3 px-4 py-3 border border-gray-200 rounded-xl bg-white cursor-pointer hover:bg-gray-50 transition"
-                    onClick={() => goRow(f.rowId)}>
+                    onClick={() => setCloseFileCompareItem(f)}>
                     <div className="w-6 h-6 rounded-full bg-gray-400 text-white text-[11px] font-bold flex items-center justify-center shrink-0">{f.seq}</div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-bold text-gray-900 truncate">{f.label}</div>
-                      <div className="text-[12px] font-semibold text-gray-500 mt-0.5 truncate">{f.msg}</div>
+                      <div className="text-[13px] font-bold text-gray-900 break-words">{f.label}</div>
+                      <div className="text-[12px] font-semibold text-gray-500 mt-0.5 break-words">{f.msg}</div>
                     </div>
                     <span className={`shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold ${typeCls(f.type)}`}>{typeBadge(f.type)}</span>
                   </div>
@@ -42180,8 +42317,8 @@ setCopyPlaceOptions(list);
         return (
           <div className="px-6 py-3 border-t border-gray-100 bg-[#1B2B4B]/5 shrink-0 flex items-center justify-between gap-4">
             <div>
-              <div className="text-[11px] font-bold text-[#1B2B4B]">전달상태 일괄 변경</div>
-              <div className="text-[10px] text-gray-500 mt-0.5">{doneCnt}/{targets.length}건 전달완료</div>
+              <div className="text-[14px] font-bold text-[#1B2B4B]">전달상태 일괄 변경</div>
+              <div className="text-[13px] font-semibold text-gray-600 mt-1">{doneCnt}/{targets.length}건 전달완료</div>
             </div>
             <button
               onClick={async () => {
@@ -42262,6 +42399,17 @@ setCopyPlaceOptions(list);
     </div>
   </div>
 )}
+      {/* ⭐ 24시콜 값 vs 프로그램 값 비교 팝업 — 일마감 검증 팝업보다 앞(z-index 높음)에 뜬다 */}
+      <CloseFileCompareModal
+        item={closeFileCompareItem}
+        programRow={closeFileCompareItem ? (dispatchData || []).find(r => r._id === closeFileCompareItem.rowId) : null}
+        onClose={() => setCloseFileCompareItem(null)}
+        onEdit={() => {
+          const rowId = closeFileCompareItem?.rowId;
+          setCloseFileCompareItem(null);
+          if (rowId) openDailyCloseIssueDetail(rowId);
+        }}
+      />
     {/* 🔥 블랙/주의업체 팝업 */}
       {notificationsEnabled && warningPopup && (
         <div
