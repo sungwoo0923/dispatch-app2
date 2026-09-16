@@ -2034,6 +2034,11 @@ function normalizeClient(row) {
     // "undefined 필드" 오류가 나지 않게 하고, isNetRevenueExcludedClient의 이름 기반
     // 폴백(후레쉬물류/채석강)이 계속 작동하게 한다.
     ...(typeof row.순수매출제외 === "boolean" ? { 순수매출제외: row.순수매출제외 } : {}),
+    // ⭐ 매출순위제외: 순수매출제외와는 별개로, "총 매출/순수 운송료/신규·이탈 리스트"에는
+    // 그대로 포함시키되 매출관리의 "월매출 TOP10"·"매출 감소 TOP10" 순위 집계에서만
+    // 빼고 싶은 거래처용 플래그(예: 월 단위 합산청구처럼 배차 매출과 성격이 달라
+    // 순위표에 넣으면 왜곡되는 거래처). 저장 규칙은 순수매출제외와 동일.
+    ...(typeof row.매출순위제외 === "boolean" ? { 매출순위제외: row.매출순위제외 } : {}),
   };
 }
 function normalizeClients(arr) {
@@ -2060,6 +2065,7 @@ function normalizeClients(arr) {
       팝업표시: c.팝업표시 !== undefined ? c.팝업표시 : true,
       contacts: Array.isArray(c.contacts) ? c.contacts : undefined,
       ...(typeof c.순수매출제외 === "boolean" ? { 순수매출제외: c.순수매출제외 } : {}),
+      ...(typeof c.매출순위제외 === "boolean" ? { 매출순위제외: c.매출순위제외 } : {}),
     }));
 }
 // 화주사 수정요청 팝업에서 필드명을 사람이 읽기 쉬운 라벨로 표시하기 위한 매핑
@@ -2131,6 +2137,28 @@ function buildNetRevenueExclusionLookup(clientsList, placesList) {
     if (!n) return false;
     if (map.has(n)) return map.get(n);
     return LEGACY_NET_REVENUE_EXCLUDED_NAMES.some((x) => n.includes(x));
+  };
+}
+
+// ⭐ 매출순위제외 — 위 순수매출제외와 완전히 별개인 플래그. "총 매출/순수 운송료/
+// 신규·이탈 거래처"에는 그대로 남기고 싶지만, 매출관리의 "월매출 TOP10"·"매출 감소
+// TOP10" 순위 집계에서만 빼고 싶은 거래처(예: 월 단위로 몰아서 합산 청구하는 거래처
+// 등, 실제 배차 흐름과 다르게 순위를 왜곡시키는 경우)를 위한 것이다. 레거시 이름
+// 폴백은 없다(신규 기능이라 과거 데이터가 없음) — 명시적으로 체크한 거래처만 빠진다.
+function buildRankingExclusionLookup(clientsList, placesList) {
+  const map = new Map();
+  (placesList || []).forEach((p) => {
+    const nm = String(p.업체명 || "").trim();
+    if (nm && typeof p.매출순위제외 === "boolean") map.set(nm, p.매출순위제외);
+  });
+  (clientsList || []).forEach((c) => {
+    const nm = String(c.거래처명 || "").trim();
+    if (nm && typeof c.매출순위제외 === "boolean") map.set(nm, c.매출순위제외);
+  });
+  return (name) => {
+    const n = String(name || "").trim();
+    if (!n) return false;
+    return map.get(n) || false;
   };
 }
 
@@ -4012,6 +4040,7 @@ const markEditRequestSeen = async (order) => {
           if (client.점심시작시간 !== undefined) syncFields.점심시작시간 = client.점심시작시간;
           if (client.점심종료시간 !== undefined) syncFields.점심종료시간 = client.점심종료시간;
           if (client.순수매출제외 !== undefined) syncFields.순수매출제외 = client.순수매출제외;
+          if (client.매출순위제외 !== undefined) syncFields.매출순위제외 = client.매출순위제외;
           if (Object.keys(syncFields).length) {
             await setDoc(doc(db, "places", m._id || m.id), syncFields, { merge: true }).catch(() => {});
           }
@@ -4199,6 +4228,12 @@ const upsertPlace = async (place) => {
         : typeof existingData?.순수매출제외 === "boolean"
           ? { 순수매출제외: existingData.순수매출제외 }
           : {}),
+      // ⭐ 매출순위제외 — 순수매출제외와 별개인 신규 플래그, 저장 규칙은 동일.
+      ...(typeof place.매출순위제외 === "boolean"
+        ? { 매출순위제외: place.매출순위제외 }
+        : typeof existingData?.매출순위제외 === "boolean"
+          ? { 매출순위제외: existingData.매출순위제외 }
+          : {}),
     };
 
     await setDoc(ref, data, { merge: true });
@@ -4223,6 +4258,7 @@ const upsertPlace = async (place) => {
           점심종료시간: data.점심종료시간,
           팝업표시: data.팝업표시,
           ...(data.순수매출제외 !== undefined ? { 순수매출제외: data.순수매출제외 } : {}),
+          ...(data.매출순위제외 !== undefined ? { 매출순위제외: data.매출순위제외 } : {}),
         }, { merge: true }).catch(() => {});
       }
     } catch {}
@@ -45920,6 +45956,13 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
     () => buildNetRevenueExclusionLookup(clients, places),
     [clients, places]
   );
+  // ⭐ 순수매출제외와 별개 — "월매출 TOP10"·"매출 감소 TOP10" 순위에서만 빼고 싶은
+  // 거래처(매출순위제외) 조회용. 총 매출/순수 운송료/신규·이탈 리스트는 이 값과
+  // 무관하게 그대로 유지된다.
+  const isRankingExcludedFast = React.useMemo(
+    () => buildRankingExclusionLookup(clients, places),
+    [clients, places]
+  );
 
   const toInt = (v) =>
     parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
@@ -46445,8 +46488,8 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
             )}
 
             <SettlementClientAnalysis
-              topRows={monthRows.filter((r) => !isExcludedClient(r.거래처명))}
-              dropRows={rows.filter((r) => !isExcludedClient(r.거래처명))}
+              topRows={monthRows.filter((r) => !isExcludedClient(r.거래처명) && !isRankingExcludedFast(r.거래처명))}
+              dropRows={rows.filter((r) => !isExcludedClient(r.거래처명) && !isRankingExcludedFast(r.거래처명))}
               newClients={newClients}
               targetMonth={targetMonth}
             />
@@ -55396,6 +55439,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       // 정확히 교체하려면 원본 contacts 배열이 필요해 별도로 보관해둔다
       _rawContacts: Array.isArray(d.contacts) ? d.contacts : [],
       ...(typeof d.순수매출제외 === "boolean" ? { 순수매출제외: d.순수매출제외 } : {}),
+      ...(typeof d.매출순위제외 === "boolean" ? { 매출순위제외: d.매출순위제외 } : {}),
     };
   };
 
@@ -56861,14 +56905,23 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                       리스트에서 제외할지 선택 — 운송사마다 이런 거래처가 다를 수 있어
                       회사별로 직접 지정한다. */}
                   <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
-                    <div>
-                      <div className="text-[13px] font-semibold text-gray-700">순수 운송료 매출 통계에서 제외</div>
-                      <div className="text-[11px] text-gray-500 mt-0.5">월 단위로 합산 청구하는 거래처 등, 실제 배차 매출과 별도로 관리할 거래처를 매출관리의 "순수 운송료"와 신규/이탈 거래처 리스트에서 제외합니다</div>
-                    </div>
+                    <div className="text-[13px] font-semibold text-gray-700">순수 운송료 매출 통계에서 제외</div>
                     <button type="button"
                       onClick={() => setEditClientModal(p => ({ ...p, 순수매출제외: !p.순수매출제외 }))}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${editClientModal.순수매출제외 ? "bg-[#1B2B4B]" : "bg-gray-300"}`}>
                       <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editClientModal.순수매출제외 ? "translate-x-6" : "translate-x-1"}`} />
+                    </button>
+                  </div>
+
+                  {/* ⭐ 위와 별개 — 총 매출/순수 운송료/신규·이탈 리스트에는 그대로 두되,
+                      매출관리의 "월매출 TOP10"·"매출 감소 TOP10" 순위에서만 빼고 싶은
+                      거래처용(예: 월 합산청구처럼 순위표에 넣으면 왜곡되는 거래처). */}
+                  <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
+                    <div className="text-[13px] font-semibold text-gray-700">매출 TOP10 / 감소 TOP10 순위에서 제외</div>
+                    <button type="button"
+                      onClick={() => setEditClientModal(p => ({ ...p, 매출순위제외: !p.매출순위제외 }))}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${editClientModal.매출순위제외 ? "bg-[#1B2B4B]" : "bg-gray-300"}`}>
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editClientModal.매출순위제외 ? "translate-x-6" : "translate-x-1"}`} />
                     </button>
                   </div>
 
@@ -57185,14 +57238,23 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
               {/* ⭐ 기본거래처와 동일한 플래그 — 같은 이름의 기본거래처가 있으면 저장 시
                   자동으로 서로 동기화된다(upsertClient/upsertPlace). */}
               <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
-                <div>
-                  <div className="text-[13px] font-semibold text-gray-700">순수 운송료 매출 통계에서 제외</div>
-                  <div className="text-[11px] text-gray-500 mt-0.5">월 단위로 합산 청구하는 거래처 등, 실제 배차 매출과 별도로 관리할 거래처를 매출관리의 "순수 운송료"와 신규/이탈 거래처 리스트에서 제외합니다. 같은 이름의 기본거래처가 있으면 자동으로 같이 켜지고 꺼집니다.</div>
-                </div>
+                <div className="text-[13px] font-semibold text-gray-700">순수 운송료 매출 통계에서 제외</div>
                 <button type="button"
                   onClick={() => setEditPlaceModal(p => ({ ...p, 순수매출제외: !p.순수매출제외 }))}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${editPlaceModal.순수매출제외 ? "bg-[#1B2B4B]" : "bg-gray-300"}`}>
                   <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editPlaceModal.순수매출제외 ? "translate-x-6" : "translate-x-1"}`} />
+                </button>
+              </div>
+
+              {/* ⭐ 위와 별개 — 총 매출/순수 운송료/신규·이탈 리스트에는 그대로 두되,
+                  매출관리의 "월매출 TOP10"·"매출 감소 TOP10" 순위에서만 빼고 싶은
+                  거래처용(예: 월 합산청구처럼 순위표에 넣으면 왜곡되는 거래처). */}
+              <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
+                <div className="text-[13px] font-semibold text-gray-700">매출 TOP10 / 감소 TOP10 순위에서 제외</div>
+                <button type="button"
+                  onClick={() => setEditPlaceModal(p => ({ ...p, 매출순위제외: !p.매출순위제외 }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${editPlaceModal.매출순위제외 ? "bg-[#1B2B4B]" : "bg-gray-300"}`}>
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editPlaceModal.매출순위제외 ? "translate-x-6" : "translate-x-1"}`} />
                 </button>
               </div>
             </div>
