@@ -3533,10 +3533,17 @@ const groupedByDate = useMemo(() => {
 
     // 🔹 수정 모드
     if (form._editId) {
-      await updateDoc(doc(db, selectedOrder.__col, form._editId), {
+      const editId = form._editId;
+      const editCol = selectedOrder.__col;
+
+      // ⭐ 이 updateDoc을 기다린 뒤에야 화면을 갱신했던 게 모바일에서 "수정하기"를
+      // 눌러도 한참 있다가 넘어가는 딜레이의 핵심 원인이었다(모바일 네트워크는
+      // PC/와이파이보다 왕복 지연이 커서 체감이 훨씬 크다). 실제 저장은
+      // 백그라운드로 넘기고, 화면은 먼저 갱신한다 — 실패하면 뒤늦게 알림.
+      const updatePromise = updateDoc(doc(db, editCol, editId), {
         ...docData,
-        _id: form._editId,
-        id: form._editId,
+        _id: editId,
+        id: editId,
       });
 
       // ★ 화주사 전송사본 동기화 — 기사배정/취소 등 일부 액션에서만 사본에 반영되고
@@ -3546,15 +3553,13 @@ const groupedByDate = useMemo(() => {
 
       // ★ PC 거래처관리(places) 동기화 — 오더 자체 저장과는 무관한 주소록 동기화라서
       // 화주사 사본 동기화(바로 위)와 동일하게 기다리지 않고 백그라운드로 돌린다.
-      // 예전엔 이걸 기다리느라(상/하차지 순차 Firestore 쓰기 2번) "수정하기"를 눌러도
-      // 한참 뒤에야 "수정 완료"가 뜨고 화면이 넘어가는 딜레이가 있었다.
       syncPlaceFromOrder(docData, pendingMemoExtra).catch(() => {});
 
       // selectedOrder 최신화 (상세보기로 돌아갈 때 최신 데이터 반영)
-      const updated = { ...selectedOrder, ...docData, _id: form._editId, id: form._editId };
+      const updated = { ...selectedOrder, ...docData, _id: editId, id: editId };
       setSelectedOrder(updated);
       setOrders(prev => prev.map(o =>
-        (o.id === form._editId || o._id === form._editId) ? updated : o
+        (o.id === editId || o._id === editId) ? updated : o
       ));
 
       showSuccess("수정 완료");
@@ -3564,6 +3569,11 @@ const groupedByDate = useMemo(() => {
       } else {
         setPage(prevPage);
       }
+
+      updatePromise.catch((e) => {
+        console.error("오더 수정 실패(백그라운드):", e);
+        alert("수정 중 오류가 발생했습니다. 다시 시도해주세요.\n" + (e?.message || ""));
+      });
       return;
     }
 
@@ -3590,15 +3600,25 @@ const groupedByDate = useMemo(() => {
       }
     }
     try {
-      const saveOne = async (i) => {
+      // ⭐ 모바일 등록 딜레이의 핵심 원인 — 예전엔 (1) addDoc으로 오더를 만든 뒤
+      // 그 자동생성 ID를 다시 _id/id 필드에 채우려고 updateDoc을 한 번 더
+      // 호출해(왕복 2번), (2) 거래처관리(places) 동기화까지 끝까지 기다린
+      // 다음에야 "등록 완료"를 보여줬다. 모바일 네트워크는 왕복 지연이 커서
+      // 이 3번의 순차 대기가 특히 크게 느껴졌다. PC(addDispatch)처럼 ID를
+      // 미리 만들어 한 번의 setDoc으로 끝내고, 나머지(주소록 동기화·화주사
+      // 전송)는 백그라운드로 돌리며, 화면은 먼저 갱신한다.
+      const buildRowData = (i) => {
         const dateForOrder = (useSeparateDates && orderDates[i]) ? orderDates[i] : docData.상차일;
         const dropDateForOrder = (useSeparateDates && orderDropDates[i]) ? orderDropDates[i] : (docData.하차일 || dateForOrder);
-        const rowData = { ...docData, 상차일: dateForOrder, 하차일: dropDateForOrder };
+        return { ...docData, 상차일: dateForOrder, 하차일: dropDateForOrder };
+      };
 
-        const ref = await addDoc(collection(db, collName), {
+      const saveOne = (rowData) => {
+        const newId = crypto.randomUUID();
+        const finalData = {
           ...rowData,
-          _id: "",    // 임시
-          id: "",     // 임시
+          _id: newId,
+          id: newId,
           등록일: today,
           createdAt: serverTimestamp(),
           // ⭐ 등록일 hover 툴팁에서 "PC로 등록/모바일로 등록"을 보여주기 위한 등록기기
@@ -3611,48 +3631,48 @@ const groupedByDate = useMemo(() => {
           // ⭐ 기사 정보까지 채워서 등록과 동시에 배차완료 상태로 저장되는 경우, PC의
           // "배차한시간" 툴팁이 읽는 배차확정일시도 같이 남겨야 한다(없으면 항상 "-").
           ...(rowData.배차상태 === "배차완료" && !rowData.배차확정일시 ? { 배차확정일시: serverTimestamp(), 배차확정자: dispatcherName } : {}),
-        });
+        };
+        const writePromise = setDoc(doc(db, collName, newId), finalData);
 
-        // 🔥 Firestore 문서 고유 ID 확정 저장
-        await updateDoc(doc(db, collName, ref.id), {
-          _id: ref.id,
-          id: ref.id,
-        });
-
-        // ★ PC 거래처관리(places) 동기화
-        await syncPlaceFromOrder(rowData, pendingMemoExtra);
+        // ★ PC 거래처관리(places) 동기화 — 오더 저장 자체와 무관하니 기다리지 않는다.
+        syncPlaceFromOrder(rowData, pendingMemoExtra).catch(() => {});
 
         // ★ 연동 승인된 화주사 거래처명이면 즉시 화주사 화면에 자동전송 (PC와 동일)
-        let matchedShipper = approvedShippers.find(
-          (a) => normalizeCompanyKey(a.companyName) === normalizeCompanyKey(rowData.거래처명)
-        );
-        if (!matchedShipper) {
-          // approvedShippers는 onSnapshot으로 비동기 로딩되는 state라, 앱을 켠 직후 목록이
-          // 채워지기 전 등록하면 여기서 빈 배열이라 매칭이 실패한다 — 실시간으로 한 번 더 확인.
-          const myCompanyName = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
-          matchedShipper = await findApprovedShipperLiveMobile(myCompanyName, rowData.거래처명);
-        }
-        if (matchedShipper) {
-          autoTransmitToShipperMobile({ ...rowData, _id: ref.id, __col: collName }, matchedShipper).catch((e) =>
-            console.error("자동 화주사 전송 실패:", e)
+        (async () => {
+          let matchedShipper = approvedShippers.find(
+            (a) => normalizeCompanyKey(a.companyName) === normalizeCompanyKey(rowData.거래처명)
           );
-        }
-        return rowData;
+          if (!matchedShipper) {
+            // approvedShippers는 onSnapshot으로 비동기 로딩되는 state라, 앱을 켠 직후 목록이
+            // 채워지기 전 등록하면 여기서 빈 배열이라 매칭이 실패한다 — 실시간으로 한 번 더 확인.
+            const myCompanyName = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
+            matchedShipper = await findApprovedShipperLiveMobile(myCompanyName, rowData.거래처명);
+          }
+          if (matchedShipper) {
+            autoTransmitToShipperMobile({ ...rowData, _id: newId, __col: collName }, matchedShipper).catch((e) =>
+              console.error("자동 화주사 전송 실패:", e)
+            );
+          }
+        })().catch(() => {});
+
+        return writePromise;
       };
 
-      const saved = [];
-      for (let i = 0; i < saveCount; i++) {
-        saved.push(await saveOne(i));
-      }
+      const rowDatas = Array.from({ length: saveCount }, (_, i) => buildRowData(i));
+      const writePromises = rowDatas.map(saveOne);
 
-      // ⭐ 예전엔 확인 버튼을 눌러야 닫히는 팝업(registeredSummary)을 띄웠는데, 그
-      // 한 번의 클릭이 강제로 끼어들면서 등록이 느리게 느껴지는 원인이었다 —
-      // 수정하기(showSuccess("수정 완료"))와 동일하게 화면 중앙에 잠깐 떴다 자동으로
-      // 사라지는 알림으로 바꿔서 별도 클릭 없이 바로 다음 화면으로 넘어가게 한다.
-      showSuccess(saved.length > 1 ? `${saved.length}건 등록 완료` : "등록 완료");
+      // ⭐ 실제 저장(setDoc)은 백그라운드에서 진행 중이지만, 화면은 즉시 갱신한다 —
+      // 예전엔 확인 버튼을 눌러야 닫히는 팝업(registeredSummary)까지 있어서 등록이
+      // 한층 더 느리게 느껴졌는데, 지금은 클릭 한 번 없이 바로 다음 화면으로 넘어간다.
+      showSuccess(saveCount > 1 ? `${saveCount}건 등록 완료` : "등록 완료");
       setMultiCount(1);
       setUseSeparateDates(false);
       setPage("list");
+
+      Promise.all(writePromises).catch((e) => {
+        console.error("오더 등록 실패(백그라운드):", e);
+        alert("오더 등록 중 오류가 발생했습니다. 목록에서 저장 여부를 확인해주세요.\n" + (e?.message || ""));
+      });
 
     } catch (e) {
       console.error(e);
@@ -4159,37 +4179,45 @@ const deleteSingleOrder = async (order) => {
     };
 
     try {
-      const ref = await addDoc(collection(db, collName), {
+      // ⭐ 일반모드 handleSave와 동일한 이유로 — addDoc+updateDoc(ID 확정) 2회
+      // 왕복과 syncPlaceFromOrder까지 기다린 뒤에야 결과를 돌려줘서 쉬운모드
+      // 등록도 느리게 느껴졌다. ID를 미리 만들어 setDoc 한 번으로 끝내고,
+      // 나머지는 백그라운드로 돌린다.
+      const newId = crypto.randomUUID();
+      const finalData = {
         ...docData,
-        _id: "",
-        id: "",
+        _id: newId,
+        id: newId,
         등록일: today,
         createdAt: serverTimestamp(),
         등록기기: "모바일",
         작성자: auth.currentUser?.email || "",
         등록자명: dispatcherName || "",
-      });
+      };
+      const writePromise = setDoc(doc(db, collName, newId), finalData);
 
-      await updateDoc(doc(db, collName, ref.id), {
-        _id: ref.id,
-        id: ref.id,
-      });
-
-      await syncPlaceFromOrder(docData);
+      syncPlaceFromOrder(docData).catch(() => {});
 
       // ★ 연동 승인된 화주사 거래처명이면 즉시 화주사 화면에 자동전송 (일반모드와 동일)
-      let matchedShipper = approvedShippers.find(
-        (a) => normalizeCompanyKey(a.companyName) === normalizeCompanyKey(docData.거래처명)
-      );
-      if (!matchedShipper) {
-        const myCompanyName = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
-        matchedShipper = await findApprovedShipperLiveMobile(myCompanyName, docData.거래처명);
-      }
-      if (matchedShipper) {
-        autoTransmitToShipperMobile({ ...docData, _id: ref.id, __col: collName }, matchedShipper).catch((e) =>
-          console.error("자동 화주사 전송 실패:", e)
+      (async () => {
+        let matchedShipper = approvedShippers.find(
+          (a) => normalizeCompanyKey(a.companyName) === normalizeCompanyKey(docData.거래처명)
         );
-      }
+        if (!matchedShipper) {
+          const myCompanyName = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
+          matchedShipper = await findApprovedShipperLiveMobile(myCompanyName, docData.거래처명);
+        }
+        if (matchedShipper) {
+          autoTransmitToShipperMobile({ ...docData, _id: newId, __col: collName }, matchedShipper).catch((e) =>
+            console.error("자동 화주사 전송 실패:", e)
+          );
+        }
+      })().catch(() => {});
+
+      writePromise.catch((e) => {
+        console.error("오더 등록 실패(백그라운드):", e);
+        alert("오더 등록 중 오류가 발생했습니다. 목록에서 저장 여부를 확인해주세요.\n" + (e?.message || ""));
+      });
 
       showSuccess("등록 완료");
       return { ok: true };
@@ -4219,7 +4247,9 @@ const deleteSingleOrder = async (order) => {
       if (String(청구운임 || "").trim()) { farePatch.청구운임 = 청구; farePatch.수수료 = 청구 - 기사; }
       if (String(기사운임 || "").trim()) { farePatch.기사운임 = 기사; farePatch.수수료 = (farePatch.청구운임 ?? Number(order.청구운임) ?? 0) - 기사; }
 
-      await updateDoc(doc(db, colName, docId), {
+      // ⭐ 이 updateDoc과 아래 upsertDriver를 순차로 기다린 뒤에야 결과를 돌려줘서
+      // 쉬운모드 "배차완료"도 느리게 느껴졌다 — 실제 저장은 백그라운드로 돌린다.
+      const writePromise = updateDoc(doc(db, colName, docId), {
         차량번호,
         기사명: 기사명 || "",
         이름: 기사명 || "",
@@ -4234,12 +4264,16 @@ const deleteSingleOrder = async (order) => {
         updatedAt: serverTimestamp(),
         _lastModified: Date.now(),
       });
+      writePromise.catch((e) => {
+        console.error("배차 저장 실패(백그라운드):", e);
+        alert("배차 저장 중 오류가 발생했습니다. 다시 시도해주세요.\n" + (e?.message || ""));
+      });
 
       // 신규 기사면 기사관리에 등록 (일반모드 handleSaveDriverToOrder와 동일)
       const nd = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
       const existingDriver = drivers.find((d) => nd(d.차량번호) === nd(차량번호));
       if (!existingDriver) {
-        await upsertDriver({ 차량번호, 이름: 기사명 || "", 전화번호: 전화번호 || "" });
+        upsertDriver({ 차량번호, 이름: 기사명 || "", 전화번호: 전화번호 || "" }).catch(() => {});
       }
 
       showSuccess("배차 완료");
@@ -4270,7 +4304,10 @@ const deleteSingleOrder = async (order) => {
     try {
       const colName = order.__col || collName;
       const docId = order._id || order.id;
-      await updateDoc(doc(db, colName, docId), {
+      // ⭐ 이 updateDoc과 아래 syncPlaceFromOrder를 순차로 기다린 뒤에야 결과를
+      // 돌려줘서 쉬운모드 "수정하기"도 느리게 느껴졌다 — 실제 저장은
+      // 백그라운드로 돌린다.
+      const writePromise = updateDoc(doc(db, colName, docId), {
         거래처명: simple.거래처명 || "",
         상차지명: simple.상차지명,
         상차지주소: simple.상차지주소 || "",
@@ -4299,7 +4336,12 @@ const deleteSingleOrder = async (order) => {
         updatedAt: serverTimestamp(),
         _lastModified: Date.now(),
       });
-      await syncPlaceFromOrder(simple);
+      writePromise.catch((e) => {
+        console.error("오더 수정 실패(백그라운드):", e);
+        alert("수정 중 오류가 발생했습니다. 다시 시도해주세요.\n" + (e?.message || ""));
+      });
+
+      syncPlaceFromOrder(simple).catch(() => {});
       showSuccess("수정 완료");
       return { ok: true };
     } catch (e) {
