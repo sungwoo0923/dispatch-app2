@@ -110,26 +110,33 @@ export default async function handler(req, res) {
     // 1-1️⃣ 강화된 fallback
     // =========================
     const tryGeocode = async (addr) => {
-      let result = await geocode(addr);
+      // 🔥 1차 시도가 성공하면 여기서 바로 끝 — 예전엔 성공 여부와 상관없이
+      // 매번 지번 변환 + 재조회까지 추가로 호출해서 왕복 네트워크 요청이
+      // 항상 최소 3번씩 발생했다.
+      const result = await geocode(addr);
+      if (result) return result;
 
       const jibun = await convertToJibun(addr);
-      const jibunResult = await geocode(jibun);
-
-      if (jibunResult) return jibunResult;
-      if (result) return result;
+      if (jibun) {
+        const jibunResult = await geocode(jibun);
+        if (jibunResult) return jibunResult;
+      }
 
       const parts = addr.split(" ");
       for (let i = parts.length - 1; i >= 2; i--) {
         const short = parts.slice(0, i).join(" ");
-        result = await geocode(short);
-        if (result) return result;
+        const shortResult = await geocode(short);
+        if (shortResult) return shortResult;
       }
 
       return null;
     };
 
-    const from = await tryGeocode(cleanAddress(fromAddr));
-    const to   = await tryGeocode(cleanAddress(toAddr));
+    // 🔥 출발지/도착지를 순차로 기다리지 않고 동시에 조회 (왕복 시간 절반으로)
+    const [from, to] = await Promise.all([
+      tryGeocode(cleanAddress(fromAddr)),
+      tryGeocode(cleanAddress(toAddr)),
+    ]);
 
     // 🔥 좌표 디버그 로그
     console.log("📍 from:", from, "| 원본주소:", fromAddr);
@@ -240,14 +247,13 @@ export default async function handler(req, res) {
       return null;
     };
 
-// 경유지 주소 → 좌표 변환
-    const viaCoords = [];
-    for (const addr of viaPoints) {
-      if (addr?.trim()) {
-        const coord = await tryGeocode(cleanAddress(addr));
-        if (coord) viaCoords.push(coord);
-      }
-    }
+// 경유지 주소 → 좌표 변환 (병렬)
+    const viaGeocoded = await Promise.all(
+      viaPoints
+        .filter((addr) => addr?.trim())
+        .map((addr) => tryGeocode(cleanAddress(addr)))
+    );
+    const viaCoords = viaGeocoded.filter(Boolean);
 
     const features = await getRoute(from, to, viaCoords);
 

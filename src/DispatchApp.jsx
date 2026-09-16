@@ -9541,43 +9541,22 @@ React.useEffect(() => {
         }
       };
 
-      const start = await getCoords(form.상차지주소);
-      if (cancelled) return;
-      const end = await getCoords(form.하차지주소);
-      if (cancelled) return;
-
-      if (!start || !end) {
-        console.warn("❌ 출발/도착 좌표 획득 실패");
-        setRouteInfo({
-          distanceKm: 0,
-          durationMin: 0
-        });
-        
-        // 🔥 좌표 없을 때도 기본 지도는 표시
-        mapDiv.innerHTML = "";
-        new window.Tmapv2.Map("route-map", {
-          center: new window.Tmapv2.LatLng(37.5665, 126.9780), // 서울시청
-          width: "100%",
-          height: "100%",
-          zoom: 10
-        });
-        
-        return;
-      }
-
-      console.log("✅ 좌표 획득 성공:", { start, end });
-
+      // ⭐ 예전엔 여기서 상/하차지 좌표를 클라이언트가 먼저 순차로(상차지→하차지
+      // 차례로, 각각 실패시 지번변환+주소축소까지 재시도) 조회한 뒤에야 지도를
+      // 만들고 /api/route를 호출했다 — 그런데 이 좌표(start/end)는 지도 중심을
+      // 잡는 데만 쓰이고, 실제 마커는 아래에서 /api/route가 돌려주는 경로(path)의
+      // 첫/마지막 좌표로 다시 그려서 사실상 버려지는 값이었다. 게다가 서버도
+      // /api/route 안에서 같은 주소를 또 geocoding하므로 완전히 중복 작업.
+      // → 지도부터 즉시 만들고, 경로 요청을 바로 시작한다.
       mapDiv.innerHTML = "";
 
       const map = new window.Tmapv2.Map("route-map", {
-        center: new window.Tmapv2.LatLng(start.lat, start.lon),
+        center: new window.Tmapv2.LatLng(37.5665, 126.9780), // 서울시청(경로 도착 전 기본값, 곧 fitBounds로 이동)
         width: "100%",
         height: "100%",
-        zoom: 11
+        zoom: 10
       });
 
-      const startLatLng = new window.Tmapv2.LatLng(start.lat, start.lon);
-      const endLatLng = new window.Tmapv2.LatLng(end.lat, end.lon);
       // =========================
 // ⭐🔥 도로 경로 (완성)
 // =========================
@@ -9726,12 +9705,18 @@ if (markerStart && markerEnd) {
   });
 }
 
-// ✅ 경유 상차지 마커 (초록색)
+// ✅ 경유 상차지(초록)/경유 하차지(보라) 마커 — 예전엔 하나씩 순서대로 기다려서
+// (for...await) 경유지가 많을수록 느려졌다. 한꺼번에 병렬로 좌표를 가져온다.
 const pickupVia = (form.경유상차목록 || []).filter(s => s.주소?.trim());
-for (let vi = 0; vi < pickupVia.length; vi++) {
-  if (cancelled) return;
-  const vCoord = await getCoords(pickupVia[vi].주소);
-  if (cancelled) return;
+const dropVia = (form.경유하차목록 || []).filter(s => s.주소?.trim());
+
+const [pickupViaCoords, dropViaCoords] = await Promise.all([
+  Promise.all(pickupVia.map(s => getCoords(s.주소))),
+  Promise.all(dropVia.map(s => getCoords(s.주소))),
+]);
+if (cancelled) return;
+
+pickupViaCoords.forEach((vCoord, vi) => {
   if (vCoord) {
     new window.Tmapv2.Marker({
       position: new window.Tmapv2.LatLng(vCoord.lat, vCoord.lon),
@@ -9741,14 +9726,9 @@ for (let vi = 0; vi < pickupVia.length; vi++) {
       iconAnchor: new window.Tmapv2.Point(30, 80),
     });
   }
-}
+});
 
-// ✅ 경유 하차지 마커 (보라색)
-const dropVia = (form.경유하차목록 || []).filter(s => s.주소?.trim());
-for (let vi = 0; vi < dropVia.length; vi++) {
-  if (cancelled) return;
-  const vCoord = await getCoords(dropVia[vi].주소);
-  if (cancelled) return;
+dropViaCoords.forEach((vCoord, vi) => {
   if (vCoord) {
     new window.Tmapv2.Marker({
       position: new window.Tmapv2.LatLng(vCoord.lat, vCoord.lon),
@@ -9758,7 +9738,7 @@ for (let vi = 0; vi < dropVia.length; vi++) {
       iconAnchor: new window.Tmapv2.Point(30, 80),
     });
   }
-}
+});
     } catch (err) {
       console.error("경로 지도 실패:", err);
     }
@@ -11911,10 +11891,14 @@ for (let i = 0; i < saveCount; i++) {
   const ddChk = (useSeparateDates && orderDropDates[i]) ? lockYear(orderDropDates[i]) : (rec.하차일 || dChk);
   if (isReversedDateOrder(dChk, ddChk)) {
     showAlert(REVERSED_DATE_ORDER_MSG);
+    setIsSaving(false);
     return;
   }
 }
-await Promise.all(Array.from({ length: saveCount }, (_, i) => {
+// ⭐ 저장 버튼 클릭 후 느껴지던 딜레이/끊김의 핵심 원인 — Firestore 쓰기가 끝날
+// 때까지 화면("저장 중...")이 멈춰 있었다. 실제 쓰기는 백그라운드로 넘기고
+// (savePromise), 화면은 아래에서 바로 초기화한다.
+const savePromise = Promise.all(Array.from({ length: saveCount }, (_, i) => {
   const dateForOrder = (useSeparateDates && orderDates[i]) ? lockYear(orderDates[i]) : rec.상차일;
   const dropDateForOrder = (useSeparateDates && orderDropDates[i]) ? lockYear(orderDropDates[i]) : (rec.하차일 || dateForOrder);
   // ⭐ 다중등록으로 오더별 상차일이 서로 다를 수 있어(useSeparateDates), 사용자가
@@ -12012,6 +11996,13 @@ if (_carNo && _name) {
     upsertDriver({ 차량번호: _carNo, 이름: _name, 전화번호: _tel }).catch(() => {});
   }
 }
+
+// ⭐ 화면은 이미 초기화됐지만 실제 Firestore 쓰기는 백그라운드에서 계속 진행 중 —
+// 뒤늦게 실패하면 여기서 알려준다.
+savePromise.catch((err) => {
+  console.error("오더 저장 실패(백그라운드):", err);
+  showAlert("오더 저장 중 오류가 발생했습니다. 배차현황에서 저장 여부를 확인해주세요.\n" + (err?.message || ""));
+});
   } catch (err) {
     console.error("오더 저장 실패:", err);
     setIsSaving(false);
