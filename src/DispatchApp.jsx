@@ -45915,6 +45915,30 @@ function MonthlyPPTReportPanel({ rows = [], monthA: monthAProp, setMonthA: setMo
   );
 }
 
+// ⭐ 매출관리 "예상 매출/건수/수익" 계산에 쓰는 국가공휴일 목록 — 설날/추석처럼
+// 음력 기준이라 매년 날짜가 바뀌므로, 새해가 되면 이 목록을 그 해 날짜로 다시
+// 채워야 한다(연도별로 키를 두어 여러 해를 같이 등록해둘 수 있다). 여기 없는
+// 연도는 공휴일 보정 없이(평일처럼) 계산한다.
+const KR_HOLIDAYS_BY_YEAR = {
+  2026: [
+    "2026-01-01", // 신정
+    "2026-02-16", "2026-02-17", "2026-02-18", // 설날 연휴
+    "2026-03-01", // 삼일절
+    "2026-05-05", // 어린이날
+    "2026-05-24", "2026-05-25", // 부처님오신날 + 대체공휴일
+    "2026-06-06", // 현충일
+    "2026-08-15", "2026-08-17", // 광복절 + 대체공휴일
+    "2026-09-24", "2026-09-25", "2026-09-26", // 추석 연휴
+    "2026-10-03", "2026-10-05", // 개천절 + 대체공휴일
+    "2026-10-09", // 한글날
+    "2026-12-25", // 성탄절
+  ],
+};
+const isKrHoliday = (dateStr) => {
+  const year = Number(String(dateStr || "").slice(0, 4));
+  return (KR_HOLIDAYS_BY_YEAR[year] || []).includes(dateStr);
+};
+
 // ===================== DispatchApp.jsx (PART 6/8 — Settlement Premium) — START =====================
 function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], isViewer = false, role, userCompany = "" }) {
   // ⭐ 연간 매출 목표(순수 운송료 목표 금액 / 제외 거래처 성장률)는 회사마다 다르므로
@@ -46132,22 +46156,88 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   const daysInMonth = new Date(yearKey, monthNum, 0).getDate();
   const elapsedDays =
     new Set(monthRows.map((r) => r.상차일).filter((d) => d && d <= today)).size || 1;
-  const curSale = m.sale;
-  const curProfit = m.profit;
-  const curCnt = monthRows.length;
-  const avgSalePerDay = curSale / elapsedDays;
-  const avgProfitPerDay = curProfit / elapsedDays;
-  const avgCntPerDay = curCnt / elapsedDays;
-  const forecast = {
-    sale: Math.round(avgSalePerDay * daysInMonth),
-    profit: Math.round(avgProfitPerDay * daysInMonth),
-    count: Math.round(avgCntPerDay * daysInMonth),
-  };
 
   const pmPure = stat(prevMonthRows.filter((r) => !isFresh(r)));
   const dPure = stat(dayRows.filter((r) => !isFresh(r)));
-  const mPure = stat(monthRows.filter((r) => !isFresh(r)));
+  const monthPureRows = monthRows.filter((r) => !isFresh(r));
+  const mPure = stat(monthPureRows);
   const yPure = stat(yearRows.filter((r) => !isFresh(r)));
+
+  // ⭐ "예상 매출/건수/수익" — 예전엔 (1) 거래처관리에서 "순수 운송료 매출
+  // 통계에서 제외"로 체크한 거래처까지 그대로 포함한 전체 매출을 기준으로,
+  // (2) "지금까지의 하루 평균 × 이번달 총 일수"로만 단순 계산했다. 그 결과
+  // 제외 거래처가 예상치에 그대로 섞여 들어갔고, 추석 같은 연휴로 실제
+  // 영업일이 줄거나 명절 전후로 물량이 몰리는 흐름은 전혀 반영되지 않았다.
+  // 이제는 (1) 제외 거래처를 뺀 "순수 운송 매출" 기준으로, (2) 남은 날짜를
+  // 하루하루 요일별 평균(최근 90일, 공휴일 제외)으로 채우고, (3) 공휴일은
+  // 매출 0으로, 연휴 앞뒤 영업일은 물량 증가를 가산해서 계산한다.
+  const forecast = (() => {
+    // 최근 90일 요일별(0=일~6=토) 평균 매출/건수 — 공휴일은 패턴을 왜곡하므로 제외
+    const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 90);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    const recentPureRows = rows.filter((r) => {
+      const d = r.상차일;
+      return d && d >= cutoffStr && d <= today && !isKrHoliday(d) && !isFresh(r);
+    });
+    const byWeekday = Array.from({ length: 7 }, () => ({ sale: 0, cnt: 0, days: new Set() }));
+    recentPureRows.forEach((r) => {
+      const wd = new Date(r.상차일).getDay();
+      byWeekday[wd].sale += toInt(r.청구운임);
+      byWeekday[wd].cnt += 1;
+      byWeekday[wd].days.add(r.상차일);
+    });
+    const weekdayAvgSale = byWeekday.map((w) => (w.days.size ? w.sale / w.days.size : 0));
+    const weekdayAvgCnt = byWeekday.map((w) => (w.days.size ? w.cnt / w.days.size : 0));
+    // 최근 데이터가 부족해 특정 요일 평균이 0이면(신규 회사 등) 지금까지의 하루
+    // 평균으로 대신한다.
+    const fallbackAvgSale = mPure.sale / elapsedDays;
+    const fallbackAvgCnt = monthPureRows.length / elapsedDays;
+
+    // 연휴 앞뒤 영업일 가산 배수 — 물류 특성상 연휴 직전엔 미리 발주가 몰리고
+    // (선적 러시), 연휴 직후엔 밀렸던 물량이 다시 풀린다. 회사별 실측치가 아닌
+    // 업계 통상치이므로 필요하면 조정한다.
+    const PRE_HOLIDAY_BOOST = 1.2;
+    const POST_HOLIDAY_BOOST = 1.1;
+    const isNearHoliday = (dateStr, dayOffset) => {
+      const d = new Date(dateStr);
+      d.setDate(d.getDate() + dayOffset);
+      return isKrHoliday(d.toISOString().slice(0, 10));
+    };
+
+    // 조회 중인 달이 이번 달이 아닐 수도 있다(과거/미래 월 선택) — elapsedDays는
+    // "매출이 실제로 찍힌 날짜 수"라 중간에 매출 0인 날이 있으면 오늘 날짜와
+    // 어긋난다. 남은 날짜 루프는 반드시 실제 오늘 날짜 기준으로 시작해야 한다.
+    const startDay = today < monthKey ? 1
+      : today.slice(0, 7) === monthKey ? Number(today.slice(8, 10)) + 1
+      : daysInMonth + 1; // 이미 다 지난 달 → 남은 날짜 없음(예상=실적)
+
+    let projectedSale = 0;
+    let projectedCnt = 0;
+    for (let day = startDay; day <= daysInMonth; day++) {
+      const dateStr = `${monthKey}-${String(day).padStart(2, "0")}`;
+      if (isKrHoliday(dateStr)) continue; // 공휴일 = 매출 0으로 가정
+
+      const wd = new Date(dateStr).getDay();
+      let daySale = weekdayAvgSale[wd] || fallbackAvgSale;
+      let dayCnt = weekdayAvgCnt[wd] || fallbackAvgCnt;
+
+      if (isNearHoliday(dateStr, 1) || isNearHoliday(dateStr, 2)) {
+        daySale *= PRE_HOLIDAY_BOOST; dayCnt *= PRE_HOLIDAY_BOOST;
+      } else if (isNearHoliday(dateStr, -1)) {
+        daySale *= POST_HOLIDAY_BOOST; dayCnt *= POST_HOLIDAY_BOOST;
+      }
+
+      projectedSale += daySale;
+      projectedCnt += dayCnt;
+    }
+
+    const forecastSale = Math.round(mPure.sale + projectedSale);
+    const forecastCount = Math.round(monthPureRows.length + projectedCnt);
+    const pureProfitRate = mPure.sale > 0 ? mPure.profit / mPure.sale : 0;
+    const forecastProfit = Math.round(forecastSale * pureProfitRate);
+
+    return { sale: forecastSale, count: forecastCount, profit: forecastProfit };
+  })();
 
   const baseYear = yearKey - 1;
   const lastYearRows = rows.filter((r) => {
@@ -46353,6 +46443,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
 
             <SettlementMonthlyHeader
               monthRows={monthRows}
+              monthPureRows={monthPureRows}
               forecast={forecast}
               forecast2026={forecast2026}
               targetMonth={targetMonth}
@@ -46919,7 +47010,7 @@ function SettlementClientAnalysis({ topRows = [], dropRows = [], newClients = []
 // 하나를 통째로(네이비 헤더+월 선택 포함) 그렸지만, 지금은 매출 현황 리포트
 // 카드 하나에 여러 섹션 중 하나로 합쳐져서 렌더링된다. 월 선택은 이제 그 상위
 // 카드의 공통 헤더가 담당하므로 setTargetMonth는 더 이상 받지 않는다.
-function SettlementMonthlyHeader({ targetMonth, monthRows, forecast, forecast2026 }) {
+function SettlementMonthlyHeader({ targetMonth, monthRows, monthPureRows, forecast, forecast2026 }) {
   const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
   const totalSale = monthRows.reduce((a, r) => a + toInt(r.청구운임), 0);
   const totalCnt = monthRows.length;
@@ -46950,8 +47041,10 @@ function SettlementMonthlyHeader({ targetMonth, monthRows, forecast, forecast202
           <StatCard title="예상 수익" value={`${forecast.profit.toLocaleString()}원`} variant="forecast" />
         </div>
 
-        {/* AI 인사이트 */}
-        <AIPremiumInsight rows={monthRows} targetMonth={targetMonth} forecast2026={forecast2026} yPure={null} />
+        {/* AI 인사이트 — "순수 운송 매출"이라고 표기하는 만큼, 거래처관리에서 제외
+            체크한 거래처는 뺀 monthPureRows를 넘긴다(예전엔 monthRows를 그대로
+            넘겨서 "총 매출"과 "순수 운송 매출"이 항상 같은 숫자로 보였다). */}
+        <AIPremiumInsight rows={monthPureRows || monthRows} targetMonth={targetMonth} forecast2026={forecast2026} yPure={null} />
 
       </div>
     </section>
