@@ -9431,8 +9431,8 @@ const isToday =
   const pickupAddrShort = shortAddr(order.상차지주소 || "");
   const dropAddrShort = shortAddr(order.하차지주소 || "");
 
-const pickupTime = order.상차시간 ? fmtDispatchTimeM(order.상차시간, order.상차시간기준 || order.상차시간구분) : "시간 없음";
-const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order.하차시간기준 || order.하차시간구분) : "시간 없음";
+const pickupTime = order.상차시간 ? fmtDispatchTimeM(order.상차시간, order.상차시간기준 || order.상차시간구분) : "즉시";
+const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order.하차시간기준 || order.하차시간구분) : "즉시";
 
 
   const pickupStatus = getDayStatusForCard(order.상차일, "pickup");
@@ -9542,50 +9542,69 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
         {/* 본문 */}
         <div className="px-3 py-2.5">
           {/* 상/하차 */}
-          <div className="flex items-stretch gap-2">
-            <div className="flex flex-col items-center shrink-0 py-0.5">
-              <div className="w-2 h-2 rounded-full border-2 bg-white mt-1.5" style={{ borderColor: statusDot }} />
-              <div className="w-px flex-1 min-h-[20px] bg-gray-200 my-0.5" />
-              <div className="w-2 h-2 rounded-full mb-1.5" style={{ background: statusDot, opacity: 0.5 }} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex-1 min-w-0 truncate">
-                  <span className="text-[1em] font-bold text-gray-900">{pickupName}</span>
-                  {pickupAddrShort && (
-                    <span className="text-[0.75em] text-gray-400 ml-1">({pickupAddrShort})</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-1 shrink-0 ml-1">
-                  <span className="text-[0.75em] text-gray-500 tabular-nums">{pickupTime}</span>
-                  {pickupStatus && <span className={`text-[0.68em] px-1 py-0.5 rounded border tabular-nums font-semibold ${dayBadgeClass(pickupStatus)}`}>{pickupStatus}</span>}
-                </div>
-              </div>
-              {(() => {
-                const pStops = validStops(order.경유상차목록 || order.경유지_상차);
-                const dStops = validStops(order.경유하차목록 || order.경유지_하차);
-                const all = [...pStops, ...dStops];
-                if (!all.length) return null;
-                return (
-                  <div className="text-[0.68em] text-gray-400 mb-1.5 pl-0.5">
-                    경유: {all.map(s => s.업체명 || "-").join(" → ")}
+          {(() => {
+            const pStops = validStops(order.경유상차목록 || order.경유지_상차);
+            const dStops = validStops(order.경유하차목록 || order.경유지_하차);
+            const viaStops = [...pStops, ...dStops];
+            return (
+              <div className="flex flex-col">
+                {/* 상차 */}
+                <div className="flex items-stretch gap-2">
+                  <div className="flex flex-col items-center shrink-0 py-0.5">
+                    <div className="w-2 h-2 rounded-full border-2 bg-white mt-1.5 shrink-0" style={{ borderColor: statusDot }} />
+                    <div className="w-px flex-1 min-h-[14px] bg-gray-200 my-0.5" />
                   </div>
-                );
-              })()}
-              <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0 truncate">
-                  <span className="text-[1em] font-bold text-gray-900">{dropName}</span>
-                  {dropAddrShort && (
-                    <span className="text-[0.75em] text-gray-400 ml-1">({dropAddrShort})</span>
-                  )}
+                  <div className="flex-1 min-w-0 pb-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0 truncate">
+                        <span className="text-[1em] font-bold text-gray-900">{pickupName}</span>
+                        {pickupAddrShort && (
+                          <span className="text-[0.75em] text-gray-400 ml-1">({pickupAddrShort})</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0 ml-1">
+                        <span className="text-[0.75em] text-gray-500 tabular-nums">{pickupTime}</span>
+                        {pickupStatus && <span className={`text-[0.68em] px-1 py-0.5 rounded border tabular-nums font-semibold ${dayBadgeClass(pickupStatus)}`}>{pickupStatus}</span>}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 shrink-0 ml-1">
-                  <span className="text-[0.75em] text-gray-500 tabular-nums">{dropTime}</span>
-                  {dropStatus && <span className={`text-[0.68em] px-1 py-0.5 rounded border tabular-nums font-semibold ${dayBadgeClass(dropStatus)}`}>{dropStatus}</span>}
+                {/* 경유 */}
+                {viaStops.map((s, i) => (
+                  <div key={i} className="flex items-stretch gap-2">
+                    <div className="flex flex-col items-center shrink-0">
+                      <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-0.5 shrink-0" />
+                      <div className="w-px flex-1 min-h-[14px] bg-gray-200 my-0.5" />
+                    </div>
+                    <div className="flex-1 min-w-0 pb-1.5">
+                      <span className="text-[0.75em] font-extrabold text-amber-600">경유</span>
+                      <span className="text-[0.8em] font-bold text-gray-700 ml-1">{s.업체명 || "-"}</span>
+                    </div>
+                  </div>
+                ))}
+                {/* 하차 */}
+                <div className="flex items-stretch gap-2">
+                  <div className="flex flex-col items-center shrink-0">
+                    <div className="w-2 h-2 rounded-full mt-0.5 shrink-0" style={{ background: statusDot, opacity: 0.5 }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0 truncate">
+                        <span className="text-[1em] font-bold text-gray-900">{dropName}</span>
+                        {dropAddrShort && (
+                          <span className="text-[0.75em] text-gray-400 ml-1">({dropAddrShort})</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0 ml-1">
+                        <span className="text-[0.75em] text-gray-500 tabular-nums">{dropTime}</span>
+                        {dropStatus && <span className={`text-[0.68em] px-1 py-0.5 rounded border tabular-nums font-semibold ${dayBadgeClass(dropStatus)}`}>{dropStatus}</span>}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* 하단 정보 — 화물내용/톤수/차종과 청구/기사 운임. 일반 휴대폰 화면(380px~)에서는 한
               줄로 나란히 정렬해 높이를 맞추고, 그보다 좁은 화면(폴더블 커버 등)에서는 화물정보와
@@ -9751,7 +9770,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
   </button>
 
   <div className="relative inline-block shrink-0">
-    <TransportStatusBadge order={order} className="inline-flex items-center leading-none" onClick={openReqModal} flat compact />
+    <TransportStatusBadge order={order} className="inline-flex items-center leading-none" onClick={openReqModal} compact />
     {isRecentlyEditedByShipper && !isEditRequested && (
       <span title="화주사가 오더 정보를 수정했습니다"
         className="absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-white" />
@@ -9786,78 +9805,89 @@ const dt = new Date(y, m - 1, d, hh, mm);
         return null;
       })()}
 
-      {/* ▶ 상차 */}
-      <div className="flex items-center gap-2 mt-1">
-        <span className="px-1.5 py-0.5 rounded-full bg-blue-500 text-white text-[11px] font-bold">
-          상
-        </span>
-        <div className="flex-1 truncate text-[1em] font-semibold">
-          {pickupName}
-          {pickupAddrShort && (
-            <span className="text-[12px] text-gray-500 ml-1">
-              ({pickupAddrShort})
-            </span>
-          )}
-        </div>
-        <span className="text-[0.8em] text-gray-600">{pickupTime}</span>
-        {pickupStatus && (
-          <span
-            className={
-              "px-1 py-0.5 rounded-full border text-[11px] " +
-              dayBadgeClass(pickupStatus)
-            }
-          >
-            {pickupStatus}
-          </span>
-        )}
-      </div>
-
-      {/* 경유지 요약 — 상/하차 행과 동일한 형태(색상 배지 + 굵은 업체명)로 표시해 어색하게
-          붕 떠 보이지 않고 상/하차 사이의 자연스러운 흐름처럼 보이도록 한다. */}
+      {/* ▶ 상차 / 경유 / 하차 — 왼쪽에 이어지는 선으로 연결 */}
       {(() => {
         const pStops = validStops(order.경유상차목록 || order.경유지_상차);
         const dStops = validStops(order.경유하차목록 || order.경유지_하차);
-        const all = [...pStops, ...dStops];
-        if (all.length === 0) return null;
+        const viaStops = [...pStops, ...dStops];
         return (
-          <div className="mt-1 space-y-1">
-            {all.map((s, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <span className="px-1.5 py-0.5 rounded-full bg-indigo-500 text-white text-[11px] font-bold shrink-0">
-                  경유
+          <div className="flex flex-col mt-1">
+            {/* 상차 */}
+            <div className="flex items-stretch gap-2">
+              <div className="flex flex-col items-center shrink-0">
+                <span className="w-5 h-5 flex items-center justify-center rounded-full bg-blue-500 text-white text-[11px] font-bold shrink-0">
+                  상
                 </span>
-                <div className="flex-1 truncate text-[0.85em] font-semibold text-gray-700">{s.업체명 || "-"}</div>
+                <div className="w-px flex-1 min-h-[10px] bg-gray-200 my-0.5" />
+              </div>
+              <div className="flex-1 min-w-0 pb-1.5 flex items-center gap-2">
+                <div className="flex-1 truncate text-[1em] font-semibold">
+                  {pickupName}
+                  {pickupAddrShort && (
+                    <span className="text-[12px] text-gray-500 ml-1">
+                      ({pickupAddrShort})
+                    </span>
+                  )}
+                </div>
+                <span className="text-[0.8em] text-gray-600">{pickupTime}</span>
+                {pickupStatus && (
+                  <span
+                    className={
+                      "px-1 py-0.5 rounded-full border text-[11px] " +
+                      dayBadgeClass(pickupStatus)
+                    }
+                  >
+                    {pickupStatus}
+                  </span>
+                )}
+              </div>
+            </div>
+            {/* 경유 */}
+            {viaStops.map((s, i) => (
+              <div key={i} className="flex items-stretch gap-2">
+                <div className="flex flex-col items-center shrink-0">
+                  <span className="w-5 h-5 flex items-center justify-center rounded-full bg-indigo-500 text-white text-[11px] font-bold shrink-0">
+                    경
+                  </span>
+                  <div className="w-px flex-1 min-h-[10px] bg-gray-200 my-0.5" />
+                </div>
+                <div className="flex-1 min-w-0 pb-1.5 flex items-center">
+                  <div className="flex-1 truncate text-[0.85em] font-semibold text-gray-700">{s.업체명 || "-"}</div>
+                </div>
               </div>
             ))}
+            {/* 하차 */}
+            <div className="flex items-stretch gap-2">
+              <div className="flex flex-col items-center shrink-0">
+                <span className="w-5 h-5 flex items-center justify-center rounded-full bg-gray-500 text-white text-[11px] font-bold shrink-0">
+                  하
+                </span>
+              </div>
+              <div className="flex-1 min-w-0 flex items-center gap-2">
+                <div className="flex-1 truncate text-[1em] font-semibold">
+                  {dropName}
+                  {dropAddrShort && (
+                    <span className="text-[12px] text-gray-500 ml-1">
+                      ({dropAddrShort})
+                    </span>
+                  )}
+                </div>
+                <span className="text-[0.8em] text-gray-600">{dropTime}</span>
+                {dropStatus && (
+                  <span
+                    className={
+                      "px-1 py-0.5 rounded-full border text-[11px] " +
+                      dayBadgeClass(dropStatus)
+                    }
+                  >
+                    {dropStatus}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
         );
       })()}
-
-      {/* ▶ 하차 */}
-      <div className="flex items-center gap-2 mt-1">
-        <span className="px-1.5 py-0.5 rounded-full bg-gray-500 text-white text-[11px] font-bold">
-          하
-        </span>
-        <div className="flex-1 truncate text-[1em] font-semibold">
-          {dropName}
-          {dropAddrShort && (
-            <span className="text-[12px] text-gray-500 ml-1">
-              ({dropAddrShort})
-            </span>
-          )}
-        </div>
-        <span className="text-[0.8em] text-gray-600">{dropTime}</span>
-        {dropStatus && (
-          <span
-            className={
-              "px-1 py-0.5 rounded-full border text-[11px] " +
-              dayBadgeClass(dropStatus)
-            }
-          >
-            {dropStatus}
-          </span>
-        )}
-      </div>
 
       {/* ▶ 하단 정보 — 일반 휴대폰 화면(380px~)에서는 화물정보와 청구/기사 운임을 한 줄로,
           폴더블 커버 같은 좁은 화면에서는 두 줄로 내려 겹치지 않게 한다. 청구/기사는 세로 줄바꿈.
@@ -18411,6 +18441,8 @@ const calcFareMobile = async () => {
     if (!includeVia && (getPickupVias(r).length > 0 || getDropVias(r).length > 0)) return false;
     return true;
   });
+  // 다구간 배차의 개별 경유 스탑 행은 기사운임이 실려있지 않아 0원으로 보이므로 목록에서 제외
+  list = list.filter(r => !isTransitStopRow(r));
 
   // 결과에 경유지 표시를 위해 태깅 (경유지 포함 합산 화물/톤수도 함께)
   list = list.map(r => {
