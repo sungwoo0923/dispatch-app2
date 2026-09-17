@@ -845,8 +845,9 @@ function DuplicateOrderModal({ matches, onCancel, onProceed }) {
 // 필요하면 "이 오더 수정하기"로 기존 수정 패널로 넘어갈 수 있게 한다.
 function CloseFileCompareModal({ item, programRow, onClose, onEdit }) {
   if (!item) return null;
-  const typeBadge = (t) => t === "dispatch" ? "배차방식 불일치" : t === "fare" ? "운임 불일치" : t === "missing" ? "파일 누락" : t === "payment" ? "지급방식 불일치" : t;
+  const typeBadge = (t) => t === "dispatch" ? "배차방식 불일치" : t === "fare" ? "운임 불일치" : t === "missing" ? "파일 누락" : t === "missingInProgram" ? "등록 누락" : t === "payment" ? "지급방식 불일치" : t;
   const fmtVal = (v) => v === undefined || v === null || v === "" ? "-" : item.isMoney ? `${Number(v).toLocaleString()}원` : String(v);
+  const hasProgramRow = !!item.rowId;
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100000000] p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-w-full overflow-hidden" onClick={(e) => e.stopPropagation()}>
@@ -867,7 +868,12 @@ function CloseFileCompareModal({ item, programRow, onClose, onEdit }) {
           <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[12px] bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
             <div><span className="text-gray-500">차량번호</span> <b className="text-gray-800 ml-1">{item.vehicle || programRow?.차량번호 || "-"}</b></div>
             <div><span className="text-gray-500">기사명</span> <b className="text-gray-800 ml-1">{item.driverName || programRow?.이름 || "-"}</b></div>
-            <div className="col-span-2"><span className="text-gray-500">오더</span> <b className="text-gray-800 ml-1">{programRow?.상차지명 || "-"} → {programRow?.하차지명 || "-"}</b></div>
+            <div className="col-span-2">
+              <span className="text-gray-500">오더</span>{" "}
+              <b className="text-gray-800 ml-1">
+                {hasProgramRow ? `${programRow?.상차지명 || "-"} → ${programRow?.하차지명 || "-"}` : "프로그램에 등록된 오더 없음"}
+              </b>
+            </div>
           </div>
 
           {item.fieldLabel && (
@@ -892,7 +898,9 @@ function CloseFileCompareModal({ item, programRow, onClose, onEdit }) {
 
         <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
           <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-[13px] font-semibold border border-gray-300 text-gray-600 hover:bg-gray-50 transition">닫기</button>
-          <button type="button" onClick={onEdit} className="px-4 py-2 rounded-lg text-[13px] font-bold bg-[#1B2B4B] text-white hover:bg-[#243a60] transition">이 오더 수정하기</button>
+          {hasProgramRow && (
+            <button type="button" onClick={onEdit} className="px-4 py-2 rounded-lg text-[13px] font-bold bg-[#1B2B4B] text-white hover:bg-[#243a60] transition">이 오더 수정하기</button>
+          )}
         </div>
       </div>
     </div>
@@ -2836,6 +2844,13 @@ function FilePreviewModal({ base64, type, name, onClose }) {
   );
 }
 
+// ⭐ 실시간배차현황/배차현황의 "정렬/필터 설정" 팝업에 있는 "컬럼명 클릭 정렬"
+// 토글이 켜졌을 때, 테이블 헤더를 클릭해서 바로 정렬할 수 있는 컬럼 목록.
+const CLICK_SORTABLE_COLUMNS = [
+  "등록일", "상차일", "하차일", "거래처명", "상차지명", "하차지명",
+  "화물내용", "차량종류", "차량톤수", "배차상태", "지급방식", "배차방식",
+];
+
 /* -------------------------------------------------
    Firestore 실시간 동기화 훅
 --------------------------------------------------*/
@@ -3073,9 +3088,10 @@ const liveWindowStart = getMonthsAgoKST(13);
       );
 
       ordersCacheRef.current = filteredArr;
-      React.startTransition(() => {
-        setDispatchData([...ordersCacheRef.current, ...dispatchCacheRef.current]);
-      });
+      // ⭐ startTransition으로 감싸면 방금 등록/수정한 오더가 배차현황에 바로 안
+      // 뜨고 지연되어 보이는 원인이 된다(React가 이 업데이트를 낮은 우선순위로
+      // 미룰 수 있음) — 우선순위 없이 바로 반영한다.
+      setDispatchData([...ordersCacheRef.current, ...dispatchCacheRef.current]);
       scheduleDispatchSave(filteredArr);
 
       // 🔔 최초 로드: prevMap 구축만
@@ -3264,9 +3280,7 @@ const liveWindowStart = getMonthsAgoKST(13);
       dispatchCacheRef.current = arr2.filter(row =>
         row.배차상태 !== "배차취소" && !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태)
       );
-      React.startTransition(() => {
-        setDispatchData([...ordersCacheRef.current, ...dispatchCacheRef.current]);
-      });
+      setDispatchData([...ordersCacheRef.current, ...dispatchCacheRef.current]);
       scheduleDispatchSave(arr2);
 
       // 🔔 최초 로드: prevMap 구축만 (fromCache 스냅샷 동안은 기준선만 계속 갱신하고,
@@ -17903,110 +17917,118 @@ className={`
 {driverModal.open && (
   // ⭐ z-index를 다중등록 팝업(z-[999999])보다 높게 — 다중등록 안에서 차량번호
   // 입력으로 이 모달이 열릴 때도 뒤에 가려지지 않고 항상 위에 떠야 한다.
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999999]">
-    <div className="bg-white rounded-xl p-6 w-[420px] shadow-xl border border-gray-200">
-      <h3 className="text-lg font-bold mb-4">신규 기사 등록</h3>
-
-      <div className="space-y-3 text-sm">
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999] p-4">
+    <div className="bg-white rounded-2xl w-[420px] max-w-full shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
         <div>
-          <label className="block text-gray-600 mb-1">차량번호</label>
-          <input autoComplete="off"
-            className="border p-2 rounded w-full bg-gray-100"
-            value={driverModal.carNo}
-            readOnly
-          />
+          <div className="text-white font-bold text-[16px]">신규 기사 등록</div>
+          <div className="text-white/60 text-[12px] mt-0.5">차량번호 [{driverModal.carNo}]를 신규 등록합니다</div>
         </div>
+        <button onClick={() => setDriverModal({ open: false })} className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-lg transition">×</button>
+      </div>
 
-        <div>
-          <label className="block text-gray-600 mb-1">기사명</label>
-          <input autoComplete="off"
-            className="border p-2 rounded w-full"
-            placeholder="예: 홍길동"
-            value={driverModal.name}
-            onChange={(e) =>
-              setDriverModal((p) => ({ ...p, name: e.target.value }))
-            }
-            ref={nameInputRef}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                document.getElementById("driver-save-btn")?.click();
+      <div className="p-6">
+        <div className="space-y-3">
+          <div>
+            <label className="block text-[12px] font-semibold text-gray-500 mb-1">차량번호</label>
+            <input autoComplete="off"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] bg-gray-50 text-gray-700"
+              value={driverModal.carNo}
+              readOnly
+            />
+          </div>
+
+          <div>
+            <label className="block text-[12px] font-semibold text-gray-500 mb-1">기사명 <span className="text-red-400">*</span></label>
+            <input autoComplete="off"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+              placeholder="예: 홍길동"
+              value={driverModal.name}
+              onChange={(e) =>
+                setDriverModal((p) => ({ ...p, name: e.target.value }))
               }
-            }}
-          />
-        </div>
+              ref={nameInputRef}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  document.getElementById("driver-save-btn")?.click();
+                }
+              }}
+            />
+          </div>
 
-        <div>
-          <label className="block text-gray-600 mb-1">전화번호</label>
-          <input autoComplete="off"
-            className="border p-2 rounded w-full"
-            placeholder="숫자(하이픈) 입력"
-            value={driverModal.phone}
-            onChange={(e) =>
+          <div>
+            <label className="block text-[12px] font-semibold text-gray-500 mb-1">전화번호 <span className="text-red-400">*</span></label>
+            <input autoComplete="off"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+              placeholder="숫자(하이픈) 입력"
+              inputMode="numeric"
+              value={driverModal.phone}
+              onChange={(e) =>
   setDriverModal((p) => ({
     ...p,
     phone: formatPhone(e.target.value),
   }))
 }
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                document.getElementById("driver-save-btn")?.click();
-              }
-            }}
-          />
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  document.getElementById("driver-save-btn")?.click();
+                }
+              }}
+            />
+          </div>
         </div>
-      </div>
 
-      <div className="flex justify-end gap-2 mt-6">
-        <button
-          className="px-4 py-2 rounded bg-gray-200"
-          onClick={() => setDriverModal({ open: false })}
-        >
-          취소
-        </button>
+        <div className="mt-5 flex gap-2">
+          <button
+            id="driver-save-btn"
+            className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"
+            onClick={async () => {
+             if (!driverModal.name.trim()) return showAlert("기사명을 입력하세요.");
+             if (!driverModal.phone.replace(/[^\d]/g, "").trim()) return showAlert("전화번호를 입력하세요.");
 
-        <button
-          id="driver-save-btn"
-          className="px-4 py-2 rounded bg-blue-600 text-white"
-          onClick={async () => {
-           if (!driverModal.name.trim()) return showAlert("기사명을 입력하세요.");
-           if (!driverModal.phone.replace(/[^\d]/g, "").trim()) return showAlert("전화번호를 입력하세요.");
+              const rawPhone = driverModal.phone.replace(/[^\d]/g, "");
+             if (!rawPhone || rawPhone.length < 10) return showAlert("전화번호를 정확히 입력하세요.");
 
-            const rawPhone = driverModal.phone.replace(/[^\d]/g, "");
-           if (!rawPhone || rawPhone.length < 10) return showAlert("전화번호를 정확히 입력하세요.");
-
-            await upsertDriver({
-              _id: driverModal.carNo,
-              차량번호: driverModal.carNo,
-              이름: driverModal.name,
-              전화번호: rawPhone,
-            });
-
-            // ⭐ 다중등록 모달에서 열린 경우엔 form이 아니라 해당 슬롯에 반영해야
-            // 해서, 호출자가 onConfirm 콜백을 넘겨줬으면 그걸 대신 사용한다 —
-            // 넘기지 않은 기존 호출(단일 배차등록 폼)은 그대로 form에 반영.
-            if (driverModal.onConfirm) {
-              driverModal.onConfirm({
+              await upsertDriver({
+                _id: driverModal.carNo,
                 차량번호: driverModal.carNo,
                 이름: driverModal.name,
-                전화번호: formatPhone(rawPhone),
+                전화번호: rawPhone,
               });
-            } else {
-              setForm((p) => ({
-                ...p,
-                차량번호: driverModal.carNo,
-                이름: driverModal.name,
-                전화번호: formatPhone(rawPhone),
-                배차상태: "배차완료",
-              }));
-            }
 
-            setDriverModal({ open: false });
-          }}
-        >
-          저장
-        </button>
+              // ⭐ 다중등록 모달에서 열린 경우엔 form이 아니라 해당 슬롯에 반영해야
+              // 해서, 호출자가 onConfirm 콜백을 넘겨줬으면 그걸 대신 사용한다 —
+              // 넘기지 않은 기존 호출(단일 배차등록 폼)은 그대로 form에 반영.
+              if (driverModal.onConfirm) {
+                driverModal.onConfirm({
+                  차량번호: driverModal.carNo,
+                  이름: driverModal.name,
+                  전화번호: formatPhone(rawPhone),
+                });
+              } else {
+                setForm((p) => ({
+                  ...p,
+                  차량번호: driverModal.carNo,
+                  이름: driverModal.name,
+                  전화번호: formatPhone(rawPhone),
+                  배차상태: "배차완료",
+                }));
+              }
+
+              setDriverModal({ open: false });
+            }}
+          >
+            저장
+          </button>
+          <button
+            className="px-4 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-500 text-[13px] font-bold hover:bg-gray-50 transition"
+            onClick={() => setDriverModal({ open: false })}
+          >
+            취소
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -20830,14 +20852,23 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
               onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.stopPropagation();}}}
               onChange={e=>{setEditList(prev=>{const c=[...prev];c[idx].주소=e.target.value;return c;});}} />
 
-            {/* 담당자 / 연락처 */}
+            {/* 담당자 / 연락처 — 목록에 없는 담당자를 직접 입력하기 시작하면, 아래 뜬
+                "담당자 선택"(복수 담당자) 드롭다운은 더 이상 의미가 없으므로 닫는다
+                (예전엔 목록에 없는 값을 입력해도 드롭다운이 계속 떠 있었다). */}
             <div className="grid grid-cols-2 gap-2">
               <input autoComplete="off" className={inputCls} placeholder="담당자" value={stop.담당자}
                 onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.stopPropagation();}}}
-                onChange={e=>{setEditList(prev=>{const c=[...prev];c[idx].담당자=e.target.value;return c;});}} />
+                onChange={e=>{
+                  setEditList(prev=>{const c=[...prev];c[idx].담당자=e.target.value;return c;});
+                  if (contactPickerIdx === idx) { setContactPickerIdx(null); setContactPickerOpts([]); }
+                }} />
               <input autoComplete="off" className={inputCls} placeholder="연락처" value={stop.담당자번호}
                 onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.stopPropagation();}}}
-                onChange={e=>{const v=formatPhone(e.target.value);setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],담당자번호:v};return c;});}} />
+                onChange={e=>{
+                  const v=formatPhone(e.target.value);
+                  setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],담당자번호:v};return c;});
+                  if (contactPickerIdx === idx) { setContactPickerIdx(null); setContactPickerOpts([]); }
+                }} />
             </div>
 
             {/* 담당자 선택 팝업 (복수 담당자) */}
@@ -25882,6 +25913,12 @@ const driverPanelCallbackRef = React.useRef(null);
   const [tempSortDir, setTempSortDir] = React.useState("asc");
   const [filterConditions, setFilterConditions] = React.useState([]);
   const [tempFilterConditions, setTempFilterConditions] = React.useState([]);
+  // ⭐ "컬럼명 클릭 정렬" 토글 — 기본은 꺼짐. 켜면 표 헤더(거래처명/상차지명 등)를
+  // 클릭하는 것만으로 그 컬럼 기준 정렬이 된다. 이미 있는 sortKey/sortDir을 그대로
+  // 재사용하므로(정렬/필터 팝업의 드롭다운과 동일한 값), 새로운 정렬 계산 로직이
+  // 아니라 그 값을 세팅하는 입력 경로만 하나 늘어나는 것 — 기존 정렬(useMemo)의
+  // 성능 특성을 그대로 유지해 렉이 생기지 않는다.
+  const [columnClickSortEnabled, setColumnClickSortEnabled] = React.useState(false);
 
   // 경유지 가공(dedup) 결과 캐시 — 행 객체 참조가 이전과 동일하면(=그 오더는 안 바뀜)
   // 다시 계산하지 않고 재사용한다. rows의 행 참조가 안정적으로 유지되므로
@@ -26893,6 +26930,24 @@ const handleCloseFileUpload = async (e) => {
       }
     }
 
+    // ⭐ 정방향 누락 검증 — 24시콜 파일에는 이 차량번호/날짜 기록이 분명히 있는데
+    // 프로그램에는 그 조건에 맞는 오더가 하나도 없는 경우. 지금까지는 "프로그램에
+    // 24시로 등록됐는데 파일에 없다"(역방향)만 잡았고, 이 반대 방향(파일에는
+    // 있는데 프로그램에 아예 등록이 안 된 경우 = 등록 누락)은 조용히 넘어갔다.
+    if (matched.length === 0) {
+      fileIssues.push({
+        rowId: null,
+        seq: "?",
+        label: `${fileDate || targetDate} [차량 ${row[plateCol] || "-"}]${fileName ? ` ${fileName}` : ""}`,
+        type: "missingInProgram",
+        거래처명: "(미입력)",
+        vehicle: row[plateCol], driverName: fileName,
+        fieldLabel: "프로그램 등록 여부", fileValue: "24시콜 파일에 있음", programValue: "등록된 오더 없음",
+        msg: `24시콜 파일에 ${fileDate || targetDate} 차량 ${row[plateCol] || "-"}(${fileName || "기사명 미상"}) 기록이 있으나, 프로그램에는 해당 차량번호·날짜로 등록된 오더가 없습니다 — 등록 누락 의심`,
+      });
+      continue; // 매칭 후보 자체가 없으니 아래 배차방식/지급방식/운임 비교는 스킵
+    }
+
     // 합산매칭 체크: Excel 1행 = 프로그램 N행의 운임 합계
     let isSumFareMatch = false;
     if (fareCol !== -1 && matched.length >= 2) {
@@ -27125,21 +27180,22 @@ const openDailyCloseIssueDetail = (rowId) => {
 
     const ids = deleteList.map(r => r._id);
 
-    // 여러 건 선택삭제 시 하나씩 순차 대기하면 건수만큼 지연이 쌓여 버벅였다 —
-    // 서로 독립적인 삭제라 병렬로 처리한다.
-    await Promise.all(ids.map(id => removeDispatch(id).catch((e) => console.error("삭제 실패:", e))));
-
-    // 화면에서 제거
+    // ⭐ 삭제 팝업에서 "삭제"를 눌러도 한참 있다가 지워지던 딜레이의 원인 — 실제
+    // Firestore 쓰기(여러 건이면 그만큼)를 다 기다린 뒤에야 화면에서 지웠다.
+    // 화면은 먼저 지우고, 실제 삭제는 백그라운드로 돌린다.
     setRows(prev => prev.filter(r => !ids.includes(r._id)));
-
-    // 되돌리기 스택 저장
     setUndoStack(deleteList);
     setShowUndo(true);
     setTimeout(() => setShowUndo(false), 8000);
-
-    // 초기화
     setSelected([]);
     setDeleteConfirmOpen(false);
+
+    // 여러 건 선택삭제 시 하나씩 순차 대기하면 건수만큼 지연이 쌓여 버벅였다 —
+    // 서로 독립적인 삭제라 병렬로 처리한다.
+    Promise.all(ids.map(id => removeDispatch(id))).catch((e) => {
+      console.error("삭제 실패:", e);
+      showAlert("일부 오더 삭제에 실패했습니다. 목록에서 확인해주세요.\n" + (e?.message || ""));
+    });
   };
 
   // =======================
@@ -27965,8 +28021,15 @@ const head = isDark
                 "전달사항",
                "첨부",
                 "전달상태",
-              ].map((h) => (
-                <th key={h} className={head}>
+              ].map((h) => {
+                const clickSortable = columnClickSortEnabled && CLICK_SORTABLE_COLUMNS.includes(h);
+                return (
+                <th key={h} className={`${head} ${clickSortable ? "cursor-pointer select-none hover:opacity-75" : ""}`}
+                  onClick={clickSortable ? () => {
+                    if (sortKey === h) setSortDir(d => d === "asc" ? "desc" : "asc");
+                    else { setSortKey(h); setSortDir("asc"); }
+                  } : undefined}
+                >
                   {h === "선택" ? (
                     <input autoComplete="off" type="checkbox"
                       title="전체선택/전체해제"
@@ -27979,9 +28042,15 @@ const head = isDark
                           : Array.from(new Set([...prev, ...filteredIds])));
                       }}
                     />
-                  ) : <EditableText id={`realtime.table.header.${h}`} defaultText={h} />}
+                  ) : (
+                    <span className="inline-flex items-center gap-0.5">
+                      <EditableText id={`realtime.table.header.${h}`} defaultText={h} />
+                      {clickSortable && sortKey === h && <span className="text-[10px]">{sortDir === "asc" ? "▲" : "▼"}</span>}
+                    </span>
+                  )}
                 </th>
-              ))}
+                );
+              })}
             </tr>
           </thead>
 
@@ -32958,11 +33027,11 @@ setConfirmChange(null);
               </div>
 
               {(() => {
-                const typeBadge = (t) => t === "dispatch" ? "배차방식" : t === "fare" ? "운임차이" : t === "missing" ? "파일누락" : "지급방식";
+                const typeBadge = (t) => t === "dispatch" ? "배차방식" : t === "fare" ? "운임차이" : t === "missing" ? "파일누락" : t === "missingInProgram" ? "등록누락" : "지급방식";
                 // ⭐ 검증/분석 화면답게 톤을 낮췄다 — 실제 금액이 틀린 건(운임차이)만
                 // 옅은 빨강으로 구분하고, 나머지는 프로그램 전반의 회색/네이비 톤에
                 // 맞춘 중립 배지로 통일(알록달록하다는 피드백 반영).
-                const typeCls = (t) => t === "fare" ? "bg-red-50 text-red-700 border border-red-100" : "bg-gray-100 text-gray-600 border border-gray-200";
+                const typeCls = (t) => t === "fare" || t === "missingInProgram" ? "bg-red-50 text-red-700 border border-red-100" : "bg-gray-100 text-gray-600 border border-gray-200";
                 // ⭐ 클릭하면 바로 오더수정 패널을 여는 대신, 24시콜 값과 프로그램 값을
                 // 나란히 비교해 보여주는 팝업(CloseFileCompareModal)을 먼저 띄운다.
                 const Card = (f, i) => (
@@ -33249,6 +33318,20 @@ setConfirmChange(null);
                   <button className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition ${tempSortDir==="asc"?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`} onClick={()=>setTempSortDir("asc")}><EditableText id="misc.btn.31782.오름차순" defaultText="오름차순" /></button>
                   <button className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition ${tempSortDir==="desc"?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`} onClick={()=>setTempSortDir("desc")}><EditableText id="misc.btn.31783.내림차순" defaultText="내림차순" /></button>
                 </div>
+              </div>
+              <div className="border-t border-gray-100"/>
+              {/* ⭐ 컬럼명 클릭 정렬 — 켜두면 표 헤더(거래처명/상차지명 등)를 클릭하는
+                  것만으로 그 컬럼 기준 정렬. 기본은 꺼짐. */}
+              <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
+                <div>
+                  <div className="text-[13px] font-semibold text-gray-700">컬럼명 클릭 정렬</div>
+                  <div className="text-[11px] text-gray-500 mt-0.5">켜두면 표 헤더(거래처명·상차지명 등)를 클릭해서 바로 정렬할 수 있습니다</div>
+                </div>
+                <button type="button"
+                  onClick={() => setColumnClickSortEnabled(v => !v)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${columnClickSortEnabled ? "bg-[#1B2B4B]" : "bg-gray-300"}`}>
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${columnClickSortEnabled ? "translate-x-6" : "translate-x-1"}`} />
+                </button>
               </div>
               <div className="border-t border-gray-100"/>
               <div>
@@ -34599,6 +34682,23 @@ const computeCloseFileIssues = (raw) => {
       }
     }
 
+    // ⭐ 정방향 누락 검증 — 24시콜 파일에는 이 차량번호/날짜 기록이 분명히 있는데
+    // 프로그램(조회기간 내)에는 그 조건에 맞는 오더가 하나도 없는 경우. "프로그램에
+    // 24시로 등록됐는데 파일에 없다"(아래 역방향 검증)만 잡던 것의 반대 방향이다.
+    if (matched.length === 0) {
+      fileIssues.push({
+        rowId: null,
+        seq: "?",
+        label: `${fileDate || "-"} [차량 ${row[plateCol] || "-"}]${fileName ? ` ${fileName}` : ""}`,
+        type: "missingInProgram",
+        거래처명: "(미입력)",
+        vehicle: row[plateCol], driverName: fileName,
+        fieldLabel: "프로그램 등록 여부", fileValue: "24시콜 파일에 있음", programValue: "등록된 오더 없음",
+        msg: `24시콜 파일에 ${fileDate || "해당"} 차량 ${row[plateCol] || "-"}(${fileName || "기사명 미상"}) 기록이 있으나, 프로그램에는 해당 차량번호·날짜로 등록된 오더가 없습니다 — 등록 누락 의심`,
+      });
+      continue;
+    }
+
     // ⭐ 같은 기사가 같은 날 우리 오더를 여러 건 진행한 경우, 24시콜 이 파일 행의
     // 운임과 정확히 일치하는 프로그램 오더가 하나뿐이면 그 오더로 확정한다. 이게
     // 없으면 이 파일 행이 그날의 "다른" 오더와도 비교되어, 둘 다 정상 등록인데도
@@ -34842,6 +34942,9 @@ const [appliedEndDate, setAppliedEndDate] = React.useState("");
   const [tempFilterConditions, setTempFilterConditions] = React.useState([]);
   const [tempSortKey, setTempSortKey] = React.useState("");
   const [tempSortDir, setTempSortDir] = React.useState("asc");
+  // ⭐ "컬럼명 클릭 정렬" 토글 — 기본은 꺼짐. 켜면 표 헤더를 클릭하는 것만으로
+  // 그 컬럼(1차 정렬 기준 sortKey/sortDir) 기준 정렬이 된다.
+  const [columnClickSortEnabled, setColumnClickSortEnabled] = React.useState(false);
   const [selected, setSelected] = React.useState(new Set());
   // 조회 날짜(기간)를 바꾸면 화면에 보이는 행이 바뀌므로, 이전 날짜에서 선택해둔
   // 체크박스가 남아있으면 안 보이는 행을 실수로 삭제/처리하는 사고로 이어질 수 있다.
@@ -37796,17 +37899,31 @@ return (
                 "화물내용", "차량종류", "차량톤수", "혼적", "차량번호", "기사명", "전화번호",
                "배차상태", "청구운임", "기사운임", "수수료", "지급방식", "배차방식", "메모", "전달사항", "첨부", "전달상태",
 
-              ].map((h) => (
-                <th key={h} className="px-3 py-3 text-center text-[14px] font-bold text-white whitespace-nowrap border-b border-white/10 border-r border-r-white/10 last:border-r-0">
+              ].map((h) => {
+                const clickSortable = columnClickSortEnabled && CLICK_SORTABLE_COLUMNS.includes(h);
+                return (
+                <th key={h}
+                  className={`px-3 py-3 text-center text-[14px] font-bold text-white whitespace-nowrap border-b border-white/10 border-r border-r-white/10 last:border-r-0 ${clickSortable ? "cursor-pointer select-none hover:opacity-75" : ""}`}
+                  onClick={clickSortable ? () => {
+                    if (sortKey === h) setSortDir(d => d === "asc" ? "desc" : "asc");
+                    else { setSortKey(h); setSortDir("asc"); }
+                  } : undefined}
+                >
                   {h === "선택" ? (
                     <input autoComplete="off"
                       type="checkbox"
                       onChange={() => toggleAll(filtered)}
                       checked={filtered.length && filtered.every((r) => selected.has(getId(r)))}
                     />
-                  ) : <EditableText id={`status.table.header.${h}`} defaultText={h} />}
+                  ) : (
+                    <span className="inline-flex items-center gap-0.5">
+                      <EditableText id={`status.table.header.${h}`} defaultText={h} />
+                      {clickSortable && sortKey === h && <span className="text-[10px]">{sortDir === "asc" ? "▲" : "▼"}</span>}
+                    </span>
+                  )}
                 </th>
-              ))}
+                );
+              })}
             </tr>
           </thead>
 
@@ -41048,15 +41165,15 @@ setCopyPlaceOptions(list);
 })()}
 
 {clientApplyPopup && (
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-    <div className="bg-white p-6 rounded-xl shadow-lg w-[300px] text-center">
-
-      <h3 className="font-bold mb-4">거래처 적용</h3>
-
-      <div className="flex flex-col gap-2">
-
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+    <div className="bg-white rounded-2xl shadow-2xl w-[320px] overflow-hidden border">
+      <div className="bg-[#1B2B4B] px-6 py-4">
+        <h3 className="text-white font-bold text-[15px]">거래처 적용</h3>
+        <p className="text-white/60 text-[12px] mt-0.5">'{clientApplyPopup.거래처명}'을(를) 어디에 적용할까요?</p>
+      </div>
+      <div className="px-6 py-4 flex flex-col gap-2">
         <button
-          className="bg-blue-500 text-white py-2 rounded"
+          className="w-full py-2.5 bg-[#1B2B4B] text-white rounded-xl font-bold text-[13px]"
           onClick={() => {
             setCopyTarget(p => ({
               ...p,
@@ -41073,7 +41190,7 @@ setCopyPlaceOptions(list);
         </button>
 
         <button
-          className="bg-green-500 text-white py-2 rounded"
+          className="w-full py-2.5 bg-[#1B2B4B] text-white rounded-xl font-bold text-[13px]"
           onClick={() => {
             setCopyTarget(p => ({
               ...p,
@@ -41090,12 +41207,11 @@ setCopyPlaceOptions(list);
         </button>
 
         <button
-          className="bg-gray-400 text-white py-2 rounded"
+          className="w-full py-2.5 bg-gray-100 text-gray-800 rounded-xl font-bold text-[13px]"
           onClick={() => setClientApplyPopup(null)}
         >
           선택안함
         </button>
-
       </div>
     </div>
   </div>
@@ -41994,6 +42110,20 @@ setCopyPlaceOptions(list);
                 </div>
               </div>
               <div className="border-t border-gray-100"/>
+              {/* ⭐ 컬럼명 클릭 정렬 — 켜두면 표 헤더(거래처명/상차지명 등)를 클릭하는
+                  것만으로 그 컬럼 기준 정렬. 기본은 꺼짐. */}
+              <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
+                <div>
+                  <div className="text-[13px] font-semibold text-gray-700">컬럼명 클릭 정렬</div>
+                  <div className="text-[11px] text-gray-500 mt-0.5">켜두면 표 헤더(거래처명·상차지명 등)를 클릭해서 바로 정렬할 수 있습니다</div>
+                </div>
+                <button type="button"
+                  onClick={() => setColumnClickSortEnabled(v => !v)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${columnClickSortEnabled ? "bg-[#1B2B4B]" : "bg-gray-300"}`}>
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${columnClickSortEnabled ? "translate-x-6" : "translate-x-1"}`} />
+                </button>
+              </div>
+              <div className="border-t border-gray-100"/>
               <div>
                 <div className="text-[11px] font-bold text-[#1B2B4B] uppercase tracking-wider mb-1">필터 조건</div>
                 <div className="text-[11px] text-gray-500 mb-3">같은 항목 여러 조건 → OR, 다른 항목 → AND / 제외 조건으로 특정 값 제외 가능</div>
@@ -42209,11 +42339,11 @@ setCopyPlaceOptions(list);
               </div>
 
               {(() => {
-                const typeBadge = (t) => t === "dispatch" ? "배차방식" : t === "fare" ? "운임차이" : t === "missing" ? "파일누락" : "지급방식";
+                const typeBadge = (t) => t === "dispatch" ? "배차방식" : t === "fare" ? "운임차이" : t === "missing" ? "파일누락" : t === "missingInProgram" ? "등록누락" : "지급방식";
                 // ⭐ 검증/분석 화면답게 톤을 낮췄다 — 실제 금액이 틀린 건(운임차이)만
                 // 옅은 빨강으로 구분하고, 나머지는 프로그램 전반의 회색/네이비 톤에
                 // 맞춘 중립 배지로 통일(알록달록하다는 피드백 반영).
-                const typeCls = (t) => t === "fare" ? "bg-red-50 text-red-700 border border-red-100" : "bg-gray-100 text-gray-600 border border-gray-200";
+                const typeCls = (t) => t === "fare" || t === "missingInProgram" ? "bg-red-50 text-red-700 border border-red-100" : "bg-gray-100 text-gray-600 border border-gray-200";
                 // ⭐ 클릭하면 바로 오더수정 패널을 여는 대신, 24시콜 값과 프로그램 값을
                 // 나란히 비교해 보여주는 팝업(CloseFileCompareModal)을 먼저 띄운다.
                 const Card = (f, i) => (
