@@ -1285,7 +1285,7 @@ function TransportStatusBadge({ order, className = "", onClick, flat = false, co
     return (
       <span
         onClick={clickable ? onClick : undefined}
-        className={`${compact ? "px-2 py-0.5 rounded" : "px-2 py-0.5 rounded-full"} border ${compact ? "text-[10px]" : "text-[11px]"} font-semibold whitespace-nowrap ${blink ? "badge-dispatching" : ""} ${clickable ? "cursor-pointer active:scale-95 transition-transform" : ""} ${TP_FLAT_CLASS[label]} ${className}`}
+        className={`inline-flex items-center justify-center leading-none h-[18px] ${compact ? "px-2 rounded" : "px-2 rounded-full"} border ${compact ? "text-[10px]" : "text-[11px]"} font-semibold whitespace-nowrap ${blink ? "badge-dispatching" : ""} ${clickable ? "cursor-pointer active:scale-95 transition-transform" : ""} ${TP_FLAT_CLASS[label]} ${className}`}
       >
         {label}
       </span>
@@ -9718,19 +9718,19 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
   <div className="flex items-center gap-1 shrink-0">
 
   {!showUndeliveredOnly && isUrgentOrder(order) && (
-    <span className="inline-flex items-center leading-none px-2 py-0.5 rounded bg-red-600 text-white text-[10px] font-bold">
+    <span className="inline-flex items-center justify-center leading-none h-[18px] px-2 rounded bg-red-600 text-white text-[10px] font-bold">
       긴급
     </span>
   )}
 
   {isCold && (
-    <span className="inline-flex items-center leading-none px-2 py-0.5 rounded bg-blue-600 text-white text-[10px] font-bold">
+    <span className="inline-flex items-center justify-center leading-none h-[18px] px-2 rounded bg-blue-600 text-white text-[10px] font-bold">
       냉장/냉동
     </span>
   )}
 
   {String(order.운행유형 || "").trim() === "왕복" && (
-    <span className="inline-flex items-center leading-none px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[10px] font-extrabold tracking-wide">
+    <span className="inline-flex items-center justify-center leading-none h-[18px] px-2 rounded bg-[#1B2B4B] text-white text-[10px] font-extrabold tracking-wide">
       왕복
     </span>
   )}
@@ -9751,7 +9751,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
   <button
     style={{ touchAction: "manipulation" }}
     onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
-    className={`inline-flex items-center leading-none gap-0.5 text-[10px] font-bold ${
+    className={`inline-flex items-center justify-center leading-none h-[18px] gap-0.5 text-[10px] font-bold ${
       order.attachViewed
         ? "text-[#1B2B4B]"
         : order.attachCount > 0
@@ -9769,8 +9769,8 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
     )}
   </button>
 
-  <div className="relative inline-block shrink-0">
-    <TransportStatusBadge order={order} className="inline-flex items-center leading-none" onClick={openReqModal} compact />
+  <div className="relative inline-flex items-center shrink-0">
+    <TransportStatusBadge order={order} className="inline-flex items-center leading-none" onClick={openReqModal} flat compact />
     {isRecentlyEditedByShipper && !isEditRequested && (
       <span title="화주사가 오더 정보를 수정했습니다"
         className="absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-white" />
