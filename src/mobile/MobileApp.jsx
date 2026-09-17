@@ -9521,7 +9521,8 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
               </button>
             )}
             {isCold && (
-              <span className="text-[0.68em] text-[#1B2B4B] font-bold bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 px-1.5 py-0.5 rounded">
+              <span className="inline-flex items-center gap-0.5 text-[0.68em] text-white font-bold bg-gradient-to-r from-sky-500 to-cyan-500 shadow-sm px-1.5 py-0.5 rounded-full">
+                <Snowflake className="w-2.5 h-2.5" />
                 {(() => {
                   const vt = String(order.차량종류 || order.차종 || "");
                   const hasCold = vt.includes("냉장") && vt.includes("냉동");
@@ -9547,14 +9548,15 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             const dStops = validStops(order.경유하차목록 || order.경유지_하차);
             const viaStops = [...pStops, ...dStops];
             return (
-              <div className="flex flex-col">
+              <div className="relative flex flex-col">
+                {/* 상/경유/하차를 관통하는 하나의 연결선 — 각 점(마커)과 항상 같은 세로 중심(7px)에 고정 */}
+                <div className="absolute left-[7px] top-[7px] bottom-[7px] w-px bg-gray-200" />
                 {/* 상차 */}
-                <div className="flex items-stretch gap-2">
-                  <div className="flex flex-col items-center shrink-0 py-0.5">
-                    <div className="w-2 h-2 rounded-full border-2 bg-white mt-1.5 shrink-0" style={{ borderColor: statusDot }} />
-                    <div className="w-px flex-1 min-h-[14px] bg-gray-200 my-0.5" />
+                <div className="flex items-center gap-2">
+                  <div className="relative z-10 w-[14px] h-[14px] flex items-center justify-center shrink-0">
+                    <div className="w-2 h-2 rounded-full border-2 bg-white" style={{ borderColor: statusDot }} />
                   </div>
-                  <div className="flex-1 min-w-0 pb-1.5">
+                  <div className="flex-1 min-w-0 py-1">
                     <div className="flex items-center justify-between">
                       <div className="flex-1 min-w-0 truncate">
                         <span className="text-[1em] font-bold text-gray-900">{pickupName}</span>
@@ -9571,23 +9573,22 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
                 </div>
                 {/* 경유 */}
                 {viaStops.map((s, i) => (
-                  <div key={i} className="flex items-stretch gap-2">
-                    <div className="flex flex-col items-center shrink-0">
-                      <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-0.5 shrink-0" />
-                      <div className="w-px flex-1 min-h-[14px] bg-gray-200 my-0.5" />
+                  <div key={i} className="flex items-center gap-2">
+                    <div className="relative z-10 w-[14px] h-[14px] flex items-center justify-center shrink-0">
+                      <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                     </div>
-                    <div className="flex-1 min-w-0 pb-1.5">
+                    <div className="flex-1 min-w-0 py-1">
                       <span className="text-[0.75em] font-extrabold text-amber-600">경유</span>
                       <span className="text-[0.8em] font-bold text-gray-700 ml-1">{s.업체명 || "-"}</span>
                     </div>
                   </div>
                 ))}
                 {/* 하차 */}
-                <div className="flex items-stretch gap-2">
-                  <div className="flex flex-col items-center shrink-0">
-                    <div className="w-2 h-2 rounded-full mt-0.5 shrink-0" style={{ background: statusDot, opacity: 0.5 }} />
+                <div className="flex items-center gap-2">
+                  <div className="relative z-10 w-[14px] h-[14px] flex items-center justify-center shrink-0">
+                    <div className="w-2 h-2 rounded-full" style={{ background: statusDot, opacity: 0.5 }} />
                   </div>
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 py-1">
                     <div className="flex items-center justify-between">
                       <div className="flex-1 min-w-0 truncate">
                         <span className="text-[1em] font-bold text-gray-900">{dropName}</span>
@@ -9811,16 +9812,15 @@ const dt = new Date(y, m - 1, d, hh, mm);
         const dStops = validStops(order.경유하차목록 || order.경유지_하차);
         const viaStops = [...pStops, ...dStops];
         return (
-          <div className="flex flex-col mt-1">
+          <div className="relative flex flex-col mt-1">
+            {/* 상/경유/하차를 관통하는 하나의 연결선 — 원형 뱃지(20px)의 세로 중심(10px)에 항상 고정 */}
+            <div className="absolute left-[10px] top-[10px] bottom-[10px] w-px bg-gray-200" />
             {/* 상차 */}
-            <div className="flex items-stretch gap-2">
-              <div className="flex flex-col items-center shrink-0">
-                <span className="w-5 h-5 flex items-center justify-center rounded-full bg-blue-500 text-white text-[11px] font-bold shrink-0">
-                  상
-                </span>
-                <div className="w-px flex-1 min-h-[10px] bg-gray-200 my-0.5" />
-              </div>
-              <div className="flex-1 min-w-0 pb-1.5 flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <span className="relative z-10 w-5 h-5 flex items-center justify-center rounded-full bg-blue-500 text-white text-[11px] font-bold shrink-0">
+                상
+              </span>
+              <div className="flex-1 min-w-0 py-1 flex items-center gap-2">
                 <div className="flex-1 truncate text-[1em] font-semibold">
                   {pickupName}
                   {pickupAddrShort && (
@@ -9844,26 +9844,21 @@ const dt = new Date(y, m - 1, d, hh, mm);
             </div>
             {/* 경유 */}
             {viaStops.map((s, i) => (
-              <div key={i} className="flex items-stretch gap-2">
-                <div className="flex flex-col items-center shrink-0">
-                  <span className="w-5 h-5 flex items-center justify-center rounded-full bg-indigo-500 text-white text-[11px] font-bold shrink-0">
-                    경
-                  </span>
-                  <div className="w-px flex-1 min-h-[10px] bg-gray-200 my-0.5" />
-                </div>
-                <div className="flex-1 min-w-0 pb-1.5 flex items-center">
+              <div key={i} className="flex items-center gap-2">
+                <span className="relative z-10 w-5 h-5 flex items-center justify-center rounded-full bg-indigo-500 text-white text-[11px] font-bold shrink-0">
+                  경
+                </span>
+                <div className="flex-1 min-w-0 py-1 flex items-center">
                   <div className="flex-1 truncate text-[0.85em] font-semibold text-gray-700">{s.업체명 || "-"}</div>
                 </div>
               </div>
             ))}
             {/* 하차 */}
-            <div className="flex items-stretch gap-2">
-              <div className="flex flex-col items-center shrink-0">
-                <span className="w-5 h-5 flex items-center justify-center rounded-full bg-gray-500 text-white text-[11px] font-bold shrink-0">
-                  하
-                </span>
-              </div>
-              <div className="flex-1 min-w-0 flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <span className="relative z-10 w-5 h-5 flex items-center justify-center rounded-full bg-gray-500 text-white text-[11px] font-bold shrink-0">
+                하
+              </span>
+              <div className="flex-1 min-w-0 py-1 flex items-center gap-2">
                 <div className="flex-1 truncate text-[1em] font-semibold">
                   {dropName}
                   {dropAddrShort && (
