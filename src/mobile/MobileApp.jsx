@@ -5655,6 +5655,10 @@ onGoAttendance={() => {
             endDate={endDate}
             setStartDate={setStartDate}
             setEndDate={setEndDate}
+            appliedStartDate={appliedStartDate}
+            appliedEndDate={appliedEndDate}
+            setAppliedStartDate={setAppliedStartDate}
+            setAppliedEndDate={setAppliedEndDate}
             quickRange={quickRange}
             setTodayRange={setTodayRange}
   setTomorrowRange={setTomorrowRange}
@@ -5676,6 +5680,10 @@ setOpenMemo={setOpenMemo}
             setSearchType={setSearchType}
             searchText={searchText}
             setSearchText={setSearchText}
+            appliedSearchType={appliedSearchType}
+            appliedSearchText={appliedSearchText}
+            setAppliedSearchType={setAppliedSearchType}
+            setAppliedSearchText={setAppliedSearchText}
             onDeleteSelected={deleteSelectedOrders}
             onDeleteOrder={deleteSingleOrder}
             onCopyOrder={handleOrderDuplicate}
@@ -7469,6 +7477,10 @@ function MobileOrderList({
   endDate,
   setStartDate,
   setEndDate,
+  appliedStartDate,
+  appliedEndDate,
+  setAppliedStartDate,
+  setAppliedEndDate,
   quickRange,
   setTodayRange,
   setTomorrowRange,
@@ -7482,6 +7494,10 @@ function MobileOrderList({
   setSearchType,
   searchText,
   setSearchText,
+  appliedSearchType,
+  appliedSearchText,
+  setAppliedSearchType,
+  setAppliedSearchText,
   onlyToday,
   setOnlyToday,
   onDeleteSelected,
