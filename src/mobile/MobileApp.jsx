@@ -7796,9 +7796,8 @@ const summary = useMemo(() => {
                 </div>
               </div>
 
-              {/* 시작/종료 날짜 — 날짜를 고르는 것만으로는 목록에 반영되지 않고,
-                  "조회" 버튼을 눌러야 appliedStartDate/appliedEndDate가 갱신되어
-                  실제로 필터링된다. */}
+              {/* 시작/종료 날짜 — 날짜를 고르는 것만으로는 목록에 반영되지 않는다.
+                  아래 검색창 안의 "조회" 버튼을 눌러야 날짜/검색어가 한번에 적용된다. */}
               <div className="flex items-center gap-2 text-sm">
                 <div className="relative flex-1 min-w-0">
                   <IconCalendar className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
@@ -7817,15 +7816,6 @@ const summary = useMemo(() => {
                     onChange={(e) => setEndDate(e.target.value)}
                   />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => { setAppliedStartDate(startDate); setAppliedEndDate(endDate); }}
-                  className={`shrink-0 px-3 py-1.5 rounded-xl text-[12px] font-bold transition active:scale-95 ${
-                    cardVersionB ? "bg-[#1B2B4B] text-white active:bg-[#243a60]" : "bg-blue-600 text-white active:bg-blue-700"
-                  }`}
-                >
-                  조회
-                </button>
               </div>
 
               {/* 차량종류 / 배차상태 드롭다운 */}
@@ -7899,16 +7889,24 @@ const summary = useMemo(() => {
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
+                        setAppliedStartDate(startDate);
+                        setAppliedEndDate(endDate);
                         setAppliedSearchType(searchType);
                         setAppliedSearchText(searchText);
                       }
                     }}
                   />
-                  {/* ⭐ 검색어를 입력하는 것만으로는 반영되지 않고, 이 버튼을 눌러야
-                      appliedSearchText/appliedSearchType이 갱신되어 실제로 검색된다. */}
+                  {/* ⭐ 이 버튼 하나로 날짜(위에서 고른 startDate/endDate)와 검색어를
+                      한번에 적용한다 — 날짜만 바꾸고 검색어는 그대로여도(값이 안
+                      바뀌었어도) 날짜가 함께 반영되도록, 항상 둘 다 같이 세팅한다. */}
                   <button
                     type="button"
-                    onClick={() => { setAppliedSearchType(searchType); setAppliedSearchText(searchText); }}
+                    onClick={() => {
+                      setAppliedStartDate(startDate);
+                      setAppliedEndDate(endDate);
+                      setAppliedSearchType(searchType);
+                      setAppliedSearchText(searchText);
+                    }}
                     className={`absolute right-1 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg text-[11px] font-bold transition active:scale-95 ${
                       cardVersionB ? "bg-[#1B2B4B] text-white active:bg-[#243a60]" : "bg-blue-600 text-white active:bg-blue-700"
                     }`}
