@@ -13232,6 +13232,40 @@ const pickDrop = (c) => {
     setVoiceReconnecting(false);
   };
 
+  // ⭐ 음성등록 인식 개선 — 예전엔 "OOO에서"/"OOO로 배달" 같은 딱 정해진 말투만
+  // 인식했고 거래처명은 아예 추출 시도조차 안 했다. 실제로 사람이 말하는 방식은
+  // "거래처는 OO, 상차지는 OO, 하차지는 OO"처럼 키워드 뒤에 바로 값이 오는 경우가
+  // 훨씬 많고, 문장부호 없이(음성인식은 쉼표/마침표를 거의 안 찍는다) 이어지는
+  // 경우가 대부분이라, 키워드~다음 키워드 사이를 잘라내는 방식으로 다시 짰다.
+  const VOICE_STOP_WORDS = [
+    "거래처", "상차지", "상차", "하차지", "하차", "도착지", "출발지",
+    "화물", "화물내용", "톤", "차종", "차량", "냉동", "냉장", "윙바디", "카고",
+    "지급방식", "배차방식", "계산서", "착불", "선불", "현금",
+    "청구운임", "청구", "기사운임", "운임", "요금", "금액",
+    "담당자", "연락처", "전화번호", "전화",
+    "지게차", "수작업", "호리", "테일게이트",
+    "오늘", "내일", "모레", "즉시",
+  ];
+  // 키워드 뒤에 바로 이어지는 값을, 다음에 나오는 다른 키워드(또는 문장부호) 직전까지 잘라낸다.
+  const extractAfterKeyword = (text, keyword, stopWords = VOICE_STOP_WORDS) => {
+    const idx = text.indexOf(keyword);
+    if (idx === -1) return null;
+    let rest = text.slice(idx + keyword.length);
+    // 조사 제거 (은/는/이/가/도/:)
+    rest = rest.replace(/^\s*(은|는|이|가|도|:)\s*/, "");
+    let cut = rest.length;
+    stopWords.forEach((w) => {
+      if (w === keyword) return;
+      const i = rest.indexOf(w);
+      if (i !== -1 && i > 0 && i < cut) cut = i;
+    });
+    const puncIdx = rest.search(/[,.\n]/);
+    if (puncIdx !== -1 && puncIdx < cut) cut = puncIdx;
+    // "3톤" 같은 뒤에 붙은 숫자 앞에서 잘리면 꼬리에 외로운 숫자가 남는다(예: "수원종합운동장 3") — 제거.
+    const value = rest.slice(0, cut).trim().replace(/\s+/g, " ").replace(/\s*\d+\s*$/, "").trim();
+    return value || null;
+  };
+
   const parseVoiceOrder = (text) => {
     const res = {};
     const t = text;
@@ -13255,12 +13289,15 @@ const pickDrop = (c) => {
     }
     if (/즉시/.test(t)) res.상차시간 = "즉시";
 
-    // 화물내용 + 타입
+    // 화물내용 + 타입 — "개"처럼 파레트/박스가 아닌 애매한 단위는 함부로 "파레트"로
+    // 단정 짓지 않는다(예전엔 무조건 파레트로 기본값이 들어가 실제와 다르게 찍혔다).
     const cargo = t.match(/(\d+)\s*(파레트|파렛트|팔레트|박스|통|롤|개)/);
     if (cargo) {
       res.화물내용 = cargo[1];
       const typeMap = { "파렛트": "파레트", "팔레트": "파레트" };
-      res.화물타입 = typeMap[cargo[2]] || (["박스","통","롤"].includes(cargo[2]) ? cargo[2] : "파레트");
+      if (typeMap[cargo[2]]) res.화물타입 = typeMap[cargo[2]];
+      else if (["박스", "통", "롤", "파레트"].includes(cargo[2])) res.화물타입 = cargo[2];
+      // "개"는 파레트/박스 어느 쪽인지 알 수 없으므로 화물타입은 비워두고 숫자만 채운다.
     }
 
     // 톤수
@@ -13275,32 +13312,81 @@ const pickDrop = (c) => {
     else if (/윙/.test(t)) res.차종 = "윙바디";
     else if (/카고/.test(t)) res.차종 = "카고";
 
-    // 업체명 - "에서"/"로"/"까지" 앞의 단어로 추출
-    const pickupM = t.match(/(.{2,10}?)\s*에서/);
-    if (pickupM) res.상차지명_후보 = pickupM[1].trim();
-    const dropM = t.match(/(.{2,10}?)\s*(?:로|까지|으로)\s*(?:배달|배송|운송|가져)/);
-    if (dropM) res.하차지명_후보 = dropM[1].trim();
+    // 지급방식 / 배차방식
+    if (/계산서/.test(t)) res.지급방식 = "계산서";
+    else if (/착불/.test(t)) res.지급방식 = "착불";
+    else if (/선불/.test(t)) res.지급방식 = "선불";
+    if (/24시/.test(t)) res.배차방식 = "24시";
+    else if (/직접\s*배차/.test(t)) res.배차방식 = "직접배차";
 
-    // 거래처 매칭
+    // 상차방법 / 하차방법
+    const methodWords = ["지게차", "수작업", "호리", "테일게이트"];
+    const pickupMethod = extractAfterKeyword(t, "상차지") || extractAfterKeyword(t, "상차");
+    const dropMethod = extractAfterKeyword(t, "하차지") || extractAfterKeyword(t, "하차");
+    methodWords.forEach((w) => {
+      if (pickupMethod && pickupMethod.includes(w)) res.상차방법 = w;
+      if (dropMethod && dropMethod.includes(w)) res.하차방법 = w;
+    });
+
+    // 청구운임 / 기사운임 — "OO만원" 단위 (예: "운임은 15만원", "기사운임 18만원")
+    const claimFare = t.match(/(?:청구운임|청구|운임|요금|금액)\s*(?:은|는)?\s*(\d+)\s*만\s*원/);
+    if (claimFare) res.청구운임 = String(Number(claimFare[1]) * 10000);
+    const driverFare = t.match(/기사\s*운임\s*(?:은|는)?\s*(\d+)\s*만\s*원/);
+    if (driverFare) res.기사운임 = String(Number(driverFare[1]) * 10000);
+
+    // 거래처명 — 키워드 뒤에 바로 오는 값으로 추출 (예전엔 이 항목 자체가 없었다)
+    const clientRaw = extractAfterKeyword(t, "거래처");
+    if (clientRaw) res.거래처명_후보 = clientRaw;
+
+    // 상차지 — "상차지는/상차는" 등 다양한 말투 지원 (예전엔 "OOO에서"만 인식)
+    const pickupRaw =
+      extractAfterKeyword(t, "상차지") ||
+      extractAfterKeyword(t, "출발지") ||
+      extractAfterKeyword(t, "상차") ||
+      (t.match(/(.{2,10}?)\s*에서/) || [])[1];
+    if (pickupRaw) res.상차지명_후보 = pickupRaw.trim();
+
+    // 하차지 — "하차지는/하차는/도착지는" 등 다양한 말투 지원
+    const dropRaw =
+      extractAfterKeyword(t, "하차지") ||
+      extractAfterKeyword(t, "도착지") ||
+      extractAfterKeyword(t, "하차") ||
+      (t.match(/(.{2,10}?)\s*(?:로|까지|으로)\s*(?:배달|배송|운송|가져)/) || [])[1];
+    if (dropRaw) res.하차지명_후보 = dropRaw.trim();
+
+    // 거래처/상차지 중 한쪽만 말한 경우 — 이 업계 특성상(직송) 거래처=상차지인
+    // 경우가 흔해 서로 채워준다 — 실제로 다르면 화면에서 바로 수정 가능.
+    if (!res.거래처명_후보 && res.상차지명_후보) res.거래처명_후보 = res.상차지명_후보;
+    else if (res.거래처명_후보 && !res.상차지명_후보) res.상차지명_후보 = res.거래처명_후보;
+
+    // 거래처 매칭 — 등록된 거래처와 이름이 비슷하면 그 거래처의 정확한 이름/주소로 보정
+    const matchClient = (raw) => {
+      if (!raw) return null;
+      const nq = normalizeCompany(raw);
+      return clients.find(c => normalizeCompany(c.거래처명).includes(nq) || nq.includes(normalizeCompany(c.거래처명)));
+    };
+    if (res.거래처명_후보) {
+      const found = matchClient(res.거래처명_후보);
+      res.거래처명 = found ? found.거래처명 : res.거래처명_후보;
+    }
     if (res.상차지명_후보) {
-      const nq = normalizeCompany(res.상차지명_후보);
-      const found = clients.find(c => normalizeCompany(c.거래처명).includes(nq));
+      const found = matchClient(res.상차지명_후보);
       if (found) { res.상차지명 = found.거래처명; res.상차지주소 = found.주소||""; }
       else res.상차지명 = res.상차지명_후보;
     }
     if (res.하차지명_후보) {
-      const nq = normalizeCompany(res.하차지명_후보);
-      const found = clients.find(c => normalizeCompany(c.거래처명).includes(nq));
+      const found = matchClient(res.하차지명_후보);
       if (found) { res.하차지명 = found.거래처명; res.하차지주소 = found.주소||""; }
       else res.하차지명 = res.하차지명_후보;
     }
-    delete res.상차지명_후보; delete res.하차지명_후보;
+    delete res.거래처명_후보; delete res.상차지명_후보; delete res.하차지명_후보;
     return res;
   };
 
   const applyVoiceParsed = () => {
     if (!voiceParsed) return;
     const p = voiceParsed;
+    if (p.거래처명) update("거래처명", p.거래처명);
     if (p.상차일) update("상차일", p.상차일);
     if (p.상차시간) update("상차시간", p.상차시간);
     if (p.상차지명) update("상차지명", p.상차지명);
@@ -13311,6 +13397,12 @@ const pickDrop = (c) => {
     if (p.화물타입) update("화물타입", p.화물타입);
     if (p.톤수) update("톤수", p.톤수);
     if (p.차종) update("차종", p.차종);
+    if (p.지급방식) update("지급방식", p.지급방식);
+    if (p.배차방식) update("배차방식", p.배차방식);
+    if (p.상차방법) update("상차방법", p.상차방법);
+    if (p.하차방법) update("하차방법", p.하차방법);
+    if (p.청구운임) update("청구운임", p.청구운임);
+    if (p.기사운임) update("기사운임", p.기사운임);
     setVoiceSheet(false);
     setVoiceTranscript("");
     setVoiceParsed(null);
@@ -15288,12 +15380,13 @@ const pickDrop = (c) => {
           )}
         </div>
 
-        {/* 예시 안내 */}
+        {/* 예시 안내 — "거래처는/상차지는/하차지는"처럼 항목별로 끊어 말하면
+            인식률이 훨씬 좋아진다(키워드 뒤 값을 바로 추출하는 방식). */}
         {!voiceTranscript && !voiceListening && (
           <div className="bg-blue-50 rounded-xl p-3 text-[12px] text-blue-700 space-y-1">
-            <div className="font-bold mb-1">음성 예시</div>
-            <div>"내일 오전 10시에 테스트업체에서 박스 5개 주주물류로 배달"</div>
-            <div>"오늘 즉시 3톤 냉장 후레쉬2공장에서 수원종합운동장으로"</div>
+            <div className="font-bold mb-1">음성 예시 (항목별로 끊어 말하면 더 정확해요)</div>
+            <div>"거래처는 테스트업체 상차지는 테스트업체 하차지는 주주물류 화물내용은 박스 5개 내일 오전 10시"</div>
+            <div>"거래처는 후레쉬2공장 하차지는 수원종합운동장 3톤 냉장 오늘 즉시"</div>
           </div>
         )}
 
@@ -15323,6 +15416,7 @@ const pickDrop = (c) => {
             <div className="text-xs font-bold text-gray-500">인식 결과 확인</div>
             <div className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100 text-sm">
               {[
+                ["거래처", voiceParsed.거래처명],
                 ["상차일", voiceParsed.상차일],
                 ["상차시간", voiceParsed.상차시간],
                 ["상차지", voiceParsed.상차지명],
@@ -15330,6 +15424,12 @@ const pickDrop = (c) => {
                 ["화물내용", voiceParsed.화물내용 ? `${voiceParsed.화물내용}${voiceParsed.화물타입 ? " "+voiceParsed.화물타입 : ""}` : ""],
                 ["톤수", voiceParsed.톤수],
                 ["차량종류", voiceParsed.차종],
+                ["지급방식", voiceParsed.지급방식],
+                ["배차방식", voiceParsed.배차방식],
+                ["상차방법", voiceParsed.상차방법],
+                ["하차방법", voiceParsed.하차방법],
+                ["청구운임", voiceParsed.청구운임 ? `${Number(voiceParsed.청구운임).toLocaleString()}원` : ""],
+                ["기사운임", voiceParsed.기사운임 ? `${Number(voiceParsed.기사운임).toLocaleString()}원` : ""],
               ].filter(([, v]) => v).map(([label, val]) => (
                 <div key={label} className="flex items-center px-3 py-2 gap-3">
                   <span className="text-gray-400 text-xs w-14 shrink-0">{label}</span>
