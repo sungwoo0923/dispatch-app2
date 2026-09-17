@@ -1879,11 +1879,18 @@ const HANDOVER_PAGE_SIZE = 5;
   // -------------------------------------------------------------
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  // ✅ 당일 / 내일 빠른 선택용
+  // ⭐ 목록 필터가 실제로 읽는 "적용된" 날짜 — 날짜칸(startDate/endDate)은 고르는
+  // 즉시 바뀌지만, 목록은 "조회" 버튼을 눌러야만 이 값이 갱신되어 실제로 필터링된다.
+  const [appliedStartDate, setAppliedStartDate] = useState("");
+  const [appliedEndDate, setAppliedEndDate] = useState("");
+  // ✅ 당일 / 내일 빠른 선택용 — 버튼 클릭 자체가 이미 명시적인 조회 동작이므로
+  // 적용된 날짜도 바로 함께 갱신한다(별도로 조회를 또 누를 필요 없음).
 const setTodayRange = () => {
   const t = todayKST();
   setStartDate(t);
   setEndDate(t);
+  setAppliedStartDate(t);
+  setAppliedEndDate(t);
 };
 
 const setTomorrowRange = () => {
@@ -1892,6 +1899,8 @@ const setTomorrowRange = () => {
   kst.setDate(kst.getDate() + 1);
   const tmr = kst.toISOString().slice(0, 10);
   setStartDate(tmr);
+  setAppliedStartDate(tmr);
+  setAppliedEndDate(tmr);
   setEndDate(tmr);
 };
   // 🔍 UI 크기 스케일 (1 = 기본, 1.1 = 크게, 1.2 = 아주 크게)
@@ -2931,6 +2940,10 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
   // 🔍 검색 상태
   const [searchType, setSearchType] = useState("거래처명");
   const [searchText, setSearchText] = useState("");
+  // ⭐ 목록 필터가 실제로 읽는 "적용된" 검색어 — 입력칸(searchText)은 타이핑
+  // 즉시 바뀌지만, 목록은 "조회" 버튼을 눌러야만 이 값이 갱신되어 실제로 검색된다.
+  const [appliedSearchType, setAppliedSearchType] = useState("거래처명");
+  const [appliedSearchText, setAppliedSearchText] = useState("");
 
   // --------------------------------------------------
   // 3. 등록 폼
@@ -2986,6 +2999,8 @@ useEffect(() => {
     if (!startDate && !endDate) {
       setStartDate(today);
       setEndDate(today);
+      setAppliedStartDate(today);
+      setAppliedEndDate(today);
     }
 
     // ⭐ 기본 탭 = 배차중
@@ -3006,7 +3021,7 @@ const thisMonth = thisMonthKST();
 if (onlyToday) {
   base = base.filter((o) => getPickupDate(o) === today);
 }
- const dateSelected = !!(startDate || endDate);
+ const dateSelected = !!(appliedStartDate || appliedEndDate);
 
  // 🔥 날짜 선택 안 한 경우에만 당월 필터 적용
  if (!dateSelected) {
@@ -3042,41 +3057,42 @@ if (onlyToday) {
       return carType.includes(vehicleFilter.toLowerCase());
     });
 
-    // 5) 날짜 필터 (직접 고른 경우만 동작)
+    // 5) 날짜 필터 (직접 고른 경우만 동작) — "조회"를 눌러야 반영되는 appliedStartDate/
+    // appliedEndDate 기준. 날짜칸(startDate/endDate)을 바꾸는 것만으로는 아직 반영 안 됨.
     base = base.filter((o) => {
       const d = getPickupDate(o);
       if (!d) return false;
-      if (startDate && d < startDate) return false;
-      if (endDate && d > endDate) return false;
+      if (appliedStartDate && d < appliedStartDate) return false;
+      if (appliedEndDate && d > appliedEndDate) return false;
       return true;
     });
 
-    // 6) 검색
+    // 6) 검색 — 마찬가지로 "조회"를 눌러야 반영되는 appliedSearchText/appliedSearchType 기준.
 base = base.filter((o) => {
-  if (!searchText.trim()) return true;
-  const q = normalize(searchText);
+  if (!appliedSearchText.trim()) return true;
+  const q = normalize(appliedSearchText);
 
-  if (searchType === "거래처명")
+  if (appliedSearchType === "거래처명")
     return normalize(o.거래처명).includes(q);
 
-  if (searchType === "기사명")
+  if (appliedSearchType === "기사명")
     return normalize(o.기사명).includes(q);
 
-  if (searchType === "차량번호")
+  if (appliedSearchType === "차량번호")
     return normalize(o.차량번호).includes(q);
 
-  if (searchType === "상차지명")
+  if (appliedSearchType === "상차지명")
     return normalize(o.상차지명).includes(q);
 
-  if (searchType === "상차지주소")
+  if (appliedSearchType === "상차지주소")
     return normalize(o.상차지주소).includes(q);
 
-  if (searchType === "하차지명")
+  if (appliedSearchType === "하차지명")
     return normalize(o.하차지명).includes(q);
 
-  if (searchType === "하차지주소")
+  if (appliedSearchType === "하차지주소")
     return normalize(o.하차지주소).includes(q);
-if (searchType === "메모")
+if (appliedSearchType === "메모")
   return normalize(o.메모 || o.적요).includes(q);
   return true;
 });
@@ -3098,10 +3114,10 @@ if (searchType === "메모")
     statusTab,
     assignFilter,
     vehicleFilter,
-    startDate,
-    endDate,
-    searchType,
-    searchText,
+    appliedStartDate,
+    appliedEndDate,
+    appliedSearchType,
+    appliedSearchText,
     thisMonth,
     onlyToday,
   ]);
@@ -7780,7 +7796,9 @@ const summary = useMemo(() => {
                 </div>
               </div>
 
-              {/* 시작/종료 날짜 */}
+              {/* 시작/종료 날짜 — 날짜를 고르는 것만으로는 목록에 반영되지 않고,
+                  "조회" 버튼을 눌러야 appliedStartDate/appliedEndDate가 갱신되어
+                  실제로 필터링된다. */}
               <div className="flex items-center gap-2 text-sm">
                 <div className="relative flex-1 min-w-0">
                   <IconCalendar className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
@@ -7799,6 +7817,15 @@ const summary = useMemo(() => {
                     onChange={(e) => setEndDate(e.target.value)}
                   />
                 </div>
+                <button
+                  type="button"
+                  onClick={() => { setAppliedStartDate(startDate); setAppliedEndDate(endDate); }}
+                  className={`shrink-0 px-3 py-1.5 rounded-xl text-[12px] font-bold transition active:scale-95 ${
+                    cardVersionB ? "bg-[#1B2B4B] text-white active:bg-[#243a60]" : "bg-blue-600 text-white active:bg-blue-700"
+                  }`}
+                >
+                  조회
+                </button>
               </div>
 
               {/* 차량종류 / 배차상태 드롭다운 */}
@@ -7861,7 +7888,7 @@ const summary = useMemo(() => {
                 <div className="relative flex-1 min-w-0">
                   <IconSearch className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
                   <input autoComplete="off"
-                    className={`w-full rounded-xl pl-8 pr-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
+                    className={`w-full rounded-xl pl-8 pr-14 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
                     placeholder={
                       searchType === "상차지주소" ? "상차지 주소 검색"
                       : searchType === "하차지주소" ? "하차지 주소 검색"
@@ -7869,7 +7896,25 @@ const summary = useMemo(() => {
                     }
                     value={searchText}
                     onChange={(e) => setSearchText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        setAppliedSearchType(searchType);
+                        setAppliedSearchText(searchText);
+                      }
+                    }}
                   />
+                  {/* ⭐ 검색어를 입력하는 것만으로는 반영되지 않고, 이 버튼을 눌러야
+                      appliedSearchText/appliedSearchType이 갱신되어 실제로 검색된다. */}
+                  <button
+                    type="button"
+                    onClick={() => { setAppliedSearchType(searchType); setAppliedSearchText(searchText); }}
+                    className={`absolute right-1 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg text-[11px] font-bold transition active:scale-95 ${
+                      cardVersionB ? "bg-[#1B2B4B] text-white active:bg-[#243a60]" : "bg-blue-600 text-white active:bg-blue-700"
+                    }`}
+                  >
+                    조회
+                  </button>
                 </div>
               </div>
             </>
