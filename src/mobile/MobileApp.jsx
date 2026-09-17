@@ -1285,7 +1285,7 @@ function TransportStatusBadge({ order, className = "", onClick, flat = false, co
     return (
       <span
         onClick={clickable ? onClick : undefined}
-        className={`inline-flex items-center justify-center leading-none h-[18px] ${compact ? "px-2 rounded" : "px-2 rounded-full"} border ${compact ? "text-[10px]" : "text-[11px]"} font-semibold whitespace-nowrap ${blink ? "badge-dispatching" : ""} ${clickable ? "cursor-pointer active:scale-95 transition-transform" : ""} ${TP_FLAT_CLASS[label]} ${className}`}
+        className={`inline-flex items-center justify-center leading-none border font-semibold whitespace-nowrap ${compact ? "h-5 px-2.5 rounded text-[11px]" : "py-0.5 px-2 rounded-full text-[11px]"} ${blink ? "badge-dispatching" : ""} ${clickable ? "cursor-pointer active:scale-95 transition-transform" : ""} ${TP_FLAT_CLASS[label]} ${className}`}
       >
         {label}
       </span>
