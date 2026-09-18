@@ -2000,21 +2000,23 @@ const formClientsList = useMemo(() => [
     !clients.some(c => normalizeCompany(c.거래처명) === normalizeCompany(p.거래처명))
   )
 ], [clients, places]);
-const handleRefresh = () => {
+const handleRefresh = async () => {
   if (isRefreshing) return;
 
   setIsRefreshing(true);
   showToast("최적화 중...");
-  setRefreshKey(prev => prev + 1); // ⭐ 핵심 — 누르자마자 바로 재구독 시작(예전엔 일부러
-  // 500ms를 기다렸다가 시작했는데, "눌러도 바로 안 되는" 느낌만 줄 뿐 이득이 없어 없앴다)
+  setRefreshKey(prev => prev + 1); // ⭐ 핵심 — 누르자마자 바로 실시간 리스너 재구독 시작(예전엔
+  // 일부러 500ms를 기다렸다가 시작했는데, "눌러도 바로 안 되는" 느낌만 줄 뿐 이득이 없어 없앴다)
 
-  // "최적화 중..." 토스트가 눈에 보일 최소한의 틈만 두고(0ms면 아래 "완료" 토스트가
-  // 곧바로 덮어써서 위 토스트가 아예 안 보이게 된다) 바로 완료 처리한다.
-  setTimeout(() => {
-    setIsRefreshing(false);
-    pullDistanceRef.current = 0;
-    showToast("최신 데이터 반영 완료");
-  }, 150);
+  // ⚠️ 예전엔 실제 반영 여부와 상관없이 150ms 뒤 무조건 "완료" 토스트를 띄웠다 —
+  // 리스너 재구독(위 refreshKey)이나 로컬 캐시가 아직 옛날 상태를 들고 있어도 화면엔
+  // "반영 완료"라고 뜨고 실제로는 한참 뒤에야 최신화되는 문제가 있었다. 이제 서버에서
+  // 직접(getDocsFromServer) 최신 상태를 확정적으로 읽어와 화면에 반영한 뒤에만 "완료"
+  // 토스트를 띄운다.
+  const ok = await refreshFromServer({ force: true });
+  setIsRefreshing(false);
+  pullDistanceRef.current = 0;
+  showToast(ok === false ? "새로고침 실패 · 네트워크를 확인해주세요" : "최신 데이터 반영 완료");
 };
 // 🔥 모든 로그인 사용자 FCM 토큰 저장
 useEffect(() => {
