@@ -2239,41 +2239,55 @@ collections.forEach((name) => {
 // 짧은 전환(다른 앱 잠깐 확인 등)에는 이미 실시간으로 반영되고 있으므로 이 재조회
 // 자체가 필요 없다. window.focus는 화면분할 모드에서 실제 백그라운드 전환 없이도
 // 계속 발생해 가장 오작동이 심했던 트리거라 완전히 제거했다.
+// ⭐ 서버에서 직접(getDocsFromServer) 한 번 확실하게 새로 읽어와 화면 상태를 즉시
+// 갱신하는 함수 — 백그라운드에서 돌아왔을 때(아래 visibility 이펙트)와 "앱 새로고침"
+// 버튼(MobileSettingsPage) 양쪽에서 공유해서 쓴다. lastRefreshAtRef로 두 트리거가
+// 동시에 눌려도 중복 조회가 나가지 않게 쿨다운을 공유한다.
+const lastRefreshAtRef = useRef(0);
+const REFRESH_COOLDOWN_MS = 3000;
+const refreshFromServer = React.useCallback(async ({ force = false } = {}) => {
+  const now = Date.now();
+  if (!force && now - lastRefreshAtRef.current < REFRESH_COOLDOWN_MS) return;
+  lastRefreshAtRef.current = now;
+  // ⭐ 재조회가 곧바로 끝나면(캐시가 이미 최신이거나 네트워크가 빠른 경우) 화면
+  // 깜빡임 없이 조용히 넘어가고, 네트워크 재연결이 오래 걸려 응답이 지연될 때만
+  // (예: 화면을 꺼뒀다 켜서 기기가 막 깨어난 직후) 잠깐이라도 화면을 덮어
+  // "한참 전 상태"가 눈에 보이거나 그 상태로 조작하는 일 자체를 막는다. 지연
+  // 체감을 줄이기 위해 대기 시간을 400ms→200ms로 단축.
+  const overlayTimer = setTimeout(() => setResyncOverlay(true), 200);
+  try {
+    const [dispatchSnap, ordersSnap] = await Promise.all([
+      getDocsFromServer(collection(db, "dispatch")),
+      getDocsFromServer(collection(db, "orders")),
+    ]);
+    const mapAll = (snap, col) => snap.docs
+      .map((d) => ({ _id: d.id, id: d.id, __col: col, ...d.data() }))
+      .filter((o) => o.source !== "transport_transmit");
+
+    const merged = [...mapAll(dispatchSnap, "dispatch"), ...mapAll(ordersSnap, "orders")];
+    setOrders(merged.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태)));
+    setCanceledOrders(merged.filter((o) => CANCELED_STATUS_LIST.includes(o.상태)));
+    return true;
+  } catch {
+    // 오프라인 등으로 서버 조회가 실패하면 조용히 무시 — onSnapshot이 재연결되는 대로 반영된다.
+    return false;
+  } finally {
+    clearTimeout(overlayTimer);
+    setResyncOverlay(false);
+  }
+}, []);
+
 useEffect(() => {
-  const lastRefreshAtRef = { current: 0 };
-  const REFRESH_COOLDOWN_MS = 3000;
-  const HIDDEN_THRESHOLD_MS = 2 * 60 * 1000; // 2분 이상 안 보였다 돌아온 경우만 "재시작"으로 취급
+  // ⚠️ 예전엔 2분 이상 안 보였다 돌아온 경우만 재조회했는데, 실제로는 30초~1분
+  // 정도만 백그라운드에 있다 돌아와도 onSnapshot 리스너가 곧바로 재연결되지
+  // 않아(특히 모바일 브라우저가 백그라운드 탭의 네트워크/타이머를 강하게
+  // 절전시키는 경우) 한참 뒤에야 최신 상태가 보이는 문제가 있었다. 임계값을
+  // 15초로 낮춰 짧게 백그라운드에 있었던 경우에도 화면이 다시 보이자마자
+  // 서버에서 최신 상태를 확인하도록 했다 — 재조회 자체는 쿨다운(3초)과 "곧바로
+  // 끝나면 오버레이 없이 조용히 넘어가는" 처리 덕분에 잦아져도 체감상 거슬리지
+  // 않는다.
+  const HIDDEN_THRESHOLD_MS = 15 * 1000;
   let hiddenAt = 0;
-
-  const refreshNow = async () => {
-    const now = Date.now();
-    if (now - lastRefreshAtRef.current < REFRESH_COOLDOWN_MS) return;
-    lastRefreshAtRef.current = now;
-    // ⭐ 재조회가 곧바로 끝나면(캐시가 이미 최신이거나 네트워크가 빠른 경우) 화면
-    // 깜빡임 없이 조용히 넘어가고, 네트워크 재연결이 오래 걸려 응답이 지연될 때만
-    // (예: 화면을 꺼뒀다 켜서 기기가 막 깨어난 직후) 잠깐이라도 화면을 덮어
-    // "한참 전 상태"가 눈에 보이거나 그 상태로 조작하는 일 자체를 막는다. 지연
-    // 체감을 줄이기 위해 대기 시간을 400ms→200ms로 단축.
-    const overlayTimer = setTimeout(() => setResyncOverlay(true), 200);
-    try {
-      const [dispatchSnap, ordersSnap] = await Promise.all([
-        getDocsFromServer(collection(db, "dispatch")),
-        getDocsFromServer(collection(db, "orders")),
-      ]);
-      const mapAll = (snap, col) => snap.docs
-        .map((d) => ({ _id: d.id, id: d.id, __col: col, ...d.data() }))
-        .filter((o) => o.source !== "transport_transmit");
-
-      const merged = [...mapAll(dispatchSnap, "dispatch"), ...mapAll(ordersSnap, "orders")];
-      setOrders(merged.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태)));
-      setCanceledOrders(merged.filter((o) => CANCELED_STATUS_LIST.includes(o.상태)));
-    } catch {
-      // 오프라인 등으로 서버 조회가 실패하면 조용히 무시 — onSnapshot이 재연결되는 대로 반영된다.
-    } finally {
-      clearTimeout(overlayTimer);
-      setResyncOverlay(false);
-    }
-  };
 
   const onVisible = () => {
     if (document.visibilityState !== "visible") {
@@ -2282,13 +2296,13 @@ useEffect(() => {
     }
     // hiddenAt이 없으면(예: 첫 마운트 직후 이벤트) 재조회 대상이 아니다 — 최초
     // 로드는 onSnapshot 첫 스냅샷이 이미 처리한다.
-    if (hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) refreshNow();
+    if (hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) refreshFromServer();
   };
 
   // bfcache(뒤로가기 등으로 페이지가 통째로 캐시에서 복원)로 돌아온 경우도 같은
   // 기준으로 취급 — persisted가 아니면(=일반적인 최초 로드) 건드리지 않는다.
   const onPageShow = (e) => {
-    if (e.persisted && hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) refreshNow();
+    if (e.persisted && hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) refreshFromServer();
   };
 
   document.addEventListener("visibilitychange", onVisible);
@@ -2298,7 +2312,7 @@ useEffect(() => {
     document.removeEventListener("visibilitychange", onVisible);
     window.removeEventListener("pageshow", onPageShow);
   };
-}, []);
+}, [refreshFromServer]);
 
 useEffect(() => {
   // pull-to-refresh is disabled — keep refs clean only
@@ -5828,6 +5842,7 @@ setOpenMemo={setOpenMemo}
             currentUser={currentUser}
             userCompany={userCompany}
             role={role}
+            refreshFromServer={refreshFromServer}
           />
         )}
         {page === "fleet" && <MobileFleetView />}
@@ -20218,7 +20233,8 @@ return (
 );
 }
 
-function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnabled, toggleAlarm, fontScale, setFontScale, easyMode, setEasyMode, appVersion, showSuccess, onLogout, userCompany, role, currentUser }) {
+function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnabled, toggleAlarm, fontScale, setFontScale, easyMode, setEasyMode, appVersion, showSuccess, onLogout, userCompany, role, currentUser, refreshFromServer }) {
+  const [manualRefreshing, setManualRefreshing] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const isTotalMaster = role === "totalMaster";
 
@@ -20483,9 +20499,21 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
         <div className="mx-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
           <SettingRow
             label="앱 새로고침"
-            sub="최신 데이터로 갱신"
-            onClick={() => { showSuccess("새로고침 완료"); setTimeout(() => window.location.reload(), 800); }}
-            right={<span className="text-[12px] text-blue-500 font-semibold">실행</span>}
+            sub="서버에서 가장 최신 상태를 다시 불러옵니다"
+            onClick={async () => {
+              if (manualRefreshing) return;
+              setManualRefreshing(true);
+              // ⭐ 캐시가 꼬여 실시간 반영이 안 먹힐 때를 대비해 로컬/IndexedDB
+              // 캐시를 거치지 않고 서버에서 직접(getDocsFromServer) 다시 읽어온다
+              // (force:true로 쿨다운도 건너뛴다). 화면 새로고침(reload) 없이 목록
+              // 상태만 즉시 갱신되므로 예전처럼 "완료"라고 뜨고도 실제로는 한참
+              // 뒤에야 반영되는 일이 없다. 로딩 화면은 최상위의 공용 재조회
+              // 오버레이(resyncOverlay)가 대신 보여준다.
+              const ok = await refreshFromServer?.({ force: true });
+              setManualRefreshing(false);
+              showSuccess(ok === false ? "새로고침 실패 (네트워크 확인)" : "새로고침 완료 · 최신 상태 반영됨");
+            }}
+            right={<span className="text-[12px] text-blue-500 font-semibold">{manualRefreshing ? "갱신 중..." : "실행"}</span>}
           />
           <SettingRow
             label="캐시 초기화"
