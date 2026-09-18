@@ -993,6 +993,27 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
   const captureRef = React.useRef(null);
   const driverRefs = React.useRef({});
 
+  // ⭐ 경유지가 있는 오더는 스케줄표 노선 칸에 "상차지 → 경 경유지명 → 하차지"처럼
+  // 원형 "경" 배지를 노선 흐름 안에 바로 표시한다 (별도 경유 뱃지/칸 없이도 한눈에 보이도록).
+  const _scheduleViaName = (s) => typeof s === "string" ? s : (s?.업체명 || s?.지명 || s?.하차지명 || s?.상차지명 || s?.주소 || "");
+  const getScheduleViaNames = (r) => [
+    ..._parseWaypointList(r.경유상차목록 || r.경유지_상차),
+    ..._parseWaypointList(r.경유하차목록 || r.경유지_하차),
+  ].map(_scheduleViaName).filter(Boolean);
+  const ScheduleRoute = ({ r }) => (
+    <>
+      {r.상차지명 || "-"}
+      {getScheduleViaNames(r).map((name, vi) => (
+        <React.Fragment key={vi}>
+          {" → "}
+          <span className="inline-flex items-center justify-center w-[15px] h-[15px] rounded-full bg-amber-500 text-white text-[9px] font-extrabold align-middle mr-0.5">경</span>
+          {name}
+        </React.Fragment>
+      ))}
+      {" → "}{r.하차지명 || "-"}
+    </>
+  );
+
   // ⭐ 달력에서 특정 날짜만 골라 이미지/PDF로 저장 — 원본 rows에 실제 존재하는
   // 날짜 전체를 먼저 뽑아두고(달력 다중선택의 모집단), 선택값이 전체와 같으면
   // "필터 없음"으로 취급해 기존 동작(전체 표시)을 그대로 유지한다.
@@ -1284,6 +1305,19 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
               {pickupContact && <div className="text-gray-700">담당자 {pickupContact}</div>}
             </div>
           </div>
+          {getScheduleViaNames(r).length > 0 && (
+            <div className="flex gap-2">
+              <span className="w-11 shrink-0 font-bold text-amber-600">경유</span>
+              <div className="min-w-0 space-y-0.5">
+                {getScheduleViaNames(r).map((name, vi) => (
+                  <div key={vi} className="flex items-center gap-1 font-semibold text-gray-700">
+                    <span className="inline-flex items-center justify-center w-[15px] h-[15px] rounded-full bg-amber-500 text-white text-[9px] font-extrabold shrink-0">경</span>
+                    {name}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex gap-2">
             <span className="w-11 shrink-0 font-bold text-gray-600">하차</span>
             <div className="min-w-0">
@@ -1427,7 +1461,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
                               <tr key={r._id || r.id || i}>
                                 <td className={`${tdCls} text-center font-bold`}>{r.상차시간 || "즉시"}</td>
                                 <td className={`${tdCls} font-extrabold text-[#1B2B4B]`}>
-                                  {r.상차지명 || "-"} → {r.하차지명 || "-"}
+                                  <ScheduleRoute r={r} />
                                   {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
                                   {_parseWorkDates(r.근무일자목록).length > 1 && (
                                     <span className="ml-1 bg-black text-white text-[10px] font-extrabold rounded px-1 py-0.5 leading-none align-middle">묶음</span>
@@ -1503,7 +1537,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
                                   </td>
                                   <td className={`${tdCls} text-center font-bold`}>{r.상차시간 || "즉시"}</td>
                                   <td className={`${tdCls} font-bold text-gray-900`}>
-                                    {r.상차지명 || "-"} → {r.하차지명 || "-"}
+                                    <ScheduleRoute r={r} />
                                     {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
                                   </td>
                                   <td className={`${tdCls} text-center`}>{r.차량종류 || "-"} / {r.차량톤수 || "-"}</td>
