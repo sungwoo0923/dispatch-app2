@@ -12543,6 +12543,51 @@ const [matchedClients, setMatchedClients] = useState([]);
   const [clientSearchQuery, setClientSearchQuery] = useState("");
 
   // ═══════════════════════════════════════════════════
+  // 필수값(거래처/상차지명/하차지명/화물내용/차량톤수/지급방식) 검증 — PC(DispatchApp.jsx)의
+  // validateRequired와 동일한 6개 항목을 동일한 기준으로 검사한다. 미입력 항목은 빨간
+  // 테두리로 깜빡이며(requiredErrors) 첫 번째 미입력 칸으로 포커스/스크롤을 옮기고,
+  // 어떤 항목이 빠졌는지 알림으로 알려준다 — 등록 버튼을 눌러도 저장이 안 되는데
+  // 이유를 몰라 헤매던 문제를 PC와 동일한 방식으로 해결한다.
+  // ═══════════════════════════════════════════════════
+  const [requiredErrors, setRequiredErrors] = useState(new Set());
+  const pickupNameInputRef = useRef(null);
+  const dropNameInputRef = useRef(null);
+  const cargoInputRef = useRef(null);
+  const tonInputRef = useRef(null);
+  const payTypeSelectRef = useRef(null);
+  const validateRequiredMobile = () => {
+    const miss = [];
+    const missKeys = [];
+    if (!form.거래처명?.trim()) { miss.push("거래처"); missKeys.push("거래처명"); }
+    if (!form.상차지명?.trim()) { miss.push("상차지명"); missKeys.push("상차지명"); }
+    if (!form.하차지명?.trim()) { miss.push("하차지명"); missKeys.push("하차지명"); }
+    if (!String(화물수량 || "").trim()) { miss.push("화물내용"); missKeys.push("화물내용"); }
+    if (!String(톤수값 || "").trim()) { miss.push("차량톤수"); missKeys.push("차량톤수"); }
+    if (!form.지급방식) { miss.push("지급방식"); missKeys.push("지급방식"); }
+    if (miss.length) {
+      setRequiredErrors(new Set(missKeys));
+      if (missKeys.includes("거래처명")) setClientNameError(true);
+      setTimeout(() => { setRequiredErrors(new Set()); setClientNameError(false); }, 2500);
+      const refMap = {
+        거래처명: clientNameInputRef,
+        상차지명: pickupNameInputRef,
+        하차지명: dropNameInputRef,
+        화물내용: cargoInputRef,
+        차량톤수: tonInputRef,
+        지급방식: payTypeSelectRef,
+      };
+      const firstKey = missKeys.find((k) => refMap[k]?.current);
+      if (firstKey) {
+        refMap[firstKey].current.focus?.();
+        refMap[firstKey].current.scrollIntoView?.({ behavior: "smooth", block: "center" });
+      }
+      alert(`필수 항목 누락: ${miss.join(", ")}\n(*) 표시된 항목을 모두 입력하세요.`);
+      return false;
+    }
+    return true;
+  };
+
+  // ═══════════════════════════════════════════════════
   // 거래처 등급(블랙/주의)·오더메모 안내 팝업 — PC와 동일한 기능.
   // 기본거래처(basicClientsOnly)를 먼저 확인하고, 없으면 하차지거래처까지
   // 포함된 병합 풀(clients)에서 찾는다(PC의 findClientAlertTarget과 동일한
@@ -13633,7 +13678,7 @@ const pickDrop = (c) => {
 
       {/* 거래처명 */}
 <div className="px-3 py-2 border-t border-gray-100">
-  <div className="text-[11px] text-gray-500 mb-1">거래처명</div>
+  <div className="text-[11px] text-gray-500 mb-1">거래처명 <span className="text-red-500">*</span></div>
   <div className="flex gap-2">
     <div className="relative flex-1 min-w-0">
       <input autoComplete="off"
@@ -13710,7 +13755,7 @@ const pickDrop = (c) => {
 
   {/* 🔵 상차지 */}
   <RowLabelInput
-    label="상차지"
+    label={<>상차지 <span className="text-red-500">*</span></>}
     labelClassName="font-bold justify-center text-center"
     right={
       <button type="button" onClick={() => openOrderMemoEditor("pickup")} className="text-[#1B2B4B] active:opacity-60" title="상차지 오더메모">
@@ -13727,7 +13772,10 @@ const pickDrop = (c) => {
         {/* 상차지명 + 드롭다운 전용 */}
         <div className="relative">
           <input autoComplete="off"
-            className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
+            ref={pickupNameInputRef}
+            className={`w-full border-0 border-b-2 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none transition ${
+              requiredErrors.has("상차지명") ? "border-red-500 ring-2 ring-red-300 animate-pulse" : "border-gray-300 focus:border-[var(--reg-accent)]"
+            }`}
             value={form.상차지명}
             onChange={(e) => {
               const val = e.target.value;
@@ -13862,7 +13910,7 @@ const pickDrop = (c) => {
 
   {/* 하차지 */}
   <RowLabelInput
-    label="하차지"
+    label={<>하차지 <span className="text-red-500">*</span></>}
     labelClassName="font-bold justify-center text-center"
     right={
       <button type="button" onClick={() => openOrderMemoEditor("drop")} className="text-[#1B2B4B] active:opacity-60" title="하차지 오더메모">
@@ -13879,7 +13927,10 @@ const pickDrop = (c) => {
         {/* 하차지명 + 드롭다운 전용 */}
         <div className="relative">
           <input autoComplete="off"
-            className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
+            ref={dropNameInputRef}
+            className={`w-full border-0 border-b-2 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none transition ${
+              requiredErrors.has("하차지명") ? "border-red-500 ring-2 ring-red-300 animate-pulse" : "border-gray-300 focus:border-[var(--reg-accent)]"
+            }`}
             value={form.하차지명}
             onChange={(e) => {
               const val = e.target.value;
@@ -14033,10 +14084,13 @@ const pickDrop = (c) => {
         />
         {/* 톤수 */}
         <RowLabelInput
-          label="톤수"
+          label={<>톤수 <span className="text-red-500">*</span></>}
           input={
-            <div className="flex items-stretch border-0 border-b-2 border-gray-300 focus-within:border-[var(--reg-accent)] transition">
+            <div className={`flex items-stretch border-0 border-b-2 transition ${
+              requiredErrors.has("차량톤수") ? "border-red-500 ring-2 ring-red-300 animate-pulse" : "border-gray-300 focus-within:border-[var(--reg-accent)]"
+            }`}>
               <input autoComplete="off"
+                ref={tonInputRef}
                 className="flex-1 min-w-0 px-2 py-1.5 text-sm outline-none border-0"
                 placeholder="예: 1"
                 inputMode={톤수타입 ? "decimal" : "text"}
@@ -14069,14 +14123,17 @@ const pickDrop = (c) => {
         />
         {/* 화물내용 */}
         <RowLabelInput
-          label="화물내용"
+          label={<>화물내용 <span className="text-red-500">*</span></>}
           input={
             <div className="space-y-1">
               <div className="flex justify-end">
                 <button type="button" className={`px-1.5 py-0.5 text-[10px] font-bold rounded text-white ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`} onClick={() => { setMCargoAddQty(""); setMCargoAddType(""); setMCargoAddPopup(true); }}>+ 추가</button>
               </div>
-              <div className="flex items-stretch border-0 border-b-2 border-gray-300 focus-within:border-[var(--reg-accent)] transition">
+              <div className={`flex items-stretch border-0 border-b-2 transition ${
+                requiredErrors.has("화물내용") ? "border-red-500 ring-2 ring-red-300 animate-pulse" : "border-gray-300 focus-within:border-[var(--reg-accent)]"
+              }`}>
                 <input autoComplete="off"
+                  ref={cargoInputRef}
                   className="flex-1 min-w-0 px-2 py-1.5 text-sm outline-none border-0"
                   placeholder="예: 3"
                   inputMode={화물타입 ? "decimal" : "text"}
@@ -14198,12 +14255,15 @@ const pickDrop = (c) => {
       {/* 배차방식은 화주사 오더라도 운송사가 항상 수정할 수 있어야 하므로 잠금 fieldset 밖에 둔다 */}
       <div className="border-t border-gray-100">
         <RowLabelInput
-          label="지급/배차방식"
+          label={<>지급/배차방식 <span className="text-red-500">*</span></>}
           input={
             <div className="flex flex-wrap gap-1.5">
               <fieldset disabled={isLockedShipperEdit} style={{ display: "contents" }}>
                 <select
-                  className="flex-1 min-w-[90px] border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
+                  ref={payTypeSelectRef}
+                  className={`flex-1 min-w-[90px] border-0 border-b-2 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none transition ${
+                    requiredErrors.has("지급방식") ? "border-red-500 ring-2 ring-red-300 animate-pulse" : "border-gray-300 focus:border-[var(--reg-accent)]"
+                  }`}
                   value={form.지급방식}
                   onChange={(e) => update("지급방식", e.target.value)}
                 >
@@ -14594,6 +14654,7 @@ const pickDrop = (c) => {
       <div className="mt-4 mb-8 space-y-2">
         <button
           onClick={() => {
+            if (!validateRequiredMobile()) return;
             // ⭐ 신규 기사면 여기서 자동 등록 — 아래 저장/등록과 별도 버튼을 누를 필요 없다.
             if (showNewDriver && (form.차량번호 || "").trim()) {
               upsertDriver({ 차량번호: form.차량번호, 이름: form.기사명 || "", 전화번호: form.전화번호 || "" });
