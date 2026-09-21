@@ -7549,20 +7549,79 @@ function MobileOrderList({
     if (/냉장|냉동/.test(t)) return "냉장냉동";
     return "일반";
   };
+
+  // ── 정렬 — 배차방식/지급방식/청구·기사운임 누락 등 기준으로 목록을 다시 정렬한다.
+  // 날짜 구분(그룹 헤더)은 그대로 두고, 같은 날짜 안에서의 순서만 바꾼다.
+  // "기본순"(default)은 기존 배차상태 우선순위+최신순 그대로 둔다.
+  const [orderSortOpen, setOrderSortOpen] = useState(false);
+  const [orderSortMode, setOrderSortMode] = useState("default");
+  const ORDER_SORT_OPTIONS = [
+    { key: "default", label: "기본순", desc: "배차요청 → 배차중 → 배차완료, 최신순" },
+    { key: "status", label: "배차상태순", desc: "배차요청/보류 → 배차중 → 배차완료" },
+    { key: "chargeMissing", label: "청구운임 없는 오더 먼저", desc: "청구운임 미입력 오더를 위로" },
+    { key: "driverFeeMissing", label: "기사운임 없는 오더 먼저", desc: "기사운임 미입력 오더를 위로" },
+    { key: "assignMethod", label: "배차방식별", desc: "24시 · 직접배차 · 인성 · 고정기사 · 미지정 순" },
+    { key: "payType", label: "지급방식별", desc: "계산서 · 착불 · 선불 · 손실 · 개인 · 취소 · 미지정 순" },
+    { key: "chargeDesc", label: "청구운임 높은순", desc: "" },
+    { key: "chargeAsc", label: "청구운임 낮은순", desc: "" },
+    { key: "driverFeeDesc", label: "기사운임 높은순", desc: "" },
+    { key: "driverFeeAsc", label: "기사운임 낮은순", desc: "" },
+  ];
+  const ASSIGN_METHOD_ORDER = { "24시": 0, "직접배차": 1, "인성": 2, "고정기사": 3 };
+  const PAY_TYPE_ORDER = { "계산서": 0, "착불": 1, "선불": 2, "손실": 3, "개인": 4, "취소": 5 };
+  const sortOrdersByMode = (list) => {
+    if (orderSortMode === "default") return list;
+    const arr = [...list];
+    const hasCharge = (o) => Number(o.청구운임) > 0;
+    const hasDriverFee = (o) => Number(o.기사운임) > 0;
+    switch (orderSortMode) {
+      case "status":
+        arr.sort((a, b) => getOrderSortTier(a) - getOrderSortTier(b) || getOrderSortTime(b) - getOrderSortTime(a));
+        break;
+      case "chargeMissing":
+        arr.sort((a, b) => (hasCharge(a) ? 1 : 0) - (hasCharge(b) ? 1 : 0));
+        break;
+      case "driverFeeMissing":
+        arr.sort((a, b) => (hasDriverFee(a) ? 1 : 0) - (hasDriverFee(b) ? 1 : 0));
+        break;
+      case "assignMethod":
+        arr.sort((a, b) => (ASSIGN_METHOD_ORDER[a.배차방식] ?? 99) - (ASSIGN_METHOD_ORDER[b.배차방식] ?? 99));
+        break;
+      case "payType":
+        arr.sort((a, b) => (PAY_TYPE_ORDER[a.지급방식] ?? 99) - (PAY_TYPE_ORDER[b.지급방식] ?? 99));
+        break;
+      case "chargeDesc":
+        arr.sort((a, b) => Number(b.청구운임 || 0) - Number(a.청구운임 || 0));
+        break;
+      case "chargeAsc":
+        arr.sort((a, b) => Number(a.청구운임 || 0) - Number(b.청구운임 || 0));
+        break;
+      case "driverFeeDesc":
+        arr.sort((a, b) => Number(b.기사운임 || 0) - Number(a.기사운임 || 0));
+        break;
+      case "driverFeeAsc":
+        arr.sort((a, b) => Number(a.기사운임 || 0) - Number(b.기사운임 || 0));
+        break;
+      default:
+        break;
+    }
+    return arr;
+  };
+
   // 아래 dates/statusCount/summary/allVisibleOrders 등 이 함수 전체가 groupedByDate를
-  // 그대로 참조하므로, 여기서 같은 이름으로 다시 선언해 필터링된 결과로 가려버린다
+  // 그대로 참조하므로, 여기서 같은 이름으로 다시 선언해 필터링·정렬된 결과로 가려버린다
   // (한 곳만 고치면 전체에 일관되게 반영됨).
   const groupedByDateRaw = groupedByDate;
-  groupedByDate = orderTypeFilter.size === 0
-    ? groupedByDateRaw
-    : (() => {
-        const next = new Map();
-        groupedByDateRaw.forEach((list, key) => {
-          const filtered = list.filter(o => orderTypeFilter.has(classifyOrderType(o)));
-          if (filtered.length) next.set(key, filtered);
-        });
-        return next;
-      })();
+  groupedByDate = (() => {
+    const next = new Map();
+    groupedByDateRaw.forEach((list, key) => {
+      const filtered = orderTypeFilter.size === 0
+        ? list
+        : list.filter(o => orderTypeFilter.has(classifyOrderType(o)));
+      if (filtered.length) next.set(key, sortOrdersByMode(filtered));
+    });
+    return next;
+  })();
   const [uploadLinkModal, setUploadLinkModal] = useState(false);
   const [estimateModal, setEstimateModal] = useState(false);
   const [deleteConfirmOrder, setDeleteConfirmOrder] = useState(null);
@@ -7975,6 +8034,18 @@ const summary = useMemo(() => {
             오더필터{orderTypeFilter.size > 0 && ` (${orderTypeFilter.size})`}
           </button>
           <button
+            onClick={() => setOrderSortOpen(true)}
+            className={`text-[12px] font-semibold border transition-colors ${
+              orderSortMode !== "default"
+                ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                : cardVersionB
+                  ? "bg-white text-[#1B2B4B] border-[#1B2B4B]/30 hover:bg-[#1B2B4B]/5"
+                  : "bg-white text-gray-600 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
+            } ${cardVersionB ? "px-3 py-1 rounded-lg" : "px-3 py-1 rounded-full"}`}
+          >
+            정렬{orderSortMode !== "default" && ` · ${ORDER_SORT_OPTIONS.find(o => o.key === orderSortMode)?.label || ""}`}
+          </button>
+          <button
             onClick={() => multiSelectMode ? exitMultiSelect() : setMultiSelectMode(true)}
             className={`text-[12px] font-semibold border transition-colors ${
               multiSelectMode
@@ -8232,6 +8303,50 @@ const summary = useMemo(() => {
               적용
             </button>
           </div>
+        </div>
+      </div>
+    )}
+
+    {/* ── 정렬 ── */}
+    {orderSortOpen && (
+      <div className="fixed inset-0 z-[9999] flex items-end justify-center" style={{ background: "rgba(0,0,0,0.45)" }} onClick={() => setOrderSortOpen(false)}>
+        <div
+          className="w-full max-w-md bg-white rounded-t-2xl px-5 pt-5 pb-8 shadow-2xl max-h-[80vh] overflow-y-auto"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="w-10 h-1 rounded-full bg-gray-200 mx-auto mb-4" />
+          <div className="flex items-center justify-between mb-4">
+            <span className={`font-bold text-[15px] ${cardVersionB ? "text-[#1B2B4B]" : "text-gray-900"}`}>정렬</span>
+            <button onClick={() => setOrderSortOpen(false)} className="text-gray-400 text-xl leading-none">&times;</button>
+          </div>
+          <div className="space-y-2 mb-5">
+            {ORDER_SORT_OPTIONS.map(opt => {
+              const checked = orderSortMode === opt.key;
+              return (
+                <button
+                  key={opt.key}
+                  onClick={() => { setOrderSortMode(opt.key); setOrderSortOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-colors ${
+                    checked ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 bg-white"
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${checked ? "border-[#1B2B4B]" : "border-gray-300"}`}>
+                    {checked && <div className="w-2.5 h-2.5 rounded-full bg-[#1B2B4B]" />}
+                  </div>
+                  <div className="min-w-0">
+                    <div className={`text-[13px] font-bold ${checked ? "text-[#1B2B4B]" : "text-gray-800"}`}>{opt.label}</div>
+                    {opt.desc && <div className="text-[11px] text-gray-400 mt-0.5">{opt.desc}</div>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <button
+            className="w-full py-3 rounded-xl text-[14px] font-semibold border border-gray-300 text-gray-600 bg-white"
+            onClick={() => { setOrderSortMode("default"); setOrderSortOpen(false); }}
+          >
+            기본순으로 초기화
+          </button>
         </div>
       </div>
     )}
