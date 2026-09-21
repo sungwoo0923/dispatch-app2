@@ -7539,56 +7539,56 @@ function MobileOrderList({
     setAttachViewOrder(order);
   };
   const [selectedIds, setSelectedIds] = useState(new Set());
-  // ── 오더필터(일반오더/오토바이/냉장·냉동) — 기존 차종선택(vehicleFilter)과 별개로,
-  // 차량종류를 3개 큰 분류로 묶어 필터링한다. 아무것도 선택 안 하면 전체 표시.
+  // ── 오더필터 — 차종/배차방식/지급방식/청구·기사운임 누락 여부로 목록을 좁혀서 본다
+  // (선택한 조건에 해당하는 것만 남기고 나머지는 안 보이게).
   const [orderTypeFilterOpen, setOrderTypeFilterOpen] = useState(false);
   const [orderTypeFilter, setOrderTypeFilter] = useState(() => new Set());
+  const [assignMethodFilter, setAssignMethodFilter] = useState(() => new Set());
+  const [payTypeFilter, setPayTypeFilter] = useState(() => new Set());
+  const [chargeMissingOnly, setChargeMissingOnly] = useState(false);
+  const [driverFeeMissingOnly, setDriverFeeMissingOnly] = useState(false);
   const classifyOrderType = (o) => {
     const t = String(o?.차량종류 || o?.차종 || "");
     if (/오토바이/.test(t)) return "오토바이";
     if (/냉장|냉동/.test(t)) return "냉장냉동";
     return "일반";
   };
+  const ASSIGN_METHOD_KEYS = ["24시", "직접배차", "인성", "고정기사", "미지정"];
+  const PAY_TYPE_KEYS = ["계산서", "착불", "선불", "손실", "개인", "취소", "미지정"];
+  const classifyAssignMethod = (o) => ASSIGN_METHOD_KEYS.includes(o?.배차방식) ? o.배차방식 : "미지정";
+  const classifyPayType = (o) => PAY_TYPE_KEYS.includes(o?.지급방식) ? o.지급방식 : "미지정";
+  const activeFilterCount = orderTypeFilter.size + assignMethodFilter.size + payTypeFilter.size
+    + (chargeMissingOnly ? 1 : 0) + (driverFeeMissingOnly ? 1 : 0);
+  const resetOrderFilters = () => {
+    setOrderTypeFilter(new Set());
+    setAssignMethodFilter(new Set());
+    setPayTypeFilter(new Set());
+    setChargeMissingOnly(false);
+    setDriverFeeMissingOnly(false);
+  };
 
-  // ── 정렬 — 배차방식/지급방식/청구·기사운임 누락 등 기준으로 목록을 다시 정렬한다.
-  // 날짜 구분(그룹 헤더)은 그대로 두고, 같은 날짜 안에서의 순서만 바꾼다.
-  // "기본순"(default)은 기존 배차상태 우선순위+최신순 그대로 둔다.
+  // ── 정렬 — 목록의 순서만 바꾼다(항목을 숨기지 않음). 날짜 구분(그룹 헤더)은
+  // 그대로 두고, 같은 날짜 안에서의 순서만 바꾼다.
   const [orderSortOpen, setOrderSortOpen] = useState(false);
   const [orderSortMode, setOrderSortMode] = useState("default");
   const ORDER_SORT_OPTIONS = [
-    { key: "default", label: "기본순", desc: "배차요청 → 배차중 → 배차완료, 최신순" },
-    { key: "status", label: "배차상태순", desc: "배차요청/보류 → 배차중 → 배차완료" },
-    { key: "chargeMissing", label: "청구운임 없는 오더 먼저", desc: "청구운임 미입력 오더를 위로" },
-    { key: "driverFeeMissing", label: "기사운임 없는 오더 먼저", desc: "기사운임 미입력 오더를 위로" },
-    { key: "assignMethod", label: "배차방식별", desc: "24시 · 직접배차 · 인성 · 고정기사 · 미지정 순" },
-    { key: "payType", label: "지급방식별", desc: "계산서 · 착불 · 선불 · 손실 · 개인 · 취소 · 미지정 순" },
-    { key: "chargeDesc", label: "청구운임 높은순", desc: "" },
-    { key: "chargeAsc", label: "청구운임 낮은순", desc: "" },
-    { key: "driverFeeDesc", label: "기사운임 높은순", desc: "" },
-    { key: "driverFeeAsc", label: "기사운임 낮은순", desc: "" },
+    { key: "default", label: "기본순" },
+    { key: "status", label: "배차상태순" },
+    { key: "client", label: "거래처순" },
+    { key: "chargeDesc", label: "청구운임 높은순" },
+    { key: "chargeAsc", label: "청구운임 낮은순" },
+    { key: "driverFeeDesc", label: "기사운임 높은순" },
+    { key: "driverFeeAsc", label: "기사운임 낮은순" },
   ];
-  const ASSIGN_METHOD_ORDER = { "24시": 0, "직접배차": 1, "인성": 2, "고정기사": 3 };
-  const PAY_TYPE_ORDER = { "계산서": 0, "착불": 1, "선불": 2, "손실": 3, "개인": 4, "취소": 5 };
   const sortOrdersByMode = (list) => {
     if (orderSortMode === "default") return list;
     const arr = [...list];
-    const hasCharge = (o) => Number(o.청구운임) > 0;
-    const hasDriverFee = (o) => Number(o.기사운임) > 0;
     switch (orderSortMode) {
       case "status":
         arr.sort((a, b) => getOrderSortTier(a) - getOrderSortTier(b) || getOrderSortTime(b) - getOrderSortTime(a));
         break;
-      case "chargeMissing":
-        arr.sort((a, b) => (hasCharge(a) ? 1 : 0) - (hasCharge(b) ? 1 : 0));
-        break;
-      case "driverFeeMissing":
-        arr.sort((a, b) => (hasDriverFee(a) ? 1 : 0) - (hasDriverFee(b) ? 1 : 0));
-        break;
-      case "assignMethod":
-        arr.sort((a, b) => (ASSIGN_METHOD_ORDER[a.배차방식] ?? 99) - (ASSIGN_METHOD_ORDER[b.배차방식] ?? 99));
-        break;
-      case "payType":
-        arr.sort((a, b) => (PAY_TYPE_ORDER[a.지급방식] ?? 99) - (PAY_TYPE_ORDER[b.지급방식] ?? 99));
+      case "client":
+        arr.sort((a, b) => String(a.거래처명 || "").localeCompare(String(b.거래처명 || ""), "ko"));
         break;
       case "chargeDesc":
         arr.sort((a, b) => Number(b.청구운임 || 0) - Number(a.청구운임 || 0));
@@ -7615,9 +7615,12 @@ function MobileOrderList({
   groupedByDate = (() => {
     const next = new Map();
     groupedByDateRaw.forEach((list, key) => {
-      const filtered = orderTypeFilter.size === 0
-        ? list
-        : list.filter(o => orderTypeFilter.has(classifyOrderType(o)));
+      let filtered = list;
+      if (orderTypeFilter.size > 0) filtered = filtered.filter(o => orderTypeFilter.has(classifyOrderType(o)));
+      if (assignMethodFilter.size > 0) filtered = filtered.filter(o => assignMethodFilter.has(classifyAssignMethod(o)));
+      if (payTypeFilter.size > 0) filtered = filtered.filter(o => payTypeFilter.has(classifyPayType(o)));
+      if (chargeMissingOnly) filtered = filtered.filter(o => !(Number(o.청구운임) > 0));
+      if (driverFeeMissingOnly) filtered = filtered.filter(o => !(Number(o.기사운임) > 0));
       if (filtered.length) next.set(key, sortOrdersByMode(filtered));
     });
     return next;
@@ -8024,14 +8027,14 @@ const summary = useMemo(() => {
           <button
             onClick={() => setOrderTypeFilterOpen(true)}
             className={`text-[12px] font-semibold border transition-colors ${
-              orderTypeFilter.size > 0
+              activeFilterCount > 0
                 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
                 : cardVersionB
                   ? "bg-white text-[#1B2B4B] border-[#1B2B4B]/30 hover:bg-[#1B2B4B]/5"
                   : "bg-white text-gray-600 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
             } ${cardVersionB ? "px-3 py-1 rounded-lg" : "px-3 py-1 rounded-full"}`}
           >
-            오더필터{orderTypeFilter.size > 0 && ` (${orderTypeFilter.size})`}
+            오더필터{activeFilterCount > 0 && ` (${activeFilterCount})`}
           </button>
           <button
             onClick={() => setOrderSortOpen(true)}
@@ -8245,11 +8248,11 @@ const summary = useMemo(() => {
       </div>
     )}
 
-    {/* ── 오더필터 (일반오더/오토바이/냉장·냉동) ── */}
+    {/* ── 오더필터 ── */}
     {orderTypeFilterOpen && (
       <div className="fixed inset-0 z-[9999] flex items-end justify-center" style={{ background: "rgba(0,0,0,0.45)" }} onClick={() => setOrderTypeFilterOpen(false)}>
         <div
-          className="w-full max-w-md bg-white rounded-t-2xl px-5 pt-5 pb-8 shadow-2xl"
+          className="w-full max-w-md bg-white rounded-t-2xl px-5 pt-5 pb-8 shadow-2xl max-h-[85vh] overflow-y-auto"
           onClick={e => e.stopPropagation()}
         >
           <div className="w-10 h-1 rounded-full bg-gray-200 mx-auto mb-4" />
@@ -8257,42 +8260,63 @@ const summary = useMemo(() => {
             <span className={`font-bold text-[15px] ${cardVersionB ? "text-[#1B2B4B]" : "text-gray-900"}`}>오더필터</span>
             <button onClick={() => setOrderTypeFilterOpen(false)} className="text-gray-400 text-xl leading-none">&times;</button>
           </div>
-          <div className="space-y-2 mb-5">
+
+          {[
+            { title: "차종", set: orderTypeFilter, setSet: setOrderTypeFilter, keys: [["일반", "일반오더"], ["오토바이", "오토바이"], ["냉장냉동", "냉장/냉동"]] },
+            { title: "배차방식", set: assignMethodFilter, setSet: setAssignMethodFilter, keys: ASSIGN_METHOD_KEYS.map(k => [k, k]) },
+            { title: "지급방식", set: payTypeFilter, setSet: setPayTypeFilter, keys: PAY_TYPE_KEYS.map(k => [k, k]) },
+          ].map(group => (
+            <div key={group.title} className="mb-4">
+              <div className="text-[12px] font-bold text-gray-400 mb-2">{group.title}</div>
+              <div className="flex flex-wrap gap-2">
+                {group.keys.map(([key, label]) => {
+                  const checked = group.set.has(key);
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => group.setSet(prev => {
+                        const next = new Set(prev);
+                        checked ? next.delete(key) : next.add(key);
+                        return next;
+                      })}
+                      className={`px-3 py-1.5 rounded-full text-[12px] font-bold border-2 transition-colors ${
+                        checked ? "border-[#1B2B4B] bg-[#1B2B4B] text-white" : "border-gray-200 bg-white text-gray-600"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          <div className="mb-5 space-y-2">
             {[
-              { key: "일반", label: "일반오더", desc: "라보/라보스, 윙, 카고, 탑 등 (오토바이·냉장·냉동 제외)" },
-              { key: "오토바이", label: "오토바이", desc: "차량종류에 오토바이가 포함된 오더" },
-              { key: "냉장냉동", label: "냉장/냉동", desc: "차량종류에 냉장 또는 냉동이 포함된 오더" },
-            ].map(opt => {
-              const checked = orderTypeFilter.has(opt.key);
-              return (
-                <button
-                  key={opt.key}
-                  onClick={() => setOrderTypeFilter(prev => {
-                    const next = new Set(prev);
-                    checked ? next.delete(opt.key) : next.add(opt.key);
-                    return next;
-                  })}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-colors ${
-                    checked ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 bg-white"
-                  }`}
-                >
-                  <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 ${checked ? "bg-[#1B2B4B] border-[#1B2B4B]" : "border-gray-300"}`}>
-                    {checked && (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <div className={`text-[13px] font-bold ${checked ? "text-[#1B2B4B]" : "text-gray-800"}`}>{opt.label}</div>
-                    <div className="text-[11px] text-gray-400 mt-0.5">{opt.desc}</div>
-                  </div>
-                </button>
-              );
-            })}
+              { checked: chargeMissingOnly, toggle: () => setChargeMissingOnly(v => !v), label: "청구운임 없는 오더만" },
+              { checked: driverFeeMissingOnly, toggle: () => setDriverFeeMissingOnly(v => !v), label: "기사운임 없는 오더만" },
+            ].map(row => (
+              <button
+                key={row.label}
+                onClick={row.toggle}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-colors ${
+                  row.checked ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 bg-white"
+                }`}
+              >
+                <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 ${row.checked ? "bg-[#1B2B4B] border-[#1B2B4B]" : "border-gray-300"}`}>
+                  {row.checked && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  )}
+                </div>
+                <div className={`text-[13px] font-bold ${row.checked ? "text-[#1B2B4B]" : "text-gray-800"}`}>{row.label}</div>
+              </button>
+            ))}
           </div>
+
           <div className="flex gap-3">
             <button
               className="flex-1 py-3 rounded-xl text-[14px] font-semibold border border-gray-300 text-gray-600 bg-white"
-              onClick={() => setOrderTypeFilter(new Set())}
+              onClick={resetOrderFilters}
             >
               초기화
             </button>
@@ -8319,7 +8343,7 @@ const summary = useMemo(() => {
             <span className={`font-bold text-[15px] ${cardVersionB ? "text-[#1B2B4B]" : "text-gray-900"}`}>정렬</span>
             <button onClick={() => setOrderSortOpen(false)} className="text-gray-400 text-xl leading-none">&times;</button>
           </div>
-          <div className="space-y-2 mb-5">
+          <div className="space-y-2">
             {ORDER_SORT_OPTIONS.map(opt => {
               const checked = orderSortMode === opt.key;
               return (
@@ -8333,20 +8357,11 @@ const summary = useMemo(() => {
                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${checked ? "border-[#1B2B4B]" : "border-gray-300"}`}>
                     {checked && <div className="w-2.5 h-2.5 rounded-full bg-[#1B2B4B]" />}
                   </div>
-                  <div className="min-w-0">
-                    <div className={`text-[13px] font-bold ${checked ? "text-[#1B2B4B]" : "text-gray-800"}`}>{opt.label}</div>
-                    {opt.desc && <div className="text-[11px] text-gray-400 mt-0.5">{opt.desc}</div>}
-                  </div>
+                  <div className={`text-[13px] font-bold ${checked ? "text-[#1B2B4B]" : "text-gray-800"}`}>{opt.label}</div>
                 </button>
               );
             })}
           </div>
-          <button
-            className="w-full py-3 rounded-xl text-[14px] font-semibold border border-gray-300 text-gray-600 bg-white"
-            onClick={() => { setOrderSortMode("default"); setOrderSortOpen(false); }}
-          >
-            기본순으로 초기화
-          </button>
         </div>
       </div>
     )}
