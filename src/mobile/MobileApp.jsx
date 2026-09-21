@@ -12133,7 +12133,7 @@ const handleAssignClick = () => {
 // ======================================================================
 // 스마트 오더 분석
 // ======================================================================
-function SmartOrderParser({ clients, onApply, onClose, cardVersionB = false }) {
+function SmartOrderParser({ clients, drivers = [], onApply, onClose, cardVersionB = false }) {
   const [text, setText] = useState("");
   const [result, setResult] = useState(null);
   const [parsing, setParsing] = useState(false);
@@ -12186,20 +12186,22 @@ function SmartOrderParser({ clients, onApply, onClose, cardVersionB = false }) {
     return null;
   };
 
+  // ⚠️ 예전엔 앞에서부터 몇 글자가 같은지(접두어)만 8글자 넘게 일치하면 매칭시켰는데,
+  // 한국 주소는 "경기도 용인시 기흥구..." 처럼 시/군/구까지는 완전히 다른 업체라도
+  // 흔히 겹치기 때문에, 상세 지번/도로명이 전혀 다른 신규 주소인데도 예전에 등록된
+  // 엉뚱한 거래처와 잘못 매칭되는 원인이었다. 한쪽 주소 전체가 다른 쪽에 통째로
+  // 포함될 때만(=사실상 같은 주소) 매칭하도록 바꿔, 이력이 없는 진짜 신규 주소는
+  // 매칭 없이 붙여넣은 그대로 입력되게 한다.
   const matchClientByAddress = (addr) => {
     const normAddr = normalize(addr);
     if (normAddr.length < 10) return null;
-    let best = null, bestScore = 0;
+    let best = null, bestLen = 0;
     for (const c of clients) {
       const ca = normalize(c.주소 || "");
-      if (ca.length < 8) continue;
-      let score = 0;
-      const minLen = Math.min(normAddr.length, ca.length);
-      for (let i = 0; i < minLen; i++) {
-        if (normAddr[i] === ca[i]) score++;
-        else break;
+      if (ca.length < 10) continue;
+      if (normAddr === ca || normAddr.includes(ca) || ca.includes(normAddr)) {
+        if (ca.length > bestLen) { bestLen = ca.length; best = c; }
       }
-      if (score > bestScore && score >= 8) { bestScore = score; best = c; }
     }
     return best;
   };
@@ -12384,6 +12386,38 @@ function SmartOrderParser({ clients, onApply, onClose, cardVersionB = false }) {
           }
         }
 
+        // ── 지급방식 — "부가세별도"는 계산서, "선불"/"착불"은 문구 그대로 매칭 ──
+        if (/착불/.test(text)) res.지급방식 = "착불";
+        else if (/선불/.test(text)) res.지급방식 = "선불";
+        else if (/부가세\s*별도/.test(text)) res.지급방식 = "계산서";
+
+        // ── 기사정보(기사명/전화번호/차량번호) — 차량번호로 기존 기사와 대조해서,
+        // 이미 등록된 기사면 저장된 이름/번호로 정확히 채우고, 처음 보는 차량번호면
+        // 붙여넣은 텍스트 그대로(신규 기사)를 채운다. ──
+        const norm = (s) => String(s || "").replace(/\s+/g, "").toLowerCase();
+        const plateLabelM = text.match(/(?:차량\s*번호|차\s*번)\s*[:：]?[ \t]*([가-힣]{0,4}[ \t]?\d{2,3}[ \t]?[가-힣][ \t]?\d{4})/);
+        const plateBareM = text.match(/[가-힣]{0,4}[ \t]?\d{2,3}[ \t]?[가-힣][ \t]?\d{4}/);
+        const platRaw = (plateLabelM?.[1] || plateBareM?.[0] || "").replace(/\s+/g, "");
+        const driverPhoneLabelM = text.match(/(?:기사|기사님|연락처|전화)[^\n]{0,6}(01[0-9][-\s]?\d{3,4}[-\s]?\d{4})/);
+        const driverPhoneBareM = text.match(/01[0-9][-\s]?\d{3,4}[-\s]?\d{4}/);
+        const driverPhoneRaw = driverPhoneLabelM?.[1] || driverPhoneBareM?.[0] || "";
+        const nameLabelM = text.match(/기사\s*명?\s*[:：]\s*([가-힣]{2,4})/);
+        const nameNearM = text.match(/([가-힣]{2,4})\s*기사님?(?!\S)/) || text.match(/기사님?\s*[:\-]?\s*([가-힣]{2,4})/);
+        const driverNameRaw = nameLabelM?.[1] || nameNearM?.[1] || "";
+
+        if (platRaw || driverPhoneRaw || driverNameRaw) {
+          const matchedDriver = platRaw ? (drivers || []).find((d) => norm(d.차량번호) === norm(platRaw)) : null;
+          if (matchedDriver) {
+            res.차량번호 = matchedDriver.차량번호;
+            res.기사명 = matchedDriver.이름 || driverNameRaw || "";
+            res.전화번호 = matchedDriver.전화번호 || driverPhoneRaw || "";
+          } else {
+            if (platRaw) res.차량번호 = platRaw;
+            if (driverNameRaw) res.기사명 = driverNameRaw;
+            if (driverPhoneRaw) res.전화번호 = driverPhoneRaw;
+          }
+        }
+
         setResult(res);
       } catch (e) {
         console.error(e);
@@ -12401,6 +12435,7 @@ function SmartOrderParser({ clients, onApply, onClose, cardVersionB = false }) {
     하차지담당자: "하차 담당자", 하차지담당자번호: "하차 연락처",
     톤수: "톤수", 차종: "차종", 화물내용: "화물",
     상차방법: "상차방법", 하차방법: "하차방법",
+    지급방식: "지급방식", 기사명: "기사명", 전화번호: "기사 연락처", 차량번호: "차량번호",
   };
 
   const hasResult = result && Object.keys(result).length > 0;
@@ -16152,6 +16187,7 @@ const pickDrop = (c) => {
       {showSmartParser && (
         <SmartOrderParser
           clients={clients || []}
+          drivers={drivers || []}
           cardVersionB={cardVersionB}
           onApply={(parsed) => {
             setForm(prev => ({
@@ -16174,6 +16210,10 @@ const pickDrop = (c) => {
               ...(parsed.화물내용 && { 화물내용: parsed.화물내용 }),
               ...(parsed.상차방법 && { 상차방법: parsed.상차방법 }),
               ...(parsed.하차방법 && { 하차방법: parsed.하차방법 }),
+              ...(parsed.지급방식 && { 지급방식: parsed.지급방식 }),
+              ...(parsed.기사명 && { 기사명: parsed.기사명 }),
+              ...(parsed.전화번호 && { 전화번호: parsed.전화번호 }),
+              ...(parsed.차량번호 && { 차량번호: parsed.차량번호 }),
             }));
           }}
           onClose={() => setShowSmartParser(false)}
