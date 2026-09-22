@@ -1057,6 +1057,18 @@ const shortAddr = (addr = "") => {
   return `${region} ${second}`;
 };
 
+// 아주 짧은 간단주소: "경기도 이천시 마장면..." → "경기이천" (공백/시·군·구 제거,
+// 어느 화면 너비에서도 줄바꿈 없이 한 줄로 보여줘야 하는 곳에 쓴다)
+const tinyAddr = (addr = "") => {
+  const parts = String(addr || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "";
+  const region = parts[0].replace(/(특별자치시|특별자치도|특별시|광역시|자치시|도)$/, "");
+  const second = parts[1] || "";
+  let city = second.replace(/(특별자치시|시|군|구)$/, "");
+  if (second && city.length < 2) city = second; // "서구"처럼 한 글자만 남으면 원래 표기 유지
+  return `${region}${city}`;
+};
+
 // 날짜 헤더: 2025-11-24 → 11.24(월)
 const weekday = ["일", "월", "화", "수", "목", "금", "토"];
 const formatDateHeader = (dateStr) => {
@@ -3092,7 +3104,7 @@ base = base.filter((o) => {
     return normalize(o.거래처명).includes(q);
 
   if (appliedSearchType === "기사명")
-    return normalize(o.기사명).includes(q);
+    return normalize(o.기사명 || o.이름).includes(q);
 
   if (appliedSearchType === "차량번호")
     return normalize(o.차량번호).includes(q);
@@ -9271,11 +9283,21 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
         onClick={e => e.stopPropagation()}
       >
         <div className={`w-10 h-1 rounded-full mx-auto mb-3 ${bStyle ? "bg-[#1B2B4B]/15" : "bg-gray-200"}`} />
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-1.5">
           <span className={`text-[15px] font-bold ${bStyle ? "text-[#1B2B4B]" : "text-gray-900"}`}>일부 수정</span>
           <button onClick={onClose} className="p-1 text-gray-400">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
+        </div>
+
+        {/* ⭐ 어느 오더를 수정 중인지 한눈에: 날짜 · 상차지→하차지(간단주소) — 화면
+            너비와 무관하게 항상 한 줄로 보이도록 truncate 처리 */}
+        <div className="flex items-center gap-1 mb-4 text-[11px] text-gray-500 whitespace-nowrap overflow-hidden">
+          <span className="shrink-0 font-semibold text-gray-600">{formatDateHeader(order.상차일)}</span>
+          <span className="shrink-0">·</span>
+          <span className="truncate">
+            {order.상차지명 || "-"}{order.상차지주소 ? `(${tinyAddr(order.상차지주소)})` : ""} → {order.하차지명 || "-"}{order.하차지주소 ? `(${tinyAddr(order.하차지주소)})` : ""}
+          </span>
         </div>
 
         {/* 운임 */}
