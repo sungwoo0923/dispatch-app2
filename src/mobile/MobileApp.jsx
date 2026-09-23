@@ -659,7 +659,7 @@ function findDuplicateOrders(form, existingRows) {
   });
 }
 
-// ⭐ 등록내역 헤더의 "중복확인" 버튼 — 이미 등록된 오더들 중, 상/하차지·운임 등
+// ⭐ 등록내역 헤더의 "오더 검증" 버튼 — 이미 등록된 오더들 중, 상/하차지·운임 등
 // 오더 내용은 물론 기사명·차량번호·전화번호까지 전부 똑같은 것들끼리 묶어서
 // 찾아낸다(단순히 같은 기사가 같은 날 다른 오더를 여러 건 뛰는 정상적인 경우까지
 // 중복으로 잘못 잡지 않도록, 기사정보까지 완전히 같은 것만 중복으로 본다).
@@ -690,31 +690,104 @@ function findExactDuplicateOrderGroups(list = []) {
     .sort((a, b) => (b[0].상차일 || "").localeCompare(a[0].상차일 || ""));
 }
 
-// 중복 확인 결과 팝업 — 그룹별로 완전히 같은 오더가 몇 건씩 등록돼 있는지 보여주고,
-// 필요 없는 건 그 자리에서 바로 취소(소프트 삭제)할 수 있게 한다.
-function MobileDuplicateCheckModal({ groups, onClose, onCancelOrder }) {
+// ⭐ 중복 말고도 자주 나오는 입력 실수 3가지를 같이 검사한다 — 전부 "저장은 됐지만
+// 데이터가 이상한" 케이스라 새로고침으로는 안 걸러지고, 눈으로 하나씩 훑어보기도
+// 힘들어서 한 번에 모아 보여준다.
+// 1) 날짜 역전: 하차일이 상차일보다 빠름 (PC/모바일 등록폼의 isReversedDateOrder와 동일 기준)
+// 2) 운임 역전: 기사운임이 청구운임보다 큼 (마이너스 수수료 — 자리를 바꿔 입력했을 가능성)
+// 3) 전화번호 형식: 배차된(차량번호 있는) 오더인데 전화번호가 8/10/11자리 숫자가 아님
+function findOrderIssues(list = []) {
+  const duplicates = findExactDuplicateOrderGroups(list);
+  const reversedDate = [];
+  const feeReversed = [];
+  const badPhone = [];
+
+  list.forEach((o) => {
+    if (!o) return;
+    if (isReversedDateOrder(o.상차일, o.하차일)) reversedDate.push(o);
+
+    const carAssigned = String(o.차량번호 || "").trim();
+    if (!carAssigned) return; // 아래 두 검사는 배차완료(기사 배정) 건에만 의미가 있음
+
+    const claim = Number(o.청구운임) || 0;
+    const fee = Number(o.기사운임) || 0;
+    if (claim > 0 && fee > 0 && fee > claim) feeReversed.push(o);
+
+    const phoneDigits = String(o.전화번호 || "").replace(/\D/g, "");
+    if (phoneDigits && ![8, 10, 11].includes(phoneDigits.length)) badPhone.push(o);
+  });
+
+  return { duplicates, reversedDate, feeReversed, badPhone };
+}
+const ORDER_ISSUE_TOTAL = (issues) =>
+  issues.duplicates.reduce((n, g) => n + g.length, 0) +
+  issues.reversedDate.length + issues.feeReversed.length + issues.badPhone.length;
+
+// 오더 검증 결과 팝업 — 항목별로 문제된 오더를 묶어 보여준다. 중복은 그 자리에서
+// 바로 취소할 수 있고, 나머지(날짜·운임·전화번호 이상)는 값을 고쳐야 하니 상세보기로
+// 이동시킨다.
+function MobileOrderValidationModal({ issues, onClose, onCancelOrder, onOpenOrder }) {
+  const total = ORDER_ISSUE_TOTAL(issues);
+  const Section = ({ title, desc, items, action }) => {
+    if (!items.length) return null;
+    return (
+      <div className="mb-4">
+        <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-1">
+          {title} · {items.length}건
+        </div>
+        {desc && <div className="text-[11px] text-gray-400 mb-1.5 px-1">{desc}</div>}
+        <div className="space-y-2">
+          {items.map((o, oi) => (
+            <div key={o._id || o.id || oi} className="border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] space-y-1 bg-gray-50">
+              <div className="flex justify-between items-center">
+                <span className="font-bold text-[#1B2B4B]">{formatDateHeader(o.상차일)}</span>
+                <span className="text-gray-500">{o.거래처명 || ""}</span>
+              </div>
+              <div className="text-gray-700 font-semibold">{o.상차지명 || "-"} → {o.하차지명 || "-"}</div>
+              <div className="flex justify-between text-gray-500">
+                <span>{o.차량번호 || "미배차"} · {o.이름 || o.기사명 || ""}</span>
+                <span className="font-semibold text-gray-700">{Number(o.청구운임 || 0).toLocaleString()}원</span>
+              </div>
+              <div className="flex justify-end pt-1">{action(o)}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const fixButton = (o) => (
+    <button
+      type="button"
+      onClick={() => onOpenOrder?.(o)}
+      className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-[#1B2B4B]/20 text-[#1B2B4B]"
+    >
+      확인하러 가기
+    </button>
+  );
+
   return (
     <div className="fixed inset-0 z-[10000] flex items-end bg-black/50" onClick={onClose}>
       <div className="w-full bg-white rounded-t-2xl shadow-2xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="bg-[#1B2B4B] px-5 py-4 rounded-t-2xl flex items-center justify-between shrink-0">
           <div>
-            <div className="text-white font-bold text-[15px]">중복 오더 확인</div>
+            <div className="text-white font-bold text-[15px]">오더 검증</div>
             <div className="text-white/60 text-[12px] mt-0.5">
-              {groups.length > 0 ? `똑같은 오더가 ${groups.length}건 발견됐어요` : "중복된 오더가 없어요"}
+              {total > 0 ? `확인이 필요한 오더가 ${total}건 있어요` : "이상 없어요"}
             </div>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 text-white text-xl font-bold">×</button>
         </div>
         <div className="overflow-y-auto px-4 pt-4 pb-6 flex-1">
-          {groups.length === 0 && (
+          {total === 0 && (
             <div className="py-10 text-center text-gray-400 text-sm">
-              상/하차지·운임·기사정보까지 모두 같은 오더는 없습니다.
+              중복·날짜·운임·전화번호 모두 이상이 없습니다.
             </div>
           )}
-          {groups.map((g, gi) => (
-            <div key={gi} className="mb-4">
+          {issues.duplicates.map((g, gi) => (
+            <div key={`dup-${gi}`} className="mb-4">
               <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-1">
-                중복 {gi + 1} · {g.length}건
+                중복 오더 {gi + 1} · {g.length}건
               </div>
               <div className="space-y-2">
                 {g.map((o, oi) => (
@@ -742,6 +815,24 @@ function MobileDuplicateCheckModal({ groups, onClose, onCancelOrder }) {
               </div>
             </div>
           ))}
+          <Section
+            title="날짜 오류"
+            desc="하차일이 상차일보다 빠르게 입력돼 있어요"
+            items={issues.reversedDate}
+            action={fixButton}
+          />
+          <Section
+            title="운임 확인 필요"
+            desc="기사운임이 청구운임보다 커요 (입력이 바뀌었을 수 있어요)"
+            items={issues.feeReversed}
+            action={fixButton}
+          />
+          <Section
+            title="전화번호 확인 필요"
+            desc="전화번호 자릿수가 이상해요"
+            items={issues.badPhone}
+            action={fixButton}
+          />
         </div>
         <div className="px-4 pb-6 pt-2 shrink-0">
           <button className="w-full py-3.5 bg-[#1B2B4B] text-white rounded-xl font-bold text-[14px]" onClick={onClose}>닫기</button>
@@ -2076,7 +2167,7 @@ const quickRange = (days) => {
   const pullStartYRef = useRef(0);
   const pullDistanceRef = useRef(0);
 const [isRefreshing, setIsRefreshing] = useState(false);
-  const [dupCheckGroups, setDupCheckGroups] = useState(null); // null=닫힘, []=결과없음, [...]=중복 그룹
+  const [orderIssues, setOrderIssues] = useState(null); // null=닫힘, {duplicates,reversedDate,feeReversed,badPhone}=결과
   const [drivers, setDrivers] = useState([]);
   const [clients, setClients] = useState([]);
   const [places, setPlaces] = useState([]);
@@ -2124,29 +2215,40 @@ const handleRefresh = async () => {
   showToast(ok === false ? "새로고침 실패 · 네트워크를 확인해주세요" : "최신 데이터 반영 완료");
 };
 
-// ⭐ 헤더 "중복확인" 버튼 — 이미 화면에 로드된 오더들 중 상/하차지·운임·기사명·
-// 차량번호·전화번호까지 전부 같은 것들을 찾아 팝업으로 보여준다(findExactDuplicateOrderGroups
-// 참고). 서버를 다시 조회하지 않고 현재 orders 상태를 그대로 검사해 바로 결과가 뜬다.
-const handleCheckDuplicates = () => {
-  const groups = findExactDuplicateOrderGroups(orders);
-  setDupCheckGroups(groups);
-  if (groups.length === 0) showToast("중복된 오더가 없습니다");
+// ⭐ 헤더 "오더 검증" 버튼 — 이미 화면에 로드된 오더들을 대상으로 중복/날짜 역전/
+// 운임 역전/전화번호 형식까지 한 번에 훑어 팝업으로 보여준다(findOrderIssues 참고).
+// 서버를 다시 조회하지 않고 현재 orders 상태를 그대로 검사해 바로 결과가 뜬다.
+const handleValidateOrders = () => {
+  const issues = findOrderIssues(orders);
+  setOrderIssues(issues);
+  if (ORDER_ISSUE_TOTAL(issues) === 0) showToast("확인된 이상이 없습니다");
 };
-// 중복확인 팝업에서 "이 오더 취소하기"를 눌렀을 때 — 기존 취소(소프트 삭제) 로직을
-// 그대로 쓰고, 팝업 목록에서도 즉시 지워서 다시 스캔하지 않아도 반영되게 한다.
+// 검증 팝업에서 "이 오더 취소하기"(중복)를 눌렀을 때 — 기존 취소(소프트 삭제)
+// 로직을 그대로 쓰고, 팝업 목록에서도 즉시 지워서 다시 스캔하지 않아도 반영되게 한다.
 const handleCancelDuplicateOrder = async (o) => {
   try {
     await deleteSingleOrder(o);
     const id = o.id || o._id;
-    setDupCheckGroups(prev =>
-      (prev || [])
+    setOrderIssues(prev => prev && ({
+      ...prev,
+      duplicates: prev.duplicates
         .map(g => g.filter(x => (x.id || x._id) !== id))
-        .filter(g => g.length > 1)
-    );
+        .filter(g => g.length > 1),
+    }));
     showToast("오더를 취소했습니다");
   } catch (e) {
     alert("취소 실패: " + (e?.message || ""));
   }
+};
+// 검증 팝업에서 "확인하러 가기"(날짜/운임/전화번호)를 눌렀을 때 — 상세보기로 이동해
+// 직접 값을 고칠 수 있게 한다(카드 탭했을 때와 동일한 이동 로직).
+const handleOpenIssueOrder = (o) => {
+  setOrderIssues(null);
+  listScrollYRef.current = window.scrollY;
+  setSelectedOrder(o);
+  setDetailFrom("list");
+  setPage("detail");
+  window.scrollTo(0, 0);
 };
 // 🔥 모든 로그인 사용자 FCM 토큰 저장
 useEffect(() => {
@@ -4893,18 +4995,19 @@ const title =
       : undefined
   }
   onRefresh={page === "list" ? handleRefresh : undefined}
-  onCheckDuplicates={page === "list" ? handleCheckDuplicates : undefined}
+  onValidateOrders={page === "list" ? handleValidateOrders : undefined}
   onMenu={page === "list" ? () => setShowMenu(true) : undefined}
   notifCount={unreadCount}
   onNotifClick={() => { setShowNotifPanel(true); markAllRead(); }}
   messengerUnread={messengerUnread}
   onMessengerClick={() => setShowMobileMessenger(true)}
 />
-{dupCheckGroups !== null && (
-  <MobileDuplicateCheckModal
-    groups={dupCheckGroups}
-    onClose={() => setDupCheckGroups(null)}
+{orderIssues !== null && (
+  <MobileOrderValidationModal
+    issues={orderIssues}
+    onClose={() => setOrderIssues(null)}
     onCancelOrder={handleCancelDuplicateOrder}
+    onOpenOrder={handleOpenIssueOrder}
   />
 )}
 {showNotifPanel && (
@@ -6444,7 +6547,7 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
 // ----------------------------------------------------------------------
 // 공통 헤더 / 사이드 메뉴
 // ----------------------------------------------------------------------
-const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh, onCheckDuplicates, onMenu, notifCount = 0, onNotifClick, cardVersionB = false, messengerUnread = 0, onMessengerClick }) {
+const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh, onValidateOrders, onMenu, notifCount = 0, onNotifClick, cardVersionB = false, messengerUnread = 0, onMessengerClick }) {
   const isListPage = title === "등록내역";
   const iconColor = cardVersionB ? "#ffffff" : "#374151";
   const bellColor = cardVersionB ? "#ffffff" : "#1f2937";
@@ -6491,15 +6594,15 @@ const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh
             </svg>
           </button>
         )}
-        {onCheckDuplicates && (
+        {onValidateOrders && (
           <button
             className={`w-8 h-8 flex items-center justify-center rounded-full transition ${cardVersionB ? "active:bg-white/10" : "active:bg-gray-100"}`}
-            onClick={onCheckDuplicates}
-            title="중복 오더 확인"
+            onClick={onValidateOrders}
+            title="오더 검증"
           >
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="9" y="9" width="12" height="12" rx="2"/>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <path d="M9 12l2 2 4-4"/>
             </svg>
           </button>
         )}
