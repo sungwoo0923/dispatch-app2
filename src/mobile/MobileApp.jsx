@@ -659,6 +659,98 @@ function findDuplicateOrders(form, existingRows) {
   });
 }
 
+// ⭐ 등록내역 헤더의 "중복확인" 버튼 — 이미 등록된 오더들 중, 상/하차지·운임 등
+// 오더 내용은 물론 기사명·차량번호·전화번호까지 전부 똑같은 것들끼리 묶어서
+// 찾아낸다(단순히 같은 기사가 같은 날 다른 오더를 여러 건 뛰는 정상적인 경우까지
+// 중복으로 잘못 잡지 않도록, 기사정보까지 완전히 같은 것만 중복으로 본다).
+function findExactDuplicateOrderGroups(list = []) {
+  const norm = (s) => String(s || "").replace(/\s+/g, "").trim().toLowerCase();
+  const onlyNum = (s) => String(s || "").replace(/[^\d]/g, "");
+  const signature = (o) => [
+    o.상차일 || "",
+    norm(o.상차지명),
+    norm(o.하차지명),
+    onlyNum(o.청구운임),
+    norm(o.차량번호),
+    norm(o.이름 || o.기사명),
+    onlyNum(o.전화번호),
+  ].join("|");
+
+  const groups = new Map();
+  list.forEach((o) => {
+    if (!o?.상차일 || !o?.상차지명 || !o?.하차지명) return;
+    if (!String(o.차량번호 || "").trim()) return; // 기사(차량번호) 배정된 것만 비교 대상
+    const key = signature(o);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(o);
+  });
+
+  return Array.from(groups.values())
+    .filter((g) => g.length > 1)
+    .sort((a, b) => (b[0].상차일 || "").localeCompare(a[0].상차일 || ""));
+}
+
+// 중복 확인 결과 팝업 — 그룹별로 완전히 같은 오더가 몇 건씩 등록돼 있는지 보여주고,
+// 필요 없는 건 그 자리에서 바로 취소(소프트 삭제)할 수 있게 한다.
+function MobileDuplicateCheckModal({ groups, onClose, onCancelOrder }) {
+  return (
+    <div className="fixed inset-0 z-[10000] flex items-end bg-black/50" onClick={onClose}>
+      <div className="w-full bg-white rounded-t-2xl shadow-2xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-[#1B2B4B] px-5 py-4 rounded-t-2xl flex items-center justify-between shrink-0">
+          <div>
+            <div className="text-white font-bold text-[15px]">중복 오더 확인</div>
+            <div className="text-white/60 text-[12px] mt-0.5">
+              {groups.length > 0 ? `똑같은 오더가 ${groups.length}건 발견됐어요` : "중복된 오더가 없어요"}
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 text-white text-xl font-bold">×</button>
+        </div>
+        <div className="overflow-y-auto px-4 pt-4 pb-6 flex-1">
+          {groups.length === 0 && (
+            <div className="py-10 text-center text-gray-400 text-sm">
+              상/하차지·운임·기사정보까지 모두 같은 오더는 없습니다.
+            </div>
+          )}
+          {groups.map((g, gi) => (
+            <div key={gi} className="mb-4">
+              <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-1">
+                중복 {gi + 1} · {g.length}건
+              </div>
+              <div className="space-y-2">
+                {g.map((o, oi) => (
+                  <div key={o._id || o.id || oi} className="border border-gray-200 rounded-xl px-3 py-2.5 text-[12px] space-y-1 bg-gray-50">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-[#1B2B4B]">{formatDateHeader(o.상차일)}</span>
+                      <span className="text-gray-500">{o.거래처명 || ""}</span>
+                    </div>
+                    <div className="text-gray-700 font-semibold">{o.상차지명} → {o.하차지명}</div>
+                    <div className="flex justify-between text-gray-500">
+                      <span>{o.차량번호} · {o.이름 || o.기사명 || ""}</span>
+                      <span className="font-semibold text-gray-700">{Number(o.청구운임 || 0).toLocaleString()}원</span>
+                    </div>
+                    <div className="flex justify-end pt-1">
+                      <button
+                        type="button"
+                        onClick={() => onCancelOrder?.(o)}
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-red-200 text-red-500"
+                      >
+                        이 오더 취소하기
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="px-4 pb-6 pt-2 shrink-0">
+          <button className="w-full py-3.5 bg-[#1B2B4B] text-white rounded-xl font-bold text-[14px]" onClick={onClose}>닫기</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ⭐ 중복 오더 알림 팝업 — 저장을 막지 않고 "취소"/"그래도 등록" 중 선택하게 한다.
 // 모바일 다른 팝업들과 동일한 하단 시트(bottom sheet) 형태, 알록달록한 경고색 없이
 // 네이비 헤더 + 무채색으로 통일.
@@ -1984,6 +2076,7 @@ const quickRange = (days) => {
   const pullStartYRef = useRef(0);
   const pullDistanceRef = useRef(0);
 const [isRefreshing, setIsRefreshing] = useState(false);
+  const [dupCheckGroups, setDupCheckGroups] = useState(null); // null=닫힘, []=결과없음, [...]=중복 그룹
   const [drivers, setDrivers] = useState([]);
   const [clients, setClients] = useState([]);
   const [places, setPlaces] = useState([]);
@@ -2029,6 +2122,31 @@ const handleRefresh = async () => {
   setIsRefreshing(false);
   pullDistanceRef.current = 0;
   showToast(ok === false ? "새로고침 실패 · 네트워크를 확인해주세요" : "최신 데이터 반영 완료");
+};
+
+// ⭐ 헤더 "중복확인" 버튼 — 이미 화면에 로드된 오더들 중 상/하차지·운임·기사명·
+// 차량번호·전화번호까지 전부 같은 것들을 찾아 팝업으로 보여준다(findExactDuplicateOrderGroups
+// 참고). 서버를 다시 조회하지 않고 현재 orders 상태를 그대로 검사해 바로 결과가 뜬다.
+const handleCheckDuplicates = () => {
+  const groups = findExactDuplicateOrderGroups(orders);
+  setDupCheckGroups(groups);
+  if (groups.length === 0) showToast("중복된 오더가 없습니다");
+};
+// 중복확인 팝업에서 "이 오더 취소하기"를 눌렀을 때 — 기존 취소(소프트 삭제) 로직을
+// 그대로 쓰고, 팝업 목록에서도 즉시 지워서 다시 스캔하지 않아도 반영되게 한다.
+const handleCancelDuplicateOrder = async (o) => {
+  try {
+    await deleteSingleOrder(o);
+    const id = o.id || o._id;
+    setDupCheckGroups(prev =>
+      (prev || [])
+        .map(g => g.filter(x => (x.id || x._id) !== id))
+        .filter(g => g.length > 1)
+    );
+    showToast("오더를 취소했습니다");
+  } catch (e) {
+    alert("취소 실패: " + (e?.message || ""));
+  }
 };
 // 🔥 모든 로그인 사용자 FCM 토큰 저장
 useEffect(() => {
@@ -4775,12 +4893,20 @@ const title =
       : undefined
   }
   onRefresh={page === "list" ? handleRefresh : undefined}
+  onCheckDuplicates={page === "list" ? handleCheckDuplicates : undefined}
   onMenu={page === "list" ? () => setShowMenu(true) : undefined}
   notifCount={unreadCount}
   onNotifClick={() => { setShowNotifPanel(true); markAllRead(); }}
   messengerUnread={messengerUnread}
   onMessengerClick={() => setShowMobileMessenger(true)}
 />
+{dupCheckGroups !== null && (
+  <MobileDuplicateCheckModal
+    groups={dupCheckGroups}
+    onClose={() => setDupCheckGroups(null)}
+    onCancelOrder={handleCancelDuplicateOrder}
+  />
+)}
 {showNotifPanel && (
   <NotificationPanel
     notifications={notifications}
@@ -6318,7 +6444,7 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
 // ----------------------------------------------------------------------
 // 공통 헤더 / 사이드 메뉴
 // ----------------------------------------------------------------------
-const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh, onMenu, notifCount = 0, onNotifClick, cardVersionB = false, messengerUnread = 0, onMessengerClick }) {
+const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh, onCheckDuplicates, onMenu, notifCount = 0, onNotifClick, cardVersionB = false, messengerUnread = 0, onMessengerClick }) {
   const isListPage = title === "등록내역";
   const iconColor = cardVersionB ? "#ffffff" : "#374151";
   const bellColor = cardVersionB ? "#ffffff" : "#1f2937";
@@ -6362,6 +6488,18 @@ const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh
               <path d="M23 4v6h-6"/>
               <path d="M1 20v-6h6"/>
               <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+          </button>
+        )}
+        {onCheckDuplicates && (
+          <button
+            className={`w-8 h-8 flex items-center justify-center rounded-full transition ${cardVersionB ? "active:bg-white/10" : "active:bg-gray-100"}`}
+            onClick={onCheckDuplicates}
+            title="중복 오더 확인"
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="9" width="12" height="12" rx="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
             </svg>
           </button>
         )}
