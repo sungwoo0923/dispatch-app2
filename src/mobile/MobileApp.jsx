@@ -726,8 +726,9 @@ const ORDER_ISSUE_TOTAL = (issues) =>
 // 오더 검증 결과 팝업 — 항목별로 문제된 오더를 묶어 보여준다. 중복은 그 자리에서
 // 바로 취소할 수 있고, 나머지(날짜·운임·전화번호 이상)는 값을 고쳐야 하니 상세보기로
 // 이동시킨다.
-function MobileOrderValidationModal({ issues, onClose, onCancelOrder, onOpenOrder }) {
+function MobileOrderValidationModal({ issues, scope, onClose, onCancelOrder, onOpenOrder, onExpandScope }) {
   const total = ORDER_ISSUE_TOTAL(issues);
+  const scopeLabel = scope === "twoMonths" ? "지난달~이번 달 기준" : "이번 달 기준";
   const Section = ({ title, desc, items, action }) => {
     if (!items.length) return null;
     return (
@@ -773,7 +774,7 @@ function MobileOrderValidationModal({ issues, onClose, onCancelOrder, onOpenOrde
           <div>
             <div className="text-white font-bold text-[15px]">오더 검증</div>
             <div className="text-white/60 text-[12px] mt-0.5">
-              {total > 0 ? `확인이 필요한 오더가 ${total}건 있어요` : "이상 없어요"}
+              {scopeLabel} · {total > 0 ? `확인이 필요한 오더가 ${total}건 있어요` : "이상 없어요"}
             </div>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 text-white text-xl font-bold">×</button>
@@ -783,6 +784,15 @@ function MobileOrderValidationModal({ issues, onClose, onCancelOrder, onOpenOrde
             <div className="py-10 text-center text-gray-400 text-sm">
               중복·날짜·운임·전화번호 모두 이상이 없습니다.
             </div>
+          )}
+          {scope !== "twoMonths" && (
+            <button
+              type="button"
+              onClick={onExpandScope}
+              className="w-full mb-4 py-2 rounded-lg border border-dashed border-gray-300 text-gray-500 text-[12px] font-semibold"
+            >
+              지난달 것도 확인하기
+            </button>
           )}
           {issues.duplicates.map((g, gi) => (
             <div key={`dup-${gi}`} className="mb-4">
@@ -969,6 +979,12 @@ const todayKST = () => {
 };
 
 const thisMonthKST = () => todayKST().slice(0, 7);
+// "YYYY-MM" 기준 바로 전달 — 오더 검증 범위를 "이번 달" / "지난달까지"로만 한정할 때 쓴다.
+const prevMonthOf = (monthStr) => {
+  const d = new Date(monthStr + "-01");
+  d.setMonth(d.getMonth() - 1);
+  return d.toISOString().slice(0, 7);
+};
 
 // ✅ ⬇⬇⬇ 여기 추가 ⬇⬇⬇
 const normalizeKoreanTime = (t = "") => {
@@ -2168,6 +2184,7 @@ const quickRange = (days) => {
   const pullDistanceRef = useRef(0);
 const [isRefreshing, setIsRefreshing] = useState(false);
   const [orderIssues, setOrderIssues] = useState(null); // null=닫힘, {duplicates,reversedDate,feeReversed,badPhone}=결과
+  const [orderIssuesScope, setOrderIssuesScope] = useState("thisMonth"); // "thisMonth" | "twoMonths"
   const [drivers, setDrivers] = useState([]);
   const [clients, setClients] = useState([]);
   const [places, setPlaces] = useState([]);
@@ -2218,9 +2235,16 @@ const handleRefresh = async () => {
 // ⭐ 헤더 "오더 검증" 버튼 — 이미 화면에 로드된 오더들을 대상으로 중복/날짜 역전/
 // 운임 역전/전화번호 형식까지 한 번에 훑어 팝업으로 보여준다(findOrderIssues 참고).
 // 서버를 다시 조회하지 않고 현재 orders 상태를 그대로 검사해 바로 결과가 뜬다.
-const handleValidateOrders = () => {
-  const issues = findOrderIssues(orders);
+// includeLastMonth=false면 이번 달 오더만, true면 지난달까지 2개월치를 검사한다.
+// 오더검증은 "지금 문제가 없는지" 확인하는 용도라 오래된 과거 데이터까지 계속
+// 나올 필요가 없어, 기본은 이번 달로 한정하고 필요할 때만 한 달 전까지만 넓힌다.
+const handleValidateOrders = (includeLastMonth = false) => {
+  const thisMonth = thisMonthKST();
+  const months = includeLastMonth ? [prevMonthOf(thisMonth), thisMonth] : [thisMonth];
+  const scoped = orders.filter((o) => months.includes(String(o.상차일 || "").slice(0, 7)));
+  const issues = findOrderIssues(scoped);
   setOrderIssues(issues);
+  setOrderIssuesScope(includeLastMonth ? "twoMonths" : "thisMonth");
   if (ORDER_ISSUE_TOTAL(issues) === 0) showToast("확인된 이상이 없습니다");
 };
 // 검증 팝업에서 "이 오더 취소하기"(중복)를 눌렀을 때 — 기존 취소(소프트 삭제)
@@ -4995,7 +5019,7 @@ const title =
       : undefined
   }
   onRefresh={page === "list" ? handleRefresh : undefined}
-  onValidateOrders={page === "list" ? handleValidateOrders : undefined}
+  onValidateOrders={page === "list" ? () => handleValidateOrders(false) : undefined}
   onMenu={page === "list" ? () => setShowMenu(true) : undefined}
   notifCount={unreadCount}
   onNotifClick={() => { setShowNotifPanel(true); markAllRead(); }}
@@ -5005,9 +5029,11 @@ const title =
 {orderIssues !== null && (
   <MobileOrderValidationModal
     issues={orderIssues}
+    scope={orderIssuesScope}
     onClose={() => setOrderIssues(null)}
     onCancelOrder={handleCancelDuplicateOrder}
     onOpenOrder={handleOpenIssueOrder}
+    onExpandScope={() => handleValidateOrders(true)}
   />
 )}
 {showNotifPanel && (
@@ -8840,6 +8866,12 @@ function CardAttachViewer({ order, onClose, showToast, showSuccess }) {
   const [confirmItem, setConfirmItem] = useState(null);
   const [unlocking, setUnlocking] = useState(false);
   const [smsUploadConfirm, setSmsUploadConfirm] = useState(false);
+  // ⭐ PC 첨부현황/첨부뷰어와 동일한 "완료처리/미완료" 수동 토글 — 기사에게 파일을
+  // 못 받고 카톡·이메일 등 다른 경로로 서류를 확인했을 때도 완료로 표시하거나,
+  // 잘못 완료 처리된 걸 다시 미완료로 되돌릴 수 있어야 한다. attachViewed는 PC와
+  // 모바일이 같은 Firestore 문서를 보므로, 여기서 바꾸면 PC에도 그대로 반영된다.
+  const [isViewed, setIsViewed] = useState(order.attachViewed === true);
+  const [viewedBusy, setViewedBusy] = useState(false);
 
   const col = order.__col || order._col || "dispatch";
   const docId = order._id || order.id;
@@ -8877,9 +8909,29 @@ function CardAttachViewer({ order, onClose, showToast, showSuccess }) {
   const markAttachViewedSaved = () => {
     if (attachViewedWrittenRef.current) return;
     attachViewedWrittenRef.current = true;
+    setIsViewed(true);
     updateDoc(doc(db, col, docId), { attachViewed: true }).catch(() => {});
     const mirror = getMirrorTarget();
     if (mirror) updateDoc(doc(db, mirror.col, mirror.id), { attachViewed: true }).catch(() => {});
+  };
+
+  // 완료처리/미완료 수동 토글 — PC 첨부현황 화면과 동일하게 attachViewed만 뒤집는다.
+  const handleToggleViewed = async () => {
+    if (viewedBusy) return;
+    setViewedBusy(true);
+    const nextVal = !isViewed;
+    try {
+      await updateDoc(doc(db, col, docId), { attachViewed: nextVal });
+      const mirror = getMirrorTarget();
+      if (mirror) await updateDoc(doc(db, mirror.col, mirror.id), { attachViewed: nextVal }).catch(() => {});
+      attachViewedWrittenRef.current = nextVal;
+      setIsViewed(nextVal);
+      showToast?.(nextVal ? "완료 처리했습니다" : "미완료로 되돌렸습니다");
+    } catch (e) {
+      alert("처리 실패: " + (e?.message || ""));
+    } finally {
+      setViewedBusy(false);
+    }
   };
 
   const [nowTick, setNowTick] = useState(Date.now());
@@ -9070,6 +9122,21 @@ function CardAttachViewer({ order, onClose, showToast, showSuccess }) {
               ))}
             </div>
           )}
+        </div>
+        {/* 완료처리/미완료 — 파일을 안 올려도(카톡·이메일 등 다른 경로로 받았을 때)
+            수동으로 완료 표시하거나, 되돌릴 수 있다. PC 첨부현황과 같은 attachViewed
+            필드라 여기서 바꾸면 PC 화면에도 그대로 반영된다. */}
+        <div className="border-t border-gray-100 px-4 py-3 shrink-0 flex items-center justify-between gap-2">
+          <span className="text-[11px] text-gray-400">파일 확인 여부를 수동으로 표시할 수 있어요</span>
+          <button
+            onClick={handleToggleViewed}
+            disabled={viewedBusy}
+            className={`px-4 py-2 rounded-lg text-[12px] font-bold whitespace-nowrap transition disabled:opacity-50 ${
+              isViewed ? "bg-[#1B2B4B] text-white" : "bg-white border border-gray-300 text-gray-600"
+            }`}
+          >
+            {viewedBusy ? "처리중..." : isViewed ? "미완료" : "완료처리"}
+          </button>
         </div>
       </div>
       {selected && (
@@ -10586,6 +10653,8 @@ function MobileOrderDetail({
   const [attachLoading, setAttachLoading] = useState(false);
   const [attachSelected, setAttachSelected] = useState(null);
   const [liveAttachCount, setLiveAttachCount] = useState(order.attachCount || 0);
+  const [detailAttachViewed, setDetailAttachViewed] = useState(order.attachViewed === true);
+  const [detailAttachViewedBusy, setDetailAttachViewedBusy] = useState(false);
   const detailAttachStorageKey = `saved_attach_${order._id || order.id}`;
   const [attachSaveStates, setAttachSaveStates] = useState(() => {
     try { return JSON.parse(localStorage.getItem(`saved_attach_${order._id || order.id}`) || "{}"); } catch { return {}; }
@@ -10960,6 +11029,9 @@ const pickupTimeText = order.상차시간
   useEffect(() => {
     setLiveAttachCount(order.attachCount || 0);
   }, [order.attachCount]);
+  useEffect(() => {
+    setDetailAttachViewed(order.attachViewed === true);
+  }, [order.attachViewed]);
 
   useEffect(() => {
     if (!showAttachments) {
@@ -10987,10 +11059,37 @@ const pickupTimeText = order.상차시간
   const markAttachViewed = () => {
     if (attachViewedWrittenRef.current) return;
     attachViewedWrittenRef.current = true;
+    setDetailAttachViewed(true);
     const col = order.__col || "orders";
     const docId = order._id || order.id;
     updateDoc(doc(db, col, docId), { attachViewed: true }).catch(() => {});
     if (typeof onOrderUpdate === "function") onOrderUpdate(order.id, { attachViewed: true });
+  };
+
+  // 완료처리/미완료 수동 토글 — 파일을 못 받았어도(카톡·이메일 등 다른 경로) 완료로
+  // 표시하거나 되돌릴 수 있다. PC와 같은 attachViewed 필드라 PC에도 그대로 반영된다.
+  const handleToggleDetailAttachViewed = async () => {
+    if (detailAttachViewedBusy) return;
+    setDetailAttachViewedBusy(true);
+    const nextVal = !detailAttachViewed;
+    const col = order.__col || "orders";
+    const docId = order._id || order.id;
+    try {
+      await updateDoc(doc(db, col, docId), { attachViewed: nextVal });
+      if (order._transmittedOrderId) {
+        await updateDoc(doc(db, "orders", order._transmittedOrderId), { attachViewed: nextVal }).catch(() => {});
+      } else if (order.originCol && order.originId) {
+        await updateDoc(doc(db, order.originCol, order.originId), { attachViewed: nextVal }).catch(() => {});
+      }
+      attachViewedWrittenRef.current = nextVal;
+      setDetailAttachViewed(nextVal);
+      if (typeof onOrderUpdate === "function") onOrderUpdate(order.id, { attachViewed: nextVal });
+      showToast?.(nextVal ? "완료 처리했습니다" : "미완료로 되돌렸습니다");
+    } catch (e) {
+      alert("처리 실패: " + (e?.message || ""));
+    } finally {
+      setDetailAttachViewedBusy(false);
+    }
   };
 
   const doAttachSave = (item, filename) => {
@@ -11905,6 +12004,21 @@ const handleAssignClick = () => {
                   ))}
                 </div>
               )}
+            </div>
+            {/* 완료처리/미완료 — 파일을 못 받았어도(카톡·이메일 등 다른 경로) 수동으로
+                완료 표시하거나 되돌릴 수 있다. PC와 같은 attachViewed 필드를 쓰므로
+                여기서 바꾸면 PC 화면에도 그대로 반영된다. */}
+            <div className="border-t border-gray-100 px-4 py-3 shrink-0 flex items-center justify-between gap-2">
+              <span className="text-[11px] text-gray-400">파일 확인 여부를 수동으로 표시할 수 있어요</span>
+              <button
+                onClick={handleToggleDetailAttachViewed}
+                disabled={detailAttachViewedBusy}
+                className={`px-4 py-2 rounded-lg text-[12px] font-bold whitespace-nowrap transition disabled:opacity-50 ${
+                  detailAttachViewed ? "bg-[#1B2B4B] text-white" : "bg-white border border-gray-300 text-gray-600"
+                }`}
+              >
+                {detailAttachViewedBusy ? "처리중..." : detailAttachViewed ? "미완료" : "완료처리"}
+              </button>
             </div>
           </div>
           {/* 전체화면 이미지 뷰 */}
@@ -12980,6 +13094,12 @@ const [matchedClients, setMatchedClients] = useState([]);
   const [requiredErrors, setRequiredErrors] = useState(new Set());
   const pickupNameInputRef = useRef(null);
   const dropNameInputRef = useRef(null);
+  // ⭐ 상/하차지명에 정확히 일치하는 거래처명을 입력해 주소·담당자가 자동입력된
+  // 뒤, 뒤에 글자를 더 입력해(예: "신선" → "신선부천점") 더 이상 어떤 거래처와도
+  // 정확히 같지 않게 되면 방금 자동입력된 값을 지운다 — 비슷하기만 한 다른(선택
+  // 하지 않은) 거래처의 주소가 새 상/하차지에 그대로 남는 걸 막는다.
+  const pickupAutoFillRef = useRef(null);
+  const dropAutoFillRef = useRef(null);
   const cargoInputRef = useRef(null);
   const tonInputRef = useRef(null);
   const payTypeSelectRef = useRef(null);
@@ -13614,13 +13734,17 @@ const pickPickup = (c) => {
     // 덮어써서, "기존 오더 불러오기"로 거래처명을 이미 불러온 뒤 상차지명만
     // 고쳐도 거래처명이 그 상차지 이름으로 조용히 바뀌어버리는 문제가 있었다.
     update("상차지명", c.거래처명 || "");
-    update("상차지주소", c.주소 || "");
+    const 주소 = c.주소 || "";
+    update("상차지주소", 주소);
 
     const contacts = (Array.isArray(c.contacts) ? c.contacts : []).filter(ct => ct.name?.trim());
     const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
     const primary = unique.find(ct => ct.isPrimary) || unique[0] || null;
-    update("상차지담당자", primary?.name || c.담당자 || "");
-    update("상차지담당자번호", primary?.phone || c.담당자번호 || "");
+    const 담당자 = primary?.name || c.담당자 || "";
+    const 담당자번호 = primary?.phone || c.담당자번호 || "";
+    update("상차지담당자", 담당자);
+    update("상차지담당자번호", 담당자번호);
+    pickupAutoFillRef.current = { 주소, 담당자, 담당자번호 };
 
     setQueryPickup("");
     setShowPickupList(false);
@@ -13633,13 +13757,17 @@ const pickPickup = (c) => {
 };
 const pickDrop = (c) => {
   update("하차지명", c.거래처명 || c.하차지명 || "");
-  update("하차지주소", c.주소 || c.하차지주소 || c.상차지주소 || "");
+  const 주소 = c.주소 || c.하차지주소 || c.상차지주소 || "";
+  update("하차지주소", 주소);
 
   const contacts = (Array.isArray(c.contacts) ? c.contacts : []).filter(ct => ct.name?.trim());
   const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
   const primary = unique.find(ct => ct.isPrimary) || unique[0] || null;
-  update("하차지담당자", primary?.name || c.담당자 || "");
-  update("하차지담당자번호", primary?.phone || c.담당자번호 || "");
+  const 담당자 = primary?.name || c.담당자 || "";
+  const 담당자번호 = primary?.phone || c.담당자번호 || "";
+  update("하차지담당자", 담당자);
+  update("하차지담당자번호", 담당자번호);
+  dropAutoFillRef.current = { 주소, 담당자, 담당자번호 };
 
   setQueryDrop("");
   setShowDropList(false);
@@ -14215,6 +14343,7 @@ const pickDrop = (c) => {
                 update("상차지주소", "");
                 update("상차지담당자", "");
                 update("상차지담당자번호", "");
+                pickupAutoFillRef.current = null;
                 return;
               }
 
@@ -14224,17 +14353,30 @@ const pickDrop = (c) => {
               );
 
               if (found) {
-  update("상차지주소", found.주소 || "");
+  const 주소 = found.주소 || "";
 
   // ★ contacts 배열 우선, 없으면 담당자 직접 필드
   const contacts = Array.isArray(found.contacts) ? found.contacts : [];
   const primary = contacts.find(c => c.isPrimary) || contacts[0] || null;
+  const 담당자 = primary?.name || found.담당자 || "";
+  const 담당자번호 = primary?.phone || found.담당자번호 || "";
 
-  update("상차지담당자", primary?.name || found.담당자 || "");
-  update("상차지담당자번호", primary?.phone || found.담당자번호 || "");
+  update("상차지주소", 주소);
+  update("상차지담당자", 담당자);
+  update("상차지담당자번호", 담당자번호);
+  pickupAutoFillRef.current = { 주소, 담당자, 담당자번호 };
 
   const alertTarget = getAlertTargetForSelectedPlace(found);
   if (alertTarget) setClientAlert(alertTarget);
+} else if (pickupAutoFillRef.current) {
+  // 방금 전엔 어떤 거래처명과 정확히 같아 자동입력됐지만, 글자를 더 입력해
+  // (예: "신선" → "신선부천점") 더 이상 어떤 거래처와도 정확히 같지 않다 —
+  // 자동입력된 값을 사용자가 그대로 뒀을 때만(직접 고치지 않았을 때만) 지운다.
+  const last = pickupAutoFillRef.current;
+  if (form.상차지주소 === last.주소) update("상차지주소", "");
+  if (form.상차지담당자 === last.담당자) update("상차지담당자", "");
+  if (form.상차지담당자번호 === last.담당자번호) update("상차지담당자번호", "");
+  pickupAutoFillRef.current = null;
 }
 
             }}
@@ -14370,6 +14512,7 @@ const pickDrop = (c) => {
                 update("하차지주소", "");
                 update("하차지담당자", "");
                 update("하차지담당자번호", "");
+                dropAutoFillRef.current = null;
                 return;
               }
 
@@ -14379,23 +14522,30 @@ const pickDrop = (c) => {
               );
 
               if (found) {
-  update(
-    "하차지주소",
-    found.주소 ||
-      found.하차지주소 ||
-      found.상차지주소 ||
-      ""
-  );
+  const 주소 = found.주소 || found.하차지주소 || found.상차지주소 || "";
 
   // ★ contacts 배열 우선, 없으면 담당자 직접 필드
   const contacts = Array.isArray(found.contacts) ? found.contacts : [];
   const primary = contacts.find(c => c.isPrimary) || contacts[0] || null;
+  const 담당자 = primary?.name || found.담당자 || "";
+  const 담당자번호 = primary?.phone || found.담당자번호 || "";
 
-  update("하차지담당자", primary?.name || found.담당자 || "");
-  update("하차지담당자번호", primary?.phone || found.담당자번호 || "");
+  update("하차지주소", 주소);
+  update("하차지담당자", 담당자);
+  update("하차지담당자번호", 담당자번호);
+  dropAutoFillRef.current = { 주소, 담당자, 담당자번호 };
 
   const alertTarget = getAlertTargetForSelectedPlace(found);
   if (alertTarget) setClientAlert(alertTarget);
+} else if (dropAutoFillRef.current) {
+  // 방금 전엔 어떤 거래처명과 정확히 같아 자동입력됐지만, 글자를 더 입력해
+  // 더 이상 어떤 거래처와도 정확히 같지 않다 — 자동입력된 값을 사용자가
+  // 그대로 뒀을 때만(직접 고치지 않았을 때만) 지운다.
+  const last = dropAutoFillRef.current;
+  if (form.하차지주소 === last.주소) update("하차지주소", "");
+  if (form.하차지담당자 === last.담당자) update("하차지담당자", "");
+  if (form.하차지담당자번호 === last.담당자번호) update("하차지담당자번호", "");
+  dropAutoFillRef.current = null;
 }
 
             }}
