@@ -34658,7 +34658,15 @@ const handleCloseFileUpload = async (e) => {
     }
   }
 
-  const raw = { json, headerIdx, plateCol, nameCol, phoneCol, feeTypeCol, commCol, fareCol, effectiveDateCol, parseExcelDate };
+  // ⭐ 24시콜 파일 자체에 "상차일" 컬럼이 있으면, 그 값은 24시콜이 "내일상"류
+  // 화물정보까지 이미 반영해 확정해둔 실제 상차일이다(직접 파일로 확인함 —
+  // 처리시간은 09-20인데 상차일은 이미 2026-09-21로 들어있는 식). 이 컬럼일
+  // 때는 화물정보로 다시 보정하면 하루를 더 밀어버리는 이중 보정이 되므로
+  // 그대로 신뢰하고, 상차일 컬럼이 없어 처리시간/접수일 등으로 대체 감지된
+  // 경우에만 아래 "내일" 보정을 적용한다.
+  const effectiveDateColHeader = effectiveDateCol !== -1 ? headers[effectiveDateCol] : null;
+
+  const raw = { json, headerIdx, plateCol, nameCol, phoneCol, feeTypeCol, commCol, fareCol, effectiveDateCol, effectiveDateColHeader, parseExcelDate };
   closeFileRawRef.current = raw;
   setCloseFileResult(computeCloseFileIssues(raw));
 };
@@ -34668,7 +34676,11 @@ const handleCloseFileUpload = async (e) => {
 // (사용자가 오류를 고친 뒤) 같은 파일을 다시 읽지 않고 재사용할 수 있도록
 // handleCloseFileUpload에서 분리했다.
 const computeCloseFileIssues = (raw) => {
-  const { json, headerIdx, plateCol, nameCol, phoneCol, feeTypeCol, commCol, fareCol, effectiveDateCol, parseExcelDate } = raw;
+  const { json, headerIdx, plateCol, nameCol, phoneCol, feeTypeCol, commCol, fareCol, effectiveDateCol, effectiveDateColHeader, parseExcelDate } = raw;
+  // "상차일" 컬럼은 24시콜이 이미 확정해둔 실제 상차일이라 그대로 믿는다 — 그
+  // 컬럼이 아닐 때만(처리시간 등으로 대체 감지된 경우만) 화물정보의 "내일/낼"로
+  // 보정한다(위 handleCloseFileUpload 주석 참고).
+  const trustDateColumnAsIs = effectiveDateColHeader === "상차일";
 
   // 조회 기간 전체 rows (appliedStartDate ~ appliedEndDate)
   const rangeStart = appliedStartDate || todayKST();
@@ -34718,7 +34730,7 @@ const computeCloseFileIssues = (raw) => {
     const fileFeeType = String(row[feeTypeCol] || "").trim();
     const fileComm    = Number(row[commCol] || 0);
     const rawFileDate = effectiveDateCol !== -1 ? parseExcelDate(row[effectiveDateCol]) : null;
-    const fileDate    = resolveEffectiveDate(rawFileDate, rowCargoText(row));
+    const fileDate    = trustDateColumnAsIs ? rawFileDate : resolveEffectiveDate(rawFileDate, rowCargoText(row));
 
     if (!filePlate) continue;
 
@@ -34863,7 +34875,7 @@ const computeCloseFileIssues = (raw) => {
     filePlates.add(plate);
     if (effectiveDateCol !== -1) {
       const rawD = parseExcelDate(row[effectiveDateCol]);
-      const d = resolveEffectiveDate(rawD, rowCargoText(row));
+      const d = trustDateColumnAsIs ? rawD : resolveEffectiveDate(rawD, rowCargoText(row));
       if (d) filePlateDate.add(`${plate}__${d}`);
     }
   }
