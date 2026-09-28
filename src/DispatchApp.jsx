@@ -34614,6 +34614,12 @@ const handleCloseFileUpload = async (e) => {
     found !== -1 ? found : headers.indexOf(name), -1
   );
 
+  // ⭐ 24시콜은 다음날 오더를 전날 미리 등록해두는 경우가 있는데, 이때 처리일은
+  // 전날로 찍혀 있어도 화물정보에 "내일상"/"내일 09시상"처럼 "내일"이 들어간다 —
+  // 그 컬럼을 찾아둔다(computeCloseFileIssues에서 처리일을 +1일로 보정하는 데 씀).
+  const cargoColNames = ["화물정보", "화물내용", "화물명", "품목내용", "품목", "화물"];
+  const cargoCol = cargoColNames.reduce((found, name) => found !== -1 ? found : headers.indexOf(name), -1);
+
   if (plateCol === -1) { showAlert("차량번호 컬럼을 찾을 수 없습니다."); return; }
 
   const parseExcelDate = (val) => {
@@ -34658,7 +34664,7 @@ const handleCloseFileUpload = async (e) => {
     }
   }
 
-  const raw = { json, headerIdx, plateCol, nameCol, phoneCol, feeTypeCol, commCol, fareCol, effectiveDateCol, parseExcelDate };
+  const raw = { json, headerIdx, plateCol, nameCol, phoneCol, feeTypeCol, commCol, fareCol, cargoCol, effectiveDateCol, parseExcelDate };
   closeFileRawRef.current = raw;
   setCloseFileResult(computeCloseFileIssues(raw));
 };
@@ -34668,7 +34674,7 @@ const handleCloseFileUpload = async (e) => {
 // (사용자가 오류를 고친 뒤) 같은 파일을 다시 읽지 않고 재사용할 수 있도록
 // handleCloseFileUpload에서 분리했다.
 const computeCloseFileIssues = (raw) => {
-  const { json, headerIdx, plateCol, nameCol, phoneCol, feeTypeCol, commCol, fareCol, effectiveDateCol, parseExcelDate } = raw;
+  const { json, headerIdx, plateCol, nameCol, phoneCol, feeTypeCol, commCol, fareCol, cargoCol, effectiveDateCol, parseExcelDate } = raw;
 
   // 조회 기간 전체 rows (appliedStartDate ~ appliedEndDate)
   const rangeStart = appliedStartDate || todayKST();
@@ -34676,6 +34682,21 @@ const computeCloseFileIssues = (raw) => {
   const viewRows = (dispatchData || []).filter(r =>
     r.상차일 >= rangeStart && r.상차일 <= rangeEnd
   );
+
+  // 처리일(raw) 하루 뒤 날짜 문자열 — 아래 "내일" 보정에 쓴다. 달/연도 경계도
+  // Date.UTC 계산에 맡겨 그대로 넘어가게 한다.
+  const addOneDay = (dateStr) => {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+  };
+  // ⭐ 24시콜 파일의 처리일(raw)과 화물정보를 받아, "다음날 오더를 전날 미리
+  // 등록"해둔 경우의 실제 상차일을 되돌려준다. 화물정보에 "내일"이 들어있으면
+  // (예: "내일상", "내일 09시상", "내일 오전7시상") 처리일+1을 실제 상차일로 본다.
+  const resolveEffectiveDate = (rawDate, cargoText) => {
+    if (!rawDate) return rawDate;
+    if (/내일/.test(cargoText || "")) return addOneDay(rawDate);
+    return rawDate;
+  };
 
   const fileIssues = [];
 
@@ -34688,9 +34709,17 @@ const computeCloseFileIssues = (raw) => {
     const filePhone   = String(row[phoneCol]   || "").replace(/[^\d]/g, "");
     const fileFeeType = String(row[feeTypeCol] || "").trim();
     const fileComm    = Number(row[commCol] || 0);
-    const fileDate    = effectiveDateCol !== -1 ? parseExcelDate(row[effectiveDateCol]) : null;
+    const fileCargo   = cargoCol !== -1 ? String(row[cargoCol] || "") : "";
+    const rawFileDate = effectiveDateCol !== -1 ? parseExcelDate(row[effectiveDateCol]) : null;
+    const fileDate    = resolveEffectiveDate(rawFileDate, fileCargo);
 
     if (!filePlate) continue;
+
+    // ⭐ 지금 조회 중인 기간(rangeStart~rangeEnd) 밖으로 확정된 날짜는 이번 일마감
+    // 대상이 아니다 — 조회하지도, 24시콜 파일에 그 날짜로 받지도 않은 문제가
+    // 튀어나오지 않도록 아예 건너뛴다(날짜를 못 읽은 행은 기존처럼 차량번호만으로
+    // 비교하므로 여기서 걸러지지 않는다).
+    if (fileDate && (fileDate < rangeStart || fileDate > rangeEnd)) continue;
 
     let matched;
     if (fileDate) {
@@ -34815,7 +34844,9 @@ const computeCloseFileIssues = (raw) => {
     });
   }
 
-  // 역방향 검증
+  // 역방향 검증 — 여기서도 "내일" 보정된 날짜로 집합을 만들어야, 전날 미리
+  // 등록해둔 익일 오더가 프로그램 쪽엔 정상 등록돼 있는데도 "파일에 없음"으로
+  // 잘못 잡히지 않는다.
   const filePlates = new Set();
   const filePlateDate = new Set();
   for (let i = headerIdx + 1; i < json.length; i++) {
@@ -34824,7 +34855,9 @@ const computeCloseFileIssues = (raw) => {
     const plate = normalizePlate(String(row[plateCol]));
     filePlates.add(plate);
     if (effectiveDateCol !== -1) {
-      const d = parseExcelDate(row[effectiveDateCol]);
+      const rawD = parseExcelDate(row[effectiveDateCol]);
+      const cargoText = cargoCol !== -1 ? String(row[cargoCol] || "") : "";
+      const d = resolveEffectiveDate(rawD, cargoText);
       if (d) filePlateDate.add(`${plate}__${d}`);
     }
   }
