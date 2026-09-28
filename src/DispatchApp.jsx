@@ -34614,12 +34614,6 @@ const handleCloseFileUpload = async (e) => {
     found !== -1 ? found : headers.indexOf(name), -1
   );
 
-  // ⭐ 24시콜은 다음날 오더를 전날 미리 등록해두는 경우가 있는데, 이때 처리일은
-  // 전날로 찍혀 있어도 화물정보에 "내일상"/"내일 09시상"처럼 "내일"이 들어간다 —
-  // 그 컬럼을 찾아둔다(computeCloseFileIssues에서 처리일을 +1일로 보정하는 데 씀).
-  const cargoColNames = ["화물정보", "화물내용", "화물명", "품목내용", "품목", "화물"];
-  const cargoCol = cargoColNames.reduce((found, name) => found !== -1 ? found : headers.indexOf(name), -1);
-
   if (plateCol === -1) { showAlert("차량번호 컬럼을 찾을 수 없습니다."); return; }
 
   const parseExcelDate = (val) => {
@@ -34664,7 +34658,7 @@ const handleCloseFileUpload = async (e) => {
     }
   }
 
-  const raw = { json, headerIdx, plateCol, nameCol, phoneCol, feeTypeCol, commCol, fareCol, cargoCol, effectiveDateCol, parseExcelDate };
+  const raw = { json, headerIdx, plateCol, nameCol, phoneCol, feeTypeCol, commCol, fareCol, effectiveDateCol, parseExcelDate };
   closeFileRawRef.current = raw;
   setCloseFileResult(computeCloseFileIssues(raw));
 };
@@ -34674,7 +34668,7 @@ const handleCloseFileUpload = async (e) => {
 // (사용자가 오류를 고친 뒤) 같은 파일을 다시 읽지 않고 재사용할 수 있도록
 // handleCloseFileUpload에서 분리했다.
 const computeCloseFileIssues = (raw) => {
-  const { json, headerIdx, plateCol, nameCol, phoneCol, feeTypeCol, commCol, fareCol, cargoCol, effectiveDateCol, parseExcelDate } = raw;
+  const { json, headerIdx, plateCol, nameCol, phoneCol, feeTypeCol, commCol, fareCol, effectiveDateCol, parseExcelDate } = raw;
 
   // 조회 기간 전체 rows (appliedStartDate ~ appliedEndDate)
   const rangeStart = appliedStartDate || todayKST();
@@ -34706,6 +34700,11 @@ const computeCloseFileIssues = (raw) => {
     const isLoadTomorrow = sIdx !== -1 && (cIdx === -1 || sIdx < cIdx);
     return isLoadTomorrow ? addOneDay(rawDate) : rawDate;
   };
+  // ⭐ 화물정보/화물내용 헤더명이 업체·양식마다 달라(고정된 헤더명으로는 그
+  // 컬럼을 못 찾는 경우가 있어) 위 판단이 아예 안 먹힐 수 있다 — 특정 컬럼만
+  // 보는 대신 그 행 전체 셀 텍스트를 이어붙여서 "내일/낼"을 찾는다. 차량번호·
+  // 상하차지·차주 정보엔 나올 일이 없는 단어라 오탐 위험 없이 훨씬 안전하다.
+  const rowCargoText = (row) => (row || []).map(c => String(c ?? "")).join(" ");
 
   const fileIssues = [];
 
@@ -34718,9 +34717,8 @@ const computeCloseFileIssues = (raw) => {
     const filePhone   = String(row[phoneCol]   || "").replace(/[^\d]/g, "");
     const fileFeeType = String(row[feeTypeCol] || "").trim();
     const fileComm    = Number(row[commCol] || 0);
-    const fileCargo   = cargoCol !== -1 ? String(row[cargoCol] || "") : "";
     const rawFileDate = effectiveDateCol !== -1 ? parseExcelDate(row[effectiveDateCol]) : null;
-    const fileDate    = resolveEffectiveDate(rawFileDate, fileCargo);
+    const fileDate    = resolveEffectiveDate(rawFileDate, rowCargoText(row));
 
     if (!filePlate) continue;
 
@@ -34865,8 +34863,7 @@ const computeCloseFileIssues = (raw) => {
     filePlates.add(plate);
     if (effectiveDateCol !== -1) {
       const rawD = parseExcelDate(row[effectiveDateCol]);
-      const cargoText = cargoCol !== -1 ? String(row[cargoCol] || "") : "";
-      const d = resolveEffectiveDate(rawD, cargoText);
+      const d = resolveEffectiveDate(rawD, rowCargoText(row));
       if (d) filePlateDate.add(`${plate}__${d}`);
     }
   }
