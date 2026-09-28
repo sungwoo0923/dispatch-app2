@@ -34781,12 +34781,27 @@ const computeCloseFileIssues = (raw) => {
       continue;
     }
 
+    // ⭐ 24시콜이 같은 기사의 그날 여러 건을 한 행으로 묶어 운임을 합산해 등록하는
+    // 경우가 있다(예: 프로그램엔 6만원+11만원 2건인데 24시콜엔 17만원 1건) — 이때
+    // 매칭된 프로그램 오더들의 기사운임 합이 파일 운임과 같으면 "합산 등록"으로
+    // 보고, 아래 개별 운임 비교(운임 불일치)를 이 파일 행에 대해서는 생략한다.
+    let isSumFareMatch = false;
+    if (fareCol !== -1 && matched.length >= 2) {
+      const fileFareForSum = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
+      if (fileFareForSum > 0) {
+        const sumFare = matched.reduce((s, mr) =>
+          s + Number(String(mr.기사운임 || "0").replace(/[^\d]/g, "")), 0);
+        if (Math.abs(sumFare - fileFareForSum) < 1000) isSumFareMatch = true;
+      }
+    }
+
     // ⭐ 같은 기사가 같은 날 우리 오더를 여러 건 진행한 경우, 24시콜 이 파일 행의
     // 운임과 정확히 일치하는 프로그램 오더가 하나뿐이면 그 오더로 확정한다. 이게
     // 없으면 이 파일 행이 그날의 "다른" 오더와도 비교되어, 둘 다 정상 등록인데도
-    // 운임이 서로 다르다는 이유만으로 양쪽 다 불일치로 잘못 표시된다.
+    // 운임이 서로 다르다는 이유만으로 양쪽 다 불일치로 잘못 표시된다. 합산매칭인
+    // 경우엔 매칭된 오더 전부에 대해 운임 비교 자체를 생략할 것이므로 좁히지 않는다.
     let matchedForRow = matched;
-    if (fareCol !== -1 && matched.length >= 2) {
+    if (!isSumFareMatch && fareCol !== -1 && matched.length >= 2) {
       const fileFareForRow = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
       if (fileFareForRow > 0) {
         const fareMatched = matched.filter(mr =>
@@ -34837,7 +34852,10 @@ const computeCloseFileIssues = (raw) => {
         }
       }
 
-      if (fareCol !== -1) {
+      // 운임 불일치 검증 — 24시콜이 이 파일 행 하나에 매칭된 프로그램 오더 여러
+      // 건의 운임을 합산해서 등록해둔 경우(isSumFareMatch)는 건별 비교가 의미가
+      // 없으므로 생략한다.
+      if (fareCol !== -1 && !isSumFareMatch) {
         const fileFare    = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
         const programFare = Number(String(mr.기사운임  || "0").replace(/[^\d]/g, ""));
         if (isSongsil) {
