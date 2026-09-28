@@ -34689,13 +34689,22 @@ const computeCloseFileIssues = (raw) => {
     const [y, m, d] = dateStr.split("-").map(Number);
     return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
   };
-  // ⭐ 24시콜 파일의 처리일(raw)과 화물정보를 받아, "다음날 오더를 전날 미리
-  // 등록"해둔 경우의 실제 상차일을 되돌려준다. 화물정보에 "내일"이 들어있으면
-  // (예: "내일상", "내일 09시상", "내일 오전7시상") 처리일+1을 실제 상차일로 본다.
+  // ⭐ 24시콜 파일의 처리일(raw)과 화물정보를 받아, "익일 오더를 전날 미리
+  // 등록"해둔 경우의 실제 상차일을 되돌려준다. 화물정보의 "내일/낼"은 상차(상)
+  // 뒤에 붙을 때만(예: "내일상", "내일 09시상", "낼09시상") 처리일+1을 실제
+  // 상차일로 보고, 하차(착) 뒤에 붙을 때는(예: "내일09시착") 오늘 상차·내일
+  // 도착하는 정상적인 익일배송일 뿐이라 상차일은 그대로 둔다 — "내일/낼" 뒤에서
+  // 상/착 중 어느 게 먼저 나오는지로 판단한다.
   const resolveEffectiveDate = (rawDate, cargoText) => {
     if (!rawDate) return rawDate;
-    if (/내일/.test(cargoText || "")) return addOneDay(rawDate);
-    return rawDate;
+    const text = cargoText || "";
+    const m = text.match(/(내일|낼)/);
+    if (!m) return rawDate;
+    const rest = text.slice(m.index + m[0].length, m.index + m[0].length + 20);
+    const sIdx = rest.indexOf("상");
+    const cIdx = rest.indexOf("착");
+    const isLoadTomorrow = sIdx !== -1 && (cIdx === -1 || sIdx < cIdx);
+    return isLoadTomorrow ? addOneDay(rawDate) : rawDate;
   };
 
   const fileIssues = [];
