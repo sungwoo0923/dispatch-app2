@@ -18147,12 +18147,17 @@ setConfirmChange(null);
     tabIndex={0}
     ref={(el) => { if (el && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
   >
-    <div className="bg-white rounded-xl shadow-xl w-[1300px] h-[650px] flex overflow-hidden border">
+    <div className="bg-white rounded-xl shadow-xl w-[95vw] h-[92vh] max-w-[1680px] flex overflow-hidden border">
 
      {/* ================= 지도 영역 =================
           ⭐ 예전엔 여기 height:'500px'가 고정돼 있어서, 모달 전체 높이(650px)보다
           작게 잡혀 지도 아래로 빈 흰 여백이 생겼다. h-full로 부모(플렉스 행)
-          높이에 꽉 차게 늘어나도록 고친다. */}
+          높이에 꽉 차게 늘어나도록 고친다.
+          ⭐ 모달 자체를 뷰포트 기준(w-[95vw] h-[92vh])으로 키운 이유 — 오른쪽
+          정보 패널(배차요청장)의 내용이 많아 상하 스크롤이 필요했는데, 지도랑
+          같이 한눈에 보이려면 스크롤 없이 다 보여야 한다는 요청. 지도 영역은
+          폭/높이가 전부 %(100%) 기준이라 모달이 커지면 지도도 그만큼 같이
+          커진다 — 별도로 지도 크기를 맞출 필요가 없다. */}
 <div className="flex-1 h-full bg-gray-200 relative" style={{ minWidth: '500px' }}>
   
   <div
@@ -18258,7 +18263,7 @@ setConfirmChange(null);
 {/* ⭐ 지도 영역 닫기 */}
 
       {/* ================= 오른쪽 정보 패널 ================= */}
-<div className="w-[380px] border-l flex flex-col bg-white">
+<div className="w-[460px] border-l flex flex-col bg-white">
 
   {/* 패널 헤더 */}
   <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
