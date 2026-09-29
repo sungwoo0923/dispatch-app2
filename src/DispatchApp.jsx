@@ -18148,17 +18148,23 @@ setConfirmChange(null);
     tabIndex={0}
     ref={(el) => { if (el && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
   >
-    <div className="bg-white rounded-xl shadow-xl w-[1400px] h-[720px] max-w-[95vw] max-h-[90vh] flex overflow-hidden border">
+    <div className="bg-white rounded-xl shadow-xl w-[1400px] max-w-[95vw] max-h-[90vh] flex overflow-hidden border">
 
      {/* ================= 지도 영역 =================
           ⭐ 예전엔 여기 height:'500px'가 고정돼 있어서, 모달 전체 높이(650px)보다
           작게 잡혀 지도 아래로 빈 흰 여백이 생겼다. h-full로 부모(플렉스 행)
           높이에 꽉 차게 늘어나도록 고친다.
-          ⭐ 처음엔 모달을 뷰포트 기준(w-[95vw] h-[92vh])으로 키웠는데, 오른쪽
-          정보 패널 내용은 보통 그렇게까지 안 길어서 큰 모니터에서 패널 아래에
-          빈 여백이 크게 남는 문제가 있었다("여백이 생기지 않는 선까지만") —
-          뷰포트 비례 대신 실제 패널 내용 분량에 맞춘 고정 크기(1400×720)로
-          바꾸고, 화면이 작을 때만 max-w/max-h로 줄어들게 한다. */}
+          ⭐ 뷰포트 비례(95vw/92vh)로 키웠더니 패널 내용이 짧은 주문에서는 아래
+          여백이 크게 남고, 반대로 고정 픽셀(720px)로 굳혔더니 내용이 긴
+          주문(경유지·메모 등)에서는 스크롤이 다시 생겼다 — 오더마다 패널
+          내용 분량이 달라 고정값 하나로는 "여백도 스크롤도 없이" 둘 다 맞출
+          수 없다. 대신 모달 자체엔 높이를 고정하지 않고(내용 기준 자동
+          높이) max-h만 안전장치로 남긴다 — flex 기본 동작(align-items:
+          stretch)상 오른쪽 패널(실제 내용이 있는 쪽)의 자연스러운 높이만큼
+          모달이 정확히 커지고, 지도(h-full, 자체 내용 없음)는 그 확정된
+          높이에 맞춰 같이 늘어난다. 이러면 오더마다 내용 분량이 달라도 항상
+          "딱 맞는" 크기가 되고, 아주 긴 경우에만 max-h-[90vh]에 걸려 패널
+          자체 스크롤(overflow-y-auto)로 자연스럽게 폴백된다. */}
 <div className="flex-1 h-full bg-gray-200 relative" style={{ minWidth: '500px' }}>
   
   <div
