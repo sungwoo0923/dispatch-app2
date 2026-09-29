@@ -30,6 +30,7 @@ import { TEAM_OPTIONS, POSITION_OPTIONS, TEAM_BADGE_CLASS, TEAM_BADGE_CLASS_UNAS
 import AttendanceBoard from "./AttendanceBoard";
 import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate, isHoliday, isScheduleApproved, LEAVE_TYPE_LABEL, ATTENDANCE_STATUS_COLOR } from "./attendanceUtils";
 import FreightRateInquiry from "./FreightRateInquiry";
+import HandoverFareReport from "./HandoverFareReport";
 import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnabled } from "./notificationSettings";
 import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare, geocodeAddress, haversineKm } from "./tmapFareCalc";
@@ -6882,6 +6883,7 @@ return (
               "배차현황",
               "단가표",
               "운임조회",
+              "인수인계",
               "기사관리",
               "거래처관리",
               "지입차관리",
@@ -7458,6 +7460,8 @@ return (
         )}
 
         {menu === "운임조회" && <FreightRateInquiry />}
+
+        {menu === "인수인계" && <HandoverFareReport userCompany={userCompany} role={role} />}
 
         {menu === "회사관리" && (
           <CompanyManagementWrapper
@@ -18303,6 +18307,29 @@ setConfirmChange(null);
           )}
         </div>
       )}
+    </div>
+
+    {/* 전달상태 — 기본은 항상 OFF(미전달)이고, 켜서 등록하면 전달완료 상태로
+        바로 등록된다. 그리드/수정패널의 미전달·전달완료 토글과 같은 필드
+        (업체전달상태)를 쓰므로 동작이 완전히 동일하다. */}
+    <div className="px-6 py-4">
+      <div className="flex items-center justify-between">
+        <span className="text-[13px] font-semibold text-gray-700">전달상태</span>
+        <button
+          type="button"
+          onClick={() => setForm(p => ({ ...p, 업체전달상태: p.업체전달상태 === "전달완료" ? "미전달" : "전달완료" }))}
+          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+            form.업체전달상태 === "전달완료" ? "bg-[#1B2B4B]" : "bg-gray-200"
+          }`}
+        >
+          <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${
+            form.업체전달상태 === "전달완료" ? "translate-x-4" : "translate-x-0.5"
+          }`}/>
+        </button>
+      </div>
+      <p className="text-[11px] text-gray-400 mt-1">
+        {form.업체전달상태 === "전달완료" ? "전달완료 상태로 등록됩니다" : "미전달 상태로 등록됩니다"}
+      </p>
     </div>
 
     {/* 화물 정보 */}
