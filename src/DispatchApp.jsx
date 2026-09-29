@@ -279,7 +279,8 @@ function FareCertModal({ row, companyName, onClose }) {
               <div className="mb-2">
                 <div className="text-[13px] font-extrabold text-[#1B2B4B] mb-1.5">■ 운임 정보</div>
                 <CertRow label="지급방식" value={r.지급방식} />
-                <CertRow label="기사운임" value={`${기사운임.toLocaleString()} 원`} bold big />
+                <CertRow label="기사운임" value={`${기사운임.toLocaleString()} 원 (VAT 별도)`} bold big />
+                <CertRow label="부가세 포함" value={`${Math.round(기사운임 * 1.1).toLocaleString()} 원 (VAT 10% 포함)`} bold />
               </div>
 
               <div className="mt-6 pt-4 border-t border-dashed border-gray-300 text-[11.5px] font-semibold text-gray-500 text-center leading-relaxed">
@@ -18147,17 +18148,17 @@ setConfirmChange(null);
     tabIndex={0}
     ref={(el) => { if (el && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
   >
-    <div className="bg-white rounded-xl shadow-xl w-[95vw] h-[92vh] max-w-[1680px] flex overflow-hidden border">
+    <div className="bg-white rounded-xl shadow-xl w-[1400px] h-[720px] max-w-[95vw] max-h-[90vh] flex overflow-hidden border">
 
      {/* ================= 지도 영역 =================
           ⭐ 예전엔 여기 height:'500px'가 고정돼 있어서, 모달 전체 높이(650px)보다
           작게 잡혀 지도 아래로 빈 흰 여백이 생겼다. h-full로 부모(플렉스 행)
           높이에 꽉 차게 늘어나도록 고친다.
-          ⭐ 모달 자체를 뷰포트 기준(w-[95vw] h-[92vh])으로 키운 이유 — 오른쪽
-          정보 패널(배차요청장)의 내용이 많아 상하 스크롤이 필요했는데, 지도랑
-          같이 한눈에 보이려면 스크롤 없이 다 보여야 한다는 요청. 지도 영역은
-          폭/높이가 전부 %(100%) 기준이라 모달이 커지면 지도도 그만큼 같이
-          커진다 — 별도로 지도 크기를 맞출 필요가 없다. */}
+          ⭐ 처음엔 모달을 뷰포트 기준(w-[95vw] h-[92vh])으로 키웠는데, 오른쪽
+          정보 패널 내용은 보통 그렇게까지 안 길어서 큰 모니터에서 패널 아래에
+          빈 여백이 크게 남는 문제가 있었다("여백이 생기지 않는 선까지만") —
+          뷰포트 비례 대신 실제 패널 내용 분량에 맞춘 고정 크기(1400×720)로
+          바꾸고, 화면이 작을 때만 max-w/max-h로 줄어들게 한다. */}
 <div className="flex-1 h-full bg-gray-200 relative" style={{ minWidth: '500px' }}>
   
   <div

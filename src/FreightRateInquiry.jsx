@@ -208,6 +208,20 @@ const CARGO_TYPES = [
   {id:"위험물",name:"위험물",   surcharge:0.20},
 ];
 
+// ⭐ "자사 실거래 참고"가 조회 조건(차종/톤수)과 무관하게 상/하차지 이름만 보고
+// 뽑던 것을 톤수까지 맞춰보기 위한 기준 톤수 — VEHICLE_TYPES id → 대략적인 톤수.
+// 오토바이/다마스라보는 톤수 개념이 무의미해 0에 가깝게, 추레라/로베드는 참고
+// 기준이 없어 25톤급으로 취급한다.
+const VEHICLE_TON_HINT = {
+  bike:0, damas:0.3, "1ton":1, "1.4ton":1.4, "2.5ton":2.5, "3.5ton":3.5, "3.5tonW":3.5,
+  "5ton":5, "5tonP":5, "5tonAx":5, "11ton":11, "18ton":18, "25ton":25, trailer:25, lowbed:25,
+};
+// 차량톤수 문자열에서 숫자만 뽑는다(예: "1.4톤"→1.4, "5"→5). 못 뽑으면 null.
+const parseTonNumber = (s) => {
+  const m = String(s||"").match(/(\d+(?:\.\d+)?)/);
+  return m ? parseFloat(m[1]) : null;
+};
+
 const PREF_LABELS = ["없음","보통","다소 선호","선호","매우 선호"];
 
 const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
@@ -628,18 +642,46 @@ function NationalFareTab() {
   },[result]);
   useEffect(()=>()=>{if(cargoToastTimerRef.current) clearTimeout(cargoToastTimerRef.current);},[]);
 
+  // ⭐ 예전엔 상/하차지 "이름"(거래처/상호명)에 지역명이 그대로 들어있다고 가정하고
+  // (pu.includes(fromP)) 찾았는데, 실제 오더의 상차지명은 "크레팜"처럼 지역명과
+  // 무관한 상호명이라 사실상 거의 매칭되지 않았다. 상/하차지 "주소"에서 시/도(+선택한
+  // 시군구가 있으면 그것까지)를 뽑아 지역으로 비교하도록 고치고, 조회 조건과 무관하게
+  // 아무 오더나 잡히지 않도록 톤수(독차일 때)·냉장/냉동 여부도 같이 맞춘다 — "같은
+  // 조건일 때 프로그램에 등록된 금액대"를 보여달라는 요청.
   const refData=useMemo(()=>{
     if(!fromP||!toP||!dispatchData.length||step!=="result")return null;
+    const cityLabelOf=(label,prov)=>{
+      const c=String(label||"").replace(prov,"").trim();
+      return c||null;
+    };
+    const fromCity=fromC?cityLabelOf(fromC.n,fromP):null;
+    const toCity=toC?cityLabelOf(toC.n,toP):null;
+    const regionMatch=(addr,prov,cityLabel)=>{
+      const a=String(addr||"");
+      if(!a||_provFromAddr(a)!==prov)return false;
+      if(cityLabel&&!a.includes(cityLabel))return false;
+      return true;
+    };
+    const wantTon=freightMode==="독차"?VEHICLE_TON_HINT[vehicle]:null;
+    const wantRefrig=cargoType==="냉장";
     const filtered=dispatchData.filter(r=>{
-      const pu=String(r.상차지명||""),dr=String(r.하차지명||"");
-      return pu.includes(fromP)&&dr.includes(toP)&&Number(r.청구운임||0)>0;
+      if(Number(r.청구운임||0)<=0)return false;
+      if(!regionMatch(r.상차지주소,fromP,fromCity))return false;
+      if(!regionMatch(r.하차지주소,toP,toCity))return false;
+      const isRefrig=/냉장|냉동/.test(String(r.차량종류||"")+String(r.화물내용||""));
+      if(wantRefrig!==isRefrig)return false;
+      if(wantTon!=null){
+        const t=parseTonNumber(r.차량톤수);
+        if(t!=null&&Math.abs(t-wantTon)>Math.max(1,wantTon*0.3))return false;
+      }
+      return true;
     });
     if(!filtered.length)return null;
     const charges=filtered.map(r=>Number(r.청구운임||0)).filter(v=>v>0);
     const drivers=filtered.map(r=>Number(r.기사운임||0)).filter(v=>v>0);
     const stat=arr=>arr.length?{avg:Math.round(arr.reduce((a,b)=>a+b)/arr.length),min:Math.min(...arr),max:Math.max(...arr)}:null;
     return{count:filtered.length,charge:stat(charges),driver:stat(drivers)};
-  },[fromP,toP,dispatchData,step]);
+  },[fromP,toP,fromC,toC,dispatchData,step,vehicle,cargoType,freightMode]);
 
   const reset=useCallback(()=>{
     setStep("from");setFromP(null);setFromC(null);setToP(null);setToC(null);setCityStep(null);
@@ -1066,7 +1108,7 @@ function NationalFareTab() {
               {/* 자사 실데이터 참고 운임 */}
               {refData&&(
                 <div className="mt-3 border-t border-white/10 pt-3">
-                  <div className="text-[10px] text-white/40 font-semibold mb-2">자사 실거래 참고 ({refData.count}건)</div>
+                  <div className="text-[10px] text-white/40 font-semibold mb-2">자사 실거래 참고 · 동일 조건 ({refData.count}건)</div>
                   <div className="grid grid-cols-2 gap-2">
                     {refData.charge&&(
                       <div className="bg-white/6 rounded-xl px-3 py-2">
