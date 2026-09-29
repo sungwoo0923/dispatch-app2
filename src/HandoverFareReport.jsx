@@ -22,25 +22,28 @@ const vehicleCategoryOf = (raw = "") => {
   return "일반화물";
 };
 
-// "1파레트", "100통" 처럼 숫자+단위 형태는 그대로(개수 포함) 하나의 화물내용
-// 값으로 쓴다 — 개수가 다르면 실제로 다른 화물(예: 1파레트 vs 5파레트는 운임이
-// 전혀 다름)이라 개수까지 정확히 구분해서 보여준다. 정형화된 단위가 없는
-// 자유서술형 화물내용은 원문 그대로 하나의 묶음으로 본다. 빈 값은 "없음".
-const cargoBucketOf = (raw = "") => {
+// 화물내용에서 "단위"와 "개수"를 따로 뽑는다 — 묶을 때는 단위만 쓰고(20박스든
+// 28박스든 같은 "박스"), 개수는 따로 모아뒀다가 화면에는 범위로 보여준다
+// (아래 cargoRangeLabel 참고). 정형화된 단위가 없는 자유서술형 화물내용은
+// 원문 그대로 하나의 단위로 본다(개수 없음). 빈 값은 "없음".
+const cargoUnitOf = (raw = "") => {
   const s = String(raw || "").trim();
-  if (!s) return "없음";
+  if (!s) return { unit: "없음", count: null };
   const m = s.match(/^(\d+(?:\.\d+)?)\s*(파레트|파렛트|박스|통|롤테이너|백)/);
-  if (m) return `${m[1]}${m[2] === "파렛트" ? "파레트" : m[2]}`;
-  return s;
+  if (m) return { unit: m[2] === "파렛트" ? "파레트" : m[2], count: Number(m[1]) };
+  return { unit: s, count: null };
 };
 
-// 화물내용 정렬용 — "1파레트, 2파레트, 10파레트" 처럼 단위별로 묶은 뒤 그
-// 안에서 개수가 작은 순으로 나오게 한다(문자열 정렬이면 "10파레트"가
-// "2파레트"보다 앞에 와버린다). 숫자가 없는 값(없음/자유서술형)은 맨 뒤로.
-const parseCargoBucket = (bucket) => {
-  const m = String(bucket || "").match(/^(\d+(?:\.\d+)?)(.+)$/);
-  if (m) return { num: Number(m[1]), unit: m[2] };
-  return { num: Number.POSITIVE_INFINITY, unit: String(bucket || "") };
+// ⭐ 같은 단위(예: "박스")로 묶인 오더들의 개수를 최소~최대로 요약한다 —
+// 20~28박스처럼 개수가 조금씩 달라도(운임이 같다면) 실질적으로 같은 화물로
+// 보고 한 줄로 보여달라는 요청에 따른 것. 다 같으면 "26박스", 다르면
+// "20~28박스"처럼 표시. 개수가 없는(자유서술형/없음) 단위는 그대로 둔다.
+const cargoRangeLabel = (unit, counts) => {
+  const nums = counts.filter((c) => c != null);
+  if (nums.length === 0) return unit;
+  const min = Math.min(...nums);
+  const max = Math.max(...nums);
+  return min === max ? `${min}${unit}` : `${min}~${max}${unit}`;
 };
 
 // 주소 표기가 "강원도"/"강원특별자치도", "경북"/"경상북도", "부산"/"부산광역시"/
@@ -183,46 +186,52 @@ export default function HandoverFareReport({ userCompany, role }) {
     return base;
   }, [rawRows, startDate, endDate, selectedSet]);
 
-  const cargoCompare = (a, b) => {
-    const pa = parseCargoBucket(a);
-    const pb = parseCargoBucket(b);
-    return pa.unit.localeCompare(pb.unit) || pa.num - pb.num;
-  };
-
-  // 거래처 > 상차지명 > 하차지명 > 차량구분 > 화물내용(개수 포함) 순으로
-  // 크게 나눠 나열한다 — "기본거래처별로 지역별로 쫙" 정렬해달라는 요청 그대로.
+  // 거래처 > 상차지명 > 하차지명 > 차량구분 > 화물단위 순으로 크게 나눠
+  // 나열한다 — "기본거래처별로 지역별로 쫙" 정렬해달라는 요청 그대로. 화물
+  // 단위(박스/파레트 등)가 같으면 개수가 조금씩 달라도(20~28박스처럼) 한
+  // 줄로 묶고, 화면에는 개수 범위로 보여준다(cargoRangeLabel).
   const clientReport = useMemo(() => {
     const groups = groupBy(filteredRows, (r) =>
       [r.거래처명 || "(미입력)", r.상차지명 || "(미입력)", r.하차지명 || "(미입력)",
-       vehicleCategoryOf(r.차량종류 || r.차종), cargoBucketOf(r.화물내용)].join("\u0000")
+       vehicleCategoryOf(r.차량종류 || r.차종), cargoUnitOf(r.화물내용).unit].join("\u0000")
     );
     return [...groups.entries()]
       .map(([key, list]) => {
-        const [거래처명, 상차지명, 하차지명, 차량구분, 화물내용] = key.split("\u0000");
-        return { 거래처명, 상차지명, 하차지명, 차량구분, 화물내용, ...summarizeFares(list) };
+        const [거래처명, 상차지명, 하차지명, 차량구분, 화물단위] = key.split("\u0000");
+        const counts = list.map((r) => cargoUnitOf(r.화물내용).count);
+        return {
+          거래처명, 상차지명, 하차지명, 차량구분,
+          화물내용: cargoRangeLabel(화물단위, counts),
+          ...summarizeFares(list),
+        };
       })
       .sort((a, b) =>
         a.거래처명.localeCompare(b.거래처명) ||
         a.상차지명.localeCompare(b.상차지명) ||
         a.하차지명.localeCompare(b.하차지명) ||
         a.차량구분.localeCompare(b.차량구분) ||
-        cargoCompare(a.화물내용, b.화물내용)
+        a.화물내용.localeCompare(b.화물내용)
       );
   }, [filteredRows]);
 
-  // 거래처 > 상차 시/도·시군구 > 하차 시/도·시군구 > 차량구분 > 화물내용
+  // 거래처 > 상차 시/도·시군구 > 하차 시/도·시군구 > 차량구분 > 화물단위
   // 순서로 나열 — 거래처를 가장 먼저 나눈 뒤 그 안에서 지역별로 쫙 정리된다.
   const regionReport = useMemo(() => {
     const groups = groupBy(filteredRows, (r) => {
       const from = regionPartsOf(r.상차지주소);
       const to = regionPartsOf(r.하차지주소);
       return [r.거래처명 || "(미입력)", from.sido, from.sigungu, to.sido, to.sigungu,
-        vehicleCategoryOf(r.차량종류 || r.차종), cargoBucketOf(r.화물내용)].join("\u0000");
+        vehicleCategoryOf(r.차량종류 || r.차종), cargoUnitOf(r.화물내용).unit].join("\u0000");
     });
     return [...groups.entries()]
       .map(([key, list]) => {
-        const [거래처명, 상차시도, 상차시군구, 하차시도, 하차시군구, 차량구분, 화물내용] = key.split("\u0000");
-        return { 거래처명, 상차시도, 상차시군구, 하차시도, 하차시군구, 차량구분, 화물내용, ...summarizeFares(list) };
+        const [거래처명, 상차시도, 상차시군구, 하차시도, 하차시군구, 차량구분, 화물단위] = key.split("\u0000");
+        const counts = list.map((r) => cargoUnitOf(r.화물내용).count);
+        return {
+          거래처명, 상차시도, 상차시군구, 하차시도, 하차시군구, 차량구분,
+          화물내용: cargoRangeLabel(화물단위, counts),
+          ...summarizeFares(list),
+        };
       })
       .sort((a, b) =>
         a.거래처명.localeCompare(b.거래처명) ||
@@ -231,7 +240,7 @@ export default function HandoverFareReport({ userCompany, role }) {
         a.하차시도.localeCompare(b.하차시도) ||
         a.하차시군구.localeCompare(b.하차시군구) ||
         a.차량구분.localeCompare(b.차량구분) ||
-        cargoCompare(a.화물내용, b.화물내용)
+        a.화물내용.localeCompare(b.화물내용)
       );
   }, [filteredRows]);
 
