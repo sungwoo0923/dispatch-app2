@@ -1913,6 +1913,102 @@ exports.backfillGsheetClients = functions
     }
   });
 
+/* ==================================================================
+   💼 인수인계 자료(운임 이력)를 구글시트로 전송 — src/HandoverFareReport.jsx
+   화면이 이미 거래처/지역별로 묶어서 계산해둔 결과(단위 묶기, 톤수 구분,
+   지역명 통일 등 모든 로직은 화면 쪽에만 있음)를 그대로 받아 적기만
+   한다 — 그래서 화면 쪽 그룹핑 로직이 바뀌어도 이 함수는 안 고쳐도 된다.
+   "운임표(명칭)"엔 거래처·상하차지명 기준 행을, "운임표(주소)"엔
+   거래처·지역 기준 행을 각각 통째로 비우고 다시 채운다(탭이 없으면 새로
+   만듦). 컬럼명/순서는 화면 표와 동일하게 코드에 고정.
+
+   호출: POST https://.../backfillGsheetFareHistory?key=<GSHEET_BACKFILL_KEY>
+   body: { key, nameRows: [...], addressRows: [...] }
+================================================================== */
+const GSHEET_FARE_NAME_COLUMNS = [
+  { field: "거래처명", header: "거래처명" },
+  { field: "상차지명", header: "상차지명" },
+  { field: "하차지명", header: "하차지명" },
+  { field: "차량구분", header: "차량구분" },
+  { field: "톤수", header: "톤수" },
+  { field: "화물내용", header: "화물내용" },
+  { field: "청구운임", header: "청구운임" },
+  { field: "최근상차일", header: "최근상차일" },
+];
+const GSHEET_FARE_ADDRESS_COLUMNS = [
+  { field: "거래처명", header: "거래처명" },
+  { field: "상차시도", header: "상차시도" },
+  { field: "상차시군구", header: "상차시군구" },
+  { field: "하차시도", header: "하차시도" },
+  { field: "하차시군구", header: "하차시군구" },
+  { field: "차량구분", header: "차량구분" },
+  { field: "톤수", header: "톤수" },
+  { field: "화물내용", header: "화물내용" },
+  { field: "청구운임", header: "청구운임" },
+  { field: "최근상차일", header: "최근상차일" },
+];
+
+async function backfillGsheetFareRows({ tabName, columns, rows }) {
+  let sheets = await getGsheetSheetList();
+  let sheet = sheets.find((s) => s.title === tabName);
+  if (!sheet) {
+    const created = await gsheetApi("POST", ":batchUpdate", {
+      data: { requests: [{ addSheet: { properties: { title: tabName } } }] },
+    });
+    sheet = created.replies[0].addSheet.properties;
+  }
+
+  return await withGsheetTabLock(tabName, async () => {
+    await gsheetApi("POST", `/values/${encodeURIComponent(quoteTab(tabName))}:clear`, { data: {} });
+
+    const headerRow = columns.map((c) => c.header);
+    const dataRows = (rows || []).map((row) => columns.map((c) => row?.[c.field] ?? ""));
+
+    await gsheetApi("POST", "/values:batchUpdate", {
+      data: {
+        valueInputOption: "USER_ENTERED",
+        data: [{ range: `${quoteTab(tabName)}!A1`, values: [headerRow, ...dataRows] }],
+      },
+    });
+
+    return { ok: true, message: `탭 "${tabName}" — ${dataRows.length}건 반영 완료.` };
+  });
+}
+
+exports.backfillGsheetFareHistory = functions
+  .runWith({ timeoutSeconds: 300, memory: "256MB" })
+  .https.onRequest(async (req, res) => {
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "Content-Type");
+    if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+    if (req.method !== "POST") { res.status(405).send("POST만 허용됩니다."); return; }
+
+    let body = req.body;
+    if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
+    body = body || {};
+
+    if (body.key !== GSHEET_BACKFILL_KEY) { res.status(403).send("forbidden"); return; }
+
+    try {
+      const results = [];
+      results.push(await backfillGsheetFareRows({
+        tabName: "운임표(명칭)",
+        columns: GSHEET_FARE_NAME_COLUMNS,
+        rows: Array.isArray(body.nameRows) ? body.nameRows : [],
+      }));
+      results.push(await backfillGsheetFareRows({
+        tabName: "운임표(주소)",
+        columns: GSHEET_FARE_ADDRESS_COLUMNS,
+        rows: Array.isArray(body.addressRows) ? body.addressRows : [],
+      }));
+      res.status(200).send(results.map((r) => r.message).join("\n"));
+    } catch (e) {
+      console.error("운임 이력 구글시트 전송 오류:", e);
+      res.status(500).send(`오류: ${e?.message || e}`);
+    }
+  });
+
 exports.syncDispatchToGoogleSheet =
   functions.firestore
     .document("{col}/{dispatchId}")

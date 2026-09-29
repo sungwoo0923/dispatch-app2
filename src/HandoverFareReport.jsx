@@ -26,7 +26,11 @@ const vehicleCategoryOf = (raw = "") => {
 // 단위가 있으면 그대로, 없으면 톤수타입(기본 "톤")을 붙임). 톤수가 없으면
 // 화물내용만으로는(예: "변압기") 몇 톤 차량에 얼마를 청구했는지 알 수 없어서
 // 묶을 때 반드시 같이 봐야 한다는 요청에 따라 그룹핑 키에 추가.
-const tonOf = (r) => {
+// 단, 오토바이/다마스·라보는 "0.001톤"/"2kg"처럼 사실상 의미 없는 값이
+// 오더마다 제각각 입력돼 있어서 톤수로 나누면 오히려 똑같은 건이 쓸데없이
+// 여러 줄로 쪼개진다 — 이 차량구분은 톤수를 그룹핑에서 아예 빼고 "-"로 둔다.
+const tonOf = (r, vehicleCategory) => {
+  if (vehicleCategory === "오토바이" || vehicleCategory === "다마스/라보") return "-";
   const ton = String(r.차량톤수 || "").trim();
   if (!ton) return "미입력";
   if (/톤|kg|킬로/.test(ton)) return ton;
@@ -139,6 +143,8 @@ export default function HandoverFareReport({ userCompany, role }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerDraft, setPickerDraft] = useState([]);
   const [pickerSearch, setPickerSearch] = useState("");
+  const [sendingSheet, setSendingSheet] = useState(false);
+  const [sheetResult, setSheetResult] = useState("");
 
   const resolveCompany = () => role === "totalMaster"
     ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
@@ -207,10 +213,11 @@ export default function HandoverFareReport({ userCompany, role }) {
   // 단위(박스/파레트 등)가 같으면 개수가 조금씩 달라도(20~28박스처럼) 한
   // 줄로 묶고, 화면에는 개수 범위로 보여준다(cargoRangeLabel).
   const clientReport = useMemo(() => {
-    const groups = groupBy(filteredRows, (r) =>
-      [r.거래처명 || "(미입력)", r.상차지명 || "(미입력)", r.하차지명 || "(미입력)",
-       vehicleCategoryOf(r.차량종류 || r.차종), tonOf(r), cargoUnitOf(r.화물내용).unit].join("\u0000")
-    );
+    const groups = groupBy(filteredRows, (r) => {
+      const 차량구분 = vehicleCategoryOf(r.차량종류 || r.차종);
+      return [r.거래처명 || "(미입력)", r.상차지명 || "(미입력)", r.하차지명 || "(미입력)",
+        차량구분, tonOf(r, 차량구분), cargoUnitOf(r.화물내용).unit].join("\u0000");
+    });
     return [...groups.entries()]
       .map(([key, list]) => {
         const [거래처명, 상차지명, 하차지명, 차량구분, 톤수, 화물단위] = key.split("\u0000");
@@ -237,8 +244,9 @@ export default function HandoverFareReport({ userCompany, role }) {
     const groups = groupBy(filteredRows, (r) => {
       const from = regionPartsOf(r.상차지주소);
       const to = regionPartsOf(r.하차지주소);
+      const 차량구분 = vehicleCategoryOf(r.차량종류 || r.차종);
       return [r.거래처명 || "(미입력)", from.sido, from.sigungu, to.sido, to.sigungu,
-        vehicleCategoryOf(r.차량종류 || r.차종), tonOf(r), cargoUnitOf(r.화물내용).unit].join("\u0000");
+        차량구분, tonOf(r, 차량구분), cargoUnitOf(r.화물내용).unit].join("\u0000");
     });
     return [...groups.entries()]
       .map(([key, list]) => {
@@ -278,6 +286,42 @@ export default function HandoverFareReport({ userCompany, role }) {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, tab === "client" ? "거래처기준" : "지역기준");
     XLSX.writeFile(wb, `인수인계_운임_${tab === "client" ? "거래처기준" : "지역기준"}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  // ⭐ "구글시트 백필"과 같은 방식(Cloud Function + key)으로, 화면에 지금 계산돼
+  // 있는 결과(거래처·상하차지명 기준 + 거래처·지역 기준 둘 다, 현재 보고 있는
+  // 탭과 무관하게)를 "운임표(명칭)"/"운임표(주소)" 시트 탭에 그대로 전송한다.
+  // 그룹핑/묶음 계산은 전부 화면(clientReport/regionReport)에서 이미 끝난
+  // 결과라 서버는 받아 적기만 한다.
+  const sendToGsheet = async () => {
+    if (!clientReport.length && !regionReport.length) { alert("먼저 이력을 불러와주세요."); return; }
+    if (!window.confirm('구글시트의 "운임표(명칭)"/"운임표(주소)" 탭을 통째로 비우고, 지금 조회된 내용으로 다시 채웁니다.\n계속할까요?')) return;
+    setSendingSheet(true);
+    setSheetResult("");
+    try {
+      const nameRows = clientReport.map((r) => ({
+        거래처명: r.거래처명, 상차지명: r.상차지명, 하차지명: r.하차지명,
+        차량구분: r.차량구분, 톤수: r.톤수, 화물내용: r.화물내용,
+        청구운임: r.청구운임표시, 최근상차일: r.최근상차일,
+      }));
+      const addressRows = regionReport.map((r) => ({
+        거래처명: r.거래처명, 상차시도: r.상차시도, 상차시군구: r.상차시군구,
+        하차시도: r.하차시도, 하차시군구: r.하차시군구,
+        차량구분: r.차량구분, 톤수: r.톤수, 화물내용: r.화물내용,
+        청구운임: r.청구운임표시, 최근상차일: r.최근상차일,
+      }));
+      const res = await fetch("https://us-central1-dispatch-app-9b92f.cloudfunctions.net/backfillGsheetFareHistory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "dolkae-backfill-2026", nameRows, addressRows }),
+      });
+      const text = await res.text();
+      setSheetResult(text);
+    } catch (e) {
+      setSheetResult(`요청 실패: ${e?.message || e}`);
+    } finally {
+      setSendingSheet(false);
+    }
   };
 
   return (
@@ -347,11 +391,25 @@ export default function HandoverFareReport({ userCompany, role }) {
           </button>
         )}
         {loaded && (
+          <button
+            onClick={sendToGsheet}
+            disabled={sendingSheet}
+            className="px-5 py-2 rounded-lg border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#1B2B4B] hover:text-white transition disabled:opacity-50"
+          >
+            {sendingSheet ? "전송 중..." : "구글시트로 보내기 (명칭+주소)"}
+          </button>
+        )}
+        {loaded && (
           <span className="text-[12px] text-gray-500">
             <b className="text-[#1B2B4B]">{activeData.length}</b>개 그룹 · 원본 <b className="text-[#1B2B4B]">{totalOrders}</b>건
           </span>
         )}
       </div>
+      {sheetResult && (
+        <div className="mb-4 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-[12px] text-gray-700 whitespace-pre-wrap break-words">
+          {sheetResult}
+        </div>
+      )}
 
       {/* 거래처 선택 팝업 */}
       {pickerOpen && (
@@ -436,25 +494,25 @@ export default function HandoverFareReport({ userCompany, role }) {
             <table className="w-full text-[12px]">
               <thead className="bg-gray-100 sticky top-0 z-10">
                 <tr>
-                  <th className="px-3 py-2 text-left font-bold text-gray-600">거래처명</th>
+                  <th className="px-3 py-2 text-center font-bold text-gray-600">거래처명</th>
                   {tab === "client" ? (
                     <>
-                      <th className="px-3 py-2 text-left font-bold text-gray-600">상차지명</th>
-                      <th className="px-3 py-2 text-left font-bold text-gray-600">하차지명</th>
+                      <th className="px-3 py-2 text-center font-bold text-gray-600">상차지명</th>
+                      <th className="px-3 py-2 text-center font-bold text-gray-600">하차지명</th>
                     </>
                   ) : (
                     <>
-                      <th className="px-3 py-2 text-left font-bold text-gray-600">상차 시/도</th>
-                      <th className="px-3 py-2 text-left font-bold text-gray-600">상차 시군구</th>
-                      <th className="px-3 py-2 text-left font-bold text-gray-600">하차 시/도</th>
-                      <th className="px-3 py-2 text-left font-bold text-gray-600">하차 시군구</th>
+                      <th className="px-3 py-2 text-center font-bold text-gray-600">상차 시/도</th>
+                      <th className="px-3 py-2 text-center font-bold text-gray-600">상차 시군구</th>
+                      <th className="px-3 py-2 text-center font-bold text-gray-600">하차 시/도</th>
+                      <th className="px-3 py-2 text-center font-bold text-gray-600">하차 시군구</th>
                     </>
                   )}
-                  <th className="px-3 py-2 text-left font-bold text-gray-600">차량구분</th>
-                  <th className="px-3 py-2 text-left font-bold text-gray-600">톤수</th>
-                  <th className="px-3 py-2 text-left font-bold text-gray-600">화물내용</th>
-                  <th className="px-3 py-2 text-right font-bold text-gray-600">청구운임</th>
-                  <th className="px-3 py-2 text-left font-bold text-gray-600">최근상차일</th>
+                  <th className="px-3 py-2 text-center font-bold text-gray-600">차량구분</th>
+                  <th className="px-3 py-2 text-center font-bold text-gray-600">톤수</th>
+                  <th className="px-3 py-2 text-center font-bold text-gray-600">화물내용</th>
+                  <th className="px-3 py-2 text-center font-bold text-gray-600">청구운임</th>
+                  <th className="px-3 py-2 text-center font-bold text-gray-600">최근상차일</th>
                 </tr>
               </thead>
               <tbody>
@@ -467,25 +525,25 @@ export default function HandoverFareReport({ userCompany, role }) {
                 )}
                 {activeData.map((r, i) => (
                   <tr key={i} className="border-t border-gray-100 hover:bg-gray-50">
-                    <td className="px-3 py-1.5 font-semibold">{r.거래처명}</td>
+                    <td className="px-3 py-1.5 text-center font-semibold">{r.거래처명}</td>
                     {tab === "client" ? (
                       <>
-                        <td className="px-3 py-1.5">{r.상차지명}</td>
-                        <td className="px-3 py-1.5">{r.하차지명}</td>
+                        <td className="px-3 py-1.5 text-center">{r.상차지명}</td>
+                        <td className="px-3 py-1.5 text-center">{r.하차지명}</td>
                       </>
                     ) : (
                       <>
-                        <td className="px-3 py-1.5">{r.상차시도}</td>
-                        <td className="px-3 py-1.5">{r.상차시군구}</td>
-                        <td className="px-3 py-1.5">{r.하차시도}</td>
-                        <td className="px-3 py-1.5">{r.하차시군구}</td>
+                        <td className="px-3 py-1.5 text-center">{r.상차시도}</td>
+                        <td className="px-3 py-1.5 text-center">{r.상차시군구}</td>
+                        <td className="px-3 py-1.5 text-center">{r.하차시도}</td>
+                        <td className="px-3 py-1.5 text-center">{r.하차시군구}</td>
                       </>
                     )}
-                    <td className="px-3 py-1.5">{r.차량구분}</td>
-                    <td className="px-3 py-1.5">{r.톤수}</td>
-                    <td className="px-3 py-1.5">{r.화물내용}</td>
-                    <td className="px-3 py-1.5 text-right font-semibold">{r.청구운임표시}</td>
-                    <td className="px-3 py-1.5 text-gray-500">{r.최근상차일}</td>
+                    <td className="px-3 py-1.5 text-center">{r.차량구분}</td>
+                    <td className="px-3 py-1.5 text-center">{r.톤수}</td>
+                    <td className="px-3 py-1.5 text-center">{r.화물내용}</td>
+                    <td className="px-3 py-1.5 text-center font-semibold">{r.청구운임표시}</td>
+                    <td className="px-3 py-1.5 text-center text-gray-500">{r.최근상차일}</td>
                   </tr>
                 ))}
               </tbody>
