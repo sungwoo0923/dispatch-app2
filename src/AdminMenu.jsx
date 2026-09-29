@@ -1663,32 +1663,65 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
 // 그 달 탭을 통째로 비우고 프로그램(앱) 기준으로 다시 채워넣는다 — 그래서 매번
 // 눌러도 결과는 항상 "지금 프로그램에 있는 내용 그대로"로 수렴한다(중복 걱정 없음).
 // 다 쓰면(백필 다 끝내면) 이 패널/탭은 지워도 된다.
+// 시작월~종료월(예: "2026-01" ~ "2026-03") 사이의 "YYYY-MM" 목록을 만든다.
+// 연도가 걸쳐도(2025-11~2026-02) 정상 동작. 실수로 아주 긴 범위를 넣어도
+// 무한루프에 빠지지 않도록 최대 36개월로 안전장치를 둔다.
+function gsheetMonthRange(start, end) {
+  const [sy, sm] = start.split("-").map(Number);
+  const [ey, em] = end.split("-").map(Number);
+  const months = [];
+  let y = sy, m = sm;
+  while ((y < ey || (y === ey && m <= em)) && months.length < 36) {
+    months.push(`${y}-${String(m).padStart(2, "0")}`);
+    m += 1;
+    if (m > 12) { m = 1; y += 1; }
+  }
+  return months;
+}
+
 function GsheetBackfillPanel() {
   const now = new Date();
   const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const [month, setMonth] = useState(defaultMonth);
+  const [startMonth, setStartMonth] = useState(defaultMonth);
+  const [endMonth, setEndMonth] = useState(defaultMonth);
   const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState("");
   const [result, setResult] = useState("");
 
   const handleRun = async () => {
-    if (!/^\d{4}-\d{2}$/.test(month)) {
-      alert("월 형식이 올바르지 않습니다. 예: 2026-09");
+    if (!/^\d{4}-\d{2}$/.test(startMonth) || !/^\d{4}-\d{2}$/.test(endMonth)) {
+      alert("월 형식이 올바르지 않습니다. 예: 2026-01");
       return;
     }
-    if (!window.confirm(`"${month}" 탭을 통째로 비우고, 프로그램에 지금 있는 오더로 다시 채웁니다.\n(그 탭에 시트에서만 직접 입력해둔 값이 있었다면 사라집니다)\n계속할까요?`)) return;
+    const months = gsheetMonthRange(startMonth, endMonth);
+    if (months.length === 0) {
+      alert("종료월이 시작월보다 빠릅니다.");
+      return;
+    }
+    if (!window.confirm(`"${months[0]}" ~ "${months[months.length - 1]}" (${months.length}개월) 탭을 각각 통째로 비우고, 프로그램에 지금 있는 오더로 다시 채웁니다.\n(그 탭에 시트에서만 직접 입력해둔 값이 있었다면 사라집니다)\n한 달씩 순서대로 처리되며 개월 수가 많으면 시간이 오래 걸릴 수 있습니다.\n계속할까요?`)) return;
 
     setRunning(true);
     setResult("");
-    try {
-      const url = `https://us-central1-dispatch-app-9b92f.cloudfunctions.net/backfillGsheetMonth?key=dolkae-backfill-2026&month=${encodeURIComponent(month)}`;
-      const res = await fetch(url);
-      const text = await res.text();
-      setResult(text);
-    } catch (e) {
-      setResult(`요청 실패: ${e?.message || e}`);
-    } finally {
-      setRunning(false);
+    const lines = [];
+    // ⭐ 여러 달을 동시에 요청하면 안 된다 — Cloud Function이 탭 단위 잠금을
+    // 쓰고 있어서, 동시에 여러 달을 보내면 같은 탭이 아니어도 잠금 충돌로
+    // 실패하거나 서로 응답을 못 읽는 문제가 생길 수 있다. 한 달이 끝난 뒤
+    // 다음 달을 요청하도록 순서대로(await) 처리한다.
+    for (let i = 0; i < months.length; i++) {
+      const m = months[i];
+      setProgress(`(${i + 1}/${months.length}) "${m}" 처리 중...`);
+      try {
+        const url = `https://us-central1-dispatch-app-9b92f.cloudfunctions.net/backfillGsheetMonth?key=dolkae-backfill-2026&month=${encodeURIComponent(m)}`;
+        const res = await fetch(url);
+        const text = await res.text();
+        lines.push(`[${m}] ${text}`);
+      } catch (e) {
+        lines.push(`[${m}] 요청 실패: ${e?.message || e}`);
+      }
+      setResult(lines.join("\n"));
     }
+    setProgress("");
+    setRunning(false);
   };
 
   return (
@@ -1698,15 +1731,24 @@ function GsheetBackfillPanel() {
         구글시트 실시간 연동이 붙기 전에 이미 등록/수정돼 있던 오더를, 지정한 달 전체
         기준으로 시트에 한 번에 밀어넣습니다. 대상 탭을 통째로 비운 뒤 프로그램(앱)
         기준으로 다시 채우는 방식이라, 여러 번 눌러도 결과는 항상 지금 프로그램에
-        있는 내용 그대로로 맞춰집니다.
+        있는 내용 그대로로 맞춰집니다. 시작월~종료월을 지정하면 그 사이 달을
+        한 달씩 순서대로 처리합니다.
       </p>
       <div className="flex items-center gap-2 mb-4">
-        <label className="text-[12px] text-gray-600 font-semibold">대상 월</label>
+        <label className="text-[12px] text-gray-600 font-semibold">시작월</label>
         <input
-          value={month}
-          onChange={(e) => setMonth(e.target.value)}
-          placeholder="2026-09"
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-[13px] w-32"
+          value={startMonth}
+          onChange={(e) => setStartMonth(e.target.value)}
+          placeholder="2026-01"
+          className="border border-gray-300 rounded-lg px-3 py-1.5 text-[13px] w-28"
+        />
+        <span className="text-gray-400">~</span>
+        <label className="text-[12px] text-gray-600 font-semibold">종료월</label>
+        <input
+          value={endMonth}
+          onChange={(e) => setEndMonth(e.target.value)}
+          placeholder="2026-03"
+          className="border border-gray-300 rounded-lg px-3 py-1.5 text-[13px] w-28"
         />
       </div>
       <button
@@ -1714,7 +1756,7 @@ function GsheetBackfillPanel() {
         disabled={running}
         className="px-5 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition disabled:opacity-40"
       >
-        {running ? "실행 중... (몇 분 걸릴 수 있어요)" : `"${month}" 백필 실행`}
+        {running ? (progress || "실행 중... (몇 분 걸릴 수 있어요)") : `"${startMonth}" ~ "${endMonth}" 백필 실행`}
       </button>
       {result && (
         <div className="mt-4 bg-gray-50 rounded-lg px-4 py-3 text-[12px] text-gray-700 whitespace-pre-wrap break-words">

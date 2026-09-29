@@ -175,6 +175,89 @@ function ApprovalStamp({ status }) {
   );
 }
 
+// A4 한 장에 꽉 차게 인쇄되는 휴가/일정 신청서 — 화면에 있는 결재선/신청서
+// 테이블/문구를 그대로 옮겨서 새 창에 그리고 바로 인쇄 대화상자를 띄운다.
+// 화면 모달을 그대로 인쇄하면 승인/반려 버튼, 삭제/수정 버튼까지 같이
+// 찍히므로, 인쇄 전용 문서를 별도로 만드는 방식을 쓴다.
+const escapeHtmlForPrint = (s = "") =>
+  String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+function handlePrintSchedule({ schedule, approvers, overallStatus, typeLabel }) {
+  const title = typeLabel[schedule.type] || "일정 신청서";
+  const stampMap = { approved: ["승 인", "#1B2B4B"], rejected: ["반 려", "#DC2626"], hold: ["보 류", "#6B7280"] };
+  const stamp = stampMap[overallStatus];
+
+  const approverCellsHtml = (approvers || []).map((a) => {
+    const statusLabel = a.status === "approved" ? "승인" : a.status === "rejected" ? "반려" : a.status === "hold" ? "보류" : "대기";
+    const statusColor = a.status === "approved" ? "#1B2B4B" : a.status === "rejected" ? "#DC2626" : a.status === "hold" ? "#6B7280" : "#9CA3AF";
+    return `
+      <td style="border-left:1.5px solid #9CA3AF; text-align:center; min-width:100px;">
+        <div style="font-size:13px; font-weight:700; border-bottom:1.5px solid #9CA3AF; padding:7px 0;">결재자</div>
+        <div style="font-size:17px; font-weight:700; padding:16px 8px;">${escapeHtmlForPrint(a.name)}</div>
+        <div style="font-size:14px; font-weight:700; color:${statusColor}; border-top:1.5px solid #9CA3AF; padding:7px 0;">${statusLabel}</div>
+      </td>`;
+  }).join("");
+
+  const rows = [
+    ["구 분", schedule.type || ""],
+    ["작 성 자", schedule.name || ""],
+    ["기 간", `${schedule.start || ""} ~ ${schedule.end || ""}`],
+    ...(schedule.memo ? [["사 유", schedule.memo]] : []),
+  ];
+  const rowsHtml = rows.map(([label, val]) => `
+    <tr>
+      <td style="background:#F9FAFB; padding:18px 22px; font-size:16px; font-weight:700; color:#4B5563; width:140px; border:1px solid #D1D5DB; white-space:nowrap;">${label}</td>
+      <td style="padding:18px 22px; font-size:17px; color:#111827; border:1px solid #D1D5DB; white-space:pre-wrap;">${escapeHtmlForPrint(val)}</td>
+    </tr>`).join("");
+
+  const html = `<!doctype html>
+<html><head><meta charset="utf-8"><title>${title}</title>
+<style>
+  @page { size: A4; margin: 20mm; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { font-family: "Malgun Gothic", "맑은 고딕", sans-serif; margin: 0; color: #111827; }
+  .sheet { min-height: 100%; display: flex; flex-direction: column; justify-content: center; }
+  .doc-title { text-align: center; font-size: 30px; font-weight: 900; letter-spacing: 0.3em; color: #1B2B4B; margin-bottom: 40px; }
+  .approver-wrap { display: flex; justify-content: flex-end; margin-bottom: 30px; }
+  .approver-table { border: 1.5px solid #9CA3AF; border-collapse: collapse; }
+  .approver-label-cell { border-right: 1.5px solid #9CA3AF; padding: 0 12px; text-align: center; font-size: 14px; font-weight: 700; }
+  table.main { width: 100%; border-collapse: collapse; margin-bottom: 36px; }
+  .stamp-box { position: relative; }
+  .stamp-circle { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-12deg); width: 140px; height: 140px; border-radius: 50%; border: 5px solid ${stamp ? stamp[1] : "#000"}; display: flex; align-items: center; justify-content: center; opacity: 0.85; }
+  .stamp-circle span { font-size: 26px; font-weight: 900; letter-spacing: 0.2em; color: ${stamp ? stamp[1] : "#000"}; }
+  .notice { border-top: 3px solid #1B2B4B; border-bottom: 3px solid #1B2B4B; padding: 24px 0; text-align: center; font-size: 19px; font-weight: 700; color: #1B2B4B; line-height: 1.9; }
+</style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="doc-title">${title}</div>
+    ${(approvers || []).length ? `
+    <div class="approver-wrap">
+      <table class="approver-table"><tr>
+        <td class="approver-label-cell">결<br/>재</td>
+        ${approverCellsHtml}
+      </tr></table>
+    </div>` : ""}
+    <div class="stamp-box">
+      ${stamp ? `<div class="stamp-circle"><span>${stamp[0]}</span></div>` : ""}
+      <table class="main"><tbody>${rowsHtml}</tbody></table>
+    </div>
+    <div class="notice">상기 사유로 인하여 결재를 요청하오니<br/>승인하여 주시기 바랍니다.</div>
+  </div>
+  <script>
+    window.onload = function () { window.print(); };
+    window.onafterprint = function () { window.close(); };
+  </script>
+</body></html>`;
+
+  const win = window.open("", "_blank", "width=900,height=1200");
+  if (!win) { alert("팝업이 차단되어 인쇄 창을 열 수 없습니다. 브라우저의 팝업 차단을 해제해주세요."); return; }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+}
+
 /* ===== getOverallApprovalStatus ===== */
 function getOverallApprovalStatus(s) {
   const approvers = s.approvers || (s.approverUid ? [{ uid: s.approverUid, name: s.approverName, status: s.approvalStatus || "pending" }] : []);
@@ -1183,7 +1266,15 @@ React.useEffect(() => {
                   <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: "#DC2626", borderRadius: 6, padding: "2px 8px", letterSpacing: "0.05em" }}>재요청</span>
                 )}
               </div>
-              <button onClick={() => setSelectedSchedule(null)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => handlePrintSchedule({ schedule: selectedSchedule, approvers, overallStatus, typeLabel })}
+                  className="text-white/80 hover:text-white text-[12px] font-semibold border border-white/30 rounded-lg px-2.5 py-1 hover:bg-white/10 transition"
+                >
+                  인쇄
+                </button>
+                <button onClick={() => setSelectedSchedule(null)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
+              </div>
             </div>
 
             <div className="px-7 py-6">
