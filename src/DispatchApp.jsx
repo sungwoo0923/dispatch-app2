@@ -6897,6 +6897,7 @@ return (
               const isBlocked = !customRole && (role === "user" || role === "test" || isViewer) && blockedMenus.includes(m);
               if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster" && !isViewer) return null;
               if (m === "관리센터" && role !== "totalMaster") return null;
+              if (m === "인수인계" && role !== "totalMaster") return null;
               if (isBlocked && (role === "test" || isViewer)) return null;
               const isActive = menu === m;
               return (
@@ -7461,7 +7462,7 @@ return (
 
         {menu === "운임조회" && <FreightRateInquiry />}
 
-        {menu === "인수인계" && <HandoverFareReport userCompany={userCompany} role={role} />}
+        {menu === "인수인계" && role === "totalMaster" && <HandoverFareReport userCompany={userCompany} role={role} />}
 
         {menu === "회사관리" && (
           <CompanyManagementWrapper
