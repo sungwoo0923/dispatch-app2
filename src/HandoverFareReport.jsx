@@ -22,6 +22,22 @@ const vehicleCategoryOf = (raw = "") => {
   return "일반화물";
 };
 
+// 톤수 — DispatchApp.jsx의 combineTonStringDA와 동일한 규칙(차량톤수에 이미
+// 단위가 있으면 그대로, 없으면 톤수타입(기본 "톤")을 붙임). 톤수가 없으면
+// 화물내용만으로는(예: "변압기") 몇 톤 차량에 얼마를 청구했는지 알 수 없어서
+// 묶을 때 반드시 같이 봐야 한다는 요청에 따라 그룹핑 키에 추가.
+const tonOf = (r) => {
+  const ton = String(r.차량톤수 || "").trim();
+  if (!ton) return "미입력";
+  if (/톤|kg|킬로/.test(ton)) return ton;
+  const unit = String(r.톤수타입 || "톤").trim();
+  return `${ton}${unit}`;
+};
+const tonSortKey = (s) => {
+  const m = String(s).match(/(\d+(?:\.\d+)?)/);
+  return m ? Number(m[1]) : Infinity;
+};
+
 // 화물내용에서 "단위"와 "개수"를 따로 뽑는다 — 묶을 때는 단위만 쓰고(20박스든
 // 28박스든 같은 "박스"), 개수는 따로 모아뒀다가 화면에는 범위로 보여준다
 // (아래 cargoRangeLabel 참고). 정형화된 단위가 없는 자유서술형 화물내용은
@@ -193,14 +209,14 @@ export default function HandoverFareReport({ userCompany, role }) {
   const clientReport = useMemo(() => {
     const groups = groupBy(filteredRows, (r) =>
       [r.거래처명 || "(미입력)", r.상차지명 || "(미입력)", r.하차지명 || "(미입력)",
-       vehicleCategoryOf(r.차량종류 || r.차종), cargoUnitOf(r.화물내용).unit].join("\u0000")
+       vehicleCategoryOf(r.차량종류 || r.차종), tonOf(r), cargoUnitOf(r.화물내용).unit].join("\u0000")
     );
     return [...groups.entries()]
       .map(([key, list]) => {
-        const [거래처명, 상차지명, 하차지명, 차량구분, 화물단위] = key.split("\u0000");
+        const [거래처명, 상차지명, 하차지명, 차량구분, 톤수, 화물단위] = key.split("\u0000");
         const counts = list.map((r) => cargoUnitOf(r.화물내용).count);
         return {
-          거래처명, 상차지명, 하차지명, 차량구분,
+          거래처명, 상차지명, 하차지명, 차량구분, 톤수,
           화물내용: cargoRangeLabel(화물단위, counts),
           ...summarizeFares(list),
         };
@@ -210,6 +226,7 @@ export default function HandoverFareReport({ userCompany, role }) {
         a.상차지명.localeCompare(b.상차지명) ||
         a.하차지명.localeCompare(b.하차지명) ||
         a.차량구분.localeCompare(b.차량구분) ||
+        (tonSortKey(a.톤수) - tonSortKey(b.톤수)) || a.톤수.localeCompare(b.톤수) ||
         a.화물내용.localeCompare(b.화물내용)
       );
   }, [filteredRows]);
@@ -221,14 +238,14 @@ export default function HandoverFareReport({ userCompany, role }) {
       const from = regionPartsOf(r.상차지주소);
       const to = regionPartsOf(r.하차지주소);
       return [r.거래처명 || "(미입력)", from.sido, from.sigungu, to.sido, to.sigungu,
-        vehicleCategoryOf(r.차량종류 || r.차종), cargoUnitOf(r.화물내용).unit].join("\u0000");
+        vehicleCategoryOf(r.차량종류 || r.차종), tonOf(r), cargoUnitOf(r.화물내용).unit].join("\u0000");
     });
     return [...groups.entries()]
       .map(([key, list]) => {
-        const [거래처명, 상차시도, 상차시군구, 하차시도, 하차시군구, 차량구분, 화물단위] = key.split("\u0000");
+        const [거래처명, 상차시도, 상차시군구, 하차시도, 하차시군구, 차량구분, 톤수, 화물단위] = key.split("\u0000");
         const counts = list.map((r) => cargoUnitOf(r.화물내용).count);
         return {
-          거래처명, 상차시도, 상차시군구, 하차시도, 하차시군구, 차량구분,
+          거래처명, 상차시도, 상차시군구, 하차시도, 하차시군구, 차량구분, 톤수,
           화물내용: cargoRangeLabel(화물단위, counts),
           ...summarizeFares(list),
         };
@@ -240,6 +257,7 @@ export default function HandoverFareReport({ userCompany, role }) {
         a.하차시도.localeCompare(b.하차시도) ||
         a.하차시군구.localeCompare(b.하차시군구) ||
         a.차량구분.localeCompare(b.차량구분) ||
+        (tonSortKey(a.톤수) - tonSortKey(b.톤수)) || a.톤수.localeCompare(b.톤수) ||
         a.화물내용.localeCompare(b.화물내용)
       );
   }, [filteredRows]);
@@ -254,7 +272,7 @@ export default function HandoverFareReport({ userCompany, role }) {
       const base = tab === "client"
         ? { 거래처명: r.거래처명, 상차지명: r.상차지명, 하차지명: r.하차지명 }
         : { 거래처명: r.거래처명, 상차시도: r.상차시도, 상차시군구: r.상차시군구, 하차시도: r.하차시도, 하차시군구: r.하차시군구 };
-      return { ...base, 차량구분: r.차량구분, 화물내용: r.화물내용, 청구운임: r.청구운임표시, 건수: r.건수, 최근상차일: r.최근상차일 };
+      return { ...base, 차량구분: r.차량구분, 톤수: r.톤수, 화물내용: r.화물내용, 청구운임: r.청구운임표시, 최근상차일: r.최근상차일 };
     });
     const ws = XLSX.utils.json_to_sheet(sheetRows);
     const wb = XLSX.utils.book_new();
@@ -433,9 +451,9 @@ export default function HandoverFareReport({ userCompany, role }) {
                     </>
                   )}
                   <th className="px-3 py-2 text-left font-bold text-gray-600">차량구분</th>
+                  <th className="px-3 py-2 text-left font-bold text-gray-600">톤수</th>
                   <th className="px-3 py-2 text-left font-bold text-gray-600">화물내용</th>
                   <th className="px-3 py-2 text-right font-bold text-gray-600">청구운임</th>
-                  <th className="px-3 py-2 text-right font-bold text-gray-600">건수</th>
                   <th className="px-3 py-2 text-left font-bold text-gray-600">최근상차일</th>
                 </tr>
               </thead>
@@ -464,9 +482,9 @@ export default function HandoverFareReport({ userCompany, role }) {
                       </>
                     )}
                     <td className="px-3 py-1.5">{r.차량구분}</td>
+                    <td className="px-3 py-1.5">{r.톤수}</td>
                     <td className="px-3 py-1.5">{r.화물내용}</td>
                     <td className="px-3 py-1.5 text-right font-semibold">{r.청구운임표시}</td>
-                    <td className="px-3 py-1.5 text-right text-gray-500">{r.건수}</td>
                     <td className="px-3 py-1.5 text-gray-500">{r.최근상차일}</td>
                   </tr>
                 ))}
