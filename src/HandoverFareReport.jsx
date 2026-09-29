@@ -22,31 +22,66 @@ const vehicleCategoryOf = (raw = "") => {
   return "일반화물";
 };
 
-// ⭐ 개수(100통/105통/80통 등)는 건별로 조금씩 달라도 사실상 "같은 화물"이라,
-// 개수까지 묶으면 똑같은 노선·같은 운임인데 화물 수량만 달라서 줄이 계속
-// 늘어나는 문제가 있었다 — 단위 종류(파레트/박스/통 등)로만 묶고 개수는
-// 버린다. 정형화된 단위가 없는 자유서술형 화물내용은 원문 그대로 하나의
-// 묶음으로 본다. 빈 값은 "없음".
+// "1파레트", "100통" 처럼 숫자+단위 형태는 그대로(개수 포함) 하나의 화물내용
+// 값으로 쓴다 — 개수가 다르면 실제로 다른 화물(예: 1파레트 vs 5파레트는 운임이
+// 전혀 다름)이라 개수까지 정확히 구분해서 보여준다. 정형화된 단위가 없는
+// 자유서술형 화물내용은 원문 그대로 하나의 묶음으로 본다. 빈 값은 "없음".
 const cargoBucketOf = (raw = "") => {
   const s = String(raw || "").trim();
   if (!s) return "없음";
-  const m = s.match(/(파레트|파렛트|박스|통|롤테이너|백)/);
-  if (m) return m[1] === "파렛트" ? "파레트" : m[1];
+  const m = s.match(/^(\d+(?:\.\d+)?)\s*(파레트|파렛트|박스|통|롤테이너|백)/);
+  if (m) return `${m[1]}${m[2] === "파렛트" ? "파레트" : m[2]}`;
   return s;
+};
+
+// 화물내용 정렬용 — "1파레트, 2파레트, 10파레트" 처럼 단위별로 묶은 뒤 그
+// 안에서 개수가 작은 순으로 나오게 한다(문자열 정렬이면 "10파레트"가
+// "2파레트"보다 앞에 와버린다). 숫자가 없는 값(없음/자유서술형)은 맨 뒤로.
+const parseCargoBucket = (bucket) => {
+  const m = String(bucket || "").match(/^(\d+(?:\.\d+)?)(.+)$/);
+  if (m) return { num: Number(m[1]), unit: m[2] };
+  return { num: Number.POSITIVE_INFINITY, unit: String(bucket || "") };
+};
+
+// 주소 표기가 "강원도"/"강원특별자치도", "경북"/"경상북도", "부산"/"부산광역시"/
+// "부산시"처럼 오더마다 제각각이라 같은 지역인데도 다른 값으로 갈라져 보이는
+// 문제가 있었다 — 시/도 표기를 하나로 통일한다.
+const SIDO_ALIASES = {
+  "서울특별시": "서울", "서울시": "서울", "서울": "서울",
+  "부산광역시": "부산", "부산시": "부산", "부산": "부산",
+  "대구광역시": "대구", "대구시": "대구", "대구": "대구",
+  "인천광역시": "인천", "인천시": "인천", "인천": "인천",
+  "광주광역시": "광주", "광주시": "광주", "광주": "광주",
+  "대전광역시": "대전", "대전시": "대전", "대전": "대전",
+  "울산광역시": "울산", "울산시": "울산", "울산": "울산",
+  "세종특별자치시": "세종", "세종시": "세종", "세종": "세종",
+  "경기도": "경기", "경기": "경기",
+  "강원특별자치도": "강원", "강원도": "강원", "강원": "강원",
+  "충청북도": "충북", "충북": "충북",
+  "충청남도": "충남", "충남": "충남",
+  "전북특별자치도": "전북", "전라북도": "전북", "전북": "전북",
+  "전라남도": "전남", "전남": "전남",
+  "경상북도": "경북", "경북": "경북",
+  "경상남도": "경남", "경남": "경남",
+  "제주특별자치도": "제주", "제주도": "제주", "제주": "제주",
 };
 
 // 주소 앞 두 토큰(시/도, 시군구)을 지역 기준으로 쓴다 — "인천 서구"처럼.
 const regionPartsOf = (addr = "") => {
   const parts = String(addr || "").trim().split(/\s+/).filter(Boolean);
-  return { sido: parts[0] || "미입력", sigungu: parts[1] || "-" };
+  const sidoRaw = parts[0] || "";
+  return {
+    sido: SIDO_ALIASES[sidoRaw] || sidoRaw || "미입력",
+    sigungu: parts[1] || "-",
+  };
 };
 
 const onlyNum = (v) => Number(String(v ?? "0").replace(/[^\d]/g, "")) || 0;
 const fmt = (v) => onlyNum(v).toLocaleString();
 
-// ⭐ 같은 그룹(거래처/상하차지·차량구분·화물단위 또는 지역·차량구분·화물단위)
-// 으로 묶인 오더들의 청구운임을 최소~최대로 요약한다 — 다 같으면 "240,000원",
-// 다르면(예: 24만원짜리 여러 건 + 25만원짜리 한 건) "240,000 ~ 250,000원".
+// ⭐ 같은 그룹으로 묶인 오더들의 청구운임을 최소~최대로 요약한다 — 다 같으면
+// "240,000원", 다르면(예: 24만원짜리 여러 건 + 25만원짜리 한 건) "240,000 ~
+// 250,000원". 그룹별 건수/최근상차일도 같이 계산해둔다.
 const summarizeFares = (list) => {
   const nums = list.map((r) => onlyNum(r.청구운임));
   const min = Math.min(...nums);
@@ -75,20 +110,23 @@ export default function HandoverFareReport({ userCompany, role }) {
   const [loaded, setLoaded] = useState(false);
   const [rawRows, setRawRows] = useState([]);
   const [tab, setTab] = useState("client"); // "client" | "region"
-  const [clientQ, setClientQ] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  // ⭐ 기본거래처 목록에서 일부를 골라 "이 거래처는 결과에서 빼줘"할 수 있게
-  // 한다 — 예: 이미 거래 종료된 곳, 테스트로 등록한 곳 등.
+  // ⭐ 기본거래처 목록 — "거래처 선택" 팝업에서 체크한 거래처만 결과에 나온다.
+  // selectedClients가 비어있으면(아무것도 안 골랐으면) 필터 없이 전체를 보여준다.
   const [clientOptions, setClientOptions] = useState([]);
-  const [excludedClients, setExcludedClients] = useState([]);
-  const [excludeInput, setExcludeInput] = useState("");
+  const [selectedClients, setSelectedClients] = useState([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerDraft, setPickerDraft] = useState([]);
+  const [pickerSearch, setPickerSearch] = useState("");
+
+  const resolveCompany = () => role === "totalMaster"
+    ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
+    : (userCompany || localStorage.getItem("userCompany") || "돌캐");
 
   useEffect(() => {
-    const myCompany = role === "totalMaster"
-      ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
-      : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+    const myCompany = resolveCompany();
     getDocs(collection(db, "clients")).then((snap) => {
       const names = snap.docs
         .map((d) => d.data())
@@ -104,9 +142,7 @@ export default function HandoverFareReport({ userCompany, role }) {
     if (loading) return;
     setLoading(true);
     try {
-      const myCompany = role === "totalMaster"
-        ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
-        : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+      const myCompany = resolveCompany();
       const fetchCol = async (colName) => {
         const snap = await getDocs(collection(db, colName));
         return snap.docs.map((d) => ({ _id: d.id, __col: colName, ...d.data() }));
@@ -128,27 +164,33 @@ export default function HandoverFareReport({ userCompany, role }) {
     }
   };
 
-  const excludedSet = useMemo(() => new Set(excludedClients), [excludedClients]);
-  const excludeSuggestions = useMemo(() => {
-    const q = excludeInput.trim();
-    if (!q) return [];
-    return clientOptions.filter((c) => c.includes(q) && !excludedSet.has(c)).slice(0, 8);
-  }, [excludeInput, clientOptions, excludedSet]);
+  const openPicker = () => { setPickerDraft(selectedClients); setPickerSearch(""); setPickerOpen(true); };
+  const applyPicker = () => { setSelectedClients(pickerDraft); setPickerOpen(false); };
+  const pickerFilteredOptions = useMemo(() => {
+    const q = pickerSearch.trim();
+    return q ? clientOptions.filter((c) => c.includes(q)) : clientOptions;
+  }, [pickerSearch, clientOptions]);
+
+  const selectedSet = useMemo(() => new Set(selectedClients), [selectedClients]);
 
   const filteredRows = useMemo(() => {
     let base = rawRows;
     if (startDate) base = base.filter((r) => (r.상차일 || "") >= startDate);
     if (endDate) base = base.filter((r) => (r.상차일 || "") <= endDate);
-    if (clientQ.trim()) {
-      const q = clientQ.trim();
-      base = base.filter((r) => (r.거래처명 || "").includes(q));
-    }
-    if (excludedSet.size > 0) {
-      base = base.filter((r) => !excludedSet.has(r.거래처명 || ""));
+    if (selectedSet.size > 0) {
+      base = base.filter((r) => selectedSet.has(r.거래처명 || ""));
     }
     return base;
-  }, [rawRows, startDate, endDate, clientQ, excludedSet]);
+  }, [rawRows, startDate, endDate, selectedSet]);
 
+  const cargoCompare = (a, b) => {
+    const pa = parseCargoBucket(a);
+    const pb = parseCargoBucket(b);
+    return pa.unit.localeCompare(pb.unit) || pa.num - pb.num;
+  };
+
+  // 거래처 > 상차지명 > 하차지명 > 차량구분 > 화물내용(개수 포함) 순으로
+  // 크게 나눠 나열한다 — "기본거래처별로 지역별로 쫙" 정렬해달라는 요청 그대로.
   const clientReport = useMemo(() => {
     const groups = groupBy(filteredRows, (r) =>
       [r.거래처명 || "(미입력)", r.상차지명 || "(미입력)", r.하차지명 || "(미입력)",
@@ -164,38 +206,32 @@ export default function HandoverFareReport({ userCompany, role }) {
         a.상차지명.localeCompare(b.상차지명) ||
         a.하차지명.localeCompare(b.하차지명) ||
         a.차량구분.localeCompare(b.차량구분) ||
-        a.화물내용.localeCompare(b.화물내용)
+        cargoCompare(a.화물내용, b.화물내용)
       );
   }, [filteredRows]);
 
+  // 거래처 > 상차 시/도·시군구 > 하차 시/도·시군구 > 차량구분 > 화물내용
+  // 순서로 나열 — 거래처를 가장 먼저 나눈 뒤 그 안에서 지역별로 쫙 정리된다.
   const regionReport = useMemo(() => {
-    const withRegion = filteredRows.map((r) => ({
-      r,
-      from: regionPartsOf(r.상차지주소),
-      to: regionPartsOf(r.하차지주소),
-    }));
-    const groups = groupBy(withRegion, ({ r, from, to }) =>
-      [from.sido, from.sigungu, to.sido, to.sigungu,
-       vehicleCategoryOf(r.차량종류 || r.차종), cargoBucketOf(r.화물내용)].join("\u0000")
-    );
+    const groups = groupBy(filteredRows, (r) => {
+      const from = regionPartsOf(r.상차지주소);
+      const to = regionPartsOf(r.하차지주소);
+      return [r.거래처명 || "(미입력)", from.sido, from.sigungu, to.sido, to.sigungu,
+        vehicleCategoryOf(r.차량종류 || r.차종), cargoBucketOf(r.화물내용)].join("\u0000");
+    });
     return [...groups.entries()]
       .map(([key, list]) => {
-        const [상차시도, 상차시군구, 하차시도, 하차시군구, 차량구분, 화물내용] = key.split("\u0000");
-        const rawList = list.map((x) => x.r);
-        const clients = [...new Set(rawList.map((r) => r.거래처명).filter(Boolean))];
-        return {
-          상차시도, 상차시군구, 하차시도, 하차시군구, 차량구분, 화물내용,
-          거래처명: clients.length > 1 ? `${clients[0]} 외 ${clients.length - 1}곳` : (clients[0] || ""),
-          ...summarizeFares(rawList),
-        };
+        const [거래처명, 상차시도, 상차시군구, 하차시도, 하차시군구, 차량구분, 화물내용] = key.split("\u0000");
+        return { 거래처명, 상차시도, 상차시군구, 하차시도, 하차시군구, 차량구분, 화물내용, ...summarizeFares(list) };
       })
       .sort((a, b) =>
+        a.거래처명.localeCompare(b.거래처명) ||
         a.상차시도.localeCompare(b.상차시도) ||
         a.상차시군구.localeCompare(b.상차시군구) ||
         a.하차시도.localeCompare(b.하차시도) ||
         a.하차시군구.localeCompare(b.하차시군구) ||
         a.차량구분.localeCompare(b.차량구분) ||
-        a.화물내용.localeCompare(b.화물내용)
+        cargoCompare(a.화물내용, b.화물내용)
       );
   }, [filteredRows]);
 
@@ -208,7 +244,7 @@ export default function HandoverFareReport({ userCompany, role }) {
     const sheetRows = activeData.map((r) => {
       const base = tab === "client"
         ? { 거래처명: r.거래처명, 상차지명: r.상차지명, 하차지명: r.하차지명 }
-        : { 상차시도: r.상차시도, 상차시군구: r.상차시군구, 하차시도: r.하차시도, 하차시군구: r.하차시군구, 거래처명: r.거래처명 };
+        : { 거래처명: r.거래처명, 상차시도: r.상차시도, 상차시군구: r.상차시군구, 하차시도: r.하차시도, 하차시군구: r.하차시군구 };
       return { ...base, 차량구분: r.차량구분, 화물내용: r.화물내용, 청구운임: r.청구운임표시, 건수: r.건수, 최근상차일: r.최근상차일 };
     });
     const ws = XLSX.utils.json_to_sheet(sheetRows);
@@ -222,7 +258,7 @@ export default function HandoverFareReport({ userCompany, role }) {
       <div className="mb-4">
         <h1 className="text-[20px] font-bold text-[#1B2B4B]">인수인계 자료 — 운임 이력</h1>
         <p className="text-[12px] text-gray-500 mt-0.5">
-          같은 거래처/상하차지(또는 지역)·차량구분·화물단위끼리 묶어서 청구운임을 정리합니다. 금액이 다르면 최소~최대로 표시됩니다. (청구운임 0원·취소 건은 제외)
+          거래처 → 상하차지(또는 지역) → 차량구분 → 화물내용 순서로 정리합니다. 같은 조건에서 금액이 다르면 최소~최대로 표시됩니다. (청구운임 0원·취소 건은 제외)
         </p>
       </div>
 
@@ -242,12 +278,12 @@ export default function HandoverFareReport({ userCompany, role }) {
             tab === "region" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
           }`}
         >
-          지역 기준 (전체 지역 한 번에)
+          거래처 · 지역 기준 (전체 지역 한 번에)
         </button>
       </div>
 
       {/* 조회 조건 */}
-      <div className="flex flex-wrap items-end gap-3 mb-3 bg-gray-50 border border-gray-200 rounded-xl p-4">
+      <div className="flex flex-wrap items-end gap-3 mb-4 bg-gray-50 border border-gray-200 rounded-xl p-4">
         <div>
           <label className="block text-[11px] font-bold text-gray-500 mb-1">시작일 (선택)</label>
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
@@ -259,9 +295,14 @@ export default function HandoverFareReport({ userCompany, role }) {
             className="border border-gray-300 rounded-lg px-3 py-1.5 text-[13px]" />
         </div>
         <div>
-          <label className="block text-[11px] font-bold text-gray-500 mb-1">거래처명 검색 (선택)</label>
-          <input value={clientQ} onChange={(e) => setClientQ(e.target.value)} placeholder="예: 반찬단지"
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-[13px] w-48" />
+          <label className="block text-[11px] font-bold text-gray-500 mb-1">거래처 선택 (선택)</label>
+          <button
+            type="button"
+            onClick={openPicker}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-[13px] bg-white hover:bg-gray-50 min-w-[160px] text-left"
+          >
+            {selectedClients.length === 0 ? "전체 거래처" : `${selectedClients.length}개 거래처 선택됨`}
+          </button>
         </div>
         <button
           onClick={fetchAll}
@@ -285,49 +326,75 @@ export default function HandoverFareReport({ userCompany, role }) {
         )}
       </div>
 
-      {/* 거래처 제외 */}
-      <div className="mb-4 bg-gray-50 border border-gray-200 rounded-xl p-4">
-        <label className="block text-[11px] font-bold text-gray-500 mb-1.5">제외할 거래처 (기본거래처 목록에서 선택)</label>
-        <div className="relative w-72">
-          <input
-            value={excludeInput}
-            onChange={(e) => setExcludeInput(e.target.value)}
-            placeholder="거래처명을 입력해 검색"
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-[13px] w-full"
-          />
-          {excludeSuggestions.length > 0 && (
-            <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-              {excludeSuggestions.map((name) => (
+      {/* 거래처 선택 팝업 */}
+      {pickerOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]" onClick={() => setPickerOpen(false)}>
+          <div className="bg-white rounded-xl shadow-xl w-[420px] max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-gray-100">
+              <div className="font-bold text-[15px] text-[#1B2B4B] mb-2">거래처 선택</div>
+              <input
+                value={pickerSearch}
+                onChange={(e) => setPickerSearch(e.target.value)}
+                placeholder="거래처명 검색"
+                className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-[13px]"
+                autoFocus
+              />
+              <div className="flex gap-2 mt-2">
                 <button
-                  key={name}
                   type="button"
-                  onClick={() => { setExcludedClients((p) => [...p, name]); setExcludeInput(""); }}
-                  className="block w-full text-left px-3 py-1.5 text-[13px] hover:bg-gray-100"
+                  onClick={() => setPickerDraft(pickerFilteredOptions)}
+                  className="text-[11px] font-semibold text-[#1B2B4B] hover:underline"
                 >
-                  {name}
+                  {pickerSearch.trim() ? "검색결과 전체선택" : "전체선택"}
                 </button>
-              ))}
+                <button
+                  type="button"
+                  onClick={() => setPickerDraft([])}
+                  className="text-[11px] font-semibold text-gray-500 hover:underline"
+                >
+                  전체해제
+                </button>
+                <span className="text-[11px] text-gray-400 ml-auto self-center">{pickerDraft.length}개 선택</span>
+              </div>
             </div>
-          )}
-        </div>
-        {excludedClients.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {excludedClients.map((name) => (
-              <span key={name} className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-50 border border-red-200 text-red-600 text-[11px] font-semibold">
-                {name}
-                <button type="button" onClick={() => setExcludedClients((p) => p.filter((n) => n !== name))} className="text-red-400 hover:text-red-600">×</button>
-              </span>
-            ))}
-            <button
-              type="button"
-              onClick={() => setExcludedClients([])}
-              className="px-2.5 py-1 rounded-full bg-gray-100 text-gray-500 text-[11px] font-semibold hover:bg-gray-200"
-            >
-              전체 해제
-            </button>
+            <div className="flex-1 overflow-y-auto px-2 py-2">
+              {pickerFilteredOptions.length === 0 && (
+                <div className="text-center text-gray-400 text-[13px] py-8">거래처가 없습니다.</div>
+              )}
+              {pickerFilteredOptions.map((name) => {
+                const checked = pickerDraft.includes(name);
+                return (
+                  <label key={name} className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer text-[13px]">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => setPickerDraft((p) => checked ? p.filter((n) => n !== name) : [...p, name])}
+                      className="w-4 h-4 accent-[#1B2B4B]"
+                    />
+                    {name}
+                  </label>
+                );
+              })}
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPickerOpen(false)}
+                className="flex-1 py-2 rounded-lg border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={applyPicker}
+                className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60]"
+              >
+                적용 {pickerDraft.length > 0 ? `(${pickerDraft.length})` : "(전체)"}
+              </button>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {!loaded && !loading && (
         <div className="py-20 text-center text-gray-400 text-sm border border-dashed border-gray-300 rounded-xl">
@@ -342,9 +409,9 @@ export default function HandoverFareReport({ userCompany, role }) {
             <table className="w-full text-[12px]">
               <thead className="bg-gray-100 sticky top-0 z-10">
                 <tr>
+                  <th className="px-3 py-2 text-left font-bold text-gray-600">거래처명</th>
                   {tab === "client" ? (
                     <>
-                      <th className="px-3 py-2 text-left font-bold text-gray-600">거래처명</th>
                       <th className="px-3 py-2 text-left font-bold text-gray-600">상차지명</th>
                       <th className="px-3 py-2 text-left font-bold text-gray-600">하차지명</th>
                     </>
@@ -354,7 +421,6 @@ export default function HandoverFareReport({ userCompany, role }) {
                       <th className="px-3 py-2 text-left font-bold text-gray-600">상차 시군구</th>
                       <th className="px-3 py-2 text-left font-bold text-gray-600">하차 시/도</th>
                       <th className="px-3 py-2 text-left font-bold text-gray-600">하차 시군구</th>
-                      <th className="px-3 py-2 text-left font-bold text-gray-600">거래처명</th>
                     </>
                   )}
                   <th className="px-3 py-2 text-left font-bold text-gray-600">차량구분</th>
@@ -374,9 +440,9 @@ export default function HandoverFareReport({ userCompany, role }) {
                 )}
                 {activeData.map((r, i) => (
                   <tr key={i} className="border-t border-gray-100 hover:bg-gray-50">
+                    <td className="px-3 py-1.5 font-semibold">{r.거래처명}</td>
                     {tab === "client" ? (
                       <>
-                        <td className="px-3 py-1.5">{r.거래처명}</td>
                         <td className="px-3 py-1.5">{r.상차지명}</td>
                         <td className="px-3 py-1.5">{r.하차지명}</td>
                       </>
@@ -386,7 +452,6 @@ export default function HandoverFareReport({ userCompany, role }) {
                         <td className="px-3 py-1.5">{r.상차시군구}</td>
                         <td className="px-3 py-1.5">{r.하차시도}</td>
                         <td className="px-3 py-1.5">{r.하차시군구}</td>
-                        <td className="px-3 py-1.5 text-gray-500">{r.거래처명}</td>
                       </>
                     )}
                     <td className="px-3 py-1.5">{r.차량구분}</td>
