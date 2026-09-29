@@ -4039,11 +4039,21 @@ const markEditRequestSeen = async (order) => {
     ...(registeredBy !== undefined ? { 등록자: registeredBy } : {}),
   };
 
-  await setDoc(
+  // ⭐ 사용자 보고: 신규 기사 등록 시 "등록완료" 팝업이 뜨기까지 딜레이가 너무 길다 —
+  // Firestore 최신 SDK는 setDoc()이 반환하는 Promise를 "서버가 이 쓰기를 확인했을
+  // 때"에야 resolve한다(로컬 캐시엔 이미 즉시 반영되지만, await 하는 쪽은 서버
+  // 왕복이 끝날 때까지 계속 기다리게 됨). 이 화면들이 하나같이 upsertDriver를
+  // await한 다음에야 팝업을 닫고 "등록완료" 알림을 띄우는 구조라, 네트워크가 느리면
+  // 그 왕복 시간만큼 그대로 체감 딜레이가 된다. 이 앱 다른 곳(handleCarInput 등)의
+  // "낙관적 업데이트 후 백그라운드 저장" 방식과 동일하게, 여기서도 쓰기를 기다리지
+  // 않고 즉시 반환한다 — 로컬 캐시(persistentLocalCache)가 이미 즉시 반영해주므로
+  // 화면(onSnapshot 기반 drivers 목록)엔 어차피 곧바로 나타나고, 실제 서버 반영은
+  // 백그라운드에서 계속 진행된다.
+  setDoc(
     doc(db, COLL.drivers, id),
     data,
     { merge: true }
-  );
+  ).catch((e) => console.error("기사 정보 저장 실패:", e));
 
   return id;
 };
