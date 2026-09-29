@@ -34224,9 +34224,18 @@ const runDailyClose = () => {
       { key: "지급방식", name: "지급방식" },
     ];
 
+    // ⭐ "이 오더 확인함" 버튼(아래 handleAckDailyCloseIssue)으로 미리 인지해둔
+    // 필드는, 아직 배차완료 전까지만(=지금 상태 그대로 있는 동안만) 오류에서
+    // 뺀다. 배차완료로 바뀌면 그때는 진짜 다 채워져 있어야 하므로 다시 검사한다.
+    const ackFields = new Set(Array.isArray(row._dailyCloseAckFields) ? row._dailyCloseAckFields : []);
     const missing = requiredFields.filter(f => {
       const v = String(row[f.key] || "").trim();
-      return !v || v === "0";
+      if (v && v !== "0") return false;
+      // 지급방식이 "손실"이면 거래처에 청구하지 않는 게 정상이라 청구운임은
+      // 원래부터 비어있어야 한다 — 필수값 누락 대상에서 제외.
+      if (f.key === "청구운임" && row.지급방식 === "손실") return false;
+      if (ackFields.has(f.key) && row.배차상태 !== "배차완료") return false;
+      return true;
     });
 
     if (missing.length > 0) {
@@ -34964,6 +34973,32 @@ const openDailyCloseIssueDetail = (rowId) => {
   setCopyTarget({ ...row, 화물내용: raw, 화물수량: cargoNum, 화물타입: cargoType, 톤수값: tonValue, 톤수타입: tonType });
   setDailyCloseIssueCtx(issues);
   setCopyPanelOpen(true);
+};
+// ⭐ "일마감 검증 — 이 오더의 문제점" 배너의 "미입력 확인" 버튼 — 아직 배차 전이라
+// 차량번호/운임 등이 비어있는 게 당연한 오더를, 매번 오류 목록에 뜨지 않도록
+// 지금 비어있는 필드들을 "확인함"으로 표시해둔다. 배차완료로 바뀌기 전까지만
+// 유효하고(runDailyClose 참고), 실제로 배차가 끝나면 다시 검사 대상이 된다.
+const handleAckDailyCloseIssue = async () => {
+  if (!copyTarget?._id) return;
+  const requiredKeys = ["차량번호", "이름", "전화번호", "청구운임", "기사운임", "배차방식", "지급방식"];
+  const missingNow = requiredKeys.filter(k => {
+    const v = String(copyTarget[k] || "").trim();
+    return !v || v === "0";
+  });
+  if (missingNow.length === 0) {
+    showAlert("지금은 비어있는 필수값이 없습니다.");
+    return;
+  }
+  try {
+    const col = copyTarget.__col || "dispatch";
+    await updateDoc(doc(db, col, copyTarget._id), { _dailyCloseAckFields: missingNow });
+    showAlert("확인 처리했습니다. 배차완료 전까지는 일마감 오류 목록에서 빠집니다.");
+    setCopyPanelOpen(false);
+    setDailyCloseIssueCtx(null);
+    runDailyClose();
+  } catch (e) {
+    showAlert("확인 처리 실패: " + (e?.message || e));
+  }
 };
 const [statusFilter, setStatusFilter] = React.useState("ALL");
   const [q, setQ] = React.useState(() => {
@@ -40003,7 +40038,19 @@ return (
     오류/경고/24시콜 비교불일치 중 이 오더에 해당하는 항목을 전부 모아 보여준다. */}
 {dailyCloseIssueCtx && dailyCloseIssueCtx.length > 0 && (
   <div className="bg-gray-50 border border-gray-200 rounded-xl px-5 py-4">
-    <div className="text-[13px] font-bold text-[#1B2B4B] mb-2">일마감 검증 — 이 오더의 문제점 ({dailyCloseIssueCtx.length}건)</div>
+    <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
+      <div className="text-[13px] font-bold text-[#1B2B4B]">일마감 검증 — 이 오더의 문제점 ({dailyCloseIssueCtx.length}건)</div>
+      {dailyCloseIssueCtx.some(it => it.level === "오류") && (
+        <button
+          type="button"
+          onClick={handleAckDailyCloseIssue}
+          title="아직 배차 전이라 비어있는 게 당연한 항목이면, 배차완료 전까지 일마감 오류 목록에서 뺍니다"
+          className="px-3 py-1.5 rounded-lg text-[11px] font-bold border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white transition whitespace-nowrap"
+        >
+          미입력 확인 (오류에서 제외)
+        </button>
+      )}
+    </div>
     <div className="space-y-1.5">
       {dailyCloseIssueCtx.map((it, i) => (
         <div key={i} className="text-[12px] text-gray-700 flex items-start gap-2">
