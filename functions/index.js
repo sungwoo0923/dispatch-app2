@@ -752,6 +752,17 @@ function gsheetColLetter(idx) {
   return s;
 }
 
+// gsheetColLetter의 역함수 — 시트 열 문자(A, B, ..., Z, AA, ...) → 0-based 열 인덱스.
+// 백필이 청구운임/기사운임/수수료/매익율 칸에 숫자·퍼센트 서식을 직접 지정할 때
+// repeatCell 요청의 startColumnIndex/endColumnIndex를 구하는 용도로 쓴다.
+function gsheetColIndexFromLetter(letter) {
+  let n = 0;
+  for (const ch of String(letter || "").toUpperCase()) {
+    n = n * 26 + (ch.charCodeAt(0) - 64);
+  }
+  return n - 1;
+}
+
 // 탭 이름 → { 상차일:"B", 경유지:"E", 배차상태:"L", ... } 이런 필드명→열문자 맵.
 // 헤더 텍스트가 살짝 바뀌어도(새 열이 끼워들거나 순서가 바뀌어도) 항상 그 탭의
 // 실제 1행을 읽어서 다시 계산하므로 코드에 열 위치를 고정해두지 않아도 된다.
@@ -1793,7 +1804,110 @@ exports.backfillGsheetMonth = functions
             console.warn("고유값 일괄 등록 실패(무시):", e?.message || e);
           }
 
-          await appendGsheetBufferRow(sheetId, rowCount); // 다음 실시간 등록을 위한 버퍼 행 1개 보충
+          // ⭐ 사용자 보고: 백필로 채운 청구운임/기사운임/수수료 칸에 천단위 콤마가
+          // 안 붙고 매익율도 25%가 아니라 0.25로만 보이는 문제 — 새로 채운 행이 항상
+          // "콤마/퍼센트 서식이 있는 행"의 서식을 이어받는다는 보장이 없어(탭을 새로
+          // 만들거나 기존 데이터를 지운 직후의 상태에 따라 갈림) 생긴다. 값을 다 쓴
+          // 뒤, 이번에 실제로 쓴 데이터 범위(2행~finalRow행)에 매번 명시적으로 서식을
+          // 다시 지정해서 어떤 상황에서도 항상 맞는 형식으로 보이게 한다.
+          const dataFormatRequests = [];
+          [colMap.청구운임, colMap.기사운임, colMap.수수료].filter(Boolean).forEach((col) => {
+            dataFormatRequests.push({
+              repeatCell: {
+                range: { sheetId, startRowIndex: 1, endRowIndex: finalRow, startColumnIndex: gsheetColIndexFromLetter(col), endColumnIndex: gsheetColIndexFromLetter(col) + 1 },
+                cell: { userEnteredFormat: { numberFormat: { type: "NUMBER", pattern: "#,##0" } } },
+                fields: "userEnteredFormat.numberFormat",
+              },
+            });
+          });
+          if (colMap.매익율) {
+            dataFormatRequests.push({
+              repeatCell: {
+                range: { sheetId, startRowIndex: 1, endRowIndex: finalRow, startColumnIndex: gsheetColIndexFromLetter(colMap.매익율), endColumnIndex: gsheetColIndexFromLetter(colMap.매익율) + 1 },
+                cell: { userEnteredFormat: { numberFormat: { type: "PERCENT", pattern: "0.00%" } } },
+                fields: "userEnteredFormat.numberFormat",
+              },
+            });
+          }
+          if (dataFormatRequests.length) {
+            await gsheetApi("POST", ":batchUpdate", { data: { requests: dataFormatRequests } })
+              .catch((e) => console.warn("백필 금액 서식 재적용 실패(무시):", e?.message || e));
+          }
+
+          // ⭐ 사용자 요청 — 백필 결과 맨 아래에 그 달 총 건수/총 청구운임/총 기사운임/
+          // 총 수수료/평균 매익율을 요약해서 보여준다. 상차일(날짜) 칸은 실시간
+          // 동기화가 블록을 찾을 때 훑는 기준 열이라 합계 행에는 절대 쓰지 않고
+          // 비워둔다 — 그래야 합계 행이 빈 구분줄처럼 보여 실시간 동기화 로직과
+          // 부딪히지 않는다. "버퍼 행"(다음 실시간 등록이 값을 채워 넣을 빈 줄)
+          // 바로 다음에 합계 행을 두어서, 나중에 새 오더가 버퍼 행을 채우고 또 새
+          // 버퍼 행이 추가돼도 합계 행은 항상 구조적으로 맨 아래로 밀려 내려간다.
+          // 다만 합계 안의 숫자 자체는 "이번 백필 시점" 스냅샷이라 그 이후 실시간
+          // 동기화로 추가된 오더는 반영되지 않는다 — 최신 합계가 필요하면 그 달을
+          // 다시 백필하면 된다.
+          const numOf = (v) => Number(String(v ?? "0").replace(/[^\d.-]/g, "")) || 0;
+          const totalCharge = toWrite.reduce((s, { data }) => s + numOf(data["청구운임"]), 0);
+          const totalDriverFare = toWrite.reduce((s, { data }) => s + numOf(data["기사운임"]), 0);
+          const totalFee = totalCharge - totalDriverFare;
+          const marginRatios = toWrite
+            .map(({ data }) => {
+              const c = numOf(data["청구운임"]);
+              const f = numOf(data["기사운임"]);
+              return c > 0 ? (c - f) / c : null;
+            })
+            .filter((v) => v !== null);
+          const avgMargin = marginRatios.length ? marginRatios.reduce((s, v) => s + v, 0) / marginRatios.length : 0;
+
+          const bufferRow = rowCount + 1;
+          const totalsRow = rowCount + 2;
+          await gsheetApi("POST", ":batchUpdate", {
+            data: {
+              requests: [
+                { insertDimension: { range: { sheetId, dimension: "ROWS", startIndex: rowCount, endIndex: bufferRow }, inheritFromBefore: true } },
+                { insertDimension: { range: { sheetId, dimension: "ROWS", startIndex: bufferRow, endIndex: totalsRow }, inheritFromBefore: true } },
+              ],
+            },
+          });
+
+          const totalsRangesData = [];
+          const pushTotal = (col, value) => { if (col) totalsRangesData.push({ range: `${quoteTab(tabName)}!${col}${totalsRow}`, values: [[value]] }); };
+          pushTotal(colMap.거래처명, `합계 (총 ${toWrite.length}건)`);
+          pushTotal(colMap.청구운임, totalCharge);
+          pushTotal(colMap.기사운임, totalDriverFare);
+          pushTotal(colMap.수수료, totalFee);
+          pushTotal(colMap.매익율, avgMargin);
+          if (totalsRangesData.length) {
+            await gsheetApi("POST", "/values:batchUpdate", { data: { valueInputOption: "USER_ENTERED", data: totalsRangesData } });
+          }
+
+          // 합계 행 서식 — 금액/매익율 칸만 데이터 행과 같은 콤마/퍼센트 서식으로
+          // 맞춘다. 굵게·배경색처럼 이 행만의 특이한 서식은 일부러 넣지 않는다 —
+          // 다음 달 백필 때 clearGsheetDataRows가 데이터 행을 지우면서 이 합계
+          // 행(그 시점의 "마지막 행")만 남기고, 그 남은 행의 서식을 이후 새로 넣는
+          // 데이터 행들이 그대로 이어받게 되는데, 합계 행에만 굵게/배경색을 넣어두면
+          // 그 서식이 엉뚱하게 다음 달 전체 데이터 행에 번져 보이게 된다.
+          const totalsFormatRequests = [];
+          [colMap.청구운임, colMap.기사운임, colMap.수수료].filter(Boolean).forEach((col) => {
+            totalsFormatRequests.push({
+              repeatCell: {
+                range: { sheetId, startRowIndex: totalsRow - 1, endRowIndex: totalsRow, startColumnIndex: gsheetColIndexFromLetter(col), endColumnIndex: gsheetColIndexFromLetter(col) + 1 },
+                cell: { userEnteredFormat: { numberFormat: { type: "NUMBER", pattern: "#,##0" } } },
+                fields: "userEnteredFormat.numberFormat",
+              },
+            });
+          });
+          if (colMap.매익율) {
+            totalsFormatRequests.push({
+              repeatCell: {
+                range: { sheetId, startRowIndex: totalsRow - 1, endRowIndex: totalsRow, startColumnIndex: gsheetColIndexFromLetter(colMap.매익율), endColumnIndex: gsheetColIndexFromLetter(colMap.매익율) + 1 },
+                cell: { userEnteredFormat: { numberFormat: { type: "PERCENT", pattern: "0.00%" } } },
+                fields: "userEnteredFormat.numberFormat",
+              },
+            });
+          }
+          if (totalsFormatRequests.length) {
+            await gsheetApi("POST", ":batchUpdate", { data: { requests: totalsFormatRequests } })
+              .catch((e) => console.warn("합계 행 서식 적용 실패(무시):", e?.message || e));
+          }
         });
       }
 
