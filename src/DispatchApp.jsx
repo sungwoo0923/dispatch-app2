@@ -18148,31 +18148,32 @@ setConfirmChange(null);
     tabIndex={0}
     ref={(el) => { if (el && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
   >
-    <div className="bg-white rounded-xl shadow-xl w-[1400px] max-w-[95vw] max-h-[90vh] flex overflow-hidden border">
+    <div className="bg-white rounded-xl shadow-xl w-[1400px] max-w-[95vw] min-h-[650px] max-h-[90vh] flex overflow-hidden border">
 
      {/* ================= 지도 영역 =================
           ⭐ 예전엔 여기 height:'500px'가 고정돼 있어서, 모달 전체 높이(650px)보다
           작게 잡혀 지도 아래로 빈 흰 여백이 생겼다. h-full로 부모(플렉스 행)
           높이에 꽉 차게 늘어나도록 고친다.
           ⭐ 뷰포트 비례(95vw/92vh)로 키웠더니 패널 내용이 짧은 주문에서는 아래
-          여백이 크게 남고, 반대로 고정 픽셀(720px)로 굳혔더니 내용이 긴
-          주문(경유지·메모 등)에서는 스크롤이 다시 생겼다 — 오더마다 패널
-          내용 분량이 달라 고정값 하나로는 "여백도 스크롤도 없이" 둘 다 맞출
-          수 없다. 대신 모달 자체엔 높이를 고정하지 않고(내용 기준 자동
-          높이) max-h만 안전장치로 남긴다 — flex 기본 동작(align-items:
-          stretch)상 오른쪽 패널(실제 내용이 있는 쪽)의 자연스러운 높이만큼
-          모달이 정확히 커지고, 지도(h-full, 자체 내용 없음)는 그 확정된
-          높이에 맞춰 같이 늘어난다. 이러면 오더마다 내용 분량이 달라도 항상
-          "딱 맞는" 크기가 되고, 아주 긴 경우에만 max-h-[90vh]에 걸려 패널
-          자체 스크롤(overflow-y-auto)로 자연스럽게 폴백된다. */}
-<div className="flex-1 h-full bg-gray-200 relative" style={{ minWidth: '500px' }}>
-  
+          여백이 크게 남고, 고정 픽셀(720px)로 굳혔더니 내용이 긴 주문(경유지·
+          메모 등)에서는 스크롤이 다시 생겼다 — 오더마다 패널 내용 분량이 달라
+          고정값 하나로는 "여백도 스크롤도 없이" 둘 다 맞출 수 없다. 그래서
+          높이를 고정하지 않고(내용 기준 자동 높이) max-h만 안전장치로
+          뒀었는데, 그러면서 min-height가 전혀 없어지자 이 지도 영역(자체
+          컨텐츠가 없는 빈 div, h-full만 의존)이 초기 레이아웃 순간에 0에
+          가까운 높이로 잡혀 TMAP이 그 크기로 초기화되면서 화면에 아예 안
+          그려지는 사고가 났다(지도 렌더 자체는 로그상 "완료"로 찍히는데 눈에
+          안 보이는 것도 이 때문). min-h-[650px]로 바닥을 다시 깔아 지도가
+          항상 확실한 높이를 갖고 초기화되게 하면서, 내용이 더 길면 여전히
+          그만큼 커지고(max-h-[90vh]까지) 짧으면 이 최소 높이로 유지된다. */}
+<div className="flex-1 h-full bg-gray-200 relative" style={{ minWidth: '500px', minHeight: '600px' }}>
+
   <div
     id="route-map"
     className="w-full h-full"
-    style={{ 
-      width: '100%', 
-      height: '100%', 
+    style={{
+      width: '100%',
+      height: '100%',
       position: 'absolute', 
       top: 0, 
       left: 0,
