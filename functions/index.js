@@ -2211,7 +2211,16 @@ exports.setupGsheetDailyLedger = functions
       const selectCols = colIdxs.map((i) => `Col${i}`).join(",");
       const lastColLetter = gsheetColLetter(GSHEET_MONTH_HEADER_COLUMNS.length - 1);
       const rangeList = readyTabs.map((t) => `${quoteTab(t)}!A2:${lastColLetter}`).join(", ");
-      const formula = `=QUERY(VSTACK(${rangeList}), "select ${selectCols} where Col1 is not null", 0)`;
+      // ⭐ 사용자 요청 — 월별 탭처럼 상차일이 바뀌는 지점에 빈 줄이 그대로 보여야
+      // 한다. 원본 월별 탭은 날짜 블록 사이에 완전히 빈 줄(모든 칸이 공백)을 넣고,
+      // "합계" 행은 순번(Col1)은 비어있지만 거래처명(Col7) 칸엔 "합계 (총 N건)"
+      // 텍스트가 있다 — 이 둘을 구분해서 순번이 있는 실제 데이터 행이거나
+      // 거래처명도 같이 비어있는 진짜 빈 구분줄만 남기고, 순번 없이 거래처명만
+      // 채워진 합계 행만 걸러낸다(여러 달을 이어붙였을 때 그 달의 합계가 중간에
+      // 끼어 보이지 않게).
+      const orderColIdx = GSHEET_MONTH_HEADER_COLUMNS.indexOf("순번") + 1;
+      const clientColIdx = GSHEET_MONTH_HEADER_COLUMNS.indexOf("거래처명") + 1;
+      const formula = `=QUERY(VSTACK(${rangeList}), "select ${selectCols} where Col${orderColIdx} is not null or Col${clientColIdx} is null", 0)`;
 
       // 탭을 방금 새로 만들었으니(위) 지울 값이 없다 — 굳이 clear를 또 호출할
       // 필요 없음.
