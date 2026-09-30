@@ -746,6 +746,19 @@ const GSHEET_FIELD_HEADER_CANDIDATES = {
   메모: ["메모"],
 };
 
+// ⭐ 사용자 요청 — 매번 시트에 헤더를 손으로 직접 쳐넣지 않아도 되도록, 백필이
+// 이 순서/이름 그대로 헤더 행 자체를 매번 다시 써준다(거래처 백필과 동일한
+// 방식). 순서를 바꾸고 싶으면 이 배열 순서를 바꾸면 된다 — 실제 값 배치는
+// 어차피 헤더 텍스트(GSHEET_FIELD_HEADER_CANDIDATES)로 찾으므로, 이 배열
+// 순서를 바꿔도 다른 로직은 안 건드려도 된다.
+const GSHEET_MONTH_HEADER_COLUMNS = [
+  "순번", "등록일", "상차일", "상차시간", "하차일", "하차시간",
+  "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소",
+  "화물내용", "차량종류", "차량톤수", "혼적", "차량번호",
+  "이름", "전화번호", "배차상태", "청구운임", "기사운임",
+  "수수료", "지급방식", "배차방식", "메모",
+];
+
 // 0-based 열 인덱스 → 시트 열 문자(0→A, 25→Z, 26→AA, ...).
 function gsheetColLetter(idx) {
   let n = idx + 1, s = "";
@@ -1368,10 +1381,14 @@ async function writeGsheetOrderRow(tabName, row, data, colMap) {
     rangesData.push({ range: `${quoteTab(tabName)}!${colMap.기사명}${row}`, values: [[mFormula]] });
     rangesData.push({ range: `${quoteTab(tabName)}!${colMap.전화번호}${row}`, values: [[nFormula]] });
   }
-  if (colMap.수수료 && colMap.매익율) {
+  // ⭐ 수수료(청구운임-기사운임)는 매익율 칸이 없어도(사용자가 원하는 컬럼
+  // 구성에 매익율이 빠질 수 있음) 그 자체로 계산 가능하므로 따로 조건을 건다.
+  if (colMap.수수료) {
     const [qFormula, rFormula] = gsheetFormulaQR(row, colMap);
     rangesData.push({ range: `${quoteTab(tabName)}!${colMap.수수료}${row}`, values: [[qFormula]] });
-    rangesData.push({ range: `${quoteTab(tabName)}!${colMap.매익율}${row}`, values: [[rFormula]] });
+    if (colMap.매익율) {
+      rangesData.push({ range: `${quoteTab(tabName)}!${colMap.매익율}${row}`, values: [[rFormula]] });
+    }
   }
   if (colMap.순번) {
     rangesData.push({ range: `${quoteTab(tabName)}!${colMap.순번}${row}`, values: [[gsheetFormulaA(row, colMap)]] });
@@ -1594,6 +1611,21 @@ exports.backfillGsheetMonth = functions
       const tabName = gsheetMonthTabName(`${monthPrefix}-01`);
       await ensureGsheetMonthTab(tabName);
 
+      // ⭐ 매번 헤더를 손으로 안 쳐도 되도록, 백필할 때마다 1행을 정해진
+      // 컬럼명/순서(GSHEET_MONTH_HEADER_COLUMNS)로 다시 써준다 — 컬럼명을
+      // 미리 준비할 필요 없이 그냥 백필 버튼만 누르면 된다.
+      await gsheetApi("POST", `/values/${encodeURIComponent(`${quoteTab(tabName)}!1:1`)}:clear`, { data: {} });
+      await gsheetApi("POST", "/values:batchUpdate", {
+        data: {
+          valueInputOption: "USER_ENTERED",
+          data: [{ range: `${quoteTab(tabName)}!A1`, values: [GSHEET_MONTH_HEADER_COLUMNS] }],
+        },
+      });
+      // 방금 헤더를 새로 썼으니, 그 전에 캐시돼 있던(30초짜리) 옛 헤더→열문자
+      // 맵이 있으면 반드시 버린다 — 안 그러면 아래 colMap 조회가 방금 지운
+      // 옛날 헤더 기준으로 나올 수 있다.
+      _gsheetColMapCache.delete("order:" + tabName);
+
       // 대상 탭의 기존 데이터 행을 최대한 비운다(헤더만 남김) — 프로그램 기준으로
       // 통째로 다시 채우기 위해.
       const sheets = await getGsheetSheetList();
@@ -1743,10 +1775,12 @@ exports.backfillGsheetMonth = functions
                 rangesData.push({ range: `${quoteTab(tabName)}!${colMap.기사명}${row}`, values: [[mFormula]] });
                 rangesData.push({ range: `${quoteTab(tabName)}!${colMap.전화번호}${row}`, values: [[nFormula]] });
               }
-              if (colMap.수수료 && colMap.매익율) {
+              if (colMap.수수료) {
                 const [qFormula, rFormula] = gsheetFormulaQR(row, colMap);
                 rangesData.push({ range: `${quoteTab(tabName)}!${colMap.수수료}${row}`, values: [[qFormula]] });
-                rangesData.push({ range: `${quoteTab(tabName)}!${colMap.매익율}${row}`, values: [[rFormula]] });
+                if (colMap.매익율) {
+                  rangesData.push({ range: `${quoteTab(tabName)}!${colMap.매익율}${row}`, values: [[rFormula]] });
+                }
               }
               if (colMap.순번) {
                 rangesData.push({ range: `${quoteTab(tabName)}!${colMap.순번}${row}`, values: [[gsheetFormulaA(row, colMap)]] });
