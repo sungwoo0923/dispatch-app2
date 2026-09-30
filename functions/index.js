@@ -2154,7 +2154,15 @@ exports.setupGsheetDailyLedger = functions
 
     try {
       const sheets = await getGsheetSheetList();
-      const monthTabs = sheets.filter((s) => gsheetTabSortKey(s.title) !== null);
+      // ⭐ 사용자 요청 — 일일업무일지는 26년9월부터만 포함한다. 그 이전 달(25년11월~
+      // 26년8월)은 나중에 새 컬럼 구성으로 백필되어 "등록일" 헤더가 생기더라도
+      // 계속 제외해야 하므로, 헤더 유무 체크와 별개로 달 자체를 이 기준으로 먼저
+      // 거른다.
+      const GSHEET_DAILY_LEDGER_MIN_MONTH_KEY = 26 * 12 + 9; // "26년9월"
+      const monthTabs = sheets.filter((s) => {
+        const key = gsheetTabSortKey(s.title);
+        return key !== null && key >= GSHEET_DAILY_LEDGER_MIN_MONTH_KEY;
+      });
       monthTabs.sort((a, b) => gsheetTabSortKey(a.title) - gsheetTabSortKey(b.title));
 
       const readyTabs = [];
