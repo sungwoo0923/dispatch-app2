@@ -1335,6 +1335,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
             <>
               <GsheetBackfillPanel />
               <GsheetClientBackfillPanel />
+              <GsheetDailyLedgerPanel />
             </>
           )}
 
@@ -1807,6 +1808,58 @@ function GsheetClientBackfillPanel() {
         className="px-5 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition disabled:opacity-40"
       >
         {running ? "실행 중..." : "거래처 전송 실행"}
+      </button>
+      {result && (
+        <div className="mt-4 bg-gray-50 rounded-lg px-4 py-3 text-[12px] text-gray-700 whitespace-pre-wrap break-words">
+          {result}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ⭐ 일일업무일지(경리) 시트 설정 — 퇴사 후 프로그램 없이 구글시트만으로 계속
+// 써도 되도록, "등록일" 헤더가 있는(=새 컬럼 구성으로 백필된) 모든 월별 탭을
+// 자동으로 찾아 QUERY 수식 하나로 합쳐 보여주는 탭을 만들어준다. 프로그램
+// 자동 전송이든 사용자가 월별 탭에 직접 입력한 오더든 원본을 그대로 읽어가는
+// 방식이라 둘 다 자동으로 반영된다. 새 달을 백필한 뒤 이 버튼을 다시 누르면
+// 그 달까지 포함해서 수식을 다시 만들어준다.
+function GsheetDailyLedgerPanel() {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState("");
+
+  const handleRun = async () => {
+    setRunning(true);
+    setResult("");
+    try {
+      const url = `https://us-central1-dispatch-app-9b92f.cloudfunctions.net/setupGsheetDailyLedger?key=dolkae-backfill-2026`;
+      const res = await fetch(url);
+      const text = await res.text();
+      setResult(text);
+    } catch (e) {
+      setResult(`요청 실패: ${e?.message || e}`);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 max-w-xl mt-6">
+      <div className="text-[14px] font-bold text-gray-800 mb-1">일일업무일지(경리) 시트 설정</div>
+      <p className="text-[12px] text-gray-500 mb-5 leading-relaxed">
+        "등록일" 헤더가 있는(새 컬럼 구성으로 백필된) 모든 월별 탭을 자동으로
+        찾아 "일일업무일지(경리)" 탭에 하나로 합쳐서 보여줍니다(탭이 없으면
+        새로 만듦). 프로그램에서 자동 전송된 오더든 사용자가 월별 탭에 직접
+        입력한 오더든 원본을 실시간으로 읽어가는 수식이라 둘 다 자동으로
+        반영됩니다. 새 달을 백필한 뒤에는 이 버튼을 한 번 더 눌러야 그 달까지
+        포함됩니다.
+      </p>
+      <button
+        onClick={handleRun}
+        disabled={running}
+        className="px-5 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition disabled:opacity-40"
+      >
+        {running ? "실행 중..." : "일일업무일지 시트 설정/갱신"}
       </button>
       {result && (
         <div className="mt-4 bg-gray-50 rounded-lg px-4 py-3 text-[12px] text-gray-700 whitespace-pre-wrap break-words">

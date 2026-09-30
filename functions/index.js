@@ -2082,6 +2082,110 @@ exports.backfillGsheetClients = functions
   });
 
 /* ==================================================================
+   📒 일일업무일지(경리) 시트 설정 — 사용자가 퇴사 후에도 프로그램 없이
+   구글시트만으로 계속 쓸 수 있게, 월별 탭(26년9월, 26년10월, ...)을
+   그대로 읽어가는(QUERY) "보기 전용" 탭을 만들어준다. 프로그램에서
+   자동 전송된 오더든, 나중에 사용자가 월별 탭에 직접 입력한 오더든
+   QUERY가 원본을 실시간으로 읽으므로 둘 다 자동으로 반영된다.
+
+   ⚠️ 새 컬럼 구성(GSHEET_MONTH_HEADER_COLUMNS, "등록일" 헤더가 있음)으로
+   백필된 달만 포함한다 — 옛 컬럼 구성 탭을 섞으면 QUERY가 위치(Col1,
+   Col2...) 기준으로 가져오기 때문에 엉뚱한 값이 들어간다. 헤더 행에
+   "등록일"이 있는지로 새/옛 구성을 구분한다.
+
+   한 번 만든 뒤 이 함수를 다시 실행하면 그 사이 새로 백필된(등록일 헤더가
+   생긴) 달까지 자동으로 다시 포함해서 수식을 새로 써준다 — "매달 새
+   시트를 만들 때마다 이 버튼을 한 번 더 눌러주면" 계속 최신 상태로
+   유지된다(수식 텍스트를 직접 손으로 고칠 필요 없음).
+
+   호출: https://.../setupGsheetDailyLedger?key=<GSHEET_BACKFILL_KEY>
+================================================================== */
+const GSHEET_DAILY_LEDGER_TAB = "일일업무일지(경리)";
+// 사용자가 요청한 "엑셀다운과 동일한" 컬럼 구성 — 상차지주소/하차지주소/혼적은
+// 빠지고 경유 상차지/경유 하차지가 들어간다.
+const GSHEET_DAILY_LEDGER_HEADERS = [
+  "순번", "등록일", "상차일", "상차시간", "하차일", "하차시간",
+  "거래처명", "상차지명", "경유 상차지", "하차지명", "경유 하차지",
+  "화물내용", "차량종류", "차량톤수", "차량번호", "기사명", "전화번호",
+  "배차상태", "청구운임", "기사운임", "수수료", "지급방식", "배차방식", "메모",
+];
+// 위 각 헤더가 월별 탭(GSHEET_MONTH_HEADER_COLUMNS) 안에서 몇 번째(1-based)
+// 컬럼인지 — 월별 탭 컬럼 구성이 나중에 바뀌어도 이 인덱스가 자동으로 같이
+// 바뀌므로 QUERY의 Col번호를 하드코딩해둘 필요가 없다.
+function gsheetDailyLedgerColIndexes() {
+  return GSHEET_DAILY_LEDGER_HEADERS.map((h) => {
+    const idx = GSHEET_MONTH_HEADER_COLUMNS.indexOf(h);
+    return idx >= 0 ? idx + 1 : null;
+  });
+}
+
+exports.setupGsheetDailyLedger = functions
+  .runWith({ timeoutSeconds: 180, memory: "256MB" })
+  .https.onRequest(async (req, res) => {
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Methods", "GET");
+    if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+    if (req.query.key !== GSHEET_BACKFILL_KEY) { res.status(403).send("forbidden"); return; }
+
+    try {
+      const sheets = await getGsheetSheetList();
+      const monthTabs = sheets.filter((s) => gsheetTabSortKey(s.title) !== null);
+      monthTabs.sort((a, b) => gsheetTabSortKey(a.title) - gsheetTabSortKey(b.title));
+
+      const readyTabs = [];
+      for (const t of monthTabs) {
+        try {
+          const headerRes = await gsheetApi("GET", `/values/${encodeURIComponent(`${quoteTab(t.title)}!1:1`)}`);
+          const header = (headerRes.values && headerRes.values[0]) || [];
+          if (header.some((h) => String(h || "").trim() === "등록일")) readyTabs.push(t.title);
+        } catch (e) {
+          console.warn(`일일업무일지 설정 — 헤더 확인 실패(건너뜀): ${t.title}`, e?.message || e);
+        }
+      }
+
+      if (!readyTabs.length) {
+        res.status(400).send('새 컬럼 구성("등록일" 헤더 포함)으로 백필된 달 탭이 하나도 없습니다. 먼저 원하는 달을 백필해주세요.');
+        return;
+      }
+
+      const colIdxs = gsheetDailyLedgerColIndexes();
+      if (colIdxs.some((i) => i === null)) {
+        res.status(500).send("일일업무일지 헤더 구성이 GSHEET_MONTH_HEADER_COLUMNS와 안 맞습니다 — 코드 확인이 필요합니다.");
+        return;
+      }
+
+      let ledgerSheet = sheets.find((s) => s.title === GSHEET_DAILY_LEDGER_TAB);
+      if (!ledgerSheet) {
+        const created = await gsheetApi("POST", ":batchUpdate", {
+          data: { requests: [{ addSheet: { properties: { title: GSHEET_DAILY_LEDGER_TAB } } }] },
+        });
+        ledgerSheet = created.replies[0].addSheet.properties;
+      }
+
+      const selectCols = colIdxs.map((i) => `Col${i}`).join(",");
+      const lastColLetter = gsheetColLetter(GSHEET_MONTH_HEADER_COLUMNS.length - 1);
+      const rangeList = readyTabs.map((t) => `${quoteTab(t)}!A2:${lastColLetter}`).join("; ");
+      const formula = `=QUERY({${rangeList}}, "select ${selectCols} where Col1 is not null", 0)`;
+
+      await gsheetApi("POST", `/values/${encodeURIComponent(`${quoteTab(GSHEET_DAILY_LEDGER_TAB)}!A1:Z`)}:clear`, { data: {} });
+      await gsheetApi("POST", "/values:batchUpdate", {
+        data: {
+          valueInputOption: "USER_ENTERED",
+          data: [
+            { range: `${quoteTab(GSHEET_DAILY_LEDGER_TAB)}!A1`, values: [GSHEET_DAILY_LEDGER_HEADERS] },
+            { range: `${quoteTab(GSHEET_DAILY_LEDGER_TAB)}!A2`, values: [[formula]] },
+          ],
+        },
+      });
+
+      res.status(200).send(`"${GSHEET_DAILY_LEDGER_TAB}" 탭 설정 완료 — 포함된 달(${readyTabs.length}개): ${readyTabs.join(", ")}`);
+    } catch (e) {
+      console.error("일일업무일지 설정 오류:", e);
+      res.status(500).send(`오류: ${e?.message || e}`);
+    }
+  });
+
+/* ==================================================================
    💼 인수인계 자료(운임 이력)를 구글시트로 전송 — src/HandoverFareReport.jsx
    화면이 이미 거래처/지역별로 묶어서 계산해둔 결과(단위 묶기, 톤수 구분,
    지역명 통일 등 모든 로직은 화면 쪽에만 있음)를 그대로 받아 적기만
