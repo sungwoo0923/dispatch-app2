@@ -2188,26 +2188,33 @@ exports.setupGsheetDailyLedger = functions
         return;
       }
 
+      // ⭐ VSTACK으로 바꿔도 수식이 여전히 텍스트로 박히는 문제가 재현됐다 — 이
+      // 탭을 여러 번 지우고 다시 쓰는 과정에서 A2 셀에 "일반 텍스트" 서식이
+      // 한 번 남게 되면(예: 예전에 실패한 시도에서 RAW로 값이 들어간 적이 있는
+      // 경우), 그 뒤로는 USER_ENTERED로 다시 써도 셀 자체가 텍스트 서식이라
+      // 수식으로 안 바뀐다(시트 UI에서 "일반 텍스트"로 서식 지정된 칸에
+      // "=1+1"을 입력해도 그대로 문자로 보이는 것과 동일한 현상). 이 탭은
+      // 전부 수식으로만 채워지는 "보기 전용" 탭이라 원본 데이터가 없으므로,
+      // 매번 탭 자체를 통째로 지우고 새로 만들어 서식 잔여물 걱정 없이
+      // 완전히 깨끗한 상태에서 시작한다.
       let ledgerSheet = sheets.find((s) => s.title === GSHEET_DAILY_LEDGER_TAB);
-      if (!ledgerSheet) {
-        const created = await gsheetApi("POST", ":batchUpdate", {
-          data: { requests: [{ addSheet: { properties: { title: GSHEET_DAILY_LEDGER_TAB } } }] },
+      if (ledgerSheet) {
+        await gsheetApi("POST", ":batchUpdate", {
+          data: { requests: [{ deleteSheet: { sheetId: ledgerSheet.sheetId } }] },
         });
-        ledgerSheet = created.replies[0].addSheet.properties;
       }
+      const created = await gsheetApi("POST", ":batchUpdate", {
+        data: { requests: [{ addSheet: { properties: { title: GSHEET_DAILY_LEDGER_TAB } } }] },
+      });
+      ledgerSheet = created.replies[0].addSheet.properties;
 
-      // ⭐ 처음엔 QUERY({범위1; 범위2; ...}, ...) 처럼 중괄호 배열 리터럴로 여러 달을
-      // 합쳤는데, 이걸 API로 쓰면(USER_ENTERED) 수식으로 계산되지 않고 그 텍스트
-      // 그대로 셀에 문자열로 박혀버리는 문제가 있었다 — 이 코드베이스의 다른 수식들
-      // (ARRAYFORMULA, IFERROR 등)은 전부 괄호+쉼표만 쓰고 중괄호/세미콜론을 안 쓰는데
-      // 유독 이것만 중괄호를 썼다는 게 결정적 단서. 중괄호 배열 리터럴 대신 VSTACK
-      // 함수(쉼표만 사용)로 여러 시트 범위를 세로로 이어붙이도록 바꿨다.
       const selectCols = colIdxs.map((i) => `Col${i}`).join(",");
       const lastColLetter = gsheetColLetter(GSHEET_MONTH_HEADER_COLUMNS.length - 1);
       const rangeList = readyTabs.map((t) => `${quoteTab(t)}!A2:${lastColLetter}`).join(", ");
       const formula = `=QUERY(VSTACK(${rangeList}), "select ${selectCols} where Col1 is not null", 0)`;
 
-      await gsheetApi("POST", `/values/${encodeURIComponent(`${quoteTab(GSHEET_DAILY_LEDGER_TAB)}!A1:Z`)}:clear`, { data: {} });
+      // 탭을 방금 새로 만들었으니(위) 지울 값이 없다 — 굳이 clear를 또 호출할
+      // 필요 없음.
       await gsheetApi("POST", "/values:batchUpdate", {
         data: {
           valueInputOption: "USER_ENTERED",
