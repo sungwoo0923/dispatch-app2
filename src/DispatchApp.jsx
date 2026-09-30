@@ -9553,6 +9553,25 @@ async function waitMapDiv() {
   return null;
 }
 
+// ⭐ 지도가 칸보다 작게(아래쪽에 여백을 남기고) 그려지는 문제의 진짜 원인 —
+// 모달이 내용 기준 자동 높이라, DOM은 이미 있어도(waitMapDiv 통과) 그
+// 순간의 실제 높이가 아직 최종 값이 아닐 수 있다. TMAP은 "생성되는 그
+// 순간"의 칸 크기로 내부를 굳히는 것으로 보이고, 생성 후에 resize류
+// 메서드를 불러도 확실히 안 먹혀서(실제로 이미 시도했지만 계속 재현됨),
+// 아예 "지도를 만들기 전에" 높이가 더 이상 안 바뀔 때까지(연속으로 같은
+// 값이 두 번 나올 때까지, 최대 1초) 기다린다 — 그러면 지도가 처음부터
+// 정확한 최종 크기로 만들어져서 사후 보정 자체가 필요 없어진다.
+async function waitStableMapHeight(el) {
+  let last = -1;
+  for (let i = 0; i < 20; i++) {
+    const h = el.clientHeight;
+    if (h > 80 && h === last) return h;
+    last = h;
+    await new Promise(r => setTimeout(r, 50));
+  }
+  return el.clientHeight;
+}
+
 React.useEffect(() => {
 
   if (!confirmOpen || !form?.상차지주소 || !form?.하차지주소) return;
@@ -9571,6 +9590,8 @@ React.useEffect(() => {
 
       const mapDiv = await waitMapDiv();
       if (!mapDiv || cancelled) return;
+      await waitStableMapHeight(mapDiv);
+      if (cancelled) return;
 
       // ⭐ 주소 → 좌표 변환 (도로명 주소 대응 강화)
       const getCoords = async (addr) => {
