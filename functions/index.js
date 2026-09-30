@@ -1713,6 +1713,10 @@ exports.backfillGsheetMonth = functions
       const canceled = items.length - toWrite.length;
       let failed = 0;
       const failedIds = [];
+      // ⭐ 진단용 — 기사명/전화번호/수수료/순번 칸이 비어 들어가는 사고가 있어서,
+      // 실제로 이번 실행에서 colMap이 이 필드들의 열을 제대로 찾았는지 결과
+      // 문구에 그대로 보여준다(사용자가 캡처해서 보내주면 바로 원인을 알 수 있음).
+      let debugColMap = null;
 
       if (toWrite.length) {
         await withGsheetTabLock(tabName, async () => {
@@ -1724,6 +1728,7 @@ exports.backfillGsheetMonth = functions
           // 열 위치는 한 번만 조회해서 재사용한다(오더마다 다시 조회하면 API 호출이
           // 오더 수만큼 늘어나 분당 쓰기 한도에 다시 걸린다).
           const colMap = await getGsheetColumnMap(tabName);
+          debugColMap = colMap;
 
           // ⭐ 구글시트 API는 "분당 쓰기 60회"라는 계정 단위 한도가 있다 — 오더 하나당
           // API 호출을 여러 번(행 삽입 + 값쓰기 + 고유값 등록) 하면 149건만 돼도 수백
@@ -1961,10 +1966,16 @@ exports.backfillGsheetMonth = functions
         console.warn("백필 결과 검증용 재조회 실패(무시):", e?.message || e);
       }
 
+      const debugFields = ["순번", "기사명", "전화번호", "수수료", "매익율", "배차상태", "청구운임"];
+      const colMapDebugText = debugColMap
+        ? debugFields.map((f) => `${f}=${debugColMap[f] || "(못찾음)"}`).join(", ")
+        : "(colMap 조회 안됨)";
+
       res.status(200).send(
         `완료 — 탭 "${tabName}" 초기화 후 반영 ${created}건, 배차취소(제외) ${canceled}건, 실패 ${failed}건 (대상 ${items.length}건)` +
         (actualRowCount !== null ? `\n검증: 시트에 실제로 채워진 행 ${actualRowCount}개` : "") +
-        (failedIds.length ? `\n실패 목록(최대 20건): ${failedIds.slice(0, 20).join(", ")}` : "")
+        (failedIds.length ? `\n실패 목록(최대 20건): ${failedIds.slice(0, 20).join(", ")}` : "") +
+        `\n열 위치 확인: ${colMapDebugText}`
       );
     } catch (e) {
       console.error("백필 오류:", e);
