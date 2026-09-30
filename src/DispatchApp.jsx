@@ -9716,13 +9716,26 @@ React.useEffect(() => {
         height: "100%",
         zoom: 10
       });
-      // 모달이 내용 기준 자동 높이라 생성 직후엔 레이아웃이 아직 다 자리잡지
-      // 않았을 수 있다 — 한 틱 뒤(레이아웃 확정 후) 한 번 더 크기를 재계산시켜
-      // 경로가 도착하기 전(기본 서울 화면) 단계부터도 지도가 칸에 꽉 차 보이게 한다.
-      setTimeout(() => {
-        try { map.invalidateSize && map.invalidateSize(); } catch {}
+      // ⭐ 모달이 내용 기준 자동 높이라 지도를 만드는 시점엔 레이아웃이 아직
+      // 최종 크기로 자리잡지 않았을 수 있다 — TMAP이 그 순간의(더 작은) 칸
+      // 크기를 기준으로 내부 크기를 굳혀버려, 실제로는 칸이 더 큰데도 지도만
+      // 작게 남아 여백이 생긴다. SDK마다 재계산 메서드 이름이 달라
+      // (resize/invalidateSize 등) 확실하지 않으므로 존재하는 것들을 전부
+      // 시도하고, 그래도 안 먹힐 경우를 대비해 실제로 측정한 픽셀 크기를
+      // 직접 다시 넣어준다. 레이아웃이 늦게 자리잡는 경우까지 잡기 위해
+      // 여러 시점(0ms/150ms/400ms)에 반복 시도한다.
+      const forceMapResize = () => {
+        try {
+          const w = mapDiv.clientWidth, h = mapDiv.clientHeight;
+          if (typeof map.resize === "function") map.resize();
+          if (typeof map.invalidateSize === "function") map.invalidateSize();
+          if (typeof map.setSize === "function" && w > 0 && h > 0) {
+            map.setSize(new window.Tmapv2.Size(w, h));
+          }
+        } catch {}
         try { window.dispatchEvent(new Event("resize")); } catch {}
-      }, 0);
+      };
+      [0, 150, 400].forEach((ms) => setTimeout(forceMapResize, ms));
 
       // =========================
 // ⭐🔥 도로 경로 (완성)
@@ -9822,19 +9835,14 @@ linePath.forEach(p => {
   if (p) bounds.extend(p);
 });
 
-// ⭐ 배차요청장 모달이 내용 기준 자동 높이로 바뀌면서, 지도 컨테이너의 최종
-// 크기가 이 지도를 처음 만든 시점(width:'100%',height:'100%') 이후에야
-// 레이아웃이 자리잡으며 정해지는 경우가 생겼다 — 그러면 지도가 그 사이의
-// 더 작았던 크기 기준으로 굳어버려 실제 칸보다 작게(여백을 남기고) 그려진다.
-// TMAP(Tmapv2)은 Leaflet 기반이라 컨테이너 크기가 바뀐 뒤엔 invalidateSize로
-// 다시 계산해줘야 한다 — fitBounds 직전에 호출해 항상 지금 실제 칸 크기
-// 기준으로 딱 맞게 그려지도록 한다.
-try { map.invalidateSize && map.invalidateSize(); } catch {}
-try { window.dispatchEvent(new Event("resize")); } catch {}
+// 경로 데이터가 도착한 지금 시점(레이아웃이 가장 안정된 상태)에도 한 번 더
+// 크기를 맞춰준다 — fitBounds가 실제 칸 크기를 기준으로 계산되게 하기 위해.
+forceMapResize();
 
 // 👉 bounds 비어있으면 절대 fitBounds 하지 말 것
 if (!bounds.isEmpty()) {
   map.fitBounds(bounds);
+  setTimeout(() => { forceMapResize(); map.fitBounds(bounds); }, 200);
 } else {
   console.warn("❌ bounds 비어있음 → fitBounds 스킵");
 }
