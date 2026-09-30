@@ -2188,10 +2188,16 @@ exports.setupGsheetDailyLedger = functions
         ledgerSheet = created.replies[0].addSheet.properties;
       }
 
+      // ⭐ 처음엔 QUERY({범위1; 범위2; ...}, ...) 처럼 중괄호 배열 리터럴로 여러 달을
+      // 합쳤는데, 이걸 API로 쓰면(USER_ENTERED) 수식으로 계산되지 않고 그 텍스트
+      // 그대로 셀에 문자열로 박혀버리는 문제가 있었다 — 이 코드베이스의 다른 수식들
+      // (ARRAYFORMULA, IFERROR 등)은 전부 괄호+쉼표만 쓰고 중괄호/세미콜론을 안 쓰는데
+      // 유독 이것만 중괄호를 썼다는 게 결정적 단서. 중괄호 배열 리터럴 대신 VSTACK
+      // 함수(쉼표만 사용)로 여러 시트 범위를 세로로 이어붙이도록 바꿨다.
       const selectCols = colIdxs.map((i) => `Col${i}`).join(",");
       const lastColLetter = gsheetColLetter(GSHEET_MONTH_HEADER_COLUMNS.length - 1);
-      const rangeList = readyTabs.map((t) => `${quoteTab(t)}!A2:${lastColLetter}`).join("; ");
-      const formula = `=QUERY({${rangeList}}, "select ${selectCols} where Col1 is not null", 0)`;
+      const rangeList = readyTabs.map((t) => `${quoteTab(t)}!A2:${lastColLetter}`).join(", ");
+      const formula = `=QUERY(VSTACK(${rangeList}), "select ${selectCols} where Col1 is not null", 0)`;
 
       await gsheetApi("POST", `/values/${encodeURIComponent(`${quoteTab(GSHEET_DAILY_LEDGER_TAB)}!A1:Z`)}:clear`, { data: {} });
       await gsheetApi("POST", "/values:batchUpdate", {
