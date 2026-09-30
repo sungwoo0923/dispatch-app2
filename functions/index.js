@@ -2102,19 +2102,44 @@ exports.backfillGsheetClients = functions
 ================================================================== */
 const GSHEET_DAILY_LEDGER_TAB = "일일업무일지(경리)";
 // 사용자가 요청한 "엑셀다운과 동일한" 컬럼 구성 — 상차지주소/하차지주소/혼적은
-// 빠지고 경유 상차지/경유 하차지가 들어간다.
-const GSHEET_DAILY_LEDGER_HEADERS = [
-  "순번", "등록일", "상차일", "상차시간", "하차일", "하차시간",
-  "거래처명", "상차지명", "경유 상차지", "하차지명", "경유 하차지",
-  "화물내용", "차량종류", "차량톤수", "차량번호", "기사명", "전화번호",
-  "배차상태", "청구운임", "기사운임", "수수료", "지급방식", "배차방식", "메모",
+// 빠지고 경유 상차지/경유 하차지가 들어간다. label은 이 시트에 실제로 표시할
+// 헤더 텍스트, source는 월별 탭(GSHEET_MONTH_HEADER_COLUMNS)에서 그 값을 찾을
+// 때 쓰는 헤더 텍스트 — "기사명"(엑셀다운 표기)과 "이름"(월별 탭 표기)처럼
+// 둘이 다를 수 있어서 분리해뒀다(하나로 합치면 둘 다 같은 텍스트라고
+// 가정하다가 못 찾는 사고가 남).
+const GSHEET_DAILY_LEDGER_COLUMNS = [
+  { label: "순번", source: "순번" },
+  { label: "등록일", source: "등록일" },
+  { label: "상차일", source: "상차일" },
+  { label: "상차시간", source: "상차시간" },
+  { label: "하차일", source: "하차일" },
+  { label: "하차시간", source: "하차시간" },
+  { label: "거래처명", source: "거래처명" },
+  { label: "상차지명", source: "상차지명" },
+  { label: "경유 상차지", source: "경유 상차지" },
+  { label: "하차지명", source: "하차지명" },
+  { label: "경유 하차지", source: "경유 하차지" },
+  { label: "화물내용", source: "화물내용" },
+  { label: "차량종류", source: "차량종류" },
+  { label: "차량톤수", source: "차량톤수" },
+  { label: "차량번호", source: "차량번호" },
+  { label: "기사명", source: "이름" },
+  { label: "전화번호", source: "전화번호" },
+  { label: "배차상태", source: "배차상태" },
+  { label: "청구운임", source: "청구운임" },
+  { label: "기사운임", source: "기사운임" },
+  { label: "수수료", source: "수수료" },
+  { label: "지급방식", source: "지급방식" },
+  { label: "배차방식", source: "배차방식" },
+  { label: "메모", source: "메모" },
 ];
-// 위 각 헤더가 월별 탭(GSHEET_MONTH_HEADER_COLUMNS) 안에서 몇 번째(1-based)
-// 컬럼인지 — 월별 탭 컬럼 구성이 나중에 바뀌어도 이 인덱스가 자동으로 같이
-// 바뀌므로 QUERY의 Col번호를 하드코딩해둘 필요가 없다.
+const GSHEET_DAILY_LEDGER_HEADERS = GSHEET_DAILY_LEDGER_COLUMNS.map((c) => c.label);
+// 위 각 컬럼의 source가 월별 탭(GSHEET_MONTH_HEADER_COLUMNS) 안에서 몇
+// 번째(1-based)인지 — 월별 탭 컬럼 구성이 나중에 바뀌어도 이 인덱스가
+// 자동으로 같이 바뀌므로 QUERY의 Col번호를 하드코딩해둘 필요가 없다.
 function gsheetDailyLedgerColIndexes() {
-  return GSHEET_DAILY_LEDGER_HEADERS.map((h) => {
-    const idx = GSHEET_MONTH_HEADER_COLUMNS.indexOf(h);
+  return GSHEET_DAILY_LEDGER_COLUMNS.map((c) => {
+    const idx = GSHEET_MONTH_HEADER_COLUMNS.indexOf(c.source);
     return idx >= 0 ? idx + 1 : null;
   });
 }
@@ -2150,7 +2175,8 @@ exports.setupGsheetDailyLedger = functions
 
       const colIdxs = gsheetDailyLedgerColIndexes();
       if (colIdxs.some((i) => i === null)) {
-        res.status(500).send("일일업무일지 헤더 구성이 GSHEET_MONTH_HEADER_COLUMNS와 안 맞습니다 — 코드 확인이 필요합니다.");
+        const missing = GSHEET_DAILY_LEDGER_COLUMNS.filter((c, i) => colIdxs[i] === null).map((c) => `${c.label}(${c.source})`);
+        res.status(500).send(`일일업무일지 헤더 구성이 월별 탭 컬럼과 안 맞습니다 — 코드 확인이 필요합니다. 못 찾은 항목: ${missing.join(", ")}`);
         return;
       }
 
