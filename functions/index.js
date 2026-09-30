@@ -726,10 +726,8 @@ const GSHEET_FIELD_HEADER_CANDIDATES = {
   거래처명: ["거래처명"],
   상차지: ["상차지명", "상차지"],
   경유지: ["경유지"],
-  경유상차지: ["경유 상차지", "경유상차지"],
   상차지주소: ["상차지주소", "상하지주소"],
   하차지: ["하차지명", "하차지"],
-  경유하차지: ["경유 하차지", "경유하차지"],
   하차지주소: ["하차지주소"],
   화물정보: ["화물내용", "화물정보"],
   차량종류: ["차량종류"],
@@ -753,13 +751,9 @@ const GSHEET_FIELD_HEADER_CANDIDATES = {
 // 방식). 순서를 바꾸고 싶으면 이 배열 순서를 바꾸면 된다 — 실제 값 배치는
 // 어차피 헤더 텍스트(GSHEET_FIELD_HEADER_CANDIDATES)로 찾으므로, 이 배열
 // 순서를 바꿔도 다른 로직은 안 건드려도 된다.
-// ⭐ "경유 상차지"/"경유 하차지"는 원래 이 목록에 없었는데, 일일업무일지(경리)
-// 시트가 이 두 컬럼을 필요로 해서(엑셀다운 컬럼 구성과 동일) 추가했다 —
-// 일일업무일지는 이 월별 탭을 그대로 읽어가는(QUERY) 방식이라, 소스인 이
-// 탭에 값이 있어야 넘어갈 수 있다.
 const GSHEET_MONTH_HEADER_COLUMNS = [
   "순번", "등록일", "상차일", "상차시간", "하차일", "하차시간",
-  "거래처명", "상차지명", "상차지주소", "경유 상차지", "하차지명", "하차지주소", "경유 하차지",
+  "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소",
   "화물내용", "차량종류", "차량톤수", "혼적", "차량번호",
   "이름", "전화번호", "배차상태", "청구운임", "기사운임",
   "수수료", "지급방식", "배차방식", "메모",
@@ -828,18 +822,9 @@ async function getGsheetColumnMap(tabName) {
 // 동의어 필드쌍이라(DispatchApp.jsx의 필드 정규화 로직과 동일한 우선순위) 각 쌍에서
 // 하나씩만 골라 상차 경유지 + 하차 경유지 순서로 합친다.
 function extractGsheetWaypointNames(data) {
-  return [...gsheetPickupWaypointNames(data), ...gsheetDropWaypointNames(data)].join(", ");
-}
-// ⭐ 일일업무일지(경리) 시트가 엑셀다운과 동일하게 "경유 상차지"/"경유 하차지"를
-// 상/하차 각각 별도 컬럼으로 요구해서, 위 합쳐진 문자열 대신 각각 따로 뽑는
-// 버전도 둔다 — 로직(동의어 필드쌍 처리)은 완전히 동일, 대상 목록만 다르다.
-function gsheetPickupWaypointNames(data) {
   const pickupList = Array.isArray(data?.경유지_상차) ? data.경유지_상차 : (Array.isArray(data?.경유상차목록) ? data.경유상차목록 : []);
-  return pickupList.map((s) => String(s?.업체명 || "").trim()).filter(Boolean);
-}
-function gsheetDropWaypointNames(data) {
   const dropList = Array.isArray(data?.경유지_하차) ? data.경유지_하차 : (Array.isArray(data?.경유하차목록) ? data.경유하차목록 : []);
-  return dropList.map((s) => String(s?.업체명 || "").trim()).filter(Boolean);
+  return [...pickupList, ...dropList].map((s) => String(s?.업체명 || "").trim()).filter(Boolean).join(", ");
 }
 
 /* ------------------------------------------------------------------
@@ -1334,10 +1319,8 @@ function buildGsheetFieldValues(d) {
     거래처명: d["거래처명"] || "",
     상차지: d["상차지명"] || "",
     경유지: extractGsheetWaypointNames(d),
-    경유상차지: gsheetPickupWaypointNames(d).join(", "),
     상차지주소: d["상차지주소"] || "",
     하차지: d["하차지명"] || "",
-    경유하차지: gsheetDropWaypointNames(d).join(", "),
     하차지주소: d["하차지주소"] || "",
     화물정보: d["화물내용"] || "",
     차량종류: d["차량종류"] || "",
@@ -2102,11 +2085,10 @@ exports.backfillGsheetClients = functions
 ================================================================== */
 const GSHEET_DAILY_LEDGER_TAB = "일일업무일지(경리)";
 // 사용자가 요청한 "엑셀다운과 동일한" 컬럼 구성 — 상차지주소/하차지주소/혼적은
-// 빠지고 경유 상차지/경유 하차지가 들어간다. label은 이 시트에 실제로 표시할
-// 헤더 텍스트, source는 월별 탭(GSHEET_MONTH_HEADER_COLUMNS)에서 그 값을 찾을
-// 때 쓰는 헤더 텍스트 — "기사명"(엑셀다운 표기)과 "이름"(월별 탭 표기)처럼
-// 둘이 다를 수 있어서 분리해뒀다(하나로 합치면 둘 다 같은 텍스트라고
-// 가정하다가 못 찾는 사고가 남).
+// 빠진다. label은 이 시트에 실제로 표시할 헤더 텍스트, source는 월별 탭
+// (GSHEET_MONTH_HEADER_COLUMNS)에서 그 값을 찾을 때 쓰는 헤더 텍스트 —
+// "기사명"(엑셀다운 표기)과 "이름"(월별 탭 표기)처럼 둘이 다를 수 있어서
+// 분리해뒀다(하나로 합치면 둘 다 같은 텍스트라고 가정하다가 못 찾는 사고가 남).
 const GSHEET_DAILY_LEDGER_COLUMNS = [
   { label: "순번", source: "순번" },
   { label: "등록일", source: "등록일" },
@@ -2116,9 +2098,7 @@ const GSHEET_DAILY_LEDGER_COLUMNS = [
   { label: "하차시간", source: "하차시간" },
   { label: "거래처명", source: "거래처명" },
   { label: "상차지명", source: "상차지명" },
-  { label: "경유 상차지", source: "경유 상차지" },
   { label: "하차지명", source: "하차지명" },
-  { label: "경유 하차지", source: "경유 하차지" },
   { label: "화물내용", source: "화물내용" },
   { label: "차량종류", source: "차량종류" },
   { label: "차량톤수", source: "차량톤수" },
