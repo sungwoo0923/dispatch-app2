@@ -1879,28 +1879,20 @@ exports.backfillGsheetMonth = functions
           }
 
           // ⭐ 사용자 요청 — 백필 결과 맨 아래에 그 달 총 건수/총 청구운임/총 기사운임/
-          // 총 수수료/평균 매익율을 요약해서 보여준다. 상차일(날짜) 칸은 실시간
-          // 동기화가 블록을 찾을 때 훑는 기준 열이라 합계 행에는 절대 쓰지 않고
-          // 비워둔다 — 그래야 합계 행이 빈 구분줄처럼 보여 실시간 동기화 로직과
-          // 부딪히지 않는다. "버퍼 행"(다음 실시간 등록이 값을 채워 넣을 빈 줄)
-          // 바로 다음에 합계 행을 두어서, 나중에 새 오더가 버퍼 행을 채우고 또 새
-          // 버퍼 행이 추가돼도 합계 행은 항상 구조적으로 맨 아래로 밀려 내려간다.
-          // 다만 합계 안의 숫자 자체는 "이번 백필 시점" 스냅샷이라 그 이후 실시간
-          // 동기화로 추가된 오더는 반영되지 않는다 — 최신 합계가 필요하면 그 달을
-          // 다시 백필하면 된다.
-          const numOf = (v) => Number(String(v ?? "0").replace(/[^\d.-]/g, "")) || 0;
-          const totalCharge = toWrite.reduce((s, { data }) => s + numOf(data["청구운임"]), 0);
-          const totalDriverFare = toWrite.reduce((s, { data }) => s + numOf(data["기사운임"]), 0);
-          const totalFee = totalCharge - totalDriverFare;
-          const marginRatios = toWrite
-            .map(({ data }) => {
-              const c = numOf(data["청구운임"]);
-              const f = numOf(data["기사운임"]);
-              return c > 0 ? (c - f) / c : null;
-            })
-            .filter((v) => v !== null);
-          const avgMargin = marginRatios.length ? marginRatios.reduce((s, v) => s + v, 0) / marginRatios.length : 0;
-
+          // 총 수수료(/평균 매익율)를 요약해서 보여준다. 처음엔 이 시점의 숫자를
+          // 고정값으로 써넣었는데, 그러면 백필 이후 실시간 동기화나 사용자가 시트에
+          // 직접 입력한 오더는 합계에 전혀 반영이 안 됐다("계속 늘어나야 하는데
+          // 실제로는 안 늘어난다") — 그래서 고정 숫자 대신 시트가 항상 다시 계산하는
+          // 수식으로 바꾼다. 합계 행 자기 자신을 범위에 넣으면 순환참조가 나는데,
+          // 합계 행 위치는 오더가 늘수록 계속 아래로 밀려서 고정 행 번호를 쓸 수
+          // 없다 — INDEX(열:열, ROW()-1)로 "지금 이 행 바로 위까지"를 가리키게 하면
+          // 합계 행이 어디로 밀려도 항상 정확하다.
+          // 상차일(날짜) 칸은 실시간 동기화가 블록을 찾을 때 훑는 기준 열이라 합계
+          // 행에는 절대 쓰지 않고 비워둔다 — 그래야 합계 행이 빈 구분줄처럼 보여
+          // 실시간 동기화 로직과 부딪히지 않는다. "버퍼 행"(다음 실시간 등록이 값을
+          // 채워 넣을 빈 줄) 바로 다음에 합계 행을 두어서, 나중에 새 오더가 버퍼
+          // 행을 채우고 또 새 버퍼 행이 추가돼도 합계 행은 항상 구조적으로 맨
+          // 아래로 밀려 내려간다.
           const bufferRow = rowCount + 1;
           const totalsRow = rowCount + 2;
           await gsheetApi("POST", ":batchUpdate", {
@@ -1912,13 +1904,17 @@ exports.backfillGsheetMonth = functions
             },
           });
 
+          const dateCol = colMap.상차일;
+          const aboveRange = (col) => `${col}2:INDEX(${col}:${col},ROW()-1)`;
           const totalsRangesData = [];
           const pushTotal = (col, value) => { if (col) totalsRangesData.push({ range: `${quoteTab(tabName)}!${col}${totalsRow}`, values: [[value]] }); };
-          pushTotal(colMap.거래처명, `합계 (총 ${toWrite.length}건)`);
-          pushTotal(colMap.청구운임, totalCharge);
-          pushTotal(colMap.기사운임, totalDriverFare);
-          pushTotal(colMap.수수료, totalFee);
-          pushTotal(colMap.매익율, avgMargin);
+          if (colMap.거래처명 && dateCol) {
+            pushTotal(colMap.거래처명, `="합계 (총 "&COUNTA(${aboveRange(dateCol)})&"건)"`);
+          }
+          if (colMap.청구운임) pushTotal(colMap.청구운임, `=SUM(${aboveRange(colMap.청구운임)})`);
+          if (colMap.기사운임) pushTotal(colMap.기사운임, `=SUM(${aboveRange(colMap.기사운임)})`);
+          if (colMap.수수료) pushTotal(colMap.수수료, `=SUM(${aboveRange(colMap.수수료)})`);
+          if (colMap.매익율) pushTotal(colMap.매익율, `=IFERROR(AVERAGE(${aboveRange(colMap.매익율)}),0)`);
           if (totalsRangesData.length) {
             await gsheetApi("POST", "/values:batchUpdate", { data: { valueInputOption: "USER_ENTERED", data: totalsRangesData } });
           }
