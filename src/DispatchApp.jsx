@@ -16451,6 +16451,24 @@ className={`
     link.click();
   };
 
+  // ⭐ 사용자 요청 — A4 용지에 맞게 인쇄. 이미지저장과 동일하게 현재 탭의 표만
+  // html2canvas로 캡처한 뒤, 운임확인서 인쇄(handlePrint)와 같은 방식으로 새
+  // 창에 이미지를 띄워 @page A4 크기로 바로 인쇄되게 한다.
+  const printSpecTable = async () => {
+    if (!specCaptureRef.current) return;
+    const canvas = await html2canvas(specCaptureRef.current, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+    const imgData = canvas.toDataURL("image/png");
+    const w = window.open("", "_blank");
+    if (!w) return;
+    const title = vehicleSpecTab === "vehicle" ? "차량제원표" : "파렛트제원표";
+    w.document.write(`<!doctype html><html><head><title>${title}</title><style>
+      @page { size: A4; margin: 10mm; }
+      body { margin:0; display:flex; justify-content:center; background:#fff; }
+      img { width:100%; max-width:190mm; }
+    </style></head><body><img src="${imgData}" onload="window.print()" /></body></html>`);
+    w.document.close();
+  };
+
   const SpecTable = ({ title, note, rows, tableKey }) => (
     <div>
       <div className="flex justify-between items-center mb-2">
@@ -16509,6 +16527,13 @@ className={`
             className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition"
           >
             <EditableText id="vehicleSpec.btn.이미지저장" defaultText="이미지 저장" />
+          </button>
+          <button
+            type="button"
+            onClick={printSpecTable}
+            className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] border border-[#1B2B4B] text-[12px] font-bold hover:bg-blue-50 transition"
+          >
+            <EditableText id="vehicleSpec.btn.인쇄" defaultText="인쇄" />
           </button>
           <button
             onClick={() => setVehicleSpecOpen(false)}
