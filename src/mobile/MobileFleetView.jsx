@@ -1,9 +1,9 @@
 // src/mobile/MobileFleetView.jsx — 지입차량 관제 (모바일)
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import "leaflet/dist/leaflet.css";
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
 import {
-  collection, onSnapshot, query, where, orderBy, limit,
+  collection, onSnapshot, query, where, orderBy, limit, doc, updateDoc,
 } from "firebase/firestore";
 import {
   MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap,
@@ -102,9 +102,49 @@ function getIcon(status, active, name) {
   return makeIcon(STATUS_COLORS[status] || "#9ca3af", !!active, name);
 }
 
+// 담당자 표시 + 위임 — PC 지입차관리(FleetManagement.jsx)의 ManagerBadge와 동일한
+// 역할. 모바일은 드롭다운 대신 탭하면 펼쳐지는 리스트로 보여준다.
+function MobileManagerBadge({ driver, staff, canDelegate, onAssign }) {
+  const [open, setOpen] = useState(false);
+  const mgr = driver.담당자;
+  return (
+    <div style={{ background: "#f8f9fb", borderRadius: 9, padding: "10px 12px", marginBottom: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 4 }}>담당자</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: mgr ? NAVY : "#c1c7d0" }}>{mgr ? mgr.name : "미지정"}</div>
+        </div>
+        {canDelegate && (
+          <button onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
+            style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", color: "#6b7280", fontSize: 11, fontWeight: 700 }}>
+            위임
+          </button>
+        )}
+      </div>
+      {open && (
+        <div style={{ marginTop: 8, borderTop: "1px solid #e5e7eb", paddingTop: 8, display: "flex", flexDirection: "column", gap: 2 }}>
+          {staff.length === 0 && <div style={{ fontSize: 12, color: "#9ca3af", padding: "4px 2px" }}>배차자가 없습니다</div>}
+          {staff.map(s => (
+            <div key={s.id} onClick={(e) => { e.stopPropagation(); onAssign(driver.id, s); setOpen(false); }}
+              style={{ padding: "7px 8px", borderRadius: 6, fontSize: 13, fontWeight: mgr?.uid === s.id ? 800 : 600, color: mgr?.uid === s.id ? NAVY : "#374151", background: mgr?.uid === s.id ? "#eef1f6" : "transparent" }}>
+              {s.name}
+            </div>
+          ))}
+          {mgr && (
+            <div onClick={(e) => { e.stopPropagation(); onAssign(driver.id, null); setOpen(false); }}
+              style={{ padding: "7px 8px", fontSize: 12, color: "#ef4444" }}>
+              담당자 해제
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────────
 
-export default function MobileFleetView() {
+export default function MobileFleetView({ dispatchData = [], userCompany = "" }) {
   const [driversRaw, setDriversRaw] = useState([]);
   const [usersMap, setUsersMap] = useState({});
   const [activityLogs, setActivityLogs] = useState([]);
@@ -113,6 +153,11 @@ export default function MobileFleetView() {
   const [statusFilter, setStatusFilter] = useState("전체");
   const [expandedId, setExpandedId] = useState(null);
   const [activeSection, setActiveSection] = useState("drivers"); // "drivers" | "map" | "feed" | "attendance"
+  // ⭐ 사용자 요청 — 배차자마다 담당 지입차가 따로 있어서 "내 차량"부터 기본으로
+  // 보여준다. 전체 지입차 보기는 토글로 유지.
+  const [scope, setScope] = useState("mine"); // "mine" | "all"
+  const [companyStaffRaw, setCompanyStaffRaw] = useState([]);
+  const myUid = auth.currentUser?.uid || null;
   const [attendanceLogs, setAttendanceLogs] = useState([]);
   const today = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = useState(today);
@@ -137,6 +182,9 @@ export default function MobileFleetView() {
     ));
     subs.push(onSnapshot(query(collection(db, "users"), where("role", "==", "driver")),
       (snap) => { const m = {}; snap.docs.forEach(d => { m[d.id] = d.data(); }); setUsersMap(m); }
+    ));
+    subs.push(onSnapshot(collection(db, "users"),
+      (snap) => setCompanyStaffRaw(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => ["totalMaster","admin","user"].includes(u.role)))
     ));
     subs.push(onSnapshot(
       query(collection(db, "driver_logs"), orderBy("timestamp", "desc"), limit(30)),
@@ -277,6 +325,7 @@ export default function MobileFleetView() {
           active: raw.active === true,
           speed: raw.speed || 0,
           workStartAt: raw.workStartAt || null,
+          담당자: raw.담당자 || null,
         };
       })
       .sort((a, b) => statusPriority(a) - statusPriority(b));
@@ -286,14 +335,62 @@ export default function MobileFleetView() {
     const m = {}; drivers.forEach(d => { m[d.id] = d; }); return m;
   }, [drivers]);
 
+  // 위임 대상 배차자 목록 + 위임 권한(관리자 이상) — PC 지입차관리와 동일 기준.
+  const companyStaff = useMemo(
+    () => companyStaffRaw
+      .filter(u => !userCompany || u.companyName === userCompany)
+      .map(u => ({ id: u.id, name: u.name || u.email || "이름없음" }))
+      .sort((a, b) => a.name.localeCompare(b.name, "ko")),
+    [companyStaffRaw, userCompany]
+  );
+  const canDelegate = ["admin", "totalMaster"].includes(
+    companyStaffRaw.find(u => u.id === myUid)?.role
+  );
+  const assignDriverManager = useCallback(async (driverId, staff) => {
+    try {
+      await updateDoc(doc(db, "drivers", driverId), { 담당자: staff ? { uid: staff.id, name: staff.name } : null });
+    } catch (e) { console.error("담당자 배정 실패:", e); alert("담당자 배정에 실패했습니다."); }
+  }, []);
+
+  // 오늘자 오더를 차량번호 우선, 없으면 이름으로 매칭 — PC 노선관리 탭과 동일한 방식.
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const ordersByPlate = useMemo(() => {
+    const m = new Map();
+    (dispatchData || []).forEach(r => {
+      if ((r.상차일 || "") !== todayStr) return;
+      const p = (r.차량번호 || "").trim();
+      if (p) { if (!m.has(p)) m.set(p, []); m.get(p).push(r); }
+    });
+    return m;
+  }, [dispatchData, todayStr]);
+  const ordersByName = useMemo(() => {
+    const m = new Map();
+    (dispatchData || []).forEach(r => {
+      if ((r.상차일 || "") !== todayStr) return;
+      const n = (r.이름 || "").trim();
+      if (n) { if (!m.has(n)) m.set(n, []); m.get(n).push(r); }
+    });
+    return m;
+  }, [dispatchData, todayStr]);
+  const ordersFor = useCallback((d) => {
+    const plate = (d.차량번호 || "").trim();
+    const name = (d.이름 || "").trim();
+    return (plate && ordersByPlate.get(plate)) || (name && ordersByName.get(name)) || [];
+  }, [ordersByPlate, ordersByName]);
+
+  const scopedDrivers = useMemo(
+    () => scope === "mine" ? drivers.filter(d => d.담당자?.uid === myUid) : drivers,
+    [drivers, scope, myUid]
+  );
+
   const filtered = useMemo(() => {
     const kw = searchQ.trim().replace(/\s/g, "");
-    return drivers.filter(d => {
+    return scopedDrivers.filter(d => {
       const matchQ = !kw || (d.차량번호 || "").replace(/\s/g, "").includes(kw) || d.이름.includes(kw);
       const matchF = statusFilter === "전체" || d.상태 === statusFilter;
       return matchQ && matchF;
     });
-  }, [drivers, searchQ, statusFilter]);
+  }, [scopedDrivers, searchQ, statusFilter]);
 
   const kpi = useMemo(() => ({
     total: drivers.length,
@@ -425,7 +522,7 @@ export default function MobileFleetView() {
 
       {/* 섹션 탭 */}
       <div style={{ display: "flex", margin: "16px 16px 0", background: "#f4f6fa", borderRadius: 10, padding: 3, flexWrap: "nowrap" }}>
-        {[["drivers", "기사 목록"], ["map", "지도"], ["feed", "활동"], ["attendance", "출근기록"]].map(([key, label]) => (
+        {[["drivers", "기사 목록"], ["map", "지도"], ["feed", "상태 로그"], ["attendance", "출근기록"]].map(([key, label]) => (
           <button key={key} onClick={() => setActiveSection(key)} style={{
             flex: 1, padding: "8px 4px", borderRadius: 8, border: "none",
             background: activeSection === key ? NAVY : "transparent",
@@ -451,6 +548,17 @@ export default function MobileFleetView() {
       {/* ═══ 기사 목록 ═══ */}
       {activeSection === "drivers" && (
         <div style={{ padding: "12px 16px 0" }}>
+          {/* 내 차량 / 전체 토글 */}
+          <div style={{ display: "flex", gap: 4, marginBottom: 10, background: "#f3f4f6", borderRadius: 8, padding: 3 }}>
+            {[["mine", "내 담당 차량"], ["all", "전체 지입차"]].map(([key, label]) => (
+              <button key={key} onClick={() => setScope(key)} style={{
+                flex: 1, padding: "7px 4px", borderRadius: 6, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                background: scope === key ? NAVY : "transparent", color: scope === key ? "#fff" : "#6b7280", transition: "all .12s",
+              }}>
+                {label}
+              </button>
+            ))}
+          </div>
           {/* 검색 */}
           <div style={{ position: "relative", marginBottom: 10 }}>
             <svg width="14" height="14" fill="none" stroke="#9ca3af" strokeWidth="2.2" viewBox="0 0 24 24" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
@@ -482,7 +590,9 @@ export default function MobileFleetView() {
 
           {filtered.length === 0 ? (
             <div style={{ padding: "32px 0", textAlign: "center", color: "#9ca3af", fontSize: 14 }}>
-              {drivers.length === 0 ? "등록된 기사가 없습니다" : "검색 결과가 없습니다"}
+              {drivers.length === 0 ? "등록된 기사가 없습니다"
+                : scopedDrivers.length === 0 ? <>아직 담당 지정된 차량이 없습니다.<br/>"전체 지입차"에서 담당자를 지정해주세요.</>
+                : "검색 결과가 없습니다"}
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -529,6 +639,34 @@ export default function MobileFleetView() {
                     {/* 확장 상세 */}
                     {expanded && (
                       <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #f0f2f5" }}>
+                        <MobileManagerBadge driver={d} staff={companyStaff} canDelegate={canDelegate} onAssign={assignDriverManager} />
+
+                        {/* 오늘 배차 노선 — 사용자 요청: 상/하차지, 상차~하차 예상시간을 지입차관리에서 바로 확인 */}
+                        {(() => {
+                          const todays = ordersFor(d);
+                          if (!todays.length) {
+                            return (
+                              <div style={{ background: "#f8f9fb", borderRadius: 9, padding: "10px 12px", marginBottom: 10, fontSize: 12, color: "#9ca3af" }}>
+                                오늘 배차된 오더가 없습니다
+                              </div>
+                            );
+                          }
+                          return todays.map((r, i) => (
+                            <div key={r._id || i} style={{ background: "#f0f4ff", borderRadius: 9, padding: "10px 12px", marginBottom: 8 }}>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: "#6b7eac", letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 4 }}>
+                                오늘 노선 {todays.length > 1 ? `${i + 1}/${todays.length}` : ""} · {r.배차상태 || "배차중"}
+                              </div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>
+                                {r.상차지명 || "-"} <span style={{ color: "#9ca3af" }}>→</span> {r.하차지명 || "-"}
+                              </div>
+                              <div style={{ fontSize: 12, color: "#4b5563", marginTop: 3 }}>
+                                상차 {r.상차시간 || "즉시"} · 하차예상 {r.하차시간 || "즉시"}{r.하차일 && r.하차일 !== r.상차일 ? ` (${r.하차일})` : ""}
+                              </div>
+                              {r.거래처명 && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>거래처: {r.거래처명}</div>}
+                            </div>
+                          ));
+                        })()}
+
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
                           {(() => {
                             const km = d.총거리 || 0;

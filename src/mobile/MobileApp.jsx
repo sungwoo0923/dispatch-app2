@@ -6114,7 +6114,7 @@ setOpenMemo={setOpenMemo}
             refreshFromServer={refreshFromServer}
           />
         )}
-        {page === "fleet" && <MobileFleetView />}
+        {page === "fleet" && <MobileFleetView dispatchData={orders} userCompany={userCompany} />}
         {page === "intel" && <MobileIntelView dispatchData={orders} cardVersionB={cardVersionB} />}
 
         {page === "unassigned" && (

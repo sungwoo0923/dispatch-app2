@@ -1258,6 +1258,57 @@ function LiveLocationBadge({ live }) {
   );
 }
 
+// ─── 담당자 배지 + 위임 ─────────────────────────────────────────────────────
+// 지입차 1대를 책임지는 배차자를 drivers/{id}.담당자에 저장해 보여준다. 위임
+// 권한(관리자 이상)이 있는 사람에게만 변경 버튼을 노출하고, 눌렀을 때 같은
+// 회사 배차자(staff) 목록에서 새 담당자를 고르는 작은 드롭다운을 연다.
+function ManagerBadge({ driver, staff, canDelegate, onAssign }) {
+  const [open, setOpen] = useState(false);
+  const mgr = driver.담당자;
+  return (
+    <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <span style={{ fontSize: 13, fontWeight: 700, color: mgr ? "#374151" : "#c1c7d0" }}>
+        {mgr ? mgr.name : "담당자 미지정"}
+      </span>
+      {canDelegate && (
+        <button
+          type="button"
+          onClick={() => setOpen(v => !v)}
+          style={{ padding: "2px 8px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", color: "#6b7280", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+        >
+          위임
+        </button>
+      )}
+      {open && (
+        <>
+          <div style={{ position: "fixed", inset: 0, zIndex: 20 }} onClick={() => setOpen(false)} />
+          <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 21, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 6px 20px rgba(0,0,0,.15)", minWidth: 150, maxHeight: 220, overflowY: "auto" }}>
+            {staff.length === 0 && (
+              <div style={{ padding: "10px 12px", fontSize: 12, color: "#9ca3af" }}>배차자가 없습니다</div>
+            )}
+            {staff.map(s => (
+              <div key={s.id}
+                onClick={() => { onAssign(driver.id, s); setOpen(false); }}
+                style={{ padding: "8px 12px", fontSize: 13, fontWeight: mgr?.uid === s.id ? 800 : 600, color: mgr?.uid === s.id ? NAVY : "#374151", cursor: "pointer", background: mgr?.uid === s.id ? "#eef1f6" : "transparent" }}
+              >
+                {s.name}
+              </div>
+            ))}
+            {mgr && (
+              <div
+                onClick={() => { onAssign(driver.id, null); setOpen(false); }}
+                style={{ padding: "8px 12px", fontSize: 12, color: "#ef4444", cursor: "pointer", borderTop: "1px solid #f3f4f6" }}
+              >
+                담당자 해제
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── 기사에게 오더 요약 전달 (SMS/카카오톡용 텍스트) ───────────────────────────
 function buildDriverSummaryText(driver, orders, selectedDate) {
   const lines = [`[${selectedDate} 배차 안내]`, `기사: ${driver.이름} (${driver.차량번호})`, ""];
@@ -1292,7 +1343,7 @@ function creatorLabel(r) {
   return r?.등록자명 || r?.createdByName || r?.등록자 || r?.createdByEmail || r?.createdBy || "-";
 }
 
-function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, live, onOpenDetail }) {
+function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, live, onOpenDetail, staff, canDelegate, onAssignManager }) {
   const first = orders[0];
   const last = orders[orders.length - 1];
   const hasConflict = isOffDay && orders.length > 0;
@@ -1318,6 +1369,9 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
         <InfoField label="거주지" value={driver.거주지 || "-"} />
         <InfoField label="근무가능요일" value={(driver.근무요일 && driver.근무요일.length) ? driver.근무요일.join(", ") : "전일 가능"} />
         <InfoField label="실시간 위치"><LiveLocationBadge live={live} /></InfoField>
+        <InfoField label="담당자">
+          <ManagerBadge driver={driver} staff={staff} canDelegate={canDelegate} onAssign={onAssignManager} />
+        </InfoField>
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexShrink: 0 }}>
           <button onClick={() => handleSendToDriver(driver, orders, selectedDate)} disabled={!orders.length}
@@ -1598,12 +1652,15 @@ function DriverRouteDetailModal({ driver, dispatchData, onClose }) {
 // 보여준다. dispatchData는 부모(DispatchApp)의 실시간 배차 데이터를 그대로 받으므로,
 // 실시간배차현황/배차현황에서 지입/직영 기사에게 배차되는 순간 자동으로 반영된다.
 // 기사 1명의 전체 이력/주요노선/엑셀다운로드는 카드의 "상세보기"로 이동했다.
-function RouteManagementTab({ drivers, dispatchData, liveDrivers = [] }) {
+function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [], canDelegate = false, onAssignManager, myUid = null }) {
   const [q, setQ] = useState("");
   const [dayMode, setDayMode] = useState("today"); // "yesterday" | "today" | "tomorrow"
   const [customDate, setCustomDate] = useState(""); // 배차관리(3파트)와 동일한 달력에서 임의 날짜 선택 시
   const [detailDriver, setDetailDriver] = useState(null);
   const [onlyIdle, setOnlyIdle] = useState(false); // 배차 없는(오늘 놀고 있는) 차량만 보기
+  // ⭐ 사용자 요청 — 배차자마다 담당 지입차가 따로 있어서, 들어오자마자 "내 담당
+  // 차량"부터 보여야 한다. 전체 차량을 보는 기능은 토글로 그대로 유지.
+  const [scope, setScope] = useState("mine");
 
   const liveByFleetId = useMemo(() => new Map(liveDrivers.map(d => [d.id, d])), [liveDrivers]);
 
@@ -1615,15 +1672,20 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [] }) {
   }, [dayMode, customDate]);
   const weekdayLabel = weekdayKoOf(selectedDate);
 
+  const scopedDrivers = useMemo(
+    () => scope === "mine" ? drivers.filter(d => d.담당자?.uid === myUid) : drivers,
+    [drivers, scope, myUid]
+  );
+
   const filteredDrivers = useMemo(() => {
     const query = q.trim().toLowerCase();
-    if (!query) return drivers;
-    return drivers.filter(d =>
+    if (!query) return scopedDrivers;
+    return scopedDrivers.filter(d =>
       (d.이름 || "").toLowerCase().includes(query) ||
       (d.차량번호 || "").toLowerCase().includes(query) ||
       (d.거주지 || "").toLowerCase().includes(query)
     );
-  }, [drivers, q]);
+  }, [scopedDrivers, q]);
 
   // 선택 날짜(상차일 기준) 오더를 차량번호 우선, 없으면 이름으로 매칭해 빠르게 찾을 수
   // 있도록 인덱스를 만든다.
@@ -1719,15 +1781,30 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [] }) {
           미배차만 보기
         </button>
         <div style={{ marginLeft: "auto", display: "flex", gap: 16, fontSize: 14, color: "#6b7280" }}>
-          <span>전체 <b style={{ color: NAVY }}>{drivers.length}</b>대</span>
+          <span>{scope === "mine" ? "내 담당" : "전체"} <b style={{ color: NAVY }}>{scopedDrivers.length}</b>대</span>
           <span>배차 <b style={{ color: "#111827" }}>{dispatchedCount}</b>대</span>
-          <span>미배차 <b style={{ color: "#111827" }}>{drivers.length - dispatchedCount}</b>대</span>
+          <span>미배차 <b style={{ color: "#111827" }}>{scopedDrivers.length - dispatchedCount}</b>대</span>
         </div>
+      </div>
+
+      {/* 내 담당 / 전체 토글 */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 14, background: "#f3f4f6", borderRadius: 8, padding: 3, width: "fit-content" }}>
+        {[["mine", "내 담당 차량"], ["all", "전체 지입차"]].map(([key, label]) => (
+          <button key={key} onClick={() => setScope(key)}
+            style={{
+              padding: "6px 16px", borderRadius: 6, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer",
+              background: scope === key ? NAVY : "transparent", color: scope === key ? "#fff" : "#6b7280", transition: "all .12s",
+            }}>
+            {label}
+          </button>
+        ))}
       </div>
 
       {driverRows.length === 0 ? (
         <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 60, textAlign: "center", color: "#9ca3af", fontSize: 16 }}>
-          지입/직영 등급 기사가 없습니다.<br />기사관리에서 등급을 지정해주세요.
+          {scope === "mine"
+            ? <>아직 담당 지정된 차량이 없습니다.<br />위 "전체 지입차"에서 담당자를 지정해주세요.</>
+            : <>지입/직영 등급 기사가 없습니다.<br />기사관리에서 등급을 지정해주세요.</>}
         </div>
       ) : visibleRows.length === 0 ? (
         <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 60, textAlign: "center", color: "#9ca3af", fontSize: 16 }}>
@@ -1745,6 +1822,9 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [] }) {
               isOffDay={isOffDay}
               live={live}
               onOpenDetail={setDetailDriver}
+              staff={staff}
+              canDelegate={canDelegate}
+              onAssignManager={onAssignManager}
             />
           ))}
         </div>
@@ -2698,7 +2778,9 @@ function CargoCameraTab({ drivers }) {
 
 export default function FleetManagement({ dispatchData = [] }) {
   // Tab persistence across parent-tab switches → sessionStorage
-  const [mainTab, setMainTab] = useState(() => sfGet("fm_tab", "tracking"));
+  // ⭐ 사용자 요청 — 지입차관리에 들어왔을 때 노선/배차상태/담당 차량이 먼저
+  // 보여야 하므로, 기본 진입 탭을 실시간관제가 아닌 노선관리로 바꾼다.
+  const [mainTab, setMainTab] = useState(() => sfGet("fm_tab", "route"));
 
   // Data — init from sessionStorage so page appears populated immediately on re-mount
   const [driversRaw, setDriversRaw] = useState(() => sfGet("fm_drivers_raw", []));
@@ -2723,6 +2805,29 @@ export default function FleetManagement({ dispatchData = [] }) {
   const [collisionAlerts, setCollisionAlerts] = useState([]);
   const [locChangeRequests, setLocChangeRequests] = useState([]);
   const [myCompanyName, setMyCompanyName] = useState(null);
+  const [companyStaffRaw, setCompanyStaffRaw] = useState([]); // users(role: totalMaster/admin/user) — 담당자 위임 대상
+  const myUid = auth.currentUser?.uid || null;
+  const canDelegate = ["admin", "totalMaster"].includes(
+    companyStaffRaw.find(u => u.id === myUid)?.role
+  );
+  const companyStaff = useMemo(
+    () => companyStaffRaw
+      .filter(u => !myCompanyName || u.companyName === myCompanyName)
+      .map(u => ({ id: u.id, name: u.name || u.email || "이름없음" }))
+      .sort((a, b) => a.name.localeCompare(b.name, "ko")),
+    [companyStaffRaw, myCompanyName]
+  );
+  const myStaffName = companyStaff.find(u => u.id === myUid)?.name
+    || auth.currentUser?.displayName || auth.currentUser?.email || "나";
+
+  // 지입차 담당자 배정/위임 — drivers/{driverId} 문서의 담당자 필드를 바로 갱신한다.
+  const assignDriverManager = useCallback(async (driverId, staff) => {
+    try {
+      await updateDoc(doc(db, "drivers", driverId), {
+        담당자: staff ? { uid: staff.id, name: staff.name } : null,
+      });
+    } catch (e) { console.error("담당자 배정 실패:", e); alert("담당자 배정에 실패했습니다: " + (e?.message || e)); }
+  }, []);
   const [contextMenu, setContextMenu] = useState(null); // { x, y, driver }
   const [todayDriverPhotos, setTodayDriverPhotos] = useState([]); // today's driver_photo_logs for all drivers
   const [photoViewerPhotos, setPhotoViewerPhotos] = useState(null); // { driverName, photos[] }
@@ -2851,6 +2956,19 @@ export default function FleetManagement({ dispatchData = [] }) {
       (err) => console.error("users:", err)
     ));
 
+    // 2-1. 배차자(관리자/일반) 목록 — "담당자 위임" 선택지로 쓴다. 회사 필터는
+    // myCompanyName 로드 전에도 일단 전체를 받아두고 화면에서 걸러 쓴다.
+    subs.push(onSnapshot(
+      collection(db, "users"),
+      (snap) => {
+        const arr = snap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .filter(u => ["totalMaster", "admin", "user"].includes(u.role));
+        setCompanyStaffRaw(arr);
+      },
+      (err) => console.error("users(staff):", err)
+    ));
+
     // 3. Collision alerts (unresolved, last 24h)
     subs.push(onSnapshot(
       query(collection(db, "collision_alerts"), where("resolved", "==", false), limit(20)),
@@ -2977,6 +3095,7 @@ export default function FleetManagement({ dispatchData = [] }) {
           workStartAt: raw.workStartAt || null,
           checkInLocation: raw.checkInLocation || null,
           dropLocation: raw.dropLocation || null,
+          담당자: raw.담당자 || null,
         };
       })
       .sort((a, b) => statusPriority(a) - statusPriority(b));
@@ -3009,6 +3128,7 @@ export default function FleetManagement({ dispatchData = [] }) {
         등급: raw.등급,
         거주지: raw.거주지 || "",
         근무요일: raw.근무요일 || [],
+        담당자: raw.담당자 || null,
       }))
       .sort((a, b) => a.이름.localeCompare(b.이름, "ko"));
   }, [driversRaw]);
@@ -3682,7 +3802,17 @@ export default function FleetManagement({ dispatchData = [] }) {
       )}
 
       {/* ═══ 노선관리 ═══ */}
-      {mainTab === "route" && <RouteManagementTab drivers={routeDrivers} dispatchData={dispatchData} liveDrivers={drivers} />}
+      {mainTab === "route" && (
+        <RouteManagementTab
+          drivers={routeDrivers}
+          dispatchData={dispatchData}
+          liveDrivers={drivers}
+          staff={companyStaff}
+          canDelegate={canDelegate}
+          onAssignManager={assignDriverManager}
+          myUid={myUid}
+        />
+      )}
 
       {/* ═══ 이력 조회 ═══ */}
       {mainTab === "history" && <HistoryTab drivers={drivers} defaultDriverId={historyPreselect} />}
