@@ -856,7 +856,8 @@ function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, comp
         ))}
       </div>
 
-      {/* 출근지 / 도착지 */}
+      {/* 출근지 / 도착지 — 지입차는 고정 노선이 없어 반경 설정 자체가 필요 없다 */}
+      {data.등급 !== "지입" && (
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
         {[
           {
@@ -906,6 +907,7 @@ function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, comp
           </div>
         ))}
       </div>
+      )}
 
       {/* Log history */}
       {logs.length > 0 && (
@@ -1363,6 +1365,11 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               <span style={{ fontSize: 16, fontWeight: 800, color: "#111827" }}>{driver.이름}</span>
               <span style={{ fontSize: 12, fontWeight: 800, padding: "1px 7px", borderRadius: 6, background: driver.등급 === "직영" ? NAVY : "#eef1f6", color: driver.등급 === "직영" ? "#fff" : "#374151" }}>{driver.등급}</span>
+              {/* ⭐ 사용자 요청 — 지입차가 출근 버튼만 누르고 아직 오늘 배차가 없으면
+                  "배차대기"로 바로 알 수 있게(관리자가 다음 배차를 넣어줘야 함을 인지) */}
+              {driver.등급 === "지입" && live?.상태 === "출근" && orders.length === 0 && (
+                <span style={{ fontSize: 12, fontWeight: 800, padding: "1px 7px", borderRadius: 6, background: "#fef3c7", color: "#92400e" }}>배차대기</span>
+              )}
             </div>
           </div>
         </div>

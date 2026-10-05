@@ -604,6 +604,7 @@ export default function DriverHome() {
   // On app restart: if driver's last status update was >5 min ago, assume they've been away
   useEffect(() => {
     if (!pos || !uid || statusLoading) return;
+    if (driver?.등급 === "지입") return; // 지입차는 반경 기반 자동출근 없이 수동 버튼으로만 출근한다
     const status = driver?.status;
     if (status && status !== "퇴근" && status !== "대기") return;
     const checkInLoc = driver?.checkInLocation || companyDefaultLoc;
@@ -649,8 +650,12 @@ export default function DriverHome() {
   }, [pos, uid, statusLoading, driver?.status, driver?.dropLocation, updateStatus]);
 
   // 수동 출근: 출근지가 설정된 경우 0.5km 이내에서만 허용
+  // ⭐ 사용자 요청 — 지입차는 정해진 노선/반경 개념이 없다(그날그날 오더를 받는
+  // 구조). 반경 체크는 고정노선으로 출퇴근하는 직영차에만 의미가 있으므로,
+  // 지입 등급 기사는 위치와 무관하게 버튼만 누르면 바로 출근 처리한다 —
+  // 그 즉시 위치가 관리자 화면에 노출되어 어느 지역에 있는지 보고 배차할 수 있다.
   const handleActionButton = useCallback((action) => {
-    if (action.status === "출근") {
+    if (action.status === "출근" && driver?.등급 !== "지입") {
       const checkInLoc = driver?.checkInLocation || companyDefaultLoc;
       if (checkInLoc?.lat && checkInLoc?.lng && pos && (pos.accuracy == null || pos.accuracy <= 100)) {
         const dist = calcDist(pos.lat, pos.lng, checkInLoc.lat, checkInLoc.lng);
@@ -666,7 +671,7 @@ export default function DriverHome() {
       return;
     }
     updateStatus(action.status);
-  }, [driver?.checkInLocation, companyDefaultLoc, pos, updateStatus]);
+  }, [driver?.checkInLocation, driver?.등급, companyDefaultLoc, pos, updateStatus]);
 
   // 사진 업로드 처리
   const handlePhotoUpload = useCallback(async (file) => {
@@ -779,6 +784,7 @@ export default function DriverHome() {
       showToast("새로고침 완료");
       return;
     }
+    if (driver?.등급 === "지입") { showToast("새로고침 완료"); return; } // 지입차는 반경 기반 자동출근 없음
     const checkInLoc = driver?.checkInLocation || companyDefaultLoc;
     if (!checkInLoc?.lat || !checkInLoc?.lng || !pos || (pos.accuracy != null && pos.accuracy > 100)) {
       showToast("새로고침 완료");
@@ -1261,6 +1267,9 @@ export default function DriverHome() {
           {/* 위치 설정 */}
           <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 8, letterSpacing: "0.06em", paddingLeft: 4 }}>위치 설정</div>
           <div style={{ background: "white", borderRadius: 16, boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #e5e7eb", overflow: "hidden", marginBottom: 20 }}>
+            {/* ⭐ 사용자 요청 — 출발지/하차지 반경 개념은 고정노선으로 다니는 직영차 전용.
+                지입차는 그날그날 배차를 받는 구조라 이 설정 자체가 필요 없어 숨긴다. */}
+            {driver.등급 !== "지입" && (<>
             {/* 출발지 */}
             <div style={{ padding: "14px 16px", borderBottom: "1px solid #f3f4f6" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
@@ -1329,6 +1338,7 @@ export default function DriverHome() {
                 >하차지 초기화</button>
               )}
             </div>
+            </>)}
             {/* GPS 현황 */}
             <div style={{ padding: "14px 16px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

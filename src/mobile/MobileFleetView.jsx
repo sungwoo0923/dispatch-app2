@@ -627,11 +627,14 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
                           <span style={{ fontSize: 15, fontWeight: 800, color: "#111827" }}>{d.이름}</span>
                           <span style={{ fontSize: 12, color: "#6b7280", fontWeight: 700, letterSpacing: "0.04em" }}>{d.차량번호}</span>
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
                           <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 700, color, background: `${color}18`, padding: "2px 8px", borderRadius: 99 }}>
                             <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, display: "inline-block" }} />
                             {d.상태 || "대기"}
                           </span>
+                          {d.등급 === "지입" && d.상태 === "출근" && ordersFor(d).length === 0 && (
+                            <span style={{ fontSize: 11, fontWeight: 800, padding: "1px 7px", borderRadius: 99, background: "#fef3c7", color: "#92400e" }}>배차대기</span>
+                          )}
                           {d.vehicleType !== "-" && (
                             <span style={{ fontSize: 12, color: "#9ca3af" }}>{d.vehicleType}</span>
                           )}
