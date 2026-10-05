@@ -54950,7 +54950,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
   const [selected, setSelected] = React.useState(new Set());
   const [gradeFilter, setGradeFilter] = React.useState("전체");
   const [showAddForm, setShowAddForm] = React.useState(false);
-  const [newForm, setNewForm] = React.useState({ 차량번호:"", 이름:"", 전화번호:"", 메모:"", 등급:"일반", 거주지:"", 근무요일:[] });
+  const [newForm, setNewForm] = React.useState({ 차량번호:"", 이름:"", 전화번호:"", 메모:"", 등급:"일반", 거주지:"", 차량종류:"", 차량톤수:"", 요청사항:"", 근무요일:[] });
   const WEEKDAYS = ["월","화","수","목","금","토","일"];
   const [showAll, setShowAll] = React.useState(false);
   const [page, setPage] = React.useState(1);
@@ -55097,9 +55097,12 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
       메모: newForm.메모,
       등급: newForm.등급 || "일반",
       거주지: isFleet ? (newForm.거주지||"") : "",
+      차량종류: isFleet ? (newForm.차량종류||"") : "",
+      차량톤수: isFleet ? (newForm.차량톤수||"") : "",
+      요청사항: isFleet ? (newForm.요청사항||"") : "",
       근무요일: isFleet ? (newForm.근무요일||[]) : [],
     });
-    setNewForm({ 차량번호:"", 이름:"", 전화번호:"", 메모:"", 등급:"일반", 거주지:"", 근무요일:[] });
+    setNewForm({ 차량번호:"", 이름:"", 전화번호:"", 메모:"", 등급:"일반", 거주지:"", 차량종류:"", 차량톤수:"", 요청사항:"", 근무요일:[] });
     setShowAddForm(false);
     showAlert("등록 완료");
   };
@@ -55274,6 +55277,30 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                       placeholder="예: 경기 김포시"
                       value={newForm.거주지}
                       onChange={e => setNewForm(p => ({ ...p, 거주지: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-gray-500 mb-1 block">차량종류</label>
+                    <CustomSelect className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]"
+                      value={newForm.차량종류 || ""} onChange={e => setNewForm(p => ({ ...p, 차량종류: e.target.value }))}>
+                      <option value="">선택</option>
+                      {["라보/다마스","카고","윙바디","탑차","냉장/냉동윙","냉장/냉동탑","직접입력"].map(t => <option key={t} value={t}>{t}</option>)}
+                    </CustomSelect>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-gray-500 mb-1 block">톤수</label>
+                    <CustomSelect className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]"
+                      value={newForm.차량톤수 || ""} onChange={e => setNewForm(p => ({ ...p, 차량톤수: e.target.value }))}>
+                      <option value="">선택</option>
+                      {Array.from({length:25},(_,i)=>`${i+1}톤`).map(t => <option key={t} value={t}>{t}</option>)}
+                    </CustomSelect>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-gray-500 mb-1 block">요청사항</label>
+                    <input autoComplete="off"
+                      className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]"
+                      value={newForm.요청사항 || ""}
+                      onChange={e => setNewForm(p => ({ ...p, 요청사항: e.target.value }))}
                     />
                   </div>
                   <div className="col-span-2">
@@ -55508,6 +55535,30 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                       placeholder="예: 경기 김포시"
                       value={editDriverModal.거주지||""}
                       onChange={(e) => setEditDriverModal(p => ({ ...p, 거주지: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">차량종류</label>
+                    <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                      value={editDriverModal.차량종류||""}
+                      onChange={(e) => setEditDriverModal(p => ({ ...p, 차량종류: e.target.value }))}>
+                      <option value="">선택</option>
+                      {["라보/다마스","카고","윙바디","탑차","냉장/냉동윙","냉장/냉동탑","직접입력"].map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">톤수</label>
+                    <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                      value={editDriverModal.차량톤수||""}
+                      onChange={(e) => setEditDriverModal(p => ({ ...p, 차량톤수: e.target.value }))}>
+                      <option value="">선택</option>
+                      {Array.from({length:25},(_,i)=>`${i+1}톤`).map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">요청사항</label>
+                    <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                      value={editDriverModal.요청사항||""}
+                      onChange={(e) => setEditDriverModal(p => ({ ...p, 요청사항: e.target.value }))} />
                   </div>
                   <div className="col-span-2">
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">근무가능요일</label>

@@ -10,6 +10,15 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 // Capacitor 네이티브 컨텍스트 여부 확인
 const isNative = () => typeof window !== "undefined" && !!(window.Capacitor?.isNativePlatform?.());
 
+// ⭐ 사용자 요청 — 차량종류/톤수/거주지를 기사 본인도 수정할 수 있어야 한다.
+// DriverRegister.jsx 가입 화면과 같은 목록을 그대로 쓴다.
+const VEHICLE_CATEGORIES = ["라보/다마스", "카고", "윙바디", "탑차", "냉장/냉동윙", "냉장/냉동탑", "직접입력"];
+const TON_OPTIONS = Array.from({ length: 25 }, (_, i) => `${i + 1}톤`);
+const RESIDENCE_PROVINCES = ["서울", "인천", "경기", "강원", "충북", "충남", "대전", "세종", "전북", "전남", "광주", "경북", "경남", "대구", "울산", "부산", "제주"];
+const RESIDENCE_SUB_REGIONS = {
+  경기: ["수원", "성남", "고양", "용인", "부천", "안산", "안양", "남양주", "화성", "평택", "의정부", "시흥", "파주", "김포", "광명", "군포", "광주", "이천", "양주", "오산", "구리", "안성", "포천", "의왕", "하남", "여주", "동두천", "과천", "가평", "양평", "연천"],
+};
+
 // BackgroundGeolocation 플러그인 — Capacitor native bridge를 통해 등록
 // 웹 빌드 시 registerPlugin은 no-op stub을 반환하므로 동적 import 불필요
 let BgGeo = null;
@@ -421,6 +430,7 @@ export default function DriverHome() {
   const [toast, setToast] = useState("");
   const [companyDefaultLoc, setCompanyDefaultLoc] = useState(null);
   const [companyContact, setCompanyContact] = useState(null); // { name, phone } — 연락처 탭 "회사 연락처"용
+  const [vehicleInfoEdit, setVehicleInfoEdit] = useState(null); // 설정탭 차량/거주지 정보 수정 폼 — null이면 보기 모드
   const autoCheckinDoneRef = useRef(false);
   const autoDropDoneRef = useRef(false);
   const wasAwayFromCheckInRef = useRef(false); // tracks if driver moved >0.5km away since last check-in/out
@@ -1262,6 +1272,97 @@ export default function DriverHome() {
                 <span style={{ fontSize: 13, color: "#1B2B4B", fontWeight: 700 }}>{value}</span>
               </div>
             ))}
+          </div>
+
+          {/* ⭐ 사용자 요청 — 차량종류/톤수/거주지/요청사항은 가입할 때만 입력하고 끝이
+              아니라, 기사 본인이 언제든 다시 수정할 수 있어야 한다(관리자도 PC
+              기사관리에서 동일하게 수정 가능). */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, paddingLeft: 4, paddingRight: 2 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", letterSpacing: "0.06em" }}>차량 / 거주지 정보</span>
+            {!vehicleInfoEdit && (
+              <button
+                onClick={() => {
+                  const parts = (driver.거주지 || "").split(" ");
+                  const province = RESIDENCE_PROVINCES.includes(parts[0]) ? parts[0] : "";
+                  const city = province && RESIDENCE_SUB_REGIONS[province] ? (parts.slice(1).join(" ") || "") : "";
+                  setVehicleInfoEdit({
+                    차량종류: driver.차량종류 || "",
+                    차량톤수: driver.차량톤수 || "",
+                    residenceProvince: province,
+                    residenceCity: city,
+                    요청사항: driver.요청사항 || "",
+                  });
+                }}
+                style={{ fontSize: 12, fontWeight: 700, color: "#3b82f6", background: "#eff6ff", border: "none", borderRadius: 8, padding: "5px 11px", cursor: "pointer" }}
+              >수정</button>
+            )}
+          </div>
+          <div style={{ background: "white", borderRadius: 16, boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #e5e7eb", padding: "14px 16px", marginBottom: 20 }}>
+            {!vehicleInfoEdit ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {[["차량종류", driver.차량종류 || "-"], ["톤수", driver.차량톤수 || "-"], ["거주지", driver.거주지 || "-"], ["요청사항", driver.요청사항 || "-"]].map(([label, value]) => (
+                  <div key={label} style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 600 }}>{label}</span>
+                    <span style={{ fontSize: 13, color: "#1B2B4B", fontWeight: 700, textAlign: "right", maxWidth: 200 }}>{value}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <select value={vehicleInfoEdit.차량종류} onChange={e => setVehicleInfoEdit(p => ({ ...p, 차량종류: e.target.value }))}
+                    style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, background: "white" }}>
+                    <option value="">차량종류 선택</option>
+                    {VEHICLE_CATEGORIES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <select value={vehicleInfoEdit.차량톤수} onChange={e => setVehicleInfoEdit(p => ({ ...p, 차량톤수: e.target.value }))}
+                    style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, background: "white" }}>
+                    <option value="">톤수 선택</option>
+                    {TON_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <select value={vehicleInfoEdit.residenceProvince}
+                    onChange={e => setVehicleInfoEdit(p => ({ ...p, residenceProvince: e.target.value, residenceCity: "" }))}
+                    style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, background: "white" }}>
+                    <option value="">거주지(시/도)</option>
+                    {RESIDENCE_PROVINCES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  {RESIDENCE_SUB_REGIONS[vehicleInfoEdit.residenceProvince] ? (
+                    <select value={vehicleInfoEdit.residenceCity} onChange={e => setVehicleInfoEdit(p => ({ ...p, residenceCity: e.target.value }))}
+                      style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, background: "white" }}>
+                      <option value="">시/군 선택</option>
+                      {RESIDENCE_SUB_REGIONS[vehicleInfoEdit.residenceProvince].map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  ) : <div />}
+                </div>
+                <textarea value={vehicleInfoEdit.요청사항} onChange={e => setVehicleInfoEdit(p => ({ ...p, 요청사항: e.target.value }))}
+                  rows={2} placeholder="요청사항"
+                  style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, resize: "none" }} />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setVehicleInfoEdit(null)}
+                    style={{ flex: 1, padding: "9px", borderRadius: 8, border: "1px solid #e5e7eb", background: "white", color: "#6b7280", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>취소</button>
+                  <button
+                    onClick={async () => {
+                      const residence = vehicleInfoEdit.residenceCity ? `${vehicleInfoEdit.residenceProvince} ${vehicleInfoEdit.residenceCity}` : vehicleInfoEdit.residenceProvince;
+                      const patch = {
+                        차량종류: vehicleInfoEdit.차량종류,
+                        차량톤수: vehicleInfoEdit.차량톤수,
+                        거주지: residence,
+                        요청사항: vehicleInfoEdit.요청사항.trim(),
+                        vehicleType: vehicleInfoEdit.차량종류 && vehicleInfoEdit.차량톤수 ? `${vehicleInfoEdit.차량종류} ${vehicleInfoEdit.차량톤수}` : driver.vehicleType || "",
+                      };
+                      try {
+                        await updateDoc(doc(db, "drivers", uid), patch);
+                        await updateDoc(doc(db, "users", uid), patch).catch(() => {});
+                        showToast("저장되었습니다");
+                        setVehicleInfoEdit(null);
+                      } catch (_) { showToast("저장 중 오류가 발생했습니다"); }
+                    }}
+                    style={{ flex: 1, padding: "9px", borderRadius: 8, border: "none", background: "#1B2B4B", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>저장</button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 위치 설정 */}

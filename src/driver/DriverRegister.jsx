@@ -5,7 +5,18 @@ import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
 
-const VEHICLE_TYPES = ["1톤", "1.4톤", "2.5톤", "3.5톤", "5톤", "11톤", "25톤", "축차", "카고", "윙/카고", "탑차", "윙바디", "냉동차", "기타"];
+// ⭐ 사용자 요청 — 차량종류/톤수/거주지를 가입할 때 드롭다운으로 선택하게 한다
+// (이전엔 "1톤"/"카고"가 뒤섞인 한 줄짜리 목록 하나만 있었음). 차종은 "직접입력"을
+// 고르면 밑에 자유 입력칸이 나온다.
+const VEHICLE_CATEGORIES = ["라보/다마스", "카고", "윙바디", "탑차", "냉장/냉동윙", "냉장/냉동탑", "직접입력"];
+const TON_OPTIONS = Array.from({ length: 25 }, (_, i) => `${i + 1}톤`);
+// 거주지 — 시/도 1차 선택, 경기도만 시/군 2차 선택(수원인지 파주인지가 배차 거리
+// 판단에 중요하다는 요청). 다른 광역시/도는 지역이 좁아 1차 선택만으로 충분하다고
+// 보고 생략했다 — 필요해지면 같은 방식으로 RESIDENCE_SUB_REGIONS에 추가하면 된다.
+const RESIDENCE_PROVINCES = ["서울", "인천", "경기", "강원", "충북", "충남", "대전", "세종", "전북", "전남", "광주", "경북", "경남", "대구", "울산", "부산", "제주"];
+const RESIDENCE_SUB_REGIONS = {
+  경기: ["수원", "성남", "고양", "용인", "부천", "안산", "안양", "남양주", "화성", "평택", "의정부", "시흥", "파주", "김포", "광명", "군포", "광주", "이천", "양주", "오산", "구리", "안성", "포천", "의왕", "하남", "여주", "동두천", "과천", "가평", "양평", "연천"],
+};
 
 const DRIVER_TERMS = `제1조 (목적)
 본 약관은 S-Flow 물류 관리 플랫폼(이하 "서비스")의 기사(차주) 회원 이용과 관련하여 권리, 의무 및 책임사항을 규정합니다.
@@ -76,7 +87,12 @@ export default function DriverRegister() {
   const [carNo, setCarNo] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [vehicleType, setVehicleType] = useState("");
+  const [vehicleCategory, setVehicleCategory] = useState("");
+  const [vehicleCategoryCustom, setVehicleCategoryCustom] = useState("");
+  const [tonnage, setTonnage] = useState("");
+  const [residenceProvince, setResidenceProvince] = useState("");
+  const [residenceCity, setResidenceCity] = useState("");
+  const [requestNote, setRequestNote] = useState("");
   const [hireDate, setHireDate] = useState("");
   const [termsAgreed, setTermsAgreed] = useState(false);
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
@@ -101,11 +117,21 @@ export default function DriverRegister() {
     if (!carNo.trim()) return setError("차량번호를 입력해주세요.");
     if (!name.trim()) return setError("이름을 입력해주세요.");
     if (!phone.trim()) return setError("핸드폰번호를 입력해주세요.");
-    if (!vehicleType) return setError("차량 종류를 선택해주세요.");
+    if (!vehicleCategory) return setError("차량 종류를 선택해주세요.");
+    if (vehicleCategory === "직접입력" && !vehicleCategoryCustom.trim()) return setError("차량 종류를 입력해주세요.");
+    if (!tonnage) return setError("톤수를 선택해주세요.");
+    if (!residenceProvince) return setError("거주지를 선택해주세요.");
+    if (RESIDENCE_SUB_REGIONS[residenceProvince] && !residenceCity) return setError("거주 지역(시/군)을 선택해주세요.");
     if (!termsAgreed || !privacyAgreed || !gpsAgreed) return setError("모든 약관에 동의해주세요.");
 
     const email = makeEmail(carNo.trim());
     const password = carNo.trim();
+    const category = vehicleCategory === "직접입력" ? vehicleCategoryCustom.trim() : vehicleCategory;
+    const residence = residenceCity ? `${residenceProvince} ${residenceCity}` : residenceProvince;
+    // vehicleType은 기존 화면들이 "카고 3.5톤" 식 한 줄 문자열로 읽던 필드라
+    // 하위호환을 위해 그대로 조합해 함께 저장하고, 차량종류/차량톤수는 구조화된
+    // 값으로 따로 저장해 PC 기사관리·지입차관리에서 그대로 쓸 수 있게 한다.
+    const vehicleType = `${category} ${tonnage}`;
 
     try {
       setLoading(true);
@@ -119,7 +145,11 @@ export default function DriverRegister() {
         name: name.trim(),
         carNo: carNo.trim(),
         phone: phone.trim(),
-        vehicleType: vehicleType || "",
+        vehicleType,
+        차량종류: category,
+        차량톤수: tonnage,
+        거주지: residence,
+        요청사항: requestNote.trim(),
         companyName: companyName.trim(),
         hireDate: hireDate || "",
         approved: false,
@@ -137,7 +167,11 @@ export default function DriverRegister() {
         name: name.trim(),
         carNo: carNo.trim(),
         phone: phone.trim(),
-        vehicleType: vehicleType || "",
+        vehicleType,
+        차량종류: category,
+        차량톤수: tonnage,
+        거주지: residence,
+        요청사항: requestNote.trim(),
         companyName: companyName.trim(),
         mainStatus: "대기",
         subStatus: "대기",
@@ -185,7 +219,7 @@ export default function DriverRegister() {
             <input
               value={companyName}
               onChange={(e) => setCompanyName(e.target.value)}
-              placeholder="예: 돌캐"
+              placeholder="가입한 운송사명을 입력하세요"
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition"
             />
             <p className="text-[11px] text-gray-400 mt-1">관리자가 등록한 회사명과 정확히 일치해야 합니다.</p>
@@ -228,21 +262,99 @@ export default function DriverRegister() {
             />
           </div>
 
-          <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
-              차량 종류 <span className="text-red-400">*</span>
-            </label>
-            <div className="relative">
-              <select
-                value={vehicleType}
-                onChange={(e) => setVehicleType(e.target.value)}
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition appearance-none bg-white"
-              >
-                <option value="">차량 종류 선택</option>
-                {VEHICLE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none">▾</span>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
+                차량 종류 <span className="text-red-400">*</span>
+              </label>
+              <div className="relative">
+                <select
+                  value={vehicleCategory}
+                  onChange={(e) => setVehicleCategory(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition appearance-none bg-white"
+                >
+                  <option value="">선택</option>
+                  {VEHICLE_CATEGORIES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none">▾</span>
+              </div>
             </div>
+            <div>
+              <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
+                톤수 <span className="text-red-400">*</span>
+              </label>
+              <div className="relative">
+                <select
+                  value={tonnage}
+                  onChange={(e) => setTonnage(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition appearance-none bg-white"
+                >
+                  <option value="">선택</option>
+                  {TON_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none">▾</span>
+              </div>
+            </div>
+          </div>
+
+          {vehicleCategory === "직접입력" && (
+            <div>
+              <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">차량 종류 직접입력 <span className="text-red-400">*</span></label>
+              <input
+                value={vehicleCategoryCustom}
+                onChange={(e) => setVehicleCategoryCustom(e.target.value)}
+                placeholder="예: 리프트탑"
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition"
+              />
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
+                거주지(시/도) <span className="text-red-400">*</span>
+              </label>
+              <div className="relative">
+                <select
+                  value={residenceProvince}
+                  onChange={(e) => { setResidenceProvince(e.target.value); setResidenceCity(""); }}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition appearance-none bg-white"
+                >
+                  <option value="">선택</option>
+                  {RESIDENCE_PROVINCES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none">▾</span>
+              </div>
+            </div>
+            {RESIDENCE_SUB_REGIONS[residenceProvince] && (
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
+                  시/군 <span className="text-red-400">*</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={residenceCity}
+                    onChange={(e) => setResidenceCity(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition appearance-none bg-white"
+                  >
+                    <option value="">선택</option>
+                    {RESIDENCE_SUB_REGIONS[residenceProvince].map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none">▾</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">요청사항</label>
+            <textarea
+              value={requestNote}
+              onChange={(e) => setRequestNote(e.target.value)}
+              rows={2}
+              placeholder="관리자에게 전달할 요청사항이 있으면 입력하세요"
+              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition resize-none"
+            />
           </div>
 
           <div>
