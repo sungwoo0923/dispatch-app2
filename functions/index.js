@@ -2365,3 +2365,41 @@ exports.syncDispatchToGoogleSheet =
         console.error("📊 구글시트 동기화 실패:", e?.message || e);
       }
     });
+
+/* ==================================================================
+   🔍 로그인 전 "회사코드 찾기" — transportApplications 컬렉션은 Firestore
+   규칙상 로그인(isSignedIn())해야 읽을 수 있는데, 이 검색은 정의상 로그인
+   "하기 전"에 쓰는 기능이라 브라우저에서 직접 Firestore를 조회하면 항상
+   권한 오류로 막혀 "검색 결과가 없습니다"만 뜨는 상태였다. 그래서 서버
+   (Admin SDK, 규칙 영향 안 받음)에서만 조회하고, 응답에는 로그인에 필요한
+   회사명/코드만 내려준다 — 전화번호·사업자번호 등 다른 민감정보는 절대
+   포함하지 않는다(로그인 전 누구나 호출 가능한 엔드포인트이므로).
+   호출: GET https://.../lookupCompanyCode?q=검색어
+================================================================== */
+exports.lookupCompanyCode = functions.https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "GET");
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+
+  const q = String(req.query.q || "").trim().toLowerCase();
+  if (!q) { res.status(200).json({ results: [] }); return; }
+
+  try {
+    const snap = await db.collection("transportApplications").get();
+    const seen = new Set();
+    const results = [];
+    snap.docs.forEach((d) => {
+      const data = d.data();
+      if (data.status !== "approved" || !data.companyCode) return;
+      const name = String(data.companyName || "");
+      if (!name.toLowerCase().includes(q)) return;
+      if (seen.has(name)) return;
+      seen.add(name);
+      results.push({ companyName: name, companyCode: data.companyCode });
+    });
+    res.status(200).json({ results });
+  } catch (e) {
+    console.error("회사코드 찾기 오류:", e);
+    res.status(500).json({ results: [], error: e?.message || String(e) });
+  }
+});

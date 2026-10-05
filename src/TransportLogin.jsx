@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { auth, db } from "./firebase";
 import { signInWithEmailAndPassword, sendPasswordResetEmail, signOut } from "firebase/auth";
-import { doc, getDoc, collection, getDocs } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
@@ -61,21 +61,20 @@ export default function TransportLogin() {
     };
   }, []);
 
+  // ⭐ transportApplications는 로그인해야 읽을 수 있는 컬렉션이라(Firestore 규칙),
+  // 로그인 "전" 화면인 여기서 직접 조회하면 항상 권한 오류로 막혀 결과가 비어
+  // 보였다 — 로그인 없이도 호출 가능한 Cloud Function(lookupCompanyCode)을
+  // 통해 회사명/코드만 받아온다.
   const searchCompanyCode = async () => {
-    const q2 = codeLookupQ.trim().toLowerCase();
+    const q2 = codeLookupQ.trim();
     if (!q2) return;
     setCodeSearching(true);
     try {
-      const snap = await getDocs(collection(db, "transportApplications"));
-      const all = snap.docs.map(d => d.data()).filter(d => d.status === "approved" && d.companyCode);
-      const filtered = all.filter(d => (d.companyName || "").toLowerCase().includes(q2));
-      const unique = Object.values(
-        filtered.reduce((acc, r) => {
-          acc[r.companyName] = { companyName: r.companyName, companyCode: r.companyCode };
-          return acc;
-        }, {})
+      const res = await fetch(
+        `https://us-central1-dispatch-app-9b92f.cloudfunctions.net/lookupCompanyCode?q=${encodeURIComponent(q2)}`
       );
-      setCodeResults(unique);
+      const data = await res.json();
+      setCodeResults(data.results || []);
     } catch {
       setCodeResults([]);
     } finally {
