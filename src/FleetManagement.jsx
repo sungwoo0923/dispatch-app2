@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import "leaflet/dist/leaflet.css";
 import { db, auth } from "./firebase";
 import {
-  collection, onSnapshot, doc, updateDoc, setDoc, getDoc, getDocs,
+  collection, onSnapshot, doc, updateDoc, setDoc, getDoc, getDocs, addDoc,
   query, where, orderBy, limit, deleteDoc, writeBatch, documentId,
 } from "firebase/firestore";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap } from "react-leaflet";
@@ -1475,6 +1475,129 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
 
 // ─── 기사 상세 모달 (기존 전체 이력/주요노선/엑셀다운로드 기능 이관) ─────────────
 
+// ⭐ 사용자 요청 — 지입차는 직원 같은 개념이라, 사업자등록증/보험증/차량등록증 같은
+// 서류를 올려두고 언제든 미리보기·다운로드할 수 있어야 한다. 클라이언트 첨부파일
+// (CLIENT_FILE_BASE64_LIMIT)과 동일하게 base64로 Firestore에 저장 — 별도 Storage
+// 설정 없이 바로 동작하고, 파일당 문서가 분리돼 있어 여러 건 보관에도 안전하다.
+const DRIVER_DOC_BASE64_LIMIT = 900_000;
+function compressDriverDocImage(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1600;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", 0.8));
+      };
+      img.onerror = () => resolve(e.target.result);
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function DriverDocumentsPanel({ driverId }) {
+  const [docs, setDocs] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [lightbox, setLightbox] = useState(null); // { name, dataUrl, type }
+
+  useEffect(() => {
+    if (!driverId) return;
+    return onSnapshot(
+      query(collection(db, "driver_documents"), where("driverId", "==", driverId)),
+      (snap) => setDocs(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.uploadedAt?.seconds || 0) - (a.uploadedAt?.seconds || 0))),
+      () => {}
+    );
+  }, [driverId]);
+
+  const handleUpload = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploading(true);
+    try {
+      const dataUrl = file.type.startsWith("image/") ? await compressDriverDocImage(file) : await new Promise((res) => {
+        const r = new FileReader();
+        r.onload = (ev) => res(ev.target.result);
+        r.readAsDataURL(file);
+      });
+      if (dataUrl.length > DRIVER_DOC_BASE64_LIMIT) {
+        alert("파일이 너무 큽니다. 더 작은 파일을 사용하거나 이미지를 압축해서 다시 올려주세요.");
+        return;
+      }
+      await addDoc(collection(db, "driver_documents"), {
+        driverId, fileName: file.name, fileType: file.type || "", dataUrl,
+        uploadedAt: { seconds: Math.floor(Date.now() / 1000) },
+      });
+    } catch (e) {
+      alert("업로드 중 오류가 발생했습니다: " + (e?.message || e));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("이 서류를 삭제할까요?")) return;
+    await deleteDoc(doc(db, "driver_documents", id)).catch(() => {});
+  };
+
+  const download = (d) => {
+    const a = document.createElement("a");
+    a.href = d.dataUrl; a.download = d.fileName;
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+
+  return (
+    <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
+      <div style={{ padding: "12px 16px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontSize: 16, fontWeight: 800, color: NAVY }}>서류함 ({docs.length})</span>
+        <label style={{ padding: "6px 14px", borderRadius: 6, border: `1px solid ${NAVY}`, background: NAVY, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+          {uploading ? "업로드중..." : "+ 서류 업로드"}
+          <input type="file" accept="image/*,.pdf" onChange={handleUpload} disabled={uploading} style={{ display: "none" }} />
+        </label>
+      </div>
+      {docs.length === 0 ? (
+        <div style={{ padding: 30, textAlign: "center", color: "#9ca3af", fontSize: 14 }}>등록된 서류가 없습니다. 사업자등록증·보험증·차량등록증 등을 올려두세요.</div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10, padding: 14 }}>
+          {docs.map(d => (
+            <div key={d.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, background: "#f9fafb" }}>
+              <div
+                onClick={() => d.fileType?.startsWith("image/") && setLightbox(d)}
+                style={{ height: 90, borderRadius: 6, background: "#fff", border: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8, cursor: d.fileType?.startsWith("image/") ? "pointer" : "default", overflow: "hidden" }}
+              >
+                {d.fileType?.startsWith("image/") ? (
+                  <img src={d.dataUrl} alt={d.fileName} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                ) : (
+                  <span style={{ fontSize: 28 }}>📄</span>
+                )}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 6 }} title={d.fileName}>{d.fileName}</div>
+              <div style={{ display: "flex", gap: 5 }}>
+                <button onClick={() => download(d)} style={{ flex: 1, padding: "5px 0", borderRadius: 5, border: "1px solid #d1d5db", background: "#fff", color: "#374151", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>다운로드</button>
+                <button onClick={() => handleDelete(d.id)} style={{ padding: "5px 9px", borderRadius: 5, border: "1px solid #fca5a5", background: "#fff", color: "#ef4444", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>삭제</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {lightbox && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.75)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={() => setLightbox(null)}>
+          <img src={lightbox.dataUrl} alt={lightbox.fileName} style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8 }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DriverRouteDetailModal({ driver, dispatchData, onClose }) {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -1541,6 +1664,14 @@ function DriverRouteDetailModal({ driver, dispatchData, onClose }) {
     XLSX.writeFile(wb, `${driver.이름}_노선내역.xlsx`);
   };
 
+  // ⭐ 사용자 요청 — 관리자가 PC에서 지입차별 "오늘 매출"/"누적 매출"을 바로 볼 수
+  // 있어야 한다. 위 totalFare 등은 fromDate/toDate/검색 필터에 따라 바뀌는 "조회
+  // 결과" 통계라 다른 목적이고, 이건 필터와 무관하게 항상 같은 값을 보여줘야 해서
+  // allDriverOrders(전체 이력)에서 별도로 계산한다.
+  const todayRevenueStr = kstDateStr();
+  const todayRevenue = allDriverOrders.filter(r => (r.상차일 || "") === todayRevenueStr).reduce((s, r) => s + toWon(r.청구운임), 0);
+  const cumulativeRevenue = allDriverOrders.reduce((s, r) => s + toWon(r.청구운임), 0);
+
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 9998, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={onClose}>
       <div style={{ background: "#f4f6f9", borderRadius: 14, width: "min(1040px, 100%)", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 8px 40px rgba(0,0,0,.25)" }} onClick={e => e.stopPropagation()}>
@@ -1555,6 +1686,16 @@ function DriverRouteDetailModal({ driver, dispatchData, onClose }) {
         </div>
 
         <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div style={{ background: NAVY, borderRadius: 10, padding: 16 }}>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,.6)" }}>오늘 매출</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: "#fff" }}>{todayRevenue.toLocaleString()}원</div>
+            </div>
+            <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 16 }}>
+              <div style={{ fontSize: 13, color: "#9ca3af" }}>누적 매출 (전체 이력)</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: NAVY }}>{cumulativeRevenue.toLocaleString()}원</div>
+            </div>
+          </div>
           <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 16, display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
             <div style={{ textAlign: "right" }}>
               <div style={{ fontSize: 13, color: "#9ca3af" }}>오더 건수</div>
@@ -1573,6 +1714,8 @@ function DriverRouteDetailModal({ driver, dispatchData, onClose }) {
               <div style={{ fontSize: 20, fontWeight: 800, color: "#f59e0b" }}>{totalMargin.toLocaleString()}원</div>
             </div>
           </div>
+
+          <DriverDocumentsPanel driverId={driver.id} />
 
           {topRoutes.length > 0 && (
             <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>

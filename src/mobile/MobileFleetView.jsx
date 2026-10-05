@@ -380,6 +380,23 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
     return (plate && ordersByPlate.get(plate)) || (name && ordersByName.get(name)) || [];
   }, [ordersByPlate, ordersByName]);
 
+  // ⭐ 사용자 요청 — 관리자가 모바일에서도 지입차별 오늘/누적 매출을 볼 수 있어야
+  // 한다. ordersFor는 오늘 오더만 매칭하므로, 날짜 제한 없이 전체 이력에서
+  // 직접 청구운임을 합산한다.
+  const toWon = useCallback((v) => Number(String(v || "0").replace(/[^\d]/g, "")) || 0, []);
+  const revenueFor = useCallback((d) => {
+    const plate = (d.차량번호 || "").trim();
+    const name = (d.이름 || "").trim();
+    const all = (dispatchData || []).filter(r => {
+      const rPlate = (r.차량번호 || "").trim();
+      const rName = (r.이름 || "").trim();
+      return (!!plate && rPlate === plate) || (!!name && rName === name);
+    });
+    const today = all.filter(r => (r.상차일 || "") === todayStr).reduce((s, r) => s + toWon(r.청구운임), 0);
+    const cumulative = all.reduce((s, r) => s + toWon(r.청구운임), 0);
+    return { today, cumulative };
+  }, [dispatchData, todayStr, toWon]);
+
   const scopedDrivers = useMemo(
     () => scope === "mine" ? drivers.filter(d => d.담당자?.uid === myUid) : drivers,
     [drivers, scope, myUid]
@@ -650,6 +667,23 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
                     {expanded && (
                       <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #f0f2f5" }}>
                         <MobileManagerBadge driver={d} staff={companyStaff} canDelegate={canDelegate} onAssign={assignDriverManager} />
+
+                        {/* 오늘/누적 매출 */}
+                        {(() => {
+                          const rev = revenueFor(d);
+                          return (
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+                              <div style={{ background: NAVY, borderRadius: 9, padding: "10px 12px" }}>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.6)", letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 4 }}>오늘 매출</div>
+                                <div style={{ fontSize: 15, fontWeight: 800, color: "#fff" }}>{rev.today.toLocaleString()}원</div>
+                              </div>
+                              <div style={{ background: "#f8f9fb", borderRadius: 9, padding: "10px 12px" }}>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 4 }}>누적 매출</div>
+                                <div style={{ fontSize: 15, fontWeight: 800, color: NAVY }}>{rev.cumulative.toLocaleString()}원</div>
+                              </div>
+                            </div>
+                          );
+                        })()}
 
                         {/* 오늘 배차 노선 — 사용자 요청: 상/하차지, 상차~하차 예상시간을 지입차관리에서 바로 확인 */}
                         {(() => {
