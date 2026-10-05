@@ -1336,14 +1336,14 @@ function handleSendToDriver(driver, orders, selectedDate) {
 
 // ─── 기사별 노선 카드 ─────────────────────────────────────────────────────────
 
-const ROUTE_COLS = ["상태", "거래처", "상차지", "하차지", "상차", "하차", "이동정보", "배차담당자"];
+const ROUTE_COLS = ["상태", "거래처", "상차지", "하차지", "상차", "하차", "이동정보", "운임", "배차담당자"];
 
 // 오더를 등록/배차한 담당자 표시 — 3파트 등록폼과 동일한 우선순위로 폴백한다.
 function creatorLabel(r) {
   return r?.등록자명 || r?.createdByName || r?.등록자 || r?.createdByEmail || r?.createdBy || "-";
 }
 
-function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, live, onOpenDetail, staff, canDelegate, onAssignManager }) {
+function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, live, onOpenDetail, staff, canDelegate, onAssignManager, index }) {
   const first = orders[0];
   const last = orders[orders.length - 1];
   const hasConflict = isOffDay && orders.length > 0;
@@ -1353,6 +1353,9 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
       {/* 헤더: 기사 기본정보를 라벨 붙은 그리드로 — 값 글자는 짙은 색으로 가독성 확보 */}
       <div style={{ padding: "14px 16px", borderBottom: "1px solid #f0f2f5", display: "flex", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 160 }}>
+          {index != null && (
+            <span style={{ fontSize: 13, fontWeight: 800, color: "#9ca3af", minWidth: 20, textAlign: "right", flexShrink: 0 }}>{index}</span>
+          )}
           <div style={{ width: 36, height: 36, borderRadius: 9, background: NAVY, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <svg width="18" height="18" fill="none" stroke="white" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" strokeLinecap="round" /></svg>
           </div>
@@ -1438,6 +1441,9 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
                       <td style={{ padding: "10px 16px", fontSize: 13, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>{r.하차일 || "-"} {r.하차시간 || "즉시"}</td>
                       <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
                         <RouteDistanceBadge fromAddr={r.상차지주소} toAddr={r.하차지주소} />
+                      </td>
+                      <td style={{ padding: "10px 16px", fontSize: 13, fontWeight: 700, color: NAVY, whiteSpace: "nowrap" }}>
+                        {r.청구운임 ? `${Number(String(r.청구운임).replace(/[^\d]/g, "")).toLocaleString()}원` : "-"}
                       </td>
                       <td style={{ padding: "10px 16px", fontSize: 13, color: "#374151", fontWeight: 600, whiteSpace: "nowrap" }}>{creatorLabel(r)}</td>
                     </tr>
@@ -1734,8 +1740,48 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
   const dispatchedCount = driverRows.filter(r => r.orders.length > 0).length;
   const visibleRows = onlyIdle ? driverRows.filter(r => r.orders.length === 0) : driverRows;
 
+  // ⭐ 사용자 요청 — 상단 KPI를 "총 등록/접속중/운행중/근무중" 대신 담당 기준으로:
+  // 총 등록기사, 내 담당차량, 내 담당차량 중 배차중, 내 담당차량 중 배차완료.
+  // 토글(scope)과 무관하게 항상 "내 담당" 수치를 보여주기 위해 drivers(전체
+  // 지입/직영)에서 직접 다시 집계한다 — search/scope 필터의 영향을 받지 않게.
+  const kpi = useMemo(() => {
+    const mine = drivers.filter(d => d.담당자?.uid === myUid);
+    const myOrders = (d) => {
+      const plate = (d.차량번호 || "").trim();
+      const name = (d.이름 || "").trim();
+      return (plate && ordersByPlate.get(plate)) || (name && ordersByName.get(name)) || [];
+    };
+    const inProgress = mine.filter(d => myOrders(d).some(r => r.배차상태 === "배차중")).length;
+    const completed = mine.filter(d => myOrders(d).some(r => r.배차상태 === "배차완료")).length;
+    return { total: drivers.length, mine: mine.length, inProgress, completed };
+  }, [drivers, myUid, ordersByPlate, ordersByName]);
+
   return (
     <div>
+      {/* KPI — 담당 기준 요약 카드 */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 16 }}>
+        {[
+          { label: "총 등록기사", value: kpi.total, icon: "🚚", accent: NAVY },
+          { label: "내 담당차량", value: kpi.mine, icon: "👤", accent: "#2563eb" },
+          { label: "내 담당 · 배차중", value: kpi.inProgress, icon: "🛣️", accent: "#f59e0b" },
+          { label: "내 담당 · 배차완료", value: kpi.completed, icon: "✅", accent: "#16a34a" },
+        ].map(c => (
+          <div key={c.label} style={{
+            background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "16px 18px",
+            display: "flex", alignItems: "center", gap: 14, position: "relative", overflow: "hidden",
+          }}>
+            <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: c.accent }} />
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: `${c.accent}14`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, flexShrink: 0 }}>
+              {c.icon}
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#9ca3af", marginBottom: 2 }}>{c.label}</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: "#111827", lineHeight: 1 }}>{c.value}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* 상단 바: 검색 + 어제/당일/내일 + KPI */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
         <input
@@ -1789,13 +1835,18 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
 
       {/* 내 담당 / 전체 토글 */}
       <div style={{ display: "flex", gap: 4, marginBottom: 14, background: "#f3f4f6", borderRadius: 8, padding: 3, width: "fit-content" }}>
-        {[["mine", "내 담당 차량"], ["all", "전체 지입차"]].map(([key, label]) => (
+        {[["mine", "내 담당 차량", drivers.filter(d => d.담당자?.uid === myUid).length], ["all", "전체 지입차", drivers.length]].map(([key, label, count]) => (
           <button key={key} onClick={() => setScope(key)}
             style={{
               padding: "6px 16px", borderRadius: 6, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer",
               background: scope === key ? NAVY : "transparent", color: scope === key ? "#fff" : "#6b7280", transition: "all .12s",
+              display: "flex", alignItems: "center", gap: 6,
             }}>
             {label}
+            <span style={{
+              fontSize: 11, fontWeight: 800, padding: "1px 6px", borderRadius: 99,
+              background: scope === key ? "rgba(255,255,255,.22)" : "#e5e7eb", color: scope === key ? "#fff" : "#6b7280",
+            }}>{count}</span>
           </button>
         ))}
       </div>
@@ -1812,9 +1863,10 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {visibleRows.map(({ driver, orders, isOffDay, live }) => (
+          {visibleRows.map(({ driver, orders, isOffDay, live }, i) => (
             <DriverRouteCard
               key={driver.id}
+              index={i + 1}
               driver={driver}
               orders={orders}
               selectedDate={selectedDate}

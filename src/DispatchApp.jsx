@@ -55083,8 +55083,14 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
     const 차량번호 = (newForm.차량번호||"").replace(/\s+/g,"");
     if (!차량번호) return showAlert("차량번호는 필수입니다.");
     const isFleet = newForm.등급 === "지입" || newForm.등급 === "직영";
+    // ⭐ 버그수정 — 여기서 항상 새 랜덤 id를 강제로 지정했더니, 이미 기사앱으로
+    // 가입해 실제 위치/상태가 쌓이고 있는 기사의 차량번호를 여기서 다시 입력하면
+    // (예: 지입 등급만 뒤늦게 지정) 완전히 별개의 빈 문서가 하나 더 생겼다 —
+    // 지입차관리(실시간 GPS)는 가입 당시 문서(uid)를 보는데, 등급은 이 새 고아
+    // 문서에만 붙어서 "지입으로 지정했는데 지입차관리에 안 보인다" 사고로 이어짐.
+    // id를 넘기지 않으면 upsertDriver가 차량번호로 기존 문서를 먼저 찾아
+    // 재사용한다(4012번 줄 부근 로직) — 신규 차량일 때만 새 문서가 생긴다.
     await upsertDriver({
-      id: crypto.randomUUID(),
       차량번호,
       이름: newForm.이름,
       전화번호: (newForm.전화번호||"").replace(/\D/g,""),
@@ -55130,8 +55136,10 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
         for (const r of json) {
           const 차량번호 = String(r.차량번호||r["차량 번호"]||"").replace(/\s+/g,"");
           if (!차량번호) continue;
+          // ⭐ addNew와 동일한 이유로 id를 강제로 새로 만들지 않는다 — 이미 기사앱으로
+          // 가입된 차량번호면 그 문서를 그대로 재사용(merge)해야 등급이 실제 위치/상태가
+          // 쌓이는 문서에 붙는다.
           await upsertDriver({
-            id: crypto.randomUUID(),
             차량번호,
             이름: r.이름||r["기사명"]||"",
             전화번호: r.전화번호||r["전화"]||r["휴대폰"]||"",

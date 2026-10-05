@@ -7198,13 +7198,25 @@ function MobileSideMenu({
   );
 }
 
+// ⭐ 사용자 요청 — 메뉴를 열었을 때 모든 섹션이 다 펼쳐져 있어 스크롤이 길었다.
+// 접속할 때마다(=메뉴를 열 때마다) 각 섹션은 항상 접힌 상태로 시작하고,
+// 제목을 누르면 펼쳐지게 바꾼다.
 function MenuSection({ title, children, dark }) {
+  const [open, setOpen] = useState(false);
   return (
     <div className="mt-1 mb-1">
-      <div className={`px-5 pt-4 pb-1.5 text-[11px] font-bold uppercase tracking-widest ${dark ? "text-white/40" : "text-blue-500"}`}>
-        {title}
-      </div>
-      <div className="flex flex-col">{children}</div>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className={`w-full flex items-center justify-between px-5 pt-4 pb-1.5 text-[11px] font-bold uppercase tracking-widest ${dark ? "text-white/40" : "text-blue-500"}`}
+      >
+        <span>{title}</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"
+          style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform .15s" }}>
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      {open && <div className="flex flex-col">{children}</div>}
     </div>
   );
 }

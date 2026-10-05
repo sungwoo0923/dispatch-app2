@@ -306,9 +306,10 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
     return () => { clearTimeout(timer); controller.abort(); };
   }, [selectedPath]);
 
-  // drivers 합성
+  // drivers 합성 — PC 지입차관리와 동일하게 등급(지입/직영)으로 지정된 기사만 대상.
   const drivers = useMemo(() => {
     return driversRaw
+      .filter(raw => raw.등급 === "지입" || raw.등급 === "직영")
       .filter(raw => { const u = usersMap[raw.id]; return u && u.approved === true; })
       .map(raw => {
         const u = usersMap[raw.id];
@@ -326,6 +327,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
           speed: raw.speed || 0,
           workStartAt: raw.workStartAt || null,
           담당자: raw.담당자 || null,
+          등급: raw.등급 || "",
         };
       })
       .sort((a, b) => statusPriority(a) - statusPriority(b));
@@ -392,12 +394,14 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
     });
   }, [scopedDrivers, searchQ, statusFilter]);
 
-  const kpi = useMemo(() => ({
-    total: drivers.length,
-    connected: drivers.filter(d => d.active).length,
-    driving: drivers.filter(d => d.상태 === "운행중").length,
-    onDuty: drivers.filter(d => ["출근","상차중","하차중","운행중","복귀중"].includes(d.상태)).length,
-  }), [drivers]);
+  // ⭐ 사용자 요청 — 총 등록/접속중/운행중/근무중 대신 담당 기준으로 변경:
+  // 총 등록기사, 내 담당차량, 내 담당차량 중 배차중, 내 담당차량 중 배차완료.
+  const kpi = useMemo(() => {
+    const mine = drivers.filter(d => d.담당자?.uid === myUid);
+    const inProgress = mine.filter(d => ordersFor(d).some(r => r.배차상태 === "배차중")).length;
+    const completed = mine.filter(d => ordersFor(d).some(r => r.배차상태 === "배차완료")).length;
+    return { total: drivers.length, mine: mine.length, inProgress, completed };
+  }, [drivers, myUid, ordersFor]);
 
   const filteredFeed = useMemo(() =>
     activityLogs.filter(l => {
@@ -480,22 +484,22 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
   return (
     <div style={{ fontFamily: "'Noto Sans KR',sans-serif", paddingBottom: 24 }}>
 
-      {/* KPI 2×2 그리드 */}
+      {/* KPI 2×2 그리드 — 담당 기준 */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, padding: "16px 16px 0" }}>
         {[
-          { label: "총 등록 기사", val: kpi.total, primary: true },
-          { label: "접속중", val: kpi.connected, color: "#3b82f6" },
-          { label: "운행중", val: kpi.driving, color: "#10b981" },
-          { label: "근무중", val: kpi.onDuty, color: "#f59e0b" },
-        ].map(({ label, val, primary, color }) => (
+          { label: "총 등록기사", val: kpi.total, icon: "🚚", accent: NAVY },
+          { label: "내 담당차량", val: kpi.mine, icon: "👤", accent: "#2563eb" },
+          { label: "내 담당 · 배차중", val: kpi.inProgress, icon: "🛣️", accent: "#f59e0b" },
+          { label: "내 담당 · 배차완료", val: kpi.completed, icon: "✅", accent: "#16a34a" },
+        ].map(({ label, val, icon, accent }) => (
           <div key={label} style={{
-            background: primary ? NAVY : "white",
-            borderRadius: 14, padding: "14px 16px",
-            border: primary ? "none" : "1px solid #e5e7eb",
-            boxShadow: primary ? "0 2px 8px rgba(27,43,75,.2)" : "none",
+            background: "white", borderRadius: 14, padding: "14px 16px",
+            border: "1px solid #e5e7eb", position: "relative", overflow: "hidden",
           }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: primary ? "rgba(255,255,255,.55)" : "#6b7280", marginBottom: 6, letterSpacing: ".05em" }}>{label}</div>
-            <div style={{ fontSize: 28, fontWeight: 900, color: primary ? "#fff" : (color || NAVY), lineHeight: 1 }}>{val}</div>
+            <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: accent }} />
+            <div style={{ fontSize: 17, marginBottom: 6 }}>{icon}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 2, letterSpacing: ".03em" }}>{label}</div>
+            <div style={{ fontSize: 24, fontWeight: 900, color: "#111827", lineHeight: 1 }}>{val}</div>
           </div>
         ))}
       </div>
@@ -550,12 +554,14 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
         <div style={{ padding: "12px 16px 0" }}>
           {/* 내 차량 / 전체 토글 */}
           <div style={{ display: "flex", gap: 4, marginBottom: 10, background: "#f3f4f6", borderRadius: 8, padding: 3 }}>
-            {[["mine", "내 담당 차량"], ["all", "전체 지입차"]].map(([key, label]) => (
+            {[["mine", "내 담당 차량", drivers.filter(d => d.담당자?.uid === myUid).length], ["all", "전체 지입차", drivers.length]].map(([key, label, count]) => (
               <button key={key} onClick={() => setScope(key)} style={{
                 flex: 1, padding: "7px 4px", borderRadius: 6, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer",
                 background: scope === key ? NAVY : "transparent", color: scope === key ? "#fff" : "#6b7280", transition: "all .12s",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
               }}>
                 {label}
+                <span style={{ fontSize: 10, fontWeight: 800, padding: "1px 5px", borderRadius: 99, background: scope === key ? "rgba(255,255,255,.22)" : "#e5e7eb", color: scope === key ? "#fff" : "#6b7280" }}>{count}</span>
               </button>
             ))}
           </div>
@@ -596,7 +602,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {filtered.map(d => {
+              {filtered.map((d, idx) => {
                 const color = STATUS_COLORS[d.상태] || "#9ca3af";
                 const expanded = expandedId === d.id;
                 return (
@@ -612,6 +618,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
                   >
                     {/* 기본 행 */}
                     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: "#9ca3af", minWidth: 16, textAlign: "right", flexShrink: 0 }}>{idx + 1}</span>
                       <div style={{ width: 40, height: 40, borderRadius: 10, background: d.active ? "#f0fdf4" : "#f9fafb", border: `1.5px solid ${d.active ? "#bbf7d0" : "#e5e7eb"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <div style={{ width: 12, height: 12, borderRadius: "50%", background: color }} />
                       </div>
@@ -663,6 +670,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
                                 상차 {r.상차시간 || "즉시"} · 하차예상 {r.하차시간 || "즉시"}{r.하차일 && r.하차일 !== r.상차일 ? ` (${r.하차일})` : ""}
                               </div>
                               {r.거래처명 && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>거래처: {r.거래처명}</div>}
+                              {r.청구운임 && <div style={{ fontSize: 12, fontWeight: 700, color: NAVY, marginTop: 2 }}>운임 {Number(String(r.청구운임).replace(/[^\d]/g, "")).toLocaleString()}원</div>}
                             </div>
                           ));
                         })()}
