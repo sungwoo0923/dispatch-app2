@@ -7020,14 +7020,10 @@ function MobileSideMenu({
           </button>
         </div>
 
-        {/* 메뉴 본문 */}
-        <div
-          className="flex-1 overflow-y-auto py-1"
-          style={dark
-            ? { scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.2) transparent" }
-            : { scrollbarWidth: "thin", scrollbarColor: "rgba(0,0,0,0.12) transparent" }
-          }
-        >
+        {/* 메뉴 본문 + 하단 컨트롤 — 사용자 요청: 메뉴 목록만 따로 작은 칸 안에서
+            스크롤되던 걸 없애고, 드로어 전체(메뉴~로그아웃~버전)가 하나로 이어져
+            일반 스크롤바로 오르내리게 통합했다. */}
+        <div className="flex-1 overflow-y-auto py-1">
           <MenuSection title="배차관리" dark={dark}>
             <MenuItem label="등록내역" onClick={onGoList} dark={dark} />
             <MenuItem label="화물등록" onClick={onGoCreate} dark={dark} />
@@ -7057,13 +7053,9 @@ function MobileSideMenu({
             <MenuItem label="내정보" onClick={onGoMyInfo} dark={dark} />
             <MenuItem label="설정" onClick={onGoSettings} dark={dark} />
           </MenuSection>
-        </div>
-
-        {/* 하단 컨트롤 */}
-        <div className={`${dark ? "border-t border-white/10" : "border-t border-blue-100"}`}>
 
           {/* 알림 토글 */}
-          <div className="px-5 py-3 flex items-center justify-between">
+          <div className={`px-5 py-3 flex items-center justify-between ${dark ? "border-t border-white/10" : "border-t border-blue-100"}`}>
             <span className={`text-[13px] font-semibold ${dark ? "text-white/80" : "text-gray-700"}`}>알림</span>
             <button
               onClick={toggleAlarm}
@@ -7244,7 +7236,7 @@ function MenuItem({ label, onClick, badge, dark }) {
 // ======================================================================
 // 업로드링크 발송 모달
 // ======================================================================
-function UploadLinkModal({ orders = [], onClose }) {
+function UploadLinkModal({ orders = [], onClose, companyName = "" }) {
   const baseUrl = window.location.origin;
   const [previewDriver, setPreviewDriver] = useState(null);
 
@@ -7266,7 +7258,7 @@ function UploadLinkModal({ orders = [], onClose }) {
   const buildMsg = (driver) => {
     const { name, vehicle, orders: dOrders } = driver;
     const lines = [];
-    lines.push("안녕하세요 돌캐 운송사입니다.\n");
+    lines.push(`안녕하세요 ${companyName || "운송사"}입니다.\n`);
 
     // 날짜 목록 (여러 오더면 복수 표시)
     const dates = [...new Set(dOrders.map(o => {
@@ -8783,6 +8775,7 @@ const summary = useMemo(() => {
       <UploadLinkModal
         orders={selectedOrders}
         onClose={() => setUploadLinkModal(false)}
+        companyName={userCompany || localStorage.getItem("userCompany") || ""}
       />
     )}
 

@@ -420,6 +420,7 @@ export default function DriverHome() {
   const [statusLoading, setStatusLoading] = useState(false);
   const [toast, setToast] = useState("");
   const [companyDefaultLoc, setCompanyDefaultLoc] = useState(null);
+  const [companyContact, setCompanyContact] = useState(null); // { name, phone } — 연락처 탭 "회사 연락처"용
   const autoCheckinDoneRef = useRef(false);
   const autoDropDoneRef = useRef(false);
   const wasAwayFromCheckInRef = useRef(false); // tracks if driver moved >0.5km away since last check-in/out
@@ -484,6 +485,23 @@ export default function DriverHome() {
       setCompanyDefaultLoc(snap.exists() ? (snap.data().defaultCheckInLocation || null) : null);
     });
   }, []);
+
+  // 연락처 탭 "회사 연락처" — 회사마다 다른 배차팀 번호를 보여주기 위해, 로그인한
+  // 기사가 소속된 회사의 transportApplications(가입 시 등록한 사업자정보)에서
+  // 전화번호를 읽어온다(예전엔 "돌캐" 번호가 모든 회사 기사에게 고정 표시됐었음).
+  useEffect(() => {
+    const co = driver?.companyName;
+    if (!co) { setCompanyContact(null); return; }
+    (async () => {
+      try {
+        const q = query(collection(db, "transportApplications"), where("companyName", "==", co));
+        const snap = await getDocs(q);
+        const found = snap.docs.map(d => d.data()).find(d => d.type === "신규" && d.status === "approved") || snap.docs[0]?.data();
+        const phone = found?.phone || found?.연락처 || "";
+        setCompanyContact(phone ? { name: co, phone } : null);
+      } catch { setCompanyContact(null); }
+    })();
+  }, [driver?.companyName]);
 
   const allLogs = useAllDriverLogs(uid);
   const { pos, permissionDenied, resetTotalDist } = useGpsTracking(uid, driver);
@@ -1167,14 +1185,12 @@ export default function DriverHome() {
       {activeTab === "contacts" && (
         <div style={{ padding: "16px" }}>
           {[
-            {
+            ...(companyContact ? [{
               section: "회사 연락처",
               items: [
-                { name: "돌캐", number: "1533-2525", tel: "15332525", desc: "배차팀" },
-                { name: "후레쉬1공장", number: "032-720-7704", tel: "0327207704", desc: "인천" },
-                { name: "후레쉬2공장", number: "032-720-7770", tel: "0327207770", desc: "인천" },
+                { name: companyContact.name, number: companyContact.phone, tel: companyContact.phone.replace(/[^0-9]/g, ""), desc: "배차팀" },
               ],
-            },
+            }] : []),
             {
               section: "긴급 연락처",
               items: [

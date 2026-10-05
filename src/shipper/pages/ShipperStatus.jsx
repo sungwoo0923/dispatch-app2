@@ -2050,11 +2050,11 @@ function Timeline({ order }) {
   const isCanceled = order?.상태 === "취소" || order?.상태 === "오더취소" || order?.취소여부 === true;
 
   const steps = [
-    { title: "배차접수", company: order?.운송사명 || "돌캐", ts: order?.createdAt },
-    { title: "배차중", company: order?.운송사명 || "돌캐", ts: order?.배차중전환일시 },
-    { title: "배차완료", company: order?.운송사명 || "돌캐", ts: order?.dispatchedAt || order?.배차완료일시 },
-    { title: "상차완료", company: order?.운송사명 || "돌캐", location: order?.상차지명 },
-    { title: "운송완료", company: order?.운송사명 || "돌캐", location: order?.하차지명 },
+    { title: "배차접수", company: order?.운송사명 || "운송사", ts: order?.createdAt },
+    { title: "배차중", company: order?.운송사명 || "운송사", ts: order?.배차중전환일시 },
+    { title: "배차완료", company: order?.운송사명 || "운송사", ts: order?.dispatchedAt || order?.배차완료일시 },
+    { title: "상차완료", company: order?.운송사명 || "운송사", location: order?.상차지명 },
+    { title: "운송완료", company: order?.운송사명 || "운송사", location: order?.하차지명 },
   ];
 
   let currentIndex = isDone ? 2 : 1;

@@ -44,9 +44,9 @@ export function mapTo24Order(order = {}) {
     endAreaPhone: order.전화번호 || "",
 
     firstType: "02",
-    firstShipperNm: "(주)돌캐",
-    firstShipperInfo: "15332525",
-    firstShipperBizNo: "3298100967",
+    firstShipperNm: order.firstShipperNm || order.거래처명 || "",
+    firstShipperInfo: order.firstShipperInfo || "",
+    firstShipperBizNo: order.firstShipperBizNo || order.거래처사업자번호 || "",
 
     taxbillType: "Y"
   };

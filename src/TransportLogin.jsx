@@ -2,12 +2,11 @@
 import React, { useState, useEffect } from "react";
 import { auth, db } from "./firebase";
 import { signInWithEmailAndPassword, sendPasswordResetEmail, signOut } from "firebase/auth";
-import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
 const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
-const DOLCAE_COMPANY = "돌캐";
 
 export default function TransportLogin() {
   const [companyCode, setCompanyCode] = useState(
@@ -29,30 +28,6 @@ export default function TransportLogin() {
   const [codeResults, setCodeResults] = useState([]);
   const [codeSearching, setCodeSearching] = useState(false);
   const navigate = useNavigate();
-
-  // 돌캐 회사 코드 자동완성: 저장된 코드 없을 때 Firestore에서 조회
-  useEffect(() => {
-    if (localStorage.getItem("transportCode")) return;
-    const fetchDolcaeCode = async () => {
-      try {
-        const q = query(
-          collection(db, "transportApplications"),
-          where("companyName", "==", DOLCAE_COMPANY),
-          where("type", "==", "신규"),
-          where("status", "==", "approved")
-        );
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          const data = snap.docs[0].data();
-          if (data.companyCode) {
-            setCompanyCode(data.companyCode);
-            setCompanyName(DOLCAE_COMPANY);
-          }
-        }
-      } catch (_) {}
-    };
-    fetchDolcaeCode();
-  }, []);
 
   // Enter key in popup
   useEffect(() => {
