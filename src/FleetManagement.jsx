@@ -18,6 +18,15 @@ const NAVY = "#1B2B4B";
 const NAVY_DARK = "#131e35";
 const NAVY_LIGHT = "#243454";
 
+// KPI 카드용 단색 라인 아이콘(path만) — 모바일 지입차관리와 동일한 스타일.
+// <svg stroke={accent}> 안에 그대로 끼워 쓴다.
+const KPI_ICONS = {
+  truck: <><rect x="1" y="5" width="14" height="10" rx="1.5" /><path d="M15 9h4l3 3v3h-7z" /><circle cx="6" cy="18" r="1.8" /><circle cx="18" cy="18" r="1.8" /></>,
+  user: <><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" /></>,
+  route: <><circle cx="6" cy="6" r="2.2" /><circle cx="18" cy="18" r="2.2" /><path d="M6 8.2V14a3 3 0 0 0 3 3h3a3 3 0 0 1 3 3v-2" /></>,
+  check: <><circle cx="12" cy="12" r="9" /><path d="M8 12.5l2.5 2.5L16 9.5" /></>,
+};
+
 const STATUS_COLORS = {
   운행중:   "#10b981",
   출근:     "#3b82f6",
@@ -1911,18 +1920,20 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
       {/* KPI — 담당 기준 요약 카드 */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 16 }}>
         {[
-          { label: "총 등록기사", value: kpi.total, icon: "🚚", accent: NAVY },
-          { label: "내 담당차량", value: kpi.mine, icon: "👤", accent: "#2563eb" },
-          { label: "내 담당 · 배차중", value: kpi.inProgress, icon: "🛣️", accent: "#f59e0b" },
-          { label: "내 담당 · 배차완료", value: kpi.completed, icon: "✅", accent: "#16a34a" },
+          { label: "총 등록기사", value: kpi.total, icon: KPI_ICONS.truck, accent: NAVY },
+          { label: "내 담당차량", value: kpi.mine, icon: KPI_ICONS.user, accent: "#2563eb" },
+          { label: "내 담당 · 배차중", value: kpi.inProgress, icon: KPI_ICONS.route, accent: "#f59e0b" },
+          { label: "내 담당 · 배차완료", value: kpi.completed, icon: KPI_ICONS.check, accent: "#16a34a" },
         ].map(c => (
           <div key={c.label} style={{
             background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "16px 18px",
             display: "flex", alignItems: "center", gap: 14, position: "relative", overflow: "hidden",
           }}>
             <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: c.accent }} />
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: `${c.accent}14`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, flexShrink: 0 }}>
-              {c.icon}
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: `${c.accent}14`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={c.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                {c.icon}
+              </svg>
             </div>
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: "#9ca3af", marginBottom: 2 }}>{c.label}</div>

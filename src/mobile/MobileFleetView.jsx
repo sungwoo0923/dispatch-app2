@@ -18,6 +18,15 @@ const STATUS_COLORS = {
 };
 const STATUS_ORDER = ["운행중", "상차중", "하차중", "복귀중", "출근", "대기", "휴식", "퇴근"];
 
+// KPI 카드용 단색 라인 아이콘(path만) — 헤더의 알림벨/새로고침과 같은 톤.
+// <svg stroke={accent}> 안에 그대로 끼워 쓴다.
+const KPI_ICONS = {
+  truck: <><rect x="1" y="5" width="14" height="10" rx="1.5" /><path d="M15 9h4l3 3v3h-7z" /><circle cx="6" cy="18" r="1.8" /><circle cx="18" cy="18" r="1.8" /></>,
+  user: <><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" /></>,
+  route: <><circle cx="6" cy="6" r="2.2" /><circle cx="18" cy="18" r="2.2" /><path d="M6 8.2V14a3 3 0 0 0 3 3h3a3 3 0 0 1 3 3v-2" /></>,
+  check: <><circle cx="12" cy="12" r="9" /><path d="M8 12.5l2.5 2.5L16 9.5" /></>,
+};
+
 function resolveTs(ts) {
   if (!ts) return null;
   if (ts.toDate) return ts.toDate();
@@ -501,20 +510,25 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
   return (
     <div style={{ fontFamily: "'Noto Sans KR',sans-serif", paddingBottom: 24 }}>
 
-      {/* KPI 2×2 그리드 — 담당 기준 */}
+      {/* KPI 2×2 그리드 — 담당 기준. 사용자 요청: 알록달록한 이모지 대신 헤더의
+          알림벨/새로고침 아이콘과 같은 단색 라인 아이콘 스타일로 통일 */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, padding: "16px 16px 0" }}>
         {[
-          { label: "총 등록기사", val: kpi.total, icon: "🚚", accent: NAVY },
-          { label: "내 담당차량", val: kpi.mine, icon: "👤", accent: "#2563eb" },
-          { label: "내 담당 · 배차중", val: kpi.inProgress, icon: "🛣️", accent: "#f59e0b" },
-          { label: "내 담당 · 배차완료", val: kpi.completed, icon: "✅", accent: "#16a34a" },
+          { label: "총 등록기사", val: kpi.total, icon: KPI_ICONS.truck, accent: NAVY },
+          { label: "내 담당차량", val: kpi.mine, icon: KPI_ICONS.user, accent: "#2563eb" },
+          { label: "내 담당 · 배차중", val: kpi.inProgress, icon: KPI_ICONS.route, accent: "#f59e0b" },
+          { label: "내 담당 · 배차완료", val: kpi.completed, icon: KPI_ICONS.check, accent: "#16a34a" },
         ].map(({ label, val, icon, accent }) => (
           <div key={label} style={{
             background: "white", borderRadius: 14, padding: "14px 16px",
             border: "1px solid #e5e7eb", position: "relative", overflow: "hidden",
           }}>
             <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: accent }} />
-            <div style={{ fontSize: 17, marginBottom: 6 }}>{icon}</div>
+            <div style={{ marginBottom: 8 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                {icon}
+              </svg>
+            </div>
             <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 2, letterSpacing: ".03em" }}>{label}</div>
             <div style={{ fontSize: 24, fontWeight: 900, color: "#111827", lineHeight: 1 }}>{val}</div>
           </div>
