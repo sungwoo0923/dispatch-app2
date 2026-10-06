@@ -147,26 +147,32 @@ export default function DriverRegister() {
     // 담당자 등 관리자가 미리 설정해둔 값을 그대로 이어받는다(겹치는 값은 가입
     // 입력값이 아니라 관리자가 지정한 값을 우선 — 등급/담당자/근무요일처럼 운영
     // 판단이 들어간 값은 기사 본인이 덮어쓰면 안 되므로).
+    // ⭐ 버그수정 — drivers 컬렉션은 보안규칙상 로그인한 사용자만 읽을 수 있는데,
+    // 이 조회를 계정 생성보다 먼저 하면 아직 비로그인 상태라 매번 permission-denied로
+    // 막혀서(조용히 catch(_)에 먹혀) 선등록 데이터가 절대 이어받아지지 않았다.
+    // 계정을 먼저 만들어 로그인 상태를 확보한 뒤 조회하고, 이름·회사명이 다르면
+    // 방금 만든 계정을 그 자리에서 삭제해 원상복구한다.
     const normPlate = carNo.trim().replace(/\s+/g, "").toUpperCase();
-    let preRegistered = null;
-    try {
-      const preSnap = await getDoc(doc(db, "drivers", normPlate));
-      if (preSnap.exists()) {
-        const d = preSnap.data();
-        const sameName = (d.이름 || d.name || "").trim() === name.trim();
-        const sameCompany = (d.companyName || "").trim() === companyName.trim();
-        if (sameName && sameCompany) preRegistered = d;
-        else {
-          setError("이미 등록된 차량번호인데 이름·회사명이 다릅니다. 관리자에게 문의해주세요.");
-          return;
-        }
-      }
-    } catch (_) { /* 조회 실패 시 그냥 신규 가입으로 진행 */ }
 
     try {
       setLoading(true);
       const res = await createUserWithEmailAndPassword(auth, email, password);
       const uid = res.user.uid;
+
+      let preRegistered = null;
+      const preSnap = await getDoc(doc(db, "drivers", normPlate));
+      if (preSnap.exists()) {
+        const d = preSnap.data();
+        const sameName = (d.이름 || d.name || "").trim() === name.trim();
+        const sameCompany = (d.companyName || "").trim() === companyName.trim();
+        if (sameName && sameCompany) {
+          preRegistered = d;
+        } else {
+          await res.user.delete().catch(() => {});
+          setError("이미 등록된 차량번호인데 이름·회사명이 다릅니다. 관리자에게 문의해주세요.");
+          return;
+        }
+      }
 
       await setDoc(doc(db, "users", uid), {
         uid,

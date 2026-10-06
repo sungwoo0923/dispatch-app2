@@ -43,16 +43,34 @@ export default function DriverLogin() {
         // 로그인 시도 중 "그런 계정이 없음" 류 오류가 나면, 입력한 차량번호로 미리
         // 등록된 문서가 있는지 확인해서 이름·회사명이 맞으면 바로 그 자리에서 계정을
         // 만들어 이어받는다 — 기사 입장에서는 그냥 "로그인"만 하면 되는 경험이 된다.
+        // ⭐ 버그수정 — drivers 컬렉션은 보안규칙상 로그인한 사용자만 읽을 수 있는데,
+        // 이 조회를 계정 생성보다 먼저 하면 아직 비로그인 상태라 매번 permission-denied가
+        // 나서(바깥 catch에 먹혀 "차량번호 또는 이름이 올바르지 않습니다"로만 보임)
+        // 선등록 문서가 실제로 있어도 절대 못 찾았다. 계정을 먼저 만들어 로그인 상태를
+        // 확보한 뒤 조회하고, 선등록 문서가 없거나 이름·회사명이 다르면 방금 만든
+        // 계정을 그 자리에서 삭제해 원상복구한다.
         const normPlate = carNo.trim().replace(/\s+/g, "").toUpperCase();
+        let res;
+        try {
+          res = await createUserWithEmailAndPassword(auth, email, password);
+        } catch (createErr) {
+          throw signInErr;
+        }
+        uid = res.user.uid;
+
         const preSnap = await getDoc(doc(db, "drivers", normPlate));
-        if (!preSnap.exists()) throw signInErr;
+        if (!preSnap.exists()) {
+          await res.user.delete().catch(() => {});
+          throw signInErr;
+        }
         const d = preSnap.data();
         const sameName = (d.이름 || d.name || "").trim() === name.trim();
         const sameCompany = (d.companyName || "").trim() === companyName.trim();
-        if (!sameName || !sameCompany) throw signInErr;
+        if (!sameName || !sameCompany) {
+          await res.user.delete().catch(() => {});
+          throw signInErr;
+        }
 
-        const res = await createUserWithEmailAndPassword(auth, email, password);
-        uid = res.user.uid;
         const common = {
           uid, name: name.trim(), carNo: carNo.trim(),
           phone: d.전화번호 || d.phone || "",
