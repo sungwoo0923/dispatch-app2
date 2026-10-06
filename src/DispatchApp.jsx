@@ -3672,6 +3672,11 @@ const patchDispatch = async (_id, patch, knownPrev) => {
     // 못 찾고 완전히 공란으로 보이는 원인이었다. 실제 "미선택" 값은 다른 곳과
     // 동일하게 빈 문자열로 저장해야 드롭다운에 플레이스홀더("선택")가 정상 표시된다.
     patch.배차방식 = "";
+    // 배차 자체가 취소됐으니 지입 기사 오더수락/거절 플로우 흔적도 같이 지운다.
+    patch.기사확인상태 = null;
+    patch.기사거절사유 = null;
+    patch.기사확인일시 = null;
+    patch.기사완료일시 = null;
   } else {
     const basePlate = patch.차량번호 || prev?.차량번호;
     if (basePlate) {
@@ -3682,6 +3687,20 @@ const patchDispatch = async (_id, patch, knownPrev) => {
         const driver = matches[0];
         patch.이름 = driver.이름;
         patch.전화번호 = driver.전화번호;
+        // ⭐ 사용자 요청 — 지입 기사에게 새 오더가 배정되면(차량번호가 이번 저장에서
+        // 실제로 "새로" 지정됐을 때만 — 이미 그 차량으로 배정돼 있던 오더를 다른
+        // 필드만 고치는 저장에는 재알림하지 않는다) 기사확인상태를 "대기"로 걸어
+        // 기사 앱에서 오더수락/거절 카드 + 상단 배너 알림이 뜨게 한다.
+        if (
+          driver.등급 === "지입" &&
+          "차량번호" in patch &&
+          normalizePlate(patch.차량번호) !== normalizePlate(prev?.차량번호)
+        ) {
+          patch.기사확인상태 = "대기";
+          patch.기사거절사유 = null;
+          patch.기사확인일시 = null;
+          patch.기사완료일시 = null;
+        }
       }
     }
   }
@@ -12095,6 +12114,15 @@ const rec = {
   경유상차목록: pickupStops,
   경유하차목록: dropStops,
 };
+// ⭐ 사용자 요청 — 신규 오더 등록 시점에 이미 지입 기사 차량번호가 입력돼 있으면
+// (patchDispatch를 거치는 수정과 달리 여기는 최초 등록 경로라 별도로 처리해야 함)
+// 기사확인상태를 "대기"로 걸어 기사 앱에서 오더수락/거절 알림이 뜨게 한다.
+if (rec.차량번호) {
+  const assignedDriver = drivers.find(d => normalizePlate(d.차량번호) === normalizePlate(rec.차량번호));
+  if (assignedDriver?.등급 === "지입") {
+    rec.기사확인상태 = "대기";
+  }
+}
 // ★ form 값 미리 캡처 (reset 전에)
 const _pName = form.상차지명, _pAddr = form.상차지주소, _pMgr = form.상차지담당자, _pPhone = form.상차지담당자번호, _pId = form.상차지Id;
 const _dName = form.하차지명, _dAddr = form.하차지주소, _dMgr = form.하차지담당자, _dPhone = form.하차지담당자번호, _dId = form.하차지Id;

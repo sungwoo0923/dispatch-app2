@@ -1165,6 +1165,11 @@ const PROG_META = {
 // 컬럼(배차상태)으로 옮기고, 운송중/배차완료까지 상황별로 구분해 보여준다.
 function driverDispatchStatus(orders, selectedDate, todayStr) {
   if (!orders.length) return { label: "배차대기", bg: "#fef3c7", color: "#92400e" };
+  // ⭐ 지입 기사 오더수락 플로우 — 기사확인상태가 있으면(차량번호를 지입 기사에게
+  // 배정한 오더) 시간 추정 대신 실제 수락 여부로 상태를 보여준다.
+  const checkStates = orders.map(r => r.기사확인상태).filter(Boolean);
+  if (checkStates.includes("수락")) return { label: "운송중", bg: "#dbeafe", color: "#1e40af" };
+  if (checkStates.includes("대기")) return { label: "오더확인중", bg: "#fef3c7", color: "#92400e" };
   const progs = orders.map(r => computeOrderProgress(r, selectedDate, todayStr));
   if (progs.includes("progress")) return { label: "운송중", bg: "#dbeafe", color: "#1e40af" };
   if (progs.every(p => p === "done")) return { label: "배차완료", bg: "#dcfce7", color: "#166534" };
@@ -1367,7 +1372,14 @@ function handleSendToDriver(driver, orders, selectedDate) {
 
 // ─── 기사별 노선 카드 ─────────────────────────────────────────────────────────
 
-const ROUTE_COLS = ["순번", "상태", "거래처", "상차지", "하차지", "상차", "하차", "이동정보", "운임", "배차담당자"];
+const ROUTE_COLS = ["순번", "상태", "거래처", "상차지", "하차지", "상차", "하차", "이동정보", "운임", "배차담당자", "오더확인"];
+// ⭐ 지입 기사 오더수락/거절 플로우 — 기사확인상태 값을 관리자 화면 배지로 표시
+const ORDER_CHECK_META = {
+  대기: { label: "확인대기", bg: "#fef3c7", color: "#92400e" },
+  수락: { label: "승인", bg: "#dcfce7", color: "#166534" },
+  거절: { label: "거절", bg: "#fee2e2", color: "#b91c1c" },
+  완료: { label: "운송완료", bg: "#e0e7ff", color: "#3730a3" },
+};
 
 // 오더를 등록/배차한 담당자 표시 — 3파트 등록폼과 동일한 우선순위로 폴백한다.
 // ⭐ 사용자 요청 — 이름 필드가 하나도 없으면 마지막엔 이메일을 그대로 보여주고
@@ -1505,6 +1517,18 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
                         {r.청구운임 ? `${Number(String(r.청구운임).replace(/[^\d]/g, "")).toLocaleString()}원` : "-"}
                       </td>
                       <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#374151", fontWeight: 700, whiteSpace: "nowrap" }}>{creatorLabel(r, staffByEmail)}</td>
+                      <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
+                        {r.기사확인상태 ? (
+                          <span
+                            title={r.기사확인상태 === "거절" ? (r.기사거절사유 || "사유 없음") : undefined}
+                            style={{ fontSize: 13, fontWeight: 800, padding: "3px 9px", borderRadius: 6, background: ORDER_CHECK_META[r.기사확인상태]?.bg || "#eef1f6", color: ORDER_CHECK_META[r.기사확인상태]?.color || "#374151", cursor: r.기사확인상태 === "거절" ? "help" : "default" }}
+                          >
+                            {ORDER_CHECK_META[r.기사확인상태]?.label || r.기사확인상태}
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 13, color: "#d1d5db" }}>-</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}

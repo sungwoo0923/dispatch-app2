@@ -130,6 +130,94 @@ function formatTime(date) {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
+// ─── 지입 기사 오더 알림 카드 ──────────────────────────────────────────────────
+function orderCreatorLabel(o) {
+  return o?.등록자명 || o?.createdByName || o?.등록자 || o?.createdByEmail || "-";
+}
+
+function LocBlock({ title, name, addr, when, manager, managerPhone, onCopy }) {
+  return (
+    <div style={{ padding: "8px 0", borderBottom: "1px solid #f3f4f6" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+        <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: title === "상차" ? "#1B2B4B" : "#374151", padding: "1px 7px", borderRadius: 6, flexShrink: 0 }}>{title}</span>
+        <span style={{ fontSize: 13, fontWeight: 800, color: "#111827" }}>{name || "-"}</span>
+        <span style={{ fontSize: 12, color: "#6b7280", marginLeft: "auto", flexShrink: 0 }}>{when}</span>
+      </div>
+      {addr && (
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 12, color: "#4b5563", flex: 1, wordBreak: "break-word" }}>{addr}</span>
+          <button onClick={() => onCopy(addr, `${title}지 주소`)} style={{ fontSize: 11, fontWeight: 700, color: "#1B2B4B", border: "1px solid #c7d2e3", borderRadius: 6, padding: "2px 7px", background: "#fff", flexShrink: 0, cursor: "pointer" }}>복사</button>
+        </div>
+      )}
+      {manager && (
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
+          <span style={{ fontSize: 12, color: "#6b7280" }}>{manager}{managerPhone ? ` · ${managerPhone}` : ""}</span>
+          {managerPhone && (
+            <a href={`tel:${String(managerPhone).replace(/[^0-9]/g, "")}`} style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: "#16a34a", borderRadius: 6, padding: "2px 8px", textDecoration: "none", flexShrink: 0 }}>전화</a>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OrderDetailBody({ o, onCopy }) {
+  const fmtDT = (date, time) => [date, time || "즉시"].filter(Boolean).join(" ");
+  return (
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      <LocBlock title="상차" name={o.상차지명} addr={o.상차지주소} when={fmtDT(o.상차일, o.상차시간)} manager={o.상차지담당자} managerPhone={o.상차지담당자번호} onCopy={onCopy} />
+      <LocBlock title="하차" name={o.하차지명} addr={o.하차지주소} when={fmtDT(o.하차일, o.하차시간)} manager={o.하차지담당자} managerPhone={o.하차지담당자번호} onCopy={onCopy} />
+      {(o.화물내용 || o.차량톤수) && (
+        <div style={{ display: "flex", gap: 8, fontSize: 12, color: "#374151", padding: "8px 0", borderBottom: "1px solid #f3f4f6" }}>
+          <span style={{ fontWeight: 700, flexShrink: 0 }}>화물</span>
+          <span>{[o.차량톤수, o.화물내용].filter(Boolean).join(" · ")}</span>
+        </div>
+      )}
+      {o.전달사항 && (
+        <div style={{ fontSize: 12, color: "#92400e", background: "#fffbeb", padding: "8px 10px", borderRadius: 8, marginTop: 8, wordBreak: "break-word" }}>
+          전달사항: {o.전달사항}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PendingOrderCard({ order: o, loading, onAccept, onReject, onCopy }) {
+  return (
+    <div style={{ background: "#fff", border: "2px solid #1B2B4B", borderRadius: 16, padding: 16, boxShadow: "0 4px 16px rgba(27,43,75,0.12)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <span style={{ fontSize: 14, fontWeight: 800, color: "#1B2B4B" }}>{o.거래처명 || "거래처 미입력"}</span>
+        <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: "#f59e0b", padding: "3px 9px", borderRadius: 20, flexShrink: 0 }}>오더 확인 필요</span>
+      </div>
+      <OrderDetailBody o={o} onCopy={onCopy} />
+      <div style={{ fontSize: 12, color: "#6b7280", marginTop: 10, paddingTop: 10, borderTop: "1px solid #f3f4f6" }}>
+        배차담당자 <b style={{ color: "#111827" }}>{orderCreatorLabel(o)}</b>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        <button onClick={onReject} disabled={loading} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "1.5px solid #ef4444", background: "#fff", color: "#ef4444", fontWeight: 800, fontSize: 14, cursor: loading ? "not-allowed" : "pointer" }}>오더 거절</button>
+        <button onClick={onAccept} disabled={loading} style={{ flex: 1.3, padding: "12px", borderRadius: 12, border: "none", background: "#1B2B4B", color: "#fff", fontWeight: 800, fontSize: 14, cursor: loading ? "not-allowed" : "pointer" }}>오더 수락</button>
+      </div>
+    </div>
+  );
+}
+
+function ActiveOrderCard({ order: o, loading, onComplete, onCopy }) {
+  return (
+    <div style={{ background: "#fff", border: "2px solid #1B2B4B", borderRadius: 16, padding: 16, boxShadow: "0 4px 16px rgba(27,43,75,0.12)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <span style={{ fontSize: 14, fontWeight: 800, color: "#1B2B4B" }}>{o.거래처명 || "-"}</span>
+        <span style={{ fontSize: 12, fontWeight: 800, color: "#1B2B4B", display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#1B2B4B", animation: "fmBlink 1.2s ease-in-out infinite" }} /> 운송중
+        </span>
+      </div>
+      <OrderDetailBody o={o} onCopy={onCopy} />
+      <button onClick={onComplete} disabled={loading} style={{ width: "100%", marginTop: 12, padding: "14px", borderRadius: 12, border: "none", background: "#16a34a", color: "#fff", fontWeight: 800, fontSize: 15, cursor: loading ? "not-allowed" : "pointer" }}>
+        운송완료
+      </button>
+    </div>
+  );
+}
+
 function StatusDot({ status, size = 10 }) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG["대기"];
   return (
@@ -456,6 +544,15 @@ export default function DriverHome() {
   const [cargoTemp, setCargoTemp] = useState(null); // { temperature, humidity, updatedAt }
   const [emergencyModal, setEmergencyModal] = useState(false); // SOS 긴급 모달
   const [emergencySent, setEmergencySent] = useState(false); // 긴급 알림 전송 여부
+  // ⭐ 사용자 요청 — 지입 기사는 "상차 시작" 같은 GPS 기반 수동 단계 대신, 관리자가
+  // 오더에 차량번호를 입력하면 그 오더를 수락/거절하는 방식으로 일한다. 내 차량번호로
+  // 배정된 오더(dispatch 문서)를 구독해 신규 배정 알림/수락/거절/운송완료를 처리한다.
+  const [myOrders, setMyOrders] = useState([]);
+  const [orderBanner, setOrderBanner] = useState(null);
+  const [rejectModal, setRejectModal] = useState(null); // { orderId }
+  const [rejectReason, setRejectReason] = useState("");
+  const [orderActionLoading, setOrderActionLoading] = useState(false);
+  const seenPendingOrderIdsRef = useRef(new Set());
   const driverRef = useRef(null);
   const posRef = useRef(null);
 
@@ -477,6 +574,29 @@ export default function DriverHome() {
       if (snap.exists()) setDriver(snap.data());
     });
   }, [uid]);
+
+  // 내 차량번호로 배정된 오더 구독 (지입 전용 오더수락/거절 플로우)
+  useEffect(() => {
+    if (driver?.등급 !== "지입") { setMyOrders([]); return; }
+    const plate = driver?.차량번호 || driver?.carNo || "";
+    if (!plate) { setMyOrders([]); return; }
+    const q = query(collection(db, "dispatch"), where("차량번호", "==", plate));
+    return onSnapshot(q, (snap) => {
+      setMyOrders(snap.docs.map(d => ({ _id: d.id, ...d.data() })));
+    }, () => {});
+  }, [driver?.등급, driver?.차량번호, driver?.carNo]);
+
+  // 새로 배정된 오더(기사확인상태: 대기) 감지 → 상단 배너 표시 후 자동 소멸
+  useEffect(() => {
+    const pending = myOrders.filter(o => o.기사확인상태 === "대기");
+    const fresh = pending.filter(o => !seenPendingOrderIdsRef.current.has(o._id));
+    if (fresh.length > 0) {
+      fresh.forEach(o => seenPendingOrderIdsRef.current.add(o._id));
+      setOrderBanner(`새 배차 ${fresh.length}건이 발생되었습니다`);
+      const t = setTimeout(() => setOrderBanner(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [myOrders]);
 
   // 오늘 사진 업로드 현황 구독
   useEffect(() => {
@@ -670,6 +790,7 @@ export default function DriverHome() {
   // 지입 등급 기사는 위치와 무관하게 버튼만 누르면 바로 출근 처리한다 —
   // 그 즉시 위치가 관리자 화면에 노출되어 어느 지역에 있는지 보고 배차할 수 있다.
   const handleActionButton = useCallback((action) => {
+    if (action.disabled) return;
     if (action.status === "출근" && driver?.등급 !== "지입") {
       const checkInLoc = driver?.checkInLocation || companyDefaultLoc;
       if (checkInLoc?.lat && checkInLoc?.lng && pos && (pos.accuracy == null || pos.accuracy <= 100)) {
@@ -687,6 +808,66 @@ export default function DriverHome() {
     }
     updateStatus(action.status);
   }, [driver?.checkInLocation, driver?.등급, companyDefaultLoc, pos, updateStatus]);
+
+  // 지입 기사 오더 수락/거절/운송완료
+  const handleAcceptOrder = useCallback(async (orderId) => {
+    if (orderActionLoading) return;
+    setOrderActionLoading(true);
+    try {
+      await updateDoc(doc(db, "dispatch", orderId), {
+        기사확인상태: "수락",
+        기사확인일시: serverTimestamp(),
+      });
+      showToast("오더를 수락했습니다");
+    } catch (e) {
+      showToast("처리 중 오류가 발생했습니다");
+    } finally {
+      setOrderActionLoading(false);
+    }
+  }, [orderActionLoading]);
+
+  const handleRejectOrderSubmit = useCallback(async () => {
+    if (!rejectModal || orderActionLoading) return;
+    if (!rejectReason.trim()) { showToast("거절 사유를 입력해주세요"); return; }
+    setOrderActionLoading(true);
+    try {
+      await updateDoc(doc(db, "dispatch", rejectModal.orderId), {
+        기사확인상태: "거절",
+        기사거절사유: rejectReason.trim(),
+        기사확인일시: serverTimestamp(),
+      });
+      showToast("오더를 거절했습니다");
+      setRejectModal(null);
+      setRejectReason("");
+    } catch (e) {
+      showToast("처리 중 오류가 발생했습니다");
+    } finally {
+      setOrderActionLoading(false);
+    }
+  }, [rejectModal, rejectReason, orderActionLoading]);
+
+  const handleCompleteOrder = useCallback(async (orderId) => {
+    if (orderActionLoading) return;
+    setOrderActionLoading(true);
+    try {
+      await updateDoc(doc(db, "dispatch", orderId), {
+        기사확인상태: "완료",
+        기사완료일시: serverTimestamp(),
+      });
+      showToast("운송완료 처리되었습니다. 다음 배차를 받을 수 있습니다");
+    } catch (e) {
+      showToast("처리 중 오류가 발생했습니다");
+    } finally {
+      setOrderActionLoading(false);
+    }
+  }, [orderActionLoading]);
+
+  const copyText = useCallback((text, label) => {
+    if (!text) return;
+    navigator.clipboard?.writeText(text)
+      .then(() => showToast(`${label || "내용"}을 복사했습니다`))
+      .catch(() => showToast("복사에 실패했습니다"));
+  }, []);
 
   // 사진 업로드 처리
   const handlePhotoUpload = useCallback(async (file) => {
@@ -841,11 +1022,31 @@ export default function DriverHome() {
 
   const currentStatus = driver.status || "대기";
   const statusCfg = STATUS_CONFIG[currentStatus] || STATUS_CONFIG["대기"];
-  const actions = getActions(currentStatus, driver.isFinalCheckout);
+  const isFleetDriver = driver.등급 === "지입";
+  const pendingOrders = isFleetDriver ? myOrders.filter(o => o.기사확인상태 === "대기") : [];
+  const acceptedOrders = isFleetDriver ? myOrders.filter(o => o.기사확인상태 === "수락") : [];
+  const hasActiveDispatch = pendingOrders.length > 0 || acceptedOrders.length > 0;
+  // ⭐ 사용자 요청 — 지입 기사는 "상차 시작"이 아니라 오더수락/거절로 일한다.
+  // 출근 상태에서 배정된 오더가 없으면 "대기" 버튼 하나만(눌려있는 상태로),
+  // 오더가 대기/수락 중이면 아래 오더 카드가 그 자리를 대신하므로 기본 액션
+  // 목록을 비운다.
+  let actions;
+  if (isFleetDriver && currentStatus === "출근" && hasActiveDispatch) {
+    actions = [];
+  } else if (isFleetDriver && currentStatus === "출근") {
+    actions = [
+      { label: "대기", status: "__대기중__", primary: true, disabled: true, pressed: true },
+      { label: "퇴근", status: "퇴근", primary: false },
+      { label: "휴차 처리", status: "휴차", primary: false },
+    ];
+  } else {
+    actions = getActions(currentStatus, driver.isFinalCheckout);
+  }
   const dateStr = `${_td.getFullYear()}.${String(_td.getMonth()+1).padStart(2,"0")}.${String(_td.getDate()).padStart(2,"0")}`;
 
   return (
     <div style={{ minHeight: "100vh", background: "#f4f6f9", paddingBottom: 72, fontFamily: '"Noto Sans KR", sans-serif' }}>
+      <style>{`@keyframes fmBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }`}</style>
 
       {/* 충돌 감지 경고 모달 */}
       {collisionAlert && (
@@ -879,6 +1080,39 @@ export default function DriverHome() {
         </div>
       )}
 
+      {/* 오더 거절 사유 입력 모달 */}
+      {rejectModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 9998, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 24px" }}>
+          <div style={{ background: "white", borderRadius: 18, padding: "22px", maxWidth: 340, width: "100%", boxShadow: "0 8px 32px rgba(0,0,0,0.25)" }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#111827", marginBottom: 4 }}>오더 거절 사유</div>
+            <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 14 }}>거절 사유는 관리자에게 바로 전달됩니다.</div>
+            <textarea
+              value={rejectReason}
+              onChange={e => setRejectReason(e.target.value)}
+              placeholder="예: 차량 정비 중입니다 / 거리가 너무 멉니다 등"
+              rows={4}
+              style={{ width: "100%", border: "1.5px solid #e5e7eb", borderRadius: 12, padding: "11px 13px", fontSize: 14, outline: "none", resize: "none", fontFamily: "inherit", boxSizing: "border-box" }}
+            />
+            <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+              <button
+                onClick={() => { setRejectModal(null); setRejectReason(""); }}
+                disabled={orderActionLoading}
+                style={{ flex: 1, padding: "13px", borderRadius: 12, border: "1.5px solid #e5e7eb", background: "white", color: "#374151", fontSize: 14, fontWeight: 700, cursor: "pointer" }}
+              >
+                취소
+              </button>
+              <button
+                onClick={handleRejectOrderSubmit}
+                disabled={orderActionLoading}
+                style={{ flex: 1, padding: "13px", borderRadius: 12, border: "none", background: "#ef4444", color: "white", fontSize: 14, fontWeight: 700, cursor: orderActionLoading ? "not-allowed" : "pointer", opacity: orderActionLoading ? 0.6 : 1 }}
+              >
+                최종 거절
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 출근지 1km 초과 경고 */}
       {checkinWarning !== null && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 9998, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 24px" }}>
@@ -907,6 +1141,20 @@ export default function DriverHome() {
           boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
         }}>
           {toast}
+        </div>
+      )}
+
+      {/* 새 배차 알림 배너 — 배차등록 팝업과 동일하게 상단 중앙에 떴다가 자동으로 사라진다 */}
+      {orderBanner && (
+        <div style={{
+          position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)",
+          background: "#1B2B4B", color: "white", fontSize: 14, fontWeight: 800,
+          padding: "13px 22px", borderRadius: 16, zIndex: 10000,
+          boxShadow: "0 8px 24px rgba(27,43,75,0.4)",
+          display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap",
+        }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#fbbf24", animation: "fmBlink 1.2s ease-in-out infinite", flexShrink: 0 }} />
+          {orderBanner}
         </div>
       )}
 
@@ -1043,7 +1291,28 @@ export default function DriverHome() {
             </div>
           )}
 
+          {/* 지입 기사 — 배정된 오더(대기/수락) 카드: 다음 액션 바로 위에 노출 */}
+          {isFleetDriver && hasActiveDispatch && (
+            <div style={{ marginBottom: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", letterSpacing: "0.05em" }}>
+                {pendingOrders.length > 0 ? `새 배차 ${pendingOrders.length}건이 발생되었습니다` : "진행중인 배차"}
+              </div>
+              {pendingOrders.map(o => (
+                <PendingOrderCard key={o._id} order={o} loading={orderActionLoading}
+                  onAccept={() => handleAcceptOrder(o._id)}
+                  onReject={() => { setRejectModal({ orderId: o._id }); setRejectReason(""); }}
+                  onCopy={copyText} />
+              ))}
+              {acceptedOrders.map(o => (
+                <ActiveOrderCard key={o._id} order={o} loading={orderActionLoading}
+                  onComplete={() => handleCompleteOrder(o._id)}
+                  onCopy={copyText} />
+              ))}
+            </div>
+          )}
+
           {/* 액션 버튼 */}
+          {!(isFleetDriver && currentStatus === "출근" && hasActiveDispatch) && (
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 10, letterSpacing: "0.05em" }}>
               {driver.isFinalCheckout ? "당일 근무 완료" : (currentStatus === "퇴근" || currentStatus === "대기" || !driver.status ? "오늘 업무 시작" : "다음 액션")}
@@ -1053,7 +1322,7 @@ export default function DriverHome() {
                 <button
                   key={action.status}
                   onClick={() => handleActionButton(action)}
-                  disabled={statusLoading}
+                  disabled={statusLoading || action.disabled}
                   style={{
                     padding: action.primary ? "16px 20px" : "12px 20px",
                     borderRadius: 14,
@@ -1062,19 +1331,23 @@ export default function DriverHome() {
                     color: action.primary ? "white" : "#374151",
                     fontSize: action.primary ? 16 : 14,
                     fontWeight: 700,
-                    cursor: statusLoading ? "not-allowed" : "pointer",
+                    cursor: (statusLoading || action.disabled) ? "not-allowed" : "pointer",
                     opacity: statusLoading ? 0.6 : 1,
                     transition: "all 0.15s",
                     textAlign: "center",
                     letterSpacing: "-0.3px",
                     boxShadow: action.primary ? "0 4px 16px rgba(27,43,75,0.25)" : "none",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
                   }}
                 >
+                  {action.pressed && <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#fbbf24", animation: "fmBlink 1.4s ease-in-out infinite" }} />}
                   {statusLoading && i === 0 ? "처리중..." : action.label}
+                  {action.pressed && <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>· 오더 대기중</span>}
                 </button>
               ))}
             </div>
           </div>
+          )}
 
           {/* 오늘 사진 업로드 현황 */}
           {(() => {
