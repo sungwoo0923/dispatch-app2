@@ -620,6 +620,27 @@ export default function DriverHome() {
     return () => clearInterval(id);
   }, []);
 
+  // ⭐ 버그수정(2차) — #root의 zoom:1을 지워도 아이폰 Safari에서 스크롤하다 보면
+  // 하단 탭바(position:fixed, bottom:0)가 화면 진짜 맨 아래가 아니라 중간에 떠
+  // 보이는 증상이 재발했다. 이건 zoom과는 별개로 iOS Safari 자체의 알려진 동작 —
+  // 스크롤 중 주소창이 접히고 펴지면서 "레이아웃 뷰포트"(기기 전체 높이)와 "시각
+  // 뷰포트"(주소창 뺀 실제 보이는 영역)의 크기가 서로 달라지는데, position:fixed는
+  // 레이아웃 뷰포트 기준으로 고정되어 주소창이 접힌 동안 실제 화면보다 아래로
+  // 밀려나 있다가, 접힌 만큼 다시 위로 끌어올려야 진짜 화면 하단에 맞는다.
+  // window.visualViewport로 그 차이를 직접 측정해서 bottom 값을 보정한다.
+  const [navBottomOffset, setNavBottomOffset] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      setNavBottomOffset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => { vv.removeEventListener("resize", update); vv.removeEventListener("scroll", update); };
+  }, []);
+
   useEffect(() => {
     return onAuthStateChanged(auth, (u) => {
       if (!u) { window.location.href = "/driver-login"; return; }
@@ -2528,7 +2549,7 @@ export default function DriverHome() {
 
       {/* ─── 하단 탭 바 ─── */}
       <div style={{
-        position: "fixed", bottom: 0, left: 0, right: 0,
+        position: "fixed", bottom: navBottomOffset, left: 0, right: 0,
         background: "white", borderTop: "1px solid #e5e7eb",
         display: "flex", zIndex: 200,
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
