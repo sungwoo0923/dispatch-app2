@@ -9,6 +9,8 @@ import {
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap } from "react-leaflet";
 import L from "leaflet";
 import * as XLSX from "xlsx";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 import { geocodeAddress } from "./tmapFareCalc";
 import CustomDatePicker from "./CustomDatePicker";
 
@@ -2599,6 +2601,452 @@ function HistoryTab({ drivers, defaultDriverId }) {
   );
 }
 
+// ─── 정산관리 탭 (지입기사 월별 정산서) ────────────────────────────────────────
+// DispatchApp.jsx의 거래명세서(거래처용 청구서)와 같은 틀을 쓰되, 수신자가
+// 거래처가 아니라 지입기사이고 금액 기준도 청구운임이 아니라 기사운임이다 —
+// "회사가 거래처에 받을 돈"이 아니라 "회사가 기사에게 줄 돈"을 정리하는 문서.
+
+// 거래명세서의 _parseWaypointList/mergeViaNames와 동일 로직 — DispatchApp.jsx가
+// export하지 않아 그대로 가져올 수 없으므로 이 파일 안에 복제한다.
+function _fmParseWaypointList(v) {
+  if (Array.isArray(v) && v.length > 0) return v;
+  if (typeof v === "string" && v.trim().startsWith("[")) {
+    try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {}
+  }
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    const ks = Object.keys(v);
+    if (ks.length > 0 && ks.every(k => /^\d+$/.test(k)))
+      return ks.sort((a, b) => Number(a) - Number(b)).map(k => v[k]);
+    if (v.업체명) return [v];
+  }
+  return [];
+}
+function fmMergeViaNames(waypointLists) {
+  const names = [];
+  for (const list of waypointLists) {
+    for (const s of _fmParseWaypointList(list)) {
+      const name = String(s?.업체명 || "").trim();
+      if (name && !names.includes(name)) names.push(name);
+    }
+  }
+  return names.join(", ");
+}
+
+// 거래명세서의 numberToKorean과 동일 — 합계금액을 "일금 ○○원정"으로 표기.
+function fmNumberToKorean(num) {
+  if (!num || num === 0) return "영";
+  const units = ["", "만", "억", "조"];
+  const nums = ["", "일", "이", "삼", "사", "오", "육", "칠", "팔", "구"];
+  const tens = ["", "십", "백", "천"];
+  let result = "";
+  let n = Math.abs(Math.round(num));
+  let unitIndex = 0;
+  while (n > 0) {
+    const chunk = n % 10000;
+    if (chunk > 0) {
+      let chunkStr = "";
+      let c = chunk;
+      for (let i = 0; i < 4; i++) {
+        const digit = c % 10;
+        if (digit > 0) {
+          const digitStr = (digit === 1 && i > 0) ? "" : nums[digit];
+          chunkStr = digitStr + tens[i] + chunkStr;
+        }
+        c = Math.floor(c / 10);
+      }
+      result = chunkStr + units[unitIndex] + result;
+    }
+    n = Math.floor(n / 10000);
+    unitIndex++;
+  }
+  return num < 0 ? "마이너스 " + result : result;
+}
+
+// 거래명세서의 addCanvasAsMultiPagePdf와 동일 — 내용이 길면 억지로 한 페이지에
+// 욱여넣지 않고 A4 높이만큼 잘라 페이지를 늘린다.
+function fmAddCanvasAsMultiPagePdf(pdf, canvas, { format = "PNG" } = {}) {
+  const pageWidthMm = 210, pageHeightMm = 297;
+  const pageHeightPx = Math.floor((canvas.width * pageHeightMm) / pageWidthMm);
+  let renderedPx = 0;
+  let pageIdx = 0;
+  while (renderedPx < canvas.height) {
+    const sliceHeightPx = Math.min(pageHeightPx, canvas.height - renderedPx);
+    const pageCanvas = document.createElement("canvas");
+    pageCanvas.width = canvas.width;
+    pageCanvas.height = sliceHeightPx;
+    const ctx = pageCanvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+    ctx.drawImage(canvas, 0, renderedPx, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx);
+    const sliceImgData = pageCanvas.toDataURL(format === "JPEG" ? "image/jpeg" : "image/png");
+    const sliceHeightMm = (sliceHeightPx * pageWidthMm) / canvas.width;
+    if (pageIdx > 0) pdf.addPage();
+    pdf.addImage(sliceImgData, format, 0, 0, pageWidthMm, sliceHeightMm);
+    renderedPx += sliceHeightPx;
+    pageIdx++;
+  }
+  return pdf;
+}
+
+// HandoverFareReport.jsx의 CANCELED_STATUSES와 동일 — 취소된 오더는 정산 대상에서 뺀다.
+const FM_CANCELED_STATUSES = ["취소", "배차취소", "오더취소", "취소됨"];
+
+function FleetSettlementTab({ drivers = [], dispatchData = [], role = "", companyName = "" }) {
+  const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
+  const won = (n) => toInt(n).toLocaleString();
+
+  const [selId, setSelId] = useState("");
+  const todayStr0 = kstDateStr();
+  const [rangeStart, setRangeStart] = useState(`${todayStr0.slice(0, 7)}-01`);
+  const [rangeEnd, setRangeEnd] = useState(todayStr0);
+  const [applied, setApplied] = useState(null); // { driverId, start, end }
+  const [rowFilter, setRowFilter] = useState("");
+
+  // 이번달/지난달 퀵셀렉트 — 거래명세서와 동일한 기능.
+  const setThisMonth = () => {
+    const ym = todayStr0.slice(0, 7);
+    const lastDay = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0).getDate();
+    setRangeStart(`${ym}-01`); setRangeEnd(`${ym}-${String(lastDay).padStart(2, "0")}`);
+  };
+  const setLastMonth = () => {
+    const d = new Date(); d.setMonth(d.getMonth() - 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    setRangeStart(`${ym}-01`); setRangeEnd(`${ym}-${String(lastDay).padStart(2, "0")}`);
+  };
+
+  const selectedDriver = useMemo(() => drivers.find(d => d.id === selId) || null, [drivers, selId]);
+
+  // ⭐ RouteManagementTab의 ordersByPlate/ordersByName과 동일한 매칭 규칙 —
+  // 차량번호가 있으면 차량번호 우선, 없으면 이름으로 매칭한다.
+  const rowsRaw = useMemo(() => {
+    if (!applied) return [];
+    const driver = drivers.find(d => d.id === applied.driverId);
+    if (!driver) return [];
+    const plate = (driver.차량번호 || "").trim();
+    const name = (driver.이름 || "").trim();
+    let list = (dispatchData || []).filter(r => {
+      const rPlate = (r.차량번호 || "").trim();
+      const rName = (r.이름 || "").trim();
+      return (plate && rPlate === plate) || (!plate && name && rName === name);
+    });
+    list = list.filter(r => (r.배차상태 || "") !== "배차취소" && !FM_CANCELED_STATUSES.includes(r.배차상태 || ""));
+    // 기사에게 줄 돈이 0원인 오더는 정산서에 넣을 필요가 없다 (거래명세서가
+    // 청구운임 0원 오더를 제외하는 것과 동일한 이유).
+    list = list.filter(r => toInt(r.기사운임) > 0);
+    if (applied.start) list = list.filter(r => (r.상차일 || "") >= applied.start);
+    if (applied.end) list = list.filter(r => (r.상차일 || "") <= applied.end);
+    return list.sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
+  }, [dispatchData, drivers, applied]);
+
+  const filterTerms = useMemo(
+    () => rowFilter.split(/[,，]/).map(s => s.trim().toLowerCase()).filter(Boolean),
+    [rowFilter]
+  );
+  const rows = useMemo(() => {
+    if (filterTerms.length === 0) return rowsRaw;
+    return rowsRaw.filter(r => {
+      const via = fmMergeViaNames([r.경유상차목록, r.경유지_상차, r.경유하차목록, r.경유지_하차]);
+      const hay = [r.거래처명, r.상차지명, r.하차지명, r.화물내용, via].join(" ").toLowerCase();
+      return filterTerms.some(t => hay.includes(t));
+    });
+  }, [rowsRaw, filterTerms]);
+
+  const mapped = useMemo(() => rows.map((r, i) => {
+    const viaLists = [r.경유상차목록, r.경유지_상차, r.경유하차목록, r.경유지_하차];
+    const via = fmMergeViaNames(viaLists);
+    const 공급가액 = toInt(r.기사운임);
+    return {
+      idx: i + 1,
+      날짜: r.상차일 || "",
+      거래처명: r.거래처명 || "",
+      상차지: r.상차지명 || r.상차지 || "",
+      하차지: r.하차지명 || r.하차지 || "",
+      경유지: via || "-",
+      화물내용: r.화물내용 || "",
+      톤수: r.차량톤수 || r.차량종류 || "",
+      기사명: r.이름 || r.기사명 || "",
+      차량번호: r.차량번호 || "",
+      공급가액,
+      세액: Math.round(공급가액 * 0.1),
+    };
+  }), [rows]);
+
+  const 합계공급가 = mapped.reduce((a, b) => a + b.공급가액, 0);
+  const 합계세액 = mapped.reduce((a, b) => a + b.세액, 0);
+
+  // ★ 공급자(우리 회사) 정보 — 거래명세서의 COMPANY_PRINT와 동일한 소스
+  // (transportApplications, 회사관리에서 등록한 사업자정보)를 그대로 읽어온다.
+  // 회사마다 로그인 계정이 다르므로 companyName으로 자기 회사 문서를 찾는다.
+  const [companyInfoDoc, setCompanyInfoDoc] = useState(null);
+  useEffect(() => {
+    const co = (companyName || "").trim();
+    if (!co) return;
+    const unsub = onSnapshot(collection(db, "transportApplications"), (snap) => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      let found = docs.find(d => (d.companyName || "").trim() === co && d.type === "신규" && d.status === "approved");
+      if (!found) found = docs.find(d => (d.companyName || "").trim() === co && d.type === "신규");
+      if (!found) found = docs.find(d => (d.companyName || "").trim() === co && d.status === "approved");
+      setCompanyInfoDoc(found || null);
+    }, () => {});
+    return () => unsub();
+  }, [companyName]);
+
+  const supplier = useMemo(() => {
+    const d = companyInfoDoc || {};
+    const co = (companyName || d.companyName || "").trim();
+    const phone = d.phone || d.연락처 || "";
+    const fax = d.fax || d.팩스 || d.팩스번호 || "";
+    const contactParts = [];
+    if (phone) contactParts.push(`TEL ${phone}`);
+    if (fax) contactParts.push(`FAX ${fax}`);
+    return {
+      name: co,
+      ceo: d.representative || d.대표자 || d.ceo || "",
+      bizNo: d.businessNumber || d.사업자번호 || "",
+      type: d.업태 || "운수업",
+      item: d.종목 || "화물운송주선",
+      addr: d.address || d.주소 || "",
+      contact: contactParts.join(" / "),
+      bank: d.계좌은행 ? `${d.계좌은행} ${d.계좌번호 || ""}`.trim() : "",
+      email: d.email || "",
+      seal: d.직인이미지 || "/seal.png",
+    };
+  }, [companyInfoDoc, companyName]);
+
+  // ★ 공급받는자(지입기사) 정보 — drivers 컬렉션에는 사업자번호/주소 필드가 없어
+  // (등급관리/기사등록에서 받는 값이 이름·차량번호·전화번호·거주지뿐) 있는
+  // 값만 보여주고 없는 항목은 "-"로 둔다. 비어도 화면이 깨지지 않는다.
+  const recipient = useMemo(() => {
+    const d = selectedDriver || {};
+    return {
+      name: d.이름 || "",
+      plate: d.차량번호 || "",
+      phone: d.전화번호 ? formatPhone(d.전화번호) : "",
+      addr: d.거주지 || "",
+    };
+  }, [selectedDriver]);
+
+  const totalAmt = 합계공급가 + 합계세액;
+
+  const runSearch = () => {
+    if (!selId) { window.alert("지입기사를 먼저 선택하세요."); return; }
+    if (!rangeStart || !rangeEnd) { window.alert("조회 기간을 입력하세요."); return; }
+    if (rangeStart > rangeEnd) { window.alert("시작일이 종료일보다 늦을 수 없습니다."); return; }
+    setApplied({ driverId: selId, start: rangeStart, end: rangeEnd });
+  };
+
+  const savePDF = async () => {
+    const area = document.getElementById("settlementArea");
+    if (!area) return;
+    const canvas = await html2canvas(area, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+    const pdf = new jsPDF("p", "mm", "a4");
+    fmAddCanvasAsMultiPagePdf(pdf, canvas, { format: "PNG" });
+    pdf.save(`정산서_${recipient.name || "기사"}_${applied?.start || ""}~${applied?.end || ""}.pdf`);
+  };
+
+  const saveAsImage = async () => {
+    const area = document.getElementById("settlementArea");
+    if (!area) return;
+    const canvas = await html2canvas(area, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+    const a = document.createElement("a");
+    a.download = `정산서_${recipient.name || "기사"}_${applied?.start || ""}~${applied?.end || ""}.png`;
+    a.href = canvas.toDataURL("image/png");
+    a.click();
+  };
+
+  const downloadExcel = () => {
+    if (!applied || !mapped.length) { window.alert("먼저 조회를 실행하세요."); return; }
+    const rowsForSheet = mapped.map(m => ({
+      날짜: m.날짜, 거래처명: m.거래처명, 상차지: m.상차지, 하차지: m.하차지, 경유지: m.경유지,
+      화물내용: m.화물내용, 톤수: m.톤수, 기사명: m.기사명, 차량번호: m.차량번호,
+      공급가액: m.공급가액, 세액: m.세액, 합계: m.공급가액 + m.세액,
+    }));
+    rowsForSheet.push({ 날짜: "", 거래처명: "", 상차지: "", 하차지: "", 경유지: "", 화물내용: "", 톤수: "", 기사명: "", 차량번호: "소 계", 공급가액: 합계공급가, 세액: 합계세액, 합계: totalAmt });
+    const ws = XLSX.utils.json_to_sheet(rowsForSheet);
+    const wb = XLSX.utils.book_new();
+    wb.Props = { Title: "정산서" };
+    XLSX.utils.book_append_sheet(wb, ws, "정산서");
+    XLSX.writeFile(wb, `정산서_${recipient.name || "기사"}_${applied?.start || ""}~${applied?.end || ""}.xlsx`);
+  };
+
+  return (
+    <div>
+      {/* 검색 바 — 거래명세서/노선관리와 동일한 시작일~종료일 + 조회 패턴 */}
+      <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "14px 18px", marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 16, fontWeight: 800, color: NAVY, whiteSpace: "nowrap" }}>지입기사 정산서</span>
+          <select
+            value={selId}
+            onChange={e => setSelId(e.target.value)}
+            style={{ flex: "0 0 auto", width: 190, maxWidth: 220, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: 7, fontSize: 15, color: "#374151", background: "#fafafa", outline: "none" }}
+          >
+            <option value="">기사 선택</option>
+            {drivers.map(d => <option key={d.id} value={d.id}>{d.이름} ({d.차량번호})</option>)}
+          </select>
+          <CustomDatePicker value={rangeStart} onChange={e => setRangeStart(e.target.value)} placeholder="시작일"
+            className="h-[34px] px-3 rounded-lg text-[13px] font-bold border border-gray-300 bg-white cursor-pointer" />
+          <span style={{ color: "#9ca3af", fontSize: 13 }}>~</span>
+          <CustomDatePicker value={rangeEnd} onChange={e => setRangeEnd(e.target.value)} placeholder="종료일"
+            className="h-[34px] px-3 rounded-lg text-[13px] font-bold border border-gray-300 bg-white cursor-pointer" />
+          <div style={{ display: "flex", gap: 4 }}>
+            <button onClick={setThisMonth} style={{ padding: "7px 12px", borderRadius: 7, border: "none", background: "#f3f4f6", color: "#6b7280", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>이번달</button>
+            <button onClick={setLastMonth} style={{ padding: "7px 12px", borderRadius: 7, border: "none", background: "#f3f4f6", color: "#6b7280", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>지난달</button>
+          </div>
+          <button onClick={runSearch}
+            style={{ padding: "8px 20px", borderRadius: 7, border: "none", background: NAVY, color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+            조회
+          </button>
+          <button onClick={() => { setSelId(""); setApplied(null); setRowFilter(""); }}
+            style={{ padding: "8px 16px", borderRadius: 7, border: "1px solid #d1d5db", background: "#fff", color: "#6b7280", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+            초기화
+          </button>
+          {applied && (
+            <div style={{ marginLeft: "auto", display: "flex", gap: 2 }}>
+              <button onClick={downloadExcel} style={{ padding: "7px 14px", borderRadius: "7px 0 0 7px", border: "1px solid #d1d5db", background: "#fff", color: "#374151", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>엑셀</button>
+              <button onClick={savePDF} style={{ padding: "7px 14px", borderRadius: 0, border: "1px solid #d1d5db", borderLeft: "none", background: "#fff", color: "#374151", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>PDF</button>
+              <button onClick={saveAsImage} style={{ padding: "7px 14px", borderRadius: "0 7px 7px 0", border: "1px solid #d1d5db", borderLeft: "none", background: "#fff", color: "#374151", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>이미지저장</button>
+            </div>
+          )}
+        </div>
+        {applied && (
+          <div style={{ display: "flex", gap: 10, marginTop: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <input
+              placeholder="세부검색 (거래처/상하차지/화물내용, 쉼표로 여러 개)"
+              value={rowFilter}
+              onChange={e => setRowFilter(e.target.value)}
+              style={{ padding: "7px 10px", borderRadius: 7, border: "1px solid #e5e7eb", fontSize: 13, width: 280, outline: "none" }}
+            />
+            {rowFilter && <button onClick={() => setRowFilter("")} style={{ padding: "6px 10px", borderRadius: 7, border: "none", background: "#f3f4f6", color: "#6b7280", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>검색초기화</button>}
+          </div>
+        )}
+      </div>
+
+      {!applied ? (
+        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 60, textAlign: "center", color: "#9ca3af", fontSize: 15 }}>
+          지입기사와 기간을 선택한 뒤 조회하세요.
+        </div>
+      ) : (
+        <>
+          {/* 요약 카드 — 발급 전에 한눈에 보이는 총 운행건수/총 지급액 */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
+            <div style={{ background: NAVY, borderRadius: 10, padding: 16 }}>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,.6)" }}>총 운행건수</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: "#fff" }}>{mapped.length}건</div>
+            </div>
+            <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 16 }}>
+              <div style={{ fontSize: 13, color: "#9ca3af" }}>공급가액 합계</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: NAVY }}>{won(합계공급가)}원</div>
+            </div>
+            <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 16 }}>
+              <div style={{ fontSize: 13, color: "#9ca3af" }}>세액 포함 총 지급액</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: "#111827" }}>{won(totalAmt)}원</div>
+            </div>
+          </div>
+
+          {rows.length === 0 ? (
+            <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 60, textAlign: "center", color: "#9ca3af", fontSize: 15 }}>
+              해당 기간에 정산할 운행 내역이 없습니다. (기사운임 0원·배차취소 오더는 제외됩니다)
+            </div>
+          ) : (
+            <div id="settlementArea" style={{ width: "100%", maxWidth: 1100, margin: "0 auto", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 6px rgba(0,0,0,.05)" }}>
+              {/* 헤더 */}
+              <div style={{ background: NAVY, padding: "20px 28px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: "#fff" }}>정산서</div>
+                  <div style={{ fontSize: 13, color: "rgba(255,255,255,.6)", marginTop: 4 }}>정산기간 : {applied.start} ~ {applied.end}</div>
+                </div>
+                <div style={{ textAlign: "right", color: "rgba(255,255,255,.7)", fontSize: 12, lineHeight: 1.8 }}>
+                  <div>{supplier.name} · 대표 {supplier.ceo}</div>
+                  <div>{supplier.contact}</div>
+                  <div>{supplier.bank}</div>
+                </div>
+              </div>
+
+              {/* 공급자/공급받는자 */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: "1px solid #e5e7eb" }}>
+                <div style={{ padding: 20, borderRight: "1px solid #e5e7eb" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 8, letterSpacing: "0.08em" }}>공급받는자 (지입기사)</div>
+                  <table style={{ width: "100%", fontSize: 13 }}><tbody>
+                    {[["성명", recipient.name], ["차량번호", recipient.plate], ["연락처", recipient.phone], ["거주지", recipient.addr]].map(([k, v]) => (
+                      <tr key={k} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                        <td style={{ padding: "6px 12px 6px 0", color: "#6b7280", fontWeight: 600, width: 80 }}>{k}</td>
+                        <td style={{ padding: "6px 0", color: "#111827", fontWeight: 600 }}>{v || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody></table>
+                </div>
+                <div style={{ padding: 20 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 8, letterSpacing: "0.08em" }}>공급자 (운송회사)</div>
+                  <table style={{ width: "100%", fontSize: 13 }}><tbody>
+                    {[["상호", supplier.name], ["대표자", supplier.ceo], ["사업자번호", supplier.bizNo], ["주소", supplier.addr]].map(([k, v]) => (
+                      <tr key={k} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                        <td style={{ padding: "6px 12px 6px 0", color: "#6b7280", fontWeight: 600, width: 80 }}>{k}</td>
+                        <td style={{ padding: "6px 0", color: "#111827", fontWeight: 600 }}>{v || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody></table>
+                </div>
+              </div>
+
+              {/* 합계금액 한글 표기 */}
+              <div style={{ padding: "12px 24px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div><span style={{ fontSize: 13, fontWeight: 700, color: "#6b7280" }}>지급금액</span> <span style={{ fontSize: 12, color: "#9ca3af" }}>(공급가액+부가세)</span></div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>일금 {fmNumberToKorean(totalAmt)} 원정</span>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: "#1d4ed8" }}>(￦ {won(totalAmt)})</span>
+                </div>
+              </div>
+
+              {/* 내역 테이블 */}
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: NAVY }}>
+                      {["No", "날짜", "거래처명", "상차지", "하차지", "경유지", "화물내용", "톤수", "기사명", "차량번호", "공급가액", "세액(10%)"].map(h => (
+                        <th key={h} style={{ padding: "9px 10px", color: "#fff", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mapped.map((m, i) => (
+                      <tr key={m.idx} style={{ background: i % 2 === 0 ? "#fff" : "#f9fafb", borderBottom: "1px solid #f3f4f6" }}>
+                        <td style={{ padding: "7px 10px", textAlign: "center", color: "#9ca3af" }}>{m.idx}</td>
+                        <td style={{ padding: "7px 10px", textAlign: "center", whiteSpace: "nowrap" }}>{m.날짜}</td>
+                        <td style={{ padding: "7px 10px", textAlign: "center" }}>{m.거래처명 || "-"}</td>
+                        <td style={{ padding: "7px 10px", textAlign: "center" }}>{m.상차지}</td>
+                        <td style={{ padding: "7px 10px", textAlign: "center" }}>{m.하차지}</td>
+                        <td style={{ padding: "7px 10px", textAlign: "center" }}>{m.경유지}</td>
+                        <td style={{ padding: "7px 10px", textAlign: "center" }}>{m.화물내용 || "-"}</td>
+                        <td style={{ padding: "7px 10px", textAlign: "center", whiteSpace: "nowrap" }}>{m.톤수 || "-"}</td>
+                        <td style={{ padding: "7px 10px", textAlign: "center" }}>{m.기사명}</td>
+                        <td style={{ padding: "7px 10px", textAlign: "center", whiteSpace: "nowrap" }}>{m.차량번호}</td>
+                        <td style={{ padding: "7px 10px", textAlign: "right", fontWeight: 700 }}>{won(m.공급가액)}</td>
+                        <td style={{ padding: "7px 10px", textAlign: "right", color: "#1d4ed8" }}>{won(m.세액)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: NAVY }}>
+                      <td colSpan={10} style={{ padding: "10px 16px", color: "#fff", fontWeight: 700, textAlign: "center" }}>합 계</td>
+                      <td style={{ padding: "10px 10px", textAlign: "right", color: "#fff", fontWeight: 700 }}>{won(합계공급가)}</td>
+                      <td style={{ padding: "10px 10px", textAlign: "right", color: "#93c5fd", fontWeight: 700 }}>{won(합계세액)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              <div style={{ padding: "16px 24px", background: "#f0f2f6", borderTop: `2px solid ${NAVY}`, fontSize: 15, fontWeight: 700, color: NAVY, textAlign: "center" }}>
+                입금계좌: {supplier.bank || "-"} &nbsp;&nbsp;|&nbsp;&nbsp; 문의: {supplier.email || supplier.contact || "-"}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── CheckInLocModal ─────────────────────────────────────────────────────────
 
 function CheckInLocModal({ title, initialLoc, onSave, onCancel }) {
@@ -3988,6 +4436,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
           {[
             ["tracking", "관제현황"],
             ["route", "노선관리"],
+            ["settlement", "정산관리"],
             ["history", "이력 조회"],
             ["attendance", "출근기록부"],
             ["temperature", "온도 관제"],
@@ -4294,6 +4743,14 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
           staffByEmail={staffByEmail}
           role={role}
         />
+      )}
+
+      {/* ═══ 정산관리 ═══ */}
+      {/* routeDrivers를 쓰는 이유는 RouteManagementTab과 동일 — 기사용 앱 가입/승인
+          여부와 무관하게 기사관리에서 등급만 지입/직영으로 지정되면 정산 대상이어야
+          하기 때문이다. */}
+      {mainTab === "settlement" && (
+        <FleetSettlementTab drivers={routeDrivers} dispatchData={dispatchData} role={role} companyName={myCompanyName} />
       )}
 
       {/* ═══ 이력 조회 ═══ */}
