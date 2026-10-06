@@ -3796,11 +3796,41 @@ const groupedByDate = useMemo(() => {
         : {},
     };
 
+    // ⭐ 사용자 요청 — 모바일(운송사 직원용) 등록/수정 폼에서 지입 기사에게
+    // 차량번호를 새로 배정해도 PC와 동일하게 기사 앱 오더수락/거절 플로우가
+    // 떠야 한다. PC의 doSave/patchDispatch와는 완전히 별도 경로라 여기도
+    // 똑같이 매칭+기사확인상태 세팅을 해준다(신규등록/수정 모드 공통).
+    {
+      const normPlateM3 = (s = "") => String(s).replace(/\s+/g, "").toUpperCase();
+      const prevPlateM3 = normPlateM3(form._editId ? (selectedOrder?.차량번호 || "") : "");
+      const nextPlateM3 = normPlateM3(docData.차량번호 || "");
+      if (nextPlateM3 && nextPlateM3 !== prevPlateM3) {
+        const assignedDriverM3 = (drivers || []).find(d => normPlateM3(d.차량번호) === nextPlateM3);
+        if (assignedDriverM3?.등급 === "지입") {
+          docData.기사확인상태 = "대기";
+          docData.기사거절사유 = null;
+          docData.기사확인일시 = null;
+          docData.기사완료일시 = null;
+          docData.배차상태 = "승인대기";
+          docData.상태 = "승인대기";
+          addDoc(collection(db, "driver_notifications"), {
+            driverId: assignedDriverM3.id,
+            type: "new_order",
+            orderId: form._editId || null,
+            title: "배차오더가 도착했습니다",
+            body: `${docData.거래처명 || ""} ${docData.상차지명 || "-"} → ${docData.하차지명 || "-"}`,
+            createdAt: serverTimestamp(),
+            read: false,
+          }).catch(() => {});
+        }
+      }
+    }
+
     // 🔒 화주사가 등록한 오더는 운송사에서 결제정보/기사배정 외 필드를 수정할 수 없다 (예외 없음)
     if (form._editId) {
       const isShipperOrder = selectedOrder?.source === "shipper" || selectedOrder?.source === "shipper_mobile";
       if (isShipperOrder) {
-        const editableKeys = ["청구운임", "기사운임", "수수료", "산재보험료", "차량번호", "기사명", "전화번호", "이름", "전화", "배차상태", "상태", "배차방식", "updatedAt", "_lastModified"];
+        const editableKeys = ["청구운임", "기사운임", "수수료", "산재보험료", "차량번호", "기사명", "전화번호", "이름", "전화", "배차상태", "상태", "배차방식", "updatedAt", "_lastModified", "기사확인상태", "기사거절사유", "기사확인일시", "기사완료일시"];
         Object.keys(docData).forEach((k) => {
           if (!editableKeys.includes(k) && selectedOrder && selectedOrder[k] !== undefined) {
             docData[k] = selectedOrder[k];
@@ -9565,6 +9595,28 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
           patch.배차확정일시 = serverTimestamp();
           patch.배차확정자 = dispatcherName;
         }
+        // ⭐ 사용자 요청 — 이 모바일 저장 화면도 지입 기사에게 새로 차량번호를
+        // 배정하면 기사 앱 오더수락/거절 플로우가 떠야 한다(PC patchDispatch와
+        // 별도 경로라 직접 반영).
+        if (nd(carNo) !== nd(order.차량번호 || "")) {
+          const assignedDriverM2 = (drivers || []).find(d => nd(d.차량번호) === nd(carNo));
+          if (assignedDriverM2?.등급 === "지입") {
+            patch.기사확인상태 = "대기";
+            patch.기사거절사유 = null;
+            patch.기사확인일시 = null;
+            patch.기사완료일시 = null;
+            patch.배차상태 = "승인대기";
+            addDoc(collection(db, "driver_notifications"), {
+              driverId: assignedDriverM2.id,
+              type: "new_order",
+              orderId: id,
+              title: "배차오더가 도착했습니다",
+              body: `${order.거래처명 || ""} ${order.상차지명 || "-"} → ${order.하차지명 || "-"}`,
+              createdAt: serverTimestamp(),
+              read: false,
+            }).catch(() => {});
+          }
+        }
       }
       await updateDoc(doc(db, col, id), patch);
       syncShipperMirrorMobile(order, patch).catch(() => {});
@@ -11318,6 +11370,34 @@ const handleAssignClick = () => {
   updatedAt: serverTimestamp(),
   _lastModified: Date.now(),
 };
+
+      // ⭐ 사용자 요청 — 모바일(운송사 직원용)에서 지입 기사에게 차량번호를 새로
+      // 배정해도 PC와 동일하게 기사 앱 오더수락/거절 카드+알림이 떠야 한다.
+      // PC의 patchDispatch는 이 화면(모바일 상세→기사배정)을 전혀 거치지 않는
+      // 완전히 별도 경로라, 여기도 똑같이 매칭+기사확인상태 세팅을 해준다.
+      const normPlateM = (s = "") => String(s).replace(/\s+/g, "").toUpperCase();
+      const prevPlateM = normPlateM(order.차량번호);
+      const nextPlateM = normPlateM(carNo);
+      if (nextPlateM && nextPlateM !== prevPlateM) {
+        const assignedDriverM = driversRef.current.find(d => normPlateM(d.차량번호) === nextPlateM);
+        if (assignedDriverM?.등급 === "지입") {
+          driverPatch.기사확인상태 = "대기";
+          driverPatch.기사거절사유 = null;
+          driverPatch.기사확인일시 = null;
+          driverPatch.기사완료일시 = null;
+          driverPatch.배차상태 = "승인대기";
+          addDoc(collection(db, "driver_notifications"), {
+            driverId: assignedDriverM.id,
+            type: "new_order",
+            orderId: docId,
+            title: "배차오더가 도착했습니다",
+            body: `${order.거래처명 || ""} ${order.상차지명 || "-"} → ${order.하차지명 || "-"}`,
+            createdAt: serverTimestamp(),
+            read: false,
+          }).catch(() => {});
+        }
+      }
+
       await updateDoc(doc(db, colName, docId), driverPatch);
       syncShipperMirrorMobile(order, driverPatch).catch(() => {});
 
