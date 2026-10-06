@@ -18,6 +18,14 @@ const NAVY = "#1B2B4B";
 const NAVY_DARK = "#131e35";
 const NAVY_LIGHT = "#243454";
 
+// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
+function formatPhone(phone) {
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  return p;
+}
+
 // KPI 카드용 단색 라인 아이콘(path만) — 모바일 지입차관리와 동일한 스타일.
 // <svg stroke={accent}> 안에 그대로 끼워 쓴다.
 const KPI_ICONS = {
@@ -1028,7 +1036,7 @@ function RegistrationTab({ usersMap, myCompanyName }) {
           {d.companyName}
         </span>
       )}
-      <div style={{ fontSize: 16, color: "#374151", flex: 1, minWidth: 110 }}>{d.phone || "-"}</div>
+      <div style={{ fontSize: 16, color: "#374151", flex: 1, minWidth: 110 }}>{d.phone ? formatPhone(d.phone) : "-"}</div>
       <div style={{ fontSize: 15, color: "#9ca3af", flexShrink: 0 }}>{d.createdAt ? formatDate(d.createdAt) : "-"}</div>
       <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
         {canApprove ? (
@@ -1171,7 +1179,7 @@ const FLEET_CHECK_PROG_META = {
 };
 // ⭐ 사용자 요청 — 카드 어딘가에 묻혀 있던 "배차대기" 표시를 차량번호 옆 전용
 // 컬럼(배차상태)으로 옮기고, 운송중/배차완료까지 상황별로 구분해 보여준다.
-function driverDispatchStatus(orders, selectedDate, todayStr, live) {
+function driverDispatchStatus(orders, todayStr, live) {
   // ⭐ 사용자 요청 — 휴차 처리한 기사는 배차 여부와 무관하게 "휴차"로 보여야 한다.
   if (live?.status === "휴차" || live?.mainStatus === "휴차") {
     return { label: "휴차", bg: "#e5e7eb", color: "#374151" };
@@ -1188,7 +1196,7 @@ function driverDispatchStatus(orders, selectedDate, todayStr, live) {
   if (checkStates.length > 0 && checkStates.every(s => s === "완료" || s === "거절")) {
     return { label: "배차대기", bg: "#fef3c7", color: "#92400e" };
   }
-  const progs = orders.map(r => computeOrderProgress(r, selectedDate, todayStr));
+  const progs = orders.map(r => computeOrderProgress(r, r.상차일, todayStr));
   if (progs.includes("progress")) return { label: "운송중", bg: "#dbeafe", color: "#1e40af" };
   if (progs.every(p => p === "done")) return { label: "배차완료", bg: "#dcfce7", color: "#166534" };
   return { label: "배차예정", bg: "#eef1f6", color: "#374151" };
@@ -1365,8 +1373,9 @@ function ManagerBadge({ driver, staff, canDelegate, onAssign }) {
 }
 
 // ─── 기사에게 오더 요약 전달 (SMS/카카오톡용 텍스트) ───────────────────────────
-function buildDriverSummaryText(driver, orders, selectedDate) {
-  const lines = [`[${selectedDate} 배차 안내]`, `기사: ${driver.이름} (${driver.차량번호})`, ""];
+function buildDriverSummaryText(driver, orders, selectedDate, rangeEndDate) {
+  const rangeLabel = rangeEndDate && rangeEndDate !== selectedDate ? `${selectedDate} ~ ${rangeEndDate}` : selectedDate;
+  const lines = [`[${rangeLabel} 배차 안내]`, `기사: ${driver.이름} (${driver.차량번호})`, ""];
   orders.forEach((r, i) => {
     const from = r.상차지명 || abbrevAddr(r.상차지주소) || "-";
     const to = r.하차지명 || abbrevAddr(r.하차지주소) || "-";
@@ -1378,8 +1387,8 @@ function buildDriverSummaryText(driver, orders, selectedDate) {
   return lines.join("\n").trim();
 }
 
-function handleSendToDriver(driver, orders, selectedDate) {
-  const text = buildDriverSummaryText(driver, orders, selectedDate);
+function handleSendToDriver(driver, orders, selectedDate, rangeEndDate) {
+  const text = buildDriverSummaryText(driver, orders, selectedDate, rangeEndDate);
   try { navigator.clipboard?.writeText(text); } catch {}
   const phone = (driver.전화번호 || "").replace(/[^\d]/g, "");
   if (phone && phone.length >= 9) {
@@ -1479,7 +1488,7 @@ function creatorLabel(r, staffByEmail) {
   return stored || fromStaff || email || "-";
 }
 
-function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, live, onOpenDetail, staff, canDelegate, onAssignManager, index, staffByEmail }) {
+function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleDay = true, todayStr, isOffDay, live, onOpenDetail, staff, canDelegate, onAssignManager, index, staffByEmail }) {
   const first = orders[0];
   const last = orders[orders.length - 1];
   const hasConflict = isOffDay && orders.length > 0;
@@ -1511,14 +1520,14 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
             전용 컬럼(배차상태)으로 빼고 운송중/배차완료까지 상황별로 보여준다. */}
         <InfoField label="배차상태">
           {(() => {
-            const st = driverDispatchStatus(orders, selectedDate, todayStr, live);
+            const st = driverDispatchStatus(orders, todayStr, live);
             return (
               <span style={{ fontSize: 13, fontWeight: 800, padding: "3px 9px", borderRadius: 6, background: st.bg, color: st.color, display: "inline-block" }}>{st.label}</span>
             );
           })()}
         </InfoField>
         <InfoField label="차량번호" value={driver.차량번호} mono />
-        <InfoField label="연락처" value={driver.전화번호 && driver.전화번호 !== "-" ? driver.전화번호 : "-"} mono />
+        <InfoField label="연락처" value={driver.전화번호 && driver.전화번호 !== "-" ? formatPhone(driver.전화번호) : "-"} mono />
         <InfoField label="거주지" value={driver.거주지 || "-"} />
         <InfoField label="근무가능요일">
           {(driver.근무요일 && driver.근무요일.length) ? (
@@ -1544,7 +1553,7 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
         </InfoField>
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexShrink: 0 }}>
-          <button onClick={() => handleSendToDriver(driver, orders, selectedDate)} disabled={!orders.length}
+          <button onClick={() => handleSendToDriver(driver, orders, selectedDate, rangeEndDate)} disabled={!orders.length}
             style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: orders.length ? "#fff" : "#f9fafb", color: orders.length ? "#374151" : "#d1d5db", fontSize: 13, fontWeight: 700, cursor: orders.length ? "pointer" : "not-allowed", whiteSpace: "nowrap" }}>
             기사에게 전달
           </button>
@@ -1563,7 +1572,9 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
 
       {orders.length === 0 ? (
         <div style={{ padding: "16px 16px", textAlign: "center", color: "#9ca3af", fontSize: 14 }}>
-          {selectedDate > todayStr ? "예정된 배차가 없습니다" : selectedDate < todayStr ? "배차 내역이 없습니다" : "오늘 배차 내역이 없습니다"}
+          {!isSingleDay
+            ? "해당 기간 배차 내역이 없습니다"
+            : selectedDate > todayStr ? "예정된 배차가 없습니다" : selectedDate < todayStr ? "배차 내역이 없습니다" : "오늘 배차 내역이 없습니다"}
         </div>
       ) : (
         <>
@@ -1581,7 +1592,7 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
               <tbody>
                 {orders.map((r, i) => {
                   const fleetMeta = r.기사확인상태 ? FLEET_CHECK_PROG_META[r.기사확인상태] : null;
-                  const prog = computeOrderProgress(r, selectedDate, todayStr);
+                  const prog = computeOrderProgress(r, r.상차일, todayStr);
                   const meta = fleetMeta || PROG_META[prog];
                   const isBlinking = fleetMeta ? r.기사확인상태 === "수락" : prog === "progress";
                   return (
@@ -1670,9 +1681,9 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
 
           {/* 요약: 첫 오더 상/하차 예상시간 + (2건 이상이면) 마지막 오더 하차완료 예상 */}
           <div style={{ padding: "9px 16px", background: "#f8f9fb", borderTop: "1px solid #f0f2f5", fontSize: 13, color: "#374151", fontWeight: 600 }}>
-            오늘 총 <b style={{ color: NAVY }}>{orders.length}</b>건 · 운임 합계 <b style={{ color: NAVY }}>{fareSum.toLocaleString()}원</b> · 첫 상차 <b>{first.상차시간 || "즉시"}</b> → 첫 오더 하차예상 <b>{first.하차시간 || "즉시"}</b>
+            {isSingleDay ? "오늘 총" : "조회기간 총"} <b style={{ color: NAVY }}>{orders.length}</b>건 · 운임 합계 <b style={{ color: NAVY }}>{fareSum.toLocaleString()}원</b> · 첫 상차 <b>{first.상차일}{" "}{first.상차시간 || "즉시"}</b> → 첫 오더 하차예상 <b>{first.하차시간 || "즉시"}</b>
             {orders.length > 1 && (
-              <> · 마지막 오더 하차완료 예상 <b>{last.하차시간 || "즉시"}{last.하차일 && last.하차일 !== selectedDate ? `(${last.하차일})` : ""}</b></>
+              <> · 마지막 오더 하차완료 예상 <b>{last.하차시간 || "즉시"}{last.하차일 && last.하차일 !== first.상차일 ? `(${last.하차일})` : ""}</b></>
             )}
           </div>
         </>
@@ -1903,7 +1914,7 @@ function DriverRouteDetailModal({ driver, dispatchData, onClose, role = "" }) {
         <div style={{ position: "sticky", top: 0, background: NAVY, padding: "16px 20px", display: "flex", alignItems: "center", zIndex: 1 }}>
           <div>
             <div style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>{driver.이름} <span style={{ fontWeight: 600, fontSize: 14, color: "rgba(255,255,255,.7)", fontFamily: "monospace" }}>{driver.차량번호}</span></div>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,.6)", marginTop: 2 }}>{driver.등급} · {driver.전화번호 || ""}{driver.거주지 ? ` · 거주지 ${driver.거주지}` : ""}</div>
+            <div style={{ fontSize: 13, color: "rgba(255,255,255,.6)", marginTop: 2 }}>{driver.등급} · {driver.전화번호 ? formatPhone(driver.전화번호) : ""}{driver.거주지 ? ` · 거주지 ${driver.거주지}` : ""}</div>
           </div>
           <button onClick={onClose} style={{ marginLeft: "auto", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: 8, background: "rgba(255,255,255,.15)", cursor: "pointer", color: "#fff", padding: 0 }}>
             <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" strokeLinecap="round" /></svg>
@@ -2036,8 +2047,18 @@ function DriverRouteDetailModal({ driver, dispatchData, onClose, role = "" }) {
 // 기사 1명의 전체 이력/주요노선/엑셀다운로드는 카드의 "상세보기"로 이동했다.
 function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [], canDelegate = false, onAssignManager, myUid = null, staffByEmail = {}, role = "" }) {
   const [q, setQ] = useState("");
-  const [dayMode, setDayMode] = useState("today"); // "yesterday" | "today" | "tomorrow"
-  const [customDate, setCustomDate] = useState(""); // 배차관리(3파트)와 동일한 달력에서 임의 날짜 선택 시
+  const todayStr0 = kstDateStr();
+  // ⭐ 사용자 요청 — 예전엔 날짜 선택이 하루만 가능했는데, 5파트(배차현황)와 동일하게
+  // 시작일~종료일을 고르고 "조회"를 눌러야 실제로 반영되는 방식으로 바꾼다.
+  // dayMode(어제/당일/내일)는 그대로 유지하되, 누르면 시작일=종료일=그 날짜로 즉시
+  // 적용(5파트의 어제/당일/내일 버튼과 동일 동작). 임의 기간은 드래프트
+  // (rangeStart/rangeEnd)만 바꾸고, "조회"를 눌러야 appliedStart/appliedEnd로
+  // 반영되어 화면이 다시 계산된다.
+  const [dayMode, setDayMode] = useState("today"); // "yesterday" | "today" | "tomorrow" | "" (임의 기간)
+  const [rangeStart, setRangeStart] = useState(todayStr0);
+  const [rangeEnd, setRangeEnd] = useState(todayStr0);
+  const [appliedStart, setAppliedStart] = useState(todayStr0);
+  const [appliedEnd, setAppliedEnd] = useState(todayStr0);
   const [detailDriver, setDetailDriver] = useState(null);
   const [onlyIdle, setOnlyIdle] = useState(false); // 배차 없는(오늘 놀고 있는) 차량만 보기
   // ⭐ 사용자 요청 — 배차자마다 담당 지입차가 따로 있어서, 들어오자마자 "내 담당
@@ -2046,13 +2067,10 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
 
   const liveByFleetId = useMemo(() => new Map(liveDrivers.map(d => [d.id, d])), [liveDrivers]);
 
-  const todayStr = kstDateStr();
-  const selectedDate = useMemo(() => {
-    if (customDate) return customDate;
-    const offset = dayMode === "yesterday" ? -86400000 : dayMode === "tomorrow" ? 86400000 : 0;
-    return kstDateStr(new Date(Date.now() + offset));
-  }, [dayMode, customDate]);
-  const weekdayLabel = weekdayKoOf(selectedDate);
+  const todayStr = todayStr0;
+  const isSingleDay = appliedStart === appliedEnd;
+  // 근무가능요일 충돌 경고는 "하루"를 볼 때만 의미가 있다 — 기간 조회 중엔 생략.
+  const weekdayLabel = isSingleDay ? weekdayKoOf(appliedStart) : "";
 
   const scopedDrivers = useMemo(
     () => scope === "mine" ? drivers.filter(d => d.담당자?.uid === myUid) : drivers,
@@ -2069,39 +2087,45 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
     );
   }, [scopedDrivers, q]);
 
-  // 선택 날짜(상차일 기준) 오더를 차량번호 우선, 없으면 이름으로 매칭해 빠르게 찾을 수
+  // 조회 기간(상차일 기준) 오더를 차량번호 우선, 없으면 이름으로 매칭해 빠르게 찾을 수
   // 있도록 인덱스를 만든다.
   const ordersByPlate = useMemo(() => {
     const m = new Map();
     (dispatchData || []).forEach(r => {
-      if ((r.상차일 || "") !== selectedDate) return;
+      const d = r.상차일 || "";
+      if (!d || d < appliedStart || d > appliedEnd) return;
       const p = (r.차량번호 || "").trim();
       if (!p) return;
       if (!m.has(p)) m.set(p, []);
       m.get(p).push(r);
     });
     return m;
-  }, [dispatchData, selectedDate]);
+  }, [dispatchData, appliedStart, appliedEnd]);
 
   const ordersByName = useMemo(() => {
     const m = new Map();
     (dispatchData || []).forEach(r => {
-      if ((r.상차일 || "") !== selectedDate) return;
+      const d = r.상차일 || "";
+      if (!d || d < appliedStart || d > appliedEnd) return;
       const n = (r.이름 || "").trim();
       if (!n) return;
       if (!m.has(n)) m.set(n, []);
       m.get(n).push(r);
     });
     return m;
-  }, [dispatchData, selectedDate]);
+  }, [dispatchData, appliedStart, appliedEnd]);
 
   const driverRows = useMemo(() => {
     const rows = filteredDrivers.map(d => {
       const plate = (d.차량번호 || "").trim();
       const name = (d.이름 || "").trim();
       const raw = (plate && ordersByPlate.get(plate)) || (name && ordersByName.get(name)) || [];
-      const orders = [...raw].sort((a, b) => (parseTimeToMin(a.상차시간) ?? 9999) - (parseTimeToMin(b.상차시간) ?? 9999));
-      const isOffDay = (d.근무요일 && d.근무요일.length) ? !d.근무요일.includes(weekdayLabel) : false;
+      const orders = [...raw].sort((a, b) => {
+        const dd = (a.상차일 || "").localeCompare(b.상차일 || "");
+        if (dd !== 0) return dd;
+        return (parseTimeToMin(a.상차시간) ?? 9999) - (parseTimeToMin(b.상차시간) ?? 9999);
+      });
+      const isOffDay = isSingleDay && (d.근무요일 && d.근무요일.length) ? !d.근무요일.includes(weekdayLabel) : false;
       return { driver: d, orders, isOffDay, live: liveByFleetId.get(d.id) || null };
     });
     return rows.sort((a, b) => {
@@ -2171,9 +2195,13 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
         <div style={{ display: "flex", gap: 4 }}>
           {["yesterday", "today", "tomorrow"].map((mode, i) => {
             const labels = ["어제", "당일", "내일"];
-            const active = !customDate && dayMode === mode;
+            const active = dayMode === mode;
             return (
-              <button key={mode} onClick={() => { setDayMode(mode); setCustomDate(""); }}
+              <button key={mode} onClick={() => {
+                const offset = mode === "yesterday" ? -86400000 : mode === "tomorrow" ? 86400000 : 0;
+                const d = kstDateStr(new Date(Date.now() + offset));
+                setDayMode(mode); setRangeStart(d); setRangeEnd(d); setAppliedStart(d); setAppliedEnd(d);
+              }}
                 style={{
                   height: 34, padding: "0 14px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer",
                   background: active ? NAVY : "#f3f4f6", color: active ? "#fff" : "#374151", transition: "all .12s",
@@ -2183,20 +2211,23 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
             );
           })}
         </div>
-        {/* 배차관리(3파트)와 동일한 CustomDatePicker — 어제/당일/내일 범위를 벗어난 임의 날짜 조회 */}
-        <CustomDatePicker
-          value={customDate}
-          onChange={(e) => setCustomDate(e.target.value)}
-          placeholder="날짜 선택"
-          className={`h-[34px] px-3 rounded-lg text-[13px] font-bold border-0 cursor-pointer ${customDate ? "bg-[#1B2B4B] text-white" : "bg-[#f3f4f6] text-[#374151]"}`}
-        />
-        {customDate && (
-          <button onClick={() => setCustomDate("")}
-            style={{ height: 34, padding: "0 10px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#6b7280", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-            ✕
-          </button>
-        )}
-        <span style={{ fontSize: 13, color: "#9ca3af" }}>{selectedDate} ({weekdayLabel})</span>
+        {/* ⭐ 사용자 요청 — 5파트(배차현황)와 동일한 시작일~종료일 + 조회 버튼. 날짜만
+            바꾸고 아직 조회를 안 누른 상태면(draft !== applied) 버튼이 깜빡여 클릭을
+            유도한다. */}
+        <CustomDatePicker value={rangeStart} onChange={(e) => { setDayMode(""); setRangeStart(e.target.value); }}
+          placeholder="시작일" className="h-[34px] px-3 rounded-lg text-[13px] font-bold border border-gray-300 bg-white cursor-pointer" />
+        <span style={{ color: "#9ca3af", fontSize: 13 }}>~</span>
+        <CustomDatePicker value={rangeEnd} onChange={(e) => { setDayMode(""); setRangeEnd(e.target.value); }}
+          placeholder="종료일" className="h-[34px] px-3 rounded-lg text-[13px] font-bold border border-gray-300 bg-white cursor-pointer" />
+        <button
+          onClick={() => { if (!rangeStart || !rangeEnd) return; if (rangeStart > rangeEnd) { window.alert("시작일이 종료일보다 늦을 수 없습니다."); return; } setAppliedStart(rangeStart); setAppliedEnd(rangeEnd); }}
+          className={rangeStart && rangeEnd && (rangeStart !== appliedStart || rangeEnd !== appliedEnd) ? "animate-pulse" : ""}
+          style={{ height: 34, padding: "0 16px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 800, cursor: "pointer", background: NAVY, color: "#fff" }}>
+          조회
+        </button>
+        <span style={{ fontSize: 13, color: "#9ca3af" }}>
+          {isSingleDay ? `${appliedStart} (${weekdayKoOf(appliedStart)})` : `${appliedStart} ~ ${appliedEnd}`}
+        </span>
         <button onClick={() => setOnlyIdle(v => !v)}
           style={{
             height: 34, padding: "0 14px", borderRadius: 8, border: "1px solid " + (onlyIdle ? NAVY : "#d1d5db"),
@@ -2247,7 +2278,9 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
               index={i + 1}
               driver={driver}
               orders={orders}
-              selectedDate={selectedDate}
+              selectedDate={appliedStart}
+              rangeEndDate={appliedEnd}
+              isSingleDay={isSingleDay}
               todayStr={todayStr}
               isOffDay={isOffDay}
               live={live}
