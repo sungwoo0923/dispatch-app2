@@ -902,7 +902,12 @@ export default function DriverHome() {
       await updateDoc(doc(db, "orders", orderId), {
         기사확인상태: "수락",
         기사확인일시: serverTimestamp(),
+        배차상태: "배차완료",
       });
+      // ⭐ 버그수정 — 이전 오더 완료 시 남겨둔 lastCompletedOrderId를 안 지웠더니,
+      // 새 오더를 수락한 직후에도 "하차완료" 업로드 타일이 이전 오더 기준으로
+      // 계속 활성화돼 보였다(상차완료만 활성화돼야 하는데 둘 다 눌림).
+      setLastCompletedOrderId(null);
       showToast("오더를 수락했습니다");
     } catch (e) {
       showToast("처리 중 오류가 발생했습니다");
@@ -916,10 +921,22 @@ export default function DriverHome() {
     if (!rejectReason.trim()) { showToast("거절 사유를 입력해주세요"); return; }
     setOrderActionLoading(true);
     try {
+      // ⭐ 사용자 요청 — 거절하면 이 오더는 다시 배차 전 상태(배차중)로 돌아가야 하고,
+      // 4/5파트 배차현황에서도 차량번호/이름/전화번호가 사라져야 한다(이 기사에게
+      // 배정됐던 흔적을 지워 담당자가 바로 다른 차량을 다시 배정할 수 있게).
       await updateDoc(doc(db, "orders", rejectModal.orderId), {
         기사확인상태: "거절",
         기사거절사유: rejectReason.trim(),
         기사확인일시: serverTimestamp(),
+        차량번호: "",
+        이름: "",
+        전화번호: "",
+        배차상태: "배차중",
+        상태: "배차중",
+        업체전달상태: "미전달",
+        배차확정일시: null,
+        배차확정자: null,
+        배차방식: "",
       });
       showToast("오더를 거절했습니다");
       setRejectModal(null);

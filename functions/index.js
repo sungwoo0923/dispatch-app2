@@ -475,7 +475,10 @@ exports.notifyDispatcherOrderRejected =
       const token = userSnap.exists ? userSnap.data().fcmToken : null;
       if (!token) return;
 
-      const driverLabel = `${after["이름"] || "기사"}(${after["차량번호"] || "-"})`;
+      // ⭐ 거절 처리와 동시에 차량번호/이름이 비워지므로(배차중으로 되돌림), after가
+      // 아니라 거절 직전 상태인 before에서 기사 정보를 가져와야 "기사(-)" 로 비어
+      // 보이지 않는다.
+      const driverLabel = `${before["이름"] || after["이름"] || "기사"}(${before["차량번호"] || after["차량번호"] || "-"})`;
       await sendPushAndCleanup([token], {
         notification: {
           title: "오더가 거절되었습니다",

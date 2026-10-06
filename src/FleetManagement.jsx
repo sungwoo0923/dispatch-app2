@@ -1161,6 +1161,14 @@ const PROG_META = {
   progress: { label: "운송중", dot: "#1B2B4B" },
   done: { label: "완료", dot: "#16a34a" },
 };
+// ⭐ 지입 기사 오더 — 개별 오더 행의 "상태" 칸도 시간 추정이 아니라 실제
+// 기사확인상태로 보여준다(완료 처리해도 "운송중"으로 계속 보이던 버그 수정).
+const FLEET_CHECK_PROG_META = {
+  대기: { label: "확인대기", dot: "#f59e0b" },
+  수락: { label: "운송중", dot: "#1B2B4B" },
+  완료: { label: "운송완료", dot: "#16a34a" },
+  거절: { label: "거절", dot: "#ef4444" },
+};
 // ⭐ 사용자 요청 — 카드 어딘가에 묻혀 있던 "배차대기" 표시를 차량번호 옆 전용
 // 컬럼(배차상태)으로 옮기고, 운송중/배차완료까지 상황별로 구분해 보여준다.
 function driverDispatchStatus(orders, selectedDate, todayStr, live) {
@@ -1174,6 +1182,12 @@ function driverDispatchStatus(orders, selectedDate, todayStr, live) {
   const checkStates = orders.map(r => r.기사확인상태).filter(Boolean);
   if (checkStates.includes("수락")) return { label: "운송중", bg: "#dbeafe", color: "#1e40af" };
   if (checkStates.includes("대기")) return { label: "오더확인중", bg: "#fef3c7", color: "#92400e" };
+  // ⭐ 버그수정 — "완료"/"거절" 상태를 전혀 체크하지 않아서, 배정된 오더가 전부
+  // 운송완료(또는 거절)됐는데도 시간 기반 폴백으로 떨어져 "운송중"이 계속 떠 있었다.
+  // 지입 기사는 오더를 다 마치면 다음 배차를 받을 수 있는 대기 상태로 봐야 한다.
+  if (checkStates.length > 0 && checkStates.every(s => s === "완료" || s === "거절")) {
+    return { label: "배차대기", bg: "#fef3c7", color: "#92400e" };
+  }
   const progs = orders.map(r => computeOrderProgress(r, selectedDate, todayStr));
   if (progs.includes("progress")) return { label: "운송중", bg: "#dbeafe", color: "#1e40af" };
   if (progs.every(p => p === "done")) return { label: "배차완료", bg: "#dcfce7", color: "#166534" };
@@ -1376,7 +1390,7 @@ function handleSendToDriver(driver, orders, selectedDate) {
 
 // ─── 기사별 노선 카드 ─────────────────────────────────────────────────────────
 
-const ROUTE_COLS = ["순번", "상태", "거래처", "상차지", "하차지", "상차", "하차", "이동정보", "운임", "배차담당자", "오더확인", "첨부"];
+const ROUTE_COLS = ["순번", "상태", "거래처", "상차지", "하차지", "상차", "하차", "이동정보", "기사운임", "배차담당자", "오더확인", "첨부"];
 // ⭐ 지입 기사 오더수락/거절 플로우 — 기사확인상태 값을 관리자 화면 배지로 표시
 const ORDER_CHECK_META = {
   대기: { label: "확인대기", bg: "#fef3c7", color: "#92400e" },
@@ -1467,7 +1481,9 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
   const last = orders[orders.length - 1];
   const hasConflict = isOffDay && orders.length > 0;
   // ⭐ 사용자 요청 — 오늘 운임 합계를 상세보기까지 안 들어가도 카드에서 바로 보이게.
-  const fareSum = orders.reduce((s, r) => s + (Number(String(r.청구운임 || 0).replace(/[^\d]/g, "")) || 0), 0);
+  // 지입차는 우리가 기사에게 지급하는 "기사운임" 기준이어야 한다(청구운임은 화주에게
+  // 받는 금액이라 기사 입장에선 의미가 다름).
+  const fareSum = orders.reduce((s, r) => s + (Number(String(r.기사운임 || 0).replace(/[^\d]/g, "")) || 0), 0);
 
   return (
     <div style={{ background: "#fff", border: `1px solid ${hasConflict ? "#f59e0b" : "#e5e7eb"}`, borderRadius: 12, overflow: "hidden" }}>
@@ -1544,8 +1560,10 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
               </thead>
               <tbody>
                 {orders.map((r, i) => {
+                  const fleetMeta = r.기사확인상태 ? FLEET_CHECK_PROG_META[r.기사확인상태] : null;
                   const prog = computeOrderProgress(r, selectedDate, todayStr);
-                  const meta = PROG_META[prog];
+                  const meta = fleetMeta || PROG_META[prog];
+                  const isBlinking = fleetMeta ? r.기사확인상태 === "수락" : prog === "progress";
                   return (
                     <tr key={r._id || i} style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : "none" }}>
                       <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, color: "#9ca3af" }}>{i + 1}</td>
@@ -1553,7 +1571,7 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                           <span style={{
                             width: 7, height: 7, borderRadius: "50%", background: meta.dot, flexShrink: 0,
-                            animation: prog === "progress" ? "fmBlink 2.4s ease-in-out infinite" : "none",
+                            animation: isBlinking ? "fmBlink 2.4s ease-in-out infinite" : "none",
                           }} />
                           {/* ⭐ 사용자 요청 — 상태/상차지/하차지/이동정보 글씨가 거래처·상차·하차·
                               운임 칸보다 작아 보였다. 전부 14px/700으로 통일. */}
@@ -1579,7 +1597,7 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
                         <RouteDistanceBadge fromAddr={r.상차지주소} toAddr={r.하차지주소} />
                       </td>
                       <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, fontWeight: 700, color: NAVY, whiteSpace: "nowrap" }}>
-                        {r.청구운임 ? `${Number(String(r.청구운임).replace(/[^\d]/g, "")).toLocaleString()}원` : "-"}
+                        {r.기사운임 ? `${Number(String(r.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원` : "-"}
                       </td>
                       <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#374151", fontWeight: 700, whiteSpace: "nowrap" }}>{creatorLabel(r, staffByEmail)}</td>
                       <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>

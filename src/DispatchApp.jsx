@@ -3722,6 +3722,11 @@ const patchDispatch = async (_id, patch, knownPrev) => {
           patch.기사거절사유 = null;
           patch.기사확인일시 = null;
           patch.기사완료일시 = null;
+          // ⭐ 사용자 요청 — 지입 기사가 아직 오더를 수락하지 않은 동안에는 4/5파트
+          // 배차현황을 포함해 전체적으로 "배차완료"가 아니라 "승인대기"로 보여야
+          // 한다. 기사가 수락/거절하면 각각 배차완료/배차중으로 자동 전환된다
+          // (DriverHome의 handleAcceptOrder/handleRejectOrderSubmit).
+          patch.배차상태 = "승인대기";
           addDoc(collection(db, "driver_notifications"), {
             driverId: driver.id,
             type: "new_order",
@@ -12194,6 +12199,7 @@ if (rec.차량번호) {
   const assignedDriver = drivers.find(d => normalizePlate(d.차량번호) === normalizePlate(rec.차량번호));
   if (assignedDriver?.등급 === "지입") {
     rec.기사확인상태 = "대기";
+    rec.배차상태 = "승인대기";
     addDoc(collection(db, "driver_notifications"), {
       driverId: assignedDriver.id,
       type: "new_order",
@@ -32765,7 +32771,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
                   <div key={r._id} className="border border-gray-200 rounded-xl p-4 bg-gray-50">
                     <div className="flex justify-between items-center pb-2 border-b border-gray-200 mb-2">
                       <div className="font-bold text-[#1B2B4B]">{idx+1}. {r.거래처명||"-"}</div>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.배차상태==="배차완료"?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-500"}`}>{r.배차상태}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.배차상태==="배차완료"?"bg-[#1B2B4B] text-white":r.배차상태==="승인대기"?"bg-amber-100 text-amber-700":"bg-gray-100 text-gray-500"}`}>{r.배차상태}</span>
                     </div>
                     <div className="space-y-1 text-gray-700 text-[13px]">
                       <div><b>상차</b> {r.상차일} · {r.상차지명}</div>
@@ -42182,7 +42188,7 @@ setCopyPlaceOptions(list);
                   <div key={id} className="border border-gray-200 rounded-xl p-4 bg-gray-50">
                     <div className="flex justify-between items-center pb-2 border-b border-gray-200 mb-2">
                       <div className="font-bold text-[#1B2B4B]">{idx + 1}. {r.거래처명 || "-"}</div>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.배차상태 === "배차완료" ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-500"}`}>{r.배차상태}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.배차상태 === "배차완료" ? "bg-[#1B2B4B] text-white" : r.배차상태 === "승인대기" ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-500"}`}>{r.배차상태}</span>
                     </div>
                     <div className="space-y-1 text-gray-700 text-[13px]">
                       <div><b>상차</b> {r.상차일} · {r.상차지명}</div>
@@ -49136,7 +49142,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                   <div key={id} className="border border-gray-200 rounded-xl p-4 bg-gray-50">
                     <div className="flex justify-between items-center pb-2 border-b border-gray-200 mb-2">
                       <div className="font-bold text-[#1B2B4B] text-[13px]">{idx + 1}. {r.거래처명 || "-"}</div>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.배차상태 === "배차완료" ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-500"}`}>{r.배차상태 || "배차중"}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.배차상태 === "배차완료" ? "bg-[#1B2B4B] text-white" : r.배차상태 === "승인대기" ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-500"}`}>{r.배차상태 || "배차중"}</span>
                     </div>
                     <div className="space-y-1 text-gray-700 text-[12px]">
                       <div><span className="font-semibold text-gray-500 w-10 inline-block">상차</span>{r.상차일 || "-"} · {r.상차지명 || "-"}</div>
