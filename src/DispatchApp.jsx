@@ -2972,27 +2972,6 @@ function useRealtimeCollections(user, userCompany, role) {
     return unsub;
   }, [user?.uid]);
 
-  // 내 정보 패널을 열 때마다 입력칸을 현재 저장된 값으로 맞춘다.
-  useEffect(() => {
-    if (showMyInfo) { setMyInfoNameDraft(myRealName); setMyInfoPhoneDraft(myPhone); }
-  }, [showMyInfo, myRealName, myPhone]);
-
-  const saveMyInfo = async () => {
-    if (!user?.uid || myInfoSaving) return;
-    setMyInfoSaving(true);
-    try {
-      await setDoc(doc(db, "users", user.uid), {
-        name: myInfoNameDraft.trim(),
-        전화번호: formatPhone(myInfoPhoneDraft.trim()),
-      }, { merge: true });
-      showAlert("내 정보가 저장되었습니다.");
-    } catch (e) {
-      showAlert("저장 실패: " + (e?.message || e));
-    } finally {
-      setMyInfoSaving(false);
-    }
-  };
-
   // ===================== 하차지(places) Firestore 실시간 구독 =====================
 const [places, setPlaces] = useState([]);
 
@@ -6365,6 +6344,27 @@ useEffect(() => {
   const [myInfoNameDraft, setMyInfoNameDraft] = useState("");
   const [myInfoPhoneDraft, setMyInfoPhoneDraft] = useState("");
   const [myInfoSaving, setMyInfoSaving] = useState(false);
+  // 내 정보 패널을 열 때마다 입력칸을 현재 저장된 값으로 맞춘다.
+  useEffect(() => {
+    if (showMyInfo) { setMyInfoNameDraft(myRealName); setMyInfoPhoneDraft(myPhone); }
+  }, [showMyInfo, myRealName, myPhone]);
+
+  const saveMyInfo = async () => {
+    if (!user?.uid || myInfoSaving) return;
+    setMyInfoSaving(true);
+    try {
+      await setDoc(doc(db, "users", user.uid), {
+        name: myInfoNameDraft.trim(),
+        전화번호: formatPhone(myInfoPhoneDraft.trim()),
+      }, { merge: true });
+      showAlert("내 정보가 저장되었습니다.");
+    } catch (e) {
+      showAlert("저장 실패: " + (e?.message || e));
+    } finally {
+      setMyInfoSaving(false);
+    }
+  };
+
   // ⭐ 명함 이미지 (per-user, Firestore 로드)
   const [cardImage, setCardImage] = useState(null);
   const [cardImageUploading, setCardImageUploading] = useState(false);
