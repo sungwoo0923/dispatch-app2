@@ -6344,10 +6344,6 @@ useEffect(() => {
   const [myInfoNameDraft, setMyInfoNameDraft] = useState("");
   const [myInfoPhoneDraft, setMyInfoPhoneDraft] = useState("");
   const [myInfoSaving, setMyInfoSaving] = useState(false);
-  // 내 정보 패널을 열 때마다 입력칸을 현재 저장된 값으로 맞춘다.
-  useEffect(() => {
-    if (showMyInfo) { setMyInfoNameDraft(myRealName); setMyInfoPhoneDraft(myPhone); }
-  }, [showMyInfo, myRealName, myPhone]);
 
   const saveMyInfo = async () => {
     if (!user?.uid || myInfoSaving) return;
@@ -6990,7 +6986,7 @@ return (
               {user?.email}
             </span>
             <button
-              onClick={() => setShowMyInfo(true)}
+              onClick={() => { setMyInfoNameDraft(myRealName); setMyInfoPhoneDraft(myPhone); setShowMyInfo(true); }}
               className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm flex items-center justify-center transition"
               title="내 정보"
             >
