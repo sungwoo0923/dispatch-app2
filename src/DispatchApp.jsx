@@ -2957,14 +2957,41 @@ function useRealtimeCollections(user, userCompany, role) {
   // upsertDriver의 등록자 스탬프가 이메일 앞부분(계정 아이디, 예: "tjddnqkf")으로만 찍히던
   // 버그가 있었다. users/{uid} 문서에 저장된 실제 이름(name)을 우선 가져와 사용한다.
   const [myRealName, setMyRealName] = useState("");
+  // ⭐ 사용자 요청 — 배차담당자 연락처(전화 버튼)를 쓰려면 직원 본인이 설정한
+  // 전화번호가 필요한데 지금까지 그런 입력 화면 자체가 없었다. "내 정보"
+  // 패널에서 이름/연락처를 직접 수정할 수 있게 하고, 저장 즉시 반영되도록
+  // getDoc 한 번이 아니라 onSnapshot으로 구독한다.
+  const [myPhone, setMyPhone] = useState("");
   useEffect(() => {
-    if (!user?.uid) { setMyRealName(""); return; }
-    let cancelled = false;
-    getDoc(doc(db, "users", user.uid)).then(snap => {
-      if (!cancelled) setMyRealName(snap.exists() ? (snap.data().name || "") : "");
-    }).catch(() => {});
-    return () => { cancelled = true; };
+    if (!user?.uid) { setMyRealName(""); setMyPhone(""); return; }
+    const unsub = onSnapshot(doc(db, "users", user.uid), (snap) => {
+      const d = snap.exists() ? snap.data() : {};
+      setMyRealName(d.name || "");
+      setMyPhone(d.전화번호 || d.phone || "");
+    }, () => {});
+    return unsub;
   }, [user?.uid]);
+
+  // 내 정보 패널을 열 때마다 입력칸을 현재 저장된 값으로 맞춘다.
+  useEffect(() => {
+    if (showMyInfo) { setMyInfoNameDraft(myRealName); setMyInfoPhoneDraft(myPhone); }
+  }, [showMyInfo, myRealName, myPhone]);
+
+  const saveMyInfo = async () => {
+    if (!user?.uid || myInfoSaving) return;
+    setMyInfoSaving(true);
+    try {
+      await setDoc(doc(db, "users", user.uid), {
+        name: myInfoNameDraft.trim(),
+        전화번호: formatPhone(myInfoPhoneDraft.trim()),
+      }, { merge: true });
+      showAlert("내 정보가 저장되었습니다.");
+    } catch (e) {
+      showAlert("저장 실패: " + (e?.message || e));
+    } finally {
+      setMyInfoSaving(false);
+    }
+  };
 
   // ===================== 하차지(places) Firestore 실시간 구독 =====================
 const [places, setPlaces] = useState([]);
@@ -6334,6 +6361,10 @@ useEffect(() => {
   const [관리센터Tab, set관리센터Tab] = useState("경영인텔리전스");
   // ⭐ 내 정보 패널 ON/OFF
   const [showMyInfo, setShowMyInfo] = useState(false);
+  // ⭐ 내 정보 — 이름/연락처 수정용 임시 입력값(패널 열 때마다 현재 값으로 초기화)
+  const [myInfoNameDraft, setMyInfoNameDraft] = useState("");
+  const [myInfoPhoneDraft, setMyInfoPhoneDraft] = useState("");
+  const [myInfoSaving, setMyInfoSaving] = useState(false);
   // ⭐ 명함 이미지 (per-user, Firestore 로드)
   const [cardImage, setCardImage] = useState(null);
   const [cardImageUploading, setCardImageUploading] = useState(false);
@@ -7639,6 +7670,27 @@ return (
                 </div>
               ) : null;
             })()}
+
+            {/* ⭐ 사용자 요청 — 배차담당자 이름이 이메일로 보이던 문제의 근본 원인은
+                이 이름을 직접 입력할 화면이 없었다는 것. 여기서 이름/연락처를 입력해두면
+                오더 등록 시 담당자명이 정확히 찍히고, 지입 기사 앱의 "배차담당자 전화"
+                버튼도 이 연락처로 동작한다. */}
+            <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 space-y-2.5">
+              <p className="text-[11px] font-semibold text-gray-500">내 이름 / 연락처</p>
+              <input autoComplete="off" value={myInfoNameDraft} onChange={e => setMyInfoNameDraft(e.target.value)}
+                placeholder="이름"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] bg-white" />
+              <input autoComplete="off" value={myInfoPhoneDraft} onChange={e => setMyInfoPhoneDraft(formatPhone(e.target.value))}
+                placeholder="연락처 (010-0000-0000)"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] bg-white" />
+              <button
+                onClick={saveMyInfo}
+                disabled={myInfoSaving}
+                className="w-full py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition disabled:opacity-60"
+              >
+                {myInfoSaving ? "저장중..." : "저장"}
+              </button>
+            </div>
 
             {/* 비밀번호 변경 */}
             <button

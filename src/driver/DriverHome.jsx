@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { db, auth } from "../firebase";
 import {
-  doc, onSnapshot, updateDoc, addDoc, deleteDoc,
+  doc, getDoc, onSnapshot, updateDoc, addDoc, deleteDoc,
   collection, query, where, orderBy, limit, getDocs, serverTimestamp,
 } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -135,6 +135,31 @@ function orderCreatorLabel(o) {
   return o?.등록자명 || o?.createdByName || o?.등록자 || o?.createdByEmail || "-";
 }
 
+// 배차담당자(오더 등록자) 연락처 — users/{createdByUid}.전화번호를 조회해 전화 버튼을 띄운다.
+// 담당자가 "내 정보"에서 연락처를 아직 입력하지 않았으면 버튼 없이 이름만 보인다.
+function DispatcherLine({ order: o }) {
+  const [phone, setPhone] = useState("");
+  useEffect(() => {
+    const uid = o?.createdByUid;
+    if (!uid) { setPhone(""); return; }
+    let cancelled = false;
+    getDoc(doc(db, "users", uid)).then(snap => {
+      if (cancelled) return;
+      const d = snap.exists() ? snap.data() : {};
+      setPhone(d.전화번호 || d.phone || "");
+    }).catch(() => { if (!cancelled) setPhone(""); });
+    return () => { cancelled = true; };
+  }, [o?.createdByUid]);
+  return (
+    <div style={{ fontSize: 12, color: "#6b7280", marginTop: 10, paddingTop: 10, borderTop: "1px solid #f3f4f6", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <span>배차담당자 <b style={{ color: "#111827" }}>{orderCreatorLabel(o)}</b></span>
+      {phone && (
+        <a href={`tel:${phone.replace(/[^0-9]/g, "")}`} style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: "#16a34a", borderRadius: 6, padding: "3px 10px", textDecoration: "none", flexShrink: 0 }}>전화</a>
+      )}
+    </div>
+  );
+}
+
 function LocBlock({ title, name, addr, when, manager, managerPhone, onCopy }) {
   return (
     <div style={{ padding: "8px 0", borderBottom: "1px solid #f3f4f6" }}>
@@ -190,9 +215,7 @@ function PendingOrderCard({ order: o, loading, onAccept, onReject, onCopy }) {
         <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: "#f59e0b", padding: "3px 9px", borderRadius: 20, flexShrink: 0 }}>오더 확인 필요</span>
       </div>
       <OrderDetailBody o={o} onCopy={onCopy} />
-      <div style={{ fontSize: 12, color: "#6b7280", marginTop: 10, paddingTop: 10, borderTop: "1px solid #f3f4f6" }}>
-        배차담당자 <b style={{ color: "#111827" }}>{orderCreatorLabel(o)}</b>
-      </div>
+      <DispatcherLine order={o} />
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
         <button onClick={onReject} disabled={loading} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "1.5px solid #ef4444", background: "#fff", color: "#ef4444", fontWeight: 800, fontSize: 14, cursor: loading ? "not-allowed" : "pointer" }}>오더 거절</button>
         <button onClick={onAccept} disabled={loading} style={{ flex: 1.3, padding: "12px", borderRadius: 12, border: "none", background: "#1B2B4B", color: "#fff", fontWeight: 800, fontSize: 14, cursor: loading ? "not-allowed" : "pointer" }}>오더 수락</button>
@@ -211,6 +234,7 @@ function ActiveOrderCard({ order: o, loading, onComplete, onCopy }) {
         </span>
       </div>
       <OrderDetailBody o={o} onCopy={onCopy} />
+      <DispatcherLine order={o} />
       <button onClick={onComplete} disabled={loading} style={{ width: "100%", marginTop: 12, padding: "14px", borderRadius: 12, border: "none", background: "#16a34a", color: "#fff", fontWeight: 800, fontSize: 15, cursor: loading ? "not-allowed" : "pointer" }}>
         운송완료
       </button>
