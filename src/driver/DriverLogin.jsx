@@ -71,9 +71,9 @@ export default function DriverLogin() {
           throw signInErr;
         }
 
+        const phone = d.전화번호 || d.phone || "";
         const common = {
-          uid, name: name.trim(), carNo: carNo.trim(),
-          phone: d.전화번호 || d.phone || "",
+          uid, name: name.trim(), carNo: carNo.trim(), phone,
           vehicleType: d.vehicleType || "",
           차량종류: d.차량종류 || "", 차량톤수: d.차량톤수 || "",
           거주지: d.거주지 || "", 요청사항: d.요청사항 || "",
@@ -86,11 +86,18 @@ export default function DriverLogin() {
           termsAgreed: true, privacyAgreed: true, gpsAgreed: true,
           createdAt: serverTimestamp(),
         });
+        // ⭐ 버그수정 — PC 기사관리 화면은 drivers/{id} 문서를 이름/차량번호/전화번호(한글
+        // 필드)로 읽는데, 여기서 영문 필드(name/carNo/phone)만 썼더니 로그인 직후 PC
+        // 기사관리 목록에서 해당 기사 줄이 전부 "-"로 보였다(모바일 DriverHome은 반대로
+        // 영문 필드를 읽으므로 영문도 그대로 유지) — 양쪽 다 쓴다.
         await setDoc(doc(db, "drivers", uid), {
           ...common,
+          이름: name.trim(), 차량번호: carNo.trim(), 전화번호: phone,
           mainStatus: "대기", subStatus: "대기", status: "대기", state: "대기", goStatus: "대기",
           active: false, totalDistance: 0,
           등급: d.등급 || "일반", 담당자: d.담당자 || null, 근무요일: d.근무요일 || [], 메모: d.메모 || "",
+          등록자: d.등록자 || "",
+          createdAt: d.createdAt || serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
         await deleteDoc(doc(db, "drivers", normPlate)).catch(() => {});

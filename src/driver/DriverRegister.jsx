@@ -198,11 +198,18 @@ export default function DriverRegister() {
         await setDoc(doc(db, "userProfiles", uid), { hireDate }, { merge: true }).catch(() => {});
       }
 
+      // ⭐ 버그수정 — PC 기사관리 화면은 drivers/{id} 문서를 이름/차량번호/전화번호(한글
+      // 필드)로 읽는데, 여기선 영문 필드(name/carNo/phone)만 써서 가입 직후 PC 기사관리
+      // 목록에서 해당 기사 줄이 전부 "-"로 보였다(모바일 DriverHome은 반대로 영문 필드를
+      // 읽으므로 영문도 그대로 유지) — 양쪽 다 쓴다.
       await setDoc(doc(db, "drivers", uid), {
         uid,
         name: name.trim(),
         carNo: carNo.trim(),
         phone: phone.trim(),
+        이름: name.trim(),
+        차량번호: carNo.trim(),
+        전화번호: phone.trim(),
         vehicleType,
         차량종류: category,
         차량톤수: tonnage,
@@ -217,6 +224,7 @@ export default function DriverRegister() {
         active: false,
         totalDistance: 0,
         approved: false,
+        createdAt: preRegistered?.createdAt || serverTimestamp(),
         updatedAt: serverTimestamp(),
         // 관리자가 PC에서 미리 지정해둔 값은 가입 입력값보다 우선해서 이어받는다.
         ...(preRegistered ? {
