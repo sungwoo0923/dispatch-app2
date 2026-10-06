@@ -725,7 +725,14 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
                                 상차 {r.상차시간 || "즉시"} · 하차예상 {r.하차시간 || "즉시"}{r.하차일 && r.하차일 !== r.상차일 ? ` (${r.하차일})` : ""}
                               </div>
                               {r.거래처명 && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>거래처: {r.거래처명}</div>}
-                              {r.청구운임 && <div style={{ fontSize: 12, fontWeight: 700, color: NAVY, marginTop: 2 }}>운임 {Number(String(r.청구운임).replace(/[^\d]/g, "")).toLocaleString()}원</div>}
+                              {/* ⭐ 사용자 요청 — 화물내용/톤수/차량종류도 보여야 하고, 운임은 청구운임이
+                                  아니라 기사에게 지급하는 기사운임이어야 한다. */}
+                              {(r.차량종류 || r.차량톤수 || r.화물내용) && (
+                                <div style={{ fontSize: 11, color: "#6b7eac", marginTop: 2 }}>
+                                  {[r.차량종류, r.차량톤수].filter(Boolean).join(" · ")}{r.화물내용 ? ` · ${r.화물내용}` : ""}
+                                </div>
+                              )}
+                              {r.기사운임 && <div style={{ fontSize: 12, fontWeight: 700, color: NAVY, marginTop: 2 }}>기사운임 {Number(String(r.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원</div>}
                             </div>
                           ));
                         })()}

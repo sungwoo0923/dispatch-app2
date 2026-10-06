@@ -1269,10 +1269,11 @@ function RouteDistanceBadge({ fromAddr, toAddr }) {
 // ─── 정보 라벨 필드 (작은 회색 라벨 + 짙은 값) ─────────────────────────────────
 function InfoField({ label, value, children, mono }) {
   return (
-    <div style={{ minWidth: 0 }}>
-      {/* ⭐ 사용자 피드백 — 라벨 글씨가 너무 작고(11px) 영문 대문자 스타일(letter-spacing)이
-          한글엔 안 어울려 눌린 느낌이 났다. 자간 없애고 조금 키움. */}
-      <div style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", marginBottom: 4 }}>{label}</div>
+    // ⭐ 사용자 요청 — 선이 없어 칸 사이 간격이 애매해 보였다. 왼쪽에 구분선 +
+    // 여백을 줘서 각 항목이 딱 떨어져 보이게 하고, 라벨 글씨도 표 헤더(상태/
+    // 거래처 등)와 비슷한 체감 크기로 키운다.
+    <div style={{ minWidth: 0, paddingLeft: 14, borderLeft: "1px solid #e5e7eb" }}>
+      <div style={{ fontSize: 13, fontWeight: 800, color: "#6b7280", marginBottom: 4 }}>{label}</div>
       {/* ⭐ 사용자 피드백 — whiteSpace:nowrap + overflow:hidden 조합 때문에 칸이
           좁으면 값 끝이 그냥 잘려서 안 보였다(말줄임표도 없이). 줄바꿈을 허용해
           내용이 전부 보이게 바꾼다. */}
@@ -1390,13 +1391,15 @@ function handleSendToDriver(driver, orders, selectedDate) {
 
 // ─── 기사별 노선 카드 ─────────────────────────────────────────────────────────
 
-const ROUTE_COLS = ["순번", "상태", "거래처", "상차지", "하차지", "상차", "하차", "이동정보", "기사운임", "배차담당자", "오더확인", "첨부"];
-// ⭐ 지입 기사 오더수락/거절 플로우 — 기사확인상태 값을 관리자 화면 배지로 표시
+const ROUTE_COLS = ["순번", "상태", "거래처", "상차지", "하차지", "상차", "하차", "화물정보", "이동정보", "기사운임", "배차담당자", "오더확인", "첨부"];
+// ⭐ 지입 기사 오더수락/거절 플로우 — 기사확인상태 값을 관리자 화면 배지로 표시.
+// ⭐ 사용자 요청 — 뱃지 색이 알록달록했다. 프로그램 색감(네이비+그레이, 거절만
+// 포인트로 빨강 테두리)에 맞춰 차분하게 다시 설계.
 const ORDER_CHECK_META = {
-  대기: { label: "확인대기", bg: "#fef3c7", color: "#92400e" },
-  수락: { label: "승인", bg: "#dcfce7", color: "#166534" },
-  거절: { label: "거절", bg: "#fee2e2", color: "#b91c1c" },
-  완료: { label: "운송완료", bg: "#e0e7ff", color: "#3730a3" },
+  대기: { label: "확인대기", bg: "#eef1f6", color: NAVY, border: "1px solid #d7deea" },
+  수락: { label: "승인", bg: NAVY, color: "#fff", border: "1px solid " + NAVY },
+  거절: { label: "거절", bg: "#fff", color: "#b91c1c", border: "1px solid #fca5a5" },
+  완료: { label: "운송완료", bg: "#eef1f6", color: NAVY, border: "1px solid #c7d2e3" },
 };
 
 // ⭐ 사용자 요청 — 지입 기사가 "오늘 사진 전송현황"에서 올린 상차/하차완료 사진을
@@ -1488,7 +1491,7 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
   return (
     <div style={{ background: "#fff", border: `1px solid ${hasConflict ? "#f59e0b" : "#e5e7eb"}`, borderRadius: 12, overflow: "hidden" }}>
       {/* 헤더: 기사 기본정보를 라벨 붙은 그리드로 — 값 글자는 짙은 색으로 가독성 확보 */}
-      <div style={{ padding: "14px 16px", borderBottom: "1px solid #f0f2f5", display: "flex", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+      <div style={{ padding: "14px 16px", borderBottom: "1px solid #f0f2f5", display: "flex", alignItems: "flex-start", gap: 10, flexWrap: "wrap", rowGap: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 160 }}>
           {index != null && (
             <span style={{ fontSize: 13, fontWeight: 800, color: "#9ca3af", minWidth: 20, textAlign: "right", flexShrink: 0 }}>{index}</span>
@@ -1517,7 +1520,24 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
         <InfoField label="차량번호" value={driver.차량번호} mono />
         <InfoField label="연락처" value={driver.전화번호 && driver.전화번호 !== "-" ? driver.전화번호 : "-"} mono />
         <InfoField label="거주지" value={driver.거주지 || "-"} />
-        <InfoField label="근무가능요일" value={(driver.근무요일 && driver.근무요일.length) ? driver.근무요일.join(", ") : "전일 가능"} />
+        <InfoField label="근무가능요일">
+          {(driver.근무요일 && driver.근무요일.length) ? (
+            // ⭐ 사용자 요청 — 오늘 요일을 빨간 동그라미로 바로 눈에 띄게 표시
+            <span style={{ display: "inline-flex", gap: 4 }}>
+              {driver.근무요일.map(w => {
+                const isToday = w === weekdayKoOf(todayStr);
+                return (
+                  <span key={w} style={{
+                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    width: 20, height: 20, borderRadius: "50%", fontSize: 13, fontWeight: 800,
+                    color: isToday ? "#fff" : "#111827",
+                    background: isToday ? "#ef4444" : "transparent",
+                  }}>{w}</span>
+                );
+              })}
+            </span>
+          ) : "전일 가능"}
+        </InfoField>
         <InfoField label="실시간 위치"><LiveLocationBadge live={live} /></InfoField>
         <InfoField label="담당자">
           <ManagerBadge driver={driver} staff={staff} canDelegate={canDelegate} onAssign={onAssignManager} />
@@ -1577,6 +1597,12 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
                               운임 칸보다 작아 보였다. 전부 14px/700으로 통일. */}
                           <span style={{ fontSize: 14, fontWeight: 700, color: "#374151" }}>{meta.label}</span>
                         </span>
+                        {/* ⭐ 사용자 요청 — 운송완료를 몇 시에 눌렀는지 관리자 화면에서도 보여야 한다 */}
+                        {r.기사확인상태 === "완료" && r.기사완료일시?.toDate && (
+                          <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>
+                            {(() => { const t = r.기사완료일시.toDate(); return `${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")} 완료`; })()}
+                          </div>
+                        )}
                       </td>
                       <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, fontWeight: 700, color: "#374151", whiteSpace: "nowrap" }}>{r.거래처명 || "-"}</td>
                       {/* ⭐ 상차지/하차지 — 예전엔 이름 아래 줄바꿈으로 "날짜 · 주소"가 작고 흐리게
@@ -1593,6 +1619,11 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
                       {/* ⭐ 상차/하차 — 상차지/하차지 칸에 있던 날짜를 여기로 옮겨 시간과 함께 표시 */}
                       <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>{r.상차일 || "-"} {r.상차시간 || "즉시"}</td>
                       <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>{r.하차일 || "-"} {r.하차시간 || "즉시"}</td>
+                      {/* ⭐ 사용자 요청 — 지입차관리 노선표에 화물내용/톤수/차량종류가 안 보여서 추가 */}
+                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#374151", fontWeight: 700, whiteSpace: "nowrap" }}>
+                        {[r.차량종류, r.차량톤수].filter(Boolean).join(" · ") || "-"}
+                        {r.화물내용 && <div style={{ fontSize: 12, color: "#6b7280", fontWeight: 600, marginTop: 2 }}>{r.화물내용}</div>}
+                      </td>
                       <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
                         <RouteDistanceBadge fromAddr={r.상차지주소} toAddr={r.하차지주소} />
                       </td>
@@ -1602,11 +1633,26 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
                       <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#374151", fontWeight: 700, whiteSpace: "nowrap" }}>{creatorLabel(r, staffByEmail)}</td>
                       <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
                         {r.기사확인상태 ? (
-                          <span
-                            title={r.기사확인상태 === "거절" ? (r.기사거절사유 || "사유 없음") : undefined}
-                            style={{ fontSize: 13, fontWeight: 800, padding: "3px 9px", borderRadius: 6, background: ORDER_CHECK_META[r.기사확인상태]?.bg || "#eef1f6", color: ORDER_CHECK_META[r.기사확인상태]?.color || "#374151", cursor: r.기사확인상태 === "거절" ? "help" : "default" }}
-                          >
-                            {ORDER_CHECK_META[r.기사확인상태]?.label || r.기사확인상태}
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                            <span
+                              title={r.기사확인상태 === "거절" ? (r.기사거절사유 || "사유 없음") : undefined}
+                              style={{ fontSize: 13, fontWeight: 800, padding: "3px 9px", borderRadius: 6, background: ORDER_CHECK_META[r.기사확인상태]?.bg, color: ORDER_CHECK_META[r.기사확인상태]?.color, border: ORDER_CHECK_META[r.기사확인상태]?.border, cursor: r.기사확인상태 === "거절" ? "help" : "default" }}
+                            >
+                              {ORDER_CHECK_META[r.기사확인상태]?.label || r.기사확인상태}
+                            </span>
+                            {/* ⭐ 사용자 요청 — 거절 내역을 확인했으면 지울 수 있는 버튼 */}
+                            {r.기사확인상태 === "거절" && (
+                              <button
+                                onClick={() => {
+                                  if (!window.confirm("거절 내역을 삭제할까요?")) return;
+                                  updateDoc(doc(db, "orders", r._id), {
+                                    기사확인상태: null, 기사거절사유: null, 기사확인일시: null,
+                                  }).catch(() => {});
+                                }}
+                                title="거절 내역 삭제"
+                                style={{ width: 18, height: 18, borderRadius: "50%", border: "1px solid #d1d5db", background: "#fff", color: "#9ca3af", fontSize: 11, lineHeight: "16px", cursor: "pointer", flexShrink: 0 }}
+                              >✕</button>
+                            )}
                           </span>
                         ) : (
                           <span style={{ fontSize: 13, color: "#d1d5db" }}>-</span>
