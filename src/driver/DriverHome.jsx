@@ -2,8 +2,8 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { db, auth } from "../firebase";
 import {
-  doc, getDoc, onSnapshot, updateDoc, addDoc, deleteDoc,
-  collection, query, where, orderBy, limit, getDocs, serverTimestamp,
+  doc, getDoc, setDoc, onSnapshot, updateDoc, addDoc, deleteDoc,
+  collection, query, where, orderBy, limit, getDocs, serverTimestamp, increment,
 } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 
@@ -196,6 +196,14 @@ function OrderDetailBody({ o, onCopy }) {
         <div style={{ display: "flex", gap: 8, fontSize: 12, color: "#374151", padding: "8px 0", borderBottom: "1px solid #f3f4f6" }}>
           <span style={{ fontWeight: 700, flexShrink: 0 }}>화물</span>
           <span>{[o.차량톤수, o.화물내용].filter(Boolean).join(" · ")}</span>
+        </div>
+      )}
+      {/* ⭐ 사용자 요청 — 기사운임/결제방법도 오더장에 보여야 한다 */}
+      {(o.기사운임 || o.지급방식) && (
+        <div style={{ display: "flex", gap: 8, fontSize: 12, color: "#374151", padding: "8px 0", borderBottom: "1px solid #f3f4f6" }}>
+          <span style={{ fontWeight: 700, flexShrink: 0 }}>운임</span>
+          <span style={{ fontWeight: 800, color: "#1B2B4B" }}>{o.기사운임 ? `${Number(String(o.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원` : "-"}</span>
+          {o.지급방식 && <span style={{ color: "#6b7280" }}>· {o.지급방식}</span>}
         </div>
       )}
       {o.전달사항 && (
@@ -576,6 +584,10 @@ export default function DriverHome() {
   const [rejectModal, setRejectModal] = useState(null); // { orderId }
   const [rejectReason, setRejectReason] = useState("");
   const [orderActionLoading, setOrderActionLoading] = useState(false);
+  // 운송완료를 누른 직후에도 그 오더의 하차완료 사진을 올릴 수 있어야 하므로
+  // (완료 처리되면 acceptedOrders에서는 빠지므로) 별도로 기억해둔다.
+  const [lastCompletedOrderId, setLastCompletedOrderId] = useState(null);
+  const [fleetPhotoUploading, setFleetPhotoUploading] = useState(false);
   const seenPendingOrderIdsRef = useRef(new Set());
   const driverRef = useRef(null);
   const posRef = useRef(null);
@@ -885,6 +897,7 @@ export default function DriverHome() {
         기사확인상태: "완료",
         기사완료일시: serverTimestamp(),
       });
+      setLastCompletedOrderId(orderId);
       showToast("운송완료 처리되었습니다. 다음 배차를 받을 수 있습니다");
     } catch (e) {
       showToast("처리 중 오류가 발생했습니다");
@@ -899,6 +912,57 @@ export default function DriverHome() {
       .then(() => showToast(`${label || "내용"}을 복사했습니다`))
       .catch(() => showToast("복사에 실패했습니다"));
   }, []);
+
+  // ⭐ 사용자 요청 — 지입 기사가 사진 전송현황에서 올리는 상차/하차완료 사진이
+  // PC 관리자 화면의 "첨부"(배차현황 4/5파트와 동일한 아이콘/뷰어)에도 그대로
+  // 보여야 한다. driver_photo_logs(기사 개인 이력)에 남기던 것과 별개로, 오더
+  // 문서의 attachments 서브컬렉션에도 같은 파일을 올려 PC 쪽 첨부 뷰어가
+  // (attachCount/attachViewed 필드 기반) 그대로 집어내게 한다.
+  const handleFleetPhotoFile = useCallback(async (file, actionType, orderId) => {
+    if (!file || !uid || !orderId || fleetPhotoUploading) return;
+    setFleetPhotoUploading(true);
+    try {
+      const base64 = await new Promise((res, rej) => {
+        const img = new Image();
+        const objUrl = URL.createObjectURL(file);
+        img.onload = () => {
+          URL.revokeObjectURL(objUrl);
+          const MAX = 1200;
+          let { width, height } = img;
+          if (width > MAX || height > MAX) {
+            if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+            else { width = Math.round(width * MAX / height); height = MAX; }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width; canvas.height = height;
+          canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+          res(canvas.toDataURL("image/jpeg", 0.75));
+        };
+        img.onerror = rej;
+        img.src = objUrl;
+      });
+      const _now = new Date();
+      const logDate = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,"0")}-${String(_now.getDate()).padStart(2,"0")}`;
+      await addDoc(collection(db, "driver_photo_logs"), {
+        uid, driverName: driver?.name || "", carNo: driver?.carNo || "",
+        actionType, imageBase64: base64, timestamp: serverTimestamp(), logDate,
+        companyName: driver?.companyName || "", orderId,
+      });
+      const attId = doc(collection(db, "orders", orderId, "attachments")).id;
+      await setDoc(doc(db, "orders", orderId, "attachments", attId), {
+        url: base64, base64,
+        name: `${actionType}_${driver?.carNo || ""}_${logDate}.jpg`,
+        size: file.size, sizeKB: Math.round(file.size / 1024),
+        uploadedBy: "driver", createdAt: serverTimestamp(),
+      });
+      await updateDoc(doc(db, "orders", orderId), { attachCount: increment(1) });
+      showToast(`${actionType} 사진이 전송되었습니다`);
+    } catch (e) {
+      showToast("사진 전송 중 오류가 발생했습니다");
+    } finally {
+      setFleetPhotoUploading(false);
+    }
+  }, [uid, driver, fleetPhotoUploading]);
 
   // 사진 업로드 처리
   const handlePhotoUpload = useCallback(async (file) => {
@@ -1392,6 +1456,43 @@ export default function DriverHome() {
 
           {/* 오늘 사진 업로드 현황 */}
           {(() => {
+            // ⭐ 사용자 요청 — 지입 기사는 이 타일이 그냥 현황 표시가 아니라 실제
+            // 업로드 버튼이어야 한다. 상차완료는 오더 수락(운송중) 중이면 언제든,
+            // 하차완료는 운송완료를 누른 뒤에만 눌러서 바로 올릴 수 있다.
+            if (isFleetDriver) {
+              const loadTargetId = acceptedOrders[0]?._id || null;
+              const dropTargetId = lastCompletedOrderId;
+              const loadedToday = loadTargetId ? todayPhotos.some(p => p.actionType === "상차완료" && p.orderId === loadTargetId) : false;
+              const droppedToday = dropTargetId ? todayPhotos.some(p => p.actionType === "하차완료" && p.orderId === dropTargetId) : false;
+              const canUploadLoad = !!loadTargetId && !loadedToday;
+              const canUploadDrop = !!dropTargetId && !droppedToday;
+              const tile = (label, sent, enabled, targetId, actionType) => (
+                <label key={label} style={{
+                  flex: 1, padding: "10px 12px", borderRadius: 10, textAlign: "center", display: "block",
+                  background: sent ? "rgba(255,255,255,0.15)" : enabled ? "rgba(16,185,129,0.18)" : "rgba(255,255,255,0.06)",
+                  border: `1px solid ${sent ? "rgba(255,255,255,0.3)" : enabled ? "rgba(16,185,129,0.5)" : "rgba(255,255,255,0.1)"}`,
+                  cursor: enabled && !fleetPhotoUploading ? "pointer" : "default",
+                }}>
+                  <div style={{ fontSize: 11, color: sent ? "rgba(255,255,255,0.7)" : enabled ? "#6ee7b7" : "rgba(255,255,255,0.4)", fontWeight: 700, marginBottom: 3 }}>{label}</div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: sent ? "#ffffff" : enabled ? "#6ee7b7" : "rgba(255,255,255,0.35)" }}>
+                    {sent ? "✓ 전송완료" : enabled ? (fleetPhotoUploading ? "전송중..." : "탭하여 업로드") : "미전송"}
+                  </div>
+                  {enabled && !sent && (
+                    <input type="file" accept="image/*" capture="environment" style={{ display: "none" }}
+                      onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) handleFleetPhotoFile(f, actionType, targetId); }} />
+                  )}
+                </label>
+              );
+              return (
+                <div style={{ background: "#1B2B4B", borderRadius: 16, padding: "14px 16px", marginBottom: 14, boxShadow: "0 4px 16px rgba(27,43,75,0.18)" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.5)", marginBottom: 10, letterSpacing: "0.06em" }}>오늘 사진 전송 현황</div>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    {tile("상차완료", loadedToday, canUploadLoad, loadTargetId, "상차완료")}
+                    {tile("하차완료", droppedToday, canUploadDrop, dropTargetId, "하차완료")}
+                  </div>
+                </div>
+              );
+            }
             const hasLoad = todayPhotos.some(p => p.actionType === "상차완료");
             const hasDrop = todayPhotos.some(p => p.actionType === "하차완료");
             return (

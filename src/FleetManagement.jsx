@@ -1376,7 +1376,7 @@ function handleSendToDriver(driver, orders, selectedDate) {
 
 // ─── 기사별 노선 카드 ─────────────────────────────────────────────────────────
 
-const ROUTE_COLS = ["순번", "상태", "거래처", "상차지", "하차지", "상차", "하차", "이동정보", "운임", "배차담당자", "오더확인"];
+const ROUTE_COLS = ["순번", "상태", "거래처", "상차지", "하차지", "상차", "하차", "이동정보", "운임", "배차담당자", "오더확인", "첨부"];
 // ⭐ 지입 기사 오더수락/거절 플로우 — 기사확인상태 값을 관리자 화면 배지로 표시
 const ORDER_CHECK_META = {
   대기: { label: "확인대기", bg: "#fef3c7", color: "#92400e" },
@@ -1384,6 +1384,67 @@ const ORDER_CHECK_META = {
   거절: { label: "거절", bg: "#fee2e2", color: "#b91c1c" },
   완료: { label: "운송완료", bg: "#e0e7ff", color: "#3730a3" },
 };
+
+// ⭐ 사용자 요청 — 지입 기사가 "오늘 사진 전송현황"에서 올린 상차/하차완료 사진을
+// 4/5파트 배차현황의 첨부 아이콘과 동일하게 지입차관리 노선표에서도 볼 수 있어야
+// 한다. 같은 orders/{id}/attachments 서브컬렉션을 보는 간단한 뷰어(회전/재업로드
+// 등 고급 기능은 빼고 보기 전용으로).
+function FleetAttachButton({ orderId, attachCount = 0 }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
+        title="첨부파일 보기"
+        style={{ border: "none", background: "transparent", cursor: "pointer" }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+          stroke={attachCount > 0 ? "#059669" : "#cbd5e1"}
+          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+        </svg>
+        {attachCount > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] bg-emerald-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+            {attachCount}
+          </span>
+        )}
+      </button>
+      {open && <FleetAttachViewer orderId={orderId} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+function FleetAttachViewer({ orderId, onClose }) {
+  const [items, setItems] = useState([]);
+  useEffect(() => {
+    if (!orderId) return;
+    return onSnapshot(collection(db, "orders", orderId, "attachments"), (snap) => {
+      setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, () => {});
+  }, [orderId]);
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
+      <div style={{ background: "#fff", borderRadius: 16, width: "min(640px, 100%)", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,.3)" }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid #f0f2f5" }}>
+          <span style={{ fontSize: 15, fontWeight: 800, color: NAVY }}>첨부파일 ({items.length}장)</span>
+          <button onClick={onClose} style={{ border: "none", background: "transparent", fontSize: 20, color: "#9ca3af", cursor: "pointer" }}>✕</button>
+        </div>
+        <div style={{ padding: 16, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }}>
+          {items.length === 0 ? (
+            <div style={{ gridColumn: "1 / -1", textAlign: "center", color: "#9ca3af", fontSize: 14, padding: "30px 0" }}>첨부된 사진이 없습니다.</div>
+          ) : items.map(it => (
+            <a key={it.id} href={it.url} target="_blank" rel="noreferrer" style={{ display: "block", border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden", textDecoration: "none" }}>
+              <img src={it.url} alt={it.name} style={{ width: "100%", height: 110, objectFit: "cover", display: "block" }} />
+              <div style={{ fontSize: 10, color: "#6b7280", padding: "5px 7px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.name}</div>
+            </a>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // 오더를 등록/배차한 담당자 표시 — 3파트 등록폼과 동일한 우선순위로 폴백한다.
 // ⭐ 사용자 요청 — 이름 필드가 하나도 없으면 마지막엔 이메일을 그대로 보여주고
@@ -1532,6 +1593,9 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
                         ) : (
                           <span style={{ fontSize: 13, color: "#d1d5db" }}>-</span>
                         )}
+                      </td>
+                      <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
+                        <FleetAttachButton orderId={r._id} attachCount={r.attachCount || 0} />
                       </td>
                     </tr>
                   );
