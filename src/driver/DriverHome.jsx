@@ -673,13 +673,29 @@ export default function DriverHome() {
   }, [myOrders]);
 
   // 알림함(driver_notifications) 구독 — 새 오더/배차취소 등 관리자 PC가 기록해둔 알림
+  // ⭐ 버그수정 — where(driverId==) + orderBy(createdAt) 조합은 Firestore 복합
+  // 인덱스가 반드시 있어야 하는데, 그 인덱스가 만들어진 적이 없어서(firestore.indexes.json
+  // 확인 결과 비어있음) 매번 "인덱스 없음" 오류로 리스너가 조용히 실패했다(에러
+  // 콜백이 빈 함수라 화면엔 아무 표시도 없이 알림함이 늘 비어 보였음). orderBy 없이
+  // where만 쓰면(단일 필드) 인덱스가 필요 없으므로, 정렬은 받아온 뒤 자바스크립트에서
+  // 처리한다 — 인덱스 배포 없이 바로 해결된다.
   useEffect(() => {
     if (!uid) return;
-    const q = query(collection(db, "driver_notifications"), where("driverId", "==", uid), orderBy("createdAt", "desc"), limit(30));
+    const q = query(collection(db, "driver_notifications"), where("driverId", "==", uid));
     return onSnapshot(q, (snap) => {
-      setNotifications(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      list.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+      setNotifications(list.slice(0, 30));
     }, () => {});
   }, [uid]);
+
+  // ⭐ 사용자 요청 — 알림함 전체삭제
+  const deleteAllNotifications = useCallback(async () => {
+    if (!notifications.length) return;
+    try {
+      await Promise.all(notifications.map(n => deleteDoc(doc(db, "driver_notifications", n.id))));
+    } catch (_) {}
+  }, [notifications]);
 
   // 알림/푸시 on-off 설정값 구독 — users/{uid}.driverPushEnabled
   useEffect(() => {
@@ -1287,7 +1303,17 @@ export default function DriverHome() {
           <div style={{ background: "white", borderRadius: 18, maxWidth: 420, width: "100%", maxHeight: "75vh", overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,0.25)" }} onClick={e => e.stopPropagation()}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", borderBottom: "1px solid #f3f4f6", position: "sticky", top: 0, background: "white" }}>
               <span style={{ fontSize: 15, fontWeight: 800, color: "#111827" }}>알림</span>
-              <button onClick={() => setShowNotifPanel(false)} style={{ border: "none", background: "transparent", fontSize: 18, color: "#9ca3af", cursor: "pointer" }}>✕</button>
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                {notifications.length > 0 && (
+                  <button
+                    onClick={() => { if (window.confirm("알림을 전체 삭제할까요?")) deleteAllNotifications(); }}
+                    style={{ border: "none", background: "transparent", fontSize: 12, fontWeight: 700, color: "#9ca3af", cursor: "pointer" }}
+                  >
+                    전체삭제
+                  </button>
+                )}
+                <button onClick={() => setShowNotifPanel(false)} style={{ border: "none", background: "transparent", fontSize: 18, color: "#9ca3af", cursor: "pointer" }}>✕</button>
+              </div>
             </div>
             {notifications.length === 0 ? (
               <div style={{ padding: "40px 20px", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>알림이 없습니다.</div>

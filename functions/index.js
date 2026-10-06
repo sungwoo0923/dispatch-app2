@@ -515,34 +515,43 @@ exports.notifyFleetDriverNewOrder =
 
       // ⭐ 안전망(반대 방향) — 차량번호가 비워지는 경로(배차취소/재배정)도 화면마다
       // 제각각이라 기사확인상태 등을 안 지우는 곳이 있을 수 있다. after에 그
-      // 흔적이 아직 남아있으면(= 클라이언트가 못 지운 경우) 서버가 직접 정리하고
-      // 그 기사에게 취소 알림을 보낸다. 클라이언트가 이미 깨끗이 지웠다면(흔적이
-      // 없음) 이미 그쪽에서 알림도 보냈을 것이므로 여기서는 조용히 넘어간다
-      // (중복 알림 방지).
+      // 흔적이 아직 남아있으면(= 클라이언트가 못 지운 경우) 서버가 직접 정리한다.
+      // ⭐ 버그수정 — 예전엔 "흔적이 없으면(stillHasTrace===false) 클라이언트가 이미
+      // 알림도 보냈을 것"이라고 가정하고 통째로 건너뛰었는데, 클라이언트(PC
+      // patchDispatch 등)는 Firestore 필드 정리와 driver_notifications(알림함 기록)
+      // 까지만 직접 하고 실제 OS 푸시(FCM)는 보낼 수 없다(브라우저에는 관리자 SDK가
+      // 없음) — 그래서 PC에서 배차를 취소해도 알림함엔 기록이 남지만 휴대폰 푸시는
+      // 영영 안 가고 있었다. 필드 정리/driver_notifications 기록은 클라이언트가 이미
+      // 했으면 중복 방지로 건너뛰되, 실제 푸시 발송은 이 서버 함수만 할 수 있으므로
+      // 취소가 감지되면 항상(stillHasTrace와 무관하게) 시도한다.
       if (!nextPlateW && prevPlateW && before?.["기사확인상태"] && before["기사확인상태"] !== "거절") {
         const stillHasTrace = after["기사확인상태"] !== null && after["기사확인상태"] !== undefined;
+        const cDriverSnap = await db.collection("drivers").where("차량번호", "==", before["차량번호"]).limit(5).get();
+        const cDriverDoc = cDriverSnap.docs.find((d) => normalizePlateServer(d.data()["차량번호"]) === prevPlateW);
         if (stillHasTrace) {
-          const cDriverSnap = await db.collection("drivers").where("차량번호", "==", before["차량번호"]).limit(5).get();
-          const cDriverDoc = cDriverSnap.docs.find((d) => normalizePlateServer(d.data()["차량번호"]) === prevPlateW);
           await change.after.ref.update({
             기사확인상태: null, 기사거절사유: null, 기사확인일시: null, 기사완료일시: null,
           });
-          if (cDriverDoc) {
-            const body = `담당자가 ${before["거래처명"] || ""} ${before["상차지명"] || "-"} → ${before["하차지명"] || "-"} 오더에서 차량 배정을 취소했습니다.`;
+        }
+        if (cDriverDoc) {
+          const body = `담당자가 ${before["거래처명"] || ""} ${before["상차지명"] || "-"} → ${before["하차지명"] || "-"} 오더에서 차량 배정을 취소했습니다.`;
+          // driver_notifications(알림함 기록)는 클라이언트가 이미 썼을 수 있으니
+          // stillHasTrace(=클라이언트가 못 지운 경우)일 때만 서버가 추가로 쓴다.
+          if (stillHasTrace) {
             await db.collection("driver_notifications").add({
               driverId: cDriverDoc.id, type: "canceled", orderId: context.params.dispatchId,
               title: "배차가 취소되었습니다", body, createdAt: FieldValue.serverTimestamp(), read: false,
             }).catch(() => {});
-            const cUserSnap = await db.collection("users").doc(cDriverDoc.id).get();
-            const cUserData = cUserSnap.exists ? cUserSnap.data() : null;
-            if (cUserData?.driverPushEnabled !== false && cUserData?.fcmToken) {
-              await sendPushAndCleanup([cUserData.fcmToken], {
-                notification: { title: "배차가 취소되었습니다", body },
-                data: { type: "fleet_order_canceled", orderId: context.params.dispatchId },
-                android: { priority: "high" },
-                apns: { payload: { aps: { sound: "default" } } },
-              }, "지입기사 오더취소(서버보정)");
-            }
+          }
+          const cUserSnap = await db.collection("users").doc(cDriverDoc.id).get();
+          const cUserData = cUserSnap.exists ? cUserSnap.data() : null;
+          if (cUserData?.driverPushEnabled !== false && cUserData?.fcmToken) {
+            await sendPushAndCleanup([cUserData.fcmToken], {
+              notification: { title: "배차가 취소되었습니다", body },
+              data: { type: "fleet_order_canceled", orderId: context.params.dispatchId },
+              android: { priority: "high" },
+              apns: { payload: { aps: { sound: "default" } } },
+            }, "지입기사 오더취소(서버보정, 항상 발송)");
           }
         }
         return;
