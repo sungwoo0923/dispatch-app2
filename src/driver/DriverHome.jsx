@@ -589,6 +589,13 @@ export default function DriverHome() {
     return onAuthStateChanged(auth, (u) => {
       if (!u) { window.location.href = "/driver-login"; return; }
       setUid(u.uid);
+      // ⭐ 사용자 요청 — 지입 기사에게 새 오더 배정을 "앱을 꺼놔도" 알리려면 OS 푸시
+      // (FCM)가 필요하다. 운송사 웹앱(MobileApp.jsx)은 이미 saveFcmToken()으로
+      // 토큰을 users/{uid}.fcmToken에 저장해 Cloud Functions가 보내는데, 기사 앱은
+      // 지금까지 이 등록을 한 번도 호출하지 않아 푸시 대상에서 완전히 빠져있었다.
+      import("../firebase").then(({ saveFcmToken }) => {
+        saveFcmToken(u).catch(() => {});
+      }).catch(() => {});
     });
   }, []);
 

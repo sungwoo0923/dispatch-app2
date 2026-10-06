@@ -398,6 +398,91 @@ exports.notifyDispatchDeleted =
       }, "배차취소(완전삭제)");
     });
 
+function normalizePlateServer(v = "") {
+  return String(v).replace(/\s+/g, "").toUpperCase();
+}
+
+/* ==============================
+   📦 지입 기사 — 새 오더 배정 알림(OS 푸시)
+   DispatchApp.jsx/DriverHome.jsx가 오더의 기사확인상태를 "대기"로 걸면
+   (관리자가 지입 기사 차량번호를 새로 입력했을 때) 그 기사 본인에게
+   실제 푸시 알림을 보낸다. 기사 쪽은 drivers/{uid} 문서의 차량번호로
+   매칭하고, 토큰은 users/{uid}.fcmToken(DriverHome이 로그인 시 저장)을 쓴다.
+============================== */
+exports.notifyFleetDriverNewOrder =
+  functions.firestore
+    .document("{col}/{dispatchId}")
+    .onUpdate(async (change, context) => {
+      const { col } = context.params;
+      if (!["dispatch", "orders"].includes(col)) return;
+
+      const before = change.before.data();
+      const after = change.after.data();
+      if (!before || !after) return;
+
+      // 새로 "대기"로 바뀐 경우만(이미 대기였던 걸 다른 필드만 고친 저장엔 재알림하지 않음)
+      if (after["기사확인상태"] !== "대기" || before["기사확인상태"] === "대기") return;
+
+      const plate = normalizePlateServer(after["차량번호"] || "");
+      if (!plate) return;
+
+      const driverSnap = await db.collection("drivers")
+        .where("차량번호", "==", after["차량번호"])
+        .limit(5)
+        .get();
+      const driverDoc = driverSnap.docs.find(
+        (d) => normalizePlateServer(d.data()["차량번호"]) === plate
+      );
+      if (!driverDoc) { console.log("🚫 배정 기사 문서를 찾을 수 없음:", after["차량번호"]); return; }
+
+      const userSnap = await db.collection("users").doc(driverDoc.id).get();
+      const token = userSnap.exists ? userSnap.data().fcmToken : null;
+      if (!token) { console.log("🚫 지입 기사 FCM 토큰 없음(앱 미접속 또는 알림권한 미허용):", driverDoc.id); return; }
+
+      await sendPushAndCleanup([token], {
+        notification: {
+          title: "배차오더가 도착했습니다",
+          body: `${after["거래처명"] || ""} ${after["상차지명"] || "-"} → ${after["하차지명"] || "-"}`,
+        },
+        data: { type: "fleet_new_order", orderId: context.params.dispatchId },
+        android: { priority: "high" },
+        apns: { payload: { aps: { sound: "default" } } },
+      }, "지입기사 신규오더 배정");
+    });
+
+/* ==============================
+   🙅 지입 기사 — 오더 거절 알림(배차담당자 본인에게 OS 푸시)
+============================== */
+exports.notifyDispatcherOrderRejected =
+  functions.firestore
+    .document("{col}/{dispatchId}")
+    .onUpdate(async (change, context) => {
+      const { col } = context.params;
+      if (!["dispatch", "orders"].includes(col)) return;
+
+      const before = change.before.data();
+      const after = change.after.data();
+      if (!before || !after) return;
+      if (after["기사확인상태"] !== "거절" || before["기사확인상태"] === "거절") return;
+
+      const creatorUid = after["createdByUid"];
+      if (!creatorUid) return;
+      const userSnap = await db.collection("users").doc(creatorUid).get();
+      const token = userSnap.exists ? userSnap.data().fcmToken : null;
+      if (!token) return;
+
+      const driverLabel = `${after["이름"] || "기사"}(${after["차량번호"] || "-"})`;
+      await sendPushAndCleanup([token], {
+        notification: {
+          title: "오더가 거절되었습니다",
+          body: `${driverLabel}님이 오더를 거절했습니다${after["기사거절사유"] ? `: ${after["기사거절사유"]}` : ""}`,
+        },
+        data: { type: "fleet_order_rejected", orderId: context.params.dispatchId },
+        android: { priority: "high" },
+        apns: { payload: { aps: { sound: "default" } } },
+      }, "지입기사 오더거절(담당자 알림)");
+    });
+
 /* ==============================
    ⛽ 유가 API Proxy
 ============================== */
