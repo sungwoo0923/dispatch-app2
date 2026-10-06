@@ -1163,7 +1163,11 @@ const PROG_META = {
 };
 // ⭐ 사용자 요청 — 카드 어딘가에 묻혀 있던 "배차대기" 표시를 차량번호 옆 전용
 // 컬럼(배차상태)으로 옮기고, 운송중/배차완료까지 상황별로 구분해 보여준다.
-function driverDispatchStatus(orders, selectedDate, todayStr) {
+function driverDispatchStatus(orders, selectedDate, todayStr, live) {
+  // ⭐ 사용자 요청 — 휴차 처리한 기사는 배차 여부와 무관하게 "휴차"로 보여야 한다.
+  if (live?.status === "휴차" || live?.mainStatus === "휴차") {
+    return { label: "휴차", bg: "#e5e7eb", color: "#374151" };
+  }
   if (!orders.length) return { label: "배차대기", bg: "#fef3c7", color: "#92400e" };
   // ⭐ 지입 기사 오더수락 플로우 — 기사확인상태가 있으면(차량번호를 지입 기사에게
   // 배정한 오더) 시간 추정 대신 실제 수락 여부로 상태를 보여준다.
@@ -1427,7 +1431,7 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
             전용 컬럼(배차상태)으로 빼고 운송중/배차완료까지 상황별로 보여준다. */}
         <InfoField label="배차상태">
           {(() => {
-            const st = driverDispatchStatus(orders, selectedDate, todayStr);
+            const st = driverDispatchStatus(orders, selectedDate, todayStr, live);
             return (
               <span style={{ fontSize: 13, fontWeight: 800, padding: "3px 9px", borderRadius: 6, background: st.bg, color: st.color, display: "inline-block" }}>{st.label}</span>
             );

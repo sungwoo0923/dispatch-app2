@@ -611,7 +611,7 @@ export default function DriverHome() {
     if (driver?.등급 !== "지입") { setMyOrders([]); return; }
     const plate = driver?.차량번호 || driver?.carNo || "";
     if (!plate) { setMyOrders([]); return; }
-    const q = query(collection(db, "dispatch"), where("차량번호", "==", plate));
+    const q = query(collection(db, "orders"), where("차량번호", "==", plate));
     return onSnapshot(q, (snap) => {
       setMyOrders(snap.docs.map(d => ({ _id: d.id, ...d.data() })));
     }, () => {});
@@ -845,7 +845,7 @@ export default function DriverHome() {
     if (orderActionLoading) return;
     setOrderActionLoading(true);
     try {
-      await updateDoc(doc(db, "dispatch", orderId), {
+      await updateDoc(doc(db, "orders", orderId), {
         기사확인상태: "수락",
         기사확인일시: serverTimestamp(),
       });
@@ -862,7 +862,7 @@ export default function DriverHome() {
     if (!rejectReason.trim()) { showToast("거절 사유를 입력해주세요"); return; }
     setOrderActionLoading(true);
     try {
-      await updateDoc(doc(db, "dispatch", rejectModal.orderId), {
+      await updateDoc(doc(db, "orders", rejectModal.orderId), {
         기사확인상태: "거절",
         기사거절사유: rejectReason.trim(),
         기사확인일시: serverTimestamp(),
@@ -881,7 +881,7 @@ export default function DriverHome() {
     if (orderActionLoading) return;
     setOrderActionLoading(true);
     try {
-      await updateDoc(doc(db, "dispatch", orderId), {
+      await updateDoc(doc(db, "orders", orderId), {
         기사확인상태: "완료",
         기사완료일시: serverTimestamp(),
       });
@@ -1057,19 +1057,29 @@ export default function DriverHome() {
   const pendingOrders = isFleetDriver ? myOrders.filter(o => o.기사확인상태 === "대기") : [];
   const acceptedOrders = isFleetDriver ? myOrders.filter(o => o.기사확인상태 === "수락") : [];
   const hasActiveDispatch = pendingOrders.length > 0 || acceptedOrders.length > 0;
-  // ⭐ 사용자 요청 — 지입 기사는 "상차 시작"이 아니라 오더수락/거절로 일한다.
-  // 출근 상태에서 배정된 오더가 없으면 "대기" 버튼 하나만(눌려있는 상태로),
-  // 오더가 대기/수락 중이면 아래 오더 카드가 그 자리를 대신하므로 기본 액션
-  // 목록을 비운다.
+  // ⭐ 사용자 요청 — 지입 기사는 "상차 시작/퇴근" 같은 일반 기사 상태머신을 쓰지
+  // 않는다. 출근 전이면 출근/휴차처리, 출근 후 오더 없으면 대기(오더대기중)만,
+  // 오더가 대기/수락 중이면(출근 여부와 무관하게!) 아래 오더 카드가 액션을
+  // 대신하므로 기본 액션 목록을 비운다. 휴차 상태에서는 "대기로 복귀"를 누르면
+  // 바로 출근 상태로 돌아가야 한다(별도의 "대기" status를 거치면 다시 출근
+  // 버튼이 나타나 버려서 헷갈린다는 피드백).
   let actions;
-  if (isFleetDriver && currentStatus === "출근" && hasActiveDispatch) {
-    actions = [];
-  } else if (isFleetDriver && currentStatus === "출근") {
-    actions = [
-      { label: "대기", status: "__대기중__", primary: true, disabled: true, pressed: true },
-      { label: "퇴근", status: "퇴근", primary: false },
-      { label: "휴차 처리", status: "휴차", primary: false },
-    ];
+  if (isFleetDriver) {
+    if (hasActiveDispatch) {
+      actions = [];
+    } else if (currentStatus === "휴차") {
+      actions = [{ label: "대기로 복귀", status: "출근", primary: true }];
+    } else if (currentStatus === "출근") {
+      actions = [
+        { label: "대기", status: "__대기중__", primary: true, disabled: true, pressed: true },
+        { label: "휴차 처리", status: "휴차", primary: false },
+      ];
+    } else {
+      actions = [
+        { label: "출근", status: "출근", primary: true },
+        { label: "휴차 처리", status: "휴차", primary: false },
+      ];
+    }
   } else {
     actions = getActions(currentStatus, driver.isFinalCheckout);
   }
@@ -1343,7 +1353,7 @@ export default function DriverHome() {
           )}
 
           {/* 액션 버튼 */}
-          {!(isFleetDriver && currentStatus === "출근" && hasActiveDispatch) && (
+          {!(isFleetDriver && hasActiveDispatch) && (
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 10, letterSpacing: "0.05em" }}>
               {driver.isFinalCheckout ? "당일 근무 완료" : (currentStatus === "퇴근" || currentStatus === "대기" || !driver.status ? "오늘 업무 시작" : "다음 액션")}
