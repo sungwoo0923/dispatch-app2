@@ -9,6 +9,7 @@ import {
   MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap,
 } from "react-leaflet";
 import L from "leaflet";
+import { geocodeAddress, haversineKm } from "../tmapFareCalc";
 
 const NAVY = "#1B2B4B";
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
@@ -21,7 +22,7 @@ function formatPhone(phone) {
 const STATUS_COLORS = {
   운행중: "#10b981", 출근: "#3b82f6", 상차중: "#f59e0b",
   하차중: "#8b5cf6", 대기: "#6b7280", 휴식: "#9ca3af",
-  퇴근: "#374151", 복귀중: "#06b6d4",
+  퇴근: "#374151", 복귀중: "#06b6d4", 휴차: "#374151",
 };
 const STATUS_ORDER = ["운행중", "상차중", "하차중", "복귀중", "출근", "대기", "휴식", "퇴근"];
 
@@ -65,6 +66,131 @@ function statusPriority(d) {
   const bonus = d.active ? 0 : 1000;
   const idx = STATUS_ORDER.indexOf(d.상태);
   return bonus + (idx === -1 ? 999 : idx);
+}
+
+// ─── 요일 유틸 (PC 지입차관리와 동일) ──────────────────────────────────────────
+const WEEKDAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
+function weekdayKoOf(dateStr) {
+  const d = new Date(`${dateStr}T12:00:00+09:00`);
+  return WEEKDAYS_KO[d.getDay()] || "";
+}
+function nowKstMinutes() {
+  const d = new Date(Date.now() + 9 * 3600000);
+  return d.getUTCHours() * 60 + d.getUTCMinutes();
+}
+function parseTimeToMin(t) {
+  const m = String(t || "").match(/(\d{1,2}):(\d{2})/);
+  return m ? (+m[1]) * 60 + (+m[2]) : null;
+}
+function computeOrderProgress(order, selectedDate, todayStr) {
+  if (selectedDate < todayStr) return "done";
+  if (selectedDate > todayStr) return "scheduled";
+  const nowMin = nowKstMinutes();
+  const pickMin = parseTimeToMin(order.상차시간);
+  const dropMin = parseTimeToMin(order.하차시간);
+  const sameDay = !order.하차일 || order.하차일 === order.상차일;
+  if (sameDay && dropMin != null && nowMin >= dropMin) return "done";
+  if (pickMin != null && nowMin < pickMin) return "scheduled";
+  return "progress";
+}
+// PC 지입차관리(FleetManagement.jsx)의 driverDispatchStatus 포팅 — ⭐ 사용자 피드백:
+// 이미 오더를 수락해 운행중인 기사가 카드엔 GPS/출퇴근 로그만 반영된 "출근"으로만
+// 보여서, 기사확인상태(지입 기사 오더수락 플로우: 대기/수락/완료/거절)를 우선
+// 반영하도록 맞춘다. 기사확인상태 플로우가 없는 일반 오더만 시간 기반 추정으로 폴백.
+function driverDispatchStatus(orders, todayStr, driver) {
+  if (driver?.상태 === "휴차") {
+    return { label: "휴차", dot: "#374151", bg: "#e5e7eb", color: "#374151" };
+  }
+  if (!orders.length) return { label: "배차대기", dot: "#f59e0b", bg: "#fef3c7", color: "#92400e" };
+  const checkStates = orders.map(r => r.기사확인상태).filter(Boolean);
+  if (checkStates.includes("수락")) return { label: "운송중", dot: "#2563eb", bg: "#dbeafe", color: "#1e40af" };
+  if (checkStates.includes("대기")) return { label: "오더확인중", dot: "#f59e0b", bg: "#fef3c7", color: "#92400e" };
+  if (checkStates.length > 0 && checkStates.every(s => s === "완료" || s === "거절")) {
+    return { label: "배차대기", dot: "#f59e0b", bg: "#fef3c7", color: "#92400e" };
+  }
+  const progs = orders.map(r => computeOrderProgress(r, r.상차일, todayStr));
+  if (progs.includes("progress")) return { label: "운송중", dot: "#2563eb", bg: "#dbeafe", color: "#1e40af" };
+  if (progs.every(p => p === "done")) return { label: "배차완료", dot: "#16a34a", bg: "#dcfce7", color: "#166534" };
+  return { label: "배차예정", dot: "#6b7280", bg: "#eef1f6", color: "#374151" };
+}
+
+// ─── 이동거리/예상시간 뱃지 (PC RouteDistanceBadge 포팅, 모바일 폭에 맞춰 축소) ───
+const _routeDistCache = new Map();
+let _routeDistQueue = [];
+let _routeDistProcessing = false;
+function enqueueRouteDist(fromAddr, toAddr, cb) {
+  const key = `${fromAddr}→${toAddr}`;
+  if (_routeDistCache.has(key)) { cb(_routeDistCache.get(key)); return; }
+  _routeDistQueue.push({ fromAddr, toAddr, key, cb });
+  _processRouteDistQueue();
+}
+async function _processRouteDistQueue() {
+  if (_routeDistProcessing || _routeDistQueue.length === 0) return;
+  _routeDistProcessing = true;
+  const { fromAddr, toAddr, key, cb } = _routeDistQueue.shift();
+  try {
+    const [from, to] = await Promise.all([geocodeAddress(fromAddr), geocodeAddress(toAddr)]);
+    if (from && to) {
+      const km = Math.round(haversineKm(from.lat, from.lon, to.lat, to.lon) * 1.25 * 10) / 10;
+      const minutes = Math.max(5, Math.round((km / 60) * 60));
+      const result = { km, minutes };
+      _routeDistCache.set(key, result);
+      cb(result);
+    } else {
+      _routeDistCache.set(key, null);
+      cb(null);
+    }
+  } catch {
+    cb(null);
+  }
+  await new Promise(r => setTimeout(r, 350));
+  _routeDistProcessing = false;
+  _processRouteDistQueue();
+}
+function RouteDistanceBadge({ fromAddr, toAddr }) {
+  const [info, setInfo] = useState(() =>
+    fromAddr && toAddr ? _routeDistCache.get(`${fromAddr}→${toAddr}`) : null
+  );
+  useEffect(() => {
+    if (!fromAddr || !toAddr) return;
+    const key = `${fromAddr}→${toAddr}`;
+    if (_routeDistCache.has(key)) { setInfo(_routeDistCache.get(key)); return; }
+    setInfo(undefined);
+    enqueueRouteDist(fromAddr, toAddr, setInfo);
+  }, [fromAddr, toAddr]);
+  if (!fromAddr || !toAddr) return <span style={{ fontSize: 12, color: "#c1c7d0" }}>-</span>;
+  if (info === undefined) return <span style={{ fontSize: 12, color: "#c1c7d0" }}>계산중…</span>;
+  if (!info) return <span style={{ fontSize: 12, color: "#c1c7d0" }}>-</span>;
+  const timeLabel = info.minutes >= 60 ? `${Math.floor(info.minutes / 60)}시간 ${info.minutes % 60}분` : `${info.minutes}분`;
+  return (
+    <span style={{ fontSize: 12, color: "#374151", fontWeight: 700, whiteSpace: "nowrap" }}>
+      약 {info.km}km · {timeLabel}
+    </span>
+  );
+}
+
+// ─── 바로 전화 버튼 — ⭐ 사용자 요청: 원격 모니터링 중 상세진입 없이 바로 전화 ───
+function CallButton({ phone, compact }) {
+  const digits = String(phone || "").replace(/[^\d]/g, "");
+  if (!digits) return null;
+  return (
+    <a
+      href={`tel:${digits}`}
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5,
+        width: compact ? 32 : undefined, height: compact ? 32 : undefined,
+        padding: compact ? 0 : "7px 12px", borderRadius: compact ? "50%" : 8,
+        background: NAVY, color: "#fff", fontSize: 12, fontWeight: 700,
+        textDecoration: "none", flexShrink: 0,
+      }}
+    >
+      <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+      </svg>
+      {!compact && "전화"}
+    </a>
+  );
 }
 
 // ─── 지도 헬퍼 컴포넌트 ──────────────────────────────────────────────────────
@@ -160,7 +286,7 @@ function MobileManagerBadge({ driver, staff, canDelegate, onAssign }) {
 
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────────
 
-export default function MobileFleetView({ dispatchData = [], userCompany = "" }) {
+export default function MobileFleetView({ dispatchData = [], userCompany = "", onRegisterBack }) {
   const [driversRaw, setDriversRaw] = useState([]);
   const [usersMap, setUsersMap] = useState({});
   const [activityLogs, setActivityLogs] = useState([]);
@@ -348,6 +474,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
           담당자: raw.담당자 || null,
           등급: raw.등급 || "",
           거주지: raw.거주지 || "",
+          근무요일: raw.근무요일 || [],
         };
       })
       .sort((a, b) => statusPriority(a) - statusPriority(b));
@@ -463,6 +590,28 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
     setActiveSection("map");
   }, []);
 
+  // ⭐ 버그수정 — "지도에서 경로 보기"로 들어간 뒤 뒤로가기를 누르면 MobileApp의
+  // 전역 뒤로가기 핸들러가 무조건 배차내역(list)으로 보내버려서, 바로 전 화면(기사
+  // 목록)으로 한 단계만 돌아가는 게 불가능했다. 현재 내부 화면 상태를 ref로 최신화해
+  // 두고, MobileApp이 뒤로가기 시 먼저 이 콜백을 불러 내부에서 처리 가능하면(true)
+  // list로 점프하지 않고 지도→목록, 펼친 카드→접힘 순으로 한 단계씩만 되돌린다.
+  const navStateRef = useRef({ activeSection, mapSelected, expandedId });
+  useEffect(() => {
+    navStateRef.current = { activeSection, mapSelected, expandedId };
+  });
+  useEffect(() => {
+    if (typeof onRegisterBack !== "function") return;
+    onRegisterBack(() => {
+      const { activeSection: sec, mapSelected: sel, expandedId: exp } = navStateRef.current;
+      if (sec === "map" && sel) { setMapSelected(null); setGpsTracks([]); setRoadPath([]); return true; }
+      if (sec !== "drivers") { setActiveSection("drivers"); return true; }
+      if (exp) { setExpandedId(null); return true; }
+      return false;
+    });
+    return () => onRegisterBack(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // 지도에서 선택 기사 live 동기화 + 자동 추적 (1분 주기, 퇴근 시 중단)
   useEffect(() => {
     if (!mapSelected) return;
@@ -492,7 +641,8 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
     }
   }, [mapSelected, drivers]);
 
-  const STATUS_OPTS = ["전체", "운행중", "출근", "상차중", "하차중", "대기", "퇴근"];
+  // ⭐ 사용자 요청 — 휴차(휴무) 기사를 따로 걸러볼 수 있는 칩이 빠져 있었다.
+  const STATUS_OPTS = ["전체", "운행중", "출근", "상차중", "하차중", "대기", "휴차", "퇴근"];
 
   // 평균 속도 계산
   const avgSpeed = useMemo(() => {
@@ -645,7 +795,12 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {filtered.map((d, idx) => {
-                const color = STATUS_COLORS[d.상태] || "#9ca3af";
+                const todays = ordersFor(d);
+                // ⭐ TASK1 — 카드 배지는 GPS/출퇴근 로그(d.상태)가 아니라 실제 오더
+                // 진행상태(기사확인상태)를 우선 반영한다. 색상도 여기서 통일해 쓴다.
+                const dispatchStatus = driverDispatchStatus(todays, todayStr, d);
+                const color = dispatchStatus.dot;
+                const activeOrder = todays[0] || null;
                 const expanded = expandedId === d.id;
                 return (
                   <div
@@ -670,21 +825,76 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
                           <span style={{ fontSize: 12, color: "#6b7280", fontWeight: 700, letterSpacing: "0.04em" }}>{d.차량번호}</span>
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 700, color, background: `${color}18`, padding: "2px 8px", borderRadius: 99 }}>
-                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, display: "inline-block" }} />
-                            {d.상태 || "대기"}
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 700, color: dispatchStatus.color, background: dispatchStatus.bg, padding: "2px 8px", borderRadius: 99 }}>
+                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: dispatchStatus.dot, display: "inline-block" }} />
+                            {dispatchStatus.label}
                           </span>
-                          {d.등급 === "지입" && d.상태 === "출근" && ordersFor(d).length === 0 && (
-                            <span style={{ fontSize: 11, fontWeight: 800, padding: "1px 7px", borderRadius: 99, background: "#fef3c7", color: "#92400e" }}>배차대기</span>
-                          )}
                           {d.vehicleType !== "-" && (
                             <span style={{ fontSize: 12, color: "#9ca3af" }}>{d.vehicleType}</span>
                           )}
                         </div>
                       </div>
-                      <div style={{ textAlign: "right", flexShrink: 0 }}>
-                        <div style={{ fontSize: 12, color: "#9ca3af" }}>{timeAgo(d.updatedAt)}</div>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", marginTop: 2 }}>{d.총거리.toFixed(1)} km</div>
+                      <div style={{ textAlign: "right", flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 12, color: "#9ca3af" }}>{timeAgo(d.updatedAt)}</div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", marginTop: 2 }}>{d.총거리.toFixed(1)} km</div>
+                        </div>
+                        {/* ⭐ TASK2 — 상세진입 없이 바로 전화할 수 있는 버튼 (PC엔 없음, 모바일 원격관제 요청) */}
+                        <CallButton phone={d.phone} compact />
+                      </div>
+                    </div>
+
+                    {/* 오늘 노선/거주지/근무요일 — ⭐ TASK2·3: 카드를 펼치지 않아도(탭 없이도)
+                        바로 보여야 한다는 사용자 요청. 상/하차지·시간·화물정보·이동정보를
+                        여기서 보여주고, 상세(매출/연료비 등)는 펼쳤을 때만 보여준다. */}
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #f3f4f6" }} onClick={e => e.stopPropagation()}>
+                      {activeOrder ? (
+                        <div style={{ background: "#f0f4ff", borderRadius: 9, padding: "10px 12px", marginBottom: 8 }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>
+                              {activeOrder.상차지명 || "-"} <span style={{ color: "#9ca3af" }}>→</span> {activeOrder.하차지명 || "-"}
+                            </div>
+                            {todays.length > 1 && (
+                              <span style={{ fontSize: 11, fontWeight: 800, color: "#6b7eac", flexShrink: 0 }}>+{todays.length - 1}건 더</span>
+                            )}
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginTop: 5 }}>
+                            <div style={{ fontSize: 12, color: "#4b5563" }}>상차 {activeOrder.상차시간 || "즉시"}</div>
+                            <div style={{ fontSize: 12, color: "#4b5563" }}>하차예상 {activeOrder.하차시간 || "즉시"}{activeOrder.하차일 && activeOrder.하차일 !== activeOrder.상차일 ? ` (${activeOrder.하차일})` : ""}</div>
+                            <div style={{ fontSize: 12, color: "#6b7eac" }}>{[activeOrder.차량종류, activeOrder.차량톤수].filter(Boolean).join(" · ") || "-"}</div>
+                            <div style={{ fontSize: 12, color: "#6b7eac", wordBreak: "break-word" }}>{activeOrder.화물내용 || "-"}</div>
+                          </div>
+                          <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid #e0e7ff", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <RouteDistanceBadge fromAddr={activeOrder.상차지주소} toAddr={activeOrder.하차지주소} />
+                            {activeOrder.기사운임 && <span style={{ fontSize: 12, fontWeight: 700, color: NAVY }}>기사운임 {Number(String(activeOrder.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원</span>}
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 8 }}>오늘 배차된 오더가 없습니다</div>
+                      )}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                        <div style={{ background: "#f8f9fb", borderRadius: 9, padding: "10px 12px" }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 4 }}>거주지</div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>{d.거주지 || "-"}</div>
+                        </div>
+                        <div style={{ background: "#f8f9fb", borderRadius: 9, padding: "10px 12px" }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 4 }}>근무가능요일</div>
+                          {(d.근무요일 && d.근무요일.length) ? (
+                            <span style={{ display: "inline-flex", gap: 3 }}>
+                              {d.근무요일.map(w => {
+                                const isToday = w === weekdayKoOf(todayStr);
+                                return (
+                                  <span key={w} style={{
+                                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                                    width: 18, height: 18, borderRadius: "50%", fontSize: 12, fontWeight: 800,
+                                    color: isToday ? "#fff" : "#111827",
+                                    background: isToday ? "#ef4444" : "transparent",
+                                  }}>{w}</span>
+                                );
+                              })}
+                            </span>
+                          ) : <div style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>전일 가능</div>}
+                        </div>
                       </div>
                     </div>
 
@@ -710,16 +920,10 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
                           );
                         })()}
 
-                        {/* 오늘 배차 노선 — 사용자 요청: 상/하차지, 상차~하차 예상시간을 지입차관리에서 바로 확인 */}
+                        {/* 오늘 배차 노선 전체 — 첫 건은 카드 상단(탭 없이도 보임)에 이미 나오므로,
+                            오더가 2건 이상일 때만 나머지까지 펼쳐서 전부 보여준다. */}
                         {(() => {
-                          const todays = ordersFor(d);
-                          if (!todays.length) {
-                            return (
-                              <div style={{ background: "#f8f9fb", borderRadius: 9, padding: "10px 12px", marginBottom: 10, fontSize: 12, color: "#9ca3af" }}>
-                                오늘 배차된 오더가 없습니다
-                              </div>
-                            );
-                          }
+                          if (todays.length < 2) return null;
                           return todays.map((r, i) => (
                             <div key={r._id || i} style={{ background: "#f0f4ff", borderRadius: 9, padding: "10px 12px", marginBottom: 8 }}>
                               <div style={{ fontSize: 10, fontWeight: 700, color: "#6b7eac", letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 4 }}>

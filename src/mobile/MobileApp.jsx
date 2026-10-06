@@ -1933,12 +1933,22 @@ const pageRef = useRef("list");
 const unassignedCountRef = useRef(0);
 const backPressCountRef = useRef(0);
 const backPressTimerRef = useRef(null);
+// ⭐ 버그수정 — 지입차관리 안의 지도 탭처럼 페이지 내부에 또 다른 화면전환이 있는
+// 경우, 뒤로가기를 누르면 이 전역 핸들러가 무조건 "list"(배차내역)로 보내버려서
+// 내부 화면(지도 → 기사목록)으로 한 단계만 돌아가는 게 불가능했다. 활성 페이지가
+// 이 ref에 "내부에서 처리했다(true)"를 돌려주면 list로 점프하지 않고 멈춘다.
+const innerBackRef = useRef(null);
 
 // 🔙 안드로이드 뒤로가기 2번 처리
 useEffect(() => {
   window.history.pushState(null, '', window.location.href);
 
   const handlePopState = () => {
+    if (innerBackRef.current && innerBackRef.current()) {
+      window.history.pushState(null, '', window.location.href);
+      backPressCountRef.current = 0;
+      return;
+    }
     if (pageRef.current !== "list") {
       setPage("list");
       window.history.pushState(null, '', window.location.href);
@@ -4236,6 +4246,35 @@ const deleteSingleOrder = async (order) => {
     return ref.id;
   };
 
+  // ⭐ 사용자 요청 — 이미 "운송완료"(기사확인상태:완료)된 오더를 기사취소/삭제하면
+  // 그 운행 기록이 통째로 사라진다. 확인 팝업(호출부)을 거친 뒤, 기사 운행일지가
+  // 계속 보여줄 수 있도록 핵심 필드만 별도 컬렉션에 스냅샷으로 남겨둔다(PC
+  // DispatchApp.jsx의 archiveCompletedOrderPC와 동일한 역할, 파일이 달라 중복 구현).
+  const normalizePlateMobile = (v = "") => String(v).replace(/\s+/g, "").toLowerCase().replace(/-/g, "");
+  const archiveCompletedOrderMobile = (data, orderId, reason) => {
+    const drv = drivers.find((d) => normalizePlateMobile(d.차량번호) === normalizePlateMobile(data?.차량번호));
+    if (!drv) return;
+    addDoc(collection(db, "driver_completed_archive"), {
+      driverId: drv.id,
+      originalOrderId: orderId,
+      차량번호: data?.차량번호 || "",
+      기사명: data?.이름 || data?.기사명 || drv.이름 || "",
+      archivedReason: reason, // "오더삭제" | "기사취소"
+      archivedAt: serverTimestamp(),
+      거래처명: data?.거래처명 || "",
+      상차지명: data?.상차지명 || "",
+      하차지명: data?.하차지명 || "",
+      상차일: data?.상차일 || "",
+      하차일: data?.하차일 || "",
+      상차시간: data?.상차시간 || "",
+      하차시간: data?.하차시간 || "",
+      화물내용: data?.화물내용 || "",
+      차량톤수: data?.차량톤수 || "",
+      기사운임: data?.기사운임 || "",
+      기사완료일시: data?.기사완료일시 || null,
+    }).catch(() => {});
+  };
+
   // --------------------------------------------------
   // 6. 기사 배차 / 배차취소(상태는 배차중으로만) / 오더삭제
   // --------------------------------------------------
@@ -4301,6 +4340,13 @@ const deleteSingleOrder = async (order) => {
     if (role === "viewer") { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return; }
     if (!selectedOrder) return;
 
+    // ⭐ 사용자 요청 — 이미 "운송완료"된 오더에서 기사를 취소하려는 경우, 완료된
+    // 운행 기록이 사라진다는 걸 한번 더 확인받는다(그 외 상태는 기존과 동일).
+    if (selectedOrder.기사확인상태 === "완료") {
+      if (!window.confirm("운송이 완료된 오더입니다. 기사를 취소하시겠습니까?")) return;
+      archiveCompletedOrderMobile(selectedOrder, selectedOrder.id || selectedOrder._id, "기사취소");
+    }
+
     const cancelPatch = {
   기사명: "",
   이름: "",
@@ -4360,6 +4406,12 @@ const deleteSingleOrder = async (order) => {
       alert("화주사가 등록한 오더는 운송사에서 임의로 삭제할 수 없습니다. 화주사가 배차취소를 요청한 건만 승인 후 삭제할 수 있습니다.");
       setDeleteConfirmMobile(null);
       return;
+    }
+    // ⭐ 사용자 요청 — 이미 "운송완료"된 오더를 삭제하면 그 운행 기록이 사라질
+    // 수 있으므로, 한번 더 확인받고 기사 운행일지용 스냅샷을 남긴다.
+    if (deleteConfirmMobile.기사확인상태 === "완료") {
+      if (!window.confirm("운송이 완료된 오더입니다. 오더를 삭제하시겠습니까?")) return;
+      archiveCompletedOrderMobile(deleteConfirmMobile, deleteConfirmMobile.id || deleteConfirmMobile._id, "오더삭제");
     }
     // ⭐ 완전삭제 대신 소프트 취소로 바꿔, 취소내역 화면에서 다시 확인하거나
     // "재등록"으로 되살릴 수 있게 한다(예전엔 여기서 바로 영구삭제되어 복구 불가였음).
@@ -6152,7 +6204,7 @@ setOpenMemo={setOpenMemo}
             refreshFromServer={refreshFromServer}
           />
         )}
-        {page === "fleet" && <MobileFleetView dispatchData={orders} userCompany={userCompany} />}
+        {page === "fleet" && <MobileFleetView dispatchData={orders} userCompany={userCompany} onRegisterBack={(fn) => { innerBackRef.current = fn; }} />}
         {page === "intel" && <MobileIntelView dispatchData={orders} cardVersionB={cardVersionB} />}
 
         {page === "unassigned" && (
@@ -7062,19 +7114,19 @@ function MobileSideMenu({
             스크롤되던 걸 없애고, 드로어 전체(메뉴~로그아웃~버전)가 하나로 이어져
             일반 스크롤바로 오르내리게 통합했다. */}
         <div className="flex-1 overflow-y-auto py-1">
-          <MenuSection title="배차관리" dark={dark}>
+          <MenuSection title="배차관리" dark={dark} alwaysOpen>
             <MenuItem label="등록내역" onClick={onGoList} dark={dark} />
             <MenuItem label="화물등록" onClick={onGoCreate} dark={dark} />
             <MenuItem label="미배차현황" onClick={onGoUnassigned} dark={dark} />
             <MenuItem label="취소내역" onClick={onGoCanceled} dark={dark} />
           </MenuSection>
-          <MenuSection title="공지 / 일정" dark={dark}>
+          <MenuSection title="공지 / 일정" dark={dark} alwaysOpen>
             <MenuItem label="공지사항" onClick={onGoNotice} badge={hasNewNotice ? "NEW" : null} dark={dark} />
             <MenuItem label="일정" onClick={onGoSchedule} badge={hasNewSchedule ? "NEW" : null} dark={dark} />
             <MenuItem label="인수인계" onClick={onGoHandover} dark={dark} />
             <MenuItem label="출근기록부" onClick={onGoAttendance} dark={dark} />
           </MenuSection>
-          <MenuSection title="매출 / 운임표" dark={dark}>
+          <MenuSection title="매출 / 운임표" dark={dark} alwaysOpen>
             <MenuItem label="자사운임표" onClick={onGoFare} dark={dark} />
             <MenuItem label="전국운임 조회" onClick={onGoNationalFare} dark={dark} />
             <MenuItem label="단가표" onClick={onGoRateCard} dark={dark} />
@@ -7239,8 +7291,21 @@ function MobileSideMenu({
 // ⭐ 사용자 요청 — 메뉴를 열었을 때 모든 섹션이 다 펼쳐져 있어 스크롤이 길었다.
 // 접속할 때마다(=메뉴를 열 때마다) 각 섹션은 항상 접힌 상태로 시작하고,
 // 제목을 누르면 펼쳐지게 바꾼다.
-function MenuSection({ title, children, dark }) {
+// ⭐ 사용자 요청 — 배차관리/공지·일정/매출·운임표는 자주 쓰는 메뉴라 항상 펼쳐져
+// 있어야 하고(접고 펴는 토글 자체를 없앰), 관리자 전용/내 계정만 기존처럼 접혀있다가
+// 눌러야 펼쳐지면 된다. alwaysOpen이면 펼침/접기 버튼 없이 그냥 항상 보여준다.
+function MenuSection({ title, children, dark, alwaysOpen = false }) {
   const [open, setOpen] = useState(false);
+  if (alwaysOpen) {
+    return (
+      <div className="mt-1 mb-1">
+        <div className={`w-full px-5 pt-4 pb-1.5 text-[11px] font-bold uppercase tracking-widest ${dark ? "text-white/40" : "text-blue-500"}`}>
+          {title}
+        </div>
+        <div className="flex flex-col">{children}</div>
+      </div>
+    );
+  }
   return (
     <div className="mt-1 mb-1">
       <button

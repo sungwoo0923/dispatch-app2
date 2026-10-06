@@ -3581,6 +3581,34 @@ const addDispatch = async (record) => {
     );
   };
 
+// ⭐ 사용자 요청 — 이미 "운송완료"(기사확인상태:완료)된 오더를 담당자가 삭제하거나
+// 거기서 기사만 취소(차량번호를 비움)하면, 그 운행 기록 자체가 통째로 사라진다.
+// 확인 팝업을 한번 더 받은 뒤(이 함수를 부르기 전에), 기사 운행일지가 계속
+// 보여줄 수 있도록 핵심 필드만 별도 컬렉션에 스냅샷으로 남겨둔다.
+const archiveCompletedOrderPC = (data, orderId, reason) => {
+  const drv = drivers.find((d) => normalizePlate(d.차량번호) === normalizePlate(data?.차량번호));
+  if (!drv) return;
+  addDoc(collection(db, "driver_completed_archive"), {
+    driverId: drv.id,
+    originalOrderId: orderId,
+    차량번호: data?.차량번호 || "",
+    기사명: data?.이름 || data?.기사명 || drv.이름 || "",
+    archivedReason: reason, // "오더삭제" | "기사취소"
+    archivedAt: serverTimestamp(),
+    거래처명: data?.거래처명 || "",
+    상차지명: data?.상차지명 || "",
+    하차지명: data?.하차지명 || "",
+    상차일: data?.상차일 || "",
+    하차일: data?.하차일 || "",
+    상차시간: data?.상차시간 || "",
+    하차시간: data?.하차시간 || "",
+    화물내용: data?.화물내용 || "",
+    차량톤수: data?.차량톤수 || "",
+    기사운임: data?.기사운임 || "",
+    기사완료일시: data?.기사완료일시 || null,
+  }).catch(() => {});
+};
+
 const patchDispatch = async (_id, patch, knownPrev) => {
   if (!_id) return;
 
@@ -3633,6 +3661,14 @@ const patchDispatch = async (_id, patch, knownPrev) => {
     }
     if (!snap.exists()) { console.error("❌ 문서 없음", _id); return; }
     prev = snap.data();
+  }
+
+  // ⭐ 사용자 요청 — 이미 "운송완료"된 오더에서 차량번호를 비워 기사만 취소하려는
+  // 경우, 완료된 운행 기록이 사라진다는 걸 한번 더 확인받는다(그 외 상태는 기존과
+  // 동일하게 즉시 처리). 아직 화면 반영/실제 저장 전이라 취소해도 되돌릴 게 없다.
+  if ("차량번호" in patch && !String(patch.차량번호 || "").trim() && prev?.기사확인상태 === "완료") {
+    if (!window.confirm("운송이 완료된 오더입니다. 기사를 취소하시겠습니까?")) return false;
+    archiveCompletedOrderPC(prev, _id, "기사취소");
   }
 
   // 🚫 하차일이 상차일보다 빠른 역순 저장 방지 — 이 함수를 거치는 모든 수정
@@ -3946,7 +3982,10 @@ const patchDispatch = async (_id, patch, knownPrev) => {
     }
   }
 };
-const removeDispatch = async (arg) => {
+// opts.skipCompletedConfirm — 다건 선택삭제(deleteRowsWithUndo/executeDelete)는
+// 호출부에서 이미 "완료된 오더가 N건 포함" 확인을 한번에 받았으므로, 건별로
+// 또 묻지 않도록 이 플래그로 내부 confirm만 건너뛴다(기록은 그대로 남긴다).
+const removeDispatch = async (arg, opts = {}) => {
   const id = typeof arg === "string" ? arg : arg?._id;
   if (!id) return;
 
@@ -3970,6 +4009,14 @@ const removeDispatch = async (arg) => {
       return;
     }
     data = snap.data();
+  }
+
+  // ⭐ 사용자 요청 — 이미 "운송완료"된 오더를 삭제하면 그 운행 기록이 통째로
+  // 사라지므로, 한번 더 확인받고(다건삭제는 호출부가 이미 물어봤다) 확인/스킵
+  // 시 기사 운행일지가 계속 보여줄 수 있도록 스냅샷을 남긴다.
+  if (data?.기사확인상태 === "완료") {
+    if (!opts.skipCompletedConfirm && !window.confirm("운송이 완료된 오더입니다. 오더를 삭제하시겠습니까?")) return;
+    archiveCompletedOrderPC(data, id, "오더삭제");
   }
 
   // ⭐ 버그수정 — 지입 기사에게 배정(대기/수락/완료)돼 있던 오더를 이 "삭제"로
@@ -27505,6 +27552,14 @@ const openDailyCloseIssueDetail = (rowId) => {
       return showAlert("화주사가 등록한 오더는 운송사에서 임의로 삭제할 수 없습니다. 화주사가 배차취소를 요청한 건만 승인 후 삭제할 수 있습니다.");
     }
 
+    // ⭐ 사용자 요청 — 선택한 여러 건 중 이미 "운송완료"된 오더가 있으면, 건별로
+    // 반복해서 묻지 않고 한번에 모아서 한 번만 확인받는다(removeDispatch 쪽
+    // 개별 confirm은 skipCompletedConfirm으로 건너뛰되, 스냅샷 기록은 그대로 남김).
+    const completedInBatch = deleteList.filter(r => r?.기사확인상태 === "완료");
+    if (completedInBatch.length > 0) {
+      if (!window.confirm(`운송이 완료된 오더가 ${completedInBatch.length}건 포함되어 있습니다. 오더를 삭제하시겠습니까?`)) return;
+    }
+
     const ids = deleteList.map(r => r._id);
 
     // ⭐ 삭제 팝업에서 "삭제"를 눌러도 한참 있다가 지워지던 딜레이의 원인 — 실제
@@ -27519,7 +27574,7 @@ const openDailyCloseIssueDetail = (rowId) => {
 
     // 여러 건 선택삭제 시 하나씩 순차 대기하면 건수만큼 지연이 쌓여 버벅였다 —
     // 서로 독립적인 삭제라 병렬로 처리한다.
-    Promise.all(ids.map(id => removeDispatch(id))).catch((e) => {
+    Promise.all(ids.map(id => removeDispatch(id, { skipCompletedConfirm: true }))).catch((e) => {
       console.error("삭제 실패:", e);
       showAlert("일부 오더 삭제에 실패했습니다. 목록에서 확인해주세요.\n" + (e?.message || ""));
     });
@@ -37171,11 +37226,19 @@ if (first) {
       return;
     }
 
+    // ⭐ 사용자 요청 — 선택한 여러 건 중 이미 "운송완료"된 오더가 있으면, 건별로
+    // 반복해서 묻지 않고 한번에 모아서 한 번만 확인받는다(_remove 쪽 개별 confirm은
+    // skipCompletedConfirm으로 건너뛰되, 스냅샷 기록은 그대로 남김).
+    const completedInBatch = backup.filter(r => r?.기사확인상태 === "완료");
+    if (completedInBatch.length > 0) {
+      if (!window.confirm(`운송이 완료된 오더가 ${completedInBatch.length}건 포함되어 있습니다. 오더를 삭제하시겠습니까?`)) return;
+    }
+
     setBackupDeleted(backup);
 
     // Firestore에서 실제 삭제
     for (const row of backup) {
-      await _remove(row);
+      await _remove(row, { skipCompletedConfirm: true });
     }
 
     // 선택 초기화

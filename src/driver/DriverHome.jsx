@@ -718,6 +718,19 @@ export default function DriverHome() {
     }, () => {});
   }, [uid]);
 
+  // ⭐ 사용자 요청 — 관리자가 "운송완료"된 오더를 삭제하거나 기사를 취소하면 원본
+  // 오더 문서가 사라지거나(삭제) 내 차량번호가 빠져(기사취소) 운행일지에서 통째로
+  // 안 보이게 된다. 삭제/취소 직전에 서버(DispatchApp/MobileApp)가 남겨둔 스냅샷
+  // (driver_completed_archive)을 구독해 운행일지에 계속 표시한다.
+  const [archivedCompleted, setArchivedCompleted] = useState([]);
+  useEffect(() => {
+    if (!uid) return;
+    const q = query(collection(db, "driver_completed_archive"), where("driverId", "==", uid));
+    return onSnapshot(q, (snap) => {
+      setArchivedCompleted(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, () => {});
+  }, [uid]);
+
   // ⭐ 사용자 요청 — 알림함 전체삭제
   const deleteAllNotifications = useCallback(async () => {
     if (!notifications.length) return;
@@ -2296,8 +2309,30 @@ export default function DriverHome() {
               보여준다. 위 날짜조회(appliedRange)와 같은 기간을 쓴다(기본값이 이미
               오늘이라 "항상 당일 기준" 요건을 그대로 만족). 5건씩 페이지네이션. */}
           {isFleetDriver && (() => {
-            const completedOrders = myOrders
-              .filter(o => o.기사확인상태 === "완료")
+            const liveCompleted = myOrders.filter(o => o.기사확인상태 === "완료");
+            // ⭐ 관리자가 완료된 오더를 삭제/기사취소하면 driver_completed_archive에
+            // 스냅샷이 남는다. 원본 오더가 아직(어떤 이유로든) 살아있으면 중복 표시를
+            // 피하려고 originalOrderId가 liveCompleted에 이미 있는 건 건너뛴다.
+            const archivedForLog = archivedCompleted
+              .filter(a => !liveCompleted.some(o => o._id === a.originalOrderId))
+              .map(a => ({
+                _id: a.originalOrderId,
+                __archiveKey: a.id,
+                __archived: true,
+                archivedReason: a.archivedReason,
+                거래처명: a.거래처명 || "",
+                상차지명: a.상차지명 || "",
+                하차지명: a.하차지명 || "",
+                상차일: a.상차일 || "",
+                하차일: a.하차일 || "",
+                상차시간: a.상차시간 || "",
+                하차시간: a.하차시간 || "",
+                화물내용: a.화물내용 || "",
+                차량톤수: a.차량톤수 || "",
+                기사운임: a.기사운임 || "",
+                기사완료일시: a.기사완료일시 || null,
+              }));
+            const completedOrders = [...liveCompleted, ...archivedForLog]
               .filter(o => { const d = o.상차일 || ""; return d >= appliedRange.from && d <= appliedRange.to; })
               .sort((a, b) => (b.기사완료일시?.seconds || 0) - (a.기사완료일시?.seconds || 0));
             const PAGE_SIZE = 5;
@@ -2353,11 +2388,19 @@ export default function DriverHome() {
                             const t = o.기사완료일시?.toDate?.();
                             const docs = hasDocs(o._id);
                             return (
-                              <tr key={o._id || i} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                              <tr key={o.__archiveKey || o._id || i} style={{ borderBottom: "1px solid #f3f4f6", background: o.__archived ? "#fffbeb" : undefined }}>
                                 <td style={{ padding: "9px 10px", fontSize: 12, color: "#374151", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap" }}>
                                   {o.상차일 || "-"}{t ? ` ${formatTime(t)}` : ""}
                                 </td>
-                                <td style={{ padding: "9px 10px", fontSize: 12, color: "#374151", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap" }}>{o.거래처명 || "-"}</td>
+                                <td style={{ padding: "9px 10px", fontSize: 12, color: "#374151", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap" }}>
+                                  {o.거래처명 || "-"}
+                                  {/* ⭐ 완료 후 관리자가 오더삭제/기사취소한 기록임을 표시 */}
+                                  {o.__archived && (
+                                    <span style={{ marginLeft: 5, fontSize: 9, fontWeight: 800, padding: "1px 5px", borderRadius: 5, background: "#fef3c7", color: "#b45309", whiteSpace: "nowrap" }}>
+                                      {o.archivedReason === "기사취소" ? "기사취소됨" : "오더삭제됨"}
+                                    </span>
+                                  )}
+                                </td>
                                 <td style={{ padding: "9px 10px", fontSize: 12, color: "#111827", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap" }}>
                                   {o.상차지명 || "-"} → {o.하차지명 || "-"}
                                 </td>
