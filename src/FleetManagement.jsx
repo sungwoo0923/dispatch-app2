@@ -1406,7 +1406,7 @@ const ORDER_CHECK_META = {
 // 4/5파트 배차현황의 첨부 아이콘과 동일하게 지입차관리 노선표에서도 볼 수 있어야
 // 한다. 같은 orders/{id}/attachments 서브컬렉션을 보는 간단한 뷰어(회전/재업로드
 // 등 고급 기능은 빼고 보기 전용으로).
-function FleetAttachButton({ orderId, attachCount = 0 }) {
+function FleetAttachButton({ orderId, col = "orders", attachCount = 0 }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -1428,19 +1428,19 @@ function FleetAttachButton({ orderId, attachCount = 0 }) {
           </span>
         )}
       </button>
-      {open && <FleetAttachViewer orderId={orderId} onClose={() => setOpen(false)} />}
+      {open && <FleetAttachViewer orderId={orderId} col={col} onClose={() => setOpen(false)} />}
     </>
   );
 }
 
-function FleetAttachViewer({ orderId, onClose }) {
+function FleetAttachViewer({ orderId, col = "orders", onClose }) {
   const [items, setItems] = useState([]);
   useEffect(() => {
     if (!orderId) return;
-    return onSnapshot(collection(db, "orders", orderId, "attachments"), (snap) => {
+    return onSnapshot(collection(db, col, orderId, "attachments"), (snap) => {
       setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, () => {});
-  }, [orderId]);
+  }, [orderId, col]);
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
       <div style={{ background: "#fff", borderRadius: 16, width: "min(640px, 100%)", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,.3)" }} onClick={e => e.stopPropagation()}>
@@ -1659,7 +1659,7 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
                         )}
                       </td>
                       <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
-                        <FleetAttachButton orderId={r._id} attachCount={r.attachCount || 0} />
+                        <FleetAttachButton orderId={r._id} col={r.__col || "orders"} attachCount={r.attachCount || 0} />
                       </td>
                     </tr>
                   );

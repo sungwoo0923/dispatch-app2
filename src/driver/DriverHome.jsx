@@ -594,6 +594,7 @@ export default function DriverHome() {
   // 운송완료를 누른 직후에도 그 오더의 하차완료 사진을 올릴 수 있어야 하므로
   // (완료 처리되면 acceptedOrders에서는 빠지므로) 별도로 기억해둔다.
   const [lastCompletedOrderId, setLastCompletedOrderId] = useState(null);
+  const [lastCompletedOrderCol, setLastCompletedOrderCol] = useState("orders");
   const [fleetPhotoUploading, setFleetPhotoUploading] = useState(false);
   // ⭐ 사용자 요청 — 알림 종(🔔): 새 오더 도착/배차취소 등을 나중에 다시 확인할 수
   // 있는 알림함. driver_notifications 컬렉션(관리자 PC가 배정/취소 시 기록)을 구독.
@@ -633,15 +634,31 @@ export default function DriverHome() {
   }, [uid]);
 
   // 내 차량번호로 배정된 오더 구독 (지입 전용 오더수락/거절 플로우)
+  // ⭐ 버그수정 — 이 앱은 오더가 "orders"(PC 신규등록 기준 컬렉션) /
+  // "dispatch"(모바일 신규등록 기본 컬렉션) 두 곳에 나뉘어 저장되는 레거시
+  // 구조다(어느 화면에서 등록했느냐에 따라 다름). "orders"만 구독했더니
+  // 모바일(운송사 직원용)에서 등록/배차한 오더는 전부 놓쳤다 — 두 컬렉션을
+  // 각각 구독해 합치고, 각 오더에 실제 컬렉션명(__col)을 태깅해서 이후
+  // 수락/거절/완료/첨부 쓰기가 같은 문서를 정확히 가리키게 한다.
+  const [myOrdersByCol, setMyOrdersByCol] = useState({ orders: [], dispatch: [] });
   useEffect(() => {
-    if (driver?.등급 !== "지입") { setMyOrders([]); return; }
+    if (driver?.등급 !== "지입") { setMyOrdersByCol({ orders: [], dispatch: [] }); return; }
     const plate = driver?.차량번호 || driver?.carNo || "";
-    if (!plate) { setMyOrders([]); return; }
-    const q = query(collection(db, "orders"), where("차량번호", "==", plate));
-    return onSnapshot(q, (snap) => {
-      setMyOrders(snap.docs.map(d => ({ _id: d.id, ...d.data() })));
-    }, () => {});
+    if (!plate) { setMyOrdersByCol({ orders: [], dispatch: [] }); return; }
+    const unsubs = ["orders", "dispatch"].map((col) => {
+      const q = query(collection(db, col), where("차량번호", "==", plate));
+      return onSnapshot(q, (snap) => {
+        setMyOrdersByCol(prev => ({
+          ...prev,
+          [col]: snap.docs.map(d => ({ _id: d.id, __col: col, ...d.data() })),
+        }));
+      }, () => {});
+    });
+    return () => unsubs.forEach(u => u());
   }, [driver?.등급, driver?.차량번호, driver?.carNo]);
+  useEffect(() => {
+    setMyOrders([...myOrdersByCol.orders, ...myOrdersByCol.dispatch]);
+  }, [myOrdersByCol]);
 
   // 새로 배정된 오더(기사확인상태: 대기) 감지 → 상단 배너 표시 후 자동 소멸
   useEffect(() => {
@@ -911,11 +928,11 @@ export default function DriverHome() {
   }, [driver?.checkInLocation, driver?.등급, companyDefaultLoc, pos, updateStatus]);
 
   // 지입 기사 오더 수락/거절/운송완료
-  const handleAcceptOrder = useCallback(async (orderId) => {
+  const handleAcceptOrder = useCallback(async (orderId, col = "orders") => {
     if (orderActionLoading) return;
     setOrderActionLoading(true);
     try {
-      await updateDoc(doc(db, "orders", orderId), {
+      await updateDoc(doc(db, col, orderId), {
         기사확인상태: "수락",
         기사확인일시: serverTimestamp(),
         배차상태: "배차완료",
@@ -940,7 +957,7 @@ export default function DriverHome() {
       // ⭐ 사용자 요청 — 거절하면 이 오더는 다시 배차 전 상태(배차중)로 돌아가야 하고,
       // 4/5파트 배차현황에서도 차량번호/이름/전화번호가 사라져야 한다(이 기사에게
       // 배정됐던 흔적을 지워 담당자가 바로 다른 차량을 다시 배정할 수 있게).
-      await updateDoc(doc(db, "orders", rejectModal.orderId), {
+      await updateDoc(doc(db, rejectModal.col || "orders", rejectModal.orderId), {
         기사확인상태: "거절",
         기사거절사유: rejectReason.trim(),
         기사확인일시: serverTimestamp(),
@@ -964,15 +981,16 @@ export default function DriverHome() {
     }
   }, [rejectModal, rejectReason, orderActionLoading]);
 
-  const handleCompleteOrder = useCallback(async (orderId) => {
+  const handleCompleteOrder = useCallback(async (orderId, col = "orders") => {
     if (orderActionLoading) return;
     setOrderActionLoading(true);
     try {
-      await updateDoc(doc(db, "orders", orderId), {
+      await updateDoc(doc(db, col, orderId), {
         기사확인상태: "완료",
         기사완료일시: serverTimestamp(),
       });
       setLastCompletedOrderId(orderId);
+      setLastCompletedOrderCol(col);
       showToast("운송완료 처리되었습니다. 다음 배차를 받을 수 있습니다");
     } catch (e) {
       showToast("처리 중 오류가 발생했습니다");
@@ -993,7 +1011,7 @@ export default function DriverHome() {
   // 보여야 한다. driver_photo_logs(기사 개인 이력)에 남기던 것과 별개로, 오더
   // 문서의 attachments 서브컬렉션에도 같은 파일을 올려 PC 쪽 첨부 뷰어가
   // (attachCount/attachViewed 필드 기반) 그대로 집어내게 한다.
-  const handleFleetPhotoFile = useCallback(async (file, actionType, orderId) => {
+  const handleFleetPhotoFile = useCallback(async (file, actionType, orderId, col = "orders") => {
     if (!file || !uid || !orderId || fleetPhotoUploading) return;
     setFleetPhotoUploading(true);
     try {
@@ -1023,14 +1041,14 @@ export default function DriverHome() {
         actionType, imageBase64: base64, timestamp: serverTimestamp(), logDate,
         companyName: driver?.companyName || "", orderId,
       });
-      const attId = doc(collection(db, "orders", orderId, "attachments")).id;
-      await setDoc(doc(db, "orders", orderId, "attachments", attId), {
+      const attId = doc(collection(db, col, orderId, "attachments")).id;
+      await setDoc(doc(db, col, orderId, "attachments", attId), {
         url: base64, base64,
         name: `${actionType}_${driver?.carNo || ""}_${logDate}.jpg`,
         size: file.size, sizeKB: Math.round(file.size / 1024),
         uploadedBy: "driver", createdAt: serverTimestamp(),
       });
-      await updateDoc(doc(db, "orders", orderId), { attachCount: increment(1) });
+      await updateDoc(doc(db, col, orderId), { attachCount: increment(1) });
       showToast(`${actionType} 사진이 전송되었습니다`);
     } catch (e) {
       showToast("사진 전송 중 오류가 발생했습니다");
@@ -1517,13 +1535,13 @@ export default function DriverHome() {
               </div>
               {pendingOrders.map(o => (
                 <PendingOrderCard key={o._id} order={o} loading={orderActionLoading}
-                  onAccept={() => handleAcceptOrder(o._id)}
-                  onReject={() => { setRejectModal({ orderId: o._id }); setRejectReason(""); }}
+                  onAccept={() => handleAcceptOrder(o._id, o.__col)}
+                  onReject={() => { setRejectModal({ orderId: o._id, col: o.__col }); setRejectReason(""); }}
                   onCopy={copyText} />
               ))}
               {acceptedOrders.map(o => (
                 <ActiveOrderCard key={o._id} order={o} loading={orderActionLoading}
-                  onComplete={() => handleCompleteOrder(o._id)}
+                  onComplete={() => handleCompleteOrder(o._id, o.__col)}
                   onCopy={copyText} />
               ))}
             </div>
@@ -1574,12 +1592,14 @@ export default function DriverHome() {
             // 하차완료는 운송완료를 누른 뒤에만 눌러서 바로 올릴 수 있다.
             if (isFleetDriver) {
               const loadTargetId = acceptedOrders[0]?._id || null;
+              const loadTargetCol = acceptedOrders[0]?.__col || "orders";
               const dropTargetId = lastCompletedOrderId;
+              const dropTargetCol = lastCompletedOrderCol;
               const loadedToday = loadTargetId ? todayPhotos.some(p => p.actionType === "상차완료" && p.orderId === loadTargetId) : false;
               const droppedToday = dropTargetId ? todayPhotos.some(p => p.actionType === "하차완료" && p.orderId === dropTargetId) : false;
               const canUploadLoad = !!loadTargetId && !loadedToday;
               const canUploadDrop = !!dropTargetId && !droppedToday;
-              const tile = (label, sent, enabled, targetId, actionType) => (
+              const tile = (label, sent, enabled, targetId, targetCol, actionType) => (
                 <label key={label} style={{
                   flex: 1, padding: "10px 12px", borderRadius: 10, textAlign: "center", display: "block",
                   background: sent ? "rgba(255,255,255,0.15)" : enabled ? "rgba(16,185,129,0.18)" : "rgba(255,255,255,0.06)",
@@ -1592,7 +1612,7 @@ export default function DriverHome() {
                   </div>
                   {enabled && !sent && (
                     <input type="file" accept="image/*" capture="environment" style={{ display: "none" }}
-                      onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) handleFleetPhotoFile(f, actionType, targetId); }} />
+                      onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) handleFleetPhotoFile(f, actionType, targetId, targetCol); }} />
                   )}
                 </label>
               );
@@ -1600,8 +1620,8 @@ export default function DriverHome() {
                 <div style={{ background: "#1B2B4B", borderRadius: 16, padding: "14px 16px", marginBottom: 14, boxShadow: "0 4px 16px rgba(27,43,75,0.18)" }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.5)", marginBottom: 10, letterSpacing: "0.06em" }}>오늘 사진 전송 현황</div>
                   <div style={{ display: "flex", gap: 10 }}>
-                    {tile("상차완료", loadedToday, canUploadLoad, loadTargetId, "상차완료")}
-                    {tile("하차완료", droppedToday, canUploadDrop, dropTargetId, "하차완료")}
+                    {tile("상차완료", loadedToday, canUploadLoad, loadTargetId, loadTargetCol, "상차완료")}
+                    {tile("하차완료", droppedToday, canUploadDrop, dropTargetId, dropTargetCol, "하차완료")}
                   </div>
                 </div>
               );
