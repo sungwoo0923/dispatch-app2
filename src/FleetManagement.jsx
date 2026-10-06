@@ -1161,6 +1161,15 @@ const PROG_META = {
   progress: { label: "운송중", dot: "#1B2B4B" },
   done: { label: "완료", dot: "#16a34a" },
 };
+// ⭐ 사용자 요청 — 카드 어딘가에 묻혀 있던 "배차대기" 표시를 차량번호 옆 전용
+// 컬럼(배차상태)으로 옮기고, 운송중/배차완료까지 상황별로 구분해 보여준다.
+function driverDispatchStatus(orders, selectedDate, todayStr) {
+  if (!orders.length) return { label: "배차대기", bg: "#fef3c7", color: "#92400e" };
+  const progs = orders.map(r => computeOrderProgress(r, selectedDate, todayStr));
+  if (progs.includes("progress")) return { label: "운송중", bg: "#dbeafe", color: "#1e40af" };
+  if (progs.every(p => p === "done")) return { label: "배차완료", bg: "#dcfce7", color: "#166534" };
+  return { label: "배차예정", bg: "#eef1f6", color: "#374151" };
+}
 function computeOrderProgress(order, selectedDate, todayStr) {
   if (selectedDate < todayStr) return "done";
   if (selectedDate > todayStr) return "scheduled";
@@ -1223,9 +1232,9 @@ function RouteDistanceBadge({ fromAddr, toAddr }) {
     setInfo(undefined);
     enqueueRouteDist(fromAddr, toAddr, setInfo);
   }, [fromAddr, toAddr]);
-  if (!fromAddr || !toAddr) return <span style={{ fontSize: 13, color: "#d1d5db" }}>-</span>;
-  if (info === undefined) return <span style={{ fontSize: 13, color: "#d1d5db" }}>계산중…</span>;
-  if (!info) return <span style={{ fontSize: 13, color: "#d1d5db" }}>-</span>;
+  if (!fromAddr || !toAddr) return <span style={{ fontSize: 14, color: "#d1d5db" }}>-</span>;
+  if (info === undefined) return <span style={{ fontSize: 14, color: "#d1d5db" }}>계산중…</span>;
+  if (!info) return <span style={{ fontSize: 14, color: "#d1d5db" }}>-</span>;
   const timeLabel = info.minutes >= 60 ? `${Math.floor(info.minutes / 60)}시간 ${info.minutes % 60}분` : `${info.minutes}분`;
   return (
     <span style={{ fontSize: 14, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>
@@ -1364,14 +1373,24 @@ const ROUTE_COLS = ["순번", "상태", "거래처", "상차지", "하차지", "
 // ⭐ 사용자 요청 — 이름 필드가 하나도 없으면 마지막엔 이메일을 그대로 보여주고
 // 있었다. staffByEmail(이메일→실명 매핑)이 있으면 이메일 대신 실명으로 바꿔 보여준다.
 function creatorLabel(r, staffByEmail) {
+  // ⭐ 사용자 요청 — 오더 등록 당시 실명(myRealName)이 비어있으면 createdByName에
+  // 이메일이 그대로 저장돼버린 과거 데이터가 있다. 저장된 값이 이메일 모양이면
+  // staffByEmail(이메일→실명)에서 실명을 다시 찾아 보여준다.
+  const isEmailLike = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || ""));
   const email = r?.createdByEmail || r?.createdBy || "";
-  return r?.등록자명 || r?.createdByName || r?.등록자 || (email && staffByEmail?.[email]) || email || "-";
+  const stored = r?.등록자명 || r?.createdByName || r?.등록자 || "";
+  const fromStaff = email && staffByEmail?.[email];
+  if (stored && !isEmailLike(stored)) return stored;
+  if (fromStaff && !isEmailLike(fromStaff)) return fromStaff;
+  return stored || fromStaff || email || "-";
 }
 
 function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, live, onOpenDetail, staff, canDelegate, onAssignManager, index, staffByEmail }) {
   const first = orders[0];
   const last = orders[orders.length - 1];
   const hasConflict = isOffDay && orders.length > 0;
+  // ⭐ 사용자 요청 — 오늘 운임 합계를 상세보기까지 안 들어가도 카드에서 바로 보이게.
+  const fareSum = orders.reduce((s, r) => s + (Number(String(r.청구운임 || 0).replace(/[^\d]/g, "")) || 0), 0);
 
   return (
     <div style={{ background: "#fff", border: `1px solid ${hasConflict ? "#f59e0b" : "#e5e7eb"}`, borderRadius: 12, overflow: "hidden" }}>
@@ -1388,15 +1407,20 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               <span style={{ fontSize: 16, fontWeight: 800, color: "#111827" }}>{driver.이름}</span>
               <span style={{ fontSize: 12, fontWeight: 800, padding: "1px 7px", borderRadius: 6, background: driver.등급 === "직영" ? NAVY : "#eef1f6", color: driver.등급 === "직영" ? "#fff" : "#374151" }}>{driver.등급}</span>
-              {/* ⭐ 사용자 요청 — 지입차가 출근 버튼만 누르고 아직 오늘 배차가 없으면
-                  "배차대기"로 바로 알 수 있게(관리자가 다음 배차를 넣어줘야 함을 인지) */}
-              {driver.등급 === "지입" && live?.상태 === "출근" && orders.length === 0 && (
-                <span style={{ fontSize: 12, fontWeight: 800, padding: "1px 7px", borderRadius: 6, background: "#fef3c7", color: "#92400e" }}>배차대기</span>
-              )}
             </div>
           </div>
         </div>
 
+        {/* ⭐ 사용자 요청 — "배차대기" 표시가 이름 옆에 묻혀 있었는데, 차량번호 옆에
+            전용 컬럼(배차상태)으로 빼고 운송중/배차완료까지 상황별로 보여준다. */}
+        <InfoField label="배차상태">
+          {(() => {
+            const st = driverDispatchStatus(orders, selectedDate, todayStr);
+            return (
+              <span style={{ fontSize: 13, fontWeight: 800, padding: "3px 9px", borderRadius: 6, background: st.bg, color: st.color, display: "inline-block" }}>{st.label}</span>
+            );
+          })()}
+        </InfoField>
         <InfoField label="차량번호" value={driver.차량번호} mono />
         <InfoField label="연락처" value={driver.전화번호 && driver.전화번호 !== "-" ? driver.전화번호 : "-"} mono />
         <InfoField label="거주지" value={driver.거주지 || "-"} />
@@ -1454,31 +1478,33 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
                             width: 7, height: 7, borderRadius: "50%", background: meta.dot, flexShrink: 0,
                             animation: prog === "progress" ? "fmBlink 2.4s ease-in-out infinite" : "none",
                           }} />
-                          <span style={{ fontSize: 13, fontWeight: 700, color: "#374151" }}>{meta.label}</span>
+                          {/* ⭐ 사용자 요청 — 상태/상차지/하차지/이동정보 글씨가 거래처·상차·하차·
+                              운임 칸보다 작아 보였다. 전부 14px/700으로 통일. */}
+                          <span style={{ fontSize: 14, fontWeight: 700, color: "#374151" }}>{meta.label}</span>
                         </span>
                       </td>
-                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, color: "#374151", whiteSpace: "nowrap" }}>{r.거래처명 || "-"}</td>
+                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, fontWeight: 700, color: "#374151", whiteSpace: "nowrap" }}>{r.거래처명 || "-"}</td>
                       {/* ⭐ 상차지/하차지 — 예전엔 이름 아래 줄바꿈으로 "날짜 · 주소"가 작고 흐리게
                           있었는데, 날짜는 상차/하차 컬럼으로 옮기고 주소는 이름 옆에 가로로,
                           더 잘 보이는 색/굵기로 붙인다. */}
                       <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
                         <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{r.상차지명 || "-"}</span>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: "#4b5563", marginLeft: 8 }}>{abbrevAddr(r.상차지주소) || "-"}</span>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: "#4b5563", marginLeft: 8 }}>{abbrevAddr(r.상차지주소) || "-"}</span>
                       </td>
                       <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
                         <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{r.하차지명 || "-"}</span>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: "#4b5563", marginLeft: 8 }}>{abbrevAddr(r.하차지주소) || "-"}</span>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: "#4b5563", marginLeft: 8 }}>{abbrevAddr(r.하차지주소) || "-"}</span>
                       </td>
                       {/* ⭐ 상차/하차 — 상차지/하차지 칸에 있던 날짜를 여기로 옮겨 시간과 함께 표시 */}
-                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 13, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>{r.상차일 || "-"} {r.상차시간 || "즉시"}</td>
-                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 13, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>{r.하차일 || "-"} {r.하차시간 || "즉시"}</td>
+                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>{r.상차일 || "-"} {r.상차시간 || "즉시"}</td>
+                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>{r.하차일 || "-"} {r.하차시간 || "즉시"}</td>
                       <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
                         <RouteDistanceBadge fromAddr={r.상차지주소} toAddr={r.하차지주소} />
                       </td>
-                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, color: NAVY, whiteSpace: "nowrap" }}>
+                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, fontWeight: 700, color: NAVY, whiteSpace: "nowrap" }}>
                         {r.청구운임 ? `${Number(String(r.청구운임).replace(/[^\d]/g, "")).toLocaleString()}원` : "-"}
                       </td>
-                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 13, color: "#374151", fontWeight: 600, whiteSpace: "nowrap" }}>{creatorLabel(r, staffByEmail)}</td>
+                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#374151", fontWeight: 700, whiteSpace: "nowrap" }}>{creatorLabel(r, staffByEmail)}</td>
                     </tr>
                   );
                 })}
@@ -1488,7 +1514,7 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
 
           {/* 요약: 첫 오더 상/하차 예상시간 + (2건 이상이면) 마지막 오더 하차완료 예상 */}
           <div style={{ padding: "9px 16px", background: "#f8f9fb", borderTop: "1px solid #f0f2f5", fontSize: 13, color: "#374151", fontWeight: 600 }}>
-            오늘 총 <b style={{ color: NAVY }}>{orders.length}</b>건 · 첫 상차 <b>{first.상차시간 || "즉시"}</b> → 첫 오더 하차예상 <b>{first.하차시간 || "즉시"}</b>
+            오늘 총 <b style={{ color: NAVY }}>{orders.length}</b>건 · 운임 합계 <b style={{ color: NAVY }}>{fareSum.toLocaleString()}원</b> · 첫 상차 <b>{first.상차시간 || "즉시"}</b> → 첫 오더 하차예상 <b>{first.하차시간 || "즉시"}</b>
             {orders.length > 1 && (
               <> · 마지막 오더 하차완료 예상 <b>{last.하차시간 || "즉시"}{last.하차일 && last.하차일 !== selectedDate ? `(${last.하차일})` : ""}</b></>
             )}
