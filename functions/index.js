@@ -386,16 +386,48 @@ exports.notifyDispatchDeleted =
       if (data["배차상태"] === "배차취소") return;
 
       const tokens = await getTokensForType("배차취소");
-      if (!tokens.length) return;
+      if (tokens.length) {
+        await sendPushAndCleanup(tokens, {
+          notification: {
+            title: "배차취소",
+            body: `${data["거래처명"] || ""} ${data["상차지명"] || "-"} → ${data["하차지명"] || "-"} 오더가 삭제되었습니다.`,
+          },
+          android: { priority: "high" },
+          apns: { payload: { aps: { sound: "default" } } },
+        }, "배차취소(완전삭제)");
+      }
 
-      await sendPushAndCleanup(tokens, {
-        notification: {
-          title: "배차취소",
-          body: `${data["거래처명"] || ""} ${data["상차지명"] || "-"} → ${data["하차지명"] || "-"} 오더가 삭제되었습니다.`,
-        },
-        android: { priority: "high" },
-        apns: { payload: { aps: { sound: "default" } } },
-      }, "배차취소(완전삭제)");
+      // ⭐ 사용자 요청 — 지입 기사에게 배정(대기/수락/완료)돼 있던 오더가 통째로
+      // 삭제되면 그 기사 본인에게도 "배차가 취소되었습니다" 알림(알림함 기록 +
+      // 푸시)을 남긴다. 거절 상태였던 오더는 이미 그 기사와 무관해진 것이라 제외.
+      if (data["기사확인상태"] && data["기사확인상태"] !== "거절" && data["차량번호"]) {
+        const plate = normalizePlateServer(data["차량번호"]);
+        const driverSnap = await db.collection("drivers").where("차량번호", "==", data["차량번호"]).limit(5).get();
+        const driverDoc = driverSnap.docs.find((d) => normalizePlateServer(d.data()["차량번호"]) === plate);
+        if (driverDoc) {
+          const body = `담당자가 ${data["거래처명"] || ""} ${data["상차지명"] || "-"} → ${data["하차지명"] || "-"} 오더를 삭제했습니다.`;
+          await db.collection("driver_notifications").add({
+            driverId: driverDoc.id,
+            type: "canceled",
+            orderId: context.params.dispatchId,
+            title: "배차가 취소되었습니다",
+            body,
+            createdAt: FieldValue.serverTimestamp(),
+            read: false,
+          }).catch(() => {});
+
+          const userSnap = await db.collection("users").doc(driverDoc.id).get();
+          const userData = userSnap.exists ? userSnap.data() : null;
+          if (userData?.driverPushEnabled !== false && userData?.fcmToken) {
+            await sendPushAndCleanup([userData.fcmToken], {
+              notification: { title: "배차가 취소되었습니다", body },
+              data: { type: "fleet_order_canceled", orderId: context.params.dispatchId },
+              android: { priority: "high" },
+              apns: { payload: { aps: { sound: "default" } } },
+            }, "지입기사 오더삭제취소");
+          }
+        }
+      }
     });
 
 function normalizePlateServer(v = "") {
@@ -409,19 +441,26 @@ function normalizePlateServer(v = "") {
    실제 푸시 알림을 보낸다. 기사 쪽은 drivers/{uid} 문서의 차량번호로
    매칭하고, 토큰은 users/{uid}.fcmToken(DriverHome이 로그인 시 저장)을 쓴다.
 ============================== */
+// ⭐ 버그수정 — onUpdate만 리스닝했더니, 오더를 "신규 등록"하면서 차량번호까지
+// 한 번에 입력하는 흔한 흐름(최초 addDoc 시점에 이미 기사확인상태:"대기"가
+// 같이 저장됨)에서는 Cloud Functions가 "update"가 아니라 "create" 이벤트로
+// 보기 때문에 이 트리거 자체가 전혀 발동하지 않았다(실시간 로그로 확인 — 몇 ms
+// 만에 끝나는 실행이 반복됐는데, 이는 그 오더가 생성된 뒤 다른 필드가 바뀔
+// 때마다 onUpdate가 불렸지만 매번 "이미 대기"라 조기 종료된 것이었다). 생성/
+// 수정을 모두 받는 onWrite로 바꾼다.
 exports.notifyFleetDriverNewOrder =
   functions.firestore
     .document("{col}/{dispatchId}")
-    .onUpdate(async (change, context) => {
+    .onWrite(async (change, context) => {
       const { col } = context.params;
       if (!["dispatch", "orders"].includes(col)) return;
 
-      const before = change.before.data();
-      const after = change.after.data();
-      if (!before || !after) return;
+      const before = change.before.exists ? change.before.data() : null;
+      const after = change.after.exists ? change.after.data() : null;
+      if (!after) return; // 삭제는 별도 함수(notifyDispatchDeleted)에서 처리
 
       // 새로 "대기"로 바뀐 경우만(이미 대기였던 걸 다른 필드만 고친 저장엔 재알림하지 않음)
-      if (after["기사확인상태"] !== "대기" || before["기사확인상태"] === "대기") return;
+      if (after["기사확인상태"] !== "대기" || before?.["기사확인상태"] === "대기") return;
 
       const plate = normalizePlateServer(after["차량번호"] || "");
       if (!plate) return;
