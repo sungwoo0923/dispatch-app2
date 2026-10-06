@@ -8,6 +8,14 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tool
 
 const fmt = (n) => (n ? Number(n).toLocaleString() : "0");
 
+// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
+const formatPhone = (phone) => {
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  return p;
+};
+
 // ── 첨부파일 뷰어 (고정거래처) ──
 function FCAttachViewer({ row, onClose }) {
   const [items, setItems] = useState([]);
@@ -178,7 +186,7 @@ function DriverSearchInput({ value, onChange, onSelect, drivers, placeholder = "
               <span className="font-bold text-[#1B2B4B]">{d.이름}</span>
               <span className="text-gray-400">|</span>
               <span className="text-gray-600">{d.차량번호}</span>
-              {d.전화번호 && <span className="text-gray-400 ml-auto">{d.전화번호}</span>}
+              {d.전화번호 && <span className="text-gray-400 ml-auto">{formatPhone(d.전화번호)}</span>}
             </div>
           ))}
         </div>
@@ -613,7 +621,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
   };
 
   const selectEditPopupDriver = (driver) => {
-    setEditPopupRow(prev => calcRow({ ...prev, 차량번호: driver.차량번호, 이름: driver.이름, 핸드폰번호: driver.전화번호 }));
+    setEditPopupRow(prev => calcRow({ ...prev, 차량번호: driver.차량번호, 이름: driver.이름, 핸드폰번호: formatPhone(driver.전화번호 || "") }));
   };
 
   const saveEditPopup = async () => {
@@ -649,7 +657,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
   };
 
   const selectFastDriver = (idx, driver) => {
-    setFastRows(prev => { const u = [...prev]; u[idx] = calcRow({ ...u[idx], 차량번호: driver.차량번호, 이름: driver.이름, 핸드폰번호: driver.전화번호 }); return u; });
+    setFastRows(prev => { const u = [...prev]; u[idx] = calcRow({ ...u[idx], 차량번호: driver.차량번호, 이름: driver.이름, 핸드폰번호: formatPhone(driver.전화번호 || "") }); return u; });
   };
 
   const selectFastClient = (idx, clientName) => {
@@ -851,7 +859,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                     <td className={cell}>{r.수량}</td>
                     <td className={cell}>{r.차량번호}</td>
                     <td className={`${cell} font-semibold`}>{r.이름}</td>
-                    <td className={cell}>{r.핸드폰번호}</td>
+                    <td className={cell}>{formatPhone(r.핸드폰번호)}</td>
                     <td className={`${cell} text-right font-semibold text-blue-600`}>{fmt(r.청구운임)}</td>
                     <td className={`${cell} text-right font-semibold text-emerald-600`}>{fmt(r.기사운임)}</td>
                     <td className={`${cell} text-right font-semibold text-orange-600`}>{fmt(r.수수료)}</td>

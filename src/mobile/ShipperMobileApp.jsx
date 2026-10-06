@@ -13,6 +13,14 @@ import html2canvas from "html2canvas";
 // ======================================================================
 // 유틸
 // ======================================================================
+// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
+const formatPhone = (phone) => {
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  return p;
+};
+
 const todayStr = () => {
   const kst = new Date(Date.now() + 9 * 3600000);
   return kst.toISOString().slice(0, 10);
@@ -1239,7 +1247,7 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
         </MRow>
         <MRow label="상차지주소"><input className="input-m" value={form.상차지주소} onChange={(e) => update("상차지주소", e.target.value)} placeholder="주소" /></MRow>
         <MRow label="담당자명"><input className="input-m" value={form.상차지담당자} onChange={(e) => update("상차지담당자", e.target.value)} placeholder="담당자명" /></MRow>
-        <MRow label="담당자번호"><input className="input-m" value={form.상차지담당자번호} onChange={(e) => update("상차지담당자번호", e.target.value)} placeholder="연락처" /></MRow>
+        <MRow label="담당자번호"><input className="input-m" value={form.상차지담당자번호} onChange={(e) => update("상차지담당자번호", formatPhone(e.target.value))} placeholder="연락처" /></MRow>
         <MRow label="상차일">
           <div className="flex gap-2">
             <input type="date" className="input-m flex-1" value={form.상차일} onChange={(e) => update("상차일", e.target.value)} />
@@ -1288,7 +1296,7 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
         </MRow>
         <MRow label="하차지주소"><input className="input-m" value={form.하차지주소} onChange={(e) => update("하차지주소", e.target.value)} placeholder="주소" /></MRow>
         <MRow label="담당자명"><input className="input-m" value={form.하차지담당자} onChange={(e) => update("하차지담당자", e.target.value)} placeholder="담당자명" /></MRow>
-        <MRow label="담당자번호"><input className="input-m" value={form.하차지담당자번호} onChange={(e) => update("하차지담당자번호", e.target.value)} placeholder="연락처" /></MRow>
+        <MRow label="담당자번호"><input className="input-m" value={form.하차지담당자번호} onChange={(e) => update("하차지담당자번호", formatPhone(e.target.value))} placeholder="연락처" /></MRow>
         <MRow label="하차일">
           <div className="flex gap-2">
             <input type="date" className="input-m flex-1" value={form.하차일} onChange={(e) => update("하차일", e.target.value)} />
@@ -1818,7 +1826,7 @@ function ShipperDetailM({ order, onBack, onEdit, user }) {
           <MDetailRow label="지명" value={order.상차지명 || "-"} />
           <MDetailRow label="주소" value={order.상차지주소 || "-"} />
           {order.상차지담당자 && <MDetailRow label="담당자" value={order.상차지담당자} />}
-          {order.상차지담당자번호 && <MDetailRow label="연락처" value={order.상차지담당자번호} />}
+          {order.상차지담당자번호 && <MDetailRow label="연락처" value={formatPhone(order.상차지담당자번호)} />}
           {order.상차메모 && <MDetailRow label="메모" value={order.상차메모} />}
           {getViaListM(order.경유상차목록).map((s, i) => (
             <MDetailRow key={i} label={`경유${i + 1}`} value={`${s.업체명 || ""} ${s.주소 || ""}`.trim() || "-"} />
@@ -1829,7 +1837,7 @@ function ShipperDetailM({ order, onBack, onEdit, user }) {
           <MDetailRow label="지명" value={order.하차지명 || "-"} />
           <MDetailRow label="주소" value={order.하차지주소 || "-"} />
           {order.하차지담당자 && <MDetailRow label="담당자" value={order.하차지담당자} />}
-          {order.하차지담당자번호 && <MDetailRow label="연락처" value={order.하차지담당자번호} />}
+          {order.하차지담당자번호 && <MDetailRow label="연락처" value={formatPhone(order.하차지담당자번호)} />}
           {order.하차메모 && <MDetailRow label="메모" value={order.하차메모} />}
           {getViaListM(order.경유하차목록).map((s, i) => (
             <MDetailRow key={i} label={`경유${i + 1}`} value={`${s.업체명 || ""} ${s.주소 || ""}`.trim() || "-"} />
@@ -1850,7 +1858,7 @@ function ShipperDetailM({ order, onBack, onEdit, user }) {
             <>
               <MDetailRow label="차량번호" value={order.차량번호} />
               <MDetailRow label="기사명" value={order.이름 || order.기사명 || "-"} />
-              <MDetailRow label="연락처" value={order.전화번호 || "-"} />
+              <MDetailRow label="연락처" value={order.전화번호 ? formatPhone(order.전화번호) : "-"} />
               <MDetailRow label="운송사" value={order.운송사명 || "-"} />
               {order.전화번호 && (
                 <div className="flex gap-2 px-3 py-2.5">
@@ -2360,7 +2368,7 @@ function ShipperSettlementM({ orders = [], user, userData, onBack }) {
           <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", marginBottom: 6, letterSpacing: "0.06em" }}>화주사 정보</div>
           <InvoiceInfoRowM label="상호" value={userData?.companyName} />
           <InvoiceInfoRowM label="담당자" value={userData?.name} />
-          <InvoiceInfoRowM label="연락처" value={userData?.phone} last />
+          <InvoiceInfoRowM label="연락처" value={userData?.phone ? formatPhone(userData.phone) : userData?.phone} last />
         </div>
         <div style={{ padding: 14 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", marginBottom: 6, letterSpacing: "0.06em" }}>운송사 정보</div>

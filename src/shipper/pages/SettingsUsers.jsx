@@ -12,6 +12,15 @@ import {
   updateDoc
 } from "firebase/firestore";
 import { db, auth } from "../../firebase";
+
+// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
+const formatPhone = (phone) => {
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  return p;
+};
+
 export default function SettingsUsers() {
     const [open, setOpen] = useState(false);
     const [users, setUsers] = useState([]);
@@ -182,7 +191,7 @@ setRejectedList(rejectedList);
 
       <td className="py-3 font-medium text-gray-800">{u.name || "-"}</td>
       <td>{u.department || "-"} / {u.position || "-"}</td>
-      <td>{u.phone || "-"}</td>
+      <td>{u.phone ? formatPhone(u.phone) : "-"}</td>
       <td className="text-gray-600">{u.email}</td>
       <td>-</td>
 

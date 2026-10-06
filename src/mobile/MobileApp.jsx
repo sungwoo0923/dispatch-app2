@@ -7386,7 +7386,7 @@ function UploadLinkModal({ orders = [], onClose, companyName = "" }) {
               >
                 <div>
                   <span className="text-[13px] font-semibold text-gray-800">{d.name}</span>
-                  <span className="ml-2 text-[11px] text-gray-500">{d.phone}</span>
+                  <span className="ml-2 text-[11px] text-gray-500">{formatPhone(d.phone)}</span>
                   <span className="ml-1 text-[11px] text-gray-400">{d.orders.length}건</span>
                 </div>
                 <a
@@ -9738,13 +9738,13 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
                           <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${bStyle ? "bg-[#1B2B4B]/5 text-[#1B2B4B] border-[#1B2B4B]/30" : "bg-blue-50 text-blue-700 border-blue-300"}`}>신규기사</span>
                           <span className="font-bold text-[13px] text-gray-900">{d.이름 || "(이름 없음)"}</span>
                         </div>
-                        <div className="text-[11px] text-gray-400 mt-0.5">{d.차량번호 || "-"} · {d.전화번호 || "-"}</div>
+                        <div className="text-[11px] text-gray-400 mt-0.5">{d.차량번호 || "-"} · {d.전화번호 ? formatPhone(d.전화번호) : "-"}</div>
                       </>
                     ) : (
                       <>
                         <span className="font-bold text-[13px] text-gray-800">{d.차량번호}</span>
                         <span className="text-gray-400 text-[12px] ml-2">{d.이름}</span>
-                        <span className="text-gray-300 text-[11px] ml-1">{d.전화번호}</span>
+                        <span className="text-gray-300 text-[11px] ml-1">{formatPhone(d.전화번호)}</span>
                       </>
                     )}
                   </button>
@@ -10193,7 +10193,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
           {state === "배차완료" && (order.이름 || order.차량번호) && (
             <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-dashed border-gray-100">
               <span className="text-[0.75em] text-gray-400 truncate flex-1">
-                {[order.차량번호, order.이름, order.전화번호].filter(Boolean).join(" · ")}
+                {[order.차량번호, order.이름, order.전화번호 ? formatPhone(order.전화번호) : ""].filter(Boolean).join(" · ")}
               </span>
               {order.전화번호 && (
                 <div className="flex gap-1">
@@ -10465,7 +10465,7 @@ const dt = new Date(y, m - 1, d, hh, mm);
       {state === "배차완료" && (order.이름 || order.차량번호) && (
         <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-dashed border-gray-100">
           <span className="text-[11px] text-gray-400 truncate flex-1">
-            {[order.차량번호, order.이름, order.전화번호].filter(Boolean).join(" · ")}
+            {[order.차량번호, order.이름, order.전화번호 ? formatPhone(order.전화번호) : ""].filter(Boolean).join(" · ")}
           </span>
           {order.전화번호 && (
             <div className="flex gap-1">
@@ -10681,13 +10681,13 @@ function MobileOrderDetail({
   };
   const [carNo, setCarNo] = useState(order.차량번호 || "");
   const [name, setName] = useState(order.기사명 || "");
-  const [phone, setPhone] = useState(order.전화번호 || "");
+  const [phone, setPhone] = useState(fmtPhone(order.전화번호 || ""));
   const { totalKg, totalPallet, hasWaypointCargo } = getOrderCargoTotals(order);
 
   useEffect(() => {
     setCarNo(order.차량번호 || "");
     setName(order.기사명 || "");
-    setPhone(order.전화번호 || "");
+    setPhone(fmtPhone(order.전화번호 || ""));
   }, [order.차량번호, order.기사명, order.전화번호]);
 
   // 상/하차지 예상 이동거리·시간 — 상세보기를 열 때만 조회한다(목록 카드에서는 호출 안 함).
@@ -11084,7 +11084,7 @@ const pickupTimeText = order.상차시간
     const norm = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
     if (!carNo) return;
     const d = drivers.find((dr) => norm(dr.차량번호) === norm(carNo));
-    if (d) { setName(d.이름 || ""); setPhone(d.전화번호 || ""); }
+    if (d) { setName(d.이름 || ""); setPhone(fmtPhone(d.전화번호 || "")); }
   }, [carNo]);
 
   useEffect(() => {
@@ -11197,12 +11197,13 @@ const pickupTimeText = order.상차시간
 
   const normD = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
 
-  const fmtPhone = (p = "") => {
+  // 함수 선언으로 호이스팅해, 이 컴포넌트 위쪽(초기 useState 등)에서도 선언 순서 걱정 없이 쓸 수 있게 한다
+  function fmtPhone(p = "") {
     const d = String(p).replace(/[^\d]/g, "");
     if (d.length === 11) return `${d.slice(0,3)}-${d.slice(3,7)}-${d.slice(7)}`;
     if (d.length === 10) return `${d.slice(0,3)}-${d.slice(3,6)}-${d.slice(6)}`;
     return p;
-  };
+  }
   const handleSmartSearch = (text) => {
     if (!text.trim()) { setSmartMatched([]); return; }
     const { plate: pl, name: nm } = parseDriverText(text);
@@ -11276,7 +11277,7 @@ const pickupTimeText = order.상차시간
     }
     setCarNo(d.차량번호 || "");
     setName(d.이름 || "");
-    setPhone(d.전화번호 || "");
+    setPhone(fmtPhone(d.전화번호 || ""));
     setIsNewDriver(false);
     clearSmartInput();
   };
@@ -11290,7 +11291,7 @@ const pickupTimeText = order.상차시간
     if (!pl) {
       // 차량번호 없으면 그냥 신규로 직접 입력 적용
       if (nm || ph) {
-        setCarNo(""); setName(nm || ""); setPhone(ph || "");
+        setCarNo(""); setName(nm || ""); setPhone(fmtPhone(ph || ""));
         clearSmartInput();
       }
       return;
@@ -11305,14 +11306,14 @@ const pickupTimeText = order.상차시간
 
       if (sameName) {
         // 이름 동일 → 그냥 매칭 (전화번호는 무시)
-        setCarNo(existing.차량번호); setName(existing.이름); setPhone(existing.전화번호);
+        setCarNo(existing.차량번호); setName(existing.이름); setPhone(fmtPhone(existing.전화번호));
         clearSmartInput();
       } else if (nm) {
         // 차량번호 같고 이름 다름 → 충돌 팝업
         clearSmartInput();
         setDriverConflictPopup({ mode: "name_diff", existing, input: { plate: pl, name: nm, phone: ph } });
       } else {
-        setCarNo(existing.차량번호); setName(existing.이름); setPhone(existing.전화번호);
+        setCarNo(existing.차량번호); setName(existing.이름); setPhone(fmtPhone(existing.전화번호));
         clearSmartInput();
       }
       return;
@@ -11337,7 +11338,7 @@ const pickupTimeText = order.상차시간
     if (!existing) return; // 등록되지 않은 차량번호는 그대로 신규로 둔다
     if (!nm || normD(existing.이름) === normD(nm)) {
       // 이름을 아직 안 썼거나 동일하면 최신 등록 정보로 자동완성만 해준다
-      setCarNo(existing.차량번호); setName(existing.이름 || ""); setPhone(existing.전화번호 || ""); setIsNewDriver(false);
+      setCarNo(existing.차량번호); setName(existing.이름 || ""); setPhone(fmtPhone(existing.전화번호 || "")); setIsNewDriver(false);
       return;
     }
     // 차량번호는 같은데 이름이 다름 → 충돌 팝업
@@ -11550,7 +11551,7 @@ const handleAssignClick = () => {
             <div className="flex-1 min-w-0">
               <div className="text-xs font-bold text-blue-700">{s.업체명 || "-"}</div>
               {s.주소 && <div className="text-[11px] text-gray-400">{s.주소}</div>}
-              {s.담당자 && <div className="text-[11px] text-gray-500">{s.담당자}{s.담당자번호 ? ` · ${s.담당자번호}` : ""}</div>}
+              {s.담당자 && <div className="text-[11px] text-gray-500">{s.담당자}{s.담당자번호 ? ` · ${formatPhone(s.담당자번호)}` : ""}</div>}
               {(s.화물내용 || s.차량톤수 || s.톤수값) && (
                 <div className="text-[12px] font-semibold text-gray-700 mt-0.5">
                   화물정보 : {[s.화물내용, toTonUnit(s.차량톤수 || (s.톤수값 ? `${s.톤수값}${s.톤수타입 || "kg"}` : ""))].filter(Boolean).join(" · ")}
@@ -11617,7 +11618,7 @@ const handleAssignClick = () => {
             <div className="flex-1 min-w-0">
               <div className="text-xs font-bold text-gray-700">{s.업체명 || "-"}</div>
               {s.주소 && <div className="text-[11px] text-gray-400">{s.주소}</div>}
-              {s.담당자 && <div className="text-[11px] text-gray-500">{s.담당자}{s.담당자번호 ? ` · ${s.담당자번호}` : ""}</div>}
+              {s.담당자 && <div className="text-[11px] text-gray-500">{s.담당자}{s.담당자번호 ? ` · ${formatPhone(s.담당자번호)}` : ""}</div>}
               {(s.화물내용 || s.차량톤수 || s.톤수값) && (
                 <div className="text-[12px] font-semibold text-gray-700 mt-0.5">
                   화물정보 : {[s.화물내용, toTonUnit(s.차량톤수 || (s.톤수값 ? `${s.톤수값}${s.톤수타입 || "kg"}` : ""))].filter(Boolean).join(" · ")}
@@ -11864,7 +11865,7 @@ const handleAssignClick = () => {
                       <div className="flex items-center">
                         <button type="button" className="flex-1 text-left px-4 py-3 hover:bg-gray-50" onPointerDown={e => { e.preventDefault(); selectSmartDriver(d); }}>
                           <div className="font-bold text-gray-900 text-[13px]">{d.이름 || "-"}</div>
-                          <div className="text-[11px] text-gray-400 mt-0.5">{d.차량번호} · {d.전화번호}</div>
+                          <div className="text-[11px] text-gray-400 mt-0.5">{d.차량번호} · {formatPhone(d.전화번호)}</div>
                         </button>
                         <button type="button" className="px-3 py-3 text-gray-400 hover:text-blue-500 text-xs" onPointerDown={e => { e.preventDefault(); setEditingDriverId(d.id || i); setEditingDriverData({ 이름: d.이름 || "", 전화번호: d.전화번호 || "" }); }}>수정</button>
                       </div>
@@ -11904,7 +11905,7 @@ const handleAssignClick = () => {
           )}
           <input autoComplete="off" className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="차량번호" value={carNo} onChange={e => { setCarNo(e.target.value); setIsNewDriver(false); }} onBlur={checkManualDriverConflict} />
           <input autoComplete="off" className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="기사 이름" value={name} onChange={e => setName(e.target.value)} onBlur={checkManualDriverConflict} />
-          <input autoComplete="off" className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="기사 연락처" value={phone} onChange={e => setPhone(e.target.value)} />
+          <input autoComplete="off" className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="기사 연락처" value={phone} onChange={e => setPhone(fmtPhone(e.target.value))} />
         </div>
       )}
       {phone && (
@@ -12226,7 +12227,7 @@ const handleAssignClick = () => {
                       className="py-3 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold"
                       onClick={() => {
                         const d = driverConflictPopup.existing;
-                        setCarNo(d.차량번호); setName(d.이름); setPhone(d.전화번호);
+                        setCarNo(d.차량번호); setName(d.이름); setPhone(fmtPhone(d.전화번호));
                         setDriverConflictPopup(null);
                       }}
                     >기존 정보 사용</button>

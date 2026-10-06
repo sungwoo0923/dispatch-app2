@@ -8,6 +8,14 @@ import {
 import { db, auth, storage } from "./firebase";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 
+// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
+function formatPhone(phone) {
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  return p;
+}
+
 const ROOMS_COLL = "chat_rooms";
 const MSGS_COLL = "chat_messages";
 const PROFILES_COLL = "chat_profiles";
@@ -875,7 +883,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
             editPosition={editPosition} editPhone={editPhone}
             setEditName={setEditName} setEditStatusMsg={setEditStatusMsg}
             setEditPosition={setEditPosition} setEditPhone={setEditPhone}
-            onEdit={() => { setEditName(myProfile?.name || ""); setEditStatusMsg(myProfile?.statusMsg || ""); setEditPosition(myProfile?.position || ""); setEditPhone(myProfile?.phone || ""); setEditingProfile(true); }}
+            onEdit={() => { setEditName(myProfile?.name || ""); setEditStatusMsg(myProfile?.statusMsg || ""); setEditPosition(myProfile?.position || ""); setEditPhone(formatPhone(myProfile?.phone || "")); setEditingProfile(true); }}
             onSave={saveProfile}
             onCancel={() => setEditingProfile(false)}
             onBack={() => setView("friends")}
@@ -916,7 +924,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
           editPosition={editPosition} editPhone={editPhone}
           setEditName={setEditName} setEditStatusMsg={setEditStatusMsg}
           setEditPosition={setEditPosition} setEditPhone={setEditPhone}
-          onEdit={() => { setEditName(myProfile?.name || ""); setEditStatusMsg(myProfile?.statusMsg || ""); setEditPosition(myProfile?.position || ""); setEditPhone(myProfile?.phone || ""); setEditingProfile(true); }}
+          onEdit={() => { setEditName(myProfile?.name || ""); setEditStatusMsg(myProfile?.statusMsg || ""); setEditPosition(myProfile?.position || ""); setEditPhone(formatPhone(myProfile?.phone || "")); setEditingProfile(true); }}
           onSave={saveProfile}
           onCancel={() => setEditingProfile(false)}
           onBack={() => setView("friends")}
@@ -988,7 +996,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
                   {profileView.phone && (
                     <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 12 }}>
                       <span style={{ color: "#6b7280", fontWeight: 600 }}>전화번호</span>
-                      <a href={`tel:${profileView.phone}`} style={{ color: "#1B2B4B", fontWeight: 600, textDecoration: "none" }}>{profileView.phone}</a>
+                      <a href={`tel:${profileView.phone}`} style={{ color: "#1B2B4B", fontWeight: 600, textDecoration: "none" }}>{formatPhone(profileView.phone)}</a>
                     </div>
                   )}
                   {profileView.email && (
@@ -1077,7 +1085,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
                       <div style={{ fontSize: 13, fontWeight: 700, color: "#111" }}>{f.name}</div>
                       {f.position && <div style={{ fontSize: 12, color: "#6b7280" }}>{f.position}</div>}
                     </div>
-                    {f.phone && <span style={{ fontSize: 12, color: "#9ca3af" }}>{f.phone}</span>}
+                    {f.phone && <span style={{ fontSize: 12, color: "#9ca3af" }}>{formatPhone(f.phone)}</span>}
                   </div>
                 ))}
               </div>
@@ -1190,7 +1198,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
                 {profileView.phone && (
                   <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 12 }}>
                     <span style={{ color: "#6b7280", fontWeight: 600 }}>전화번호</span>
-                    <a href={`tel:${profileView.phone}`} style={{ color: "#1B2B4B", fontWeight: 600, textDecoration: "none" }}>{profileView.phone}</a>
+                    <a href={`tel:${profileView.phone}`} style={{ color: "#1B2B4B", fontWeight: 600, textDecoration: "none" }}>{formatPhone(profileView.phone)}</a>
                   </div>
                 )}
                 {profileView.email && (
@@ -1281,7 +1289,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#111" }}>{f.name}</div>
                     {f.position && <div style={{ fontSize: 12, color: "#6b7280" }}>{f.position}</div>}
                   </div>
-                  {f.phone && <span style={{ fontSize: 12, color: "#9ca3af" }}>{f.phone}</span>}
+                  {f.phone && <span style={{ fontSize: 12, color: "#9ca3af" }}>{formatPhone(f.phone)}</span>}
                 </div>
               ))}
             </div>
@@ -1711,7 +1719,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                           {msg.contactPhone && (
                             <a href={`tel:${msg.contactPhone}`} style={{ display: "flex", alignItems: "center", gap: 6, textDecoration: "none" }}>
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={isMine ? "rgba(255,255,255,0.7)" : "#6b7280"} strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2.19h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6 6l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 17z"/></svg>
-                              <span style={{ fontSize: 12, color: isMine ? "rgba(255,255,255,0.8)" : "#1B2B4B", fontWeight: 600 }}>{msg.contactPhone}</span>
+                              <span style={{ fontSize: 12, color: isMine ? "rgba(255,255,255,0.8)" : "#1B2B4B", fontWeight: 600 }}>{formatPhone(msg.contactPhone)}</span>
                             </a>
                           )}
                         </div>
@@ -2047,7 +2055,7 @@ function ProfileView({ myProfile, editingProfile, editName, editStatusMsg, editP
               <input value={editPosition} onChange={e => setEditPosition(e.target.value)}
                 placeholder="직책 (예: 팀장, 과장...)"
                 style={{ textAlign: "center", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 10, padding: "5px 12px", color: "rgba(255,255,255,0.8)", fontSize: 13, outline: "none", width: "80%" }} />
-              <input value={editPhone} onChange={e => setEditPhone(e.target.value)}
+              <input value={editPhone} onChange={e => setEditPhone(formatPhone(e.target.value))}
                 placeholder="전화번호"
                 style={{ textAlign: "center", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 10, padding: "5px 12px", color: "rgba(255,255,255,0.8)", fontSize: 13, outline: "none", width: "80%" }} />
               <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
@@ -2075,7 +2083,7 @@ function ProfileView({ myProfile, editingProfile, editName, editStatusMsg, editP
               ["이메일", myProfile?.email || ""],
               ["회사", myProfile?.company || ""],
               ["직책", myProfile?.position || "-"],
-              ["전화번호", myProfile?.phone || "-"],
+              ["전화번호", myProfile?.phone ? formatPhone(myProfile.phone) : "-"],
             ].map(([label, value], idx, arr) => (
               <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: idx < arr.length - 1 ? "1px solid #e5e7eb" : "none" }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: "#6b7280" }}>{label}</span>

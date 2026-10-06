@@ -6,6 +6,14 @@ import {
 } from "firebase/firestore";
 import { EditableText } from "./EditMode";
 
+// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
+const formatPhone = (phone) => {
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  return p;
+};
+
 const generateCompanyCode = () => {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "SF-";
@@ -695,7 +703,7 @@ export default function CompanyApplications() {
                     <td className="px-3 py-3 text-center font-semibold text-gray-800">{app.companyName}</td>
                     <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.businessNumber || "-"}</td>
                     <td className="px-3 py-3 text-center text-gray-800">{app.name}</td>
-                    <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.phone}</td>
+                    <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.phone ? formatPhone(app.phone) : app.phone}</td>
                     <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.position || "-"}</td>
                     <td className="px-3 py-3 text-center">
                       <span className={`text-[11px] font-bold ${app.termsAgreed && app.privacyAgreed ? "text-emerald-600" : "text-red-500"}`}>
@@ -767,7 +775,7 @@ export default function CompanyApplications() {
                       <td className="px-3 py-3 text-center font-semibold text-gray-800">{app.name || app.displayName || "-"}</td>
                       <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.vehicleNumber || app.licensePlate || "-"}</td>
                       <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.vehicleType || "-"}</td>
-                      <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.phone || app.phoneNumber || "-"}</td>
+                      <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{(app.phone || app.phoneNumber) ? formatPhone(app.phone || app.phoneNumber) : "-"}</td>
                       <td className="px-3 py-3 text-center"><StatusBadge status={st} /></td>
                       <td className="px-3 py-3 text-center">
                         <button
@@ -820,7 +828,7 @@ export default function CompanyApplications() {
                     <InfoRow label="사업자번호" value={managingApp.businessNumber} />
                     <InfoRow label="이메일" value={managingApp.email} />
                     <InfoRow label="이름" value={managingApp.name} />
-                    <InfoRow label="연락처" value={managingApp.phone} />
+                    <InfoRow label="연락처" value={managingApp.phone ? formatPhone(managingApp.phone) : managingApp.phone} />
                     <InfoRow label="직책" value={managingApp.position} />
                     <InfoRow label="주소" value={managingApp.address} />
                   </>
@@ -829,7 +837,7 @@ export default function CompanyApplications() {
                     <InfoRow label="신청 일시" value={fmtDate(managingApp.createdAt)} />
                     <InfoRow label="이름" value={managingApp.name || managingApp.displayName} />
                     <InfoRow label="이메일" value={managingApp.email} />
-                    <InfoRow label="연락처" value={managingApp.phone || managingApp.phoneNumber} />
+                    <InfoRow label="연락처" value={(managingApp.phone || managingApp.phoneNumber) ? formatPhone(managingApp.phone || managingApp.phoneNumber) : ""} />
                     <InfoRow label="차량번호" value={managingApp.vehicleNumber || managingApp.licensePlate} />
                     <InfoRow label="차종" value={managingApp.vehicleType} />
                     <InfoRow label="주소" value={managingApp.address} />
@@ -1127,7 +1135,7 @@ export default function CompanyApplications() {
               </div>
               <div className="border border-gray-100 rounded-xl overflow-hidden mb-5">
                 <div className="bg-gray-50 px-4 py-2 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100"><EditableText id="companyApp.codeNotice.신청자연락처" defaultText="신청자 연락처" /></div>
-                {[["이메일", codeNotice.email || "-"], ["핸드폰", codeNotice.phone || "-"]].map(([label, value]) => (
+                {[["이메일", codeNotice.email || "-"], ["핸드폰", codeNotice.phone ? formatPhone(codeNotice.phone) : "-"]].map(([label, value]) => (
                   <div key={label} className="flex items-center justify-between px-4 py-3 border-t border-gray-50 first:border-t-0">
                     <span className="text-[12px] text-gray-400"><EditableText id={`companyApp.codeNotice.label.${label}`} defaultText={label} /></span>
                     <span className="text-[13px] font-semibold text-gray-800">{value}</span>
@@ -1147,7 +1155,7 @@ export default function CompanyApplications() {
                 {codeNotice.phone && (
                   <div className="flex items-center justify-between w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50">
                     <span className="text-[13px] font-semibold text-gray-700"><EditableText id="companyApp.codeNotice.핸드폰으로직접전달" defaultText="핸드폰으로 직접 전달" /></span>
-                    <span className="text-[12px] font-mono text-gray-600">{codeNotice.phone}</span>
+                    <span className="text-[12px] font-mono text-gray-600">{formatPhone(codeNotice.phone)}</span>
                   </div>
                 )}
               </div>

@@ -25,6 +25,14 @@ import RolePermissionsPanel from "./RolePermissionsPanel";
 import { useCustomRoles } from "./customRoles";
 import { EditableText } from "./EditMode";
 
+// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
+const formatPhone = (phone) => {
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  return p;
+};
+
 const todayStr = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -513,7 +521,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const openManage = (u) => {
     setManageUser(u);
     setEditName(u.name || "");
-    setEditPhone(u.phone || "");
+    setEditPhone(formatPhone(u.phone || ""));
     setEditRole(u.role || "user");
     setEditCompany(u.companyName || "");
     setEditPosition(u.position || "");
@@ -855,7 +863,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                               ["이름", u.name || "-"],
                               ["직책", u.position || "-"],
                               ["부서", u.team || "미배정"],
-                              ["연락처", u.phone || "-"],
+                              ["연락처", u.phone ? formatPhone(u.phone) : "-"],
                               ["권한", roleLabels[u.role] || u.role || "-"],
                               ["회사명", u.companyName || "-"],
                             ].map(([label, value], i) => (
@@ -1027,7 +1035,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                               <span className="text-[11px] text-blue-600">연동: {app.linkedTransportCompany.companyName}</span>
                             )}
                           </td>
-                          <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.phone}</td>
+                          <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.phone ? formatPhone(app.phone) : app.phone}</td>
                           {isTotalMaster && (
                             <>
                               <td className="px-3 py-3 text-center text-[12px] text-gray-600">{app.linkedTransportCompany?.companyName || "-"}</td>
@@ -1306,7 +1314,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                       <tr key={q.id} onClick={() => setSelectedLandingInquiry(q)} className="cursor-pointer hover:bg-gray-50 transition">
                         <td className="px-4 py-3 font-semibold text-gray-800">{q.companyName}</td>
                         <td className="px-4 py-3 text-gray-600">{q.name}</td>
-                        <td className="px-4 py-3 text-gray-600">{q.phone}</td>
+                        <td className="px-4 py-3 text-gray-600">{q.phone ? formatPhone(q.phone) : q.phone}</td>
                         <td className="px-4 py-3 text-center text-gray-500">{q.createdAt?.seconds ? new Date(q.createdAt.seconds * 1000).toLocaleDateString("ko-KR") : "-"}</td>
                         <td className="px-4 py-3 text-center">
                           <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
@@ -1394,7 +1402,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                   ["화주사명", managingLinkedApp.companyName],
                   ["사업자번호", managingLinkedApp.businessNumber || "-"],
                   ["이름", managingLinkedApp.name],
-                  ["연락처", managingLinkedApp.phone],
+                  ["연락처", managingLinkedApp.phone ? formatPhone(managingLinkedApp.phone) : managingLinkedApp.phone],
                   ["직책", managingLinkedApp.position || "-"],
                   ["이메일", managingLinkedApp.email || "-"],
                   ["신청일", fmtDate(managingLinkedApp.createdAt)],
@@ -1609,7 +1617,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
               <div>
                 <div className="font-bold text-[15px] text-[#1B2B4B]">{selectedLandingInquiry.companyName}</div>
                 <div className="text-[12px] text-gray-500 mt-0.5">
-                  {selectedLandingInquiry.name} · {selectedLandingInquiry.phone}
+                  {selectedLandingInquiry.name} · {selectedLandingInquiry.phone ? formatPhone(selectedLandingInquiry.phone) : selectedLandingInquiry.phone}
                   {selectedLandingInquiry.createdAt?.seconds && ` · ${new Date(selectedLandingInquiry.createdAt.seconds * 1000).toLocaleString("ko-KR")}`}
                 </div>
               </div>

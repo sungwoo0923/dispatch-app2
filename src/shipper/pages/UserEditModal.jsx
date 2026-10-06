@@ -2,6 +2,15 @@ import { useState, useEffect } from "react";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../../firebase";
 import { auth } from "../../firebase";
+
+// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
+const formatPhone = (phone) => {
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  return p;
+};
+
 export default function UserEditModal({ open, user, onClose, mode, currentUserData }) {
   
   
@@ -153,7 +162,7 @@ if (!open) return null;
         <div className="space-y-2 text-[14px] mb-6 text-gray-700">
           <div>이름: {user?.name || "-"}</div>
           <div>이메일: {user?.email}</div>
-          <div>연락처: {user?.phone || "-"}</div>
+          <div>연락처: {user?.phone ? formatPhone(user.phone) : "-"}</div>
         </div>
 
         {/* 권한 선택 */}
@@ -265,7 +274,7 @@ if (mode === "reApprove") {
         <div className="px-6 py-5 space-y-2 text-[14px] text-gray-700">
           <div>이름: {user?.name || "-"}</div>
           <div>이메일: {user?.email}</div>
-          <div>연락처: {user?.phone || "-"}</div>
+          <div>연락처: {user?.phone ? formatPhone(user.phone) : "-"}</div>
           <div>부서: {user?.department || "-"}</div>
         </div>
 

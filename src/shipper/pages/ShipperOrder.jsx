@@ -27,6 +27,14 @@ const todayStr = () => {
   return `${y}-${m}-${day}`;
 };
 
+// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
+const formatPhone = (phone) => {
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  return p;
+};
+
 // 경유지 목록은 정상적으로는 배열이지만, 다른 경로(전송하기/구버전 데이터 등)로
 // 저장된 문서는 숫자키 맵 형태 등으로 들어올 수 있어 .filter() 호출 전 항상 배열로 정규화한다.
 const safeStops = (v) => {
@@ -936,7 +944,7 @@ export default function ShipperOrder({ editData, onClose }) {
               </div>
               <div><label className={labelCls}>상차지주소</label><input className={inputCls + errCls("상차지주소")} placeholder="상차지주소" value={form.상차지주소} onChange={e => onChange("상차지주소", e.target.value)} /></div>
               <div><label className={labelCls}>담당자명</label><input className={inputCls} placeholder="담당자명" value={form.상차담당자명} onChange={e => onChange("상차담당자명", e.target.value)} /></div>
-              <div><label className={labelCls}>담당자번호</label><input className={inputCls} placeholder="담당자번호" value={form.상차담당자번호} onChange={e => onChange("상차담당자번호", e.target.value)} /></div>
+              <div><label className={labelCls}>담당자번호</label><input className={inputCls} placeholder="담당자번호" value={form.상차담당자번호} onChange={e => onChange("상차담당자번호", formatPhone(e.target.value))} /></div>
               <div><label className={labelCls}>메모</label><input className={inputCls} placeholder="메모" value={form.상차메모} onChange={e => onChange("상차메모", e.target.value)} /></div>
               <div className="pt-1">
                 {(form.경유상차목록 || []).filter(s => s.업체명?.trim()).length > 0 ? (
@@ -978,7 +986,7 @@ export default function ShipperOrder({ editData, onClose }) {
               </div>
               <div><label className={labelCls}>하차지주소</label><input className={inputCls + errCls("하차지주소")} placeholder="하차지주소" value={form.하차지주소} onChange={e => onChange("하차지주소", e.target.value)} /></div>
               <div><label className={labelCls}>담당자명</label><input className={inputCls} placeholder="담당자명" value={form.하차담당자명} onChange={e => onChange("하차담당자명", e.target.value)} /></div>
-              <div><label className={labelCls}>담당자번호</label><input className={inputCls} placeholder="담당자번호" value={form.하차담당자번호} onChange={e => onChange("하차담당자번호", e.target.value)} /></div>
+              <div><label className={labelCls}>담당자번호</label><input className={inputCls} placeholder="담당자번호" value={form.하차담당자번호} onChange={e => onChange("하차담당자번호", formatPhone(e.target.value))} /></div>
               <div><label className={labelCls}>메모</label><input className={inputCls} placeholder="메모" value={form.하차메모} onChange={e => onChange("하차메모", e.target.value)} /></div>
               <div className="pt-1">
                 {(form.경유하차목록 || []).filter(s => s.업체명?.trim()).length > 0 ? (
@@ -1294,7 +1302,7 @@ export default function ShipperOrder({ editData, onClose }) {
                   className="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-[#1B2B4B] hover:bg-[#eef1f7] transition"
                 >
                   <div className="font-bold text-[14px] text-gray-900">{c.name || "(이름 없음)"}</div>
-                  <div className="text-[12px] text-gray-500 mt-0.5">{c.phone || "-"}</div>
+                  <div className="text-[12px] text-gray-500 mt-0.5">{c.phone ? formatPhone(c.phone) : "-"}</div>
                 </button>
               ))}
             </div>
@@ -1409,7 +1417,7 @@ function ViaStopModal({ type, list, onSave, onClose }) {
               <input className={inputCls} placeholder="주소" value={stop.주소} onChange={e => update(idx, "주소", e.target.value)} />
               <div className="grid grid-cols-2 gap-2">
                 <input className={inputCls} placeholder="담당자명" value={stop.담당자} onChange={e => update(idx, "담당자", e.target.value)} />
-                <input className={inputCls} placeholder="담당자번호" value={stop.담당자번호} onChange={e => update(idx, "담당자번호", e.target.value)} />
+                <input className={inputCls} placeholder="담당자번호" value={stop.담당자번호} onChange={e => update(idx, "담당자번호", formatPhone(e.target.value))} />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <input className={inputCls} placeholder="화물내용 (예: 2파레트)" value={stop.화물내용} onChange={e => update(idx, "화물내용", e.target.value)} />

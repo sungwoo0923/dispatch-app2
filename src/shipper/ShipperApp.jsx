@@ -21,6 +21,14 @@ import InternalMessenger from "../InternalMessenger";
 const myInfoLabelCls = "block text-xs font-bold text-gray-600 mb-1";
 const myInfoInputCls = "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:ring-2 focus:ring-[#1B2B4B]/40 focus:border-[#1B2B4B] outline-none";
 
+// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
+const formatPhone = (phone) => {
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  return p;
+};
+
 // ── 실시간 현황판: 운송사가 오늘 배차완료/수정한 이벤트만 뽑아낸다(화주사 자신의 등록은 제외) ──
 const _todayKST = () => {
   const kst = new Date(Date.now() + 9 * 3600000);
@@ -280,7 +288,7 @@ setUser(u);
 setUserData(data);
 setForm({
   name: data.name || "",
-  phone: data.phone || "",
+  phone: formatPhone(data.phone || ""),
   department: data.department || "",
   position: data.position || ""
 });
@@ -563,7 +571,7 @@ location.pathname.startsWith("/shipper/transport")
         <label className={myInfoLabelCls}>핸드폰번호</label>
         <input
           value={form.phone}
-          onChange={(e) => setForm({ ...form, phone: e.target.value })}
+          onChange={(e) => setForm({ ...form, phone: formatPhone(e.target.value) })}
           className={myInfoInputCls}
         />
       </div>

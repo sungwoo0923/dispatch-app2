@@ -4,6 +4,14 @@ import { getDoc, collection, query, where, getDocs, doc, deleteDoc, addDoc, upda
 
 const EMPTY_FORM = { name: "", address: "", 담당자명: "", 담당자번호: "", 메모: "" };
 
+// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
+const formatPhone = (phone) => {
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  return p;
+};
+
 export default function SettingsAddress() {
   const [addressBook, setAddressBook] = useState([]);
   const [userData, setUserData] = useState(null);
@@ -88,7 +96,7 @@ export default function SettingsAddress() {
   };
 
   const openEdit = (item) => {
-    setForm({ name: item.name, address: item.address, 담당자명: item.manager, 담당자번호: item.phone, 메모: item.memo });
+    setForm({ name: item.name, address: item.address, 담당자명: item.manager, 담당자번호: formatPhone(item.phone || ""), 메모: item.memo });
     setEditItem(item);
     setAddOpen(true);
   };
@@ -247,7 +255,7 @@ export default function SettingsAddress() {
                   <td className="py-3 px-4 font-semibold text-left border-r border-gray-100">{item.name}</td>
                   <td className="py-3 px-4 text-gray-600 text-left border-r border-gray-100 max-w-[220px] truncate">{item.address || "-"}</td>
                   <td className="py-3 px-4 border-r border-gray-100">{item.manager || "-"}</td>
-                  <td className="py-3 px-4 border-r border-gray-100">{item.phone || "-"}</td>
+                  <td className="py-3 px-4 border-r border-gray-100">{item.phone ? formatPhone(item.phone) : "-"}</td>
                   <td className="py-3 px-4 border-r border-gray-100 text-gray-500">{item.memo || "-"}</td>
                   <td className="py-3 px-4">
                     <div className="flex justify-center gap-2">
@@ -314,7 +322,7 @@ export default function SettingsAddress() {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-[#1B2B4B]/40 focus:border-[#1B2B4B]"
                   placeholder="010-0000-0000"
                   value={form.담당자번호}
-                  onChange={(e) => setForm({ ...form, 담당자번호: e.target.value })}
+                  onChange={(e) => setForm({ ...form, 담당자번호: formatPhone(e.target.value) })}
                 />
               </div>
               <div>

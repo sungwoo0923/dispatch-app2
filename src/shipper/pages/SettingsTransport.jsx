@@ -2,6 +2,14 @@ import { useState, useEffect } from "react";
 import { auth, db } from "../../firebase";
 import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 
+// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
+const formatPhone = (phone) => {
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  return p;
+};
+
 function Row({ label, value }) {
   return (
     <div className="grid grid-cols-[160px_1fr] items-center py-3 border-b border-gray-100 last:border-b-0">
@@ -95,7 +103,7 @@ export default function SettingsTransport() {
           <Row label="사업자번호" value={linked.businessNumber || detail?.businessNumber} />
           <Row label="대표자" value={linked.representative || detail?.name || detail?.representative} />
           <Row label="주소" value={detail?.address} />
-          <Row label="연락처" value={detail?.phone || detail?.tel} />
+          <Row label="연락처" value={formatPhone(detail?.phone || detail?.tel || "")} />
           <Row label="이메일" value={detail?.email} />
         </div>
       </div>

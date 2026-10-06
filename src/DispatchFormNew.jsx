@@ -13,6 +13,13 @@ const calcRouteByServer = async (fromAddr, toAddr) => {
 };
 
 // DispatchFormNew.jsx
+// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
+function formatPhone(phone) {
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  return p;
+}
 const VEHICLE_TYPES = [
   "라보/다마스",
   "카고",
@@ -244,7 +251,7 @@ const handleAutoRouteCalc = async () => {
 
     if (match) {
       onChange("기사명", match.이름 || "");
-      onChange("기사연락처", match.전화번호 || "");
+      onChange("기사연락처", formatPhone(match.전화번호 || ""));
     } else {
       setPendingPlate(form.차량번호);
       setShowNewDriverModal(true);
@@ -314,7 +321,7 @@ const placePool = useMemo(() => {
     지명: p.업체명 || "",
     주소: p.주소 || "",
     담당자: p.담당자 || "",
-    연락처: p.담당자번호 || "",
+    연락처: formatPhone(p.담당자번호 || ""),
   }));
 }, [placeRows]);
 // ✅ 거래처 자동완성 풀 (상차지 기준)
@@ -329,7 +336,7 @@ const clientPool = useMemo(() => {
       지명: p.업체명,
       주소: p.주소 || "",
       담당자: p.담당자 || "",
-      연락처: p.담당자번호 || "",
+      연락처: formatPhone(p.담당자번호 || ""),
     });
   });
 
@@ -459,7 +466,7 @@ useEffect(() => {
             onChange("상차지명", client.업체명);
             onChange("상차지주소", client.주소);
             onChange("상차담당자", client.담당자);
-            onChange("상차연락처", client.담당자연락처);
+            onChange("상차연락처", formatPhone(client.담당자연락처 || ""));
             setShowNewClientModal(false);
           }}
         />
@@ -471,7 +478,7 @@ useEffect(() => {
           onSave={(driver) => {
             onChange("차량번호", driver.차량번호);
             onChange("기사명", driver.이름);
-            onChange("기사연락처", driver.전화번호);
+            onChange("기사연락처", formatPhone(driver.전화번호 || ""));
             const plateId = normalizePlate(driver.차량번호);
             upsertDriver?.({
               id: plateId,
@@ -566,7 +573,7 @@ useEffect(() => {
               <input ref={upAddrRef} className={lineInput} placeholder="상차지 주소" value={form.상차지주소 || ""} onChange={e => onChange("상차지주소", e.target.value)}/>
               <div className="grid grid-cols-2 gap-2">
                 <input ref={upManRef} className={lineInput} placeholder="담당자" value={form.상차담당자 || ""} onChange={e => onChange("상차담당자", e.target.value)}/>
-                <input ref={upTelRef} className={lineInput} placeholder="연락처" value={form.상차연락처 || ""} onChange={e => onChange("상차연락처", e.target.value)}/>
+                <input ref={upTelRef} className={lineInput} placeholder="연락처" value={form.상차연락처 || ""} onChange={e => onChange("상차연락처", formatPhone(e.target.value))}/>
               </div>
             </div>
             <div className="space-y-2">
@@ -591,7 +598,7 @@ useEffect(() => {
               <input className={lineInput} placeholder="하차지 주소" value={form.하차지주소 || ""} onChange={e => onChange("하차지주소", e.target.value)}/>
               <div className="grid grid-cols-2 gap-2">
                 <input className={lineInput} placeholder="담당자" value={form.하차담당자 || ""} onChange={e => onChange("하차담당자", e.target.value)}/>
-                <input className={lineInput} placeholder="연락처" value={form.하차연락처 || ""} onChange={e => onChange("하차연락처", e.target.value)}/>
+                <input className={lineInput} placeholder="연락처" value={form.하차연락처 || ""} onChange={e => onChange("하차연락처", formatPhone(e.target.value))}/>
               </div>
             </div>
           </div>
@@ -646,7 +653,7 @@ useEffect(() => {
           <div className="grid grid-cols-3 gap-5">
             <input className={lineInput} placeholder="차량번호" value={form.차량번호 || ""} onChange={(e) => { const v = e.target.value; onChange("차량번호", v); if (!v.trim()) { onChange("기사명", ""); onChange("기사연락처", ""); } }} onBlur={checkDriverMatch} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); checkDriverMatch(); e.target.blur(); } }}/>
             <input className={lineInput + " bg-gray-50"} placeholder="기사명" value={form.기사명 || ""} readOnly/>
-            <input className={lineInput + " bg-gray-50"} placeholder="기사 연락처" value={form.기사연락처 || ""} readOnly/>
+            <input className={lineInput + " bg-gray-50"} placeholder="기사 연락처" value={form.기사연락처 ? formatPhone(form.기사연락처) : ""} readOnly/>
           </div>
         </section>
 
@@ -743,7 +750,7 @@ function NewClientModal({ initialName, onClose, onSave }) {
               placeholder="담당자 연락처"
               value={form.담당자연락처}
               onChange={(e) =>
-                change("담당자연락처", e.target.value)
+                change("담당자연락처", formatPhone(e.target.value))
               }
             />
           </div>
@@ -820,7 +827,7 @@ onChange={(e)=>change("이름",e.target.value)}
 className="w-full border rounded-md px-3 py-2 text-sm"
 placeholder="연락처"
 value={form.전화번호}
-onChange={(e)=>change("전화번호",e.target.value)}
+onChange={(e)=>change("전화번호",formatPhone(e.target.value))}
 />
 
 </div>

@@ -5,6 +5,14 @@ import { doc, getDoc } from "firebase/firestore";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
+// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
+const formatPhone = (phone) => {
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  return p;
+};
+
 const numberToKorean = (num) => {
   if (!num) return "영";
   const units = ["", "만", "억", "조"];
@@ -529,7 +537,7 @@ export default function ShipperSettlement() {
                     <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 8, letterSpacing: "0.08em", textTransform: "uppercase" }}>화주사 정보</div>
                     <InvoiceInfoRow label="상호" value={userData?.companyName} />
                     <InvoiceInfoRow label="담당자" value={userData?.name} />
-                    <InvoiceInfoRow label="연락처" value={userData?.phone} />
+                    <InvoiceInfoRow label="연락처" value={userData?.phone ? formatPhone(userData.phone) : userData?.phone} />
                     <InvoiceInfoRow label="이메일" value={user?.email} last />
                   </div>
                   <div style={{ padding: 20 }}>

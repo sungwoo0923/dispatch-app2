@@ -68,6 +68,14 @@ const fmtMoney = (v) => `${(Number(v) || 0).toLocaleString("ko-KR")}원`;
 
 const onlyDigits = (v = "") => String(v).replace(/[^\d]/g, "");
 
+// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
+const formatPhone = (v = "") => {
+  const d = onlyDigits(v);
+  if (d.length === 11) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  return d;
+};
+
 const normalizeText = (s = "") => String(s).toLowerCase().replace(/\s+/g, "");
 
 const getPickupDate = (o = {}) => String(o.상차일 || "").slice(0, 10);
@@ -430,7 +438,7 @@ function ContactPickerModal({ contacts, onSelect, onClose }) {
                   <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">주담당</span>
                 )}
               </div>
-              <div className="text-base text-gray-500 mt-0.5">{c.phone || "-"}</div>
+              <div className="text-base text-gray-500 mt-0.5">{c.phone ? formatPhone(c.phone) : "-"}</div>
             </button>
           ))}
         </div>
@@ -544,7 +552,7 @@ function OrderCard({ order, onClick, variant, onOpenFare }) {
           {(order.전화번호 || order.전화) && (
             <span className="inline-flex items-center gap-1">
               <span className="text-gray-300">·</span>
-              <Phone className="w-4 h-4 shrink-0" /> {order.전화번호 || order.전화}
+              <Phone className="w-4 h-4 shrink-0" /> {formatPhone(order.전화번호 || order.전화)}
             </span>
           )}
         </div>
@@ -660,11 +668,11 @@ function RegisterScreen({ clients, places, role, onSubmitRegister, onBack, onDon
   const [상차지명, set상차지명] = useState(io.상차지명 || "");
   const [상차지주소, set상차지주소] = useState(io.상차지주소 || "");
   const [상차지담당자, set상차지담당자] = useState(io.상차지담당자 || "");
-  const [상차지담당자번호, set상차지담당자번호] = useState(io.상차지담당자번호 || "");
+  const [상차지담당자번호, set상차지담당자번호] = useState(formatPhone(io.상차지담당자번호 || ""));
   const [하차지명, set하차지명] = useState(io.하차지명 || "");
   const [하차지주소, set하차지주소] = useState(io.하차지주소 || "");
   const [하차지담당자, set하차지담당자] = useState(io.하차지담당자 || "");
-  const [하차지담당자번호, set하차지담당자번호] = useState(io.하차지담당자번호 || "");
+  const [하차지담당자번호, set하차지담당자번호] = useState(formatPhone(io.하차지담당자번호 || ""));
   const [상차일, set상차일] = useState(() => getPickupDate(io) || todayLocal());
   const [상차시간, set상차시간] = useState(io.상차시간 || "");
   const [상차시간기준, set상차시간기준] = useState(io.상차시간기준 || null);
@@ -708,12 +716,12 @@ function RegisterScreen({ clients, places, role, onSubmitRegister, onBack, onDon
       set상차지명(c.거래처명 || "");
       set상차지주소(c.주소 || "");
       set상차지담당자(primary?.name || c.담당자 || "");
-      set상차지담당자번호(primary?.phone || c.담당자번호 || "");
+      set상차지담당자번호(formatPhone(primary?.phone || c.담당자번호 || ""));
     } else {
       set하차지명(c.거래처명 || "");
       set하차지주소(c.주소 || "");
       set하차지담당자(primary?.name || c.담당자 || "");
-      set하차지담당자번호(primary?.phone || c.담당자번호 || "");
+      set하차지담당자번호(formatPhone(primary?.phone || c.담당자번호 || ""));
     }
     if (contacts.length > 1) {
       setPendingContacts(contacts);
@@ -805,7 +813,7 @@ function RegisterScreen({ clients, places, role, onSubmitRegister, onBack, onDon
             <BigInput
               className="flex-[1.5]"
               value={상차지담당자번호}
-              onChange={(e) => set상차지담당자번호(onlyDigits(e.target.value))}
+              onChange={(e) => set상차지담당자번호(formatPhone(e.target.value))}
               placeholder="연락처"
               inputMode="tel"
             />
@@ -835,7 +843,7 @@ function RegisterScreen({ clients, places, role, onSubmitRegister, onBack, onDon
             <BigInput
               className="flex-[1.5]"
               value={하차지담당자번호}
-              onChange={(e) => set하차지담당자번호(onlyDigits(e.target.value))}
+              onChange={(e) => set하차지담당자번호(formatPhone(e.target.value))}
               placeholder="연락처"
               inputMode="tel"
             />
@@ -933,10 +941,10 @@ function RegisterScreen({ clients, places, role, onSubmitRegister, onBack, onDon
           onSelect={(c) => {
             if (contactPickerFor === "pickup") {
               set상차지담당자(c.name || "");
-              set상차지담당자번호(c.phone || "");
+              set상차지담당자번호(formatPhone(c.phone || ""));
             } else {
               set하차지담당자(c.name || "");
-              set하차지담당자번호(c.phone || "");
+              set하차지담당자번호(formatPhone(c.phone || ""));
             }
             setContactPickerFor(null);
           }}
@@ -1065,7 +1073,7 @@ function OrderListScreen({
 
 function OrderDetailSheet({ order, onClose, onOpenFare, onEdit }) {
   if (!order) return null;
-  const driverPhone = order.전화번호 || order.전화 || "";
+  const driverPhone = formatPhone(order.전화번호 || order.전화 || "");
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-end" onClick={onClose}>
       <div
@@ -1361,7 +1369,7 @@ function AssignScreen({ order, drivers, role, onAssignVehicle, onBack, onDone, o
   const applyDriver = (d) => {
     set차량번호(d.차량번호 || "");
     set기사명(d.이름 || "");
-    set전화번호(d.전화번호 || "");
+    set전화번호(formatPhone(d.전화번호 || ""));
   };
 
   const handleSubmit = async () => {
@@ -1439,7 +1447,7 @@ function AssignScreen({ order, drivers, role, onAssignVehicle, onBack, onDone, o
                     onClick={() => { applyDriver(d); setShowPlateList(false); }}
                   >
                     <div className="text-lg font-bold text-gray-900">{d.차량번호}</div>
-                    <div className="text-sm text-gray-400 mt-0.5">{d.이름 || "-"} · {d.전화번호 || "-"}</div>
+                    <div className="text-sm text-gray-400 mt-0.5">{d.이름 || "-"} · {d.전화번호 ? formatPhone(d.전화번호) : "-"}</div>
                   </button>
                 ))}
               </div>
@@ -1468,7 +1476,7 @@ function AssignScreen({ order, drivers, role, onAssignVehicle, onBack, onDone, o
                     onClick={() => { applyDriver(d); setShowNameList(false); }}
                   >
                     <div className="text-lg font-bold text-gray-900">{d.이름}</div>
-                    <div className="text-sm text-gray-400 mt-0.5">{d.차량번호 || "-"} · {d.전화번호 || "-"}</div>
+                    <div className="text-sm text-gray-400 mt-0.5">{d.차량번호 || "-"} · {d.전화번호 ? formatPhone(d.전화번호) : "-"}</div>
                   </button>
                 ))}
               </div>
@@ -1480,8 +1488,8 @@ function AssignScreen({ order, drivers, role, onAssignVehicle, onBack, onDone, o
           <FieldLabel>전화번호</FieldLabel>
           <BigInput
             value={전화번호}
-            onChange={(e) => set전화번호(onlyDigits(e.target.value))}
-            placeholder="01012345678"
+            onChange={(e) => set전화번호(formatPhone(e.target.value))}
+            placeholder="010-1234-5678"
             inputMode="tel"
           />
         </div>

@@ -5,6 +5,14 @@ import {
   collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, orderBy, query
 } from "firebase/firestore";
 
+// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
+function formatPhone(phone) {
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  return p;
+}
+
 // ── 주소 정규화 ───────────────────────────────────────────────────────────
 function normalizeAddr(addr = "") {
   return addr
@@ -277,7 +285,7 @@ function buildOutputExcel(origWb, sheetAssignments) {
     if (!assignment?.assigned?.driver?.name) return;
 
     const d = assignment.assigned.driver;
-    const sigText = `${d.plate}\n${d.name} ${d.phone}`;
+    const sigText = `${d.plate}\n${d.name} ${formatPhone(d.phone)}`;
 
     const range = XLSX.utils.decode_range(ws["!ref"] || "A1:Z200");
 
@@ -744,7 +752,7 @@ export default function DeliverySignaturePage() {
                           {d ? (
                             <>
                               <div className="text-[12px] font-bold text-gray-800">{d.name}</div>
-                              <div className="text-[10px] text-gray-400">{d.plate} · {d.phone}</div>
+                              <div className="text-[10px] text-gray-400">{d.plate} · {formatPhone(d.phone)}</div>
                             </>
                           ) : (
                             <div className="text-[12px] text-amber-600 font-semibold">미지정</div>
@@ -788,7 +796,7 @@ export default function DeliverySignaturePage() {
                     <div className="bg-[#1B2B4B] px-4 py-3 flex items-center justify-between">
                       <div>
                         <div className="text-white font-bold text-[14px]">{s.driver.name}</div>
-                        <div className="text-white/60 text-[11px]">{s.driver.plate} · {s.driver.phone}</div>
+                        <div className="text-white/60 text-[11px]">{s.driver.plate} · {formatPhone(s.driver.phone)}</div>
                       </div>
                       <div className="text-right">
                         <div className="text-white text-[22px] font-black leading-none">{s.deliveries}</div>

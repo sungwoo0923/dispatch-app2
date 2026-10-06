@@ -13,6 +13,16 @@ const STANDARD_TON_LABELS = ["다마스/라보","1톤","1.4톤","2.5톤","3.5톤
 // 회사마다 자기 정보로 찍히게 한다 — RateCard 컴포넌트 안 useCompanyInfo 훅 참고.
 const EMPTY_COMPANY = { name: "", manager: "", phone: "", email: "", address: "", tel: "" };
 
+// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙) — 단가표/견적서
+// 곳곳에서 COMPANY.phone/tel을 그대로 찍어쓰므로, 여기서 한 번만 포맷해두면 모든
+// 소비처(RateCard.jsx 전체, MobileApp.jsx 등)에 전부 적용된다.
+function formatPhone(phone) {
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  return p;
+}
+
 export function useCompanyInfo(userCompany) {
   const [info, setInfo] = useState(EMPTY_COMPANY);
   useEffect(() => {
@@ -27,10 +37,10 @@ export function useCompanyInfo(userCompany) {
       setInfo({
         name: co,
         manager: d.representative || d.대표자 || d.ceo || "",
-        phone: d.phone || d.연락처 || "",
+        phone: formatPhone(d.phone || d.연락처 || ""),
         email: d.email || "",
         address: d.address || d.주소 || "",
-        tel: d.fax || d.팩스 || d.팩스번호 || "",
+        tel: formatPhone(d.fax || d.팩스 || d.팩스번호 || ""),
       });
     }, () => {});
     return () => unsub();

@@ -11,6 +11,14 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 // Capacitor 네이티브 컨텍스트 여부 확인
 const isNative = () => typeof window !== "undefined" && !!(window.Capacitor?.isNativePlatform?.());
 
+// 전화번호 하이픈 자동 포맷 (PC/모바일 formatPhone과 동일 규칙)
+function formatPhone(phone) {
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  return p;
+}
+
 // ⭐ 사용자 요청 — 차량종류/톤수/거주지를 기사 본인도 수정할 수 있어야 한다.
 // DriverRegister.jsx 가입 화면과 같은 목록을 그대로 쓴다.
 const VEHICLE_CATEGORIES = ["라보/다마스", "카고", "윙바디", "탑차", "냉장/냉동윙", "냉장/냉동탑", "직접입력"];
@@ -177,7 +185,7 @@ function LocBlock({ title, name, addr, when, manager, managerPhone, onCopy }) {
       )}
       {manager && (
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
-          <span style={{ fontSize: 12, color: "#6b7280" }}>{manager}{managerPhone ? ` · ${managerPhone}` : ""}</span>
+          <span style={{ fontSize: 12, color: "#6b7280" }}>{manager}{managerPhone ? ` · ${formatPhone(managerPhone)}` : ""}</span>
           {managerPhone && (
             <a href={`tel:${String(managerPhone).replace(/[^0-9]/g, "")}`} style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: "#16a34a", borderRadius: 6, padding: "2px 8px", textDecoration: "none", flexShrink: 0 }}>전화</a>
           )}
@@ -1791,7 +1799,7 @@ export default function DriverHome() {
             ...(companyContact ? [{
               section: "회사 연락처",
               items: [
-                { name: companyContact.name, number: companyContact.phone, tel: companyContact.phone.replace(/[^0-9]/g, ""), desc: "배차팀" },
+                { name: companyContact.name, number: formatPhone(companyContact.phone), tel: companyContact.phone.replace(/[^0-9]/g, ""), desc: "배차팀" },
               ],
             }] : []),
             {
@@ -1851,7 +1859,7 @@ export default function DriverHome() {
               ["이름", driver.name || "-"],
               ["차량번호", driver.carNo || "-"],
               ["차량종류", driver.vehicleType || "-"],
-              ["연락처", driver.phone || "-"],
+              ["연락처", driver.phone ? formatPhone(driver.phone) : "-"],
               ["현재 상태", currentStatus],
             ].map(([label, value], i, arr) => (
               <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 16px", borderBottom: i < arr.length - 1 ? "1px solid #f3f4f6" : "none" }}>

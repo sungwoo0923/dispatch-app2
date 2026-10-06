@@ -1,6 +1,14 @@
 // ✅ DriverPickerModal.jsx (Firestore 연동 버전)
 import React, { useEffect, useState } from "react";
 
+// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
+function formatPhone(phone) {
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  return p;
+}
+
 /**
  * ✅ DriverPickerModal.jsx
  * 차량번호 클릭 시 뜨는 기사 선택 / 신규등록 팝업
@@ -67,12 +75,12 @@ export default function DriverPickerModal({
                 onClick={() => {
                   setCar(d.차량번호);
                   setName(d.이름);
-                  setPhone(d.전화번호);
+                  setPhone(formatPhone(d.전화번호));
                   setIsNew(false);
                 }}
                 className="p-2 hover:bg-blue-50 cursor-pointer border-b text-sm"
               >
-                🚚 {d.차량번호} — {d.이름} ({d.전화번호})
+                🚚 {d.차량번호} — {d.이름} ({formatPhone(d.전화번호)})
               </div>
             ))
           ) : (
@@ -103,7 +111,7 @@ export default function DriverPickerModal({
               type="text"
               placeholder="전화번호"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => setPhone(formatPhone(e.target.value))}
               className="w-full border rounded p-2"
             />
           </div>

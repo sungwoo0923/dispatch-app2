@@ -100,6 +100,14 @@ const fmtTimeCell = (time, gubun) => {
   return gubun && gubun !== "정각" ? `${fmt12(time)} ${gubun}` : fmt12(time);
 };
 
+// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
+const formatPhone = (phone) => {
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  return p;
+};
+
 const getViaList = (v) => (Array.isArray(v) ? v.filter(s => s && (s.업체명 || s.주소)) : []);
 
 const getPalletSummary = (o) => {
@@ -239,7 +247,7 @@ export default function ShipperStatus() {
       `차량 : ${o.차량종류 || "-"} / ${o.차량톤수 || "-"}`,
       `청구운임 : ${o.청구운임 ? Number(o.청구운임).toLocaleString() + "원" : "-"}`,
       `지급방식 : ${o.지급방식 || "-"}`,
-      o.차량번호 ? `기사 : ${o.이름 || "-"} / ${o.차량번호} / ${o.전화번호 || "-"}` : null,
+      o.차량번호 ? `기사 : ${o.이름 || "-"} / ${o.차량번호} / ${o.전화번호 ? formatPhone(o.전화번호) : "-"}` : null,
     ].filter(Boolean).join("\n");
   };
 
@@ -734,7 +742,7 @@ export default function ShipperStatus() {
         톤수: o.차량톤수 || "",
         차량번호: o.차량번호 || "",
         기사명: o.이름 || "",
-        기사전화: o.전화번호 || "",
+        기사전화: o.전화번호 ? formatPhone(o.전화번호) : "",
         청구운임: o.청구운임 || "",
         지급방식: o.지급방식 || "",
         상태: getStatus(o),
@@ -1204,7 +1212,7 @@ export default function ShipperStatus() {
                     <td className={tdCls}>{o.차량톤수 || "-"}</td>
                     <td className={`${tdCls} font-semibold`}>{o.차량번호 || "-"}</td>
                     <td className={tdCls}>{o.이름 || "-"}</td>
-                    <td className={`${tdCls} whitespace-nowrap`}>{o.전화번호 || "-"}</td>
+                    <td className={`${tdCls} whitespace-nowrap`}>{o.전화번호 ? formatPhone(o.전화번호) : "-"}</td>
                     <td className={`${tdCls} font-bold text-[#1B2B4B] whitespace-nowrap`}>
                       {o.청구운임 ? Number(o.청구운임).toLocaleString() + "원" : "-"}
                     </td>
@@ -1357,7 +1365,7 @@ export default function ShipperStatus() {
                 <div className="grid grid-cols-2 gap-x-6">
                   <Row label="기사명" value={selectedOrder?.이름 || "-"} />
                   <Row label="차량번호" value={selectedOrder?.차량번호 || "-"} />
-                  <Row label="전화번호" value={selectedOrder?.전화번호 || "-"} />
+                  <Row label="전화번호" value={selectedOrder?.전화번호 ? formatPhone(selectedOrder.전화번호) : "-"} />
                   <Row label="운송사" value={selectedOrder?.운송사명 || "-"} />
                 </div>
                 <div className="border-t mt-2 pt-3">
@@ -1630,7 +1638,7 @@ export default function ShipperStatus() {
                 <>
                   <div><span className="text-gray-400 text-[12px] mr-2">기사명</span>{driverInfoPopup.이름 || "-"}</div>
                   <div><span className="text-gray-400 text-[12px] mr-2">차량번호</span>{driverInfoPopup.차량번호 || "-"}</div>
-                  <div><span className="text-gray-400 text-[12px] mr-2">전화번호</span>{driverInfoPopup.전화번호 || "-"}</div>
+                  <div><span className="text-gray-400 text-[12px] mr-2">전화번호</span>{driverInfoPopup.전화번호 ? formatPhone(driverInfoPopup.전화번호) : "-"}</div>
                   <div><span className="text-gray-400 text-[12px] mr-2">운송사</span>{driverInfoPopup.운송사명 || "-"}</div>
                 </>
               ) : (

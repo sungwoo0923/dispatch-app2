@@ -11,6 +11,13 @@ import {
 import L from "leaflet";
 
 const NAVY = "#1B2B4B";
+// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
+function formatPhone(phone) {
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  return p;
+}
 const STATUS_COLORS = {
   운행중: "#10b981", 출근: "#3b82f6", 상차중: "#f59e0b",
   하차중: "#8b5cf6", 대기: "#6b7280", 휴식: "#9ca3af",
@@ -744,7 +751,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
                             const eff = /25|28/.test(vt)?3.0:/11|15|18/.test(vt)?3.5:/1[^0-9]|2\.5|소형/.test(vt)?5.5:4.0;
                             const fuelCost = km > 0 ? Math.round(km/eff*1750) : 0;
                             return [
-                              ["연락처", d.phone || "-"],
+                              ["연락처", d.phone ? formatPhone(d.phone) : "-"],
                               ["차량종류", d.vehicleType || "-"],
                               ["이동거리", `${km.toFixed(2)} km`],
                               ["연료비 추정", km > 0 ? `${fuelCost.toLocaleString()}원` : "-"],

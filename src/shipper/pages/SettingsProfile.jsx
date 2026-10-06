@@ -5,6 +5,18 @@ import { doc, getDoc, updateDoc } from "firebase/firestore";
 const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:ring-2 focus:ring-[#1B2B4B]/40 focus:border-[#1B2B4B] outline-none";
 const labelCls = "block text-xs font-bold text-gray-600 mb-1";
 
+// 전화번호 하이픈 자동 포맷 — 02(서울) 지역번호는 10자리일 때 2-4-4로 나눈다
+const formatPhone = (phone) => {
+  const digits = String(phone ?? "").replace(/\D/g, "");
+  if (digits.length === 11) return digits.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
+  if (digits.length === 10) {
+    if (digits.startsWith("02")) return digits.replace(/(\d{2})(\d{4})(\d{4})/, "$1-$2-$3");
+    return digits.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
+  }
+  if (digits.length === 9 && digits.startsWith("02")) return digits.replace(/(\d{2})(\d{3})(\d{4})/, "$1-$2-$3");
+  return digits;
+};
+
 export default function SettingsProfile() {
   const [data, setData] = useState(null);
   const [open, setOpen] = useState(false);
@@ -77,8 +89,8 @@ export default function SettingsProfile() {
           연락처
         </div>
         <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-          <Row label="전화번호" value={data.tel} />
-          <Row label="팩스" value={data.fax} />
+          <Row label="전화번호" value={data.tel ? formatPhone(data.tel) : data.tel} />
+          <Row label="팩스" value={data.fax ? formatPhone(data.fax) : data.fax} />
         </div>
       </div>
 
@@ -136,8 +148,8 @@ function EditModal({ data, setData, onClose }) {
           </div>
           <div><label className={labelCls}>사업자번호</label><input className={inputCls} value={form.bizNo} onChange={(e) => update("bizNo", e.target.value)} /></div>
           <div><label className={labelCls}>은행정보</label><input className={inputCls} value={form.bank} onChange={(e) => update("bank", e.target.value)} /></div>
-          <div><label className={labelCls}>전화번호</label><input className={inputCls} value={form.tel} onChange={(e) => update("tel", e.target.value)} /></div>
-          <div><label className={labelCls}>팩스</label><input className={inputCls} value={form.fax} onChange={(e) => update("fax", e.target.value)} /></div>
+          <div><label className={labelCls}>전화번호</label><input className={inputCls} value={form.tel} onChange={(e) => update("tel", formatPhone(e.target.value))} /></div>
+          <div><label className={labelCls}>팩스</label><input className={inputCls} value={form.fax} onChange={(e) => update("fax", formatPhone(e.target.value))} /></div>
         </div>
 
         <div className="border-t border-gray-100 px-6 py-4 flex gap-2">
