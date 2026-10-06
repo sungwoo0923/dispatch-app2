@@ -10833,6 +10833,27 @@ const submitMultiRegister = async () => {
           upsertDriver({ 차량번호: s.차량번호, 이름: s.이름, 전화번호: s.전화번호 }).catch(() => {});
         }
       }
+      // ⭐ 사용자 요청 — 단일 등록폼(doSave)과 동일하게, 다중등록 슬롯에도 지입
+      // 기사 차량번호가 이미 입력돼 있으면 기사확인상태를 "대기"로 걸어 기사
+      // 앱에서 오더수락/거절 알림(+푸시)이 뜨게 한다. 이 함수는 addDispatch를
+      // 직접 호출하는 별도 등록 경로라 doSave의 처리를 그대로 복제해야 한다 —
+      // 안 그러면 다중등록으로 지입 기사를 배정한 오더는 푸시가 안 간다.
+      let 슬롯기사확인상태 = {};
+      if (s.차량번호) {
+        const assignedDriverMR = drivers.find(d => normalizePlate(d.차량번호) === normalizePlate(s.차량번호));
+        if (assignedDriverMR?.등급 === "지입") {
+          슬롯기사확인상태 = { 기사확인상태: "대기" };
+          addDoc(collection(db, "driver_notifications"), {
+            driverId: assignedDriverMR.id,
+            type: "new_order",
+            orderId: null,
+            title: "배차오더가 도착했습니다",
+            body: `${s.거래처명 || ""} ${s.상차지명 || "-"} → ${s.하차지명 || "-"}`,
+            createdAt: serverTimestamp(),
+            read: false,
+          }).catch(() => {});
+        }
+      }
       // ⭐ emptyForm을 기반으로 스프레드해야 한다 — 그리드/목록 화면 곳곳이
       // 경유상차목록/경유하차목록/근무일자목록 같은 배열 필드가 항상 존재한다고
       // 가정하고 그대로 .map()을 돌리는 경우가 있어(단일 등록폼은 emptyForm을
@@ -10859,8 +10880,9 @@ const submitMultiRegister = async () => {
         수수료: String((parseInt(s.청구운임 || 0, 10) || 0) - (parseInt(s.기사운임 || 0, 10) || 0)),
         메모: s.메모 || "",
         긴급: !!s.긴급,
-        배차상태: s.지급방식 === "취소" ? "배차취소" : (s.차량번호?.trim() ? "배차완료" : "배차중"),
+        배차상태: s.지급방식 === "취소" ? "배차취소" : (슬롯기사확인상태.기사확인상태 === "대기" ? "승인대기" : (s.차량번호?.trim() ? "배차완료" : "배차중")),
         등록일: _todayStr(),
+        ...슬롯기사확인상태,
       });
     }));
     setMultiRegOpen(false);
