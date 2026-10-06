@@ -1,5 +1,6 @@
 // DriverHome.jsx — 지입기사 전용 앱 (리뉴얼)
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import html2canvas from "html2canvas";
 import { db, auth } from "../firebase";
 import {
   doc, getDoc, setDoc, onSnapshot, updateDoc, addDoc, deleteDoc,
@@ -573,6 +574,12 @@ export default function DriverHome() {
   const [photoModal, setPhotoModal] = useState(null); // { nextStatus, actionLabel }
   const [photoUploading, setPhotoUploading] = useState(false);
   const [todayPhotos, setTodayPhotos] = useState([]); // today's driver_photo_logs
+  const [allPhotoLogs, setAllPhotoLogs] = useState([]); // 운행일지용 — 내 전체 사진 이력
+  const [logbookPage, setLogbookPage] = useState(0);
+  const logbookRef = useRef(null);
+  const [logbookSaving, setLogbookSaving] = useState(false);
+  // 조회 기간이 바뀌면 운행일지 페이지를 처음으로
+  useEffect(() => { setLogbookPage(0); }, [appliedRange]);
   const [cargoTemp, setCargoTemp] = useState(null); // { temperature, humidity, updatedAt }
   const [emergencyModal, setEmergencyModal] = useState(false); // SOS 긴급 모달
   const [emergencySent, setEmergencySent] = useState(false); // 긴급 알림 전송 여부
@@ -690,6 +697,15 @@ export default function DriverHome() {
     const todayDateStr = `${_td2.getFullYear()}-${String(_td2.getMonth()+1).padStart(2,"0")}-${String(_td2.getDate()).padStart(2,"0")}`;
     const q = query(collection(db, "driver_photo_logs"), where("uid","==",uid), where("logDate","==",todayDateStr));
     return onSnapshot(q, snap => setTodayPhotos(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+  }, [uid]);
+
+  // ⭐ 운행일지(증빙서류) — 과거 날짜 오더의 서류 업로드 여부도 확인해야 하므로
+  // 오늘자로 한정하지 않고 내 전체 사진 이력을 구독한다(단일 필드 쿼리라 별도
+  // 색인 없이 동작).
+  useEffect(() => {
+    if (!uid) return;
+    const q = query(collection(db, "driver_photo_logs"), where("uid", "==", uid));
+    return onSnapshot(q, snap => setAllPhotoLogs(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
   }, [uid]);
 
   // 적재함 온도 구독 (IoT 센서 연결 시 자동 수신)
@@ -2191,6 +2207,108 @@ export default function DriverHome() {
               </div>
             ))}
           </div>
+
+          {/* ⭐ 사용자 요청 — 운행일지(증빙서류): 운송완료한 오더만, 언제 어떤 오더를
+              누구(배차담당자)에게 받아 운송했는지 + 서류(사진) 업로드 여부를 한눈에
+              보여준다. 위 날짜조회(appliedRange)와 같은 기간을 쓴다(기본값이 이미
+              오늘이라 "항상 당일 기준" 요건을 그대로 만족). 5건씩 페이지네이션. */}
+          {isFleetDriver && (() => {
+            const completedOrders = myOrders
+              .filter(o => o.기사확인상태 === "완료")
+              .filter(o => { const d = o.상차일 || ""; return d >= appliedRange.from && d <= appliedRange.to; })
+              .sort((a, b) => (b.기사완료일시?.seconds || 0) - (a.기사완료일시?.seconds || 0));
+            const PAGE_SIZE = 5;
+            const totalPages = Math.max(1, Math.ceil(completedOrders.length / PAGE_SIZE));
+            const page = Math.min(logbookPage, totalPages - 1);
+            const paged = completedOrders.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+            const fareSum = completedOrders.reduce((s, o) => s + (Number(String(o.기사운임 || 0).replace(/[^\d]/g, "")) || 0), 0);
+            const hasDocs = (orderId) => {
+              const has = (t) => allPhotoLogs.some(p => p.orderId === orderId && p.actionType === t);
+              return { load: has("상차완료"), drop: has("하차완료") };
+            };
+            const saveAsImage = async () => {
+              if (!logbookRef.current || logbookSaving) return;
+              setLogbookSaving(true);
+              try {
+                const canvas = await html2canvas(logbookRef.current, { backgroundColor: "#ffffff", scale: 2 });
+                const a = document.createElement("a");
+                a.download = `운행일지_${driver.carNo || ""}_${appliedRange.from}${appliedRange.from !== appliedRange.to ? `~${appliedRange.to}` : ""}.png`;
+                a.href = canvas.toDataURL("image/png");
+                a.click();
+              } catch (e) {
+                showToast("이미지 저장에 실패했습니다");
+              } finally {
+                setLogbookSaving(false);
+              }
+            };
+            return (
+              <div ref={logbookRef} style={{ background: "white", borderRadius: 16, padding: "16px", boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #e5e7eb", marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", letterSpacing: "0.05em" }}>
+                    운행일지 — 운송완료 {completedOrders.length}건 · 기사운임 합계 {fareSum.toLocaleString()}원
+                  </div>
+                  <button onClick={saveAsImage} disabled={logbookSaving || !completedOrders.length}
+                    style={{ fontSize: 11, fontWeight: 700, color: "#1B2B4B", background: "#eef1f6", border: "none", borderRadius: 8, padding: "5px 10px", cursor: completedOrders.length ? "pointer" : "not-allowed" }}>
+                    {logbookSaving ? "저장중..." : "이미지로 저장"}
+                  </button>
+                </div>
+                {completedOrders.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "24px 0", fontSize: 13, color: "#d1d5db" }}>해당 기간에 운송완료한 내역이 없습니다</div>
+                ) : (
+                  <>
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 560 }}>
+                        <thead>
+                          <tr style={{ background: "#f8f9fb" }}>
+                            {["완료일시", "거래처", "상차지 → 하차지", "화물정보", "기사운임", "배차담당자", "서류"].map(h => (
+                              <th key={h} style={{ padding: "8px 10px", fontSize: 11, fontWeight: 800, color: "#6b7280", textAlign: "center", whiteSpace: "nowrap", borderBottom: "1px solid #e5e7eb" }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paged.map((o, i) => {
+                            const t = o.기사완료일시?.toDate?.();
+                            const docs = hasDocs(o._id);
+                            return (
+                              <tr key={o._id || i} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                                <td style={{ padding: "9px 10px", fontSize: 12, color: "#374151", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap" }}>
+                                  {o.상차일 || "-"}{t ? ` ${formatTime(t)}` : ""}
+                                </td>
+                                <td style={{ padding: "9px 10px", fontSize: 12, color: "#374151", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap" }}>{o.거래처명 || "-"}</td>
+                                <td style={{ padding: "9px 10px", fontSize: 12, color: "#111827", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap" }}>
+                                  {o.상차지명 || "-"} → {o.하차지명 || "-"}
+                                </td>
+                                <td style={{ padding: "9px 10px", fontSize: 12, color: "#6b7280", textAlign: "center", whiteSpace: "nowrap" }}>
+                                  {[o.차량톤수, o.화물내용].filter(Boolean).join(" · ") || "-"}
+                                </td>
+                                <td style={{ padding: "9px 10px", fontSize: 12, color: "#1B2B4B", fontWeight: 800, textAlign: "center", whiteSpace: "nowrap" }}>
+                                  {o.기사운임 ? `${Number(String(o.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원` : "-"}
+                                </td>
+                                <td style={{ padding: "9px 10px", fontSize: 12, color: "#374151", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap" }}>{orderCreatorLabel(o)}</td>
+                                <td style={{ padding: "9px 10px", textAlign: "center", whiteSpace: "nowrap" }}>
+                                  <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 6px", borderRadius: 5, marginRight: 3, background: docs.load ? "#eef1f6" : "#fef2f2", color: docs.load ? "#1B2B4B" : "#dc2626" }}>상차{docs.load ? "✓" : "✗"}</span>
+                                  <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 6px", borderRadius: 5, background: docs.drop ? "#eef1f6" : "#fef2f2", color: docs.drop ? "#1B2B4B" : "#dc2626" }}>하차{docs.drop ? "✓" : "✗"}</span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    {totalPages > 1 && (
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginTop: 12 }}>
+                        <button onClick={() => setLogbookPage(p => Math.max(0, p - 1))} disabled={page === 0}
+                          style={{ fontSize: 12, fontWeight: 700, color: page === 0 ? "#d1d5db" : "#1B2B4B", background: "none", border: "none", cursor: page === 0 ? "not-allowed" : "pointer" }}>← 이전</button>
+                        <span style={{ fontSize: 12, color: "#9ca3af" }}>{page + 1} / {totalPages}</span>
+                        <button onClick={() => setLogbookPage(p => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1}
+                          style={{ fontSize: 12, fontWeight: 700, color: page === totalPages - 1 ? "#d1d5db" : "#1B2B4B", background: "none", border: "none", cursor: page === totalPages - 1 ? "not-allowed" : "pointer" }}>다음 →</button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })()}
 
           {/* 전체 상태 기록 */}
           <div style={{ background: "white", borderRadius: 16, padding: "16px", boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #e5e7eb" }}>
