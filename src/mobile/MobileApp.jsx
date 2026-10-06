@@ -1466,18 +1466,25 @@ const TP_STATUS_DOT = {
   배차요청: { dot: "#fbbf24", text: "#fde68a", ring: "rgba(251,191,36,0.4)", wash: "rgba(251,191,36,0.08)" },
   요청보류: { dot: "#f87171", text: "#fecaca", ring: "rgba(248,113,113,0.4)", wash: "rgba(248,113,113,0.08)" },
   배차완료: { dot: "#34d399", text: "#a7f3d0", ring: "rgba(52,211,153,0.4)", wash: "rgba(52,211,153,0.06)" },
+  승인대기: { dot: "#f59e0b", text: "#fde68a", ring: "rgba(245,158,11,0.4)", wash: "rgba(245,158,11,0.08)" },
 };
 
+// ⭐ 지입 기사가 아직 오더를 수락하지 않은 건(기사확인상태==="대기")은 차량번호가
+// 이미 채워져 있어도(getStatus 기준 "배차완료") PC와 동일하게 "승인대기"로 보여야
+// 한다 — 차량번호만 보고 "배차완료"로 뜨면 실제로는 기사가 수락 전인데도 확정된
+// 것처럼 오해하게 된다.
 function getTransportBadgeInfo(order) {
   const state = getStatus(order);
   const isPending = state !== "배차완료" && order.화주사확인대기 === true;
   const isHold = state !== "배차완료" && order.배차거절 === true;
+  const isFleetAwaiting = state === "배차완료" && order.기사확인상태 === "대기";
   let label = state;
   if (isHold) label = "요청보류";
   else if (isPending) label = "배차요청";
-  const blink = label === "배차중" || label === "배차요청";
+  else if (isFleetAwaiting) label = "승인대기";
+  const blink = label === "배차중" || label === "배차요청" || label === "승인대기";
   const s = TP_STATUS_DOT[label] || TP_STATUS_DOT.배차중;
-  return { label, blink, isPending, isHold, ...s };
+  return { label, blink, isPending, isHold, isFleetAwaiting, ...s };
 }
 
 // A스타일 카드 전용 뱃지 색상 (기존 flat 톤 유지)
@@ -1486,6 +1493,7 @@ const TP_FLAT_CLASS = {
   배차요청: "bg-amber-100 text-amber-700 border-amber-300",
   요청보류: "bg-red-100 text-red-700 border-red-300",
   배차중: "bg-gray-100 text-gray-600 border-gray-300",
+  승인대기: "bg-amber-100 text-amber-700 border-amber-300",
 };
 
 function TransportStatusBadge({ order, className = "", onClick, flat = false, compact = false }) {
