@@ -487,6 +487,67 @@ exports.notifyFleetDriverNewOrder =
       const after = change.after.exists ? change.after.data() : null;
       if (!after) return; // 삭제는 별도 함수(notifyDispatchDeleted)에서 처리
 
+      // ⭐ 안전망 — 이 운송사 앱은 PC/모바일을 합쳐 "차량번호를 오더에 쓰는" 화면이
+      // 한두 곳이 아니라 화면마다(등록폼/상세보기 기사배정/배차완료 모달/빠른배차
+      // 등) 제각각 독립적인 함수로 updateDoc을 직접 호출한다 — 그래서 특정 화면
+      // 하나에만 "기사확인상태:대기 세팅"을 넣는 방식은 매번 또 다른 경로를
+      // 놓치는 문제가 반복됐다. 클라이언트가 어떤 코드로 어떻게 썼든 상관없이,
+      // 여기(서버)에서 "차량번호가 새로 지정됐다"는 사실 자체를 감지해 직접
+      // 보정한다. 재귀 방지: 기사확인상태가 이미 "대기"면(클라이언트가 이미
+      // 세팅했거나 이 보정이 이미 실행된 경우) 다시 쓰지 않는다 — 그 다음에는
+      // 바로 아래 알림 발송 로직이 이어서 처리한다.
+      const prevPlateW = normalizePlateServer(before?.["차량번호"] || "");
+      const nextPlateW = normalizePlateServer(after["차량번호"] || "");
+      if (nextPlateW && nextPlateW !== prevPlateW && after["기사확인상태"] !== "대기") {
+        const wDriverSnap = await db.collection("drivers").where("차량번호", "==", after["차량번호"]).limit(5).get();
+        const wDriverDoc = wDriverSnap.docs.find((d) => normalizePlateServer(d.data()["차량번호"]) === nextPlateW);
+        if (wDriverDoc?.data()?.["등급"] === "지입") {
+          await change.after.ref.update({
+            기사확인상태: "대기",
+            기사거절사유: null,
+            기사확인일시: null,
+            기사완료일시: null,
+            ...(after["배차상태"] !== "배차취소" ? { 배차상태: "승인대기", 상태: "승인대기" } : {}),
+          });
+          return; // 이 update가 onWrite를 다시 트리거 → 그 호출에서 아래 알림 발송 로직이 실행된다.
+        }
+      }
+
+      // ⭐ 안전망(반대 방향) — 차량번호가 비워지는 경로(배차취소/재배정)도 화면마다
+      // 제각각이라 기사확인상태 등을 안 지우는 곳이 있을 수 있다. after에 그
+      // 흔적이 아직 남아있으면(= 클라이언트가 못 지운 경우) 서버가 직접 정리하고
+      // 그 기사에게 취소 알림을 보낸다. 클라이언트가 이미 깨끗이 지웠다면(흔적이
+      // 없음) 이미 그쪽에서 알림도 보냈을 것이므로 여기서는 조용히 넘어간다
+      // (중복 알림 방지).
+      if (!nextPlateW && prevPlateW && before?.["기사확인상태"] && before["기사확인상태"] !== "거절") {
+        const stillHasTrace = after["기사확인상태"] !== null && after["기사확인상태"] !== undefined;
+        if (stillHasTrace) {
+          const cDriverSnap = await db.collection("drivers").where("차량번호", "==", before["차량번호"]).limit(5).get();
+          const cDriverDoc = cDriverSnap.docs.find((d) => normalizePlateServer(d.data()["차량번호"]) === prevPlateW);
+          await change.after.ref.update({
+            기사확인상태: null, 기사거절사유: null, 기사확인일시: null, 기사완료일시: null,
+          });
+          if (cDriverDoc) {
+            const body = `담당자가 ${before["거래처명"] || ""} ${before["상차지명"] || "-"} → ${before["하차지명"] || "-"} 오더에서 차량 배정을 취소했습니다.`;
+            await db.collection("driver_notifications").add({
+              driverId: cDriverDoc.id, type: "canceled", orderId: context.params.dispatchId,
+              title: "배차가 취소되었습니다", body, createdAt: FieldValue.serverTimestamp(), read: false,
+            }).catch(() => {});
+            const cUserSnap = await db.collection("users").doc(cDriverDoc.id).get();
+            const cUserData = cUserSnap.exists ? cUserSnap.data() : null;
+            if (cUserData?.driverPushEnabled !== false && cUserData?.fcmToken) {
+              await sendPushAndCleanup([cUserData.fcmToken], {
+                notification: { title: "배차가 취소되었습니다", body },
+                data: { type: "fleet_order_canceled", orderId: context.params.dispatchId },
+                android: { priority: "high" },
+                apns: { payload: { aps: { sound: "default" } } },
+              }, "지입기사 오더취소(서버보정)");
+            }
+          }
+        }
+        return;
+      }
+
       // 새로 "대기"로 바뀐 경우만(이미 대기였던 걸 다른 필드만 고친 저장엔 재알림하지 않음)
       if (after["기사확인상태"] !== "대기" || before?.["기사확인상태"] === "대기") return;
 
