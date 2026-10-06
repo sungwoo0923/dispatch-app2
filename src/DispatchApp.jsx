@@ -3972,6 +3972,26 @@ const removeDispatch = async (arg) => {
     data = snap.data();
   }
 
+  // ⭐ 버그수정 — 지입 기사에게 배정(대기/수락/완료)돼 있던 오더를 이 "삭제"로
+  // 취소해도 기사확인상태 등을 전혀 안 지워서, 기사 앱의 오더수락/거절 카드가
+  // 계속 남아있었다(카드는 기사확인상태로 판단하는데 그 필드가 그대로였음).
+  // 아래 updateDoc에서 함께 초기화하고, 알림함에도 취소 사실을 남긴다
+  // (실제 OS 푸시는 배차상태→"배차취소" 전환을 보는 Cloud Function이 보낸다).
+  if (data?.기사확인상태 && data.기사확인상태 !== "거절" && data?.차량번호) {
+    const canceledDriver = drivers.find(d => normalizePlate(d.차량번호) === normalizePlate(data.차량번호));
+    if (canceledDriver?.등급 === "지입") {
+      addDoc(collection(db, "driver_notifications"), {
+        driverId: canceledDriver.id,
+        type: "canceled",
+        orderId: id,
+        title: "배차가 취소되었습니다",
+        body: `담당자가 ${data.거래처명 || ""} ${data.상차지명 || "-"} → ${data.하차지명 || "-"} 오더를 취소했습니다.`,
+        createdAt: serverTimestamp(),
+        read: false,
+      }).catch(() => {});
+    }
+  }
+
   // ⭐ 완전삭제 대신 소프트 취소로 바꿔, 모바일 "취소내역" 화면에서 PC에서 취소한
   // 오더도 함께 보이고 "재등록"으로 되살릴 수 있게 한다(기존엔 여기서 바로
   // deleteDoc으로 영구삭제되어 취소내역 자체가 있을 수 없었다).
@@ -3982,6 +4002,10 @@ const removeDispatch = async (arg) => {
     취소일시: serverTimestamp(),
     updatedAt: serverTimestamp(),
     _lastModified: Date.now(),
+    기사확인상태: null,
+    기사거절사유: null,
+    기사확인일시: null,
+    기사완료일시: null,
   });
 
   // 연동 화주사에게 전송된 사본이 있으면(운송사가 등록/전송한 오더), 원본을 취소할 때
