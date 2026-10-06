@@ -37,9 +37,19 @@
   --font-scale: 1;
 }
 
+/* ⭐ 예전엔 #root에 기본값으로 zoom:1을 항상 선언해뒀었는데, 값이 1(=효과 없음)이어도
+   iOS Safari(WebKit)는 zoom 속성이 "선언만 되어 있어도" 그 하위 position:fixed
+   요소(기사 앱 하단 탭바 등)의 기준점을 진짜 화면이 아니라 이 컨테이너 기준으로
+   잘못 계산하는 버그가 있다 — 스크롤하면 하단바가 화면 맨 아래가 아니라 엉뚱한
+   위치에 떠 보이는 원인이었다(기사 모바일 앱에서 재현 확인됨). 화면배율조절
+   기능(MobileApp.jsx/DispatchApp.jsx)은 필요할 때 root.style.zoom을 인라인
+   스타일로 직접 설정하므로, 여기 기본값을 없애도 그 기능은 그대로 동작한다 —
+   다만 아무것도 설정 안 한 "기본 상태"에서는 zoom 자체가 선언되지 않아 버그가
+   사라진다.
 #root {
   zoom: 1;
 }
+*/
 
 html, body {
   font-family: "Noto Sans KR", "Apple SD Gothic Neo", "맑은 고딕", Malgun Gothic, sans-serif !important;
