@@ -7299,6 +7299,8 @@ return (
             drivers={drivers}
             upsertDriver={upsertDriverSafe}
             removeDriver={removeDriverSafe}
+            showAlert={showAlert}
+            userCompany={userCompany}
           />
         )}
 
@@ -54943,14 +54945,29 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
 }
 // ===================== DispatchApp.jsx (PART 9/9) — END =====================
 // ===================== DispatchApp.jsx (PART 10/10) — START =====================
-function DriverManagement({ drivers, upsertDriver, removeDriver }) {
+function DriverManagement({ drivers, upsertDriver, removeDriver, showAlert = (m) => alert(m), userCompany = "" }) {
+  // ⭐ 사용자 요청 — PC 기사 수정 모달에서도 담당자(위임 대상)를 바로 지정할 수
+  // 있어야 한다. 지입차관리(FleetManagement)와 동일한 기준(같은 회사의
+  // totalMaster/admin/user)으로 배차자 목록을 가져온다.
+  const [companyStaff, setCompanyStaff] = React.useState([]);
+  React.useEffect(() => {
+    const unsub = onSnapshot(collection(db, "users"), (snap) => {
+      const list = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(u => ["totalMaster", "admin", "user"].includes(u.role) && (!userCompany || u.companyName === userCompany))
+        .map(u => ({ id: u.id, name: u.name || u.email || "이름없음" }))
+        .sort((a, b) => a.name.localeCompare(b.name, "ko"));
+      setCompanyStaff(list);
+    });
+    return unsub;
+  }, [userCompany]);
   const [q, setQ] = React.useState("");
   const [qField, setQField] = React.useState("전체");
   const [searched, setSearched] = React.useState(false);
   const [selected, setSelected] = React.useState(new Set());
   const [gradeFilter, setGradeFilter] = React.useState("전체");
   const [showAddForm, setShowAddForm] = React.useState(false);
-  const [newForm, setNewForm] = React.useState({ 차량번호:"", 이름:"", 전화번호:"", 메모:"", 등급:"일반", 거주지:"", 차량종류:"", 차량톤수:"", 요청사항:"", 근무요일:[] });
+  const [newForm, setNewForm] = React.useState({ 차량번호:"", 이름:"", 전화번호:"", 메모:"", 등급:"일반", 거주지:"", 차량종류:"", 차량톤수:"", 요청사항:"", 담당자:null, 근무요일:[] });
   const WEEKDAYS = ["월","화","수","목","금","토","일"];
   const [showAll, setShowAll] = React.useState(false);
   const [page, setPage] = React.useState(1);
@@ -55100,9 +55117,10 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
       차량종류: isFleet ? (newForm.차량종류||"") : "",
       차량톤수: isFleet ? (newForm.차량톤수||"") : "",
       요청사항: isFleet ? (newForm.요청사항||"") : "",
+      담당자: isFleet ? (newForm.담당자||null) : null,
       근무요일: isFleet ? (newForm.근무요일||[]) : [],
     });
-    setNewForm({ 차량번호:"", 이름:"", 전화번호:"", 메모:"", 등급:"일반", 거주지:"", 차량종류:"", 차량톤수:"", 요청사항:"", 근무요일:[] });
+    setNewForm({ 차량번호:"", 이름:"", 전화번호:"", 메모:"", 등급:"일반", 거주지:"", 차량종류:"", 차량톤수:"", 요청사항:"", 담당자:null, 근무요일:[] });
     setShowAddForm(false);
     showAlert("등록 완료");
   };
@@ -55292,7 +55310,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                     <CustomSelect className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]"
                       value={newForm.차량톤수 || ""} onChange={e => setNewForm(p => ({ ...p, 차량톤수: e.target.value }))}>
                       <option value="">선택</option>
-                      {Array.from({length:25},(_,i)=>`${i+1}톤`).map(t => <option key={t} value={t}>{t}</option>)}
+                      {CARGO_VEHICLE_SPEC_TABLE.map(v => v.name).map(t => <option key={t} value={t}>{t}</option>)}
                     </CustomSelect>
                   </div>
                   <div>
@@ -55302,6 +55320,18 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                       value={newForm.요청사항 || ""}
                       onChange={e => setNewForm(p => ({ ...p, 요청사항: e.target.value }))}
                     />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-gray-500 mb-1 block">담당자</label>
+                    <CustomSelect className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]"
+                      value={newForm.담당자?.uid || ""}
+                      onChange={e => {
+                        const s = companyStaff.find(x => x.id === e.target.value);
+                        setNewForm(p => ({ ...p, 담당자: s ? { uid: s.id, name: s.name } : null }));
+                      }}>
+                      <option value="">미지정</option>
+                      {companyStaff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </CustomSelect>
                   </div>
                   <div className="col-span-2">
                     <label className="text-[11px] font-semibold text-gray-500 mb-1 block"><EditableText id="driver.addForm.label.근무가능요일" defaultText="근무가능요일" /></label>
@@ -55551,7 +55581,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                       value={editDriverModal.차량톤수||""}
                       onChange={(e) => setEditDriverModal(p => ({ ...p, 차량톤수: e.target.value }))}>
                       <option value="">선택</option>
-                      {Array.from({length:25},(_,i)=>`${i+1}톤`).map(t => <option key={t} value={t}>{t}</option>)}
+                      {CARGO_VEHICLE_SPEC_TABLE.map(v => v.name).map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
                   <div>
@@ -55559,6 +55589,18 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
                     <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                       value={editDriverModal.요청사항||""}
                       onChange={(e) => setEditDriverModal(p => ({ ...p, 요청사항: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1">담당자</label>
+                    <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                      value={editDriverModal.담당자?.uid || ""}
+                      onChange={(e) => {
+                        const s = companyStaff.find(x => x.id === e.target.value);
+                        setEditDriverModal(p => ({ ...p, 담당자: s ? { uid: s.id, name: s.name } : null }));
+                      }}>
+                      <option value="">미지정</option>
+                      {companyStaff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
                   </div>
                   <div className="col-span-2">
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">근무가능요일</label>

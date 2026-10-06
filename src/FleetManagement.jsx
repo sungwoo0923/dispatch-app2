@@ -1228,7 +1228,7 @@ function RouteDistanceBadge({ fromAddr, toAddr }) {
   if (!info) return <span style={{ fontSize: 13, color: "#d1d5db" }}>-</span>;
   const timeLabel = info.minutes >= 60 ? `${Math.floor(info.minutes / 60)}시간 ${info.minutes % 60}분` : `${info.minutes}분`;
   return (
-    <span style={{ fontSize: 13, color: "#374151", fontWeight: 600, whiteSpace: "nowrap" }}>
+    <span style={{ fontSize: 14, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>
       약 {info.km}km · {timeLabel}
     </span>
   );
@@ -1238,9 +1238,9 @@ function RouteDistanceBadge({ fromAddr, toAddr }) {
 function InfoField({ label, value, children, mono }) {
   return (
     <div style={{ minWidth: 0 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: ".03em", marginBottom: 3 }}>{label}</div>
-      {/* ⭐ 차량번호/연락처 등 값 글씨가 잘 안 보인다는 피드백 — 쉬운모드 수준으로
-          진하고 크게: 색을 이름과 동일한 진한 색(#111827)으로, 글자 크기/굵기도 키움. */}
+      {/* ⭐ 사용자 피드백 — 라벨 글씨가 너무 작고(11px) 영문 대문자 스타일(letter-spacing)이
+          한글엔 안 어울려 눌린 느낌이 났다. 자간 없애고 조금 키움. */}
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", marginBottom: 4 }}>{label}</div>
       <div style={{ fontSize: 15, fontWeight: 800, color: "#111827", fontFamily: mono ? "monospace" : undefined, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
         {children != null ? children : (value || "-")}
       </div>
@@ -1277,44 +1277,52 @@ function ManagerBadge({ driver, staff, canDelegate, onAssign }) {
   const [open, setOpen] = useState(false);
   const mgr = driver.담당자;
   return (
-    <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 6 }}>
+    <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
       <span style={{ fontSize: 13, fontWeight: 700, color: mgr ? "#374151" : "#c1c7d0" }}>
         {mgr ? mgr.name : "담당자 미지정"}
       </span>
       {canDelegate && (
         <button
           type="button"
-          onClick={() => setOpen(v => !v)}
+          onClick={() => setOpen(true)}
           style={{ padding: "2px 8px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", color: "#6b7280", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
         >
           위임
         </button>
       )}
+      {/* ⭐ 버그수정 — 예전엔 position:absolute로 버튼 바로 밑에 띄웠는데, 이 카드의
+          바깥 div가 둥근 모서리 때문에 overflow:hidden이라 메뉴가 잘려서(화면엔
+          안 보이게) "눌러도 아무 반응 없음"처럼 보였다. 화면 중앙 모달로 바꿔
+          어떤 카드에서 눌러도 항상 보이게 한다. */}
       {open && (
-        <>
-          <div style={{ position: "fixed", inset: 0, zIndex: 20 }} onClick={() => setOpen(false)} />
-          <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 21, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 6px 20px rgba(0,0,0,.15)", minWidth: 150, maxHeight: 220, overflowY: "auto" }}>
-            {staff.length === 0 && (
-              <div style={{ padding: "10px 12px", fontSize: 12, color: "#9ca3af" }}>배차자가 없습니다</div>
-            )}
-            {staff.map(s => (
-              <div key={s.id}
-                onClick={() => { onAssign(driver.id, s); setOpen(false); }}
-                style={{ padding: "8px 12px", fontSize: 13, fontWeight: mgr?.uid === s.id ? 800 : 600, color: mgr?.uid === s.id ? NAVY : "#374151", cursor: "pointer", background: mgr?.uid === s.id ? "#eef1f6" : "transparent" }}
-              >
-                {s.name}
-              </div>
-            ))}
-            {mgr && (
-              <div
-                onClick={() => { onAssign(driver.id, null); setOpen(false); }}
-                style={{ padding: "8px 12px", fontSize: 12, color: "#ef4444", cursor: "pointer", borderTop: "1px solid #f3f4f6" }}
-              >
-                담당자 해제
-              </div>
-            )}
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", zIndex: 10050, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setOpen(false)}>
+          <div style={{ background: "#fff", borderRadius: 12, width: 280, maxHeight: "70vh", overflowY: "auto", boxShadow: "0 10px 40px rgba(0,0,0,.3)" }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: "14px 16px", borderBottom: "1px solid #f0f2f5", fontSize: 15, fontWeight: 800, color: NAVY }}>
+              {driver.이름} 담당자 위임
+            </div>
+            <div style={{ padding: 6 }}>
+              {staff.length === 0 && (
+                <div style={{ padding: "16px 12px", fontSize: 13, color: "#9ca3af", textAlign: "center" }}>배차자가 없습니다</div>
+              )}
+              {staff.map(s => (
+                <div key={s.id}
+                  onClick={() => { onAssign(driver.id, s); setOpen(false); }}
+                  style={{ padding: "10px 12px", borderRadius: 8, fontSize: 14, fontWeight: mgr?.uid === s.id ? 800 : 600, color: mgr?.uid === s.id ? NAVY : "#374151", cursor: "pointer", background: mgr?.uid === s.id ? "#eef1f6" : "transparent" }}
+                >
+                  {s.name}
+                </div>
+              ))}
+              {mgr && (
+                <div
+                  onClick={() => { onAssign(driver.id, null); setOpen(false); }}
+                  style={{ padding: "10px 12px", borderRadius: 8, fontSize: 13, color: "#ef4444", cursor: "pointer", borderTop: "1px solid #f3f4f6", marginTop: 4 }}
+                >
+                  담당자 해제
+                </div>
+              )}
+            </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
@@ -1347,7 +1355,7 @@ function handleSendToDriver(driver, orders, selectedDate) {
 
 // ─── 기사별 노선 카드 ─────────────────────────────────────────────────────────
 
-const ROUTE_COLS = ["상태", "거래처", "상차지", "하차지", "상차", "하차", "이동정보", "운임", "배차담당자"];
+const ROUTE_COLS = ["순번", "상태", "거래처", "상차지", "하차지", "상차", "하차", "이동정보", "운임", "배차담당자"];
 
 // 오더를 등록/배차한 담당자 표시 — 3파트 등록폼과 동일한 우선순위로 폴백한다.
 function creatorLabel(r) {
@@ -1419,9 +1427,11 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
-                <tr style={{ background: "#f8f9fb" }}>
+                {/* ⭐ 사용자 요청 — 헤더가 너무 밋밋해서(연회색 작은 글씨) 네이비 배경 +
+                    흰색 굵은 글씨 + 중앙정렬로 프로그램 색감에 맞춤 */}
+                <tr style={{ background: NAVY }}>
                   {ROUTE_COLS.map(h => (
-                    <th key={h} style={{ padding: "7px 16px", fontSize: 11, fontWeight: 700, color: "#9ca3af", textAlign: "left", textTransform: "uppercase", letterSpacing: ".03em", whiteSpace: "nowrap", borderBottom: "1px solid #f0f2f5" }}>{h}</th>
+                    <th key={h} style={{ padding: "9px 16px", fontSize: 12, fontWeight: 800, color: "#fff", textAlign: "center", letterSpacing: ".02em", whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -1431,6 +1441,7 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
                   const meta = PROG_META[prog];
                   return (
                     <tr key={r._id || i} style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : "none" }}>
+                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, color: "#9ca3af" }}>{i + 1}</td>
                       <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                           <span style={{

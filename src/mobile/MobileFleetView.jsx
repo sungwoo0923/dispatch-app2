@@ -315,19 +315,22 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
     return () => { clearTimeout(timer); controller.abort(); };
   }, [selectedPath]);
 
-  // drivers 합성 — PC 지입차관리와 동일하게 등급(지입/직영)으로 지정된 기사만 대상.
+  // drivers 합성 — PC 지입차관리(routeDrivers)와 동일하게 등급(지입/직영)만 기준으로
+  // 삼는다. ⭐ 버그수정 — 예전엔 기사앱 가입+승인(usersMap)까지 요구해서, PC
+  // 기사관리에서 "+ 기사 등록"으로 만든(아직 앱에 가입 안 한) 지입차는 모바일
+  // 지입차관리에서 통째로 0건으로 보였다. 앱 가입 여부와 무관하게 목록엔 항상
+  // 보이고, GPS/위치는 가입된 기사만 자연히 채워지는 식으로 둔다.
   const drivers = useMemo(() => {
     return driversRaw
       .filter(raw => raw.등급 === "지입" || raw.등급 === "직영")
-      .filter(raw => { const u = usersMap[raw.id]; return u && u.approved === true; })
       .map(raw => {
-        const u = usersMap[raw.id];
+        const u = usersMap[raw.id] || {};
         return {
           id: raw.id,
-          이름: (u.name || raw.name || "").trim() || "-",
-          차량번호: (u.carNo || raw.carNo || "").trim() || "-",
+          이름: (u.name || raw.이름 || raw.name || "").trim() || "-",
+          차량번호: (u.carNo || raw.차량번호 || raw.carNo || "").trim() || "-",
           vehicleType: u.vehicleType || raw.vehicleType || "-",
-          phone: u.phone || raw.phone || "-",
+          phone: u.phone || raw.전화번호 || raw.phone || "-",
           상태: raw.status || raw.mainStatus || "대기",
           location: raw.location || null,
           총거리: raw.totalDistance || 0,
@@ -337,6 +340,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
           workStartAt: raw.workStartAt || null,
           담당자: raw.담당자 || null,
           등급: raw.등급 || "",
+          거주지: raw.거주지 || "",
         };
       })
       .sort((a, b) => statusPriority(a) - statusPriority(b));

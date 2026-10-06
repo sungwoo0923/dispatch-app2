@@ -156,8 +156,14 @@ export async function geocodeAddress(rawAddr) {
   let result = await tryGeocode(clean);
   if (result) return result;
 
+  // ⭐ 사용자 보고 — 지입차관리 "이동정보" 거리가 서로 다른 두 주소인데도 0km로
+  // 나오는 사고가 있었다. 원인은 여기서 주소를 통째로 "시/구"까지(2단어) 잘라
+  // 재시도하던 것 — 같은 구 안의 서로 다른 두 지번이 둘 다 "인천 서구" 좌표
+  // (구청 중심)로 수렴해 버려 실제로는 떨어져 있는데 거리가 0으로 계산됐다.
+  // 최소 3단어(예: "인천 서구 완정로")까지만 줄여서, 적어도 도로명 단위 정밀도는
+  // 유지하고 그 이상 깎이는 "시/군/구"까지의 뭉뚱그려진 좌표는 쓰지 않는다.
   const parts = clean.split(" ");
-  for (let i = parts.length - 1; i >= 2; i--) {
+  for (let i = parts.length - 1; i >= 3; i--) {
     result = await tryGeocode(parts.slice(0, i).join(" "));
     if (result) return result;
   }
