@@ -707,6 +707,49 @@ export default function DriverHome() {
     } catch (_) {}
   }, [uid, pushEnabled]);
 
+  // ⭐ "설정은 다 켜놨는데 이 휴대폰만 배차 알림이 안 온다" 리포트 대응 — 기사 본인이
+  // 개발자도구 없이도(특히 아이폰) 이 화면에서 바로 원인을 확인할 수 있게 한다.
+  // "알림 테스트"는 서버 없이 이 기기에서 알림창 자체만 띄워보고, "FCM 진단"은
+  // 서버(FCM)까지 실제로 거쳐 토큰을 발급/저장해본다.
+  const [fcmDiagRunning, setFcmDiagRunning] = useState(false);
+  const runFcmDiagnosis = useCallback(async () => {
+    if (!uid || fcmDiagRunning) return;
+    setFcmDiagRunning(true);
+    try {
+      const { diagnoseFcmToken } = await import("../firebase");
+      const result = await diagnoseFcmToken({ uid });
+      if (result.ok) {
+        alert(`✅ 토큰 발급/저장 성공\n\n이 휴대폰은 서버와 정상 연결됐습니다.\n그래도 알림이 안 오면 위 "새 오더 알림(푸시)" 스위치가 켜져 있는지 확인해주세요.`);
+      } else {
+        alert(`❌ 실패\n\n${result.reason}`);
+      }
+    } catch (e) {
+      alert(`진단 중 예외 발생: ${e?.message || e}`);
+    } finally {
+      setFcmDiagRunning(false);
+    }
+  }, [uid, fcmDiagRunning]);
+  const handleTestNotification = useCallback(async () => {
+    try {
+      if (!("Notification" in window)) { alert("이 휴대폰 브라우저는 알림을 지원하지 않습니다."); return; }
+      let permission = Notification.permission;
+      if (permission === "default") permission = await Notification.requestPermission();
+      if (permission !== "granted") { alert("알림 권한이 허용돼 있지 않습니다. 휴대폰 설정 > 이 앱(또는 브라우저) > 알림에서 허용해주세요."); return; }
+      const reg = await navigator.serviceWorker.ready;
+      const isAndroidTest = /android/i.test(navigator.userAgent || "");
+      await reg.showNotification("테스트 알림", {
+        body: "이렇게 화면에 뜨면 알림창 자체는 정상 작동하는 거예요.",
+        icon: isAndroidTest ? "/icons/icon-192x192-notif-android.png" : "/icons/icon-192x192-notif.png",
+        badge: "/icons/icon-192x192.png",
+        vibrate: [200, 100, 200],
+        tag: "kpflow-test",
+        renotify: true,
+      });
+    } catch (e) {
+      alert("테스트 알림 실행 실패: " + (e?.message || e));
+    }
+  }, []);
+
   // 오늘 사진 업로드 현황 구독
   useEffect(() => {
     if (!uid) return;
@@ -1841,6 +1884,20 @@ export default function DriverHome() {
               >
                 <span style={{ position: "absolute", top: 3, left: pushEnabled ? 23 : 3, width: 20, height: 20, borderRadius: "50%", background: "white", transition: "left 0.15s", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }} />
               </button>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 16px", borderTop: "1px solid #f3f4f6" }}>
+              <div>
+                <div style={{ fontSize: 13, color: "#111827", fontWeight: 700 }}>알림 테스트</div>
+                <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 1 }}>서버 없이 이 휴대폰에서 알림창만 바로 확인</div>
+              </div>
+              <button onClick={handleTestNotification} style={{ fontSize: 12, fontWeight: 700, color: "#1B2B4B", background: "#eef1f6", border: "none", borderRadius: 8, padding: "7px 12px", cursor: "pointer", flexShrink: 0 }}>실행</button>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 16px", borderTop: "1px solid #f3f4f6" }}>
+              <div>
+                <div style={{ fontSize: 13, color: "#111827", fontWeight: 700 }}>FCM 진단</div>
+                <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 1 }}>서버까지 실제로 거쳐 왜 안 되는지 확인</div>
+              </div>
+              <button onClick={runFcmDiagnosis} disabled={fcmDiagRunning} style={{ fontSize: 12, fontWeight: 700, color: "#1B2B4B", background: "#eef1f6", border: "none", borderRadius: 8, padding: "7px 12px", cursor: "pointer", flexShrink: 0, opacity: fcmDiagRunning ? 0.6 : 1 }}>{fcmDiagRunning ? "..." : "실행"}</button>
             </div>
           </div>
 
