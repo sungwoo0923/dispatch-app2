@@ -588,6 +588,13 @@ export default function DriverHome() {
   // (완료 처리되면 acceptedOrders에서는 빠지므로) 별도로 기억해둔다.
   const [lastCompletedOrderId, setLastCompletedOrderId] = useState(null);
   const [fleetPhotoUploading, setFleetPhotoUploading] = useState(false);
+  // ⭐ 사용자 요청 — 알림 종(🔔): 새 오더 도착/배차취소 등을 나중에 다시 확인할 수
+  // 있는 알림함. driver_notifications 컬렉션(관리자 PC가 배정/취소 시 기록)을 구독.
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
+  // ⭐ 사용자 요청 — 알림/푸시 on-off. users/{uid}.driverPushEnabled를 Cloud
+  // Functions가 발송 전에 확인한다(기본값: 켜짐).
+  const [pushEnabled, setPushEnabled] = useState(true);
   const seenPendingOrderIdsRef = useRef(new Set());
   const driverRef = useRef(null);
   const posRef = useRef(null);
@@ -640,6 +647,41 @@ export default function DriverHome() {
       return () => clearTimeout(t);
     }
   }, [myOrders]);
+
+  // 알림함(driver_notifications) 구독 — 새 오더/배차취소 등 관리자 PC가 기록해둔 알림
+  useEffect(() => {
+    if (!uid) return;
+    const q = query(collection(db, "driver_notifications"), where("driverId", "==", uid), orderBy("createdAt", "desc"), limit(30));
+    return onSnapshot(q, (snap) => {
+      setNotifications(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, () => {});
+  }, [uid]);
+
+  // 알림/푸시 on-off 설정값 구독 — users/{uid}.driverPushEnabled
+  useEffect(() => {
+    if (!uid) return;
+    return onSnapshot(doc(db, "users", uid), (snap) => {
+      const v = snap.exists() ? snap.data().driverPushEnabled : undefined;
+      setPushEnabled(v !== false); // 기본값: 켜짐
+    }, () => {});
+  }, [uid]);
+
+  const markNotificationsRead = useCallback(async () => {
+    const unread = notifications.filter(n => !n.read);
+    if (!unread.length) return;
+    try {
+      await Promise.all(unread.map(n => updateDoc(doc(db, "driver_notifications", n.id), { read: true })));
+    } catch (_) {}
+  }, [notifications]);
+
+  const togglePushEnabled = useCallback(async () => {
+    if (!uid) return;
+    const next = !pushEnabled;
+    setPushEnabled(next);
+    try {
+      await setDoc(doc(db, "users", uid), { driverPushEnabled: next }, { merge: true });
+    } catch (_) {}
+  }, [uid, pushEnabled]);
 
   // 오늘 사진 업로드 현황 구독
   useEffect(() => {
@@ -1185,6 +1227,37 @@ export default function DriverHome() {
         </div>
       )}
 
+      {/* 알림함 */}
+      {showNotifPanel && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 9998, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "70px 16px 0" }} onClick={() => setShowNotifPanel(false)}>
+          <div style={{ background: "white", borderRadius: 18, maxWidth: 420, width: "100%", maxHeight: "75vh", overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,0.25)" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", borderBottom: "1px solid #f3f4f6", position: "sticky", top: 0, background: "white" }}>
+              <span style={{ fontSize: 15, fontWeight: 800, color: "#111827" }}>알림</span>
+              <button onClick={() => setShowNotifPanel(false)} style={{ border: "none", background: "transparent", fontSize: 18, color: "#9ca3af", cursor: "pointer" }}>✕</button>
+            </div>
+            {notifications.length === 0 ? (
+              <div style={{ padding: "40px 20px", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>알림이 없습니다.</div>
+            ) : (
+              <div>
+                {notifications.map(n => {
+                  const t = n.createdAt?.toDate?.();
+                  return (
+                    <div key={n.id} style={{ padding: "13px 18px", borderBottom: "1px solid #f3f4f6", display: "flex", gap: 10, background: n.read ? "#fff" : "#f0f4ff" }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: n.type === "canceled" ? "#ef4444" : "#1B2B4B", marginTop: 5, flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: "#111827" }}>{n.title || "알림"}</div>
+                        {n.body && <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2, wordBreak: "break-word" }}>{n.body}</div>}
+                        {t && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 3 }}>{formatTime(t)}</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 오더 거절 사유 입력 모달 */}
       {rejectModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 9998, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 24px" }}>
@@ -1280,6 +1353,13 @@ export default function DriverHome() {
               >
                 <svg width="13" height="13" fill="white" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
                 SOS
+              </button>
+              {/* 알림 종 */}
+              <button onClick={() => { setShowNotifPanel(true); markNotificationsRead(); }} style={{ position: "relative", background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="16" height="16" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                {notifications.some(n => !n.read) && (
+                  <span style={{ position: "absolute", top: 3, right: 4, width: 8, height: 8, borderRadius: "50%", background: "#ef4444", boxShadow: "0 0 0 2px #1B2B4B" }} />
+                )}
               </button>
               {/* 설정 버튼 */}
               <button onClick={() => setActiveTab("settings")} style={{ background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1692,6 +1772,23 @@ export default function DriverHome() {
                 <span style={{ fontSize: 13, color: "#1B2B4B", fontWeight: 700 }}>{value}</span>
               </div>
             ))}
+          </div>
+
+          {/* ⭐ 사용자 요청 — 알림/푸시 on-off를 기사 본인이 설정에서 끄고 켤 수 있어야 한다 */}
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 8, letterSpacing: "0.06em", paddingLeft: 4 }}>알림 설정</div>
+          <div style={{ background: "white", borderRadius: 16, boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #e5e7eb", overflow: "hidden", marginBottom: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 16px" }}>
+              <div>
+                <div style={{ fontSize: 13, color: "#111827", fontWeight: 700 }}>새 오더 알림(푸시)</div>
+                <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 1 }}>꺼두면 배차 알림이 휴대폰에 뜨지 않습니다</div>
+              </div>
+              <button
+                onClick={togglePushEnabled}
+                style={{ width: 46, height: 26, borderRadius: 13, border: "none", cursor: "pointer", position: "relative", background: pushEnabled ? "#1B2B4B" : "#e5e7eb", transition: "background 0.15s", flexShrink: 0 }}
+              >
+                <span style={{ position: "absolute", top: 3, left: pushEnabled ? 23 : 3, width: 20, height: 20, borderRadius: "50%", background: "white", transition: "left 0.15s", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }} />
+              </button>
+            </div>
           </div>
 
           {/* ⭐ 사용자 요청 — 차량종류/톤수/거주지/요청사항은 가입할 때만 입력하고 끝이

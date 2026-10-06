@@ -436,7 +436,11 @@ exports.notifyFleetDriverNewOrder =
       if (!driverDoc) { console.log("🚫 배정 기사 문서를 찾을 수 없음:", after["차량번호"]); return; }
 
       const userSnap = await db.collection("users").doc(driverDoc.id).get();
-      const token = userSnap.exists ? userSnap.data().fcmToken : null;
+      const userData = userSnap.exists ? userSnap.data() : null;
+      // ⭐ 사용자 요청 — 기사 앱 설정에서 알림/푸시를 꺼놨으면(driverPushEnabled===false)
+      // 보내지 않는다. 기본값은 켜짐(필드 자체가 없으면 보낸다).
+      if (userData?.driverPushEnabled === false) { console.log("🔕 지입 기사 알림 꺼둠:", driverDoc.id); return; }
+      const token = userData?.fcmToken || null;
       if (!token) { console.log("🚫 지입 기사 FCM 토큰 없음(앱 미접속 또는 알림권한 미허용):", driverDoc.id); return; }
 
       await sendPushAndCleanup([token], {

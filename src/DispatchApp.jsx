@@ -3683,6 +3683,22 @@ const patchDispatch = async (_id, patch, knownPrev) => {
     patch.기사거절사유 = null;
     patch.기사확인일시 = null;
     patch.기사완료일시 = null;
+    // ⭐ 사용자 요청 — 담당자가 배차를 취소(차량번호를 뺌)하면 원래 배정돼 있던
+    // 지입 기사에게 "배차가 취소되었습니다" 알림을 남긴다(기사 앱 알림종).
+    if (prev?.차량번호) {
+      const canceledDriver = drivers.find(d => normalizePlate(d.차량번호) === normalizePlate(prev.차량번호));
+      if (canceledDriver?.등급 === "지입") {
+        addDoc(collection(db, "driver_notifications"), {
+          driverId: canceledDriver.id,
+          type: "canceled",
+          orderId: _id,
+          title: "배차가 취소되었습니다",
+          body: `담당자가 ${prev.거래처명 || ""} ${prev.상차지명 || "-"} → ${prev.하차지명 || "-"} 오더에서 차량 배정을 취소했습니다.`,
+          createdAt: serverTimestamp(),
+          read: false,
+        }).catch(() => {});
+      }
+    }
   } else {
     const basePlate = patch.차량번호 || prev?.차량번호;
     if (basePlate) {
@@ -3706,6 +3722,15 @@ const patchDispatch = async (_id, patch, knownPrev) => {
           patch.기사거절사유 = null;
           patch.기사확인일시 = null;
           patch.기사완료일시 = null;
+          addDoc(collection(db, "driver_notifications"), {
+            driverId: driver.id,
+            type: "new_order",
+            orderId: _id,
+            title: "배차오더가 도착했습니다",
+            body: `${patch.거래처명 || prev?.거래처명 || ""} ${patch.상차지명 || prev?.상차지명 || "-"} → ${patch.하차지명 || prev?.하차지명 || "-"}`,
+            createdAt: serverTimestamp(),
+            read: false,
+          }).catch(() => {});
         }
       }
     }
@@ -12169,6 +12194,15 @@ if (rec.차량번호) {
   const assignedDriver = drivers.find(d => normalizePlate(d.차량번호) === normalizePlate(rec.차량번호));
   if (assignedDriver?.등급 === "지입") {
     rec.기사확인상태 = "대기";
+    addDoc(collection(db, "driver_notifications"), {
+      driverId: assignedDriver.id,
+      type: "new_order",
+      orderId: null,
+      title: "배차오더가 도착했습니다",
+      body: `${rec.거래처명 || ""} ${rec.상차지명 || "-"} → ${rec.하차지명 || "-"}`,
+      createdAt: serverTimestamp(),
+      read: false,
+    }).catch(() => {});
   }
 }
 // ★ form 값 미리 캡처 (reset 전에)
