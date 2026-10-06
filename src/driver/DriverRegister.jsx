@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { auth, db } from "../firebase";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
 
 // ⭐ 사용자 요청 — 차량종류/톤수/거주지를 가입할 때 드롭다운으로 선택하게 한다
@@ -139,6 +139,30 @@ export default function DriverRegister() {
     // 값으로 따로 저장해 PC 기사관리·지입차관리에서 그대로 쓸 수 있게 한다.
     const vehicleType = `${category} ${tonnage}`;
 
+    // ⭐ 사용자 요청 — 관리자가 PC 기사관리에서 지입차를 미리 등록해두면(차량번호로
+    // 문서가 만들어짐, Firebase 인증 계정은 아직 없음) 그 차주가 나중에 실제로
+    // 기사앱에 가입하려 해도 로그인이 안 됐다(인증 계정 자체가 없으므로). 가입
+    // 시점에 같은 차량번호의 "인증 계정 없는" 선등록 문서가 있는지 먼저 확인해서,
+    // 차량번호·이름·회사명이 모두 같으면 그 문서에 이미 들어있는 등급/거주지/
+    // 담당자 등 관리자가 미리 설정해둔 값을 그대로 이어받는다(겹치는 값은 가입
+    // 입력값이 아니라 관리자가 지정한 값을 우선 — 등급/담당자/근무요일처럼 운영
+    // 판단이 들어간 값은 기사 본인이 덮어쓰면 안 되므로).
+    const normPlate = carNo.trim().replace(/\s+/g, "").toUpperCase();
+    let preRegistered = null;
+    try {
+      const preSnap = await getDoc(doc(db, "drivers", normPlate));
+      if (preSnap.exists()) {
+        const d = preSnap.data();
+        const sameName = (d.이름 || d.name || "").trim() === name.trim();
+        const sameCompany = (d.companyName || "").trim() === companyName.trim();
+        if (sameName && sameCompany) preRegistered = d;
+        else {
+          setError("이미 등록된 차량번호인데 이름·회사명이 다릅니다. 관리자에게 문의해주세요.");
+          return;
+        }
+      }
+    } catch (_) { /* 조회 실패 시 그냥 신규 가입으로 진행 */ }
+
     try {
       setLoading(true);
       const res = await createUserWithEmailAndPassword(auth, email, password);
@@ -188,7 +212,18 @@ export default function DriverRegister() {
         totalDistance: 0,
         approved: false,
         updatedAt: serverTimestamp(),
+        // 관리자가 PC에서 미리 지정해둔 값은 가입 입력값보다 우선해서 이어받는다.
+        ...(preRegistered ? {
+          등급: preRegistered.등급 || "일반",
+          담당자: preRegistered.담당자 || null,
+          근무요일: preRegistered.근무요일 || [],
+          메모: preRegistered.메모 || "",
+          등록자: preRegistered.등록자 || "",
+        } : {}),
       });
+      if (preRegistered) {
+        await deleteDoc(doc(db, "drivers", normPlate)).catch(() => {});
+      }
 
       await signOut(auth);
       setSuccess(true);

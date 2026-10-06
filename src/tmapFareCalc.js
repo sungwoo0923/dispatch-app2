@@ -160,11 +160,16 @@ export async function geocodeAddress(rawAddr) {
   // 나오는 사고가 있었다. 원인은 여기서 주소를 통째로 "시/구"까지(2단어) 잘라
   // 재시도하던 것 — 같은 구 안의 서로 다른 두 지번이 둘 다 "인천 서구" 좌표
   // (구청 중심)로 수렴해 버려 실제로는 떨어져 있는데 거리가 0으로 계산됐다.
-  // 최소 3단어(예: "인천 서구 완정로")까지만 줄여서, 적어도 도로명 단위 정밀도는
-  // 유지하고 그 이상 깎이는 "시/군/구"까지의 뭉뚱그려진 좌표는 쓰지 않는다.
+  // 우선 도로명 단위(최소 3단어, 예: "인천 서구 완정로")까지만 줄여서 정밀도를
+  // 지키고, 그래도 전부 실패하면("-"로 아예 안 나오는 게 더 나쁘다는 사용자 요청)
+  // 마지막 수단으로 2단어(시/구)까지 한 번 더 시도해 최소한 근사값은 보여준다.
   const parts = clean.split(" ");
   for (let i = parts.length - 1; i >= 3; i--) {
     result = await tryGeocode(parts.slice(0, i).join(" "));
+    if (result) return result;
+  }
+  if (parts.length >= 2) {
+    result = await tryGeocode(parts.slice(0, 2).join(" "));
     if (result) return result;
   }
   return null;

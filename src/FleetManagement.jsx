@@ -1241,7 +1241,10 @@ function InfoField({ label, value, children, mono }) {
       {/* ⭐ 사용자 피드백 — 라벨 글씨가 너무 작고(11px) 영문 대문자 스타일(letter-spacing)이
           한글엔 안 어울려 눌린 느낌이 났다. 자간 없애고 조금 키움. */}
       <div style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 15, fontWeight: 800, color: "#111827", fontFamily: mono ? "monospace" : undefined, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+      {/* ⭐ 사용자 피드백 — whiteSpace:nowrap + overflow:hidden 조합 때문에 칸이
+          좁으면 값 끝이 그냥 잘려서 안 보였다(말줄임표도 없이). 줄바꿈을 허용해
+          내용이 전부 보이게 바꾼다. */}
+      <div style={{ fontSize: 15, fontWeight: 800, color: "#111827", fontFamily: mono ? "monospace" : undefined, wordBreak: "break-word" }}>
         {children != null ? children : (value || "-")}
       </div>
     </div>
@@ -1358,11 +1361,14 @@ function handleSendToDriver(driver, orders, selectedDate) {
 const ROUTE_COLS = ["순번", "상태", "거래처", "상차지", "하차지", "상차", "하차", "이동정보", "운임", "배차담당자"];
 
 // 오더를 등록/배차한 담당자 표시 — 3파트 등록폼과 동일한 우선순위로 폴백한다.
-function creatorLabel(r) {
-  return r?.등록자명 || r?.createdByName || r?.등록자 || r?.createdByEmail || r?.createdBy || "-";
+// ⭐ 사용자 요청 — 이름 필드가 하나도 없으면 마지막엔 이메일을 그대로 보여주고
+// 있었다. staffByEmail(이메일→실명 매핑)이 있으면 이메일 대신 실명으로 바꿔 보여준다.
+function creatorLabel(r, staffByEmail) {
+  const email = r?.createdByEmail || r?.createdBy || "";
+  return r?.등록자명 || r?.createdByName || r?.등록자 || (email && staffByEmail?.[email]) || email || "-";
 }
 
-function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, live, onOpenDetail, staff, canDelegate, onAssignManager, index }) {
+function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, live, onOpenDetail, staff, canDelegate, onAssignManager, index, staffByEmail }) {
   const first = orders[0];
   const last = orders[orders.length - 1];
   const hasConflict = isOffDay && orders.length > 0;
@@ -1442,7 +1448,7 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
                   return (
                     <tr key={r._id || i} style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : "none" }}>
                       <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, color: "#9ca3af" }}>{i + 1}</td>
-                      <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+                      <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                           <span style={{
                             width: 7, height: 7, borderRadius: "50%", background: meta.dot, flexShrink: 0,
@@ -1451,28 +1457,28 @@ function DriverRouteCard({ driver, orders, selectedDate, todayStr, isOffDay, liv
                           <span style={{ fontSize: 13, fontWeight: 700, color: "#374151" }}>{meta.label}</span>
                         </span>
                       </td>
-                      <td style={{ padding: "10px 16px", fontSize: 13, fontWeight: 700, color: "#374151", whiteSpace: "nowrap" }}>{r.거래처명 || "-"}</td>
+                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, color: "#374151", whiteSpace: "nowrap" }}>{r.거래처명 || "-"}</td>
                       {/* ⭐ 상차지/하차지 — 예전엔 이름 아래 줄바꿈으로 "날짜 · 주소"가 작고 흐리게
                           있었는데, 날짜는 상차/하차 컬럼으로 옮기고 주소는 이름 옆에 가로로,
                           더 잘 보이는 색/굵기로 붙인다. */}
-                      <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+                      <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
                         <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{r.상차지명 || "-"}</span>
                         <span style={{ fontSize: 13, fontWeight: 600, color: "#4b5563", marginLeft: 8 }}>{abbrevAddr(r.상차지주소) || "-"}</span>
                       </td>
-                      <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+                      <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
                         <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{r.하차지명 || "-"}</span>
                         <span style={{ fontSize: 13, fontWeight: 600, color: "#4b5563", marginLeft: 8 }}>{abbrevAddr(r.하차지주소) || "-"}</span>
                       </td>
                       {/* ⭐ 상차/하차 — 상차지/하차지 칸에 있던 날짜를 여기로 옮겨 시간과 함께 표시 */}
-                      <td style={{ padding: "10px 16px", fontSize: 13, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>{r.상차일 || "-"} {r.상차시간 || "즉시"}</td>
-                      <td style={{ padding: "10px 16px", fontSize: 13, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>{r.하차일 || "-"} {r.하차시간 || "즉시"}</td>
-                      <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 13, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>{r.상차일 || "-"} {r.상차시간 || "즉시"}</td>
+                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 13, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>{r.하차일 || "-"} {r.하차시간 || "즉시"}</td>
+                      <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
                         <RouteDistanceBadge fromAddr={r.상차지주소} toAddr={r.하차지주소} />
                       </td>
-                      <td style={{ padding: "10px 16px", fontSize: 13, fontWeight: 700, color: NAVY, whiteSpace: "nowrap" }}>
+                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, color: NAVY, whiteSpace: "nowrap" }}>
                         {r.청구운임 ? `${Number(String(r.청구운임).replace(/[^\d]/g, "")).toLocaleString()}원` : "-"}
                       </td>
-                      <td style={{ padding: "10px 16px", fontSize: 13, color: "#374151", fontWeight: 600, whiteSpace: "nowrap" }}>{creatorLabel(r)}</td>
+                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 13, color: "#374151", fontWeight: 600, whiteSpace: "nowrap" }}>{creatorLabel(r, staffByEmail)}</td>
                     </tr>
                   );
                 })}
@@ -1618,10 +1624,25 @@ function DriverDocumentsPanel({ driverId }) {
   );
 }
 
-function DriverRouteDetailModal({ driver, dispatchData, onClose }) {
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+// 오늘로부터 n개월 전 날짜(YYYY-MM-DD, KST) — 조회기간 하한 계산용.
+function monthsAgoKstDateStr(n) {
+  const d = new Date(Date.now() + 9 * 3600 * 1000); // KST
+  d.setUTCMonth(d.getUTCMonth() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+function DriverRouteDetailModal({ driver, dispatchData, onClose, role = "" }) {
+  // ⭐ 사용자 요청 — 예전엔 기간을 비워두면 "전체 이력"이 기본으로 떴다. 항상
+  // 당일 배차부터 보여주고, 사용자가 직접 기간을 선택했을 때만 그 범위로 바뀌게
+  // 기본값을 오늘로 둔다.
+  const todayForRange = kstDateStr();
+  const [fromDate, setFromDate] = useState(todayForRange);
+  const [toDate, setToDate] = useState(todayForRange);
   const [orderSearch, setOrderSearch] = useState("");
+  // 관리자/최고관리자만 기간 제한 없이 조회 가능, 그 이하 직급은 최근 3개월까지만.
+  const isUnrestricted = role === "admin" || role === "totalMaster";
+  const minAllowedDate = isUnrestricted ? null : monthsAgoKstDateStr(3);
+  const clampDate = (v) => (minAllowedDate && v && v < minAllowedDate) ? minAllowedDate : v;
 
   const toWon = (v) => Number(String(v || "0").replace(/[^\d]/g, "")) || 0;
 
@@ -1694,7 +1715,9 @@ function DriverRouteDetailModal({ driver, dispatchData, onClose }) {
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 9998, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={onClose}>
-      <div style={{ background: "#f4f6f9", borderRadius: 14, width: "min(1040px, 100%)", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 8px 40px rgba(0,0,0,.25)" }} onClick={e => e.stopPropagation()}>
+      {/* ⭐ 사용자 요청 — 맨 아래 오더 목록 표가 가로로 길어서 잘려 보였다. 1040px
+          고정폭 대신 뷰포트에 맞춰 넓게(최대 1500px) 쓴다. */}
+      <div style={{ background: "#f4f6f9", borderRadius: 14, width: "min(1500px, 95vw)", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 8px 40px rgba(0,0,0,.25)" }} onClick={e => e.stopPropagation()}>
         <div style={{ position: "sticky", top: 0, background: NAVY, padding: "16px 20px", display: "flex", alignItems: "center", zIndex: 1 }}>
           <div>
             <div style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>{driver.이름} <span style={{ fontWeight: 600, fontSize: 14, color: "rgba(255,255,255,.7)", fontFamily: "monospace" }}>{driver.차량번호}</span></div>
@@ -1761,16 +1784,17 @@ function DriverRouteDetailModal({ driver, dispatchData, onClose }) {
 
           <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: "#6b7280" }}>기간</span>
-            <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
-              style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 13 }} />
+            <CustomDatePicker value={fromDate} onChange={e => setFromDate(clampDate(e.target.value))} placeholder="시작일"
+              className="h-[34px] px-3 rounded-lg text-[13px] font-bold border border-gray-300 bg-white cursor-pointer" />
             <span style={{ color: "#9ca3af" }}>~</span>
-            <input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
-              style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 13 }} />
-            {(fromDate || toDate) && (
-              <button onClick={() => { setFromDate(""); setToDate(""); }}
-                style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", fontSize: 13, cursor: "pointer" }}>
-                초기화
-              </button>
+            <CustomDatePicker value={toDate} onChange={e => setToDate(clampDate(e.target.value))} placeholder="종료일"
+              className="h-[34px] px-3 rounded-lg text-[13px] font-bold border border-gray-300 bg-white cursor-pointer" />
+            <button onClick={() => { setFromDate(todayForRange); setToDate(todayForRange); }}
+              style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", fontSize: 13, cursor: "pointer" }}>
+              오늘로 초기화
+            </button>
+            {!isUnrestricted && (
+              <span style={{ fontSize: 12, color: "#9ca3af" }}>최근 3개월까지만 조회 가능</span>
             )}
             <input
               placeholder="거래처/상하차지 검색"
@@ -1828,7 +1852,7 @@ function DriverRouteDetailModal({ driver, dispatchData, onClose }) {
 // 보여준다. dispatchData는 부모(DispatchApp)의 실시간 배차 데이터를 그대로 받으므로,
 // 실시간배차현황/배차현황에서 지입/직영 기사에게 배차되는 순간 자동으로 반영된다.
 // 기사 1명의 전체 이력/주요노선/엑셀다운로드는 카드의 "상세보기"로 이동했다.
-function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [], canDelegate = false, onAssignManager, myUid = null }) {
+function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [], canDelegate = false, onAssignManager, myUid = null, staffByEmail = {}, role = "" }) {
   const [q, setQ] = useState("");
   const [dayMode, setDayMode] = useState("today"); // "yesterday" | "today" | "tomorrow"
   const [customDate, setCustomDate] = useState(""); // 배차관리(3파트)와 동일한 달력에서 임의 날짜 선택 시
@@ -2049,13 +2073,14 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
               staff={staff}
               canDelegate={canDelegate}
               onAssignManager={onAssignManager}
+              staffByEmail={staffByEmail}
             />
           ))}
         </div>
       )}
 
       {detailDriver && (
-        <DriverRouteDetailModal driver={detailDriver} dispatchData={dispatchData} onClose={() => setDetailDriver(null)} />
+        <DriverRouteDetailModal driver={detailDriver} dispatchData={dispatchData} onClose={() => setDetailDriver(null)} role={role} />
       )}
     </div>
   );
@@ -3000,7 +3025,7 @@ function CargoCameraTab({ drivers }) {
   document.head.appendChild(s);
 })();
 
-export default function FleetManagement({ dispatchData = [] }) {
+export default function FleetManagement({ dispatchData = [], role = "" }) {
   // Tab persistence across parent-tab switches → sessionStorage
   // ⭐ 사용자 요청 — 지입차관리에 들어왔을 때 노선/배차상태/담당 차량이 먼저
   // 보여야 하므로, 기본 진입 탭을 실시간관제가 아닌 노선관리로 바꾼다.
@@ -3043,6 +3068,13 @@ export default function FleetManagement({ dispatchData = [] }) {
   );
   const myStaffName = companyStaff.find(u => u.id === myUid)?.name
     || auth.currentUser?.displayName || auth.currentUser?.email || "나";
+  // ⭐ 사용자 요청 — 노선표 "배차담당자" 칸이 이름을 못 찾으면 계정 이메일을
+  // 그대로 보여주고 있었다. 이메일 → 실명 매핑을 만들어 creatorLabel이 최종
+  // 폴백으로 이메일 대신 이름을 쓸 수 있게 한다.
+  const staffByEmail = useMemo(
+    () => Object.fromEntries(companyStaffRaw.filter(u => u.email).map(u => [u.email, u.name || u.email])),
+    [companyStaffRaw]
+  );
 
   // 지입차 담당자 배정/위임 — drivers/{driverId} 문서의 담당자 필드를 바로 갱신한다.
   const assignDriverManager = useCallback(async (driverId, staff) => {
@@ -3050,8 +3082,17 @@ export default function FleetManagement({ dispatchData = [] }) {
       await updateDoc(doc(db, "drivers", driverId), {
         담당자: staff ? { uid: staff.id, name: staff.name } : null,
       });
+      // ⭐ 사용자 요청 — 오더 등록할 때 뜨는 상단 중앙 토스트와 동일한 방식/지속시간
+      // (window.__sflowShowToast, DispatchApp.jsx가 마운트 시 노출해둔 전역 함수)으로
+      // "누가 누구에게 위임했다"를 알려준다.
+      const target = driversRaw.find(d => d.id === driverId);
+      const label = target ? `${target.이름 || target.name || "기사"}(${target.차량번호 || target.carNo || "-"})` : "기사";
+      const msg = staff
+        ? `${myStaffName}님이 ${label}을 ${staff.name}님에게 위임했습니다`
+        : `${myStaffName}님이 ${label}의 담당자를 해제했습니다`;
+      window.__sflowShowToast?.(msg, "dispatch");
     } catch (e) { console.error("담당자 배정 실패:", e); alert("담당자 배정에 실패했습니다: " + (e?.message || e)); }
-  }, []);
+  }, [driversRaw, myStaffName]);
   const [contextMenu, setContextMenu] = useState(null); // { x, y, driver }
   const [todayDriverPhotos, setTodayDriverPhotos] = useState([]); // today's driver_photo_logs for all drivers
   const [photoViewerPhotos, setPhotoViewerPhotos] = useState(null); // { driverName, photos[] }
@@ -4035,6 +4076,8 @@ export default function FleetManagement({ dispatchData = [] }) {
           canDelegate={canDelegate}
           onAssignManager={assignDriverManager}
           myUid={myUid}
+          staffByEmail={staffByEmail}
+          role={role}
         />
       )}
 

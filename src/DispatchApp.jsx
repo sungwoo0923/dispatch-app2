@@ -7355,7 +7355,7 @@ return (
               </button>
             </div>
             <div className="px-4">
-              <FleetManagement dispatchData={dispatchDataFiltered} />
+              <FleetManagement dispatchData={dispatchDataFiltered} role={role} />
             </div>
           </div>
         )}
@@ -9759,6 +9759,20 @@ React.useEffect(() => {
         try { window.dispatchEvent(new Event("resize")); } catch {}
       };
       [0, 150, 400].forEach((ms) => setTimeout(forceMapResize, ms));
+      // ⭐ 사용자 재보고 — 0/150/400ms 안에 패널(배차요청장) 쪽 비동기 데이터(운임/
+      // 거리 등)가 다 안 끝나고 그 뒤에도 패널 높이가 더 늘어나는 경우, 지도는 이미
+      // 그 전 크기로 굳어서 여전히 아래쪽에 여백이 남았다. 정해진 시점만 믿지 않고
+      // 지도 칸 자체의 실제 크기 변화를 계속 감시해서, 바뀔 때마다 다시 맞춘다
+      // (모달이 닫히면 관찰 중단).
+      let roCancelled = false;
+      const ro = new ResizeObserver(() => { if (!roCancelled) forceMapResize(); });
+      ro.observe(mapDiv);
+      const stopObserving = () => { roCancelled = true; ro.disconnect(); };
+      const prevCancelCheck = () => cancelled;
+      (function watchCancel() {
+        if (prevCancelCheck()) { stopObserving(); return; }
+        setTimeout(watchCancel, 500);
+      })();
 
       // =========================
 // ⭐🔥 도로 경로 (완성)
@@ -55479,7 +55493,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver, showAlert = (m)
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">{r.이름||"-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">{formatPhone(r.전화번호)||"-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500 text-[12px]">{displayRegDate(r) || "-"}</td>
-                        <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500">{(grade==="지입"||grade==="직영") ? (r.등록자 || "-") : "-"}</td>
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500">{(grade==="지입"||grade==="직영") ? (r.담당자?.name || "-") : "-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500">{(grade==="지입"||grade==="직영") ? (r.거주지 || "-") : "-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500 text-[12px]">{(grade==="지입"||grade==="직영") ? ((r.근무요일 && r.근무요일.length) ? r.근무요일.join(",") : "-") : "-"}</td>
                         <td className="px-3 py-2.5 text-center">
