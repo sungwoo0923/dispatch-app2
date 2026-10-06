@@ -1,8 +1,8 @@
 // src/driver/DriverLogin.jsx
 import React, { useState, useEffect } from "react";
 import { auth, db } from "../firebase";
-import { signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
+import { doc, getDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 
 export default function DriverLogin() {
@@ -32,8 +32,51 @@ export default function DriverLogin() {
     const password = carNo.trim();
 
     try {
-      const res = await signInWithEmailAndPassword(auth, email, password);
-      const uid = res.user.uid;
+      let uid;
+      try {
+        const res = await signInWithEmailAndPassword(auth, email, password);
+        uid = res.user.uid;
+      } catch (signInErr) {
+        // ⭐ 사용자 요청 — 관리자가 PC 기사관리에서 지입차를 미리 등록해두면(차량번호로
+        // 문서만 만들어짐, 인증 계정은 아직 없음) 그 기사가 여기서 바로 로그인하려 해도
+        // 로그인용 계정 자체가 없어 매번 실패했다(기사 등록 화면을 따로 거쳐야만 했음).
+        // 로그인 시도 중 "그런 계정이 없음" 류 오류가 나면, 입력한 차량번호로 미리
+        // 등록된 문서가 있는지 확인해서 이름·회사명이 맞으면 바로 그 자리에서 계정을
+        // 만들어 이어받는다 — 기사 입장에서는 그냥 "로그인"만 하면 되는 경험이 된다.
+        const normPlate = carNo.trim().replace(/\s+/g, "").toUpperCase();
+        const preSnap = await getDoc(doc(db, "drivers", normPlate));
+        if (!preSnap.exists()) throw signInErr;
+        const d = preSnap.data();
+        const sameName = (d.이름 || d.name || "").trim() === name.trim();
+        const sameCompany = (d.companyName || "").trim() === companyName.trim();
+        if (!sameName || !sameCompany) throw signInErr;
+
+        const res = await createUserWithEmailAndPassword(auth, email, password);
+        uid = res.user.uid;
+        const common = {
+          uid, name: name.trim(), carNo: carNo.trim(),
+          phone: d.전화번호 || d.phone || "",
+          vehicleType: d.vehicleType || "",
+          차량종류: d.차량종류 || "", 차량톤수: d.차량톤수 || "",
+          거주지: d.거주지 || "", 요청사항: d.요청사항 || "",
+          companyName: companyName.trim(),
+          // 관리자가 PC에서 직접 등록한 차량이므로 승인 절차 없이 바로 사용 가능하게 한다.
+          approved: true,
+        };
+        await setDoc(doc(db, "users", uid), {
+          ...common, email, role: "driver",
+          termsAgreed: true, privacyAgreed: true, gpsAgreed: true,
+          createdAt: serverTimestamp(),
+        });
+        await setDoc(doc(db, "drivers", uid), {
+          ...common,
+          mainStatus: "대기", subStatus: "대기", status: "대기", state: "대기", goStatus: "대기",
+          active: false, totalDistance: 0,
+          등급: d.등급 || "일반", 담당자: d.담당자 || null, 근무요일: d.근무요일 || [], 메모: d.메모 || "",
+          updatedAt: serverTimestamp(),
+        });
+        await deleteDoc(doc(db, "drivers", normPlate)).catch(() => {});
+      }
 
       const snap = await getDoc(doc(db, "users", uid));
       if (!snap.exists()) {
@@ -104,7 +147,7 @@ export default function DriverLogin() {
               value={companyName}
               onChange={(e) => setCompanyName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && login()}
-              placeholder="예: 돌캐"
+              placeholder="가입한 운송사명을 입력하세요"
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition"
             />
           </div>
