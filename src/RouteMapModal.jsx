@@ -72,12 +72,20 @@ export async function geocodeTmapAddr(addr) {
 }
 
 // ⭐ 사용자 요청 — 경로보기에 "예정 경로"뿐 아니라 기사의 실제 GPS 이동 동선과
-// 현재 위치도 같이 보여준다(아래 live 아이콘 — 녹색 점선이 실제 이동 경로).
+// 현재 위치도 같이 보여준다. 이모지 대신 프로그램 전체에서 쓰는 네이비 톤
+// 트럭 아이콘(FleetManagement.jsx KPI_ICONS.truck과 동일한 선 모양)으로 통일하고,
+// "지금 실시간"이라는 의미는 범례와 같은 초록색 펄스 링으로만 표현한다.
 function makeLiveIcon() {
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
-      <circle cx="20" cy="20" r="17" fill="#16a34a" stroke="white" stroke-width="3"/>
-      <text x="20" y="26" text-anchor="middle" font-size="18">🚚</text>
+      <circle cx="20" cy="20" r="18" fill="#16a34a" opacity="0.18"/>
+      <circle cx="20" cy="20" r="14" fill="#1B2B4B" stroke="white" stroke-width="3"/>
+      <g transform="translate(8,8)" fill="white">
+        <rect x="1" y="5" width="14" height="10" rx="1.5" />
+        <path d="M15 9h4l3 3v3h-7z" />
+        <circle cx="6" cy="18" r="1.8" fill="#1B2B4B" stroke="white" stroke-width="1.2"/>
+        <circle cx="18" cy="18" r="1.8" fill="#1B2B4B" stroke="white" stroke-width="1.2"/>
+      </g>
     </svg>
   `;
   return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
