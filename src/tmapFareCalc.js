@@ -175,6 +175,41 @@ export async function geocodeAddress(rawAddr) {
   return null;
 }
 
+// ⭐ 사용자 보고 — 지입차관리 "이동정보"(RouteDistanceBadge)가 직선거리*1.25
+// 근사치를 쓰고 있어서, 강/산업단지 등으로 실제 도로가 크게 우회하는 구간(예:
+// 직선 3.4km인데 실도로는 18km)에서 체감 오차가 너무 컸다. 배차등록 폼의
+// 지도(RouteMapModal)는 이미 실제 도로 경로(tmap/routes)를 쓰고 있어 정확한데,
+// 노선관리는 그 API를 안 쓰고 있었다 — 같은 API로 통일한다.
+export async function getDrivingRoute(fromAddr, toAddr) {
+  const [from, to] = await Promise.all([geocodeAddress(fromAddr), geocodeAddress(toAddr)]);
+  if (!from || !to) return null;
+  const url = "https://apis.openapi.sk.com/tmap/routes?version=1&format=json&appKey=" + TMAP_KEY;
+  const body = new URLSearchParams({
+    startX: String(from.lon), startY: String(from.lat),
+    endX: String(to.lon), endY: String(to.lat),
+    reqCoordType: "WGS84GEO", resCoordType: "WGS84GEO",
+    searchOption: "0", startName: "출발지", endName: "도착지",
+  });
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+      body,
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const props = data?.features?.[0]?.properties;
+    const distM = props?.totalDistance;
+    const timeS = props?.totalTime;
+    if (!distM) return null;
+    const km = Math.round((distM / 1000) * 10) / 10;
+    const minutes = timeS ? Math.max(1, Math.round(timeS / 60)) : Math.max(5, Math.round((km / 60) * 60));
+    return { km, minutes };
+  } catch {
+    return null;
+  }
+}
+
 // 화물내용 텍스트에 냉장/냉동/위험물 키워드가 있으면 할증률 적용
 function cargoSurcharge(cargoText = "") {
   if (/냉장|냉동/.test(cargoText)) return 0.15;

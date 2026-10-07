@@ -11,7 +11,7 @@ import L from "leaflet";
 import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import { geocodeAddress } from "./tmapFareCalc";
+import { getDrivingRoute } from "./tmapFareCalc";
 import CustomDatePicker from "./CustomDatePicker";
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
@@ -1216,9 +1216,11 @@ function computeOrderProgress(order, selectedDate, todayStr) {
 }
 
 // ─── 이동거리/예상시간 뱃지 ────────────────────────────────────────────────────
-// Tmap 지오코딩 + 직선거리*1.25 보정(estimateDistanceFare와 동일 기준)으로 대략적인
-// 이동거리를 구하고, 평균 60km/h 가정으로 예상 소요시간을 계산한다. 같은 주소쌍은
-// 캐시하고, 요청은 순차 처리해 API 과호출을 막는다.
+// ⭐ 버그수정 — 예전엔 직선거리*1.25 근사치를 썼는데, 강/산업단지 등으로 실제
+// 도로가 크게 우회하는 구간은 오차가 너무 컸다(직선 3.4km인데 실도로 18km인
+// 사례 보고됨). 배차등록 폼의 지도가 이미 쓰고 있는 실제 도로경로 API
+// (tmap/routes, getDrivingRoute)로 통일해 정확한 거리/시간을 쓴다. 같은
+// 주소쌍은 캐시하고, 요청은 순차 처리해 API 과호출을 막는다.
 const _routeDistCache = new Map();
 let _routeDistQueue = [];
 let _routeDistProcessing = false;
@@ -1235,17 +1237,9 @@ async function _processRouteDistQueue() {
   _routeDistProcessing = true;
   const { fromAddr, toAddr, key, cb } = _routeDistQueue.shift();
   try {
-    const [from, to] = await Promise.all([geocodeAddress(fromAddr), geocodeAddress(toAddr)]);
-    if (from && to) {
-      const km = Math.round(haversineKm(from.lat, from.lon, to.lat, to.lon) * 1.25 * 10) / 10;
-      const minutes = Math.max(5, Math.round((km / 60) * 60));
-      const result = { km, minutes };
-      _routeDistCache.set(key, result);
-      cb(result);
-    } else {
-      _routeDistCache.set(key, null);
-      cb(null);
-    }
+    const result = await getDrivingRoute(fromAddr, toAddr);
+    _routeDistCache.set(key, result);
+    cb(result);
   } catch {
     cb(null);
   }
@@ -1609,13 +1603,13 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                           {/* ⭐ 사용자 요청 — 상태/상차지/하차지/이동정보 글씨가 거래처·상차·하차·
                               운임 칸보다 작아 보였다. 전부 14px/700으로 통일. */}
                           <span style={{ fontSize: 14, fontWeight: 700, color: "#374151" }}>{meta.label}</span>
+                          {/* ⭐ 사용자 요청 — 완료시간이 줄바꿈으로 아래에 따로 뜨던 걸 한 줄로 합침 */}
+                          {r.기사확인상태 === "완료" && r.기사완료일시?.toDate && (
+                            <span style={{ fontSize: 11, color: "#9ca3af" }}>
+                              {(() => { const t = r.기사완료일시.toDate(); return `(${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")})`; })()}
+                            </span>
+                          )}
                         </span>
-                        {/* ⭐ 사용자 요청 — 운송완료를 몇 시에 눌렀는지 관리자 화면에서도 보여야 한다 */}
-                        {r.기사확인상태 === "완료" && r.기사완료일시?.toDate && (
-                          <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>
-                            {(() => { const t = r.기사완료일시.toDate(); return `${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")} 완료`; })()}
-                          </div>
-                        )}
                       </td>
                       <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, fontWeight: 700, color: "#374151", whiteSpace: "nowrap" }}>{r.거래처명 || "-"}</td>
                       {/* ⭐ 상차지/하차지 — 예전엔 이름 아래 줄바꿈으로 "날짜 · 주소"가 작고 흐리게
@@ -1634,8 +1628,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                       <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>{r.하차일 || "-"} {r.하차시간 || "즉시"}</td>
                       {/* ⭐ 사용자 요청 — 지입차관리 노선표에 화물내용/톤수/차량종류가 안 보여서 추가 */}
                       <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#374151", fontWeight: 700, whiteSpace: "nowrap" }}>
-                        {[r.차량종류, r.차량톤수].filter(Boolean).join(" · ") || "-"}
-                        {r.화물내용 && <div style={{ fontSize: 12, color: "#6b7280", fontWeight: 600, marginTop: 2 }}>{r.화물내용}</div>}
+                        {[r.차량종류, r.차량톤수, r.화물내용].filter(Boolean).join(" · ") || "-"}
                       </td>
                       <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
                         <RouteDistanceBadge fromAddr={r.상차지주소} toAddr={r.하차지주소} />

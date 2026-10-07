@@ -9,7 +9,7 @@ import {
   MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap,
 } from "react-leaflet";
 import L from "leaflet";
-import { geocodeAddress, haversineKm } from "../tmapFareCalc";
+import { getDrivingRoute } from "../tmapFareCalc";
 
 const NAVY = "#1B2B4B";
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
@@ -115,6 +115,9 @@ function driverDispatchStatus(orders, todayStr, driver) {
 }
 
 // ─── 이동거리/예상시간 뱃지 (PC RouteDistanceBadge 포팅, 모바일 폭에 맞춰 축소) ───
+// ⭐ 버그수정 — PC와 동일하게 직선거리*1.25 근사치 대신 실제 도로경로 API
+// (getDrivingRoute)로 통일 — 강/산업단지 우회 구간에서 거리가 너무 짧게
+// 나오던 문제 수정.
 const _routeDistCache = new Map();
 let _routeDistQueue = [];
 let _routeDistProcessing = false;
@@ -129,17 +132,9 @@ async function _processRouteDistQueue() {
   _routeDistProcessing = true;
   const { fromAddr, toAddr, key, cb } = _routeDistQueue.shift();
   try {
-    const [from, to] = await Promise.all([geocodeAddress(fromAddr), geocodeAddress(toAddr)]);
-    if (from && to) {
-      const km = Math.round(haversineKm(from.lat, from.lon, to.lat, to.lon) * 1.25 * 10) / 10;
-      const minutes = Math.max(5, Math.round((km / 60) * 60));
-      const result = { km, minutes };
-      _routeDistCache.set(key, result);
-      cb(result);
-    } else {
-      _routeDistCache.set(key, null);
-      cb(null);
-    }
+    const result = await getDrivingRoute(fromAddr, toAddr);
+    _routeDistCache.set(key, result);
+    cb(result);
   } catch {
     cb(null);
   }
