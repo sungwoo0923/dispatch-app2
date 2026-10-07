@@ -9,14 +9,22 @@ import {
   MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap,
 } from "react-leaflet";
 import L from "leaflet";
+import { getDrivingRoute, geocodeAddress, haversineKm } from "../tmapFareCalc";
 
 const NAVY = "#1B2B4B";
+// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
+function formatPhone(phone) {
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  return p;
+}
 const STATUS_COLORS = {
-  운행중: "#10b981", 출근: "#3b82f6", 상차중: "#f59e0b",
+  운송중: "#10b981", 출근: "#3b82f6", 상차중: "#f59e0b",
   하차중: "#8b5cf6", 대기: "#6b7280", 휴식: "#9ca3af",
-  퇴근: "#374151", 복귀중: "#06b6d4",
+  퇴근: "#374151", 복귀중: "#06b6d4", 휴차: "#374151",
 };
-const STATUS_ORDER = ["운행중", "상차중", "하차중", "복귀중", "출근", "대기", "휴식", "퇴근"];
+const STATUS_ORDER = ["운송중", "상차중", "하차중", "복귀중", "출근", "대기", "휴식", "퇴근"];
 
 // KPI 카드용 단색 라인 아이콘(path만) — 헤더의 알림벨/새로고침과 같은 톤.
 // <svg stroke={accent}> 안에 그대로 끼워 쓴다.
@@ -58,6 +66,268 @@ function statusPriority(d) {
   const bonus = d.active ? 0 : 1000;
   const idx = STATUS_ORDER.indexOf(d.상태);
   return bonus + (idx === -1 ? 999 : idx);
+}
+
+// ─── 요일 유틸 (PC 지입차관리와 동일) ──────────────────────────────────────────
+const WEEKDAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
+function weekdayKoOf(dateStr) {
+  const d = new Date(`${dateStr}T12:00:00+09:00`);
+  return WEEKDAYS_KO[d.getDay()] || "";
+}
+function nowKstMinutes() {
+  const d = new Date(Date.now() + 9 * 3600000);
+  return d.getUTCHours() * 60 + d.getUTCMinutes();
+}
+function parseTimeToMin(t) {
+  const m = String(t || "").match(/(\d{1,2}):(\d{2})/);
+  return m ? (+m[1]) * 60 + (+m[2]) : null;
+}
+function computeOrderProgress(order, selectedDate, todayStr) {
+  if (selectedDate < todayStr) return "done";
+  if (selectedDate > todayStr) return "scheduled";
+  const nowMin = nowKstMinutes();
+  const pickMin = parseTimeToMin(order.상차시간);
+  const dropMin = parseTimeToMin(order.하차시간);
+  const sameDay = !order.하차일 || order.하차일 === order.상차일;
+  if (sameDay && dropMin != null && nowMin >= dropMin) return "done";
+  if (pickMin != null && nowMin < pickMin) return "scheduled";
+  return "progress";
+}
+// PC 지입차관리(FleetManagement.jsx)의 driverDispatchStatus 포팅 — ⭐ 사용자 피드백:
+// 이미 오더를 수락해 운송중인 기사가 카드엔 GPS/출퇴근 로그만 반영된 "출근"으로만
+// 보여서, 기사확인상태(지입 기사 오더수락 플로우: 대기/수락/완료/거절)를 우선
+// 반영하도록 맞춘다. 기사확인상태 플로우가 없는 일반 오더만 시간 기반 추정으로 폴백.
+function driverDispatchStatus(orders, todayStr, driver) {
+  if (driver?.상태 === "휴차") {
+    return { label: "휴차", dot: "#374151", bg: "#e5e7eb", color: "#374151" };
+  }
+  if (!orders.length) return { label: "배차대기", dot: "#f59e0b", bg: "#fef3c7", color: "#92400e" };
+  const checkStates = orders.map(r => r.기사확인상태).filter(Boolean);
+  if (checkStates.includes("수락")) return { label: "운송중", dot: "#2563eb", bg: "#dbeafe", color: "#1e40af" };
+  if (checkStates.includes("대기")) return { label: "오더확인중", dot: "#f59e0b", bg: "#fef3c7", color: "#92400e" };
+  if (checkStates.length > 0 && checkStates.every(s => s === "완료" || s === "거절")) {
+    return { label: "배차대기", dot: "#f59e0b", bg: "#fef3c7", color: "#92400e" };
+  }
+  const progs = orders.map(r => computeOrderProgress(r, r.상차일, todayStr));
+  if (progs.includes("progress")) return { label: "운송중", dot: "#2563eb", bg: "#dbeafe", color: "#1e40af" };
+  if (progs.every(p => p === "done")) return { label: "배차완료", dot: "#16a34a", bg: "#dcfce7", color: "#166534" };
+  return { label: "배차예정", dot: "#6b7280", bg: "#eef1f6", color: "#374151" };
+}
+
+// ⭐ 사용자 요청 — 기사카드 오더목록의 개별 오더 상태를 운행중/운행완료/관리자취소/
+// 기사거절 네 가지로만 보여준다. HandoverFareReport.jsx의 CANCELED_STATUSES와 동일.
+const FM_CANCELED_STATUSES_MOBILE = ["취소", "배차취소", "오더취소", "취소됨"];
+function mobileOrderStatusMeta(r) {
+  if (FM_CANCELED_STATUSES_MOBILE.includes(r.상태) || r.배차상태 === "배차취소") {
+    return { label: "관리자취소", bg: "#fee2e2", color: "#b91c1c" };
+  }
+  if (r.기사확인상태 === "거절") return { label: "기사거절", bg: "#fee2e2", color: "#b91c1c" };
+  if (r.기사확인상태 === "완료") return { label: "운행완료", bg: "#dcfce7", color: "#166534" };
+  return { label: "운행중", bg: "#dbeafe", color: "#1e40af" };
+}
+// 전체 주소에서 "시/도"를 뺀 간단주소 (예: "경기도 김포시 ..." → "김포시 ...")
+function shortAddr(addr) {
+  const s = String(addr || "").trim();
+  if (!s) return "-";
+  const tokens = s.split(/\s+/).filter(Boolean);
+  return tokens.slice(1, 3).join(" ") || tokens[0] || "-";
+}
+
+// ─── 이동거리/예상시간 뱃지 (PC RouteDistanceBadge 포팅, 모바일 폭에 맞춰 축소) ───
+// ⭐ 버그수정 — PC와 동일하게 직선거리*1.25 근사치 대신 실제 도로경로 API
+// (getDrivingRoute)로 통일 — 강/산업단지 우회 구간에서 거리가 너무 짧게
+// 나오던 문제 수정.
+const _routeDistCache = new Map();
+let _routeDistQueue = [];
+let _routeDistProcessing = false;
+function enqueueRouteDist(fromAddr, toAddr, cb) {
+  const key = `${fromAddr}→${toAddr}`;
+  if (_routeDistCache.has(key)) { cb(_routeDistCache.get(key)); return; }
+  _routeDistQueue.push({ fromAddr, toAddr, key, cb });
+  _processRouteDistQueue();
+}
+async function _processRouteDistQueue() {
+  if (_routeDistProcessing || _routeDistQueue.length === 0) return;
+  _routeDistProcessing = true;
+  const { fromAddr, toAddr, key, cb } = _routeDistQueue.shift();
+  try {
+    const result = await getDrivingRoute(fromAddr, toAddr);
+    _routeDistCache.set(key, result);
+    cb(result);
+  } catch {
+    cb(null);
+  }
+  await new Promise(r => setTimeout(r, 350));
+  _routeDistProcessing = false;
+  _processRouteDistQueue();
+}
+function RouteDistanceBadge({ fromAddr, toAddr }) {
+  const [info, setInfo] = useState(() =>
+    fromAddr && toAddr ? _routeDistCache.get(`${fromAddr}→${toAddr}`) : null
+  );
+  useEffect(() => {
+    if (!fromAddr || !toAddr) return;
+    const key = `${fromAddr}→${toAddr}`;
+    if (_routeDistCache.has(key)) { setInfo(_routeDistCache.get(key)); return; }
+    setInfo(undefined);
+    enqueueRouteDist(fromAddr, toAddr, setInfo);
+  }, [fromAddr, toAddr]);
+  if (!fromAddr || !toAddr) return <span style={{ fontSize: 12, color: "#c1c7d0" }}>-</span>;
+  if (info === undefined) return <span style={{ fontSize: 12, color: "#c1c7d0" }}>계산중…</span>;
+  if (!info) return <span style={{ fontSize: 12, color: "#c1c7d0" }}>-</span>;
+  const timeLabel = info.minutes >= 60 ? `${Math.floor(info.minutes / 60)}시간 ${info.minutes % 60}분` : `${info.minutes}분`;
+  return (
+    <span style={{ fontSize: 12, color: "#374151", fontWeight: 700, whiteSpace: "nowrap" }}>
+      약 {info.km}km · {timeLabel}
+    </span>
+  );
+}
+
+// ─── "운송중" 세부 상태 (상차지진입/상차지도착/하차지진입/하차지도착) ─────────
+// ⭐ 사용자 요청 — PC FleetManagement.jsx와 동일하게, "운송중" 라벨을 기사 실시간
+// GPS와 지금 향하는 목적지(상차 전엔 상차지, 상차 후~하차 전엔 하차지) 간 거리로
+// 세분화한다. 주소는 한 번만 지오코딩해 캐시(RouteDistanceBadge와 동일한 캐시+
+// 순차처리 패턴)하고, 실패/위치없음이면 조용히 기존 "운송중" 라벨로 되돌아간다.
+const _destGeoCache = new Map();
+let _destGeoQueue = [];
+let _destGeoProcessing = false;
+function enqueueDestGeo(addr, cb) {
+  if (_destGeoCache.has(addr)) { cb(_destGeoCache.get(addr)); return; }
+  _destGeoQueue.push({ addr, cb });
+  _processDestGeoQueue();
+}
+async function _processDestGeoQueue() {
+  if (_destGeoProcessing || _destGeoQueue.length === 0) return;
+  _destGeoProcessing = true;
+  const { addr, cb } = _destGeoQueue.shift();
+  let result = null;
+  try {
+    const g = await geocodeAddress(addr);
+    result = g ? { lat: g.lat, lng: g.lon } : null;
+  } catch { result = null; }
+  // ⭐ 버그수정 — 실패(null)까지 캐시에 영구 저장해버리면, API가 한 번 일시적으로
+  // (레이트리밋 등) 실패했을 때 그 주소는 영원히 "하차지진입/도착"으로 못 바뀌고
+  // 계속 "이동중"에 멈춰 있었다. 성공한 결과만 캐시하고, 실패는 캐시하지 않아
+  // 다음 요청 때 다시 시도되게 한다.
+  if (result) _destGeoCache.set(addr, result);
+  cb(result);
+  await new Promise(r => setTimeout(r, 350));
+  _destGeoProcessing = false;
+  _processDestGeoQueue();
+}
+function useDestGeo(addr) {
+  const [geo, setGeo] = useState(() => (addr ? _destGeoCache.get(addr) : null) ?? null);
+  useEffect(() => {
+    if (!addr) { setGeo(null); return; }
+    let cancelled = false;
+    let retryTimer = null;
+    const attempt = () => {
+      if (cancelled) return;
+      if (_destGeoCache.has(addr)) { setGeo(_destGeoCache.get(addr)); return; }
+      setGeo(undefined);
+      enqueueDestGeo(addr, (result) => {
+        if (cancelled) return;
+        setGeo(result);
+        // 실패(null)면 30초 뒤 자동 재시도 — API 레이트리밋/일시 오류로 인한
+        // 실패가 화면에 영구히 남지 않도록 한다.
+        if (!result) retryTimer = setTimeout(attempt, 30000);
+      });
+    };
+    attempt();
+    return () => { cancelled = true; if (retryTimer) clearTimeout(retryTimer); };
+  }, [addr]);
+  return geo; // undefined = 조회중, null = 실패/없음, {lat,lng} = 성공
+}
+
+function kstDateStrLocal(d = new Date()) {
+  return new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
+}
+
+// ⭐ 보강 — "상차지를 다녀왔다"는 기억이 화면을 보고 있는 동안의 세션 상태로만
+// 있으면, 관리자가 기사 출발 이후에 새로고침/재진입할 때 다시 "상차지진입"으로
+// 잘못 보일 수 있다. 오늘자 GPS 기록(gps_tracks)에 상차지 1km 이내로 찍힌 점이
+// 하나라도 있으면 "다녀온 이력"으로 간주해, 새로고침해도 계속 정확하게 뜨게 한다.
+function useVisitedPickup(driverId, pickupGeo) {
+  const [visited, setVisited] = useState(false);
+  useEffect(() => {
+    setVisited(false);
+    if (!driverId || !pickupGeo) return;
+    const dateStr = kstDateStrLocal();
+    const unsub = onSnapshot(
+      query(collection(db, "gps_tracks"), where("driverId", "==", driverId), where("date", "==", dateStr)),
+      (snap) => {
+        const hit = snap.docs.some((d) => {
+          const p = d.data();
+          if (p.lat == null || p.lng == null) return false;
+          return haversineKm(p.lat, p.lng, pickupGeo.lat, pickupGeo.lng) <= 1;
+        });
+        if (hit) setVisited(true);
+      },
+      () => {}
+    );
+    return () => unsub();
+  }, [driverId, pickupGeo]);
+  return visited;
+}
+// driverDispatchStatus가 "운송중"을 반환하게 만든 그 오더(상/하차지 주소가
+// 필요하므로) — checkStates.includes("수락") 로직과 동일한 우선순위로 찾는다.
+function findActiveTransitOrder(orders, todayStr) {
+  return orders.find(r => {
+    if (r.기사확인상태) return r.기사확인상태 === "수락";
+    return computeOrderProgress(r, r.상차일, todayStr) === "progress";
+  }) || null;
+}
+// "운송중" 라벨 하나를 세분화 라벨로 바꿔 보여준다 — 그 외엔 항상 fallback 그대로.
+// ⭐ 버그수정 — 예전엔 기사가 앱에서 "상차 시작/상차완료" 버튼을 직접 눌러야만
+// (driver.상태가 "운송중"으로 바뀌어야만) 하차지 방향으로 인식했는데, 실제로는 버튼을
+// 안 누르고 그냥 운전만 해도 상태가 갱신돼야 한다. 버튼 상태는 더 이상 보지 않고,
+// 순수하게 GPS 거리만으로 판단한다: 상차지 1km 이내면 "상차지도착"(한 번이라도
+// 들어왔었다는 걸 visitedPickup으로 기억해둔다), 그 뒤 상차지를 벗어나면(1km 초과)
+// 하차지에 가까워지기 전까지 "이동중", 하차지 5km/1km 이내면 하차지진입/도착.
+function TransitPhaseLabel({ order, driver, fallback }) {
+  const pickupGeo = useDestGeo(order?.상차지주소 || null);
+  const dropGeo = useDestGeo(order?.하차지주소 || null);
+  const hasLoc = driver?.location?.lat != null && driver?.location?.lng != null;
+
+  const pickupDist = (hasLoc && pickupGeo) ? haversineKm(driver.location.lat, driver.location.lng, pickupGeo.lat, pickupGeo.lng) : null;
+  const dropDist = (hasLoc && dropGeo) ? haversineKm(driver.location.lat, driver.location.lng, dropGeo.lat, dropGeo.lng) : null;
+  const visitedFromHistory = useVisitedPickup(driver?.id, pickupGeo);
+  const visitedPickup = visitedFromHistory || (pickupDist != null && pickupDist <= 1);
+
+  if (pickupDist != null && pickupDist <= 1) return "상차지도착";
+  if (dropDist != null && dropDist <= 1) return "하차지도착";
+  if (dropDist != null && dropDist <= 5) return "하차지진입";
+  if (!visitedPickup && pickupDist != null && pickupDist <= 5) return "상차지진입";
+  if (visitedPickup) return "이동중";
+  // ⭐ 버그수정 — 기사 앱을 막 켠 직후처럼 GPS 첫 위치가 아직 서버에 안 올라온
+  // 순간엔 거리 계산 자체가 불가능해 조용히 "운송중"(기본값)으로 보였다. 이러면
+  // "진짜 이동중"과 "위치를 아직 못 받음"이 똑같이 보여 혼동을 준다 — 구분해서 표시.
+  if (!hasLoc) return "위치 확인중";
+  return fallback;
+}
+
+// ─── 바로 전화 버튼 — ⭐ 사용자 요청: 원격 모니터링 중 상세진입 없이 바로 전화 ───
+function CallButton({ phone, compact }) {
+  const digits = String(phone || "").replace(/[^\d]/g, "");
+  if (!digits) return null;
+  return (
+    <a
+      href={`tel:${digits}`}
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5,
+        width: compact ? 32 : undefined, height: compact ? 32 : undefined,
+        padding: compact ? 0 : "7px 12px", borderRadius: compact ? "50%" : 8,
+        background: NAVY, color: "#fff", fontSize: 12, fontWeight: 700,
+        textDecoration: "none", flexShrink: 0,
+      }}
+    >
+      <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+      </svg>
+      {!compact && "전화"}
+    </a>
+  );
 }
 
 // ─── 지도 헬퍼 컴포넌트 ──────────────────────────────────────────────────────
@@ -151,9 +421,43 @@ function MobileManagerBadge({ driver, staff, canDelegate, onAssign }) {
   );
 }
 
+// ⭐ 사용자 요청 — 모바일 오더목록에서 오더를 탭하면 오더상세내역처럼 해당 오더의
+// 전체 정보(상/하차지·시간·거래처·화물정보·운임·상태)가 담긴 팝업이 떠야 한다.
+function MobileOrderDetailModal({ order, onClose }) {
+  if (!order) return null;
+  const meta = mobileOrderStatusMeta(order);
+  const row = (label, value) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "9px 0", borderBottom: "1px solid #f0f2f5" }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color: "#9ca3af", flexShrink: 0 }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 700, color: "#111827", textAlign: "right" }}>{value || "-"}</span>
+    </div>
+  );
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 2000, display: "flex", alignItems: "flex-end" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxHeight: "80vh", overflowY: "auto", background: "#fff", borderRadius: "16px 16px 0 0", padding: "16px 18px 24px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: NAVY }}>오더상세내역</div>
+          <button onClick={onClose} style={{ border: "none", background: "transparent", fontSize: 20, color: "#9ca3af", cursor: "pointer", lineHeight: 1 }}>✕</button>
+        </div>
+        <div style={{ marginBottom: 10 }}>
+          <span style={{ fontSize: 12, fontWeight: 800, padding: "3px 10px", borderRadius: 99, background: meta.bg, color: meta.color }}>{meta.label}</span>
+        </div>
+        {row("거래처", order.거래처명)}
+        {row("상차지", `${order.상차지명 || "-"} (${order.상차지주소 || "-"})`)}
+        {row("하차지", `${order.하차지명 || "-"} (${order.하차지주소 || "-"})`)}
+        {row("상차일시", `${order.상차일 || "-"} ${order.상차시간 || "즉시"}`)}
+        {row("하차일시", `${order.하차일 || order.상차일 || "-"} ${order.하차시간 || "즉시"}`)}
+        {row("화물정보", [order.차량종류, order.차량톤수, order.화물내용].filter(Boolean).join(" · "))}
+        {row("기사운임", order.기사운임 ? `${Number(String(order.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원` : "-")}
+        {order.기사확인상태 === "거절" && row("거절사유", order.기사거절사유 || "사유 없음")}
+      </div>
+    </div>
+  );
+}
+
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────────
 
-export default function MobileFleetView({ dispatchData = [], userCompany = "" }) {
+export default function MobileFleetView({ dispatchData = [], userCompany = "", onRegisterBack }) {
   const [driversRaw, setDriversRaw] = useState([]);
   const [usersMap, setUsersMap] = useState({});
   const [activityLogs, setActivityLogs] = useState([]);
@@ -161,6 +465,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
   const [searchQ, setSearchQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("전체");
   const [expandedId, setExpandedId] = useState(null);
+  const [detailOrder, setDetailOrder] = useState(null);
   const [activeSection, setActiveSection] = useState("drivers"); // "drivers" | "map" | "feed" | "attendance"
   // ⭐ 사용자 요청 — 배차자마다 담당 지입차가 따로 있어서 "내 차량"부터 기본으로
   // 보여준다. 전체 지입차 보기는 토글로 유지.
@@ -258,7 +563,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
           })
         : gpsTracks;
       const tracks = sessionTracks.length >= 2 ? sessionTracks : gpsTracks;
-      return tracks.map(t => ({ lat: t.lat, lng: t.lng, status: "운행중", timestamp: t.timestamp }));
+      return tracks.map(t => ({ lat: t.lat, lng: t.lng, status: "운송중", timestamp: t.timestamp }));
     }
     const withLoc = selectedDriverLogs.filter(l => {
       if (!l.location?.lat) return false;
@@ -341,6 +646,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
           담당자: raw.담당자 || null,
           등급: raw.등급 || "",
           거주지: raw.거주지 || "",
+          근무요일: raw.근무요일 || [],
         };
       })
       .sort((a, b) => statusPriority(a) - statusPriority(b));
@@ -424,7 +730,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
     });
   }, [scopedDrivers, searchQ, statusFilter]);
 
-  // ⭐ 사용자 요청 — 총 등록/접속중/운행중/근무중 대신 담당 기준으로 변경:
+  // ⭐ 사용자 요청 — 총 등록/접속중/운송중/근무중 대신 담당 기준으로 변경:
   // 총 등록기사, 내 담당차량, 내 담당차량 중 배차중, 내 담당차량 중 배차완료.
   const kpi = useMemo(() => {
     const mine = drivers.filter(d => d.담당자?.uid === myUid);
@@ -456,6 +762,28 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
     setActiveSection("map");
   }, []);
 
+  // ⭐ 버그수정 — "지도에서 경로 보기"로 들어간 뒤 뒤로가기를 누르면 MobileApp의
+  // 전역 뒤로가기 핸들러가 무조건 배차내역(list)으로 보내버려서, 바로 전 화면(기사
+  // 목록)으로 한 단계만 돌아가는 게 불가능했다. 현재 내부 화면 상태를 ref로 최신화해
+  // 두고, MobileApp이 뒤로가기 시 먼저 이 콜백을 불러 내부에서 처리 가능하면(true)
+  // list로 점프하지 않고 지도→목록, 펼친 카드→접힘 순으로 한 단계씩만 되돌린다.
+  const navStateRef = useRef({ activeSection, mapSelected, expandedId });
+  useEffect(() => {
+    navStateRef.current = { activeSection, mapSelected, expandedId };
+  });
+  useEffect(() => {
+    if (typeof onRegisterBack !== "function") return;
+    onRegisterBack(() => {
+      const { activeSection: sec, mapSelected: sel, expandedId: exp } = navStateRef.current;
+      if (sec === "map" && sel) { setMapSelected(null); setGpsTracks([]); setRoadPath([]); return true; }
+      if (sec !== "drivers") { setActiveSection("drivers"); return true; }
+      if (exp) { setExpandedId(null); return true; }
+      return false;
+    });
+    return () => onRegisterBack(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // 지도에서 선택 기사 live 동기화 + 자동 추적 (1분 주기, 퇴근 시 중단)
   useEffect(() => {
     if (!mapSelected) return;
@@ -485,7 +813,8 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
     }
   }, [mapSelected, drivers]);
 
-  const STATUS_OPTS = ["전체", "운행중", "출근", "상차중", "하차중", "대기", "퇴근"];
+  // ⭐ 사용자 요청 — 휴차(휴무) 기사를 따로 걸러볼 수 있는 칩이 빠져 있었다.
+  const STATUS_OPTS = ["전체", "운송중", "출근", "상차중", "하차중", "대기", "휴차", "퇴근"];
 
   // 평균 속도 계산
   const avgSpeed = useMemo(() => {
@@ -638,7 +967,12 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {filtered.map((d, idx) => {
-                const color = STATUS_COLORS[d.상태] || "#9ca3af";
+                const todays = ordersFor(d);
+                // ⭐ TASK1 — 카드 배지는 GPS/출퇴근 로그(d.상태)가 아니라 실제 오더
+                // 진행상태(기사확인상태)를 우선 반영한다. 색상도 여기서 통일해 쓴다.
+                const dispatchStatus = driverDispatchStatus(todays, todayStr, d);
+                const color = dispatchStatus.dot;
+                const activeOrder = todays[0] || null;
                 const expanded = expandedId === d.id;
                 return (
                   <div
@@ -663,21 +997,82 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
                           <span style={{ fontSize: 12, color: "#6b7280", fontWeight: 700, letterSpacing: "0.04em" }}>{d.차량번호}</span>
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 700, color, background: `${color}18`, padding: "2px 8px", borderRadius: 99 }}>
-                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, display: "inline-block" }} />
-                            {d.상태 || "대기"}
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 700, color: dispatchStatus.color, background: dispatchStatus.bg, padding: "2px 8px", borderRadius: 99 }}>
+                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: dispatchStatus.dot, display: "inline-block" }} />
+                            {(() => {
+                              if (dispatchStatus.label !== "운송중") return dispatchStatus.label;
+                              const transitOrder = findActiveTransitOrder(todays, todayStr);
+                              return transitOrder
+                                ? <TransitPhaseLabel order={transitOrder} driver={d} fallback={dispatchStatus.label} />
+                                : dispatchStatus.label;
+                            })()}
                           </span>
-                          {d.등급 === "지입" && d.상태 === "출근" && ordersFor(d).length === 0 && (
-                            <span style={{ fontSize: 11, fontWeight: 800, padding: "1px 7px", borderRadius: 99, background: "#fef3c7", color: "#92400e" }}>배차대기</span>
-                          )}
                           {d.vehicleType !== "-" && (
                             <span style={{ fontSize: 12, color: "#9ca3af" }}>{d.vehicleType}</span>
                           )}
                         </div>
                       </div>
-                      <div style={{ textAlign: "right", flexShrink: 0 }}>
-                        <div style={{ fontSize: 12, color: "#9ca3af" }}>{timeAgo(d.updatedAt)}</div>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", marginTop: 2 }}>{d.총거리.toFixed(1)} km</div>
+                      <div style={{ textAlign: "right", flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 12, color: "#9ca3af" }}>{timeAgo(d.updatedAt)}</div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", marginTop: 2 }}>{d.총거리.toFixed(1)} km</div>
+                        </div>
+                        {/* ⭐ TASK2 — 상세진입 없이 바로 전화할 수 있는 버튼 (PC엔 없음, 모바일 원격관제 요청) */}
+                        <CallButton phone={d.phone} compact />
+                      </div>
+                    </div>
+
+                    {/* 오늘 노선/거주지/근무요일 — ⭐ TASK2·3: 카드를 펼치지 않아도(탭 없이도)
+                        바로 보여야 한다는 사용자 요청. 상/하차지·시간·화물정보·이동정보를
+                        여기서 보여주고, 상세(매출/연료비 등)는 펼쳤을 때만 보여준다. */}
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #f3f4f6" }} onClick={e => e.stopPropagation()}>
+                      {activeOrder ? (
+                        <div style={{ background: "#f0f4ff", borderRadius: 9, padding: "10px 12px", marginBottom: 8 }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>
+                              {activeOrder.상차지명 || "-"} <span style={{ color: "#9ca3af" }}>→</span> {activeOrder.하차지명 || "-"}
+                            </div>
+                            {todays.length > 1 && (
+                              <span style={{ fontSize: 11, fontWeight: 800, color: "#6b7eac", flexShrink: 0 }}>총 {todays.length}건</span>
+                            )}
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginTop: 5 }}>
+                            <div style={{ fontSize: 12, color: "#4b5563" }}>상차 {activeOrder.상차시간 || "즉시"}</div>
+                            <div style={{ fontSize: 12, color: "#4b5563" }}>하차예상 {activeOrder.하차시간 || "즉시"}{activeOrder.하차일 && activeOrder.하차일 !== activeOrder.상차일 ? ` (${activeOrder.하차일})` : ""}</div>
+                            <div style={{ fontSize: 12, color: "#6b7eac" }}>{[activeOrder.차량종류, activeOrder.차량톤수].filter(Boolean).join(" · ") || "-"}</div>
+                            <div style={{ fontSize: 12, color: "#6b7eac", wordBreak: "break-word" }}>{activeOrder.화물내용 || "-"}</div>
+                          </div>
+                          <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid #e0e7ff", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <RouteDistanceBadge fromAddr={activeOrder.상차지주소} toAddr={activeOrder.하차지주소} />
+                            {activeOrder.기사운임 && <span style={{ fontSize: 12, fontWeight: 700, color: NAVY }}>기사운임 {Number(String(activeOrder.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원</span>}
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 8 }}>오늘 배차된 오더가 없습니다</div>
+                      )}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                        <div style={{ background: "#f8f9fb", borderRadius: 9, padding: "10px 12px" }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 4 }}>거주지</div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>{d.거주지 || "-"}</div>
+                        </div>
+                        <div style={{ background: "#f8f9fb", borderRadius: 9, padding: "10px 12px" }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 4 }}>근무가능요일</div>
+                          {(d.근무요일 && d.근무요일.length) ? (
+                            <span style={{ display: "inline-flex", gap: 3 }}>
+                              {d.근무요일.map(w => {
+                                const isToday = w === weekdayKoOf(todayStr);
+                                return (
+                                  <span key={w} style={{
+                                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                                    width: 18, height: 18, borderRadius: "50%", fontSize: 12, fontWeight: 800,
+                                    color: isToday ? "#fff" : "#111827",
+                                    background: isToday ? "#ef4444" : "transparent",
+                                  }}>{w}</span>
+                                );
+                              })}
+                            </span>
+                          ) : <div style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>전일 가능</div>}
+                        </div>
                       </div>
                     </div>
 
@@ -703,38 +1098,47 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
                           );
                         })()}
 
-                        {/* 오늘 배차 노선 — 사용자 요청: 상/하차지, 상차~하차 예상시간을 지입차관리에서 바로 확인 */}
+                        {/* 오늘 배차 노선 전체 — 첫 건은 카드 상단(탭 없이도 보임)에 이미 나오므로,
+                            오더가 2건 이상일 때만 PC 노선표처럼 순번 목록으로 전부 보여준다.
+                            ⭐ 사용자 요청 — 줄바꿈 블록 대신 가로형식 표, 중앙정렬, 탭하면
+                            오더상세내역 팝업. */}
                         {(() => {
-                          const todays = ordersFor(d);
-                          if (!todays.length) {
-                            return (
-                              <div style={{ background: "#f8f9fb", borderRadius: 9, padding: "10px 12px", marginBottom: 10, fontSize: 12, color: "#9ca3af" }}>
-                                오늘 배차된 오더가 없습니다
-                              </div>
-                            );
-                          }
-                          return todays.map((r, i) => (
-                            <div key={r._id || i} style={{ background: "#f0f4ff", borderRadius: 9, padding: "10px 12px", marginBottom: 8 }}>
-                              <div style={{ fontSize: 10, fontWeight: 700, color: "#6b7eac", letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 4 }}>
-                                오늘 노선 {todays.length > 1 ? `${i + 1}/${todays.length}` : ""} · {r.배차상태 || "배차중"}
-                              </div>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>
-                                {r.상차지명 || "-"} <span style={{ color: "#9ca3af" }}>→</span> {r.하차지명 || "-"}
-                              </div>
-                              <div style={{ fontSize: 12, color: "#4b5563", marginTop: 3 }}>
-                                상차 {r.상차시간 || "즉시"} · 하차예상 {r.하차시간 || "즉시"}{r.하차일 && r.하차일 !== r.상차일 ? ` (${r.하차일})` : ""}
-                              </div>
-                              {r.거래처명 && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>거래처: {r.거래처명}</div>}
-                              {/* ⭐ 사용자 요청 — 화물내용/톤수/차량종류도 보여야 하고, 운임은 청구운임이
-                                  아니라 기사에게 지급하는 기사운임이어야 한다. */}
-                              {(r.차량종류 || r.차량톤수 || r.화물내용) && (
-                                <div style={{ fontSize: 11, color: "#6b7eac", marginTop: 2 }}>
-                                  {[r.차량종류, r.차량톤수].filter(Boolean).join(" · ")}{r.화물내용 ? ` · ${r.화물내용}` : ""}
-                                </div>
-                              )}
-                              {r.기사운임 && <div style={{ fontSize: 12, fontWeight: 700, color: NAVY, marginTop: 2 }}>기사운임 {Number(String(r.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원</div>}
+                          if (todays.length < 2) return null;
+                          return (
+                            <div style={{ overflowX: "auto", marginBottom: 10, borderRadius: 9, border: "1px solid #e5e7eb" }}>
+                              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                <thead>
+                                  <tr style={{ background: NAVY }}>
+                                    {["순번", "상차일시", "하차일시", "상차지 → 하차지", "상태"].map(h => (
+                                      <th key={h} style={{ padding: "7px 10px", fontSize: 11, fontWeight: 800, color: "#fff", textAlign: "center", whiteSpace: "nowrap" }}>{h}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {todays.map((r, i) => {
+                                    const smeta = mobileOrderStatusMeta(r);
+                                    return (
+                                      <tr
+                                        key={r._id || i}
+                                        onClick={(e) => { e.stopPropagation(); setDetailOrder(r); }}
+                                        style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : "none", cursor: "pointer" }}
+                                      >
+                                        <td style={{ padding: "8px 10px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#9ca3af" }}>{i + 1}</td>
+                                        <td style={{ padding: "8px 10px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#374151", whiteSpace: "nowrap" }}>{r.상차일 || "-"} {r.상차시간 || "즉시"}</td>
+                                        <td style={{ padding: "8px 10px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#374151", whiteSpace: "nowrap" }}>{r.하차일 || r.상차일 || "-"} {r.하차시간 || "즉시"}</td>
+                                        <td style={{ padding: "8px 10px", textAlign: "center", fontSize: 12, fontWeight: 700, color: NAVY, whiteSpace: "nowrap" }}>
+                                          {r.상차지명 || "-"}({shortAddr(r.상차지주소)}) <span style={{ color: "#9ca3af" }}>→</span> {r.하차지명 || "-"}({shortAddr(r.하차지주소)})
+                                        </td>
+                                        <td style={{ padding: "8px 10px", textAlign: "center", whiteSpace: "nowrap" }}>
+                                          <span style={{ fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 99, background: smeta.bg, color: smeta.color }}>{smeta.label}</span>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
                             </div>
-                          ));
+                          );
                         })()}
 
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
@@ -744,7 +1148,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
                             const eff = /25|28/.test(vt)?3.0:/11|15|18/.test(vt)?3.5:/1[^0-9]|2\.5|소형/.test(vt)?5.5:4.0;
                             const fuelCost = km > 0 ? Math.round(km/eff*1750) : 0;
                             return [
-                              ["연락처", d.phone || "-"],
+                              ["연락처", d.phone ? formatPhone(d.phone) : "-"],
                               ["차량종류", d.vehicleType || "-"],
                               ["이동거리", `${km.toFixed(2)} km`],
                               ["연료비 추정", km > 0 ? `${fuelCost.toLocaleString()}원` : "-"],
@@ -1024,6 +1428,8 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "" })
       {activeSection === "attendance" && (
         <MobileAttendance logs={attendanceLogs} drivers={drivers} />
       )}
+
+      {detailOrder && <MobileOrderDetailModal order={detailOrder} onClose={() => setDetailOrder(null)} />}
 
       <style>{`
         @keyframes spin{to{transform:rotate(360deg)}}
