@@ -20,8 +20,6 @@ jobs:
     steps:
       - name: 코드 체크아웃
         uses: actions/checkout@v4
-        with:
-          ref: claude/tender-wright-wBiU5
 
       - name: Node.js 22 설정
         uses: actions/setup-node@v4
