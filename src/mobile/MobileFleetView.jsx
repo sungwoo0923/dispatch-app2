@@ -280,6 +280,10 @@ function TransitPhaseLabel({ order, driver, fallback }) {
   if (dropDist != null && dropDist <= 5) return "하차지진입";
   if (!visitedPickup && pickupDist != null && pickupDist <= 5) return "상차지진입";
   if (visitedPickup) return "이동중";
+  // ⭐ 버그수정 — 기사 앱을 막 켠 직후처럼 GPS 첫 위치가 아직 서버에 안 올라온
+  // 순간엔 거리 계산 자체가 불가능해 조용히 "운송중"(기본값)으로 보였다. 이러면
+  // "진짜 이동중"과 "위치를 아직 못 받음"이 똑같이 보여 혼동을 준다 — 구분해서 표시.
+  if (!hasLoc) return "위치 확인중";
   return fallback;
 }
 
