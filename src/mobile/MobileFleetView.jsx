@@ -114,6 +114,25 @@ function driverDispatchStatus(orders, todayStr, driver) {
   return { label: "배차예정", dot: "#6b7280", bg: "#eef1f6", color: "#374151" };
 }
 
+// ⭐ 사용자 요청 — 기사카드 오더목록의 개별 오더 상태를 운행중/운행완료/관리자취소/
+// 기사거절 네 가지로만 보여준다. HandoverFareReport.jsx의 CANCELED_STATUSES와 동일.
+const FM_CANCELED_STATUSES_MOBILE = ["취소", "배차취소", "오더취소", "취소됨"];
+function mobileOrderStatusMeta(r) {
+  if (FM_CANCELED_STATUSES_MOBILE.includes(r.상태) || r.배차상태 === "배차취소") {
+    return { label: "관리자취소", bg: "#fee2e2", color: "#b91c1c" };
+  }
+  if (r.기사확인상태 === "거절") return { label: "기사거절", bg: "#fee2e2", color: "#b91c1c" };
+  if (r.기사확인상태 === "완료") return { label: "운행완료", bg: "#dcfce7", color: "#166534" };
+  return { label: "운행중", bg: "#dbeafe", color: "#1e40af" };
+}
+// 전체 주소에서 "시/도"를 뺀 간단주소 (예: "경기도 김포시 ..." → "김포시 ...")
+function shortAddr(addr) {
+  const s = String(addr || "").trim();
+  if (!s) return "-";
+  const tokens = s.split(/\s+/).filter(Boolean);
+  return tokens.slice(1, 3).join(" ") || tokens[0] || "-";
+}
+
 // ─── 이동거리/예상시간 뱃지 (PC RouteDistanceBadge 포팅, 모바일 폭에 맞춰 축소) ───
 // ⭐ 버그수정 — PC와 동일하게 직선거리*1.25 근사치 대신 실제 도로경로 API
 // (getDrivingRoute)로 통일 — 강/산업단지 우회 구간에서 거리가 너무 짧게
@@ -402,6 +421,40 @@ function MobileManagerBadge({ driver, staff, canDelegate, onAssign }) {
   );
 }
 
+// ⭐ 사용자 요청 — 모바일 오더목록에서 오더를 탭하면 오더상세내역처럼 해당 오더의
+// 전체 정보(상/하차지·시간·거래처·화물정보·운임·상태)가 담긴 팝업이 떠야 한다.
+function MobileOrderDetailModal({ order, onClose }) {
+  if (!order) return null;
+  const meta = mobileOrderStatusMeta(order);
+  const row = (label, value) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "9px 0", borderBottom: "1px solid #f0f2f5" }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color: "#9ca3af", flexShrink: 0 }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 700, color: "#111827", textAlign: "right" }}>{value || "-"}</span>
+    </div>
+  );
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 2000, display: "flex", alignItems: "flex-end" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxHeight: "80vh", overflowY: "auto", background: "#fff", borderRadius: "16px 16px 0 0", padding: "16px 18px 24px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: NAVY }}>오더상세내역</div>
+          <button onClick={onClose} style={{ border: "none", background: "transparent", fontSize: 20, color: "#9ca3af", cursor: "pointer", lineHeight: 1 }}>✕</button>
+        </div>
+        <div style={{ marginBottom: 10 }}>
+          <span style={{ fontSize: 12, fontWeight: 800, padding: "3px 10px", borderRadius: 99, background: meta.bg, color: meta.color }}>{meta.label}</span>
+        </div>
+        {row("거래처", order.거래처명)}
+        {row("상차지", `${order.상차지명 || "-"} (${order.상차지주소 || "-"})`)}
+        {row("하차지", `${order.하차지명 || "-"} (${order.하차지주소 || "-"})`)}
+        {row("상차일시", `${order.상차일 || "-"} ${order.상차시간 || "즉시"}`)}
+        {row("하차일시", `${order.하차일 || order.상차일 || "-"} ${order.하차시간 || "즉시"}`)}
+        {row("화물정보", [order.차량종류, order.차량톤수, order.화물내용].filter(Boolean).join(" · "))}
+        {row("기사운임", order.기사운임 ? `${Number(String(order.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원` : "-")}
+        {order.기사확인상태 === "거절" && row("거절사유", order.기사거절사유 || "사유 없음")}
+      </div>
+    </div>
+  );
+}
+
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────────
 
 export default function MobileFleetView({ dispatchData = [], userCompany = "", onRegisterBack }) {
@@ -412,6 +465,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
   const [searchQ, setSearchQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("전체");
   const [expandedId, setExpandedId] = useState(null);
+  const [detailOrder, setDetailOrder] = useState(null);
   const [activeSection, setActiveSection] = useState("drivers"); // "drivers" | "map" | "feed" | "attendance"
   // ⭐ 사용자 요청 — 배차자마다 담당 지입차가 따로 있어서 "내 차량"부터 기본으로
   // 보여준다. 전체 지입차 보기는 토글로 유지.
@@ -979,7 +1033,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                               {activeOrder.상차지명 || "-"} <span style={{ color: "#9ca3af" }}>→</span> {activeOrder.하차지명 || "-"}
                             </div>
                             {todays.length > 1 && (
-                              <span style={{ fontSize: 11, fontWeight: 800, color: "#6b7eac", flexShrink: 0 }}>+{todays.length - 1}건 더</span>
+                              <span style={{ fontSize: 11, fontWeight: 800, color: "#6b7eac", flexShrink: 0 }}>총 {todays.length}건</span>
                             )}
                           </div>
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginTop: 5 }}>
@@ -1045,31 +1099,46 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                         })()}
 
                         {/* 오늘 배차 노선 전체 — 첫 건은 카드 상단(탭 없이도 보임)에 이미 나오므로,
-                            오더가 2건 이상일 때만 나머지까지 펼쳐서 전부 보여준다. */}
+                            오더가 2건 이상일 때만 PC 노선표처럼 순번 목록으로 전부 보여준다.
+                            ⭐ 사용자 요청 — 줄바꿈 블록 대신 가로형식 표, 중앙정렬, 탭하면
+                            오더상세내역 팝업. */}
                         {(() => {
                           if (todays.length < 2) return null;
-                          return todays.map((r, i) => (
-                            <div key={r._id || i} style={{ background: "#f0f4ff", borderRadius: 9, padding: "10px 12px", marginBottom: 8 }}>
-                              <div style={{ fontSize: 10, fontWeight: 700, color: "#6b7eac", letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 4 }}>
-                                오늘 노선 {todays.length > 1 ? `${i + 1}/${todays.length}` : ""} · {r.배차상태 || "배차중"}
-                              </div>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>
-                                {r.상차지명 || "-"} <span style={{ color: "#9ca3af" }}>→</span> {r.하차지명 || "-"}
-                              </div>
-                              <div style={{ fontSize: 12, color: "#4b5563", marginTop: 3 }}>
-                                상차 {r.상차시간 || "즉시"} · 하차예상 {r.하차시간 || "즉시"}{r.하차일 && r.하차일 !== r.상차일 ? ` (${r.하차일})` : ""}
-                              </div>
-                              {r.거래처명 && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>거래처: {r.거래처명}</div>}
-                              {/* ⭐ 사용자 요청 — 화물내용/톤수/차량종류도 보여야 하고, 운임은 청구운임이
-                                  아니라 기사에게 지급하는 기사운임이어야 한다. */}
-                              {(r.차량종류 || r.차량톤수 || r.화물내용) && (
-                                <div style={{ fontSize: 11, color: "#6b7eac", marginTop: 2 }}>
-                                  {[r.차량종류, r.차량톤수].filter(Boolean).join(" · ")}{r.화물내용 ? ` · ${r.화물내용}` : ""}
-                                </div>
-                              )}
-                              {r.기사운임 && <div style={{ fontSize: 12, fontWeight: 700, color: NAVY, marginTop: 2 }}>기사운임 {Number(String(r.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원</div>}
+                          return (
+                            <div style={{ overflowX: "auto", marginBottom: 10, borderRadius: 9, border: "1px solid #e5e7eb" }}>
+                              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                <thead>
+                                  <tr style={{ background: NAVY }}>
+                                    {["순번", "상차일시", "하차일시", "상차지 → 하차지", "상태"].map(h => (
+                                      <th key={h} style={{ padding: "7px 10px", fontSize: 11, fontWeight: 800, color: "#fff", textAlign: "center", whiteSpace: "nowrap" }}>{h}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {todays.map((r, i) => {
+                                    const smeta = mobileOrderStatusMeta(r);
+                                    return (
+                                      <tr
+                                        key={r._id || i}
+                                        onClick={(e) => { e.stopPropagation(); setDetailOrder(r); }}
+                                        style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : "none", cursor: "pointer" }}
+                                      >
+                                        <td style={{ padding: "8px 10px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#9ca3af" }}>{i + 1}</td>
+                                        <td style={{ padding: "8px 10px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#374151", whiteSpace: "nowrap" }}>{r.상차일 || "-"} {r.상차시간 || "즉시"}</td>
+                                        <td style={{ padding: "8px 10px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#374151", whiteSpace: "nowrap" }}>{r.하차일 || r.상차일 || "-"} {r.하차시간 || "즉시"}</td>
+                                        <td style={{ padding: "8px 10px", textAlign: "center", fontSize: 12, fontWeight: 700, color: NAVY, whiteSpace: "nowrap" }}>
+                                          {r.상차지명 || "-"}({shortAddr(r.상차지주소)}) <span style={{ color: "#9ca3af" }}>→</span> {r.하차지명 || "-"}({shortAddr(r.하차지주소)})
+                                        </td>
+                                        <td style={{ padding: "8px 10px", textAlign: "center", whiteSpace: "nowrap" }}>
+                                          <span style={{ fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 99, background: smeta.bg, color: smeta.color }}>{smeta.label}</span>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
                             </div>
-                          ));
+                          );
                         })()}
 
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
@@ -1359,6 +1428,8 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
       {activeSection === "attendance" && (
         <MobileAttendance logs={attendanceLogs} drivers={drivers} />
       )}
+
+      {detailOrder && <MobileOrderDetailModal order={detailOrder} onClose={() => setDetailOrder(null)} />}
 
       <style>{`
         @keyframes spin{to{transform:rotate(360deg)}}
