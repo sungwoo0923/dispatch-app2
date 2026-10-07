@@ -6227,13 +6227,6 @@ function CargoExtraChips({ value }) {
 export default function DispatchApp({ role, user, userCompany = "" }) {
   const isTest = role === "test";
   const navigate = useNavigate();
-  // ⭐ 회사별 커스텀 드롭다운 옵션(Part B) — 등록폼 전역에서 재사용하므로 최상위에서
-  // 한 번만 구독한다. 커스터마이즈 안 한 회사는 기존 하드코딩 값 그대로 보인다.
-  const loadMethodOptions = useCompanyDropdownOptions("상하차방법", role, userCompany);
-  const payTypeOptionsCustom = useCompanyDropdownOptions("지급방식", role, userCompany);
-  const dispatchTypeOptionsCustom = useCompanyDropdownOptions("배차방식", role, userCompany);
-  const cargoTypeOptionsCustom = useCompanyDropdownOptions("화물타입", role, userCompany);
-  const tonTypeOptionsCustom = useCompanyDropdownOptions("톤수타입", role, userCompany);
   // ⭐ 오늘 비/눈이 왔는지 자동 인식 — 자사운임표·AI추천 등 운임조회 전반이
   // 참고하는 특수운임 판정에 쓰인다(weatherUtil.js). 앱 진입 시 한 번만
   // 받아오면 되므로 최상위 컴포넌트에서 호출한다.
@@ -8361,6 +8354,13 @@ function MultiRegCombo({ id, value, onChange, onSelect, items, placeholder, clas
     approvedShippers = [],
   }) {
 
+      // ⭐ 회사별 커스텀 드롭다운 옵션(Part B) — 등록폼 전역에서 재사용하므로 최상위에서
+      // 한 번만 구독한다. 커스터마이즈 안 한 회사는 기존 하드코딩 값 그대로 보인다.
+      const loadMethodOptions = useCompanyDropdownOptions("상하차방법", role, userCompany);
+      const payTypeOptionsCustom = useCompanyDropdownOptions("지급방식", role, userCompany);
+      const dispatchTypeOptionsCustom = useCompanyDropdownOptions("배차방식", role, userCompany);
+      const cargoTypeOptionsCustom = useCompanyDropdownOptions("화물타입", role, userCompany);
+      const tonTypeOptionsCustom = useCompanyDropdownOptions("톤수타입", role, userCompany);
       const [useNewForm, setUseNewForm] = React.useState(false);
       const [bottomStatusKey, setBottomStatusKey] = React.useState(0);
       // ⏱ 상/하차 시간 + 이전/이후 표시용
