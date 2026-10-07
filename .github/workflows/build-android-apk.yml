@@ -22,6 +22,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # ⭐ 아래 "릴리즈로 APK 게시" 단계가 릴리즈를 만들고 파일을 올리려면 필요하다.
+    permissions:
+      contents: write
 
     steps:
       - name: 코드 체크아웃
@@ -96,3 +99,17 @@ jobs:
           name: KPFlow-기사앱-release
           path: android/app/build/outputs/apk/release/app-release-unsigned.apk
           retention-days: 30
+
+      # ⭐ 사용자 요청 — GitHub Actions의 "Artifacts" 다운로드가 모바일 웹에서
+      # 제대로 안 눌리는 경우가 있었다(버튼이 안 뜨거나 digest만 복사됨). 대신
+      # "릴리즈"에 APK를 직접 첨부하면, 아무 브라우저에서나 되는 평범한 파일
+      # 다운로드 링크가 생긴다. 태그를 고정해서(driver-apk-latest) 매번 같은
+      # 링크를 북마크해두고 쓸 수 있게 한다.
+      - name: 릴리즈로 APK 게시(모바일에서도 바로 다운로드되는 링크)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: driver-apk-latest
+          name: "KP-Flow 기사앱 (최신 빌드)"
+          body: "커밋 ${{ github.sha }} 기준 자동 빌드. 안드로이드 폰에서 이 APK 파일을 눌러 다운로드한 뒤 설치하세요."
+          files: android/app/build/outputs/apk/**/*.apk
+          prerelease: true
