@@ -1386,10 +1386,10 @@ function TransitPhaseLabel({ order, live, driverId, fallback }) {
   else if (visitedPickup) label = "이동중";
   else label = fallback;
 
-  // ⭐ 임시 진단용 — "하차지 1km 이내인데도 이동중" 재현 신고를 원격으로 못 보고
-  // 있어 추가. 상/하차 거리와 좌표 확보 여부를 눈으로 바로 확인하기 위한
-  // 표시로, 원인 확인되면 제거할 예정.
-  const dbg = ` (상${pickupGeo ? pickupDist?.toFixed(1) ?? "?" : "geo✗"}/하${dropGeo ? dropDist?.toFixed(1) ?? "?" : "geo✗"}${visitedPickup ? "/V" : ""})`;
+  // ⭐ 임시 진단용 — "하차지 1km 이내/도착해도 계속 이동중" 재현을 원격으로 못 하고
+  // 있어 추가. 실제 좌표값까지 눈으로 확인하기 위한 표시로, 원인 확인되면 제거할 예정.
+  const fmt = (p) => p ? `${p.lat.toFixed(4)},${p.lng.toFixed(4)}` : "-";
+  const dbg = ` [나:${live?.location ? fmt(live.location) : "위치없음"} 상:${pickupGeo ? fmt(pickupGeo) : "geo✗"}=${pickupDist?.toFixed(1) ?? "?"} 하:${dropGeo ? fmt(dropGeo) : "geo✗"}=${dropDist?.toFixed(1) ?? "?"}${visitedPickup ? " V" : ""}]`;
   return <>{label}<span style={{ fontSize: 9, color: "#9ca3af", fontWeight: 400 }}>{dbg}</span></>;
 }
 
