@@ -1856,7 +1856,7 @@ function creatorLabel(r, staffByEmail) {
   return stored || fromStaff || email || "-";
 }
 
-function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleDay = true, todayStr, isOffDay, live, onOpenDetail, staff, canDelegate, onAssignManager, index, staffByEmail }) {
+function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleDay = true, todayStr, isOffDay, live, monthlyFareSum = 0, acceptRate = null, onOpenDetail, staff, canDelegate, onAssignManager, index, staffByEmail }) {
   const first = orders[0];
   const last = orders[orders.length - 1];
   const hasConflict = isOffDay && orders.length > 0;
@@ -1946,6 +1946,17 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
           ) : "전일 가능"}
         </InfoField>
         <InfoField label="실시간 위치"><LiveLocationBadge live={live} /></InfoField>
+        {/* ⭐ 사용자 요청 — 상세보기까지 안 들어가도 이번 달 정산 예정액을 바로 볼 수 있게 */}
+        <InfoField label="이번 달 정산예정">
+          <span style={{ fontSize: 14, fontWeight: 800, color: NAVY }}>{monthlyFareSum.toLocaleString()}원</span>
+        </InfoField>
+        {/* ⭐ 사용자 요청 — 최근 배차 수락/거절 이력 기반 신뢰도 지표 */}
+        {acceptRate != null && (
+          <InfoField label="배차 수락률">
+            <span style={{ fontSize: 14, fontWeight: 800, color: acceptRate < 70 ? "#dc2626" : "#111827" }}>{acceptRate}%</span>
+          </InfoField>
+        )}
+        <InfoField label="서류"><DocExpiryBadge driverId={driver.id} /></InfoField>
         <InfoField label="담당자">
           <ManagerBadge driver={driver} staff={staff} canDelegate={canDelegate} onAssign={onAssignManager} />
         </InfoField>
@@ -2133,10 +2144,45 @@ function compressDriverDocImage(file) {
   });
 }
 
+// ⭐ 사용자 요청 — 카드에서 바로 서류(사업자등록증/보험 등) 만료 임박 여부를
+// 확인할 수 있게. driver_documents에 만료일이 있는 서류 중 가장 임박한 것을
+// 찾아 30일 이내면 경고 배지로 보여준다.
+function DocExpiryBadge({ driverId }) {
+  const [soonest, setSoonest] = useState(undefined); // undefined=로딩, null=없음
+  useEffect(() => {
+    if (!driverId) return;
+    return onSnapshot(
+      query(collection(db, "driver_documents"), where("driverId", "==", driverId)),
+      (snap) => {
+        const withExpiry = snap.docs.map(d => d.data()).filter(doc => doc.만료일);
+        if (!withExpiry.length) { setSoonest(null); return; }
+        const next = withExpiry.reduce((min, doc) => (!min || doc.만료일 < min.만료일) ? doc : min, null);
+        setSoonest(next);
+      },
+      () => setSoonest(null)
+    );
+  }, [driverId]);
+
+  if (soonest === undefined) return <span style={{ fontSize: 13, color: "#d1d5db" }}>-</span>;
+  if (!soonest) return <span style={{ fontSize: 13, color: "#d1d5db" }}>만료일 미등록</span>;
+
+  const days = Math.ceil((new Date(soonest.만료일) - new Date(kstDateStr())) / (1000 * 60 * 60 * 24));
+  if (days < 0) {
+    return <span style={{ fontSize: 13, fontWeight: 800, padding: "2px 8px", borderRadius: 6, background: "#fee2e2", color: "#dc2626" }}>만료됨 ({soonest.fileName})</span>;
+  }
+  if (days <= 30) {
+    return <span style={{ fontSize: 13, fontWeight: 800, padding: "2px 8px", borderRadius: 6, background: "#fef3c7", color: "#92400e" }}>{days}일 후 만료 ({soonest.fileName})</span>;
+  }
+  return <span style={{ fontSize: 13, color: "#9ca3af" }}>정상</span>;
+}
+
 function DriverDocumentsPanel({ driverId }) {
   const [docs, setDocs] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [lightbox, setLightbox] = useState(null); // { name, dataUrl, type }
+  // ⭐ 사용자 요청 — 서류 만료일 임박 알림을 카드에서 바로 보려면 만료일을
+  // 입력받아야 한다(선택). 업로드 직전에 고른 날짜를 그 서류의 만료일로 저장.
+  const [pendingExpiry, setPendingExpiry] = useState("");
 
   useEffect(() => {
     if (!driverId) return;
@@ -2165,7 +2211,9 @@ function DriverDocumentsPanel({ driverId }) {
       await addDoc(collection(db, "driver_documents"), {
         driverId, fileName: file.name, fileType: file.type || "", dataUrl,
         uploadedAt: { seconds: Math.floor(Date.now() / 1000) },
+        ...(pendingExpiry ? { 만료일: pendingExpiry } : {}),
       });
+      setPendingExpiry("");
     } catch (e) {
       alert("업로드 중 오류가 발생했습니다: " + (e?.message || e));
     } finally {
@@ -2188,10 +2236,17 @@ function DriverDocumentsPanel({ driverId }) {
     <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
       <div style={{ padding: "12px 16px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <span style={{ fontSize: 16, fontWeight: 800, color: NAVY }}>서류함 ({docs.length})</span>
-        <label style={{ padding: "6px 14px", borderRadius: 6, border: `1px solid ${NAVY}`, background: NAVY, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-          {uploading ? "업로드중..." : "+ 서류 업로드"}
-          <input type="file" accept="image/*,.pdf" onChange={handleUpload} disabled={uploading} style={{ display: "none" }} />
-        </label>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 2 }}>만료일(선택)</div>
+            <input type="date" value={pendingExpiry} onChange={e => setPendingExpiry(e.target.value)}
+              style={{ padding: "5px 8px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 12 }} />
+          </div>
+          <label style={{ padding: "6px 14px", borderRadius: 6, border: `1px solid ${NAVY}`, background: NAVY, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            {uploading ? "업로드중..." : "+ 서류 업로드"}
+            <input type="file" accept="image/*,.pdf" onChange={handleUpload} disabled={uploading} style={{ display: "none" }} />
+          </label>
+        </div>
       </div>
       {docs.length === 0 ? (
         <div style={{ padding: 30, textAlign: "center", color: "#9ca3af", fontSize: 14 }}>등록된 서류가 없습니다. 사업자등록증·보험증·차량등록증 등을 올려두세요.</div>
@@ -2209,7 +2264,8 @@ function DriverDocumentsPanel({ driverId }) {
                   <span style={{ fontSize: 28 }}>📄</span>
                 )}
               </div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 6 }} title={d.fileName}>{d.fileName}</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 2 }} title={d.fileName}>{d.fileName}</div>
+              {d.만료일 && <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6 }}>만료일: {d.만료일}</div>}
               <div style={{ display: "flex", gap: 5 }}>
                 <button onClick={() => download(d)} style={{ flex: 1, padding: "5px 0", borderRadius: 5, border: "1px solid #d1d5db", background: "#fff", color: "#374151", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>다운로드</button>
                 <button onClick={() => handleDelete(d.id)} style={{ padding: "5px 9px", borderRadius: 5, border: "1px solid #fca5a5", background: "#fff", color: "#ef4444", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>삭제</button>
@@ -2525,6 +2581,29 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
     return m;
   }, [dispatchData, appliedStart, appliedEnd]);
 
+  // ⭐ 사용자 요청 — "내 담당차량" 카드에 (1) 이번 달 정산 예정액 (2) 최근 배차
+  // 수락률을 바로 보여준다. 조회기간(appliedStart/appliedEnd)과 무관하게 항상
+  // "이번 달 전체"/"최근 수락·거절 이력 전체" 기준이어야 하므로, 화면에 표시
+  // 중인 orders(조회기간 한정)가 아니라 dispatchData 전체에서 별도로 집계한다.
+  const monthlyStatsByKey = useMemo(() => {
+    const m = new Map();
+    const thisMonth = todayStr.slice(0, 7); // YYYY-MM
+    (dispatchData || []).forEach(r => {
+      const plate = (r.차량번호 || "").trim();
+      const name = (r.이름 || "").trim();
+      const key = plate || name;
+      if (!key) return;
+      if (!m.has(key)) m.set(key, { fareSum: 0, accepted: 0, rejected: 0 });
+      const s = m.get(key);
+      if ((r.상차일 || "").startsWith(thisMonth)) {
+        s.fareSum += Number(String(r.기사운임 || 0).replace(/[^\d]/g, "")) || 0;
+      }
+      if (r.기사확인상태 === "수락" || r.기사확인상태 === "완료") s.accepted += 1;
+      else if (r.기사확인상태 === "거절") s.rejected += 1;
+    });
+    return m;
+  }, [dispatchData, todayStr]);
+
   const driverRows = useMemo(() => {
     const rows = filteredDrivers.map(d => {
       const plate = (d.차량번호 || "").trim();
@@ -2536,7 +2615,8 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
         return (parseTimeToMin(a.상차시간) ?? 9999) - (parseTimeToMin(b.상차시간) ?? 9999);
       });
       const isOffDay = isSingleDay && (d.근무요일 && d.근무요일.length) ? !d.근무요일.includes(weekdayLabel) : false;
-      return { driver: d, orders, isOffDay, live: liveByFleetId.get(d.id) || null };
+      const mStats = monthlyStatsByKey.get(plate) || monthlyStatsByKey.get(name) || { fareSum: 0, accepted: 0, rejected: 0 };
+      return { driver: d, orders, isOffDay, live: liveByFleetId.get(d.id) || null, monthlyFareSum: mStats.fareSum, acceptRate: (mStats.accepted + mStats.rejected) > 0 ? Math.round((mStats.accepted / (mStats.accepted + mStats.rejected)) * 100) : null };
     });
     return rows.sort((a, b) => {
       if ((a.orders.length > 0) !== (b.orders.length > 0)) return a.orders.length > 0 ? -1 : 1;
@@ -2545,7 +2625,7 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
       if (at !== bt) return at - bt;
       return (a.driver.이름 || "").localeCompare(b.driver.이름 || "", "ko");
     });
-  }, [filteredDrivers, ordersByPlate, ordersByName, weekdayLabel, liveByFleetId]);
+  }, [filteredDrivers, ordersByPlate, ordersByName, weekdayLabel, liveByFleetId, monthlyStatsByKey]);
 
   const dispatchedCount = driverRows.filter(r => r.orders.length > 0).length;
   const visibleRows = onlyIdle ? driverRows.filter(r => r.orders.length === 0) : driverRows;
@@ -2682,7 +2762,7 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {visibleRows.map(({ driver, orders, isOffDay, live }, i) => (
+          {visibleRows.map(({ driver, orders, isOffDay, live, monthlyFareSum, acceptRate }, i) => (
             <DriverRouteCard
               key={driver.id}
               index={i + 1}
@@ -2694,6 +2774,8 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
               todayStr={todayStr}
               isOffDay={isOffDay}
               live={live}
+              monthlyFareSum={monthlyFareSum}
+              acceptRate={acceptRate}
               onOpenDetail={setDetailDriver}
               staff={staff}
               canDelegate={canDelegate}
