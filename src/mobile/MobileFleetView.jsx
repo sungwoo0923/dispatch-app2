@@ -202,24 +202,6 @@ function useDestGeo(addr) {
   }, [addr]);
   return geo; // undefined = 조회중, null = 실패/없음, {lat,lng} = 성공
 }
-// 상차중(상차 시작) 전엔 상차지, 상차 완료~하차 시작 전("운송중")엔 하차지 — 그
-// 외 상태(상차중/하차중/복귀중/대기/휴차 등)는 세분화하지 않는다.
-// ⭐ 사용자 요청 — 상차지도착 후 하차지로 출발하면, 하차지 반경에 들어오기 전까지는
-// "운송중"이 아니라 "이동중"으로 보여준다. 막 출발한 직후(아직 상차지 1km 이내)엔
-// "상차지도착"을 그대로 유지하도록 상차지 주소도 같이 넘긴다.
-function transitPhaseTarget(order, driver) {
-  const driverStatus = driver?.상태;
-  if (driverStatus === "출근") {
-    return { addr: order?.상차지주소, enterLabel: "상차지진입", nearLabel: "상차지도착" };
-  }
-  if (driverStatus === "운송중") {
-    return {
-      addr: order?.하차지주소, enterLabel: "하차지진입", nearLabel: "하차지도착",
-      departAddr: order?.상차지주소, departNearLabel: "상차지도착", farLabel: "이동중",
-    };
-  }
-  return null;
-}
 // driverDispatchStatus가 "운송중"을 반환하게 만든 그 오더(상/하차지 주소가
 // 필요하므로) — checkStates.includes("수락") 로직과 동일한 우선순위로 찾는다.
 function findActiveTransitOrder(orders, todayStr) {
@@ -229,23 +211,30 @@ function findActiveTransitOrder(orders, todayStr) {
   }) || null;
 }
 // "운송중" 라벨 하나를 세분화 라벨로 바꿔 보여준다 — 그 외엔 항상 fallback 그대로.
+// ⭐ 버그수정 — 예전엔 기사가 앱에서 "상차 시작/상차완료" 버튼을 직접 눌러야만
+// (driver.상태가 "운송중"으로 바뀌어야만) 하차지 방향으로 인식했는데, 실제로는 버튼을
+// 안 누르고 그냥 운전만 해도 상태가 갱신돼야 한다. 버튼 상태는 더 이상 보지 않고,
+// 순수하게 GPS 거리만으로 판단한다: 상차지 1km 이내면 "상차지도착"(한 번이라도
+// 들어왔었다는 걸 visitedPickup으로 기억해둔다), 그 뒤 상차지를 벗어나면(1km 초과)
+// 하차지에 가까워지기 전까지 "이동중", 하차지 5km/1km 이내면 하차지진입/도착.
 function TransitPhaseLabel({ order, driver, fallback }) {
-  const target = transitPhaseTarget(order, driver);
-  const geo = useDestGeo(target?.addr || null);
-  const departGeo = useDestGeo(target?.departAddr || null);
+  const pickupGeo = useDestGeo(order?.상차지주소 || null);
+  const dropGeo = useDestGeo(order?.하차지주소 || null);
   const hasLoc = driver?.location?.lat != null && driver?.location?.lng != null;
+  const [visitedPickup, setVisitedPickup] = useState(false);
 
-  if (target && geo && hasLoc) {
-    const dist = haversineKm(driver.location.lat, driver.location.lng, geo.lat, geo.lng);
-    if (dist <= 1) return target.nearLabel;
-    if (dist <= 5) return target.enterLabel;
-  }
-  // 하차지에서 멀면 — 상차지를 1km 이상 벗어났는지(= 이미 출발했는지) 확인
-  if (target?.departAddr && departGeo && hasLoc) {
-    const departDist = haversineKm(driver.location.lat, driver.location.lng, departGeo.lat, departGeo.lng);
-    if (departDist <= 1) return target.departNearLabel;
-  }
-  if (target?.farLabel) return target.farLabel;
+  const pickupDist = (hasLoc && pickupGeo) ? haversineKm(driver.location.lat, driver.location.lng, pickupGeo.lat, pickupGeo.lng) : null;
+  const dropDist = (hasLoc && dropGeo) ? haversineKm(driver.location.lat, driver.location.lng, dropGeo.lat, dropGeo.lng) : null;
+
+  useEffect(() => {
+    if (pickupDist != null && pickupDist <= 1 && !visitedPickup) setVisitedPickup(true);
+  }, [pickupDist, visitedPickup]);
+
+  if (pickupDist != null && pickupDist <= 1) return "상차지도착";
+  if (dropDist != null && dropDist <= 1) return "하차지도착";
+  if (dropDist != null && dropDist <= 5) return "하차지진입";
+  if (!visitedPickup && pickupDist != null && pickupDist <= 5) return "상차지진입";
+  if (visitedPickup) return "이동중";
   return fallback;
 }
 
