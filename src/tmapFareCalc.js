@@ -129,12 +129,44 @@ export function haversineKm(la1, lo1, la2, lo2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// ⭐ 버그수정 — 도로명/지번과 번지수 사이 띄어쓰기가 없는 주소(예: "김포한강5로385",
+// "원당대로1018번길5", "신곡리123", "역삼동123-4번지")를 Tmap이 읽을 수 있게 띄어준다.
+// 도로명 자체에 들어있는 숫자("테헤란로8길", "원당대로1018번길", "을지로3가",
+// "210동2004호")는 뒤에 길/번길/로/가/동/호/층이 붙어 있으면 건드리지 않는다.
+export function normalizeAddrSpacing(rawAddr) {
+  return String(rawAddr || "")
+    .replace(/\(.*?\)/g, " ")
+    .replace(/(\d)\s*번지/g, "$1 ")
+    .replace(/(로|길)(\d+(?:-\d+)?)(?![\d-]|번길|길|로|가)/g, "$1 $2 ")
+    .replace(/([가-힣\d](?:동|리|가))(산?\d+(?:-\d+)?)(?![\d-]|번길|길|로|가|동|호|층)/g, "$1 $2 ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Tmap fullAddrGeo 응답에서 좌표 추출 — 지번 좌표(lat/lon)가 비어 있고 도로명
+// 좌표(newLat/newLon)만 오는 경우가 있어 둘 다 확인한다.
+export function pickTmapCoord(coord) {
+  if (!coord) return null;
+  for (const [la, lo] of [[coord.lat, coord.lon], [coord.newLat, coord.newLon]]) {
+    const lat = parseFloat(la), lon = parseFloat(lo);
+    if (Number.isFinite(lat) && Number.isFinite(lon) && !(lat === 0 && lon === 0)) return { lat, lon };
+  }
+  return null;
+}
+
+// 디버그 — 브라우저 콘솔에서 localStorage.geoDebug="1" 설정 후 새로고침하면
+// 주소별로 어떤 형태로 지오코딩됐는지(좌표 포함) 콘솔에 찍힌다. 끄려면 removeItem.
+export function geoDebugLog(...args) {
+  try { if (localStorage.getItem("geoDebug") === "1") console.log("[geo]", ...args); } catch { /* noop */ }
+}
+
 // 도로명/지번/축약 주소 순으로 시도하는 간단한 지오코딩. 실패하면 null.
 export async function geocodeAddress(rawAddr) {
   const addr = String(rawAddr || "").trim();
   if (!addr) return null;
 
-  const clean = addr.replace(/\(.*?\)/g, "").replace(/\s+/g, " ").trim();
+  const raw = addr.replace(/\(.*?\)/g, "").replace(/\s+/g, " ").trim();
+  const clean = normalizeAddrSpacing(addr);
 
   const tryGeocode = async (address) => {
     try {
@@ -142,31 +174,18 @@ export async function geocodeAddress(rawAddr) {
         "?version=1&format=json&fullAddr=" + encodeURIComponent(address);
       const res = await fetch(url, { method: "GET", headers: { Accept: "application/json", appKey: TMAP_KEY } });
       const data = await res.json();
-      const coord = data?.coordinateInfo?.coordinate?.[0];
-      if (!coord) return null;
-      const lat = parseFloat(coord.lat);
-      const lon = parseFloat(coord.lon);
-      if (!Number.isFinite(lat) || !Number.isFinite(lon) || (lat === 0 && lon === 0)) return null;
-      return { lat, lon };
+      return pickTmapCoord(data?.coordinateInfo?.coordinate?.[0]);
     } catch {
       return null;
     }
   };
 
+  // 띄어쓰기 정규화한 주소를 먼저, 실패하면 원본 그대로 한 번 더.
   let result = await tryGeocode(clean);
-  if (result) return result;
-
-  // ⭐ 버그수정 — "김포한강5로385"처럼 도로명(로/길) 바로 뒤에 띄어쓰기 없이
-  // 번지수가 붙어있으면 지오코딩 API가 주소를 못 읽고 완전히 실패한다. 이러면
-  // 바로 아래 "단어 줄이기" 폴백이 전부 실패해 결국 "시/군"까지 뭉뚱그려
-  // 버려서(예: 실제 위치와 8km 이상 떨어진 시청 좌표로 수렴) 엉뚱한 곳으로
-  // 지오코딩됐다. 로/길 뒤에 숫자가 바로 붙어있으면 띄어쓰기를 넣어 재시도한다
-  // (도로명 자체에 포함된 숫자, 예: "5로"의 "5"는 바뀌지 않음 — 로/길 "뒤"의
-  // 숫자만 대상).
-  const spaced = clean.replace(/(로|길)(\d)/g, "$1 $2");
-  if (spaced !== clean) {
-    result = await tryGeocode(spaced);
-    if (result) return result;
+  if (result) { geoDebugLog(addr, "→", clean, result); return result; }
+  if (raw !== clean) {
+    result = await tryGeocode(raw);
+    if (result) { geoDebugLog(addr, "→(원본)", raw, result); return result; }
   }
 
   // ⭐ 사용자 보고 — 지입차관리 "이동정보" 거리가 서로 다른 두 주소인데도 0km로
@@ -179,12 +198,13 @@ export async function geocodeAddress(rawAddr) {
   const parts = clean.split(" ");
   for (let i = parts.length - 1; i >= 3; i--) {
     result = await tryGeocode(parts.slice(0, i).join(" "));
-    if (result) return result;
+    if (result) { geoDebugLog(addr, "→(축약)", parts.slice(0, i).join(" "), result); return result; }
   }
   if (parts.length >= 2) {
     result = await tryGeocode(parts.slice(0, 2).join(" "));
-    if (result) return result;
+    if (result) { geoDebugLog(addr, "→(시/구 근사!)", parts.slice(0, 2).join(" "), result); return result; }
   }
+  geoDebugLog(addr, "→ 실패");
   return null;
 }
 

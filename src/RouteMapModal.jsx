@@ -1,6 +1,7 @@
 import React from "react";
 import { db } from "./firebase";
 import { collection, doc, onSnapshot, query, where, orderBy } from "firebase/firestore";
+import { normalizeAddrSpacing, pickTmapCoord, geoDebugLog } from "./tmapFareCalc";
 
 function kstDateStr(d = new Date()) {
   return new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
@@ -20,9 +21,7 @@ async function geocodeOnce(address) {
     const url = "https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=" + encodeURIComponent(address);
     const res = await fetch(url, { method: "GET", headers: { Accept: "application/json", appKey: TMAP_KEY } });
     const data = await res.json();
-    const coord = data?.coordinateInfo?.coordinate?.[0];
-    if (!coord) return null;
-    return { lat: parseFloat(coord.lat), lon: parseFloat(coord.lon) };
+    return pickTmapCoord(data?.coordinateInfo?.coordinate?.[0]);
   } catch {
     return null;
   }
@@ -53,16 +52,15 @@ function shortenAddress(address) {
 export async function geocodeTmapAddr(addr) {
   if (!addr || !addr.trim()) return null;
   try {
-    const cleaned = cleanAddrForGeo(addr);
+    // ⭐ 버그수정 — "김포한강5로385"/"신곡리123"처럼 번지수가 붙어있는 주소는
+    // 띄어쓰기 정규화(normalizeAddrSpacing)한 주소로 먼저, 실패하면 원본으로 재시도.
+    const raw = cleanAddrForGeo(addr);
+    const cleaned = normalizeAddrSpacing(addr);
     let result = await geocodeOnce(cleaned);
-    if (result) return result;
-    // ⭐ 버그수정 — "김포한강5로385"처럼 도로명(로/길) 바로 뒤에 띄어쓰기 없이
-    // 번지수가 붙어있으면 지오코딩이 실패해 엉뚱한 곳(시/군 중심)으로 뭉뚱그려
-    // 진다. 로/길 뒤에 숫자가 바로 붙어있으면 띄어쓰기를 넣어 재시도한다.
-    const spaced = cleaned.replace(/(로|길)(\d)/g, "$1 $2");
-    if (spaced !== cleaned) {
-      result = await geocodeOnce(spaced);
-      if (result) return result;
+    if (result) { geoDebugLog(addr, "→", cleaned, result); return result; }
+    if (raw !== cleaned) {
+      result = await geocodeOnce(raw);
+      if (result) { geoDebugLog(addr, "→(원본)", raw, result); return result; }
     }
     const jibun = await convertToJibun(cleaned);
     if (jibun) {
