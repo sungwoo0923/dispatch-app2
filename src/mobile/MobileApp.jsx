@@ -4196,6 +4196,9 @@ const deleteSingleOrder = async (order) => {
     alert("화주사가 등록한 오더는 운송사에서 임의로 삭제할 수 없습니다. 화주사가 배차취소를 요청한 건만 승인 후 삭제할 수 있습니다.");
     return;
   }
+  // ⭐ 버그수정 — PC와 동일하게 운송완료된 오더는 한 번 더 확인받는다
+  // (목록 화면의 "취소하기" 경로에는 이 확인이 빠져 있었다).
+  if (order.기사확인상태 === "완료" && !window.confirm("운송이 완료된 오더입니다. 오더를 삭제하시겠습니까?")) return;
   const col = order.__col || collName;
   const id = order.id || order._id;
   if (!col || !id) return;
@@ -4422,11 +4425,10 @@ const deleteSingleOrder = async (order) => {
       setDeleteConfirmMobile(null);
       return;
     }
-    // ⭐ 사용자 요청 — 이미 "운송완료"된 오더를 삭제하면 그 운행 기록이 사라질
-    // 수 있으므로, 한번 더 확인받고 기사 운행일지용 스냅샷을 남긴다.
+    // ⭐ 이미 "운송완료"된 오더는 한 번 더 확인받는다. 삭제된 오더는 기사 운행일지에서도
+    // 빠져야 하므로(사용자 요청) 운행일지용 스냅샷은 남기지 않는다.
     if (deleteConfirmMobile.기사확인상태 === "완료") {
       if (!window.confirm("운송이 완료된 오더입니다. 오더를 삭제하시겠습니까?")) return;
-      archiveCompletedOrderMobile(deleteConfirmMobile, deleteConfirmMobile.id || deleteConfirmMobile._id, "오더삭제");
     }
     // ⭐ 완전삭제 대신 소프트 취소로 바꿔, 취소내역 화면에서 다시 확인하거나
     // "재등록"으로 되살릴 수 있게 한다(예전엔 여기서 바로 영구삭제되어 복구 불가였음).
@@ -4463,6 +4465,8 @@ const deleteSingleOrder = async (order) => {
       return;
     }
     if (!window.confirm(`선택한 ${selectedOrders.length}개 오더를 취소하시겠습니까?\n취소내역으로 이동하며, 필요하면 다시 재등록할 수 있습니다.`)) return;
+    const completedCount = selectedOrders.filter(o => o.기사확인상태 === "완료").length;
+    if (completedCount > 0 && !window.confirm(`운송이 완료된 오더가 ${completedCount}건 포함되어 있습니다. 오더를 삭제하시겠습니까?`)) return;
     try {
       for (const order of selectedOrders) {
         const col = order.__col || collName;

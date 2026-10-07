@@ -4017,7 +4017,7 @@ const removeDispatch = async (arg, opts = {}) => {
   // 시 기사 운행일지가 계속 보여줄 수 있도록 스냅샷을 남긴다.
   if (data?.기사확인상태 === "완료") {
     if (!opts.skipCompletedConfirm && !window.confirm("운송이 완료된 오더입니다. 오더를 삭제하시겠습니까?")) return;
-    archiveCompletedOrderPC(data, id, "오더삭제");
+    // ⭐ 사용자 요청 — 삭제된 오더는 기사 운행일지에서도 빠져야 하므로 스냅샷을 남기지 않는다.
   }
 
   // ⭐ 버그수정 — 지입 기사에게 배정(대기/수락/완료)돼 있던 오더를 이 "삭제"로

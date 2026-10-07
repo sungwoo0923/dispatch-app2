@@ -2427,11 +2427,16 @@ export default function DriverHome() {
               보여준다. 위 날짜조회(appliedRange)와 같은 기간을 쓴다(기본값이 이미
               오늘이라 "항상 당일 기준" 요건을 그대로 만족). 5건씩 페이지네이션. */}
           {isFleetDriver && (() => {
-            const liveCompleted = myOrders.filter(o => o.기사확인상태 === "완료");
+            // ⭐ 버그수정 — 관리자가 삭제(=소프트 취소: 배차상태 "배차취소")한 오더는
+            // 차량번호/기사확인상태가 그대로 남아 운행일지에 계속 보였다. 취소된 오더는 뺀다.
+            const isDeleted = (o) => o.배차상태 === "배차취소" || o.상태 === "취소";
+            const liveCompleted = myOrders.filter(o => o.기사확인상태 === "완료" && !isDeleted(o));
             // ⭐ 관리자가 완료된 오더를 삭제/기사취소하면 driver_completed_archive에
             // 스냅샷이 남는다. 원본 오더가 아직(어떤 이유로든) 살아있으면 중복 표시를
             // 피하려고 originalOrderId가 liveCompleted에 이미 있는 건 건너뛴다.
+            // 예전에 "오더삭제"로 남겨진 스냅샷도 이제는 표시하지 않는다(기사취소 스냅샷만 유지).
             const archivedForLog = archivedCompleted
+              .filter(a => a.archivedReason !== "오더삭제")
               .filter(a => !liveCompleted.some(o => o._id === a.originalOrderId))
               .map(a => ({
                 _id: a.originalOrderId,
