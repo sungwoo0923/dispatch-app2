@@ -1320,6 +1320,7 @@ export default function ShipperOrder({ editData, onClose }) {
           list={viaModal.type === "상차" ? form.경유상차목록 : form.경유하차목록}
           onSave={(newList) => onChange(viaModal.type === "상차" ? "경유상차목록" : "경유하차목록", newList)}
           onClose={() => setViaModal(null)}
+          orderDate={viaModal.type === "상차" ? form.상차일 : form.하차일}
         />
       )}
 
@@ -1345,11 +1346,15 @@ export default function ShipperOrder({ editData, onClose }) {
   );
 }
 
-function ViaStopModal({ type, list, onSave, onClose }) {
-  const emptyStop = () => ({ 업체명: "", 주소: "", 담당자: "", 담당자번호: "", 화물내용: "", 차량톤수: "", 상차시간: "", 하차시간: "", 시간구분: "", 방법: "" });
+function ViaStopModal({ type, list, onSave, onClose, orderDate = "" }) {
+  const dateKey = type === "상차" ? "상차일" : "하차일";
+  const emptyStop = () => ({ 업체명: "", 주소: "", 담당자: "", 담당자번호: "", 화물내용: "", 차량톤수: "", 상차일: "", 상차시간: "", 하차일: "", 하차시간: "", 시간구분: "", 방법: "" });
+  // ⚠️ 경유지 자체 날짜 없는 예전 데이터는 오더 본 상차일/하차일로 대체 표시한다 — 당일상차→당일하차→
+  // 익일상차→익일하차처럼 경유지마다 날짜가 갈리는 경우만 직접 바꾸면 된다.
   const [rows, setRows] = useState(() => {
     const init = (list || []).filter(s => s?.업체명?.trim());
-    return init.length ? init.map(s => ({ ...emptyStop(), ...s })) : [emptyStop()];
+    const withDefaults = init.map(s => ({ ...emptyStop(), ...s, [dateKey]: s[dateKey] || orderDate || "" }));
+    return withDefaults.length ? withDefaults : [{ ...emptyStop(), [dateKey]: orderDate || "" }];
   });
   const label = type === "상차" ? "상차경유지" : "하차경유지";
   const timeKey = type === "상차" ? "상차시간" : "하차시간";
@@ -1382,7 +1387,7 @@ function ViaStopModal({ type, list, onSave, onClose }) {
     } : r));
     setPlaceDropdownIdx(null);
   };
-  const addRow = () => setRows(prev => [...prev, emptyStop()]);
+  const addRow = () => setRows(prev => [...prev, { ...emptyStop(), [dateKey]: orderDate || "" }]);
   const removeRow = (idx) => setRows(prev => prev.filter((_, i) => i !== idx));
   const handleSave = () => { onSave(rows.filter(s => s.업체명?.trim())); onClose(); };
 
@@ -1423,6 +1428,9 @@ function ViaStopModal({ type, list, onSave, onClose }) {
                 <input className={inputCls} placeholder="화물내용 (예: 2파레트)" value={stop.화물내용} onChange={e => update(idx, "화물내용", e.target.value)} />
                 <input className={inputCls} placeholder="톤수 (예: 1톤)" value={stop.차량톤수} onChange={e => update(idx, "차량톤수", e.target.value)} />
               </div>
+              {/* 경유지 자체 날짜 — 오더 본 상차일/하차일은 전체 구간 날짜라, 당일상차→당일하차→
+                  익일상차→익일하차처럼 경유지마다 날짜가 갈리는 경우를 표현 못 하던 문제 */}
+              <input type="date" className={inputCls} value={stop[dateKey] || ""} onChange={e => update(idx, dateKey, e.target.value)} />
               <div className="grid grid-cols-2 gap-2">
                 <select className={inputCls} value={stop[timeKey]} onChange={e => update(idx, timeKey, e.target.value)}>
                   <option value="">{type}시간 선택</option>

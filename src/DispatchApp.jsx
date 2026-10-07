@@ -8494,7 +8494,7 @@ const [activeStopIdx, setActiveStopIdx] = React.useState(null);
 const [stopContactPickerIdx, setStopContactPickerIdx] = React.useState(null);
 const [stopContactPickerOpts, setStopContactPickerOpts] = React.useState([]);
 const [stopList, setStopList] = React.useState([
-  { 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"파레트", 톤수값:"", 톤수타입:"톤", 차량톤수:"", 상차시간:"", 하차시간:"", 방법:"" }
+  { 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"파레트", 톤수값:"", 톤수타입:"톤", 차량톤수:"", 상차일:"", 상차시간:"", 하차일:"", 하차시간:"", 방법:"" }
 ]);
 const [stopForm, setStopForm] = React.useState({
   업체명:"",
@@ -14380,6 +14380,7 @@ shadow-sm
                   placeRows={mergedClients}
                   timeOptions={timeOptions}
                   className="mt-1.5"
+                  orderDate={currentMultiSlot.하차일 || currentMultiSlot.상차일 || ""}
                 />
               </div>
               <div>
@@ -15096,9 +15097,9 @@ const similar = placeList.filter(p => {
   onClick={() => {
   setStopType("pickup");
 
-const arr = form.경유상차목록 || [];
+const arr = (form.경유상차목록 || []).map(s => ({ ...s, 상차일: s.상차일 || form.상차일 || "" }));
   setStopList(arr.length ? arr : [
-    { 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"파레트", 톤수값:"", 톤수타입:"톤", 차량톤수:"", 상차시간:"", 하차시간:"", 방법:"" }
+    { 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"파레트", 톤수값:"", 톤수타입:"톤", 차량톤수:"", 상차일: form.상차일 || "", 상차시간:"", 하차일:"", 하차시간:"", 방법:"" }
   ]);
 
   setStopPopupOpen(true);
@@ -15271,12 +15272,12 @@ className={`
   onClick={() => {
   setStopType("drop");
 
-  const arr = form.경유하차목록 || [];
+  const arr = (form.경유하차목록 || []).map(s => ({ ...s, 하차일: s.하차일 || form.하차일 || "" }));
 
   setStopList(
     arr.length
       ? arr
-      : [{ 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"파레트", 톤수값:"", 톤수타입:"톤", 차량톤수:"", 상차시간:"", 하차시간:"", 방법:"" }]
+      : [{ 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"파레트", 톤수값:"", 톤수타입:"톤", 차량톤수:"", 상차일:"", 상차시간:"", 하차일: form.하차일 || "", 하차시간:"", 방법:"" }]
   );
 
   setStopPopupOpen(true);
@@ -16168,50 +16169,60 @@ className={`
 
         </div>
 
-        {/* 🔥 새로 추가: 상차시간 / 하차시간 */}
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block"><EditableText id="waypoint.label.상차시간" defaultText="상차시간" /></label>
-            <CustomSelect
-              className={inputCls}
-              value={stop.상차시간 || ""}
-              onChange={(e) => {
-                const v = e.target.value;
-                setStopList(prev => {
-                  const copy = [...prev];
-                  copy[idx].상차시간 = v;
-                  return copy;
-                });
-              }}
-            >
-              <option value="">시간 선택</option>
-              {localTimeOptions.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </CustomSelect>
+        {/* 🔥 경유지 자체 날짜+시간 — 상차경유지는 상차일/상차시간만, 하차경유지는
+            하차일/하차시간만 쓴다(오더 본 상차일/하차일은 전체 구간 날짜라, A→C(당일)→C→B(다음날)
+            처럼 경유지마다 날짜가 갈리는 경우를 표현 못 하던 문제 — 경유지 자체에 날짜를 둔다). */}
+        {stopType === "pickup" ? (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block"><EditableText id="waypoint.label.상차일" defaultText="상차일" /></label>
+              <CustomDatePicker
+                value={stop.상차일 || ""}
+                showIcon
+                className={inputCls}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setStopList(prev => { const copy = [...prev]; copy[idx] = { ...copy[idx], 상차일: v }; return copy; });
+                }}
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block"><EditableText id="waypoint.label.상차시간" defaultText="상차시간" /></label>
+              <TimeAmPmPicker
+                value={stop.상차시간 || ""}
+                onChange={(v) => {
+                  setStopList(prev => { const copy = [...prev]; copy[idx] = { ...copy[idx], 상차시간: v }; return copy; });
+                }}
+                selectCls={inputCls}
+              />
+            </div>
           </div>
-          <div>
-            <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block"><EditableText id="waypoint.label.하차시간" defaultText="하차시간" /></label>
-            <CustomSelect
-              className={inputCls}
-              value={stop.하차시간 || ""}
-              onChange={(e) => {
-                const v = e.target.value;
-                setStopList(prev => {
-                  const copy = [...prev];
-                  copy[idx].하차시간 = v;
-                  return copy;
-                });
-              }}
-            >
-              <option value="">시간 선택</option>
-              {localTimeOptions.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </CustomSelect>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block"><EditableText id="waypoint.label.하차일" defaultText="하차일" /></label>
+              <CustomDatePicker
+                value={stop.하차일 || ""}
+                showIcon
+                className={inputCls}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setStopList(prev => { const copy = [...prev]; copy[idx] = { ...copy[idx], 하차일: v }; return copy; });
+                }}
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block"><EditableText id="waypoint.label.하차시간" defaultText="하차시간" /></label>
+              <TimeAmPmPicker
+                value={stop.하차시간 || ""}
+                onChange={(v) => {
+                  setStopList(prev => { const copy = [...prev]; copy[idx] = { ...copy[idx], 하차시간: v }; return copy; });
+                }}
+                selectCls={inputCls}
+              />
+            </div>
           </div>
-          
-        </div>
+        )}
 
         {/* 방법 (상/하차방법) */}
         <div>
@@ -16262,7 +16273,12 @@ className={`
             {
               업체명: "", 주소: "", 담당자: "담당자", 담당자번호: "", 메모: "",
               화물내용: "", 화물타입: "파레트", 톤수값: "", 톤수타입: "톤",
-              차량톤수: "", 상차시간: "", 하차시간: "", 방법: ""
+              차량톤수: "",
+              상차일: stopType === "pickup" ? (form.상차일 || "") : "",
+              상차시간: "",
+              하차일: stopType === "drop" ? (form.하차일 || "") : "",
+              하차시간: "",
+              방법: ""
             }
           ]);
         }}
@@ -17600,7 +17616,7 @@ className={`
   ].filter(Boolean);
   const unique = [...new Map(arr.map(s => [JSON.stringify(s), s])).values()];
   if (unique.length === 0) return null;
-  return <StopBadge count={unique.length} list={unique} type="pickup" />;
+  return <StopBadge count={unique.length} list={unique} type="pickup" orderDate={row.상차일 || ""} />;
 })()}
                           </div>
 </td>
@@ -17620,7 +17636,7 @@ className={`
   ].filter(Boolean);
   const unique = [...new Map(arr.map(s => [JSON.stringify(s), s])).values()];
   if (unique.length === 0) return null;
-  return <StopBadge count={unique.length} list={unique} type="drop" />;
+  return <StopBadge count={unique.length} list={unique} type="drop" orderDate={row.하차일 || ""} />;
 })()}
   </div>
 </td>
@@ -20743,7 +20759,23 @@ const RoundTripBadge = () => (
   </span>
 );
 
-function StopBadge({ count, list, type = "pickup", onSave, placeRows = [], timeOptions = [] }) {
+// 경유지 날짜(상차일/하차일)가 오더 본 날짜와 다를 때만 "MM/DD 시간"으로 보여준다 —
+// A상차(당일)→C하차→C상차→B하차(다음날)처럼 경유지마다 날짜가 갈리는 케이스를
+// 날짜 없이 시간만 보여주면 헷갈리니, 같을 땐 기존처럼 시간만 그대로 보여준다.
+function formatWaypointTime(stop, type, orderDate) {
+  const timeKey = type === "pickup" ? "상차시간" : "하차시간";
+  const dateKey = type === "pickup" ? "상차일" : "하차일";
+  const time = stop?.[timeKey] || "";
+  if (!time) return "";
+  const date = stop?.[dateKey] || "";
+  if (date && orderDate && date !== orderDate) {
+    const m = String(date).match(/^\d{4}-(\d{2})-(\d{2})$/);
+    if (m) return `${parseInt(m[1], 10)}/${parseInt(m[2], 10)} ${time}`;
+  }
+  return time;
+}
+
+function StopBadge({ count, list, type = "pickup", onSave, placeRows = [], timeOptions = [], orderDate = "" }) {
   const [open, setOpen] = React.useState(false);
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
@@ -20814,7 +20846,7 @@ function StopBadge({ count, list, type = "pickup", onSave, placeRows = [], timeO
             </div>
             <div className="overflow-y-auto flex-1 p-4 space-y-3">
               {validList.map((s, i) => {
-                const timeVal = s[timeKey];
+                const timeVal = formatWaypointTime(s, type, orderDate) || s[timeKey];
                 return (
                   <div key={i} className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
                     <div className="bg-[#1B2B4B]/8 px-4 py-2 border-b border-gray-200 flex items-center gap-2">
@@ -20857,11 +20889,12 @@ function StopBadge({ count, list, type = "pickup", onSave, placeRows = [], timeO
         type={type}
         placeRows={placeRows}
         timeOptions={timeOptions}
+        orderDate={orderDate}
       />
     </>
   );
 }
-function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editable = false, placeRows = [], timeOptions = [] }) {
+function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editable = false, placeRows = [], timeOptions = [], orderDate = "" }) {
   const [open, setOpen] = React.useState(false);
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
@@ -20985,8 +21018,9 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
                       {Row("담당자", (s.담당자 || s.담당자번호) ? `${s.담당자 || "-"}${s.담당자번호 ? ` (${s.담당자번호})` : ""}` : "")}
                       {Row("화물내용", cargo)}
                       {Row("화물톤수", ton)}
-                      {Row("상차시간", s.상차시간)}
-                      {Row("하차시간", s.하차시간)}
+                      {isPickup
+                        ? Row("상차시간", formatWaypointTime(s, "pickup", orderDate))
+                        : Row("하차시간", formatWaypointTime(s, "drop", orderDate))}
                       {s.메모 && <div className="text-[12px] text-gray-500 pt-0.5">메모 : {s.메모}</div>}
                     </div>
                   </div>
@@ -21018,13 +21052,14 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
         type={type}
         placeRows={placeRows}
         timeOptions={timeOptions}
+        orderDate={orderDate}
       />
     </>
   );
 }
 
 // ===================== StopEditModal (경유지 수정 팝업 — 3파트와 동일 구조) =====================
-function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], timeOptions = [] }) {
+function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], timeOptions = [], orderDate = "" }) {
   const [editList, setEditList] = React.useState([]);
   const [placeOpts, setPlaceOpts] = React.useState([]);
   const [activeIdx, setActiveIdx] = React.useState(null);
@@ -21053,7 +21088,12 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
   const emptyStop = () => ({
     업체명: "", 주소: "", 담당자: "", 담당자번호: "", 메모: "",
     화물내용: "", 화물타입: "파레트", 톤수값: "", 톤수타입: "톤",
-    차량톤수: "", 상차시간: "", 하차시간: "", 방법: ""
+    차량톤수: "",
+    상차일: type === "pickup" ? (orderDate || "") : "",
+    상차시간: "",
+    하차일: type === "drop" ? (orderDate || "") : "",
+    하차시간: "",
+    방법: ""
   });
 
   React.useEffect(() => {
@@ -21081,7 +21121,13 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
         else if (/kg/i.test(ton)) { tonVal = ton.replace(/kg/gi,""); tonType="kg"; }
         else if (!ton.trim()) { tonType = "톤"; }
         else { tonType=""; }
-        return { ...emptyStop(), ...s, 화물내용: cargoVal, 화물타입: cargoType, 톤수값: tonVal, 톤수타입: tonType };
+        // ⚠️ 날짜 없는 예전 경유지 데이터 — 오더 본 상차일/하차일로 대체 표시(빈 날짜로 보이지 않게).
+        return {
+          ...emptyStop(), ...s,
+          화물내용: cargoVal, 화물타입: cargoType, 톤수값: tonVal, 톤수타입: tonType,
+          상차일: type === "pickup" ? (s.상차일 || orderDate || "") : (s.상차일 || ""),
+          하차일: type === "drop" ? (s.하차일 || orderDate || "") : (s.하차일 || ""),
+        };
       });
       setEditList(initList.length ? initList : [emptyStop()]);
     }
@@ -21352,25 +21398,49 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
               })()}
             </div>
 
-            {/* 상차시간 / 하차시간 */}
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block"><EditableText id="waypoint.label.상차시간" defaultText="상차시간" /></label>
-                <select className={inputCls} value={stop.상차시간||""}
-                  onChange={e=>{const v=e.target.value;setEditList(prev=>{const c=[...prev];c[idx].상차시간=v;return c;});}}>
-                  <option value="">시간 선택</option>
-                  {localTimes.map(t=><option key={t} value={t}>{t}</option>)}
-                </select>
+            {/* 경유지 자체 날짜+시간 — 상차경유지는 상차일/상차시간만, 하차경유지는 하차일/하차시간만
+                (오더 본 상차일/하차일은 전체 구간 날짜라, 경유지마다 날짜가 갈리는 케이스를 못 담던 문제) */}
+            {type === "pickup" ? (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block"><EditableText id="waypoint.label.상차일" defaultText="상차일" /></label>
+                  <CustomDatePicker
+                    value={stop.상차일||""}
+                    showIcon
+                    className={inputCls}
+                    onChange={e=>{const v=e.target.value;setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],상차일:v};return c;});}}
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block"><EditableText id="waypoint.label.상차시간" defaultText="상차시간" /></label>
+                  <TimeAmPmPicker
+                    value={stop.상차시간||""}
+                    onChange={v=>{setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],상차시간:v};return c;});}}
+                    selectCls={inputCls}
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block"><EditableText id="waypoint.label.하차시간" defaultText="하차시간" /></label>
-                <select className={inputCls} value={stop.하차시간||""}
-                  onChange={e=>{const v=e.target.value;setEditList(prev=>{const c=[...prev];c[idx].하차시간=v;return c;});}}>
-                  <option value="">시간 선택</option>
-                  {localTimes.map(t=><option key={t} value={t}>{t}</option>)}
-                </select>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block"><EditableText id="waypoint.label.하차일" defaultText="하차일" /></label>
+                  <CustomDatePicker
+                    value={stop.하차일||""}
+                    showIcon
+                    className={inputCls}
+                    onChange={e=>{const v=e.target.value;setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],하차일:v};return c;});}}
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block"><EditableText id="waypoint.label.하차시간" defaultText="하차시간" /></label>
+                  <TimeAmPmPicker
+                    value={stop.하차시간||""}
+                    onChange={v=>{setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],하차시간:v};return c;});}}
+                    selectCls={inputCls}
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             {/* 방법 */}
             <div>
@@ -21431,7 +21501,7 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
 // ===================== /StopEditModal =====================
 
 // ===================== WaypointSection (경유 추가/수정 통합) =====================
-function WaypointSection({ stops = [], type = "pickup", onSave, placeRows = [], timeOptions = [], className = "" }) {
+function WaypointSection({ stops = [], type = "pickup", onSave, placeRows = [], timeOptions = [], className = "", orderDate = "" }) {
   const [addOpen, setAddOpen] = React.useState(false);
   const label = type === "pickup" ? "상차경유지" : "하차경유지";
   return (
@@ -21439,7 +21509,7 @@ function WaypointSection({ stops = [], type = "pickup", onSave, placeRows = [], 
       <div className={`flex items-center gap-2 ${className}`}>
         <span className="text-[12px] text-gray-500 font-medium">{label}</span>
         {stops.length > 0
-          ? <StopBadge count={stops.length} list={stops} type={type} placeRows={placeRows} timeOptions={timeOptions} onSave={onSave} />
+          ? <StopBadge count={stops.length} list={stops} type={type} placeRows={placeRows} timeOptions={timeOptions} onSave={onSave} orderDate={orderDate} />
           : <button type="button" onClick={() => setAddOpen(true)}
               className="text-[11px] font-bold px-2.5 py-1 rounded-full border transition bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white">
               + 경유
@@ -21448,7 +21518,7 @@ function WaypointSection({ stops = [], type = "pickup", onSave, placeRows = [], 
       </div>
       <StopEditModal open={addOpen} onClose={() => setAddOpen(false)}
         onSave={newList => { onSave(newList); setAddOpen(false); }}
-        list={[]} type={type} placeRows={placeRows} timeOptions={timeOptions} />
+        list={[]} type={type} placeRows={placeRows} timeOptions={timeOptions} orderDate={orderDate} />
     </>
   );
 }
@@ -22828,7 +22898,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
 
 {r.__pickupStops?.length > 0 && (
   <StopInlineBadge count={r.__pickupStops.length} list={r.__pickupStops} type="pickup"
-    placeRows={placeRows} timeOptions={timeOptions}
+    placeRows={placeRows} timeOptions={timeOptions} orderDate={r.상차일 || ""}
     onEdit={newList => patchDispatch(r._id, { 경유상차목록: newList, 경유지_상차: newList, 경유지상차: newList })}
   />
 )}
@@ -22846,7 +22916,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
 
 {r.__dropStops?.length > 0 && (
   <StopInlineBadge count={r.__dropStops.length} list={r.__dropStops} type="drop"
-    placeRows={placeRows} timeOptions={timeOptions}
+    placeRows={placeRows} timeOptions={timeOptions} orderDate={r.하차일 || ""}
     onEdit={newList => patchDispatch(r._id, { 경유하차목록: newList, 경유지_하차: newList, 경유지하차: newList })}
   />
 )}
@@ -29150,7 +29220,7 @@ checkWarningStatus(c.거래처명, "거래처");
         ].filter(s => s && (s.업체명?.trim() || s.주소?.trim()))
          .filter((s, i, arr) => arr.findIndex(x => (x.업체명 || x.주소) === (s.업체명 || s.주소)) === i);
 
-        return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mt-3" />;
+        return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mt-3" orderDate={copyTarget?.상차일 || ""} />;
       })()}
 
     </div>
@@ -29345,7 +29415,7 @@ checkWarningStatus(c.거래처명, "거래처");
         ].filter(s => s && (s.업체명?.trim() || s.주소?.trim()))
          .filter((s, i, arr) => arr.findIndex(x => (x.업체명 || x.주소) === (s.업체명 || s.주소)) === i);
 
-        return <WaypointSection stops={stops} type="drop" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mt-3" />;
+        return <WaypointSection stops={stops} type="drop" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mt-3" orderDate={copyTarget?.하차일 || ""} />;
       })()}
 
     </div>
@@ -30987,7 +31057,7 @@ value={copyTarget?.화물수량 || ""}
               ].filter(s => s?.업체명?.trim())
                .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
 
-              return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setEditTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mb-3" />;
+              return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setEditTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mb-3" orderDate={editTarget?.상차일 || ""} />;
             })()}
 
             {/* ===================== 하차지 ===================== */}
@@ -31156,7 +31226,7 @@ value={copyTarget?.화물수량 || ""}
               ].filter(s => s?.업체명?.trim())
                .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
 
-              return <WaypointSection stops={stops} type="drop" onSave={(newList) => setEditTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mb-3" />;
+              return <WaypointSection stops={stops} type="drop" onSave={(newList) => setEditTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mb-3" orderDate={editTarget?.하차일 || ""} />;
             })()}
 
             {/* ------------------------------------------------ */}
@@ -38595,7 +38665,7 @@ return (
       const list=[..._s(row.경유상차목록),..._s(row.경유지_상차)]
         .filter(s=>s&&(s.업체명?.trim()||s.주소?.trim()))
         .filter((s,i,arr)=>{const k=s.업체명||s.주소;return arr.findIndex(x=>(x.업체명||x.주소)===k)===i;});
-      return list.length>0?<StopBadge count={list.length} list={list} type="pickup" onSave={(newList)=>patchDispatch(row._id,{경유상차목록:newList,경유지_상차:newList,경유지상차:newList,__col:row.__col})} placeRows={placeRows} timeOptions={timeOptions}/>:null;
+      return list.length>0?<StopBadge count={list.length} list={list} type="pickup" onSave={(newList)=>patchDispatch(row._id,{경유상차목록:newList,경유지_상차:newList,경유지상차:newList,__col:row.__col})} placeRows={placeRows} timeOptions={timeOptions} orderDate={row.상차일||""}/>:null;
     })()}
   </div>
 
@@ -38607,7 +38677,7 @@ return (
       const list=[..._s(row.경유하차목록),..._s(row.경유지_하차)]
         .filter(s=>s&&(s.업체명?.trim()||s.주소?.trim()))
         .filter((s,i,arr)=>{const k=s.업체명||s.주소;return arr.findIndex(x=>(x.업체명||x.주소)===k)===i;});
-      return list.length>0?<StopBadge count={list.length} list={list} type="drop" onSave={(newList)=>patchDispatch(row._id,{경유하차목록:newList,경유지_하차:newList,경유지하차:newList,__col:row.__col})} placeRows={placeRows} timeOptions={timeOptions}/>:null;
+      return list.length>0?<StopBadge count={list.length} list={list} type="drop" onSave={(newList)=>patchDispatch(row._id,{경유하차목록:newList,경유지_하차:newList,경유지하차:newList,__col:row.__col})} placeRows={placeRows} timeOptions={timeOptions} orderDate={row.하차일||""}/>:null;
     })()}
   </div>
 
@@ -39364,7 +39434,7 @@ return (
               const stops = [...sp(editTarget?.경유상차목록), ...sp(editTarget?.경유지_상차)]
                 .filter(s => s?.업체명?.trim())
                 .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
-              return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setEditTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mb-3" />;
+              return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setEditTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mb-3" orderDate={editTarget?.상차일 || ""} />;
             })()}
 
             {/* ================= 하차지명 ================= */}
@@ -39537,7 +39607,7 @@ return (
               const stops = [...sp(editTarget?.경유하차목록), ...sp(editTarget?.경유지_하차)]
                 .filter(s => s?.업체명?.trim())
                 .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
-              return <WaypointSection stops={stops} type="drop" onSave={(newList) => setEditTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mb-3" />;
+              return <WaypointSection stops={stops} type="drop" onSave={(newList) => setEditTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mb-3" orderDate={editTarget?.하차일 || ""} />;
             })()}
 
             {/* 🔥 화물내용 (단독 한 줄) */}
@@ -40775,7 +40845,7 @@ setCopyPlaceOptions(list);
       {(() => {
         const _sp = (v) => { if (Array.isArray(v) && v.length > 0) return v; if (typeof v === "string" && v.trim().startsWith("[")) { try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {} } if (v && typeof v === "object" && !Array.isArray(v)) { const ks = Object.keys(v); if (ks.length > 0 && ks.every(k => /^\d+$/.test(k))) return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]); if (v.업체명) return [v]; } return []; };
         const stops = _sp(copyTarget?.경유상차목록 || copyTarget?.경유지_상차).filter(s => s && (s.업체명?.trim() || s.주소?.trim()));
-        return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mt-1" />;
+        return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mt-1" orderDate={copyTarget?.상차일 || ""} />;
       })()}
 
     </div>
@@ -40952,7 +41022,7 @@ setCopyPlaceOptions(list);
       {(() => {
         const _sp = (v) => { if (Array.isArray(v) && v.length > 0) return v; if (typeof v === "string" && v.trim().startsWith("[")) { try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {} } if (v && typeof v === "object" && !Array.isArray(v)) { const ks = Object.keys(v); if (ks.length > 0 && ks.every(k => /^\d+$/.test(k))) return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]); if (v.업체명) return [v]; } return []; };
         const stops = _sp(copyTarget?.경유하차목록 || copyTarget?.경유지_하차).filter(s => s && (s.업체명?.trim() || s.주소?.trim()));
-        return <WaypointSection stops={stops} type="drop" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mt-1" />;
+        return <WaypointSection stops={stops} type="drop" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mt-1" orderDate={copyTarget?.하차일 || ""} />;
       })()}
 
     </div>
@@ -49191,8 +49261,8 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                           const dr = _dedup([..._sp(r.경유하차목록), ..._sp(r.경유지_하차), ..._sp(r.경유지하차)]);
                           return (
                             <div className="flex flex-wrap gap-1">
-                              {pu.length > 0 && <StopBadge count={pu.length} list={pu} type="pickup" />}
-                              {dr.length > 0 && <StopBadge count={dr.length} list={dr} type="drop" />}
+                              {pu.length > 0 && <StopBadge count={pu.length} list={pu} type="pickup" orderDate={r.상차일 || ""} />}
+                              {dr.length > 0 && <StopBadge count={dr.length} list={dr} type="drop" orderDate={r.하차일 || ""} />}
                             </div>
                           );
                         })()}
@@ -49774,7 +49844,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         const _sp7 = (v) => { if (Array.isArray(v)) return v; if (typeof v === "string") { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } } return []; };
                         const stops = [..._sp7(copyTarget?.경유상차목록), ..._sp7(copyTarget?.경유지_상차)].filter(s => s?.업체명?.trim() || s?.주소?.trim());
                         const dedup = [...new Map(stops.map(s => [(s.업체명||s.주소), s])).values()];
-                        return <WaypointSection stops={dedup} type="pickup" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={[...clients, ...places]} timeOptions={[]} className="mt-2" />;
+                        return <WaypointSection stops={dedup} type="pickup" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={[...clients, ...places]} timeOptions={[]} className="mt-2" orderDate={copyTarget?.상차일 || ""} />;
                       })()}
                     </div>
 
@@ -49869,7 +49939,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         const _sp7 = (v) => { if (Array.isArray(v)) return v; if (typeof v === "string") { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } } return []; };
                         const stops = [..._sp7(copyTarget?.경유하차목록), ..._sp7(copyTarget?.경유지_하차)].filter(s => s?.업체명?.trim() || s?.주소?.trim());
                         const dedup = [...new Map(stops.map(s => [(s.업체명||s.주소), s])).values()];
-                        return <WaypointSection stops={dedup} type="drop" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={[...clients, ...places]} timeOptions={[]} className="mt-2" />;
+                        return <WaypointSection stops={dedup} type="drop" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={[...clients, ...places]} timeOptions={[]} className="mt-2" orderDate={copyTarget?.하차일 || ""} />;
                       })()}
                     </div>
                   </div>

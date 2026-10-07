@@ -1131,6 +1131,21 @@ const safeParseStops = (raw) => {
 const validStops = (raw) =>
   safeParseStops(raw).filter(s => s && typeof s === "object" && (s.업체명?.trim() || s.주소?.trim()));
 
+// 경유지 날짜(상차일/하차일)가 오더 본 날짜와 다를 때만 "MM/DD 시간"으로 보여준다 —
+// 당일상차→당일하차→익일상차→익일하차처럼 경유지마다 날짜가 갈리는 경우만 날짜를 덧붙인다.
+const formatWaypointTime = (stop, type, orderDate) => {
+  const timeKey = type === "pickup" ? "상차시간" : "하차시간";
+  const dateKey = type === "pickup" ? "상차일" : "하차일";
+  const time = stop?.[timeKey] || "";
+  if (!time) return "";
+  const date = stop?.[dateKey] || "";
+  if (date && orderDate && date !== orderDate) {
+    const m = String(date).match(/^\d{4}-(\d{2})-(\d{2})$/);
+    if (m) return `${parseInt(m[1], 10)}/${parseInt(m[2], 10)} ${time}`;
+  }
+  return time;
+};
+
 // kg 추출 (예: "1836kg", "3톤", "3.5" 등 방어적으로 파싱)
 const parseKgValue = (s = "") => {
   const str = String(s ?? "").trim();
@@ -11624,7 +11639,7 @@ const handleAssignClick = () => {
               )}
               <div className="flex gap-2 mt-0.5 flex-wrap">
                 {s.방법 && <span className="text-[10px] text-gray-500 border border-gray-200 px-1 py-0.5 rounded">상차방법 : {s.방법}</span>}
-                {s.상차시간 && <span className="text-[10px] text-gray-500">{s.상차시간}</span>}
+                {s.상차시간 && <span className="text-[10px] text-gray-500">{formatWaypointTime(s, "pickup", order.상차일)}</span>}
               </div>
               {s.메모 && <div className="text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 mt-0.5">{s.메모}</div>}
             </div>
@@ -11691,7 +11706,7 @@ const handleAssignClick = () => {
               )}
               <div className="flex gap-2 mt-0.5 flex-wrap">
                 {s.방법 && <span className="text-[10px] text-gray-500 border border-gray-200 px-1 py-0.5 rounded">하차방법 : {s.방법}</span>}
-                {s.하차시간 && <span className="text-[10px] text-gray-500">{s.하차시간}</span>}
+                {s.하차시간 && <span className="text-[10px] text-gray-500">{formatWaypointTime(s, "drop", order.하차일)}</span>}
               </div>
               {s.메모 && <div className="text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 mt-0.5">{s.메모}</div>}
             </div>
@@ -13437,11 +13452,18 @@ const STOP_TIMES = [
   "","즉시","오전 6시","오전 7시","오전 8시","오전 9시","오전 10시","오전 11시",
   "오후 12시","오후 1시","오후 2시","오후 3시","오후 4시","오후 5시","오후 6시","오후 7시","오후 8시",
 ];
-const emptyStop = () => ({ 업체명:"", 주소:"", 담당자:"", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"", 톤수값:"", 톤수타입:"", 차량톤수:"", 상차시간:"", 하차시간:"", 방법:"" });
+const emptyStop = () => ({ 업체명:"", 주소:"", 담당자:"", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"", 톤수값:"", 톤수타입:"", 차량톤수:"", 상차일:"", 상차시간:"", 하차일:"", 하차시간:"", 방법:"" });
 
 const openStopSheet = (type) => {
   const existing = validStops(type === "pickup" ? form.경유상차목록 : form.경유하차목록);
-  setStopList(existing.length ? existing.map(s => ({ ...emptyStop(), ...s })) : [emptyStop()]);
+  // ⚠️ 경유지 자체 날짜 없는 예전 데이터·신규 경유지는 오더 본 상차일/하차일로 기본값을 채운다
+  // (A상차→C하차(당일)→C상차→B하차(다음날)처럼 경유지마다 날짜가 갈리는 경우만 직접 바꾸면 된다).
+  const withDate = existing.map(s => type === "pickup"
+    ? { ...emptyStop(), ...s, 상차일: s.상차일 || form.상차일 || "" }
+    : { ...emptyStop(), ...s, 하차일: s.하차일 || form.하차일 || "" });
+  setStopList(withDate.length ? withDate : [type === "pickup"
+    ? { ...emptyStop(), 상차일: form.상차일 || "" }
+    : { ...emptyStop(), 하차일: form.하차일 || "" }]);
   setStopSheet(type);
 };
 
@@ -16467,29 +16489,54 @@ const pickDrop = (c) => {
                 <option value="kg">kg</option>
               </select>
             </div>
-            {/* 시간 */}
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <div className="text-[10px] text-gray-500 font-semibold mb-1">상차시간</div>
-                <select
-                  className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none"
-                  value={stop.상차시간 || ""}
-                  onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 상차시간: e.target.value } : s))}
-                >
-                  {STOP_TIMES.map(t => <option key={t} value={t}>{t || "시간 선택"}</option>)}
-                </select>
+            {/* 경유지 자체 날짜+시간 — 상차경유지는 상차일/상차시간만, 하차경유지는 하차일/하차시간만
+                (오더 본 상차일/하차일은 전체 구간 날짜라, A상차(당일)→C하차→C상차→B하차(다음날)처럼
+                경유지마다 날짜가 갈리는 케이스를 표현 못 하던 문제 — 경유지 자체에 날짜를 둔다) */}
+            {stopSheet === "pickup" ? (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <div className="text-[10px] text-gray-500 font-semibold mb-1">상차일</div>
+                  <CustomDatePicker
+                    className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white"
+                    value={stop.상차일 || ""}
+                    onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 상차일: e.target.value } : s))}
+                  />
+                </div>
+                <div>
+                  <div className="text-[10px] text-gray-500 font-semibold mb-1">상차시간</div>
+                  <select
+                    className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none"
+                    value={stop.상차시간 || ""}
+                    onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 상차시간: e.target.value } : s))}
+                  >
+                    <option value="">시간 선택</option>
+                    {HALF_HOUR_TIMES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
               </div>
-              <div>
-                <div className="text-[10px] text-gray-500 font-semibold mb-1">하차시간</div>
-                <select
-                  className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none"
-                  value={stop.하차시간 || ""}
-                  onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 하차시간: e.target.value } : s))}
-                >
-                  {STOP_TIMES.map(t => <option key={t} value={t}>{t || "시간 선택"}</option>)}
-                </select>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <div className="text-[10px] text-gray-500 font-semibold mb-1">하차일</div>
+                  <CustomDatePicker
+                    className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white"
+                    value={stop.하차일 || ""}
+                    onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 하차일: e.target.value } : s))}
+                  />
+                </div>
+                <div>
+                  <div className="text-[10px] text-gray-500 font-semibold mb-1">하차시간</div>
+                  <select
+                    className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none"
+                    value={stop.하차시간 || ""}
+                    onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 하차시간: e.target.value } : s))}
+                  >
+                    <option value="">시간 선택</option>
+                    {HALF_HOUR_TIMES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
               </div>
-            </div>
+            )}
             {/* 상/하차방법 */}
             <div>
               <div className="text-[10px] text-gray-500 font-semibold mb-1">{stopSheet === "pickup" ? "상차방법" : "하차방법"}</div>
@@ -16518,7 +16565,9 @@ const pickDrop = (c) => {
         {/* 경유지 추가 버튼 */}
         <button
           type="button"
-          onClick={() => setStopList(prev => [...prev, emptyStop()])}
+          onClick={() => setStopList(prev => [...prev, stopSheet === "pickup"
+            ? { ...emptyStop(), 상차일: form.상차일 || "" }
+            : { ...emptyStop(), 하차일: form.하차일 || "" }])}
           className="w-full py-3 rounded-2xl border-2 border-dashed border-[#1B2B4B]/30 text-[#1B2B4B] text-sm font-semibold"
         >
           + 경유지 추가
