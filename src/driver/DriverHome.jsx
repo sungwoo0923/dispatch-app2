@@ -1968,6 +1968,25 @@ export default function DriverHome() {
             </>
           )}
 
+          {/* ⭐ 사용자 보고 — 아이폰은 아직 네이티브 앱이 없어(안드로이드만 우선 진행)
+              이 웹 브라우저 화면으로 쓰는데, iOS Safari는 화면이 꺼지거나 다른 화면으로
+              전환되면 몇 초 안에 위치 추적 자체를 멈춰버린다(OS 정책, 코드로 우회 불가).
+              그 상태에서는 관리자 화면 위치/상태도 그 시점에 멈춰버린 걸로 보인다 —
+              기사 본인에게 원인을 명확히 안내해, 운행 중엔 화면을 켜두도록 유도한다. */}
+          {!isNative() && (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 8, letterSpacing: "0.06em", paddingLeft: 4 }}>위치 추적 안내</div>
+              <div style={{ background: "white", borderRadius: 16, boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #fde68a", padding: "14px 16px", marginBottom: 20 }}>
+                <div style={{ fontSize: 13, color: "#92400e", fontWeight: 700, marginBottom: 4 }}>아이폰(웹) 백그라운드 위치 제한</div>
+                <div style={{ fontSize: 12, color: "#6b7280", lineHeight: 1.5 }}>
+                  아이폰은 이 화면(웹브라우저)을 끄거나 다른 앱으로 전환하면 위치 전송이
+                  멈춥니다. 운행 중에는 이 화면을 켜둔 채로 다녀주세요. 화면을 다시 켜면
+                  위치가 즉시 갱신됩니다.
+                </div>
+              </div>
+            </>
+          )}
+
           {/* ⭐ 사용자 요청 — 차량종류/톤수/거주지/요청사항은 가입할 때만 입력하고 끝이
               아니라, 기사 본인이 언제든 다시 수정할 수 있어야 한다(관리자도 PC
               기사관리에서 동일하게 수정 가능). */}
