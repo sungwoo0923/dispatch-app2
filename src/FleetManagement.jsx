@@ -1655,13 +1655,6 @@ async function resendOrderToDriver(order, driver) {
   }
 }
 
-// ─── 전화 걸기 — 우클릭 메뉴에서 기사에게 바로 전화 ───────────────────────────
-function callDriver(driver) {
-  const phone = String(driver?.전화번호 || "").replace(/[^\d]/g, "");
-  if (!phone) { window.alert("기사 연락처가 없습니다."); return; }
-  window.location.href = `tel:${phone}`;
-}
-
 // ─── 주소 복사 — 상/하차지 주소를 내비게이션 앱 등에 바로 붙여넣을 수 있게 ──────
 function copyOrderAddress(order) {
   const text = [
@@ -2033,7 +2026,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
   };
 
   const ctxItems = ctxMenu ? [
-    { label: "경로보기 (거리·시간)", onClick: () => setRouteMapOrder(ctxMenu.order) },
+    { label: "경로보기", onClick: () => setRouteMapOrder(ctxMenu.order) },
     { label: "수정", onClick: () => setEditOrder(ctxMenu.order) },
     {
       label: "재발송",
@@ -2047,14 +2040,8 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
       disabledReason: "기사 연락처가 없습니다.",
       onClick: () => handleSendToDriver(driver, [ctxMenu.order], ctxMenu.order.상차일, ctxMenu.order.상차일),
     },
-    {
-      label: "전화 걸기",
-      disabled: !driver.전화번호,
-      disabledReason: "기사 연락처가 없습니다.",
-      onClick: () => callDriver(driver),
-    },
     { label: "기사복사", onClick: () => setCopyOrder(ctxMenu.order) },
-    { label: "주소 복사", onClick: () => copyOrderAddress(ctxMenu.order) },
+    { label: "주소복사", onClick: () => copyOrderAddress(ctxMenu.order) },
     {
       label: "배차취소 (기사 해제)",
       danger: true,
@@ -2066,7 +2053,8 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
     <div style={{ background: "#fff", border: `1px solid ${hasConflict ? "#f59e0b" : "#e5e7eb"}`, borderRadius: 12, overflow: "hidden" }}>
       {/* 헤더: 기사 기본정보를 라벨 붙은 그리드로 — 값 글자는 짙은 색으로 가독성 확보 */}
       <div style={{ padding: "14px 16px", borderBottom: "1px solid #f0f2f5", display: "flex", alignItems: "flex-start", gap: 10, flexWrap: "wrap", rowGap: 14 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 160 }}>
+        {/* ⭐ 사용자 요청 — 이름만 있던 자리에 차량번호/연락처도 같이 가로로 보여준다(지입/직영 뱃지는 그대로 유지). */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 220 }}>
           {index != null && (
             <span style={{ fontSize: 13, fontWeight: 800, color: "#9ca3af", minWidth: 20, textAlign: "right", flexShrink: 0 }}>{index}</span>
           )}
@@ -2074,15 +2062,16 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
             <svg width="18" height="18" fill="none" stroke="white" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" strokeLinecap="round" /></svg>
           </div>
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{ fontSize: 16, fontWeight: 800, color: "#111827" }}>{driver.이름}</span>
+              <span style={{ fontSize: 14, fontWeight: 800, color: "#374151", fontFamily: "monospace" }}>{driver.차량번호}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#6b7280", fontFamily: "monospace" }}>{driver.전화번호 && driver.전화번호 !== "-" ? formatPhone(driver.전화번호) : "-"}</span>
               <span style={{ fontSize: 12, fontWeight: 800, padding: "1px 7px", borderRadius: 6, background: driver.등급 === "직영" ? NAVY : "#eef1f6", color: driver.등급 === "직영" ? "#fff" : "#374151" }}>{driver.등급}</span>
             </div>
           </div>
         </div>
 
-        {/* ⭐ 사용자 요청 — "배차대기" 표시가 이름 옆에 묻혀 있었는데, 차량번호 옆에
-            전용 컬럼(배차상태)으로 빼고 운송중/배차완료까지 상황별로 보여준다. */}
+        {/* ⭐ 사용자 요청 — 배차상태/거주지/근무가능요일/실시간위치/이번달정산예정/배차수락률/서류/담당자 순서 */}
         <InfoField label="배차상태">
           {(() => {
             const st = driverDispatchStatus(orders, todayStr, live);
@@ -2094,8 +2083,6 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
             );
           })()}
         </InfoField>
-        <InfoField label="차량번호" value={driver.차량번호} mono />
-        <InfoField label="연락처" value={driver.전화번호 && driver.전화번호 !== "-" ? formatPhone(driver.전화번호) : "-"} mono />
         <InfoField label="거주지" value={driver.거주지 || "-"} />
         <InfoField label="근무가능요일">
           {(driver.근무요일 && driver.근무요일.length) ? (
@@ -2276,6 +2263,8 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
           dropAddr={routeMapOrder.하차지주소}
           pickupName={routeMapOrder.상차지명}
           dropName={routeMapOrder.하차지명}
+          driverId={driver.id}
+          orderDate={routeMapOrder.상차일}
           onClose={() => setRouteMapOrder(null)}
         />
       )}

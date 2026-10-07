@@ -1,4 +1,10 @@
 import React from "react";
+import { db } from "./firebase";
+import { collection, doc, onSnapshot, query, where, orderBy } from "firebase/firestore";
+
+function kstDateStr(d = new Date()) {
+  return new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
+}
 
 // ⭐ 주소 → 좌표 변환 — PC(배차관리 3파트 배차요청장)와 모바일에서 공용으로 쓰는
 // Tmap 지오코딩 헬퍼. 원본 주소 → 지번 변환 → 주소 축소 순으로 재시도해서
@@ -65,6 +71,18 @@ export async function geocodeTmapAddr(addr) {
   }
 }
 
+// ⭐ 사용자 요청 — 경로보기에 "예정 경로"뿐 아니라 기사의 실제 GPS 이동 동선과
+// 현재 위치도 같이 보여준다(아래 live 아이콘 — 녹색 점선이 실제 이동 경로).
+function makeLiveIcon() {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
+      <circle cx="20" cy="20" r="17" fill="#16a34a" stroke="white" stroke-width="3"/>
+      <text x="20" y="26" text-anchor="middle" font-size="18">🚚</text>
+    </svg>
+  `;
+  return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
+}
+
 function makePinIcon(label, color) {
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="60" height="80" viewBox="0 0 60 80">
@@ -81,10 +99,15 @@ function makePinIcon(label, color) {
 // ⭐ 경로보기 팝업 — 오더정보/등록화면 등 어디서든 상/하차지 주소만 넘기면 Tmap
 // 위에 실제 도로 경로(폴리라인)와 출발/도착(+경유) 마커를 그려준다. PC/모바일 공용.
 // 디자인은 프로그램 전체 톤(네이비 헤더 + 무채색)에 맞춰 알록달록한 색 없이 구성.
-export default function RouteMapModal({ pickupAddr, dropAddr, pickupName, dropName, viaPickup = [], viaDrop = [], onClose }) {
+export default function RouteMapModal({ pickupAddr, dropAddr, pickupName, dropName, viaPickup = [], viaDrop = [], driverId, orderDate, onClose }) {
   const mapId = React.useRef(`route-map-modal-${Math.random().toString(36).slice(2)}`).current;
   const [status, setStatus] = React.useState("loading"); // loading | ready | error
   const [info, setInfo] = React.useState(null); // { distanceKm, durationMin }
+  const mapObjRef = React.useRef(null);
+  const driverMarkerRef = React.useRef(null);
+  const driverPolylineRef = React.useRef(null);
+  const [driverTrack, setDriverTrack] = React.useState([]);
+  const [liveLoc, setLiveLoc] = React.useState(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -110,6 +133,7 @@ export default function RouteMapModal({ pickupAddr, dropAddr, pickupName, dropNa
         height: "100%",
         zoom: 11,
       });
+      mapObjRef.current = map;
 
       const API_BASE = import.meta.env.VITE_API_BASE || "";
       const viaAddrs = [...viaPickup, ...viaDrop].filter(Boolean);
@@ -168,6 +192,59 @@ export default function RouteMapModal({ pickupAddr, dropAddr, pickupName, dropNa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickupAddr, dropAddr]);
 
+  // ⭐ 사용자 요청 — 기사의 실제 이동 동선(오늘자 gps_tracks)과 현재 위치(drivers/{id}.location)를
+  // 실시간 구독한다. driverId가 없으면(다른 화면에서 호출된 예정경로 전용 사용) 아무것도 하지 않는다.
+  React.useEffect(() => {
+    if (!driverId) { setDriverTrack([]); setLiveLoc(null); return; }
+    const dateStr = orderDate || kstDateStr();
+    const unsubTrack = onSnapshot(
+      query(collection(db, "gps_tracks"), where("driverId", "==", driverId), where("date", "==", dateStr), orderBy("timestamp", "asc")),
+      (snap) => {
+        const pts = snap.docs
+          .map((d) => d.data())
+          .filter((p) => p.lat != null && p.lng != null)
+          .map((p) => ({ lat: p.lat, lng: p.lng }));
+        setDriverTrack(pts);
+      },
+      () => setDriverTrack([])
+    );
+    const unsubLive = onSnapshot(
+      doc(db, "drivers", driverId),
+      (snap) => {
+        const loc = snap.exists() ? snap.data()?.location : null;
+        setLiveLoc(loc && loc.lat != null && loc.lng != null ? { lat: loc.lat, lng: loc.lng } : null);
+      },
+      () => setLiveLoc(null)
+    );
+    return () => { unsubTrack(); unsubLive(); };
+  }, [driverId, orderDate]);
+
+  // 지도가 준비된 뒤(status==="ready") 또는 새 GPS 데이터가 들어올 때마다 실제 이동
+  // 경로(녹색 점선)와 현재 위치 마커를 다시 그린다.
+  React.useEffect(() => {
+    const map = mapObjRef.current;
+    if (!map || !window.Tmapv2 || status !== "ready") return;
+
+    if (driverPolylineRef.current) { driverPolylineRef.current.setMap(null); driverPolylineRef.current = null; }
+    if (driverTrack.length >= 2) {
+      const path = driverTrack.map((p) => new window.Tmapv2.LatLng(p.lat, p.lng));
+      driverPolylineRef.current = new window.Tmapv2.Polyline({
+        path, strokeColor: "#16a34a", strokeWeight: 5, strokeStyle: "dashed", map,
+      });
+    }
+
+    if (driverMarkerRef.current) { driverMarkerRef.current.setMap(null); driverMarkerRef.current = null; }
+    if (liveLoc) {
+      driverMarkerRef.current = new window.Tmapv2.Marker({
+        position: new window.Tmapv2.LatLng(liveLoc.lat, liveLoc.lng),
+        map,
+        icon: makeLiveIcon(),
+        iconSize: new window.Tmapv2.Size(40, 40),
+        iconAnchor: new window.Tmapv2.Point(20, 20),
+      });
+    }
+  }, [driverTrack, liveLoc, status]);
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999] p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-[720px] max-w-full h-[560px] max-h-[88vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -187,6 +264,12 @@ export default function RouteMapModal({ pickupAddr, dropAddr, pickupName, dropNa
           )}
           {status === "error" && (
             <div className="absolute inset-0 flex items-center justify-center text-[13px] font-semibold text-gray-500 bg-white/80">경로 정보를 가져올 수 없습니다</div>
+          )}
+          {driverId && status === "ready" && (
+            <div className="absolute left-3 bottom-3 bg-white/90 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 flex items-center gap-3 shadow">
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-[#1B2B4B]" />예정 경로</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-[#16a34a]" style={{ borderTop: "2px dashed #16a34a", background: "none" }} />실제 이동 · 현재위치</span>
+            </div>
           )}
         </div>
         {info && (

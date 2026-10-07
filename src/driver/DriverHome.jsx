@@ -147,28 +147,37 @@ function formatTime(date) {
 }
 
 // ─── 지입 기사 오더 알림 카드 ──────────────────────────────────────────────────
+// ⭐ 버그수정 — createdByEmail(계정 아이디)로 폴백하면 기사 화면에 관리자 이메일이
+// 그대로 노출된다. 실명이 없으면 이메일 대신 "-"로 표시한다.
 function orderCreatorLabel(o) {
-  return o?.등록자명 || o?.createdByName || o?.등록자 || o?.createdByEmail || "-";
+  return o?.등록자명 || o?.createdByName || o?.등록자 || "-";
 }
 
 // 배차담당자(오더 등록자) 연락처 — users/{createdByUid}.전화번호를 조회해 전화 버튼을 띄운다.
 // 담당자가 "내 정보"에서 연락처를 아직 입력하지 않았으면 버튼 없이 이름만 보인다.
+// ⭐ 버그수정 — 오더에 등록자명/createdByName/등록자가 전부 비어있으면(최고관리자가
+// 직접 등록한 테스트 오더 등) orderCreatorLabel이 createdByEmail(계정 아이디)로
+// 폴백해 기사 화면에 이메일이 그대로 노출됐다. users/{uid}.name(실명)을 함께
+// 조회해 이메일보다 먼저 쓰도록 한다 — DispatchApp.jsx의 등록자 실명 표시와 동일한 소스.
 function DispatcherLine({ order: o }) {
   const [phone, setPhone] = useState("");
+  const [fetchedName, setFetchedName] = useState("");
   useEffect(() => {
     const uid = o?.createdByUid;
-    if (!uid) { setPhone(""); return; }
+    if (!uid) { setPhone(""); setFetchedName(""); return; }
     let cancelled = false;
     getDoc(doc(db, "users", uid)).then(snap => {
       if (cancelled) return;
       const d = snap.exists() ? snap.data() : {};
       setPhone(d.전화번호 || d.phone || "");
-    }).catch(() => { if (!cancelled) setPhone(""); });
+      setFetchedName(d.name || "");
+    }).catch(() => { if (!cancelled) { setPhone(""); setFetchedName(""); } });
     return () => { cancelled = true; };
   }, [o?.createdByUid]);
+  const label = o?.등록자명 || o?.createdByName || o?.등록자 || fetchedName || o?.createdByEmail || "-";
   return (
     <div style={{ fontSize: 12, color: "#6b7280", marginTop: 10, paddingTop: 10, borderTop: "1px solid #f3f4f6", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-      <span>배차담당자 <b style={{ color: "#111827" }}>{orderCreatorLabel(o)}</b></span>
+      <span>배차담당자 <b style={{ color: "#111827" }}>{label}</b></span>
       {phone && (
         <a href={`tel:${phone.replace(/[^0-9]/g, "")}`} style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: "#16a34a", borderRadius: 6, padding: "3px 10px", textDecoration: "none", flexShrink: 0 }}>전화</a>
       )}

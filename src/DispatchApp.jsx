@@ -16596,7 +16596,7 @@ className={`
   </div>
 
   <div>
-    <label className={labelCls}><EditableText id="orderForm.label.하차방법" defaultText="하차방법" /></label>
+    <label className={labelCls}><EditableText id="orderForm.label.하차방법" defaultText="하차방법" /><DropdownOptionsManageButton optKey="상하차방법" label="상/하차방법" role={role} userCompany={userCompany} /></label>
     <CustomSelect className={inputCls} value={form.하차방법} onChange={(e) => onChange("하차방법", e.target.value)}>
       <option value="">선택 ▾</option>
       {loadMethodOptions.map(v => <option key={v} value={v}>{v}</option>)}
