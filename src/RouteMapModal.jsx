@@ -56,6 +56,14 @@ export async function geocodeTmapAddr(addr) {
     const cleaned = cleanAddrForGeo(addr);
     let result = await geocodeOnce(cleaned);
     if (result) return result;
+    // ⭐ 버그수정 — "김포한강5로385"처럼 도로명(로/길) 바로 뒤에 띄어쓰기 없이
+    // 번지수가 붙어있으면 지오코딩이 실패해 엉뚱한 곳(시/군 중심)으로 뭉뚱그려
+    // 진다. 로/길 뒤에 숫자가 바로 붙어있으면 띄어쓰기를 넣어 재시도한다.
+    const spaced = cleaned.replace(/(로|길)(\d)/g, "$1 $2");
+    if (spaced !== cleaned) {
+      result = await geocodeOnce(spaced);
+      if (result) return result;
+    }
     const jibun = await convertToJibun(cleaned);
     if (jibun) {
       result = await geocodeOnce(jibun);

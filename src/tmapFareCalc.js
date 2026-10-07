@@ -156,6 +156,19 @@ export async function geocodeAddress(rawAddr) {
   let result = await tryGeocode(clean);
   if (result) return result;
 
+  // ⭐ 버그수정 — "김포한강5로385"처럼 도로명(로/길) 바로 뒤에 띄어쓰기 없이
+  // 번지수가 붙어있으면 지오코딩 API가 주소를 못 읽고 완전히 실패한다. 이러면
+  // 바로 아래 "단어 줄이기" 폴백이 전부 실패해 결국 "시/군"까지 뭉뚱그려
+  // 버려서(예: 실제 위치와 8km 이상 떨어진 시청 좌표로 수렴) 엉뚱한 곳으로
+  // 지오코딩됐다. 로/길 뒤에 숫자가 바로 붙어있으면 띄어쓰기를 넣어 재시도한다
+  // (도로명 자체에 포함된 숫자, 예: "5로"의 "5"는 바뀌지 않음 — 로/길 "뒤"의
+  // 숫자만 대상).
+  const spaced = clean.replace(/(로|길)(\d)/g, "$1 $2");
+  if (spaced !== clean) {
+    result = await tryGeocode(spaced);
+    if (result) return result;
+  }
+
   // ⭐ 사용자 보고 — 지입차관리 "이동정보" 거리가 서로 다른 두 주소인데도 0km로
   // 나오는 사고가 있었다. 원인은 여기서 주소를 통째로 "시/구"까지(2단어) 잘라
   // 재시도하던 것 — 같은 구 안의 서로 다른 두 지번이 둘 다 "인천 서구" 좌표
