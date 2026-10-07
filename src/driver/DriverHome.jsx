@@ -62,7 +62,7 @@ const STATUS_CONFIG = {
   대기:      { color: "#6b7280", label: "대기" },
   출근:      { color: "#1B2B4B", label: "출근" },
   상차중:    { color: "#374151", label: "상차중" },
-  운행중:    { color: "#1B2B4B", label: "운행중" },
+  운송중:    { color: "#1B2B4B", label: "운송중" },
   하차중:    { color: "#374151", label: "하차중" },
   복귀중:    { color: "#4b5563", label: "복귀중" },
   휴식:      { color: "#9ca3af", label: "휴식" },
@@ -98,9 +98,9 @@ function getActions(status, isFinalCheckout) {
       ];
     case "상차중":
       return [
-        { label: "상차 완료 (운행 시작)", status: "운행중", primary: true },
+        { label: "상차 완료 (운행 시작)", status: "운송중", primary: true },
       ];
-    case "운행중":
+    case "운송중":
       return [
         { label: "하차 시작", status: "하차중", primary: true },
         { label: "대기", status: "대기", primary: false },
@@ -315,11 +315,11 @@ function calcWorkSummary(logs) {
     const t = log.timestamp?.toDate?.();
     if (!t) return;
     if (log.status === "출근" && !checkInTime) checkInTime = t;
-    if (log.status === "운행중") tripCount++;
+    if (log.status === "운송중") tripCount++;
     if (lastTime && lastStatus && lastStatus !== "퇴근" && lastStatus !== "대기" && lastStatus !== "최종퇴근") {
       const diff = t - lastTime;
       if (lastStatus !== "휴식") workMs += diff;
-      if (lastStatus === "운행중" || lastStatus === "하차중") driveMs += diff;
+      if (lastStatus === "운송중" || lastStatus === "하차중") driveMs += diff;
     }
     lastTime = t; lastStatus = log.status;
   });
@@ -327,7 +327,7 @@ function calcWorkSummary(logs) {
   if (lastTime && lastStatus && lastStatus !== "퇴근" && lastStatus !== "최종퇴근") {
     const diff = Date.now() - lastTime;
     if (lastStatus !== "휴식") workMs += diff;
-    if (lastStatus === "운행중" || lastStatus === "하차중") driveMs += diff;
+    if (lastStatus === "운송중" || lastStatus === "하차중") driveMs += diff;
   }
 
   return { workMs, driveMs, checkInTime, tripCount };
@@ -948,15 +948,15 @@ export default function DriverHome() {
     }
   }, [pos, uid, statusLoading, driver?.status, driver?.checkInLocation, driver?.isFinalCheckout, driver?.workDate, driver?.updatedAt, companyDefaultLoc, updateStatus]);
 
-  // 자동 하차: status가 운행중이 아닐 때 autoDropDoneRef 리셋
+  // 자동 하차: status가 운송중이 아닐 때 autoDropDoneRef 리셋
   useEffect(() => {
-    if (driver?.status !== "운행중") autoDropDoneRef.current = false;
+    if (driver?.status !== "운송중") autoDropDoneRef.current = false;
   }, [driver?.status]);
 
-  // 자동 하차시작: 운행중 + 하차지 100m 이내 진입 시 자동 트리거
+  // 자동 하차시작: 운송중 + 하차지 100m 이내 진입 시 자동 트리거
   useEffect(() => {
     if (!pos || !uid || statusLoading) return;
-    if (driver?.status !== "운행중") return;
+    if (driver?.status !== "운송중") return;
     const dropLoc = driver?.dropLocation;
     if (!dropLoc?.lat || !dropLoc?.lng) return;
     if (pos.accuracy != null && pos.accuracy > 50) return;
@@ -985,7 +985,7 @@ export default function DriverHome() {
       }
     }
     // 상차완료 / 하차완료 → 사진 업로드 모달
-    if (action.status === "운행중" || action.status === "복귀중") {
+    if (action.status === "운송중" || action.status === "복귀중") {
       setPhotoModal({ nextStatus: action.status, actionLabel: action.label });
       return;
     }
@@ -1152,7 +1152,7 @@ export default function DriverHome() {
       });
       const _now = new Date();
       const logDate = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,"0")}-${String(_now.getDate()).padStart(2,"0")}`;
-      const actionType = photoModal.nextStatus === "운행중" ? "상차완료" : "하차완료";
+      const actionType = photoModal.nextStatus === "운송중" ? "상차완료" : "하차완료";
       await addDoc(collection(db, "driver_photo_logs"), {
         uid,
         driverName: driver?.name || "",
@@ -1507,7 +1507,7 @@ export default function DriverHome() {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{
               width: 12, height: 12, borderRadius: "50%", background: statusCfg.color === "#1B2B4B" ? "#60a5fa" : "white",
-              boxShadow: currentStatus === "운행중" ? "0 0 0 4px rgba(96,165,250,0.3)" : "none",
+              boxShadow: currentStatus === "운송중" ? "0 0 0 4px rgba(96,165,250,0.3)" : "none",
               flexShrink: 0,
             }} />
             <div>
@@ -2161,7 +2161,7 @@ export default function DriverHome() {
                 {[
                   ["누적 출근일", `${workDays}일`],
                   ["총 근무시간", totalWorkMs > 0 ? formatDuration(totalWorkMs) : "--"],
-                  ["운행기록", `${allLogs.filter(l=>(l.status||l.mainStatus)==="운행중").length}회`],
+                  ["운행기록", `${allLogs.filter(l=>(l.status||l.mainStatus)==="운송중").length}회`],
                 ].map(([label, value]) => (
                   <div key={label} style={{ textAlign: "center", padding: "14px 8px", background: "white", borderRadius: 12, border: "1px solid #e5e7eb", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
                     <div style={{ fontSize: 18, fontWeight: 800, color: "#1B2B4B" }}>{value}</div>
@@ -2226,7 +2226,7 @@ export default function DriverHome() {
                 {(() => {
                   const logs = calendarDayDetail.logs;
                   let checkIn=null, checkOut=null, tripCount=0;
-                  logs.forEach(l => { const s = l.status || l.mainStatus || ""; const t = l.timestamp?.toDate?.(); if (s==="출근" && !checkIn) checkIn=t; if (s==="최종퇴근" || s==="퇴근") checkOut=t; if (s==="운행중") tripCount++; });
+                  logs.forEach(l => { const s = l.status || l.mainStatus || ""; const t = l.timestamp?.toDate?.(); if (s==="출근" && !checkIn) checkIn=t; if (s==="최종퇴근" || s==="퇴근") checkOut=t; if (s==="운송중") tripCount++; });
                   const workMs = checkIn && checkOut ? checkOut.getTime()-checkIn.getTime() : (checkIn ? Date.now()-checkIn.getTime() : 0);
                   return (
                     <div style={{ padding: "16px" }}>
@@ -2531,7 +2531,7 @@ export default function DriverHome() {
             </div>
             <div style={{ padding:"20px 20px 0" }}>
               <div style={{ fontSize:13, color:"#374151", lineHeight:1.6, marginBottom:20 }}>
-                {photoModal.nextStatus === "운행중" ? "상차가 완료된 상태를 사진으로 남겨주세요." : "하차가 완료된 상태를 사진으로 남겨주세요."}<br />
+                {photoModal.nextStatus === "운송중" ? "상차가 완료된 상태를 사진으로 남겨주세요." : "하차가 완료된 상태를 사진으로 남겨주세요."}<br />
                 <span style={{ fontSize:12, color:"#9ca3af" }}>관리자가 실시간으로 확인할 수 있습니다.</span>
               </div>
               <div style={{ display:"flex", flexDirection:"column", gap:10 }}>

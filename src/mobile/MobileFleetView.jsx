@@ -9,7 +9,7 @@ import {
   MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap,
 } from "react-leaflet";
 import L from "leaflet";
-import { getDrivingRoute } from "../tmapFareCalc";
+import { getDrivingRoute, geocodeAddress, haversineKm } from "../tmapFareCalc";
 
 const NAVY = "#1B2B4B";
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
@@ -20,11 +20,11 @@ function formatPhone(phone) {
   return p;
 }
 const STATUS_COLORS = {
-  운행중: "#10b981", 출근: "#3b82f6", 상차중: "#f59e0b",
+  운송중: "#10b981", 출근: "#3b82f6", 상차중: "#f59e0b",
   하차중: "#8b5cf6", 대기: "#6b7280", 휴식: "#9ca3af",
   퇴근: "#374151", 복귀중: "#06b6d4", 휴차: "#374151",
 };
-const STATUS_ORDER = ["운행중", "상차중", "하차중", "복귀중", "출근", "대기", "휴식", "퇴근"];
+const STATUS_ORDER = ["운송중", "상차중", "하차중", "복귀중", "출근", "대기", "휴식", "퇴근"];
 
 // KPI 카드용 단색 라인 아이콘(path만) — 헤더의 알림벨/새로고침과 같은 톤.
 // <svg stroke={accent}> 안에 그대로 끼워 쓴다.
@@ -94,7 +94,7 @@ function computeOrderProgress(order, selectedDate, todayStr) {
   return "progress";
 }
 // PC 지입차관리(FleetManagement.jsx)의 driverDispatchStatus 포팅 — ⭐ 사용자 피드백:
-// 이미 오더를 수락해 운행중인 기사가 카드엔 GPS/출퇴근 로그만 반영된 "출근"으로만
+// 이미 오더를 수락해 운송중인 기사가 카드엔 GPS/출퇴근 로그만 반영된 "출근"으로만
 // 보여서, 기사확인상태(지입 기사 오더수락 플로우: 대기/수락/완료/거절)를 우선
 // 반영하도록 맞춘다. 기사확인상태 플로우가 없는 일반 오더만 시간 기반 추정으로 폴백.
 function driverDispatchStatus(orders, todayStr, driver) {
@@ -162,6 +162,76 @@ function RouteDistanceBadge({ fromAddr, toAddr }) {
       약 {info.km}km · {timeLabel}
     </span>
   );
+}
+
+// ─── "운송중" 세부 상태 (상차지진입/상차지도착/하차지진입/하차지도착) ─────────
+// ⭐ 사용자 요청 — PC FleetManagement.jsx와 동일하게, "운송중" 라벨을 기사 실시간
+// GPS와 지금 향하는 목적지(상차 전엔 상차지, 상차 후~하차 전엔 하차지) 간 거리로
+// 세분화한다. 주소는 한 번만 지오코딩해 캐시(RouteDistanceBadge와 동일한 캐시+
+// 순차처리 패턴)하고, 실패/위치없음이면 조용히 기존 "운송중" 라벨로 되돌아간다.
+const _destGeoCache = new Map();
+let _destGeoQueue = [];
+let _destGeoProcessing = false;
+function enqueueDestGeo(addr, cb) {
+  if (_destGeoCache.has(addr)) { cb(_destGeoCache.get(addr)); return; }
+  _destGeoQueue.push({ addr, cb });
+  _processDestGeoQueue();
+}
+async function _processDestGeoQueue() {
+  if (_destGeoProcessing || _destGeoQueue.length === 0) return;
+  _destGeoProcessing = true;
+  const { addr, cb } = _destGeoQueue.shift();
+  let result = null;
+  try {
+    const g = await geocodeAddress(addr);
+    result = g ? { lat: g.lat, lng: g.lon } : null;
+  } catch { result = null; }
+  _destGeoCache.set(addr, result);
+  cb(result);
+  await new Promise(r => setTimeout(r, 350));
+  _destGeoProcessing = false;
+  _processDestGeoQueue();
+}
+function useDestGeo(addr) {
+  const [geo, setGeo] = useState(() => (addr ? _destGeoCache.get(addr) : null) ?? null);
+  useEffect(() => {
+    if (!addr) { setGeo(null); return; }
+    if (_destGeoCache.has(addr)) { setGeo(_destGeoCache.get(addr)); return; }
+    setGeo(undefined);
+    enqueueDestGeo(addr, setGeo);
+  }, [addr]);
+  return geo; // undefined = 조회중, null = 실패/없음, {lat,lng} = 성공
+}
+// 상차중(상차 시작) 전엔 상차지, 상차 완료~하차 시작 전("운송중")엔 하차지 — 그
+// 외 상태(상차중/하차중/복귀중/대기/휴차 등)는 세분화하지 않는다.
+function transitPhaseTarget(order, driver) {
+  const driverStatus = driver?.상태;
+  if (driverStatus === "출근") {
+    return { addr: order?.상차지주소, enterLabel: "상차지진입", nearLabel: "상차지도착" };
+  }
+  if (driverStatus === "운송중") {
+    return { addr: order?.하차지주소, enterLabel: "하차지진입", nearLabel: "하차지도착" };
+  }
+  return null;
+}
+// driverDispatchStatus가 "운송중"을 반환하게 만든 그 오더(상/하차지 주소가
+// 필요하므로) — checkStates.includes("수락") 로직과 동일한 우선순위로 찾는다.
+function findActiveTransitOrder(orders, todayStr) {
+  return orders.find(r => {
+    if (r.기사확인상태) return r.기사확인상태 === "수락";
+    return computeOrderProgress(r, r.상차일, todayStr) === "progress";
+  }) || null;
+}
+// "운송중" 라벨 하나를 세분화 라벨로 바꿔 보여준다 — 그 외엔 항상 fallback 그대로.
+function TransitPhaseLabel({ order, driver, fallback }) {
+  const target = transitPhaseTarget(order, driver);
+  const geo = useDestGeo(target?.addr || null);
+  if (target && geo && driver?.location?.lat != null && driver?.location?.lng != null) {
+    const dist = haversineKm(driver.location.lat, driver.location.lng, geo.lat, geo.lng);
+    if (dist <= 1) return target.nearLabel;
+    if (dist <= 5) return target.enterLabel;
+  }
+  return fallback;
 }
 
 // ─── 바로 전화 버튼 — ⭐ 사용자 요청: 원격 모니터링 중 상세진입 없이 바로 전화 ───
@@ -386,7 +456,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
           })
         : gpsTracks;
       const tracks = sessionTracks.length >= 2 ? sessionTracks : gpsTracks;
-      return tracks.map(t => ({ lat: t.lat, lng: t.lng, status: "운행중", timestamp: t.timestamp }));
+      return tracks.map(t => ({ lat: t.lat, lng: t.lng, status: "운송중", timestamp: t.timestamp }));
     }
     const withLoc = selectedDriverLogs.filter(l => {
       if (!l.location?.lat) return false;
@@ -553,7 +623,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
     });
   }, [scopedDrivers, searchQ, statusFilter]);
 
-  // ⭐ 사용자 요청 — 총 등록/접속중/운행중/근무중 대신 담당 기준으로 변경:
+  // ⭐ 사용자 요청 — 총 등록/접속중/운송중/근무중 대신 담당 기준으로 변경:
   // 총 등록기사, 내 담당차량, 내 담당차량 중 배차중, 내 담당차량 중 배차완료.
   const kpi = useMemo(() => {
     const mine = drivers.filter(d => d.담당자?.uid === myUid);
@@ -637,7 +707,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
   }, [mapSelected, drivers]);
 
   // ⭐ 사용자 요청 — 휴차(휴무) 기사를 따로 걸러볼 수 있는 칩이 빠져 있었다.
-  const STATUS_OPTS = ["전체", "운행중", "출근", "상차중", "하차중", "대기", "휴차", "퇴근"];
+  const STATUS_OPTS = ["전체", "운송중", "출근", "상차중", "하차중", "대기", "휴차", "퇴근"];
 
   // 평균 속도 계산
   const avgSpeed = useMemo(() => {
@@ -822,7 +892,13 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
                           <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 700, color: dispatchStatus.color, background: dispatchStatus.bg, padding: "2px 8px", borderRadius: 99 }}>
                             <span style={{ width: 6, height: 6, borderRadius: "50%", background: dispatchStatus.dot, display: "inline-block" }} />
-                            {dispatchStatus.label}
+                            {(() => {
+                              if (dispatchStatus.label !== "운송중") return dispatchStatus.label;
+                              const transitOrder = findActiveTransitOrder(todays, todayStr);
+                              return transitOrder
+                                ? <TransitPhaseLabel order={transitOrder} driver={d} fallback={dispatchStatus.label} />
+                                : dispatchStatus.label;
+                            })()}
                           </span>
                           {d.vehicleType !== "-" && (
                             <span style={{ fontSize: 12, color: "#9ca3af" }}>{d.vehicleType}</span>

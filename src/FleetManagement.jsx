@@ -11,7 +11,7 @@ import L from "leaflet";
 import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import { getDrivingRoute } from "./tmapFareCalc";
+import { getDrivingRoute, geocodeAddress } from "./tmapFareCalc";
 import CustomDatePicker from "./CustomDatePicker";
 import RouteMapModal from "./RouteMapModal";
 
@@ -39,7 +39,7 @@ const KPI_ICONS = {
 };
 
 const STATUS_COLORS = {
-  운행중:   "#10b981",
+  운송중:   "#10b981",
   출근:     "#3b82f6",
   상차중:   "#f59e0b",
   하차중:   "#8b5cf6",
@@ -51,8 +51,8 @@ const STATUS_COLORS = {
   복귀중:   "#06b6d4",
 };
 
-const STATUS_ORDER = ["운행중", "상차중", "하차중", "복귀중", "출근", "대기", "휴식", "퇴근"];
-const STATUS_FILTER_OPTIONS = ["전체", "운행중", "출근", "상차중", "하차중", "복귀중", "대기", "휴식", "휴차", "퇴근"];
+const STATUS_ORDER = ["운송중", "상차중", "하차중", "복귀중", "출근", "대기", "휴식", "퇴근"];
+const STATUS_FILTER_OPTIONS = ["전체", "운송중", "출근", "상차중", "하차중", "복귀중", "대기", "휴식", "휴차", "퇴근"];
 
 const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
 
@@ -1271,6 +1271,85 @@ function RouteDistanceBadge({ fromAddr, toAddr }) {
   );
 }
 
+// ─── "운송중" 세부 상태 (상차지진입/상차지도착/하차지진입/하차지도착) ─────────
+// ⭐ 사용자 요청 — "운송중" 한 가지로만 보이던 라벨을, 기사 실시간 GPS와 지금
+// 향하고 있는 목적지(상차 전엔 상차지, 상차 후~하차 전엔 하차지) 간 거리로 더
+// 세분화해 보여준다. 주소는 한 번만 지오코딩해 캐시하고(RouteDistanceBadge와
+// 동일한 캐시+순차처리 패턴), 지오코딩 실패/위치 없음은 조용히 기존 "운송중"
+// 라벨로 되돌아간다 — 기사 앱의 버튼/상태 흐름은 전혀 건드리지 않는 읽기 전용 기능.
+const _destGeoCache = new Map();
+let _destGeoQueue = [];
+let _destGeoProcessing = false;
+
+function enqueueDestGeo(addr, cb) {
+  if (_destGeoCache.has(addr)) { cb(_destGeoCache.get(addr)); return; }
+  _destGeoQueue.push({ addr, cb });
+  _processDestGeoQueue();
+}
+
+async function _processDestGeoQueue() {
+  if (_destGeoProcessing || _destGeoQueue.length === 0) return;
+  _destGeoProcessing = true;
+  const { addr, cb } = _destGeoQueue.shift();
+  let result = null;
+  try {
+    const g = await geocodeAddress(addr);
+    result = g ? { lat: g.lat, lng: g.lon } : null;
+  } catch { result = null; }
+  _destGeoCache.set(addr, result);
+  cb(result);
+  await new Promise(r => setTimeout(r, 350));
+  _destGeoProcessing = false;
+  _processDestGeoQueue();
+}
+
+function useDestGeo(addr) {
+  const [geo, setGeo] = useState(() => (addr ? _destGeoCache.get(addr) : null) ?? null);
+  useEffect(() => {
+    if (!addr) { setGeo(null); return; }
+    if (_destGeoCache.has(addr)) { setGeo(_destGeoCache.get(addr)); return; }
+    setGeo(undefined);
+    enqueueDestGeo(addr, setGeo);
+  }, [addr]);
+  return geo; // undefined = 조회중, null = 실패/없음, {lat,lng} = 성공
+}
+
+// 운송중인 오더가 지금 향하는 목적지를 live(기사의 실시간 상태/위치)로 판정한다.
+// 상차중(상차 시작) 전엔 상차지, 상차 완료~하차 시작 전("운송중")엔 하차지 — 그
+// 외 상태(상차중/하차중/복귀중/대기/휴차 등)는 세분화 대상이 아니므로 null.
+function transitPhaseTarget(order, live) {
+  const driverStatus = live?.상태;
+  if (driverStatus === "출근") {
+    return { addr: order?.상차지주소, enterLabel: "상차지진입", nearLabel: "상차지도착" };
+  }
+  if (driverStatus === "운송중") {
+    return { addr: order?.하차지주소, enterLabel: "하차지진입", nearLabel: "하차지도착" };
+  }
+  return null;
+}
+
+// "운송중" 라벨 하나를 세분화 라벨로 바꿔 보여준다 — 그 외엔 항상 fallback 그대로.
+function TransitPhaseLabel({ order, live, fallback }) {
+  const target = transitPhaseTarget(order, live);
+  const geo = useDestGeo(target?.addr || null);
+  if (target && geo && live?.location?.lat != null && live?.location?.lng != null) {
+    const dist = haversineKm(live.location.lat, live.location.lng, geo.lat, geo.lng);
+    if (dist <= 1) return target.nearLabel;
+    if (dist <= 5) return target.enterLabel;
+  }
+  return fallback;
+}
+
+// driverDispatchStatus가 "운송중"을 반환하게 만든 그 오더(상/하차지 주소가
+// 필요하므로) — checkStates.includes("수락") 로직과 동일한 우선순위로 찾는다.
+function findActiveOrder(orders, todayStr) {
+  return orders.find(r => {
+    const fleetMeta = r.기사확인상태 ? FLEET_CHECK_PROG_META[r.기사확인상태] : null;
+    if (fleetMeta) return fleetMeta.label === "운송중";
+    return computeOrderProgress(r, r.상차일, todayStr) === "progress";
+  }) || null;
+}
+
 // ─── 정보 라벨 필드 (작은 회색 라벨 + 짙은 값) ─────────────────────────────────
 function InfoField({ label, value, children, mono }) {
   return (
@@ -2007,8 +2086,11 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
         <InfoField label="배차상태">
           {(() => {
             const st = driverDispatchStatus(orders, todayStr, live);
+            const activeOrder = st.label === "운송중" ? findActiveOrder(orders, todayStr) : null;
             return (
-              <span style={{ fontSize: 13, fontWeight: 800, padding: "3px 9px", borderRadius: 6, background: st.bg, color: st.color, display: "inline-block" }}>{st.label}</span>
+              <span style={{ fontSize: 13, fontWeight: 800, padding: "3px 9px", borderRadius: 6, background: st.bg, color: st.color, display: "inline-block" }}>
+                {activeOrder ? <TransitPhaseLabel order={activeOrder} live={live} fallback={st.label} /> : st.label}
+              </span>
             );
           })()}
         </InfoField>
@@ -2103,7 +2185,9 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                           }} />
                           {/* ⭐ 사용자 요청 — 상태/상차지/하차지/이동정보 글씨가 거래처·상차·하차·
                               운임 칸보다 작아 보였다. 전부 14px/700으로 통일. */}
-                          <span style={{ fontSize: 14, fontWeight: 700, color: "#374151" }}>{meta.label}</span>
+                          <span style={{ fontSize: 14, fontWeight: 700, color: "#374151" }}>
+                            {meta.label === "운송중" ? <TransitPhaseLabel order={r} live={live} fallback={meta.label} /> : meta.label}
+                          </span>
                           {/* ⭐ 사용자 요청 — 완료시간이 줄바꿈으로 아래에 따로 뜨던 걸 한 줄로 합침 */}
                           {r.기사확인상태 === "완료" && r.기사완료일시?.toDate && (
                             <span style={{ fontSize: 11, color: "#9ca3af" }}>
@@ -2718,7 +2802,7 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
   const dispatchedCount = driverRows.filter(r => r.orders.length > 0).length;
   const visibleRows = onlyIdle ? driverRows.filter(r => r.orders.length === 0) : driverRows;
 
-  // ⭐ 사용자 요청 — 상단 KPI를 "총 등록/접속중/운행중/근무중" 대신 담당 기준으로:
+  // ⭐ 사용자 요청 — 상단 KPI를 "총 등록/접속중/운송중/근무중" 대신 담당 기준으로:
   // 총 등록기사, 내 담당차량, 내 담당차량 중 배차중, 내 담당차량 중 배차완료.
   // 토글(scope)과 무관하게 항상 "내 담당" 수치를 보여주기 위해 drivers(전체
   // 지입/직영)에서 직접 다시 집계한다 — search/scope 필터의 영향을 받지 않게.
@@ -2956,7 +3040,7 @@ function HistoryTab({ drivers, defaultDriverId }) {
       if (s === "출근" && !checkInTime) checkInTime = t;
       if (s === "최종퇴근") finalCheckOutTime = t;
       if (!finalCheckOutTime && (log.status === "퇴근" || log.mainStatus === "퇴근")) finalCheckOutTime = t;
-      if (s === "운행중") tripCount++;
+      if (s === "운송중") tripCount++;
     });
     const endTime = finalCheckOutTime || (checkInTime ? new Date() : null);
     const workMs = checkInTime && endTime ? endTime.getTime() - checkInTime.getTime() : 0;
@@ -4668,7 +4752,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
       const tracksToUse = sessionTracks.length >= 2 ? sessionTracks : gpsTracks;
       return tracksToUse.map(t => {
         const ts = resolveTs(t.timestamp)?.getTime() || 0;
-        let status = "운행중";
+        let status = "운송중";
         for (let i = sorted.length - 1; i >= 0; i--) {
           const logTs = resolveTs(sorted[i].timestamp)?.getTime() || 0;
           if (logTs <= ts) { status = sorted[i].status; break; }
@@ -4791,8 +4875,8 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
   const kpi = useMemo(() => ({
     total: drivers.length,
     connected: drivers.filter(d => d.active).length,
-    driving: drivers.filter(d => d.상태 === "운행중").length,
-    onDuty: drivers.filter(d => ["출근", "상차중", "하차중", "운행중", "복귀중"].includes(d.상태)).length,
+    driving: drivers.filter(d => d.상태 === "운송중").length,
+    onDuty: drivers.filter(d => ["출근", "상차중", "하차중", "운송중", "복귀중"].includes(d.상태)).length,
   }), [drivers]);
 
   const pendingCount = useMemo(() =>
@@ -5080,7 +5164,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
             <KpiCard label="총 등록" value={kpi.total} sub="전체 기사 수" primary />
             <KpiCard label="현재 접속중" value={kpi.connected} sub="앱 활성" />
-            <KpiCard label="운행중" value={kpi.driving} sub="현재 주행" accent="#10b981" />
+            <KpiCard label="운송중" value={kpi.driving} sub="현재 주행" accent="#10b981" />
             <KpiCard label="근무중" value={kpi.onDuty} sub="출근~복귀 합산" />
           </div>
 

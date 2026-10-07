@@ -55,8 +55,8 @@ export default function DriverLogs({ driverId }) {
             }
           }
 
-          // 운행중만: 운행시간
-          if (lastStatus === "운행중") {
+          // 운송중만: 운행시간
+          if (lastStatus === "운송중") {
             driveMs += diff;
           }
         }
@@ -85,7 +85,7 @@ export default function DriverLogs({ driverId }) {
       <div className="bg-white rounded-xl shadow p-4 mb-4">
         <div className="font-bold mb-2">근무 요약</div>
         <p>총 근무시간: {formatMin(summary.totalWork)}</p>
-        <p>운행중 시간: {formatMin(summary.totalDrive)}</p>
+        <p>운송중 시간: {formatMin(summary.totalDrive)}</p>
       </div>
 
       <div className="bg-white rounded-xl shadow p-4">
