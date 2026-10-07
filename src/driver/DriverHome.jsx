@@ -357,6 +357,7 @@ function useGpsTracking(uid, driverData) {
   const [pos, setPos] = useState(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const lastPosRef = useRef(null);
+  const lastPosTimeRef = useRef(0);         // ⭐ 실제 GPS 수신 시각(forceInterval이 가짜로 안 찍게)
   const totalDistRef = useRef(0);           // running total — avoids stale closure bug
   const distInitializedRef = useRef(false); // true once synced from Firestore
   const lastGpsStoreRef = useRef(null);     // last point stored to gps_tracks
@@ -404,6 +405,7 @@ function useGpsTracking(uid, driverData) {
       let distDelta = 0;
       if (prev) distDelta = calcDist(prev.lat, prev.lng, lat, lng);
       lastPosRef.current = { lat, lng };
+      lastPosTimeRef.current = Date.now();
       const updateData = {
         location: { lat, lng },
         speed: speed ? Math.round(speed * 3.6) : 0,
@@ -475,9 +477,19 @@ function useGpsTracking(uid, driverData) {
       startWatch();
 
       // 30초마다 updatedAt 강제 갱신 (정지 중에도 최신 상태 유지)
+      // ⭐ 버그수정 — 사용자 보고: 기사가 실제로 하차지에 도착했는데도 관리자
+      // 화면엔 한참 전 위치 기준으로 "이동중"이 계속 떠 있었다. 원인은 이 타이머가
+      // "정지 중"과 "GPS 수신 자체가 끊김"을 구분 못 하고 lastPosRef의 오래된
+      // 좌표에 매번 새 updatedAt을 찍어, 실제로는 수 분~수십 분 전에 멈춘 위치가
+      // 관리자 화면엔 계속 "방금"/"N분 전"으로 신선해 보였다는 점이다(화면이
+      // 꺼지거나 브라우저가 백그라운드로 밀려 watchPosition이 멈춘 뒤에도 이
+      // setInterval만 계속 돌아간 경우). 실제 GPS 수신이 90초 넘게 없었으면
+      // 더 이상 가짜로 갱신하지 않는다 — 그래야 "N분 전" 표시가 진짜 마지막
+      // 수신 시점을 정확히 보여주고, 관리자가 위치가 멈췄다는 걸 알아챌 수 있다.
       const forceInterval = setInterval(() => {
         const p = lastPosRef.current;
         if (!p) return;
+        if (Date.now() - lastPosTimeRef.current > 90000) return;
         updateDoc(doc(db, "drivers", uid), {
           location: { lat: p.lat, lng: p.lng },
           updatedAt: serverTimestamp(),
@@ -495,6 +507,7 @@ function useGpsTracking(uid, driverData) {
             setPos({ lat, lng, speed, accuracy });
             if (accuracy <= 100) {
               lastPosRef.current = { lat, lng };
+              lastPosTimeRef.current = Date.now();
               try {
                 await updateDoc(doc(db, "drivers", uid), {
                   location: { lat, lng },
