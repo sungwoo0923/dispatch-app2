@@ -12984,6 +12984,20 @@ const [onlyRoundTrip, setOnlyRoundTrip] = React.useState(false);
 const [copyShowMore, setCopyShowMore] = React.useState(false);
 const [copyDateHint, setCopyDateHint] = React.useState(null); // {origPickup, origDrop}
 const [showAmPmError, setShowAmPmError] = React.useState(false);
+// ⭐ 사용자 요청 — F4를 누르면 "오더복사" 버튼을 누른 것과 동일하게 팝업이 뜨고,
+// 뜨자마자 검색어 입력칸에 바로 타이핑할 수 있어야 한다. 다른 입력칸에 포커스가
+// 있는 중에 F4가 눌려도(값 입력 중 실수 등) 그대로 가로채 팝업을 연다 — F4는
+// 브라우저/OS가 쓰는 키가 아니라 텍스트 입력에서 의미 있게 쓰일 일이 없다.
+React.useEffect(() => {
+  const onKeyDown = (e) => {
+    if (e.key !== "F4") return;
+    e.preventDefault();
+    setCopyOpen(true);
+    setCopySelected([]);
+  };
+  window.addEventListener("keydown", onKeyDown);
+  return () => window.removeEventListener("keydown", onKeyDown);
+}, []);
 // 🔍 오더복사 리스트
 const copyList = React.useMemo(() => {
   const q = copyQ.trim().toLowerCase();
@@ -17446,6 +17460,7 @@ className={`
                     <option value="화물내용">화물내용</option>
                   </CustomSelect>
                   <input autoComplete="off"
+                    autoFocus
                     type="text"
                     placeholder="검색어를 입력하세요"
                     className="border border-gray-200 bg-white px-4 py-2 rounded-xl text-[13px] flex-1 outline-none focus:ring-2 focus:ring-[#1B2B4B]/20 focus:border-[#1B2B4B]"
@@ -37236,20 +37251,19 @@ if (first) {
 
     setBackupDeleted(backup);
 
-    // Firestore에서 실제 삭제
-    for (const row of backup) {
-      await _remove(row, { skipCompletedConfirm: true });
-    }
-
-    // 선택 초기화
+    // 선택 초기화 + 팝업 닫기 + 되돌리기 버튼 표시 — 먼저 끝내고 실제 Firestore
+    // 삭제는 백그라운드로 돌린다(4파트 executeDelete와 동일한 수정 — 예전엔
+    // 여러 건을 하나씩 순서대로 await해서, 선택 건수만큼 지연이 쌓여 "삭제"를
+    // 눌러도 한참 있다가 화면이 반응하는 버벅임의 원인이었다).
     setSelected(new Set());
-
-    // 팝업 닫기
     setShowDeletePopup(false);
-
-    // 되돌리기 버튼 표시
     setUndoVisible(true);
     setTimeout(() => setUndoVisible(false), 30000);
+
+    Promise.all(backup.map(row => _remove(row, { skipCompletedConfirm: true }))).catch((e) => {
+      console.error("삭제 실패:", e);
+      showAlert("일부 오더 삭제에 실패했습니다. 목록에서 확인해주세요.\n" + (e?.message || ""));
+    });
   };
 
 
@@ -48982,15 +48996,16 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
       showToast("화주사가 등록한 오더는 운송사에서 임의로 삭제할 수 없습니다. 화주사가 배차취소를 요청한 건만 승인 후 삭제할 수 있습니다.", "err");
       return;
     }
-    try {
-      await Promise.all(ids.map((id) => removeDispatch(id)));
-      showToast(`${ids.length}건 삭제 완료`);
-      setDeleteConfirmOpen(false);
-      exitDeleteMode();
-    } catch (e) {
+    // ⭐ Firestore 쓰기를 다 기다린 뒤에야 팝업이 닫혀서 "삭제"를 눌러도 한참
+    // 있다가 반응하는 버벅임이 있었다 — 팝업/안내는 먼저 끝내고 실제 삭제는
+    // 백그라운드로 돌린다(4파트 executeDelete와 동일한 수정).
+    showToast(`${ids.length}건 삭제 완료`);
+    setDeleteConfirmOpen(false);
+    exitDeleteMode();
+    Promise.all(ids.map((id) => removeDispatch(id))).catch((e) => {
       console.error(e);
       showToast("삭제 중 오류 발생", "err");
-    }
+    });
   };
 
   function normalizeVehicleNo(v = "") {
