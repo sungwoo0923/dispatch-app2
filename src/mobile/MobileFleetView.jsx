@@ -275,16 +275,23 @@ function TransitPhaseLabel({ order, driver, fallback }) {
   const visitedFromHistory = useVisitedPickup(driver?.id, pickupGeo);
   const visitedPickup = visitedFromHistory || (pickupDist != null && pickupDist <= 1);
 
-  if (pickupDist != null && pickupDist <= 1) return "상차지도착";
-  if (dropDist != null && dropDist <= 1) return "하차지도착";
-  if (dropDist != null && dropDist <= 5) return "하차지진입";
-  if (!visitedPickup && pickupDist != null && pickupDist <= 5) return "상차지진입";
-  if (visitedPickup) return "이동중";
+  let label;
+  if (pickupDist != null && pickupDist <= 1) label = "상차지도착";
+  else if (dropDist != null && dropDist <= 1) label = "하차지도착";
+  else if (dropDist != null && dropDist <= 5) label = "하차지진입";
+  else if (!visitedPickup && pickupDist != null && pickupDist <= 5) label = "상차지진입";
+  else if (visitedPickup) label = "이동중";
   // ⭐ 버그수정 — 기사 앱을 막 켠 직후처럼 GPS 첫 위치가 아직 서버에 안 올라온
   // 순간엔 거리 계산 자체가 불가능해 조용히 "운송중"(기본값)으로 보였다. 이러면
   // "진짜 이동중"과 "위치를 아직 못 받음"이 똑같이 보여 혼동을 준다 — 구분해서 표시.
-  if (!hasLoc) return "위치 확인중";
-  return fallback;
+  else if (!hasLoc) label = "위치 확인중";
+  else label = fallback;
+
+  // ⭐ 임시 진단용 — 상차지 주소가 좌표로 정확히 변환됐는지 직접 눈으로 확인하기
+  // 위해 추가. 원인 확인되는 대로 제거.
+  const fmt = (p) => p ? `${p.lat.toFixed(5)},${p.lng.toFixed(5)}` : (p === null ? "실패" : "...");
+  const dbg = ` [상:${fmt(pickupGeo)}=${pickupDist?.toFixed(2) ?? "?"}km 하:${fmt(dropGeo)}=${dropDist?.toFixed(2) ?? "?"}km]`;
+  return <>{label}<span style={{ fontSize: 9, color: "#9ca3af", fontWeight: 400 }}>{dbg}</span></>;
 }
 
 // ─── 바로 전화 버튼 — ⭐ 사용자 요청: 원격 모니터링 중 상세진입 없이 바로 전화 ───
