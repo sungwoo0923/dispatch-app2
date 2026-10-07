@@ -1,6 +1,12 @@
 name: Build Android APK
 
 on:
+  # ⭐ 사용자 요청 — workflow_dispatch(수동 "Run workflow" 버튼)를 이 세션에
+  # 연결된 GitHub 앱이 API로 못 누른다(403, Actions 쓰기 권한 없음). main에
+  # 푸시될 때마다 자동으로 빌드되게 해서, 모바일 GitHub 화면에서 버튼 찾아
+  # 누르는 것 없이도 항상 최신 코드로 APK가 만들어지게 한다.
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       build_type:
@@ -64,18 +70,19 @@ jobs:
       - name: Gradle 권한 설정
         run: chmod +x android/gradlew
 
+      # ⭐ push 이벤트는 inputs가 없으므로 비어있으면 debug로 취급한다.
       - name: Debug APK 빌드
-        if: ${{ inputs.build_type == 'debug' }}
+        if: ${{ (github.event.inputs.build_type || 'debug') == 'debug' }}
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon
 
       - name: Release APK 빌드
-        if: ${{ inputs.build_type == 'release' }}
+        if: ${{ github.event.inputs.build_type == 'release' }}
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon
 
       - name: Debug APK 업로드
-        if: ${{ inputs.build_type == 'debug' }}
+        if: ${{ (github.event.inputs.build_type || 'debug') == 'debug' }}
         uses: actions/upload-artifact@v4
         with:
           name: KPFlow-기사앱-debug
@@ -83,7 +90,7 @@ jobs:
           retention-days: 30
 
       - name: Release APK 업로드
-        if: ${{ inputs.build_type == 'release' }}
+        if: ${{ github.event.inputs.build_type == 'release' }}
         uses: actions/upload-artifact@v4
         with:
           name: KPFlow-기사앱-release
