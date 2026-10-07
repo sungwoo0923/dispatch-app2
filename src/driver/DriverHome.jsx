@@ -435,28 +435,46 @@ function useGpsTracking(uid, driverData) {
 
     if (isNative()) {
       // ── 네이티브 앱: BackgroundGeolocation 플러그인 사용 ──
+      // ⭐ 버그수정 — 앱을 막 켠 직후엔 플러그인의 백그라운드 서비스가 아직 완전히
+      // 연결되기 전이라 addWatcher가 "Service not running." 에러를 던질 수 있다
+      // (네이티브 플러그인 코드의 bindService가 비동기라 생기는 타이밍 문제).
+      // 예전엔 NOT_AUTHORIZED가 아닌 에러는 그냥 조용히 무시해버려서, 이 타이밍에
+      // 걸리면 앱을 재시작하기 전까진 GPS가 영원히 안 들어왔다("GPS 대기중"에
+      // 멈춰있던 원인). 이제 NOT_AUTHORIZED가 아닌 에러는 잠시 뒤 재시도한다.
       let watcherId = null;
-      loadBgGeo().then((plugin) => {
-        if (!plugin) return;
-        plugin.addWatcher(
-          {
-            backgroundMessage: "취소하면 위치 추적이 중지됩니다.",
-            backgroundTitle: "KP-Flow 운행 추적 중",
-            requestPermissions: true,
-            stale: false,
-            distanceFilter: 10,
-          },
-          (location, error) => {
-            if (error) {
-              if (error.code === "NOT_AUTHORIZED") setPermissionDenied(true);
-              return;
+      let cancelled = false;
+      let retryTimer = null;
+      const startNativeWatch = (attempt = 0) => {
+        loadBgGeo().then((plugin) => {
+          if (!plugin || cancelled) return;
+          plugin.addWatcher(
+            {
+              backgroundMessage: "취소하면 위치 추적이 중지됩니다.",
+              backgroundTitle: "KP-Flow 운행 추적 중",
+              requestPermissions: true,
+              stale: false,
+              distanceFilter: 10,
+            },
+            (location, error) => {
+              if (cancelled) return;
+              if (error) {
+                if (error.code === "NOT_AUTHORIZED") { setPermissionDenied(true); return; }
+                // 서비스 연결 전 타이밍 문제 등 — 최대 5번, 1.5초 간격으로 재시도
+                if (attempt < 5) retryTimer = setTimeout(() => startNativeWatch(attempt + 1), 1500);
+                return;
+              }
+              gpsCallback(location.latitude, location.longitude, location.speed, location.accuracy);
             }
-            gpsCallback(location.latitude, location.longitude, location.speed, location.accuracy);
-          }
-        ).then((id) => { watcherId = id; });
-      });
+          ).then((id) => { watcherId = id; }).catch(() => {
+            if (!cancelled && attempt < 5) retryTimer = setTimeout(() => startNativeWatch(attempt + 1), 1500);
+          });
+        });
+      };
+      startNativeWatch();
 
       cleanup = () => {
+        cancelled = true;
+        if (retryTimer) clearTimeout(retryTimer);
         if (watcherId) {
           loadBgGeo().then((plugin) => plugin?.removeWatcher({ id: watcherId }).catch(() => {}));
         }
