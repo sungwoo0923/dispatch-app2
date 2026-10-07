@@ -473,7 +473,10 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
   const [companyStaffRaw, setCompanyStaffRaw] = useState([]);
   const myUid = auth.currentUser?.uid || null;
   const [attendanceLogs, setAttendanceLogs] = useState([]);
-  const today = new Date().toISOString().slice(0, 10);
+  // ⭐ 버그수정 — UTC 기준 날짜를 썼더니 자정~오전 9시(KST) 사이엔 "오늘"이
+  // 하루 전날로 잘못 계산됐다(그 시간대엔 UTC 날짜가 아직 안 넘어갔으므로).
+  // KST 기준으로 변환해서 계산.
+  const today = kstDateStrLocal();
   const [selectedDate, setSelectedDate] = useState(today);
 
   // 지도 관련 상태
@@ -674,7 +677,9 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
   }, []);
 
   // 오늘자 오더를 차량번호 우선, 없으면 이름으로 매칭 — PC 노선관리 탭과 동일한 방식.
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // ⭐ 버그수정 — UTC 기준이면 자정~오전 9시(KST) 사이에 todayStr이 하루 전날로
+  // 계산돼, 당일 배차된 오더가 "오늘 배차된 오더가 없습니다"로 안 보였다.
+  const todayStr = kstDateStrLocal();
   const ordersByPlate = useMemo(() => {
     const m = new Map();
     (dispatchData || []).forEach(r => {
@@ -1443,7 +1448,9 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
 // ─── MobileAttendance ─────────────────────────────────────────────────────────
 
 function MobileAttendance({ logs, drivers }) {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // ⭐ 버그수정 — UTC 기준 날짜 대신 KST 기준으로 "오늘"을 계산 (자정~오전 9시
+  // 사이 하루 전날로 잘못 표시되던 문제).
+  const todayStr = kstDateStrLocal();
   const [selectedDate, setSelectedDate] = useState(todayStr);
 
   const goDay = (delta) => {
