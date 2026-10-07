@@ -4189,6 +4189,34 @@ const deleteShipperMirrorMobile = async (order) => {
   }
 };
 
+// ⭐ 버그수정 — 지입 기사에게 배차된(대기/수락/완료) 오더를 모바일에서 삭제(소프트 취소)해도
+// 기사확인상태를 안 지워서, 기사앱에 "운송중" 카드가 그대로 남아 있었다(PC removeDispatch는
+// 이미 지우고 있었음). PC와 동일하게 확인 팝업 → 필드 초기화 → 기사 알림함 기록을 한다.
+const FLEET_CANCEL_FIELDS_MOBILE = { 기사확인상태: null, 기사거절사유: null, 기사확인일시: null, 기사완료일시: null };
+const fleetDeleteConfirmMsgMobile = (order) => {
+  const st = order?.기사확인상태;
+  if (st === "완료") return "운송이 완료된 오더입니다. 오더를 삭제하시겠습니까?";
+  if (st === "대기" || st === "수락") {
+    return `지입 기사(${order.이름 || order.차량번호 || "-"})에게 배차된 오더입니다${st === "수락" ? "(기사 수락 완료)" : ""}.\n삭제하면 기사앱에서도 오더가 사라집니다. 삭제하시겠습니까?`;
+  }
+  return null;
+};
+const notifyFleetCancelMobile = (order, orderId) => {
+  if (!order?.기사확인상태 || order.기사확인상태 === "거절" || !order.차량번호) return;
+  const norm = (v = "") => String(v).replace(/\s+/g, "").toLowerCase().replace(/-/g, "");
+  const drv = (drivers || []).find(d => norm(d.차량번호) === norm(order.차량번호));
+  if (drv?.등급 !== "지입") return;
+  addDoc(collection(db, "driver_notifications"), {
+    driverId: drv.id,
+    type: "canceled",
+    orderId,
+    title: "배차가 취소되었습니다",
+    body: `담당자가 ${order.거래처명 || ""} ${order.상차지명 || "-"} → ${order.하차지명 || "-"} 오더를 취소했습니다.`,
+    createdAt: serverTimestamp(),
+    read: false,
+  }).catch(() => {});
+};
+
 const deleteSingleOrder = async (order) => {
   if (role === "viewer") { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return; }
   const isShipperOrder = order.source === "shipper" || order.source === "shipper_mobile";
@@ -4196,12 +4224,14 @@ const deleteSingleOrder = async (order) => {
     alert("화주사가 등록한 오더는 운송사에서 임의로 삭제할 수 없습니다. 화주사가 배차취소를 요청한 건만 승인 후 삭제할 수 있습니다.");
     return;
   }
-  // ⭐ 버그수정 — PC와 동일하게 운송완료된 오더는 한 번 더 확인받는다
+  // ⭐ 버그수정 — 지입 기사에게 배차된 오더는 한 번 더 확인받는다
   // (목록 화면의 "취소하기" 경로에는 이 확인이 빠져 있었다).
-  if (order.기사확인상태 === "완료" && !window.confirm("운송이 완료된 오더입니다. 오더를 삭제하시겠습니까?")) return;
+  const fleetMsg = fleetDeleteConfirmMsgMobile(order);
+  if (fleetMsg && !window.confirm(fleetMsg)) return;
   const col = order.__col || collName;
   const id = order.id || order._id;
   if (!col || !id) return;
+  notifyFleetCancelMobile(order, id);
   // ⭐ 완전삭제 대신 소프트 취소 — 취소내역 화면으로 이동, 필요하면 재등록 가능
   await updateDoc(doc(db, col, id), {
     상태: "취소",
@@ -4210,6 +4240,7 @@ const deleteSingleOrder = async (order) => {
     취소일시: serverTimestamp(),
     updatedAt: serverTimestamp(),
     _lastModified: Date.now(),
+    ...FLEET_CANCEL_FIELDS_MOBILE,
   });
   deleteShipperMirrorMobile(order).catch(() => {});
   setOrders(prev => prev.filter(o => (o.id || o._id) !== id));
@@ -4427,9 +4458,9 @@ const deleteSingleOrder = async (order) => {
     }
     // ⭐ 이미 "운송완료"된 오더는 한 번 더 확인받는다. 삭제된 오더는 기사 운행일지에서도
     // 빠져야 하므로(사용자 요청) 운행일지용 스냅샷은 남기지 않는다.
-    if (deleteConfirmMobile.기사확인상태 === "완료") {
-      if (!window.confirm("운송이 완료된 오더입니다. 오더를 삭제하시겠습니까?")) return;
-    }
+    const fleetMsgD = fleetDeleteConfirmMsgMobile(deleteConfirmMobile);
+    if (fleetMsgD && !window.confirm(fleetMsgD)) return;
+    notifyFleetCancelMobile(deleteConfirmMobile, deleteConfirmMobile.id);
     // ⭐ 완전삭제 대신 소프트 취소로 바꿔, 취소내역 화면에서 다시 확인하거나
     // "재등록"으로 되살릴 수 있게 한다(예전엔 여기서 바로 영구삭제되어 복구 불가였음).
     await updateDoc(doc(db, deleteConfirmMobile.__col, deleteConfirmMobile.id), {
@@ -4439,6 +4470,7 @@ const deleteSingleOrder = async (order) => {
       취소일시: serverTimestamp(),
       updatedAt: serverTimestamp(),
       _lastModified: Date.now(),
+      ...FLEET_CANCEL_FIELDS_MOBILE,
     });
     deleteShipperMirrorMobile(deleteConfirmMobile).catch(() => {});
     setDeleteConfirmMobile(null);
@@ -4467,11 +4499,14 @@ const deleteSingleOrder = async (order) => {
     if (!window.confirm(`선택한 ${selectedOrders.length}개 오더를 취소하시겠습니까?\n취소내역으로 이동하며, 필요하면 다시 재등록할 수 있습니다.`)) return;
     const completedCount = selectedOrders.filter(o => o.기사확인상태 === "완료").length;
     if (completedCount > 0 && !window.confirm(`운송이 완료된 오더가 ${completedCount}건 포함되어 있습니다. 오더를 삭제하시겠습니까?`)) return;
+    const fleetCount = selectedOrders.filter(o => o.기사확인상태 === "대기" || o.기사확인상태 === "수락").length;
+    if (fleetCount > 0 && !window.confirm(`지입 기사에게 배차된 오더가 ${fleetCount}건 포함되어 있습니다.\n삭제하면 기사앱에서도 오더가 사라집니다. 삭제하시겠습니까?`)) return;
     try {
       for (const order of selectedOrders) {
         const col = order.__col || collName;
         const id = order.id || order._id;
         if (col && id) {
+          notifyFleetCancelMobile(order, id);
           // ⭐ 완전삭제 대신 소프트 취소 — 취소내역 화면으로 이동
           await updateDoc(doc(db, col, id), {
             상태: "취소",
@@ -4480,6 +4515,7 @@ const deleteSingleOrder = async (order) => {
             취소일시: serverTimestamp(),
             updatedAt: serverTimestamp(),
             _lastModified: Date.now(),
+            ...FLEET_CANCEL_FIELDS_MOBILE,
           });
           deleteShipperMirrorMobile(order).catch(() => {});
         }

@@ -758,7 +758,7 @@ export default function DriverHome() {
 
   // 새로 배정된 오더(기사확인상태: 대기) 감지 → 상단 배너 표시 후 자동 소멸
   useEffect(() => {
-    const pending = myOrders.filter(o => o.기사확인상태 === "대기");
+    const pending = myOrders.filter(o => o.기사확인상태 === "대기" && o.배차상태 !== "배차취소" && o.상태 !== "취소");
     const fresh = pending.filter(o => !seenPendingOrderIdsRef.current.has(o._id));
     if (fresh.length > 0) {
       fresh.forEach(o => seenPendingOrderIdsRef.current.add(o._id));
@@ -1339,8 +1339,10 @@ export default function DriverHome() {
   const currentStatus = driver.status || "대기";
   const statusCfg = STATUS_CONFIG[currentStatus] || STATUS_CONFIG["대기"];
   const isFleetDriver = driver.등급 === "지입";
-  const pendingOrders = isFleetDriver ? myOrders.filter(o => o.기사확인상태 === "대기") : [];
-  const acceptedOrders = isFleetDriver ? myOrders.filter(o => o.기사확인상태 === "수락") : [];
+  // ⭐ 버그수정 — 관리자가 삭제(배차취소)한 오더는 기사확인상태가 남아 있어도 카드에서 뺀다.
+  const isCanceledOrder = (o) => o.배차상태 === "배차취소" || o.상태 === "취소";
+  const pendingOrders = isFleetDriver ? myOrders.filter(o => o.기사확인상태 === "대기" && !isCanceledOrder(o)) : [];
+  const acceptedOrders = isFleetDriver ? myOrders.filter(o => o.기사확인상태 === "수락" && !isCanceledOrder(o)) : [];
   const hasActiveDispatch = pendingOrders.length > 0 || acceptedOrders.length > 0;
   // ⭐ 사용자 요청 — 지입 기사는 "상차 시작/퇴근" 같은 일반 기사 상태머신을 쓰지
   // 않는다. 출근 전이면 출근/휴차처리, 출근 후 오더 없으면 대기(오더대기중)만,
