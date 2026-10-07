@@ -1576,6 +1576,82 @@ async function resendOrderToDriver(order, driver) {
   }
 }
 
+// ─── 전화 걸기 — 우클릭 메뉴에서 기사에게 바로 전화 ───────────────────────────
+function callDriver(driver) {
+  const phone = String(driver?.전화번호 || "").replace(/[^\d]/g, "");
+  if (!phone) { window.alert("기사 연락처가 없습니다."); return; }
+  window.location.href = `tel:${phone}`;
+}
+
+// ─── 주소 복사 — 상/하차지 주소를 내비게이션 앱 등에 바로 붙여넣을 수 있게 ──────
+function copyOrderAddress(order) {
+  const text = [
+    `${order.상차지명 || ""} ${order.상차지주소 || ""}`.trim(),
+    "→",
+    `${order.하차지명 || ""} ${order.하차지주소 || ""}`.trim(),
+  ].join("\n");
+  try {
+    navigator.clipboard?.writeText(text);
+    window.alert("상/하차지 주소가 복사되었습니다.");
+  } catch {
+    window.alert("복사에 실패했습니다.");
+  }
+}
+
+// ─── 배차취소 — 이 오더에서 기사(차량)만 해제, DispatchApp.jsx patchDispatch의
+// "차량번호가 명시적으로 빈값" 분기(3698행)와 동일한 필드 초기화 규칙을 그대로
+// 따른다(파일이 달라 중복 구현 — 이 화면은 DispatchApp의 patchDispatch를 직접
+// 쓸 수 없다). 완료된 오더는 같은 안전장치(확인+보관함 기록)를 적용한다.
+async function cancelDriverAssignment(order, driver) {
+  if (order?.기사확인상태 === "완료") {
+    if (!window.confirm("운송이 완료된 오더입니다. 기사를 취소하시겠습니까?")) return;
+    addDoc(collection(db, "driver_completed_archive"), {
+      driverId: driver.id,
+      originalOrderId: order._id,
+      차량번호: order.차량번호 || "",
+      기사명: order.이름 || order.기사명 || driver.이름 || "",
+      archivedReason: "기사취소",
+      archivedAt: serverTimestamp(),
+      거래처명: order.거래처명 || "",
+      상차지명: order.상차지명 || "",
+      하차지명: order.하차지명 || "",
+      상차일: order.상차일 || "",
+      하차일: order.하차일 || "",
+      상차시간: order.상차시간 || "",
+      하차시간: order.하차시간 || "",
+      화물내용: order.화물내용 || "",
+      차량톤수: order.차량톤수 || "",
+      기사운임: order.기사운임 || "",
+      기사완료일시: order.기사완료일시 || null,
+    }).catch(() => {});
+  } else if (!window.confirm(`${driver.이름 || ""}(${driver.차량번호 || ""}) 기사 배정을 취소하시겠습니까?`)) {
+    return;
+  }
+  const col = order.__col || "orders";
+  try {
+    await updateDoc(doc(db, col, order._id), {
+      차량번호: "", 이름: "", 전화번호: "", 기사명: "",
+      배차상태: "배차중", 상태: "배차중", 업체전달상태: "미전달",
+      배차확정일시: null, 배차확정자: null, 배차방식: "",
+      기사확인상태: null, 기사거절사유: null, 기사확인일시: null, 기사완료일시: null,
+      updatedAt: serverTimestamp(), _lastModified: Date.now(),
+    });
+    if (driver.등급 === "지입") {
+      addDoc(collection(db, "driver_notifications"), {
+        driverId: driver.id,
+        type: "canceled",
+        orderId: order._id,
+        title: "배차가 취소되었습니다",
+        body: `담당자가 ${order.거래처명 || ""} ${order.상차지명 || "-"} → ${order.하차지명 || "-"} 오더에서 차량 배정을 취소했습니다.`,
+        createdAt: serverTimestamp(),
+        read: false,
+      }).catch(() => {});
+    }
+  } catch {
+    window.alert("기사 취소에 실패했습니다. 잠시 후 다시 시도해주세요.");
+  }
+}
+
 // ─── 우클릭 컨텍스트 메뉴 ─────────────────────────────────────────────────────
 // position:fixed로 클릭 좌표에 띄우고, 바깥 클릭/ESC로 닫는다. ManagerBadge의
 // 드롭다운(흰 배경+그림자+네이비 포인트)과 같은 톤으로 맞춘다.
@@ -1892,7 +1968,19 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
       disabledReason: "기사 연락처가 없습니다.",
       onClick: () => handleSendToDriver(driver, [ctxMenu.order], ctxMenu.order.상차일, ctxMenu.order.상차일),
     },
+    {
+      label: "전화 걸기",
+      disabled: !driver.전화번호,
+      disabledReason: "기사 연락처가 없습니다.",
+      onClick: () => callDriver(driver),
+    },
     { label: "기사복사", onClick: () => setCopyOrder(ctxMenu.order) },
+    { label: "주소 복사", onClick: () => copyOrderAddress(ctxMenu.order) },
+    {
+      label: "배차취소 (기사 해제)",
+      danger: true,
+      onClick: () => cancelDriverAssignment(ctxMenu.order, driver),
+    },
   ] : [];
 
   return (
