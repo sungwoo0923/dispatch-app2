@@ -204,13 +204,19 @@ function useDestGeo(addr) {
 }
 // 상차중(상차 시작) 전엔 상차지, 상차 완료~하차 시작 전("운송중")엔 하차지 — 그
 // 외 상태(상차중/하차중/복귀중/대기/휴차 등)는 세분화하지 않는다.
+// ⭐ 사용자 요청 — 상차지도착 후 하차지로 출발하면, 하차지 반경에 들어오기 전까지는
+// "운송중"이 아니라 "이동중"으로 보여준다. 막 출발한 직후(아직 상차지 1km 이내)엔
+// "상차지도착"을 그대로 유지하도록 상차지 주소도 같이 넘긴다.
 function transitPhaseTarget(order, driver) {
   const driverStatus = driver?.상태;
   if (driverStatus === "출근") {
     return { addr: order?.상차지주소, enterLabel: "상차지진입", nearLabel: "상차지도착" };
   }
   if (driverStatus === "운송중") {
-    return { addr: order?.하차지주소, enterLabel: "하차지진입", nearLabel: "하차지도착" };
+    return {
+      addr: order?.하차지주소, enterLabel: "하차지진입", nearLabel: "하차지도착",
+      departAddr: order?.상차지주소, departNearLabel: "상차지도착", farLabel: "이동중",
+    };
   }
   return null;
 }
@@ -226,11 +232,20 @@ function findActiveTransitOrder(orders, todayStr) {
 function TransitPhaseLabel({ order, driver, fallback }) {
   const target = transitPhaseTarget(order, driver);
   const geo = useDestGeo(target?.addr || null);
-  if (target && geo && driver?.location?.lat != null && driver?.location?.lng != null) {
+  const departGeo = useDestGeo(target?.departAddr || null);
+  const hasLoc = driver?.location?.lat != null && driver?.location?.lng != null;
+
+  if (target && geo && hasLoc) {
     const dist = haversineKm(driver.location.lat, driver.location.lng, geo.lat, geo.lng);
     if (dist <= 1) return target.nearLabel;
     if (dist <= 5) return target.enterLabel;
   }
+  // 하차지에서 멀면 — 상차지를 1km 이상 벗어났는지(= 이미 출발했는지) 확인
+  if (target?.departAddr && departGeo && hasLoc) {
+    const departDist = haversineKm(driver.location.lat, driver.location.lng, departGeo.lat, departGeo.lng);
+    if (departDist <= 1) return target.departNearLabel;
+  }
+  if (target?.farLabel) return target.farLabel;
   return fallback;
 }
 
