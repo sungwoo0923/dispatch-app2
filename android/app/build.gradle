@@ -16,7 +16,26 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // ⭐ 버그수정 — 서명 안 해두면 Gradle이 매 빌드마다(이 경우 GitHub Actions
+    // 러너마다) 새 debug.keystore를 즉석에서 만들어버려, 빌드할 때마다 서명이
+    // 달라진다. 안드로이드는 서명이 다른 APK는 "업데이트 설치"를 막기 때문에,
+    // 매번 기존 앱을 수동으로 완전히 삭제한 뒤 새로 설치해야 했다(기사가 "재설치
+    // 했는데도 고친 게 안 먹힌다"고 보고한 원인 — 설치 자체가 조용히 실패했을
+    // 가능성이 큼). 저장소에 고정된 디버그 키스토어(debug.keystore)를 커밋해두고
+    // 모든 빌드가 이 키로 서명하게 해서, 앞으로는 새 APK를 그냥 덮어 설치하면
+    // 정상적으로 업데이트된다.
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
     buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
