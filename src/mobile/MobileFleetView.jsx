@@ -275,12 +275,19 @@ function TransitPhaseLabel({ order, driver, fallback }) {
   const visitedFromHistory = useVisitedPickup(driver?.id, pickupGeo);
   const visitedPickup = visitedFromHistory || (pickupDist != null && pickupDist <= 1);
 
-  if (pickupDist != null && pickupDist <= 1) return "상차지도착";
-  if (dropDist != null && dropDist <= 1) return "하차지도착";
-  if (dropDist != null && dropDist <= 5) return "하차지진입";
-  if (!visitedPickup && pickupDist != null && pickupDist <= 5) return "상차지진입";
-  if (visitedPickup) return "이동중";
-  return fallback;
+  let label;
+  if (pickupDist != null && pickupDist <= 1) label = "상차지도착";
+  else if (dropDist != null && dropDist <= 1) label = "하차지도착";
+  else if (dropDist != null && dropDist <= 5) label = "하차지진입";
+  else if (!visitedPickup && pickupDist != null && pickupDist <= 5) label = "상차지진입";
+  else if (visitedPickup) label = "이동중";
+  else label = fallback;
+
+  // ⭐ 임시 진단용 — "하차지 1km 이내인데도 이동중" 재현 신고를 원격으로 못 보고
+  // 있어 추가. 상/하차 거리와 좌표 확보 여부를 눈으로 바로 확인하기 위한
+  // 표시로, 원인 확인되면 제거할 예정.
+  const dbg = ` (상${pickupGeo ? pickupDist?.toFixed(1) ?? "?" : "geo✗"}/하${dropGeo ? dropDist?.toFixed(1) ?? "?" : "geo✗"}${visitedPickup ? "/V" : ""})`;
+  return <>{label}<span style={{ fontSize: 9, color: "#9ca3af", fontWeight: 400 }}>{dbg}</span></>;
 }
 
 // ─── 바로 전화 버튼 — ⭐ 사용자 요청: 원격 모니터링 중 상세진입 없이 바로 전화 ───
