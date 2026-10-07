@@ -18,6 +18,7 @@ import FixedClients from "./FixedClients";
 import FleetManagement from "./FleetManagement";
 import HomeDashboard from "./HomeDashboard";
 import { EditModeProvider, EditableText, EditModeToggleButton } from "./EditMode";
+import { useCompanyDropdownOptions, DropdownOptionsManageButton } from "./companyDropdownOptions";
 import StandardFare from "./StandardFare";
 import RateCard from "./RateCard";
 import DispatchFormNew from "./DispatchFormNew";
@@ -6226,6 +6227,13 @@ function CargoExtraChips({ value }) {
 export default function DispatchApp({ role, user, userCompany = "" }) {
   const isTest = role === "test";
   const navigate = useNavigate();
+  // ⭐ 회사별 커스텀 드롭다운 옵션(Part B) — 등록폼 전역에서 재사용하므로 최상위에서
+  // 한 번만 구독한다. 커스터마이즈 안 한 회사는 기존 하드코딩 값 그대로 보인다.
+  const loadMethodOptions = useCompanyDropdownOptions("상하차방법", role, userCompany);
+  const payTypeOptionsCustom = useCompanyDropdownOptions("지급방식", role, userCompany);
+  const dispatchTypeOptionsCustom = useCompanyDropdownOptions("배차방식", role, userCompany);
+  const cargoTypeOptionsCustom = useCompanyDropdownOptions("화물타입", role, userCompany);
+  const tonTypeOptionsCustom = useCompanyDropdownOptions("톤수타입", role, userCompany);
   // ⭐ 오늘 비/눈이 왔는지 자동 인식 — 자사운임표·AI추천 등 운임조회 전반이
   // 참고하는 특수운임 판정에 쓰인다(weatherUtil.js). 앱 진입 시 한 번만
   // 받아오면 되므로 최상위 컴포넌트에서 호출한다.
@@ -6972,7 +6980,7 @@ React.useEffect(() => {
 
   // ---------------- 메뉴 UI ----------------
 return (
-    <EditModeProvider role={role}>
+    <EditModeProvider role={role} userCompany={userCompany}>
     <ToastProvider>
       <CustomAlert message={alertMsg} onClose={closeAlert} />
       {weekendCheckPopup && (
@@ -7422,6 +7430,7 @@ return (
             {배차현황Tab === "미배차현황" && (
               <UnassignedStatus
                 role={role}
+                userCompany={userCompany}
                 dispatchData={dispatchDataFiltered}
                 patchDispatch={patchDispatchSafe}
                 removeDispatch={removeDispatchSafe}
@@ -10811,6 +10820,10 @@ const updateMultiSlot = (key, value) => {
     if (key === "차량종류" && value === "오토바이") {
       return { ...s, 차량종류: value, 상차방법: "수작업", 하차방법: "수작업" };
     }
+    // ⭐ 리프트 차량 선택 시 상/하차방법 기본값 제안 — 이미 다른 값을 골라둔 경우는 덮지 않음
+    if (key === "차량종류" && value === "리프트") {
+      return { ...s, 차량종류: value, 상차방법: s.상차방법 || "리프트", 하차방법: s.하차방법 || "리프트" };
+    }
     // ⭐ 자동완성으로 채워둔 하차지명을 사용자가 지우면, 남아있는 주소/담당자도
     // 같이 비워야 한다(상차지명 handlePickupName과 동일한 규칙).
     if (key === "하차지명" && value.trim() === "") {
@@ -11270,6 +11283,12 @@ function swapPickupDrop() {
       }
       if (key === "차량종류" && value === "오토바이") {
         setForm((p) => ({ ...p, 차량종류: value, 상차방법: "수작업", 하차방법: "수작업", 배차방식: "인성" }));
+        return;
+      }
+      // ⭐ 리프트 차량 선택 시 상/하차방법 기본값 제안 — 사용자가 이미 다른 값을
+      // 골라둔 경우(다른 경유지용으로 의도적으로 고른 값일 수 있음)는 덮어쓰지 않음
+      if (key === "차량종류" && value === "리프트") {
+        setForm((p) => ({ ...p, 차량종류: value, 상차방법: p.상차방법 || "리프트", 하차방법: p.하차방법 || "리프트" }));
         return;
       }
       setForm((p) => ({ ...p, [key]: value }));
@@ -14419,14 +14438,14 @@ shadow-sm
                 <label className={mrLabelCls}><EditableText id="orderForm.multi.label.상차방법" defaultText="상차방법" /></label>
                 <CustomSelect className={mrInputCls} value={currentMultiSlot.상차방법 || ""} onChange={e => updateMultiSlot("상차방법", e.target.value)}>
                   <option value="">선택 ▾</option>
-                  {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => <option key={v} value={v}>{v}</option>)}
+                  {loadMethodOptions.map(v => <option key={v} value={v}>{v}</option>)}
                 </CustomSelect>
               </div>
               <div>
                 <label className={mrLabelCls}><EditableText id="orderForm.multi.label.하차방법" defaultText="하차방법" /></label>
                 <CustomSelect className={mrInputCls} value={currentMultiSlot.하차방법 || ""} onChange={e => updateMultiSlot("하차방법", e.target.value)}>
                   <option value="">선택 ▾</option>
-                  {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => <option key={v} value={v}>{v}</option>)}
+                  {loadMethodOptions.map(v => <option key={v} value={v}>{v}</option>)}
                 </CustomSelect>
               </div>
 
@@ -14456,9 +14475,7 @@ shadow-sm
                   <label className={mrLabelCls}>&nbsp;</label>
                   <CustomSelect className={mrInputCls} value={currentMultiSlot.화물타입 || ""} onChange={e => updateMultiSlot("화물타입", e.target.value)}>
                     <option value="">없음</option>
-                    <option value="파레트">파레트</option>
-                    <option value="박스">박스</option>
-                    <option value="통">통</option>
+                    {cargoTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
                   </CustomSelect>
                 </div>
               </div>
@@ -14474,8 +14491,7 @@ shadow-sm
                   <label className={mrLabelCls}>&nbsp;</label>
                   <CustomSelect className={mrInputCls} value={currentMultiSlot.톤수타입 || ""} onChange={e => updateMultiSlot("톤수타입", e.target.value)}>
                     <option value="">없음</option>
-                    <option value="톤">톤</option>
-                    <option value="kg">kg</option>
+                    {tonTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
                   </CustomSelect>
                 </div>
               </div>
@@ -14491,14 +14507,14 @@ shadow-sm
                 <label className={mrLabelCls}><EditableText id="orderForm.multi.label.지급방식" defaultText="지급방식" /></label>
                 <CustomSelect className={mrInputCls} value={currentMultiSlot.지급방식 || ""} onChange={e => updateMultiSlot("지급방식", e.target.value)}>
                   <option value="">선택 ▾</option>
-                  {PAY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+                  {payTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
                 </CustomSelect>
               </div>
               <div>
                 <label className={mrLabelCls}><EditableText id="orderForm.multi.label.배차방식" defaultText="배차방식" /></label>
                 <CustomSelect className={mrInputCls} value={currentMultiSlot.배차방식 || ""} onChange={e => updateMultiSlot("배차방식", e.target.value)}>
                   <option value="">선택 ▾</option>
-                  {DISPATCH_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+                  {dispatchTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
                 </CustomSelect>
               </div>
 
@@ -16109,9 +16125,7 @@ className={`
                 }}
               >
                 <option value="">없음</option>
-                <option value="파레트">파레트</option>
-                <option value="박스">박스</option>
-                <option value="통">통</option>
+                {cargoTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
               </CustomSelect>
             </div>
           </div>
@@ -16161,8 +16175,7 @@ className={`
                 }}
               >
                 <option value="">없음</option>
-                <option value="톤">톤</option>
-                <option value="kg">kg</option>
+                {tonTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
               </CustomSelect>
             </div>
           </div>
@@ -16242,7 +16255,7 @@ className={`
             }}
           >
             <option value="">선택</option>
-            {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => (
+            {loadMethodOptions.map(v => (
               <option key={v} value={v}>{v}</option>
             ))}
           </CustomSelect>
@@ -16575,10 +16588,10 @@ className={`
 
   {/* 상/하차 방법 */}
   <div>
-    <label className={labelCls}><EditableText id="orderForm.label.상차방법" defaultText="상차방법" /></label>
+    <label className={labelCls}><EditableText id="orderForm.label.상차방법" defaultText="상차방법" /><DropdownOptionsManageButton optKey="상하차방법" label="상/하차방법" role={role} userCompany={userCompany} /></label>
     <CustomSelect className={inputCls} value={form.상차방법} onChange={(e) => onChange("상차방법", e.target.value)}>
       <option value="">선택 ▾</option>
-      {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => <option key={v} value={v}>{v}</option>)}
+      {loadMethodOptions.map(v => <option key={v} value={v}>{v}</option>)}
     </CustomSelect>
   </div>
 
@@ -16586,13 +16599,13 @@ className={`
     <label className={labelCls}><EditableText id="orderForm.label.하차방법" defaultText="하차방법" /></label>
     <CustomSelect className={inputCls} value={form.하차방법} onChange={(e) => onChange("하차방법", e.target.value)}>
       <option value="">선택 ▾</option>
-      {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => <option key={v} value={v}>{v}</option>)}
+      {loadMethodOptions.map(v => <option key={v} value={v}>{v}</option>)}
     </CustomSelect>
   </div>
 
   {/* 결제 */}
   <div>
-    <label className={labelCls}><EditableText id="orderForm.label.지급방식" defaultText="지급방식" /> {reqStar}</label>
+    <label className={labelCls}><EditableText id="orderForm.label.지급방식" defaultText="지급방식" /> {reqStar}<DropdownOptionsManageButton optKey="지급방식" label="지급방식" role={role} userCompany={userCompany} /></label>
    <CustomSelect ref={payTypeRef} className={`${inputCls}${requiredErrors.has("지급방식") ? " border-red-500 ring-2 ring-red-300 animate-pulse" : ""}`} value={form.지급방식} onChange={(e) => {
   const v = e.target.value;
   onChange("지급방식", v);
@@ -16603,15 +16616,15 @@ className={`
 }
 }}>
       <option value="">선택 ▾</option>
-      {PAY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+      {payTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
     </CustomSelect>
   </div>
 
   <div>
-    <label className={labelCls}><EditableText id="orderForm.label.배차방식" defaultText="배차방식" /></label>
+    <label className={labelCls}><EditableText id="orderForm.label.배차방식" defaultText="배차방식" /><DropdownOptionsManageButton optKey="배차방식" label="배차방식" role={role} userCompany={userCompany} /></label>
     <CustomSelect className={inputCls} value={form.배차방식} onChange={(e) => onChange("배차방식", e.target.value)}>
       <option value="">선택 ▾</option>
-      {DISPATCH_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+      {dispatchTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
     </CustomSelect>
   </div>
 
@@ -21060,6 +21073,11 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
 
 // ===================== StopEditModal (경유지 수정 팝업 — 3파트와 동일 구조) =====================
 function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], timeOptions = [], orderDate = "" }) {
+  // ⭐ 이 팝업은 role/userCompany를 prop으로 못 받는 위치라(여러 단계 위에서 호출됨),
+  // 훅 내부의 localStorage 전용 대체 규칙을 쓴다(resolveCompany와 거의 동일한 결과).
+  const loadMethodOptions = useCompanyDropdownOptions("상하차방법");
+  const cargoTypeOptionsCustom = useCompanyDropdownOptions("화물타입");
+  const tonTypeOptionsCustom = useCompanyDropdownOptions("톤수타입");
   const [editList, setEditList] = React.useState([]);
   const [placeOpts, setPlaceOpts] = React.useState([]);
   const [activeIdx, setActiveIdx] = React.useState(null);
@@ -21359,8 +21377,8 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                   <select className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
                     value={stop.화물타입??"파레트"}
                     onChange={e=>{const t=e.target.value;setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],화물타입:t};return c;});}}>
-                    <option value="">없음</option><option value="파레트">파레트</option>
-                    <option value="박스">박스</option><option value="통">통</option>
+                    <option value="">없음</option>
+                    {cargoTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
                   </select>
                   <span className="absolute right-1.5 text-white/70 text-[10px] pointer-events-none">▾</span>
                 </div>
@@ -21389,7 +21407,8 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                   <select className="w-[48px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
                     value={stop.톤수타입??"톤"}
                     onChange={e=>{const t=e.target.value;setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],톤수타입:t,차량톤수:t?`${c[idx].톤수값||""}${t}`:(c[idx].톤수값||"")};return c;});}}>
-                    <option value="">없음</option><option value="톤">톤</option><option value="kg">kg</option>
+                    <option value="">없음</option>
+                    {tonTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
                   </select>
                   <span className="absolute right-1 text-white/70 text-[10px] pointer-events-none">▾</span>
                 </div>
@@ -21448,7 +21467,7 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
               <select className={inputCls} value={stop.방법||""}
                 onChange={e=>{const v=e.target.value;setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],방법:v};return c;});}}>
                 <option value="">선택</option>
-                {["지게차","수작업","직접수작업","수도움","크레인"].map(v=>(
+                {loadMethodOptions.map(v=>(
                   <option key={v} value={v}>{v}</option>
                 ))}
               </select>
@@ -23513,6 +23532,7 @@ function RealtimeStatus({
   markEditRequestSeen = () => {},
   approvedShippers = [],
 }) {
+const loadMethodOptions = useCompanyDropdownOptions("상하차방법", role, userCompany);
 const rtTableWrapRef = React.useRef(null);
 const mergedClients = React.useMemo(() => {
   const map = new Map();
@@ -29167,11 +29187,7 @@ checkWarningStatus(c.거래처명, "거래처");
     onChange={(e)=>setCopyTarget(p=>({...p, 상차방법:e.target.value}))}
   >
     <option value="">선택</option>
-    <option value="지게차">지게차</option>
-    <option value="수작업">수작업</option>
-    <option value="직접수작업">직접수작업</option>
-    <option value="수도움">수도움</option>
-    <option value="크레인">크레인</option>
+    {loadMethodOptions.map(v => <option key={v} value={v}>{v}</option>)}
   </CustomSelect>
 </Field>
 
@@ -29363,11 +29379,7 @@ checkWarningStatus(c.거래처명, "거래처");
     onChange={(e)=>setCopyTarget(p=>({...p, 하차방법:e.target.value}))}
   >
     <option value="">선택</option>
-    <option value="지게차">지게차</option>
-    <option value="수작업">수작업</option>
-    <option value="직접수작업">직접수작업</option>
-    <option value="수도움">수도움</option>
-    <option value="크레인">크레인</option>
+    {loadMethodOptions.map(v => <option key={v} value={v}>{v}</option>)}
   </CustomSelect>
 </Field>
       <Field label={<span className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoC4("drop")} hasMemo={hasPanelMemoC4("drop")} /></span>}>
@@ -31136,11 +31148,7 @@ value={copyTarget?.화물수량 || ""}
                 <label className="text-sm font-medium"><EditableText id="selectEdit.label.상차방법" defaultText="상차방법" /></label>
                 <CustomSelect className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.상차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차방법: e.target.value }))}>
                   <option value="">선택</option>
-                  <option value="지게차">지게차</option>
-                  <option value="수작업">수작업</option>
-                  <option value="직접수작업">직접수작업</option>
-                  <option value="수도움">수도움</option>
-                  <option value="크레인">크레인</option>
+                  {loadMethodOptions.map(v => <option key={v} value={v}>{v}</option>)}
                 </CustomSelect>
                             </div>
             </div>
@@ -31305,11 +31313,7 @@ value={copyTarget?.화물수량 || ""}
                 <label className="text-sm font-medium"><EditableText id="selectEdit.label.하차방법" defaultText="하차방법" /></label>
                 <CustomSelect className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} value={editTarget.하차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차방법: e.target.value }))}>
                   <option value="">선택</option>
-                  <option value="지게차">지게차</option>
-                  <option value="수작업">수작업</option>
-                  <option value="직접수작업">직접수작업</option>
-                  <option value="수도움">수도움</option>
-                  <option value="크레인">크레인</option>
+                  {loadMethodOptions.map(v => <option key={v} value={v}>{v}</option>)}
                 </CustomSelect>
                             </div>
             </div>
@@ -34340,6 +34344,7 @@ function DispatchStatus({
   // 중복으로 읽어들였다).
   userNameMap = new Map(),
 }) {
+const loadMethodOptions = useCompanyDropdownOptions("상하차방법", role, userCompany);
 const dsTableWrapRef = React.useRef(null);
 const [companyBankData, setCompanyBankData] = React.useState(null);
 React.useEffect(() => {
@@ -39631,11 +39636,7 @@ return (
                   onChange={(e) => setEditTarget((p) => ({ ...p, 상차방법: e.target.value }))}
                 >
                   <option value="">선택</option>
-                  <option value="지게차">지게차</option>
-                  <option value="수작업">수작업</option>
-                  <option value="직접수작업">직접수작업</option>
-                  <option value="수도움">수도움</option>
-                  <option value="크레인">크레인</option>
+                  {loadMethodOptions.map(v => <option key={v} value={v}>{v}</option>)}
                 </CustomSelect>
               </div>
             </div>
@@ -39804,11 +39805,7 @@ return (
                   onChange={(e) => setEditTarget((p) => ({ ...p, 하차방법: e.target.value }))}
                 >
                   <option value="">선택</option>
-                  <option value="지게차">지게차</option>
-                  <option value="수작업">수작업</option>
-                  <option value="직접수작업">직접수작업</option>
-                  <option value="수도움">수도움</option>
-                  <option value="크레인">크레인</option>
+                  {loadMethodOptions.map(v => <option key={v} value={v}>{v}</option>)}
                 </CustomSelect>
               </div>
             </div>
@@ -40915,11 +40912,7 @@ setCopyTarget(prev=>({
     onChange={(e)=>setCopyTarget(p=>({...p, 상차방법:e.target.value}))}
   >
     <option value="">선택</option>
-    <option value="지게차">지게차</option>
-    <option value="수작업">수작업</option>
-    <option value="직접수작업">직접수작업</option>
-    <option value="수도움">수도움</option>
-    <option value="크레인">크레인</option>
+    {loadMethodOptions.map(v => <option key={v} value={v}>{v}</option>)}
   </CustomSelect>
 </Field>
 
@@ -41094,11 +41087,7 @@ setCopyPlaceOptions(list);
     onChange={(e)=>setCopyTarget(p=>({...p, 하차방법:e.target.value}))}
   >
     <option value="">선택</option>
-    <option value="지게차">지게차</option>
-    <option value="수작업">수작업</option>
-    <option value="직접수작업">직접수작업</option>
-    <option value="수도움">수도움</option>
-    <option value="크레인">크레인</option>
+    {loadMethodOptions.map(v => <option key={v} value={v}>{v}</option>)}
   </CustomSelect>
 </Field>
       <Field label={<span className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoC5("drop")} hasMemo={hasPanelMemoC5("drop")} /></span>}>
@@ -48834,7 +48823,11 @@ const tableData = React.useMemo(() => {
 // ===================== DispatchApp.jsx (PART 6/8 — END) =====================
 
 // ===================== DispatchApp.jsx (PART 7/8 — 미배차현황) =====================
-function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDispatch, clients = [], places = [], upsertDriver, upsertClient, isViewer = false, setCargoAddPopup = () => {}, approvedShippers = [] }) {
+function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDispatch, clients = [], places = [], upsertDriver, upsertClient, isViewer = false, setCargoAddPopup = () => {}, approvedShippers = [], role, userCompany = "" }) {
+  // ⭐ 회사별 커스텀 드롭다운 옵션(Part B) — 오더복사/수정 패널의 상/하차방법·화물타입·톤수타입에 사용.
+  const loadMethodOptions = useCompanyDropdownOptions("상하차방법", role, userCompany);
+  const cargoTypeOptionsCustom = useCompanyDropdownOptions("화물타입", role, userCompany);
+  const tonTypeOptionsCustom = useCompanyDropdownOptions("톤수타입", role, userCompany);
   // 오더복사/수정 패널에서 담당자를 새로 입력해도 거래처관리(기본거래처/하차지거래처)에
   // 반영되지 않던 문제 — DispatchManagement/RealtimeStatus/DispatchStatus의
   // savePlaceSmart와 동일한 우선순위(기본거래처 우선)로 담당자를 병합 저장한다.
@@ -49986,7 +49979,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <Field label="상차방법">
                         <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차방법: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                           <option value="">선택</option>
-                          <option value="지게차">지게차</option><option value="수작업">수작업</option><option value="직접수작업">직접수작업</option><option value="수도움">수도움</option><option value="크레인">크레인</option>
+                          {loadMethodOptions.map(v => <option key={v} value={v}>{v}</option>)}
                         </CustomSelect>
                       </Field>
                       <Field label="상차지명">
@@ -50081,7 +50074,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <Field label="하차방법">
                         <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차방법: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                           <option value="">선택</option>
-                          <option value="지게차">지게차</option><option value="수작업">수작업</option><option value="직접수작업">직접수작업</option><option value="수도움">수도움</option><option value="크레인">크레인</option>
+                          {loadMethodOptions.map(v => <option key={v} value={v}>{v}</option>)}
                         </CustomSelect>
                       </Field>
                       <Field label="하차지명">
@@ -50285,7 +50278,8 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
                         <input autoComplete="off" className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.톤수값 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 톤수값: v, 차량톤수: p.톤수타입 ? `${v}${p.톤수타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                         <CustomSelect className="px-3 py-2 bg-[#1B2B4B] text-white font-bold outline-none cursor-pointer text-[13px]" value={copyTarget?.톤수타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 톤수타입: type, 차량톤수: type ? `${p.톤수값 || ""}${type}` : (p.톤수값 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
-                          <option value="">선택</option><option value="톤">톤</option><option value="kg">kg</option>
+                          <option value="">선택</option>
+                          {tonTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
                         </CustomSelect>
                       </div>
                     </Field>
@@ -50293,7 +50287,8 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
                         <input autoComplete="off" className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.화물수량 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 화물수량: v, 화물내용: p.화물타입 ? `${v}${p.화물타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                         <CustomSelect className="px-3 py-2 bg-[#1B2B4B] text-white font-bold outline-none cursor-pointer text-[13px]" value={copyTarget?.화물타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 화물타입: type, 화물내용: type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
-                          <option value="">없음</option><option value="파레트">파레트</option><option value="박스">박스</option><option value="통">통</option>
+                          <option value="">없음</option>
+                          {cargoTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
                         </CustomSelect>
                       </div>
                     </Field>
