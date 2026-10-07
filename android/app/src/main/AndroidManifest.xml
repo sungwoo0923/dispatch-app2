@@ -47,11 +47,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Android 13+: 백그라운드 추적 중 상시 알림을 띄우려면 필요 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- 백그라운드 GPS 서비스 -->
-    <service
-        android:name="com.equimaps.capacitorbackgroundgeolocation.BackgroundGeolocationService"
-        android:enabled="true"
-        android:exported="false"
-        android:foregroundServiceType="location" />
+    <!-- 백그라운드 GPS 서비스는 @capacitor-community/background-geolocation 플러그인
+    모듈 자체의 AndroidManifest.xml(gradle manifest merge)에서 올바른 클래스명으로
+    선언되므로 여기서 중복 선언하지 않는다. (이전에 클래스명이 잘못 적혀 있던
+    더미 <service> 선언을 제거함 — com.equimaps.capacitor_background_geolocation,
+    밑줄 없는 오타였음) -->
 </manifest>

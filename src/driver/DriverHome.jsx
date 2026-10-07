@@ -45,6 +45,13 @@ async function loadBgGeo() {
   return BgGeo;
 }
 
+// 플러그인은 위치/배터리 권한 화면을 직접 열어주는 API가 없어 앱 상세정보 화면만
+// 열 수 있다(openSettings) — "항상 허용" 위치 권한과 배터리 최적화 제외는 그 화면에서
+// 기사가 직접 들어가 설정해야 한다(OS 제약, 코드로 우회 불가).
+function openNativeAppSettings() {
+  loadBgGeo().then((plugin) => plugin?.openSettings().catch(() => {}));
+}
+
 // KST 날짜 문자열 (YYYY-MM-DD) — UTC 대신 KST 기준 오늘 날짜
 function kstDateStr(d = new Date()) {
   return new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
@@ -1590,11 +1597,22 @@ export default function DriverHome() {
             );
           })()}
 
-          {/* GPS 경고 */}
+          {/* GPS 경고 — 네이티브 앱은 "항상 허용"까지 가야 배차 추적이 끊기지 않으므로
+              웹과 다른 안내 + 설정 바로가기 버튼을 보여준다 */}
           {permissionDenied && (
             <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 12, padding: "12px 16px", marginBottom: 14 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#dc2626", marginBottom: 2 }}>위치 권한이 필요합니다</div>
-              <div style={{ fontSize: 12, color: "#ef4444" }}>설정에서 위치 권한을 허용하면 실시간 추적 및 출근지 500m 이내 자동 출근이 가능합니다.</div>
+              <div style={{ fontSize: 12, color: "#ef4444" }}>
+                {isNative()
+                  ? "설정 > 권한 > 위치에서 \"항상 허용\"으로 바꿔주세요. \"앱 사용 중에만 허용\"이면 화면을 끄거나 다른 앱으로 전환하는 순간 배차 추적이 끊깁니다."
+                  : "설정에서 위치 권한을 허용하면 실시간 추적 및 출근지 500m 이내 자동 출근이 가능합니다."}
+              </div>
+              {isNative() && (
+                <button
+                  onClick={openNativeAppSettings}
+                  style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: "#dc2626", background: "white", border: "1px solid #fecaca", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}
+                >설정 열기</button>
+              )}
             </div>
           )}
 
@@ -1919,6 +1937,27 @@ export default function DriverHome() {
               </button>
             </div>
           </div>
+
+          {/* 네이티브 앱에서만 의미 있음 — 배터리 최적화가 걸려 있으면 권한을 다 줘도
+              OS가 임의로 추적을 꺼버리는 경우가 가장 흔한 "추적 끊김" 원인이다.
+              플러그인에 배터리 최적화 제외를 직접 요청하는 API가 없어 앱 설정
+              화면으로만 안내할 수 있다. */}
+          {isNative() && (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 8, letterSpacing: "0.06em", paddingLeft: 4 }}>위치 추적 안정화</div>
+              <div style={{ background: "white", borderRadius: 16, boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #e5e7eb", padding: "14px 16px", marginBottom: 20 }}>
+                <div style={{ fontSize: 13, color: "#111827", fontWeight: 700, marginBottom: 4 }}>배터리 사용 제한 해제</div>
+                <div style={{ fontSize: 12, color: "#6b7280", lineHeight: 1.5, marginBottom: 10 }}>
+                  배차 추적이 끊기지 않으려면 설정 &gt; 배터리에서 이 앱을 "제한 없음"으로 바꿔주세요.
+                  꺼두면 화면이 꺼진 뒤 휴대폰이 추적을 강제로 멈출 수 있습니다.
+                </div>
+                <button
+                  onClick={openNativeAppSettings}
+                  style={{ fontSize: 12, fontWeight: 700, color: "#1B2B4B", background: "#eff6ff", border: "none", borderRadius: 8, padding: "7px 12px", cursor: "pointer" }}
+                >앱 설정 열기</button>
+              </div>
+            </>
+          )}
 
           {/* ⭐ 사용자 요청 — 차량종류/톤수/거주지/요청사항은 가입할 때만 입력하고 끝이
               아니라, 기사 본인이 언제든 다시 수정할 수 있어야 한다(관리자도 PC

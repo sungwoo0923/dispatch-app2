@@ -6,6 +6,9 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   android: {
     backgroundColor: '#f0f2f5',
+    // background-geolocation 플러그인 README 권고 — 없으면 앱이 백그라운드 진입 5분 후
+    // WebView 브릿지가 멈춰 위치 업데이트가 끊긴다.
+    useLegacyBridge: true,
   },
   plugins: {
     BackgroundGeolocation: {
