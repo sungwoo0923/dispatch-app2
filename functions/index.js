@@ -760,6 +760,192 @@ exports.notifyUnassignedUrgent = functions.pubsub
   });
 
 /* ==============================
+   🚚 지입 기사 — 상차/하차 시간 지연 알림
+   — 5분마다 실행. 오늘 "수락"(운송중) 상태인 지입 오더 중 상차시간(또는
+   하차시간)이 지났는데 기사가 아직 상차지(하차지) 5km(진입) 반경 밖에 있으면,
+   기사 본인과 담당자(기사 담당자 + 오더 등록자)에게 푸시를 보낸다.
+   시간이 "즉시"처럼 정해지지 않은 오더는 대상이 아니다. 한 오더당 상차/하차
+   각각 한 번만 보내도록 fleet_late_alerts/{오더ID_pickup|drop}에 기록한다.
+   상/하차지 좌표는 geo_cache 컬렉션에 저장해 Tmap 호출을 줄인다.
+============================== */
+const TMAP_KEY_SERVER = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
+const LATE_ENTER_KM = 5;      // 진입 반경
+const LATE_CHECK_WINDOW_MIN = 60; // 시간 지난 뒤 이 시간 안에만 판정(앱 재배포 등으로 늦게 돌아도 옛 오더 폭탄 방지)
+
+function normalizeAddrSpacingServer(a) {
+  return String(a || "")
+    .replace(/\(.*?\)/g, " ")
+    .replace(/(\d)\s*번지/g, "$1 ")
+    .replace(/(로|길)(\d+(?:-\d+)?)(?![\d-]|번길|길|로|가)/g, "$1 $2 ")
+    .replace(/([가-힣\d](?:동|리|가))(산?\d+(?:-\d+)?)(?![\d-]|번길|길|로|가|동|호|층)/g, "$1 $2 ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+function haversineKmServer(la1, lo1, la2, lo2) {
+  const R = 6371;
+  const d1 = (la2 - la1) * Math.PI / 180;
+  const d2 = (lo2 - lo1) * Math.PI / 180;
+  const a = Math.sin(d1 / 2) ** 2 + Math.cos(la1 * Math.PI / 180) * Math.cos(la2 * Math.PI / 180) * Math.sin(d2 / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+async function tmapGeocodeServer(address) {
+  try {
+    const url = "https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=" + encodeURIComponent(address);
+    const res = await fetch(url, { headers: { Accept: "application/json", appKey: TMAP_KEY_SERVER } });
+    const c = (await res.json())?.coordinateInfo?.coordinate?.[0];
+    if (!c) return null;
+    for (const [la, lo] of [[c.lat, c.lon], [c.newLat, c.newLon]]) {
+      const lat = parseFloat(la), lng = parseFloat(lo);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0)) return { lat, lng };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+// 정확한 좌표만 쓴다 — 시/구 단위로 뭉뚱그린 근사 좌표로 판정하면 엉뚱한 지연 알림이 갈 수 있다.
+async function geocodeServerCached(rawAddr) {
+  const addr = String(rawAddr || "").trim();
+  if (!addr) return null;
+  const id = Buffer.from(addr).toString("base64").replace(/[/+=]/g, "_").slice(0, 700);
+  const ref = db.collection("geo_cache").doc(id);
+  const snap = await ref.get().catch(() => null);
+  if (snap?.exists) return snap.data().failed ? null : { lat: snap.data().lat, lng: snap.data().lng };
+  const clean = normalizeAddrSpacingServer(addr);
+  const raw = addr.replace(/\(.*?\)/g, "").replace(/\s+/g, " ").trim();
+  let g = await tmapGeocodeServer(clean);
+  if (!g && raw !== clean) g = await tmapGeocodeServer(raw);
+  if (g) await ref.set({ addr, lat: g.lat, lng: g.lng, at: FieldValue.serverTimestamp() }).catch(() => {});
+  return g;
+}
+
+async function getUserToken(uid) {
+  if (!uid) return null;
+  const u = await db.collection("users").doc(uid).get().catch(() => null);
+  return u?.exists ? (u.data().fcmToken || null) : null;
+}
+
+exports.notifyFleetLateArrival = functions.pubsub
+  .schedule("every 5 minutes")
+  .timeZone("Asia/Seoul")
+  .onRun(async () => {
+    const nowMs = Date.now();
+    const todayStr = new Date(nowMs + 9 * 3600000).toISOString().slice(0, 10);
+    let sent = 0;
+
+    for (const col of ["dispatch", "orders"]) {
+      let snap;
+      try {
+        snap = await db.collection(col).where("기사확인상태", "==", "수락").get();
+      } catch (e) {
+        console.warn(`🚚 ${col} 조회 실패:`, e?.message || e);
+        continue;
+      }
+
+      for (const docSnap of snap.docs) {
+        const o = docSnap.data();
+        if (o.source === "transport_transmit") continue;
+        const plate = normalizePlateServer(o["차량번호"] || "");
+        if (!plate) continue;
+
+        const checks = [
+          { kind: "pickup", label: "상차", date: o["상차일"], time: o["상차시간"], addr: o["상차지주소"], place: o["상차지명"] },
+          { kind: "drop", label: "하차", date: o["하차일"] || o["상차일"], time: o["하차시간"], addr: o["하차지주소"], place: o["하차지명"] },
+        ];
+
+        for (const c of checks) {
+          if (c.date !== todayStr) continue;
+          const t24 = normalizeTimeToHHMM(c.time);
+          if (!t24 || !c.addr) continue;
+          const dueMs = new Date(`${c.date}T${t24}:00+09:00`).getTime();
+          const lateMin = (nowMs - dueMs) / 60000;
+          if (lateMin < 0 || lateMin > LATE_CHECK_WINDOW_MIN) continue;
+
+          const markRef = db.collection("fleet_late_alerts").doc(`${docSnap.id}_${c.kind}`);
+          const mark = await markRef.get().catch(() => null);
+          if (mark?.exists) continue;
+
+          const driverSnap = await db.collection("drivers").where("차량번호", "==", o["차량번호"]).limit(5).get();
+          const driverDoc = driverSnap.docs.find((d) => normalizePlateServer(d.data()["차량번호"]) === plate);
+          if (!driverDoc) continue;
+          const drv = driverDoc.data();
+
+          const geo = await geocodeServerCached(c.addr);
+          if (!geo) continue; // 좌표를 정확히 못 구하면 판정하지 않는다(오알림 방지)
+
+          const loc = drv.location;
+          const hasLoc = loc?.lat != null && loc?.lng != null;
+          const distKm = hasLoc ? haversineKmServer(loc.lat, loc.lng, geo.lat, geo.lng) : null;
+
+          // 상차: 오늘 이미 상차지 1km 안에 다녀왔으면(이미 상차하고 떠난 경우) 지연 아님
+          if (c.kind === "pickup" && (distKm == null || distKm > LATE_ENTER_KM)) {
+            const tracks = await db.collection("gps_tracks")
+              .where("driverId", "==", driverDoc.id).where("date", "==", todayStr).get().catch(() => null);
+            const visited = tracks?.docs.some((d) => {
+              const p = d.data();
+              return p.lat != null && p.lng != null && haversineKmServer(p.lat, p.lng, geo.lat, geo.lng) <= 1;
+            });
+            if (visited) { await markRef.set({ skipped: "visited", at: FieldValue.serverTimestamp() }).catch(() => {}); continue; }
+          }
+
+          if (distKm != null && distKm <= LATE_ENTER_KM) {
+            // 시간 맞춰 반경 안에 들어와 있음 — 이 오더/구간은 더 볼 필요 없음
+            await markRef.set({ skipped: "inRange", distKm, at: FieldValue.serverTimestamp() }).catch(() => {});
+            continue;
+          }
+
+          const driverLabel = `${o["이름"] || drv["이름"] || "기사"}(${o["차량번호"]})`;
+          const distText = distKm != null ? `약 ${distKm.toFixed(1)}km 떨어져 있습니다` : "현재 위치가 확인되지 않습니다(앱 GPS 꺼짐 가능)";
+          const place = c.place || c.addr;
+
+          // 담당자: 기사 담당자 + 오더 등록자 (중복 제거)
+          const mgrUids = [...new Set([drv["담당자"]?.uid, o["createdByUid"]].filter(Boolean))];
+          const mgrTokens = [];
+          for (const uid of mgrUids) {
+            const t = await getUserToken(uid);
+            if (t && !mgrTokens.includes(t)) mgrTokens.push(t);
+          }
+          if (mgrTokens.length) {
+            await sendPushAndCleanup(mgrTokens, {
+              notification: {
+                title: `⚠️ ${c.label} 지연 우려 · ${driverLabel}`,
+                body: `${c.label}시간(${t24})이 지났지만 아직 ${c.label}지 [${place}] 반경 밖입니다. ${distText}. 기사님께 확인 바랍니다.`,
+              },
+              data: { type: `fleet_late_${c.kind}`, orderId: docSnap.id },
+              android: { priority: "high" },
+              apns: { payload: { aps: { sound: "default" } } },
+            }, `지입 ${c.label}지연(담당자)`);
+          }
+
+          const userSnap = await db.collection("users").doc(driverDoc.id).get().catch(() => null);
+          const du = userSnap?.exists ? userSnap.data() : null;
+          if (du?.fcmToken && du.driverPushEnabled !== false) {
+            await sendPushAndCleanup([du.fcmToken], {
+              notification: {
+                title: `${c.label}시간 알림 (${t24})`,
+                body: `${c.label}시간이 지났습니다. ${c.label}지 [${place}]까지 ${distKm != null ? `약 ${distKm.toFixed(1)}km 남았습니다` : "위치 확인이 안 됩니다"}. 늦어지면 담당자에게 연락해주세요.`,
+              },
+              data: { type: `fleet_late_${c.kind}`, orderId: docSnap.id },
+              android: { priority: "high" },
+              apns: { payload: { aps: { sound: "default" } } },
+            }, `지입 ${c.label}지연(기사)`);
+            await db.collection("driver_notifications").add({
+              driverId: driverDoc.id, type: `late_${c.kind}`, orderId: docSnap.id,
+              title: `${c.label}시간 알림 (${t24})`,
+              body: `${c.label}지 [${place}] 도착이 늦어지고 있습니다. ${distText}.`,
+              createdAt: FieldValue.serverTimestamp(), read: false,
+            }).catch(() => {});
+          }
+
+          await markRef.set({ sent: true, distKm, at: FieldValue.serverTimestamp() }).catch(() => {});
+          sent++;
+        }
+      }
+    }
+    console.log(`🚚 지입 상/하차 지연 체크 완료 (발송 ${sent}건)`);
+  });
+
+/* ==============================
    🗑️ 첨부파일 6개월 경과 자동삭제
    — 매일 실행되며, 등록(createdAt) 후 6개월이 지난 첨부파일 중
    사용자가 "잠금"을 걸어두지 않은(잠금 !== true) 파일만 삭제한다.

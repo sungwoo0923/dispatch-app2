@@ -208,6 +208,52 @@ export async function geocodeAddress(rawAddr) {
   return null;
 }
 
+// ⭐ 사용자 요청 — 간단주소(예: "김포구래동")를 만들려면 좌표뿐 아니라 시/구/동
+// 정보가 필요하다. fullAddrGeo 응답의 행정구역 필드를 그대로 돌려주고, 동 정보가
+// 비어 있으면 좌표로 역지오코딩(reversegeocoding)해서 채운다. 실패하면 null.
+export async function geocodeAddressDetail(rawAddr) {
+  const addr = String(rawAddr || "").trim();
+  if (!addr) return null;
+  const raw = addr.replace(/\(.*?\)/g, "").replace(/\s+/g, " ").trim();
+  const clean = normalizeAddrSpacing(addr);
+  const fetchGeo = async (address) => {
+    try {
+      const url = "https://apis.openapi.sk.com/tmap/geo/fullAddrGeo" +
+        "?version=1&format=json&fullAddr=" + encodeURIComponent(address);
+      const res = await fetch(url, { method: "GET", headers: { Accept: "application/json", appKey: TMAP_KEY } });
+      const data = await res.json();
+      const c = data?.coordinateInfo?.coordinate?.[0];
+      const pt = pickTmapCoord(c);
+      return pt ? { ...pt, city_do: c.city_do || "", gu_gun: c.gu_gun || "", eup_myun: c.eup_myun || "", legalDong: c.legalDong || "", adminDong: c.adminDong || "", ri: c.ri || "" } : null;
+    } catch {
+      return null;
+    }
+  };
+  let r = await fetchGeo(clean);
+  if (!r && raw !== clean) r = await fetchGeo(raw);
+  if (!r) return null;
+  if (!r.eup_myun && !r.legalDong) {
+    try {
+      const url = "https://apis.openapi.sk.com/tmap/geo/reversegeocoding?version=1&format=json&coordType=WGS84GEO&addressType=A10" +
+        `&lat=${r.lat}&lon=${r.lon}`;
+      const res = await fetch(url, { method: "GET", headers: { Accept: "application/json", appKey: TMAP_KEY } });
+      const info = (await res.json())?.addressInfo;
+      if (info) {
+        r = {
+          ...r,
+          city_do: r.city_do || info.city_do || "",
+          gu_gun: r.gu_gun || info.gu_gun || "",
+          eup_myun: info.eup_myun || "",
+          legalDong: info.legalDong || "",
+          adminDong: info.adminDong || "",
+        };
+      }
+    } catch { /* 동 정보 없이 시/구까지만 사용 */ }
+  }
+  geoDebugLog(addr, "→(상세)", r);
+  return r;
+}
+
 // ⭐ 사용자 보고 — 지입차관리 "이동정보"(RouteDistanceBadge)가 직선거리*1.25
 // 근사치를 쓰고 있어서, 강/산업단지 등으로 실제 도로가 크게 우회하는 구간(예:
 // 직선 3.4km인데 실도로는 18km)에서 체감 오차가 너무 컸다. 배차등록 폼의
@@ -237,6 +283,33 @@ export async function getDrivingRoute(fromAddr, toAddr) {
     if (!distM) return null;
     const km = Math.round((distM / 1000) * 10) / 10;
     const minutes = timeS ? Math.max(1, Math.round(timeS / 60)) : Math.max(5, Math.round((km / 60) * 60));
+    return { km, minutes };
+  } catch {
+    return null;
+  }
+}
+
+// 좌표 → 좌표 실제 도로 경로(거리/시간). getDrivingRoute와 동일 API, 지오코딩만 생략.
+export async function getDrivingRouteByCoords(from, to) {
+  if (!from || !to) return null;
+  const url = "https://apis.openapi.sk.com/tmap/routes?version=1&format=json&appKey=" + TMAP_KEY;
+  const body = new URLSearchParams({
+    startX: String(from.lon), startY: String(from.lat),
+    endX: String(to.lon), endY: String(to.lat),
+    reqCoordType: "WGS84GEO", resCoordType: "WGS84GEO",
+    searchOption: "0", startName: "출발지", endName: "도착지",
+  });
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+      body,
+    });
+    if (!res.ok) return null;
+    const props = (await res.json())?.features?.[0]?.properties;
+    if (!props?.totalDistance) return null;
+    const km = Math.round((props.totalDistance / 1000) * 10) / 10;
+    const minutes = props.totalTime ? Math.max(1, Math.round(props.totalTime / 60)) : Math.max(5, Math.round(km));
     return { km, minutes };
   } catch {
     return null;

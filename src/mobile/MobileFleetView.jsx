@@ -10,6 +10,7 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import { getDrivingRoute, geocodeAddress, haversineKm } from "../tmapFareCalc";
+import { ShortAddr, DropEtaText } from "../fleetGeo";
 
 const NAVY = "#1B2B4B";
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
@@ -125,14 +126,6 @@ function mobileOrderStatusMeta(r) {
   if (r.기사확인상태 === "완료") return { label: "운행완료", bg: "#dcfce7", color: "#166534" };
   return { label: "운행중", bg: "#dbeafe", color: "#1e40af" };
 }
-// 전체 주소에서 "시/도"를 뺀 간단주소 (예: "경기도 김포시 ..." → "김포시 ...")
-function shortAddr(addr) {
-  const s = String(addr || "").trim();
-  if (!s) return "-";
-  const tokens = s.split(/\s+/).filter(Boolean);
-  return tokens.slice(1, 3).join(" ") || tokens[0] || "-";
-}
-
 // ─── 이동거리/예상시간 뱃지 (PC RouteDistanceBadge 포팅, 모바일 폭에 맞춰 축소) ───
 // ⭐ 버그수정 — PC와 동일하게 직선거리*1.25 근사치 대신 실제 도로경로 API
 // (getDrivingRoute)로 통일 — 강/산업단지 우회 구간에서 거리가 너무 짧게
@@ -1043,7 +1036,11 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                           </div>
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginTop: 5 }}>
                             <div style={{ fontSize: 12, color: "#4b5563" }}>상차 {activeOrder.상차시간 || "즉시"}</div>
-                            <div style={{ fontSize: 12, color: "#4b5563" }}>하차예상 {activeOrder.하차시간 || "즉시"}{activeOrder.하차일 && activeOrder.하차일 !== activeOrder.상차일 ? ` (${activeOrder.하차일})` : ""}</div>
+                            <div style={{ fontSize: 12, color: "#4b5563" }}>
+                              하차예상 {activeOrder.하차시간 || "즉시"}{activeOrder.하차일 && activeOrder.하차일 !== activeOrder.상차일 ? ` (${activeOrder.하차일})` : ""}
+                              {/* ⭐ 상차지 도착 + 30분 + 실도로 소요시간 기준 도착예상시각 */}
+                              <DropEtaText order={activeOrder} driverId={d.id} style={{ display: "block", fontSize: 12, marginTop: 2 }} />
+                            </div>
                             <div style={{ fontSize: 12, color: "#6b7eac" }}>{[activeOrder.차량종류, activeOrder.차량톤수].filter(Boolean).join(" · ") || "-"}</div>
                             <div style={{ fontSize: 12, color: "#6b7eac", wordBreak: "break-word" }}>{activeOrder.화물내용 || "-"}</div>
                           </div>
@@ -1132,7 +1129,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                                         <td style={{ padding: "8px 10px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#374151", whiteSpace: "nowrap" }}>{r.상차일 || "-"} {r.상차시간 || "즉시"}</td>
                                         <td style={{ padding: "8px 10px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#374151", whiteSpace: "nowrap" }}>{r.하차일 || r.상차일 || "-"} {r.하차시간 || "즉시"}</td>
                                         <td style={{ padding: "8px 10px", textAlign: "center", fontSize: 12, fontWeight: 700, color: NAVY, whiteSpace: "nowrap" }}>
-                                          {r.상차지명 || "-"}({shortAddr(r.상차지주소)}) <span style={{ color: "#9ca3af" }}>→</span> {r.하차지명 || "-"}({shortAddr(r.하차지주소)})
+                                          {r.상차지명 || "-"}(<ShortAddr addr={r.상차지주소} />) <span style={{ color: "#9ca3af" }}>→</span> {r.하차지명 || "-"}(<ShortAddr addr={r.하차지주소} />)
                                         </td>
                                         <td style={{ padding: "8px 10px", textAlign: "center", whiteSpace: "nowrap" }}>
                                           <span style={{ fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 99, background: smeta.bg, color: smeta.color }}>{smeta.label}</span>

@@ -7,6 +7,8 @@ import {
   collection, query, where, orderBy, limit, getDocs, serverTimestamp, increment,
 } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import { useAddrGeo } from "../fleetGeo";
+import { haversineKm } from "../tmapFareCalc";
 
 // Capacitor 네이티브 컨텍스트 여부 확인
 const isNative = () => typeof window !== "undefined" && !!(window.Capacitor?.isNativePlatform?.());
@@ -257,7 +259,22 @@ function PendingOrderCard({ order: o, loading, onAccept, onReject, onCopy }) {
   );
 }
 
-function ActiveOrderCard({ order: o, loading, onComplete, onCopy }) {
+// ⭐ 사용자 요청 — 운송완료는 하차지 반경 1km 안에서만 누를 수 있다.
+// 하차지 주소를 좌표로 못 바꾸는 경우(지오코딩 실패)엔 완료 자체가 막히면 안 되므로 허용한다.
+const DROP_COMPLETE_KM = 1;
+function useDropCompleteGate(order, pos) {
+  const dropGeo = useAddrGeo(order?.하차지주소 || null);
+  if (!order?.하차지주소 || dropGeo === null) return { ok: true, msg: "" };
+  if (dropGeo === undefined) return { ok: false, msg: "하차지 위치 확인중..." };
+  if (pos?.lat == null || pos?.lng == null) return { ok: false, msg: "GPS 위치 확인중... (위치권한을 켜주세요)" };
+  const km = haversineKm(pos.lat, pos.lng, dropGeo.lat, dropGeo.lng);
+  if (km <= DROP_COMPLETE_KM) return { ok: true, msg: "" };
+  return { ok: false, msg: `하차지 1km 이내에서 운송완료 가능 (현재 약 ${km.toFixed(1)}km)` };
+}
+
+function ActiveOrderCard({ order: o, loading, onComplete, onCopy, pos }) {
+  const gate = useDropCompleteGate(o, pos);
+  const disabled = loading || !gate.ok;
   return (
     <div style={{ background: "#fff", border: "2px solid #1B2B4B", borderRadius: 16, padding: 16, boxShadow: "0 4px 16px rgba(27,43,75,0.12)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
@@ -268,9 +285,12 @@ function ActiveOrderCard({ order: o, loading, onComplete, onCopy }) {
       </div>
       <OrderDetailBody o={o} onCopy={onCopy} />
       <DispatcherLine order={o} />
-      <button onClick={onComplete} disabled={loading} style={{ width: "100%", marginTop: 12, padding: "14px", borderRadius: 12, border: "none", background: "#16a34a", color: "#fff", fontWeight: 800, fontSize: 15, cursor: loading ? "not-allowed" : "pointer" }}>
+      <button onClick={() => { if (gate.ok) onComplete(); }} disabled={disabled} style={{ width: "100%", marginTop: 12, padding: "14px", borderRadius: 12, border: "none", background: gate.ok ? "#16a34a" : "#9ca3af", color: "#fff", fontWeight: 800, fontSize: 15, cursor: disabled ? "not-allowed" : "pointer" }}>
         운송완료
       </button>
+      {!gate.ok && (
+        <div style={{ marginTop: 6, fontSize: 12, fontWeight: 700, color: "#6b7280", textAlign: "center" }}>{gate.msg}</div>
+      )}
     </div>
   );
 }
@@ -1674,7 +1694,7 @@ export default function DriverHome() {
                   onCopy={copyText} />
               ))}
               {acceptedOrders.map(o => (
-                <ActiveOrderCard key={o._id} order={o} loading={orderActionLoading}
+                <ActiveOrderCard key={o._id} order={o} loading={orderActionLoading} pos={pos}
                   onComplete={() => handleCompleteOrder(o._id, o.__col)}
                   onCopy={copyText} />
               ))}

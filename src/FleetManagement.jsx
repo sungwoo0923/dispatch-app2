@@ -12,6 +12,7 @@ import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { getDrivingRoute, geocodeAddress } from "./tmapFareCalc";
+import { ShortAddr, DropEtaText } from "./fleetGeo";
 import CustomDatePicker from "./CustomDatePicker";
 import RouteMapModal from "./RouteMapModal";
 
@@ -2239,15 +2240,19 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                           더 잘 보이는 색/굵기로 붙인다. */}
                       <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
                         <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{r.상차지명 || "-"}</span>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: "#4b5563", marginLeft: 8 }}>{abbrevAddr(r.상차지주소) || "-"}</span>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: "#4b5563", marginLeft: 8 }}><ShortAddr addr={r.상차지주소} /></span>
                       </td>
                       <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
                         <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{r.하차지명 || "-"}</span>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: "#4b5563", marginLeft: 8 }}>{abbrevAddr(r.하차지주소) || "-"}</span>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: "#4b5563", marginLeft: 8 }}><ShortAddr addr={r.하차지주소} /></span>
                       </td>
                       {/* ⭐ 상차/하차 — 상차지/하차지 칸에 있던 날짜를 여기로 옮겨 시간과 함께 표시 */}
                       <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>{r.상차일 || "-"} {r.상차시간 || "즉시"}</td>
-                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>{r.하차일 || "-"} {r.하차시간 || "즉시"}</td>
+                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>
+                        {r.하차일 || "-"} {r.하차시간 || "즉시"}
+                        {/* ⭐ 상차지 도착 + 30분 + 실도로 소요시간 기준 도착예상시각 */}
+                        {meta.label === "운송중" && <DropEtaText order={r} driverId={driver.id} style={{ display: "block", fontSize: 12, marginTop: 2 }} />}
+                      </td>
                       {/* ⭐ 사용자 요청 — 지입차관리 노선표에 화물내용/톤수/차량종류가 안 보여서 추가 */}
                       <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#374151", fontWeight: 700, whiteSpace: "nowrap" }}>
                         {[r.차량종류, r.차량톤수, r.화물내용].filter(Boolean).join(" · ") || "-"}
