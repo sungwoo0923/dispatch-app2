@@ -17159,10 +17159,10 @@ const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 �
       const _mainDCargoMf=(_dHasMf||_pHasMf)&&order.화물내용?`\n화물내용 : ${order.화물내용}`:"";
       const _mainDTonMf=(_dHasMf||_pHasMf)&&order.차량톤수?`\n화물톤수 : ${normalizeTon(order.차량톤수)}`:"";
 
-      text = `
-${header ? header + "\n\n" : ""}${order.상차일} ${getYoil(order.상차일)}
-
-${_pStopsTextMf ? _pStopsTextMf+"\n\n" : ""}${_pNumMf}상차지 : ${order.상차지명||"-"}
+      // 🔗 상차/하차 경유지 수가 같으면 연속 경유(체인) 건 — N번째 상차/하차를 한 쌍으로
+      // 묶어서 보여준다. (상세 설명은 DispatchApp.jsx의 isChainD 주석 참고)
+      const isChainMf = _pHasMf && _dHasMf && _pStopsMf.length === _dStopsMf.length;
+      const _fanOutBlockMf = `${_pStopsTextMf ? _pStopsTextMf+"\n\n" : ""}${_pNumMf}상차지 : ${order.상차지명||"-"}
 ${order.상차지주소||""}${_pConMf?`\n${_pConMf}`:""}
 상차시간 : ${pickupTime}
 상차방법 : ${order.상차방법||"-"}
@@ -17170,7 +17170,50 @@ ${order.상차지주소||""}${_pConMf?`\n${_pConMf}`:""}
 ${_dStopsTextMf ? _dStopsTextMf+"\n\n" : ""}${_dNumMf}하차지 : ${order.하차지명||"-"}
 ${order.하차지주소||""}${_dConMf?`\n${_dConMf}`:""}${_mainDCargoMf}${_mainDTonMf}
 하차시간 : ${dropTime}
-하차방법 : ${order.하차방법||"-"}
+하차방법 : ${order.하차방법||"-"}`;
+
+      const _chainBlockMf = isChainMf ? (() => {
+        const pChainMf = [
+          { name: order.상차지명, addr: order.상차지주소, contact: _pConMf, cargo: order.화물내용, ton: order.차량톤수 ? normalizeTon(order.차량톤수) : "", method: order.상차방법, date: order.상차일, time: pickupTime },
+          ..._pStopsMf.map(s => ({ name: s.업체명, addr: s.주소, contact: buildManagerLine(s.담당자||s.담당자명, s.담당자번호||s.연락처||s.전화번호), cargo: _ctM(s), ton: _ttM(s), method: s.방법, date: s.상차일, time: s.상차시간 || "즉시" })),
+        ];
+        const dChainMf = [
+          { name: order.하차지명, addr: order.하차지주소, contact: _dConMf, cargo: order.화물내용, ton: order.차량톤수 ? normalizeTon(order.차량톤수) : "", method: order.하차방법, date: order.하차일, time: dropTimeRaw },
+          ..._dStopsMf.map(s => ({ name: s.업체명, addr: s.주소, contact: buildManagerLine(s.담당자||s.담당자명, s.담당자번호||s.연락처||s.전화번호), cargo: _ctM(s), ton: _ttM(s), method: s.방법, date: s.하차일, time: s.하차시간 || "즉시" })),
+        ];
+        const nMf = pChainMf.length;
+        const renderLegMf = (e, num, kind, timeOverride) => {
+          const t = timeOverride ?? e.time;
+          return `${num}${kind}지 : ${e.name || "-"}
+${e.addr || ""}${e.contact ? `\n${e.contact}` : ""}${e.cargo ? `\n화물내용 : ${e.cargo}` : ""}${e.ton ? `\n화물톤수 : ${e.ton}` : ""}
+${kind}시간 : ${t}
+${kind}방법 : ${e.method || "-"}`;
+        };
+        const legTextsMf = [];
+        for (let i = 1; i <= nMf; i++) {
+          const p = pChainMf[i - 1], d = dChainMf[i - 1];
+          const dTime = i === 1 ? dropTime : (diffDays(p.date, d.date) >= 1 ? `${md(d.date)} ${d.time}` : d.time);
+          legTextsMf.push(`${renderLegMf(p, `${i}.`, "상차")}\n\n${renderLegMf(d, `${i}.`, "하차", dTime)}`);
+        }
+        let outMf = legTextsMf[0];
+        for (let i = 1; i < nMf; i++) {
+          const diffMf = diffDays(pChainMf[i - 1].date, dChainMf[i].date);
+          const sepMf = diffMf === 1
+            ? `익일 하차 건 (상차: ${md(pChainMf[i - 1].date)} → 하차: ${md(dChainMf[i].date)})`
+            : diffMf >= 2
+              ? `지정 하차 건 (상차: ${md(pChainMf[i - 1].date)} → 하차: ${md(dChainMf[i].date)})`
+              : "";
+          outMf += sepMf ? `\n\n${sepMf}\n\n${legTextsMf[i]}` : `\n\n${legTextsMf[i]}`;
+        }
+        return outMf;
+      })() : "";
+
+      const coreBlockMf = isChainMf ? _chainBlockMf : _fanOutBlockMf;
+
+      text = `
+${isChainMf ? "" : (header ? header + "\n\n" : "")}${order.상차일} ${getYoil(order.상차일)}
+
+${coreBlockMf}
 
 중량 : ${_totTonMf}${_totCargoMf?` / ${_totCargoMf}`:""} ${order.차량종류||order.차종||""}
 결제방법 : ${order.지급방식 || "-"}
@@ -17251,21 +17294,63 @@ ${Number(order.청구운임||0).toLocaleString()}원 ${(()=>{const pt=order.지�
       const _mainDCargoMd=(_dHasMd||_pHasMd)&&order.화물내용?`\n화물내용 : ${order.화물내용}`:"";
       const _mainDTonMd=(_dHasMd||_pHasMd)&&order.차량톤수?`\n화물톤수 : ${normalizeTon(order.차량톤수)}`:"";
 
+      // 🔗 상차/하차 경유지 수가 같으면 연속 경유(체인) 건 — N번째 상차/하차를 한 쌍으로
+      // 묶어서 보여준다. (상세 설명은 DispatchApp.jsx의 isChainD 주석 참고)
+      const isChainMd = _pHasMd && _dHasMd && _pStopsMd.length === _dStopsMd.length;
+      const _fanOutBlockMd = `${_pStopsTextMd ? _pStopsTextMd+"\n\n" : ""}${_pNumMd}상차 : ${order.상차지명||"-"} / ${timeOrNow(order.상차시간)}${order.상차시간기준 ? ` ${order.상차시간기준}` : ""}
+${order.상차지주소||""}${pickupMgr?`\n${pickupMgr}`:""}
+상차방법 : ${order.상차방법||"-"}
+
+${_dStopsTextMd ? _dStopsTextMd+"\n\n" : ""}${_dNumMd}하차 : ${order.하차지명||"-"} / ${dropTimeText2}
+${order.하차지주소||""}${dropMgr?`\n${dropMgr}`:""}${_mainDCargoMd}${_mainDTonMd}
+하차방법 : ${order.하차방법||"-"}`;
+
+      const _chainBlockMd = isChainMd ? (() => {
+        const pChainMd = [
+          { name: order.상차지명, addr: order.상차지주소, contact: pickupMgr, cargo: order.화물내용, ton: order.차량톤수 ? normalizeTon(order.차량톤수) : "", method: order.상차방법, date: order.상차일, time: timeOrNow(order.상차시간) + (order.상차시간기준 ? ` ${order.상차시간기준}` : "") },
+          ..._pStopsMd.map(s => ({ name: s.업체명, addr: s.주소, contact: pm(s.담당자||s.담당자명, s.담당자번호||s.연락처||s.전화번호), cargo: _ctMd(s), ton: _ttMd(s), method: s.방법, date: s.상차일, time: s.상차시간 || "즉시" })),
+        ];
+        const dChainMd = [
+          { name: order.하차지명, addr: order.하차지주소, contact: dropMgr, cargo: order.화물내용, ton: order.차량톤수 ? normalizeTon(order.차량톤수) : "", method: order.하차방법, date: order.하차일, time: timeOrNow(order.하차시간) },
+          ..._dStopsMd.map(s => ({ name: s.업체명, addr: s.주소, contact: pm(s.담당자||s.담당자명, s.담당자번호||s.연락처||s.전화번호), cargo: _ctMd(s), ton: _ttMd(s), method: s.방법, date: s.하차일, time: s.하차시간 || "즉시" })),
+        ];
+        const nMd = pChainMd.length;
+        const renderLegMd = (e, num, kind, timeOverride) => {
+          const t = timeOverride ?? e.time;
+          return `${num}${kind} : ${e.name || "-"} / ${t}
+${e.addr || ""}${e.contact ? `\n${e.contact}` : ""}${e.cargo ? `\n화물내용 : ${e.cargo}` : ""}${e.ton ? `\n화물톤수 : ${e.ton}` : ""}
+${kind}방법 : ${e.method || "-"}`;
+        };
+        const legTextsMd = [];
+        for (let i = 1; i <= nMd; i++) {
+          const p = pChainMd[i - 1], d = dChainMd[i - 1];
+          const dTime = i === 1 ? dropTimeText2 : (diffDays(p.date, d.date) >= 1 ? `${md(d.date)} ${d.time}` : d.time);
+          legTextsMd.push(`${renderLegMd(p, `${i}.`, "상차")}\n\n${renderLegMd(d, `${i}.`, "하차", dTime)}`);
+        }
+        let outMd = legTextsMd[0];
+        for (let i = 1; i < nMd; i++) {
+          const diffMd = diffDays(pChainMd[i - 1].date, dChainMd[i].date);
+          const sepMd = diffMd === 1
+            ? `익일 하차 건 (상차: ${md(pChainMd[i - 1].date)} → 하차: ${md(dChainMd[i].date)})`
+            : diffMd >= 2
+              ? `지정일 하차 건 (상차: ${md(pChainMd[i - 1].date)} → 하차: ${md(dChainMd[i].date)})`
+              : "";
+          outMd += sepMd ? `\n\n${sepMd}\n\n${legTextsMd[i]}` : `\n\n${legTextsMd[i]}`;
+        }
+        return outMd;
+      })() : "";
+
+      const coreBlockMd = isChainMd ? _chainBlockMd : _fanOutBlockMd;
+
       text = `[파렛전표/거래명세서 업로드]
 미 전송시 운임 지연 될 수 있습니다.
 👇👇👇👇👇👇👇👇👇👇👇👇
 ${uploadUrl}
 
 ${isColdVeh ? "*냉장(0~10도유지),냉동(-18도이하)*\n" : "*관련 서류 업로드 필수*\n"}${order.지급방식 === "착불" ? "*착불건입니다*" : order.지급방식 === "선불" ? "*선불건입니다*" : "*결제일 링크 참고하세요*"}
-${dateNotice2}${order.상차일 || ""} ${getYoil(order.상차일)}
+${isChainMd ? "" : dateNotice2}${order.상차일 || ""} ${getYoil(order.상차일)}
 
-${_pStopsTextMd ? _pStopsTextMd+"\n\n" : ""}${_pNumMd}상차 : ${order.상차지명||"-"} / ${timeOrNow(order.상차시간)}${order.상차시간기준 ? ` ${order.상차시간기준}` : ""}
-${order.상차지주소||""}${pickupMgr?`\n${pickupMgr}`:""}
-상차방법 : ${order.상차방법||"-"}
-
-${_dStopsTextMd ? _dStopsTextMd+"\n\n" : ""}${_dNumMd}하차 : ${order.하차지명||"-"} / ${dropTimeText2}
-${order.하차지주소||""}${dropMgr?`\n${dropMgr}`:""}${_mainDCargoMd}${_mainDTonMd}
-하차방법 : ${order.하차방법||"-"}${order.전달사항?.trim() ? `\n\n📢 전달사항\n${order.전달사항.trim()}` : ""}
+${coreBlockMd}${order.전달사항?.trim() ? `\n\n📢 전달사항\n${order.전달사항.trim()}` : ""}
 
 화물 : ${_totTonMd}${_totCargoMd?` / ${_totCargoMd}`:""} ${order.차량종류||order.차종||""}
 결제방법 : ${order.지급방식 === "계산서" ? `계산서(${order.배차방식 === "24시" ? "24시발행" : (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim() || "-"})` : (order.지급방식 || "-")}${noticeBlock?`\n\n${noticeBlock}`:""}

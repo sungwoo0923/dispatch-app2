@@ -24372,21 +24372,76 @@ const _mainPTon4d=hasPickupStopsD&&r.차량톤수?`\n화물톤수 : ${toTonUnit(
 const _mainDCargo4d=hasPickupStopsD?(_totCargo4d?`\n화물내용 : ${_totCargo4d}`:""): (hasDropStopsD&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"");
 const _mainDTon4d=hasPickupStopsD?(_totTon4d?`\n화물톤수 : ${_totTon4d}`:""):(hasDropStopsD&&r.차량톤수?`\n화물톤수 : ${toTonUnit(r.차량톤수)}`:"");
 
+// 🔗 상차 경유지 수 === 하차 경유지 수면 "상차→하차"가 교대로 이어지는
+// 연속 경유(체인) 건으로 보고, 상차 전체→하차 전체로 나열하던 기존 방식 대신
+// N번째 상차와 N번째 하차를 한 쌍(leg)으로 묶어 보여준다. 개수가 다르면(단순
+// 다건 상/하차 팬아웃) 기존 방식을 그대로 유지한다.
+const isChainD = hasPickupStopsD && hasDropStopsD && pickupStopsD.length === dropStopsD.length;
+const _dayDiffD = (a, b) => {
+  if (!a || !b) return 0;
+  const s = new Date(a), e = new Date(b);
+  return Math.round((new Date(e.getFullYear(), e.getMonth(), e.getDate()) - new Date(s.getFullYear(), s.getMonth(), s.getDate())) / (1000 * 60 * 60 * 24));
+};
+const _mdD = (dstr) => { const d = new Date(dstr); return `${d.getMonth() + 1}/${d.getDate()}`; };
+
+const _fanOutBlockD = `${pickupMainNumD}상차 : ${r.상차지명 || "-"} / ${r.상차시간 || "즉시"}${r.상차시간기준 ? ` (${r.상차시간기준})` : ""}
+${r.상차지주소 || ""}${(() => { const line = buildContactLine(r.상차지담당자, r.상차지담당자번호); return line ? `\n${line}` : ""; })()}${_mainPCargo4d}${_mainPTon4d}
+상차방법 : ${r.상차방법 || "-"}${pickupStopsTextD ? "\n\n" + pickupStopsTextD : ""}
+
+${dropStopsTextD ? dropStopsTextD + "\n\n" : ""}${dropMainNumD}하차 : ${r.하차지명 || "-"} / ${dropTimeText}${r.하차시간기준 ? ` (${r.하차시간기준})` : ""}
+${r.하차지주소 || ""}${(() => { const line = buildContactLine(r.하차지담당자, r.하차지담당자번호); return line ? `\n${line}` : ""; })()}${_mainDCargo4d}${_mainDTon4d}
+하차방법 : ${r.하차방법 || "-"}`;
+
+const _chainBlockD = isChainD ? (() => {
+  const pChainD = [
+    { name: r.상차지명, addr: r.상차지주소, cName: r.상차지담당자, cPhone: r.상차지담당자번호, cargo: r.화물내용, ton: r.차량톤수 ? toTonUnit(r.차량톤수) : "", method: r.상차방법, date: r.상차일, time: r.상차시간 || "즉시", suffix: r.상차시간기준 },
+    ...pickupStopsD.map(s => ({ name: s.업체명, addr: s.주소, cName: s.담당자, cPhone: s.담당자번호, cargo: _cargoText(s), ton: _tonText(s), method: s.방법, date: s.상차일, time: s.상차시간 || "즉시", suffix: "" })),
+  ];
+  const dChainD = [
+    { name: r.하차지명, addr: r.하차지주소, cName: r.하차지담당자, cPhone: r.하차지담당자번호, cargo: r.화물내용, ton: r.차량톤수 ? toTonUnit(r.차량톤수) : "", method: r.하차방법, date: r.하차일, time: r.하차시간 || "즉시", suffix: r.하차시간기준 },
+    ...dropStopsD.map(s => ({ name: s.업체명, addr: s.주소, cName: s.담당자, cPhone: s.담당자번호, cargo: _cargoText(s), ton: _tonText(s), method: s.방법, date: s.하차일, time: s.하차시간 || "즉시", suffix: "" })),
+  ];
+  const nD = pChainD.length;
+  const renderLegD = (e, num, kind, timeOverride) => {
+    const contact = buildContactLine(e.cName, e.cPhone);
+    const t = timeOverride ?? e.time;
+    return `${num}${kind} : ${e.name || "-"} / ${t}${e.suffix ? ` (${e.suffix})` : ""}
+${e.addr || ""}${contact ? `\n${contact}` : ""}${e.cargo ? `\n화물내용 : ${e.cargo}` : ""}${e.ton ? `\n화물톤수 : ${e.ton}` : ""}
+${kind}방법 : ${e.method || "-"}`;
+  };
+  const legTextsD = [];
+  for (let i = 1; i <= nD; i++) {
+    const p = pChainD[i - 1], d = dChainD[i - 1];
+    const dTime = i === 1 ? dropTimeText : (() => {
+      const diffD = _dayDiffD(p.date, d.date);
+      return diffD >= 1 ? `${_mdD(d.date)} ${d.time}` : d.time;
+    })();
+    legTextsD.push(`${renderLegD(p, `${i}.`, "상차")}\n\n${renderLegD(d, `${i}.`, "하차", dTime)}`);
+  }
+  let outD = legTextsD[0];
+  for (let i = 1; i < nD; i++) {
+    const diffD = _dayDiffD(pChainD[i - 1].date, dChainD[i].date);
+    const sepD = diffD === 1
+      ? `익일 하차 건 (상차: ${_mdD(pChainD[i - 1].date)} → 하차: ${_mdD(dChainD[i].date)})`
+      : diffD >= 2
+        ? `지정일 하차 건 (상차: ${_mdD(pChainD[i - 1].date)} → 하차: ${_mdD(dChainD[i].date)})`
+        : "";
+    outD += sepD ? `\n\n${sepD}\n\n${legTextsD[i]}` : `\n\n${legTextsD[i]}`;
+  }
+  return outD;
+})() : "";
+
+const coreBlockD = isChainD ? _chainBlockD : _fanOutBlockD;
+
 return `[파렛전표/거래명세서 업로드]
 미 전송시 운임 지연 될 수 있습니다.
 👇👇👇👇👇👇👇👇👇👇👇👇
 ${uploadUrl}
 
 ${/(냉장|냉동)/i.test(r.차량종류||r.차종||"") ? "*냉장(0~10도유지),냉동(-18도이하)*\n" : "*관련 서류 업로드 필수*\n"}${r.지급방식 === "착불" ? "*착불건입니다*" : r.지급방식 === "선불" ? "*선불건입니다*" : "*결제일 링크 참고하세요*"}
-${dateNotice}${dateText}${r.운행유형 === "왕복" ? "\n[왕복운행]" : ""}
+${isChainD ? "" : dateNotice}${dateText}${r.운행유형 === "왕복" ? "\n[왕복운행]" : ""}
 
-${pickupMainNumD}상차 : ${r.상차지명 || "-"} / ${r.상차시간 || "즉시"}${r.상차시간기준 ? ` (${r.상차시간기준})` : ""}
-${r.상차지주소 || ""}${(() => { const line = buildContactLine(r.상차지담당자, r.상차지담당자번호); return line ? `\n${line}` : ""; })()}${_mainPCargo4d}${_mainPTon4d}
-상차방법 : ${r.상차방법 || "-"}${pickupStopsTextD ? "\n\n" + pickupStopsTextD : ""}
-
-${dropStopsTextD ? dropStopsTextD + "\n\n" : ""}${dropMainNumD}하차 : ${r.하차지명 || "-"} / ${dropTimeText}${r.하차시간기준 ? ` (${r.하차시간기준})` : ""}
-${r.하차지주소 || ""}${(() => { const line = buildContactLine(r.하차지담당자, r.하차지담당자번호); return line ? `\n${line}` : ""; })()}${_mainDCargo4d}${_mainDTon4d}
-하차방법 : ${r.하차방법 || "-"}
+${coreBlockD}
 
 화물 : ${_totTon4d}${_totCargo4d ? ` / ${_totCargo4d}` : ""} ${r.차량종류 || r.차종}
 결제방법 : ${r.지급방식 === "계산서" ? `계산서(${r.배차방식 === "24시" ? "24시발행" : (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim() || "-"})` : (r.지급방식 || "-")}${driverNoteText}${noticeBlock ? `\n\n${noticeBlock}` : ""}
@@ -24506,9 +24561,17 @@ const _mainPTon4f=hasPickupStops&&r.차량톤수?`\n화물톤수 : ${toTonUnit(r
 const _mainDCargo4f=hasPickupStops?(_totCargo4f?`\n화물내용 : ${_totCargo4f}`:""):(hasDropStops&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"");
 const _mainDTon4f=hasPickupStops?(_totTon4f?`\n화물톤수 : ${_totTon4f}`:""):(hasDropStops&&r.차량톤수?`\n화물톤수 : ${toTonUnit(r.차량톤수)}`:"");
 
-return `${dateNotice}${r.상차일 || ""} ${yoil}${r.운행유형 === "왕복" ? "\n[왕복운행]" : ""}
+// 🔗 상차/하차 경유지 수가 같으면 연속 경유(체인) 건 — N번째 상차/하차를 한 쌍으로
+// 묶어서 보여준다. (상세 설명은 driver 모드 쪽 isChainD 주석 참고)
+const isChainF = hasPickupStops && hasDropStops && pickupStops.length === dropStops.length;
+const _dayDiffF = (a, b) => {
+  if (!a || !b) return 0;
+  const s = new Date(a), e = new Date(b);
+  return Math.round((new Date(e.getFullYear(), e.getMonth(), e.getDate()) - new Date(s.getFullYear(), s.getMonth(), s.getDate())) / (1000 * 60 * 60 * 24));
+};
+const _mdF = (dstr) => { const d = new Date(dstr); return `${d.getMonth() + 1}/${d.getDate()}`; };
 
-${pickupMainNum}상차지 : ${r.상차지명 || "-"}
+const _fanOutBlockF = `${pickupMainNum}상차지 : ${r.상차지명 || "-"}
 ${r.상차지주소 || "-"}${pickupContact ? `\n${pickupContact}` : ""}${_mainPCargo4f}${_mainPTon4f}
 상차시간 : ${pickupTime}${r.상차시간기준 ? ` (${r.상차시간기준})` : ""}
 상차방법 : ${r.상차방법 || "-"}${pickupStopsText ? "\n\n" + pickupStopsText : ""}
@@ -24516,7 +24579,53 @@ ${r.상차지주소 || "-"}${pickupContact ? `\n${pickupContact}` : ""}${_mainPC
 ${dropStopsText ? dropStopsText + "\n\n" : ""}${dropMainNum}하차지 : ${r.하차지명 || "-"}
 ${r.하차지주소 || "-"}${dropContact ? `\n${dropContact}` : ""}${_mainDCargo4f}${_mainDTon4f}
 하차시간 : ${dropTimeText}${r.하차시간기준 ? ` (${r.하차시간기준})` : ""}
-하차방법 : ${r.하차방법 || "-"}
+하차방법 : ${r.하차방법 || "-"}`;
+
+const _chainBlockF = isChainF ? (() => {
+  const pChainF = [
+    { name: r.상차지명, addr: r.상차지주소, cName: r.상차지담당자, cPhone: r.상차지담당자번호, cargo: r.화물내용, ton: r.차량톤수 ? toTonUnit(r.차량톤수) : "", method: r.상차방법, date: r.상차일, time: pickupTime, suffix: r.상차시간기준 },
+    ...pickupStops.map(s => ({ name: s.업체명, addr: s.주소, cName: s.담당자, cPhone: s.담당자번호, cargo: _cargoTextF(s), ton: _tonTextF(s), method: s.방법, date: s.상차일, time: s.상차시간 || "즉시", suffix: "" })),
+  ];
+  const dChainF = [
+    { name: r.하차지명, addr: r.하차지주소, cName: r.하차지담당자, cPhone: r.하차지담당자번호, cargo: r.화물내용, ton: r.차량톤수 ? toTonUnit(r.차량톤수) : "", method: r.하차방법, date: r.하차일, time: dropTimeRaw, suffix: r.하차시간기준 },
+    ...dropStops.map(s => ({ name: s.업체명, addr: s.주소, cName: s.담당자, cPhone: s.담당자번호, cargo: _cargoTextF(s), ton: _tonTextF(s), method: s.방법, date: s.하차일, time: s.하차시간 || "즉시", suffix: "" })),
+  ];
+  const nF = pChainF.length;
+  const renderLegF = (e, num, kind, timeOverride) => {
+    const contact = buildContactLine(e.cName, e.cPhone);
+    const t = timeOverride ?? e.time;
+    return `${num}${kind}지 : ${e.name || "-"}
+${e.addr || "-"}${contact ? `\n${contact}` : ""}${e.cargo ? `\n화물내용 : ${e.cargo}` : ""}${e.ton ? `\n화물톤수 : ${e.ton}` : ""}
+${kind}시간 : ${t}${e.suffix ? ` (${e.suffix})` : ""}
+${kind}방법 : ${e.method || "-"}`;
+  };
+  const legTextsF = [];
+  for (let i = 1; i <= nF; i++) {
+    const pF = pChainF[i - 1], dF = dChainF[i - 1];
+    const dTimeF = i === 1 ? dropTimeText : (() => {
+      const diffF = _dayDiffF(pF.date, dF.date);
+      return diffF >= 1 ? `${_mdF(dF.date)} ${dF.time}` : dF.time;
+    })();
+    legTextsF.push(`${renderLegF(pF, `${i}.`, "상차")}\n\n${renderLegF(dF, `${i}.`, "하차", dTimeF)}`);
+  }
+  let outF = legTextsF[0];
+  for (let i = 1; i < nF; i++) {
+    const diffF = _dayDiffF(pChainF[i - 1].date, dChainF[i].date);
+    const sepF = diffF === 1
+      ? `익일 하차 건 (상차: ${_mdF(pChainF[i - 1].date)} → 하차: ${_mdF(dChainF[i].date)})`
+      : diffF >= 2
+        ? `지정일 하차 건 (상차: ${_mdF(pChainF[i - 1].date)} → 하차: ${_mdF(dChainF[i].date)})`
+        : "";
+    outF += sepF ? `\n\n${sepF}\n\n${legTextsF[i]}` : `\n\n${legTextsF[i]}`;
+  }
+  return outF;
+})() : "";
+
+const coreBlockF = isChainF ? _chainBlockF : _fanOutBlockF;
+
+return `${isChainF ? "" : dateNotice}${r.상차일 || ""} ${yoil}${r.운행유형 === "왕복" ? "\n[왕복운행]" : ""}
+
+${coreBlockF}
 
 중량 : ${_totTon4f}${_totCargo4f ? ` / ${_totCargo4f}` : ""} ${r.차량종류 || ""}
 결제방법 : ${r.지급방식 || "-"}
@@ -36435,21 +36544,74 @@ const _mainPTon5d=_pHas5d&&r.차량톤수?`\n화물톤수 : ${toTonUnit(r.차량
 const _mainDCargo5d=_pHas5d?(_totCargo5d?`\n화물내용 : ${_totCargo5d}`:""): (_dHas5d&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"");
 const _mainDTon5d=_pHas5d?(_totTon5d?`\n화물톤수 : ${_totTon5d}`:""):(_dHas5d&&r.차량톤수?`\n화물톤수 : ${toTonUnit(r.차량톤수)}`:"");
 
+// 🔗 상차/하차 경유지 수가 같으면 연속 경유(체인) 건 — N번째 상차/하차를 한 쌍으로
+// 묶어서 보여준다. (상세 설명은 driver 모드 쪽 isChainD 주석 참고)
+const isChain5d = _pHas5d && _dHas5d && _pStops5d.length === _dStops5d.length;
+const _dayDiff5d = (a, b) => {
+  if (!a || !b) return 0;
+  const s = new Date(a), e = new Date(b);
+  return Math.round((new Date(e.getFullYear(), e.getMonth(), e.getDate()) - new Date(s.getFullYear(), s.getMonth(), s.getDate())) / (1000 * 60 * 60 * 24));
+};
+const _md5d = (dstr) => { const d = new Date(dstr); return `${d.getMonth() + 1}/${d.getDate()}`; };
+
+const _fanOutBlock5d = `${_pNum5d}상차 :${r.상차지명||"-"} / ${r.상차시간||"즉시"}${r.상차시간기준?` (${r.상차시간기준})`:""}
+${r.상차지주소||""}${(()=>{const line=buildContactLine(r.상차지담당자,r.상차지담당자번호);return line?`\n${line}`:""})()}${_mainPCargo5d}${_mainPTon5d}
+상차방법 : ${r.상차방법||"-"}${_pStopsText5d ? "\n\n" + _pStopsText5d : ""}
+
+${_dStopsText5d ? _dStopsText5d+"\n\n" : ""}${_dNum5d}하차 : ${r.하차지명||"-"} / ${dropTimeText}${r.하차시간기준?` (${r.하차시간기준})`:""}
+${r.하차지주소||""}${(()=>{const line=buildContactLine(r.하차지담당자,r.하차지담당자번호);return line?`\n${line}`:""})()}${_mainDCargo5d}${_mainDTon5d}
+하차방법 : ${r.하차방법||"-"}`;
+
+const _chainBlock5d = isChain5d ? (() => {
+  const pChain5d = [
+    { name: r.상차지명, addr: r.상차지주소, cName: r.상차지담당자, cPhone: r.상차지담당자번호, cargo: r.화물내용, ton: r.차량톤수 ? toTonUnit(r.차량톤수) : "", method: r.상차방법, date: r.상차일, time: r.상차시간 || "즉시", suffix: r.상차시간기준 },
+    ..._pStops5d.map(s => ({ name: s.업체명, addr: s.주소, cName: s.담당자, cPhone: s.담당자번호, cargo: _ct5d(s), ton: _tt5d(s), method: s.방법, date: s.상차일, time: s.상차시간 || "즉시", suffix: "" })),
+  ];
+  const dChain5d = [
+    { name: r.하차지명, addr: r.하차지주소, cName: r.하차지담당자, cPhone: r.하차지담당자번호, cargo: r.화물내용, ton: r.차량톤수 ? toTonUnit(r.차량톤수) : "", method: r.하차방법, date: r.하차일, time: r.하차시간 || "즉시", suffix: r.하차시간기준 },
+    ..._dStops5d.map(s => ({ name: s.업체명, addr: s.주소, cName: s.담당자, cPhone: s.담당자번호, cargo: _ct5d(s), ton: _tt5d(s), method: s.방법, date: s.하차일, time: s.하차시간 || "즉시", suffix: "" })),
+  ];
+  const n5d = pChain5d.length;
+  const renderLeg5d = (e, num, kind, timeOverride) => {
+    const contact = buildContactLine(e.cName, e.cPhone);
+    const t = timeOverride ?? e.time;
+    return `${num}${kind} : ${e.name || "-"} / ${t}${e.suffix ? ` (${e.suffix})` : ""}
+${e.addr || ""}${contact ? `\n${contact}` : ""}${e.cargo ? `\n화물내용 : ${e.cargo}` : ""}${e.ton ? `\n화물톤수 : ${e.ton}` : ""}
+${kind}방법 : ${e.method || "-"}`;
+  };
+  const legTexts5d = [];
+  for (let i = 1; i <= n5d; i++) {
+    const p5d = pChain5d[i - 1], d5d = dChain5d[i - 1];
+    const dTime5d = i === 1 ? dropTimeText : (() => {
+      const diff5d = _dayDiff5d(p5d.date, d5d.date);
+      return diff5d >= 1 ? `${_md5d(d5d.date)} ${d5d.time}` : d5d.time;
+    })();
+    legTexts5d.push(`${renderLeg5d(p5d, `${i}.`, "상차")}\n\n${renderLeg5d(d5d, `${i}.`, "하차", dTime5d)}`);
+  }
+  let out5d = legTexts5d[0];
+  for (let i = 1; i < n5d; i++) {
+    const diff5d = _dayDiff5d(pChain5d[i - 1].date, dChain5d[i].date);
+    const sep5d = diff5d === 1
+      ? `익일 하차 건 (상차: ${_md5d(pChain5d[i - 1].date)} → 하차: ${_md5d(dChain5d[i].date)})`
+      : diff5d >= 2
+        ? `지정일 하차 건 (상차: ${_md5d(pChain5d[i - 1].date)} → 하차: ${_md5d(dChain5d[i].date)})`
+        : "";
+    out5d += sep5d ? `\n\n${sep5d}\n\n${legTexts5d[i]}` : `\n\n${legTexts5d[i]}`;
+  }
+  return out5d;
+})() : "";
+
+const coreBlock5d = isChain5d ? _chainBlock5d : _fanOutBlock5d;
+
 return `[파렛전표/거래명세서 업로드]
 (파렛전표/명세서없으면 미업로드)
 👇👇👇👇👇👇👇👇👇👇👇👇
 ${uploadUrl}
 
 ${/(냉장|냉동)/i.test(r.차량종류||"-") ? "*냉장(0~10도유지),냉동(-18도이하)*\n" : "*관련 서류 업로드 필수*\n"}${r.지급방식 === "착불" ? "*착불건입니다*" : r.지급방식 === "선불" ? "*선불건입니다*" : "*결제일 링크 참고하세요*"}
-${dateNotice}${dateText}${r.운행유형==="왕복"?"\n[왕복운행]":""}
+${isChain5d ? "" : dateNotice}${dateText}${r.운행유형==="왕복"?"\n[왕복운행]":""}
 
-${_pNum5d}상차 :${r.상차지명||"-"} / ${r.상차시간||"즉시"}${r.상차시간기준?` (${r.상차시간기준})`:""}
-${r.상차지주소||""}${(()=>{const line=buildContactLine(r.상차지담당자,r.상차지담당자번호);return line?`\n${line}`:""})()}${_mainPCargo5d}${_mainPTon5d}
-상차방법 : ${r.상차방법||"-"}${_pStopsText5d ? "\n\n" + _pStopsText5d : ""}
-
-${_dStopsText5d ? _dStopsText5d+"\n\n" : ""}${_dNum5d}하차 : ${r.하차지명||"-"} / ${dropTimeText}${r.하차시간기준?` (${r.하차시간기준})`:""}
-${r.하차지주소||""}${(()=>{const line=buildContactLine(r.하차지담당자,r.하차지담당자번호);return line?`\n${line}`:""})()}${_mainDCargo5d}${_mainDTon5d}
-하차방법 : ${r.하차방법||"-"}
+${coreBlock5d}
 
 화물 : ${_totTon5d}${_totCargo5d?` / ${_totCargo5d}`:""} ${r.차량종류||"-"}
 결제방법 : ${r.지급방식 === "계산서" ? `계산서(${r.배차방식 === "24시" ? "24시발행" : (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "").trim() || "-"})` : (r.지급방식||"-")}${driverNoteText}${noticeBlock?`\n\n${noticeBlock}`:""}
@@ -36520,9 +36682,17 @@ const _mainPTon5f=_pHas5f&&r.차량톤수?`\n화물톤수 : ${toTonUnit(r.차량
 const _mainDCargo5f=_pHas5f?(_totCargo5f?`\n화물내용 : ${_totCargo5f}`:""): (_dHas5f&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"");
 const _mainDTon5f=_pHas5f?(_totTon5f?`\n화물톤수 : ${_totTon5f}`:""):(_dHas5f&&r.차량톤수?`\n화물톤수 : ${toTonUnit(r.차량톤수)}`:"");
 
-        return `${dateNotice}${r.상차일||""} ${yoil}${r.운행유형==="왕복"?"\n[왕복운행]":""}
+// 🔗 상차/하차 경유지 수가 같으면 연속 경유(체인) 건 — N번째 상차/하차를 한 쌍으로
+// 묶어서 보여준다. (상세 설명은 driver 모드 쪽 isChainD 주석 참고)
+const isChain5f = _pHas5f && _dHas5f && _pStops5f.length === _dStops5f.length;
+const _dayDiff5f = (a, b) => {
+  if (!a || !b) return 0;
+  const s = new Date(a), e = new Date(b);
+  return Math.round((new Date(e.getFullYear(), e.getMonth(), e.getDate()) - new Date(s.getFullYear(), s.getMonth(), s.getDate())) / (1000 * 60 * 60 * 24));
+};
+const _md5f = (dstr) => { const d = new Date(dstr); return `${d.getMonth() + 1}/${d.getDate()}`; };
 
-${_pNum5f}상차지 : ${r.상차지명||"-"}
+const _fanOutBlock5f = `${_pNum5f}상차지 : ${r.상차지명||"-"}
 ${r.상차지주소||"-"}${_pCon5f?`\n${_pCon5f}`:""}${_mainPCargo5f}${_mainPTon5f}
 상차시간 : ${pickupTime}${r.상차시간기준?` (${r.상차시간기준})`:""}
 상차방법 : ${r.상차방법||"-"}${_pStopsText5f ? "\n\n" + _pStopsText5f : ""}
@@ -36530,7 +36700,53 @@ ${r.상차지주소||"-"}${_pCon5f?`\n${_pCon5f}`:""}${_mainPCargo5f}${_mainPTon
 ${_dStopsText5f ? _dStopsText5f+"\n\n" : ""}${_dNum5f}하차지 : ${r.하차지명||"-"}
 ${r.하차지주소||"-"}${_dCon5f?`\n${_dCon5f}`:""}${_mainDCargo5f}${_mainDTon5f}
 하차시간 : ${dropTimeText}${r.하차시간기준?` (${r.하차시간기준})`:""}
-하차방법 : ${r.하차방법||"-"}
+하차방법 : ${r.하차방법||"-"}`;
+
+const _chainBlock5f = isChain5f ? (() => {
+  const pChain5f = [
+    { name: r.상차지명, addr: r.상차지주소, cName: r.상차지담당자, cPhone: r.상차지담당자번호, cargo: r.화물내용, ton: r.차량톤수 ? toTonUnit(r.차량톤수) : "", method: r.상차방법, date: r.상차일, time: pickupTime, suffix: r.상차시간기준 },
+    ..._pStops5f.map(s => ({ name: s.업체명, addr: s.주소, cName: s.담당자, cPhone: s.담당자번호, cargo: _ct5f(s), ton: _tt5f(s), method: s.방법, date: s.상차일, time: s.상차시간 || "즉시", suffix: "" })),
+  ];
+  const dChain5f = [
+    { name: r.하차지명, addr: r.하차지주소, cName: r.하차지담당자, cPhone: r.하차지담당자번호, cargo: r.화물내용, ton: r.차량톤수 ? toTonUnit(r.차량톤수) : "", method: r.하차방법, date: r.하차일, time: dropTimeRaw, suffix: r.하차시간기준 },
+    ..._dStops5f.map(s => ({ name: s.업체명, addr: s.주소, cName: s.담당자, cPhone: s.담당자번호, cargo: _ct5f(s), ton: _tt5f(s), method: s.방법, date: s.하차일, time: s.하차시간 || "즉시", suffix: "" })),
+  ];
+  const n5f = pChain5f.length;
+  const renderLeg5f = (e, num, kind, timeOverride) => {
+    const contact = buildContactLine(e.cName, e.cPhone);
+    const t = timeOverride ?? e.time;
+    return `${num}${kind}지 : ${e.name || "-"}
+${e.addr || "-"}${contact ? `\n${contact}` : ""}${e.cargo ? `\n화물내용 : ${e.cargo}` : ""}${e.ton ? `\n화물톤수 : ${e.ton}` : ""}
+${kind}시간 : ${t}${e.suffix ? ` (${e.suffix})` : ""}
+${kind}방법 : ${e.method || "-"}`;
+  };
+  const legTexts5f = [];
+  for (let i = 1; i <= n5f; i++) {
+    const p5f = pChain5f[i - 1], d5f = dChain5f[i - 1];
+    const dTime5f = i === 1 ? dropTimeText : (() => {
+      const diff5f = _dayDiff5f(p5f.date, d5f.date);
+      return diff5f >= 1 ? `${_md5f(d5f.date)} ${d5f.time}` : d5f.time;
+    })();
+    legTexts5f.push(`${renderLeg5f(p5f, `${i}.`, "상차")}\n\n${renderLeg5f(d5f, `${i}.`, "하차", dTime5f)}`);
+  }
+  let out5f = legTexts5f[0];
+  for (let i = 1; i < n5f; i++) {
+    const diff5f = _dayDiff5f(pChain5f[i - 1].date, dChain5f[i].date);
+    const sep5f = diff5f === 1
+      ? `익일 하차 건 (상차: ${_md5f(pChain5f[i - 1].date)} → 하차: ${_md5f(dChain5f[i].date)})`
+      : diff5f >= 2
+        ? `지정일 하차 건 (상차: ${_md5f(pChain5f[i - 1].date)} → 하차: ${_md5f(dChain5f[i].date)})`
+        : "";
+    out5f += sep5f ? `\n\n${sep5f}\n\n${legTexts5f[i]}` : `\n\n${legTexts5f[i]}`;
+  }
+  return out5f;
+})() : "";
+
+const coreBlock5f = isChain5f ? _chainBlock5f : _fanOutBlock5f;
+
+        return `${isChain5f ? "" : dateNotice}${r.상차일||""} ${yoil}${r.운행유형==="왕복"?"\n[왕복운행]":""}
+
+${coreBlock5f}
 
 중량 : ${_totTon5f}${_totCargo5f?` / ${_totCargo5f}`:""} ${r.차량종류||""}
 결제방법 : ${r.지급방식||"-"}
