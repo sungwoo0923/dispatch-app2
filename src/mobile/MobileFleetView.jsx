@@ -202,6 +202,37 @@ function useDestGeo(addr) {
   }, [addr]);
   return geo; // undefined = 조회중, null = 실패/없음, {lat,lng} = 성공
 }
+
+function kstDateStrLocal(d = new Date()) {
+  return new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
+}
+
+// ⭐ 보강 — "상차지를 다녀왔다"는 기억이 화면을 보고 있는 동안의 세션 상태로만
+// 있으면, 관리자가 기사 출발 이후에 새로고침/재진입할 때 다시 "상차지진입"으로
+// 잘못 보일 수 있다. 오늘자 GPS 기록(gps_tracks)에 상차지 1km 이내로 찍힌 점이
+// 하나라도 있으면 "다녀온 이력"으로 간주해, 새로고침해도 계속 정확하게 뜨게 한다.
+function useVisitedPickup(driverId, pickupGeo) {
+  const [visited, setVisited] = useState(false);
+  useEffect(() => {
+    setVisited(false);
+    if (!driverId || !pickupGeo) return;
+    const dateStr = kstDateStrLocal();
+    const unsub = onSnapshot(
+      query(collection(db, "gps_tracks"), where("driverId", "==", driverId), where("date", "==", dateStr)),
+      (snap) => {
+        const hit = snap.docs.some((d) => {
+          const p = d.data();
+          if (p.lat == null || p.lng == null) return false;
+          return haversineKm(p.lat, p.lng, pickupGeo.lat, pickupGeo.lng) <= 1;
+        });
+        if (hit) setVisited(true);
+      },
+      () => {}
+    );
+    return () => unsub();
+  }, [driverId, pickupGeo]);
+  return visited;
+}
 // driverDispatchStatus가 "운송중"을 반환하게 만든 그 오더(상/하차지 주소가
 // 필요하므로) — checkStates.includes("수락") 로직과 동일한 우선순위로 찾는다.
 function findActiveTransitOrder(orders, todayStr) {
@@ -221,14 +252,11 @@ function TransitPhaseLabel({ order, driver, fallback }) {
   const pickupGeo = useDestGeo(order?.상차지주소 || null);
   const dropGeo = useDestGeo(order?.하차지주소 || null);
   const hasLoc = driver?.location?.lat != null && driver?.location?.lng != null;
-  const [visitedPickup, setVisitedPickup] = useState(false);
 
   const pickupDist = (hasLoc && pickupGeo) ? haversineKm(driver.location.lat, driver.location.lng, pickupGeo.lat, pickupGeo.lng) : null;
   const dropDist = (hasLoc && dropGeo) ? haversineKm(driver.location.lat, driver.location.lng, dropGeo.lat, dropGeo.lng) : null;
-
-  useEffect(() => {
-    if (pickupDist != null && pickupDist <= 1 && !visitedPickup) setVisitedPickup(true);
-  }, [pickupDist, visitedPickup]);
+  const visitedFromHistory = useVisitedPickup(driver?.id, pickupGeo);
+  const visitedPickup = visitedFromHistory || (pickupDist != null && pickupDist <= 1);
 
   if (pickupDist != null && pickupDist <= 1) return "상차지도착";
   if (dropDist != null && dropDist <= 1) return "하차지도착";

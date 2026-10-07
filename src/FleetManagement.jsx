@@ -1314,25 +1314,51 @@ function useDestGeo(addr) {
   return geo; // undefined = 조회중, null = 실패/없음, {lat,lng} = 성공
 }
 
+// ⭐ 보강 — "상차지를 다녀왔다"는 기억이 화면을 보고 있는 동안의 세션 상태로만
+// 있으면, 관리자가 기사 출발 이후에 새로고침/재진입할 때 다시 "상차지진입"으로
+// 잘못 보일 수 있다. 오늘자 GPS 기록(gps_tracks — 운행기록/경로보기와 같은 컬렉션)에
+// 상차지 1km 이내로 찍힌 점이 하나라도 있으면 "다녀온 이력"으로 간주해, 새로고침
+// 해도 계속 정확하게 "이동중"으로 뜨게 한다.
+function useVisitedPickup(driverId, pickupGeo) {
+  const [visited, setVisited] = useState(false);
+  useEffect(() => {
+    setVisited(false);
+    if (!driverId || !pickupGeo) return;
+    const dateStr = kstDateStr();
+    const unsub = onSnapshot(
+      query(collection(db, "gps_tracks"), where("driverId", "==", driverId), where("date", "==", dateStr)),
+      (snap) => {
+        const hit = snap.docs.some((d) => {
+          const p = d.data();
+          if (p.lat == null || p.lng == null) return false;
+          return haversineKm(p.lat, p.lng, pickupGeo.lat, pickupGeo.lng) <= 1;
+        });
+        if (hit) setVisited(true);
+      },
+      () => {}
+    );
+    return () => unsub();
+  }, [driverId, pickupGeo]);
+  return visited;
+}
+
 // "운송중" 라벨 하나를 세분화 라벨로 바꿔 보여준다 — 그 외엔 항상 fallback 그대로.
 // ⭐ 버그수정 — 예전엔 기사가 앱에서 "상차 시작/상차완료" 버튼을 직접 눌러야만
 // (live.상태가 "운송중"으로 바뀌어야만) 하차지 방향으로 인식했는데, 실제로는 버튼을
 // 안 누르고 그냥 운전만 해도 상태가 갱신돼야 한다. 버튼 상태는 더 이상 보지 않고,
-// 순수하게 GPS 거리만으로 판단한다: 상차지 1km 이내면 "상차지도착"(한 번이라도
-// 들어왔었다는 걸 visitedPickup으로 기억해둔다), 그 뒤 상차지를 벗어나면(1km 초과)
-// 하차지에 가까워지기 전까지 "이동중", 하차지 5km/1km 이내면 하차지진입/도착.
-function TransitPhaseLabel({ order, live, fallback }) {
+// 순수하게 GPS 거리만으로 판단한다: 상차지 1km 이내면 "상차지도착"(지금 거리가
+// 1km 이내거나, 오늘자 GPS 기록상 1km 이내로 다녀온 적이 있으면 visitedPickup=true),
+// 그 뒤 상차지를 벗어나면(1km 초과) 하차지에 가까워지기 전까지 "이동중", 하차지
+// 5km/1km 이내면 하차지진입/도착.
+function TransitPhaseLabel({ order, live, driverId, fallback }) {
   const pickupGeo = useDestGeo(order?.상차지주소 || null);
   const dropGeo = useDestGeo(order?.하차지주소 || null);
   const hasLoc = live?.location?.lat != null && live?.location?.lng != null;
-  const [visitedPickup, setVisitedPickup] = useState(false);
 
   const pickupDist = (hasLoc && pickupGeo) ? haversineKm(live.location.lat, live.location.lng, pickupGeo.lat, pickupGeo.lng) : null;
   const dropDist = (hasLoc && dropGeo) ? haversineKm(live.location.lat, live.location.lng, dropGeo.lat, dropGeo.lng) : null;
-
-  useEffect(() => {
-    if (pickupDist != null && pickupDist <= 1 && !visitedPickup) setVisitedPickup(true);
-  }, [pickupDist, visitedPickup]);
+  const visitedFromHistory = useVisitedPickup(driverId, pickupGeo);
+  const visitedPickup = visitedFromHistory || (pickupDist != null && pickupDist <= 1);
 
   if (pickupDist != null && pickupDist <= 1) return "상차지도착";
   if (dropDist != null && dropDist <= 1) return "하차지도착";
@@ -2080,7 +2106,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
             const activeOrder = st.label === "운송중" ? findActiveOrder(orders, todayStr) : null;
             return (
               <span style={{ fontSize: 13, fontWeight: 800, padding: "3px 9px", borderRadius: 6, background: st.bg, color: st.color, display: "inline-block" }}>
-                {activeOrder ? <TransitPhaseLabel order={activeOrder} live={live} fallback={st.label} /> : st.label}
+                {activeOrder ? <TransitPhaseLabel order={activeOrder} live={live} driverId={driver.id} fallback={st.label} /> : st.label}
               </span>
             );
           })()}
@@ -2175,7 +2201,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                           {/* ⭐ 사용자 요청 — 상태/상차지/하차지/이동정보 글씨가 거래처·상차·하차·
                               운임 칸보다 작아 보였다. 전부 14px/700으로 통일. */}
                           <span style={{ fontSize: 14, fontWeight: 700, color: "#374151" }}>
-                            {meta.label === "운송중" ? <TransitPhaseLabel order={r} live={live} fallback={meta.label} /> : meta.label}
+                            {meta.label === "운송중" ? <TransitPhaseLabel order={r} live={live} driverId={driver.id} fallback={meta.label} /> : meta.label}
                           </span>
                           {/* ⭐ 사용자 요청 — 완료시간이 줄바꿈으로 아래에 따로 뜨던 걸 한 줄로 합침 */}
                           {r.기사확인상태 === "완료" && r.기사완료일시?.toDate && (
