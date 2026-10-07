@@ -35,23 +35,56 @@ const RESIDENCE_SUB_REGIONS = {
   경기: ["수원", "성남", "고양", "용인", "부천", "안산", "안양", "남양주", "화성", "평택", "의정부", "시흥", "파주", "김포", "광명", "군포", "광주", "이천", "양주", "오산", "구리", "안성", "포천", "의왕", "하남", "여주", "동두천", "과천", "가평", "양평", "연천"],
 };
 
-// BackgroundGeolocation 플러그인 — Capacitor native bridge를 통해 등록
-// 웹 빌드 시 registerPlugin은 no-op stub을 반환하므로 동적 import 불필요
-let BgGeo = null;
-async function loadBgGeo() {
-  if (BgGeo) return BgGeo;
+// ⭐ 네이티브 위치 서비스(KpLocation) — android/app/src/main/java/com/kpflow/driver/
+// KpLocationService.java. 예전 BackgroundGeolocation 플러그인은 위치를 웹화면(JS)으로
+// 넘겨 JS가 Firestore에 쓰는 구조라, 앱이 백그라운드로 가서 웹화면이 멈추면 전송도
+// 끊겼다. 새 서비스는 네이티브에서 직접 Firestore(REST)에 기록하므로 화면이 꺼지거나
+// 다른 앱을 써도 계속 전송된다. JS는 화면 표시용 위치만 이벤트로 받는다.
+let KpLoc = null;
+async function loadKpLoc() {
+  if (KpLoc) return KpLoc;
   try {
     const { registerPlugin } = await import("@capacitor/core");
-    BgGeo = registerPlugin("BackgroundGeolocation");
+    KpLoc = registerPlugin("KpLocation");
   } catch (_) {}
-  return BgGeo;
+  return KpLoc;
 }
 
-// 플러그인은 위치/배터리 권한 화면을 직접 열어주는 API가 없어 앱 상세정보 화면만
-// 열 수 있다(openSettings) — "항상 허용" 위치 권한과 배터리 최적화 제외는 그 화면에서
-// 기사가 직접 들어가 설정해야 한다(OS 제약, 코드로 우회 불가).
 function openNativeAppSettings() {
-  loadBgGeo().then((plugin) => plugin?.openSettings().catch(() => {}));
+  loadKpLoc().then((plugin) => plugin?.openAppSettings().catch(() => {}));
+}
+function requestNativeIgnoreBattery() {
+  loadKpLoc().then((plugin) => plugin?.requestIgnoreBattery().catch(() => {}));
+}
+function stopNativeTracking() {
+  if (!isNative()) return Promise.resolve();
+  return loadKpLoc().then((plugin) => plugin?.stop().catch(() => {}));
+}
+
+// 설정 탭 — 네이티브 실시간 위치 전송 상태 표시(3초마다 갱신)
+function NativeTrackingStatus() {
+  const [st, setSt] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    const poll = () => loadKpLoc().then(p => p?.status()).then(r => { if (alive && r) setSt(r); }).catch(() => {});
+    poll();
+    const t = setInterval(poll, 3000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+  if (!st) return null;
+  const row = (label, ok, okText, ngText) => (
+    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0" }}>
+      <span style={{ color: "#6b7280" }}>{label}</span>
+      <span style={{ fontWeight: 800, color: ok ? "#16a34a" : "#dc2626" }}>{ok ? okText : ngText}</span>
+    </div>
+  );
+  return (
+    <div style={{ background: "#f8fafc", borderRadius: 10, padding: "8px 10px", marginBottom: 10 }}>
+      {row("실시간 위치 전송", st.running, "동작중", "중지됨")}
+      {row("위치 권한", st.locationGranted, "허용", "거부")}
+      {row("배터리 최적화", st.ignoringBattery, "제한 없음", "제한됨(해제 필요)")}
+    </div>
+  );
 }
 
 // KST 날짜 문자열 (YYYY-MM-DD) — UTC 대신 KST 기준 오늘 날짜
@@ -407,6 +440,44 @@ function useGpsTracking(uid, driverData) {
     };
   }, [uid]);
 
+  // ⭐ 네이티브 위치 서비스 시작/중지 — 로그인돼 있고 퇴근 상태가 아니면 계속 추적.
+  // 앱을 닫아도(최근앱에서 밀어도) 상단 "운행 추적 중" 알림이 있는 동안 전송이 유지된다.
+  const offDuty = driverData?.status === "퇴근";
+  const driverLoaded = !!driverData;
+  useEffect(() => {
+    if (!isNative() || !uid || !driverLoaded) return;
+    let alive = true;
+    loadKpLoc().then(async (plugin) => {
+      if (!plugin || !alive) return;
+      if (offDuty) { plugin.stop().catch(() => {}); return; }
+      const u = auth.currentUser;
+      if (!u?.refreshToken) return;
+      try {
+        await plugin.start({
+          uid,
+          refreshToken: u.refreshToken,
+          apiKey: auth.app.options.apiKey,
+          projectId: auth.app.options.projectId,
+        });
+        if (alive) setPermissionDenied(false);
+      } catch (e) {
+        if (alive && String(e?.message || e).includes("NOT_AUTHORIZED")) setPermissionDenied(true);
+        return;
+      }
+      // 배터리 최적화가 걸려 있으면 화면이 꺼진 뒤 OS가 추적을 멈출 수 있어 최초 1회 해제 요청
+      try {
+        const st = await plugin.status();
+        let asked = false;
+        try { asked = localStorage.getItem("kpBatteryAsked") === "1"; } catch (_) {}
+        if (!st.ignoringBattery && !asked) {
+          try { localStorage.setItem("kpBatteryAsked", "1"); } catch (_) {}
+          plugin.requestIgnoreBattery().catch(() => {});
+        }
+      } catch (_) {}
+    });
+    return () => { alive = false; };
+  }, [uid, driverLoaded, offDuty]);
+
   const resetTotalDist = useCallback(() => {
     totalDistRef.current = 0;
     distInitializedRef.current = true;
@@ -454,51 +525,19 @@ function useGpsTracking(uid, driverData) {
     let cleanup = () => {};
 
     if (isNative()) {
-      // ── 네이티브 앱: BackgroundGeolocation 플러그인 사용 ──
-      // ⭐ 버그수정 — 앱을 막 켠 직후엔 플러그인의 백그라운드 서비스가 아직 완전히
-      // 연결되기 전이라 addWatcher가 "Service not running." 에러를 던질 수 있다
-      // (네이티브 플러그인 코드의 bindService가 비동기라 생기는 타이밍 문제).
-      // 예전엔 NOT_AUTHORIZED가 아닌 에러는 그냥 조용히 무시해버려서, 이 타이밍에
-      // 걸리면 앱을 재시작하기 전까진 GPS가 영원히 안 들어왔다("GPS 대기중"에
-      // 멈춰있던 원인). 이제 NOT_AUTHORIZED가 아닌 에러는 잠시 뒤 재시도한다.
-      let watcherId = null;
+      // ── 네이티브 앱: 위치 기록은 KpLocationService가 직접 한다(아래 별도 effect에서
+      // 시작/중지). 여기서는 화면 표시용 위치 이벤트만 받는다(JS는 Firestore에 안 씀 —
+      // 중복 기록/이동거리 이중 계산 방지).
+      let handle = null;
       let cancelled = false;
-      let retryTimer = null;
-      const startNativeWatch = (attempt = 0) => {
-        loadBgGeo().then((plugin) => {
-          if (!plugin || cancelled) return;
-          plugin.addWatcher(
-            {
-              backgroundMessage: "취소하면 위치 추적이 중지됩니다.",
-              backgroundTitle: "KP-Flow 운행 추적 중",
-              requestPermissions: true,
-              stale: false,
-              distanceFilter: 10,
-            },
-            (location, error) => {
-              if (cancelled) return;
-              if (error) {
-                if (error.code === "NOT_AUTHORIZED") { setPermissionDenied(true); return; }
-                // 서비스 연결 전 타이밍 문제 등 — 최대 5번, 1.5초 간격으로 재시도
-                if (attempt < 5) retryTimer = setTimeout(() => startNativeWatch(attempt + 1), 1500);
-                return;
-              }
-              gpsCallback(location.latitude, location.longitude, location.speed, location.accuracy);
-            }
-          ).then((id) => { watcherId = id; }).catch(() => {
-            if (!cancelled && attempt < 5) retryTimer = setTimeout(() => startNativeWatch(attempt + 1), 1500);
-          });
+      loadKpLoc().then(async (plugin) => {
+        if (!plugin || cancelled) return;
+        handle = await plugin.addListener("location", (l) => {
+          setPos({ lat: l.lat, lng: l.lng, speed: l.speed, accuracy: l.accuracy });
         });
-      };
-      startNativeWatch();
-
-      cleanup = () => {
-        cancelled = true;
-        if (retryTimer) clearTimeout(retryTimer);
-        if (watcherId) {
-          loadBgGeo().then((plugin) => plugin?.removeWatcher({ id: watcherId }).catch(() => {}));
-        }
-      };
+        if (cancelled) handle?.remove();
+      }).catch(() => {});
+      cleanup = () => { cancelled = true; handle?.remove(); };
     } else {
       // ── 웹 브라우저: navigator.geolocation 사용 ──
       let watchId = null;
@@ -1315,6 +1354,7 @@ export default function DriverHome() {
   }, [uid, statusLoading, driver, companyDefaultLoc, pos, updateStatus]);
 
   const handleLogout = async () => {
+    await stopNativeTracking();
     if (uid) {
       try {
         await updateDoc(doc(db, "drivers", uid), { active: false, updatedAt: serverTimestamp() });
@@ -2013,10 +2053,17 @@ export default function DriverHome() {
                   배차 추적이 끊기지 않으려면 설정 &gt; 배터리에서 이 앱을 "제한 없음"으로 바꿔주세요.
                   꺼두면 화면이 꺼진 뒤 휴대폰이 추적을 강제로 멈출 수 있습니다.
                 </div>
-                <button
-                  onClick={openNativeAppSettings}
-                  style={{ fontSize: 12, fontWeight: 700, color: "#1B2B4B", background: "#eff6ff", border: "none", borderRadius: 8, padding: "7px 12px", cursor: "pointer" }}
-                >앱 설정 열기</button>
+                <NativeTrackingStatus />
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button
+                    onClick={requestNativeIgnoreBattery}
+                    style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: "#1B2B4B", border: "none", borderRadius: 8, padding: "7px 12px", cursor: "pointer" }}
+                  >배터리 제한 해제</button>
+                  <button
+                    onClick={openNativeAppSettings}
+                    style={{ fontSize: 12, fontWeight: 700, color: "#1B2B4B", background: "#eff6ff", border: "none", borderRadius: 8, padding: "7px 12px", cursor: "pointer" }}
+                  >앱 설정 열기</button>
+                </div>
               </div>
             </>
           )}

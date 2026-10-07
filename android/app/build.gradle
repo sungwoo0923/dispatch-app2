@@ -7,8 +7,9 @@ android {
         applicationId "com.kpflow.driver"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // GitHub Actions 빌드 번호로 버전을 올려, 새 APK가 항상 "업데이트"로 설치되게 한다.
+        versionCode = Integer.parseInt(System.getenv("GITHUB_RUN_NUMBER") ?: "1") + 1
+        versionName = "1.1." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

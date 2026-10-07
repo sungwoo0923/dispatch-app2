@@ -24,6 +24,13 @@
 
         </activity>
 
+        <!-- ⭐ 백그라운드 실시간 위치 전송 서비스(화면이 꺼지거나 앱이 뒤로 가도 동작) -->
+        <service
+            android:name=".KpLocationService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -49,6 +56,8 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Android 13+: 백그라운드 추적 중 상시 알림을 띄우려면 필요 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 배터리 최적화 제외 요청(절전으로 추적이 끊기지 않게) -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- 백그라운드 GPS 서비스는 @capacitor-community/background-geolocation 플러그인
     모듈 자체의 AndroidManifest.xml(gradle manifest merge)에서 올바른 클래스명으로
