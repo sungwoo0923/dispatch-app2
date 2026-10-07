@@ -186,7 +186,11 @@ async function _processDestGeoQueue() {
     const g = await geocodeAddress(addr);
     result = g ? { lat: g.lat, lng: g.lon } : null;
   } catch { result = null; }
-  _destGeoCache.set(addr, result);
+  // ⭐ 버그수정 — 실패(null)까지 캐시에 영구 저장해버리면, API가 한 번 일시적으로
+  // (레이트리밋 등) 실패했을 때 그 주소는 영원히 "하차지진입/도착"으로 못 바뀌고
+  // 계속 "이동중"에 멈춰 있었다. 성공한 결과만 캐시하고, 실패는 캐시하지 않아
+  // 다음 요청 때 다시 시도되게 한다.
+  if (result) _destGeoCache.set(addr, result);
   cb(result);
   await new Promise(r => setTimeout(r, 350));
   _destGeoProcessing = false;
@@ -196,9 +200,22 @@ function useDestGeo(addr) {
   const [geo, setGeo] = useState(() => (addr ? _destGeoCache.get(addr) : null) ?? null);
   useEffect(() => {
     if (!addr) { setGeo(null); return; }
-    if (_destGeoCache.has(addr)) { setGeo(_destGeoCache.get(addr)); return; }
-    setGeo(undefined);
-    enqueueDestGeo(addr, setGeo);
+    let cancelled = false;
+    let retryTimer = null;
+    const attempt = () => {
+      if (cancelled) return;
+      if (_destGeoCache.has(addr)) { setGeo(_destGeoCache.get(addr)); return; }
+      setGeo(undefined);
+      enqueueDestGeo(addr, (result) => {
+        if (cancelled) return;
+        setGeo(result);
+        // 실패(null)면 30초 뒤 자동 재시도 — API 레이트리밋/일시 오류로 인한
+        // 실패가 화면에 영구히 남지 않도록 한다.
+        if (!result) retryTimer = setTimeout(attempt, 30000);
+      });
+    };
+    attempt();
+    return () => { cancelled = true; if (retryTimer) clearTimeout(retryTimer); };
   }, [addr]);
   return geo; // undefined = 조회중, null = 실패/없음, {lat,lng} = 성공
 }
