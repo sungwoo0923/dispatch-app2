@@ -647,9 +647,8 @@ function FitAll({ count, drivers }) {
   return null;
 }
 
-function FleetMap({ drivers, center, onSelect, selectedPath = [], roadPath = [], fitAllCount = 0, selectedDriver = null }) {
-
-  // Prefer OSRM road-following path; fall back to direct GPS waypoints
+function FleetMap({ drivers, center, onSelect, selectedPath = [], fitAllCount = 0, selectedDriver = null }) {
+  const defaultCenter = center || { lat: 37.5665, lng: 126.9780 };
 
   return (
     <MapContainer center={[defaultCenter.lat, defaultCenter.lng]} zoom={12} scrollWheelZoom style={{ height: "100%", width: "100%", minHeight: 480, position: "relative" }}>
