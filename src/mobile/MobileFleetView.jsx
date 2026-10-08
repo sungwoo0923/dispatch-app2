@@ -120,6 +120,21 @@ function driverDispatchStatus(orders, todayStr, driver) {
 // ⭐ 사용자 요청 — 기사카드 오더목록의 개별 오더 상태를 운행중/운행완료/관리자취소/
 // 기사거절 네 가지로만 보여준다. HandoverFareReport.jsx의 CANCELED_STATUSES와 동일.
 const FM_CANCELED_STATUSES_MOBILE = ["취소", "배차취소", "오더취소", "취소됨"];
+// ⭐ 사용자 요청 — 모바일 지입차관리 목록/지도에서 기사 현재 속도 표시.
+// 마지막 위치 수신이 3분 넘게 지났으면 속도값을 믿을 수 없어 표시하지 않는다.
+function SpeedBadge({ d, size = 12 }) {
+  const t = d?.updatedAt;
+  const ms = t?.toMillis ? t.toMillis() : (t?.seconds ? t.seconds * 1000 : null);
+  if (!ms || Date.now() - ms > 3 * 60000) return null;
+  const v = Math.round(d.speed || 0);
+  const moving = v >= 3;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: size, fontWeight: 800, color: !moving ? "#6b7280" : v > 80 ? "#dc2626" : "#1B2B4B", whiteSpace: "nowrap" }}>
+      {moving ? `${v} km/h` : "정차"}
+    </span>
+  );
+}
+
 // ⭐ 관리자가 수정한 오더를 기사가 확인했는지 표시(PC 노선관리와 동일)
 function ModBadge({ order }) {
   const ms = modificationStatus(order);
@@ -1036,6 +1051,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                       <div style={{ textAlign: "right", flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
                         <div>
                           <div style={{ fontSize: 12, color: "#9ca3af" }}>{timeAgo(d.updatedAt)}</div>
+                          <div style={{ marginTop: 2 }}><SpeedBadge d={d} /></div>
                           <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", marginTop: 2 }}>{d.총거리.toFixed(1)} km</div>
                         </div>
                         {/* ⭐ TASK2 — 상세진입 없이 바로 전화할 수 있는 버튼 (PC엔 없음, 모바일 원격관제 요청) */}
@@ -1282,7 +1298,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                         <span style={{ fontWeight: 700, color: STATUS_COLORS[d.상태] || "#9ca3af", fontSize: 13 }}>{d.상태}</span>
                       </div>
                       <div style={{ color: "#6b7280", fontSize: 12, marginTop: 2 }}>이동거리: {d.총거리.toFixed(1)} km</div>
-                      <div style={{ color: "#9ca3af", fontSize: 11, marginTop: 1 }}>{timeAgo(d.updatedAt)}</div>
+                      <div style={{ color: "#9ca3af", fontSize: 11, marginTop: 1 }}>{timeAgo(d.updatedAt)} · <SpeedBadge d={d} size={11} /></div>
                     </div>
                   </Popup>
                 </Marker>
@@ -1308,7 +1324,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
               </div>
               {mapSelected && (
                 <div style={{ background: "rgba(255,255,255,0.9)", borderRadius: 8, padding: "5px 10px", fontSize: 11, color: NAVY, fontWeight: 700, backdropFilter: "blur(4px)" }}>
-                  {mapSelected.이름} · {timeAgo(mapSelected.updatedAt)}
+                  {mapSelected.이름} · {timeAgo(mapSelected.updatedAt)} <SpeedBadge d={mapSelected} />
                 </div>
               )}
             </div>
@@ -1334,6 +1350,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                     <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_COLORS[mapSelected.상태] || "#9ca3af", display: "inline-block" }} />
                     <span style={{ fontSize: 13, fontWeight: 700, color: STATUS_COLORS[mapSelected.상태] || "#9ca3af" }}>{mapSelected.상태}</span>
                     <span style={{ fontSize: 12, color: "#9ca3af" }}>{timeAgo(mapSelected.updatedAt)}</span>
+                    <SpeedBadge d={mapSelected} />
                   </div>
                 </div>
                 <button

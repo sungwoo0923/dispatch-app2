@@ -1481,6 +1481,11 @@ export default function DriverHome() {
   // 이전 상태로 되돌리기: 마지막 로그 삭제 후 이전 상태로 복원
   const handleUndoLastStatus = useCallback(async () => {
     if (!uid || statusLoading || todayLogs.length === 0) return;
+    // 안전장치 — 수락/확인대기 오더가 있으면(운송 중) 되돌리기 불가
+    if (driver?.등급 === "지입" && myOrders.some(o => (o.기사확인상태 === "수락" || o.기사확인상태 === "대기") && o.배차상태 !== "배차취소" && o.상태 !== "취소")) {
+      showToast("운송 중에는 이전 상태로 되돌릴 수 없습니다");
+      return;
+    }
     setStatusLoading(true);
     try {
       const sorted = [...todayLogs].sort((a, b) => {
@@ -1506,7 +1511,7 @@ export default function DriverHome() {
     } finally {
       setStatusLoading(false);
     }
-  }, [uid, statusLoading, todayLogs]);
+  }, [uid, statusLoading, todayLogs, driver?.등급, myOrders]);
 
   // 새로고침: tick 갱신 + 출근지 반경 내이면 자동 출근 시도
   const handleRefresh = useCallback(() => {
@@ -2047,7 +2052,9 @@ export default function DriverHome() {
           })()}
 
           {/* 이전 상태로 되돌리기 */}
-          {todayLogs.length > 0 && !driver.isFinalCheckout && (
+          {/* ⭐ 지입 기사가 오더를 받았거나 운송 중이면 되돌리기를 막는다
+              (운송 중에 휴차/출근 등 이전 상태로 돌아가면 관리자 화면 상태가 꼬인다) */}
+          {todayLogs.length > 0 && !driver.isFinalCheckout && !(isFleetDriver && hasActiveDispatch) && (
             <div style={{ marginBottom: 14 }}>
               <button
                 onClick={handleUndoLastStatus}
