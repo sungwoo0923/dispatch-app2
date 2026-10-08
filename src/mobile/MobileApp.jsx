@@ -1,4 +1,6 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
+import { hideBlind, isBlindHidden, canSeeBlind } from "../blind";
+import { checkHolidayDispatch } from "../holidayConfirm";
 import html2canvas from "html2canvas";
 import { useCompanyInfo } from "../RateCard";
 import MobileFleetView from "./MobileFleetView";
@@ -270,6 +272,7 @@ const findApprovedShipperLiveMobile = async (myCompanyName, targetCompanyName) =
 // autoTransmitToShipper / AdminMenu.jsx의 수동 "화주사 전송"과 동일한 매핑으로
 // 화주사가 볼 수 있는 사본을 즉시 생성한다. (모듈 최상위 스코프)
 const autoTransmitToShipperMobile = async (savedRecord, shipperApp) => {
+  if (savedRecord?.블라인드 === true) return; // ⭐ 블라인드 오더는 화주사에도 전송하지 않는다
   let myCompanyCode = "";
   try {
     const uid = auth.currentUser?.uid;
@@ -2207,8 +2210,11 @@ const quickRange = (days) => {
   // --------------------------------------------------
   // 1. Firestore 실시간 연동 (🔥 전체 데이터 — PC와 동일)
   // --------------------------------------------------
-  const [orders, setOrders] = useState([]);
-  const [canceledOrders, setCanceledOrders] = useState([]); // ⭐ 취소내역 화면용
+  // ⭐ 블라인드 오더(최고관리자 전용)는 어떤 경로로 들어오든 여기서 걸러진다.
+  const [orders, setOrdersRaw] = useState([]);
+  const setOrders = React.useCallback((v) => setOrdersRaw(prev => hideBlind(typeof v === "function" ? v(prev) : v)), []);
+  const [canceledOrders, setCanceledOrdersRaw] = useState([]);
+  const setCanceledOrders = React.useCallback((v) => setCanceledOrdersRaw(prev => hideBlind(typeof v === "function" ? v(prev) : v)), []); // ⭐ 취소내역 화면용
   // ⭐ 앱을 백그라운드에 뒀다가 다시 열었을 때, 서버 재조회가 오래 걸리는 동안(기기가
   // 막 깨어나 네트워크 재연결이 느릴 때) 화면에 남아있던 오래된 오더 상태를 보거나
   // 그걸 보고 조작하는 일이 없도록 잠깐 화면을 덮어두는 오버레이 — refreshNow 참고.
@@ -3739,6 +3745,15 @@ const groupedByDate = useMemo(() => {
       return;
     }
 
+    // ⭐ 지입 기사 휴차일(근무가능요일 아님) 배차 확인 팝업
+    if (String(form.차량번호 || "").trim()) {
+      const nPlate = (v = "") => String(v).replace(/[\s-]/g, "").toLowerCase();
+      const prevOrder = form._editId ? orders.find(o => (o.id || o._id) === form._editId) : null;
+      if (!prevOrder || nPlate(prevOrder.차량번호) !== nPlate(form.차량번호)) {
+        if (!(await checkHolidayDispatch(drivers, form.차량번호, form.상차일 || todayKST()))) return;
+      }
+    }
+
     // 하차일이 상차일보다 앞설 수 없다 (역순 입력 방지)
     if (form.상차일 && form.하차일 && form.하차일 < form.상차일) {
       alert(`⛔ 하차일(${form.하차일})이 상차일(${form.상차일})보다 앞설 수 없습니다.\n날짜를 다시 확인해주세요.`);
@@ -3779,6 +3794,7 @@ const groupedByDate = useMemo(() => {
       혼적여부: form.혼적여부 || "독차",
       혼적: form.혼적여부 === "혼적",   // ← PC boolean 호환
       긴급: form.긴급 === true,          // ← PC 긴급 버튼과 동일 필드
+      ...(canSeeBlind() ? { 블라인드: form.블라인드 === true } : {}), // ⭐ 최고관리자 전용 블라인드
       운행유형: form.운행유형 || "",     // ← PC 왕복/편도 버튼과 동일 필드
       적요: form.적요 || "",
       메모: form.적요 || "",
@@ -4332,6 +4348,10 @@ const deleteSingleOrder = async (order) => {
     if (!selectedOrder) return;
 
     const norm = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
+    // ⭐ 지입 기사 휴차일 배차 확인 팝업
+    if (norm(selectedOrder.차량번호) !== norm(차량번호)) {
+      if (!(await checkHolidayDispatch(drivers, 차량번호, selectedOrder.상차일 || todayKST()))) return;
+    }
 
     // 이름+차량번호 일치 우선, 없으면 차량번호만
     const existingDriver =
@@ -4541,6 +4561,10 @@ const deleteSingleOrder = async (order) => {
     if (!simple?.상차지명 || !simple?.하차지명) {
       return { ok: false, error: "상차지 / 하차지는 필수입니다." };
     }
+    if (String(simple.차량번호 || "").trim()
+      && !(await checkHolidayDispatch(drivers, simple.차량번호, simple.상차일 || todayKST()))) {
+      return { ok: false, error: "휴차일 배차를 취소했습니다." };
+    }
 
     const 청구운임 = toNumber(simple.청구운임);
     const 기사운임 = toNumber(simple.기사운임);
@@ -4667,6 +4691,9 @@ const deleteSingleOrder = async (order) => {
     if (!order) return { ok: false, error: "오더 정보가 없습니다." };
     if (!String(차량번호 || "").trim()) {
       return { ok: false, error: "차량번호를 입력해주세요." };
+    }
+    if (!(await checkHolidayDispatch(drivers, 차량번호, order.상차일 || todayKST()))) {
+      return { ok: false, error: "휴차일 배차를 취소했습니다." };
     }
     try {
       const colName = order.__col || collName;
@@ -15131,6 +15158,14 @@ const pickDrop = (c) => {
                 className={`px-3 py-1.5 text-[13px] font-bold rounded-lg border transition-all ${form.긴급 ? "bg-red-600 text-white border-red-600" : "bg-white text-gray-600 border-gray-300"}`}>
                 긴급
               </button>
+              {canSeeBlind() && (
+                <button type="button"
+                  onClick={() => update("블라인드", !form.블라인드)}
+                  className={`px-3 py-1.5 text-[13px] font-bold rounded-lg border transition-all inline-flex items-center gap-1 ${form.블라인드 ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-300"}`}>
+                  <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+                  블라인드
+                </button>
+              )}
             </div>
           }
         />
@@ -19114,7 +19149,7 @@ const [showAddressConfirmPopup, setShowAddressConfirmPopup] = useState(false);
       const map = new Map();
       dispatchCache.forEach(r => map.set(r.id, r));
       ordersCache.forEach(r => map.set(r.id, r));
-      setDispatchData(Array.from(map.values()));
+      setDispatchData(hideBlind(Array.from(map.values())));
     };
     const mapDoc = (d) => {
       const data = d.data();

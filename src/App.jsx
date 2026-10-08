@@ -10,6 +10,7 @@ import {
 } from "react-router-dom";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, db } from "./firebase";
+import { setBlindViewerRole } from "./blind";
 import { doc, onSnapshot, addDoc, collection, serverTimestamp, query, orderBy, limit, getDocs, deleteDoc } from "firebase/firestore";
 
 // 역할별 대형 화면은 지연 로딩(code-splitting)한다 — 이전에는 전부 하나의 번들로
@@ -98,6 +99,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [approved, setApproved] = useState(false);
   const [userCompany, setUserCompany] = useState("");
+  // ⭐ 블라인드 오더 노출 판정용 — 렌더 중 바로 반영(하위 화면 첫 렌더 전에 알아야 함)
+  setBlindViewerRole(role, user?.email);
   // updateReady 팝업 제거됨 - UpdateBanner가 자동 처리
   const [splashDone, setSplashDone] = useState(false);
 

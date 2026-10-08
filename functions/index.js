@@ -236,6 +236,7 @@ exports.notifyNewDispatch =
       if (!["dispatch", "orders"].includes(col)) return;
 
       const data = snap.data();
+      if (data?.블라인드 === true) return; // ⭐ 블라인드 오더(최고관리자 전용)는 알림 제외
       if (!data) return;
 
       // ⭐ 화주사 전송 사본(source==="transport_transmit")은 이미 있던 오더를
@@ -277,6 +278,7 @@ exports.notifyDispatchDone =
 
       const before = change.before.data();
       const after = change.after.data();
+      if (after?.블라인드 === true) return; // ⭐ 블라인드 오더(최고관리자 전용)는 알림 제외
       if (!before || !after) return;
       if (after.source === "transport_transmit") return; // 위와 동일한 이유로 사본은 스킵
 
@@ -314,6 +316,7 @@ exports.notifyRedispatch =
 
       const before = change.before.data();
       const after = change.after.data();
+      if (after?.블라인드 === true) return; // ⭐ 블라인드 오더(최고관리자 전용)는 알림 제외
       if (!before || !after) return;
       if (after.source === "transport_transmit") return;
 
@@ -351,6 +354,7 @@ exports.notifyDispatchCanceled =
 
       const before = change.before.data();
       const after = change.after.data();
+      if (after?.블라인드 === true) return; // ⭐ 블라인드 오더(최고관리자 전용)는 알림 제외
       if (!before || !after) return;
       if (after.source === "transport_transmit") return;
 
@@ -407,6 +411,7 @@ exports.notifyDispatchDeleted =
       if (!["dispatch", "orders"].includes(col)) return;
 
       const data = snap.data();
+      if (data?.블라인드 === true) return; // ⭐ 블라인드 오더(최고관리자 전용)는 알림 제외
       if (!data) return;
       if (data.source === "transport_transmit") return;
       // 배차취소로 먼저 바뀐 뒤 나중에 완전삭제된 문서는 위 notifyDispatchCanceled에서
@@ -729,6 +734,7 @@ exports.notifyUnassignedUrgent = functions.pubsub
         const data = docSnap.data();
         if (data.source === "transport_transmit") continue; // 원본(dispatch)과 중복 방지
         if (data.urgentPushSentAt) continue; // 이미 이 오더는 알림을 보냈음
+        if (data.블라인드 === true) continue; // ⭐ 블라인드 오더는 미배차 알림 제외
 
         const t24 = normalizeTimeToHHMM(data["상차시간"]);
         if (!t24) continue;
@@ -2752,6 +2758,7 @@ exports.syncDispatchToGoogleSheet =
 
       const after = change.after.exists ? change.after.data() : null;
       const before = change.before.exists ? change.before.data() : null;
+      if (after?.블라인드 === true || (!after && before?.블라인드 === true)) return; // ⭐ 블라인드 오더는 구글시트에도 기록 안 함
 
       if (!after) {
         // 문서 자체가 완전삭제된 경우(예: 화주사 전송사본 삭제 등) — 시트에 이미

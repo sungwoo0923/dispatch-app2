@@ -1,5 +1,7 @@
 // ===================== DispatchApp.jsx (PART 1/8) — START =====================
 import { loadTmap } from "./tmapLoader";
+import { hideBlind, isBlindHidden, canSeeBlind } from "./blind";
+import { checkHolidayDispatch } from "./holidayConfirm";
 import { drawTmapTrafficRoute, TRAFFIC_LEGEND } from "./mapStyle";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -2389,6 +2391,7 @@ const findApprovedShipperLive = async (myCompanyName, targetCompanyName) => {
 // "화주사 전송"과 동일한 매핑으로 화주사가 볼 수 있는 사본을 즉시 생성한다.
 // (모듈 최상위 스코프 — useRealtimeCollections 안의 addDispatch에서 호출된다)
 const autoTransmitToShipper = async (savedRecord, shipperApp) => {
+  if (savedRecord?.블라인드 === true) return; // ⭐ 블라인드 오더는 화주사에도 전송하지 않는다
   let myCompanyCode = "";
   try {
     const uid = auth.currentUser?.uid;
@@ -2909,7 +2912,9 @@ function useRealtimeCollections(user, userCompany, role) {
   // ⚡ T165 — 매번 빈 배열로 시작해 Firestore 최초 응답을 기다리는 동안 화면이 비어 보이던 문제.
   //    직전 세션에서 safeSave로 남겨둔 로컬 캐시를 초기값으로 먼저 그려주고,
   //    실시간 리스너가 응답하는 즉시 최신 데이터로 교체한다(정확성에는 영향 없음, 최초 페인트만 개선).
-  const [dispatchData, setDispatchData] = useState(() => safeLoad("dispatchData", []));
+  // ⭐ 블라인드 오더(최고관리자 전용)는 어떤 경로로 들어오든 여기서 걸러진다.
+  const [dispatchData, setDispatchDataRaw] = useState(() => hideBlind(safeLoad("dispatchData", [])));
+  const setDispatchData = React.useCallback((v) => setDispatchDataRaw(prev => hideBlind(typeof v === "function" ? v(prev) : v)), []);
   const [drivers, setDrivers] = useState(() => safeLoad("drivers", []));
   const [clients, setClients] = useState(() => safeLoad("clients", []));
   // 🔔 위 캐시(dispatchData)는 이전 세션의 오래된 스냅샷이라, orders/dispatch 두
@@ -2921,7 +2926,8 @@ function useRealtimeCollections(user, userCompany, role) {
   // ⭐ 실시간배차현황/배차관리 하단부 전용 — 어제~내일(딱 3일)만 담는 훨씬 작은
   // 실시간 데이터. 위 dispatchData(최근 13개월)보다도 훨씬 작아서, 그 화면들이
   // 매번 큰 배열을 필터링/재계산하며 겪던 버벅임과 저장 후 팝업 딜레이를 줄여준다.
-  const [recentDispatchData, setRecentDispatchData] = useState([]);
+  const [recentDispatchData, setRecentDispatchDataRaw] = useState([]);
+  const setRecentDispatchData = React.useCallback((v) => setRecentDispatchDataRaw(prev => hideBlind(typeof v === "function" ? v(prev) : v)), []);
   const [recentLiveDataReady, setRecentLiveDataReady] = useState(false);
   // 날짜가 바뀌면(자정 경과) 아래 "어제~내일" 실시간 구독 범위도 하루 밀려야 하므로,
   // 창을 열어둔 채 자정을 넘겨도 자동으로 갱신되도록 KST 기준 날짜가 바뀔 때만 값이
@@ -3508,6 +3514,12 @@ const addDispatch = async (record) => {
     return false;
   }
 
+  // ⭐ 지입 기사 휴차일 배차 확인(등록과 동시에 차량번호를 넣는 경우)
+  if (record?.차량번호) {
+    const okHoliday = await checkHolidayDispatch(drivers, record.차량번호, record.상차일);
+    if (!okHoliday) return false;
+  }
+
   const _id = crypto.randomUUID(); // ⭐ 무조건 새로 생성
 
   const cleanRecord = stripUndefinedDeep({
@@ -3664,6 +3676,13 @@ const patchDispatch = async (_id, patch, knownPrev) => {
     }
     if (!snap.exists()) { console.error("❌ 문서 없음", _id); return; }
     prev = snap.data();
+  }
+
+  // ⭐ 사용자 요청 — 지입 기사를 근무가능요일이 아닌 날(휴차)에 배차하면 확인 팝업.
+  // "휴차일이지만 배차"를 고르면 그대로 진행, "배차 취소"면 저장하지 않는다.
+  if (patch.차량번호 && normalizePlate(patch.차량번호) !== normalizePlate(prev?.차량번호 || "")) {
+    const okHoliday = await checkHolidayDispatch(drivers, patch.차량번호, patch.상차일 || prev?.상차일);
+    if (!okHoliday) return false;
   }
 
   // ⭐ 사용자 요청 — 이미 "운송완료"된 오더에서 차량번호를 비워 기사만 취소하려는
@@ -13890,6 +13909,16 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
   className={`px-3 py-1.5 text-sm font-bold rounded-lg border transition-all ${form.긴급 ? "bg-red-600 text-white border-red-600" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
   긴급
 </button>
+
+{/* ⭐ 블라인드 — 최고관리자에게만 보이는 버튼. 켜고 등록하면 최고관리자 외 누구의 배차목록에도 안 보인다 */}
+{canSeeBlind() && (
+<button type="button" onClick={() => onChange("블라인드", !form.블라인드)}
+  title="켜고 등록하면 최고관리자 외에는 아무도 이 오더를 볼 수 없습니다"
+  className={`px-3 py-1.5 text-sm font-bold rounded-lg border transition-all inline-flex items-center gap-1 ${form.블라인드 ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+  <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+  블라인드
+</button>
+)}
   {(areaFareHint || distanceFareEstimate) && (
     <div
       className="mt-2 flex items-center gap-3 bg-[#1B2B4B] rounded-lg px-4 py-2 text-sm cursor-pointer hover:bg-[#243a60] transition"
@@ -22270,6 +22299,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
       };
       const [orders, dispatch] = await Promise.all([fetchOne("orders"), fetchOne("dispatch")]);
       const merged = [...orders, ...dispatch].filter(r =>
+        !isBlindHidden(r) &&
         r.source !== "transport_transmit" &&
         r.배차상태 !== "배차취소" &&
         !["취소", "배차취소", "오더취소", "취소됨"].includes(r.상태) &&
@@ -26006,7 +26036,7 @@ const handleUrgentSnooze = (minutes) => {
       );
 
       onSnapshot(qRef, (snap) => {
-        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const list = hideBlind(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setSimilarOrders(list);
       });
     } catch (e) {
@@ -35614,6 +35644,7 @@ const [appliedEndDate, setAppliedEndDate] = React.useState("");
         const [oldOrders, oldDispatch] = await Promise.all([fetchOlder("orders"), fetchOlder("dispatch")]);
         if (cancelled) return;
         const merged = [...oldOrders, ...oldDispatch].filter(row =>
+          !isBlindHidden(row) &&
           row.배차상태 !== "배차취소" && !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태)
         );
         setExtraHistoricalRows(merged);
