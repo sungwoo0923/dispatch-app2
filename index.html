@@ -101,8 +101,10 @@
     <link rel="shortcut icon" href="/icons/sflow-icon.png" />
     <link rel="manifest" href="/manifest.json" />
 
-    <!-- ⭐ Tmap SDK -->
-    <script src="https://apis.openapi.sk.com/tmap/jsv2?version=1&appKey=rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer&libraries=services"></script>
+    <!-- ⭐ Tmap SDK — 예전엔 여기서 "동기"로 불러와 첫 화면이 지도 SDK 다운로드를 다 기다렸다.
+         이제 src/tmapLoader.js가 화면이 뜬 뒤(또는 지도가 필요할 때) 불러온다. -->
+    <link rel="preconnect" href="https://apis.openapi.sk.com" crossorigin />
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
 
   </head>
 
@@ -110,11 +112,7 @@
 
     <div id="root"></div>
 
-    <!-- 카카오 지도 -->
-    <script
-      src="//dapi.kakao.com/v2/maps/sdk.js?appkey=bd50dacf0c9ef4d03e905a2e14e7279a&libraries=services"
-      defer
-    ></script>
+    <!-- (카카오 지도 SDK는 프로그램에서 쓰지 않아 제거 — 불필요한 다운로드로 로딩만 늦췄음) -->
 
     <!-- React -->
     <script type="module" src="/src/main.jsx"></script>

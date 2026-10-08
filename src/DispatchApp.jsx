@@ -1,4 +1,6 @@
 // ===================== DispatchApp.jsx (PART 1/8) — START =====================
+import { loadTmap } from "./tmapLoader";
+import { drawTmapTrafficRoute, TRAFFIC_LEGEND } from "./mapStyle";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -9767,6 +9769,9 @@ React.useEffect(() => {
 
       console.log("📍 지도 렌더 시작");
 
+      // ⭐ Tmap SDK는 이제 필요할 때만 불러온다(첫 화면 로딩 속도 개선)
+      await loadTmap().catch(() => {});
+      if (cancelled || !window.Tmapv2?.Map) return;
       const mapDiv = await waitMapDiv();
       if (!mapDiv || cancelled) return;
       await waitStableMapHeight(mapDiv);
@@ -10025,12 +10030,8 @@ if (!linePath || linePath.length === 0) {
 // =========================
 // ⭐ 경로 그리기
 // =========================
-new window.Tmapv2.Polyline({
-  path: linePath,
-  strokeColor: "#2563eb",
-  strokeWeight: 5,
-  map
-});
+// ⭐ 티맵처럼 두꺼운 선 + 구간별 교통상황 색(원활/서행/지체/정체)
+drawTmapTrafficRoute(map, routeData);
 
 // =========================
 // ⭐ 거리 / 시간
@@ -18514,6 +18515,13 @@ setConfirmChange(null);
     }}
   />
 
+  {/* ⭐ 교통상황 범례(티맵 색 기준) */}
+  <div className="absolute top-4 left-4 bg-white/95 rounded-lg shadow px-3 py-1.5 text-[12px] font-bold text-gray-600 flex items-center gap-3" style={{ zIndex: 1001 }}>
+    {TRAFFIC_LEGEND.map(t => (
+      <span key={t.c} className="flex items-center gap-1"><span className="inline-block w-4 h-1.5 rounded" style={{ background: t.color }} />{t.label}</span>
+    ))}
+  </div>
+
   {/* 지도 위 경로 정보 */}
   <div 
     className="absolute bottom-6 left-6 bg-white/95 backdrop-blur px-5 py-4 rounded-xl shadow-2xl text-sm space-y-2 border border-gray-200"
@@ -20706,7 +20714,7 @@ function LiveLocationPopup({ row, onClose }) {
   React.useEffect(() => {
     if (!loc) return;
     const draw = () => {
-      if (!window.Tmapv2) { setTimeout(draw, 200); return; }
+      if (!window.Tmapv2?.Map) { loadTmap().catch(() => {}); setTimeout(draw, 200); return; }
       const pos = new window.Tmapv2.LatLng(loc.lat, loc.lng);
       if (!mapObjRef.current) {
         mapObjRef.current = new window.Tmapv2.Map(mapElId, { center: pos, width: "100%", height: "600px", zoom: 15 });

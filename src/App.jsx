@@ -20,23 +20,40 @@ const DispatchApp = React.lazy(() => import("./DispatchApp"));
 const MobileApp = React.lazy(() => import("./mobile/MobileApp"));
 const ShipperMobileApp = React.lazy(() => import("./mobile/ShipperMobileApp"));
 
-import DriverHome from "./driver/DriverHome";
-import DriverLogin from "./driver/DriverLogin";
-import DriverRegister from "./driver/DriverRegister";
+// ⭐ 로딩 속도 개선 — 운송사 프로그램 본체(PC: DispatchApp, 폰: MobileApp)는 로그인
+// 확인(Firebase 인증 + 사용자 문서 조회)이 다 끝난 "뒤에야" 다운로드를 시작해서,
+// 두 대기 시간이 그대로 더해졌다. 첫 화면을 여는 순간 바로 미리 받기 시작해 겹치게 한다.
+(function prefetchMainApp() {
+  try {
+    if (typeof window === "undefined" || window.Capacitor?.isNativePlatform?.()) return;
+    const p = window.location.pathname;
+    if (!(p === "/" || p.startsWith("/app") || p === "/login" || p === "/transport-login")) return;
+    const ua = navigator.userAgent.toLowerCase();
+    const phone = /iphone|ipod|android(?!.*tablet)/.test(ua) || window.innerWidth < 768;
+    (phone ? import("./mobile/MobileApp") : import("./DispatchApp")).catch(() => {});
+  } catch { /* 미리받기 실패는 무시 — 원래대로 필요할 때 받는다 */ }
+})();
+
+// ⭐ 로딩 속도 개선 — 기사앱/회원가입/업로드 페이지 등은 운송사 PC 사용자가 거의
+// 열지 않는 화면인데, 첫 번들에 같이 들어 있어서(약 600KB, html2canvas 포함) 프로그램을
+// 열 때마다 다운로드/해석 시간이 늘었다. 필요할 때만 불러오도록 지연 로딩으로 바꾼다.
+const DriverHome = React.lazy(() => import("./driver/DriverHome"));
+const DriverLogin = React.lazy(() => import("./driver/DriverLogin"));
+const DriverRegister = React.lazy(() => import("./driver/DriverRegister"));
 
 import Login from "./Login";
 import TransportLogin from "./TransportLogin";
-import Signup from "./Signup";
+const Signup = React.lazy(() => import("./Signup"));
 import ShipperLogin from "./shipper/ShipperLogin";
-import ShipperSignup from "./shipper/ShipperSignup";
-import ShipperPending from "./shipper/ShipperPending";
+const ShipperSignup = React.lazy(() => import("./shipper/ShipperSignup"));
+const ShipperPending = React.lazy(() => import("./shipper/ShipperPending"));
 
 import NoAccess from "./NoAccess";
-import UploadPage from "./UploadPage";
-import DriverSearchPage from "./DriverSearchPage";
-import ShortLinkRedirect from "./ShortLinkRedirect";
-import StandardFare from "./StandardFare";
-import ChangePassword from "./ChangePassword";
+const UploadPage = React.lazy(() => import("./UploadPage"));
+const DriverSearchPage = React.lazy(() => import("./DriverSearchPage"));
+const ShortLinkRedirect = React.lazy(() => import("./ShortLinkRedirect"));
+const StandardFare = React.lazy(() => import("./StandardFare"));
+const ChangePassword = React.lazy(() => import("./ChangePassword"));
 
 // ⭐ 관리자 겸 개발자 계정 — 배차/화주/모바일 등 프로그램 어디서든, users 문서
 // 상태(role 필드 오타, 퇴사 처리, 문서 자체가 없는 경우 등)와 무관하게 무조건
@@ -492,7 +509,7 @@ export default function App() {
   // 기사전달용 짧은 업로드 링크 (/u/{code}) — /upload?id=...&t=...로 리다이렉트
   const shortLinkMatch = window.location.pathname.match(/^\/u\/([A-Za-z0-9]+)$/);
   if (shortLinkMatch) {
-    return <Router><Routes><Route path="*" element={<ShortLinkRedirect code={shortLinkMatch[1]} />} /></Routes></Router>;
+    return <Router><Routes><Route path="*" element={<React.Suspense fallback={null}><ShortLinkRedirect code={shortLinkMatch[1]} /></React.Suspense>} /></Routes></Router>;
   }
 
   // 로딩/스플래시

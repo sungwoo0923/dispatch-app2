@@ -11,6 +11,7 @@ import {
 import L from "leaflet";
 import { getDrivingRoute, geocodeAddress, haversineKm } from "../tmapFareCalc";
 import { ShortAddr, DropEtaText } from "../fleetGeo";
+import { LeafletTrack, MapLegend } from "../mapLeaflet";
 
 const NAVY = "#1B2B4B";
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
@@ -527,7 +528,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
           .map(d => ({ id: d.id, ...d.data() }))
           .filter(t => {
             const d = resolveTs(t.timestamp);
-            return d && d.toISOString().slice(0, 10) === selectedDate;
+            return d && new Date(d.getTime() + 9 * 3600000).toISOString().slice(0, 10) === selectedDate;
           })
           .sort((a, b) => (resolveTs(a.timestamp)?.getTime() || 0) - (resolveTs(b.timestamp)?.getTime() || 0));
         setGpsTracks(tracks);
@@ -1233,37 +1234,8 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
               {displayPath.length >= 2 && <FitPath points={displayPath} resetKey={mapSelected?.id} />}
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
 
-              {/* 실제 도로 경로 선 */}
-              {displayPath.length >= 2 && (
-                <Polyline
-                  positions={displayPath.map(p => [p.lat, p.lng])}
-                  color={NAVY} weight={4} opacity={0.8}
-                />
-              )}
-
-              {/* 경로 상태 포인트 */}
-              {selectedPath.map((p, i) => {
-                const color = STATUS_COLORS[p.status] || "#9ca3af";
-                const isFirst = i === selectedPath.length - 1;
-                const isLast = i === 0;
-                if (gpsTracks.length >= 2 && !isFirst && !isLast) return null; // dense tracks: only endpoints
-                return (
-                  <CircleMarker
-                    key={i}
-                    center={[p.lat, p.lng]}
-                    radius={isFirst || isLast ? 8 : 5}
-                    color="#fff" weight={2.5}
-                    fillColor={color} fillOpacity={1}
-                  >
-                    <Popup>
-                      <div style={{ fontSize: 13, fontFamily: "'Noto Sans KR',sans-serif", lineHeight: 1.7 }}>
-                        <span style={{ fontWeight: 700, color }}>● {p.status}</span>
-                        <div style={{ color: "#6b7280", fontSize: 12, marginTop: 2 }}>{formatDateTime(p.timestamp)}</div>
-                      </div>
-                    </Popup>
-                  </CircleMarker>
-                );
-              })}
+              {/* ⭐ 이동 동선 — 점 대신 매끈한 선 + 출발점/상태 변경 지점만 표시(PC와 동일) */}
+              {selectedPath.length >= 2 && <LeafletTrack points={selectedPath} statusColors={STATUS_COLORS} />}
 
               {/* 기사 현재 위치 마커 */}
               {drivers.map(d => d.location ? (
@@ -1290,6 +1262,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                 </Marker>
               ) : null)}
             </MapContainer>
+            {selectedPath.length >= 2 && <MapLegend showTraffic={false} />}
 
             {/* 갱신 배지 + 새로고침 버튼 */}
             <div style={{ position: "absolute", top: 10, left: 10, zIndex: 1000, display: "flex", flexDirection: "column", gap: 6 }}>

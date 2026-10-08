@@ -625,6 +625,7 @@ function useCollisionDetection(uid, driverRef, posRef, onCollision) {
   const onCollisionRef = useRef(onCollision);
   useEffect(() => { onCollisionRef.current = onCollision; }, [onCollision]);
   const cooldownRef = useRef(false);
+  const hitsRef = useRef([]); // 최근 강한 충격 샘플 시각들
 
   useEffect(() => {
     if (!uid) return;
@@ -638,7 +639,23 @@ function useCollisionDetection(uid, driverRef, posRef, onCollision) {
         const { x = 0, y = 0, z = 0 } = e.accelerationIncludingGravity;
         magnitude = Math.max(0, Math.sqrt(x * x + y * y + z * z) - 9.8);
       }
-      if (magnitude < 25) return;
+      // ⭐ 사용자 요청 — 폰을 톡 건드리거나 거치대에 툭 놓기만 해도 충돌 알림이 떴다.
+      // 예전 기준은 "한 순간이라도 25m/s²(약 2.5G)"라, 손가락 탭/폰 떨어뜨림 같은 아주
+      // 짧은 튐에도 걸렸다. 실제 교통사고 충격만 잡도록 기준을 크게 올린다:
+      //  ① 순간 충격 40m/s²(약 4G) 이상이
+      //  ② 0.25초 안에 3번 이상 연속으로 감지되고(톡 치는 건 1~2샘플로 끝남)
+      //  ③ 차가 실제로 달리고 있었을 것(GPS 속도 15km/h 이상).
+      //     속도 정보를 못 받는 상황이면 대신 훨씬 강한 60m/s²(약 6G)를 요구한다.
+      const speedMs = posRef.current?.speed;
+      const moving = speedMs != null && speedMs >= 4.2;
+      const threshold = speedMs == null ? 60 : 40;
+      if (magnitude < threshold) return;
+      if (speedMs != null && !moving) return;
+      const now = Date.now();
+      hitsRef.current = hitsRef.current.filter(t => now - t < 250);
+      hitsRef.current.push(now);
+      if (hitsRef.current.length < 3) return;
+      hitsRef.current = [];
       cooldownRef.current = true;
       setTimeout(() => { cooldownRef.current = false; }, 90000); // 90s cooldown
       onCollisionRef.current?.(magnitude);

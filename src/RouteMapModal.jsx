@@ -2,6 +2,8 @@ import React from "react";
 import { db } from "./firebase";
 import { collection, doc, onSnapshot, query, where, orderBy } from "firebase/firestore";
 import { normalizeAddrSpacing, pickTmapCoord, geoDebugLog } from "./tmapFareCalc";
+import { drawTmapTrafficRoute, drawTmapTrack, clearTmapOverlays, TRAFFIC_LEGEND, TRACK_COLOR } from "./mapStyle";
+import { loadTmap } from "./tmapLoader";
 
 function kstDateStr(d = new Date()) {
   return new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
@@ -127,9 +129,10 @@ export default function RouteMapModal({ pickupAddr, dropAddr, pickupName, dropNa
     let cancelled = false;
 
     const run = async () => {
-      // Tmap 스크립트 + 지도 DOM이 준비될 때까지 대기(최대 2초)
+      // Tmap 스크립트(필요할 때만 불러옴) + 지도 DOM이 준비될 때까지 대기
+      await loadTmap().catch(() => {});
       for (let i = 0; i < 40; i++) {
-        if (window.Tmapv2 && document.getElementById(mapId)) break;
+        if (window.Tmapv2?.Map && document.getElementById(mapId)) break;
         await new Promise((r) => setTimeout(r, 50));
       }
       if (cancelled) return;
@@ -167,7 +170,8 @@ export default function RouteMapModal({ pickupAddr, dropAddr, pickupName, dropNa
       const linePath = routeData.path.map(([lng, lat]) => new window.Tmapv2.LatLng(lat, lng));
       if (!linePath.length) { setStatus("error"); return; }
 
-      new window.Tmapv2.Polyline({ path: linePath, strokeColor: "#1B2B4B", strokeWeight: 5, map });
+      // ⭐ 티맵처럼 두꺼운 선 + 구간별 교통상황 색(원활/서행/지체/정체)
+      drawTmapTrafficRoute(map, routeData);
 
       const bounds = new window.Tmapv2.LatLngBounds();
       linePath.forEach((p) => { if (p) bounds.extend(p); });
@@ -217,7 +221,7 @@ export default function RouteMapModal({ pickupAddr, dropAddr, pickupName, dropNa
         const pts = snap.docs
           .map((d) => d.data())
           .filter((p) => p.lat != null && p.lng != null)
-          .map((p) => ({ lat: p.lat, lng: p.lng }));
+          .map((p) => ({ lat: p.lat, lng: p.lng, timestamp: p.timestamp }));
         setDriverTrack(pts);
       },
       () => setDriverTrack([])
@@ -239,13 +243,9 @@ export default function RouteMapModal({ pickupAddr, dropAddr, pickupName, dropNa
     const map = mapObjRef.current;
     if (!map || !window.Tmapv2 || status !== "ready") return;
 
-    if (driverPolylineRef.current) { driverPolylineRef.current.setMap(null); driverPolylineRef.current = null; }
-    if (driverTrack.length >= 2) {
-      const path = driverTrack.map((p) => new window.Tmapv2.LatLng(p.lat, p.lng));
-      driverPolylineRef.current = new window.Tmapv2.Polyline({
-        path, strokeColor: "#16a34a", strokeWeight: 5, strokeStyle: "dashed", map,
-      });
-    }
+    // ⭐ 실제 이동 동선 — GPS 튐 제거 후 매끈한 보라색 선 + 출발점
+    clearTmapOverlays(driverPolylineRef.current);
+    driverPolylineRef.current = drawTmapTrack(map, driverTrack);
 
     if (driverMarkerRef.current) { driverMarkerRef.current.setMap(null); driverMarkerRef.current = null; }
     if (liveLoc) {
@@ -279,10 +279,12 @@ export default function RouteMapModal({ pickupAddr, dropAddr, pickupName, dropNa
           {status === "error" && (
             <div className="absolute inset-0 flex items-center justify-center text-[13px] font-semibold text-gray-500 bg-white/80">경로 정보를 가져올 수 없습니다</div>
           )}
-          {driverId && status === "ready" && (
-            <div className="absolute left-3 bottom-3 bg-white/90 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 flex items-center gap-3 shadow">
-              <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-[#1B2B4B]" />예정 경로</span>
-              <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-[#16a34a]" style={{ borderTop: "2px dashed #16a34a", background: "none" }} />실제 이동 · 현재위치</span>
+          {status === "ready" && (
+            <div className="absolute left-3 bottom-3 bg-white/95 rounded-lg px-2.5 py-1.5 text-[11px] font-bold text-gray-600 flex items-center gap-2.5 shadow">
+              {TRAFFIC_LEGEND.map((t) => (
+                <span key={t.c} className="flex items-center gap-1"><span className="inline-block w-4 h-1.5 rounded" style={{ background: t.color }} />{t.label}</span>
+              ))}
+              {driverId && <span className="flex items-center gap-1"><span className="inline-block w-4 h-1.5 rounded" style={{ background: TRACK_COLOR }} />실제 이동</span>}
             </div>
           )}
         </div>

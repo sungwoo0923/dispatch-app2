@@ -13,6 +13,7 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { getDrivingRoute, geocodeAddress } from "./tmapFareCalc";
 import { ShortAddr, DropEtaText } from "./fleetGeo";
+import { LeafletTrack, MapLegend } from "./mapLeaflet";
 import CustomDatePicker from "./CustomDatePicker";
 import RouteMapModal from "./RouteMapModal";
 
@@ -647,10 +648,8 @@ function FitAll({ count, drivers }) {
 }
 
 function FleetMap({ drivers, center, onSelect, selectedPath = [], roadPath = [], fitAllCount = 0, selectedDriver = null }) {
-  const defaultCenter = center || { lat: 37.5665, lng: 126.9780 };
+
   // Prefer OSRM road-following path; fall back to direct GPS waypoints
-  const displayPath = roadPath.length >= 2 ? roadPath : selectedPath;
-  const pathPositions = displayPath.map(p => [p.lat, p.lng]);
 
   return (
     <MapContainer center={[defaultCenter.lat, defaultCenter.lng]} zoom={12} scrollWheelZoom style={{ height: "100%", width: "100%", minHeight: 480, position: "relative" }}>
@@ -659,38 +658,14 @@ function FleetMap({ drivers, center, onSelect, selectedPath = [], roadPath = [],
       {selectedPath.length >= 2 && <FitPath points={selectedPath} resetKey={selectedDriver?.id} />}
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
 
-      {/* 이동 경로 선 (OSRM 도로 경로) */}
-      {pathPositions.length >= 2 && (
-        <Polyline positions={pathPositions} color={NAVY} weight={4} opacity={0.75} />
+      {/* ⭐ 이동 동선 — 예전엔 GPS 점을 하나하나 원으로 찍어 다닥다닥 보였다. 도로에 맞춘
+          경로(OSRM, 없으면 GPS)를 매끈한 선 하나로 그리고, 출발점과 상태가 바뀐 지점만 표시 */}
+      {/* OSRM으로 25개 점만 골라 도로를 다시 추정하면 엉뚱하게 꺾이는 경우가 있어,
+          실제 GPS 기록(튐 제거·정리)을 그대로 이어 그린다 */}
+      {selectedPath.length >= 2 && (
+        <LeafletTrack points={selectedPath} statusColors={STATUS_COLORS} />
       )}
-
-      {/* 경로 포인트 (상태 변경 위치) */}
-      {selectedPath.map((p, i) => {
-        const color = STATUS_COLORS[p.status] || "#9ca3af";
-        const isFirst = i === selectedPath.length - 1; // 가장 오래된 = 출근
-        const isLast = i === 0; // 가장 최근
-        return (
-          <CircleMarker
-            key={i}
-            center={[p.lat, p.lng]}
-            radius={isFirst || isLast ? 8 : 5}
-            color="#fff"
-            weight={2}
-            fillColor={color}
-            fillOpacity={1}
-          >
-            <Popup>
-              <div style={{ fontSize: 15, lineHeight: 1.7, fontFamily: "'Noto Sans KR',sans-serif" }}>
-                <span style={{ fontWeight: 700, color }}>● {p.status}</span>
-                <div style={{ color: "#6b7280", marginTop: 2 }}>{formatTime(p.timestamp)}</div>
-                {p.dwell > 60000 && (
-                  <div style={{ color: "#9ca3af", fontSize: 14 }}>체류 {formatMs(p.dwell)}</div>
-                )}
-              </div>
-            </Popup>
-          </CircleMarker>
-        );
-      })}
+      {selectedPath.length >= 2 && <MapLegend showTraffic={false} />}
 
       {/* 현재 위치 마커 */}
       {drivers.map(d =>
@@ -1407,7 +1382,8 @@ function InfoField({ label, value, children, mono }) {
     // ⭐ 사용자 요청 — 선이 없어 칸 사이 간격이 애매해 보였다. 왼쪽에 구분선 +
     // 여백을 줘서 각 항목이 딱 떨어져 보이게 하고, 라벨 글씨도 표 헤더(상태/
     // 거래처 등)와 비슷한 체감 크기로 키운다.
-    <div style={{ minWidth: 0, paddingLeft: 14, borderLeft: "1px solid #e5e7eb" }}>
+    // ⭐ 사용자 요청 — 라벨/값이 왼쪽에 붙어 있어 정렬이 어긋나 보였다 → 중앙정렬
+    <div style={{ minWidth: 0, paddingLeft: 14, paddingRight: 4, borderLeft: "1px solid #e5e7eb", textAlign: "center" }}>
       <div style={{ fontSize: 13, fontWeight: 800, color: "#6b7280", marginBottom: 4 }}>{label}</div>
       {/* ⭐ 사용자 피드백 — whiteSpace:nowrap + overflow:hidden 조합 때문에 칸이
           좁으면 값 끝이 그냥 잘려서 안 보였다(말줄임표도 없이). 줄바꿈을 허용해
@@ -2103,21 +2079,35 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
   return (
     <div style={{ background: "#fff", border: `1px solid ${hasConflict ? "#f59e0b" : "#e5e7eb"}`, borderRadius: 12, overflow: "hidden" }}>
       {/* 헤더: 기사 기본정보를 라벨 붙은 그리드로 — 값 글자는 짙은 색으로 가독성 확보 */}
-      <div style={{ padding: "14px 16px", borderBottom: "1px solid #f0f2f5", display: "flex", alignItems: "flex-start", gap: 10, flexWrap: "wrap", rowGap: 14 }}>
+      <div style={{ padding: "14px 16px", borderBottom: "1px solid #f0f2f5", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", rowGap: 14 }}>
         {/* ⭐ 사용자 요청 — 이름만 있던 자리에 차량번호/연락처도 같이 가로로 보여준다(지입/직영 뱃지는 그대로 유지). */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 220 }}>
+        {/* ⭐ 사용자 요청 — 기사정보가 작고 고정폭(monospace) 글씨라 뭉개져 보였다. 4/5파트
+            오더와 같은 기본 글씨체로 바꾸고, 사원증/명함처럼 크게 한눈에 보이게 만든다. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
           {index != null && (
-            <span style={{ fontSize: 13, fontWeight: 800, color: "#9ca3af", minWidth: 20, textAlign: "right", flexShrink: 0 }}>{index}</span>
+            <span style={{ fontSize: 14, fontWeight: 800, color: "#9ca3af", minWidth: 20, textAlign: "right", flexShrink: 0 }}>{index}</span>
           )}
-          <div style={{ width: 36, height: 36, borderRadius: 9, background: NAVY, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <svg width="18" height="18" fill="none" stroke="white" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" strokeLinecap="round" /></svg>
-          </div>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 16, fontWeight: 800, color: "#111827" }}>{driver.이름}</span>
-              <span style={{ fontSize: 14, fontWeight: 800, color: "#374151", fontFamily: "monospace" }}>{driver.차량번호}</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#6b7280", fontFamily: "monospace" }}>{driver.전화번호 && driver.전화번호 !== "-" ? formatPhone(driver.전화번호) : "-"}</span>
-              <span style={{ fontSize: 12, fontWeight: 800, padding: "1px 7px", borderRadius: 6, background: driver.등급 === "직영" ? NAVY : "#eef1f6", color: driver.등급 === "직영" ? "#fff" : "#374151" }}>{driver.등급}</span>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 12, padding: "10px 16px 10px 12px", minWidth: 290,
+            border: "1px solid #dbe1ea", borderLeft: `5px solid ${driver.등급 === "직영" ? "#0f766e" : NAVY}`, borderRadius: 12,
+            background: "linear-gradient(135deg, #ffffff 0%, #f4f7fb 100%)", boxShadow: "0 2px 8px rgba(27,43,75,0.08)",
+          }}>
+            <div style={{ width: 46, height: 46, borderRadius: 12, background: NAVY, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 900, flexShrink: 0 }}>
+              {String(driver.이름 || "?").slice(0, 1)}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 20, fontWeight: 900, color: "#111827", letterSpacing: "-0.01em" }}>{driver.이름}</span>
+                <span style={{ fontSize: 12, fontWeight: 800, padding: "2px 8px", borderRadius: 6, background: driver.등급 === "직영" ? "#0f766e" : NAVY, color: "#fff" }}>{driver.등급}</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, flexWrap: "wrap" }}>
+                {/* 번호판 모양 */}
+                <span style={{ fontSize: 15, fontWeight: 800, color: "#111827", padding: "1px 9px", border: "1.5px solid #111827", borderRadius: 5, background: "#fff", letterSpacing: "0.02em" }}>{driver.차량번호 || "-"}</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 15, fontWeight: 700, color: "#374151" }}>
+                  <svg width="13" height="13" fill="none" stroke="#6b7280" strokeWidth="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                  {driver.전화번호 && driver.전화번호 !== "-" ? formatPhone(driver.전화번호) : "-"}
+                </span>
+              </div>
             </div>
           </div>
         </div>

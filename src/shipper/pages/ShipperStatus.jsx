@@ -1,3 +1,4 @@
+import { loadTmap } from "../../tmapLoader";
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { db, auth } from "../../firebase";
 import ShipperOrder from "./ShipperOrder";
@@ -1686,7 +1687,7 @@ function ShipperLiveLocationPopup({ order, onClose }) {
   useEffect(() => {
     if (!loc) return;
     const draw = () => {
-      if (!window.Tmapv2) { setTimeout(draw, 200); return; }
+      if (!window.Tmapv2?.Map) { loadTmap().catch(() => {}); setTimeout(draw, 200); return; }
       const pos = new window.Tmapv2.LatLng(loc.lat, loc.lng);
       if (!mapObjRef.current) {
         mapObjRef.current = new window.Tmapv2.Map(mapElId, { center: pos, width: "100%", height: "340px", zoom: 15 });

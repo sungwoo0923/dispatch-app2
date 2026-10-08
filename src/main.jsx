@@ -4,6 +4,10 @@ import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 import ErrorBoundary from "./ErrorBoundary.jsx";
 import "./index.css";
+import { preloadTmapWhenIdle } from "./tmapLoader";
+
+// ⭐ 지도 SDK는 첫 화면이 다 뜬 뒤 여유 시간에 미리 받아둔다(첫 로딩 속도 개선)
+preloadTmapWhenIdle();
 
 // --------------------------------------------------
 // ⭐ Firestore 로컬 저장공간(localStorage) 한도 초과 시 자동 복구

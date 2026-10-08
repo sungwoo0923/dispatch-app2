@@ -1,3 +1,5 @@
+import { loadTmap } from "../../tmapLoader";
+import { drawTmapTrafficRoute } from "../../mapStyle";
 import { useState, useEffect, useRef } from "react";
 import { db, auth } from "../../firebase";
 import {
@@ -223,7 +225,7 @@ export default function ShipperOrder({ editData, onClose }) {
     return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
   };
   const initMap = async () => {
-    if (!window.Tmapv2) { setTimeout(initMap, 200); return; }
+    if (!window.Tmapv2?.Map) { loadTmap().catch(() => {}); setTimeout(initMap, 200); return; }
     const mapDiv = await waitMapDiv();
     if (!mapDiv || cancelled) return;
     mapDiv.innerHTML = "";
@@ -248,7 +250,7 @@ export default function ShipperOrder({ editData, onClose }) {
       const data = await res.json();
       if (cancelled || !data?.path?.length) return;
       const linePath = data.path.map(([lng, lat]) => new window.Tmapv2.LatLng(lat, lng));
-      new window.Tmapv2.Polyline({ path: linePath, strokeColor: "#2563eb", strokeWeight: 5, map });
+      drawTmapTrafficRoute(map, data);
       setRouteInfo({ distance: Number(data.distanceKm || 0).toFixed(1), time: Math.round(Number(data.durationMin || 0)) });
 
       const bounds = new window.Tmapv2.LatLngBounds();

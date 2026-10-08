@@ -166,6 +166,8 @@ export default async function handler(req, res) {
           resCoordType: "WGS84GEO",
           searchOption: "0",
           tollgateFareOption: "16",
+          // ⭐ 실시간 교통정보(구간별 원활/서행/지체/정체) — 지도에 티맵처럼 색으로 표시
+          trafficInfo: "Y",
         };
         // 경유지 있으면 추가 (TMAP passList: "경도,위도_경도,위도" 형식)
         if (passList.length > 0) {
@@ -272,11 +274,44 @@ export default async function handler(req, res) {
     // =========================
     const path = [];
 
+    // ⭐ 구간별 교통상황 — segments: [{ c: 0~4, path: [[lng,lat],...] }]
+    //   c: 0 정보없음 · 1 원활 · 2 서행 · 3 지체 · 4 정체
+    //   Tmap은 LineString마다 traffic: [[시작idx, 끝idx, 혼잡도, 속도], ...]를 준다.
+    const segments = [];
+    const pushSeg = (c, pts) => {
+      if (pts.length < 2) return;
+      const last = segments[segments.length - 1];
+      if (last && last.c === c) {
+        // 같은 색 구간은 이어 붙여 선 개수를 줄인다
+        last.path.push(...pts.slice(1));
+      } else {
+        segments.push({ c, path: pts.slice() });
+      }
+    };
+
     features.forEach((f) => {
       if (f.geometry?.type === "LineString") {
-        f.geometry.coordinates.forEach(([lng, lat]) => {
+        const coords = f.geometry.coordinates || [];
+        coords.forEach(([lng, lat]) => {
           path.push([lng, lat]);
         });
+        const traffic = f.geometry.traffic || f.properties?.traffic || [];
+        if (!Array.isArray(traffic) || !traffic.length) {
+          pushSeg(0, coords);
+          return;
+        }
+        let cursor = 0;
+        traffic
+          .slice()
+          .sort((a, b) => a[0] - b[0])
+          .forEach(([si, ei, cong]) => {
+            const s = Math.max(0, Number(si) || 0);
+            const e = Math.min(coords.length - 1, Number(ei) || 0);
+            if (s > cursor) pushSeg(0, coords.slice(cursor, s + 1));
+            if (e > s) pushSeg(Number(cong) || 0, coords.slice(s, e + 1));
+            cursor = Math.max(cursor, e);
+          });
+        if (cursor < coords.length - 1) pushSeg(0, coords.slice(cursor));
       }
     });
 
@@ -312,6 +347,7 @@ return res.status(200).json({
   durationMin,                        // 기존 숫자값 유지 (혹시 다른 곳에서 쓸 경우 대비)
   durationText: formatDuration(durationMin),  // 🔥 새로 추가
   path,
+  segments,                           // ⭐ 구간별 교통상황(지도 색 표시용)
 });
 
   } catch (e) {
