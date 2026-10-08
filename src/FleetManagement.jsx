@@ -12,7 +12,7 @@ import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { getDrivingRoute, geocodeAddress } from "./tmapFareCalc";
-import { ShortAddr, DropEtaText } from "./fleetGeo";
+import { ShortAddr, DropEtaText, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS } from "./fleetGeo";
 import { LeafletTrack, MapLegend } from "./mapLeaflet";
 import { cleanTrack } from "./mapStyle";
 import CustomDatePicker from "./CustomDatePicker";
@@ -491,7 +491,7 @@ const COL_HEADERS = ["#", "이름", "차량번호", "차종", "현재상태", "�
 function normPlateKey(v = "") { return String(v).replace(/[\s-]/g, "").toUpperCase(); }
 function todayKstStr() { return new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10); }
 
-function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, todayPhotos = [], onViewPhotos, ordersByPlate }) {
+function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, todayPhotos = [], onViewPhotos, phaseById }) {
   if (rows.length === 0) {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "52px 24px", color: "#9ca3af" }}>
@@ -555,28 +555,11 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
                 {d.vehicleType || "-"}
               </td>
 
-              {/* 현재상태 — ⭐ 지입 기사는 버튼(출근/퇴근) 상태 대신 노선관리와 같은 오더 기반
-                  상태(배차대기/오더확인중/상차지진입/상차지도착/이동중/하차지진입/하차지도착 등) */}
+              {/* 현재상태 — ⭐ 출근/상차중 등 버튼 상태 대신 오더·위치 기반 통합 상태 */}
               <td style={{ padding: "11px 14px", textAlign: "center" }}>
                 {(() => {
-                  const orders = ordersByPlate?.get(normPlateKey(d.차량번호)) || [];
-                  if (d.등급 === "지입" && orders.length) {
-                    const st = driverDispatchStatus(orders, todayKstStr(), d);
-                    const activeOrder = st.label === "운송중" ? findActiveOrder(orders, todayKstStr()) : null;
-                    return (
-                      <span style={{ fontSize: 15 }}>
-                        {activeOrder
-                          ? <TransitPhaseLabel colored order={activeOrder} live={d} driverId={d.id} fallback={st.label} />
-                          : <span style={{ fontWeight: 800, color: st.color }}>{st.label}</span>}
-                      </span>
-                    );
-                  }
-                  return (
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_COLORS[d.상태] || "#9ca3af", display: "inline-block" }} />
-                      <span style={{ color: "#1B2B4B", fontWeight: 700, fontSize: 15 }}>{d.상태 || "대기"}</span>
-                    </span>
-                  );
+                  const ph = phaseById?.get(d.id) || "배차대기";
+                  return <span style={{ fontWeight: 800, fontSize: 15, color: FLEET_PHASE_COLORS[ph] || NAVY }}>{ph}</span>;
                 })()}
               </td>
 
@@ -1204,7 +1187,9 @@ const FLEET_CHECK_PROG_META = {
 // 컬럼(배차상태)으로 옮기고, 운송중/배차완료까지 상황별로 구분해 보여준다.
 function driverDispatchStatus(orders, todayStr, live) {
   // ⭐ 사용자 요청 — 휴차 처리한 기사는 배차 여부와 무관하게 "휴차"로 보여야 한다.
-  if (live?.status === "휴차" || live?.mainStatus === "휴차") {
+  // ⭐ 버그수정 — 노선관리에 넘어오는 live는 가공된 기사 객체라 상태가 "상태" 필드에 있다
+  // (status/mainStatus만 보고 있어서 휴차처리해도 "배차대기"로 보였다).
+  if (live?.status === "휴차" || live?.mainStatus === "휴차" || live?.상태 === "휴차") {
     return { label: "휴차", bg: "#e5e7eb", color: "#374151" };
   }
   if (!orders.length) return { label: "배차대기", bg: "#fef3c7", color: "#92400e" };
@@ -4995,6 +4980,18 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
     return m;
   }, [dispatchData]);
 
+  // ⭐ 지입 기사 통합 상태(배차대기/오더확인중/운송중/상차지진입…/휴차) — 표·필터·KPI 공통
+  useFleetPhaseGeo(useMemo(() => Array.from(todayOrdersByPlate.values()).flat(), [todayOrdersByPlate]));
+  const phaseById = useMemo(() => {
+    const m = new Map();
+    drivers.forEach(d => m.set(d.id, computeFleetPhase({
+      driverStatus: d.상태,
+      orders: todayOrdersByPlate.get(normPlateKey(d.차량번호)) || [],
+      location: d.location,
+    })));
+    return m;
+  });
+
   const filteredRows = useMemo(() => {
     const kw = searchQuery.trim().replace(/\s/g, "");
     return drivers.filter(d => {
@@ -5002,10 +4999,11 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
       const matchQ = !kw ||
         carNoClean.includes(kw) ||
         (d.이름 !== "-" && d.이름.includes(kw));
-      const matchF = statusFilter === "전체" || d.상태 === statusFilter;
+      const ph = phaseById.get(d.id);
+      const matchF = statusFilter === "전체" || ph === statusFilter || (statusFilter === "배차대기" && ph === "오더확인중");
       return matchQ && matchF;
     });
-  }, [drivers, searchQuery, statusFilter]);
+  }, [drivers, searchQuery, statusFilter, phaseById]);
 
   // 활동 피드: 승인된 기사의 로그만 표시
   const filteredActivityLogs = useMemo(() =>
@@ -5017,9 +5015,9 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
   const kpi = useMemo(() => ({
     total: drivers.length,
     connected: drivers.filter(d => d.active).length,
-    driving: drivers.filter(d => d.상태 === "운송중").length,
-    onDuty: drivers.filter(d => ["출근", "상차중", "하차중", "운송중", "복귀중"].includes(d.상태)).length,
-  }), [drivers]);
+    driving: drivers.filter(d => ["운송중", "상차지진입", "상차지도착", "하차지진입", "하차지도착"].includes(phaseById.get(d.id))).length,
+    onDuty: drivers.filter(d => phaseById.get(d.id) !== "휴차" && d.active).length,
+  }), [drivers, phaseById]);
 
   const pendingCount = useMemo(() =>
     Object.values(usersMap).filter(u => !u.approved).length,
@@ -5390,7 +5388,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
               />
             </div>
             <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-              {STATUS_FILTER_OPTIONS.map(opt => {
+              {FLEET_PHASE_FILTERS.map(opt => {
                 const active = statusFilter === opt;
                 return (
                   <button
@@ -5406,7 +5404,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
                     }}
                   >
                     {opt !== "전체" && (
-                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: active ? "rgba(255,255,255,.75)" : (STATUS_COLORS[opt] || "#9ca3af"), display: "inline-block" }} />
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: active ? "rgba(255,255,255,.75)" : (FLEET_PHASE_COLORS[opt] || "#9ca3af"), display: "inline-block" }} />
                     )}
                     {opt}
                   </button>
@@ -5454,7 +5452,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
                 <span style={{ fontSize: 15, color: "#6b7280", fontWeight: 600 }}>{filteredRows.length}명</span>
               </div>
               <div style={{ flex: 1, overflowY: "auto", overflowX: "auto" }}>
-                <DriverTable ordersByPlate={todayOrdersByPlate} rows={filteredRows} selectedId={selected?.id} onSelect={handleSelect} onFocusMap={handleFocusMap} onContextMenu={handleContextMenu} todayPhotos={todayDriverPhotos} onViewPhotos={setPhotoViewerPhotos} />
+                <DriverTable phaseById={phaseById} rows={filteredRows} selectedId={selected?.id} onSelect={handleSelect} onFocusMap={handleFocusMap} onContextMenu={handleContextMenu} todayPhotos={todayDriverPhotos} onViewPhotos={setPhotoViewerPhotos} />
               </div>
             </div>
 

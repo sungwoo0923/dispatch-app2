@@ -10,7 +10,7 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import { getDrivingRoute, geocodeAddress, haversineKm } from "../tmapFareCalc";
-import { ShortAddr, DropEtaText } from "../fleetGeo";
+import { ShortAddr, DropEtaText, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS } from "../fleetGeo";
 import { LeafletTrack, MapLegend } from "../mapLeaflet";
 
 const NAVY = "#1B2B4B";
@@ -720,14 +720,19 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
     [drivers, scope, myUid]
   );
 
+  // ⭐ 지입 기사 통합 상태(PC 관제현황과 동일) — 목록 표시·필터 공통
+  useFleetPhaseGeo(useMemo(() => scopedDrivers.flatMap(d => ordersFor(d)), [scopedDrivers, ordersFor]));
+  const phaseOf = (d) => computeFleetPhase({ driverStatus: d.상태, orders: ordersFor(d), location: d.location });
+
   const filtered = useMemo(() => {
     const kw = searchQ.trim().replace(/\s/g, "");
     return scopedDrivers.filter(d => {
       const matchQ = !kw || (d.차량번호 || "").replace(/\s/g, "").includes(kw) || d.이름.includes(kw);
-      const matchF = statusFilter === "전체" || d.상태 === statusFilter;
+      const ph = phaseOf(d);
+      const matchF = statusFilter === "전체" || ph === statusFilter || (statusFilter === "배차대기" && ph === "오더확인중");
       return matchQ && matchF;
     });
-  }, [scopedDrivers, searchQ, statusFilter]);
+  });
 
   // ⭐ 사용자 요청 — 총 등록/접속중/운송중/근무중 대신 담당 기준으로 변경:
   // 총 등록기사, 내 담당차량, 내 담당차량 중 배차중, 내 담당차량 중 배차완료.
@@ -813,7 +818,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
   }, [mapSelected, drivers]);
 
   // ⭐ 사용자 요청 — 휴차(휴무) 기사를 따로 걸러볼 수 있는 칩이 빠져 있었다.
-  const STATUS_OPTS = ["전체", "운송중", "출근", "상차중", "하차중", "대기", "휴차", "퇴근"];
+  const STATUS_OPTS = FLEET_PHASE_FILTERS;
 
   // 평균 속도 계산
   const avgSpeed = useMemo(() => {
@@ -999,11 +1004,8 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                           <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 700, color: dispatchStatus.color, background: dispatchStatus.bg, padding: "2px 8px", borderRadius: 99 }}>
                             <span style={{ width: 6, height: 6, borderRadius: "50%", background: dispatchStatus.dot, display: "inline-block" }} />
                             {(() => {
-                              if (dispatchStatus.label !== "운송중") return dispatchStatus.label;
-                              const transitOrder = findActiveTransitOrder(todays, todayStr);
-                              return transitOrder
-                                ? <TransitPhaseLabel order={transitOrder} driver={d} fallback={dispatchStatus.label} />
-                                : dispatchStatus.label;
+                              const ph = phaseOf(d);
+                              return <span style={{ color: FLEET_PHASE_COLORS[ph] || dispatchStatus.color }}>{ph}</span>;
                             })()}
                           </span>
                           {d.vehicleType !== "-" && (

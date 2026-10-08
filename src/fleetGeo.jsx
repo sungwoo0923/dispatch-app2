@@ -239,3 +239,65 @@ export function DropEtaText({ order, driverId, style }) {
     <span style={{ fontWeight: 800, color: "#1d4ed8", ...style }}>{hhmm(eta)} 도착예상</span>
   );
 }
+
+
+// ─── 지입 기사 통합 상태(관제현황·노선관리·모바일·기사앱 공통) ───────────────────────
+// ⭐ 사용자 요청 — 지입 기사는 출근/상차중/하차중/복귀중/퇴근 버튼 상태 대신
+//   배차대기 / 오더확인중 / 운송중 / 상차지진입 / 상차지도착 / 하차지진입 / 하차지도착 / 휴차
+// 로 통일해서 보여준다(기사가 출근만 누르고 오더가 없으면 "배차대기").
+export const FLEET_PHASE_FILTERS = ["전체", "배차대기", "운송중", "상차지진입", "상차지도착", "하차지진입", "하차지도착", "휴차"];
+export const FLEET_PHASE_COLORS = {
+  "배차대기": "#92400e", "오더확인중": "#d97706", "운송중": "#1B2B4B",
+  "상차지진입": "#2563eb", "상차지도착": "#7c3aed", "하차지진입": "#ea580c", "하차지도착": "#db2777",
+  "휴차": "#6b7280",
+};
+
+export function getCachedGeo(addr) {
+  const k = String(addr || "").trim();
+  return k ? _geoCache.get(k) || null : null;
+}
+export function prefetchGeo(addr) {
+  const k = String(addr || "").trim();
+  if (!k || _geoCache.has(k)) return Promise.resolve(_geoCache.get(k) || null);
+  return geocodeCached(k);
+}
+
+const isCanceledRow = (r) => r?.배차상태 === "배차취소" || r?.상태 === "취소";
+
+// 순수 계산 — 좌표는 캐시에 있는 것만 사용(없으면 "운송중"으로 두고 prefetch로 채운다)
+export function computeFleetPhase({ driverStatus, orders = [], location }) {
+  if (driverStatus === "휴차") return "휴차";
+  const live = (orders || []).filter(r => !isCanceledRow(r));
+  const active = live.find(r => r.기사확인상태 === "수락");
+  if (active) {
+    const pg = getCachedGeo(active.상차지주소);
+    const dg = getCachedGeo(active.하차지주소);
+    if (location?.lat != null && location?.lng != null) {
+      const pd = pg ? haversineKm(location.lat, location.lng, pg.lat, pg.lng) : null;
+      const dd = dg ? haversineKm(location.lat, location.lng, dg.lat, dg.lng) : null;
+      if (pd != null && pd <= 1) return "상차지도착";
+      if (dd != null && dd <= 1) return "하차지도착";
+      if (dd != null && dd <= 5) return "하차지진입";
+      if (pd != null && pd <= 5) return "상차지진입";
+    }
+    return "운송중";
+  }
+  if (live.some(r => r.기사확인상태 === "대기")) return "오더확인중";
+  return "배차대기";
+}
+
+// 화면용 훅 — 필요한 주소 좌표를 받아오고, 받아오면 다시 그린다
+export function useFleetPhaseGeo(orders) {
+  const [, setTick] = useState(0);
+  const key = (orders || []).filter(r => r?.기사확인상태 === "수락").map(r => `${r.상차지주소}|${r.하차지주소}`).join("#");
+  useEffect(() => {
+    let alive = true;
+    (orders || []).filter(r => r?.기사확인상태 === "수락").forEach(r => {
+      [r.상차지주소, r.하차지주소].forEach(a => {
+        if (a && !getCachedGeo(a)) prefetchGeo(a).then(() => { if (alive) setTick(t => t + 1); });
+      });
+    });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+}

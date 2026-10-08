@@ -8,7 +8,7 @@ import {
 } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { registerPlugin } from "@capacitor/core";
-import { useAddrGeo } from "../fleetGeo";
+import { useAddrGeo, computeFleetPhase, useFleetPhaseGeo } from "../fleetGeo";
 import { haversineKm } from "../tmapFareCalc";
 
 // Capacitor 네이티브 컨텍스트 여부 확인
@@ -224,6 +224,78 @@ function DispatcherLine({ order: o }) {
   );
 }
 
+// ⭐ 사용자 요청 — 오더장 상차지/하차지에서 바로 내비 실행(티맵/카카오/네이버 중 선택).
+// 누른 곳(상차지 또는 하차지)의 주소가 도착지로 자동 입력된다. 마지막으로 고른 앱은 기억해 강조.
+const NAV_APPS = [
+  { key: "tmap", label: "티맵", color: "#e5373f", pkg: "com.skt.tmap.ku",
+    url: (n, a, g) => g ? `tmap://route?goalname=${encodeURIComponent(n || a)}&goalx=${g.lng}&goaly=${g.lat}` : `tmap://search?name=${encodeURIComponent(a)}` },
+  { key: "kakao", label: "카카오맵(내비)", color: "#f7c600", text: "#191919", pkg: "net.daum.android.map",
+    url: (n, a, g) => g ? `kakaomap://route?ep=${g.lat},${g.lng}&by=CAR` : `kakaomap://search?q=${encodeURIComponent(a)}` },
+  { key: "naver", label: "네이버지도", color: "#03c75a", pkg: "com.nhn.android.nmap",
+    url: (n, a, g) => g ? `nmap://navigation?dlat=${g.lat}&dlng=${g.lng}&dname=${encodeURIComponent(n || a)}&appname=com.kpflow.driver` : `nmap://search?query=${encodeURIComponent(a)}&appname=com.kpflow.driver` },
+];
+function NavButton({ title, name, addr }) {
+  const [open, setOpen] = useState(false);
+  const [notice, setNotice] = useState(null);
+  const geo = useAddrGeo(addr || null);
+  let last = "";
+  try { last = localStorage.getItem("kpNavApp") || ""; } catch (_) {}
+  const launch = (app) => {
+    try { localStorage.setItem("kpNavApp", app.key); } catch (_) {}
+    setOpen(false);
+    const startedAt = Date.now();
+    window.location.href = app.url(name, addr, geo || null);
+    // 앱이 안 열리고(미설치) 화면이 그대로면 설치 안내
+    setTimeout(() => {
+      if (document.visibilityState === "visible" && Date.now() - startedAt < 2500) setNotice(app);
+    }, 1800);
+  };
+  return (
+    <>
+      <button onClick={() => setOpen(true)}
+        style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 800, color: "#fff", background: "#1B2B4B", border: "none", borderRadius: 6, padding: "3px 8px", flexShrink: 0, cursor: "pointer" }}>
+        <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.6" viewBox="0 0 24 24"><path d="M3 11l18-8-8 18-2-8-8-2z" strokeLinejoin="round" /></svg>
+        길안내
+      </button>
+      {open && (
+        <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(15,23,42,.5)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, background: "#fff", borderRadius: "18px 18px 0 0", padding: "18px 18px 26px" }}>
+            <div style={{ width: 40, height: 4, borderRadius: 2, background: "#e5e7eb", margin: "0 auto 14px" }} />
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#1B2B4B" }}>{title}지로 길안내</div>
+            <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4, marginBottom: 14, wordBreak: "break-word" }}>{name ? `${name} · ` : ""}{addr}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {NAV_APPS.map(app => (
+                <button key={app.key} onClick={() => launch(app)}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderRadius: 12, border: last === app.key ? "2px solid #1B2B4B" : "1.5px solid #e5e7eb", background: "#fff", cursor: "pointer" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ width: 30, height: 30, borderRadius: 8, background: app.color, color: app.text || "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 900 }}>{app.label.slice(0, 1)}</span>
+                    <span style={{ fontSize: 15, fontWeight: 800, color: "#111827" }}>{app.label}</span>
+                  </span>
+                  {last === app.key && <span style={{ fontSize: 11, fontWeight: 800, color: "#1B2B4B", background: "#eef1f6", padding: "2px 8px", borderRadius: 20 }}>최근 사용</span>}
+                </button>
+              ))}
+            </div>
+            {geo === undefined && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 10 }}>도착지 좌표 확인중… (지금 눌러도 주소 검색으로 열립니다)</div>}
+          </div>
+        </div>
+      )}
+      {notice && (
+        <div onClick={() => setNotice(null)} style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(15,23,42,.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, padding: 20, maxWidth: 340, width: "100%" }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#1B2B4B", marginBottom: 6 }}>{notice.label} 앱이 열리지 않나요?</div>
+            <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.5, marginBottom: 14 }}>휴대폰에 앱이 설치되어 있지 않으면 설치 후 다시 눌러주세요.</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setNotice(null)} style={{ flex: 1, padding: 12, borderRadius: 10, border: "1.5px solid #d1d5db", background: "#fff", fontWeight: 800, color: "#374151" }}>닫기</button>
+              <button onClick={() => { const p = notice.pkg; setNotice(null); window.location.href = `market://details?id=${p}`; }}
+                style={{ flex: 1.3, padding: 12, borderRadius: 10, border: "none", background: "#1B2B4B", color: "#fff", fontWeight: 800 }}>앱 설치하기</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function LocBlock({ title, name, addr, when, manager, managerPhone, onCopy }) {
   return (
     <div style={{ padding: "8px 0", borderBottom: "1px solid #f3f4f6" }}>
@@ -236,6 +308,7 @@ function LocBlock({ title, name, addr, when, manager, managerPhone, onCopy }) {
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ fontSize: 12, color: "#4b5563", flex: 1, wordBreak: "break-word" }}>{addr}</span>
           <button onClick={() => onCopy(addr, `${title}지 주소`)} style={{ fontSize: 11, fontWeight: 700, color: "#1B2B4B", border: "1px solid #c7d2e3", borderRadius: 6, padding: "2px 7px", background: "#fff", flexShrink: 0, cursor: "pointer" }}>복사</button>
+          <NavButton title={title} name={name} addr={addr} />
         </div>
       )}
       {manager && (
@@ -322,7 +395,9 @@ function ActiveOrderCard({ order: o, loading, onComplete, onCopy, pos }) {
       </div>
       <OrderDetailBody o={o} onCopy={onCopy} />
       <DispatcherLine order={o} />
-      <button onClick={() => { if (gate.ok) onComplete(); }} disabled={disabled} style={{ width: "100%", marginTop: 12, padding: "14px", borderRadius: 12, border: "none", background: gate.ok ? "#16a34a" : "#9ca3af", color: "#fff", fontWeight: 800, fontSize: 15, cursor: disabled ? "not-allowed" : "pointer" }}>
+      {/* ⭐ 하차지 도착해 운송완료가 가능해지면 버튼이 천천히 깜빡여 눈에 띄게 */}
+      <style>{`@keyframes kpCompletePulse { 0%,100% { box-shadow: 0 0 0 0 rgba(22,163,74,.55); filter: brightness(1); } 50% { box-shadow: 0 0 0 10px rgba(22,163,74,0); filter: brightness(1.12); } }`}</style>
+      <button onClick={() => { if (gate.ok) onComplete(); }} disabled={disabled} style={{ width: "100%", marginTop: 12, padding: "14px", borderRadius: 12, border: "none", background: gate.ok ? "#16a34a" : "#9ca3af", color: "#fff", fontWeight: 800, fontSize: 15, cursor: disabled ? "not-allowed" : "pointer", animation: gate.ok && !loading ? "kpCompletePulse 2.2s ease-in-out infinite" : "none" }}>
         운송완료
       </button>
       {!gate.ok && (
@@ -819,6 +894,8 @@ export default function DriverHome() {
   useEffect(() => {
     setMyOrders([...myOrdersByCol.orders, ...myOrdersByCol.dispatch]);
   }, [myOrdersByCol]);
+  // 지입 기사 상단 상태(상차지진입/도착 등) 계산용 좌표 미리 받기
+  useFleetPhaseGeo(myOrders);
 
   // 새로 배정된 오더(기사확인상태: 대기) 감지 → 상단 배너 표시 후 자동 소멸
   useEffect(() => {
@@ -1406,6 +1483,11 @@ export default function DriverHome() {
   const currentStatus = driver.status || "대기";
   const statusCfg = STATUS_CONFIG[currentStatus] || STATUS_CONFIG["대기"];
   const isFleetDriver = driver.등급 === "지입";
+  // ⭐ 사용자 요청 — 지입 기사는 상단 상태를 "출근" 대신 관리자 화면과 같은 통합 상태로
+  // (오더 없음=배차대기, 수락 전=오더확인중, 수락 후=운송중/상차지진입/도착/하차지진입/도착, 휴차)
+  const fleetPhase = isFleetDriver
+    ? computeFleetPhase({ driverStatus: currentStatus, orders: myOrders, location: pos })
+    : null;
   // ⭐ 버그수정 — 관리자가 삭제(배차취소)한 오더는 기사확인상태가 남아 있어도 카드에서 뺀다.
   const isCanceledOrder = (o) => o.배차상태 === "배차취소" || o.상태 === "취소";
   const pendingOrders = isFleetDriver ? myOrders.filter(o => o.기사확인상태 === "대기" && !isCanceledOrder(o)) : [];
@@ -1640,7 +1722,7 @@ export default function DriverHome() {
               flexShrink: 0,
             }} />
             <div>
-              <div style={{ fontSize: 20, fontWeight: 900, color: "white", letterSpacing: "-0.5px" }}>{currentStatus}</div>
+              <div style={{ fontSize: 20, fontWeight: 900, color: "white", letterSpacing: "-0.5px" }}>{fleetPhase || currentStatus}</div>
               {summary.checkInTime && (
                 <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", marginTop: 1 }}>
                   출근 {formatTime(summary.checkInTime)}
