@@ -12,7 +12,7 @@ import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { getDrivingRoute, geocodeAddress } from "./tmapFareCalc";
-import { ShortAddr, DropEtaText, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS } from "./fleetGeo";
+import { ShortAddr, DropEtaText, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS, isPickupVisited } from "./fleetGeo";
 import { LeafletTrack, MapLegend } from "./mapLeaflet";
 import { cleanTrack } from "./mapStyle";
 import { modificationStatus } from "./orderChange";
@@ -1425,7 +1425,7 @@ function useTransitPhase({ order, live, driverId, fallback }) {
   const pickupDist = (hasLoc && pickupGeo) ? haversineKm(live.location.lat, live.location.lng, pickupGeo.lat, pickupGeo.lng) : null;
   const dropDist = (hasLoc && dropGeo) ? haversineKm(live.location.lat, live.location.lng, dropGeo.lat, dropGeo.lng) : null;
   const visitedFromHistory = useVisitedPickup(driverId, pickupGeo);
-  const visitedPickup = visitedFromHistory || (pickupDist != null && pickupDist <= 1);
+  const visitedPickup = visitedFromHistory || isPickupVisited(order) || (pickupDist != null && pickupDist <= 1);
 
   if (pickupDist != null && pickupDist <= 1) return "상차지도착";
   if (dropDist != null && dropDist <= 1) return "하차지도착";

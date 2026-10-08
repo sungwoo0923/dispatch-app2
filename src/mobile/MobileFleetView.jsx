@@ -10,7 +10,7 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import { getDrivingRoute, geocodeAddress, haversineKm } from "../tmapFareCalc";
-import { ShortAddr, DropEtaText, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS } from "../fleetGeo";
+import { ShortAddr, DropEtaText, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS, isPickupVisited } from "../fleetGeo";
 import { LeafletTrack, MapLegend } from "../mapLeaflet";
 import { modificationStatus } from "../orderChange";
 
@@ -306,7 +306,7 @@ function TransitPhaseLabel({ order, driver, fallback }) {
   const pickupDist = (hasLoc && pickupGeo) ? haversineKm(driver.location.lat, driver.location.lng, pickupGeo.lat, pickupGeo.lng) : null;
   const dropDist = (hasLoc && dropGeo) ? haversineKm(driver.location.lat, driver.location.lng, dropGeo.lat, dropGeo.lng) : null;
   const visitedFromHistory = useVisitedPickup(driver?.id, pickupGeo);
-  const visitedPickup = visitedFromHistory || (pickupDist != null && pickupDist <= 1);
+  const visitedPickup = visitedFromHistory || isPickupVisited(order) || (pickupDist != null && pickupDist <= 1);
 
   if (pickupDist != null && pickupDist <= 1) return "상차지도착";
   if (dropDist != null && dropDist <= 1) return "하차지도착";

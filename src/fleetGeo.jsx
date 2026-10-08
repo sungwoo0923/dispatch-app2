@@ -264,6 +264,11 @@ export function prefetchGeo(addr) {
 
 const isCanceledRow = (r) => r?.배차상태 === "배차취소" || r?.상태 === "취소";
 
+const normAddr = (a) => String(a || "").replace(/\(.*?\)/g, "").replace(/\s+/g, "").trim();
+export function isPickupVisited(order) {
+  return !!order?.상차지도착주소 && normAddr(order.상차지도착주소) === normAddr(order.상차지주소);
+}
+
 // 순수 계산 — 좌표는 캐시에 있는 것만 사용(없으면 "운송중"으로 두고 prefetch로 채운다)
 export function computeFleetPhase({ driverStatus, orders = [], location }) {
   if (driverStatus === "휴차") return "휴차";
@@ -275,10 +280,16 @@ export function computeFleetPhase({ driverStatus, orders = [], location }) {
     if (location?.lat != null && location?.lng != null) {
       const pd = pg ? haversineKm(location.lat, location.lng, pg.lat, pg.lng) : null;
       const dd = dg ? haversineKm(location.lat, location.lng, dg.lat, dg.lng) : null;
+      // ⭐ 버그수정 — "상차지에 이미 다녀왔는지"를 기억하지 않아, 상차 후 상차지에서
+      // 1~5km 멀어지면 "운송중"이 아니라 다시 "상차지진입"으로 보였다(상차지 주소를 운행
+      // 중에 수정한 경우, 대기하던 자리에서 바로 오더를 받은 경우 모두 해당).
+      // 기사앱이 상차지 1km 안에 들어온 적이 있으면 오더에 상차지도착주소를 남긴다 —
+      // 그 주소가 지금 상차지 주소와 같으면 "다녀온 것"으로 보고 상차지진입은 건너뛴다.
+      const visited = isPickupVisited(active);
       if (pd != null && pd <= 1) return "상차지도착";
       if (dd != null && dd <= 1) return "하차지도착";
       if (dd != null && dd <= 5) return "하차지진입";
-      if (pd != null && pd <= 5) return "상차지진입";
+      if (!visited && pd != null && pd <= 5) return "상차지진입";
     }
     return "운송중";
   }

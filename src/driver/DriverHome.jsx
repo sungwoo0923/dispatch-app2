@@ -8,7 +8,7 @@ import {
 } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { registerPlugin } from "@capacitor/core";
-import { useAddrGeo, computeFleetPhase, useFleetPhaseGeo } from "../fleetGeo";
+import { useAddrGeo, computeFleetPhase, useFleetPhaseGeo, getCachedGeo, isPickupVisited } from "../fleetGeo";
 import { snapshotOrder, changedFields, changedLabels } from "../orderChange";
 import { haversineKm } from "../tmapFareCalc";
 
@@ -1290,6 +1290,39 @@ export default function DriverHome() {
       showToast("처리 중 오류가 발생했습니다");
     }
   }, []);
+
+  // ⭐ 상차지 방문 기록 — 수락한 오더의 상차지 1km 안에 들어오면(또는 오늘 GPS 기록상
+  // 수락 이후 들어온 적이 있으면) 오더에 상차지도착주소/일시를 남긴다. 이후 상차지에서
+  // 멀어지면 "상차지진입"이 아니라 "운송중"으로 보이게 하는 기준(관리자 화면도 같은 값을 씀).
+  const visitCheckedRef = useRef(new Set());
+  useEffect(() => {
+    if (!uid) return;
+    myOrders
+      .filter(o => o.기사확인상태 === "수락" && o.배차상태 !== "배차취소" && o.상차지주소 && !isPickupVisited(o))
+      .forEach(o => {
+        const g = getCachedGeo(o.상차지주소);
+        if (!g) return;
+        const mark = () => updateDoc(doc(db, o.__col || "orders", o._id), {
+          상차지도착주소: o.상차지주소, 상차지도착일시: serverTimestamp(),
+        }).catch(() => {});
+        if (pos?.lat != null && haversineKm(pos.lat, pos.lng, g.lat, g.lng) <= 1) { mark(); return; }
+        // 주소가 바뀐 경우 등 — 오늘 GPS 기록에서 수락 이후 1km 안에 들어온 적이 있는지 한 번만 확인
+        const key = `${o._id}|${o.상차지주소}`;
+        if (visitCheckedRef.current.has(key)) return;
+        visitCheckedRef.current.add(key);
+        const sinceMs = o.기사확인일시?.toMillis ? o.기사확인일시.toMillis() : 0;
+        getDocs(query(collection(db, "gps_tracks"), where("driverId", "==", uid), where("date", "==", kstDateStr())))
+          .then(snap => {
+            const hit = snap.docs.some(d => {
+              const p = d.data();
+              const ms = p.timestamp?.toMillis ? p.timestamp.toMillis() : 0;
+              return p.lat != null && (!sinceMs || ms >= sinceMs) && haversineKm(p.lat, p.lng, g.lat, g.lng) <= 1;
+            });
+            if (hit) mark();
+          })
+          .catch(() => {});
+      });
+  }, [uid, myOrders, pos?.lat, pos?.lng]);
 
   // 이 기능 이전에 수락한 오더는 기준값이 없으므로, 지금 내용을 기준값으로 한 번 저장해둔다
   useEffect(() => {
