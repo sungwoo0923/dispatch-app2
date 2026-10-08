@@ -560,7 +560,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
           })
         : gpsTracks;
       const tracks = sessionTracks.length >= 2 ? sessionTracks : gpsTracks;
-      return tracks.map(t => ({ lat: t.lat, lng: t.lng, status: "운송중", timestamp: t.timestamp }));
+      return tracks.map(t => ({ lat: t.lat, lng: t.lng, status: "운송중", timestamp: t.timestamp, accuracy: t.accuracy }));
     }
     const withLoc = selectedDriverLogs.filter(l => {
       if (!l.location?.lat) return false;

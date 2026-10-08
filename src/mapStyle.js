@@ -28,15 +28,25 @@ export function routeSegments(routeData) {
   return path.length >= 2 ? [{ c: 0, color: TRAFFIC[0].color, points: path.map(([lng, lat]) => [lat, lng]) }] : [];
 }
 
-// GPS 동선 정리 — 정확도 튐(순간이동) 제거 + 15m 이내 촘촘한 점 솎아내기
-export function cleanTrack(points, { minGapKm = 0.015, maxJumpKmh = 200 } = {}) {
-  const pts = (points || []).filter(p => p && p.lat != null && p.lng != null);
-  const out = [];
-  for (const p of pts) {
+// GPS 동선 정리
+//  ⭐ 정차 중(실내·주차장) GPS/와이파이 위치가 수십~수백m씩 튀어 지도에 "낙서"처럼
+//  보였다. ① 오차가 큰 점 제외 ② 40m 이내 촘촘한 점 솎기 ③ 비현실적 속도(순간이동) 제외
+//  ④ 갔다가 바로 되돌아오는 "튀는 점"(A→B→A 모양) 제거
+export function cleanTrack(points, { minGapKm = 0.1, maxJumpKmh = 140, maxAccuracyM = 50 } = {}) {
+  const pts = (points || []).filter(p => p && p.lat != null && p.lng != null
+    && !(p.accuracy != null && p.accuracy > maxAccuracyM));
+  let out = [];
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
     const prev = out[out.length - 1];
     if (!prev) { out.push(p); continue; }
     const km = haversineKm(prev.lat, prev.lng, p.lat, p.lng);
     if (km < minGapKm) continue;
+    // 정차 중 튐 방지 — 기준점에서 벗어난 점이라도, 바로 다음 점들이 다시 기준점 근처로
+    // 돌아오면 실제로 출발한 게 아니라 GPS 튐이다(진짜 출발이면 계속 멀어진다).
+    const n1 = pts[i + 1], n2 = pts[i + 2];
+    const back = (n) => n && haversineKm(prev.lat, prev.lng, n.lat, n.lng) < minGapKm * 1.5;
+    if (back(n1) || back(n2)) continue;
     const t1 = tsMs(prev.timestamp), t2 = tsMs(p.timestamp);
     if (t1 && t2 && t2 > t1) {
       const kmh = km / ((t2 - t1) / 3600000);
@@ -44,7 +54,21 @@ export function cleanTrack(points, { minGapKm = 0.015, maxJumpKmh = 200 } = {}) 
     }
     out.push(p);
   }
-  if (pts.length && out[out.length - 1] !== pts[pts.length - 1]) out.push(pts[pts.length - 1]);
+  // 튀는 점 제거(두 번 반복 — 연속 튐도 정리)
+  for (let pass = 0; pass < 2; pass++) {
+    const res = [];
+    for (let i = 0; i < out.length; i++) {
+      const a = res[res.length - 1], b = out[i], c = out[i + 1];
+      if (a && c) {
+        const ab = haversineKm(a.lat, a.lng, b.lat, b.lng);
+        const bc = haversineKm(b.lat, b.lng, c.lat, c.lng);
+        const ac = haversineKm(a.lat, a.lng, c.lat, c.lng);
+        if (ab > 0.06 && bc > 0.06 && ac < 0.5 * Math.min(ab, bc)) continue;
+      }
+      res.push(b);
+    }
+    out = res;
+  }
   return out;
 }
 function tsMs(t) {

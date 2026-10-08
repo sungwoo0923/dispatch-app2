@@ -60,7 +60,12 @@ public class KpLocationService extends Service {
     private static final long DRIVER_UPLOAD_MS = 10000;     // drivers 문서 갱신 최소 간격
     private static final long TRACK_UPLOAD_MS = 30000;      // gps_tracks 저장 간격
     private static final double TRACK_UPLOAD_KM = 0.05;     // 또는 50m 이동 시 저장
-    private static final float MAX_ACCURACY_M = 100f;
+    private static final float MAX_ACCURACY_M = 100f;       // 실시간 위치(drivers 문서) 허용 오차
+    // ⭐ 정차 중(실내/주차장) GPS·와이파이 위치가 50~100m씩 튀어 지도에 "낙서"처럼
+    // 그려졌다. 이동 경로(gps_tracks)·이동거리에는 정확한 위치만 쓰고, 멈춰 있을 땐 기록하지 않는다.
+    private static final float TRACK_ACCURACY_M = 35f;
+    private static final double STOPPED_SPEED_MS = 1.5;     // 약 5km/h 미만 = 정차
+    private static final double STOPPED_MIN_MOVE_KM = 0.05; // 정차 중엔 50m 이상 벗어나야 기록
 
     public interface Listener { void onLocation(double lat, double lng, double speed, double accuracy); }
     static volatile Listener listener;
@@ -193,17 +198,26 @@ public class KpLocationService extends Service {
 
         if (acc > MAX_ACCURACY_M) return;
 
-        if (lastDistLoc != null) {
-            double km = lastDistLoc.distanceTo(loc) / 1000.0;
-            if (km > 0.01) { pendingDistKm += km; lastDistLoc = loc; }
-        } else {
-            lastDistLoc = loc;
+        boolean precise = acc > 0 && acc <= TRACK_ACCURACY_M;
+        boolean stopped = speed < STOPPED_SPEED_MS;
+
+        // 이동거리: 정확한 위치끼리, 오차보다 크게 움직였을 때만 누적
+        if (precise) {
+            if (lastDistLoc != null) {
+                double km = lastDistLoc.distanceTo(loc) / 1000.0;
+                double minKm = Math.max(0.02, acc / 1000.0);
+                if (km > minKm && !(stopped && km < STOPPED_MIN_MOVE_KM)) { pendingDistKm += km; lastDistLoc = loc; }
+            } else {
+                lastDistLoc = loc;
+            }
         }
 
         long now = System.currentTimeMillis();
-        boolean track = (now - lastTrackAt >= TRACK_UPLOAD_MS)
-                || (lastTrackLoc != null && lastTrackLoc.distanceTo(loc) / 1000.0 > TRACK_UPLOAD_KM)
-                || lastTrackLoc == null;
+        double fromLastTrackKm = lastTrackLoc != null ? lastTrackLoc.distanceTo(loc) / 1000.0 : 999;
+        boolean track = precise && (
+                lastTrackLoc == null
+                || (stopped ? fromLastTrackKm > STOPPED_MIN_MOVE_KM
+                            : (now - lastTrackAt >= TRACK_UPLOAD_MS || fromLastTrackKm > TRACK_UPLOAD_KM)));
         if (now - lastDriverUploadAt < DRIVER_UPLOAD_MS && !track) return;
 
         lastDriverUploadAt = now;
@@ -212,11 +226,12 @@ public class KpLocationService extends Service {
         pendingDistKm = 0;
         final boolean writeTrack = track;
         final int speedKmh = (int) Math.round(speed * 3.6);
-        io.execute(() -> upload(lat, lng, speedKmh, distKm, writeTrack));
+        final double accM = acc;
+        io.execute(() -> upload(lat, lng, speedKmh, distKm, writeTrack, accM));
     }
 
     // ── Firestore REST ──────────────────────────────────────────────
-    private void upload(double lat, double lng, int speedKmh, double distKm, boolean writeTrack) {
+    private void upload(double lat, double lng, int speedKmh, double distKm, boolean writeTrack, double accM) {
         SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
         String uid = sp.getString("uid", null);
         String projectId = sp.getString("projectId", null);
@@ -256,7 +271,8 @@ public class KpLocationService extends Service {
                         .put("lng", new JSONObject().put("doubleValue", lng))
                         .put("speed", new JSONObject().put("integerValue", String.valueOf(speedKmh)))
                         .put("date", new JSONObject().put("stringValue", f.format(new Date())))
-                        .put("source", new JSONObject().put("stringValue", "native"));
+                        .put("source", new JSONObject().put("stringValue", "native"))
+                        .put("accuracy", new JSONObject().put("doubleValue", accM));
                 String trackId = UUID.randomUUID().toString().replace("-", "").substring(0, 20);
                 writes.put(new JSONObject()
                         .put("update", new JSONObject().put("name", base + "gps_tracks/" + trackId).put("fields", tf))

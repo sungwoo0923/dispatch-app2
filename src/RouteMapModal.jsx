@@ -221,7 +221,7 @@ export default function RouteMapModal({ pickupAddr, dropAddr, pickupName, dropNa
         const pts = snap.docs
           .map((d) => d.data())
           .filter((p) => p.lat != null && p.lng != null)
-          .map((p) => ({ lat: p.lat, lng: p.lng, timestamp: p.timestamp }));
+          .map((p) => ({ lat: p.lat, lng: p.lng, timestamp: p.timestamp, accuracy: p.accuracy }));
         setDriverTrack(pts);
       },
       () => setDriverTrack([])

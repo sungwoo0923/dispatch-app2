@@ -4821,7 +4821,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
           const logTs = resolveTs(sorted[i].timestamp)?.getTime() || 0;
           if (logTs <= ts) { status = sorted[i].status; break; }
         }
-        return { lat: t.lat, lng: t.lng, status, timestamp: t.timestamp, dwell: null };
+        return { lat: t.lat, lng: t.lng, status, timestamp: t.timestamp, accuracy: t.accuracy, dwell: null };
       });
     }
     // Fallback: use status change log positions from selected date's session

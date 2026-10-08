@@ -516,12 +516,14 @@ function useGpsTracking(uid, driverData) {
       const storeDelta = lastStore ? calcDist(lastStore.lat, lastStore.lng, lat, lng) : 999;
       const nowMs = Date.now();
       const timeSinceLast = nowMs - lastGpsTimeRef.current;
-      if (storeDelta > 0.05 || timeSinceLast >= 30000) {
+      // 이동 경로(gps_tracks)는 정확한 위치(35m 이내)만 기록 — 정차 중 실내 GPS 튐 방지
+      if (accuracy != null && accuracy <= 35 && (storeDelta > 0.05 || timeSinceLast >= 30000)) {
         lastGpsStoreRef.current = { lat, lng };
         lastGpsTimeRef.current = nowMs;
         addDoc(collection(db, "gps_tracks"), {
           driverId: uid, lat, lng,
           speed: speed ? Math.round(speed * 3.6) : 0,
+          accuracy: Math.round(accuracy),
           timestamp: serverTimestamp(), date: kstDateStr(),
         }).catch(() => {});
       }
