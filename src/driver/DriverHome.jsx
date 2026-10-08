@@ -7,6 +7,7 @@ import {
   collection, query, where, orderBy, limit, getDocs, serverTimestamp, increment,
 } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import { registerPlugin } from "@capacitor/core";
 import { useAddrGeo } from "../fleetGeo";
 import { haversineKm } from "../tmapFareCalc";
 
@@ -40,25 +41,26 @@ const RESIDENCE_SUB_REGIONS = {
 // 넘겨 JS가 Firestore에 쓰는 구조라, 앱이 백그라운드로 가서 웹화면이 멈추면 전송도
 // 끊겼다. 새 서비스는 네이티브에서 직접 Firestore(REST)에 기록하므로 화면이 꺼지거나
 // 다른 앱을 써도 계속 전송된다. JS는 화면 표시용 위치만 이벤트로 받는다.
-let KpLoc = null;
-async function loadKpLoc() {
-  if (KpLoc) return KpLoc;
-  try {
-    const { registerPlugin } = await import("@capacitor/core");
-    KpLoc = registerPlugin("KpLocation");
-  } catch (_) {}
-  return KpLoc;
+// ⚠️ 버그수정(진짜 원인) — Capacitor 플러그인 객체(Proxy)는 모든 속성을 함수로 돌려주기
+// 때문에 "then"도 있는 것처럼 보인다(thenable). 예전처럼 async 함수에서 플러그인을
+// return 하면 Promise가 그 가짜 then을 호출하고 영원히 끝나지 않아, 플러그인을 한 번도
+// 못 쓰고 "GPS 대기중"에 멈춰 있었다(이전 BackgroundGeolocation 방식도 같은 문제).
+// 플러그인 객체는 절대 Promise로 넘기지 말고 콜백 인자로만 전달한다.
+const KpLocation = registerPlugin("KpLocation");
+function withKpLoc(fn) {
+  if (!isNative()) return Promise.resolve();
+  try { return Promise.resolve(fn(KpLocation)); } catch (e) { return Promise.reject(e); }
 }
 
 function openNativeAppSettings() {
-  loadKpLoc().then((plugin) => plugin?.openAppSettings().catch(() => {}));
+  withKpLoc((plugin) => plugin.openAppSettings()).catch(() => {});
 }
 function requestNativeIgnoreBattery() {
-  loadKpLoc().then((plugin) => plugin?.requestIgnoreBattery().catch(() => {}));
+  withKpLoc((plugin) => plugin.requestIgnoreBattery()).catch(() => {});
 }
 function stopNativeTracking() {
   if (!isNative()) return Promise.resolve();
-  return loadKpLoc().then((plugin) => plugin?.stop().catch(() => {}));
+  return withKpLoc((plugin) => plugin.stop()).catch(() => {});
 }
 
 // 설정 탭 — 네이티브 실시간 위치 전송 상태 표시(3초마다 갱신)
@@ -66,12 +68,13 @@ function NativeTrackingStatus() {
   const [st, setSt] = useState(null);
   useEffect(() => {
     let alive = true;
-    const poll = () => loadKpLoc().then(p => p?.status()).then(r => { if (alive && r) setSt(r); }).catch(() => {});
+    const poll = () => withKpLoc(p => p.status()).then(r => { if (alive && r) setSt(r); }).catch((e) => { if (alive) setSt({ error: String(e?.message || e) }); });
     poll();
     const t = setInterval(poll, 3000);
     return () => { alive = false; clearInterval(t); };
   }, []);
   if (!st) return null;
+  if (st.error) return <div style={{ fontSize: 12, color: "#dc2626", marginBottom: 10 }}>위치 서비스 오류: {st.error}</div>;
   const row = (label, ok, okText, ngText) => (
     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0" }}>
       <span style={{ color: "#6b7280" }}>{label}</span>
@@ -83,6 +86,7 @@ function NativeTrackingStatus() {
       {row("실시간 위치 전송", st.running, "동작중", "중지됨")}
       {row("위치 권한", st.locationGranted, "허용", "거부")}
       {row("배터리 최적화", st.ignoringBattery, "제한 없음", "제한됨(해제 필요)")}
+      {!st.running && window.__kpStartErr && <div style={{ fontSize: 11, color: "#dc2626", marginTop: 4 }}>시작 오류: {window.__kpStartErr}</div>}
     </div>
   );
 }
@@ -447,8 +451,8 @@ function useGpsTracking(uid, driverData) {
   useEffect(() => {
     if (!isNative() || !uid || !driverLoaded) return;
     let alive = true;
-    loadKpLoc().then(async (plugin) => {
-      if (!plugin || !alive) return;
+    withKpLoc(async (plugin) => {
+      if (!alive) return;
       if (offDuty) { plugin.stop().catch(() => {}); return; }
       const u = auth.currentUser;
       if (!u?.refreshToken) return;
@@ -461,9 +465,11 @@ function useGpsTracking(uid, driverData) {
         });
         if (alive) setPermissionDenied(false);
       } catch (e) {
+        window.__kpStartErr = String(e?.message || e);
         if (alive && String(e?.message || e).includes("NOT_AUTHORIZED")) setPermissionDenied(true);
         return;
       }
+      window.__kpStartErr = "";
       // 배터리 최적화가 걸려 있으면 화면이 꺼진 뒤 OS가 추적을 멈출 수 있어 최초 1회 해제 요청
       try {
         const st = await plugin.status();
@@ -530,8 +536,8 @@ function useGpsTracking(uid, driverData) {
       // 중복 기록/이동거리 이중 계산 방지).
       let handle = null;
       let cancelled = false;
-      loadKpLoc().then(async (plugin) => {
-        if (!plugin || cancelled) return;
+      withKpLoc(async (plugin) => {
+        if (cancelled) return;
         handle = await plugin.addListener("location", (l) => {
           setPos({ lat: l.lat, lng: l.lng, speed: l.speed, accuracy: l.accuracy });
         });
