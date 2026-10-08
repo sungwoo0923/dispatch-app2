@@ -14,6 +14,7 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
@@ -74,6 +75,16 @@ public class KpLocationService extends Service {
     private LocationManager lm;
     private PowerManager.WakeLock wakeLock;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
+    // ⭐ 생존신호 — 정차 중이거나 실내라 위치가 갱신되지 않아도 1분마다 "앱 동작중"을 알린다
+    // (관제현황 접속상태 판정용 heartbeatAt / active). 위치(updatedAt)는 건드리지 않는다.
+    private final Handler hb = new Handler(Looper.getMainLooper());
+    private final Runnable hbTick = new Runnable() {
+        @Override public void run() {
+            if (!running) return;
+            io.execute(() -> heartbeat());
+            hb.postDelayed(this, 60000);
+        }
+    };
 
     private Location lastDistLoc = null;
     private double pendingDistKm = 0;
@@ -118,6 +129,7 @@ public class KpLocationService extends Service {
             running = true;
             acquireWakeLock();
             startLocationUpdates();
+            hb.postDelayed(hbTick, 5000);
         }
         return START_STICKY;
     }
@@ -125,6 +137,7 @@ public class KpLocationService extends Service {
     @Override
     public void onDestroy() {
         running = false;
+        hb.removeCallbacks(hbTick);
         try { if (lm != null) lm.removeUpdates(locListener); } catch (Exception ignored) {}
         try { if (wakeLock != null && wakeLock.isHeld()) wakeLock.release(); } catch (Exception ignored) {}
         io.shutdown();
@@ -287,6 +300,30 @@ public class KpLocationService extends Service {
             if (code >= 300) Log.w(TAG, "업로드 실패 HTTP " + code);
         } catch (Exception e) {
             Log.w(TAG, "업로드 오류", e);
+        }
+    }
+
+    private void heartbeat() {
+        SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
+        String uid = sp.getString("uid", null);
+        String projectId = sp.getString("projectId", null);
+        if (uid == null || projectId == null) return;
+        try {
+            String token = getIdToken();
+            if (token == null) return;
+            String name = "projects/" + projectId + "/databases/(default)/documents/drivers/" + uid;
+            JSONObject w = new JSONObject()
+                    .put("update", new JSONObject().put("name", name)
+                            .put("fields", new JSONObject().put("active", new JSONObject().put("booleanValue", true))))
+                    .put("updateMask", new JSONObject().put("fieldPaths", new JSONArray().put("active")))
+                    .put("updateTransforms", new JSONArray()
+                            .put(new JSONObject().put("fieldPath", "heartbeatAt").put("setToServerValue", "REQUEST_TIME")))
+                    .put("currentDocument", new JSONObject().put("exists", true));
+            String url = "https://firestore.googleapis.com/v1/projects/" + projectId + "/databases/(default)/documents:commit";
+            int code = httpJson(url, new JSONObject().put("writes", new JSONArray().put(w)).toString(), token, null);
+            if (code == 401 || code == 403) { idToken = null; idTokenExpAt = 0; }
+        } catch (Exception e) {
+            Log.w(TAG, "생존신호 오류", e);
         }
     }
 

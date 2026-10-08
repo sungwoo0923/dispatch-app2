@@ -14,6 +14,7 @@ import jsPDF from "jspdf";
 import { getDrivingRoute, geocodeAddress } from "./tmapFareCalc";
 import { ShortAddr, DropEtaText } from "./fleetGeo";
 import { LeafletTrack, MapLegend } from "./mapLeaflet";
+import { cleanTrack } from "./mapStyle";
 import CustomDatePicker from "./CustomDatePicker";
 import RouteMapModal from "./RouteMapModal";
 
@@ -471,9 +472,26 @@ function KpiCard({ label, value, sub, primary, accent }) {
 // ─── DriverTable ─────────────────────────────────────────────────────────────
 // Selection uses light-blue highlight so dark text stays readable
 
+// 최근 10분 안에 위치/생존신호가 들어왔는지
+function isRecentlySeen(...tsList) {
+  const now = Date.now();
+  return tsList.some(t => {
+    const ms = t?.toMillis ? t.toMillis() : (t?.seconds ? t.seconds * 1000 : null);
+    return ms != null && now - ms < 10 * 60 * 1000;
+  });
+}
+// KST 기준 오늘 0시(ms)
+function kstTodayStartMs() {
+  const k = new Date(Date.now() + 9 * 3600000);
+  return Date.UTC(k.getUTCFullYear(), k.getUTCMonth(), k.getUTCDate()) - 9 * 3600000;
+}
+
 const COL_HEADERS = ["#", "이름", "차량번호", "차종", "현재상태", "속력", "주행시간", "이동거리", "업데이트", "활성화", "첨부", ""];
 
-function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, todayPhotos = [], onViewPhotos }) {
+function normPlateKey(v = "") { return String(v).replace(/[\s-]/g, "").toUpperCase(); }
+function todayKstStr() { return new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10); }
+
+function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, todayPhotos = [], onViewPhotos, ordersByPlate }) {
   if (rows.length === 0) {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "52px 24px", color: "#9ca3af" }}>
@@ -487,9 +505,9 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
   return (
     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 16 }}>
       <thead>
-        <tr style={{ background: "#f4f6fa", borderBottom: "2px solid #e5e7eb", position: "sticky", top: 0, zIndex: 1 }}>
+        <tr style={{ background: NAVY, position: "sticky", top: 0, zIndex: 1 }}>
           {COL_HEADERS.map(col => (
-            <th key={col} style={{ padding: "11px 14px", textAlign: "left", color: "#374151", fontWeight: 700, fontSize: 15, whiteSpace: "nowrap", letterSpacing: "-.01em" }}>
+            <th key={col} style={{ padding: "11px 14px", textAlign: "center", color: "#fff", fontWeight: 800, fontSize: 14, whiteSpace: "nowrap", letterSpacing: ".02em" }}>
               {col}
             </th>
           ))}
@@ -507,6 +525,7 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
               onContextMenu={e => { e.preventDefault(); onContextMenu?.(e, d); }}
               style={{
                 background: bg,
+                textAlign: "center",
                 borderBottom: "1px solid #f0f2f5",
                 borderLeft: sel ? `3px solid ${NAVY}` : "3px solid transparent",
                 cursor: "pointer",
@@ -536,12 +555,29 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
                 {d.vehicleType || "-"}
               </td>
 
-              {/* 현재상태 */}
-              <td style={{ padding: "11px 14px" }}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_COLORS[d.상태] || "#9ca3af", display: "inline-block" }} />
-                  <span style={{ color: "#1B2B4B", fontWeight: 700, fontSize: 15 }}>{d.상태 || "대기"}</span>
-                </span>
+              {/* 현재상태 — ⭐ 지입 기사는 버튼(출근/퇴근) 상태 대신 노선관리와 같은 오더 기반
+                  상태(배차대기/오더확인중/상차지진입/상차지도착/이동중/하차지진입/하차지도착 등) */}
+              <td style={{ padding: "11px 14px", textAlign: "center" }}>
+                {(() => {
+                  const orders = ordersByPlate?.get(normPlateKey(d.차량번호)) || [];
+                  if (d.등급 === "지입" && orders.length) {
+                    const st = driverDispatchStatus(orders, todayKstStr(), d);
+                    const activeOrder = st.label === "운송중" ? findActiveOrder(orders, todayKstStr()) : null;
+                    return (
+                      <span style={{ fontSize: 15 }}>
+                        {activeOrder
+                          ? <TransitPhaseLabel colored order={activeOrder} live={d} driverId={d.id} fallback={st.label} />
+                          : <span style={{ fontWeight: 800, color: st.color }}>{st.label}</span>}
+                      </span>
+                    );
+                  }
+                  return (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_COLORS[d.상태] || "#9ca3af", display: "inline-block" }} />
+                      <span style={{ color: "#1B2B4B", fontWeight: 700, fontSize: 15 }}>{d.상태 || "대기"}</span>
+                    </span>
+                  );
+                })()}
               </td>
 
               {/* 속력 */}
@@ -561,12 +597,21 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
                   const start = ws?.toDate?.() || (ws?.seconds ? new Date(ws.seconds * 1000) : null);
                   if (!start) return <span style={{ fontSize: 14, color: "#d1d5db" }}>–</span>;
                   const isOut = d.상태 === "퇴근" || d.상태 === "최종퇴근";
+                  // ⭐ 버그수정 — 퇴근 처리 없이 며칠이 지나면 "40시간"처럼 출근 시점부터 계속
+                  // 누적돼 보였다. 오늘 이전에 출근한 기록이면 오늘 0시부터만 세고 "퇴근 미처리" 표시.
+                  const dayStart = kstTodayStartMs();
+                  const carried = !isOut && start.getTime() < dayStart;
                   const ms = isOut && d.근무시간
                     ? d.근무시간 * 60 * 1000
-                    : Date.now() - start.getTime();
+                    : Date.now() - Math.max(start.getTime(), dayStart);
                   const h = Math.floor(ms / 3600000);
                   const m = Math.floor((ms % 3600000) / 60000);
-                  return <span style={{ fontSize: 14, color: "#374151", fontVariantNumeric: "tabular-nums" }}>{h > 0 ? `${h}시간 ` : ""}{m}분</span>;
+                  return (
+                    <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", lineHeight: 1.2 }}>
+                      <span style={{ fontSize: 14, color: "#374151", fontVariantNumeric: "tabular-nums" }}>{h > 0 ? `${h}시간 ` : ""}{m}분</span>
+                      {carried && <span style={{ fontSize: 11, fontWeight: 700, color: "#d97706" }} title={`${start.getMonth() + 1}.${start.getDate()} 출근 후 퇴근 기록 없음`}>퇴근 미처리</span>}
+                    </span>
+                  );
                 })()}
               </td>
 
@@ -4744,7 +4789,10 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
           총거리: raw.totalDistance || 0,
           근무시간: raw.workMinutes || 0,
           updatedAt: raw.updatedAt,
-          active: raw.active === true,
+          // ⭐ 버그수정 — 기사앱(APK 네이티브 위치 서비스)은 active 필드를 따로 켜지 않아,
+          // 위치가 계속 들어오는데도 "미접속/비활성"으로 보였다. 최근 10분 안에 위치나
+          // 생존신호(heartbeatAt)가 들어왔으면 접속중으로 본다.
+          active: raw.active === true || isRecentlySeen(raw.updatedAt, raw.heartbeatAt),
           speed: raw.speed || 0,
           workStartAt: raw.workStartAt || null,
           checkInLocation: raw.checkInLocation || null,
@@ -4849,7 +4897,19 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
     const sorted = [...selectedDriverLogs].sort((a, b) =>
       (resolveTs(a.timestamp)?.getTime()||0) - (resolveTs(b.timestamp)?.getTime()||0)
     );
-    const checkInIdx = sorted.findIndex(l => l.status === "출근" && toKSTDate(l.timestamp) === selectedTrackDate);
+    let checkInIdx = sorted.findIndex(l => l.status === "출근" && toKSTDate(l.timestamp) === selectedTrackDate);
+    // ⭐ 버그수정 — 이전 날짜에 출근하고 최종퇴근 없이 이어지는 경우 "근무시간 0분"으로 나왔다.
+    // 그날 출근 기록이 없으면 그 전 마지막 출근(이후 최종퇴근 없음)을 이어받고, 선택 날짜 0시부터 센다.
+    let carryStartMs = null;
+    if (checkInIdx < 0) {
+      for (let i = sorted.length - 1; i >= 0; i--) {
+        const d = toKSTDate(sorted[i].timestamp);
+        if (d > selectedTrackDate) continue;
+        if (sorted[i].status === "최종퇴근") break;
+        if (sorted[i].status === "출근") { checkInIdx = i; break; }
+      }
+      if (checkInIdx >= 0) carryStartMs = new Date(`${selectedTrackDate}T00:00:00+09:00`).getTime();
+    }
     if (checkInIdx < 0) return { logs: [], workMs: 0, isActive: false };
     let endIdx = sorted.length - 1;
     let isFinalOut = false;
@@ -4859,7 +4919,9 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
     const sessionLogs = sorted.slice(checkInIdx, endIdx + 1);
     const checkInTime = resolveTs(sorted[checkInIdx].timestamp);
     const endTime = isFinalOut ? resolveTs(sorted[endIdx].timestamp) : null;
-    const workMs = endTime ? endTime.getTime() - checkInTime.getTime() : Date.now() - checkInTime.getTime();
+    const startMs = carryStartMs != null ? Math.max(carryStartMs, checkInTime.getTime()) : checkInTime.getTime();
+    const dayEndMs = new Date(`${selectedTrackDate}T23:59:59+09:00`).getTime();
+    const workMs = endTime ? endTime.getTime() - startMs : Math.min(Date.now(), dayEndMs) - startMs;
     return { logs: sessionLogs, workMs, isActive: !isFinalOut };
   }, [selectedDriverLogs, selectedTrackDate, selected?.id]);
 
@@ -4867,8 +4929,10 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
   const sessionGpsDist = useMemo(() => {
     if (gpsTracks.length < 2) return 0;
     let dist = 0;
-    for (let i = 1; i < gpsTracks.length; i++)
-      dist += haversineKm(gpsTracks[i-1].lat, gpsTracks[i-1].lng, gpsTracks[i].lat, gpsTracks[i].lng);
+    // ⭐ 정차 중 GPS 튐까지 거리로 더해져 부풀려지던 문제 — 지도와 같은 정리 로직으로 계산
+    const pts = cleanTrack(gpsTracks);
+    for (let i = 1; i < pts.length; i++)
+      dist += haversineKm(pts[i-1].lat, pts[i-1].lng, pts[i].lat, pts[i].lng);
     return dist;
   }, [gpsTracks]);
 
@@ -4917,6 +4981,20 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
   }, [selectedPath]);
 
   // ── 필터링 ────────────────────────────────────────────────────────────────
+  // ⭐ 관제현황 "현재상태"를 노선관리와 같은 오더 기반 상태로 보여주기 위한 오늘 오더(차량번호별)
+  const todayOrdersByPlate = useMemo(() => {
+    const today = todayKstStr();
+    const m = new Map();
+    (dispatchData || []).forEach(r => {
+      if (!r?.차량번호 || r.상차일 !== today) return;
+      if (r.배차상태 === "배차취소" || r.상태 === "취소") return;
+      const k = normPlateKey(r.차량번호);
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push(r);
+    });
+    return m;
+  }, [dispatchData]);
+
   const filteredRows = useMemo(() => {
     const kw = searchQuery.trim().replace(/\s/g, "");
     return drivers.filter(d => {
@@ -5376,7 +5454,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
                 <span style={{ fontSize: 15, color: "#6b7280", fontWeight: 600 }}>{filteredRows.length}명</span>
               </div>
               <div style={{ flex: 1, overflowY: "auto", overflowX: "auto" }}>
-                <DriverTable rows={filteredRows} selectedId={selected?.id} onSelect={handleSelect} onFocusMap={handleFocusMap} onContextMenu={handleContextMenu} todayPhotos={todayDriverPhotos} onViewPhotos={setPhotoViewerPhotos} />
+                <DriverTable ordersByPlate={todayOrdersByPlate} rows={filteredRows} selectedId={selected?.id} onSelect={handleSelect} onFocusMap={handleFocusMap} onContextMenu={handleContextMenu} todayPhotos={todayDriverPhotos} onViewPhotos={setPhotoViewerPhotos} />
               </div>
             </div>
 
