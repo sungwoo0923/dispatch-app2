@@ -15158,21 +15158,21 @@ const pickDrop = (c) => {
         <RowLabelInput
           label="왕복/긴급"
           input={
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 flex-nowrap whitespace-nowrap">
               <button type="button"
                 onClick={() => update("운행유형", form.운행유형 === "왕복" ? "편도" : "왕복")}
-                className={`px-3 py-1.5 text-[13px] font-bold rounded-lg border transition-all ${form.운행유형 === "왕복" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-300"}`}>
+                className={`shrink-0 whitespace-nowrap px-2.5 py-1.5 text-[13px] font-bold rounded-lg border transition-all ${form.운행유형 === "왕복" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-300"}`}>
                 왕복
               </button>
               <button type="button"
                 onClick={() => update("긴급", !form.긴급)}
-                className={`px-3 py-1.5 text-[13px] font-bold rounded-lg border transition-all ${form.긴급 ? "bg-red-600 text-white border-red-600" : "bg-white text-gray-600 border-gray-300"}`}>
+                className={`shrink-0 whitespace-nowrap px-2.5 py-1.5 text-[13px] font-bold rounded-lg border transition-all ${form.긴급 ? "bg-red-600 text-white border-red-600" : "bg-white text-gray-600 border-gray-300"}`}>
                 긴급
               </button>
               {canSeeBlind() && (
                 <button type="button"
                   onClick={() => update("블라인드", !form.블라인드)}
-                  className={`px-3 py-1.5 text-[13px] font-bold rounded-lg border transition-all inline-flex items-center gap-1 ${form.블라인드 ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-300"}`}>
+                  className={`shrink-0 whitespace-nowrap px-2.5 py-1.5 text-[13px] font-bold rounded-lg border transition-all inline-flex items-center gap-1 ${form.블라인드 ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-300"}`}>
                   <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
                   블라인드
                 </button>

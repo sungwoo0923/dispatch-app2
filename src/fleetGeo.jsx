@@ -217,14 +217,44 @@ function useRouteMinutes(from, to) {
   return min;
 }
 
-export function useDropEta(order, driverId) {
+// ⭐ 실시간 위치 기준 경로 소요시간 — 위치가 500m 이상 바뀌었거나 3분이 지나면 다시 조회
+//   (Tmap 경로 API의 소요시간은 현재 도로 상황(교통)을 반영한다)
+function useLiveRouteMinutes(loc, to) {
+  const [state, setState] = useState(null); // { min, at, from }
+  useEffect(() => {
+    if (!loc || loc.lat == null || !to) return;
+    const moved = !state?.from || haversineKm(state.from.lat, state.from.lng, loc.lat, loc.lng) > 0.5;
+    const stale = !state?.at || Date.now() - state.at > 3 * 60000;
+    if (!moved && !stale) return;
+    let alive = true;
+    const from = { lat: loc.lat, lng: loc.lng };
+    getDrivingRouteByCoords({ lat: from.lat, lon: from.lng }, { lat: to.lat, lon: to.lng }).then(r => {
+      if (alive && r) setState({ min: r.minutes, at: Date.now(), from });
+    });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loc?.lat, loc?.lng, to?.lat, to?.lng]);
+  return state?.min ?? null;
+}
+
+// ⭐ 사용자 요청 — 하차 도착예상시각
+//  · 상차지 도착 후 아직 상차지(1km 이내)에 있으면: (도착시각+30분 상차, 단 이미 지났으면 지금) + 상차지→하차지 소요시간
+//  · 상차지를 떠나 이동 중이면: 지금 + "현재 위치→하차지" 실시간 소요시간 (기사가 빨리 출발하면 그만큼 당겨짐)
+export function useDropEta(order, driverId, location) {
   const pickupGeo = useAddrGeo(order?.상차지주소 || null);
   const dropGeo = useAddrGeo(order?.하차지주소 || null);
   const sinceMs = tsMs(order?.기사확인일시);
   const arrivedMs = usePickupArrivalMs(driverId, pickupGeo || null, sinceMs);
   const routeMin = useRouteMinutes(pickupGeo || null, dropGeo || null);
-  if (arrivedMs == null || routeMin == null) return null;
-  return new Date(arrivedMs + (LOADING_MINUTES + routeMin) * 60000);
+  const hasLoc = location?.lat != null && location?.lng != null;
+  const atPickup = hasLoc && pickupGeo ? haversineKm(location.lat, location.lng, pickupGeo.lat, pickupGeo.lng) <= ARRIVE_KM : false;
+  const departed = arrivedMs != null && hasLoc && !atPickup;
+  const liveMin = useLiveRouteMinutes(departed ? location : null, dropGeo || null);
+  if (arrivedMs == null) return null;
+  if (departed && liveMin != null) return new Date(Date.now() + liveMin * 60000);
+  if (routeMin == null) return null;
+  const departMs = Math.max(arrivedMs + LOADING_MINUTES * 60000, Date.now());
+  return new Date(departMs + routeMin * 60000);
 }
 
 const hhmm = (d) => {
@@ -232,8 +262,8 @@ const hhmm = (d) => {
   return `${String(k.getUTCHours()).padStart(2, "0")}:${String(k.getUTCMinutes()).padStart(2, "0")}`;
 };
 
-export function DropEtaText({ order, driverId, style }) {
-  const eta = useDropEta(order, driverId);
+export function DropEtaText({ order, driverId, location, style }) {
+  const eta = useDropEta(order, driverId, location);
   if (!eta) return null;
   return (
     <span style={{ fontWeight: 800, color: "#1d4ed8", ...style }}>{hhmm(eta)} 도착예상</span>

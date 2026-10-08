@@ -1065,7 +1065,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                             <div style={{ fontSize: 12, color: "#4b5563" }}>
                               하차예상 {activeOrder.하차시간 || "즉시"}{activeOrder.하차일 && activeOrder.하차일 !== activeOrder.상차일 ? ` (${activeOrder.하차일})` : ""}
                               {/* ⭐ 상차지 도착 + 30분 + 실도로 소요시간 기준 도착예상시각 */}
-                              <DropEtaText order={activeOrder} driverId={d.id} style={{ display: "block", fontSize: 12, marginTop: 2 }} />
+                              <DropEtaText order={activeOrder} driverId={d.id} location={d.location} style={{ display: "block", fontSize: 12, marginTop: 2 }} />
                             </div>
                             <div style={{ fontSize: 12, color: "#6b7eac" }}>{[activeOrder.차량종류, activeOrder.차량톤수].filter(Boolean).join(" · ") || "-"}</div>
                             <div style={{ fontSize: 12, color: "#6b7eac", wordBreak: "break-word" }}>{activeOrder.화물내용 || "-"}</div>

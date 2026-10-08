@@ -2322,7 +2322,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                       <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>
                         {r.하차일 || "-"} {r.하차시간 || "즉시"}
                         {/* ⭐ 상차지 도착 + 30분 + 실도로 소요시간 기준 도착예상시각 */}
-                        {meta.label === "운송중" && <DropEtaText order={r} driverId={driver.id} style={{ display: "block", fontSize: 12, marginTop: 2 }} />}
+                        {meta.label === "운송중" && <DropEtaText order={r} driverId={driver.id} location={live?.location} style={{ display: "block", fontSize: 12, marginTop: 2 }} />}
                       </td>
                       {/* ⭐ 사용자 요청 — 지입차관리 노선표에 화물내용/톤수/차량종류가 안 보여서 추가 */}
                       <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#374151", fontWeight: 700, whiteSpace: "nowrap" }}>
