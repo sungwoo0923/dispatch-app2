@@ -767,6 +767,66 @@ exports.notifyUnassignedUrgent = functions.pubsub
   });
 
 /* ==============================
+   ✏️ 지입 기사 — 수락한 오더를 관리자가 수정하면 기사에게 알림
+   상/하차지·일시·화물·운임·담당자·전달사항 중 바뀐 항목을 알려준다(푸시 + 알림함).
+   기사앱은 오더의 기사확인값(수락/수정확인 시점 값)과 비교해 빨간 깜빡임 + 수정확인 버튼을 띄운다.
+============================== */
+const ORDER_WATCH_GROUPS = [
+  ["상차지", ["상차지명", "상차지주소"]],
+  ["하차지", ["하차지명", "하차지주소"]],
+  ["상차일시", ["상차일", "상차시간"]],
+  ["하차일시", ["하차일", "하차시간"]],
+  ["화물정보", ["화물내용", "차량톤수", "차량종류"]],
+  ["운임", ["기사운임", "지급방식"]],
+  ["담당자 연락처", ["상차지담당자", "상차지담당자번호", "하차지담당자", "하차지담당자번호"]],
+  ["전달사항", ["전달사항"]],
+];
+exports.notifyFleetOrderModified =
+  functions.firestore
+    .document("{col}/{dispatchId}")
+    .onUpdate(async (change, context) => {
+      const { col, dispatchId } = context.params;
+      if (!["dispatch", "orders"].includes(col)) return;
+      const before = change.before.data();
+      const after = change.after.data();
+      if (!before || !after) return;
+      if (after["기사확인상태"] !== "수락" || before["기사확인상태"] !== "수락") return;
+      if (after["배차상태"] === "배차취소") return;
+      const plate = normalizePlateServer(after["차량번호"] || "");
+      if (!plate || plate !== normalizePlateServer(before["차량번호"] || "")) return;
+
+      const norm = (v) => (v == null ? "" : String(v).trim());
+      const labels = ORDER_WATCH_GROUPS
+        .filter(([, fields]) => fields.some((f) => norm(before[f]) !== norm(after[f])))
+        .map(([label]) => label);
+      if (!labels.length) return;
+
+      const driverSnap = await db.collection("drivers").where("차량번호", "==", after["차량번호"]).limit(5).get();
+      const driverDoc = driverSnap.docs.find((d) => normalizePlateServer(d.data()["차량번호"]) === plate);
+      if (!driverDoc) return;
+
+      const route = `${after["상차지명"] || "-"} → ${after["하차지명"] || "-"}`;
+      const title = "오더가 수정되었습니다";
+      const body = `${after["거래처명"] ? after["거래처명"] + " " : ""}${route} 오더의 ${labels.join("·")} 정보가 변경되었습니다. 앱에서 확인 후 "수정확인"을 눌러주세요.`;
+
+      await db.collection("driver_notifications").add({
+        driverId: driverDoc.id, type: "order_modified", orderId: dispatchId,
+        title, body, changed: labels, createdAt: FieldValue.serverTimestamp(), read: false,
+      }).catch(() => {});
+
+      const u = await db.collection("users").doc(driverDoc.id).get().catch(() => null);
+      const ud = u?.exists ? u.data() : null;
+      if (ud?.fcmToken && ud.driverPushEnabled !== false) {
+        await sendPushAndCleanup([ud.fcmToken], {
+          notification: { title, body },
+          data: { type: "fleet_order_modified", orderId: dispatchId },
+          android: { priority: "high" },
+          apns: { payload: { aps: { sound: "default" } } },
+        }, "지입기사 오더수정");
+      }
+    });
+
+/* ==============================
    🚚 지입 기사 — 상차/하차 시간 지연 알림
    — 5분마다 실행. 오늘 "수락"(운송중) 상태인 지입 오더 중 상차시간(또는
    하차시간)이 지났는데 기사가 아직 상차지(하차지) 5km(진입) 반경 밖에 있으면,

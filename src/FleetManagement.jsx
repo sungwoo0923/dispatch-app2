@@ -15,6 +15,7 @@ import { getDrivingRoute, geocodeAddress } from "./tmapFareCalc";
 import { ShortAddr, DropEtaText, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS } from "./fleetGeo";
 import { LeafletTrack, MapLegend } from "./mapLeaflet";
 import { cleanTrack } from "./mapStyle";
+import { modificationStatus } from "./orderChange";
 import CustomDatePicker from "./CustomDatePicker";
 import RouteMapModal from "./RouteMapModal";
 
@@ -1388,6 +1389,25 @@ const PHASE_TEXT_COLORS = {
   "상차 예정": "#64748b",
   "위치 확인중": "#9ca3af",
 };
+// ⭐ 관리자가 수정한 오더를 기사가 확인했는지 표시
+function ModBadge({ order }) {
+  const ms = modificationStatus(order);
+  if (!ms) return null;
+  if (ms.kind === "pending") {
+    return (
+      <span title={`수정 항목: ${ms.labels.join(", ")}`} style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", border: "1px solid #fecaca", background: "#fef2f2", borderRadius: 6, padding: "1px 6px", whiteSpace: "nowrap" }}>
+        수정 미확인
+      </span>
+    );
+  }
+  const d = new Date(ms.at);
+  return (
+    <span title={`기사가 수정 내용을 확인했습니다${ms.labels.length ? ` (${ms.labels.join(", ")})` : ""}`} style={{ fontSize: 11, fontWeight: 800, color: "#16a34a", border: "1px solid #bbf7d0", background: "#f0fdf4", borderRadius: 6, padding: "1px 6px", whiteSpace: "nowrap" }}>
+      기사 확인 {String(d.getHours()).padStart(2, "0")}:{String(d.getMinutes()).padStart(2, "0")}
+    </span>
+  );
+}
+
 function PhaseText({ label }) {
   return <span style={{ color: PHASE_TEXT_COLORS[label] || "#374151", fontWeight: 800 }}>{label}</span>;
 }
@@ -2276,6 +2296,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                           <span style={{ fontSize: 14, fontWeight: 700, color: "#374151" }}>
                             {meta.label === "운송중" ? <TransitPhaseLabel colored order={r} live={live} driverId={driver.id} fallback={meta.label} /> : <PhaseText label={meta.label} />}
                           </span>
+                          <ModBadge order={r} />
                           {/* ⭐ 사용자 요청 — 완료시간이 줄바꿈으로 아래에 따로 뜨던 걸 한 줄로 합침 */}
                           {r.기사확인상태 === "완료" && r.기사완료일시?.toDate && (
                             <span style={{ fontSize: 11, color: "#9ca3af" }}>

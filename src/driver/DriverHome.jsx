@@ -9,6 +9,7 @@ import {
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { registerPlugin } from "@capacitor/core";
 import { useAddrGeo, computeFleetPhase, useFleetPhaseGeo } from "../fleetGeo";
+import { snapshotOrder, changedFields, changedLabels } from "../orderChange";
 import { haversineKm } from "../tmapFareCalc";
 
 // Capacitor 네이티브 컨텍스트 여부 확인
@@ -296,24 +297,26 @@ function NavButton({ title, name, addr }) {
   );
 }
 
-function LocBlock({ title, name, addr, when, manager, managerPhone, onCopy }) {
+// 관리자가 수정한 항목 — 빨간색 + 천천히 깜빡임
+const CHG = { color: "#dc2626", fontWeight: 800, animation: "kpRedBlink 1.4s ease-in-out infinite" };
+function LocBlock({ title, name, addr, when, manager, managerPhone, onCopy, chName, chAddr, chWhen, chManager }) {
   return (
     <div style={{ padding: "8px 0", borderBottom: "1px solid #f3f4f6" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
         <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: title === "상차" ? "#1B2B4B" : "#374151", padding: "1px 7px", borderRadius: 6, flexShrink: 0 }}>{title}</span>
-        <span style={{ fontSize: 13, fontWeight: 800, color: "#111827" }}>{name || "-"}</span>
-        <span style={{ fontSize: 12, color: "#6b7280", marginLeft: "auto", flexShrink: 0 }}>{when}</span>
+        <span style={{ fontSize: 13, fontWeight: 800, color: "#111827", ...(chName ? CHG : {}) }}>{name || "-"}</span>
+        <span style={{ fontSize: 12, color: "#6b7280", marginLeft: "auto", flexShrink: 0, ...(chWhen ? CHG : {}) }}>{when}</span>
       </div>
       {addr && (
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 12, color: "#4b5563", flex: 1, wordBreak: "break-word" }}>{addr}</span>
+          <span style={{ fontSize: 12, color: "#4b5563", flex: 1, wordBreak: "break-word", ...(chAddr ? CHG : {}) }}>{addr}</span>
           <button onClick={() => onCopy(addr, `${title}지 주소`)} style={{ fontSize: 11, fontWeight: 700, color: "#1B2B4B", border: "1px solid #c7d2e3", borderRadius: 6, padding: "2px 7px", background: "#fff", flexShrink: 0, cursor: "pointer" }}>복사</button>
           <NavButton title={title} name={name} addr={addr} />
         </div>
       )}
       {manager && (
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
-          <span style={{ fontSize: 12, color: "#6b7280" }}>{manager}{managerPhone ? ` · ${formatPhone(managerPhone)}` : ""}</span>
+          <span style={{ fontSize: 12, color: "#6b7280", ...(chManager ? CHG : {}) }}>{manager}{managerPhone ? ` · ${formatPhone(managerPhone)}` : ""}</span>
           {managerPhone && (
             <a href={`tel:${String(managerPhone).replace(/[^0-9]/g, "")}`} style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: "#16a34a", borderRadius: 6, padding: "2px 8px", textDecoration: "none", flexShrink: 0 }}>전화</a>
           )}
@@ -323,28 +326,33 @@ function LocBlock({ title, name, addr, when, manager, managerPhone, onCopy }) {
   );
 }
 
-function OrderDetailBody({ o, onCopy }) {
+function OrderDetailBody({ o, onCopy, changed = [] }) {
   const fmtDT = (date, time) => [date, time || "즉시"].filter(Boolean).join(" ");
+  const ch = new Set(changed);
+  const any = (...f) => f.some(x => ch.has(x));
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
-      <LocBlock title="상차" name={o.상차지명} addr={o.상차지주소} when={fmtDT(o.상차일, o.상차시간)} manager={o.상차지담당자} managerPhone={o.상차지담당자번호} onCopy={onCopy} />
-      <LocBlock title="하차" name={o.하차지명} addr={o.하차지주소} when={fmtDT(o.하차일, o.하차시간)} manager={o.하차지담당자} managerPhone={o.하차지담당자번호} onCopy={onCopy} />
+      <style>{`@keyframes kpRedBlink { 0%,100% { opacity: 1; } 50% { opacity: .35; } }`}</style>
+      <LocBlock title="상차" name={o.상차지명} addr={o.상차지주소} when={fmtDT(o.상차일, o.상차시간)} manager={o.상차지담당자} managerPhone={o.상차지담당자번호} onCopy={onCopy}
+        chName={any("상차지명")} chAddr={any("상차지주소")} chWhen={any("상차일", "상차시간")} chManager={any("상차지담당자", "상차지담당자번호")} />
+      <LocBlock title="하차" name={o.하차지명} addr={o.하차지주소} when={fmtDT(o.하차일, o.하차시간)} manager={o.하차지담당자} managerPhone={o.하차지담당자번호} onCopy={onCopy}
+        chName={any("하차지명")} chAddr={any("하차지주소")} chWhen={any("하차일", "하차시간")} chManager={any("하차지담당자", "하차지담당자번호")} />
       {(o.화물내용 || o.차량톤수) && (
         <div style={{ display: "flex", gap: 8, fontSize: 12, color: "#374151", padding: "8px 0", borderBottom: "1px solid #f3f4f6" }}>
           <span style={{ fontWeight: 700, flexShrink: 0 }}>화물</span>
-          <span>{[o.차량톤수, o.화물내용].filter(Boolean).join(" · ")}</span>
+          <span style={any("화물내용", "차량톤수", "차량종류") ? CHG : undefined}>{[o.차량톤수, o.화물내용].filter(Boolean).join(" · ")}</span>
         </div>
       )}
       {/* ⭐ 사용자 요청 — 기사운임/결제방법도 오더장에 보여야 한다 */}
       {(o.기사운임 || o.지급방식) && (
         <div style={{ display: "flex", gap: 8, fontSize: 12, color: "#374151", padding: "8px 0", borderBottom: "1px solid #f3f4f6" }}>
           <span style={{ fontWeight: 700, flexShrink: 0 }}>운임</span>
-          <span style={{ fontWeight: 800, color: "#1B2B4B" }}>{o.기사운임 ? `${Number(String(o.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원` : "-"}</span>
+          <span style={{ fontWeight: 800, color: "#1B2B4B", ...(any("기사운임", "지급방식") ? CHG : {}) }}>{o.기사운임 ? `${Number(String(o.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원` : "-"}</span>
           {o.지급방식 && <span style={{ color: "#6b7280" }}>· {o.지급방식}</span>}
         </div>
       )}
       {o.전달사항 && (
-        <div style={{ fontSize: 12, color: "#92400e", background: "#fffbeb", padding: "8px 10px", borderRadius: 8, marginTop: 8, wordBreak: "break-word" }}>
+        <div style={{ fontSize: 12, color: "#92400e", background: "#fffbeb", padding: "8px 10px", borderRadius: 8, marginTop: 8, wordBreak: "break-word", ...(any("전달사항") ? CHG : {}) }}>
           전달사항: {o.전달사항}
         </div>
       )}
@@ -382,9 +390,11 @@ function useDropCompleteGate(order, pos) {
   return { ok: false, msg: `하차지 1km 이내에서 운송완료 가능 (현재 약 ${km.toFixed(1)}km)` };
 }
 
-function ActiveOrderCard({ order: o, loading, onComplete, onCopy, pos }) {
+function ActiveOrderCard({ order: o, loading, onComplete, onCopy, pos, onConfirmChange }) {
   const gate = useDropCompleteGate(o, pos);
   const disabled = loading || !gate.ok;
+  const changed = changedFields(o);
+  const labels = changedLabels(changed);
   return (
     <div style={{ background: "#fff", border: "2px solid #1B2B4B", borderRadius: 16, padding: 16, boxShadow: "0 4px 16px rgba(27,43,75,0.12)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
@@ -393,7 +403,20 @@ function ActiveOrderCard({ order: o, loading, onComplete, onCopy, pos }) {
           <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#1B2B4B", animation: "fmBlink 1.2s ease-in-out infinite" }} /> 운송중
         </span>
       </div>
-      <OrderDetailBody o={o} onCopy={onCopy} />
+      {/* ⭐ 관리자가 수락 이후 오더 내용을 수정한 경우 — 변경 항목 안내 + 수정확인 */}
+      {labels.length > 0 && (
+        <div style={{ background: "#fef2f2", border: "1.5px solid #fecaca", borderRadius: 12, padding: "10px 12px", marginBottom: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: "#dc2626", animation: "kpRedBlink 1.4s ease-in-out infinite" }}>
+            ⚠ 담당자가 오더를 수정했습니다
+          </div>
+          <div style={{ fontSize: 12, color: "#7f1d1d", marginTop: 3 }}>변경 항목: <b>{labels.join(", ")}</b> — 아래 빨간 글씨를 확인해주세요</div>
+          <button onClick={() => onConfirmChange?.(o)} disabled={loading}
+            style={{ width: "100%", marginTop: 8, padding: "11px", borderRadius: 10, border: "none", background: "#dc2626", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>
+            수정확인
+          </button>
+        </div>
+      )}
+      <OrderDetailBody o={o} onCopy={onCopy} changed={changed} />
       <DispatcherLine order={o} />
       {/* ⭐ 하차지 도착해 운송완료가 가능해지면 버튼이 천천히 깜빡여 눈에 띄게 */}
       <style>{`@keyframes kpCompletePulse { 0%,100% { box-shadow: 0 0 0 0 rgba(22,163,74,.55); filter: brightness(1); } 50% { box-shadow: 0 0 0 10px rgba(22,163,74,0); filter: brightness(1.12); } }`}</style>
@@ -1198,10 +1221,13 @@ export default function DriverHome() {
     if (orderActionLoading) return;
     setOrderActionLoading(true);
     try {
+      const accepted = myOrders.find(x => x._id === orderId);
       await updateDoc(doc(db, col, orderId), {
         기사확인상태: "수락",
         기사확인일시: serverTimestamp(),
         배차상태: "배차완료",
+        // 수락 시점 내용 저장 — 이후 관리자가 수정하면 무엇이 바뀌었는지 비교한다
+        ...(accepted ? { 기사확인값: snapshotOrder(accepted) } : {}),
       });
       // ⭐ 버그수정 — 이전 오더 완료 시 남겨둔 lastCompletedOrderId를 안 지웠더니,
       // 새 오더를 수락한 직후에도 "하차완료" 업로드 타일이 이전 오더 기준으로
@@ -1215,7 +1241,7 @@ export default function DriverHome() {
     } finally {
       setOrderActionLoading(false);
     }
-  }, [orderActionLoading]);
+  }, [orderActionLoading, myOrders]);
 
   const handleRejectOrderSubmit = useCallback(async () => {
     if (!rejectModal || orderActionLoading) return;
@@ -1249,6 +1275,30 @@ export default function DriverHome() {
       setOrderActionLoading(false);
     }
   }, [rejectModal, rejectReason, orderActionLoading]);
+
+  // ⭐ 수정확인 — 지금 내용을 새 기준값으로 저장하고 확인 시각을 남긴다(관리자 노선관리에 표시)
+  const handleConfirmChange = useCallback(async (o) => {
+    if (!o?._id) return;
+    try {
+      await updateDoc(doc(db, o.__col || "orders", o._id), {
+        기사확인값: snapshotOrder(o),
+        수정확인일시: serverTimestamp(),
+        수정확인항목: changedLabels(changedFields(o)),
+      });
+      showToast("수정 내용을 확인했습니다");
+    } catch (e) {
+      showToast("처리 중 오류가 발생했습니다");
+    }
+  }, []);
+
+  // 이 기능 이전에 수락한 오더는 기준값이 없으므로, 지금 내용을 기준값으로 한 번 저장해둔다
+  useEffect(() => {
+    myOrders
+      .filter(o => o.기사확인상태 === "수락" && !o.기사확인값 && o.배차상태 !== "배차취소")
+      .forEach(o => {
+        updateDoc(doc(db, o.__col || "orders", o._id), { 기사확인값: snapshotOrder(o) }).catch(() => {});
+      });
+  }, [myOrders]);
 
   const handleCompleteOrder = useCallback(async (orderId, col = "orders") => {
     if (orderActionLoading) return;
@@ -1833,6 +1883,17 @@ export default function DriverHome() {
               {/* ⭐ 사용자 요청 — 수락/거절해서 더 이상 확인 대기중인 오더가 없으면
                   "새 배차 N건..." 안내 문구는 완전히 사라져야 한다(예전엔 "진행중인
                   배차"로 문구만 바뀌어 계속 떠 있었음). */}
+              {/* ⭐ 상단 알림 — 관리자가 수정한 오더가 있으면(수정확인 전까지) 계속 표시 */}
+              {(() => {
+                const n = acceptedOrders.filter(o => changedFields(o).length > 0).length;
+                if (!n) return null;
+                return (
+                  <div style={{ background: "#dc2626", color: "#fff", borderRadius: 12, padding: "11px 14px", fontSize: 14, fontWeight: 800, display: "flex", alignItems: "center", gap: 8, animation: "kpRedBlink 1.6s ease-in-out infinite" }}>
+                    <svg width="16" height="16" fill="none" stroke="#fff" strokeWidth="2.4" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg>
+                    수정된 오더 {n}건 — 내용 확인 후 "수정확인"을 눌러주세요
+                  </div>
+                );
+              })()}
               {pendingOrders.length > 0 && (
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", letterSpacing: "0.05em" }}>
                   {`새 배차 ${pendingOrders.length}건이 발생되었습니다`}
@@ -1845,7 +1906,7 @@ export default function DriverHome() {
                   onCopy={copyText} />
               ))}
               {acceptedOrders.map(o => (
-                <ActiveOrderCard key={o._id} order={o} loading={orderActionLoading} pos={pos}
+                <ActiveOrderCard key={o._id} order={o} loading={orderActionLoading} pos={pos} onConfirmChange={handleConfirmChange}
                   onComplete={() => handleCompleteOrder(o._id, o.__col)}
                   onCopy={copyText} />
               ))}

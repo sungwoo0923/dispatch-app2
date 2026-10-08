@@ -12,6 +12,7 @@ import L from "leaflet";
 import { getDrivingRoute, geocodeAddress, haversineKm } from "../tmapFareCalc";
 import { ShortAddr, DropEtaText, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS } from "../fleetGeo";
 import { LeafletTrack, MapLegend } from "../mapLeaflet";
+import { modificationStatus } from "../orderChange";
 
 const NAVY = "#1B2B4B";
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
@@ -119,6 +120,25 @@ function driverDispatchStatus(orders, todayStr, driver) {
 // ⭐ 사용자 요청 — 기사카드 오더목록의 개별 오더 상태를 운행중/운행완료/관리자취소/
 // 기사거절 네 가지로만 보여준다. HandoverFareReport.jsx의 CANCELED_STATUSES와 동일.
 const FM_CANCELED_STATUSES_MOBILE = ["취소", "배차취소", "오더취소", "취소됨"];
+// ⭐ 관리자가 수정한 오더를 기사가 확인했는지 표시(PC 노선관리와 동일)
+function ModBadge({ order }) {
+  const ms = modificationStatus(order);
+  if (!ms) return null;
+  if (ms.kind === "pending") {
+    return (
+      <span title={`수정 항목: ${ms.labels.join(", ")}`} style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", border: "1px solid #fecaca", background: "#fef2f2", borderRadius: 6, padding: "1px 6px", whiteSpace: "nowrap" }}>
+        수정 미확인
+      </span>
+    );
+  }
+  const d = new Date(ms.at);
+  return (
+    <span title={`기사가 수정 내용을 확인했습니다${ms.labels.length ? ` (${ms.labels.join(", ")})` : ""}`} style={{ fontSize: 11, fontWeight: 800, color: "#16a34a", border: "1px solid #bbf7d0", background: "#f0fdf4", borderRadius: 6, padding: "1px 6px", whiteSpace: "nowrap" }}>
+      기사 확인 {String(d.getHours()).padStart(2, "0")}:{String(d.getMinutes()).padStart(2, "0")}
+    </span>
+  );
+}
+
 function mobileOrderStatusMeta(r) {
   if (FM_CANCELED_STATUSES_MOBILE.includes(r.상태) || r.배차상태 === "배차취소") {
     return { label: "관리자취소", bg: "#fee2e2", color: "#b91c1c" };
@@ -1033,9 +1053,12 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                             <div style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>
                               {activeOrder.상차지명 || "-"} <span style={{ color: "#9ca3af" }}>→</span> {activeOrder.하차지명 || "-"}
                             </div>
-                            {todays.length > 1 && (
-                              <span style={{ fontSize: 11, fontWeight: 800, color: "#6b7eac", flexShrink: 0 }}>총 {todays.length}건</span>
-                            )}
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                              <ModBadge order={activeOrder} />
+                              {todays.length > 1 && (
+                                <span style={{ fontSize: 11, fontWeight: 800, color: "#6b7eac" }}>총 {todays.length}건</span>
+                              )}
+                            </span>
                           </div>
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginTop: 5 }}>
                             <div style={{ fontSize: 12, color: "#4b5563" }}>상차 {activeOrder.상차시간 || "즉시"}</div>
@@ -1136,6 +1159,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                                         </td>
                                         <td style={{ padding: "8px 10px", textAlign: "center", whiteSpace: "nowrap" }}>
                                           <span style={{ fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 99, background: smeta.bg, color: smeta.color }}>{smeta.label}</span>
+                                          <div style={{ marginTop: 3 }}><ModBadge order={r} /></div>
                                         </td>
                                       </tr>
                                     );
