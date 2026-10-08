@@ -17,7 +17,7 @@ import {
   orderBy,
   limit,
 } from "firebase/firestore";
-import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
+import { ref as storageRef, uploadBytes, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
 import { POSITION_OPTIONS, TEAM_OPTIONS, EMPLOYMENT_STATUS_OPTIONS } from "./hrConstants";
 import { CustomSelect } from "./CustomSelect";
@@ -2084,6 +2084,36 @@ function LandingPageEditPanel() {
     }
   };
 
+  // ⭐ 사용자 요청 — 로그인 첫 화면 배경에 올린 영상이 계속(반복) 재생되게
+  const [videoProgress, setVideoProgress] = useState(null); // null | 0~100
+  const handleVideoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("video/")) { alert("영상 파일(mp4 등)만 업로드할 수 있습니다."); return; }
+    if (file.size > 100 * 1024 * 1024) { alert("영상 용량은 100MB 이하로 올려주세요. (로딩 속도를 위해 20MB 이하 권장)"); return; }
+    setVideoProgress(0);
+    try {
+      const ext = (file.name.split(".").pop() || "mp4").toLowerCase();
+      const r = storageRef(storage, `siteConfig/landing-video-${Date.now()}.${ext}`);
+      const task = uploadBytesResumable(r, file, { contentType: file.type, cacheControl: "public,max-age=31536000" });
+      await new Promise((resolve, reject) => {
+        task.on("state_changed", (snap) => setVideoProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)), reject, resolve);
+      });
+      const url = await getDownloadURL(r);
+      set("backgroundVideoUrl", url);
+      await setDoc(doc(db, "siteConfig", "landing"), { backgroundVideoUrl: url }, { merge: true });
+    } catch (e2) {
+      alert("영상 업로드 실패: " + (e2?.message || e2));
+    } finally {
+      setVideoProgress(null);
+    }
+  };
+  const handleRemoveVideo = async () => {
+    set("backgroundVideoUrl", "");
+    try { await setDoc(doc(db, "siteConfig", "landing"), { backgroundVideoUrl: "" }, { merge: true }); } catch {}
+  };
+
   const handleRemoveImage = async () => {
     set("backgroundImageUrl", "");
     try {
@@ -2132,7 +2162,7 @@ function LandingPageEditPanel() {
           />
         ) : (
           <div className="text-[11px] text-gray-400 mb-2">
-            설정 안 함 — 기본 영상 배경(/videos/bg-truck.mp4)이 그대로 나갑니다.
+            설정 안 함 — 기본 남색 배경이 나갑니다.
           </div>
         )}
         <div className="flex items-center gap-2">
@@ -2149,6 +2179,30 @@ function LandingPageEditPanel() {
             </button>
           )}
         </div>
+      </div>
+
+      {/* 배경 영상 */}
+      <div className="mb-6">
+        <div className="text-[12px] font-bold text-gray-600 mb-2">배경 영상 <span className="font-normal text-gray-400">(올리면 이미지보다 우선, 소리 없이 계속 반복 재생)</span></div>
+        {form.backgroundVideoUrl ? (
+          <video src={form.backgroundVideoUrl} muted loop autoPlay playsInline
+            className="w-full max-w-md h-32 object-cover rounded-lg border border-gray-200 mb-2 bg-black" />
+        ) : (
+          <div className="text-[11px] text-gray-400 mb-2">설정 안 함</div>
+        )}
+        <div className="flex items-center gap-2">
+          <label className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-semibold cursor-pointer hover:opacity-90 transition">
+            {videoProgress != null ? `업로드 중... ${videoProgress}%` : "영상 업로드"}
+            <input type="file" accept="video/*" className="hidden" onChange={handleVideoUpload} disabled={videoProgress != null} />
+          </label>
+          {form.backgroundVideoUrl && (
+            <button onClick={handleRemoveVideo}
+              className="px-4 py-2 rounded-lg bg-white border border-gray-300 text-gray-500 text-[12px] font-semibold hover:bg-gray-50 transition">
+              영상 제거
+            </button>
+          )}
+        </div>
+        <div className="text-[11px] text-gray-400 mt-1.5">영상이 잘 보이게 하려면 아래 "오버레이 투명도"를 40~60% 정도로 낮춰주세요.</div>
       </div>
 
       {/* 오버레이 색상 */}

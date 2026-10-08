@@ -60,7 +60,10 @@ export default function Login() {
   const backgroundImageUrl = c.backgroundImageUrl || "";
   const overlayBackground = c.overlayColor
     ? `linear-gradient(135deg, ${hexToRgba(c.overlayColor, (c.overlayOpacity ?? 82) / 100)} 0%, ${hexToRgba(c.overlayColor, (c.overlayOpacity ?? 82) / 100)} 100%)`
-    : DEFAULT_OVERLAY_GRADIENT;
+    : (c.backgroundVideoUrl || c.backgroundImageUrl)
+      // 영상/이미지가 있으면 기본 오버레이를 옅게 — 진하면 영상이 거의 안 보인다
+      ? "linear-gradient(135deg, rgba(6,24,50,0.55) 0%, rgba(11,37,84,0.45) 50%, rgba(13,43,102,0.55) 100%)"
+      : DEFAULT_OVERLAY_GRADIENT;
   const fontFamily = FONT_FAMILY_MAP[c.fontFamily] || FONT_FAMILY_MAP.noto;
   const textColor = c.textColor || DEFAULT_TEXT_COLOR;
   const accentColor = c.accentColor || DEFAULT_ACCENT_COLOR;
@@ -70,22 +73,26 @@ export default function Login() {
     <div className="relative min-h-screen overflow-hidden" style={{ fontFamily }}>
       {/* ── 배경: 최고관리자가 이미지를 올렸으면 이미지, 아니면 기존 영상(공개 폴더
           /videos/bg-truck.mp4)을 그대로 쓴다 ── */}
-      {backgroundImageUrl ? (
+      {/* ⭐ 최고관리자가 업로드한 영상(관리자메뉴 > 랜딩페이지 편집)이 있으면 영상이 우선,
+          없으면 이미지, 둘 다 없으면 기본 남색 배경 */}
+      {c.backgroundVideoUrl ? (
+        <video
+          key={c.backgroundVideoUrl}
+          className="absolute inset-0 w-full h-full object-cover"
+          src={c.backgroundVideoUrl}
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="auto"
+        />
+      ) : backgroundImageUrl ? (
         <img
           className="absolute inset-0 w-full h-full object-cover"
           src={backgroundImageUrl}
           alt=""
         />
-      ) : (
-        <video
-          className="absolute inset-0 w-full h-full object-cover"
-          src="/videos/bg-truck.mp4"
-          autoPlay
-          loop
-          muted
-          playsInline
-        />
-      )}
+      ) : null}
       {/* 배경 위 어두운 오버레이 */}
       <div className="absolute inset-0" style={{ background: overlayBackground }} />
 
