@@ -11,6 +11,7 @@ const functions = require("firebase-functions/v1");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
+const { getAuth } = require("firebase-admin/auth");
 const fetch = require("node-fetch");
 const { GoogleAuth } = require("google-auth-library");
 
@@ -2800,26 +2801,52 @@ exports.syncDispatchToGoogleSheet =
 ================================================================== */
 exports.lookupCompanyCode = functions.https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
-  res.set("Access-Control-Allow-Methods", "GET");
+  res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+
+  // ⭐ 사용자 요청 — 회사코드 찾기는 최고관리자만. 예전엔 로그인 없이 누구나 호출할 수 있었다.
+  // 클라이언트가 최고관리자 계정으로 받은 Firebase ID 토큰을 Authorization 헤더로 보내야 한다.
+  try {
+    const authz = String(req.get("Authorization") || "");
+    const token = authz.startsWith("Bearer ") ? authz.slice(7) : "";
+    if (!token) { res.status(401).json({ results: [], error: "AUTH_REQUIRED" }); return; }
+    const decoded = await getAuth().verifyIdToken(token);
+    let isMaster = decoded.email === "tjddnqkf@naver.com";
+    if (!isMaster) {
+      const u = await db.collection("users").doc(decoded.uid).get();
+      isMaster = u.exists && u.data().role === "totalMaster";
+    }
+    if (!isMaster) { res.status(403).json({ results: [], error: "FORBIDDEN" }); return; }
+  } catch (e) {
+    res.status(401).json({ results: [], error: "AUTH_INVALID" });
+    return;
+  }
 
   const q = String(req.query.q || "").trim().toLowerCase();
   if (!q) { res.status(200).json({ results: [] }); return; }
 
   try {
-    const snap = await db.collection("transportApplications").get();
-    const seen = new Set();
-    const results = [];
-    snap.docs.forEach((d) => {
+    const seen = new Map();
+    const add = (name, code) => {
+      name = String(name || "").trim();
+      code = String(code || "").trim();
+      if (!name || !code) return;
+      if (!name.toLowerCase().includes(q) && !code.toLowerCase().includes(q)) return;
+      const key = `${name}|${code}`;
+      if (!seen.has(key)) seen.set(key, { companyName: name, companyCode: code });
+    };
+    // 1) 가입 신청서(승인된 것)
+    const apps = await db.collection("transportApplications").get();
+    apps.docs.forEach((d) => {
       const data = d.data();
-      if (data.status !== "approved" || !data.companyCode) return;
-      const name = String(data.companyName || "");
-      if (!name.toLowerCase().includes(q)) return;
-      if (seen.has(name)) return;
-      seen.add(name);
-      results.push({ companyName: name, companyCode: data.companyCode });
+      if (data.status === "approved" || data.status === "승인") add(data.companyName, data.companyCode);
     });
-    res.status(200).json({ results });
+    // 2) ⭐ 버그수정 — 신청서 없이 만들어진(초기/수동 등록) 회사는 코드가 사용자 문서에만 있어
+    //    검색 결과가 항상 비었다. users 문서의 companyName/companyCode도 함께 찾는다.
+    const users = await db.collection("users").where("companyCode", ">", "").get();
+    users.docs.forEach((d) => { const u = d.data(); add(u.companyName, u.companyCode); });
+    res.status(200).json({ results: Array.from(seen.values()).slice(0, 50) });
   } catch (e) {
     console.error("회사코드 찾기 오류:", e);
     res.status(500).json({ results: [], error: e?.message || String(e) });

@@ -1830,6 +1830,17 @@ const formatPhone = (phone) => {
 //  메인 컴포넌트
 // ======================================================================
 
+// ⭐ 로그아웃/초기화해도 "로그인 정보 저장" 설정은 남긴다(다음 로그인 때 회사코드·회사명 자동 입력)
+const clearLocalStorageKeepLogin = () => {
+  const keep = {};
+  ["transportLoginSaved", "driverLoginSaved"].forEach((k) => {
+    const v = localStorage.getItem(k);
+    if (v != null) keep[k] = v;
+  });
+  localStorage.clear();
+  Object.entries(keep).forEach(([k, v]) => { try { localStorage.setItem(k, v); } catch { /* noop */ } });
+};
+
 export default function MobileApp({ role, user, userCompany = "" }) {
   // ⭐ 글자 크기 설정(기본/크게/더 크게) — 아래 zoom 리셋 로직에서 함께 적용되어야
   // 화면 전체(글자+버튼+아이콘)가 실제로 커진다. 쉬운모드는 자체 화면(MobileEasyMode)이
@@ -3235,7 +3246,7 @@ const [detailFrom, setDetailFrom] = useState(null);
     } catch (e) {
       console.error("signOut error:", e);
     }
-    localStorage.clear();
+    clearLocalStorageKeepLogin();
     sessionStorage.clear();
     window.location.replace("/login");
   };
@@ -7150,7 +7161,7 @@ function MobileSideMenu({
     } catch (e) {
       console.error("signOut error:", e);
     }
-    localStorage.clear();
+    clearLocalStorageKeepLogin();
     sessionStorage.clear();
     window.location.replace("/login");
   };

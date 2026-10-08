@@ -1,21 +1,34 @@
 // ======================= src/TransportLogin.jsx =======================
 import React, { useState, useEffect } from "react";
 import { auth, db } from "./firebase";
-import { signInWithEmailAndPassword, sendPasswordResetEmail, signOut } from "firebase/auth";
+import { signInWithEmailAndPassword, sendPasswordResetEmail, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence, getAuth } from "firebase/auth";
+import { initializeApp, getApps } from "firebase/app";
+import BigCheck from "./components/BigCheck";
 import { doc, getDoc } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
 const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
 
+// ⭐ 사용자 요청 — 로그아웃해도 지워지지 않는 "로그인 정보 저장"(회사코드/회사명/이메일)과
+// "자동 로그인"(체크 해제 시 브라우저를 닫으면 로그아웃) 설정. 로그아웃 시 지워지는
+// loginCompany/transportCode와 분리해서 따로 보관한다.
+const SAVED_KEY = "transportLoginSaved";
+function loadSaved() {
+  try { return JSON.parse(localStorage.getItem(SAVED_KEY) || "null"); } catch { return null; }
+}
+
 export default function TransportLogin() {
+  const saved = loadSaved();
+  const [rememberInfo, setRememberInfo] = useState(saved ? saved.remember !== false : true);
+  const [autoLogin, setAutoLogin] = useState(saved ? saved.autoLogin !== false : true);
   const [companyCode, setCompanyCode] = useState(
-    () => localStorage.getItem("transportCode") || ""
+    () => (saved?.remember !== false && saved?.companyCode) || localStorage.getItem("transportCode") || ""
   );
   const [companyName, setCompanyName] = useState(
-    () => localStorage.getItem("loginCompany") || ""
+    () => (saved?.remember !== false && saved?.companyName) || localStorage.getItem("loginCompany") || ""
   );
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => (saved?.remember !== false && saved?.email) || "");
   const [pw, setPw] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -65,19 +78,34 @@ export default function TransportLogin() {
   // 로그인 "전" 화면인 여기서 직접 조회하면 항상 권한 오류로 막혀 결과가 비어
   // 보였다 — 로그인 없이도 호출 가능한 Cloud Function(lookupCompanyCode)을
   // 통해 회사명/코드만 받아온다.
+  // ⭐ 최고관리자 전용 — 화면의 이메일/비밀번호(최고관리자 계정)로 "별도" 인증 인스턴스에서
+  // 토큰만 받아 서버 함수에 보낸다(메인 로그인 상태에는 영향 없음).
+  const [codeError, setCodeError] = useState("");
+  const isMasterEmail = email.trim().toLowerCase() === TOTAL_MASTER_EMAIL;
   const searchCompanyCode = async () => {
     const q2 = codeLookupQ.trim();
     if (!q2) return;
+    setCodeError("");
+    if (!pw) { setCodeError("최고관리자 비밀번호를 로그인 칸에 먼저 입력해주세요."); return; }
     setCodeSearching(true);
+    let lookupAuth = null;
     try {
+      const lookupApp = getApps().find(a => a.name === "codeLookup") || initializeApp(auth.app.options, "codeLookup");
+      lookupAuth = getAuth(lookupApp);
+      const cred = await signInWithEmailAndPassword(lookupAuth, email.trim(), pw);
+      const token = await cred.user.getIdToken();
       const res = await fetch(
-        `https://us-central1-dispatch-app-9b92f.cloudfunctions.net/lookupCompanyCode?q=${encodeURIComponent(q2)}`
+        `https://us-central1-dispatch-app-9b92f.cloudfunctions.net/lookupCompanyCode?q=${encodeURIComponent(q2)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
       );
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setCodeError(res.status === 403 ? "최고관리자만 사용할 수 있습니다." : "조회에 실패했습니다. 잠시 후 다시 시도해주세요.");
       setCodeResults(data.results || []);
     } catch {
+      setCodeError("최고관리자 인증에 실패했습니다. 비밀번호를 확인해주세요.");
       setCodeResults([]);
     } finally {
+      if (lookupAuth) signOut(lookupAuth).catch(() => {});
       setCodeSearching(false);
     }
   };
@@ -94,6 +122,8 @@ export default function TransportLogin() {
       setLoading(true);
       // Semaphore set BEFORE auth so App.jsx won't redirect while we validate
       sessionStorage.setItem("transportValidating", "true");
+      // 자동 로그인: 체크하면 브라우저/앱을 껐다 켜도 로그인 유지, 해제하면 닫을 때 로그아웃
+      await setPersistence(auth, autoLogin ? browserLocalPersistence : browserSessionPersistence).catch(() => {});
 
       const credential = await signInWithEmailAndPassword(auth, email.trim(), pw);
       const uid = credential.user.uid;
@@ -167,6 +197,11 @@ export default function TransportLogin() {
         localStorage.setItem("transportCode", inputCompanyCode);
       }
 
+      try {
+        localStorage.setItem(SAVED_KEY, JSON.stringify(rememberInfo
+          ? { remember: true, autoLogin, companyCode: inputCompanyCode, companyName: inputCompanyName, email: email.trim() }
+          : { remember: false, autoLogin }));
+      } catch { /* 저장 실패 무시 */ }
       // Validation done — switch from validation semaphore to popup semaphore
       sessionStorage.removeItem("transportValidating");
       sessionStorage.setItem("skipLoginPopup", "true");
@@ -242,13 +277,16 @@ export default function TransportLogin() {
               <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
                 회사코드 <span className="text-red-500">*</span>
               </label>
-              <button
-                type="button"
-                onClick={() => { setShowCodeLookup(true); setCodeLookupQ(""); setCodeResults([]); }}
-                className="text-[11px] text-[#1B2B4B] font-semibold hover:underline"
-              >
-                회사코드 찾기
-              </button>
+              {/* ⭐ 최고관리자 전용 — 이메일 칸에 최고관리자 계정을 입력했을 때만 보인다 */}
+              {isMasterEmail && (
+                <button
+                  type="button"
+                  onClick={() => { setShowCodeLookup(true); setCodeLookupQ(""); setCodeResults([]); setCodeError(""); }}
+                  className="text-[11px] text-[#1B2B4B] font-semibold hover:underline"
+                >
+                  회사코드 찾기
+                </button>
+              )}
             </div>
             <input
               type="text"
@@ -303,6 +341,12 @@ export default function TransportLogin() {
               onKeyDown={handleKeyDown}
               className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30 focus:border-[#1B2B4B] transition"
             />
+          </div>
+
+          {/* ⭐ 로그인 정보 저장 / 자동 로그인 */}
+          <div className="flex items-center justify-between mb-4 -mt-1">
+            <BigCheck checked={rememberInfo} onChange={setRememberInfo} label="로그인 정보 저장" />
+            <BigCheck checked={autoLogin} onChange={setAutoLogin} label="자동 로그인" />
           </div>
 
           {error && (
@@ -448,10 +492,13 @@ export default function TransportLogin() {
                   {codeSearching ? "검색 중..." : "검색"}
                 </button>
               </div>
+              {codeError && (
+                <div className="mb-3 text-[13px] text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{codeError}</div>
+              )}
               {codeResults.length > 0 ? (
                 <div className="border border-gray-100 rounded-xl overflow-hidden">
                   {codeResults.map(r => (
-                    <div key={r.companyName} className="flex items-center justify-between px-4 py-3 border-b border-gray-50 last:border-b-0 hover:bg-blue-50/30">
+                    <div key={`${r.companyName}|${r.companyCode}`} className="flex items-center justify-between px-4 py-3 border-b border-gray-50 last:border-b-0 hover:bg-blue-50/30">
                       <div>
                         <div className="text-[13px] font-semibold text-gray-800">{r.companyName}</div>
                         <div className="text-[12px] font-mono text-[#1B2B4B] font-bold">{r.companyCode}</div>
@@ -469,7 +516,7 @@ export default function TransportLogin() {
                     </div>
                   ))}
                 </div>
-              ) : codeLookupQ && !codeSearching ? (
+              ) : codeLookupQ && !codeSearching && !codeError ? (
                 <div className="text-center py-6 text-[13px] text-gray-400">검색 결과가 없습니다</div>
               ) : null}
               <p className="text-[11px] text-gray-400 mt-4 text-center">

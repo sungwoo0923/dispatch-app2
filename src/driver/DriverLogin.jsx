@@ -4,24 +4,50 @@ import { auth, db } from "../firebase";
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
+import BigCheck from "../components/BigCheck";
+
+// ⭐ 사용자 요청 — 한 번 로그인한 폰에서는 소속회사명/차량번호/이름을 기억하고(정보 저장),
+// "자동 로그인"을 켜두면 로그인 화면에 들어오는 순간 저장된 정보로 바로 로그인한다.
+// 단, 기사가 직접 "로그아웃"을 누른 직후에는 자동 로그인하지 않는다(다시 들어가버리는 것 방지).
+const SAVED_KEY = "driverLoginSaved";
+function loadSaved() {
+  try { return JSON.parse(localStorage.getItem(SAVED_KEY) || "null"); } catch { return null; }
+}
 
 export default function DriverLogin() {
-  const [companyName, setCompanyName] = useState("");
-  const [carNo, setCarNo] = useState("");
-  const [name, setName] = useState("");
+  const saved = loadSaved();
+  const keep = saved && saved.remember !== false;
+  const [companyNameState, setCompanyName] = useState(keep ? saved.companyName || "" : "");
+  const [carNoState, setCarNo] = useState(keep ? saved.carNo || "" : "");
+  const [nameState, setName] = useState(keep ? saved.name || "" : "");
+  const [rememberInfo, setRememberInfo] = useState(saved ? saved.remember !== false : true);
+  const [autoLogin, setAutoLogin] = useState(saved ? saved.autoLogin === true : false);
   const [error, setError] = useState("");
+  const [loggingIn, setLoggingIn] = useState(false);
   const navigate = useNavigate();
 
   const makeEmail = (v) => `${v.replace(/ /g, "")}@driver.run25.kr`;
 
-  // 페이지 진입 시 무조건 초기화
+  // 페이지 진입 시 무조건 초기화 → 자동 로그인 설정이면 저장된 정보로 바로 로그인
   useEffect(() => {
-    signOut(auth);
-    localStorage.removeItem("role");
-    localStorage.removeItem("uid");
+    (async () => {
+      await signOut(auth).catch(() => {});
+      localStorage.removeItem("role");
+      localStorage.removeItem("uid");
+      const justLoggedOut = sessionStorage.getItem("driverJustLoggedOut") === "1";
+      sessionStorage.removeItem("driverJustLoggedOut");
+      const sv = loadSaved();
+      if (!justLoggedOut && sv?.autoLogin && sv.companyName && sv.carNo && sv.name) login(sv);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const login = async () => {
+  const login = async (override) => {
+    // override: 자동 로그인 시 저장된 값(아직 state 반영 전일 수 있어 직접 받는다)
+    const companyName = override?.companyName ?? companyNameState;
+    const carNo = override?.carNo ?? carNoState;
+    const name = override?.name ?? nameState;
+    if (loggingIn) return;
     setError("");
     if (!companyName.trim() || !carNo.trim() || !name.trim()) {
       setError("회사명, 차량번호, 이름을 모두 입력해주세요.");
@@ -31,6 +57,7 @@ export default function DriverLogin() {
     const email = makeEmail(carNo.trim());
     const password = carNo.trim();
 
+    setLoggingIn(true);
     try {
       let uid;
       try {
@@ -129,6 +156,13 @@ export default function DriverLogin() {
 
       localStorage.setItem("role", "driver");
       localStorage.setItem("uid", uid);
+      try {
+        const remember = override ? true : rememberInfo;
+        const auto = override ? true : autoLogin;
+        localStorage.setItem(SAVED_KEY, JSON.stringify(remember
+          ? { remember: true, autoLogin: auto, companyName: companyName.trim(), carNo: carNo.trim(), name: name.trim() }
+          : { remember: false, autoLogin: false }));
+      } catch { /* 저장 실패 무시 */ }
 
       setTimeout(() => {
         navigate("/driver-home", { replace: true });
@@ -137,6 +171,8 @@ export default function DriverLogin() {
       console.error(err);
       setError("차량번호 또는 이름이 올바르지 않습니다.");
       await signOut(auth);
+    } finally {
+      setLoggingIn(false);
     }
   };
 
@@ -169,7 +205,7 @@ export default function DriverLogin() {
               소속 회사명
             </label>
             <input
-              value={companyName}
+              value={companyNameState}
               onChange={(e) => setCompanyName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && login()}
               placeholder="가입한 운송사명을 입력하세요"
@@ -182,7 +218,7 @@ export default function DriverLogin() {
               차량번호
             </label>
             <input
-              value={carNo}
+              value={carNoState}
               onChange={(e) => setCarNo(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && login()}
               placeholder="예: 경기97가1234"
@@ -195,13 +231,19 @@ export default function DriverLogin() {
               기사 이름
             </label>
             <input
-              value={name}
+              value={nameState}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && login()}
               placeholder="이름 입력"
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition"
             />
           </div>
+        </div>
+
+        {/* ⭐ 정보 저장 / 자동 로그인 */}
+        <div className="mt-4 flex items-center justify-between">
+          <BigCheck checked={rememberInfo} onChange={(v) => { setRememberInfo(v); if (!v) setAutoLogin(false); }} label="기본정보 저장" />
+          <BigCheck checked={autoLogin} onChange={(v) => { setAutoLogin(v); if (v) setRememberInfo(true); }} label="자동 로그인" />
         </div>
 
         {/* 에러 메시지 */}
@@ -213,10 +255,11 @@ export default function DriverLogin() {
 
         {/* 로그인 버튼 */}
         <button
-          onClick={login}
-          className="mt-6 w-full bg-[#1B2B4B] text-white py-3 rounded-xl font-bold text-[15px] hover:bg-[#243a60] transition"
+          onClick={() => login()}
+          disabled={loggingIn}
+          className="mt-6 w-full bg-[#1B2B4B] text-white py-3 rounded-xl font-bold text-[15px] hover:bg-[#243a60] transition disabled:opacity-60"
         >
-          로그인
+          {loggingIn ? "로그인 중..." : "로그인"}
         </button>
 
         {/* 하단 링크 */}

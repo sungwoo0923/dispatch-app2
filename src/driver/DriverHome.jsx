@@ -1379,6 +1379,8 @@ export default function DriverHome() {
   }, [uid, statusLoading, driver, companyDefaultLoc, pos, updateStatus]);
 
   const handleLogout = async () => {
+    // 직접 로그아웃한 직후엔 로그인 화면에서 자동 로그인하지 않도록 표시
+    try { sessionStorage.setItem("driverJustLoggedOut", "1"); } catch (_) {}
     await stopNativeTracking();
     if (uid) {
       try {
