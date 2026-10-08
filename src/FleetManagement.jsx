@@ -1343,7 +1343,31 @@ function useVisitedPickup(driverId, pickupGeo) {
 // 1km 이내거나, 오늘자 GPS 기록상 1km 이내로 다녀온 적이 있으면 visitedPickup=true),
 // 그 뒤 상차지를 벗어나면(1km 초과) 하차지에 가까워지기 전까지 "이동중", 하차지
 // 5km/1km 이내면 하차지진입/도착.
-function TransitPhaseLabel({ order, live, driverId, fallback }) {
+// ⭐ 사용자 요청 — 노선관리 오더 "상태" 칸은 배경색 없이 글자색만 상태별로 바꾼다.
+const PHASE_TEXT_COLORS = {
+  "확인대기": "#d97706",
+  "운송중": "#1B2B4B",
+  "상차지진입": "#2563eb",
+  "상차지도착": "#7c3aed",
+  "이동중": "#0891b2",
+  "하차지진입": "#ea580c",
+  "하차지도착": "#db2777",
+  "운송완료": "#16a34a",
+  "완료": "#16a34a",
+  "거절": "#dc2626",
+  "상차 예정": "#64748b",
+  "위치 확인중": "#9ca3af",
+};
+function PhaseText({ label }) {
+  return <span style={{ color: PHASE_TEXT_COLORS[label] || "#374151", fontWeight: 800 }}>{label}</span>;
+}
+
+function TransitPhaseLabel({ colored, ...props }) {
+  const label = useTransitPhase(props);
+  return colored ? <PhaseText label={label} /> : label;
+}
+
+function useTransitPhase({ order, live, driverId, fallback }) {
   const pickupGeo = useDestGeo(order?.상차지주소 || null);
   const dropGeo = useDestGeo(order?.하차지주소 || null);
   const hasLoc = live?.location?.lat != null && live?.location?.lng != null;
@@ -1376,18 +1400,18 @@ function findActiveOrder(orders, todayStr) {
 }
 
 // ─── 정보 라벨 필드 (작은 회색 라벨 + 짙은 값) ─────────────────────────────────
-function InfoField({ label, value, children, mono }) {
+function InfoField({ label, value, children, mono, first }) {
   return (
     // ⭐ 사용자 요청 — 선이 없어 칸 사이 간격이 애매해 보였다. 왼쪽에 구분선 +
     // 여백을 줘서 각 항목이 딱 떨어져 보이게 하고, 라벨 글씨도 표 헤더(상태/
     // 거래처 등)와 비슷한 체감 크기로 키운다.
     // ⭐ 사용자 요청 — 라벨/값이 왼쪽에 붙어 있어 정렬이 어긋나 보였다 → 중앙정렬
-    <div style={{ minWidth: 0, paddingLeft: 14, paddingRight: 4, borderLeft: "1px solid #e5e7eb", textAlign: "center" }}>
-      <div style={{ fontSize: 13, fontWeight: 800, color: "#6b7280", marginBottom: 4 }}>{label}</div>
+    <div style={{ minWidth: 0, flex: "1 1 auto", padding: "2px 12px", borderLeft: first ? "none" : "1px solid #e2e8f0", textAlign: "center", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+      <div style={{ fontSize: 13, fontWeight: 800, color: "#6b7280", marginBottom: 6, whiteSpace: "nowrap" }}>{label}</div>
       {/* ⭐ 사용자 피드백 — whiteSpace:nowrap + overflow:hidden 조합 때문에 칸이
           좁으면 값 끝이 그냥 잘려서 안 보였다(말줄임표도 없이). 줄바꿈을 허용해
           내용이 전부 보이게 바꾼다. */}
-      <div style={{ fontSize: 15, fontWeight: 800, color: "#111827", fontFamily: mono ? "monospace" : undefined, wordBreak: "break-word" }}>
+      <div style={{ fontSize: 16, fontWeight: 800, color: "#111827", fontFamily: mono ? "monospace" : undefined, wordBreak: "break-word" }}>
         {children != null ? children : (value || "-")}
       </div>
     </div>
@@ -2111,13 +2135,19 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
           </div>
         </div>
 
-        {/* ⭐ 사용자 요청 — 배차상태/거주지/근무가능요일/실시간위치/이번달정산예정/배차수락률/서류/담당자 순서 */}
-        <InfoField label="배차상태">
+        {/* ⭐ 사용자 요청 — 배차상태/거주지/근무가능요일/실시간위치/이번달정산예정/배차수락률/서류/담당자 순서.
+            기사정보 카드와 같은 디자인(테두리·그라데이션·그림자)의 한 장짜리 정보 카드로 묶는다. */}
+        <div style={{
+          flex: "1 1 auto", display: "flex", alignItems: "stretch", flexWrap: "wrap", rowGap: 10,
+          padding: "10px 6px", border: "1px solid #dbe1ea", borderRadius: 12,
+          background: "linear-gradient(135deg, #ffffff 0%, #f4f7fb 100%)", boxShadow: "0 2px 8px rgba(27,43,75,0.08)",
+        }}>
+        <InfoField label="배차상태" first>
           {(() => {
             const st = driverDispatchStatus(orders, todayStr, live);
             const activeOrder = st.label === "운송중" ? findActiveOrder(orders, todayStr) : null;
             return (
-              <span style={{ fontSize: 13, fontWeight: 800, padding: "3px 9px", borderRadius: 6, background: st.bg, color: st.color, display: "inline-block" }}>
+              <span style={{ fontSize: 14, fontWeight: 800, padding: "3px 10px", borderRadius: 6, background: st.bg, color: st.color, display: "inline-block" }}>
                 {activeOrder ? <TransitPhaseLabel order={activeOrder} live={live} driverId={driver.id} fallback={st.label} /> : st.label}
               </span>
             );
@@ -2133,7 +2163,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                 return (
                   <span key={w} style={{
                     display: "inline-flex", alignItems: "center", justifyContent: "center",
-                    width: 20, height: 20, borderRadius: "50%", fontSize: 13, fontWeight: 800,
+                    width: 22, height: 22, borderRadius: "50%", fontSize: 14, fontWeight: 800,
                     color: isToday ? "#fff" : "#111827",
                     background: isToday ? "#ef4444" : "transparent",
                   }}>{w}</span>
@@ -2145,18 +2175,19 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
         <InfoField label="실시간 위치"><LiveLocationBadge live={live} /></InfoField>
         {/* ⭐ 사용자 요청 — 상세보기까지 안 들어가도 이번 달 정산 예정액을 바로 볼 수 있게 */}
         <InfoField label="이번 달 정산예정">
-          <span style={{ fontSize: 14, fontWeight: 800, color: NAVY }}>{monthlyFareSum.toLocaleString()}원</span>
+          <span style={{ fontSize: 16, fontWeight: 800, color: NAVY }}>{monthlyFareSum.toLocaleString()}원</span>
         </InfoField>
         {/* ⭐ 사용자 요청 — 최근 배차 수락/거절 이력 기반 신뢰도 지표 */}
         {acceptRate != null && (
           <InfoField label="배차 수락률">
-            <span style={{ fontSize: 14, fontWeight: 800, color: acceptRate < 70 ? "#dc2626" : "#111827" }}>{acceptRate}%</span>
+            <span style={{ fontSize: 16, fontWeight: 800, color: acceptRate < 70 ? "#dc2626" : "#111827" }}>{acceptRate}%</span>
           </InfoField>
         )}
         <InfoField label="서류"><DocExpiryBadge driverId={driver.id} /></InfoField>
         <InfoField label="담당자">
           <ManagerBadge driver={driver} staff={staff} canDelegate={canDelegate} onAssign={onAssignManager} />
         </InfoField>
+        </div>
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexShrink: 0 }}>
           <button onClick={() => handleSendToDriver(driver, orders, selectedDate, rangeEndDate)} disabled={!orders.length}
@@ -2213,7 +2244,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                           {/* ⭐ 사용자 요청 — 상태/상차지/하차지/이동정보 글씨가 거래처·상차·하차·
                               운임 칸보다 작아 보였다. 전부 14px/700으로 통일. */}
                           <span style={{ fontSize: 14, fontWeight: 700, color: "#374151" }}>
-                            {meta.label === "운송중" ? <TransitPhaseLabel order={r} live={live} driverId={driver.id} fallback={meta.label} /> : meta.label}
+                            {meta.label === "운송중" ? <TransitPhaseLabel colored order={r} live={live} driverId={driver.id} fallback={meta.label} /> : <PhaseText label={meta.label} />}
                           </span>
                           {/* ⭐ 사용자 요청 — 완료시간이 줄바꿈으로 아래에 따로 뜨던 걸 한 줄로 합침 */}
                           {r.기사확인상태 === "완료" && r.기사완료일시?.toDate && (

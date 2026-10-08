@@ -279,6 +279,29 @@ export default function RouteMapModal({ pickupAddr, dropAddr, pickupName, dropNa
           {status === "error" && (
             <div className="absolute inset-0 flex items-center justify-center text-[13px] font-semibold text-gray-500 bg-white/80">경로 정보를 가져올 수 없습니다</div>
           )}
+          {/* ⭐ 사용자 요청 — 이동거리/예상시간이 지도 아래에 있어 잘려서 안 보였다 → 지도 위에 고정 표시 */}
+          {status === "ready" && info && (
+            <div className="absolute left-3 top-3 bg-white/95 rounded-xl shadow-lg px-4 py-2.5 flex items-center gap-4" style={{ zIndex: 10 }}>
+              <div>
+                <div className="text-[11px] font-bold text-gray-500">이동거리</div>
+                <div className="text-[18px] font-black text-[#1B2B4B] leading-tight">{info.distanceKm.toFixed(1)}<span className="text-[12px] font-bold text-gray-500 ml-0.5">km</span></div>
+              </div>
+              <div className="w-px h-8 bg-gray-200" />
+              <div>
+                <div className="text-[11px] font-bold text-gray-500">예상시간</div>
+                <div className="text-[18px] font-black text-[#1B2B4B] leading-tight">
+                  {info.durationMin >= 60 ? `${Math.floor(info.durationMin / 60)}시간 ${info.durationMin % 60}분` : `${info.durationMin}분`}
+                </div>
+              </div>
+              <div className="w-px h-8 bg-gray-200" />
+              <div>
+                <div className="text-[11px] font-bold text-gray-500">지금 출발 시 도착</div>
+                <div className="text-[18px] font-black text-[#2563eb] leading-tight">
+                  {(() => { const d = new Date(Date.now() + info.durationMin * 60000); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; })()}
+                </div>
+              </div>
+            </div>
+          )}
           {status === "ready" && (
             <div className="absolute left-3 bottom-3 bg-white/95 rounded-lg px-2.5 py-1.5 text-[11px] font-bold text-gray-600 flex items-center gap-2.5 shadow">
               {TRAFFIC_LEGEND.map((t) => (
@@ -288,22 +311,6 @@ export default function RouteMapModal({ pickupAddr, dropAddr, pickupName, dropNa
             </div>
           )}
         </div>
-        {info && (
-          <div className="px-5 py-3 border-t border-gray-100 flex gap-3 shrink-0">
-            <div className="flex-1 border border-gray-200 rounded-lg py-2 text-center bg-gray-50">
-              <div className="text-[10px] text-gray-500 mb-0.5">총 거리</div>
-              <div className="text-[15px] font-black text-[#1B2B4B]">
-                {info.distanceKm.toFixed(1)}<span className="text-[10px] font-semibold text-gray-500 ml-0.5">km</span>
-              </div>
-            </div>
-            <div className="flex-1 border border-gray-200 rounded-lg py-2 text-center bg-gray-50">
-              <div className="text-[10px] text-gray-500 mb-0.5">예상 시간</div>
-              <div className="text-[15px] font-black text-[#1B2B4B]">
-                {info.durationMin}<span className="text-[10px] font-semibold text-gray-500 ml-0.5">분</span>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
