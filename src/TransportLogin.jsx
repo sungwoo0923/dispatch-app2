@@ -4,7 +4,7 @@ import { auth, db } from "./firebase";
 import { signInWithEmailAndPassword, sendPasswordResetEmail, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence, getAuth } from "firebase/auth";
 import { initializeApp, getApps } from "firebase/app";
 import BigCheck from "./components/BigCheck";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, getFirestore, collection, getDocs, query, where } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
@@ -93,16 +93,33 @@ export default function TransportLogin() {
       const lookupApp = getApps().find(a => a.name === "codeLookup") || initializeApp(auth.app.options, "codeLookup");
       lookupAuth = getAuth(lookupApp);
       const cred = await signInWithEmailAndPassword(lookupAuth, email.trim(), pw);
-      const token = await cred.user.getIdToken();
-      const res = await fetch(
-        `https://us-central1-dispatch-app-9b92f.cloudfunctions.net/lookupCompanyCode?q=${encodeURIComponent(q2)}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) setCodeError(res.status === 403 ? "최고관리자만 사용할 수 있습니다." : "조회에 실패했습니다. 잠시 후 다시 시도해주세요.");
-      setCodeResults(data.results || []);
-    } catch {
-      setCodeError("최고관리자 인증에 실패했습니다. 비밀번호를 확인해주세요.");
+      if ((cred.user.email || "").toLowerCase() !== TOTAL_MASTER_EMAIL) {
+        setCodeError("최고관리자만 사용할 수 있습니다.");
+        setCodeResults([]);
+        return;
+      }
+      // ⭐ 서버 함수(lookupCompanyCode)는 배포 권한 문제로 한 번도 배포되지 않아 결과가 항상
+      // 비었다. 최고관리자로 인증된 별도 인스턴스에서 직접 조회한다(가입신청서 + 사용자 문서).
+      const ldb = getFirestore(lookupApp);
+      const qLower = q2.toLowerCase();
+      const seen = new Map();
+      const add = (name, code) => {
+        name = String(name || "").trim(); code = String(code || "").trim();
+        if (!name || !code) return;
+        if (!name.toLowerCase().includes(qLower) && !code.toLowerCase().includes(qLower)) return;
+        seen.set(`${name}|${code}`, { companyName: name, companyCode: code });
+      };
+      const [apps, users] = await Promise.all([
+        getDocs(collection(ldb, "transportApplications")),
+        getDocs(query(collection(ldb, "users"), where("companyCode", ">", ""))),
+      ]);
+      apps.docs.forEach(d => { const a = d.data(); if (a.status === "approved" || a.status === "승인") add(a.companyName, a.companyCode); });
+      users.docs.forEach(d => { const u = d.data(); add(u.companyName, u.companyCode); });
+      setCodeResults(Array.from(seen.values()).slice(0, 50));
+    } catch (e) {
+      setCodeError(String(e?.code || "").startsWith("auth/")
+        ? "최고관리자 인증에 실패했습니다. 비밀번호를 확인해주세요."
+        : `조회 중 오류가 발생했습니다: ${e?.message || e}`);
       setCodeResults([]);
     } finally {
       if (lookupAuth) signOut(lookupAuth).catch(() => {});
