@@ -10799,6 +10799,119 @@ const SmartTextarea = React.memo(function SmartTextarea({ onSearch, onCommit, te
   );
 });
 
+// ⭐ 사용자 요청 — 상세보기에서 바로 주요 항목만 고치는 "빠른수정" 시트
+const QUICK_EDIT_PAY = ["계산서", "착불", "선불", "손실", "개인"];
+const QUICK_EDIT_ASSIGN = ["24시", "직접배차", "인성", "고정기사"];
+// (렌더 함수 밖에 둬야 입력할 때마다 칸이 새로 만들어져 포커스가 풀리지 않는다)
+function QuickField({ label, children, span = 1 }) {
+  return (
+    <div style={{ gridColumn: `span ${span} / span ${span}` }}>
+      <label className="block text-[11px] font-bold text-gray-500 mb-1">{label}</label>
+      {children}
+    </div>
+  );
+}
+function QuickEditSheet({ order, onClose, onSaved, cardVersionB }) {
+  const toNum = (v) => Number(String(v ?? "").replace(/[^\d-]/g, "")) || 0;
+  const [f, setF] = useState(() => ({
+    거래처명: order.거래처명 || "",
+    상차지명: order.상차지명 || "", 상차일: order.상차일 || "", 상차시간: order.상차시간 || "",
+    하차지명: order.하차지명 || "", 하차일: order.하차일 || "", 하차시간: order.하차시간 || "",
+    배차방식: order.배차방식 || "", 지급방식: order.지급방식 || "",
+    화물내용: order.화물내용 || "", 차량종류: order.차량종류 || order.차종 || "", 차량톤수: order.차량톤수 || order.톤수 || "",
+    청구운임: order.청구운임 ? toNum(order.청구운임).toLocaleString() : "",
+    기사운임: order.기사운임 ? toNum(order.기사운임).toLocaleString() : "",
+  }));
+  const [saving, setSaving] = useState(false);
+  const set = (k) => (e) => setF(p => ({ ...p, [k]: e.target.value }));
+  const setMoney = (k) => (e) => {
+    const n = toNum(e.target.value);
+    setF(p => ({ ...p, [k]: e.target.value.trim() === "" ? "" : n.toLocaleString() }));
+  };
+  const fee = toNum(f.청구운임) - toNum(f.기사운임);
+
+  const save = async () => {
+    if (!f.상차지명.trim() || !f.하차지명.trim()) { alert("상차지 / 하차지명은 필수입니다."); return; }
+    if (isReversedDateOrder(f.상차일, f.하차일)) { alert("하차일이 상차일보다 빠를 수 없습니다."); return; }
+    const patch = {
+      거래처명: f.거래처명.trim(),
+      상차지명: f.상차지명.trim(), 상차일: f.상차일, 상차시간: f.상차시간,
+      하차지명: f.하차지명.trim(), 하차일: f.하차일, 하차시간: f.하차시간,
+      배차방식: f.배차방식, 지급방식: f.지급방식,
+      화물내용: f.화물내용, 차량종류: f.차량종류, 차종: f.차량종류, 차량톤수: f.차량톤수, 톤수: f.차량톤수,
+      청구운임: toNum(f.청구운임), 기사운임: toNum(f.기사운임), 수수료: fee,
+    };
+    // 바뀐 항목만 저장
+    const changed = {};
+    Object.entries(patch).forEach(([k, v]) => { if (String(order[k] ?? "") !== String(v ?? "")) changed[k] = v; });
+    if (!Object.keys(changed).length) { onClose(); return; }
+    setSaving(true);
+    try {
+      const id = order.id || order._id;
+      await updateDoc(doc(db, order.__col || "dispatch", id), { ...changed, updatedAt: serverTimestamp(), _lastModified: Date.now() });
+      syncShipperMirrorMobile(order, changed).catch(() => {});
+      onSaved(id, changed);
+    } catch (e) {
+      alert("저장 실패: " + (e?.message || e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inp = "w-full border border-gray-200 rounded-lg px-2.5 py-2 text-[14px] focus:outline-none focus:border-[#1B2B4B] bg-white";
+  return (
+    <div className="fixed inset-0 z-[10000] bg-black/45 flex items-end justify-center" onClick={onClose}>
+      <div className="w-full max-w-md bg-white rounded-t-2xl max-h-[88vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className={`px-5 py-3.5 rounded-t-2xl flex items-center justify-between ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>
+          <div>
+            <div className="text-white font-bold text-[15px]">빠른수정</div>
+            <div className="text-white/60 text-[11px]">바뀐 항목만 저장됩니다</div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-white/10 text-white text-lg">×</button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          <div className="grid grid-cols-2 gap-3">
+            <QuickField label="거래처명" span={2}><input className={inp} value={f.거래처명} onChange={set("거래처명")} /></QuickField>
+            <QuickField label="상차지명" span={2}><input className={inp} value={f.상차지명} onChange={set("상차지명")} /></QuickField>
+            <QuickField label="상차일"><input type="date" className={inp} value={f.상차일} onChange={set("상차일")} /></QuickField>
+            <QuickField label="상차시간"><input className={inp} value={f.상차시간} onChange={set("상차시간")} placeholder="즉시 / 오후 2시" /></QuickField>
+            <QuickField label="하차지명" span={2}><input className={inp} value={f.하차지명} onChange={set("하차지명")} /></QuickField>
+            <QuickField label="하차일"><input type="date" className={inp} value={f.하차일} onChange={set("하차일")} /></QuickField>
+            <QuickField label="하차시간"><input className={inp} value={f.하차시간} onChange={set("하차시간")} placeholder="즉시 / 오후 5시" /></QuickField>
+            <QuickField label="배차방식">
+              <select className={inp} value={f.배차방식} onChange={set("배차방식")}>
+                <option value="">선택없음</option>
+                {QUICK_EDIT_ASSIGN.map(v => <option key={v}>{v}</option>)}
+              </select>
+            </QuickField>
+            <QuickField label="지급방식">
+              <select className={inp} value={f.지급방식} onChange={set("지급방식")}>
+                <option value="">선택없음</option>
+                {QUICK_EDIT_PAY.map(v => <option key={v}>{v}</option>)}
+              </select>
+            </QuickField>
+            <QuickField label="톤수"><input className={inp} value={f.차량톤수} onChange={set("차량톤수")} placeholder="예: 5톤" /></QuickField>
+            <QuickField label="차량종류"><input className={inp} value={f.차량종류} onChange={set("차량종류")} placeholder="예: 윙/카고" /></QuickField>
+            <QuickField label="화물내용" span={2}><input className={inp} value={f.화물내용} onChange={set("화물내용")} placeholder="예: 12파레트" /></QuickField>
+            <QuickField label="청구운임"><input inputMode="numeric" className={inp} value={f.청구운임} onChange={setMoney("청구운임")} /></QuickField>
+            <QuickField label="기사운임"><input inputMode="numeric" className={inp} value={f.기사운임} onChange={setMoney("기사운임")} /></QuickField>
+          </div>
+          <div className="mt-3 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+            <span className="text-[12px] font-bold text-gray-500">수수료</span>
+            <span className={`text-[15px] font-black ${fee < 0 ? "text-red-500" : "text-[#1B2B4B]"}`}>{fee.toLocaleString()}원</span>
+          </div>
+        </div>
+        <div className="px-5 pb-6 pt-3 border-t border-gray-100 flex gap-2">
+          <button onClick={onClose} className="flex-1 py-3 rounded-xl border border-gray-300 text-gray-600 font-bold text-[14px]">닫기</button>
+          <button onClick={save} disabled={saving} className={`flex-[1.4] py-3 rounded-xl text-white font-bold text-[14px] disabled:opacity-60 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>
+            {saving ? "저장 중..." : "저장"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MobileOrderDetail({
   order,
   onOrderUpdate,
@@ -10827,6 +10940,7 @@ function MobileOrderDetail({
   const [showMemoPopup, setShowMemoPopup] = useState(false);
   const [showNoticePopup, setShowNoticePopup] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showQuickEdit, setShowQuickEdit] = useState(false);
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [smartMatched, setSmartMatched] = useState([]);
   const [driverConflictPopup, setDriverConflictPopup] = useState(null);
@@ -11650,10 +11764,24 @@ const handleAssignClick = () => {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setShowQuickEdit(true)} className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-[#1B2B4B] text-[#1B2B4B] bg-white whitespace-nowrap">빠른수정</button>
           <button onClick={handleGoToEdit} className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${cardVersionB ? "bg-gray-700 text-white" : "bg-blue-600 text-white"}`}>수정</button>
           <button onClick={onCancelOrder} className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-red-200 text-red-500">취소</button>
         </div>
       </div>
+      {showQuickEdit && (
+        <QuickEditSheet
+          order={order}
+          cardVersionB={cardVersionB}
+          onClose={() => setShowQuickEdit(false)}
+          onSaved={(id, changed) => {
+            onOrderUpdate?.(id, changed);
+            setSelectedOrder?.((prev) => (prev ? { ...prev, ...changed } : prev));
+            setShowQuickEdit(false);
+            showSuccess?.("빠른수정 저장 완료");
+          }}
+        />
+      )}
       {showMemoPopup && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 px-6" onClick={() => setShowMemoPopup(false)}>
           <div className="bg-white rounded-2xl w-full max-w-xs p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
