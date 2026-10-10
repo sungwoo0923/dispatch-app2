@@ -10802,6 +10802,7 @@ const SmartTextarea = React.memo(function SmartTextarea({ onSearch, onCommit, te
 // ⭐ 사용자 요청 — 상세보기에서 바로 주요 항목만 고치는 "빠른수정" 시트
 const QUICK_EDIT_PAY = ["계산서", "착불", "선불", "손실", "개인"];
 const QUICK_EDIT_ASSIGN = ["24시", "직접배차", "인성", "고정기사"];
+const QUICK_EDIT_CAR = ["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"];
 // (렌더 함수 밖에 둬야 입력할 때마다 칸이 새로 만들어져 포커스가 풀리지 않는다)
 function QuickField({ label, children, span = 1 }) {
   return (
@@ -10811,34 +10812,117 @@ function QuickField({ label, children, span = 1 }) {
     </div>
   );
 }
-function QuickEditSheet({ order, onClose, onSaved, cardVersionB }) {
+// 화물등록 폼과 같은 유사도 순(완전일치 → 시작일치 → 포함 → 주소포함) 자동완성
+function quickMatch(list, q, withAddr) {
+  const raw = String(q || "").trim();
+  if (!raw) return [];
+  const nq = normalizeCompany(raw);
+  const exact = [], starts = [], includes = [], addr = [];
+  (list || []).forEach((c) => {
+    const nameRaw = c.거래처명 || "";
+    const name = normalizeCompany(nameRaw);
+    if (nameRaw.trim() === raw || name === nq) exact.push(c);
+    else if (name.startsWith(nq)) starts.push(c);
+    else if (name.includes(nq)) includes.push(c);
+    else if (withAddr && normalizeCompany(c.주소 || "").includes(nq)) addr.push(c);
+  });
+  return [...exact, ...starts, ...includes, ...addr].slice(0, 10);
+}
+function QuickSuggestInput({ value, onChange, onPick, list, withAddr, className }) {
+  const [open, setOpen] = useState(false);
+  const opts = useMemo(() => (open ? quickMatch(list, value, withAddr) : []), [open, list, value, withAddr]);
+  return (
+    <div className="relative">
+      <input autoComplete="off" className={className} value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => { if (value) setOpen(true); }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)} />
+      {open && opts.length > 0 && (
+        <div className="absolute z-50 left-0 right-0 mt-0.5 bg-white border rounded-lg shadow max-h-48 overflow-y-auto text-xs">
+          {opts.map((c, i) => (
+            <button key={c.id || i} type="button" className="w-full text-left px-2.5 py-1.5 hover:bg-gray-100 border-b last:border-b-0"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onPick(c); setOpen(false); }}>
+              <div className="font-semibold text-gray-900">{c.거래처명 || c.상호 || "-"}</div>
+              {withAddr && c.주소 && <div className="text-[11px] text-gray-500">{c.주소}</div>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+// 등록폼과 같은 단위 분리(톤수: 톤/kg, 화물내용: 파레트/박스/통/롤)
+const splitTon = (t = "") => {
+  const s = String(t || "");
+  return { v: s.replace(/톤|kg/gi, "").trim(), u: /kg/i.test(s) ? "kg" : s.includes("톤") ? "톤" : "" };
+};
+const splitCargo = (t = "") => {
+  const s = String(t || "").trim();
+  const m = s.match(/^(\d+(?:\.\d+)?)\s*(파레트|파렛트|팔레트|박스|통|롤)$/);
+  if (!m) return { v: s, u: "" };
+  return { v: m[1], u: m[2] === "파렛트" || m[2] === "팔레트" ? "파레트" : m[2] };
+};
+function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], basicClients }) {
   const toNum = (v) => Number(String(v ?? "").replace(/[^\d-]/g, "")) || 0;
-  const [f, setF] = useState(() => ({
-    거래처명: order.거래처명 || "",
-    상차지명: order.상차지명 || "", 상차일: order.상차일 || "", 상차시간: order.상차시간 || "",
-    하차지명: order.하차지명 || "", 하차일: order.하차일 || "", 하차시간: order.하차시간 || "",
-    배차방식: order.배차방식 || "", 지급방식: order.지급방식 || "",
-    화물내용: order.화물내용 || "", 차량종류: order.차량종류 || order.차종 || "", 차량톤수: order.차량톤수 || order.톤수 || "",
-    청구운임: order.청구운임 ? toNum(order.청구운임).toLocaleString() : "",
-    기사운임: order.기사운임 ? toNum(order.기사운임).toLocaleString() : "",
-  }));
+  const [f, setF] = useState(() => {
+    const ton = splitTon(order.차량톤수 || order.톤수 || "");
+    const cargo = splitCargo(order.화물내용 || "");
+    return {
+      거래처명: order.거래처명 || "",
+      상차지명: order.상차지명 || "", 상차지주소: order.상차지주소 || "", 상차지담당자: order.상차지담당자 || "", 상차지담당자번호: order.상차지담당자번호 || "",
+      상차일: order.상차일 || "", 상차시간: order.상차시간 || "",
+      하차지명: order.하차지명 || "", 하차지주소: order.하차지주소 || "", 하차지담당자: order.하차지담당자 || "", 하차지담당자번호: order.하차지담당자번호 || "",
+      하차일: order.하차일 || "", 하차시간: order.하차시간 || "",
+      배차방식: order.배차방식 || "", 지급방식: order.지급방식 || "",
+      화물수량: cargo.v, 화물타입: cargo.u, 차량종류: order.차량종류 || order.차종 || "",
+      톤수값: ton.v, 톤수타입: ton.u,
+      청구운임: order.청구운임 ? toNum(order.청구운임).toLocaleString() : "",
+      기사운임: order.기사운임 ? toNum(order.기사운임).toLocaleString() : "",
+    };
+  });
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setF(p => ({ ...p, [k]: e.target.value }));
+  const setVal = (k) => (v) => setF(p => ({ ...p, [k]: v }));
   const setMoney = (k) => (e) => {
     const n = toNum(e.target.value);
     setF(p => ({ ...p, [k]: e.target.value.trim() === "" ? "" : n.toLocaleString() }));
   };
+  // 상/하차지 선택 시 주소·담당자도 같이 채운다(등록폼 pickPickup/pickDrop과 동일)
+  const pickPlace = (type) => (c) => {
+    const contacts = (Array.isArray(c.contacts) ? c.contacts : []).filter(ct => ct.name?.trim());
+    const primary = contacts.find(ct => ct.isPrimary) || contacts[0] || null;
+    setF(p => ({
+      ...p,
+      [`${type}지명`]: c.거래처명 || "",
+      [`${type}지주소`]: c.주소 || "",
+      [`${type}지담당자`]: primary?.name || c.담당자 || "",
+      [`${type}지담당자번호`]: primary?.phone || c.담당자번호 || "",
+    }));
+  };
   const fee = toNum(f.청구운임) - toNum(f.기사운임);
+  const joinU = (v, u) => (u ? `${v}${u}` : v);
+  // 손대지 않은 칸은 원래 글자 그대로 둔다("12 파레트" → "12파레트"처럼 바뀐 걸로 잡히지 않게)
+  const [init] = useState(() => {
+    const t = splitTon(order.차량톤수 || order.톤수 || ""), c = splitCargo(order.화물내용 || "");
+    return { ton: joinU(t.v, t.u), cargo: joinU(c.v, c.u) };
+  });
+  const tonNow = joinU(f.톤수값, f.톤수타입);
+  const cargoNow = joinU(f.화물수량, f.화물타입);
+  const ton = tonNow === init.ton ? (order.차량톤수 || order.톤수 || "") : tonNow;
+  const cargo = cargoNow === init.cargo ? (order.화물내용 || "") : cargoNow;
 
   const save = async () => {
     if (!f.상차지명.trim() || !f.하차지명.trim()) { alert("상차지 / 하차지명은 필수입니다."); return; }
     if (isReversedDateOrder(f.상차일, f.하차일)) { alert("하차일이 상차일보다 빠를 수 없습니다."); return; }
     const patch = {
       거래처명: f.거래처명.trim(),
-      상차지명: f.상차지명.trim(), 상차일: f.상차일, 상차시간: f.상차시간,
-      하차지명: f.하차지명.trim(), 하차일: f.하차일, 하차시간: f.하차시간,
+      상차지명: f.상차지명.trim(), 상차지주소: f.상차지주소, 상차지담당자: f.상차지담당자, 상차지담당자번호: f.상차지담당자번호,
+      상차일: f.상차일, 상차시간: f.상차시간,
+      하차지명: f.하차지명.trim(), 하차지주소: f.하차지주소, 하차지담당자: f.하차지담당자, 하차지담당자번호: f.하차지담당자번호,
+      하차일: f.하차일, 하차시간: f.하차시간,
       배차방식: f.배차방식, 지급방식: f.지급방식,
-      화물내용: f.화물내용, 차량종류: f.차량종류, 차종: f.차량종류, 차량톤수: f.차량톤수, 톤수: f.차량톤수,
+      화물내용: cargo, 차량종류: f.차량종류, 차종: f.차량종류, 차량톤수: ton, 톤수: ton,
       청구운임: toNum(f.청구운임), 기사운임: toNum(f.기사운임), 수수료: fee,
     };
     // 바뀐 항목만 저장
@@ -10859,6 +10943,22 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB }) {
   };
 
   const inp = "w-full border border-gray-200 rounded-lg px-2.5 py-2 text-[14px] focus:outline-none focus:border-[#1B2B4B] bg-white";
+  const unitSel = `appearance-none h-full border-0 px-2 pr-5 text-[12px] font-bold text-white outline-none ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`;
+  const timeOpts = (cur) => (cur && !HALF_HOUR_TIMES.includes(cur) ? [cur, ...HALF_HOUR_TIMES] : HALF_HOUR_TIMES);
+  const unitBox = (qty, onQty, unit, onUnit, units, w, ph) => (
+    <div className="flex items-stretch border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#1B2B4B]">
+      <input autoComplete="off" className="flex-1 min-w-0 px-2.5 py-2 text-[14px] outline-none border-0"
+        placeholder={ph} inputMode={unit ? "decimal" : "text"} value={qty}
+        onChange={(e) => onQty(unit ? e.target.value.replace(/[^0-9.]/g, "") : e.target.value)} />
+      <div className="relative shrink-0" style={{ width: w }}>
+        <select className={`${unitSel} w-full`} value={unit} onChange={(e) => onUnit(e.target.value)}>
+          <option value="">없음</option>
+          {units.map(u => <option key={u} value={u}>{u}</option>)}
+        </select>
+        <IconChevronDown className="w-3 h-3 absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none text-white" />
+      </div>
+    </div>
+  );
   return (
     <div className="fixed inset-0 z-[10000] bg-black/45 flex items-end justify-center" onClick={onClose}>
       <div className="w-full max-w-md bg-white rounded-t-2xl max-h-[88vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -10871,13 +10971,34 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB }) {
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4">
           <div className="grid grid-cols-2 gap-3">
-            <QuickField label="거래처명" span={2}><input className={inp} value={f.거래처명} onChange={set("거래처명")} /></QuickField>
-            <QuickField label="상차지명" span={2}><input className={inp} value={f.상차지명} onChange={set("상차지명")} /></QuickField>
-            <QuickField label="상차일"><input type="date" className={inp} value={f.상차일} onChange={set("상차일")} /></QuickField>
-            <QuickField label="상차시간"><input className={inp} value={f.상차시간} onChange={set("상차시간")} placeholder="즉시 / 오후 2시" /></QuickField>
-            <QuickField label="하차지명" span={2}><input className={inp} value={f.하차지명} onChange={set("하차지명")} /></QuickField>
-            <QuickField label="하차일"><input type="date" className={inp} value={f.하차일} onChange={set("하차일")} /></QuickField>
-            <QuickField label="하차시간"><input className={inp} value={f.하차시간} onChange={set("하차시간")} placeholder="즉시 / 오후 5시" /></QuickField>
+            <QuickField label="거래처명" span={2}>
+              <QuickSuggestInput className={inp} value={f.거래처명} onChange={setVal("거래처명")}
+                list={basicClients || clients} onPick={(c) => setVal("거래처명")(c.거래처명 || "")} />
+            </QuickField>
+            <QuickField label="상차지명" span={2}>
+              <QuickSuggestInput className={inp} value={f.상차지명} withAddr list={clients}
+                onChange={(v) => setF(p => ({ ...p, 상차지명: v }))} onPick={pickPlace("상차")} />
+              {f.상차지주소 && <div className="mt-0.5 text-[11px] text-gray-400 truncate">{f.상차지주소}</div>}
+            </QuickField>
+            <QuickField label="상차일"><CustomDatePicker className={inp} value={f.상차일} onChange={set("상차일")} /></QuickField>
+            <QuickField label="상차시간">
+              <select className={inp} value={f.상차시간} onChange={set("상차시간")}>
+                <option value="">상차시간</option>
+                {timeOpts(f.상차시간).map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </QuickField>
+            <QuickField label="하차지명" span={2}>
+              <QuickSuggestInput className={inp} value={f.하차지명} withAddr list={clients}
+                onChange={(v) => setF(p => ({ ...p, 하차지명: v }))} onPick={pickPlace("하차")} />
+              {f.하차지주소 && <div className="mt-0.5 text-[11px] text-gray-400 truncate">{f.하차지주소}</div>}
+            </QuickField>
+            <QuickField label="하차일"><CustomDatePicker className={inp} value={f.하차일} onChange={set("하차일")} /></QuickField>
+            <QuickField label="하차시간">
+              <select className={inp} value={f.하차시간} onChange={set("하차시간")}>
+                <option value="">하차시간</option>
+                {timeOpts(f.하차시간).map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </QuickField>
             <QuickField label="배차방식">
               <select className={inp} value={f.배차방식} onChange={set("배차방식")}>
                 <option value="">선택없음</option>
@@ -10890,9 +11011,19 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB }) {
                 {QUICK_EDIT_PAY.map(v => <option key={v}>{v}</option>)}
               </select>
             </QuickField>
-            <QuickField label="톤수"><input className={inp} value={f.차량톤수} onChange={set("차량톤수")} placeholder="예: 5톤" /></QuickField>
-            <QuickField label="차량종류"><input className={inp} value={f.차량종류} onChange={set("차량종류")} placeholder="예: 윙/카고" /></QuickField>
-            <QuickField label="화물내용" span={2}><input className={inp} value={f.화물내용} onChange={set("화물내용")} placeholder="예: 12파레트" /></QuickField>
+            <QuickField label="톤수">
+              {unitBox(f.톤수값, setVal("톤수값"), f.톤수타입, setVal("톤수타입"), ["톤", "kg"], 62, "예: 1")}
+            </QuickField>
+            <QuickField label="차량종류">
+              <select className={inp} value={f.차량종류} onChange={set("차량종류")}>
+                <option value="">차량종류 선택</option>
+                {f.차량종류 && !QUICK_EDIT_CAR.includes(f.차량종류) && <option value={f.차량종류}>{f.차량종류}</option>}
+                {QUICK_EDIT_CAR.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </QuickField>
+            <QuickField label="화물내용" span={2}>
+              {unitBox(f.화물수량, setVal("화물수량"), f.화물타입, setVal("화물타입"), ["파레트", "박스", "통", "롤"], 76, "예: 3")}
+            </QuickField>
             <QuickField label="청구운임"><input inputMode="numeric" className={inp} value={f.청구운임} onChange={setMoney("청구운임")} /></QuickField>
             <QuickField label="기사운임"><input inputMode="numeric" className={inp} value={f.기사운임} onChange={setMoney("기사운임")} /></QuickField>
           </div>
@@ -10933,6 +11064,7 @@ function MobileOrderDetail({
   cardVersionB = false,
   dispatcherName = "",
   mobileUsers = [],
+  basicClients,
 }) {
   const [confirmDeliver, setConfirmDeliver] = useState(false);
   const [showConfirmInfo, setShowConfirmInfo] = useState(false);
@@ -11743,7 +11875,7 @@ const handleAssignClick = () => {
         <div className="min-w-0 flex items-center gap-2.5">
           <div className="min-w-0">
             <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">거래처명</div>
-            <span className="text-[13px] font-bold text-gray-700 truncate">{order.거래처명 || "-"}</span>
+            <span className="block text-[13px] font-bold text-gray-700 truncate">{order.거래처명 || "-"}</span>
           </div>
           <div className={`flex items-center gap-2 shrink-0 ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"}`}>
             {(order.메모 || order.적요) && (
@@ -11763,15 +11895,18 @@ const handleAssignClick = () => {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        {/* 화면이 좁으면(폴더블 분할화면 등) 버튼을 세로로 쌓아 거래처명과 겹치지 않게 */}
+        <div className="shrink-0 flex flex-col min-[420px]:flex-row items-stretch gap-1.5 ml-2">
           <button onClick={() => setShowQuickEdit(true)} className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-[#1B2B4B] text-[#1B2B4B] bg-white whitespace-nowrap">빠른수정</button>
-          <button onClick={handleGoToEdit} className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${cardVersionB ? "bg-gray-700 text-white" : "bg-blue-600 text-white"}`}>수정</button>
-          <button onClick={onCancelOrder} className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-red-200 text-red-500">취소</button>
+          <button onClick={handleGoToEdit} className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap ${cardVersionB ? "bg-gray-700 text-white" : "bg-blue-600 text-white"}`}>수정</button>
+          <button onClick={onCancelOrder} className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-red-200 text-red-500 whitespace-nowrap">취소</button>
         </div>
       </div>
       {showQuickEdit && (
         <QuickEditSheet
           order={order}
+          clients={clients}
+          basicClients={basicClients}
           cardVersionB={cardVersionB}
           onClose={() => setShowQuickEdit(false)}
           onSaved={(id, changed) => {
