@@ -542,9 +542,10 @@ function useGpsTracking(uid, driverData) {
     };
   }, [uid]);
 
-  // ⭐ 네이티브 위치 서비스 시작/중지 — 로그인돼 있고 퇴근 상태가 아니면 계속 추적.
+  // ⭐ 네이티브 위치 서비스 시작/중지 — 로그인돼 있고 퇴근·휴차 상태가 아니면 계속 추적.
   // 앱을 닫아도(최근앱에서 밀어도) 상단 "운행 추적 중" 알림이 있는 동안 전송이 유지된다.
-  const offDuty = driverData?.status === "퇴근";
+  // 휴차일엔 위치가 필요 없으므로 멈춘다(배터리·데이터 절약). "대기로 복귀"하면 다시 시작.
+  const offDuty = ["퇴근", "휴차"].includes(driverData?.status) || driverData?.mainStatus === "휴차";
   const driverLoaded = !!driverData;
   useEffect(() => {
     if (!isNative() || !uid || !driverLoaded) return;
