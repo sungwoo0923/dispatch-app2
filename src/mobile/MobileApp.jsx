@@ -1,6 +1,6 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
 import { hideBlind, isBlindHidden, canSeeBlind } from "../blind";
-import { checkHolidayDispatch } from "../holidayConfirm";
+import { checkHolidayDispatch, findRestConflict, confirmRestDispatch, restAckKey } from "../holidayConfirm";
 import html2canvas from "html2canvas";
 import { useCompanyInfo } from "../RateCard";
 import MobileFleetView from "./MobileFleetView";
@@ -3761,8 +3761,14 @@ const groupedByDate = useMemo(() => {
     if (String(form.차량번호 || "").trim()) {
       const nPlate = (v = "") => String(v).replace(/[\s-]/g, "").toLowerCase();
       const prevOrder = form._editId ? orders.find(o => (o.id || o._id) === form._editId) : null;
-      if (!prevOrder || nPlate(prevOrder.차량번호) !== nPlate(form.차량번호)) {
-        if (!(await checkHolidayDispatch(drivers, form.차량번호, form.상차일 || todayKST()))) return;
+      if ((!prevOrder || nPlate(prevOrder.차량번호) !== nPlate(form.차량번호))
+          && form._restAck !== restAckKey(form.차량번호, form.상차일 || todayKST())) {
+        if (!(await checkHolidayDispatch(drivers, form.차량번호, form.상차일 || todayKST()))) {
+          // "보류" — 기사 정보를 비우고, 다시 저장하면 기사 없이(배차중) 등록된다
+          setForm(p => ({ ...p, 차량번호: "", 기사명: "", 전화번호: "", _restAck: "" }));
+          alert("기사 배정을 보류했습니다. 기사 정보를 비웠으니 저장을 다시 눌러주세요.");
+          return;
+        }
       }
     }
 
@@ -13582,6 +13588,31 @@ function MobileOrderForm({
   // 자동완성을 위해 하차지거래처(places)까지 합쳐진 풀이라, 여기 그대로 쓰면 관련 없는
   // 하차지명이 거래처 드롭다운에 함께 뜬다.
   const basicClientsOnly = basicClients || clients;
+  // ⭐ 차량번호 입력으로 지입 기사가 매칭되는 순간 휴차(지정 휴차일/오늘 본인 휴차중) 확인 팝업
+  //   진행: 그대로(저장 때 다시 묻지 않음) / 보류: 입력한 기사 정보를 비운다
+  const restAskingRef = useRef("");
+  useEffect(() => {
+    const plate = String(form?.차량번호 || "").trim();
+    if (!plate) return;
+    const date = form.상차일 || todayKST();
+    const key = restAckKey(plate, date);
+    if (form._restAck === key || restAskingRef.current === key) return;
+    // 수정 중인 오더에 원래 배정돼 있던 기사면 묻지 않는다
+    if (form._editId) {
+      const prev = (orders || []).find(o => (o.id || o._id) === form._editId);
+      if (prev && String(prev.차량번호 || "").replace(/[\s-]/g, "") === plate.replace(/[\s-]/g, "")) return;
+    }
+    const c = findRestConflict(drivers, plate, date);
+    if (!c) return;
+    const t = setTimeout(async () => {
+      restAskingRef.current = key;
+      const ok = await confirmRestDispatch(c);
+      restAskingRef.current = "";
+      if (ok) setForm(p => ({ ...p, _restAck: key }));
+      else setForm(p => ({ ...p, 차량번호: "", 기사명: "", 전화번호: "", _restAck: "" }));
+    }, 500);
+    return () => clearTimeout(t);
+  }, [form?.차량번호, form?.상차일, form?._restAck, drivers]); // eslint-disable-line react-hooks/exhaustive-deps
     // 입력 카드들이 흐릿한 기본 회색 테두리라 카드 느낌이 안 나던 것을,
     // 스타일에 맞는 색(A=블루/B=네이비) 테두리로 통일한다.
     const cardBorderCls = cardVersionB ? "border-[#1B2B4B]/25" : "border-blue-200";

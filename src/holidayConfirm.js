@@ -12,27 +12,50 @@ export function weekdayKo(dateStr) {
 
 const normPlate = (v = "") => String(v).replace(/[\s-]/g, "").toLowerCase();
 
+export const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+
 // 배차하려는 기사가 그 날짜에 휴차(근무요일 아님)인지 — 지입 기사 + 근무요일이 설정된 경우만
 export function findHolidayConflict(drivers, plate, dateStr) {
+  const c = findRestConflict(drivers, plate, dateStr);
+  return c && c.designated ? c : null;
+}
+
+// ⭐ 휴차 확인 — 두 가지를 함께 본다.
+//  1) 지정 휴차: 그 오더의 상차일 요일이 기사 근무가능요일이 아님
+//  2) 본인 휴차: 기사가 앱에서 직접 "휴차"를 누른 상태 — 오늘 일을 마치고 누르는 경우가 많아,
+//     "오늘(상차일=오늘)" 오더일 때만 경고한다. 내일 이후 오더는 기사가 다음날 다시 일하므로 경고하지 않는다.
+//     (휴차일자가 오늘이 아니면 — 어제 누르고 안 풀었으면 — 지난 상태로 보고 무시)
+export function findRestConflict(drivers, plate, dateStr) {
   const p = normPlate(plate);
-  if (!p || !dateStr) return null;
+  if (!p) return null;
   const drv = (drivers || []).find(d => normPlate(d.차량번호) === p);
   if (!drv || drv.등급 !== "지입") return null;
+  const date = String(dateStr || kstToday()).slice(0, 10);
   const days = Array.isArray(drv.근무요일) ? drv.근무요일 : [];
-  if (!days.length) return null; // 근무요일 미설정 = 전일 가능
-  const wd = weekdayKo(dateStr);
-  if (!wd || days.includes(wd)) return null;
-  return { driver: drv, weekday: wd, days, date: String(dateStr).slice(0, 10) };
+  const wd = weekdayKo(date);
+  const designated = !!(days.length && wd && !days.includes(wd));
+  const st = drv.status || drv.mainStatus || drv.상태 || "";
+  const restDate = drv.휴차일자 ? String(drv.휴차일자).slice(0, 10) : "";
+  const manual = st === "휴차" && date === kstToday() && (!restDate || restDate === kstToday());
+  if (!designated && !manual) return null;
+  return { driver: drv, weekday: wd, days, date, designated, manual };
 }
 
 let open = false;
 
 export function confirmHolidayDispatch(conflict) {
+  return confirmRestDispatch(conflict);
+}
+
+// 화면 중앙 확인 팝업 — "진행"(true): 그대로 배차 / "보류"(false): 이 기사 배정을 빼고 진행
+export function confirmRestDispatch(conflict) {
   if (!conflict || typeof document === "undefined") return Promise.resolve(true);
   if (open) return Promise.resolve(false);
   open = true;
   return new Promise((resolve) => {
-    const { driver, weekday, days, date } = conflict;
+    const { driver, weekday, days, date, designated, manual } = conflict;
+    const title = designated && manual ? "휴차 기사 배차 확인" : designated ? "지정 휴차일 배차 확인" : "휴차중 기사 배차 확인";
+    const sub = designated ? "근무가능요일이 아닌 날입니다" : "기사님이 직접 휴차 처리한 상태입니다";
     const overlay = document.createElement("div");
     overlay.setAttribute("role", "dialog");
     overlay.style.cssText = "position:fixed;inset:0;z-index:2147483000;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px;font-family:Pretendard,'Noto Sans KR',sans-serif;";
@@ -50,24 +73,29 @@ export function confirmHolidayDispatch(conflict) {
             <svg width="18" height="18" fill="none" stroke="#fbbf24" stroke-width="2.2" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
           </div>
           <div>
-            <div style="color:#fff;font-size:16px;font-weight:800">휴차일 배차 확인</div>
-            <div style="color:rgba(255,255,255,.65);font-size:12px;margin-top:2px">근무가능요일이 아닌 날입니다</div>
+            <div style="color:#fff;font-size:16px;font-weight:800">${title}</div>
+            <div style="color:rgba(255,255,255,.65);font-size:12px;margin-top:2px">${sub}</div>
           </div>
         </div>
         <div style="padding:18px 20px 6px">
           <div style="font-size:15px;color:#111827;line-height:1.6">
-            <b>${esc(driver.이름 || "-")}</b> <span style="color:#6b7280">(${esc(driver.차량번호 || "-")})</span> 기사는<br/>
-            <b style="color:#ef4444">${esc(date)} (${esc(weekday)})</b> 휴차일로 등록되어 있습니다.
+            입력하신 <b>${esc(driver.이름 || "-")}</b> <span style="color:#6b7280">(${esc(driver.차량번호 || "-")})</span> 기사님은<br/>
+            ${designated ? `<b style="color:#ef4444">${esc(date)} (${esc(weekday)})</b> 지정 휴차일입니다.` : ""}
+            ${designated && manual ? "<br/>" : ""}
+            ${manual ? `<b style="color:#ef4444">현재 휴차중</b>입니다. <span style="color:#6b7280">(오늘 일을 마치고 직접 휴차 처리)</span>` : ""}
           </div>
-          <div style="margin-top:12px;padding:10px 12px;background:#f8fafc;border-radius:10px">
+          ${designated ? `<div style="margin-top:12px;padding:10px 12px;background:#f8fafc;border-radius:10px">
             <div style="font-size:12px;font-weight:800;color:#6b7280;margin-bottom:6px">근무가능요일</div>
             <div style="display:flex;gap:5px;flex-wrap:wrap">${dayChips}</div>
+          </div>` : ""}
+          <div style="font-size:13px;color:#6b7280;margin-top:10px;line-height:1.5">
+            <b style="color:#111827">진행</b> — 그대로 배차하고 기사앱으로 오더가 전달됩니다.<br/>
+            <b style="color:#111827">보류</b> — 기사에게 보내지 않고, 입력한 기사 정보를 비웁니다.
           </div>
-          <div style="font-size:13px;color:#6b7280;margin-top:10px;line-height:1.5">기사와 협의되어 휴차일에도 운행하는 경우에만 배차를 진행해주세요.</div>
         </div>
         <div style="display:flex;gap:8px;padding:16px 20px 20px">
-          <button data-act="cancel" style="flex:1;padding:13px 0;border-radius:12px;border:1.5px solid #d1d5db;background:#fff;color:#374151;font-size:15px;font-weight:800;cursor:pointer">배차 취소</button>
-          <button data-act="ok" style="flex:1.3;padding:13px 0;border-radius:12px;border:none;background:#1B2B4B;color:#fff;font-size:15px;font-weight:800;cursor:pointer">휴차일이지만 배차</button>
+          <button data-act="cancel" style="flex:1;padding:13px 0;border-radius:12px;border:1.5px solid #d1d5db;background:#fff;color:#374151;font-size:15px;font-weight:800;cursor:pointer">보류</button>
+          <button data-act="ok" style="flex:1.3;padding:13px 0;border-radius:12px;border:none;background:#1B2B4B;color:#fff;font-size:15px;font-weight:800;cursor:pointer">진행 (그대로 배차)</button>
         </div>
       </div>`;
     const done = (v) => {
@@ -88,8 +116,11 @@ export function confirmHolidayDispatch(conflict) {
   });
 }
 
-// 편의 함수: 충돌이 없으면 true, 있으면 팝업 결과
+// 편의 함수: 충돌이 없으면 true, 있으면 팝업 결과(진행=true / 보류=false)
 export async function checkHolidayDispatch(drivers, plate, dateStr) {
-  const c = findHolidayConflict(drivers, plate, dateStr);
-  return c ? confirmHolidayDispatch(c) : true;
+  const c = findRestConflict(drivers, plate, dateStr);
+  return c ? confirmRestDispatch(c) : true;
 }
+
+// 이미 입력 단계에서 "진행"을 고른 차량번호+날짜인지 표시하는 키(저장 단계에서 같은 팝업이 또 뜨지 않게)
+export const restAckKey = (plate, dateStr) => `${normPlate(plate)}|${String(dateStr || kstToday()).slice(0, 10)}`;

@@ -1,7 +1,7 @@
 // ===================== DispatchApp.jsx (PART 1/8) — START =====================
 import { loadTmap } from "./tmapLoader";
 import { hideBlind, isBlindHidden, canSeeBlind } from "./blind";
-import { checkHolidayDispatch } from "./holidayConfirm";
+import { checkHolidayDispatch, findRestConflict, confirmRestDispatch, restAckKey } from "./holidayConfirm";
 import { drawTmapTrafficRoute, TRAFFIC_LEGEND } from "./mapStyle";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -3539,18 +3539,23 @@ const liveWindowStart = getMonthsAgoKST(13);
     return () => { unsub1(); unsub2(); };
   }, [user, todayKstKey]);
 
-const addDispatch = async (record) => {
+const addDispatch = async (recordIn) => {
+  let record = recordIn;
   // 🚫 하차일이 상차일보다 빠른 역순 등록 방지
   if (isReversedDateOrder(record?.상차일, record?.하차일)) {
     globalShowAlert(REVERSED_DATE_ORDER_MSG);
     return false;
   }
 
-  // ⭐ 지입 기사 휴차일 배차 확인(등록과 동시에 차량번호를 넣는 경우)
-  if (record?.차량번호) {
+  // ⭐ 지입 기사 휴차(지정 휴차일/본인 휴차중) 배차 확인 — 입력 단계에서 이미 "진행"을 골랐으면 건너뛴다.
+  // "보류"면 오더는 등록하되 기사 정보를 빼고(배차중) 저장한다 → 기사앱으로 가지 않는다.
+  if (record?.차량번호 && record._restAck !== restAckKey(record.차량번호, record.상차일)) {
     const okHoliday = await checkHolidayDispatch(drivers, record.차량번호, record.상차일);
-    if (!okHoliday) return false;
+    if (!okHoliday) {
+      record = { ...record, 차량번호: "", 이름: "", 전화번호: "", 배차상태: "배차중", 기사확인상태: null };
+    }
   }
+  if (record && "_restAck" in record) { record = { ...record }; delete record._restAck; }
 
   const _id = crypto.randomUUID(); // ⭐ 무조건 새로 생성
 
@@ -3712,9 +3717,16 @@ const patchDispatch = async (_id, patch, knownPrev) => {
 
   // ⭐ 사용자 요청 — 지입 기사를 근무가능요일이 아닌 날(휴차)에 배차하면 확인 팝업.
   // "휴차일이지만 배차"를 고르면 그대로 진행, "배차 취소"면 저장하지 않는다.
-  if (patch.차량번호 && normalizePlate(patch.차량번호) !== normalizePlate(prev?.차량번호 || "")) {
+  const _restAck = patch._restAck; delete patch._restAck;
+  if (patch.차량번호 && normalizePlate(patch.차량번호) !== normalizePlate(prev?.차량번호 || "")
+      && _restAck !== restAckKey(patch.차량번호, patch.상차일 || prev?.상차일)) {
     const okHoliday = await checkHolidayDispatch(drivers, patch.차량번호, patch.상차일 || prev?.상차일);
-    if (!okHoliday) return false;
+    if (!okHoliday) {
+      // "보류" — 이번에 입력한 기사 정보만 빼고 나머지 수정은 저장한다(기사에게는 가지 않음)
+      ["차량번호", "이름", "전화번호", "기사명", "배차상태", "상태", "기사확인상태", "배차확정일시", "배차확정자", "배차완료일시", "화주사확인대기"].forEach(k => { delete patch[k]; });
+      const META = new Set(["updatedAt", "_lastModified", "업체전달상태"]);
+      if (!Object.keys(patch).some(k => !META.has(k))) return false;
+    }
   }
 
   // ⭐ 사용자 요청 — 이미 "운송완료"된 오더에서 차량번호를 비워 기사만 취소하려는
@@ -9775,6 +9787,26 @@ const filterPlaces = (q) => {
   } catch {}
   return { ...emptyForm };
 });
+// ⭐ 차량번호를 입력해 지입 기사가 매칭되는 순간, 그 기사가 휴차(지정 휴차일 또는 오늘 본인 휴차중)면
+// 화면 중앙에 확인 팝업 — 진행: 그대로(저장 때 다시 묻지 않음) / 보류: 입력한 기사 정보를 비운다.
+const restAskingRef = React.useRef("");
+React.useEffect(() => {
+  const plate = String(form?.차량번호 || "").trim();
+  if (!plate) return;
+  const key = restAckKey(plate, form.상차일);
+  if (form._restAck === key || restAskingRef.current === key) return;
+  const c = findRestConflict(drivers, plate, form.상차일);
+  if (!c) return;
+  const t = setTimeout(async () => {
+    restAskingRef.current = key;
+    const ok = await confirmRestDispatch(c);
+    restAskingRef.current = "";
+    if (ok) setForm(p => ({ ...p, _restAck: key }));
+    else setForm(p => ({ ...p, 차량번호: "", 이름: "", 전화번호: "", 배차상태: "배차중", _restAck: "" }));
+  }, 500);
+  return () => clearTimeout(t);
+}, [form?.차량번호, form?.상차일, form?._restAck, drivers]); // eslint-disable-line react-hooks/exhaustive-deps
+
     // ⭐ route-map DOM 생성 대기
 async function waitMapDiv() {
   for (let i = 0; i < 20; i++) {
@@ -12355,6 +12387,16 @@ const rec = {
   경유상차목록: pickupStops,
   경유하차목록: dropStops,
 };
+// ⭐ 휴차(지정 휴차일/본인 휴차중) 확인 — 기사 알림을 만들기 전에 먼저 확인한다.
+// 입력 단계에서 이미 "진행"을 골랐으면 건너뛰고, "보류"면 기사 정보를 빼고 등록한다.
+if (rec.차량번호) {
+  const ackKey = restAckKey(rec.차량번호, rec.상차일);
+  if (rec._restAck !== ackKey) {
+    const okRest = await checkHolidayDispatch(drivers, rec.차량번호, rec.상차일);
+    if (!okRest) { rec.차량번호 = ""; rec.이름 = ""; rec.전화번호 = ""; rec.배차상태 = "배차중"; }
+  }
+  if (rec.차량번호) rec._restAck = ackKey; // addDispatch에서 같은 팝업이 또 뜨지 않게
+}
 // ⭐ 사용자 요청 — 신규 오더 등록 시점에 이미 지입 기사 차량번호가 입력돼 있으면
 // (patchDispatch를 거치는 수정과 달리 여기는 최초 등록 경로라 별도로 처리해야 함)
 // 기사확인상태를 "대기"로 걸어 기사 앱에서 오더수락/거절 알림이 뜨게 한다.

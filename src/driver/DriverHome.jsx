@@ -400,7 +400,9 @@ function RotTag({ o, style }) {
   );
 }
 
-function PendingOrderCard({ order: o, loading, onAccept, onReject, onCopy }) {
+function PendingOrderCard({ order: o, loading, onAccept, onReject, onCopy, resting = false }) {
+  const oDate = String(o.상차일 || "").slice(0, 10);
+  const isFuture = oDate && oDate > kstDateStr();
   return (
     <div style={{ background: "#fff", border: "2px solid #1B2B4B", borderRadius: 16, padding: 16, boxShadow: "0 4px 16px rgba(27,43,75,0.12)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
@@ -408,6 +410,14 @@ function PendingOrderCard({ order: o, loading, onAccept, onReject, onCopy }) {
         <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: "#f59e0b", padding: "3px 9px", borderRadius: 20, flexShrink: 0 }}>오더 확인 필요</span>
       </div>
       {rotationCount(o) > 1 && <RotationNotice n={rotationCount(o)} />}
+      {/* ⭐ 휴차중에 받은 오더 안내 — 오늘 오더는 수락하면 휴차가 풀리고, 내일 이후 오더는 휴차 그대로 */}
+      {resting && (
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", background: "#f3f4f6", border: "1px solid #d1d5db", borderRadius: 10, padding: "8px 10px", marginBottom: 8 }}>
+          {isFuture
+            ? `휴차중에 받은 ${oDate.slice(5).replace("-", "/")} 오더입니다. 수락해도 오늘 휴차 상태는 그대로 유지됩니다.`
+            : "휴차중에 오늘 배차가 도착했습니다. 수락하면 휴차가 해제되고 대기 상태로 바뀝니다."}
+        </div>
+      )}
       <OrderDetailBody o={o} onCopy={onCopy} />
       <DispatcherLine order={o} />
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
@@ -1155,6 +1165,8 @@ export default function DriverHome() {
         mainStatus: firestoreStatus,
         updatedAt: serverTimestamp(),
         active: firestoreStatus !== "퇴근",
+        // ⭐ 본인 휴차를 누른 날짜 — 관리자 배차 시 "오늘 휴차중" 경고는 이 날짜가 오늘일 때만 띄운다
+        ...(firestoreStatus === "휴차" ? { 휴차일자: today } : {}),
       };
       if (newStatus === "출근") {
         driverUpdate.workStartAt = serverTimestamp();
@@ -1297,13 +1309,20 @@ export default function DriverHome() {
       setLastCompletedOrderId(null);
       // ⭐ 사용자 요청 — 수락/거절하면 상단 "새 배차 N건..." 토스트는 바로 사라져야 한다.
       setOrderBanner(null);
+      // ⭐ 휴차중에 오늘(또는 지난) 오더를 수락하면 일하는 것이므로 자동으로 "대기"로 돌려
+      // 위치 추적·상태 표시가 다시 동작하게 한다. 내일 이후 오더는 휴차 상태 그대로 둔다.
+      const accDate = String(accepted?.상차일 || "").slice(0, 10);
+      if ((driver?.status === "휴차" || driver?.mainStatus === "휴차") && (!accDate || accDate <= kstDateStr())) {
+        updateDoc(doc(db, "drivers", uid), { status: "대기", mainStatus: "대기", active: false, updatedAt: serverTimestamp() }).catch(() => {});
+        showToast("오더를 수락했습니다 — 휴차를 해제하고 대기 상태로 바꿨습니다");
+      } else
       showToast("오더를 수락했습니다");
     } catch (e) {
       showToast("처리 중 오류가 발생했습니다");
     } finally {
       setOrderActionLoading(false);
     }
-  }, [orderActionLoading, myOrders]);
+  }, [orderActionLoading, myOrders, driver?.status, driver?.mainStatus, uid]);
 
   const handleRejectOrderSubmit = useCallback(async () => {
     if (!rejectModal || orderActionLoading) return;
@@ -2018,6 +2037,7 @@ export default function DriverHome() {
               )}
               {pendingOrders.map(o => (
                 <PendingOrderCard key={o._id} order={o} loading={orderActionLoading}
+                  resting={driver?.status === "휴차" || driver?.mainStatus === "휴차"}
                   onAccept={() => handleAcceptOrder(o._id, o.__col)}
                   onReject={() => { setRejectModal({ orderId: o._id, col: o.__col }); setRejectReason(""); }}
                   onCopy={copyText} />
