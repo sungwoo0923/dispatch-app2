@@ -11885,6 +11885,12 @@ const handleAssignClick = () => {
           <div className="min-w-0">
             <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">거래처명</div>
             <span className="block text-[13px] font-bold text-gray-700 truncate">{order.거래처명 || "-"}</span>
+            {(String(order.운행유형 || "").trim() === "왕복" || order.회차총수 > 1) && (
+              <div className="flex items-center gap-1 mt-0.5">
+                {String(order.운행유형 || "").trim() === "왕복" && <span className="text-[10px] font-extrabold bg-[#1B2B4B] text-white px-1.5 py-0.5 rounded">왕복</span>}
+                <RotationBadge order={order} className="!ml-0" />
+              </div>
+            )}
           </div>
           <div className={`flex items-center gap-2 shrink-0 ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"}`}>
             {(order.메모 || order.적요) && (

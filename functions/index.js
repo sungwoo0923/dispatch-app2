@@ -777,6 +777,7 @@ const ORDER_WATCH_GROUPS = [
   ["상차일시", ["상차일", "상차시간"]],
   ["하차일시", ["하차일", "하차시간"]],
   ["화물정보", ["화물내용", "차량톤수", "차량종류"]],
+  ["회전수", ["회전수"]],
   ["운임", ["기사운임", "지급방식"]],
   ["담당자 연락처", ["상차지담당자", "상차지담당자번호", "하차지담당자", "하차지담당자번호"]],
   ["전달사항", ["전달사항"]],
@@ -796,8 +797,10 @@ exports.notifyFleetOrderModified =
       if (!plate || plate !== normalizePlateServer(before["차량번호"] || "")) return;
 
       const norm = (v) => (v == null ? "" : String(v).trim());
+      // 회전수는 비어있음/1을 같은 값(1회)으로 본다
+      const normF = (f, v) => (f === "회전수" ? (Number(v) > 1 ? String(Math.floor(Number(v))) : "") : norm(v));
       const labels = ORDER_WATCH_GROUPS
-        .filter(([, fields]) => fields.some((f) => norm(before[f]) !== norm(after[f])))
+        .filter(([, fields]) => fields.some((f) => normF(f, before[f]) !== normF(f, after[f])))
         .map(([label]) => label);
       if (!labels.length) return;
 
