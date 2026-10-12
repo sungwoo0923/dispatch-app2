@@ -12338,7 +12338,7 @@ if (rec.차량번호) {
       type: "new_order",
       orderId: null,
       title: "배차오더가 도착했습니다",
-      body: `${rec.거래처명 || ""} ${rec.상차지명 || "-"} → ${rec.하차지명 || "-"}`,
+      body: `${rec.거래처명 || ""} ${rec.상차지명 || "-"} → ${rec.하차지명 || "-"}${rec.운행유형 === "왕복" && Number(rec.회전수) > 1 ? (rec.회전방식 === "분리" ? ` (회전운행 ${rec.회전수}회차 분리)` : ` (${rec.회전수}회전)`) : ""}`,
       createdAt: serverTimestamp(),
       read: false,
     }).catch(() => {});
@@ -13901,13 +13901,15 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
 </button>
 
 {/* 왕복 */}
-<button type="button" onClick={() => onChange("운행유형", form.운행유형 === "왕복" ? "편도" : "왕복")}
+<button type="button" onClick={() => setForm((p) => p.운행유형 === "왕복"
+  ? { ...p, 운행유형: "편도", 회전수: 1, 회전방식: "묶기" }
+  : { ...p, 운행유형: "왕복" })}
   className={`px-3 py-1.5 text-sm font-bold rounded-lg border transition-all ${form.운행유형 === "왕복" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
   왕복
 </button>
 
 {/* ⭐ 회전 운행 — 같은 상/하차지를 2회 이상 반복 (묶기: 1건+회전수 / 나누기: N건 분리) */}
-<RotationPicker
+{form.운행유형 === "왕복" && <RotationPicker
   count={form.회전수 || 1}
   mode={form.회전방식 || "묶기"}
   onChange={(c, m) => setForm((p) => ({ ...p, 회전수: c, 회전방식: m }))}
@@ -13916,7 +13918,7 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
     const sale = num(p.청구운임) * n, drv = num(p.기사운임) * n;
     return { ...p, 청구운임: sale ? String(sale) : p.청구운임, 기사운임: drv ? String(drv) : p.기사운임, 수수료: String(sale - drv) };
   }) : undefined}
-/>
+/>}
 
 {/* 긴급 */}
 <button type="button" onClick={() => onChange("긴급", !form.긴급)}
@@ -30813,13 +30815,21 @@ value={copyTarget?.화물수량 || ""}
                 type="button"
                 onClick={() => setEditTarget((p) => {
                   const next = p.운행유형 === "왕복" ? "편도" : "왕복";
-                  setEdited((prev) => ({ ...prev, [p._id]: { ...(prev[p._id] || {}), 운행유형: next } }));
-                  return { ...p, 운행유형: next };
+                  const rot = next === "왕복" ? {} : { 회전수: 1 };
+                  setEdited((prev) => ({ ...prev, [p._id]: { ...(prev[p._id] || {}), 운행유형: next, ...rot } }));
+                  return { ...p, 운행유형: next, ...rot };
                 })}
                 className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${editTarget.운행유형 === "왕복" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
               >
                 왕복
               </button>
+              {editTarget.운행유형 === "왕복" && (
+                <RotationPicker size="sm" allowSplit={false} count={editTarget.회전수 || 1}
+                  onChange={(c) => setEditTarget((p) => {
+                    setEdited((prev) => ({ ...prev, [p._id]: { ...(prev[p._id] || {}), 회전수: c } }));
+                    return { ...p, 회전수: c };
+                  })} />
+              )}
               <button
                 type="button"
                 onClick={() => setEditTarget((p) => ({ ...p, 혼적: !p.혼적, 독차: p.혼적 ? p.독차 : false }))}
@@ -32003,6 +32013,7 @@ const ALLOWED_FIELDS = [
   "하차지담당자번호",
   "하차방법",
   "운행유형",
+  "회전수",
   "혼적", "독차",
   "긴급", "운임보정",
   "배차상태",
@@ -36668,7 +36679,7 @@ return `[파렛전표/거래명세서 업로드]
 ${uploadUrl}
 
 ${/(냉장|냉동)/i.test(r.차량종류||"-") ? "*냉장(0~10도유지),냉동(-18도이하)*\n" : "*관련 서류 업로드 필수*\n"}${r.지급방식 === "착불" ? "*착불건입니다*" : r.지급방식 === "선불" ? "*선불건입니다*" : "*결제일 링크 참고하세요*"}
-${isChain5d ? "" : dateNotice}${dateText}${r.운행유형==="왕복"?"\n[왕복운행]":""}
+${isChain5d ? "" : dateNotice}${dateText}${r.운행유형==="왕복"?"\n[왕복운행]":""}${rotationNotice(r)}
 
 ${coreBlock5d}
 
@@ -36803,7 +36814,7 @@ ${kind}방법 : ${e.method || "-"}`;
 
 const coreBlock5f = isChain5f ? _chainBlock5f : _fanOutBlock5f;
 
-        return `${isChain5f ? "" : dateNotice}${r.상차일||""} ${yoil}${r.운행유형==="왕복"?"\n[왕복운행]":""}
+        return `${isChain5f ? "" : dateNotice}${r.상차일||""} ${yoil}${r.운행유형==="왕복"?"\n[왕복운행]":""}${rotationNotice(r)}
 
 ${coreBlock5f}
 
@@ -39302,10 +39313,14 @@ return (
                 긴급
               </button>
               <button type="button"
-                onClick={() => setEditTarget((p) => ({ ...p, 운행유형: p.운행유형 === "왕복" ? "편도" : "왕복" }))}
+                onClick={() => setEditTarget((p) => (p.운행유형 === "왕복" ? { ...p, 운행유형: "편도", 회전수: 1 } : { ...p, 운행유형: "왕복" }))}
                 className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${editTarget.운행유형 === "왕복" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
                 왕복
               </button>
+              {editTarget.운행유형 === "왕복" && (
+                <RotationPicker size="sm" allowSplit={false} count={editTarget.회전수 || 1}
+                  onChange={(c) => setEditTarget((p) => ({ ...p, 회전수: c }))} />
+              )}
               <button type="button"
                 onClick={() => setEditTarget((p) => ({ ...p, 혼적: !p.혼적, 독차: p.혼적 ? p.독차 : false }))}
                 className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${editTarget.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
@@ -40437,6 +40452,7 @@ return (
       "하차지담당자번호",
       "하차방법",
       "운행유형",
+      "회전수",
       "혼적", "독차",
       "긴급",
       "운임보정",

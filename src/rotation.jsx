@@ -41,7 +41,8 @@ export function RotationBadge({ order, className = "" }) {
 
 // 저장 직전 — 나누기 모드면 N건 레코드로 펼친다(묶기/1회면 그대로 1건)
 export function expandRotation(rec) {
-  const n = rotationCount(rec);
+  // 회전은 왕복일 때만 의미가 있다 — 왕복이 아니면 항상 1회
+  const n = rec?.운행유형 === "왕복" ? rotationCount(rec) : 1;
   const { 회전방식, ...base } = rec;
   if (n <= 1) return [{ ...base, 회전수: 1 }];
   if (회전방식 !== "분리") return [{ ...base, 회전수: n, 완료회차: 0 }];
@@ -50,7 +51,7 @@ export function expandRotation(rec) {
 }
 
 // 등록폼용 선택기 — [−] 3 [+] 회전  (● 한 오더로 묶기 ○ N건으로 나누기)  [운임 ×N]
-export function RotationPicker({ count = 1, mode = "묶기", onChange, onMultiplyFare, accent = "#1B2B4B", size = "md" }) {
+export function RotationPicker({ count = 1, mode = "묶기", onChange, onMultiplyFare, accent = "#1B2B4B", size = "md", allowSplit = true }) {
   const n = Math.max(1, Math.min(ROTATION_MAX, Number(count) || 1));
   const sm = size === "sm";
   const btn = `${sm ? "w-6 h-6 text-[13px]" : "w-7 h-7 text-sm"} rounded-md border border-gray-300 bg-white font-bold text-gray-700 active:scale-95`;
@@ -63,7 +64,7 @@ export function RotationPicker({ count = 1, mode = "묶기", onChange, onMultipl
       <button type="button" className={btn} onClick={() => set(n + 1)}>+</button>
       {n > 1 && (
         <>
-          {["묶기", "분리"].map(m => (
+          {allowSplit && ["묶기", "분리"].map(m => (
             <button key={m} type="button" onClick={() => set(n, m)}
               className={`px-2 py-1 rounded-md border font-bold whitespace-nowrap ${mode === m ? "text-white" : "bg-white text-gray-600 border-gray-300"}`}
               style={mode === m ? { background: accent, borderColor: accent } : undefined}>

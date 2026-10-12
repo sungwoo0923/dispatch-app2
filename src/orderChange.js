@@ -8,6 +8,7 @@ export const WATCH_GROUPS = [
   { label: "상차일시", fields: ["상차일", "상차시간"] },
   { label: "하차일시", fields: ["하차일", "하차시간"] },
   { label: "화물정보", fields: ["화물내용", "차량톤수", "차량종류"] },
+  { label: "회전수", fields: ["회전수"] },
   { label: "운임", fields: ["기사운임", "지급방식"] },
   { label: "담당자 연락처", fields: ["상차지담당자", "상차지담당자번호", "하차지담당자", "하차지담당자번호"] },
   { label: "전달사항", fields: ["전달사항"] },
@@ -15,10 +16,12 @@ export const WATCH_GROUPS = [
 export const WATCH_FIELDS = WATCH_GROUPS.flatMap(g => g.fields);
 
 const norm = (v) => (v == null ? "" : String(v).trim());
+// 회전수는 비어있음/1을 같은 값(1회)으로 본다 — 수정 저장 시 1이 새로 들어가도 변경으로 잡지 않게
+const normF = (f, v) => (f === "회전수" ? (Number(v) > 1 ? String(Math.floor(Number(v))) : "") : norm(v));
 
 export function snapshotOrder(o) {
   const snap = {};
-  WATCH_FIELDS.forEach(f => { snap[f] = norm(o?.[f]); });
+  WATCH_FIELDS.forEach(f => { snap[f] = normF(f, o?.[f]); });
   return snap;
 }
 
@@ -26,7 +29,7 @@ export function snapshotOrder(o) {
 export function changedFields(o) {
   const base = o?.기사확인값;
   if (!base || typeof base !== "object") return [];
-  return WATCH_FIELDS.filter(f => f in base && norm(base[f]) !== norm(o?.[f]));
+  return WATCH_FIELDS.filter(f => f in base && normF(f, base[f]) !== normF(f, o?.[f]));
 }
 
 export function changedLabels(fields) {

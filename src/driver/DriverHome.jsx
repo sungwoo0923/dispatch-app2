@@ -361,13 +361,29 @@ function OrderDetailBody({ o, onCopy, changed = [] }) {
   );
 }
 
+// ⭐ 관리자가 회전 운행(2회전·3회전…)으로 준 오더 표시
+function RotTag({ o, style }) {
+  const label = rotationLabel(o);
+  if (!label) return null;
+  return (
+    <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: "#d97706", padding: "3px 8px", borderRadius: 20, whiteSpace: "nowrap", flexShrink: 0, ...style }}>
+      🔁 {label}
+    </span>
+  );
+}
+
 function PendingOrderCard({ order: o, loading, onAccept, onReject, onCopy }) {
   return (
     <div style={{ background: "#fff", border: "2px solid #1B2B4B", borderRadius: 16, padding: 16, boxShadow: "0 4px 16px rgba(27,43,75,0.12)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-        <span style={{ fontSize: 14, fontWeight: 800, color: "#1B2B4B" }}>{o.거래처명 || "거래처 미입력"}</span>
+        <span style={{ fontSize: 14, fontWeight: 800, color: "#1B2B4B", display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>{o.거래처명 || "거래처 미입력"}<RotTag o={o} /></span>
         <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: "#f59e0b", padding: "3px 9px", borderRadius: 20, flexShrink: 0 }}>오더 확인 필요</span>
       </div>
+      {rotationCount(o) > 1 && (
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#92400e", background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 10, padding: "8px 10px", marginBottom: 8 }}>
+          🔁 같은 상/하차지를 <b>{rotationCount(o)}번</b> 운행하는 오더입니다
+        </div>
+      )}
       <OrderDetailBody o={o} onCopy={onCopy} />
       <DispatcherLine order={o} />
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
@@ -404,7 +420,7 @@ function ActiveOrderCard({ order: o, loading, onComplete, onRoundComplete, onCop
   return (
     <div style={{ background: "#fff", border: "2px solid #1B2B4B", borderRadius: 16, padding: 16, boxShadow: "0 4px 16px rgba(27,43,75,0.12)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-        <span style={{ fontSize: 14, fontWeight: 800, color: "#1B2B4B" }}>{o.거래처명 || "-"}</span>
+        <span style={{ fontSize: 14, fontWeight: 800, color: "#1B2B4B", display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>{o.거래처명 || "-"}<RotTag o={o} /></span>
         <span style={{ fontSize: 12, fontWeight: 800, color: "#1B2B4B", display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#1B2B4B", animation: "fmBlink 1.2s ease-in-out infinite" }} /> 운송중
         </span>
@@ -2826,6 +2842,7 @@ export default function DriverHome() {
                                 </td>
                                 <td style={{ padding: "9px 10px", fontSize: 12, color: "#111827", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap" }}>
                                   {o.상차지명 || "-"} → {o.하차지명 || "-"}
+                                  <RotTag o={o} style={{ marginLeft: 5, fontSize: 9, padding: "1px 5px" }} />
                                 </td>
                                 <td style={{ padding: "9px 10px", fontSize: 12, color: "#6b7280", textAlign: "center", whiteSpace: "nowrap" }}>
                                   {[o.차량톤수, o.화물내용].filter(Boolean).join(" · ") || "-"}

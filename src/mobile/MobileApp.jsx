@@ -51,7 +51,7 @@ import { db, auth } from "../firebase";
 import { signOut } from "firebase/auth";
 import { version as APP_VERSION } from "../../package.json";
 import { calcLeaveBalance } from "../leaveUtils";
-import { RotationPicker, RotationBadge, expandRotation } from "../rotation";
+import { RotationPicker, RotationBadge, expandRotation, rotationNotice } from "../rotation";
 import { isWeekend, findApprovedLeaveForDate, isHoliday } from "../attendanceUtils";
 
 
@@ -3808,7 +3808,7 @@ const groupedByDate = useMemo(() => {
       긴급: form.긴급 === true,          // ← PC 긴급 버튼과 동일 필드
       ...(canSeeBlind() ? { 블라인드: form.블라인드 === true } : {}), // ⭐ 최고관리자 전용 블라인드
       운행유형: form.운행유형 || "",     // ← PC 왕복/편도 버튼과 동일 필드
-      회전수: Math.max(1, Number(form.회전수) || 1), // ⭐ 회전 운행(같은 구간 N회)
+      회전수: form.운행유형 === "왕복" ? Math.max(1, Number(form.회전수) || 1) : 1, // ⭐ 회전 운행(왕복일 때만)
       적요: form.적요 || "",
       메모: form.적요 || "",
       전달사항: form.전달사항 || "",
@@ -15432,7 +15432,7 @@ const pickDrop = (c) => {
           input={
             <div className="flex items-center gap-1.5 flex-nowrap whitespace-nowrap">
               <button type="button"
-                onClick={() => update("운행유형", form.운행유형 === "왕복" ? "편도" : "왕복")}
+                onClick={() => setForm(p => p.운행유형 === "왕복" ? { ...p, 운행유형: "편도", 회전수: 1, 회전방식: "묶기" } : { ...p, 운행유형: "왕복" })}
                 className={`shrink-0 whitespace-nowrap px-2.5 py-1.5 text-[13px] font-bold rounded-lg border transition-all ${form.운행유형 === "왕복" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-300"}`}>
                 왕복
               </button>
@@ -15452,11 +15452,13 @@ const pickDrop = (c) => {
             </div>
           }
         />
+        {form.운행유형 === "왕복" && (
         <RowLabelInput
           label="회전"
           input={
             <RotationPicker
               size="sm"
+              allowSplit={!form._editId}
               count={form.회전수 || 1}
               mode={form._editId ? "묶기" : (form.회전방식 || "묶기")}
               accent={cardVersionB ? "#1B2B4B" : "#2563eb"}
@@ -15469,6 +15471,7 @@ const pickDrop = (c) => {
             />
           }
         />
+        )}
         </fieldset>
       </div>
 
@@ -17586,7 +17589,7 @@ ${kind}방법 : ${e.method || "-"}`;
       const coreBlockMf = isChainMf ? _chainBlockMf : _fanOutBlockMf;
 
       text = `
-${isChainMf ? "" : (header ? header + "\n\n" : "")}${order.상차일} ${getYoil(order.상차일)}
+${isChainMf ? "" : (header ? header + "\n\n" : "")}${order.상차일} ${getYoil(order.상차일)}${order.운행유형 === "왕복" ? "\n[왕복운행]" : ""}${rotationNotice(order)}
 
 ${coreBlockMf}
 
@@ -17723,7 +17726,7 @@ ${kind}방법 : ${e.method || "-"}`;
 ${uploadUrl}
 
 ${isColdVeh ? "*냉장(0~10도유지),냉동(-18도이하)*\n" : "*관련 서류 업로드 필수*\n"}${order.지급방식 === "착불" ? "*착불건입니다*" : order.지급방식 === "선불" ? "*선불건입니다*" : "*결제일 링크 참고하세요*"}
-${isChainMd ? "" : dateNotice2}${order.상차일 || ""} ${getYoil(order.상차일)}
+${isChainMd ? "" : dateNotice2}${order.상차일 || ""} ${getYoil(order.상차일)}${order.운행유형 === "왕복" ? "\n[왕복운행]" : ""}${rotationNotice(order)}
 
 ${coreBlockMd}${order.전달사항?.trim() ? `\n\n📢 전달사항\n${order.전달사항.trim()}` : ""}
 
