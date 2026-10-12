@@ -22,9 +22,10 @@ export function findHolidayConflict(drivers, plate, dateStr) {
 
 // ⭐ 휴차 확인 — 두 가지를 함께 본다.
 //  1) 지정 휴차: 그 오더의 상차일 요일이 기사 근무가능요일이 아님
-//  2) 본인 휴차: 기사가 앱에서 직접 "휴차"를 누른 상태 — 오늘 일을 마치고 누르는 경우가 많아,
-//     "오늘(상차일=오늘)" 오더일 때만 경고한다. 내일 이후 오더는 기사가 다음날 다시 일하므로 경고하지 않는다.
-//     (휴차일자가 오늘이 아니면 — 어제 누르고 안 풀었으면 — 지난 상태로 보고 무시)
+//  2) 본인 휴차: 기사가 앱에서 직접 "휴차"를 누른 상태 — 오늘 오더든 내일 이후 오더든 모두 경고한다.
+//     (다음날 오더를 전날 미리 주는 경우가 많아, 휴차중인 기사에게 가는 오더는 날짜와 상관없이 확인받는다.
+//      "진행"을 누르면 그대로 기사앱으로 전달된다.) 지난 날짜 오더는 제외.
+//     휴차일자가 오늘이 아니면(어제 누르고 안 풀었으면) 지난 상태로 보고 무시한다.
 export function findRestConflict(drivers, plate, dateStr) {
   const p = normPlate(plate);
   if (!p) return null;
@@ -36,7 +37,7 @@ export function findRestConflict(drivers, plate, dateStr) {
   const designated = !!(days.length && wd && !days.includes(wd));
   const st = drv.status || drv.mainStatus || drv.상태 || "";
   const restDate = drv.휴차일자 ? String(drv.휴차일자).slice(0, 10) : "";
-  const manual = st === "휴차" && date === kstToday() && (!restDate || restDate === kstToday());
+  const manual = st === "휴차" && date >= kstToday() && (!restDate || restDate === kstToday());
   if (!designated && !manual) return null;
   return { driver: drv, weekday: wd, days, date, designated, manual };
 }
@@ -82,7 +83,10 @@ export function confirmRestDispatch(conflict) {
             입력하신 <b>${esc(driver.이름 || "-")}</b> <span style="color:#6b7280">(${esc(driver.차량번호 || "-")})</span> 기사님은<br/>
             ${designated ? `<b style="color:#ef4444">${esc(date)} (${esc(weekday)})</b> 지정 휴차일입니다.` : ""}
             ${designated && manual ? "<br/>" : ""}
-            ${manual ? `<b style="color:#ef4444">현재 휴차중</b>입니다. <span style="color:#6b7280">(오늘 일을 마치고 직접 휴차 처리)</span>` : ""}
+            ${manual ? `<b style="color:#ef4444">현재 휴차중</b>입니다. <span style="color:#6b7280">(기사님이 직접 휴차 처리)</span>` : ""}
+          </div>
+          <div style="margin-top:10px;padding:8px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;font-size:13px;color:#9a3412;font-weight:700">
+            배정하려는 오더: ${esc(date)} (${esc(weekday)}) ${date === kstToday() ? "· 오늘 오더" : date > kstToday() ? "· 미리 주는 오더" : ""}
           </div>
           ${designated ? `<div style="margin-top:12px;padding:10px 12px;background:#f8fafc;border-radius:10px">
             <div style="font-size:12px;font-weight:800;color:#6b7280;margin-bottom:6px">근무가능요일</div>
