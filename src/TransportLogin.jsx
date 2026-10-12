@@ -1,5 +1,6 @@
 // ======================= src/TransportLogin.jsx =======================
 import React, { useState, useEffect } from "react";
+import { safeLocalSet } from "./safeStorage";
 import { auth, db } from "./firebase";
 import { signInWithEmailAndPassword, sendPasswordResetEmail, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence, getAuth } from "firebase/auth";
 import { initializeApp, getApps } from "firebase/app";
@@ -211,19 +212,19 @@ export default function TransportLogin() {
           }
         }
 
-        localStorage.setItem("loginCompany", inputCompanyName);
-        localStorage.setItem("userCompany", inputCompanyName);
+        safeLocalSet("loginCompany", inputCompanyName);
+        safeLocalSet("userCompany", inputCompanyName);
       } else {
         // totalMaster: loginCompany를 반드시 갱신해야 헤더에 올바른 회사명이 표시됨
-        localStorage.setItem("loginCompany", inputCompanyName);
+        safeLocalSet("loginCompany", inputCompanyName);
       }
 
       if (inputCompanyCode) {
-        localStorage.setItem("transportCode", inputCompanyCode);
+        safeLocalSet("transportCode", inputCompanyCode);
       }
 
       try {
-        localStorage.setItem(SAVED_KEY, JSON.stringify(rememberInfo
+        safeLocalSet(SAVED_KEY, JSON.stringify(rememberInfo
           ? { remember: true, autoLogin, companyCode: inputCompanyCode, companyName: inputCompanyName, email: email.trim() }
           : { remember: false, autoLogin }));
       } catch { /* 저장 실패 무시 */ }

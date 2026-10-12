@@ -1,6 +1,7 @@
 // ======================= src/App.jsx =======================
 
 import React, { useState, useEffect, useRef } from "react";
+import { safeLocalSet } from "./safeStorage";
 import UpdateBanner from "./UpdateBanner";
 import {
   BrowserRouter as Router,
@@ -466,10 +467,10 @@ export default function App() {
             // totalMaster uses the company they typed at login, not their Firestore doc
             const loginCompany = localStorage.getItem("loginCompany") || "";
             setUserCompany(loginCompany);
-            try { localStorage.setItem("userCompany", loginCompany); } catch {}
+            safeLocalSet("userCompany", loginCompany);
           } else {
             setUserCompany(data.companyName || "");
-            try { localStorage.setItem("userCompany", data.companyName || ""); } catch {};
+            safeLocalSet("userCompany", data.companyName || "");
           }
           // localStorage가 꽉 찬 경우 대용량 항목 먼저 정리 후 저장
           const safeSetItem = (key, val) => {
@@ -477,7 +478,7 @@ export default function App() {
               ["mobileNotifs", "attachments", "detailAttachments"].forEach(k => { try { localStorage.removeItem(k); } catch {} });
               // shownNotifs_ prefix 항목도 정리
               Object.keys(localStorage).filter(k2 => k2.startsWith("shownNotifs_") || k2.startsWith("attach_")).forEach(k2 => { try { localStorage.removeItem(k2); } catch {} });
-              try { localStorage.setItem(key, val); } catch {}
+              safeLocalSet(key, val);
             }
           };
           safeSetItem("role", dataRole);
@@ -488,7 +489,7 @@ export default function App() {
           setApproved(true);
           const loginCompany = localStorage.getItem("loginCompany") || "";
           setUserCompany(loginCompany);
-          try { localStorage.setItem("userCompany", loginCompany); localStorage.setItem("role", "totalMaster"); } catch {}
+          safeLocalSet("userCompany", loginCompany); safeLocalSet("role", "totalMaster");
         } else {
           setRole(null);
           setApproved(false);
