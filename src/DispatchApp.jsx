@@ -21463,7 +21463,7 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
             <div className="grid grid-cols-2 gap-2">
               {(() => {
                 const cargoIsUnit = !!(stop.화물타입 && stop.화물타입 !== "없음");
-                const cargoDisabled = !cargoIsUnit && !String(stop.화물내용||"").trim();
+                const cargoDisabled = false; // "없음"이면 자유 입력, 단위 선택 시엔 숫자만
                 return (
               <div className="relative">
                 <input autoComplete="off" className={`${inputCls} pr-[62px] ${cargoDisabled ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
@@ -21484,8 +21484,8 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                   }} />
                 <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
                   <select className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
-                    value={stop.화물타입??"파레트"}
-                    onChange={e=>{const t=e.target.value;setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],화물타입:t};return c;});}}>
+                    value={stop.화물타입||""}
+                    onChange={e=>{const t=e.target.value;setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],화물타입:t,화물내용:t?String(c[idx].화물내용||"").replace(/[^\d.]/g,""):c[idx].화물내용};return c;});}}>
                     <option value="">없음</option>
                     {cargoTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
                   </select>
@@ -21497,7 +21497,7 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
               {(() => {
                 const tonIsUnit = !!(stop.톤수타입 && stop.톤수타입 !== "없음");
                 const tonCurVal = tonIsUnit ? (stop.톤수값||"") : (stop.차량톤수||"");
-                const tonDisabled = !tonIsUnit && !String(tonCurVal||"").trim();
+                const tonDisabled = false; // "없음"이면 자유 입력, 단위 선택 시엔 숫자만
                 return (
               <div className="relative">
                 <input autoComplete="off" className={`${inputCls} pr-[52px] ${tonDisabled ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
@@ -21514,8 +21514,8 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                   }} />
                 <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
                   <select className="w-[48px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
-                    value={stop.톤수타입??"톤"}
-                    onChange={e=>{const t=e.target.value;setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],톤수타입:t,차량톤수:t?`${c[idx].톤수값||""}${t}`:(c[idx].톤수값||"")};return c;});}}>
+                    value={stop.톤수타입||""}
+                    onChange={e=>{const t=e.target.value;setEditList(prev=>{const c=[...prev];const tv=t?String(c[idx].톤수값||c[idx].차량톤수||"").replace(/[^\d.]/g,""):(c[idx].톤수값||c[idx].차량톤수||"");c[idx]={...c[idx],톤수타입:t,톤수값:tv,차량톤수:t?(tv?`${tv}${t}`:""):tv};return c;});}}>
                     <option value="">없음</option>
                     {tonTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
                   </select>

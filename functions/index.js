@@ -363,29 +363,19 @@ exports.notifyDispatchCanceled =
       const nextStatus = String(after["배차상태"] || "").trim();
       if (prevStatus === "배차취소" || nextStatus !== "배차취소") return; // 새로 취소된 경우만
 
-      const tokens = await getTokensForType("배차취소");
-      if (tokens.length) {
-        await sendPushAndCleanup(tokens, {
-          notification: {
-            title: "배차취소",
-            body: `${after["거래처명"] || ""} ${after["상차지명"] || "-"} → ${after["하차지명"] || "-"} 오더가 취소되었습니다.`,
-          },
-          android: { priority: "high" },
-          apns: { payload: { aps: { sound: "default" } } },
-        }, "배차취소(취소상태 전환)");
-      }
-
       // ⭐ 사용자 요청 — PC "삭제" 버튼은 실제로는 deleteDoc이 아니라 배차상태를
       // "배차취소"로 바꾸는 소프트 취소다(모바일 취소내역/재등록을 위해). 그래서
       // 지입 기사에게 배정(대기/수락/완료)돼 있던 오더가 여기로 취소되면
       // notifyDispatchDeleted(onDelete)는 전혀 발동하지 않는다 — 여기서 그 기사
       // 본인에게 OS 푸시를 보낸다(알림함 기록은 클라이언트 removeDispatch가 남김).
       // 취소 직전 배정 정보는 before에만 남아있다(after는 이미 지워졌을 수 있음).
+      // ⭐ 기사 본인 푸시를 관리자 알림보다 먼저 보낸다(관리자 쪽 처리 중 문제가 생겨도 기사 알림은 가게).
+      // 기사확인상태가 다른 저장에서 먼저 지워졌더라도, 차량번호가 지입 기사면 보낸다(거절한 오더만 제외).
       const checkState = before["기사확인상태"];
-      if (checkState && checkState !== "거절" && before["차량번호"]) {
+      if (checkState !== "거절" && before["차량번호"]) try {
         const plate = normalizePlateServer(before["차량번호"]);
         const driverSnap = await db.collection("drivers").where("차량번호", "==", before["차량번호"]).limit(5).get();
-        const driverDoc = driverSnap.docs.find((d) => normalizePlateServer(d.data()["차량번호"]) === plate);
+        const driverDoc = driverSnap.docs.find((d) => normalizePlateServer(d.data()["차량번호"]) === plate && (checkState || d.data()["등급"] === "지입"));
         if (driverDoc) {
           const userSnap = await db.collection("users").doc(driverDoc.id).get();
           const userData = userSnap.exists ? userSnap.data() : null;
@@ -399,8 +389,24 @@ exports.notifyDispatchCanceled =
               android: { priority: "high" },
               apns: { payload: { aps: { sound: "default" } } },
             }, "지입기사 오더취소(소프트)");
+          } else {
+            console.log("🚫 오더취소 기사 푸시 생략(알림꺼짐/토큰없음):", driverDoc.id);
           }
+        } else {
+          console.log("🚫 오더취소: 배정 기사 문서를 찾을 수 없음:", before["차량번호"]);
         }
+      } catch (e) { console.error("오더취소 기사 푸시 실패:", e?.message || e); }
+
+      const tokens = await getTokensForType("배차취소");
+      if (tokens.length) {
+        await sendPushAndCleanup(tokens, {
+          notification: {
+            title: "배차취소",
+            body: `${after["거래처명"] || ""} ${after["상차지명"] || "-"} → ${after["하차지명"] || "-"} 오더가 취소되었습니다.`,
+          },
+          android: { priority: "high" },
+          apns: { payload: { aps: { sound: "default" } } },
+        }, "배차취소(취소상태 전환)");
       }
     });
 
