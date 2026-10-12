@@ -355,7 +355,8 @@ exports.notifyDispatchCanceled =
 
       const before = change.before.data();
       const after = change.after.data();
-      if (after?.블라인드 === true) return; // ⭐ 블라인드 오더(최고관리자 전용)는 알림 제외
+      // ⭐ 블라인드 오더는 관리자 전체 알림만 제외하고, 배정된 기사 본인에게는 취소 알림을 보낸다
+      const isBlind = after?.블라인드 === true;
       if (!before || !after) return;
       if (after.source === "transport_transmit") return;
 
@@ -397,7 +398,7 @@ exports.notifyDispatchCanceled =
         }
       } catch (e) { console.error("오더취소 기사 푸시 실패:", e?.message || e); }
 
-      const tokens = await getTokensForType("배차취소");
+      const tokens = isBlind ? [] : await getTokensForType("배차취소");
       if (tokens.length) {
         await sendPushAndCleanup(tokens, {
           notification: {
@@ -418,14 +419,14 @@ exports.notifyDispatchDeleted =
       if (!["dispatch", "orders"].includes(col)) return;
 
       const data = snap.data();
-      if (data?.블라인드 === true) return; // ⭐ 블라인드 오더(최고관리자 전용)는 알림 제외
+      const isBlind = data?.블라인드 === true; // 블라인드는 관리자 전체 알림만 제외(기사 본인 알림은 보냄)
       if (!data) return;
       if (data.source === "transport_transmit") return;
       // 배차취소로 먼저 바뀐 뒤 나중에 완전삭제된 문서는 위 notifyDispatchCanceled에서
       // 이미 알림을 보냈으니 여기서 또 보내지 않는다(중복 방지).
       if (data["배차상태"] === "배차취소") return;
 
-      const tokens = await getTokensForType("배차취소");
+      const tokens = isBlind ? [] : await getTokensForType("배차취소");
       if (tokens.length) {
         await sendPushAndCleanup(tokens, {
           notification: {
