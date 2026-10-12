@@ -1,6 +1,6 @@
 // ======================= src/TransportLogin.jsx =======================
 import React, { useState, useEffect } from "react";
-import { safeLocalSet } from "./safeStorage";
+import { safeLocalSet, isQuota, freeLocalStorage, trimLocalStorage } from "./safeStorage";
 import { auth, db } from "./firebase";
 import { signInWithEmailAndPassword, sendPasswordResetEmail, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence, getAuth } from "firebase/auth";
 import { initializeApp, getApps } from "firebase/app";
@@ -144,12 +144,20 @@ export default function TransportLogin() {
       await setPersistence(auth, autoLogin ? browserLocalPersistence : browserSessionPersistence).catch(() => {});
 
       // 네트워크가 순간 끊기거나 새 버전(서비스워커) 교체 직후엔 첫 요청이 실패할 수 있어 1회 자동 재시도
+      // ⭐ Firebase 로그인 자체가 로그인 정보를 브라우저 저장공간(localStorage)에 쓰는데,
+      // 저장공간이 꽉 차 있으면(오류 22) 로그인이 실패한다 — 미리 큰 캐시를 정리한다.
+      trimLocalStorage();
       let credential;
       try {
         credential = await signInWithEmailAndPassword(auth, email.trim(), pw);
       } catch (e1) {
-        if (e1?.code !== "auth/network-request-failed") throw e1;
-        await new Promise(r => setTimeout(r, 1200));
+        if (isQuota(e1)) {
+          freeLocalStorage(3 * 1024 * 1024);
+        } else if (e1?.code === "auth/network-request-failed") {
+          await new Promise(r => setTimeout(r, 1200));
+        } else {
+          throw e1;
+        }
         credential = await signInWithEmailAndPassword(auth, email.trim(), pw);
       }
       const uid = credential.user.uid;

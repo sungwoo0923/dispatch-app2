@@ -4,7 +4,7 @@
 const KEEP = new Set([
   "transportLoginSaved", "driverLoginSaved", "loginCompany", "userCompany", "transportCode", "role",
 ]);
-const isQuota = (e) => e && (e.code === 22 || e.code === 1014 || e.name === "QuotaExceededError" || e.name === "NS_ERROR_DOM_QUOTA_REACHED");
+export const isQuota = (e) => e && (e.code === 22 || e.code === 1014 || e.name === "QuotaExceededError" || e.name === "NS_ERROR_DOM_QUOTA_REACHED");
 
 // 큰 항목부터 지워 needBytes 이상 확보(또는 지울 게 없을 때까지)
 export function freeLocalStorage(needBytes = 512 * 1024) {
@@ -28,4 +28,16 @@ export function safeLocalSet(key, value) {
     freeLocalStorage(Math.max(512 * 1024, String(value).length * 4));
     try { localStorage.setItem(key, value); return true; } catch { return false; }
   }
+}
+
+// 전체 사용량(바이트, UTF-16 기준 대략값)
+export function localStorageBytes() {
+  let n = 0;
+  try { for (const k of Object.keys(localStorage)) n += (k.length + (localStorage.getItem(k) || "").length) * 2; } catch { /* noop */ }
+  return n;
+}
+// 앱 시작/로그인 직전 — 4MB를 넘으면 큰 캐시부터 정리해 여유를 만든다(브라우저 한도 약 5MB)
+export function trimLocalStorage(limit = 4 * 1024 * 1024) {
+  const used = localStorageBytes();
+  if (used > limit) freeLocalStorage(used - limit + 1024 * 1024);
 }

@@ -5,6 +5,10 @@ import App from "./App.jsx";
 import ErrorBoundary from "./ErrorBoundary.jsx";
 import "./index.css";
 import { preloadTmapWhenIdle } from "./tmapLoader";
+import { trimLocalStorage } from "./safeStorage";
+
+// ⭐ 브라우저 저장공간(약 5MB)이 캐시로 꽉 차면 로그인 정보 저장이 실패해 로그인이 안 된다 — 시작할 때 미리 정리
+trimLocalStorage();
 
 // ⭐ 지도 SDK는 첫 화면이 다 뜬 뒤 여유 시간에 미리 받아둔다(첫 로딩 속도 개선)
 preloadTmapWhenIdle();
