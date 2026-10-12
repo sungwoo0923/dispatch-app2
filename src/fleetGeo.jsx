@@ -304,7 +304,7 @@ export function useRemainInfo(order, location, phase) {
   const hasLoc = location?.lat != null && location?.lng != null;
   const visited = isPickupVisited(order);
   let target = null, label = "", from = hasLoc ? location : null;
-  if (phase === "상차지도착") { target = dropGeo; label = "상차 후 하차지까지"; from = pickupGeo ? { lat: pickupGeo.lat, lng: pickupGeo.lng } : null; }
+  if (phase === "상차지도착") { target = dropGeo; label = "하차지까지"; }
   else if (phase === "하차지도착") { target = null; }
   else if (phase === "하차지진입" || visited) { target = dropGeo; label = "하차지까지"; }
   else if (phase === "운송중" || phase === "상차지진입") { target = pickupGeo; label = "상차지까지"; }
@@ -353,11 +353,57 @@ export function isPickupVisited(order) {
   return true;
 }
 
+// ⭐ 수락한 오더가 여러 건이면 "먼저 수락한 오더"부터 진행한다(운송완료 전까지는 그 오더 기준).
+// 기사확인일시(수락 시각) 오름차순, 같으면 상차일·상차시간 순. 수락 시각이 아직 저장 전이면 맨 뒤.
+export function sortActiveOrders(orders = []) {
+  return (orders || [])
+    .filter(r => r?.기사확인상태 === "수락" && !isCanceledRow(r))
+    .slice()
+    .sort((a, b) => {
+      const ta = tsMs(a.기사확인일시) ?? Infinity, tb = tsMs(b.기사확인일시) ?? Infinity;
+      if (ta !== tb) return ta - tb;
+      return `${a.상차일 || ""} ${a.상차시간 || ""}`.localeCompare(`${b.상차일 || ""} ${b.상차시간 || ""}`);
+    });
+}
+export const pickCurrentOrder = (orders) => sortActiveOrders(orders)[0] || null;
+
+// 진행 단계(가로 진행선) — 상차지로 가는 "운송중"과 상차 후 "운송중"을 구분해 보여준다
+export const FLEET_STEPS = ["운송중", "상차지진입", "상차지도착", "하차이동", "하차지진입", "하차지도착"];
+export function fleetStepIndex(order, phase) {
+  if (phase === "상차지진입") return 1;
+  if (phase === "상차지도착") return 2;
+  if (phase === "하차지진입") return 4;
+  if (phase === "하차지도착") return 5;
+  if (phase === "운송중") return isPickupVisited(order) ? 3 : 0;
+  return -1;
+}
+export function FleetStepper({ order, phase }) {
+  const cur = fleetStepIndex(order, phase);
+  if (cur < 0) return null;
+  const LABELS = ["상차지로 이동", "상차지진입", "상차지도착", "하차지로 이동", "하차지진입", "하차지도착"];
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", width: "100%" }}>
+      <style>{`@keyframes kpStepBlink { 0%,100% { box-shadow: 0 0 0 0 rgba(37,99,235,.55); } 50% { box-shadow: 0 0 0 6px rgba(37,99,235,0); } } @keyframes kpStepText { 0%,100% { opacity: 1; } 50% { opacity: .45; } }`}</style>
+      {LABELS.map((lb, i) => {
+        const done = i < cur, now = i === cur;
+        const dot = now ? "#2563eb" : done ? "#1B2B4B" : "#d1d5db";
+        return (
+          <div key={lb} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative", minWidth: 0 }}>
+            {i > 0 && <div style={{ position: "absolute", top: 6, right: "50%", width: "100%", height: 3, background: i <= cur ? "#1B2B4B" : "#e5e7eb", zIndex: 0 }} />}
+            <div style={{ width: now ? 15 : 13, height: now ? 15 : 13, marginTop: now ? -1 : 0, borderRadius: "50%", background: dot, border: "2px solid #fff", zIndex: 1, animation: now ? "kpStepBlink 1.6s ease-in-out infinite" : "none" }} />
+            <div style={{ marginTop: 4, fontSize: 10, lineHeight: 1.2, textAlign: "center", fontWeight: now ? 900 : 700, color: now ? "#2563eb" : done ? "#1B2B4B" : "#9ca3af", wordBreak: "keep-all", animation: now ? "kpStepText 1.6s ease-in-out infinite" : "none" }}>{lb}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // 순수 계산 — 좌표는 캐시에 있는 것만 사용(없으면 "운송중"으로 두고 prefetch로 채운다)
 export function computeFleetPhase({ driverStatus, orders = [], location }) {
   if (driverStatus === "휴차") return "휴차";
   const live = (orders || []).filter(r => !isCanceledRow(r));
-  const active = live.find(r => r.기사확인상태 === "수락");
+  const active = pickCurrentOrder(live);
   if (active) {
     const pg = getCachedGeo(active.상차지주소);
     const dg = getCachedGeo(active.하차지주소);

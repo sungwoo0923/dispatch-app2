@@ -10,7 +10,7 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import { getDrivingRoute, geocodeAddress, haversineKm } from "../tmapFareCalc";
-import { ShortAddr, DropEtaText, RemainText, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS, isPickupVisited } from "../fleetGeo";
+import { ShortAddr, DropEtaText, RemainText, FleetStepper, pickCurrentOrder, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS, isPickupVisited } from "../fleetGeo";
 import { LeafletTrack, MapLegend } from "../mapLeaflet";
 import { modificationStatus } from "../orderChange";
 
@@ -1021,7 +1021,8 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                 // 진행상태(기사확인상태)를 우선 반영한다. 색상도 여기서 통일해 쓴다.
                 const dispatchStatus = driverDispatchStatus(todays, todayStr, d);
                 const color = dispatchStatus.dot;
-                const activeOrder = todays[0] || null;
+                // 수락한 오더가 여러 건이면 먼저 수락한(진행중인) 오더를 보여준다
+                const activeOrder = pickCurrentOrder(todays) || todays[0] || null;
                 const expanded = expandedId === d.id;
                 return (
                   <div
@@ -1110,11 +1111,15 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                           {accepted && (
                             <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #e0e7ff", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 10px" }}>
                               <InfoCell label="진행상황" span>
-                                <span style={{ color: FLEET_PHASE_COLORS[ph] || NAVY }}>{ph}</span>
-                                {ph !== "상차지도착" && ph !== "하차지도착" && (
-                                  <> · <RemainText order={activeOrder} location={d.location} phase={ph} style={{ fontWeight: 800 }} /></>
-                                )}
+                                <div style={{ padding: "6px 0 2px" }}>
+                                  <FleetStepper order={activeOrder} phase={ph} />
+                                </div>
                               </InfoCell>
+                              {ph !== "하차지도착" && (
+                                <InfoCell label="남은 거리 · 시간 (현재 위치 기준)" span>
+                                  <RemainText order={activeOrder} location={d.location} phase={ph} style={{ fontWeight: 800 }} />
+                                </InfoCell>
+                              )}
                               <InfoCell label="하차지 도착예상" span>
                                 <DropEtaText order={activeOrder} driverId={d.id} location={d.location} style={{ fontSize: 13 }}
                                   fallback={<span style={{ color: "#9ca3af", fontWeight: 700 }}>상차지 도착 후 계산됩니다</span>} />
@@ -1358,7 +1363,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                 <div style={{ background: "rgba(255,255,255,0.9)", borderRadius: 8, padding: "5px 10px", fontSize: 11, color: NAVY, fontWeight: 700, backdropFilter: "blur(4px)" }}>
                   {mapSelected.이름} · {timeAgo(mapSelected.updatedAt)} <SpeedBadge d={mapSelected} />
                   {(() => {
-                    const ao = (ordersFor(mapSelected) || []).find(o => o.기사확인상태 === "수락" && o.배차상태 !== "배차취소");
+                    const ao = pickCurrentOrder(ordersFor(mapSelected) || []);
                     if (!ao) return null;
                     const ph = phaseOf(mapSelected);
                     return (

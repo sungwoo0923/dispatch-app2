@@ -8,7 +8,7 @@ import {
 } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { registerPlugin } from "@capacitor/core";
-import { useAddrGeo, computeFleetPhase, useFleetPhaseGeo, getCachedGeo, isPickupVisited } from "../fleetGeo";
+import { useAddrGeo, computeFleetPhase, useFleetPhaseGeo, getCachedGeo, isPickupVisited, sortActiveOrders } from "../fleetGeo";
 import { snapshotOrder, changedFields, changedLabels } from "../orderChange";
 import { rotationCount, rotationDone, rotationLabel } from "../rotation";
 import { haversineKm } from "../tmapFareCalc";
@@ -441,8 +441,10 @@ function useDropCompleteGate(order, pos) {
   return { ok: false, msg: `하차지 1km 이내에서 운송완료 가능 (현재 약 ${km.toFixed(1)}km)` };
 }
 
-function ActiveOrderCard({ order: o, loading, onComplete, onRoundComplete, onCopy, pos, onConfirmChange }) {
-  const gate = useDropCompleteGate(o, pos);
+function ActiveOrderCard({ order: o, loading, onComplete, onRoundComplete, onCopy, pos, onConfirmChange, queued = false, queueNo = 0, photos = [], uploading = false, onUpload }) {
+  const rawGate = useDropCompleteGate(o, pos);
+  // ⭐ 수락한 오더가 여러 건이면 먼저 수락한 오더부터 — 뒤 오더는 위치가 하차지 근처여도 운송완료 불가
+  const gate = queued ? { ok: false, msg: "앞 오더를 운송완료한 뒤 진행할 수 있습니다" } : rawGate;
   const disabled = loading || !gate.ok;
   const changed = changedFields(o);
   const labels = changedLabels(changed);
@@ -456,7 +458,9 @@ function ActiveOrderCard({ order: o, loading, onComplete, onRoundComplete, onCop
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
         <span style={{ fontSize: 14, fontWeight: 800, color: "#1B2B4B", display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>{o.거래처명 || "-"}<RotTag o={o} /></span>
         <span style={{ fontSize: 12, fontWeight: 800, color: "#1B2B4B", display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#1B2B4B", animation: "fmBlink 1.2s ease-in-out infinite" }} /> 운송중
+          {queued
+            ? <span style={{ color: "#6b7280" }}>다음 오더 {queueNo ? `(${queueNo}번째)` : ""}</span>
+            : <><span style={{ width: 7, height: 7, borderRadius: "50%", background: "#1B2B4B", animation: "fmBlink 1.2s ease-in-out infinite" }} /> 운송중</>}
         </span>
       </div>
       {/* ⭐ 관리자가 수락 이후 오더 내용을 수정한 경우 — 변경 항목 안내 + 수정확인 */}
@@ -497,6 +501,36 @@ function ActiveOrderCard({ order: o, loading, onComplete, onRoundComplete, onCop
       {!gate.ok && (
         <div style={{ marginTop: 6, fontSize: 12, fontWeight: 700, color: "#6b7280", textAlign: "center" }}>{gate.msg}</div>
       )}
+      {/* ⭐ 이 오더의 사진 전송 — 올린 사진은 이 오더의 첨부로 들어간다 */}
+      {(() => {
+        const sentLoad = photos.some(p => p.actionType === "상차완료");
+        const sentDrop = photos.some(p => p.actionType === "하차완료");
+        const canLoad = !queued && !sentLoad;
+        const canDrop = !queued && !sentDrop && rawGate.ok;
+        const tile = (label, sent, enabled, actionType, hint) => (
+          <label key={label} style={{
+            flex: 1, padding: "10px 8px", borderRadius: 10, textAlign: "center", display: "block",
+            background: sent ? "#ecfdf5" : enabled ? "#f0fdf4" : "#f9fafb",
+            border: `1.5px solid ${sent ? "#10b981" : enabled ? "#22c55e" : "#e5e7eb"}`,
+            cursor: enabled && !uploading ? "pointer" : "default",
+          }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: sent ? "#047857" : enabled ? "#15803d" : "#9ca3af" }}>{label} 사진</div>
+            <div style={{ fontSize: 13, fontWeight: 900, marginTop: 2, color: sent ? "#047857" : enabled ? "#16a34a" : "#9ca3af" }}>
+              {sent ? "✓ 전송완료" : enabled ? (uploading ? "전송중..." : "탭하여 업로드") : hint}
+            </div>
+            {enabled && !sent && (
+              <input type="file" accept="image/*" capture="environment" style={{ display: "none" }}
+                onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) onUpload?.(f, actionType); }} />
+            )}
+          </label>
+        );
+        return (
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            {tile("상차완료", sentLoad, canLoad, "상차완료", queued ? "앞 오더 진행중" : "미전송")}
+            {tile("하차완료", sentDrop, canDrop, "하차완료", queued ? "앞 오더 진행중" : "하차지 도착 후")}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -1379,7 +1413,8 @@ export default function DriverHome() {
   useEffect(() => {
     if (!uid) return;
     myOrders
-      .filter(o => o.기사확인상태 === "수락" && o.배차상태 !== "배차취소" && o.상차지주소 && !isPickupVisited(o))
+      // 진행중인(먼저 수락한) 오더만 — 뒤 오더 상차지를 지나가도 "다녀옴"으로 기록하지 않는다
+      .filter((o, i, arr) => o === sortActiveOrders(myOrders)[0] && o.상차지주소 && !isPickupVisited(o))
       .forEach(o => {
         const g = getCachedGeo(o.상차지주소);
         if (!g) return;
@@ -1392,8 +1427,11 @@ export default function DriverHome() {
         // "오늘 하루 GPS 기록 전체"로 검사했다 → 오전에 그 상차지 근처를 지나갔으면 수락하자마자
         // "상차지 다녀옴"으로 잘못 기록되어 5km 안에 들어와도 "상차지진입"이 안 떴다.
         // 수락 시각이 확정된 뒤에만, 그 이후 기록으로만 검사한다.
-        const sinceMs = o.기사확인일시?.toMillis ? o.기사확인일시.toMillis() : null;
-        if (!sinceMs) return;
+        const acceptMs = o.기사확인일시?.toMillis ? o.기사확인일시.toMillis() : null;
+        if (!acceptMs) return;
+        // 앞 오더를 하고 있던 동안의 기록은 제외 — 앞 오더 운송완료 시각 이후부터만 본다
+        const prevDoneMs = Math.max(0, ...myOrders.filter(x => x.기사확인상태 === "완료" && x.기사완료일시?.toMillis).map(x => x.기사완료일시.toMillis()));
+        const sinceMs = Math.max(acceptMs, prevDoneMs);
         const key = `${o._id}|${o.상차지주소}`;
         if (visitCheckedRef.current.has(key)) return;
         visitCheckedRef.current.add(key);
@@ -1682,7 +1720,8 @@ export default function DriverHome() {
   // ⭐ 버그수정 — 관리자가 삭제(배차취소)한 오더는 기사확인상태가 남아 있어도 카드에서 뺀다.
   const isCanceledOrder = (o) => o.배차상태 === "배차취소" || o.상태 === "취소";
   const pendingOrders = isFleetDriver ? myOrders.filter(o => o.기사확인상태 === "대기" && !isCanceledOrder(o)) : [];
-  const acceptedOrders = isFleetDriver ? myOrders.filter(o => o.기사확인상태 === "수락" && !isCanceledOrder(o)) : [];
+  // 먼저 수락한 오더가 맨 위(진행중), 나머지는 "다음 오더"
+  const acceptedOrders = isFleetDriver ? sortActiveOrders(myOrders).filter(o => !isCanceledOrder(o)) : [];
   const hasActiveDispatch = pendingOrders.length > 0 || acceptedOrders.length > 0;
   // ⭐ 사용자 요청 — 지입 기사는 "상차 시작/퇴근" 같은 일반 기사 상태머신을 쓰지
   // 않는다. 출근 전이면 출근/휴차처리, 출근 후 오더 없으면 대기(오더대기중)만,
@@ -2047,8 +2086,12 @@ export default function DriverHome() {
                   onReject={() => { setRejectModal({ orderId: o._id, col: o.__col }); setRejectReason(""); }}
                   onCopy={copyText} />
               ))}
-              {acceptedOrders.map(o => (
+              {acceptedOrders.map((o, qi) => (
                 <ActiveOrderCard key={o._id} order={o} loading={orderActionLoading} pos={pos} onConfirmChange={handleConfirmChange}
+                  queued={qi > 0} queueNo={qi + 1}
+                  photos={todayPhotos.filter(p => p.orderId === o._id)}
+                  uploading={fleetPhotoUploading}
+                  onUpload={(f, actionType) => handleFleetPhotoFile(f, actionType, o._id, o.__col || "orders")}
                   onComplete={() => handleCompleteOrder(o._id, o.__col)}
                   onRoundComplete={(k) => handleRoundComplete(o, k)}
                   onCopy={copyText} />
@@ -2100,8 +2143,13 @@ export default function DriverHome() {
             // 업로드 버튼이어야 한다. 상차완료는 오더 수락(운송중) 중이면 언제든,
             // 하차완료는 운송완료를 누른 뒤에만 눌러서 바로 올릴 수 있다.
             if (isFleetDriver) {
-              const loadTargetId = acceptedOrders[0]?._id || null;
-              const loadTargetCol = acceptedOrders[0]?.__col || "orders";
+              // ⭐ 진행중 오더의 사진은 각 오더 카드 안에서 올린다. 여기는 "방금 운송완료한 오더"의
+              // 하차 사진을 아직 안 올린 경우에만 보여준다(완료하면 카드가 사라지므로).
+              const lastDone = lastCompletedOrderId;
+              const lastDropSent = lastDone ? todayPhotos.some(p => p.actionType === "하차완료" && p.orderId === lastDone) : true;
+              if (!lastDone || lastDropSent) return null;
+              const loadTargetId = null;
+              const loadTargetCol = "orders";
               const dropTargetId = lastCompletedOrderId;
               const dropTargetCol = lastCompletedOrderCol;
               const loadedToday = loadTargetId ? todayPhotos.some(p => p.actionType === "상차완료" && p.orderId === loadTargetId) : false;
@@ -2127,9 +2175,8 @@ export default function DriverHome() {
               );
               return (
                 <div style={{ background: "#1B2B4B", borderRadius: 16, padding: "14px 16px", marginBottom: 14, boxShadow: "0 4px 16px rgba(27,43,75,0.18)" }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.5)", marginBottom: 10, letterSpacing: "0.06em" }}>오늘 사진 전송 현황</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: "rgba(255,255,255,0.8)", marginBottom: 10 }}>방금 운송완료한 오더 — 하차 사진을 올려주세요</div>
                   <div style={{ display: "flex", gap: 10 }}>
-                    {tile("상차완료", loadedToday, canUploadLoad, loadTargetId, loadTargetCol, "상차완료")}
                     {tile("하차완료", droppedToday, canUploadDrop, dropTargetId, dropTargetCol, "하차완료")}
                   </div>
                 </div>

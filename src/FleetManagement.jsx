@@ -12,7 +12,7 @@ import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { getDrivingRoute, geocodeAddress } from "./tmapFareCalc";
-import { ShortAddr, DropEtaText, RemainText, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS, isPickupVisited } from "./fleetGeo";
+import { ShortAddr, DropEtaText, RemainText, pickCurrentOrder, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS, isPickupVisited } from "./fleetGeo";
 import { LeafletTrack, MapLegend } from "./mapLeaflet";
 import { cleanTrack } from "./mapStyle";
 import { modificationStatus } from "./orderChange";
@@ -2331,10 +2331,13 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                       <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
                         <RouteDistanceBadge fromAddr={r.상차지주소} toAddr={r.하차지주소} />
                         {/* ⭐ 상태별 남은 거리·예상시간(상차지까지 / 하차지까지) */}
-                        {r.기사확인상태 === "수락" && (
+                        {r.기사확인상태 === "수락" && (pickCurrentOrder(orders)?._id ?? pickCurrentOrder(orders)?.id) === (r._id ?? r.id) && (
                           <RemainText order={r} location={live?.location}
                             phase={computeFleetPhase({ driverStatus: live?.status || live?.mainStatus, orders: [r], location: live?.location })}
                             style={{ display: "block", fontSize: 12, marginTop: 2 }} />
+                        )}
+                        {r.기사확인상태 === "수락" && (pickCurrentOrder(orders)?._id ?? pickCurrentOrder(orders)?.id) !== (r._id ?? r.id) && (
+                          <span style={{ display: "block", fontSize: 12, marginTop: 2, color: "#6b7280", fontWeight: 700 }}>다음 오더 (앞 오더 진행중)</span>
                         )}
                       </td>
                       <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, fontWeight: 700, color: NAVY, whiteSpace: "nowrap" }}>
