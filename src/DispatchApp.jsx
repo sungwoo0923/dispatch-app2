@@ -41,7 +41,7 @@ import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare, geocodeAddress, haversineKm } from "./tmapFareCalc";
 import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
 import RouteMapModal from "./RouteMapModal";
-import { RotationPicker, RotationBadge, expandRotation, rotationNotice } from "./rotation";
+import { RotationPicker, RotationBadge, expandRotation, rotationNotice, withRotationMemo } from "./rotation";
 import { generateMonthlyReportPPT, PPT_TEMPLATES } from "./pptReportUtil";
 
 // ⭐ html2canvas로 캡처한 캔버스를 A4 PDF로 저장할 때 공용으로 쓰는 다중 페이지
@@ -13913,11 +13913,6 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
   count={form.회전수 || 1}
   mode={form.회전방식 || "묶기"}
   onChange={(c, m) => setForm((p) => ({ ...p, 회전수: c, 회전방식: m }))}
-  onMultiplyFare={isAdmin ? (n) => setForm((p) => {
-    const num = (v) => parseInt(String(v ?? "").replace(/[^\d-]/g, ""), 10) || 0;
-    const sale = num(p.청구운임) * n, drv = num(p.기사운임) * n;
-    return { ...p, 청구운임: sale ? String(sale) : p.청구운임, 기사운임: drv ? String(drv) : p.기사운임, 수수료: String(sale - drv) };
-  }) : undefined}
 />}
 
 {/* 긴급 */}
@@ -30815,7 +30810,7 @@ value={copyTarget?.화물수량 || ""}
                 type="button"
                 onClick={() => setEditTarget((p) => {
                   const next = p.운행유형 === "왕복" ? "편도" : "왕복";
-                  const rot = next === "왕복" ? {} : { 회전수: 1 };
+                  const rot = next === "왕복" ? {} : { 회전수: 1, 메모: withRotationMemo(p.메모, 1) };
                   setEdited((prev) => ({ ...prev, [p._id]: { ...(prev[p._id] || {}), 운행유형: next, ...rot } }));
                   return { ...p, 운행유형: next, ...rot };
                 })}
@@ -30826,8 +30821,9 @@ value={copyTarget?.화물수량 || ""}
               {editTarget.운행유형 === "왕복" && (
                 <RotationPicker size="sm" allowSplit={false} count={editTarget.회전수 || 1}
                   onChange={(c) => setEditTarget((p) => {
-                    setEdited((prev) => ({ ...prev, [p._id]: { ...(prev[p._id] || {}), 회전수: c } }));
-                    return { ...p, 회전수: c };
+                    const 메모 = withRotationMemo(p.메모, c);
+                    setEdited((prev) => ({ ...prev, [p._id]: { ...(prev[p._id] || {}), 회전수: c, 메모 } }));
+                    return { ...p, 회전수: c, 메모 };
                   })} />
               )}
               <button
@@ -39313,13 +39309,13 @@ return (
                 긴급
               </button>
               <button type="button"
-                onClick={() => setEditTarget((p) => (p.운행유형 === "왕복" ? { ...p, 운행유형: "편도", 회전수: 1 } : { ...p, 운행유형: "왕복" }))}
+                onClick={() => setEditTarget((p) => (p.운행유형 === "왕복" ? { ...p, 운행유형: "편도", 회전수: 1, 메모: withRotationMemo(p.메모, 1) } : { ...p, 운행유형: "왕복" }))}
                 className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${editTarget.운행유형 === "왕복" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
                 왕복
               </button>
               {editTarget.운행유형 === "왕복" && (
                 <RotationPicker size="sm" allowSplit={false} count={editTarget.회전수 || 1}
-                  onChange={(c) => setEditTarget((p) => ({ ...p, 회전수: c }))} />
+                  onChange={(c) => setEditTarget((p) => ({ ...p, 회전수: c, 메모: withRotationMemo(p.메모, c) }))} />
               )}
               <button type="button"
                 onClick={() => setEditTarget((p) => ({ ...p, 혼적: !p.혼적, 독차: p.혼적 ? p.독차 : false }))}

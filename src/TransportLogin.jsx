@@ -142,7 +142,15 @@ export default function TransportLogin() {
       // 자동 로그인: 체크하면 브라우저/앱을 껐다 켜도 로그인 유지, 해제하면 닫을 때 로그아웃
       await setPersistence(auth, autoLogin ? browserLocalPersistence : browserSessionPersistence).catch(() => {});
 
-      const credential = await signInWithEmailAndPassword(auth, email.trim(), pw);
+      // 네트워크가 순간 끊기거나 새 버전(서비스워커) 교체 직후엔 첫 요청이 실패할 수 있어 1회 자동 재시도
+      let credential;
+      try {
+        credential = await signInWithEmailAndPassword(auth, email.trim(), pw);
+      } catch (e1) {
+        if (e1?.code !== "auth/network-request-failed") throw e1;
+        await new Promise(r => setTimeout(r, 1200));
+        credential = await signInWithEmailAndPassword(auth, email.trim(), pw);
+      }
       const uid = credential.user.uid;
       const inputEmail = email.trim().toLowerCase();
       const inputCompanyName = companyName.trim();
@@ -233,8 +241,18 @@ export default function TransportLogin() {
         setError("비밀번호가 일치하지 않습니다.");
       } else if (code === "auth/user-not-found") {
         setError("등록된 이메일이 없습니다.");
+      } else if (code === "auth/too-many-requests") {
+        setError("로그인 시도가 너무 많아 잠시 잠겼습니다. 몇 분 뒤 다시 시도하거나 '비밀번호 찾기'로 재설정해주세요.");
+      } else if (code === "auth/network-request-failed") {
+        setError("인터넷 연결이 불안정해 로그인하지 못했습니다. 잠시 후 다시 시도해주세요.");
+      } else if (code === "auth/user-disabled") {
+        setError("사용이 중지된 계정입니다. 관리자에게 문의하세요.");
+      } else if (code === "auth/invalid-email") {
+        setError("이메일 형식이 올바르지 않습니다.");
       } else {
-        setError("로그인에 실패했습니다. 입력 정보를 확인해주세요.");
+        // 원인 파악용으로 오류 코드를 같이 보여준다
+        console.error("[로그인 실패]", err);
+        setError(`로그인에 실패했습니다. 입력 정보를 확인해주세요. (${code || err?.message || "unknown"})`);
       }
     } finally {
       setLoading(false);

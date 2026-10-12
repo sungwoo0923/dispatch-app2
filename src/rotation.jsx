@@ -39,19 +39,31 @@ export function RotationBadge({ order, className = "" }) {
   );
 }
 
+// ⭐ 메모 자동기입 — "3회전 왕복 오더 입니다" (나누기: "3회전 왕복 중 2회차 오더 입니다")
+// 이미 들어간 문구는 새 값으로 바꾸고, 1회(회전 아님)가 되면 지운다.
+const ROT_MEMO_RE = /\s*\d+회전 왕복(?: 중 \d+회차)? 오더 입니다\s*/g;
+export function withRotationMemo(memo, n, part) {
+  const raw = String(memo || "");
+  // 기존 문구가 있을 때만 그 부분을 지운다(사용자가 쓴 줄바꿈 등은 그대로 둔다)
+  const base = raw.match(ROT_MEMO_RE) ? raw.replace(ROT_MEMO_RE, " ").trim() : raw;
+  if (!(Number(n) > 1)) return base;
+  const line = part ? `${n}회전 왕복 중 ${part}회차 오더 입니다` : `${n}회전 왕복 오더 입니다`;
+  return base ? `${line} ${base}` : line;
+}
+
 // 저장 직전 — 나누기 모드면 N건 레코드로 펼친다(묶기/1회면 그대로 1건)
 export function expandRotation(rec) {
   // 회전은 왕복일 때만 의미가 있다 — 왕복이 아니면 항상 1회
   const n = rec?.운행유형 === "왕복" ? rotationCount(rec) : 1;
   const { 회전방식, ...base } = rec;
-  if (n <= 1) return [{ ...base, 회전수: 1 }];
-  if (회전방식 !== "분리") return [{ ...base, 회전수: n, 완료회차: 0 }];
+  if (n <= 1) return [{ ...base, 회전수: 1, 메모: withRotationMemo(base.메모, 1) }];
+  if (회전방식 !== "분리") return [{ ...base, 회전수: n, 완료회차: 0, 메모: withRotationMemo(base.메모, n) }];
   const gid = `rot_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  return Array.from({ length: n }, (_, i) => ({ ...base, 회전수: 1, 회전묶음ID: gid, 회차: i + 1, 회차총수: n }));
+  return Array.from({ length: n }, (_, i) => ({ ...base, 회전수: 1, 회전묶음ID: gid, 회차: i + 1, 회차총수: n, 메모: withRotationMemo(base.메모, n, i + 1) }));
 }
 
-// 등록폼용 선택기 — [−] 3 [+] 회전  (● 한 오더로 묶기 ○ N건으로 나누기)  [운임 ×N]
-export function RotationPicker({ count = 1, mode = "묶기", onChange, onMultiplyFare, accent = "#1B2B4B", size = "md", allowSplit = true }) {
+// 등록폼용 선택기 — [−] 3 [+] 회전  (● 한 오더로 묶기 ○ N건으로 나누기)
+export function RotationPicker({ count = 1, mode = "묶기", onChange, accent = "#1B2B4B", size = "md", allowSplit = true }) {
   const n = Math.max(1, Math.min(ROTATION_MAX, Number(count) || 1));
   const sm = size === "sm";
   const btn = `${sm ? "w-6 h-6 text-[13px]" : "w-7 h-7 text-sm"} rounded-md border border-gray-300 bg-white font-bold text-gray-700 active:scale-95`;
@@ -71,12 +83,6 @@ export function RotationPicker({ count = 1, mode = "묶기", onChange, onMultipl
               {m === "묶기" ? "한 오더로 묶기" : `${n}건으로 나누기`}
             </button>
           ))}
-          {mode !== "분리" && onMultiplyFare && (
-            <button type="button" onClick={() => onMultiplyFare(n)} title="지금 입력된 청구/기사운임을 1회 운임으로 보고 회전수만큼 곱합니다"
-              className="px-2 py-1 rounded-md border border-amber-400 bg-amber-50 text-amber-700 font-bold whitespace-nowrap">
-              운임 ×{n}
-            </button>
-          )}
         </>
       )}
     </div>

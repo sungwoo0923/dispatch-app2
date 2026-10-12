@@ -191,7 +191,11 @@ function formatTime(date) {
 // ⭐ 버그수정 — createdByEmail(계정 아이디)로 폴백하면 기사 화면에 관리자 이메일이
 // 그대로 노출된다. 실명이 없으면 이메일 대신 "-"로 표시한다.
 function orderCreatorLabel(o) {
-  return o?.등록자명 || o?.createdByName || o?.등록자 || "-";
+  // 계정 아이디(이메일·이메일 앞부분)는 이름이 아니므로 건너뛴다
+  const em = String(o?.createdByEmail || o?.작성자 || "").trim().toLowerCase();
+  const idPart = em.split("@")[0];
+  const ok = (v) => { const t = String(v || "").trim().toLowerCase(); return t && !t.includes("@") && !(idPart && t === idPart); };
+  return [o?.등록자명, o?.createdByName, o?.등록자].find(ok) || "-";
 }
 
 // 배차담당자(오더 등록자) 연락처 — users/{createdByUid}.전화번호를 조회해 전화 버튼을 띄운다.
@@ -203,19 +207,30 @@ function orderCreatorLabel(o) {
 function DispatcherLine({ order: o }) {
   const [phone, setPhone] = useState("");
   const [fetchedName, setFetchedName] = useState("");
+  const creatorEmail = String(o?.createdByEmail || o?.작성자 || "").trim().toLowerCase();
   useEffect(() => {
     const uid = o?.createdByUid;
-    if (!uid) { setPhone(""); setFetchedName(""); return; }
     let cancelled = false;
-    getDoc(doc(db, "users", uid)).then(snap => {
+    const apply = (d = {}) => {
       if (cancelled) return;
-      const d = snap.exists() ? snap.data() : {};
       setPhone(d.전화번호 || d.phone || "");
-      setFetchedName(d.name || "");
-    }).catch(() => { if (!cancelled) { setPhone(""); setFetchedName(""); } });
+      setFetchedName(String(d.name || d.이름 || "").trim());
+    };
+    // ⭐ 실명은 users 문서(내 정보의 이름)를 최우선으로 쓴다 — 오더에 저장된 등록자명은
+    // 저장 시점에 실명이 아직 안 불러와져 계정 아이디(이메일 앞부분)로 들어간 경우가 있다.
+    // 모바일로 등록한 예전 오더는 createdByUid가 없어 이메일로 찾는다.
+    const p = uid
+      ? getDoc(doc(db, "users", uid)).then(snap => (snap.exists() ? snap.data() : {}))
+      : creatorEmail
+        ? getDocs(query(collection(db, "users"), where("email", "==", creatorEmail), limit(1))).then(snap => (snap.docs[0]?.data() || {}))
+        : Promise.resolve({});
+    p.then(apply).catch(() => apply({}));
     return () => { cancelled = true; };
-  }, [o?.createdByUid]);
-  const label = o?.등록자명 || o?.createdByName || o?.등록자 || fetchedName || o?.createdByEmail || "-";
+  }, [o?.createdByUid, creatorEmail]);
+  // 계정 아이디(이메일 또는 이메일 앞부분)는 이름이 아니므로 건너뛴다
+  const idPart = creatorEmail.split("@")[0];
+  const isAccountId = (v) => { const t = String(v || "").trim().toLowerCase(); return !t || t.includes("@") || (idPart && t === idPart); };
+  const label = [fetchedName, o?.등록자명, o?.createdByName, o?.등록자].find(v => !isAccountId(v)) || "-";
   return (
     <div style={{ fontSize: 12, color: "#6b7280", marginTop: 10, paddingTop: 10, borderTop: "1px solid #f3f4f6", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
       <span>배차담당자 <b style={{ color: "#111827" }}>{label}</b></span>
@@ -361,13 +376,26 @@ function OrderDetailBody({ o, onCopy, changed = [] }) {
   );
 }
 
+// ⭐ 회전 운행 안내 — 바탕색 없이 검은 테두리 + 굵은 검은 글씨, 천천히 깜빡임
+function RotationNotice({ n, children }) {
+  return (
+    <div style={{ border: "2px solid #111827", borderRadius: 10, padding: "9px 12px", marginBottom: 8, background: "transparent" }}>
+      <style>{`@keyframes kpRotBlink { 0%,100% { opacity: 1; } 50% { opacity: .35; } }`}</style>
+      <div style={{ fontSize: 14, fontWeight: 900, color: "#111827", animation: "kpRotBlink 2.4s ease-in-out infinite" }}>
+        {n}회전 왕복하는 오더입니다
+      </div>
+      {children}
+    </div>
+  );
+}
+
 // ⭐ 관리자가 회전 운행(2회전·3회전…)으로 준 오더 표시
 function RotTag({ o, style }) {
   const label = rotationLabel(o);
   if (!label) return null;
   return (
     <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: "#d97706", padding: "3px 8px", borderRadius: 20, whiteSpace: "nowrap", flexShrink: 0, ...style }}>
-      🔁 {label}
+      {label}
     </span>
   );
 }
@@ -379,11 +407,7 @@ function PendingOrderCard({ order: o, loading, onAccept, onReject, onCopy }) {
         <span style={{ fontSize: 14, fontWeight: 800, color: "#1B2B4B", display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>{o.거래처명 || "거래처 미입력"}<RotTag o={o} /></span>
         <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: "#f59e0b", padding: "3px 9px", borderRadius: 20, flexShrink: 0 }}>오더 확인 필요</span>
       </div>
-      {rotationCount(o) > 1 && (
-        <div style={{ fontSize: 12, fontWeight: 700, color: "#92400e", background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 10, padding: "8px 10px", marginBottom: 8 }}>
-          🔁 같은 상/하차지를 <b>{rotationCount(o)}번</b> 운행하는 오더입니다
-        </div>
-      )}
+      {rotationCount(o) > 1 && <RotationNotice n={rotationCount(o)} />}
       <OrderDetailBody o={o} onCopy={onCopy} />
       <DispatcherLine order={o} />
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
@@ -438,22 +462,21 @@ function ActiveOrderCard({ order: o, loading, onComplete, onRoundComplete, onCop
           </button>
         </div>
       )}
-      {rotLabel && (
-        <div style={{ background: "#fffbeb", border: "1.5px solid #fcd34d", borderRadius: 12, padding: "10px 12px", marginBottom: 8 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 14, fontWeight: 800, color: "#b45309" }}>🔁 회전 운행 {rotLabel}</span>
-            {rounds > 1 && <span style={{ fontSize: 13, fontWeight: 800, color: "#92400e" }}>{roundsDone}/{rounds} 완료</span>}
-          </div>
-          {rounds > 1 && (
-            <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
+      {rounds > 1 ? (
+        <RotationNotice n={rounds}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+            <div style={{ flex: 1, display: "flex", gap: 4 }}>
               {Array.from({ length: rounds }, (_, i) => (
-                <div key={i} style={{ flex: 1, height: 6, borderRadius: 3, background: i < roundsDone ? "#f59e0b" : "#fde68a" }} />
+                <div key={i} style={{ flex: 1, height: 6, borderRadius: 3, background: i < roundsDone ? "#111827" : "#e5e7eb" }} />
               ))}
             </div>
-          )}
-          {rounds > 1 && <div style={{ fontSize: 11, color: "#92400e", marginTop: 6 }}>같은 상/하차지를 {rounds}번 운행합니다. 하차할 때마다 회차 완료를 눌러주세요.</div>}
-        </div>
-      )}
+            <span style={{ fontSize: 13, fontWeight: 900, color: "#111827", whiteSpace: "nowrap" }}>{roundsDone}/{rounds} 완료</span>
+          </div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#374151", marginTop: 6 }}>하차할 때마다 회차 완료를 눌러주세요.</div>
+        </RotationNotice>
+      ) : rotLabel ? (
+        <div style={{ border: "2px solid #111827", borderRadius: 10, padding: "9px 12px", marginBottom: 8, fontSize: 14, fontWeight: 900, color: "#111827" }}>회전운행 {rotLabel}</div>
+      ) : null}
       <OrderDetailBody o={o} onCopy={onCopy} changed={changed} />
       <DispatcherLine order={o} />
       {/* ⭐ 하차지 도착해 운송완료가 가능해지면 버튼이 천천히 깜빡여 눈에 띄게 */}

@@ -4008,6 +4008,9 @@ const groupedByDate = useMemo(() => {
           // 빠져있어 등록일 팝업/툴팁에서 작성자가 항상 비어 보이던 원인이었다.
           작성자: auth.currentUser?.email || "",
           등록자명: dispatcherName || "",
+          // ⭐ 기사앱 배차담당자 실명 조회용(users/{uid}.name)
+          createdByUid: auth.currentUser?.uid || null,
+          createdByEmail: auth.currentUser?.email || null,
           // ⭐ 기사 정보까지 채워서 등록과 동시에 배차완료 상태로 저장되는 경우, PC의
           // "배차한시간" 툴팁이 읽는 배차확정일시도 같이 남겨야 한다(없으면 항상 "-").
           ...(rowData.배차상태 === "배차완료" && !rowData.배차확정일시 ? { 배차확정일시: serverTimestamp(), 배차확정자: dispatcherName } : {}),
@@ -15469,11 +15472,6 @@ const pickDrop = (c) => {
               mode={form._editId ? "묶기" : (form.회전방식 || "묶기")}
               accent={cardVersionB ? "#1B2B4B" : "#2563eb"}
               onChange={(c, m) => setForm(p => ({ ...p, 회전수: c, 회전방식: p._editId ? "묶기" : m }))}
-              onMultiplyFare={(n) => setForm(p => {
-                const num = (v) => Number(String(v ?? "").replace(/[^\d-]/g, "")) || 0;
-                const sale = num(p.청구운임) * n, drv = num(p.기사운임) * n;
-                return { ...p, 청구운임: sale ? String(sale) : p.청구운임, 기사운임: drv ? String(drv) : p.기사운임, 수수료: sale - drv };
-              })}
             />
           }
         />
