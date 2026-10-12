@@ -271,6 +271,54 @@ export function DropEtaText({ order, driverId, location, style }) {
 }
 
 
+// ⭐ 사용자 요청 — 상태에 따라 "남은 거리·예상시간"
+//  · 상차지로 가는 중(운송중/상차지진입, 아직 상차지 안 다녀옴): 현재 위치 → 상차지
+//  · 상차지를 다녀온 뒤(운송중/하차지진입): 현재 위치 → 하차지
+//  · 상차지도착: 상차지 → 하차지(상차 후 남은 운행)
+//  실제 도로 기준(티맵). 0.5km 이상 움직였거나 3분 지나면 다시 계산한다.
+function useLiveRoute(loc, to) {
+  const [state, setState] = useState(null); // { km, min, at, from, key }
+  const toKey = to ? `${to.lat},${to.lng}` : "";
+  useEffect(() => {
+    if (!loc || loc.lat == null || !to) return;
+    const same = state?.key === toKey;
+    const moved = !same || !state?.from || haversineKm(state.from.lat, state.from.lng, loc.lat, loc.lng) > 0.5;
+    const stale = !state?.at || Date.now() - state.at > 3 * 60000;
+    if (!moved && !stale) return;
+    let alive = true;
+    const from = { lat: loc.lat, lng: loc.lng };
+    getDrivingRouteByCoords({ lat: from.lat, lon: from.lng }, { lat: to.lat, lon: to.lng }).then(r => {
+      if (alive && r) setState({ km: r.km, min: r.minutes, at: Date.now(), from, key: toKey });
+    });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loc?.lat, loc?.lng, toKey]);
+  return state?.key === toKey ? state : null;
+}
+
+const fmtMin = (m) => (m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60}분` : `${m}분`);
+
+export function useRemainInfo(order, location, phase) {
+  const pickupGeo = useAddrGeo(order?.상차지주소 || null);
+  const dropGeo = useAddrGeo(order?.하차지주소 || null);
+  const hasLoc = location?.lat != null && location?.lng != null;
+  const visited = isPickupVisited(order);
+  let target = null, label = "", from = hasLoc ? location : null;
+  if (phase === "상차지도착") { target = dropGeo; label = "상차 후 하차지까지"; from = pickupGeo ? { lat: pickupGeo.lat, lng: pickupGeo.lng } : null; }
+  else if (phase === "하차지도착") { target = null; }
+  else if (phase === "하차지진입" || visited) { target = dropGeo; label = "하차지까지"; }
+  else if (phase === "운송중" || phase === "상차지진입") { target = pickupGeo; label = "상차지까지"; }
+  const r = useLiveRoute(from, target || null);
+  if (!target || !r) return null;
+  return { label, km: r.km, min: r.min, text: `${label} ${r.km}km · 약 ${fmtMin(r.min)}` };
+}
+
+export function RemainText({ order, location, phase, style }) {
+  const info = useRemainInfo(order, location, phase);
+  if (!info) return null;
+  return <span style={{ fontWeight: 800, color: "#111827", ...style }}>{info.text}</span>;
+}
+
 // ─── 지입 기사 통합 상태(관제현황·노선관리·모바일·기사앱 공통) ───────────────────────
 // ⭐ 사용자 요청 — 지입 기사는 출근/상차중/하차중/복귀중/퇴근 버튼 상태 대신
 //   배차대기 / 오더확인중 / 운송중 / 상차지진입 / 상차지도착 / 하차지진입 / 하차지도착 / 휴차
@@ -296,7 +344,13 @@ const isCanceledRow = (r) => r?.배차상태 === "배차취소" || r?.상태 ===
 
 const normAddr = (a) => String(a || "").replace(/\(.*?\)/g, "").replace(/\s+/g, "").trim();
 export function isPickupVisited(order) {
-  return !!order?.상차지도착주소 && normAddr(order.상차지도착주소) === normAddr(order.상차지주소);
+  if (!order?.상차지도착주소 || normAddr(order.상차지도착주소) !== normAddr(order.상차지주소)) return false;
+  // ⭐ 예전 기사앱 버그로 "수락하는 순간" 다녀온 것으로 잘못 기록된 경우(근거 없음 + 수락 5초 이내)는 무시
+  if (!order.상차지도착근거) {
+    const v = tsMs(order.상차지도착일시), a = tsMs(order.기사확인일시);
+    if (v && a && Math.abs(v - a) < 5000) return false;
+  }
+  return true;
 }
 
 // 순수 계산 — 좌표는 캐시에 있는 것만 사용(없으면 "운송중"으로 두고 prefetch로 채운다)

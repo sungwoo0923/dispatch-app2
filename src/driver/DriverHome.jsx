@@ -1383,23 +1383,28 @@ export default function DriverHome() {
       .forEach(o => {
         const g = getCachedGeo(o.상차지주소);
         if (!g) return;
-        const mark = () => updateDoc(doc(db, o.__col || "orders", o._id), {
-          상차지도착주소: o.상차지주소, 상차지도착일시: serverTimestamp(),
+        const mark = (근거) => updateDoc(doc(db, o.__col || "orders", o._id), {
+          상차지도착주소: o.상차지주소, 상차지도착일시: serverTimestamp(), 상차지도착근거: 근거,
         }).catch(() => {});
-        if (pos?.lat != null && haversineKm(pos.lat, pos.lng, g.lat, g.lng) <= 1) { mark(); return; }
+        if (pos?.lat != null && haversineKm(pos.lat, pos.lng, g.lat, g.lng) <= 1) { mark("현재위치"); return; }
         // 주소가 바뀐 경우 등 — 오늘 GPS 기록에서 수락 이후 1km 안에 들어온 적이 있는지 한 번만 확인
+        // ⭐ 버그수정 — 수락 직후엔 기사확인일시가 아직 서버 저장 전(null)이라 sinceMs가 0이 되어,
+        // "오늘 하루 GPS 기록 전체"로 검사했다 → 오전에 그 상차지 근처를 지나갔으면 수락하자마자
+        // "상차지 다녀옴"으로 잘못 기록되어 5km 안에 들어와도 "상차지진입"이 안 떴다.
+        // 수락 시각이 확정된 뒤에만, 그 이후 기록으로만 검사한다.
+        const sinceMs = o.기사확인일시?.toMillis ? o.기사확인일시.toMillis() : null;
+        if (!sinceMs) return;
         const key = `${o._id}|${o.상차지주소}`;
         if (visitCheckedRef.current.has(key)) return;
         visitCheckedRef.current.add(key);
-        const sinceMs = o.기사확인일시?.toMillis ? o.기사확인일시.toMillis() : 0;
         getDocs(query(collection(db, "gps_tracks"), where("driverId", "==", uid), where("date", "==", kstDateStr())))
           .then(snap => {
             const hit = snap.docs.some(d => {
               const p = d.data();
               const ms = p.timestamp?.toMillis ? p.timestamp.toMillis() : 0;
-              return p.lat != null && (!sinceMs || ms >= sinceMs) && haversineKm(p.lat, p.lng, g.lat, g.lng) <= 1;
+              return p.lat != null && ms >= sinceMs && haversineKm(p.lat, p.lng, g.lat, g.lng) <= 1;
             });
-            if (hit) mark();
+            if (hit) mark("GPS기록");
           })
           .catch(() => {});
       });

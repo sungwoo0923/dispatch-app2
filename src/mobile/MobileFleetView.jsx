@@ -10,7 +10,7 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import { getDrivingRoute, geocodeAddress, haversineKm } from "../tmapFareCalc";
-import { ShortAddr, DropEtaText, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS, isPickupVisited } from "../fleetGeo";
+import { ShortAddr, DropEtaText, RemainText, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS, isPickupVisited } from "../fleetGeo";
 import { LeafletTrack, MapLegend } from "../mapLeaflet";
 import { modificationStatus } from "../orderChange";
 
@@ -1086,6 +1086,12 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                             <div style={{ fontSize: 12, color: "#6b7eac" }}>{[activeOrder.차량종류, activeOrder.차량톤수].filter(Boolean).join(" · ") || "-"}</div>
                             <div style={{ fontSize: 12, color: "#6b7eac", wordBreak: "break-word" }}>{activeOrder.화물내용 || "-"}</div>
                           </div>
+                          {/* ⭐ 상태별 남은 거리·예상시간(상차지까지 / 하차지까지) */}
+                          {activeOrder.기사확인상태 === "수락" && (
+                            <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid #e0e7ff", fontSize: 13 }}>
+                              <RemainText order={activeOrder} location={d.location} phase={phaseOf(d)} />
+                            </div>
+                          )}
                           <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid #e0e7ff", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                             <RouteDistanceBadge fromAddr={activeOrder.상차지주소} toAddr={activeOrder.하차지주소} />
                             {activeOrder.기사운임 && <span style={{ fontSize: 12, fontWeight: 700, color: NAVY }}>기사운임 {Number(String(activeOrder.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원</span>}
@@ -1325,6 +1331,17 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
               {mapSelected && (
                 <div style={{ background: "rgba(255,255,255,0.9)", borderRadius: 8, padding: "5px 10px", fontSize: 11, color: NAVY, fontWeight: 700, backdropFilter: "blur(4px)" }}>
                   {mapSelected.이름} · {timeAgo(mapSelected.updatedAt)} <SpeedBadge d={mapSelected} />
+                  {(() => {
+                    const ao = (ordersFor(mapSelected) || []).find(o => o.기사확인상태 === "수락" && o.배차상태 !== "배차취소");
+                    if (!ao) return null;
+                    const ph = phaseOf(mapSelected);
+                    return (
+                      <div style={{ marginTop: 3, fontSize: 12 }}>
+                        <span style={{ color: FLEET_PHASE_COLORS[ph] || NAVY, fontWeight: 800 }}>{ph}</span>
+                        {" · "}<RemainText order={ao} location={mapSelected.location} phase={ph} />
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>

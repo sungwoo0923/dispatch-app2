@@ -12,7 +12,7 @@ import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { getDrivingRoute, geocodeAddress } from "./tmapFareCalc";
-import { ShortAddr, DropEtaText, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS, isPickupVisited } from "./fleetGeo";
+import { ShortAddr, DropEtaText, RemainText, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS, isPickupVisited } from "./fleetGeo";
 import { LeafletTrack, MapLegend } from "./mapLeaflet";
 import { cleanTrack } from "./mapStyle";
 import { modificationStatus } from "./orderChange";
@@ -2330,6 +2330,12 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                       </td>
                       <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
                         <RouteDistanceBadge fromAddr={r.상차지주소} toAddr={r.하차지주소} />
+                        {/* ⭐ 상태별 남은 거리·예상시간(상차지까지 / 하차지까지) */}
+                        {r.기사확인상태 === "수락" && (
+                          <RemainText order={r} location={live?.location}
+                            phase={computeFleetPhase({ driverStatus: live?.status || live?.mainStatus, orders: [r], location: live?.location })}
+                            style={{ display: "block", fontSize: 12, marginTop: 2 }} />
+                        )}
                       </td>
                       <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, fontWeight: 700, color: NAVY, whiteSpace: "nowrap" }}>
                         {r.기사운임 ? `${Number(String(r.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원` : "-"}
