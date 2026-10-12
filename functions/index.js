@@ -551,7 +551,10 @@ exports.notifyFleetDriverNewOrder =
           }
           const cUserSnap = await db.collection("users").doc(cDriverDoc.id).get();
           const cUserData = cUserSnap.exists ? cUserSnap.data() : null;
-          if (cUserData?.driverPushEnabled !== false && cUserData?.fcmToken) {
+          // 오더 자체가 "배차취소"로 바뀐 경우엔 notifyDispatchCanceled가 같은 기사에게 이미
+          // 푸시를 보내므로 여기선 보내지 않는다(같은 알림이 2번 오는 것 방지).
+          const orderCanceledNow = String(after["배차상태"] || "").trim() === "배차취소" && String(before?.["배차상태"] || "").trim() !== "배차취소";
+          if (!orderCanceledNow && cUserData?.driverPushEnabled !== false && cUserData?.fcmToken) {
             await sendPushAndCleanup([cUserData.fcmToken], {
               notification: { title: "배차가 취소되었습니다", body },
               data: { type: "fleet_order_canceled", orderId: context.params.dispatchId },
