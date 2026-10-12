@@ -302,7 +302,7 @@ export function useRemainInfo(order, location, phase) {
   const pickupGeo = useAddrGeo(order?.상차지주소 || null);
   const dropGeo = useAddrGeo(order?.하차지주소 || null);
   const hasLoc = location?.lat != null && location?.lng != null;
-  const visited = isPickupVisited(order);
+  const visited = !!order?.상차완료일시 || isPickupVisited(order);
   let target = null, label = "", from = hasLoc ? location : null;
   if (phase === "상차지도착") { target = dropGeo; label = "하차지까지"; }
   else if (phase === "하차지도착") { target = null; }
@@ -353,6 +353,17 @@ export function isPickupVisited(order) {
   return true;
 }
 
+// ⭐ 상차 완료 여부 — 기사가 "상차완료"를 눌렀거나(상차사진 포함), 상차지에 들렀다가 1km 밖으로
+// 벗어났으면(출발) 상차한 것으로 본다. 상차 전에는 하차지가 가까워도 하차지 상태로 보지 않는다.
+export function isLoaded(order, location) {
+  if (!order) return false;
+  if (order.상차완료일시) return true;
+  if (!isPickupVisited(order)) return false;
+  const pg = getCachedGeo(order.상차지주소);
+  if (!pg || location?.lat == null || location?.lng == null) return false;
+  return haversineKm(location.lat, location.lng, pg.lat, pg.lng) > 1;
+}
+
 // ⭐ 수락한 오더가 여러 건이면 "먼저 수락한 오더"부터 진행한다(운송완료 전까지는 그 오더 기준).
 // 기사확인일시(수락 시각) 오름차순, 같으면 상차일·상차시간 순. 수락 시각이 아직 저장 전이면 맨 뒤.
 export function sortActiveOrders(orders = []) {
@@ -374,7 +385,7 @@ export function fleetStepIndex(order, phase) {
   if (phase === "상차지도착") return 2;
   if (phase === "하차지진입") return 4;
   if (phase === "하차지도착") return 5;
-  if (phase === "운송중") return isPickupVisited(order) ? 3 : 0;
+  if (phase === "운송중") return (order?.상차완료일시 || isPickupVisited(order)) ? 3 : 0;
   return -1;
 }
 export function FleetStepper({ order, phase }) {
@@ -392,6 +403,11 @@ export function FleetStepper({ order, phase }) {
             {i > 0 && <div style={{ position: "absolute", top: 6, right: "50%", width: "100%", height: 3, background: i <= cur ? "#1B2B4B" : "#e5e7eb", zIndex: 0 }} />}
             <div style={{ width: now ? 15 : 13, height: now ? 15 : 13, marginTop: now ? -1 : 0, borderRadius: "50%", background: dot, border: "2px solid #fff", zIndex: 1, animation: now ? "kpStepBlink 1.6s ease-in-out infinite" : "none" }} />
             <div style={{ marginTop: 4, fontSize: 10, lineHeight: 1.2, textAlign: "center", fontWeight: now ? 900 : 700, color: now ? "#2563eb" : done ? "#1B2B4B" : "#9ca3af", wordBreak: "keep-all", animation: now ? "kpStepText 1.6s ease-in-out infinite" : "none" }}>{lb}</div>
+            {i === 2 && tsMs(order?.상차완료일시) && (
+              <div style={{ fontSize: 9, fontWeight: 800, color: "#16a34a", marginTop: 1 }}>
+                상차완료 {new Date(tsMs(order.상차완료일시) + 9 * 3600e3).toISOString().slice(11, 16)}
+              </div>
+            )}
           </div>
         );
       })}
@@ -415,12 +431,15 @@ export function computeFleetPhase({ driverStatus, orders = [], location }) {
       // 중에 수정한 경우, 대기하던 자리에서 바로 오더를 받은 경우 모두 해당).
       // 기사앱이 상차지 1km 안에 들어온 적이 있으면 오더에 상차지도착주소를 남긴다 —
       // 그 주소가 지금 상차지 주소와 같으면 "다녀온 것"으로 보고 상차지진입은 건너뛴다.
-      const visited = isPickupVisited(active);
-      if (pd != null && pd <= 1) return "상차지도착";
-      // 상차(상차지 방문) 전에는 하차지 근처에 있어도 하차지진입/도착이 아니다 — 상차지로 가는 중
-      if (visited && dd != null && dd <= 1) return "하차지도착";
-      if (visited && dd != null && dd <= 5) return "하차지진입";
-      if (!visited && pd != null && pd <= 5) return "상차지진입";
+      // 상차 전: 상차지 거리만 본다(하차지가 가까워도 무시) / 상차 후: 하차지 거리만 본다
+      const loaded = isLoaded(active, location);
+      if (!loaded) {
+        if (pd != null && pd <= 1) return "상차지도착";
+        if (pd != null && pd <= 5 && !isPickupVisited(active)) return "상차지진입";
+      } else {
+        if (dd != null && dd <= 1) return "하차지도착";
+        if (dd != null && dd <= 5) return "하차지진입";
+      }
     }
     return "운송중";
   }

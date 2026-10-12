@@ -9,7 +9,8 @@ export const WATCH_GROUPS = [
   { label: "하차일시", fields: ["하차일", "하차시간"] },
   { label: "화물정보", fields: ["화물내용", "차량톤수", "차량종류"] },
   { label: "회전수", fields: ["회전수"] },
-  { label: "운임", fields: ["기사운임", "지급방식"] },
+  { label: "운임", fields: ["기사운임"] },
+  { label: "지급방식", fields: ["지급방식"] },
   { label: "담당자 연락처", fields: ["상차지담당자", "상차지담당자번호", "하차지담당자", "하차지담당자번호"] },
   { label: "전달사항", fields: ["전달사항"] },
 ];

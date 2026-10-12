@@ -8,7 +8,7 @@ import {
 } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { registerPlugin } from "@capacitor/core";
-import { useAddrGeo, computeFleetPhase, useFleetPhaseGeo, getCachedGeo, isPickupVisited, sortActiveOrders } from "../fleetGeo";
+import { useAddrGeo, computeFleetPhase, useFleetPhaseGeo, getCachedGeo, isPickupVisited, sortActiveOrders, isLoaded } from "../fleetGeo";
 import { snapshotOrder, changedFields, changedLabels } from "../orderChange";
 import { rotationCount, rotationDone, rotationLabel } from "../rotation";
 import { haversineKm } from "../tmapFareCalc";
@@ -441,17 +441,24 @@ function useDropCompleteGate(order, pos) {
   return { ok: false, msg: `하차지 1km 이내에서 운송완료 가능 (현재 약 ${km.toFixed(1)}km)` };
 }
 
-function ActiveOrderCard({ order: o, loading, onComplete, onRoundComplete, onCopy, pos, onConfirmChange, queued = false, queueNo = 0, photos = [], uploading = false, onUpload }) {
+function ActiveOrderCard({ order: o, loading, onComplete, onRoundComplete, onCopy, pos, onConfirmChange, queued = false, queueNo = 0, photos = [], uploading = false, onUpload, onLoadComplete }) {
   const rawGate = useDropCompleteGate(o, pos);
   // ⭐ 수락한 오더가 여러 건이면 먼저 수락한 오더부터 — 뒤 오더는 위치가 하차지 근처여도 운송완료 불가.
   // 또 상차지에 들른(상차한) 뒤에만 운송완료 가능 — 하차지 근처에서 오더를 받았다고 바로 완료되면 안 된다.
   // (상차지 1km 진입 또는 "상차완료 사진" 전송으로 상차 확인)
-  const loaded = isPickupVisited(o);
+  // ⭐ 2단계 버튼 — 상차 전엔 "상차완료"(상차지 1km 안에서), 상차 후엔 "운송완료"(하차지 1km 안에서)
+  const loaded = isLoaded(o, pos);
+  const pickupGeo = useAddrGeo(o?.상차지주소 || null);
+  const pickupKm = pickupGeo && pos?.lat != null ? haversineKm(pos.lat, pos.lng, pickupGeo.lat, pickupGeo.lng) : null;
+  const atPickup = pickupKm != null && pickupKm <= 1;
   const gate = queued
     ? { ok: false, msg: "앞 오더를 운송완료한 뒤 진행할 수 있습니다" }
-    : !loaded
-      ? { ok: false, msg: "상차지에 도착(상차)한 뒤 운송완료할 수 있습니다" }
-      : rawGate;
+    : rawGate;
+  const loadGate = queued
+    ? { ok: false, msg: "앞 오더를 운송완료한 뒤 진행할 수 있습니다" }
+    : atPickup || pickupGeo === null
+      ? { ok: true, msg: "" }
+      : { ok: false, msg: pickupKm != null ? `상차지 1km 이내에서 상차완료 가능 (현재 약 ${pickupKm.toFixed(1)}km)` : "상차지 위치 확인중..." };
   const disabled = loading || !gate.ok;
   const changed = changedFields(o);
   const labels = changedLabels(changed);
@@ -502,18 +509,33 @@ function ActiveOrderCard({ order: o, loading, onComplete, onRoundComplete, onCop
       <DispatcherLine order={o} />
       {/* ⭐ 하차지 도착해 운송완료가 가능해지면 버튼이 천천히 깜빡여 눈에 띄게 */}
       <style>{`@keyframes kpCompletePulse { 0%,100% { box-shadow: 0 0 0 0 rgba(22,163,74,.55); filter: brightness(1); } 50% { box-shadow: 0 0 0 10px rgba(22,163,74,0); filter: brightness(1.12); } }`}</style>
-      <button onClick={() => { if (!gate.ok) return; if (midRound) onRoundComplete?.(roundsDone + 1); else onComplete(); }} disabled={disabled} style={{ width: "100%", marginTop: 12, padding: "14px", borderRadius: 12, border: "none", background: gate.ok ? (midRound ? "#d97706" : "#16a34a") : "#9ca3af", color: "#fff", fontWeight: 800, fontSize: 15, cursor: disabled ? "not-allowed" : "pointer", animation: gate.ok && !loading ? "kpCompletePulse 2.2s ease-in-out infinite" : "none" }}>
-        {midRound ? `${roundsDone + 1}회차 완료 (${roundsDone + 1}/${rounds})` : rounds > 1 ? `마지막 회차 · 운송완료` : "운송완료"}
-      </button>
-      {!gate.ok && (
-        <div style={{ marginTop: 6, fontSize: 12, fontWeight: 700, color: "#6b7280", textAlign: "center" }}>{gate.msg}</div>
+      {!loaded ? (
+        <>
+          <button onClick={() => { if (loadGate.ok && !loading) onLoadComplete?.(); }} disabled={loading || !loadGate.ok}
+            style={{ width: "100%", marginTop: 12, padding: "14px", borderRadius: 12, border: "none", background: loadGate.ok ? "#1B2B4B" : "#9ca3af", color: "#fff", fontWeight: 800, fontSize: 15, cursor: loadGate.ok ? "pointer" : "not-allowed", animation: loadGate.ok && !loading ? "kpCompletePulse 2.2s ease-in-out infinite" : "none" }}>
+            상차완료
+          </button>
+          {!loadGate.ok && (
+            <div style={{ marginTop: 6, fontSize: 12, fontWeight: 700, color: "#6b7280", textAlign: "center" }}>{loadGate.msg}</div>
+          )}
+        </>
+      ) : (
+        <>
+          <button onClick={() => { if (!gate.ok) return; if (midRound) onRoundComplete?.(roundsDone + 1); else onComplete(); }} disabled={disabled} style={{ width: "100%", marginTop: 12, padding: "14px", borderRadius: 12, border: "none", background: gate.ok ? (midRound ? "#d97706" : "#16a34a") : "#9ca3af", color: "#fff", fontWeight: 800, fontSize: 15, cursor: disabled ? "not-allowed" : "pointer", animation: gate.ok && !loading ? "kpCompletePulse 2.2s ease-in-out infinite" : "none" }}>
+            {midRound ? `${roundsDone + 1}회차 완료 (${roundsDone + 1}/${rounds})` : rounds > 1 ? `마지막 회차 · 운송완료` : "운송완료"}
+          </button>
+          {!gate.ok && (
+            <div style={{ marginTop: 6, fontSize: 12, fontWeight: 700, color: "#6b7280", textAlign: "center" }}>{gate.msg}</div>
+          )}
+        </>
       )}
       {/* ⭐ 이 오더의 사진 전송 — 올린 사진은 이 오더의 첨부로 들어간다 */}
       {(() => {
         const sentLoad = photos.some(p => p.actionType === "상차완료");
         const sentDrop = photos.some(p => p.actionType === "하차완료");
-        const canLoad = !queued && !sentLoad;
-        const canDrop = !queued && !sentDrop && rawGate.ok;
+        // 상차 사진은 상차지에 있을 때(또는 상차 후), 하차 사진은 상차 후 하차지 1km 안에서만
+        const canLoad = !queued && !sentLoad && (atPickup || loaded);
+        const canDrop = !queued && !sentDrop && loaded && rawGate.ok;
         const tile = (label, sent, enabled, actionType, hint) => (
           <label key={label} style={{
             flex: 1, padding: "10px 8px", borderRadius: 10, textAlign: "center", display: "block",
@@ -533,8 +555,8 @@ function ActiveOrderCard({ order: o, loading, onComplete, onRoundComplete, onCop
         );
         return (
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-            {tile("상차완료", sentLoad, canLoad, "상차완료", queued ? "앞 오더 진행중" : "미전송")}
-            {tile("하차완료", sentDrop, canDrop, "하차완료", queued ? "앞 오더 진행중" : "하차지 도착 후")}
+            {tile("상차완료", sentLoad, canLoad, "상차완료", queued ? "앞 오더 진행중" : "상차지 도착 후")}
+            {tile("하차완료", sentDrop, canDrop, "하차완료", queued ? "앞 오더 진행중" : loaded ? "하차지 도착 후" : "상차완료 후")}
           </div>
         );
       })()}
@@ -946,6 +968,8 @@ export default function DriverHome() {
   const [lastCompletedOrderId, setLastCompletedOrderId] = useState(null);
   const [lastCompletedOrderCol, setLastCompletedOrderCol] = useState("orders");
   const [fleetPhotoUploading, setFleetPhotoUploading] = useState(false);
+  const [logDetail, setLogDetail] = useState(null); // 운행일지 상세 팝업(오더 더블클릭)
+  const logDetailRef = useRef(null);
   // ⭐ 사용자 요청 — 알림 종(🔔): 새 오더 도착/배차취소 등을 나중에 다시 확인할 수
   // 있는 알림함. driver_notifications 컬렉션(관리자 PC가 배정/취소 시 기록)을 구독.
   const [notifications, setNotifications] = useState([]);
@@ -1465,6 +1489,28 @@ export default function DriverHome() {
       });
   }, [myOrders]);
 
+  // ⭐ 상차완료 — 누르면 상차 시각을 남기고, 이후 상태/버튼은 하차지 기준으로 바뀐다
+  const handleLoadComplete = useCallback(async (o, 근거 = "기사버튼") => {
+    if (!o?._id || o.상차완료일시) return;
+    try {
+      await updateDoc(doc(db, o.__col || "orders", o._id), {
+        상차완료일시: serverTimestamp(), 상차완료근거: 근거,
+        ...(isPickupVisited(o) ? {} : { 상차지도착주소: o.상차지주소 || "", 상차지도착일시: serverTimestamp(), 상차지도착근거: 근거 }),
+      });
+      if (근거 === "기사버튼") showToast("상차완료 — 하차지로 이동해주세요");
+    } catch (e) {
+      showToast("처리 중 오류가 발생했습니다");
+    }
+  }, []);
+
+  // ⭐ 상차지에 들렀다가 1km 밖으로 벗어나면(출발) 상차완료를 자동으로 기록한다
+  const autoLoadRef = useRef(new Set());
+  useEffect(() => {
+    const cur = sortActiveOrders(myOrders)[0];
+    if (!cur || cur.상차완료일시 || !isPickupVisited(cur) || autoLoadRef.current.has(cur._id)) return;
+    if (isLoaded(cur, pos)) { autoLoadRef.current.add(cur._id); handleLoadComplete(cur, "자동출발"); }
+  }, [myOrders, pos?.lat, pos?.lng, handleLoadComplete]);
+
   // ⭐ 회전 운행 — 중간 회차 완료(마지막 회차는 운송완료로 처리)
   const handleRoundComplete = useCallback(async (o, k) => {
     if (orderActionLoading) return;
@@ -1555,6 +1601,7 @@ export default function DriverHome() {
         // 상차완료 사진을 보냈으면 상차한 것으로 본다(GPS가 늦게 잡혀도 운송완료가 막히지 않게)
         ...(actionType === "상차완료" && target && !isPickupVisited(target)
           ? { 상차지도착주소: target.상차지주소 || "", 상차지도착일시: serverTimestamp(), 상차지도착근거: "상차사진" } : {}),
+        ...(actionType === "상차완료" && target && !target.상차완료일시 ? { 상차완료일시: serverTimestamp(), 상차완료근거: "상차사진" } : {}),
       });
       showToast(`${actionType} 사진이 전송되었습니다`);
     } catch (e) {
@@ -2098,17 +2145,6 @@ export default function DriverHome() {
               {/* ⭐ 사용자 요청 — 수락/거절해서 더 이상 확인 대기중인 오더가 없으면
                   "새 배차 N건..." 안내 문구는 완전히 사라져야 한다(예전엔 "진행중인
                   배차"로 문구만 바뀌어 계속 떠 있었음). */}
-              {/* ⭐ 상단 알림 — 관리자가 수정한 오더가 있으면(수정확인 전까지) 계속 표시 */}
-              {(() => {
-                const n = acceptedOrders.filter(o => changedFields(o).length > 0).length;
-                if (!n) return null;
-                return (
-                  <div style={{ background: "#dc2626", color: "#fff", borderRadius: 12, padding: "11px 14px", fontSize: 14, fontWeight: 800, display: "flex", alignItems: "center", gap: 8, animation: "kpRedBlink 1.6s ease-in-out infinite" }}>
-                    <svg width="16" height="16" fill="none" stroke="#fff" strokeWidth="2.4" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg>
-                    수정된 오더 {n}건 — 내용 확인 후 "수정확인"을 눌러주세요
-                  </div>
-                );
-              })()}
               {(() => {
                 const n = slideOrders.length;
                 if (!n) return null;
@@ -2162,6 +2198,7 @@ export default function DriverHome() {
                           uploading={fleetPhotoUploading}
                           onUpload={(f, actionType) => handleFleetPhotoFile(f, actionType, o._id, o.__col || "orders")}
                           onComplete={() => handleCompleteOrder(o._id, o.__col)}
+                          onLoadComplete={() => handleLoadComplete(o)}
                           onRoundComplete={(k) => handleRoundComplete(o, k)}
                           onCopy={copyText} />
                       )}
@@ -2938,6 +2975,10 @@ export default function DriverHome() {
                 차량톤수: a.차량톤수 || "",
                 기사운임: a.기사운임 || "",
                 기사완료일시: a.기사완료일시 || null,
+                상차지주소: a.상차지주소 || "", 하차지주소: a.하차지주소 || "",
+                차량종류: a.차량종류 || "", 지급방식: a.지급방식 || "",
+                상차완료일시: a.상차완료일시 || null, 기사확인일시: a.기사확인일시 || null,
+                등록자명: a.등록자명 || "", createdByName: a.createdByName || "",
               }));
             const completedOrders = [...liveCompleted, ...archivedForLog]
               .filter(o => { const d = o.상차일 || ""; return d >= appliedRange.from && d <= appliedRange.to; })
@@ -2995,7 +3036,8 @@ export default function DriverHome() {
                             const t = o.기사완료일시?.toDate?.();
                             const docs = hasDocs(o._id);
                             return (
-                              <tr key={o.__archiveKey || o._id || i} style={{ borderBottom: "1px solid #f3f4f6", background: o.__archived ? "#fffbeb" : undefined }}>
+                              <tr key={o.__archiveKey || o._id || i} onDoubleClick={() => setLogDetail(o)} title="더블클릭하면 운행일지 상세"
+                                style={{ borderBottom: "1px solid #f3f4f6", background: o.__archived ? "#fffbeb" : undefined, cursor: "pointer" }}>
                                 <td style={{ padding: "9px 10px", fontSize: 12, color: "#374151", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap" }}>
                                   {o.상차일 || "-"}{t ? ` ${formatTime(t)}` : ""}
                                 </td>
@@ -3040,6 +3082,89 @@ export default function DriverHome() {
                     )}
                   </>
                 )}
+              </div>
+            );
+          })()}
+
+          {/* ⭐ 운행일지 상세 팝업 — 운행일지 표에서 오더를 더블클릭 */}
+          {logDetail && (() => {
+            const o = logDetail;
+            const t = o.기사완료일시?.toDate?.();
+            const loadT = o.상차완료일시?.toDate?.();
+            const acceptT = o.기사확인일시?.toDate?.();
+            const fmtDT = (d) => d ? `${d.getMonth() + 1}/${d.getDate()} ${formatTime(d)}` : "-";
+            const fare = Number(String(o.기사운임 || 0).replace(/[^\d]/g, "")) || 0;
+            const docs = { load: allPhotoLogs.some(p => p.orderId === o._id && p.actionType === "상차완료"), drop: allPhotoLogs.some(p => p.orderId === o._id && p.actionType === "하차완료") };
+            const Row = ({ k, v, strong }) => (
+              <div style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: "1px solid #f3f4f6" }}>
+                <div style={{ width: 86, flexShrink: 0, fontSize: 13, fontWeight: 700, color: "#6b7280" }}>{k}</div>
+                <div style={{ flex: 1, fontSize: 14, fontWeight: strong ? 900 : 700, color: "#111827", wordBreak: "break-word" }}>{v || "-"}</div>
+              </div>
+            );
+            const Sec = ({ title, children }) => (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 900, color: "#1B2B4B", marginBottom: 2 }}>{title}</div>
+                {children}
+              </div>
+            );
+            const save = async () => {
+              if (!logDetailRef.current) return;
+              try {
+                const canvas = await html2canvas(logDetailRef.current, { backgroundColor: "#ffffff", scale: 2 });
+                const a = document.createElement("a");
+                a.download = `운행일지_${driver.carNo || ""}_${o.상차일 || ""}_${o.상차지명 || ""}.png`;
+                a.href = canvas.toDataURL("image/png");
+                a.click();
+              } catch (_) { showToast("이미지 저장에 실패했습니다"); }
+            };
+            return (
+              <div onClick={() => setLogDetail(null)} style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(15,23,42,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+                <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, maxHeight: "88vh", overflowY: "auto", background: "#fff", borderRadius: 16 }}>
+                  <div ref={logDetailRef} style={{ padding: "18px 18px 8px", background: "#fff" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ fontSize: 18, fontWeight: 900, color: "#111827" }}>운행일지</div>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: o.__archived ? "#b45309" : "#16a34a" }}>
+                        {o.__archived ? (o.archivedReason === "기사취소" ? "기사취소됨" : "오더삭제됨") : "운송완료"}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#6b7280", marginTop: 2 }}>{driver.name || ""} · {driver.carNo || ""}</div>
+                    <Sec title="오더">
+                      <Row k="거래처" v={o.거래처명} strong />
+                      <Row k="운행일" v={o.상차일 && o.하차일 && o.하차일 !== o.상차일 ? `${o.상차일} ~ ${o.하차일}` : o.상차일} />
+                      <Row k="배차담당자" v={orderCreatorLabel(o)} />
+                    </Sec>
+                    <Sec title="상차">
+                      <Row k="상차지" v={o.상차지명} strong />
+                      <Row k="주소" v={o.상차지주소} />
+                      <Row k="담당자" v={[o.상차지담당자, o.상차지담당자번호].filter(Boolean).join(" ")} />
+                      <Row k="상차시간" v={`${o.상차일 || ""} ${o.상차시간 || "즉시"}`} />
+                      <Row k="상차완료" v={fmtDT(loadT)} />
+                    </Sec>
+                    <Sec title="하차">
+                      <Row k="하차지" v={o.하차지명} strong />
+                      <Row k="주소" v={o.하차지주소} />
+                      <Row k="담당자" v={[o.하차지담당자, o.하차지담당자번호].filter(Boolean).join(" ")} />
+                      <Row k="하차시간" v={`${o.하차일 || o.상차일 || ""} ${o.하차시간 || "즉시"}`} />
+                      <Row k="운송완료" v={fmtDT(t)} />
+                    </Sec>
+                    <Sec title="화물 · 운임">
+                      <Row k="차량·톤수" v={[o.차량종류, o.차량톤수].filter(Boolean).join(" · ")} />
+                      <Row k="화물내용" v={o.화물내용} />
+                      {rotationLabel(o) && <Row k="회전" v={rotationLabel(o)} />}
+                      <Row k="기사운임" v={fare ? `${fare.toLocaleString()}원` : "-"} strong />
+                      <Row k="지급방식" v={o.지급방식} />
+                    </Sec>
+                    <Sec title="기록">
+                      <Row k="오더수락" v={fmtDT(acceptT)} />
+                      <Row k="서류" v={`상차 ${docs.load ? "✓ 전송" : "✗ 미전송"} · 하차 ${docs.drop ? "✓ 전송" : "✗ 미전송"}`} />
+                      {o.전달사항 && <Row k="전달사항" v={o.전달사항} />}
+                    </Sec>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, padding: "10px 18px 18px" }}>
+                    <button onClick={save} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "1.5px solid #1B2B4B", background: "#fff", color: "#1B2B4B", fontWeight: 800, fontSize: 14 }}>이미지로 저장</button>
+                    <button onClick={() => setLogDetail(null)} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: "#1B2B4B", color: "#fff", fontWeight: 800, fontSize: 14 }}>닫기</button>
+                  </div>
+                </div>
               </div>
             );
           })()}
