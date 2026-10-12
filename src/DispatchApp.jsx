@@ -41,6 +41,7 @@ import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare, geocodeAddress, haversineKm } from "./tmapFareCalc";
 import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
 import RouteMapModal from "./RouteMapModal";
+import { RotationPicker, RotationBadge, expandRotation, rotationNotice } from "./rotation";
 import { generateMonthlyReportPPT, PPT_TEMPLATES } from "./pptReportUtil";
 
 // ⭐ html2canvas로 캡처한 캔버스를 A4 PDF로 저장할 때 공용으로 쓰는 다중 페이지
@@ -1469,7 +1470,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
                                 <td className={`${tdCls} text-center font-bold`}>{r.상차시간 || "즉시"}</td>
                                 <td className={`${tdCls} font-extrabold text-[#1B2B4B]`}>
                                   <ScheduleRoute r={r} />
-                                  {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
+                                  {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}<RotationBadge order={r} />
                                   {_parseWorkDates(r.근무일자목록).length > 1 && (
                                     <span className="ml-1 bg-black text-white text-[10px] font-extrabold rounded px-1 py-0.5 leading-none align-middle">묶음</span>
                                   )}
@@ -1545,7 +1546,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
                                   <td className={`${tdCls} text-center font-bold`}>{r.상차시간 || "즉시"}</td>
                                   <td className={`${tdCls} font-bold text-gray-900`}>
                                     <ScheduleRoute r={r} />
-                                    {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
+                                    {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}<RotationBadge order={r} />
                                   </td>
                                   <td className={`${tdCls} text-center`}>{r.차량종류 || "-"} / {r.차량톤수 || "-"}</td>
                                   <td className={`${tdCls} text-center`}>{r.화물내용 || "-"}</td>
@@ -12380,7 +12381,8 @@ const savePromise = Promise.all(Array.from({ length: saveCount }, (_, i) => {
         const info = getAutoSpecialInfo(dateForOrder);
         return { 특수운임: info.special, 특수운임사유: info.reason };
       })();
-  return addDispatch({ ...rec, 상차일: dateForOrder, 하차일: dropDateForOrder, ...specialPatch });
+  // ⭐ 회전 운행 "나누기"면 회차별로 N건 저장(묶기/1회는 1건)
+  return Promise.all(expandRotation({ ...rec, 상차일: dateForOrder, 하차일: dropDateForOrder, ...specialPatch }).map(r => addDispatch(r)));
 }));
 
 // ★ 배차마당(카페사이트) 공유 — "배차마당 등록" 버튼으로 저장했고, 회사 설정에서
@@ -12437,7 +12439,7 @@ setAutoPickMatched(false);
 setAutoDropMatched(false);
 setConfirmOpen(false);
 try { localStorage.removeItem("dispatchForm"); } catch {}
-const finalCount = saveCount;
+const finalCount = saveCount * (rec.회전방식 === "분리" && Number(rec.회전수) > 1 ? Number(rec.회전수) : 1);
 setMultiCount(1);
 setUseSeparateDates(false);
 setOrderDates([]);
@@ -13903,6 +13905,18 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
   className={`px-3 py-1.5 text-sm font-bold rounded-lg border transition-all ${form.운행유형 === "왕복" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
   왕복
 </button>
+
+{/* ⭐ 회전 운행 — 같은 상/하차지를 2회 이상 반복 (묶기: 1건+회전수 / 나누기: N건 분리) */}
+<RotationPicker
+  count={form.회전수 || 1}
+  mode={form.회전방식 || "묶기"}
+  onChange={(c, m) => setForm((p) => ({ ...p, 회전수: c, 회전방식: m }))}
+  onMultiplyFare={isAdmin ? (n) => setForm((p) => {
+    const num = (v) => parseInt(String(v ?? "").replace(/[^\d-]/g, ""), 10) || 0;
+    const sale = num(p.청구운임) * n, drv = num(p.기사운임) * n;
+    return { ...p, 청구운임: sale ? String(sale) : p.청구운임, 기사운임: drv ? String(drv) : p.기사운임, 수수료: String(sale - drv) };
+  }) : undefined}
+/>
 
 {/* 긴급 */}
 <button type="button" onClick={() => onChange("긴급", !form.긴급)}
@@ -17646,6 +17660,7 @@ className={`
     {row.운행유형 === "왕복" && (
       <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-indigo-100 text-indigo-600 border border-indigo-200 whitespace-nowrap">왕복</span>
     )}
+    <RotationBadge order={row} />
    {(() => {
   const safeParse = v => {
     if (Array.isArray(v)) return v;
@@ -22951,7 +22966,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <AddressCell text={r.상차지명} max={8} popupTitle="상차지명 전체보기" />
-    {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
+    {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}<RotationBadge order={r} />
 
 {r.__pickupStops?.length > 0 && (
   <StopInlineBadge count={r.__pickupStops.length} list={r.__pickupStops} type="pickup"
@@ -24497,7 +24512,7 @@ return `[파렛전표/거래명세서 업로드]
 ${uploadUrl}
 
 ${/(냉장|냉동)/i.test(r.차량종류||r.차종||"") ? "*냉장(0~10도유지),냉동(-18도이하)*\n" : "*관련 서류 업로드 필수*\n"}${r.지급방식 === "착불" ? "*착불건입니다*" : r.지급방식 === "선불" ? "*선불건입니다*" : "*결제일 링크 참고하세요*"}
-${isChainD ? "" : dateNotice}${dateText}${r.운행유형 === "왕복" ? "\n[왕복운행]" : ""}
+${isChainD ? "" : dateNotice}${dateText}${r.운행유형 === "왕복" ? "\n[왕복운행]" : ""}${rotationNotice(r)}
 
 ${coreBlockD}
 
@@ -24681,7 +24696,7 @@ ${kind}방법 : ${e.method || "-"}`;
 
 const coreBlockF = isChainF ? _chainBlockF : _fanOutBlockF;
 
-return `${isChainF ? "" : dateNotice}${r.상차일 || ""} ${yoil}${r.운행유형 === "왕복" ? "\n[왕복운행]" : ""}
+return `${isChainF ? "" : dateNotice}${r.상차일 || ""} ${yoil}${r.운행유형 === "왕복" ? "\n[왕복운행]" : ""}${rotationNotice(r)}
 
 ${coreBlockF}
 
@@ -38919,7 +38934,7 @@ return (
    ) : key === "상차지명" ? (
   <div className="inline-flex items-center gap-1">
     <AddressCell text={row.상차지명} max={8} popupTitle="상차지명 전체보기" />
-    {String(row.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
+    {String(row.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}<RotationBadge order={row} />
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
       const list=[..._s(row.경유상차목록),..._s(row.경유지_상차)]
@@ -49476,7 +49491,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <td className={`${cellBase} font-medium`}>
                         <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
                           <span>{r.상차지명 || ""}</span>
-                          {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}
+                          {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}<RotationBadge order={r} />
                         </div>
                       </td>
                       <td className={cellBase}>

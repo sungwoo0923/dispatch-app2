@@ -10,6 +10,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { registerPlugin } from "@capacitor/core";
 import { useAddrGeo, computeFleetPhase, useFleetPhaseGeo, getCachedGeo, isPickupVisited } from "../fleetGeo";
 import { snapshotOrder, changedFields, changedLabels } from "../orderChange";
+import { rotationCount, rotationDone, rotationLabel } from "../rotation";
 import { haversineKm } from "../tmapFareCalc";
 
 // Capacitor 네이티브 컨텍스트 여부 확인
@@ -390,11 +391,16 @@ function useDropCompleteGate(order, pos) {
   return { ok: false, msg: `하차지 1km 이내에서 운송완료 가능 (현재 약 ${km.toFixed(1)}km)` };
 }
 
-function ActiveOrderCard({ order: o, loading, onComplete, onCopy, pos, onConfirmChange }) {
+function ActiveOrderCard({ order: o, loading, onComplete, onRoundComplete, onCopy, pos, onConfirmChange }) {
   const gate = useDropCompleteGate(o, pos);
   const disabled = loading || !gate.ok;
   const changed = changedFields(o);
   const labels = changedLabels(changed);
+  // ⭐ 회전 운행(묶기) — 마지막 회차 전까지는 "N회차 완료", 마지막 회차에서 운송완료
+  const rounds = rotationCount(o);
+  const roundsDone = rotationDone(o);
+  const midRound = rounds > 1 && roundsDone < rounds - 1;
+  const rotLabel = rotationLabel(o);
   return (
     <div style={{ background: "#fff", border: "2px solid #1B2B4B", borderRadius: 16, padding: 16, boxShadow: "0 4px 16px rgba(27,43,75,0.12)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
@@ -416,12 +422,28 @@ function ActiveOrderCard({ order: o, loading, onComplete, onCopy, pos, onConfirm
           </button>
         </div>
       )}
+      {rotLabel && (
+        <div style={{ background: "#fffbeb", border: "1.5px solid #fcd34d", borderRadius: 12, padding: "10px 12px", marginBottom: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 14, fontWeight: 800, color: "#b45309" }}>🔁 회전 운행 {rotLabel}</span>
+            {rounds > 1 && <span style={{ fontSize: 13, fontWeight: 800, color: "#92400e" }}>{roundsDone}/{rounds} 완료</span>}
+          </div>
+          {rounds > 1 && (
+            <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
+              {Array.from({ length: rounds }, (_, i) => (
+                <div key={i} style={{ flex: 1, height: 6, borderRadius: 3, background: i < roundsDone ? "#f59e0b" : "#fde68a" }} />
+              ))}
+            </div>
+          )}
+          {rounds > 1 && <div style={{ fontSize: 11, color: "#92400e", marginTop: 6 }}>같은 상/하차지를 {rounds}번 운행합니다. 하차할 때마다 회차 완료를 눌러주세요.</div>}
+        </div>
+      )}
       <OrderDetailBody o={o} onCopy={onCopy} changed={changed} />
       <DispatcherLine order={o} />
       {/* ⭐ 하차지 도착해 운송완료가 가능해지면 버튼이 천천히 깜빡여 눈에 띄게 */}
       <style>{`@keyframes kpCompletePulse { 0%,100% { box-shadow: 0 0 0 0 rgba(22,163,74,.55); filter: brightness(1); } 50% { box-shadow: 0 0 0 10px rgba(22,163,74,0); filter: brightness(1.12); } }`}</style>
-      <button onClick={() => { if (gate.ok) onComplete(); }} disabled={disabled} style={{ width: "100%", marginTop: 12, padding: "14px", borderRadius: 12, border: "none", background: gate.ok ? "#16a34a" : "#9ca3af", color: "#fff", fontWeight: 800, fontSize: 15, cursor: disabled ? "not-allowed" : "pointer", animation: gate.ok && !loading ? "kpCompletePulse 2.2s ease-in-out infinite" : "none" }}>
-        운송완료
+      <button onClick={() => { if (!gate.ok) return; if (midRound) onRoundComplete?.(roundsDone + 1); else onComplete(); }} disabled={disabled} style={{ width: "100%", marginTop: 12, padding: "14px", borderRadius: 12, border: "none", background: gate.ok ? (midRound ? "#d97706" : "#16a34a") : "#9ca3af", color: "#fff", fontWeight: 800, fontSize: 15, cursor: disabled ? "not-allowed" : "pointer", animation: gate.ok && !loading ? "kpCompletePulse 2.2s ease-in-out infinite" : "none" }}>
+        {midRound ? `${roundsDone + 1}회차 완료 (${roundsDone + 1}/${rounds})` : rounds > 1 ? `마지막 회차 · 운송완료` : "운송완료"}
       </button>
       {!gate.ok && (
         <div style={{ marginTop: 6, fontSize: 12, fontWeight: 700, color: "#6b7280", textAlign: "center" }}>{gate.msg}</div>
@@ -1334,6 +1356,23 @@ export default function DriverHome() {
       });
   }, [myOrders]);
 
+  // ⭐ 회전 운행 — 중간 회차 완료(마지막 회차는 운송완료로 처리)
+  const handleRoundComplete = useCallback(async (o, k) => {
+    if (orderActionLoading) return;
+    setOrderActionLoading(true);
+    try {
+      await updateDoc(doc(db, o.__col || "orders", o._id), {
+        완료회차: k,
+        [`회차완료일시.${k}`]: serverTimestamp(),
+      });
+      showToast(`${k}회차 완료 — 다음 회차 상차지로 이동해주세요`);
+    } catch (e) {
+      showToast("처리 중 오류가 발생했습니다");
+    } finally {
+      setOrderActionLoading(false);
+    }
+  }, [orderActionLoading]);
+
   const handleCompleteOrder = useCallback(async (orderId, col = "orders") => {
     if (orderActionLoading) return;
     setOrderActionLoading(true);
@@ -1947,6 +1986,7 @@ export default function DriverHome() {
               {acceptedOrders.map(o => (
                 <ActiveOrderCard key={o._id} order={o} loading={orderActionLoading} pos={pos} onConfirmChange={handleConfirmChange}
                   onComplete={() => handleCompleteOrder(o._id, o.__col)}
+                  onRoundComplete={(k) => handleRoundComplete(o, k)}
                   onCopy={copyText} />
               ))}
             </div>

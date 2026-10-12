@@ -51,6 +51,7 @@ import { db, auth } from "../firebase";
 import { signOut } from "firebase/auth";
 import { version as APP_VERSION } from "../../package.json";
 import { calcLeaveBalance } from "../leaveUtils";
+import { RotationPicker, RotationBadge, expandRotation } from "../rotation";
 import { isWeekend, findApprovedLeaveForDate, isHoliday } from "../attendanceUtils";
 
 
@@ -3807,6 +3808,7 @@ const groupedByDate = useMemo(() => {
       긴급: form.긴급 === true,          // ← PC 긴급 버튼과 동일 필드
       ...(canSeeBlind() ? { 블라인드: form.블라인드 === true } : {}), // ⭐ 최고관리자 전용 블라인드
       운행유형: form.운행유형 || "",     // ← PC 왕복/편도 버튼과 동일 필드
+      회전수: Math.max(1, Number(form.회전수) || 1), // ⭐ 회전 운행(같은 구간 N회)
       적요: form.적요 || "",
       메모: form.적요 || "",
       전달사항: form.전달사항 || "",
@@ -4036,13 +4038,15 @@ const groupedByDate = useMemo(() => {
         return writePromise;
       };
 
-      const rowDatas = Array.from({ length: saveCount }, (_, i) => buildRowData(i));
+      // ⭐ 회전 운행 "나누기"면 회차별로 N건으로 펼친다
+      const rowDatas = Array.from({ length: saveCount }, (_, i) => buildRowData(i))
+        .flatMap(r => expandRotation({ ...r, 회전방식: form.회전방식 || "묶기" }));
       const writePromises = rowDatas.map(saveOne);
 
       // ⭐ 실제 저장(setDoc)은 백그라운드에서 진행 중이지만, 화면은 즉시 갱신한다 —
       // 예전엔 확인 버튼을 눌러야 닫히는 팝업(registeredSummary)까지 있어서 등록이
       // 한층 더 느리게 느껴졌는데, 지금은 클릭 한 번 없이 바로 다음 화면으로 넘어간다.
-      showSuccess(saveCount > 1 ? `${saveCount}건 등록 완료` : "등록 완료");
+      showSuccess(rowDatas.length > 1 ? `${rowDatas.length}건 등록 완료` : "등록 완료");
       setMultiCount(1);
       setUseSeparateDates(false);
       setPage("list");
@@ -4117,6 +4121,7 @@ const handleOrderDuplicate = (order) => {
     혼적여부: order.혼적여부 || "독차",
     긴급: order.긴급 === true,
     운행유형: order.운행유형 || "",
+    회전수: Number(order.회전수) > 1 ? Number(order.회전수) : 1,
     적요: "",
     전달사항: order.전달사항 || "",
     전달사항고정: order.전달사항고정 === true,
@@ -4184,6 +4189,7 @@ const handleOrderDuplicateWithDriver = (order) => {
     혼적여부: order.혼적여부 || "독차",
     긴급: order.긴급 === true,
     운행유형: order.운행유형 || "",
+    회전수: Number(order.회전수) > 1 ? Number(order.회전수) : 1,
     적요: "",
     전달사항: order.전달사항 || "",
     전달사항고정: order.전달사항고정 === true,
@@ -10198,6 +10204,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             {String(order.운행유형 || "").trim() === "왕복" && (
               <span className="text-[0.68em] font-extrabold tracking-wide bg-[#1B2B4B] text-white px-1.5 py-0.5 rounded shrink-0">왕복</span>
             )}
+            <RotationBadge order={order} className="!ml-0 shrink-0" />
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {activeRequestType && (
@@ -10435,6 +10442,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
       왕복
     </span>
   )}
+  <RotationBadge order={order} className="!ml-0" />
 
   {activeRequestType && (
     <button
@@ -11372,6 +11380,7 @@ function MobileOrderDetail({
       혼적여부: order.혼적여부 || "독차",
       긴급: order.긴급 === true,
       운행유형: order.운행유형 || "",
+      회전수: Number(order.회전수) > 1 ? Number(order.회전수) : 1,
       적요: order.메모 || "",
       기사명: order.기사명 || "",
       전화번호: order.전화번호 || "",
@@ -11851,7 +11860,7 @@ const handleAssignClick = () => {
       청구운임: order.청구운임 || 0, 기사운임: order.기사운임 || 0,
       수수료: (Number(order.청구운임) || 0) - (Number(order.기사운임) || 0),
       산재보험료: order.산재보험료 || 0, 차량번호: carNo || "",
-      혼적여부: order.혼적여부 || "독차", 긴급: order.긴급 === true, 운행유형: order.운행유형 || "",
+      혼적여부: order.혼적여부 || "독차", 긴급: order.긴급 === true, 운행유형: order.운행유형 || "", 회전수: Number(order.회전수) > 1 ? Number(order.회전수) : 1,
       적요: order.메모 || "",
       전달사항: order.전달사항 || "",
       전달사항고정: order.전달사항고정 === true,
@@ -15441,6 +15450,23 @@ const pickDrop = (c) => {
                 </button>
               )}
             </div>
+          }
+        />
+        <RowLabelInput
+          label="회전"
+          input={
+            <RotationPicker
+              size="sm"
+              count={form.회전수 || 1}
+              mode={form._editId ? "묶기" : (form.회전방식 || "묶기")}
+              accent={cardVersionB ? "#1B2B4B" : "#2563eb"}
+              onChange={(c, m) => setForm(p => ({ ...p, 회전수: c, 회전방식: p._editId ? "묶기" : m }))}
+              onMultiplyFare={(n) => setForm(p => {
+                const num = (v) => Number(String(v ?? "").replace(/[^\d-]/g, "")) || 0;
+                const sale = num(p.청구운임) * n, drv = num(p.기사운임) * n;
+                return { ...p, 청구운임: sale ? String(sale) : p.청구운임, 기사운임: drv ? String(drv) : p.기사운임, 수수료: sale - drv };
+              })}
+            />
           }
         />
         </fieldset>
