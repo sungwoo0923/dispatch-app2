@@ -417,8 +417,9 @@ export function computeFleetPhase({ driverStatus, orders = [], location }) {
       // 그 주소가 지금 상차지 주소와 같으면 "다녀온 것"으로 보고 상차지진입은 건너뛴다.
       const visited = isPickupVisited(active);
       if (pd != null && pd <= 1) return "상차지도착";
-      if (dd != null && dd <= 1) return "하차지도착";
-      if (dd != null && dd <= 5) return "하차지진입";
+      // 상차(상차지 방문) 전에는 하차지 근처에 있어도 하차지진입/도착이 아니다 — 상차지로 가는 중
+      if (visited && dd != null && dd <= 1) return "하차지도착";
+      if (visited && dd != null && dd <= 5) return "하차지진입";
       if (!visited && pd != null && pd <= 5) return "상차지진입";
     }
     return "운송중";

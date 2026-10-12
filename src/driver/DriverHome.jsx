@@ -443,8 +443,15 @@ function useDropCompleteGate(order, pos) {
 
 function ActiveOrderCard({ order: o, loading, onComplete, onRoundComplete, onCopy, pos, onConfirmChange, queued = false, queueNo = 0, photos = [], uploading = false, onUpload }) {
   const rawGate = useDropCompleteGate(o, pos);
-  // ⭐ 수락한 오더가 여러 건이면 먼저 수락한 오더부터 — 뒤 오더는 위치가 하차지 근처여도 운송완료 불가
-  const gate = queued ? { ok: false, msg: "앞 오더를 운송완료한 뒤 진행할 수 있습니다" } : rawGate;
+  // ⭐ 수락한 오더가 여러 건이면 먼저 수락한 오더부터 — 뒤 오더는 위치가 하차지 근처여도 운송완료 불가.
+  // 또 상차지에 들른(상차한) 뒤에만 운송완료 가능 — 하차지 근처에서 오더를 받았다고 바로 완료되면 안 된다.
+  // (상차지 1km 진입 또는 "상차완료 사진" 전송으로 상차 확인)
+  const loaded = isPickupVisited(o);
+  const gate = queued
+    ? { ok: false, msg: "앞 오더를 운송완료한 뒤 진행할 수 있습니다" }
+    : !loaded
+      ? { ok: false, msg: "상차지에 도착(상차)한 뒤 운송완료할 수 있습니다" }
+      : rawGate;
   const disabled = loading || !gate.ok;
   const changed = changedFields(o);
   const labels = changedLabels(changed);
@@ -1409,7 +1416,7 @@ export default function DriverHome() {
   // ⭐ 상차지 방문 기록 — 수락한 오더의 상차지 1km 안에 들어오면(또는 오늘 GPS 기록상
   // 수락 이후 들어온 적이 있으면) 오더에 상차지도착주소/일시를 남긴다. 이후 상차지에서
   // 멀어지면 "상차지진입"이 아니라 "운송중"으로 보이게 하는 기준(관리자 화면도 같은 값을 씀).
-  const visitCheckedRef = useRef(new Set());
+  const visitCheckedRef = useRef(new Map()); // key → 마지막 GPS기록 확인 시각(2분마다 다시 확인)
   useEffect(() => {
     if (!uid) return;
     myOrders
@@ -1433,8 +1440,9 @@ export default function DriverHome() {
         const prevDoneMs = Math.max(0, ...myOrders.filter(x => x.기사확인상태 === "완료" && x.기사완료일시?.toMillis).map(x => x.기사완료일시.toMillis()));
         const sinceMs = Math.max(acceptMs, prevDoneMs);
         const key = `${o._id}|${o.상차지주소}`;
-        if (visitCheckedRef.current.has(key)) return;
-        visitCheckedRef.current.add(key);
+        const lastChk = visitCheckedRef.current.get(key) || 0;
+        if (Date.now() - lastChk < 120000) return;
+        visitCheckedRef.current.set(key, Date.now());
         getDocs(query(collection(db, "gps_tracks"), where("driverId", "==", uid), where("date", "==", kstDateStr())))
           .then(snap => {
             const hit = snap.docs.some(d => {
@@ -1541,14 +1549,20 @@ export default function DriverHome() {
         size: file.size, sizeKB: Math.round(file.size / 1024),
         uploadedBy: "driver", createdAt: serverTimestamp(),
       });
-      await updateDoc(doc(db, col, orderId), { attachCount: increment(1) });
+      const target = myOrders.find(x => x._id === orderId);
+      await updateDoc(doc(db, col, orderId), {
+        attachCount: increment(1),
+        // 상차완료 사진을 보냈으면 상차한 것으로 본다(GPS가 늦게 잡혀도 운송완료가 막히지 않게)
+        ...(actionType === "상차완료" && target && !isPickupVisited(target)
+          ? { 상차지도착주소: target.상차지주소 || "", 상차지도착일시: serverTimestamp(), 상차지도착근거: "상차사진" } : {}),
+      });
       showToast(`${actionType} 사진이 전송되었습니다`);
     } catch (e) {
       showToast("사진 전송 중 오류가 발생했습니다");
     } finally {
       setFleetPhotoUploading(false);
     }
-  }, [uid, driver, fleetPhotoUploading]);
+  }, [uid, driver, fleetPhotoUploading, myOrders]);
 
   // 사진 업로드 처리
   const handlePhotoUpload = useCallback(async (file) => {
@@ -1696,6 +1710,27 @@ export default function DriverHome() {
     await signOut(auth);
     window.location.href = "/driver-login";
   };
+
+  // ⭐ 오더장 슬라이드 — 진행중(먼저 수락한) 오더 → 다음 오더 → 수락 대기 오더 순서.
+  // 좌우로 밀거나 ‹ › 버튼으로 넘긴다. 새 오더(수락 대기)가 들어오면 그 오더장으로 자동 이동.
+  const _canceled = (o) => o.배차상태 === "배차취소" || o.상태 === "취소";
+  const slideOrders = [
+    ...sortActiveOrders(myOrders).filter(o => !_canceled(o)),
+    ...myOrders.filter(o => o.기사확인상태 === "대기" && !_canceled(o)),
+  ];
+  const slideKey = slideOrders.map(o => o._id).join(",");
+  const [slideIdx, setSlideIdx] = useState(0);
+  const seenSlidePendingRef = useRef(null);
+  const touchXRef = useRef(null);
+  useEffect(() => {
+    const pendIds = slideOrders.filter(o => o.기사확인상태 === "대기").map(o => o._id);
+    if (seenSlidePendingRef.current === null) { seenSlidePendingRef.current = new Set(pendIds); }
+    const fresh = pendIds.find(id => !seenSlidePendingRef.current.has(id));
+    pendIds.forEach(id => seenSlidePendingRef.current.add(id));
+    if (fresh) { const i = slideOrders.findIndex(o => o._id === fresh); if (i >= 0) { setSlideIdx(i); return; } }
+    setSlideIdx(i => Math.min(i, Math.max(0, slideOrders.length - 1)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slideKey]);
 
   if (!driver) {
     return (
@@ -2074,28 +2109,66 @@ export default function DriverHome() {
                   </div>
                 );
               })()}
-              {pendingOrders.length > 0 && (
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", letterSpacing: "0.05em" }}>
-                  {`새 배차 ${pendingOrders.length}건이 발생되었습니다`}
-                </div>
-              )}
-              {pendingOrders.map(o => (
-                <PendingOrderCard key={o._id} order={o} loading={orderActionLoading}
-                  resting={driver?.status === "휴차" || driver?.mainStatus === "휴차"}
-                  onAccept={() => handleAcceptOrder(o._id, o.__col)}
-                  onReject={() => { setRejectModal({ orderId: o._id, col: o.__col }); setRejectReason(""); }}
-                  onCopy={copyText} />
-              ))}
-              {acceptedOrders.map((o, qi) => (
-                <ActiveOrderCard key={o._id} order={o} loading={orderActionLoading} pos={pos} onConfirmChange={handleConfirmChange}
-                  queued={qi > 0} queueNo={qi + 1}
-                  photos={todayPhotos.filter(p => p.orderId === o._id)}
-                  uploading={fleetPhotoUploading}
-                  onUpload={(f, actionType) => handleFleetPhotoFile(f, actionType, o._id, o.__col || "orders")}
-                  onComplete={() => handleCompleteOrder(o._id, o.__col)}
-                  onRoundComplete={(k) => handleRoundComplete(o, k)}
-                  onCopy={copyText} />
-              ))}
+              {(() => {
+                const n = slideOrders.length;
+                if (!n) return null;
+                const idx = Math.min(slideIdx, n - 1);
+                const o = slideOrders[idx];
+                const qi = acceptedOrders.findIndex(x => x._id === o._id);
+                const go = (d) => setSlideIdx(Math.max(0, Math.min(n - 1, idx + d)));
+                const navBtn = (d, label, dis) => (
+                  <button onClick={() => go(d)} disabled={dis}
+                    style={{ width: 38, height: 38, borderRadius: 12, border: "1.5px solid #1B2B4B", background: dis ? "#f3f4f6" : "#fff", color: dis ? "#cbd5e1" : "#1B2B4B", fontSize: 20, fontWeight: 900, cursor: dis ? "default" : "pointer", borderColor: dis ? "#e5e7eb" : "#1B2B4B" }}>{label}</button>
+                );
+                return (
+                  <div>
+                    {n > 1 && (
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                        {navBtn(-1, "‹", idx === 0)}
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: 14, fontWeight: 900, color: "#111827" }}>
+                            {o.기사확인상태 === "대기" ? "새 오더 · 수락 대기" : qi === 0 ? "진행중 오더" : `다음 오더 (${qi + 1}번째)`}
+                            <span style={{ color: "#6b7280", fontWeight: 800 }}>  {idx + 1} / {n}</span>
+                          </div>
+                          <div style={{ display: "flex", gap: 5, justifyContent: "center", marginTop: 5 }}>
+                            {slideOrders.map((x, i) => (
+                              <span key={x._id} onClick={() => setSlideIdx(i)} style={{ width: i === idx ? 18 : 7, height: 7, borderRadius: 4, cursor: "pointer", transition: "width .2s",
+                                background: i === idx ? "#1B2B4B" : x.기사확인상태 === "대기" ? "#f59e0b" : "#cbd5e1" }} />
+                            ))}
+                          </div>
+                        </div>
+                        {navBtn(1, "›", idx === n - 1)}
+                      </div>
+                    )}
+                    <div
+                      onTouchStart={e => { touchXRef.current = e.touches[0].clientX; }}
+                      onTouchEnd={e => {
+                        const sx = touchXRef.current; touchXRef.current = null;
+                        if (sx == null) return;
+                        const dx = e.changedTouches[0].clientX - sx;
+                        if (Math.abs(dx) > 60) go(dx < 0 ? 1 : -1);
+                      }}
+                    >
+                      {o.기사확인상태 === "대기" ? (
+                        <PendingOrderCard key={o._id} order={o} loading={orderActionLoading}
+                          resting={driver?.status === "휴차" || driver?.mainStatus === "휴차"}
+                          onAccept={() => handleAcceptOrder(o._id, o.__col)}
+                          onReject={() => { setRejectModal({ orderId: o._id, col: o.__col }); setRejectReason(""); }}
+                          onCopy={copyText} />
+                      ) : (
+                        <ActiveOrderCard key={o._id} order={o} loading={orderActionLoading} pos={pos} onConfirmChange={handleConfirmChange}
+                          queued={qi > 0} queueNo={qi + 1}
+                          photos={todayPhotos.filter(p => p.orderId === o._id)}
+                          uploading={fleetPhotoUploading}
+                          onUpload={(f, actionType) => handleFleetPhotoFile(f, actionType, o._id, o.__col || "orders")}
+                          onComplete={() => handleCompleteOrder(o._id, o.__col)}
+                          onRoundComplete={(k) => handleRoundComplete(o, k)}
+                          onCopy={copyText} />
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
