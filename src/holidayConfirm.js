@@ -68,38 +68,38 @@ export function confirmRestDispatch(conflict) {
         ${today ? "background:#ef4444;color:#fff;" : on ? "background:#1B2B4B;color:#fff;" : "background:#f1f5f9;color:#94a3b8;"}">${w}</span>`;
     }).join("");
     overlay.innerHTML = `
-      <div style="width:100%;max-width:400px;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.25)">
+      <div style="width:100%;max-width:440px;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.25)">
         <div style="background:#1B2B4B;padding:16px 20px;display:flex;align-items:center;gap:10px">
           <div style="width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center">
             <svg width="18" height="18" fill="none" stroke="#fbbf24" stroke-width="2.2" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
           </div>
           <div>
-            <div style="color:#fff;font-size:16px;font-weight:800">${title}</div>
-            <div style="color:rgba(255,255,255,.65);font-size:12px;margin-top:2px">${sub}</div>
+            <div style="color:#fff;font-size:18px;font-weight:900">${title}</div>
+            <div style="color:rgba(255,255,255,.9);font-size:14px;font-weight:700;margin-top:3px">${sub}</div>
           </div>
         </div>
         <div style="padding:18px 20px 6px">
-          <div style="font-size:15px;color:#111827;line-height:1.6">
-            입력하신 <b>${esc(driver.이름 || "-")}</b> <span style="color:#6b7280">(${esc(driver.차량번호 || "-")})</span> 기사님은<br/>
-            ${designated ? `<b style="color:#ef4444">${esc(date)} (${esc(weekday)})</b> 지정 휴차일입니다.` : ""}
+          <div style="font-size:17px;color:#111827;font-weight:700;line-height:1.65">
+            입력하신 <b style="font-weight:900">${esc(driver.이름 || "-")}</b> <span style="color:#111827">(${esc(driver.차량번호 || "-")})</span> 기사님은<br/>
+            ${designated ? `<b style="color:#dc2626;font-weight:900">${esc(date)} (${esc(weekday)})</b> 지정 휴차일입니다.` : ""}
             ${designated && manual ? "<br/>" : ""}
-            ${manual ? `<b style="color:#ef4444">현재 휴차중</b>입니다. <span style="color:#6b7280">(기사님이 직접 휴차 처리)</span>` : ""}
+            ${manual ? `<b style="color:#dc2626;font-weight:900">현재 휴차중</b>입니다. <span style="color:#374151">(기사님이 직접 휴차 처리)</span>` : ""}
           </div>
-          <div style="margin-top:10px;padding:8px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;font-size:13px;color:#9a3412;font-weight:700">
+          <div style="margin-top:12px;padding:10px 14px;background:transparent;border:2px solid #111827;border-radius:10px;font-size:16px;color:#111827;font-weight:900">
             배정하려는 오더: ${esc(date)} (${esc(weekday)}) ${date === kstToday() ? "· 오늘 오더" : date > kstToday() ? "· 미리 주는 오더" : ""}
           </div>
           ${designated ? `<div style="margin-top:12px;padding:10px 12px;background:#f8fafc;border-radius:10px">
-            <div style="font-size:12px;font-weight:800;color:#6b7280;margin-bottom:6px">근무가능요일</div>
+            <div style="font-size:14px;font-weight:900;color:#111827;margin-bottom:6px">근무가능요일</div>
             <div style="display:flex;gap:5px;flex-wrap:wrap">${dayChips}</div>
           </div>` : ""}
-          <div style="font-size:13px;color:#6b7280;margin-top:10px;line-height:1.5">
-            <b style="color:#111827">진행</b> — 그대로 배차하고 기사앱으로 오더가 전달됩니다.<br/>
-            <b style="color:#111827">보류</b> — 기사에게 보내지 않고, 입력한 기사 정보를 비웁니다.
+          <div style="font-size:15px;color:#111827;font-weight:600;margin-top:12px;line-height:1.6">
+            <b style="font-weight:900">진행</b> — 그대로 배차하고 기사앱으로 오더가 전달됩니다.<br/>
+            <b style="font-weight:900">보류</b> — 기사에게 보내지 않고, 입력한 기사 정보를 비웁니다.
           </div>
         </div>
         <div style="display:flex;gap:8px;padding:16px 20px 20px">
-          <button data-act="cancel" style="flex:1;padding:13px 0;border-radius:12px;border:1.5px solid #d1d5db;background:#fff;color:#374151;font-size:15px;font-weight:800;cursor:pointer">보류</button>
-          <button data-act="ok" style="flex:1.3;padding:13px 0;border-radius:12px;border:none;background:#1B2B4B;color:#fff;font-size:15px;font-weight:800;cursor:pointer">진행 (그대로 배차)</button>
+          <button data-act="cancel" style="flex:1;padding:13px 0;border-radius:12px;border:2px solid #111827;background:#fff;color:#111827;font-size:17px;font-weight:900;cursor:pointer">보류</button>
+          <button data-act="ok" style="flex:1.3;padding:13px 0;border-radius:12px;border:none;background:#1B2B4B;color:#fff;font-size:17px;font-weight:900;cursor:pointer">진행 (그대로 배차)</button>
         </div>
       </div>`;
     const done = (v) => {
