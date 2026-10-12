@@ -262,9 +262,9 @@ const hhmm = (d) => {
   return `${String(k.getUTCHours()).padStart(2, "0")}:${String(k.getUTCMinutes()).padStart(2, "0")}`;
 };
 
-export function DropEtaText({ order, driverId, location, style }) {
+export function DropEtaText({ order, driverId, location, style, fallback = null }) {
   const eta = useDropEta(order, driverId, location);
-  if (!eta) return null;
+  if (!eta) return fallback;
   return (
     <span style={{ fontWeight: 800, color: "#1d4ed8", ...style }}>{hhmm(eta)} 도착예상</span>
   );
