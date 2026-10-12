@@ -2474,6 +2474,7 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
     ...copyTarget,
     _id: newId,
     화물내용: cargoOverride ?? (copyTarget.화물내용 || ""),
+    완료회차: 0, // 회전 운행 진행상황은 새 오더에서 처음부터
     // 복사/수정 패널에서 상차일/하차일을 수정했다면 그 값을 그대로 존중한다 — 무조건
     // 오늘 날짜로 덮어쓰면 사용자가 다른 날짜로 바꿔서 등록해도 조용히 오늘로 저장되어
     // 화주사(연동 사본)와 운송사 원본이 모두 의도한 날짜와 다르게 등록되는 문제가 있었다.
@@ -8525,7 +8526,7 @@ const [activeStopIdx, setActiveStopIdx] = React.useState(null);
 const [stopContactPickerIdx, setStopContactPickerIdx] = React.useState(null);
 const [stopContactPickerOpts, setStopContactPickerOpts] = React.useState([]);
 const [stopList, setStopList] = React.useState([
-  { 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"파레트", 톤수값:"", 톤수타입:"톤", 차량톤수:"", 상차일:"", 상차시간:"", 하차일:"", 하차시간:"", 방법:"" }
+  { 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"", 톤수값:"", 톤수타입:"", 차량톤수:"", 상차일:"", 상차시간:"", 하차일:"", 하차시간:"", 방법:"" }
 ]);
 const [stopForm, setStopForm] = React.useState({
   업체명:"",
@@ -8931,14 +8932,13 @@ const primary =
     : null;
 
 // 구형 포맷(담당자 직접 필드) 호환
-  const legacyContact = p.담당자?.trim()
-    ? [{ name: p.담당자.trim(), phone: p.담당자번호 || "", isPrimary: true }]
+  const legacyContact = (p.담당자?.trim() || String(p.담당자번호 || "").trim())
+    ? [{ name: (p.담당자 || "").trim(), phone: p.담당자번호 || "", isPrimary: true }]
     : [];
 
-  const resolvedContacts =
-    Array.isArray(p.contacts) && p.contacts.length
-      ? p.contacts
-      : legacyContact;
+  // 이름·번호가 모두 빈 자리표시 연락처는 버린다
+  const validContacts = (Array.isArray(p.contacts) ? p.contacts : []).filter(c => c && (String(c.name || "").trim() || String(c.phone || "").trim()));
+  const resolvedContacts = validContacts.length ? validContacts : legacyContact;
 
   const resolvedPrimary =
     resolvedContacts.find(c => c.isPrimary) || resolvedContacts[0] || null;
@@ -9445,7 +9445,8 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
   }
 
   const existing = existingByName;
-  let contacts = existing?.contacts ? [...existing.contacts] : [];
+  // 이름·번호가 빈 자리표시 연락처는 버리고 시작한다(새 담당자/번호가 대표로 잡히게)
+  let contacts = (existing?.contacts ? [...existing.contacts] : []).filter(c => c && (String(c.name || "").trim() || String(c.phone || "").trim()));
 
   const resolvedManager = manager?.trim() || "";
   const resolvedPhone = phone?.trim() || "";
@@ -10867,7 +10868,7 @@ const applyMultiSlotDrop = (place) => {
   setMultiRegSlots(prev => prev.map((s, i) => i === multiRegIdx ? {
     ...s,
     하차지명: place.업체명, 하차지주소: place.주소 || "",
-    하차지담당자: place.담당자 || "", 하차지담당자번호: place.담당자번호 || "",
+    하차지담당자: primaryContactOf(place)?.name || "", 하차지담당자번호: primaryContactOf(place)?.phone || "",
   } : s));
 
   // ⭐ 하차지도 상차지와 동일하게: 담당자 여러 명이면 선택 팝업, 등급/메모가
@@ -11182,8 +11183,8 @@ function applyClientSelect(name) {
       // 🔥 상차지 자동 세팅
       상차지명: p.업체명,
       상차지주소: p.주소 || "",
-      상차지담당자: p.담당자 || "",
-상차지담당자번호: p.담당자번호 || "",
+      상차지담당자: primaryContactOf(p)?.name || "",
+상차지담당자번호: primaryContactOf(p)?.phone || "",
 
     }));
   } else {
@@ -11223,8 +11224,8 @@ function applyToPickup(place) {
     거래처명: place.업체명,
     상차지명: place.업체명,
     상차지주소: place.주소 || "",
-    상차지담당자: place.담당자 || "",
-    상차지담당자번호: place.담당자번호 || "",
+    상차지담당자: primaryContactOf(place)?.name || "",
+    상차지담당자번호: primaryContactOf(place)?.phone || "",
   }));
 
 }
@@ -11575,8 +11576,7 @@ const applyPlaceToForm = (place, type, nextFocusId = null) => {
   const uniqueContacts = [...new Map(contacts.map(c => [c.name.trim(), c])).values()];
   // 기본거래처로 옮겨온 업체는 contacts 배열이 없고 담당자/담당자번호 평면 필드만
   // 있으므로, contacts가 비어 있으면 그 평면 필드로 대체한다
-  const primary = uniqueContacts.find(c => c.isPrimary) || uniqueContacts[0]
-    || (place.담당자 ? { name: place.담당자, phone: place.담당자번호 || "" } : null);
+  const primary = uniqueContacts.find(c => c.isPrimary) || uniqueContacts[0] || primaryContactOf(place);
 
   if (type === "pickup") {
     setForm(prev => ({
@@ -15154,9 +15154,9 @@ const similar = placeList.filter(p => {
   onClick={() => {
   setStopType("pickup");
 
-const arr = (form.경유상차목록 || []).map(s => ({ ...s, 상차일: s.상차일 || form.상차일 || "" }));
+const arr = (form.경유상차목록 || []).map(s => cleanStopCargo({ ...s, 상차일: s.상차일 || form.상차일 || "" }));
   setStopList(arr.length ? arr : [
-    { 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"파레트", 톤수값:"", 톤수타입:"톤", 차량톤수:"", 상차일: form.상차일 || "", 상차시간:"", 하차일:"", 하차시간:"", 방법:"" }
+    { 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"", 톤수값:"", 톤수타입:"", 차량톤수:"", 상차일: form.상차일 || "", 상차시간:"", 하차일:"", 하차시간:"", 방법:"" }
   ]);
 
   setStopPopupOpen(true);
@@ -15329,12 +15329,12 @@ className={`
   onClick={() => {
   setStopType("drop");
 
-  const arr = (form.경유하차목록 || []).map(s => ({ ...s, 하차일: s.하차일 || form.하차일 || "" }));
+  const arr = (form.경유하차목록 || []).map(s => cleanStopCargo({ ...s, 하차일: s.하차일 || form.하차일 || "" }));
 
   setStopList(
     arr.length
       ? arr
-      : [{ 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"파레트", 톤수값:"", 톤수타입:"톤", 차량톤수:"", 상차일:"", 상차시간:"", 하차일: form.하차일 || "", 하차시간:"", 방법:"" }]
+      : [{ 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"", 톤수값:"", 톤수타입:"", 차량톤수:"", 상차일:"", 상차시간:"", 하차일: form.하차일 || "", 하차시간:"", 방법:"" }]
   );
 
   setStopPopupOpen(true);
@@ -16154,13 +16154,14 @@ className={`
             <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
               <CustomSelect
                 className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
-                value={stop.화물타입 ?? "파레트"}
+                value={stop.화물타입 || ""}
                 openOnFocus
                 onChange={(e) => {
                   const type = e.target.value;
                   setStopList(prev => {
                     const copy = [...prev];
-                    copy[idx] = { ...copy[idx], 화물타입: type };
+                    // 단위를 고르면 숫자만 남긴다(단위 선택 시엔 글자 입력 불가)
+                    copy[idx] = { ...copy[idx], 화물타입: type, 화물내용: type ? String(copy[idx].화물내용 || "").replace(/[^\d.]/g, "") : copy[idx].화물내용 };
                     return copy;
                   });
                 }}
@@ -16204,13 +16205,14 @@ className={`
             <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
               <CustomSelect
                 className="w-[48px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
-                value={stop.톤수타입 ?? "톤"}
+                value={stop.톤수타입 || ""}
                 openOnFocus
                 onChange={(e) => {
                   const type = e.target.value;
                   setStopList(prev => {
                     const copy = [...prev];
-                    copy[idx] = { ...copy[idx], 톤수타입: type, 차량톤수: type ? `${copy[idx].톤수값 || ""}${type}` : (copy[idx].톤수값 || "") };
+                    const tv = type ? String(copy[idx].톤수값 || copy[idx].차량톤수 || "").replace(/[^\d.]/g, "") : (copy[idx].톤수값 || "");
+                    copy[idx] = { ...copy[idx], 톤수타입: type, 톤수값: tv, 차량톤수: type ? (tv ? `${tv}${type}` : "") : tv };
                     return copy;
                   });
                 }}
@@ -16326,7 +16328,7 @@ className={`
             ...prev,
             {
               업체명: "", 주소: "", 담당자: "담당자", 담당자번호: "", 메모: "",
-              화물내용: "", 화물타입: "파레트", 톤수값: "", 톤수타입: "톤",
+              화물내용: "", 화물타입: "", 톤수값: "", 톤수타입: "",
               차량톤수: "",
               상차일: stopType === "pickup" ? (form.상차일 || "") : "",
               상차시간: "",
@@ -16354,7 +16356,8 @@ className={`
           className="px-3 py-1.5 text-sm font-semibold bg-[#1B2B4B] text-white rounded-lg hover:bg-[#243a60] transition"
           onClick={() => {
             // 🔥 저장 전 화물내용/톤수에 타입 합치기
-            const finalList = stopList.map(s => {
+            const finalList = stopList.map(s0 => {
+              const s = cleanStopCargo(s0);
               const cargo = s.화물내용 || "";
               const cargoType = s.화물타입 || "";
               const tonVal = s.톤수값 || "";
@@ -16365,15 +16368,13 @@ className={`
               const TON_SFXS = ["톤","kg","KG"];
               let tonBase = tonVal;
               for (const sfx of TON_SFXS) { if (tonBase.endsWith(sfx)) { tonBase = tonBase.slice(0, -sfx.length).trim(); break; } }
-              const tonRaw8 = (tonType && tonType !== "없음" && tonBase)
-                ? `${tonBase}${tonType}`
-                : (tonVal || "없음");
+              // 아무것도 입력하지 않았으면 "없음"이 아니라 빈칸으로 저장한다
+              const tonFree = s.차량톤수 || tonVal;
+              const tonRaw8 = (tonType && tonBase) ? `${tonBase}${tonType}` : (tonType ? "" : tonFree);
               return {
                 ...s,
-                화물내용: (cargoType && cargoType !== "없음" && cargoBase)
-                  ? `${cargoBase}${cargoType}`
-                  : (cargo || "없음"),
-                차량톤수: tonRaw8 === "없음" ? "없음" : toTonUnit(tonRaw8),
+                화물내용: cargoType ? (cargoBase ? `${cargoBase}${cargoType}` : "") : cargo,
+                차량톤수: tonRaw8 ? toTonUnit(tonRaw8) : "",
               };
             });
 
@@ -20806,13 +20807,42 @@ function LiveLocationPopup({ row, onClose }) {
   );
 }
 
+// ⭐ 거래처(기본/하차지)의 대표 담당자 — contacts 배열(이름 또는 번호가 있는 것만) 중
+// 대표(isPrimary) → 첫 번째 → 평면 필드(담당자/담당자번호/연락처) 순으로 찾는다.
+// 예전엔 이름이 빈 연락처(번호만 저장)나, contacts가 비어 있고 번호만 평면 필드에 있는
+// 거래처는 자동입력에서 빠져 "주소만 오고 담당자/연락처는 안 오는" 문제가 있었다.
+function primaryContactOf(place) {
+  if (!place) return null;
+  const list = (Array.isArray(place.contacts) ? place.contacts : []).filter(c => c && (String(c.name || "").trim() || String(c.phone || "").trim()));
+  const flatName = String(place.담당자 || "").trim();
+  const flatPhone = String(place.담당자번호 || place.연락처 || "").trim();
+  const c = list.find(x => x.isPrimary) || list[0];
+  if (c) return { name: String(c.name || "").trim() || (String(c.phone || "").trim() ? "" : flatName), phone: String(c.phone || "").trim() || flatPhone };
+  return (flatName || flatPhone) ? { name: flatName, phone: flatPhone } : null;
+}
+
+// ⭐ 경유지 화물내용/톤수 정리 — 예전 버그로 아무것도 안 고르고 저장하면 문자 그대로
+// "없음"이 저장됐고, 다시 열어 저장하면 단위가 붙어 "없음파레트"가 되었다.
+// "없음"으로 시작하는 값은 빈 값으로 보고, 값이 없으면 단위 드롭다운도 "없음"("")으로 둔다.
+const stripNoneVal = (v) => {
+  const t = String(v ?? "").replace(/^\s*없음\s*/, "").trim();
+  return /^(파레트|파렛트|박스|통|롤|톤|kg)$/i.test(t) ? "" : t;
+};
+function cleanStopCargo(s) {
+  if (!s || typeof s !== "object") return s;
+  const c = stripNoneVal(s.화물내용), t = stripNoneVal(s.차량톤수), tv = stripNoneVal(s.톤수값);
+  const ct = s.화물타입 === "없음" ? "" : (s.화물타입 || "");
+  const tt = s.톤수타입 === "없음" ? "" : (s.톤수타입 || "");
+  return { ...s, 화물내용: c, 화물타입: c ? ct : "", 차량톤수: t, 톤수값: tv, 톤수타입: (t || tv) ? tt : "" };
+}
+
 // 왕복 오더 표시 — 행 배경 강조와는 별도로, 한눈에 띄는 진한 배지
 const RoundTripBadge = () => (
   <span
     className="
-      inline-flex items-center ml-1 px-2 py-0.5
-      text-[10px] font-extrabold tracking-wide
-      rounded
+      inline-flex items-center shrink-0 align-middle ml-1 px-2 py-[3px]
+      text-[12px] leading-none font-bold tracking-normal
+      rounded-md
       bg-[#1B2B4B] text-white
       whitespace-nowrap
     "
@@ -20919,10 +20949,10 @@ function StopBadge({ count, list, type = "pickup", onSave, placeRows = [], timeO
                       {s.주소 && <div className="flex gap-2"><span className="text-[10px] font-bold text-gray-500 w-14 shrink-0">주소</span><span className="text-[12px] text-gray-700 break-words min-w-0">{s.주소}</span></div>}
                       {(s.담당자||s.담당자번호) && <div className="flex gap-2"><span className="text-[10px] font-bold text-gray-500 w-14 shrink-0">담당자</span><span className="text-[12px] text-gray-700">{s.담당자}{s.담당자번호?` (${s.담당자번호})`:""}</span></div>}
                       {timeVal && <div className="flex gap-2"><span className="text-[10px] font-bold text-gray-500 w-14 shrink-0">{timeLabel}</span><span className="text-[12px] font-semibold text-[#1B2B4B]">{timeVal}</span></div>}
-                      {(s.화물내용||s.차량톤수||s.톤수값) && (
+                      {(stripNoneVal(s.화물내용)||stripNoneVal(s.차량톤수)||stripNoneVal(s.톤수값)) && (
                         <div className="flex gap-3 pt-1 border-t border-gray-100">
-                          {s.화물내용 && <div className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-center"><div className="text-[9px] text-gray-500 font-bold mb-0.5">화물내용</div><div className="text-[13px] font-bold text-gray-800">{s.화물내용}</div></div>}
-                          {(s.차량톤수||s.톤수값) && <div className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-center"><div className="text-[9px] text-gray-500 font-bold mb-0.5">화물톤수</div><div className="text-[13px] font-bold text-gray-800">{toTonUnit(s.차량톤수||s.톤수값)}</div></div>}
+                          {stripNoneVal(s.화물내용) && <div className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-center"><div className="text-[9px] text-gray-500 font-bold mb-0.5">화물내용</div><div className="text-[13px] font-bold text-gray-800">{stripNoneVal(s.화물내용)}</div></div>}
+                          {(stripNoneVal(s.차량톤수)||stripNoneVal(s.톤수값)) && <div className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-center"><div className="text-[9px] text-gray-500 font-bold mb-0.5">화물톤수</div><div className="text-[13px] font-bold text-gray-800">{toTonUnit(stripNoneVal(s.차량톤수)||stripNoneVal(s.톤수값))}</div></div>}
                         </div>
                       )}
                     </div>
@@ -20977,7 +21007,7 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
       if (s.상차시간) lines.push(`상차시간 : ${s.상차시간}`);
       if (s.하차시간) lines.push(`하차시간 : ${s.하차시간}`);
       const cargo = (() => {
-        const raw = s.화물내용 || "";
+        const raw = stripNoneVal(s.화물내용);
         const hasSfx = /파레트|파렛트|박스|통/.test(raw);
         if (hasSfx) return /\d/.test(raw) ? raw : "";
         const qty = raw || s.화물수량 || "";
@@ -20987,7 +21017,7 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
       })();
       if (cargo) lines.push(`화물내용 : ${cargo}`);
       const ton = (() => {
-        const raw = s.차량톤수 || "";
+        const raw = stripNoneVal(s.차량톤수);
         if (/톤|kg/.test(raw)) return toTonUnit(raw);
         const val = s.톤수값 || raw || "";
         const tp = s.톤수타입 || "";
@@ -21047,7 +21077,7 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
               <p className="text-[12px] text-gray-500 -mt-1">전체 경유지 상세 정보</p>
               {list.map((s, i) => {
                 const cargo = (() => {
-                  const raw = s.화물내용 || "";
+                  const raw = stripNoneVal(s.화물내용);
                   if (/파레트|파렛트|박스|통/.test(raw)) return raw;
                   const qty = raw || s.화물수량 || "";
                   const tp = s.화물타입 || "";
@@ -21055,7 +21085,7 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
                   return tp && tp !== "없음" ? `${qty}${tp}` : qty;
                 })();
                 const ton = (() => {
-                  const raw = s.차량톤수 || "";
+                  const raw = stripNoneVal(s.차량톤수);
                   if (/톤|kg/.test(raw)) return toTonUnit(raw);
                   const val = s.톤수값 || raw || "";
                   const tp = s.톤수타입 || "";
@@ -21154,7 +21184,7 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
 
   const emptyStop = () => ({
     업체명: "", 주소: "", 담당자: "", 담당자번호: "", 메모: "",
-    화물내용: "", 화물타입: "파레트", 톤수값: "", 톤수타입: "톤",
+    화물내용: "", 화물타입: "", 톤수값: "", 톤수타입: "",
     차량톤수: "",
     상차일: type === "pickup" ? (orderDate || "") : "",
     상차시간: "",
@@ -21167,7 +21197,7 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
     if (open && !prevOpenRef.current) {
       // Initialize only when modal transitions from closed to open
       const currentList = listRef.current;
-      const initList = (currentList || []).filter(s => s?.업체명?.trim()).map(s => {
+      const initList = (currentList || []).filter(s => s?.업체명?.trim()).map(cleanStopCargo).map(s => {
         const cargo = s.화물내용 || "";
         let cargoVal = cargo, cargoType = "파레트";
         // ⚠️ 예전 버그로 화물내용을 비운 채 "없음"으로 저장했던 이력 데이터가
@@ -21179,14 +21209,14 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
         else if (/파레트|파렛트/.test(cargo)) { cargoVal = cargo.replace(/파레트|파렛트/g,""); cargoType="파레트"; }
         else if (/박스/.test(cargo)) { cargoVal = cargo.replace(/박스/g,""); cargoType="박스"; }
         else if (/통/.test(cargo)) { cargoVal = cargo.replace(/통/g,""); cargoType="통"; }
-        else if (!cargo.trim()) { cargoType = "파레트"; }
+        else if (!cargo.trim()) { cargoType = ""; }
         else { cargoType=""; }
         const ton = s.차량톤수 || s.톤수값 || "";
         let tonVal = ton, tonType = "톤";
         if (ton === "없음") { tonVal = ""; tonType = ""; }
         else if (/톤/.test(ton)) { tonVal = ton.replace(/톤/g,""); tonType="톤"; }
         else if (/kg/i.test(ton)) { tonVal = ton.replace(/kg/gi,""); tonType="kg"; }
-        else if (!ton.trim()) { tonType = "톤"; }
+        else if (!ton.trim()) { tonType = ""; }
         else { tonType=""; }
         // ⚠️ 날짜 없는 예전 경유지 데이터 — 오더 본 상차일/하차일로 대체 표시(빈 날짜로 보이지 않게).
         return {
@@ -23750,7 +23780,8 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
   }
 
   const existing = existingByName;
-  let contacts = existing?.contacts ? [...existing.contacts] : [];
+  // 이름·번호가 빈 자리표시 연락처는 버리고 시작한다(새 담당자/번호가 대표로 잡히게)
+  let contacts = (existing?.contacts ? [...existing.contacts] : []).filter(c => c && (String(c.name || "").trim() || String(c.phone || "").trim()));
   const resolvedManager = manager?.trim() || "";
   const resolvedPhone = phone?.trim() || "";
   if (resolvedManager) {
@@ -24352,7 +24383,7 @@ const _safeStops = (v) => {
 
 // 화물내용 조합 (타입이 "없음"이거나 없으면 숫자만)
 const _cargoText = (s) => {
-  const raw = s.화물내용 || "";
+  const raw = stripNoneVal(s.화물내용);
   const hasSuffix = /파레트|파렛트|박스|통/.test(raw);
   // 숫자+단위 형식("2파레트")이면 그대로, 단위만("파레트" - 수량 없음)이면 없음 처리
   if (hasSuffix) return /\d/.test(raw) ? raw : "";
@@ -24364,7 +24395,7 @@ const _cargoText = (s) => {
 };
 
 const _tonText = (s) => {
-  const raw = s.차량톤수 || "";
+  const raw = stripNoneVal(s.차량톤수);
   if (/톤|kg/.test(raw)) return /\d/.test(raw) ? toTonUnit(raw) : "";
   const val = s.톤수값 || raw || "";
   const type = s.톤수타입 || "";
@@ -24573,7 +24604,7 @@ const _safeStopsF = (v) => {
 };
 
 const _cargoTextF = (s) => {
-  const raw = s.화물내용 || "";
+  const raw = stripNoneVal(s.화물내용);
   if (/파레트|파렛트|박스|통/.test(raw)) return /\d/.test(raw) ? raw : "";
   const qty = raw || s.화물수량 || "";
   const type = s.화물타입 || "";
@@ -24582,7 +24613,7 @@ const _cargoTextF = (s) => {
 };
 
 const _tonTextF = (s) => {
-  const raw = s.차량톤수 || "";
+  const raw = stripNoneVal(s.차량톤수);
   if (/톤|kg/.test(raw)) return /\d/.test(raw) ? toTonUnit(raw) : "";
   const val = s.톤수값 || raw || "";
   const type = s.톤수타입 || "";
@@ -29049,9 +29080,14 @@ flashRow(savedId);
     className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
   ><EditableText id="misc.btn.26997.혼적" defaultText="혼적" /></button>
   <button type="button"
-    onClick={() => setCopyTarget(p => ({ ...p, 운행유형: p.운행유형 === "왕복" ? "편도" : "왕복" }))}
+    onClick={() => setCopyTarget(p => (p.운행유형 === "왕복" ? { ...p, 운행유형: "편도", 회전수: 1, 메모: withRotationMemo(p.메모, 1) } : { ...p, 운행유형: "왕복" }))}
     className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.운행유형 === "왕복" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
   ><EditableText id="misc.btn.27001.왕복" defaultText="왕복" /></button>
+  {/* ⭐ 왕복일 때만 회전수 선택 (기존 오더 수정/복사는 한 오더로 묶기) */}
+  {copyTarget.운행유형 === "왕복" && (
+    <RotationPicker size="sm" allowSplit={false} count={copyTarget.회전수 || 1}
+      onChange={(c) => setCopyTarget(p => ({ ...p, 회전수: c, 메모: withRotationMemo(p.메모, c) }))} />
+  )}
   <button type="button"
     onClick={() => setCopyTarget(p => ({ ...p, 긴급: !p.긴급 }))}
     className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.긴급 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
@@ -34576,7 +34612,8 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
   }
 
   const existing = existingByName;
-  let contacts = existing?.contacts ? [...existing.contacts] : [];
+  // 이름·번호가 빈 자리표시 연락처는 버리고 시작한다(새 담당자/번호가 대표로 잡히게)
+  let contacts = (existing?.contacts ? [...existing.contacts] : []).filter(c => c && (String(c.name || "").trim() || String(c.phone || "").trim()));
   const resolvedManager = manager?.trim() || "";
   const resolvedPhone = phone?.trim() || "";
   if (resolvedManager) {
@@ -40791,9 +40828,14 @@ return (
     className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
   ><EditableText id="misc.btn.38150.혼적" defaultText="혼적" /></button>
   <button type="button"
-    onClick={() => setCopyTarget(p => ({ ...p, 운행유형: p.운행유형 === "왕복" ? "편도" : "왕복" }))}
+    onClick={() => setCopyTarget(p => (p.운행유형 === "왕복" ? { ...p, 운행유형: "편도", 회전수: 1, 메모: withRotationMemo(p.메모, 1) } : { ...p, 운행유형: "왕복" }))}
     className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.운행유형 === "왕복" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
   ><EditableText id="misc.btn.38154.왕복" defaultText="왕복" /></button>
+  {/* ⭐ 왕복일 때만 회전수 선택 (기존 오더 수정/복사는 한 오더로 묶기) */}
+  {copyTarget.운행유형 === "왕복" && (
+    <RotationPicker size="sm" allowSplit={false} count={copyTarget.회전수 || 1}
+      onChange={(c) => setCopyTarget(p => ({ ...p, 회전수: c, 메모: withRotationMemo(p.메모, c) }))} />
+  )}
   <button type="button"
     onClick={() => setCopyTarget(p => ({ ...p, 긴급: !p.긴급 }))}
     className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.긴급 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
@@ -44318,6 +44360,8 @@ function NewOrderPopup({
         차량톤수: toTonUnit(newOrder.차량톤수),
         메모중요도: "일반",
         운행유형: newOrder.운행유형 || "편도",
+        회전수: newOrder.운행유형 === "왕복" ? Math.max(1, Number(newOrder.회전수) || 1) : 1,
+        메모: withRotationMemo(newOrder.메모, newOrder.운행유형 === "왕복" ? Number(newOrder.회전수) || 1 : 1),
         등록일: new Date().toISOString().slice(0, 10),
         배차상태: "배차중",
         차량번호: "",
@@ -44384,7 +44428,7 @@ function NewOrderPopup({
 {/* 왕복/편도 토글 */}
 <button
   type="button"
-  onClick={() => handleChange("운행유형", newOrder.운행유형 === "왕복" ? "편도" : "왕복")}
+  onClick={() => setNewOrder(prev => prev.운행유형 === "왕복" ? { ...prev, 운행유형: "편도", 회전수: 1 } : { ...prev, 운행유형: "왕복" })}
   className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
     newOrder.운행유형 === "왕복"
       ? "bg-indigo-600 text-white border-indigo-600"
@@ -44393,6 +44437,9 @@ function NewOrderPopup({
 >
   {newOrder.운행유형 === "왕복" ? "왕복 ✓" : "편도"}
 </button>
+{newOrder.운행유형 === "왕복" && (
+  <RotationPicker size="sm" allowSplit={false} count={newOrder.회전수 || 1} onChange={(c) => handleChange("회전수", c)} />
+)}
             <label className="flex items-center gap-2">
               <input autoComplete="off"
                 type="checkbox"

@@ -33,7 +33,7 @@ export function RotationBadge({ order, className = "" }) {
   const n = rotationCount(order);
   const done = rotationDone(order);
   return (
-    <span className={`inline-flex items-center ml-1 px-2 py-0.5 text-[10px] font-extrabold rounded bg-amber-500 text-white whitespace-nowrap ${className}`}>
+    <span className={`inline-flex items-center shrink-0 align-middle ml-1 px-2 py-[3px] text-[12px] leading-none font-bold tracking-normal rounded-md bg-orange-600 text-white whitespace-nowrap ${className}`}>
       {label}{n > 1 && done > 0 ? ` (${done}/${n})` : ""}
     </span>
   );

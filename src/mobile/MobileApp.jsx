@@ -10175,8 +10175,9 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
         onClick={onSelect}
       >
         {/* 상단 정보 바 — 왼쪽: 날짜/거래처명/첨부, 오른쪽: 냉장탑/배차상태 */}
-        <div className="px-3 py-1.5 flex items-center justify-between" style={{ background: `linear-gradient(90deg, ${statusWash}, transparent)` }}>
-          <div className="flex items-center gap-1.5 min-w-0">
+        {/* ⭐ 화면이 좁으면(폴더블 분할화면) 배지가 서로 겹치지 않고 다음 줄로 내려가게 flex-wrap */}
+        <div className="px-3 py-1.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1" style={{ background: `linear-gradient(90deg, ${statusWash}, transparent)` }}>
+          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
             <span className="text-[0.68em] text-gray-400 tabular-nums shrink-0">{String(order.상차일 || "").slice(5)}</span>
             {order.거래처명 && (
               <span className="text-[0.72em] font-semibold text-gray-500 truncate max-w-[90px]">{order.거래처명}</span>
@@ -10207,9 +10208,9 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             {String(order.운행유형 || "").trim() === "왕복" && (
               <span className="text-[0.68em] font-extrabold tracking-wide bg-[#1B2B4B] text-white px-1.5 py-0.5 rounded shrink-0">왕복</span>
             )}
-            <RotationBadge order={order} className="!ml-0 shrink-0" />
+            <RotationBadge order={order} className="!ml-0 shrink-0 !text-[0.68em] !px-1.5 !py-0.5 !rounded" />
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center justify-end gap-1.5 ml-auto">
             {activeRequestType && (
               <button
                 onClick={openRequestModal}
@@ -10414,7 +10415,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
   onClick={onSelect}
 >
       {/* ▶ 거래처명 + 메모 + 상태 + 배지들 */}
-<div className="flex justify-between items-center gap-1 mb-0.5">
+<div className="flex flex-wrap justify-between items-center gap-x-1 gap-y-1 mb-0.5">
   <div className="flex items-center gap-1 min-w-0 flex-1">
     {order.거래처명 && (
       <span className="text-[11px] font-semibold text-gray-600 truncate">{order.거래처명}</span>
@@ -10426,7 +10427,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
       >메모</button>
     )}
   </div>
-  <div className="flex items-center gap-1 shrink-0">
+  <div className="flex flex-wrap items-center justify-end gap-1 ml-auto">
 
   {!showUndeliveredOnly && isUrgentOrder(order) && (
     <span className="inline-flex items-center justify-center leading-none h-[18px] px-2 rounded bg-red-600 text-white text-[10px] font-bold">
@@ -10445,7 +10446,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
       왕복
     </span>
   )}
-  <RotationBadge order={order} className="!ml-0" />
+  <RotationBadge order={order} className="!ml-0 !h-[18px] !py-0 !px-2 !text-[10px] !rounded" />
 
   {activeRequestType && (
     <button
@@ -17519,8 +17520,8 @@ const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 �
 
       // 경유지 파싱
       const _ssM=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p))return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
-      const _ctM=(s)=>{const raw=s.화물내용||"";if(/파레트|파렛트|박스|통/.test(raw))return raw;const qty=raw||s.화물수량||"";const tp=s.화물타입||"";if(!qty)return"";return tp&&tp!=="없음"?`${qty}${tp}`:qty;};
-      const _ttM=(s)=>{const raw=s.차량톤수||"";if(/톤|kg/.test(raw))return toTonUnit(raw);const val=s.톤수값||raw||"";const tp=s.톤수타입||"";if(!val)return"";return toTonUnit(tp&&tp!=="없음"?`${val}${tp}`:val);};
+      const _ctM=(s)=>{const raw=String(s.화물내용||"").replace(/^\s*없음\s*/,"");if(/파레트|파렛트|박스|통/.test(raw))return raw;const qty=raw||s.화물수량||"";const tp=s.화물타입||"";if(!qty)return"";return tp&&tp!=="없음"?`${qty}${tp}`:qty;};
+      const _ttM=(s)=>{const raw=String(s.차량톤수||"").replace(/^\s*없음\s*/,"");if(/톤|kg/.test(raw))return toTonUnit(raw);const val=s.톤수값||raw||"";const tp=s.톤수타입||"";if(!val)return"";return toTonUnit(tp&&tp!=="없음"?`${val}${tp}`:val);};
       const _pkgM=(str)=>{const s=String(str||"").trim().replace(/,/g,"");if(!s)return 0;const kg=s.match(/([\d.]+)\s*kg/i);if(kg)return parseFloat(kg[1]);const ton=s.match(/([\d.]+)\s*톤/);return ton?parseFloat(ton[1])*1000:0;};
       const _fkgM=(kg)=>{if(!kg)return"";if(kg>=1000){const t=kg/1000;return t.toFixed(3).replace(/\.?0+$/,"")+"톤";}return`${kg}kg`;};
       const _scM=(main,stops)=>{const mainParts=main?main.split("+").map(s=>s.trim()).filter(Boolean):[];const all=[...mainParts,...stops.map(_ctM)].filter(Boolean);const byU={};const unk=[];for(const c of all){let hit=false;for(const u of["파레트","파렛트","박스","통","바구니"]){if(c.endsWith(u)){const n=parseFloat(c.slice(0,-u.length));if(!isNaN(n)){const k=u==="파렛트"?"파레트":u;byU[k]=(byU[k]||0)+n;hit=true;break;}}}if(!hit&&c)unk.push(c);}return[...Object.entries(byU).map(([u,n])=>`${n}${u}`),...unk].join("+");};
@@ -17654,8 +17655,8 @@ ${Number(order.청구운임||0).toLocaleString()}원 ${(()=>{const pt=order.지�
 
       // 경유지 파싱
       const _ssMd=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p))return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
-      const _ctMd=(s)=>{const raw=s.화물내용||"";if(/파레트|파렛트|박스|통/.test(raw))return raw;const qty=raw||s.화물수량||"";const tp=s.화물타입||"";if(!qty)return"";return tp&&tp!=="없음"?`${qty}${tp}`:qty;};
-      const _ttMd=(s)=>{const raw=s.차량톤수||"";if(/톤|kg/.test(raw))return toTonUnit(raw);const val=s.톤수값||raw||"";const tp=s.톤수타입||"";if(!val)return"";return toTonUnit(tp&&tp!=="없음"?`${val}${tp}`:val);};
+      const _ctMd=(s)=>{const raw=String(s.화물내용||"").replace(/^\s*없음\s*/,"");if(/파레트|파렛트|박스|통/.test(raw))return raw;const qty=raw||s.화물수량||"";const tp=s.화물타입||"";if(!qty)return"";return tp&&tp!=="없음"?`${qty}${tp}`:qty;};
+      const _ttMd=(s)=>{const raw=String(s.차량톤수||"").replace(/^\s*없음\s*/,"");if(/톤|kg/.test(raw))return toTonUnit(raw);const val=s.톤수값||raw||"";const tp=s.톤수타입||"";if(!val)return"";return toTonUnit(tp&&tp!=="없음"?`${val}${tp}`:val);};
       const _pkgMd=(str)=>{const s=String(str||"").trim().replace(/,/g,"");if(!s)return 0;const kg=s.match(/([\d.]+)\s*kg/i);if(kg)return parseFloat(kg[1]);const ton=s.match(/([\d.]+)\s*톤/);return ton?parseFloat(ton[1])*1000:0;};
       const _fkgMd=(kg)=>{if(!kg)return"";if(kg>=1000){const t=kg/1000;return t.toFixed(3).replace(/\.?0+$/,"")+"톤";}return`${kg}kg`;};
       const _scMd=(main,stops)=>{const mainParts=main?main.split("+").map(s=>s.trim()).filter(Boolean):[];const all=[...mainParts,...stops.map(_ctMd)].filter(Boolean);const byU={};const unk=[];for(const c of all){let hit=false;for(const u of["파레트","파렛트","박스","통","바구니"]){if(c.endsWith(u)){const n=parseFloat(c.slice(0,-u.length));if(!isNaN(n)){const k=u==="파렛트"?"파레트":u;byU[k]=(byU[k]||0)+n;hit=true;break;}}}if(!hit&&c)unk.push(c);}return[...Object.entries(byU).map(([u,n])=>`${n}${u}`),...unk].join("+");};
