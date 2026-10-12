@@ -3645,7 +3645,7 @@ const archiveCompletedOrderPC = (data, orderId, reason) => {
     originalOrderId: orderId,
     차량번호: data?.차량번호 || "",
     기사명: data?.이름 || data?.기사명 || drv.이름 || "",
-    archivedReason: reason, // "오더삭제" | "기사취소"
+    archivedReason: reason, // "오더삭제"(오더취소) | "기사취소"(배차취소)
     archivedAt: serverTimestamp(),
     거래처명: data?.거래처명 || "",
     상차지명: data?.상차지명 || "",
@@ -3658,6 +3658,15 @@ const archiveCompletedOrderPC = (data, orderId, reason) => {
     차량톤수: data?.차량톤수 || "",
     기사운임: data?.기사운임 || "",
     기사완료일시: data?.기사완료일시 || null,
+    // 운행일지 상세 팝업용 추가 정보
+    상차지주소: data?.상차지주소 || "", 하차지주소: data?.하차지주소 || "",
+    상차지담당자: data?.상차지담당자 || "", 상차지담당자번호: data?.상차지담당자번호 || "",
+    하차지담당자: data?.하차지담당자 || "", 하차지담당자번호: data?.하차지담당자번호 || "",
+    차량종류: data?.차량종류 || data?.차종 || "", 지급방식: data?.지급방식 || "",
+    기사확인일시: data?.기사확인일시 || null, 상차완료일시: data?.상차완료일시 || null,
+    기사확인상태: data?.기사확인상태 || "",
+    등록자명: data?.등록자명 || "", createdByName: data?.createdByName || "", createdByEmail: data?.createdByEmail || data?.작성자 || "",
+    전달사항: data?.전달사항 || "",
   }).catch(() => {});
 };
 
@@ -3734,6 +3743,9 @@ const patchDispatch = async (_id, patch, knownPrev) => {
   // 동일하게 즉시 처리). 아직 화면 반영/실제 저장 전이라 취소해도 되돌릴 게 없다.
   if ("차량번호" in patch && !String(patch.차량번호 || "").trim() && prev?.기사확인상태 === "완료") {
     if (!window.confirm("운송이 완료된 오더입니다. 기사를 취소하시겠습니까?")) return false;
+    archiveCompletedOrderPC(prev, _id, "기사취소");
+  } else if ("차량번호" in patch && !String(patch.차량번호 || "").trim() && prev?.기사확인상태 === "수락") {
+    // ⭐ 기사가 수락한 뒤 기사만 빠진 경우도 기사 운행기록에 "배차취소"로 남긴다
     archiveCompletedOrderPC(prev, _id, "기사취소");
   }
 
@@ -4082,7 +4094,10 @@ const removeDispatch = async (arg, opts = {}) => {
   // 시 기사 운행일지가 계속 보여줄 수 있도록 스냅샷을 남긴다.
   if (data?.기사확인상태 === "완료") {
     if (!opts.skipCompletedConfirm && !window.confirm("운송이 완료된 오더입니다. 오더를 삭제하시겠습니까?")) return;
-    // ⭐ 사용자 요청 — 삭제된 오더는 기사 운행일지에서도 빠져야 하므로 스냅샷을 남기지 않는다.
+  }
+  // ⭐ 기사가 수락(또는 완료)한 오더가 삭제되면 기사 운행기록에 "오더취소"로 남긴다
+  if ((data?.기사확인상태 === "수락" || data?.기사확인상태 === "완료") && data?.차량번호) {
+    archiveCompletedOrderPC(data, id, "오더삭제");
   }
 
   // ⭐ 버그수정 — 지입 기사에게 배정(대기/수락/완료)돼 있던 오더를 이 "삭제"로

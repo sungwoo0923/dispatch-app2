@@ -4363,6 +4363,15 @@ const deleteSingleOrder = async (order) => {
       차량톤수: data?.차량톤수 || "",
       기사운임: data?.기사운임 || "",
       기사완료일시: data?.기사완료일시 || null,
+      // 운행일지 상세 팝업용 추가 정보
+      상차지주소: data?.상차지주소 || "", 하차지주소: data?.하차지주소 || "",
+      상차지담당자: data?.상차지담당자 || "", 상차지담당자번호: data?.상차지담당자번호 || "",
+      하차지담당자: data?.하차지담당자 || "", 하차지담당자번호: data?.하차지담당자번호 || "",
+      차량종류: data?.차량종류 || data?.차종 || "", 지급방식: data?.지급방식 || "",
+      기사확인일시: data?.기사확인일시 || null, 상차완료일시: data?.상차완료일시 || null,
+      기사확인상태: data?.기사확인상태 || "",
+      등록자명: data?.등록자명 || "", createdByName: data?.createdByName || "", createdByEmail: data?.createdByEmail || data?.작성자 || "",
+      전달사항: data?.전달사항 || "",
     }).catch(() => {});
   };
 
@@ -4440,6 +4449,9 @@ const deleteSingleOrder = async (order) => {
     if (selectedOrder.기사확인상태 === "완료") {
       if (!window.confirm("운송이 완료된 오더입니다. 기사를 취소하시겠습니까?")) return;
       archiveCompletedOrderMobile(selectedOrder, selectedOrder.id || selectedOrder._id, "기사취소");
+    } else if (selectedOrder.기사확인상태 === "수락") {
+      // 기사가 수락한 뒤 기사만 빠짐 → 기사 운행기록에 "배차취소"
+      archiveCompletedOrderMobile(selectedOrder, selectedOrder.id || selectedOrder._id, "기사취소");
     }
 
     const cancelPatch = {
@@ -4507,6 +4519,10 @@ const deleteSingleOrder = async (order) => {
     const fleetMsgD = fleetDeleteConfirmMsgMobile(deleteConfirmMobile);
     if (fleetMsgD && !window.confirm(fleetMsgD)) return;
     notifyFleetCancelMobile(deleteConfirmMobile, deleteConfirmMobile.id);
+    // 기사가 수락(또는 완료)한 오더가 삭제되면 기사 운행기록에 "오더취소"
+    if (["수락", "완료"].includes(deleteConfirmMobile.기사확인상태) && deleteConfirmMobile.차량번호) {
+      archiveCompletedOrderMobile(deleteConfirmMobile, deleteConfirmMobile.id, "오더삭제");
+    }
     // ⭐ 완전삭제 대신 소프트 취소로 바꿔, 취소내역 화면에서 다시 확인하거나
     // "재등록"으로 되살릴 수 있게 한다(예전엔 여기서 바로 영구삭제되어 복구 불가였음).
     await updateDoc(doc(db, deleteConfirmMobile.__col, deleteConfirmMobile.id), {
@@ -4553,6 +4569,7 @@ const deleteSingleOrder = async (order) => {
         const id = order.id || order._id;
         if (col && id) {
           notifyFleetCancelMobile(order, id);
+          if (["수락", "완료"].includes(order.기사확인상태) && order.차량번호) archiveCompletedOrderMobile(order, id, "오더삭제");
           // ⭐ 완전삭제 대신 소프트 취소 — 취소내역 화면으로 이동
           await updateDoc(doc(db, col, id), {
             상태: "취소",

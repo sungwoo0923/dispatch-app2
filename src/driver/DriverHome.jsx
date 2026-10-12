@@ -190,6 +190,14 @@ function formatTime(date) {
 // ─── 지입 기사 오더 알림 카드 ──────────────────────────────────────────────────
 // ⭐ 버그수정 — createdByEmail(계정 아이디)로 폴백하면 기사 화면에 관리자 이메일이
 // 그대로 노출된다. 실명이 없으면 이메일 대신 "-"로 표시한다.
+// ⭐ 운행기록 "오더결과" — 수락 이후 결과: 운송완료(초록) / 배차취소(주황, 기사만 빠짐) / 오더취소(빨강, 오더 삭제)
+function orderResultOf(o) {
+  if (o?.__archived) {
+    return o.archivedReason === "기사취소" ? { label: "배차취소", color: "#ea580c" } : { label: "오더취소", color: "#dc2626" };
+  }
+  return { label: "운송완료", color: "#16a34a" };
+}
+
 function orderCreatorLabel(o) {
   // 계정 아이디(이메일·이메일 앞부분)는 이름이 아니므로 건너뛴다
   const em = String(o?.createdByEmail || o?.작성자 || "").trim().toLowerCase();
@@ -2257,7 +2265,9 @@ export default function DriverHome() {
               // 하차 사진을 아직 안 올린 경우에만 보여준다(완료하면 카드가 사라지므로).
               const lastDone = lastCompletedOrderId;
               const lastDropSent = lastDone ? todayPhotos.some(p => p.actionType === "하차완료" && p.orderId === lastDone) : true;
-              if (!lastDone || lastDropSent) return null;
+              // 완료 후 관리자가 기사취소/오더삭제했으면(내 오더 목록에서 사라졌거나 취소됨) 띄우지 않는다
+              const lastStillMine = lastDone && myOrders.some(x => x._id === lastDone && x.기사확인상태 === "완료" && x.배차상태 !== "배차취소" && x.상태 !== "취소");
+              if (!lastDone || lastDropSent || !lastStillMine) return null;
               const loadTargetId = null;
               const loadTargetCol = "orders";
               const dropTargetId = lastCompletedOrderId;
@@ -2956,10 +2966,11 @@ export default function DriverHome() {
             // 스냅샷이 남는다. 원본 오더가 아직(어떤 이유로든) 살아있으면 중복 표시를
             // 피하려고 originalOrderId가 liveCompleted에 이미 있는 건 건너뛴다.
             // 예전에 "오더삭제"로 남겨진 스냅샷도 이제는 표시하지 않는다(기사취소 스냅샷만 유지).
+            // ⭐ 수락 이후 결과는 모두 기록: 운송완료 / 배차취소(기사만 빠짐) / 오더취소(오더 삭제)
             const archivedForLog = archivedCompleted
-              .filter(a => a.archivedReason !== "오더삭제")
               .filter(a => !liveCompleted.some(o => o._id === a.originalOrderId))
               .map(a => ({
+                ...a,
                 _id: a.originalOrderId,
                 __archiveKey: a.id,
                 __archived: true,
@@ -2982,12 +2993,13 @@ export default function DriverHome() {
               }));
             const completedOrders = [...liveCompleted, ...archivedForLog]
               .filter(o => { const d = o.상차일 || ""; return d >= appliedRange.from && d <= appliedRange.to; })
-              .sort((a, b) => (b.기사완료일시?.seconds || 0) - (a.기사완료일시?.seconds || 0));
+              .sort((a, b) => ((b.기사완료일시 || b.archivedAt)?.seconds || 0) - ((a.기사완료일시 || a.archivedAt)?.seconds || 0));
             const PAGE_SIZE = 5;
             const totalPages = Math.max(1, Math.ceil(completedOrders.length / PAGE_SIZE));
             const page = Math.min(logbookPage, totalPages - 1);
             const paged = completedOrders.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
-            const fareSum = completedOrders.reduce((s, o) => s + (Number(String(o.기사운임 || 0).replace(/[^\d]/g, "")) || 0), 0);
+            const fareSum = completedOrders.filter(o => orderResultOf(o).label === "운송완료").reduce((s, o) => s + (Number(String(o.기사운임 || 0).replace(/[^\d]/g, "")) || 0), 0);
+            const doneCount = completedOrders.filter(o => orderResultOf(o).label === "운송완료").length;
             const hasDocs = (orderId) => {
               const has = (t) => allPhotoLogs.some(p => p.orderId === orderId && p.actionType === t);
               return { load: has("상차완료"), drop: has("하차완료") };
@@ -3011,7 +3023,7 @@ export default function DriverHome() {
               <div ref={logbookRef} style={{ background: "white", borderRadius: 16, padding: "16px", boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #e5e7eb", marginBottom: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", letterSpacing: "0.05em" }}>
-                    운행일지 — 운송완료 {completedOrders.length}건 · 기사운임 합계 {fareSum.toLocaleString()}원
+                    운행일지 — 운송완료 {doneCount}건{completedOrders.length > doneCount ? ` · 취소 ${completedOrders.length - doneCount}건` : ""} · 기사운임 합계 {fareSum.toLocaleString()}원
                   </div>
                   <button onClick={saveAsImage} disabled={logbookSaving || !completedOrders.length}
                     style={{ fontSize: 11, fontWeight: 700, color: "#1B2B4B", background: "#eef1f6", border: "none", borderRadius: 8, padding: "5px 10px", cursor: completedOrders.length ? "pointer" : "not-allowed" }}>
@@ -3026,29 +3038,23 @@ export default function DriverHome() {
                       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 560 }}>
                         <thead>
                           <tr style={{ background: "#f8f9fb" }}>
-                            {["완료일시", "거래처", "상차지 → 하차지", "화물정보", "기사운임", "배차담당자", "서류"].map(h => (
+                            {["완료일시", "거래처", "상차지 → 하차지", "화물정보", "기사운임", "배차담당자", "오더결과", "서류"].map(h => (
                               <th key={h} style={{ padding: "8px 10px", fontSize: 11, fontWeight: 800, color: "#6b7280", textAlign: "center", whiteSpace: "nowrap", borderBottom: "1px solid #e5e7eb" }}>{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
                           {paged.map((o, i) => {
-                            const t = o.기사완료일시?.toDate?.();
+                            const t = (o.기사완료일시 || o.archivedAt)?.toDate?.();
                             const docs = hasDocs(o._id);
                             return (
                               <tr key={o.__archiveKey || o._id || i} onDoubleClick={() => setLogDetail(o)} title="더블클릭하면 운행일지 상세"
-                                style={{ borderBottom: "1px solid #f3f4f6", background: o.__archived ? "#fffbeb" : undefined, cursor: "pointer" }}>
+                                style={{ borderBottom: "1px solid #f3f4f6", cursor: "pointer" }}>
                                 <td style={{ padding: "9px 10px", fontSize: 12, color: "#374151", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap" }}>
                                   {o.상차일 || "-"}{t ? ` ${formatTime(t)}` : ""}
                                 </td>
                                 <td style={{ padding: "9px 10px", fontSize: 12, color: "#374151", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap" }}>
                                   {o.거래처명 || "-"}
-                                  {/* ⭐ 완료 후 관리자가 오더삭제/기사취소한 기록임을 표시 */}
-                                  {o.__archived && (
-                                    <span style={{ marginLeft: 5, fontSize: 9, fontWeight: 800, padding: "1px 5px", borderRadius: 5, background: "#fef3c7", color: "#b45309", whiteSpace: "nowrap" }}>
-                                      {o.archivedReason === "기사취소" ? "기사취소됨" : "오더삭제됨"}
-                                    </span>
-                                  )}
                                 </td>
                                 <td style={{ padding: "9px 10px", fontSize: 12, color: "#111827", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap" }}>
                                   {o.상차지명 || "-"} → {o.하차지명 || "-"}
@@ -3061,6 +3067,7 @@ export default function DriverHome() {
                                   {o.기사운임 ? `${Number(String(o.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원` : "-"}
                                 </td>
                                 <td style={{ padding: "9px 10px", fontSize: 12, color: "#374151", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap" }}>{orderCreatorLabel(o)}</td>
+                                <td style={{ padding: "9px 10px", fontSize: 12, fontWeight: 900, textAlign: "center", whiteSpace: "nowrap", color: orderResultOf(o).color }}>{orderResultOf(o).label}</td>
                                 <td style={{ padding: "9px 10px", textAlign: "center", whiteSpace: "nowrap" }}>
                                   <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 6px", borderRadius: 5, marginRight: 3, background: docs.load ? "#eef1f6" : "#fef2f2", color: docs.load ? "#1B2B4B" : "#dc2626" }}>상차{docs.load ? "✓" : "✗"}</span>
                                   <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 6px", borderRadius: 5, background: docs.drop ? "#eef1f6" : "#fef2f2", color: docs.drop ? "#1B2B4B" : "#dc2626" }}>하차{docs.drop ? "✓" : "✗"}</span>
@@ -3123,9 +3130,7 @@ export default function DriverHome() {
                   <div ref={logDetailRef} style={{ padding: "18px 18px 8px", background: "#fff" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                       <div style={{ fontSize: 18, fontWeight: 900, color: "#111827" }}>운행일지</div>
-                      <div style={{ fontSize: 12, fontWeight: 800, color: o.__archived ? "#b45309" : "#16a34a" }}>
-                        {o.__archived ? (o.archivedReason === "기사취소" ? "기사취소됨" : "오더삭제됨") : "운송완료"}
-                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 900, color: orderResultOf(o).color }}>{orderResultOf(o).label}</div>
                     </div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#6b7280", marginTop: 2 }}>{driver.name || ""} · {driver.carNo || ""}</div>
                     <Sec title="오더">
@@ -3145,7 +3150,7 @@ export default function DriverHome() {
                       <Row k="주소" v={o.하차지주소} />
                       <Row k="담당자" v={[o.하차지담당자, o.하차지담당자번호].filter(Boolean).join(" ")} />
                       <Row k="하차시간" v={`${o.하차일 || o.상차일 || ""} ${o.하차시간 || "즉시"}`} />
-                      <Row k="운송완료" v={fmtDT(t)} />
+                      <Row k={orderResultOf(o).label === "운송완료" ? "운송완료" : "취소시각"} v={fmtDT(t || o.archivedAt?.toDate?.())} />
                     </Sec>
                     <Sec title="화물 · 운임">
                       <Row k="차량·톤수" v={[o.차량종류, o.차량톤수].filter(Boolean).join(" · ")} />
