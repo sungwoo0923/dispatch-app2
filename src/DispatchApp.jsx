@@ -2767,6 +2767,36 @@ function ContactPickerIconButton({ onClick, title = "담당자 선택" }) {
   );
 }
 
+// ⭐ 오더복사/수정 패널용 — 거래처의 담당자 목록(이름 또는 번호가 있는 것만, 이름 중복 제거)
+function uniqueContactsOf(place) {
+  const list = (Array.isArray(place?.contacts) ? place.contacts : []).filter(c => c && (String(c.name || "").trim() || String(c.phone || "").trim()));
+  const flat = (!list.length && (place?.담당자 || place?.담당자번호 || place?.연락처)) ? [{ name: place.담당자 || "", phone: place.담당자번호 || place.연락처 || "", isPrimary: true }] : [];
+  const all = list.length ? list : flat;
+  return [...new Map(all.map(c => [String(c.name || "").trim() || String(c.phone || ""), c])).values()];
+}
+const nameKeyOf = (v) => String(v || "").replace(/\s+/g, "").toLowerCase();
+
+// 간단한 담당자 선택 팝업(미배차 화면 등 자체 팝업이 없는 패널용)
+function ContactChooserModal({ title, contacts, onPick, onClose }) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[360px] max-h-[70vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="bg-[#1B2B4B] px-5 py-3 text-white font-bold text-[14px]">{title}</div>
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          {contacts.map((c, i) => (
+            <button key={i} type="button" onClick={() => onPick(c)}
+              className="w-full text-left border border-gray-200 rounded-lg px-3 py-2 hover:bg-gray-50">
+              <div className="text-[13px] font-bold text-gray-900">{c.name || "(이름 없음)"}{c.isPrimary ? <span className="ml-1 text-[10px] text-blue-600">대표</span> : null}</div>
+              <div className="text-[12px] text-gray-500">{c.phone || "-"}</div>
+            </button>
+          ))}
+        </div>
+        <div className="p-3 border-t"><button type="button" onClick={onClose} className="w-full py-2 rounded-lg bg-gray-100 text-gray-700 text-[13px] font-semibold">닫기</button></div>
+      </div>
+    </div>
+  );
+}
+
 // 상/하차지 오더메모 보기·수정 팝업 — 배차관리 등록 폼의 orderMemoPopup과 동일한
 // UI를 오더복사/수정 패널, 선택수정 패널에서도 재사용한다. 저장은 즉시 반영하지
 // 않고(onSave로 넘긴 값을 패널 자체의 상태에만 임시로 담아두고) 실제 오더가
@@ -29392,7 +29422,7 @@ checkWarningStatus(c.거래처명, "거래처");
         />
       </Field>
 
-      <Field label="상차지 담당자명">
+      <Field label={<span className="flex items-center justify-between w-full">상차지 담당자명<ContactPickerIconButton title="상차지 담당자명 선택" onClick={() => { const nm = copyTarget?.상차지명 || ""; if (!nm.trim()) return showAlert("상차지명을 먼저 입력하세요."); const p = (mergedClients || []).find(x => nameKeyOf(x.업체명) === nameKeyOf(nm)); const cs = uniqueContactsOf(p); if (!cs.length) return showAlert("등록된 담당자가 없습니다."); setPanelContactPopup4({ type: "pickup", place: p, contacts: cs, setter: setCopyTarget, pickupKey: "상차", dropKey: "하차" }); }} /></span>}>
         <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
@@ -29583,7 +29613,7 @@ checkWarningStatus(c.거래처명, "거래처");
         />
       </Field>
 
-      <Field label="하차지 담당자명">
+      <Field label={<span className="flex items-center justify-between w-full">하차지 담당자명<ContactPickerIconButton title="하차지 담당자명 선택" onClick={() => { const nm = copyTarget?.하차지명 || ""; if (!nm.trim()) return showAlert("하차지명을 먼저 입력하세요."); const p = (mergedClients || []).find(x => nameKeyOf(x.업체명) === nameKeyOf(nm)); const cs = uniqueContactsOf(p); if (!cs.length) return showAlert("등록된 담당자가 없습니다."); setPanelContactPopup4({ type: "drop", place: p, contacts: cs, setter: setCopyTarget, pickupKey: "상차", dropKey: "하차" }); }} /></span>}>
         <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
@@ -41140,7 +41170,7 @@ setCopyPlaceOptions(list);
         />
       </Field>
 
-      <Field label="상차지 담당자명">
+      <Field label={<span className="flex items-center justify-between w-full">상차지 담당자명<ContactPickerIconButton title="상차지 담당자명 선택" onClick={() => { const nm = copyTarget?.상차지명 || ""; if (!nm.trim()) return showAlert("상차지명을 먼저 입력하세요."); const p = (mergedClients || []).find(x => nameKeyOf(x.업체명) === nameKeyOf(nm)); const cs = uniqueContactsOf(p); if (!cs.length) return showAlert("등록된 담당자가 없습니다."); setPanelContactPopup5({ type: "pickup", place: p, contacts: cs, setter: setCopyTarget }); }} /></span>}>
         <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
@@ -41313,7 +41343,7 @@ setCopyPlaceOptions(list);
         />
       </Field>
 
-      <Field label="하차지 담당자명">
+      <Field label={<span className="flex items-center justify-between w-full">하차지 담당자명<ContactPickerIconButton title="하차지 담당자명 선택" onClick={() => { const nm = copyTarget?.하차지명 || ""; if (!nm.trim()) return showAlert("하차지명을 먼저 입력하세요."); const p = (mergedClients || []).find(x => nameKeyOf(x.업체명) === nameKeyOf(nm)); const cs = uniqueContactsOf(p); if (!cs.length) return showAlert("등록된 담당자가 없습니다."); setPanelContactPopup5({ type: "drop", place: p, contacts: cs, setter: setCopyTarget }); }} /></span>}>
         <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={inputStyle}
@@ -49021,6 +49051,7 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDis
 
   const [selectedOrder, setSelectedOrder] = React.useState(null);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
+  const [copyContactChooser, setCopyContactChooser] = React.useState(null); // 오더복사/수정 패널 담당자 선택
   const [copyTarget, setCopyTarget] = React.useState(null);
   const [copyPanelWorkDatesOpen, setCopyPanelWorkDatesOpen] = React.useState(false); // 오더복사수정패널 근무일(묶음) 수정 팝업
   const [clientDropdown, setClientDropdown] = React.useState([]);
@@ -49923,6 +49954,18 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
       {/* 오더 복사/수정 패널 */}
       {copyPanelOpen && copyTarget && (
         <div className="fixed inset-0 z-[99999]">
+          {copyContactChooser && (
+            <ContactChooserModal
+              title={copyContactChooser.type === "pickup" ? "상차지 담당자 선택" : "하차지 담당자 선택"}
+              contacts={copyContactChooser.contacts}
+              onClose={() => setCopyContactChooser(null)}
+              onPick={(c) => {
+                const key = copyContactChooser.type === "pickup" ? "상차" : "하차";
+                setCopyTarget(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" }));
+                setCopyContactChooser(null);
+              }}
+            />
+          )}
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setCopyPanelOpen(false)} />
           <div className="absolute top-0 right-0 h-full w-[1100px] bg-gray-50 shadow-2xl border-l overflow-y-auto">
             <div className="p-8 space-y-6">
@@ -50155,7 +50198,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <Field label="상차지주소">
                         <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] resize-none leading-snug focus:outline-none focus:border-blue-400" value={copyTarget?.상차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지주소: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
-                      <Field label="상차지 담당자명">
+                      <Field label={<span className="flex items-center justify-between w-full">상차지 담당자명<ContactPickerIconButton title="상차지 담당자명 선택" onClick={() => { const nm = copyTarget?.상차지명 || ""; if (!nm.trim()) return alert("상차지명을 먼저 입력하세요."); const p = filterPlaces(nm).find(x => nameKeyOf(x.업체명) === nameKeyOf(nm)); const cs = uniqueContactsOf(p); if (!cs.length) return alert("등록된 담당자가 없습니다."); setCopyContactChooser({ type: "pickup", contacts: cs }); }} /></span>}>
                         <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                       <Field label="상차지 연락처">
@@ -50250,7 +50293,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <Field label="하차지주소">
                         <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] resize-none leading-snug focus:outline-none focus:border-blue-400" value={copyTarget?.하차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지주소: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
-                      <Field label="하차지 담당자명">
+                      <Field label={<span className="flex items-center justify-between w-full">하차지 담당자명<ContactPickerIconButton title="하차지 담당자명 선택" onClick={() => { const nm = copyTarget?.하차지명 || ""; if (!nm.trim()) return alert("하차지명을 먼저 입력하세요."); const p = filterPlaces(nm).find(x => nameKeyOf(x.업체명) === nameKeyOf(nm)); const cs = uniqueContactsOf(p); if (!cs.length) return alert("등록된 담당자가 없습니다."); setCopyContactChooser({ type: "drop", contacts: cs }); }} /></span>}>
                         <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </Field>
                       <Field label="하차지 연락처">
