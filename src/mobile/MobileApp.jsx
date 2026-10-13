@@ -53,6 +53,7 @@ import { version as APP_VERSION } from "../../package.json";
 import { calcLeaveBalance } from "../leaveUtils";
 import { RotationPicker, RotationBadge, expandRotation, rotationNotice } from "../rotation";
 import { isWeekend, findApprovedLeaveForDate, isHoliday } from "../attendanceUtils";
+import MonthCompareAnalysis from "../MonthCompareAnalysis";
 
 
 
@@ -6498,6 +6499,7 @@ function isNetRevenueExcludedClientMobile(name, clientsList, placesList) {
 function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = false, clients = [], places = [] }) {
   const [verified, setVerified] = useState(() => sessionStorage.getItem("sales_ok") === "1");
   const [month, setMonth] = useState(new Date(new Date().getTime() + 9*60*60*1000).toISOString().slice(0,7));
+  const [compareOpen, setCompareOpen] = useState(false); // ⭐ 월 비교 분석
   const toInt = (v) => Number(String(v || "").replace(/[^\d]/g, "")) || 0;
   const fmtWon = (v) => Number(v).toLocaleString("ko-KR");
 
@@ -6510,6 +6512,7 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
     청구운임: r.청구운임 || r.운임 || 0,
     기사운임: r.기사운임 || r.기사비 || 0,
     거래처명: r.거래처명 || r.업체명 || "",
+    __fixed: true,
   });
   const allFixed = fixedData.map(normalizeFixed).filter(r => r.상차일);
   const allBase = [...data.filter(r => r.상차일 && !isNetRevenueExcludedClientMobile(r.거래처명, clients, places)), ...allFixed];
@@ -6653,6 +6656,24 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
 
       <div className="px-4 pt-4 space-y-4">
         {/* 전월 대비 배너 */}
+        {/* ⭐ 월 비교 분석 — 두 달 전체 데이터를 비교해 매출·수익 변화 원인을 알려준다 */}
+        <button onClick={() => setCompareOpen(true)}
+          className="w-full flex items-center justify-between rounded-xl px-4 py-3 bg-[#1B2B4B] text-white active:scale-[0.99] transition">
+          <span className="text-left">
+            <span className="block text-[15px] font-bold">월 비교 분석</span>
+            <span className="block text-[12px] text-white/70 mt-0.5">매출은 늘었는데 수익은 왜 그대로인지 등 원인 분석</span>
+          </span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+        {compareOpen && (
+          <MonthCompareAnalysis
+            compact
+            rows={[...data.filter(r => r.상차일), ...allFixed]}
+            isExcluded={(name) => isNetRevenueExcludedClientMobile(name, clients, places)}
+            hasExcluded
+            onClose={() => setCompareOpen(false)}
+          />
+        )}
         <div className={`rounded-xl px-3 py-2.5 flex items-center justify-between text-[12px] font-semibold border ${saleDiff>=0?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-rose-50 border-rose-200 text-rose-600"}`}>
           <span className="shrink-0">전월 대비</span>
           <span className="text-right ml-2">{saleDiff>=0?"▲":"▼"} {fmtM(Math.abs(saleDiff))} {saleDiffPct!==null?`(${saleDiffPct>=0?"+":""}${saleDiffPct.toFixed(1)}%)`:"(전월 없음)"}</span>

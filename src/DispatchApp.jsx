@@ -41,6 +41,7 @@ import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare, geocodeAddress, haversineKm } from "./tmapFareCalc";
 import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
 import RouteMapModal from "./RouteMapModal";
+import MonthCompareAnalysis from "./MonthCompareAnalysis";
 import { RotationPicker, RotationBadge, expandRotation, rotationNotice, withRotationMemo } from "./rotation";
 import { generateMonthlyReportPPT, PPT_TEMPLATES } from "./pptReportUtil";
 
@@ -47110,6 +47111,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   );
   const [detailClient, setDetailClient] = React.useState(null);
   const [aiMode, setAiMode] = React.useState(null);
+  const [monthCompareOpen, setMonthCompareOpen] = React.useState(false); // ⭐ 월 비교 분석
   // ⭐ AI 월간비교분석 탭에서 선택한 두 달 — 탭을 옮겨도(activeTab 전환으로
   // MonthCompareInsight가 unmount/remount 되어도) 선택이 유지되도록 상위인
   // Settlement가 들고 있는다.
@@ -47225,6 +47227,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
       기사운임: driver,
       수수료: fee,
       배차상태: "배차완료",
+      __fixed: true, // 월 비교 분석에서 "고정거래처"로 구분
     };
   }), [fixedRows]);
 
@@ -47744,6 +47747,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
                 <p className="text-[11px] text-white/50 mt-0.5"><EditableText id="settlement.report.subtitle" defaultText="월별 요약 · 요일별 수주 · 거래처별 기간 조회" /></p>
               </div>
               <div className="flex items-center gap-2">
+                <button onClick={() => setMonthCompareOpen(true)} className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[12px] font-bold hover:bg-white/90 transition">월 비교 분석</button>
                 <button onClick={() => setAiMode("summary")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20"><EditableText id="settlement.report.AI요약" defaultText="AI 요약" /></button>
                 <button onClick={() => setAiMode("suggest")} className="px-3 py-1.5 rounded-lg bg-emerald-500/80 text-white text-[12px] font-semibold hover:bg-emerald-500 transition"><EditableText id="settlement.report.AI제안" defaultText="AI 제안" /></button>
                 <button onClick={() => setAiMode("report")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20"><EditableText id="settlement.report.보고서" defaultText="보고서" /></button>
@@ -47763,6 +47767,14 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
 
             <div className="p-6 space-y-8">
               <YearlySummaryChart rows={rows} year={selectedYear} clients={clients} places={places} />
+              {monthCompareOpen && (
+                <MonthCompareAnalysis
+                  rows={rows}
+                  isExcluded={isExcludedFast}
+                  hasExcluded={getNetRevenueExcludedNames(clients, places).length > 0}
+                  onClose={() => setMonthCompareOpen(false)}
+                />
+              )}
 
               <div className="border-t border-gray-200" />
 
