@@ -79,7 +79,83 @@ export function analyzeMonths({ rows = [], monthA, monthB, scope = "pure", isExc
   const anomaliesA = listA.map((r) => anomalyOf(r)).filter(Boolean);
   const countBy = (arr) => arr.reduce((m, a) => { const t = a.type || a.an.type; m[t] = (m[t] || 0) + 1; return m; }, {});
 
-  return { monthA, monthB, scope, A, B, effects: { volume, price, margin, total: B.profit - A.profit }, dims, anomaliesB, anomalyCountB: countBy(anomaliesB), anomalyCountA: countBy(anomaliesA) };
+  // 이상 오더 비교(건수·금액) — 리스트 대신 두 달 합계 비교
+  const anomalySummary = ANOMALY_TYPES.map((t) => {
+    const sum = (list) => {
+      const hit = list.filter((r) => anomalyOf(r)?.type === t.type);
+      return { cnt: hit.length, amount: hit.reduce((acc, r) => acc + t.amount(r), 0) };
+    };
+    return { ...t, a: sum(listA), b: sum(listB) };
+  });
+
+  // 순수 운송(매출관리)에서 빠지는 거래처 — 두 달 기준
+  const exMap = new Map();
+  for (const [side, list] of [["a", rows.filter((r) => String(r.상차일 || "").startsWith(monthA))], ["b", rows.filter((r) => String(r.상차일 || "").startsWith(monthB))]]) {
+    for (const r of list) {
+      if (!isExcluded(r.거래처명)) continue;
+      const k = String(r.거래처명 || "").trim() || "(거래처 미입력)";
+      if (!exMap.has(k)) exMap.set(k, { key: k, a: [], b: [] });
+      exMap.get(k)[side].push(r);
+    }
+  }
+  const excludedClients = [...exMap.values()].map((g) => ({ key: g.key, a: statsOf(g.a), b: statsOf(g.b) })).sort((x, y) => (y.a.sale + y.b.sale) - (x.a.sale + x.b.sale));
+
+  return { monthA, monthB, scope, A, B, listA, listB, effects: { volume, price, margin, total: B.profit - A.profit }, dims, anomaliesB, anomalyCountB: countBy(anomaliesB), anomalyCountA: countBy(anomaliesA), anomalySummary, excludedClients };
+}
+
+export const ANOMALY_TYPES = [
+  { type: "청구운임 미입력", tone: "bad", amountLabel: "나간 운반비", amount: (r) => toWon(r.기사운임), desc: "매출 0원인데 기사운임만 나간 오더 — 수익이 그만큼 줄어듦" },
+  { type: "역마진", tone: "bad", amountLabel: "손해 금액", amount: (r) => toWon(r.기사운임) - toWon(r.청구운임), desc: "기사운임이 청구운임보다 큰 오더" },
+  { type: "기사운임 미입력", tone: "warn", amountLabel: "청구운임", amount: (r) => toWon(r.청구운임), desc: "기사운임이 비어 수익이 실제보다 크게 잡힌 오더" },
+  { type: "수익 0원", tone: "warn", amountLabel: "청구운임", amount: (r) => toWon(r.청구운임), desc: "청구운임 = 기사운임" },
+  { type: "저마진", tone: "warn", amountLabel: "수익", amount: (r) => toWon(r.청구운임) - toWon(r.기사운임), desc: "수익률 5% 미만" },
+];
+
+// ── 쉬운 설명: "매출은 늘었는데 왜 수익은 그대로인가" ─────────────────────
+// B월 매출을 A월 수익률로 벌었다면 받았을 수익(기대 수익)과 실제 수익의 차이를
+// 원인별로 나눈다. 원인끼리 겹치지 않게(이상 오더는 거래처 계산에서 뺌) 나누고,
+// 나머지는 "기타"로 묶어 합계가 정확히 맞게 한다.
+export function explainGap(res) {
+  const { A, B, listB, monthA, monthB } = res;
+  const a = mLabel(monthA), b = mLabel(monthB);
+  const expected = B.sale * A.rate;
+  const gap = B.profit - expected; // 음수면 덜 번 것
+  const reasons = [];
+  const used = new Set();
+  const impactOf = (list) => list.reduce((acc, r) => acc + (toWon(r.청구운임) - toWon(r.기사운임)) - toWon(r.청구운임) * A.rate, 0);
+
+  const noSale = listB.filter((r) => anomalyOf(r)?.type === "청구운임 미입력");
+  if (noSale.length) {
+    noSale.forEach((r) => used.add(r));
+    reasons.push({ label: "청구운임 미입력 오더", amount: impactOf(noSale), desc: `${noSale.length}건 · 매출 0원에 운반비만 나감` });
+  }
+  const neg = listB.filter((r) => anomalyOf(r)?.type === "역마진");
+  if (neg.length) {
+    neg.forEach((r) => used.add(r));
+    reasons.push({ label: "역마진 오더", amount: impactOf(neg), desc: `${neg.length}건 · 기사운임이 청구운임보다 큼` });
+  }
+  // 거래처별(이상 오더 제외)
+  const byClient = new Map();
+  listB.filter((r) => !used.has(r)).forEach((r) => {
+    const k = String(r.거래처명 || "").trim() || "(거래처 미입력)";
+    if (!byClient.has(k)) byClient.set(k, []);
+    byClient.get(k).push(r);
+  });
+  const clientImpacts = [...byClient.entries()].map(([k, list]) => {
+    const st = statsOf(list);
+    return { key: k, impact: impactOf(list), st };
+  }).filter((c) => c.impact < 0).sort((x, y) => x.impact - y.impact).slice(0, 3);
+  clientImpacts.forEach((c) => reasons.push({ label: `거래처 "${c.key}"`, amount: c.impact, desc: `${b} 매출 ${man(c.st.sale)} · 수익률 ${pct(c.st.rate)} (${a} 평균 ${pct(A.rate)}보다 낮음)` }));
+  const shown = reasons.reduce((acc, r) => acc + r.amount, 0);
+  const other = gap - shown;
+  if (Math.abs(other) >= 10000) reasons.push({ label: "그 밖의 오더", amount: other, desc: other < 0 ? "여러 오더에 조금씩 나뉜 마진 감소" : "다른 오더들은 평균보다 조금 더 남김(위 감소분을 일부 상쇄)" });
+
+  const saleDiff = B.sale - A.sale, profitDiff = B.profit - A.profit;
+  const headline = `${b}은 ${a}보다 매출이 ${signMan(saleDiff)}${Math.abs(profitDiff) < Math.abs(saleDiff) * A.rate * 0.5 && saleDiff > 0 ? `인데, 수익은 ${signMan(profitDiff)}로 거의 그대로입니다.` : `, 수익은 ${signMan(profitDiff)}입니다.`}`;
+  const why = gap < 0
+    ? `${a}처럼 매출의 ${pct(A.rate)}를 남겼다면 ${b} 수익은 ${man(expected)}이어야 하지만, 실제로는 ${man(B.profit)}만 남아 ${man(-gap)}을 덜 벌었습니다. (${b} 수익률 ${pct(B.rate)})`
+    : `${b}은 ${a} 수익률(${pct(A.rate)})보다 높은 ${pct(B.rate)}를 남겨 기대보다 ${man(gap)} 더 벌었습니다.`;
+  return { headline, why, expected, gap, reasons: gap < 0 ? reasons.sort((x, y) => x.amount - y.amount) : reasons };
 }
 
 // ── 사람이 읽는 분석 문장 ────────────────────────────────────────────

@@ -1,6 +1,6 @@
 // ===================== 월 비교 분석 화면 (PC·모바일 공용) =====================
 import React, { useMemo, useState, useEffect } from "react";
-import { analyzeMonths, buildInsights, COMPARE_DIMS, toWon } from "./monthCompare";
+import { analyzeMonths, explainGap, COMPARE_DIMS, toWon } from "./monthCompare";
 
 const NAVY = "#1B2B4B";
 const won = (v) => `${Math.round(v).toLocaleString()}원`;
@@ -19,6 +19,33 @@ function Delta({ v, money = true, isRate = false }) {
   const up = v > 0;
   const txt = isRate ? `${up ? "+" : ""}${(v * 100).toFixed(1)}%p` : `${up ? "+" : "−"}${money ? Math.abs(Math.round(v)).toLocaleString() + "원" : Math.abs(v)}`;
   return <span style={{ color: up ? "#047857" : "#b91c1c", fontWeight: 800 }}>{txt}</span>;
+}
+
+// 두 달 비교 행 — PC는 [항목 | A | B] 한 줄, 좁은 화면은 항목 아래 A/B 두 칸
+function CompareRows({ items, a, b, compact }) {
+  const cell = (c, label) => (
+    <div style={{ textAlign: compact ? "left" : "right", background: compact ? "#f8f9fb" : "transparent", borderRadius: 8, padding: compact ? "7px 10px" : 0, minWidth: 0 }}>
+      {compact && <div style={{ fontSize: 12, fontWeight: 800, color: "#4b5563" }}>{label}</div>}
+      <div style={{ fontSize: 15, fontWeight: 900, color: c.bad ? "#b91c1c" : "#111827", whiteSpace: "nowrap" }}>{c.main}</div>
+      {c.sub && <div style={{ fontSize: 12, fontWeight: 700, color: "#4b5563", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.sub}</div>}
+    </div>
+  );
+  return (
+    <div>
+      {!compact && (
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr)", gap: 12, padding: "8px 10px", background: "#f4f7fb", borderRadius: 8, fontSize: 14, fontWeight: 900, color: NAVY }}>
+          <span>구분</span><span style={{ textAlign: "right" }}>{a}</span><span style={{ textAlign: "right" }}>{b}</span>
+        </div>
+      )}
+      {items.map((it) => (
+        <div key={it.key} style={{ display: "grid", gridTemplateColumns: compact ? "minmax(0,1fr) minmax(0,1fr)" : "minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr)", gap: compact ? 6 : 12, padding: compact ? "10px 0" : "10px 10px", borderBottom: "1px solid #eef1f6", alignItems: "start" }}>
+          <div style={{ gridColumn: compact ? "1 / -1" : undefined, minWidth: 0 }}>{it.head}</div>
+          {cell(it.cells[0], a)}
+          {cell(it.cells[1], b)}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function MonthCompareAnalysis({ rows = [], isExcluded = () => false, hasExcluded = false, onClose, compact = false }) {
@@ -40,7 +67,8 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
   }, [onClose]);
 
   const res = useMemo(() => analyzeMonths({ rows, monthA, monthB, scope, isExcluded }), [rows, monthA, monthB, scope, isExcluded]);
-  const insights = useMemo(() => buildInsights(res), [res]);
+  const gapInfo = useMemo(() => explainGap(res), [res]);
+  const [showAnomalyList, setShowAnomalyList] = useState(false);
   const { A, B, effects } = res;
   const dimRows = res.dims[dimKey] || [];
   const a = `${Number(monthA.slice(5))}월`, b = `${Number(monthB.slice(5))}월`;
@@ -57,6 +85,40 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
   const effectList = [["물량(건수) 변화", effects.volume], ["건당 매출 변화", effects.price], ["수익률 변화", effects.margin]];
   const maxEff = Math.max(1, ...effectList.map(([, v]) => Math.abs(v)), Math.abs(effects.total));
 
+  const anomalyListEl = (
+    <div style={{ marginTop: 10 }}>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 720 }}>
+                  <thead>
+                    <tr style={{ background: "#eef1f6", color: NAVY }}>
+                      {["구분", "상차일", "거래처", "상차지 → 하차지", "청구운임", "기사운임", "수익", "비고"].map((t) => (
+                        <th key={t} style={{ padding: "8px 10px", fontWeight: 900, whiteSpace: "nowrap", textAlign: ["청구운임", "기사운임", "수익"].includes(t) ? "right" : "left" }}>{t}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {res.anomaliesB.slice(0, 100).map(({ r, an }, i) => {
+                      const s = toWon(r.청구운임), d = toWon(r.기사운임);
+                      const t = TONE[an.tone];
+                      return (
+                        <tr key={r._id || i} style={{ borderBottom: "1px solid #eef1f6" }}>
+                          <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}><span style={{ fontSize: 12, fontWeight: 900, color: t.title, background: t.bg, border: `1px solid ${t.border}`, borderRadius: 5, padding: "1px 7px" }}>{an.type}</span></td>
+                          <td style={{ padding: "8px 10px", whiteSpace: "nowrap", fontWeight: 700, color: "#374151" }}>{r.상차일}</td>
+                          <td style={{ padding: "8px 10px", whiteSpace: "nowrap", fontWeight: 800, color: "#111827" }}>{r.거래처명 || "-"}</td>
+                          <td style={{ padding: "8px 10px", whiteSpace: "nowrap", fontWeight: 600, color: "#374151" }}>{(r.상차지명 || r.출발지 || "-")} → {(r.하차지명 || r.도착지 || "-")}</td>
+                          <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 700 }}>{s.toLocaleString()}</td>
+                          <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 700 }}>{d.toLocaleString()}</td>
+                          <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 900, color: s - d < 0 ? "#b91c1c" : "#111827" }}>{(s - d).toLocaleString()}</td>
+                          <td style={{ padding: "8px 10px", whiteSpace: "nowrap", fontWeight: 600, color: "#4b5563" }}>{an.note}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {res.anomaliesB.length > 100 && <div style={{ fontSize: 13, color: "#4b5563", marginTop: 6 }}>수익이 낮은 순으로 100건까지 표시</div>}
+              </div>
+    </div>
+  );
   const fmtK = (kind, v) => kind === "rate" ? pct(v) : kind === "cnt" ? `${v}건` : won(v);
   const deltaOf = (kind, va, vb) => kind === "rate" ? <Delta v={vb - va} isRate /> : kind === "cnt" ? <Delta v={vb - va} money={false} /> : <Delta v={vb - va} />;
   const kpiCards = (
@@ -107,7 +169,6 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
         <div style={{ background: NAVY, padding: compact ? "14px 16px" : "16px 22px", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ color: "#fff", fontSize: compact ? 17 : 19, fontWeight: 900 }}>월 비교 분석</div>
-            <div style={{ color: "rgba(255,255,255,.75)", fontSize: 13, fontWeight: 600, marginTop: 2 }}>두 달의 전체 오더를 비교해 매출·수익이 왜 달라졌는지 찾아줍니다</div>
           </div>
           <button onClick={onClose} style={{ border: "none", background: "transparent", color: "rgba(255,255,255,.85)", fontSize: 24, cursor: "pointer", lineHeight: 1 }}>✕</button>
         </div>
@@ -129,57 +190,90 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: compact ? 12 : 20, display: "flex", flexDirection: "column", gap: compact ? 12 : 16 }}>
-          {!compact && kpiCards}
-          <div style={{ display: "grid", gridTemplateColumns: compact ? "minmax(0, 1fr)" : "minmax(0, 1.25fr) minmax(0, 1fr)", gap: compact ? 12 : 16, alignItems: "start" }}>
-            {/* 분석 요약 */}
-            <div style={card}>
-              <h3 style={h}>분석 결과</h3>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {insights.map((it, i) => {
-                  const t = TONE[it.tone] || TONE.info;
-                  return (
-                    <div key={i} style={{ background: t.bg, border: `1px solid ${t.border}`, borderLeft: `4px solid ${t.bar}`, borderRadius: 10, padding: "11px 14px" }}>
-                      <div style={{ fontSize: 15, fontWeight: 900, color: t.title, marginBottom: 4 }}>{it.title}</div>
-                      {it.text && <div style={{ fontSize: 15, fontWeight: 600, color: "#1f2937", lineHeight: 1.6 }}>{it.text}</div>}
-                      {it.list && (
-                        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 14, fontWeight: 600, color: "#1f2937", lineHeight: 1.7 }}>
-                          {it.list.map((x, j) => <li key={j}>{x}</li>)}
-                        </ul>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+          {/* ⭐ 왜 차이가 났나 — 한 줄 결론 + 덜 번 금액을 원인별로(합계가 정확히 맞음) */}
+          <div style={card}>
+            <div style={{ fontSize: compact ? 18 : 20, fontWeight: 900, color: "#111827", lineHeight: 1.45 }}>{gapInfo.headline}</div>
+            <div style={{ fontSize: compact ? 15 : 16, fontWeight: 700, color: "#1f2937", lineHeight: 1.6, marginTop: 8, background: gapInfo.gap < 0 ? "#fff5f5" : "#f0fdf4", border: `1px solid ${gapInfo.gap < 0 ? "#fecaca" : "#bbf7d0"}`, borderRadius: 10, padding: "10px 14px" }}>
+              {gapInfo.why}
             </div>
+            {gapInfo.reasons.length > 0 && (
+              <>
+                <div style={{ fontSize: 16, fontWeight: 900, color: NAVY, margin: "16px 0 8px" }}>
+                  {gapInfo.gap < 0 ? `덜 번 ${Math.round(-gapInfo.gap).toLocaleString()}원, 어디서 생겼나 (큰 순서)` : "원인별 금액"}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {gapInfo.reasons.map((r, i) => {
+                    const neg = r.amount < 0;
+                    const w = gapInfo.gap ? Math.min(100, Math.round((Math.abs(r.amount) / Math.abs(gapInfo.gap)) * 100)) : 0;
+                    return (
+                      <div key={i} style={{ border: "1px solid #e2e7ef", borderRadius: 10, padding: "10px 12px", background: "#fff" }}>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                          <span style={{ fontSize: 15, fontWeight: 900, color: "#111827", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{i + 1}. {r.label}</span>
+                          <span style={{ marginLeft: "auto", fontSize: 15, fontWeight: 900, color: neg ? "#b91c1c" : "#047857", whiteSpace: "nowrap" }}>{neg ? "−" : "+"}{Math.abs(Math.round(r.amount)).toLocaleString()}원</span>
+                        </div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginTop: 3 }}>{r.desc}</div>
+                        <div style={{ height: 6, background: "#eef1f6", borderRadius: 4, marginTop: 7, overflow: "hidden" }}>
+                          <div style={{ width: `${w}%`, height: "100%", background: neg ? "#ef4444" : "#10b981", borderRadius: 4 }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
 
-            {compact && kpiTable}
-            {/* 수익 변화 분해 막대 */}
-            <div style={card}>
-              <h3 style={h}>수익 변화 원인 ({a} → {b})</h3>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 12 }}>
-                {a} 수익 {won(A.profit)} → {b} 수익 {won(B.profit)}
-              </div>
-              {[...effectList, ["합계", effects.total]].map(([l, v]) => {
-                const w = Math.round((Math.abs(v) / maxEff) * 100);
-                const pos = v >= 0;
-                const total = l === "합계";
-                return (
-                  <div key={l} style={{ marginBottom: 12, paddingTop: total ? 10 : 0, borderTop: total ? "1px dashed #cbd5e1" : "none" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: total ? 900 : 800, color: "#1f2937", marginBottom: 4 }}>
-                      <span>{l}</span>
-                      <span style={{ color: pos ? "#047857" : "#b91c1c" }}>{pos ? "+" : "−"}{Math.abs(Math.round(v)).toLocaleString()}원</span>
-                    </div>
-                    <div style={{ height: 12, background: "#eef1f6", borderRadius: 6, position: "relative", overflow: "hidden" }}>
-                      <div style={{ position: "absolute", top: 0, bottom: 0, left: pos ? "50%" : `${50 - w / 2}%`, width: `${w / 2}%`, background: pos ? (total ? "#065f46" : "#10b981") : (total ? "#7f1d1d" : "#ef4444"), borderRadius: 6 }} />
-                      <div style={{ position: "absolute", top: -2, bottom: -2, left: "50%", width: 2, background: "#94a3b8" }} />
-                    </div>
-                  </div>
-                );
-              })}
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#4b5563", lineHeight: 1.6, marginTop: 4 }}>
-                · 물량: 오더 건수가 늘거나 줄어든 영향<br />· 건당 매출: 오더 1건당 청구운임 변화 영향<br />· 수익률: 같은 매출에서 남기는 비율(마진) 변화 영향
-              </div>
-            </div>
+          {compact ? kpiTable : kpiCards}
+
+          {/* 확인 필요 오더 — 두 달 건수·금액 비교 */}
+          <div style={card}>
+            <h3 style={h}>확인이 필요한 오더 ({a} vs {b})</h3>
+            <CompareRows
+              compact={compact}
+              a={a} b={b}
+              items={res.anomalySummary.map((t) => ({
+                key: t.type,
+                head: <>
+                  <span style={{ fontSize: 13, fontWeight: 900, color: TONE[t.tone].title, background: TONE[t.tone].bg, border: `1px solid ${TONE[t.tone].border}`, borderRadius: 5, padding: "1px 7px", whiteSpace: "nowrap" }}>{t.type}</span>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#4b5563", marginTop: 4 }}>{t.desc}</div>
+                </>,
+                cells: [t.a, t.b].map((v, k) => ({
+                  main: `${v.cnt}건`,
+                  sub: `${t.amountLabel} ${Math.round(v.amount).toLocaleString()}원`,
+                  bad: k === 1 && t.b.cnt > t.a.cnt,
+                })),
+              }))}
+            />
+            {res.anomaliesB.length > 0 && (
+              <button onClick={() => setShowAnomalyList((v) => !v)} style={{ marginTop: 10, height: 34, padding: "0 14px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: NAVY, fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
+                {showAnomalyList ? "목록 접기" : `${b} 오더 목록 보기 (${res.anomaliesB.length}건)`}
+              </button>
+            )}
+            {showAnomalyList && anomalyListEl}
+          </div>
+
+          {/* 매출관리(순수 운송)에서 빠지는 거래처 */}
+          <div style={card}>
+            <h3 style={h}>매출관리(순수 운송)에 포함되지 않는 거래처</h3>
+            {res.excludedClients.length === 0 ? (
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#374151" }}>{a}·{b}에는 순수 운송에서 빠지는 거래처 오더가 없습니다.</div>
+            ) : (
+              <>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#4b5563", marginBottom: 8 }}>거래처관리에서 "순수 운송료 매출 통계에서 제외"가 켜진 거래처입니다. "순수 운송" 숫자에는 들어가지 않고 "전체"에만 들어갑니다.</div>
+                <CompareRows
+                  compact={compact}
+                  a={a} b={b}
+                  items={res.excludedClients.map((g) => ({
+                    key: g.key,
+                    head: <span style={{ fontSize: 15, fontWeight: 900, color: "#111827" }}>{g.key}</span>,
+                    cells: [g.a, g.b].map((v) => ({
+                      main: v.cnt ? won(v.sale) : "-",
+                      sub: v.cnt ? `수익 ${won(v.profit)} · ${v.cnt}건` : "",
+                    })),
+                  }))}
+                />
+              </>
+            )}
           </div>
 
           {/* 항목별 비교 */}
@@ -229,44 +323,6 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
             )}
           </div>
 
-          {/* 확인 필요 오더 */}
-          <div style={card}>
-            <h3 style={h}>{b} 확인 필요 오더 ({res.anomaliesB.length}건)</h3>
-            {res.anomaliesB.length === 0 ? (
-              <div style={{ fontSize: 15, fontWeight: 700, color: "#047857" }}>역마진·운임 미입력·저마진 오더가 없습니다.</div>
-            ) : (
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 720 }}>
-                  <thead>
-                    <tr style={{ background: "#eef1f6", color: NAVY }}>
-                      {["구분", "상차일", "거래처", "상차지 → 하차지", "청구운임", "기사운임", "수익", "비고"].map((t) => (
-                        <th key={t} style={{ padding: "8px 10px", fontWeight: 900, whiteSpace: "nowrap", textAlign: ["청구운임", "기사운임", "수익"].includes(t) ? "right" : "left" }}>{t}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {res.anomaliesB.slice(0, 100).map(({ r, an }, i) => {
-                      const s = toWon(r.청구운임), d = toWon(r.기사운임);
-                      const t = TONE[an.tone];
-                      return (
-                        <tr key={r._id || i} style={{ borderBottom: "1px solid #eef1f6" }}>
-                          <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}><span style={{ fontSize: 12, fontWeight: 900, color: t.title, background: t.bg, border: `1px solid ${t.border}`, borderRadius: 5, padding: "1px 7px" }}>{an.type}</span></td>
-                          <td style={{ padding: "8px 10px", whiteSpace: "nowrap", fontWeight: 700, color: "#374151" }}>{r.상차일}</td>
-                          <td style={{ padding: "8px 10px", whiteSpace: "nowrap", fontWeight: 800, color: "#111827" }}>{r.거래처명 || "-"}</td>
-                          <td style={{ padding: "8px 10px", whiteSpace: "nowrap", fontWeight: 600, color: "#374151" }}>{(r.상차지명 || r.출발지 || "-")} → {(r.하차지명 || r.도착지 || "-")}</td>
-                          <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 700 }}>{s.toLocaleString()}</td>
-                          <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 700 }}>{d.toLocaleString()}</td>
-                          <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 900, color: s - d < 0 ? "#b91c1c" : "#111827" }}>{(s - d).toLocaleString()}</td>
-                          <td style={{ padding: "8px 10px", whiteSpace: "nowrap", fontWeight: 600, color: "#4b5563" }}>{an.note}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                {res.anomaliesB.length > 100 && <div style={{ fontSize: 13, color: "#4b5563", marginTop: 6 }}>수익이 낮은 순으로 100건까지 표시</div>}
-              </div>
-            )}
-          </div>
         </div>
       </div>
     </div>
