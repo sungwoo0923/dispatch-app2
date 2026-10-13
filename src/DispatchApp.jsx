@@ -4120,21 +4120,9 @@ const removeDispatch = async (arg, opts = {}) => {
     }
   }
 
-  // ⭐ 완전삭제 대신 소프트 취소로 바꿔, 모바일 "취소내역" 화면에서 PC에서 취소한
-  // 오더도 함께 보이고 "재등록"으로 되살릴 수 있게 한다(기존엔 여기서 바로
-  // deleteDoc으로 영구삭제되어 취소내역 자체가 있을 수 없었다).
-  await updateDoc(ref, {
-    상태: "취소",
-    배차상태: "배차취소",
-    취소자: myRealName || user?.displayName || user?.email?.split("@")[0] || "",
-    취소일시: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    _lastModified: Date.now(),
-    기사확인상태: null,
-    기사거절사유: null,
-    기사확인일시: null,
-    기사완료일시: null,
-  });
+  // ⭐ 사용자 요청 — "취소내역"(소프트 취소)을 없애고, 삭제하면 모든 화면에서 바로
+  // 사라지도록 완전삭제한다. 기사 운행기록은 위 archiveCompletedOrderPC 스냅샷으로 남는다.
+  await deleteDoc(ref);
 
   // 연동 화주사에게 전송된 사본이 있으면(운송사가 등록/전송한 오더), 원본을 취소할 때
   // 화주사 화면의 사본도 함께 삭제되도록 한다.

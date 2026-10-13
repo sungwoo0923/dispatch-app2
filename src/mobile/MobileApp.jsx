@@ -4274,16 +4274,8 @@ const deleteSingleOrder = async (order) => {
   const id = order.id || order._id;
   if (!col || !id) return;
   notifyFleetCancelMobile(order, id);
-  // ⭐ 완전삭제 대신 소프트 취소 — 취소내역 화면으로 이동, 필요하면 재등록 가능
-  await updateDoc(doc(db, col, id), {
-    상태: "취소",
-    배차상태: "배차취소",
-    취소자: dispatcherName,
-    취소일시: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    _lastModified: Date.now(),
-    ...FLEET_CANCEL_FIELDS_MOBILE,
-  });
+  // ⭐ 사용자 요청 — 취소내역 없이 완전삭제(모든 화면에서 사라짐)
+  await deleteDoc(doc(db, col, id));
   deleteShipperMirrorMobile(order).catch(() => {});
   setOrders(prev => prev.filter(o => (o.id || o._id) !== id));
 };
@@ -4523,21 +4515,12 @@ const deleteSingleOrder = async (order) => {
     if (["수락", "완료"].includes(deleteConfirmMobile.기사확인상태) && deleteConfirmMobile.차량번호) {
       archiveCompletedOrderMobile(deleteConfirmMobile, deleteConfirmMobile.id, "오더삭제");
     }
-    // ⭐ 완전삭제 대신 소프트 취소로 바꿔, 취소내역 화면에서 다시 확인하거나
-    // "재등록"으로 되살릴 수 있게 한다(예전엔 여기서 바로 영구삭제되어 복구 불가였음).
-    await updateDoc(doc(db, deleteConfirmMobile.__col, deleteConfirmMobile.id), {
-      상태: "취소",
-      배차상태: "배차취소",
-      취소자: dispatcherName,
-      취소일시: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      _lastModified: Date.now(),
-      ...FLEET_CANCEL_FIELDS_MOBILE,
-    });
+    // ⭐ 사용자 요청 — 취소내역 없이 완전삭제(모든 화면에서 사라짐)
+    await deleteDoc(doc(db, deleteConfirmMobile.__col, deleteConfirmMobile.id));
     deleteShipperMirrorMobile(deleteConfirmMobile).catch(() => {});
     setDeleteConfirmMobile(null);
     setSelectedOrder(null);
-    showSuccess("오더 취소 완료 (취소내역에서 확인할 수 있어요)");
+    showSuccess("오더 삭제 완료");
     setPage(prevPage);
   };
   // 🔴 전체삭제 비활성화
@@ -4558,7 +4541,7 @@ const deleteSingleOrder = async (order) => {
       alert("화주사가 등록한 오더는 운송사에서 임의로 삭제할 수 없습니다. 화주사가 배차취소를 요청한 건만 승인 후 삭제할 수 있습니다.");
       return;
     }
-    if (!window.confirm(`선택한 ${selectedOrders.length}개 오더를 취소하시겠습니까?\n취소내역으로 이동하며, 필요하면 다시 재등록할 수 있습니다.`)) return;
+    if (!window.confirm(`선택한 ${selectedOrders.length}개 오더를 삭제하시겠습니까?\n삭제하면 모든 화면에서 사라집니다.`)) return;
     const completedCount = selectedOrders.filter(o => o.기사확인상태 === "완료").length;
     if (completedCount > 0 && !window.confirm(`운송이 완료된 오더가 ${completedCount}건 포함되어 있습니다. 오더를 삭제하시겠습니까?`)) return;
     const fleetCount = selectedOrders.filter(o => o.기사확인상태 === "대기" || o.기사확인상태 === "수락").length;
@@ -4570,24 +4553,16 @@ const deleteSingleOrder = async (order) => {
         if (col && id) {
           notifyFleetCancelMobile(order, id);
           if (["수락", "완료"].includes(order.기사확인상태) && order.차량번호) archiveCompletedOrderMobile(order, id, "오더삭제");
-          // ⭐ 완전삭제 대신 소프트 취소 — 취소내역 화면으로 이동
-          await updateDoc(doc(db, col, id), {
-            상태: "취소",
-            배차상태: "배차취소",
-            취소자: dispatcherName,
-            취소일시: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-            _lastModified: Date.now(),
-            ...FLEET_CANCEL_FIELDS_MOBILE,
-          });
+          // ⭐ 사용자 요청 — 취소내역 없이 완전삭제(모든 화면에서 사라짐)
+          await deleteDoc(doc(db, col, id));
           deleteShipperMirrorMobile(order).catch(() => {});
         }
       }
       const deletedIds = new Set(selectedOrders.map(o => o.id || o._id));
       setOrders(prev => prev.filter(o => !deletedIds.has(o.id) && !deletedIds.has(o._id)));
-      showSuccess(`${selectedOrders.length}개 오더 취소 완료`);
+      showSuccess(`${selectedOrders.length}개 오더 삭제 완료`);
     } catch (e) {
-      alert("취소 처리 중 오류가 발생했습니다: " + e.message);
+      alert("삭제 처리 중 오류가 발생했습니다: " + e.message);
     }
   };
 
@@ -5186,7 +5161,7 @@ const title =
         </div>
       </div>
       <div style={{ fontSize: 13, color: "#6b7280", textAlign: "center", padding: "0 20px 18px" }}>
-        취소하면 목록에서 사라지고 "취소내역"으로 이동합니다.<br />필요하면 취소내역에서 다시 재등록할 수 있어요.
+        삭제하면 PC·모바일·기사앱 모든 화면에서 사라집니다.
       </div>
       <div style={{ display: "flex", borderTop: "1px solid #f3f4f6" }}>
         <button
@@ -7243,7 +7218,6 @@ function MobileSideMenu({
             <MenuItem label="등록내역" onClick={onGoList} dark={dark} />
             <MenuItem label="화물등록" onClick={onGoCreate} dark={dark} />
             <MenuItem label="미배차현황" onClick={onGoUnassigned} dark={dark} />
-            <MenuItem label="취소내역" onClick={onGoCanceled} dark={dark} />
           </MenuSection>
           <MenuSection title="공지 / 일정" dark={dark} alwaysOpen>
             <MenuItem label="공지사항" onClick={onGoNotice} badge={hasNewNotice ? "NEW" : null} dark={dark} />
@@ -8732,7 +8706,7 @@ const summary = useMemo(() => {
             {deleteConfirmOrder.상차지명} → {deleteConfirmOrder.하차지명}
           </div>
           <div className="text-[12px] text-gray-400 mb-5 ml-6">{deleteConfirmOrder.상차일 || ""}</div>
-          <p className="text-[13px] text-gray-500 mb-5 text-center">취소하면 "취소내역"으로 이동합니다. 필요하면 다시 재등록할 수 있어요.</p>
+          <p className="text-[13px] text-gray-500 mb-5 text-center">삭제하면 PC·모바일·기사앱 모든 화면에서 사라집니다.</p>
           <div className="flex gap-3">
             <button
               className={`flex-1 py-3 rounded-xl text-[14px] font-semibold ${
@@ -8752,7 +8726,7 @@ const summary = useMemo(() => {
                 await onDeleteOrder?.(o);
               }}
             >
-              취소하기
+              삭제하기
             </button>
           </div>
         </div>
@@ -9587,7 +9561,7 @@ function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriv
     },
     {
       label: "취소",
-      desc: "이 오더를 취소합니다 (취소내역에서 재등록 가능)",
+      desc: "이 오더를 삭제합니다 (모든 화면에서 사라짐)",
       action: onDelete,
       danger: true,
       svg: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>,
@@ -10109,8 +10083,11 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
           상태: "취소", 배차상태: "배차취소", 취소요청: false, 취소처리: "승인", 취소처리일시: serverTimestamp(),
         }).catch(() => {});
       }
-      // ⭐ 완전삭제 대신 소프트 취소 — 운송사 쪽 원본도 취소내역으로 이동해 재등록 가능하게 한다.
-      await updateDoc(doc(db, order.__col || "orders", order.id), {
+      // ⭐ PC(approveCancelRequestPC)와 동일 — 화주사 사본이 있으면 운송사 원본은 완전삭제,
+      // 화주사가 직접 등록한 오더(사본 없음)는 화주사의 유일한 기록이라 취소 상태만 남긴다.
+      if (order._transmittedOrderId) {
+        await deleteDoc(doc(db, order.__col || "orders", order.id));
+      } else await updateDoc(doc(db, order.__col || "orders", order.id), {
         상태: "취소", 배차상태: "배차취소", 취소요청: false, 취소처리: "승인", 취소처리일시: serverTimestamp(),
         취소자: dispatcherName, 취소일시: serverTimestamp(),
         updatedAt: serverTimestamp(), _lastModified: Date.now(),
@@ -11457,8 +11434,11 @@ function MobileOrderDetail({
           상태: "취소", 배차상태: "배차취소", 취소요청: false, 취소처리: "승인", 취소처리일시: serverTimestamp(),
         }).catch(() => {});
       }
-      // ⭐ 완전삭제 대신 소프트 취소 — 운송사 쪽 원본도 취소내역으로 이동해 재등록 가능하게 한다.
-      await updateDoc(doc(db, order.__col || "orders", order.id), {
+      // ⭐ PC(approveCancelRequestPC)와 동일 — 화주사 사본이 있으면 운송사 원본은 완전삭제,
+      // 화주사가 직접 등록한 오더(사본 없음)는 화주사의 유일한 기록이라 취소 상태만 남긴다.
+      if (order._transmittedOrderId) {
+        await deleteDoc(doc(db, order.__col || "orders", order.id));
+      } else await updateDoc(doc(db, order.__col || "orders", order.id), {
         상태: "취소", 배차상태: "배차취소", 취소요청: false, 취소처리: "승인", 취소처리일시: serverTimestamp(),
         취소자: dispatcherName, 취소일시: serverTimestamp(),
         updatedAt: serverTimestamp(), _lastModified: Date.now(),
@@ -21510,9 +21490,9 @@ return (
         <div className="w-full max-w-md bg-white rounded-t-2xl px-5 pt-5 pb-8 shadow-2xl"
           onClick={e => e.stopPropagation()}>
           <div className="w-10 h-1 rounded-full bg-gray-200 mx-auto mb-4" />
-          <div className="font-bold text-[15px] text-gray-900 mb-1">오더 취소</div>
+          <div className="font-bold text-[15px] text-gray-900 mb-1">오더 삭제</div>
           <div className="text-[13px] text-gray-500 mb-5">
-            {deleteConfirmOrder.상차지명} → {deleteConfirmOrder.하차지명} 오더를 취소합니다. "취소내역"에서 다시 재등록할 수 있어요.
+            {deleteConfirmOrder.상차지명} → {deleteConfirmOrder.하차지명} 오더를 삭제합니다. 모든 화면에서 사라집니다.
           </div>
           <div className="flex gap-3">
             <button onClick={() => setDeleteConfirmOrder(null)}
@@ -21521,7 +21501,7 @@ return (
               const o = deleteConfirmOrder;
               setDeleteConfirmOrder(null);
               await onDeleteOrder?.(o);
-            }} className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-red-500 text-white">취소하기</button>
+            }} className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-red-500 text-white">삭제하기</button>
           </div>
         </div>
       </div>

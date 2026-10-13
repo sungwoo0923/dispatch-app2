@@ -1184,6 +1184,8 @@ const FLEET_CHECK_PROG_META = {
   완료: { label: "운송완료", dot: "#16a34a" },
   거절: { label: "거절", dot: "#ef4444" },
 };
+// 수락했지만 앞 오더가 아직 운송완료 전인 오더
+const FLEET_WAITING_META = { label: "운송대기", dot: "#94a3b8" };
 // ⭐ 사용자 요청 — 카드 어딘가에 묻혀 있던 "배차대기" 표시를 차량번호 옆 전용
 // 컬럼(배차상태)으로 옮기고, 운송중/배차완료까지 상황별로 구분해 보여준다.
 function driverDispatchStatus(orders, todayStr, live) {
@@ -1376,6 +1378,7 @@ function useVisitedPickup(driverId, pickupGeo) {
 // 5km/1km 이내면 하차지진입/도착.
 // ⭐ 사용자 요청 — 노선관리 오더 "상태" 칸은 배경색 없이 글자색만 상태별로 바꾼다.
 const PHASE_TEXT_COLORS = {
+  "운송대기": "#64748b",
   "확인대기": "#d97706",
   "운송중": "#1B2B4B",
   "상차지진입": "#2563eb",
@@ -1438,6 +1441,8 @@ function useTransitPhase({ order, live, driverId, fallback }) {
 // driverDispatchStatus가 "운송중"을 반환하게 만든 그 오더(상/하차지 주소가
 // 필요하므로) — checkStates.includes("수락") 로직과 동일한 우선순위로 찾는다.
 function findActiveOrder(orders, todayStr) {
+  const cur = pickCurrentOrder(orders);
+  if (cur) return cur;
   return orders.find(r => {
     const fleetMeta = r.기사확인상태 ? FLEET_CHECK_PROG_META[r.기사확인상태] : null;
     if (fleetMeta) return fleetMeta.label === "운송중";
@@ -2193,7 +2198,7 @@ function OrderTimelineModal({ order, events, onClose }) {
   });
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
-      <div style={{ background: "#fff", borderRadius: 16, width: "min(520px, 100%)", maxHeight: "85vh", display: "flex", flexDirection: "column", boxShadow: "0 12px 40px rgba(0,0,0,.28)", overflow: "hidden" }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: "#fff", borderRadius: 16, width: "min(600px, 100%)", maxHeight: "85vh", display: "flex", flexDirection: "column", boxShadow: "0 12px 40px rgba(0,0,0,.28)", overflow: "hidden" }} onClick={e => e.stopPropagation()}>
         <div style={{ background: NAVY, padding: "16px 20px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ color: "#fff", fontSize: 15, fontWeight: 800 }}>오더 타임라인</div>
@@ -2216,14 +2221,15 @@ function OrderTimelineModal({ order, events, onClose }) {
                   const sub = tlSub(e);
                   const dot = m.danger ? "#b91c1c" : NAVY;
                   return (
-                    <div key={i} style={{ position: "relative", padding: "6px 0 10px" }}>
-                      <span style={{ position: "absolute", left: -21, top: 10, width: 12, height: 12, borderRadius: "50%", background: m.done ? dot : "#fff", border: `2.5px solid ${dot}`, boxSizing: "border-box" }} />
-                      <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-                        <span style={{ fontSize: 14, fontWeight: 900, color: "#111827", fontVariantNumeric: "tabular-nums", minWidth: 42 }}>{tlTime(e.at)}</span>
-                        <span style={{ fontSize: 11, fontWeight: 800, padding: "1px 7px", borderRadius: 5, background: m.danger ? "#fff" : "#eef1f6", color: m.danger ? "#b91c1c" : NAVY, border: m.danger ? "1px solid #fca5a5" : "1px solid #d7deea", whiteSpace: "nowrap" }}>{m.label}</span>
+                    <div key={i} style={{ position: "relative", padding: "7px 0" }}>
+                      {/* ⭐ 시간·뱃지·내용을 한 줄(같은 높이, 세로 가운데)로 맞춘다 */}
+                      <span style={{ position: "absolute", left: -21, top: 7 + 13 - 6, width: 12, height: 12, borderRadius: "50%", background: m.done ? dot : "#fff", border: `2.5px solid ${dot}`, boxSizing: "border-box" }} />
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 26 }}>
+                        <span style={{ fontSize: 14, fontWeight: 900, color: "#111827", fontVariantNumeric: "tabular-nums", width: 44, flexShrink: 0, lineHeight: "26px" }}>{tlTime(e.at)}</span>
+                        <span style={{ fontSize: 11, fontWeight: 800, padding: "0 8px", height: 22, lineHeight: "20px", borderRadius: 5, background: m.danger ? "#fff" : "#eef1f6", color: m.danger ? "#b91c1c" : NAVY, border: m.danger ? "1px solid #fca5a5" : "1px solid #d7deea", whiteSpace: "nowrap", flexShrink: 0, boxSizing: "border-box", width: 74, textAlign: "center" }}>{m.label}</span>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: "#1f2937", lineHeight: "26px" }}>{tlSentence(e)}</span>
                       </div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: "#374151", marginTop: 4, marginLeft: 52 }}>{tlSentence(e)}</div>
-                      {sub && <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2, marginLeft: 52 }}>{sub}</div>}
+                      {sub && <div style={{ fontSize: 12, color: "#6b7280", marginTop: 1, marginLeft: 44 + 10 + 74 + 10 }}>{sub}</div>}
                     </div>
                   );
                 })}
@@ -2419,10 +2425,13 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
               </thead>
               <tbody>
                 {orders.map((r, i) => {
-                  const fleetMeta = r.기사확인상태 ? FLEET_CHECK_PROG_META[r.기사확인상태] : null;
+                  // ⭐ 수락한 오더가 여러 건이면 먼저 수락한(진행중) 1건만 "운송중", 나머지는 "운송대기"
+                  const curOrder = pickCurrentOrder(orders);
+                  const isWaitingNext = r.기사확인상태 === "수락" && curOrder && (curOrder._id ?? curOrder.id) !== (r._id ?? r.id);
+                  const fleetMeta = isWaitingNext ? FLEET_WAITING_META : (r.기사확인상태 ? FLEET_CHECK_PROG_META[r.기사확인상태] : null);
                   const prog = computeOrderProgress(r, r.상차일, todayStr);
                   const meta = fleetMeta || PROG_META[prog];
-                  const isBlinking = fleetMeta ? r.기사확인상태 === "수락" : prog === "progress";
+                  const isBlinking = fleetMeta ? (r.기사확인상태 === "수락" && !isWaitingNext) : prog === "progress";
                   return (
                     <tr key={r._id || i} style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : "none" }} onContextMenu={(e) => openRowMenu(e, r)}>
                       <td style={{ padding: "10px 6px", textAlign: "center", fontSize: 13, fontWeight: 700, color: "#9ca3af" }}>{i + 1}</td>
@@ -2971,12 +2980,12 @@ const LIVE_MOVING_PHASES = ["운송중", "상차지진입", "상차지도착", "
 function liveTruckIcon({ plate, state, selected }) {
   // state: moving(운행중) / idle(대기·접속중) / offline(미접속) — 색은 네이비·그레이 톤만 사용
   const bg = state === "offline" ? "#9aa3b2" : NAVY;
-  const size = selected ? 40 : 34;
+  const size = selected ? 46 : 40;
   const pulse = state === "moving"
     ? `<span style="position:absolute;inset:0;border-radius:50%;background:${NAVY};opacity:.25;animation:fmRing 2s infinite ease-out;"></span>` : "";
   const ring = selected ? `box-shadow:0 0 0 3px #fff,0 0 0 5px ${NAVY},0 6px 16px rgba(15,23,42,.35);` : `box-shadow:0 0 0 2px #fff,0 4px 12px rgba(15,23,42,.3);`;
-  const truck = `<svg width="${selected ? 22 : 19}" height="${selected ? 22 : 19}" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4h13v11H1z"/><path d="M14 8h4l3 3v4h-7z"/><circle cx="5.5" cy="17.5" r="2"/><circle cx="17.5" cy="17.5" r="2"/></svg>`;
-  const label = plate ? `<div style="margin-top:4px;white-space:nowrap;background:#fff;color:${state === "offline" ? "#6b7280" : NAVY};font-size:11px;font-weight:800;padding:1px 6px;border-radius:5px;border:1.5px solid ${bg};box-shadow:0 1px 4px rgba(0,0,0,.15);font-family:'Noto Sans KR',sans-serif;">${plate}</div>` : "";
+  const truck = `<svg width="${selected ? 25 : 22}" height="${selected ? 25 : 22}" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4h13v11H1z"/><path d="M14 8h4l3 3v4h-7z"/><circle cx="5.5" cy="17.5" r="2"/><circle cx="17.5" cy="17.5" r="2"/></svg>`;
+  const label = plate ? `<div style="margin-top:5px;white-space:nowrap;background:#fff;color:${state === "offline" ? "#4b5563" : "#111827"};font-size:15px;font-weight:900;padding:2px 9px;border-radius:6px;border:2px solid ${bg};box-shadow:0 2px 6px rgba(0,0,0,.22);font-family:'Noto Sans KR','Malgun Gothic',sans-serif;letter-spacing:.01em;">${plate}</div>` : "";
   return L.divIcon({
     html: `<div style="display:flex;flex-direction:column;align-items:center;transform:translateX(-50%);position:absolute;left:50%;top:0;"><div style="position:relative;width:${size}px;height:${size}px;">${pulse}<div style="position:relative;width:100%;height:100%;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;${ring}">${truck}</div></div>${label}</div>`,
     className: "",
@@ -3094,19 +3103,21 @@ function FleetLiveMapModal({ drivers, liveById, dispatchData, onClose }) {
   const FILTERS = [["all", "전체"], ["moving", "운행중"], ["idle", "대기"], ["offline", "미접속"]];
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", zIndex: 99990, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={onClose}>
-      <div style={{ background: "#fff", borderRadius: 16, width: "min(1400px, 100%)", height: "min(860px, 100%)", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 16px 48px rgba(0,0,0,.3)" }} onClick={e => e.stopPropagation()}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", zIndex: 99990, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Noto Sans KR','Malgun Gothic',sans-serif" }} onClick={onClose}>
+      {/* ⭐ 지도 말풍선 기본 글씨(작고 흐린 Helvetica)를 프로그램 글씨체·크기로 */}
+      <style>{`.fm-live-popup .leaflet-popup-content{margin:14px 16px;font-family:'Noto Sans KR','Malgun Gothic',sans-serif;}.fm-live-popup .leaflet-popup-content-wrapper{border-radius:12px;box-shadow:0 8px 24px rgba(15,23,42,.25);}`}</style>
+      <div style={{ background: "#fff", borderRadius: 16, width: "min(1680px, 100%)", height: "min(960px, 100%)", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 16px 48px rgba(0,0,0,.3)" }} onClick={e => e.stopPropagation()}>
         {/* 헤더 */}
         <div style={{ background: NAVY, padding: "14px 20px", display: "flex", alignItems: "center", gap: 14 }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4h13v11H1z" /><path d="M14 8h4l3 3v4h-7z" /><circle cx="5.5" cy="17.5" r="2" /><circle cx="17.5" cy="17.5" r="2" /></svg>
           <div>
-            <div style={{ color: "#fff", fontSize: 16, fontWeight: 800 }}>지입차 실시간 위치</div>
-            <div style={{ color: "rgba(255,255,255,.6)", fontSize: 12, marginTop: 2 }}>기사앱 위치가 들어오는 대로 자동 갱신됩니다</div>
+            <div style={{ color: "#fff", fontSize: 18, fontWeight: 800 }}>지입차 실시간 위치</div>
+            <div style={{ color: "rgba(255,255,255,.7)", fontSize: 13, marginTop: 2 }}>기사앱 위치가 들어오는 대로 자동 갱신됩니다</div>
           </div>
           <div style={{ display: "flex", gap: 8, marginLeft: 18 }}>
             {[["운행중", counts.moving], ["대기", counts.idle], ["미접속", counts.offline]].map(([l, c]) => (
-              <span key={l} style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,.75)", background: "rgba(255,255,255,.1)", borderRadius: 6, padding: "4px 10px" }}>
-                {l} <b style={{ color: "#fff", fontSize: 14, marginLeft: 3 }}>{c}</b>
+              <span key={l} style={{ fontSize: 14, fontWeight: 700, color: "rgba(255,255,255,.85)", background: "rgba(255,255,255,.12)", borderRadius: 7, padding: "5px 12px" }}>
+                {l} <b style={{ color: "#fff", fontSize: 16, marginLeft: 4 }}>{c}</b>
               </span>
             ))}
           </div>
@@ -3115,7 +3126,7 @@ function FleetLiveMapModal({ drivers, liveById, dispatchData, onClose }) {
 
         <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
           {/* 좌측: 검색 + 목록 */}
-          <div style={{ width: 330, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", background: "#f8f9fb" }}>
+          <div style={{ width: 400, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", background: "#f8f9fb" }}>
             <div style={{ padding: 12, borderBottom: "1px solid #e5e7eb", display: "flex", flexDirection: "column", gap: 8, background: "#fff" }}>
               <input
                 autoFocus
@@ -3123,7 +3134,7 @@ function FleetLiveMapModal({ drivers, liveById, dispatchData, onClose }) {
                 onChange={e => setQ(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && listRows[0]) focusRow(listRows[0]); }}
                 placeholder="기사명 · 차량번호 · 전화번호 검색"
-                style={{ height: 36, padding: "0 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 13, outline: "none" }}
+                style={{ height: 42, padding: "0 14px", borderRadius: 9, border: "1px solid #d1d5db", fontSize: 15, fontWeight: 600, color: "#111827", outline: "none" }}
               />
               <select
                 value={region}
@@ -3132,7 +3143,7 @@ function FleetLiveMapModal({ drivers, liveById, dispatchData, onClose }) {
                   setRegion(e.target.value);
                   if (rg) { setSelectedId(null); setTarget({ lat: rg.lat, lng: rg.lng, z: rg.z, _t: Date.now() }); }
                 }}
-                style={{ height: 34, padding: "0 10px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 13, fontWeight: 700, color: "#374151", background: "#fff", outline: "none" }}
+                style={{ height: 40, padding: "0 12px", borderRadius: 9, border: "1px solid #d1d5db", fontSize: 15, fontWeight: 700, color: "#111827", background: "#fff", outline: "none" }}
               >
                 <option value="">지역 선택 → 지도 이동</option>
                 {LIVE_MAP_REGIONS.map(rg => <option key={rg.name} value={rg.name}>{rg.name}</option>)}
@@ -3140,7 +3151,7 @@ function FleetLiveMapModal({ drivers, liveById, dispatchData, onClose }) {
               <div style={{ display: "flex", gap: 4 }}>
                 {FILTERS.map(([k, l]) => (
                   <button key={k} onClick={() => setFilter(k)}
-                    style={{ flex: 1, height: 30, borderRadius: 7, border: "1px solid " + (filter === k ? NAVY : "#e5e7eb"), background: filter === k ? NAVY : "#fff", color: filter === k ? "#fff" : "#4b5563", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    style={{ flex: 1, height: 36, borderRadius: 8, border: "1px solid " + (filter === k ? NAVY : "#d1d5db"), background: filter === k ? NAVY : "#fff", color: filter === k ? "#fff" : "#1f2937", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
                     {l} {counts[k]}
                   </button>
                 ))}
@@ -3148,30 +3159,30 @@ function FleetLiveMapModal({ drivers, liveById, dispatchData, onClose }) {
             </div>
             <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
               {listRows.length === 0 ? (
-                <div style={{ textAlign: "center", color: "#9ca3af", fontSize: 13, padding: "30px 0" }}>검색 결과가 없습니다</div>
+                <div style={{ textAlign: "center", color: "#6b7280", fontSize: 15, padding: "30px 0" }}>검색 결과가 없습니다</div>
               ) : listRows.map(r => {
                 const sel = r.d.id === selectedId;
                 return (
                   <div key={r.d.id} onClick={() => focusRow(r)}
-                    style={{ padding: "10px 12px", borderRadius: 10, marginBottom: 6, cursor: r.loc ? "pointer" : "default", background: "#fff", border: "1px solid " + (sel ? NAVY : "#e5e7eb"), boxShadow: sel ? "0 0 0 2px rgba(27,43,75,.12)" : "none", opacity: r.state === "offline" ? 0.72 : 1 }}>
+                    style={{ padding: "13px 14px", borderRadius: 12, marginBottom: 8, cursor: r.loc ? "pointer" : "default", background: "#fff", border: "1px solid " + (sel ? NAVY : "#e5e7eb"), boxShadow: sel ? "0 0 0 2px rgba(27,43,75,.12)" : "none", opacity: r.state === "offline" ? 0.8 : 1 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: r.state === "offline" ? "#cbd5e1" : NAVY, animation: r.state === "moving" ? "fmBlink 2.4s ease-in-out infinite" : "none" }} />
-                      <span style={{ fontSize: 14, fontWeight: 800, color: "#111827" }}>{r.d.이름}</span>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: "#111827", padding: "0 6px", border: "1.5px solid #111827", borderRadius: 4, background: "#fff" }}>{r.d.차량번호}</span>
-                      <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 800, padding: "2px 7px", borderRadius: 5, background: r.state === "offline" ? "#f1f3f6" : r.state === "moving" ? NAVY : "#eef1f6", color: r.state === "offline" ? "#9ca3af" : r.state === "moving" ? "#fff" : NAVY, whiteSpace: "nowrap" }}>
+                      <span style={{ fontSize: 17, fontWeight: 900, color: "#111827" }}>{r.d.이름}</span>
+                      <span style={{ fontSize: 15, fontWeight: 800, color: "#111827", padding: "0 8px", border: "1.5px solid #111827", borderRadius: 5, background: "#fff" }}>{r.d.차량번호}</span>
+                      <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 800, padding: "3px 9px", borderRadius: 6, background: r.state === "offline" ? "#f1f3f6" : r.state === "moving" ? NAVY : "#eef1f6", color: r.state === "offline" ? "#9ca3af" : r.state === "moving" ? "#fff" : NAVY, whiteSpace: "nowrap" }}>
                         {r.state === "offline" ? "미접속" : r.phase}
                       </span>
                     </div>
-                    <div style={{ fontSize: 12, color: "#4b5563", fontWeight: 600, marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <div style={{ fontSize: 15, color: "#1f2937", fontWeight: 700, marginTop: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       <LiveAddrText loc={r.loc} />
                     </div>
-                    <div style={{ display: "flex", gap: 8, fontSize: 11, color: "#9ca3af", marginTop: 3 }}>
+                    <div style={{ display: "flex", gap: 8, fontSize: 13, color: "#4b5563", fontWeight: 600, marginTop: 4 }}>
                       {r.loc && <span>업데이트 {timeAgo(r.live?.updatedAt)}</span>}
                       {r.speed > 0 && <span>· {r.speed} km/h</span>}
                     </div>
                     {r.cur && (
-                      <div style={{ fontSize: 12, color: NAVY, fontWeight: 700, marginTop: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {r.cur.상차지명 || "-"} → {r.cur.하차지명 || "-"}
+                      <div style={{ fontSize: 14, color: NAVY, fontWeight: 800, marginTop: 7, padding: "5px 9px", background: "#f4f7fb", borderRadius: 7, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        오더 · {r.cur.상차지명 || "-"} → {r.cur.하차지명 || "-"}
                       </div>
                     )}
                   </div>
@@ -3195,16 +3206,24 @@ function FleetLiveMapModal({ drivers, liveById, dispatchData, onClose }) {
                   ref={el => { if (el) markerRefs.current[r.d.id] = el; }}
                   eventHandlers={{ click: () => setSelectedId(r.d.id) }}
                 >
-                  <Popup>
-                    <div style={{ minWidth: 200, fontFamily: "'Noto Sans KR',sans-serif", lineHeight: 1.6 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <b style={{ fontSize: 15, color: NAVY }}>{r.d.이름}</b>
-                        <span style={{ fontSize: 12, fontWeight: 800, padding: "0 5px", border: "1.5px solid #111827", borderRadius: 4 }}>{r.d.차량번호}</span>
+                  <Popup className="fm-live-popup" minWidth={270} maxWidth={360}>
+                    <div style={{ lineHeight: 1.55, color: "#111827" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <b style={{ fontSize: 18, fontWeight: 900, color: NAVY }}>{r.d.이름}</b>
+                        <span style={{ fontSize: 15, fontWeight: 800, padding: "0 7px", border: "1.5px solid #111827", borderRadius: 5 }}>{r.d.차량번호}</span>
                       </div>
-                      <div style={{ fontSize: 12, fontWeight: 800, color: r.state === "offline" ? "#9ca3af" : NAVY, marginTop: 2 }}>{r.state === "offline" ? "미접속 (마지막 위치)" : r.phase}{r.speed > 0 ? ` · ${r.speed} km/h` : ""}</div>
-                      <div style={{ fontSize: 12, color: "#374151" }}><LiveAddrText loc={r.loc} /></div>
-                      {r.cur && <div style={{ fontSize: 12, color: "#374151" }}>오더: {r.cur.상차지명 || "-"} → {r.cur.하차지명 || "-"}</div>}
-                      <div style={{ fontSize: 11, color: "#9ca3af" }}>업데이트 {timeAgo(r.live?.updatedAt)}{r.d.전화번호 && r.d.전화번호 !== "-" ? ` · ${formatPhone(r.d.전화번호)}` : ""}</div>
+                      <div style={{ display: "inline-block", fontSize: 13, fontWeight: 800, color: r.state === "offline" ? "#4b5563" : "#fff", background: r.state === "offline" ? "#e5e7eb" : NAVY, borderRadius: 6, padding: "2px 9px", marginTop: 7 }}>
+                        {r.state === "offline" ? "미접속 (마지막 위치)" : r.phase}{r.speed > 0 ? ` · ${r.speed} km/h` : ""}
+                      </div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: "#1f2937", marginTop: 8 }}><LiveAddrText loc={r.loc} /></div>
+                      {r.cur && (
+                        <div style={{ fontSize: 15, fontWeight: 800, color: NAVY, marginTop: 6, padding: "6px 10px", background: "#f4f7fb", borderRadius: 8 }}>
+                          오더 · {r.cur.상차지명 || "-"} → {r.cur.하차지명 || "-"}
+                        </div>
+                      )}
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#4b5563", marginTop: 7 }}>
+                        업데이트 {timeAgo(r.live?.updatedAt)}{r.d.전화번호 && r.d.전화번호 !== "-" ? ` · ${formatPhone(r.d.전화번호)}` : ""}
+                      </div>
                     </div>
                   </Popup>
                 </Marker>
@@ -3214,12 +3233,12 @@ function FleetLiveMapModal({ drivers, liveById, dispatchData, onClose }) {
             {/* 지도 위 컨트롤 */}
             <div style={{ position: "absolute", top: 12, right: 12, zIndex: 500, display: "flex", flexDirection: "column", gap: 6 }}>
               <button onClick={() => { setSelectedId(null); setRegion(""); setFitKey(k => k + 1); }}
-                style={{ height: 34, padding: "0 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: NAVY, fontSize: 12, fontWeight: 800, cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,.12)" }}>
+                style={{ height: 40, padding: "0 14px", borderRadius: 9, border: "1px solid #d1d5db", background: "#fff", color: NAVY, fontSize: 14, fontWeight: 800, cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,.12)" }}>
                 전체 차량 보기
               </button>
               <button onClick={() => setFollow(v => !v)}
                 title="선택한 기사의 위치가 바뀌면 지도가 따라 이동합니다"
-                style={{ height: 34, padding: "0 12px", borderRadius: 8, border: "1px solid " + (follow ? NAVY : "#d1d5db"), background: follow ? NAVY : "#fff", color: follow ? "#fff" : "#4b5563", fontSize: 12, fontWeight: 800, cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,.12)" }}>
+                style={{ height: 40, padding: "0 14px", borderRadius: 9, border: "1px solid " + (follow ? NAVY : "#d1d5db"), background: follow ? NAVY : "#fff", color: follow ? "#fff" : "#1f2937", fontSize: 14, fontWeight: 800, cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,.12)" }}>
                 선택 차량 따라가기 {follow ? "ON" : "OFF"}
               </button>
             </div>
@@ -3229,7 +3248,7 @@ function FleetLiveMapModal({ drivers, liveById, dispatchData, onClose }) {
               </div>
             )}
             {/* 범례 */}
-            <div style={{ position: "absolute", left: 12, bottom: 12, zIndex: 500, background: "rgba(255,255,255,.95)", borderRadius: 10, padding: "8px 12px", boxShadow: "0 2px 8px rgba(0,0,0,.12)", display: "flex", gap: 14, fontSize: 12, fontWeight: 700, color: "#374151" }}>
+            <div style={{ position: "absolute", left: 12, bottom: 12, zIndex: 500, background: "rgba(255,255,255,.95)", borderRadius: 10, padding: "8px 12px", boxShadow: "0 2px 8px rgba(0,0,0,.12)", display: "flex", gap: 16, fontSize: 14, fontWeight: 700, color: "#1f2937" }}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 12, height: 12, borderRadius: "50%", background: NAVY, boxShadow: "0 0 0 3px rgba(27,43,75,.2)" }} />운행중</span>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 12, height: 12, borderRadius: "50%", background: NAVY }} />대기</span>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 12, height: 12, borderRadius: "50%", background: "#9aa3b2" }} />미접속(마지막 위치)</span>

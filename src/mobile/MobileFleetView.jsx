@@ -10,7 +10,7 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import { getDrivingRoute, geocodeAddress, haversineKm } from "../tmapFareCalc";
-import { ShortAddr, DropEtaText, RemainText, FleetStepper, pickCurrentOrder, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS, isPickupVisited } from "../fleetGeo";
+import { ShortAddr, DropEtaText, RemainText, FleetStepper, pickCurrentOrder, sortActiveOrders, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS, isPickupVisited } from "../fleetGeo";
 import { LeafletTrack, MapLegend } from "../mapLeaflet";
 import { modificationStatus } from "../orderChange";
 
@@ -150,13 +150,105 @@ function ModBadge({ order }) {
   return null;
 }
 
-function mobileOrderStatusMeta(r) {
+// currentId — 지금 진행중인(먼저 수락한) 오더 id. 수락했지만 앞 오더가 아직 안 끝난 오더는 "운송대기".
+function mobileOrderStatusMeta(r, currentId) {
   if (FM_CANCELED_STATUSES_MOBILE.includes(r.상태) || r.배차상태 === "배차취소") {
     return { label: "관리자취소", bg: "#fee2e2", color: "#b91c1c" };
   }
   if (r.기사확인상태 === "거절") return { label: "기사거절", bg: "#fee2e2", color: "#b91c1c" };
   if (r.기사확인상태 === "완료") return { label: "운행완료", bg: "#dcfce7", color: "#166534" };
+  if (r.기사확인상태 === "대기") return { label: "확인대기", bg: "#fef3c7", color: "#92400e" };
+  if (r.기사확인상태 === "수락" && currentId != null && (r._id ?? r.id) !== currentId) {
+    return { label: "운송대기", bg: "#eef1f6", color: "#475569" };
+  }
   return { label: "운행중", bg: "#dbeafe", color: "#1e40af" };
+}
+
+// ⭐ 사용자 요청 — 기사 1명에게 오더가 여러 건이면 진행중 → 진행예정 → 완료 순으로
+// 좌우 슬라이드(또는 탭/화살표)로 넘겨 본다(기사앱에서 오더를 넘겨보는 것과 같은 방식).
+function orderSlideList(orders) {
+  const live = (orders || []).filter(r => !(FM_CANCELED_STATUSES_MOBILE.includes(r.상태) || r.배차상태 === "배차취소") && r.기사확인상태 !== "거절");
+  const accepted = sortActiveOrders(live);
+  const byTime = (a, b) => `${a.상차일 || ""} ${a.상차시간 || ""}`.localeCompare(`${b.상차일 || ""} ${b.상차시간 || ""}`);
+  const waiting = live.filter(r => r.기사확인상태 === "대기").sort(byTime);
+  const plain = live.filter(r => !r.기사확인상태).sort(byTime);
+  const done = live.filter(r => r.기사확인상태 === "완료").sort(byTime);
+  const cur = accepted[0] || null;
+  return [
+    ...accepted.map((r, i) => ({ r, kind: i === 0 ? "current" : "next" })),
+    ...waiting.map(r => ({ r, kind: "next" })),
+    ...plain.map(r => ({ r, kind: cur ? "next" : "current" })),
+    ...done.map(r => ({ r, kind: "done" })),
+  ];
+}
+const SLIDE_KIND_META = {
+  current: { label: "진행중", bg: NAVY, color: "#fff" },
+  next: { label: "진행예정", bg: "#eef1f6", color: NAVY },
+  done: { label: "운송완료", bg: "#dcfce7", color: "#166534" },
+};
+
+function OrderSlider({ orders, renderOrder }) {
+  const list = useMemo(() => orderSlideList(orders), [orders]);
+  const [idx, setIdx] = useState(0);
+  const trackRef = useRef(null);
+  const n = list.length;
+  const safeIdx = Math.min(idx, Math.max(0, n - 1));
+  const go = (i) => {
+    const t = Math.max(0, Math.min(n - 1, i));
+    setIdx(t);
+    const el = trackRef.current;
+    if (el) el.scrollTo({ left: t * el.clientWidth, behavior: "smooth" });
+  };
+  const onScroll = () => {
+    const el = trackRef.current;
+    if (!el || !el.clientWidth) return;
+    const i = Math.round(el.scrollLeft / el.clientWidth);
+    if (i !== idx) setIdx(i);
+  };
+  if (!n) return null;
+  const curCount = list.filter(x => x.kind === "current").length;
+  const nextCount = list.filter(x => x.kind === "next").length;
+  const doneCount = list.filter(x => x.kind === "done").length;
+  const firstOf = (k) => list.findIndex(x => x.kind === k);
+  return (
+    <div style={{ marginBottom: 8 }}>
+      {n > 1 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 7 }}>
+          {[["current", "진행중", curCount], ["next", "진행예정", nextCount], ["done", "완료", doneCount]].filter(([, , c]) => c > 0).map(([k, l, c]) => {
+            const on = list[safeIdx]?.kind === k;
+            return (
+              <button key={k} onClick={() => go(firstOf(k))}
+                style={{ height: 28, padding: "0 11px", borderRadius: 99, border: "1px solid " + (on ? NAVY : "#d7deea"), background: on ? NAVY : "#fff", color: on ? "#fff" : NAVY, fontSize: 12, fontWeight: 800, cursor: "pointer" }}>
+                {l} {c}
+              </button>
+            );
+          })}
+          <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <button onClick={() => go(safeIdx - 1)} disabled={safeIdx === 0}
+              style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid #e5e7eb", background: "#fff", color: safeIdx === 0 ? "#d1d5db" : NAVY, fontSize: 15, fontWeight: 900, cursor: "pointer" }}>‹</button>
+            <span style={{ fontSize: 12, fontWeight: 800, color: "#475569", minWidth: 30, textAlign: "center" }}>{safeIdx + 1}/{n}</span>
+            <button onClick={() => go(safeIdx + 1)} disabled={safeIdx === n - 1}
+              style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid #e5e7eb", background: "#fff", color: safeIdx === n - 1 ? "#d1d5db" : NAVY, fontSize: 15, fontWeight: 900, cursor: "pointer" }}>›</button>
+          </span>
+        </div>
+      )}
+      <div ref={trackRef} onScroll={onScroll}
+        style={{ display: "flex", overflowX: n > 1 ? "auto" : "hidden", scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch", scrollbarWidth: "none", borderRadius: 9 }}>
+        {list.map(({ r, kind }, i) => (
+          <div key={r._id || r.id || i} style={{ flex: "0 0 100%", minWidth: 0, scrollSnapAlign: "start" }}>
+            {renderOrder(r, kind, SLIDE_KIND_META[kind])}
+          </div>
+        ))}
+      </div>
+      {n > 1 && (
+        <div style={{ display: "flex", justifyContent: "center", gap: 5, marginTop: 7 }}>
+          {list.map((x, i) => (
+            <span key={i} onClick={() => go(i)} style={{ width: i === safeIdx ? 16 : 6, height: 6, borderRadius: 99, background: i === safeIdx ? NAVY : "#cbd5e1", transition: "all .2s", cursor: "pointer" }} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 // ─── 이동거리/예상시간 뱃지 (PC RouteDistanceBadge 포팅, 모바일 폭에 맞춰 축소) ───
 // ⭐ 버그수정 — PC와 동일하게 직선거리*1.25 근사치 대신 실제 도로경로 API
@@ -458,9 +550,9 @@ function MobileManagerBadge({ driver, staff, canDelegate, onAssign }) {
 
 // ⭐ 사용자 요청 — 모바일 오더목록에서 오더를 탭하면 오더상세내역처럼 해당 오더의
 // 전체 정보(상/하차지·시간·거래처·화물정보·운임·상태)가 담긴 팝업이 떠야 한다.
-function MobileOrderDetailModal({ order, onClose }) {
+function MobileOrderDetailModal({ order, currentId = null, onClose }) {
   if (!order) return null;
-  const meta = mobileOrderStatusMeta(order);
+  const meta = mobileOrderStatusMeta(order, currentId);
   const row = (label, value) => (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "9px 0", borderBottom: "1px solid #f0f2f5" }}>
       <span style={{ fontSize: 12, fontWeight: 700, color: "#9ca3af", flexShrink: 0 }}>{label}</span>
@@ -1070,27 +1162,31 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                         바로 보여야 한다는 사용자 요청. 상/하차지·시간·화물정보·이동정보를
                         여기서 보여주고, 상세(매출/연료비 등)는 펼쳤을 때만 보여준다. */}
                     <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #f3f4f6" }} onClick={e => e.stopPropagation()}>
-                      {activeOrder ? (() => {
+                      {activeOrder ? (
+                        <OrderSlider orders={todays} renderOrder={(activeOrder, kind, km) => {
                         // ⭐ 정리 — 항목마다 이름표(구간/상차/하차/화물/기사운임/전체거리/진행상황)를 달고,
                         // "하차예상 즉시"처럼 어색한 문구와 중복(전체거리 = 상차 후 남은거리)을 없앴다.
                         const ph = phaseOf(d);
-                        const accepted = activeOrder.기사확인상태 === "수락";
+                        // 진행중인 오더에만 진행상황(단계·남은거리·도착예상)을 붙인다
+                        const accepted = activeOrder.기사확인상태 === "수락" && kind === "current";
                         const fare = Number(String(activeOrder.기사운임 ?? "").replace(/[^\d]/g, "")) || 0;
                         const when = (date, time) => {
                           const t = time || "즉시";
                           return date && date !== activeOrder.상차일 ? `${String(date).slice(5).replace("-", "/")} ${t}` : t;
                         };
                         return (
-                        <div style={{ background: "#f0f4ff", borderRadius: 9, padding: "10px 12px", marginBottom: 8 }}>
+                        <div style={{ background: kind === "current" ? "#f0f4ff" : "#f8f9fb", border: "1px solid " + (kind === "current" ? "#dbe4ff" : "#e5e7eb"), borderRadius: 9, padding: "10px 12px", height: "100%", boxSizing: "border-box" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                            <span style={{ fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 99, background: km.bg, color: km.color }}>{km.label}</span>
+                            {kind === "next" && activeOrder.기사확인상태 === "수락" && <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>앞 오더 완료 후 운송</span>}
+                            {activeOrder.기사확인상태 === "대기" && <span style={{ fontSize: 11, fontWeight: 700, color: "#92400e" }}>기사 확인대기</span>}
+                          </div>
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                             <div style={{ fontSize: 14, fontWeight: 800, color: NAVY }}>
                               {activeOrder.상차지명 || "-"} <span style={{ color: "#9ca3af" }}>→</span> {activeOrder.하차지명 || "-"}
                             </div>
                             <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                               <ModBadge order={activeOrder} />
-                              {todays.length > 1 && (
-                                <span style={{ fontSize: 11, fontWeight: 800, color: "#6b7eac" }}>총 {todays.length}건</span>
-                              )}
                             </span>
                           </div>
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 10px", marginTop: 8 }}>
@@ -1124,7 +1220,8 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                           )}
                         </div>
                         );
-                      })() : (
+                        }} />
+                      ) : (
                         <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 8 }}>오늘 배차된 오더가 없습니다</div>
                       )}
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -1193,11 +1290,12 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                                 </thead>
                                 <tbody>
                                   {todays.map((r, i) => {
-                                    const smeta = mobileOrderStatusMeta(r);
+                                    const curO = pickCurrentOrder(todays);
+                                    const smeta = mobileOrderStatusMeta(r, curO ? (curO._id ?? curO.id) : null);
                                     return (
                                       <tr
                                         key={r._id || i}
-                                        onClick={(e) => { e.stopPropagation(); setDetailOrder(r); }}
+                                        onClick={(e) => { e.stopPropagation(); setDetailOrder({ ...r, __currentId: curO ? (curO._id ?? curO.id) : null }); }}
                                         style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : "none", cursor: "pointer" }}
                                       >
                                         <td style={{ padding: "8px 10px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#9ca3af" }}>{i + 1}</td>
@@ -1491,7 +1589,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
         <MobileAttendance logs={attendanceLogs} drivers={drivers} />
       )}
 
-      {detailOrder && <MobileOrderDetailModal order={detailOrder} onClose={() => setDetailOrder(null)} />}
+      {detailOrder && <MobileOrderDetailModal order={detailOrder} currentId={detailOrder.__currentId ?? null} onClose={() => setDetailOrder(null)} />}
 
       <style>{`
         @keyframes spin{to{transform:rotate(360deg)}}
