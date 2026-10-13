@@ -12,7 +12,7 @@ import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { getDrivingRoute, geocodeAddress, getDrivingPathByCoords } from "./tmapFareCalc";
-import { ShortAddr, DropEtaText, RemainText, FleetStepper, fleetStepIndex, pickCurrentOrder, sortActiveOrders, prefetchGeo, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS, isPickupVisited } from "./fleetGeo";
+import { ShortAddr, DropEtaText, RemainText, RemainEtaText, FleetStepper, fleetStepIndex, pickCurrentOrder, sortActiveOrders, prefetchGeo, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS, isPickupVisited } from "./fleetGeo";
 import { LeafletTrack, MapLegend } from "./mapLeaflet";
 import { cleanTrack } from "./mapStyle";
 import { modificationStatus } from "./orderChange";
@@ -2370,21 +2370,21 @@ function DriverJourneyPanel({ driver, orders, live, onClose }) {
     <div style={{ position: "fixed", inset: 0, zIndex: 99980, background: "rgba(15,23,42,.28)", fontFamily: "'Noto Sans KR','Malgun Gothic',sans-serif" }} onClick={onClose}>
       <style>{`@keyframes fmSlideIn{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}} @keyframes fmLiveDash{to{stroke-dashoffset:-20}} .fm-journey-live{animation:fmLiveDash 1s linear infinite;} .fm-journey-tiles{filter:grayscale(.85) contrast(.95) brightness(1.04);}`}</style>
       <aside onClick={e => e.stopPropagation()}
-        style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: "min(560px, 100vw)", background: "#f4f6f9", boxShadow: "-12px 0 40px rgba(15,23,42,.25)", display: "flex", flexDirection: "column", animation: "fmSlideIn .22s ease-out" }}>
+        style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: "min(760px, 100vw)", background: "#f4f6f9", boxShadow: "-12px 0 40px rgba(15,23,42,.25)", display: "flex", flexDirection: "column", animation: "fmSlideIn .22s ease-out" }}>
         {/* 헤더 */}
         <div style={{ background: NAVY, padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(255,255,255,.14)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, fontWeight: 900, flexShrink: 0 }}>{String(driver.이름 || "?").slice(0, 1)}</div>
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(255,255,255,.14)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 21, fontWeight: 900, flexShrink: 0 }}>{String(driver.이름 || "?").slice(0, 1)}</div>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span style={{ color: "#fff", fontSize: 19, fontWeight: 900 }}>{driver.이름}</span>
-              <span style={{ fontSize: 14, fontWeight: 800, color: NAVY, background: "#fff", borderRadius: 5, padding: "0 8px" }}>{driver.차량번호 || "-"}</span>
-              <span style={{ fontSize: 13, fontWeight: 800, color: "#fff", border: "1px solid rgba(255,255,255,.4)", borderRadius: 6, padding: "1px 8px" }}>{phase}</span>
+              <span style={{ color: "#fff", fontSize: 21, fontWeight: 900 }}>{driver.이름}</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: NAVY, background: "#fff", borderRadius: 5, padding: "0 8px" }}>{driver.차량번호 || "-"}</span>
+              <span style={{ fontSize: 15, fontWeight: 800, color: "#fff", border: "1px solid rgba(255,255,255,.4)", borderRadius: 6, padding: "1px 8px" }}>{phase}</span>
             </div>
-            <div style={{ color: "rgba(255,255,255,.8)", fontSize: 13, fontWeight: 600, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <div style={{ color: "rgba(255,255,255,.8)", fontSize: 15, fontWeight: 600, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               현재 위치 · <LiveAddrText loc={live?.location?.lat != null ? live.location : null} />{live?.updatedAt ? ` · ${timeAgo(live.updatedAt)}` : ""}
             </div>
           </div>
-          <button onClick={onClose} style={{ border: "none", background: "transparent", color: "rgba(255,255,255,.8)", fontSize: 22, cursor: "pointer", lineHeight: 1 }}>✕</button>
+          <button onClick={onClose} style={{ border: "none", background: "transparent", color: "rgba(255,255,255,.8)", fontSize: 24, cursor: "pointer", lineHeight: 1 }}>✕</button>
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
@@ -2392,14 +2392,14 @@ function DriverJourneyPanel({ driver, orders, live, onClose }) {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 12 }}>
             {[["전체", list.length], ["운송완료", counts.done || 0], ["진행중", counts.current || 0], ["진행예정", (counts.next || 0) + (counts.waiting || 0) + (counts.plain || 0)]].map(([l, v]) => (
               <div key={l} style={{ background: "#fff", border: "1px solid #e2e7ef", borderRadius: 10, padding: "9px 10px", textAlign: "center" }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "#4b5563" }}>{l}</div>
-                <div style={{ fontSize: 20, fontWeight: 900, color: "#111827", lineHeight: 1.2 }}>{v}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#4b5563" }}>{l}</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: "#111827", lineHeight: 1.2 }}>{v}</div>
               </div>
             ))}
           </div>
 
           {/* 지도 */}
-          <div style={{ position: "relative", height: 300, borderRadius: 12, overflow: "hidden", border: "1px solid #dbe1ea", background: "#fff", marginBottom: 8 }}>
+          <div style={{ position: "relative", height: 380, borderRadius: 12, overflow: "hidden", border: "1px solid #dbe1ea", background: "#fff", marginBottom: 8 }}>
             <MapContainer center={loc || [37.45, 126.8]} zoom={11} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
               <TileLayer className="fm-journey-tiles" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
               <JourneyFit points={points} fitKey={fitKey} />
@@ -2424,12 +2424,12 @@ function DriverJourneyPanel({ driver, orders, live, onClose }) {
               {loc && <Marker position={loc} zIndexOffset={1000} icon={liveTruckIcon({ plate: driver.차량번호 !== "-" ? driver.차량번호 : driver.이름, state: live?.active ? (curOrder ? "moving" : "idle") : "offline", selected: true })} />}
             </MapContainer>
             <button onClick={() => setFitKey(k => k + 1)}
-              style={{ position: "absolute", top: 10, right: 10, zIndex: 500, height: 32, padding: "0 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: NAVY, fontSize: 13, fontWeight: 800, cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,.12)" }}>
+              style={{ position: "absolute", top: 10, right: 10, zIndex: 500, height: 32, padding: "0 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: NAVY, fontSize: 15, fontWeight: 800, cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,.12)" }}>
               전체 노선 보기
             </button>
           </div>
           {/* 범례 */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", fontSize: 13, fontWeight: 700, color: "#1f2937", marginBottom: 14, padding: "0 2px" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", fontSize: 15, fontWeight: 700, color: "#1f2937", marginBottom: 14, padding: "0 2px" }}>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 22, height: 4, borderRadius: 2, background: NAVY }} />오더 구간</span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 22, borderTop: "3px dotted #64748b" }} />다음 상차지 이동</span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 22, borderTop: "3px dashed #2563eb" }} />현재 위치 → 목적지</span>
@@ -2438,7 +2438,7 @@ function DriverJourneyPanel({ driver, orders, live, onClose }) {
 
           {/* 노선 타임라인 */}
           {list.length === 0 ? (
-            <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e2e7ef", padding: "30px 0", textAlign: "center", color: "#4b5563", fontSize: 15, fontWeight: 700 }}>조회 기간에 배차된 오더가 없습니다</div>
+            <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e2e7ef", padding: "30px 0", textAlign: "center", color: "#4b5563", fontSize: 17, fontWeight: 700 }}>조회 기간에 배차된 오더가 없습니다</div>
           ) : list.map((r, i) => {
             const kind = journeyKindOf(r, curId);
             const km = JOURNEY_KIND[kind];
@@ -2447,12 +2447,12 @@ function DriverJourneyPanel({ driver, orders, live, onClose }) {
             const link = legs.find(l => l.id === `l${i}`);
             return (
               <React.Fragment key={r._id || i}>
-                <div style={{ background: "#fff", borderRadius: 12, border: `1.5px solid ${kind === "current" ? NAVY : "#e2e7ef"}`, boxShadow: kind === "current" ? "0 4px 14px rgba(27,43,75,.14)" : "none", padding: "13px 14px", position: "relative", overflow: "hidden" }}>
+                <div style={{ background: "#fff", borderRadius: 12, border: `1.5px solid ${kind === "current" ? NAVY : "#e2e7ef"}`, boxShadow: kind === "current" ? "0 4px 14px rgba(27,43,75,.14)" : "none", padding: "16px 18px", position: "relative", overflow: "hidden" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                    <span style={{ width: 26, height: 26, borderRadius: 8, background: done ? "#9aa3b2" : NAVY, color: "#fff", fontSize: 13, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span>
-                    <span style={{ fontSize: 13, fontWeight: 800, padding: "2px 9px", borderRadius: 6, background: km.bg, color: km.color, border: kind === "rejected" ? "1px solid #fca5a5" : "none" }}>{km.label}</span>
-                    <span style={{ fontSize: 15, fontWeight: 800, color: "#111827" }}>{r.거래처명 || "-"}</span>
-                    <span style={{ marginLeft: "auto", fontSize: 14, fontWeight: 800, color: NAVY }}>{r.기사운임 ? `${Number(String(r.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원` : ""}</span>
+                    <span style={{ width: 30, height: 30, borderRadius: 8, background: done ? "#9aa3b2" : NAVY, color: "#fff", fontSize: 15, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span>
+                    <span style={{ fontSize: 15, fontWeight: 800, padding: "2px 9px", borderRadius: 6, background: km.bg, color: km.color, border: kind === "rejected" ? "1px solid #fca5a5" : "none" }}>{km.label}</span>
+                    <span style={{ fontSize: 17, fontWeight: 800, color: "#111827" }}>{r.거래처명 || "-"}</span>
+                    <span style={{ marginLeft: "auto", fontSize: 16, fontWeight: 800, color: NAVY }}>{r.기사운임 ? `${Number(String(r.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원` : ""}</span>
                   </div>
                   {/* 상차 → 하차 */}
                   <div style={{ position: "relative", paddingLeft: 24, opacity: done ? 0.75 : 1 }}>
@@ -2464,31 +2464,31 @@ function DriverJourneyPanel({ driver, orders, live, onClose }) {
                       <div key={st.tag} style={{ position: "relative", paddingBottom: k === 0 ? 12 : 0 }}>
                         <span style={{ position: "absolute", left: -22, top: 3, width: 14, height: 14, borderRadius: "50%", background: st.filled ? (done ? "#9aa3b2" : NAVY) : "#fff", border: `2.5px solid ${done ? "#9aa3b2" : NAVY}`, boxSizing: "border-box" }} />
                         <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-                          <span style={{ fontSize: 12, fontWeight: 900, color: NAVY, background: "#eef1f6", borderRadius: 4, padding: "0 6px" }}>{st.tag}</span>
-                          <span style={{ fontSize: 15, fontWeight: 800, color: "#111827" }}>{st.name || "-"}</span>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: "#374151" }}>{st.when}</span>
+                          <span style={{ fontSize: 14, fontWeight: 900, color: NAVY, background: "#eef1f6", borderRadius: 4, padding: "0 6px" }}>{st.tag}</span>
+                          <span style={{ fontSize: 17, fontWeight: 800, color: "#111827" }}>{st.name || "-"}</span>
+                          <span style={{ fontSize: 15, fontWeight: 700, color: "#374151" }}>{st.when}</span>
                         </div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginTop: 2 }}>{st.addr || "-"}</div>
-                        {st.ev.length > 0 && <div style={{ fontSize: 12, fontWeight: 800, color: "#166534", marginTop: 2 }}>{st.ev.join(" · ")}</div>}
+                        <div style={{ fontSize: 15, fontWeight: 600, color: "#374151", marginTop: 2 }}>{st.addr || "-"}</div>
+                        {st.ev.length > 0 && <div style={{ fontSize: 14, fontWeight: 800, color: "#166534", marginTop: 2 }}>{st.ev.join(" · ")}</div>}
                       </div>
                     ))}
                   </div>
-                  <div style={{ marginTop: 10, paddingTop: 9, borderTop: "1px dashed #e2e7ef", display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 700, color: "#374151" }}>
-                    <span>오더 구간</span><RouteDistanceBadge fromAddr={r.상차지주소} toAddr={r.하차지주소} size={13} />
+                  <div style={{ marginTop: 10, paddingTop: 9, borderTop: "1px dashed #e2e7ef", display: "flex", alignItems: "center", gap: 8, fontSize: 15, fontWeight: 700, color: "#374151" }}>
+                    <span>오더 구간</span><RouteDistanceBadge fromAddr={r.상차지주소} toAddr={r.하차지주소} size={15} />
                     {[r.차량종류, r.차량톤수, r.화물내용].filter(Boolean).length > 0 && <span style={{ marginLeft: "auto", color: "#4b5563" }}>{[r.차량종류, r.차량톤수, r.화물내용].filter(Boolean).join(" · ")}</span>}
                   </div>
                   {/* 진행중 오더 — 단계 진행선(현재 단계 깜빡임) + 남은 거리/도착예상 */}
                   {kind === "current" && (
                     <div style={{ marginTop: 12, background: "#f4f7fb", borderRadius: 10, padding: "12px 10px 10px" }}>
                       <FleetStepper order={r} phase={phase} large />
-                      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 10, fontSize: 13, fontWeight: 700, color: "#1f2937" }}>
-                        <span>남은 거리 · <RemainText order={r} location={live?.location} phase={phase} style={{ fontSize: 13 }} fallback={<span style={{ color: "#4b5563" }}>위치 확인 후 계산</span>} /></span>
-                        <span>하차 도착예상 · <DropEtaText order={r} driverId={driver.id} location={live?.location} style={{ fontSize: 13, fontWeight: 800 }} fallback={<span style={{ color: "#4b5563" }}>상차지 도착 후 계산</span>} /></span>
+                      <div style={{ marginTop: 12, display: "flex", alignItems: "baseline", gap: 10, fontSize: 15, fontWeight: 700, color: "#1f2937", borderTop: "1px solid #e2e7ef", paddingTop: 10 }}>
+                        <span style={{ color: "#4b5563", flexShrink: 0 }}>남은 거리 · 시간</span>
+                        <RemainEtaText order={r} driverId={driver.id} location={live?.location} phase={phase} style={{ fontSize: 16 }} fallback={<span style={{ color: "#4b5563" }}>위치 확인 후 계산</span>} />
                       </div>
                     </div>
                   )}
                   {done && (
-                    <div style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%) rotate(-8deg)", border: `2.5px solid ${NAVY}`, borderRadius: 8, padding: "2px 10px", color: NAVY, fontSize: 15, fontWeight: 900, letterSpacing: ".18em", background: "rgba(255,255,255,.85)", pointerEvents: "none" }}>
+                    <div style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%) rotate(-8deg)", border: `2.5px solid ${NAVY}`, borderRadius: 8, padding: "2px 10px", color: NAVY, fontSize: 17, fontWeight: 900, letterSpacing: ".18em", background: "rgba(255,255,255,.85)", pointerEvents: "none" }}>
                       운송완료
                     </div>
                   )}
@@ -2498,9 +2498,9 @@ function DriverJourneyPanel({ driver, orders, live, onClose }) {
                   <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0 8px 22px" }}>
                     <div style={{ width: 2.5, height: 34, background: "repeating-linear-gradient(#64748b 0 4px, transparent 4px 9px)", borderRadius: 2 }} />
                     <div style={{ flex: 1, background: "#fff", border: "1px dashed #94a3b8", borderRadius: 10, padding: "7px 12px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: "#475569" }}>{r.하차지명 || "하차지"} → {nx.상차지명 || "다음 상차지"}</span>
-                      <span style={{ marginLeft: "auto", fontSize: 14, fontWeight: 900, color: NAVY }}>
-                        {link?.km != null ? `약 ${link.km}km · ${_timeLabel(link.minutes)}` : <RouteDistanceBadge fromAddr={r.하차지주소} toAddr={nx.상차지주소} size={14} />}
+                      <span style={{ fontSize: 15, fontWeight: 800, color: "#475569" }}>{r.하차지명 || "하차지"} → {nx.상차지명 || "다음 상차지"}</span>
+                      <span style={{ marginLeft: "auto", fontSize: 16, fontWeight: 900, color: NAVY }}>
+                        {link?.km != null ? `약 ${link.km}km · ${_timeLabel(link.minutes)}` : <RouteDistanceBadge fromAddr={r.하차지주소} toAddr={nx.상차지주소} size={16} />}
                       </span>
                     </div>
                   </div>

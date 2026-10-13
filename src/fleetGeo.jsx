@@ -319,6 +319,24 @@ export function RemainText({ order, location, phase, style, fallback = null }) {
   return <span style={{ fontWeight: 800, color: "#111827", ...style }}>{info.text}</span>;
 }
 
+// ⭐ 사용자 요청 — "하차지까지 15km · 약 32분 (16:05 도착예상)" 한 줄로 합쳐 보여준다.
+// 하차지로 가는 중이면 하차 도착예상(useDropEta), 없으면 지금+소요시간. 상차지로 가는 중이면 상차지 도착예상.
+export function RemainEtaText({ order, driverId, location, phase, style, etaStyle, fallback = null }) {
+  const info = useRemainInfo(order, location, phase);
+  const dropEta = useDropEta(order, driverId, location);
+  if (!info) {
+    if (dropEta) return <span style={{ fontWeight: 800, color: "#1d4ed8", ...style, ...etaStyle }}>{hhmm(dropEta)} 도착예상</span>;
+    return fallback;
+  }
+  const eta = info.label === "하차지까지" ? (dropEta || new Date(Date.now() + info.min * 60000)) : new Date(Date.now() + info.min * 60000);
+  return (
+    <span style={{ fontWeight: 800, color: "#111827", ...style }}>
+      {info.text}
+      <span style={{ color: "#1d4ed8", marginLeft: 6, ...etaStyle }}>({hhmm(eta)} 도착예상)</span>
+    </span>
+  );
+}
+
 // ─── 지입 기사 통합 상태(관제현황·노선관리·모바일·기사앱 공통) ───────────────────────
 // ⭐ 사용자 요청 — 지입 기사는 출근/상차중/하차중/복귀중/퇴근 버튼 상태 대신
 //   배차대기 / 오더확인중 / 운송중 / 상차지진입 / 상차지도착 / 하차지진입 / 하차지도착 / 휴차
@@ -402,9 +420,9 @@ export function FleetStepper({ order, phase, large = false }) {
           <div key={lb} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative", minWidth: 0 }}>
             {i > 0 && <div style={{ position: "absolute", top: 6, right: "50%", width: "100%", height: 3, background: i <= cur ? "#1B2B4B" : "#e5e7eb", zIndex: 0 }} />}
             <div style={{ width: now ? 15 : 13, height: now ? 15 : 13, marginTop: now ? -1 : 0, borderRadius: "50%", background: dot, border: "2px solid #fff", zIndex: 1, animation: now ? "kpStepBlink 1.6s ease-in-out infinite" : "none" }} />
-            <div style={{ marginTop: 4, fontSize: large ? 12 : 10, lineHeight: 1.25, textAlign: "center", fontWeight: now ? 900 : 700, color: now ? "#2563eb" : done ? "#1B2B4B" : "#9ca3af", wordBreak: "keep-all", animation: now ? "kpStepText 1.6s ease-in-out infinite" : "none" }}>{lb}</div>
+            <div style={{ marginTop: 4, fontSize: large === true ? 14 : (large || 10), lineHeight: 1.25, textAlign: "center", fontWeight: now ? 900 : 700, color: now ? "#2563eb" : done ? "#1B2B4B" : "#9ca3af", wordBreak: "keep-all", animation: now ? "kpStepText 1.6s ease-in-out infinite" : "none" }}>{lb}</div>
             {i === 2 && tsMs(order?.상차완료일시) && (
-              <div style={{ fontSize: large ? 11 : 9, fontWeight: 800, color: "#16a34a", marginTop: 1 }}>
+              <div style={{ fontSize: large === true ? 12 : large ? large - 1 : 9, fontWeight: 800, color: "#16a34a", marginTop: 1 }}>
                 상차완료 {new Date(tsMs(order.상차완료일시) + 9 * 3600e3).toISOString().slice(11, 16)}
               </div>
             )}

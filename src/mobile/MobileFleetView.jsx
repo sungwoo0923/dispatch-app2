@@ -10,7 +10,7 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import { getDrivingRoute, geocodeAddress, haversineKm } from "../tmapFareCalc";
-import { ShortAddr, DropEtaText, RemainText, FleetStepper, pickCurrentOrder, sortActiveOrders, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS, isPickupVisited } from "../fleetGeo";
+import { ShortAddr, DropEtaText, RemainText, RemainEtaText, FleetStepper, pickCurrentOrder, sortActiveOrders, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS, isPickupVisited } from "../fleetGeo";
 import { LeafletTrack, MapLegend } from "../mapLeaflet";
 import { modificationStatus } from "../orderChange";
 
@@ -299,12 +299,12 @@ function RouteDistanceBadge({ fromAddr, toAddr }) {
     setInfo(undefined);
     enqueueRouteDist(fromAddr, toAddr, setInfo);
   }, [fromAddr, toAddr]);
-  if (!fromAddr || !toAddr) return <span style={{ fontSize: 12, color: "#c1c7d0" }}>-</span>;
-  if (info === undefined) return <span style={{ fontSize: 12, color: "#c1c7d0" }}>계산중…</span>;
-  if (!info) return <span style={{ fontSize: 12, color: "#c1c7d0" }}>-</span>;
+  if (!fromAddr || !toAddr) return <span style={{ fontSize: 13, color: "#9ca3af" }}>-</span>;
+  if (info === undefined) return <span style={{ fontSize: 13, color: "#9ca3af" }}>계산중…</span>;
+  if (!info) return <span style={{ fontSize: 13, color: "#9ca3af" }}>-</span>;
   const timeLabel = info.minutes >= 60 ? `${Math.floor(info.minutes / 60)}시간 ${info.minutes % 60}분` : `${info.minutes}분`;
   return (
-    <span style={{ fontSize: 12, color: "#374151", fontWeight: 700, whiteSpace: "nowrap" }}>
+    <span style={{ fontSize: 13, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>
       약 {info.km}km · {timeLabel}
     </span>
   );
@@ -1164,58 +1164,71 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                     <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #f3f4f6" }} onClick={e => e.stopPropagation()}>
                       {activeOrder ? (
                         <OrderSlider orders={todays} renderOrder={(activeOrder, kind, km) => {
-                        // ⭐ 정리 — 항목마다 이름표(구간/상차/하차/화물/기사운임/전체거리/진행상황)를 달고,
-                        // "하차예상 즉시"처럼 어색한 문구와 중복(전체거리 = 상차 후 남은거리)을 없앴다.
+                        // ⭐ 사용자 요청 — PC 이동노선 사이드바와 같은 구성으로 정리:
+                        // 머리줄(상태·거래처·운임) → 상차/하차 세로 노선 → 차량·화물·구간거리 → (진행중) 단계 진행선 + 남은거리·도착예상 한 줄
                         const ph = phaseOf(d);
-                        // 진행중인 오더에만 진행상황(단계·남은거리·도착예상)을 붙인다
                         const accepted = activeOrder.기사확인상태 === "수락" && kind === "current";
                         const fare = Number(String(activeOrder.기사운임 ?? "").replace(/[^\d]/g, "")) || 0;
+                        const hm = (v) => { const ms = v?.toMillis ? v.toMillis() : typeof v?.seconds === "number" ? v.seconds * 1000 : 0; if (!ms) return ""; const t = new Date(ms); return `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`; };
                         const when = (date, time) => {
                           const t = time || "즉시";
-                          return date && date !== activeOrder.상차일 ? `${String(date).slice(5).replace("-", "/")} ${t}` : t;
+                          return date && date !== todayStr ? `${String(date).slice(5).replace("-", "/")} ${t}` : t;
                         };
+                        const done = kind === "done";
+                        const stops = [
+                          { tag: "상차", name: activeOrder.상차지명, addr: activeOrder.상차지주소, time: when(activeOrder.상차일, activeOrder.상차시간), ev: [activeOrder.상차지도착일시 && `도착 ${hm(activeOrder.상차지도착일시)}`, activeOrder.상차완료일시 && `상차완료 ${hm(activeOrder.상차완료일시)}`].filter(Boolean), filled: false },
+                          { tag: "하차", name: activeOrder.하차지명, addr: activeOrder.하차지주소, time: when(activeOrder.하차일 || activeOrder.상차일, activeOrder.하차시간), ev: [activeOrder.기사완료일시 && `운송완료 ${hm(activeOrder.기사완료일시)}`].filter(Boolean), filled: true },
+                        ];
+                        const line = done ? "#cbd5e1" : NAVY;
                         return (
-                        <div style={{ background: kind === "current" ? "#f0f4ff" : "#f8f9fb", border: "1px solid " + (kind === "current" ? "#dbe4ff" : "#e5e7eb"), borderRadius: 9, padding: "10px 12px", height: "100%", boxSizing: "border-box" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                            <span style={{ fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 99, background: km.bg, color: km.color }}>{km.label}</span>
-                            {kind === "next" && activeOrder.기사확인상태 === "수락" && <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>앞 오더 완료 후 운송</span>}
-                            {activeOrder.기사확인상태 === "대기" && <span style={{ fontSize: 11, fontWeight: 700, color: "#92400e" }}>기사 확인대기</span>}
+                        <div style={{ background: "#fff", border: kind === "current" ? `1.5px solid ${NAVY}` : "1px solid #e2e7ef", boxShadow: kind === "current" ? "0 3px 12px rgba(27,43,75,.12)" : "none", borderRadius: 12, padding: "12px 14px", height: "100%", boxSizing: "border-box" }}>
+                          {/* 머리줄 */}
+                          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                            <span style={{ fontSize: 12, fontWeight: 800, padding: "2px 9px", borderRadius: 6, background: km.bg, color: km.color, flexShrink: 0 }}>{km.label}</span>
+                            <span style={{ fontSize: 15, fontWeight: 800, color: "#111827", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{activeOrder.거래처명 || "-"}</span>
+                            <ModBadge order={activeOrder} />
+                            <span style={{ marginLeft: "auto", fontSize: 14, fontWeight: 800, color: NAVY, flexShrink: 0 }}>{fare ? `${fare.toLocaleString()}원` : ""}</span>
                           </div>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                            <div style={{ fontSize: 14, fontWeight: 800, color: NAVY }}>
-                              {activeOrder.상차지명 || "-"} <span style={{ color: "#9ca3af" }}>→</span> {activeOrder.하차지명 || "-"}
-                            </div>
-                            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                              <ModBadge order={activeOrder} />
+                          {(kind === "next" && activeOrder.기사확인상태 === "수락") && <div style={{ fontSize: 12, fontWeight: 700, color: "#475569", marginTop: 4 }}>앞 오더 완료 후 운송</div>}
+                          {activeOrder.기사확인상태 === "대기" && <div style={{ fontSize: 12, fontWeight: 700, color: "#92400e", marginTop: 4 }}>기사 확인대기</div>}
+
+                          {/* 상차 → 하차 세로 노선 */}
+                          <div style={{ position: "relative", paddingLeft: 22, marginTop: 11, opacity: done ? 0.75 : 1 }}>
+                            <div style={{ position: "absolute", left: 7, top: 9, bottom: 9, width: 2.5, background: line, borderRadius: 2 }} />
+                            {stops.map((st, k) => (
+                              <div key={st.tag} style={{ position: "relative", paddingBottom: k === 0 ? 11 : 0 }}>
+                                <span style={{ position: "absolute", left: -20, top: 3, width: 13, height: 13, borderRadius: "50%", background: st.filled ? line : "#fff", border: `2.5px solid ${line}`, boxSizing: "border-box" }} />
+                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                  <span style={{ fontSize: 11, fontWeight: 900, color: NAVY, background: "#eef1f6", borderRadius: 4, padding: "0 5px", flexShrink: 0 }}>{st.tag}</span>
+                                  <span style={{ fontSize: 15, fontWeight: 800, color: "#111827", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{st.name || "-"}</span>
+                                  <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 800, color: "#1f2937", flexShrink: 0 }}>{st.time}</span>
+                                </div>
+                                <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{st.addr || "-"}</div>
+                                {st.ev.length > 0 && <div style={{ fontSize: 12, fontWeight: 800, color: "#166534", marginTop: 1 }}>{st.ev.join(" · ")}</div>}
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* 차량·화물 / 구간거리 */}
+                          <div style={{ marginTop: 10, paddingTop: 9, borderTop: "1px dashed #e2e7ef", display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 700, color: "#374151" }}>
+                            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[activeOrder.차량종류, activeOrder.차량톤수, activeOrder.화물내용].filter(Boolean).join(" · ") || "-"}</span>
+                            <span style={{ marginLeft: "auto", flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                              <span style={{ color: "#4b5563" }}>구간</span>
+                              <RouteDistanceBadge fromAddr={activeOrder.상차지주소} toAddr={activeOrder.하차지주소} />
                             </span>
                           </div>
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 10px", marginTop: 8 }}>
-                            <InfoCell label="상차시간">{when(activeOrder.상차일, activeOrder.상차시간)}</InfoCell>
-                            <InfoCell label="하차시간">{when(activeOrder.하차일, activeOrder.하차시간)}</InfoCell>
-                            <InfoCell label="차량 · 톤수">{[activeOrder.차량종류, activeOrder.차량톤수].filter(Boolean).join(" · ") || "-"}</InfoCell>
-                            <InfoCell label="화물">{activeOrder.화물내용 || "-"}</InfoCell>
-                            <InfoCell label="전체 거리">
-                              <RouteDistanceBadge fromAddr={activeOrder.상차지주소} toAddr={activeOrder.하차지주소} />
-                            </InfoCell>
-                            <InfoCell label="기사운임">{fare ? `${fare.toLocaleString()}원` : "-"}</InfoCell>
-                          </div>
-                          {/* 진행상황 — 지금 상태 + 남은 거리·시간 + 하차지 도착예상 */}
+
+                          {/* 진행중 — 단계 진행선 + 남은 거리·시간(도착예상) 한 줄 */}
                           {accepted && (
-                            <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #e0e7ff", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 10px" }}>
-                              <InfoCell label="진행상황" span>
-                                <div style={{ padding: "6px 0 2px" }}>
-                                  <FleetStepper order={activeOrder} phase={ph} />
-                                </div>
-                              </InfoCell>
+                            <div style={{ marginTop: 10, background: "#f4f7fb", borderRadius: 10, padding: "11px 8px 10px" }}>
+                              <FleetStepper order={activeOrder} phase={ph} large={12} />
                               {ph !== "하차지도착" && (
-                                <InfoCell label="남은 거리 · 시간 (현재 위치 기준)" span>
-                                  <RemainText order={activeOrder} location={d.location} phase={ph} style={{ fontWeight: 800 }} />
-                                </InfoCell>
+                                <div style={{ marginTop: 10, paddingTop: 9, borderTop: "1px solid #e2e7ef", padding: "9px 4px 0" }}>
+                                  <div style={{ fontSize: 11, fontWeight: 700, color: "#4b5563", marginBottom: 2 }}>남은 거리 · 시간 (현재 위치 기준)</div>
+                                  <RemainEtaText order={activeOrder} driverId={d.id} location={d.location} phase={ph} style={{ fontSize: 14 }}
+                                    fallback={<span style={{ fontSize: 13, color: "#4b5563", fontWeight: 700 }}>위치 확인 후 계산됩니다</span>} />
+                                </div>
                               )}
-                              <InfoCell label="하차지 도착예상" span>
-                                <DropEtaText order={activeOrder} driverId={d.id} location={d.location} style={{ fontSize: 13 }}
-                                  fallback={<span style={{ color: "#9ca3af", fontWeight: 700 }}>상차지 도착 후 계산됩니다</span>} />
-                              </InfoCell>
                             </div>
                           )}
                         </div>
