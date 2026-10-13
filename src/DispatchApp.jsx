@@ -4503,17 +4503,27 @@ const upsertPlace = async (place) => {
           : {}),
     };
 
-    await setDoc(ref, data, { merge: true });
+    // ⭐ 저장 속도: setDoc의 Promise는 "서버 확인"까지 기다린다 — 로컬 캐시엔 즉시
+    // 반영되므로 기다리지 않고 백그라운드로 넘긴다(upsertDriver와 동일 방식).
+    setDoc(ref, data, { merge: true }).catch((e) => console.error("하차지 저장 실패:", e));
 
     // ═══════════════════════════════════════════════════
     // 기본거래처 ↔ 하차지거래처 동기화 — 같은 이름의 기본거래처가 있으면 주소/담당자/
     // 메모/오더메모를 그대로 반영한다. 어느 쪽에서 고치든 같이 바뀌어야 한다는 요구사항.
     // upsertClient를 다시 부르지 않고 직접 write해서 서로 재귀 호출되지 않게 한다.
+    // ⭐ 기본거래처 문서는 이름이 거래처명 또는 업체명 필드에 들어있어 둘 다 찾는다
+    // (거래처명만 찾으면 동기화가 빠져 배차관리 드롭다운에서 오더메모 팝업이 안 떴다).
+    // 이 동기화는 화면 저장을 막지 않도록 백그라운드로 돌린다.
     // ═══════════════════════════════════════════════════
-    try {
-      const clientSnap = await getDocs(query(collection(db, "clients"), where("거래처명", "==", name)));
-      for (const d of clientSnap.docs) {
-        await setDoc(doc(db, "clients", d.id), {
+    (async () => { try {
+      const [snapA, snapB] = await Promise.all([
+        getDocs(query(collection(db, "clients"), where("거래처명", "==", name))),
+        getDocs(query(collection(db, "clients"), where("업체명", "==", name))),
+      ]);
+      const seen = new Set();
+      const clientDocs = [...snapA.docs, ...snapB.docs].filter(d => !seen.has(d.id) && seen.add(d.id));
+      for (const d of clientDocs) {
+        setDoc(doc(db, "clients", d.id), {
           주소: data.주소,
           contacts: data.contacts,
           담당자: data.담당자,
@@ -4528,7 +4538,7 @@ const upsertPlace = async (place) => {
           ...(data.매출순위제외 !== undefined ? { 매출순위제외: data.매출순위제외 } : {}),
         }, { merge: true }).catch(() => {});
       }
-    } catch {}
+    } catch {} })();
 
     return key;
 
@@ -8179,49 +8189,58 @@ const FuelSlideWidget = React.memo(function FuelSlideWidget() {
   const [loading, setLoading] = React.useState(true);
 
   // 🔹 유가 로드
+  // ⚠️ "유가 정보 없음" 원인 2가지:
+  //  1) opinet avgSidoPrice.do 응답에는 PRODNM(제품명)이 없고 PRODCD(제품코드)만 온다 →
+  //     PRODNM.includes("경유") 가 전부 실패해 items가 빈 배열이 됐다. PRODCD로 이름을 보정한다.
+  //  2) 서버는 endpoint 3개를 2.5초씩 시도(최대 7.5초+콜드스타트)하는데 프런트가 3.5초에 끊어버렸다.
+  // 마지막 정상값을 localStorage에 보관해 실패해도 직전 유가를 보여준다.
 React.useEffect(() => {
   let cancelled = false;
-  setLoading(true);
-  const timer = setTimeout(() => setLoading(false), 10000); // 10초 타임아웃
-  // 서버리스 함수 콜드스타트/일시적 타임아웃(504) 등으로 첫 시도가 실패해도, 한 번은
-  // 재시도해서 "유가 정보 없음"으로 넘어가기 전에 회복할 기회를 준다.
+  const cacheKey = `fuelCache_${area || "01"}`;
+  let hadCache = false;
+  try {
+    const cached = JSON.parse(localStorage.getItem(cacheKey) || "null");
+    if (Array.isArray(cached) && cached.length) { setPrices(cached); setLoading(false); hadCache = true; }
+  } catch { /* noop */ }
+  if (!hadCache) setLoading(true);
+  const PROD_NAME = { B034: "고급휘발유", B027: "휘발유", D047: "경유", C004: "실내등유", K015: "LPG" };
+  const normalize = (oil) => oil.map(o => ({
+    ...o,
+    PRODNM: o?.PRODNM || PROD_NAME[o?.PRODCD] || "",
+    PRICE: Number(String(o?.PRICE ?? "").replace(/,/g, "")) || 0,
+    DIFF: Number(String(o?.DIFF ?? "0").replace(/,/g, "")) || 0,
+  })).filter(o => o.PRODNM && o.PRICE > 0);
   async function fetchOnce() {
     const ctrl = new AbortController();
-    const tid = setTimeout(() => ctrl.abort(), 3500);
+    const tid = setTimeout(() => ctrl.abort(), 12000);
     try {
       const res = await fetch(`/api/fuel?area=${area || "01"}`, { signal: ctrl.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      const oil = Array.isArray(data?.RESULT?.OIL) ? data.RESULT.OIL : [];
+      const oil = normalize(Array.isArray(data?.RESULT?.OIL) ? data.RESULT.OIL : []);
       if (!oil.length) throw new Error("empty OIL");
-      return oil;
+      return { oil, fallback: !!data?._fallback };
     } finally {
       clearTimeout(tid);
     }
   }
   async function loadFuel() {
-    try {
-      const oil = await fetchOnce();
-      if (!cancelled) setPrices(oil);
-    } catch (e1) {
-      try {
-        await new Promise(r => setTimeout(r, 1200));
-        const oil = await fetchOnce();
-        if (!cancelled) setPrices(oil);
-      } catch (e2) {
-        console.warn("유가 조회 실패:", e2);
-        if (!cancelled) setPrices([]);
-      }
-    } finally {
-      clearTimeout(timer);
-      if (!cancelled) setLoading(false);
+    let result = null;
+    try { result = await fetchOnce(); } catch {
+      try { await new Promise(r => setTimeout(r, 1500)); result = await fetchOnce(); } catch (e2) { console.warn("유가 조회 실패:", e2); }
     }
+    if (cancelled) return;
+    if (result) {
+      // 서버 하드코딩 폴백값은 캐시가 있으면 캐시(실제 최근값)를 우선한다
+      if (!(result.fallback && hadCache)) setPrices(result.oil);
+      if (!result.fallback) { try { localStorage.setItem(cacheKey, JSON.stringify(result.oil)); } catch { /* noop */ } }
+    }
+    setLoading(false);
   }
   loadFuel();
-  return () => { cancelled = true; clearTimeout(timer); };
+  return () => { cancelled = true; };
 }, [area]);
 
-// 🔹 유가 정리 (안정 버전)
 // 🔹 유가 정리
 const premium = prices.find(o => o?.PRODNM?.includes("고급"));
 
@@ -11590,7 +11609,12 @@ const getAlertTargetForSelectedPlace = (place) => {
   if (!place || place.팝업표시 === false) return null;
   const note = place.오더메모;
   const hasNote = note && String(note).trim();
-  if (place.등급 !== "블랙" && place.등급 !== "주의" && place.등급 !== "이탈" && !hasNote) return null;
+  if (place.등급 !== "블랙" && place.등급 !== "주의" && place.등급 !== "이탈" && !hasNote) {
+    // ⭐ 드롭다운 항목(mergedClients)은 기본거래처를 우선하는데, 하차지거래처에서만
+    // 오더메모를 저장한 경우 기본거래처 항목엔 오더메모가 비어 있어 팝업이 안 떴다
+    // (오더복사는 이름으로 두 컬렉션을 모두 찾아 떴음). 이름으로 한 번 더 찾는다.
+    return findClientAlertTarget(place.업체명 || place.거래처명 || "");
+  }
   return { ...place, 메모: note || place.메모 || "" };
 };
 // 하위호환용 — 기존 호출부에서 그대로 쓸 수 있도록 남겨둠 (단일 대상만 체크)
@@ -57160,6 +57184,8 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     data.contacts = contacts;
     data.담당자 = primaryContact?.name || "";
     data.연락처 = primaryContact?.phone || "";
+    // 안내사항이 기본양식("[업체명 주의사항]\n- ")뿐이면 미등록(빈 값)으로 저장
+    if (data.기사전달주의사항 !== undefined && !_hasRealDriverNotice(data.기사전달주의사항)) data.기사전달주의사항 = "";
 
     const oldName = (original.거래처명 || "").trim();
     const newName = (data.거래처명 || "").trim();
@@ -57173,6 +57199,12 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       );
     }
 
+    // ⭐ 저장 속도: 서버 확인/오더 동기화를 기다리지 않고 화면은 즉시 반영·닫는다
+    setRows(prev => prev.map(r => (r.id || r.거래처명) === id ? { ...data } : r));
+    setEditClientModal(null);
+    showAlert("수정 완료");
+
+    (async () => {
     try {
       await upsertClient?.({ ...data, id });
     } catch (e) {
@@ -57180,8 +57212,6 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       showAlert("저장에 실패했습니다: " + (e?.message || "알 수 없는 오류"));
       return;
     }
-    setRows(prev => prev.map(r => (r.id || r.거래처명) === id ? { ...data } : r));
-    setEditClientModal(null);
 
     let syncedCount = 0;
     try {
@@ -57201,8 +57231,8 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     } catch (e) {
       console.error("거래처 정보 오더 동기화 오류:", e);
     }
-
-    showAlert(syncedCount > 0 ? `수정 완료 (연결된 오더 ${syncedCount}건 정보 동기화)` : "수정 완료");
+    if (syncedCount > 0) console.log(`거래처 수정: 연결된 오더 ${syncedCount}건 정보 동기화`);
+    })();
   };
 
   const saveEditPlace = async () => {
@@ -57236,14 +57266,22 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       );
     }
 
-    await upsertPlace?.({ ...editPlaceModal, _id: editPlaceModal.id, id, contacts, 담당자, 담당자번호 });
+    // ⭐ 저장 속도: 예전엔 문서 조회 → 서버 저장 확인 → 기본거래처 검색/동기화 →
+    // 과거 오더 전체 검색/동기화가 다 끝나야 팝업이 닫혀 매우 느렸다. 화면은 즉시
+    // 반영·닫고, 나머지는 백그라운드에서 처리한다.
+    const placePayload = { ...editPlaceModal, _id: editPlaceModal.id, id, contacts, 담당자, 담당자번호 };
+    // 안내사항이 기본양식("[업체명 주의사항]\n- ")뿐이면 미등록(빈 값)으로 저장
+    if (!_hasRealDriverNotice(placePayload.기사전달주의사항)) placePayload.기사전달주의사항 = "";
     // ⚠️ 더블클릭으로 다시 열 때는 담당자 목록을 contacts가 아니라 _rawContacts에서 다시
     // 채운다(위 주석 참고) — 여기서 _rawContacts도 함께 갱신하지 않으면, 저장 직후 실시간
     // 리스너가 아직 새 데이터를 반영하기 전에 곧바로 다시 열었을 때 옛 담당자 목록(저장 전
     // _rawContacts)이 그대로 보이는 문제가 있었다.
-    setPlaceRows(prev => prev.map(r => (r.id || r.업체명) === id ? { ...editPlaceModal, contacts, 담당자, 담당자번호, _rawContacts: contacts } : r));
+    setPlaceRows(prev => prev.map(r => (r.id || r.업체명) === id ? { ...editPlaceModal, 기사전달주의사항: placePayload.기사전달주의사항, contacts, 담당자, 담당자번호, _rawContacts: contacts } : r));
     setEditPlaceModal(null);
+    showAlert("수정 완료");
 
+    (async () => {
+    try { await upsertPlace?.(placePayload); } catch (e) { console.error("saveEditPlace 오류:", e); }
     let syncedCount = 0;
     try {
       if (nameChanged && cascadeRename) {
@@ -57261,8 +57299,8 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     } catch (e) {
       console.error("하차지거래처 정보 오더 동기화 오류:", e);
     }
-
-    showAlert(syncedCount > 0 ? `수정 완료 (연결된 오더 ${syncedCount}건 정보 동기화)` : "수정 완료");
+    if (syncedCount > 0) console.log(`하차지 수정: 연결된 오더 ${syncedCount}건 정보 동기화`);
+    })();
   };
 
   const removeSelectedFn = async () => {
@@ -57799,7 +57837,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                           <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate text-center">{r.메모||""}</td>
                           <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate text-center">{r.오더메모||""}</td>
                           <td className="px-2 py-2.5 text-center max-w-[160px]">
-                            <span className="text-[13px] font-bold text-black">{(r.기사전달주의사항 || "").trim() ? "등록" : "미등록"}</span>
+                            <span className="text-[13px] font-bold text-black">{_hasRealDriverNotice(r.기사전달주의사항) ? "등록" : "미등록"}</span>
                           </td>
                           <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
                             <button onClick={async () => {
@@ -58467,7 +58505,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                             )}
                           </td>
                           <td className="px-2 py-2.5 text-center max-w-[160px]">
-                            <span className="text-[13px] font-bold text-black">{(r.기사전달주의사항 || "").trim() ? "등록" : "미등록"}</span>
+                            <span className="text-[13px] font-bold text-black">{_hasRealDriverNotice(r.기사전달주의사항) ? "등록" : "미등록"}</span>
                           </td>
                         </tr>
                       );

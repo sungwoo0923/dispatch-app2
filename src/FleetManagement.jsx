@@ -1400,12 +1400,8 @@ function ModBadge({ order }) {
       </span>
     );
   }
-  const d = new Date(ms.at);
-  return (
-    <span title={`기사가 수정 내용을 확인했습니다${ms.labels.length ? ` (${ms.labels.join(", ")})` : ""}`} style={{ fontSize: 11, fontWeight: 800, color: "#16a34a", border: "1px solid #bbf7d0", background: "#f0fdf4", borderRadius: 6, padding: "1px 6px", whiteSpace: "nowrap" }}>
-      기사 확인 {String(d.getHours()).padStart(2, "0")}:{String(d.getMinutes()).padStart(2, "0")}
-    </span>
-  );
+  // ⭐ 사용자 요청 — 수정 확인 완료 시 "기사 확인 HH:MM" 배지는 표시하지 않는다(타임라인에서 확인)
+  return null;
 }
 
 function PhaseText({ label }) {
@@ -2016,7 +2012,9 @@ function OrderCopyModal({ order, driver, onClose }) {
 
 // ─── 기사별 노선 카드 ─────────────────────────────────────────────────────────
 
-const ROUTE_COLS = ["순번", "상태", "거래처", "상차지", "하차지", "상차", "하차", "화물정보", "이동정보", "기사운임", "배차담당자", "오더확인", "첨부"];
+const ROUTE_COLS = ["순번", "상태", "거래처", "상차지", "하차지", "상차", "하차", "화물정보", "이동정보", "기사운임", "배차담당자", "오더확인", "타임라인", "첨부"];
+// 폭을 줄일 컬럼(한 화면에 다 보이게)
+const ROUTE_NARROW_COLS = new Set(["순번", "오더확인", "첨부"]);
 // ⭐ 지입 기사 오더수락/거절 플로우 — 기사확인상태 값을 관리자 화면 배지로 표시.
 // ⭐ 사용자 요청 — 뱃지 색이 알록달록했다. 프로그램 색감(네이비+그레이, 거절만
 // 포인트로 빨강 테두리)에 맞춰 차분하게 다시 설계.
@@ -2091,6 +2089,153 @@ function FleetAttachViewer({ orderId, col = "orders", onClose }) {
 // 오더를 등록/배차한 담당자 표시 — 3파트 등록폼과 동일한 우선순위로 폴백한다.
 // ⭐ 사용자 요청 — 이름 필드가 하나도 없으면 마지막엔 이메일을 그대로 보여주고
 // 있었다. staffByEmail(이메일→실명 매핑)이 있으면 이메일 대신 실명으로 바꿔 보여준다.
+// ─── 오더 타임라인 ────────────────────────────────────────────────────────────
+// ⭐ 사용자 요청 — 기사가 오더를 수락/거절/수정확인/상차지도착/상차완료/운송완료한
+// 시각을 오더별로 한눈에. 기사앱이 남기는 기사타임라인 배열(누적 기록)을 기본으로,
+// 이 기능 이전 오더는 기존 일시 필드(기사확인일시/상차지도착일시 등)로 보완한다.
+const TL_META = {
+  수락: { label: "오더 수락", msg: "오더를 수락했습니다" },
+  거절: { label: "오더 거절", msg: "오더를 거절했습니다", danger: true },
+  수정확인: { label: "수정 확인", msg: "수정 내용을 확인했습니다" },
+  상차지도착: { label: "상차지 도착", msg: "상차지에 도착했습니다" },
+  상차완료: { label: "상차 완료", msg: "상차를 완료했습니다" },
+  사진전송: { label: "사진 전송", msg: "사진을 전송했습니다" },
+  회차완료: { label: "회차 완료", msg: "회차를 완료했습니다" },
+  운송완료: { label: "운송 완료", msg: "운송을 완료했습니다", done: true },
+};
+const tlMs = (v) => {
+  if (!v) return 0;
+  if (typeof v === "number") return v;
+  if (typeof v.toMillis === "function") return v.toMillis();
+  if (v instanceof Date) return v.getTime();
+  if (typeof v.seconds === "number") return v.seconds * 1000;
+  const t = new Date(v).getTime();
+  return Number.isFinite(t) ? t : 0;
+};
+const DETAIL_REASON = { 현재위치: "GPS 위치 확인", GPS기록: "GPS 이동기록", 자동출발: "상차지 출발 자동감지", 기사버튼: "기사 직접 입력", 상차사진: "상차사진 전송" };
+
+function buildOrderTimeline(r, fallbackName) {
+  const name = r.이름 || fallbackName || "기사";
+  const logged = Array.isArray(r.기사타임라인) ? r.기사타임라인 : [];
+  const events = logged
+    .map(e => ({ type: e.type, at: tlMs(e.at), by: e.by || name, detail: e.detail || "" }))
+    .filter(e => e.at && TL_META[e.type]);
+  const has = (t) => events.some(e => e.type === t);
+  const add = (type, v, detail = "") => { const at = tlMs(v); if (at && !has(type)) events.push({ type, at, by: name, detail }); };
+  // 예전 오더(누적 기록이 없던 시절) 보완
+  if (r.기사확인일시) {
+    if (r.기사확인상태 === "거절") add("거절", r.기사확인일시, r.기사거절사유 || "");
+    else if (r.기사확인상태 === "수락" || r.기사확인상태 === "완료") add("수락", r.기사확인일시);
+  }
+  add("수정확인", r.수정확인일시, Array.isArray(r.수정확인항목) ? r.수정확인항목.join(", ") : "");
+  add("상차지도착", r.상차지도착일시, r.상차지도착근거 || "");
+  add("상차완료", r.상차완료일시, r.상차완료근거 || "");
+  if (r.회차완료일시 && typeof r.회차완료일시 === "object" && !has("회차완료")) {
+    Object.entries(r.회차완료일시).forEach(([k, v]) => { const at = tlMs(v); if (at) events.push({ type: "회차완료", at, by: name, detail: `${k}회차` }); });
+  }
+  add("운송완료", r.기사완료일시);
+  return events.sort((a, b) => a.at - b.at);
+}
+
+const tlDate = (ms) => { const d = new Date(ms); const w = "일월화수목금토"[d.getDay()]; return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} (${w})`; };
+const tlTime = (ms) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+const tlSentence = (e) => {
+  const m = TL_META[e.type];
+  if (e.type === "사진전송") return `${e.by}님이 ${e.detail ? e.detail + " " : ""}사진을 전송했습니다`;
+  if (e.type === "회차완료") return `${e.by}님이 ${e.detail || "회차"}를 완료했습니다`;
+  return `${e.by}님이 ${m.msg}`;
+};
+const tlSub = (e) => {
+  if (!e.detail || e.type === "사진전송" || e.type === "회차완료") return "";
+  if (e.type === "거절") return `사유: ${e.detail}`;
+  if (e.type === "수정확인") return `변경 항목: ${e.detail}`;
+  return DETAIL_REASON[e.detail] ? `근거: ${DETAIL_REASON[e.detail]}` : "";
+};
+
+function OrderTimelineButton({ order, driverName }) {
+  const [open, setOpen] = useState(false);
+  const events = useMemo(() => buildOrderTimeline(order, driverName), [order, driverName]);
+  const last = events[events.length - 1];
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        title="오더 타임라인 보기"
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 8px", borderRadius: 6, border: "1px solid " + (events.length ? "#c7d2e3" : "#e5e7eb"), background: events.length ? "#f4f7fb" : "#fff", cursor: "pointer", whiteSpace: "nowrap" }}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={events.length ? NAVY : "#cbd5e1"} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15 14" /></svg>
+        {last ? (
+          <span style={{ fontSize: 12, fontWeight: 800, color: NAVY }}>
+            {tlTime(last.at)} <span style={{ color: "#4b5563", fontWeight: 700 }}>{TL_META[last.type].label}</span>
+            <span style={{ marginLeft: 5, fontSize: 11, color: "#9ca3af", fontWeight: 700 }}>{events.length}</span>
+          </span>
+        ) : (
+          <span style={{ fontSize: 12, color: "#9ca3af", fontWeight: 700 }}>기록 없음</span>
+        )}
+      </button>
+      {open && <OrderTimelineModal order={order} events={events} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+function OrderTimelineModal({ order, events, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  // 날짜별로 묶는다
+  const groups = [];
+  events.forEach(e => {
+    const k = tlDate(e.at);
+    const g = groups[groups.length - 1];
+    if (g && g.date === k) g.items.push(e); else groups.push({ date: k, items: [e] });
+  });
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
+      <div style={{ background: "#fff", borderRadius: 16, width: "min(520px, 100%)", maxHeight: "85vh", display: "flex", flexDirection: "column", boxShadow: "0 12px 40px rgba(0,0,0,.28)", overflow: "hidden" }} onClick={e => e.stopPropagation()}>
+        <div style={{ background: NAVY, padding: "16px 20px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ color: "#fff", fontSize: 15, fontWeight: 800 }}>오더 타임라인</div>
+            <div style={{ color: "rgba(255,255,255,.65)", fontSize: 12, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {order.상차지명 || "-"} → {order.하차지명 || "-"} · {order.상차일 || ""} {order.상차시간 || ""}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ border: "none", background: "transparent", color: "rgba(255,255,255,.7)", fontSize: 20, cursor: "pointer", lineHeight: 1 }}>✕</button>
+        </div>
+        <div style={{ padding: "18px 22px 22px", overflowY: "auto" }}>
+          {events.length === 0 ? (
+            <div style={{ textAlign: "center", color: "#9ca3af", fontSize: 14, padding: "36px 0" }}>아직 기사 활동 기록이 없습니다.</div>
+          ) : groups.map(g => (
+            <div key={g.date} style={{ marginBottom: 14 }}>
+              <div style={{ display: "inline-block", fontSize: 12, fontWeight: 800, color: NAVY, background: "#eef1f6", border: "1px solid #d7deea", borderRadius: 6, padding: "2px 9px", marginBottom: 10 }}>{g.date}</div>
+              <div style={{ position: "relative", paddingLeft: 22 }}>
+                <div style={{ position: "absolute", left: 6, top: 6, bottom: 6, width: 2, background: "#e5e9f0" }} />
+                {g.items.map((e, i) => {
+                  const m = TL_META[e.type];
+                  const sub = tlSub(e);
+                  const dot = m.danger ? "#b91c1c" : NAVY;
+                  return (
+                    <div key={i} style={{ position: "relative", padding: "6px 0 10px" }}>
+                      <span style={{ position: "absolute", left: -21, top: 10, width: 12, height: 12, borderRadius: "50%", background: m.done ? dot : "#fff", border: `2.5px solid ${dot}`, boxSizing: "border-box" }} />
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                        <span style={{ fontSize: 14, fontWeight: 900, color: "#111827", fontVariantNumeric: "tabular-nums", minWidth: 42 }}>{tlTime(e.at)}</span>
+                        <span style={{ fontSize: 11, fontWeight: 800, padding: "1px 7px", borderRadius: 5, background: m.danger ? "#fff" : "#eef1f6", color: m.danger ? "#b91c1c" : NAVY, border: m.danger ? "1px solid #fca5a5" : "1px solid #d7deea", whiteSpace: "nowrap" }}>{m.label}</span>
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "#374151", marginTop: 4, marginLeft: 52 }}>{tlSentence(e)}</div>
+                      {sub && <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2, marginLeft: 52 }}>{sub}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function creatorLabel(r, staffByEmail) {
   // ⭐ 사용자 요청 — 오더 등록 당시 실명(myRealName)이 비어있으면 createdByName에
   // 이메일이 그대로 저장돼버린 과거 데이터가 있다. 저장된 값이 이메일 모양이면
@@ -2240,10 +2385,6 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
         </div>
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexShrink: 0 }}>
-          <button onClick={() => handleSendToDriver(driver, orders, selectedDate, rangeEndDate)} disabled={!orders.length}
-            style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: orders.length ? "#fff" : "#f9fafb", color: orders.length ? "#374151" : "#d1d5db", fontSize: 13, fontWeight: 700, cursor: orders.length ? "pointer" : "not-allowed", whiteSpace: "nowrap" }}>
-            기사에게 전달
-          </button>
           <button onClick={() => onOpenDetail(driver)}
             style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid " + NAVY, background: "#fff", color: NAVY, fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
             상세보기
@@ -2272,7 +2413,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                     흰색 굵은 글씨 + 중앙정렬로 프로그램 색감에 맞춤 */}
                 <tr style={{ background: NAVY }}>
                   {ROUTE_COLS.map(h => (
-                    <th key={h} style={{ padding: "9px 16px", fontSize: 12, fontWeight: 800, color: "#fff", textAlign: "center", letterSpacing: ".02em", whiteSpace: "nowrap" }}>{h}</th>
+                    <th key={h} style={{ padding: ROUTE_NARROW_COLS.has(h) ? "9px 6px" : "9px 16px", fontSize: 12, fontWeight: 800, color: "#fff", textAlign: "center", letterSpacing: ".02em", whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -2284,7 +2425,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                   const isBlinking = fleetMeta ? r.기사확인상태 === "수락" : prog === "progress";
                   return (
                     <tr key={r._id || i} style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : "none" }} onContextMenu={(e) => openRowMenu(e, r)}>
-                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, color: "#9ca3af" }}>{i + 1}</td>
+                      <td style={{ padding: "10px 6px", textAlign: "center", fontSize: 13, fontWeight: 700, color: "#9ca3af" }}>{i + 1}</td>
                       <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                           <span style={{
@@ -2344,7 +2485,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                         {r.기사운임 ? `${Number(String(r.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원` : "-"}
                       </td>
                       <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#374151", fontWeight: 700, whiteSpace: "nowrap" }}>{creatorLabel(r, staffByEmail)}</td>
-                      <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
+                      <td style={{ padding: "10px 6px", textAlign: "center", whiteSpace: "nowrap" }}>
                         {r.기사확인상태 ? (
                           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                             <span
@@ -2371,7 +2512,10 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                           <span style={{ fontSize: 13, color: "#d1d5db" }}>-</span>
                         )}
                       </td>
-                      <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
+                      <td style={{ padding: "10px 8px", textAlign: "center", whiteSpace: "nowrap" }}>
+                        <OrderTimelineButton order={r} driverName={driver.이름} />
+                      </td>
+                      <td style={{ padding: "10px 6px", textAlign: "center", whiteSpace: "nowrap" }}>
                         <FleetAttachButton orderId={r._id} col={r.__col || "orders"} attachCount={r.attachCount || 0} />
                       </td>
                     </tr>
@@ -2807,6 +2951,296 @@ function DriverRouteDetailModal({ driver, dispatchData, onClose, role = "" }) {
 // 보여준다. dispatchData는 부모(DispatchApp)의 실시간 배차 데이터를 그대로 받으므로,
 // 실시간배차현황/배차현황에서 지입/직영 기사에게 배차되는 순간 자동으로 반영된다.
 // 기사 1명의 전체 이력/주요노선/엑셀다운로드는 카드의 "상세보기"로 이동했다.
+// ─── 지입차 실시간 위치 지도 ─────────────────────────────────────────────────
+// ⭐ 사용자 요청 — 지입/직영 기사 전원을 트럭 마커로 한 지도에 띄워, 누가 어디로
+// 움직이고 있는지 한눈에. 이름/차량번호/전화번호 검색, 지역 선택 시 해당 위치로 이동.
+// drivers 문서의 location이 onSnapshot으로 계속 들어오므로 지도도 실시간으로 갱신된다.
+const LIVE_MAP_REGIONS = [
+  { name: "서울", lat: 37.5665, lng: 126.978, z: 11 }, { name: "인천", lat: 37.4563, lng: 126.7052, z: 11 },
+  { name: "경기", lat: 37.41, lng: 127.25, z: 9 }, { name: "강원", lat: 37.8, lng: 128.2, z: 9 },
+  { name: "대전", lat: 36.3504, lng: 127.3845, z: 11 }, { name: "세종", lat: 36.48, lng: 127.289, z: 11 },
+  { name: "충북", lat: 36.8, lng: 127.7, z: 9 }, { name: "충남", lat: 36.5, lng: 126.8, z: 9 },
+  { name: "광주", lat: 35.1595, lng: 126.8526, z: 11 }, { name: "전북", lat: 35.82, lng: 127.11, z: 9 },
+  { name: "전남", lat: 34.86, lng: 126.99, z: 9 }, { name: "대구", lat: 35.8714, lng: 128.6014, z: 11 },
+  { name: "경북", lat: 36.4, lng: 128.9, z: 9 }, { name: "울산", lat: 35.5384, lng: 129.3114, z: 11 },
+  { name: "부산", lat: 35.1796, lng: 129.0756, z: 11 }, { name: "경남", lat: 35.46, lng: 128.21, z: 9 },
+  { name: "제주", lat: 33.4996, lng: 126.5312, z: 10 },
+];
+const LIVE_MOVING_PHASES = ["운송중", "상차지진입", "상차지도착", "하차지진입", "하차지도착"];
+
+function liveTruckIcon({ plate, state, selected }) {
+  // state: moving(운행중) / idle(대기·접속중) / offline(미접속) — 색은 네이비·그레이 톤만 사용
+  const bg = state === "offline" ? "#9aa3b2" : NAVY;
+  const size = selected ? 40 : 34;
+  const pulse = state === "moving"
+    ? `<span style="position:absolute;inset:0;border-radius:50%;background:${NAVY};opacity:.25;animation:fmRing 2s infinite ease-out;"></span>` : "";
+  const ring = selected ? `box-shadow:0 0 0 3px #fff,0 0 0 5px ${NAVY},0 6px 16px rgba(15,23,42,.35);` : `box-shadow:0 0 0 2px #fff,0 4px 12px rgba(15,23,42,.3);`;
+  const truck = `<svg width="${selected ? 22 : 19}" height="${selected ? 22 : 19}" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4h13v11H1z"/><path d="M14 8h4l3 3v4h-7z"/><circle cx="5.5" cy="17.5" r="2"/><circle cx="17.5" cy="17.5" r="2"/></svg>`;
+  const label = plate ? `<div style="margin-top:4px;white-space:nowrap;background:#fff;color:${state === "offline" ? "#6b7280" : NAVY};font-size:11px;font-weight:800;padding:1px 6px;border-radius:5px;border:1.5px solid ${bg};box-shadow:0 1px 4px rgba(0,0,0,.15);font-family:'Noto Sans KR',sans-serif;">${plate}</div>` : "";
+  return L.divIcon({
+    html: `<div style="display:flex;flex-direction:column;align-items:center;transform:translateX(-50%);position:absolute;left:50%;top:0;"><div style="position:relative;width:${size}px;height:${size}px;">${pulse}<div style="position:relative;width:100%;height:100%;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;${ring}">${truck}</div></div>${label}</div>`,
+    className: "",
+    iconSize: [0, 0],
+    iconAnchor: [0, size / 2],
+    popupAnchor: [0, -size / 2],
+  });
+}
+
+function LiveMapController({ target, fitKey, points }) {
+  const map = useMap();
+  useEffect(() => { const t = setTimeout(() => map.invalidateSize(), 120); return () => clearTimeout(t); }, [map]);
+  useEffect(() => {
+    if (!target) return;
+    map.flyTo([target.lat, target.lng], target.z || 14, { duration: 0.8 });
+  }, [target, map]);
+  useEffect(() => {
+    if (!fitKey) return;
+    if (points.length === 1) map.setView(points[0], 13);
+    else if (points.length > 1) map.fitBounds(L.latLngBounds(points), { padding: [60, 60], maxZoom: 13 });
+  }, [fitKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+function LiveAddrText({ loc }) {
+  const [addr, setAddr] = useState(null);
+  useEffect(() => {
+    if (loc?.lat != null) enqueueGeocode(loc.lat, loc.lng, setAddr); else setAddr(null);
+  }, [loc?.lat, loc?.lng]);
+  if (!loc) return <span style={{ color: "#c1c7d0" }}>위치 정보 없음</span>;
+  return <span>{addr || "주소 조회중…"}</span>;
+}
+
+function FleetLiveMapModal({ drivers, liveById, dispatchData, onClose }) {
+  const [q, setQ] = useState("");
+  const [filter, setFilter] = useState("all"); // all | moving | idle | offline
+  const [selectedId, setSelectedId] = useState(null);
+  const [follow, setFollow] = useState(true);
+  const [target, setTarget] = useState(null);
+  const [fitKey, setFitKey] = useState(1);
+  const [region, setRegion] = useState("");
+  const markerRefs = useRef({});
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const todayOrdersByPlate = useMemo(() => {
+    const today = kstDateStr();
+    const m = new Map();
+    (dispatchData || []).forEach(r => {
+      if (!r?.차량번호 || r.상차일 !== today) return;
+      if (r.배차상태 === "배차취소" || r.상태 === "취소") return;
+      const k = normPlateKey(r.차량번호);
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push(r);
+    });
+    return m;
+  }, [dispatchData]);
+  useFleetPhaseGeo(useMemo(() => Array.from(todayOrdersByPlate.values()).flat(), [todayOrdersByPlate]));
+
+  const rows = useMemo(() => drivers.map(d => {
+    const live = liveById.get(d.id) || null;
+    const loc = live?.location?.lat != null ? live.location : null;
+    const orders = todayOrdersByPlate.get(normPlateKey(d.차량번호)) || [];
+    const phase = computeFleetPhase({ driverStatus: live?.상태, orders, location: loc });
+    const online = !!(live && live.active && loc);
+    const state = !online ? "offline" : LIVE_MOVING_PHASES.includes(phase) ? "moving" : "idle";
+    const cur = pickCurrentOrder(orders.filter(r => r.기사확인상태 === "수락")) || null;
+    return { d, live, loc, phase, state, cur, speed: live?.speed || 0 };
+  }), [drivers, liveById, todayOrdersByPlate]);
+
+  const counts = useMemo(() => ({
+    all: rows.length,
+    moving: rows.filter(r => r.state === "moving").length,
+    idle: rows.filter(r => r.state === "idle").length,
+    offline: rows.filter(r => r.state === "offline").length,
+  }), [rows]);
+
+  const listRows = useMemo(() => {
+    const kw = q.trim().replace(/[\s-]/g, "").toLowerCase();
+    return rows
+      .filter(r => filter === "all" || r.state === filter)
+      .filter(r => !kw ||
+        (r.d.이름 || "").toLowerCase().includes(kw) ||
+        (r.d.차량번호 || "").replace(/[\s-]/g, "").toLowerCase().includes(kw) ||
+        (r.d.전화번호 || "").replace(/\D/g, "").includes(kw.replace(/\D/g, "") || "#"))
+      .sort((a, b) => ({ moving: 0, idle: 1, offline: 2 }[a.state] - { moving: 0, idle: 1, offline: 2 }[b.state]) || (a.d.이름 || "").localeCompare(b.d.이름 || "", "ko"));
+  }, [rows, q, filter]);
+
+  const located = rows.filter(r => r.loc);
+  const points = located.map(r => [r.loc.lat, r.loc.lng]);
+
+  const focusRow = (r) => {
+    setSelectedId(r.d.id);
+    setRegion("");
+    if (r.loc) {
+      setTarget({ lat: r.loc.lat, lng: r.loc.lng, z: 14, _t: Date.now() });
+      setTimeout(() => markerRefs.current[r.d.id]?.openPopup(), 850);
+    }
+  };
+
+  // 선택한 기사 따라가기 — 위치가 갱신되면 지도도 따라 이동
+  const selRow = rows.find(r => r.d.id === selectedId);
+  const selLat = selRow?.loc?.lat, selLng = selRow?.loc?.lng;
+  const firstFollowRef = useRef(true);
+  useEffect(() => {
+    if (firstFollowRef.current) { firstFollowRef.current = false; return; }
+    if (!follow || selLat == null) return;
+    setTarget(t => ({ lat: selLat, lng: selLng, z: t?.z || 14, _t: Date.now() }));
+  }, [selLat, selLng]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const FILTERS = [["all", "전체"], ["moving", "운행중"], ["idle", "대기"], ["offline", "미접속"]];
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", zIndex: 99990, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={onClose}>
+      <div style={{ background: "#fff", borderRadius: 16, width: "min(1400px, 100%)", height: "min(860px, 100%)", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 16px 48px rgba(0,0,0,.3)" }} onClick={e => e.stopPropagation()}>
+        {/* 헤더 */}
+        <div style={{ background: NAVY, padding: "14px 20px", display: "flex", alignItems: "center", gap: 14 }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4h13v11H1z" /><path d="M14 8h4l3 3v4h-7z" /><circle cx="5.5" cy="17.5" r="2" /><circle cx="17.5" cy="17.5" r="2" /></svg>
+          <div>
+            <div style={{ color: "#fff", fontSize: 16, fontWeight: 800 }}>지입차 실시간 위치</div>
+            <div style={{ color: "rgba(255,255,255,.6)", fontSize: 12, marginTop: 2 }}>기사앱 위치가 들어오는 대로 자동 갱신됩니다</div>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginLeft: 18 }}>
+            {[["운행중", counts.moving], ["대기", counts.idle], ["미접속", counts.offline]].map(([l, c]) => (
+              <span key={l} style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,.75)", background: "rgba(255,255,255,.1)", borderRadius: 6, padding: "4px 10px" }}>
+                {l} <b style={{ color: "#fff", fontSize: 14, marginLeft: 3 }}>{c}</b>
+              </span>
+            ))}
+          </div>
+          <button onClick={onClose} style={{ marginLeft: "auto", border: "none", background: "transparent", color: "rgba(255,255,255,.75)", fontSize: 22, cursor: "pointer", lineHeight: 1 }}>✕</button>
+        </div>
+
+        <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
+          {/* 좌측: 검색 + 목록 */}
+          <div style={{ width: 330, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", background: "#f8f9fb" }}>
+            <div style={{ padding: 12, borderBottom: "1px solid #e5e7eb", display: "flex", flexDirection: "column", gap: 8, background: "#fff" }}>
+              <input
+                autoFocus
+                value={q}
+                onChange={e => setQ(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && listRows[0]) focusRow(listRows[0]); }}
+                placeholder="기사명 · 차량번호 · 전화번호 검색"
+                style={{ height: 36, padding: "0 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 13, outline: "none" }}
+              />
+              <select
+                value={region}
+                onChange={e => {
+                  const rg = LIVE_MAP_REGIONS.find(x => x.name === e.target.value);
+                  setRegion(e.target.value);
+                  if (rg) { setSelectedId(null); setTarget({ lat: rg.lat, lng: rg.lng, z: rg.z, _t: Date.now() }); }
+                }}
+                style={{ height: 34, padding: "0 10px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 13, fontWeight: 700, color: "#374151", background: "#fff", outline: "none" }}
+              >
+                <option value="">지역 선택 → 지도 이동</option>
+                {LIVE_MAP_REGIONS.map(rg => <option key={rg.name} value={rg.name}>{rg.name}</option>)}
+              </select>
+              <div style={{ display: "flex", gap: 4 }}>
+                {FILTERS.map(([k, l]) => (
+                  <button key={k} onClick={() => setFilter(k)}
+                    style={{ flex: 1, height: 30, borderRadius: 7, border: "1px solid " + (filter === k ? NAVY : "#e5e7eb"), background: filter === k ? NAVY : "#fff", color: filter === k ? "#fff" : "#4b5563", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    {l} {counts[k]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
+              {listRows.length === 0 ? (
+                <div style={{ textAlign: "center", color: "#9ca3af", fontSize: 13, padding: "30px 0" }}>검색 결과가 없습니다</div>
+              ) : listRows.map(r => {
+                const sel = r.d.id === selectedId;
+                return (
+                  <div key={r.d.id} onClick={() => focusRow(r)}
+                    style={{ padding: "10px 12px", borderRadius: 10, marginBottom: 6, cursor: r.loc ? "pointer" : "default", background: "#fff", border: "1px solid " + (sel ? NAVY : "#e5e7eb"), boxShadow: sel ? "0 0 0 2px rgba(27,43,75,.12)" : "none", opacity: r.state === "offline" ? 0.72 : 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: r.state === "offline" ? "#cbd5e1" : NAVY, animation: r.state === "moving" ? "fmBlink 2.4s ease-in-out infinite" : "none" }} />
+                      <span style={{ fontSize: 14, fontWeight: 800, color: "#111827" }}>{r.d.이름}</span>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: "#111827", padding: "0 6px", border: "1.5px solid #111827", borderRadius: 4, background: "#fff" }}>{r.d.차량번호}</span>
+                      <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 800, padding: "2px 7px", borderRadius: 5, background: r.state === "offline" ? "#f1f3f6" : r.state === "moving" ? NAVY : "#eef1f6", color: r.state === "offline" ? "#9ca3af" : r.state === "moving" ? "#fff" : NAVY, whiteSpace: "nowrap" }}>
+                        {r.state === "offline" ? "미접속" : r.phase}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: "#4b5563", fontWeight: 600, marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <LiveAddrText loc={r.loc} />
+                    </div>
+                    <div style={{ display: "flex", gap: 8, fontSize: 11, color: "#9ca3af", marginTop: 3 }}>
+                      {r.loc && <span>업데이트 {timeAgo(r.live?.updatedAt)}</span>}
+                      {r.speed > 0 && <span>· {r.speed} km/h</span>}
+                    </div>
+                    {r.cur && (
+                      <div style={{ fontSize: 12, color: NAVY, fontWeight: 700, marginTop: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {r.cur.상차지명 || "-"} → {r.cur.하차지명 || "-"}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 우측: 지도 */}
+          <div style={{ flex: 1, position: "relative", minWidth: 0 }}>
+            <style>{`.fm-live-tiles{filter:grayscale(.85) contrast(.95) brightness(1.04);}`}</style>
+            <MapContainer center={[37.45, 126.9]} zoom={10} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
+              <TileLayer className="fm-live-tiles" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
+              <LiveMapController target={target} fitKey={fitKey} points={points} />
+              {located.map(r => (
+                <Marker
+                  key={r.d.id}
+                  position={[r.loc.lat, r.loc.lng]}
+                  icon={liveTruckIcon({ plate: r.d.차량번호 !== "-" ? r.d.차량번호 : r.d.이름, state: r.state, selected: r.d.id === selectedId })}
+                  zIndexOffset={r.d.id === selectedId ? 1000 : r.state === "moving" ? 500 : 0}
+                  ref={el => { if (el) markerRefs.current[r.d.id] = el; }}
+                  eventHandlers={{ click: () => setSelectedId(r.d.id) }}
+                >
+                  <Popup>
+                    <div style={{ minWidth: 200, fontFamily: "'Noto Sans KR',sans-serif", lineHeight: 1.6 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <b style={{ fontSize: 15, color: NAVY }}>{r.d.이름}</b>
+                        <span style={{ fontSize: 12, fontWeight: 800, padding: "0 5px", border: "1.5px solid #111827", borderRadius: 4 }}>{r.d.차량번호}</span>
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: r.state === "offline" ? "#9ca3af" : NAVY, marginTop: 2 }}>{r.state === "offline" ? "미접속 (마지막 위치)" : r.phase}{r.speed > 0 ? ` · ${r.speed} km/h` : ""}</div>
+                      <div style={{ fontSize: 12, color: "#374151" }}><LiveAddrText loc={r.loc} /></div>
+                      {r.cur && <div style={{ fontSize: 12, color: "#374151" }}>오더: {r.cur.상차지명 || "-"} → {r.cur.하차지명 || "-"}</div>}
+                      <div style={{ fontSize: 11, color: "#9ca3af" }}>업데이트 {timeAgo(r.live?.updatedAt)}{r.d.전화번호 && r.d.전화번호 !== "-" ? ` · ${formatPhone(r.d.전화번호)}` : ""}</div>
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
+            </MapContainer>
+
+            {/* 지도 위 컨트롤 */}
+            <div style={{ position: "absolute", top: 12, right: 12, zIndex: 500, display: "flex", flexDirection: "column", gap: 6 }}>
+              <button onClick={() => { setSelectedId(null); setRegion(""); setFitKey(k => k + 1); }}
+                style={{ height: 34, padding: "0 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: NAVY, fontSize: 12, fontWeight: 800, cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,.12)" }}>
+                전체 차량 보기
+              </button>
+              <button onClick={() => setFollow(v => !v)}
+                title="선택한 기사의 위치가 바뀌면 지도가 따라 이동합니다"
+                style={{ height: 34, padding: "0 12px", borderRadius: 8, border: "1px solid " + (follow ? NAVY : "#d1d5db"), background: follow ? NAVY : "#fff", color: follow ? "#fff" : "#4b5563", fontSize: 12, fontWeight: 800, cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,.12)" }}>
+                선택 차량 따라가기 {follow ? "ON" : "OFF"}
+              </button>
+            </div>
+            {located.length === 0 && (
+              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", zIndex: 500, background: "#fff", borderRadius: 12, padding: "16px 22px", boxShadow: "0 4px 18px rgba(0,0,0,.15)", fontSize: 14, fontWeight: 700, color: "#6b7280", textAlign: "center" }}>
+                위치가 들어온 지입차가 없습니다<br /><span style={{ fontSize: 12, fontWeight: 500 }}>기사앱에서 위치 공유가 켜지면 표시됩니다</span>
+              </div>
+            )}
+            {/* 범례 */}
+            <div style={{ position: "absolute", left: 12, bottom: 12, zIndex: 500, background: "rgba(255,255,255,.95)", borderRadius: 10, padding: "8px 12px", boxShadow: "0 2px 8px rgba(0,0,0,.12)", display: "flex", gap: 14, fontSize: 12, fontWeight: 700, color: "#374151" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 12, height: 12, borderRadius: "50%", background: NAVY, boxShadow: "0 0 0 3px rgba(27,43,75,.2)" }} />운행중</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 12, height: 12, borderRadius: "50%", background: NAVY }} />대기</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 12, height: 12, borderRadius: "50%", background: "#9aa3b2" }} />미접속(마지막 위치)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [], canDelegate = false, onAssignManager, myUid = null, staffByEmail = {}, role = "" }) {
   const [q, setQ] = useState("");
   const todayStr0 = kstDateStr();
@@ -2826,6 +3260,7 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
   // ⭐ 사용자 요청 — 배차자마다 담당 지입차가 따로 있어서, 들어오자마자 "내 담당
   // 차량"부터 보여야 한다. 전체 차량을 보는 기능은 토글로 그대로 유지.
   const [scope, setScope] = useState("mine");
+  const [liveMapOpen, setLiveMapOpen] = useState(false);
 
   const liveByFleetId = useMemo(() => new Map(liveDrivers.map(d => [d.id, d])), [liveDrivers]);
 
@@ -3021,6 +3456,11 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
           }}>
           미배차만 보기
         </button>
+        <button onClick={() => setLiveMapOpen(true)}
+          style={{ height: 34, padding: "0 14px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 800, cursor: "pointer", background: NAVY, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4h13v11H1z" /><path d="M14 8h4l3 3v4h-7z" /><circle cx="5.5" cy="17.5" r="2" /><circle cx="17.5" cy="17.5" r="2" /></svg>
+          실시간 위치 지도
+        </button>
         <div style={{ marginLeft: "auto", display: "flex", gap: 16, fontSize: 14, color: "#6b7280" }}>
           <span>{scope === "mine" ? "내 담당" : "전체"} <b style={{ color: NAVY }}>{scopedDrivers.length}</b>대</span>
           <span>배차 <b style={{ color: "#111827" }}>{dispatchedCount}</b>대</span>
@@ -3084,6 +3524,9 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
 
       {detailDriver && (
         <DriverRouteDetailModal driver={detailDriver} dispatchData={dispatchData} onClose={() => setDetailDriver(null)} role={role} />
+      )}
+      {liveMapOpen && (
+        <FleetLiveMapModal drivers={drivers} liveById={liveByFleetId} dispatchData={dispatchData} onClose={() => setLiveMapOpen(false)} />
       )}
     </div>
   );

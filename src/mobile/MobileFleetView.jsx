@@ -146,12 +146,8 @@ function ModBadge({ order }) {
       </span>
     );
   }
-  const d = new Date(ms.at);
-  return (
-    <span title={`기사가 수정 내용을 확인했습니다${ms.labels.length ? ` (${ms.labels.join(", ")})` : ""}`} style={{ fontSize: 11, fontWeight: 800, color: "#16a34a", border: "1px solid #bbf7d0", background: "#f0fdf4", borderRadius: 6, padding: "1px 6px", whiteSpace: "nowrap" }}>
-      기사 확인 {String(d.getHours()).padStart(2, "0")}:{String(d.getMinutes()).padStart(2, "0")}
-    </span>
-  );
+  // ⭐ 사용자 요청 — 수정 확인 완료 시 "기사 확인 HH:MM" 배지는 표시하지 않는다(타임라인에서 확인)
+  return null;
 }
 
 function mobileOrderStatusMeta(r) {

@@ -4,7 +4,7 @@ import html2canvas from "html2canvas";
 import { db, auth } from "../firebase";
 import {
   doc, getDoc, setDoc, onSnapshot, updateDoc, addDoc, deleteDoc,
-  collection, query, where, orderBy, limit, getDocs, serverTimestamp, increment,
+  collection, query, where, orderBy, limit, getDocs, serverTimestamp, increment, arrayUnion,
 } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { registerPlugin } from "@capacitor/core";
@@ -12,6 +12,12 @@ import { useAddrGeo, computeFleetPhase, useFleetPhaseGeo, getCachedGeo, isPickup
 import { snapshotOrder, changedFields, changedLabels } from "../orderChange";
 import { rotationCount, rotationDone, rotationLabel } from "../rotation";
 import { haversineKm } from "../tmapFareCalc";
+
+// ⭐ 오더 타임라인 — 기사 행동(수락/거절/수정확인/상차지도착/상차완료/운송완료 등)을
+// 오더 문서의 기사타임라인 배열에 "덮어쓰지 않고" 계속 쌓는다(관리자 지입차관리 타임라인).
+const tlLog = (type, by, extra = {}) => ({
+  기사타임라인: arrayUnion({ type, at: Date.now(), by: by || "", ...extra }),
+});
 
 // Capacitor 네이티브 컨텍스트 여부 확인
 const isNative = () => typeof window !== "undefined" && !!(window.Capacitor?.isNativePlatform?.());
@@ -1372,6 +1378,7 @@ export default function DriverHome() {
       await updateDoc(doc(db, col, orderId), {
         기사확인상태: "수락",
         기사확인일시: serverTimestamp(),
+        ...tlLog("수락", driver?.name),
         배차상태: "배차완료",
         // 수락 시점 내용 저장 — 이후 관리자가 수정하면 무엇이 바뀌었는지 비교한다
         ...(accepted ? { 기사확인값: snapshotOrder(accepted) } : {}),
@@ -1395,7 +1402,7 @@ export default function DriverHome() {
     } finally {
       setOrderActionLoading(false);
     }
-  }, [orderActionLoading, myOrders, driver?.status, driver?.mainStatus, uid]);
+  }, [orderActionLoading, myOrders, driver?.status, driver?.mainStatus, driver?.name, uid]);
 
   const handleRejectOrderSubmit = useCallback(async () => {
     if (!rejectModal || orderActionLoading) return;
@@ -1409,6 +1416,7 @@ export default function DriverHome() {
         기사확인상태: "거절",
         기사거절사유: rejectReason.trim(),
         기사확인일시: serverTimestamp(),
+        ...tlLog("거절", driver?.name, { detail: rejectReason.trim() }),
         차량번호: "",
         이름: "",
         전화번호: "",
@@ -1428,7 +1436,7 @@ export default function DriverHome() {
     } finally {
       setOrderActionLoading(false);
     }
-  }, [rejectModal, rejectReason, orderActionLoading]);
+  }, [rejectModal, rejectReason, orderActionLoading, driver?.name]);
 
   // ⭐ 수정확인 — 지금 내용을 새 기준값으로 저장하고 확인 시각을 남긴다(관리자 노선관리에 표시)
   const handleConfirmChange = useCallback(async (o) => {
@@ -1438,12 +1446,13 @@ export default function DriverHome() {
         기사확인값: snapshotOrder(o),
         수정확인일시: serverTimestamp(),
         수정확인항목: changedLabels(changedFields(o)),
+        ...tlLog("수정확인", driver?.name, { detail: changedLabels(changedFields(o)).join(", ") }),
       });
       showToast("수정 내용을 확인했습니다");
     } catch (e) {
       showToast("처리 중 오류가 발생했습니다");
     }
-  }, []);
+  }, [driver?.name]);
 
   // ⭐ 상차지 방문 기록 — 수락한 오더의 상차지 1km 안에 들어오면(또는 오늘 GPS 기록상
   // 수락 이후 들어온 적이 있으면) 오더에 상차지도착주소/일시를 남긴다. 이후 상차지에서
@@ -1459,6 +1468,7 @@ export default function DriverHome() {
         if (!g) return;
         const mark = (근거) => updateDoc(doc(db, o.__col || "orders", o._id), {
           상차지도착주소: o.상차지주소, 상차지도착일시: serverTimestamp(), 상차지도착근거: 근거,
+          ...tlLog("상차지도착", driver?.name, { detail: 근거 }),
         }).catch(() => {});
         if (pos?.lat != null && haversineKm(pos.lat, pos.lng, g.lat, g.lng) <= 1) { mark("현재위치"); return; }
         // 주소가 바뀐 경우 등 — 오늘 GPS 기록에서 수락 이후 1km 안에 들어온 적이 있는지 한 번만 확인
@@ -1486,7 +1496,7 @@ export default function DriverHome() {
           })
           .catch(() => {});
       });
-  }, [uid, myOrders, pos?.lat, pos?.lng]);
+  }, [uid, myOrders, pos?.lat, pos?.lng, driver?.name]);
 
   // 이 기능 이전에 수락한 오더는 기준값이 없으므로, 지금 내용을 기준값으로 한 번 저장해둔다
   useEffect(() => {
@@ -1504,12 +1514,13 @@ export default function DriverHome() {
       await updateDoc(doc(db, o.__col || "orders", o._id), {
         상차완료일시: serverTimestamp(), 상차완료근거: 근거,
         ...(isPickupVisited(o) ? {} : { 상차지도착주소: o.상차지주소 || "", 상차지도착일시: serverTimestamp(), 상차지도착근거: 근거 }),
+        ...tlLog("상차완료", driver?.name, { detail: 근거 }),
       });
       if (근거 === "기사버튼") showToast("상차완료 — 하차지로 이동해주세요");
     } catch (e) {
       showToast("처리 중 오류가 발생했습니다");
     }
-  }, []);
+  }, [driver?.name]);
 
   // ⭐ 상차지에 들렀다가 1km 밖으로 벗어나면(출발) 상차완료를 자동으로 기록한다
   const autoLoadRef = useRef(new Set());
@@ -1527,6 +1538,7 @@ export default function DriverHome() {
       await updateDoc(doc(db, o.__col || "orders", o._id), {
         완료회차: k,
         [`회차완료일시.${k}`]: serverTimestamp(),
+        ...tlLog("회차완료", driver?.name, { detail: `${k}회차` }),
       });
       showToast(`${k}회차 완료 — 다음 회차 상차지로 이동해주세요`);
     } catch (e) {
@@ -1534,7 +1546,7 @@ export default function DriverHome() {
     } finally {
       setOrderActionLoading(false);
     }
-  }, [orderActionLoading]);
+  }, [orderActionLoading, driver?.name]);
 
   const handleCompleteOrder = useCallback(async (orderId, col = "orders") => {
     if (orderActionLoading) return;
@@ -1543,6 +1555,7 @@ export default function DriverHome() {
       await updateDoc(doc(db, col, orderId), {
         기사확인상태: "완료",
         기사완료일시: serverTimestamp(),
+        ...tlLog("운송완료", driver?.name),
       });
       setLastCompletedOrderId(orderId);
       setLastCompletedOrderCol(col);
@@ -1552,7 +1565,7 @@ export default function DriverHome() {
     } finally {
       setOrderActionLoading(false);
     }
-  }, [orderActionLoading]);
+  }, [orderActionLoading, driver?.name]);
 
   const copyText = useCallback((text, label) => {
     if (!text) return;
@@ -1606,6 +1619,7 @@ export default function DriverHome() {
       const target = myOrders.find(x => x._id === orderId);
       await updateDoc(doc(db, col, orderId), {
         attachCount: increment(1),
+        ...tlLog("사진전송", driver?.name, { detail: actionType }),
         // 상차완료 사진을 보냈으면 상차한 것으로 본다(GPS가 늦게 잡혀도 운송완료가 막히지 않게)
         ...(actionType === "상차완료" && target && !isPickupVisited(target)
           ? { 상차지도착주소: target.상차지주소 || "", 상차지도착일시: serverTimestamp(), 상차지도착근거: "상차사진" } : {}),
