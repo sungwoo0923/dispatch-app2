@@ -16,6 +16,7 @@ import CafeOrderForm from "./CafeOrderForm";
 import CafeOrderDetail from "./CafeOrderDetail";
 import CafeOrderTable from "./CafeOrderTable";
 import CafeHome from "./CafeHome";
+import { CafeEditProvider, EditModeToggle, T, TOTAL_MASTER_EMAIL } from "./CafeEditMode";
 
 function LoadingScreen() {
   return (
@@ -56,6 +57,7 @@ export default function CafeApp() {
       setProfile({
         uid: authUser.uid, email: authUser.email,
         companyName: d.companyName || "", name: d.name || "", nickname: d.nickname || "", phone: d.phone || "",
+        role: d.role || "",
       });
     });
   }, [authUser]);
@@ -116,7 +118,7 @@ export default function CafeApp() {
       {[["card", "카드형"], ["table", "기본형"]].map(([k, l]) => (
         <button key={k} onClick={() => setViewMode(k)}
           className={`px-3 py-2 text-[12.5px] font-bold transition ${viewMode === k ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>
-          {l}
+          <T k={`view.${k}`}>{l}</T>
         </button>
       ))}
     </div>
@@ -125,7 +127,7 @@ export default function CafeApp() {
   // 카드/표 목록 — cardCols로 화면 폭에 맞게 칸 수를 늘린다
   const renderList = (list, cardCols) => (
     list.length === 0 ? (
-      <div className="py-24 text-center text-[13px] text-gray-400 bg-white border border-gray-200 rounded-xl">등록된 오더가 없습니다.</div>
+      <div className="py-24 text-center text-[13px] text-gray-400 bg-white border border-gray-200 rounded-xl"><T k="list.empty">등록된 오더가 없습니다.</T></div>
     ) : viewMode === "table" ? (
       <CafeOrderTable orders={list} onClick={openOrder} />
     ) : (
@@ -137,26 +139,31 @@ export default function CafeApp() {
 
   const countBy = (list, st) => list.filter(o => o.status === st).length;
 
+  // 최고관리자(운송 프로그램과 동일 기준) — 편집모드 버튼 노출용. 실제 저장 권한은 firestore.rules에서 재검증.
+  const isAdmin = profile.role === "totalMaster" || profile.email === TOTAL_MASTER_EMAIL;
+
   return (
+    <CafeEditProvider isAdmin={isAdmin}>
     <div className="min-h-screen bg-[#f4f6fa]">
       {/* 상단 네비 */}
       <div className="bg-[#1B2B4B] sticky top-0 z-40">
         <div className="w-full px-4 lg:px-6 py-3 flex items-center gap-4">
           <div className="flex items-center gap-2 shrink-0 cursor-pointer" onClick={() => { setTab("board"); if (selectedOrderId) nav("/"); }}>
             <div className="w-7 h-7 rounded-md bg-white/15 flex items-center justify-center text-white font-black text-[13px]">배</div>
-            <span className="text-white font-black text-[15px] tracking-tight">배차마당</span>
+            <T k="nav.brand" className="text-white font-black text-[15px] tracking-tight">배차마당</T>
           </div>
           <nav className="flex items-center gap-1 flex-1 overflow-x-auto">
             {[["board", "홈"], ["live", "실시간배차현황"], ["mine", "내 등록 오더"], ["mypage", "마이페이지"]].map(([k, l]) => (
               <button key={k} onClick={() => { setTab(k); if (selectedOrderId) nav("/"); }}
                 className={`px-3 py-1.5 rounded-lg text-[13px] font-semibold transition whitespace-nowrap ${tab === k ? "bg-white text-[#1B2B4B]" : "text-white/70 hover:bg-white/10"}`}>
-                {l}
+                <T k={`nav.${k}`}>{l}</T>
               </button>
             ))}
           </nav>
           <div className="flex items-center gap-3 shrink-0">
+            <EditModeToggle />
             <span className="text-white/70 text-[12px] hidden sm:inline">{profile.companyName} · {profile.nickname}</span>
-            <button onClick={logout} className="text-white/60 hover:text-white text-[12px] font-semibold">로그아웃</button>
+            <button onClick={logout} className="text-white/60 hover:text-white text-[12px] font-semibold"><T k="nav.logout">로그아웃</T></button>
           </div>
         </div>
       </div>
@@ -188,9 +195,10 @@ export default function CafeApp() {
                   ["신청중", countBy(orders, "applying"), "applying"],
                   ["배차완료", countBy(orders, "confirmed"), "confirmed"],
                 ].map(([l, v, st]) => (
+                  // 편집모드 키: live.stat.all / open / applying / confirmed
                   <button key={l} onClick={() => setStatusFilter(st)}
                     className={`text-left bg-white border rounded-xl px-4 py-3 transition ${statusFilter === st ? "border-[#1B2B4B] ring-1 ring-[#1B2B4B]" : "border-gray-200 hover:border-gray-300"}`}>
-                    <div className="text-[11px] font-bold text-gray-400">{l}</div>
+                    <T k={`live.stat.${st || "all"}`} className="block text-[11px] font-bold text-gray-400">{l}</T>
                     <div className="text-[22px] font-black text-[#1B2B4B] mt-0.5">{v}</div>
                   </button>
                 ))}
@@ -212,11 +220,11 @@ export default function CafeApp() {
                 {ViewToggle}
                 <button onClick={() => { setEditingOrder(null); setFormOpen(true); }}
                   className="px-4 py-2 rounded-lg bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition shrink-0">
-                  + 오더 등록
+                  <T k="live.btnNew">+ 오더 등록</T>
                 </button>
               </div>
 
-              <div className="text-[12px] text-gray-400 mb-2">검색결과 {filtered.length}건</div>
+              <div className="text-[12px] text-gray-400 mb-2"><T k="live.resultCount">검색결과</T> {filtered.length}건</div>
               {renderList(filtered, "grid-cols-1 md:grid-cols-2 2xl:grid-cols-3")}
             </div>
           </div>
@@ -226,24 +234,24 @@ export default function CafeApp() {
           <>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
               {[
-                ["내 등록 오더", myOrders.length],
-                ["대기중", countBy(myOrders, "open")],
-                ["신청중", countBy(myOrders, "applying")],
-                ["배차완료", countBy(myOrders, "confirmed")],
-              ].map(([l, v]) => (
-                <div key={l} className="bg-white border border-gray-200 rounded-xl px-4 py-3">
-                  <div className="text-[11px] font-bold text-gray-400">{l}</div>
+                ["all", "내 등록 오더", myOrders.length],
+                ["open", "대기중", countBy(myOrders, "open")],
+                ["applying", "신청중", countBy(myOrders, "applying")],
+                ["confirmed", "배차완료", countBy(myOrders, "confirmed")],
+              ].map(([key, l, v]) => (
+                <div key={key} className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+                  <T k={`mine.stat.${key}`} className="block text-[11px] font-bold text-gray-400">{l}</T>
                   <div className="text-[22px] font-black text-[#1B2B4B] mt-0.5">{v}</div>
                 </div>
               ))}
             </div>
             <div className="flex items-center justify-between mb-4">
-              <div className="text-[13px] text-gray-500">내가 등록한 오더 {myOrders.length}건</div>
+              <div className="text-[13px] text-gray-500"><T k="mine.count">내가 등록한 오더</T> {myOrders.length}건</div>
               <div className="flex items-center gap-2">
                 {ViewToggle}
                 <button onClick={() => { setEditingOrder(null); setFormOpen(true); }}
                   className="px-4 py-2 rounded-lg bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">
-                  + 오더 등록
+                  <T k="mine.btnNew">+ 오더 등록</T>
                 </button>
               </div>
             </div>
@@ -272,48 +280,48 @@ export default function CafeApp() {
                   ["이메일(아이디)", profile.email],
                 ].map(([l, v]) => (
                   <div key={l} className="flex justify-between border-b border-gray-100 pb-2 last:border-0">
-                    <span className="text-gray-400 font-semibold">{l}</span>
+                    <T k={`mypage.field.${l}`} className="text-gray-400 font-semibold">{l}</T>
                     <span className="text-gray-800 font-medium">{v || "-"}</span>
                   </div>
                 ))}
               </div>
               <button onClick={logout}
                 className="w-full mt-5 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-semibold text-[13px] hover:bg-gray-50 transition">
-                로그아웃
+                <T k="mypage.logout">로그아웃</T>
               </button>
             </div>
 
             <div className="lg:col-span-2 space-y-5">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
-                  ["총 등록 오더", myOrders.length],
-                  ["배차 대기", countBy(myOrders, "open")],
-                  ["배차완료", countBy(myOrders, "confirmed")],
-                  ["내가 잡은 배차", orders.filter(o => o.applicantUid === profile.uid && o.status === "confirmed").length],
-                ].map(([l, v]) => (
-                  <div key={l} className="bg-white border border-gray-200 rounded-xl px-4 py-3">
-                    <div className="text-[11px] font-bold text-gray-400">{l}</div>
+                  ["total", "총 등록 오더", myOrders.length],
+                  ["open", "배차 대기", countBy(myOrders, "open")],
+                  ["confirmed", "배차완료", countBy(myOrders, "confirmed")],
+                  ["won", "내가 잡은 배차", orders.filter(o => o.applicantUid === profile.uid && o.status === "confirmed").length],
+                ].map(([key, l, v]) => (
+                  <div key={key} className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+                    <T k={`mypage.stat.${key}`} className="block text-[11px] font-bold text-gray-400">{l}</T>
                     <div className="text-[22px] font-black text-[#1B2B4B] mt-0.5">{v}</div>
                   </div>
                 ))}
               </div>
 
               <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-                <div className="px-5 py-3.5 border-b border-gray-100 text-[14px] font-bold text-gray-900">내가 배차신청한 오더</div>
+                <div className="px-5 py-3.5 border-b border-gray-100 text-[14px] font-bold text-gray-900"><T k="mypage.applied.title">내가 배차신청한 오더</T></div>
                 {(() => {
                   const applied = orders.filter(o => o.applicantUid === profile.uid);
-                  if (applied.length === 0) return <div className="py-10 text-center text-[12.5px] text-gray-400">배차신청한 오더가 없습니다.</div>;
+                  if (applied.length === 0) return <div className="py-10 text-center text-[12.5px] text-gray-400"><T k="mypage.applied.empty">배차신청한 오더가 없습니다.</T></div>;
                   return <CafeOrderTable orders={applied} onClick={openOrder} />;
                 })()}
               </div>
 
               <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
                 <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
-                  <span className="text-[14px] font-bold text-gray-900">최근 내 등록 오더</span>
-                  <button onClick={() => setTab("mine")} className="text-[12px] font-bold text-gray-400 hover:text-[#1B2B4B]">전체보기 →</button>
+                  <T k="mypage.recent.title" className="text-[14px] font-bold text-gray-900">최근 내 등록 오더</T>
+                  <button onClick={() => setTab("mine")} className="text-[12px] font-bold text-gray-400 hover:text-[#1B2B4B]"><T k="mypage.recent.more">전체보기 →</T></button>
                 </div>
                 {myOrders.length === 0
-                  ? <div className="py-10 text-center text-[12.5px] text-gray-400">등록한 오더가 없습니다.</div>
+                  ? <div className="py-10 text-center text-[12.5px] text-gray-400"><T k="mypage.recent.empty">등록한 오더가 없습니다.</T></div>
                   : <CafeOrderTable orders={myOrders.slice(0, 5)} onClick={openOrder} />}
               </div>
             </div>
@@ -340,5 +348,6 @@ export default function CafeApp() {
         />
       )}
     </div>
+    </CafeEditProvider>
   );
 }

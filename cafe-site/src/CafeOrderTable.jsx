@@ -1,6 +1,7 @@
 // ======================= cafe-site/src/CafeOrderTable.jsx =======================
 // "기본형" 보기 — 운송 프로그램(배차현황)처럼 컬럼이 있는 가로형(엑셀형) 표.
 import React from "react";
+import { T } from "./CafeEditMode";
 
 const STATUS_META = {
   open:      { label: "대기중" },
@@ -9,11 +10,14 @@ const STATUS_META = {
   cancelled: { label: "취소됨" },
 };
 
+// 컬럼명은 가운데 정렬 + 편집모드에서 문구/스타일 수정 가능
 const Th = ({ children }) => (
-  <th className="px-3 py-2.5 text-left text-[11px] font-bold text-gray-500 border-b border-gray-200 whitespace-nowrap">{children}</th>
+  <th className="px-3 py-2.5 text-center text-[11px] font-bold text-gray-500 border-b border-gray-200 whitespace-nowrap">
+    <T k={`table.col.${children}`}>{children}</T>
+  </th>
 );
 const Td = ({ children, className = "" }) => (
-  <td className={`px-3 py-2.5 text-[12.5px] text-gray-700 border-b border-gray-100 whitespace-nowrap ${className}`}>{children}</td>
+  <td className={`px-3 py-2.5 text-center text-[12.5px] text-gray-700 border-b border-gray-100 whitespace-nowrap ${className}`}>{children}</td>
 );
 
 export default function CafeOrderTable({ orders, onClick }) {
@@ -70,7 +74,7 @@ export default function CafeOrderTable({ orders, onClick }) {
         </table>
       </div>
       {orders.length === 0 && (
-        <div className="py-16 text-center text-[13px] text-gray-400">등록된 오더가 없습니다.</div>
+        <div className="py-16 text-center text-[13px] text-gray-400"><T k="table.empty">등록된 오더가 없습니다.</T></div>
       )}
     </div>
   );

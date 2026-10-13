@@ -7,6 +7,7 @@ import { createCafeOrder, updateCafeOrder } from "./cafeApi";
 import CustomDatePicker from "./CustomDatePicker";
 import TimeAmPmPicker from "./TimeAmPmPicker";
 import PlaceAutocomplete from "./PlaceAutocomplete";
+import { T } from "./CafeEditMode";
 
 const emptyForm = {
   상차지명: "", 상차지주소: "", 하차지명: "", 하차지주소: "",
@@ -119,14 +120,14 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
   const body = (
     <>
         <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
-          <div className="text-white font-bold text-[15px]">{editing ? "오더 수정" : inline ? "빠른 오더 등록" : "오더 등록"}</div>
+          <div className="text-white font-bold text-[15px]">{editing ? <T k="form.title.edit">오더 수정</T> : inline ? <T k="form.title.inline">빠른 오더 등록</T> : <T k="form.title.new">오더 등록</T>}</div>
           {!inline && <button onClick={onClose} className="text-white/60 hover:text-white text-xl leading-none">×</button>}
         </div>
 
         <div className={`flex-1 overflow-y-auto space-y-4 ${inline ? "p-4" : "p-6"}`}>
           {/* 상차지 */}
           <div>
-            <label className={label}>상차지명 / 주소 *</label>
+            <label className={label}><T k="form.상차지명 / 주소 *">상차지명 / 주소 *</T></label>
             <PlaceAutocomplete
               nameValue={form.상차지명}
               addrValue={form.상차지주소}
@@ -139,7 +140,7 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
           </div>
           {/* 하차지 */}
           <div>
-            <label className={label}>하차지명 / 주소 *</label>
+            <label className={label}><T k="form.하차지명 / 주소 *">하차지명 / 주소 *</T></label>
             <PlaceAutocomplete
               nameValue={form.하차지명}
               addrValue={form.하차지주소}
@@ -154,31 +155,31 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
           {/* 상/하차 일시 */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={label}>상차일 *</label>
+              <label className={label}><T k="form.상차일 *">상차일 *</T></label>
               <CustomDatePicker value={form.상차일} onChange={e => set("상차일", e.target.value)} className={field} placeholder="날짜 선택" showIcon />
             </div>
             <div>
-              <label className={label}>상차시간</label>
+              <label className={label}><T k="form.상차시간">상차시간</T></label>
               <TimeAmPmPicker value={form.상차시간} onChange={v => set("상차시간", v)} />
             </div>
             <div>
-              <label className={label}>하차일</label>
+              <label className={label}><T k="form.하차일">하차일</T></label>
               <CustomDatePicker value={form.하차일} onChange={e => set("하차일", e.target.value)} className={field} placeholder="날짜 선택" showIcon />
             </div>
             <div>
-              <label className={label}>하차시간</label>
+              <label className={label}><T k="form.하차시간">하차시간</T></label>
               <TimeAmPmPicker value={form.하차시간} onChange={v => set("하차시간", v)} />
             </div>
           </div>
 
           {/* 화물 정보 */}
           <div>
-            <label className={label}>화물내용 *</label>
+            <label className={label}><T k="form.화물내용 *">화물내용 *</T></label>
             <input className={field} value={form.화물내용} onChange={e => set("화물내용", e.target.value)} placeholder={PLACEHOLDERS.화물내용} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={label}>차량톤수</label>
+              <label className={label}><T k="form.차량톤수">차량톤수</T></label>
               <div className="relative">
                 <input
                   className={`${field} pr-[76px]`}
@@ -207,7 +208,7 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
               </div>
             </div>
             <div>
-              <label className={label}>차량종류</label>
+              <label className={label}><T k="form.차량종류">차량종류</T></label>
               <select className={field} value={form.차량종류} onChange={e => set("차량종류", e.target.value)}>
                 <option value="">선택</option>
                 {VEHICLE_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
@@ -224,21 +225,21 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
           {/* 지급/상하차방법 */}
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className={label}>지급방식</label>
+              <label className={label}><T k="form.지급방식">지급방식</T></label>
               <select className={field} value={form.지급방식} onChange={e => set("지급방식", e.target.value)}>
                 <option value="">선택</option>
                 {PAY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>
-              <label className={label}>상차방법</label>
+              <label className={label}><T k="form.상차방법">상차방법</T></label>
               <select className={field} value={form.상차방법} onChange={e => set("상차방법", e.target.value)}>
                 <option value="">선택</option>
                 {LOAD_METHODS.map(v => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>
-              <label className={label}>하차방법</label>
+              <label className={label}><T k="form.하차방법">하차방법</T></label>
               <select className={field} value={form.하차방법} onChange={e => set("하차방법", e.target.value)}>
                 <option value="">선택</option>
                 {LOAD_METHODS.map(v => <option key={v} value={v}>{v}</option>)}
@@ -248,7 +249,7 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
 
           {/* 운임 */}
           <div>
-            <label className={label}>운임</label>
+            <label className={label}><T k="form.운임">운임</T></label>
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
                 <input
@@ -287,7 +288,7 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
           </div>
 
           <div>
-            <label className={label}>메모</label>
+            <label className={label}><T k="form.메모">메모</T></label>
             <textarea className={field} rows={3} value={form.메모} onChange={e => set("메모", e.target.value)} placeholder="추가로 전달할 내용이 있다면 적어주세요." />
           </div>
 
@@ -297,11 +298,11 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
 
         <div className={`border-t border-gray-100 flex gap-3 shrink-0 ${inline ? "px-4 py-3" : "px-6 py-4"}`}>
           <button onClick={inline ? resetForm : onClose} className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px] transition">
-            {inline ? "초기화" : "취소"}
+            {inline ? <T k="form.btn.reset">초기화</T> : <T k="form.btn.cancel">취소</T>}
           </button>
           <button onClick={submit} disabled={saving}
             className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition disabled:opacity-50">
-            {saving ? "저장 중..." : editing ? "수정 완료" : "등록하기"}
+            {saving ? "저장 중..." : editing ? <T k="form.btn.update">수정 완료</T> : <T k="form.btn.submit">등록하기</T>}
           </button>
         </div>
     </>

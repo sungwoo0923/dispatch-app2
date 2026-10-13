@@ -4,6 +4,7 @@
 // 서비스 소개 + 이용방법 + 실시간 요약(방금 올라온 오더/긴급/인기 노선/차종별)으로 구성한다.
 import React, { useMemo } from "react";
 import { VEHICLE_TYPES } from "./cafeConstants";
+import { T } from "./CafeEditMode";
 
 function sameDay(a, b) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -28,29 +29,64 @@ const STEPS = [
   ["4", "배차확정 · 연락", "확정되면 서로의 연락처가 공개되어 바로 전화/문자로 진행합니다."],
 ];
 
-function MiniRow({ o, onClick }) {
+// 게시판형 오더 표 — 배차프로그램처럼 최소한의 컬럼만, 한 줄(가로)로 보여준다.
+// cols: 보여줄 컬럼 키 목록
+const BOARD_COLS = {
+  when:  { label: "상차일시", cls: "w-[130px]" },
+  from:  { label: "상차지" },
+  to:    { label: "하차지" },
+  route: { label: "구간" },
+  cargo: { label: "화물내용" },
+  car:   { label: "차량" },
+  fare:  { label: "운임", cls: "w-[100px]" },
+  ago:   { label: "등록", cls: "w-[80px]" },
+};
+
+function boardCell(key, o) {
+  const when = `${(o.상차일 || "").slice(5).replace("-", "/") || "-"}${o.상차시간 ? ` ${o.상차시간}` : ""}`;
+  const place = (name, addr) => (
+    <span className="font-semibold text-gray-900">{name || "-"}{addr ? <span className="ml-1 font-normal text-gray-400">({region(addr)})</span> : null}</span>
+  );
+  switch (key) {
+    case "when": return <span className="font-bold text-[#1B2B4B] whitespace-nowrap">{when}</span>;
+    case "from": return place(o.상차지명, o.상차지주소);
+    case "to": return place(o.하차지명, o.하차지주소);
+    case "route": return <span className="font-semibold text-gray-900">{region(o.상차지주소) || o.상차지명} → {region(o.하차지주소) || o.하차지명}</span>;
+    case "cargo": return o.화물내용 || "-";
+    case "car": return [o.차량톤수, o.차량종류].filter(Boolean).join(" ") || "-";
+    case "fare": return <span className="font-bold text-[#1B2B4B]">{o.운임 || "협의"}</span>;
+    case "ago": return <span className="text-gray-400">{timeAgo(o.createdAt)}</span>;
+    default: return null;
+  }
+}
+
+function OrderBoard({ id, orders, cols, onOpenOrder, empty }) {
+  if (orders.length === 0) return empty;
   return (
-    <div onClick={onClick}
-      className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer transition">
-      <div className="flex flex-col items-center w-14 shrink-0">
-        <span className="text-[11px] font-bold text-[#1B2B4B]">{(o.상차일 || "").slice(5) || "-"}</span>
-        <span className="text-[10px] text-gray-400">{o.상차시간 || ""}</span>
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5 text-[13.5px] font-bold text-gray-900 min-w-0">
-          {o.긴급 && <span className="text-[10px] font-bold px-1.5 py-px rounded border border-orange-300 text-orange-700 shrink-0">긴급</span>}
-          <span className="truncate">{region(o.상차지주소) || o.상차지명}</span>
-          <span className="text-gray-300 shrink-0">→</span>
-          <span className="truncate">{region(o.하차지주소) || o.하차지명}</span>
-        </div>
-        <div className="text-[11.5px] text-gray-500 truncate">
-          {[o.화물내용, o.차량톤수, o.차량종류].filter(Boolean).join(" · ") || "-"}
-        </div>
-      </div>
-      <div className="text-right shrink-0">
-        <div className="text-[13px] font-bold text-[#1B2B4B]">{o.운임 || "협의"}</div>
-        <div className="text-[10.5px] text-gray-400">{timeAgo(o.createdAt)}</div>
-      </div>
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse">
+        <thead className="bg-gray-50">
+          <tr>
+            {cols.map(c => (
+              <th key={c} className={`px-3 py-2 text-center text-[11.5px] font-bold text-gray-500 border-b border-gray-200 whitespace-nowrap ${BOARD_COLS[c].cls || ""}`}>
+                <T k={`home.${id}.col.${c}`}>{BOARD_COLS[c].label}</T>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {orders.map(o => (
+            <tr key={o.id} onClick={() => onOpenOrder(o)} className="cursor-pointer hover:bg-gray-50 transition">
+              {cols.map(c => (
+                <td key={c} className="px-3 py-2.5 text-center text-[12.5px] text-gray-700 border-b border-gray-100 whitespace-nowrap max-w-[220px] truncate">
+                  {c === "when" && o.긴급 && <span className="mr-1 text-[10px] font-bold px-1 py-px rounded border border-orange-300 text-orange-700">긴급</span>}
+                  {boardCell(c, o)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -92,35 +128,37 @@ export default function CafeHome({ orders, profile, onNewOrder, onGoLive, onOpen
       {/* 히어로 — 서비스 소개 */}
       <div className="rounded-2xl bg-gradient-to-br from-[#1B2B4B] to-[#2c4475] text-white px-6 py-7 lg:px-10 lg:py-9 flex flex-col lg:flex-row lg:items-center gap-6">
         <div className="flex-1 min-w-0">
-          <div className="inline-block text-[11px] font-bold px-2.5 py-1 rounded-full bg-white/15 mb-3">화물 오더 공유 커뮤니티</div>
-          <h1 className="text-[22px] lg:text-[28px] font-black leading-snug tracking-tight">
-            전국 운송사·화주·기사가 함께 쓰는<br />실시간 오더 공유 마당
-          </h1>
-          <p className="text-white/70 text-[13px] lg:text-[14px] mt-2 leading-relaxed">
-            남는 오더는 올리고, 필요한 오더는 바로 배차신청하세요.<br className="hidden sm:inline" />
-            {profile?.nickname ? `${profile.nickname}님, ` : ""}지금 {stats.open}건의 오더가 차량을 기다리고 있어요.
+          <T k="home.hero.badge" className="inline-block text-[11px] font-bold px-2.5 py-1 rounded-full bg-white/15 mb-3">화물 오더 공유 커뮤니티</T>
+          <T k="home.hero.title" as="h1" className="text-[22px] lg:text-[28px] font-black leading-snug tracking-tight whitespace-pre-line">
+            {"전국 운송사·화주·기사가 함께 쓰는\n실시간 오더 공유 마당"}
+          </T>
+          <T k="home.hero.desc" as="p" className="block text-white/70 text-[13px] lg:text-[14px] mt-2 leading-relaxed">
+            남는 오더는 올리고, 필요한 오더는 바로 배차신청하세요.
+          </T>
+          <p className="text-white/70 text-[13px] lg:text-[14px] leading-relaxed">
+            {profile?.nickname ? `${profile.nickname}님, ` : ""}<T k="home.hero.waitPre">지금</T> <b className="text-white">{stats.open}</b><T k="home.hero.waitPost">건의 오더가 차량을 기다리고 있어요.</T>
           </p>
           <div className="flex flex-wrap gap-2 mt-5">
             <button onClick={onNewOrder}
               className="px-5 py-2.5 rounded-xl bg-white text-[#1B2B4B] text-[13.5px] font-bold hover:bg-gray-100 transition">
-              + 오더 올리기
+              <T k="home.hero.btnNew">+ 오더 올리기</T>
             </button>
             <button onClick={() => onGoLive()}
               className="px-5 py-2.5 rounded-xl border border-white/40 text-white text-[13.5px] font-bold hover:bg-white/10 transition">
-              실시간 배차현황 보기 →
+              <T k="home.hero.btnLive">실시간 배차현황 보기 →</T>
             </button>
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-2.5 lg:w-[360px] shrink-0">
           {[
-            ["배차 대기", stats.open, "건"],
-            ["오늘 등록", stats.todayNew, "건"],
-            ["오늘 배차완료", stats.todayDone, "건"],
-            ["참여 업체", stats.companies, "곳"],
-          ].map(([l, v, u]) => (
-            <div key={l} className="bg-white/10 rounded-xl px-4 py-3">
-              <div className="text-[11px] font-semibold text-white/60">{l}</div>
-              <div className="text-[24px] font-black leading-tight">{v}<span className="text-[12px] font-bold text-white/60 ml-0.5">{u}</span></div>
+            ["open", "배차 대기", stats.open, "건"],
+            ["todayNew", "오늘 등록", stats.todayNew, "건"],
+            ["todayDone", "오늘 배차완료", stats.todayDone, "건"],
+            ["companies", "참여 업체", stats.companies, "곳"],
+          ].map(([key, l, v, u]) => (
+            <div key={key} className="bg-white/10 rounded-xl px-4 py-3">
+              <T k={`home.stat.${key}`} className="block text-[11px] font-semibold text-white/60">{l}</T>
+              <div className="text-[24px] font-black leading-tight">{v}<T k={`home.stat.${key}.unit`} className="text-[12px] font-bold text-white/60 ml-0.5">{u}</T></div>
             </div>
           ))}
         </div>
@@ -131,16 +169,16 @@ export default function CafeHome({ orders, profile, onNewOrder, onGoLive, onOpen
         {STEPS.map(([n, t, d]) => (
           <div key={n} className="bg-white border border-gray-200 rounded-xl px-5 py-4 flex gap-3">
             <div className="w-8 h-8 rounded-full bg-[#1B2B4B] text-white font-black text-[13px] flex items-center justify-center shrink-0">{n}</div>
-            <div className="min-w-0">
-              <div className="text-[14px] font-bold text-gray-900">{t}</div>
-              <div className="text-[12px] text-gray-500 mt-0.5 leading-relaxed">{d}</div>
+            <div className="min-w-0 flex-1">
+              <T k={`home.step${n}.title`} className="block text-[14px] font-bold text-gray-900">{t}</T>
+              <T k={`home.step${n}.desc`} className="block text-[12px] text-gray-500 mt-0.5 leading-relaxed">{d}</T>
             </div>
           </div>
         ))}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-        {/* 방금 올라온 오더 */}
+        {/* 방금 올라온 오더 — 게시판형 */}
         <div className="xl:col-span-2 bg-white border border-gray-200 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
             <div className="flex items-center gap-2">
@@ -148,39 +186,45 @@ export default function CafeHome({ orders, profile, onNewOrder, onGoLive, onOpen
                 <span className="absolute inline-flex w-full h-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
                 <span className="relative inline-flex w-2 h-2 rounded-full bg-emerald-500" />
               </span>
-              <span className="text-[14px] font-bold text-gray-900">방금 올라온 배차 대기 오더</span>
+              <T k="home.latest.title" className="text-[14px] font-bold text-gray-900">방금 올라온 배차 대기 오더</T>
             </div>
-            <button onClick={() => onGoLive()} className="text-[12px] font-bold text-gray-400 hover:text-[#1B2B4B]">전체보기 →</button>
+            <button onClick={() => onGoLive()} className="text-[12px] font-bold text-gray-400 hover:text-[#1B2B4B]"><T k="home.latest.more">전체보기 →</T></button>
           </div>
-          {latest.length === 0 ? (
-            <div className="py-16 text-center text-[13px] text-gray-400">
-              아직 대기 중인 오더가 없어요.<br />
-              <button onClick={onNewOrder} className="mt-3 px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[12.5px] font-bold">첫 오더 올리기</button>
-            </div>
-          ) : (
-            latest.map(o => <MiniRow key={o.id} o={o} onClick={() => onOpenOrder(o)} />)
-          )}
+          <OrderBoard
+            id="latest"
+            orders={latest}
+            cols={["when", "from", "to", "cargo", "car", "fare", "ago"]}
+            onOpenOrder={onOpenOrder}
+            empty={
+              <div className="py-16 text-center text-[13px] text-gray-400">
+                <T k="home.latest.empty">아직 대기 중인 오더가 없어요.</T><br />
+                <button onClick={onNewOrder} className="mt-3 px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[12.5px] font-bold"><T k="home.latest.emptyBtn">첫 오더 올리기</T></button>
+              </div>
+            }
+          />
         </div>
 
         <div className="space-y-5">
           {/* 긴급 오더 */}
           <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
             <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2">
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-orange-300 text-orange-700">긴급</span>
-              <span className="text-[14px] font-bold text-gray-900">급하게 차를 찾는 오더</span>
+              <T k="home.urgent.badge" className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-orange-300 text-orange-700">긴급</T>
+              <T k="home.urgent.title" className="text-[14px] font-bold text-gray-900">급하게 차를 찾는 오더</T>
             </div>
-            {urgent.length === 0 ? (
-              <div className="py-8 text-center text-[12.5px] text-gray-400">현재 긴급 오더가 없습니다.</div>
-            ) : (
-              urgent.map(o => <MiniRow key={o.id} o={o} onClick={() => onOpenOrder(o)} />)
-            )}
+            <OrderBoard
+              id="urgent"
+              orders={urgent}
+              cols={["when", "route", "fare"]}
+              onOpenOrder={onOpenOrder}
+              empty={<div className="py-8 text-center text-[12.5px] text-gray-400"><T k="home.urgent.empty">현재 긴급 오더가 없습니다.</T></div>}
+            />
           </div>
 
           {/* 인기 노선 */}
           <div className="bg-white border border-gray-200 rounded-2xl px-5 py-4">
-            <div className="text-[14px] font-bold text-gray-900 mb-3">많이 올라오는 노선 TOP 5</div>
+            <T k="home.routes.title" className="block text-[14px] font-bold text-gray-900 mb-3">많이 올라오는 노선 TOP 5</T>
             {topRoutes.length === 0 ? (
-              <div className="text-[12.5px] text-gray-400 py-3">데이터가 쌓이면 표시됩니다.</div>
+              <T k="home.routes.empty" className="block text-[12.5px] text-gray-400 py-3">데이터가 쌓이면 표시됩니다.</T>
             ) : (
               <div className="space-y-2">
                 {topRoutes.map(([route, cnt], i) => (
@@ -196,9 +240,9 @@ export default function CafeHome({ orders, profile, onNewOrder, onGoLive, onOpen
 
           {/* 차종별 대기 오더 — 클릭하면 실시간 현황에서 해당 차종만 */}
           <div className="bg-white border border-gray-200 rounded-2xl px-5 py-4">
-            <div className="text-[14px] font-bold text-gray-900 mb-3">차종별 대기 오더</div>
+            <T k="home.vehicle.title" className="block text-[14px] font-bold text-gray-900 mb-3">차종별 대기 오더</T>
             {byVehicle.length === 0 ? (
-              <div className="text-[12.5px] text-gray-400 py-3">대기 중인 오더가 없습니다.</div>
+              <T k="home.vehicle.empty" className="block text-[12.5px] text-gray-400 py-3">대기 중인 오더가 없습니다.</T>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {byVehicle.map(([v, c]) => (

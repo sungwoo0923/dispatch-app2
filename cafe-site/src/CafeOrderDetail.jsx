@@ -1,6 +1,7 @@
 // ======================= cafe-site/src/CafeOrderDetail.jsx =======================
 import React, { useState, useEffect, useRef } from "react";
 import { APPLY_CANCEL_WINDOW_MS } from "./cafeConstants";
+import { T } from "./CafeEditMode";
 import { applyToCafeOrder, cancelCafeApply, finalizeCafeApplyIfDue, deleteCafeOrder, cancelCafeOrder, fetchCafeContact } from "./cafeApi";
 
 const STATUS_META = {
@@ -14,7 +15,7 @@ function Row({ label, value }) {
   if (!value) return null;
   return (
     <div className="flex items-start gap-3 py-1.5">
-      <div className="w-20 shrink-0 text-[12px] font-bold text-gray-400">{label}</div>
+      <T k={`detail.${label}`} className="block w-20 shrink-0 text-[12px] font-bold text-gray-400">{label}</T>
       <div className="text-[13px] text-gray-800 font-medium">{value}</div>
     </div>
   );

@@ -130,6 +130,13 @@ service cloud.firestore {
       allow list: if false;
       allow write: if isTotalMasterUser();
     }
+    // siteConfig/cafeLabels(배차마당 편집모드 문구/글씨 스타일)도 같은 이유로
+    // 읽기는 로그인 사용자 전체, 쓰기만 최고관리자.
+    match /siteConfig/cafeLabels {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow write: if isTotalMasterUser();
+    }
     match /siteConfig/{docId} {
       allow get, list: if isTotalMasterUser();
       allow write: if isTotalMasterUser();
