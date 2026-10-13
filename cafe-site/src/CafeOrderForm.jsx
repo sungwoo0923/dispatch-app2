@@ -27,13 +27,15 @@ const PLACEHOLDERS = {
   화물내용: "예: 잡화 10파레트",
 };
 
-export default function CafeOrderForm({ profile, editing, onClose, onSaved, orders = [] }) {
+// inline=true 이면 모달이 아니라 화면 안(실시간 배차현황 왼쪽 패널)에 그대로 그린다.
+export default function CafeOrderForm({ profile, editing, onClose, onSaved, orders = [], inline = false }) {
   const [form, setForm] = useState(emptyForm);
   const [tonUnit, setTonUnit] = useState("톤");
   const [tonValue, setTonValue] = useState("");
   const [fareDigits, setFareDigits] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [done, setDone] = useState("");
 
   useEffect(() => {
     if (editing) {
@@ -69,8 +71,16 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
 
   const showLift = /윙|카고/.test(form.차량종류 || "");
 
+  const resetForm = () => {
+    setForm(emptyForm);
+    setTonUnit("톤");
+    setTonValue("");
+    setFareDigits("");
+  };
+
   const submit = async () => {
     setError("");
+    setDone("");
     if (!form.상차지명.trim() || !form.하차지명.trim()) return setError("상차지명/하차지명을 입력해주세요.");
     if (!form.화물내용.trim()) return setError("화물내용을 입력해주세요.");
     if (!form.상차일) return setError("상차일을 선택해주세요.");
@@ -93,6 +103,11 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
           source: "cafe",
         }, { posterPhone: profile.phone, posterName: profile.name });
       }
+      if (inline) {
+        resetForm();
+        setDone("오더가 등록되었습니다.");
+        setTimeout(() => setDone(""), 2500);
+      }
       onSaved?.();
     } catch (e) {
       setError(e.message || "저장 중 오류가 발생했습니다.");
@@ -101,15 +116,14 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-w-full max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+  const body = (
+    <>
         <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
-          <div className="text-white font-bold text-[15px]">{editing ? "오더 수정" : "오더 등록"}</div>
-          <button onClick={onClose} className="text-white/60 hover:text-white text-xl leading-none">×</button>
+          <div className="text-white font-bold text-[15px]">{editing ? "오더 수정" : inline ? "빠른 오더 등록" : "오더 등록"}</div>
+          {!inline && <button onClick={onClose} className="text-white/60 hover:text-white text-xl leading-none">×</button>}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className={`flex-1 overflow-y-auto space-y-4 ${inline ? "p-4" : "p-6"}`}>
           {/* 상차지 */}
           <div>
             <label className={label}>상차지명 / 주소 *</label>
@@ -278,15 +292,35 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
           </div>
 
           {error && <div className="text-[12px] text-red-500 font-semibold">{error}</div>}
+          {done && <div className="text-[12px] text-emerald-600 font-semibold">✓ {done}</div>}
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-100 flex gap-3 shrink-0">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px] transition">취소</button>
+        <div className={`border-t border-gray-100 flex gap-3 shrink-0 ${inline ? "px-4 py-3" : "px-6 py-4"}`}>
+          <button onClick={inline ? resetForm : onClose} className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px] transition">
+            {inline ? "초기화" : "취소"}
+          </button>
           <button onClick={submit} disabled={saving}
             className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition disabled:opacity-50">
             {saving ? "저장 중..." : editing ? "수정 완료" : "등록하기"}
           </button>
         </div>
+    </>
+  );
+
+  if (inline) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-2xl flex flex-col overflow-hidden h-full">
+        {body}
+      </div>
+    );
+  }
+
+  // 바깥(어두운 배경)을 클릭해도 닫히지 않게 한다 — 입력 중 실수로 닫혀 내용이 날아가는 것 방지.
+  // 닫기는 × 버튼 / 취소 버튼으로만.
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-w-full max-h-[90vh] flex flex-col overflow-hidden">
+        {body}
       </div>
     </div>
   );
