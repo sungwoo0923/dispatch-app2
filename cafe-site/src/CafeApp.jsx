@@ -15,10 +15,7 @@ import CafeOrderCard from "./CafeOrderCard";
 import CafeOrderForm from "./CafeOrderForm";
 import CafeOrderDetail from "./CafeOrderDetail";
 import CafeOrderTable from "./CafeOrderTable";
-
-function sameDay(a, b) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-}
+import CafeHome from "./CafeHome";
 
 function LoadingScreen() {
   return (
@@ -39,6 +36,7 @@ export default function CafeApp() {
   const [q, setQ] = useState("");
   const [vehicleFilter, setVehicleFilter] = useState("");
   const [payFilter, setPayFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState(""); // "" = 전체
   const [formOpen, setFormOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState(null);
   const [viewMode, setViewMode] = useState("card"); // card | table
@@ -74,18 +72,18 @@ export default function CafeApp() {
   }, [profile?.uid]);
 
   const filtered = useMemo(() => {
-    const base = tab === "live" ? orders.filter(o => o.status === "open") : orders;
+    const base = statusFilter ? orders.filter(o => o.status === statusFilter) : orders;
     const _q = q.trim().toLowerCase();
     return base.filter(o => {
       if (vehicleFilter && o.차량종류 !== vehicleFilter) return false;
       if (payFilter && o.지급방식 !== payFilter) return false;
       if (_q) {
-        const hay = `${o.상차지명 || ""} ${o.하차지명 || ""} ${o.화물내용 || ""}`.toLowerCase();
+        const hay = `${o.상차지명 || ""} ${o.하차지명 || ""} ${o.상차지주소 || ""} ${o.하차지주소 || ""} ${o.화물내용 || ""}`.toLowerCase();
         if (!hay.includes(_q)) return false;
       }
       return true;
     });
-  }, [orders, tab, q, vehicleFilter, payFilter]);
+  }, [orders, statusFilter, q, vehicleFilter, payFilter]);
 
   // URL(/orders/:id)에 대응하는 오더를 상세 모달로 표시 — 실시간 갱신도 그대로 반영된다
   // (신청중 → 배차완료 전환 등).
@@ -107,19 +105,51 @@ export default function CafeApp() {
 
   const listToShow = tab === "mine" ? myOrders : filtered;
 
+  const goLive = (vehicle) => {
+    setTab("live");
+    setVehicleFilter(typeof vehicle === "string" ? vehicle : "");
+    if (selectedOrderId) nav("/");
+  };
+
+  const ViewToggle = (
+    <div className="flex border border-gray-200 rounded-lg overflow-hidden shrink-0">
+      {[["card", "카드형"], ["table", "기본형"]].map(([k, l]) => (
+        <button key={k} onClick={() => setViewMode(k)}
+          className={`px-3 py-2 text-[12.5px] font-bold transition ${viewMode === k ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>
+          {l}
+        </button>
+      ))}
+    </div>
+  );
+
+  // 카드/표 목록 — cardCols로 화면 폭에 맞게 칸 수를 늘린다
+  const renderList = (list, cardCols) => (
+    list.length === 0 ? (
+      <div className="py-24 text-center text-[13px] text-gray-400 bg-white border border-gray-200 rounded-xl">등록된 오더가 없습니다.</div>
+    ) : viewMode === "table" ? (
+      <CafeOrderTable orders={list} onClick={openOrder} />
+    ) : (
+      <div className={`grid gap-3 ${cardCols}`}>
+        {list.map(o => <CafeOrderCard key={o.id} order={o} onClick={() => openOrder(o)} />)}
+      </div>
+    )
+  );
+
+  const countBy = (list, st) => list.filter(o => o.status === st).length;
+
   return (
     <div className="min-h-screen bg-[#f4f6fa]">
       {/* 상단 네비 */}
       <div className="bg-[#1B2B4B] sticky top-0 z-40">
-        <div className="max-w-[1000px] mx-auto px-5 py-3 flex items-center gap-4">
-          <div className="flex items-center gap-2 shrink-0">
+        <div className="w-full px-4 lg:px-6 py-3 flex items-center gap-4">
+          <div className="flex items-center gap-2 shrink-0 cursor-pointer" onClick={() => { setTab("board"); if (selectedOrderId) nav("/"); }}>
             <div className="w-7 h-7 rounded-md bg-white/15 flex items-center justify-center text-white font-black text-[13px]">배</div>
             <span className="text-white font-black text-[15px] tracking-tight">배차마당</span>
           </div>
-          <nav className="flex items-center gap-1 flex-1">
+          <nav className="flex items-center gap-1 flex-1 overflow-x-auto">
             {[["board", "홈"], ["live", "실시간배차현황"], ["mine", "내 등록 오더"], ["mypage", "마이페이지"]].map(([k, l]) => (
               <button key={k} onClick={() => { setTab(k); if (selectedOrderId) nav("/"); }}
-                className={`px-3 py-1.5 rounded-lg text-[13px] font-semibold transition ${tab === k ? "bg-white text-[#1B2B4B]" : "text-white/70 hover:bg-white/10"}`}>
+                className={`px-3 py-1.5 rounded-lg text-[13px] font-semibold transition whitespace-nowrap ${tab === k ? "bg-white text-[#1B2B4B]" : "text-white/70 hover:bg-white/10"}`}>
                 {l}
               </button>
             ))}
@@ -131,116 +161,163 @@ export default function CafeApp() {
         </div>
       </div>
 
-      <div className="max-w-[1000px] mx-auto px-5 py-6">
-        {tab === "mypage" ? (
-          <div className="max-w-[420px] bg-white border border-gray-200 rounded-2xl p-6">
-            <div className="text-[15px] font-bold text-gray-900 mb-4">마이페이지</div>
-            <div className="space-y-3 text-[13px]">
-              <div className="flex justify-between border-b border-gray-100 pb-2">
-                <span className="text-gray-400 font-semibold">회사명</span>
-                <span className="text-gray-800 font-medium">{profile.companyName || "-"}</span>
-              </div>
-              <div className="flex justify-between border-b border-gray-100 pb-2">
-                <span className="text-gray-400 font-semibold">이름</span>
-                <span className="text-gray-800 font-medium">{profile.name || "-"}</span>
-              </div>
-              <div className="flex justify-between border-b border-gray-100 pb-2">
-                <span className="text-gray-400 font-semibold">닉네임</span>
-                <span className="text-gray-800 font-medium">{profile.nickname || "-"}</span>
-              </div>
-              <div className="flex justify-between border-b border-gray-100 pb-2">
-                <span className="text-gray-400 font-semibold">휴대폰번호</span>
-                <span className="text-gray-800 font-medium">{profile.phone || "-"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400 font-semibold">이메일(아이디)</span>
-                <span className="text-gray-800 font-medium">{profile.email || "-"}</span>
-              </div>
+      <div className="w-full px-4 lg:px-6 py-5">
+        {tab === "board" && (
+          <CafeHome
+            orders={orders}
+            profile={profile}
+            onNewOrder={() => { setEditingOrder(null); setFormOpen(true); }}
+            onGoLive={goLive}
+            onOpenOrder={openOrder}
+          />
+        )}
+
+        {tab === "live" && (
+          // 왼쪽 3 : 오른쪽 7 — 왼쪽에서 오더를 입력하면서 오른쪽에서 배차현황을 실시간으로 본다
+          <div className="grid grid-cols-1 lg:grid-cols-10 gap-5 items-start">
+            <div className="lg:col-span-3 lg:sticky lg:top-[72px] lg:h-[calc(100vh-92px)]">
+              <CafeOrderForm inline orders={orders} profile={profile} editing={null} />
             </div>
-            <button onClick={logout}
-              className="w-full mt-5 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-semibold text-[13px] hover:bg-gray-50 transition">
-              로그아웃
-            </button>
-          </div>
-        ) : (
-          <>
-            {tab !== "mine" && (
-              <>
-                {/* 현황 요약 — 휑해 보이지 않게 한눈에 보이는 숫자 몇 개 */}
-                <div className="grid grid-cols-3 gap-3 mb-5">
-                  {[
-                    ["전체 오더", orders.length],
-                    ["대기중", orders.filter(o => o.status === "open").length],
-                    ["오늘 등록", orders.filter(o => o.createdAt?.toDate && sameDay(o.createdAt.toDate(), new Date())).length],
-                  ].map(([l, v]) => (
-                    <div key={l} className="bg-white border border-gray-200 rounded-xl px-4 py-3">
-                      <div className="text-[11px] font-bold text-gray-400">{l}</div>
-                      <div className="text-[22px] font-black text-[#1B2B4B] mt-0.5">{v}</div>
-                    </div>
-                  ))}
-                </div>
 
-                <div className="flex flex-wrap items-center gap-2 mb-5">
-                  <input value={q} onChange={e => setQ(e.target.value)} placeholder="상/하차지, 화물내용 검색"
-                    className="flex-1 min-w-[200px] border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] bg-white" />
-                  <select value={vehicleFilter} onChange={e => setVehicleFilter(e.target.value)}
-                    className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] bg-white">
-                    <option value="">차량종류 전체</option>
-                    {VEHICLE_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
-                  </select>
-                  <select value={payFilter} onChange={e => setPayFilter(e.target.value)}
-                    className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] bg-white">
-                    <option value="">지급방식 전체</option>
-                    {PAY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
-                  </select>
-                  <div className="flex border border-gray-200 rounded-lg overflow-hidden shrink-0">
-                    {[["card", "카드형"], ["table", "기본형"]].map(([k, l]) => (
-                      <button key={k} onClick={() => setViewMode(k)}
-                        className={`px-3 py-2 text-[12.5px] font-bold transition ${viewMode === k ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>
-                        {l}
-                      </button>
-                    ))}
-                  </div>
-                  <button onClick={() => { setEditingOrder(null); setFormOpen(true); }}
-                    className="px-4 py-2 rounded-lg bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition shrink-0">
-                    + 오더 등록
+            <div className="lg:col-span-7 min-w-0">
+              {/* 현황 요약 */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                {[
+                  ["전체 오더", orders.length, ""],
+                  ["대기중", countBy(orders, "open"), "open"],
+                  ["신청중", countBy(orders, "applying"), "applying"],
+                  ["배차완료", countBy(orders, "confirmed"), "confirmed"],
+                ].map(([l, v, st]) => (
+                  <button key={l} onClick={() => setStatusFilter(st)}
+                    className={`text-left bg-white border rounded-xl px-4 py-3 transition ${statusFilter === st ? "border-[#1B2B4B] ring-1 ring-[#1B2B4B]" : "border-gray-200 hover:border-gray-300"}`}>
+                    <div className="text-[11px] font-bold text-gray-400">{l}</div>
+                    <div className="text-[22px] font-black text-[#1B2B4B] mt-0.5">{v}</div>
                   </button>
-                </div>
-              </>
-            )}
-
-            {tab === "mine" && (
-              <div className="flex items-center justify-between mb-5">
-                <div className="text-[13px] text-gray-500">내가 등록한 오더 {myOrders.length}건</div>
-                <div className="flex items-center gap-2">
-                  <div className="flex border border-gray-200 rounded-lg overflow-hidden shrink-0">
-                    {[["card", "카드형"], ["table", "기본형"]].map(([k, l]) => (
-                      <button key={k} onClick={() => setViewMode(k)}
-                        className={`px-3 py-2 text-[12.5px] font-bold transition ${viewMode === k ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>
-                        {l}
-                      </button>
-                    ))}
-                  </div>
-                  <button onClick={() => { setEditingOrder(null); setFormOpen(true); }}
-                    className="px-4 py-2 rounded-lg bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">
-                    + 오더 등록
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {listToShow.length === 0 ? (
-              <div className="py-24 text-center text-[13px] text-gray-400">등록된 오더가 없습니다.</div>
-            ) : viewMode === "table" ? (
-              <CafeOrderTable orders={listToShow} onClick={openOrder} />
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {listToShow.map(o => (
-                  <CafeOrderCard key={o.id} order={o} onClick={() => openOrder(o)} />
                 ))}
               </div>
-            )}
+
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                <input value={q} onChange={e => setQ(e.target.value)} placeholder="상/하차지, 주소, 화물내용 검색"
+                  className="flex-1 min-w-[200px] border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] bg-white" />
+                <select value={vehicleFilter} onChange={e => setVehicleFilter(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] bg-white">
+                  <option value="">차량종류 전체</option>
+                  {VEHICLE_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+                </select>
+                <select value={payFilter} onChange={e => setPayFilter(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] bg-white">
+                  <option value="">지급방식 전체</option>
+                  {PAY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+                </select>
+                {ViewToggle}
+                <button onClick={() => { setEditingOrder(null); setFormOpen(true); }}
+                  className="px-4 py-2 rounded-lg bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition shrink-0">
+                  + 오더 등록
+                </button>
+              </div>
+
+              <div className="text-[12px] text-gray-400 mb-2">검색결과 {filtered.length}건</div>
+              {renderList(filtered, "grid-cols-1 md:grid-cols-2 2xl:grid-cols-3")}
+            </div>
+          </div>
+        )}
+
+        {tab === "mine" && (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              {[
+                ["내 등록 오더", myOrders.length],
+                ["대기중", countBy(myOrders, "open")],
+                ["신청중", countBy(myOrders, "applying")],
+                ["배차완료", countBy(myOrders, "confirmed")],
+              ].map(([l, v]) => (
+                <div key={l} className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+                  <div className="text-[11px] font-bold text-gray-400">{l}</div>
+                  <div className="text-[22px] font-black text-[#1B2B4B] mt-0.5">{v}</div>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-[13px] text-gray-500">내가 등록한 오더 {myOrders.length}건</div>
+              <div className="flex items-center gap-2">
+                {ViewToggle}
+                <button onClick={() => { setEditingOrder(null); setFormOpen(true); }}
+                  className="px-4 py-2 rounded-lg bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">
+                  + 오더 등록
+                </button>
+              </div>
+            </div>
+            {renderList(myOrders, "grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4")}
           </>
+        )}
+
+        {tab === "mypage" && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+            <div className="bg-white border border-gray-200 rounded-2xl p-6">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-12 h-12 rounded-full bg-[#1B2B4B] text-white font-black text-[18px] flex items-center justify-center shrink-0">
+                  {(profile.nickname || profile.name || "?").slice(0, 1)}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[16px] font-bold text-gray-900 truncate">{profile.nickname || profile.name || "-"}</div>
+                  <div className="text-[12px] text-gray-400 truncate">{profile.companyName || "-"}</div>
+                </div>
+              </div>
+              <div className="space-y-3 text-[13px]">
+                {[
+                  ["회사명", profile.companyName],
+                  ["이름", profile.name],
+                  ["닉네임", profile.nickname],
+                  ["휴대폰번호", profile.phone],
+                  ["이메일(아이디)", profile.email],
+                ].map(([l, v]) => (
+                  <div key={l} className="flex justify-between border-b border-gray-100 pb-2 last:border-0">
+                    <span className="text-gray-400 font-semibold">{l}</span>
+                    <span className="text-gray-800 font-medium">{v || "-"}</span>
+                  </div>
+                ))}
+              </div>
+              <button onClick={logout}
+                className="w-full mt-5 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-semibold text-[13px] hover:bg-gray-50 transition">
+                로그아웃
+              </button>
+            </div>
+
+            <div className="lg:col-span-2 space-y-5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  ["총 등록 오더", myOrders.length],
+                  ["배차 대기", countBy(myOrders, "open")],
+                  ["배차완료", countBy(myOrders, "confirmed")],
+                  ["내가 잡은 배차", orders.filter(o => o.applicantUid === profile.uid && o.status === "confirmed").length],
+                ].map(([l, v]) => (
+                  <div key={l} className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+                    <div className="text-[11px] font-bold text-gray-400">{l}</div>
+                    <div className="text-[22px] font-black text-[#1B2B4B] mt-0.5">{v}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-gray-100 text-[14px] font-bold text-gray-900">내가 배차신청한 오더</div>
+                {(() => {
+                  const applied = orders.filter(o => o.applicantUid === profile.uid);
+                  if (applied.length === 0) return <div className="py-10 text-center text-[12.5px] text-gray-400">배차신청한 오더가 없습니다.</div>;
+                  return <CafeOrderTable orders={applied} onClick={openOrder} />;
+                })()}
+              </div>
+
+              <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+                  <span className="text-[14px] font-bold text-gray-900">최근 내 등록 오더</span>
+                  <button onClick={() => setTab("mine")} className="text-[12px] font-bold text-gray-400 hover:text-[#1B2B4B]">전체보기 →</button>
+                </div>
+                {myOrders.length === 0
+                  ? <div className="py-10 text-center text-[12.5px] text-gray-400">등록한 오더가 없습니다.</div>
+                  : <CafeOrderTable orders={myOrders.slice(0, 5)} onClick={openOrder} />}
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
