@@ -406,29 +406,58 @@ export function fleetStepIndex(order, phase) {
   if (phase === "운송중") return (order?.상차완료일시 || isPickupVisited(order)) ? 3 : 0;
   return -1;
 }
+// ⭐ 사용자 요청 — 단계 이름: 상차이동·상차진입·상차지도착·하차이동·하차진입·하차지도착.
+// 칸이 좁아 글자가 겹치면(폴더블 2분할 등) 위에 "상차 / 하차" 묶음 제목을 두고 아래는
+// "이동·진입·도착" 2글자만 보여준다 — 겹치지 않으면서 세로로 길어지지도 않는다.
+// 상차완료 시각은 위 상차지 정보에 이미 나오므로 여기선 표시하지 않는다.
+const STEP_LABELS = ["상차이동", "상차진입", "상차지도착", "하차이동", "하차진입", "하차지도착"];
+const STEP_SHORT = ["이동", "진입", "도착", "이동", "진입", "도착"];
 export function FleetStepper({ order, phase, large = false }) {
   const cur = fleetStepIndex(order, phase);
+  const ref = React.useRef(null);
+  const [w, setW] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setW(e.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [cur < 0]);
   if (cur < 0) return null;
-  const LABELS = ["상차지로 이동", "상차지진입", "상차지도착", "하차지로 이동", "하차지진입", "하차지도착"];
+  const f = large === true ? 14 : (large || 11);
+  // 가장 긴 이름(5글자)이 한 칸에 들어가는지로 판단
+  const compact = w > 0 && w / 6 < f * 5 + 6;
+  const labels = compact ? STEP_SHORT : STEP_LABELS;
   return (
-    <div style={{ display: "flex", alignItems: "flex-start", width: "100%" }}>
+    <div ref={ref} style={{ width: "100%" }}>
       <style>{`@keyframes kpStepBlink { 0%,100% { box-shadow: 0 0 0 0 rgba(37,99,235,.55); } 50% { box-shadow: 0 0 0 6px rgba(37,99,235,0); } } @keyframes kpStepText { 0%,100% { opacity: 1; } 50% { opacity: .45; } }`}</style>
-      {LABELS.map((lb, i) => {
-        const done = i < cur, now = i === cur;
-        const dot = now ? "#2563eb" : done ? "#1B2B4B" : "#d1d5db";
-        return (
-          <div key={lb} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative", minWidth: 0 }}>
-            {i > 0 && <div style={{ position: "absolute", top: 6, right: "50%", width: "100%", height: 3, background: i <= cur ? "#1B2B4B" : "#e5e7eb", zIndex: 0 }} />}
-            <div style={{ width: now ? 15 : 13, height: now ? 15 : 13, marginTop: now ? -1 : 0, borderRadius: "50%", background: dot, border: "2px solid #fff", zIndex: 1, animation: now ? "kpStepBlink 1.6s ease-in-out infinite" : "none" }} />
-            <div style={{ marginTop: 4, fontSize: large === true ? 14 : (large || 10), lineHeight: 1.25, textAlign: "center", fontWeight: now ? 900 : 700, color: now ? "#2563eb" : done ? "#1B2B4B" : "#9ca3af", wordBreak: "keep-all", animation: now ? "kpStepText 1.6s ease-in-out infinite" : "none" }}>{lb}</div>
-            {i === 2 && tsMs(order?.상차완료일시) && (
-              <div style={{ fontSize: large === true ? 12 : large ? large - 1 : 9, fontWeight: 800, color: "#16a34a", marginTop: 1 }}>
-                상차완료 {new Date(tsMs(order.상차완료일시) + 9 * 3600e3).toISOString().slice(11, 16)}
+      {compact && (
+        <div style={{ display: "flex", marginBottom: 5 }}>
+          {["상차", "하차"].map((g, gi) => {
+            const on = gi === 0 ? cur <= 2 : cur >= 3;
+            return (
+              <div key={g} style={{ flex: 1, display: "flex", alignItems: "center", gap: 5, padding: "0 6px" }}>
+                <span style={{ flex: 1, height: 1.5, background: on ? "#93a4c3" : "#e5e7eb" }} />
+                <span style={{ fontSize: f, fontWeight: 900, color: on ? "#1B2B4B" : "#9ca3af", whiteSpace: "nowrap" }}>{g}</span>
+                <span style={{ flex: 1, height: 1.5, background: on ? "#93a4c3" : "#e5e7eb" }} />
               </div>
-            )}
-          </div>
-        );
-      })}
+            );
+          })}
+        </div>
+      )}
+      <div style={{ display: "flex", alignItems: "flex-start", width: "100%" }}>
+        {labels.map((lb, i) => {
+          const done = i < cur, now = i === cur;
+          const dot = now ? "#2563eb" : done ? "#1B2B4B" : "#d1d5db";
+          return (
+            <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative", minWidth: 0 }}>
+              {i > 0 && <div style={{ position: "absolute", top: 6, right: "50%", width: "100%", height: 3, background: i <= cur ? "#1B2B4B" : "#e5e7eb", zIndex: 0 }} />}
+              <div style={{ width: now ? 15 : 13, height: now ? 15 : 13, marginTop: now ? -1 : 0, borderRadius: "50%", background: dot, border: "2px solid #fff", zIndex: 1, animation: now ? "kpStepBlink 1.6s ease-in-out infinite" : "none" }} />
+              <div style={{ marginTop: 5, fontSize: f, lineHeight: 1.2, textAlign: "center", whiteSpace: "nowrap", fontWeight: now ? 900 : 700, color: now ? "#2563eb" : done ? "#1B2B4B" : "#9ca3af", animation: now ? "kpStepText 1.6s ease-in-out infinite" : "none" }}>{lb}</div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

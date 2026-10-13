@@ -2542,6 +2542,38 @@ function DoneStamp({ at }) {
   );
 }
 
+// ⭐ 차량종류·톤수 칩 — 트럭 아이콘 + 차량종류, 오른쪽에 적재중량 표기판 모양의 톤수.
+// 값이 없으면 아무것도 그리지 않는다.
+const fmtTon = (v) => {
+  const t = String(v || "").trim();
+  if (!t) return "";
+  return /톤|t$|T$|kg/i.test(t) ? t.replace(/t$|T$/, "톤") : `${t}톤`;
+};
+function VehicleSpecChip({ type, ton }) {
+  const ty = String(type || "").trim();
+  const tn = fmtTon(ton);
+  if (!ty && !tn) return null;
+  return (
+    <span title="차량종류 · 톤수" style={{ display: "inline-flex", alignItems: "stretch", height: 24, borderRadius: 7, border: "1.5px solid #c7d0de", background: "#fff", overflow: "hidden", whiteSpace: "nowrap", flexShrink: 0 }}>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "0 8px", fontSize: 13, fontWeight: 800, color: "#1f2937" }}>
+        <svg width="17" height="13" viewBox="0 0 26 18" fill="none" stroke={NAVY} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round">
+          <rect x="1" y="2" width="15" height="10" rx="1.5" fill="#eef1f6" />
+          <path d="M16 6h4.5l3.5 3.5V12h-8z" fill="#eef1f6" />
+          <circle cx="6" cy="14.5" r="2.2" fill="#fff" />
+          <circle cx="19.5" cy="14.5" r="2.2" fill="#fff" />
+        </svg>
+        {ty || "차종 미입력"}
+      </span>
+      {tn && (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "0 8px", background: NAVY, color: "#fff", fontSize: 13, fontWeight: 900 }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8h12l2 13H4z" /><circle cx="12" cy="5" r="2.2" /></svg>
+          {tn}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleDay = true, todayStr, isOffDay, live, monthlyFareSum = 0, acceptRate = null, onOpenDetail, staff, canDelegate, onAssignManager, index, staffByEmail }) {
   const first = orders[0];
   const last = orders[orders.length - 1];
@@ -2617,6 +2649,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 20, fontWeight: 900, color: "#111827", letterSpacing: "-0.01em" }}>{driver.이름}</span>
                 <span style={{ fontSize: 12, fontWeight: 800, padding: "2px 8px", borderRadius: 6, background: driver.등급 === "직영" ? "#0f766e" : NAVY, color: "#fff" }}>{driver.등급}</span>
+                <VehicleSpecChip type={driver.차량종류} ton={driver.차량톤수} />
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, flexWrap: "wrap" }}>
                 {/* 번호판 모양 */}
@@ -5611,6 +5644,9 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
         차량번호: (raw.차량번호 || raw.carNo || "").trim() || "-",
         전화번호: (raw.전화번호 || raw.phone || "").trim() || "-",
         등급: raw.등급,
+        // ⭐ 노선관리 기사카드에 차량종류·톤수 표시(기사관리 입력값 우선, 없으면 기사앱 가입 정보)
+        차량종류: (raw.차량종류 || raw.vehicleType || "").trim(),
+        차량톤수: String(raw.차량톤수 || raw.톤수 || "").trim(),
         거주지: raw.거주지 || "",
         근무요일: raw.근무요일 || [],
         담당자: raw.담당자 || null,

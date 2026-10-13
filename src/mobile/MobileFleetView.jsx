@@ -213,17 +213,19 @@ function OrderSlider({ orders, renderOrder }) {
   return (
     <div style={{ marginBottom: 8 }}>
       {n > 1 && (
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 7 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 7, minWidth: 0 }}>
+          <div style={{ display: "flex", gap: 5, overflowX: "auto", minWidth: 0, flex: 1, scrollbarWidth: "none" }}>
           {[["current", "진행중", curCount], ["next", "진행예정", nextCount], ["done", "완료", doneCount]].filter(([, , c]) => c > 0).map(([k, l, c]) => {
             const on = list[safeIdx]?.kind === k;
             return (
               <button key={k} onClick={() => go(firstOf(k))}
-                style={{ height: 28, padding: "0 11px", borderRadius: 99, border: "1px solid " + (on ? NAVY : "#d7deea"), background: on ? NAVY : "#fff", color: on ? "#fff" : NAVY, fontSize: 12, fontWeight: 800, cursor: "pointer" }}>
+                style={{ height: 28, padding: "0 10px", borderRadius: 99, border: "1px solid " + (on ? NAVY : "#d7deea"), background: on ? NAVY : "#fff", color: on ? "#fff" : NAVY, fontSize: 12, fontWeight: 800, cursor: "pointer", flexShrink: 0 }}>
                 {l} {c}
               </button>
             );
           })}
-          <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4 }}>
+          </div>
+          <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
             <button onClick={() => go(safeIdx - 1)} disabled={safeIdx === 0}
               style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid #e5e7eb", background: "#fff", color: safeIdx === 0 ? "#d1d5db" : NAVY, fontSize: 15, fontWeight: 900, cursor: "pointer" }}>‹</button>
             <span style={{ fontSize: 12, fontWeight: 800, color: "#475569", minWidth: 30, textAlign: "center" }}>{safeIdx + 1}/{n}</span>
@@ -978,7 +980,9 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
   const displayPath = roadPath.length >= 2 ? roadPath : selectedPath;
 
   return (
-    <div style={{ fontFamily: "'Noto Sans KR',sans-serif", paddingBottom: 24 }}>
+    <div className="mfv-root" style={{ fontFamily: "'Noto Sans KR',sans-serif", paddingBottom: 24 }}>
+      {/* ⭐ 폴더블 2분할처럼 폭이 좁아도 버튼·뱃지 글자가 세로로 줄바꿈되며 겹치지 않게 */}
+      <style>{`.mfv-root{word-break:keep-all;} .mfv-root button{white-space:nowrap;} .mfv-nw{white-space:nowrap;} .mfv-ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}`}</style>
 
       {/* KPI 2×2 그리드 — 담당 기준. 사용자 요청: 알록달록한 이모지 대신 헤더의
           알림벨/새로고침 아이콘과 같은 단색 라인 아이콘 스타일로 통일 */}
@@ -1026,7 +1030,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
       </div>
 
       {/* 섹션 탭 */}
-      <div style={{ display: "flex", margin: "16px 16px 0", background: "#f4f6fa", borderRadius: 10, padding: 3, flexWrap: "nowrap" }}>
+      <div style={{ display: "flex", margin: "16px 16px 0", background: "#f4f6fa", borderRadius: 10, padding: 3, flexWrap: "nowrap", overflowX: "auto", scrollbarWidth: "none" }}>
         {[["drivers", "기사 목록"], ["map", "지도"], ["feed", "상태 로그"], ["attendance", "출근기록"]].map(([key, label]) => (
           <button key={key} onClick={() => setActiveSection(key)} style={{
             flex: 1, padding: "8px 4px", borderRadius: 8, border: "none",
@@ -1124,18 +1128,18 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                     }}
                   >
                     {/* 기본 행 */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: "#9ca3af", minWidth: 16, textAlign: "right", flexShrink: 0 }}>{idx + 1}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: "#9ca3af", minWidth: 14, textAlign: "right", flexShrink: 0 }}>{idx + 1}</span>
                       <div style={{ width: 40, height: 40, borderRadius: 10, background: d.active ? "#f0fdf4" : "#f9fafb", border: `1.5px solid ${d.active ? "#bbf7d0" : "#e5e7eb"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <div style={{ width: 12, height: 12, borderRadius: "50%", background: color }} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                          <span style={{ fontSize: 15, fontWeight: 800, color: "#111827" }}>{d.이름}</span>
-                          <span style={{ fontSize: 12, color: "#6b7280", fontWeight: 700, letterSpacing: "0.04em" }}>{d.차량번호}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+                          <span className="mfv-ell" style={{ fontSize: 15, fontWeight: 800, color: "#111827", flexShrink: 1 }}>{d.이름}</span>
+                          <span className="mfv-nw" style={{ fontSize: 12, color: "#374151", fontWeight: 800, flexShrink: 0, padding: "0 6px", border: "1.5px solid #111827", borderRadius: 4, background: "#fff" }}>{d.차량번호}</span>
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 700, color: dispatchStatus.color, background: dispatchStatus.bg, padding: "2px 8px", borderRadius: 99 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, minWidth: 0 }}>
+                          <span className="mfv-nw" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 700, color: dispatchStatus.color, background: dispatchStatus.bg, padding: "2px 8px", borderRadius: 99, flexShrink: 0 }}>
                             <span style={{ width: 6, height: 6, borderRadius: "50%", background: dispatchStatus.dot, display: "inline-block" }} />
                             {(() => {
                               const ph = phaseOf(d);
@@ -1143,13 +1147,13 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                             })()}
                           </span>
                           {d.vehicleType !== "-" && (
-                            <span style={{ fontSize: 12, color: "#9ca3af" }}>{d.vehicleType}</span>
+                            <span className="mfv-ell" style={{ fontSize: 12, color: "#6b7280", fontWeight: 600 }}>{d.vehicleType}</span>
                           )}
                         </div>
                       </div>
-                      <div style={{ textAlign: "right", flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
+                      <div className="mfv-nw" style={{ textAlign: "right", flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
                         <div>
-                          <div style={{ fontSize: 12, color: "#9ca3af" }}>{timeAgo(d.updatedAt)}</div>
+                          <div style={{ fontSize: 12, color: "#6b7280" }}>{timeAgo(d.updatedAt)}</div>
                           <div style={{ marginTop: 2 }}><SpeedBadge d={d} /></div>
                           <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", marginTop: 2 }}>{d.총거리.toFixed(1)} km</div>
                         </div>
@@ -1221,7 +1225,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                           {/* 진행중 — 단계 진행선 + 남은 거리·시간(도착예상) 한 줄 */}
                           {accepted && (
                             <div style={{ marginTop: 10, background: "#f4f7fb", borderRadius: 10, padding: "11px 8px 10px" }}>
-                              <FleetStepper order={activeOrder} phase={ph} large={12} />
+                              <FleetStepper order={activeOrder} phase={ph} large={13} />
                               {ph !== "하차지도착" && (
                                 <div style={{ marginTop: 10, paddingTop: 9, borderTop: "1px solid #e2e7ef", padding: "9px 4px 0" }}>
                                   <div style={{ fontSize: 11, fontWeight: 700, color: "#4b5563", marginBottom: 2 }}>남은 거리 · 시간 (현재 위치 기준)</div>
