@@ -316,6 +316,42 @@ export async function getDrivingRouteByCoords(from, to) {
   }
 }
 
+// 좌표 → 좌표 실제 도로 경로 + 경로선(지도에 그릴 [lat, lng] 배열). from/to는 { lat, lng }.
+const _pathCache = new Map();
+export async function getDrivingPathByCoords(from, to) {
+  if (!from || !to) return null;
+  const key = `${from.lat.toFixed(5)},${from.lng.toFixed(5)}>${to.lat.toFixed(5)},${to.lng.toFixed(5)}`;
+  if (_pathCache.has(key)) return _pathCache.get(key);
+  const url = "https://apis.openapi.sk.com/tmap/routes?version=1&format=json&appKey=" + TMAP_KEY;
+  const body = new URLSearchParams({
+    startX: String(from.lng), startY: String(from.lat),
+    endX: String(to.lng), endY: String(to.lat),
+    reqCoordType: "WGS84GEO", resCoordType: "WGS84GEO",
+    searchOption: "0", startName: "출발지", endName: "도착지",
+  });
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+      body,
+    });
+    if (!res.ok) return null;
+    const features = (await res.json())?.features || [];
+    const props = features[0]?.properties;
+    const path = [];
+    features.forEach(f => {
+      if (f?.geometry?.type === "LineString") f.geometry.coordinates.forEach(([x, y]) => path.push([y, x]));
+    });
+    const km = props?.totalDistance ? Math.round((props.totalDistance / 1000) * 10) / 10 : null;
+    const minutes = props?.totalTime ? Math.max(1, Math.round(props.totalTime / 60)) : null;
+    const result = { km, minutes, path };
+    _pathCache.set(key, result);
+    return result;
+  } catch {
+    return null;
+  }
+}
+
 // 화물내용 텍스트에 냉장/냉동/위험물 키워드가 있으면 할증률 적용
 function cargoSurcharge(cargoText = "") {
   if (/냉장|냉동/.test(cargoText)) return 0.15;

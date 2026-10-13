@@ -11,8 +11,8 @@ import L from "leaflet";
 import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import { getDrivingRoute, geocodeAddress } from "./tmapFareCalc";
-import { ShortAddr, DropEtaText, RemainText, pickCurrentOrder, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS, isPickupVisited } from "./fleetGeo";
+import { getDrivingRoute, geocodeAddress, getDrivingPathByCoords } from "./tmapFareCalc";
+import { ShortAddr, DropEtaText, RemainText, FleetStepper, fleetStepIndex, pickCurrentOrder, sortActiveOrders, prefetchGeo, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS, isPickupVisited } from "./fleetGeo";
 import { LeafletTrack, MapLegend } from "./mapLeaflet";
 import { cleanTrack } from "./mapStyle";
 import { modificationStatus } from "./orderChange";
@@ -1257,7 +1257,7 @@ async function _processRouteDistQueue() {
   _processRouteDistQueue();
 }
 
-function RouteDistanceBadge({ fromAddr, toAddr }) {
+function RouteDistanceBadge({ fromAddr, toAddr, size = 14 }) {
   const [info, setInfo] = useState(() =>
     fromAddr && toAddr ? _routeDistCache.get(`${fromAddr}→${toAddr}`) : null
   );
@@ -1268,12 +1268,12 @@ function RouteDistanceBadge({ fromAddr, toAddr }) {
     setInfo(undefined);
     enqueueRouteDist(fromAddr, toAddr, setInfo);
   }, [fromAddr, toAddr]);
-  if (!fromAddr || !toAddr) return <span style={{ fontSize: 14, color: "#d1d5db" }}>-</span>;
-  if (info === undefined) return <span style={{ fontSize: 14, color: "#d1d5db" }}>계산중…</span>;
-  if (!info) return <span style={{ fontSize: 14, color: "#d1d5db" }}>-</span>;
+  if (!fromAddr || !toAddr) return <span style={{ fontSize: size, color: "#d1d5db" }}>-</span>;
+  if (info === undefined) return <span style={{ fontSize: size, color: "#9ca3af" }}>계산중…</span>;
+  if (!info) return <span style={{ fontSize: size, color: "#d1d5db" }}>-</span>;
   const timeLabel = info.minutes >= 60 ? `${Math.floor(info.minutes / 60)}시간 ${info.minutes % 60}분` : `${info.minutes}분`;
   return (
-    <span style={{ fontSize: 14, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>
+    <span style={{ fontSize: size, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>
       약 {info.km}km · {timeLabel}
     </span>
   );
@@ -2017,7 +2017,8 @@ function OrderCopyModal({ order, driver, onClose }) {
 
 // ─── 기사별 노선 카드 ─────────────────────────────────────────────────────────
 
-const ROUTE_COLS = ["순번", "상태", "거래처", "상차지", "하차지", "상차", "하차", "화물정보", "이동정보", "기사운임", "배차담당자", "오더확인", "타임라인", "첨부"];
+// ⭐ 상태 → 상차 → 하차 순. "" 는 운송완료 도장을 띄우는 폭 0짜리 자리(헤더에 안 보임)
+const ROUTE_COLS = ["순번", "상태", "상차", "하차", "거래처", "상차지", "하차지", "", "화물정보", "이동정보", "기사운임", "배차담당자", "오더확인", "타임라인", "첨부"];
 // 폭을 줄일 컬럼(한 화면에 다 보이게)
 const ROUTE_NARROW_COLS = new Set(["순번", "오더확인", "첨부"]);
 // ⭐ 지입 기사 오더수락/거절 플로우 — 기사확인상태 값을 관리자 화면 배지로 표시.
@@ -2255,6 +2256,292 @@ function creatorLabel(r, staffByEmail) {
   return stored || fromStaff || email || "-";
 }
 
+// ─── 기사 전체 이동 노선 (우측 사이드바) ──────────────────────────────────────
+// ⭐ 사용자 요청 — 기사정보 카드를 더블클릭(또는 "이동노선")하면 우측에 그 기사의 오늘
+// 노선 전체를 보여준다. 지도엔 오더별 상차→하차 도로경로(실선)와 "앞 오더 하차지 →
+// 다음 오더 상차지" 연결 경로(점선), 지금 위치→현재 목적지(파란 점선)를 그리고, 아래엔
+// 오더별 진행 단계(운송중·상차지진입·상차지도착·하차지로 이동·하차지진입·하차지도착)를
+// 현재 단계만 깜빡이게 보여준다. 오더 사이에는 다음 상차지까지 거리·시간이 나온다.
+const JOURNEY_KIND = {
+  done: { label: "운송완료", bg: "#e5e7eb", color: "#374151" },
+  current: { label: "진행중", bg: NAVY, color: "#fff" },
+  next: { label: "진행예정", bg: "#eef1f6", color: NAVY },
+  waiting: { label: "확인대기", bg: "#fff7e6", color: "#92400e" },
+  plain: { label: "예정", bg: "#eef1f6", color: NAVY },
+  rejected: { label: "거절", bg: "#fff", color: "#b91c1c" },
+};
+function journeyKindOf(r, curId) {
+  if (r.기사확인상태 === "완료") return "done";
+  if (r.기사확인상태 === "거절") return "rejected";
+  if (r.기사확인상태 === "수락") return (r._id ?? r.id) === curId ? "current" : "next";
+  if (r.기사확인상태 === "대기") return "waiting";
+  return "plain";
+}
+const _hm = (v) => { const ms = _tsOf(v); if (!ms) return ""; const d = new Date(ms); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+const _timeLabel = (m) => m == null ? "" : m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60}분` : `${m}분`;
+
+function journeyPinIcon(text, { filled, muted }) {
+  const c = muted ? "#9aa3b2" : NAVY;
+  return L.divIcon({
+    html: `<div style="transform:translate(-50%,-50%);position:absolute;left:0;top:0;min-width:30px;height:30px;padding:0 6px;box-sizing:border-box;border-radius:15px;background:${filled ? c : "#fff"};border:2.5px solid ${c};color:${filled ? "#fff" : c};font:900 13px 'Noto Sans KR','Malgun Gothic',sans-serif;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.25);white-space:nowrap;">${text}</div>`,
+    className: "", iconSize: [0, 0], iconAnchor: [0, 0],
+  });
+}
+
+function JourneyFit({ points, fitKey }) {
+  const map = useMap();
+  useEffect(() => { const t = setTimeout(() => map.invalidateSize(), 150); return () => clearTimeout(t); }, [map]);
+  useEffect(() => {
+    if (!points.length) return;
+    if (points.length === 1) map.setView(points[0], 13);
+    else map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 14 });
+  }, [fitKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+function useJourneyGeo(orders, live, curOrder) {
+  const [geo, setGeo] = useState({});
+  const [legs, setLegs] = useState([]);
+  const addrKey = orders.map(r => `${r.상차지주소}|${r.하차지주소}|${r.기사확인상태}`).join("#");
+  const loc = live?.location?.lat != null ? { lat: live.location.lat, lng: live.location.lng } : null;
+  const locKey = loc ? `${loc.lat.toFixed(3)},${loc.lng.toFixed(3)}` : "";
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const g = {};
+      for (const r of orders) {
+        for (const a of [r.상차지주소, r.하차지주소]) {
+          const k = String(a || "").trim();
+          if (k && !(k in g)) g[k] = await prefetchGeo(k).catch(() => null);
+        }
+      }
+      if (!alive) return;
+      setGeo(g);
+      const pt = (a) => g[String(a || "").trim()] || null;
+      const plan = [];
+      const list = orders.filter(r => r.기사확인상태 !== "거절");
+      list.forEach((r, i) => {
+        const done = r.기사확인상태 === "완료";
+        plan.push({ type: "order", done, from: pt(r.상차지주소), to: pt(r.하차지주소), id: `o${i}` });
+        const nx = list[i + 1];
+        if (nx) plan.push({ type: "link", done: done && nx.기사확인상태 === "완료", from: pt(r.하차지주소), to: pt(nx.상차지주소), id: `l${i}` });
+      });
+      if (curOrder && loc) {
+        const loaded = !!(curOrder.상차완료일시 || isPickupVisited(curOrder));
+        plan.push({ type: "live", from: loc, to: pt(loaded ? curOrder.하차지주소 : curOrder.상차지주소), id: "live" });
+      }
+      const out = [];
+      for (const p of plan) {
+        if (!p.from || !p.to) continue;
+        const res = await getDrivingPathByCoords(p.from, p.to).catch(() => null);
+        out.push({ ...p, path: res?.path?.length ? res.path : [[p.from.lat, p.from.lng], [p.to.lat, p.to.lng]], km: res?.km ?? null, minutes: res?.minutes ?? null });
+        if (!alive) return;
+        setLegs([...out]);
+      }
+      if (alive) setLegs(out);
+    })();
+    return () => { alive = false; };
+  }, [addrKey, locKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  return { geo, legs };
+}
+
+function DriverJourneyPanel({ driver, orders, live, onClose }) {
+  const [fitKey, setFitKey] = useState(1);
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const curOrder = pickCurrentOrder(orders);
+  const curId = curOrder ? (curOrder._id ?? curOrder.id) : null;
+  const phase = computeFleetPhase({ driverStatus: live?.상태, orders, location: live?.location });
+  const { geo, legs } = useJourneyGeo(orders, live, curOrder);
+  const list = orders.filter(r => r.기사확인상태 !== "거절");
+  const loc = live?.location?.lat != null ? [live.location.lat, live.location.lng] : null;
+  const pt = (a) => geo[String(a || "").trim()] || null;
+  const points = [...(loc ? [loc] : []), ...list.flatMap(r => [pt(r.상차지주소), pt(r.하차지주소)]).filter(Boolean).map(p => [p.lat, p.lng])];
+  const pointsKey = points.length;
+  useEffect(() => { setFitKey(k => k + 1); }, [pointsKey]);
+  const counts = list.reduce((m, r) => { const k = journeyKindOf(r, curId); m[k] = (m[k] || 0) + 1; return m; }, {});
+  const remainKm = legs.filter(l => !l.done && l.type !== "live" && l.km != null).reduce((s, l) => s + l.km, 0)
+    + (legs.find(l => l.type === "live")?.km || 0);
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 99980, background: "rgba(15,23,42,.28)", fontFamily: "'Noto Sans KR','Malgun Gothic',sans-serif" }} onClick={onClose}>
+      <style>{`@keyframes fmSlideIn{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}} @keyframes fmLiveDash{to{stroke-dashoffset:-20}} .fm-journey-live{animation:fmLiveDash 1s linear infinite;} .fm-journey-tiles{filter:grayscale(.85) contrast(.95) brightness(1.04);}`}</style>
+      <aside onClick={e => e.stopPropagation()}
+        style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: "min(560px, 100vw)", background: "#f4f6f9", boxShadow: "-12px 0 40px rgba(15,23,42,.25)", display: "flex", flexDirection: "column", animation: "fmSlideIn .22s ease-out" }}>
+        {/* 헤더 */}
+        <div style={{ background: NAVY, padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(255,255,255,.14)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, fontWeight: 900, flexShrink: 0 }}>{String(driver.이름 || "?").slice(0, 1)}</div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ color: "#fff", fontSize: 19, fontWeight: 900 }}>{driver.이름}</span>
+              <span style={{ fontSize: 14, fontWeight: 800, color: NAVY, background: "#fff", borderRadius: 5, padding: "0 8px" }}>{driver.차량번호 || "-"}</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: "#fff", border: "1px solid rgba(255,255,255,.4)", borderRadius: 6, padding: "1px 8px" }}>{phase}</span>
+            </div>
+            <div style={{ color: "rgba(255,255,255,.8)", fontSize: 13, fontWeight: 600, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              현재 위치 · <LiveAddrText loc={live?.location?.lat != null ? live.location : null} />{live?.updatedAt ? ` · ${timeAgo(live.updatedAt)}` : ""}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ border: "none", background: "transparent", color: "rgba(255,255,255,.8)", fontSize: 22, cursor: "pointer", lineHeight: 1 }}>✕</button>
+        </div>
+
+        <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+          {/* 요약 */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 12 }}>
+            {[["전체", list.length], ["운송완료", counts.done || 0], ["진행중", counts.current || 0], ["진행예정", (counts.next || 0) + (counts.waiting || 0) + (counts.plain || 0)]].map(([l, v]) => (
+              <div key={l} style={{ background: "#fff", border: "1px solid #e2e7ef", borderRadius: 10, padding: "9px 10px", textAlign: "center" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#4b5563" }}>{l}</div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: "#111827", lineHeight: 1.2 }}>{v}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* 지도 */}
+          <div style={{ position: "relative", height: 300, borderRadius: 12, overflow: "hidden", border: "1px solid #dbe1ea", background: "#fff", marginBottom: 8 }}>
+            <MapContainer center={loc || [37.45, 126.8]} zoom={11} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
+              <TileLayer className="fm-journey-tiles" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
+              <JourneyFit points={points} fitKey={fitKey} />
+              {legs.map(l => (
+                <Polyline key={l.id} positions={l.path}
+                  pathOptions={l.type === "order"
+                    ? { color: l.done ? "#9aa3b2" : NAVY, weight: 5, opacity: l.done ? 0.7 : 0.9 }
+                    : l.type === "link"
+                      ? { color: l.done ? "#9aa3b2" : "#64748b", weight: 4, opacity: 0.85, dashArray: "2 9", lineCap: "round" }
+                      : { color: "#2563eb", weight: 4, opacity: 0.95, dashArray: "8 10", className: "fm-journey-live" }} />
+              ))}
+              {list.map((r, i) => {
+                const done = r.기사확인상태 === "완료";
+                const p = pt(r.상차지주소), d = pt(r.하차지주소);
+                return (
+                  <React.Fragment key={r._id || i}>
+                    {p && <Marker position={[p.lat, p.lng]} icon={journeyPinIcon(`상${i + 1}`, { filled: false, muted: done })} />}
+                    {d && <Marker position={[d.lat, d.lng]} icon={journeyPinIcon(`하${i + 1}`, { filled: true, muted: done })} />}
+                  </React.Fragment>
+                );
+              })}
+              {loc && <Marker position={loc} zIndexOffset={1000} icon={liveTruckIcon({ plate: driver.차량번호 !== "-" ? driver.차량번호 : driver.이름, state: live?.active ? (curOrder ? "moving" : "idle") : "offline", selected: true })} />}
+            </MapContainer>
+            <button onClick={() => setFitKey(k => k + 1)}
+              style={{ position: "absolute", top: 10, right: 10, zIndex: 500, height: 32, padding: "0 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: NAVY, fontSize: 13, fontWeight: 800, cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,.12)" }}>
+              전체 노선 보기
+            </button>
+          </div>
+          {/* 범례 */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", fontSize: 13, fontWeight: 700, color: "#1f2937", marginBottom: 14, padding: "0 2px" }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 22, height: 4, borderRadius: 2, background: NAVY }} />오더 구간</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 22, borderTop: "3px dotted #64748b" }} />다음 상차지 이동</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 22, borderTop: "3px dashed #2563eb" }} />현재 위치 → 목적지</span>
+            {remainKm > 0 && <span style={{ marginLeft: "auto", color: NAVY, fontWeight: 900 }}>남은 이동 약 {Math.round(remainKm * 10) / 10}km</span>}
+          </div>
+
+          {/* 노선 타임라인 */}
+          {list.length === 0 ? (
+            <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e2e7ef", padding: "30px 0", textAlign: "center", color: "#4b5563", fontSize: 15, fontWeight: 700 }}>조회 기간에 배차된 오더가 없습니다</div>
+          ) : list.map((r, i) => {
+            const kind = journeyKindOf(r, curId);
+            const km = JOURNEY_KIND[kind];
+            const done = kind === "done";
+            const nx = list[i + 1];
+            const link = legs.find(l => l.id === `l${i}`);
+            return (
+              <React.Fragment key={r._id || i}>
+                <div style={{ background: "#fff", borderRadius: 12, border: `1.5px solid ${kind === "current" ? NAVY : "#e2e7ef"}`, boxShadow: kind === "current" ? "0 4px 14px rgba(27,43,75,.14)" : "none", padding: "13px 14px", position: "relative", overflow: "hidden" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                    <span style={{ width: 26, height: 26, borderRadius: 8, background: done ? "#9aa3b2" : NAVY, color: "#fff", fontSize: 13, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, padding: "2px 9px", borderRadius: 6, background: km.bg, color: km.color, border: kind === "rejected" ? "1px solid #fca5a5" : "none" }}>{km.label}</span>
+                    <span style={{ fontSize: 15, fontWeight: 800, color: "#111827" }}>{r.거래처명 || "-"}</span>
+                    <span style={{ marginLeft: "auto", fontSize: 14, fontWeight: 800, color: NAVY }}>{r.기사운임 ? `${Number(String(r.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원` : ""}</span>
+                  </div>
+                  {/* 상차 → 하차 */}
+                  <div style={{ position: "relative", paddingLeft: 24, opacity: done ? 0.75 : 1 }}>
+                    <div style={{ position: "absolute", left: 8, top: 10, bottom: 10, width: 2.5, background: done ? "#cbd5e1" : NAVY, borderRadius: 2 }} />
+                    {[
+                      { tag: "상차", name: r.상차지명, addr: r.상차지주소, when: `${r.상차일 || ""} ${r.상차시간 || "즉시"}`, ev: [r.상차지도착일시 && `도착 ${_hm(r.상차지도착일시)}`, r.상차완료일시 && `상차완료 ${_hm(r.상차완료일시)}`].filter(Boolean), filled: false },
+                      { tag: "하차", name: r.하차지명, addr: r.하차지주소, when: `${r.하차일 || r.상차일 || ""} ${r.하차시간 || "즉시"}`, ev: [r.기사완료일시 && `운송완료 ${_hm(r.기사완료일시)}`].filter(Boolean), filled: true },
+                    ].map((st, k) => (
+                      <div key={st.tag} style={{ position: "relative", paddingBottom: k === 0 ? 12 : 0 }}>
+                        <span style={{ position: "absolute", left: -22, top: 3, width: 14, height: 14, borderRadius: "50%", background: st.filled ? (done ? "#9aa3b2" : NAVY) : "#fff", border: `2.5px solid ${done ? "#9aa3b2" : NAVY}`, boxSizing: "border-box" }} />
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 12, fontWeight: 900, color: NAVY, background: "#eef1f6", borderRadius: 4, padding: "0 6px" }}>{st.tag}</span>
+                          <span style={{ fontSize: 15, fontWeight: 800, color: "#111827" }}>{st.name || "-"}</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "#374151" }}>{st.when}</span>
+                        </div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginTop: 2 }}>{st.addr || "-"}</div>
+                        {st.ev.length > 0 && <div style={{ fontSize: 12, fontWeight: 800, color: "#166534", marginTop: 2 }}>{st.ev.join(" · ")}</div>}
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 10, paddingTop: 9, borderTop: "1px dashed #e2e7ef", display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 700, color: "#374151" }}>
+                    <span>오더 구간</span><RouteDistanceBadge fromAddr={r.상차지주소} toAddr={r.하차지주소} size={13} />
+                    {[r.차량종류, r.차량톤수, r.화물내용].filter(Boolean).length > 0 && <span style={{ marginLeft: "auto", color: "#4b5563" }}>{[r.차량종류, r.차량톤수, r.화물내용].filter(Boolean).join(" · ")}</span>}
+                  </div>
+                  {/* 진행중 오더 — 단계 진행선(현재 단계 깜빡임) + 남은 거리/도착예상 */}
+                  {kind === "current" && (
+                    <div style={{ marginTop: 12, background: "#f4f7fb", borderRadius: 10, padding: "12px 10px 10px" }}>
+                      <FleetStepper order={r} phase={phase} large />
+                      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 10, fontSize: 13, fontWeight: 700, color: "#1f2937" }}>
+                        <span>남은 거리 · <RemainText order={r} location={live?.location} phase={phase} style={{ fontSize: 13 }} fallback={<span style={{ color: "#4b5563" }}>위치 확인 후 계산</span>} /></span>
+                        <span>하차 도착예상 · <DropEtaText order={r} driverId={driver.id} location={live?.location} style={{ fontSize: 13, fontWeight: 800 }} fallback={<span style={{ color: "#4b5563" }}>상차지 도착 후 계산</span>} /></span>
+                      </div>
+                    </div>
+                  )}
+                  {done && (
+                    <div style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%) rotate(-8deg)", border: `2.5px solid ${NAVY}`, borderRadius: 8, padding: "2px 10px", color: NAVY, fontSize: 15, fontWeight: 900, letterSpacing: ".18em", background: "rgba(255,255,255,.85)", pointerEvents: "none" }}>
+                      운송완료
+                    </div>
+                  )}
+                </div>
+                {/* 오더 사이 — 앞 오더 하차지 → 다음 오더 상차지 */}
+                {nx && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0 8px 22px" }}>
+                    <div style={{ width: 2.5, height: 34, background: "repeating-linear-gradient(#64748b 0 4px, transparent 4px 9px)", borderRadius: 2 }} />
+                    <div style={{ flex: 1, background: "#fff", border: "1px dashed #94a3b8", borderRadius: 10, padding: "7px 12px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: "#475569" }}>{r.하차지명 || "하차지"} → {nx.상차지명 || "다음 상차지"}</span>
+                      <span style={{ marginLeft: "auto", fontSize: 14, fontWeight: 900, color: NAVY }}>
+                        {link?.km != null ? `약 ${link.km}km · ${_timeLabel(link.minutes)}` : <RouteDistanceBadge fromAddr={r.하차지주소} toAddr={nx.상차지주소} size={14} />}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+// ⭐ 노선표 정렬 — 운송완료(완료시각 순) → 진행중/진행예정(수락 순) → 확인대기·기타(상차시간 순) → 거절
+const _tsOf = (v) => (v?.toMillis ? v.toMillis() : typeof v?.seconds === "number" ? v.seconds * 1000 : typeof v === "number" ? v : 0);
+function sortRouteOrders(orders) {
+  const byTime = (a, b) => `${a.상차일 || ""} ${String(parseTimeToMin(a.상차시간) ?? 9999).padStart(4, "0")}`.localeCompare(`${b.상차일 || ""} ${String(parseTimeToMin(b.상차시간) ?? 9999).padStart(4, "0")}`);
+  const done = orders.filter(r => r.기사확인상태 === "완료").sort((a, b) => (_tsOf(a.기사완료일시) || Infinity) - (_tsOf(b.기사완료일시) || Infinity) || byTime(a, b));
+  const active = sortActiveOrders(orders);
+  const activeIds = new Set(active.map(r => r._id ?? r.id));
+  const rest = orders.filter(r => r.기사확인상태 !== "완료" && r.기사확인상태 !== "거절" && !activeIds.has(r._id ?? r.id)).sort(byTime);
+  const rejected = orders.filter(r => r.기사확인상태 === "거절");
+  return [...done, ...active, ...rest, ...rejected];
+}
+
+// 운송완료 도장 — 행 가운데에 비스듬히 찍힌 도장 모양(클릭은 통과)
+function DoneStamp({ at }) {
+  const ms = _tsOf(at);
+  const d = ms ? new Date(ms) : null;
+  return (
+    <div style={{
+      position: "absolute", left: 0, top: "50%", transform: "translate(-50%, -50%) rotate(-8deg)", zIndex: 2, pointerEvents: "none",
+      border: `2.5px solid ${NAVY}`, borderRadius: 8, padding: "3px 12px", background: "rgba(255,255,255,.88)",
+      color: NAVY, textAlign: "center", whiteSpace: "nowrap", boxShadow: "0 0 0 2px rgba(255,255,255,.9), inset 0 0 0 1.5px rgba(27,43,75,.35)",
+    }}>
+      <div style={{ fontSize: 17, fontWeight: 900, letterSpacing: ".2em", lineHeight: 1.25 }}>운송완료</div>
+      {d && <div style={{ fontSize: 12, fontWeight: 800, lineHeight: 1.2 }}>{`${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`}</div>}
+    </div>
+  );
+}
+
 function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleDay = true, todayStr, isOffDay, live, monthlyFareSum = 0, acceptRate = null, onOpenDetail, staff, canDelegate, onAssignManager, index, staffByEmail }) {
   const first = orders[0];
   const last = orders[orders.length - 1];
@@ -2263,6 +2550,10 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
   // 지입차는 우리가 기사에게 지급하는 "기사운임" 기준이어야 한다(청구운임은 화주에게
   // 받는 금액이라 기사 입장에선 의미가 다름).
   const fareSum = orders.reduce((s, r) => s + (Number(String(r.기사운임 || 0).replace(/[^\d]/g, "")) || 0), 0);
+  // ⭐ 사용자 요청 — 표 순서: 운송완료(완료 순) → 진행중 → 진행예정(수락 순) → 확인대기/기타(상차시간 순)
+  const activeSeq = useMemo(() => sortActiveOrders(orders), [orders]);
+  const displayOrders = useMemo(() => sortRouteOrders(orders), [orders]);
+  const [journeyOpen, setJourneyOpen] = useState(false);
 
   // ⭐ 사용자 요청 — 오더 행 우클릭으로 경로보기/수정/재발송/문자메시지/기사복사를
   // 바로 할 수 있어야 한다.
@@ -2311,8 +2602,11 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
           {index != null && (
             <span style={{ fontSize: 14, fontWeight: 800, color: "#9ca3af", minWidth: 20, textAlign: "right", flexShrink: 0 }}>{index}</span>
           )}
-          <div style={{
-            display: "flex", alignItems: "center", gap: 12, padding: "10px 16px 10px 12px", minWidth: 290,
+          <div
+            onDoubleClick={() => setJourneyOpen(true)}
+            title="더블클릭하면 이 기사의 전체 이동 노선을 봅니다"
+            style={{
+            display: "flex", alignItems: "center", gap: 12, padding: "10px 16px 10px 12px", minWidth: 290, cursor: "pointer", userSelect: "none",
             border: "1px solid #dbe1ea", borderLeft: `5px solid ${driver.등급 === "직영" ? "#0f766e" : NAVY}`, borderRadius: 12,
             background: "linear-gradient(135deg, #ffffff 0%, #f4f7fb 100%)", boxShadow: "0 2px 8px rgba(27,43,75,0.08)",
           }}>
@@ -2391,6 +2685,10 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
         </div>
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexShrink: 0 }}>
+          <button onClick={() => setJourneyOpen(true)}
+            style={{ padding: "7px 12px", borderRadius: 8, border: "none", background: NAVY, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+            이동노선
+          </button>
           <button onClick={() => onOpenDetail(driver)}
             style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid " + NAVY, background: "#fff", color: NAVY, fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
             상세보기
@@ -2419,12 +2717,12 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                     흰색 굵은 글씨 + 중앙정렬로 프로그램 색감에 맞춤 */}
                 <tr style={{ background: NAVY }}>
                   {ROUTE_COLS.map(h => (
-                    <th key={h} style={{ padding: ROUTE_NARROW_COLS.has(h) ? "9px 6px" : "9px 16px", fontSize: 12, fontWeight: 800, color: "#fff", textAlign: "center", letterSpacing: ".02em", whiteSpace: "nowrap" }}>{h}</th>
+                    <th key={h || "stamp"} style={{ padding: !h ? 0 : ROUTE_NARROW_COLS.has(h) ? "9px 6px" : "9px 16px", width: h ? undefined : 0, fontSize: 12, fontWeight: 800, color: "#fff", textAlign: "center", letterSpacing: ".02em", whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {orders.map((r, i) => {
+                {displayOrders.map((r, i) => {
                   // ⭐ 수락한 오더가 여러 건이면 먼저 수락한(진행중) 1건만 "운송중", 나머지는 "운송대기"
                   const curOrder = pickCurrentOrder(orders);
                   const isWaitingNext = r.기사확인상태 === "수락" && curOrder && (curOrder._id ?? curOrder.id) !== (r._id ?? r.id);
@@ -2432,10 +2730,16 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                   const prog = computeOrderProgress(r, r.상차일, todayStr);
                   const meta = fleetMeta || PROG_META[prog];
                   const isBlinking = fleetMeta ? (r.기사확인상태 === "수락" && !isWaitingNext) : prog === "progress";
+                  // ⭐ 운송완료 오더 — 회색·흐리게 + 가운데 "운송완료" 도장. 오더확인/타임라인/첨부는 그대로 선명·클릭 가능
+                  const isDone = r.기사확인상태 === "완료";
+                  const dimCell = isDone ? { filter: "grayscale(1)", opacity: 0.4 } : {};
+                  // 진행예정 오더 — 수락 순서상 바로 앞 오더의 하차지에서 이 오더 상차지까지
+                  const seqIdx = activeSeq.findIndex(x => (x._id ?? x.id) === (r._id ?? r.id));
+                  const prevOrder = seqIdx > 0 ? activeSeq[seqIdx - 1] : null;
                   return (
-                    <tr key={r._id || i} style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : "none" }} onContextMenu={(e) => openRowMenu(e, r)}>
-                      <td style={{ padding: "10px 6px", textAlign: "center", fontSize: 13, fontWeight: 700, color: "#9ca3af" }}>{i + 1}</td>
-                      <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
+                    <tr key={r._id || i} style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : "none", background: isDone ? "#f6f7f9" : undefined, position: "relative" }} onContextMenu={(e) => openRowMenu(e, r)}>
+                      <td style={{ ...dimCell, padding: "10px 6px", textAlign: "center", fontSize: 13, fontWeight: 700, color: "#9ca3af" }}>{i + 1}</td>
+                      <td style={{ ...dimCell, padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                           <span style={{
                             width: 7, height: 7, borderRadius: "50%", background: meta.dot, flexShrink: 0,
@@ -2455,30 +2759,29 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                           )}
                         </span>
                       </td>
-                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, fontWeight: 700, color: "#374151", whiteSpace: "nowrap" }}>{r.거래처명 || "-"}</td>
-                      {/* ⭐ 상차지/하차지 — 예전엔 이름 아래 줄바꿈으로 "날짜 · 주소"가 작고 흐리게
-                          있었는데, 날짜는 상차/하차 컬럼으로 옮기고 주소는 이름 옆에 가로로,
-                          더 잘 보이는 색/굵기로 붙인다. */}
-                      <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
-                        <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{r.상차지명 || "-"}</span>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: "#4b5563", marginLeft: 8 }}><ShortAddr addr={r.상차지주소} /></span>
-                      </td>
-                      <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
-                        <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{r.하차지명 || "-"}</span>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: "#4b5563", marginLeft: 8 }}><ShortAddr addr={r.하차지주소} /></span>
-                      </td>
-                      {/* ⭐ 상차/하차 — 상차지/하차지 칸에 있던 날짜를 여기로 옮겨 시간과 함께 표시 */}
-                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>{r.상차일 || "-"} {r.상차시간 || "즉시"}</td>
-                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>
+                      <td style={{ ...dimCell, padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>{r.상차일 || "-"} {r.상차시간 || "즉시"}</td>
+                      <td style={{ ...dimCell, padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#111827", fontWeight: 700, whiteSpace: "nowrap" }}>
                         {r.하차일 || "-"} {r.하차시간 || "즉시"}
                         {/* ⭐ 상차지 도착 + 30분 + 실도로 소요시간 기준 도착예상시각 */}
                         {meta.label === "운송중" && <DropEtaText order={r} driverId={driver.id} location={live?.location} style={{ display: "block", fontSize: 12, marginTop: 2 }} />}
                       </td>
-                      {/* ⭐ 사용자 요청 — 지입차관리 노선표에 화물내용/톤수/차량종류가 안 보여서 추가 */}
-                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#374151", fontWeight: 700, whiteSpace: "nowrap" }}>
+                      <td style={{ ...dimCell, padding: "10px 16px", textAlign: "center", fontSize: 14, fontWeight: 700, color: "#374151", whiteSpace: "nowrap" }}>{r.거래처명 || "-"}</td>
+                      <td style={{ ...dimCell, padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{r.상차지명 || "-"}</span>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: "#4b5563", marginLeft: 8 }}><ShortAddr addr={r.상차지주소} /></span>
+                      </td>
+                      <td style={{ ...dimCell, padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{r.하차지명 || "-"}</span>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: "#4b5563", marginLeft: 8 }}><ShortAddr addr={r.하차지주소} /></span>
+                      </td>
+                      {/* 도장은 화물정보 칸 기준으로 행 가운데에 겹쳐 띄운다(흐림 처리 밖) */}
+                      <td style={{ padding: 0, position: "relative", width: 0 }}>
+                        {isDone && <DoneStamp at={r.기사완료일시} />}
+                      </td>
+                      <td style={{ ...dimCell, padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#374151", fontWeight: 700, whiteSpace: "nowrap" }}>
                         {[r.차량종류, r.차량톤수, r.화물내용].filter(Boolean).join(" · ") || "-"}
                       </td>
-                      <td style={{ padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
+                      <td style={{ ...dimCell, padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
                         <RouteDistanceBadge fromAddr={r.상차지주소} toAddr={r.하차지주소} />
                         {/* ⭐ 상태별 남은 거리·예상시간(상차지까지 / 하차지까지) */}
                         {r.기사확인상태 === "수락" && (pickCurrentOrder(orders)?._id ?? pickCurrentOrder(orders)?.id) === (r._id ?? r.id) && (
@@ -2487,13 +2790,15 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                             style={{ display: "block", fontSize: 12, marginTop: 2 }} />
                         )}
                         {r.기사확인상태 === "수락" && (pickCurrentOrder(orders)?._id ?? pickCurrentOrder(orders)?.id) !== (r._id ?? r.id) && (
-                          <span style={{ display: "block", fontSize: 12, marginTop: 2, color: "#6b7280", fontWeight: 700 }}>다음 오더 (앞 오더 진행중)</span>
+                          <span style={{ display: "block", fontSize: 12, marginTop: 3, color: "#475569", fontWeight: 800 }}>
+                            {prevOrder ? <>앞 하차지 → 이 상차지 · <RouteDistanceBadge fromAddr={prevOrder.하차지주소} toAddr={r.상차지주소} size={12} /></> : "다음 오더 (앞 오더 진행중)"}
+                          </span>
                         )}
                       </td>
-                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, fontWeight: 700, color: NAVY, whiteSpace: "nowrap" }}>
+                      <td style={{ ...dimCell, padding: "10px 16px", textAlign: "center", fontSize: 14, fontWeight: 700, color: NAVY, whiteSpace: "nowrap" }}>
                         {r.기사운임 ? `${Number(String(r.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원` : "-"}
                       </td>
-                      <td style={{ padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#374151", fontWeight: 700, whiteSpace: "nowrap" }}>{creatorLabel(r, staffByEmail)}</td>
+                      <td style={{ ...dimCell, padding: "10px 16px", textAlign: "center", fontSize: 14, color: "#374151", fontWeight: 700, whiteSpace: "nowrap" }}>{creatorLabel(r, staffByEmail)}</td>
                       <td style={{ padding: "10px 6px", textAlign: "center", whiteSpace: "nowrap" }}>
                         {r.기사확인상태 ? (
                           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -2558,6 +2863,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
       )}
       {editOrder && <OrderEditModal order={editOrder} onClose={() => setEditOrder(null)} />}
       {copyOrder && <OrderCopyModal order={copyOrder} driver={driver} onClose={() => setCopyOrder(null)} />}
+      {journeyOpen && <DriverJourneyPanel driver={driver} orders={displayOrders} live={live} onClose={() => setJourneyOpen(false)} />}
     </div>
   );
 }
