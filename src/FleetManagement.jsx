@@ -2516,10 +2516,10 @@ function DriverJourneyPanel({ driver, orders, live, onClose, dispatchData }) {
             );
           })}
 
-          {/* ⭐ 귀로(공차) 오더 추천 — 마지막 남은 오더 하차지(없으면 현재 위치) 근처 미배차 오더 */}
+          {/* ⭐ 최적 오더 추천 — 마지막 남은 오더 하차지(없으면 현재 위치) 근처 미배차 오더 */}
           {dispatchData && (
             <div style={{ marginTop: 14, background: "#fff", border: "1px solid #e2e7ef", borderRadius: 12, padding: 14 }}>
-              <div style={{ fontSize: 17, fontWeight: 900, color: NAVY, marginBottom: 8 }}>귀로 오더 추천</div>
+              <div style={{ fontSize: 17, fontWeight: 900, color: NAVY, marginBottom: 8 }}>최적 오더 추천</div>
               <ReturnTripSuggest base={returnBase} dispatchData={dispatchData} />
             </div>
           )}

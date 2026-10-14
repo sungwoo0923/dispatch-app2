@@ -16528,13 +16528,13 @@ className={`
 <div className="relative">
   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
     <label className={labelCls}><EditableText id="orderForm.label.스마트검색" defaultText="스마트검색" /></label>
-    {/* ⭐ 빈 지입차 추천 — 오늘 배차 없는 지입·직영 기사를 상차지 가까운 순으로 */}
-    <IdleFleetButton
+    {/* ⭐ 빈 지입차 추천 — 오늘 배차 없는 지입·직영 기사를 상차지 가까운 순으로 (현재 최고관리자 전용) */}
+    {role === "totalMaster" && <IdleFleetButton
       drivers={drivers}
       dispatchData={dispatchData}
       pickupAddr={form.상차지주소}
       onPick={(x) => selectSmartDriver({ ...x.d, 차량번호: x.plate, 이름: x.name, 전화번호: x.phone })}
-    />
+    />}
   </div>
 
   <div className="relative">

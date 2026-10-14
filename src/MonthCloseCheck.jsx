@@ -41,7 +41,9 @@ export default function MonthCloseCheck({ dispatchData = [], onClose, isViewer =
   const list = useMemo(() => (dispatchData || []).filter((r) => String(r.상차일 || "").startsWith(month) && !isCanceled(r)), [dispatchData, month]);
   const result = useMemo(() => {
     const m = {};
-    for (const c of CLOSE_CHECKS) m[c.key] = list.filter((r) => c.test(r, today));
+    // ⭐ 지급방식 "손실"은 원래 청구가 없는 오더라 점검 대상에서 뺀다
+    const targets = list.filter((r) => String(r.지급방식 || "").trim() !== "손실");
+    for (const c of CLOSE_CHECKS) m[c.key] = targets.filter((r) => c.test(r, today));
     // 운임 둘 다 미입력은 청구운임 미입력과 겹치지 않음(기사운임 0) — 그대로 둔다
     return m;
   }, [list, today]);
