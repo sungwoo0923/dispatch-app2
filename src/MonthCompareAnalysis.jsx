@@ -21,6 +21,133 @@ function Delta({ v, money = true, isRate = false }) {
   return <span style={{ color: up ? "#047857" : "#b91c1c", fontWeight: 800 }}>{txt}</span>;
 }
 
+// ⭐ 좌우 비교 — 왼쪽 A월, 오른쪽 B월, 마지막 칸 "A월 대비 B월" 증감
+function MonthSideBySide({ res, a, b, compact }) {
+  const A = res.detailA, B = res.detailB;
+  const n = (v) => Math.round(v).toLocaleString();
+  const money = (v) => `${n(v)}원`;
+  const pctOf = (va, vb) => (va ? ((vb - va) / Math.abs(va)) * 100 : null);
+  const diffEl = (va, vb, kind = "money", goodUp = true) => {
+    const d = vb - va;
+    if (kind === "rate") {
+      const p = d * 100;
+      if (Math.abs(p) < 0.05) return <span style={{ color: "#6b7280", fontWeight: 800 }}>변동 없음</span>;
+      return <span style={{ color: (p > 0) === goodUp ? "#047857" : "#b91c1c", fontWeight: 900 }}>{p > 0 ? "+" : ""}{p.toFixed(1)}%p</span>;
+    }
+    if (!d) return <span style={{ color: "#6b7280", fontWeight: 800 }}>변동 없음</span>;
+    const pc = pctOf(va, vb);
+    const color = (d > 0) === goodUp ? "#047857" : "#b91c1c";
+    return (
+      <span style={{ color, fontWeight: 900, whiteSpace: "nowrap" }}>
+        {d > 0 ? "+" : "−"}{kind === "cnt" ? `${n(Math.abs(d))}건` : kind === "num" ? n(Math.abs(d)) : money(Math.abs(d))}
+        {pc != null && <span style={{ fontSize: 12, fontWeight: 800, marginLeft: 4 }}>({pc > 0 ? "+" : ""}{pc.toFixed(1)}%)</span>}
+      </span>
+    );
+  };
+  const fmt = (v, kind) => kind === "rate" ? `${(v * 100).toFixed(1)}%` : kind === "cnt" ? `${n(v)}건` : kind === "num" ? n(v) : money(v);
+
+  const groups = [
+    { title: "기본 실적", rows: [
+      ["총 매출 (청구운임)", A.sale, B.sale, "money"],
+      ["총 기사운임", A.driver, B.driver, "money", false],
+      ["총 수익", A.profit, B.profit, "money"],
+      ["수익률", A.rate, B.rate, "rate"],
+      ["총 건수", A.cnt, B.cnt, "cnt"],
+    ] },
+    { title: "건당 평균", rows: [
+      ["건당 평균 매출", A.avgSale, B.avgSale, "money"],
+      ["건당 평균 기사운임", A.avgDriver, B.avgDriver, "money", false],
+      ["건당 평균 수익", A.avgProfit, B.avgProfit, "money"],
+    ] },
+    { title: "지급방식별 (매출 · 건수)", rows: res.payKeys.map((k) => {
+      const pa = A.pay[k] || { cnt: 0, sale: 0, driver: 0 }, pb = B.pay[k] || { cnt: 0, sale: 0, driver: 0 };
+      return [k, pa, pb, "pay"];
+    }) },
+    { title: "손실", rows: [
+      ["총 손실금액 (역마진)", A.lossAmt, B.lossAmt, "money", false, `${A.lossCnt}건`, `${B.lossCnt}건`],
+      ["└ 청구운임 미입력 운반비", A.noSaleDriver, B.noSaleDriver, "money", false, `${A.noSaleCnt}건`, `${B.noSaleCnt}건`],
+    ] },
+    { title: "운영", rows: [
+      ["운행일수 (오더 있는 날)", A.days, B.days, "num"],
+      ["일평균 매출", A.perDaySale, B.perDaySale, "money"],
+      ["일평균 건수", A.perDayCnt, B.perDayCnt, "num"],
+      ["거래처 수", A.clients, B.clients, "num"],
+      ...(A.fixedCnt || B.fixedCnt ? [["고정거래처 매출", A.fixedSale, B.fixedSale, "money", true, `${A.fixedCnt}건`, `${B.fixedCnt}건`]] : []),
+    ] },
+  ];
+
+  // 좁은 화면: 항목명은 위 한 줄, 아래에 [A월 | B월(증감)] 두 칸
+  const cols = compact ? "minmax(0,1fr) minmax(0,1fr)" : "minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.1fr)";
+  const headA = { background: "#eef1f6", color: NAVY }, headB = { background: NAVY, color: "#fff" };
+  const valCell = (main, sub, strong) => (
+    <div style={{ textAlign: "right", minWidth: 0 }}>
+      <div style={{ fontSize: compact ? 14 : 15, fontWeight: strong ? 900 : 700, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{main}</div>
+      {sub && <div style={{ fontSize: 12, fontWeight: 700, color: "#4b5563", whiteSpace: "nowrap" }}>{sub}</div>}
+    </div>
+  );
+
+  return (
+    <div style={{ background: "#fff", border: "1px solid #e2e7ef", borderRadius: 14, overflow: "hidden" }}>
+      {/* 한 줄 요약 */}
+      <div style={{ padding: compact ? "12px 14px" : "14px 18px", borderBottom: "1px solid #e2e7ef", display: "flex", flexWrap: "wrap", gap: "6px 16px", alignItems: "baseline" }}>
+        <span style={{ fontSize: compact ? 16 : 17, fontWeight: 900, color: NAVY }}>{a} 대비 {b}</span>
+        {[["매출", A.sale, B.sale, "money"], ["건수", A.cnt, B.cnt, "cnt"], ["수익", A.profit, B.profit, "money"], ["기사운임", A.driver, B.driver, "money", false]].map(([l, va, vb, k, g]) => (
+          <span key={l} style={{ fontSize: 14, fontWeight: 700, color: "#374151", whiteSpace: "nowrap" }}>{l} {diffEl(va, vb, k, g !== false)}</span>
+        ))}
+      </div>
+      {/* 머리줄 */}
+      <div style={{ display: "grid", gridTemplateColumns: cols, gap: 8, padding: compact ? "10px 12px" : "10px 18px", alignItems: "center", borderBottom: "2px solid #e2e7ef" }}>
+        {!compact && <span style={{ fontSize: 13, fontWeight: 900, color: "#4b5563" }}>항목</span>}
+        <span style={{ ...headA, textAlign: "center", borderRadius: 8, padding: "6px 0", fontSize: 15, fontWeight: 900 }}>{a}</span>
+        {compact ? (
+          <span style={{ ...headB, textAlign: "center", borderRadius: 8, padding: "6px 0", fontSize: 15, fontWeight: 900 }}>{b} <span style={{ fontSize: 11, opacity: .8 }}>(증감)</span></span>
+        ) : (
+          <>
+            <span style={{ ...headB, textAlign: "center", borderRadius: 8, padding: "6px 0", fontSize: 15, fontWeight: 900 }}>{b}</span>
+            <span style={{ textAlign: "center", fontSize: 14, fontWeight: 900, color: NAVY }}>{a} 대비 {b}</span>
+          </>
+        )}
+      </div>
+      {groups.filter((g) => g.rows.length).map((g) => (
+        <div key={g.title}>
+          <div style={{ padding: compact ? "8px 12px 4px" : "10px 18px 4px", fontSize: 13, fontWeight: 900, color: NAVY, background: "#f8f9fb", borderTop: "1px solid #eef1f6" }}>{g.title}</div>
+          {g.rows.map(([label, va, vb, kind, goodUp = true, subA, subB]) => {
+            const isPay = kind === "pay";
+            const mainA = isPay ? (va.cnt ? money(va.sale) : "-") : fmt(va, kind);
+            const mainB = isPay ? (vb.cnt ? money(vb.sale) : "-") : fmt(vb, kind);
+            const sA = isPay ? (va.cnt ? `${va.cnt}건 · 수익 ${n(va.sale - va.driver)}` : "") : subA;
+            const sB = isPay ? (vb.cnt ? `${vb.cnt}건 · 수익 ${n(vb.sale - vb.driver)}` : "") : subB;
+            // 지급방식 "손실"처럼 매출이 두 달 다 0원이면 수익(손해) 기준으로 비교
+            const payNoSale = isPay && !va.sale && !vb.sale;
+            const diff = isPay ? (payNoSale ? diffEl(va.sale - va.driver, vb.sale - vb.driver, "money") : diffEl(va.sale, vb.sale, "money")) : diffEl(va, vb, kind, goodUp);
+            const strong = ["총 매출 (청구운임)", "총 수익", "총 손실금액 (역마진)"].includes(label);
+            return (
+              <div key={label} style={{ display: "grid", gridTemplateColumns: cols, gap: compact ? "2px 10px" : 8, padding: compact ? "8px 12px" : "9px 18px", alignItems: compact ? "start" : "center", borderTop: "1px solid #f1f3f6" }}>
+                <span style={{ fontSize: 14, fontWeight: 800, color: "#1f2937", minWidth: 0, gridColumn: compact ? "1 / -1" : undefined }}>{label}</span>
+                {valCell(mainA, sA, strong)}
+                {compact ? (
+                  <div style={{ textAlign: "right", minWidth: 0 }}>
+                    {valCell(mainB, sB, strong)}
+                    <div style={{ fontSize: 12 }}>{diff}</div>
+                  </div>
+                ) : (
+                  <>
+                    {valCell(mainB, sB, strong)}
+                    <div style={{ textAlign: "right", fontSize: 14 }}>
+                      {diff}
+                      {isPay && (va.cnt || vb.cnt) ? <div style={{ fontSize: 12, fontWeight: 700, color: "#4b5563" }}>건수 {vb.cnt - va.cnt >= 0 ? "+" : "−"}{Math.abs(vb.cnt - va.cnt)}건</div> : null}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // 두 달 비교 행 — PC는 [항목 | A | B] 한 줄, 좁은 화면은 항목 아래 A/B 두 칸
 function CompareRows({ items, a, b, compact }) {
   const cell = (c, label) => (
@@ -69,7 +196,7 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
   const res = useMemo(() => analyzeMonths({ rows, monthA, monthB, scope, isExcluded }), [rows, monthA, monthB, scope, isExcluded]);
   const gapInfo = useMemo(() => explainGap(res), [res]);
   const [showAnomalyList, setShowAnomalyList] = useState(false);
-  const { A, B, effects } = res;
+  const { A } = res;
   const dimRows = res.dims[dimKey] || [];
   const a = `${Number(monthA.slice(5))}월`, b = `${Number(monthB.slice(5))}월`;
 
@@ -78,12 +205,6 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
   const card = { background: "#fff", border: "1px solid #e2e7ef", borderRadius: 14, padding: compact ? 14 : 18, minWidth: 0, boxSizing: "border-box" };
   const h = { fontSize: compact ? 16 : 17, fontWeight: 900, color: NAVY, margin: "0 0 10px" };
 
-  const kpis = [
-    ["건수", A.cnt, B.cnt, "cnt"], ["매출", A.sale, B.sale], ["운반비", A.driver, B.driver], ["수익", A.profit, B.profit],
-    ["수익률", A.rate, B.rate, "rate"], ["건당 매출", A.avgSale, B.avgSale], ["건당 수익", A.avgProfit, B.avgProfit],
-  ];
-  const effectList = [["물량(건수) 변화", effects.volume], ["건당 매출 변화", effects.price], ["수익률 변화", effects.margin]];
-  const maxEff = Math.max(1, ...effectList.map(([, v]) => Math.abs(v)), Math.abs(effects.total));
 
   const anomalyListEl = (
     <div style={{ marginTop: 10 }}>
@@ -119,49 +240,6 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
               </div>
     </div>
   );
-  const fmtK = (kind, v) => kind === "rate" ? pct(v) : kind === "cnt" ? `${v}건` : won(v);
-  const deltaOf = (kind, va, vb) => kind === "rate" ? <Delta v={vb - va} isRate /> : kind === "cnt" ? <Delta v={vb - va} money={false} /> : <Delta v={vb - va} />;
-  const kpiCards = (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
-      {kpis.map(([label, va, vb, kind]) => (
-        <div key={label} style={{ ...card, padding: "12px 14px" }}>
-          <div style={{ fontSize: 14, fontWeight: 900, color: NAVY }}>{label}</div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#4b5563", marginTop: 5, whiteSpace: "nowrap" }}>{a} {fmtK(kind, va)}</div>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 5, marginTop: 2, whiteSpace: "nowrap" }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: "#4b5563" }}>{b}</span>
-            <span style={{ fontSize: 17, fontWeight: 900, color: "#111827" }}>{fmtK(kind, vb)}</span>
-          </div>
-          <div style={{ fontSize: 14, marginTop: 3 }}>{deltaOf(kind, va, vb)}</div>
-        </div>
-      ))}
-    </div>
-  );
-  const kpiTable = (
-    <div style={card}>
-      <h3 style={h}>숫자 비교</h3>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-        <thead>
-          <tr style={{ color: NAVY }}>
-            {["", a, `${b} (증감)`].map((t, i) => <th key={i} style={{ padding: "6px 4px", textAlign: i ? "right" : "left", fontWeight: 900, borderBottom: "2px solid #e2e7ef" }}>{t}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {kpis.map(([label, va, vb, kind]) => (
-            <tr key={label} style={{ borderBottom: "1px solid #eef1f6" }}>
-              <td style={{ padding: "8px 4px", fontWeight: 800, color: "#111827", whiteSpace: "nowrap" }}>{label}</td>
-              <td style={{ padding: "8px 4px", textAlign: "right", fontWeight: 600, color: "#374151", whiteSpace: "nowrap" }}>{fmtK(kind, va).replace("원", "")}</td>
-              <td style={{ padding: "8px 4px", textAlign: "right", whiteSpace: "nowrap" }}>
-                <div style={{ fontWeight: 900, color: "#111827" }}>{fmtK(kind, vb).replace("원", "")}</div>
-                <div style={{ fontSize: 12 }}>{deltaOf(kind, va, vb)}</div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div style={{ fontSize: 12, color: "#4b5563", marginTop: 6 }}>금액 단위: 원</div>
-    </div>
-  );
-
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 99990, background: "rgba(15,23,42,.45)", display: "flex", alignItems: compact ? "stretch" : "center", justifyContent: "center", padding: compact ? 0 : 20, fontFamily: "'Noto Sans KR','Malgun Gothic',sans-serif", wordBreak: "keep-all" }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: "#f4f6f9", width: compact ? "100%" : "min(1280px, 100%)", height: compact ? "100%" : "min(92vh, 1100px)", borderRadius: compact ? 0 : 18, display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,.3)" }}>
@@ -190,6 +268,8 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: compact ? 12 : 20, display: "flex", flexDirection: "column", gap: compact ? 12 : 16 }}>
+          <MonthSideBySide res={res} a={a} b={b} compact={compact} />
+
           {/* ⭐ 왜 차이가 났나 — 한 줄 결론 + 덜 번 금액을 원인별로(합계가 정확히 맞음) */}
           <div style={card}>
             <div style={{ fontSize: compact ? 18 : 20, fontWeight: 900, color: "#111827", lineHeight: 1.45 }}>{gapInfo.headline}</div>
@@ -223,7 +303,6 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
             )}
           </div>
 
-          {compact ? kpiTable : kpiCards}
 
           {/* 확인 필요 오더 — 두 달 건수·금액 비교 */}
           <div style={card}>

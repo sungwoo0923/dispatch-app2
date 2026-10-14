@@ -100,7 +100,38 @@ export function analyzeMonths({ rows = [], monthA, monthB, scope = "pure", isExc
   }
   const excludedClients = [...exMap.values()].map((g) => ({ key: g.key, a: statsOf(g.a), b: statsOf(g.b) })).sort((x, y) => (y.a.sale + y.b.sale) - (x.a.sale + x.b.sale));
 
-  return { monthA, monthB, scope, A, B, listA, listB, effects: { volume, price, margin, total: B.profit - A.profit }, dims, anomaliesB, anomalyCountB: countBy(anomaliesB), anomalyCountA: countBy(anomaliesA), anomalySummary, excludedClients };
+  const detailA = monthDetail(listA), detailB = monthDetail(listB);
+  const payKeys = [...new Set([...PAY_ORDER, ...Object.keys(detailA.pay), ...Object.keys(detailB.pay)])].filter((k) => detailA.pay[k] || detailB.pay[k]);
+
+  return { monthA, monthB, scope, A, B, listA, listB, detailA, detailB, payKeys, effects: { volume, price, margin, total: B.profit - A.profit }, dims, anomaliesB, anomalyCountB: countBy(anomaliesB), anomalyCountA: countBy(anomaliesA), anomalySummary, excludedClients };
+}
+
+// ── 월별 상세 집계(좌우 비교용) ───────────────────────────────────────
+export const PAY_ORDER = ["계산서", "착불", "선불", "계좌이체", "개인", "손실", "취소", "미지정"];
+export function monthDetail(list) {
+  const st = statsOf(list);
+  const pay = {};
+  let lossAmt = 0, lossCnt = 0, noSaleDriver = 0, noSaleCnt = 0, fixedSale = 0, fixedCnt = 0;
+  const days = new Set(), clients = new Set();
+  for (const r of list) {
+    const s = toWon(r.청구운임), d = toWon(r.기사운임);
+    const k = r.__fixed ? "계산서" : (String(r.지급방식 || "").trim() || "미지정");
+    if (!pay[k]) pay[k] = { cnt: 0, sale: 0, driver: 0 };
+    pay[k].cnt++; pay[k].sale += s; pay[k].driver += d;
+    if (s - d < 0) { lossAmt += d - s; lossCnt++; }
+    if (s === 0 && d > 0) { noSaleDriver += d; noSaleCnt++; }
+    if (r.__fixed) { fixedSale += s; fixedCnt++; }
+    if (r.상차일) days.add(String(r.상차일).slice(0, 10));
+    if (r.거래처명) clients.add(String(r.거래처명).trim());
+  }
+  return {
+    ...st,
+    avgDriver: st.cnt ? st.driver / st.cnt : 0,
+    pay, lossAmt, lossCnt, noSaleDriver, noSaleCnt, fixedSale, fixedCnt,
+    days: days.size, clients: clients.size,
+    perDaySale: days.size ? st.sale / days.size : 0,
+    perDayCnt: days.size ? st.cnt / days.size : 0,
+  };
 }
 
 export const ANOMALY_TYPES = [
