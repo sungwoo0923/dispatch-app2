@@ -1312,7 +1312,11 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                   <tbody className="divide-y divide-gray-100">
                     {landingInquiries.map(q => (
                       <tr key={q.id} onClick={() => setSelectedLandingInquiry(q)} className="cursor-pointer hover:bg-gray-50 transition">
-                        <td className="px-4 py-3 font-semibold text-gray-800">{q.companyName}</td>
+                        <td className="px-4 py-3 font-semibold text-gray-800">
+                          {q.companyName}
+                          {q.type === "무료체험" && <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-600 align-middle">무료체험</span>}
+                          {q.vehicles && <span className="ml-1.5 text-[11px] font-semibold text-gray-500">{q.vehicles}</span>}
+                        </td>
                         <td className="px-4 py-3 text-gray-600">{q.name}</td>
                         <td className="px-4 py-3 text-gray-600">{q.phone ? formatPhone(q.phone) : q.phone}</td>
                         <td className="px-4 py-3 text-center text-gray-500">{q.createdAt?.seconds ? new Date(q.createdAt.seconds * 1000).toLocaleDateString("ko-KR") : "-"}</td>
@@ -1628,6 +1632,17 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                 <div>
                   <div className="text-[11px] font-semibold text-gray-500 mb-1">이메일</div>
                   <div className="text-[13px] text-gray-700">{selectedLandingInquiry.email}</div>
+                </div>
+              )}
+              {/* ⭐ 무료 체험 신청 항목(홈페이지 폼) */}
+              {(selectedLandingInquiry.vehicles || selectedLandingInquiry.staffCount || selectedLandingInquiry.currentTool) && (
+                <div className="grid grid-cols-3 gap-2">
+                  {[["운영 차량", selectedLandingInquiry.vehicles], ["배차 인원", selectedLandingInquiry.staffCount], ["현재 방식", selectedLandingInquiry.currentTool]].map(([l, v]) => (
+                    <div key={l} className="bg-gray-50 rounded-lg p-2.5">
+                      <div className="text-[11px] font-semibold text-gray-500 mb-0.5">{l}</div>
+                      <div className="text-[13px] font-bold text-gray-800">{v || "-"}</div>
+                    </div>
+                  ))}
                 </div>
               )}
               <div>

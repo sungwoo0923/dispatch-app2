@@ -21,7 +21,7 @@
       <span>KP-Flow</span>
     </div>
     <div style="display:flex; align-items:center; gap:10px;">
-      <button class="btn btn-navy" onclick="document.getElementById('inquiry-form').scrollIntoView({behavior:'smooth'})">도입 문의</button>
+      <button class="btn btn-navy" onclick="document.getElementById('inquiry-form').scrollIntoView({behavior:'smooth'})">무료 체험 신청</button>
       <a class="btn btn-outline" href="login.html">로그인</a>
     </div>
   </div>
@@ -33,7 +33,7 @@
     <h1>배차부터 정산까지,<br /><span>KP-Flow</span> 하나로 끝내세요</h1>
     <p>배차관리, 실시간 추적, 지입차관리, 정산관리까지 —<br />운송사 운영에 필요한 모든 기능을 하나의 프로그램에서 관리하세요.</p>
     <div class="hero-actions">
-      <button class="btn btn-navy btn-lg" onclick="document.getElementById('inquiry-form').scrollIntoView({behavior:'smooth'})">도입 문의하기</button>
+      <button class="btn btn-navy btn-lg" onclick="document.getElementById('inquiry-form').scrollIntoView({behavior:'smooth'})">무료 체험 신청하기</button>
       <a class="btn btn-outline btn-lg" href="login.html">로그인</a>
     </div>
   </div>
@@ -57,17 +57,17 @@
 <section class="steps-section">
   <h2 class="steps-title">도입은 이렇게 진행돼요</h2>
   <div class="steps">
-    <div class="step-card"><div class="step-num">1</div><h4>문의 접수</h4><p>아래 폼으로 회사 정보를 남겨주세요</p></div>
-    <div class="step-card"><div class="step-num">2</div><h4>상담 및 협의</h4><p>담당자가 연락드려 이용 방식을 안내합니다</p></div>
-    <div class="step-card"><div class="step-num">3</div><h4>계정 발급</h4><p>합의 후 전용 계정과 로그인 정보를 드립니다</p></div>
+    <div class="step-card"><div class="step-num">1</div><h4>체험 신청</h4><p>아래 폼으로 회사 정보를 남겨주세요</p></div>
+    <div class="step-card"><div class="step-num">2</div><h4>상담 및 세팅</h4><p>담당자가 연락드려 거래처·기사 등 기초 자료 세팅을 도와드립니다</p></div>
+    <div class="step-card"><div class="step-num">3</div><h4>무료 체험</h4><p>전용 계정으로 실제 업무에 써보시고 결정하세요</p></div>
   </div>
 </section>
 
 <section id="inquiry-form">
   <div class="form-section">
-    <div class="section-label">도입 문의</div>
-    <h2 class="section-title" style="margin-bottom:0;">지금 문의해 보세요</h2>
-    <p class="sub">담당자가 확인 후 빠르게 연락드리겠습니다.</p>
+    <div class="section-label">무료 체험 신청</div>
+    <h2 class="section-title" style="margin-bottom:0;">무료로 먼저 써보세요</h2>
+    <p class="sub">신청하시면 담당자가 연락드려 체험 계정을 열어드립니다. 엑셀 자료 이관도 도와드립니다.</p>
 
     <form id="inquiryForm">
       <div>
@@ -87,16 +87,46 @@
         <input id="f-email" autocomplete="off" placeholder="example@company.com" />
       </div>
       <div>
+        <label>운영 차량 대수</label>
+        <select id="f-vehicles">
+          <option value="">선택해주세요</option>
+          <option>10대 미만</option>
+          <option>10~30대</option>
+          <option>30~100대</option>
+          <option>100대 이상</option>
+        </select>
+      </div>
+      <div>
+        <label>배차 담당 인원</label>
+        <select id="f-staff">
+          <option value="">선택해주세요</option>
+          <option>1~2명</option>
+          <option>3~5명</option>
+          <option>6~10명</option>
+          <option>10명 이상</option>
+        </select>
+      </div>
+      <div>
+        <label>현재 배차 관리 방식</label>
+        <select id="f-current">
+          <option value="">선택해주세요</option>
+          <option>엑셀</option>
+          <option>다른 배차 프로그램</option>
+          <option>수기·메모</option>
+          <option>기타</option>
+        </select>
+      </div>
+      <div>
         <label>문의 내용</label>
-        <textarea id="f-message" rows="4" placeholder="차량 대수, 이용 목적 등을 남겨주시면 상담에 도움이 됩니다."></textarea>
+        <textarea id="f-message" rows="4" placeholder="필요한 기능, 궁금한 점을 자유롭게 남겨주세요."></textarea>
       </div>
       <div id="form-error" class="error-text" style="display:none;"></div>
-      <button type="submit" id="submitBtn" class="submit-btn">문의 보내기</button>
+      <button type="submit" id="submitBtn" class="submit-btn">무료 체험 신청</button>
     </form>
 
     <div id="successBox" class="success-box" style="display:none;">
       <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg></div>
-      <h3>문의가 접수되었습니다</h3>
+      <h3>체험 신청이 접수되었습니다</h3>
       <p>담당자 확인 후 입력하신 연락처로 안내드리겠습니다.</p>
     </div>
   </div>
@@ -104,7 +134,7 @@
 
 <footer>
   <div class="wrap footer-inner">
-    <div class="contact"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z"/></svg>도입 문의 및 상담은 위 폼을 이용해 주세요.</div>
+    <div class="contact"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z"/></svg>무료 체험 신청 및 상담은 위 폼을 이용해 주세요.</div>
     <div class="copy">© <span id="year"></span> KP-Flow. All rights reserved.</div>
   </div>
 </footer>
@@ -139,6 +169,9 @@
     const phone = document.getElementById("f-phone").value.trim();
     const email = document.getElementById("f-email").value.trim();
     const message = document.getElementById("f-message").value.trim();
+    const vehicles = document.getElementById("f-vehicles").value;
+    const staffCount = document.getElementById("f-staff").value;
+    const currentTool = document.getElementById("f-current").value;
 
     if (!companyName || !name || !phone) {
       errorBox.textContent = "회사명, 담당자명, 연락처는 필수 입력입니다.";
@@ -152,16 +185,18 @@
     try {
       await addDoc(collection(db, "landingInquiries"), {
         companyName, name, phone, email, message,
+        type: "무료체험",
+        vehicles, staffCount, currentTool,
         status: "신규",
         createdAt: serverTimestamp(),
       });
       form.style.display = "none";
       document.getElementById("successBox").style.display = "block";
     } catch (err) {
-      errorBox.textContent = "문의 전송에 실패했습니다. 잠시 후 다시 시도해주세요.";
+      errorBox.textContent = "신청 전송에 실패했습니다. 잠시 후 다시 시도해주세요.";
       errorBox.style.display = "block";
       submitBtn.disabled = false;
-      submitBtn.textContent = "문의 보내기";
+      submitBtn.textContent = "무료 체험 신청";
     }
   });
 </script>

@@ -45,7 +45,7 @@ section { padding: 72px 20px; }
 .form-section p.sub { font-size: 14px; color: #6b7280; margin-top: 10px; }
 form { text-align: left; display: flex; flex-direction: column; gap: 14px; margin-top: 32px; }
 label { display: block; font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 6px; }
-input, textarea { width: 100%; box-sizing: border-box; padding: 12px 14px; border-radius: 10px; border: 1px solid #d1d5db; font-size: 14px; outline: none; font-family: inherit; }
+input, textarea, select { width: 100%; background: #fff; box-sizing: border-box; padding: 12px 14px; border-radius: 10px; border: 1px solid #d1d5db; font-size: 14px; outline: none; font-family: inherit; }
 textarea { resize: vertical; }
 .submit-btn { margin-top: 6px; padding: 14px; border-radius: 10px; background: var(--navy); color: #fff; font-weight: 700; font-size: 15px; border: none; cursor: pointer; }
 .submit-btn:disabled { background: #9ca3af; cursor: not-allowed; }
