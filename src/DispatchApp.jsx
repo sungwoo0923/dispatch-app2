@@ -42,7 +42,7 @@ import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
 import RouteMapModal from "./RouteMapModal";
 import MonthCompareAnalysis from "./MonthCompareAnalysis";
 import { IdleFleetButton } from "./fleetRecommend";
-import { findClientRouteMismatch, ClientMismatchModal } from "./clientRouteCheck";
+import { findClientRouteMismatch, ClientMismatchModal, ClientMismatchTag } from "./clientRouteCheck";
 import MonthCloseCheck from "./MonthCloseCheck";
 import StaffPerformance from "./StaffPerformance";
 import { RotationPicker, RotationBadge, expandRotation, rotationNotice, withRotationMemo } from "./rotation";
@@ -17780,7 +17780,7 @@ className={`
                             />
                           </td>
                           <td className="px-3 py-3 text-[12px] font-semibold text-gray-500 whitespace-nowrap">{row.상차일}</td>
-                          <td className="px-3 py-3 font-semibold text-[#1B2B4B] whitespace-nowrap">{row.거래처명}</td>
+                          <td className="px-3 py-3 font-semibold text-[#1B2B4B] whitespace-nowrap">{row.거래처명}<ClientMismatchTag row={row} rows={dispatchData} /></td>
                           <td className="px-3 py-3">
   <div className="inline-flex items-center gap-1 whitespace-nowrap">
     <span className="font-semibold text-gray-800">{row.상차지명}</span>
