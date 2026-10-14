@@ -42,7 +42,6 @@ import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
 import RouteMapModal from "./RouteMapModal";
 import MonthCompareAnalysis from "./MonthCompareAnalysis";
 import { IdleFleetButton } from "./fleetRecommend";
-import { findClientRouteMismatch, ClientMismatchModal, ClientMismatchTag } from "./clientRouteCheck";
 import MonthCloseCheck from "./MonthCloseCheck";
 import StaffPerformance from "./StaffPerformance";
 import { RotationPicker, RotationBadge, expandRotation, rotationNotice, withRotationMemo } from "./rotation";
@@ -10535,14 +10534,6 @@ const confirmDuplicateOrder = (matches) => new Promise((resolve) => {
   dupOrderResolveRef.current = resolve;
   setDupOrderMatches(matches);
 });
-// ⭐ 노선-거래처 불일치 확인창 — "change"(추천 거래처로 바꿔 등록) / "keep"(그대로) / "cancel"
-const [clientMisInfo, setClientMisInfo] = React.useState(null);
-const clientMisResolveRef = React.useRef(null);
-const confirmClientMismatch = (info) => new Promise((resolve) => {
-  clientMisResolveRef.current = resolve;
-  setClientMisInfo(info);
-});
-const closeClientMis = (choice) => { clientMisResolveRef.current?.(choice); clientMisResolveRef.current = null; setClientMisInfo(null); };
 const [multiCount, setMultiCount] = React.useState(1); // ★ 다중 등록 수량
 const [orderDates, setOrderDates] = React.useState([]); // 오더별 개별 상차일
 const [orderDropDates, setOrderDropDates] = React.useState([]); // 오더별 개별 하차일
@@ -12330,18 +12321,6 @@ showAlert(
     if (!proceed) { setIsSaving(false); return; }
   }
 
-  // ⭐ 노선-거래처 불일치 경고 — 같은 상차지→하차지 노선이 보통 다른 거래처로 등록돼 왔으면 확인
-  let clientFix = null;
-  const clientMis = findClientRouteMismatch(form, dispatchData);
-  if (clientMis) {
-    const choice = await confirmClientMismatch(clientMis);
-    if (choice === "cancel") { setIsSaving(false); return; }
-    if (choice === "change") {
-      clientFix = clientMis.suggest;
-      setForm(p => ({ ...p, 거래처명: clientMis.suggest }));
-    }
-  }
-
 const status = form.지급방식 === "취소"
     ? "배차취소"
     : form.차량번호 && (form.이름 || form.전화번호)
@@ -12395,7 +12374,6 @@ const _finalCargo = form.화물타입
 
 const rec = {
   ...form,
-  ...(clientFix ? { 거래처명: clientFix } : {}),
   화물내용: _finalCargo,
   메모중요도: autoPriority,
   운임보정: fareAdjustment,
@@ -17780,7 +17758,7 @@ className={`
                             />
                           </td>
                           <td className="px-3 py-3 text-[12px] font-semibold text-gray-500 whitespace-nowrap">{row.상차일}</td>
-                          <td className="px-3 py-3 font-semibold text-[#1B2B4B] whitespace-nowrap">{row.거래처명}<ClientMismatchTag row={row} rows={dispatchData} /></td>
+                          <td className="px-3 py-3 font-semibold text-[#1B2B4B] whitespace-nowrap">{row.거래처명}</td>
                           <td className="px-3 py-3">
   <div className="inline-flex items-center gap-1 whitespace-nowrap">
     <span className="font-semibold text-gray-800">{row.상차지명}</span>
@@ -17899,16 +17877,6 @@ className={`
     companyName={userCompany || localStorage.getItem("userCompany") || "돌캐"}
   />
 </div>
-{clientMisInfo && (
-  <ClientMismatchModal
-    info={clientMisInfo}
-    pickup={form.상차지명}
-    drop={form.하차지명}
-    onChange={() => closeClientMis("change")}
-    onKeep={() => closeClientMis("keep")}
-    onCancel={() => closeClientMis("cancel")}
-  />
-)}
 {dupOrderMatches && (
   <DuplicateOrderModal
     matches={dupOrderMatches}
