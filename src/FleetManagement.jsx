@@ -18,7 +18,6 @@ import { cleanTrack } from "./mapStyle";
 import { modificationStatus } from "./orderChange";
 import CustomDatePicker from "./CustomDatePicker";
 import RouteMapModal from "./RouteMapModal";
-import { copyTrackingLink, copyDriverTrackingLink } from "./trackingLink";
 import { ReturnTripSuggest } from "./fleetRecommend";
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
@@ -2795,20 +2794,6 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
       onClick: () => handleSendToDriver(driver, [ctxMenu.order], ctxMenu.order.상차일, ctxMenu.order.상차일),
     },
     { label: "기사복사", onClick: () => setCopyOrder(ctxMenu.order) },
-    {
-      label: "배송추적 링크 복사 (화주용)",
-      onClick: async () => {
-        try { await copyTrackingLink(ctxMenu.order); window.alert("배송 추적 링크를 복사했습니다. 화주에게 문자·카톡으로 보내주세요."); }
-        catch (e) { window.alert("링크를 만들지 못했습니다: " + (e?.message || "")); }
-      },
-    },
-    {
-      label: "위치공유 링크 복사 (기사용)",
-      onClick: async () => {
-        try { await copyDriverTrackingLink(ctxMenu.order); window.alert("기사용 위치공유 링크를 복사했습니다. 기사에게 문자·카톡으로 보내주세요."); }
-        catch (e) { window.alert("링크를 만들지 못했습니다: " + (e?.message || "")); }
-      },
-    },
     { label: "주소복사", onClick: () => copyOrderAddress(ctxMenu.order) },
     {
       label: "배차취소 (기사 해제)",

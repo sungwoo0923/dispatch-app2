@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import southKorea from "@svg-maps/south-korea";
-import PalletSimulator from "./PalletSimulator";
 import StandardFare from "./StandardFare";
 import { db } from "./firebase";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
@@ -981,7 +980,6 @@ function NationalFareTab() {
                 </button>
               ))}
             </div>
-            <p className="text-[11px] text-gray-500 mt-1.5">차량 선택이 어렵다면 상단 차량제원 탭을 참고하세요.</p>
           </div>
         )}
 
@@ -1340,7 +1338,7 @@ export default function FreightRateInquiry(){
   return(
     <div className="w-full">
       <div className="flex items-center gap-1 mb-5 border-b border-gray-200">
-        {["전국운임조회","자사운임표","차량제원"].map(tab=>(
+        {["전국운임조회","자사운임표"].map(tab=>(
           <button key={tab} onClick={()=>setActiveTab(tab)}
             className={`px-5 py-2.5 text-[14px] font-extrabold transition border-b-2 -mb-px ${activeTab===tab?"border-[#1B2B4B] text-[#1B2B4B]":"border-transparent text-gray-500 hover:text-gray-600"}`}>
             {tab}
@@ -1349,7 +1347,6 @@ export default function FreightRateInquiry(){
       </div>
       {activeTab==="전국운임조회"&&<NationalFareTab/>}
       {activeTab==="자사운임표"&&<CompanyFareTab/>}
-      {activeTab==="차량제원"&&<PalletSimulator/>}
     </div>
   );
 }

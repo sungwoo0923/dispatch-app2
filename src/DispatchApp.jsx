@@ -35,15 +35,14 @@ import { TEAM_OPTIONS, POSITION_OPTIONS, TEAM_BADGE_CLASS, TEAM_BADGE_CLASS_UNAS
 import AttendanceBoard from "./AttendanceBoard";
 import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate, isHoliday, isScheduleApproved, LEAVE_TYPE_LABEL, ATTENDANCE_STATUS_COLOR } from "./attendanceUtils";
 import FreightRateInquiry from "./FreightRateInquiry";
-import HandoverFareReport from "./HandoverFareReport";
 import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnabled } from "./notificationSettings";
 import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare, geocodeAddress, haversineKm } from "./tmapFareCalc";
 import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
 import RouteMapModal from "./RouteMapModal";
 import MonthCompareAnalysis from "./MonthCompareAnalysis";
-import { copyTrackingLink, copyDriverTrackingLink } from "./trackingLink";
 import { IdleFleetButton } from "./fleetRecommend";
+import { findClientRouteMismatch, ClientMismatchModal } from "./clientRouteCheck";
 import MonthCloseCheck from "./MonthCloseCheck";
 import StaffPerformance from "./StaffPerformance";
 import { RotationPicker, RotationBadge, expandRotation, rotationNotice, withRotationMemo } from "./rotation";
@@ -7125,7 +7124,6 @@ return (
               "배차현황",
               "단가표",
               "운임조회",
-              "인수인계",
               "기사관리",
               "거래처관리",
               "지입차관리",
@@ -7139,7 +7137,6 @@ return (
               const isBlocked = !customRole && (role === "user" || role === "test" || isViewer) && blockedMenus.includes(m);
               if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster" && !isViewer) return null;
               if (m === "관리센터" && role !== "totalMaster") return null;
-              if (m === "인수인계" && role !== "totalMaster") return null;
               if (isBlocked && (role === "test" || isViewer)) return null;
               const isActive = menu === m;
               return (
@@ -7707,7 +7704,6 @@ return (
 
         {menu === "운임조회" && <FreightRateInquiry />}
 
-        {menu === "인수인계" && role === "totalMaster" && <HandoverFareReport userCompany={userCompany} role={role} />}
 
         {menu === "회사관리" && (
           <CompanyManagementWrapper
@@ -10539,6 +10535,14 @@ const confirmDuplicateOrder = (matches) => new Promise((resolve) => {
   dupOrderResolveRef.current = resolve;
   setDupOrderMatches(matches);
 });
+// ⭐ 노선-거래처 불일치 확인창 — "change"(추천 거래처로 바꿔 등록) / "keep"(그대로) / "cancel"
+const [clientMisInfo, setClientMisInfo] = React.useState(null);
+const clientMisResolveRef = React.useRef(null);
+const confirmClientMismatch = (info) => new Promise((resolve) => {
+  clientMisResolveRef.current = resolve;
+  setClientMisInfo(info);
+});
+const closeClientMis = (choice) => { clientMisResolveRef.current?.(choice); clientMisResolveRef.current = null; setClientMisInfo(null); };
 const [multiCount, setMultiCount] = React.useState(1); // ★ 다중 등록 수량
 const [orderDates, setOrderDates] = React.useState([]); // 오더별 개별 상차일
 const [orderDropDates, setOrderDropDates] = React.useState([]); // 오더별 개별 하차일
@@ -12326,6 +12330,18 @@ showAlert(
     if (!proceed) { setIsSaving(false); return; }
   }
 
+  // ⭐ 노선-거래처 불일치 경고 — 같은 상차지→하차지 노선이 보통 다른 거래처로 등록돼 왔으면 확인
+  let clientFix = null;
+  const clientMis = findClientRouteMismatch(form, dispatchData);
+  if (clientMis) {
+    const choice = await confirmClientMismatch(clientMis);
+    if (choice === "cancel") { setIsSaving(false); return; }
+    if (choice === "change") {
+      clientFix = clientMis.suggest;
+      setForm(p => ({ ...p, 거래처명: clientMis.suggest }));
+    }
+  }
+
 const status = form.지급방식 === "취소"
     ? "배차취소"
     : form.차량번호 && (form.이름 || form.전화번호)
@@ -12379,6 +12395,7 @@ const _finalCargo = form.화물타입
 
 const rec = {
   ...form,
+  ...(clientFix ? { 거래처명: clientFix } : {}),
   화물내용: _finalCargo,
   메모중요도: autoPriority,
   운임보정: fareAdjustment,
@@ -17882,6 +17899,16 @@ className={`
     companyName={userCompany || localStorage.getItem("userCompany") || "돌캐"}
   />
 </div>
+{clientMisInfo && (
+  <ClientMismatchModal
+    info={clientMisInfo}
+    pickup={form.상차지명}
+    drop={form.하차지명}
+    onChange={() => closeClientMis("change")}
+    onKeep={() => closeClientMis("keep")}
+    onCancel={() => closeClientMis("cancel")}
+  />
+)}
 {dupOrderMatches && (
   <DuplicateOrderModal
     matches={dupOrderMatches}
@@ -32729,32 +32756,6 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             <EditableText id="realtime.ctxMenu.기사복사" defaultText="기사복사" />
           </button>
-          {/* ⭐ 화주용 배송 추적 링크 */}
-          <button
-            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
-            onClick={async () => {
-              const r = contextMenu.row;
-              setContextMenu(null);
-              try { await copyTrackingLink(r); showAlert("배송 추적 링크를 복사했습니다. 화주에게 문자·카톡으로 보내주세요."); }
-              catch (e) { showAlert("링크를 만들지 못했습니다: " + (e?.message || "")); }
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/><circle cx="12" cy="10" r="3"/></svg>
-            배송추적 링크 복사 (화주용)
-          </button>
-          {/* ⭐ 기사용 위치공유 링크 — 기사가 열고 위치 허용하면 📍실시간 위치에 표시(앱 설치 불필요) */}
-          <button
-            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
-            onClick={async () => {
-              const r = contextMenu.row;
-              setContextMenu(null);
-              try { await copyDriverTrackingLink(r); showAlert("기사용 위치공유 링크를 복사했습니다. 기사에게 문자·카톡으로 보내주세요.\n기사가 링크를 열고 위치를 허용하면 📍실시간 위치에서 볼 수 있습니다."); }
-              catch (e) { showAlert("링크를 만들지 못했습니다: " + (e?.message || "")); }
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4h13v11H1z"/><path d="M14 8h4l3 3v4h-7z"/><circle cx="5.5" cy="17.5" r="2"/><circle cx="17.5" cy="17.5" r="2"/></svg>
-            위치공유 링크 복사 (기사용)
-          </button>
           {/* 업로드링크 */}
           <button
             className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
@@ -43732,32 +43733,6 @@ setCopyPlaceOptions(list);
             }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             <EditableText id="status.ctxMenu.기사복사" defaultText="기사복사" />
-          </button>
-          {/* ⭐ 화주용 배송 추적 링크 */}
-          <button
-            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
-            onClick={async () => {
-              const r = contextMenuDS.row;
-              setContextMenuDS(null);
-              try { await copyTrackingLink(r); showAlert("배송 추적 링크를 복사했습니다. 화주에게 문자·카톡으로 보내주세요."); }
-              catch (e) { showAlert("링크를 만들지 못했습니다: " + (e?.message || "")); }
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/><circle cx="12" cy="10" r="3"/></svg>
-            배송추적 링크 복사 (화주용)
-          </button>
-          {/* ⭐ 기사용 위치공유 링크 — 기사가 열고 위치 허용하면 📍실시간 위치에 표시(앱 설치 불필요) */}
-          <button
-            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
-            onClick={async () => {
-              const r = contextMenuDS.row;
-              setContextMenuDS(null);
-              try { await copyDriverTrackingLink(r); showAlert("기사용 위치공유 링크를 복사했습니다. 기사에게 문자·카톡으로 보내주세요.\n기사가 링크를 열고 위치를 허용하면 📍실시간 위치에서 볼 수 있습니다."); }
-              catch (e) { showAlert("링크를 만들지 못했습니다: " + (e?.message || "")); }
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4h13v11H1z"/><path d="M14 8h4l3 3v4h-7z"/><circle cx="5.5" cy="17.5" r="2"/><circle cx="17.5" cy="17.5" r="2"/></svg>
-            위치공유 링크 복사 (기사용)
           </button>
           <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
             onClick={() => {

@@ -54,7 +54,6 @@ import NoAccess from "./NoAccess";
 const UploadPage = React.lazy(() => import("./UploadPage"));
 const DriverSearchPage = React.lazy(() => import("./DriverSearchPage"));
 const ShortLinkRedirect = React.lazy(() => import("./ShortLinkRedirect"));
-const TrackPage = React.lazy(() => import("./TrackPage")); // ⭐ 화주용 배송 추적(로그인 없음)
 const StandardFare = React.lazy(() => import("./StandardFare"));
 const ChangePassword = React.lazy(() => import("./ChangePassword"));
 
@@ -509,11 +508,6 @@ export default function App() {
   if (publicMatch) {
     const PublicComp = publicMatch;
     return <Router><Routes><Route path="*" element={<PublicComp />} /></Routes></Router>;
-  }
-
-  // ⭐ 화주용 배송 추적 페이지 — 로그인/스플래시 없이 바로
-  if (window.location.pathname === "/track") {
-    return <Router><Routes><Route path="*" element={<React.Suspense fallback={null}><TrackPage /></React.Suspense>} /></Routes></Router>;
   }
 
   // 기사전달용 짧은 업로드 링크 (/u/{code}) — /upload?id=...&t=...로 리다이렉트
