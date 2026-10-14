@@ -34,22 +34,20 @@ import {
 // ====================================================
 // Firebase 설정
 // ====================================================
-// ⭐ 회사별 별도 DB(방식 B) — 고객사마다 Vercel 프로젝트 환경변수(VITE_FIREBASE_*)에
-// 그 회사 Firebase 프로젝트 값을 넣어 배포한다. 값이 없으면 기존(돌캐) 프로젝트로 동작.
-const env = import.meta.env || {};
+// ⚠️ 접속 정보는 코드에 고정한다 — Vercel에 예전부터 있던 VITE_FIREBASE_* 값이 잘못된 키라
+// 환경변수에서 읽게 바꿨더니 로그인이 전부 "api-key-not-valid"로 실패했다.
 const firebaseConfig = {
-  apiKey: env.VITE_FIREBASE_API_KEY || "AIzaSyDaCTK03VbaXQCEKEiD7yp2KIzzX5x64a4",
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || "dispatch-app-9b92f.firebaseapp.com",
-  projectId: env.VITE_FIREBASE_PROJECT_ID || "dispatch-app-9b92f",
-  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || "dispatch-app-9b92f.firebasestorage.app",
-  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || "273115387263",
-  appId: env.VITE_FIREBASE_APP_ID || "1:273115387263:web:8ae6946cb01e265e55764a",
-  measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || "G-1NVFMVHQ28",
+  apiKey: "AIzaSyDaCTK03VbaXQCEKEiD7yp2KIzzX5x64a4",
+  authDomain: "dispatch-app-9b92f.firebaseapp.com",
+  projectId: "dispatch-app-9b92f",
+  storageBucket: "dispatch-app-9b92f.firebasestorage.app",
+  messagingSenderId: "273115387263",
+  appId: "1:273115387263:web:8ae6946cb01e265e55764a",
+  measurementId: "G-1NVFMVHQ28",
 };
-// Cloud Functions 주소도 연결된 프로젝트를 따라간다
-// 회사명이 비어있는 옛 문서를 어느 회사 소속으로 볼지(돌캐 배포는 "돌캐", 새 회사 배포는 그 회사명)
-export const DEFAULT_COMPANY = env.VITE_DEFAULT_COMPANY || "돌캐";
-export const FUNCTIONS_BASE = `https://${env.VITE_FIREBASE_FUNCTIONS_REGION || "us-central1"}-${firebaseConfig.projectId}.cloudfunctions.net`;
+// 회사명이 비어있는 옛 문서를 어느 회사 소속으로 볼지
+export const DEFAULT_COMPANY = "돌캐";
+export const FUNCTIONS_BASE = `https://us-central1-${firebaseConfig.projectId}.cloudfunctions.net`;
 
 const app = initializeApp(firebaseConfig);
 

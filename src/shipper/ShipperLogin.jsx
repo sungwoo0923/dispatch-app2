@@ -159,12 +159,26 @@ export default function ShipperLogin() {
     } catch (err) {
       sessionStorage.removeItem("shipperValidating");
       const code = err.code;
+      // 비밀번호는 통과했는데 그 뒤 확인 단계에서 실패한 경우 — 반쯤 로그인된 상태로 남지 않게
+      if (!String(code || "").startsWith("auth/")) signOut(auth).catch(() => {});
       if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
         setError("비밀번호가 일치하지 않습니다");
       } else if (code === "auth/user-not-found") {
         setError("등록된 이메일이 없습니다");
+      } else if (code === "auth/too-many-requests") {
+        setError("로그인 시도가 너무 많아 잠시 잠겼습니다. 몇 분 뒤 다시 시도하거나 '비밀번호 찾기'로 재설정해주세요.");
+      } else if (code === "auth/network-request-failed") {
+        setError("인터넷 연결이 불안정해 로그인하지 못했습니다. 잠시 후 다시 시도해주세요.");
+      } else if (code === "auth/user-disabled") {
+        setError("사용이 중지된 계정입니다. 관리자에게 문의하세요.");
+      } else if (code === "auth/invalid-email") {
+        setError("이메일 형식이 올바르지 않습니다.");
+      } else if (code === "permission-denied") {
+        setError("계정 정보를 읽을 권한이 없습니다. 관리자에게 문의하세요. (permission-denied)");
       } else {
-        setError("로그인에 실패했습니다");
+        // ⭐ 원인 파악용으로 오류 코드를 같이 보여준다(운송사 로그인과 동일)
+        console.error("[화주 로그인 실패]", err);
+        setError(`로그인에 실패했습니다. (${code || err?.message || "unknown"})`);
       }
     } finally {
       setLoading(false);
