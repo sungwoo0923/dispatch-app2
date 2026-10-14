@@ -280,3 +280,141 @@ export function buildInsights(res) {
   }
   return out;
 }
+
+// ===================== 원인 분석 리포트 (표 + 설명) =====================
+// ⭐ 사용자 요청 — "핵심 숫자 / 원인 1·2·3 / 원인이 아닌 것"을 표와 짧은 설명으로,
+// 어떤 두 달을 골라도 데이터에서 자동으로 만든다.
+const manU = (v) => {
+  const a = Math.abs(v);
+  if (a >= 1e8) {
+    const eok = Math.floor(a / 1e8), man = Math.round((a - eok * 1e8) / 1e4);
+    return `${v < 0 ? "−" : ""}${eok}억${man ? ` ${man.toLocaleString()}만` : ""}원`;
+  }
+  if (a >= 1e4) return `${Math.round(v / 1e4).toLocaleString()}만원`;
+  return `${Math.round(v).toLocaleString()}원`;
+};
+const sManU = (v) => (v >= 0 ? "+" : "−") + manU(Math.abs(v));
+const pctU = (v) => `${(v * 100).toFixed(1)}%`;
+const pp = (a, b) => `${((b - a) * 100 >= 0 ? "+" : "")}${((b - a) * 100).toFixed(1)}%p`;
+const rateOf = (s, d) => (s > 0 ? (s - d) / s : 0);
+
+export function buildReport(res) {
+  const { A, B, monthA, monthB, detailA, detailB, dims, listA, listB } = res;
+  const a = mLabel(monthA), b = mLabel(monthB);
+  const causes = [];
+  const notCauses = [];
+  const saleD = B.sale - A.sale, profitD = B.profit - A.profit;
+  const retain = saleD > 0 ? profitD / saleD : null;
+
+  // ── 핵심 숫자
+  const core = [
+    { label: "매출", a: manU(A.sale), b: manU(B.sale), d: `${sManU(saleD)}${A.sale ? ` (${saleD >= 0 ? "+" : ""}${((saleD / A.sale) * 100).toFixed(1)}%)` : ""}`, tone: saleD >= 0 ? "good" : "bad" },
+    { label: "수익", a: manU(A.profit), b: manU(B.profit), d: `${sManU(profitD)}${A.profit ? ` (${profitD >= 0 ? "+" : ""}${((profitD / Math.abs(A.profit)) * 100).toFixed(1)}%)` : ""}`, tone: profitD >= 0 ? "good" : "bad" },
+    { label: "수익률", a: pctU(A.rate), b: pctU(B.rate), d: pp(A.rate, B.rate), tone: B.rate >= A.rate ? "good" : "bad" },
+    { label: "건수", a: `${A.cnt.toLocaleString()}건`, b: `${B.cnt.toLocaleString()}건`, d: `${B.cnt - A.cnt >= 0 ? "+" : ""}${(B.cnt - A.cnt).toLocaleString()}건`, tone: B.cnt >= A.cnt ? "good" : "bad" },
+    { label: "건당 평균 수익", a: `${Math.round(A.avgProfit).toLocaleString()}원`, b: `${Math.round(B.avgProfit).toLocaleString()}원`, d: `${B.avgProfit - A.avgProfit >= 0 ? "+" : "−"}${Math.abs(Math.round(B.avgProfit - A.avgProfit)).toLocaleString()}원`, tone: B.avgProfit >= A.avgProfit ? "good" : "bad" },
+  ];
+
+  // ── 원인 후보 1: 마진 구조(수익률 구간)
+  const bandRows = MARGIN_BANDS.map((bd) => {
+    const x = detailA.bands[bd.key], y = detailB.bands[bd.key];
+    const good = bd.key === "15" || bd.key === "10";
+    return {
+      label: bd.label,
+      a: [`${x.cnt}건 · ${manU(x.sale)}`, `수익 ${manU(x.sale - x.driver)}`],
+      b: [`${y.cnt}건 · ${manU(y.sale)}`, `수익 ${manU(y.sale - y.driver)}`],
+      d: [`매출 ${sManU(y.sale - x.sale)}`, `수익 ${sManU((y.sale - y.driver) - (x.sale - x.driver))}`],
+      tone: (y.sale - x.sale) === 0 ? "neutral" : ((y.sale > x.sale) === good ? "good" : "bad"),
+    };
+  });
+  const lowSale = (dt) => ["5", "0", "neg"].reduce((s, k) => s + dt.bands[k].sale, 0);
+  const lowShareA = A.sale ? lowSale(detailA) / A.sale : 0, lowShareB = B.sale ? lowSale(detailB) / B.sale : 0;
+  const top = (dt) => dt.bands["15"];
+  const topProfitD = (top(detailB).sale - top(detailB).driver) - (top(detailA).sale - top(detailA).driver);
+  const zeroA = listA.filter((r) => toWon(r.청구운임) > 0 && toWon(r.청구운임) === toWon(r.기사운임));
+  const zeroB = listB.filter((r) => toWon(r.청구운임) > 0 && toWon(r.청구운임) === toWon(r.기사운임));
+  const zeroTop = Object.entries(zeroB.reduce((m, r) => { const k = String(r.거래처명 || "").trim() || "(미입력)"; m[k] = (m[k] || 0) + 1; return m; }, {})).sort((x, y) => y[1] - x[1]).slice(0, 4);
+  const marginBullets = [
+    `수익률 10% 미만 오더가 전체 매출에서 차지하는 비중: ${pctU(lowShareA)} → ${pctU(lowShareB)}`,
+    `수익률 15% 이상 오더: ${top(detailA).cnt}건 → ${top(detailB).cnt}건, 수익 ${sManU(topProfitD)}`,
+    `수익이 정확히 0원인 오더: ${zeroA.length}건(${manU(zeroA.reduce((s, r) => s + toWon(r.청구운임), 0))}) → ${zeroB.length}건(${manU(zeroB.reduce((s, r) => s + toWon(r.청구운임), 0))})${zeroTop.length ? ` · ${b} 많은 곳: ${zeroTop.map(([k, c]) => `${k} ${c}건`).join(", ")}` : ""}`,
+  ];
+  const marginScore = Math.max(0, (lowShareB - lowShareA) * B.sale * A.rate) + Math.max(0, -topProfitD);
+  const marginSection = {
+    key: "margin", title: lowShareB > lowShareA + 0.02 ? "마진 낮은 오더가 늘었습니다" : topProfitD < 0 ? "마진 좋은 오더가 줄었습니다" : "수익률 구간별 변화",
+    head: ["수익률 구간", a, b, "증감"], rows: bandRows, bullets: marginBullets, score: marginScore,
+  };
+  if (lowShareB > lowShareA + 0.02 || topProfitD < -Math.max(300000, Math.abs(profitD) * 0.3)) causes.push(marginSection);
+  else notCauses.push(`수익률 구간 구성은 비슷합니다(10% 미만 매출 비중 ${pctU(lowShareA)} → ${pctU(lowShareB)}).`);
+
+  // ── 원인 후보 2: 배차방식별 마진
+  const methodRows = (dims.method || []).filter((g) => g.a.sale + g.b.sale > 0).sort((x, y) => (y.b.sale + y.a.sale) - (x.b.sale + x.a.sale)).map((g) => ({
+    label: g.key,
+    a: [`${g.a.cnt}건 · ${manU(g.a.sale)}`, `수익률 ${pctU(g.a.rate)}`],
+    b: [`${g.b.cnt}건 · ${manU(g.b.sale)}`, `수익률 ${pctU(g.b.rate)}`],
+    d: [`매출 ${sManU(g.dSale)}`, `수익 ${sManU(g.dProfit)}`],
+    tone: g.b.rate < g.a.rate - 0.01 ? "bad" : g.b.rate > g.a.rate + 0.01 ? "good" : "neutral",
+    g,
+  }));
+  const worstMethod = methodRows.map((r) => r.g).filter((g) => g.a.sale > 0 && g.b.sale > 0 && g.b.rate < g.a.rate - 0.01).sort((x, y) => (x.b.sale * (x.b.rate - x.a.rate)) - (y.b.sale * (y.b.rate - y.a.rate)))[0];
+  if (worstMethod && worstMethod.b.sale * (worstMethod.a.rate - worstMethod.b.rate) > Math.max(300000, Math.abs(B.sale * (A.rate - B.rate)) * 0.2)) {
+    const low = (list) => list.filter((r) => COMPARE_DIMS[1].get(r) === worstMethod.key && rateOf(toWon(r.청구운임), toWon(r.기사운임)) < 0.10).length;
+    causes.push({
+      key: "method", title: `"${worstMethod.key}" 오더의 마진이 떨어졌습니다`, head: ["배차방식", a, b, "증감"], rows: methodRows,
+      bullets: [
+        `${worstMethod.key} 수익률 ${pctU(worstMethod.a.rate)} → ${pctU(worstMethod.b.rate)}: 매출 ${sManU(worstMethod.dSale)}인데 수익은 ${sManU(worstMethod.dProfit)}`,
+        `${worstMethod.key}에서 수익률 10% 미만 오더: ${low(listA)}건 → ${low(listB)}건`,
+      ],
+      score: worstMethod.b.sale * (worstMethod.a.rate - worstMethod.b.rate),
+    });
+  }
+
+  // ── 원인 후보 3: 거래처 변화
+  const cl = (dims.client || []).filter((g) => g.a.sale + g.b.sale > 0);
+  const lost = cl.filter((g) => g.dProfit < 0).sort((x, y) => x.dProfit - y.dProfit).slice(0, 3);
+  const growLow = cl.filter((g) => g.dSale > 0 && g.b.sale > 0 && g.b.rate < A.rate - 0.02).sort((x, y) => y.dSale - x.dSale).slice(0, 4);
+  const halved = cl.filter((g) => g.a.sale > 0 && g.b.sale >= 1000000 && g.a.rate - g.b.rate >= 0.05 && !lost.includes(g)).sort((x, y) => x.dProfit - y.dProfit).slice(0, 3);
+  const cRow = (g, note) => ({
+    label: g.key,
+    a: [g.a.cnt ? `${g.a.cnt}건 · ${manU(g.a.sale)}` : "-", g.a.cnt ? `수익률 ${pctU(g.a.rate)}` : ""],
+    b: [g.b.cnt ? `${g.b.cnt}건 · ${manU(g.b.sale)}` : "-", g.b.cnt ? `수익률 ${pctU(g.b.rate)}` : ""],
+    d: [`수익 ${sManU(g.dProfit)}`, note],
+    tone: g.dProfit < 0 ? "bad" : "warn",
+  });
+  const clientRows = [
+    ...lost.map((g) => cRow(g, g.dSale < 0 ? "오더 감소" : "마진 하락")),
+    ...growLow.filter((g) => !lost.includes(g)).map((g) => cRow(g, `늘었지만 저마진`)),
+    ...halved.filter((g) => !growLow.includes(g)).map((g) => cRow(g, `수익률 ${pp(g.a.rate, g.b.rate)}`)),
+  ];
+  if (clientRows.length) {
+    const bl = [];
+    if (lost[0]) bl.push(`수익이 가장 많이 줄어든 곳: ${lost[0].key} (${lost[0].a.cnt}건 → ${lost[0].b.cnt}건, 수익 ${sManU(lost[0].dProfit)})`);
+    if (growLow.length) bl.push(`${b}에 크게 늘었지만 마진이 낮은 곳: ${growLow.map((g) => `${g.key}(${pctU(g.b.rate)})`).join(", ")}`);
+    if (halved.length) bl.push(`마진이 크게 떨어진 곳: ${halved.map((g) => `${g.key} ${pctU(g.a.rate)}→${pctU(g.b.rate)}`).join(", ")}`);
+    causes.push({ key: "client", title: "거래처 변화", head: ["거래처", a, b, "영향"], rows: clientRows, bullets: bl, score: -lost.reduce((s, g) => s + g.dProfit, 0) });
+  }
+
+  // ── 원인 후보 4: 차량종류
+  const veh = (dims.vehicle || []).filter((g) => g.a.sale > 0 && g.b.sale > 0 && g.dSale > 0 && g.b.rate < g.a.rate - 0.02).sort((x, y) => (x.b.sale * (x.b.rate - x.a.rate)) - (y.b.sale * (y.b.rate - y.a.rate)))[0];
+  if (veh && veh.dSale > Math.abs(saleD) * 0.1) {
+    causes.push({ key: "vehicle", title: `차량종류 "${veh.key}" 마진 하락`, rows: null, bullets: [`${veh.key}: 매출 ${sManU(veh.dSale)}인데 수익 ${sManU(veh.dProfit)} (수익률 ${pctU(veh.a.rate)} → ${pctU(veh.b.rate)})`], score: veh.b.sale * (veh.a.rate - veh.b.rate) });
+  }
+
+  // ── 이상 오더: 차이가 작으면 "원인 아님"
+  for (const t of res.anomalySummary.filter((x) => x.type === "역마진" || x.type === "청구운임 미입력")) {
+    const diff = t.b.amount - t.a.amount;
+    if (Math.abs(diff) < Math.max(300000, Math.abs(profitD) * 0.2)) notCauses.push(`${t.type}: ${manU(t.a.amount)}(${t.a.cnt}건) → ${manU(t.b.amount)}(${t.b.cnt}건), 두 달이 비슷합니다.`);
+    else causes.push({ key: `an-${t.type}`, title: `${t.type} 오더가 ${diff > 0 ? "늘었습니다" : "줄었습니다"}`, rows: null, bullets: [`${t.type}: ${manU(t.a.amount)}(${t.a.cnt}건) → ${manU(t.b.amount)}(${t.b.cnt}건) · ${t.desc}`], score: Math.abs(diff) });
+  }
+
+  // ── 결론 문장
+  let headline;
+  if (saleD > 0 && retain != null && retain < A.rate * 0.6) {
+    headline = `매출이 ${manU(saleD)} 늘었는데 수익은 ${sManU(profitD)}입니다. 늘어난 매출에서 남은 비율이 ${pctU(Math.max(retain, -9.99))}뿐입니다(${a} 평균 수익률 ${pctU(A.rate)}).`;
+  } else {
+    headline = `매출 ${sManU(saleD)}, 수익 ${sManU(profitD)} · 수익률 ${pctU(A.rate)} → ${pctU(B.rate)}`;
+  }
+  const sorted = causes.sort((x, y) => (x.key === "margin" ? -1 : y.key === "margin" ? 1 : y.score - x.score));
+  const summary = sorted.length ? `${b}에는 ${sorted.map((c) => c.title).slice(0, 2).join(" / ")}` : "두 달 사이에 눈에 띄는 원인이 없습니다.";
+  return { a, b, headline, summary, core, causes: sorted, notCauses };
+}

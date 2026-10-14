@@ -1,6 +1,6 @@
 // ===================== 월 비교 분석 화면 (PC·모바일 공용) =====================
 import React, { useMemo, useState, useEffect } from "react";
-import { analyzeMonths, explainGap, COMPARE_DIMS, toWon, MARGIN_BANDS } from "./monthCompare";
+import { analyzeMonths, buildReport, COMPARE_DIMS, toWon, MARGIN_BANDS } from "./monthCompare";
 
 const NAVY = "#1B2B4B";
 const won = (v) => `${Math.round(v).toLocaleString()}원`;
@@ -19,6 +19,43 @@ function Delta({ v, money = true, isRate = false }) {
   const up = v > 0;
   const txt = isRate ? `${up ? "+" : ""}${(v * 100).toFixed(1)}%p` : `${up ? "+" : "−"}${money ? Math.abs(Math.round(v)).toLocaleString() + "원" : Math.abs(v)}`;
   return <span style={{ color: up ? "#047857" : "#b91c1c", fontWeight: 800 }}>{txt}</span>;
+}
+
+// ⭐ 리포트 표 — 구분선·가운데 정렬. 셀 값은 문자열 또는 [윗줄, 아랫줄]
+const TONE_COLOR = { good: "#047857", bad: "#b91c1c", warn: "#b45309", neutral: "#374151" };
+function ReportTable({ head, rows, compact }) {
+  const LINE = "1px solid #dfe5ee";
+  const cols = compact ? "minmax(0,0.9fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)" : "minmax(0,1fr) minmax(0,1.2fr) minmax(0,1.2fr) minmax(0,1.2fr)";
+  const cell = (v, i, extra = {}) => {
+    let lines = Array.isArray(v) ? v.filter(Boolean) : [v];
+    // 좁은 화면: "506건 · 7,032만원"을 두 줄로 나눠 어색한 줄바꿈 방지
+    let mainCnt = 1;
+    if (compact && typeof lines[0] === "string" && lines[0].includes(" · ")) { const parts = lines[0].split(" · "); mainCnt = parts.length; lines = [...parts, ...lines.slice(1)]; }
+    return (
+      <div style={{ padding: compact ? "8px 4px" : "10px 10px", borderLeft: i ? LINE : "none", textAlign: "center", minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", ...extra }}>
+        {lines.map((t, k) => (
+          <div key={k} style={{ fontSize: (k >= mainCnt) ? (compact ? 11 : 12) : (compact ? 13 : 15), fontWeight: (k >= mainCnt) ? 700 : 800, color: (k >= mainCnt) ? "#4b5563" : (extra.color || "#111827"), lineHeight: 1.35, wordBreak: "keep-all", overflowWrap: "anywhere" }}>{t}</div>
+        ))}
+      </div>
+    );
+  };
+  return (
+    <div style={{ border: LINE, borderRadius: 10, overflow: "hidden" }}>
+      <div style={{ display: "grid", gridTemplateColumns: cols, background: "#eef1f6", borderBottom: "2px solid #cfd8e5" }}>
+        {head.map((t, i) => (
+          <div key={i} style={{ padding: compact ? "8px 4px" : "10px 10px", borderLeft: i ? LINE : "none", textAlign: "center", fontSize: compact ? 13 : 14, fontWeight: 900, color: i === 2 ? "#fff" : NAVY, background: i === 2 ? NAVY : "transparent" }}>{t}</div>
+        ))}
+      </div>
+      {rows.map((r, idx) => (
+        <div key={idx} style={{ display: "grid", gridTemplateColumns: cols, borderTop: idx ? LINE : "none" }}>
+          {cell(r.label, 0, { background: "#fafbfc", color: "#1f2937" })}
+          {cell(r.a, 1)}
+          {cell(r.b, 2)}
+          {cell(r.d, 3, { color: TONE_COLOR[r.tone] || "#111827" })}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 // ⭐ 좌우 비교 — 왼쪽 A월, 오른쪽 B월, 마지막 칸 "A월 대비 B월" 증감
@@ -154,25 +191,29 @@ function MonthSideBySide({ res, a, b, compact }) {
 
 // 두 달 비교 행 — PC는 [항목 | A | B] 한 줄, 좁은 화면은 항목 아래 A/B 두 칸
 function CompareRows({ items, a, b, compact }) {
-  const cell = (c, label) => (
-    <div style={{ textAlign: compact ? "left" : "right", background: compact ? "#f8f9fb" : "transparent", borderRadius: 8, padding: compact ? "7px 10px" : 0, minWidth: 0 }}>
+  const LINE = "1px solid #dfe5ee";
+  const cols = compact ? "minmax(0,1fr) minmax(0,1fr)" : "minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr)";
+  const cell = (c, label, first) => (
+    <div style={{ textAlign: "center", padding: compact ? "8px 6px" : "10px 10px", borderLeft: first ? "none" : LINE, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
       {compact && <div style={{ fontSize: 12, fontWeight: 800, color: "#4b5563" }}>{label}</div>}
       <div style={{ fontSize: 15, fontWeight: 900, color: c.bad ? "#b91c1c" : "#111827", whiteSpace: "nowrap" }}>{c.main}</div>
       {c.sub && <div style={{ fontSize: 12, fontWeight: 700, color: "#4b5563", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.sub}</div>}
     </div>
   );
   return (
-    <div>
+    <div style={{ border: LINE, borderRadius: 10, overflow: "hidden" }}>
       {!compact && (
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr)", gap: 12, padding: "8px 10px", background: "#f4f7fb", borderRadius: 8, fontSize: 14, fontWeight: 900, color: NAVY }}>
-          <span>구분</span><span style={{ textAlign: "right" }}>{a}</span><span style={{ textAlign: "right" }}>{b}</span>
+        <div style={{ display: "grid", gridTemplateColumns: cols, background: "#eef1f6", borderBottom: "2px solid #cfd8e5", fontSize: 14, fontWeight: 900, color: NAVY, textAlign: "center" }}>
+          <span style={{ padding: "10px" }}>구분</span>
+          <span style={{ padding: "10px", borderLeft: LINE }}>{a}</span>
+          <span style={{ padding: "10px", borderLeft: LINE, background: NAVY, color: "#fff" }}>{b}</span>
         </div>
       )}
-      {items.map((it) => (
-        <div key={it.key} style={{ display: "grid", gridTemplateColumns: compact ? "minmax(0,1fr) minmax(0,1fr)" : "minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr)", gap: compact ? 6 : 12, padding: compact ? "10px 0" : "10px 10px", borderBottom: "1px solid #eef1f6", alignItems: "start" }}>
-          <div style={{ gridColumn: compact ? "1 / -1" : undefined, minWidth: 0 }}>{it.head}</div>
-          {cell(it.cells[0], a)}
-          {cell(it.cells[1], b)}
+      {items.map((it, idx) => (
+        <div key={it.key} style={{ display: "grid", gridTemplateColumns: cols, borderTop: idx ? LINE : "none" }}>
+          <div style={{ gridColumn: compact ? "1 / -1" : undefined, minWidth: 0, textAlign: "center", padding: compact ? "8px 6px" : "10px 10px", background: "#fafbfc", borderBottom: compact ? LINE : "none" }}>{it.head}</div>
+          {cell(it.cells[0], a, compact)}
+          {cell(it.cells[1], b, false)}
         </div>
       ))}
     </div>
@@ -198,7 +239,8 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
   }, [onClose]);
 
   const res = useMemo(() => analyzeMonths({ rows, monthA, monthB, scope, isExcluded }), [rows, monthA, monthB, scope, isExcluded]);
-  const gapInfo = useMemo(() => explainGap(res), [res]);
+  const report = useMemo(() => buildReport(res), [res]);
+  const [detailTab, setDetailTab] = useState("");
   const [showAnomalyList, setShowAnomalyList] = useState(false);
   const { A } = res;
   const dimRows = res.dims[dimKey] || [];
@@ -275,94 +317,53 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
             높이 0 근처로 찌그러져 얇은 선처럼만 보였다. 자식이 줄어들지 않게 고정한다. */}
         <style>{`.mca-scroll > * { flex-shrink: 0; }`}</style>
         <div className="mca-scroll" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: compact ? 12 : 20, display: "flex", flexDirection: "column", gap: compact ? 12 : 16 }}>
-          <MonthSideBySide res={res} a={a} b={b} compact={compact} />
+          {/* ⭐ 원인 분석 리포트 — 결론 → 핵심 숫자 → 원인별 표·설명 → 원인이 아닌 것 */}
+          <div style={{ background: NAVY, borderRadius: 14, padding: compact ? "14px 16px" : "18px 22px", color: "#fff" }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "rgba(255,255,255,.7)", marginBottom: 6 }}>한 줄 결론 · {mLabel(monthA)} vs {mLabel(monthB)} ({scope === "pure" ? "순수 운송" : scope === "all" ? "전체" : "제외 거래처"})</div>
+            <div style={{ fontSize: compact ? 17 : 20, fontWeight: 900, lineHeight: 1.5 }}>{report.headline}</div>
+            <div style={{ fontSize: compact ? 14 : 15, fontWeight: 700, color: "rgba(255,255,255,.85)", marginTop: 6, lineHeight: 1.5 }}>{report.summary}</div>
+          </div>
 
-          {/* ⭐ 왜 차이가 났나 — 한 줄 결론 + 덜 번 금액을 원인별로(합계가 정확히 맞음) */}
           <div style={card}>
-            <div style={{ fontSize: compact ? 18 : 20, fontWeight: 900, color: "#111827", lineHeight: 1.45 }}>{gapInfo.headline}</div>
-            <div style={{ fontSize: compact ? 15 : 16, fontWeight: 700, color: "#1f2937", lineHeight: 1.6, marginTop: 8, background: gapInfo.gap < 0 ? "#fff5f5" : "#f0fdf4", border: `1px solid ${gapInfo.gap < 0 ? "#fecaca" : "#bbf7d0"}`, borderRadius: 10, padding: "10px 14px" }}>
-              {gapInfo.why}
+            <h3 style={h}>핵심 숫자</h3>
+            <ReportTable compact={compact} head={["구분", a, b, "증감"]} rows={report.core} />
+          </div>
+
+          {report.causes.map((c, i) => (
+            <div key={c.key} style={card}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                <span style={{ flexShrink: 0, fontSize: 13, fontWeight: 900, color: "#fff", background: "#b91c1c", borderRadius: 6, padding: "3px 9px" }}>원인 {i + 1}</span>
+                <span style={{ fontSize: compact ? 16 : 18, fontWeight: 900, color: "#111827" }}>{c.title}</span>
+              </div>
+              {c.rows && <ReportTable compact={compact} head={c.head} rows={c.rows} />}
+              {c.bullets?.length > 0 && (
+                <ul style={{ margin: c.rows ? "12px 0 0" : 0, paddingLeft: 20, fontSize: compact ? 14 : 15, fontWeight: 600, color: "#1f2937", lineHeight: 1.75 }}>
+                  {c.bullets.map((t, j) => <li key={j}>{t}</li>)}
+                </ul>
+              )}
             </div>
-            {gapInfo.reasons.length > 0 && (
-              <>
-                <div style={{ fontSize: 16, fontWeight: 900, color: NAVY, margin: "16px 0 8px" }}>
-                  {gapInfo.gap < 0 ? `덜 번 ${Math.round(-gapInfo.gap).toLocaleString()}원, 어디서 생겼나 (큰 순서)` : "원인별 금액"}
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {gapInfo.reasons.map((r, i) => {
-                    const neg = r.amount < 0;
-                    const w = gapInfo.gap ? Math.min(100, Math.round((Math.abs(r.amount) / Math.abs(gapInfo.gap)) * 100)) : 0;
-                    return (
-                      <div key={i} style={{ border: "1px solid #e2e7ef", borderRadius: 10, padding: "10px 12px", background: "#fff" }}>
-                        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                          <span style={{ fontSize: 15, fontWeight: 900, color: "#111827", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{i + 1}. {r.label}</span>
-                          <span style={{ marginLeft: "auto", fontSize: 15, fontWeight: 900, color: neg ? "#b91c1c" : "#047857", whiteSpace: "nowrap" }}>{neg ? "−" : "+"}{Math.abs(Math.round(r.amount)).toLocaleString()}원</span>
-                        </div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginTop: 3 }}>{r.desc}</div>
-                        <div style={{ height: 6, background: "#eef1f6", borderRadius: 4, marginTop: 7, overflow: "hidden" }}>
-                          <div style={{ width: `${w}%`, height: "100%", background: neg ? "#ef4444" : "#10b981", borderRadius: 4 }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
+          ))}
+
+          {report.notCauses.length > 0 && (
+            <div style={{ ...card, background: "#f8faf9" }}>
+              <h3 style={{ ...h, color: "#047857" }}>원인이 아닌 것</h3>
+              <ul style={{ margin: 0, paddingLeft: 20, fontSize: compact ? 14 : 15, fontWeight: 600, color: "#1f2937", lineHeight: 1.75 }}>
+                {report.notCauses.map((t, j) => <li key={j}>{t}</li>)}
+              </ul>
+            </div>
+          )}
+
+          {/* 상세 자료 — 탭으로 하나씩 */}
+          <div style={{ ...card, padding: compact ? "10px 12px" : "12px 18px" }}>
+            <div style={{ fontSize: 14, fontWeight: 900, color: NAVY, marginBottom: 8 }}>상세 자료</div>
+            <div style={{ display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none" }}>
+              {[["table", "월별 상세 비교표"], ["dims", "항목별 비교"], ["check", "확인 필요 오더"], ["excluded", "순수운송 제외 거래처"]].map(([k, l]) => (
+                <button key={k} onClick={() => setDetailTab(detailTab === k ? "" : k)} style={{ flexShrink: 0, height: 34, padding: "0 14px", borderRadius: 99, border: "1px solid " + (detailTab === k ? NAVY : "#cbd5e1"), background: detailTab === k ? NAVY : "#fff", color: detailTab === k ? "#fff" : "#1f2937", fontSize: 14, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>{l}</button>
+              ))}
+            </div>
           </div>
-
-
-          {/* 확인 필요 오더 — 두 달 건수·금액 비교 */}
-          <div style={card}>
-            <h3 style={h}>확인이 필요한 오더 ({a} vs {b})</h3>
-            <CompareRows
-              compact={compact}
-              a={a} b={b}
-              items={res.anomalySummary.map((t) => ({
-                key: t.type,
-                head: <>
-                  <span style={{ fontSize: 13, fontWeight: 900, color: TONE[t.tone].title, background: TONE[t.tone].bg, border: `1px solid ${TONE[t.tone].border}`, borderRadius: 5, padding: "1px 7px", whiteSpace: "nowrap" }}>{t.type}</span>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "#4b5563", marginTop: 4 }}>{t.desc}</div>
-                </>,
-                cells: [t.a, t.b].map((v, k) => ({
-                  main: `${v.cnt}건`,
-                  sub: `${t.amountLabel} ${Math.round(v.amount).toLocaleString()}원`,
-                  bad: k === 1 && t.b.cnt > t.a.cnt,
-                })),
-              }))}
-            />
-            {res.anomaliesB.length > 0 && (
-              <button onClick={() => setShowAnomalyList((v) => !v)} style={{ marginTop: 10, height: 34, padding: "0 14px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: NAVY, fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
-                {showAnomalyList ? "목록 접기" : `${b} 오더 목록 보기 (${res.anomaliesB.length}건)`}
-              </button>
-            )}
-            {showAnomalyList && anomalyListEl}
-          </div>
-
-          {/* 매출관리(순수 운송)에서 빠지는 거래처 */}
-          <div style={card}>
-            <h3 style={h}>매출관리(순수 운송)에 포함되지 않는 거래처</h3>
-            {res.excludedClients.length === 0 ? (
-              <div style={{ fontSize: 15, fontWeight: 700, color: "#374151" }}>{a}·{b}에는 순수 운송에서 빠지는 거래처 오더가 없습니다.</div>
-            ) : (
-              <>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#4b5563", marginBottom: 8 }}>거래처관리에서 "순수 운송료 매출 통계에서 제외"가 켜진 거래처입니다. "순수 운송" 숫자에는 들어가지 않고 "전체"에만 들어갑니다.</div>
-                <CompareRows
-                  compact={compact}
-                  a={a} b={b}
-                  items={res.excludedClients.map((g) => ({
-                    key: g.key,
-                    head: <span style={{ fontSize: 15, fontWeight: 900, color: "#111827" }}>{g.key}</span>,
-                    cells: [g.a, g.b].map((v) => ({
-                      main: v.cnt ? won(v.sale) : "-",
-                      sub: v.cnt ? `수익 ${won(v.profit)} · ${v.cnt}건` : "",
-                    })),
-                  }))}
-                />
-              </>
-            )}
-          </div>
-
-          {/* 항목별 비교 */}
+          {detailTab === "table" && <MonthSideBySide res={res} a={a} b={b} compact={compact} />}
+          {detailTab === "dims" && (
           <div style={card}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
               <h3 style={{ ...h, margin: 0 }}>항목별 비교</h3>
@@ -408,6 +409,58 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
               </button>
             )}
           </div>
+          )}
+          {detailTab === "check" && (
+          <div style={card}>
+            <h3 style={h}>확인이 필요한 오더 ({a} vs {b})</h3>
+            <CompareRows
+              compact={compact}
+              a={a} b={b}
+              items={res.anomalySummary.map((t) => ({
+                key: t.type,
+                head: <>
+                  <span style={{ fontSize: 13, fontWeight: 900, color: TONE[t.tone].title, background: TONE[t.tone].bg, border: `1px solid ${TONE[t.tone].border}`, borderRadius: 5, padding: "1px 7px", whiteSpace: "nowrap" }}>{t.type}</span>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#4b5563", marginTop: 4 }}>{t.desc}</div>
+                </>,
+                cells: [t.a, t.b].map((v, k) => ({
+                  main: `${v.cnt}건`,
+                  sub: `${t.amountLabel} ${Math.round(v.amount).toLocaleString()}원`,
+                  bad: k === 1 && t.b.cnt > t.a.cnt,
+                })),
+              }))}
+            />
+            {res.anomaliesB.length > 0 && (
+              <button onClick={() => setShowAnomalyList((v) => !v)} style={{ marginTop: 10, height: 34, padding: "0 14px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: NAVY, fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
+                {showAnomalyList ? "목록 접기" : `${b} 오더 목록 보기 (${res.anomaliesB.length}건)`}
+              </button>
+            )}
+            {showAnomalyList && anomalyListEl}
+          </div>
+          )}
+          {detailTab === "excluded" && (
+          <div style={card}>
+            <h3 style={h}>매출관리(순수 운송)에 포함되지 않는 거래처</h3>
+            {res.excludedClients.length === 0 ? (
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#374151" }}>{a}·{b}에는 순수 운송에서 빠지는 거래처 오더가 없습니다.</div>
+            ) : (
+              <>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#4b5563", marginBottom: 8 }}>거래처관리에서 "순수 운송료 매출 통계에서 제외"가 켜진 거래처입니다. "순수 운송" 숫자에는 들어가지 않고 "전체"에만 들어갑니다.</div>
+                <CompareRows
+                  compact={compact}
+                  a={a} b={b}
+                  items={res.excludedClients.map((g) => ({
+                    key: g.key,
+                    head: <span style={{ fontSize: 15, fontWeight: 900, color: "#111827" }}>{g.key}</span>,
+                    cells: [g.a, g.b].map((v) => ({
+                      main: v.cnt ? won(v.sale) : "-",
+                      sub: v.cnt ? `수익 ${won(v.profit)} · ${v.cnt}건` : "",
+                    })),
+                  }))}
+                />
+              </>
+            )}
+          </div>
+          )}
 
         </div>
       </div>
