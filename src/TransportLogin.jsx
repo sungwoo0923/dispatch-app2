@@ -177,6 +177,15 @@ export default function TransportLogin() {
 
         const userData = userSnap.data();
 
+        // ⭐ 운송사 로그인은 운송사 직원 계정만 — 화주·기사·배차마당 계정은 각자 로그인 화면에서만 로그인
+        const OTHER_LOGIN = { shipper: "화주사 로그인", driver: "기사앱", cafeUser: "배차마당" };
+        if (OTHER_LOGIN[userData.role]) {
+          sessionStorage.removeItem("transportValidating");
+          await signOut(auth);
+          setError(`운송사 계정이 아닙니다. ${OTHER_LOGIN[userData.role]} 화면에서 로그인해주세요.`);
+          return;
+        }
+
         if ((userData.companyName || "") !== inputCompanyName) {
           sessionStorage.removeItem("transportValidating");
           await signOut(auth);

@@ -138,6 +138,12 @@ export default function DriverLogin() {
       }
 
       const u = snap.data();
+      // ⭐ 기사앱은 기사 계정만 로그인
+      if (u.role !== "driver") {
+        setError("기사 계정이 아닙니다. 가입하신 로그인 화면(운송사/화주사)에서 로그인해주세요.");
+        await signOut(auth);
+        return;
+      }
       if (!u.approved) {
         setError("관리자 승인 대기중입니다.");
         await signOut(auth);
