@@ -18,6 +18,8 @@ import { cleanTrack } from "./mapStyle";
 import { modificationStatus } from "./orderChange";
 import CustomDatePicker from "./CustomDatePicker";
 import RouteMapModal from "./RouteMapModal";
+import { copyTrackingLink } from "./trackingLink";
+import { ReturnTripSuggest } from "./fleetRecommend";
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
 
@@ -2345,7 +2347,7 @@ function useJourneyGeo(orders, live, curOrder) {
   return { geo, legs };
 }
 
-function DriverJourneyPanel({ driver, orders, live, onClose }) {
+function DriverJourneyPanel({ driver, orders, live, onClose, dispatchData }) {
   const [fitKey, setFitKey] = useState(1);
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
@@ -2363,6 +2365,11 @@ function DriverJourneyPanel({ driver, orders, live, onClose }) {
   const pointsKey = points.length;
   useEffect(() => { setFitKey(k => k + 1); }, [pointsKey]);
   const counts = list.reduce((m, r) => { const k = journeyKindOf(r, curId); m[k] = (m[k] || 0) + 1; return m; }, {});
+  const lastActive = sortActiveOrders(orders).slice(-1)[0] || null;
+  const lastDrop = lastActive ? pt(lastActive.하차지주소) : null;
+  const returnBase = lastDrop
+    ? { lat: lastDrop.lat, lng: lastDrop.lng, label: `마지막 오더 하차지 (${lastActive.하차지명 || "하차지"})` }
+    : loc ? { lat: loc[0], lng: loc[1], label: "현재 위치" } : null;
   const remainKm = legs.filter(l => !l.done && l.type !== "live" && l.km != null).reduce((s, l) => s + l.km, 0)
     + (legs.find(l => l.type === "live")?.km || 0);
 
@@ -2508,6 +2515,14 @@ function DriverJourneyPanel({ driver, orders, live, onClose }) {
               </React.Fragment>
             );
           })}
+
+          {/* ⭐ 귀로(공차) 오더 추천 — 마지막 남은 오더 하차지(없으면 현재 위치) 근처 미배차 오더 */}
+          {dispatchData && (
+            <div style={{ marginTop: 14, background: "#fff", border: "1px solid #e2e7ef", borderRadius: 12, padding: 14 }}>
+              <div style={{ fontSize: 17, fontWeight: 900, color: NAVY, marginBottom: 8 }}>귀로 오더 추천</div>
+              <ReturnTripSuggest base={returnBase} dispatchData={dispatchData} />
+            </div>
+          )}
         </div>
       </aside>
     </div>
@@ -2574,7 +2589,7 @@ function VehicleSpecChip({ type, ton }) {
   );
 }
 
-function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleDay = true, todayStr, isOffDay, live, monthlyFareSum = 0, acceptRate = null, onOpenDetail, staff, canDelegate, onAssignManager, index, staffByEmail }) {
+function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleDay = true, todayStr, isOffDay, live, monthlyFareSum = 0, acceptRate = null, onOpenDetail, staff, canDelegate, onAssignManager, index, staffByEmail, dispatchData }) {
   const first = orders[0];
   const last = orders[orders.length - 1];
   const hasConflict = isOffDay && orders.length > 0;
@@ -2615,6 +2630,13 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
       onClick: () => handleSendToDriver(driver, [ctxMenu.order], ctxMenu.order.상차일, ctxMenu.order.상차일),
     },
     { label: "기사복사", onClick: () => setCopyOrder(ctxMenu.order) },
+    {
+      label: "배송추적 링크 복사",
+      onClick: async () => {
+        try { await copyTrackingLink(ctxMenu.order); window.alert("배송 추적 링크를 복사했습니다. 화주에게 문자·카톡으로 보내주세요."); }
+        catch (e) { window.alert("링크를 만들지 못했습니다: " + (e?.message || "")); }
+      },
+    },
     { label: "주소복사", onClick: () => copyOrderAddress(ctxMenu.order) },
     {
       label: "배차취소 (기사 해제)",
@@ -2896,7 +2918,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
       )}
       {editOrder && <OrderEditModal order={editOrder} onClose={() => setEditOrder(null)} />}
       {copyOrder && <OrderCopyModal order={copyOrder} driver={driver} onClose={() => setCopyOrder(null)} />}
-      {journeyOpen && <DriverJourneyPanel driver={driver} orders={displayOrders} live={live} onClose={() => setJourneyOpen(false)} />}
+      {journeyOpen && <DriverJourneyPanel driver={driver} orders={displayOrders} live={live} dispatchData={dispatchData} onClose={() => setJourneyOpen(false)} />}
     </div>
   );
 }
@@ -3875,6 +3897,7 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
               canDelegate={canDelegate}
               onAssignManager={onAssignManager}
               staffByEmail={staffByEmail}
+              dispatchData={dispatchData}
             />
           ))}
         </div>

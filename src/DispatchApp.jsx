@@ -42,6 +42,10 @@ import { estimateDistanceFare, geocodeAddress, haversineKm } from "./tmapFareCal
 import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
 import RouteMapModal from "./RouteMapModal";
 import MonthCompareAnalysis from "./MonthCompareAnalysis";
+import { copyTrackingLink } from "./trackingLink";
+import { IdleFleetButton } from "./fleetRecommend";
+import MonthCloseCheck from "./MonthCloseCheck";
+import StaffPerformance from "./StaffPerformance";
 import { RotationPicker, RotationBadge, expandRotation, rotationNotice, withRotationMemo } from "./rotation";
 import { generateMonthlyReportPPT, PPT_TEMPLATES } from "./pptReportUtil";
 
@@ -16522,7 +16526,16 @@ className={`
 
  {/* ===== 스마트검색 (독립 컬럼) ===== */}
 <div className="relative">
-  <label className={labelCls}><EditableText id="orderForm.label.스마트검색" defaultText="스마트검색" /></label>
+  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+    <label className={labelCls}><EditableText id="orderForm.label.스마트검색" defaultText="스마트검색" /></label>
+    {/* ⭐ 빈 지입차 추천 — 오늘 배차 없는 지입·직영 기사를 상차지 가까운 순으로 */}
+    <IdleFleetButton
+      drivers={drivers}
+      dispatchData={dispatchData}
+      pickupAddr={form.상차지주소}
+      onPick={(x) => selectSmartDriver({ ...x.d, 차량번호: x.plate, 이름: x.name, 전화번호: x.phone })}
+    />
+  </div>
 
   <div className="relative">
     <textarea
@@ -32716,6 +32729,19 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             <EditableText id="realtime.ctxMenu.기사복사" defaultText="기사복사" />
           </button>
+          {/* ⭐ 화주용 배송 추적 링크 */}
+          <button
+            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={async () => {
+              const r = contextMenu.row;
+              setContextMenu(null);
+              try { await copyTrackingLink(r); showAlert("배송 추적 링크를 복사했습니다. 화주에게 문자·카톡으로 보내주세요."); }
+              catch (e) { showAlert("링크를 만들지 못했습니다: " + (e?.message || "")); }
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/><circle cx="12" cy="10" r="3"/></svg>
+            배송추적 링크 복사
+          </button>
           {/* 업로드링크 */}
           <button
             className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
@@ -43694,6 +43720,19 @@ setCopyPlaceOptions(list);
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             <EditableText id="status.ctxMenu.기사복사" defaultText="기사복사" />
           </button>
+          {/* ⭐ 화주용 배송 추적 링크 */}
+          <button
+            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={async () => {
+              const r = contextMenuDS.row;
+              setContextMenuDS(null);
+              try { await copyTrackingLink(r); showAlert("배송 추적 링크를 복사했습니다. 화주에게 문자·카톡으로 보내주세요."); }
+              catch (e) { showAlert("링크를 만들지 못했습니다: " + (e?.message || "")); }
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/><circle cx="12" cy="10" r="3"/></svg>
+            배송추적 링크 복사
+          </button>
           <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
             onClick={() => {
               const r = contextMenuDS.row;
@@ -47112,6 +47151,9 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   const [detailClient, setDetailClient] = React.useState(null);
   const [aiMode, setAiMode] = React.useState(null);
   const [monthCompareOpen, setMonthCompareOpen] = React.useState(false); // ⭐ 월 비교 분석
+  const [monthCloseOpen, setMonthCloseOpen] = React.useState(false); // ⭐ 월 마감 점검
+  const [staffPerfOpen, setStaffPerfOpen] = React.useState(false); // ⭐ 배차담당자별 실적(관리자 전용)
+  const canSeeStaffPerf = role === "admin" || role === "totalMaster";
   // ⭐ AI 월간비교분석 탭에서 선택한 두 달 — 탭을 옮겨도(activeTab 전환으로
   // MonthCompareInsight가 unmount/remount 되어도) 선택이 유지되도록 상위인
   // Settlement가 들고 있는다.
@@ -47748,6 +47790,10 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => setMonthCompareOpen(true)} className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[12px] font-bold hover:bg-white/90 transition">월 비교 분석</button>
+                <button onClick={() => setMonthCloseOpen(true)} className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[12px] font-bold hover:bg-white/90 transition">월 마감 점검</button>
+                {canSeeStaffPerf && (
+                  <button onClick={() => setStaffPerfOpen(true)} className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[12px] font-bold hover:bg-white/90 transition">담당자별 실적</button>
+                )}
                 <button onClick={() => setAiMode("summary")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20"><EditableText id="settlement.report.AI요약" defaultText="AI 요약" /></button>
                 <button onClick={() => setAiMode("suggest")} className="px-3 py-1.5 rounded-lg bg-emerald-500/80 text-white text-[12px] font-semibold hover:bg-emerald-500 transition"><EditableText id="settlement.report.AI제안" defaultText="AI 제안" /></button>
                 <button onClick={() => setAiMode("report")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20"><EditableText id="settlement.report.보고서" defaultText="보고서" /></button>
@@ -47767,6 +47813,17 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
 
             <div className="p-6 space-y-8">
               <YearlySummaryChart rows={rows} year={selectedYear} clients={clients} places={places} />
+              {monthCloseOpen && (
+                <MonthCloseCheck dispatchData={dispatchData} isViewer={isViewer} onClose={() => setMonthCloseOpen(false)} />
+              )}
+              {staffPerfOpen && canSeeStaffPerf && (
+                <StaffPerformance
+                  rows={rows}
+                  isExcluded={isExcludedFast}
+                  hasExcluded={getNetRevenueExcludedNames(clients, places).length > 0}
+                  onClose={() => setStaffPerfOpen(false)}
+                />
+              )}
               {monthCompareOpen && (
                 <MonthCompareAnalysis
                   rows={rows}

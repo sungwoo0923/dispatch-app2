@@ -1498,6 +1498,20 @@ export default function DriverHome() {
       });
   }, [uid, myOrders, pos?.lat, pos?.lng, driver?.name]);
 
+  // ⭐ 화주용 배송 추적(/track) — 지금 진행중인(먼저 수락한) 오더의 liveLocations/{오더id}에
+  // 내 위치를 10초 간격으로 남긴다(업로드 링크 위치공유와 같은 형식이라 추적 페이지가 그대로 읽는다).
+  const liveLocWriteRef = useRef(0);
+  useEffect(() => {
+    if (pos?.lat == null || pos?.lng == null) return;
+    if (pos.accuracy != null && pos.accuracy > 100) return;
+    const cur = sortActiveOrders(myOrders)[0];
+    if (!cur?._id) return;
+    const now = Date.now();
+    if (now - liveLocWriteRef.current < 10000) return;
+    liveLocWriteRef.current = now;
+    setDoc(doc(db, "liveLocations", cur._id), { 위치: { lat: pos.lat, lng: pos.lng }, 위치갱신일시: serverTimestamp(), 출처: "기사앱" }, { merge: true }).catch(() => {});
+  }, [pos?.lat, pos?.lng, myOrders]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // 이 기능 이전에 수락한 오더는 기준값이 없으므로, 지금 내용을 기준값으로 한 번 저장해둔다
   useEffect(() => {
     myOrders

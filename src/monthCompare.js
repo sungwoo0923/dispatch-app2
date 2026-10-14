@@ -25,7 +25,7 @@ export function statsOf(list) {
   };
 }
 
-const creatorOf = (r) => {
+export const creatorOf = (r) => {
   const raw = String(r.등록자명 || r.createdByName || r.등록자 || r.작성자 || r.createdByEmail || "").trim();
   return raw.includes("@") ? raw.split("@")[0] : raw;
 };
