@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { collection, doc, onSnapshot, query, setDoc, where, addDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "../firebase";
+import { db, DEFAULT_COMPANY } from "../firebase";
 import { ATTENDANCE_STATUS_COLOR, isWeekend, isHoliday, findApprovedLeaveForDate } from "../attendanceUtils";
 
 const ADMIN_ROLES = ["totalMaster", "admin"];
@@ -90,7 +90,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
   useEffect(() => {
     if (!company) return;
     const unsub = onSnapshot(collection(db, "schedules"), snap => {
-      setSchedules(snap.docs.map(d => d.data()).filter(s => (s.companyName || "돌캐") === company));
+      setSchedules(snap.docs.map(d => d.data()).filter(s => (s.companyName || DEFAULT_COMPANY) === company));
     }, () => {});
     return () => unsub();
   }, [company]);

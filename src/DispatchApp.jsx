@@ -359,9 +359,9 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
   // 휴가/외근 승인 현황(인사관리 > 출근기록부와 동일한 "schedules" 컬렉션)을 구독해서,
   // 승인 완료된 연차·외근·병가 등을 달력 날짜 칸에 함께 표시한다.
   React.useEffect(() => {
-    const company = companyName || "돌캐";
+    const company = companyName || DEFAULT_COMPANY;
     const unsub = onSnapshot(collection(db, "schedules"), (snap) => {
-      setSchedules(snap.docs.map(d => d.data()).filter(s => (s.companyName || "돌캐") === company));
+      setSchedules(snap.docs.map(d => d.data()).filter(s => (s.companyName || DEFAULT_COMPANY) === company));
     }, () => {});
     return () => unsub();
   }, [companyName]);
@@ -2588,7 +2588,7 @@ import {
   where,
   deleteField
 } from "firebase/firestore";
-import { auth, db, storage } from "./firebase";
+import { auth, db, storage, DEFAULT_COMPANY } from "./firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 // 기사전달용 업로드 링크 단축 — /upload?id=...&t=... (길고 낯설어 기사들이 거부감을
@@ -3023,11 +3023,11 @@ useEffect(() => {
   const coll = collection(db, "places");
   const unsub = onSnapshot(coll, (snap) => {
     const viewCompany = role === "totalMaster"
-      ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
-      : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+      ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
+      : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
     const arr = snap.docs
       .map((d) => ({ _id: d.id, ...(d.data() || {}) }))
-      .filter((d) => (d.companyName || "돌캐") === viewCompany);
+      .filter((d) => (d.companyName || DEFAULT_COMPANY) === viewCompany);
     setPlaces(arr);
   });
 
@@ -3040,8 +3040,8 @@ useEffect(() => {
 const [approvedShippers, setApprovedShippers] = useState([]);
 useEffect(() => {
   const viewCompany = role === "totalMaster"
-    ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
-    : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+    ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
+    : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
   const unsub = onSnapshot(collection(db, "companyApplications"), (snap) => {
     const list = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
@@ -3445,22 +3445,22 @@ const liveWindowStart = getMonthsAgoKST(13);
     unsubs.push(
       onSnapshot(collection(db, COLL.drivers), (snap) => {
         const viewCompany = role === "totalMaster"
-          ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
-          : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+          ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
+          : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
         const arr = snap.docs
           .map(d => ({ ...d.data(), id: d.id }))
-          .filter(d => (d.companyName || "돌캐") === viewCompany);
+          .filter(d => (d.companyName || DEFAULT_COMPANY) === viewCompany);
         setDrivers(arr);
         safeSave("drivers", arr);
       })
     );
     unsubs.push(onSnapshot(collection(db, COLL.clients), (snap) => {
       const viewCompany = role === "totalMaster"
-        ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
-        : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+        ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
+        : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
       const arr = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
-        .filter(c => (c.companyName || "돌캐") === viewCompany);
+        .filter(c => (c.companyName || DEFAULT_COMPANY) === viewCompany);
       setClients(normalizeClients(arr));
       safeSave("clients", arr);
     }));
@@ -4204,8 +4204,8 @@ const markEditRequestSeen = async (order) => {
 };
   const upsertDriver = async (driver) => {
   const viewCompany = role === "totalMaster"
-    ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
-    : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+    ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
+    : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
 
   // ★ id가 없을 때: 차량번호 기준으로 기존 기사 찾기 (중복 생성 방지)
   let id = driver.id;
@@ -4267,8 +4267,8 @@ const markEditRequestSeen = async (order) => {
     // id가 있으면 그것을 최우선으로 쓴다.
     const id = client.id || client.거래처명 || crypto.randomUUID();
     const viewCompany = role === "totalMaster"
-      ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
-      : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+      ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
+      : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
     await setDoc(
       doc(db, COLL.clients, id),
       { ...client, id, companyName: client.companyName || viewCompany },
@@ -4477,7 +4477,7 @@ const upsertPlace = async (place) => {
       팝업표시: place.팝업표시 !== undefined ? place.팝업표시 : (existingData?.팝업표시 !== undefined ? existingData.팝업표시 : true),
       isActive: place.isActive !== false,
       updatedAt: serverTimestamp(),
-      companyName: place.companyName || existingData?.companyName || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "돌캐",
+      companyName: place.companyName || existingData?.companyName || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || DEFAULT_COMPANY,
       // ⭐ 순수매출제외 — 명시적으로 true/false가 있을 때만 키를 만든다(기본거래처
       // normalizeClient와 동일한 이유: 한 번도 안 건드린 거래처는 undefined 필드 저장
       // 오류 없이 그대로 "미설정" 상태를 유지해야 이름 기반 폴백이 계속 동작한다).
@@ -6318,11 +6318,11 @@ export default function DispatchApp({ role, user, userCompany = "" }) {
 useEffect(() => {
   const unsub = onSnapshot(collection(db, "fixedClients"), (snap) => {
     const viewCompany = role === "totalMaster"
-      ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
-      : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+      ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
+      : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
     const arr = snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
-      .filter(r => (r.companyName || "돌캐") === viewCompany);
+      .filter(r => (r.companyName || DEFAULT_COMPANY) === viewCompany);
     setFixedRows(arr);
   });
 
@@ -6612,14 +6612,14 @@ useEffect(() => {
 
     // 총마스터는 입력한 회사명 기준으로 필터
     if (role === "totalMaster") {
-      const viewCompany = localStorage.getItem("loginCompany") || userCompany || "돌캐";
-      return data.filter(o => (o?.companyName || "돌캐") === viewCompany);
+      const viewCompany = localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY;
+      return data.filter(o => (o?.companyName || DEFAULT_COMPANY) === viewCompany);
     }
 
     // 회사명 기준 필터 (없으면 "돌캐"로 간주)
-    const myCompany = userCompany || localStorage.getItem("userCompany") || "돌캐";
+    const myCompany = userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY;
     const byCompany = data.filter(o => {
-      const docCompany = o?.companyName || "돌캐";
+      const docCompany = o?.companyName || DEFAULT_COMPANY;
       return docCompany === myCompany;
     });
 
@@ -12390,7 +12390,7 @@ const rec = {
   // updateProfile을 호출하지 않음), 예전엔 항상 이메일이 담당자명으로 찍혔다.
   // users/{uid}.name(실명, myRealName)을 우선 사용한다.
   createdByName: (typeof myRealName !== "undefined" && myRealName) || auth.currentUser?.displayName || auth.currentUser?.email || null,
-  companyName: userCompany || localStorage.getItem("userCompany") || "돌캐",
+  companyName: userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY,
 
   // 🔥 여기 안으로 넣어
   aiLog: aiRecommend
@@ -17874,7 +17874,7 @@ className={`
     dropDate={form.하차일 || ""}
     onPickupChange={(v) => onChange("상차일", v)}
     onDropChange={(v) => onChange("하차일", v)}
-    companyName={userCompany || localStorage.getItem("userCompany") || "돌캐"}
+    companyName={userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY}
   />
 </div>
 {dupOrderMatches && (
@@ -22437,7 +22437,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
     const q = clientQ.trim();
     setSearching(true);
     try {
-      const myCompany = companyName || "돌캐";
+      const myCompany = companyName || DEFAULT_COMPANY;
       const fetchOne = async (colName) => {
         const qy = query(
           collection(db, colName),
@@ -22453,7 +22453,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
         r.source !== "transport_transmit" &&
         r.배차상태 !== "배차취소" &&
         !["취소", "배차취소", "오더취소", "취소됨"].includes(r.상태) &&
-        (r.companyName || "돌캐") === myCompany &&
+        (r.companyName || DEFAULT_COMPANY) === myCompany &&
         (!q || (r.거래처명 || "").includes(q))
       );
       setResults(merged);
@@ -22600,7 +22600,8 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
       "② 날짜·차량번호·이름 확인",
       "③ 오더 선택 후 사진 업로드",
       "",
-      "https://dispatch-app2.vercel.app/driver-upload",
+      // ⭐ 회사별 배포(방식 B) — 각 회사 사이트 주소를 따라가도록
+      `${window.location.origin}/driver-upload`,
     ].filter(l => l !== null).join("\n");
     navigator.clipboard.writeText(lines)
       .then(() => { setSendDone(r._id); setTimeout(() => setSendDone(null), 2000); })
@@ -57148,14 +57149,14 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const propagateFieldsToOrders = async (matchField, name, patchByField) => {
     const trimmedName = (name || "").trim();
     if (!trimmedName || !patchByField || !Object.keys(patchByField).length) return 0;
-    const myCompany = (userCompany || "돌캐").trim() || "돌캐";
+    const myCompany = (userCompany || DEFAULT_COMPANY).trim() || DEFAULT_COMPANY;
     let updated = 0;
     for (const colName of ["orders", "dispatch"]) {
       try {
         const snap = await getDocs(query(collection(db, colName), where(matchField, "==", trimmedName)));
         await Promise.all(snap.docs.map(async (d) => {
           const cur = d.data();
-          if ((cur.companyName || "돌캐") !== myCompany) return;
+          if ((cur.companyName || DEFAULT_COMPANY) !== myCompany) return;
           const patch = {};
           Object.entries(patchByField).forEach(([k, v]) => {
             if ((cur[k] || "") !== (v || "")) patch[k] = v;
@@ -57180,13 +57181,13 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     const from = (oldName || "").trim();
     const to = (newName || "").trim();
     if (!from || !to || from === to) return 0;
-    const myCompany = (userCompany || "돌캐").trim() || "돌캐";
+    const myCompany = (userCompany || DEFAULT_COMPANY).trim() || DEFAULT_COMPANY;
     let updated = 0;
     for (const colName of ["orders", "dispatch"]) {
       try {
         const snap = await getDocs(query(collection(db, colName), where(matchField, "==", from)));
         await Promise.all(snap.docs.map(async (d) => {
-          if ((d.data().companyName || "돌캐") !== myCompany) return;
+          if ((d.data().companyName || DEFAULT_COMPANY) !== myCompany) return;
           await updateDoc(doc(db, colName, d.id), { [matchField]: to });
           updated++;
         }));
@@ -59149,7 +59150,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
       if (snap.exists()) setMyName(snap.data().name || "");
     }, () => {});
     const unsub = onSnapshot(collection(db, "schedules"), snap => {
-      setMySchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => (s.companyName || "돌캐") === co));
+      setMySchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => (s.companyName || DEFAULT_COMPANY) === co));
     }, () => {});
     return () => { unsubProfile(); unsubUser(); unsub(); };
   }, [user?.uid, co]);
@@ -59534,7 +59535,7 @@ function HRManagementPage({ userCompany, role, userId }) {
   React.useEffect(() => {
     if (!company) return;
     const unsub = onSnapshot(collection(db, "schedules"), snap => {
-      setSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => (s.companyName || "돌캐") === company));
+      setSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => (s.companyName || DEFAULT_COMPANY) === company));
     }, () => {});
     return () => unsub();
   }, [company]);

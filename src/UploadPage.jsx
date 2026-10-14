@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { db } from "./firebase";
+import { db, DEFAULT_COMPANY } from "./firebase";
 import {
   doc,
   getDoc,
@@ -189,7 +189,7 @@ export default function UploadPage() {
   // 다를 수 있으므로 이 오더가 어느 회사 소속인지로 조회한다. 설정이 없으면 기본값 유지.
   useEffect(() => {
     if (!order) return;
-    const cname = (order.companyName || "돌캐").trim();
+    const cname = (order.companyName || DEFAULT_COMPANY).trim();
     (async () => {
       try {
         const snap = await getDoc(doc(db, "companySettings", cname));

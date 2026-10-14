@@ -17,6 +17,13 @@ on:
         options:
           - debug
           - release
+      # ⭐ 회사별 별도 DB(방식 B) — 비워두면 기존(돌캐) 기사앱. 회사 키(영문 대문자, 예: AUNSONG)를
+      # 넣으면 저장소 Settings → Variables의 TENANT_<키> 값(Firebase 설정 JSON)으로 그 회사 전용 APK를 만든다.
+      tenant:
+        description: '회사 키(비우면 기본 회사)'
+        required: false
+        default: ''
+        type: string
 
 jobs:
   build:
@@ -64,6 +71,21 @@ jobs:
       - name: npm 패키지 설치
         run: npm ci
 
+      - name: 회사별 Firebase 설정 적용
+        if: ${{ github.event.inputs.tenant != '' && github.event.inputs.tenant != null }}
+        env:
+          TENANT_JSON: ${{ vars[format('TENANT_{0}', github.event.inputs.tenant)] }}
+        run: |
+          if [ -z "$TENANT_JSON" ]; then echo "TENANT_${{ github.event.inputs.tenant }} 변수가 없습니다" && exit 1; fi
+          node -e '
+            const c = JSON.parse(process.env.TENANT_JSON);
+            const keys = ["API_KEY","AUTH_DOMAIN","PROJECT_ID","STORAGE_BUCKET","MESSAGING_SENDER_ID","APP_ID","MEASUREMENT_ID","DEFAULT_COMPANY","FCM_VAPID_KEY"];
+            const map = { FCM_VAPID_KEY: "VITE_FCM_VAPID_KEY" };
+            const out = keys.filter(k => c[k]).map(k => `${map[k] || "VITE_FIREBASE_" + k}=${c[k]}`.replace("VITE_FIREBASE_DEFAULT_COMPANY", "VITE_DEFAULT_COMPANY"));
+            require("fs").writeFileSync(".env.production.local", out.join("\n") + "\n");
+            console.log("적용:", c.PROJECT_ID, c.DEFAULT_COMPANY || "");
+          '
+
       - name: 웹 앱 빌드
         run: npm run build
 
@@ -108,8 +130,8 @@ jobs:
       - name: 릴리즈로 APK 게시(모바일에서도 바로 다운로드되는 링크)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: driver-apk-latest
-          name: "KP-Flow 기사앱 (최신 빌드)"
+          tag_name: ${{ github.event.inputs.tenant && format('driver-apk-{0}', github.event.inputs.tenant) || 'driver-apk-latest' }}
+          name: ${{ github.event.inputs.tenant && format('KP-Flow 기사앱 - {0}', github.event.inputs.tenant) || 'KP-Flow 기사앱 (최신 빌드)' }}
           body: "커밋 ${{ github.sha }} 기준 자동 빌드. 안드로이드 폰에서 이 APK 파일을 눌러 다운로드한 뒤 설치하세요."
           files: android/app/build/outputs/apk/**/*.apk
           prerelease: true

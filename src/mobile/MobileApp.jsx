@@ -47,7 +47,7 @@ import {
   arrayUnion,
   deleteField,
 } from "firebase/firestore";
-import { db, auth } from "../firebase";
+import { db, auth, FUNCTIONS_BASE, DEFAULT_COMPANY } from "../firebase";
 import { signOut } from "firebase/auth";
 import { version as APP_VERSION } from "../../package.json";
 import { calcLeaveBalance } from "../leaveUtils";
@@ -2889,11 +2889,11 @@ useEffect(() => {
     // ⭐ PC(DispatchApp.jsx)는 drivers 구독에 companyName 필터가 있는데, 모바일은 이
     // 필터가 통째로 빠져있어 다른 회사의 기사 목록까지 그대로 받아오고 있었다 —
     // PC와 동일한 기준(companyName 없는 옛 문서는 "돌캐"로 취급)으로 맞춘다.
-    const co = userCompany || localStorage.getItem("userCompany") || "돌캐";
+    const co = userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY;
     const unsub = onSnapshot(collection(db, "drivers"), (snap) => {
       const list = snap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
-        .filter((d) => (d.companyName || "돌캐") === co);
+        .filter((d) => (d.companyName || DEFAULT_COMPANY) === co);
       setDrivers(list);
     });
     return () => unsub();
@@ -2903,9 +2903,9 @@ useEffect(() => {
 useEffect(() => {
   // ⭐ PC(DispatchApp.jsx)의 places 구독과 동일하게 companyName 필터를 맞춘다 —
   // 이 필터가 없어서 다른 회사의 하차지거래처까지 그대로 받아오고 있었다.
-  const co = userCompany || localStorage.getItem("userCompany") || "돌캐";
+  const co = userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY;
   const unsub = onSnapshot(collection(db, "places"), (snap) => {
-    const list = snap.docs.filter((d) => ((d.data() || {}).companyName || "돌캐") === co).map((d) => {
+    const list = snap.docs.filter((d) => ((d.data() || {}).companyName || DEFAULT_COMPANY) === co).map((d) => {
       const data = d.data();
 
       const name =
@@ -3827,7 +3827,7 @@ const groupedByDate = useMemo(() => {
       // where("companyName","==","돌캐")로 정확히 매칭하는 서버 쪽 조회에서는
       // 이 필드가 없는 문서 자체가 통째로 걸러져 모바일로 등록한 오더가 전부
       // 빠지는 원인이었다.
-      companyName: userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "돌캐",
+      companyName: userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || DEFAULT_COMPANY,
 
       차량번호: form.차량번호 || "",
       기사명: form.기사명 || "",
@@ -4630,7 +4630,7 @@ const deleteSingleOrder = async (order) => {
       // 이 필드 자체가 아예 빠져있었다 — 구글시트 백필/실시간 동기화가
       // Firestore where("companyName","==","돌캐")로 정확히 매칭하는데,
       // 이 필드가 없는 문서는 통째로 걸러져 모바일로 등록한 오더가 전부 빠졌음.
-      companyName: userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "돌캐",
+      companyName: userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || DEFAULT_COMPANY,
 
       차량번호: "",
       기사명: "",
@@ -18180,7 +18180,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
       if (snap.exists() && snap.data().hireDate) setHireDate(snap.data().hireDate);
     }, () => {});
     const unsub = onSnapshot(collection(db, "schedules"), snap => {
-      setMySchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => (s.companyName || "돌캐") === myCompany));
+      setMySchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => (s.companyName || DEFAULT_COMPANY) === myCompany));
     }, () => {});
     return () => { unsubProfile(); unsub(); };
   }, [currentUser?.uid, myCompany]);
@@ -21624,7 +21624,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     setBackfillRunning(true);
     setBackfillResult("");
     try {
-      const url = `https://us-central1-dispatch-app-9b92f.cloudfunctions.net/backfillGsheetMonth?key=dolkae-backfill-2026&month=${encodeURIComponent(backfillMonth)}`;
+      const url = `${FUNCTIONS_BASE}/backfillGsheetMonth?key=dolkae-backfill-2026&month=${encodeURIComponent(backfillMonth)}`;
       const res = await fetch(url);
       setBackfillResult(await res.text());
     } catch (e) {
@@ -21643,7 +21643,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     setClientBackfillRunning(true);
     setClientBackfillResult("");
     try {
-      const url = `https://us-central1-dispatch-app-9b92f.cloudfunctions.net/backfillGsheetClients?key=dolkae-backfill-2026`;
+      const url = `${FUNCTIONS_BASE}/backfillGsheetClients?key=dolkae-backfill-2026`;
       const res = await fetch(url);
       const text = await res.text();
       setClientBackfillResult(text);
@@ -21760,7 +21760,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     setPushSending(true);
     setPushResult("");
     try {
-      const res = await fetch("https://us-central1-dispatch-app-9b92f.cloudfunctions.net/sendPushNotification", {
+      const res = await fetch(`${FUNCTIONS_BASE}/sendPushNotification`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key: "kpflow-push-2026", title: pushTitle.trim(), body: pushBody.trim() }),

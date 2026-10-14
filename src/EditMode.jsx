@@ -15,7 +15,7 @@
 // 바꾸는 건 비현실적이라, 눈에 잘 띄는 자리(상단 메뉴 탭, Home 위젯 제목 등)부터
 // 순차적으로 적용하고 있다 — 아직 안 감싼 글자는 지금 당장은 편집이 안 된다.
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { auth, db, doc, onSnapshot, setDoc } from "./firebase";
+import { auth, db, doc, onSnapshot, setDoc, DEFAULT_COMPANY } from "./firebase";
 
 const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
 
@@ -32,8 +32,8 @@ const EditModeContext = createContext({
 // 선택 중인 회사(loginCompany)를, 일반 계정은 본인 소속 회사를 기준으로 한다.
 function resolveCompanyKey(role, userCompany) {
   return role === "totalMaster"
-    ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
-    : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+    ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
+    : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
 }
 
 // ⭐ 라벨 저장 문서 위치 — "돌캐"는 이 기능이 처음 나온 이후 실제로 편집해온

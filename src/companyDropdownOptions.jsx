@@ -9,7 +9,7 @@
 // 회사가 한 번도 커스터마이즈하지 않았으면(필드 없음) 아래 DEFAULTS를 그대로
 // 보여준다 — 그래서 아무도 손대지 않으면 전과 100% 동일한 화면이 된다.
 import React, { useEffect, useState, useCallback } from "react";
-import { db, doc, onSnapshot, setDoc } from "./firebase";
+import { db, doc, onSnapshot, setDoc, DEFAULT_COMPANY } from "./firebase";
 import { useEditMode } from "./EditMode";
 
 // ⭐ 기존 하드코딩 값 그대로 + 사용자가 요청한 "리프트" 추가(상/하차방법만)
@@ -27,11 +27,11 @@ function resolveCompanyKey(role, userCompany) {
   if (role === undefined) {
     // role을 모르는 자리 — 이 파일 안에서도 여러 곳이 쓰는 localStorage 전용 대체 규칙
     // (예: DispatchApp.jsx의 `localStorage.getItem("loginCompany") || localStorage.getItem("userCompany")`)
-    return localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "돌캐";
+    return localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || DEFAULT_COMPANY;
   }
   return role === "totalMaster"
-    ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
-    : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+    ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
+    : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
 }
 
 /**

@@ -8,7 +8,7 @@ import {
   collection, addDoc, onSnapshot, query, orderBy,
   serverTimestamp, doc, deleteDoc, updateDoc, where, setDoc, getDoc, arrayUnion,
 } from "firebase/firestore";
-import { db, auth } from "./firebase";
+import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import { EditableText } from "./EditMode";
 
 /* ===== 공통 Modal ===== */
@@ -350,8 +350,8 @@ React.useEffect(() => {
 }, [toast]);
 
   const getViewCompany = () => role === "totalMaster"
-    ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
-    : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+    ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
+    : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "users"), (snap) => {
@@ -458,7 +458,7 @@ React.useEffect(() => {
     const q = query(collection(db, "schedules"), orderBy("createdAt", "desc"));
     let initialLoad = true;
     const unsub = onSnapshot(q, (snap) => {
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(d => (d.companyName || "돌캐") === vc);
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(d => (d.companyName || DEFAULT_COMPANY) === vc);
       setSchedules(list);
       if (initialLoad) {
         initialLoad = false;
@@ -498,7 +498,7 @@ React.useEffect(() => {
     const q = query(collection(db, "notices"), orderBy("createdAt", "desc"));
     let initialLoad = true;
     const unsub = onSnapshot(q, (snap) => {
-      const list = snap.docs.map(d => { const data = d.data(); const date = formatCreatedAt(data.createdAt); if (!date) return null; return { id: d.id, ...data, date }; }).filter(Boolean).filter(d => (d.companyName || "돌캐") === vc);
+      const list = snap.docs.map(d => { const data = d.data(); const date = formatCreatedAt(data.createdAt); if (!date) return null; return { id: d.id, ...data, date }; }).filter(Boolean).filter(d => (d.companyName || DEFAULT_COMPANY) === vc);
       setNotices(list);
       if (initialLoad) {
         initialLoad = false;
@@ -522,7 +522,7 @@ React.useEffect(() => {
     const q = query(collection(db, "handovers"), orderBy("createdAt", "desc"));
     let initialLoad = true;
     const unsub = onSnapshot(q, (snap) => {
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(d => (d.companyName || "돌캐") === vc);
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(d => (d.companyName || DEFAULT_COMPANY) === vc);
       setHandovers(list);
       if (initialLoad) {
         initialLoad = false;

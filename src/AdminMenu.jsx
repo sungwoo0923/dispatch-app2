@@ -1,6 +1,6 @@
 // src/AdminMenu.jsx
 import React, { useEffect, useState, useMemo } from "react";
-import { auth, db, storage } from "./firebase";
+import { auth, db, storage, FUNCTIONS_BASE, DEFAULT_COMPANY } from "./firebase";
 import {
   collection,
   addDoc,
@@ -132,7 +132,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const ROLES = isTotalMaster
     ? ["totalMaster", "admin", "hrManager", "user", "viewer", "driver", "shipper", "test", ...customRoles.map(r => r.key)]
     : ["admin", "user", "viewer", "driver", "shipper", "test", ...customRoles.map(r => r.key)];
-  const effectiveCompany = myCompany || parentCompany || localStorage.getItem("userCompany") || "돌캐";
+  const effectiveCompany = myCompany || parentCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY;
 
   useEffect(() => {
     if (!me) return;
@@ -220,7 +220,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     return users.filter(u =>
       u.email !== TOTAL_MASTER_EMAIL &&
       u.role !== "totalMaster" &&
-      (u.companyName || "돌캐") === effectiveCompany
+      (u.companyName || DEFAULT_COMPANY) === effectiveCompany
     );
   }, [users, isTotalMaster, effectiveCompany]);
 
@@ -477,7 +477,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   // 관리 기능
   const toggleApprove = async (u) => {
     if (isViewer) return _viewerAlert();
-    if (!isTotalMaster && (u.companyName || "돌캐") !== effectiveCompany) return;
+    if (!isTotalMaster && (u.companyName || DEFAULT_COMPANY) !== effectiveCompany) return;
     const status = !u.approved;
     const updateData = { approved: status };
     if (u.role === "shipper" && status === true) {
@@ -504,7 +504,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const removeUser = async (u) => {
     if (isViewer) return _viewerAlert();
     if (me?.uid === u.id) return alert("본인 계정은 삭제할 수 없습니다.");
-    if (!isTotalMaster && (u.companyName || "돌캐") !== effectiveCompany) return;
+    if (!isTotalMaster && (u.companyName || DEFAULT_COMPANY) !== effectiveCompany) return;
     if (!window.confirm(`"${u.name || u.email}" 계정을 삭제하시겠습니까?\n가입신청 내역도 함께 삭제됩니다.`)) return;
     await deleteDoc(doc(db, "users", u.id));
     try {
@@ -830,7 +830,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                   <div className="h-full flex items-center justify-center text-[13px] text-gray-400 py-24">왼쪽에서 회원을 선택하세요</div>
                 ) : (() => {
                   const u = manageUser;
-                  const canManage = isTotalMaster || (u.companyName || "돌캐") === effectiveCompany;
+                  const canManage = isTotalMaster || (u.companyName || DEFAULT_COMPANY) === effectiveCompany;
                   const resigned = u.employmentStatus === "퇴사";
                   return (
                     <div>
@@ -1735,7 +1735,7 @@ function GsheetBackfillPanel() {
       const m = months[i];
       setProgress(`(${i + 1}/${months.length}) "${m}" 처리 중...`);
       try {
-        const url = `https://us-central1-dispatch-app-9b92f.cloudfunctions.net/backfillGsheetMonth?key=dolkae-backfill-2026&month=${encodeURIComponent(m)}`;
+        const url = `${FUNCTIONS_BASE}/backfillGsheetMonth?key=dolkae-backfill-2026&month=${encodeURIComponent(m)}`;
         const res = await fetch(url);
         const text = await res.text();
         lines.push(`[${m}] ${text}`);
@@ -1805,7 +1805,7 @@ function GsheetClientBackfillPanel() {
     setRunning(true);
     setResult("");
     try {
-      const url = `https://us-central1-dispatch-app-9b92f.cloudfunctions.net/backfillGsheetClients?key=dolkae-backfill-2026`;
+      const url = `${FUNCTIONS_BASE}/backfillGsheetClients?key=dolkae-backfill-2026`;
       const res = await fetch(url);
       const text = await res.text();
       setResult(text);
@@ -1855,7 +1855,7 @@ function GsheetDailyLedgerPanel() {
     setRunning(true);
     setResult("");
     try {
-      const url = `https://us-central1-dispatch-app-9b92f.cloudfunctions.net/setupGsheetDailyLedger?key=dolkae-backfill-2026`;
+      const url = `${FUNCTIONS_BASE}/setupGsheetDailyLedger?key=dolkae-backfill-2026`;
       const res = await fetch(url);
       const text = await res.text();
       setResult(text);

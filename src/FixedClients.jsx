@@ -1,7 +1,7 @@
 // ===================== FixedClients.jsx =====================
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
-import { db } from "./firebase";
+import { db, DEFAULT_COMPANY } from "./firebase";
 import { collection, onSnapshot, setDoc, doc, deleteDoc, getDocs, updateDoc } from "firebase/firestore";
 import { Dialog } from "@headlessui/react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
@@ -480,8 +480,8 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
   const [bulkScope, setBulkScope] = useState("selected");
 
   const getViewCompany = () => role === "totalMaster"
-    ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
-    : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+    ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
+    : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
 
   const getClientConfigs = () => {
     try { return JSON.parse(localStorage.getItem(`fcConfig_${getViewCompany()}`) || "{}"); } catch { return {}; }
@@ -504,12 +504,12 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
 
   useEffect(() => {
     const viewCompany = role === "totalMaster"
-      ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
-      : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+      ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
+      : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
     const unsub = onSnapshot(coll, (snap) => {
       const arr = snap.docs
         .map(d => d.data())
-        .filter(d => (d.companyName || "돌캐") === viewCompany)
+        .filter(d => (d.companyName || DEFAULT_COMPANY) === viewCompany)
         .sort((a, b) => (b.날짜 || "").localeCompare(a.날짜 || ""));
       setRows(arr);
     });

@@ -5,7 +5,7 @@
 // 조회하는 대신, 등록된 데이터 전체를 한 번에 훑어 정리하는 용도.
 // 최고관리자(totalMaster) 전용 — DispatchApp.jsx의 메뉴 게이팅 참고.
 import React, { useState, useMemo, useEffect } from "react";
-import { db } from "./firebase";
+import { db, FUNCTIONS_BASE, DEFAULT_COMPANY } from "./firebase";
 import { collection, getDocs } from "firebase/firestore";
 
 const CANCELED_STATUSES = ["취소", "배차취소", "오더취소", "취소됨"];
@@ -147,15 +147,15 @@ export default function HandoverFareReport({ userCompany, role }) {
   const [sheetResult, setSheetResult] = useState("");
 
   const resolveCompany = () => role === "totalMaster"
-    ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
-    : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+    ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
+    : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
 
   useEffect(() => {
     const myCompany = resolveCompany();
     getDocs(collection(db, "clients")).then((snap) => {
       const names = snap.docs
         .map((d) => d.data())
-        .filter((c) => (c.companyName || "돌캐") === myCompany)
+        .filter((c) => (c.companyName || DEFAULT_COMPANY) === myCompany)
         .map((c) => c.거래처명)
         .filter(Boolean);
       setClientOptions([...new Set(names)].sort());
@@ -177,7 +177,7 @@ export default function HandoverFareReport({ userCompany, role }) {
         r.source !== "transport_transmit" &&
         r.배차상태 !== "배차취소" &&
         !CANCELED_STATUSES.includes(r.상태) &&
-        (r.companyName || "돌캐") === myCompany &&
+        (r.companyName || DEFAULT_COMPANY) === myCompany &&
         onlyNum(r.청구운임) > 0
       );
       setRawRows(merged);
@@ -310,7 +310,7 @@ export default function HandoverFareReport({ userCompany, role }) {
         차량구분: r.차량구분, 톤수: r.톤수, 화물내용: r.화물내용,
         청구운임: r.청구운임표시, 최근상차일: r.최근상차일,
       }));
-      const res = await fetch("https://us-central1-dispatch-app-9b92f.cloudfunctions.net/backfillGsheetFareHistory", {
+      const res = await fetch(`${FUNCTIONS_BASE}/backfillGsheetFareHistory`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key: "dolkae-backfill-2026", nameRows, addressRows }),
