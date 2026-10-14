@@ -13,22 +13,33 @@ const randToken = () => {
   }
 };
 
-export async function makeTrackingLink(order) {
+// forDriver=true → 기사용 링크(열면 위치공유 동의 후 관리자에게 실시간 위치 전송). 화주용과 토큰을 따로 써서
+// 화주 링크로는 위치 전송 화면이 열리지 않게 한다.
+export async function makeTrackingLink(order, forDriver = false) {
   const id = order?._id || order?.id;
   if (!id) throw new Error("오더 id가 없습니다");
   const col = order.__col || "orders";
-  let t = order.추적토큰;
+  const key = forDriver ? "기사추적토큰" : "추적토큰";
+  let t = order[key];
   if (!t) {
     t = randToken();
-    await updateDoc(doc(db, col, id), { 추적토큰: t });
+    await updateDoc(doc(db, col, id), { [key]: t });
   }
-  return `${window.location.origin}/track?id=${encodeURIComponent(id)}&c=${encodeURIComponent(col)}&t=${t}`;
+  return `${window.location.origin}/track?id=${encodeURIComponent(id)}&c=${encodeURIComponent(col)}&t=${t}${forDriver ? "&m=driver" : ""}`;
 }
 
 // 링크를 만들고 화주에게 보낼 문구까지 클립보드에 복사
 export async function copyTrackingLink(order) {
   const url = await makeTrackingLink(order);
   const text = `[배송 조회 안내]\n${order.상차지명 || ""} → ${order.하차지명 || ""}${order.상차일 ? ` (${order.상차일})` : ""}\n아래 링크에서 차량 위치와 도착 예상 시간을 확인하실 수 있습니다.\n${url}`;
+  try { await navigator.clipboard.writeText(text); } catch { window.prompt("아래 내용을 복사하세요", text); }
+  return url;
+}
+
+// ⭐ 기사용 위치공유 링크 — 기사가 열고 위치 권한을 승인하면 관리자 화면(📍 실시간 위치)에 위치가 보인다(앱 설치 불필요)
+export async function copyDriverTrackingLink(order) {
+  const url = await makeTrackingLink(order, true);
+  const text = `[위치 공유 요청]\n${order.상차지명 || ""} → ${order.하차지명 || ""}${order.상차일 ? ` (${order.상차일})` : ""}\n아래 링크를 열고 "위치 공유 시작"을 눌러주세요. 운송 중에는 화면을 켜 두시면 됩니다.\n${url}`;
   try { await navigator.clipboard.writeText(text); } catch { window.prompt("아래 내용을 복사하세요", text); }
   return url;
 }

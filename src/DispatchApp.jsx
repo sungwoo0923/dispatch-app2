@@ -42,7 +42,7 @@ import { estimateDistanceFare, geocodeAddress, haversineKm } from "./tmapFareCal
 import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
 import RouteMapModal from "./RouteMapModal";
 import MonthCompareAnalysis from "./MonthCompareAnalysis";
-import { copyTrackingLink } from "./trackingLink";
+import { copyTrackingLink, copyDriverTrackingLink } from "./trackingLink";
 import { IdleFleetButton } from "./fleetRecommend";
 import MonthCloseCheck from "./MonthCloseCheck";
 import StaffPerformance from "./StaffPerformance";
@@ -32740,7 +32740,20 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/><circle cx="12" cy="10" r="3"/></svg>
-            배송추적 링크 복사
+            배송추적 링크 복사 (화주용)
+          </button>
+          {/* ⭐ 기사용 위치공유 링크 — 기사가 열고 위치 허용하면 📍실시간 위치에 표시(앱 설치 불필요) */}
+          <button
+            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={async () => {
+              const r = contextMenu.row;
+              setContextMenu(null);
+              try { await copyDriverTrackingLink(r); showAlert("기사용 위치공유 링크를 복사했습니다. 기사에게 문자·카톡으로 보내주세요.\n기사가 링크를 열고 위치를 허용하면 📍실시간 위치에서 볼 수 있습니다."); }
+              catch (e) { showAlert("링크를 만들지 못했습니다: " + (e?.message || "")); }
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4h13v11H1z"/><path d="M14 8h4l3 3v4h-7z"/><circle cx="5.5" cy="17.5" r="2"/><circle cx="17.5" cy="17.5" r="2"/></svg>
+            위치공유 링크 복사 (기사용)
           </button>
           {/* 업로드링크 */}
           <button
@@ -43731,7 +43744,20 @@ setCopyPlaceOptions(list);
             }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/><circle cx="12" cy="10" r="3"/></svg>
-            배송추적 링크 복사
+            배송추적 링크 복사 (화주용)
+          </button>
+          {/* ⭐ 기사용 위치공유 링크 — 기사가 열고 위치 허용하면 📍실시간 위치에 표시(앱 설치 불필요) */}
+          <button
+            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={async () => {
+              const r = contextMenuDS.row;
+              setContextMenuDS(null);
+              try { await copyDriverTrackingLink(r); showAlert("기사용 위치공유 링크를 복사했습니다. 기사에게 문자·카톡으로 보내주세요.\n기사가 링크를 열고 위치를 허용하면 📍실시간 위치에서 볼 수 있습니다."); }
+              catch (e) { showAlert("링크를 만들지 못했습니다: " + (e?.message || "")); }
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4h13v11H1z"/><path d="M14 8h4l3 3v4h-7z"/><circle cx="5.5" cy="17.5" r="2"/><circle cx="17.5" cy="17.5" r="2"/></svg>
+            위치공유 링크 복사 (기사용)
           </button>
           <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
             onClick={() => {

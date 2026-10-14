@@ -1,9 +1,9 @@
 // ===================== 화주용 배송 추적 페이지 (/track, 로그인 없음) =====================
 // 링크(id·컬렉션·토큰)로 오더 1건만 조회한다. 운임 등 금액 정보는 보여주지 않는다.
-// 차량 위치는 liveLocations/{오더id}(기사앱·업로드 링크 위치공유가 기록)에서 읽는다.
-import React, { useEffect, useMemo, useState } from "react";
+// 차량 위치는 liveLocations/{오더id}(기사용 링크 m=driver·업로드 링크 위치공유가 기록)에서 읽는다.
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
 import L from "leaflet";
 import { db } from "./firebase";
@@ -52,7 +52,9 @@ export default function TrackPage() {
     if (!id) return;
     return onSnapshot(doc(db, "liveLocations", id), (s) => setLive(s.exists() ? s.data() : null), () => {});
   }, [id]);
-  const valid = order && token && order.추적토큰 === token;
+  // m=driver → 기사용 링크(기사추적토큰). 위치공유 동의 후 liveLocations에 좌표를 기록한다.
+  const isDriver = params.get("m") === "driver";
+  const valid = order && token && (isDriver ? order.기사추적토큰 === token : order.추적토큰 === token);
   useEffect(() => {
     if (!valid) return;
     let alive = true;
@@ -91,6 +93,36 @@ export default function TrackPage() {
     return () => { alive = false; };
   }, [liveFresh, Math.round((live?.위치?.lat || 0) * 500), Math.round((live?.위치?.lng || 0) * 500), curIdx, geo.d, geo.p]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── 기사 위치 공유(기사용 링크) — UploadPage 위치공유와 같은 방식(8초 간격 기록) ──
+  const [share, setShare] = useState({ on: false, err: "", lastAt: 0 });
+  const watchRef = useRef(null);
+  const lastWriteRef = useRef(0);
+  const wakeRef = useRef(null);
+  const startShare = () => {
+    if (!navigator.geolocation) { setShare((p) => ({ ...p, err: "이 휴대폰 브라우저는 위치 공유를 지원하지 않습니다." })); return; }
+    const mirror = order._transmittedOrderId ? { col: "orders", id: order._transmittedOrderId }
+      : (order.originCol && order.originId ? { col: order.originCol, id: order.originId } : null);
+    updateDoc(doc(db, col, id), { 위치공유중: true }).catch(() => {});
+    if (mirror) updateDoc(doc(db, mirror.col, mirror.id), { 위치공유중: true }).catch(() => {});
+    try { navigator.wakeLock?.request("screen").then((w) => { wakeRef.current = w; }).catch(() => {}); } catch { /* 화면 켜짐 유지 미지원 */ }
+    if (watchRef.current != null) navigator.geolocation.clearWatch(watchRef.current);
+    watchRef.current = navigator.geolocation.watchPosition((pos) => {
+      const now = Date.now();
+      setShare({ on: true, err: "", lastAt: now });
+      if (now - lastWriteRef.current < 8000) return;
+      lastWriteRef.current = now;
+      const payload = { 위치: { lat: pos.coords.latitude, lng: pos.coords.longitude }, 위치갱신일시: serverTimestamp(), 출처: "기사추적링크" };
+      setDoc(doc(db, "liveLocations", id), payload, { merge: true }).catch(() => {});
+      if (mirror) setDoc(doc(db, "liveLocations", mirror.id), payload, { merge: true }).catch(() => {});
+    }, (err) => {
+      setShare({ on: false, lastAt: 0, err: err.code === 1 ? "위치 권한이 거부되었습니다. 휴대폰 설정 → 브라우저(크롬/삼성인터넷) → 위치 권한을 허용한 뒤 다시 눌러주세요." : "위치를 가져올 수 없습니다. GPS를 켜고 다시 눌러주세요." });
+    }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+  };
+  useEffect(() => () => {
+    if (watchRef.current != null) navigator.geolocation?.clearWatch(watchRef.current);
+    try { wakeRef.current?.release(); } catch { /* 무시 */ }
+  }, []);
+
   const wrap = { minHeight: "100vh", background: "#f4f6f9", fontFamily: "'Noto Sans KR','Malgun Gothic',sans-serif", wordBreak: "keep-all" };
   if (order === undefined) return <div style={{ ...wrap, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, color: "#4b5563" }}>불러오는 중…</div>;
   if (!valid) return <div style={{ ...wrap, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center", fontSize: 16, fontWeight: 700, color: "#4b5563" }}>유효하지 않은 배송 조회 링크입니다.<br />담당자에게 링크를 다시 요청해 주세요.</div>;
@@ -102,7 +134,7 @@ export default function TrackPage() {
     <div style={wrap}>
       <div style={{ background: NAVY, color: "#fff", padding: "18px 18px 22px" }}>
         <div style={{ maxWidth: 720, margin: "0 auto" }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "rgba(255,255,255,.7)" }}>{order.companyName ? `${order.companyName} · ` : ""}배송 조회</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "rgba(255,255,255,.7)" }}>{order.companyName ? `${order.companyName} · ` : ""}{isDriver ? "기사 위치 공유" : "배송 조회"}</div>
           <div style={{ fontSize: 21, fontWeight: 900, marginTop: 6 }}>{order.상차지명 || "-"} → {order.하차지명 || "-"}</div>
           <div style={{ fontSize: 15, fontWeight: 800, marginTop: 10, background: "rgba(255,255,255,.12)", borderRadius: 10, padding: "10px 12px" }}>
             {done ? `하차 완료 · ${hm(steps[4].at)}`
@@ -112,6 +144,36 @@ export default function TrackPage() {
         </div>
       </div>
       <div style={{ maxWidth: 720, margin: "0 auto", padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+        {/* 기사용 — 위치 공유 시작 */}
+        {isDriver && !done && (
+          <div style={{ background: share.on ? "#ecfdf5" : "#fff", borderRadius: 14, border: `2px solid ${share.on ? "#10b981" : NAVY}`, padding: 16 }}>
+            {share.on ? (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 18, fontWeight: 900, color: "#047857" }}>
+                  <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#10b981", animation: "trkPulse 1.2s infinite" }} />
+                  위치 공유 중
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#065f46", marginTop: 6, lineHeight: 1.6 }}>
+                  담당자가 차량 위치를 보고 있습니다. 운송이 끝날 때까지 <b>이 화면을 켜 두세요.</b><br />
+                  (다른 앱으로 넘어가거나 화면이 꺼지면 전송이 멈춥니다)
+                </div>
+                <style>{`@keyframes trkPulse{0%,100%{opacity:1}50%{opacity:.3}}`}</style>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 18, fontWeight: 900, color: NAVY }}>담당자가 위치 공유를 요청했습니다</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#374151", marginTop: 6, lineHeight: 1.6 }}>
+                  아래 버튼을 누르고 위치 권한을 <b>허용</b>해 주세요. 이 오더 운송 중에만 위치가 담당자에게 보입니다.
+                </div>
+                <button onClick={startShare}
+                  style={{ marginTop: 12, width: "100%", height: 54, borderRadius: 12, border: "none", background: NAVY, color: "#fff", fontSize: 18, fontWeight: 900, cursor: "pointer" }}>
+                  위치 공유 시작
+                </button>
+                {share.err && <div style={{ marginTop: 10, fontSize: 14, fontWeight: 700, color: "#b91c1c", lineHeight: 1.5 }}>{share.err}</div>}
+              </>
+            )}
+          </div>
+        )}
         {/* 진행 단계 */}
         <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e2e7ef", padding: "16px 10px 12px" }}>
           <div style={{ display: "flex" }}>

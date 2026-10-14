@@ -18,7 +18,7 @@ import { cleanTrack } from "./mapStyle";
 import { modificationStatus } from "./orderChange";
 import CustomDatePicker from "./CustomDatePicker";
 import RouteMapModal from "./RouteMapModal";
-import { copyTrackingLink } from "./trackingLink";
+import { copyTrackingLink, copyDriverTrackingLink } from "./trackingLink";
 import { ReturnTripSuggest } from "./fleetRecommend";
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
@@ -999,26 +999,118 @@ function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, comp
 
 // ─── RegistrationTab ─────────────────────────────────────────────────────────
 
-function RegistrationTab({ usersMap, myCompanyName }) {
+// ⭐ 사용자 요청 — 노선관리와 같은 카드형 디자인, 큰 글씨, "내 차량 목록 / 전체 목록" 분리.
+// 내 차량 = drivers/{id}.담당자가 나(로그인 계정)인 차량. 두 목록 모두 차량종류 → 톤수 순으로 묶어 보여주고
+// 검색(이름·차량번호·전화번호)과 필터(차량종류·톤수·등급·담당자·앱 접속)를 제공한다.
+const regTonNum = (t) => { const n = parseFloat(String(t || "").replace(/[^\d.]/g, "")); return Number.isFinite(n) ? n : 9999; };
+const regPlate = (v) => String(v || "").replace(/\s/g, "");
+function RegSelect({ value, onChange, options, label }) {
+  return (
+    <select value={value} onChange={e => onChange(e.target.value)}
+      style={{ height: 40, padding: "0 10px", borderRadius: 8, border: `1.5px solid ${value ? NAVY : "#d1d5db"}`, background: value ? "#eef1f6" : "#fff", color: "#111827", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+      <option value="">{label} 전체</option>
+      {options.map(o => <option key={o} value={o}>{o}</option>)}
+    </select>
+  );
+}
+
+function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = null, staff = [], canDelegate = false, onAssignManager }) {
   const [approvingId, setApprovingId] = useState(null);
+  const [scope, setScope] = useState("mine");
+  const [q, setQ] = useState("");
+  const [fType, setFType] = useState("");
+  const [fTon, setFTon] = useState("");
+  const [fGrade, setFGrade] = useState("");
+  const [fMgr, setFMgr] = useState("");
+  const [fLive, setFLive] = useState("");
+  const [folded, setFolded] = useState({});
+
+  const rawById = useMemo(() => {
+    const m = {};
+    driversRaw.forEach(r => { m[r.id] = r; });
+    return m;
+  }, [driversRaw]);
 
   const driverList = useMemo(() => {
     return Object.entries(usersMap)
       .filter(([, u]) => !myCompanyName || !u.companyName || u.companyName === myCompanyName)
-      .map(([uid, u]) => ({ uid, ...u }))
-      .sort((a, b) => {
-        if (a.approved !== b.approved) return a.approved ? 1 : -1;
-        const at = resolveTs(b.createdAt)?.getTime() || 0;
-        const bt = resolveTs(a.createdAt)?.getTime() || 0;
-        return at - bt;
+      .map(([uid, u]) => {
+        const raw = rawById[uid] || {};
+        const vt = String(u.vehicleType || raw.vehicleType || "").trim();
+        const vtTon = (vt.match(/[\d.]+\s*(톤|t|T)/) || [""])[0];
+        return {
+          uid, ...u,
+          이름: (raw.이름 || u.name || raw.name || "").trim() || "-",
+          차량번호: (raw.차량번호 || u.carNo || raw.carNo || "").trim() || "-",
+          전화번호: raw.전화번호 || u.phone || raw.phone || "",
+          차량종류: String(raw.차량종류 || u.차량종류 || vt.replace(vtTon, "") || "").trim() || "미입력",
+          차량톤수: String(raw.차량톤수 || u.차량톤수 || vtTon || "").trim() || "미입력",
+          등급: raw.등급 || "일반",
+          담당자: raw.담당자 || null,
+          online: isRecentlySeen(raw.updatedAt, raw.heartbeatAt),
+          lastSeen: raw.heartbeatAt || raw.updatedAt || null,
+          hasDriverDoc: !!rawById[uid],
+        };
       });
-  }, [usersMap]);
+  }, [usersMap, rawById, myCompanyName]);
 
-  const pending = driverList.filter(d => !d.approved);
-  const approved = driverList.filter(d => d.approved);
+  const pending = useMemo(() => driverList.filter(d => !d.approved)
+    .sort((a, b) => (resolveTs(b.createdAt)?.getTime() || 0) - (resolveTs(a.createdAt)?.getTime() || 0)), [driverList]);
+  const approved = useMemo(() => driverList.filter(d => d.approved), [driverList]);
+  const mine = useMemo(() => approved.filter(d => myUid && d.담당자?.uid === myUid), [approved, myUid]);
+  const base = scope === "mine" ? mine : approved;
+
+  const opts = useMemo(() => {
+    const uniq = (arr) => [...new Set(arr.filter(Boolean))];
+    return {
+      type: uniq(base.map(d => d.차량종류)).sort((a, b) => a.localeCompare(b, "ko")),
+      ton: uniq(base.map(d => d.차량톤수)).sort((a, b) => regTonNum(a) - regTonNum(b)),
+      grade: uniq(base.map(d => d.등급)),
+      mgr: uniq(base.map(d => d.담당자?.name || "담당자 미지정")).sort((a, b) => a.localeCompare(b, "ko")),
+    };
+  }, [base]);
+
+  const filtered = useMemo(() => {
+    const k = q.trim().replace(/[\s-]/g, "").toLowerCase();
+    return base.filter(d => {
+      if (fType && d.차량종류 !== fType) return false;
+      if (fTon && d.차량톤수 !== fTon) return false;
+      if (fGrade && d.등급 !== fGrade) return false;
+      if (fMgr && (d.담당자?.name || "담당자 미지정") !== fMgr) return false;
+      if (fLive === "on" && !d.online) return false;
+      if (fLive === "off" && d.online) return false;
+      if (k) {
+        const hay = `${d.이름}${regPlate(d.차량번호)}${String(d.전화번호).replace(/\D/g, "")}${d.담당자?.name || ""}`.toLowerCase();
+        if (!hay.includes(k)) return false;
+      }
+      return true;
+    });
+  }, [base, q, fType, fTon, fGrade, fMgr, fLive]);
+
+  // 차량종류 → 톤수 묶음
+  const groups = useMemo(() => {
+    const byType = {};
+    filtered.forEach(d => {
+      const t = d.차량종류, n = d.차량톤수;
+      (byType[t] ||= {})[n] ||= [];
+      byType[t][n].push(d);
+    });
+    return Object.keys(byType)
+      .sort((a, b) => (a === "미입력") - (b === "미입력") || a.localeCompare(b, "ko"))
+      .map(t => ({
+        type: t,
+        count: Object.values(byType[t]).reduce((s, l) => s + l.length, 0),
+        tons: Object.keys(byType[t]).sort((a, b) => regTonNum(a) - regTonNum(b))
+          .map(n => ({ ton: n, list: byType[t][n].sort((a, b) => a.이름.localeCompare(b.이름, "ko")) })),
+      }));
+  }, [filtered]);
+
+  const filterOn = !!(q || fType || fTon || fGrade || fMgr || fLive);
+  const resetFilters = () => { setQ(""); setFType(""); setFTon(""); setFGrade(""); setFMgr(""); setFLive(""); };
 
   const handleApprove = async (uid, doApprove) => {
     if (approvingId) return;
+    if (!doApprove && !window.confirm("이 기사의 승인을 취소할까요? 기사앱 사용이 막힙니다.")) return;
     setApprovingId(uid);
     try {
       await updateDoc(doc(db, "users", uid), { approved: doApprove });
@@ -1030,80 +1122,153 @@ function RegistrationTab({ usersMap, myCompanyName }) {
     }
   };
 
-  const DriverRow = ({ d, canApprove }) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "15px 0", borderBottom: "1px solid #f0f2f5", flexWrap: "wrap" }}>
-      <div style={{ width: 9, height: 9, borderRadius: "50%", background: d.approved ? "#10b981" : "#f59e0b", flexShrink: 0 }} />
-      <div style={{ minWidth: 90, flex: "0 0 auto" }}>
-        <div style={{ fontSize: 17, fontWeight: 700, color: "#111827" }}>{d.name || "-"}</div>
-        <div style={{ fontSize: 15, color: "#374151", marginTop: 2, fontWeight: 700, letterSpacing: "0.04em" }}>{d.carNo || "-"}</div>
+  const COLS = "52px 1.1fr 1.1fr 1fr 0.8fr 1.2fr 1.2fr 1fr 150px";
+  const head = ["", "기사", "차량번호", "차량", "등급", "전화번호", "담당자", "앱 접속", ""];
+  const gradeColor = (g) => g === "지입" ? { bg: "#eef1f6", fg: NAVY } : g === "직영" ? { bg: "#ecfdf5", fg: "#047857" } : g === "블랙" ? { bg: "#fef2f2", fg: "#b91c1c" } : { bg: "#f3f4f6", fg: "#374151" };
+
+  const DriverRow = ({ d, idx }) => {
+    const gc = gradeColor(d.등급);
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: COLS, alignItems: "center", gap: 10, padding: "12px 16px", borderTop: "1px solid #eef1f5", background: idx % 2 ? "#fbfcfd" : "#fff" }}>
+        <div style={{ width: 38, height: 38, borderRadius: 10, background: NAVY, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: 900 }}>{String(d.이름).slice(0, 1)}</div>
+        <div style={{ fontSize: 17, fontWeight: 900, color: "#111827", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.이름}</div>
+        <div><span style={{ fontSize: 16, fontWeight: 800, color: "#111827", border: "1.5px solid #111827", borderRadius: 5, padding: "2px 8px", whiteSpace: "nowrap" }}>{d.차량번호}</span></div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: "#374151" }}>{[d.차량종류, d.차량톤수].filter(v => v && v !== "미입력").join(" ") || "-"}</div>
+        <div><span style={{ fontSize: 14, fontWeight: 800, color: gc.fg, background: gc.bg, borderRadius: 6, padding: "3px 10px" }}>{d.등급}</span></div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>{d.전화번호 ? formatPhone(d.전화번호) : "-"}</div>
+        <div>
+          {d.hasDriverDoc
+            ? <ManagerBadge driver={{ id: d.uid, 이름: d.이름, 담당자: d.담당자 }} staff={staff} canDelegate={canDelegate} onAssign={onAssignManager} big />
+            : <span style={{ fontSize: 14, color: "#6b7280", fontWeight: 700 }}>-</span>}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14, fontWeight: 700, color: d.online ? "#047857" : "#6b7280" }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: d.online ? "#10b981" : "#cbd2dc", flexShrink: 0 }} />
+          {d.online ? "접속중" : d.lastSeen ? timeAgo(d.lastSeen) : "기록 없음"}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
+          <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 700, whiteSpace: "nowrap" }}>{d.createdAt ? formatDate(d.createdAt) : ""}</span>
+          <button onClick={() => handleApprove(d.uid, false)} disabled={!!approvingId}
+            style={{ padding: "5px 10px", borderRadius: 7, border: "1px solid #e5e7eb", background: "#fff", color: "#6b7280", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>승인취소</button>
+        </div>
       </div>
-      <span style={{ fontSize: 15, color: "#374151", padding: "3px 10px", border: "1px solid #e5e7eb", borderRadius: 99, background: "#fafafa", flexShrink: 0 }}>
-        {d.vehicleType || "-"}
-      </span>
-      {d.companyName && (
-        <span style={{ fontSize: 14, color: "#6b7280", padding: "3px 10px", border: "1px solid #e5e7eb", borderRadius: 99, background: "#f9fafb", flexShrink: 0 }}>
-          {d.companyName}
-        </span>
-      )}
-      <div style={{ fontSize: 16, color: "#374151", flex: 1, minWidth: 110 }}>{d.phone ? formatPhone(d.phone) : "-"}</div>
-      <div style={{ fontSize: 15, color: "#9ca3af", flexShrink: 0 }}>{d.createdAt ? formatDate(d.createdAt) : "-"}</div>
-      <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-        {canApprove ? (
-          <>
-            <button
-              onClick={() => handleApprove(d.uid, true)}
-              disabled={approvingId === d.uid}
-              style={{ padding: "7px 18px", borderRadius: 8, border: "none", background: NAVY, color: "white", fontSize: 16, fontWeight: 700, cursor: approvingId === d.uid ? "not-allowed" : "pointer", opacity: approvingId === d.uid ? 0.6 : 1 }}
-            >
-              {approvingId === d.uid ? "처리중..." : "승인"}
-            </button>
-            <button
-              onClick={() => handleApprove(d.uid, false)}
-              disabled={!!approvingId}
-              style={{ padding: "7px 15px", borderRadius: 8, border: "1px solid #fca5a5", background: "white", color: "#dc2626", fontSize: 16, fontWeight: 700, cursor: "pointer" }}
-            >
-              거절
-            </button>
-          </>
-        ) : (
-          <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-            <span style={{ fontSize: 15, color: "#10b981", fontWeight: 700, background: "#d1fae5", padding: "3px 11px", borderRadius: 99 }}>승인됨</span>
-            <button
-              onClick={() => handleApprove(d.uid, false)}
-              disabled={!!approvingId}
-              style={{ padding: "5px 11px", borderRadius: 7, border: "1px solid #e5e7eb", background: "white", color: "#9ca3af", fontSize: 15, cursor: "pointer" }}
-            >
-              취소
-            </button>
-          </div>
-        )}
-      </div>
+    );
+  };
+
+  const stat = (label, value, color = "#111827") => (
+    <div style={{ background: "#fff", border: "1px solid #e2e7ef", borderRadius: 10, padding: "10px 16px", minWidth: 110 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: "#4b5563" }}>{label}</div>
+      <div style={{ fontSize: 24, fontWeight: 900, color, lineHeight: 1.25 }}>{value}</div>
     </div>
   );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* 요약 */}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        {stat("내 차량", `${mine.length}대`, NAVY)}
+        {stat("전체 등록 기사", `${approved.length}명`)}
+        {stat("지금 앱 접속중", `${approved.filter(d => d.online).length}명`, "#047857")}
+        {stat("승인 대기", `${pending.length}명`, pending.length ? "#b45309" : "#6b7280")}
+      </div>
+
+      {/* 승인 대기 */}
       {pending.length > 0 && (
-        <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12, padding: "20px 26px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14 }}>
-            <div style={{ width: 9, height: 9, borderRadius: "50%", background: "#f59e0b" }} />
-            <span style={{ fontSize: 17, fontWeight: 800, color: "#92400e" }}>가입 승인 대기 ({pending.length}명)</span>
-          </div>
-          {pending.map(d => <DriverRow key={d.uid} d={d} canApprove={true} />)}
+        <div style={{ background: "#fffbeb", border: "1.5px solid #fcd34d", borderRadius: 12, padding: "14px 18px" }}>
+          <div style={{ fontSize: 17, fontWeight: 900, color: "#92400e", marginBottom: 8 }}>가입 승인 대기 {pending.length}명</div>
+          {pending.map(d => (
+            <div key={d.uid} style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 0", borderTop: "1px solid #fde68a", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 17, fontWeight: 900, color: "#111827", minWidth: 80 }}>{d.이름}</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: "#111827", border: "1.5px solid #111827", borderRadius: 5, padding: "1px 8px" }}>{d.차량번호}</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: "#374151" }}>{[d.차량종류, d.차량톤수].filter(v => v !== "미입력").join(" ") || "-"}</span>
+              <span style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>{d.전화번호 ? formatPhone(d.전화번호) : "-"}</span>
+              {d.companyName && <span style={{ fontSize: 14, fontWeight: 700, color: "#4b5563" }}>{d.companyName}</span>}
+              <span style={{ marginLeft: "auto", fontSize: 14, color: "#6b7280", fontWeight: 700 }}>{d.createdAt ? formatDate(d.createdAt) : ""}</span>
+              <button onClick={() => handleApprove(d.uid, true)} disabled={approvingId === d.uid}
+                style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: NAVY, color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer", opacity: approvingId === d.uid ? 0.6 : 1 }}>
+                {approvingId === d.uid ? "처리중..." : "승인"}
+              </button>
+              <button onClick={() => handleApprove(d.uid, false)} disabled={!!approvingId}
+                style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #fca5a5", background: "#fff", color: "#dc2626", fontSize: 16, fontWeight: 800, cursor: "pointer" }}>거절</button>
+            </div>
+          ))}
         </div>
       )}
 
-      <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "20px 26px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14 }}>
-          <div style={{ width: 9, height: 9, borderRadius: "50%", background: "#10b981" }} />
-          <span style={{ fontSize: 17, fontWeight: 800, color: NAVY }}>등록 기사 ({approved.length}명)</span>
+      {/* 내 차량 / 전체 토글 + 검색·필터 */}
+      <div style={{ background: "#fff", border: "1px solid #e2e7ef", borderRadius: 12, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 4, background: "#f3f4f6", borderRadius: 10, padding: 4 }}>
+            {[["mine", "내 차량 목록", mine.length], ["all", "전체 목록", approved.length]].map(([key, label, count]) => (
+              <button key={key} onClick={() => { setScope(key); resetFilters(); }}
+                style={{ padding: "8px 18px", borderRadius: 8, border: "none", fontSize: 16, fontWeight: 800, cursor: "pointer", background: scope === key ? NAVY : "transparent", color: scope === key ? "#fff" : "#374151", display: "flex", alignItems: "center", gap: 8 }}>
+                {label}
+                <span style={{ fontSize: 13, fontWeight: 900, padding: "1px 8px", borderRadius: 99, background: scope === key ? "rgba(255,255,255,.22)" : "#e5e7eb", color: scope === key ? "#fff" : "#374151" }}>{count}</span>
+              </button>
+            ))}
+          </div>
+          <div style={{ position: "relative", flex: "1 1 260px", maxWidth: 380 }}>
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="이름 · 차량번호 · 전화번호 검색"
+              style={{ width: "100%", height: 40, padding: "0 34px 0 12px", borderRadius: 8, border: "1.5px solid #d1d5db", fontSize: 15, fontWeight: 600, outline: "none", boxSizing: "border-box" }} />
+            {q && <button onClick={() => setQ("")} style={{ position: "absolute", right: 8, top: 8, border: "none", background: "transparent", fontSize: 16, color: "#6b7280", cursor: "pointer" }}>✕</button>}
+          </div>
+          <div style={{ marginLeft: "auto", fontSize: 15, fontWeight: 700, color: "#374151" }}>
+            {filterOn ? <>검색 결과 <b style={{ color: NAVY }}>{filtered.length}</b>대 / {base.length}대</> : <>총 <b style={{ color: NAVY }}>{base.length}</b>대</>}
+          </div>
         </div>
-        {approved.length === 0 ? (
-          <div style={{ padding: "30px 0", textAlign: "center", color: "#9ca3af", fontSize: 16 }}>승인된 기사가 없습니다</div>
-        ) : (
-          approved.map(d => <DriverRow key={d.uid} d={d} canApprove={false} />)
-        )}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <RegSelect label="차량종류" value={fType} onChange={setFType} options={opts.type} />
+          <RegSelect label="톤수" value={fTon} onChange={setFTon} options={opts.ton} />
+          <RegSelect label="등급" value={fGrade} onChange={setFGrade} options={opts.grade} />
+          {scope === "all" && <RegSelect label="담당자" value={fMgr} onChange={setFMgr} options={opts.mgr} />}
+          <div style={{ display: "flex", gap: 4 }}>
+            {[["", "접속 전체"], ["on", "접속중"], ["off", "미접속"]].map(([k, l]) => (
+              <button key={k} onClick={() => setFLive(k)}
+                style={{ height: 40, padding: "0 12px", borderRadius: 8, border: `1.5px solid ${fLive === k ? NAVY : "#d1d5db"}`, background: fLive === k ? NAVY : "#fff", color: fLive === k ? "#fff" : "#374151", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>{l}</button>
+            ))}
+          </div>
+          {filterOn && <button onClick={resetFilters} style={{ height: 40, padding: "0 12px", borderRadius: 8, border: "none", background: "transparent", color: "#b91c1c", fontSize: 15, fontWeight: 800, cursor: "pointer" }}>필터 초기화</button>}
+        </div>
       </div>
+
+      {/* 목록 — 차량종류 → 톤수 */}
+      {base.length === 0 ? (
+        <div style={{ background: "#fff", border: "1px solid #e2e7ef", borderRadius: 12, padding: 50, textAlign: "center", color: "#4b5563", fontSize: 17, fontWeight: 700, lineHeight: 1.7 }}>
+          {scope === "mine"
+            ? <>내가 담당자로 지정된 차량이 없습니다.<br />"전체 목록"에서 담당자를 지정하거나, 노선관리에서 위임받으세요.</>
+            : <>승인된 기사가 없습니다.</>}
+        </div>
+      ) : groups.length === 0 ? (
+        <div style={{ background: "#fff", border: "1px solid #e2e7ef", borderRadius: 12, padding: 50, textAlign: "center", color: "#4b5563", fontSize: 17, fontWeight: 700 }}>검색·필터 조건에 맞는 차량이 없습니다.</div>
+      ) : groups.map(g => {
+        const fk = `${scope}:${g.type}`;
+        const isFold = !!folded[fk];
+        return (
+          <div key={g.type} style={{ background: "#fff", border: "1px solid #e2e7ef", borderRadius: 12, overflow: "hidden" }}>
+            <div onClick={() => setFolded(p => ({ ...p, [fk]: !p[fk] }))}
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: NAVY, color: "#fff", cursor: "pointer", userSelect: "none" }}>
+              <span style={{ fontSize: 14, transition: "transform .15s", transform: isFold ? "rotate(-90deg)" : "none" }}>▼</span>
+              <span style={{ fontSize: 18, fontWeight: 900 }}>{g.type}</span>
+              <span style={{ fontSize: 14, fontWeight: 800, background: "rgba(255,255,255,.2)", borderRadius: 99, padding: "1px 10px" }}>{g.count}대</span>
+              <span style={{ marginLeft: 8, fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,.8)" }}>{g.tons.map(t => `${t.ton} ${t.list.length}`).join(" · ")}</span>
+            </div>
+            {!isFold && (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: COLS, gap: 10, padding: "9px 16px", background: "#f4f6f9", fontSize: 14, fontWeight: 800, color: "#374151" }}>
+                  {head.map((h, i) => <div key={i} style={{ textAlign: i === 8 ? "right" : "left" }}>{i === 8 ? "가입일" : h}</div>)}
+                </div>
+                {g.tons.map(t => (
+                  <React.Fragment key={t.ton}>
+                    <div style={{ padding: "8px 16px", background: "#eef1f6", borderTop: "1px solid #e2e7ef", fontSize: 15, fontWeight: 900, color: NAVY }}>
+                      {t.ton} <span style={{ fontWeight: 700, color: "#4b5563" }}>· {t.list.length}대</span>
+                    </div>
+                    {t.list.map((d, i) => <DriverRow key={d.uid} d={d} idx={i} />)}
+                  </React.Fragment>
+                ))}
+              </>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1496,19 +1661,19 @@ function LiveLocationBadge({ live }) {
 // 지입차 1대를 책임지는 배차자를 drivers/{id}.담당자에 저장해 보여준다. 위임
 // 권한(관리자 이상)이 있는 사람에게만 변경 버튼을 노출하고, 눌렀을 때 같은
 // 회사 배차자(staff) 목록에서 새 담당자를 고르는 작은 드롭다운을 연다.
-function ManagerBadge({ driver, staff, canDelegate, onAssign }) {
+function ManagerBadge({ driver, staff, canDelegate, onAssign, big = false }) {
   const [open, setOpen] = useState(false);
   const mgr = driver.담당자;
   return (
     <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-      <span style={{ fontSize: 13, fontWeight: 700, color: mgr ? "#374151" : "#c1c7d0" }}>
+      <span style={{ fontSize: big ? 15 : 13, fontWeight: big ? 800 : 700, color: mgr ? (big ? "#111827" : "#374151") : (big ? "#9ca3af" : "#c1c7d0") }}>
         {mgr ? mgr.name : "담당자 미지정"}
       </span>
       {canDelegate && (
         <button
           type="button"
           onClick={() => setOpen(true)}
-          style={{ padding: "2px 8px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", color: "#6b7280", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+          style={{ padding: big ? "3px 10px" : "2px 8px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", color: big ? "#374151" : "#6b7280", fontSize: big ? 13 : 11, fontWeight: 700, cursor: "pointer" }}
         >
           위임
         </button>
@@ -2631,9 +2796,16 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
     },
     { label: "기사복사", onClick: () => setCopyOrder(ctxMenu.order) },
     {
-      label: "배송추적 링크 복사",
+      label: "배송추적 링크 복사 (화주용)",
       onClick: async () => {
         try { await copyTrackingLink(ctxMenu.order); window.alert("배송 추적 링크를 복사했습니다. 화주에게 문자·카톡으로 보내주세요."); }
+        catch (e) { window.alert("링크를 만들지 못했습니다: " + (e?.message || "")); }
+      },
+    },
+    {
+      label: "위치공유 링크 복사 (기사용)",
+      onClick: async () => {
+        try { await copyDriverTrackingLink(ctxMenu.order); window.alert("기사용 위치공유 링크를 복사했습니다. 기사에게 문자·카톡으로 보내주세요."); }
         catch (e) { window.alert("링크를 만들지 못했습니다: " + (e?.message || "")); }
       },
     },
@@ -6423,7 +6595,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
       {mainTab === "cargo-camera" && <CargoCameraTab drivers={drivers} />}
 
       {/* ═══ 기사 등록 관리 ═══ */}
-      {mainTab === "registration" && <RegistrationTab usersMap={usersMap} myCompanyName={myCompanyName} />}
+      {mainTab === "registration" && <RegistrationTab usersMap={usersMap} myCompanyName={myCompanyName} driversRaw={driversRaw} myUid={myUid} staff={companyStaff} canDelegate={canDelegate} onAssignManager={assignDriverManager} />}
 
         </div>
       </div>
