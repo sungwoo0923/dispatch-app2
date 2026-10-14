@@ -6,6 +6,49 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // ⭐ 보안 1단계 — "가입만 하고 승인 안 된 계정"이 DB 전체를 읽고 쓰는 것을 막는다.
+    // 앱(App.jsx)과 같은 기준: users/{uid} 문서가 있고, approved가 false가 아니며(예전 계정처럼
+    // 값이 없으면 승인으로 봄), 퇴사 처리되지 않은 계정. 최고관리자 이메일은 항상 허용.
+    function myUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    function isApproved() {
+      return isSignedIn() && (
+        request.auth.token.get('email', '') == "tjddnqkf@naver.com" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         myUser().get('approved', true) != false &&
+         myUser().get('employmentStatus', '') != '퇴사' &&
+         // 배차마당(cafe-site) 가입 계정은 가입과 동시에 approved:true로 저장되므로
+         // 배차 프로그램 데이터에는 접근할 수 없게 따로 제외한다(배차마당 컬렉션만 사용).
+         myUser().get('role', '') != 'cafeUser')
+      );
+    }
+    // DriverLogin/DriverRegister의 차량번호 정규화와 동일(공백 제거 + 대문자)
+    function plateId(carNo) {
+      return carNo.trim().replace('\\s+', '').upper();
+    }
+    // 기사앱 로그인 — PC 기사관리에서 미리 등록한 차량(drivers/{차량번호})과 이름·회사명이 같으면
+    // 승인 없이 approved:true로 가입시키는 기존 흐름을 서버에서도 똑같이 확인한다.
+    function preRegisteredDriverOk(data) {
+      return data.get('role', '') == 'driver' &&
+        data.get('carNo', '') is string && data.get('carNo', '') != '' &&
+        exists(/databases/$(database)/documents/drivers/$(plateId(data.carNo))) &&
+        get(/databases/$(database)/documents/drivers/$(plateId(data.carNo))).data.get('이름',
+          get(/databases/$(database)/documents/drivers/$(plateId(data.carNo))).data.get('name', '')).trim() == data.get('name', '').trim() &&
+        get(/databases/$(database)/documents/drivers/$(plateId(data.carNo))).data.get('companyName', '').trim() == data.get('companyName', '').trim();
+    }
+    // 본인 users 문서 쓰기 — 승인 여부/권한(role)을 스스로 올리는 것만 막는다.
+    function selfUserWriteOk(userId) {
+      return request.auth.uid == userId && (
+        request.resource.data.get('approved', false) == false ||
+        request.resource.data.get('role', '') == 'cafeUser' ||
+        preRegisteredDriverOk(request.resource.data) ||
+        (resource != null &&
+         request.resource.data.get('approved', null) == resource.data.get('approved', null) &&
+         request.resource.data.get('role', null) == resource.data.get('role', null))
+      );
+    }
+
     // ⭐ 프로그램 전역 설정(랜딩페이지 편집, 알림 문구 설정 등)은 최고관리자만
     // 읽고 쓸 수 있어야 한다 — AdminMenu.jsx의 isTotalMaster 판정 로직과 동일하게
     // (1) 고정된 총마스터 이메일이거나 (2) 본인 users 문서의 role이 "totalMaster"인
@@ -13,7 +56,7 @@ service cloud.firestore {
     // 가능) 서버(규칙)에서 독립적으로 다시 검증한다.
     function isTotalMasterUser() {
       return isSignedIn() && (
-        request.auth.token.email == "tjddnqkf@naver.com" ||
+        request.auth.token.get('email', '') == "tjddnqkf@naver.com" ||
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "totalMaster"
       );
     }
@@ -36,24 +79,24 @@ service cloud.firestore {
       // list는 열려 있어야 한다. 이 경로를 서버(Vercel 함수)로 옮기기 전까지는
       // "그 날짜의 전체 오더 목록이 링크 소지자에게 노출될 수 있다"는 제한된 리스크가 남는다.
       allow list: if true;
-      allow update: if isSignedIn() || isPublicOrderUpdate();
-      allow create, delete: if isSignedIn();
+      allow update: if isApproved() || isPublicOrderUpdate();
+      allow create, delete: if isApproved();
     }
     match /dispatch/{id} {
       allow get: if true;
       allow list: if true;
-      allow update: if isSignedIn() || isPublicOrderUpdate();
-      allow create, delete: if isSignedIn();
+      allow update: if isApproved() || isPublicOrderUpdate();
+      allow create, delete: if isApproved();
     }
     match /dispatch_test/{id} {
       allow get: if true;
-      allow list, create, update, delete: if isSignedIn();
+      allow list, create, update, delete: if isApproved();
     }
     match /fixedClients/{id} {
       allow get: if true;
       allow list: if true; // /driver-upload?source=fixed 검색용
-      allow update: if isSignedIn() || isPublicOrderUpdate();
-      allow create, delete: if isSignedIn();
+      allow update: if isApproved() || isPublicOrderUpdate();
+      allow create, delete: if isApproved();
     }
 
     // 기사전달용 업로드 링크 단축 — /u/{code}가 로그인 없이 code로 원본
@@ -63,34 +106,34 @@ service cloud.firestore {
     match /shortLinks/{code} {
       allow get: if true;
       allow list: if false;
-      allow create, update: if isSignedIn();
-      allow delete: if isSignedIn();
+      allow create, update: if isApproved();
+      allow delete: if isApproved();
     }
 
     // 인수증/서류 첨부 — 오더 문서 id만 알면 사진을 올리고 확인·삭제(되돌리기)할 수 있어야 한다.
     // 첨부 문서 id는 추측 불가능한 Firestore 자동 id라 list를 막아도 기능에 지장이 없다.
     match /{col}/{orderId}/attachments/{attId} {
       allow get, create, delete: if true;
-      allow list, update: if isSignedIn();
+      allow list, update: if isApproved();
     }
 
     // 수동 업로드(오더 id 없이 들어온 기사) — 새 메타 문서 생성만 허용, 조회는 로그인 사용자만.
     match /driver_uploads/{id} {
       allow create: if true;
-      allow get, list, update, delete: if isSignedIn();
+      allow get, list, update, delete: if isApproved();
     }
 
     // 홈페이지(랜딩페이지) 도입 문의 — 로그인 없는 방문자가 폼으로 제출만 할 수 있고,
     // 목록 조회/상태 변경은 관리자메뉴(로그인 사용자)만 가능하다.
     match /landingInquiries/{id} {
       allow create: if true;
-      allow get, list, update, delete: if isSignedIn();
+      allow get, list, update, delete: if isApproved();
     }
 
     // 실시간 위치공유 — 업로드 페이지에서 오더 id로만 쓰고 읽는다. 전체 목록 열람은 로그인 사용자만.
     match /liveLocations/{id} {
       allow get, create, update: if true;
-      allow list, delete: if isSignedIn();
+      allow list, delete: if isApproved();
     }
 
     // ────────────────────────────────────────────────────────────
@@ -136,12 +179,57 @@ service cloud.firestore {
     }
 
     // ────────────────────────────────────────────────────────────
-    // 그 외 모든 컬렉션 — 로그인한 사용자만 접근 가능
+    // 가입 진행 중(승인 전) 계정에 필요한 최소 권한 — 승인된 계정은 기존과 동일
+    // ────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      allow get: if isApproved() || (isSignedIn() && request.auth.uid == userId);
+      allow list: if isApproved();
+      allow create, update: if isSignedIn() && (
+        (isApproved() && request.auth.uid != userId) ||
+        isTotalMasterUser() ||
+        selfUserWriteOk(userId)
+      );
+      allow delete: if isApproved();
+    }
+    match /userProfiles/{userId} {
+      allow read, write: if isApproved() || (isSignedIn() && request.auth.uid == userId);
+    }
+    match /drivers/{driverId} {
+      // 기사앱 가입/로그인 때 차량번호 문서(PC 선등록) 확인용 단건 조회
+      allow get: if isSignedIn();
+      allow list: if isApproved();
+      allow create, update: if isApproved() || (isSignedIn() && request.auth.uid == driverId);
+      // 가입 후 선등록 문서(drivers/{차량번호}) 정리 — 승인 전에는 본인 차량번호 문서만
+      allow delete: if isApproved() || (isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        myUser().get('carNo', '') is string && myUser().get('carNo', '') != '' &&
+        plateId(myUser().carNo) == driverId);
+    }
+    match /transportApplications/{id} {
+      allow create: if isSignedIn();
+      allow get, list, delete: if isApproved();
+      allow update: if isApproved() ||
+        (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['address']));
+    }
+    match /companyApplications/{id} {
+      allow create: if isSignedIn();
+      allow get, list: if isApproved() || (isSignedIn() && resource.data.get('userId', '') == request.auth.uid);
+      allow delete: if isApproved();
+      allow update: if isApproved() ||
+        (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['address']));
+    }
+    match /sessionLogs/{id} {
+      allow create: if isSignedIn();
+      allow read, update, delete: if isApproved();
+    }
+
+    // ────────────────────────────────────────────────────────────
+    // 그 외 모든 컬렉션 — 승인된 계정만 접근 가능
     // (운송사/화주사/기사 전용 화면은 전부 Firebase Auth 로그인 후에만 진입하므로
     // 기존 기능에는 영향이 없고, 로그인 없는 제3자의 접근만 차단한다)
     // ────────────────────────────────────────────────────────────
     match /{document=**} {
-      allow read, write: if isSignedIn();
+      allow read, write: if isApproved();
     }
   }
 }
