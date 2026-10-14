@@ -23,6 +23,14 @@ function Delta({ v, money = true, isRate = false }) {
   return <span style={{ color: up ? "#047857" : "#b91c1c", fontWeight: 800 }}>{txt}</span>;
 }
 
+// ⭐ 뱃지 — 이미지/PDF 저장(html2canvas) 때 flex 가운데 정렬 글자가 아래로 밀려 찍히던 문제가 있어,
+// flex 대신 높이 = line-height로 세로 가운데를 맞춘다(브라우저와 캡처 결과가 같게 나옴).
+function Badge({ h = 22, size = 12, bg, color = "#fff", style, children }) {
+  return (
+    <span style={{ display: "inline-block", height: h, lineHeight: `${h}px`, fontSize: size, fontWeight: 900, color, background: bg, borderRadius: 5, padding: "0 8px", whiteSpace: "nowrap", verticalAlign: "middle", ...style }}><span className="mca-badge-t" style={{ position: "relative" }}>{children}</span></span>
+  );
+}
+
 // ⭐ 리포트 표 — 구분선·가운데 정렬. 셀 값은 문자열 또는 [윗줄, 아랫줄]
 const TONE_COLOR = { good: "#047857", bad: "#b91c1c", warn: "#b45309", neutral: "#374151" };
 function ReportTable({ head, rows, compact }) {
@@ -35,7 +43,7 @@ function ReportTable({ head, rows, compact }) {
     if (compact && typeof lines[0] === "string" && lines[0].includes(" · ")) { const parts = lines[0].split(" · "); mainCnt = parts.length; lines = [...parts, ...lines.slice(1)]; }
     return (
       <div style={{ padding: compact ? "9px 4px" : "12px 10px", borderLeft: i ? LINE : "none", textAlign: "center", minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", background: extra.background, color: extra.color }}>
-        {extra.badge && <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: compact ? 20 : 22, lineHeight: 1, fontSize: compact ? 11 : 12, fontWeight: 900, color: "#fff", background: "#dc2626", borderRadius: 5, padding: "0 8px", marginBottom: 4, whiteSpace: "nowrap" }}>{extra.badge}</span>}
+        {extra.badge && <Badge h={compact ? 20 : 22} size={compact ? 11 : 12} bg="#dc2626" style={{ marginBottom: 4 }}>{extra.badge}</Badge>}
         {lines.map((t, k) => (
           <div key={k} style={{ fontSize: (k >= mainCnt) ? (compact ? 13 : 14) : (compact ? 14 : 16), fontWeight: (k >= mainCnt) ? 800 : 900, color: (k >= mainCnt) ? (extra.subColor || "#1f2937") : (extra.color || "#111827"), lineHeight: 1.4, marginTop: k ? 2 : 0, wordBreak: "keep-all", overflowWrap: "anywhere" }}>{t}</div>
         ))}
@@ -258,6 +266,8 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
         onclone: (doc) => {
           const sc = doc.querySelector(".mca-scroll");
           if (sc) { sc.style.overflow = "visible"; sc.style.height = "auto"; sc.style.maxHeight = "none"; sc.style.flex = "none"; }
+          // 캡처 라이브러리가 이 글꼴의 글자를 실제보다 아래에 그려서, 저장용 복제본에서만 살짝 올린다
+          doc.querySelectorAll(".mca-badge-t").forEach((t) => { t.style.top = "-0.3em"; });
           let p = sc?.parentElement;
           while (p && p !== doc.body) { p.style.overflow = "visible"; p.style.height = "auto"; p.style.maxHeight = "none"; p = p.parentElement; }
         },
@@ -391,7 +401,7 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
           {report.causes.map((c, i) => (
             <div key={c.key} style={card}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                <span style={{ flexShrink: 0, fontSize: 13, fontWeight: 900, color: "#fff", background: "#b91c1c", borderRadius: 6, padding: "3px 9px" }}>원인 {i + 1}</span>
+                <Badge h={26} size={13} bg="#b91c1c" style={{ flexShrink: 0, borderRadius: 6, padding: "0 10px" }}>원인 {i + 1}</Badge>
                 <span style={{ fontSize: compact ? 16 : 18, fontWeight: 900, color: "#111827" }}>{c.title}</span>
               </div>
               {c.rows && <ReportTable compact={compact} head={c.head} rows={c.rows} />}
