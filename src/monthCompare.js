@@ -305,6 +305,10 @@ export function buildReport(res) {
   const notCauses = [];
   const saleD = B.sale - A.sale, profitD = B.profit - A.profit;
   const retain = saleD > 0 ? profitD / saleD : null;
+  // ⭐ "주요 원인" 표시 기준 — 기대 수익(A월 수익률 기준) 대비 부족분의 25% 이상이거나 100만원 이상 줄어든 것
+  const gapAbs = Math.abs(B.profit - B.sale * A.rate);
+  const majorCut = Math.max(1000000, gapAbs * 0.25);
+  const isMajor = (profitDrop) => profitDrop <= -Math.min(majorCut, Math.max(500000, gapAbs * 0.25));
 
   // ── 핵심 숫자
   const core = [
@@ -325,6 +329,8 @@ export function buildReport(res) {
       b: [`${y.cnt}건 · ${manU(y.sale)}`, `수익 ${manU(y.sale - y.driver)}`],
       d: [`매출 ${sManU(y.sale - x.sale)}`, `수익 ${sManU((y.sale - y.driver) - (x.sale - x.driver))}`],
       tone: (y.sale - x.sale) === 0 ? "neutral" : ((y.sale > x.sale) === good ? "good" : "bad"),
+      major: good && isMajor((y.sale - y.driver) - (x.sale - x.driver)),
+      majorText: good ? `수익 ${sManU((y.sale - y.driver) - (x.sale - x.driver))}` : "",
     };
   });
   const lowSale = (dt) => ["5", "0", "neg"].reduce((s, k) => s + dt.bands[k].sale, 0);
@@ -356,6 +362,8 @@ export function buildReport(res) {
     tone: g.b.rate < g.a.rate - 0.01 ? "bad" : g.b.rate > g.a.rate + 0.01 ? "good" : "neutral",
     g,
   }));
+  // 마진 하락으로 덜 번 금액이 큰 배차방식은 주요 원인 표시
+  methodRows.forEach((r) => { const loss = r.g.b.sale * (r.g.b.rate - r.g.a.rate); if (r.g.a.sale > 0 && isMajor(loss)) { r.major = true; r.majorText = `마진 하락 ${sManU(loss)}`; } });
   const worstMethod = methodRows.map((r) => r.g).filter((g) => g.a.sale > 0 && g.b.sale > 0 && g.b.rate < g.a.rate - 0.01).sort((x, y) => (x.b.sale * (x.b.rate - x.a.rate)) - (y.b.sale * (y.b.rate - y.a.rate)))[0];
   if (worstMethod && worstMethod.b.sale * (worstMethod.a.rate - worstMethod.b.rate) > Math.max(300000, Math.abs(B.sale * (A.rate - B.rate)) * 0.2)) {
     const low = (list) => list.filter((r) => COMPARE_DIMS[1].get(r) === worstMethod.key && rateOf(toWon(r.청구운임), toWon(r.기사운임)) < 0.10).length;
@@ -378,8 +386,10 @@ export function buildReport(res) {
     label: g.key,
     a: [g.a.cnt ? `${g.a.cnt}건 · ${manU(g.a.sale)}` : "-", g.a.cnt ? `수익률 ${pctU(g.a.rate)}` : ""],
     b: [g.b.cnt ? `${g.b.cnt}건 · ${manU(g.b.sale)}` : "-", g.b.cnt ? `수익률 ${pctU(g.b.rate)}` : ""],
-    d: [`수익 ${sManU(g.dProfit)}`, note],
+    d: [`수익 ${sManU(g.dProfit)}`, `매출 ${sManU(g.dSale)} · ${note}`],
     tone: g.dProfit < 0 ? "bad" : "warn",
+    major: isMajor(g.dProfit),
+    majorText: g.dSale < 0 ? `매출 ${sManU(g.dSale)} · 수익 ${sManU(g.dProfit)}` : `수익 ${sManU(g.dProfit)}`,
   });
   const clientRows = [
     ...lost.map((g) => cRow(g, g.dSale < 0 ? "오더 감소" : "마진 하락")),
@@ -415,6 +425,14 @@ export function buildReport(res) {
     headline = `매출 ${sManU(saleD)}, 수익 ${sManU(profitD)} · 수익률 ${pctU(A.rate)} → ${pctU(B.rate)}`;
   }
   const sorted = causes.sort((x, y) => (x.key === "margin" ? -1 : y.key === "margin" ? 1 : y.score - x.score));
-  const summary = sorted.length ? `${b}에는 ${sorted.map((c) => c.title).slice(0, 2).join(" / ")}` : "두 달 사이에 눈에 띄는 원인이 없습니다.";
+  const biggest = lost[0] && isMajor(lost[0].dProfit) ? lost[0] : null;
+  const summary = (sorted.length ? `${b}에는 ${sorted.map((c) => c.title).slice(0, 2).join(" / ")}` : "두 달 사이에 눈에 띄는 원인이 없습니다.")
+    + (biggest ? ` · 가장 크게 줄어든 거래처: ${biggest.key} (매출 ${sManU(biggest.dSale)}, 수익 ${sManU(biggest.dProfit)})` : "");
+  // 주요 원인 거래처는 설명 첫 줄에 강조
+  const clientCause = sorted.find((c) => c.key === "client");
+  if (clientCause && biggest && gapAbs > 0) {
+    clientCause.bullets.unshift(`가장 큰 원인: ${biggest.key} — ${biggest.a.cnt}건 → ${biggest.b.cnt}건, 매출 ${sManU(biggest.dSale)}, 수익 ${sManU(biggest.dProfit)} (덜 번 금액 ${manU(gapAbs)}의 약 ${Math.round((Math.abs(biggest.dProfit) / gapAbs) * 100)}%)`);
+    clientCause.bullets = clientCause.bullets.filter((t, i) => !(i > 0 && t.startsWith("수익이 가장 많이 줄어든 곳")));
+  }
   return { a, b, headline, summary, core, causes: sorted, notCauses };
 }

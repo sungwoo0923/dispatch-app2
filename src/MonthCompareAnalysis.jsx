@@ -1,5 +1,7 @@
 // ===================== 월 비교 분석 화면 (PC·모바일 공용) =====================
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 import { analyzeMonths, buildReport, COMPARE_DIMS, toWon, MARGIN_BANDS } from "./monthCompare";
 
 const NAVY = "#1B2B4B";
@@ -32,9 +34,10 @@ function ReportTable({ head, rows, compact }) {
     let mainCnt = 1;
     if (compact && typeof lines[0] === "string" && lines[0].includes(" · ")) { const parts = lines[0].split(" · "); mainCnt = parts.length; lines = [...parts, ...lines.slice(1)]; }
     return (
-      <div style={{ padding: compact ? "8px 4px" : "10px 10px", borderLeft: i ? LINE : "none", textAlign: "center", minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", ...extra }}>
+      <div style={{ padding: compact ? "9px 4px" : "12px 10px", borderLeft: i ? LINE : "none", textAlign: "center", minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", background: extra.background, color: extra.color }}>
+        {extra.badge && <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: compact ? 20 : 22, lineHeight: 1, fontSize: compact ? 11 : 12, fontWeight: 900, color: "#fff", background: "#dc2626", borderRadius: 5, padding: "0 8px", marginBottom: 4, whiteSpace: "nowrap" }}>{extra.badge}</span>}
         {lines.map((t, k) => (
-          <div key={k} style={{ fontSize: (k >= mainCnt) ? (compact ? 11 : 12) : (compact ? 13 : 15), fontWeight: (k >= mainCnt) ? 700 : 800, color: (k >= mainCnt) ? "#4b5563" : (extra.color || "#111827"), lineHeight: 1.35, wordBreak: "keep-all", overflowWrap: "anywhere" }}>{t}</div>
+          <div key={k} style={{ fontSize: (k >= mainCnt) ? (compact ? 13 : 14) : (compact ? 14 : 16), fontWeight: (k >= mainCnt) ? 800 : 900, color: (k >= mainCnt) ? (extra.subColor || "#1f2937") : (extra.color || "#111827"), lineHeight: 1.4, marginTop: k ? 2 : 0, wordBreak: "keep-all", overflowWrap: "anywhere" }}>{t}</div>
         ))}
       </div>
     );
@@ -43,15 +46,16 @@ function ReportTable({ head, rows, compact }) {
     <div style={{ border: LINE, borderRadius: 10, overflow: "hidden" }}>
       <div style={{ display: "grid", gridTemplateColumns: cols, background: "#eef1f6", borderBottom: "2px solid #cfd8e5" }}>
         {head.map((t, i) => (
-          <div key={i} style={{ padding: compact ? "8px 4px" : "10px 10px", borderLeft: i ? LINE : "none", textAlign: "center", fontSize: compact ? 13 : 14, fontWeight: 900, color: i === 2 ? "#fff" : NAVY, background: i === 2 ? NAVY : "transparent" }}>{t}</div>
+          <div key={i} style={{ padding: compact ? "9px 4px" : "11px 10px", borderLeft: i ? LINE : "none", textAlign: "center", fontSize: compact ? 14 : 15, fontWeight: 900, color: i === 2 ? "#fff" : NAVY, background: i === 2 ? NAVY : "transparent" }}>{t}</div>
         ))}
       </div>
       {rows.map((r, idx) => (
-        <div key={idx} style={{ display: "grid", gridTemplateColumns: cols, borderTop: idx ? LINE : "none" }}>
-          {cell(r.label, 0, { background: "#fafbfc", color: "#1f2937" })}
+        // ⭐ 주요 원인 행 — 빨간 배경·왼쪽 굵은 띠·"주요 원인" 뱃지로 한눈에 보이게
+        <div key={idx} style={{ display: "grid", gridTemplateColumns: cols, borderTop: idx ? (r.major ? "2px solid #fca5a5" : LINE) : "none", borderBottom: r.major ? "2px solid #fca5a5" : "none", background: r.major ? "#fff1f2" : "transparent", borderLeft: r.major ? "5px solid #dc2626" : "none" }}>
+          {cell(r.label, 0, { background: r.major ? "transparent" : "#fafbfc", color: r.major ? "#991b1b" : "#1f2937", badge: r.major ? "주요 원인" : null })}
           {cell(r.a, 1)}
           {cell(r.b, 2)}
-          {cell(r.d, 3, { color: TONE_COLOR[r.tone] || "#111827" })}
+          {cell(r.d, 3, { color: TONE_COLOR[r.tone] || "#111827", subColor: r.major ? "#991b1b" : undefined })}
         </div>
       ))}
     </div>
@@ -240,6 +244,54 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
 
   const res = useMemo(() => analyzeMonths({ rows, monthA, monthB, scope, isExcluded }), [rows, monthA, monthB, scope, isExcluded]);
   const report = useMemo(() => buildReport(res), [res]);
+  // ⭐ 이미지(PNG) / PDF 저장 — 리포트 부분(결론~원인이 아닌 것 + 펼친 상세 자료)을 그대로 캡처
+  const reportRef = useRef(null);
+  const [saving, setSaving] = useState("");
+  const exportReport = async (type) => {
+    const el = reportRef.current;
+    if (!el || saving) return;
+    setSaving(type);
+    try {
+      const canvas = await html2canvas(el, {
+        scale: 2, backgroundColor: "#f4f6f9", useCORS: true, logging: false,
+        // 스크롤 영역 밖으로 잘린 부분까지 전부 찍히도록 복제본에서는 높이 제한을 푼다
+        onclone: (doc) => {
+          const sc = doc.querySelector(".mca-scroll");
+          if (sc) { sc.style.overflow = "visible"; sc.style.height = "auto"; sc.style.maxHeight = "none"; sc.style.flex = "none"; }
+          let p = sc?.parentElement;
+          while (p && p !== doc.body) { p.style.overflow = "visible"; p.style.height = "auto"; p.style.maxHeight = "none"; p = p.parentElement; }
+        },
+      });
+      const name = `월비교분석_${monthA}_vs_${monthB}_${scope === "pure" ? "순수운송" : scope === "all" ? "전체" : "제외거래처"}`;
+      if (type === "png") {
+        const a = document.createElement("a");
+        a.href = canvas.toDataURL("image/png");
+        a.download = `${name}.png`;
+        a.click();
+      } else {
+        const pdf = new jsPDF({ orientation: "p", unit: "mm", format: "a4" });
+        const margin = 8, pw = 210 - margin * 2, ph = 297 - margin * 2;
+        const pxPerMm = canvas.width / pw;
+        const sliceH = Math.floor(ph * pxPerMm);
+        for (let y = 0, page = 0; y < canvas.height; y += sliceH, page++) {
+          const h = Math.min(sliceH, canvas.height - y);
+          const part = document.createElement("canvas");
+          part.width = canvas.width; part.height = h;
+          const ctx = part.getContext("2d");
+          ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, part.width, h);
+          ctx.drawImage(canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h);
+          if (page) pdf.addPage();
+          pdf.addImage(part.toDataURL("image/jpeg", 0.92), "JPEG", margin, margin, pw, h / pxPerMm);
+        }
+        pdf.save(`${name}.pdf`);
+      }
+    } catch (e) {
+      console.error("월 비교 분석 저장 실패:", e);
+      window.alert("저장 중 오류가 발생했습니다.");
+    } finally {
+      setSaving("");
+    }
+  };
   const [detailTab, setDetailTab] = useState("");
   const [showAnomalyList, setShowAnomalyList] = useState(false);
   const { A } = res;
@@ -288,12 +340,18 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
   );
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 99990, background: "rgba(15,23,42,.45)", display: "flex", alignItems: compact ? "stretch" : "center", justifyContent: "center", padding: compact ? 0 : 20, fontFamily: "'Noto Sans KR','Malgun Gothic',sans-serif", wordBreak: "keep-all" }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "#f4f6f9", width: compact ? "100%" : "min(1280px, 100%)", height: compact ? "100%" : "min(92vh, 1100px)", borderRadius: compact ? 0 : 18, display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,.3)" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#f4f6f9", width: compact ? "100%" : "min(1560px, 100%)", height: compact ? "100%" : "min(95vh, 1300px)", borderRadius: compact ? 0 : 18, display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,.3)" }}>
         {/* 헤더 */}
         <div style={{ background: NAVY, padding: compact ? "14px 16px" : "16px 22px", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ color: "#fff", fontSize: compact ? 17 : 19, fontWeight: 900 }}>월 비교 분석</div>
           </div>
+          {[["png", "이미지 저장"], ["pdf", "PDF 저장"]].map(([k, l]) => (
+            <button key={k} onClick={() => exportReport(k)} disabled={!!saving}
+              style={{ height: compact ? 32 : 36, padding: compact ? "0 10px" : "0 14px", borderRadius: 8, border: "1px solid rgba(255,255,255,.35)", background: k === "pdf" ? "#fff" : "transparent", color: k === "pdf" ? NAVY : "#fff", fontSize: compact ? 13 : 14, fontWeight: 800, cursor: saving ? "wait" : "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
+              {saving === k ? "저장 중…" : l}
+            </button>
+          ))}
           <button onClick={onClose} style={{ border: "none", background: "transparent", color: "rgba(255,255,255,.85)", fontSize: 24, cursor: "pointer", lineHeight: 1 }}>✕</button>
         </div>
 
@@ -318,6 +376,7 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
         <style>{`.mca-scroll > * { flex-shrink: 0; }`}</style>
         <div className="mca-scroll" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: compact ? 12 : 20, display: "flex", flexDirection: "column", gap: compact ? 12 : 16 }}>
           {/* ⭐ 원인 분석 리포트 — 결론 → 핵심 숫자 → 원인별 표·설명 → 원인이 아닌 것 */}
+          <div ref={reportRef} style={{ display: "flex", flexDirection: "column", gap: compact ? 12 : 16, background: "#f4f6f9" }}>
           <div style={{ background: NAVY, borderRadius: 14, padding: compact ? "14px 16px" : "18px 22px", color: "#fff" }}>
             <div style={{ fontSize: 13, fontWeight: 800, color: "rgba(255,255,255,.7)", marginBottom: 6 }}>한 줄 결론 · {mLabel(monthA)} vs {mLabel(monthB)} ({scope === "pure" ? "순수 운송" : scope === "all" ? "전체" : "제외 거래처"})</div>
             <div style={{ fontSize: compact ? 17 : 20, fontWeight: 900, lineHeight: 1.5 }}>{report.headline}</div>
@@ -338,7 +397,7 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
               {c.rows && <ReportTable compact={compact} head={c.head} rows={c.rows} />}
               {c.bullets?.length > 0 && (
                 <ul style={{ margin: c.rows ? "12px 0 0" : 0, paddingLeft: 20, fontSize: compact ? 14 : 15, fontWeight: 600, color: "#1f2937", lineHeight: 1.75 }}>
-                  {c.bullets.map((t, j) => <li key={j}>{t}</li>)}
+                  {c.bullets.map((t, j) => <li key={j} style={t.startsWith("가장 큰 원인") ? { color: "#b91c1c", fontWeight: 900 } : undefined}>{t}</li>)}
                 </ul>
               )}
             </div>
@@ -352,6 +411,8 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
               </ul>
             </div>
           )}
+
+          </div>
 
           {/* 상세 자료 — 탭으로 하나씩 */}
           <div style={{ ...card, padding: compact ? "10px 12px" : "12px 18px" }}>
