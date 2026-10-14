@@ -107,14 +107,31 @@ export function analyzeMonths({ rows = [], monthA, monthB, scope = "pure", isExc
 }
 
 // ── 월별 상세 집계(좌우 비교용) ───────────────────────────────────────
+// ⭐ 수익률 구간 — "매출은 늘었는데 수익은 그대로"의 가장 흔한 원인(마진 낮은 오더 증가)을 바로 보여준다
+export const MARGIN_BANDS = [
+  { key: "15", label: "수익률 15% 이상" },
+  { key: "10", label: "10% ~ 15%" },
+  { key: "5", label: "5% ~ 10%" },
+  { key: "0", label: "0% ~ 5%" },
+  { key: "neg", label: "수익 0원 이하" },
+];
+function bandOf(s, d) {
+  const p = s - d;
+  if (p <= 0 || s <= 0) return "neg";
+  const r = p / s;
+  return r >= 0.15 ? "15" : r >= 0.10 ? "10" : r >= 0.05 ? "5" : "0";
+}
 export const PAY_ORDER = ["계산서", "착불", "선불", "계좌이체", "개인", "손실", "취소", "미지정"];
 export function monthDetail(list) {
   const st = statsOf(list);
   const pay = {};
   let lossAmt = 0, lossCnt = 0, noSaleDriver = 0, noSaleCnt = 0, fixedSale = 0, fixedCnt = 0;
   const days = new Set(), clients = new Set();
+  const bands = Object.fromEntries(MARGIN_BANDS.map((b) => [b.key, { cnt: 0, sale: 0, driver: 0 }]));
   for (const r of list) {
     const s = toWon(r.청구운임), d = toWon(r.기사운임);
+    const band = bandOf(s, d);
+    bands[band].cnt++; bands[band].sale += s; bands[band].driver += d;
     const k = r.__fixed ? "계산서" : (String(r.지급방식 || "").trim() || "미지정");
     if (!pay[k]) pay[k] = { cnt: 0, sale: 0, driver: 0 };
     pay[k].cnt++; pay[k].sale += s; pay[k].driver += d;
@@ -127,7 +144,7 @@ export function monthDetail(list) {
   return {
     ...st,
     avgDriver: st.cnt ? st.driver / st.cnt : 0,
-    pay, lossAmt, lossCnt, noSaleDriver, noSaleCnt, fixedSale, fixedCnt,
+    pay, bands, lossAmt, lossCnt, noSaleDriver, noSaleCnt, fixedSale, fixedCnt,
     days: days.size, clients: clients.size,
     perDaySale: days.size ? st.sale / days.size : 0,
     perDayCnt: days.size ? st.cnt / days.size : 0,

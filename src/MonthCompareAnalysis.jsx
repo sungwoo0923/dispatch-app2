@@ -1,6 +1,6 @@
 // ===================== 월 비교 분석 화면 (PC·모바일 공용) =====================
 import React, { useMemo, useState, useEffect } from "react";
-import { analyzeMonths, explainGap, COMPARE_DIMS, toWon } from "./monthCompare";
+import { analyzeMonths, explainGap, COMPARE_DIMS, toWon, MARGIN_BANDS } from "./monthCompare";
 
 const NAVY = "#1B2B4B";
 const won = (v) => `${Math.round(v).toLocaleString()}원`;
@@ -63,6 +63,7 @@ function MonthSideBySide({ res, a, b, compact }) {
       const pa = A.pay[k] || { cnt: 0, sale: 0, driver: 0 }, pb = B.pay[k] || { cnt: 0, sale: 0, driver: 0 };
       return [k, pa, pb, "pay"];
     }) },
+    { title: "수익률 구간별 (매출 · 건수) — 마진 낮은 오더가 늘었는지 확인", rows: MARGIN_BANDS.map((bd) => [bd.label, A.bands[bd.key], B.bands[bd.key], "pay", bd.key === "15" || bd.key === "10"]) },
     { title: "손실", rows: [
       ["총 손실금액 (역마진)", A.lossAmt, B.lossAmt, "money", false, `${A.lossCnt}건`, `${B.lossCnt}건`],
       ["└ 청구운임 미입력 운반비", A.noSaleDriver, B.noSaleDriver, "money", false, `${A.noSaleCnt}건`, `${B.noSaleCnt}건`],
@@ -79,8 +80,11 @@ function MonthSideBySide({ res, a, b, compact }) {
   // 좁은 화면: 항목명은 위 한 줄, 아래에 [A월 | B월(증감)] 두 칸
   const cols = compact ? "minmax(0,1fr) minmax(0,1fr)" : "minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.1fr)";
   const headA = { background: "#eef1f6", color: NAVY }, headB = { background: NAVY, color: "#fff" };
+  // ⭐ 칸 사이 세로 구분선 + 가운데 정렬
+  const LINE = "1px solid #dfe5ee";
+  const cellBox = (first) => ({ padding: compact ? "8px 8px" : "10px 12px", borderLeft: first ? "none" : LINE, textAlign: "center", minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center" });
   const valCell = (main, sub, strong) => (
-    <div style={{ textAlign: "right", minWidth: 0 }}>
+    <div style={{ textAlign: "center", minWidth: 0 }}>
       <div style={{ fontSize: compact ? 14 : 15, fontWeight: strong ? 900 : 700, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{main}</div>
       {sub && <div style={{ fontSize: 12, fontWeight: 700, color: "#4b5563", whiteSpace: "nowrap" }}>{sub}</div>}
     </div>
@@ -96,21 +100,21 @@ function MonthSideBySide({ res, a, b, compact }) {
         ))}
       </div>
       {/* 머리줄 */}
-      <div style={{ display: "grid", gridTemplateColumns: cols, gap: 8, padding: compact ? "10px 12px" : "10px 18px", alignItems: "center", borderBottom: "2px solid #e2e7ef" }}>
-        {!compact && <span style={{ fontSize: 13, fontWeight: 900, color: "#4b5563" }}>항목</span>}
-        <span style={{ ...headA, textAlign: "center", borderRadius: 8, padding: "6px 0", fontSize: 15, fontWeight: 900 }}>{a}</span>
+      <div style={{ display: "grid", gridTemplateColumns: cols, alignItems: "stretch", borderBottom: "2px solid #cfd8e5" }}>
+        {!compact && <span style={{ ...cellBox(true), fontSize: 14, fontWeight: 900, color: NAVY, background: "#f4f7fb" }}>항목</span>}
+        <span style={{ ...cellBox(compact), ...headA, fontSize: 15, fontWeight: 900 }}>{a}</span>
         {compact ? (
-          <span style={{ ...headB, textAlign: "center", borderRadius: 8, padding: "6px 0", fontSize: 15, fontWeight: 900 }}>{b} <span style={{ fontSize: 11, opacity: .8 }}>(증감)</span></span>
+          <span style={{ ...cellBox(false), ...headB, fontSize: 15, fontWeight: 900 }}>{b} <span style={{ fontSize: 11, opacity: .8 }}>(증감)</span></span>
         ) : (
           <>
-            <span style={{ ...headB, textAlign: "center", borderRadius: 8, padding: "6px 0", fontSize: 15, fontWeight: 900 }}>{b}</span>
-            <span style={{ textAlign: "center", fontSize: 14, fontWeight: 900, color: NAVY }}>{a} 대비 {b}</span>
+            <span style={{ ...cellBox(false), ...headB, fontSize: 15, fontWeight: 900 }}>{b}</span>
+            <span style={{ ...cellBox(false), fontSize: 14, fontWeight: 900, color: NAVY, background: "#f4f7fb" }}>{a} 대비 {b}</span>
           </>
         )}
       </div>
       {groups.filter((g) => g.rows.length).map((g) => (
         <div key={g.title}>
-          <div style={{ padding: compact ? "8px 12px 4px" : "10px 18px 4px", fontSize: 13, fontWeight: 900, color: NAVY, background: "#f8f9fb", borderTop: "1px solid #eef1f6" }}>{g.title}</div>
+          <div style={{ padding: compact ? "7px 12px" : "8px 18px", fontSize: 13, fontWeight: 900, color: NAVY, background: "#eef1f6", borderTop: "1px solid #cfd8e5", borderBottom: "1px solid #dfe5ee", textAlign: "center" }}>{g.title}</div>
           {g.rows.map(([label, va, vb, kind, goodUp = true, subA, subB]) => {
             const isPay = kind === "pay";
             const mainA = isPay ? (va.cnt ? money(va.sale) : "-") : fmt(va, kind);
@@ -119,21 +123,21 @@ function MonthSideBySide({ res, a, b, compact }) {
             const sB = isPay ? (vb.cnt ? `${vb.cnt}건 · 수익 ${n(vb.sale - vb.driver)}` : "") : subB;
             // 지급방식 "손실"처럼 매출이 두 달 다 0원이면 수익(손해) 기준으로 비교
             const payNoSale = isPay && !va.sale && !vb.sale;
-            const diff = isPay ? (payNoSale ? diffEl(va.sale - va.driver, vb.sale - vb.driver, "money") : diffEl(va.sale, vb.sale, "money")) : diffEl(va, vb, kind, goodUp);
+            const diff = isPay ? (payNoSale ? diffEl(va.sale - va.driver, vb.sale - vb.driver, "money") : diffEl(va.sale, vb.sale, "money", goodUp)) : diffEl(va, vb, kind, goodUp);
             const strong = ["총 매출 (청구운임)", "총 수익", "총 손실금액 (역마진)"].includes(label);
             return (
-              <div key={label} style={{ display: "grid", gridTemplateColumns: cols, gap: compact ? "2px 10px" : 8, padding: compact ? "8px 12px" : "9px 18px", alignItems: compact ? "start" : "center", borderTop: "1px solid #f1f3f6" }}>
-                <span style={{ fontSize: 14, fontWeight: 800, color: "#1f2937", minWidth: 0, gridColumn: compact ? "1 / -1" : undefined }}>{label}</span>
-                {valCell(mainA, sA, strong)}
+              <div key={label} style={{ display: "grid", gridTemplateColumns: cols, alignItems: "stretch", borderTop: "1px solid #e8edf3" }}>
+                <span style={{ ...cellBox(true), fontSize: 14, fontWeight: 800, color: "#1f2937", gridColumn: compact ? "1 / -1" : undefined, background: compact ? "#fafbfc" : "transparent", borderBottom: compact ? "1px solid #eef1f6" : "none", padding: compact ? "6px 8px" : undefined }}>{label}</span>
+                <div style={cellBox(compact)}>{valCell(mainA, sA, strong)}</div>
                 {compact ? (
-                  <div style={{ textAlign: "right", minWidth: 0 }}>
+                  <div style={cellBox(false)}>
                     {valCell(mainB, sB, strong)}
                     <div style={{ fontSize: 12 }}>{diff}</div>
                   </div>
                 ) : (
                   <>
-                    {valCell(mainB, sB, strong)}
-                    <div style={{ textAlign: "right", fontSize: 14 }}>
+                    <div style={cellBox(false)}>{valCell(mainB, sB, strong)}</div>
+                    <div style={{ ...cellBox(false), fontSize: 14 }}>
                       {diff}
                       {isPay && (va.cnt || vb.cnt) ? <div style={{ fontSize: 12, fontWeight: 700, color: "#4b5563" }}>건수 {vb.cnt - va.cnt >= 0 ? "+" : "−"}{Math.abs(vb.cnt - va.cnt)}건</div> : null}
                     </div>
