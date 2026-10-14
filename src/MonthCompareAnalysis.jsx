@@ -87,7 +87,7 @@ function MonthSideBySide({ res, a, b, compact }) {
   );
 
   return (
-    <div style={{ background: "#fff", border: "1px solid #e2e7ef", borderRadius: 14, overflow: "hidden" }}>
+    <div style={{ background: "#fff", border: "1px solid #e2e7ef", borderRadius: 14, overflow: "hidden", flexShrink: 0 }}>
       {/* 한 줄 요약 */}
       <div style={{ padding: compact ? "12px 14px" : "14px 18px", borderBottom: "1px solid #e2e7ef", display: "flex", flexWrap: "wrap", gap: "6px 16px", alignItems: "baseline" }}>
         <span style={{ fontSize: compact ? 16 : 17, fontWeight: 900, color: NAVY }}>{a} 대비 {b}</span>
@@ -267,7 +267,10 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
           </div>
         </div>
 
-        <div style={{ flex: 1, overflowY: "auto", padding: compact ? 12 : 20, display: "flex", flexDirection: "column", gap: compact ? 12 : 16 }}>
+        {/* ⭐ 버그수정 — 세로 flex 스크롤 영역 안에서 overflow:hidden 카드(좌우 비교표)가
+            높이 0 근처로 찌그러져 얇은 선처럼만 보였다. 자식이 줄어들지 않게 고정한다. */}
+        <style>{`.mca-scroll > * { flex-shrink: 0; }`}</style>
+        <div className="mca-scroll" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: compact ? 12 : 20, display: "flex", flexDirection: "column", gap: compact ? 12 : 16 }}>
           <MonthSideBySide res={res} a={a} b={b} compact={compact} />
 
           {/* ⭐ 왜 차이가 났나 — 한 줄 결론 + 덜 번 금액을 원인별로(합계가 정확히 맞음) */}
