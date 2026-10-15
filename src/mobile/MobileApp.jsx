@@ -7476,29 +7476,39 @@ function MobileLoadingScreen({ loaded = 0, total = null, cacheDone = false, onAl
   const targetsRef = useRef([]);
   targetsRef.current = items.map((it) => it.target);
   const [shown, setShown] = useState([0, 0, 0, 0]);
+  // ⚠️ 진행값은 ref에서 바로 계산한다 — setState 함수 안에서 "계속 움직일지"를 정하면
+  // React가 그 함수를 나중에 실행해 애니메이션이 중간(예: 41%)에 멈춰버렸다.
+  const shownRef = useRef([0, 0, 0, 0]);
   const doneRef = useRef(false);
   const targetKey = targetsRef.current.join(",");
   useEffect(() => {
     let raf = 0;
     let last = performance.now();
     const step = (now) => {
-      const dt = now - last;
+      const dt = Math.min(50, now - last);
       last = now;
+      const next = [...shownRef.current];
       let moving = false;
-      setShown((prev) => {
-        const next = [...prev];
-        for (let i = 0; i < next.length; i += 1) {
-          if (i > 0 && next[i - 1] < 100) break; // 앞 항목이 100%가 돼야 다음 항목 시작
-          const t = targetsRef.current[i];
-          if (next[i] < t) { next[i] = Math.min(t, next[i] + dt * 0.4); moving = true; } // 한 항목 약 0.25초
-        }
-        return moving ? next : prev;
-      });
-      if (moving) raf = requestAnimationFrame(step);
+      for (let i = 0; i < next.length; i += 1) {
+        if (i > 0 && next[i - 1] < 100) break; // 앞 항목이 100%가 돼야 다음 항목 시작
+        const t = targetsRef.current[i];
+        if (next[i] < t) { next[i] = Math.min(t, next[i] + dt * 0.4); moving = true; } // 한 항목 약 0.25초
+      }
+      if (moving) {
+        shownRef.current = next;
+        setShown(next);
+        raf = requestAnimationFrame(step);
+      }
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
   }, [targetKey]);
+  // 안전장치 — 어떤 이유로든 10초 안에 다 안 차면 그냥 연다
+  useEffect(() => {
+    const t = setTimeout(() => { if (!doneRef.current) { doneRef.current = true; onAllDone?.(); } }, 10000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     if (doneRef.current || shown.some((v) => v < 100)) return;
     doneRef.current = true;
