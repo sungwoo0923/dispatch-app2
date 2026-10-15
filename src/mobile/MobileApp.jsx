@@ -2584,6 +2584,9 @@ collections.forEach((name) => {
     // ⭐ 최근 범위만 실시간 구독(예전엔 컬렉션 전체 1만 건+)
     let seenFirst = false;
     let hadCache = false;
+    // ⭐ 스크롤 끊김 방지 — 바뀐 오더만 새 객체로 만들고 안 바뀐 오더는 이전 객체를 그대로 쓴다.
+    // (예전엔 누가 오더 1건만 고쳐도 300여 건을 전부 새 객체로 만들어 카드 전체를 다시 그렸다)
+    const objCache = new Map();
     let serverSynced = false;
     const unsub = onSnapshot(query(collection(db, name), where("상차일", ">=", liveStart)), { includeMetadataChanges: true }, (snap) => {
       // ⭐ 첫 진입 속도 — 예전엔 폰 저장본을 연 뒤 서버에 조회를 12번 따로 보내 "바뀐 오더"를 확인했다(LTE에서 느림).
@@ -2605,12 +2608,12 @@ collections.forEach((name) => {
       // 표시되면 안 된다 — PC(DispatchApp.jsx)와 동일한 기준으로 제외한다.
       // 화주사가 취소(소프트 삭제)한 오더도 PC와 동일하게 배차중처럼 보이지 않도록 제외한다
       // (getStatus가 차량번호 유무만으로 상태를 판정해 취소건이 "배차중"으로 잘못 표시되던 버그).
-      const allMapped = snap.docs.map((d) => ({
-        _id: d.id,
-        id: d.id,
-        __col: name,
-        ...d.data(),
-      })).filter((o) => o.source !== "transport_transmit");
+      snap.docChanges().forEach((ch) => {
+        if (ch.type === "removed") objCache.delete(ch.doc.id);
+        else objCache.set(ch.doc.id, { _id: ch.doc.id, id: ch.doc.id, __col: name, ...ch.doc.data() });
+      });
+      const allMapped = snap.docs.map((d) => objCache.get(d.id) || { _id: d.id, id: d.id, __col: name, ...d.data() })
+        .filter((o) => o.source !== "transport_transmit");
       const list = allMapped.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태));
       // ⭐ 취소내역 화면용 — 같은 스냅샷에서 취소 상태인 것만 따로 모은다(리스너 중복 없이).
       const canceledList = allMapped.filter((o) => CANCELED_STATUS_LIST.includes(o.상태));
@@ -7564,7 +7567,7 @@ function MobileLoadingScreen({ loaded = 0, total = null, cacheDone = false, onAl
   const activeIdx = shown.findIndex((v) => v < 100);
   return (
     <div
-      className="fixed inset-0 z-[100001] flex flex-col items-center justify-center px-8 select-none"
+      className="fixed inset-0 z-[100001] flex flex-col items-center justify-center px-6 select-none"
       style={{
         background: "radial-gradient(120% 80% at 50% 0%, #2A3F6B 0%, #1B2B4B 45%, #0F1A30 100%)",
         opacity: leaving ? 0 : 1,
@@ -7577,12 +7580,12 @@ function MobileLoadingScreen({ loaded = 0, total = null, cacheDone = false, onAl
         @keyframes kpBootDash { from { background-position: 0 0 } to { background-position: -24px 0 } }
         @keyframes kpBootPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(96,165,250,0.55) } 70% { box-shadow: 0 0 0 7px rgba(96,165,250,0) } }
       `}</style>
-      <div className="w-full max-w-[320px] flex flex-col">
+      <div className="w-full max-w-[320px] flex flex-col min-w-0">
         {/* 로고 */}
         <div className="flex flex-col items-center mb-9">
           <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-14 h-14 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.35)] ring-1 ring-white/15" />
           <div className="mt-3 text-white text-[22px] font-black tracking-tight">KP-Flow</div>
-          <div className="mt-0.5 text-[11px] font-semibold tracking-[0.2em] text-blue-200/60">배차관리 시스템</div>
+          <div className="mt-0.5 text-[11px] font-semibold tracking-[0.2em] text-blue-200/60 whitespace-nowrap">배차관리 시스템</div>
         </div>
 
         {/* 트럭이 전체 진행률만큼 달리는 길 */}
@@ -7602,9 +7605,9 @@ function MobileLoadingScreen({ loaded = 0, total = null, cacheDone = false, onAl
             </svg>
           </div>
         </div>
-        <div className="flex justify-between items-baseline mb-7">
-          <span className="text-[12px] font-bold text-blue-100/70">{activeIdx === -1 ? "준비 완료" : `${BOOT_STEPS[activeIdx]} 중…`}</span>
-          <span className="text-[26px] font-black text-white tabular-nums leading-none">{overall}<span className="text-[14px] text-blue-200/70 ml-0.5">%</span></span>
+        <div className="flex justify-between items-baseline gap-2 mb-7 whitespace-nowrap">
+          <span className="text-[12px] font-bold text-blue-100/70 truncate min-w-0">{activeIdx === -1 ? "준비 완료" : `${BOOT_STEPS[activeIdx]} 중…`}</span>
+          <span className="text-[26px] font-black text-white tabular-nums leading-none shrink-0">{overall}<span className="text-[14px] text-blue-200/70 ml-0.5">%</span></span>
         </div>
 
         {/* 단계별 진행 */}
@@ -7624,9 +7627,9 @@ function MobileLoadingScreen({ loaded = 0, total = null, cacheDone = false, onAl
                   ) : i + 1}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-baseline">
-                    <span className={`text-[13px] font-bold ${done ? "text-white" : "text-blue-50/90"}`}>{label}</span>
-                    <span className="text-[11px] font-bold tabular-nums text-blue-200/80">{subs[i] && (done || active) ? subs[i] : `${v}%`}</span>
+                  <div className="flex justify-between items-baseline gap-2 whitespace-nowrap">
+                    <span className={`text-[13px] font-bold truncate min-w-0 ${done ? "text-white" : "text-blue-50/90"}`}>{label}</span>
+                    <span className="text-[11px] font-bold tabular-nums text-blue-200/80 shrink-0">{subs[i] && (done || active) ? subs[i] : `${v}%`}</span>
                   </div>
                   <div className="mt-1.5 h-[3px] rounded-full bg-white/10 overflow-hidden">
                     <div className="h-full rounded-full bg-gradient-to-r from-blue-400 to-sky-300" style={{ width: `${v}%` }} />
@@ -9058,14 +9061,14 @@ const summary = useMemo(() => {
       </div>
 
       {/* ── 조회 건수 + 선택 버튼 바 ── */}
-      <div className={`flex items-center justify-between px-4 py-2 border-b ${cardVersionB ? "bg-gray-50 border-gray-100" : "bg-white border-gray-100"}`}>
-        <span className={`text-[12px] ${cardVersionB ? "text-gray-500 font-medium" : "text-gray-500"}`}>
+      <div className={`flex items-center justify-between gap-2 px-4 py-2 border-b ${cardVersionB ? "bg-gray-50 border-gray-100" : "bg-white border-gray-100"}`}>
+        <span className={`text-[12px] whitespace-nowrap shrink-0 ${cardVersionB ? "text-gray-500 font-medium" : "text-gray-500"}`}>
           총 <span className={cardVersionB ? "font-bold text-[#1B2B4B]" : ""}>{allVisibleOrders.length}</span>건
           {multiSelectMode && selectedIds.size > 0 && (
             <span className="ml-1.5 font-bold text-[#1B2B4B]">· {selectedIds.size}개 선택</span>
           )}
         </span>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto no-scrollbar">
           <button
             onClick={() => setOrderTypeFilterOpen(true)}
             className={`text-[12px] font-semibold border transition-colors ${
@@ -9074,7 +9077,7 @@ const summary = useMemo(() => {
                 : cardVersionB
                   ? "bg-white text-[#1B2B4B] border-[#1B2B4B]/30 hover:bg-[#1B2B4B]/5"
                   : "bg-white text-gray-600 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
-            } ${cardVersionB ? "px-3 py-1 rounded-lg" : "px-3 py-1 rounded-full"}`}
+            } whitespace-nowrap shrink-0 ${cardVersionB ? "px-2.5 py-1 rounded-lg" : "px-2.5 py-1 rounded-full"}`}
           >
             오더필터{activeFilterCount > 0 && ` (${activeFilterCount})`}
           </button>
@@ -9086,7 +9089,7 @@ const summary = useMemo(() => {
                 : cardVersionB
                   ? "bg-white text-[#1B2B4B] border-[#1B2B4B]/30 hover:bg-[#1B2B4B]/5"
                   : "bg-white text-gray-600 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
-            } ${cardVersionB ? "px-3 py-1 rounded-lg" : "px-3 py-1 rounded-full"}`}
+            } whitespace-nowrap shrink-0 ${cardVersionB ? "px-2.5 py-1 rounded-lg" : "px-2.5 py-1 rounded-full"}`}
           >
             정렬{orderSortMode !== "default" && ` · ${ORDER_SORT_OPTIONS.find(o => o.key === orderSortMode)?.label || ""}`}
           </button>
@@ -9098,7 +9101,7 @@ const summary = useMemo(() => {
                 : cardVersionB
                   ? "bg-white text-[#1B2B4B] border-[#1B2B4B]/30 hover:bg-[#1B2B4B]/5"
                   : "bg-white text-gray-600 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
-            } ${cardVersionB ? "px-3 py-1 rounded-lg" : "px-3 py-1 rounded-full"}`}
+            } whitespace-nowrap shrink-0 ${cardVersionB ? "px-2.5 py-1 rounded-lg" : "px-2.5 py-1 rounded-full"}`}
           >
             {multiSelectMode ? "선택 취소" : "다중선택"}
           </button>
@@ -11244,6 +11247,15 @@ const dt = new Date(y, m - 1, d, hh, mm);
   )}
   </>
   );
+// ⭐ 카드에 넘기는 함수(onSelect 등)는 매번 새로 만들어지지만 안에서 쓰는 건 상태 변경 함수·오더뿐이라,
+// 함수가 아닌 값(오더·선택 여부 등)이 같으면 다시 그리지 않는다(스크롤 끊김 방지)
+}, (a, b) => {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const k of keys) {
+    if (typeof a[k] === "function" && typeof b[k] === "function") continue;
+    if (a[k] !== b[k]) return false;
+  }
+  return true;
 });
 // ======================================================================
 // 상세보기
