@@ -14,7 +14,21 @@ import { subscribeOrderSync, deleteOrderWithLog, historyStartDate } from "../ord
 import CustomDatePicker from "../CustomDatePicker";
 import RouteMapModal from "../RouteMapModal";
 import southKorea from "@svg-maps/south-korea";
-import React, { useState, useMemo, useEffect, useRef, startTransition } from "react";
+import React, { useState, useMemo, useEffect, useRef, startTransition, useSyncExternalStore } from "react";
+// ⭐ 작은 표시 전용 저장소 — "최신 정보 확인 중"·첫 진입 진행률이 바뀔 때 화면 전체(오더 목록)를
+// 다시 그리지 않고 그 표시만 바꾼다(저사양 폰에서 스크롤 끊김 방지)
+function createMiniStore(init) {
+  let v = init;
+  const subs = new Set();
+  return {
+    get: () => v,
+    set: (n) => { v = typeof n === "function" ? n(v) : n; subs.forEach((f) => f()); },
+    sub: (f) => { subs.add(f); return () => subs.delete(f); },
+  };
+}
+const useMiniStore = (st) => useSyncExternalStore(st.sub, st.get);
+const resyncCheckingStore = createMiniStore(false);
+const bootStageStore = createMiniStore({ server: 0, apply: 0, applyCount: 0, ready: 0 });
 import { createPortal } from "react-dom";
 import { Scale, Package, Snowflake, Car, Bike, Truck, Forklift, Mic, Sparkles, Download, RotateCcw, Building2, ArrowUpDown, StickyNote, MessageSquare, History } from "lucide-react";
 import {
@@ -2334,7 +2348,7 @@ const quickRange = (days) => {
     const since = Date.now() - 60 * 1000;
     return subscribeOrderSync({
       since,
-      onRows: (rows) => setExtraMap((prev) => {
+      onRows: (rows) => startTransition(() => setExtraMap((prev) => {
         // 최근 범위(7일~) 오더는 원래 실시간 리스너가 받으므로 여기선 건너뛴다(같은 변경으로 화면이 두 번 다시 계산되는 것 방지)
         const liveStart = mobileLiveStart();
         const outside = rows.filter(({ data }) => String(data.상차일 || "") < liveStart);
@@ -2348,13 +2362,13 @@ const quickRange = (days) => {
           next.set(key, { _id: id, id, __col: col, ...data });
         });
         return next;
-      }),
-      onDeleted: (keys) => setExtraMap((prev) => {
+      })),
+      onDeleted: (keys) => startTransition(() => setExtraMap((prev) => {
         if (!keys.some((k) => prev.has(k))) return prev;
         const next = new Map(prev);
         keys.forEach((k) => next.delete(k));
         return next;
-      }),
+      })),
     });
   }, []);
   const canceledLoadedRef = useRef(false);
@@ -2404,7 +2418,7 @@ const quickRange = (days) => {
     try { localStorage.setItem("mobileLastSyncAt", String(lastSyncAtRef.current)); } catch { /* 무시 */ }
   };
   // 최신 정보 확인 중(화면을 막지 않는 작은 표시)
-  const [resyncChecking, setResyncChecking] = useState(false);
+  const setResyncChecking = resyncCheckingStore.set; // 루트 상태가 아니라 표시 전용 저장소
   const pullStartYRef = useRef(0);
   const pullDistanceRef = useRef(0);
 const [isRefreshing, setIsRefreshing] = useState(false);
@@ -2584,13 +2598,17 @@ collections.forEach((name) => {
       setOrdersLoaded(true);
       // ⭐ 첫 화면 로딩 진행률용 — 컬렉션별로 받은 오더 수(서버 응답 기준)
       setInitLoadCounts((p) => (p[name] === snap.size ? p : { ...p, [name]: snap.size }));
-      setOrders((prev) => {
-        const filtered = prev.filter((o) => o.__col !== name);
-        return [...filtered, ...list];
-      });
-      setCanceledOrders((prev) => {
-        const filtered = prev.filter((o) => o.__col !== name);
-        return [...filtered, ...canceledList];
+      // ⭐ 끊김 방지 — 앱이 다시 열리면 여러 실시간 연결이 한꺼번에 데이터를 보내 화면 전체를 연달아
+      // 다시 그린다. 낮은 우선순위(startTransition)로 반영해 터치·스크롤이 항상 먼저 처리되게 한다.
+      startTransition(() => {
+        setOrders((prev) => {
+          const filtered = prev.filter((o) => o.__col !== name);
+          return [...filtered, ...list];
+        });
+        setCanceledOrders((prev) => {
+          const filtered = prev.filter((o) => o.__col !== name);
+          return [...filtered, ...canceledList];
+        });
       });
 
       // 교체 후
@@ -2748,7 +2766,7 @@ const docSig = (o) => [
   Array.isArray(o?.history) ? o.history.length : "",
 ].join("|");
 
-const refreshFromServer = React.useCallback(async ({ force = false, since, manual = false } = {}) => {
+const refreshFromServer = React.useCallback(async ({ force = false, since, manual = false, boot = false } = {}) => {
   const startedAt = Date.now();
   if (!force && startedAt - lastRefreshAtRef.current < REFRESH_COOLDOWN_MS) return;
   lastRefreshAtRef.current = startedAt;
@@ -2763,7 +2781,9 @@ const refreshFromServer = React.useCallback(async ({ force = false, since, manua
   const isToday = (o) => String(o.상차일 || "").slice(0, 10) === today;
   const keyOf = (o) => `${o.__col}/${o._id}`;
   const keep = (o) => o.source !== "transport_transmit";
-  const checkTimer = setTimeout(() => setResyncChecking(true), 300);
+  // boot=첫 진입 — 작은 표시/팝업 대신 로딩 화면의 단계별 %로 보여준다
+  const checkTimer = boot ? 0 : setTimeout(() => setResyncChecking(true), 300);
+  const stage = (patch) => { if (boot) bootStageStore.set((st) => ({ ...st, ...patch })); };
   try {
     const cols = ["dispatch", "orders"];
     const jobs = cols.map((col) => ({ col, today: true, q: query(collection(db, col), where("상차일", "==", today)) }));
@@ -2776,9 +2796,11 @@ const refreshFromServer = React.useCallback(async ({ force = false, since, manua
       ].forEach((w) => jobs.push({ col, today: false, q: query(collection(db, col), w) })));
     }
     let failed = 0;
+    let doneJobs = 0;
     const results = await Promise.all(jobs.map((j) => getDocsFromServer(j.q)
       .then((snap) => ({ j, rows: snap.docs.map((d) => ({ _id: d.id, id: d.id, __col: j.col, ...d.data() })) }))
-      .catch(() => { failed += 1; return { j, rows: [] }; })));
+      .catch(() => { failed += 1; return { j, rows: [] }; })
+      .finally(() => { doneJobs += 1; stage({ server: Math.round((doneJobs / jobs.length) * 100) }); })));
     if (failed === jobs.length) throw new Error("all failed");
 
     // 서버 쪽 최신본 모으기
@@ -2819,13 +2841,16 @@ const refreshFromServer = React.useCallback(async ({ force = false, since, manua
 
     if (diff === 0) {
       markSynced(startedAt);
+      stage({ apply: 100, applyCount: 0 });
       return { ok: true, changed: 0 };
     }
 
     // 바뀐 게 있을 때만 진행 화면 — 반영할 건수를 0 → N으로 올리며 보여준다
-    setResyncProgress({ added, modified, removed, total: diff });
-    setResyncOverlay(true);
-    await new Promise((r) => setTimeout(r, 550)); // 팝업 안에서 0 → N 올라가는 동안
+    if (!boot) {
+      setResyncProgress({ added, modified, removed, total: diff });
+      setResyncOverlay(true);
+      await new Promise((r) => setTimeout(r, 550)); // 팝업 안에서 0 → N 올라가는 동안
+    } else stage({ applyCount: diff });
     const upKeys = new Set(upserts.map(keyOf));
     const drop = (o) => upKeys.has(keyOf(o)) || removedKeys.has(keyOf(o));
     startTransition(() => {
@@ -2834,6 +2859,7 @@ const refreshFromServer = React.useCallback(async ({ force = false, since, manua
     });
     if (extraUpserts.length) mergeExtra(extraUpserts);
     markSynced(startedAt);
+    if (boot) { stage({ apply: 100 }); return { ok: true, changed: diff }; }
     await new Promise((r) => setTimeout(r, 400)); // 100%를 잠깐 보여주고 닫는다
     return { ok: true, changed: diff };
   } catch {
@@ -2850,10 +2876,20 @@ const refreshFromServer = React.useCallback(async ({ force = false, since, manua
 
 // ⭐ 첫 진입 — 폰 저장본으로 화면을 연 직후, 마지막 동기화 이후 바뀐 오더만 확인(바뀐 게 있을 때만 화면 표시)
 const firstSyncDoneRef = useRef(false);
+// ⭐ 첫 진입 — 저장된 오더 → 서버 확인 → 최신 오더 반영 → 화면 준비가 다 100%가 되면 최신 상태로 연다
+const [bootDone, setBootDone] = useState(false);
 useEffect(() => {
   if (!initLoadDone || !ordersLoaded || firstSyncDoneRef.current) return;
   firstSyncDoneRef.current = true;
-  refreshFromServer({ force: true });
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    bootStageStore.set((st) => ({ ...st, server: 100, apply: 100, ready: 100 }));
+  };
+  // 서버가 느리면 오래 기다리지 않고 연다(확인은 뒤에서 조용히 계속)
+  const cap = setTimeout(finish, 6000);
+  refreshFromServer({ force: true, boot: true }).finally(() => { clearTimeout(cap); finish(); });
 }, [initLoadDone, ordersLoaded, refreshFromServer]);
 
 useEffect(() => {
@@ -3165,7 +3201,7 @@ useEffect(() => {
       const list = snap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
         .filter((d) => (d.companyName || DEFAULT_COMPANY) === co);
-      setDrivers(list);
+      startTransition(() => setDrivers(list)); // 끊김 방지(낮은 우선순위)
     });
     return () => unsub();
   }, [userCompany]);
@@ -3216,7 +3252,7 @@ useEffect(() => {
       };
     });
 
-    setPlaces(list);
+    startTransition(() => setPlaces(list)); // 끊김 방지(낮은 우선순위)
   });
 
   return () => unsub();
@@ -3229,7 +3265,7 @@ useEffect(() => {
     const list = snap.docs
       .map(d => ({ id: d.id, __col: "fixedClients", ...d.data() }))
       .filter(r => !co || !r.companyName || r.companyName === co);
-    setFixedClientRows(list);
+    startTransition(() => setFixedClientRows(list)); // 끊김 방지(낮은 우선순위)
   });
   return () => unsub();
 }, [userCompany]);
@@ -3257,7 +3293,7 @@ useEffect(() => {
         팝업표시: d.팝업표시 !== undefined ? d.팝업표시 : true,
         ...(typeof d.순수매출제외 === "boolean" ? { 순수매출제외: d.순수매출제외 } : {}),
       }));
-    setClients(list);
+    startTransition(() => setClients(list)); // 끊김 방지(낮은 우선순위)
   });
   return () => unsub();
 }, [userCompany]);
@@ -5170,18 +5206,7 @@ const title =
         조작하는 걸 막기 위해 재조회가 끝날 때까지 화면을 덮는다. 짧은 앱 전환
         (다른 앱 잠깐 확인 등)에는 뜨지 않는다. */}
     {/* 최신 정보 확인 중 — 화면을 막지 않는 작은 표시(바뀐 게 없으면 이걸로 끝) */}
-    {historyLoading > 0 && !resyncChecking && !resyncOverlay && (
-      <div className="fixed left-1/2 -translate-x-1/2 z-[99999] px-3 py-1.5 rounded-full bg-[#1B2B4B] text-white text-[12px] font-bold shadow-lg flex items-center gap-2" style={{ top: 58 }}>
-        <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-        오더 불러오는 중
-      </div>
-    )}
-    {resyncChecking && !resyncOverlay && (
-      <div className="fixed left-1/2 -translate-x-1/2 z-[99999] px-3 py-1.5 rounded-full bg-[#1B2B4B] text-white text-[12px] font-bold shadow-lg flex items-center gap-2" style={{ top: 58 }}>
-        <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-        최신 정보 확인 중
-      </div>
-    )}
+    <TopStatusPill historyLoading={historyLoading > 0} hidden={resyncOverlay} />
     {resyncOverlay && (() => {
       // ⭐ 실제로 바뀐 오더가 있을 때만 뜬다 — 반영할 건수를 0 → N으로 올리며 보여준다
       const p = resyncProgress;
@@ -6425,14 +6450,16 @@ onGoAttendance={() => {
   </div>
 )}
 
-        {page === "list" && !(ordersLoaded && initLoadDone) && (
+        {page === "list" && !(ordersLoaded && initLoadDone && bootDone) && (
           <MobileLoadingScreen
             loaded={(initLoadCounts.dispatch || 0) + (initLoadCounts.orders || 0)}
             total={initLoadTotal}
+            cacheDone={ordersLoaded && initLoadDone}
+            onAllDone={() => setBootDone(true)}
           />
         )}
 
-        {page === "list" && ordersLoaded && initLoadDone && (
+        {page === "list" && ordersLoaded && initLoadDone && bootDone && (
           <MobileOrderList
             dispatcherName={dispatcherName}
             userCompany={userCompany}
@@ -7424,51 +7451,84 @@ function ResyncCountUp({ total = 0, detail = "" }) {
   );
 }
 
-// ⭐ 첫 진입 로딩 화면 — 최신화(백그라운드 복귀) 화면과 같은 모양으로, 서버 전체 오더 수 대비
-// 지금까지 받은 오더 수와 %를 보여준다. 숫자는 받은 만큼 부드럽게 올라간다.
-function MobileLoadingScreen({ loaded = 0, total = null }) {
-  const [shown, setShown] = useState(0);
-  const shownRef = useRef(0);
+// ⭐ 상단 작은 표시 — 표시 전용 저장소를 직접 읽어서, 켜지고 꺼질 때 이 표시만 다시 그린다
+function TopStatusPill({ historyLoading, hidden }) {
+  const checking = useMiniStore(resyncCheckingStore);
+  if (hidden || (!checking && !historyLoading)) return null;
+  return (
+    <div className="fixed left-1/2 -translate-x-1/2 z-[99999] px-3 py-1.5 rounded-full bg-[#1B2B4B] text-white text-[12px] font-bold shadow-lg flex items-center gap-2 pointer-events-none" style={{ top: 58 }}>
+      <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+      {checking ? "최신 정보 확인 중" : "오더 불러오는 중"}
+    </div>
+  );
+}
+
+// ⭐ 첫 진입 로딩 화면 — 항목별로 0 → 100%가 차례대로 차오르고, 전부 100%가 되면 최신 상태로 연다
+function MobileLoadingScreen({ loaded = 0, total = null, cacheDone = false, onAllDone }) {
+  const bs = useMiniStore(bootStageStore);
+  const cachePct = cacheDone ? 100 : total ? Math.min(99, Math.round((loaded / total) * 100)) : 0;
+  const items = [
+    { label: "저장된 오더 불러오는 중", target: cachePct, sub: total != null ? `${Math.min(loaded, total).toLocaleString()} / ${total.toLocaleString()}건` : "" },
+    { label: "서버 확인 중", target: bs.server, sub: "" },
+    { label: "최신 오더 반영 중", target: bs.apply, sub: bs.apply >= 100 ? (bs.applyCount ? `${bs.applyCount.toLocaleString()}건 반영` : "바뀐 오더 없음") : "" },
+    { label: "화면 준비", target: bs.ready, sub: "" },
+  ];
+  const targetsRef = useRef([]);
+  targetsRef.current = items.map((it) => it.target);
+  const [shown, setShown] = useState([0, 0, 0, 0]);
+  const doneRef = useRef(false);
+  const targetKey = targetsRef.current.join(",");
   useEffect(() => {
-    const target = total != null ? Math.min(loaded, total) : loaded;
-    const from = shownRef.current;
-    if (from === target) return;
     let raf = 0;
-    const start = performance.now();
+    let last = performance.now();
     const step = (now) => {
-      const k = Math.min(1, (now - start) / 450);
-      const v = Math.round(from + (target - from) * k);
-      shownRef.current = v;
-      setShown(v);
-      if (k < 1) raf = requestAnimationFrame(step);
+      const dt = now - last;
+      last = now;
+      let moving = false;
+      setShown((prev) => {
+        const next = [...prev];
+        for (let i = 0; i < next.length; i += 1) {
+          if (i > 0 && next[i - 1] < 100) break; // 앞 항목이 100%가 돼야 다음 항목 시작
+          const t = targetsRef.current[i];
+          if (next[i] < t) { next[i] = Math.min(t, next[i] + dt * 0.4); moving = true; } // 한 항목 약 0.25초
+        }
+        return moving ? next : prev;
+      });
+      if (moving) raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [loaded, total]);
+  }, [targetKey]);
+  useEffect(() => {
+    if (doneRef.current || shown.some((v) => v < 100)) return;
+    doneRef.current = true;
+    const t = setTimeout(() => onAllDone?.(), 120);
+    return () => clearTimeout(t);
+  }, [shown, onAllDone]);
 
-  const pct = total ? Math.min(100, Math.round((shown / total) * 100)) : 0;
   return (
     <div className="flex flex-col items-center justify-center px-8" style={{ minHeight: "60vh" }}>
-      <div className="w-full max-w-[300px] flex flex-col items-center gap-3">
-        <div className="w-9 h-9 border-[3px] border-gray-200 border-t-[#1B2B4B] rounded-full animate-spin" />
-        <div className="text-[15px] font-extrabold text-[#1B2B4B]">이 폰에 저장된 오더 여는 중</div>
-        {total != null ? (
-          <>
-            <div className="flex items-baseline gap-1">
-              <span className="text-[34px] font-black text-[#1B2B4B] tabular-nums leading-none">{shown.toLocaleString()}</span>
-              <span className="text-[18px] font-bold text-gray-400 tabular-nums">/ {total.toLocaleString()}건</span>
+      <div className="w-full max-w-[300px] flex flex-col gap-4">
+        <div className="flex flex-col items-center gap-2 mb-1">
+          <div className="w-9 h-9 border-[3px] border-gray-200 border-t-[#1B2B4B] rounded-full animate-spin" />
+          <div className="text-[15px] font-extrabold text-[#1B2B4B]">최신 상태로 준비 중</div>
+        </div>
+        {items.map((it, i) => {
+          const v = Math.round(shown[i]);
+          const active = i === 0 || shown[i - 1] >= 100;
+          return (
+            <div key={it.label} className="flex flex-col gap-1" style={{ opacity: active ? 1 : 0.35, transition: "opacity 0.2s" }}>
+              <div className="flex justify-between text-[13px] font-bold tabular-nums">
+                <span className={v >= 100 ? "text-[#1B2B4B]" : "text-gray-600"}>{v >= 100 ? "✓ " : ""}{it.label}</span>
+                <span className="text-[#1B2B4B]">{v}%</span>
+              </div>
+              <div className="w-full h-2 rounded-full bg-gray-200 overflow-hidden">
+                <div className="h-full rounded-full bg-[#1B2B4B]" style={{ width: `${v}%` }} />
+              </div>
+              {it.sub && active && <div className="text-[11px] font-semibold text-gray-400 text-right tabular-nums">{it.sub}</div>}
             </div>
-            <div className="w-full h-2.5 rounded-full bg-gray-200 overflow-hidden">
-              <div className="h-full rounded-full bg-[#1B2B4B] transition-all duration-300" style={{ width: `${pct}%` }} />
-            </div>
-            <div className="w-full flex justify-between text-[12px] font-bold text-gray-500 tabular-nums">
-              <span>서버에선 바뀐 오더만 받아옵니다</span>
-              <span className="text-[#1B2B4B]">{pct}%</span>
-            </div>
-          </>
-        ) : (
-          <div className="text-[13px] font-bold text-gray-500">서버에 연결하는 중…</div>
-        )}
+          );
+        })}
       </div>
     </div>
   );
