@@ -1978,13 +1978,11 @@ useEffect(() => {
   if (initLoadDone) return;
   const both = initLoadCounts.dispatch != null && initLoadCounts.orders != null;
   if (!both) return;
-  // 서버 전체 건수만큼 다 받았으면(폰 캐시가 오래돼도 부족분이 추가로 들어오면서 채워진다) 연다.
-  // 전체 건수를 못 받았으면(오프라인 등) 받은 것만으로 연다.
-  const loaded = initLoadCounts.dispatch + initLoadCounts.orders;
-  if (initLoadTotal != null && loaded < initLoadTotal) return;
-  const t = setTimeout(() => setInitLoadDone(true), 350); // 100%를 잠깐 보여주고 연다
+  // ⭐ 폰에 저장된 오더(두 컬렉션)가 다 올라오면 바로 연다 — 서버에서 1만 건을 다시 받는 게
+  // 아니라, 이어서 "마지막 동기화 이후 바뀐 것"만 확인한다(아래 이펙트).
+  const t = setTimeout(() => setInitLoadDone(true), 250);
   return () => clearTimeout(t);
-}, [initLoadCounts, initLoadDone, initLoadTotal]);
+}, [initLoadCounts, initLoadDone]);
 const [focusUnassignedOrderId, setFocusUnassignedOrderId] = useState(null);
 const popupLastShownDateRef = useRef(null);        // 마지막으로 팝업을 띄운 KST 날짜(YYYY-MM-DD)
 const pendingPopupRef = useRef(false);             // 자정에 list가 아니면, list로 돌아왔을 때 띄우기
@@ -2264,6 +2262,17 @@ const quickRange = (days) => {
   const [resyncProgress, setResyncProgress] = useState(null);
   const ordersStateRef = useRef([]);
   useEffect(() => { ordersStateRef.current = orders; }, [orders]);
+  const canceledStateRef = useRef([]);
+  useEffect(() => { canceledStateRef.current = canceledOrders; }, [canceledOrders]);
+  // ⭐ "이 폰이 서버와 마지막으로 맞춰진 시각" — 최신화는 이 시각 이후 바뀐 것만 확인한다.
+  // 앱을 껐다 켜도 이어지도록 저장해둔다.
+  const lastSyncAtRef = useRef((() => { try { return Number(localStorage.getItem("mobileLastSyncAt")) || 0; } catch { return 0; } })());
+  const markSynced = (t) => {
+    lastSyncAtRef.current = Math.max(lastSyncAtRef.current, t);
+    try { localStorage.setItem("mobileLastSyncAt", String(lastSyncAtRef.current)); } catch { /* 무시 */ }
+  };
+  // 최신 정보 확인 중(화면을 막지 않는 작은 표시)
+  const [resyncChecking, setResyncChecking] = useState(false);
   const pullStartYRef = useRef(0);
   const pullDistanceRef = useRef(0);
 const [isRefreshing, setIsRefreshing] = useState(false);
@@ -2301,19 +2310,19 @@ const handleRefresh = async () => {
   if (isRefreshing) return;
 
   setIsRefreshing(true);
-  showToast("최적화 중...");
-  setRefreshKey(prev => prev + 1); // ⭐ 핵심 — 누르자마자 바로 실시간 리스너 재구독 시작(예전엔
-  // 일부러 500ms를 기다렸다가 시작했는데, "눌러도 바로 안 되는" 느낌만 줄 뿐 이득이 없어 없앴다)
+  // ⭐ 예전엔 누를 때마다 실시간 리스너를 통째로 다시 구독해 전체 오더(1만 건+)를 다시 읽었다.
+  //    이제는 마지막 동기화 이후 바뀐 것만 확인하고, 서버 확인이 실패할 때만 재구독한다.
 
   // ⚠️ 예전엔 실제 반영 여부와 상관없이 150ms 뒤 무조건 "완료" 토스트를 띄웠다 —
   // 리스너 재구독(위 refreshKey)이나 로컬 캐시가 아직 옛날 상태를 들고 있어도 화면엔
   // "반영 완료"라고 뜨고 실제로는 한참 뒤에야 최신화되는 문제가 있었다. 이제 서버에서
   // 직접(getDocsFromServer) 최신 상태를 확정적으로 읽어와 화면에 반영한 뒤에만 "완료"
   // 토스트를 띄운다.
-  const ok = await refreshFromServer({ force: true });
+  const res = await refreshFromServer({ force: true, manual: true });
   setIsRefreshing(false);
   pullDistanceRef.current = 0;
-  showToast(ok === false ? "새로고침 실패 · 네트워크를 확인해주세요" : "최신 데이터 반영 완료");
+  showToast(!res?.ok ? "새로고침 실패 · 네트워크를 확인해주세요"
+    : res.changed > 0 ? `최신 데이터 반영 완료 (${res.changed}건)` : "이미 최신 상태입니다");
 };
 
 // ⭐ 헤더 "오더 검증" 버튼 — 이미 화면에 로드된 오더들을 대상으로 중복/날짜 역전/
@@ -2589,72 +2598,115 @@ collections.forEach((name) => {
 // 동시에 눌려도 중복 조회가 나가지 않게 쿨다운을 공유한다.
 const lastRefreshAtRef = useRef(0);
 const REFRESH_COOLDOWN_MS = 3000;
-const refreshFromServer = React.useCallback(async ({ force = false, since = 0 } = {}) => {
-  const now = Date.now();
-  if (!force && now - lastRefreshAtRef.current < REFRESH_COOLDOWN_MS) return;
-  lastRefreshAtRef.current = now;
-  // 재조회가 곧바로 끝나면 화면 깜빡임 없이 넘어가고, 0.2초 넘게 걸릴 때만 진행률 화면을 띄운다.
-  const overlayTimer = setTimeout(() => setResyncOverlay(true), 200);
-  // ⭐ 사용자 요청 — 최근 7일 전체를 다시 받으니 오래 걸렸다. 이제
-  //   ① 오늘 상차 오더는 서버에서 통째로 다시 받고(그 사이 삭제된 것도 빠짐)
-  //   ② 다른 날짜는 "폰이 백그라운드에 있던 동안 등록·수정된 오더"만 골라 받는다.
-  //   (수정시각 필드가 저장 경로마다 서버시각/숫자 두 형식이라 둘 다 조회. 기기 간 시계
-  //    차이를 감안해 3분 여유. 다른 날짜에서 "삭제"된 오더는 실시간 연결이 이어서 반영한다.)
+// 값 비교용 — 키 순서와 상관없이 같은 내용이면 같은 문자열(서버시각은 ms로)
+const stableStr = (v) => {
+  if (v == null || typeof v !== "object") return JSON.stringify(v);
+  if (typeof v.toMillis === "function") return `"ts:${v.toMillis()}"`;
+  if (Array.isArray(v)) return `[${v.map(stableStr).join(",")}]`;
+  return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${stableStr(v[k])}`).join(",")}}`;
+};
+const docSig = (o) => { const { _id, id, __col, ...rest } = o || {}; return stableStr(rest); };
+
+const refreshFromServer = React.useCallback(async ({ force = false, since, manual = false } = {}) => {
+  const startedAt = Date.now();
+  if (!force && startedAt - lastRefreshAtRef.current < REFRESH_COOLDOWN_MS) return;
+  lastRefreshAtRef.current = startedAt;
+  // ⭐ 사용자 요청 — 방금 최신화했으면 다시 최신화 화면이 뜰 필요가 없다.
+  //   ① 오늘 상차 오더는 서버에서 다시 받아 비교(삭제된 것도 확인)
+  //   ② 다른 날짜는 "마지막으로 맞춰진 시각 이후" 등록·수정된 오더만 받는다
+  //   ③ 폰에 있는 것과 비교해 실제로 다른 게 있을 때만 진행 화면을 띄우고 반영한다
+  //   (수정시각 필드가 저장 경로마다 서버시각/숫자 두 형식이라 둘 다 조회, 기기 간 시계 차이 3분 여유)
   const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
-  const sinceMs = Math.max(0, (since || now - 10 * 60 * 1000) - 3 * 60 * 1000);
-  const sinceTs = Timestamp.fromMillis(sinceMs);
+  const base = since ?? lastSyncAtRef.current;
+  const sinceMs = base ? Math.max(0, base - 3 * 60 * 1000) : 0;
   const isToday = (o) => String(o.상차일 || "").slice(0, 10) === today;
   const keyOf = (o) => `${o.__col}/${o._id}`;
+  const keep = (o) => o.source !== "transport_transmit";
+  const checkTimer = setTimeout(() => setResyncChecking(true), 300);
   try {
     const cols = ["dispatch", "orders"];
-    const todayQ = (col) => query(collection(db, col), where("상차일", "==", today));
-    const changeQs = (col) => [
-      query(collection(db, col), where("updatedAt", ">=", sinceTs)),
-      query(collection(db, col), where("updatedAt", ">=", sinceMs)),
-      query(collection(db, col), where("createdAt", ">=", sinceTs)),
-      query(collection(db, col), where("createdAt", ">=", sinceMs)),
-      query(collection(db, col), where("_lastModified", ">=", sinceMs)),
-    ];
-    const counts = await Promise.all(cols.map((c) => getCountFromServer(todayQ(c)).then((r) => r.data().count).catch(() => 0)));
-    const total = counts[0] + counts[1];
-    const before = (ordersStateRef.current || []).filter(isToday).length;
-    const jobs = [
-      ...cols.map((col) => ({ col, today: true, q: todayQ(col) })),
-      ...cols.flatMap((col) => changeQs(col).map((q) => ({ col, today: false, q }))),
-    ];
-    let done = 0, loaded = 0;
-    const changed = new Map();
-    const todayFresh = [];
-    setResyncProgress({ before, loaded: 0, total, done: 0, jobs: jobs.length, changed: 0 });
-    await Promise.all(jobs.map(async (j) => {
-      // 일부 조건 조회가 실패해도(색인 등) 나머지는 그대로 반영
-      const snap = await getDocsFromServer(j.q).catch(() => null);
-      const rows = (snap?.docs || []).map((d) => ({ _id: d.id, id: d.id, __col: j.col, ...d.data() }));
-      if (j.today) { todayFresh.push(...rows); loaded += rows.length; }
-      else rows.forEach((r) => { if (!isToday(r)) changed.set(keyOf(r), r); });
-      done += 1;
-      setResyncProgress({ before, loaded, total: Math.max(total, loaded), done, jobs: jobs.length, changed: changed.size });
-    }));
+    const jobs = cols.map((col) => ({ col, today: true, q: query(collection(db, col), where("상차일", "==", today)) }));
+    if (sinceMs) {
+      const sinceTs = Timestamp.fromMillis(sinceMs);
+      cols.forEach((col) => [
+        where("updatedAt", ">=", sinceTs), where("updatedAt", ">=", sinceMs),
+        where("createdAt", ">=", sinceTs), where("createdAt", ">=", sinceMs),
+        where("_lastModified", ">=", sinceMs),
+      ].forEach((w) => jobs.push({ col, today: false, q: query(collection(db, col), w) })));
+    }
+    let failed = 0;
+    const results = await Promise.all(jobs.map((j) => getDocsFromServer(j.q)
+      .then((snap) => ({ j, rows: snap.docs.map((d) => ({ _id: d.id, id: d.id, __col: j.col, ...d.data() })) }))
+      .catch(() => { failed += 1; return { j, rows: [] }; })));
+    if (failed === jobs.length) throw new Error("all failed");
 
-    const keep = (o) => o.source !== "transport_transmit";
-    const changedList = [...changed.values()].filter(keep);
-    const changedKeys = new Set(changedList.map(keyOf));
-    const freshAll = [...todayFresh.filter(keep), ...changedList];
-    const drop = (o) => isToday(o) || changedKeys.has(keyOf(o));
-    setOrders((prev) => [...prev.filter((o) => !drop(o)), ...freshAll.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태))]);
-    setCanceledOrders((prev) => [...prev.filter((o) => !drop(o)), ...freshAll.filter((o) => CANCELED_STATUS_LIST.includes(o.상태))]);
-    // 100% 상태를 잠깐 보여주고 닫는다
-    await new Promise((r) => setTimeout(r, 350));
-    return true;
+    // 서버 쪽 최신본 모으기
+    const serverToday = new Map();
+    const serverChanged = new Map();
+    // 화면과 같은 기준(화주 전송 사본·블라인드 제외)으로 비교해야 매번 "새 오더"로 잡히지 않는다
+    results.forEach(({ j, rows }) => hideBlind(rows.filter(keep)).forEach((r) => {
+      if (j.today || isToday(r)) serverToday.set(keyOf(r), r);
+      else serverChanged.set(keyOf(r), r);
+    }));
+    const todayQueriesOk = results.filter((r) => r.j.today).length === cols.length && failed === 0;
+
+    // 폰에 있는 것과 비교
+    const phoneAll = [...(ordersStateRef.current || []), ...(canceledStateRef.current || [])];
+    const phoneMap = new Map(phoneAll.map((o) => [keyOf(o), o]));
+    let added = 0, modified = 0, removed = 0;
+    const upserts = [];
+    [...serverToday.values(), ...serverChanged.values()].forEach((r) => {
+      const cur = phoneMap.get(keyOf(r));
+      if (!cur) { added += 1; upserts.push(r); }
+      else if (docSig(cur) !== docSig(r)) { modified += 1; upserts.push(r); }
+    });
+    const removedKeys = new Set();
+    if (todayQueriesOk) {
+      phoneAll.filter(isToday).forEach((o) => { if (!serverToday.has(keyOf(o))) { removed += 1; removedKeys.add(keyOf(o)); } });
+    }
+    const diff = added + modified + removed;
+    clearTimeout(checkTimer);
+    setResyncChecking(false);
+
+    if (diff === 0) {
+      markSynced(startedAt);
+      return { ok: true, changed: 0 };
+    }
+
+    // 바뀐 게 있을 때만 진행 화면 — 반영할 건수를 0 → N으로 올리며 보여준다
+    setResyncProgress({ added, modified, removed, total: diff, applied: 0 });
+    setResyncOverlay(true);
+    const steps = Math.min(diff, 12);
+    for (let i = 1; i <= steps; i++) {
+      await new Promise((r) => setTimeout(r, 40));
+      setResyncProgress({ added, modified, removed, total: diff, applied: Math.round((diff * i) / steps) });
+    }
+    const upKeys = new Set(upserts.map(keyOf));
+    const drop = (o) => upKeys.has(keyOf(o)) || removedKeys.has(keyOf(o));
+    setOrders((prev) => [...prev.filter((o) => !drop(o)), ...upserts.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태))]);
+    setCanceledOrders((prev) => [...prev.filter((o) => !drop(o)), ...upserts.filter((o) => CANCELED_STATUS_LIST.includes(o.상태))]);
+    markSynced(startedAt);
+    await new Promise((r) => setTimeout(r, 400)); // 100%를 잠깐 보여주고 닫는다
+    return { ok: true, changed: diff };
   } catch {
-    // 오프라인 등으로 서버 조회가 실패하면 조용히 무시 — onSnapshot이 재연결되는 대로 반영된다.
-    return false;
+    // 오프라인 등으로 서버 조회가 실패 — 실시간 연결을 다시 맺어 반영되게 한다
+    if (manual) setRefreshKey((k) => k + 1);
+    return { ok: false, changed: 0 };
   } finally {
-    clearTimeout(overlayTimer);
+    clearTimeout(checkTimer);
+    setResyncChecking(false);
     setResyncOverlay(false);
     setResyncProgress(null);
   }
 }, []);
+
+// ⭐ 첫 진입 — 폰 저장본으로 화면을 연 직후, 마지막 동기화 이후 바뀐 오더만 확인(바뀐 게 있을 때만 화면 표시)
+const firstSyncDoneRef = useRef(false);
+useEffect(() => {
+  if (!initLoadDone || !ordersLoaded || firstSyncDoneRef.current) return;
+  firstSyncDoneRef.current = true;
+  refreshFromServer({ force: true });
+}, [initLoadDone, ordersLoaded, refreshFromServer]);
 
 useEffect(() => {
   // ⚠️ 예전엔 2분 이상 안 보였다 돌아온 경우만 재조회했는데, 실제로는 30초~1분
@@ -2671,17 +2723,18 @@ useEffect(() => {
   const onVisible = () => {
     if (document.visibilityState !== "visible") {
       hiddenAt = Date.now();
+      markSynced(hiddenAt);
       return;
     }
     // hiddenAt이 없으면(예: 첫 마운트 직후 이벤트) 재조회 대상이 아니다 — 최초
     // 로드는 onSnapshot 첫 스냅샷이 이미 처리한다.
-    if (hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) refreshFromServer({ since: hiddenAt });
+    if (hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) refreshFromServer();
   };
 
   // bfcache(뒤로가기 등으로 페이지가 통째로 캐시에서 복원)로 돌아온 경우도 같은
   // 기준으로 취급 — persisted가 아니면(=일반적인 최초 로드) 건드리지 않는다.
   const onPageShow = (e) => {
-    if (e.persisted && hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) refreshFromServer({ since: hiddenAt });
+    if (e.persisted && hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) refreshFromServer();
   };
 
   document.addEventListener("visibilitychange", onVisible);
@@ -4949,38 +5002,36 @@ const title =
         뜨는 최적화(재조회) 대기 오버레이 — 오래된 오더 상태를 보거나 그 상태로
         조작하는 걸 막기 위해 재조회가 끝날 때까지 화면을 덮는다. 짧은 앱 전환
         (다른 앱 잠깐 확인 등)에는 뜨지 않는다. */}
+    {/* 최신 정보 확인 중 — 화면을 막지 않는 작은 표시(바뀐 게 없으면 이걸로 끝) */}
+    {resyncChecking && !resyncOverlay && (
+      <div className="fixed left-1/2 -translate-x-1/2 z-[99999] px-3 py-1.5 rounded-full bg-[#1B2B4B] text-white text-[12px] font-bold shadow-lg flex items-center gap-2" style={{ top: 58 }}>
+        <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+        최신 정보 확인 중
+      </div>
+    )}
     {resyncOverlay && (() => {
-      // ⭐ 최신화 진행률 — "화면에 있던 오더 수 / 서버 실제 오더 수"에서 시작해 받은 만큼 올라간다
+      // ⭐ 실제로 바뀐 오더가 있을 때만 뜬다 — 반영할 건수를 0 → N으로 올리며 보여준다
       const p = resyncProgress;
       const total = p?.total || 0;
-      const shown = p ? Math.min(total, Math.max(p.before, p.loaded)) : 0;
-      // 진행률은 서버 조회 단계(오늘 오더 + 변경 확인) 완료 비율
-      const pct = p?.jobs ? Math.min(100, Math.round((p.done / p.jobs) * 100)) : 0;
+      const applied = p?.applied || 0;
+      const pct = total > 0 ? Math.min(100, Math.round((applied / total) * 100)) : 0;
       return (
         <div className="fixed inset-0 z-[100000] flex flex-col items-center justify-center bg-white/95 backdrop-blur-sm px-8">
           <div className="w-full max-w-[300px] flex flex-col items-center gap-3">
             <div className="w-9 h-9 border-[3px] border-gray-200 border-t-[#1B2B4B] rounded-full animate-spin" />
-            <div className="text-[15px] font-extrabold text-[#1B2B4B]">최신 오더로 맞추는 중</div>
-            {p ? (
-              <>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-[34px] font-black text-[#1B2B4B] tabular-nums leading-none">{shown}</span>
-                  <span className="text-[18px] font-bold text-gray-400 tabular-nums">/ {total}건</span>
-                </div>
-                <div className="w-full h-2.5 rounded-full bg-gray-200 overflow-hidden">
-                  <div className="h-full rounded-full bg-[#1B2B4B] transition-all duration-300" style={{ width: `${pct}%` }} />
-                </div>
-                <div className="w-full flex justify-between text-[12px] font-bold text-gray-500 tabular-nums">
-                  <span>{p.before !== total ? `이 폰 ${p.before}건 → 실시간 ${total}건` : "오늘 오더 확인"}</span>
-                  <span className="text-[#1B2B4B]">{pct}%</span>
-                </div>
-                <div className="text-[11px] font-semibold text-gray-400 text-center">
-                  오늘 상차 오더 기준{p.changed > 0 ? ` · 다른 날짜 변경 ${p.changed}건 반영` : p.done >= p.jobs ? " · 다른 날짜 변경 없음" : " · 다른 날짜 변경 확인 중"}
-                </div>
-              </>
-            ) : (
-              <div className="text-[13px] font-bold text-gray-500">서버에 연결하는 중…</div>
-            )}
+            <div className="text-[15px] font-extrabold text-[#1B2B4B]">바뀐 오더 반영 중</div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-[34px] font-black text-[#1B2B4B] tabular-nums leading-none">{applied}</span>
+              <span className="text-[18px] font-bold text-gray-400 tabular-nums">/ {total}건</span>
+            </div>
+            <div className="w-full h-2.5 rounded-full bg-gray-200 overflow-hidden">
+              <div className="h-full rounded-full bg-[#1B2B4B] transition-all duration-200" style={{ width: `${pct}%` }} />
+            </div>
+            <div className="w-full flex justify-between text-[12px] font-bold text-gray-500 tabular-nums">
+              <span>{[p?.added ? `신규 ${p.added}` : "", p?.modified ? `수정 ${p.modified}` : "", p?.removed ? `삭제 ${p.removed}` : ""].filter(Boolean).join(" · ")}</span>
+              <span className="text-[#1B2B4B]">{pct}%</span>
+            </div>
+            <div className="text-[11px] font-semibold text-gray-400 text-center">마지막 동기화 이후 바뀐 오더만 받아옵니다</div>
           </div>
         </div>
       );
@@ -7198,7 +7249,7 @@ function MobileLoadingScreen({ loaded = 0, total = null }) {
     <div className="flex flex-col items-center justify-center px-8" style={{ minHeight: "60vh" }}>
       <div className="w-full max-w-[300px] flex flex-col items-center gap-3">
         <div className="w-9 h-9 border-[3px] border-gray-200 border-t-[#1B2B4B] rounded-full animate-spin" />
-        <div className="text-[15px] font-extrabold text-[#1B2B4B]">오더 목록 불러오는 중</div>
+        <div className="text-[15px] font-extrabold text-[#1B2B4B]">이 폰에 저장된 오더 여는 중</div>
         {total != null ? (
           <>
             <div className="flex items-baseline gap-1">
@@ -7209,7 +7260,7 @@ function MobileLoadingScreen({ loaded = 0, total = null }) {
               <div className="h-full rounded-full bg-[#1B2B4B] transition-all duration-300" style={{ width: `${pct}%` }} />
             </div>
             <div className="w-full flex justify-between text-[12px] font-bold text-gray-500 tabular-nums">
-              <span>실시간 전체 오더</span>
+              <span>서버에선 바뀐 오더만 받아옵니다</span>
               <span className="text-[#1B2B4B]">{pct}%</span>
             </div>
           </>
