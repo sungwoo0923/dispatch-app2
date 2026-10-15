@@ -1982,6 +1982,8 @@ const [showUnassignedEntryPopup, setShowUnassignedEntryPopup] = useState(false);
 const [showUnreadPopup, setShowUnreadPopup] = useState(false);
 const unreadPopupShownRef = useRef(false);
 const [ordersLoaded, setOrdersLoaded] = useState(false);
+// 첫 진입 — 실시간 구독이 서버와 맞춰졌는지(컬렉션별)와 그때 바뀐 오더 수
+const bootSyncRef = useRef({ done: {}, changed: 0, onProgress: null });
 // ⭐ 첫 진입 로딩 화면 진행률 — 서버 전체 오더 수(total)와 지금까지 받은 수
 const [initLoadCounts, setInitLoadCounts] = useState({});
 const [initLoadTotal, setInitLoadTotal] = useState(null);
@@ -2001,7 +2003,7 @@ useEffect(() => {
   if (!both) return;
   // ⭐ 폰에 저장된 오더(두 컬렉션)가 다 올라오면 바로 연다 — 서버에서 1만 건을 다시 받는 게
   // 아니라, 이어서 "마지막 동기화 이후 바뀐 것"만 확인한다(아래 이펙트).
-  const t = setTimeout(() => setInitLoadDone(true), 250);
+  const t = setTimeout(() => setInitLoadDone(true), 50);
   return () => clearTimeout(t);
 }, [initLoadCounts, initLoadDone]);
 const [focusUnassignedOrderId, setFocusUnassignedOrderId] = useState(null);
@@ -2580,7 +2582,24 @@ const collections = ["dispatch", "orders"];
 const liveStart = mobileLiveStart();
 collections.forEach((name) => {
     // ⭐ 최근 범위만 실시간 구독(예전엔 컬렉션 전체 1만 건+)
-    const unsub = onSnapshot(query(collection(db, name), where("상차일", ">=", liveStart)), (snap) => {
+    let seenFirst = false;
+    let hadCache = false;
+    let serverSynced = false;
+    const unsub = onSnapshot(query(collection(db, name), where("상차일", ">=", liveStart)), { includeMetadataChanges: true }, (snap) => {
+      // ⭐ 첫 진입 속도 — 예전엔 폰 저장본을 연 뒤 서버에 조회를 12번 따로 보내 "바뀐 오더"를 확인했다(LTE에서 느림).
+      // 이미 연결된 실시간 구독이 서버와 맞춰지는 순간(fromCache=false)을 그대로 쓰면 추가 조회가 필요 없다.
+      const changeCount = snap.docChanges().length;
+      if (!serverSynced && !snap.metadata.fromCache) {
+        serverSynced = true;
+        bootSyncRef.current.done[name] = true;
+        // 폰 저장본을 먼저 보여준 경우만 "바뀐 건수"로 센다(처음부터 서버에서 받은 건 전부 새로 받은 것)
+        if (hadCache) bootSyncRef.current.changed += changeCount;
+        bootSyncRef.current.onProgress?.();
+      }
+      if (snap.metadata.fromCache) hadCache = true;
+      // 내용 변화 없이 상태(캐시/서버·저장대기)만 바뀐 알림은 화면을 다시 그리지 않는다
+      if (seenFirst && changeCount === 0) return;
+      seenFirst = true;
       // "화주사 전송"으로 생성된 사본(orders 컬렉션, source: "transport_transmit")은
       // 화주사 화면 전용 문서라 운송사 자체 배차 화면(dispatch 컬렉션 원본)과 중복으로
       // 표시되면 안 된다 — PC(DispatchApp.jsx)와 동일한 기준으로 제외한다.
@@ -2885,12 +2904,27 @@ useEffect(() => {
   const finish = () => {
     if (finished) return;
     finished = true;
+    bootSyncRef.current.onProgress = null;
     bootStageStore.set((st) => ({ ...st, server: 100, apply: 100, ready: 100 }));
   };
-  // 서버가 느리면 오래 기다리지 않고 연다(확인은 뒤에서 조용히 계속)
-  const cap = setTimeout(finish, 6000);
-  refreshFromServer({ force: true, boot: true }).finally(() => { clearTimeout(cap); finish(); });
-}, [initLoadDone, ordersLoaded, refreshFromServer]);
+  // 실시간 구독이 서버와 맞춰질 때마다 진행률 갱신 — 두 컬렉션 다 맞춰지면 최신 상태
+  const check = () => {
+    const d = bootSyncRef.current.done;
+    const n = (d.dispatch ? 1 : 0) + (d.orders ? 1 : 0);
+    bootStageStore.set((st) => ({ ...st, server: n * 50 }));
+    if (n === 2) {
+      markSynced(Date.now());
+      bootStageStore.set((st) => ({ ...st, apply: 100, applyCount: bootSyncRef.current.changed }));
+      finish();
+    }
+  };
+  bootSyncRef.current.onProgress = check;
+  check();
+  // 전파가 약하면 오래 기다리지 않고 폰 저장본으로 연다(서버 반영은 뒤에서 자동으로 계속)
+  const cap = setTimeout(finish, 4000);
+  return () => clearTimeout(cap);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [initLoadDone, ordersLoaded]);
 
 useEffect(() => {
   // ⚠️ 예전엔 2분 이상 안 보였다 돌아온 경우만 재조회했는데, 실제로는 30초~1분
@@ -7463,24 +7497,28 @@ function TopStatusPill({ historyLoading, hidden }) {
   );
 }
 
-// ⭐ 첫 진입 로딩 화면 — 항목별로 0 → 100%가 차례대로 차오르고, 전부 100%가 되면 최신 상태로 연다
+// ⭐ 첫 진입 로딩 화면(KP-Flow) — 네이비 화면 위로 트럭이 전체 진행률만큼 길을 달리고,
+// 아래 4단계가 차례대로 0 → 100% 채워진다. 전부 100%가 되면 부드럽게 사라지며 최신 상태로 열린다.
+const BOOT_STEPS = ["저장된 오더 불러오기", "서버 확인", "최신 오더 반영", "화면 준비"];
 function MobileLoadingScreen({ loaded = 0, total = null, cacheDone = false, onAllDone }) {
   const bs = useMiniStore(bootStageStore);
   const cachePct = cacheDone ? 100 : total ? Math.min(99, Math.round((loaded / total) * 100)) : 0;
-  const items = [
-    { label: "저장된 오더 불러오는 중", target: cachePct, sub: total != null ? `${Math.min(loaded, total).toLocaleString()} / ${total.toLocaleString()}건` : "" },
-    { label: "서버 확인 중", target: bs.server, sub: "" },
-    { label: "최신 오더 반영 중", target: bs.apply, sub: bs.apply >= 100 ? (bs.applyCount ? `${bs.applyCount.toLocaleString()}건 반영` : "바뀐 오더 없음") : "" },
-    { label: "화면 준비", target: bs.ready, sub: "" },
+  const targets = [cachePct, bs.server, bs.apply, bs.ready];
+  const subs = [
+    total != null ? `${Math.min(loaded, total).toLocaleString()} / ${total.toLocaleString()}건` : "",
+    "",
+    bs.apply >= 100 ? (bs.applyCount ? `${bs.applyCount.toLocaleString()}건 반영` : "바뀐 오더 없음") : "",
+    "",
   ];
-  const targetsRef = useRef([]);
-  targetsRef.current = items.map((it) => it.target);
+  const targetsRef = useRef(targets);
+  targetsRef.current = targets;
   const [shown, setShown] = useState([0, 0, 0, 0]);
   // ⚠️ 진행값은 ref에서 바로 계산한다 — setState 함수 안에서 "계속 움직일지"를 정하면
   // React가 그 함수를 나중에 실행해 애니메이션이 중간(예: 41%)에 멈춰버렸다.
   const shownRef = useRef([0, 0, 0, 0]);
   const doneRef = useRef(false);
-  const targetKey = targetsRef.current.join(",");
+  const [leaving, setLeaving] = useState(false);
+  const targetKey = targets.join(",");
   useEffect(() => {
     let raf = 0;
     let last = performance.now();
@@ -7490,9 +7528,9 @@ function MobileLoadingScreen({ loaded = 0, total = null, cacheDone = false, onAl
       const next = [...shownRef.current];
       let moving = false;
       for (let i = 0; i < next.length; i += 1) {
-        if (i > 0 && next[i - 1] < 100) break; // 앞 항목이 100%가 돼야 다음 항목 시작
+        if (i > 0 && next[i - 1] < 100) break; // 앞 단계가 100%가 돼야 다음 단계 시작
         const t = targetsRef.current[i];
-        if (next[i] < t) { next[i] = Math.min(t, next[i] + dt * 0.4); moving = true; } // 한 항목 약 0.25초
+        if (next[i] < t) { next[i] = Math.min(t, next[i] + dt * 0.5); moving = true; } // 한 단계 약 0.2초
       }
       if (moving) {
         shownRef.current = next;
@@ -7503,42 +7541,101 @@ function MobileLoadingScreen({ loaded = 0, total = null, cacheDone = false, onAl
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
   }, [targetKey]);
+  const finish = () => {
+    if (doneRef.current) return;
+    doneRef.current = true;
+    setLeaving(true);
+    setTimeout(() => onAllDone?.(), 260); // 사라지는 효과 후 화면 열기
+  };
   // 안전장치 — 어떤 이유로든 10초 안에 다 안 차면 그냥 연다
   useEffect(() => {
-    const t = setTimeout(() => { if (!doneRef.current) { doneRef.current = true; onAllDone?.(); } }, 10000);
+    const t = setTimeout(finish, 10000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
-    if (doneRef.current || shown.some((v) => v < 100)) return;
-    doneRef.current = true;
-    const t = setTimeout(() => onAllDone?.(), 120);
+    if (shown.some((v) => v < 100)) return;
+    const t = setTimeout(finish, 120);
     return () => clearTimeout(t);
-  }, [shown, onAllDone]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shown]);
 
+  const overall = Math.round(shown.reduce((a, v) => a + v, 0) / shown.length);
+  const activeIdx = shown.findIndex((v) => v < 100);
   return (
-    <div className="flex flex-col items-center justify-center px-8" style={{ minHeight: "60vh" }}>
-      <div className="w-full max-w-[300px] flex flex-col gap-4">
-        <div className="flex flex-col items-center gap-2 mb-1">
-          <div className="w-9 h-9 border-[3px] border-gray-200 border-t-[#1B2B4B] rounded-full animate-spin" />
-          <div className="text-[15px] font-extrabold text-[#1B2B4B]">최신 상태로 준비 중</div>
+    <div
+      className="fixed inset-0 z-[100001] flex flex-col items-center justify-center px-8 select-none"
+      style={{
+        background: "radial-gradient(120% 80% at 50% 0%, #2A3F6B 0%, #1B2B4B 45%, #0F1A30 100%)",
+        opacity: leaving ? 0 : 1,
+        transform: leaving ? "scale(1.02)" : "none",
+        transition: "opacity 0.26s ease, transform 0.26s ease",
+      }}
+    >
+      <style>{`
+        @keyframes kpBootFloat { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-1.5px) } }
+        @keyframes kpBootDash { from { background-position: 0 0 } to { background-position: -24px 0 } }
+        @keyframes kpBootPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(96,165,250,0.55) } 70% { box-shadow: 0 0 0 7px rgba(96,165,250,0) } }
+      `}</style>
+      <div className="w-full max-w-[320px] flex flex-col">
+        {/* 로고 */}
+        <div className="flex flex-col items-center mb-9">
+          <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-14 h-14 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.35)] ring-1 ring-white/15" />
+          <div className="mt-3 text-white text-[22px] font-black tracking-tight">KP-Flow</div>
+          <div className="mt-0.5 text-[11px] font-semibold tracking-[0.2em] text-blue-200/60">배차관리 시스템</div>
         </div>
-        {items.map((it, i) => {
-          const v = Math.round(shown[i]);
-          const active = i === 0 || shown[i - 1] >= 100;
-          return (
-            <div key={it.label} className="flex flex-col gap-1" style={{ opacity: active ? 1 : 0.35, transition: "opacity 0.2s" }}>
-              <div className="flex justify-between text-[13px] font-bold tabular-nums">
-                <span className={v >= 100 ? "text-[#1B2B4B]" : "text-gray-600"}>{v >= 100 ? "✓ " : ""}{it.label}</span>
-                <span className="text-[#1B2B4B]">{v}%</span>
+
+        {/* 트럭이 전체 진행률만큼 달리는 길 */}
+        <div className="relative h-9 mb-1">
+          <div
+            className="absolute left-0 right-0 bottom-1.5 h-[2px] rounded-full opacity-30"
+            style={{ backgroundImage: "linear-gradient(90deg, #fff 50%, transparent 50%)", backgroundSize: "12px 2px", animation: "kpBootDash 0.6s linear infinite" }}
+          />
+          <div className="absolute left-0 bottom-1.5 h-[2px] rounded-full bg-gradient-to-r from-blue-400 to-sky-300" style={{ width: `${overall}%` }} />
+          <div className="absolute bottom-1.5" style={{ left: `calc(${overall}% - ${overall * 0.3}px)` }}>
+            <svg width="30" height="22" viewBox="0 0 30 22" style={{ animation: "kpBootFloat 0.5s ease-in-out infinite" }}>
+              <rect x="1" y="3" width="17" height="12" rx="2" fill="#E8EEF9" />
+              <path d="M18 7h5.5l4 4.5V15H18z" fill="#93C5FD" />
+              <rect x="20" y="8.3" width="3.2" height="2.6" rx="0.6" fill="#1B2B4B" />
+              <circle cx="7" cy="17" r="2.6" fill="#0F1A30" stroke="#E8EEF9" strokeWidth="1.3" />
+              <circle cx="22.5" cy="17" r="2.6" fill="#0F1A30" stroke="#E8EEF9" strokeWidth="1.3" />
+            </svg>
+          </div>
+        </div>
+        <div className="flex justify-between items-baseline mb-7">
+          <span className="text-[12px] font-bold text-blue-100/70">{activeIdx === -1 ? "준비 완료" : `${BOOT_STEPS[activeIdx]} 중…`}</span>
+          <span className="text-[26px] font-black text-white tabular-nums leading-none">{overall}<span className="text-[14px] text-blue-200/70 ml-0.5">%</span></span>
+        </div>
+
+        {/* 단계별 진행 */}
+        <div className="flex flex-col gap-3.5 rounded-2xl bg-white/[0.06] ring-1 ring-white/10 px-4 py-4 backdrop-blur-sm">
+          {BOOT_STEPS.map((label, i) => {
+            const v = Math.round(shown[i]);
+            const done = v >= 100;
+            const active = i === activeIdx;
+            return (
+              <div key={label} className="flex items-center gap-3" style={{ opacity: done || active ? 1 : 0.38, transition: "opacity 0.2s" }}>
+                <div
+                  className={`w-[22px] h-[22px] shrink-0 rounded-full flex items-center justify-center text-[11px] font-black ${done ? "bg-blue-400 text-[#0F1A30]" : active ? "bg-white/10 text-white ring-2 ring-blue-400" : "bg-white/10 text-white/50"}`}
+                  style={active ? { animation: "kpBootPulse 1.2s ease-out infinite" } : undefined}
+                >
+                  {done ? (
+                    <svg width="11" height="11" viewBox="0 0 12 12"><path d="M2.5 6.3l2.4 2.4 4.6-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  ) : i + 1}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between items-baseline">
+                    <span className={`text-[13px] font-bold ${done ? "text-white" : "text-blue-50/90"}`}>{label}</span>
+                    <span className="text-[11px] font-bold tabular-nums text-blue-200/80">{subs[i] && (done || active) ? subs[i] : `${v}%`}</span>
+                  </div>
+                  <div className="mt-1.5 h-[3px] rounded-full bg-white/10 overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-to-r from-blue-400 to-sky-300" style={{ width: `${v}%` }} />
+                  </div>
+                </div>
               </div>
-              <div className="w-full h-2 rounded-full bg-gray-200 overflow-hidden">
-                <div className="h-full rounded-full bg-[#1B2B4B]" style={{ width: `${v}%` }} />
-              </div>
-              {it.sub && active && <div className="text-[11px] font-semibold text-gray-400 text-right tabular-nums">{it.sub}</div>}
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );
