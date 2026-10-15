@@ -9,6 +9,7 @@ import {
 } from "firebase/firestore";
 import InternalMessenger from "../InternalMessenger";
 import html2canvas from "html2canvas";
+import { deleteOrderWithLog } from "../orderHistory";
 
 // ======================================================================
 // 유틸
@@ -280,7 +281,7 @@ async function shipperDeleteOrRequestCancel(order, user) {
     return true;
   }
   if (!window.confirm("이 오더를 삭제하시겠습니까?\n삭제 후 복구가 불가능합니다.")) return false;
-  await deleteDoc(doc(db, "orders", order.id));
+  await deleteOrderWithLog("orders", order.id);
   await propagateDeleteToOrigin(order);
   return true;
 }
@@ -350,7 +351,7 @@ function RequestHoldActions({ order, onDeleted }) {
     if (!window.confirm("이 오더를 삭제하시겠습니까?\n삭제 후 복구가 불가능합니다.")) return;
     setBusy(true);
     try {
-      await deleteDoc(doc(db, "orders", order.id));
+      await deleteOrderWithLog("orders", order.id);
       onDeleted?.();
     } catch {}
     setBusy(false);

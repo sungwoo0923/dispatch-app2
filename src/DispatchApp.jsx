@@ -42,7 +42,7 @@ import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
 import RouteMapModal from "./RouteMapModal";
 import MonthCompareAnalysis from "./MonthCompareAnalysis";
 import { IdleFleetButton } from "./fleetRecommend";
-import { OrderHistoryContext, useOrderHistory, useLoadOrderRange, useLoadFullOrderHistory, pcLiveWindowStart, pcPrevDay, kstToday as histToday, monthStartAgo, monthEnd } from "./orderHistory";
+import { subscribeOrderSync, deleteOrderWithLog, OrderHistoryContext, useOrderHistory, useLoadOrderRange, useLoadFullOrderHistory, pcLiveWindowStart, pcPrevDay, kstToday as histToday, monthStartAgo, monthEnd } from "./orderHistory";
 import MonthCloseCheck from "./MonthCloseCheck";
 import StaffPerformance from "./StaffPerformance";
 import { RotationPicker, RotationBadge, expandRotation, rotationNotice, withRotationMemo } from "./rotation";
@@ -2345,6 +2345,7 @@ const approveCancelRequestPC = async (order) => {
     await updateDoc(doc(db, "orders", order._transmittedOrderId), patch).catch((e) =>
       console.error("화주사 전송사본 취소승인 동기화 오류:", e)
     );
+    setDoc(doc(db, "deletedOrders", `${ref.parent.id}_${ref.id}`), { col: ref.parent.id, id: ref.id, at: Date.now() }).catch(() => {});
     await deleteDoc(ref);
   } else {
     // 화주사가 직접 등록한 오더(사본 없음) — 이 문서 자체가 화주사의 유일한 기록이므로
@@ -3043,6 +3044,36 @@ function useRealtimeCollections(user, userCompany, role) {
       .finally(() => { fullLoadingRef.current = null; });
     return fullLoadingRef.current;
   }, [fetchHistoryRows]);
+  // ⭐ 여러 사용자 실시간 일치 — 미배차 전부 + 앱을 연 뒤 누군가 등록·수정한 오더(날짜 무관) +
+  // 삭제 기록을 실시간으로 받아 예전 오더 보관소에 반영한다(최근 7일~은 원래 실시간).
+  React.useEffect(() => {
+    if (!user) return undefined;
+    const since = Date.now() - 60 * 1000;
+    return subscribeOrderSync({
+      since,
+      onRows: (rows) => setHistoryMap(prev => {
+        const next = new Map(prev);
+        rows.forEach(({ col, id, data }) => {
+          const key = `${col}/${id}`;
+          const excluded = data.source === "transport_transmit" || data.배차상태 === "배차취소" ||
+            ["취소", "배차취소", "오더취소", "취소됨"].includes(data.상태);
+          if (excluded) { next.delete(key); return; }
+          next.set(key, {
+            _id: id, __col: col, ...data,
+            경유지_상차: parseWaypointsShared(data.경유지_상차) || parseWaypointsShared(data.경유상차목록) || [],
+            경유지_하차: parseWaypointsShared(data.경유지_하차) || parseWaypointsShared(data.경유하차목록) || [],
+          });
+        });
+        return next;
+      }),
+      onDeleted: (keys) => setHistoryMap(prev => {
+        if (!keys.some(k => prev.has(k))) return prev;
+        const next = new Map(prev);
+        keys.forEach(k => next.delete(k));
+        return next;
+      }),
+    });
+  }, [user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
   const [drivers, setDrivers] = useState(() => safeLoad("drivers", []));
   const [clients, setClients] = useState(() => safeLoad("clients", []));
   // 🔔 위 캐시(dispatchData)는 이전 세션의 오래된 스냅샷이라, orders/dispatch 두
@@ -4230,6 +4261,8 @@ const removeDispatch = async (arg, opts = {}) => {
 
   // ⭐ 사용자 요청 — "취소내역"(소프트 취소)을 없애고, 삭제하면 모든 화면에서 바로
   // 사라지도록 완전삭제한다. 기사 운행기록은 위 archiveCompletedOrderPC 스냅샷으로 남는다.
+  // 삭제 기록을 남겨 다른 사용자 화면(예전 날짜 오더 포함)에서도 바로 사라지게 한다
+  setDoc(doc(db, "deletedOrders", `${ref.parent.id}_${ref.id}`), { col: ref.parent.id, id: ref.id, at: Date.now() }).catch(() => {});
   await deleteDoc(ref);
 
   // 연동 화주사에게 전송된 사본이 있으면(운송사가 등록/전송한 오더), 원본을 취소할 때

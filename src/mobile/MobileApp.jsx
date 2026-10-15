@@ -10,6 +10,7 @@ import MobileIntelView from "./MobileIntelView";
 import InternalMessenger from "../InternalMessenger";
 import MobileMapFare from "./MobileMapFare";
 import PalletSimulator from "../PalletSimulator";
+import { subscribeOrderSync, deleteOrderWithLog } from "../orderHistory";
 import CustomDatePicker from "../CustomDatePicker";
 import RouteMapModal from "../RouteMapModal";
 import southKorea from "@svg-maps/south-korea";
@@ -2322,6 +2323,29 @@ const quickRange = (days) => {
       .finally(() => { fullLoadingRef.current = null; });
     return fullLoadingRef.current;
   }, [fetchRows]);
+  // ⭐ 여러 사용자 실시간 일치 — 미배차 전부 + 앱을 연 뒤 누군가 등록·수정한 오더(날짜 무관) +
+  // 삭제 기록을 실시간으로 받아 예전 오더 보관소에 반영(최근 7일~은 원래 실시간)
+  useEffect(() => {
+    const since = Date.now() - 60 * 1000;
+    return subscribeOrderSync({
+      since,
+      onRows: (rows) => setExtraMap((prev) => {
+        const next = new Map(prev);
+        rows.forEach(({ col, id, data }) => {
+          const key = `${col}/${id}`;
+          if (data.source === "transport_transmit") { next.delete(key); return; }
+          next.set(key, { _id: id, id, __col: col, ...data });
+        });
+        return next;
+      }),
+      onDeleted: (keys) => setExtraMap((prev) => {
+        if (!keys.some((k) => prev.has(k))) return prev;
+        const next = new Map(prev);
+        keys.forEach((k) => next.delete(k));
+        return next;
+      }),
+    });
+  }, []);
   const canceledLoadedRef = useRef(false);
   const loadCanceledHistory = React.useCallback(async () => {
     if (fullLoadedRef.current || canceledLoadedRef.current) return;
@@ -4517,7 +4541,7 @@ const deleteSingleOrder = async (order) => {
   if (!col || !id) return;
   notifyFleetCancelMobile(order, id);
   // ⭐ 사용자 요청 — 취소내역 없이 완전삭제(모든 화면에서 사라짐)
-  await deleteDoc(doc(db, col, id));
+  await deleteOrderWithLog(col, id);
   deleteShipperMirrorMobile(order).catch(() => {});
   setOrders(prev => prev.filter(o => (o.id || o._id) !== id));
 };
@@ -4796,7 +4820,7 @@ const deleteSingleOrder = async (order) => {
           notifyFleetCancelMobile(order, id);
           if (["수락", "완료"].includes(order.기사확인상태) && order.차량번호) archiveCompletedOrderMobile(order, id, "오더삭제");
           // ⭐ 사용자 요청 — 취소내역 없이 완전삭제(모든 화면에서 사라짐)
-          await deleteDoc(doc(db, col, id));
+          await deleteOrderWithLog(col, id);
           deleteShipperMirrorMobile(order).catch(() => {});
         }
       }
@@ -10409,7 +10433,7 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
       // ⭐ PC(approveCancelRequestPC)와 동일 — 화주사 사본이 있으면 운송사 원본은 완전삭제,
       // 화주사가 직접 등록한 오더(사본 없음)는 화주사의 유일한 기록이라 취소 상태만 남긴다.
       if (order._transmittedOrderId) {
-        await deleteDoc(doc(db, order.__col || "orders", order.id));
+        await deleteOrderWithLog(order.__col || "orders", order.id);
       } else await updateDoc(doc(db, order.__col || "orders", order.id), {
         상태: "취소", 배차상태: "배차취소", 취소요청: false, 취소처리: "승인", 취소처리일시: serverTimestamp(),
         취소자: dispatcherName, 취소일시: serverTimestamp(),
@@ -11763,7 +11787,7 @@ function MobileOrderDetail({
       // ⭐ PC(approveCancelRequestPC)와 동일 — 화주사 사본이 있으면 운송사 원본은 완전삭제,
       // 화주사가 직접 등록한 오더(사본 없음)는 화주사의 유일한 기록이라 취소 상태만 남긴다.
       if (order._transmittedOrderId) {
-        await deleteDoc(doc(db, order.__col || "orders", order.id));
+        await deleteOrderWithLog(order.__col || "orders", order.id);
       } else await updateDoc(doc(db, order.__col || "orders", order.id), {
         상태: "취소", 배차상태: "배차취소", 취소요청: false, 취소처리: "승인", 취소처리일시: serverTimestamp(),
         취소자: dispatcherName, 취소일시: serverTimestamp(),
@@ -21135,7 +21159,7 @@ function MobileCanceledList({ orders = [], onBack, cardVersionB = false, mobileU
     if (!sorted.length || busy) return;
     setBusy(true);
     try {
-      await Promise.all(sorted.map((o) => deleteDoc(doc(db, o.__col, o.id))));
+      await Promise.all(sorted.map((o) => deleteOrderWithLog(o.__col, o.id)));
       setPurgeAll(false);
       flash("전체 삭제 완료");
     } catch (e) {

@@ -17,6 +17,7 @@ import {
   increment,
 } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
+import { deleteOrderWithLog } from "../../orderHistory";
 
 // 운송사 프로그램(DispatchApp.jsx StatusBadge)과 동일한 배지 디자인 — 단색 배경 + 흰 글씨 + rounded-lg
 const STATUS = {
@@ -664,7 +665,7 @@ export default function ShipperStatus() {
         `선택하신 ${targets.length}건을 영구 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.`,
         async () => {
           for (const o of targets) {
-            await deleteDoc(doc(db, "orders", o.id));
+            await deleteOrderWithLog("orders", o.id);
             await propagateDeleteToOrigin(o);
           }
           onDone?.(); setConfirmOpen(false);
