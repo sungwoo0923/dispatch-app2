@@ -2046,6 +2046,16 @@ const displayRegDate = (row) => {
 --------------------------------------------------*/
 const safeLoad = (k, f) => { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : f; } catch { return f; } };
 const safeSave = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { } };
+// ⭐ 큰 목록(기사/거래처)은 화면이 바쁠 때 저장하면 잠깐 멈추므로, 연속 변경은 묶고 한가할 때 저장
+const _idleSaveTimers = {};
+const idleSave = (k, v) => {
+  clearTimeout(_idleSaveTimers[k]);
+  _idleSaveTimers[k] = setTimeout(() => {
+    const run = () => safeSave(k, v);
+    if (typeof window !== "undefined" && window.requestIdleCallback) window.requestIdleCallback(run, { timeout: 5000 });
+    else run();
+  }, 1500);
+};
 
 /* -------------------------------------------------
    거래처 정규화
@@ -2990,10 +3000,22 @@ function useRealtimeCollections(user, userCompany, role) {
   //    쓰기 한 번마다 전체 목록을 동기적으로 JSON.stringify + localStorage.setItem 하면
   //    (특히 orders 컬렉션이 커질수록) 저장 직후 메인스레드가 블로킹되어 "끊김"의 주 원인이 된다.
   //    디바운스로 묶어서 렌더링/입력에 영향 없는 시점으로 미룬다.
+  // ⭐ 그래도 등록 직후 0.8초 뒤 "전체 오더"를 한 번에 문자열로 바꿔 저장하느라 화면이 잠깐
+  //    멈췄다(배차등록 후 버벅임). 이 저장본은 앱을 켤 때 첫 화면을 빨리 그리는 용도뿐이라
+  //    최근 오더(3일 전~)만 최대 500건, 브라우저가 한가할 때만 저장한다. 나머지는 Firestore
+  //    로컬 캐시(IndexedDB)가 곧바로 채워준다.
   let dispatchSaveTimer = null;
   const scheduleDispatchSave = (v) => {
     if (dispatchSaveTimer) clearTimeout(dispatchSaveTimer);
-    dispatchSaveTimer = setTimeout(() => safeSave("dispatchData", v), 800);
+    dispatchSaveTimer = setTimeout(() => {
+      const run = () => {
+        const from = new Date(Date.now() + 9 * 3600e3 - 3 * 86400e3).toISOString().slice(0, 10);
+        const slim = (v || []).filter(r => String(r.상차일 || "") >= from).slice(-500);
+        safeSave("dispatchData", slim);
+      };
+      if (typeof window !== "undefined" && window.requestIdleCallback) window.requestIdleCallback(run, { timeout: 5000 });
+      else run();
+    }, 2000);
   };
 
   // ★ 담당자(등록자) 표시용 실명 — auth 사용자 객체는 displayName을 한 번도 설정한 적이
@@ -3451,7 +3473,7 @@ const liveWindowStart = getMonthsAgoKST(13);
           .map(d => ({ ...d.data(), id: d.id }))
           .filter(d => (d.companyName || DEFAULT_COMPANY) === viewCompany);
         setDrivers(arr);
-        safeSave("drivers", arr);
+        idleSave("drivers", arr);
       })
     );
     unsubs.push(onSnapshot(collection(db, COLL.clients), (snap) => {
@@ -3462,7 +3484,7 @@ const liveWindowStart = getMonthsAgoKST(13);
         .map(d => ({ id: d.id, ...d.data() }))
         .filter(c => (c.companyName || DEFAULT_COMPANY) === viewCompany);
       setClients(normalizeClients(arr));
-      safeSave("clients", arr);
+      idleSave("clients", arr);
     }));
 
     return () => unsubs.forEach(u => u && u());

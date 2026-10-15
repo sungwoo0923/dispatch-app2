@@ -46,6 +46,9 @@ import {
   getDoc,
   arrayUnion,
   deleteField,
+  orderBy,
+  startAfter,
+  getCountFromServer,
 } from "firebase/firestore";
 import { db, auth, FUNCTIONS_BASE, DEFAULT_COMPANY } from "../firebase";
 import { signOut } from "firebase/auth";
@@ -2232,6 +2235,10 @@ const quickRange = (days) => {
   // 막 깨어나 네트워크 재연결이 느릴 때) 화면에 남아있던 오래된 오더 상태를 보거나
   // 그걸 보고 조작하는 일이 없도록 잠깐 화면을 덮어두는 오버레이 — refreshNow 참고.
   const [resyncOverlay, setResyncOverlay] = useState(false);
+  // ⭐ 최신화 진행 표시 — { before: 화면에 있던 오더 수, loaded: 서버에서 받은 수, total: 서버 실제 오더 수 }
+  const [resyncProgress, setResyncProgress] = useState(null);
+  const ordersStateRef = useRef([]);
+  useEffect(() => { ordersStateRef.current = orders; }, [orders]);
   const pullStartYRef = useRef(0);
   const pullDistanceRef = useRef(0);
 const [isRefreshing, setIsRefreshing] = useState(false);
@@ -2565,18 +2572,43 @@ const refreshFromServer = React.useCallback(async ({ force = false } = {}) => {
   // "한참 전 상태"가 눈에 보이거나 그 상태로 조작하는 일 자체를 막는다. 지연
   // 체감을 줄이기 위해 대기 시간을 400ms→200ms로 단축.
   const overlayTimer = setTimeout(() => setResyncOverlay(true), 200);
+  // ⭐ 속도 개선 — 예전엔 dispatch/orders 컬렉션 "전체"(수천 건)를 서버에서 다시 받느라
+  // 10~20초 동안 옛날 화면이 보였다. 실제로 바뀌는 건 최근 오더라 상차일 7일 전~ 범위만
+  // 서버에서 다시 받고(그보다 오래된 오더는 실시간 리스너가 계속 반영), 150건씩 나눠 받으며
+  // "화면 오더 수 → 서버 실제 오더 수" 진행률을 보여준다.
+  const windowStart = new Date(Date.now() + 9 * 3600e3 - 7 * 86400e3).toISOString().slice(0, 10);
+  const inWindow = (o) => String(o.상차일 || "") >= windowStart;
+  const PAGE = 150;
   try {
-    const [dispatchSnap, ordersSnap] = await Promise.all([
-      getDocsFromServer(collection(db, "dispatch")),
-      getDocsFromServer(collection(db, "orders")),
-    ]);
-    const mapAll = (snap, col) => snap.docs
-      .map((d) => ({ _id: d.id, id: d.id, __col: col, ...d.data() }))
-      .filter((o) => o.source !== "transport_transmit");
+    const cols = ["dispatch", "orders"];
+    const qOf = (col) => query(collection(db, col), where("상차일", ">=", windowStart), orderBy("상차일"));
+    const counts = await Promise.all(cols.map((c) => getCountFromServer(qOf(c)).then((r) => r.data().count).catch(() => 0)));
+    const total = counts.reduce((a, b) => a + b, 0);
+    const before = (ordersStateRef.current || []).filter(inWindow).length;
+    let loaded = 0;
+    setResyncProgress({ before, loaded: 0, total });
 
-    const merged = [...mapAll(dispatchSnap, "dispatch"), ...mapAll(ordersSnap, "orders")];
-    setOrders(merged.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태)));
-    setCanceledOrders(merged.filter((o) => CANCELED_STATUS_LIST.includes(o.상태)));
+    const fetched = [];
+    for (const col of cols) {
+      let last = null;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const q = last ? query(qOf(col), startAfter(last), limit(PAGE)) : query(qOf(col), limit(PAGE));
+        const snap = await getDocsFromServer(q);
+        snap.docs.forEach((d) => fetched.push({ _id: d.id, id: d.id, __col: col, ...d.data() }));
+        loaded += snap.size;
+        setResyncProgress({ before, loaded, total: Math.max(total, loaded) });
+        if (snap.size < PAGE) break;
+        last = snap.docs[snap.docs.length - 1];
+      }
+    }
+
+    const fresh = fetched.filter((o) => o.source !== "transport_transmit");
+    // 최근 범위는 서버 결과로 통째로 교체(그 사이 삭제된 오더도 빠짐), 그보다 오래된 오더는 그대로 둔다
+    setOrders((prev) => [...prev.filter((o) => !inWindow(o)), ...fresh.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태))]);
+    setCanceledOrders((prev) => [...prev.filter((o) => !inWindow(o)), ...fresh.filter((o) => CANCELED_STATUS_LIST.includes(o.상태))]);
+    // 100% 상태를 잠깐 보여주고 닫는다
+    await new Promise((r) => setTimeout(r, 350));
     return true;
   } catch {
     // 오프라인 등으로 서버 조회가 실패하면 조용히 무시 — onSnapshot이 재연결되는 대로 반영된다.
@@ -2584,6 +2616,7 @@ const refreshFromServer = React.useCallback(async ({ force = false } = {}) => {
   } finally {
     clearTimeout(overlayTimer);
     setResyncOverlay(false);
+    setResyncProgress(null);
   }
 }, []);
 
@@ -4880,12 +4913,39 @@ const title =
         뜨는 최적화(재조회) 대기 오버레이 — 오래된 오더 상태를 보거나 그 상태로
         조작하는 걸 막기 위해 재조회가 끝날 때까지 화면을 덮는다. 짧은 앱 전환
         (다른 앱 잠깐 확인 등)에는 뜨지 않는다. */}
-    {resyncOverlay && (
-      <div className="fixed inset-0 z-[100000] flex flex-col items-center justify-center gap-3 bg-white/90 backdrop-blur-sm">
-        <div className="w-8 h-8 border-[3px] border-gray-200 border-t-[#1B2B4B] rounded-full animate-spin" />
-        <div className="text-[13px] font-bold text-gray-600">최적화 중...</div>
-      </div>
-    )}
+    {resyncOverlay && (() => {
+      // ⭐ 최신화 진행률 — "화면에 있던 오더 수 / 서버 실제 오더 수"에서 시작해 받은 만큼 올라간다
+      const p = resyncProgress;
+      const total = p?.total || 0;
+      const shown = p ? Math.min(total, Math.max(p.before, p.loaded)) : 0;
+      const pct = total > 0 ? Math.min(100, Math.round((p.loaded / total) * 100)) : (p ? 100 : 0);
+      return (
+        <div className="fixed inset-0 z-[100000] flex flex-col items-center justify-center bg-white/95 backdrop-blur-sm px-8">
+          <div className="w-full max-w-[300px] flex flex-col items-center gap-3">
+            <div className="w-9 h-9 border-[3px] border-gray-200 border-t-[#1B2B4B] rounded-full animate-spin" />
+            <div className="text-[15px] font-extrabold text-[#1B2B4B]">최신 오더로 맞추는 중</div>
+            {p ? (
+              <>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-[34px] font-black text-[#1B2B4B] tabular-nums leading-none">{shown}</span>
+                  <span className="text-[18px] font-bold text-gray-400 tabular-nums">/ {total}건</span>
+                </div>
+                <div className="w-full h-2.5 rounded-full bg-gray-200 overflow-hidden">
+                  <div className="h-full rounded-full bg-[#1B2B4B] transition-all duration-300" style={{ width: `${pct}%` }} />
+                </div>
+                <div className="w-full flex justify-between text-[12px] font-bold text-gray-500 tabular-nums">
+                  <span>{p.before !== total ? `이 폰 ${p.before}건 → 실시간 ${total}건` : "실시간 오더 확인"}</span>
+                  <span className="text-[#1B2B4B]">{pct}%</span>
+                </div>
+                <div className="text-[11px] font-semibold text-gray-400">최근 7일 이후 상차 오더 기준</div>
+              </>
+            ) : (
+              <div className="text-[13px] font-bold text-gray-500">서버에 연결하는 중…</div>
+            )}
+          </div>
+        </div>
+      );
+    })()}
     {/* 📝 메모 전체 보기 모달 */}
 {openMemo && (
   <div
