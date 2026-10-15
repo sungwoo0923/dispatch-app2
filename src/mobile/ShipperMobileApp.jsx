@@ -261,7 +261,7 @@ async function propagateToOrigin(order, patch) {
 }
 async function propagateDeleteToOrigin(order) {
   if (!order?.originCol || !order?.originId) return;
-  try { await deleteDoc(doc(db, order.originCol, order.originId)); }
+  try { await deleteOrderWithLog(order.originCol, order.originId); }
   catch (e) { console.error("원본 오더 삭제 동기화 실패:", e); }
 }
 

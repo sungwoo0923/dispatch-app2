@@ -10,7 +10,7 @@ import MobileIntelView from "./MobileIntelView";
 import InternalMessenger from "../InternalMessenger";
 import MobileMapFare from "./MobileMapFare";
 import PalletSimulator from "../PalletSimulator";
-import { subscribeOrderSync, deleteOrderWithLog } from "../orderHistory";
+import { subscribeOrderSync, deleteOrderWithLog, historyStartDate } from "../orderHistory";
 import CustomDatePicker from "../CustomDatePicker";
 import RouteMapModal from "../RouteMapModal";
 import southKorea from "@svg-maps/south-korea";
@@ -2301,25 +2301,30 @@ const quickRange = (days) => {
       mergeExtra(rows);
       return rows;
     } catch {
-      return [];
+      return null; // 실패 — "받은 것"으로 기록하지 않게(다음에 다시 시도)
     } finally {
       setHistoryLoading((n) => Math.max(0, n - 1));
     }
   }, [mergeExtra]);
   const loadRange = React.useCallback(async (from, to) => {
-    if (fullLoadedRef.current || !from) return [];
+    if (!from) return [];
     const liveStart = mobileLiveStart();
     const end = (!to || to >= liveStart) ? prevDayStr(liveStart) : to; // 실시간 범위는 이미 있음
     if (from > end) return [];
     if (loadedRangesRef.current.some(([a, b]) => a <= from && b >= end)) return [];
-    loadedRangesRef.current.push([from, end]);
-    return fetchRows((c) => query(c, where("상차일", ">=", from), where("상차일", "<=", end)));
+    const range = [from, end];
+    loadedRangesRef.current.push(range);
+    const rows = await fetchRows((c) => query(c, where("상차일", ">=", from), where("상차일", "<=", end)));
+    if (rows === null) { loadedRangesRef.current = loadedRangesRef.current.filter((r) => r !== range); return []; } // 실패한 기간은 다시 받을 수 있게
+    return rows;
   }, [fetchRows]);
   const loadFullHistory = React.useCallback(() => {
     if (fullLoadedRef.current) return Promise.resolve();
     if (fullLoadingRef.current) return fullLoadingRef.current;
-    fullLoadingRef.current = fetchRows((c) => query(c, where("상차일", "<", mobileLiveStart())))
-      .then(() => { fullLoadedRef.current = true; })
+    // 최근 13개월(그보다 예전 기간은 날짜 조회 시 그 기간만 따로 불러온다)
+    const hStart = historyStartDate();
+    fullLoadingRef.current = fetchRows((c) => query(c, where("상차일", ">=", hStart), where("상차일", "<", mobileLiveStart())))
+      .then((rows) => { if (rows !== null) { fullLoadedRef.current = true; loadedRangesRef.current.push([hStart, prevDayStr(mobileLiveStart())]); } })
       .finally(() => { fullLoadingRef.current = null; });
     return fullLoadingRef.current;
   }, [fetchRows]);
@@ -2354,9 +2359,10 @@ const quickRange = (days) => {
   }, []);
   const canceledLoadedRef = useRef(false);
   const loadCanceledHistory = React.useCallback(async () => {
-    if (fullLoadedRef.current || canceledLoadedRef.current) return;
+    if (canceledLoadedRef.current) return;
     canceledLoadedRef.current = true;
-    await fetchRows((c) => query(c, where("상태", "in", CANCELED_STATUS_LIST.slice(0, 30))));
+    const rows = await fetchRows((c) => query(c, where("상태", "in", CANCELED_STATUS_LIST.slice(0, 30))));
+    if (rows === null) canceledLoadedRef.current = false; // 실패 시 다시 시도 가능
   }, [fetchRows]);
   // 화면에서 쓰는 전체 목록 = 실시간 오더 + 불러온 예전 오더(같은 오더면 실시간 쪽 우선)
   const allOrdersCombined = useMemo(() => {
@@ -4238,7 +4244,7 @@ const groupedByDate = useMemo(() => {
     // ⭐ 완전히 동일한 오더 중복 등록 알림 — 저장을 막지는 않고, 이미 같은 조건의
     // 오더가 등록돼 있으면 알려서 사용자가 직접 판단하게 한다(여러 담당자가 같은
     // 오더를 모르고 중복 등록하는 것을 방지). "그래도 등록"을 누르면 계속 진행.
-    const dupOrders = findDuplicateOrders(docData, orders);
+    const dupOrders = findDuplicateOrders(docData, allOrders);
     if (dupOrders.length > 0) {
       const proceed = await confirmDuplicateOrder(dupOrders);
       if (!proceed) return;
@@ -4788,7 +4794,7 @@ const deleteSingleOrder = async (order) => {
       archiveCompletedOrderMobile(deleteConfirmMobile, deleteConfirmMobile.id, "오더삭제");
     }
     // ⭐ 사용자 요청 — 취소내역 없이 완전삭제(모든 화면에서 사라짐)
-    await deleteDoc(doc(db, deleteConfirmMobile.__col, deleteConfirmMobile.id));
+    await deleteOrderWithLog(deleteConfirmMobile.__col, deleteConfirmMobile.id);
     deleteShipperMirrorMobile(deleteConfirmMobile).catch(() => {});
     setDeleteConfirmMobile(null);
     setSelectedOrder(null);
@@ -21151,7 +21157,7 @@ function MobileCanceledList({ orders = [], onBack, cardVersionB = false, mobileU
     if (!purgeTarget || busy) return;
     setBusy(true);
     try {
-      await deleteDoc(doc(db, purgeTarget.__col, purgeTarget.id));
+      await deleteOrderWithLog(purgeTarget.__col, purgeTarget.id);
       setPurgeTarget(null);
       flash("완전 삭제 완료");
     } catch (e) {

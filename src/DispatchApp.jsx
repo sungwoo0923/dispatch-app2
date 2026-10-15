@@ -42,7 +42,7 @@ import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
 import RouteMapModal from "./RouteMapModal";
 import MonthCompareAnalysis from "./MonthCompareAnalysis";
 import { IdleFleetButton } from "./fleetRecommend";
-import { subscribeOrderSync, deleteOrderWithLog, OrderHistoryContext, useOrderHistory, useLoadOrderRange, useLoadFullOrderHistory, pcLiveWindowStart, pcPrevDay, kstToday as histToday, monthStartAgo, monthEnd } from "./orderHistory";
+import { subscribeOrderSync, deleteOrderWithLog, logOrderDeletion, OrderHistoryContext, useOrderHistory, useLoadOrderRange, useLoadFullOrderHistory, pcLiveWindowStart, pcPrevDay, kstToday as histToday, monthStartAgo, monthEnd, monthStart, historyStartDate } from "./orderHistory";
 import MonthCloseCheck from "./MonthCloseCheck";
 import StaffPerformance from "./StaffPerformance";
 import { RotationPicker, RotationBadge, expandRotation, rotationNotice, withRotationMemo } from "./rotation";
@@ -2345,7 +2345,7 @@ const approveCancelRequestPC = async (order) => {
     await updateDoc(doc(db, "orders", order._transmittedOrderId), patch).catch((e) =>
       console.error("화주사 전송사본 취소승인 동기화 오류:", e)
     );
-    setDoc(doc(db, "deletedOrders", `${ref.parent.id}_${ref.id}`), { col: ref.parent.id, id: ref.id, at: Date.now() }).catch(() => {});
+    logOrderDeletion(ref.parent.id, ref.id);
     await deleteDoc(ref);
   } else {
     // 화주사가 직접 등록한 오더(사본 없음) — 이 문서 자체가 화주사의 유일한 기록이므로
@@ -2982,8 +2982,11 @@ function useRealtimeCollections(user, userCompany, role) {
     if (typeof v === "function") {
       setHistoryMap(prev => {
         if (prev.size === 0) return prev;
+        const before = [...prev.values()];
+        const after = v(before) || [];
+        if (after.length === before.length && after.every((r, i) => r === before[i])) return prev; // 바뀐 게 없으면 그대로
         const next = new Map();
-        (v([...prev.values()]) || []).forEach(r => next.set(`${r.__col}/${r._id}`, r));
+        after.forEach(r => next.set(`${r.__col}/${r._id}`, r));
         return next;
       });
     }
@@ -3020,27 +3023,32 @@ function useRealtimeCollections(user, userCompany, role) {
       return rows;
     } catch (e) {
       console.error("예전 오더 불러오기 실패:", e);
-      return [];
+      return null; // 실패 — 호출한 쪽이 "받은 것"으로 기록하지 않게(다음에 다시 시도)
     } finally {
       setHistoryLoading(n => Math.max(0, n - 1));
     }
   }, []);
   // 기간 조회 — 실시간 범위 밖 부분만, 이미 받은 기간은 다시 받지 않는다
   const loadRange = React.useCallback(async (from, to) => {
-    if (fullLoadedRef.current || !from) return [];
+    if (!from) return [];
     const liveStart = pcLiveWindowStart();
     const end = (!to || to >= liveStart) ? pcPrevDay(liveStart) : to;
     if (from > end) return [];
     if (loadedRangesRef.current.some(([a, b]) => a <= from && b >= end)) return [];
-    loadedRangesRef.current.push([from, end]);
-    return fetchHistoryRows(c => query(c, where("상차일", ">=", from), where("상차일", "<=", end)));
+    const range = [from, end];
+    loadedRangesRef.current.push(range);
+    const rows = await fetchHistoryRows(c => query(c, where("상차일", ">=", from), where("상차일", "<=", end)));
+    if (rows === null) { loadedRangesRef.current = loadedRangesRef.current.filter(r => r !== range); return []; } // 실패한 기간은 다시 받을 수 있게
+    return rows;
   }, [fetchHistoryRows]);
   // 오더복사·운임조회 등 전체 이력이 필요한 기능을 처음 쓸 때 1회
   const loadFullHistory = React.useCallback(() => {
     if (fullLoadedRef.current) return Promise.resolve();
     if (fullLoadingRef.current) return fullLoadingRef.current;
-    fullLoadingRef.current = fetchHistoryRows(c => query(c, where("상차일", "<", pcLiveWindowStart())))
-      .then(() => { fullLoadedRef.current = true; })
+    // 예전 PC와 같은 최근 13개월(그보다 예전 기간은 날짜 조회 시 그 기간만 따로 불러온다)
+    const hStart = historyStartDate();
+    fullLoadingRef.current = fetchHistoryRows(c => query(c, where("상차일", ">=", hStart), where("상차일", "<", pcLiveWindowStart())))
+      .then((rows) => { if (rows !== null) { fullLoadedRef.current = true; loadedRangesRef.current.push([hStart, pcPrevDay(pcLiveWindowStart())]); } })
       .finally(() => { fullLoadingRef.current = null; });
     return fullLoadingRef.current;
   }, [fetchHistoryRows]);
@@ -4268,7 +4276,7 @@ const removeDispatch = async (arg, opts = {}) => {
   // ⭐ 사용자 요청 — "취소내역"(소프트 취소)을 없애고, 삭제하면 모든 화면에서 바로
   // 사라지도록 완전삭제한다. 기사 운행기록은 위 archiveCompletedOrderPC 스냅샷으로 남는다.
   // 삭제 기록을 남겨 다른 사용자 화면(예전 날짜 오더 포함)에서도 바로 사라지게 한다
-  setDoc(doc(db, "deletedOrders", `${ref.parent.id}_${ref.id}`), { col: ref.parent.id, id: ref.id, at: Date.now() }).catch(() => {});
+  logOrderDeletion(ref.parent.id, ref.id);
   await deleteDoc(ref);
 
   // 연동 화주사에게 전송된 사본이 있으면(운송사가 등록/전송한 오더), 원본을 취소할 때
@@ -47241,7 +47249,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   // 월 비교 분석은 아무 달이나 고를 수 있어 열 때 전체를 불러온다.
   {
     const yStart = `${selectedYear}-01-01`;
-    const mStart = monthStartAgo(targetMonth, 3);
+    const mStart = monthStartAgo(targetMonth, 3) || yStart;
     useLoadOrderRange(yStart < mStart ? yStart : mStart, histToday());
   }
   useLoadFullOrderHistory(monthCompareOpen);
@@ -51632,9 +51640,9 @@ const [arToYear,   setArToYear]   = useState(String(THIS_YEAR));
 const [arToMM,     setArToMM]     = useState("12");
 // ⭐ 거래처정산 — 화면에서 고른 기간만 불러온다(기간조회 / 연월 범위 / 일괄정산 / 미수현황 각각)
 useLoadOrderRange(start && end ? start : null, end);
-useLoadOrderRange(`${yearFrom}-${monthFrom}-01`, monthEnd(`${yearTo}-${monthTo}`));
-useLoadOrderRange(`${batchFromYear}-${batchFromMM}-01`, monthEnd(`${batchToYear}-${batchToMM}`), batchModalOpen);
-useLoadOrderRange(`${arFromYear}-${arFromMM}-01`, monthEnd(`${arToYear}-${arToMM}`), arReportOpen);
+useLoadOrderRange(monthStart(`${yearFrom}-${monthFrom}`), monthEnd(`${yearTo}-${monthTo}`));
+useLoadOrderRange(monthStart(`${batchFromYear}-${batchFromMM}`), monthEnd(`${batchToYear}-${batchToMM}`), batchModalOpen);
+useLoadOrderRange(monthStart(`${arFromYear}-${arFromMM}`), monthEnd(`${arToYear}-${arToMM}`), arReportOpen);
 const [arOnlyUnsettled, setArOnlyUnsettled] = useState(false);
 // ★ 신규: 거래처 필터
 const [arReportMode, setArReportMode] = useState("all"); // "all" | "selected"

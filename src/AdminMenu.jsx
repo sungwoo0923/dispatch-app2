@@ -24,7 +24,7 @@ import { CustomSelect } from "./CustomSelect";
 import RolePermissionsPanel from "./RolePermissionsPanel";
 import { useCustomRoles } from "./customRoles";
 import { EditableText } from "./EditMode";
-import { useLoadOrderRange, monthEnd } from "./orderHistory";
+import { useLoadOrderRange, monthEnd, monthStart } from "./orderHistory";
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
 const formatPhone = (phone) => {
@@ -106,7 +106,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const [transmitCompanyQuery, setTransmitCompanyQuery] = useState("");
   const [transmitFromMonth, setTransmitFromMonth] = useState(monthNow);
   const [transmitToMonth, setTransmitToMonth] = useState(monthNow);
-  useLoadOrderRange(`${transmitFromMonth}-01`, monthEnd(transmitToMonth)); // ⭐ 고른 기간만 불러오기
+  useLoadOrderRange(transmitToMonth ? monthStart(transmitFromMonth) : null, monthEnd(transmitToMonth)); // ⭐ 고른 기간만 불러오기(월을 지우면 요청 안 함)
   const [transmitSearched, setTransmitSearched] = useState(false);
   const [transmitting, setTransmitting] = useState(false);
   const [transmitResult, setTransmitResult] = useState(null);

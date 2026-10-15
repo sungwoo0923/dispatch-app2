@@ -645,7 +645,7 @@ export default function ShipperStatus() {
   };
   const propagateDeleteToOrigin = async (order) => {
     if (!order?.originCol || !order?.originId) return;
-    try { await deleteDoc(doc(db, order.originCol, order.originId)); }
+    try { await deleteOrderWithLog(order.originCol, order.originId); }
     catch (e) { console.error("원본 오더 삭제 동기화 실패:", e); }
   };
   // 배차취소는 화주사의 "배차취소" 목록에만 남아야 한다 — 운송사 배차현황/실시간배차현황에는
@@ -653,7 +653,7 @@ export default function ShipperStatus() {
   // 아예 삭제한다(화주사 쪽 사본에는 취소 상태를 그대로 남긴다).
   const propagateCancelDeleteToOrigin = async (order) => {
     if (!order?.originCol || !order?.originId) return;
-    try { await deleteDoc(doc(db, order.originCol, order.originId)); }
+    try { await deleteOrderWithLog(order.originCol, order.originId); }
     catch (e) { console.error("원본 오더 취소삭제 동기화 실패:", e); }
   };
 
