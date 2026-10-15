@@ -49,6 +49,7 @@ import {
   orderBy,
   startAfter,
   getCountFromServer,
+  Timestamp,
 } from "firebase/firestore";
 import { db, auth, FUNCTIONS_BASE, DEFAULT_COMPANY } from "../firebase";
 import { signOut } from "firebase/auth";
@@ -1960,6 +1961,30 @@ const [showUnassignedEntryPopup, setShowUnassignedEntryPopup] = useState(false);
 const [showUnreadPopup, setShowUnreadPopup] = useState(false);
 const unreadPopupShownRef = useRef(false);
 const [ordersLoaded, setOrdersLoaded] = useState(false);
+// ⭐ 첫 진입 로딩 화면 진행률 — 서버 전체 오더 수(total)와 지금까지 받은 수
+const [initLoadCounts, setInitLoadCounts] = useState({});
+const [initLoadTotal, setInitLoadTotal] = useState(null);
+const [initLoadDone, setInitLoadDone] = useState(false);
+useEffect(() => {
+  let alive = true;
+  Promise.all(["dispatch", "orders"].map((c) => getCountFromServer(collection(db, c)).then((r) => r.data().count)))
+    .then((n) => { if (alive) setInitLoadTotal(n[0] + n[1]); })
+    .catch(() => {});
+  // 네트워크 문제 등으로 한쪽이 안 와도 8초 뒤에는 화면을 연다
+  const t = setTimeout(() => { if (alive) setInitLoadDone(true); }, 8000);
+  return () => { alive = false; clearTimeout(t); };
+}, []);
+useEffect(() => {
+  if (initLoadDone) return;
+  const both = initLoadCounts.dispatch != null && initLoadCounts.orders != null;
+  if (!both) return;
+  // 서버 전체 건수만큼 다 받았으면(폰 캐시가 오래돼도 부족분이 추가로 들어오면서 채워진다) 연다.
+  // 전체 건수를 못 받았으면(오프라인 등) 받은 것만으로 연다.
+  const loaded = initLoadCounts.dispatch + initLoadCounts.orders;
+  if (initLoadTotal != null && loaded < initLoadTotal) return;
+  const t = setTimeout(() => setInitLoadDone(true), 350); // 100%를 잠깐 보여주고 연다
+  return () => clearTimeout(t);
+}, [initLoadCounts, initLoadDone, initLoadTotal]);
 const [focusUnassignedOrderId, setFocusUnassignedOrderId] = useState(null);
 const popupLastShownDateRef = useRef(null);        // 마지막으로 팝업을 띄운 KST 날짜(YYYY-MM-DD)
 const pendingPopupRef = useRef(false);             // 자정에 list가 아니면, list로 돌아왔을 때 띄우기
@@ -2409,6 +2434,8 @@ collections.forEach((name) => {
       // ⭐ 취소내역 화면용 — 같은 스냅샷에서 취소 상태인 것만 따로 모은다(리스너 중복 없이).
       const canceledList = allMapped.filter((o) => CANCELED_STATUS_LIST.includes(o.상태));
       setOrdersLoaded(true);
+      // ⭐ 첫 화면 로딩 진행률용 — 컬렉션별로 받은 오더 수(서버 응답 기준)
+      setInitLoadCounts((p) => (p[name] === snap.size ? p : { ...p, [name]: snap.size }));
       setOrders((prev) => {
         const filtered = prev.filter((o) => o.__col !== name);
         return [...filtered, ...list];
@@ -2562,51 +2589,60 @@ collections.forEach((name) => {
 // 동시에 눌려도 중복 조회가 나가지 않게 쿨다운을 공유한다.
 const lastRefreshAtRef = useRef(0);
 const REFRESH_COOLDOWN_MS = 3000;
-const refreshFromServer = React.useCallback(async ({ force = false } = {}) => {
+const refreshFromServer = React.useCallback(async ({ force = false, since = 0 } = {}) => {
   const now = Date.now();
   if (!force && now - lastRefreshAtRef.current < REFRESH_COOLDOWN_MS) return;
   lastRefreshAtRef.current = now;
-  // ⭐ 재조회가 곧바로 끝나면(캐시가 이미 최신이거나 네트워크가 빠른 경우) 화면
-  // 깜빡임 없이 조용히 넘어가고, 네트워크 재연결이 오래 걸려 응답이 지연될 때만
-  // (예: 화면을 꺼뒀다 켜서 기기가 막 깨어난 직후) 잠깐이라도 화면을 덮어
-  // "한참 전 상태"가 눈에 보이거나 그 상태로 조작하는 일 자체를 막는다. 지연
-  // 체감을 줄이기 위해 대기 시간을 400ms→200ms로 단축.
+  // 재조회가 곧바로 끝나면 화면 깜빡임 없이 넘어가고, 0.2초 넘게 걸릴 때만 진행률 화면을 띄운다.
   const overlayTimer = setTimeout(() => setResyncOverlay(true), 200);
-  // ⭐ 속도 개선 — 예전엔 dispatch/orders 컬렉션 "전체"(수천 건)를 서버에서 다시 받느라
-  // 10~20초 동안 옛날 화면이 보였다. 실제로 바뀌는 건 최근 오더라 상차일 7일 전~ 범위만
-  // 서버에서 다시 받고(그보다 오래된 오더는 실시간 리스너가 계속 반영), 150건씩 나눠 받으며
-  // "화면 오더 수 → 서버 실제 오더 수" 진행률을 보여준다.
-  const windowStart = new Date(Date.now() + 9 * 3600e3 - 7 * 86400e3).toISOString().slice(0, 10);
-  const inWindow = (o) => String(o.상차일 || "") >= windowStart;
-  const PAGE = 150;
+  // ⭐ 사용자 요청 — 최근 7일 전체를 다시 받으니 오래 걸렸다. 이제
+  //   ① 오늘 상차 오더는 서버에서 통째로 다시 받고(그 사이 삭제된 것도 빠짐)
+  //   ② 다른 날짜는 "폰이 백그라운드에 있던 동안 등록·수정된 오더"만 골라 받는다.
+  //   (수정시각 필드가 저장 경로마다 서버시각/숫자 두 형식이라 둘 다 조회. 기기 간 시계
+  //    차이를 감안해 3분 여유. 다른 날짜에서 "삭제"된 오더는 실시간 연결이 이어서 반영한다.)
+  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const sinceMs = Math.max(0, (since || now - 10 * 60 * 1000) - 3 * 60 * 1000);
+  const sinceTs = Timestamp.fromMillis(sinceMs);
+  const isToday = (o) => String(o.상차일 || "").slice(0, 10) === today;
+  const keyOf = (o) => `${o.__col}/${o._id}`;
   try {
     const cols = ["dispatch", "orders"];
-    const qOf = (col) => query(collection(db, col), where("상차일", ">=", windowStart), orderBy("상차일"));
-    const counts = await Promise.all(cols.map((c) => getCountFromServer(qOf(c)).then((r) => r.data().count).catch(() => 0)));
-    const total = counts.reduce((a, b) => a + b, 0);
-    const before = (ordersStateRef.current || []).filter(inWindow).length;
-    let loaded = 0;
-    setResyncProgress({ before, loaded: 0, total });
+    const todayQ = (col) => query(collection(db, col), where("상차일", "==", today));
+    const changeQs = (col) => [
+      query(collection(db, col), where("updatedAt", ">=", sinceTs)),
+      query(collection(db, col), where("updatedAt", ">=", sinceMs)),
+      query(collection(db, col), where("createdAt", ">=", sinceTs)),
+      query(collection(db, col), where("createdAt", ">=", sinceMs)),
+      query(collection(db, col), where("_lastModified", ">=", sinceMs)),
+    ];
+    const counts = await Promise.all(cols.map((c) => getCountFromServer(todayQ(c)).then((r) => r.data().count).catch(() => 0)));
+    const total = counts[0] + counts[1];
+    const before = (ordersStateRef.current || []).filter(isToday).length;
+    const jobs = [
+      ...cols.map((col) => ({ col, today: true, q: todayQ(col) })),
+      ...cols.flatMap((col) => changeQs(col).map((q) => ({ col, today: false, q }))),
+    ];
+    let done = 0, loaded = 0;
+    const changed = new Map();
+    const todayFresh = [];
+    setResyncProgress({ before, loaded: 0, total, done: 0, jobs: jobs.length, changed: 0 });
+    await Promise.all(jobs.map(async (j) => {
+      // 일부 조건 조회가 실패해도(색인 등) 나머지는 그대로 반영
+      const snap = await getDocsFromServer(j.q).catch(() => null);
+      const rows = (snap?.docs || []).map((d) => ({ _id: d.id, id: d.id, __col: j.col, ...d.data() }));
+      if (j.today) { todayFresh.push(...rows); loaded += rows.length; }
+      else rows.forEach((r) => { if (!isToday(r)) changed.set(keyOf(r), r); });
+      done += 1;
+      setResyncProgress({ before, loaded, total: Math.max(total, loaded), done, jobs: jobs.length, changed: changed.size });
+    }));
 
-    const fetched = [];
-    for (const col of cols) {
-      let last = null;
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const q = last ? query(qOf(col), startAfter(last), limit(PAGE)) : query(qOf(col), limit(PAGE));
-        const snap = await getDocsFromServer(q);
-        snap.docs.forEach((d) => fetched.push({ _id: d.id, id: d.id, __col: col, ...d.data() }));
-        loaded += snap.size;
-        setResyncProgress({ before, loaded, total: Math.max(total, loaded) });
-        if (snap.size < PAGE) break;
-        last = snap.docs[snap.docs.length - 1];
-      }
-    }
-
-    const fresh = fetched.filter((o) => o.source !== "transport_transmit");
-    // 최근 범위는 서버 결과로 통째로 교체(그 사이 삭제된 오더도 빠짐), 그보다 오래된 오더는 그대로 둔다
-    setOrders((prev) => [...prev.filter((o) => !inWindow(o)), ...fresh.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태))]);
-    setCanceledOrders((prev) => [...prev.filter((o) => !inWindow(o)), ...fresh.filter((o) => CANCELED_STATUS_LIST.includes(o.상태))]);
+    const keep = (o) => o.source !== "transport_transmit";
+    const changedList = [...changed.values()].filter(keep);
+    const changedKeys = new Set(changedList.map(keyOf));
+    const freshAll = [...todayFresh.filter(keep), ...changedList];
+    const drop = (o) => isToday(o) || changedKeys.has(keyOf(o));
+    setOrders((prev) => [...prev.filter((o) => !drop(o)), ...freshAll.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태))]);
+    setCanceledOrders((prev) => [...prev.filter((o) => !drop(o)), ...freshAll.filter((o) => CANCELED_STATUS_LIST.includes(o.상태))]);
     // 100% 상태를 잠깐 보여주고 닫는다
     await new Promise((r) => setTimeout(r, 350));
     return true;
@@ -2639,13 +2675,13 @@ useEffect(() => {
     }
     // hiddenAt이 없으면(예: 첫 마운트 직후 이벤트) 재조회 대상이 아니다 — 최초
     // 로드는 onSnapshot 첫 스냅샷이 이미 처리한다.
-    if (hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) refreshFromServer();
+    if (hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) refreshFromServer({ since: hiddenAt });
   };
 
   // bfcache(뒤로가기 등으로 페이지가 통째로 캐시에서 복원)로 돌아온 경우도 같은
   // 기준으로 취급 — persisted가 아니면(=일반적인 최초 로드) 건드리지 않는다.
   const onPageShow = (e) => {
-    if (e.persisted && hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) refreshFromServer();
+    if (e.persisted && hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) refreshFromServer({ since: hiddenAt });
   };
 
   document.addEventListener("visibilitychange", onVisible);
@@ -4918,7 +4954,8 @@ const title =
       const p = resyncProgress;
       const total = p?.total || 0;
       const shown = p ? Math.min(total, Math.max(p.before, p.loaded)) : 0;
-      const pct = total > 0 ? Math.min(100, Math.round((p.loaded / total) * 100)) : (p ? 100 : 0);
+      // 진행률은 서버 조회 단계(오늘 오더 + 변경 확인) 완료 비율
+      const pct = p?.jobs ? Math.min(100, Math.round((p.done / p.jobs) * 100)) : 0;
       return (
         <div className="fixed inset-0 z-[100000] flex flex-col items-center justify-center bg-white/95 backdrop-blur-sm px-8">
           <div className="w-full max-w-[300px] flex flex-col items-center gap-3">
@@ -4934,10 +4971,12 @@ const title =
                   <div className="h-full rounded-full bg-[#1B2B4B] transition-all duration-300" style={{ width: `${pct}%` }} />
                 </div>
                 <div className="w-full flex justify-between text-[12px] font-bold text-gray-500 tabular-nums">
-                  <span>{p.before !== total ? `이 폰 ${p.before}건 → 실시간 ${total}건` : "실시간 오더 확인"}</span>
+                  <span>{p.before !== total ? `이 폰 ${p.before}건 → 실시간 ${total}건` : "오늘 오더 확인"}</span>
                   <span className="text-[#1B2B4B]">{pct}%</span>
                 </div>
-                <div className="text-[11px] font-semibold text-gray-400">최근 7일 이후 상차 오더 기준</div>
+                <div className="text-[11px] font-semibold text-gray-400 text-center">
+                  오늘 상차 오더 기준{p.changed > 0 ? ` · 다른 날짜 변경 ${p.changed}건 반영` : p.done >= p.jobs ? " · 다른 날짜 변경 없음" : " · 다른 날짜 변경 확인 중"}
+                </div>
               </>
             ) : (
               <div className="text-[13px] font-bold text-gray-500">서버에 연결하는 중…</div>
@@ -6174,11 +6213,14 @@ onGoAttendance={() => {
   </div>
 )}
 
-        {page === "list" && !ordersLoaded && (
-          <MobileLoadingScreen cardVersionB={cardVersionB} />
+        {page === "list" && !(ordersLoaded && initLoadDone) && (
+          <MobileLoadingScreen
+            loaded={(initLoadCounts.dispatch || 0) + (initLoadCounts.orders || 0)}
+            total={initLoadTotal}
+          />
         )}
 
-        {page === "list" && ordersLoaded && (
+        {page === "list" && ordersLoaded && initLoadDone && (
           <MobileOrderList
             dispatcherName={dispatcherName}
             userCompany={userCompany}
@@ -7129,38 +7171,52 @@ function DetailRow({ label, value }) {
   );
 }
 
-function MobileLoadingScreen({ cardVersionB }) {
-  const ESTIMATED_SEC = 5;
-  const [remain, setRemain] = useState(ESTIMATED_SEC);
-
+// ⭐ 첫 진입 로딩 화면 — 최신화(백그라운드 복귀) 화면과 같은 모양으로, 서버 전체 오더 수 대비
+// 지금까지 받은 오더 수와 %를 보여준다. 숫자는 받은 만큼 부드럽게 올라간다.
+function MobileLoadingScreen({ loaded = 0, total = null }) {
+  const [shown, setShown] = useState(0);
+  const shownRef = useRef(0);
   useEffect(() => {
-    const t = setInterval(() => {
-      setRemain((prev) => (prev > 1 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(t);
-  }, []);
+    const target = total != null ? Math.min(loaded, total) : loaded;
+    const from = shownRef.current;
+    if (from === target) return;
+    let raf = 0;
+    const start = performance.now();
+    const step = (now) => {
+      const k = Math.min(1, (now - start) / 450);
+      const v = Math.round(from + (target - from) * k);
+      shownRef.current = v;
+      setShown(v);
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [loaded, total]);
 
-  if (cardVersionB) {
-    return (
-      <div style={{ minHeight: "60vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 20px" }}>
-        <div style={{ width: 56, height: 56, borderRadius: "50%", border: "4px solid rgba(27,43,75,0.12)", borderTopColor: "#1B2B4B", animation: "kpfSpin 0.9s linear infinite" }} />
-        <div style={{ marginTop: 22, fontSize: 14, fontWeight: 700, color: "#1B2B4B", letterSpacing: "-0.2px" }}>오더 목록을 불러오는 중입니다</div>
-        <div style={{ marginTop: 6, fontSize: 12, color: "#8b93a6" }}>
-          {remain > 0 ? `약 ${remain}초 후 표시됩니다` : "잠시만 기다려주세요"}
-        </div>
-        <style>{`@keyframes kpfSpin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    );
-  }
-
+  const pct = total ? Math.min(100, Math.round((shown / total) * 100)) : 0;
   return (
-    <div style={{ minHeight: "60vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 20px" }}>
-      <div style={{ width: 48, height: 48, borderRadius: "50%", border: "4px solid #eef0f4", borderTopColor: "#1B2B4B", animation: "kpfSpin 0.9s linear infinite" }} />
-      <div style={{ marginTop: 20, fontSize: 13, fontWeight: 700, color: "#374151" }}>오더 목록을 불러오는 중입니다</div>
-      <div style={{ marginTop: 6, fontSize: 12, color: "#9ca3af" }}>
-        {remain > 0 ? `약 ${remain}초 후 표시됩니다` : "잠시만 기다려주세요"}
+    <div className="flex flex-col items-center justify-center px-8" style={{ minHeight: "60vh" }}>
+      <div className="w-full max-w-[300px] flex flex-col items-center gap-3">
+        <div className="w-9 h-9 border-[3px] border-gray-200 border-t-[#1B2B4B] rounded-full animate-spin" />
+        <div className="text-[15px] font-extrabold text-[#1B2B4B]">오더 목록 불러오는 중</div>
+        {total != null ? (
+          <>
+            <div className="flex items-baseline gap-1">
+              <span className="text-[34px] font-black text-[#1B2B4B] tabular-nums leading-none">{shown.toLocaleString()}</span>
+              <span className="text-[18px] font-bold text-gray-400 tabular-nums">/ {total.toLocaleString()}건</span>
+            </div>
+            <div className="w-full h-2.5 rounded-full bg-gray-200 overflow-hidden">
+              <div className="h-full rounded-full bg-[#1B2B4B] transition-all duration-300" style={{ width: `${pct}%` }} />
+            </div>
+            <div className="w-full flex justify-between text-[12px] font-bold text-gray-500 tabular-nums">
+              <span>실시간 전체 오더</span>
+              <span className="text-[#1B2B4B]">{pct}%</span>
+            </div>
+          </>
+        ) : (
+          <div className="text-[13px] font-bold text-gray-500">서버에 연결하는 중…</div>
+        )}
       </div>
-      <style>{`@keyframes kpfSpin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
