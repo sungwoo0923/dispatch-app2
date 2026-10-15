@@ -2738,13 +2738,15 @@ collections.forEach((name) => {
 const lastRefreshAtRef = useRef(0);
 const REFRESH_COOLDOWN_MS = 3000;
 // 값 비교용 — 키 순서와 상관없이 같은 내용이면 같은 문자열(서버시각은 ms로)
-const stableStr = (v) => {
-  if (v == null || typeof v !== "object") return JSON.stringify(v);
-  if (typeof v.toMillis === "function") return `"ts:${v.toMillis()}"`;
-  if (Array.isArray(v)) return `[${v.map(stableStr).join(",")}]`;
-  return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${stableStr(v[k])}`).join(",")}}`;
-};
-const docSig = (o) => { const { _id, id, __col, ...rest } = o || {}; return stableStr(rest); };
+// ⭐ 가벼운 비교값 — 예전엔 오더 전체(수정이력 배열 포함)를 문자열로 바꿔 비교해 저사양 폰에서
+// "최신 정보 확인 중"마다 화면이 끊겼다. 이제 오더 저장 시 수정시각(_lastModified)이 항상 남으므로
+// 수정시각 + 자주 바뀌는 핵심 필드(업로드 링크처럼 수정시각을 못 남기는 저장 포함)만 비교한다.
+const sigMs = (v) => (v?.toMillis ? v.toMillis() : typeof v === "number" ? v : typeof v?.seconds === "number" ? v.seconds * 1000 : "");
+const docSig = (o) => [
+  sigMs(o?._lastModified), sigMs(o?.updatedAt), o?.배차상태, o?.상태, o?.차량번호, o?.이름, o?.청구운임, o?.기사운임,
+  o?.attachCount, o?.위치공유중, o?.업로드잠금, o?.기사확인상태, o?.상차일, o?.하차일, o?.업체전달상태,
+  Array.isArray(o?.history) ? o.history.length : "",
+].join("|");
 
 const refreshFromServer = React.useCallback(async ({ force = false, since, manual = false } = {}) => {
   const startedAt = Date.now();
@@ -2821,17 +2823,15 @@ const refreshFromServer = React.useCallback(async ({ force = false, since, manua
     }
 
     // 바뀐 게 있을 때만 진행 화면 — 반영할 건수를 0 → N으로 올리며 보여준다
-    setResyncProgress({ added, modified, removed, total: diff, applied: 0 });
+    setResyncProgress({ added, modified, removed, total: diff });
     setResyncOverlay(true);
-    const steps = Math.min(diff, 12);
-    for (let i = 1; i <= steps; i++) {
-      await new Promise((r) => setTimeout(r, 40));
-      setResyncProgress({ added, modified, removed, total: diff, applied: Math.round((diff * i) / steps) });
-    }
+    await new Promise((r) => setTimeout(r, 550)); // 팝업 안에서 0 → N 올라가는 동안
     const upKeys = new Set(upserts.map(keyOf));
     const drop = (o) => upKeys.has(keyOf(o)) || removedKeys.has(keyOf(o));
-    setOrders((prev) => [...prev.filter((o) => !drop(o)), ...upserts.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태))]);
-    setCanceledOrders((prev) => [...prev.filter((o) => !drop(o)), ...upserts.filter((o) => CANCELED_STATUS_LIST.includes(o.상태))]);
+    startTransition(() => {
+      setOrders((prev) => [...prev.filter((o) => !drop(o)), ...upserts.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태))]);
+      setCanceledOrders((prev) => [...prev.filter((o) => !drop(o)), ...upserts.filter((o) => CANCELED_STATUS_LIST.includes(o.상태))]);
+    });
     if (extraUpserts.length) mergeExtra(extraUpserts);
     markSynced(startedAt);
     await new Promise((r) => setTimeout(r, 400)); // 100%를 잠깐 보여주고 닫는다
@@ -2876,7 +2876,8 @@ useEffect(() => {
     }
     // hiddenAt이 없으면(예: 첫 마운트 직후 이벤트) 재조회 대상이 아니다 — 최초
     // 로드는 onSnapshot 첫 스냅샷이 이미 처리한다.
-    if (hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) refreshFromServer();
+    // 앱이 다시 보이자마자 확인하면 첫 터치·스크롤과 겹쳐 끊긴다 — 화면이 먼저 그려진 뒤 확인
+    if (hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) setTimeout(() => refreshFromServer(), 400);
   };
 
   // bfcache(뒤로가기 등으로 페이지가 통째로 캐시에서 복원)로 돌아온 경우도 같은
@@ -5185,24 +5186,12 @@ const title =
       // ⭐ 실제로 바뀐 오더가 있을 때만 뜬다 — 반영할 건수를 0 → N으로 올리며 보여준다
       const p = resyncProgress;
       const total = p?.total || 0;
-      const applied = p?.applied || 0;
-      const pct = total > 0 ? Math.min(100, Math.round((applied / total) * 100)) : 0;
       return (
         <div className="fixed inset-0 z-[100000] flex flex-col items-center justify-center bg-white/95 backdrop-blur-sm px-8">
           <div className="w-full max-w-[300px] flex flex-col items-center gap-3">
             <div className="w-9 h-9 border-[3px] border-gray-200 border-t-[#1B2B4B] rounded-full animate-spin" />
             <div className="text-[15px] font-extrabold text-[#1B2B4B]">바뀐 오더 반영 중</div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-[34px] font-black text-[#1B2B4B] tabular-nums leading-none">{applied}</span>
-              <span className="text-[18px] font-bold text-gray-400 tabular-nums">/ {total}건</span>
-            </div>
-            <div className="w-full h-2.5 rounded-full bg-gray-200 overflow-hidden">
-              <div className="h-full rounded-full bg-[#1B2B4B] transition-all duration-200" style={{ width: `${pct}%` }} />
-            </div>
-            <div className="w-full flex justify-between text-[12px] font-bold text-gray-500 tabular-nums">
-              <span>{[p?.added ? `신규 ${p.added}` : "", p?.modified ? `수정 ${p.modified}` : "", p?.removed ? `삭제 ${p.removed}` : ""].filter(Boolean).join(" · ")}</span>
-              <span className="text-[#1B2B4B]">{pct}%</span>
-            </div>
+            <ResyncCountUp total={total} detail={[p?.added ? `신규 ${p.added}` : "", p?.modified ? `수정 ${p.modified}` : "", p?.removed ? `삭제 ${p.removed}` : ""].filter(Boolean).join(" · ")} />
             <div className="text-[11px] font-semibold text-gray-400 text-center">마지막 동기화 이후 바뀐 오더만 받아옵니다</div>
           </div>
         </div>
@@ -7400,6 +7389,38 @@ function DetailRow({ label, value }) {
       <span className="text-gray-400 w-14 shrink-0">{label}</span>
       <span className="text-gray-700 font-medium">{value}</span>
     </div>
+  );
+}
+
+// ⭐ 최신화 반영 숫자(0 → N)와 진행 막대 — 앱 전체가 아니라 이 부분만 다시 그린다(끊김 방지)
+function ResyncCountUp({ total = 0, detail = "" }) {
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const start = performance.now();
+    const step = (now) => {
+      const k = Math.min(1, (now - start) / 450);
+      setShown(Math.round(total * k));
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [total]);
+  const pct = total > 0 ? Math.min(100, Math.round((shown / total) * 100)) : 0;
+  return (
+    <>
+      <div className="flex items-baseline gap-1">
+        <span className="text-[34px] font-black text-[#1B2B4B] tabular-nums leading-none">{shown}</span>
+        <span className="text-[18px] font-bold text-gray-400 tabular-nums">/ {total}건</span>
+      </div>
+      <div className="w-full h-2.5 rounded-full bg-gray-200 overflow-hidden">
+        <div className="h-full rounded-full bg-[#1B2B4B]" style={{ width: `${pct}%` }} />
+      </div>
+      <div className="w-full flex justify-between text-[12px] font-bold text-gray-500 tabular-nums">
+        <span>{detail}</span>
+        <span className="text-[#1B2B4B]">{pct}%</span>
+      </div>
+    </>
   );
 }
 
