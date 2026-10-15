@@ -1847,6 +1847,13 @@ const clearLocalStorageKeepLogin = () => {
   Object.entries(keep).forEach(([k, v]) => { try { localStorage.setItem(k, v); } catch { /* noop */ } });
 };
 
+// ⭐ 실시간 연결 범위 — 상차일 기준 최근 N일부터(미래 포함). 그보다 예전 오더는 화면에서
+// 필요할 때(날짜 조회·매출·통계·오더복사·운임조회 등)만 불러온다. Firestore는 오래 끊겼다
+// 다시 연결될 때 구독 범위 전체를 다시 읽은 것으로 과금하므로, 범위를 좁혀 비용과 속도를 줄인다.
+const MOBILE_LIVE_DAYS = 7;
+const mobileLiveStart = () => new Date(Date.now() + 9 * 3600e3 - MOBILE_LIVE_DAYS * 86400e3).toISOString().slice(0, 10);
+const prevDayStr = (ymd) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
+
 export default function MobileApp({ role, user, userCompany = "" }) {
   // ⭐ 글자 크기 설정(기본/크게/더 크게) — 아래 zoom 리셋 로직에서 함께 적용되어야
   // 화면 전체(글자+버튼+아이콘)가 실제로 커진다. 쉬운모드는 자체 화면(MobileEasyMode)이
@@ -1967,7 +1974,7 @@ const [initLoadTotal, setInitLoadTotal] = useState(null);
 const [initLoadDone, setInitLoadDone] = useState(false);
 useEffect(() => {
   let alive = true;
-  Promise.all(["dispatch", "orders"].map((c) => getCountFromServer(collection(db, c)).then((r) => r.data().count)))
+  Promise.all(["dispatch", "orders"].map((c) => getCountFromServer(query(collection(db, c), where("상차일", ">=", mobileLiveStart()))).then((r) => r.data().count)))
     .then((n) => { if (alive) setInitLoadTotal(n[0] + n[1]); })
     .catch(() => {});
   // 네트워크 문제 등으로 한쪽이 안 와도 8초 뒤에는 화면을 연다
@@ -2264,6 +2271,85 @@ const quickRange = (days) => {
   useEffect(() => { ordersStateRef.current = orders; }, [orders]);
   const canceledStateRef = useRef([]);
   useEffect(() => { canceledStateRef.current = canceledOrders; }, [canceledOrders]);
+
+  // ⭐ 예전 오더 보관소 — 실시간 범위(최근 7일~) 밖의 오더를 화면에서 필요할 때만 불러와 담아둔다.
+  //   loadRange(from,to): 그 기간만 1회 조회 / loadFullHistory(): 오더복사·운임조회처럼 전체 이력이
+  //   필요한 기능을 처음 열 때 1회 조회. 같은 세션에서 같은 기간을 다시 받지 않는다.
+  const [extraMap, setExtraMap] = useState(() => new Map());
+  const extraMapRef = useRef(extraMap);
+  useEffect(() => { extraMapRef.current = extraMap; }, [extraMap]);
+  const [historyLoading, setHistoryLoading] = useState(0);
+  const loadedRangesRef = useRef([]); // [from, to] 목록
+  const fullLoadedRef = useRef(false);
+  const fullLoadingRef = useRef(null);
+  const mergeExtra = React.useCallback((rows) => {
+    if (!rows.length) return;
+    setExtraMap((prev) => {
+      const next = new Map(prev);
+      rows.forEach((r) => next.set(`${r.__col}/${r._id}`, r));
+      return next;
+    });
+  }, []);
+  const fetchRows = React.useCallback(async (makeQuery) => {
+    setHistoryLoading((n) => n + 1);
+    try {
+      const snaps = await Promise.all(["dispatch", "orders"].map((col) =>
+        getDocs(makeQuery(collection(db, col))).then((snap) =>
+          snap.docs.map((d) => ({ _id: d.id, id: d.id, __col: col, ...d.data() })))));
+      const rows = snaps.flat().filter((o) => o.source !== "transport_transmit");
+      mergeExtra(rows);
+      return rows;
+    } catch {
+      return [];
+    } finally {
+      setHistoryLoading((n) => Math.max(0, n - 1));
+    }
+  }, [mergeExtra]);
+  const loadRange = React.useCallback(async (from, to) => {
+    if (fullLoadedRef.current || !from) return [];
+    const liveStart = mobileLiveStart();
+    const end = (!to || to >= liveStart) ? prevDayStr(liveStart) : to; // 실시간 범위는 이미 있음
+    if (from > end) return [];
+    if (loadedRangesRef.current.some(([a, b]) => a <= from && b >= end)) return [];
+    loadedRangesRef.current.push([from, end]);
+    return fetchRows((c) => query(c, where("상차일", ">=", from), where("상차일", "<=", end)));
+  }, [fetchRows]);
+  const loadFullHistory = React.useCallback(() => {
+    if (fullLoadedRef.current) return Promise.resolve();
+    if (fullLoadingRef.current) return fullLoadingRef.current;
+    fullLoadingRef.current = fetchRows((c) => query(c, where("상차일", "<", mobileLiveStart())))
+      .then(() => { fullLoadedRef.current = true; })
+      .finally(() => { fullLoadingRef.current = null; });
+    return fullLoadingRef.current;
+  }, [fetchRows]);
+  const canceledLoadedRef = useRef(false);
+  const loadCanceledHistory = React.useCallback(async () => {
+    if (fullLoadedRef.current || canceledLoadedRef.current) return;
+    canceledLoadedRef.current = true;
+    await fetchRows((c) => query(c, where("상태", "in", CANCELED_STATUS_LIST.slice(0, 30))));
+  }, [fetchRows]);
+  // 화면에서 쓰는 전체 목록 = 실시간 오더 + 불러온 예전 오더(같은 오더면 실시간 쪽 우선)
+  const allOrdersCombined = useMemo(() => {
+    const live = [...orders, ...canceledOrders];
+    const liveKeys = new Set(live.map((o) => `${o.__col}/${o._id}`));
+    const extra = hideBlind([...extraMap.values()].filter((o) => !liveKeys.has(`${o.__col}/${o._id}`)));
+    return {
+      orders: [...orders, ...extra.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태))],
+      canceled: [...canceledOrders, ...extra.filter((o) => CANCELED_STATUS_LIST.includes(o.상태))],
+    };
+  }, [orders, canceledOrders, extraMap]);
+  const allOrders = allOrdersCombined.orders;
+  const allCanceledOrders = allOrdersCombined.canceled;
+  // 화면에서 바로 고친 값을 실시간 목록·예전 오더 보관소 양쪽에 반영
+  const patchLocalOrder = React.useCallback((id, patch) => {
+    setOrders((prev) => prev.map((o) => (o.id === id || o._id === id) ? { ...o, ...patch } : o));
+    setExtraMap((prev) => {
+      let hit = false;
+      const next = new Map(prev);
+      next.forEach((o, k) => { if (o.id === id || o._id === id) { next.set(k, { ...o, ...patch }); hit = true; } });
+      return hit ? next : prev;
+    });
+  }, []);
   // ⭐ "이 폰이 서버와 마지막으로 맞춰진 시각" — 최신화는 이 시각 이후 바뀐 것만 확인한다.
   // 앱을 껐다 켜도 이어지도록 저장해둔다.
   const lastSyncAtRef = useRef((() => { try { return Number(localStorage.getItem("mobileLastSyncAt")) || 0; } catch { return 0; } })());
@@ -2331,10 +2417,15 @@ const handleRefresh = async () => {
 // includeLastMonth=false면 이번 달 오더만, true면 지난달까지 2개월치를 검사한다.
 // 오더검증은 "지금 문제가 없는지" 확인하는 용도라 오래된 과거 데이터까지 계속
 // 나올 필요가 없어, 기본은 이번 달로 한정하고 필요할 때만 한 달 전까지만 넓힌다.
-const handleValidateOrders = (includeLastMonth = false) => {
+const handleValidateOrders = async (includeLastMonth = false) => {
   const thisMonth = thisMonthKST();
   const months = includeLastMonth ? [prevMonthOf(thisMonth), thisMonth] : [thisMonth];
-  const scoped = orders.filter((o) => months.includes(String(o.상차일 || "").slice(0, 7)));
+  // 검사 기간 중 실시간 범위 밖(예전 날짜) 오더를 먼저 불러온다
+  const fetched = await loadRange(`${months[0]}-01`, todayKST());
+  const fetchedNew = hideBlind(fetched.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태)));
+  const seen = new Set(allOrders.map((o) => `${o.__col}/${o._id}`));
+  const pool = [...allOrders, ...fetchedNew.filter((o) => !seen.has(`${o.__col}/${o._id}`))];
+  const scoped = pool.filter((o) => months.includes(String(o.상차일 || "").slice(0, 7)));
   const issues = findOrderIssues(scoped);
   setOrderIssues(issues);
   setOrderIssuesScope(includeLastMonth ? "twoMonths" : "thisMonth");
@@ -2426,8 +2517,10 @@ useEffect(() => {
 
 const collections = ["dispatch", "orders"];
 
+const liveStart = mobileLiveStart();
 collections.forEach((name) => {
-    const unsub = onSnapshot(collection(db, name), (snap) => {
+    // ⭐ 최근 범위만 실시간 구독(예전엔 컬렉션 전체 1만 건+)
+    const unsub = onSnapshot(query(collection(db, name), where("상차일", ">=", liveStart)), (snap) => {
       // "화주사 전송"으로 생성된 사본(orders 컬렉션, source: "transport_transmit")은
       // 화주사 화면 전용 문서라 운송사 자체 배차 화면(dispatch 컬렉션 원본)과 중복으로
       // 표시되면 안 된다 — PC(DispatchApp.jsx)와 동일한 기준으로 제외한다.
@@ -2655,7 +2748,15 @@ const refreshFromServer = React.useCallback(async ({ force = false, since, manua
     const phoneMap = new Map(phoneAll.map((o) => [keyOf(o), o]));
     let added = 0, modified = 0, removed = 0;
     const upserts = [];
+    const extraUpserts = [];
+    const liveStartNow = mobileLiveStart();
     [...serverToday.values(), ...serverChanged.values()].forEach((r) => {
+      // 실시간 범위 밖(예전 날짜) 오더는 이미 불러와 둔 것만 갱신하고, 안 불러온 건 건너뛴다
+      if (String(r.상차일 || "") < liveStartNow) {
+        const cur = extraMapRef.current.get(keyOf(r));
+        if (cur && docSig(cur) !== docSig(r)) { modified += 1; extraUpserts.push(r); }
+        return;
+      }
       const cur = phoneMap.get(keyOf(r));
       if (!cur) { added += 1; upserts.push(r); }
       else if (docSig(cur) !== docSig(r)) { modified += 1; upserts.push(r); }
@@ -2685,6 +2786,7 @@ const refreshFromServer = React.useCallback(async ({ force = false, since, manua
     const drop = (o) => upKeys.has(keyOf(o)) || removedKeys.has(keyOf(o));
     setOrders((prev) => [...prev.filter((o) => !drop(o)), ...upserts.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태))]);
     setCanceledOrders((prev) => [...prev.filter((o) => !drop(o)), ...upserts.filter((o) => CANCELED_STATUS_LIST.includes(o.상태))]);
+    if (extraUpserts.length) mergeExtra(extraUpserts);
     markSynced(startedAt);
     await new Promise((r) => setTimeout(r, 400)); // 100%를 잠깐 보여주고 닫는다
     return { ok: true, changed: diff };
@@ -3332,9 +3434,9 @@ useEffect(() => {
   useEffect(() => {
     if (!selectedOrder) return;
     const id = selectedOrder.id || selectedOrder._id;
-    const latest = orders.find((o) => (o.id || o._id) === id);
+    const latest = allOrders.find((o) => (o.id || o._id) === id);
     if (latest) setSelectedOrder((prev) => (prev ? { ...prev, ...latest } : prev));
-  }, [orders]);
+  }, [allOrders]);
   const [openMemo, setOpenMemo] = useState(null);
   const [deleteConfirmMobile, setDeleteConfirmMobile] = useState(null);
   // 🔙 상세보기 진입 출처 (list | unassigned | status)
@@ -3458,8 +3560,25 @@ useEffect(() => {
   // --------------------------------------------------
 const thisMonth = thisMonthKST();
 
+  // ⭐ 화면이 필요로 하는 기간만 그때 불러오기(실시간 범위 밖일 때만 실제 조회)
+  useEffect(() => {
+    if (page !== "list" || onlyToday) return;
+    if (!appliedStartDate && !appliedEndDate) { loadRange(`${thisMonth}-01`, todayKST()); return; } // 날짜 미선택 = 이번 달
+    loadRange(appliedStartDate || "2000-01-01", appliedEndDate || todayKST());
+  }, [page, appliedStartDate, appliedEndDate, onlyToday, thisMonth, loadRange]);
+  useEffect(() => {
+    if (page === "canceled") loadCanceledHistory();
+    else if (page === "fleet" || page === "ratecard" || page === "myinfo") loadFullHistory(); // 누적 매출·운임표·내 전체 실적
+    else if (page === "intel") {
+      const y = todayKST().slice(0, 4);
+      const d = new Date(Date.now() + 9 * 3600e3); d.setUTCMonth(d.getUTCMonth() - 6);
+      const sixAgo = d.toISOString().slice(0, 7) + "-01";
+      loadRange(`${y}-01-01` < sixAgo ? `${y}-01-01` : sixAgo, todayKST()); // 올해·최근 6개월 통계
+    }
+  }, [page, loadRange, loadFullHistory, loadCanceledHistory]);
+
   const filteredOrders = useMemo(() => {
-    let base = [...orders];
+    let base = [...allOrders];
 
     // 🔹 오늘 / 날짜 선택 여부
     const today = todayStr();
@@ -3556,7 +3675,7 @@ if (appliedSearchType === "메모")
 
     return base;
   }, [
-    orders,
+    allOrders,
     statusTab,
     assignFilter,
     vehicleFilter,
@@ -3573,13 +3692,13 @@ if (appliedSearchType === "메모")
   const filteredStatusOrders = filteredOrders;
 // ✅ 미배차 오더 (차량번호 없는 것)
 const unassignedOrders = useMemo(() => {
-  return orders.filter(
+  return allOrders.filter(
     (o) =>
       !String(o.차량번호 || "").trim() &&
       (o.상차지명 || o.하차지명) &&   // ★ 상/하차지 없는 빈 오더 제외
       getPickupDate(o)                  // ★ 날짜 없는 오더 제외
   );
-}, [orders]);
+}, [allOrders]);
 
 // 📤 정보미전달 오더 (오늘 이후 + 전달미완료)
 const undeliveredOrders = useMemo(() => {
@@ -3883,7 +4002,7 @@ const groupedByDate = useMemo(() => {
     // ⭐ 지입 기사 휴차일(근무가능요일 아님) 배차 확인 팝업
     if (String(form.차량번호 || "").trim()) {
       const nPlate = (v = "") => String(v).replace(/[\s-]/g, "").toLowerCase();
-      const prevOrder = form._editId ? orders.find(o => (o.id || o._id) === form._editId) : null;
+      const prevOrder = form._editId ? allOrders.find(o => (o.id || o._id) === form._editId) : null;
       if ((!prevOrder || nPlate(prevOrder.차량번호) !== nPlate(form.차량번호))
           && form._restAck !== restAckKey(form.차량번호, form.상차일 || todayKST())) {
         if (!(await checkHolidayDispatch(drivers, form.차량번호, form.상차일 || todayKST()))) {
@@ -4954,7 +5073,8 @@ const deleteSingleOrder = async (order) => {
   if (easyMode) {
     return (
       <MobileEasyMode
-        orders={orders}
+        orders={allOrders}
+        onNeedHistory={loadFullHistory}
         unassignedOrders={unassignedOrders}
         drivers={drivers}
         clients={clients}
@@ -5003,6 +5123,12 @@ const title =
         조작하는 걸 막기 위해 재조회가 끝날 때까지 화면을 덮는다. 짧은 앱 전환
         (다른 앱 잠깐 확인 등)에는 뜨지 않는다. */}
     {/* 최신 정보 확인 중 — 화면을 막지 않는 작은 표시(바뀐 게 없으면 이걸로 끝) */}
+    {historyLoading > 0 && !resyncChecking && !resyncOverlay && (
+      <div className="fixed left-1/2 -translate-x-1/2 z-[99999] px-3 py-1.5 rounded-full bg-[#1B2B4B] text-white text-[12px] font-bold shadow-lg flex items-center gap-2" style={{ top: 58 }}>
+        <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+        예전 오더 불러오는 중
+      </div>
+    )}
     {resyncChecking && !resyncOverlay && (
       <div className="fixed left-1/2 -translate-x-1/2 z-[99999] px-3 py-1.5 rounded-full bg-[#1B2B4B] text-white text-[12px] font-bold shadow-lg flex items-center gap-2" style={{ top: 58 }}>
         <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -5386,7 +5512,7 @@ const title =
     onClearSelected={clearSelectedNotifs}
     alarmEnabled={alarmEnabled}
     onToggleAlarm={toggleAlarm}
-    orders={orders}
+    orders={allOrders}
   />
 )}
 {/* 모바일 메신저 - 항상 마운트하여 unread count 추적, mobileVisible로 UI 표시 제어 */}
@@ -6329,7 +6455,9 @@ setOpenMemo={setOpenMemo}
         )}
 {page === "sales" && (
   <MobileSalesPage
-    data={orders}
+    data={allOrders}
+    loadRange={loadRange}
+    loadFullHistory={loadFullHistory}
     fixedData={fixedClientRows}
     onBack={() => setPage("list")}
     cardVersionB={cardVersionB}
@@ -6348,7 +6476,8 @@ setOpenMemo={setOpenMemo}
             showToast={showToast}
             drivers={drivers}
             upsertDriver={upsertDriver}
-            orders={orders}
+            orders={allOrders}
+            onNeedHistory={loadFullHistory}
             cardVersionB={cardVersionB}
             role={role}
             clientNameInputRef={clientNameInputRef}
@@ -6379,11 +6508,10 @@ setOpenMemo={setOpenMemo}
             order={selectedOrder}
             dispatcherName={dispatcherName}
             mobileUsers={mobileUsers}
-            onOrderUpdate={(id, patch) => {
-    setOrders(prev => prev.map(o => (o.id === id || o._id === id) ? { ...o, ...patch } : o));
-  }}
+            onOrderUpdate={(id, patch) => patchLocalOrder(id, patch)}
             drivers={drivers}
-            orders={orders}
+            orders={allOrders}
+            onNeedHistory={loadFullHistory}
             clients={formClientsList}
             basicClients={clients}
             onDuplicate={handleOrderDuplicate}
@@ -6421,7 +6549,7 @@ setOpenMemo={setOpenMemo}
         )}
         {page === "ratecard" && (
           <MobileRateCard
-            dispatchData={orders}
+            dispatchData={allOrders}
             onBack={() => setPage("list")}
             cardVersionB={cardVersionB}
             userCompany={userCompany}
@@ -6432,7 +6560,7 @@ setOpenMemo={setOpenMemo}
             currentUser={currentUser}
             mobileUsers={mobileUsers}
             loginTime={loginTime}
-            orders={orders}
+            orders={allOrders}
             userCompany={userCompany || localStorage.getItem("userCompany") || ""}
             onBack={() => setPage("list")}
             cardVersionB={cardVersionB}
@@ -6458,8 +6586,8 @@ setOpenMemo={setOpenMemo}
             refreshFromServer={refreshFromServer}
           />
         )}
-        {page === "fleet" && <MobileFleetView dispatchData={orders} userCompany={userCompany} onRegisterBack={(fn) => { innerBackRef.current = fn; }} />}
-        {page === "intel" && <MobileIntelView dispatchData={orders} cardVersionB={cardVersionB} />}
+        {page === "fleet" && <MobileFleetView dispatchData={allOrders} userCompany={userCompany} onRegisterBack={(fn) => { innerBackRef.current = fn; }} />}
+        {page === "intel" && <MobileIntelView dispatchData={allOrders} cardVersionB={cardVersionB} />}
 
         {page === "unassigned" && (
   <MobileUnassignedList
@@ -6500,7 +6628,7 @@ setOpenMemo={setOpenMemo}
 
         {page === "canceled" && (
           <MobileCanceledList
-            orders={canceledOrders}
+            orders={allCanceledOrders}
             onBack={() => setPage("list")}
             cardVersionB={cardVersionB}
             mobileUsers={mobileUsers}
@@ -6649,10 +6777,17 @@ function isNetRevenueExcludedClientMobile(name, clientsList, placesList) {
   return LEGACY_NET_REVENUE_EXCLUDED_NAMES_MOBILE.some((x) => n.includes(x));
 }
 
-function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = false, clients = [], places = [] }) {
+function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = false, clients = [], places = [], loadRange, loadFullHistory }) {
   const [verified, setVerified] = useState(() => sessionStorage.getItem("sales_ok") === "1");
   const [month, setMonth] = useState(new Date(new Date().getTime() + 9*60*60*1000).toISOString().slice(0,7));
   const [compareOpen, setCompareOpen] = useState(false); // ⭐ 월 비교 분석
+  // ⭐ 선택한 달 + 이전 6개월(추이 그래프)만 그때 불러온다 / 월 비교 분석은 아무 달이나 고르므로 전체
+  useEffect(() => {
+    const d = new Date(`${month}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - 6);
+    const end = new Date(`${month}-01T00:00:00Z`); end.setUTCMonth(end.getUTCMonth() + 1); end.setUTCDate(0);
+    loadRange?.(d.toISOString().slice(0, 10), end.toISOString().slice(0, 10));
+  }, [month]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (compareOpen) loadFullHistory?.(); }, [compareOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   const toInt = (v) => Number(String(v || "").replace(/[^\d]/g, "")) || 0;
   const fmtWon = (v) => Number(v).toLocaleString("ko-KR");
 
@@ -11244,6 +11379,7 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
 }
 
 function MobileOrderDetail({
+  onNeedHistory,
   order,
   onOrderUpdate,
   drivers,
@@ -11331,6 +11467,8 @@ function MobileOrderDetail({
   const [attachConfirmItem, setAttachConfirmItem] = useState(null);
   const [smsUploadConfirm, setSmsUploadConfirm] = useState(false);
   const [showDetailFareHistory, setShowDetailFareHistory] = useState(false);
+  // ⭐ 운임조회는 예전 오더 전체가 필요 — 누를 때 1회 불러온다
+  useEffect(() => { if (showDetailFareHistory) onNeedHistory?.(); }, [showDetailFareHistory]); // eslint-disable-line react-hooks/exhaustive-deps
   const [fareAppliedPopup, setFareAppliedPopup] = React.useState(null);
   const [detailFareFilter, setDetailFareFilter] = useState("all");
   const [detailFareSortMode, setDetailFareSortMode] = useState("relevance");
@@ -13745,6 +13883,7 @@ function SmartOrderParser({ clients, drivers = [], onApply, onClose, cardVersion
 // 등록 폼
 // ======================================================================
 function MobileOrderForm({
+  onNeedHistory,
   form,
   setForm,
   clients,
@@ -14016,6 +14155,10 @@ const [showNewDriver, setShowNewDriver] = useState(false);
 // 충돌 팝업 — 상세보기(MobileOrderDetail)와 동일한 개념이지만 이 폼 전용 state다.
 const [formConflictPopup, setFormConflictPopup] = useState(null);
 const [showOrderCopyModal, setShowOrderCopyModal] = useState(false);
+// ⭐ 오더복사·운임 이력은 예전 오더 전체가 필요 — 복사창을 열거나 상·하차지를 다 입력하면 1회 불러온다
+useEffect(() => {
+  if (showOrderCopyModal || (form?.상차지명 && form?.하차지명)) onNeedHistory?.();
+}, [showOrderCopyModal, form?.상차지명, form?.하차지명]); // eslint-disable-line react-hooks/exhaustive-deps
 const [showClientPickerModal, setShowClientPickerModal] = useState(false);
 const [clientPickerSearch, setClientPickerSearch] = useState("");
 const [contactPopup, setContactPopup] = useState(null);

@@ -4,7 +4,7 @@
 // - 4개 메뉴(배차등록/배차현황/미배차현황/운임조회) + 배차정보(차량) 입력 화면으로 구성된
 //   단순한 화면 전환 앱이지만, 일반모드에 있는 핵심 기능(스마트검색/자동완성/담당자 등)은
 //   큰 글씨/큰 버튼 톤에 맞춰 그대로 제공한다.
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Truck,
   ClipboardList,
@@ -1752,6 +1752,7 @@ function FareScreen({ orders, clients, places, onBack }) {
 // 메인 컴포넌트
 // ==================================================================
 export default function MobileEasyMode({
+  onNeedHistory,
   orders = [],
   unassignedOrders = [],
   drivers = [],
@@ -1775,6 +1776,8 @@ export default function MobileEasyMode({
   const [editOrder, setEditOrder] = useState(null);
   const [editFrom, setEditFrom] = useState("home");
   const [fareMatchOrder, setFareMatchOrder] = useState(null);
+  // ⭐ 운임 화면·유사 운임 팝업은 예전 오더 전체가 필요 — 열 때 1회 불러온다
+  useEffect(() => { if (screen === "fare" || fareMatchOrder) onNeedHistory?.(); }, [screen, fareMatchOrder]); // eslint-disable-line react-hooks/exhaustive-deps
   const [listDateMode, setListDateMode] = useState("today");
   // 쉬운모드 자체 글자크기 배율(기본/크게/아주크게) — 일반모드의 fontScale과는 별도로
   // 관리하며, 이 화면트리 전체(모든 화면 공통)에 zoom으로 적용해 "모든 글씨"가 함께 커진다.
