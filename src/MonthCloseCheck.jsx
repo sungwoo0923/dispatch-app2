@@ -2,7 +2,11 @@
 // ⭐ 마감 전에 매출 숫자를 틀리게 만드는 오더(운임 미입력·역마진·지급방식 누락 등)를
 // 한 화면에 모아 바로 고치게 한다. 운임·지급방식은 이 화면에서 바로 수정·저장된다.
 import React, { useMemo, useState, useEffect } from "react";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import {
+  doc,
+  serverTimestamp,
+} from "firebase/firestore";
+import { updateDoc } from "./orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { db } from "./firebase";
 import { toWon } from "./monthCompare";
 import { useLoadOrderRange, monthEnd } from "./orderHistory";

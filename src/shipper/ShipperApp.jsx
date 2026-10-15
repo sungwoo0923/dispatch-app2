@@ -4,7 +4,13 @@ import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-
 import { signOut } from "firebase/auth";
 import { auth, db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
-import { updateDoc, collection, query, where, onSnapshot } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+} from "firebase/firestore";
+import { updateDoc } from "../orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { hardReloadForUpdate } from "../UpdateBanner";
 // pages
 import ShipperHome from "./pages/ShipperHome";

@@ -4,7 +4,6 @@ import { auth, db, storage, FUNCTIONS_BASE, DEFAULT_COMPANY } from "./firebase";
 import {
   collection,
   addDoc,
-  setDoc,
   deleteDoc,
   doc,
   onSnapshot,
@@ -12,11 +11,11 @@ import {
   getDoc,
   query,
   where,
-  updateDoc,
   serverTimestamp,
   orderBy,
   limit,
 } from "firebase/firestore";
+import { setDoc, updateDoc } from "./orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { ref as storageRef, uploadBytes, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
 import { POSITION_OPTIONS, TEAM_OPTIONS, EMPLOYMENT_STATUS_OPTIONS } from "./hrConstants";

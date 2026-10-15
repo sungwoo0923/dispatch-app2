@@ -3,9 +3,22 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import "leaflet/dist/leaflet.css";
 import { db, auth } from "./firebase";
 import {
-  collection, onSnapshot, doc, updateDoc, setDoc, getDoc, getDocs, addDoc,
-  query, where, orderBy, limit, deleteDoc, writeBatch, documentId, serverTimestamp,
+  collection,
+  onSnapshot,
+  doc,
+  getDoc,
+  getDocs,
+  addDoc,
+  query,
+  where,
+  orderBy,
+  limit,
+  deleteDoc,
+  writeBatch,
+  documentId,
+  serverTimestamp,
 } from "firebase/firestore";
+import { updateDoc, setDoc } from "./orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap } from "react-leaflet";
 import L from "leaflet";
 import * as XLSX from "xlsx";

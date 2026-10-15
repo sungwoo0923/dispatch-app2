@@ -35,7 +35,6 @@ import {
   getDocs,
   getDocsFromServer,
   addDoc,
-  updateDoc,
   deleteDoc,
   doc,
   onSnapshot,
@@ -43,7 +42,6 @@ import {
   query,
   where,
   limit,
-  setDoc,
   getDoc,
   arrayUnion,
   deleteField,
@@ -52,6 +50,7 @@ import {
   getCountFromServer,
   Timestamp,
 } from "firebase/firestore";
+import { updateDoc, setDoc } from "../orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { db, auth, FUNCTIONS_BASE, DEFAULT_COMPANY } from "../firebase";
 import { signOut } from "firebase/auth";
 import { version as APP_VERSION } from "../../package.json";
@@ -2285,11 +2284,12 @@ const quickRange = (days) => {
   const fullLoadingRef = useRef(null);
   const mergeExtra = React.useCallback((rows) => {
     if (!rows.length) return;
-    setExtraMap((prev) => {
+    // 많은 오더를 합치는 작업은 낮은 우선순위로 — 입력·스크롤이 먼저 반응하게(저사양 폰 버벅임 방지)
+    startTransition(() => setExtraMap((prev) => {
       const next = new Map(prev);
       rows.forEach((r) => next.set(`${r.__col}/${r._id}`, r));
       return next;
-    });
+    }));
   }, []);
   const fetchRows = React.useCallback(async (makeQuery) => {
     setHistoryLoading((n) => n + 1);
@@ -2365,15 +2365,25 @@ const quickRange = (days) => {
     if (rows === null) canceledLoadedRef.current = false; // 실패 시 다시 시도 가능
   }, [fetchRows]);
   // 화면에서 쓰는 전체 목록 = 실시간 오더 + 불러온 예전 오더(같은 오더면 실시간 쪽 우선)
-  const allOrdersCombined = useMemo(() => {
-    const live = [...orders, ...canceledOrders];
-    const liveKeys = new Set(live.map((o) => `${o.__col}/${o._id}`));
-    const extra = hideBlind([...extraMap.values()].filter((o) => !liveKeys.has(`${o.__col}/${o._id}`)));
+  // 예전 오더 목록 정리(블라인드 제외·취소 분리)는 보관소가 바뀔 때만 한 번
+  const extraSplit = useMemo(() => {
+    const all = hideBlind([...extraMap.values()]);
     return {
-      orders: [...orders, ...extra.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태))],
-      canceled: [...canceledOrders, ...extra.filter((o) => CANCELED_STATUS_LIST.includes(o.상태))],
+      active: all.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태)),
+      canceled: all.filter((o) => CANCELED_STATUS_LIST.includes(o.상태)),
     };
-  }, [orders, canceledOrders, extraMap]);
+  }, [extraMap]);
+  const allOrdersCombined = useMemo(() => {
+    if (extraMap.size === 0) return { orders, canceled: canceledOrders };
+    const liveKeys = new Set();
+    orders.forEach((o) => liveKeys.add(`${o.__col}/${o._id}`));
+    canceledOrders.forEach((o) => liveKeys.add(`${o.__col}/${o._id}`));
+    const notLive = (o) => !liveKeys.has(`${o.__col}/${o._id}`);
+    return {
+      orders: [...orders, ...extraSplit.active.filter(notLive)],
+      canceled: [...canceledOrders, ...extraSplit.canceled.filter(notLive)],
+    };
+  }, [orders, canceledOrders, extraSplit, extraMap.size]);
   const allOrders = allOrdersCombined.orders;
   const allCanceledOrders = allOrdersCombined.canceled;
   // 화면에서 바로 고친 값을 실시간 목록·예전 오더 보관소 양쪽에 반영
@@ -14191,10 +14201,8 @@ const [showNewDriver, setShowNewDriver] = useState(false);
 // 충돌 팝업 — 상세보기(MobileOrderDetail)와 동일한 개념이지만 이 폼 전용 state다.
 const [formConflictPopup, setFormConflictPopup] = useState(null);
 const [showOrderCopyModal, setShowOrderCopyModal] = useState(false);
-// ⭐ 오더복사·운임 이력은 예전 오더 전체가 필요 — 복사창을 열거나 상·하차지를 다 입력하면 1회 불러온다
-useEffect(() => {
-  if (showOrderCopyModal || (form?.상차지명 && form?.하차지명)) onNeedHistory?.();
-}, [showOrderCopyModal, form?.상차지명, form?.하차지명]); // eslint-disable-line react-hooks/exhaustive-deps
+// ⭐ 오더복사는 예전 오더 전체가 필요 — 복사창을 열 때 1회 불러온다(타이핑 중엔 불러오지 않아 버벅임 방지)
+useEffect(() => { if (showOrderCopyModal) onNeedHistory?.(); }, [showOrderCopyModal]); // eslint-disable-line react-hooks/exhaustive-deps
 const [showClientPickerModal, setShowClientPickerModal] = useState(false);
 const [clientPickerSearch, setClientPickerSearch] = useState("");
 const [contactPopup, setContactPopup] = useState(null);
@@ -14239,6 +14247,8 @@ const saveStopSheet = () => {
   setStopSheet(null);
 };
 const [showFareHistory, setShowFareHistory] = useState(false);
+// ⭐ 운임 이력은 예전 오더 전체가 필요 — 운임 이력을 펼칠 때 1회 불러온다
+useEffect(() => { if (showFareHistory) onNeedHistory?.(); }, [showFareHistory]); // eslint-disable-line react-hooks/exhaustive-deps
 const [mobileFareFilter, setMobileFareFilter] = useState("all");
 const [mobileFareSortMode, setMobileFareSortMode] = useState("relevance");
 const [fareDetailItem, setFareDetailItem] = useState(null);
@@ -14280,8 +14290,16 @@ const extractAreaFromAddr = (addr = "") => {
 };
 
 // ── 스마트 운임 조회 매칭 (주소 노선 기반) ──
+// ⭐ 운임 유사이력 계산은 오더 전체를 훑어 무겁다 — 글자를 칠 때마다 바로 다시 계산하면 저사양 폰에서
+// 입력이 끊긴다. 입력값을 "지연된 값"으로 넘겨 타이핑이 먼저 반응하고 계산은 그 뒤에 따라오게 한다.
+const fareForm = React.useDeferredValue(React.useMemo(() => ({
+  상차지주소: form.상차지주소, 하차지주소: form.하차지주소, 상차지명: form.상차지명, 하차지명: form.하차지명,
+  차종: form.차종, 거래처명: form.거래처명, 화물내용: form.화물내용, 톤수: form.톤수, 상차일: form.상차일,
+}), [form.상차지주소, form.하차지주소, form.상차지명, form.하차지명, form.차종, form.거래처명, form.화물내용, form.톤수, form.상차일]));
+const fareOrders = React.useDeferredValue(orders);
 const fareMatches = useMemo(() => {
-  if (!orders || orders.length === 0) return [];
+  const form = fareForm; // ⭐ 타이핑과 분리된(지연된) 입력값으로 계산
+  if (!fareOrders || fareOrders.length === 0) return [];
 
   const ns = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
 
@@ -14312,7 +14330,7 @@ const fareMatches = useMemo(() => {
 
   const candidates = [];
 
-  orders.forEach(o => {
+  fareOrders.forEach(o => {
     // ⚠️ 예전엔 "오늘 날짜로 등록된 이력"을 무조건 제외했는데, 그러면 오늘 이미
     // 확정된(배차완료) 진짜 과거 운임 기록도 조회에서 안 보이는 문제가 있었다.
     // 지금 등록 중인 오더 자체가 오늘 날짜일 때만(같은 날 중복 입력건과 헷갈리지
@@ -14400,7 +14418,7 @@ const fareMatches = useMemo(() => {
 
   finalList.sort((a, b) => b.score !== a.score ? b.score - a.score : b.dateStr.localeCompare(a.dateStr));
   return finalList.slice(0, 50);
-}, [orders, form.상차지주소, form.하차지주소, form.상차지명, form.하차지명, form.차종, form.거래처명, form.화물내용, form.톤수]);
+}, [fareOrders, fareForm]);
 
 const openContactPopup = (items) => {
   if (!items || items.length === 0) return;

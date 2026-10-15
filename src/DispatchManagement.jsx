@@ -5,12 +5,12 @@ import {
   collection,
   doc,
   onSnapshot,
-  setDoc,
   serverTimestamp,
   query,
   where,
   orderBy,
 } from "firebase/firestore";
+import { setDoc } from "./orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { encryptData } from "./utils/crypt"; // ⬅ 24시콜 테스트 서버 암호화용
 
 // 숫자만 추출해서 number

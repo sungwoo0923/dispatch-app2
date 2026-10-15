@@ -2595,11 +2595,10 @@ import {
   onSnapshot,
   query,
   serverTimestamp,
-  setDoc,
-  updateDoc,
   where,
-  deleteField
+  deleteField,
 } from "firebase/firestore";
+import { setDoc, updateDoc } from "./orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { auth, db, storage, DEFAULT_COMPANY } from "./firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -3019,7 +3018,8 @@ function useRealtimeCollections(user, userCompany, role) {
         row.source !== "transport_transmit" &&
         row.배차상태 !== "배차취소" &&
         !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태));
-      if (rows.length) setHistoryMap(prev => { const next = new Map(prev); rows.forEach(r => next.set(`${r.__col}/${r._id}`, r)); return next; });
+      // 많은 오더를 합치는 작업은 낮은 우선순위로 — 입력·스크롤이 먼저 반응하게
+      if (rows.length) React.startTransition(() => setHistoryMap(prev => { const next = new Map(prev); rows.forEach(r => next.set(`${r.__col}/${r._id}`, r)); return next; }));
       return rows;
     } catch (e) {
       console.error("예전 오더 불러오기 실패:", e);

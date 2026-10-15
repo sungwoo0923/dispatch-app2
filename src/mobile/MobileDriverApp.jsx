@@ -7,11 +7,11 @@ import {
   query,
   where,
   onSnapshot,
-  updateDoc,
   addDoc,
   doc,
-  serverTimestamp
+  serverTimestamp,
 } from "firebase/firestore";
+import { updateDoc } from "../orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { getDistanceKm } from "../utils/distance";
 import { getFuelPrice } from "../firebase/fuelApi"; // 🔥 추가
 

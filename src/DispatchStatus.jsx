@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { db } from "./firebase";
-import { collection, doc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  onSnapshot,
+  serverTimestamp,
+} from "firebase/firestore";
+import { setDoc } from "./orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 
 const toNumber = (v) => parseInt(String(v).replace(/[^\d]/g, ""), 10) || 0;
 const toComma = (v) => (v ? v.toLocaleString() : "");

@@ -3,9 +3,22 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from "react"
 import html2canvas from "html2canvas";
 import { db, auth } from "../firebase";
 import {
-  doc, getDoc, setDoc, onSnapshot, updateDoc, addDoc, deleteDoc,
-  collection, query, where, orderBy, limit, getDocs, serverTimestamp, increment, arrayUnion,
+  doc,
+  getDoc,
+  onSnapshot,
+  addDoc,
+  deleteDoc,
+  collection,
+  query,
+  where,
+  orderBy,
+  limit,
+  getDocs,
+  serverTimestamp,
+  increment,
+  arrayUnion,
 } from "firebase/firestore";
+import { setDoc, updateDoc } from "../orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { registerPlugin } from "@capacitor/core";
 import { useAddrGeo, computeFleetPhase, useFleetPhaseGeo, getCachedGeo, isPickupVisited, sortActiveOrders, isLoaded } from "../fleetGeo";

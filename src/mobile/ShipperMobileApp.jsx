@@ -3,10 +3,22 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 import { auth, db } from "../firebase";
 import {
-  collection, query, where, onSnapshot,
-  doc, getDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, getDocs,
-  orderBy, limit, arrayUnion, deleteField,
+  collection,
+  query,
+  where,
+  onSnapshot,
+  doc,
+  getDoc,
+  addDoc,
+  deleteDoc,
+  serverTimestamp,
+  getDocs,
+  orderBy,
+  limit,
+  arrayUnion,
+  deleteField,
 } from "firebase/firestore";
+import { updateDoc } from "../orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import InternalMessenger from "../InternalMessenger";
 import html2canvas from "html2canvas";
 import { deleteOrderWithLog } from "../orderHistory";

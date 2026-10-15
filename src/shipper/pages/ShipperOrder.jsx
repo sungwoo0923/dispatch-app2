@@ -8,7 +8,6 @@ import {
   serverTimestamp,
   doc,
   getDoc,
-  updateDoc,
   getDocs,
   query,
   where,
@@ -16,6 +15,7 @@ import {
   arrayUnion,
   deleteField,
 } from "firebase/firestore";
+import { updateDoc } from "../../orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 // 운송사 프로그램(DispatchApp.jsx)의 등록일 컬럼은 별도 문자열 필드 "등록일"(YYYY-MM-DD)을

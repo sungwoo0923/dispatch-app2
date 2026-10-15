@@ -11,11 +11,10 @@ import {
   getDoc,
   getDocs,
   onSnapshot,
-  updateDoc,
-  setDoc,
   serverTimestamp,
   increment,
 } from "firebase/firestore";
+import { updateDoc, setDoc } from "../../orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { useNavigate } from "react-router-dom";
 import { deleteOrderWithLog } from "../../orderHistory";
 
