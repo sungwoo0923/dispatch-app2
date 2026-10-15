@@ -5,6 +5,7 @@ import {
   CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend,
 } from "recharts";
 import { EditableText } from "./EditMode";
+import { useLoadFullOrderHistory } from "./orderHistory";
 
 // ─────────────────────────────────────────────────────────
 //  PIN GATE
@@ -1116,6 +1117,7 @@ const TABS = [
 ];
 
 export default function ExecutiveDashboard({ dispatchData = [], fixedRows = [] }) {
+  useLoadFullOrderHistory(true); // ⭐ 경영 분석은 전체 이력이 필요 — 메뉴를 열 때 1회
   const [verified, setVerified] = useState(() => sessionStorage.getItem("exec_intel_ok") === "1");
   const [activeTab, setActiveTab] = useState("overview");
 

@@ -2,6 +2,7 @@
 // ⭐ 담당자(오더 등록자)별 건수·매출·수익·수익률·저마진 건수를 월 단위로 보고 전월과 비교한다.
 import React, { useMemo, useState, useEffect } from "react";
 import { toWon, creatorOf } from "./monthCompare";
+import { useLoadOrderRange, monthEnd, monthStartAgo } from "./orderHistory";
 
 const NAVY = "#1B2B4B";
 const kstMonth = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
@@ -26,6 +27,7 @@ function aggregate(list) {
 
 export default function StaffPerformance({ rows = [], isExcluded = () => false, hasExcluded = false, onClose }) {
   const [month, setMonth] = useState(() => shiftMonth(kstMonth(), -1));
+  useLoadOrderRange(monthStartAgo(month, 1), monthEnd(month)); // ⭐ 고른 달 + 전월(전월 대비)만 불러오기
   const [scope, setScope] = useState(hasExcluded ? "pure" : "all");
   const [sortKey, setSortKey] = useState("profit");
   useEffect(() => {

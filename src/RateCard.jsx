@@ -1,6 +1,7 @@
 // ===================== src/RateCard.jsx =====================
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import * as XLSX from "xlsx";
+import { useLoadFullOrderHistory } from "./orderHistory";
 import { db } from "./firebase";
 import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, where, serverTimestamp } from "firebase/firestore";
 
@@ -221,6 +222,7 @@ function BaseNameAutocomplete({ initialValue, clients = [], onCommit }) {
 }
 
 export default function RateCard({ dispatchData = [], userCompany = "", clients = [] }) {
+  useLoadFullOrderHistory(true); // ⭐ 단가표 운임 매칭은 예전 오더 전체가 필요 — 메뉴를 열 때 1회
   const COMPANY = useCompanyInfo(userCompany);
   const [pickup, setPickup] = useState("");
   const [drop, setDrop] = useState("");

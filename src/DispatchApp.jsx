@@ -42,6 +42,7 @@ import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
 import RouteMapModal from "./RouteMapModal";
 import MonthCompareAnalysis from "./MonthCompareAnalysis";
 import { IdleFleetButton } from "./fleetRecommend";
+import { OrderHistoryContext, useOrderHistory, useLoadOrderRange, useLoadFullOrderHistory, pcLiveWindowStart, pcPrevDay, kstToday as histToday, monthStartAgo, monthEnd } from "./orderHistory";
 import MonthCloseCheck from "./MonthCloseCheck";
 import StaffPerformance from "./StaffPerformance";
 import { RotationPicker, RotationBadge, expandRotation, rotationNotice, withRotationMemo } from "./rotation";
@@ -2953,13 +2954,95 @@ const getCollectionName = (role) =>
 // 모듈 레벨 dismiss Set: 컴포넌트 재마운트 후에도 세션 동안 유지
 const _urgentDismissed = new Set();
 
+// 경유지 필드(배열/JSON문자열/숫자키 객체)를 배열로 — 예전 오더 불러오기에서 실시간 리스너와 같은 모양으로 맞추기 위함
+const parseWaypointsShared = (v) => {
+  if (Array.isArray(v) && v.length > 0) return v;
+  if (typeof v === "string" && v.startsWith("[")) try { const p = JSON.parse(v); if (Array.isArray(p) && p.length > 0) return p; } catch { /* 무시 */ }
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    const ks = Object.keys(v);
+    if (ks.length > 0 && ks.every(k => /^\d+$/.test(k))) return ks.sort((a, b) => Number(a) - Number(b)).map(k => v[k]);
+    if (v.업체명) return [v];
+  }
+  return null;
+};
+
 function useRealtimeCollections(user, userCompany, role) {
   // ⚡ T165 — 매번 빈 배열로 시작해 Firestore 최초 응답을 기다리는 동안 화면이 비어 보이던 문제.
   //    직전 세션에서 safeSave로 남겨둔 로컬 캐시를 초기값으로 먼저 그려주고,
   //    실시간 리스너가 응답하는 즉시 최신 데이터로 교체한다(정확성에는 영향 없음, 최초 페인트만 개선).
   // ⭐ 블라인드 오더(최고관리자 전용)는 어떤 경로로 들어오든 여기서 걸러진다.
-  const [dispatchData, setDispatchDataRaw] = useState(() => hideBlind(safeLoad("dispatchData", [])));
-  const setDispatchData = React.useCallback((v) => setDispatchDataRaw(prev => hideBlind(typeof v === "function" ? v(prev) : v)), []);
+  const [dispatchDataLive, setDispatchDataRaw] = useState(() => hideBlind(safeLoad("dispatchData", [])));
+  // ⭐ 예전 오더 보관소 — 실시간 범위(최근 7일~) 밖 오더를 화면이 필요할 때만 불러와 담는다.
+  const [historyMap, setHistoryMap] = useState(() => new Map());
+  // 화면에서 바로 고치는 값(함수형 업데이트)은 실시간 목록·예전 오더 양쪽에 똑같이 적용한다.
+  // 배열을 통째로 넣는 건 실시간 리스너뿐이라 실시간 목록만 바꾼다.
+  const setDispatchData = React.useCallback((v) => {
+    setDispatchDataRaw(prev => hideBlind(typeof v === "function" ? v(prev) : v));
+    if (typeof v === "function") {
+      setHistoryMap(prev => {
+        if (prev.size === 0) return prev;
+        const next = new Map();
+        (v([...prev.values()]) || []).forEach(r => next.set(`${r.__col}/${r._id}`, r));
+        return next;
+      });
+    }
+  }, []);
+  // 화면에 주는 dispatchData = 실시간 + 불러온 예전 오더(같은 오더면 실시간 쪽 우선)
+  const dispatchData = React.useMemo(() => {
+    if (historyMap.size === 0) return dispatchDataLive;
+    const liveKeys = new Set(dispatchDataLive.map(r => `${r.__col}/${r._id}`));
+    const extra = hideBlind([...historyMap.values()].filter(r => !liveKeys.has(`${r.__col}/${r._id}`)));
+    return [...dispatchDataLive, ...extra];
+  }, [dispatchDataLive, historyMap]);
+  const [historyLoading, setHistoryLoading] = useState(0);
+  const loadedRangesRef = React.useRef([]);
+  const fullLoadedRef = React.useRef(false);
+  const fullLoadingRef = React.useRef(null);
+  const fetchHistoryRows = React.useCallback(async (makeQuery) => {
+    setHistoryLoading(n => n + 1);
+    try {
+      const parts = await Promise.all(["orders", "dispatch"].map(col =>
+        getDocs(makeQuery(collection(db, col))).then(snap => snap.docs.map(d => {
+          const data = d.data() || {};
+          return {
+            _id: d.id, __col: col, ...data,
+            경유지_상차: parseWaypointsShared(data.경유지_상차) || parseWaypointsShared(data.경유상차목록) || [],
+            경유지_하차: parseWaypointsShared(data.경유지_하차) || parseWaypointsShared(data.경유하차목록) || [],
+          };
+        }))));
+      // 실시간 목록과 같은 기준으로 제외(화주 전송 사본·취소건)
+      const rows = parts.flat().filter(row =>
+        row.source !== "transport_transmit" &&
+        row.배차상태 !== "배차취소" &&
+        !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태));
+      if (rows.length) setHistoryMap(prev => { const next = new Map(prev); rows.forEach(r => next.set(`${r.__col}/${r._id}`, r)); return next; });
+      return rows;
+    } catch (e) {
+      console.error("예전 오더 불러오기 실패:", e);
+      return [];
+    } finally {
+      setHistoryLoading(n => Math.max(0, n - 1));
+    }
+  }, []);
+  // 기간 조회 — 실시간 범위 밖 부분만, 이미 받은 기간은 다시 받지 않는다
+  const loadRange = React.useCallback(async (from, to) => {
+    if (fullLoadedRef.current || !from) return [];
+    const liveStart = pcLiveWindowStart();
+    const end = (!to || to >= liveStart) ? pcPrevDay(liveStart) : to;
+    if (from > end) return [];
+    if (loadedRangesRef.current.some(([a, b]) => a <= from && b >= end)) return [];
+    loadedRangesRef.current.push([from, end]);
+    return fetchHistoryRows(c => query(c, where("상차일", ">=", from), where("상차일", "<=", end)));
+  }, [fetchHistoryRows]);
+  // 오더복사·운임조회 등 전체 이력이 필요한 기능을 처음 쓸 때 1회
+  const loadFullHistory = React.useCallback(() => {
+    if (fullLoadedRef.current) return Promise.resolve();
+    if (fullLoadingRef.current) return fullLoadingRef.current;
+    fullLoadingRef.current = fetchHistoryRows(c => query(c, where("상차일", "<", pcLiveWindowStart())))
+      .then(() => { fullLoadedRef.current = true; })
+      .finally(() => { fullLoadingRef.current = null; });
+    return fullLoadingRef.current;
+  }, [fetchHistoryRows]);
   const [drivers, setDrivers] = useState(() => safeLoad("drivers", []));
   const [clients, setClients] = useState(() => safeLoad("clients", []));
   // 🔔 위 캐시(dispatchData)는 이전 세션의 오래된 스냅샷이라, orders/dispatch 두
@@ -3100,7 +3183,7 @@ const getMonthsAgoKST = (months) => {
   d.setMonth(d.getMonth() - months);
   return d.toISOString().slice(0, 10);
 };
-const liveWindowStart = getMonthsAgoKST(13);
+const liveWindowStart = pcLiveWindowStart(); // ⭐ 13개월 → 최근 7일~(예전 오더는 화면에서 필요할 때만)
   // orders/dispatch 두 리스너 모두 "캐시가 아닌 진짜" 첫 응답을 받으면 liveDataReady를 켠다.
   let ordersRealFirstDone = false;
   let dispatchRealFirstDone = false;
@@ -4352,6 +4435,9 @@ const markEditRequestSeen = async (order) => {
     removeClient,
     approvedShippers,
     myRealName,
+    loadRange,
+    loadFullHistory,
+    historyLoading,
   };
 }  // ← ⭐ 이거 반드시 필요
 
@@ -6618,7 +6704,11 @@ useEffect(() => {
     removeClient,
     approvedShippers,
     myRealName,
+    loadRange,
+    loadFullHistory,
+    historyLoading,
   } = useRealtimeCollections(user, userCompany, role);
+  const orderHistoryApi = React.useMemo(() => ({ loadRange, loadFullHistory }), [loadRange, loadFullHistory]);
 
   // ⚠️ 아래 dispatchDataFiltered에서 커스텀 권한(관리자메뉴 > 권한관리에서 만든 역할)
   // 여부를 판단하는 데 필요해서, 원래 더 아래(구 "역할별 차단 메뉴" 구역)에 있던
@@ -7076,9 +7166,16 @@ React.useEffect(() => {
 
   // ---------------- 메뉴 UI ----------------
 return (
+    <OrderHistoryContext.Provider value={orderHistoryApi}>
     <EditModeProvider role={role} userCompany={userCompany}>
     <ToastProvider>
       <CustomAlert message={alertMsg} onClose={closeAlert} />
+      {historyLoading > 0 && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[999998] px-4 py-2 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold shadow-lg flex items-center gap-2 pointer-events-none">
+          <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          예전 오더 불러오는 중
+        </div>
+      )}
       {weekendCheckPopup && (
         <div className="fixed inset-0 bg-black/40 z-[999999] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
@@ -8157,6 +8254,7 @@ return (
 
     </ToastProvider>
     </EditModeProvider>
+    </OrderHistoryContext.Provider>
   );
 }
 // ===================== DispatchApp.jsx (PART 2/8) — END =====================
@@ -13145,6 +13243,10 @@ const [copyFilterType, setCopyFilterType] = React.useState("전체");
 const [onlyRoundTrip, setOnlyRoundTrip] = React.useState(false);
 const [copyShowMore, setCopyShowMore] = React.useState(false);
 const [copyDateHint, setCopyDateHint] = React.useState(null); // {origPickup, origDrop}
+// ⭐ 오더복사·운임 추천/비교·운임조회는 예전 오더 전체가 필요 — 복사창을 열거나 상·하차지를 다 입력하면 1회 불러온다
+useLoadFullOrderHistory(copyOpen || !!(String(form.상차지명 || "").trim() && String(form.하차지명 || "").trim()));
+// 예전 날짜로 등록하면(순번·중복 확인용) 그 날짜 오더를 불러온다
+useLoadOrderRange(form.상차일 && form.상차일 < pcLiveWindowStart() ? form.상차일 : null, form.상차일);
 const [showAmPmError, setShowAmPmError] = React.useState(false);
 // ⭐ 사용자 요청 — F4를 누르면 "오더복사" 버튼을 누른 것과 동일하게 팝업이 뜨고,
 // 뜨자마자 검색어 입력칸에 바로 타이핑할 수 있어야 한다. 다른 입력칸에 포커스가
@@ -23583,6 +23685,7 @@ async function scheduleEmailDoc({ companyName, to, subject, html, attachments = 
 }
 
 function OptimalMatchModal({ row, dispatchData, onClose, companyName }) {
+  useLoadFullOrderHistory(!!row); // ⭐ 최적매칭은 예전 오더 전체가 필요 — 열릴 때 1회
   const toWon = (v) => Number(String(v || "0").replace(/[^\d]/g, "")) || 0;
   const [selected, setSelected] = React.useState(() => new Set());
 
@@ -25830,6 +25933,9 @@ React.useEffect(() => {
     독차: false,
     긴급: false,
   });
+  // ⭐ 운임조회·운임계산·동일노선 추천은 예전 오더 전체가 필요 — 수정/복사/운임조회 창을 열거나
+  // 신규 오더에 상·하차지를 입력하면 1회 불러온다(평소 현황 화면은 최근 범위만)
+  useLoadFullOrderHistory(!!(editTarget || copyTarget || ctxFare4Target || (newOrder?.상차지명 && newOrder?.하차지명)));
   // ==========================
   // 🆕 신규 오더 상/하차지 자동완성 상태
   // ==========================
@@ -35808,45 +35914,8 @@ const [appliedEndDate, setAppliedEndDate] = React.useState("");
   // getDocs로 한 번 불러와 합쳐준다.
   const [extraHistoricalRows, setExtraHistoricalRows] = React.useState([]);
   const [extraHistoricalLoading, setExtraHistoricalLoading] = React.useState(false);
-  React.useEffect(() => {
-    if (!appliedStartDate || !appliedEndDate) { setExtraHistoricalRows([]); return; }
-    const liveWindowStart = (() => {
-      const d = new Date();
-      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-      d.setMonth(d.getMonth() - 13);
-      return d.toISOString().slice(0, 10);
-    })();
-    // 조회 시작일이 실시간 구독 범위(최근 13개월) 안이면 이미 dispatchData에 다 있다 — 추가 조회 불필요.
-    if (appliedStartDate >= liveWindowStart) { setExtraHistoricalRows([]); return; }
-    let cancelled = false;
-    setExtraHistoricalLoading(true);
-    (async () => {
-      try {
-        const fetchOlder = async (collName) => {
-          const qy = query(
-            collection(db, collName),
-            where("상차일", ">=", appliedStartDate),
-            where("상차일", "<", liveWindowStart)
-          );
-          const snap = await getDocs(qy);
-          return snap.docs.map(d => ({ _id: d.id, __col: collName, ...d.data() }));
-        };
-        const [oldOrders, oldDispatch] = await Promise.all([fetchOlder("orders"), fetchOlder("dispatch")]);
-        if (cancelled) return;
-        const merged = [...oldOrders, ...oldDispatch].filter(row =>
-          !isBlindHidden(row) &&
-          row.배차상태 !== "배차취소" && !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태)
-        );
-        setExtraHistoricalRows(merged);
-      } catch (e) {
-        console.error("과거(13개월 이전) 배차 데이터 조회 실패:", e);
-        if (!cancelled) setExtraHistoricalRows([]);
-      } finally {
-        if (!cancelled) setExtraHistoricalLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [appliedStartDate, appliedEndDate]);
+  // ⭐ 조회 기간이 실시간 범위(최근 7일~) 밖이면 그 기간만 공용 보관소로 불러온다(부모 dispatchData에 합쳐짐)
+  useLoadOrderRange(appliedStartDate || appliedEndDate || null, appliedEndDate || appliedStartDate);
   const [sortKey, setSortKey] = React.useState("");
   const [sortDir, setSortDir] = React.useState("asc");
   const [sortKey2, setSortKey2] = React.useState("");
@@ -36084,6 +36153,8 @@ const flashRow = React.useCallback((id) => {
 }, []);
 
   const [editTarget, setEditTarget] = React.useState(null);
+  // ⭐ 운임조회·최적매칭·복사창은 예전 오더 전체가 필요 — 그 창을 열 때 1회 불러온다
+  useLoadFullOrderHistory(!!(editTarget || copyTarget || optimalMatchRow5));
   const [edited, setEdited] = React.useState({});
   const [justSaved, setJustSaved] = React.useState([]);
   const [editPopupOpen, setEditPopupOpen] = React.useState(false);
@@ -47145,6 +47216,14 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   const [monthCompareOpen, setMonthCompareOpen] = React.useState(false); // ⭐ 월 비교 분석
   const [monthCloseOpen, setMonthCloseOpen] = React.useState(false); // ⭐ 월 마감 점검
   const [staffPerfOpen, setStaffPerfOpen] = React.useState(false); // ⭐ 배차담당자별 실적(관리자 전용)
+  // ⭐ 매출관리 — 선택한 연도 전체 + 고른 달 기준 3개월 전(전월 비교·마감 점검·담당자 실적)까지만 불러온다.
+  // 월 비교 분석은 아무 달이나 고를 수 있어 열 때 전체를 불러온다.
+  {
+    const yStart = `${selectedYear}-01-01`;
+    const mStart = monthStartAgo(targetMonth, 3);
+    useLoadOrderRange(yStart < mStart ? yStart : mStart, histToday());
+  }
+  useLoadFullOrderHistory(monthCompareOpen);
   const canSeeStaffPerf = role === "admin" || role === "totalMaster";
   // ⭐ AI 월간비교분석 탭에서 선택한 두 달 — 탭을 옮겨도(activeTab 전환으로
   // MonthCompareInsight가 unmount/remount 되어도) 선택이 유지되도록 상위인
@@ -49161,6 +49240,8 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDis
   const [q, setQ] = React.useState("");
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
+   // ⭐ 기간을 지정하면 그 기간만 불러온다(미지정 시 최근 범위의 배차중 오더)
+   useLoadOrderRange(startDate && endDate ? startDate : null, endDate);
   const [deleteMode, setDeleteMode] = React.useState(false);
   const [selectedIds, setSelectedIds] = React.useState(new Set());
   // 조회 날짜(기간)를 바꾸면 화면에 보이는 행이 바뀌므로, 이전 날짜에서 선택해둔
@@ -51528,6 +51609,11 @@ const [arFromYear, setArFromYear] = useState(String(THIS_YEAR));
 const [arFromMM,   setArFromMM]   = useState("01");
 const [arToYear,   setArToYear]   = useState(String(THIS_YEAR));
 const [arToMM,     setArToMM]     = useState("12");
+// ⭐ 거래처정산 — 화면에서 고른 기간만 불러온다(기간조회 / 연월 범위 / 일괄정산 / 미수현황 각각)
+useLoadOrderRange(start && end ? start : null, end);
+useLoadOrderRange(`${yearFrom}-${monthFrom}-01`, monthEnd(`${yearTo}-${monthTo}`));
+useLoadOrderRange(`${batchFromYear}-${batchFromMM}-01`, monthEnd(`${batchToYear}-${batchToMM}`), batchModalOpen);
+useLoadOrderRange(`${arFromYear}-${arFromMM}-01`, monthEnd(`${arToYear}-${arToMM}`), arReportOpen);
 const [arOnlyUnsettled, setArOnlyUnsettled] = useState(false);
 // ★ 신규: 거래처 필터
 const [arReportMode, setArReportMode] = useState("all"); // "all" | "selected"
@@ -55015,6 +55101,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   const [dispatchMethodFilter, setDispatchMethodFilter] = useState("전체");
   const [loadStart, setLoadStart] = useState(() => `${thisMonthStr()}-01`);
   const [loadEnd, setLoadEnd] = useState(todayStr9);
+  useLoadOrderRange(loadStart || null, loadEnd); // ⭐ 고른 기간만 불러오기
   const [carNoQ, setCarNoQ] = useState("");
   const [nameQ, setNameQ] = useState("");
   const [clientQ, setClientQ] = useState("");

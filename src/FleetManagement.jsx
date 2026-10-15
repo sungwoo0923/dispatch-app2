@@ -19,6 +19,7 @@ import { modificationStatus } from "./orderChange";
 import CustomDatePicker from "./CustomDatePicker";
 import RouteMapModal from "./RouteMapModal";
 import { ReturnTripSuggest } from "./fleetRecommend";
+import { useLoadOrderRange } from "./orderHistory";
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
 
@@ -3264,6 +3265,7 @@ function DriverRouteDetailModal({ driver, dispatchData, onClose, role = "" }) {
   const todayForRange = kstDateStr();
   const [fromDate, setFromDate] = useState(todayForRange);
   const [toDate, setToDate] = useState(todayForRange);
+  useLoadOrderRange(fromDate, toDate); // ⭐ 고른 기간만 불러오기
   const [orderSearch, setOrderSearch] = useState("");
   // 관리자/최고관리자만 기간 제한 없이 조회 가능, 그 이하 직급은 최근 3개월까지만.
   const isUnrestricted = role === "admin" || role === "totalMaster";
@@ -3790,6 +3792,7 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
   const [dayMode, setDayMode] = useState("today"); // "yesterday" | "today" | "tomorrow" | "" (임의 기간)
   const [rangeStart, setRangeStart] = useState(todayStr0);
   const [rangeEnd, setRangeEnd] = useState(todayStr0);
+  useLoadOrderRange(rangeStart, rangeEnd); // ⭐ 고른 기간만 불러오기
   const [appliedStart, setAppliedStart] = useState(todayStr0);
   const [appliedEnd, setAppliedEnd] = useState(todayStr0);
   const [detailDriver, setDetailDriver] = useState(null);
@@ -4080,6 +4083,8 @@ function HistoryTab({ drivers, defaultDriverId }) {
   }, [defaultDriverId]);
   const [fromDate, setFromDate] = useState(todayStr);
   const [toDate, setToDate] = useState(todayStr);
+  useLoadOrderRange(fromDate, toDate); // ⭐ 고른 기간만 불러오기
+  useLoadOrderRange(`${String(todayStr).slice(0, 7)}-01`, todayStr); // 카드의 이번 달 정산예정 합계용
   const [applied, setApplied] = useState(null);
   const [logs, setLogs] = useState([]);
   const [gpsDist, setGpsDist] = useState(null);
@@ -4466,6 +4471,7 @@ function FleetSettlementTab({ drivers = [], dispatchData = [], role = "", compan
   const todayStr0 = kstDateStr();
   const [rangeStart, setRangeStart] = useState(`${todayStr0.slice(0, 7)}-01`);
   const [rangeEnd, setRangeEnd] = useState(todayStr0);
+  useLoadOrderRange(rangeStart, rangeEnd); // ⭐ 고른 기간만 불러오기
   const [applied, setApplied] = useState(null); // { driverId, start, end }
   const [rowFilter, setRowFilter] = useState("");
 

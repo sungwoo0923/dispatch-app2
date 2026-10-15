@@ -10,6 +10,7 @@ import {
 } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import { EditableText } from "./EditMode";
+import { useOrderHistory } from "./orderHistory";
 
 /* ===== 공통 Modal ===== */
 function Modal({ title, onClose, children }) {
@@ -292,6 +293,12 @@ let _firestoreSeenLoaded = false;
 
 /* ===================== HOME DASHBOARD ===================== */
 export default function HomeDashboard({ role, user, userCompany = "", pending, delayed, dispatchData = [], onOrderDoubleClick }) {
+  // ⭐ 년 매출·누적 오더는 올해 오더가 필요 — 첫 화면을 빨리 띄운 뒤(3초 후) 올해분만 1회 불러온다
+  const { loadRange } = useOrderHistory();
+  useEffect(() => {
+    const t = setTimeout(() => loadRange(`${new Date().getFullYear()}-01-01`, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)), 3000);
+    return () => clearTimeout(t);
+  }, [loadRange]);
   const isEditingHandoverRef = useRef(false);
   const [toast, setToast] = useState(null);
   const [firestoreSeenReady, setFirestoreSeenReady] = useState(false);

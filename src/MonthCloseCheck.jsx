@@ -5,6 +5,7 @@ import React, { useMemo, useState, useEffect } from "react";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "./firebase";
 import { toWon } from "./monthCompare";
+import { useLoadOrderRange, monthEnd } from "./orderHistory";
 
 const NAVY = "#1B2B4B";
 const kstMonth = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
@@ -25,6 +26,7 @@ export const CLOSE_CHECKS = [
 
 export default function MonthCloseCheck({ dispatchData = [], onClose, isViewer = false }) {
   const [month, setMonth] = useState(() => shiftMonth(kstMonth(), -1));
+  useLoadOrderRange(`${month}-01`, monthEnd(month)); // ⭐ 고른 달만 불러오기
   const [active, setActive] = useState("noSale");
   const [edits, setEdits] = useState({}); // id → { 청구운임, 기사운임, 지급방식 }
   const [saving, setSaving] = useState({});
