@@ -2599,6 +2599,8 @@ import {
   deleteField,
 } from "firebase/firestore";
 import { setDoc, updateDoc } from "./orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
+import KpBootScreen from "./KpBootScreen";
+import { pcBootStore, useMiniStore, makeBootTracker, markBootBase } from "./bootProgress";
 import { auth, db, storage, DEFAULT_COMPANY } from "./firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -3239,6 +3241,7 @@ const liveWindowStart = pcLiveWindowStart(); // ⭐ 13개월 → 최근 7일~(�
   };
       // ✅ 1️⃣ orders (화주 + 신규) + 알림 감지
   let ordersFirstLoad = true;
+  const bootTrackOrders = makeBootTracker(pcBootStore, "orders");
   const ordersPrev = new Map();
   // id -> 가공된 row 객체. 매 스냅샷마다 전체 문서를 다시 map()하면 오더가
   // 쌓일수록(수천 건) 다른 사람의 사소한 쓰기 한 건에도 전체를 재가공하게 되어
@@ -3283,7 +3286,10 @@ const liveWindowStart = pcLiveWindowStart(); // ⭐ 13개월 → 최근 7일~(�
   });
 
   unsubs.push(
-    onSnapshot(query(collection(db, collName), where("상차일", ">=", liveWindowStart)), (snap) => {
+    // ⭐ includeMetadataChanges — 저장본(캐시) → 서버와 맞춰지는 순간을 받아 첫 진입 로딩 화면 진행률에 쓴다.
+    // (예전엔 서버에 바뀐 게 없으면 그 순간이 안 와서, 알림 기준선이 "캐시본"에 계속 머물렀다)
+    onSnapshot(query(collection(db, collName), where("상차일", ">=", liveWindowStart)), { includeMetadataChanges: true }, (snap) => {
+      bootTrackOrders(snap);
       const changes = snap.docChanges();
       let hasSignificantChange = ordersFirstLoad;
       changes.forEach((ch) => {
@@ -3473,6 +3479,7 @@ const liveWindowStart = pcLiveWindowStart(); // ⭐ 13개월 → 최근 7일~(�
 
     // ✅ 2️⃣ 기존 dispatch 데이터 + 알림 감지
   let dispatchFirstLoad = true;
+  const bootTrackDispatch = makeBootTracker(pcBootStore, "dispatch");
   const dispatchPrev = new Map();
   // orders 리스너와 동일한 이유로, 변경된 문서만 다시 가공한다.
   const dispatchRowMap = new Map();
@@ -3486,7 +3493,8 @@ const liveWindowStart = pcLiveWindowStart(); // ⭐ 13개월 → 최근 7일~(�
   });
 
   unsubs.push(
-    onSnapshot(query(collection(db, "dispatch"), where("상차일", ">=", liveWindowStart)), (snap) => {
+    onSnapshot(query(collection(db, "dispatch"), where("상차일", ">=", liveWindowStart)), { includeMetadataChanges: true }, (snap) => {
+      bootTrackDispatch(snap);
       const changes = snap.docChanges();
       let hasSignificantChange = dispatchFirstLoad;
       changes.forEach((ch) => {
@@ -3602,6 +3610,7 @@ const liveWindowStart = pcLiveWindowStart(); // ⭐ 13개월 → 최근 7일~(�
           .filter(d => (d.companyName || DEFAULT_COMPANY) === viewCompany);
         setDrivers(arr);
         idleSave("drivers", arr);
+        markBootBase(pcBootStore, "drivers");
       })
     );
     unsubs.push(onSnapshot(collection(db, COLL.clients), (snap) => {
@@ -3613,6 +3622,7 @@ const liveWindowStart = pcLiveWindowStart(); // ⭐ 13개월 → 최근 7일~(�
         .filter(c => (c.companyName || DEFAULT_COMPANY) === viewCompany);
       setClients(normalizeClients(arr));
       idleSave("clients", arr);
+      markBootBase(pcBootStore, "clients");
     }));
 
     return () => unsubs.forEach(u => u && u());
@@ -6460,6 +6470,46 @@ function CargoExtraChips({ value }) {
   return <span className="text-[12px] font-bold text-[#1B2B4B] bg-[#e8ecf5] px-2 py-0.5 rounded-full">{extras.length}개 등록</span>;
 }
 
+// ⭐ PC 첫 진입 로딩 화면(모바일과 같은 디자인) —
+//   ① 저장된 오더 불러오기: PC에 저장된 오더(캐시) 첫 응답
+//   ② 서버 확인: 실시간 구독이 서버와 맞춰짐(추가 조회 없음)
+//   ③ 최신 오더 반영: 그동안 바뀐 오더(신규/수정/삭제) 반영
+//   ④ 화면 준비: 기사·거래처 + 홈 화면 통계용 올해 오더까지 다 받아 화면을 미리 그려둔다
+//   → 전부 100%가 되면 걷히고, 홈은 이미 다 그려진 상태로 보인다(들어와서 렉 없음)
+function PcBootOverlay({ historyLoading, onDone }) {
+  const st = useMiniStore(pcBootStore);
+  const [capped, setCapped] = useState(false);
+  const startedAtRef = useRef(Date.now());
+  const historyStartedRef = useRef(false);
+  if (historyLoading > 0) historyStartedRef.current = true;
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    // 서버가 느리면 오래 기다리지 않고 연다(나머지는 뒤에서 자동으로 계속 반영)
+    const cap = setTimeout(() => setCapped(true), 8000);
+    // 홈 통계용 불러오기가 아예 필요 없는 경우(예: 1월 초) 대비 — 1.5초 뒤 다시 판단
+    const t = setTimeout(() => setTick((n) => n + 1), 1500);
+    return () => { clearTimeout(cap); clearTimeout(t); };
+  }, []);
+  const two = (o) => (o.orders ? 50 : 0) + (o.dispatch ? 50 : 0);
+  const cachePct = two(st.cache);
+  const serverPct = two(st.server);
+  const applyPct = serverPct === 100 ? 100 : 0;
+  const historySettled = historyLoading === 0 && (historyStartedRef.current || Date.now() - startedAtRef.current > 1500 || tick > 0);
+  const readyPct = (st.base.drivers ? 35 : 0) + (st.base.clients ? 35 : 0) + (applyPct === 100 && historySettled ? 30 : 0);
+  const targets = capped ? [100, 100, 100, 100] : [cachePct, serverPct, applyPct, readyPct];
+  const total = (st.cacheCount.orders || 0) + (st.cacheCount.dispatch || 0);
+  const changed = st.added + st.modified + st.removed;
+  const subs = [
+    cachePct === 100 ? `${total.toLocaleString()}건` : "",
+    "",
+    applyPct === 100
+      ? (changed ? [st.added ? `신규 ${st.added}` : "", st.modified ? `수정 ${st.modified}` : "", st.removed ? `삭제 ${st.removed}` : ""].filter(Boolean).join(" · ") : "최신 데이터 없음")
+      : "",
+    readyPct >= 100 ? "기사·거래처·통계 준비 완료" : "",
+  ];
+  return <KpBootScreen targets={targets} subs={subs} onAllDone={onDone} variant="pc" zIndex={2147483000} maxWaitMs={12000} />;
+}
+
 export default function DispatchApp({ role, user, userCompany = "" }) {
   const isTest = role === "test";
   const navigate = useNavigate();
@@ -6756,6 +6806,7 @@ useEffect(() => {
     historyLoading,
   } = useRealtimeCollections(user, userCompany, role);
   const orderHistoryApi = React.useMemo(() => ({ loadRange, loadFullHistory }), [loadRange, loadFullHistory]);
+  const [pcBootDone, setPcBootDone] = useState(false);
 
   // ⚠️ 아래 dispatchDataFiltered에서 커스텀 권한(관리자메뉴 > 권한관리에서 만든 역할)
   // 여부를 판단하는 데 필요해서, 원래 더 아래(구 "역할별 차단 메뉴" 구역)에 있던
@@ -7217,7 +7268,9 @@ return (
     <EditModeProvider role={role} userCompany={userCompany}>
     <ToastProvider>
       <CustomAlert message={alertMsg} onClose={closeAlert} />
-      {historyLoading > 0 && (
+      {/* ⭐ 첫 진입 로딩 화면 — 뒤에서 홈 화면·데이터가 다 준비되는 동안 덮고 있다가, 전부 100%가 되면 걷힌다 */}
+      {!pcBootDone && <PcBootOverlay historyLoading={historyLoading} onDone={() => setPcBootDone(true)} />}
+      {pcBootDone && historyLoading > 0 && (
         <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[999998] px-4 py-2 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold shadow-lg flex items-center gap-2 pointer-events-none">
           <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
           오더 불러오는 중

@@ -293,11 +293,11 @@ let _firestoreSeenLoaded = false;
 
 /* ===================== HOME DASHBOARD ===================== */
 export default function HomeDashboard({ role, user, userCompany = "", pending, delayed, dispatchData = [], onOrderDoubleClick }) {
-  // ⭐ 년 매출·누적 오더는 올해 오더가 필요 — 첫 화면을 빨리 띄운 뒤(3초 후) 올해분만 1회 불러온다
+  // ⭐ 년 매출·누적 오더는 올해 오더가 필요 — 첫 진입 로딩 화면이 덮고 있는 동안 바로 불러와서,
+  // 로딩 화면이 걷혔을 때는 이미 통계까지 다 그려져 있게 한다(들어온 뒤에 불러오며 버벅이지 않게)
   const { loadRange } = useOrderHistory();
   useEffect(() => {
-    const t = setTimeout(() => loadRange(`${new Date().getFullYear()}-01-01`, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)), 3000);
-    return () => clearTimeout(t);
+    loadRange(`${new Date().getFullYear()}-01-01`, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10));
   }, [loadRange]);
   const isEditingHandoverRef = useRef(false);
   const [toast, setToast] = useState(null);
