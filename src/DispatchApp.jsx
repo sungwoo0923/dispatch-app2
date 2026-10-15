@@ -6160,6 +6160,14 @@ function FloatingCalculator({ onClose }) {
   );
 }
 
+// ⭐ 날짜 ±n일 (YYYY-MM-DD) — 밤에 등록한 다음날 새벽 상차 오더는 24시콜 파일 상차일이
+// 프로그램 상차일보다 하루 뒤로 찍혀(예: 프로그램 10-14 / 24시콜 10-15) 불일치로 잡히던 문제 보정용
+const shiftYmd = (ymd, n) => {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  if (isNaN(d)) return ymd;
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
 // ===================== DispatchApp.jsx (PART 2/8) — START =====================
 const ROLE_LABELS = {
   totalMaster: "최고관리자",
@@ -27667,6 +27675,17 @@ const handleCloseFileUpload = async (e) => {
 
   const fileIssues = [];
 
+  // 24시콜 파일의 "차량번호__날짜" 전체 목록(하루 전/후 매칭 시 제외 판단용)
+  const exactFileKeys = new Set();
+  if (effectiveDateCol !== -1) {
+    for (let i = headerIdx + 1; i < json.length; i++) {
+      const r0 = json[i];
+      if (!r0 || !r0[plateCol]) continue;
+      const d0 = parseExcelDate(r0[effectiveDateCol]);
+      if (d0) exactFileKeys.add(`${normalizePlate(String(r0[plateCol]))}__${d0}`);
+    }
+  }
+
   for (let i = headerIdx + 1; i < json.length; i++) {
     const row = json[i];
     if (!row || !row[plateCol]) continue;
@@ -27688,6 +27707,15 @@ const handleCloseFileUpload = async (e) => {
       matched = rows.filter(r =>
         normalizePlate(r.차량번호 || "") === filePlate && r.상차일 === fileDate
       );
+      // 같은 날짜가 없으면 하루 전/후 상차일 오더로 매칭(전날 밤 등록 → 다음날 새벽 상차)
+      // 단, 그 오더가 자기 날짜로 된 24시콜 행을 따로 갖고 있으면(같은 기사의 다른 날 운행) 제외
+      if (matched.length === 0) {
+        matched = rows.filter(r =>
+          normalizePlate(r.차량번호 || "") === filePlate &&
+          (r.상차일 === shiftYmd(fileDate, -1) || r.상차일 === shiftYmd(fileDate, 1)) &&
+          !exactFileKeys.has(`${filePlate}__${r.상차일}`)
+        );
+      }
     } else {
       // 날짜 감지 실패: targetDate 기준 rows에서 차량번호 매칭
       const candidates = todayRows.filter(r => normalizePlate(r.차량번호 || "") === filePlate);
@@ -27877,7 +27905,14 @@ const handleCloseFileUpload = async (e) => {
     const plate = normalizePlate(mr.차량번호);
     // 날짜 컬럼 있으면 plate+date 조합으로 확인, 없으면 plate만 확인
     const inFile = filePlateDate.size > 0
-      ? filePlateDate.has(`${plate}__${mr.상차일}`)
+      ? (filePlateDate.has(`${plate}__${mr.상차일}`) ||
+         // 하루 전/후 날짜의 파일 행도 인정(전날 밤 등록 → 다음날 새벽 상차). 단 그 날짜에
+         // 같은 차량 오더가 프로그램에 따로 있으면 그 오더 몫이므로 인정하지 않는다.
+         [1, -1].some(n => {
+           const d = shiftYmd(mr.상차일, n);
+           return filePlateDate.has(`${plate}__${d}`) &&
+             !(rows || []).some(o => normalizePlate(o.차량번호 || "") === plate && o.상차일 === d);
+         }))
       : filePlates.has(plate);
 
     if (!inFile) {
@@ -35482,6 +35517,18 @@ const computeCloseFileIssues = (raw) => {
 
   const fileIssues = [];
 
+  // 24시콜 파일의 "차량번호__날짜" 전체 목록(하루 전/후 매칭 시 제외 판단용)
+  const exactFileKeys = new Set();
+  if (effectiveDateCol !== -1) {
+    for (let i = headerIdx + 1; i < json.length; i++) {
+      const r0 = json[i];
+      if (!r0 || !r0[plateCol]) continue;
+      const raw0 = parseExcelDate(r0[effectiveDateCol]);
+      const d0 = trustDateColumnAsIs ? raw0 : resolveEffectiveDate(raw0, rowCargoText(r0));
+      if (d0) exactFileKeys.add(`${normalizePlate(String(r0[plateCol]))}__${d0}`);
+    }
+  }
+
   for (let i = headerIdx + 1; i < json.length; i++) {
     const row = json[i];
     if (!row || !row[plateCol]) continue;
@@ -35500,13 +35547,27 @@ const computeCloseFileIssues = (raw) => {
     // 대상이 아니다 — 조회하지도, 24시콜 파일에 그 날짜로 받지도 않은 문제가
     // 튀어나오지 않도록 아예 건너뛴다(날짜를 못 읽은 행은 기존처럼 차량번호만으로
     // 비교하므로 여기서 걸러지지 않는다).
-    if (fileDate && (fileDate < rangeStart || fileDate > rangeEnd)) continue;
+    if (fileDate && (fileDate < shiftYmd(rangeStart, -1) || fileDate > shiftYmd(rangeEnd, 1))) continue;
 
     let matched;
     if (fileDate) {
       matched = viewRows.filter(r =>
         normalizePlate(r.차량번호 || "") === filePlate && r.상차일 === fileDate
       );
+      // 같은 날짜가 없으면 하루 전/후 상차일 오더로 매칭(전날 밤 등록 → 다음날 새벽 상차)
+      // 단, 그 오더가 자기 날짜로 된 24시콜 행을 따로 갖고 있거나, 이 파일 날짜에 같은 차량의
+      // 오더가 프로그램에 따로 있으면(조회 기간 밖 포함) 다른 날 운행이므로 제외
+      const hasExactInProgram = (dispatchData || []).some(r =>
+        normalizePlate(r.차량번호 || "") === filePlate && r.상차일 === fileDate);
+      if (matched.length === 0 && !hasExactInProgram) {
+        matched = viewRows.filter(r =>
+          normalizePlate(r.차량번호 || "") === filePlate &&
+          (r.상차일 === shiftYmd(fileDate, -1) || r.상차일 === shiftYmd(fileDate, 1)) &&
+          !exactFileKeys.has(`${filePlate}__${r.상차일}`)
+        );
+      }
+      // 조회 기간 밖 날짜인데 기간 안 오더와도 안 맞으면 기존처럼 비교 대상 아님
+      if (matched.length === 0 && (fileDate < rangeStart || fileDate > rangeEnd)) continue;
     } else {
       const candidates = viewRows.filter(r => normalizePlate(r.차량번호 || "") === filePlate);
       if (candidates.length <= 1) {
@@ -35667,7 +35728,14 @@ const computeCloseFileIssues = (raw) => {
 
     const plate = normalizePlate(mr.차량번호);
     const inFile = filePlateDate.size > 0
-      ? filePlateDate.has(`${plate}__${mr.상차일}`)
+      ? (filePlateDate.has(`${plate}__${mr.상차일}`) ||
+         // 하루 전/후 날짜의 파일 행도 인정(전날 밤 등록 → 다음날 새벽 상차). 단 그 날짜에
+         // 같은 차량 오더가 프로그램에 따로 있으면 그 오더 몫이므로 인정하지 않는다.
+         [1, -1].some(n => {
+           const d = shiftYmd(mr.상차일, n);
+           return filePlateDate.has(`${plate}__${d}`) &&
+             !(dispatchData || []).some(o => normalizePlate(o.차량번호 || "") === plate && o.상차일 === d);
+         }))
       : filePlates.has(plate);
 
     if (!inFile) {
