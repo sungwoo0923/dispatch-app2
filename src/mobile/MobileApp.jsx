@@ -1864,7 +1864,8 @@ const clearLocalStorageKeepLogin = () => {
 // ⭐ 실시간 연결 범위 — 상차일 기준 최근 N일부터(미래 포함). 그보다 예전 오더는 화면에서
 // 필요할 때(날짜 조회·매출·통계·오더복사·운임조회 등)만 불러온다. Firestore는 오래 끊겼다
 // 다시 연결될 때 구독 범위 전체를 다시 읽은 것으로 과금하므로, 범위를 좁혀 비용과 속도를 줄인다.
-const MOBILE_LIVE_DAYS = 7;
+// ⭐ 실시간 범위 — 어제 ~ 미래(그 이전 날짜는 조회할 때 서버에서 최신본을 받고, 앱을 연 뒤의 수정·삭제는 날짜 무관 실시간 반영)
+const MOBILE_LIVE_DAYS = 1;
 const mobileLiveStart = () => new Date(Date.now() + 9 * 3600e3 - MOBILE_LIVE_DAYS * 86400e3).toISOString().slice(0, 10);
 const prevDayStr = (ymd) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
 
@@ -1947,7 +1948,8 @@ export default function MobileApp({ role, user, userCompany = "" }) {
     }
   }, [page]);
   // localStorage 용량 초과 방지: 오래된 첨부파일 캐시 정리
-  (() => {
+  // (예전엔 화면이 다시 그려질 때마다 실행돼 저장소 전체를 훑었다 — 앱 시작 시 1번만)
+  useEffect(() => {
     try {
       const keys = Object.keys(localStorage);
       const attachKeys = keys.filter(k => k.startsWith("saved_attach_"));
@@ -1959,7 +1961,7 @@ export default function MobileApp({ role, user, userCompany = "" }) {
         keys.filter(k => k.startsWith("shownNotifs_")).slice(0, -3).forEach(k => { try { localStorage.removeItem(k); } catch {} });
       }
     } catch {}
-  })();
+  }, []);
 
   // 🎨 테마 상태 (기본: navy)
 const [theme, setTheme] = useState(
@@ -1983,7 +1985,7 @@ const [showUnreadPopup, setShowUnreadPopup] = useState(false);
 const unreadPopupShownRef = useRef(false);
 const [ordersLoaded, setOrdersLoaded] = useState(false);
 // 첫 진입 — 실시간 구독이 서버와 맞춰졌는지(컬렉션별)와 그때 바뀐 오더 수
-const bootSyncRef = useRef({ done: {}, changed: 0, onProgress: null });
+const bootSyncRef = useRef({ done: {}, added: 0, modified: 0, removed: 0, onProgress: null });
 // ⭐ 첫 진입 로딩 화면 진행률 — 서버 전체 오더 수(total)와 지금까지 받은 수
 const [initLoadCounts, setInitLoadCounts] = useState({});
 const [initLoadTotal, setInitLoadTotal] = useState(null);
@@ -2190,8 +2192,10 @@ const HANDOVER_PAGE_SIZE = 5;
   const [endDate, setEndDate] = useState("");
   // ⭐ 목록 필터가 실제로 읽는 "적용된" 날짜 — 날짜칸(startDate/endDate)은 고르는
   // 즉시 바뀌지만, 목록은 "조회" 버튼을 눌러야만 이 값이 갱신되어 실제로 필터링된다.
-  const [appliedStartDate, setAppliedStartDate] = useState("");
-  const [appliedEndDate, setAppliedEndDate] = useState("");
+  // ⭐ 처음부터 오늘로 시작 — 예전엔 빈 값으로 시작했다가 직후에 오늘로 바뀌어서, 그 사이
+  // "날짜 미선택 = 이번 달 전체"로 판단해 앱을 켤 때마다 이번 달 오더를 서버에서 통째로 한 번 더 받았다(LTE에서 느림)
+  const [appliedStartDate, setAppliedStartDate] = useState(() => todayKST());
+  const [appliedEndDate, setAppliedEndDate] = useState(() => todayKST());
   // ✅ 당일 / 내일 빠른 선택용 — 버튼 클릭 자체가 이미 명시적인 조회 동작이므로
   // 적용된 날짜도 바로 함께 갱신한다(별도로 조회를 또 누를 필요 없음).
 const setTodayRange = () => {
@@ -2592,14 +2596,17 @@ collections.forEach((name) => {
       // ⭐ 첫 진입 속도 — 예전엔 폰 저장본을 연 뒤 서버에 조회를 12번 따로 보내 "바뀐 오더"를 확인했다(LTE에서 느림).
       // 이미 연결된 실시간 구독이 서버와 맞춰지는 순간(fromCache=false)을 그대로 쓰면 추가 조회가 필요 없다.
       const changeCount = snap.docChanges().length;
-      if (!serverSynced && !snap.metadata.fromCache) {
-        serverSynced = true;
-        bootSyncRef.current.done[name] = true;
-        // 폰 저장본을 먼저 보여준 경우만 "바뀐 건수"로 센다(처음부터 서버에서 받은 건 전부 새로 받은 것)
-        if (hadCache) bootSyncRef.current.changed += changeCount;
-        bootSyncRef.current.onProgress?.();
+      // 첫 알림이 폰 저장본(캐시)이고 실제로 오더가 있었는지 — 처음 설치·캐시 없음이면 전부 "신규"로 세지 않는다
+      if (!seenFirst && snap.metadata.fromCache && snap.size > 0) hadCache = true;
+      if (!serverSynced) {
+        // 서버가 보낸 변경은 "서버와 맞춰짐" 표시 전 알림에 먼저 섞여 오기도 해서, 첫 알림 이후 맞춰질 때까지 전부 센다
+        if (seenFirst && hadCache) snap.docChanges().forEach((ch) => { bootSyncRef.current[ch.type] = (bootSyncRef.current[ch.type] || 0) + 1; });
+        if (!snap.metadata.fromCache) {
+          serverSynced = true;
+          bootSyncRef.current.done[name] = true;
+          bootSyncRef.current.onProgress?.();
+        }
       }
-      if (snap.metadata.fromCache) hadCache = true;
       // 내용 변화 없이 상태(캐시/서버·저장대기)만 바뀐 알림은 화면을 다시 그리지 않는다
       if (seenFirst && changeCount === 0) return;
       seenFirst = true;
@@ -2917,7 +2924,8 @@ useEffect(() => {
     bootStageStore.set((st) => ({ ...st, server: n * 50 }));
     if (n === 2) {
       markSynced(Date.now());
-      bootStageStore.set((st) => ({ ...st, apply: 100, applyCount: bootSyncRef.current.changed }));
+      const { added = 0, modified = 0, removed = 0 } = bootSyncRef.current;
+      bootStageStore.set((st) => ({ ...st, apply: 100, applyCount: added + modified + removed, applyDetail: { added, modified, removed } }));
       finish();
     }
   };
@@ -6496,7 +6504,10 @@ onGoAttendance={() => {
           />
         )}
 
-        {page === "list" && ordersLoaded && initLoadDone && bootDone && (
+        {/* ⭐ 상세보기 중에도 목록을 화면 뒤에 그대로 두었다가(숨김) 뒤로가기 때 바로 보여준다 —
+            예전엔 뒤로갈 때마다 목록 카드 수백 장을 새로 만들어 한 박자 늦게 나왔다 */}
+        {(page === "list" || page === "detail") && ordersLoaded && initLoadDone && bootDone && (
+          <div style={page === "list" ? undefined : { display: "none" }}>
           <MobileOrderList
             dispatcherName={dispatcherName}
             userCompany={userCompany}
@@ -6551,6 +6562,7 @@ setOpenMemo={setOpenMemo}
             showSuccess={showSuccess}
             upsertDriver={upsertDriver}
           />
+          </div>
         )}
 {page === "sales" && (
   <MobileSalesPage
@@ -7510,7 +7522,11 @@ function MobileLoadingScreen({ loaded = 0, total = null, cacheDone = false, onAl
   const subs = [
     total != null ? `${Math.min(loaded, total).toLocaleString()} / ${total.toLocaleString()}건` : "",
     "",
-    bs.apply >= 100 ? (bs.applyCount ? `${bs.applyCount.toLocaleString()}건 반영` : "바뀐 오더 없음") : "",
+    bs.apply >= 100
+      ? (bs.applyCount
+        ? [bs.applyDetail?.added ? `신규 ${bs.applyDetail.added}` : "", bs.applyDetail?.modified ? `수정 ${bs.applyDetail.modified}` : "", bs.applyDetail?.removed ? `삭제 ${bs.applyDetail.removed}` : ""].filter(Boolean).join(" · ") || `${bs.applyCount.toLocaleString()}건 반영`
+        : "최신 데이터 없음")
+      : "",
     "",
   ];
   const targetsRef = useRef(targets);
