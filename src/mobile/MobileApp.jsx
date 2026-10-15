@@ -2330,8 +2330,14 @@ const quickRange = (days) => {
     return subscribeOrderSync({
       since,
       onRows: (rows) => setExtraMap((prev) => {
+        // 최근 범위(7일~) 오더는 원래 실시간 리스너가 받으므로 여기선 건너뛴다(같은 변경으로 화면이 두 번 다시 계산되는 것 방지)
+        const liveStart = mobileLiveStart();
+        const outside = rows.filter(({ data }) => String(data.상차일 || "") < liveStart);
+        const staleInside = rows.filter(({ col, id, data }) => String(data.상차일 || "") >= liveStart && prev.has(`${col}/${id}`));
+        if (!outside.length && !staleInside.length) return prev;
         const next = new Map(prev);
-        rows.forEach(({ col, id, data }) => {
+        staleInside.forEach(({ col, id }) => next.delete(`${col}/${id}`)); // 최근 범위로 옮겨온 오더는 실시간 쪽만 남김
+        outside.forEach(({ col, id, data }) => {
           const key = `${col}/${id}`;
           if (data.source === "transport_transmit") { next.delete(key); return; }
           next.set(key, { _id: id, id, __col: col, ...data });
@@ -5150,7 +5156,7 @@ const title =
     {historyLoading > 0 && !resyncChecking && !resyncOverlay && (
       <div className="fixed left-1/2 -translate-x-1/2 z-[99999] px-3 py-1.5 rounded-full bg-[#1B2B4B] text-white text-[12px] font-bold shadow-lg flex items-center gap-2" style={{ top: 58 }}>
         <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-        예전 오더 불러오는 중
+        오더 불러오는 중
       </div>
     )}
     {resyncChecking && !resyncOverlay && (

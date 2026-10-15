@@ -3052,8 +3052,14 @@ function useRealtimeCollections(user, userCompany, role) {
     return subscribeOrderSync({
       since,
       onRows: (rows) => setHistoryMap(prev => {
+        // 최근 범위(7일~) 오더는 원래 실시간 리스너가 받으므로 여기선 건너뛴다(같은 변경으로 화면이 두 번 다시 계산되는 것 방지)
+        const liveStart = pcLiveWindowStart();
+        const outside = rows.filter(({ data }) => String(data.상차일 || "") < liveStart);
+        const staleInside = rows.filter(({ col, id, data }) => String(data.상차일 || "") >= liveStart && prev.has(`${col}/${id}`));
+        if (!outside.length && !staleInside.length) return prev;
         const next = new Map(prev);
-        rows.forEach(({ col, id, data }) => {
+        staleInside.forEach(({ col, id }) => next.delete(`${col}/${id}`)); // 최근 범위로 옮겨온 오더는 실시간 쪽만 남김
+        outside.forEach(({ col, id, data }) => {
           const key = `${col}/${id}`;
           const excluded = data.source === "transport_transmit" || data.배차상태 === "배차취소" ||
             ["취소", "배차취소", "오더취소", "취소됨"].includes(data.상태);
@@ -7206,7 +7212,7 @@ return (
       {historyLoading > 0 && (
         <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[999998] px-4 py-2 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold shadow-lg flex items-center gap-2 pointer-events-none">
           <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          예전 오더 불러오는 중
+          오더 불러오는 중
         </div>
       )}
       {weekendCheckPopup && (
@@ -9843,27 +9849,9 @@ const filterPlaces = (q) => {
       return <span className={`px-2 py-0.5 rounded text-xs whitespace-nowrap ${map[s] || "bg-gray-100 text-gray-700"}`}>{s || "-"}</span>;
     };
 
-    // ✅ 첨부파일 개수 저장용
-    const [attachCount, setAttachCount] = React.useState({}); // { dispatchId: count }
-
-    // ✅ 첨부파일 서브컬렉션 개수 로드 (Firestore)
-    React.useEffect(() => {
-      const loadAttachments = async () => {
-        try {
-          if (!dispatchData?.length || typeof getDocs !== "function" || typeof collection !== "function") return;
-          const result = {};
-          for (const row of dispatchData) {
-            if (!row?._id) continue;
-            const snap = await getDocs(collection(db, "dispatch", row._id, "attachments"));
-            result[row._id] = snap.size;
-          }
-          setAttachCount(result);
-        } catch (e) {
-          console.warn("첨부 개수 로드 실패(무시 가능):", e);
-        }
-      };
-      loadAttachments();
-    }, [dispatchData]);
+    // ⭐ (삭제) 예전엔 오더 목록이 바뀔 때마다 "모든 오더"의 첨부 서브컬렉션을 한 건씩 서버에서 읽어
+    // 개수를 세는 코드가 있었는데, 그 결과(attachCount)를 쓰는 곳이 하나도 없어 읽기 비용만 수천 건씩
+    // 나가고 있었다 — 첨부 개수는 각 오더의 attachCount 필드/첨부현황 화면에서 따로 보여준다.
 
     // ⏱ 시간 옵션(오전6시~오후10시, 30분 간격) — timeOptions 미지정 시 내부 생성
     const buildHalfHour = React.useMemo(() => {
