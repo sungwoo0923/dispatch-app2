@@ -92,7 +92,7 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
       ? { title: "연결이 많이 느린 것 같아요", desc: "신호가 좋은 곳이나 와이파이에서 더 빨라요" }
       : phase >= 1
         ? { title: "열심히 가져오고 있어요", desc: "조금만 더 기다려 주세요" }
-        : { title: "데이터 환경에 따라 조금 늦어질 수 있어요", desc: "최신 오더를 빠짐없이 받는 중이에요" };
+        : { title: "데이터 환경에 따라 늦어질 수 있어요", desc: "최신 오더를 빠짐없이 받는 중이에요" };
   const canSkip = !!onSkip && (offline || phase >= 2);
 
   const activeIdx = completed.findIndex((c) => !c);
@@ -177,9 +177,11 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
 
         {/* 안내 문구 — 처음부터 표시(자리를 미리 잡아 두어 문구가 바뀌어도 화면이 들썩이지 않게) */}
         <div className={`mt-4 flex flex-col items-center text-center ${variant === "pc" ? "min-h-[88px]" : "min-h-[84px]"}`}>
-          <div key={notice.title} className="flex flex-col items-center gap-1" style={{ animation: "kpBootFade 0.4s ease" }}>
-            <div className={`flex items-center gap-1.5 ${Z.label} font-bold text-sky-200`}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+          {/* ⚠️ 첫 문구는 효과 없이 바로 보이게 — 앱이 막 켜져 바쁜 순간엔 "서서히 나타나기" 효과가 멈춰 있어
+              문구가 투명한 채로 있다가 로딩이 다 끝나서야 보였다. 문구가 바뀔 때만 효과를 준다. */}
+          <div key={notice.title} className="flex flex-col items-center gap-1 max-w-full" style={offline || phase > 0 ? { animation: "kpBootFade 0.4s ease" } : undefined}>
+            <div className={`flex items-center gap-1.5 ${Z.label} font-bold text-sky-200 whitespace-nowrap max-w-full`}>
+              <svg className="shrink-0" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
               {notice.title}
             </div>
             <div className={`${Z.sub} font-semibold text-blue-100/55`}>{notice.desc}</div>
