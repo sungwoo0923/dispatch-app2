@@ -2355,8 +2355,12 @@ const quickRange = (days) => {
   }, [fetchRows]);
   // ⭐ 여러 사용자 실시간 일치 — 미배차 전부 + 앱을 연 뒤 누군가 등록·수정한 오더(날짜 무관) +
   // 삭제 기록을 실시간으로 받아 예전 오더 보관소에 반영(최근 7일~은 원래 실시간)
+  // ⭐ LTE 속도 — 이 구독(미배차 전체·변경분·삭제기록)도 오더를 먼저 받은 뒤 시작한다. 기준 시각은 앱을 연 순간으로
+  // 고정해 두어, 늦게 시작해도 그사이 다른 사람이 고친 예전 오더까지 빠짐없이 받는다.
+  const syncSinceRef = useRef(Date.now() - 60 * 1000);
   useEffect(() => {
-    const since = Date.now() - 60 * 1000;
+    if (!secondaryReady) return undefined;
+    const since = syncSinceRef.current;
     return subscribeOrderSync({
       since,
       onRows: (rows) => startTransition(() => setExtraMap((prev) => {
@@ -2381,7 +2385,7 @@ const quickRange = (days) => {
         return next;
       })),
     });
-  }, []);
+  }, [secondaryReady]);
   const canceledLoadedRef = useRef(false);
   const loadCanceledHistory = React.useCallback(async () => {
     if (canceledLoadedRef.current) return;
@@ -5639,7 +5643,9 @@ const title =
     orders={allOrders}
   />
 )}
-{/* 모바일 메신저 - 항상 마운트하여 unread count 추적, mobileVisible로 UI 표시 제어 */}
+{/* 모바일 메신저 - 항상 마운트하여 unread count 추적, mobileVisible로 UI 표시 제어
+    ⭐ LTE 속도 — 첫 진입 땐 오더부터 받고, 메신저(대화방·메시지 구독)는 그다음에 시작한다 */}
+{(secondaryReady || showMobileMessenger) && (
 <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 99990, background: "#fff", display: "flex", flexDirection: "column", overflow: "hidden", visibility: showMobileMessenger ? "visible" : "hidden", pointerEvents: showMobileMessenger ? "auto" : "none", paddingTop: "env(safe-area-inset-top, 0px)" }}>
   <InternalMessenger
     user={user}
@@ -5651,6 +5657,7 @@ const title =
     onUnreadChange={setMessengerUnread}
   />
 </div>
+)}
       {showMenu && (
         <MobileSideMenu
   onClose={() => setShowMenu(false)}

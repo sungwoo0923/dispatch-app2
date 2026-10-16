@@ -64,11 +64,16 @@ export const auth = getAuth(app);
 // 정상적으로 안 뜨는 사고로 이어졌다(실사용 환경에서 재현 확인됨). "미리보기
 // 캐시 경고"는 미리보기가 메모리 캐시로 도는 것뿐인 경미한 문제였는데, 그걸 고치려다
 // 훨씬 큰 문제(전체 사용자 화면 크래시)를 만든 셈이라 원래 방식으로 되돌린다.
+// ⭐ 휴대폰(앱) — 앱을 껐다가 몇 초 안에 다시 켜면, 꺼진 앱이 쥐고 있던 저장소 사용권(최대 약 5초)이 아직 남아 있어
+// 새로 켠 앱이 폰에 저장된 오더를 못 쓰고 "메모리 저장"으로 떨어졌다 → 저장된 오더 없이 LTE로 처음부터 받느라
+// 첫 화면이 "0 / N건"에서 한참 멈췄다. 휴대폰은 창이 하나뿐이라 사용권을 바로 가져오게 한다.
+// (PC는 탭·관리자 화면의 모바일 미리보기 등 여러 창이 같이 쓰므로 지금처럼 둔다)
+const IS_PHONE = typeof navigator !== "undefined" && /iphone|ipod|android(?!.*tablet)/i.test(navigator.userAgent || "") && !/ipad|tablet/i.test(navigator.userAgent || "");
 function createDb() {
   try {
     return initializeFirestore(app, {
       localCache: persistentLocalCache({
-        tabManager: persistentSingleTabManager({ forceOwnership: false }),
+        tabManager: persistentSingleTabManager({ forceOwnership: IS_PHONE }),
       }),
     });
   } catch {
