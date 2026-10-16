@@ -19,7 +19,7 @@ const SIZE = {
   },
 };
 
-export default function KpBootScreen({ targets, subs = [], onAllDone, variant = "mobile", steps = BOOT_STEPS, zIndex, maxWaitMs = 10000 }) {
+export default function KpBootScreen({ targets, subs = [], onAllDone, variant = "mobile", steps = BOOT_STEPS, zIndex, onSkip }) {
   const Z = SIZE[variant] || SIZE.mobile;
   const targetsRef = useRef(targets);
   targetsRef.current = targets;
@@ -41,7 +41,7 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
       for (let i = 0; i < next.length; i += 1) {
         if (i > 0 && next[i - 1] < 100) break; // 앞 단계가 100%가 돼야 다음 단계 시작
         const t = targetsRef.current[i];
-        if (next[i] < t) { next[i] = Math.min(t, next[i] + dt * 0.5); moving = true; } // 한 단계 약 0.2초
+        if (next[i] < t) { next[i] = Math.min(t, next[i] + dt * 0.8); moving = true; } // 한 단계 약 0.12초(데이터가 이미 준비됐으면 빨리 지나간다)
       }
       if (moving) {
         shownRef.current = next;
@@ -56,14 +56,31 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
     if (doneRef.current) return;
     doneRef.current = true;
     setLeaving(true);
-    setTimeout(() => onAllDone?.(), 260); // 사라지는 효과 후 화면 열기
+    setTimeout(() => onAllDone?.(), 200); // 사라지는 효과 후 화면 열기
   };
-  // 안전장치 — 어떤 이유로든 maxWaitMs(기본 10초) 안에 다 안 차면 그냥 연다
+  // ⭐ 오래 걸릴 때 — 받다 만 상태로 강제로 열지 않고(오류 원인), 걸린 시간에 맞춰 안내 문구를 보여준다.
+  // 30초가 넘거나 인터넷이 끊겨 있으면 "저장된 오더로 먼저 열기"를 직접 고를 수 있다.
+  const [elapsed, setElapsed] = useState(0);
+  const [offline, setOffline] = useState(typeof navigator !== "undefined" && navigator.onLine === false);
   useEffect(() => {
-    const t = setTimeout(finish, maxWaitMs);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const started = Date.now();
+    const t = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    const on = () => setOffline(false);
+    const off = () => setOffline(true);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => { clearInterval(t); window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, []);
+  const notice = offline
+    ? { title: "인터넷 연결이 끊겨 있어요", desc: "연결되면 자동으로 이어서 받아와요" }
+    : elapsed >= 30
+      ? { title: "연결이 많이 느린 것 같아요", desc: "신호가 좋은 곳이나 와이파이에서 더 빨라요" }
+      : elapsed >= 20
+        ? { title: "열심히 가져오고 있어요", desc: "조금만 더 기다려 주세요" }
+        : elapsed >= 10
+          ? { title: "데이터 환경에 따라 조금 늦어질 수 있어요", desc: "최신 오더를 빠짐없이 받는 중이에요" }
+          : null;
+  const canSkip = !!onSkip && (offline || elapsed >= 30);
   useEffect(() => {
     if (shown.some((v) => v < 100)) return;
     const t = setTimeout(finish, 120);
@@ -81,12 +98,13 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
         zIndex,
         opacity: leaving ? 0 : 1,
         transform: leaving ? "scale(1.02)" : "none",
-        transition: "opacity 0.26s ease, transform 0.26s ease",
+        transition: "opacity 0.2s ease, transform 0.2s ease",
       }}
     >
       <style>{`
         @keyframes kpBootFloat { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-1.5px) } }
         @keyframes kpBootDash { from { background-position: 0 0 } to { background-position: -24px 0 } }
+        @keyframes kpBootFade { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
         @keyframes kpBootPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(96,165,250,0.55) } 70% { box-shadow: 0 0 0 7px rgba(96,165,250,0) } }
       `}</style>
       <div className={`w-full ${Z.box} flex flex-col min-w-0`}>
@@ -147,6 +165,28 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
               </div>
             );
           })}
+        </div>
+
+        {/* 오래 걸릴 때 안내 — 자리를 미리 잡아 두어 문구가 떠도 화면이 들썩이지 않게 */}
+        <div className={`mt-4 flex flex-col items-center text-center ${variant === "pc" ? "min-h-[88px]" : "min-h-[84px]"}`}>
+          {notice && (
+            <div key={notice.title} className="flex flex-col items-center gap-1" style={{ animation: "kpBootFade 0.4s ease" }}>
+              <div className={`flex items-center gap-1.5 ${Z.label} font-bold text-sky-200`}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+                {notice.title}
+              </div>
+              <div className={`${Z.sub} font-semibold text-blue-100/55`}>{notice.desc}</div>
+              {canSkip && (
+                <button
+                  type="button"
+                  onClick={onSkip}
+                  className={`mt-2 px-4 py-1.5 rounded-full bg-white/10 ring-1 ring-white/20 text-white ${Z.sub} font-bold active:bg-white/20`}
+                >
+                  저장된 오더로 먼저 열기
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

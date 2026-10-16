@@ -3040,7 +3040,7 @@ function useRealtimeCollections(user, userCompany, role) {
     const range = [from, end];
     loadedRangesRef.current.push(range);
     const rows = await fetchHistoryRows(c => query(c, where("상차일", ">=", from), where("상차일", "<=", end)));
-    if (rows === null) { loadedRangesRef.current = loadedRangesRef.current.filter(r => r !== range); return []; } // 실패한 기간은 다시 받을 수 있게
+    if (rows === null) { loadedRangesRef.current = loadedRangesRef.current.filter(r => r !== range); return null; } // 실패한 기간은 다시 받을 수 있게(실패 = null)
     return rows;
   }, [fetchHistoryRows]);
   // 오더복사·운임조회 등 전체 이력이 필요한 기능을 처음 쓸 때 1회
@@ -6476,27 +6476,23 @@ function CargoExtraChips({ value }) {
 //   ③ 최신 오더 반영: 그동안 바뀐 오더(신규/수정/삭제) 반영
 //   ④ 화면 준비: 기사·거래처 + 홈 화면 통계용 올해 오더까지 다 받아 화면을 미리 그려둔다
 //   → 전부 100%가 되면 걷히고, 홈은 이미 다 그려진 상태로 보인다(들어와서 렉 없음)
-function PcBootOverlay({ historyLoading, onDone }) {
+function PcBootOverlay({ onDone }) {
   const st = useMiniStore(pcBootStore);
-  const [capped, setCapped] = useState(false);
-  const startedAtRef = useRef(Date.now());
-  const historyStartedRef = useRef(false);
-  if (historyLoading > 0) historyStartedRef.current = true;
-  const [tick, setTick] = useState(0);
+  const [skipped, setSkipped] = useState(false);
+  const [noHome, setNoHome] = useState(false);
   useEffect(() => {
-    // 서버가 느리면 오래 기다리지 않고 연다(나머지는 뒤에서 자동으로 계속 반영)
-    const cap = setTimeout(() => setCapped(true), 8000);
-    // 홈 통계용 불러오기가 아예 필요 없는 경우(예: 1월 초) 대비 — 1.5초 뒤 다시 판단
-    const t = setTimeout(() => setTick((n) => n + 1), 1500);
-    return () => { clearTimeout(cap); clearTimeout(t); };
+    // 홈 화면이 아예 안 뜨는 권한(첫 메뉴가 홈이 아닌 경우)이면 홈 통계는 기다리지 않는다
+    const t = setTimeout(() => { if (!pcBootStore.get().base.homeMounted) setNoHome(true); }, 1500);
+    return () => clearTimeout(t);
   }, []);
   const two = (o) => (o.orders ? 50 : 0) + (o.dispatch ? 50 : 0);
   const cachePct = two(st.cache);
   const serverPct = two(st.server);
   const applyPct = serverPct === 100 ? 100 : 0;
-  const historySettled = historyLoading === 0 && (historyStartedRef.current || Date.now() - startedAtRef.current > 1500 || tick > 0);
-  const readyPct = (st.base.drivers ? 35 : 0) + (st.base.clients ? 35 : 0) + (applyPct === 100 && historySettled ? 30 : 0);
-  const targets = capped ? [100, 100, 100, 100] : [cachePct, serverPct, applyPct, readyPct];
+  const homeReady = st.base.home || noHome;
+  const readyPct = (st.base.drivers ? 35 : 0) + (st.base.clients ? 35 : 0) + (applyPct === 100 && homeReady ? 30 : 0);
+  // ⚠️ 받다 만 상태로 강제로 열지 않는다 — 오래 걸리면 로딩 화면에 안내 문구, 30초 후엔 "먼저 열기" 버튼
+  const targets = skipped ? [100, 100, 100, 100] : [cachePct, serverPct, applyPct, readyPct];
   const total = (st.cacheCount.orders || 0) + (st.cacheCount.dispatch || 0);
   const changed = st.added + st.modified + st.removed;
   const subs = [
@@ -6507,7 +6503,7 @@ function PcBootOverlay({ historyLoading, onDone }) {
       : "",
     readyPct >= 100 ? "기사·거래처·통계 준비 완료" : "",
   ];
-  return <KpBootScreen targets={targets} subs={subs} onAllDone={onDone} variant="pc" zIndex={2147483000} maxWaitMs={12000} />;
+  return <KpBootScreen targets={targets} subs={subs} onAllDone={onDone} onSkip={() => setSkipped(true)} variant="pc" zIndex={2147483000} />;
 }
 
 export default function DispatchApp({ role, user, userCompany = "" }) {
@@ -7269,8 +7265,9 @@ return (
     <ToastProvider>
       <CustomAlert message={alertMsg} onClose={closeAlert} />
       {/* ⭐ 첫 진입 로딩 화면 — 뒤에서 홈 화면·데이터가 다 준비되는 동안 덮고 있다가, 전부 100%가 되면 걷힌다 */}
-      {!pcBootDone && <PcBootOverlay historyLoading={historyLoading} onDone={() => setPcBootDone(true)} />}
-      {pcBootDone && historyLoading > 0 && (
+      {!pcBootDone && <PcBootOverlay onDone={() => setPcBootDone(true)} />}
+      {/* ⭐ PC는 실시간으로 계속 반영되므로 상단 중앙 "오더 불러오는 중" 표시는 띄우지 않는다(표시가 뜨고 지며 화면이 끊겼다) */}
+      {false && historyLoading > 0 && (
         <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[999998] px-4 py-2 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold shadow-lg flex items-center gap-2 pointer-events-none">
           <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
           오더 불러오는 중

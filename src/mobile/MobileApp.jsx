@@ -1871,6 +1871,9 @@ const mobileLiveStart = () => new Date(Date.now() + 9 * 3600e3 - MOBILE_LIVE_DAY
 const prevDayStr = (ymd) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
 
 export default function MobileApp({ role, user, userCompany = "" }) {
+  // ⭐ LTE 속도 — 앱을 켜면 오더·기사·거래처·공지·일정 등 10여 개 구독이 한꺼번에 전파를 나눠 써서,
+  // 약한 LTE에선 정작 오더가 늦게 들어왔다. 오더가 서버와 맞춰진 뒤에 나머지(기사·거래처·공지 등)를 시작한다.
+  const [secondaryReady, setSecondaryReady] = useState(false);
   // ⭐ 글자 크기 설정(기본/크게/더 크게) — 아래 zoom 리셋 로직에서 함께 적용되어야
   // 화면 전체(글자+버튼+아이콘)가 실제로 커진다. 쉬운모드는 자체 화면(MobileEasyMode)이
   // 이미 큰 글씨/큰 버튼으로 설계되어 있으므로, 여기서 별도로 확대하지 않는다
@@ -1922,6 +1925,7 @@ export default function MobileApp({ role, user, userCompany = "" }) {
   // PC(DispatchApp.jsx)와 동일하게 즉시 화주사 화면에도 사본을 생성한다.
   const [approvedShippers, setApprovedShippers] = useState([]);
   useEffect(() => {
+    if (!secondaryReady) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
     const viewCompany = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
     const unsub = onSnapshot(collection(db, "companyApplications"), (snap) => {
       const list = snap.docs
@@ -1930,7 +1934,7 @@ export default function MobileApp({ role, user, userCompany = "" }) {
       setApprovedShippers(list);
     });
     return () => unsub();
-  }, [userCompany]);
+  }, [userCompany, secondaryReady]);
 
   const [page, setPage] = useState("list");
   const listScrollYRef = useRef(0); // 리스트 스크롤 위치 저장
@@ -2908,6 +2912,7 @@ const refreshFromServer = React.useCallback(async ({ force = false, since, manua
 const firstSyncDoneRef = useRef(false);
 // ⭐ 첫 진입 — 저장된 오더 → 서버 확인 → 최신 오더 반영 → 화면 준비가 다 100%가 되면 최신 상태로 연다
 const [bootDone, setBootDone] = useState(false);
+const bootSkipRef = useRef(null); // 로딩 화면의 "저장된 오더로 먼저 열기" 버튼
 useEffect(() => {
   if (!initLoadDone || !ordersLoaded || firstSyncDoneRef.current) return;
   firstSyncDoneRef.current = true;
@@ -2917,6 +2922,7 @@ useEffect(() => {
     finished = true;
     bootSyncRef.current.onProgress = null;
     bootStageStore.set((st) => ({ ...st, server: 100, apply: 100, ready: 100 }));
+    setSecondaryReady(true); // 오더가 다 들어왔으니 기사·거래처·공지 등 나머지 구독 시작
   };
   // 실시간 구독이 서버와 맞춰질 때마다 진행률 갱신 — 두 컬렉션 다 맞춰지면 최신 상태
   const check = () => {
@@ -2932,11 +2938,16 @@ useEffect(() => {
   };
   bootSyncRef.current.onProgress = check;
   check();
-  // 전파가 약하면 오래 기다리지 않고 폰 저장본으로 연다(서버 반영은 뒤에서 자동으로 계속)
-  const cap = setTimeout(finish, 4000);
-  return () => clearTimeout(cap);
+  // ⚠️ 예전엔 4초(로딩 화면은 10초)가 지나면 받다 만 상태로 강제로 열었다 — 이제는 다 받을 때까지 기다리고,
+  // 오래 걸리면 로딩 화면에 안내 문구를 보여준다(30초 이후엔 "저장된 오더로 먼저 열기" 버튼).
+  bootSkipRef.current = finish;
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [initLoadDone, ordersLoaded]);
+// 오더 첫 동기화가 어떤 이유로든 시작되지 못해도 나머지 구독은 20초 뒤엔 시작
+useEffect(() => {
+  const t = setTimeout(() => setSecondaryReady(true), 20000);
+  return () => clearTimeout(t);
+}, []);
 
 useEffect(() => {
   // ⚠️ 예전엔 2분 이상 안 보였다 돌아온 경우만 재조회했는데, 실제로는 30초~1분
@@ -2987,6 +2998,7 @@ useEffect(() => {
 // 🔔 PC 공지사항 실시간 구독 (이 위치!)
 // --------------------------------------------------
 useEffect(() => {
+  if (!secondaryReady) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
   const unsub = onSnapshot(
     collection(db, "notices"),   // ⚠️ PC에서 쓰는 컬렉션명
     
@@ -3004,12 +3016,13 @@ useEffect(() => {
     }
   );
   return () => unsub();
-}, []);
+}, [secondaryReady]);
 
 // --------------------------------------------------
 // 📅 PC 일정 실시간 구독 (이 위치!)
 // --------------------------------------------------
 useEffect(() => {
+  if (!secondaryReady) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
   const unsub = onSnapshot(
     collection(db, "schedules"), // ⚠️ PC에서 쓰는 컬렉션명
     (snap) => {
@@ -3021,7 +3034,7 @@ useEffect(() => {
     }
   );
   return () => unsub();
-}, []);
+}, [secondaryReady]);
 // 자동 마이그레이션: 6월 16일 이전 일정 승인 처리
 React.useEffect(() => {
   schedules.forEach(s => {
@@ -3043,6 +3056,7 @@ React.useEffect(() => {
 // 📝 인수인계 실시간 구독 (★ 여기 추가 ★)
 // --------------------------------------------------
 useEffect(() => {
+  if (!secondaryReady) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
   const unsub = onSnapshot(
     collection(db, "handovers"),
     (snap) => {
@@ -3063,7 +3077,7 @@ useEffect(() => {
   );
 
   return () => unsub();
-}, []);
+}, [secondaryReady]);
 
 // 👤 현재 로그인 사용자 추적
 useEffect(() => {
@@ -3239,6 +3253,7 @@ useEffect(() => {
 
 
   useEffect(() => {
+    if (!secondaryReady) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
     // ⭐ PC(DispatchApp.jsx)는 drivers 구독에 companyName 필터가 있는데, 모바일은 이
     // 필터가 통째로 빠져있어 다른 회사의 기사 목록까지 그대로 받아오고 있었다 —
     // PC와 동일한 기준(companyName 없는 옛 문서는 "돌캐"로 취급)으로 맞춘다.
@@ -3250,10 +3265,11 @@ useEffect(() => {
       startTransition(() => setDrivers(list)); // 끊김 방지(낮은 우선순위)
     });
     return () => unsub();
-  }, [userCompany]);
+  }, [userCompany, secondaryReady]);
 
   // 🔥 하차지 거래처(places)도 clients에 병합
 useEffect(() => {
+  if (!secondaryReady) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
   // ⭐ PC(DispatchApp.jsx)의 places 구독과 동일하게 companyName 필터를 맞춘다 —
   // 이 필터가 없어서 다른 회사의 하차지거래처까지 그대로 받아오고 있었다.
   const co = userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY;
@@ -3302,10 +3318,11 @@ useEffect(() => {
   });
 
   return () => unsub();
-}, [userCompany]);
+}, [userCompany, secondaryReady]);
 
 // 고정거래처관리 리스너
 useEffect(() => {
+  if (!secondaryReady) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
   const co = userCompany || localStorage.getItem("userCompany") || "";
   const unsub = onSnapshot(collection(db, "fixedClients"), (snap) => {
     const list = snap.docs
@@ -3314,10 +3331,11 @@ useEffect(() => {
     startTransition(() => setFixedClientRows(list)); // 끊김 방지(낮은 우선순위)
   });
   return () => unsub();
-}, [userCompany]);
+}, [userCompany, secondaryReady]);
 
 // 🏢 기본거래처(clients) 리스너
 useEffect(() => {
+  if (!secondaryReady) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
   const co = userCompany || localStorage.getItem("userCompany") || "";
   const unsub = onSnapshot(collection(db, "clients"), (snap) => {
     const list = snap.docs
@@ -3342,7 +3360,7 @@ useEffect(() => {
     startTransition(() => setClients(list)); // 끊김 방지(낮은 우선순위)
   });
   return () => unsub();
-}, [userCompany]);
+}, [userCompany, secondaryReady]);
 
   // --------------------------------------------------
   // 2. 화면 상태 / 필터
@@ -6502,6 +6520,13 @@ onGoAttendance={() => {
             total={initLoadTotal}
             cacheDone={ordersLoaded && initLoadDone}
             onAllDone={() => setBootDone(true)}
+            onSkip={() => {
+              if (bootSkipRef.current) bootSkipRef.current();
+              else bootStageStore.set((st) => ({ ...st, server: 100, apply: 100, ready: 100 }));
+              setOrdersLoaded(true);
+              setInitLoadDone(true);
+              setSecondaryReady(true);
+            }}
           />
         )}
 
@@ -7515,7 +7540,7 @@ function TopStatusPill({ historyLoading, hidden }) {
 
 // ⭐ 첫 진입 로딩 화면(KP-Flow) — 네이비 화면 위로 트럭이 전체 진행률만큼 길을 달리고,
 // 아래 4단계가 차례대로 0 → 100% 채워진다. 전부 100%가 되면 부드럽게 사라지며 최신 상태로 열린다.
-function MobileLoadingScreen({ loaded = 0, total = null, cacheDone = false, onAllDone }) {
+function MobileLoadingScreen({ loaded = 0, total = null, cacheDone = false, onAllDone, onSkip }) {
   const bs = useMiniStore(bootStageStore);
   const cachePct = cacheDone ? 100 : total ? Math.min(99, Math.round((loaded / total) * 100)) : 0;
   const targets = [cachePct, bs.server, bs.apply, bs.ready];
@@ -7529,7 +7554,7 @@ function MobileLoadingScreen({ loaded = 0, total = null, cacheDone = false, onAl
       : "",
     "",
   ];
-  return <KpBootScreen targets={targets} subs={subs} onAllDone={onAllDone} variant="mobile" />;
+  return <KpBootScreen targets={targets} subs={subs} onAllDone={onAllDone} onSkip={onSkip} variant="mobile" />;
 }
 
 function MobileSideMenu({

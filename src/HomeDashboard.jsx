@@ -6,11 +6,12 @@ import {
 } from "recharts";
 import {
   collection, addDoc, onSnapshot, query, orderBy,
-  serverTimestamp, doc, deleteDoc, updateDoc, where, setDoc, getDoc, arrayUnion,
+  serverTimestamp, doc, deleteDoc, updateDoc, where, setDoc, getDoc, arrayUnion, getDocs,
 } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import { EditableText } from "./EditMode";
-import { useOrderHistory } from "./orderHistory";
+import { pcLiveWindowStart, pcPrevDay } from "./orderHistory";
+import { pcBootStore, markBootBase } from "./bootProgress";
 
 /* ===== 공통 Modal ===== */
 function Modal({ title, onClose, children }) {
@@ -293,12 +294,37 @@ let _firestoreSeenLoaded = false;
 
 /* ===================== HOME DASHBOARD ===================== */
 export default function HomeDashboard({ role, user, userCompany = "", pending, delayed, dispatchData = [], onOrderDoubleClick }) {
-  // ⭐ 년 매출·누적 오더는 올해 오더가 필요 — 첫 진입 로딩 화면이 덮고 있는 동안 바로 불러와서,
-  // 로딩 화면이 걷혔을 때는 이미 통계까지 다 그려져 있게 한다(들어온 뒤에 불러오며 버벅이지 않게)
-  const { loadRange } = useOrderHistory();
+  // ⭐ 년 매출·당월 매출·누적 오더 — 예전엔 새로고침할 때마다 올해 오더 전체(수천~만 건)를 서버에서 다시 받아
+  // 새로고침이 느리고 버벅였다. "실시간 범위(최근 7일) 이전" 기간의 합계는 하루 동안 거의 안 바뀌므로
+  // 하루 1번만 받아 계산해 PC에 저장해 두고(homePastStats), 최근 7일~은 실시간 데이터로 더한다.
+  const liveStartStr = pcLiveWindowStart();
+  const [pastCache, setPastCache] = useState(() => {
+    try {
+      const c = JSON.parse(localStorage.getItem("homePastStats") || "null");
+      return c && c.v === 2 && c.liveStart === liveStartStr && c.calYear === new Date().getFullYear() ? c : null;
+    } catch { return null; }
+  });
   useEffect(() => {
-    loadRange(`${new Date().getFullYear()}-01-01`, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10));
-  }, [loadRange]);
+    markBootBase(pcBootStore, "homeMounted");
+    // 오늘 이미 계산해 둔 지난 기간 합계가 있으면 다시 받지 않는다(첫 진입 로딩 화면에 "준비 완료" 알림)
+    if (pastCache) { markBootBase(pcBootStore, "home"); return undefined; }
+    let alive = true;
+    // 합계만 계산하고 화면 데이터에는 합치지 않는다 — 수천 건을 화면 데이터에 합치면 그 순간 전체 화면이 다시 그려져 버벅인다
+    const y = new Date().getFullYear();
+    const end = pcPrevDay(liveStartStr);
+    Promise.all(["orders", "dispatch"].map((col) => getDocs(query(collection(db, col), where("상차일", ">=", `${y}-01-01`), where("상차일", "<=", end)))))
+      .then((snaps) => {
+        const rows = snaps.flatMap((sn) => sn.docs.map((d) => d.data() || {})).filter((row) =>
+          row.source !== "transport_transmit" && row.배차상태 !== "배차취소" && !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태));
+        const c = { ...sumStats(rows), v: 2, liveStart: liveStartStr, calYear: y, savedAt: Date.now() }; // year=년 매출 합계, calYear=연도
+        try { localStorage.setItem("homePastStats", JSON.stringify(c)); } catch { /* 용량 초과 등은 무시 */ }
+        if (alive) setPastCache(c);
+      })
+      .catch((e) => console.warn("홈 통계(지난 기간) 불러오기 실패:", e))
+      .finally(() => markBootBase(pcBootStore, "home")); // 실패해도 로딩 화면은 넘어간다(다음 새로고침에 다시 시도)
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const isEditingHandoverRef = useRef(false);
   const [toast, setToast] = useState(null);
   const [firestoreSeenReady, setFirestoreSeenReady] = useState(false);
@@ -573,9 +599,24 @@ React.useEffect(() => {
     return { count, revenue, profit };
   }, [dispatchData]);
 
-  const yearRevenue = useMemo(() => dispatchData.reduce((sum, row) => { const d = getLoadDate(row); if (!d) return sum; return d.getFullYear() === currentYear ? sum + Number(row?.청구운임 || 0) : sum; }, 0), [dispatchData]);
-  const monthRevenue = useMemo(() => dispatchData.reduce((sum, row) => { const d = getLoadDate(row); if (!d) return sum; return d.getFullYear() === currentYear && d.getMonth() === currentMonth ? sum + Number(row?.청구운임 || 0) : sum; }, 0), [dispatchData]);
-  const orderCountFrom2026 = useMemo(() => dispatchData.filter(row => { const d = getLoadDate(row); return d && d >= new Date("2026-01-01"); }).length, [dispatchData]);
+  // 합계 계산 — 기간을 "실시간 범위 이전(past)"과 "최근(live)"으로 나눠 센다
+  const sumStats = (rows) => {
+    let year = 0, month = 0, count = 0;
+    rows.forEach((row) => {
+      const d = getLoadDate(row);
+      if (!d) return;
+      const fare = Number(row?.청구운임 || 0);
+      if (d.getFullYear() === currentYear) { year += fare; if (d.getMonth() === currentMonth) month += fare; }
+      if (d >= new Date("2026-01-01")) count += 1;
+    });
+    return { year, month, count };
+  };
+  const dateKey = (row) => String(row?.상차일자 || row?.상차일 || row?.상차 || "").slice(0, 10);
+  const liveStats = useMemo(() => sumStats(dispatchData.filter((row) => dateKey(row) >= liveStartStr)), [dispatchData, liveStartStr]);
+  const past = pastCache || { year: 0, month: 0, count: 0 };
+  const yearRevenue = past.year + liveStats.year;
+  const monthRevenue = past.month + liveStats.month;
+  const orderCountFrom2026 = past.count + liveStats.count;
 
   const salesTrend = useMemo(() => {
     const today = new Date();
