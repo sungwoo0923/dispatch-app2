@@ -31,6 +31,7 @@ const resyncCheckingStore = createMiniStore(false);
 const bootStageStore = createMiniStore({ server: 0, apply: 0, applyCount: 0, ready: 0 });
 import { createPortal } from "react-dom";
 import KpBootScreen from "../KpBootScreen";
+import { isMeaningfulChange } from "../bootProgress";
 import { Scale, Package, Snowflake, Car, Bike, Truck, Forklift, Mic, Sparkles, Download, RotateCcw, Building2, ArrowUpDown, StickyNote, MessageSquare, History } from "lucide-react";
 import {
   LineChart,
@@ -2609,7 +2610,11 @@ collections.forEach((name) => {
       if (!seenFirst && snap.metadata.fromCache && snap.size > 0) hadCache = true;
       if (!serverSynced) {
         // 서버가 보낸 변경은 "서버와 맞춰짐" 표시 전 알림에 먼저 섞여 오기도 해서, 첫 알림 이후 맞춰질 때까지 전부 센다
-        if (seenFirst && hadCache) snap.docChanges().forEach((ch) => { bootSyncRef.current[ch.type] = (bootSyncRef.current[ch.type] || 0) + 1; });
+        // 시스템용 값(구글시트 줄번호 등)만 바뀐 건 "수정"으로 세지 않는다 — objCache에는 아직 직전 내용이 있다
+        if (seenFirst && hadCache) snap.docChanges().forEach((ch) => {
+          if (ch.type === "modified" && !isMeaningfulChange(objCache.get(ch.doc.id), ch.doc.data())) return;
+          bootSyncRef.current[ch.type] = (bootSyncRef.current[ch.type] || 0) + 1;
+        });
         if (!snap.metadata.fromCache) {
           serverSynced = true;
           bootSyncRef.current.done[name] = true;
