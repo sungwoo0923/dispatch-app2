@@ -65,6 +65,8 @@ import {
   startAfter,
   getCountFromServer,
   Timestamp,
+  disableNetwork,
+  enableNetwork,
 } from "firebase/firestore";
 import { updateDoc, setDoc } from "../orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { db, auth, FUNCTIONS_BASE, DEFAULT_COMPANY } from "../firebase";
@@ -2970,6 +2972,14 @@ useEffect(() => {
   const HIDDEN_THRESHOLD_MS = 15 * 1000;
   let hiddenAt = 0;
 
+  // 백그라운드에서 끊겼던 서버 연결을 바로 다시 맺는다(폰 브라우저는 백그라운드 연결 복구가 한참 늦을 때가 있음)
+  let reconnecting = false;
+  const reconnectNow = async () => {
+    if (reconnecting || !navigator.onLine) return;
+    reconnecting = true;
+    try { await disableNetwork(db); await enableNetwork(db); } catch { /* 무시 — 실시간 구독이 스스로 다시 붙는다 */ }
+    reconnecting = false;
+  };
   const onVisible = () => {
     if (document.visibilityState !== "visible") {
       hiddenAt = Date.now();
@@ -2979,13 +2989,16 @@ useEffect(() => {
     // hiddenAt이 없으면(예: 첫 마운트 직후 이벤트) 재조회 대상이 아니다 — 최초
     // 로드는 onSnapshot 첫 스냅샷이 이미 처리한다.
     // 앱이 다시 보이자마자 확인하면 첫 터치·스크롤과 겹쳐 끊긴다 — 화면이 먼저 그려진 뒤 확인
-    if (hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) setTimeout(() => refreshFromServer(), 400);
+    // ⭐ 사용자 요청 — 예전엔 돌아올 때마다 서버에 조회를 12번 따로 보내고 "최신 정보 확인 중"을 띄웠다(새 정보가
+    // 없어도 뜨고, 뜰 때마다 화면이 끊김). 이제는 이미 연결된 실시간 구독을 바로 다시 붙이기만 한다 — 그동안
+    // 바뀐 것만 조용히 들어오고(새 정보가 없으면 아무 일도 없음), 표시도 띄우지 않는다.
+    if (hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) setTimeout(reconnectNow, 300);
   };
 
   // bfcache(뒤로가기 등으로 페이지가 통째로 캐시에서 복원)로 돌아온 경우도 같은
   // 기준으로 취급 — persisted가 아니면(=일반적인 최초 로드) 건드리지 않는다.
   const onPageShow = (e) => {
-    if (e.persisted && hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) refreshFromServer();
+    if (e.persisted && hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) reconnectNow();
   };
 
   document.addEventListener("visibilitychange", onVisible);
@@ -2995,7 +3008,7 @@ useEffect(() => {
     document.removeEventListener("visibilitychange", onVisible);
     window.removeEventListener("pageshow", onPageShow);
   };
-}, [refreshFromServer]);
+}, []);
 
 useEffect(() => {
   // pull-to-refresh is disabled — keep refs clean only
