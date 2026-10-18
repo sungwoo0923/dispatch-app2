@@ -1,36 +1,21 @@
-// ======================= src/Login.jsx (Homepage) =======================
+// ======================= src/Login.jsx (로그인 선택 화면) =======================
+// ⭐ 리디자인 — 예전엔 상단 로그인 링크 3개와 가운데 "○○ 시작하기" 버튼 3개가 같은 곳으로 가는 중복이 있었고,
+// 홍보용 카드 4개(배차 관리 등)까지 있어 복잡했다. 로딩 화면과 같은 KP-Flow 디자인으로 통일하고,
+// "누가 어떤 걸 누르면 되는지" 바로 보이게 큰 선택 카드 3개로 정리했다.
+//  - 마지막에 쓴 계정 종류를 기억해 맨 위 카드처럼 강조(흰색 + "최근 로그인")
+//  - 회원가입은 맨 아래 한 줄로(계정 종류별)
+//  - 배경 영상/이미지·글꼴·하단 문구는 지금처럼 관리자메뉴 > 랜딩페이지 편집 값을 그대로 쓴다
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { db, doc, onSnapshot } from "./firebase";
 
-// ⭐ 아래 DEFAULT_* 값들은 최고관리자가 관리자메뉴 > 랜딩페이지 편집에서 아무것도
-// 안 건드렸을 때 그대로 쓰이는 기존 화면 그대로다 — siteConfig/landing 문서가
-// 없거나 특정 필드가 비어있으면 이 값으로 자동 대체된다(onSnapshot 실시간 반영이라
-// 편집하면 바로 화면에 뜬다, 새로고침 필요 없음).
-const DEFAULT_BADGE = "물류 관리 플랫폼";
-const DEFAULT_HEADLINE_1 = "더 스마트한";
-const DEFAULT_HEADLINE_2 = "물류 관리";
-const DEFAULT_ACCENT_COLOR = "#93c5fd"; // tailwind text-blue-300
-const DEFAULT_TEXT_COLOR = "#ffffff";
-const DEFAULT_SUBTITLE_1 = "배차 관리부터 차주 관리, 운임 정산까지";
-const DEFAULT_SUBTITLE_2 = "KP-Flow 하나로 물류 업무를 최적화하세요.";
-const DEFAULT_CTA_TRANSPORT = "운송사 시작하기";
-const DEFAULT_CTA_DRIVER = "차주 시작하기";
-const DEFAULT_CTA_SHIPPER = "화주사 시작하기";
 const DEFAULT_FOOTER = "© 2025 KP-Flow Logistics. All rights reserved.";
-const DEFAULT_FEATURES = [
-  { title: "배차 관리", desc: "실시간 배차 등록 및 현황 관리" },
-  { title: "차주 관리", desc: "차주 정보 및 운행 현황 통합 관리" },
-  { title: "운임 정산", desc: "청구운임 및 기사운임 자동 정산" },
-  { title: "거래처 관리", desc: "화주사 및 거래처 통합 관리" },
-];
-const DEFAULT_OVERLAY_GRADIENT =
-  "linear-gradient(135deg, rgba(6,24,50,0.88) 0%, rgba(11,37,84,0.82) 50%, rgba(13,43,102,0.88) 100%)";
 const FONT_FAMILY_MAP = {
   noto: "'Noto Sans KR', sans-serif",
   nanum: "'Nanum Gothic', sans-serif",
   gothicA1: "'Gothic A1', sans-serif",
 };
+const LAST_ROLE_KEY = "lastLoginRole";
 
 function hexToRgba(hex, alpha) {
   const h = (hex || "").replace("#", "");
@@ -41,11 +26,48 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+// 계정 종류 — 로그인·가입 경로와 한 줄 설명
+const ROLES = [
+  {
+    key: "transport",
+    title: "운송사",
+    desc: "배차 등록 · 현황 · 정산 관리",
+    to: "/transport-login",
+    signup: "/signup",
+    icon: (c) => (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M8 14h3M8 17h6" />
+      </svg>
+    ),
+  },
+  {
+    key: "driver",
+    title: "차주 (기사)",
+    desc: "운행 확인 · 인수증·서류 업로드",
+    to: "/driver-login",
+    signup: "/driver-register",
+    icon: (c) => (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="1" y="6" width="13" height="10" rx="1.5" /><path d="M14 9h4l3 3.5V16h-7z" /><circle cx="5.5" cy="17.5" r="1.8" /><circle cx="17.5" cy="17.5" r="1.8" />
+      </svg>
+    ),
+  },
+  {
+    key: "shipper",
+    title: "화주사",
+    desc: "오더 요청 · 배차 현황 확인",
+    to: "/shipper-login",
+    signup: "/shipper-signup",
+    icon: (c) => (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 21V8l6-4 6 4v13" /><path d="M15 21V11h6v10M7 12h4M7 16h4" />
+      </svg>
+    ),
+  },
+];
+
 export default function Login() {
-  // ⭐ siteConfig/landing 문서를 실시간 구독한다 — 최고관리자가 관리자메뉴에서
-  // 저장하면 이 화면(로그인 전, 누구나 보는 화면)에 새로고침 없이 바로 반영된다.
-  // Firestore 규칙(firestore.rules)에서 이 문서의 get은 로그인 여부와 무관하게
-  // 누구나 허용, write만 최고관리자로 제한해뒀다.
+  // siteConfig/landing — 관리자메뉴 > 랜딩페이지 편집 값(배경·글꼴·하단 문구)을 실시간으로 반영
   const [config, setConfig] = useState(null);
   useEffect(() => {
     const unsub = onSnapshot(
@@ -57,137 +79,104 @@ export default function Login() {
   }, []);
   const c = config || {};
 
-  const backgroundImageUrl = c.backgroundImageUrl || "";
+  // 마지막에 고른 계정 종류(이 기기 기준)
+  const [lastRole] = useState(() => { try { return localStorage.getItem(LAST_ROLE_KEY) || "transport"; } catch { return "transport"; } });
+  const remember = (key) => { try { localStorage.setItem(LAST_ROLE_KEY, key); } catch { /* 무시 */ } };
+  const hasHistory = (() => { try { return !!localStorage.getItem(LAST_ROLE_KEY); } catch { return false; } })();
+
+  const hasMedia = !!(c.backgroundVideoUrl || c.backgroundImageUrl);
   const overlayBackground = c.overlayColor
-    ? `linear-gradient(135deg, ${hexToRgba(c.overlayColor, (c.overlayOpacity ?? 82) / 100)} 0%, ${hexToRgba(c.overlayColor, (c.overlayOpacity ?? 82) / 100)} 100%)`
-    : (c.backgroundVideoUrl || c.backgroundImageUrl)
-      // 영상/이미지가 있으면 기본 오버레이를 옅게 — 진하면 영상이 거의 안 보인다
-      ? "linear-gradient(135deg, rgba(6,24,50,0.55) 0%, rgba(11,37,84,0.45) 50%, rgba(13,43,102,0.55) 100%)"
-      : DEFAULT_OVERLAY_GRADIENT;
+    ? hexToRgba(c.overlayColor, (c.overlayOpacity ?? 82) / 100)
+    : hasMedia
+      ? "linear-gradient(180deg, rgba(15,26,48,0.55) 0%, rgba(15,26,48,0.85) 100%)"
+      : "radial-gradient(120% 70% at 50% 0%, #2A3F6B 0%, #1B2B4B 45%, #0F1A30 100%)";
   const fontFamily = FONT_FAMILY_MAP[c.fontFamily] || FONT_FAMILY_MAP.noto;
-  const textColor = c.textColor || DEFAULT_TEXT_COLOR;
-  const accentColor = c.accentColor || DEFAULT_ACCENT_COLOR;
-  const features = Array.isArray(c.features) && c.features.length === 4 ? c.features : DEFAULT_FEATURES;
 
   return (
-    <div className="relative min-h-screen overflow-hidden" style={{ fontFamily }}>
-      {/* ── 배경: 최고관리자가 이미지를 올렸으면 이미지, 아니면 기존 영상(공개 폴더
-          /videos/bg-truck.mp4)을 그대로 쓴다 ── */}
-      {/* ⭐ 최고관리자가 업로드한 영상(관리자메뉴 > 랜딩페이지 편집)이 있으면 영상이 우선,
-          없으면 이미지, 둘 다 없으면 기본 남색 배경 */}
+    <div className="relative min-h-screen overflow-hidden bg-[#0F1A30] text-white select-none" style={{ fontFamily }}>
+      {/* 배경 — 관리자가 올린 영상 > 이미지 > 기본 네이비 */}
       {c.backgroundVideoUrl ? (
-        <video
-          key={c.backgroundVideoUrl}
-          className="absolute inset-0 w-full h-full object-cover"
-          src={c.backgroundVideoUrl}
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload="auto"
-        />
-      ) : backgroundImageUrl ? (
-        <img
-          className="absolute inset-0 w-full h-full object-cover"
-          src={backgroundImageUrl}
-          alt=""
-        />
+        <video key={c.backgroundVideoUrl} className="absolute inset-0 w-full h-full object-cover" src={c.backgroundVideoUrl} autoPlay loop muted playsInline preload="auto" />
+      ) : c.backgroundImageUrl ? (
+        <img className="absolute inset-0 w-full h-full object-cover" src={c.backgroundImageUrl} alt="" />
       ) : null}
-      {/* 배경 위 어두운 오버레이 */}
       <div className="absolute inset-0" style={{ background: overlayBackground }} />
+      <style>{`
+        @keyframes kpLoginIn { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
+        @keyframes kpLoginTruck { 0% { transform: translateX(-40px) } 100% { transform: translateX(calc(100% + 40px)) } }
+        @keyframes kpLoginFloat { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-1.5px) } }
+      `}</style>
 
-      {/* ── 콘텐츠 레이어 ── */}
-      <div className="relative z-10 flex flex-col min-h-screen">
-
-        {/* Fixed Nav */}
-        {/* ⭐ 로그인 링크 3개가 좁은 화면(작은 아이폰 등)에서 줄바꿈되던 문제 —
-            모바일 기준(px-2 py-1.5 text-xs)으로 작게 시작해서 화면이 커질수록
-            sm:/lg: 브레이크포인트에서 원래 크기로 커지도록 반응형으로 바꿨다.
-            flex-nowrap + overflow-x-auto를 같이 둬서, 그래도 안 들어가는 극단적으로
-            좁은 화면에서는 줄바꿈 대신 가로 스크롤로 빠지게 안전장치를 뒀다
-            (로고 글자는 요청대로 줄바꿈 허용 — truncate 안 함). */}
-        <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between gap-2 px-3 sm:px-6 py-3 bg-[#061832]/70 backdrop-blur-md border-b border-white/10">
-          <div className="flex items-center gap-2 min-w-0 shrink-0">
-            <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-6 h-6 sm:w-7 sm:h-7 rounded-md shrink-0" />
-            <span className="font-bold text-white text-xs sm:text-sm tracking-tight">KP-Flow Logistics</span>
-          </div>
-          <div className="flex items-center gap-0.5 sm:gap-1 flex-nowrap overflow-x-auto no-scrollbar shrink-0">
-            <Link to="/transport-login" className="px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm whitespace-nowrap text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-all">
-              운송사 로그인
-            </Link>
-            <Link to="/driver-login" className="px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm whitespace-nowrap text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-all">
-              차주 로그인
-            </Link>
-            <Link to="/shipper-login" className="px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm whitespace-nowrap text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-all">
-              화주사 로그인
-            </Link>
-          </div>
-        </nav>
-
-        {/* Hero Section */}
-        <section className="flex flex-col items-center justify-center flex-1 px-4 pt-20 pb-10 text-center">
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 mb-6 px-4 py-1.5 bg-white/10 border border-white/20 rounded-full">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs font-semibold text-white/80 uppercase tracking-wider">{c.badgeText || DEFAULT_BADGE}</span>
+      <div className="relative z-10 min-h-screen flex flex-col items-center px-5" style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 56px)", paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)" }}>
+        <div className="w-full max-w-[420px] flex flex-col flex-1">
+          {/* 로고 */}
+          <div className="flex flex-col items-center" style={{ animation: "kpLoginIn 0.5s ease both" }}>
+            <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-16 h-16 sm:w-20 sm:h-20 rounded-[18px] sm:rounded-[22px] shadow-[0_10px_28px_rgba(0,0,0,0.35)] ring-1 ring-white/15" />
+            <h1 className="mt-3.5 text-[26px] sm:text-[30px] font-black tracking-tight">KP-Flow</h1>
+            <p className="mt-1 text-[13px] font-semibold tracking-[0.18em] text-blue-200/65">배차관리 시스템</p>
           </div>
 
-          {/* Headline */}
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight mb-5 max-w-3xl" style={{ color: textColor }}>
-            {c.headlineLine1 || DEFAULT_HEADLINE_1}<br />
-            <span style={{ color: accentColor }}>{c.headlineLine2 || DEFAULT_HEADLINE_2}</span>
-          </h1>
-
-          {/* Subtitle */}
-          <p className="text-base sm:text-lg mb-10 leading-relaxed max-w-xl" style={{ color: textColor, opacity: 0.6 }}>
-            {c.subtitleLine1 || DEFAULT_SUBTITLE_1}<br />
-            {c.subtitleLine2 || DEFAULT_SUBTITLE_2}
-          </p>
-
-          {/* CTA Buttons */}
-          {/* ⭐ 좁은 화면에서 버튼 3개가 줄바꿈되던 문제 — flex-wrap을 없애고
-              (flex-nowrap) 모바일 기준 작은 패딩/글자로 시작해서 sm:에서
-              원래 크기로 커지게 반응형으로 바꿨다. 그래도 안 들어가면
-              줄바꿈 대신 가로 스크롤로 빠진다(overflow-x-auto). */}
-          <div className="flex flex-row flex-nowrap items-center justify-center gap-2 sm:gap-3 mb-16 overflow-x-auto no-scrollbar max-w-full px-2">
-            <Link
-              to="/transport-login"
-              className="bg-white text-[#1B2B4B] font-bold rounded-xl px-3.5 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm hover:bg-blue-50 transition-all shadow-lg whitespace-nowrap shrink-0"
-            >
-              {c.ctaTransportLabel || DEFAULT_CTA_TRANSPORT}
-            </Link>
-            <Link
-              to="/driver-login"
-              className="bg-white/10 text-white border border-white/25 rounded-xl px-3.5 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm hover:bg-white/20 transition-all backdrop-blur-sm whitespace-nowrap shrink-0"
-            >
-              {c.ctaDriverLabel || DEFAULT_CTA_DRIVER}
-            </Link>
-            <Link
-              to="/shipper-login"
-              className="bg-white/10 text-white border border-white/25 rounded-xl px-3.5 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm hover:bg-white/20 transition-all backdrop-blur-sm whitespace-nowrap shrink-0"
-            >
-              {c.ctaShipperLabel || DEFAULT_CTA_SHIPPER}
-            </Link>
+          {/* 트럭이 지나가는 길 */}
+          <div className="relative h-7 mt-7 mb-7 mx-1 overflow-hidden" aria-hidden="true">
+            <div className="absolute left-0 right-0 bottom-1 h-[2px]" style={{ backgroundImage: "linear-gradient(90deg, rgba(255,255,255,0.28) 50%, transparent 50%)", backgroundSize: "12px 2px" }} />
+            <div className="absolute bottom-1 left-0 w-full" style={{ animation: "kpLoginTruck 7s linear infinite", willChange: "transform" }}>
+              <svg width="32" height="23" viewBox="0 0 30 22" style={{ display: "block", animation: "kpLoginFloat 0.5s ease-in-out infinite" }}>
+                <rect x="1" y="3" width="17" height="12" rx="2" fill="#E8EEF9" />
+                <path d="M18 7h5.5l4 4.5V15H18z" fill="#93C5FD" />
+                <rect x="20" y="8.3" width="3.2" height="2.6" rx="0.6" fill="#1B2B4B" />
+                <circle cx="7" cy="17" r="2.6" fill="#0F1A30" stroke="#E8EEF9" strokeWidth="1.3" />
+                <circle cx="22.5" cy="17" r="2.6" fill="#0F1A30" stroke="#E8EEF9" strokeWidth="1.3" />
+              </svg>
+            </div>
           </div>
 
-          {/* Feature Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 max-w-4xl w-full">
-            {features.map((f, i) => (
-              <div
-                key={i}
-                className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-5 text-left transition-all backdrop-blur-sm"
-              >
-                <p className="text-white font-bold text-sm">{f.title}</p>
-                <p className="text-white/40 text-xs mt-1 leading-relaxed">{f.desc}</p>
-              </div>
-            ))}
+          {/* 계정 선택 */}
+          <p className="text-[14px] font-bold text-blue-100/80 mb-3 px-1">어떤 계정으로 들어가시나요?</p>
+          <div className="flex flex-col gap-3">
+            {ROLES.map((r, i) => {
+              const main = r.key === lastRole;
+              return (
+                <Link
+                  key={r.key}
+                  to={r.to}
+                  onClick={() => remember(r.key)}
+                  className={`group flex items-center gap-3.5 rounded-[18px] px-4 py-4 sm:py-[18px] transition-transform active:scale-[0.98] ${
+                    main
+                      ? "bg-white text-[#1B2B4B] shadow-[0_12px_30px_rgba(0,0,0,0.3)]"
+                      : "bg-white/[0.07] ring-1 ring-white/10 hover:bg-white/[0.11]"
+                  }`}
+                  style={{ animation: `kpLoginIn 0.5s ease ${0.08 + i * 0.06}s both` }}
+                >
+                  <div className={`w-12 h-12 shrink-0 rounded-[14px] flex items-center justify-center ${main ? "bg-[#EEF3FB]" : "bg-blue-400/[0.18]"}`}>
+                    {r.icon(main ? "#1B2B4B" : "#93C5FD")}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 whitespace-nowrap">
+                      <span className="text-[17px] font-extrabold">{r.title}</span>
+                      {main && hasHistory && <span className="text-[10.5px] font-extrabold text-blue-600 bg-blue-100 rounded-full px-2 py-0.5">최근 로그인</span>}
+                    </div>
+                    <div className={`mt-0.5 text-[12.5px] truncate ${main ? "text-gray-500" : "text-blue-100/60"}`}>{r.desc}</div>
+                  </div>
+                  <svg className={`shrink-0 transition-transform group-hover:translate-x-0.5 ${main ? "text-[#1B2B4B]/50" : "text-white/40"}`} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+                </Link>
+              );
+            })}
           </div>
-        </section>
 
-        {/* Footer */}
-        <footer className="py-4 text-center">
-          <p className="text-xs text-white/20">{c.footerText || DEFAULT_FOOTER}</p>
-        </footer>
+          {/* 회원가입 — 계정 종류별 한 줄 */}
+          <div className="mt-auto pt-10 text-center">
+            <p className="text-[13px] text-blue-100/55">처음 오셨나요? 회원가입</p>
+            <div className="mt-2 flex items-center justify-center gap-1 text-[13px] font-bold">
+              {ROLES.map((r, i) => (
+                <React.Fragment key={r.key}>
+                  {i > 0 && <span className="text-white/20 px-1">·</span>}
+                  <Link to={r.signup} onClick={() => remember(r.key)} className="text-blue-300 hover:text-blue-200 px-1 py-1">{r.title.replace(" (기사)", "")}</Link>
+                </React.Fragment>
+              ))}
+            </div>
+            <p className="mt-6 text-[11px] text-white/25">{c.footerText || DEFAULT_FOOTER}</p>
+          </div>
+        </div>
       </div>
     </div>
   );

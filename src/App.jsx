@@ -102,6 +102,12 @@ export default function App() {
   const [userCompany, setUserCompany] = useState("");
   // ⭐ 블라인드 오더 노출 판정용 — 렌더 중 바로 반영(하위 화면 첫 렌더 전에 알아야 함)
   setBlindViewerRole(role, user?.email);
+  // ⭐ 로그인 선택 화면의 "최근 로그인" — 실제로 로그인에 성공한 계정 종류를 이 기기에 기억한다
+  useEffect(() => {
+    if (!user || !role) return;
+    const kind = role === "driver" ? "driver" : role === "shipper" ? "shipper" : role === "cafeUser" ? null : "transport";
+    if (kind) { try { localStorage.setItem("lastLoginRole", kind); } catch { /* 무시 */ } }
+  }, [user, role]);
   // updateReady 팝업 제거됨 - UpdateBanner가 자동 처리
   const [splashDone, setSplashDone] = useState(false);
 
