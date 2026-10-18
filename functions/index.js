@@ -211,19 +211,44 @@ function notifFieldValue(key, d) {
 // 선택된 필드들을 사람이 읽기 좋게 이어붙인다 — 상차지명 바로 다음에 하차지명이
 // 오면(둘 다 선택된 기본 케이스) 그 둘만 "출발 → 도착"처럼 화살표로 잇고,
 // 나머지는 가운뎃점으로 구분한다.
+// ⭐ 2026-10-19 요청 — 알림을 더 자연스럽게:
+//   제목: "미배차 임박 (용운)"처럼 거래처명을 제목 옆 괄호로
+//   1줄: 날짜·시간(오늘/내일/10/20(화) + 상차시간) — 상하차지보다 위에
+//   2줄: 상차지 → 하차지
+//   3줄: 나머지(화물·톤수·차종·기사·차량번호·전화번호)
+// (관리자메뉴 > 알림 문구 설정에서 고른 항목만 나온다)
+const KST_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
+function notifDateLabel(ymd) {
+  if (!/^\d{4}-\d{2}-\d{2}/.test(ymd || "")) return ymd || "";
+  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const tmr = new Date(Date.now() + 9 * 3600e3 + 86400e3).toISOString().slice(0, 10);
+  const d = String(ymd).slice(0, 10);
+  if (d === today) return "오늘";
+  if (d === tmr) return "내일";
+  const dt = new Date(`${d}T00:00:00Z`);
+  return `${dt.getUTCMonth() + 1}/${dt.getUTCDate()}(${KST_DAYS[dt.getUTCDay()]})`;
+}
+function buildNotifTitle(base, fieldKeys, d) {
+  const client = fieldKeys.includes("거래처명") ? String(d["거래처명"] || "").trim() : "";
+  return client ? `${base} (${client})` : base;
+}
 function buildNotifBody(fieldKeys, d) {
-  const segments = [];
-  for (let i = 0; i < fieldKeys.length; i++) {
-    const key = fieldKeys[i];
-    if (key === "하차지명" && fieldKeys[i - 1] === "상차지명") continue; // 위에서 화살표로 이미 처리
-    if (key === "상차지명" && fieldKeys[i + 1] === "하차지명") {
-      segments.push(`${notifFieldValue("상차지명", d)} → ${notifFieldValue("하차지명", d)}`);
-      continue;
-    }
-    const v = notifFieldValue(key, d);
-    if (v) segments.push(v);
-  }
-  return segments.join(" · ");
+  const has = (k) => fieldKeys.includes(k);
+  const lines = [];
+  // 1줄: 날짜·시간
+  const when = [has("상차일") ? notifDateLabel(d["상차일"]) : "", has("상차시간") ? notifFieldValue("상차시간", d) : ""].filter(Boolean).join(" ");
+  if (when) lines.push(`${when} 상차`);
+  // 2줄: 상차지 → 하차지
+  if (has("상차지명") && has("하차지명")) lines.push(`${notifFieldValue("상차지명", d)} → ${notifFieldValue("하차지명", d)}`);
+  else if (has("상차지명")) lines.push(`상차 ${notifFieldValue("상차지명", d)}`);
+  else if (has("하차지명")) lines.push(`하차 ${notifFieldValue("하차지명", d)}`);
+  // 3줄: 나머지
+  const rest = fieldKeys
+    .filter((k) => !["거래처명", "상차일", "상차시간", "상차지명", "하차지명"].includes(k))
+    .map((k) => notifFieldValue(k, d))
+    .filter(Boolean);
+  if (rest.length) lines.push(rest.join(" · "));
+  return lines.join("\n");
 }
 
 /* ==============================
@@ -255,11 +280,12 @@ exports.notifyNewDispatch =
       }
 
       const templateConfig = await getNotificationTemplateConfig();
-      const body = buildNotifBody(getNotifFieldsForType(templateConfig, type), data);
+      const fields = getNotifFieldsForType(templateConfig, type);
+      const body = buildNotifBody(fields, data);
 
       await sendPushAndCleanup(tokens, {
         notification: {
-          title: isUrgent ? "긴급 오더 등록" : "신규 오더 등록",
+          title: buildNotifTitle(isUrgent ? "긴급 오더 등록" : "신규 오더 등록", fields, data),
           body,
         },
         android: { priority: "high" },
@@ -292,11 +318,12 @@ exports.notifyDispatchDone =
       if (!tokens.length) return;
 
       const templateConfig = await getNotificationTemplateConfig();
-      const body = buildNotifBody(getNotifFieldsForType(templateConfig, "배차완료"), after);
+      const doneFields = getNotifFieldsForType(templateConfig, "배차완료");
+      const body = buildNotifBody(doneFields, after);
 
       await sendPushAndCleanup(tokens, {
         notification: {
-          title: "배차완료",
+          title: buildNotifTitle("배차완료", doneFields, after),
           body,
         },
         android: { priority: "high" },
@@ -758,7 +785,7 @@ exports.notifyUnassignedUrgent = functions.pubsub
         try {
           await sendPushAndCleanup(tokens, {
             notification: {
-              title: "미배차 임박",
+              title: buildNotifTitle("미배차 임박", notifFields, data),
               body: buildNotifBody(notifFields, data),
             },
             android: { priority: "high" },
