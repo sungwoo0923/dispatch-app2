@@ -7945,7 +7945,7 @@ return (
 
         {menu === "회사관리" && (
           <CompanyManagementWrapper
-            userCompany={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "").trim()}
+            userCompany={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()}
             role={role}
             userId={auth?.currentUser?.uid || localStorage.getItem("uid") || ""}
             user={user}
@@ -60509,6 +60509,8 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
     const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
     if (!allowed.includes(file.type)) { showMsg("JPG, PNG, WEBP, PDF 파일만 업로드 가능합니다."); return; }
     if (file.size > 3 * 1024 * 1024) { showMsg("파일 크기는 3MB 이하여야 합니다. (Firestore 저장 방식)"); return; }
+    // ⚠️ 예전엔 회사 정보(appData)를 못 찾았을 때 저장은 건너뛰고 "업로드되었습니다"만 띄웠다
+    if (!appData?.id) { showMsg("회사 정보를 찾지 못해 저장할 수 없습니다. 새로고침 후 다시 시도해 주세요."); return; }
     setUploading(true);
     setUploadProgress("업로드 중...");
     try {

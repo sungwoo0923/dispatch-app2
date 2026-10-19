@@ -33,7 +33,14 @@ preloadTmapWhenIdle();
     if (sessionStorage.getItem(RELOAD_GUARD_KEY)) return; // 이미 한 번 시도했으면 반복 안 함
     sessionStorage.setItem(RELOAD_GUARD_KEY, "1");
     console.warn("[APP] Firestore 로컬 저장공간 문제 감지 — 캐시 정리 후 새로고침합니다.");
-    try { localStorage.clear(); } catch {}
+    // ⭐ 로그인·회사 정보는 남긴다 — 예전엔 전부 지워서 로그인은 유지된 채 회사명만 사라져
+    // 회사관리·매출관리 등이 "로딩 중"에서 멈췄다.
+    try {
+      const KEEP = ["loginCompany", "userCompany", "role", "uid", "lastLoginRole"];
+      const kept = KEEP.map((k) => [k, localStorage.getItem(k)]);
+      localStorage.clear();
+      kept.forEach(([k, v]) => { if (v != null) localStorage.setItem(k, v); });
+    } catch {}
     try {
       if (indexedDB.databases) {
         const dbs = await indexedDB.databases();

@@ -10,7 +10,7 @@ import {
   Navigate,
 } from "react-router-dom";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { auth, db } from "./firebase";
+import { auth, db, DEFAULT_COMPANY } from "./firebase";
 import { setBlindViewerRole } from "./blind";
 import { doc, onSnapshot, addDoc, collection, serverTimestamp, query, orderBy, limit, getDocs, deleteDoc } from "firebase/firestore";
 
@@ -471,9 +471,12 @@ export default function App() {
           setApproved(isMasterEmail ? true : data.approved !== false);
           if (dataRole === "totalMaster") {
             // totalMaster uses the company they typed at login, not their Firestore doc
-            const loginCompany = localStorage.getItem("loginCompany") || "";
+            // ⭐ 저장된 회사명이 지워졌으면(캐시 정리 등) 본인 문서의 회사 → 기본 회사 순으로 채운다 —
+            // 비어 있으면 회사관리·매출관리 등이 어느 회사인지 몰라 "로딩 중"에서 멈췄다.
+            const loginCompany = localStorage.getItem("loginCompany") || data.companyName || DEFAULT_COMPANY || "";
             setUserCompany(loginCompany);
             safeLocalSet("userCompany", loginCompany);
+            safeLocalSet("loginCompany", loginCompany);
           } else {
             setUserCompany(data.companyName || "");
             safeLocalSet("userCompany", data.companyName || "");
@@ -493,9 +496,9 @@ export default function App() {
           // 이메일은 무조건 최고관리자로 들어가야 한다.
           setRole("totalMaster");
           setApproved(true);
-          const loginCompany = localStorage.getItem("loginCompany") || "";
+          const loginCompany = localStorage.getItem("loginCompany") || DEFAULT_COMPANY || "";
           setUserCompany(loginCompany);
-          safeLocalSet("userCompany", loginCompany); safeLocalSet("role", "totalMaster");
+          safeLocalSet("userCompany", loginCompany); safeLocalSet("loginCompany", loginCompany); safeLocalSet("role", "totalMaster");
         } else {
           setRole(null);
           setApproved(false);
