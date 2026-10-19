@@ -7122,6 +7122,8 @@ const [revenuePassInput, setRevenuePassInput] = React.useState("");
 const [revenuePassError, setRevenuePassError] = React.useState(false);
 const [revenuePassword, setRevenuePassword] = React.useState(null); // null = not loaded yet
 const [revenuePasswordLoaded, setRevenuePasswordLoaded] = React.useState(false);
+const [revenuePasswordError, setRevenuePasswordError] = React.useState(""); // 불러오기 실패 사유
+const [revenuePasswordRetry, setRevenuePasswordRetry] = React.useState(0);
 const [hasUpdate, setHasUpdate] = React.useState(false);
 React.useEffect(() => {
   const handler = () => setHasUpdate(true);
@@ -7175,16 +7177,27 @@ React.useEffect(() => {
   }, [role]);
 
   // 매출관리 비밀번호 - 회사별 Firestore 로드
+  // ⚠️ 예전엔 ① 회사명이 비어 있거나(캐시 초기화 등으로 저장된 회사명이 지워진 경우) ② 서버가 읽기를 거부·실패하면
+  // 아무 값도 안 들어와 "로딩 중..."이 끝나지 않았다. 회사명이 없으면 기본 회사로 보고, 실패하면 이유와 "다시 시도"를 보여준다.
   useEffect(() => {
-    const co = (userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim();
-    if (!co) return;
+    const co = (userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
+    setRevenuePasswordError("");
+    if (!co) { setRevenuePasswordError("회사 정보가 없습니다. 다시 로그인해 주세요."); return undefined; }
+    // 서버 응답이 오래 없으면(네트워크 문제) 안내
+    const slow = setTimeout(() => setRevenuePasswordError((e) => e || "서버 응답이 늦어지고 있습니다."), 8000);
     const unsub = onSnapshot(doc(db, "companySettings", co), (snap) => {
+      clearTimeout(slow);
       const data = snap.data();
       setRevenuePassword(data?.revenuePassword ?? null);
       setRevenuePasswordLoaded(true);
+      setRevenuePasswordError("");
+    }, (err) => {
+      clearTimeout(slow);
+      console.error("매출관리 비밀번호 불러오기 실패:", err);
+      setRevenuePasswordError(err?.code === "permission-denied" ? "읽기 권한이 없습니다(계정 승인 상태를 확인해 주세요)." : `불러오기 실패: ${err?.code || err?.message || err}`);
     });
-    return () => unsub();
-  }, [userCompany]);
+    return () => { clearTimeout(slow); unsub(); };
+  }, [userCompany, revenuePasswordRetry]);
 
   // 역할이 바뀌어 현재 메뉴가 차단 목록에 포함되면 HOME으로 이동
   useEffect(() => {
@@ -7828,7 +7841,17 @@ return (
                   </div>
                 </div>
                 {!revenuePasswordLoaded ? (
-                  <div className="text-center py-4 text-gray-500 text-[13px]">로딩 중...</div>
+                  revenuePasswordError ? (
+                    <div className="text-center py-2">
+                      <div className="text-[13px] text-red-500 mb-3">{revenuePasswordError}</div>
+                      <button
+                        onClick={() => { setRevenuePasswordError(""); setRevenuePasswordRetry((n) => n + 1); }}
+                        className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold"
+                      >다시 시도</button>
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-gray-500 text-[13px]">로딩 중...</div>
+                  )
                 ) : !revenuePassword ? (
                   <div>
                     <div className="text-[13px] text-gray-500 text-center mb-4">비밀번호가 설정되지 않았습니다.<br/>관리자가 회사관리에서 비밀번호를 설정해 주세요.</div>
