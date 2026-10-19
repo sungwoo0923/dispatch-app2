@@ -2600,6 +2600,7 @@ import {
 } from "firebase/firestore";
 import { setDoc, updateDoc } from "./orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import KpBootScreen from "./KpBootScreen";
+import AdminShell from "./AdminShell";
 import { pcBootStore, useMiniStore, makeBootTracker, markBootBase } from "./bootProgress";
 import { auth, db, storage, DEFAULT_COMPANY } from "./firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -59573,20 +59574,27 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
   const canViewHR = role === "totalMaster" || role === "hrManager";
   const tabs = canViewHR ? ["회사정보", "내정보", "출근기록부", "인사관리부"] : ["회사정보", "내정보", "출근기록부"];
 
+  // ⭐ 디자인 개편 — 관리자메뉴와 같은 왼쪽 메뉴바 + 상단 인사 카드(AdminShell 공용 레이아웃)
+  const TAB_ICONS = { 회사정보: "building", 내정보: "user", 출근기록부: "clock", 인사관리부: "idcard" };
+  const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
+  const myName = user?.displayName || (user?.email || "").split("@")[0] || "";
   return (
-    <div>
-      <div className="flex gap-2 px-4 pt-4 pb-0">
-        {tabs.map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-5 py-2 text-[13px] font-bold rounded-lg transition border ${
-              tab === t
-                ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-                : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
-            }`}>
-            <EditableText id={`companyMgmt.tab.${t}`} defaultText={t} />
-          </button>
-        ))}
-      </div>
+    <AdminShell
+      badgeLabel="COMPANY"
+      title={userCompany || "회사 관리"}
+      groups={[{ label: "회사 관리", items: tabs.map((t) => ({ key: t, label: t, icon: TAB_ICONS[t] })) }]}
+      active={tab}
+      onSelect={setTab}
+      heroTitle={`${userCompany || "우리 회사"} 회사 관리`}
+      heroSubtitle={`${myName ? `${myName}님, ` : ""}회사 정보·내 정보·출근 기록을 한 곳에서 관리하세요.`}
+      stats={[
+        { label: "오늘 접수", value: `${todayStats?.count || 0}건`, icon: "truck", tone: "navy" },
+        { label: "오늘 매출", value: won(todayStats?.revenue), icon: "money", tone: "green" },
+        { label: "오늘 수익", value: won(todayStats?.profit), icon: "check", tone: "blue" },
+        { label: "누적 오더", value: `${(myStats?.totalOrders || 0).toLocaleString()}건`, icon: "dashboard", tone: "violet" },
+      ]}
+    >
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_10px_rgba(16,24,40,0.04)] overflow-hidden">
       {tab === "회사정보" && (
         <CompanyProfile userCompany={userCompany} role={role} userId={userId} />
       )}
@@ -59610,7 +59618,8 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
       {tab === "인사관리부" && canViewHR && (
         <HRManagementPage userCompany={userCompany} role={role} userId={userId} />
       )}
-    </div>
+      </div>
+    </AdminShell>
   );
 }
 

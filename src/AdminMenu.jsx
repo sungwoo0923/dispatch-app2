@@ -1,4 +1,5 @@
 // src/AdminMenu.jsx
+import AdminShell from "./AdminShell";
 import React, { useEffect, useState, useMemo } from "react";
 import { auth, db, storage, FUNCTIONS_BASE, DEFAULT_COMPANY } from "./firebase";
 import {
@@ -694,83 +695,37 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const tabBadgeCounts = { linked: linkedPendingCount, inquiries: unansweredInquiryCount, landingInquiries: newLandingInquiryCount };
   const groupBadgeTotal = (g) => g.tabs.reduce((sum, t) => sum + (tabBadgeCounts[t] || 0), 0);
 
+  // ⭐ 디자인 개편 — 왼쪽 메뉴바(그룹별) + 상단 인사 카드 + 숫자 카드(AdminShell 공용 레이아웃)
+  const TAB_ICONS = {
+    members: "users", linked: "link", transmit: "send", inquiries: "chat", landingInquiries: "inbox",
+    sessionLogs: "history", forceUpdate: "refresh", permissions: "key", gsheetBackfill: "sheet",
+    landingEdit: "globe", notifTemplate: "bell",
+  };
+  const shellGroups = tabGroups.map((g) => ({
+    label: g.label,
+    items: g.tabs.map((t) => ({ key: t, label: TAB_LABELS[t], icon: TAB_ICONS[t], badge: tabBadgeCounts[t] || 0 })),
+  }));
+  const myDisplayName = users.find((u) => u.id === me?.uid)?.name || me?.email || "관리자";
+  const pendingUserCount = visibleUsers.filter((u) => !u.approved).length;
+  const todoCount = pendingUserCount + (linkedPendingCount || 0) + (unansweredInquiryCount || 0);
+
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      {/* 헤더 */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-[22px] font-bold text-[#1B2B4B]"><EditableText id="adminMenu.header.title" defaultText="관리자 메뉴" /></h1>
-          <p className="text-[13px] text-gray-500 mt-0.5"><EditableText id="adminMenu.header.subtitle" defaultText="사용자 계정 권한 및 승인 관리" /></p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="bg-[#1B2B4B]/10 rounded-xl px-4 py-2 text-center">
-            <div className="text-[22px] font-bold text-[#1B2B4B]">{visibleUsers.length}</div>
-            <div className="text-[11px] text-gray-500"><EditableText id="adminMenu.header.전체사용자" defaultText="전체 사용자" /></div>
-          </div>
-          <div className="bg-emerald-50 rounded-xl px-4 py-2 text-center">
-            <div className="text-[22px] font-bold text-emerald-600">{visibleUsers.filter(u => u.approved).length}</div>
-            <div className="text-[11px] text-gray-500"><EditableText id="adminMenu.header.승인완료" defaultText="승인 완료" /></div>
-          </div>
-          <div className="bg-amber-50 rounded-xl px-4 py-2 text-center">
-            <div className="text-[22px] font-bold text-amber-500">{visibleUsers.filter(u => !u.approved).length}</div>
-            <div className="text-[11px] text-gray-500"><EditableText id="adminMenu.header.승인대기" defaultText="승인 대기" /></div>
-          </div>
-          <button
-            onClick={() => setShowMobilePreview(v => !v)}
-            className={`px-4 py-2.5 rounded-xl text-[13px] font-semibold shadow-sm transition ${showMobilePreview ? "bg-gray-700 text-white" : "bg-[#1B2B4B] text-white hover:bg-[#243a60]"}`}
-          >
-            <EditableText id="adminMenu.header.모바일미리보기" defaultText="모바일 미리보기" />
-          </button>
-        </div>
-      </div>
-
-      {/* 탭 — 1단(그룹) + 2단(하위 탭) 구조. 그룹 안에 탭이 하나뿐이면(회원 관리)
-          하위 탭 줄 자체를 안 그린다. */}
-      <div className="flex gap-2 mb-2 flex-wrap">
-        {tabGroups.map((group) => {
-          const active = group.key === activeGroup.key;
-          const badge = groupBadgeTotal(group);
-          return (
-            <button
-              key={group.key}
-              onClick={() => setAdminTab(group.tabs[0])}
-              className={`relative px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${active ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
-            >
-              <EditableText id={`adminMenu.group.${group.key}`} defaultText={group.label} />
-              {badge > 0 && (
-                <span className={`absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${active ? "bg-white text-[#1B2B4B]" : "bg-[#1B2B4B] text-white"}`}>
-                  {badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {activeGroup.tabs.length > 1 ? (
-        <div className="flex gap-2 mb-4 pl-3 ml-1 border-l-2 border-gray-200 flex-wrap">
-          {activeGroup.tabs.map((t) => {
-            const active = adminTab === t;
-            const badge = tabBadgeCounts[t] || 0;
-            return (
-              <button
-                key={t}
-                onClick={() => setAdminTab(t)}
-                className={`relative px-4 py-1.5 rounded-md text-[12px] font-semibold border transition ${active ? "bg-[#2C4270] text-white border-[#2C4270]" : "bg-white text-gray-400 border-gray-200 hover:bg-gray-50"}`}
-              >
-                <EditableText id={`adminMenu.tab.${t}`} defaultText={TAB_LABELS[t]} />
-                {badge > 0 && (
-                  <span className={`absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center ${active ? "bg-white text-[#2C4270]" : "bg-[#2C4270] text-white"}`}>
-                    {badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="mb-4" />
-      )}
+    <AdminShell
+      badgeLabel="ADMIN"
+      title={`${myDisplayName}님`}
+      groups={shellGroups}
+      active={adminTab}
+      onSelect={setAdminTab}
+      heroTitle={`안녕하세요, ${myDisplayName}님`}
+      heroSubtitle={todoCount > 0 ? `처리할 일이 ${todoCount}건 있어요 — 승인 대기 ${pendingUserCount} · 연동 대기 ${linkedPendingCount || 0} · 미답변 문의 ${unansweredInquiryCount || 0}` : "처리할 일이 모두 끝났어요. 수고하셨어요!"}
+      heroActions={[{ label: showMobilePreview ? "모바일 미리보기 닫기" : "모바일 미리보기", icon: "phone", active: showMobilePreview, onClick: () => setShowMobilePreview((v) => !v) }]}
+      stats={[
+        { label: "전체 사용자", value: visibleUsers.length, icon: "users", tone: "navy" },
+        { label: "승인 완료", value: visibleUsers.filter((u) => u.approved).length, icon: "check", tone: "green" },
+        { label: "승인 대기", value: pendingUserCount, icon: "hourglass", tone: "amber" },
+        { label: "연동 대기 화주사", value: linkedPendingCount || 0, icon: "link", tone: "violet" },
+      ]}
+    >
 
       <div className="flex gap-6">
         <div className="flex-1 min-w-0">
@@ -1675,7 +1630,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
           </div>
         </div>
       )}
-    </div>
+    </AdminShell>
   );
 }
 
