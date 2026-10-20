@@ -2515,6 +2515,7 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
   delete payload._transmittedOrderId;
   delete payload._transmittedToShipper;
   delete payload._transmittedAt;
+  delete payload._gsheetSync; // ⭐ 원본의 구글시트 줄 연결값이 복사본에 딸려가면 원본 줄을 덮어쓰거나 지웠다
 
   const col = copyTarget.__col || "orders";
   await setDoc(doc(db, col, newId), payload);

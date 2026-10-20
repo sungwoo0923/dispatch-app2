@@ -1301,6 +1301,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
           {/* ====== 구글시트 백필 탭 (최고관리자 전용, 임시 · 1회성) ====== */}
           {adminTab === "gsheetBackfill" && isTotalMaster && (
             <>
+              <GsheetCheckPanel />
               <GsheetBackfillPanel />
               <GsheetClientBackfillPanel />
               <GsheetDailyLedgerPanel />
@@ -1657,6 +1658,44 @@ function gsheetMonthRange(start, end) {
     if (m > 12) { m = 1; y += 1; }
   }
   return months;
+}
+
+// ⭐ 구글시트 점검 — 한 달을 프로그램과 날짜별로 비교하고, 원하면 자동으로 맞춘다
+// (시트에만 남은 삭제·취소 오더와 중복 줄은 지우고, 시트에 없는 오더는 넣는다)
+function GsheetCheckPanel() {
+  const now = new Date(Date.now() + 9 * 3600e3);
+  const [month, setMonth] = useState(now.toISOString().slice(0, 7));
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState("");
+  const run = async (fix) => {
+    if (fix && !window.confirm(`${month} 시트를 프로그램 기준으로 맞춥니다.\n시트에만 있는 줄(삭제·취소된 오더, 중복 줄)은 지우고, 빠진 오더는 넣어요.\n계속할까요?`)) return;
+    setRunning(true);
+    setResult("");
+    try {
+      const res = await fetch(`${FUNCTIONS_BASE}/checkGsheetMonth?key=dolkae-backfill-2026&month=${encodeURIComponent(month)}${fix ? "&fix=1" : ""}`);
+      setResult(await res.text());
+    } catch (e) {
+      setResult(`요청 실패: ${e?.message || e}`);
+    } finally {
+      setRunning(false);
+    }
+  };
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 max-w-xl mb-6">
+      <div className="text-[14px] font-bold text-gray-800 mb-1">구글시트 점검</div>
+      <p className="text-[12px] text-gray-500 mb-4 leading-relaxed">
+        한 달 탭을 프로그램과 날짜별로 비교합니다. "점검"은 차이만 보여주고, "자동으로 맞추기"는 시트에만 남은
+        줄(삭제·취소된 오더, 같은 오더 중복)을 지우고 빠진 오더를 넣습니다.
+      </p>
+      <div className="flex items-center gap-2 mb-4">
+        <label className="text-[12px] text-gray-600 font-semibold">월</label>
+        <input value={month} onChange={(e) => setMonth(e.target.value)} placeholder="2026-10" className="border border-gray-300 rounded-lg px-3 py-1.5 text-[13px] w-28" />
+        <button onClick={() => run(false)} disabled={running} className="px-4 py-2 rounded-lg border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#1B2B4B]/5 disabled:opacity-40">{running ? "확인 중..." : "점검"}</button>
+        <button onClick={() => run(true)} disabled={running} className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] disabled:opacity-40">자동으로 맞추기</button>
+      </div>
+      {result && <div className="bg-gray-50 rounded-lg px-4 py-3 text-[12px] text-gray-700 whitespace-pre-wrap break-words font-mono">{result}</div>}
+    </div>
+  );
 }
 
 function GsheetBackfillPanel() {

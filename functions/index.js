@@ -1267,6 +1267,10 @@ const GSHEET_FIELD_HEADER_CANDIDATES = {
   지급방식: ["지급방식", "선/착불"],
   프로그램: ["배차방식", "프로그램"],
   메모: ["메모"],
+  // ⭐ 2026-10-20 — 시트 행 ↔ 프로그램 오더를 1:1로 정확히 잇는 열(숨김). 이 열이 없던 예전엔
+  // "몇 번째 줄" 번호(_gsheetSync.row)만으로 찾아서, 번호가 어긋나면 엉뚱한 줄을 고치거나
+  // 지우지 못해 시트에 오더가 더 많이 남는 일이 있었다.
+  오더ID: ["오더ID"],
 };
 
 // ⭐ 사용자 요청 — 매번 시트에 헤더를 손으로 직접 쳐넣지 않아도 되도록, 백필이
@@ -1279,7 +1283,7 @@ const GSHEET_MONTH_HEADER_COLUMNS = [
   "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소",
   "화물내용", "차량종류", "차량톤수", "혼적", "차량번호",
   "이름", "전화번호", "배차상태", "청구운임", "기사운임",
-  "수수료", "지급방식", "배차방식", "메모",
+  "수수료", "지급방식", "배차방식", "메모", "오더ID",
 ];
 
 // 0-based 열 인덱스 → 시트 열 문자(0→A, 25→Z, 26→AA, ...).
@@ -1740,7 +1744,11 @@ async function ensureGsheetRowsUpTo(sheetId, rowCount, targetRow) {
 // 있던 다른 오더들의 _gsheetSync.row 포인터도 함께 -1 보정해줘야, 그 오더들을 다음에
 // 수정할 때 엉뚱한 행을 덮어쓰지 않는다.
 async function removeGsheetRow(tabName, row) {
-  await withGsheetTabLock(tabName, async () => {
+  await withGsheetTabLock(tabName, () => removeGsheetRowUnlocked(tabName, row));
+}
+// 잠금 없이 행 1개 삭제(이미 그 탭 잠금을 잡고 있는 쪽에서 호출) + 아래 오더들의 줄번호 포인터 보정
+async function removeGsheetRowUnlocked(tabName, row) {
+  {
     const sheets = await getGsheetSheetList();
     const sheet = sheets.find((s) => s.title === tabName);
     if (!sheet) return; // 탭 자체가 이미 없으면(수동 삭제 등) 할 일 없음
@@ -1783,7 +1791,7 @@ async function removeGsheetRow(tabName, row) {
         await batch.commit();
       }
     }
-  });
+  }
 }
 
 // 오더 하나를 시트에서 제거한다(완전삭제 또는 배차취소로 인한 제거) — _gsheetSync가
@@ -1887,9 +1895,10 @@ function gsheetFormulaA(row, colMap) {
 // 이 함수가 판단하지 않는다(호출하는 쪽이 정함). 실시간 동기화와 백필(대량 처리) 양쪽이
 // 공유해서 쓴다. colMap을 안 넘기면(단건 호출) 이 함수가 직접 조회한다 — 여러 행을
 // 연달아 쓰는 쪽(백필)은 미리 한 번만 조회해서 넘겨 API 호출을 아낀다.
-async function writeGsheetOrderRow(tabName, row, data, colMap) {
+async function writeGsheetOrderRow(tabName, row, data, colMap, docId) {
   colMap = colMap || (await getGsheetColumnMap(tabName));
   const rangesData = [];
+  if (docId && colMap.오더ID) rangesData.push({ range: `${quoteTab(tabName)}!${colMap.오더ID}${row}`, values: [[docId]] });
   const fieldValues = buildGsheetFieldValues(data);
   for (const [field, value] of Object.entries(fieldValues)) {
     const col = colMap[field];
@@ -1919,148 +1928,202 @@ async function writeGsheetOrderRow(tabName, row, data, colMap) {
   });
 }
 
-async function syncOneDispatchToGsheet(docId, data) {
-  if (!data) return;
-  // ⭐ 백필과 동일하게 화면 표시 폴백((companyName || "돌캐"))과 맞춰준다 — 이 필드가
-  // 없는 문서(과거 모바일 등록분 등)도 돌캐 소속으로 취급해 실시간 동기화 대상에
-  // 포함시킨다. (모바일 등록 화면은 이제 companyName을 항상 써넣도록 고쳤지만,
-  // 이미 만들어진 문서나 다른 경로로 생성된 문서를 위한 안전장치.)
-  if ((data.companyName || "돌캐") !== GSHEET_TARGET_COMPANY) return;
+// ======================= 오더ID 열(시트 행 ↔ 오더 1:1 연결) =======================
+// 탭에 "오더ID" 열이 없으면 마지막 열 다음에 만들고 숨긴다(예전 탭도 자동으로 붙음).
+async function ensureGsheetIdColumn(tabName) {
+  let colMap = await getGsheetColumnMap(tabName);
+  if (colMap.오더ID) return colMap;
+  const sheet = (await getGsheetSheetList()).find((x) => x.title === tabName);
+  if (!sheet) return colMap;
+  const res = await gsheetApi("GET", `/values/${encodeURIComponent(`${quoteTab(tabName)}!1:1`)}`);
+  const header = (res.values && res.values[0]) || [];
+  let idx = 0;
+  for (let i = header.length - 1; i >= 0; i--) { if (String(header[i] || "").trim()) { idx = i + 1; break; } }
+  const colCount = sheet.gridProperties?.columnCount || 26;
+  const requests = [];
+  if (idx >= colCount) requests.push({ appendDimension: { sheetId: sheet.sheetId, dimension: "COLUMNS", length: idx - colCount + 1 } });
+  requests.push({ updateDimensionProperties: { range: { sheetId: sheet.sheetId, dimension: "COLUMNS", startIndex: idx, endIndex: idx + 1 }, properties: { hiddenByUser: true }, fields: "hiddenByUser" } });
+  await gsheetApi("POST", ":batchUpdate", { data: { requests } });
+  await gsheetApi("POST", "/values:batchUpdate", {
+    data: { valueInputOption: "RAW", data: [{ range: `${quoteTab(tabName)}!${gsheetColLetter(idx)}1`, values: [["오더ID"]] }] },
+  });
+  _gsheetColMapCache.delete("order:" + tabName);
+  return getGsheetColumnMap(tabName);
+}
+// 이 오더(docId)가 적힌 행 번호들(정상이면 1개, 중복 사고가 있었으면 여러 개)
+async function findGsheetRowsById(tabName, colMap, docId) {
+  if (!colMap.오더ID) return [];
+  const res = await gsheetApi("GET", `/values/${encodeURIComponent(`${quoteTab(tabName)}!${colMap.오더ID}2:${colMap.오더ID}6000`)}`);
+  const rows = [];
+  (res.values || []).forEach((v, i) => { if (String(v?.[0] || "").trim() === docId) rows.push(i + 2); });
+  return rows;
+}
+async function readGsheetCells(tabName, row, cols) {
+  const ranges = cols.filter(Boolean).map((c) => `${quoteTab(tabName)}!${c}${row}`);
+  if (!ranges.length) return {};
+  const q = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join("&");
+  const res = await gsheetApi("GET", `/values:batchGet?${q}`);
+  const out = {};
+  (res.valueRanges || []).forEach((vr, i) => { out[cols.filter(Boolean)[i]] = String(vr.values?.[0]?.[0] || "").trim(); });
+  return out;
+}
+const isGsheetCanceled = (d) => d["배차상태"] === "배차취소" || GSHEET_CANCELED_STATUS_LIST.includes(d["상태"]);
+// 이 문서가 직접 받은 줄번호 포인터만 인정(오더 복사로 원본 포인터가 딸려온 경우 무시)
+const ownGsheetPtr = (d, docId) => {
+  const p = d?._gsheetSync;
+  if (!p?.tab || !p?.row) return null;
+  if (p.doc && p.doc !== docId) return null;
+  return p;
+};
 
-  // ⭐ 화주사 전송 사본(source==="transport_transmit")은 운송사가 오더를 화주사에게
-  // 보낼 때 "orders" 컬렉션에 자동으로 만들어지는, 원본(dispatch)과 동일한 오더를
-  // 가리키는 화주사 화면 전용 미러다. 화면(DispatchApp.jsx)도 dispatchData 합성 시
-  // 이 사본을 제외하는데, 여기서 걸러내지 않으면 원본과 이 사본이 둘 다 시트에
-  // 올라가 오더 하나가 행 두 개로 중복된다.
+// 한 탭 안에서 이 오더의 행들을 찾는다 — ① 오더ID 열 ② (예전 방식) 줄번호 포인터: 그 줄의 오더ID가
+// 비어 있고 상차일이 맞을 때만 이 오더의 줄로 인정(엉뚱한 줄을 지우지 않도록)
+async function locateOrderRowsInTab(tabName, colMap, docId, ptr, expectDates) {
+  const rows = await findGsheetRowsById(tabName, colMap, docId);
+  if (ptr && ptr.tab === tabName && !rows.includes(ptr.row)) {
+    const cells = await readGsheetCells(tabName, ptr.row, [colMap.오더ID, colMap.상차일]);
+    const idCell = colMap.오더ID ? cells[colMap.오더ID] : "";
+    const dateCell = colMap.상차일 ? cells[colMap.상차일] : "";
+    if (idCell === docId) rows.push(ptr.row);
+    else if (!idCell && (ptr.doc === docId || expectDates.filter(Boolean).includes(dateCell))) rows.push(ptr.row);
+  }
+  return [...new Set(rows)].sort((x, y) => x - y);
+}
+
+// 오더를 시트에서 완전히 뺀다(삭제·배차취소·블라인드·다른 회사로 변경 등)
+async function removeDocFromGsheet(docId, hint) {
+  const ptr = ownGsheetPtr(hint, docId) || (hint?._gsheetSync?.tab ? hint._gsheetSync : null);
+  const tabs = [...new Set([ptr?.tab, gsheetMonthTabName(hint?.["상차일"])].filter(Boolean))];
+  const sheetTitles = new Set((await getGsheetSheetList()).map((x) => x.title));
+  for (const tab of tabs) {
+    if (!sheetTitles.has(tab)) continue;
+    await withGsheetTabLock(tab, async () => {
+      const colMap = await ensureGsheetIdColumn(tab);
+      const rows = await locateOrderRowsInTab(tab, colMap, docId, ptr, [hint?.["상차일"]]);
+      for (const r of rows.sort((x, y) => y - x)) await removeGsheetRowUnlocked(tab, r); // 아래 줄부터 지워야 번호가 안 밀림
+    });
+  }
+}
+
+// ⭐ 2026-10-20 재작성 — 프로그램과 시트가 항상 같도록:
+//  - 이벤트에 실린 값이 아니라 Firestore의 "지금" 값을 다시 읽어서 판단(늦게 도착한 이벤트가 옛 상태로 덮어쓰지 않게)
+//  - 같은 오더가 거의 동시에 여러 번 저장돼도(등록 직후 수정 등) 줄이 2개 생기지 않게, 탭 잠금 안에서 확인→기록
+//  - 줄번호 포인터는 잠금 안에서 바로 기록(다음 처리가 바로 보도록) + 오더ID 열로 정확히 찾음
+//  - 오더 복사로 딸려온 원본의 포인터는 무시(예전엔 복사본이 원본 줄을 덮어쓰거나 지웠다)
+//  - 같은 오더가 시트에 여러 줄 있으면(예전 사고) 1줄만 남기고 정리
+async function syncOneDispatchToGsheet(docId, eventData, eventBefore) {
+  const snap = await db.doc(docId).get();
+  if (!snap.exists) { await removeDocFromGsheet(docId, eventBefore || eventData); return; }
+  const data = snap.data();
   if (data.source === "transport_transmit") return;
+  const outOfScope = (data.companyName || "돌캐") !== GSHEET_TARGET_COMPANY || data.블라인드 === true;
+  // 새로 생긴 문서에 딸려온 옛 방식 포인터(문서ID 없음)는 복사 원본의 것 — 무시
+  const createdNow = !eventBefore;
+  let ptr = ownGsheetPtr(data, docId);
+  if (ptr && createdNow && !ptr.doc) ptr = null;
+  // 전체 덮어쓰기 저장으로 포인터가 빠진 경우 직전 포인터를 이어받는다(예전엔 여기서 줄이 하나 더 생겼다)
+  if (!ptr && eventBefore) ptr = ownGsheetPtr(eventBefore, docId);
 
-  // 배차취소(앱의 "삭제"는 실제 문서삭제가 아니라 배차상태를 배차취소로 바꾸는
-  // 소프트삭제라 여기로 update가 들어온다) — 이미 시트에 올라간 행이 있으면 그
-  // 행 자체를 지운다. 취소되기 전에 한 번도 동기화된 적 없는 오더는 애초에 새로
-  // 만들지 않고 그냥 스킵(취소된 오더를 새로 시트에 올릴 이유가 없음). 배차상태
-  // 외에 상태(화주사 취소 등)로만 취소가 표시되는 경우도 화면과 동일하게 포함.
-  if (data["배차상태"] === "배차취소" || GSHEET_CANCELED_STATUS_LIST.includes(data["상태"])) {
-    if (data._gsheetSync) await removeOneDispatchFromGsheet(data, docId);
+  const targetTab = outOfScope || isGsheetCanceled(data) ? null : gsheetMonthTabName(data["상차일"]);
+  const sheetTitles = new Set((await getGsheetSheetList()).map((x) => x.title));
+  const expectDates = [data["상차일"], eventBefore?.["상차일"]];
+
+  // 1) 대상이 아닌 탭(월이 바뀐 경우 이전 달 탭 등)에 남은 줄 정리
+  const otherTabs = [...new Set([ptr?.tab, gsheetMonthTabName(eventBefore?.["상차일"])].filter((t) => t && t !== targetTab))];
+  for (const tab of otherTabs) {
+    if (!sheetTitles.has(tab)) continue;
+    await withGsheetTabLock(tab, async () => {
+      const colMap = await ensureGsheetIdColumn(tab);
+      const rows = await locateOrderRowsInTab(tab, colMap, docId, ptr, expectDates);
+      for (const r of rows.sort((x, y) => y - x)) await removeGsheetRowUnlocked(tab, r);
+    });
+  }
+  if (!targetTab) {
+    if (data._gsheetSync) await db.doc(docId).update({ _gsheetSync: FieldValue.delete() }).catch(() => {});
     return;
   }
 
-  const tabName = gsheetMonthTabName(data["상차일"]);
-  if (!tabName) return; // 상차일이 없으면 어느 달 탭인지 알 수 없어 스킵
+  // 2) 대상 탭 — 잠금 안에서 "이미 있나" 확인 → 고치거나 새로 넣기
+  await ensureGsheetMonthTab(targetTab);
+  await withGsheetTabLock(targetTab, async () => {
+    const colMap = await ensureGsheetIdColumn(targetTab);
+    // 잠금을 기다리는 사이 다른 처리가 먼저 끝났을 수 있으니 최신 문서를 다시 본다
+    const fresh = await db.doc(docId).get();
+    if (!fresh.exists) {
+      const rows = await findGsheetRowsById(targetTab, colMap, docId);
+      for (const r of rows.sort((x, y) => y - x)) await removeGsheetRowUnlocked(targetTab, r);
+      return;
+    }
+    const cur = fresh.data();
+    if (isGsheetCanceled(cur) || gsheetMonthTabName(cur["상차일"]) !== targetTab || cur.블라인드 === true) return; // 뒤이은 이벤트가 처리
+    const curPtr = ownGsheetPtr(cur, docId);
+    let ptrNow = curPtr && curPtr.doc === docId ? curPtr : ptr;
 
-  const existingRef = data._gsheetSync;
+    let rows = await findGsheetRowsById(targetTab, colMap, docId);
+    // 방금 다른 처리가 줄을 넣고 포인터(문서ID 포함)를 남겼다면, 시트 읽기 지연으로 ID가 아직 안 보여도 그 줄을 쓴다
+    if (!rows.length && ptrNow && ptrNow.tab === targetTab) {
+      const located = await locateOrderRowsInTab(targetTab, colMap, docId, ptrNow, [cur["상차일"], ...expectDates]);
+      rows = located;
+    }
+    // 중복 줄 정리(아래 줄부터) — 첫 줄만 남김
+    if (rows.length > 1) {
+      for (const r of rows.slice(1).sort((x, y) => y - x)) await removeGsheetRowUnlocked(targetTab, r);
+      rows = [rows[0]];
+    }
 
-  if (existingRef && existingRef.tab && existingRef.row) {
-    // 이미 시트에 적혀있는 오더 — 값 칸(상차일~메모, 경유지 포함)만 나눠서 덮어쓴다.
-    // 순번/수수료/매익율/배차상태/기사명/전화번호는 전부 시트 자체 수식이 계산해주는
-    // 칸이라(수식이 다른 열을 보고 자동 계산) 절대 건드리지 않는다 — 여기 값을 쓰면
-    // 수식이 깨진다. 비고(고유값고정값)도 용도 불명이라 그대로 둔다.
-    if (existingRef.tab === tabName) {
-      const colMap = await getGsheetColumnMap(existingRef.tab);
-      // ⭐ 상차일이 수정돼(같은 달 안에서의 날짜 정정 등) 이 오더가 있어야 할 날짜
-      // 블록 자체가 바뀌었으면 값만 덮어써선 안 된다 — 행 위치가 예전 날짜 블록에
-      // 그대로 남아 그 블록이 뒤섞인다(실사용에서 실제로 발생한 문제). 시트에 지금
-      // 실제로 적혀있는 상차일과 비교해 바뀌었으면 아래 "새로 만들기" 경로로 넘어가
-      // 올바른 날짜 위치로 옮긴다.
-      const dateCol = colMap.상차일;
-      let sheetDate = null;
-      if (dateCol) {
-        const cell = await gsheetApi(
-          "GET",
-          `/values/${encodeURIComponent(`${quoteTab(existingRef.tab)}!${dateCol}${existingRef.row}`)}`
-        );
-        sheetDate = String(cell.values?.[0]?.[0] || "").trim();
-      }
-      const targetDate = String(data["상차일"] || "").trim();
-      if (!dateCol || sheetDate === targetDate) {
+    if (rows.length) {
+      const row = rows[0];
+      const cells = colMap.상차일 ? await readGsheetCells(targetTab, row, [colMap.상차일]) : {};
+      const sheetDate = colMap.상차일 ? cells[colMap.상차일] : String(cur["상차일"] || "").trim();
+      if (sheetDate === String(cur["상차일"] || "").trim()) {
+        // 같은 날짜 블록 — 값 칸만 덮어쓰기(수식 칸은 건드리지 않음) + 오더ID
         const rangesData = [];
-        for (const [field, value] of Object.entries(buildGsheetFieldValues(data))) {
+        for (const [field, value] of Object.entries(buildGsheetFieldValues(cur))) {
           const col = colMap[field];
-          if (!col) continue;
-          rangesData.push({ range: `${quoteTab(existingRef.tab)}!${col}${existingRef.row}`, values: [[value]] });
+          if (col) rangesData.push({ range: `${quoteTab(targetTab)}!${col}${row}`, values: [[value]] });
         }
-        if (rangesData.length) {
-          await gsheetApi("POST", "/values:batchUpdate", {
-            data: { valueInputOption: "USER_ENTERED", data: rangesData },
-          });
+        if (colMap.오더ID) rangesData.push({ range: `${quoteTab(targetTab)}!${colMap.오더ID}${row}`, values: [[docId]] });
+        if (rangesData.length) await gsheetApi("POST", "/values:batchUpdate", { data: { valueInputOption: "USER_ENTERED", data: rangesData } });
+        if (!curPtr || curPtr.row !== row || curPtr.tab !== targetTab || curPtr.doc !== docId) {
+          await db.doc(docId).update({ _gsheetSync: { tab: targetTab, row, doc: docId } }).catch(() => {});
         }
-        await ensureDriverInGsheetUniqueTab(data["차량번호"], data["이름"], data["전화번호"]);
         return;
       }
-      // 날짜가 바뀜 — 기존 행을 지우고 아래에서 올바른 날짜 블록 위치에 새로 만든다.
-      try {
-        await removeGsheetRow(existingRef.tab, existingRef.row);
-      } catch (e) {
-        console.warn("날짜 정정으로 인한 기존 행 정리 실패(무시):", e?.message || e);
-      }
-    } else {
-      // 월이 바뀐 경우 — 이전 행은 지우고(다른 오더로 착각되지 않도록, 아래 행들 당겨짐 +
-      // 다른 오더 포인터 보정까지 removeGsheetRow가 처리) 새 탭에 새로 만든다.
-      try {
-        await removeGsheetRow(existingRef.tab, existingRef.row);
-      } catch (e) {
-        console.warn("이전 월 행 정리 실패(무시):", e?.message || e);
-      }
+      // 날짜가 바뀜 — 기존 줄을 지우고 아래에서 올바른 날짜 블록에 새로 넣는다
+      await removeGsheetRowUnlocked(targetTab, row);
     }
-  }
 
-  // 신규(또는 위에서 날짜/월이 바뀌어 기존 행을 지운 경우) — 대상 월 탭을 준비하고
-  // (없으면 자동 생성) 그 상차일이 있어야 할 날짜 블록 위치를 찾아(findGsheetInsertPosition)
-  // 값+수식을 채운다. 이미 그 날짜 블록이 시트 맨 끝에 있으면 기존처럼 그냥 이어붙이고,
-  // 그 외(날짜 순서상 중간에 들어가야 하는 경우)에는 실제로 행을 구조적으로 끼워넣는다.
-  // ⭐ 다중등록 등으로 여러 오더가 거의 동시에 들어오면 "지금 어디까지 있나" 판단이
-  // 서로 겹쳐써서 순서가 꼬일 수 있어(withGsheetTabLock 주석 참고), 같은 탭에 대한
-  // 위치 계산~쓰기 전체를 잠금으로 감싸 한 번에 하나씩만 처리되게 한다.
-  await ensureGsheetMonthTab(tabName);
-
-  const row = await withGsheetTabLock(tabName, async () => {
-    const sheetProps = (await getGsheetSheetList()).find((s) => s.title === tabName);
-    if (!sheetProps) throw new Error(`탭을 찾을 수 없습니다: ${tabName}`);
-
-    const colMap = await getGsheetColumnMap(tabName);
-    const pos = await findGsheetInsertPosition(tabName, data["상차일"], colMap);
-
+    // 새로 넣기(날짜 블록 위치 계산)
+    const sheetProps = (await getGsheetSheetList()).find((x) => x.title === targetTab);
+    if (!sheetProps) throw new Error(`탭을 찾을 수 없습니다: ${targetTab}`);
+    const pos = await findGsheetInsertPosition(targetTab, cur["상차일"], colMap);
+    let r;
     if (pos.mode === "append-at-end") {
-      const r = pos.insertRow;
-      // ensureGsheetRowsUpTo는 정확히 r행까지만 늘리므로, 끝나고 나면 rowCount는 항상 r다
-      // (아래에서 다시 조회할 필요 없음 — 대량 백필 시 오더당 API 호출 수를 줄여 처리
-      // 시간이 함수 제한시간(9분)을 넘기지 않게 하기 위해 왕복을 최대한 줄인다).
+      r = pos.insertRow;
       await ensureGsheetRowsUpTo(sheetProps.sheetId, sheetProps.gridProperties?.rowCount || 1, r);
-      await writeGsheetOrderRow(tabName, r, data, colMap);
-      // 다음 오더를 위해 서식 이어받은 빈 버퍼 행을 하나 더 마련해둔다(항상 맨 끝에
-      // 빈 줄 하나가 대기하고 있도록 유지) — 방금 쓴 행(r)이 곧 현재 rowCount다.
+      await writeGsheetOrderRow(targetTab, r, cur, colMap, docId);
       await appendGsheetBufferRow(sheetProps.sheetId, r);
-      return r;
-    }
-
-    if (pos.mode === "insert-into-block") {
-      // 이미 있는 그 날짜 블록의 맨 위에 실제로 한 행을 구조적으로 끼워넣는다(그
-      // 블록에 있던 기존 행들 + 그 아래 모든 행은 한 칸씩 밀려 내려감). 바로 위 행은
-      // 이전 블록의 구분용 빈 줄(또는 맨 첫 블록이면 헤더)이라 서식이 없거나 다르므로,
-      // inheritFromBefore:false로 대신 바로 아래(밀려날, 같은 날짜) 행에서 서식을
-      // 이어받는다 — new-block-before 케이스와 동일한 이유.
-      const r = pos.insertRow;
+    } else if (pos.mode === "insert-into-block") {
+      r = pos.insertRow;
       await insertGsheetDataRows(sheetProps.sheetId, r, 1, false);
-      await shiftGsheetRowPointersFrom(tabName, r, 1, docId);
-      await writeGsheetOrderRow(tabName, r, data, colMap);
-      return r;
+      await shiftGsheetRowPointersFrom(targetTab, r, 1, docId);
+      await writeGsheetOrderRow(targetTab, r, cur, colMap, docId);
+    } else {
+      r = pos.anchorRow;
+      await insertGsheetDataRows(sheetProps.sheetId, r, 2, r > 2);
+      await shiftGsheetRowPointersFrom(targetTab, r, 2, docId);
+      await writeGsheetOrderRow(targetTab, r, cur, colMap, docId);
     }
-
-    // mode === "new-block-before": 날짜 오름차순을 지키기 위해 기존 블록들 사이에
-    // 새 날짜 블록(데이터 1행 + 구분용 빈 줄 1행)을 통째로 끼워넣는다.
-    const r = pos.anchorRow;
-    // 맨 위(헤더 바로 다음)에 끼워넣는 경우엔 위쪽에 이어받을 서식 있는 행이 없어(그
-    // 자리는 곧 헤더), 대신 아래쪽(밀려날 기존 첫 블록)의 서식을 이어받는다 — 위에서
-    // 이어받으면 헤더 서식(테두리 없음 등)이 그대로 복사돼 이후 삽입마다 계속 번지는
-    // 사고가 있었다(appendGsheetBufferRow 주석 참고).
-    await insertGsheetDataRows(sheetProps.sheetId, r, 2, r > 2);
-    await shiftGsheetRowPointersFrom(tabName, r, 2, docId);
-    await writeGsheetOrderRow(tabName, r, data, colMap);
-    // r+1행은 새 블록과 다음 블록을 구분하는 빈 줄로 비워둔다(값을 쓰지 않음).
-    return r;
+    // 포인터는 잠금 안에서 바로 기록 — 문서가 그새 삭제됐으면 방금 넣은 줄을 되돌린다
+    try {
+      await db.doc(docId).update({ _gsheetSync: { tab: targetTab, row: r, doc: docId } });
+    } catch (e) {
+      console.warn("포인터 기록 실패(문서 삭제됨?) — 방금 넣은 줄 삭제:", e?.message || e);
+      await removeGsheetRowUnlocked(targetTab, r);
+    }
   });
 
   await ensureDriverInGsheetUniqueTab(data["차량번호"], data["이름"], data["전화번호"]);
-  await db.doc(docId).update({ _gsheetSync: { tab: tabName, row } });
 }
 
 /* ==============================================================
@@ -2145,6 +2208,14 @@ exports.backfillGsheetMonth = functions
       // 맵이 있으면 반드시 버린다 — 안 그러면 아래 colMap 조회가 방금 지운
       // 옛날 헤더 기준으로 나올 수 있다.
       _gsheetColMapCache.delete("order:" + tabName);
+      // 오더ID 열은 숨김(시트를 보는 사람에겐 필요 없는 연결용 값)
+      try {
+        const idIdx = GSHEET_MONTH_HEADER_COLUMNS.indexOf("오더ID");
+        const sh = (await getGsheetSheetList()).find((x) => x.title === tabName);
+        if (sh && idIdx >= 0) {
+          await gsheetApi("POST", ":batchUpdate", { data: { requests: [{ updateDimensionProperties: { range: { sheetId: sh.sheetId, dimension: "COLUMNS", startIndex: idIdx, endIndex: idIdx + 1 }, properties: { hiddenByUser: true }, fields: "hiddenByUser" } }] } });
+        }
+      } catch (e) { console.warn("오더ID 열 숨김 실패(무시):", e?.message || e); }
 
       // 대상 탭의 기존 데이터 행을 최대한 비운다(헤더만 남김) — 프로그램 기준으로
       // 통째로 다시 채우기 위해.
@@ -2199,6 +2270,7 @@ exports.backfillGsheetMonth = functions
         snap.docs.forEach((d) => {
           const data = d.data();
           if (data.source === "transport_transmit") return;
+          if (data.블라인드 === true) return; // ⭐ 실시간 동기화와 같은 기준(예전 백필은 블라인드 오더까지 올려 시트가 더 많았다)
           if ((data.companyName || "돌캐") === GSHEET_TARGET_COMPANY) {
             items.push({ docId: `${col}/${d.id}`, data });
           }
@@ -2289,7 +2361,8 @@ exports.backfillGsheetMonth = functions
           // 그대로 돌려준다 — 아래에서 실패분만 다시 돌리는 재시도 라운드에 재사용한다.
           const writeChunk = async (chunk) => {
             const rangesData = [];
-            chunk.forEach(({ row, data }) => {
+            chunk.forEach(({ row, data, docId }) => {
+              if (colMap.오더ID) rangesData.push({ range: `${quoteTab(tabName)}!${colMap.오더ID}${row}`, values: [[docId]] });
               for (const [field, value] of Object.entries(buildGsheetFieldValues(data))) {
                 const col = colMap[field];
                 if (!col) continue;
@@ -2316,7 +2389,7 @@ exports.backfillGsheetMonth = functions
               created += chunk.length;
               for (let j = 0; j < chunk.length; j += 500) {
                 const fsBatch = db.batch();
-                chunk.slice(j, j + 500).forEach(({ docId, row }) => fsBatch.update(db.doc(docId), { _gsheetSync: { tab: tabName, row } }));
+                chunk.slice(j, j + 500).forEach(({ docId, row }) => fsBatch.update(db.doc(docId), { _gsheetSync: { tab: tabName, row, doc: docId } }));
                 await fsBatch.commit().catch((e) => console.warn("_gsheetSync 일괄 기록 실패(무시):", e?.message || e));
               }
               return [];
@@ -2860,14 +2933,15 @@ exports.syncDispatchToGoogleSheet =
 
       const after = change.after.exists ? change.after.data() : null;
       const before = change.before.exists ? change.before.data() : null;
-      if (after?.블라인드 === true || (!after && before?.블라인드 === true)) return; // ⭐ 블라인드 오더는 구글시트에도 기록 안 함
+      // ⭐ 블라인드 오더는 시트에 기록하지 않는다 — 블라인드로 바뀐 경우 이미 있던 줄은 아래 동기화에서 지운다
+      if (!before && after?.블라인드 === true) return;
+      if (!after && before?.블라인드 === true && !before._gsheetSync) return;
 
       if (!after) {
-        // 문서 자체가 완전삭제된 경우(예: 화주사 전송사본 삭제 등) — 시트에 이미
-        // 올라간 행이 있으면 그 행을 지운다.
-        if (before && (before.companyName || "돌캐") === GSHEET_TARGET_COMPANY) {
+        // 문서가 완전삭제됨 — 시트에 남은 이 오더의 줄을 오더ID(또는 예전 줄번호)로 찾아 지운다
+        if (before && (before.companyName || "돌캐") === GSHEET_TARGET_COMPANY && before.source !== "transport_transmit") {
           try {
-            await removeOneDispatchFromGsheet(before, null);
+            await removeDocFromGsheet(`${col}/${dispatchId}`, before);
           } catch (e) {
             console.error("📊 구글시트 행 삭제 실패:", e?.message || e);
           }
@@ -2884,11 +2958,97 @@ exports.syncDispatchToGoogleSheet =
       }
 
       try {
-        await syncOneDispatchToGsheet(`${col}/${dispatchId}`, after);
+        await syncOneDispatchToGsheet(`${col}/${dispatchId}`, after, before);
       } catch (e) {
         console.error("📊 구글시트 동기화 실패:", e?.message || e);
       }
     });
+
+/* ==================================================================
+   🔎 구글시트 점검 — 한 달 탭을 프로그램과 날짜별로 비교하고(fix=1이면 자동으로 맞춤)
+   - 시트에만 있는 줄(삭제·취소된 오더, 같은 오더가 2줄, 오더ID 없는 줄): 지움
+   - 프로그램에만 있는 오더: 실시간 동기화와 같은 방식으로 넣음
+   호출: GET .../checkGsheetMonth?key=<GSHEET_BACKFILL_KEY>&month=YYYY-MM[&fix=1]
+================================================================== */
+exports.checkGsheetMonth = functions
+  .runWith({ timeoutSeconds: 540, memory: "256MB" })
+  .https.onRequest(async (req, res) => {
+    res.set("Access-Control-Allow-Origin", "*");
+    if (req.query.key !== GSHEET_BACKFILL_KEY) { res.status(403).send("권한 없음"); return; }
+    const month = String(req.query.month || "");
+    if (!/^\d{4}-\d{2}$/.test(month)) { res.status(400).send("month=YYYY-MM 형식으로 넣어주세요"); return; }
+    const fix = req.query.fix === "1";
+    try {
+      const tabName = gsheetMonthTabName(`${month}-01`);
+      const sheet = (await getGsheetSheetList()).find((x) => x.title === tabName);
+      // 프로그램 쪽(백필과 같은 기준)
+      const program = new Map(); // docId -> 상차일
+      for (const col of ["orders", "dispatch"]) {
+        const snap = await db.collection(col).where("상차일", ">=", `${month}-01`).where("상차일", "<", `${month}~`).get();
+        snap.docs.forEach((d) => {
+          const x = d.data();
+          if (x.source === "transport_transmit" || x.블라인드 === true) return;
+          if ((x.companyName || "돌캐") !== GSHEET_TARGET_COMPANY) return;
+          if (isGsheetCanceled(x)) return;
+          program.set(`${col}/${d.id}`, String(x["상차일"] || "").trim());
+        });
+      }
+      if (!sheet) { res.send(`[${tabName}] 시트 탭이 없습니다. 프로그램 ${program.size}건`); return; }
+      const colMap = await ensureGsheetIdColumn(tabName);
+      const dateCol = colMap.상차일 || "B";
+      const idCol = colMap.오더ID;
+      const [dRes, iRes] = await Promise.all([
+        gsheetApi("GET", `/values/${encodeURIComponent(`${quoteTab(tabName)}!${dateCol}2:${dateCol}6000`)}`),
+        idCol ? gsheetApi("GET", `/values/${encodeURIComponent(`${quoteTab(tabName)}!${idCol}2:${idCol}6000`)}`) : Promise.resolve({ values: [] }),
+      ]);
+      const dates = dRes.values || [];
+      const ids = iRes.values || [];
+      const sheetRows = []; // { row, date, id }
+      const n = Math.max(dates.length, ids.length);
+      for (let i = 0; i < n; i++) {
+        const date = String(dates[i]?.[0] || "").trim();
+        const id = String(ids[i]?.[0] || "").trim();
+        if (!date && !id) continue; // 날짜 구분용 빈 줄
+        sheetRows.push({ row: i + 2, date, id });
+      }
+      const seen = new Set();
+      const extra = []; // 지울 줄
+      sheetRows.forEach((r) => {
+        if (!r.id) { extra.push({ ...r, why: "오더ID 없음(예전 방식 줄)" }); return; }
+        if (!program.has(r.id)) { extra.push({ ...r, why: "프로그램에 없음(삭제·취소)" }); return; }
+        if (seen.has(r.id)) { extra.push({ ...r, why: "중복" }); return; }
+        seen.add(r.id);
+      });
+      const missing = [...program.keys()].filter((id) => !seen.has(id));
+      // 날짜별 건수
+      const byDate = {};
+      program.forEach((d) => { byDate[d] = byDate[d] || { p: 0, s: 0 }; byDate[d].p += 1; });
+      sheetRows.forEach((r) => { if (r.date) { byDate[r.date] = byDate[r.date] || { p: 0, s: 0 }; byDate[r.date].s += 1; } });
+      const lines = Object.keys(byDate).sort().map((d) => `${d}  프로그램 ${byDate[d].p} / 시트 ${byDate[d].s}${byDate[d].p !== byDate[d].s ? "  ← 다름" : ""}`);
+      const legacy = extra.filter((e) => e.why.startsWith("오더ID 없음")).length;
+      let out = `[${tabName}] 프로그램 ${program.size}건 / 시트 ${sheetRows.length}줄\n` +
+        `시트에만 있음 ${extra.length - legacy}줄 · 오더ID 없는 예전 줄 ${legacy}줄 · 시트에 없음 ${missing.length}건\n\n` + lines.join("\n");
+      if (legacy > 0 && !fix) out += `\n\n※ 오더ID 없는 예전 줄이 있으면 정확히 비교할 수 없어요 — 이 달은 "백필"을 한 번 실행해 주세요(모든 줄에 오더ID가 붙습니다).`;
+      if (fix) {
+        if (legacy > 0) {
+          out += `\n\n⚠️ 오더ID 없는 예전 줄이 있어 자동 정리를 하지 않았습니다 — 이 달은 "백필"을 먼저 실행해 주세요.`;
+        } else {
+          await withGsheetTabLock(tabName, async () => {
+            for (const r of extra.sort((a, b) => b.row - a.row)) await removeGsheetRowUnlocked(tabName, r.row);
+          });
+          for (const id of missing) {
+            const snap = await db.doc(id).get();
+            if (snap.exists) await syncOneDispatchToGsheet(id, snap.data(), snap.data());
+          }
+          out += `\n\n✅ 정리 완료 — 시트에서 ${extra.length}줄 삭제, ${missing.length}건 추가`;
+        }
+      }
+      res.send(out);
+    } catch (e) {
+      console.error("구글시트 점검 실패:", e);
+      res.status(500).send(`점검 실패: ${e?.message || e}`);
+    }
+  });
 
 /* ==================================================================
    🔍 로그인 전 "회사코드 찾기" — transportApplications 컬렉션은 Firestore
