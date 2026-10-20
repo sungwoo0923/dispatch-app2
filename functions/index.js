@@ -1599,7 +1599,92 @@ async function ensureGsheetMonthTab(tabName) {
 
   // 복제된 탭에서 1행(헤더)만 남기고 나머지 데이터 행은 최대한 삭제한다.
   await clearGsheetDataRows(newProps.sheetId, newProps.gridProperties?.rowCount || 1, tabName);
+  try { await applyGsheetInputGuides(tabName); } catch (e) { console.warn("필수칸 표시 적용 실패(무시):", e?.message || e); }
   return newProps;
+}
+
+/* ==================================================================
+   ✍️ 시트 직접 입력 도우미(2026-10-20 요청) — 월별 탭에 한 번 적용해두면 시트가 알아서 표시한다
+   ① 필수칸: 그 줄에 뭔가 입력하기 시작했는데 필수칸이 비어 있으면 연한 빨간 배경 → 입력하면 바로 사라짐
+      (구글시트 "조건부 서식"은 테두리를 바꿀 수 없어서 배경색으로 표시)
+   ② 머리줄: 필수 항목 이름을 빨간 글씨·연한 빨간 배경으로 + 마우스를 올리면 "필수 입력" 메모, 머리줄 고정
+   ③ 목록 선택: 차량종류·지급방식·배차방식은 프로그램과 같은 목록을 고를 수 있게(목록에 없는 값도 입력은 됨, 경고만)
+   ④ 운임: 청구운임·기사운임에 숫자가 아닌 값을 넣으면 경고
+================================================================== */
+const GSHEET_REQUIRED_FIELDS = ["상차일", "상차시간", "하차일", "하차시간", "거래처명", "상차지", "하차지", "화물정보", "차량종류", "차량톤수", "차량번호", "청구운임", "기사운임", "지급방식", "프로그램"];
+const GSHEET_LIST_OPTIONS = {
+  차량종류: ["라보", "다마스", "오토바이", "윙바디", "탑", "카고", "윙/카고", "냉장윙", "냉동윙", "냉장탑", "냉동탑", "냉장/냉동탑", "냉장/냉동윙"],
+  지급방식: ["계산서", "착불", "선불", "계좌이체"],
+  프로그램: ["24시", "인성", "직접배차", "24시(외부업체)"],
+};
+const GSHEET_GUIDE_MARK = `"필수"="필수"`; // 이 표시가 든 조건부 서식은 이 기능이 만든 것 — 다시 적용할 때 지우고 새로 만든다
+async function applyGsheetInputGuides(tabName) {
+  _gsheetColMapCache.delete("order:" + tabName);
+  const colMap = await getGsheetColumnMap(tabName);
+  const meta = await gsheetApi("GET", `?fields=${encodeURIComponent("sheets(properties(sheetId,title),conditionalFormats)")}`);
+  const sh = (meta.sheets || []).find((x) => x.properties?.title === tabName);
+  if (!sh) return;
+  const sheetId = sh.properties.sheetId;
+  const requests = [];
+  // 예전에 이 기능이 만든 규칙 제거(뒤에서부터)
+  (sh.conditionalFormats || []).map((r, i) => ({ r, i })).reverse().forEach(({ r, i }) => {
+    const f = r.booleanRule?.condition?.values?.[0]?.userEnteredValue || "";
+    if (f.includes(GSHEET_GUIDE_MARK)) requests.push({ deleteConditionalFormatRule: { sheetId, index: i } });
+  });
+  const reqCols = GSHEET_REQUIRED_FIELDS.map((f) => colMap[f]).filter(Boolean);
+  if (!reqCols.length) return;
+  const anyFilled = `LEN(${reqCols.map((c) => `$${c}2`).join("&")})>0`;
+  const colRange = (c) => ({ sheetId, startRowIndex: 1, startColumnIndex: gsheetColIndexFromLetter(c), endColumnIndex: gsheetColIndexFromLetter(c) + 1 });
+  reqCols.forEach((c) => {
+    requests.push({
+      addConditionalFormatRule: {
+        index: 0,
+        rule: {
+          ranges: [colRange(c)],
+          booleanRule: {
+            condition: { type: "CUSTOM_FORMULA", values: [{ userEnteredValue: `=AND(${c}2="",${anyFilled},${GSHEET_GUIDE_MARK})` }] },
+            format: { backgroundColor: { red: 0.99, green: 0.86, blue: 0.86 } },
+          },
+        },
+      },
+    });
+  });
+  // 머리줄: 필수 항목 표시 + 메모
+  reqCols.forEach((c) => {
+    const ci = gsheetColIndexFromLetter(c);
+    requests.push({
+      repeatCell: {
+        range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: ci, endColumnIndex: ci + 1 },
+        cell: { note: "필수 입력 — 비어 있으면 연한 빨간색으로 표시됩니다", userEnteredFormat: { backgroundColor: { red: 1, green: 0.89, blue: 0.89 }, textFormat: { bold: true, foregroundColor: { red: 0.78, green: 0.16, blue: 0.16 } } } },
+        fields: "note,userEnteredFormat.backgroundColor,userEnteredFormat.textFormat.bold,userEnteredFormat.textFormat.foregroundColor",
+      },
+    });
+  });
+  // 목록 선택(경고만, 다른 값도 입력 가능)
+  for (const [field, list] of Object.entries(GSHEET_LIST_OPTIONS)) {
+    const c = colMap[field];
+    if (!c) continue;
+    requests.push({
+      setDataValidation: {
+        range: colRange(c),
+        rule: { condition: { type: "ONE_OF_LIST", values: list.map((v) => ({ userEnteredValue: v })) }, showCustomUi: true, strict: false, inputMessage: `목록에서 고르거나 직접 입력하세요` },
+      },
+    });
+  }
+  // 운임은 숫자(경고만)
+  ["청구운임", "기사운임"].forEach((field) => {
+    const c = colMap[field];
+    if (!c) return;
+    requests.push({
+      setDataValidation: {
+        range: colRange(c),
+        rule: { condition: { type: "NUMBER_GREATER_THAN_EQ", values: [{ userEnteredValue: "0" }] }, strict: false, inputMessage: "숫자만 입력하세요(예: 300000)" },
+      },
+    });
+  });
+  // 머리줄 고정
+  requests.push({ updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: 1 } }, fields: "gridProperties.frozenRowCount" } });
+  await gsheetApi("POST", ":batchUpdate", { data: { requests } });
 }
 
 // 신규(또는 상차일이 바뀌어 다시 넣어야 하는) 오더를 어느 행에 넣을지 정한다 — 상차일
@@ -2216,6 +2301,7 @@ exports.backfillGsheetMonth = functions
           await gsheetApi("POST", ":batchUpdate", { data: { requests: [{ updateDimensionProperties: { range: { sheetId: sh.sheetId, dimension: "COLUMNS", startIndex: idIdx, endIndex: idIdx + 1 }, properties: { hiddenByUser: true }, fields: "hiddenByUser" } }] } });
         }
       } catch (e) { console.warn("오더ID 열 숨김 실패(무시):", e?.message || e); }
+      try { await applyGsheetInputGuides(tabName); } catch (e) { console.warn("필수칸 표시 적용 실패(무시):", e?.message || e); }
 
       // 대상 탭의 기존 데이터 행을 최대한 비운다(헤더만 남김) — 프로그램 기준으로
       // 통째로 다시 채우기 위해.
@@ -2963,6 +3049,26 @@ exports.syncDispatchToGoogleSheet =
         console.error("📊 구글시트 동기화 실패:", e?.message || e);
       }
     });
+
+// 모든 월별 탭에 "시트 직접 입력 도우미"(필수칸 표시·목록 선택 등)를 적용 — 관리자메뉴 버튼
+// 호출: GET .../applyGsheetGuides?key=<GSHEET_BACKFILL_KEY>
+exports.applyGsheetGuides = functions
+  .runWith({ timeoutSeconds: 300, memory: "256MB" })
+  .https.onRequest(async (req, res) => {
+    res.set("Access-Control-Allow-Origin", "*");
+    if (req.query.key !== GSHEET_BACKFILL_KEY) { res.status(403).send("권한 없음"); return; }
+    try {
+      const tabs = (await getGsheetSheetList()).filter((x) => gsheetTabSortKey(x.title) !== null).map((x) => x.title);
+      const done = [];
+      const failed = [];
+      for (const t of tabs) {
+        try { await applyGsheetInputGuides(t); done.push(t); } catch (e) { failed.push(`${t}(${e?.message || e})`); }
+      }
+      res.send(`✅ ${done.length}개 탭에 적용: ${done.join(", ")}${failed.length ? `\n⚠️ 실패: ${failed.join(", ")}` : ""}`);
+    } catch (e) {
+      res.status(500).send(`적용 실패: ${e?.message || e}`);
+    }
+  });
 
 /* ==================================================================
    🔎 구글시트 점검 — 한 달 탭을 프로그램과 날짜별로 비교하고(fix=1이면 자동으로 맞춤)

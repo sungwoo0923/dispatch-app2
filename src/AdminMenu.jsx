@@ -1694,6 +1694,19 @@ function GsheetCheckPanel() {
         <button onClick={() => run(true)} disabled={running} className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] disabled:opacity-40">자동으로 맞추기</button>
       </div>
       {result && <div className="bg-gray-50 rounded-lg px-4 py-3 text-[12px] text-gray-700 whitespace-pre-wrap break-words font-mono">{result}</div>}
+      <div className="mt-5 pt-4 border-t border-gray-100">
+        <div className="text-[13px] font-bold text-gray-800 mb-1">시트 직접 입력 도우미</div>
+        <p className="text-[12px] text-gray-500 mb-3 leading-relaxed">
+          모든 월별 탭에 적용합니다 — 필수칸(상차일·상차시간·하차일·하차시간·거래처명·상차지명·하차지명·화물내용·차량종류·차량톤수·차량번호·청구운임·기사운임·지급방식·배차방식)이
+          비어 있으면 연한 빨간색으로 표시되고, 입력하면 바로 사라집니다. 필수 항목 머리줄 빨간 글씨·머리줄 고정, 차량종류·지급방식·배차방식 목록 선택, 운임 숫자 확인도 함께 적용돼요.
+        </p>
+        <button onClick={async () => {
+          setRunning(true); setResult("");
+          try { const r = await fetch(`${FUNCTIONS_BASE}/applyGsheetGuides?key=dolkae-backfill-2026`); setResult(await r.text()); }
+          catch (e) { setResult(`요청 실패: ${e?.message || e}`); }
+          finally { setRunning(false); }
+        }} disabled={running} className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] disabled:opacity-40">필수칸 표시 적용</button>
+      </div>
     </div>
   );
 }
