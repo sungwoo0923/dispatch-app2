@@ -1211,6 +1211,11 @@ exports.sendPushNotification = functions.https.onRequest(async (req, res) => {
 
 // 이 스프레드시트의 ID — URL의 /d/{ID}/edit 부분.
 const GSHEET_SPREADSHEET_ID = "1Md09eYeoXVvXm155kCVE_jz1aZ1aedsmsvOQuPoiMxU";
+// ⭐ 프로그램 → 구글시트 연결 스위치(2026-10-21) — 마지막 백필 이후 구글시트는 사람이 직접(수기) 작성한다.
+// false면 오더 등록·수정·삭제가 시트에 자동 반영되지 않고, 시트를 비우고 다시 채우는 백필·자동 맞추기도 막아
+// 수기로 적은 내용이 지워지지 않게 한다. 다시 연결하려면 true로 바꾸고 functions 배포.
+const GSHEET_PROGRAM_LINK_ENABLED = false;
+const GSHEET_LINK_OFF_MESSAGE = "프로그램과 구글시트 연결이 끊겨 있습니다(시트 수기 작성 중) — 시트를 덮어쓰지 않도록 이 작업은 실행하지 않았습니다.";
 // 이 시트 전용 동기화 대상 회사명 — 다른 회사 데이터가 섞이지 않도록 반드시 필터링한다.
 const GSHEET_TARGET_COMPANY = "돌캐";
 // "차량번호로 기사명/전화번호 자동매칭"에 쓰이는 기준표 시트 이름(A:기사명, B:차량정보(차량번호), C:전화번호, D:비고).
@@ -2250,6 +2255,7 @@ exports.backfillGsheetMonth = functions
       res.status(403).send("forbidden");
       return;
     }
+    if (!GSHEET_PROGRAM_LINK_ENABLED) { res.status(409).send(GSHEET_LINK_OFF_MESSAGE); return; }
     const monthPrefix = String(req.query.month || "").trim(); // 예: "2026-09"
     if (!/^\d{4}-\d{2}$/.test(monthPrefix)) {
       res.status(400).send("사용법: ?key=...&month=YYYY-MM (예: month=2026-09)");
@@ -2733,6 +2739,7 @@ exports.backfillGsheetClients = functions
     res.set("Access-Control-Allow-Methods", "GET");
     if (req.method === "OPTIONS") { res.status(204).send(""); return; }
     if (req.query.key !== GSHEET_BACKFILL_KEY) { res.status(403).send("forbidden"); return; }
+    if (!GSHEET_PROGRAM_LINK_ENABLED) { res.status(409).send(GSHEET_LINK_OFF_MESSAGE); return; }
 
     try {
       const results = [];
@@ -2990,6 +2997,7 @@ exports.backfillGsheetFareHistory = functions
     body = body || {};
 
     if (body.key !== GSHEET_BACKFILL_KEY) { res.status(403).send("forbidden"); return; }
+    if (!GSHEET_PROGRAM_LINK_ENABLED) { res.status(409).send(GSHEET_LINK_OFF_MESSAGE); return; }
 
     try {
       const results = [];
@@ -3014,6 +3022,8 @@ exports.syncDispatchToGoogleSheet =
   functions.firestore
     .document("{col}/{dispatchId}")
     .onWrite(async (change, context) => {
+      // ⭐ 연결 끊김 — 시트는 수기 작성 중이라 프로그램 변경을 시트에 보내지 않는다
+      if (!GSHEET_PROGRAM_LINK_ENABLED) return;
       const { col, dispatchId } = context.params;
       if (!["dispatch", "orders"].includes(col)) return;
 
@@ -3084,6 +3094,7 @@ exports.checkGsheetMonth = functions
     const month = String(req.query.month || "");
     if (!/^\d{4}-\d{2}$/.test(month)) { res.status(400).send("month=YYYY-MM 형식으로 넣어주세요"); return; }
     const fix = req.query.fix === "1";
+    if (fix && !GSHEET_PROGRAM_LINK_ENABLED) { res.status(409).send(GSHEET_LINK_OFF_MESSAGE); return; }
     try {
       const tabName = gsheetMonthTabName(`${month}-01`);
       const sheet = (await getGsheetSheetList()).find((x) => x.title === tabName);
