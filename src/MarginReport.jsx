@@ -7,6 +7,7 @@
 //  - 엑셀: 요약 / 구분별 비교 / 거래처별 비교 / 일자별 상세(당월·전월) / 손실 건 / 수수료 0% 건 / 미배차 페널티 건 / 기타
 import React from "react";
 import * as XLSX from "xlsx";
+import html2canvas from "html2canvas";
 
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 const pct = (profit, sale) => (sale ? Math.round((profit / sale) * 1000) / 10 : 0);
@@ -192,8 +193,8 @@ const Diff = ({ v, unit = "won" }) => {
   const text = unit === "won" ? won(Math.abs(v)) : unit === "p" ? `${Math.abs(v)}%p` : `${Math.abs(v).toLocaleString()}건`;
   return <span className={`font-bold ${v > 0 ? "text-blue-600" : "text-red-600"}`}>{v > 0 ? "▲" : "▼"} {text}</span>;
 };
-const Th = ({ children, className = "" }) => <th className={`px-3 py-2.5 font-bold whitespace-nowrap ${className}`}>{children}</th>;
-const Td = ({ children, className = "" }) => <td className={`px-3 py-2.5 whitespace-nowrap tabular-nums ${className}`}>{children}</td>;
+const Th = ({ children, className = "" }) => <th className={`px-2.5 py-2.5 font-bold whitespace-nowrap ${className}`}>{children}</th>;
+const Td = ({ children, className = "" }) => <td className={`px-2.5 py-2.5 whitespace-nowrap tabular-nums ${className}`}>{children}</td>;
 const CUR_TH = "bg-blue-50/70 text-[#1B2B4B]";
 
 export default function MarginReportModal({ rows, initialMonth, isExcluded, hasExcluded, onClose }) {
@@ -203,6 +204,8 @@ export default function MarginReportModal({ rows, initialMonth, isExcluded, hasE
   const [clientSort, setClientSort] = React.useState("gap");
   const [showAll, setShowAll] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
+  const [capturing, setCapturing] = React.useState(false);
+  const clientTableRef = React.useRef(null);
   // 전월이 당월보다 늦게 골라져도 항상 "이른 달 → 늦은 달" 순서로 비교
   const [pk, mk] = prevKey <= monthKey ? [prevKey, monthKey] : [monthKey, prevKey];
   const R = React.useMemo(() => buildMarginReport(rows, mk, pk, { pureOnly, isExcluded }), [rows, mk, pk, pureOnly, isExcluded]);
@@ -216,7 +219,35 @@ export default function MarginReportModal({ rows, initialMonth, isExcluded, hasE
   const maxClient = Math.max(1, ...clientCauses.map((c) => c.gap));
   const sortedClients = [...R.clients].sort((x, y) =>
     clientSort === "gap" ? y.gap - x.gap : clientSort === "dSale" ? y.dSale - x.dSale : y.cur.sale - x.cur.sale);
-  const shownClients = showAll ? sortedClients : sortedClients.slice(0, 30);
+  const shownClients = showAll || capturing ? sortedClients : sortedClients.slice(0, 30);
+
+  // ⭐ 거래처별 비교 표를 이미지(PNG)로 저장 — 저장할 때는 전체 거래처를 펼치고 버튼은 빼고 찍는다
+  const saveClientImage = async () => {
+    if (capturing) return;
+    setCapturing(true);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    try {
+      const el = clientTableRef.current;
+      const canvas = await html2canvas(el, {
+        scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false,
+        windowWidth: el.scrollWidth + 80,
+        onclone: (doc) => {
+          // 팝업 스크롤 영역 밖으로 잘린 줄까지 전부 찍히도록 복제본에서는 높이 제한을 푼다
+          const sc = doc.querySelector(".mr-scroll");
+          if (sc) { sc.style.overflow = "visible"; sc.style.maxHeight = "none"; }
+          doc.querySelectorAll(".mr-no-capture").forEach((n) => { n.style.display = "none"; });
+        },
+      });
+      const a = document.createElement("a");
+      a.href = canvas.toDataURL("image/png");
+      a.download = `거래처별_비교_${pk}_vs_${mk}.png`;
+      a.click();
+    } catch (e) {
+      alert(`이미지 저장 실패: ${e?.message || e}`);
+    } finally {
+      setCapturing(false);
+    }
+  };
 
   const CompareCard = ({ label, a, b, fmt, diff, diffUnit, rateText }) => (
     <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4 min-w-0">
@@ -244,8 +275,10 @@ export default function MarginReportModal({ rows, initialMonth, isExcluded, hasE
   );
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-black/45 flex items-center justify-center p-3" onClick={onClose}>
-      <div className="bg-[#F4F6FA] rounded-2xl shadow-2xl w-[min(1560px,97vw)] max-h-[95vh] overflow-y-auto text-gray-800" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[9999] bg-black/45 flex items-center justify-center p-2" onClick={onClose}>
+      <div className="mr-scroll bg-[#F4F6FA] rounded-2xl shadow-2xl w-[99vw] max-w-[2000px] max-h-[96vh] overflow-y-auto text-gray-800" onClick={(e) => e.stopPropagation()}>
+        {/* 화면이 좁으면(1600px 미만) 거래처별 표 글씨·여백을 줄여 좌우 스크롤 없이 한눈에 */}
+        <style>{`@media (max-width: 1599px) { .mr-client-table { font-size: 12.5px; } .mr-client-table th, .mr-client-table td { padding-left: 5px; padding-right: 5px; } .mr-client-table td:first-child { max-width: 150px; } }`}</style>
         <div className="bg-[#1B2B4B] text-white px-7 py-4 rounded-t-2xl flex items-center justify-between sticky top-0 z-10">
           <div>
             <div className="text-[19px] font-black">매익률 원인 보고서 — {A} vs {B}</div>
@@ -254,7 +287,7 @@ export default function MarginReportModal({ rows, initialMonth, isExcluded, hasE
           <button onClick={onClose} className="text-white/80 hover:text-white text-[28px] leading-none px-2">×</button>
         </div>
 
-        <div className="p-7 space-y-6">
+        <div className="p-5 space-y-6">
           {/* 조회 조건 */}
           <div className="flex flex-wrap items-center gap-3 text-[14px] bg-white rounded-2xl border border-gray-200 px-5 py-3">
             <label className="font-bold text-gray-600">전월(기준)</label>
@@ -397,28 +430,29 @@ export default function MarginReportModal({ rows, initialMonth, isExcluded, hasE
           </div>
 
           {/* 거래처별 비교 표 */}
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-x-auto">
+          <div ref={clientTableRef} className="bg-white rounded-2xl border border-gray-200 overflow-x-auto">
             <div className="px-5 py-3 border-b flex flex-wrap items-center gap-3">
-              <div className="text-[16px] font-black text-[#1B2B4B]">거래처별 비교 ({A} → {B})</div>
-              <div className="ml-auto flex items-center gap-1.5 text-[13px]">
+              <div className="text-[16px] font-black text-[#1B2B4B]">거래처별 비교 ({A} → {B}){pureOnly ? " · 순수 운송 매출" : ""}</div>
+              <div className="mr-no-capture ml-auto flex items-center gap-1.5 text-[13px]">
+                <button onClick={saveClientImage} disabled={capturing} className="px-3 py-1.5 rounded-lg font-bold border border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 mr-2">{capturing ? "저장 중…" : "이미지 저장"}</button>
                 {[["gap", "덜 남은 이익 순"], ["dSale", "매출 증가 순"], ["sale", `${B} 매출 순`]].map(([k, l]) => (
                   <button key={k} onClick={() => setClientSort(k)} className={`px-3 py-1.5 rounded-lg font-bold border ${clientSort === k ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"}`}>{l}</button>
                 ))}
               </div>
             </div>
-            <table className="w-full text-[14px]">
+            <table className="mr-client-table w-full text-[14px]">
               <thead className="text-gray-600 text-[13px] bg-gray-50">
                 <tr>
                   <Th className="text-left">거래처</Th>
                   <Th className="text-right border-l">{A} 건수</Th><Th className="text-right">{A} 매출</Th><Th className="text-right">{A} 이익</Th><Th className="text-right">{A} 매익률</Th>
                   <Th className={`text-right border-l ${CUR_TH}`}>{B} 건수</Th><Th className={`text-right ${CUR_TH}`}>{B} 매출</Th><Th className={`text-right ${CUR_TH}`}>{B} 이익</Th><Th className={`text-right ${CUR_TH}`}>{B} 매익률</Th>
-                  <Th className="text-right border-l">매출 증감</Th><Th className="text-right">이익 증감</Th><Th className="text-right">덜 남은 이익</Th><Th className="text-right">{B} 손실·0% 건</Th>
+                  <Th className="text-right border-l">매출 증감</Th><Th className="text-right">이익 증감</Th><Th className="text-right">덜 남은 이익</Th><Th className="text-right">{B} 손실·0%</Th>
                 </tr>
               </thead>
               <tbody>
                 {shownClients.map((c) => (
                   <tr key={c.name} className="border-t hover:bg-gray-50">
-                    <Td className="font-bold max-w-[220px] truncate">{c.name}</Td>
+                    <Td className={`font-bold ${capturing ? "" : "max-w-[200px] truncate"}`}>{c.name}</Td>
                     <Td className="text-right border-l text-gray-600">{c.prev.cnt || "-"}</Td>
                     <Td className="text-right text-gray-600">{c.prev.cnt ? won(c.prev.sale) : "-"}</Td>
                     <Td className={`text-right ${c.prev.profit < 0 ? "text-red-600" : "text-gray-600"}`}>{c.prev.cnt ? won(c.prev.profit) : "-"}</Td>
@@ -435,7 +469,7 @@ export default function MarginReportModal({ rows, initialMonth, isExcluded, hasE
                 ))}
               </tbody>
             </table>
-            {sortedClients.length > 30 && (
+            {sortedClients.length > 30 && !capturing && (
               <button onClick={() => setShowAll((v) => !v)} className="w-full py-3 border-t text-[14px] font-bold text-[#1B2B4B] hover:bg-gray-50">
                 {showAll ? "접기" : `전체 ${sortedClients.length}곳 보기`}
               </button>
