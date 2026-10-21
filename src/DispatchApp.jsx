@@ -41,6 +41,7 @@ import { estimateDistanceFare, geocodeAddress, haversineKm } from "./tmapFareCal
 import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
 import RouteMapModal from "./RouteMapModal";
 import MonthCompareAnalysis from "./MonthCompareAnalysis";
+import MarginReportModal from "./MarginReport";
 import { IdleFleetButton } from "./fleetRecommend";
 import { subscribeOrderSync, deleteOrderWithLog, logOrderDeletion, OrderHistoryContext, useOrderHistory, useLoadOrderRange, useLoadFullOrderHistory, pcLiveWindowStart, pcPrevDay, kstToday as histToday, monthStartAgo, monthEnd, monthStart, historyStartDate } from "./orderHistory";
 import MonthCloseCheck from "./MonthCloseCheck";
@@ -47318,6 +47319,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   const [detailClient, setDetailClient] = React.useState(null);
   const [aiMode, setAiMode] = React.useState(null);
   const [monthCompareOpen, setMonthCompareOpen] = React.useState(false); // ⭐ 월 비교 분석
+  const [marginReportOpen, setMarginReportOpen] = React.useState(false); // ⭐ 매익률 원인 보고서
   const [monthCloseOpen, setMonthCloseOpen] = React.useState(false); // ⭐ 월 마감 점검
   const [staffPerfOpen, setStaffPerfOpen] = React.useState(false); // ⭐ 배차담당자별 실적(관리자 전용)
   // ⭐ 매출관리 — 선택한 연도 전체 + 고른 달 기준 3개월 전(전월 비교·마감 점검·담당자 실적)까지만 불러온다.
@@ -47327,7 +47329,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
     const mStart = monthStartAgo(targetMonth, 3) || yStart;
     useLoadOrderRange(yStart < mStart ? yStart : mStart, histToday());
   }
-  useLoadFullOrderHistory(monthCompareOpen);
+  useLoadFullOrderHistory(monthCompareOpen || marginReportOpen);
   const canSeeStaffPerf = role === "admin" || role === "totalMaster";
   // ⭐ AI 월간비교분석 탭에서 선택한 두 달 — 탭을 옮겨도(activeTab 전환으로
   // MonthCompareInsight가 unmount/remount 되어도) 선택이 유지되도록 상위인
@@ -47964,6 +47966,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
                 <p className="text-[11px] text-white/50 mt-0.5"><EditableText id="settlement.report.subtitle" defaultText="월별 요약 · 요일별 수주 · 거래처별 기간 조회" /></p>
               </div>
               <div className="flex items-center gap-2">
+                <button onClick={() => setMarginReportOpen(true)} className="px-3 py-1.5 rounded-lg bg-amber-400 text-[#1B2B4B] text-[12px] font-bold hover:bg-amber-300 transition">매익률 원인 보고서</button>
                 <button onClick={() => setMonthCompareOpen(true)} className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[12px] font-bold hover:bg-white/90 transition">월 비교 분석</button>
                 <button onClick={() => setMonthCloseOpen(true)} className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[12px] font-bold hover:bg-white/90 transition">월 마감 점검</button>
                 {canSeeStaffPerf && (
@@ -47997,6 +48000,15 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
                   isExcluded={isExcludedFast}
                   hasExcluded={getNetRevenueExcludedNames(clients, places).length > 0}
                   onClose={() => setStaffPerfOpen(false)}
+                />
+              )}
+              {marginReportOpen && (
+                <MarginReportModal
+                  rows={rows}
+                  initialMonth={targetMonth}
+                  isExcluded={isExcludedFast}
+                  hasExcluded={getNetRevenueExcludedNames(clients, places).length > 0}
+                  onClose={() => setMarginReportOpen(false)}
                 />
               )}
               {monthCompareOpen && (
