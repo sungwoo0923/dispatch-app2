@@ -9,7 +9,7 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import { onAuthStateChanged, signOut, multiFactor } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, db, DEFAULT_COMPANY } from "./firebase";
 import { setBlindViewerRole } from "./blind";
 import {
@@ -17,6 +17,8 @@ import {
   KIND_LABEL, END_REASON_LABEL, sessionLastMs, timeAgo,
 } from "./loginSessions";
 import { LoginManagerModal } from "./LoginManager";
+import { PcVerifyGate, isPcMfaPassed } from "./MfaModal";
+import { getDeviceKind } from "./loginSessions";
 import { doc, onSnapshot, addDoc, collection, serverTimestamp, query, orderBy, limit, getDocs, deleteDoc } from "firebase/firestore";
 
 // 역할별 대형 화면은 지연 로딩(code-splitting)한다 — 이전에는 전부 하나의 번들로
@@ -179,18 +181,28 @@ export default function App() {
       setSessionBusy(false);
     }
   };
-  // ⭐ 최고관리자가 아직 2차 인증(휴대폰 문자)을 등록하지 않았으면 로그인할 때 한 번 안내한다
+  // ⭐ 최고관리자 PC 2차 인증 — PC에서 로그인하면 등록된 휴대폰으로 문자 인증을 통과해야 프로그램이 열린다(모바일 제외)
+  const [masterPcPhone, setMasterPcPhone] = useState(null); // null = 아직 모름
+  const [pcMfaTick, setPcMfaTick] = useState(0);
+  useEffect(() => {
+    const h = () => setPcMfaTick((v) => v + 1);
+    window.addEventListener("kp-pc-mfa-ok", h);
+    window.addEventListener("storage", h); // 다른 탭에서 인증하면 이 탭도 바로 열린다
+    return () => { window.removeEventListener("kp-pc-mfa-ok", h); window.removeEventListener("storage", h); };
+  }, []);
+  const isPcDevice = getDeviceKind() === "pc";
+  const needPcMfa = !!(user && role === "totalMaster" && isPcDevice && masterPcPhone && !isPcMfaPassed(user.uid)) && pcMfaTick >= 0;
+  // 아직 번호를 등록하지 않았으면(PC에서) 로그인할 때 한 번 안내한다
   const [mfaNag, setMfaNag] = useState(false);
   const [mfaSetupOpen, setMfaSetupOpen] = useState(false);
   useEffect(() => {
-    if (!user || role !== "totalMaster") return;
+    if (!user || role !== "totalMaster" || !isPcDevice || masterPcPhone !== "") return;
     try {
       if (sessionStorage.getItem("mfaNagShown") === "1") return;
-      if ((multiFactor(user).enrolledFactors || []).length > 0) return;
       sessionStorage.setItem("mfaNagShown", "1");
       setMfaNag(true);
     } catch { /* 무시 */ }
-  }, [user, role]);
+  }, [user, role, masterPcPhone, isPcDevice]);
   const cancelSessionConflict = () => {
     setSessionConflict(null);
     signOut(auth).catch(() => {});
@@ -532,6 +544,7 @@ export default function App() {
           }
           const dataRole = isMasterEmail ? "totalMaster" : (data.role || "user");
           setRole(dataRole);
+          setMasterPcPhone(data.pcVerifyPhone || "");
           // 스냅샷은 프로필이 바뀔 때마다 재발화될 수 있어, 이 uid로 로그인 기록을 아직
           // 남기지 않았을 때만(세션당 1회) 기록한다.
           if (sessionLogRef.current.uid !== u.uid) {
@@ -577,6 +590,7 @@ export default function App() {
           };
           safeSetItem("role", dataRole);
         } else if (isMasterEmail) {
+          setMasterPcPhone("");
           // users 문서 자체가 없어도(예: KP-Planner 전용으로만 가입해본 경우) 이
           // 이메일은 무조건 최고관리자로 들어가야 한다.
           setRole("totalMaster");
@@ -701,16 +715,21 @@ export default function App() {
         </div>
       )}
 
+      {/* ⭐ 최고관리자 PC 2차 인증 화면 — 통과 전까지 프로그램을 가린다 */}
+      {needPcMfa && !sessionConflict && (
+        <PcVerifyGate uid={user.uid} phone={masterPcPhone} onCancel={() => signOut(auth).catch(() => {})} />
+      )}
+
       {/* ⭐ 최고관리자 2차 인증 등록 안내 */}
-      {mfaNag && !sessionConflict && user && (
+      {mfaNag && !needPcMfa && !sessionConflict && user && (
         <div className="fixed inset-0 z-[100000] bg-black/55 flex items-center justify-center p-5">
           <div className="w-full max-w-[400px] bg-white rounded-2xl shadow-2xl overflow-hidden">
             <div className="bg-[#1B2B4B] px-6 py-5 text-white">
-              <div className="text-[17px] font-black">2차 인증을 등록해 주세요</div>
+              <div className="text-[17px] font-black">PC 2차 인증을 등록해 주세요</div>
               <div className="text-[12.5px] text-white/70 mt-0.5">최고관리자 계정은 전체 회사 데이터를 다룰 수 있어 보안이 중요합니다</div>
             </div>
             <div className="px-6 py-5 text-[13.5px] text-gray-700 leading-relaxed">
-              휴대폰 번호를 등록하면 로그인할 때마다 비밀번호 다음에 <b>문자로 받은 인증번호 6자리</b>를 입력해야 로그인됩니다. 비밀번호가 새어나가도 휴대폰이 없으면 들어올 수 없습니다.
+              휴대폰 번호를 등록하면 <b>PC에서</b> 로그인할 때마다 비밀번호 다음에 <b>문자로 받은 인증번호 6자리</b>를 입력해야 프로그램이 열립니다. 모바일은 묻지 않습니다.
             </div>
             <div className="grid grid-cols-2 gap-2 px-6 pb-6">
               <button onClick={() => setMfaNag(false)} className="py-3 rounded-xl border border-gray-300 text-[14px] font-bold text-gray-700 hover:bg-gray-50">나중에</button>

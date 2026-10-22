@@ -1,5 +1,12 @@
 // ======================= src/MfaModal.jsx =======================
-// ⭐ 최고관리자 2차 인증(휴대폰 문자) — Firebase 공식 "SMS 다중 인증" 사용(2026-10-22 요청)
+// ⭐ 최고관리자 2차 인증(휴대폰 문자)
+// [현재 방식 — PC 전용] PC에서 최고관리자로 로그인하면 등록한 휴대폰으로 인증번호 문자를 보내고,
+//   6자리를 입력해야 프로그램이 열린다(PcVerifyGate). 모바일은 묻지 않는다. 문자 발송·확인은
+//   Firebase "전화 인증"을 별도 인스턴스(pcVerify)에서 써서 본 로그인에는 영향이 없다.
+//   번호는 users/{uid}.pcVerifyPhone, 이 PC에서 확인했다는 표시는 로그아웃 전까지 유지(kpPcMfaOk).
+// [예전 방식 — 아래 useMfaPrompt 등] Firebase 공식 "SMS 다중 인증"은 계정 전체(PC+모바일)에 걸려
+//   PC만 따로 적용할 수 없어 더 쓰지 않는다. 이미 등록된 계정이 있으면 해제할 수 있게만 남겨둔다.
+// (아래는 예전 방식 설명)
 //  - 등록: 로그인 관리 → "2차 인증(휴대폰 문자)" 에서 휴대폰 번호 등록(이메일 인증 → 문자 인증번호 확인)
 //  - 로그인: 비밀번호가 맞으면 Firebase가 "2차 인증 필요" 오류를 내고 → 이 창에서 문자로 받은 6자리 입력
 //  - 비밀번호 변경처럼 "다시 로그인 확인"이 필요한 곳에서도 같은 창을 쓴다
@@ -10,7 +17,10 @@ import {
   RecaptchaVerifier, PhoneAuthProvider, PhoneMultiFactorGenerator, getMultiFactorResolver, multiFactor,
   reauthenticateWithCredential, EmailAuthProvider, sendEmailVerification,
 } from "firebase/auth";
-import { auth as mainAuth } from "./firebase";
+import { initializeApp, getApps } from "firebase/app";
+import { getAuth, signInWithPhoneNumber, signOut } from "firebase/auth";
+import { doc, setDoc, deleteField } from "firebase/firestore";
+import { auth as mainAuth, db } from "./firebase";
 
 export const MASTER_EMAIL = "tjddnqkf@naver.com";
 
@@ -38,7 +48,7 @@ export function mfaErrorText(e) {
     "auth/quota-exceeded": "오늘 보낼 수 있는 문자 수를 넘었습니다. 잠시 후 다시 시도해 주세요.",
     "auth/invalid-phone-number": "휴대폰 번호 형식이 올바르지 않습니다.",
     "auth/missing-phone-number": "휴대폰 번호를 입력해 주세요.",
-    "auth/operation-not-allowed": "Firebase에서 문자 인증(SMS 다중 인증)이 아직 켜져 있지 않습니다.",
+    "auth/operation-not-allowed": "Firebase에서 전화(문자) 인증이 아직 켜져 있지 않습니다. 콘솔 → Authentication → 로그인 방법 → 전화를 사용 설정해 주세요.",
     "auth/admin-restricted-operation": "Firebase에서 문자 인증(SMS 다중 인증)이 아직 켜져 있지 않습니다.",
     "auth/unverified-email": "이메일 인증을 먼저 완료해야 합니다.",
     "auth/requires-recent-login": "보안을 위해 비밀번호를 다시 입력해 주세요.",
@@ -303,6 +313,189 @@ export function MfaEnrollSection({ user: userProp }) {
       )}
       {msg.text && <div className={`text-[13px] font-semibold leading-relaxed ${msg.type === "ok" ? "text-emerald-600" : "text-red-600"}`}>{msg.text}</div>}
       <div ref={recaptchaRef} />
+    </div>
+  );
+}
+
+/* ====================== PC 전용 2차 인증 ====================== */
+export const PC_MFA_KEY = "kpPcMfaOk"; // 이 PC에서 문자 인증을 통과한 계정 uid(로그아웃하면 지움)
+
+function phoneAuthInstance() {
+  const app = getApps().find((a) => a.name === "pcVerify") || initializeApp(mainAuth.app.options, "pcVerify");
+  return getAuth(app);
+}
+
+// 문자 보내기 → 6자리 확인. 매번 새 reCAPTCHA 칸을 만들어 "이미 그려짐" 오류를 피한다.
+function usePhoneCheck(holderRef) {
+  const confirmRef = React.useRef(null);
+  const verifierRef = React.useRef(null);
+  const clear = () => { try { verifierRef.current?.clear(); } catch { /* 무시 */ } verifierRef.current = null; };
+  React.useEffect(() => () => clear(), []);
+  const send = async (phoneE164) => {
+    const a2 = phoneAuthInstance();
+    clear();
+    const holder = holderRef.current;
+    if (holder) holder.innerHTML = "";
+    const el = document.createElement("div");
+    holder?.appendChild(el);
+    verifierRef.current = new RecaptchaVerifier(a2, el, { size: "invisible" });
+    confirmRef.current = await signInWithPhoneNumber(a2, phoneE164, verifierRef.current);
+  };
+  const confirm = async (code) => {
+    if (!confirmRef.current) throw Object.assign(new Error("인증번호를 먼저 받아주세요."), { code: "auth/missing-verification-id" });
+    await confirmRef.current.confirm(code);
+    await signOut(phoneAuthInstance()).catch(() => {});
+    clear();
+  };
+  return { send, confirm };
+}
+
+export function isPcMfaPassed(uid) {
+  try { return localStorage.getItem(PC_MFA_KEY) === uid; } catch { return false; }
+}
+
+// PC 로그인 직후 프로그램을 가리는 인증 화면
+export function PcVerifyGate({ uid, phone, onCancel }) {
+  const holderRef = React.useRef(null);
+  const { send, confirm } = usePhoneCheck(holderRef);
+  const [, force] = React.useReducer((x) => x + 1, 0);
+  return createPortal(
+    <div className="fixed inset-0 z-[100002] flex items-center justify-center p-5" style={{ background: "linear-gradient(135deg, #061832 0%, #0B2554 50%, #0D2B66 100%)" }}>
+      <div className="flex flex-col items-center w-full max-w-[380px]">
+        <img src="/icons/sflow-icon.png" alt="" className="w-14 h-14 rounded-[16px] shadow-[0_10px_28px_rgba(0,0,0,0.35)] ring-1 ring-white/15 mb-4" />
+        <div className="text-white/70 text-[12.5px] font-semibold tracking-[0.18em] mb-5">최고관리자 보안 확인</div>
+        <MfaCodeBox
+          title="PC 로그인 2차 인증"
+          subtitle={`등록된 휴대폰 ${maskPhone(phone)}으로 인증번호를 보냅니다`}
+          autoSend
+          onSend={() => send(phone)}
+          onVerify={async (code) => {
+            await confirm(code);
+            try { localStorage.setItem(PC_MFA_KEY, uid); } catch { /* 무시 */ }
+            window.dispatchEvent(new Event("kp-pc-mfa-ok"));
+            force();
+          }}
+          onCancel={onCancel}
+        />
+        <div ref={holderRef} />
+        <p className="mt-4 text-[12px] text-white/50 text-center leading-relaxed">PC에서만 확인합니다. 인증 후에는 로그아웃할 때까지 다시 묻지 않습니다.</p>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// 로그인 관리 화면 — PC 2차 인증 휴대폰 등록·변경·해제(+ 예전 방식 해제)
+export function PcVerifySection({ user: userProp, phone }) {
+  const user = userProp?.reload ? userProp : mainAuth.currentUser;
+  const holderRef = React.useRef(null);
+  const { send, confirm } = usePhoneCheck(holderRef);
+  const [, force] = React.useReducer((x) => x + 1, 0);
+  const [editing, setEditing] = React.useState(false);
+  const [newPhone, setNewPhone] = React.useState("");
+  const [sentTo, setSentTo] = React.useState("");
+  const [pw, setPw] = React.useState("");
+  const [busy, setBusy] = React.useState("");
+  const [msg, setMsg] = React.useState({ type: "", text: "" });
+  const [mfaUi, askMfa] = useMfaPrompt();
+  if (!user) return null;
+  const legacy = multiFactor(user).enrolledFactors || [];
+
+  const startSend = async () => {
+    const e164 = toE164(newPhone);
+    if (!/^\+8210\d{7,8}$/.test(e164)) return setMsg({ type: "err", text: "휴대폰 번호를 010-0000-0000 형식으로 입력해 주세요." });
+    setBusy("send"); setMsg({ type: "", text: "" });
+    try { await send(e164); setSentTo(e164); } catch (e) { setMsg({ type: "err", text: mfaErrorText(e) }); } finally { setBusy(""); }
+  };
+  const remove = async () => {
+    if (!pw) return setMsg({ type: "err", text: "해제하려면 현재 비밀번호를 입력해 주세요." });
+    if (!window.confirm("PC 2차 인증을 해제할까요? 해제하면 PC에서도 비밀번호만으로 로그인됩니다.")) return;
+    setBusy("rm"); setMsg({ type: "", text: "" });
+    try {
+      await reauth(user, pw, askMfa);
+      await setDoc(doc(db, "users", user.uid), { pcVerifyPhone: deleteField() }, { merge: true });
+      setPw("");
+      setMsg({ type: "ok", text: "PC 2차 인증을 해제했습니다." });
+    } catch (e) { setMsg({ type: "err", text: mfaErrorText(e) }); } finally { setBusy(""); }
+  };
+  const removeLegacy = async (f) => {
+    if (!pw) return setMsg({ type: "err", text: "현재 비밀번호를 입력해 주세요." });
+    setBusy("legacy");
+    try {
+      await reauth(user, pw, askMfa);
+      await multiFactor(user).unenroll(f);
+      await user.reload().catch(() => {});
+      force();
+      setMsg({ type: "ok", text: "예전 방식(모바일에도 걸리던 인증)을 해제했습니다." });
+    } catch (e) { setMsg({ type: "err", text: mfaErrorText(e) }); } finally { setBusy(""); }
+  };
+  const input = "w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-[14px] outline-none focus:border-[#1B2B4B] bg-white";
+
+  return (
+    <div className="space-y-3">
+      {mfaUi}
+      {legacy.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-2">
+          <div className="text-[13px] font-semibold text-amber-800">예전 방식 인증이 켜져 있어 모바일에서도 문자 인증을 묻습니다. 아래 비밀번호 입력 후 해제하세요.</div>
+          {legacy.map((f) => (
+            <button key={f.uid} onClick={() => removeLegacy(f)} disabled={busy === "legacy"} className="px-3 py-2 rounded-lg border border-amber-400 text-amber-800 text-[12.5px] font-bold bg-white disabled:opacity-60">
+              {maskPhone(f.phoneNumber)} 예전 방식 해제
+            </button>
+          ))}
+        </div>
+      )}
+
+      {phone && !editing ? (
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 5 6v6c0 4.5 3 7.7 7 9 4-1.3 7-4.5 7-9V6z" /><path d="m9 12 2 2 4-4" /></svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[14px] font-bold text-emerald-800">사용 중 · {maskPhone(phone)}</div>
+            <div className="text-[12px] text-emerald-700/80">PC에서 로그인할 때마다 이 번호로 인증번호 문자가 옵니다 (모바일은 묻지 않음)</div>
+          </div>
+          <button onClick={() => { setEditing(true); setNewPhone(""); setSentTo(""); setMsg({ type: "", text: "" }); }} className="shrink-0 px-3 py-2 rounded-xl border border-[#1B2B4B]/30 text-[#1B2B4B] text-[12.5px] font-bold hover:bg-white">번호 변경</button>
+        </div>
+      ) : sentTo ? (
+        <div className="flex justify-center">
+          <MfaCodeBox
+            title="휴대폰 인증"
+            subtitle={`${maskPhone(sentTo)}으로 인증번호를 보냈습니다`}
+            initiallySent
+            onSend={() => send(sentTo)}
+            onVerify={async (code) => {
+              await confirm(code);
+              await setDoc(doc(db, "users", user.uid), { pcVerifyPhone: sentTo }, { merge: true });
+              try { localStorage.setItem(PC_MFA_KEY, user.uid); } catch { /* 무시 */ }
+              setSentTo(""); setEditing(false);
+              setMsg({ type: "ok", text: "등록되었습니다. 다음에 PC에서 로그인할 때부터 문자 인증번호를 입력합니다." });
+            }}
+            onCancel={() => setSentTo("")}
+          />
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          <input type="tel" inputMode="tel" placeholder="휴대폰 번호 (010-0000-0000)" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} className={input} />
+          <div className="flex gap-2">
+            <button onClick={startSend} disabled={busy === "send"} className="flex-1 py-3 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-bold hover:bg-[#243a60] disabled:opacity-60">
+              {busy === "send" ? "문자 보내는 중…" : "인증번호 받기"}
+            </button>
+            {editing && <button onClick={() => setEditing(false)} className="px-4 py-3 rounded-xl border border-gray-300 text-[14px] font-bold text-gray-600">취소</button>}
+          </div>
+        </div>
+      )}
+
+      {phone && !editing && (
+        <div className="flex gap-2">
+          <input type="password" autoComplete="current-password" placeholder="해제할 때만 — 현재 비밀번호" value={pw} onChange={(e) => setPw(e.target.value)} className={input} />
+          <button onClick={remove} disabled={busy === "rm"} className="shrink-0 px-4 rounded-xl border border-red-300 text-red-600 text-[13px] font-bold hover:bg-red-50 disabled:opacity-60">해제</button>
+        </div>
+      )}
+      {!phone && legacy.length > 0 && (
+        <input type="password" autoComplete="current-password" placeholder="예전 방식 해제용 — 현재 비밀번호" value={pw} onChange={(e) => setPw(e.target.value)} className={input} />
+      )}
+      {msg.text && <div className={`text-[13px] font-semibold leading-relaxed ${msg.type === "ok" ? "text-emerald-600" : "text-red-600"}`}>{msg.text}</div>}
+      <div ref={holderRef} />
     </div>
   );
 }

@@ -22122,53 +22122,6 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const isTotalMaster = role === "totalMaster";
 
-  // ⭐ 구글시트 백필(임시·1회성) — PC 관리자 메뉴와 동일한 기능을 모바일에서도
-  // 최고관리자만 쓸 수 있게. 매번 그 달 탭을 통째로 비우고 프로그램 기준으로
-  // 다시 채우는 방식이라 여러 번 눌러도 결과는 항상 지금 프로그램에 있는
-  // 내용 그대로로 수렴한다(중복 걱정 없음).
-  const [backfillOpen, setBackfillOpen] = useState(false);
-  const now = new Date();
-  const [backfillMonth, setBackfillMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
-  const [backfillRunning, setBackfillRunning] = useState(false);
-  const [backfillResult, setBackfillResult] = useState("");
-  const runBackfill = async () => {
-    if (!/^\d{4}-\d{2}$/.test(backfillMonth)) { alert("월 형식이 올바르지 않습니다. 예: 2026-09"); return; }
-    if (!window.confirm(`"${backfillMonth}" 탭을 통째로 비우고, 프로그램에 지금 있는 오더로 다시 채웁니다.\n계속할까요?`)) return;
-    setBackfillRunning(true);
-    setBackfillResult("");
-    try {
-      const url = `${FUNCTIONS_BASE}/backfillGsheetMonth?key=dolkae-backfill-2026&month=${encodeURIComponent(backfillMonth)}`;
-      const res = await fetch(url);
-      setBackfillResult(await res.text());
-    } catch (e) {
-      setBackfillResult(`요청 실패: ${e?.message || e}`);
-    } finally {
-      setBackfillRunning(false);
-    }
-  };
-
-  // ⭐ 거래처(기본거래처/하차지거래처) 백필 — 위 오더 백필과 동일한 방식이지만
-  // 월 구분 없이 "기본거래처관리"/"하차지거래처관리" 탭 전체를 한 번에 갱신한다.
-  const [clientBackfillRunning, setClientBackfillRunning] = useState(false);
-  const [clientBackfillResult, setClientBackfillResult] = useState("");
-  const runClientBackfill = async () => {
-    if (!window.confirm(`"기본거래처관리"/"하차지거래처관리" 탭을 통째로 비우고, 프로그램에 지금 등록된 거래처로 다시 채웁니다.\n계속할까요?`)) return;
-    setClientBackfillRunning(true);
-    setClientBackfillResult("");
-    try {
-      const url = `${FUNCTIONS_BASE}/backfillGsheetClients?key=dolkae-backfill-2026`;
-      const res = await fetch(url);
-      const text = await res.text();
-      setClientBackfillResult(text);
-      alert(text);
-    } catch (e) {
-      const msg = `요청 실패: ${e?.message || e}`;
-      setClientBackfillResult(msg);
-      alert(msg);
-    } finally {
-      setClientBackfillRunning(false);
-    }
-  };
 
   // ⭐ "알림 테스트" — 서버(FCM)를 거치지 않고 이 기기의 서비스워커에 바로 알림을
   // 띄워달라고 해서, 알림 권한/화면이 정상 작동하는지 즉시(가상으로) 확인만 한다.
@@ -22412,18 +22365,6 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
             <SectionHeader title="관리자" />
             <div className="mx-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
               <SettingRow
-                label="구글시트 백필"
-                sub="임시·1회성 — 연동 전 오더를 시트로 일괄 반영"
-                onClick={() => setBackfillOpen(true)}
-                right={<span className="text-[12px] text-blue-500 font-semibold">열기</span>}
-              />
-              <SettingRow
-                label="거래처 구글시트 전송"
-                sub={clientBackfillRunning ? "전송 중..." : "기본거래처/하차지거래처를 시트로 일괄 반영"}
-                onClick={runClientBackfill}
-                right={<span className="text-[12px] text-blue-500 font-semibold">{clientBackfillRunning ? "..." : "실행"}</span>}
-              />
-              <SettingRow
                 label="알림 테스트"
                 sub="서버로 안 보내고 이 기기에서 바로 알림창만 확인"
                 onClick={handleTestNotification}
@@ -22475,49 +22416,6 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
 
       </div>
 
-      {/* 구글시트 백필 모달 (최고관리자 전용, 임시·1회성) */}
-      {backfillOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/45" onClick={() => !backfillRunning && setBackfillOpen(false)}>
-          <div className="w-full max-w-md bg-white rounded-t-2xl pb-8 shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-center pt-3 pb-2">
-              <div className="w-10 h-1 rounded-full bg-gray-200" />
-            </div>
-            <div className="px-5 pb-2">
-              <div className="font-bold text-[15px] text-gray-900">구글시트 백필 (임시·1회성)</div>
-              <div className="text-[12px] text-gray-400 mt-1 leading-relaxed">
-                연동이 붙기 전 이미 등록/수정돼 있던 오더를, 지정한 달 전체 기준으로 시트에 한 번에 밀어넣습니다.
-                대상 탭을 통째로 비운 뒤 프로그램 기준으로 다시 채우는 방식이라 여러 번 눌러도 결과는 항상 같습니다.
-              </div>
-            </div>
-            <div className="px-5 py-3">
-              <label className="text-[12px] font-semibold text-gray-600 block mb-1.5">대상 월</label>
-              <input
-                value={backfillMonth}
-                onChange={e => setBackfillMonth(e.target.value)}
-                placeholder="2026-09"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px]"
-              />
-            </div>
-            <div className="px-5 pt-2">
-              <button
-                onClick={runBackfill}
-                disabled={backfillRunning}
-                className={`w-full py-3 rounded-xl text-white text-[13px] font-bold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} disabled:opacity-40`}
-              >
-                {backfillRunning ? "실행 중... (몇 분 걸릴 수 있어요)" : `"${backfillMonth}" 백필 실행`}
-              </button>
-            </div>
-            {backfillResult && (
-              <div className="mx-5 mt-4 bg-gray-50 rounded-xl px-4 py-3 text-[12px] text-gray-700 whitespace-pre-wrap break-words">
-                {backfillResult}
-              </div>
-            )}
-            <div className="px-5 pt-4">
-              <button onClick={() => setBackfillOpen(false)} className="w-full py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold">닫기</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 전체 푸시 발송 모달 (최고관리자 전용) */}
       {pushComposeOpen && (

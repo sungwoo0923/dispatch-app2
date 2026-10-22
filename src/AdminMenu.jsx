@@ -669,7 +669,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   // REQUIRES_MASTER에 있는 하위 탭은 최고관리자에게만 보인다(기존 isTotalMaster
   // 게이팅과 동일한 기준을 그대로 옮긴 것 — 권한 자체는 안 바뀜).
   const REQUIRES_MASTER_TABS = new Set([
-    "landingInquiries", "sessionLogs", "forceUpdate", "permissions", "gsheetBackfill",
+    "landingInquiries", "sessionLogs", "forceUpdate", "permissions",
     "landingEdit", "notifTemplate", "companyReset",
   ]);
   const TAB_LABELS = {
@@ -683,14 +683,13 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     companyReset: "운송사 초기화",
     forceUpdate: "화주사 강제 업데이트",
     permissions: "권한 관리",
-    gsheetBackfill: "구글시트 백필",
     landingEdit: "랜딩페이지 편집",
     notifTemplate: "알림 문구 설정",
   };
   const tabGroups = [
     { key: "members", label: "회원 관리", tabs: ["members"] },
     { key: "shipperMgmt", label: "화주사 관리", tabs: ["linked", "transmit", "inquiries", "landingInquiries"] },
-    { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "forceUpdate", "permissions", "gsheetBackfill", "companyReset"] },
+    { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "forceUpdate", "permissions", "companyReset"] },
     { key: "settings", label: "환경 설정", tabs: ["landingEdit", "notifTemplate"] },
   ]
     .map((g) => ({ ...g, tabs: g.tabs.filter((t) => !REQUIRES_MASTER_TABS.has(t) || isTotalMaster) }))
@@ -702,7 +701,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   // ⭐ 디자인 개편 — 왼쪽 메뉴바(그룹별) + 상단 인사 카드 + 숫자 카드(AdminShell 공용 레이아웃)
   const TAB_ICONS = {
     members: "users", linked: "link", transmit: "send", inquiries: "chat", landingInquiries: "inbox",
-    loginSessions: "phone", companyReset: "trash", sessionLogs: "history", forceUpdate: "refresh", permissions: "key", gsheetBackfill: "sheet",
+    loginSessions: "phone", companyReset: "trash", sessionLogs: "history", forceUpdate: "refresh", permissions: "key",
     landingEdit: "globe", notifTemplate: "bell",
   };
   const shellGroups = tabGroups.map((g) => ({
@@ -1310,16 +1309,6 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
             <RolePermissionsPanel />
           )}
 
-          {/* ====== 구글시트 백필 탭 (최고관리자 전용, 임시 · 1회성) ====== */}
-          {adminTab === "gsheetBackfill" && isTotalMaster && (
-            <>
-              <GsheetCheckPanel />
-              <GsheetBackfillPanel />
-              <GsheetClientBackfillPanel />
-              <GsheetDailyLedgerPanel />
-            </>
-          )}
-
           {/* ====== 랜딩페이지 편집 탭 (최고관리자 전용) ====== */}
           {adminTab === "landingEdit" && isTotalMaster && <LandingPageEditPanel />}
 
@@ -1651,269 +1640,6 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
 // 화주사 클라이언트가 자체 서비스워커 갱신을 놓치는 경우에 대비해, 최고관리자가
 // systemConfig/forceUpdate 문서의 minVersion을 직접 올리면 화주사 프로그램(ShipperApp.jsx)이
 // 자신의 __APP_VERSION__과 비교해 뒤처진 경우 강제로 업데이트 배너를 띄운다.
-// ⚠️ 임시 기능 — 구글시트 실시간 연동을 붙이기 전에 이미 등록/수정돼 있던 오더를
-// 한 번에 시트로 밀어넣기 위한 1회성 버튼. Cloud Function(backfillGsheetMonth)이
-// 그 달 탭을 통째로 비우고 프로그램(앱) 기준으로 다시 채워넣는다 — 그래서 매번
-// 눌러도 결과는 항상 "지금 프로그램에 있는 내용 그대로"로 수렴한다(중복 걱정 없음).
-// 다 쓰면(백필 다 끝내면) 이 패널/탭은 지워도 된다.
-// 시작월~종료월(예: "2026-01" ~ "2026-03") 사이의 "YYYY-MM" 목록을 만든다.
-// 연도가 걸쳐도(2025-11~2026-02) 정상 동작. 실수로 아주 긴 범위를 넣어도
-// 무한루프에 빠지지 않도록 최대 36개월로 안전장치를 둔다.
-function gsheetMonthRange(start, end) {
-  const [sy, sm] = start.split("-").map(Number);
-  const [ey, em] = end.split("-").map(Number);
-  const months = [];
-  let y = sy, m = sm;
-  while ((y < ey || (y === ey && m <= em)) && months.length < 36) {
-    months.push(`${y}-${String(m).padStart(2, "0")}`);
-    m += 1;
-    if (m > 12) { m = 1; y += 1; }
-  }
-  return months;
-}
-
-// ⭐ 구글시트 점검 — 한 달을 프로그램과 날짜별로 비교하고, 원하면 자동으로 맞춘다
-// (시트에만 남은 삭제·취소 오더와 중복 줄은 지우고, 시트에 없는 오더는 넣는다)
-function GsheetCheckPanel() {
-  const now = new Date(Date.now() + 9 * 3600e3);
-  const [month, setMonth] = useState(now.toISOString().slice(0, 7));
-  const [running, setRunning] = useState(false);
-  const [result, setResult] = useState("");
-  const run = async (fix) => {
-    if (fix && !window.confirm(`${month} 시트를 프로그램 기준으로 맞춥니다.\n시트에만 있는 줄(삭제·취소된 오더, 중복 줄)은 지우고, 빠진 오더는 넣어요.\n계속할까요?`)) return;
-    setRunning(true);
-    setResult("");
-    try {
-      const res = await fetch(`${FUNCTIONS_BASE}/checkGsheetMonth?key=dolkae-backfill-2026&month=${encodeURIComponent(month)}${fix ? "&fix=1" : ""}`);
-      setResult(await res.text());
-    } catch (e) {
-      setResult(`요청 실패: ${e?.message || e}`);
-    } finally {
-      setRunning(false);
-    }
-  };
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 max-w-xl mb-6">
-      <div className="text-[14px] font-bold text-gray-800 mb-1">구글시트 점검</div>
-      <p className="text-[12px] text-gray-500 mb-4 leading-relaxed">
-        한 달 탭을 프로그램과 날짜별로 비교합니다. "점검"은 차이만 보여주고, "자동으로 맞추기"는 시트에만 남은
-        줄(삭제·취소된 오더, 같은 오더 중복)을 지우고 빠진 오더를 넣습니다.
-      </p>
-      <div className="flex items-center gap-2 mb-4">
-        <label className="text-[12px] text-gray-600 font-semibold">월</label>
-        <input value={month} onChange={(e) => setMonth(e.target.value)} placeholder="2026-10" className="border border-gray-300 rounded-lg px-3 py-1.5 text-[13px] w-28" />
-        <button onClick={() => run(false)} disabled={running} className="px-4 py-2 rounded-lg border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#1B2B4B]/5 disabled:opacity-40">{running ? "확인 중..." : "점검"}</button>
-        <button onClick={() => run(true)} disabled={running} className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] disabled:opacity-40">자동으로 맞추기</button>
-      </div>
-      {result && <div className="bg-gray-50 rounded-lg px-4 py-3 text-[12px] text-gray-700 whitespace-pre-wrap break-words font-mono">{result}</div>}
-      <div className="mt-5 pt-4 border-t border-gray-100">
-        <div className="text-[13px] font-bold text-gray-800 mb-1">시트 직접 입력 도우미</div>
-        <p className="text-[12px] text-gray-500 mb-3 leading-relaxed">
-          모든 월별 탭에 적용합니다 — 필수칸(상차일·상차시간·하차일·하차시간·거래처명·상차지명·하차지명·화물내용·차량종류·차량톤수·차량번호·청구운임·기사운임·지급방식·배차방식)이
-          비어 있으면 연한 빨간색으로 표시되고, 입력하면 바로 사라집니다. 필수 항목 머리줄 빨간 글씨·머리줄 고정, 차량종류·지급방식·배차방식 목록 선택, 운임 숫자 확인도 함께 적용돼요.
-        </p>
-        <button onClick={async () => {
-          setRunning(true); setResult("");
-          try { const r = await fetch(`${FUNCTIONS_BASE}/applyGsheetGuides?key=dolkae-backfill-2026`); setResult(await r.text()); }
-          catch (e) { setResult(`요청 실패: ${e?.message || e}`); }
-          finally { setRunning(false); }
-        }} disabled={running} className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] disabled:opacity-40">필수칸 표시 적용</button>
-      </div>
-    </div>
-  );
-}
-
-function GsheetBackfillPanel() {
-  const now = new Date();
-  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const [startMonth, setStartMonth] = useState(defaultMonth);
-  const [endMonth, setEndMonth] = useState(defaultMonth);
-  const [running, setRunning] = useState(false);
-  const [progress, setProgress] = useState("");
-  const [result, setResult] = useState("");
-
-  const handleRun = async () => {
-    if (!/^\d{4}-\d{2}$/.test(startMonth) || !/^\d{4}-\d{2}$/.test(endMonth)) {
-      alert("월 형식이 올바르지 않습니다. 예: 2026-01");
-      return;
-    }
-    const months = gsheetMonthRange(startMonth, endMonth);
-    if (months.length === 0) {
-      alert("종료월이 시작월보다 빠릅니다.");
-      return;
-    }
-    if (!window.confirm(`"${months[0]}" ~ "${months[months.length - 1]}" (${months.length}개월) 탭을 각각 통째로 비우고, 프로그램에 지금 있는 오더로 다시 채웁니다.\n(그 탭에 시트에서만 직접 입력해둔 값이 있었다면 사라집니다)\n한 달씩 순서대로 처리되며 개월 수가 많으면 시간이 오래 걸릴 수 있습니다.\n계속할까요?`)) return;
-
-    setRunning(true);
-    setResult("");
-    const lines = [];
-    // ⭐ 여러 달을 동시에 요청하면 안 된다 — Cloud Function이 탭 단위 잠금을
-    // 쓰고 있어서, 동시에 여러 달을 보내면 같은 탭이 아니어도 잠금 충돌로
-    // 실패하거나 서로 응답을 못 읽는 문제가 생길 수 있다. 한 달이 끝난 뒤
-    // 다음 달을 요청하도록 순서대로(await) 처리한다.
-    for (let i = 0; i < months.length; i++) {
-      const m = months[i];
-      setProgress(`(${i + 1}/${months.length}) "${m}" 처리 중...`);
-      try {
-        const url = `${FUNCTIONS_BASE}/backfillGsheetMonth?key=dolkae-backfill-2026&month=${encodeURIComponent(m)}`;
-        const res = await fetch(url);
-        const text = await res.text();
-        lines.push(`[${m}] ${text}`);
-      } catch (e) {
-        lines.push(`[${m}] 요청 실패: ${e?.message || e}`);
-      }
-      setResult(lines.join("\n"));
-    }
-    setProgress("");
-    setRunning(false);
-  };
-
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 max-w-xl">
-      <div className="text-[14px] font-bold text-gray-800 mb-1">구글시트 백필 (임시 · 1회성)</div>
-      <p className="text-[12px] text-gray-500 mb-5 leading-relaxed">
-        구글시트 실시간 연동이 붙기 전에 이미 등록/수정돼 있던 오더를, 지정한 달 전체
-        기준으로 시트에 한 번에 밀어넣습니다. 대상 탭을 통째로 비운 뒤 프로그램(앱)
-        기준으로 다시 채우는 방식이라, 여러 번 눌러도 결과는 항상 지금 프로그램에
-        있는 내용 그대로로 맞춰집니다. 시작월~종료월을 지정하면 그 사이 달을
-        한 달씩 순서대로 처리합니다.
-      </p>
-      <div className="flex items-center gap-2 mb-4">
-        <label className="text-[12px] text-gray-600 font-semibold">시작월</label>
-        <input
-          value={startMonth}
-          onChange={(e) => setStartMonth(e.target.value)}
-          placeholder="2026-01"
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-[13px] w-28"
-        />
-        <span className="text-gray-400">~</span>
-        <label className="text-[12px] text-gray-600 font-semibold">종료월</label>
-        <input
-          value={endMonth}
-          onChange={(e) => setEndMonth(e.target.value)}
-          placeholder="2026-03"
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-[13px] w-28"
-        />
-      </div>
-      <button
-        onClick={handleRun}
-        disabled={running}
-        className="px-5 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition disabled:opacity-40"
-      >
-        {running ? (progress || "실행 중... (몇 분 걸릴 수 있어요)") : `"${startMonth}" ~ "${endMonth}" 백필 실행`}
-      </button>
-      {result && (
-        <div className="mt-4 bg-gray-50 rounded-lg px-4 py-3 text-[12px] text-gray-700 whitespace-pre-wrap break-words">
-          {result}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ⭐ 기본거래처(clients)/하차지거래처(places)를 구글시트로 전송 — "기본거래처관리"/
-// "하차지거래처관리" 탭은 미리 만들어둘 필요 없다(없으면 Cloud Function이 새로
-// 만든다). 컬럼명/순서는 화면(거래처관리 목록)에 있는 그대로 코드에 고정돼 있어서,
-// 실행할 때마다 헤더까지 항상 그 컬럼명으로 다시 써준다 — 사용자가 시트에 헤더를
-// 미리 넣어둘 필요가 없다.
-function GsheetClientBackfillPanel() {
-  const [running, setRunning] = useState(false);
-  const [result, setResult] = useState("");
-
-  const handleRun = async () => {
-    if (!window.confirm(`"기본거래처관리"/"하차지거래처관리" 탭을 통째로 비우고, 프로그램에 지금 등록된 거래처로 다시 채웁니다.\n계속할까요?`)) return;
-    setRunning(true);
-    setResult("");
-    try {
-      const url = `${FUNCTIONS_BASE}/backfillGsheetClients?key=dolkae-backfill-2026`;
-      const res = await fetch(url);
-      const text = await res.text();
-      setResult(text);
-    } catch (e) {
-      setResult(`요청 실패: ${e?.message || e}`);
-    } finally {
-      setRunning(false);
-    }
-  };
-
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 max-w-xl mt-6">
-      <div className="text-[14px] font-bold text-gray-800 mb-1">거래처 구글시트 전송</div>
-      <p className="text-[12px] text-gray-500 mb-5 leading-relaxed">
-        기본거래처/하차지거래처에 등록된 정보를 "기본거래처관리"/"하차지거래처관리" 탭에
-        한 번에 반영합니다. 탭이 없으면 새로 만들고, 컬럼명도 화면에 있는 그대로(제외:
-        기본거래처는 등급/안내사항, 하차지거래처는 등급/안내사항/삭제) 실행할 때마다
-        다시 써줍니다 — 컬럼명을 미리 준비할 필요 없이 그냥 실행만 하면 됩니다.
-      </p>
-      <button
-        onClick={handleRun}
-        disabled={running}
-        className="px-5 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition disabled:opacity-40"
-      >
-        {running ? "실행 중..." : "거래처 전송 실행"}
-      </button>
-      {result && (
-        <div className="mt-4 bg-gray-50 rounded-lg px-4 py-3 text-[12px] text-gray-700 whitespace-pre-wrap break-words">
-          {result}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ⭐ 일일업무일지(경리) 시트 설정 — 퇴사 후 프로그램 없이 구글시트만으로 계속
-// 써도 되도록, "등록일" 헤더가 있는(=새 컬럼 구성으로 백필된) 모든 월별 탭을
-// 자동으로 찾아 QUERY 수식 하나로 합쳐 보여주는 탭을 만들어준다. 프로그램
-// 자동 전송이든 사용자가 월별 탭에 직접 입력한 오더든 원본을 그대로 읽어가는
-// 방식이라 둘 다 자동으로 반영된다. 새 달을 백필한 뒤 이 버튼을 다시 누르면
-// 그 달까지 포함해서 수식을 다시 만들어준다.
-function GsheetDailyLedgerPanel() {
-  const [running, setRunning] = useState(false);
-  const [result, setResult] = useState("");
-
-  const handleRun = async () => {
-    setRunning(true);
-    setResult("");
-    try {
-      const url = `${FUNCTIONS_BASE}/setupGsheetDailyLedger?key=dolkae-backfill-2026`;
-      const res = await fetch(url);
-      const text = await res.text();
-      setResult(text);
-    } catch (e) {
-      setResult(`요청 실패: ${e?.message || e}`);
-    } finally {
-      setRunning(false);
-    }
-  };
-
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 max-w-xl mt-6">
-      <div className="text-[14px] font-bold text-gray-800 mb-1">일일업무일지(경리) 시트 설정</div>
-      <p className="text-[12px] text-gray-500 mb-5 leading-relaxed">
-        26년9월 이후 달 중 "등록일" 헤더가 있는(새 컬럼 구성으로 백필된) 월별
-        탭을 자동으로 찾아 "일일업무일지(경리)" 탭에 하나로 합쳐서
-        보여줍니다(탭이 없으면 새로 만듦, 26년9월 이전 달은 제외). 프로그램에서
-        자동 전송된 오더든 사용자가 월별 탭에 직접 입력한 오더든 원본을
-        실시간으로 읽어가는 수식이라 둘 다 자동으로 반영됩니다. 새 달을 백필한
-        뒤에는 이 버튼을 한 번 더 눌러야 그 달까지
-        포함됩니다.
-      </p>
-      <button
-        onClick={handleRun}
-        disabled={running}
-        className="px-5 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition disabled:opacity-40"
-      >
-        {running ? "실행 중..." : "일일업무일지 시트 설정/갱신"}
-      </button>
-      {result && (
-        <div className="mt-4 bg-gray-50 rounded-lg px-4 py-3 text-[12px] text-gray-700 whitespace-pre-wrap break-words">
-          {result}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ⭐ 알림 문구 설정 — 최고관리자가 푸시 알림 본문에 어떤 필드를 넣을지 종류별로
 // 고른다(제목은 고정값이라 여기선 안 건드림). 실제 발송 로직(functions/index.js)의
 // NOTIF_TEMPLATE_FIELD_LABELS/NOTIF_TEMPLATE_DEFAULTS와 필드 키/순서를 반드시

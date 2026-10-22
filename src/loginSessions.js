@@ -180,6 +180,7 @@ export function installEndOnSignOut() {
   endOnSignOutInstalled = true;
   beforeAuthStateChanged(auth, async (next) => {
     if (next) return;
+    try { localStorage.removeItem("kpPcMfaOk"); } catch { /* 무시 */ } // PC 2차 인증 통과 표시도 로그아웃과 함께 지운다
     const id = getMySessionId();
     if (!id) return;
     storeSession(null);

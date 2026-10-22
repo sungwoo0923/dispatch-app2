@@ -9,7 +9,8 @@ import { createPortal } from "react-dom";
 import { auth, db, DEFAULT_COMPANY } from "./firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth";
-import { useMfaPrompt, MfaEnrollSection, MASTER_EMAIL, mfaErrorText } from "./MfaModal";
+import { useMfaPrompt, PcVerifySection, MASTER_EMAIL, mfaErrorText } from "./MfaModal";
+import { doc as fsDoc } from "firebase/firestore";
 import {
   SESSIONS_COLL, KIND_LABEL, END_REASON_LABEL, getMySessionId, endSessions, sessionLastMs, timeAgo, getDeviceLabel,
 } from "./loginSessions";
@@ -112,6 +113,12 @@ function PasswordChange({ otherIds }) {
 }
 
 export default function LoginManager({ user }) {
+  const [pcPhone, setPcPhone] = React.useState("");
+  const myUid = user?.uid || auth.currentUser?.uid;
+  React.useEffect(() => {
+    if (!myUid) return undefined;
+    return onSnapshot(fsDoc(db, "users", myUid), (snap) => setPcPhone(snap.data()?.pcVerifyPhone || ""), () => {});
+  }, [myUid]);
   const isMaster = (user?.email || auth.currentUser?.email) === MASTER_EMAIL || (() => { try { return localStorage.getItem("role") === "totalMaster"; } catch { return false; } })();
   const uid = user?.uid || auth.currentUser?.uid;
   const list = useMySessions(uid);
@@ -171,8 +178,8 @@ export default function LoginManager({ user }) {
       </Section>
 
       {isMaster && (
-        <Section title="2차 인증 (휴대폰 문자)" desc="최고관리자 전용 — 로그인할 때 비밀번호 다음에 휴대폰으로 받은 인증번호 6자리를 한 번 더 입력합니다.">
-          <MfaEnrollSection user={user} />
+        <Section title="PC 로그인 2차 인증 (휴대폰 문자)" desc="최고관리자 전용 — PC에서 로그인할 때 비밀번호 다음에 휴대폰으로 받은 인증번호 6자리를 한 번 더 입력합니다. 모바일은 묻지 않습니다.">
+          <PcVerifySection user={user} phone={pcPhone} />
         </Section>
       )}
 
