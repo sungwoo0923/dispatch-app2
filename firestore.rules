@@ -218,6 +218,21 @@ service cloud.firestore {
       allow update: if isApproved() ||
         (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['address']));
     }
+    // ⭐ 로그인 관리 — 기기별 로그인 기록. 본인 기록은 승인 전 계정(화주 승인대기 등)도 읽고 쓸 수 있어야
+    // 중복 로그인 확인·연결 끊기가 된다. 관리자는 전체(강제 로그아웃).
+    match /loginSessions/{id} {
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow get, list, update: if isSignedIn() && (resource.data.uid == request.auth.uid || isApproved());
+      allow delete: if isApproved();
+    }
+    // 운송사 초기화 비밀번호(해시) — 서버(Cloud Functions)만 읽고 쓴다
+    match /adminSecrets/{id} {
+      allow read, write: if false;
+    }
+    match /resetLogs/{id} {
+      allow read: if isTotalMasterUser();
+      allow write: if false;
+    }
     match /sessionLogs/{id} {
       allow create: if isSignedIn();
       allow read, update, delete: if isApproved();

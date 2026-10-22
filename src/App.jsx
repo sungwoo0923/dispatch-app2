@@ -12,6 +12,10 @@ import {
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, db, DEFAULT_COMPANY } from "./firebase";
 import { setBlindViewerRole } from "./blind";
+import {
+  checkLoginSession, replaceAndCreate, watchMySession, startHeartbeat, installEndOnSignOut,
+  KIND_LABEL, END_REASON_LABEL, sessionLastMs, timeAgo,
+} from "./loginSessions";
 import { doc, onSnapshot, addDoc, collection, serverTimestamp, query, orderBy, limit, getDocs, deleteDoc } from "firebase/firestore";
 
 // 역할별 대형 화면은 지연 로딩(code-splitting)한다 — 이전에는 전부 하나의 번들로
@@ -110,6 +114,74 @@ export default function App() {
   }, [user, role]);
   // updateReady 팝업 제거됨 - UpdateBanner가 자동 처리
   const [splashDone, setSplashDone] = useState(false);
+
+  // ⭐ 로그인 관리 — 같은 계정으로 PC 2대(또는 모바일 2대)가 동시에 로그인하지 못하게 한다(최고관리자 제외).
+  //  sessionConflict: 같은 종류 기기가 이미 로그인 중 → "기존 로그인 끊고 로그인 / 취소" 선택창
+  //  kickedReason: 이 기기가 다른 곳에서 끊김 → 로그아웃 후 안내창
+  const [sessionConflict, setSessionConflict] = useState(null);
+  const [sessionBusy, setSessionBusy] = useState(false);
+  const [kickedReason, setKickedReason] = useState(null);
+  const sessionGateRef = useRef({ uid: null, stop: null });
+  useEffect(() => { installEndOnSignOut(); }, []);
+  const startSessionWatch = (id) => {
+    const unwatch = watchMySession(id, (reason) => {
+      setKickedReason(reason);
+      signOut(auth).catch(() => {});
+    });
+    const stopBeat = startHeartbeat(id);
+    sessionGateRef.current.stop = () => { unwatch(); stopBeat(); };
+  };
+  useEffect(() => {
+    if (!user || !role || role === "cafeUser") {
+      if (!user) {
+        sessionGateRef.current.stop?.();
+        sessionGateRef.current = { uid: null, stop: null };
+        setSessionConflict(null);
+      }
+      return;
+    }
+    if (sessionGateRef.current.uid === user.uid) return;
+    sessionGateRef.current = { uid: user.uid, stop: null };
+    let cancelled = false;
+    const run = async () => {
+      // 로그인 화면이 회사코드 등을 확인하는 중(잠깐 로그인했다가 다시 로그아웃할 수 있음)이면 끝날 때까지 기다린다
+      for (let i = 0; i < 60; i++) {
+        if (sessionStorage.getItem("transportValidating") !== "true" && sessionStorage.getItem("shipperValidating") !== "true") break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      if (cancelled || auth.currentUser?.uid !== user.uid) return;
+      const info = { ...(sessionLogRef.current.info || {}), role };
+      try {
+        const res = await checkLoginSession(user, info);
+        if (cancelled) return;
+        if (res.status === "ok") startSessionWatch(res.id);
+        else if (res.status === "revoked") { setKickedReason(res.reason); signOut(auth).catch(() => {}); }
+        else if (res.status === "conflict") setSessionConflict({ ...res, info });
+      } catch (e) {
+        // 세션 기록이 안 되더라도(권한·네트워크) 로그인 자체는 막지 않는다
+        console.warn("로그인 세션 확인 실패:", e?.message || e);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [user, role]);
+  const acceptSessionConflict = async () => {
+    if (!sessionConflict || !user) return;
+    setSessionBusy(true);
+    try {
+      const id = await replaceAndCreate(user, sessionConflict.info, sessionConflict.conflicts);
+      setSessionConflict(null);
+      startSessionWatch(id);
+    } catch (e) {
+      alert(`기존 로그인을 끊지 못했습니다: ${e?.message || e}`);
+    } finally {
+      setSessionBusy(false);
+    }
+  };
+  const cancelSessionConflict = () => {
+    setSessionConflict(null);
+    signOut(auth).catch(() => {});
+  };
 
   // ★ 태블릿 감지 상태
   const [isTablet, setIsTablet] = useState(false);
@@ -588,6 +660,49 @@ export default function App() {
     <>
       {/* 자동 업데이트 배너 (팝업 없이 상단 배너로 표시 후 자동 새로고침). */}
       <UpdateBanner />
+
+      {/* ⭐ 중복 로그인 선택창 */}
+      {sessionConflict && (
+        <div className="fixed inset-0 z-[100000] bg-black/55 flex items-center justify-center p-5">
+          <div className="w-full max-w-[400px] bg-white rounded-2xl shadow-2xl overflow-hidden">
+            <div className="bg-[#1B2B4B] px-6 py-4 text-white">
+              <div className="text-[17px] font-black">이미 로그인된 {KIND_LABEL[sessionConflict.kind]}가 있습니다</div>
+              <div className="text-[12.5px] text-white/70 mt-0.5">한 계정은 PC 1대 + 모바일 1대까지 동시에 쓸 수 있습니다</div>
+            </div>
+            <div className="px-6 py-5 space-y-2">
+              {sessionConflict.conflicts.map((c) => (
+                <div key={c.id} className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                  <div className="text-[14px] font-bold text-gray-800">{c.device || KIND_LABEL[c.kind]}</div>
+                  <div className="text-[12.5px] text-gray-500 mt-0.5">마지막 활동 {timeAgo(sessionLastMs(c))}</div>
+                </div>
+              ))}
+              <p className="text-[13px] text-gray-600 pt-1">기존 로그인을 끊고 이 {KIND_LABEL[sessionConflict.kind]}에서 로그인할까요? 기존 기기는 바로 로그아웃됩니다.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 px-6 pb-6">
+              <button onClick={cancelSessionConflict} disabled={sessionBusy} className="py-3 rounded-xl border border-gray-300 text-[14px] font-bold text-gray-700 hover:bg-gray-50">취소</button>
+              <button onClick={acceptSessionConflict} disabled={sessionBusy} className="py-3 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-bold hover:bg-[#243a60] disabled:opacity-60">
+                {sessionBusy ? "처리 중…" : "기존 로그인 끊고 로그인"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⭐ 다른 곳에서 연결이 끊겨 로그아웃됐다는 안내 */}
+      {kickedReason && (
+        <div className="fixed inset-0 z-[100000] bg-black/55 flex items-center justify-center p-5">
+          <div className="w-full max-w-[380px] bg-white rounded-2xl shadow-2xl p-6 text-center">
+            <div className="text-[17px] font-black text-[#1B2B4B]">로그아웃되었습니다</div>
+            <p className="text-[13.5px] text-gray-600 mt-2 leading-relaxed">
+              {kickedReason === "duplicate" ? "같은 계정으로 다른 기기에서 로그인해서 이 기기의 로그인이 끊겼습니다."
+                : kickedReason === "password" ? "비밀번호가 변경되어 이 기기의 로그인이 끊겼습니다."
+                  : kickedReason === "admin" ? "관리자가 이 기기의 로그인을 끊었습니다."
+                    : `이 기기의 로그인이 끊겼습니다. (${END_REASON_LABEL[kickedReason] || "연결 끊기"})`}
+            </p>
+            <button onClick={() => setKickedReason(null)} className="mt-5 w-full py-3 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-bold">확인</button>
+          </div>
+        </div>
+      )}
 
       <Router>
         <React.Suspense fallback={routeFallback}>

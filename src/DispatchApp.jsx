@@ -2605,6 +2605,7 @@ import KpBootScreen from "./KpBootScreen";
 import AdminShell from "./AdminShell";
 import { pcBootStore, useMiniStore, makeBootTracker, markBootBase } from "./bootProgress";
 import { auth, db, storage, DEFAULT_COMPANY } from "./firebase";
+import { LoginManagerModal } from "./LoginManager";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 // 기사전달용 업로드 링크 단축 — /upload?id=...&t=... (길고 낯설어 기사들이 거부감을
@@ -7119,6 +7120,7 @@ const closeAlert = () => {
   alertThenRef.current = null;
   if (cb) setTimeout(cb, 50);
 };
+const [loginMgrOpen, setLoginMgrOpen] = React.useState(false); // ⭐ 로그인 관리 창
 // 매출관리 비밀번호 게이트
 const [revenueUnlocked, setRevenueUnlocked] = React.useState(false);
 const [revenuePassInput, setRevenuePassInput] = React.useState("");
@@ -8111,13 +8113,14 @@ return (
               </button>
             </div>
 
-            {/* 비밀번호 변경 */}
+            {/* ⭐ 로그인 관리(로그인된 기기·연결 끊기·비밀번호 변경) */}
             <button
-              onClick={() => navigate("/change-password")}
+              onClick={() => setLoginMgrOpen(true)}
               className="w-full py-2.5 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#1B2B4B] hover:text-white transition"
             >
-              비밀번호 변경
+              로그인 관리 · 비밀번호 변경
             </button>
+            {loginMgrOpen && <LoginManagerModal user={user} onClose={() => setLoginMgrOpen(false)} />}
 
             {/* 명함 이미지 */}
             <div>
@@ -59355,6 +59358,7 @@ function RevenuePasswordSection({ companyName }) {
 
 // ─────────── 내정보 컴포넌트 ───────────
 function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, cardImageUploading, setCardImageUploading, showAlert, userCompany, role }) {
+  const [loginMgrOpen, setLoginMgrOpen] = React.useState(false); // ⭐ 로그인 관리 창
   const co = role === "totalMaster"
     ? (localStorage.getItem("loginCompany") || userCompany || "")
     : (userCompany || localStorage.getItem("userCompany") || "");
@@ -59479,13 +59483,14 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
             </div>
           </div>
 
-          {/* 비밀번호 변경 */}
+          {/* ⭐ 계정 보안 — 로그인 관리(로그인된 기기·연결 끊기·비밀번호 변경) */}
           <div>
             <div className="text-[13px] font-semibold text-gray-700 mb-2">계정 보안</div>
-            <button onClick={() => navigate("/change-password")}
+            <button onClick={() => setLoginMgrOpen(true)}
               className="px-5 py-2.5 bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold rounded-xl hover:bg-[#1B2B4B] hover:text-white transition">
-              비밀번호 변경
+              로그인 관리 · 비밀번호 변경
             </button>
+            {loginMgrOpen && <LoginManagerModal user={user} onClose={() => setLoginMgrOpen(false)} />}
           </div>
 
           {/* 명함 이미지 */}

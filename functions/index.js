@@ -3230,3 +3230,274 @@ exports.lookupCompanyCode = functions.https.onRequest(async (req, res) => {
     res.status(500).json({ results: [], error: e?.message || String(e) });
   }
 });
+/* ==================================================================
+   🧹 운송사 데이터 초기화 — 최고관리자 전용(관리자메뉴 > 운송사 초기화)
+   해당 운송사가 프로그램에 등록한 데이터를 하나도 빠짐없이 지운다.
+   - 모든 최상위 컬렉션을 돌면서 아래에 해당하는 문서를 찾는다
+     · 회사 필드(companyName/company/회사명/운송사명/transportCompany/companyKey) = 운송사명
+     · companyCode = 그 운송사의 회사코드
+     · uid/userId 등 = 그 운송사 소속 계정의 uid, 또는 문서ID 자체가 운송사명/uid
+   - 찾은 문서는 하위 컬렉션까지 통째로 삭제하고, 문서 안에 있던 첨부파일(Storage)도 지운다.
+   - 기본은 "계정은 남기기"(직원·기사가 다시 로그인해 처음부터 쓸 수 있게) — 계정까지 지우면
+     users 문서·로그인 계정·가입신청서도 삭제된다.
+   - 실행 전 최고관리자가 정한 "초기화 비밀번호"(adminSecrets/companyReset, scrypt 해시)를 확인한다.
+   호출: POST .../companyReset  (Authorization: Bearer <ID 토큰>)
+     { action: "status" | "setPassword" | "companies" | "preview" | "execute", ... }
+================================================================== */
+const crypto = require("crypto");
+const RESET_SECRET_DOC = db.collection("adminSecrets").doc("companyReset");
+const RESET_COMPANY_FIELDS = ["companyName", "company", "회사명", "운송사명", "transportCompany", "companyKey"];
+const RESET_UID_FIELDS = ["uid", "userId", "ownerUid", "createdByUid", "writerUid", "authorUid", "driverUid"];
+const RESET_SKIP_COLLECTIONS = new Set(["adminSecrets", "resetLogs"]);
+
+function hashResetPassword(pw, salt) {
+  return crypto.scryptSync(String(pw), salt, 64).toString("hex");
+}
+
+async function requireTotalMaster(req) {
+  const authz = String(req.get("Authorization") || "");
+  const token = authz.startsWith("Bearer ") ? authz.slice(7) : "";
+  if (!token) throw Object.assign(new Error("로그인이 필요합니다."), { status: 401 });
+  const decoded = await getAuth().verifyIdToken(token);
+  let ok = decoded.email === "tjddnqkf@naver.com";
+  if (!ok) {
+    const u = await db.collection("users").doc(decoded.uid).get();
+    ok = u.exists && u.data().role === "totalMaster";
+  }
+  if (!ok) throw Object.assign(new Error("최고관리자만 사용할 수 있습니다."), { status: 403 });
+  return decoded;
+}
+
+async function verifyResetPassword(pw) {
+  const snap = await RESET_SECRET_DOC.get();
+  const d = snap.exists ? snap.data() : null;
+  if (!d?.hash) throw Object.assign(new Error("초기화 비밀번호가 아직 설정되지 않았습니다."), { status: 400 });
+  const lockUntil = d.lockUntil?.toMillis?.() || 0;
+  if (lockUntil > Date.now()) {
+    throw Object.assign(new Error(`비밀번호를 여러 번 틀려 잠겼습니다. ${Math.ceil((lockUntil - Date.now()) / 60000)}분 뒤 다시 시도하세요.`), { status: 429 });
+  }
+  const given = Buffer.from(hashResetPassword(pw || "", d.salt), "hex");
+  const saved = Buffer.from(d.hash, "hex");
+  if (given.length !== saved.length || !crypto.timingSafeEqual(given, saved)) {
+    const fails = (d.failCount || 0) + 1;
+    await RESET_SECRET_DOC.set(fails >= 5
+      ? { failCount: 0, lockUntil: new Date(Date.now() + 10 * 60000) }
+      : { failCount: fails }, { merge: true });
+    throw Object.assign(new Error(fails >= 5 ? "비밀번호를 5번 틀려 10분간 잠겼습니다." : `초기화 비밀번호가 틀렸습니다. (${fails}/5)`), { status: 403 });
+  }
+  if (d.failCount) await RESET_SECRET_DOC.set({ failCount: 0 }, { merge: true });
+}
+
+// 운송사 소속 계정(최고관리자 제외)과 회사코드
+async function getCompanyMembers(company) {
+  const users = await db.collection("users").where("companyName", "==", company).get();
+  const members = users.docs
+    .filter((d) => d.data().role !== "totalMaster" && d.data().email !== "tjddnqkf@naver.com")
+    .map((d) => ({ uid: d.id, email: d.data().email || "", role: d.data().role || "" }));
+  const codes = new Set();
+  users.docs.forEach((d) => { if (d.data().companyCode) codes.add(String(d.data().companyCode)); });
+  const apps = await db.collection("transportApplications").where("companyName", "==", company).get();
+  apps.docs.forEach((d) => { if (d.data().companyCode) codes.add(String(d.data().companyCode)); });
+  return { members, codes: [...codes].filter(Boolean) };
+}
+
+// 지울 문서 찾기 — Map(path → DocumentReference) + 컬렉션별 개수
+async function collectCompanyDocs(company, { deleteAccounts }) {
+  const { members, codes } = await getCompanyMembers(company);
+  const uids = members.map((m) => m.uid);
+  const found = new Map();
+  const perCollection = {};
+  const keepCollections = deleteAccounts ? new Set() : new Set(["users", "transportApplications"]);
+  const add = (col, snapDocs) => {
+    snapDocs.forEach((d) => {
+      if (!d.exists) return;
+      if (found.has(d.ref.path)) return;
+      found.set(d.ref.path, d);
+      perCollection[col] = (perCollection[col] || 0) + 1;
+    });
+  };
+  const chunks = (arr, n) => { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; };
+  const cols = await db.listCollections();
+  for (const colRef of cols) {
+    const col = colRef.id;
+    if (RESET_SKIP_COLLECTIONS.has(col) || keepCollections.has(col)) continue;
+    const tasks = [];
+    RESET_COMPANY_FIELDS.forEach((f) => tasks.push(colRef.where(f, "==", company).get()));
+    codes.forEach((code) => tasks.push(colRef.where("companyCode", "==", code).get()));
+    chunks(uids, 30).forEach((ch) => RESET_UID_FIELDS.forEach((f) => tasks.push(colRef.where(f, "in", ch).get())));
+    const results = await Promise.all(tasks.map((t) => t.catch(() => null)));
+    results.forEach((r) => r && add(col, r.docs));
+    // 문서ID 자체가 운송사명이거나 소속 계정 uid인 문서(companySettings/{회사명}, userProfiles/{uid} 등)
+    const idRefs = [...(company.includes("/") ? [] : [colRef.doc(company)]), ...uids.map((u) => colRef.doc(u))];
+    for (const ch of chunks(idRefs, 100)) {
+      const snaps = await db.getAll(...ch).catch(() => []);
+      add(col, snaps.filter((s) => s.exists));
+    }
+  }
+  // 계정을 남기는 경우에도 최고관리자 문서는 절대 지우지 않는다(안전장치)
+  for (const [path, d] of found) {
+    const data = d.data() || {};
+    if (path.startsWith("users/") && (data.role === "totalMaster" || data.email === "tjddnqkf@naver.com")) {
+      found.delete(path);
+      perCollection.users = Math.max(0, (perCollection.users || 1) - 1);
+    }
+  }
+  return { found, perCollection, members, codes };
+}
+
+// 문서 안의 Firebase Storage 파일 경로 찾기(다운로드 URL·gs:// 주소)
+function collectStoragePaths(value, out) {
+  if (!value) return;
+  if (typeof value === "string") {
+    const m = value.match(/firebasestorage\.googleapis\.com\/v0\/b\/[^/]+\/o\/([^?#]+)/);
+    if (m) { try { out.add(decodeURIComponent(m[1])); } catch { /* 무시 */ } return; }
+    const g = value.match(/^gs:\/\/[^/]+\/(.+)$/);
+    if (g) out.add(g[1]);
+    return;
+  }
+  if (Array.isArray(value)) { value.forEach((v) => collectStoragePaths(v, out)); return; }
+  if (typeof value === "object" && !(value instanceof Date) && !value.toMillis) {
+    Object.values(value).forEach((v) => collectStoragePaths(v, out));
+  }
+}
+
+// 지울 문서들(하위 컬렉션 포함)에 들어 있는 첨부파일 경로를 모은다
+async function collectFilesInDocs(found) {
+  const files = new Set();
+  const walkSub = async (ref, depth) => {
+    if (depth > 4) return;
+    const subs = await ref.listCollections().catch(() => []);
+    for (const sub of subs) {
+      const snap = await sub.get().catch(() => null);
+      if (!snap) continue;
+      for (const d of snap.docs) {
+        collectStoragePaths(d.data(), files);
+        await walkSub(d.ref, depth + 1);
+      }
+    }
+  };
+  for (const d of found.values()) {
+    collectStoragePaths(d.data(), files);
+    await walkSub(d.ref, 0);
+  }
+  return files;
+}
+
+exports.companyReset = functions
+  .runWith({ timeoutSeconds: 540, memory: "1GB" })
+  .https.onRequest(async (req, res) => {
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+    if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
+    let body = req.body;
+    if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
+    body = body || {};
+    try {
+      const me = await requireTotalMaster(req);
+      const action = body.action;
+
+      if (action === "status") {
+        const snap = await RESET_SECRET_DOC.get();
+        const d = snap.exists ? snap.data() : {};
+        res.json({ hasPassword: !!d.hash, updatedAt: d.updatedAt?.toMillis?.() || null, updatedBy: d.updatedBy || "" });
+        return;
+      }
+
+      if (action === "setPassword") {
+        const snap = await RESET_SECRET_DOC.get();
+        if (snap.exists && snap.data().hash) await verifyResetPassword(body.currentPassword);
+        const pw = String(body.newPassword || "");
+        if (pw.length < 4) { res.status(400).json({ error: "초기화 비밀번호는 4자 이상이어야 합니다." }); return; }
+        const salt = crypto.randomBytes(16).toString("hex");
+        await RESET_SECRET_DOC.set({
+          salt, hash: hashResetPassword(pw, salt), updatedAt: FieldValue.serverTimestamp(), updatedBy: me.email || me.uid,
+          failCount: 0, lockUntil: null,
+        });
+        res.json({ ok: true });
+        return;
+      }
+
+      if (action === "companies") {
+        const map = new Map();
+        const touch = (name, patch = {}) => {
+          name = String(name || "").trim();
+          if (!name) return;
+          const cur = map.get(name) || { name, users: 0, code: "" };
+          map.set(name, { ...cur, ...patch, users: cur.users + (patch.users || 0) });
+        };
+        const users = await db.collection("users").get();
+        users.docs.forEach((d) => {
+          const u = d.data();
+          if (["shipper", "cafeUser"].includes(u.role) || u.role === "totalMaster") return;
+          touch(u.companyName, { users: 1, ...(u.companyCode ? { code: String(u.companyCode) } : {}) });
+        });
+        const apps = await db.collection("transportApplications").get();
+        apps.docs.forEach((d) => { const a = d.data(); touch(a.companyName, a.companyCode ? { code: String(a.companyCode) } : {}); });
+        const settings = await db.collection("companySettings").listDocuments();
+        settings.forEach((r) => touch(r.id));
+        res.json({
+          companies: [...map.values()].sort((a, b) => a.name.localeCompare(b.name, "ko")),
+          defaultCompany: "돌캐",
+        });
+        return;
+      }
+
+      const company = String(body.company || "").trim();
+      if (!company) { res.status(400).json({ error: "초기화할 운송사를 선택하세요." }); return; }
+      // ⭐ 안전장치 — 기본 회사(돌캐)는 예전 데이터에 회사명이 없는 것도 많아 초기화 대상에서 막는다
+      if (company === "돌캐") { res.status(400).json({ error: "기본 회사(돌캐)는 초기화할 수 없습니다." }); return; }
+      const deleteAccounts = body.deleteAccounts === true;
+
+      if (action === "preview") {
+        const { found, perCollection, members } = await collectCompanyDocs(company, { deleteAccounts });
+        const files = await collectFilesInDocs(found);
+        res.json({ total: found.size, perCollection, files: files.size, accounts: members.length, deleteAccounts });
+        return;
+      }
+
+      if (action === "execute") {
+        await verifyResetPassword(body.password);
+        const { found, perCollection, members } = await collectCompanyDocs(company, { deleteAccounts });
+        const files = await collectFilesInDocs(found);
+        // 1) 문서(하위 컬렉션 포함) 삭제
+        let deletedDocs = 0;
+        const refs = [...found.values()].map((d) => d.ref);
+        for (let i = 0; i < refs.length; i += 20) {
+          await Promise.all(refs.slice(i, i + 20).map((r) => db.recursiveDelete(r).then(() => { deletedDocs += 1; }).catch((e) => console.warn("삭제 실패", r.path, e?.message))));
+        }
+        // 2) 첨부파일 삭제
+        let deletedFiles = 0;
+        try {
+          const { getStorage } = require("firebase-admin/storage");
+          const bucket = getStorage().bucket();
+          const paths = [...files];
+          for (let i = 0; i < paths.length; i += 20) {
+            await Promise.all(paths.slice(i, i + 20).map((p) => bucket.file(p).delete().then(() => { deletedFiles += 1; }).catch(() => {})));
+          }
+        } catch (e) { console.warn("첨부파일 삭제 실패:", e?.message || e); }
+        // 3) 로그인 계정 삭제(선택)
+        let deletedAccounts = 0;
+        if (deleteAccounts && members.length) {
+          const uids = members.map((m) => m.uid);
+          for (let i = 0; i < uids.length; i += 1000) {
+            const r = await getAuth().deleteUsers(uids.slice(i, i + 1000)).catch(() => null);
+            deletedAccounts += r?.successCount || 0;
+          }
+        }
+        await db.collection("resetLogs").add({
+          company, by: me.email || me.uid, at: FieldValue.serverTimestamp(), deleteAccounts,
+          deletedDocs, deletedFiles, deletedAccounts, perCollection,
+        });
+        console.log(`🧹 운송사 초기화: ${company} — 문서 ${deletedDocs}, 파일 ${deletedFiles}, 계정 ${deletedAccounts} (by ${me.email})`);
+        res.json({ ok: true, deletedDocs, deletedFiles, deletedAccounts, perCollection });
+        return;
+      }
+
+      res.status(400).json({ error: "알 수 없는 요청입니다." });
+    } catch (e) {
+      console.error("운송사 초기화 오류:", e);
+      res.status(e.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
