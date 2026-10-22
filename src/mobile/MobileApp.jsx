@@ -2451,23 +2451,25 @@ const [isRefreshing, setIsRefreshing] = useState(false);
   const [fixedClientRows, setFixedClientRows] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
   // ⭐ 초기화·복원·가져오기 취소가 끝나면(서버가 systemConfig/dataVersion.{회사}에 시각을 남김) 이 폰에 불러둔
-  //    예전 오더·마지막 동기화 시각을 비우고 실시간 연결을 다시 맺는다 — 초기화한 회사 데이터가 모바일에 남던 문제
+  //    예전 오더·마지막 동기화 시각을 비운다(최근 오더는 실시간 연결이 지운 것을 바로 반영) — 초기화한 회사 데이터가 모바일에 남던 문제
   useEffect(() => {
     if (!user) return undefined;
     const co = () => localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY;
     let seen = null;
     return onSnapshot(doc(db, "systemConfig", "dataVersion"), (snap) => {
+      // ⭐ 폰/PC 저장본(캐시)의 옛 값은 무시 — 서버 값만 기준으로 삼는다(예전엔 앱을 켤 때마다 캐시→서버 값 차이를 "새 초기화"로 오인해 전체를 다시 불러와 느려졌다)
+      if (snap.metadata.fromCache) return;
       const t = snap.data()?.[co()];
       const ms = t?.toMillis ? t.toMillis() : 0;
-      if (seen === null) { seen = ms; return; }
+      if (seen === null) { seen = ms; return; } // 처음 받은 서버 값은 기준으로만
       if (ms <= seen) return;
       seen = ms;
+      if (Date.now() - ms > 10 * 60 * 1000) return; // 10분 넘게 지난 기록은 이미 반영된 것으로 본다
       loadedRangesRef.current = [];
       fullLoadedRef.current = false;
       setExtraMap(new Map());
       try { localStorage.removeItem("mobileLastSyncAt"); } catch { /* 무시 */ }
       lastSyncAtRef.current = 0;
-      setRefreshKey((k) => k + 1);
     }, () => {});
   }, [user?.uid, userCompany]); // eslint-disable-line react-hooks/exhaustive-deps
 
