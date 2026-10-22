@@ -2602,7 +2602,7 @@ import {
 } from "firebase/firestore";
 import { setDoc, updateDoc } from "./orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import KpBootScreen from "./KpBootScreen";
-import AdminShell from "./AdminShell";
+import AdminShell, { ShellIcon } from "./AdminShell";
 import { pcBootStore, useMiniStore, makeBootTracker, markBootBase } from "./bootProgress";
 import { auth, db, storage, DEFAULT_COMPANY } from "./firebase";
 import { LoginManagerModal } from "./LoginManager";
@@ -2979,6 +2979,98 @@ function KpPageHeader({ menu }) {
     </div>
   );
 }
+// ⭐ 왼쪽 접이식 메뉴(2026-10-22) — 평소엔 왼쪽 끝 작은 손잡이만 보이고, 누르면 회사관리 메뉴와 같은 디자인의 메뉴가 펼쳐진다.
+//    상단 메뉴와 같은 목록·같은 권한 규칙을 쓴다(목록은 DispatchApp이 넘겨준다).
+const KP_SIDE_GROUPS = [
+  { label: "배차", items: ["HOME", "배차관리", "실시간배차현황", "배차현황"] },
+  { label: "운임", items: ["단가표", "운임조회"] },
+  { label: "기사 · 거래처", items: ["기사관리", "거래처관리", "지입차관리"] },
+  { label: "매출 · 정산", items: ["매출관리", "정산관리"] },
+  { label: "관리", items: ["회사관리", "관리자메뉴", "관리센터"] },
+];
+const KP_SIDE_ICONS = {
+  HOME: "dashboard", 배차관리: "truck", 실시간배차현황: "bell", 배차현황: "sheet", 단가표: "money", 운임조회: "globe",
+  기사관리: "user", 거래처관리: "building", 지입차관리: "link", 매출관리: "check", 정산관리: "inbox",
+  회사관리: "idcard", 관리자메뉴: "key", 관리센터: "shield",
+};
+function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, company, email }) {
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+  return (
+    <>
+      {/* 접혀 있을 때 — 왼쪽 끝 손잡이 */}
+      {!open && (
+        <button
+          onClick={onOpen}
+          title="메뉴 펼치기"
+          className="fixed left-0 top-1/2 -translate-y-1/2 z-[60] w-6 h-24 rounded-r-xl flex items-center justify-center text-white shadow-[0_8px_20px_rgba(15,26,48,0.3)] hover:w-8 transition-all"
+          style={{ background: "linear-gradient(180deg, #16264A 0%, #2D4C82 100%)", opacity: 1 }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6" /></svg>
+        </button>
+      )}
+      {/* 펼쳤을 때 */}
+      <div
+        className={`fixed inset-0 z-[9990] bg-[#0F1A30]/40 backdrop-blur-[2px] transition-opacity duration-200 ${open ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+        onClick={onClose}
+      />
+      <aside
+        className={`fixed left-0 top-0 bottom-0 z-[9991] w-[256px] flex flex-col text-white shadow-[12px_0_40px_rgba(15,26,48,0.35)] transition-transform duration-200 ease-out ${open ? "translate-x-0" : "-translate-x-full"}`}
+        style={{ background: "linear-gradient(180deg, #16264A 0%, #1B2B4B 55%, #14213D 100%)" }}
+      >
+        <div className="px-5 pt-6 pb-5 border-b border-white/10 flex items-center gap-3">
+          <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-10 h-10 rounded-xl ring-1 ring-white/15 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <div className="text-[10.5px] font-extrabold tracking-[0.18em] text-blue-200/70">KP-FLOW MENU</div>
+            <div className="text-[15px] font-bold truncate">{company || "KP-Flow"}</div>
+          </div>
+          <button onClick={onClose} title="메뉴 접기" className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center shrink-0" style={{ opacity: 1 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m15 6-6 6 6 6" /></svg>
+          </button>
+        </div>
+        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5 no-scrollbar">
+          {KP_SIDE_GROUPS.map((g) => {
+            const items = g.items.map((m) => ({ m, st: menuState(m) })).filter(({ st }) => st !== "hidden");
+            if (!items.length) return null;
+            return (
+              <div key={g.label}>
+                <div className="px-3 mb-1.5 text-[11px] font-bold text-blue-200/45">{g.label}</div>
+                <div className="space-y-1">
+                  {items.map(({ m, st }) => {
+                    const on = m === active;
+                    const blocked = st === "blocked";
+                    return (
+                      <button
+                        key={m}
+                        disabled={blocked}
+                        onClick={() => { onSelect(m); onClose(); }}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13.5px] font-semibold transition ${
+                          blocked ? "text-white/25 cursor-not-allowed"
+                            : on ? "bg-white text-[#1B2B4B] shadow-[0_6px_16px_rgba(0,0,0,0.18)]" : "text-blue-50/80 hover:bg-white/[0.08] hover:text-white"
+                        }`}
+                        style={{ opacity: 1 }}
+                      >
+                        <ShellIcon name={KP_SIDE_ICONS[m]} size={18} className={on ? "text-[#1B2B4B]" : "text-blue-200/80"} />
+                        <span className="flex-1 text-left truncate">{m}</span>
+                        {on && <span className="w-1.5 h-1.5 rounded-full bg-[#4B6CB7]" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </nav>
+        {email && <div className="px-5 py-4 border-t border-white/10 text-[12px] text-blue-100/60 truncate">{email}</div>}
+      </aside>
+    </>
+  );
+}
+
 const kpTabWrap = "inline-flex items-center gap-1 p-1 rounded-[14px] bg-[#EEF2F8] border border-[#E3E8F0]";
 const kpTabCls = (on) => `px-5 h-9 rounded-[10px] text-[13.5px] transition whitespace-nowrap ${
   on ? "bg-white text-[#0F1A30] font-extrabold shadow-[0_1px_2px_rgba(16,24,40,0.08),0_4px_10px_rgba(16,24,40,0.08)]"
@@ -7286,6 +7378,8 @@ React.useEffect(() => {
     if (m !== "매출관리") setRevenueUnlocked(false);
     React.startTransition(() => setMenu(m));
   };
+  const [sideMenuOpen, setSideMenuOpen] = React.useState(false);
+  const closeSideMenu = React.useCallback(() => setSideMenuOpen(false), []);
 
 
   // 화물내용 +추가 팝업 (공통)
@@ -7345,6 +7439,15 @@ React.useEffect(() => {
   const activeReqAlertIsEdit = !!activeReqAlert?.수정요청;
 
   // ---------------- 메뉴 UI ----------------
+  // 메뉴 보이기 규칙(상단 메뉴·왼쪽 메뉴 공용) — "hidden" | "blocked" | "ok"
+  const menuState = (m) => {
+    if (customRole && getMenuAccess(customRoles, role, m) === "hidden") return "hidden";
+    const isBlocked = !customRole && (role === "user" || role === "test" || isViewer) && blockedMenus.includes(m);
+    if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster" && !isViewer) return "hidden";
+    if (m === "관리센터" && role !== "totalMaster") return "hidden";
+    if (isBlocked && (role === "test" || isViewer)) return "hidden";
+    return isBlocked ? "blocked" : "ok";
+  };
 return (
     <OrderHistoryContext.Provider value={orderHistoryApi}>
     <EditModeProvider role={role} userCompany={userCompany}>
@@ -7374,6 +7477,16 @@ return (
         </div>
       )}
       <div className={`w-full overflow-x-hidden ${darkMode ? "" : "kp-pc"}`}>
+      <KpSideMenu
+        open={sideMenuOpen}
+        onOpen={() => setSideMenuOpen(true)}
+        onClose={closeSideMenu}
+        menuState={menuState}
+        active={menu}
+        onSelect={handleMenuClick}
+        company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")}
+        email={user?.email}
+      />
       {/* ===== 통합 헤더 네비 ===== */}
       <header className="kp-topnav sticky top-0 z-50 mb-6 w-full">
 
@@ -7387,6 +7500,9 @@ return (
               : (userCompany || localStorage.getItem("userCompany") || "");
             return (
               <div className="flex items-center gap-2.5 min-w-0 shrink-0">
+                <button onClick={() => setSideMenuOpen(true)} title="전체 메뉴" className="kp-icon-btn transition">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+                </button>
                 <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-8 h-8 rounded-[10px] shrink-0 ring-1 ring-white/15 shadow-[0_4px_12px_rgba(0,0,0,0.25)]" />
                 <div className="flex flex-col leading-none shrink-0">
                   <span className="text-white font-black text-[15px] tracking-tight">KP-Flow</span>
@@ -7441,11 +7557,9 @@ return (
               "관리자메뉴",
               "관리센터",
             ].map((m) => {
-              if (customRole && getMenuAccess(customRoles, role, m) === "hidden") return null;
-              const isBlocked = !customRole && (role === "user" || role === "test" || isViewer) && blockedMenus.includes(m);
-              if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster" && !isViewer) return null;
-              if (m === "관리센터" && role !== "totalMaster") return null;
-              if (isBlocked && (role === "test" || isViewer)) return null;
+              const st = menuState(m);
+              if (st === "hidden") return null;
+              const isBlocked = st === "blocked";
               const isActive = menu === m;
               return (
                 <button
@@ -29070,7 +29184,7 @@ const head = isDark
 
       {/* 테이블 */}
       <div>
-      <div ref={rtTableWrapRef} className={`overflow-x-auto rounded-xl shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
+      <div ref={rtTableWrapRef} className={`kp-grid overflow-x-auto rounded-xl shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
   <table className="w-full min-w-max table-auto">
           <thead className={isDark ? "bg-[#0f172a]" : "bg-[#1B2B4B]"}>
             <tr>
@@ -39156,7 +39270,7 @@ return (
 
       {/* ---------------- 테이블 ---------------- */}
       <div>
-      <div ref={dsTableWrapRef} className="rounded-xl shadow border border-gray-200 overflow-x-auto">
+      <div ref={dsTableWrapRef} className="kp-grid rounded-xl shadow border border-gray-200 overflow-x-auto">
 
   <table className="w-full min-w-max table-auto">
           <thead className="bg-[#1B2B4B]">
@@ -49901,7 +50015,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
       </div>
 
       {/* 테이블 */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="kp-grid bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>

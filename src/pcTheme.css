@@ -162,3 +162,97 @@
 }
 .kp-topnav .kp-chip-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.14); color: #fff; opacity: 1; }
 .kp-topnav .kp-nav-btn { opacity: 1; }
+
+/* ===================== 배차 목록 표(실시간배차현황·배차현황·미배차현황) =====================
+   엑셀 같은 격자 대신 — 세로줄 없음, 넉넉한 줄 높이, 마우스를 올린 줄·선택한 줄에 왼쪽 강조선,
+   배차상태는 점이 있는 둥근 배지. 표에 kp-grid 클래스가 붙은 곳에만 적용된다. */
+.kp-pc .kp-grid {
+  border: 1px solid var(--kp-line) !important;
+  border-radius: 18px !important;
+  box-shadow: var(--kp-card-shadow) !important;
+  background: #fff;
+}
+.kp-pc .kp-grid thead {
+  background: linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2A4677 100%) !important;
+}
+.kp-pc .kp-grid thead th {
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+  font-size: calc(13px * var(--font-scale, 1)) !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.02em;
+  height: 48px;
+  border-right: none !important;
+  border-bottom: none !important;
+}
+.kp-pc .kp-grid tbody tr {
+  height: 54px;
+  border-bottom: none;
+  background-color: #fff;
+}
+.kp-pc .kp-grid tbody td {
+  background-color: transparent !important;
+  border-right: none !important;
+  border-bottom: 1px solid #EEF1F6 !important;
+  color: #1F2A44 !important;
+  font-variant-numeric: tabular-nums;
+}
+.kp-pc .kp-grid tbody tr:last-child td { border-bottom: none !important; }
+/* 줄무늬 없애고 마우스 올린 줄 강조 */
+.kp-pc .kp-grid tbody tr[class~="bg-gray-50"] { background-color: #fff; }
+.kp-pc .kp-grid tbody tr:hover { background-color: #F3F7FF; }
+.kp-pc .kp-grid tbody tr:hover > td:first-child { box-shadow: inset 3px 0 0 #4B6CB7; }
+/* 선택한 줄 */
+.kp-pc .kp-grid tbody tr[class~="bg-blue-50"] { background-color: #EAF1FF; }
+.kp-pc .kp-grid tbody tr[class~="bg-blue-50"] > td:first-child { box-shadow: inset 3px 0 0 #2D4C82; }
+/* 긴급 미배차 줄 */
+.kp-pc .kp-grid tbody tr[class~="bg-red-50"] { background-color: #FFF5F5; }
+.kp-pc .kp-grid tbody tr[class~="bg-red-50"] > td:first-child { box-shadow: inset 3px 0 0 #E5484D; }
+
+/* 배차상태 배지 → 점 + 둥근 알약 */
+.kp-pc .kp-grid td button[class~="py-0.5"][class~="text-[11px]"][class~="bg-amber-500"],
+.kp-pc .kp-grid td button[class~="py-0.5"][class~="text-[11px]"][class~="bg-[#1B2B4B]"],
+.kp-pc .kp-grid td button[class~="py-0.5"][class~="text-[11px]"][class~="bg-red-500"],
+.kp-pc .kp-grid td button[class~="py-0.5"][class~="text-[11px]"][class~="bg-red-600"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px 4px 9px !important;
+  border-radius: 999px !important;
+  font-size: calc(12px * var(--font-scale, 1)) !important;
+  font-weight: 800 !important;
+  box-shadow: none !important;
+}
+.kp-pc .kp-grid td button[class~="py-0.5"][class~="text-[11px]"][class~="bg-amber-500"]::before,
+.kp-pc .kp-grid td button[class~="py-0.5"][class~="text-[11px]"][class~="bg-[#1B2B4B]"]::before,
+.kp-pc .kp-grid td button[class~="py-0.5"][class~="text-[11px]"][class~="bg-red-500"]::before,
+.kp-pc .kp-grid td button[class~="py-0.5"][class~="text-[11px]"][class~="bg-red-600"]::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+.kp-pc .kp-grid td button[class~="py-0.5"][class~="text-[11px]"][class~="bg-amber-500"] {
+  background: #FFF4E0 !important; color: #B45309 !important; outline: 1px solid #FBD38D;
+}
+.kp-pc .kp-grid td button[class~="py-0.5"][class~="text-[11px]"][class~="bg-[#1B2B4B]"] {
+  background: #E7F6EE !important; color: #047857 !important; outline: 1px solid #A7E3C4;
+}
+.kp-pc .kp-grid td button[class~="py-0.5"][class~="text-[11px]"][class~="bg-red-500"],
+.kp-pc .kp-grid td button[class~="py-0.5"][class~="text-[11px]"][class~="bg-red-600"] {
+  background: #FDECEC !important; color: #C81E1E !important; outline: 1px solid #F8B4B4;
+}
+
+/* 표 안 입력칸·선택칸 */
+.kp-pc .kp-grid td input:not([type="checkbox"]):not([type="radio"]),
+.kp-pc .kp-grid td select {
+  border-radius: 8px !important;
+  background-color: #FBFCFE;
+}
+.kp-pc .kp-grid input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: #2D4C82;
+  cursor: pointer;
+}
