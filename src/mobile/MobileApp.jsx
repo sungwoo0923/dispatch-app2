@@ -31,6 +31,7 @@ const useMiniStore = (st) => useSyncExternalStore(st.sub, st.get);
 const resyncCheckingStore = createMiniStore(false);
 const bootStageStore = createMiniStore({ server: 0, apply: 0, applyCount: 0, ready: 0 });
 import { createPortal } from "react-dom";
+import "./mobileTheme.css"; // ⭐ 모바일 A/B 디자인 + 알록달록 금지(남색 계열)
 import KpBootScreen from "../KpBootScreen";
 import { isMeaningfulChange } from "../bootProgress";
 import { Scale, Package, Snowflake, Car, Bike, Truck, Forklift, Mic, Sparkles, Download, RotateCcw, Building2, ArrowUpDown, StickyNote, MessageSquare, History } from "lucide-react";
@@ -1504,12 +1505,13 @@ async function rejectEditRequest(order) {
 }
 
 // 운송사 앱 상태뱃지 색상 (화주사 앱과 동일한 네이비 디지털 톤)
+// ⭐ 알록달록 금지 — 상태는 남색 계열 진하기로만 구분(배차완료=진남색, 요청=중간 남색, 배차중=회청색)
 const TP_STATUS_DOT = {
-  배차중: { dot: "#60a5fa", text: "#bfdbfe", ring: "rgba(96,165,250,0.4)", wash: "rgba(96,165,250,0.06)" },
-  배차요청: { dot: "#fbbf24", text: "#fde68a", ring: "rgba(251,191,36,0.4)", wash: "rgba(251,191,36,0.08)" },
-  요청보류: { dot: "#f87171", text: "#fecaca", ring: "rgba(248,113,113,0.4)", wash: "rgba(248,113,113,0.08)" },
-  배차완료: { dot: "#34d399", text: "#a7f3d0", ring: "rgba(52,211,153,0.4)", wash: "rgba(52,211,153,0.06)" },
-  승인대기: { dot: "#f59e0b", text: "#fde68a", ring: "rgba(245,158,11,0.4)", wash: "rgba(245,158,11,0.08)" },
+  배차중: { dot: "#9AA9C3", text: "#DCE4F1", ring: "rgba(154,169,195,0.45)", wash: "rgba(154,169,195,0.10)" },
+  배차요청: { dot: "#6E95E8", text: "#DCE4F1", ring: "rgba(110,149,232,0.45)", wash: "rgba(110,149,232,0.10)" },
+  요청보류: { dot: "#C9D2E0", text: "#FFFFFF", ring: "rgba(201,210,224,0.55)", wash: "rgba(15,26,48,0.06)" },
+  배차완료: { dot: "#1B2B4B", text: "#FFFFFF", ring: "rgba(27,43,75,0.45)", wash: "rgba(27,43,75,0.06)" },
+  승인대기: { dot: "#6E95E8", text: "#DCE4F1", ring: "rgba(110,149,232,0.45)", wash: "rgba(110,149,232,0.10)" },
 };
 
 // ⭐ 지입 기사가 아직 오더를 수락하지 않은 건(기사확인상태==="대기")은 차량번호가
@@ -1532,11 +1534,11 @@ function getTransportBadgeInfo(order) {
 
 // A스타일 카드 전용 뱃지 색상 (기존 flat 톤 유지)
 const TP_FLAT_CLASS = {
-  배차완료: "bg-blue-600 text-white border-blue-600",
-  배차요청: "bg-amber-100 text-amber-700 border-amber-300",
-  요청보류: "bg-red-100 text-red-700 border-red-300",
-  배차중: "bg-gray-100 text-gray-600 border-gray-300",
-  승인대기: "bg-amber-100 text-amber-700 border-amber-300",
+  배차완료: "bg-[#1B2B4B] text-white border-[#1B2B4B]",
+  배차요청: "bg-[#EEF3FB] text-[#1B2B4B] border-[#9FB3D9]",
+  요청보류: "bg-white text-[#0F1A30] border-[#0F1A30]",
+  배차중: "bg-white text-[#5B6B85] border-[#C9D2E0]",
+  승인대기: "bg-[#EEF3FB] text-[#1B2B4B] border-[#9FB3D9]",
 };
 
 function TransportStatusBadge({ order, className = "", onClick, flat = false, compact = false }) {
@@ -1563,15 +1565,15 @@ function TransportStatusBadge({ order, className = "", onClick, flat = false, co
       onClick={clickable ? onClick : undefined}
       className={`inline-flex items-center ${compact ? "gap-1 px-1.5 py-0.5 text-[0.68em]" : "gap-1.5 px-2 py-0.5 text-[11px]"} rounded-full font-bold tracking-wide whitespace-nowrap ${clickable ? "cursor-pointer active:scale-95 transition-transform" : ""} ${className}`}
       style={{
-        background: "linear-gradient(135deg,#1e3a5f,#0f2035)",
-        color: text,
-        border: `1px solid ${ring}`,
+        background: label === "배차중" ? "#EEF2F8" : "linear-gradient(135deg,#1B2B4B,#0F1A30)",
+        color: label === "배차중" ? "#3A4A66" : text,
+        border: `1px solid ${label === "배차중" ? "#C9D2E0" : ring}`,
         boxShadow: "0 1px 2px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.06)",
       }}
     >
       <span
         className="w-1.5 h-1.5 rounded-full shrink-0"
-        style={{ background: dot, boxShadow: `0 0 4px ${dot}`, animation: blink ? "dotPulse 1.4s ease-in-out infinite" : "none" }}
+        style={{ background: label === "배차완료" ? "#FFFFFF" : dot, boxShadow: "none", animation: blink ? "dotPulse 1.4s ease-in-out infinite" : "none" }}
       />
       {label}
     </span>
@@ -5286,7 +5288,7 @@ const title =
   // 렌더링
   // ------------------------------------------------------------------
  return (
-<div className="w-full min-h-screen flex flex-col relative"
+<div className={`kp-m ${cardVersionB ? "kp-m-b" : "kp-m-a"} w-full min-h-screen flex flex-col relative`}
   style={{ backgroundColor: "var(--bg-app)", color: "var(--text-primary)", transition: "background-color 0.3s, color 0.3s" }}>
     {/* ⭐ 오래 백그라운드에 있다가(=사실상 껐다 켠 것과 같은 상황) 돌아왔을 때만
         뜨는 최적화(재조회) 대기 오버레이 — 오래된 오더 상태를 보거나 그 상태로
@@ -7236,92 +7238,63 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
 // 공통 헤더 / 사이드 메뉴
 // ----------------------------------------------------------------------
 const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh, onValidateOrders, onMenu, notifCount = 0, onNotifClick, cardVersionB = false, messengerUnread = 0, onMessengerClick }) {
+  // ⭐ 2026-10-22 디자인 개선 — A형: 반투명 흰 머리줄 / B형: 남색 그라데이션 머리줄. 버튼은 둥근 네모 타일.
   const isListPage = title === "등록내역";
-  const iconColor = cardVersionB ? "#ffffff" : "#374151";
-  const bellColor = cardVersionB ? "#ffffff" : "#1f2937";
+  const iconColor = cardVersionB ? "#ffffff" : "#1B2B4B";
+  const countCls = `absolute -top-1 -right-1 min-w-[17px] h-[17px] text-[10px] font-extrabold rounded-full flex items-center justify-center px-1 leading-none ring-2 ${
+    cardVersionB ? "bg-white text-[#1B2B4B] ring-[#1B2B4B]" : "bg-[#1B2B4B] text-white ring-white"
+  }`;
 
   return (
-    <div className={`flex items-center justify-between px-4 sticky top-0 z-30 ${
-      cardVersionB
-        ? "bg-[#1B2B4B] py-3.5"
-        : "bg-white border-b py-3"
-    }`} style={{ willChange: "transform", transform: "translateZ(0)", WebkitTransform: "translateZ(0)", paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.5rem)" }}>
-      <div className="w-12">
+    <div className="kp-m-header flex items-center justify-between gap-2 px-3.5 pb-2.5 sticky top-0 z-30"
+      style={{ willChange: "transform", transform: "translateZ(0)", WebkitTransform: "translateZ(0)", paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.6rem)" }}>
+      <div className="shrink-0 flex items-center">
         {isListPage ? (
-          <button
-            onClick={onMenu}
-            className={`text-[13px] font-bold tracking-wide ${cardVersionB ? "text-white/80 hover:text-white" : "text-blue-600"}`}
-          >
-            MENU
+          <button onClick={onMenu} className="kp-m-hbtn" aria-label="메뉴">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.2" strokeLinecap="round"><path d="M4 7h16M4 12h11M4 17h16" /></svg>
           </button>
         ) : (
           onBack && (
-            <button onClick={onBack} className={`flex items-center ${cardVersionB ? "text-white" : "text-gray-600"}`}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M19 12H5M12 19l-7-7 7-7"/>
-              </svg>
+            <button onClick={onBack} className="kp-m-hbtn" aria-label="뒤로">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
             </button>
           )
         )}
       </div>
 
-      <div className={`font-bold text-[15px] tracking-tight ${cardVersionB ? "text-white" : "text-gray-800"}`}>
-        {title}
+      <div className="flex-1 min-w-0 text-center leading-none">
+        <div className={`text-[9.5px] font-extrabold tracking-[0.24em] ${cardVersionB ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`}>KP-FLOW</div>
+        <div className={`mt-1 font-black text-[16px] tracking-tight truncate ${cardVersionB ? "text-white" : "text-[#0F1A30]"}`}>{title}</div>
       </div>
 
-      <div className="flex items-center gap-1 justify-end">
+      <div className="shrink-0 flex items-center gap-1.5 justify-end">
         {onRefresh && (
-          <button
-            className={`w-8 h-8 flex items-center justify-center rounded-full transition ${cardVersionB ? "active:bg-white/10" : "active:bg-gray-100"}`}
-            onClick={onRefresh}
-          >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M23 4v6h-6"/>
-              <path d="M1 20v-6h6"/>
-              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+          <button className="kp-m-hbtn" onClick={onRefresh} aria-label="새로고침">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
             </svg>
           </button>
         )}
         {onValidateOrders && (
-          <button
-            className={`w-8 h-8 flex items-center justify-center rounded-full transition ${cardVersionB ? "active:bg-white/10" : "active:bg-gray-100"}`}
-            onClick={onValidateOrders}
-            title="오더 검증"
-          >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-              <path d="M9 12l2 2 4-4"/>
+          <button className="kp-m-hbtn" onClick={onValidateOrders} title="오더 검증">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/>
             </svg>
           </button>
         )}
         {onMessengerClick && (
-          <button
-            className={`relative w-8 h-8 flex items-center justify-center rounded-full transition ${cardVersionB ? "active:bg-white/10" : "active:bg-gray-100"}`}
-            onClick={onMessengerClick}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <button className="kp-m-hbtn relative" onClick={onMessengerClick} aria-label="메신저">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
             </svg>
-            {messengerUnread > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
-                {messengerUnread > 99 ? "99+" : messengerUnread}
-              </span>
-            )}
+            {messengerUnread > 0 && <span className={countCls}>{messengerUnread > 99 ? "99+" : messengerUnread}</span>}
           </button>
         )}
-        <button
-          className={`relative w-8 h-8 flex items-center justify-center rounded-full transition ${cardVersionB ? "active:bg-white/10" : "active:bg-gray-100"}`}
-          onClick={onNotifClick}
-        >
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={bellColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        <button className="kp-m-hbtn relative" onClick={onNotifClick} aria-label="알림">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
           </svg>
-          {notifCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
-              {notifCount > 99 ? "99+" : notifCount}
-            </span>
-          )}
+          {notifCount > 0 && <span className={countCls}>{notifCount > 99 ? "99+" : notifCount}</span>}
         </button>
       </div>
     </div>
@@ -7679,28 +7652,31 @@ function MobileSideMenu({
     <>
     <div className="fixed inset-0 z-40">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className={`absolute left-0 top-0 bottom-0 w-72 shadow-2xl flex flex-col ${
-        dark ? "bg-[#1B2B4B] border-r border-white/10" : "bg-white border-r border-blue-100"
-      }`} style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+      <div className={`absolute left-0 top-0 bottom-0 w-[78vw] max-w-[300px] shadow-[12px_0_40px_rgba(15,26,48,0.3)] flex flex-col rounded-r-[24px] overflow-hidden ${
+        dark ? "text-white" : "bg-white"
+      }`} style={{ paddingTop: "env(safe-area-inset-top, 0px)", background: dark ? "linear-gradient(180deg, #16264A 0%, #1B2B4B 55%, #14213D 100%)" : undefined }}>
 
         {/* 헤더 */}
-        <div className={`px-5 py-4 flex items-center justify-between ${
-          dark ? "border-b border-white/10" : "border-b border-blue-100"
+        <div className={`px-5 pt-5 pb-4 flex items-start justify-between gap-3 ${
+          dark ? "border-b border-white/10" : "border-b border-[#EEF1F6]"
         }`}>
-          <div>
-            <div className={`text-[15px] font-extrabold tracking-tight ${dark ? "text-white" : "text-blue-600"}`}>(주)KP-Flow 모바일</div>
-            <div className={`text-[11px] mt-0.5 ${dark ? "text-white/50" : "text-blue-400"}`}>DISPATCH MANAGEMENT</div>
-            <div className="mt-2 flex items-center gap-1.5">
-              <span className={`w-2 h-2 rounded-full inline-block ${dark ? "bg-blue-300" : "bg-blue-500"}`}></span>
-              <span className={`text-[12px] font-bold ${dark ? "text-white" : "text-gray-800"}`}>{myName}</span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5">
+              <img src="/icons/sflow-icon.png" alt="KP-Flow" className={`w-9 h-9 rounded-[11px] shrink-0 ${dark ? "ring-1 ring-white/15" : "ring-1 ring-[#E3E8F0]"}`} />
+              <div className="min-w-0">
+                <div className={`text-[10px] font-extrabold tracking-[0.22em] ${dark ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`}>DISPATCH</div>
+                <div className={`text-[15px] font-black tracking-tight truncate ${dark ? "text-white" : "text-[#0F1A30]"}`}>KP-Flow 모바일</div>
+              </div>
             </div>
-            <div className={`text-[11px] mt-0.5 ${dark ? "text-white/50" : "text-gray-400"}`}>
-              접속: {fmtLoginTime(loginTime)}
+            <div className={`mt-3 inline-flex items-center gap-2 px-2.5 py-1.5 rounded-xl ${dark ? "bg-white/[0.08] border border-white/10" : "bg-[#F5F8FD] border border-[#E3E8F0]"}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${dark ? "bg-white" : "bg-[#1B2B4B]"}`} />
+              <span className={`text-[12.5px] font-bold ${dark ? "text-white" : "text-[#0F1A30]"}`}>{myName}</span>
+              <span className={`text-[11px] ${dark ? "text-white/50" : "text-[#7A879C]"}`}>{fmtLoginTime(loginTime)}</span>
             </div>
           </div>
           <button
-            className={`w-8 h-8 rounded-full flex items-center justify-center transition ${
-              dark ? "bg-white/10 text-white/70 hover:bg-white/20" : "bg-blue-50 text-blue-500 hover:bg-blue-100"
+            className={`w-8 h-8 rounded-[10px] flex items-center justify-center transition shrink-0 ${
+              dark ? "bg-white/10 text-white/80" : "bg-[#F1F4F9] text-[#1B2B4B] border border-[#E3E8F0]"
             }`}
             onClick={onClose}
           >
@@ -7906,7 +7882,7 @@ function MenuSection({ title, children, dark, alwaysOpen = false }) {
   if (alwaysOpen) {
     return (
       <div className="mt-1 mb-1">
-        <div className={`w-full px-5 pt-4 pb-1.5 text-[11px] font-bold uppercase tracking-widest ${dark ? "text-white/40" : "text-blue-500"}`}>
+        <div className={`w-full px-5 pt-4 pb-1.5 text-[11px] font-bold uppercase tracking-widest ${dark ? "text-[#8FB0F0]/70" : "text-[#4B6CB7]"}`}>
           {title}
         </div>
         <div className="flex flex-col">{children}</div>
@@ -7918,7 +7894,7 @@ function MenuSection({ title, children, dark, alwaysOpen = false }) {
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className={`w-full flex items-center justify-between px-5 pt-4 pb-1.5 text-[11px] font-bold uppercase tracking-widest ${dark ? "text-white/40" : "text-blue-500"}`}
+        className={`w-full flex items-center justify-between px-5 pt-4 pb-1.5 text-[11px] font-bold uppercase tracking-widest ${dark ? "text-[#8FB0F0]/70" : "text-[#4B6CB7]"}`}
       >
         <span>{title}</span>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"
@@ -7934,19 +7910,19 @@ function MenuSection({ title, children, dark, alwaysOpen = false }) {
 function MenuItem({ label, onClick, badge, dark }) {
   return (
     <button
-      className={`w-full flex items-center justify-between px-5 py-2.5 text-[13px] font-semibold transition-colors ${
-        dark ? "text-white/90 hover:bg-white/10 active:bg-white/20" : "text-gray-800 hover:bg-blue-50 active:bg-blue-100"
+      className={`kp-m-drawer-item w-full flex items-center justify-between px-5 py-2.5 text-[14px] font-semibold transition-colors ${
+        dark ? "text-white/90 hover:bg-white/10 active:bg-white/[0.16]" : "text-[#1F2A44] hover:bg-[#F1F4F9] active:bg-[#E8EDF5]"
       }`}
       onClick={onClick}
     >
       <span>{label}</span>
       <div className="flex items-center gap-2">
         {badge && (
-          <span className={`px-2 py-0.5 text-[10px] font-bold rounded leading-none ${dark ? "bg-white text-[#1B2B4B]" : "bg-blue-600 text-white"}`}>
+          <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-full leading-none ${dark ? "bg-white text-[#1B2B4B]" : "bg-[#1B2B4B] text-white"}`}>
             {badge}
           </span>
         )}
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={dark ? "rgba(255,255,255,0.3)" : "#2563EB"} strokeWidth="2" strokeLinecap="round">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={dark ? "rgba(255,255,255,0.35)" : "#9AA9C3"} strokeWidth="2.2" strokeLinecap="round">
           <path d="M9 6l6 6-6 6" />
         </svg>
       </div>
@@ -9557,11 +9533,11 @@ function getDayStatusForCard(dateStr, type) {
 function dayBadgeClass(label) {
   if (label === "당상" || label === "당착") {
     // 🔵 오늘
-    return "bg-blue-50 text-blue-600 border-blue-200";
+    return "bg-[#1B2B4B] text-white border-[#1B2B4B]";
   }
   if (label === "내상" || label === "내착") {
     // 🔴 내일
-    return "bg-red-50 text-red-600 border-red-200";
+    return "bg-[#EEF3FB] text-[#1B2B4B] border-[#9FB3D9]";
   }
   // 그 외 날짜 (예: 11/30)
   return "bg-gray-50 text-gray-500 border-gray-200";
@@ -10671,7 +10647,8 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
       <>
       <div
         className={
-          "relative bg-white rounded-2xl border shadow-sm transition-colors overflow-hidden " +
+          "kp-m-card relative bg-white rounded-2xl border shadow-sm transition-colors overflow-hidden " +
+          (selected ? "kp-m-card-on " : "") +
           (selected
             ? "border-[#1B2B4B] shadow-[0_0_0_2px_rgba(27,43,75,0.12)]"
             : flash
@@ -10911,7 +10888,8 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
    <>
    <div
   className={
-    "relative bg-white rounded-2xl shadow border px-3 py-3 transition-colors " +
+    "kp-m-card relative bg-white rounded-2xl shadow border px-3.5 py-3 transition-colors " +
+    (selected ? "kp-m-card-on " : "") +
     (selected
       ? "border-[#1B2B4B] bg-[#1B2B4B]/[0.03] shadow-[0_0_0_2px_rgba(27,43,75,0.15)]"
       : flash
@@ -11108,7 +11086,7 @@ const dt = new Date(y, m - 1, d, hh, mm);
           폴더블 커버 같은 좁은 화면에서는 두 줄로 내려 겹치지 않게 한다. 청구/기사는 세로 줄바꿈.
           가로 폭만으로는 "좁은 휴대폰"과 "분할화면(폭은 좁지만 세로는 그대로인 창)"을 구분할 수
           없으므로, 세로로 매우 긴 비율(분할화면 등)이면 폭이 380px를 넘어도 세로 배치를 유지한다. */}
-      <div className="flex flex-col min-[380px]:flex-row min-[380px]:items-center min-[380px]:justify-between [@media(max-aspect-ratio:2/5)]:!flex-col [@media(max-aspect-ratio:2/5)]:!items-stretch gap-1 mt-2 px-2 py-1.5 rounded-xl bg-gray-50 border border-gray-100">
+      <div className="kp-m-card-foot flex flex-col min-[380px]:flex-row min-[380px]:items-center min-[380px]:justify-between [@media(max-aspect-ratio:2/5)]:!flex-col [@media(max-aspect-ratio:2/5)]:!items-stretch gap-1 mt-2 px-2.5 py-2 rounded-xl bg-gray-50 border border-gray-100">
         <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0 min-[380px]:flex-1 [@media(max-aspect-ratio:2/5)]:!flex-none text-[0.8em] leading-relaxed">
           {cargo && (
             <span className="font-extrabold text-amber-600 whitespace-nowrap inline-flex items-center gap-1.5">
