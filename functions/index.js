@@ -3299,6 +3299,7 @@ function makeResetProgress(jobId, base) {
     async current() { return ref ? (await ref.get()).data() || null : null; },
   };
 }
+const RESET_ORDER_COLLECTIONS = new Set(["orders", "dispatch"]);
 const RESET_KEEP_DAYS = 7; // ⭐ 초기화한 데이터를 이 기간 동안 보관 → 복원 가능
 // ⭐ 회사명이 비어 있는 예전 데이터는 프로그램이 "돌캐" 것으로 본다(화면의 companyName || "돌캐" 규칙).
 // 그래서 돌캐를 초기화할 때는 아래 컬렉션에서 회사 필드가 아예 없는 문서도 함께 지운다.
@@ -3411,6 +3412,9 @@ async function collectCompanyDocs(company, { deleteAccounts, onProgress }) {
       const light = await colRef.select(...RESET_COMPANY_FIELDS, "companyCode", ...RESET_UID_FIELDS).get().catch(() => null);
       const legacyRefs = (light?.docs || []).filter((d) => {
         const x = d.data() || {};
+        // ⭐ 오더(orders·dispatch)는 화면 규칙과 똑같이 "companyName이 비었으면 돌캐"로 본다.
+        //    (예전엔 다른 회사 필드나 작성자 uid까지 따져서, 화면엔 돌캐로 보이는데 안 지워지는 오더가 남았다)
+        if (RESET_ORDER_COLLECTIONS.has(col)) return !String(x.companyName ?? "").trim();
         if (![...RESET_COMPANY_FIELDS, "companyCode"].every((f) => !String(x[f] ?? "").trim())) return false;
         const owners = RESET_UID_FIELDS.map((f) => String(x[f] ?? "").trim()).filter(Boolean);
         return owners.length === 0 || owners.some((o) => uidSet.has(o));

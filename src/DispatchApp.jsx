@@ -2939,6 +2939,51 @@ function FilePreviewModal({ base64, type, name, onClose }) {
   );
 }
 
+// ⭐ PC 화면 공통 머리말 + 탭(세그먼트) — 2026-10-22 디자인 개선 2단계
+const KP_PAGE_META = {
+  배차관리: { en: "DISPATCH", desc: "오더 등록과 배차 처리를 한 화면에서", icon: "M3 7h13l5 5v5h-2M3 7v10h2m0 0a2 2 0 1 0 4 0m-4 0a2 2 0 1 1 4 0m0 0h6m0 0a2 2 0 1 0 4 0m-4 0a2 2 0 1 1 4 0" },
+  실시간배차현황: { en: "LIVE BOARD", desc: "어제·오늘·내일 오더를 실시간으로", icon: "M3 12h4l3-8 4 16 3-8h4" },
+  배차현황: { en: "DISPATCH STATUS", desc: "기간별 배차 내역 조회·수정", icon: "M4 5h16M4 12h16M4 19h10" },
+  단가표: { en: "RATE CARD", desc: "거래처·구간별 운임 단가", icon: "M4 4h16v16H4zM4 10h16M10 4v16" },
+  운임조회: { en: "FARE LOOKUP", desc: "과거 운임으로 적정 운임 확인", icon: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-5-5" },
+  기사관리: { en: "DRIVERS", desc: "기사 정보와 차량 관리", icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 4-6 8-6s8 2 8 6" },
+  거래처관리: { en: "CLIENTS", desc: "거래처·하차지·고정 노선 관리", icon: "M4 21V7l8-4 8 4v14M9 21v-6h6v6" },
+  // 지입차관리는 화면 자체 머리말(지입차량 관제)이 있어 생략
+  매출관리: { en: "REVENUE", desc: "매출·매입·수익 분석", icon: "M4 20V10M10 20V4M16 20v-7M22 20H2" },
+  정산관리: { en: "SETTLEMENT", desc: "거래처 정산과 기사 지급 관리", icon: "M3 6h18v12H3zM3 10h18M7 15h4" },
+  관리센터: { en: "CONTROL CENTER", desc: "경영 지표와 가입 신청 관리", icon: "M12 3l8 4v6c0 4-3.5 7-8 8-4.5-1-8-4-8-8V7z" },
+};
+function KpPageHeader({ menu }) {
+  const meta = KP_PAGE_META[menu];
+  if (!meta) return null;
+  const now = new Date(Date.now() + 9 * 3600e3);
+  const ymd = now.toISOString().slice(0, 10).replace(/-/g, ".");
+  const dow = ["일", "월", "화", "수", "목", "금", "토"][now.getUTCDay()];
+  return (
+    <div className="flex items-center gap-4 pb-4 mb-4 border-b border-[#EEF1F6]">
+      <div className="w-11 h-11 rounded-[14px] flex items-center justify-center shrink-0 shadow-[0_6px_16px_rgba(27,43,75,0.25)]"
+        style={{ background: "linear-gradient(135deg, #1B2B4B 0%, #2D4C82 100%)" }}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={meta.icon} /></svg>
+      </div>
+      <div className="min-w-0">
+        <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">{meta.en}</div>
+        <div className="flex items-baseline gap-3">
+          <h2 className="text-[20px] font-black text-[#0F1A30] tracking-tight leading-tight">{menu}</h2>
+          <span className="text-[13.5px] text-[#5B6B85] font-medium truncate">{meta.desc}</span>
+        </div>
+      </div>
+      <div className="ml-auto hidden lg:flex items-center gap-2 px-3 h-9 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] text-[13px] font-bold text-[#3A4A66] shrink-0">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+        {ymd} ({dow})
+      </div>
+    </div>
+  );
+}
+const kpTabWrap = "inline-flex items-center gap-1 p-1 rounded-[14px] bg-[#EEF2F8] border border-[#E3E8F0]";
+const kpTabCls = (on) => `px-5 h-9 rounded-[10px] text-[13.5px] transition whitespace-nowrap ${
+  on ? "bg-white text-[#0F1A30] font-extrabold shadow-[0_1px_2px_rgba(16,24,40,0.08),0_4px_10px_rgba(16,24,40,0.08)]"
+     : "text-[#5B6B85] font-bold hover:text-[#0F1A30] hover:bg-white/60"}`;
+
 // ⭐ 실시간배차현황/배차현황의 "정렬/필터 설정" 팝업에 있는 "컬럼명 클릭 정렬"
 // 토글이 켜졌을 때, 테이블 헤더를 클릭해서 바로 정렬할 수 있는 컬럼 목록.
 const CLICK_SORTABLE_COLUMNS = [
@@ -3006,6 +3051,9 @@ function useRealtimeCollections(user, userCompany, role) {
   }, [dispatchDataLive, historyMap]);
   const [historyLoading, setHistoryLoading] = useState(0);
   const loadedRangesRef = React.useRef([]);
+  // ⭐ 초기화·복원·가져오기 취소가 끝나면(서버가 systemConfig/dataVersion.{회사}에 시각을 남김)
+  //    이미 불러와 둔 예전 오더를 비우고 다시 불러온다 — 창을 켜둔 채 초기화하면 지운 오더가 화면에 남던 문제
+  const [historyEpoch, setHistoryEpoch] = useState(0);
   const fullLoadedRef = React.useRef(false);
   const fullLoadingRef = React.useRef(null);
   const fetchHistoryRows = React.useCallback(async (makeQuery) => {
@@ -3047,7 +3095,7 @@ function useRealtimeCollections(user, userCompany, role) {
     const rows = await fetchHistoryRows(c => query(c, where("상차일", ">=", from), where("상차일", "<=", end)));
     if (rows === null) { loadedRangesRef.current = loadedRangesRef.current.filter(r => r !== range); return null; } // 실패한 기간은 다시 받을 수 있게(실패 = null)
     return rows;
-  }, [fetchHistoryRows]);
+  }, [fetchHistoryRows, historyEpoch]); // eslint-disable-line react-hooks/exhaustive-deps
   // 오더복사·운임조회 등 전체 이력이 필요한 기능을 처음 쓸 때 1회
   const loadFullHistory = React.useCallback(() => {
     if (fullLoadedRef.current) return Promise.resolve();
@@ -3058,7 +3106,26 @@ function useRealtimeCollections(user, userCompany, role) {
       .then((rows) => { if (rows !== null) { fullLoadedRef.current = true; loadedRangesRef.current.push([hStart, pcPrevDay(pcLiveWindowStart())]); } })
       .finally(() => { fullLoadingRef.current = null; });
     return fullLoadingRef.current;
-  }, [fetchHistoryRows]);
+  }, [fetchHistoryRows, historyEpoch]); // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(() => {
+    if (!user) return undefined;
+    const myCompany = () => (role === "totalMaster"
+      ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
+      : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY));
+    let seen = null;
+    return onSnapshot(doc(db, "systemConfig", "dataVersion"), (snap) => {
+      const t = snap.data()?.[myCompany()];
+      const ms = t?.toMillis ? t.toMillis() : 0;
+      if (seen === null) { seen = ms; return; } // 처음 값은 기준으로만
+      if (ms <= seen) return;
+      seen = ms;
+      loadedRangesRef.current = [];
+      fullLoadedRef.current = false;
+      setHistoryMap(new Map());
+      safeSave("dispatchData", []);
+      setHistoryEpoch(n => n + 1); // 열려 있는 화면이 자기 기간을 다시 불러오게
+    }, () => {});
+  }, [user?.uid, role, userCompany]); // eslint-disable-line react-hooks/exhaustive-deps
   // ⭐ 여러 사용자 실시간 일치 — 미배차 전부 + 앱을 연 뒤 누군가 등록·수정한 오더(날짜 무관) +
   // 삭제 기록을 실시간으로 받아 예전 오더 보관소에 반영한다(최근 7일~은 원래 실시간).
   React.useEffect(() => {
@@ -7623,6 +7690,7 @@ return (
 
       {/* ---------------- 화면 렌더링 ---------------- */}
       <main className={`kp-main ${menu === "HOME" ? "kp-main-bare" : ""} rounded shadow p-4 w-full min-w-0 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
+        {!darkMode && <KpPageHeader menu={menu} />}
         {menu === "HOME" && (
           <HomeDashboard
             role={role}
@@ -7702,14 +7770,10 @@ return (
 
         {menu === "배차현황" && (
           <div>
-            <div className="flex gap-2 px-4 pt-4 pb-0">
+            <div className={`${kpTabWrap} mb-1`}>
               {["배차현황", "미배차현황"].map(tab => (
                 <button key={tab} onClick={() => set배차현황Tab(tab)}
-                  className={`px-5 py-2 text-[13px] font-bold rounded-lg transition border ${
-                    배차현황Tab === tab
-                      ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-                      : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
-                  }`}>
+                  className={kpTabCls(배차현황Tab === tab)}>
                   {tab}
                 </button>
               ))}
@@ -7777,14 +7841,10 @@ return (
 
         {menu === "거래처관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer || !!customRole) && (
           <>
-          <div className="flex gap-2 px-4 pt-4 pb-0">
+          <div className={`${kpTabWrap} mb-1`}>
             {["하차지거래처", "기본거래처", "고정거래처관리", "고정노선관리"].map(tab => (
               <button key={tab} onClick={() => set거래처관리Tab(tab)}
-                className={`px-5 py-2 text-[13px] font-bold rounded-lg transition border ${
-                  거래처관리Tab === tab
-                    ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-                    : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
-                }`}>
+                className={kpTabCls(거래처관리Tab === tab)}>
                 <EditableText id={`nav.거래처관리.${tab}`} defaultText={tab} />
               </button>
             ))}
@@ -7913,14 +7973,10 @@ return (
 
         {정산관리Visited && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
           <div style={{ display: menu === "정산관리" ? undefined : "none" }}>
-          <div className="flex gap-2 px-4 pt-4 pb-0">
+          <div className={`${kpTabWrap} mb-1`}>
             {["거래처정산", "지급관리"].map(tab => (
               <button key={tab} onClick={() => set정산관리Tab(tab)}
-                className={`px-5 py-2 text-[13px] font-bold rounded-lg transition border ${
-                  정산관리Tab === tab
-                    ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-                    : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
-                }`}>
+                className={kpTabCls(정산관리Tab === tab)}>
                 {tab}
               </button>
             ))}
@@ -7977,14 +8033,10 @@ return (
 
         {menu === "관리센터" && role === "totalMaster" && (
           <div>
-            <div className="flex gap-2 px-4 pt-4 pb-4">
+            <div className={`${kpTabWrap} mb-4`}>
               {["경영인텔리전스", "가입신청관리"].map(tab => (
                 <button key={tab} onClick={() => set관리센터Tab(tab)}
-                  className={`px-5 py-2 text-[13px] font-bold rounded-lg transition border ${
-                    관리센터Tab === tab
-                      ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-                      : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
-                  }`}>
+                  className={kpTabCls(관리센터Tab === tab)}>
                   <EditableText id={`nav.관리센터.${tab}`} defaultText={tab} />
                 </button>
               ))}

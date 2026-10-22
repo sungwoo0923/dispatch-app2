@@ -6202,16 +6202,17 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
     }}>
 
       {/* ═══ 헤더 ═══ */}
-      <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "15px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+      <div style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 18, boxShadow: "0 1px 2px rgba(16,24,40,0.04), 0 10px 28px rgba(16,24,40,0.06)", padding: "16px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <div style={{ width: 42, height: 42, borderRadius: 11, background: NAVY, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 14, background: "linear-gradient(135deg, #1B2B4B 0%, #2D4C82 100%)", boxShadow: "0 6px 16px rgba(27,43,75,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <svg width="22" height="22" fill="none" stroke="white" strokeWidth="1.7" viewBox="0 0 24 24">
               <rect x="1" y="3" width="15" height="13" rx="1" /><path d="M16 8h4l3 3v5h-7V8Z" />
               <circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" />
             </svg>
           </div>
           <div>
-            <h1 style={{ fontSize: 21, fontWeight: 800, color: NAVY, margin: 0, letterSpacing: "-0.02em" }}>지입차량 관제</h1>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.22em", color: "#4B6CB7" }}>FLEET</div>
+            <h1 style={{ fontSize: 20, fontWeight: 900, color: "#0F1A30", margin: 0, letterSpacing: "-0.02em" }}>지입차량 관제</h1>
             <p style={{ fontSize: 15, color: "#6b7280", margin: "2px 0 0" }}>실시간 차량 모니터링 시스템</p>
           </div>
         </div>
