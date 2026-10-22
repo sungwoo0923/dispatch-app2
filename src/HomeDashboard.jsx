@@ -29,44 +29,63 @@ function Modal({ title, onClose, children }) {
 }
 
 /* ===== KPI 카드 ===== */
-function KpiCard({ title, value, unit = "", color = "blue" }) {
-  const colors = {
-    blue: "border-l-blue-500 bg-blue-50/50",
-    green: "border-l-emerald-500 bg-emerald-50/50",
-    orange: "border-l-orange-500 bg-orange-50/50",
-    red: "border-l-red-500 bg-red-50/50",
-  };
+// ⭐ 2026-10-23 개편 — 회사관리와 같은 디자인(흰 카드 + 아이콘 배지 + 큰 숫자)
+const KP_HOME_CARD = "bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)]";
+const KPI_TONES = {
+  blue: { badge: "bg-[#EEF3FB] text-[#1B2B4B]", bar: "bg-[#1B2B4B]" },
+  red: { badge: "bg-red-50 text-red-600", bar: "bg-red-500" },
+  green: { badge: "bg-emerald-50 text-emerald-600", bar: "bg-emerald-500" },
+  orange: { badge: "bg-amber-50 text-amber-600", bar: "bg-amber-500" },
+};
+const KPI_ICONS = {
+  blue: <><rect x="1" y="6" width="13" height="10" rx="1.5" /><path d="M14 9h4l3 3.5V16h-7z" /><circle cx="5.5" cy="17.5" r="1.8" /><circle cx="17.5" cy="17.5" r="1.8" /></>,
+  red: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+  green: <><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /></>,
+  orange: <><path d="M3 17l6-6 4 4 8-8" /><path d="M14 7h7v7" /></>,
+};
+function KpiCard({ title, value, unit = "", color = "blue", sub }) {
+  const t = KPI_TONES[color] || KPI_TONES.blue;
   return (
-    <div className={`bg-white rounded-xl border border-gray-200 border-l-4 ${colors[color]} shadow-sm p-4`}>
-      <div className="text-[12px] font-semibold text-gray-500 mb-1">
-        <EditableText id={`home.kpi.${title}`} defaultText={title} />
+    <div className={`${KP_HOME_CARD} relative overflow-hidden px-6 py-5`}>
+      <div className={`absolute left-0 top-0 h-full w-1 ${t.bar}`} />
+      <div className="flex items-center gap-3">
+        <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${t.badge}`}>
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{KPI_ICONS[color]}</svg>
+        </div>
+        <div className="text-[14px] font-bold text-gray-600">
+          <EditableText id={`home.kpi.${title}`} defaultText={title} />
+        </div>
       </div>
-      <div className="text-[22px] font-bold text-gray-900">
+      <div className="mt-3 text-[30px] font-black text-[#0F1A30] tabular-nums leading-none tracking-tight">
         {typeof value === "number" ? value.toLocaleString() : value}
-        {unit && <span className="text-[14px] font-semibold text-gray-500 ml-1">{unit}</span>}
+        {unit && <span className="text-[15px] font-bold text-gray-400 ml-1">{unit}</span>}
       </div>
+      {sub && <div className="mt-2 text-[12.5px] font-semibold text-gray-500">{sub}</div>}
     </div>
   );
 }
 
 /* ===== 섹션 카드 ===== */
-function SectionCard({ title, action, children }) {
+function SectionCard({ title, eyebrow, desc, action, children, bodyClass = "px-6 pb-6" }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div className={`${KP_HOME_CARD} overflow-hidden`}>
       {title && (
-        <div className="flex justify-between items-center px-5 py-3 bg-[#1B2B4B]">
-          <h3 className="text-[14px] font-bold text-white">
-            <EditableText id={`home.section.${title}`} defaultText={title} />
-          </h3>
-          {action && <div>{action}</div>}
+        <div className="flex items-start gap-3 px-6 pt-5 pb-4 mb-4 border-b border-[#EEF1F6]">
+          <div className="flex-1 min-w-0">
+            {eyebrow && <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">{eyebrow}</div>}
+            <h3 className="mt-0.5 text-[18px] font-black text-[#0F1A30] tracking-tight">
+              <EditableText id={`home.section.${title}`} defaultText={title} />
+            </h3>
+            {desc && <div className="text-[13px] text-gray-500 mt-0.5">{desc}</div>}
+          </div>
+          {action && <div className="shrink-0">{action}</div>}
         </div>
       )}
-      <div className="p-4">{children}</div>
+      <div className={bodyClass}>{children}</div>
     </div>
   );
 }
 
-/* ===== CountUp ===== */
 function CountUp({ value, duration = 900 }) {
   const [display, setDisplay] = React.useState(0);
   React.useEffect(() => {
@@ -298,30 +317,52 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   // 새로고침이 느리고 버벅였다. "실시간 범위(최근 7일) 이전" 기간의 합계는 하루 동안 거의 안 바뀌므로
   // 하루 1번만 받아 계산해 PC에 저장해 두고(homePastStats), 최근 7일~은 실시간 데이터로 더한다.
   const liveStartStr = pcLiveWindowStart();
+  // ⭐ 버그수정(2026-10-23) — 예전엔 모든 운송사 오더를 합쳐 계산했고, 초기화해도 하루 동안 옛 숫자가 남았다.
+  //   지금 보고 있는 회사 오더만 더하고, 저장할 때 회사명을 같이 적어 둔다(v3).
+  //   초기화·복원·가져오기가 있으면 서버가 systemConfig/dataVersion.{회사}에 시각을 남기고, 그보다 오래된 저장값은 다시 계산한다.
+  const homeCompany = (() => {
+    try {
+      return role === "totalMaster"
+        ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
+        : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
+    } catch { return userCompany || DEFAULT_COMPANY; }
+  })();
   const [pastCache, setPastCache] = useState(() => {
     try {
       const c = JSON.parse(localStorage.getItem("homePastStats") || "null");
-      return c && c.v === 2 && c.liveStart === liveStartStr && c.calYear === new Date().getFullYear() ? c : null;
+      return c && c.v === 3 && c.company === homeCompany && c.liveStart === liveStartStr && c.calYear === new Date().getFullYear() ? c : null;
     } catch { return null; }
   });
   useEffect(() => {
     markBootBase(pcBootStore, "homeMounted");
     // 오늘 이미 계산해 둔 지난 기간 합계가 있으면 다시 받지 않는다(첫 진입 로딩 화면에 "준비 완료" 알림)
-    if (pastCache) { markBootBase(pcBootStore, "home"); return undefined; }
     let alive = true;
     // 합계만 계산하고 화면 데이터에는 합치지 않는다 — 수천 건을 화면 데이터에 합치면 그 순간 전체 화면이 다시 그려져 버벅인다
-    const y = new Date().getFullYear();
-    const end = pcPrevDay(liveStartStr);
-    Promise.all(["orders", "dispatch"].map((col) => getDocs(query(collection(db, col), where("상차일", ">=", `${y}-01-01`), where("상차일", "<=", end)))))
-      .then((snaps) => {
-        const rows = snaps.flatMap((sn) => sn.docs.map((d) => d.data() || {})).filter((row) =>
-          row.source !== "transport_transmit" && row.배차상태 !== "배차취소" && !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태));
-        const c = { ...sumStats(rows), v: 2, liveStart: liveStartStr, calYear: y, savedAt: Date.now() }; // year=년 매출 합계, calYear=연도
-        try { localStorage.setItem("homePastStats", JSON.stringify(c)); } catch { /* 용량 초과 등은 무시 */ }
-        if (alive) setPastCache(c);
-      })
-      .catch((e) => console.warn("홈 통계(지난 기간) 불러오기 실패:", e))
-      .finally(() => markBootBase(pcBootStore, "home")); // 실패해도 로딩 화면은 넘어간다(다음 새로고침에 다시 시도)
+    const recompute = () => {
+      const y = new Date().getFullYear();
+      const end = pcPrevDay(liveStartStr);
+      return Promise.all(["orders", "dispatch"].map((col) => getDocs(query(collection(db, col), where("상차일", ">=", `${y}-01-01`), where("상차일", "<=", end)))))
+        .then((snaps) => {
+          const rows = snaps.flatMap((sn) => sn.docs.map((d) => d.data() || {})).filter((row) =>
+            (row.companyName || DEFAULT_COMPANY) === homeCompany &&
+            row.source !== "transport_transmit" && row.배차상태 !== "배차취소" && !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태));
+          const c = { ...sumStats(rows), v: 3, company: homeCompany, liveStart: liveStartStr, calYear: y, savedAt: Date.now() };
+          try { localStorage.setItem("homePastStats", JSON.stringify(c)); } catch { /* 용량 초과 등은 무시 */ }
+          if (alive) setPastCache(c);
+        })
+        .catch((e) => console.warn("홈 통계(지난 기간) 불러오기 실패:", e));
+    };
+    if (pastCache) {
+      markBootBase(pcBootStore, "home");
+      // 저장값이 있어도 그 뒤에 초기화·가져오기가 있었으면 뒤에서 조용히 다시 계산한다
+      getDoc(doc(db, "systemConfig", "dataVersion")).then((snap) => {
+        const v = snap.data()?.[homeCompany];
+        const ms = v?.toMillis ? v.toMillis() : 0;
+        if (ms > (pastCache.savedAt || 0)) recompute();
+      }).catch(() => {});
+    } else {
+      recompute().finally(() => markBootBase(pcBootStore, "home")); // 실패해도 로딩 화면은 넘어간다(다음 새로고침에 다시 시도)
+    }
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -643,7 +684,7 @@ React.useEffect(() => {
     const map = {};
     dispatchData.forEach(d => {
       const dDate = getLoadDate(d);
-      if (!dDate || dDate.getFullYear() !== 2026 || dDate.getMonth() !== 0) return;
+      if (!dDate || dDate.getFullYear() !== currentYear || dDate.getMonth() !== currentMonth) return; // ⭐ 버그수정: 2026년 1월로 고정돼 있었다
       const name = d?.거래처명;
       if (!name || /\d{2}년\d{1,2}월/.test(name) || name.includes("후레쉬물류")) return;
       map[name] = (map[name] || 0) + Number(d?.청구운임 || 0);
@@ -724,7 +765,7 @@ React.useEffect(() => {
   }, [user?.uid]);
 
   return (
-    <div className="bg-gray-50 min-h-screen p-5 space-y-4">
+    <div className="bg-[#F4F6FA] min-h-screen px-7 py-6 space-y-6">
 
       {/* 결재 알림 배너 (큐 방식 - 여러 알림 순차 표시) */}
       {approvalNotifQueue.length > 0 && (() => {
@@ -751,85 +792,149 @@ React.useEffect(() => {
         );
       })()}
 
-      {/* ===== KPI 4개 ===== */}
-      <div className="grid grid-cols-4 gap-4">
-        <KpiCard title="오늘 접수" value={todayStatsFixed.count} unit="건" color="blue" />
-        <KpiCard title="미배차" value={pending} unit="건" color="red" />
-        <KpiCard title="오늘 매출" value={todayStatsFixed.revenue} unit="원" color="green" />
-        <KpiCard title="오늘 수익" value={todayStatsFixed.profit} unit="원" color="orange" />
-      </div>
-
-      {/* ===== 차트 + Sales Score ===== */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="flex justify-between items-center px-5 py-3 bg-[#1B2B4B]">
-          <h3 className="text-[14px] font-bold text-white">매출 현황</h3>
-          <button onClick={() => setPeriod(p => p === "7d" ? "none" : "7d")}
-            className="text-[12px] px-2.5 py-1 rounded-lg bg-white/20 text-white border border-white/30 hover:bg-white/30 transition">
-            최근 7일
-          </button>
-        </div>
-        <div className="p-4 grid grid-cols-3 gap-4">
-          <div className="col-span-2">
-            <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={salesTrend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#1B2B4B" stopOpacity={0.3} />
-                    <stop offset="100%" stopColor="#1B2B4B" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} dy={4} />
-                <YAxis hide />
-                <Tooltip formatter={v => `${Number(v).toLocaleString()}원`} contentStyle={{ borderRadius: 10, border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.12)", fontSize: 12 }} />
-                <Area type="natural" dataKey="value" stroke="#1B2B4B" strokeWidth={2.5} fill="url(#colorRev)" dot={false} activeDot={{ r: 6, fill: "#1B2B4B", stroke: "#fff", strokeWidth: 2 }} animationDuration={1000} />
-                {salesTrend.length === 7 && <ReferenceDot x={salesTrend[6].date} y={salesTrend[6].value} r={5} fill="#1B2B4B" stroke="#fff" strokeWidth={2} />}
-              </AreaChart>
-            </ResponsiveContainer>
-            <div className="mt-2 pt-2 border-t border-gray-100 flex items-end justify-between">
-              <div>
-                <div className="text-[11px] text-gray-500 font-medium">Total Revenue</div>
-                <div className="text-[16px] font-bold text-gray-900">{yearRevenue.toLocaleString()}원</div>
+      {/* ===== 인사 카드 — 오늘 요약 + 올해 실적 ===== */}
+      {(() => {
+        const myName = users.find((u) => u.id === user?.uid)?.name || user?.displayName || (user?.email || "").split("@")[0] || "";
+        const d = new Date();
+        const dateText = `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${["일", "월", "화", "수", "목", "금", "토"][d.getDay()]}요일`;
+        const hour = d.getHours();
+        const hello = hour < 12 ? "좋은 아침입니다" : hour < 18 ? "오늘도 수고 많으십니다" : "오늘 하루 고생하셨습니다";
+        return (
+          <section className="relative overflow-hidden rounded-[24px] text-white shadow-[0_18px_40px_rgba(15,26,48,0.28)]"
+            style={{ background: "linear-gradient(120deg, #0F1A30 0%, #1B2B4B 50%, #2D4C82 100%)" }}>
+            <div className="absolute -right-24 -top-28 w-96 h-96 rounded-full" style={{ background: "radial-gradient(circle, rgba(147,197,253,0.22) 0%, rgba(147,197,253,0) 70%)" }} />
+            <div className="absolute inset-0" style={{ backgroundImage: "linear-gradient(115deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0) 60%)" }} />
+            <div className="relative flex flex-wrap items-end gap-6 px-8 py-7">
+              <div className="min-w-0 flex-1">
+                <div className="text-[11px] font-extrabold tracking-[0.25em] text-blue-200/75">KP-FLOW DASHBOARD</div>
+                <div className="mt-2 text-[14px] font-bold text-blue-100/85">{dateText}</div>
+                <h1 className="mt-1 text-[30px] font-black tracking-tight leading-tight">{myName ? `${myName}님, ${hello}` : hello}</h1>
+                <p className="mt-2 text-[15px] font-medium text-blue-50/90">
+                  오늘 접수 <b className="text-white">{todayStatsFixed.count.toLocaleString()}건</b> · 미배차 <b className={pending > 0 ? "text-amber-300" : "text-white"}>{Number(pending || 0).toLocaleString()}건</b> · 오늘 매출 <b className="text-white">{todayStatsFixed.revenue.toLocaleString()}원</b>
+                </p>
               </div>
-              <div className={`text-[13px] font-semibold ${delta >= 0 ? "text-blue-600" : "text-red-500"}`}>
-                {delta >= 0 ? "+" : ""}{Math.abs(delta).toLocaleString()}원
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  ["올해 매출", yearRevenue, "원"],
+                  ["이번 달 매출", monthRevenue, "원"],
+                  ["누적 오더", orderCountFrom2026, "건"],
+                ].map(([k, v, u]) => (
+                  <div key={k} className="rounded-2xl bg-white/[0.08] ring-1 ring-white/15 backdrop-blur-sm px-5 py-3.5 min-w-[170px]">
+                    <div className="text-[12.5px] font-bold text-blue-100/80">{k}</div>
+                    <div className="mt-1 text-[21px] font-black tabular-nums tracking-tight whitespace-nowrap"><CountUp value={v} /><span className="text-[13px] font-bold text-blue-100/70 ml-1">{u}</span></div>
+                  </div>
+                ))}
               </div>
             </div>
-          </div>
-          <div className="border-l border-gray-100 pl-4 flex flex-col justify-center gap-4">
-            {[
-              { label: "년 매출", value: yearRevenue, unit: "원" },
-              { label: "당월 매출", value: monthRevenue, unit: "원" },
-              { label: "누적 오더", value: orderCountFrom2026, unit: "건" },
-              { label: "등록 거래처", value: new Set(dispatchData.map(d => d?.거래처명).filter(Boolean)).size, unit: "곳" },
-            ].map((item, i) => (
-              <div key={i}>
-                <div className="text-[20px] font-extrabold text-[#1B2B4B] leading-tight">
-                  <CountUp value={item.value} />
-                  <span className="text-[12px] font-semibold text-gray-500 ml-1">{item.unit}</span>
-                </div>
-                <div className="text-[11px] font-medium text-gray-500">{item.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
+          </section>
+        );
+      })()}
+
+      {/* ===== KPI 4개 ===== */}
+      <div className="grid grid-cols-4 gap-5">
+        <KpiCard title="오늘 접수" value={todayStatsFixed.count} unit="건" color="blue" sub="오늘 상차 기준" />
+        <KpiCard title="미배차" value={pending} unit="건" color="red" sub={pending > 0 ? "배차가 필요한 오더가 있습니다" : "모두 배차 완료"} />
+        <KpiCard title="오늘 매출" value={todayStatsFixed.revenue} unit="원" color="green" sub="청구운임 합계" />
+        <KpiCard title="오늘 수익" value={todayStatsFixed.profit} unit="원" color="orange"
+          sub={todayStatsFixed.revenue ? `매익률 ${Math.round((todayStatsFixed.profit / todayStatsFixed.revenue) * 1000) / 10}%` : "매익률 -"} />
       </div>
 
-      {/* ===== 하단: 미배차 현황 + Top5 ===== */}
-      <div className="grid grid-cols-3 gap-4">
-        {/* 미배차 현황 ticker — col-span-2 */}
+      {/* ===== 매출 흐름 + Top 5 ===== */}
+      <div className="grid grid-cols-3 gap-5">
         <div className="col-span-2">
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          {/* 제목 + 컬럼명을 하나로 이어지는 네이비 영역으로 표시 (예전엔 사이에 여백이
-              있는 두 개의 네이비 바처럼 보였다) */}
-          <div className="bg-[#1B2B4B] px-5 pt-3 pb-0">
-            <h3 className="text-[14px] font-bold text-white pb-2.5">{`미배차 현황 (${allPendingOrders.length}건)`}</h3>
+          <SectionCard eyebrow="REVENUE" title="최근 7일 매출" desc="상차일 기준 청구운임"
+            action={
+              <div className="text-right">
+                <div className="text-[12.5px] font-bold text-gray-500">7일 합계</div>
+                <div className="text-[22px] font-black text-[#0F1A30] tabular-nums">{salesTrend.reduce((a, x) => a + x.value, 0).toLocaleString()}<span className="text-[13px] text-gray-400 ml-1">원</span></div>
+              </div>
+            }>
+            <ResponsiveContainer width="100%" height={240}>
+              <AreaChart data={salesTrend} margin={{ top: 10, right: 12, left: 12, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2D4C82" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="#2D4C82" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12.5, fill: "#64748b", fontWeight: 600 }} dy={6} />
+                <YAxis hide />
+                <Tooltip formatter={v => `${Number(v).toLocaleString()}원`} contentStyle={{ borderRadius: 12, border: "none", boxShadow: "0 8px 24px rgba(15,26,48,0.16)", fontSize: 13, fontWeight: 700 }} />
+                <Area type="monotone" dataKey="value" stroke="#1B2B4B" strokeWidth={3} fill="url(#colorRev)" dot={{ r: 3.5, fill: "#fff", stroke: "#1B2B4B", strokeWidth: 2 }} activeDot={{ r: 7, fill: "#1B2B4B", stroke: "#fff", strokeWidth: 3 }} animationDuration={900} />
+                {salesTrend.length === 7 && <ReferenceDot x={salesTrend[6].date} y={salesTrend[6].value} r={6} fill="#1B2B4B" stroke="#fff" strokeWidth={3} />}
+              </AreaChart>
+            </ResponsiveContainer>
+            <div className="mt-3 pt-4 border-t border-[#EEF1F6] grid grid-cols-3 gap-4">
+              {[
+                ["오늘", salesTrend[6]?.value || 0],
+                ["어제", salesTrend[5]?.value || 0],
+                ["7일 전 대비", delta, true],
+              ].map(([k, v, signed]) => (
+                <div key={k}>
+                  <div className="text-[12.5px] font-bold text-gray-500">{k}</div>
+                  <div className={`mt-0.5 text-[18px] font-black tabular-nums ${signed ? (v >= 0 ? "text-blue-600" : "text-red-500") : "text-[#0F1A30]"}`}>
+                    {signed && v > 0 ? "+" : ""}{Number(v).toLocaleString()}<span className="text-[12.5px] text-gray-400 ml-1">원</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+        </div>
+        {/* Top5 거래처 */}
+        <SectionCard eyebrow="TOP CLIENTS" title="이번 달 Top 5 거래처" desc={`${currentMonth + 1}월 청구운임 기준`}>
+          {topClients.length === 0 ? (
+            <div className="text-[14px] text-gray-500 text-center py-16">이번 달 오더가 아직 없습니다</div>
+          ) : (
+            <div className="space-y-4 py-1">
+              {topClients.map((c, i) => {
+                const max = topClients[0]?.value || 1;
+                return (
+                  <div key={c.name} className="flex items-center gap-3">
+                    <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-[13px] font-black shrink-0 ${i === 0 ? "bg-[#1B2B4B] text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>{i + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[14.5px] font-bold text-[#0F1A30] truncate">{c.name}</span>
+                        <span className="text-[13.5px] font-black text-[#1B2B4B] shrink-0 ml-2 tabular-nums">{c.value >= 1000000 ? `${(c.value / 1000000).toFixed(1)}M` : c.value.toLocaleString()}원</span>
+                      </div>
+                      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(c.value / max) * 100}%`, backgroundColor: i === 0 ? "#1B2B4B" : i === 1 ? "#2d4470" : "#4a6296", opacity: 1 - i * 0.1 }} />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className="flex justify-between mt-5 pt-4 border-t border-[#EEF1F6]">
+            <span className="text-[13px] text-gray-500">1위: <b className="text-[#1B2B4B]">{top10Summary.topName}</b></span>
+            <span className="text-[13px] text-gray-500">합계: <b className="text-[#1B2B4B]">{(top10Summary.total / 1000000).toFixed(1)}M</b></span>
+          </div>
+        </SectionCard>
+      </div>
+
+      {/* ===== 미배차 현황(전체 너비) ===== */}
+      <div>
+        <div>
+        <div className={`${KP_HOME_CARD} overflow-hidden`}>
+          <div className="flex items-center gap-3 px-6 pt-5 pb-4 border-b border-[#EEF1F6]">
+            <div className="flex-1 min-w-0">
+              <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">PENDING</div>
+              <h3 className="mt-0.5 text-[18px] font-black text-[#0F1A30] tracking-tight">미배차 현황</h3>
+              <div className="text-[13px] text-gray-500 mt-0.5">아직 차량이 배정되지 않은 오더 · 두 번 클릭하면 상세 보기</div>
+            </div>
+            <span className={`px-3.5 py-1.5 rounded-xl text-[15px] font-black tabular-nums ${allPendingOrders.length ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"}`}>
+              {allPendingOrders.length ? `${allPendingOrders.length}건` : "모두 배차 완료"}
+            </span>
           </div>
           {allPendingOrders.length === 0 ? (
-            <div className="flex items-center justify-center h-[300px] text-[13px] text-gray-500">미배차 오더가 없습니다</div>
+            <div className="flex flex-col items-center justify-center h-[200px] text-[14px] text-gray-500 gap-2">
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="m8 12 3 3 5-6" /></svg>
+              미배차 오더가 없습니다
+            </div>
           ) : (
-            <div className="relative" style={{ minHeight: 300 }}>
+            <div className="relative">
               {/* column headers — 위 제목 영역과 같은 네이비, 바로 이어붙임 */}
-              <div className="grid divide-x divide-white/20 text-[12px] font-bold text-white bg-[#1B2B4B] w-full"
+              <div className="grid text-[12.5px] font-bold text-gray-600 bg-[#F5F8FD] border-b border-[#E3E8F0] w-full"
                 style={{ gridTemplateColumns: "1fr 1.3fr 1fr 1.3fr 1.6fr 1.4fr 1.4fr 1.2fr 1.2fr 0.7fr 1.2fr" }}>
                 {["상차일","상차시간","하차일","하차시간","거래처명","상차지명","하차지명","화물내용","차량종류","톤수","배차상태"].map(h => (
                   <span key={h} className="text-center px-2 py-2.5 whitespace-nowrap">{h}</span>
@@ -847,21 +952,21 @@ React.useEffect(() => {
                   return (
                     <div
                       key={i}
-                      className={`grid divide-x divide-gray-200 items-center border-b border-gray-100 hover:bg-blue-50/30 cursor-pointer transition w-full ${i % 2 ? "bg-gray-50/50" : "bg-white"}`}
+                      className="grid items-center border-b border-[#EEF1F6] hover:bg-[#F5F8FD] cursor-pointer transition w-full bg-white"
                       style={{ gridTemplateColumns: "1fr 1.3fr 1fr 1.3fr 1.6fr 1.4fr 1.4fr 1.2fr 1.2fr 0.7fr 1.2fr" }}
                       onDoubleClick={() => onOrderDoubleClick && onOrderDoubleClick(d)}
                     >
-                      <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate">{상차일}</span>
-                      <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate">{d?.상차시간 || ""}</span>
-                      <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate">{하차일}</span>
-                      <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate">{d?.하차시간 || ""}</span>
-                      <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate">{d?.거래처명 || ""}</span>
-                      <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate">{d?.상차지명 || ""}</span>
-                      <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate">{d?.하차지명 || ""}</span>
-                      <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate">{d?.화물내용 || ""}</span>
-                      <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate">{d?.차량종류 || ""}</span>
-                      <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate">{d?.차량톤수 || ""}</span>
-                      <span className="text-center px-2 py-2.5 text-[12px] font-bold text-[#1B2B4B] truncate whitespace-nowrap">{status}</span>
+                      <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{상차일}</span>
+                      <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.상차시간 || ""}</span>
+                      <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{하차일}</span>
+                      <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.하차시간 || ""}</span>
+                      <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.거래처명 || ""}</span>
+                      <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.상차지명 || ""}</span>
+                      <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.하차지명 || ""}</span>
+                      <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.화물내용 || ""}</span>
+                      <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.차량종류 || ""}</span>
+                      <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.차량톤수 || ""}</span>
+                      <span className="text-center px-2 py-3 whitespace-nowrap"><span className="inline-block px-2.5 py-0.5 rounded-full text-[12px] font-bold bg-red-50 text-red-600">{status}</span></span>
                     </div>
                   );
                 })}
@@ -894,42 +999,16 @@ React.useEffect(() => {
         </div>
         </div>
 
-        {/* Top5 거래처 */}
-        <SectionCard title="Top 5 거래처">
-          {topClients.length === 0 ? (
-            <div className="text-[13px] text-gray-500 text-center py-8">데이터 없음</div>
-          ) : (
-            <div className="space-y-3 py-1">
-              {topClients.map((c, i) => {
-                const max = topClients[0]?.value || 1;
-                return (
-                  <div key={c.name} className="flex items-center gap-3">
-                    <span className="text-[12px] font-bold text-gray-400 w-4 shrink-0">{i + 1}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[13px] font-semibold text-gray-700 truncate">{c.name}</span>
-                        <span className="text-[12px] font-bold text-[#1B2B4B] shrink-0 ml-2">{c.value >= 1000000 ? `${(c.value / 1000000).toFixed(1)}M` : c.value.toLocaleString()}원</span>
-                      </div>
-                      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(c.value / max) * 100}%`, backgroundColor: i === 0 ? "#1B2B4B" : i === 1 ? "#2d4470" : "#4a6296", opacity: 1 - i * 0.1 }} />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          <div className="flex justify-between mt-3 pt-2 border-t border-gray-100">
-            <span className="text-[11px] text-gray-500">1위: <b className="text-[#1B2B4B]">{top10Summary.topName}</b></span>
-            <span className="text-[11px] text-gray-500">합계: <b className="text-[#1B2B4B]">{(top10Summary.total / 1000000).toFixed(1)}M</b></span>
-          </div>
-        </SectionCard>
       </div>
 
       {/* ===== 통합 게시판 ===== */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className={`${KP_HOME_CARD} overflow-hidden`}>
+        <div className="px-6 pt-5">
+          <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">BOARD</div>
+          <h3 className="mt-0.5 text-[18px] font-black text-[#0F1A30] tracking-tight">사내 게시판</h3>
+        </div>
         {/* 헤더: 탭 + 등록 버튼 */}
-        <div className="flex items-center border-b border-gray-100 px-4">
+        <div className="flex items-center border-b border-[#EEF1F6] px-4 mt-2">
           <div className="flex gap-0">
             {(() => {
               const pendingApprovalCount = schedules.filter(s => (s.approvers || []).some(a => a.uid === user?.uid && (!a.status || a.status === "pending"))).length;
@@ -944,7 +1023,7 @@ React.useEffect(() => {
                   <button
                     key={key}
                     onClick={() => setBoardTab(key)}
-                    className={`relative px-5 py-3.5 text-[13px] font-semibold transition border-b-2 ${
+                    className={`relative px-5 py-3.5 text-[14.5px] font-bold transition border-b-2 ${
                       isActive
                         ? "text-[#1B2B4B] border-[#1B2B4B]"
                         : "text-gray-500 border-transparent hover:text-gray-600"
@@ -974,7 +1053,7 @@ React.useEffect(() => {
         </div>
 
         {/* 탭 콘텐츠 */}
-        <div className="p-4">
+        <div className="p-5">
           {/* 공지사항 탭 */}
           {boardTab === "공지사항" && (
             notices.length === 0 ? (

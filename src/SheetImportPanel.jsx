@@ -325,6 +325,8 @@ export default function SheetImportPanel() {
       }
       const result = { count: done, skippedDup: checked.rows.filter((r) => r.__dup).length, errors: checked.rows.filter((r) => r.__problems.length).length, registered };
       await setDoc(doc(db, "importBatches", batchId), { status: "done", ...result }, { merge: true });
+      // 홈 화면 합계를 다시 계산하라는 표시
+      await setDoc(doc(db, "systemConfig", "dataVersion"), { [company]: serverTimestamp() }, { merge: true }).catch(() => {});
       setProgress({ pct: 100, step: "완료", done: true, result });
     } catch (e) {
       await setDoc(doc(db, "importBatches", batchId), { status: "error", error: String(e?.message || e) }, { merge: true }).catch(() => {});

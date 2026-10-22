@@ -3623,6 +3623,7 @@ async function companyResetHandler(req, res) {
           await getAuth().updateUser(uid, { disabled: false }).then(() => { restoredAccounts += 1; }).catch(() => {});
         }
         await setBulkMode(b.company, false); bulkCompany = null;
+        await bumpDataVersion(b.company);
         await ref.set({ status: "restored", restoredAt: FieldValue.serverTimestamp(), restoredBy: me.email || me.uid }, { merge: true });
         await db.collection("resetLogs").add({ company: b.company, by: me.email || me.uid, at: FieldValue.serverTimestamp(), backupId: ref.id, action: "restore", restoredDocs, restoredFiles, restoredAccounts });
         console.log(`♻️ 운송사 복원: ${b.company} — 문서 ${restoredDocs}, 파일 ${restoredFiles}, 계정 ${restoredAccounts} (by ${me.email})`);
@@ -3732,6 +3733,7 @@ async function companyResetHandler(req, res) {
             }
           }
           await setBulkMode(company, false); bulkCompany = null;
+          await bumpDataVersion(company);
           await backupRef.set({ phase: "done", deletedFiles: savedFileObjs.length, disabledAccounts }, { merge: true });
           await db.collection("resetLogs").add({
             company, by: me.email || me.uid, at: FieldValue.serverTimestamp(), deleteAccounts: !!b.deleteAccounts, backupId: jobId,
@@ -3822,6 +3824,10 @@ async function isBulkModeFor(company) {
   if (!v || (v.until?.toMillis?.() || 0) < Date.now()) return false;
   return (v.companies || []).includes(company || "돌캐");
 }
+// ⭐ 홈 화면 합계(PC에 하루 저장)를 다시 계산하라는 표시 — 초기화·복원·가져오기 취소가 끝나면 남긴다
+function bumpDataVersion(company) {
+  return db.collection("systemConfig").doc("dataVersion").set({ [company || "돌캐"]: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
+}
 async function setBulkMode(company, on) {
   const ref = db.collection("adminSecrets").doc("bulkMode");
   await ref.set({
@@ -3904,6 +3910,7 @@ exports.sheetImport = functions
         } finally {
           await setBulkMode(b.companyName, false);
         }
+        await bumpDataVersion(b.companyName);
         await bref.set({ status: "canceled", canceledAt: FieldValue.serverTimestamp(), canceledBy: me.email || me.uid, removed }, { merge: true });
         res.json({ ok: true, removed });
         return;
