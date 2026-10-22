@@ -118,15 +118,15 @@ export default function AdminShell({
         <div className="max-w-[1480px] mx-auto">
           {!hideHero && (
             <section
-              className="relative overflow-hidden rounded-[26px] px-8 py-7 text-white mb-5 shadow-[0_14px_34px_rgba(27,43,75,0.25)]"
+              className="relative overflow-hidden rounded-[26px] px-8 py-7 text-white mb-6 shadow-[0_14px_34px_rgba(27,43,75,0.25)]"
               style={{ background: "linear-gradient(120deg, #1B2B4B 0%, #233B66 55%, #2D4C82 100%)" }}
             >
               <div className="absolute -right-16 -top-20 w-72 h-72 rounded-full bg-white/[0.06]" />
               <div className="absolute right-40 -bottom-24 w-56 h-56 rounded-full bg-white/[0.05]" />
               <div className="relative">
-                <div className="text-[13px] font-semibold text-blue-100/75">{dateLabel()}</div>
-                <h1 className="mt-1.5 text-[26px] font-black tracking-tight">{heroTitle}</h1>
-                {heroSubtitle && <p className="mt-1.5 text-[14px] text-blue-100/80">{heroSubtitle}</p>}
+                <div className="text-[13.5px] font-bold text-blue-100/85">{dateLabel()}</div>
+                <h1 className="mt-1.5 text-[28px] font-black tracking-tight">{heroTitle}</h1>
+                {heroSubtitle && <p className="mt-2 text-[15px] font-medium text-blue-50/90">{heroSubtitle}</p>}
                 {heroActions.length > 0 && (
                   <div className="mt-5 flex flex-wrap gap-2">
                     {heroActions.map((a) => (
@@ -148,14 +148,16 @@ export default function AdminShell({
           )}
 
           {stats.length > 0 && (
-            <div className="grid gap-4 mb-5" style={{ gridTemplateColumns: `repeat(${Math.min(stats.length, 4)}, minmax(0, 1fr))` }}>
+            <div className="grid gap-5 mb-6" style={{ gridTemplateColumns: `repeat(${Math.min(stats.length, 4)}, minmax(0, 1fr))` }}>
               {stats.map((s) => (
-                <div key={s.label} className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_10px_rgba(16,24,40,0.04)] px-5 py-4">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${TONES[s.tone] || TONES.navy}`}>
-                    <ShellIcon name={s.icon} size={20} />
+                <div key={s.label} className="bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] px-6 py-5 flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${TONES[s.tone] || TONES.navy}`}>
+                    <ShellIcon name={s.icon} size={22} />
                   </div>
-                  <div className="mt-3 text-[12.5px] font-semibold text-gray-500">{s.label}</div>
-                  <div className="mt-0.5 text-[26px] font-black text-[#1B2B4B] tabular-nums leading-tight">{s.value}</div>
+                  <div className="min-w-0">
+                    <div className="text-[13.5px] font-bold text-gray-600">{s.label}</div>
+                    <div className="mt-0.5 text-[28px] font-black text-[#0F1A30] tabular-nums leading-tight truncate">{s.value}</div>
+                  </div>
                 </div>
               ))}
             </div>

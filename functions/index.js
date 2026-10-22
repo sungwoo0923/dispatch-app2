@@ -3248,7 +3248,28 @@ const crypto = require("crypto");
 const RESET_SECRET_DOC = db.collection("adminSecrets").doc("companyReset");
 const RESET_COMPANY_FIELDS = ["companyName", "company", "회사명", "운송사명", "transportCompany", "companyKey"];
 const RESET_UID_FIELDS = ["uid", "userId", "ownerUid", "createdByUid", "writerUid", "authorUid", "driverUid"];
-const RESET_SKIP_COLLECTIONS = new Set(["adminSecrets", "resetLogs", "resetBackups"]);
+const RESET_SKIP_COLLECTIONS = new Set(["adminSecrets", "resetLogs", "resetBackups", "resetJobs"]);
+// ⭐ 진행률 — 화면이 resetJobs/{작업ID}를 실시간으로 보고 "몇 % 진행 중"을 띄운다(너무 자주 쓰지 않게 0.8초 간격)
+function makeResetProgress(jobId, base) {
+  const id = String(jobId || "").replace(/[^\w-]/g, "").slice(0, 60);
+  const ref = id ? db.collection("resetJobs").doc(id) : null;
+  let last = 0;
+  return {
+    async set(pct, step, force = false) {
+      if (!ref) return;
+      const now = Date.now();
+      if (!force && now - last < 800) return;
+      last = now;
+      await ref.set({ ...base, pct: Math.max(0, Math.min(99, Math.round(pct))), step, status: "running", updatedAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
+    },
+    async done(result) {
+      if (ref) await ref.set({ ...base, pct: 100, step: "완료", status: "done", result, updatedAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
+    },
+    async fail(error) {
+      if (ref) await ref.set({ ...base, status: "error", error, updatedAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
+    },
+  };
+}
 const RESET_KEEP_DAYS = 7; // ⭐ 초기화한 데이터를 이 기간 동안 보관 → 복원 가능
 // ⭐ 회사명이 비어 있는 예전 데이터는 프로그램이 "돌캐" 것으로 본다(화면의 companyName || "돌캐" 규칙).
 // 그래서 돌캐를 초기화할 때는 아래 컬렉션에서 회사 필드가 아예 없는 문서도 함께 지운다.
@@ -3321,7 +3342,7 @@ async function getCompanyMembers(company) {
 }
 
 // 지울 문서 찾기 — Map(path → DocumentReference) + 컬렉션별 개수
-async function collectCompanyDocs(company, { deleteAccounts }) {
+async function collectCompanyDocs(company, { deleteAccounts, onProgress }) {
   const { members, codes } = await getCompanyMembers(company);
   const uids = members.map((m) => m.uid);
   const found = new Map();
@@ -3337,8 +3358,10 @@ async function collectCompanyDocs(company, { deleteAccounts }) {
   };
   const chunks = (arr, n) => { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; };
   const cols = await db.listCollections();
-  for (const colRef of cols) {
+  for (let ci = 0; ci < cols.length; ci++) {
+    const colRef = cols[ci];
     const col = colRef.id;
+    if (onProgress) await onProgress(ci / cols.length, col);
     if (RESET_SKIP_COLLECTIONS.has(col) || keepCollections.has(col)) continue;
     const tasks = [];
     RESET_COMPANY_FIELDS.forEach((f) => tasks.push(colRef.where(f, "==", company).get()));
@@ -3397,7 +3420,7 @@ function collectStoragePaths(value, out) {
 }
 
 // 지울 문서들을 하위 컬렉션까지 통째로 읽어 { 경로, 내용 } 목록과 첨부파일 경로를 만든다(보관·복원용)
-async function snapshotTree(found) {
+async function snapshotTree(found, onProgress) {
   const entries = [];
   const files = new Set();
   // ⭐ 문서마다 하위 컬렉션을 "한 건씩 차례로" 확인하면 오더가 수만 건인 회사는 9분 제한을 넘겨
@@ -3406,6 +3429,7 @@ async function snapshotTree(found) {
     if (depth > 4 || !refs.length) return;
     const next = [];
     for (let i = 0; i < refs.length; i += 50) {
+      if (depth === 0 && onProgress) await onProgress(i / refs.length);
       const lists = await Promise.all(refs.slice(i, i + 50).map((r) => r.listCollections().catch(() => [])));
       const subs = lists.flat();
       for (let k = 0; k < subs.length; k += 20) {
@@ -3454,6 +3478,7 @@ exports.companyReset = functions
     let body = req.body;
     if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
     body = body || {};
+    let prog = null;
     try {
       const me = await requireTotalMaster(req);
       const action = body.action;
@@ -3521,6 +3546,8 @@ exports.companyReset = functions
       }
 
       if (action === "restore") {
+        prog = makeResetProgress(body.jobId, { action: "restore", by: me.email || me.uid });
+        await prog.set(1, "비밀번호 확인 중", true);
         await verifyResetPassword(body.password);
         const ref = db.collection("resetBackups").doc(String(body.backupId || "x"));
         const snap = await ref.get();
@@ -3541,6 +3568,7 @@ exports.companyReset = functions
           const page = await q.get();
           if (page.empty) break;
           page.docs.forEach((d) => { const x = d.data(); writer.set(db.doc(x.path), x.data); restoredDocs += 1; });
+          await prog.set(3 + (restoredDocs / Math.max(1, b.docCount || restoredDocs)) * 80, `데이터 되돌리는 중 ${restoredDocs.toLocaleString()} / ${(b.docCount || 0).toLocaleString()}`);
           last = page.docs[page.docs.length - 1];
         }
         await writer.close();
@@ -3550,6 +3578,7 @@ exports.companyReset = functions
         const prefix = `resetBackups/${ref.id}/`;
         const [saved] = await bucket.getFiles({ prefix }).catch(() => [[]]);
         for (let i = 0; i < saved.length; i += 20) {
+          await prog.set(84 + (i / Math.max(1, saved.length)) * 12, `첨부파일 되돌리는 중 ${i.toLocaleString()} / ${saved.length.toLocaleString()}`);
           await Promise.all(saved.slice(i, i + 20).map((f) => f.copy(bucket.file(f.name.slice(prefix.length))).then(() => { restoredFiles += 1; }).catch(() => {})));
         }
         // 3) 사용 중지해둔 계정 다시 사용
@@ -3560,6 +3589,7 @@ exports.companyReset = functions
         await ref.set({ status: "restored", restoredAt: FieldValue.serverTimestamp(), restoredBy: me.email || me.uid }, { merge: true });
         await db.collection("resetLogs").add({ company: b.company, by: me.email || me.uid, at: FieldValue.serverTimestamp(), backupId: ref.id, action: "restore", restoredDocs, restoredFiles, restoredAccounts });
         console.log(`♻️ 운송사 복원: ${b.company} — 문서 ${restoredDocs}, 파일 ${restoredFiles}, 계정 ${restoredAccounts} (by ${me.email})`);
+        await prog.done({ ok: true, company: b.company, restoredDocs, restoredFiles, restoredAccounts });
         res.json({ ok: true, company: b.company, restoredDocs, restoredFiles, restoredAccounts });
         return;
       }
@@ -3576,9 +3606,14 @@ exports.companyReset = functions
       }
 
       if (action === "execute") {
+        prog = makeResetProgress(body.jobId, { action: "reset", company, by: me.email || me.uid });
+        await prog.set(1, "비밀번호 확인 중", true);
         await verifyResetPassword(body.password);
-        const { found, perCollection, members } = await collectCompanyDocs(company, { deleteAccounts });
-        const { entries, files } = await snapshotTree(found);
+        const { found, perCollection, members } = await collectCompanyDocs(company, {
+          deleteAccounts, onProgress: (r, col) => prog.set(2 + r * 28, `데이터 찾는 중 · ${col}`),
+        });
+        await prog.set(30, `첨부·하위 데이터 확인 중 (${found.size.toLocaleString()}건)`, true);
+        const { entries, files } = await snapshotTree(found, (r) => prog.set(30 + r * 10, `첨부·하위 데이터 확인 중 (${found.size.toLocaleString()}건)`));
         const bucket = resetBucket();
         // 1) 지우기 전에 보관함에 통째로 복사 — 하나라도 실패하면 아무것도 지우지 않고 멈춘다
         const backupRef = db.collection("resetBackups").doc();
@@ -3591,12 +3626,15 @@ exports.companyReset = functions
         const failures = [];
         const writer = db.bulkWriter();
         writer.onWriteError((err) => { if (err.failedAttempts < 3) return true; failures.push(err.documentRef.path); return false; });
-        entries.forEach((e, idx) => writer.set(backupRef.collection("docs").doc(String(idx).padStart(7, "0")), { path: e.path, data: e.data }));
+        let savedCount = 0;
+        entries.forEach((e, idx) => writer.set(backupRef.collection("docs").doc(String(idx).padStart(7, "0")), { path: e.path, data: e.data })
+          .then(() => { savedCount += 1; prog.set(40 + (savedCount / entries.length) * 20, `보관함에 복사 중 ${savedCount.toLocaleString()} / ${entries.length.toLocaleString()}`); }).catch(() => {}));
         await writer.close();
         const savedFiles = [];
         const fileFailures = [];
         const paths = [...files];
         for (let i = 0; i < paths.length; i += 20) {
+          await prog.set(60 + (i / Math.max(1, paths.length)) * 10, `첨부파일 보관 중 ${i.toLocaleString()} / ${paths.length.toLocaleString()}`);
           await Promise.all(paths.slice(i, i + 20).map((p) => bucket.file(p).copy(bucket.file(`resetBackups/${backupRef.id}/${p}`))
             .then(() => savedFiles.push(p))
             .catch((e) => { if (e?.code !== 404) fileFailures.push(p); })));
@@ -3604,7 +3642,9 @@ exports.companyReset = functions
         if (failures.length || fileFailures.length) {
           await purgeResetBackup(backupRef).catch(() => {});
           await backupRef.delete().catch(() => {});
-          res.status(500).json({ error: `보관함에 복사하지 못한 데이터가 있어 초기화를 중단했습니다(아무것도 지우지 않음). 문서 ${failures.length}건, 파일 ${fileFailures.length}개` });
+          const msg = `보관함에 복사하지 못한 데이터가 있어 초기화를 중단했습니다(아무것도 지우지 않음). 문서 ${failures.length}건, 파일 ${fileFailures.length}개`;
+          await prog.fail(msg);
+          res.status(500).json({ error: msg });
           return;
         }
         await backupRef.set({ status: "kept", fileCount: savedFiles.length }, { merge: true });
@@ -3612,17 +3652,21 @@ exports.companyReset = functions
         // 보관해둔 문서(하위 문서 포함)를 한꺼번에 지운다 — 문서가 많아도 빠르게
         const delWriter = db.bulkWriter();
         delWriter.onWriteError((err) => err.failedAttempts < 3);
-        entries.forEach((e) => delWriter.delete(db.doc(e.path)));
+        let delCount = 0;
+        entries.forEach((e) => delWriter.delete(db.doc(e.path))
+          .then(() => { delCount += 1; prog.set(70 + (delCount / entries.length) * 18, `데이터 삭제 중 ${delCount.toLocaleString()} / ${entries.length.toLocaleString()}`); }).catch(() => {}));
         await delWriter.close();
         const deletedDocs = found.size;
         // 3) 첨부파일 삭제(보관함에는 복사본이 있음)
         let deletedFiles = 0;
         for (let i = 0; i < savedFiles.length; i += 20) {
+          await prog.set(88 + (i / Math.max(1, savedFiles.length)) * 7, `첨부파일 삭제 중 ${i.toLocaleString()} / ${savedFiles.length.toLocaleString()}`);
           await Promise.all(savedFiles.slice(i, i + 20).map((p) => bucket.file(p).delete().then(() => { deletedFiles += 1; }).catch(() => {})));
         }
         // 4) 계정까지 지우는 경우 — 보관 기간 동안은 "사용 중지"만 해두고, 기간이 지나면 완전 삭제(복원하면 다시 사용)
         let disabledAccounts = 0;
         if (deleteAccounts) {
+          await prog.set(96, "로그인 계정 사용 중지 중", true);
           for (const m of members) {
             await getAuth().updateUser(m.uid, { disabled: true }).then(() => { disabledAccounts += 1; }).catch(() => {});
           }
@@ -3632,13 +3676,16 @@ exports.companyReset = functions
           deletedDocs, deletedFiles, disabledAccounts, perCollection, action: "reset",
         });
         console.log(`🧹 운송사 초기화: ${company} — 문서 ${deletedDocs}(보관 ${entries.length}), 파일 ${deletedFiles}, 계정 ${disabledAccounts} (by ${me.email})`);
-        res.json({ ok: true, backupId: backupRef.id, expiresAt: expiresAt.getTime(), deletedDocs, savedDocs: entries.length, deletedFiles, deletedAccounts: disabledAccounts, perCollection });
+        const result = { ok: true, backupId: backupRef.id, expiresAt: expiresAt.getTime(), deletedDocs, savedDocs: entries.length, deletedFiles, deletedAccounts: disabledAccounts };
+        await prog.done(result);
+        res.json({ ...result, perCollection });
         return;
       }
 
       res.status(400).json({ error: "알 수 없는 요청입니다." });
     } catch (e) {
       console.error("운송사 초기화 오류:", e);
+      if (prog) await prog.fail(e?.message || String(e));
       res.status(e.status || 500).json({ error: e?.message || String(e) });
     }
   });

@@ -233,6 +233,11 @@ service cloud.firestore {
     match /resetBackups/{document=**} {
       allow read, write: if false;
     }
+    // 초기화·복원 진행률 — 최고관리자 화면이 실시간으로 읽는다(쓰기는 서버만)
+    match /resetJobs/{id} {
+      allow read: if isTotalMasterUser();
+      allow write: if false;
+    }
     match /resetLogs/{id} {
       allow read: if isTotalMasterUser();
       allow write: if false;
@@ -250,7 +255,7 @@ service cloud.firestore {
     // ⭐ 규칙은 "하나라도 허용하면 허용"이라, 서버 전용 컬렉션(초기화 비밀번호·보관함·기록)은
     // 여기서 빼야 위의 "allow … if false"가 실제로 막힌다.
     match /{col}/{rest=**} {
-      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs']);
+      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs']);
     }
   }
 }
