@@ -3262,20 +3262,41 @@ function makeResetProgress(jobId, base) {
   const id = String(jobId || "").replace(/[^\w-]/g, "").slice(0, 60);
   const ref = id ? db.collection("resetJobs").doc(id) : null;
   let last = 0;
+  let beat = null;
   return {
+    id,
+    // ⭐ 같은 작업이 두 번 동시에 돌지 않게 "작업 중" 표시를 잡는다 — 다른 실행이 90초 안에 신호를 남겼으면 false
+    async claim() {
+      if (!ref) return true;
+      const ok = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const d = snap.exists ? snap.data() : {};
+        const hb = d.heartbeatAt?.toMillis?.() || 0;
+        if (d.status === "running" && Date.now() - hb < 90000) return false;
+        tx.set(ref, { ...base, status: "running", heartbeatAt: FieldValue.serverTimestamp(), attempts: FieldValue.increment(1), error: FieldValue.delete() }, { merge: true });
+        return true;
+      });
+      if (ok) beat = setInterval(() => { ref.set({ heartbeatAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {}); }, 20000);
+      return ok;
+    },
+    stop() { if (beat) clearInterval(beat); beat = null; },
     async set(pct, step, force = false) {
       if (!ref) return;
       const now = Date.now();
       if (!force && now - last < 800) return;
       last = now;
-      await ref.set({ ...base, pct: Math.max(0, Math.min(99, Math.round(pct))), step, status: "running", updatedAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
+      await ref.set({ ...base, pct: Math.max(0, Math.min(99, Math.round(pct))), step, status: "running", updatedAt: FieldValue.serverTimestamp(), heartbeatAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
     },
     async done(result) {
+      this.stop();
       if (ref) await ref.set({ ...base, pct: 100, step: "완료", status: "done", result, updatedAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
     },
-    async fail(error) {
-      if (ref) await ref.set({ ...base, status: "error", error, updatedAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
+    // fatal=true: 비밀번호 틀림처럼 사람이 고쳐야 하는 오류(자동 재시도 안 함)
+    async fail(error, fatal = false) {
+      this.stop();
+      if (ref) await ref.set({ ...base, status: "error", error, fatal, updatedAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
     },
+    async current() { return ref ? (await ref.get()).data() || null : null; },
   };
 }
 const RESET_KEEP_DAYS = 7; // ⭐ 초기화한 데이터를 이 기간 동안 보관 → 복원 가능
@@ -3431,29 +3452,34 @@ function collectStoragePaths(value, out) {
 async function snapshotTree(found, onProgress) {
   const entries = [];
   const files = new Set();
-  // ⭐ 문서마다 하위 컬렉션을 "한 건씩 차례로" 확인하면 오더가 수만 건인 회사는 9분 제한을 넘겨
-  // 브라우저에 "서버에 연결할 수 없음"만 떴다 — 50건씩 동시에 확인한다.
-  const walk = async (refs, depth) => {
-    if (depth > 4 || !refs.length) return;
-    const next = [];
-    for (let i = 0; i < refs.length; i += 50) {
-      if (depth === 0 && onProgress) await onProgress(i / refs.length);
-      const lists = await Promise.all(refs.slice(i, i + 50).map((r) => r.listCollections().catch(() => [])));
-      const subs = lists.flat();
-      for (let k = 0; k < subs.length; k += 20) {
-        const snaps = await Promise.all(subs.slice(k, k + 20).map((c) => c.get().catch(() => null)));
-        snaps.forEach((snap) => snap && snap.docs.forEach((d) => {
-          entries.push({ path: d.ref.path, data: d.data() });
-          collectStoragePaths(d.data(), files);
-          next.push(d.ref);
-        }));
-      }
-    }
-    await walk(next, depth + 1);
-  };
   const tops = [...found.values()];
   tops.forEach((d) => { entries.push({ path: d.ref.path, data: d.data() }); collectStoragePaths(d.data(), files); });
-  await walk(tops.map((d) => d.ref), 0);
+  const foundPaths = new Set(tops.map((d) => d.ref.path));
+  // ⭐ 2026-10-23 — 예전엔 문서마다 "하위 컬렉션 있나?"를 하나씩 물어봐서(2만 9천 건 → 9분 초과로 중단)
+  // 너무 느렸다. 하위 컬렉션 이름(첨부 attachments 등)을 먼저 알아낸 뒤, 이름별로 한 번에 조회해서
+  // 지울 문서 아래에 있는 것만 골라낸다.
+  const names = new Set(["attachments", "events", "logs"]);
+  const byCol = new Map();
+  tops.forEach((d) => { const c = d.ref.parent.path; if (!byCol.has(c)) byCol.set(c, []); if (byCol.get(c).length < 25) byCol.get(c).push(d.ref); });
+  for (const refs of byCol.values()) {
+    const lists = await Promise.all(refs.map((r) => r.listCollections().catch(() => [])));
+    lists.flat().forEach((c) => names.add(c.id));
+  }
+  const underFound = (ref) => {
+    for (let p = ref.parent.parent; p; p = p.parent.parent) { if (foundPaths.has(p.path)) return true; }
+    return false;
+  };
+  let k = 0;
+  for (const name of names) {
+    if (onProgress) await onProgress(k / names.size, name);
+    k += 1;
+    const light = await db.collectionGroup(name).select().get().catch(() => null);
+    const hits = (light?.docs || []).filter((d) => underFound(d.ref)).map((d) => d.ref);
+    for (let i = 0; i < hits.length; i += 300) {
+      const snaps = await db.getAll(...hits.slice(i, i + 300)).catch(() => []);
+      snaps.forEach((d) => { if (d.exists) { entries.push({ path: d.ref.path, data: d.data() }); collectStoragePaths(d.data(), files); } });
+    }
+  }
   return { entries, files };
 }
 
@@ -3475,9 +3501,7 @@ async function purgeResetBackup(ref) {
   await ref.set({ status: "purged", purgedAt: FieldValue.serverTimestamp() }, { merge: true });
 }
 
-exports.companyReset = functions
-  .runWith({ timeoutSeconds: 540, memory: "2GB" })
-  .https.onRequest(async (req, res) => {
+async function companyResetHandler(req, res) {
     res.set("Access-Control-Allow-Origin", "*");
     res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
     res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
@@ -3556,21 +3580,23 @@ exports.companyReset = functions
 
       if (action === "restore") {
         prog = makeResetProgress(body.jobId, { action: "restore", by: me.email || me.uid });
-        await prog.set(1, "비밀번호 확인 중", true);
+        const cur = await prog.current();
+        if (cur?.status === "done") { res.json(cur.result || { ok: true }); return; }
         await verifyResetPassword(body.password);
+        if (!(await prog.claim())) { res.json({ busy: true }); return; }
+        await prog.set(1, "복원 준비 중", true);
         const ref = db.collection("resetBackups").doc(String(body.backupId || "x"));
         const snap = await ref.get();
-        if (!snap.exists) { res.status(404).json({ error: "보관된 초기화 기록을 찾을 수 없습니다." }); return; }
+        if (!snap.exists) throw Object.assign(new Error("보관된 초기화 기록을 찾을 수 없습니다."), { status: 404 });
         const b = snap.data();
-        if (b.status !== "kept") {
-          res.status(400).json({ error: b.status === "restored" ? "이미 복원된 기록입니다." : "보관 기간이 지나 복원할 수 없습니다." });
-          return;
+        // "restoring"(복원하다 끊긴 상태)이면 처음부터 다시 덮어쓴다 — 같은 내용을 다시 써도 결과는 같다
+        if (b.status !== "kept" && b.status !== "restoring") {
+          throw Object.assign(new Error(b.status === "restored" ? "이미 복원된 기록입니다." : "보관 기간이 지나 복원할 수 없습니다."), { status: 400 });
         }
         await ref.set({ status: "restoring" }, { merge: true });
         await prog.set(2, "복원 준비 중(알림 일시 중지)", true);
         bulkCompany = b.company;
         await setBulkMode(b.company, true);
-        // 1) 문서 원래 자리로 되돌리기(같은 문서ID·내용 그대로)
         let restoredDocs = 0;
         const writer = db.bulkWriter();
         let last = null;
@@ -3580,11 +3606,10 @@ exports.companyReset = functions
           const page = await q.get();
           if (page.empty) break;
           page.docs.forEach((d) => { const x = d.data(); writer.set(db.doc(x.path), x.data); restoredDocs += 1; });
-          await prog.set(3 + (restoredDocs / Math.max(1, b.docCount || restoredDocs)) * 80, `데이터 되돌리는 중 ${restoredDocs.toLocaleString()} / ${(b.docCount || 0).toLocaleString()}`);
           last = page.docs[page.docs.length - 1];
+          await prog.set(3 + (restoredDocs / Math.max(1, b.docCount || restoredDocs)) * 80, `데이터 되돌리는 중 ${restoredDocs.toLocaleString()} / ${(b.docCount || 0).toLocaleString()}`);
         }
         await writer.close();
-        // 2) 첨부파일 되돌리기(다운로드 주소가 그대로 다시 열린다)
         const bucket = resetBucket();
         let restoredFiles = 0;
         const prefix = `resetBackups/${ref.id}/`;
@@ -3593,7 +3618,6 @@ exports.companyReset = functions
           await prog.set(84 + (i / Math.max(1, saved.length)) * 12, `첨부파일 되돌리는 중 ${i.toLocaleString()} / ${saved.length.toLocaleString()}`);
           await Promise.all(saved.slice(i, i + 20).map((f) => f.copy(bucket.file(f.name.slice(prefix.length))).then(() => { restoredFiles += 1; }).catch(() => {})));
         }
-        // 3) 사용 중지해둔 계정 다시 사용
         let restoredAccounts = 0;
         for (const uid of b.accountUids || []) {
           await getAuth().updateUser(uid, { disabled: false }).then(() => { restoredAccounts += 1; }).catch(() => {});
@@ -3602,8 +3626,9 @@ exports.companyReset = functions
         await ref.set({ status: "restored", restoredAt: FieldValue.serverTimestamp(), restoredBy: me.email || me.uid }, { merge: true });
         await db.collection("resetLogs").add({ company: b.company, by: me.email || me.uid, at: FieldValue.serverTimestamp(), backupId: ref.id, action: "restore", restoredDocs, restoredFiles, restoredAccounts });
         console.log(`♻️ 운송사 복원: ${b.company} — 문서 ${restoredDocs}, 파일 ${restoredFiles}, 계정 ${restoredAccounts} (by ${me.email})`);
-        await prog.done({ ok: true, company: b.company, restoredDocs, restoredFiles, restoredAccounts });
-        res.json({ ok: true, company: b.company, restoredDocs, restoredFiles, restoredAccounts });
+        const result = { ok: true, company: b.company, restoredDocs, restoredFiles, restoredAccounts };
+        await prog.done(result);
+        res.json(result);
         return;
       }
 
@@ -3619,83 +3644,108 @@ exports.companyReset = functions
       }
 
       if (action === "execute") {
-        prog = makeResetProgress(body.jobId, { action: "reset", company, by: me.email || me.uid });
-        await prog.set(1, "비밀번호 확인 중", true);
+        // ⭐ 이어하기 가능한 초기화 — 작업ID(jobId)가 곧 보관함 ID라, 중간에 끊겨 다시 불려도
+        //   보관이 끝난 단계는 건너뛰고 남은 삭제부터 이어서 한다. (화면이 멈춤을 감지하면 자동으로 다시 부른다)
+        const jobId = String(body.jobId || "").replace(/[^\w-]/g, "").slice(0, 60) || `job_${Date.now()}`;
+        prog = makeResetProgress(jobId, { action: "reset", company, by: me.email || me.uid });
+        const cur = await prog.current();
+        if (cur?.status === "done") { res.json(cur.result || { ok: true }); return; }
         await verifyResetPassword(body.password);
-        const { found, perCollection, members } = await collectCompanyDocs(company, {
-          deleteAccounts, onProgress: (r, col) => prog.set(2 + r * 28, `데이터 찾는 중 · ${col}`),
-        });
-        await prog.set(30, `첨부·하위 데이터 확인 중 (${found.size.toLocaleString()}건)`, true);
-        const { entries, files } = await snapshotTree(found, (r) => prog.set(30 + r * 10, `첨부·하위 데이터 확인 중 (${found.size.toLocaleString()}건)`));
+        if (!(await prog.claim())) { res.json({ busy: true }); return; }
+        await prog.set(1, "시작하는 중", true);
         const bucket = resetBucket();
-        // 1) 지우기 전에 보관함에 통째로 복사 — 하나라도 실패하면 아무것도 지우지 않고 멈춘다
-        const backupRef = db.collection("resetBackups").doc();
-        const expiresAt = new Date(Date.now() + RESET_KEEP_DAYS * 86400000);
-        await backupRef.set({
-          company, by: me.email || me.uid, at: FieldValue.serverTimestamp(), expiresAt, status: "saving",
-          deleteAccounts, perCollection, docCount: entries.length, fileCount: 0,
-          accountUids: deleteAccounts ? members.map((m) => m.uid) : [],
-        });
-        const failures = [];
-        const writer = db.bulkWriter();
-        writer.onWriteError((err) => { if (err.failedAttempts < 3) return true; failures.push(err.documentRef.path); return false; });
-        let savedCount = 0;
-        entries.forEach((e, idx) => writer.set(backupRef.collection("docs").doc(String(idx).padStart(7, "0")), { path: e.path, data: e.data })
-          .then(() => { savedCount += 1; prog.set(40 + (savedCount / entries.length) * 20, `보관함에 복사 중 ${savedCount.toLocaleString()} / ${entries.length.toLocaleString()}`); }).catch(() => {}));
-        await writer.close();
-        const savedFiles = [];
-        const fileFailures = [];
-        const paths = [...files];
-        for (let i = 0; i < paths.length; i += 20) {
-          await prog.set(60 + (i / Math.max(1, paths.length)) * 10, `첨부파일 보관 중 ${i.toLocaleString()} / ${paths.length.toLocaleString()}`);
-          await Promise.all(paths.slice(i, i + 20).map((p) => bucket.file(p).copy(bucket.file(`resetBackups/${backupRef.id}/${p}`))
-            .then(() => savedFiles.push(p))
-            .catch((e) => { if (e?.code !== 404) fileFailures.push(p); })));
-        }
-        if (failures.length || fileFailures.length) {
-          await purgeResetBackup(backupRef).catch(() => {});
-          await backupRef.delete().catch(() => {});
-          const msg = `보관함에 복사하지 못한 데이터가 있어 초기화를 중단했습니다(아무것도 지우지 않음). 문서 ${failures.length}건, 파일 ${fileFailures.length}개`;
-          await prog.fail(msg);
-          res.status(500).json({ error: msg });
-          return;
-        }
-        await backupRef.set({ status: "kept", fileCount: savedFiles.length }, { merge: true });
-        await prog.set(70, "삭제 준비 중(알림 일시 중지)", true);
-        bulkCompany = company;
-        await setBulkMode(company, true);
-        // 2) 문서(하위 컬렉션 포함) 삭제
-        // 보관해둔 문서(하위 문서 포함)를 한꺼번에 지운다 — 문서가 많아도 빠르게
-        const delWriter = db.bulkWriter();
-        delWriter.onWriteError((err) => err.failedAttempts < 3);
-        let delCount = 0;
-        entries.forEach((e) => delWriter.delete(db.doc(e.path))
-          .then(() => { delCount += 1; prog.set(70 + (delCount / entries.length) * 18, `데이터 삭제 중 ${delCount.toLocaleString()} / ${entries.length.toLocaleString()}`); }).catch(() => {}));
-        await delWriter.close();
-        const deletedDocs = found.size;
-        // 3) 첨부파일 삭제(보관함에는 복사본이 있음)
-        let deletedFiles = 0;
-        for (let i = 0; i < savedFiles.length; i += 20) {
-          await prog.set(88 + (i / Math.max(1, savedFiles.length)) * 7, `첨부파일 삭제 중 ${i.toLocaleString()} / ${savedFiles.length.toLocaleString()}`);
-          await Promise.all(savedFiles.slice(i, i + 20).map((p) => bucket.file(p).delete().then(() => { deletedFiles += 1; }).catch(() => {})));
-        }
-        // 4) 계정까지 지우는 경우 — 보관 기간 동안은 "사용 중지"만 해두고, 기간이 지나면 완전 삭제(복원하면 다시 사용)
-        let disabledAccounts = 0;
-        if (deleteAccounts) {
-          await prog.set(96, "로그인 계정 사용 중지 중", true);
-          for (const m of members) {
-            await getAuth().updateUser(m.uid, { disabled: true }).then(() => { disabledAccounts += 1; }).catch(() => {});
+        const backupRef = db.collection("resetBackups").doc(jobId);
+        let b = (await backupRef.get()).data() || null;
+
+        // ── 1단계: 보관(아직 아무것도 지우지 않은 단계) — 끊겼으면 처음부터 다시 보관 ──
+        if (!b || b.status === "saving") {
+          if (b) {
+            await prog.set(2, "끊긴 보관 작업 정리 중", true);
+            await db.recursiveDelete(backupRef.collection("docs")).catch(() => {});
+            await bucket.deleteFiles({ prefix: `resetBackups/${jobId}/` }).catch(() => {});
           }
+          const { found, perCollection, members } = await collectCompanyDocs(company, {
+            deleteAccounts, onProgress: (r, col) => prog.set(3 + r * 27, `데이터 찾는 중 · ${col}`),
+          });
+          await prog.set(30, `첨부·하위 데이터 확인 중 (${found.size.toLocaleString()}건)`, true);
+          const { entries, files } = await snapshotTree(found, (r, name) => prog.set(30 + r * 8, `첨부·하위 데이터 확인 중 · ${name}`));
+          const expiresAt = new Date(Date.now() + RESET_KEEP_DAYS * 86400000);
+          await backupRef.set({
+            company, by: me.email || me.uid, at: FieldValue.serverTimestamp(), expiresAt, status: "saving", phase: "backup",
+            deleteAccounts, perCollection, topCount: found.size, docCount: entries.length, fileCount: 0,
+            accountUids: deleteAccounts ? members.map((m) => m.uid) : [],
+          });
+          const failures = [];
+          const writer = db.bulkWriter();
+          writer.onWriteError((err) => { if (err.failedAttempts < 5) return true; failures.push(err.documentRef.path); return false; });
+          let savedCount = 0;
+          entries.forEach((e, idx) => writer.set(backupRef.collection("docs").doc(String(idx).padStart(7, "0")), { path: e.path, data: e.data })
+            .then(() => { savedCount += 1; prog.set(38 + (savedCount / entries.length) * 22, `보관함에 복사 중 ${savedCount.toLocaleString()} / ${entries.length.toLocaleString()}`); }).catch(() => {}));
+          await writer.close();
+          const paths = [...files];
+          let savedFiles = 0;
+          const fileFailures = [];
+          for (let i = 0; i < paths.length; i += 20) {
+            await prog.set(60 + (i / Math.max(1, paths.length)) * 10, `첨부파일 보관 중 ${i.toLocaleString()} / ${paths.length.toLocaleString()}`);
+            await Promise.all(paths.slice(i, i + 20).map((p) => bucket.file(p).copy(bucket.file(`resetBackups/${jobId}/${p}`))
+              .then(() => { savedFiles += 1; })
+              .catch((e) => { if (e?.code !== 404) fileFailures.push(p); })));
+          }
+          if (failures.length || fileFailures.length) {
+            // 일시적인 오류일 수 있어 "saving" 그대로 두고 실패로 알린다 → 화면이 자동 재시도하면 보관부터 다시
+            throw new Error(`보관함 복사 중 일부 실패(문서 ${failures.length}건, 파일 ${fileFailures.length}개) — 아무것도 지우지 않았습니다. 자동으로 다시 시도합니다.`);
+          }
+          await backupRef.set({ status: "kept", phase: "delete", fileCount: savedFiles }, { merge: true });
+          b = (await backupRef.get()).data();
         }
-        await db.collection("resetLogs").add({
-          company, by: me.email || me.uid, at: FieldValue.serverTimestamp(), deleteAccounts, backupId: backupRef.id,
-          deletedDocs, deletedFiles, disabledAccounts, perCollection, action: "reset",
-        });
-        console.log(`🧹 운송사 초기화: ${company} — 문서 ${deletedDocs}(보관 ${entries.length}), 파일 ${deletedFiles}, 계정 ${disabledAccounts} (by ${me.email})`);
-        await setBulkMode(company, false); bulkCompany = null;
-        const result = { ok: true, backupId: backupRef.id, expiresAt: expiresAt.getTime(), deletedDocs, savedDocs: entries.length, deletedFiles, deletedAccounts: disabledAccounts };
+
+        // ── 2단계: 삭제(보관함 목록 기준이라 끊겼다 다시 해도 빠짐없이 지운다) ──
+        if (b.phase !== "done") {
+          await prog.set(70, "삭제 준비 중(알림 일시 중지)", true);
+          bulkCompany = company;
+          await setBulkMode(company, true);
+          let delCount = 0;
+          let last = null;
+          const delWriter = db.bulkWriter();
+          delWriter.onWriteError((err) => err.failedAttempts < 5);
+          for (;;) {
+            let q = backupRef.collection("docs").orderBy("__name__").select("path").limit(1000);
+            if (last) q = q.startAfter(last);
+            const page = await q.get();
+            if (page.empty) break;
+            page.docs.forEach((d) => { delWriter.delete(db.doc(d.get("path"))); delCount += 1; });
+            last = page.docs[page.docs.length - 1];
+            await prog.set(70 + (delCount / Math.max(1, b.docCount || delCount)) * 18, `데이터 삭제 중 ${delCount.toLocaleString()} / ${(b.docCount || 0).toLocaleString()}`);
+          }
+          await delWriter.close();
+          const prefix = `resetBackups/${jobId}/`;
+          const [savedFileObjs] = await bucket.getFiles({ prefix }).catch(() => [[]]);
+          for (let i = 0; i < savedFileObjs.length; i += 20) {
+            await prog.set(88 + (i / Math.max(1, savedFileObjs.length)) * 7, `첨부파일 삭제 중 ${i.toLocaleString()} / ${savedFileObjs.length.toLocaleString()}`);
+            await Promise.all(savedFileObjs.slice(i, i + 20).map((f) => bucket.file(f.name.slice(prefix.length)).delete().catch(() => {})));
+          }
+          let disabledAccounts = 0;
+          if (b.deleteAccounts) {
+            await prog.set(96, "로그인 계정 사용 중지 중", true);
+            for (const uid of b.accountUids || []) {
+              await getAuth().updateUser(uid, { disabled: true }).then(() => { disabledAccounts += 1; }).catch(() => {});
+            }
+          }
+          await setBulkMode(company, false); bulkCompany = null;
+          await backupRef.set({ phase: "done", deletedFiles: savedFileObjs.length, disabledAccounts }, { merge: true });
+          await db.collection("resetLogs").add({
+            company, by: me.email || me.uid, at: FieldValue.serverTimestamp(), deleteAccounts: !!b.deleteAccounts, backupId: jobId,
+            deletedDocs: b.topCount || 0, savedDocs: b.docCount || 0, deletedFiles: savedFileObjs.length, disabledAccounts, perCollection: b.perCollection || {}, action: "reset",
+          });
+          console.log(`🧹 운송사 초기화: ${company} — 문서 ${b.topCount}(보관 ${b.docCount}), 파일 ${savedFileObjs.length}, 계정 ${disabledAccounts} (by ${me.email})`);
+          b = (await backupRef.get()).data();
+        }
+        const result = {
+          ok: true, backupId: jobId, expiresAt: b.expiresAt?.toMillis?.() || null, deletedDocs: b.topCount || 0, savedDocs: b.docCount || 0,
+          deletedFiles: b.deletedFiles || 0, deletedAccounts: b.disabledAccounts || 0,
+        };
         await prog.done(result);
-        res.json({ ...result, perCollection });
+        res.json({ ...result, perCollection: b.perCollection || {} });
         return;
       }
 
@@ -3703,10 +3753,20 @@ exports.companyReset = functions
     } catch (e) {
       console.error("운송사 초기화 오류:", e);
       if (bulkCompany) await setBulkMode(bulkCompany, false);
-      if (prog) await prog.fail(e?.message || String(e));
+      if (prog) await prog.fail(e?.message || String(e), !!(e.status && e.status >= 400 && e.status < 500));
       res.status(e.status || 500).json({ error: e?.message || String(e) });
     }
-  });
+}
+// 예전 주소(9분 제한) — 목록·상태 조회 등 짧은 요청용으로 남겨둔다
+exports.companyReset = functions
+  .runWith({ timeoutSeconds: 540, memory: "2GB" })
+  .https.onRequest(companyResetHandler);
+// ⭐ 초기화·복원 실행용 — 2세대 함수라 최대 60분까지 돌 수 있다(데이터가 많은 회사도 중간에 끊기지 않게)
+const { onRequest: onRequestV2 } = require("firebase-functions/v2/https");
+exports.companyResetJob = onRequestV2(
+  { region: "us-central1", timeoutSeconds: 3600, memory: "4GiB", invoker: "public" },
+  companyResetHandler,
+);
 
 // ⏰ 매일 새벽 — 보관 기간(7일)이 지난 초기화 보관함을 비운다
 exports.purgeExpiredResetBackups = functions.pubsub

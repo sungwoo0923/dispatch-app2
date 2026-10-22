@@ -9,11 +9,12 @@ import React from "react";
 import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import { doc, onSnapshot } from "firebase/firestore";
 
-async function callReset(body) {
+// 초기화·복원 실행은 60분까지 돌 수 있는 companyResetJob, 나머지(목록·상태)는 companyReset
+async function callReset(body, fn = "companyReset") {
   const token = await auth.currentUser?.getIdToken();
   let res;
   try {
-    res = await fetch(`${FUNCTIONS_BASE}/companyReset`, {
+    res = await fetch(`${FUNCTIONS_BASE}/${fn}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token || ""}` },
       body: JSON.stringify(body),
@@ -26,7 +27,7 @@ async function callReset(body) {
   try { data = await res.json(); } catch { /* 무시 */ }
   if (!res.ok) {
     if (res.status === 404) throw new Error("서버에 초기화 기능이 아직 배포되지 않았습니다. PC에서 firebase deploy --only functions를 실행해 주세요.");
-    throw new Error(data.error || `요청 실패 (${res.status})`);
+    throw Object.assign(new Error(data.error || `요청 실패 (${res.status})`), { status: res.status });
   }
   return data;
 }
@@ -47,22 +48,39 @@ const fmtTime = (ms) => (ms ? new Date(ms).toLocaleString("ko-KR", { month: "num
 const daysLeft = (ms) => Math.max(0, Math.ceil((ms - Date.now()) / 86400000));
 
 // 진행률 창 — 서버가 적는 resetJobs/{jobId}를 실시간으로 본다
-function ProgressModal({ job, onClose }) {
+// ⭐ 자동 재시도 — 서버가 20초마다 남기는 "작업 중" 신호(heartbeatAt)가 90초 넘게 끊기거나,
+//   일시적인 오류로 멈추면 같은 작업ID로 다시 불러 남은 단계부터 이어서 하게 한다(성공할 때까지 계속).
+//   비밀번호 틀림처럼 사람이 고쳐야 하는 오류(fatal)만 멈추고 알려준다.
+function ProgressModal({ job, onClose, onRetry }) {
   const [state, setState] = React.useState({ pct: 0, step: "시작하는 중…", status: "running" });
   const [elapsed, setElapsed] = React.useState(0);
+  const [now, setNow] = React.useState(Date.now());
+  const lastRetryRef = React.useRef(Date.now());
+  const [retries, setRetries] = React.useState(0);
   React.useEffect(() => {
     const unsub = onSnapshot(doc(db, "resetJobs", job.id), (snap) => { if (snap.exists()) setState((p) => ({ ...p, ...snap.data() })); }, () => {});
     const t0 = Date.now();
-    const t = setInterval(() => setElapsed(Math.floor((Date.now() - t0) / 1000)), 1000);
+    const t = setInterval(() => { setElapsed(Math.floor((Date.now() - t0) / 1000)); setNow(Date.now()); }, 1000);
     return () => { unsub(); clearInterval(t); };
   }, [job.id]);
+  const hbMs = state.heartbeatAt?.toMillis ? state.heartbeatAt.toMillis() : 0;
+  const silentFor = Math.round((now - Math.max(hbMs, lastRetryRef.current)) / 1000);
+  const fatal = state.status === "error" && state.fatal;
+  const stalled = !job.result && !job.error && !fatal && state.status !== "done"
+    && ((state.status === "running" && silentFor > 90) || (state.status === "error" && !state.fatal && silentFor > 20) || (!hbMs && silentFor > 120));
+  React.useEffect(() => {
+    if (!stalled) return;
+    lastRetryRef.current = Date.now();
+    setRetries((n) => n + 1);
+    onRetry();
+  }, [stalled]); // eslint-disable-line react-hooks/exhaustive-deps
   // 서버 응답(fetch)이 먼저 오면 그 결과로도 마무리한다
   React.useEffect(() => {
     if (job.result) setState((p) => ({ ...p, pct: 100, status: "done", step: "완료", result: job.result }));
     if (job.error) setState((p) => ({ ...p, status: "error", error: job.error }));
   }, [job.result, job.error]);
   const done = state.status === "done";
-  const failed = state.status === "error";
+  const failed = fatal || !!job.error;
   const isRestore = job.action === "restore";
   const r = state.result || {};
   const mm = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`;
@@ -81,7 +99,12 @@ function ProgressModal({ job, onClose }) {
           <div className="mt-4 h-3 rounded-full bg-[#EEF1F6] overflow-hidden">
             <div className={`h-full rounded-full transition-all duration-700 ${failed ? "bg-red-500" : done ? "bg-emerald-500" : "bg-[#1B2B4B]"}`} style={{ width: `${failed ? 100 : done ? 100 : Math.max(3, state.pct || 0)}%` }} />
           </div>
-          <div className={`mt-3 text-[14px] font-semibold ${failed ? "text-red-600" : "text-gray-700"}`}>{failed ? state.error : state.step}</div>
+          <div className={`mt-3 text-[14px] font-semibold ${failed ? "text-red-600" : "text-gray-700"}`}>{failed ? (job.error || state.error) : state.status === "error" ? "일시적인 오류 — 곧 자동으로 이어서 진행합니다" : state.step}</div>
+          {!done && !failed && (retries > 0 || (state.attempts || 0) > 1) && (
+            <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-[12.5px] font-bold text-amber-700">
+              자동 재시도 {Math.max(retries, (state.attempts || 1) - 1)}회째 · 끝난 단계는 건너뛰고 이어서 진행 중
+            </div>
+          )}
           {done && (
             <div className="mt-5 rounded-2xl bg-[#F5F8FD] border border-[#E3E8F0] px-5 py-4 text-[14px] text-[#0F1A30] leading-relaxed">
               {isRestore
@@ -143,23 +166,29 @@ export default function CompanyResetPanel() {
     setAskPw(p); setExecPw(""); setExecErr("");
   };
 
+  // 한 번 요청 — 응답이 "busy"(이미 다른 실행이 돌고 있음)면 그냥 진행률만 지켜본다
+  const attempt = async (j) => {
+    try {
+      const r = await callReset(j.body, "companyResetJob");
+      if (r.busy) return;
+      setJob((cur) => (cur && cur.id === j.id ? { ...cur, result: r } : cur));
+    } catch (e) {
+      // 연결 끊김·서버 오류(5xx)는 진행률 창이 감지해서 자동으로 다시 부른다. 4xx(비밀번호 틀림 등)만 멈춘다.
+      if (!e.network && e.status && e.status < 500) setJob((cur) => (cur && cur.id === j.id ? { ...cur, error: e.message } : cur));
+    }
+  };
   const run = async () => {
     if (!execPw) return setExecErr("비밀번호를 입력하세요.");
     const restore = askPw.mode === "restore";
     const jobId = newJobId();
-    const j = { id: jobId, action: restore ? "restore" : "reset", company: restore ? askPw.backup.company : company };
+    const body = restore
+      ? { action: "restore", backupId: askPw.backup.id, password: execPw, jobId }
+      : { action: "execute", company, deleteAccounts, password: execPw, jobId };
+    const j = { id: jobId, action: restore ? "restore" : "reset", company: restore ? askPw.backup.company : company, body };
     setAskPw(null);
     setJob(j);
-    try {
-      const r = await callReset(restore
-        ? { action: "restore", backupId: askPw.backup.id, password: execPw, jobId }
-        : { action: "execute", company, deleteAccounts, password: execPw, jobId });
-      setJob((cur) => (cur && cur.id === jobId ? { ...cur, result: r } : cur));
-    } catch (e) {
-      // 연결만 끊긴 경우엔 서버가 계속 진행 중일 수 있어 진행률 창이 계속 지켜본다
-      if (!e.network) setJob((cur) => (cur && cur.id === jobId ? { ...cur, error: e.message } : cur));
-    }
     setExecPw("");
+    attempt(j);
   };
 
   const input = "w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-[14px] outline-none focus:border-[#1B2B4B]";
@@ -297,7 +326,7 @@ export default function CompanyResetPanel() {
         </div>
       )}
 
-      {job && <ProgressModal job={job} onClose={() => { setJob(null); load(); }} />}
+      {job && <ProgressModal job={job} onRetry={() => attempt(job)} onClose={() => { setJob(null); load(); }} />}
     </div>
   );
 }
