@@ -2450,6 +2450,26 @@ const [isRefreshing, setIsRefreshing] = useState(false);
   const [places, setPlaces] = useState([]);
   const [fixedClientRows, setFixedClientRows] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
+  // ⭐ 초기화·복원·가져오기 취소가 끝나면(서버가 systemConfig/dataVersion.{회사}에 시각을 남김) 이 폰에 불러둔
+  //    예전 오더·마지막 동기화 시각을 비우고 실시간 연결을 다시 맺는다 — 초기화한 회사 데이터가 모바일에 남던 문제
+  useEffect(() => {
+    if (!user) return undefined;
+    const co = () => localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY;
+    let seen = null;
+    return onSnapshot(doc(db, "systemConfig", "dataVersion"), (snap) => {
+      const t = snap.data()?.[co()];
+      const ms = t?.toMillis ? t.toMillis() : 0;
+      if (seen === null) { seen = ms; return; }
+      if (ms <= seen) return;
+      seen = ms;
+      loadedRangesRef.current = [];
+      fullLoadedRef.current = false;
+      setExtraMap(new Map());
+      try { localStorage.removeItem("mobileLastSyncAt"); } catch { /* 무시 */ }
+      lastSyncAtRef.current = 0;
+      setRefreshKey((k) => k + 1);
+    }, () => {});
+  }, [user?.uid, userCompany]); // eslint-disable-line react-hooks/exhaustive-deps
 
 // MobileApp 스코프: clients(Firestore) + places(Firestore) 통합 검색용 (places 우선)
 // MobileOrderForm/Detail에는 이미 merged된 clients prop이 전달되므로 여기서만 사용
@@ -7246,9 +7266,17 @@ const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh
   }`;
 
   return (
-    <div className="kp-m-header flex items-center justify-between gap-2 px-3.5 pb-2.5 sticky top-0 z-30"
+    <div className="kp-m-header relative flex items-center justify-between gap-2 px-3.5 pb-2.5 sticky top-0 z-30"
       style={{ willChange: "transform", transform: "translateZ(0)", WebkitTransform: "translateZ(0)", paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.6rem)" }}>
-      <div className="shrink-0 flex items-center">
+      <div className="shrink-0 flex items-center gap-1">
+        {/* 새로고침은 왼쪽으로 — 오른쪽 버튼이 많아도 가운데 제목과 겹치지 않게 */}
+        {onRefresh && (
+          <button className="kp-m-hbtn order-2" onClick={onRefresh} aria-label="새로고침">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+          </button>
+        )}
         {isListPage ? (
           <button onClick={onMenu} className="kp-m-hbtn" aria-label="메뉴">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.2" strokeLinecap="round"><path d="M4 7h16M4 12h11M4 17h16" /></svg>
@@ -7262,19 +7290,13 @@ const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh
         )}
       </div>
 
-      <div className="flex-1 min-w-0 text-center leading-none">
+      {/* ⭐ 제목은 버튼 개수와 상관없이 화면 정중앙 */}
+      <div className="absolute left-1/2 -translate-x-1/2 bottom-2.5 max-w-[44%] text-center leading-none pointer-events-none">
         <div className={`text-[9.5px] font-extrabold tracking-[0.24em] ${cardVersionB ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`}>KP-FLOW</div>
         <div className={`mt-1 font-black text-[16px] tracking-tight truncate ${cardVersionB ? "text-white" : "text-[#0F1A30]"}`}>{title}</div>
       </div>
 
-      <div className="shrink-0 flex items-center gap-1.5 justify-end">
-        {onRefresh && (
-          <button className="kp-m-hbtn" onClick={onRefresh} aria-label="새로고침">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-            </svg>
-          </button>
-        )}
+      <div className="shrink-0 flex items-center gap-1 justify-end">
         {onValidateOrders && (
           <button className="kp-m-hbtn" onClick={onValidateOrders} title="오더 검증">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -8752,7 +8774,7 @@ const summary = useMemo(() => {
     <>
     <div>
       {/* 상태 탭 */}
-      <div className={`flex border-b ${cardVersionB ? "bg-white" : "bg-white"}`}>
+      <div className={cardVersionB ? "flex border-b bg-white" : "kp-a-tabs mx-3 mt-3 flex gap-1 p-1 rounded-2xl bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_6px_16px_rgba(16,24,40,0.05)]"}>
         {tabs.map((t) => {
           let count = null;
           if (statusTab === "전체") {
@@ -8766,12 +8788,9 @@ const summary = useMemo(() => {
             <button
               key={t}
               onClick={() => setStatusTab(t)}
-              className={`flex-1 py-2.5 text-[13px] font-semibold border-b-2 transition-colors flex items-center justify-center gap-1 ${statusTab === t
-                  ? cardVersionB
-                    ? "border-[#1B2B4B] text-[#1B2B4B]"
-                    : "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-400"
-                }`}
+              className={cardVersionB
+                ? `flex-1 py-2.5 text-[13px] font-semibold border-b-2 transition-colors flex items-center justify-center gap-1 ${statusTab === t ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-transparent text-gray-400"}`
+                : `flex-1 h-9 rounded-xl text-[13px] font-extrabold transition-colors flex items-center justify-center gap-1.5 ${statusTab === t ? "bg-[#0F1A30] text-white shadow-[0_4px_12px_rgba(15,26,48,0.25)]" : "text-[#7A879C]"}`}
             >
               {t}
               {count !== null && (
@@ -8785,7 +8804,7 @@ const summary = useMemo(() => {
       </div>
 
       {/* 날짜/퀵범위/필터 */}
-      <div className="border-b px-4 pt-3 pb-3 space-y-2.5 overflow-hidden bg-white">
+      <div className={cardVersionB ? "border-b px-4 pt-3 pb-3 space-y-2.5 overflow-hidden bg-white" : "px-3 pt-3 pb-1 space-y-2.5"}>
         {(() => {
           // KPI 다이얼 패널만 A/B 테마를 따르고(하나는 다크 네이비, 하나는 라이트),
           // 그 아래 필터 영역은 페이지 배경이 항상 흰색이므로 공통 라이트 스타일을 사용한다.
@@ -8798,16 +8817,19 @@ const summary = useMemo(() => {
                 glow: "0 0 10px rgba(120,170,255,0.35)",
               }
             : {
-                panel: "bg-gradient-to-br from-white to-[#f2f5fa] border border-gray-100 shadow-sm",
-                label: "text-gray-400",
-                value: "text-[#1B2B4B]",
-                divider: "border-gray-200",
+                // ⭐ A형 — 영수증(티켓) 느낌의 흰 패널, 큰 숫자, 점선 구분
+                panel: "bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_24px_rgba(16,24,40,0.06)] !rounded-[22px] !py-4",
+                label: "text-[#9AA9C3]",
+                value: "text-[#0F1A30] !text-[17px] !font-black",
+                divider: "border-dashed border-[#DCE3EE]",
                 glow: "none",
               };
           const segTrack = "bg-gray-100";
           const segActive = `bg-white shadow ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"}`;
           const segInactive = "text-gray-500";
-          const field = "bg-gray-50 text-gray-800 border border-gray-200 focus:border-[#1B2B4B]/30 focus:ring-[#1B2B4B]/10";
+          const field = cardVersionB
+            ? "bg-gray-50 text-gray-800 border border-gray-200 focus:border-[#1B2B4B]/30 focus:ring-[#1B2B4B]/10"
+            : "bg-white text-[#0F1A30] font-semibold border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04)] focus:border-[#0F1A30]/40 focus:ring-[#0F1A30]/10";
           const icon = "text-gray-400";
           const rangeText = "text-gray-500";
           const todayStr = todayKST();
@@ -8831,7 +8853,7 @@ const summary = useMemo(() => {
                     <div className={`text-[9px] font-bold tracking-[0.15em] uppercase mb-1 ${dt.label}`}>{label}</div>
                     <div
                       className={`text-[14px] font-extrabold tabular-nums whitespace-nowrap ${dt.value}`}
-                      style={{ fontFamily: "monospace", textShadow: dt.glow }}
+                      style={{ fontFamily: cardVersionB ? "monospace" : undefined, textShadow: dt.glow }}
                     >
                       <DialNumber value={value} />
                     </div>
@@ -8972,7 +8994,7 @@ const summary = useMemo(() => {
                       setAppliedSearchText(searchText);
                     }}
                     className={`absolute right-1 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg text-[11px] font-bold transition active:scale-95 ${
-                      cardVersionB ? "bg-[#1B2B4B] text-white active:bg-[#243a60]" : "bg-blue-600 text-white active:bg-blue-700"
+                      cardVersionB ? "bg-[#1B2B4B] text-white active:bg-[#243a60]" : "bg-[#0F1A30] text-white"
                     }`}
                   >
                     조회
@@ -8985,9 +9007,9 @@ const summary = useMemo(() => {
       </div>
 
       {/* ── 조회 건수 + 선택 버튼 바 ── */}
-      <div className={`flex items-center justify-between gap-2 px-4 py-2 border-b ${cardVersionB ? "bg-gray-50 border-gray-100" : "bg-white border-gray-100"}`}>
+      <div className={`flex items-center justify-between gap-2 px-4 py-2 ${cardVersionB ? "border-b bg-gray-50 border-gray-100" : ""}`}>
         <span className={`text-[12px] whitespace-nowrap shrink-0 ${cardVersionB ? "text-gray-500 font-medium" : "text-gray-500"}`}>
-          총 <span className={cardVersionB ? "font-bold text-[#1B2B4B]" : ""}>{allVisibleOrders.length}</span>건
+          총 <span className={cardVersionB ? "font-bold text-[#1B2B4B]" : "font-black text-[#0F1A30] text-[14px]"}>{allVisibleOrders.length}</span>건
           {multiSelectMode && selectedIds.size > 0 && (
             <span className="ml-1.5 font-bold text-[#1B2B4B]">· {selectedIds.size}개 선택</span>
           )}
@@ -9000,8 +9022,8 @@ const summary = useMemo(() => {
                 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
                 : cardVersionB
                   ? "bg-white text-[#1B2B4B] border-[#1B2B4B]/30 hover:bg-[#1B2B4B]/5"
-                  : "bg-white text-gray-600 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
-            } whitespace-nowrap shrink-0 ${cardVersionB ? "px-2.5 py-1 rounded-lg" : "px-2.5 py-1 rounded-full"}`}
+                  : "bg-white text-[#0F1A30] border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.05)]"
+            } whitespace-nowrap shrink-0 ${cardVersionB ? "px-2.5 py-1 rounded-lg" : "px-3 py-1.5 rounded-full font-bold"}`}
           >
             오더필터{activeFilterCount > 0 && ` (${activeFilterCount})`}
           </button>
@@ -9012,8 +9034,8 @@ const summary = useMemo(() => {
                 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
                 : cardVersionB
                   ? "bg-white text-[#1B2B4B] border-[#1B2B4B]/30 hover:bg-[#1B2B4B]/5"
-                  : "bg-white text-gray-600 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
-            } whitespace-nowrap shrink-0 ${cardVersionB ? "px-2.5 py-1 rounded-lg" : "px-2.5 py-1 rounded-full"}`}
+                  : "bg-white text-[#0F1A30] border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.05)]"
+            } whitespace-nowrap shrink-0 ${cardVersionB ? "px-2.5 py-1 rounded-lg" : "px-3 py-1.5 rounded-full font-bold"}`}
           >
             정렬{orderSortMode !== "default" && ` · ${ORDER_SORT_OPTIONS.find(o => o.key === orderSortMode)?.label || ""}`}
           </button>
@@ -9024,8 +9046,8 @@ const summary = useMemo(() => {
                 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
                 : cardVersionB
                   ? "bg-white text-[#1B2B4B] border-[#1B2B4B]/30 hover:bg-[#1B2B4B]/5"
-                  : "bg-white text-gray-600 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
-            } whitespace-nowrap shrink-0 ${cardVersionB ? "px-2.5 py-1 rounded-lg" : "px-2.5 py-1 rounded-full"}`}
+                  : "bg-white text-[#0F1A30] border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.05)]"
+            } whitespace-nowrap shrink-0 ${cardVersionB ? "px-2.5 py-1 rounded-lg" : "px-3 py-1.5 rounded-full font-bold"}`}
           >
             {multiSelectMode ? "선택 취소" : "다중선택"}
           </button>
@@ -9047,9 +9069,14 @@ const summary = useMemo(() => {
             <div className={`flex items-center justify-between mb-3 px-1 ${cardVersionB ? "py-0.5" : ""}`}>
 
   {/* 날짜 */}
-  <div className={`font-bold ${cardVersionB ? "text-[13px] text-[#1B2B4B] tracking-tight" : "text-sm text-gray-700"}`}>
-    {formatDateHeader(dateKey)}
-  </div>
+  {cardVersionB ? (
+    <div className="font-bold text-[13px] text-[#1B2B4B] tracking-tight">{formatDateHeader(dateKey)}</div>
+  ) : (
+    <div className="flex items-baseline gap-2">
+      <span className="text-[20px] font-black text-[#0F1A30] tracking-tight tabular-nums">{formatDateHeader(dateKey)}</span>
+      <span className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]">ORDERS</span>
+    </div>
+  )}
 
   <div className="flex gap-1">
     {statusTab === "전체" && (
@@ -9065,10 +9092,10 @@ const summary = useMemo(() => {
           </>
         ) : (
           <>
-            <span className="text-[11px] px-2 py-1 rounded-full bg-blue-50 text-blue-600 font-semibold">
+            <span className="text-[11px] px-2.5 py-1 rounded-full bg-white border border-[#E3E8F0] text-[#0F1A30] font-extrabold">
               배차중 {statusCount.ing}
             </span>
-            <span className="text-[11px] px-2 py-1 rounded-full bg-gray-100 text-gray-600 font-semibold">
+            <span className="text-[11px] px-2.5 py-1 rounded-full bg-[#0F1A30] text-white font-extrabold">
               완료 {statusCount.done}
             </span>
           </>
@@ -10886,275 +10913,160 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
 
   return (
    <>
+   {/* ⭐ A형(2026-10-22 새 디자인) — 탑승권(티켓) 스타일: 큰 출발→도착, 절취선, 아래 운임 스텁. 남색 계열만 사용 */}
    <div
   className={
-    "kp-m-card relative bg-white rounded-2xl shadow border px-3.5 py-3 transition-colors " +
+    "kp-m-card kp-ticket relative bg-white rounded-2xl shadow border transition-colors " +
     (selected ? "kp-m-card-on " : "") +
-    (selected
-      ? "border-[#1B2B4B] bg-[#1B2B4B]/[0.03] shadow-[0_0_0_2px_rgba(27,43,75,0.15)]"
-      : flash
-        ? "border-blue-400 order-flash-blue shadow-[0_0_0_4px_rgba(59,130,246,0.18),0_0_18px_rgba(59,130,246,0.35)]"
-        : "border-gray-200") +
+    (flash && !selected ? "order-flash-blue " : "") +
     (statusBlink && !selected ? " card-status-blink" : "")
   }
   style={{ "--glow-c": statusRing }}
   onClick={onSelect}
 >
-      {/* ▶ 거래처명 + 메모 + 상태 + 배지들 */}
-<div className="flex flex-wrap justify-between items-center gap-x-1 gap-y-1 mb-0.5">
-  <div className="flex items-center gap-1 min-w-0 flex-1">
-    {order.거래처명 && (
-      <span className="text-[11px] font-semibold text-gray-600 truncate">{order.거래처명}</span>
-    )}
-    {(order.메모 || order.적요) && (
-      <button
-        onClick={(e) => { e.stopPropagation(); onOpenMemo(order); }}
-        className="memo-blink shrink-0 px-1.5 py-0.5 rounded-full bg-[#1B2B4B] text-white border border-[#1B2B4B] text-[10px] font-extrabold"
-      >메모</button>
-    )}
-  </div>
-  <div className="flex flex-wrap items-center justify-end gap-1 ml-auto">
-
-  {!showUndeliveredOnly && isUrgentOrder(order) && (
-    <span className="inline-flex items-center justify-center leading-none h-[18px] px-2 rounded bg-red-600 text-white text-[10px] font-bold">
-      긴급
-    </span>
-  )}
-
-  {isCold && (
-    <span className="inline-flex items-center justify-center leading-none h-[18px] px-2 rounded bg-blue-600 text-white text-[10px] font-bold">
-      냉장/냉동
-    </span>
-  )}
-
-  {String(order.운행유형 || "").trim() === "왕복" && (
-    <span className="inline-flex items-center justify-center leading-none h-[18px] px-2 rounded bg-[#1B2B4B] text-white text-[10px] font-extrabold tracking-wide">
-      왕복
-    </span>
-  )}
-  <RotationBadge order={order} className="!ml-0 !h-[18px] !py-0 !px-2 !text-[10px] !rounded" />
-
-  {activeRequestType && (
-    <button
-      onClick={openRequestModal}
-      className="text-[11px] font-extrabold"
-      style={{
-        color: activeRequestType === "cancel" ? "#dc2626" : activeRequestType === "swap" ? "#f97316" : "#0284c7",
-        animation: "dispatchingPulse 1.8s ease-in-out infinite",
-      }}
-    >
-      요청
-    </button>
-  )}
-
-  <button
-    style={{ touchAction: "manipulation" }}
-    onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
-    className={`inline-flex items-center justify-center leading-none h-[18px] gap-0.5 text-[10px] font-bold ${
-      order.attachViewed
-        ? "text-[#1B2B4B]"
-        : order.attachCount > 0
-        ? "text-emerald-600"
-        : "text-gray-300"
-    }`}
-  >
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-    {(order.attachCount > 0) ? order.attachCount : "-"}
-    {order.업로드잠금해제만료 && new Date(order.업로드잠금해제만료).getTime() > Date.now() && (
-      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-    )}
-    {order.재업로드완료알림 === true && (
-      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-    )}
-  </button>
-
-  <div className="relative inline-flex items-center shrink-0">
-    <TransportStatusBadge order={order} className="inline-flex items-center leading-none" onClick={openReqModal} flat compact />
-    {isRecentlyEditedByShipper && !isEditRequested && (
-      <span title="화주사가 오더 정보를 수정했습니다"
-        className="absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-white" />
-    )}
-  </div>
-  </div>
-</div>
-
-
-      {/* ⚠ 상차 임박 */}
+  {/* ── 윗줄: 거래처 · 메모 / 배지들 ── */}
+  <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-4 pt-3">
+    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+      <span className="text-[10px] font-extrabold tracking-[0.18em] text-[#9AA9C3] tabular-nums shrink-0">{String(order.상차일 || "").slice(5).replace("-", ".")}</span>
+      {order.거래처명 && <span className="text-[12px] font-bold text-[#3A4A66] truncate">{order.거래처명}</span>}
+      {(order.메모 || order.적요) && (
+        <button onClick={(e) => { e.stopPropagation(); onOpenMemo(order); }}
+          className="memo-blink shrink-0 px-1.5 py-[3px] rounded-md bg-[#0F1A30] text-white text-[9.5px] font-extrabold leading-none">메모</button>
+      )}
+    </div>
+    <div className="flex flex-wrap items-center justify-end gap-1">
+      {!showUndeliveredOnly && isUrgentOrder(order) && (
+        <span className="h-[19px] px-1.5 inline-flex items-center rounded-md border-[1.5px] border-[#0F1A30] text-[#0F1A30] text-[10px] font-black leading-none">긴급</span>
+      )}
       {(() => {
         if (!order.상차일 || !order.상차시간) return null;
-        const now = new Date(
-  new Date().getTime() + 9 * 60 * 60 * 1000
-);
-       const [y, m, d] = order.상차일.split("-").map(Number);
-const [hh, mm] = normalizeKoreanTime(order.상차시간)
-  .split(":")
-  .map(Number);
-
-const dt = new Date(y, m - 1, d, hh, mm);
-        const diffMin = (dt - now) / 60000;
-        if (diffMin > 0 && diffMin <= 120) {
-          return (
-            <div className="text-right mb-0.5">
-              <span className="px-2 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold">
-                임박
-              </span>
-            </div>
-          );
-        }
-        return null;
+        const now = new Date(Date.now() + 9 * 60 * 60 * 1000);
+        const [y, m, d] = order.상차일.split("-").map(Number);
+        const [hh, mm] = normalizeKoreanTime(order.상차시간).split(":").map(Number);
+        const diffMin = (new Date(y, m - 1, d, hh, mm) - now) / 60000;
+        return diffMin > 0 && diffMin <= 120
+          ? <span className="h-[19px] px-1.5 inline-flex items-center rounded-md bg-[#0F1A30] text-white text-[10px] font-black leading-none">임박</span>
+          : null;
       })()}
-
-      {/* ▶ 상차 / 경유 / 하차 — 왼쪽에 이어지는 선으로 연결 */}
-      {(() => {
-        const pStops = validStops(order.경유상차목록 || order.경유지_상차);
-        const dStops = validStops(order.경유하차목록 || order.경유지_하차);
-        const viaStops = [...pStops, ...dStops];
-        return (
-          <div className="relative flex flex-col mt-1">
-            {/* 상/경유/하차를 관통하는 하나의 연결선 — 원형 뱃지(20px)의 세로 중심(10px)에 항상 고정 */}
-            <div className="absolute left-[10px] top-[10px] bottom-[10px] w-px bg-gray-200" />
-            {/* 상차 */}
-            <div className="flex items-center gap-2">
-              <span className="relative z-10 w-5 h-5 flex items-center justify-center rounded-full bg-blue-500 text-white text-[11px] font-bold shrink-0">
-                상
-              </span>
-              <div className="flex-1 min-w-0 py-1 flex items-center gap-2">
-                <div className="flex-1 truncate text-[1em] font-semibold">
-                  {pickupName}
-                  {pickupAddrShort && (
-                    <span className="text-[12px] text-gray-500 ml-1">
-                      ({pickupAddrShort})
-                    </span>
-                  )}
-                </div>
-                <span className="text-[0.8em] text-gray-600">{pickupTime}</span>
-                {pickupStatus && (
-                  <span
-                    className={
-                      "px-1 py-0.5 rounded-full border text-[11px] " +
-                      dayBadgeClass(pickupStatus)
-                    }
-                  >
-                    {pickupStatus}
-                  </span>
-                )}
-              </div>
-            </div>
-            {/* 경유 */}
-            {viaStops.map((s, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <span className="relative z-10 w-5 h-5 flex items-center justify-center rounded-full bg-indigo-500 text-white text-[11px] font-bold shrink-0">
-                  경
-                </span>
-                <div className="flex-1 min-w-0 py-1 flex items-center">
-                  <div className="flex-1 truncate text-[0.85em] font-semibold text-gray-700">{s.업체명 || "-"}</div>
-                </div>
-              </div>
-            ))}
-            {/* 하차 */}
-            <div className="flex items-center gap-2">
-              <span className="relative z-10 w-5 h-5 flex items-center justify-center rounded-full bg-gray-500 text-white text-[11px] font-bold shrink-0">
-                하
-              </span>
-              <div className="flex-1 min-w-0 py-1 flex items-center gap-2">
-                <div className="flex-1 truncate text-[1em] font-semibold">
-                  {dropName}
-                  {dropAddrShort && (
-                    <span className="text-[12px] text-gray-500 ml-1">
-                      ({dropAddrShort})
-                    </span>
-                  )}
-                </div>
-                <span className="text-[0.8em] text-gray-600">{dropTime}</span>
-                {dropStatus && (
-                  <span
-                    className={
-                      "px-1 py-0.5 rounded-full border text-[11px] " +
-                      dayBadgeClass(dropStatus)
-                    }
-                  >
-                    {dropStatus}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* ▶ 하단 정보 — 일반 휴대폰 화면(380px~)에서는 화물정보와 청구/기사 운임을 한 줄로,
-          폴더블 커버 같은 좁은 화면에서는 두 줄로 내려 겹치지 않게 한다. 청구/기사는 세로 줄바꿈.
-          가로 폭만으로는 "좁은 휴대폰"과 "분할화면(폭은 좁지만 세로는 그대로인 창)"을 구분할 수
-          없으므로, 세로로 매우 긴 비율(분할화면 등)이면 폭이 380px를 넘어도 세로 배치를 유지한다. */}
-      <div className="kp-m-card-foot flex flex-col min-[380px]:flex-row min-[380px]:items-center min-[380px]:justify-between [@media(max-aspect-ratio:2/5)]:!flex-col [@media(max-aspect-ratio:2/5)]:!items-stretch gap-1 mt-2 px-2.5 py-2 rounded-xl bg-gray-50 border border-gray-100">
-        <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0 min-[380px]:flex-1 [@media(max-aspect-ratio:2/5)]:!flex-none text-[0.8em] leading-relaxed">
-          {cargo && (
-            <span className="font-extrabold text-amber-600 whitespace-nowrap inline-flex items-center gap-1.5">
-              <Package className="w-3.5 h-3.5 text-amber-500 shrink-0" /> <CargoTag text={cargo} />
-            </span>
-          )}
-          {ton && (
-            <span className="font-bold text-gray-900 whitespace-nowrap inline-flex items-center gap-1">
-              <Scale className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {ton}
-            </span>
-          )}
-          {carType && (
-            <span className="font-bold text-gray-900 whitespace-nowrap inline-flex items-center gap-1">
-              <VehicleTypeIcon type={carType} className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {carType}
-            </span>
-          )}
-          {!ton && !carType && !cargo && <span className="text-gray-400">-</span>}
-        </span>
-        <div className="flex flex-col items-end gap-0.5 shrink-0">
-          <span className="flex items-baseline gap-1">
-            <span className="text-[0.6em] text-gray-400 font-semibold">청구</span>
-            <span className="text-[0.78em] font-bold text-gray-900 tabular-nums">{fmtMoney(claim)}</span>
-          </span>
-          <span className="flex items-baseline gap-1">
-            <span className="text-[0.6em] text-gray-400 font-semibold">기사</span>
-            <span className="text-[0.78em] font-bold text-amber-600 tabular-nums">{fmtMoney(fee)}</span>
-          </span>
-        </div>
+      {isCold && (
+        <span className="h-[19px] px-1.5 inline-flex items-center gap-0.5 rounded-md bg-[#EEF3FB] text-[#1B2B4B] text-[10px] font-bold leading-none"><Snowflake className="w-3 h-3" />냉장</span>
+      )}
+      {String(order.운행유형 || "").trim() === "왕복" && (
+        <span className="h-[19px] px-1.5 inline-flex items-center rounded-md bg-[#EEF3FB] text-[#1B2B4B] text-[10px] font-extrabold leading-none">왕복</span>
+      )}
+      <RotationBadge order={order} className="!ml-0 !h-[19px] !py-0 !px-1.5 !text-[10px] !rounded-md" />
+      {activeRequestType && (
+        <button onClick={openRequestModal} className="text-[11px] font-black text-[#0F1A30] underline underline-offset-2"
+          style={{ animation: "dispatchingPulse 1.8s ease-in-out infinite" }}>요청</button>
+      )}
+      <button
+        style={{ touchAction: "manipulation" }}
+        onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
+        className={`inline-flex items-center h-[19px] gap-0.5 text-[10px] font-bold ${order.attachCount > 0 ? "text-[#1B2B4B]" : "text-[#C3CEDF]"}`}
+      >
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        {(order.attachCount > 0) ? order.attachCount : "-"}
+        {((order.업로드잠금해제만료 && new Date(order.업로드잠금해제만료).getTime() > Date.now()) || order.재업로드완료알림 === true) && (
+          <span className="w-1.5 h-1.5 rounded-full bg-[#4B6CB7] animate-pulse" />
+        )}
+      </button>
+      <div className="relative inline-flex items-center shrink-0">
+        <TransportStatusBadge order={order} className="inline-flex items-center leading-none" onClick={openReqModal} flat compact />
+        {isRecentlyEditedByShipper && !isEditRequested && (
+          <span title="화주사가 오더 정보를 수정했습니다" className="absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-full bg-[#4B6CB7] border-2 border-white" />
+        )}
       </div>
+    </div>
+  </div>
 
-      {/* ▶ 배차완료 → 기사 빠른 연락 */}
-      {state === "배차완료" && (order.이름 || order.차량번호) && (
-        <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-dashed border-gray-100">
-          <span className="text-[11px] text-gray-400 truncate flex-1">
-            {[order.차량번호, order.이름, order.전화번호 ? formatPhone(order.전화번호) : ""].filter(Boolean).join(" · ")}
-          </span>
-          {order.전화번호 && (
-            <div className="flex gap-1">
-              <a href={`tel:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}
-                className="shrink-0 w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.59a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.7 16z"/></svg>
-              </a>
-              <a href={`sms:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}
-                className="shrink-0 w-7 h-7 rounded-full border border-blue-600 flex items-center justify-center">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-              </a>
+  {/* ── 출발 → 도착 (탑승권처럼 크게) ── */}
+  {(() => {
+    const viaStops = [...validStops(order.경유상차목록 || order.경유지_상차), ...validStops(order.경유하차목록 || order.경유지_하차)];
+    const DayChip = ({ v }) => v ? (
+      <span className={`ml-1 px-1.5 py-[2px] rounded-md text-[10px] font-extrabold leading-none ${v === "당상" || v === "당착" ? "bg-[#0F1A30] text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>{v}</span>
+    ) : null;
+    return (
+      <div className="px-4 pt-2.5 pb-3">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+          <div className="min-w-0">
+            <div className="text-[9.5px] font-extrabold tracking-[0.2em] text-[#9AA9C3]">상차</div>
+            <div className="text-[1.12em] font-black text-[#0F1A30] leading-tight truncate">{pickupName}</div>
+            {pickupAddrShort && <div className="text-[11px] text-[#7A879C] truncate">{pickupAddrShort}</div>}
+          </div>
+          <div className="flex flex-col items-center px-1">
+            <div className="flex items-center gap-1 text-[#1B2B4B]">
+              <span className="w-1.5 h-1.5 rounded-full border-[1.5px] border-[#1B2B4B]" />
+              <span className="w-5 border-t-[1.5px] border-dashed border-[#9AA9C3]" />
+              <Truck className="w-4 h-4" />
+              <span className="w-5 border-t-[1.5px] border-dashed border-[#9AA9C3]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#1B2B4B]" />
             </div>
-          )}
+            {viaStops.length > 0 && <div className="mt-0.5 text-[9.5px] font-bold text-[#4B6CB7]">경유 {viaStops.length}</div>}
+          </div>
+          <div className="min-w-0 text-right">
+            <div className="text-[9.5px] font-extrabold tracking-[0.2em] text-[#9AA9C3]">하차</div>
+            <div className="text-[1.12em] font-black text-[#0F1A30] leading-tight truncate">{dropName}</div>
+            {dropAddrShort && <div className="text-[11px] text-[#7A879C] truncate">{dropAddrShort}</div>}
+          </div>
+        </div>
+        <div className="mt-1.5 flex items-center justify-between">
+          <div className="flex items-center text-[13px] font-extrabold text-[#1B2B4B] tabular-nums">{pickupTime}<DayChip v={pickupStatus} /></div>
+          <div className="flex items-center text-[13px] font-extrabold text-[#1B2B4B] tabular-nums">{dropTime}<DayChip v={dropStatus} /></div>
+        </div>
+        {viaStops.length > 0 && (
+          <div className="mt-1.5 text-[11px] text-[#5B6B85] truncate">경유 · {viaStops.map(s => s.업체명 || "-").join(" → ")}</div>
+        )}
+      </div>
+    );
+  })()}
+
+  {/* ── 절취선 ── */}
+  <div className="relative h-0 mx-4 border-t-[1.5px] border-dashed border-[#DCE3EE]">
+    <span className="kp-ticket-notch absolute -left-[25px] -top-[9px] w-4 h-4 rounded-full" />
+    <span className="kp-ticket-notch absolute -right-[25px] -top-[9px] w-4 h-4 rounded-full" />
+  </div>
+
+  {/* ── 스텁: 화물 · 운임 ── */}
+  <div className="flex items-center justify-between gap-2 px-4 py-2.5">
+    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0 text-[0.8em]">
+      {cargo && <span className="inline-flex items-center gap-1 font-extrabold text-[#0F1A30] whitespace-nowrap"><Package className="w-3.5 h-3.5 text-[#7A879C]" /><CargoTag text={cargo} /></span>}
+      {ton && <span className="inline-flex items-center gap-1 font-bold text-[#0F1A30] whitespace-nowrap"><Scale className="w-3.5 h-3.5 text-[#7A879C]" />{ton}</span>}
+      {carType && <span className="inline-flex items-center gap-1 font-bold text-[#0F1A30] whitespace-nowrap"><VehicleTypeIcon type={carType} className="w-3.5 h-3.5 text-[#7A879C]" />{carType}</span>}
+      {!ton && !carType && !cargo && <span className="text-[#9AA9C3]">-</span>}
+    </div>
+    <div className="text-right shrink-0 leading-tight">
+      <div className="text-[1em] font-black text-[#0F1A30] tabular-nums">{fmtMoney(claim)}</div>
+      <div className="text-[10.5px] font-semibold text-[#7A879C] tabular-nums">기사 {fmtMoney(fee)}</div>
+    </div>
+  </div>
+
+  {/* ── 배차완료 → 기사 빠른 연락 ── */}
+  {state === "배차완료" && (order.이름 || order.차량번호) && (
+    <div className="flex items-center gap-2 mx-3 mb-3 px-3 py-2 rounded-xl bg-[#F5F8FD] border border-[#E8EDF5]">
+      <span className="text-[11.5px] font-semibold text-[#3A4A66] truncate flex-1">
+        {[order.차량번호, order.이름, order.전화번호 ? formatPhone(order.전화번호) : ""].filter(Boolean).join(" · ")}
+      </span>
+      {order.전화번호 && (
+        <div className="flex gap-1">
+          <a href={`tel:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}
+            className="shrink-0 w-7 h-7 rounded-full bg-[#0F1A30] flex items-center justify-center">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.59a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.7 16z"/></svg>
+          </a>
+          <a href={`sms:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}
+            className="shrink-0 w-7 h-7 rounded-full border border-[#0F1A30] bg-white flex items-center justify-center">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0F1A30" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </a>
         </div>
       )}
+    </div>
+  )}
 
-      {/* ✅ 전달버튼은 여기 */}
-{showUndeliveredOnly && (
-  <div className="flex justify-end mt-2">
-    <button
-      onClick={(e) => {
-        e.stopPropagation();
-        onConfirmDeliver?.();
-      }}
-      className="text-[11px] px-2 py-1 rounded-full
-                 border border-emerald-300
-                 text-emerald-600
-                 hover:bg-emerald-50"
-    >
-      업체전송
-    </button>
-  </div>
-)}
+  {showUndeliveredOnly && (
+    <div className="flex justify-end px-4 pb-3">
+      <button onClick={(e) => { e.stopPropagation(); onConfirmDeliver?.(); }}
+        className="text-[11px] px-3 py-1 rounded-full border border-[#0F1A30] text-[#0F1A30] font-bold">업체전송</button>
+    </div>
+  )}
 </div>
   {showReqModal && (
     <DispatchRequestModal order={order} onApprove={approveDispatchRequest} onReject={rejectDispatchRequest} onClose={() => setShowReqModal(false)} />
@@ -12377,51 +12289,110 @@ const handleAssignClick = () => {
     });
   };
 
-  return (
-    <div className="px-3 py-4 bg-gray-50 pb-10">
-
-  {/* ── 통합 카드 ── */}
-  <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-
-    {/* 상단: 거래처 + 수정/삭제 + 메모/전달사항/수정이력 */}
-    <div className="px-4 pt-4 pb-3 border-b border-gray-100">
-      <div className="flex items-center justify-between mb-2">
-        <div className="min-w-0 flex items-center gap-2.5">
-          <div className="min-w-0">
-            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">거래처명</div>
-            <span className="block text-[13px] font-bold text-gray-700 truncate">{order.거래처명 || "-"}</span>
-            {(String(order.운행유형 || "").trim() === "왕복" || order.회차총수 > 1) && (
-              <div className="flex items-center gap-1 mt-0.5">
-                {String(order.운행유형 || "").trim() === "왕복" && <span className="text-[10px] font-extrabold bg-[#1B2B4B] text-white px-1.5 py-0.5 rounded">왕복</span>}
-                <RotationBadge order={order} className="!ml-0" />
-              </div>
-            )}
-          </div>
-          <div className={`flex items-center gap-2 shrink-0 ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"}`}>
-            {(order.메모 || order.적요) && (
-              <button onClick={() => setShowMemoPopup(true)}>
-                <StickyNote className="w-[15px] h-[15px]" strokeWidth={2} />
-              </button>
-            )}
-            {order.전달사항?.trim() && (
-              <button onClick={() => setShowNoticePopup(true)}>
-                <MessageSquare className="w-[15px] h-[15px]" strokeWidth={2} />
-              </button>
-            )}
-            {Array.isArray(order.history) && order.history.length > 0 && (
-              <button onClick={() => setShowHistory(true)}>
-                <History className="w-[15px] h-[15px]" strokeWidth={2} />
-              </button>
-            )}
-          </div>
-        </div>
-        {/* 화면이 좁으면(폴더블 분할화면 등) 버튼을 세로로 쌓아 거래처명과 겹치지 않게 */}
-        <div className="shrink-0 flex flex-col min-[420px]:flex-row items-stretch gap-1.5 ml-2">
-          <button onClick={() => setShowQuickEdit(true)} className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-[#1B2B4B] text-[#1B2B4B] bg-white whitespace-nowrap">빠른수정</button>
-          <button onClick={handleGoToEdit} className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap ${cardVersionB ? "bg-gray-700 text-white" : "bg-blue-600 text-white"}`}>수정</button>
-          <button onClick={onCancelOrder} className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-red-200 text-red-500 whitespace-nowrap">취소</button>
-        </div>
+  // ⭐ 2026-10-22 상세보기 개편 — 위에서부터 [노선 히어로 + 버튼] → [상·하차 타임라인] → [화물·배차 정보 칸] → [운임] → [첨부·바로가기]
+  //    한 화면에 칸이 너무 많고 색이 섞여 복잡해 보이던 것을 남색 한 가지 톤으로 정리했다.
+  const specTiles = [
+    (order.차량톤수 || order.톤수) && { k: "톤수", v: hasWaypointCargo && totalKg > 0 ? toTonUnit(`${totalKg}kg`) : toTonUnit(order.차량톤수 || order.톤수) },
+    order.화물내용 && { k: "화물", v: hasWaypointCargo && totalPallet > 0 ? `${totalPallet}파레트` : order.화물내용 },
+    (order.차량종류 || order.차종) && { k: "차종", v: order.차량종류 || order.차종 },
+    order.혼적여부 && order.혼적여부 !== "독차" && { k: "혼적", v: order.혼적여부 },
+    { k: "배차방식", v: order.배차방식 || "-" },
+    { k: "지급방식", v: order.지급방식 || "-" },
+    order.상차지주소 && { k: "이동거리", v: routeInfo === "loading" ? "조회중" : routeInfo === "error" || !routeInfo ? "-" : `${routeInfo.distanceKm.toFixed(1)}km` },
+    order.상차지주소 && { k: "소요시간", v: routeInfo === "loading" ? "조회중" : routeInfo === "error" || !routeInfo ? "-" : routeInfo.durationText },
+  ].filter(Boolean);
+  const dSec = "text-[10px] font-extrabold tracking-[0.2em] text-[#9AA9C3]";
+  const StopBlock = ({ s, i, kind }) => (
+    <div className="relative pl-7 pb-3">
+      <span className="absolute left-[7px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-[#9AA9C3] bg-white" />
+      <div className="text-[10px] font-bold text-[#7A879C]">경유 {kind}{i + 1}</div>
+      <div className="text-[13px] font-bold text-[#1F2A44]">{s.업체명 || "-"}</div>
+      {s.주소 && <div className="text-[11.5px] text-[#7A879C]">{s.주소}</div>}
+      {s.담당자 && <div className="text-[11.5px] text-[#5B6B85]">{s.담당자}{s.담당자번호 ? ` · ${formatPhone(s.담당자번호)}` : ""}</div>}
+      {(s.화물내용 || s.차량톤수 || s.톤수값) && (
+        <div className="text-[12px] font-semibold text-[#1F2A44] mt-0.5">{[s.화물내용, toTonUnit(s.차량톤수 || (s.톤수값 ? `${s.톤수값}${s.톤수타입 || "kg"}` : ""))].filter(Boolean).join(" · ")}</div>
+      )}
+      <div className="flex gap-2 mt-0.5 flex-wrap text-[10.5px] text-[#5B6B85]">
+        {s.방법 && <span>{kind}차방법 {s.방법}</span>}
+        {kind === "상" && s.상차시간 && <span>{formatWaypointTime(s, "pickup", order.상차일)}</span>}
+        {kind === "하" && s.하차시간 && <span>{formatWaypointTime(s, "drop", order.하차일)}</span>}
       </div>
+      {s.메모 && <div className="text-[11px] text-[#3A4A66] bg-[#F5F8FD] rounded-lg px-2 py-1 mt-1">{s.메모}</div>}
+    </div>
+  );
+  return (
+    <div className={`kp-m-detail px-3 pt-3 pb-10 ${cardVersionB ? "bg-[#EEF2F8]" : "bg-[#F4F6FA]"}`}>
+
+  {/* ── ① 노선 히어로 ── */}
+  <div className={`relative overflow-hidden rounded-[22px] px-4 pt-4 pb-4 mb-3 ${cardVersionB ? "text-white shadow-[0_12px_28px_rgba(15,26,48,0.28)]" : "bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_24px_rgba(16,24,40,0.06)]"}`}
+    style={cardVersionB ? { background: "linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%)" } : undefined}>
+    <div className="flex items-start justify-between gap-2">
+      <div className="min-w-0">
+        <div className={`text-[10px] font-extrabold tracking-[0.2em] ${cardVersionB ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`}>CLIENT</div>
+        <div className={`text-[15px] font-black truncate ${cardVersionB ? "text-white" : "text-[#0F1A30]"}`}>{order.거래처명 || "-"}</div>
+        {(String(order.운행유형 || "").trim() === "왕복" || order.회차총수 > 1) && (
+          <div className="flex items-center gap-1 mt-1">
+            {String(order.운행유형 || "").trim() === "왕복" && <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-md ${cardVersionB ? "bg-white/15 text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>왕복</span>}
+            <RotationBadge order={order} className="!ml-0" />
+          </div>
+        )}
+      </div>
+      <div className="shrink-0 flex items-center gap-1.5">
+        {activeRequestType && (
+          <button onClick={() => setShowRequestModal(true)} className={`text-[11px] font-black underline underline-offset-2 ${cardVersionB ? "text-white" : "text-[#0F1A30]"}`}
+            style={{ animation: "dispatchingPulse 1.8s ease-in-out infinite" }}>요청</button>
+        )}
+        {(() => {
+          const { isPending, isHold } = getTransportBadgeInfo(order);
+          if (isPending || isHold) return <TransportStatusBadge order={order} className="text-[10px]" onClick={() => setShowReqModal(true)} flat={!cardVersionB} />;
+          return (
+            <button type="button" onClick={() => setShowConfirmInfo(true)} className="active:scale-95 transition-transform">
+              <TransportStatusBadge order={order} className="text-[10px] cursor-pointer" flat={!cardVersionB} />
+            </button>
+          );
+        })()}
+      </div>
+    </div>
+
+    {/* 큰 노선 */}
+    <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+      <div className="min-w-0">
+        <div className={`text-[18px] font-black leading-tight truncate ${cardVersionB ? "text-white" : "text-[#0F1A30]"}`}>{order.상차지명 || "-"}</div>
+        <div className={`text-[11.5px] font-semibold mt-0.5 ${cardVersionB ? "text-white/60" : "text-[#7A879C]"}`}>{상차일시 || "-"}</div>
+      </div>
+      <div className={`flex items-center gap-1 ${cardVersionB ? "text-white/70" : "text-[#1B2B4B]"}`}>
+        <span className={`w-4 border-t-[1.5px] border-dashed ${cardVersionB ? "border-white/40" : "border-[#9AA9C3]"}`} />
+        <Truck className="w-4 h-4" />
+        <span className={`w-4 border-t-[1.5px] border-dashed ${cardVersionB ? "border-white/40" : "border-[#9AA9C3]"}`} />
+      </div>
+      <div className="min-w-0 text-right">
+        <div className={`text-[18px] font-black leading-tight truncate ${cardVersionB ? "text-white" : "text-[#0F1A30]"}`}>{order.하차지명 || "-"}</div>
+        <div className={`text-[11.5px] font-semibold mt-0.5 ${cardVersionB ? "text-white/60" : "text-[#7A879C]"}`}>{하차일시 || "-"}</div>
+      </div>
+    </div>
+
+    {/* 메모 · 전달사항 · 수정이력 */}
+    {((order.메모 || order.적요) || order.전달사항?.trim() || (Array.isArray(order.history) && order.history.length > 0)) && (
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {[
+          (order.메모 || order.적요) && { label: "메모", Icon: StickyNote, on: () => setShowMemoPopup(true) },
+          order.전달사항?.trim() && { label: "전달사항", Icon: MessageSquare, on: () => setShowNoticePopup(true) },
+          (Array.isArray(order.history) && order.history.length > 0) && { label: "수정이력", Icon: History, on: () => setShowHistory(true) },
+        ].filter(Boolean).map(({ label, Icon, on }) => (
+          <button key={label} onClick={on}
+            className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[11.5px] font-bold ${cardVersionB ? "bg-white/10 text-white border border-white/15" : "bg-[#F5F8FD] text-[#1B2B4B] border border-[#E3E8F0]"}`}>
+            <Icon className="w-3.5 h-3.5" strokeWidth={2.2} />{label}
+          </button>
+        ))}
+      </div>
+    )}
+
+    {/* 버튼 — 빠른수정 · 수정 · 취소 */}
+    <div className="mt-3.5 grid grid-cols-3 gap-1.5">
+      <button onClick={() => setShowQuickEdit(true)} className={`h-10 rounded-xl text-[13px] font-extrabold ${cardVersionB ? "bg-white/10 text-white border border-white/20" : "bg-[#F1F4F9] text-[#0F1A30] border border-[#E3E8F0]"}`}>빠른수정</button>
+      <button onClick={handleGoToEdit} className={`h-10 rounded-xl text-[13px] font-extrabold ${cardVersionB ? "bg-white text-[#0F1A30]" : "bg-[#0F1A30] text-white"}`}>수정</button>
+      <button onClick={onCancelOrder} className={`h-10 rounded-xl text-[13px] font-extrabold ${cardVersionB ? "text-white/80 border border-white/20" : "text-[#5B6B85] border border-[#E3E8F0] bg-white"}`}>오더취소</button>
+    </div>
       {showQuickEdit && (
         <QuickEditSheet
           order={order}
@@ -12470,230 +12441,56 @@ const handleAssignClick = () => {
           onClose={() => setShowRequestModal(false)}
         />
       )}
+  </div>
+  {showConfirmInfo && (
+    <DispatchConfirmModal order={order} cardVersionB={cardVersionB} mobileUsers={mobileUsers} mode={state === "배차완료" ? "confirm" : "register"} onClose={() => setShowConfirmInfo(false)} />
+  )}
+
+  {/* ── 통합 카드 ── */}
+  <div className="bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_24px_rgba(16,24,40,0.06)] overflow-hidden">
+
+    {/* ── ② 상·하차 타임라인 ── */}
+    <div className="px-4 pt-4 pb-1">
+      <div className={`${dSec} mb-2`}>ROUTE</div>
+      <div className="relative">
+        <div className="absolute left-[11px] top-3 bottom-6 w-px bg-[#DCE3EE]" />
+        <div className="relative pl-7 pb-3">
+          <span className="absolute left-[5px] top-1 w-3.5 h-3.5 rounded-full bg-[#0F1A30] ring-4 ring-[#EEF3FB]" />
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="text-[14.5px] font-black text-[#0F1A30] truncate">{order.상차지명 || "-"}</div>
+            <div className="text-[11.5px] font-bold text-[#1B2B4B] shrink-0">{상차일시 || "-"}</div>
+          </div>
+          {order.상차지주소 && <div className="text-[12px] text-[#7A879C] mt-0.5">{order.상차지주소}</div>}
+        </div>
+        {validStops(order.경유상차목록 || order.경유지_상차).map((s, i) => <StopBlock key={`p${i}`} s={s} i={i} kind="상" />)}
+        {validStops(order.경유하차목록 || order.경유지_하차).map((s, i) => <StopBlock key={`d${i}`} s={s} i={i} kind="하" />)}
+        <div className="relative pl-7 pb-3">
+          <span className="absolute left-[5px] top-1 w-3.5 h-3.5 rounded-full bg-white border-[3px] border-[#0F1A30]" />
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="text-[14.5px] font-black text-[#0F1A30] truncate">{order.하차지명 || "-"}</div>
+            <div className="text-[11.5px] font-bold text-[#1B2B4B] shrink-0">{하차일시 || "-"}</div>
+          </div>
+          {order.하차지주소 && <div className="text-[12px] text-[#7A879C] mt-0.5">{order.하차지주소}</div>}
+        </div>
+      </div>
     </div>
 
-    {/* 오더 정보 */}
-    <div className="border-b border-gray-100">
-      {/* ── 상차지 블록 ── */}
-      <div className="px-4 pt-3 pb-3 bg-blue-50/30">
-        <div className="flex gap-2">
-          <span className={`mt-0.5 w-5 h-5 rounded-full ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0`}>상</span>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-baseline justify-between gap-2 mb-0.5">
-              <div className="text-[13px] font-bold text-gray-900 truncate">{order.상차지명 || "-"}</div>
-              <div className="text-[11px] text-gray-400 shrink-0">{상차일시 || "-"}</div>
-            </div>
-            {order.상차지주소 && <div className="text-[11px] text-gray-500 mt-0.5">{order.상차지주소}</div>}
-          </div>
-        </div>
-        {validStops(order.경유상차목록 || order.경유지_상차).map((s, i) => (
-          <div key={i} className="flex gap-2 mt-1.5 ml-3">
-            <span className="mt-0.5 w-5 h-5 rounded-full bg-blue-300 text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">상{i+1}</span>
-            <div className="flex-1 min-w-0">
-              <div className="text-xs font-bold text-blue-700">{s.업체명 || "-"}</div>
-              {s.주소 && <div className="text-[11px] text-gray-400">{s.주소}</div>}
-              {s.담당자 && <div className="text-[11px] text-gray-500">{s.담당자}{s.담당자번호 ? ` · ${formatPhone(s.담당자번호)}` : ""}</div>}
-              {(s.화물내용 || s.차량톤수 || s.톤수값) && (
-                <div className="text-[12px] font-semibold text-gray-700 mt-0.5">
-                  화물정보 : {[s.화물내용, toTonUnit(s.차량톤수 || (s.톤수값 ? `${s.톤수값}${s.톤수타입 || "kg"}` : ""))].filter(Boolean).join(" · ")}
-                </div>
-              )}
-              <div className="flex gap-2 mt-0.5 flex-wrap">
-                {s.방법 && <span className="text-[10px] text-gray-500 border border-gray-200 px-1 py-0.5 rounded">상차방법 : {s.방법}</span>}
-                {s.상차시간 && <span className="text-[10px] text-gray-500">{formatWaypointTime(s, "pickup", order.상차일)}</span>}
-              </div>
-              {s.메모 && <div className="text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 mt-0.5">{s.메모}</div>}
-            </div>
+    {/* ── ③ 화물 · 배차 정보 ── */}
+    <div className="px-4 pt-3 pb-4 border-t border-[#EEF1F6]">
+      <div className="flex items-center justify-between mb-2">
+        <div className={dSec}>DETAILS</div>
+        {routeInfo && routeInfo !== "loading" && routeInfo !== "error" && (
+          <button type="button" onClick={() => setShowRouteMap(true)} className="text-[11.5px] font-extrabold text-[#1B2B4B] underline underline-offset-2">경로보기</button>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-1.5">
+        {specTiles.map(({ k, v }) => (
+          <div key={k} className="px-3 py-2 rounded-xl bg-[#F5F8FD] border border-[#EDF1F7] min-w-0">
+            <div className="text-[10.5px] font-bold text-[#7A879C]">{k}</div>
+            <div className="text-[13.5px] font-extrabold text-[#0F1A30] truncate">{v}</div>
           </div>
         ))}
       </div>
-
-      {/* ── 상→하 route 구분선 + 배차상태(상/하차지 중간) ── */}
-      <div className="flex items-center gap-2 px-4 py-1">
-        <div className="flex flex-col items-center shrink-0 ml-2">
-          <div className="w-px h-3 bg-gray-200" />
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-          <div className="w-px h-3 bg-gray-200" />
-        </div>
-        <div className="flex-1 ml-3 border-t border-dashed border-gray-200" />
-        <div className="shrink-0 flex items-center gap-1.5">
-          {activeRequestType && (
-            <button
-              onClick={() => setShowRequestModal(true)}
-              className="text-[11px] font-extrabold"
-              style={{
-                color: activeRequestType === "cancel" ? "#dc2626" : activeRequestType === "swap" ? "#f97316" : "#0284c7",
-                animation: "dispatchingPulse 1.8s ease-in-out infinite",
-              }}
-            >
-              요청
-            </button>
-          )}
-          {/* 배차완료/배차중 어느 쪽이든 뱃지 옆 날짜 텍스트로 밀리는 대신, 뱃지를
-              눌러 등록/배차 정보를 팝업으로 보게 한다(아래 DispatchConfirmModal).
-              단, 화주사 요청(배차취소/기사변경/수정)이 걸려있는 뱃지는 기존처럼
-              그 요청을 확인하는 팝업이 우선이다. */}
-          {(() => {
-            const { isPending, isHold } = getTransportBadgeInfo(order);
-            const requestClickable = isPending || isHold;
-            if (requestClickable) {
-              return <TransportStatusBadge order={order} className="text-[10px]" onClick={() => setShowReqModal(true)} flat={!cardVersionB} />;
-            }
-            return (
-              <button type="button" onClick={() => setShowConfirmInfo(true)} className="active:scale-95 transition-transform">
-                <TransportStatusBadge order={order} className="text-[10px] cursor-pointer" flat={!cardVersionB} />
-              </button>
-            );
-          })()}
-        </div>
-      </div>
-      {showConfirmInfo && (
-        <DispatchConfirmModal order={order} cardVersionB={cardVersionB} mobileUsers={mobileUsers} mode={state === "배차완료" ? "confirm" : "register"} onClose={() => setShowConfirmInfo(false)} />
-      )}
-
-      {/* ── 하차지 블록 ── */}
-      <div className="px-4 pt-2 pb-3">
-        {validStops(order.경유하차목록 || order.경유지_하차).map((s, i) => (
-          <div key={i} className="flex gap-2 mb-1.5 ml-3">
-            <span className="mt-0.5 w-5 h-5 rounded-full bg-gray-400 text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">하{i+1}</span>
-            <div className="flex-1 min-w-0">
-              <div className="text-xs font-bold text-gray-700">{s.업체명 || "-"}</div>
-              {s.주소 && <div className="text-[11px] text-gray-400">{s.주소}</div>}
-              {s.담당자 && <div className="text-[11px] text-gray-500">{s.담당자}{s.담당자번호 ? ` · ${formatPhone(s.담당자번호)}` : ""}</div>}
-              {(s.화물내용 || s.차량톤수 || s.톤수값) && (
-                <div className="text-[12px] font-semibold text-gray-700 mt-0.5">
-                  화물정보 : {[s.화물내용, toTonUnit(s.차량톤수 || (s.톤수값 ? `${s.톤수값}${s.톤수타입 || "kg"}` : ""))].filter(Boolean).join(" · ")}
-                </div>
-              )}
-              <div className="flex gap-2 mt-0.5 flex-wrap">
-                {s.방법 && <span className="text-[10px] text-gray-500 border border-gray-200 px-1 py-0.5 rounded">하차방법 : {s.방법}</span>}
-                {s.하차시간 && <span className="text-[10px] text-gray-500">{formatWaypointTime(s, "drop", order.하차일)}</span>}
-              </div>
-              {s.메모 && <div className="text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 mt-0.5">{s.메모}</div>}
-            </div>
-          </div>
-        ))}
-        <div className="flex gap-2">
-          <span className="mt-0.5 w-5 h-5 rounded-full bg-gray-500 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">하</span>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-baseline justify-between gap-2">
-              <div className="text-[13px] font-bold text-gray-900 truncate">{order.하차지명 || "-"}</div>
-              <div className="text-[11px] text-gray-400 shrink-0">{하차일시 || "-"}</div>
-            </div>
-            {order.하차지주소 && <div className="text-[11px] text-gray-500 mt-0.5">{order.하차지주소}</div>}
-          </div>
-        </div>
-      </div>
-      {/* 화물정보 — 톤수/화물내용/차량종류/혼적여부. 아이콘+텍스트를 한 줄에 나열하던
-          방식을 아래 배차방식/지급방식/이동거리 블록과 동일한 "캡션 위 + 값 아래"
-          그리드로 바꿔, 항목 간 구분이 뚜렷하도록 통일한다. */}
-      {(() => {
-        const cargoFlags = [
-          !!(order.차량톤수 || order.톤수),
-          !!order.화물내용,
-          !!(order.차량종류 || order.차종),
-          !!(order.혼적여부 && order.혼적여부 !== "독차"),
-        ];
-        const cargoCount = cargoFlags.filter(Boolean).length;
-        if (!cargoCount) return null;
-        const cargoGridCls = cargoCount >= 4 ? "grid-cols-[repeat(4,minmax(max-content,1fr))]" : cargoCount === 3 ? "grid-cols-[repeat(3,minmax(max-content,1fr))]" : cargoCount === 2 ? "grid-cols-[repeat(2,minmax(max-content,1fr))]" : "grid-cols-1";
-        return (
-          <div className="px-4 pt-2.5 pb-2 border-t border-gray-100 bg-gray-50/60">
-            <div className="text-[10px] font-bold text-gray-400 mb-1">화물정보</div>
-            <div className="overflow-x-auto">
-            <div className={`grid ${cargoGridCls} min-w-full`}>
-              {(order.차량톤수 || order.톤수) && (
-                <div className="text-center border-l border-gray-200 first:border-l-0">
-                  <div className="flex items-center justify-center gap-0.5 text-[9px] text-gray-400 mb-0.5">
-                    <Scale className="w-2.5 h-2.5" />톤수
-                  </div>
-                  <div className="text-[12px] font-extrabold text-gray-800">
-                    {hasWaypointCargo && totalKg > 0 ? toTonUnit(`${totalKg}kg`) : toTonUnit(order.차량톤수 || order.톤수)}
-                  </div>
-                </div>
-              )}
-              {order.화물내용 && (
-                <div className="text-center border-l border-gray-200 first:border-l-0">
-                  <div className="flex items-center justify-center gap-0.5 text-[9px] text-gray-400 mb-0.5">
-                    <Package className="w-2.5 h-2.5" />화물내용
-                  </div>
-                  <div className="text-[12px] font-extrabold text-gray-800">
-                    {hasWaypointCargo && totalPallet > 0 ? `${totalPallet}파레트` : order.화물내용}
-                  </div>
-                </div>
-              )}
-              {(order.차량종류 || order.차종) && (
-                <div className="text-center border-l border-gray-200 first:border-l-0">
-                  <div className="flex items-center justify-center gap-0.5 text-[9px] text-gray-400 mb-0.5">
-                    <VehicleTypeIcon type={order.차량종류 || order.차종} className="w-2.5 h-2.5" />차량종류
-                  </div>
-                  <div className="text-[12px] font-extrabold text-gray-800">{order.차량종류 || order.차종}</div>
-                </div>
-              )}
-              {order.혼적여부 && order.혼적여부 !== "독차" && (
-                <div className="text-center border-l border-gray-200 first:border-l-0">
-                  <div className="text-[9px] text-gray-400 mb-0.5">혼적여부</div>
-                  <div className="text-[12px] font-extrabold text-gray-800">{order.혼적여부}</div>
-                </div>
-              )}
-            </div>
-            </div>
-          </div>
-        );
-      })()}
-      {/* 배차방식/지급방식/이동거리/소요시간 — 청구운임·기사운임·수수료와 동일한
-          "캡션 위 + 값 아래" 통계칸 형식으로 통일해, 배차방식과 지급방식 값이 라벨
-          없이 나란히 붙어 구분이 안 되던 문제를 해결하고 화면 전체 시각언어도 맞춘다. */}
-      {(order.배차방식 || order.지급방식 || order.상차지주소) && (
-        <div className={`px-4 pt-2 pb-2.5 border-t bg-gray-50/60 ${cardVersionB ? "border-[#1B2B4B]/10" : "border-blue-100"}`}>
-          {/* ⚠️ Tailwind의 grid-cols-N은 내부적으로 minmax(0,1fr)이라, 분할화면처럼
-              뷰포트가 아주 좁아지면 칸이 내용 폭보다 더 줄어들면서 경로보기 버튼이
-              옆 칸(소요시간) 글자와 겹쳐 보이는 문제가 있었다. minmax(max-content,1fr)로
-              바꿔 칸이 내용보다 작아지지 않게 하고, 그래도 안 들어가면 줄바꿈/겹침 대신
-              가로 스크롤이 되도록 감싼다. */}
-          <div className="overflow-x-auto">
-          <div className={`grid ${routeInfo && routeInfo !== "loading" && routeInfo !== "error" ? "grid-cols-[repeat(5,minmax(max-content,1fr))]" : "grid-cols-[repeat(4,minmax(max-content,1fr))]"} min-w-full`}>
-            <div className="text-center px-1">
-              <div className="text-[10px] text-gray-400 mb-0.5 whitespace-nowrap">배차방식</div>
-              <div className={`text-[12px] font-extrabold whitespace-nowrap ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>{order.배차방식 || "-"}</div>
-            </div>
-            <div className="text-center border-l border-gray-200 px-1">
-              <div className="text-[10px] text-gray-400 mb-0.5 whitespace-nowrap">지급방식</div>
-              <div className={`text-[12px] font-extrabold whitespace-nowrap ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>{order.지급방식 || "-"}</div>
-            </div>
-            <div className="text-center border-l border-gray-200 px-1">
-              <div className="text-[10px] text-gray-400 mb-0.5 whitespace-nowrap">이동거리</div>
-              <div className={`text-[12px] font-extrabold whitespace-nowrap ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>
-                {routeInfo === "loading" ? <span className="text-gray-300 font-normal text-[11px]">조회중</span>
-                  : routeInfo === "error" || !routeInfo ? "-"
-                  : `${routeInfo.distanceKm.toFixed(1)}km`}
-              </div>
-            </div>
-            <div className="text-center border-l border-gray-200 px-1">
-              <div className="text-[10px] text-gray-400 mb-0.5 whitespace-nowrap">소요시간</div>
-              <div className={`text-[12px] font-extrabold whitespace-nowrap ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-700"}`}>
-                {routeInfo === "loading" ? <span className="text-gray-300 font-normal text-[11px]">조회중</span>
-                  : routeInfo === "error" || !routeInfo ? "-"
-                  : routeInfo.durationText}
-              </div>
-            </div>
-            {/* 경로보기 전용 칸 — 소요시간과 한 칸을 같이 쓰면 좁은 화면에서 줄바꿈이
-                생기던 문제가 있어, 값이 있을 때만 5번째 칸을 통째로 내준다. */}
-            {routeInfo && routeInfo !== "loading" && routeInfo !== "error" && (
-              <div className="flex items-center justify-center border-l border-gray-200 px-1">
-                <button
-                  type="button"
-                  onClick={() => setShowRouteMap(true)}
-                  className={`px-1.5 py-1 text-[10px] font-bold rounded border whitespace-nowrap ${cardVersionB ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-blue-600 text-blue-700"}`}
-                >
-                  경로보기
-                </button>
-              </div>
-            )}
-          </div>
-          </div>
-        </div>
-      )}
       {showRouteMap && (
         <RouteMapModal
           pickupAddr={order.상차지주소}
@@ -12705,75 +12502,72 @@ const handleAssignClick = () => {
       )}
     </div>
 
-    {/* 운임 정보 + 업체전달 */}
-    <div className="px-4 py-3 border-b border-gray-100">
-      <div className="flex items-center justify-between">
-        <div className="grid grid-cols-3 gap-3 flex-1 mr-3">
-          <div className="text-center">
-            <div className="text-[10px] text-gray-400 mb-0.5">청구운임</div>
-            <div className="text-[14px] font-extrabold text-[#1B2B4B]">{Number(claim || 0).toLocaleString()}<span className="text-[10px] font-normal text-gray-400 ml-0.5">원</span></div>
+    {/* ── ④ 운임 + 업체전달 ── */}
+    <div className="px-4 pt-3 pb-4 border-t border-[#EEF1F6]">
+      <div className={`${dSec} mb-2`}>FARE</div>
+      <div className="grid grid-cols-3 rounded-2xl border border-[#E3E8F0] overflow-hidden">
+        {[
+          { k: "청구", v: Number(claim || 0), strong: true },
+          { k: "기사", v: Number(order.기사운임 || 0) },
+          { k: "수수료", v: Number(claim || 0) - Number(order.기사운임 || 0) },
+        ].map(({ k, v, strong }, i) => (
+          <div key={k} className={`py-2.5 text-center ${i > 0 ? "border-l border-[#E3E8F0]" : ""} ${strong ? "bg-[#0F1A30]" : "bg-white"}`}>
+            <div className={`text-[10.5px] font-bold ${strong ? "text-white/60" : "text-[#7A879C]"}`}>{k}</div>
+            <div className={`text-[14.5px] font-black tabular-nums ${strong ? "text-white" : "text-[#0F1A30]"}`}>{v.toLocaleString()}<span className={`text-[10px] font-semibold ml-0.5 ${strong ? "text-white/60" : "text-[#9AA9C3]"}`}>원</span></div>
           </div>
-          <div className="text-center border-x border-gray-100">
-            <div className="text-[10px] text-gray-400 mb-0.5">기사운임</div>
-            <div className="text-[14px] font-extrabold text-emerald-700">{Number(order.기사운임 || 0).toLocaleString()}<span className="text-[10px] font-normal text-gray-400 ml-0.5">원</span></div>
-          </div>
-          <div className="text-center">
-            <div className="text-[10px] text-gray-400 mb-0.5">수수료</div>
-            <div className="text-[14px] font-extrabold text-gray-700">{(Number(claim || 0) - Number(order.기사운임 || 0)).toLocaleString()}<span className="text-[10px] font-normal text-gray-400 ml-0.5">원</span></div>
-          </div>
+        ))}
+      </div>
+      <div className="mt-2.5 flex items-center justify-between px-1">
+        <div>
+          <div className="text-[13px] font-bold text-[#1F2A44]">업체전달</div>
+          <div className="text-[11px] text-[#7A879C]">{isDelivered ? "전달 완료" : "아직 전달하지 않음"}</div>
         </div>
-        {/* 업체전달 토글 */}
-        <div className="flex flex-col items-center gap-1 border-l border-gray-100 pl-3">
-          <div className="text-[10px] text-gray-400">업체전달</div>
-          <button
-            type="button"
-            onClick={() => isDelivered ? setConfirmUndoDeliver(true) : setConfirmDeliver(true)}
-            className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${isDelivered ? (cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600") : "bg-gray-300"}`}
-          >
-            <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${isDelivered ? "translate-x-5" : "translate-x-0"}`} />
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => isDelivered ? setConfirmUndoDeliver(true) : setConfirmDeliver(true)}
+          className={`relative w-12 h-7 rounded-full transition-colors duration-200 ${isDelivered ? "bg-[#0F1A30]" : "bg-[#D5DCE7]"}`}
+        >
+          <span className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${isDelivered ? "translate-x-5" : "translate-x-0"}`} />
+        </button>
       </div>
     </div>
 
-    {/* 첨부파일 */}
-    <div className="border-b border-gray-100">
+    {/* ── ⑤ 첨부파일 ── */}
+    <div className="border-t border-[#EEF1F6]">
       <button
         onClick={() => setShowAttachments(true)}
         style={{ touchAction: "manipulation" }}
         className="w-full flex items-center justify-between px-4 py-3"
       >
-        <div className="flex items-center gap-2.5">
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-[#EEF3FB] text-[#1B2B4B]">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
             </svg>
           </div>
           <div className="text-left">
-            <div className="text-[13px] font-bold text-gray-900">첨부파일</div>
-            <div className="text-[11px] text-gray-400">{liveAttachCount > 0 ? `${liveAttachCount}개의 파일` : "업로드된 파일 없음"}</div>
+            <div className="text-[13.5px] font-bold text-[#0F1A30]">첨부파일</div>
+            <div className="text-[11.5px] text-[#7A879C]">{liveAttachCount > 0 ? `${liveAttachCount}개의 파일` : "업로드된 파일 없음"}</div>
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          {liveAttachCount > 0 && !order.attachViewed && (
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-          )}
-          {liveAttachCount > 0 && <span className={`min-w-[20px] h-5 px-1 rounded-full text-white text-[10px] font-bold flex items-center justify-center ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>{liveAttachCount}</span>}
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          {liveAttachCount > 0 && !order.attachViewed && <span className="w-2 h-2 rounded-full bg-[#4B6CB7]" />}
+          {liveAttachCount > 0 && <span className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-[#0F1A30] text-white text-[11px] font-bold flex items-center justify-center">{liveAttachCount}</span>}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9AA9C3" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </div>
       </button>
     </div>
 
-    {/* 빠른 액션 */}
-    <div className="px-4 py-3 border-b border-gray-100">
-      <div className="grid grid-cols-3 gap-2">
+    {/* ── 바로가기 ── */}
+    <div className="px-4 py-3 border-t border-[#EEF1F6]">
+      <div className="grid grid-cols-3 gap-1.5">
         <button onClick={() => onDuplicate(order)} style={{ touchAction: "manipulation" }}
-          className="py-2 rounded-xl bg-gray-100 text-gray-700 text-[11px] font-bold">오더복사</button>
+          className="h-10 rounded-xl bg-[#F1F4F9] border border-[#E3E8F0] text-[#0F1A30] text-[12.5px] font-extrabold">오더복사</button>
         <button onClick={() => setShowCopyModal(true)} style={{ touchAction: "manipulation" }}
-          className="py-2 rounded-xl bg-gray-100 text-gray-700 text-[11px] font-bold">기사복사</button>
+          className="h-10 rounded-xl bg-[#F1F4F9] border border-[#E3E8F0] text-[#0F1A30] text-[12.5px] font-extrabold">기사복사</button>
         <button style={{ touchAction: "manipulation" }}
           onClick={() => { setDetailFareFilter("all"); setShowDetailFareHistory(true); }}
-          className={`py-2 rounded-xl text-white text-[11px] font-bold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>
+          className="h-10 rounded-xl bg-[#0F1A30] text-white text-[12.5px] font-extrabold">
           운임조회{detailFareMatches.length > 0 ? ` (${detailFareMatches.length})` : ""}
         </button>
       </div>
@@ -15132,7 +14926,7 @@ const pickDrop = (c) => {
   };
 
   return (
-    <div className="px-4 py-3 space-y-3" style={{ "--reg-accent": cardVersionB ? "#1B2B4B" : "#2563eb" }}>
+    <div className={`kp-m-form px-3.5 py-3 space-y-3 ${cardVersionB ? "kp-m-form-b" : "kp-m-form-a"}`} style={{ "--reg-accent": cardVersionB ? "#1B2B4B" : "#0F1A30" }}>
       {isLockedShipperEdit && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-[12px] text-amber-800 font-semibold">
           화주사가 등록한 오더입니다. 배차 관련 정보(차량/기사/운임)만 수정할 수 있으며, 주소·시간·화물 정보는 변경할 수 없습니다.
@@ -15185,39 +14979,36 @@ const pickDrop = (c) => {
             key={key}
             type="button"
             onClick={onClick}
-            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-1 py-2.5 rounded-xl shadow-sm active:scale-95 transition ${
-              cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-500"
+            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl active:scale-95 transition ${
+              cardVersionB
+                ? "bg-[#1B2B4B] shadow-[0_6px_14px_rgba(27,43,75,0.25)]"
+                : "bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_6px_14px_rgba(16,24,40,0.05)]"
             }`}
           >
-            <Icon className="w-[18px] h-[18px] text-white shrink-0" strokeWidth={2.2} />
-            <span className="text-white text-[9px] font-bold leading-none whitespace-nowrap">{label}</span>
+            <Icon className={`w-[18px] h-[18px] shrink-0 ${cardVersionB ? "text-white" : "text-[#0F1A30]"}`} strokeWidth={2.1} />
+            <span className={`text-[10px] font-extrabold leading-none whitespace-nowrap ${cardVersionB ? "text-white/90" : "text-[#3A4A66]"}`}>{label}</span>
           </button>
         ))}
       </div>
 
-      {/* 총운임 / 기사운임 */}
-      <div className="grid grid-cols-2 border rounded-lg overflow-hidden bg-white shadow-sm">
-        <div className="border-r px-3 py-2">
-          <div className="text-xs text-gray-500 mb-1">
-            총운임(청구운임)
+      {/* 총운임 / 기사운임 / 수수료 — A형: 흰 영수증 패널, B형: 남색 패널 */}
+      <div className={`grid grid-cols-3 rounded-[20px] overflow-hidden ${cardVersionB ? "text-white shadow-[0_10px_24px_rgba(15,26,48,0.25)]" : "bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)]"}`}
+        style={cardVersionB ? { background: "linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%)" } : undefined}>
+        {[
+          { k: "청구운임", v: Number(form.청구운임 || 0) },
+          { k: "기사운임", v: Number(form.기사운임 || 0) },
+          { k: "수수료", v: Number(form.청구운임 || 0) - Number(form.기사운임 || 0) },
+        ].map(({ k, v }, i) => (
+          <div key={k} className={`px-2 py-3 text-center ${i > 0 ? (cardVersionB ? "border-l border-white/10" : "border-l border-dashed border-[#DCE3EE]") : ""}`}>
+            <div className={`text-[10px] font-extrabold tracking-[0.12em] ${cardVersionB ? "text-white/55" : "text-[#9AA9C3]"}`}>{k}</div>
+            <div className={`mt-0.5 text-[15px] font-black tabular-nums ${cardVersionB ? "text-white" : "text-[#0F1A30]"}`}>{fmtMoney(v)}</div>
           </div>
-          <div className="text-base font-semibold">
-            {fmtMoney(form.청구운임)}
-          </div>
-        </div>
-        <div className="px-3 py-2">
-          <div className="text-xs text-gray-500 mb-1">
-            기사운임
-          </div>
-          <div className="text-base font-semibold">
-            {fmtMoney(form.기사운임)}
-          </div>
-        </div>
+        ))}
       </div>
 
       {/* 수정/등록 입력 전체를 하나의 카드로 묶는다 — 각 항목마다 따로 테두리를
           두르지 않고, 카드 한 장 안에 얇은 구분선으로만 항목을 나눈다 */}
-      <div className="bg-white rounded-2xl overflow-hidden shadow-sm">
+      <div className="kp-m-form-card bg-white rounded-[22px] overflow-hidden border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_24px_rgba(16,24,40,0.06)]">
       <fieldset disabled={isLockedShipperEdit} style={{ display: "contents" }}>
       {/* 상차/하차 일시 */}
       <div>
@@ -16342,8 +16133,8 @@ const pickDrop = (c) => {
             }
             onSave();
           }}
-          className={`w-full py-3 rounded-lg text-white text-base font-semibold shadow ${
-            cardVersionB ? "bg-[#1B2B4B] hover:bg-[#243a60]" : "bg-blue-500"
+          className={`w-full h-[52px] rounded-2xl text-white text-[16px] font-black tracking-tight shadow-[0_10px_24px_rgba(15,26,48,0.25)] active:scale-[0.99] transition ${
+            cardVersionB ? "bg-[#1B2B4B]" : "bg-[#0F1A30]"
           }`}
         >
           {form._editId ? "수정하기" : multiCount > 1 ? `${multiCount}건 등록하기` : "등록하기"}
@@ -16384,11 +16175,7 @@ const pickDrop = (c) => {
                 _returnToDetail: false,
               });
             }}
-            className={`w-full py-3 rounded-lg text-base font-semibold shadow ${
-              cardVersionB
-                ? "bg-gray-100 text-[#1B2B4B]/70 border border-gray-200"
-                : "bg-gray-300 text-gray-800"
-            }`}
+            className="w-full h-12 rounded-2xl text-[15px] font-extrabold bg-white text-[#3A4A66] border border-[#E3E8F0]"
           >
             수정취소
           </button>
@@ -18567,12 +18354,12 @@ ${coreBlockMd}${order.전달사항?.trim() ? `\n\n📢 전달사항\n${order.전
 // ======================================================================
 function RowLabelInput({ label, input, right, labelClassName = "" }) {
   return (
-    <div className="flex border-b last:border-b-0 overflow-hidden">
-      <div className={`${right ? "w-[104px]" : "w-[88px]"} shrink-0 px-2 py-2 text-[11px] text-gray-600 bg-gray-50 flex items-center justify-between gap-1 ${labelClassName}`}>
-        <span className="whitespace-nowrap truncate">{label}</span>
+    <div className="flex border-b border-[#EEF1F6] last:border-b-0 overflow-hidden">
+      <div className={`${right ? "w-[104px]" : "w-[88px]"} shrink-0 px-2.5 py-2.5 text-[11.5px] font-bold text-[#5B6B85] bg-[#F7F9FC] border-r border-[#EEF1F6] flex items-center justify-between gap-1 ${labelClassName}`}>
+        <span className="leading-tight break-keep">{label}</span>
         {right && <span className="ml-1 shrink-0 whitespace-nowrap [&_button]:whitespace-nowrap [&_span]:whitespace-nowrap">{right}</span>}
       </div>
-      <div className="flex-1 min-w-0 px-2 py-2 overflow-hidden">{input}</div>
+      <div className="flex-1 min-w-0 px-2.5 py-2 overflow-hidden">{input}</div>
     </div>
   );
 }
