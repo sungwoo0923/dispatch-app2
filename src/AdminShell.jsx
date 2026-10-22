@@ -37,13 +37,14 @@ export function ShellIcon({ name, size = 18, className = "", strokeWidth = 1.9 }
   );
 }
 
+// ⭐ 알록달록 금지 — 숫자 카드 아이콘은 모두 남색 계열
 const TONES = {
   navy: "bg-[#EEF3FB] text-[#1B2B4B]",
-  blue: "bg-blue-50 text-blue-600",
-  green: "bg-emerald-50 text-emerald-600",
-  amber: "bg-amber-50 text-amber-600",
-  violet: "bg-violet-50 text-violet-600",
-  rose: "bg-rose-50 text-rose-600",
+  blue: "bg-[#EEF3FB] text-[#1B2B4B]",
+  green: "bg-[#EEF3FB] text-[#1B2B4B]",
+  amber: "bg-[#EEF3FB] text-[#1B2B4B]",
+  violet: "bg-[#EEF3FB] text-[#1B2B4B]",
+  rose: "bg-[#EEF3FB] text-[#1B2B4B]",
 };
 
 const dateLabel = () => {

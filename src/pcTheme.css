@@ -205,9 +205,9 @@
 /* 선택한 줄 */
 .kp-pc .kp-grid tbody tr[class~="bg-blue-50"] { background-color: #EAF1FF; }
 .kp-pc .kp-grid tbody tr[class~="bg-blue-50"] > td:first-child { box-shadow: inset 3px 0 0 #2D4C82; }
-/* 긴급 미배차 줄 */
-.kp-pc .kp-grid tbody tr[class~="bg-red-50"] { background-color: #FFF5F5; }
-.kp-pc .kp-grid tbody tr[class~="bg-red-50"] > td:first-child { box-shadow: inset 3px 0 0 #E5484D; }
+/* 긴급 미배차 줄(남색 계열로만) */
+.kp-pc .kp-grid tbody tr[class~="bg-red-50"] { background-color: #F3F6FB; }
+.kp-pc .kp-grid tbody tr[class~="bg-red-50"] > td:first-child { box-shadow: inset 3px 0 0 #0F1A30; }
 
 /* 배차상태 배지 → 점 + 둥근 알약 */
 .kp-pc .kp-grid td button[class~="py-0.5"][class~="text-[11px]"][class~="bg-amber-500"],
@@ -233,15 +233,27 @@
   border-radius: 999px;
   background: currentColor;
 }
+/* ⭐ 알록달록 금지 — 상태 배지는 남색 계열로만 구분 */
+/* 배차중: 흰 바탕 + 남색 테두리 */
 .kp-pc .kp-grid td button[class~="py-0.5"][class~="text-[11px]"][class~="bg-amber-500"] {
-  background: #FFF4E0 !important; color: #B45309 !important; outline: 1px solid #FBD38D;
+  background: #fff !important; color: #1B2B4B !important; outline: 1px solid #B9C6DC;
 }
+/* 배차완료: 남색 채움 */
 .kp-pc .kp-grid td button[class~="py-0.5"][class~="text-[11px]"][class~="bg-[#1B2B4B]"] {
-  background: #E7F6EE !important; color: #047857 !important; outline: 1px solid #A7E3C4;
+  background: #1B2B4B !important; color: #fff !important; outline: none;
 }
+/* 긴급·취소: 진한 남색 테두리 굵게 */
 .kp-pc .kp-grid td button[class~="py-0.5"][class~="text-[11px]"][class~="bg-red-500"],
 .kp-pc .kp-grid td button[class~="py-0.5"][class~="text-[11px]"][class~="bg-red-600"] {
-  background: #FDECEC !important; color: #C81E1E !important; outline: 1px solid #F8B4B4;
+  background: #EEF3FB !important; color: #0F1A30 !important; outline: 2px solid #0F1A30;
+}
+
+/* 화주사 배차요청·취소요청 배지도 남색 계열로(깜빡임은 그대로) */
+.kp-pc .kp-grid td button[class~="py-0.5"][class~="text-[11px]"][class~="bg-sky-500"] {
+  background: #2D4C82 !important; color: #fff !important; border-radius: 999px !important; padding: 4px 11px !important;
+}
+.kp-pc .kp-grid td button[title^="화주사가 배차취소를"] {
+  background: #0F1A30 !important; box-shadow: none !important; border-radius: 999px !important; padding: 4px 11px !important;
 }
 
 /* 표 안 입력칸·선택칸 */

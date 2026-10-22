@@ -2973,7 +2973,7 @@ function KpPageHeader({ menu }) {
         </div>
       </div>
       <div className="ml-auto hidden lg:flex items-center gap-2 px-3 h-9 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] text-[13px] font-bold text-[#3A4A66] shrink-0">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+        <span className="w-1.5 h-1.5 rounded-full bg-[#4B6CB7]" />
         {ymd} ({dow})
       </div>
     </div>
@@ -7626,7 +7626,7 @@ return (
               <button
                 onClick={toggleUpdateBanner}
                 className={`kp-chip-btn text-[12px] transition ${
-                  updateBannerEnabled ? "!bg-emerald-500/90 !border-emerald-400 !text-white" : ""
+                  updateBannerEnabled ? "!bg-white !text-[#0F1A30] !border-white" : ""
                 }`}
                 title={updateBannerEnabled
                   ? "업데이트 알림 배너: 전체 ON — 클릭 시 끄기"
@@ -7694,7 +7694,7 @@ return (
 
             <button
               onClick={logout}
-              className="h-[34px] px-3.5 rounded-[10px] bg-[#E5484D]/90 hover:bg-[#E5484D] text-white text-[12px] font-bold transition whitespace-nowrap shadow-[0_4px_12px_rgba(229,72,77,0.3)]"
+              className="kp-chip-btn text-[12px] transition"
             >
               로그아웃
             </button>

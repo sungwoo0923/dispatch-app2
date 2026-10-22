@@ -33,9 +33,10 @@ function Modal({ title, onClose, children }) {
 const KP_HOME_CARD = "bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)]";
 const KPI_TONES = {
   blue: { badge: "bg-[#EEF3FB] text-[#1B2B4B]", bar: "bg-[#1B2B4B]" },
-  red: { badge: "bg-red-50 text-red-600", bar: "bg-red-500" },
-  green: { badge: "bg-emerald-50 text-emerald-600", bar: "bg-emerald-500" },
-  orange: { badge: "bg-amber-50 text-amber-600", bar: "bg-amber-500" },
+  // ⭐ 알록달록 금지 — 전부 남색 계열
+  red: { badge: "bg-[#EEF3FB] text-[#1B2B4B]", bar: "bg-[#1B2B4B]" },
+  green: { badge: "bg-[#EEF3FB] text-[#1B2B4B]", bar: "bg-[#1B2B4B]" },
+  orange: { badge: "bg-[#EEF3FB] text-[#1B2B4B]", bar: "bg-[#1B2B4B]" },
 };
 const KPI_ICONS = {
   blue: <><rect x="1" y="6" width="13" height="10" rx="1.5" /><path d="M14 9h4l3 3.5V16h-7z" /><circle cx="5.5" cy="17.5" r="1.8" /><circle cx="17.5" cy="17.5" r="1.8" /></>,
@@ -810,7 +811,7 @@ React.useEffect(() => {
                 <div className="mt-2 text-[14px] font-bold text-blue-100/85">{dateText}</div>
                 <h1 className="mt-1 text-[30px] font-black tracking-tight leading-tight">{myName ? `${myName}님, ${hello}` : hello}</h1>
                 <p className="mt-2 text-[15px] font-medium text-blue-50/90">
-                  오늘 접수 <b className="text-white">{todayStatsFixed.count.toLocaleString()}건</b> · 미배차 <b className={pending > 0 ? "text-amber-300" : "text-white"}>{Number(pending || 0).toLocaleString()}건</b> · 오늘 매출 <b className="text-white">{todayStatsFixed.revenue.toLocaleString()}원</b>
+                  오늘 접수 <b className="text-white">{todayStatsFixed.count.toLocaleString()}건</b> · 미배차 <b className="text-white">{Number(pending || 0).toLocaleString()}건</b> · 오늘 매출 <b className="text-white">{todayStatsFixed.revenue.toLocaleString()}원</b>
                 </p>
               </div>
               <div className="grid grid-cols-3 gap-3">
@@ -922,7 +923,7 @@ React.useEffect(() => {
               <h3 className="mt-0.5 text-[18px] font-black text-[#0F1A30] tracking-tight">미배차 현황</h3>
               <div className="text-[13px] text-gray-500 mt-0.5">아직 차량이 배정되지 않은 오더 · 두 번 클릭하면 상세 보기</div>
             </div>
-            <span className={`px-3.5 py-1.5 rounded-xl text-[15px] font-black tabular-nums ${allPendingOrders.length ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"}`}>
+            <span className={`px-3.5 py-1.5 rounded-xl text-[15px] font-black tabular-nums bg-[#EEF3FB] text-[#1B2B4B]`}>
               {allPendingOrders.length ? `${allPendingOrders.length}건` : "모두 배차 완료"}
             </span>
           </div>
@@ -1076,7 +1077,7 @@ React.useEffect(() => {
                       <td className="px-3 py-2.5 text-center text-[13px] font-semibold text-gray-700">{n.author}</td>
                       <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800">
                         {n.audience === "shipper" && (
-                          <span className="inline-block mr-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-600 align-middle">화주사</span>
+                          <span className="inline-block mr-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#EEF3FB] text-[#1B2B4B] align-middle">화주사</span>
                         )}
                         {n.title || "공지사항"}
                       </td>
@@ -1197,7 +1198,7 @@ React.useEffect(() => {
                         >
                           <td className="w-[44px] text-center py-2.5 pl-3 pr-2 relative">
                             {(isReceiver || isAuthor) && (
-                              <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-r ${receiverRead ? "bg-emerald-400" : "bg-red-400"}`} />
+                              <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-r ${receiverRead ? "bg-[#C9D2E0]" : "bg-[#1B2B4B]"}`} />
                             )}
                             <span className="text-[12px] text-gray-500">{(handoverPage - 1) * HANDOVER_PAGE_SIZE + idx + 1}</span>
                           </td>
