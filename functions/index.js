@@ -3440,7 +3440,7 @@ async function purgeResetBackup(ref) {
 }
 
 exports.companyReset = functions
-  .runWith({ timeoutSeconds: 540, memory: "1GB" })
+  .runWith({ timeoutSeconds: 540, memory: "2GB" })
   .https.onRequest(async (req, res) => {
     res.set("Access-Control-Allow-Origin", "*");
     res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -3566,8 +3566,8 @@ exports.companyReset = functions
 
       if (action === "preview") {
         const { found, perCollection, members } = await collectCompanyDocs(company, { deleteAccounts });
-        const files = await collectFilesInDocs(found);
-        res.json({ total: found.size, perCollection, files: files.size, accounts: members.length, deleteAccounts });
+        const { entries, files } = await snapshotTree(found);
+        res.json({ total: found.size, subDocs: entries.length - found.size, perCollection, files: files.size, accounts: members.length, deleteAccounts });
         return;
       }
 
@@ -3605,11 +3605,12 @@ exports.companyReset = functions
         }
         await backupRef.set({ status: "kept", fileCount: savedFiles.length }, { merge: true });
         // 2) 문서(하위 컬렉션 포함) 삭제
-        let deletedDocs = 0;
-        const refs = [...found.values()].map((d) => d.ref);
-        for (let i = 0; i < refs.length; i += 20) {
-          await Promise.all(refs.slice(i, i + 20).map((r) => db.recursiveDelete(r).then(() => { deletedDocs += 1; }).catch((e) => console.warn("삭제 실패", r.path, e?.message))));
-        }
+        // 보관해둔 문서(하위 문서 포함)를 한꺼번에 지운다 — 문서가 많아도 빠르게
+        const delWriter = db.bulkWriter();
+        delWriter.onWriteError((err) => err.failedAttempts < 3);
+        entries.forEach((e) => delWriter.delete(db.doc(e.path)));
+        await delWriter.close();
+        const deletedDocs = found.size;
         // 3) 첨부파일 삭제(보관함에는 복사본이 있음)
         let deletedFiles = 0;
         for (let i = 0; i < savedFiles.length; i += 20) {
