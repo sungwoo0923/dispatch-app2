@@ -9,6 +9,7 @@ import { createPortal } from "react-dom";
 import { auth, db, DEFAULT_COMPANY } from "./firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth";
+import { useMfaPrompt, MfaEnrollSection, MASTER_EMAIL, mfaErrorText } from "./MfaModal";
 import {
   SESSIONS_COLL, KIND_LABEL, END_REASON_LABEL, getMySessionId, endSessions, sessionLastMs, timeAgo, getDeviceLabel,
 } from "./loginSessions";
@@ -50,6 +51,7 @@ function useMySessions(uid) {
 }
 
 function PasswordChange({ otherIds }) {
+  const [mfaUi, askMfa] = useMfaPrompt();
   const [cur, setCur] = React.useState("");
   const [pw1, setPw1] = React.useState("");
   const [pw2, setPw2] = React.useState("");
@@ -65,7 +67,13 @@ function PasswordChange({ otherIds }) {
     if (!user?.email) return setMsg({ type: "err", text: "로그인 정보를 확인할 수 없습니다. 다시 로그인해 주세요." });
     setBusy(true); setMsg({ type: "", text: "" });
     try {
-      await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, cur));
+      try {
+        await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, cur));
+      } catch (re) {
+        // 2차 인증을 쓰는 계정은 문자 인증까지 통과해야 비밀번호를 바꿀 수 있다
+        if (re?.code === "auth/multi-factor-auth-required") await askMfa(re, auth);
+        else throw re;
+      }
       await updatePassword(user, pw1);
       if (logoutOthers && otherIds.length) await endSessions(otherIds, "password", getDeviceLabel()).catch(() => {});
       setCur(""); setPw1(""); setPw2("");
@@ -77,7 +85,8 @@ function PasswordChange({ otherIds }) {
         text: code === "auth/wrong-password" || code === "auth/invalid-credential" ? "현재 비밀번호가 올바르지 않습니다."
           : code === "auth/too-many-requests" ? "시도가 너무 많습니다. 잠시 후 다시 해주세요."
             : code === "auth/weak-password" ? "비밀번호가 너무 쉽습니다. 6자 이상으로 다시 입력해 주세요."
-              : `변경 실패: ${e?.message || e}`,
+              : code.startsWith("mfa/") || code.includes("verification") || code === "auth/code-expired" ? mfaErrorText(e)
+                : `변경 실패: ${e?.message || e}`,
       });
     } finally {
       setBusy(false);
@@ -86,6 +95,7 @@ function PasswordChange({ otherIds }) {
   const input = "w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-[14px] outline-none focus:border-[#1B2B4B] bg-white";
   return (
     <div className="space-y-2.5">
+      {mfaUi}
       <input type="password" autoComplete="current-password" placeholder="현재 비밀번호" value={cur} onChange={(e) => setCur(e.target.value)} className={input} />
       <input type="password" autoComplete="new-password" placeholder="새 비밀번호 (6자 이상)" value={pw1} onChange={(e) => setPw1(e.target.value)} className={input} />
       <input type="password" autoComplete="new-password" placeholder="새 비밀번호 확인" value={pw2} onChange={(e) => setPw2(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} className={input} />
@@ -102,6 +112,7 @@ function PasswordChange({ otherIds }) {
 }
 
 export default function LoginManager({ user }) {
+  const isMaster = (user?.email || auth.currentUser?.email) === MASTER_EMAIL || (() => { try { return localStorage.getItem("role") === "totalMaster"; } catch { return false; } })();
   const uid = user?.uid || auth.currentUser?.uid;
   const list = useMySessions(uid);
   const myId = getMySessionId();
@@ -158,6 +169,12 @@ export default function LoginManager({ user }) {
           </div>
         )}
       </Section>
+
+      {isMaster && (
+        <Section title="2차 인증 (휴대폰 문자)" desc="최고관리자 전용 — 로그인할 때 비밀번호 다음에 휴대폰으로 받은 인증번호 6자리를 한 번 더 입력합니다.">
+          <MfaEnrollSection user={user} />
+        </Section>
+      )}
 
       <Section title="비밀번호 변경" desc="현재 비밀번호를 확인한 뒤 새 비밀번호로 바꿉니다.">
         <PasswordChange otherIds={others.map((s) => s.id)} />

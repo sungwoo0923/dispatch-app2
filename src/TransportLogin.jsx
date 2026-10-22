@@ -8,6 +8,7 @@ import BigCheck from "./components/BigCheck";
 import { doc, getDoc, getFirestore, collection, getDocs, query, where } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
+import { useMfaPrompt, mfaErrorText } from "./MfaModal";
 
 const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
 
@@ -82,6 +83,16 @@ export default function TransportLogin() {
   // ⭐ 최고관리자 전용 — 화면의 이메일/비밀번호(최고관리자 계정)로 "별도" 인증 인스턴스에서
   // 토큰만 받아 서버 함수에 보낸다(메인 로그인 상태에는 영향 없음).
   const [codeError, setCodeError] = useState("");
+  // ⭐ 최고관리자 2차 인증(휴대폰 문자) — 비밀번호가 맞으면 Firebase가 "2차 인증 필요"를 알려주고, 문자 인증창을 띄운다
+  const [mfaUi, askMfa] = useMfaPrompt();
+  const signInMfa = async (authInst) => {
+    try {
+      return await signInWithEmailAndPassword(authInst, email.trim(), pw);
+    } catch (e) {
+      if (e?.code === "auth/multi-factor-auth-required") return askMfa(e, authInst);
+      throw e;
+    }
+  };
   const isMasterEmail = email.trim().toLowerCase() === TOTAL_MASTER_EMAIL;
   const searchCompanyCode = async () => {
     const q2 = codeLookupQ.trim();
@@ -93,7 +104,7 @@ export default function TransportLogin() {
     try {
       const lookupApp = getApps().find(a => a.name === "codeLookup") || initializeApp(auth.app.options, "codeLookup");
       lookupAuth = getAuth(lookupApp);
-      const cred = await signInWithEmailAndPassword(lookupAuth, email.trim(), pw);
+      const cred = await signInMfa(lookupAuth);
       if ((cred.user.email || "").toLowerCase() !== TOTAL_MASTER_EMAIL) {
         setCodeError("최고관리자만 사용할 수 있습니다.");
         setCodeResults([]);
@@ -149,7 +160,7 @@ export default function TransportLogin() {
       trimLocalStorage();
       let credential;
       try {
-        credential = await signInWithEmailAndPassword(auth, email.trim(), pw);
+        credential = await signInMfa(auth);
       } catch (e1) {
         if (isQuota(e1)) {
           freeLocalStorage(3 * 1024 * 1024);
@@ -158,7 +169,7 @@ export default function TransportLogin() {
         } else {
           throw e1;
         }
-        credential = await signInWithEmailAndPassword(auth, email.trim(), pw);
+        credential = await signInMfa(auth);
       }
       const uid = credential.user.uid;
       const inputEmail = email.trim().toLowerCase();
@@ -257,6 +268,8 @@ export default function TransportLogin() {
       const code = err.code;
       if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
         setError("비밀번호가 일치하지 않습니다.");
+      } else if (code === "mfa/cancelled" || code === "auth/invalid-verification-code" || code === "auth/code-expired" || code === "auth/operation-not-allowed") {
+        setError(mfaErrorText(err));
       } else if (code === "auth/user-not-found") {
         setError("등록된 이메일이 없습니다.");
       } else if (code === "auth/too-many-requests") {
@@ -293,6 +306,8 @@ export default function TransportLogin() {
   };
 
   return (
+    <>
+    {mfaUi}
     <div
       className="min-h-screen flex items-center justify-center px-4 relative"
       style={{ background: "linear-gradient(135deg, #061832 0%, #0B2554 50%, #0D2B66 100%)" }}
@@ -580,5 +595,6 @@ export default function TransportLogin() {
         </div>
       )}
     </div>
+    </>
   );
 }

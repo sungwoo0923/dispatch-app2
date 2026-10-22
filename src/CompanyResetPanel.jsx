@@ -3,6 +3,7 @@
 //  1) 초기화 비밀번호를 먼저 설정(서버에 암호화해서 저장 — 화면에서 다시 볼 수 없음)
 //  2) 운송사 선택 → [미리보기]로 지워질 데이터 개수 확인
 //  3) [초기화] → 매출관리처럼 비밀번호 입력창 → 맞으면 그 운송사가 등록한 데이터를 전부 삭제
+//  4) 지운 데이터는 7일 동안 보관함에 남는다 → [복원]하면 초기화 전 상태 그대로 돌아온다(7일 뒤 자동 영구 삭제)
 // 실제 삭제는 서버(functions/index.js companyReset)가 한다.
 import React from "react";
 import { auth, FUNCTIONS_BASE } from "./firebase";
@@ -54,13 +55,19 @@ export default function CompanyResetPanel() {
   const [askPw, setAskPw] = React.useState(false);
   const [execPw, setExecPw] = React.useState("");
   const [execErr, setExecErr] = React.useState("");
+  const [backups, setBackups] = React.useState(null);
+  const [keepDays, setKeepDays] = React.useState(7);
+  const [restoreTarget, setRestoreTarget] = React.useState(null); // 복원할 보관함(비밀번호 창)
+  const [restoreMsg, setRestoreMsg] = React.useState("");
 
   const load = React.useCallback(async () => {
     setLoadErr("");
     try {
-      const [st, co] = await Promise.all([callReset({ action: "status" }), callReset({ action: "companies" })]);
+      const [st, co, bk] = await Promise.all([callReset({ action: "status" }), callReset({ action: "companies" }), callReset({ action: "backups" })]);
       setStatus(st);
       setCompanies(co.companies || []);
+      setBackups(bk.backups || []);
+      if (bk.keepDays) setKeepDays(bk.keepDays);
     } catch (e) { setLoadErr(e.message); }
   }, []);
   React.useEffect(() => { load(); }, [load]);
@@ -89,12 +96,23 @@ export default function CompanyResetPanel() {
     if (!execPw) return setExecErr("비밀번호를 입력하세요.");
     setBusy("exec"); setExecErr("");
     try {
-      const r = await callReset({ action: "execute", company, deleteAccounts, password: execPw });
-      setAskPw(false); setExecPw(""); setPreview(null);
-      setResult(r);
+      if (restoreTarget) {
+        const r = await callReset({ action: "restore", backupId: restoreTarget.id, password: execPw });
+        setRestoreMsg(`${r.company} 복원 완료 — 데이터 ${r.restoredDocs.toLocaleString()}건, 첨부파일 ${r.restoredFiles.toLocaleString()}개${r.restoredAccounts ? `, 계정 ${r.restoredAccounts}개` : ""}가 초기화 전 상태로 돌아왔습니다.`);
+        setRestoreTarget(null);
+      } else {
+        const r = await callReset({ action: "execute", company, deleteAccounts, password: execPw });
+        setPreview(null);
+        setResult(r);
+      }
+      setAskPw(false); setExecPw("");
       load();
     } catch (e) { setExecErr(e.message); } finally { setBusy(""); }
   };
+  const openRestore = (b) => { setRestoreTarget(b); setAskPw(true); setExecErr(""); setExecPw(""); setRestoreMsg(""); };
+  const closePw = () => { if (busy === "exec") return; setAskPw(false); setRestoreTarget(null); };
+  const fmtTime = (ms) => (ms ? new Date(ms).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-");
+  const daysLeft = (ms) => Math.max(0, Math.ceil((ms - Date.now()) / 86400000));
 
   const input = "w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]";
   const sel = companies.find((c) => c.name === company);
@@ -102,8 +120,9 @@ export default function CompanyResetPanel() {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-[13px] text-red-700 leading-relaxed">
-        <b className="text-[14px]">⚠️ 되돌릴 수 없는 기능입니다.</b> 선택한 운송사가 프로그램에 등록한 모든 데이터(오더·거래처·상하차지·기사·일정·근태·알림·설정·첨부파일 등)를
+        <b className="text-[14px]">⚠️ 운송사 데이터를 전부 지우는 기능입니다.</b> 선택한 운송사가 프로그램에 등록한 모든 데이터(오더·거래처·상하차지·기사·일정·근태·알림·설정·첨부파일 등)를
         하나도 빠짐없이 삭제해 처음 가입한 상태로 되돌립니다. 돌캐는 회사명이 비어 있는 예전 데이터까지 함께 지워집니다.
+        <div className="mt-1.5 text-[#1B2B4B] font-semibold">🛟 지운 데이터는 {keepDays}일 동안 아래 "3. 초기화 보관함"에 보관되며, [복원]을 누르면 초기화 전 상태 그대로 돌아옵니다. {keepDays}일이 지나면 자동으로 영구 삭제됩니다.</div>
       </div>
 
       {loadErr && <div className="rounded-xl border border-amber-300 bg-amber-50 px-5 py-3 text-[13px] text-amber-800">{loadErr} <button onClick={load} className="ml-2 underline font-bold">다시 시도</button></div>}
@@ -184,28 +203,86 @@ export default function CompanyResetPanel() {
 
         {result && (
           <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-[13px] text-emerald-800 font-semibold">
-            초기화 완료 — 데이터 {result.deletedDocs.toLocaleString()}건, 첨부파일 {result.deletedFiles.toLocaleString()}개{result.deletedAccounts ? `, 계정 ${result.deletedAccounts}개` : ""} 삭제
+            초기화 완료 — 데이터 {result.deletedDocs.toLocaleString()}건, 첨부파일 {result.deletedFiles.toLocaleString()}개{result.deletedAccounts ? `, 계정 ${result.deletedAccounts}개(사용 중지)` : ""} 삭제.
+            <span className="font-normal"> {fmtTime(result.expiresAt)}까지 보관함에서 복원할 수 있습니다.</span>
           </div>
         )}
       </div>
 
-      {/* 비밀번호 입력창(매출관리 잠금 화면과 같은 방식) */}
+      {/* 3. 초기화 보관함 — 7일 동안 복원 가능 */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="px-5 py-4 flex items-center gap-3 border-b border-gray-100">
+          <div className="flex-1">
+            <div className="text-[14.5px] font-black text-[#1B2B4B]">3. 초기화 보관함</div>
+            <div className="text-[12.5px] text-gray-500 mt-0.5">초기화한 데이터를 {keepDays}일 동안 보관합니다. [복원]을 누르고 초기화 비밀번호를 입력하면 초기화 전 상태 그대로 돌아옵니다.</div>
+          </div>
+          <button onClick={load} className="px-3 py-2 rounded-lg border border-gray-300 text-[12.5px] font-bold text-gray-600 hover:bg-gray-50">새로고침</button>
+        </div>
+        {restoreMsg && <div className="mx-5 mt-4 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-[13px] text-emerald-800 font-semibold">{restoreMsg}</div>}
+        {backups === null ? (
+          <div className="text-[13px] text-gray-500 text-center py-10">불러오는 중…</div>
+        ) : backups.length === 0 ? (
+          <div className="text-[13px] text-gray-500 text-center py-10">초기화한 기록이 없습니다.</div>
+        ) : (
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="bg-[#1B2B4B] text-white">
+                {["운송사", "초기화 일시", "실행", "보관 데이터", "상태", ""].map((h) => <th key={h} className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{h}</th>)}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {backups.map((b) => {
+                const live = b.status === "kept" && b.expiresAt > Date.now();
+                const left = daysLeft(b.expiresAt);
+                return (
+                  <tr key={b.id} className="hover:bg-gray-50">
+                    <td className="px-3 py-3 text-center font-bold text-gray-800">{b.company}</td>
+                    <td className="px-3 py-3 text-center text-gray-600 whitespace-nowrap">{fmtTime(b.at)}</td>
+                    <td className="px-3 py-3 text-center text-gray-500">{b.by}</td>
+                    <td className="px-3 py-3 text-center text-gray-700 whitespace-nowrap">
+                      {b.docCount.toLocaleString()}건 · 파일 {b.fileCount.toLocaleString()}개{b.deleteAccounts ? ` · 계정 ${b.accounts}개` : ""}
+                    </td>
+                    <td className="px-3 py-3 text-center whitespace-nowrap">
+                      {b.status === "restored" ? <span className="px-2.5 py-1 rounded-full text-[11.5px] font-bold bg-emerald-100 text-emerald-700">복원됨 · {fmtTime(b.restoredAt)}</span>
+                        : live ? <span className={`px-2.5 py-1 rounded-full text-[11.5px] font-bold ${left <= 1 ? "bg-red-100 text-red-700" : "bg-blue-100 text-[#1B2B4B]"}`}>보관 중 · {left <= 1 ? "오늘·내일 삭제" : `D-${left}`}</span>
+                          : b.status === "saving" || b.status === "restoring" ? <span className="px-2.5 py-1 rounded-full text-[11.5px] font-bold bg-amber-100 text-amber-700">처리 중</span>
+                            : <span className="px-2.5 py-1 rounded-full text-[11.5px] font-bold bg-gray-100 text-gray-500">영구 삭제됨</span>}
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      {live && (
+                        <button onClick={() => openRestore(b)} className="px-3.5 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12.5px] font-bold hover:bg-[#243a60]">복원</button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* 비밀번호 입력창(매출관리 잠금 화면과 같은 방식) — 초기화·복원 공용 */}
       {askPw && (
-        <div className="fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center p-4" onClick={() => busy !== "exec" && setAskPw(false)}>
+        <div className="fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center p-4" onClick={closePw}>
           <div className="w-full max-w-[380px] bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="bg-red-600 px-6 py-4 text-white">
-              <div className="text-[16px] font-black">{company} 초기화</div>
-              <div className="text-[12px] text-white/80 mt-0.5">초기화 비밀번호를 입력하면 바로 삭제가 시작됩니다</div>
+            <div className={`${restoreTarget ? "bg-[#1B2B4B]" : "bg-red-600"} px-6 py-4 text-white`}>
+              <div className="text-[16px] font-black">{restoreTarget ? `${restoreTarget.company} 복원` : `${company} 초기화`}</div>
+              <div className="text-[12px] text-white/80 mt-0.5">
+                {restoreTarget ? `${fmtTime(restoreTarget.at)}에 초기화한 데이터를 초기화 전 상태로 되돌립니다` : `초기화 비밀번호를 입력하면 바로 삭제가 시작됩니다(${keepDays}일간 보관)`}
+              </div>
             </div>
             <div className="px-6 py-5 space-y-3">
               <input type="password" autoFocus value={execPw} onChange={(e) => setExecPw(e.target.value)} onKeyDown={(e) => e.key === "Enter" && runExecute()}
-                placeholder="초기화 비밀번호" className="w-full border border-gray-300 rounded-xl px-4 py-3 text-[15px] outline-none focus:border-red-500 text-center tracking-widest" />
+                placeholder="초기화 비밀번호" className={`w-full border border-gray-300 rounded-xl px-4 py-3 text-[15px] outline-none text-center tracking-widest ${restoreTarget ? "focus:border-[#1B2B4B]" : "focus:border-red-500"}`} />
               {execErr && <div className="text-[12.5px] font-semibold text-red-600 text-center">{execErr}</div>}
               <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => setAskPw(false)} disabled={busy === "exec"} className="py-3 rounded-xl border border-gray-300 text-[14px] font-bold text-gray-700">취소</button>
-                <button onClick={runExecute} disabled={busy === "exec"} className="py-3 rounded-xl bg-red-600 text-white text-[14px] font-bold disabled:opacity-60">{busy === "exec" ? "삭제 중…" : "초기화"}</button>
+                <button onClick={closePw} disabled={busy === "exec"} className="py-3 rounded-xl border border-gray-300 text-[14px] font-bold text-gray-700">취소</button>
+                <button onClick={runExecute} disabled={busy === "exec"} className={`py-3 rounded-xl text-white text-[14px] font-bold disabled:opacity-60 ${restoreTarget ? "bg-[#1B2B4B]" : "bg-red-600"}`}>
+                  {busy === "exec" ? (restoreTarget ? "복원 중…" : "보관 후 삭제 중…") : (restoreTarget ? "복원" : "초기화")}
+                </button>
               </div>
-              {sel && <div className="text-[11.5px] text-gray-500 text-center">삭제 대상: {preview?.total?.toLocaleString() || 0}건 · 첨부파일 {preview?.files || 0}개</div>}
+              {restoreTarget && <div className="text-[11.5px] text-gray-500 text-center">복원 대상: {restoreTarget.docCount.toLocaleString()}건 · 첨부파일 {restoreTarget.fileCount}개{restoreTarget.deleteAccounts ? ` · 계정 ${restoreTarget.accounts}개` : ""}</div>}
+              {!restoreTarget && sel && <div className="text-[11.5px] text-gray-500 text-center">삭제 대상: {preview?.total?.toLocaleString() || 0}건 · 첨부파일 {preview?.files || 0}개</div>}
             </div>
           </div>
         </div>

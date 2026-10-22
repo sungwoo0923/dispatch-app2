@@ -9,13 +9,14 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import { onAuthStateChanged, signOut, multiFactor } from "firebase/auth";
 import { auth, db, DEFAULT_COMPANY } from "./firebase";
 import { setBlindViewerRole } from "./blind";
 import {
   checkLoginSession, replaceAndCreate, watchMySession, startHeartbeat, installEndOnSignOut,
   KIND_LABEL, END_REASON_LABEL, sessionLastMs, timeAgo,
 } from "./loginSessions";
+import { LoginManagerModal } from "./LoginManager";
 import { doc, onSnapshot, addDoc, collection, serverTimestamp, query, orderBy, limit, getDocs, deleteDoc } from "firebase/firestore";
 
 // 역할별 대형 화면은 지연 로딩(code-splitting)한다 — 이전에는 전부 하나의 번들로
@@ -178,6 +179,18 @@ export default function App() {
       setSessionBusy(false);
     }
   };
+  // ⭐ 최고관리자가 아직 2차 인증(휴대폰 문자)을 등록하지 않았으면 로그인할 때 한 번 안내한다
+  const [mfaNag, setMfaNag] = useState(false);
+  const [mfaSetupOpen, setMfaSetupOpen] = useState(false);
+  useEffect(() => {
+    if (!user || role !== "totalMaster") return;
+    try {
+      if (sessionStorage.getItem("mfaNagShown") === "1") return;
+      if ((multiFactor(user).enrolledFactors || []).length > 0) return;
+      sessionStorage.setItem("mfaNagShown", "1");
+      setMfaNag(true);
+    } catch { /* 무시 */ }
+  }, [user, role]);
   const cancelSessionConflict = () => {
     setSessionConflict(null);
     signOut(auth).catch(() => {});
@@ -687,6 +700,26 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* ⭐ 최고관리자 2차 인증 등록 안내 */}
+      {mfaNag && !sessionConflict && user && (
+        <div className="fixed inset-0 z-[100000] bg-black/55 flex items-center justify-center p-5">
+          <div className="w-full max-w-[400px] bg-white rounded-2xl shadow-2xl overflow-hidden">
+            <div className="bg-[#1B2B4B] px-6 py-5 text-white">
+              <div className="text-[17px] font-black">2차 인증을 등록해 주세요</div>
+              <div className="text-[12.5px] text-white/70 mt-0.5">최고관리자 계정은 전체 회사 데이터를 다룰 수 있어 보안이 중요합니다</div>
+            </div>
+            <div className="px-6 py-5 text-[13.5px] text-gray-700 leading-relaxed">
+              휴대폰 번호를 등록하면 로그인할 때마다 비밀번호 다음에 <b>문자로 받은 인증번호 6자리</b>를 입력해야 로그인됩니다. 비밀번호가 새어나가도 휴대폰이 없으면 들어올 수 없습니다.
+            </div>
+            <div className="grid grid-cols-2 gap-2 px-6 pb-6">
+              <button onClick={() => setMfaNag(false)} className="py-3 rounded-xl border border-gray-300 text-[14px] font-bold text-gray-700 hover:bg-gray-50">나중에</button>
+              <button onClick={() => { setMfaNag(false); setMfaSetupOpen(true); }} className="py-3 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-bold hover:bg-[#243a60]">지금 등록하기</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {mfaSetupOpen && user && <LoginManagerModal user={user} onClose={() => setMfaSetupOpen(false)} />}
 
       {/* ⭐ 다른 곳에서 연결이 끊겨 로그아웃됐다는 안내 */}
       {kickedReason && (
