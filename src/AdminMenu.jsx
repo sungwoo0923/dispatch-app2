@@ -24,6 +24,7 @@ import { CustomSelect } from "./CustomSelect";
 import RolePermissionsPanel from "./RolePermissionsPanel";
 import { AdminSessionsPanel } from "./LoginManager";
 import CompanyResetPanel from "./CompanyResetPanel";
+import SheetImportPanel from "./SheetImportPanel";
 import { useCustomRoles } from "./customRoles";
 import { EditableText } from "./EditMode";
 import { useLoadOrderRange, monthEnd, monthStart } from "./orderHistory";
@@ -670,7 +671,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   // 게이팅과 동일한 기준을 그대로 옮긴 것 — 권한 자체는 안 바뀜).
   const REQUIRES_MASTER_TABS = new Set([
     "landingInquiries", "sessionLogs", "forceUpdate", "permissions",
-    "landingEdit", "notifTemplate", "companyReset",
+    "landingEdit", "notifTemplate", "companyReset", "sheetImport",
   ]);
   const TAB_LABELS = {
     members: "회원 관리",
@@ -681,6 +682,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     loginSessions: "로그인 관리",
     sessionLogs: "접속이력",
     companyReset: "운송사 초기화",
+    sheetImport: "구글시트 가져오기",
     forceUpdate: "화주사 강제 업데이트",
     permissions: "권한 관리",
     landingEdit: "랜딩페이지 편집",
@@ -689,7 +691,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const tabGroups = [
     { key: "members", label: "회원 관리", tabs: ["members"] },
     { key: "shipperMgmt", label: "화주사 관리", tabs: ["linked", "transmit", "inquiries", "landingInquiries"] },
-    { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "forceUpdate", "permissions", "companyReset"] },
+    { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "forceUpdate", "permissions", "sheetImport", "companyReset"] },
     { key: "settings", label: "환경 설정", tabs: ["landingEdit", "notifTemplate"] },
   ]
     .map((g) => ({ ...g, tabs: g.tabs.filter((t) => !REQUIRES_MASTER_TABS.has(t) || isTotalMaster) }))
@@ -701,7 +703,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   // ⭐ 디자인 개편 — 왼쪽 메뉴바(그룹별) + 상단 인사 카드 + 숫자 카드(AdminShell 공용 레이아웃)
   const TAB_ICONS = {
     members: "users", linked: "link", transmit: "send", inquiries: "chat", landingInquiries: "inbox",
-    loginSessions: "phone", companyReset: "trash", sessionLogs: "history", forceUpdate: "refresh", permissions: "key",
+    loginSessions: "phone", companyReset: "trash", sheetImport: "sheet", sessionLogs: "history", forceUpdate: "refresh", permissions: "key",
     landingEdit: "globe", notifTemplate: "bell",
   };
   const shellGroups = tabGroups.map((g) => ({
@@ -1181,6 +1183,9 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
 
           {/* ====== 운송사 초기화 탭 (최고관리자 전용) ====== */}
           {adminTab === "companyReset" && isTotalMaster && <CompanyResetPanel />}
+
+          {/* ====== 구글시트(엑셀) 배차일지 가져오기 (최고관리자 전용) ====== */}
+          {adminTab === "sheetImport" && isTotalMaster && <SheetImportPanel />}
 
           {/* ====== 접속이력 탭 (최고관리자 전용) ====== */}
           {adminTab === "sessionLogs" && isTotalMaster && (() => {

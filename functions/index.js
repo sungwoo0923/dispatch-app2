@@ -264,6 +264,9 @@ exports.notifyNewDispatch =
       const data = snap.data();
       if (data?.블라인드 === true) return; // ⭐ 블라인드 오더(최고관리자 전용)는 알림 제외
       if (!data) return;
+      // ⭐ 구글시트 가져오기로 한꺼번에 만든 예전 오더, 초기화 복원 중인 오더는 알림을 보내지 않는다
+      if (data.importBatchId) return;
+      if (await isBulkModeFor(data.companyName)) return;
 
       // ⭐ 화주사 전송 사본(source==="transport_transmit")은 이미 있던 오더를
       // 화주사 화면용으로 미러링만 한 문서라, 그대로 두면 "신규 오더 등록"이
@@ -448,6 +451,8 @@ exports.notifyDispatchDeleted =
       const data = snap.data();
       const isBlind = data?.블라인드 === true; // 블라인드는 관리자 전체 알림만 제외(기사 본인 알림은 보냄)
       if (!data) return;
+      // ⭐ 운송사 초기화·가져오기 취소처럼 한꺼번에 지우는 중에는 삭제 알림을 보내지 않는다
+      if (await isBulkModeFor(data.companyName)) return;
       if (data.source === "transport_transmit") return;
       // 배차취소로 먼저 바뀐 뒤 나중에 완전삭제된 문서는 위 notifyDispatchCanceled에서
       // 이미 알림을 보냈으니 여기서 또 보내지 않는다(중복 방지).
@@ -526,6 +531,9 @@ exports.notifyFleetDriverNewOrder =
       const before = change.before.exists ? change.before.data() : null;
       const after = change.after.exists ? change.after.data() : null;
       if (!after) return; // 삭제는 별도 함수(notifyDispatchDeleted)에서 처리
+      // ⭐ 가져오기로 만든 예전 오더·초기화 복원 중인 오더는 지입 기사에게 새 배차로 보내지 않는다
+      if (!before && after.importBatchId) return;
+      if (await isBulkModeFor(after.companyName)) return;
 
       // ⭐ 안전망 — 이 운송사 앱은 PC/모바일을 합쳐 "차량번호를 오더에 쓰는" 화면이
       // 한두 곳이 아니라 화면마다(등록폼/상세보기 기사배정/배차완료 모달/빠른배차
@@ -3479,6 +3487,7 @@ exports.companyReset = functions
     if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
     body = body || {};
     let prog = null;
+    let bulkCompany = null; // 알림 일시 중지 중인 회사(실패해도 꼭 풀어준다)
     try {
       const me = await requireTotalMaster(req);
       const action = body.action;
@@ -3558,6 +3567,9 @@ exports.companyReset = functions
           return;
         }
         await ref.set({ status: "restoring" }, { merge: true });
+        await prog.set(2, "복원 준비 중(알림 일시 중지)", true);
+        bulkCompany = b.company;
+        await setBulkMode(b.company, true);
         // 1) 문서 원래 자리로 되돌리기(같은 문서ID·내용 그대로)
         let restoredDocs = 0;
         const writer = db.bulkWriter();
@@ -3586,6 +3598,7 @@ exports.companyReset = functions
         for (const uid of b.accountUids || []) {
           await getAuth().updateUser(uid, { disabled: false }).then(() => { restoredAccounts += 1; }).catch(() => {});
         }
+        await setBulkMode(b.company, false); bulkCompany = null;
         await ref.set({ status: "restored", restoredAt: FieldValue.serverTimestamp(), restoredBy: me.email || me.uid }, { merge: true });
         await db.collection("resetLogs").add({ company: b.company, by: me.email || me.uid, at: FieldValue.serverTimestamp(), backupId: ref.id, action: "restore", restoredDocs, restoredFiles, restoredAccounts });
         console.log(`♻️ 운송사 복원: ${b.company} — 문서 ${restoredDocs}, 파일 ${restoredFiles}, 계정 ${restoredAccounts} (by ${me.email})`);
@@ -3648,6 +3661,9 @@ exports.companyReset = functions
           return;
         }
         await backupRef.set({ status: "kept", fileCount: savedFiles.length }, { merge: true });
+        await prog.set(70, "삭제 준비 중(알림 일시 중지)", true);
+        bulkCompany = company;
+        await setBulkMode(company, true);
         // 2) 문서(하위 컬렉션 포함) 삭제
         // 보관해둔 문서(하위 문서 포함)를 한꺼번에 지운다 — 문서가 많아도 빠르게
         const delWriter = db.bulkWriter();
@@ -3676,6 +3692,7 @@ exports.companyReset = functions
           deletedDocs, deletedFiles, disabledAccounts, perCollection, action: "reset",
         });
         console.log(`🧹 운송사 초기화: ${company} — 문서 ${deletedDocs}(보관 ${entries.length}), 파일 ${deletedFiles}, 계정 ${disabledAccounts} (by ${me.email})`);
+        await setBulkMode(company, false); bulkCompany = null;
         const result = { ok: true, backupId: backupRef.id, expiresAt: expiresAt.getTime(), deletedDocs, savedDocs: entries.length, deletedFiles, deletedAccounts: disabledAccounts };
         await prog.done(result);
         res.json({ ...result, perCollection });
@@ -3685,6 +3702,7 @@ exports.companyReset = functions
       res.status(400).json({ error: "알 수 없는 요청입니다." });
     } catch (e) {
       console.error("운송사 초기화 오류:", e);
+      if (bulkCompany) await setBulkMode(bulkCompany, false);
       if (prog) await prog.fail(e?.message || String(e));
       res.status(e.status || 500).json({ error: e?.message || String(e) });
     }
@@ -3702,4 +3720,138 @@ exports.purgeExpiredResetBackups = functions.pubsub
     }
     console.log(`🗑️ 만료된 초기화 보관함 정리 ${snap.size}건 확인`);
     return null;
+  });
+
+/* ==================================================================
+   📥 구글시트 → 프로그램 오더 가져오기 (최고관리자 전용, 관리자메뉴 > 구글시트 가져오기)
+   새 운송사가 쓰던 배차일지 시트를 그대로 옮길 때 쓴다. 시트를 이 프로그램 계정
+   (dispatch-app-9b92f@appspot.gserviceaccount.com)에 "보기"로 공유해야 읽을 수 있다.
+   - inspect: 시트 탭 목록 + 탭마다 제목줄(첫 5줄 중 글자가 가장 많은 줄) 추측
+   - read:    고른 탭들의 값을 통째로 돌려준다(칸 맞추기·검사·저장은 화면에서)
+   - cancel:  가져온 묶음(importBatchId) 전체 삭제(오더·자동 등록된 거래처/상하차지/기사)
+   호출: POST .../sheetImport (Authorization: Bearer <ID 토큰>)
+================================================================== */
+function parseSpreadsheetId(url) {
+  const m = String(url || "").match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (m) return m[1];
+  return /^[a-zA-Z0-9-_]{25,}$/.test(String(url || "").trim()) ? String(url).trim() : "";
+}
+async function sheetsApiFor(spreadsheetId, method, path, opts = {}) {
+  const client = await getGsheetAuthClient();
+  try {
+    const res = await client.request({ url: `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}${path}`, method, ...opts });
+    return res.data;
+  } catch (e) {
+    const status = e?.response?.status;
+    if (status === 403 || status === 404) {
+      throw Object.assign(new Error("시트를 열 수 없습니다. 시트 공유에 dispatch-app-9b92f@appspot.gserviceaccount.com 을(를) '뷰어'로 추가했는지, 주소가 맞는지 확인해 주세요."), { status: 400 });
+    }
+    throw e;
+  }
+}
+
+// ⭐ 대량 작업(초기화·복원·가져오기 취소) 중에는 그 회사 오더의 생성/삭제 알림을 보내지 않는다
+// adminSecrets/bulkMode = { companies: [...], until } — 알림 함수가 10초 캐시로 확인
+let _bulkModeCache = { at: 0, v: null };
+async function isBulkModeFor(company) {
+  if (Date.now() - _bulkModeCache.at > 10000) {
+    const s = await db.collection("adminSecrets").doc("bulkMode").get().catch(() => null);
+    _bulkModeCache = { at: Date.now(), v: s?.exists ? s.data() : null };
+  }
+  const v = _bulkModeCache.v;
+  if (!v || (v.until?.toMillis?.() || 0) < Date.now()) return false;
+  return (v.companies || []).includes(company || "돌캐");
+}
+async function setBulkMode(company, on) {
+  const ref = db.collection("adminSecrets").doc("bulkMode");
+  await ref.set({
+    companies: on ? FieldValue.arrayUnion(company) : FieldValue.arrayRemove(company),
+    until: new Date(Date.now() + 30 * 60000),
+  }, { merge: true }).catch(() => {});
+  // 다른 서버 인스턴스의 10초 캐시가 새 값을 볼 때까지 잠깐 기다린다
+  if (on) await sleep(11000);
+}
+
+exports.sheetImport = functions
+  .runWith({ timeoutSeconds: 540, memory: "1GB" })
+  .https.onRequest(async (req, res) => {
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+    if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
+    let body = req.body;
+    if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
+    body = body || {};
+    try {
+      const me = await requireTotalMaster(req);
+      const action = body.action;
+
+      if (action === "inspect" || action === "read") {
+        const id = parseSpreadsheetId(body.url);
+        if (!id) { res.status(400).json({ error: "구글시트 주소가 올바르지 않습니다." }); return; }
+        const meta = await sheetsApiFor(id, "GET", "?fields=properties.title,sheets.properties(title,index,gridProperties(rowCount,columnCount))");
+        const allTabs = (meta.sheets || []).map((s) => s.properties).sort((a, b) => a.index - b.index);
+        if (action === "inspect") {
+          const ranges = allTabs.map((t) => `${quoteTab(t.title)}!1:6`);
+          const got = ranges.length
+            ? await sheetsApiFor(id, "GET", `/values:batchGet?${ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join("&")}&valueRenderOption=FORMATTED_VALUE`)
+            : { valueRanges: [] };
+          const tabs = allTabs.map((t, i) => {
+            const rows = got.valueRanges?.[i]?.values || [];
+            let headerRow = 0, best = -1;
+            rows.forEach((r, ri) => {
+              const n = r.filter((c) => String(c || "").trim() && !/^[\d,.\-\s:/]+$/.test(String(c))).length;
+              if (n > best) { best = n; headerRow = ri; }
+            });
+            return { title: t.title, rowCount: t.gridProperties?.rowCount || 0, headerRow, header: (rows[headerRow] || []).map((c) => String(c || "").trim()) };
+          });
+          res.json({ title: meta.properties?.title || "", tabs });
+          return;
+        }
+        const want = Array.isArray(body.tabs) ? body.tabs : [];
+        const valid = want.filter((w) => allTabs.some((t) => t.title === w.title));
+        if (!valid.length) { res.status(400).json({ error: "가져올 탭을 골라주세요." }); return; }
+        const got = await sheetsApiFor(id, "GET",
+          `/values:batchGet?${valid.map((w) => `ranges=${encodeURIComponent(quoteTab(w.title))}`).join("&")}&valueRenderOption=FORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`);
+        res.json({
+          title: meta.properties?.title || "",
+          tabs: valid.map((w, i) => {
+            const rows = got.valueRanges?.[i]?.values || [];
+            const hr = Math.max(0, Number(w.headerRow) || 0);
+            return { title: w.title, header: (rows[hr] || []).map((c) => String(c || "").trim()), rows: rows.slice(hr + 1) };
+          }),
+        });
+        return;
+      }
+
+      if (action === "cancel") {
+        const batchId = String(body.batchId || "");
+        const bref = db.collection("importBatches").doc(batchId || "x");
+        const bs = await bref.get();
+        if (!bs.exists) { res.status(404).json({ error: "가져오기 기록을 찾을 수 없습니다." }); return; }
+        const b = bs.data();
+        if (b.status === "canceled") { res.status(400).json({ error: "이미 취소된 가져오기입니다." }); return; }
+        await setBulkMode(b.companyName, true);
+        let removed = 0;
+        try {
+          const writer = db.bulkWriter();
+          for (const col of ["orders", "dispatch", "clients", "places", "drivers"]) {
+            const snap = await db.collection(col).where("importBatchId", "==", batchId).get();
+            snap.docs.forEach((d) => { writer.delete(d.ref); removed += 1; });
+          }
+          await writer.close();
+        } finally {
+          await setBulkMode(b.companyName, false);
+        }
+        await bref.set({ status: "canceled", canceledAt: FieldValue.serverTimestamp(), canceledBy: me.email || me.uid, removed }, { merge: true });
+        res.json({ ok: true, removed });
+        return;
+      }
+
+      res.status(400).json({ error: "알 수 없는 요청입니다." });
+    } catch (e) {
+      console.error("구글시트 가져오기 오류:", e);
+      res.status(e.status || 500).json({ error: e?.message || String(e) });
+    }
   });
