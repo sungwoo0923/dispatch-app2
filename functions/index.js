@@ -3400,24 +3400,28 @@ function collectStoragePaths(value, out) {
 async function snapshotTree(found) {
   const entries = [];
   const files = new Set();
-  const walkSub = async (ref, depth) => {
-    if (depth > 4) return;
-    const subs = await ref.listCollections().catch(() => []);
-    for (const sub of subs) {
-      const snap = await sub.get().catch(() => null);
-      if (!snap) continue;
-      for (const d of snap.docs) {
-        entries.push({ path: d.ref.path, data: d.data() });
-        collectStoragePaths(d.data(), files);
-        await walkSub(d.ref, depth + 1);
+  // ⭐ 문서마다 하위 컬렉션을 "한 건씩 차례로" 확인하면 오더가 수만 건인 회사는 9분 제한을 넘겨
+  // 브라우저에 "서버에 연결할 수 없음"만 떴다 — 50건씩 동시에 확인한다.
+  const walk = async (refs, depth) => {
+    if (depth > 4 || !refs.length) return;
+    const next = [];
+    for (let i = 0; i < refs.length; i += 50) {
+      const lists = await Promise.all(refs.slice(i, i + 50).map((r) => r.listCollections().catch(() => [])));
+      const subs = lists.flat();
+      for (let k = 0; k < subs.length; k += 20) {
+        const snaps = await Promise.all(subs.slice(k, k + 20).map((c) => c.get().catch(() => null)));
+        snaps.forEach((snap) => snap && snap.docs.forEach((d) => {
+          entries.push({ path: d.ref.path, data: d.data() });
+          collectStoragePaths(d.data(), files);
+          next.push(d.ref);
+        }));
       }
     }
+    await walk(next, depth + 1);
   };
-  for (const d of found.values()) {
-    entries.push({ path: d.ref.path, data: d.data() });
-    collectStoragePaths(d.data(), files);
-    await walkSub(d.ref, 0);
-  }
+  const tops = [...found.values()];
+  tops.forEach((d) => { entries.push({ path: d.ref.path, data: d.data() }); collectStoragePaths(d.data(), files); });
+  await walk(tops.map((d) => d.ref), 0);
   return { entries, files };
 }
 

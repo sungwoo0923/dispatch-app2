@@ -19,7 +19,8 @@ async function callReset(body) {
     });
   } catch {
     // 서버에 함수가 아직 없으면 브라우저는 "Failed to fetch"로만 알려준다
-    throw new Error("서버에 연결할 수 없습니다. 초기화 기능을 아직 배포하지 않았다면 PC에서 firebase deploy --only functions 를 실행해 주세요.");
+    // 함수가 없거나, 처리 시간이 서버 제한(9분)을 넘기면 브라우저는 "Failed to fetch"로만 알려준다
+    throw new Error("서버 응답을 받지 못했습니다. 데이터가 아주 많아 시간이 초과됐거나, 초기화 기능이 아직 배포되지 않았을 수 있습니다. 잠시 후 다시 시도해 주세요.");
   }
   let data = {};
   try { data = await res.json(); } catch { /* 무시 */ }

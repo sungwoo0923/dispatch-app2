@@ -1306,7 +1306,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
 
           {/* ====== 권한 관리 탭 (최고관리자 전용) ====== */}
           {adminTab === "permissions" && isTotalMaster && (
-            <RolePermissionsPanel />
+            <RolePermissionsPanel users={users} roleLabels={roleLabels} />
           )}
 
           {/* ====== 랜딩페이지 편집 탭 (최고관리자 전용) ====== */}

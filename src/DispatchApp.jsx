@@ -59357,6 +59357,20 @@ function RevenuePasswordSection({ companyName }) {
 }
 
 // ─────────── 내정보 컴포넌트 ───────────
+// 내정보 화면의 카드 틀 — 화면 안에서 만들면 입력칸이 매 글자마다 다시 그려져 포커스가 빠지므로 밖에 둔다
+const ProfilePanel = ({ title: t, desc, right, children, className = "" }) => (
+  <div className={`bg-white rounded-2xl border border-gray-200 shadow-[0_2px_10px_rgba(16,24,40,0.04)] p-5 ${className}`}>
+    <div className="flex items-start gap-3 mb-4">
+      <div className="flex-1 min-w-0">
+        <div className="text-[15px] font-black text-[#1B2B4B]">{t}</div>
+        {desc && <div className="text-[12px] text-gray-500 mt-0.5">{desc}</div>}
+      </div>
+      {right}
+    </div>
+    {children}
+  </div>
+);
+
 function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, cardImageUploading, setCardImageUploading, showAlert, userCompany, role }) {
   const [loginMgrOpen, setLoginMgrOpen] = React.useState(false); // ⭐ 로그인 관리 창
   const co = role === "totalMaster"
@@ -59369,6 +59383,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
   const [hireDateSaving, setHireDateSaving] = useState(false);
   const [mySchedules, setMySchedules] = useState([]);
   const [myName, setMyName] = useState("");
+  const [myInfo, setMyInfo] = useState({});
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -59376,7 +59391,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
       if (snap.exists() && snap.data().hireDate) setHireDate(snap.data().hireDate);
     }, () => {});
     const unsubUser = onSnapshot(doc(db, "users", user.uid), snap => {
-      if (snap.exists()) setMyName(snap.data().name || "");
+      if (snap.exists()) { setMyName(snap.data().name || ""); setMyInfo(snap.data()); }
     }, () => {});
     const unsub = onSnapshot(collection(db, "schedules"), snap => {
       setMySchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => (s.companyName || DEFAULT_COMPANY) === co));
@@ -59413,174 +59428,242 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
     return m > 0 ? `${y}년 ${m}개월 근속` : `${y}년 근속`;
   }, [hireDate]);
 
+  // ⭐ 2026-10-22 개편 — 디지털 명함 + 정보 카드 그리드(세로로 길던 화면을 가로 배치로)
+  const ROLE_NAME = { totalMaster: "최고관리자", admin: "관리자", hrManager: "인사관리자", user: "실무자", test: "경리/회계", viewer: "조회전용" };
+  const displayName = myName || user?.displayName || (user?.email || "").split("@")[0];
+  const phone = myInfo.전화번호 || myInfo.phone || "";
+  const title = [myInfo.team, myInfo.position].filter(Boolean).join(" · ");
+  const cardRef = React.useRef(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [draftName, setDraftName] = useState("");
+  const [draftPhone, setDraftPhone] = useState("");
+  const [savingInfo, setSavingInfo] = useState(false);
+  const fmtPhone = (v) => {
+    const d = String(v || "").replace(/\D/g, "").slice(0, 11);
+    if (d.length < 4) return d;
+    if (d.length < 8) return `${d.slice(0, 3)}-${d.slice(3)}`;
+    return d.length === 11 ? `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}` : `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  };
+  const openEdit = () => { setDraftName(displayName || ""); setDraftPhone(phone); setEditOpen(true); };
+  const saveInfo = async () => {
+    if (!user?.uid) return;
+    setSavingInfo(true);
+    try {
+      await setDoc(doc(db, "users", user.uid), { name: draftName.trim(), 전화번호: fmtPhone(draftPhone) }, { merge: true });
+      setEditOpen(false);
+      showAlert("내 정보가 저장되었습니다.");
+    } catch (e) { showAlert("저장 실패: " + (e?.message || e)); } finally { setSavingInfo(false); }
+  };
+  const saveCardAsImage = async () => {
+    if (!cardRef.current) return;
+    try {
+      const canvas = await html2canvas(cardRef.current, { scale: 3, backgroundColor: null, useCORS: true, logging: false });
+      const a = document.createElement("a");
+      a.href = canvas.toDataURL("image/png");
+      a.download = `${displayName || "명함"}_디지털명함.png`;
+      a.click();
+    } catch (e) { showAlert("이미지 저장 실패: " + (e?.message || e)); }
+  };
+  const copyContact = async () => {
+    const text = [`${co} ${displayName}${title ? ` (${title})` : ""}`, phone && `휴대폰 ${phone}`, user?.email && `이메일 ${user.email}`].filter(Boolean).join("\n");
+    try { await navigator.clipboard.writeText(text); showAlert("연락처를 복사했습니다. 카톡·문자에 붙여넣기 하세요."); } catch { showAlert("복사에 실패했습니다."); }
+  };
+  const saveVcard = () => {
+    const vcf = ["BEGIN:VCARD", "VERSION:3.0", `FN:${displayName}`, `N:${displayName};;;;`, co && `ORG:${co}${myInfo.team ? `;${myInfo.team}` : ""}`,
+      myInfo.position && `TITLE:${myInfo.position}`, phone && `TEL;TYPE=CELL:${phone}`, user?.email && `EMAIL:${user.email}`, "END:VCARD"].filter(Boolean).join("\r\n");
+    const url = URL.createObjectURL(new Blob([vcf], { type: "text/vcard;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = `${displayName || "연락처"}.vcf`; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  const onCardFile = (file) => {
+    if (!file || !user?.uid) return;
+    setCardImageUploading(true);
+    const imgEl = new Image();
+    const objUrl = URL.createObjectURL(file);
+    imgEl.onload = async () => {
+      URL.revokeObjectURL(objUrl);
+      const MAX = 800;
+      let w = imgEl.width, h = imgEl.height;
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+        else { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      const cv = document.createElement("canvas");
+      cv.width = w; cv.height = h;
+      cv.getContext("2d").drawImage(imgEl, 0, 0, w, h);
+      const dataUrl = cv.toDataURL("image/jpeg", 0.65);
+      setCardImage(dataUrl);
+      try {
+        await setDoc(doc(db, "userProfiles", user.uid), { cardImageUrl: dataUrl }, { merge: true });
+        showAlert("명함 이미지가 저장되었습니다.");
+      } catch (err) {
+        showAlert("저장 실패: " + err.message);
+      } finally {
+        setCardImageUploading(false);
+      }
+    };
+    imgEl.onerror = () => { URL.revokeObjectURL(objUrl); showAlert("이미지 로드 실패"); setCardImageUploading(false); };
+    imgEl.src = objUrl;
+  };
+  const Ico = ({ d, className = "" }) => (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{d}</svg>
+  );
+  const usedPct = leave && leave.entitlement ? Math.min(100, Math.round((leave.used / leave.entitlement) * 100)) : 0;
+
   return (
-    <div className="p-6 max-w-2xl">
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="bg-[#1B2B4B] px-6 py-4">
-          <h2 className="text-white font-bold text-[16px]"><EditableText id="myProfile.title" defaultText="내 정보" /></h2>
-          <p className="text-white/60 text-[12px] mt-0.5"><EditableText id="myProfile.subtitle" defaultText="계정 정보 및 개인 통계" /></p>
+    <div className="p-6 space-y-5 bg-[#F7F9FC]">
+      {/* ── 1줄: 디지털 명함 + 내 프로필 ── */}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,540px)_minmax(0,1fr)] gap-5">
+        <div>
+          {/* 디지털 명함 */}
+          <div ref={cardRef} className="relative overflow-hidden rounded-[22px] text-white shadow-[0_18px_40px_rgba(15,26,48,0.35)]"
+            style={{ aspectRatio: "1.75 / 1", background: "linear-gradient(135deg, #0F1A30 0%, #1B2B4B 45%, #2D4C82 100%)" }}>
+            <div className="absolute -right-20 -top-24 w-80 h-80 rounded-full" style={{ background: "radial-gradient(circle, rgba(147,197,253,0.22) 0%, rgba(147,197,253,0) 70%)" }} />
+            <div className="absolute -left-16 -bottom-24 w-72 h-72 rounded-full" style={{ background: "radial-gradient(circle, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 70%)" }} />
+            <div className="absolute inset-0" style={{ backgroundImage: "linear-gradient(115deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0) 60%)" }} />
+            <div className="relative h-full flex flex-col px-8 py-7">
+              <div className="flex items-center gap-2.5">
+                <img src="/icons/sflow-icon.png" alt="" className="w-8 h-8 rounded-lg ring-1 ring-white/20" crossOrigin="anonymous" />
+                <div className="min-w-0">
+                  <div className="text-[15px] font-black tracking-tight truncate">{co || "KP-Flow"}</div>
+                  <div className="text-[10px] font-semibold tracking-[0.25em] text-blue-200/70">KP-FLOW LOGISTICS</div>
+                </div>
+                <div className="ml-auto text-[10px] font-bold tracking-[0.2em] text-white/40">DIGITAL CARD</div>
+              </div>
+              <div className="mt-auto">
+                <div className="text-[34px] font-black tracking-tight leading-none">{displayName || "이름을 등록하세요"}</div>
+                <div className="mt-2 text-[14px] font-semibold text-blue-100/85">{title || ROLE_NAME[role] || ""}</div>
+              </div>
+              <div className="mt-5 pt-4 border-t border-white/15 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[13px]">
+                <div className="flex items-center gap-2 text-white/90 min-w-0"><Ico className="shrink-0 text-blue-200" d={<><rect x="7" y="2" width="10" height="20" rx="2.5" /><path d="M11 18h2" /></>} /><span className="truncate">{phone || "연락처 미등록"}</span></div>
+                <div className="flex items-center gap-2 text-white/90 min-w-0"><Ico className="shrink-0 text-blue-200" d={<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>} /><span className="truncate">{user?.email || "-"}</span></div>
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <button onClick={saveCardAsImage} className="py-2.5 rounded-xl bg-white border border-gray-200 text-[12.5px] font-bold text-[#1B2B4B] hover:border-[#1B2B4B] transition">명함 이미지 저장</button>
+            <button onClick={copyContact} className="py-2.5 rounded-xl bg-white border border-gray-200 text-[12.5px] font-bold text-[#1B2B4B] hover:border-[#1B2B4B] transition">연락처 복사</button>
+            <button onClick={saveVcard} className="py-2.5 rounded-xl bg-white border border-gray-200 text-[12.5px] font-bold text-[#1B2B4B] hover:border-[#1B2B4B] transition">휴대폰 연락처 파일</button>
+          </div>
         </div>
-        <div className="p-6 space-y-6">
-          {/* 계정 정보 */}
-          <div className="grid grid-cols-2 gap-4">
-            {co && (
-              <div className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-3">
-                <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">회사명</div>
-                <div className="text-[15px] font-bold text-gray-900">{co}</div>
-              </div>
-            )}
-            <div className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-3">
-              <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">이메일</div>
-              <div className="text-[14px] font-semibold text-gray-800 break-all">{user?.email || "-"}</div>
-            </div>
-          </div>
 
-          {/* 입사일 / 연차·월차 */}
-          <div>
-            <div className="text-[13px] font-semibold text-gray-700 mb-2">입사일 / 연차·월차</div>
-            <div className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-3 space-y-3">
-              <div className="flex items-center gap-3">
-                <span className="text-[12px] font-semibold text-gray-500 w-16 flex-shrink-0">입사일</span>
-                <CustomDatePicker value={hireDate} onChange={e => saveHireDate(e.target.value)}
-                  className="px-3 py-1.5 rounded-lg border border-gray-300 text-[13px] font-semibold text-[#1B2B4B] focus:border-[#1B2B4B] outline-none"/>
-                {hireDateSaving && <span className="text-[11px] text-gray-500">저장 중...</span>}
+        {/* 내 프로필 */}
+        <ProfilePanel title="내 프로필" desc="명함과 오더·기사앱에 표시되는 정보입니다"
+          right={!editOpen && <button onClick={openEdit} className="px-3.5 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12.5px] font-bold hover:bg-[#243a60]">수정</button>}>
+          {editOpen ? (
+            <div className="space-y-3 max-w-[420px]">
+              <label className="block"><span className="text-[12px] font-bold text-gray-500">이름</span>
+                <input value={draftName} onChange={(e) => setDraftName(e.target.value)} className="mt-1 w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-[14px] outline-none focus:border-[#1B2B4B]" /></label>
+              <label className="block"><span className="text-[12px] font-bold text-gray-500">연락처</span>
+                <input value={draftPhone} onChange={(e) => setDraftPhone(fmtPhone(e.target.value))} placeholder="010-0000-0000" className="mt-1 w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-[14px] outline-none focus:border-[#1B2B4B]" /></label>
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => setEditOpen(false)} className="px-4 py-2.5 rounded-xl border border-gray-300 text-[13px] font-bold text-gray-600">취소</button>
+                <button onClick={saveInfo} disabled={savingInfo} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold disabled:opacity-60">{savingInfo ? "저장 중…" : "저장"}</button>
               </div>
-              {yearsOfService && (
-                <div className="px-3 py-2 bg-[#1B2B4B] rounded-xl text-center">
-                  <div className="text-white text-[15px] font-extrabold">{yearsOfService}</div>
-                  <div className="text-white/50 text-[10px] mt-0.5">근속 기간</div>
-                </div>
-              )}
-              {leave ? (
-                <div className="grid grid-cols-3 gap-2 pt-1">
-                  <div className="bg-white rounded-lg border border-gray-200 px-3 py-2">
-                    <div className="text-[10px] text-gray-500 font-semibold mb-0.5">구분</div>
-                    <div className="text-[14px] font-black text-[#1B2B4B]">{leave.leaveLabel}</div>
-                  </div>
-                  <div className="bg-white rounded-lg border border-gray-200 px-3 py-2">
-                    <div className="text-[10px] text-gray-500 font-semibold mb-0.5">사용</div>
-                    <div className="text-[14px] font-black text-[#1B2B4B]">{leave.used}일</div>
-                  </div>
-                  <div className="bg-[#1B2B4B] rounded-lg px-3 py-2">
-                    <div className="text-[10px] text-white/50 font-semibold mb-0.5">잔여</div>
-                    <div className="text-[14px] font-black text-white">{leave.remaining}일</div>
-                  </div>
-                  <div className="col-span-3 text-[13px] text-gray-600">
-                    총 발생 {leave.entitlement}일 · 2026년부터 사용 내역 집계 · 휴가/외근 결재 승인 건 기준
-                  </div>
-                  <div className="bg-white rounded-lg border border-gray-200 px-3 py-2">
-                    <div className="text-[10px] text-gray-500 font-semibold mb-0.5">병가</div>
-                    <div className="text-[14px] font-black text-[#1B2B4B]">{leave.sickDays}일</div>
-                  </div>
-                  <div className="bg-white rounded-lg border border-gray-200 px-3 py-2">
-                    <div className="text-[10px] text-gray-500 font-semibold mb-0.5">외근</div>
-                    <div className="text-[14px] font-black text-[#1B2B4B]">{leave.fieldDays}일</div>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-[11px] text-gray-500">입사일을 설정하면 연차/월차 잔여일수가 표시됩니다.</div>
-              )}
             </div>
-          </div>
-
-          {/* ⭐ 계정 보안 — 로그인 관리(로그인된 기기·연결 끊기·비밀번호 변경) */}
-          <div>
-            <div className="text-[13px] font-semibold text-gray-700 mb-2">계정 보안</div>
-            <button onClick={() => setLoginMgrOpen(true)}
-              className="px-5 py-2.5 bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold rounded-xl hover:bg-[#1B2B4B] hover:text-white transition">
-              로그인 관리 · 비밀번호 변경
-            </button>
+          ) : (
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+              {[
+                ["이름", displayName || "-"], ["연락처", phone || "-"],
+                ["회사", co || "-"], ["이메일", user?.email || "-"],
+                ["부서 · 직책", title || "미지정 (인사관리부에서 지정)"], ["권한", ROLE_NAME[role] || role || "-"],
+              ].map(([k, v]) => (
+                <div key={k} className="min-w-0">
+                  <div className="text-[11.5px] font-bold text-gray-400 tracking-wide">{k}</div>
+                  <div className="mt-1 text-[14.5px] font-semibold text-gray-800 truncate">{v}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-5 pt-4 border-t border-gray-100 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#EEF3FB] text-[#1B2B4B] flex items-center justify-center shrink-0">
+              <Ico d={<><path d="M12 3 5 6v6c0 4.5 3 7.7 7 9 4-1.3 7-4.5 7-9V6z" /><path d="m9 12 2 2 4-4" /></>} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13.5px] font-bold text-gray-800">계정 보안</div>
+              <div className="text-[12px] text-gray-500">로그인된 기기 확인 · 연결 끊기 · 비밀번호 변경</div>
+            </div>
+            <button onClick={() => setLoginMgrOpen(true)} className="px-4 py-2 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-[12.5px] font-bold hover:bg-[#1B2B4B] hover:text-white transition">로그인 관리</button>
             {loginMgrOpen && <LoginManagerModal user={user} onClose={() => setLoginMgrOpen(false)} />}
           </div>
+        </ProfilePanel>
+      </div>
 
-          {/* 명함 이미지 */}
-          <div>
-            <div className="text-[13px] font-semibold text-gray-700 mb-1">명함 이미지</div>
-            <div className="text-[11px] text-gray-500 mb-3">이메일 발송 시 하단에 첨부되는 명함 이미지입니다.</div>
-            {cardImage && (
-              <img src={cardImage} alt="명함" className="rounded-xl mb-3 border border-gray-200 object-contain max-h-28 max-w-xs" />
-            )}
-            <div className="flex gap-2">
-              <label className={`px-4 py-2 rounded-xl border text-[13px] font-semibold cursor-pointer transition ${cardImageUploading ? "bg-gray-100 text-gray-500 border-gray-200" : "bg-white border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
-                {cardImageUploading ? "업로드 중..." : "이미지 선택"}
-                <input autoComplete="off" type="file" accept="image/*" className="hidden" disabled={cardImageUploading}
-                  onChange={(e) => {
-                    const file = e.target.files[0];
-                    if (!file || !user?.uid) return;
-                    setCardImageUploading(true);
-                    const imgEl = new Image();
-                    const objUrl = URL.createObjectURL(file);
-                    imgEl.onload = async () => {
-                      URL.revokeObjectURL(objUrl);
-                      const MAX = 800;
-                      let w = imgEl.width, h = imgEl.height;
-                      if (w > MAX || h > MAX) {
-                        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
-                        else { w = Math.round(w * MAX / h); h = MAX; }
-                      }
-                      const cv = document.createElement("canvas");
-                      cv.width = w; cv.height = h;
-                      cv.getContext("2d").drawImage(imgEl, 0, 0, w, h);
-                      const dataUrl = cv.toDataURL("image/jpeg", 0.65);
-                      setCardImage(dataUrl);
-                      try {
-                        await setDoc(doc(db, "userProfiles", user.uid), { cardImageUrl: dataUrl }, { merge: true });
-                        showAlert("명함 이미지가 저장되었습니다.");
-                      } catch(err) {
-                        showAlert("저장 실패: " + err.message);
-                      } finally {
-                        setCardImageUploading(false);
-                      }
-                    };
-                    imgEl.onerror = () => { URL.revokeObjectURL(objUrl); showAlert("이미지 로드 실패"); setCardImageUploading(false); };
-                    imgEl.src = objUrl;
-                  }} />
-              </label>
-              {cardImage && (
-                <button onClick={async () => {
-                  setCardImage(null);
-                  if (user?.uid) await setDoc(doc(db, "userProfiles", user.uid), { cardImageUrl: null }, { merge: true }).catch(() => {});
-                }} className="px-4 py-2 rounded-xl border border-red-200 text-red-500 text-[13px] font-semibold hover:bg-red-50 transition">
-                  삭제
-                </button>
-              )}
-            </div>
+      {/* ── 2줄: 근속·휴가 / 나의 실적 / 메일 명함 ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <ProfilePanel title="근속 · 휴가" desc="휴가·외근 결재 승인 건 기준 (2026년부터 집계)">
+          <div className="flex items-center gap-3">
+            <span className="text-[12px] font-bold text-gray-500 shrink-0">입사일</span>
+            <CustomDatePicker value={hireDate} onChange={e => saveHireDate(e.target.value)}
+              className="px-3 py-1.5 rounded-lg border border-gray-300 text-[13px] font-semibold text-[#1B2B4B] focus:border-[#1B2B4B] outline-none" />
+            {hireDateSaving && <span className="text-[11px] text-gray-500">저장 중…</span>}
           </div>
+          {yearsOfService && <div className="mt-3 text-[22px] font-black text-[#1B2B4B]">{yearsOfService}</div>}
+          {leave ? (
+            <div className="mt-3">
+              <div className="flex items-baseline justify-between text-[12.5px]">
+                <span className="font-bold text-gray-600">{leave.leaveLabel}</span>
+                <span className="text-gray-500">사용 <b className="text-gray-800">{leave.used}</b> / {leave.entitlement}일</span>
+              </div>
+              <div className="mt-1.5 h-2.5 rounded-full bg-gray-100 overflow-hidden"><div className="h-full rounded-full bg-[#1B2B4B]" style={{ width: `${usedPct}%` }} /></div>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                {[["잔여", leave.remaining, true], ["병가", leave.sickDays], ["외근", leave.fieldDays]].map(([k, v, hi]) => (
+                  <div key={k} className={`rounded-xl px-2 py-2.5 ${hi ? "bg-[#1B2B4B] text-white" : "bg-gray-50 border border-gray-200"}`}>
+                    <div className={`text-[11px] font-semibold ${hi ? "text-white/60" : "text-gray-500"}`}>{k}</div>
+                    <div className="text-[17px] font-black">{v}일</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="mt-3 text-[12.5px] text-gray-500">입사일을 설정하면 연차·월차 잔여일수가 표시됩니다.</div>
+          )}
+        </ProfilePanel>
 
-          {/* 오늘 통계 */}
-          <div>
-            <div className="text-[13px] font-semibold text-gray-700 mb-3">오늘 통계</div>
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { label: "오늘 오더", value: todayStats?.count ?? 0, unit: "건" },
-                { label: "오늘 매출", value: (todayStats?.revenue ?? 0).toLocaleString(), unit: "원" },
-                { label: "오늘 수익", value: (todayStats?.profit ?? 0).toLocaleString(), unit: "원" },
-              ].map(({ label, value, unit }) => (
-                <div key={label} className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-3">
-                  <div className="text-[11px] text-gray-500 font-medium mb-0.5">{label}</div>
-                  <div className="text-[15px] font-bold text-[#1B2B4B]">{value}<span className="text-[12px] font-normal text-gray-500 ml-0.5">{unit}</span></div>
-                </div>
-              ))}
+        <ProfilePanel title="나의 실적" desc="내가 등록한 오더 기준">
+          {[
+            ["오늘", todayStats?.count ?? 0, todayStats?.revenue ?? 0, todayStats?.profit ?? 0],
+            ["누적", myStats?.totalOrders ?? 0, myStats?.totalRevenue ?? 0, myStats?.totalProfit ?? 0],
+          ].map(([k, cnt, rev, pro], i) => (
+            <div key={k} className={`${i ? "mt-3 pt-3 border-t border-gray-100" : ""}`}>
+              <div className="text-[12px] font-black text-gray-500 mb-2">{k}</div>
+              <div className="grid grid-cols-3 gap-2">
+                {[["오더", `${Number(cnt).toLocaleString()}건`], ["매출", `${Math.round(rev).toLocaleString()}원`], ["수익", `${Math.round(pro).toLocaleString()}원`]].map(([a, b]) => (
+                  <div key={a} className="rounded-xl bg-gray-50 border border-gray-200 px-3 py-2.5 min-w-0">
+                    <div className="text-[11px] font-semibold text-gray-500">{a}</div>
+                    <div className="text-[14px] font-black text-[#1B2B4B] truncate">{b}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          ))}
+        </ProfilePanel>
 
-          {/* 총 통계 */}
-          <div>
-            <div className="text-[13px] font-semibold text-gray-700 mb-3">총 통계</div>
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { label: "총 오더", value: myStats?.totalOrders ?? 0, unit: "건" },
-                { label: "총 매출", value: (myStats?.totalRevenue ?? 0).toLocaleString(), unit: "원" },
-                { label: "총 수익", value: (myStats?.totalProfit ?? 0).toLocaleString(), unit: "원" },
-              ].map(({ label, value, unit }) => (
-                <div key={label} className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-3">
-                  <div className="text-[11px] text-gray-500 font-medium mb-0.5">{label}</div>
-                  <div className="text-[15px] font-bold text-[#1B2B4B]">{value}<span className="text-[12px] font-normal text-gray-500 ml-0.5">{unit}</span></div>
-                </div>
-              ))}
-            </div>
+        <ProfilePanel title="메일 첨부 명함" desc="이메일 발송 시 하단에 붙는 명함 이미지">
+          <div className="rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 h-[140px] flex items-center justify-center overflow-hidden">
+            {cardImage ? <img src={cardImage} alt="명함" className="max-h-[128px] max-w-full object-contain" /> : <span className="text-[12.5px] text-gray-400">등록된 이미지가 없습니다</span>}
           </div>
-        </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <label className={`py-2.5 rounded-xl text-center text-[12.5px] font-bold cursor-pointer transition ${cardImageUploading ? "bg-gray-100 text-gray-500" : "bg-[#1B2B4B] text-white hover:bg-[#243a60]"}`}>
+              {cardImageUploading ? "업로드 중…" : cardImage ? "이미지 바꾸기" : "이미지 선택"}
+              <input autoComplete="off" type="file" accept="image/*" className="hidden" disabled={cardImageUploading} onChange={(e) => onCardFile(e.target.files[0])} />
+            </label>
+            <button disabled={!cardImage} onClick={async () => {
+              setCardImage(null);
+              if (user?.uid) await setDoc(doc(db, "userProfiles", user.uid), { cardImageUrl: null }, { merge: true }).catch(() => {});
+            }} className="py-2.5 rounded-xl border border-red-200 text-red-500 text-[12.5px] font-bold hover:bg-red-50 disabled:opacity-40">삭제</button>
+          </div>
+          <button onClick={async () => {
+            try {
+              const canvas = await html2canvas(cardRef.current, { scale: 2, backgroundColor: null, useCORS: true, logging: false });
+              const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+              setCardImage(dataUrl);
+              await setDoc(doc(db, "userProfiles", user.uid), { cardImageUrl: dataUrl }, { merge: true });
+              showAlert("디지털 명함을 메일 첨부 명함으로 등록했습니다.");
+            } catch (e) { showAlert("등록 실패: " + (e?.message || e)); }
+          }} className="mt-2 w-full py-2 rounded-xl text-[12px] font-bold text-[#1B2B4B] hover:bg-[#EEF3FB]">↳ 위 디지털 명함을 메일 명함으로 쓰기</button>
+        </ProfilePanel>
       </div>
     </div>
   );
@@ -60461,6 +60544,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
   const [bankForm, setBankForm] = React.useState({ bank: "", accountNumber: "", accountHolder: "" });
   const [bankConfirmOpen, setBankConfirmOpen] = React.useState(false);
   const [bankSaving, setBankSaving] = React.useState(false);
+  const [bankEditOpen, setBankEditOpen] = React.useState(false);
 
   // ★ 배차마당(카페사이트) 공유 온/오프 — companySettings/{회사명}.cafeSyncOn
   const [cafeSyncOn, setCafeSyncOn] = React.useState(false);
@@ -60511,7 +60595,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
       );
       setAppData(found || null);
       setLoading(false);
-    });
+    }, () => setLoading(false)); // 읽기 실패(권한·네트워크)해도 "불러오는 중"에 멈추지 않게
     return () => unsub();
   }, [companyName]);
 
@@ -60688,6 +60772,8 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
         예금주: bankForm.accountHolder,
       });
       setBankConfirmOpen(false);
+      setBankEditOpen(false);
+      setAppData(prev => ({ ...prev, 계좌은행: bankForm.bank, 계좌번호: bankForm.accountNumber, 예금주: bankForm.accountHolder }));
       showMsg("계좌 정보가 저장되었습니다.");
     } catch (err) {
       showMsg("저장 실패: " + (err.message || "알 수 없는 오류"));
@@ -60719,7 +60805,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
   );
 
   return (
-    <div className="p-6">
+    <div className="p-6 bg-[#F7F9FC]">
       {/* 토스트 알림 */}
       {alertMsg && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[99999] bg-[#1B2B4B] text-white px-5 py-3 rounded-xl shadow-lg text-[13px] font-medium">
@@ -60759,71 +60845,142 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
         </div>
       )}
 
-      {/* ===== 세로형 구획 — 구성마다 독립된 카드로 명확히 구분 ===== */}
-      <div className="space-y-4">
-
-        {/* 상단 헤더 카드 */}
-        <div className="bg-[#1B2B4B] rounded-2xl px-6 py-5 flex items-center justify-between shadow-sm">
-          <div>
-            <h2 className="text-white font-bold text-[16px]"><EditableText id="companyProfile.title" defaultText="회사 정보" /></h2>
-            <p className="text-white/50 text-[12px] mt-0.5">{appData?.companyName || companyName}</p>
-          </div>
-          {isAdmin && appData && (
-            <button className="px-3 py-1.5 bg-white/15 hover:bg-white/25 text-white text-[12px] font-semibold rounded-lg transition border border-white/20" onClick={openEditModal}>
-              수정 요청
-            </button>
-          )}
-        </div>
-
-        {/* 배차마당 공유 온/오프 */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex items-center justify-between">
-          <div>
-            <p className="text-[13px] font-bold text-gray-800">배차마당 공유</p>
-            <p className="text-[12px] text-gray-500 mt-0.5">
-              켜두면 배차요청장에서 "배차마당 등록" 버튼으로 저장한 오더가 배차마당(카페사이트)에도 함께 올라갑니다.
-            </p>
-          </div>
-          <button onClick={toggleCafeSync} disabled={cafeSyncSaving}
-            className={`relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0 ${cafeSyncOn ? "bg-[#1B2B4B]" : "bg-gray-300"} ${cafeSyncSaving ? "opacity-60 cursor-wait" : "cursor-pointer"}`}>
-            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${cafeSyncOn ? "translate-x-5" : "translate-x-0"}`} />
-          </button>
-        </div>
-
-        {/* 기본 정보 카드 */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-5">기본 정보</p>
-          {appData ? (
-            <div className="grid grid-cols-2 gap-x-8 gap-y-5">
-              {[
-                { label: "회사명", value: appData.companyName },
-                { label: "대표자", value: appData.representative || appData.대표자 || appData.ceo },
-                { label: "사업자번호", value: appData.businessNumber || appData.사업자번호 },
-                { label: "연락처", value: appData.phone || appData.연락처 },
-                { label: "팩스", value: appData.fax || appData.팩스 || appData.팩스번호 },
-                { label: "이메일", value: appData.email },
-                { label: "회사 코드", value: appData.companyCode, mono: true },
-                { label: "승인일", value: appData.approvedAt ? new Date(appData.approvedAt).toLocaleDateString("ko-KR") : appData.processedAt ? new Date(appData.processedAt?.seconds * 1000).toLocaleDateString("ko-KR") : null },
-                { label: "주소", value: appData.address || appData.주소, span: true },
-              ].map(({ label, value, mono, span }) => (
-                <div key={label} className={span ? "col-span-2" : ""}>
-                  <div className="text-[11px] font-bold text-gray-500 mb-1.5 uppercase tracking-wide">{label}</div>
-                  {mono ? (
-                    <div className="text-[14px] font-mono font-bold text-[#1B2B4B] bg-[#1B2B4B]/5 inline-block px-3 py-1 rounded-lg">{value || "-"}</div>
-                  ) : (
-                    <div className="text-[15px] font-semibold text-gray-800">{value || "-"}</div>
-                  )}
+      {/* ===== 2026-10-22 개편 — 회사 명패(상단) + 서류·계좌(가운데) + 운영 설정(아래) ===== */}
+      <div className="space-y-5">
+        {/* 회사 명패 */}
+        <div className="relative overflow-hidden rounded-2xl text-white shadow-[0_14px_34px_rgba(27,43,75,0.25)]" style={{ background: "linear-gradient(120deg, #0F1A30 0%, #1B2B4B 50%, #2D4C82 100%)" }}>
+          <div className="absolute -right-16 -top-24 w-80 h-80 rounded-full bg-white/[0.05]" />
+          <div className="relative px-7 pt-6 pb-5">
+            <div className="flex flex-wrap items-center gap-5">
+              <div className="w-16 h-16 rounded-2xl bg-white/10 ring-1 ring-white/20 flex items-center justify-center text-[28px] font-black shrink-0">
+                {(appData?.companyName || companyName || "?").slice(0, 1)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[26px] font-black tracking-tight truncate">{appData?.companyName || companyName}</div>
+                <div className="mt-1 text-[13px] text-blue-100/80 flex flex-wrap gap-x-4 gap-y-1">
+                  <span>대표 {appData?.representative || appData?.대표자 || appData?.ceo || "-"}</span>
+                  <span>사업자번호 {appData?.businessNumber || appData?.사업자번호 || "-"}</span>
+                  {(appData?.approvedAt || appData?.processedAt) && <span>가입 승인 {appData.approvedAt ? new Date(appData.approvedAt).toLocaleDateString("ko-KR") : new Date(appData.processedAt?.seconds * 1000).toLocaleDateString("ko-KR")}</span>}
                 </div>
-              ))}
+              </div>
+              {appData?.companyCode && (
+                <button onClick={() => { navigator.clipboard?.writeText(appData.companyCode).then(() => showMsg("회사코드를 복사했습니다.")).catch(() => {}); }}
+                  className="text-left rounded-xl bg-white/10 ring-1 ring-white/20 px-4 py-2.5 hover:bg-white/15 transition" title="눌러서 복사">
+                  <div className="text-[10.5px] font-bold tracking-[0.18em] text-blue-200/70">회사코드 · 복사</div>
+                  <div className="text-[17px] font-black font-mono tracking-wider">{appData.companyCode}</div>
+                </button>
+              )}
+              {isAdmin && appData && (
+                <button onClick={openEditModal} className="px-4 py-2.5 rounded-xl bg-white text-[#1B2B4B] text-[13px] font-bold hover:bg-blue-50 transition">정보 수정 요청</button>
+              )}
             </div>
-          ) : (
-            <div className="py-8 text-[14px] text-gray-500 text-center">가입 승인 후 표시됩니다.</div>
-          )}
+          </div>
+          <div className="relative grid grid-cols-1 md:grid-cols-4 border-t border-white/10 bg-black/10">
+            {[
+              ["연락처", appData?.phone || appData?.연락처],
+              ["팩스", appData?.fax || appData?.팩스 || appData?.팩스번호],
+              ["이메일", appData?.email],
+              ["주소", appData?.address || appData?.주소],
+            ].map(([k, v], idx) => (
+              <div key={k} className={`px-7 py-3.5 min-w-0 ${idx ? "md:border-l border-white/10" : ""}`}>
+                <div className="text-[11px] font-bold tracking-wide text-blue-200/60">{k}</div>
+                <div className="mt-0.5 text-[13.5px] font-semibold truncate" title={v || ""}>{v || "-"}</div>
+              </div>
+            ))}
+          </div>
+          {!appData && <div className="relative px-7 pb-5 text-[13px] text-blue-100/80">가입 승인 후 회사 정보가 표시됩니다.</div>}
         </div>
 
-        {/* 계좌 정보 카드 */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-5"><EditableText id="companyProfile.section.계좌정보" defaultText="계좌 정보" /></p>
-          <div className="max-w-[420px] space-y-3">
+        {/* 서류 + 정산 계좌 */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+          <div className="xl:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-[0_2px_10px_rgba(16,24,40,0.04)] p-5">
+            <div className="text-[15px] font-black text-[#1B2B4B]">회사 서류</div>
+            <div className="text-[12px] text-gray-500 mt-0.5 mb-4">사업자등록증과 직인은 거래명세서·보고서 등 필요한 곳에 자동으로 쓰입니다</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <div className="flex items-center mb-2">
+                  <span className="text-[13px] font-bold text-gray-700">사업자등록증</span>
+                  <button className="ml-auto px-3 py-1 text-[12px] font-bold rounded-lg border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/5 disabled:opacity-40"
+                    onClick={() => fileRef.current?.click()} disabled={uploading}>{uploading ? uploadProgress : filePreviewSrc ? "다시 올리기" : "파일 선택"}</button>
+                  <input autoComplete="off" ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={e => handleFileUpload(e.target.files?.[0])} />
+                </div>
+          <div
+            className={`border-2 border-dashed rounded-xl transition min-h-[180px] flex flex-col ${dragOver ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200"}`}
+            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={e => { e.preventDefault(); setDragOver(false); handleFileUpload(e.dataTransfer.files?.[0]); }}
+          >
+            {filePreviewSrc ? (
+              <div className="p-3 space-y-3 flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] font-semibold text-gray-700 truncate flex-1 mr-2">{appData.사업자등록증파일명 || "사업자등록증"}</span>
+                  <div className="flex gap-1.5 shrink-0">
+                    {isImage && <button className="px-2.5 py-1.5 text-[12px] rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition" onClick={handleCopyImage}><EditableText id="misc.btn.57388.이미지 복사" defaultText="이미지 복사" /></button>}
+                    <button className="px-2.5 py-1.5 text-[12px] rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60] transition" onClick={handleDownload}><EditableText id="misc.btn.57389.다운로드" defaultText="다운로드" /></button>
+                  </div>
+                </div>
+                {isImage && (
+                  <img src={filePreviewSrc} alt="사업자등록증" className="w-full max-h-[200px] object-contain rounded-xl bg-gray-50 border border-gray-100" />
+                )}
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center py-10 cursor-pointer" onClick={() => fileRef.current?.click()}>
+                <svg className="w-10 h-10 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p className="text-[13px] font-semibold text-gray-500">클릭 또는 드래그하여 업로드</p>
+                <p className="text-[12px] text-gray-500 mt-1">JPG, PNG, WEBP, PDF / 최대 3MB</p>
+              </div>
+            )}
+          </div>
+              </div>
+              <div>
+                <div className="flex items-center mb-2">
+                  <span className="text-[13px] font-bold text-gray-700">직인(도장)</span>
+                  <button className="ml-auto px-3 py-1 text-[12px] font-bold rounded-lg border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/5 disabled:opacity-40"
+                    onClick={() => sealFileRef.current?.click()} disabled={sealUploading}>{sealUploading ? "업로드 중..." : appData?.직인이미지 ? "다시 올리기" : "이미지 선택"}</button>
+                  <input autoComplete="off" ref={sealFileRef} type="file" accept="image/*" className="hidden" onChange={e => handleSealUpload(e.target.files?.[0])} />
+                </div>
+          <div
+            className="border-2 border-dashed rounded-xl transition min-h-[180px] flex items-center justify-center cursor-pointer border-gray-200 bg-gray-50"
+            onClick={() => sealFileRef.current?.click()}
+          >
+            {appData?.직인이미지 ? (
+              <img src={appData.직인이미지} alt="직인" className="max-h-[120px] max-w-[160px] object-contain" style={{ mixBlendMode: "multiply" }} />
+            ) : (
+              <div className="flex flex-col items-center py-6">
+                <svg className="w-9 h-9 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l1.5-3h15L21 8v11a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
+                </svg>
+                <p className="text-[13px] font-semibold text-gray-500">클릭하여 도장 이미지 업로드</p>
+                <p className="text-[12px] text-gray-500 mt-1">배경이 투명한 PNG 권장 / 최대 1MB</p>
+              </div>
+            )}
+          </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-[0_2px_10px_rgba(16,24,40,0.04)] p-5">
+            <div className="flex items-center mb-4">
+              <div>
+                <div className="text-[15px] font-black text-[#1B2B4B]">정산 계좌</div>
+                <div className="text-[12px] text-gray-500 mt-0.5">청구서·거래명세서에 표시되는 입금 계좌</div>
+              </div>
+              {appData?.계좌은행 && !bankEditOpen && <button onClick={() => setBankEditOpen(true)} className="ml-auto px-3 py-1.5 rounded-lg border border-gray-300 text-[12px] font-bold text-gray-600 hover:bg-gray-50">변경</button>}
+            </div>
+            {appData?.계좌은행 && !bankEditOpen ? (
+              <div className="relative overflow-hidden rounded-2xl text-white px-5 py-5" style={{ aspectRatio: "1.6 / 1", background: "linear-gradient(135deg, #1B2B4B 0%, #2D4C82 100%)" }}>
+                <div className="absolute -right-10 -bottom-12 w-40 h-40 rounded-full bg-white/[0.07]" />
+                <div className="relative h-full flex flex-col">
+                  <div className="text-[14px] font-black">{appData.계좌은행}</div>
+                  <div className="mt-auto text-[20px] font-black font-mono tracking-wider">{appData.계좌번호}</div>
+                  <div className="mt-1 text-[12.5px] text-blue-100/80">예금주 {appData.예금주 || "-"}</div>
+                </div>
+              </div>
+            ) : (
+          <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1.5"><EditableText id="companyProfile.bankForm.label.은행" defaultText="은행" /></label>
@@ -60857,130 +61014,50 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                 onChange={e => setBankForm(p => ({ ...p, accountNumber: e.target.value.replace(/[^\d-]/g, "") }))}
               />
             </div>
-            {appData?.계좌은행 && (
-              <div className="bg-[#1B2B4B]/5 border border-[#1B2B4B]/10 rounded-xl px-4 py-3">
-                <div className="text-[11px] font-semibold text-gray-500 mb-1">현재 등록된 계좌</div>
-                <div className="text-[15px] font-bold text-[#1B2B4B]">{appData.계좌은행} {appData.계좌번호}</div>
-                <div className="text-[13px] text-gray-500 mt-0.5">예금주: {appData.예금주 || "-"}</div>
-              </div>
-            )}
-            <button
-              className="w-full py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[14px] font-bold transition disabled:opacity-40"
-              disabled={!bankForm.bank || !bankForm.accountNumber || !bankForm.accountHolder}
-              onClick={() => { if (!bankForm.bank || !bankForm.accountNumber || !bankForm.accountHolder) return; setBankConfirmOpen(true); }}
-            >
-              계좌 저장
-            </button>
-          </div>
-        </div>
-
-        {/* 사업자등록증 카드 */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-5">
-            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">사업자등록증</p>
-            <button
-              className="px-3 py-1.5 text-[12px] font-semibold rounded-lg border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/5 transition disabled:opacity-40"
-              onClick={() => fileRef.current?.click()}
-              disabled={uploading}
-            >
-              {uploading ? uploadProgress : "파일 선택"}
-            </button>
-            <input autoComplete="off" ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden"
-              onChange={e => handleFileUpload(e.target.files?.[0])} />
-          </div>
-          <div
-            className={`border-2 border-dashed rounded-xl transition min-h-[180px] max-w-[420px] flex flex-col ${dragOver ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200"}`}
-            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={e => { e.preventDefault(); setDragOver(false); handleFileUpload(e.dataTransfer.files?.[0]); }}
-          >
-            {filePreviewSrc ? (
-              <div className="p-3 space-y-3 flex-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-semibold text-gray-700 truncate flex-1 mr-2">{appData.사업자등록증파일명 || "사업자등록증"}</span>
-                  <div className="flex gap-1.5 shrink-0">
-                    {isImage && <button className="px-2.5 py-1.5 text-[12px] rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition" onClick={handleCopyImage}><EditableText id="misc.btn.57388.이미지 복사" defaultText="이미지 복사" /></button>}
-                    <button className="px-2.5 py-1.5 text-[12px] rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60] transition" onClick={handleDownload}><EditableText id="misc.btn.57389.다운로드" defaultText="다운로드" /></button>
-                  </div>
+                <div className="flex gap-2">
+                  {appData?.계좌은행 && <button onClick={() => setBankEditOpen(false)} className="px-4 py-2.5 rounded-xl border border-gray-300 text-[13px] font-bold text-gray-600">취소</button>}
+                  <button
+                    className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[14px] font-bold transition disabled:opacity-40"
+                    disabled={!bankForm.bank || !bankForm.accountNumber || !bankForm.accountHolder}
+                    onClick={() => { if (!bankForm.bank || !bankForm.accountNumber || !bankForm.accountHolder) return; setBankConfirmOpen(true); }}
+                  >계좌 저장</button>
                 </div>
-                {isImage && (
-                  <img src={filePreviewSrc} alt="사업자등록증" className="w-full max-h-[200px] object-contain rounded-xl bg-gray-50 border border-gray-100" />
-                )}
-              </div>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center py-10 cursor-pointer" onClick={() => fileRef.current?.click()}>
-                <svg className="w-10 h-10 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <p className="text-[13px] font-semibold text-gray-500">클릭 또는 드래그하여 업로드</p>
-                <p className="text-[12px] text-gray-500 mt-1">JPG, PNG, WEBP, PDF / 최대 3MB</p>
               </div>
             )}
           </div>
         </div>
 
-        {/* 직인(도장) 이미지 카드 — 여기 업로드하면 거래명세서 등 도장이 찍히는 모든 곳에 자동 반영 */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">직인(도장) 이미지</p>
-              <p className="text-[11px] text-gray-400 mt-1">거래명세서 등 도장이 필요한 모든 화면에 자동으로 적용됩니다.</p>
+        {/* 운영 설정 */}
+        <div>
+          <div className="px-1 mb-3 text-[15px] font-black text-[#1B2B4B]">운영 설정</div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-[0_2px_10px_rgba(16,24,40,0.04)] p-5 flex items-center gap-4">
+              <div className="flex-1">
+                <p className="text-[14px] font-bold text-gray-800">배차마당 공유</p>
+                <p className="text-[12px] text-gray-500 mt-0.5">켜두면 배차요청장에서 "배차마당 등록"으로 저장한 오더가 배차마당(카페사이트)에도 함께 올라갑니다.</p>
+              </div>
+              <button onClick={toggleCafeSync} disabled={cafeSyncSaving}
+                className={`relative w-12 h-7 rounded-full transition-colors duration-200 shrink-0 ${cafeSyncOn ? "bg-[#1B2B4B]" : "bg-gray-300"} ${cafeSyncSaving ? "opacity-60 cursor-wait" : "cursor-pointer"}`}>
+                <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200 ${cafeSyncOn ? "translate-x-5" : "translate-x-0"}`} />
+              </button>
             </div>
-            <button
-              className="px-3 py-1.5 text-[12px] font-semibold rounded-lg border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/5 transition disabled:opacity-40 shrink-0"
-              onClick={() => sealFileRef.current?.click()}
-              disabled={sealUploading}
-            >
-              {sealUploading ? "업로드 중..." : appData?.직인이미지 ? "다시 업로드" : "이미지 선택"}
-            </button>
-            <input autoComplete="off" ref={sealFileRef} type="file" accept="image/*" className="hidden"
-              onChange={e => handleSealUpload(e.target.files?.[0])} />
-          </div>
-          <div
-            className="border-2 border-dashed rounded-xl transition min-h-[140px] max-w-[420px] flex items-center justify-center cursor-pointer border-gray-200 bg-gray-50"
-            onClick={() => sealFileRef.current?.click()}
-          >
-            {appData?.직인이미지 ? (
-              <img src={appData.직인이미지} alt="직인" className="max-h-[120px] max-w-[160px] object-contain" style={{ mixBlendMode: "multiply" }} />
-            ) : (
-              <div className="flex flex-col items-center py-6">
-                <svg className="w-9 h-9 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l1.5-3h15L21 8v11a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
-                </svg>
-                <p className="text-[13px] font-semibold text-gray-500">클릭하여 도장 이미지 업로드</p>
-                <p className="text-[12px] text-gray-500 mt-1">배경이 투명한 PNG 권장 / 최대 1MB</p>
+            {isAdmin && (
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-[0_2px_10px_rgba(16,24,40,0.04)] p-5">
+                <RevenuePasswordSection companyName={companyName} />
+              </div>
+            )}
+            {isAdmin && (
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-[0_2px_10px_rgba(16,24,40,0.04)] p-5">
+                <PaymentDateRuleSection companyName={companyName} />
+              </div>
+            )}
+            {isAdmin && (
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-[0_2px_10px_rgba(16,24,40,0.04)] p-5">
+                <RevenueTargetSection companyName={companyName} />
               </div>
             )}
           </div>
         </div>
-
-        {/* 매출관리 비밀번호 카드 */}
-        {isAdmin && (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-            <div className="max-w-[420px]">
-              <RevenuePasswordSection companyName={companyName} />
-            </div>
-          </div>
-        )}
-
-        {/* 결제일(계산서→입금) 규칙 카드 */}
-        {isAdmin && (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-            <div className="max-w-[420px]">
-              <PaymentDateRuleSection companyName={companyName} />
-            </div>
-          </div>
-        )}
-
-        {/* 연간 매출 목표 카드 */}
-        {isAdmin && (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-            <div className="max-w-[420px]">
-              <RevenueTargetSection companyName={companyName} />
-            </div>
-          </div>
-        )}
       </div>
 
       {/* 계좌 확인 팝업 */}
