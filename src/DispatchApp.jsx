@@ -2606,6 +2606,7 @@ import AdminShell from "./AdminShell";
 import { pcBootStore, useMiniStore, makeBootTracker, markBootBase } from "./bootProgress";
 import { auth, db, storage, DEFAULT_COMPANY } from "./firebase";
 import { LoginManagerModal } from "./LoginManager";
+import "./pcTheme.css";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 // 기사전달용 업로드 링크 단축 — /upload?id=...&t=... (길고 낯설어 기사들이 거부감을
@@ -7305,12 +7306,12 @@ return (
           </div>
         </div>
       )}
-      <div className="w-full overflow-x-hidden">
+      <div className={`w-full overflow-x-hidden ${darkMode ? "" : "kp-pc"}`}>
       {/* ===== 통합 헤더 네비 ===== */}
-      <header className="sticky top-0 z-50 bg-[#1B2B4B] shadow-lg mb-6 w-full">
+      <header className="kp-topnav sticky top-0 z-50 mb-6 w-full">
 
         {/* 상단바: 로고 + 메뉴 + 유저 */}
-        <div className="flex items-center px-6 h-14">
+        <div className="flex items-center gap-3 px-6 h-[60px]">
 
           {/* 좌측 로고 */}
           {(() => {
@@ -7318,10 +7319,17 @@ return (
               ? (localStorage.getItem("loginCompany") || userCompany || "")
               : (userCompany || localStorage.getItem("userCompany") || "");
             return (
-              <div className="flex items-center gap-2 min-w-0 shrink-0">
-                <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-7 h-7 rounded-lg shrink-0" />
-                <span className="text-white font-extrabold text-[14px] tracking-tight shrink-0">KP-Flow</span>
-                {co && <span className="text-[14px] font-bold text-white/90 truncate max-w-[100px]">{co}</span>}
+              <div className="flex items-center gap-2.5 min-w-0 shrink-0">
+                <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-8 h-8 rounded-[10px] shrink-0 ring-1 ring-white/15 shadow-[0_4px_12px_rgba(0,0,0,0.25)]" />
+                <div className="flex flex-col leading-none shrink-0">
+                  <span className="text-white font-black text-[15px] tracking-tight">KP-Flow</span>
+                  <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0] mt-1">DISPATCH</span>
+                </div>
+                {co && (
+                  <span className="ml-1 px-2.5 h-7 inline-flex items-center rounded-lg bg-white/[0.07] border border-white/10 text-[13px] font-bold text-white/90 truncate max-w-[120px]">
+                    {co}
+                  </span>
+                )}
                 {hasUpdate ? (
                   <button
                     onClick={hardReloadForUpdate}
@@ -7331,7 +7339,7 @@ return (
                     v{__APP_VERSION__} 업데이트
                   </button>
                 ) : (
-                  <span className="text-[13px] font-mono text-white/60 shrink-0">v{__APP_VERSION__}</span>
+                  <span className="text-[11px] font-mono text-white/45 shrink-0">v{__APP_VERSION__}</span>
                 )}
                 <EditModeToggleButton className="ml-1" />
               </div>
@@ -7377,17 +7385,17 @@ return (
                   key={m}
                   disabled={isBlocked}
                   onClick={() => handleMenuClick(m)}
-                  className={`relative px-3 py-1.5 rounded-md text-[13px] xl:text-[14px] xl:px-4 font-medium whitespace-nowrap transition-all flex-shrink-0
+                  className={`kp-nav-btn relative px-3 h-[34px] rounded-[10px] text-[13px] xl:text-[14px] xl:px-3.5 whitespace-nowrap transition-all flex-shrink-0
                     ${isBlocked
                       ? "text-white/20 cursor-not-allowed"
                       : isActive
-                        ? "bg-[#28406b] text-white font-semibold ring-1 ring-emerald-400/30"
-                        : "text-white/60 hover:text-white hover:bg-[#28406b] hover:ring-1 hover:ring-emerald-400/30"
+                        ? "bg-white text-[#0F1A30] font-extrabold shadow-[0_4px_14px_rgba(0,0,0,0.25)]"
+                        : "text-white/65 font-semibold hover:text-white hover:bg-white/[0.09]"
                     }`}
                 >
                   <EditableText id={`nav.${m}`} defaultText={m} />
                   {!isBlocked && isActive && (
-                    <span className="absolute left-1/2 -translate-x-1/2 -bottom-[3px] w-4 h-[2px] bg-blue-400 rounded-full" />
+                    <span className="absolute left-1/2 -translate-x-1/2 -bottom-[7px] w-5 h-[3px] bg-[#6E95E8] rounded-full" />
                   )}
                 </button>
               );
@@ -7397,19 +7405,22 @@ return (
 
           {/* 우측 유저 영역 */}
           <div className="flex items-center gap-2 min-w-[180px] justify-end">
-            <span className="text-white/50 text-xs hidden xl:block truncate max-w-[120px]">
+            <span className="text-white/45 text-[12px] font-medium hidden 2xl:block truncate max-w-[150px]">
               {user?.email}
             </span>
             <button
               onClick={() => { setMyInfoNameDraft(myRealName); setMyInfoPhoneDraft(myPhone); setShowMyInfo(true); }}
-              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm flex items-center justify-center transition"
+              className="kp-icon-btn transition"
               title="내 정보"
             >
-              👤
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="8" r="4" />
+                <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
+              </svg>
             </button>
             <button
               onClick={() => setNotificationsEnabled(!notificationsEnabled)}
-              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm flex items-center justify-center transition relative"
+              className="kp-icon-btn transition relative"
               title={notificationsEnabled ? "알림 켜짐 (클릭 시 끄기)" : "알림 꺼짐 (클릭 시 켜기)"}
             >
               {notificationsEnabled ? (
@@ -7433,10 +7444,8 @@ return (
             {role === "totalMaster" && (
               <button
                 onClick={toggleUpdateBanner}
-                className={`px-2.5 py-1.5 rounded-md text-[11px] font-bold transition whitespace-nowrap ${
-                  updateBannerEnabled
-                    ? "bg-emerald-500/90 hover:bg-emerald-500 text-white"
-                    : "bg-white/10 hover:bg-white/20 text-white/70"
+                className={`kp-chip-btn text-[12px] transition ${
+                  updateBannerEnabled ? "!bg-emerald-500/90 !border-emerald-400 !text-white" : ""
                 }`}
                 title={updateBannerEnabled
                   ? "업데이트 알림 배너: 전체 ON — 클릭 시 끄기"
@@ -7451,7 +7460,7 @@ return (
             <button
               onClick={handleOptimizeClick}
               disabled={optimizing}
-              className="px-2.5 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition disabled:opacity-50 whitespace-nowrap"
+              className="kp-chip-btn text-[12px] transition disabled:opacity-50"
               title="오더를 많이 등록/조회하다 화면이 버벅이면 눌러주세요 — 새로고침 없이 현재 화면만 가볍게 초기화합니다"
             >
               {optimizing ? "최적화 중..." : "최적화"}
@@ -7461,7 +7470,7 @@ return (
             <div className="relative">
               <button
                 onClick={() => setFontSettingsOpen(v => !v)}
-                className="px-2.5 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition"
+                className="kp-icon-btn text-[13px] font-black transition"
                 title="글씨 크기 조절"
               >
                 가
@@ -7504,7 +7513,7 @@ return (
 
             <button
               onClick={logout}
-              className="px-3 py-1.5 rounded-md bg-red-500/80 hover:bg-red-500 text-white text-xs font-semibold transition"
+              className="h-[34px] px-3.5 rounded-[10px] bg-[#E5484D]/90 hover:bg-[#E5484D] text-white text-[12px] font-bold transition whitespace-nowrap shadow-[0_4px_12px_rgba(229,72,77,0.3)]"
             >
               로그아웃
             </button>
@@ -7613,7 +7622,7 @@ return (
       )}
 
       {/* ---------------- 화면 렌더링 ---------------- */}
-      <main className={`rounded shadow p-4 w-full min-w-0 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
+      <main className={`kp-main ${menu === "HOME" ? "kp-main-bare" : ""} rounded shadow p-4 w-full min-w-0 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
         {menu === "HOME" && (
           <HomeDashboard
             role={role}

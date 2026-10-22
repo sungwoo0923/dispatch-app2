@@ -1,0 +1,164 @@
+/* ======================= src/pcTheme.css =======================
+   ⭐ PC 공통 디자인 레이어(2026-10-22) — 홈·회사관리에서 쓰는 "디지털·고급" 디자인을
+   PC 전체 메뉴에 한 번에 입힌다. DispatchApp 최상위 div의 .kp-pc 안에서만 적용된다
+   (모바일·기사앱·화주앱에는 영향 없음, 다크모드일 때는 .kp-pc가 빠진다). */
+
+.kp-pc {
+  --kp-navy: #1B2B4B;
+  --kp-ink: #0F1A30;
+  --kp-line: #E3E8F0;
+  --kp-soft: #F5F8FD;
+  --kp-accent: #4B6CB7;
+  --kp-bar: linear-gradient(120deg, #0F1A30 0%, #1B2B4B 50%, #2D4C82 100%);
+  --kp-card-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 10px 28px rgba(16, 24, 40, 0.06);
+  background: #F4F6FA;
+  min-height: 100vh;
+}
+
+/* ── 화면 본문 — 흰 시트(카드)로 띄워 보이게. HOME은 자체 배경을 쓰므로 시트 없이 ── */
+.kp-pc main.kp-main {
+  background: #fff !important;
+  border: 1px solid var(--kp-line);
+  border-radius: 20px !important;
+  box-shadow: var(--kp-card-shadow) !important;
+  margin: 0 20px 28px;
+  width: auto !important;
+  padding: 20px !important;
+}
+.kp-pc main.kp-main.kp-main-bare {
+  background: transparent !important;
+  border: none;
+  box-shadow: none !important;
+  margin: 0;
+  padding: 0 !important;
+}
+
+/* ── 남색 타이틀바(팝업 머리·카드 머리) → 그라데이션 ── */
+.kp-pc div[class~="bg-[#1B2B4B]"][class*="px-"],
+.kp-pc header[class~="bg-[#1B2B4B]"][class*="px-"],
+.kp-pc section[class~="bg-[#1B2B4B]"][class*="px-"] {
+  background-image: var(--kp-bar);
+}
+
+/* ── 남색 버튼 → 은은한 그림자 ── */
+.kp-pc button[class~="bg-[#1B2B4B]"] {
+  box-shadow: 0 1px 2px rgba(15, 26, 48, 0.18), 0 4px 12px rgba(27, 43, 75, 0.18);
+}
+.kp-pc button[class~="bg-[#1B2B4B]"]:hover:not(:disabled) {
+  opacity: 1;
+  background-color: #2D4C82;
+}
+
+/* ── 카드(흰 박스) → 둥글고 부드러운 테두리·그림자 ── */
+.kp-pc [class~="bg-white"][class~="rounded-xl"][class~="border"],
+.kp-pc [class~="bg-white"][class~="rounded-2xl"][class~="border"],
+.kp-pc [class~="bg-white"][class~="rounded-lg"][class~="shadow"],
+.kp-pc [class~="bg-white"][class~="rounded"][class~="shadow"] {
+  border-color: var(--kp-line) !important;
+  box-shadow: var(--kp-card-shadow) !important;
+}
+.kp-pc [class~="bg-white"][class~="rounded-xl"][class~="border"],
+.kp-pc [class~="bg-white"][class~="rounded-2xl"][class~="border"] {
+  border-radius: 18px;
+}
+
+/* 팝업(모달) 박스 */
+.kp-pc [class~="bg-white"][class~="rounded-2xl"][class~="shadow-xl"],
+.kp-pc [class~="bg-white"][class~="rounded-2xl"][class~="shadow-2xl"] {
+  border-radius: 20px;
+  box-shadow: 0 24px 64px rgba(15, 26, 48, 0.28), 0 2px 6px rgba(15, 26, 48, 0.08) !important;
+}
+
+/* 회색 박스(필터·요약 영역) → 연한 블루그레이 */
+.kp-pc [class~="bg-gray-50"][class~="rounded-xl"],
+.kp-pc [class~="bg-gray-50"][class~="rounded-lg"] {
+  background-color: var(--kp-soft);
+}
+.kp-pc [class~="bg-gray-50"][class~="border"][class*="rounded"] {
+  border-color: var(--kp-line);
+}
+
+/* ── 입력칸 ── */
+.kp-pc input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+.kp-pc select,
+.kp-pc textarea {
+  border-color: #D5DCE7;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.kp-pc input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):focus,
+.kp-pc select:focus,
+.kp-pc textarea:focus {
+  outline: none;
+  border-color: var(--kp-accent) !important;
+  box-shadow: 0 0 0 3px rgba(75, 108, 183, 0.16) !important;
+}
+
+/* ── 표 머리줄(남색) → 진한 남색 + 글자 간격 ── */
+.kp-pc thead[class~="bg-[#1B2B4B]"] th,
+.kp-pc tr[class~="bg-[#1B2B4B]"] th {
+  background-color: #17253F;
+  letter-spacing: 0.01em;
+}
+.kp-pc table thead th {
+  border-right-color: rgba(255, 255, 255, 0.08);
+}
+
+/* 회색 표 머리줄 */
+.kp-pc thead[class~="bg-gray-50"] th,
+.kp-pc thead[class~="bg-gray-100"] th,
+.kp-pc tr[class~="bg-gray-50"] th,
+.kp-pc tr[class~="bg-gray-100"] th {
+  background-color: #EEF2F8;
+  color: #3A4A66;
+}
+
+/* ── 스크롤바 ── */
+.kp-pc ::-webkit-scrollbar { width: 10px; height: 10px; }
+.kp-pc ::-webkit-scrollbar-thumb {
+  background: #C9D2E0;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.kp-pc ::-webkit-scrollbar-thumb:hover { background-color: #9FACC2; }
+.kp-pc ::-webkit-scrollbar-track { background: transparent; }
+
+/* ── 상단 메뉴바 ── */
+.kp-topnav {
+  background: linear-gradient(120deg, #0F1A30 0%, #16243F 45%, #1F3560 100%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 8px 24px rgba(15, 26, 48, 0.25);
+}
+.kp-topnav::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(125, 160, 230, 0.45), transparent);
+  pointer-events: none;
+}
+.kp-topnav .kp-icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: #fff;
+}
+.kp-topnav .kp-icon-btn:hover { background: rgba(255, 255, 255, 0.14); opacity: 1; }
+.kp-topnav .kp-chip-btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.kp-topnav .kp-chip-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.14); color: #fff; opacity: 1; }
+.kp-topnav .kp-nav-btn { opacity: 1; }
