@@ -3249,6 +3249,15 @@ const RESET_SECRET_DOC = db.collection("adminSecrets").doc("companyReset");
 const RESET_COMPANY_FIELDS = ["companyName", "company", "회사명", "운송사명", "transportCompany", "companyKey"];
 const RESET_UID_FIELDS = ["uid", "userId", "ownerUid", "createdByUid", "writerUid", "authorUid", "driverUid"];
 const RESET_SKIP_COLLECTIONS = new Set(["adminSecrets", "resetLogs"]);
+// ⭐ 회사명이 비어 있는 예전 데이터는 프로그램이 "돌캐" 것으로 본다(화면의 companyName || "돌캐" 규칙).
+// 그래서 돌캐를 초기화할 때는 아래 컬렉션에서 회사 필드가 아예 없는 문서도 함께 지운다.
+const RESET_LEGACY_COMPANY = "돌캐";
+const RESET_LEGACY_COLLECTIONS = [
+  "dispatch", "orders", "fixedClients", "clients", "places", "drivers", "schedules", "notices", "handovers",
+  "multiRateSheets", "deletedOrders", "scheduledEmails", "emailLogs", "acctPayments", "attendance",
+  "attendanceRequests", "attendanceChangeRequests", "driver_logs", "driver_notifications", "driver_documents",
+  "driver_completed_archive", "driver_photo_logs", "gps_tracks",
+];
 
 function hashResetPassword(pw, salt) {
   return crypto.scryptSync(String(pw), salt, 64).toString("hex");
@@ -3291,11 +3300,20 @@ async function verifyResetPassword(pw) {
 // 운송사 소속 계정(최고관리자 제외)과 회사코드
 async function getCompanyMembers(company) {
   const users = await db.collection("users").where("companyName", "==", company).get();
-  const members = users.docs
+  const userDocs = [...users.docs];
+  if (company === RESET_LEGACY_COMPANY) {
+    // 회사명이 비어 있는 예전 계정(화주·배차마당 계정 제외)도 돌캐 소속으로 본다
+    const all = await db.collection("users").get();
+    all.docs.forEach((d) => {
+      const u = d.data();
+      if (!String(u.companyName || "").trim() && !["shipper", "cafeUser"].includes(u.role)) userDocs.push(d);
+    });
+  }
+  const members = userDocs
     .filter((d) => d.data().role !== "totalMaster" && d.data().email !== "tjddnqkf@naver.com")
     .map((d) => ({ uid: d.id, email: d.data().email || "", role: d.data().role || "" }));
   const codes = new Set();
-  users.docs.forEach((d) => { if (d.data().companyCode) codes.add(String(d.data().companyCode)); });
+  userDocs.forEach((d) => { if (d.data().companyCode) codes.add(String(d.data().companyCode)); });
   const apps = await db.collection("transportApplications").where("companyName", "==", company).get();
   apps.docs.forEach((d) => { if (d.data().companyCode) codes.add(String(d.data().companyCode)); });
   return { members, codes: [...codes].filter(Boolean) };
@@ -3332,6 +3350,22 @@ async function collectCompanyDocs(company, { deleteAccounts }) {
     for (const ch of chunks(idRefs, 100)) {
       const snaps = await db.getAll(...ch).catch(() => []);
       add(col, snaps.filter((s) => s.exists));
+    }
+    // 돌캐 초기화 — 회사 필드가 하나도 없는 예전 문서(가볍게 회사 필드만 읽어 찾은 뒤 전체 내용을 다시 읽는다)
+    if (company === RESET_LEGACY_COMPANY && RESET_LEGACY_COLLECTIONS.includes(col)) {
+      // 회사 필드가 없어도 다른 회사 직원의 기록(uid가 돌캐 소속이 아닌 문서)은 건드리지 않는다
+      const uidSet = new Set(uids);
+      const light = await colRef.select(...RESET_COMPANY_FIELDS, "companyCode", ...RESET_UID_FIELDS).get().catch(() => null);
+      const legacyRefs = (light?.docs || []).filter((d) => {
+        const x = d.data() || {};
+        if (![...RESET_COMPANY_FIELDS, "companyCode"].every((f) => !String(x[f] ?? "").trim())) return false;
+        const owners = RESET_UID_FIELDS.map((f) => String(x[f] ?? "").trim()).filter(Boolean);
+        return owners.length === 0 || owners.some((o) => uidSet.has(o));
+      }).map((d) => d.ref).filter((r) => !found.has(r.path));
+      for (const ch of chunks(legacyRefs, 300)) {
+        const snaps = await db.getAll(...ch).catch(() => []);
+        add(col, snaps.filter((s) => s.exists));
+      }
     }
   }
   // 계정을 남기는 경우에도 최고관리자 문서는 절대 지우지 않는다(안전장치)
@@ -3439,15 +3473,13 @@ exports.companyReset = functions
         settings.forEach((r) => touch(r.id));
         res.json({
           companies: [...map.values()].sort((a, b) => a.name.localeCompare(b.name, "ko")),
-          defaultCompany: "돌캐",
+          legacyCompany: RESET_LEGACY_COMPANY,
         });
         return;
       }
 
       const company = String(body.company || "").trim();
       if (!company) { res.status(400).json({ error: "초기화할 운송사를 선택하세요." }); return; }
-      // ⭐ 안전장치 — 기본 회사(돌캐)는 예전 데이터에 회사명이 없는 것도 많아 초기화 대상에서 막는다
-      if (company === "돌캐") { res.status(400).json({ error: "기본 회사(돌캐)는 초기화할 수 없습니다." }); return; }
       const deleteAccounts = body.deleteAccounts === true;
 
       if (action === "preview") {

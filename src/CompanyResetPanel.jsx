@@ -103,7 +103,7 @@ export default function CompanyResetPanel() {
     <div className="space-y-4">
       <div className="rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-[13px] text-red-700 leading-relaxed">
         <b className="text-[14px]">⚠️ 되돌릴 수 없는 기능입니다.</b> 선택한 운송사가 프로그램에 등록한 모든 데이터(오더·거래처·상하차지·기사·일정·근태·알림·설정·첨부파일 등)를
-        하나도 빠짐없이 삭제해 처음 가입한 상태로 되돌립니다. 기본 회사(돌캐)는 초기화할 수 없습니다.
+        하나도 빠짐없이 삭제해 처음 가입한 상태로 되돌립니다. 돌캐는 회사명이 비어 있는 예전 데이터까지 함께 지워집니다.
       </div>
 
       {loadErr && <div className="rounded-xl border border-amber-300 bg-amber-50 px-5 py-3 text-[13px] text-amber-800">{loadErr} <button onClick={load} className="ml-2 underline font-bold">다시 시도</button></div>}
@@ -145,8 +145,8 @@ export default function CompanyResetPanel() {
           <select value={company} onChange={(e) => setCompany(e.target.value)} className="h-[38px] min-w-[260px] px-3 rounded-lg border border-gray-300 text-[13.5px] font-semibold outline-none">
             <option value="">운송사 선택</option>
             {companies.map((c) => (
-              <option key={c.name} value={c.name} disabled={c.name === "돌캐"}>
-                {c.name}{c.code ? ` (${c.code})` : ""} · 계정 {c.users}명{c.name === "돌캐" ? " — 초기화 불가" : ""}
+              <option key={c.name} value={c.name}>
+                {c.name}{c.code ? ` (${c.code})` : ""} · 계정 {c.users}명
               </option>
             ))}
           </select>
