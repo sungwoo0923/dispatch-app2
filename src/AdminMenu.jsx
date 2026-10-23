@@ -735,91 +735,149 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
       <div className="flex gap-6">
         <div className="flex-1 min-w-0">
 
-          {/* ====== 회원 관리 탭 (목록 + 상세) ====== */}
-          {adminTab === "members" && (
-            <div className="flex gap-4" style={{ minHeight: 560 }}>
-              {/* 좌측 목록 */}
-              <div className="w-[330px] flex-shrink-0 bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col" style={{ maxHeight: 720 }}>
-                <div className="p-3 border-b border-gray-100 space-y-2">
-                  <div className="flex items-center gap-2 border border-gray-200 rounded-xl overflow-hidden bg-white focus-within:border-[#1B2B4B] transition">
-                    <svg className="ml-3 w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                    <input value={search} onChange={e => setSearch(e.target.value)}
-                      placeholder="이메일 · 이름 · 회사명 검색"
-                      className="flex-1 px-2 py-2 text-[13px] outline-none" />
+          {/* ====== 회원 관리 탭 (목록 + 상세) — 2026-10-23 리디자인: 왼쪽 회원 목록(이니셜 아바타) + 오른쪽 디지털 명함 ====== */}
+          {adminTab === "members" && (() => {
+            const initials = (u) => String(u.name || u.email || "?").trim().slice(0, u.name ? 1 : 2).toUpperCase();
+            const CARD = "bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)]";
+            return (
+            <div className="flex gap-5" style={{ minHeight: 600 }}>
+              {/* 좌측 회원 목록 */}
+              <div className={`w-[340px] flex-shrink-0 flex flex-col overflow-hidden ${CARD}`} style={{ maxHeight: 760 }}>
+                <div className="px-4 pt-4 pb-3 border-b border-[#EEF1F6] space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">MEMBERS</div>
+                      <div className="text-[17px] font-black text-[#0F1A30]">회원 목록</div>
+                    </div>
+                    <span className="px-2.5 h-7 inline-flex items-center rounded-full bg-[#F5F8FD] border border-[#E3E8F0] text-[12px] font-extrabold text-[#1B2B4B] tabular-nums">{filtered.length}명</span>
+                  </div>
+                  <div className="flex items-center gap-2 h-10 px-3 rounded-xl border border-[#DCE3EE] bg-white focus-within:border-[#4B6CB7] focus-within:ring-4 focus-within:ring-[#4B6CB7]/10 transition">
+                    <svg className="w-4 h-4 text-[#9AA9C3] shrink-0" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="이름 · 이메일 · 회사명 검색"
+                      className="flex-1 min-w-0 text-[13px] font-semibold text-[#0F1A30] outline-none bg-transparent placeholder:text-[#A7B3C6]" />
                   </div>
                   <select
                     value={roleFilter}
                     onChange={e => setRoleFilter(e.target.value)}
-                    className="w-full h-[34px] px-3 pr-8 rounded-lg text-[12.5px] font-semibold border border-gray-300 bg-white text-gray-700 outline-none cursor-pointer appearance-none"
-                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center" }}
+                    className="w-full h-10 px-3 pr-8 rounded-xl text-[13px] font-bold border border-[#DCE3EE] bg-white text-[#1F2A44] outline-none cursor-pointer appearance-none"
+                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%237A879C' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center" }}
                   >
                     <option value="all">전체 권한</option>
                     {ROLES.map(r => (
                       <option key={r} value={r}>{roleLabels[r] || r}</option>
                     ))}
                   </select>
-                  <div className="text-[11px] text-gray-500">{filtered.length}명 표시 중</div>
                 </div>
-                <div className="overflow-y-auto flex-1">
+                <div className="overflow-y-auto flex-1 p-2">
                   {filtered.length === 0 ? (
-                    <div className="py-16 text-center text-[12px] text-gray-400">검색 결과가 없습니다</div>
+                    <div className="py-16 text-center text-[13px] text-[#9AA9C3]">검색 결과가 없습니다</div>
                   ) : filtered.map(u => {
                     const isMe = me?.uid === u.id;
                     const resigned = u.employmentStatus === "퇴사";
+                    const on = manageUser?.id === u.id;
                     return (
-                      <div key={u.id} onClick={() => openManage(u)}
-                        className={`px-3.5 py-2.5 border-b border-gray-50 cursor-pointer transition ${manageUser?.id === u.id ? "bg-blue-50" : "hover:bg-gray-50"} ${resigned ? "opacity-50" : ""}`}>
-                        <div className="flex items-center justify-between">
-                          <div className="text-[13px] font-semibold text-gray-800 truncate">{u.name || u.email}</div>
-                          <DotBadge active={u.approved && !resigned} activeLabel={resigned ? "퇴사" : "승인"} inactiveLabel={resigned ? "퇴사" : "대기"} />
-                        </div>
-                        <div className="text-[11px] text-gray-500 mt-0.5 truncate">{u.email}</div>
-                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                          <span className="text-[10.5px] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-500 font-semibold">{u.team || "미배정"}</span>
-                          <span className="text-[10.5px] px-1.5 py-0.5 rounded-md bg-[#1B2B4B]/5 text-[#1B2B4B] font-semibold">{roleLabels[u.role || "user"] || u.role}</span>
-                          {isMe && <span className="text-[10px] text-blue-500 font-semibold">나</span>}
-                        </div>
-                      </div>
+                      <button key={u.id} onClick={() => openManage(u)}
+                        className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-2xl transition mb-0.5 ${on ? "bg-[#0F1A30] text-white shadow-[0_8px_18px_rgba(15,26,48,0.25)]" : "hover:bg-[#F5F8FD]"} ${resigned && !on ? "opacity-50" : ""}`}>
+                        <span className={`w-10 h-10 rounded-[14px] flex items-center justify-center text-[14px] font-black shrink-0 ${on ? "bg-white text-[#0F1A30]" : "text-white"}`}
+                          style={on ? undefined : { background: "linear-gradient(135deg, #1B2B4B 0%, #2D4C82 100%)" }}>{initials(u)}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-1.5">
+                            <span className={`text-[14px] font-extrabold truncate ${on ? "text-white" : "text-[#0F1A30]"}`}>{u.name || u.email}</span>
+                            {isMe && <span className={`text-[10px] font-extrabold px-1.5 rounded ${on ? "bg-white/15 text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>나</span>}
+                          </span>
+                          <span className={`block text-[11.5px] truncate ${on ? "text-white/60" : "text-[#7A879C]"}`}>{[u.position, u.team || "미배정", roleLabels[u.role || "user"] || u.role].filter(Boolean).join(" · ")}</span>
+                        </span>
+                        <span className={`shrink-0 text-[10.5px] font-extrabold px-2 py-0.5 rounded-full ${
+                          resigned ? (on ? "bg-white/10 text-white/70" : "bg-[#F1F4F9] text-[#7A879C]")
+                            : u.approved ? (on ? "bg-white text-[#0F1A30]" : "bg-[#0F1A30] text-white")
+                            : (on ? "border border-white/40 text-white" : "border border-[#9AA9C3] text-[#3A4A66]")
+                        }`}>{resigned ? "퇴사" : u.approved ? "승인" : "대기"}</span>
+                      </button>
                     );
                   })}
                 </div>
               </div>
 
-              {/* 우측 상세 패널 */}
-              <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm min-w-0">
+              {/* 우측 — 디지털 명함 + 상세 */}
+              <div className="flex-1 min-w-0">
                 {!manageUser ? (
-                  <div className="h-full flex items-center justify-center text-[13px] text-gray-400 py-24">왼쪽에서 회원을 선택하세요</div>
+                  <div className={`h-full flex flex-col items-center justify-center py-28 ${CARD}`}>
+                    <div className="w-14 h-14 rounded-2xl bg-[#EEF3FB] text-[#1B2B4B] flex items-center justify-center mb-3">
+                      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="9" cy="11" r="2.2" /><path d="M5.5 16c.5-1.6 1.9-2.5 3.5-2.5s3 .9 3.5 2.5M15 10h3M15 13h3" /></svg>
+                    </div>
+                    <div className="text-[15px] font-extrabold text-[#0F1A30]">회원을 선택하세요</div>
+                    <div className="text-[13px] text-[#7A879C] mt-1">왼쪽 목록에서 고르면 명함과 상세 정보가 보입니다</div>
+                  </div>
                 ) : (() => {
                   const u = manageUser;
                   const canManage = isTotalMaster || (u.companyName || DEFAULT_COMPANY) === effectiveCompany;
                   const resigned = u.employmentStatus === "퇴사";
                   return (
-                    <div>
-                      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-[16px] font-bold text-gray-800">{u.name || u.email}</h3>
-                            {u.email === TOTAL_MASTER_EMAIL && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-semibold">총마스터</span>}
-                            {resigned && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-50 text-red-500 border border-red-200 font-semibold">퇴사 ({u.resignedAt || "-"})</span>}
+                    <div className="space-y-4">
+                      {/* 디지털 명함 */}
+                      <div className="relative overflow-hidden rounded-[24px] px-7 py-6 text-white shadow-[0_18px_40px_rgba(15,26,48,0.28)]"
+                        style={{ background: "linear-gradient(125deg, #0F1A30 0%, #1B2B4B 52%, #2D4C82 100%)" }}>
+                        <div className="absolute -right-16 -top-20 w-72 h-72 rounded-full bg-white/[0.05]" />
+                        <div className="absolute right-24 -bottom-28 w-60 h-60 rounded-full bg-white/[0.04]" />
+                        <div className="relative flex items-start gap-5">
+                          <div className="w-[76px] h-[76px] rounded-[22px] bg-white text-[#0F1A30] flex items-center justify-center text-[28px] font-black shadow-[0_10px_24px_rgba(0,0,0,0.25)] shrink-0">{initials(u)}</div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">{(u.companyName || DEFAULT_COMPANY).toUpperCase()}</div>
+                            <div className="mt-1 flex items-center gap-2 flex-wrap">
+                              <h3 className="text-[26px] font-black tracking-tight leading-tight">{u.name || u.email}</h3>
+                              {u.email === TOTAL_MASTER_EMAIL && <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/15 font-bold">총마스터</span>}
+                              {resigned && <span className="text-[11px] px-2 py-0.5 rounded-full border border-white/30 font-bold">퇴사 {u.resignedAt || ""}</span>}
+                            </div>
+                            <div className="text-[14px] font-semibold text-white/75 mt-0.5">{[u.position, u.team || "미배정"].filter(Boolean).join(" · ")}</div>
+                            <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1.5 text-[13.5px]">
+                              <span className="inline-flex items-center gap-2 text-white/90">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="7" y="2" width="10" height="20" rx="2.5" /><path d="M11 18h2" /></svg>
+                                {u.phone ? formatPhone(u.phone) : "-"}
+                              </span>
+                              <span className="inline-flex items-center gap-2 text-white/90">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg>
+                                {u.email}
+                              </span>
+                            </div>
                           </div>
-                          <p className="text-[12px] text-gray-500 mt-0.5">{u.email}</p>
+                          <div className="shrink-0 text-right">
+                            <span className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[12.5px] font-extrabold ${u.approved && !resigned ? "bg-white text-[#0F1A30]" : "bg-white/10 text-white border border-white/25"}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${u.approved && !resigned ? "bg-[#0F1A30]" : "bg-white/70"}`} />
+                              {resigned ? "퇴사" : u.approved ? "승인 완료" : "승인 대기"}
+                            </span>
+                            <div className="mt-2 text-[12px] font-bold text-white/60">{roleLabels[u.role] || u.role || "-"}</div>
+                          </div>
                         </div>
-                        {canManage && !editMode && (
-                          <div className="flex items-center gap-2">
-                            <button onClick={() => setEditMode(true)} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/10 transition"><EditableText id="adminMenu.members.정보수정" defaultText="정보 수정" /></button>
-                            <button onClick={() => setResignStatus(u, !resigned)} className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition ${resigned ? "border-gray-200 text-gray-600 hover:bg-gray-50" : "border-red-200 text-red-500 hover:bg-red-50"}`}>
-                              {resigned ? <EditableText id="adminMenu.members.복직처리" defaultText="복직 처리" /> : <EditableText id="adminMenu.members.퇴사처리" defaultText="퇴사 처리" />}
-                            </button>
-                            {me?.uid !== u.id && (
-                              <button onClick={() => removeUser(u)} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-gray-200 text-gray-500 hover:bg-gray-50 transition"><EditableText id="adminMenu.members.계정삭제" defaultText="계정 삭제" /></button>
-                            )}
-                          </div>
-                        )}
                       </div>
 
+                      <div className={CARD}>
+                        {/* 버튼 줄 */}
+                        <div className="px-6 py-4 border-b border-[#EEF1F6] flex flex-wrap items-center gap-2">
+                          <div className="mr-auto">
+                            <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">PROFILE</div>
+                            <div className="text-[17px] font-black text-[#0F1A30]">{editMode ? "정보 수정" : "회원 정보"}</div>
+                          </div>
+                          {!editMode && (
+                            <button onClick={() => toggleApprove(u)} className={`h-10 px-4 rounded-xl text-[13px] font-extrabold transition ${u.approved ? "border border-[#E3E8F0] text-[#3A4A66] hover:bg-[#F5F8FD]" : "bg-[#0F1A30] text-white hover:bg-[#1B2B4B]"}`}>
+                              {u.approved ? <EditableText id="adminMenu.members.승인해제" defaultText="승인 해제" /> : <EditableText id="adminMenu.members.승인" defaultText="승인" />}
+                            </button>
+                          )}
+                          {canManage && !editMode && (
+                            <>
+                              <button onClick={() => setEditMode(true)} className="h-10 px-4 rounded-xl text-[13px] font-extrabold bg-[#0F1A30] text-white hover:bg-[#1B2B4B] transition"><EditableText id="adminMenu.members.정보수정" defaultText="정보 수정" /></button>
+                              <button onClick={() => setResignStatus(u, !resigned)} className="h-10 px-4 rounded-xl text-[13px] font-extrabold border border-[#E3E8F0] text-[#3A4A66] hover:bg-[#F5F8FD] transition">
+                                {resigned ? <EditableText id="adminMenu.members.복직처리" defaultText="복직 처리" /> : <EditableText id="adminMenu.members.퇴사처리" defaultText="퇴사 처리" />}
+                              </button>
+                              {me?.uid !== u.id && (
+                                <button onClick={() => removeUser(u)} className="h-10 px-4 rounded-xl text-[13px] font-extrabold border border-[#E3E8F0] text-[#7A879C] hover:bg-[#F5F8FD] transition"><EditableText id="adminMenu.members.계정삭제" defaultText="계정 삭제" /></button>
+                              )}
+                            </>
+                          )}
+                        </div>
+
                       {!editMode ? (
-                        <div className="p-6">
-                          <div className="grid grid-cols-2 gap-x-8 gap-y-0 border border-gray-100 rounded-xl overflow-hidden mb-5">
+                        <div className="px-6 py-5">
+                          <div className="grid grid-cols-3 gap-2.5">
                             {[
                               ["이름", u.name || "-"],
                               ["직책", u.position || "-"],
@@ -827,31 +885,30 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                               ["연락처", u.phone ? formatPhone(u.phone) : "-"],
                               ["권한", roleLabels[u.role] || u.role || "-"],
                               ["회사명", u.companyName || "-"],
-                            ].map(([label, value], i) => (
-                              <div key={label} className={`flex items-center px-4 py-3 ${i % 2 === 0 ? "border-r border-gray-100" : ""} ${i < 4 ? "border-b border-gray-50" : ""}`}>
-                                <span className="text-[12px] text-gray-500 w-16 shrink-0"><EditableText id={`adminMenu.members.infoLabel.${label}`} defaultText={label} /></span>
-                                <span className="text-[13px] font-medium text-gray-800">{value}</span>
+                            ].map(([label, value]) => (
+                              <div key={label} className="px-4 py-3 rounded-2xl bg-[#F5F8FD] border border-[#EDF1F7] min-w-0">
+                                <div className="text-[11.5px] font-bold text-[#7A879C]"><EditableText id={`adminMenu.members.infoLabel.${label}`} defaultText={label} /></div>
+                                <div className="text-[15px] font-extrabold text-[#0F1A30] truncate mt-0.5">{value}</div>
                               </div>
                             ))}
                           </div>
-                          <div className="flex items-center gap-2 mb-2">
-                            <button onClick={() => toggleApprove(u)} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
-                              {u.approved ? <EditableText id="adminMenu.members.승인해제" defaultText="승인 해제" /> : <EditableText id="adminMenu.members.승인" defaultText="승인" />}
-                            </button>
-                          </div>
 
-                          {/* 인사발령 이력 */}
-                          <div className="mt-5">
-                            <div className="text-[12.5px] font-bold text-gray-600 border-l-4 border-[#1B2B4B] pl-2 mb-2"><EditableText id="adminMenu.members.인사발령이력" defaultText="인사발령 이력" /></div>
+                          {/* 인사발령 이력 — 타임라인 */}
+                          <div className="mt-6">
+                            <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7] mb-2"><EditableText id="adminMenu.members.인사발령이력" defaultText="인사발령 이력" /></div>
                             {(u.personnelHistory || []).length === 0 ? (
-                              <div className="text-[12px] text-gray-400 px-1">등록된 발령 이력이 없습니다</div>
+                              <div className="px-4 py-6 rounded-2xl border border-dashed border-[#DCE3EE] text-center text-[13px] text-[#9AA9C3]">등록된 발령 이력이 없습니다</div>
                             ) : (
-                              <div className="border border-gray-100 rounded-xl divide-y divide-gray-50">
+                              <div className="relative pl-6">
+                                <div className="absolute left-[7px] top-2 bottom-2 w-px bg-[#DCE3EE]" />
                                 {[...(u.personnelHistory || [])].reverse().map((h, i) => (
-                                  <div key={i} className="flex items-center gap-3 px-4 py-2 text-[12.5px]">
-                                    <span className="text-gray-500 w-24 shrink-0">{h.date}</span>
-                                    <span className="font-semibold text-gray-600 w-16 shrink-0">{h.type}</span>
-                                    <span className="text-gray-700">{h.detail}</span>
+                                  <div key={i} className="relative py-2">
+                                    <span className={`absolute -left-[22px] top-3.5 w-3 h-3 rounded-full ${i === 0 ? "bg-[#0F1A30] ring-4 ring-[#EEF3FB]" : "bg-white border-2 border-[#9AA9C3]"}`} />
+                                    <div className="flex items-baseline gap-3">
+                                      <span className="text-[12.5px] font-bold text-[#7A879C] tabular-nums w-24 shrink-0">{h.date}</span>
+                                      <span className="text-[13px] font-extrabold text-[#0F1A30] shrink-0">{h.type}</span>
+                                      <span className="text-[13px] text-[#3A4A66] truncate">{h.detail}</span>
+                                    </div>
                                   </div>
                                 ))}
                               </div>
@@ -859,22 +916,22 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                           </div>
                         </div>
                       ) : (
-                        <div className="p-5">
+                        <div className="px-6 py-5">
                           <div className="grid grid-cols-2 gap-3 mb-4">
                             <div>
-                              <label className="block text-[11px] font-semibold text-gray-500 mb-1">회사명</label>
+                              <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">회사명</label>
                               <input value={editCompany} onChange={e => setEditCompany(e.target.value)}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" />
+                                className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10" />
                             </div>
                             <div>
-                              <label className="block text-[11px] font-semibold text-gray-500 mb-1">이름</label>
+                              <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">이름</label>
                               <input value={editName} onChange={e => setEditName(e.target.value)}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" />
+                                className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10" />
                             </div>
                             <div>
-                              <label className="block text-[11px] font-semibold text-gray-500 mb-1">직책</label>
+                              <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">직책</label>
                               <CustomSelect value={editPosition} onChange={e => setEditPosition(e.target.value)}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white">
+                                className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
                                 <option value="">선택 안 함</option>
                                 {(editPosition && !POSITION_OPTIONS.includes(editPosition)) && (
                                   <option value={editPosition}>{editPosition}</option>
@@ -883,15 +940,15 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                               </CustomSelect>
                             </div>
                             <div>
-                              <label className="block text-[11px] font-semibold text-gray-500 mb-1">부서</label>
+                              <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">부서</label>
                               <CustomSelect value={editTeam} onChange={e => setEditTeam(e.target.value)}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white">
+                                className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
                                 <option value="">미배정</option>
                                 {TEAM_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                               </CustomSelect>
                             </div>
                             <div>
-                              <label className="block text-[11px] font-semibold text-gray-500 mb-1">핸드폰번호</label>
+                              <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">핸드폰번호</label>
                               <input value={editPhone}
                                 onChange={e => {
                                   let v = e.target.value.replace(/[^0-9]/g, "");
@@ -899,34 +956,36 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                                   else if (v.length > 3) v = v.replace(/(\d{3})(\d+)/, "$1-$2");
                                   setEditPhone(v);
                                 }}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" />
+                                className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10" />
                             </div>
                             <div>
-                              <label className="block text-[11px] font-semibold text-gray-500 mb-1">권한</label>
+                              <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">권한</label>
                               <CustomSelect value={editRole} onChange={e => setEditRole(e.target.value)}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white">
+                                className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
                                 {ROLES.map(r => <option key={r} value={r}>{roleLabels[r] || r}</option>)}
                               </CustomSelect>
                             </div>
                           </div>
                           <div className="flex gap-2">
                             <button onClick={() => setEditMode(false)}
-                              className="flex-1 py-2 rounded-lg border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition">
+                              className="flex-1 h-11 rounded-xl border border-[#E3E8F0] text-[13.5px] font-bold text-[#3A4A66] hover:bg-[#F5F8FD] transition">
                               취소
                             </button>
                             <button onClick={saveEdit}
-                              className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">
+                              className="flex-1 h-11 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-extrabold hover:bg-[#1B2B4B] transition">
                               저장
                             </button>
                           </div>
                         </div>
                       )}
+                      </div>
                     </div>
                   );
                 })()}
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* ====== 연동 화주사 탭 ====== */}
           {adminTab === "linked" && (

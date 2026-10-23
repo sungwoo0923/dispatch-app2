@@ -60239,40 +60239,51 @@ function HRManagementPage({ userCompany, role, userId }) {
     );
   };
 
+  // ⭐ 2026-10-23 리디자인 — 왼쪽 인원 목록(사진/이니셜) + 오른쪽 사원증(디지털 명함) 머리 + 알약 탭
+  const hrCard = "bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)]";
   return (
-    <div className="p-5 flex gap-4" style={{ minHeight: 600 }}>
+    <div className="p-5 flex gap-5" style={{ minHeight: 600 }}>
       {/* 좌측: 팀별 인원 목록 */}
-      <div className="w-[300px] flex-shrink-0 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col" style={{ maxHeight: 780 }}>
-        <div className="p-3 border-b border-gray-100">
-          <h2 className="text-[16px] font-black text-[#1B2B4B] mb-2"><EditableText id="hr.title" defaultText="인사관리부" /></h2>
-          <input autoComplete="off" value={search} onChange={e => setSearch(e.target.value)} placeholder="이름/직책 검색"
-            className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B] mb-2" />
+      <div className={`w-[310px] flex-shrink-0 flex flex-col overflow-hidden ${hrCard}`} style={{ maxHeight: 800 }}>
+        <div className="px-4 pt-4 pb-3 border-b border-[#EEF1F6]">
+          <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">PEOPLE</div>
+          <h2 className="text-[17px] font-black text-[#0F1A30] mb-2.5"><EditableText id="hr.title" defaultText="인사관리부" /></h2>
+          <div className="flex items-center gap-2 h-10 px-3 rounded-xl border border-[#DCE3EE] bg-white focus-within:border-[#4B6CB7] focus-within:ring-4 focus-within:ring-[#4B6CB7]/10 transition mb-2.5">
+            <svg className="w-4 h-4 text-[#9AA9C3] shrink-0" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input autoComplete="off" value={search} onChange={e => setSearch(e.target.value)} placeholder="이름/직책 검색"
+              className="flex-1 min-w-0 text-[13px] font-semibold text-[#0F1A30] outline-none bg-transparent placeholder:text-[#A7B3C6]" />
+          </div>
           <div className="flex flex-wrap gap-1">
             {["전체", ...TEAM_OPTIONS, "미배정"].map(t => (
               <button key={t} onClick={() => setTeamFilter(t)}
-                className={`px-2 py-1 rounded-full text-[10.5px] font-bold border transition ${teamFilter === t ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"}`}>{t}</button>
+                className={`h-7 px-2.5 rounded-full text-[11.5px] font-extrabold transition ${teamFilter === t ? "bg-[#0F1A30] text-white" : "bg-[#F5F8FD] text-[#5B6B85] border border-[#E3E8F0] hover:text-[#0F1A30]"}`}>{t}</button>
             ))}
           </div>
         </div>
-        <div className="overflow-y-auto flex-1">
-          {Object.keys(grouped).length === 0 && <div className="py-16 text-center text-[12px] text-gray-400">인원이 없습니다</div>}
+        <div className="overflow-y-auto flex-1 p-2">
+          {Object.keys(grouped).length === 0 && <div className="py-16 text-center text-[13px] text-[#9AA9C3]">인원이 없습니다</div>}
           {Object.entries(grouped).map(([team, members2]) => (
-            <div key={team}>
-              <div className={`px-3 py-1.5 text-[11px] font-bold sticky top-0 border-b ${team === "미배정" ? TEAM_BADGE_CLASS_UNASSIGNED : TEAM_BADGE_CLASS}`}>{team} ({members2.length})</div>
+            <div key={team} className="mb-2">
+              <div className="px-2 pt-2 pb-1 flex items-center justify-between">
+                <span className="text-[11px] font-extrabold tracking-[0.12em] text-[#7A879C]">{team}</span>
+                <span className="text-[11px] font-bold text-[#9AA9C3] tabular-nums">{members2.length}명</span>
+              </div>
               {members2.map(r => {
                 const photo = resumes[r.uid]?.photoUrl;
+                const on = selectedUid === r.uid;
                 return (
-                  <div key={r.uid} onClick={() => { setSelectedUid(r.uid); setEditMode(false); setDraft(null); }}
-                    className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer border-b border-gray-50 transition ${selectedUid === r.uid ? "bg-blue-50" : "hover:bg-gray-50"}`}>
-                    <div className="w-8 h-8 rounded-full bg-gray-100 border border-gray-200 flex-shrink-0 overflow-hidden flex items-center justify-center text-[10px] text-gray-500">
+                  <button key={r.uid} onClick={() => { setSelectedUid(r.uid); setEditMode(false); setDraft(null); }}
+                    className={`w-full text-left flex items-center gap-3 px-2.5 py-2 rounded-2xl transition mb-0.5 ${on ? "bg-[#0F1A30] text-white shadow-[0_8px_18px_rgba(15,26,48,0.25)]" : "hover:bg-[#F5F8FD]"}`}>
+                    <div className={`w-10 h-10 rounded-[14px] flex-shrink-0 overflow-hidden flex items-center justify-center text-[14px] font-black ${on ? "bg-white text-[#0F1A30]" : "text-white"}`}
+                      style={photo || on ? undefined : { background: "linear-gradient(135deg, #1B2B4B 0%, #2D4C82 100%)" }}>
                       {photo ? <img src={photo} className="w-full h-full object-cover" /> : (r.name || "?").slice(0, 1)}
                     </div>
-                    <div className="min-w-0">
-                      <div className="text-[12.5px] font-bold text-gray-800 truncate">{r.name || r.email}</div>
-                      <div className="text-[10.5px] text-gray-500 truncate">{r.position || "직책 미설정"}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className={`text-[14px] font-extrabold truncate ${on ? "text-white" : "text-[#0F1A30]"}`}>{r.name || r.email}</div>
+                      <div className={`text-[11.5px] truncate ${on ? "text-white/60" : "text-[#7A879C]"}`}>{r.position || "직책 미설정"}</div>
                     </div>
-                    {r.pendingApprovals > 0 && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />}
-                  </div>
+                    {r.pendingApprovals > 0 && <span className={`shrink-0 min-w-[20px] h-5 px-1.5 rounded-full text-[10.5px] font-extrabold flex items-center justify-center ${on ? "bg-white text-[#0F1A30]" : "bg-[#0F1A30] text-white"}`} title="결재 대기">{r.pendingApprovals}</span>}
+                  </button>
                 );
               })}
             </div>
@@ -60281,34 +60292,72 @@ function HRManagementPage({ userCompany, role, userId }) {
       </div>
 
       {/* 우측: 상세 패널 */}
-      <div className="flex-1 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 gap-4">
         {!selected ? (
-          <div className="flex-1 flex items-center justify-center text-[13px] text-gray-400">왼쪽에서 인원을 선택하세요</div>
+          <div className={`flex-1 flex flex-col items-center justify-center py-28 ${hrCard}`}>
+            <div className="w-14 h-14 rounded-2xl bg-[#EEF3FB] text-[#1B2B4B] flex items-center justify-center mb-3">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="9" cy="11" r="2.2" /><path d="M5.5 16c.5-1.6 1.9-2.5 3.5-2.5s3 .9 3.5 2.5M15 10h3M15 13h3" /></svg>
+            </div>
+            <div className="text-[15px] font-extrabold text-[#0F1A30]">인원을 선택하세요</div>
+            <div className="text-[13px] text-[#7A879C] mt-1">왼쪽에서 고르면 사원증과 이력서가 보입니다</div>
+          </div>
         ) : (
           <>
-            <div className="px-5 pt-4 pb-0 border-b border-gray-100 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="text-[17px] font-black text-[#1B2B4B]">{selected.name || selected.email}</div>
-                <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-semibold">{ROLE_LABELS_HR[selected.role] || selected.role}</span>
-                {canManage ? (
-                  <select value={selected.team || "미배정"} onChange={e => setTeam(selected.uid, e.target.value)}
-                    className={`text-[11px] font-bold border rounded-full px-2 py-0.5 focus:outline-none ${selected.team === "미배정" || !selected.team ? TEAM_BADGE_CLASS_UNASSIGNED : TEAM_BADGE_CLASS}`}>
-                    {TEAM_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                    <option value="미배정">미배정</option>
-                  </select>
-                ) : (
-                  <span className={`text-[11px] font-bold border rounded-full px-2 py-0.5 ${selected.team === "미배정" || !selected.team ? TEAM_BADGE_CLASS_UNASSIGNED : TEAM_BADGE_CLASS}`}>{selected.team}</span>
-                )}
-                {selected.employmentStatus && selected.employmentStatus !== "재직" && (
-                  <span className="text-[11px] font-bold border rounded-full px-2 py-0.5 bg-gray-100 text-gray-500 border-gray-200">{selected.employmentStatus}</span>
-                )}
+            {/* 사원증(디지털 명함) */}
+            <div className="relative overflow-hidden rounded-[24px] px-7 py-6 text-white shadow-[0_18px_40px_rgba(15,26,48,0.28)]"
+              style={{ background: "linear-gradient(125deg, #0F1A30 0%, #1B2B4B 52%, #2D4C82 100%)" }}>
+              <div className="absolute -right-16 -top-20 w-72 h-72 rounded-full bg-white/[0.05]" />
+              <div className="absolute right-28 -bottom-28 w-60 h-60 rounded-full bg-white/[0.04]" />
+              <div className="relative flex items-start gap-5">
+                <div className="w-[84px] h-[104px] rounded-[18px] bg-white overflow-hidden flex items-center justify-center text-[30px] font-black text-[#0F1A30] shadow-[0_10px_24px_rgba(0,0,0,0.25)] shrink-0">
+                  {resume.photoUrl ? <img src={resume.photoUrl} className="w-full h-full object-cover" /> : (selected.name || "?").slice(0, 1)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">{(company || "").toUpperCase()} · EMPLOYEE</div>
+                  <div className="mt-1 flex items-center gap-2 flex-wrap">
+                    <div className="text-[26px] font-black tracking-tight leading-tight">{selected.name || selected.email}</div>
+                    <span className="text-[11.5px] px-2 py-0.5 rounded-full bg-white/15 font-bold">{ROLE_LABELS_HR[selected.role] || selected.role}</span>
+                    {selected.employmentStatus && selected.employmentStatus !== "재직" && (
+                      <span className="text-[11.5px] px-2 py-0.5 rounded-full border border-white/30 font-bold">{selected.employmentStatus}</span>
+                    )}
+                  </div>
+                  <div className="mt-1 flex items-center gap-2 text-[14px] font-semibold text-white/75">
+                    <span>{selected.position || "직책 미설정"}</span>
+                    <span className="text-white/30">·</span>
+                    {canManage ? (
+                      <select value={selected.team || "미배정"} onChange={e => setTeam(selected.uid, e.target.value)}
+                        className="h-7 px-2 rounded-lg bg-white/10 border border-white/20 text-white text-[13px] font-bold focus:outline-none [&>option]:text-[#0F1A30]">
+                        {TEAM_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                        <option value="미배정">미배정</option>
+                      </select>
+                    ) : <span>{selected.team || "미배정"}</span>}
+                  </div>
+                  <div className="mt-4 grid grid-cols-4 gap-2 max-w-[640px]">
+                    {[
+                      { k: "입사일", v: selected.hireDate || "미등록" },
+                      { k: "근속", v: selected.tenureLabel || "-" },
+                      { k: "잔여 휴가", v: selected.leave ? `${selected.leave.remaining}일` : "-" },
+                      { k: "이달 출근", v: `${selected.workDays || 0}일` },
+                    ].map(({ k, v }) => (
+                      <div key={k} className="px-3 py-2 rounded-xl bg-white/[0.08] border border-white/10 min-w-0">
+                        <div className="text-[10.5px] font-bold text-white/55">{k}</div>
+                        <div className="text-[14px] font-black truncate">{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-1 mb-2">
+            </div>
+
+            <div className={`flex-1 flex flex-col min-w-0 ${hrCard}`}>
+            <div className="px-5 py-3 border-b border-[#EEF1F6] flex items-center justify-between gap-3">
+              <div className="inline-flex items-center gap-1 p-1 rounded-[14px] bg-[#EEF2F8] border border-[#E3E8F0]">
                 {["이력서", "근태/근속", "인사발령 이력"].map(t => (
                   <button key={t} onClick={() => { setActiveTab(t); cancelEdit(); }}
-                    className={`px-3 py-1.5 rounded-xl text-[12.5px] font-bold transition ${activeTab === t ? "bg-[#1B2B4B] text-white" : "text-gray-500 hover:bg-gray-50"}`}>{t}</button>
+                    className={`px-4 h-9 rounded-[10px] text-[13.5px] transition whitespace-nowrap ${activeTab === t ? "bg-white text-[#0F1A30] font-extrabold shadow-[0_1px_2px_rgba(16,24,40,0.08),0_4px_10px_rgba(16,24,40,0.08)]" : "text-[#5B6B85] font-bold hover:text-[#0F1A30]"}`}>{t}</button>
                 ))}
               </div>
+              {selected.pendingApprovals > 0 && <span className="text-[12.5px] font-bold text-[#3A4A66]">결재 대기 <b className="text-[#0F1A30]">{selected.pendingApprovals}</b>건</span>}
             </div>
 
             <div className="flex-1 overflow-y-auto p-5">
@@ -60317,22 +60366,22 @@ function HRManagementPage({ userCompany, role, userId }) {
                   <div className="flex justify-end gap-2 mb-3 w-full max-w-[820px]">
                     <HRResumePrintButton row={selected} resume={resume} photo={resume.photoUrl} />
                     <button onClick={() => exportPdf(resumeRef.current, `이력서_${selected.name || selected.email}.pdf`)} disabled={exportingPdf}
-                      className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-[12px] font-bold hover:bg-gray-50 transition disabled:opacity-50">{exportingPdf ? "저장 중..." : "PDF로 저장"}</button>
+                      className="h-9 px-3.5 rounded-xl border border-[#E3E8F0] text-[#3A4A66] text-[12.5px] font-extrabold hover:bg-[#F5F8FD] transition disabled:opacity-50">{exportingPdf ? "저장 중..." : "PDF로 저장"}</button>
                     {canEditThis && !editMode && (
-                      <button onClick={startEdit} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:opacity-90"><EditableText id="misc.btn.56544.수정" defaultText="수정" /></button>
+                      <button onClick={startEdit} className="h-9 px-4 rounded-xl bg-[#0F1A30] text-white text-[12.5px] font-extrabold hover:bg-[#1B2B4B]"><EditableText id="misc.btn.56544.수정" defaultText="수정" /></button>
                     )}
                     {editMode && (
                       <>
-                        <button onClick={cancelEdit} className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 text-[12px] font-bold hover:bg-gray-50"><EditableText id="misc.btn.56548.취소" defaultText="취소" /></button>
-                        <button onClick={saveResume} disabled={saving} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:opacity-90 disabled:opacity-50">{saving ? "저장 중..." : "저장"}</button>
+                        <button onClick={cancelEdit} className="h-9 px-3.5 rounded-xl border border-[#E3E8F0] text-[#5B6B85] text-[12.5px] font-extrabold hover:bg-[#F5F8FD]"><EditableText id="misc.btn.56548.취소" defaultText="취소" /></button>
+                        <button onClick={saveResume} disabled={saving} className="h-9 px-4 rounded-xl bg-[#0F1A30] text-white text-[12.5px] font-extrabold hover:bg-[#1B2B4B] disabled:opacity-50">{saving ? "저장 중..." : "저장"}</button>
                       </>
                     )}
                   </div>
 
-                  <div ref={resumeRef} className="w-full max-w-[820px] bg-white border border-gray-200 rounded-xl p-6">
-                    <div className="text-center text-[18px] font-black text-[#1B2B4B] tracking-[6px] mb-5">이 력 서</div>
+                  <div ref={resumeRef} className="w-full max-w-[820px] bg-white border border-[#E3E8F0] rounded-[20px] p-8 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+                    <div className="text-center text-[19px] font-black text-[#0F1A30] tracking-[8px] mb-6">이 력 서</div>
                     <div className="flex gap-5 mb-5">
-                      <div className="w-[100px] h-[128px] flex-shrink-0 border border-gray-300 rounded-lg overflow-hidden bg-gray-50 flex items-center justify-center relative">
+                      <div className="w-[100px] h-[128px] flex-shrink-0 border border-[#DCE3EE] rounded-2xl overflow-hidden bg-[#F5F8FD] flex items-center justify-center relative">
                         {resume.photoUrl ? <img src={resume.photoUrl} className="w-full h-full object-cover" /> : <span className="text-[10px] text-gray-400">증명사진</span>}
                         {canEditThis && (
                           <label className={`absolute bottom-0 inset-x-0 text-center text-[10px] py-1 cursor-pointer ${photoUploading ? "bg-gray-200 text-gray-500" : "bg-black/60 text-white hover:bg-black/75"}`}>
@@ -60371,31 +60420,31 @@ function HRManagementPage({ userCompany, role, userId }) {
                     ) : (
                       <>
                         <div className="mb-4">
-                          <div className="text-[12.5px] font-bold text-[#1B2B4B] border-l-4 border-[#1B2B4B] pl-2 mb-1.5">학력사항</div>
+                          <div className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7] pb-1.5 mb-1 border-b border-[#EEF1F6]">학력사항</div>
                           {(resume.education || []).length === 0 ? <div className="text-[11.5px] text-gray-400">등록된 정보가 없습니다</div> : (resume.education || []).map((e, i) => (
                             <div key={i} className="flex gap-3 text-[12px] text-gray-600 py-1 border-b border-gray-50"><span className="w-28 text-gray-500">{e.period}</span><span className="font-semibold">{e.school}</span><span>{e.detail}</span></div>
                           ))}
                         </div>
                         <div className="mb-4">
-                          <div className="text-[12.5px] font-bold text-[#1B2B4B] border-l-4 border-[#1B2B4B] pl-2 mb-1.5">경력사항</div>
+                          <div className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7] pb-1.5 mb-1 border-b border-[#EEF1F6]">경력사항</div>
                           {(resume.career || []).length === 0 ? <div className="text-[11.5px] text-gray-400">등록된 정보가 없습니다</div> : (resume.career || []).map((c, i) => (
                             <div key={i} className="flex gap-3 text-[12px] text-gray-600 py-1 border-b border-gray-50"><span className="w-28 text-gray-500">{c.period}</span><span className="font-semibold">{c.company}</span><span>{c.detail}</span></div>
                           ))}
                         </div>
                         <div className="mb-4">
-                          <div className="text-[12.5px] font-bold text-[#1B2B4B] border-l-4 border-[#1B2B4B] pl-2 mb-1.5">자격/면허</div>
+                          <div className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7] pb-1.5 mb-1 border-b border-[#EEF1F6]">자격/면허</div>
                           {(resume.certificates || []).length === 0 ? <div className="text-[11.5px] text-gray-400">등록된 정보가 없습니다</div> : (resume.certificates || []).map((c, i) => (
                             <div key={i} className="flex gap-3 text-[12px] text-gray-600 py-1 border-b border-gray-50"><span className="w-28 text-gray-500">{c.date}</span><span className="font-semibold">{c.name}</span><span>{c.issuer}</span></div>
                           ))}
                         </div>
                         <div className="mb-4">
-                          <div className="text-[12.5px] font-bold text-[#1B2B4B] border-l-4 border-[#1B2B4B] pl-2 mb-1.5">가족관계</div>
+                          <div className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7] pb-1.5 mb-1 border-b border-[#EEF1F6]">가족관계</div>
                           {(resume.family || []).length === 0 ? <div className="text-[11.5px] text-gray-400">등록된 정보가 없습니다</div> : (resume.family || []).map((f, i) => (
                             <div key={i} className="flex gap-3 text-[12px] text-gray-600 py-1 border-b border-gray-50"><span className="w-16 text-gray-500">{f.relation}</span><span className="w-20 font-semibold">{f.name}</span><span className="w-28 text-gray-500">{f.birth}</span><span>{f.job}</span></div>
                           ))}
                         </div>
                         <div>
-                          <div className="text-[12.5px] font-bold text-[#1B2B4B] border-l-4 border-[#1B2B4B] pl-2 mb-1.5">자기소개</div>
+                          <div className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7] pb-1.5 mb-1 border-b border-[#EEF1F6]">자기소개</div>
                           <div className="text-[12.5px] text-gray-600 whitespace-pre-wrap leading-relaxed">{resume.intro || <span className="text-gray-400">등록된 자기소개가 없습니다</span>}</div>
                         </div>
                       </>
@@ -60407,10 +60456,10 @@ function HRManagementPage({ userCompany, role, userId }) {
                   <div className="flex justify-end gap-2 mb-3 w-full max-w-[820px]">
                     <HRAttendancePrintButton row={selected} />
                     <button onClick={() => exportPdf(attendanceRef.current, `근태근속_${selected.name || selected.email}.pdf`)} disabled={exportingPdf}
-                      className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-[12px] font-bold hover:bg-gray-50 transition disabled:opacity-50">{exportingPdf ? "저장 중..." : "PDF로 저장"}</button>
+                      className="h-9 px-3.5 rounded-xl border border-[#E3E8F0] text-[#3A4A66] text-[12.5px] font-extrabold hover:bg-[#F5F8FD] transition disabled:opacity-50">{exportingPdf ? "저장 중..." : "PDF로 저장"}</button>
                   </div>
-                  <div ref={attendanceRef} className="w-full max-w-[820px] bg-white border border-gray-200 rounded-xl p-6">
-                    <div className="text-center text-[18px] font-black text-[#1B2B4B] tracking-[6px] mb-5">근태 / 근속 현황</div>
+                  <div ref={attendanceRef} className="w-full max-w-[820px] bg-white border border-[#E3E8F0] rounded-[20px] p-8 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+                    <div className="text-center text-[19px] font-black text-[#0F1A30] tracking-[8px] mb-6">근태 / 근속 현황</div>
                     <div className="text-[12.5px] text-gray-500 font-semibold mb-3">{selected.name} · {selected.team} / {selected.position || "-"}</div>
                     <table className="w-full border-collapse text-[12.5px]">
                       <tbody>
@@ -60434,19 +60483,19 @@ function HRManagementPage({ userCompany, role, userId }) {
                 </div>
               ) : (
                 <div className="flex flex-col items-center">
-                  <div className="w-full max-w-[820px] bg-white border border-gray-200 rounded-xl p-6">
-                    <div className="text-center text-[18px] font-black text-[#1B2B4B] tracking-[6px] mb-5">인사발령 이력</div>
+                  <div className="w-full max-w-[820px] bg-white border border-[#E3E8F0] rounded-[20px] p-8 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+                    <div className="text-center text-[19px] font-black text-[#0F1A30] tracking-[8px] mb-6">인사발령 이력</div>
                     <div className="flex gap-4 mb-5 text-[12.5px]">
-                      <div className="flex-1 px-4 py-3 rounded-lg border border-gray-100 bg-gray-50/50">
+                      <div className="flex-1 px-4 py-3 rounded-2xl border border-[#EDF1F7] bg-[#F5F8FD]">
                         <div className="text-[11px] text-gray-500 font-semibold mb-1">현재 재직상태</div>
                         <div className="text-[14px] font-black text-[#1B2B4B]">{selected.employmentStatus || "재직"}</div>
                       </div>
-                      <div className="flex-1 px-4 py-3 rounded-lg border border-gray-100 bg-gray-50/50">
+                      <div className="flex-1 px-4 py-3 rounded-2xl border border-[#EDF1F7] bg-[#F5F8FD]">
                         <div className="text-[11px] text-gray-500 font-semibold mb-1">퇴사일</div>
                         <div className="text-[14px] font-black text-[#1B2B4B]">{selected.resignedAt || "-"}</div>
                       </div>
                     </div>
-                    <div className="text-[12.5px] font-bold text-[#1B2B4B] border-l-4 border-[#1B2B4B] pl-2 mb-2">발령 이력</div>
+                    <div className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7] pb-1.5 mb-2 border-b border-[#EEF1F6]">발령 이력</div>
                     {(!selected.personnelHistory || selected.personnelHistory.length === 0) ? (
                       <div className="text-[11.5px] text-gray-400 py-6 text-center">등록된 인사발령 이력이 없습니다</div>
                     ) : (
@@ -60463,7 +60512,7 @@ function HRManagementPage({ userCompany, role, userId }) {
                             <tr key={i} className="border-b border-gray-50">
                               <td className="py-2 pr-4 text-gray-500">{h.date}</td>
                               <td className="py-2 pr-4">
-                                <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-semibold text-[11px]">{h.type}</span>
+                                <span className="px-2 py-0.5 rounded-full bg-[#0F1A30] text-white font-bold text-[11px]">{h.type}</span>
                               </td>
                               <td className="py-2 text-gray-700">{h.detail}</td>
                             </tr>
@@ -60474,6 +60523,7 @@ function HRManagementPage({ userCompany, role, userId }) {
                   </div>
                 </div>
               )}
+            </div>
             </div>
           </>
         )}

@@ -12,7 +12,7 @@ import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 
 import { useMfaPrompt, PcVerifySection, MASTER_EMAIL, mfaErrorText } from "./MfaModal";
 import { doc as fsDoc } from "firebase/firestore";
 import {
-  SESSIONS_COLL, KIND_LABEL, END_REASON_LABEL, getMySessionId, endSessions, sessionLastMs, timeAgo, getDeviceLabel,
+  SESSIONS_COLL, KIND_LABEL, END_REASON_LABEL, getMySessionId, endSessions, sessionLastMs, timeAgo, getDeviceLabel, isTotalMasterRole,
 } from "./loginSessions";
 
 const tsMs = (t) => (t?.toMillis ? t.toMillis() : t?.seconds ? t.seconds * 1000 : 0);
@@ -242,7 +242,10 @@ export function AdminSessionsPanel({ isTotalMaster, company, roleLabels = {} }) 
     .filter((s) => isTotalMaster || (s.companyName || DEFAULT_COMPANY) === company)
     .filter((s) => !q || [s.name, s.email, s.companyName, s.device].some((v) => String(v || "").includes(q)))
     .sort((a, b) => sessionLastMs(b) - sessionLastMs(a));
+  // ⭐ 최고관리자의 로그인은 최고관리자만 끊을 수 있다(관리자 화면에서는 잠금 표시)
+  const isMasterSession = (s) => isTotalMasterRole(s.role, s.email);
   const kick = async (s) => {
+    if (isMasterSession(s) && !isTotalMaster) return;
     if (!window.confirm(`${s.name || s.email}님의 ${KIND_LABEL[s.kind]}(${s.device}) 로그인을 끊을까요?`)) return;
     setBusy(s.id);
     try { await endSessions([s.id], "admin", auth.currentUser?.email || ""); } catch (e) { alert(`실패: ${e?.message || e}`); } finally { setBusy(null); }
@@ -275,7 +278,12 @@ export function AdminSessionsPanel({ isTotalMaster, company, roleLabels = {} }) 
                 <td className="px-2 py-2.5 text-center text-gray-500 whitespace-nowrap">{fmt(tsMs(s.createdAt))}</td>
                 <td className="px-2 py-2.5 text-center text-gray-500 whitespace-nowrap">{timeAgo(sessionLastMs(s))}</td>
                 <td className="px-2 py-2.5 text-center">
-                  {s.id === myId ? <span className="text-[11.5px] font-bold text-[#1B2B4B]">이 기기</span> : (
+                  {s.id === myId ? <span className="text-[11.5px] font-bold text-[#1B2B4B]">이 기기</span> : isMasterSession(s) && !isTotalMaster ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#EEF3FB] text-[#1B2B4B] text-[12px] font-bold" title="최고관리자의 로그인은 끊을 수 없습니다">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+                      최고관리자
+                    </span>
+                  ) : (
                     <button onClick={() => kick(s)} disabled={busy === s.id} className="px-2.5 py-1 rounded-lg bg-red-500 text-white text-[12px] font-bold hover:bg-red-600 disabled:opacity-60">
                       {busy === s.id ? "끊는 중…" : "연결 끊기"}
                     </button>
