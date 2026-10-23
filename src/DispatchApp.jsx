@@ -60219,20 +60219,20 @@ function HRManagementPage({ userCompany, role, userId }) {
   const listField = (key, label, placeholder) => {
     const items = draft?.[key] || [];
     return (
-      <div className="mb-3">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[12px] font-bold text-gray-600">{label}</span>
-          <button onClick={() => setDraft(d => ({ ...d, [key]: [...(d[key] || []), {}] }))} className="text-[11px] text-[#1B2B4B] font-bold hover:underline">+ 추가</button>
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[16px] font-black text-[#0F1A30]">{label}</span>
+          <button onClick={() => setDraft(d => ({ ...d, [key]: [...(d[key] || []), {}] }))} className="h-9 px-3.5 rounded-xl border border-[#E3E8F0] text-[13px] text-[#0F1A30] font-extrabold hover:bg-[#F5F8FD]">+ 추가</button>
         </div>
-        {items.length === 0 && <div className="text-[11px] text-gray-400">항목 없음</div>}
+        {items.length === 0 && <div className="px-4 py-3 rounded-2xl border border-dashed border-[#DCE3EE] text-[13.5px] text-[#9AA9C3]">항목 없음</div>}
         {items.map((it, i) => (
-          <div key={i} className="flex gap-1.5 mb-1.5">
+          <div key={i} className="flex gap-2 mb-2">
             {Object.keys(placeholder).map(f => (
               <input autoComplete="off" key={f} value={it[f] || ""} placeholder={placeholder[f]}
                 onChange={e => setDraft(d => { const arr = [...d[key]]; arr[i] = { ...arr[i], [f]: e.target.value }; return { ...d, [key]: arr }; })}
-                className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]" />
+                className="flex-1 h-11 border border-[#DCE3EE] rounded-xl px-3 text-[14.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10" />
             ))}
-            <button onClick={() => setDraft(d => ({ ...d, [key]: d[key].filter((_, idx) => idx !== i) }))} className="px-2 text-gray-400 hover:text-red-500">✕</button>
+            <button onClick={() => setDraft(d => ({ ...d, [key]: d[key].filter((_, idx) => idx !== i) }))} className="w-11 h-11 rounded-xl border border-[#E3E8F0] text-[#7A879C] hover:text-[#0F1A30] hover:bg-[#F5F8FD]">✕</button>
           </div>
         ))}
       </div>
@@ -60360,167 +60360,239 @@ function HRManagementPage({ userCompany, role, userId }) {
               {selected.pendingApprovals > 0 && <span className="text-[12.5px] font-bold text-[#3A4A66]">결재 대기 <b className="text-[#0F1A30]">{selected.pendingApprovals}</b>건</span>}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5">
+            {/* ⭐ 2026-10-23 문서 리디자인 — 화면 폭 가득, 큰 글씨, 항목별 카드 */}
+            <div className="flex-1 overflow-y-auto p-6">
               {activeTab === "이력서" ? (
-                <div className="flex flex-col items-center">
-                  <div className="flex justify-end gap-2 mb-3 w-full max-w-[820px]">
+                <div>
+                  <div className="flex justify-end gap-2 mb-4">
                     <HRResumePrintButton row={selected} resume={resume} photo={resume.photoUrl} />
                     <button onClick={() => exportPdf(resumeRef.current, `이력서_${selected.name || selected.email}.pdf`)} disabled={exportingPdf}
-                      className="h-9 px-3.5 rounded-xl border border-[#E3E8F0] text-[#3A4A66] text-[12.5px] font-extrabold hover:bg-[#F5F8FD] transition disabled:opacity-50">{exportingPdf ? "저장 중..." : "PDF로 저장"}</button>
+                      className="h-10 px-4 rounded-xl border border-[#E3E8F0] text-[#3A4A66] text-[13.5px] font-extrabold hover:bg-[#F5F8FD] transition disabled:opacity-50">{exportingPdf ? "저장 중..." : "PDF로 저장"}</button>
                     {canEditThis && !editMode && (
-                      <button onClick={startEdit} className="h-9 px-4 rounded-xl bg-[#0F1A30] text-white text-[12.5px] font-extrabold hover:bg-[#1B2B4B]"><EditableText id="misc.btn.56544.수정" defaultText="수정" /></button>
+                      <button onClick={startEdit} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-extrabold hover:bg-[#1B2B4B]"><EditableText id="misc.btn.56544.수정" defaultText="수정" /></button>
                     )}
                     {editMode && (
                       <>
-                        <button onClick={cancelEdit} className="h-9 px-3.5 rounded-xl border border-[#E3E8F0] text-[#5B6B85] text-[12.5px] font-extrabold hover:bg-[#F5F8FD]"><EditableText id="misc.btn.56548.취소" defaultText="취소" /></button>
-                        <button onClick={saveResume} disabled={saving} className="h-9 px-4 rounded-xl bg-[#0F1A30] text-white text-[12.5px] font-extrabold hover:bg-[#1B2B4B] disabled:opacity-50">{saving ? "저장 중..." : "저장"}</button>
+                        <button onClick={cancelEdit} className="h-10 px-4 rounded-xl border border-[#E3E8F0] text-[#5B6B85] text-[13.5px] font-extrabold hover:bg-[#F5F8FD]"><EditableText id="misc.btn.56548.취소" defaultText="취소" /></button>
+                        <button onClick={saveResume} disabled={saving} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-extrabold hover:bg-[#1B2B4B] disabled:opacity-50">{saving ? "저장 중..." : "저장"}</button>
                       </>
                     )}
                   </div>
 
-                  <div ref={resumeRef} className="w-full max-w-[820px] bg-white border border-[#E3E8F0] rounded-[20px] p-8 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-                    <div className="text-center text-[19px] font-black text-[#0F1A30] tracking-[8px] mb-6">이 력 서</div>
-                    <div className="flex gap-5 mb-5">
-                      <div className="w-[100px] h-[128px] flex-shrink-0 border border-[#DCE3EE] rounded-2xl overflow-hidden bg-[#F5F8FD] flex items-center justify-center relative">
-                        {resume.photoUrl ? <img src={resume.photoUrl} className="w-full h-full object-cover" /> : <span className="text-[10px] text-gray-400">증명사진</span>}
+                  <div ref={resumeRef} className="w-full bg-white rounded-[22px] border border-[#E3E8F0] px-10 py-9">
+                    {/* 문서 머리 */}
+                    <div className="flex items-end justify-between pb-5 mb-7 border-b-2 border-[#0F1A30]">
+                      <div>
+                        <div className="text-[12px] font-extrabold tracking-[0.3em] text-[#4B6CB7]">RESUME</div>
+                        <div className="text-[30px] font-black text-[#0F1A30] tracking-[0.2em] leading-tight">이력서</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[15px] font-extrabold text-[#0F1A30]">{company}</div>
+                        <div className="text-[13px] text-[#7A879C]">{selected.team} · {selected.position || "-"}</div>
+                      </div>
+                    </div>
+
+                    {/* 인적사항 */}
+                    <div className="flex gap-7 mb-9">
+                      <div className="w-[136px] h-[176px] flex-shrink-0 rounded-[20px] overflow-hidden bg-[#F5F8FD] border border-[#DCE3EE] flex items-center justify-center relative">
+                        {resume.photoUrl ? <img src={resume.photoUrl} className="w-full h-full object-cover" /> : <span className="text-[13px] font-bold text-[#9AA9C3]">증명사진</span>}
                         {canEditThis && (
-                          <label className={`absolute bottom-0 inset-x-0 text-center text-[10px] py-1 cursor-pointer ${photoUploading ? "bg-gray-200 text-gray-500" : "bg-black/60 text-white hover:bg-black/75"}`}>
+                          <label className={`absolute bottom-0 inset-x-0 text-center text-[12px] font-bold py-1.5 cursor-pointer ${photoUploading ? "bg-[#DCE3EE] text-[#5B6B85]" : "bg-[#0F1A30]/80 text-white hover:bg-[#0F1A30]"}`}>
                             {photoUploading ? "업로드중" : "사진 변경"}
                             <input autoComplete="off" type="file" accept="image/*" className="hidden" disabled={photoUploading} onChange={handlePhotoUpload} />
                           </label>
                         )}
                       </div>
-                      <div className="flex-1 grid grid-cols-2 gap-2 text-[12.5px]">
-                        <div><div className="text-gray-500 text-[11px] mb-0.5">성명</div><div className="font-bold text-gray-800">{selected.name}</div></div>
-                        <div><div className="text-gray-500 text-[11px] mb-0.5">생년월일</div>
-                          {editMode ? <input autoComplete="off" value={draft.birthDate || ""} onChange={e => setDraft(d => ({ ...d, birthDate: e.target.value }))} placeholder="YYYY-MM-DD" className="w-full border border-gray-200 rounded-lg px-2 py-1 text-[12px]" /> : <div className="font-semibold text-gray-700">{resume.birthDate || "-"}</div>}
-                        </div>
-                        <div><div className="text-gray-500 text-[11px] mb-0.5">연락처</div><div className="font-semibold text-gray-700">{selected.phone || "-"}</div></div>
-                        <div><div className="text-gray-500 text-[11px] mb-0.5">이메일</div><div className="font-semibold text-gray-700">{selected.email || "-"}</div></div>
-                        <div className="col-span-2"><div className="text-gray-500 text-[11px] mb-0.5">주소</div>
-                          {editMode ? <input autoComplete="off" value={draft.address || ""} onChange={e => setDraft(d => ({ ...d, address: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-[12px]" /> : <div className="font-semibold text-gray-700">{resume.address || "-"}</div>}
-                        </div>
-                        <div><div className="text-gray-500 text-[11px] mb-0.5">소속</div><div className="font-semibold text-gray-700">{selected.team} / {selected.position || "-"}</div></div>
-                        <div><div className="text-gray-500 text-[11px] mb-0.5">입사일</div><div className="font-semibold text-gray-700">{selected.hireDate || "미등록"}</div></div>
+                      <div className="flex-1 grid grid-cols-3 gap-3">
+                        {[
+                          { k: "성명", v: selected.name || "-", big: true },
+                          { k: "생년월일", v: resume.birthDate || "-", edit: "birthDate", ph: "YYYY-MM-DD" },
+                          { k: "입사일", v: selected.hireDate || "미등록" },
+                          { k: "연락처", v: selected.phone || "-" },
+                          { k: "이메일", v: selected.email || "-", span: 2 },
+                          { k: "주소", v: resume.address || "-", edit: "address", span: 2 },
+                          { k: "소속", v: `${selected.team} / ${selected.position || "-"}` },
+                        ].map(({ k, v, big, edit, ph, span }) => (
+                          <div key={k} className={`px-4 py-3 rounded-2xl bg-[#F5F8FD] border border-[#EDF1F7] min-w-0 ${span === 2 ? "col-span-2" : ""}`}>
+                            <div className="text-[12.5px] font-bold text-[#7A879C]">{k}</div>
+                            {editMode && edit ? (
+                              <input autoComplete="off" value={draft[edit] || ""} placeholder={ph || ""} onChange={e => setDraft(d => ({ ...d, [edit]: e.target.value }))}
+                                className="mt-1 w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[15px] font-semibold text-[#0F1A30] bg-white focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10" />
+                            ) : (
+                              <div className={`${big ? "text-[20px] font-black" : "text-[16px] font-extrabold"} text-[#0F1A30] truncate mt-0.5`}>{v}</div>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     </div>
 
                     {editMode ? (
-                      <>
+                      <div className="space-y-5">
                         {listField("education", "학력사항", { period: "기간", school: "학교명", detail: "내용" })}
                         {listField("career", "경력사항", { period: "기간", company: "근무처", detail: "내용" })}
                         {listField("certificates", "자격/면허", { date: "취득일", name: "자격명", issuer: "발급기관" })}
                         {listField("family", "가족관계", { relation: "관계", name: "성명", birth: "생년월일/연령", job: "직업" })}
-                        <div className="mb-2">
-                          <div className="text-[12px] font-bold text-gray-600 mb-1">자기소개</div>
-                          <textarea value={draft.intro || ""} onChange={e => setDraft(d => ({ ...d, intro: e.target.value }))} rows={5}
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[12.5px] focus:outline-none focus:border-[#1B2B4B] resize-none" />
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="mb-4">
-                          <div className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7] pb-1.5 mb-1 border-b border-[#EEF1F6]">학력사항</div>
-                          {(resume.education || []).length === 0 ? <div className="text-[11.5px] text-gray-400">등록된 정보가 없습니다</div> : (resume.education || []).map((e, i) => (
-                            <div key={i} className="flex gap-3 text-[12px] text-gray-600 py-1 border-b border-gray-50"><span className="w-28 text-gray-500">{e.period}</span><span className="font-semibold">{e.school}</span><span>{e.detail}</span></div>
-                          ))}
-                        </div>
-                        <div className="mb-4">
-                          <div className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7] pb-1.5 mb-1 border-b border-[#EEF1F6]">경력사항</div>
-                          {(resume.career || []).length === 0 ? <div className="text-[11.5px] text-gray-400">등록된 정보가 없습니다</div> : (resume.career || []).map((c, i) => (
-                            <div key={i} className="flex gap-3 text-[12px] text-gray-600 py-1 border-b border-gray-50"><span className="w-28 text-gray-500">{c.period}</span><span className="font-semibold">{c.company}</span><span>{c.detail}</span></div>
-                          ))}
-                        </div>
-                        <div className="mb-4">
-                          <div className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7] pb-1.5 mb-1 border-b border-[#EEF1F6]">자격/면허</div>
-                          {(resume.certificates || []).length === 0 ? <div className="text-[11.5px] text-gray-400">등록된 정보가 없습니다</div> : (resume.certificates || []).map((c, i) => (
-                            <div key={i} className="flex gap-3 text-[12px] text-gray-600 py-1 border-b border-gray-50"><span className="w-28 text-gray-500">{c.date}</span><span className="font-semibold">{c.name}</span><span>{c.issuer}</span></div>
-                          ))}
-                        </div>
-                        <div className="mb-4">
-                          <div className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7] pb-1.5 mb-1 border-b border-[#EEF1F6]">가족관계</div>
-                          {(resume.family || []).length === 0 ? <div className="text-[11.5px] text-gray-400">등록된 정보가 없습니다</div> : (resume.family || []).map((f, i) => (
-                            <div key={i} className="flex gap-3 text-[12px] text-gray-600 py-1 border-b border-gray-50"><span className="w-16 text-gray-500">{f.relation}</span><span className="w-20 font-semibold">{f.name}</span><span className="w-28 text-gray-500">{f.birth}</span><span>{f.job}</span></div>
-                          ))}
-                        </div>
                         <div>
-                          <div className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7] pb-1.5 mb-1 border-b border-[#EEF1F6]">자기소개</div>
-                          <div className="text-[12.5px] text-gray-600 whitespace-pre-wrap leading-relaxed">{resume.intro || <span className="text-gray-400">등록된 자기소개가 없습니다</span>}</div>
+                          <div className="text-[16px] font-black text-[#0F1A30] mb-2">자기소개</div>
+                          <textarea value={draft.intro || ""} onChange={e => setDraft(d => ({ ...d, intro: e.target.value }))} rows={6}
+                            className="w-full border border-[#DCE3EE] rounded-2xl px-4 py-3 text-[15px] leading-relaxed text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 resize-none" />
                         </div>
-                      </>
+                      </div>
+                    ) : (
+                      <div className="space-y-8">
+                        {[
+                          { en: "EDUCATION", ko: "학력사항", list: resume.education, cols: (e) => [e.period, e.school, e.detail] },
+                          { en: "CAREER", ko: "경력사항", list: resume.career, cols: (c) => [c.period, c.company, c.detail] },
+                          { en: "LICENSE", ko: "자격 / 면허", list: resume.certificates, cols: (c) => [c.date, c.name, c.issuer] },
+                          { en: "FAMILY", ko: "가족관계", list: resume.family, cols: (f) => [f.relation, f.name, [f.birth, f.job].filter(Boolean).join(" · ")] },
+                        ].map(({ en, ko, list, cols }) => (
+                          <div key={en}>
+                            <div className="flex items-baseline gap-3 mb-3">
+                              <span className="text-[17px] font-black text-[#0F1A30]">{ko}</span>
+                              <span className="text-[11px] font-extrabold tracking-[0.24em] text-[#9AA9C3]">{en}</span>
+                              <span className="flex-1 h-px bg-[#E3E8F0] self-center" />
+                            </div>
+                            {(list || []).length === 0 ? (
+                              <div className="px-5 py-4 rounded-2xl border border-dashed border-[#DCE3EE] text-[14px] text-[#9AA9C3]">등록된 정보가 없습니다</div>
+                            ) : (
+                              <div className="rounded-2xl border border-[#E3E8F0] overflow-hidden">
+                                {(list || []).map((it, i) => {
+                                  const [a, b, c] = cols(it);
+                                  return (
+                                    <div key={i} className={`grid grid-cols-[180px_minmax(0,1fr)_minmax(0,1.4fr)] gap-4 px-5 py-3.5 items-center ${i > 0 ? "border-t border-[#EEF1F6]" : ""}`}>
+                                      <span className="text-[14.5px] font-bold text-[#5B6B85] tabular-nums">{a || "-"}</span>
+                                      <span className="text-[15.5px] font-extrabold text-[#0F1A30] truncate">{b || "-"}</span>
+                                      <span className="text-[15px] text-[#3A4A66] truncate">{c || ""}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        <div>
+                          <div className="flex items-baseline gap-3 mb-3">
+                            <span className="text-[17px] font-black text-[#0F1A30]">자기소개</span>
+                            <span className="text-[11px] font-extrabold tracking-[0.24em] text-[#9AA9C3]">ABOUT</span>
+                            <span className="flex-1 h-px bg-[#E3E8F0] self-center" />
+                          </div>
+                          {resume.intro ? (
+                            <div className="px-6 py-5 rounded-2xl bg-[#F5F8FD] border border-[#EDF1F7] text-[15.5px] text-[#1F2A44] whitespace-pre-wrap leading-[1.8]">{resume.intro}</div>
+                          ) : (
+                            <div className="px-5 py-4 rounded-2xl border border-dashed border-[#DCE3EE] text-[14px] text-[#9AA9C3]">등록된 자기소개가 없습니다</div>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>
               ) : activeTab === "근태/근속" ? (
-                <div className="flex flex-col items-center">
-                  <div className="flex justify-end gap-2 mb-3 w-full max-w-[820px]">
+                <div>
+                  <div className="flex justify-end gap-2 mb-4">
                     <HRAttendancePrintButton row={selected} />
                     <button onClick={() => exportPdf(attendanceRef.current, `근태근속_${selected.name || selected.email}.pdf`)} disabled={exportingPdf}
-                      className="h-9 px-3.5 rounded-xl border border-[#E3E8F0] text-[#3A4A66] text-[12.5px] font-extrabold hover:bg-[#F5F8FD] transition disabled:opacity-50">{exportingPdf ? "저장 중..." : "PDF로 저장"}</button>
+                      className="h-10 px-4 rounded-xl border border-[#E3E8F0] text-[#3A4A66] text-[13.5px] font-extrabold hover:bg-[#F5F8FD] transition disabled:opacity-50">{exportingPdf ? "저장 중..." : "PDF로 저장"}</button>
                   </div>
-                  <div ref={attendanceRef} className="w-full max-w-[820px] bg-white border border-[#E3E8F0] rounded-[20px] p-8 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-                    <div className="text-center text-[19px] font-black text-[#0F1A30] tracking-[8px] mb-6">근태 / 근속 현황</div>
-                    <div className="text-[12.5px] text-gray-500 font-semibold mb-3">{selected.name} · {selected.team} / {selected.position || "-"}</div>
-                    <table className="w-full border-collapse text-[12.5px]">
-                      <tbody>
-                        {[
-                          { l: "입사일", v: selected.hireDate || "미등록" },
-                          { l: "근속기간", v: selected.tenureLabel },
-                          { l: selected.leave ? selected.leave.leaveLabel + " 발생/사용/잔여" : "휴가", v: selected.leave ? `${selected.leave.entitlement}일 / ${selected.leave.used}일 / ${selected.leave.remaining}일` : "입사일 미등록" },
-                          { l: "이달 출근일수", v: `${selected.workDays}일` },
-                          { l: "이달 연차/반차", v: `${selected.leaveDays}일` },
-                          { l: "병가 / 외근", v: selected.leave ? `${selected.leave.sickDays}일 / ${selected.leave.fieldDays}일` : "-" },
-                          { l: "결재 대기 건", v: `${selected.pendingApprovals}건` },
-                        ].map(s => (
-                          <tr key={s.l} className="border-b border-gray-100">
-                            <th className="text-left py-2.5 pr-4 text-gray-500 font-semibold w-[180px] align-top"><EditableText id={`hr.attendancePreview.label.${s.l}`} defaultText={s.l} /></th>
-                            <td className="py-2.5 text-gray-800 font-bold">{s.v}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div ref={attendanceRef} className="w-full bg-white rounded-[22px] border border-[#E3E8F0] px-10 py-9">
+                    <div className="flex items-end justify-between pb-5 mb-7 border-b-2 border-[#0F1A30]">
+                      <div>
+                        <div className="text-[12px] font-extrabold tracking-[0.3em] text-[#4B6CB7]">ATTENDANCE · TENURE</div>
+                        <div className="text-[30px] font-black text-[#0F1A30] tracking-[0.12em] leading-tight">근태 / 근속 현황</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[17px] font-black text-[#0F1A30]">{selected.name}</div>
+                        <div className="text-[13px] text-[#7A879C]">{selected.team} · {selected.position || "-"}</div>
+                      </div>
+                    </div>
+
+                    {/* 큰 숫자 칸 */}
+                    <div className="grid grid-cols-4 gap-3 mb-6">
+                      {[
+                        { k: "입사일", v: selected.hireDate || "미등록" },
+                        { k: "근속기간", v: selected.tenureLabel || "-" },
+                        { k: "이달 출근", v: `${selected.workDays || 0}일` },
+                        { k: "결재 대기", v: `${selected.pendingApprovals || 0}건` },
+                      ].map(({ k, v }, i) => (
+                        <div key={k} className={`px-5 py-4 rounded-2xl ${i === 1 ? "bg-[#0F1A30] text-white" : "bg-[#F5F8FD] border border-[#EDF1F7]"}`}>
+                          <div className={`text-[13px] font-bold ${i === 1 ? "text-white/60" : "text-[#7A879C]"}`}>{k}</div>
+                          <div className={`text-[22px] font-black mt-1 tabular-nums ${i === 1 ? "text-white" : "text-[#0F1A30]"}`}>{v}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* 휴가 막대 */}
+                    <div className="rounded-2xl border border-[#E3E8F0] px-6 py-5 mb-6">
+                      <div className="flex items-baseline justify-between mb-3">
+                        <div className="text-[17px] font-black text-[#0F1A30]">{selected.leave ? selected.leave.leaveLabel : "휴가"}</div>
+                        {selected.leave && <div className="text-[14px] font-bold text-[#5B6B85]">발생 <b className="text-[#0F1A30]">{selected.leave.entitlement}일</b> · 사용 <b className="text-[#0F1A30]">{selected.leave.used}일</b> · 잔여 <b className="text-[#0F1A30]">{selected.leave.remaining}일</b></div>}
+                      </div>
+                      {selected.leave ? (
+                        <div className="h-3.5 rounded-full bg-[#EEF2F8] overflow-hidden">
+                          <div className="h-full rounded-full bg-[#0F1A30]" style={{ width: `${Math.min(100, Math.round((Number(selected.leave.used) || 0) / Math.max(1, Number(selected.leave.entitlement) || 0) * 100))}%` }} />
+                        </div>
+                      ) : <div className="text-[14px] text-[#9AA9C3]">입사일이 등록되지 않아 계산할 수 없습니다</div>}
+                    </div>
+
+                    <div className="rounded-2xl border border-[#E3E8F0] overflow-hidden">
+                      {[
+                        { l: "이달 연차/반차", v: `${selected.leaveDays}일` },
+                        { l: "병가 / 외근", v: selected.leave ? `${selected.leave.sickDays}일 / ${selected.leave.fieldDays}일` : "-" },
+                        { l: selected.leave ? selected.leave.leaveLabel + " 발생/사용/잔여" : "휴가", v: selected.leave ? `${selected.leave.entitlement}일 / ${selected.leave.used}일 / ${selected.leave.remaining}일` : "입사일 미등록" },
+                      ].map((r, i) => (
+                        <div key={r.l} className={`flex items-center px-6 py-4 ${i > 0 ? "border-t border-[#EEF1F6]" : ""}`}>
+                          <span className="w-[260px] text-[15px] font-bold text-[#5B6B85]"><EditableText id={`hr.attendancePreview.label.${r.l}`} defaultText={r.l} /></span>
+                          <span className="text-[16px] font-extrabold text-[#0F1A30]">{r.v}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col items-center">
-                  <div className="w-full max-w-[820px] bg-white border border-[#E3E8F0] rounded-[20px] p-8 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-                    <div className="text-center text-[19px] font-black text-[#0F1A30] tracking-[8px] mb-6">인사발령 이력</div>
-                    <div className="flex gap-4 mb-5 text-[12.5px]">
-                      <div className="flex-1 px-4 py-3 rounded-2xl border border-[#EDF1F7] bg-[#F5F8FD]">
-                        <div className="text-[11px] text-gray-500 font-semibold mb-1">현재 재직상태</div>
-                        <div className="text-[14px] font-black text-[#1B2B4B]">{selected.employmentStatus || "재직"}</div>
-                      </div>
-                      <div className="flex-1 px-4 py-3 rounded-2xl border border-[#EDF1F7] bg-[#F5F8FD]">
-                        <div className="text-[11px] text-gray-500 font-semibold mb-1">퇴사일</div>
-                        <div className="text-[14px] font-black text-[#1B2B4B]">{selected.resignedAt || "-"}</div>
-                      </div>
+                <div className="w-full bg-white rounded-[22px] border border-[#E3E8F0] px-10 py-9">
+                  <div className="flex items-end justify-between pb-5 mb-7 border-b-2 border-[#0F1A30]">
+                    <div>
+                      <div className="text-[12px] font-extrabold tracking-[0.3em] text-[#4B6CB7]">PERSONNEL HISTORY</div>
+                      <div className="text-[30px] font-black text-[#0F1A30] tracking-[0.12em] leading-tight">인사발령 이력</div>
                     </div>
-                    <div className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7] pb-1.5 mb-2 border-b border-[#EEF1F6]">발령 이력</div>
-                    {(!selected.personnelHistory || selected.personnelHistory.length === 0) ? (
-                      <div className="text-[11.5px] text-gray-400 py-6 text-center">등록된 인사발령 이력이 없습니다</div>
-                    ) : (
-                      <table className="w-full border-collapse text-[12.5px]">
-                        <thead>
-                          <tr className="border-b border-gray-200 text-gray-500">
-                            <th className="text-left py-2 pr-4 font-semibold w-[120px]"><EditableText id="personnel.history.header.일자" defaultText="일자" /></th>
-                            <th className="text-left py-2 pr-4 font-semibold w-[100px]"><EditableText id="personnel.history.header.구분" defaultText="구분" /></th>
-                            <th className="text-left py-2 font-semibold"><EditableText id="personnel.history.header.내용" defaultText="내용" /></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {[...selected.personnelHistory].reverse().map((h, i) => (
-                            <tr key={i} className="border-b border-gray-50">
-                              <td className="py-2 pr-4 text-gray-500">{h.date}</td>
-                              <td className="py-2 pr-4">
-                                <span className="px-2 py-0.5 rounded-full bg-[#0F1A30] text-white font-bold text-[11px]">{h.type}</span>
-                              </td>
-                              <td className="py-2 text-gray-700">{h.detail}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
+                    <div className="text-right">
+                      <div className="text-[17px] font-black text-[#0F1A30]">{selected.name}</div>
+                      <div className="text-[13px] text-[#7A879C]">{selected.team} · {selected.position || "-"}</div>
+                    </div>
                   </div>
+                  <div className="grid grid-cols-3 gap-3 mb-8">
+                    {[
+                      { k: "현재 재직상태", v: selected.employmentStatus || "재직", strong: true },
+                      { k: "입사일", v: selected.hireDate || "미등록" },
+                      { k: "퇴사일", v: selected.resignedAt || "-" },
+                    ].map(({ k, v, strong }) => (
+                      <div key={k} className={`px-5 py-4 rounded-2xl ${strong ? "bg-[#0F1A30] text-white" : "bg-[#F5F8FD] border border-[#EDF1F7]"}`}>
+                        <div className={`text-[13px] font-bold ${strong ? "text-white/60" : "text-[#7A879C]"}`}>{k}</div>
+                        <div className={`text-[22px] font-black mt-1 ${strong ? "text-white" : "text-[#0F1A30]"}`}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-baseline gap-3 mb-4">
+                    <span className="text-[17px] font-black text-[#0F1A30]">발령 이력</span>
+                    <span className="text-[11px] font-extrabold tracking-[0.24em] text-[#9AA9C3]">TIMELINE</span>
+                    <span className="flex-1 h-px bg-[#E3E8F0] self-center" />
+                  </div>
+                  {(!selected.personnelHistory || selected.personnelHistory.length === 0) ? (
+                    <div className="px-5 py-8 rounded-2xl border border-dashed border-[#DCE3EE] text-center text-[14.5px] text-[#9AA9C3]">등록된 인사발령 이력이 없습니다</div>
+                  ) : (
+                    <div className="relative pl-9">
+                      <div className="absolute left-[11px] top-3 bottom-3 w-[2px] bg-[#E3E8F0]" />
+                      {[...selected.personnelHistory].reverse().map((h, i) => (
+                        <div key={i} className="relative mb-3">
+                          <span className={`absolute -left-[33px] top-5 w-4 h-4 rounded-full ${i === 0 ? "bg-[#0F1A30] ring-4 ring-[#EEF3FB]" : "bg-white border-[3px] border-[#9AA9C3]"}`} />
+                          <div className="flex items-center gap-5 px-5 py-4 rounded-2xl bg-[#F5F8FD] border border-[#EDF1F7]">
+                            <span className="text-[15px] font-bold text-[#5B6B85] tabular-nums w-[120px] shrink-0">{h.date}</span>
+                            <span className="px-3 py-1 rounded-full bg-[#0F1A30] text-white text-[13px] font-extrabold shrink-0">{h.type}</span>
+                            <span className="text-[16px] font-semibold text-[#0F1A30]">{h.detail}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
