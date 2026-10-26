@@ -1367,12 +1367,18 @@ async function sendGsheetMineBatch(items) {
         await gsheetApi("POST", "/values:batchUpdate", { data: { valueInputOption: "USER_ENTERED", data: ranges.slice(i, i + 500) } });
       }
       await renumberGsheetDates(tab, [...groups.keys()]).catch((e) => console.warn("순번 다시 매기기 실패:", e?.message || e));
-      for (let i = 0; i < finalRows.length; i += 400) {
-        const wb = db.batch();
-        finalRows.slice(i, i + 400).forEach(({ it, row }) => wb.update(it.ref, { _gsheetMineSent: true, _gsheetMineSentAt: FieldValue.serverTimestamp(), _gsheetSync: { tab, row, doc: it.path } }));
-        await wb.commit();
+      // ⭐ 2026-10-27 — 한 묶음(batch)으로 표시하면, 보내는 사이 프로그램에서 지운 오더가 1건만 있어도 묶음 전체가
+      //    실패하고 그 오더의 줄은 시트에 남았다(지운 오더가 시트에 1건 남던 원인). 한 건씩 표시하고, 이미 지워진
+      //    오더는 방금 넣은 줄을 바로 지운다.
+      const gone = [];
+      await Promise.all(finalRows.map(({ it, row }) => it.ref.update({ _gsheetMineSent: true, _gsheetMineSentAt: FieldValue.serverTimestamp(), _gsheetSync: { tab, row, doc: it.path } })
+        .then(() => { sent += 1; })
+        .catch((e) => { if (e?.code === 5 || /NOT_FOUND|No document/i.test(String(e?.message || e))) gone.push(it.path); else throw e; })));
+      if (gone.length) {
+        const rows = [];
+        for (const path of gone) rows.push(...await findGsheetRowsById(tab, colMap, path));
+        for (const r of rows.sort((x, y) => y - x)) await removeGsheetRowUnlocked(tab, r);
       }
-      sent += finalRows.length;
     });
     for (const it of already) {
       await it.ref.update({ _gsheetMineSent: true, _gsheetMineSentAt: FieldValue.serverTimestamp() });
@@ -3274,7 +3280,11 @@ exports.syncDispatchToGoogleSheet =
         if (!isMine) return;
         const wasSent = sentOf(before);
         const isSent = sentOf(after) || wasSent;
-        if (!isSent) return; // 아직 전송 안 한 오더는 시트와 무관(수정·삭제해도 아무 일 없음)
+        if (!isSent) {
+          // ⭐ 전송 버튼과 거의 동시에 지운 경우 시트에 줄이 이미 들어갔을 수 있다 — 오더ID로 찾아 있으면 지운다
+          if (!after && before?._gsheetMine) await removeDocFromGsheet(`${col}/${dispatchId}`, before).catch((e) => console.warn("대기 오더 삭제 확인 실패:", e?.message || e));
+          return; // 아직 전송 안 한 오더는 시트와 무관
+        }
         // ⭐ 운송사 초기화 중(대량 삭제)에는 시트 줄을 지우지 않는다 — 시트는 사람이 직접 관리하는 기록
         if (!after && await isBulkModeFor(before?.companyName)) return;
         // 전체 덮어쓰기 저장으로 표시가 빠졌으면 다시 단다(동기화는 아래에서 최신 문서를 다시 읽어 이어서 처리)
@@ -4167,6 +4177,37 @@ exports.gsheetMine = functions.runWith({ timeoutSeconds: 540, memory: "512MB" })
       }
       await db.collection("importBatches").doc(batchId).set({ gsheetLinked: linked, gsheetLinkedAt: FieldValue.serverTimestamp() }, { merge: true });
       res.json({ linked, notFound, total: docs.length });
+      return;
+    }
+    if (body.action === "cleanup") {
+      // ⭐ 시트 정리 — 오더ID가 적혀 있는데 프로그램에는 없는(지워진) 오더의 줄을 지운다. 사람이 적은 줄(오더ID 없음)은 건드리지 않는다.
+      const months = Array.isArray(body.tabs) && body.tabs.length ? body.tabs : (() => {
+        const now = new Date(Date.now() + 9 * 3600e3); const prev = new Date(now); prev.setUTCDate(1); prev.setUTCMonth(prev.getUTCMonth() - 1);
+        return [gsheetMonthTabName(prev.toISOString().slice(0, 10)), gsheetMonthTabName(now.toISOString().slice(0, 10))];
+      })();
+      const titles = new Set((await getGsheetSheetList()).map((t) => t.title));
+      let removed = 0; const removedList = [];
+      for (const tab of months) {
+        if (!tab || !titles.has(tab)) continue;
+        await withGsheetTabLock(tab, async () => {
+          const colMap = await ensureGsheetIdColumn(tab);
+          if (!colMap.오더ID) return;
+          const got = await gsheetApi("GET", `/values/${encodeURIComponent(`${quoteTab(tab)}!${colMap.오더ID}2:${colMap.오더ID}6000`)}`);
+          const ids = (got.values || []).map((v, i) => ({ row: i + 2, id: String(v?.[0] || "").trim() })).filter((x) => /^(orders|dispatch)\/[^/]+$/.test(x.id));
+          if (!ids.length) return;
+          const refs = [...new Set(ids.map((x) => x.id))].map((p) => db.doc(p));
+          const exist = new Set();
+          for (let i = 0; i < refs.length; i += 300) (await db.getAll(...refs.slice(i, i + 300))).forEach((d) => { if (d.exists) exist.add(d.ref.path); });
+          // ⚠️ 프로그램에서 "삭제"한 기록(deletedOrders)이 있는 오더만 지운다 — 가져오기 취소처럼 일부러 시트 줄을 남긴 경우는 건드리지 않는다
+          const missing = [...new Set(ids.filter((x) => !exist.has(x.id)).map((x) => x.id))];
+          const deletedLogged = new Set();
+          const logRefs = missing.map((p) => db.collection("deletedOrders").doc(p.replace("/", "_")));
+          for (let i = 0; i < logRefs.length; i += 300) (await db.getAll(...logRefs.slice(i, i + 300))).forEach((d, k) => { if (d.exists) deletedLogged.add(missing[i + k]); });
+          const orphan = ids.filter((x) => deletedLogged.has(x.id)).sort((a, b) => b.row - a.row);
+          for (const x of orphan) { await removeGsheetRowUnlocked(tab, x.row); removed += 1; removedList.push(`${tab} ${x.id}`); }
+        });
+      }
+      res.json({ removed, removedList, tabs: months });
       return;
     }
     if (body.action === "send") {

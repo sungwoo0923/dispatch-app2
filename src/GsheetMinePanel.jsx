@@ -60,6 +60,7 @@ export default function GsheetMinePanel() {
     try {
       const d = await callApi({ action, email });
       if (action === "send") { setResult(d); await callApi({ action: "status" }).then(setSt).catch(() => {}); }
+      else if (action === "cleanup") setResult({ cleanup: d });
       else { setSt(d); if (d.email && action === "status") setEmail(d.email); }
     } catch (e) { setErr(e.message); } finally { setBusy(""); }
   };
@@ -136,7 +137,13 @@ export default function GsheetMinePanel() {
             {busy === "send" ? "전송 중…" : `구글시트로 전송 (${pending.length}건)`}
           </button>
         </div>
-        {result && (
+        {result?.cleanup && (
+          <div className="mx-6 mt-4 px-4 py-3 rounded-2xl bg-[#F5F8FD] border border-[#EDF1F7] text-[13.5px] text-[#0F1A30]">
+            <b>시트 정리 완료 · 지워진 오더 줄 {result.cleanup.removed}건 삭제</b>
+            <div className="mt-1 text-[12px] text-[#5B6B85]">확인한 탭: {(result.cleanup.tabs || []).join(", ")}</div>
+          </div>
+        )}
+        {result && !result.cleanup && (
           <div className="mx-6 mt-4 px-4 py-3 rounded-2xl bg-[#F5F8FD] border border-[#EDF1F7] text-[13.5px] text-[#0F1A30]">
             <b>{result.sent}건 전송 완료</b>{result.failed?.length ? ` · 실패 ${result.failed.length}건(다시 누르면 재시도)` : ""}
             {result.failed?.length > 0 && <div className="mt-1 text-[12px] text-[#5B6B85]">{result.failed.join(" / ")}</div>}
@@ -162,6 +169,12 @@ export default function GsheetMinePanel() {
             <li>전송 전에 삭제한 오더는 보내지 않습니다. 전송 후 삭제·배차취소하면 시트에서도 지워지고 그날 순번이 다시 매겨집니다.</li>
             <li>시트의 줄은 맨 오른쪽 숨겨진 "오더ID" 열로 찾습니다 — 이 열은 지우지 말아 주세요.</li>
           </ul>
+          <button
+            onClick={() => { if (window.confirm("시트 정리를 할까요?\n이번 달·지난달 탭에서, 프로그램에서 이미 지운 오더의 줄만 찾아 지웁니다.\n(직접 적은 줄은 건드리지 않습니다)")) run("cleanup"); }}
+            disabled={!!busy}
+            className="mt-4 h-11 px-5 w-full sm:w-auto rounded-xl border border-[#E3E8F0] text-[#0F1A30] text-[14px] font-black disabled:opacity-50">
+            {busy === "cleanup" ? "정리 중…" : "시트 정리 (지운 오더 줄 삭제)"}
+          </button>
         </div>
       </div>
     </div>
