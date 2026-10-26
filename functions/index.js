@@ -1297,7 +1297,7 @@ async function sendGsheetMineBatch(items) {
   const byTab = new Map();
   const skipped = [];
   for (const it of items) {
-    const tab = isGsheetCanceled(it.data) || it.data.블라인드 === true ? null : gsheetMonthTabName(it.data.상차일);
+    const tab = isGsheetCanceled(it.data) ? null : gsheetMonthTabName(it.data.상차일); // ⭐ 블라인드여도 내 오더는 시트로 보낸다(프로그램에서만 숨김)
     if (!tab) { skipped.push(it); continue; }
     if (!byTab.has(tab)) byTab.set(tab, []);
     byTab.get(tab).push(it);
@@ -1380,7 +1380,7 @@ async function sendGsheetMineBatch(items) {
       sent += 1;
     }
   }
-  // 취소·블라인드·날짜 없는 오더는 시트에 넣지 않고 전송 처리만(나중에 다시 살아나면 그때 반영)
+  // 취소·날짜 없는 오더는 시트에 넣지 않고 전송 처리만(나중에 다시 살아나면 그때 반영)
   for (const it of skipped) await it.ref.update({ _gsheetMineSent: true, _gsheetMineSentAt: FieldValue.serverTimestamp() }).catch(() => {});
   // 기사 기준표(고유값) — 차량번호별 한 번씩
   const seen = new Set();
@@ -2323,7 +2323,8 @@ async function syncOneDispatchToGsheet(docId, eventData, eventBefore) {
   if (data.source === "transport_transmit") return;
   // "내 오더만 보내기" 표시가 있는 오더는 회사명과 상관없이 대상, 전체 연결이 꺼져 있으면 그 오더만 대상
   if (!GSHEET_PROGRAM_LINK_ENABLED && !(data._gsheetMine && (data._gsheetMineSent || [docId, docId.split("/").pop()].includes(data._gsheetSync?.doc)))) return;
-  const outOfScope = (!data._gsheetMine && (data.companyName || "돌캐") !== GSHEET_TARGET_COMPANY) || data.블라인드 === true;
+  // ⭐ 블라인드는 프로그램 화면에서만 숨기는 것 — "내 오더" 표시가 있으면 시트에는 그대로 둔다
+  const outOfScope = (!data._gsheetMine && ((data.companyName || "돌캐") !== GSHEET_TARGET_COMPANY || data.블라인드 === true));
   // 새로 생긴 문서에 딸려온 옛 방식 포인터(문서ID 없음)는 복사 원본의 것 — 무시
   const createdNow = !eventBefore;
   let ptr = ownGsheetPtr(data, docId);
@@ -2362,7 +2363,7 @@ async function syncOneDispatchToGsheet(docId, eventData, eventBefore) {
       return;
     }
     const cur = fresh.data();
-    if (isGsheetCanceled(cur) || gsheetMonthTabName(cur["상차일"]) !== targetTab || cur.블라인드 === true) return; // 뒤이은 이벤트가 처리
+    if (isGsheetCanceled(cur) || gsheetMonthTabName(cur["상차일"]) !== targetTab || (cur.블라인드 === true && !cur._gsheetMine)) return; // 뒤이은 이벤트가 처리
     const curPtr = ownGsheetPtr(cur, docId);
     let ptrNow = curPtr && curPtr.doc === docId ? curPtr : ptr;
 
@@ -3258,13 +3259,14 @@ exports.syncDispatchToGoogleSheet =
         //    (실시간 방식 때 보낸 오더의 수정·삭제가 시트에 안 가던 원인)
         const sentOf = (d) => !!(d && (d._gsheetMineSent || (d._gsheetMine && [dispatchId, `${col}/${dispatchId}`].includes(d._gsheetSync?.doc))));
         let isMine = !!(after?._gsheetMine || before?._gsheetMine);
-        if (!isMine && !before && after) {
+        // ⭐ 새로 등록됐거나, 블라인드로 바뀐 순간(블라인드 때문에 예전에 못 모은 오더 복구)에 모을 대상인지 본다
+        if (!isMine && after && (!before || (after.블라인드 === true && before.블라인드 !== true))) {
           const mine = await getGsheetMineConfig();
           const sinceMs = mine?.since?.toMillis?.() || 0;
           const createdMs = after.createdAt?.toMillis?.() || (typeof after.createdAt === "number" ? after.createdAt : Date.now());
           if (mine?.enabled && mine.email &&
               String(after.작성자 || "").trim().toLowerCase() === String(mine.email).trim().toLowerCase() &&
-              createdMs >= sinceMs && !after.importBatchId && after.source !== "transport_transmit" && after.블라인드 !== true) {
+              createdMs >= sinceMs && !after.importBatchId && after.source !== "transport_transmit") {
             await change.after.ref.update({ _gsheetMine: true }).catch(() => {});
           }
           return; // 전송 대기 — [구글시트로 전송] 버튼을 누를 때 들어간다
@@ -3281,8 +3283,9 @@ exports.syncDispatchToGoogleSheet =
         }
       }
       // ⭐ 블라인드 오더는 시트에 기록하지 않는다 — 블라인드로 바뀐 경우 이미 있던 줄은 아래 동기화에서 지운다
-      if (!before && after?.블라인드 === true) return;
-      if (!after && before?.블라인드 === true && !before._gsheetSync) return;
+      //    (단, "내 오더 보내기"로 보낸 오더는 블라인드여도 시트에 그대로 둔다)
+      if (!before && after?.블라인드 === true && !after._gsheetMine) return;
+      if (!after && before?.블라인드 === true && !before._gsheetSync && !before._gsheetMine) return;
 
       if (!after) {
         // 문서가 완전삭제됨 — 시트에 남은 이 오더의 줄을 오더ID(또는 예전 줄번호)로 찾아 지운다
