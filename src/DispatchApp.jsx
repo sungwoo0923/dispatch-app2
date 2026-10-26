@@ -6751,34 +6751,29 @@ function CargoExtraChips({ value }) {
 //   ① 저장된 오더 불러오기: PC에 저장된 오더(캐시) 첫 응답
 //   ② 서버 확인: 실시간 구독이 서버와 맞춰짐(추가 조회 없음)
 //   ③ 최신 오더 반영: 그동안 바뀐 오더(신규/수정/삭제) 반영
-//   ④ 화면 준비: 기사·거래처 + 홈 화면 통계용 올해 오더까지 다 받아 화면을 미리 그려둔다
-//   → 전부 100%가 되면 걷히고, 홈은 이미 다 그려진 상태로 보인다(들어와서 렉 없음)
+//   ④ 화면 준비: 기사·거래처
+//   ⭐ 2026-10-26 속도 개선 — 홈 통계용 "올해 지난 기간 합계"(1년치 조회)는 더 이상 기다리지 않는다.
+//      로딩 화면이 걷힌 뒤 뒤에서 계산돼 홈 숫자에 더해진다(하루 1번).
 function PcBootOverlay({ onDone }) {
   const st = useMiniStore(pcBootStore);
   const [skipped, setSkipped] = useState(false);
-  const [noHome, setNoHome] = useState(false);
-  useEffect(() => {
-    // 홈 화면이 아예 안 뜨는 권한(첫 메뉴가 홈이 아닌 경우)이면 홈 통계는 기다리지 않는다
-    const t = setTimeout(() => { if (!pcBootStore.get().base.homeMounted) setNoHome(true); }, 1500);
-    return () => clearTimeout(t);
-  }, []);
   const two = (o) => (o.orders ? 50 : 0) + (o.dispatch ? 50 : 0);
   const cachePct = two(st.cache);
   const serverPct = two(st.server);
   const applyPct = serverPct === 100 ? 100 : 0;
-  const homeReady = st.base.home || noHome;
-  const readyPct = (st.base.drivers ? 35 : 0) + (st.base.clients ? 35 : 0) + (applyPct === 100 && homeReady ? 30 : 0);
+  const readyPct = (st.base.drivers ? 50 : 0) + (st.base.clients ? 50 : 0);
   // ⚠️ 받다 만 상태로 강제로 열지 않는다 — 오래 걸리면 로딩 화면에 안내 문구, 30초 후엔 "먼저 열기" 버튼
   const targets = skipped ? [100, 100, 100, 100] : [cachePct, serverPct, applyPct, readyPct];
-  const total = (st.cacheCount.orders || 0) + (st.cacheCount.dispatch || 0);
+  // ⭐ 보여주는 건수 = 오늘(상차일) 오더 — 다른 날짜는 각 화면에서 조회할 때 불러온다
+  const total = (st.todayCount?.orders || 0) + (st.todayCount?.dispatch || 0);
   const changed = st.added + st.modified + st.removed;
   const subs = [
-    cachePct === 100 ? `${total.toLocaleString()}건` : "",
+    cachePct === 100 ? `오늘 ${total.toLocaleString()}건` : "",
     "",
     applyPct === 100
       ? (changed ? [st.added ? `신규 ${st.added}` : "", st.modified ? `수정 ${st.modified}` : "", st.removed ? `삭제 ${st.removed}` : ""].filter(Boolean).join(" · ") : "최신 데이터 없음")
       : "",
-    readyPct >= 100 ? "기사·거래처·통계 준비 완료" : "",
+    readyPct >= 100 ? "기사·거래처 준비 완료" : "",
   ];
   return <KpBootScreen targets={targets} subs={subs} onAllDone={onDone} onSkip={() => setSkipped(true)} variant="pc" zIndex={2147483000} />;
 }
@@ -13911,10 +13906,10 @@ setCopyOpen(false);
 // KakaoT Minimal Clean Theme
 // =======================
 
-// 오더 정보 카드 스타일 — A: 카드형(기본), B: 밑줄형. 사용자가 마지막으로
+// 오더 정보 카드 스타일 — A: 카드형, B: 밑줄형(기본 — 직접 A로 바꾼 사용자만 A 유지). 사용자가 마지막으로
 // 선택한 스타일을 localStorage에 저장해 재접속/다른 탭 이동 후에도 유지한다.
 const [orderCardStyle, setOrderCardStyle] = React.useState(() => {
-  try { return localStorage.getItem("orderCardStyle") === "B" ? "B" : "A"; } catch { return "A"; }
+  try { return localStorage.getItem("orderCardStyle") === "A" ? "A" : "B"; } catch { return "B"; }
 });
 const toggleOrderCardStyle = () => {
   setOrderCardStyle(prev => {

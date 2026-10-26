@@ -822,7 +822,7 @@ React.useEffect(() => {
                 ].map(([k, v, u]) => (
                   <div key={k} className="rounded-2xl bg-white/[0.08] ring-1 ring-white/15 backdrop-blur-sm px-5 py-3.5 min-w-[170px]">
                     <div className="text-[12.5px] font-bold text-blue-100/80">{k}</div>
-                    <div className="mt-1 text-[21px] font-black tabular-nums tracking-tight whitespace-nowrap"><CountUp value={v} /><span className="text-[13px] font-bold text-blue-100/70 ml-1">{u}</span></div>
+                    <div className="mt-1 text-[21px] font-black tabular-nums tracking-tight whitespace-nowrap">{pastCache ? <><CountUp value={v} /><span className="text-[13px] font-bold text-blue-100/70 ml-1">{u}</span></> : <span className="text-[14px] font-bold text-blue-100/70">계산 중…</span>}</div>
                   </div>
                 ))}
               </div>

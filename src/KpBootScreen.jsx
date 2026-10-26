@@ -25,7 +25,7 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
   // 테두리 깜빡임이 매 프레임 화면 전체를 다시 칠하게 만들었다. 데이터를 받느라 바쁜 저사양 폰(특히 LTE)에서
   // 그대로 끊겼다. 이제 막대·트럭은 "목표만 정해주고" 이동은 그래픽 칩(transform 전환효과)이 하게 해서,
   // 자바스크립트가 바빠도 부드럽게 움직인다.
-  const STEP_MS = 280; // 한 단계가 차오르는 시간
+  const STEP_MS = 160; // 한 단계가 차오르는 시간(속도 개선: 280 → 160)
   const [completed, setCompleted] = useState([false, false, false, false]);
   const shown = targets.map((t, i) => (i === 0 || completed[i - 1] ? Math.max(0, Math.min(100, t || 0)) : 0));
   const shownKey = shown.join(",");

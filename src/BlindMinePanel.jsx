@@ -14,6 +14,7 @@ export default function BlindMinePanel() {
   const myEmail = auth.currentUser?.email || "";
   const [cfg, setCfg] = React.useState(null);
   const [from, setFrom] = React.useState("2026-10-27");
+  const [to, setTo] = React.useState(""); // 비우면 끝 없음
   const [onlyMine, setOnlyMine] = React.useState(true);
   const [busy, setBusy] = React.useState("");
   const [msg, setMsg] = React.useState("");
@@ -32,7 +33,8 @@ export default function BlindMinePanel() {
   const bulk = async (value) => {
     if (!from) return;
     const label = value ? "블라인드" : "블라인드 해제";
-    if (!window.confirm(`${from} 이후 ${onlyMine ? "내가 등록한 " : ""}오더를 전부 ${label}할까요?`)) return;
+    if (to && to < from) { setMsg("⚠ 종료일이 시작일보다 빠릅니다"); return; }
+    if (!window.confirm(`${from} ~ ${to || "끝까지"} ${onlyMine ? "내가 등록한 " : ""}오더를 전부 ${label}할까요?`)) return;
     setBusy(value ? "blind" : "unblind"); setMsg("");
     try {
       const targets = [];
@@ -41,6 +43,7 @@ export default function BlindMinePanel() {
         snap.forEach((d) => {
           const o = d.data();
           if (o.source === "transport_transmit") return; // 화주사 전송 사본은 제외
+          if (to && String(o.상차일 || "") > to) return; // 종료일 이후 제외
           if (onlyMine && o.작성자 !== myEmail && o.createdByEmail !== myEmail) return;
           if ((o.블라인드 === true) === value) return; // 이미 같은 상태
           targets.push(d.ref);
@@ -87,6 +90,9 @@ export default function BlindMinePanel() {
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
               className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#4B6CB7]" />
             <span className="text-[13px] font-bold text-[#7A879C]">부터</span>
+            <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)}
+              className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#4B6CB7]" />
+            <span className="text-[13px] font-bold text-[#7A879C]">까지{to ? "" : "(비우면 끝까지)"}</span>
             <label className="inline-flex items-center gap-1.5 text-[13px] font-bold text-[#0F1A30]">
               <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} />
               내가 등록한 오더만

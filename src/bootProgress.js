@@ -15,7 +15,10 @@ export function createMiniStore(init) {
 export const useMiniStore = (st) => useSyncExternalStore(st.sub, st.get);
 
 // cache: 컬렉션별 폰/PC 저장본(캐시) 첫 응답 / server: 서버와 맞춰짐 / base: 기사·거래처 등 기본 데이터
-export const pcBootStore = createMiniStore({ cache: {}, cacheCount: {}, server: {}, base: {}, added: 0, modified: 0, removed: 0 });
+export const pcBootStore = createMiniStore({ cache: {}, cacheCount: {}, todayCount: {}, server: {}, base: {}, added: 0, modified: 0, removed: 0 });
+// 로딩 화면에 보여줄 "오늘(상차일) 오더" 건수 — KST 기준
+const kstTodayStr = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+const countToday = (snap) => { const t = kstTodayStr(); let n = 0; snap.docs.forEach((d) => { if (String(d.get("상차일") || "").slice(0, 10) === t) n += 1; }); return n; };
 
 // ⭐ "수정"으로 세지 않을 시스템용 값 — 사람이 고친 게 아니라 서버가 자동으로 바꾸는 값들.
 // 예) 오더 1건을 등록하면 구글시트 자동 연동이 시트에 줄을 끼워 넣으면서 그 아래 오더 수십 건의
@@ -56,7 +59,7 @@ export function makeBootTracker(store, name) {
       first = false;
       if (fromCache && snap.size > 0) hadCache = true;
       if (hadCache) snap.docs.forEach((d) => prevData.set(d.id, d.data()));
-      store.set((st) => ({ ...st, cache: { ...st.cache, [name]: true }, cacheCount: { ...st.cacheCount, [name]: snap.size } }));
+      store.set((st) => ({ ...st, cache: { ...st.cache, [name]: true }, cacheCount: { ...st.cacheCount, [name]: snap.size }, todayCount: { ...st.todayCount, [name]: countToday(snap) } }));
     } else if (!synced && hadCache) {
       const c = { added: 0, modified: 0, removed: 0 };
       snap.docChanges().forEach((ch) => {
@@ -69,7 +72,7 @@ export function makeBootTracker(store, name) {
     if (!synced && !fromCache) {
       synced = true;
       prevData.clear();
-      store.set((st) => ({ ...st, server: { ...st.server, [name]: true }, cacheCount: { ...st.cacheCount, [name]: snap.size } }));
+      store.set((st) => ({ ...st, server: { ...st.server, [name]: true }, cacheCount: { ...st.cacheCount, [name]: snap.size }, todayCount: { ...st.todayCount, [name]: countToday(snap) } }));
     }
   };
 }
