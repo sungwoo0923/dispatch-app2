@@ -82,10 +82,10 @@ export function MfaCodeBox({ title, subtitle, sendLabel = "인증번호 받기",
     const t = setTimeout(() => setLeft((v) => v - 1), 1000);
     return () => clearTimeout(t);
   }, [left]);
-  const send = async () => {
+  const send = async (opts) => {
     setBusy("send"); setErr("");
     try {
-      await onSend();
+      await onSend(opts);
       setSent(true); setLeft(60); setCode("");
       setTimeout(() => inputRef.current?.focus(), 50);
     } catch (e) { setErr(mfaErrorText(e)); } finally { setBusy(""); }
@@ -97,7 +97,7 @@ export function MfaCodeBox({ title, subtitle, sendLabel = "인증번호 받기",
   };
   const autoSent = React.useRef(false);
   React.useEffect(() => {
-    if (autoSend && !autoSent.current) { autoSent.current = true; send(); }
+    if (autoSend && !autoSent.current) { autoSent.current = true; send({ auto: true }); }
   }, [autoSend]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
@@ -318,7 +318,17 @@ export function MfaEnrollSection({ user: userProp }) {
 }
 
 /* ====================== PC 전용 2차 인증 ====================== */
-export const PC_MFA_KEY = "kpPcMfaOk"; // 이 PC에서 문자 인증을 통과한 계정 uid(로그아웃하면 지움)
+export const PC_MFA_KEY = "kpPcMfaOk"; // 이 PC에서 문자 인증을 통과한 기록 { uid, at }
+// ⭐ 2026-10-26 — 한 번 인증하면 이 PC에서는 12시간 동안 다시 묻지 않는다.
+//    (예전엔 로그아웃하면 지워서, 최고관리자가 회사코드를 찾아 다시 로그인할 때마다 문자를 또 받아야 했다)
+const PC_MFA_VALID_MS = 12 * 60 * 60 * 1000;
+export function markPcMfaPassed(uid) {
+  try { localStorage.setItem(PC_MFA_KEY, JSON.stringify({ uid, at: Date.now() })); } catch { /* 무시 */ }
+}
+// ⭐ 인증 화면이 잠깐 닫혔다 다시 열려도(로그인 직후 확인이 끝나며 화면이 다시 그려지는 경우) 문자를 또 보내지 않도록,
+//    마지막으로 보낸 문자와 그 확인 정보를 화면 밖에 보관한다 — 처음 받은 번호를 그대로 입력하면 된다.
+const RESEND_GUARD_MS = 60 * 1000;
+let lastPcSend = { phone: "", at: 0, confirm: null };
 
 function phoneAuthInstance() {
   const app = getApps().find((a) => a.name === "pcVerify") || initializeApp(mainAuth.app.options, "pcVerify");
@@ -331,7 +341,12 @@ function usePhoneCheck(holderRef) {
   const verifierRef = React.useRef(null);
   const clear = () => { try { verifierRef.current?.clear(); } catch { /* 무시 */ } verifierRef.current = null; };
   React.useEffect(() => () => clear(), []);
-  const send = async (phoneE164) => {
+  const send = async (phoneE164, { auto = false } = {}) => {
+    // 자동 발송인데 1분 안에 같은 번호로 이미 보냈다면 다시 보내지 않고 그 확인 정보를 이어 쓴다
+    if (auto && lastPcSend.confirm && lastPcSend.phone === phoneE164 && Date.now() - lastPcSend.at < RESEND_GUARD_MS) {
+      confirmRef.current = lastPcSend.confirm;
+      return;
+    }
     const a2 = phoneAuthInstance();
     clear();
     const holder = holderRef.current;
@@ -340,10 +355,12 @@ function usePhoneCheck(holderRef) {
     holder?.appendChild(el);
     verifierRef.current = new RecaptchaVerifier(a2, el, { size: "invisible" });
     confirmRef.current = await signInWithPhoneNumber(a2, phoneE164, verifierRef.current);
+    lastPcSend = { phone: phoneE164, at: Date.now(), confirm: confirmRef.current };
   };
   const confirm = async (code) => {
     if (!confirmRef.current) throw Object.assign(new Error("인증번호를 먼저 받아주세요."), { code: "auth/missing-verification-id" });
     await confirmRef.current.confirm(code);
+    lastPcSend = { phone: "", at: 0, confirm: null };
     await signOut(phoneAuthInstance()).catch(() => {});
     clear();
   };
@@ -351,7 +368,12 @@ function usePhoneCheck(holderRef) {
 }
 
 export function isPcMfaPassed(uid) {
-  try { return localStorage.getItem(PC_MFA_KEY) === uid; } catch { return false; }
+  try {
+    const raw = localStorage.getItem(PC_MFA_KEY);
+    if (!raw) return false;
+    const v = JSON.parse(raw);
+    return !!v && v.uid === uid && Date.now() - (Number(v.at) || 0) < PC_MFA_VALID_MS;
+  } catch { return false; } // 예전 형식(uid 문자열)은 다시 한 번만 인증
 }
 
 // PC 로그인 직후 프로그램을 가리는 인증 화면
@@ -368,10 +390,10 @@ export function PcVerifyGate({ uid, phone, onCancel }) {
           title="PC 로그인 2차 인증"
           subtitle={`등록된 휴대폰 ${maskPhone(phone)}으로 인증번호를 보냅니다`}
           autoSend
-          onSend={() => send(phone)}
+          onSend={(opts) => send(phone, opts)}
           onVerify={async (code) => {
             await confirm(code);
-            try { localStorage.setItem(PC_MFA_KEY, uid); } catch { /* 무시 */ }
+            markPcMfaPassed(uid);
             window.dispatchEvent(new Event("kp-pc-mfa-ok"));
             force();
           }}
@@ -466,7 +488,7 @@ export function PcVerifySection({ user: userProp, phone }) {
             onVerify={async (code) => {
               await confirm(code);
               await setDoc(doc(db, "users", user.uid), { pcVerifyPhone: sentTo }, { merge: true });
-              try { localStorage.setItem(PC_MFA_KEY, user.uid); } catch { /* 무시 */ }
+              markPcMfaPassed(user.uid);
               setSentTo(""); setEditing(false);
               setMsg({ type: "ok", text: "등록되었습니다. 다음에 PC에서 로그인할 때부터 문자 인증번호를 입력합니다." });
             }}

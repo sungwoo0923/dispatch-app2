@@ -36,7 +36,7 @@ preloadTmapWhenIdle();
     // ⭐ 로그인·회사 정보는 남긴다 — 예전엔 전부 지워서 로그인은 유지된 채 회사명만 사라져
     // 회사관리·매출관리 등이 "로딩 중"에서 멈췄다.
     try {
-      const KEEP = ["loginCompany", "userCompany", "role", "uid", "lastLoginRole"];
+      const KEEP = ["loginCompany", "userCompany", "role", "uid", "lastLoginRole", "kpPcMfaOk"];
       const kept = KEEP.map((k) => [k, localStorage.getItem(k)]);
       localStorage.clear();
       kept.forEach(([k, v]) => { if (v != null) localStorage.setItem(k, v); });

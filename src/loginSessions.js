@@ -180,7 +180,7 @@ export function installEndOnSignOut() {
   endOnSignOutInstalled = true;
   beforeAuthStateChanged(auth, async (next) => {
     if (next) return;
-    try { localStorage.removeItem("kpPcMfaOk"); } catch { /* 무시 */ } // PC 2차 인증 통과 표시도 로그아웃과 함께 지운다
+    // (PC 2차 인증 통과 표시는 로그아웃해도 12시간 유지 — 회사를 바꿔 다시 로그인할 때 문자를 또 받지 않게. MfaModal.jsx 참고)
     const id = getMySessionId();
     if (!id) return;
     storeSession(null);
