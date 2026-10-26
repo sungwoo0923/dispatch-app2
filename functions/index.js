@@ -1223,6 +1223,28 @@ const GSHEET_SPREADSHEET_ID = "1Md09eYeoXVvXm155kCVE_jz1aZ1aedsmsvOQuPoiMxU";
 // false면 오더 등록·수정·삭제가 시트에 자동 반영되지 않고, 시트를 비우고 다시 채우는 백필·자동 맞추기도 막아
 // 수기로 적은 내용이 지워지지 않게 한다. 다시 연결하려면 true로 바꾸고 functions 배포.
 const GSHEET_PROGRAM_LINK_ENABLED = false;
+// ⭐ "내 오더만 보내기"(2026-10-26) — 전체 연결은 끈 채로, 지정한 한 계정이 켠 시각 이후 "새로 등록한" 오더만
+// 시트의 월별 탭·날짜 칸에 맞춰 넣는다. 다른 사람이 손으로 적은 줄은 건드리지 않도록, 이 모드의 오더는
+// 오더ID 열로만 자기 줄을 찾는다(줄번호·날짜로 추측하지 않음). 설정: adminSecrets/gsheetMine { enabled, email, since }
+const GSHEET_MINE_DOC = db.collection("adminSecrets").doc("gsheetMine");
+let _gsheetMineCache = { at: 0, v: null };
+async function getGsheetMineConfig() {
+  if (Date.now() - _gsheetMineCache.at > 15000) {
+    const snap = await GSHEET_MINE_DOC.get().catch(() => null);
+    _gsheetMineCache = { at: Date.now(), v: snap?.exists ? snap.data() : null };
+  }
+  return _gsheetMineCache.v;
+}
+// 시트 날짜 칸 값("2026. 10. 27" / "2026-10-27" / "2026/10/27" / "10/27")을 YYYY-MM-DD로 맞춘다
+function gsheetNormDate(v, yearHint) {
+  const t = String(v || "").trim();
+  if (!t) return "";
+  let m = t.match(/^(\d{4})\D+(\d{1,2})\D+(\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  m = t.match(/^(\d{1,2})\D+(\d{1,2})$/);
+  if (m && yearHint) return `${yearHint}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`;
+  return t;
+}
 const GSHEET_LINK_OFF_MESSAGE = "프로그램과 구글시트 연결이 끊겨 있습니다(시트 수기 작성 중) — 시트를 덮어쓰지 않도록 이 작업은 실행하지 않았습니다.";
 // 이 시트 전용 동기화 대상 회사명 — 다른 회사 데이터가 섞이지 않도록 반드시 필터링한다.
 const GSHEET_TARGET_COMPANY = "돌캐";
@@ -1718,7 +1740,8 @@ async function applyGsheetInputGuides(tabName) {
 // 날짜가 시트 여러 군데에 흩어져버렸다 — 이 함수가 그 버그의 원인이었다.
 async function findGsheetInsertPosition(tabName, targetDate, colMap) {
   const dateCol = colMap?.상차일 || "B";
-  const target = String(targetDate || "").trim();
+  const target = gsheetNormDate(targetDate);
+  const yearHint = target.slice(0, 4);
   const res = await gsheetApi("GET", `/values/${encodeURIComponent(`${quoteTab(tabName)}!${dateCol}2:${dateCol}2000`)}`);
   const values = res.values || [];
 
@@ -1727,7 +1750,7 @@ async function findGsheetInsertPosition(tabName, targetDate, colMap) {
   const blocks = []; // { date, startRow, endRow } — startRow/endRow는 시트 행 번호(1-based)
   let open = null;
   for (let i = 0; i < values.length; i++) {
-    const v = String(values[i]?.[0] || "").trim();
+    const v = gsheetNormDate(values[i]?.[0], yearHint); // 사람이 적은 "2026. 10. 27" 형식도 같은 날짜로 본다
     const row = i + 2; // values[0] == 2행(1행=헤더)
     if (!v) { open = null; continue; }
     if (open && open.date === v) { open.endRow = row; continue; }
@@ -2083,7 +2106,9 @@ async function locateOrderRowsInTab(tabName, colMap, docId, ptr, expectDates) {
     const idCell = colMap.오더ID ? cells[colMap.오더ID] : "";
     const dateCell = colMap.상차일 ? cells[colMap.상차일] : "";
     if (idCell === docId) rows.push(ptr.row);
-    else if (!idCell && (ptr.doc === docId || expectDates.filter(Boolean).includes(dateCell))) rows.push(ptr.row);
+    // ⭐ 시트를 사람이 손으로 고치면 줄이 밀려 포인터가 남의 줄을 가리킬 수 있다 — "내 오더만 보내기" 모드에서는
+    //    오더ID가 적힌 줄만 내 줄로 본다(남이 적은 줄을 덮어쓰거나 지우지 않게)
+    else if (!idCell && GSHEET_PROGRAM_LINK_ENABLED && (ptr.doc === docId || expectDates.filter(Boolean).includes(dateCell))) rows.push(ptr.row);
   }
   return [...new Set(rows)].sort((x, y) => x - y);
 }
@@ -2114,7 +2139,9 @@ async function syncOneDispatchToGsheet(docId, eventData, eventBefore) {
   if (!snap.exists) { await removeDocFromGsheet(docId, eventBefore || eventData); return; }
   const data = snap.data();
   if (data.source === "transport_transmit") return;
-  const outOfScope = (data.companyName || "돌캐") !== GSHEET_TARGET_COMPANY || data.블라인드 === true;
+  // "내 오더만 보내기" 표시가 있는 오더는 회사명과 상관없이 대상, 전체 연결이 꺼져 있으면 그 오더만 대상
+  if (!GSHEET_PROGRAM_LINK_ENABLED && !data._gsheetMine) return;
+  const outOfScope = (!data._gsheetMine && (data.companyName || "돌캐") !== GSHEET_TARGET_COMPANY) || data.블라인드 === true;
   // 새로 생긴 문서에 딸려온 옛 방식 포인터(문서ID 없음)는 복사 원본의 것 — 무시
   const createdNow = !eventBefore;
   let ptr = ownGsheetPtr(data, docId);
@@ -2172,8 +2199,9 @@ async function syncOneDispatchToGsheet(docId, eventData, eventBefore) {
     if (rows.length) {
       const row = rows[0];
       const cells = colMap.상차일 ? await readGsheetCells(targetTab, row, [colMap.상차일]) : {};
-      const sheetDate = colMap.상차일 ? cells[colMap.상차일] : String(cur["상차일"] || "").trim();
-      if (sheetDate === String(cur["상차일"] || "").trim()) {
+      const curDate = gsheetNormDate(cur["상차일"]);
+      const sheetDate = colMap.상차일 ? gsheetNormDate(cells[colMap.상차일], curDate.slice(0, 4)) : curDate;
+      if (sheetDate === curDate) {
         // 같은 날짜 블록 — 값 칸만 덮어쓰기(수식 칸은 건드리지 않음) + 오더ID
         const rangesData = [];
         for (const [field, value] of Object.entries(buildGsheetFieldValues(cur))) {
@@ -3030,20 +3058,40 @@ exports.syncDispatchToGoogleSheet =
   functions.firestore
     .document("{col}/{dispatchId}")
     .onWrite(async (change, context) => {
-      // ⭐ 연결 끊김 — 시트는 수기 작성 중이라 프로그램 변경을 시트에 보내지 않는다
-      if (!GSHEET_PROGRAM_LINK_ENABLED) return;
       const { col, dispatchId } = context.params;
       if (!["dispatch", "orders"].includes(col)) return;
 
       const after = change.after.exists ? change.after.data() : null;
       const before = change.before.exists ? change.before.data() : null;
+
+      // ⭐ 전체 연결은 꺼져 있고(시트는 사람이 직접 작성) "내 오더만 보내기"만 켜져 있을 때:
+      //    지정 계정이 켠 시각 이후 새로 등록한 오더에 _gsheetMine 표시를 달고, 표시가 있는 오더만 보낸다
+      if (!GSHEET_PROGRAM_LINK_ENABLED) {
+        let isMine = !!(after?._gsheetMine || before?._gsheetMine);
+        if (!isMine && !before && after) {
+          const mine = await getGsheetMineConfig();
+          const sinceMs = mine?.since?.toMillis?.() || 0;
+          const createdMs = after.createdAt?.toMillis?.() || (typeof after.createdAt === "number" ? after.createdAt : Date.now());
+          if (mine?.enabled && mine.email &&
+              String(after.작성자 || "").trim().toLowerCase() === String(mine.email).trim().toLowerCase() &&
+              createdMs >= sinceMs && !after.importBatchId && after.source !== "transport_transmit" && after.블라인드 !== true) {
+            await change.after.ref.update({ _gsheetMine: true }).catch(() => {});
+            isMine = true;
+          }
+        }
+        if (!isMine) return;
+        // 전체 덮어쓰기 저장으로 표시가 빠졌으면 다시 단다(동기화는 아래에서 최신 문서를 다시 읽어 이어서 처리)
+        if (after && !after._gsheetMine && before?._gsheetMine) {
+          await change.after.ref.update({ _gsheetMine: true }).catch(() => {});
+        }
+      }
       // ⭐ 블라인드 오더는 시트에 기록하지 않는다 — 블라인드로 바뀐 경우 이미 있던 줄은 아래 동기화에서 지운다
       if (!before && after?.블라인드 === true) return;
       if (!after && before?.블라인드 === true && !before._gsheetSync) return;
 
       if (!after) {
         // 문서가 완전삭제됨 — 시트에 남은 이 오더의 줄을 오더ID(또는 예전 줄번호)로 찾아 지운다
-        if (before && (before.companyName || "돌캐") === GSHEET_TARGET_COMPANY && before.source !== "transport_transmit") {
+        if (before && (before._gsheetMine || (before.companyName || "돌캐") === GSHEET_TARGET_COMPANY) && before.source !== "transport_transmit") {
           try {
             await removeDocFromGsheet(`${col}/${dispatchId}`, before);
           } catch (e) {
@@ -3056,8 +3104,8 @@ exports.syncDispatchToGoogleSheet =
       // ⭐ 무한루프 방지 — 이 함수 자신이 _gsheetSync를 써서 생기는 재호출을 걸러낸다.
       // (_gsheetSync만 바뀌고 그 외 필드는 동일하면 스킵)
       if (before) {
-        const a = { ...after }; delete a._gsheetSync; delete a.updatedAt;
-        const b = { ...before }; delete b._gsheetSync; delete b.updatedAt;
+        const a = { ...after }; delete a._gsheetSync; delete a.updatedAt; delete a._gsheetMine;
+        const b = { ...before }; delete b._gsheetSync; delete b.updatedAt; delete b._gsheetMine;
         if (JSON.stringify(a) === JSON.stringify(b)) return;
       }
 
@@ -3841,6 +3889,37 @@ async function setBulkMode(company, on) {
   // 다른 서버 인스턴스의 10초 캐시가 새 값을 볼 때까지 잠깐 기다린다
   if (on) await sleep(11000);
 }
+
+// ⭐ "내 오더만 구글시트로 보내기" 켜기/끄기(최고관리자) — POST { action: "status" | "enable" | "disable", email }
+exports.gsheetMine = functions.https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
+  let body = req.body;
+  if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
+  body = body || {};
+  try {
+    const me = await requireTotalMaster(req);
+    const toJson = (d) => d ? { enabled: !!d.enabled, email: d.email || "", since: d.since?.toMillis?.() || null, updatedBy: d.updatedBy || "" } : { enabled: false };
+    if (body.action === "enable") {
+      const email = String(body.email || "").trim();
+      if (!email) { res.status(400).json({ error: "보낼 계정(이메일)을 입력하세요." }); return; }
+      await GSHEET_MINE_DOC.set({ enabled: true, email, since: FieldValue.serverTimestamp(), updatedBy: me.email || "" });
+    } else if (body.action === "disable") {
+      await GSHEET_MINE_DOC.set({ enabled: false, updatedBy: me.email || "" }, { merge: true });
+    }
+    _gsheetMineCache = { at: 0, v: null };
+    const snap = await GSHEET_MINE_DOC.get();
+    // 시트 접근 확인(서비스계정이 시트 편집자로 공유돼 있어야 한다)
+    let sheetOk = true; let sheetError = "";
+    try { await getGsheetSheetList(); } catch (e) { sheetOk = false; sheetError = String(e?.response?.data?.error?.message || e?.message || e); }
+    res.json({ ...toJson(snap.exists ? snap.data() : null), sheetOk, sheetError, sheetUrl: `https://docs.google.com/spreadsheets/d/${GSHEET_SPREADSHEET_ID}/edit` });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message || String(e) });
+  }
+});
 
 exports.sheetImport = functions
   .runWith({ timeoutSeconds: 540, memory: "1GB" })
