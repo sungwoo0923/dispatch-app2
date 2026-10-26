@@ -31,7 +31,8 @@ const useMiniStore = (st) => useSyncExternalStore(st.sub, st.get);
 const resyncCheckingStore = createMiniStore(false);
 const bootStageStore = createMiniStore({ server: 0, apply: 0, applyCount: 0, ready: 0 });
 import { createPortal } from "react-dom";
-import "./mobileTheme.css"; // ⭐ 모바일 A/B 디자인 + 알록달록 금지(남색 계열)
+import "./mobileTheme.css";
+import GsheetMinePanel from "../GsheetMinePanel"; // ⭐ 모바일 A/B 디자인 + 알록달록 금지(남색 계열)
 import KpBootScreen from "../KpBootScreen";
 import { isMeaningfulChange } from "../bootProgress";
 import { Scale, Package, Snowflake, Car, Bike, Truck, Forklift, Mic, Sparkles, Download, RotateCcw, Building2, ArrowUpDown, StickyNote, MessageSquare, History } from "lucide-react";
@@ -5312,6 +5313,7 @@ const title =
   : page === "settings" ? "설정"
   : page === "fleet" ? "지입차관리"
   : page === "intel" ? "경영인텔리전스"
+  : page === "gsheet" ? "구글시트 전송"
   : "상세보기";
 
   // ------------------------------------------------------------------
@@ -5325,7 +5327,8 @@ const title =
         조작하는 걸 막기 위해 재조회가 끝날 때까지 화면을 덮는다. 짧은 앱 전환
         (다른 앱 잠깐 확인 등)에는 뜨지 않는다. */}
     {/* 최신 정보 확인 중 — 화면을 막지 않는 작은 표시(바뀐 게 없으면 이걸로 끝) */}
-    <TopStatusPill historyLoading={historyLoading > 0} hidden={resyncOverlay} />
+    {/* ⭐ "오더 불러오는 중"은 띄우지 않는다(PC와 동일) — 폰 저장본을 먼저 보여주고 서버 최신본은 뒤에서 조용히 맞춘다 */}
+    <TopStatusPill historyLoading={false} hidden={resyncOverlay} />
     {resyncOverlay && (() => {
       // ⭐ 실제로 바뀐 오더가 있을 때만 뜬다 — 반영할 건수를 0 → N으로 올리며 보여준다
       const p = resyncProgress;
@@ -5658,7 +5661,7 @@ const title =
             setPage("list");
           }
         }
-    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
@@ -5836,6 +5839,7 @@ onGoAttendance={() => {
           role={role}
           onGoFleet={() => { setPage("fleet"); setShowMenu(false); }}
           onGoIntel={() => { setPage("intel"); setShowMenu(false); }}
+          onGoGsheet={() => { setPage("gsheet"); setShowMenu(false); }}
           onDeleteAll={deleteAllOrders}
           setUiScale={setUiScale}
           uiScale={uiScale}
@@ -6783,6 +6787,8 @@ setOpenMemo={setOpenMemo}
         )}
         {page === "fleet" && <MobileFleetView dispatchData={allOrders} userCompany={userCompany} onRegisterBack={(fn) => { innerBackRef.current = fn; }} />}
         {page === "intel" && <MobileIntelView dispatchData={allOrders} cardVersionB={cardVersionB} />}
+        {/* ⭐ 구글시트 전송(최고관리자) — PC 관리자메뉴와 같은 화면 */}
+        {page === "gsheet" && role === "totalMaster" && <div className="px-3 py-3"><GsheetMinePanel /></div>}
 
         {page === "unassigned" && (
   <MobileUnassignedList
@@ -7619,6 +7625,7 @@ function MobileSideMenu({
   role,
   onGoFleet,
   onGoIntel,
+  onGoGsheet,
 }) {
   const [loginMgrOpen, setLoginMgrOpen] = useState(false); // ⭐ 로그인 관리
   const myName =
@@ -7743,6 +7750,7 @@ function MobileSideMenu({
             <MenuSection title="관리자 전용" dark={dark}>
               <MenuItem label="지입차관리" onClick={onGoFleet} dark={dark} />
               <MenuItem label="경영인텔리전스" onClick={onGoIntel} dark={dark} />
+              <MenuItem label="구글시트 전송" onClick={onGoGsheet} dark={dark} />
               <MenuItem label="회사코드조회" onClick={openCodeLookup} dark={dark} />
             </MenuSection>
           )}
@@ -14133,8 +14141,7 @@ const [formConflictPopup, setFormConflictPopup] = useState(null);
 const [showOrderCopyModal, setShowOrderCopyModal] = useState(false);
 // ⭐ 오더복사는 예전 오더 전체가 필요 — 복사창을 열 때 1회 불러온다(타이핑 중엔 불러오지 않아 버벅임 방지)
 useEffect(() => { if (showOrderCopyModal) onNeedHistory?.(); }, [showOrderCopyModal]); // eslint-disable-line react-hooks/exhaustive-deps
-// ⭐ 화물등록 화면을 열면 잠시 뒤 예전 오더를 미리 받아둔다 — [불러오기]를 누를 때 바로 목록이 뜨도록(한 번 받으면 다시 안 받음)
-useEffect(() => { const t = setTimeout(() => onNeedHistory?.({ quiet: true }), 1200); return () => clearTimeout(t); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
 const [showClientPickerModal, setShowClientPickerModal] = useState(false);
 const [clientPickerSearch, setClientPickerSearch] = useState("");
 const [contactPopup, setContactPopup] = useState(null);
@@ -14464,6 +14471,25 @@ const handleFormSmartCommit = (val) => {
 
 const [orderCopySearch, setOrderCopySearch] = useState("");
 const [orderCopySearchField, setOrderCopySearchField] = useState("all"); // 이 줄을 추가합니다.
+// ⭐ 불러오기 목록 — 창이 열려 있을 때만, 검색어가 바뀔 때만 다시 계산(예전엔 화면이 다시 그려질 때마다 수천 건을 거르고 정렬해 버벅였다)
+const orderCopySearchDeferred = React.useDeferredValue(orderCopySearch);
+const orderCopyList = useMemo(() => {
+  if (!showOrderCopyModal) return [];
+  const q = orderCopySearchDeferred.trim().toLowerCase();
+  const val = (o, key) => String(o[key] || "").toLowerCase();
+  const out = [];
+  for (const o of orders) {
+    if (!o.상차지명 && !o.하차지명) continue;
+    if (q) {
+      const hit = orderCopySearchField === "all"
+        ? ["거래처명", "상차지명", "하차지명", "기사명", "차량번호"].some((k) => val(o, k).includes(q))
+        : val(o, orderCopySearchField).includes(q);
+      if (!hit) continue;
+    }
+    out.push(o);
+  }
+  return out.sort((a, b) => (b.상차일 || "").localeCompare(a.상차일 || "")).slice(0, 30);
+}, [showOrderCopyModal, orders, orderCopySearchDeferred, orderCopySearchField]);
 
 // 톤수 분리 state
   const [톤수값, set톤수값] = useState(() => {
@@ -17527,29 +17553,7 @@ const pickDrop = (c) => {
 
       {/* 목록 */}
       <div className="overflow-y-auto flex-1 px-4 py-2 space-y-2">
-        {[...orders]
-          .filter(o => {
-            if (!o.상차지명 && !o.하차지명) return false;
-
-            const q = orderCopySearch.trim().toLowerCase();
-            if (!q) return true;
-
-            const getValue = key => String(o[key] || "").toLowerCase();
-
-            if (orderCopySearchField === "all") {
-              return (
-                getValue("거래처명").includes(q) ||
-                getValue("상차지명").includes(q) ||
-                getValue("하차지명").includes(q) ||
-                getValue("기사명").includes(q) ||
-                getValue("차량번호").includes(q)
-              );
-            }
-
-            return getValue(orderCopySearchField).includes(q);
-          })
-          .sort((a, b) => (b.상차일 || "").localeCompare(a.상차일 || ""))
-          .slice(0, 30)
+        {orderCopyList
           .map(o => (
             <button
               key={o._id || o.id}

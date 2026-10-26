@@ -69,7 +69,7 @@ export default function GsheetMinePanel() {
   return (
     <div className="space-y-4">
       <div className={CARD}>
-        <div className="px-6 py-5 border-b border-[#EEF1F6]">
+        <div className="px-5 sm:px-6 py-5 border-b border-[#EEF1F6]">
           <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">GOOGLE SHEET</div>
           <div className="text-[18px] font-black text-[#0F1A30]">내 오더만 구글시트로 보내기</div>
           <div className="text-[13.5px] text-[#5B6B85] mt-1">
@@ -78,7 +78,7 @@ export default function GsheetMinePanel() {
           </div>
         </div>
 
-        <div className="px-6 py-5 space-y-4">
+        <div className="px-5 sm:px-6 py-5 space-y-4">
           {/* 상태 */}
           <div className={`flex items-center justify-between gap-4 px-5 py-4 rounded-2xl ${on ? "bg-[#0F1A30] text-white" : "bg-[#F5F8FD] border border-[#EDF1F7]"}`}>
             <div>
@@ -124,7 +124,7 @@ export default function GsheetMinePanel() {
 
       {/* 전송 대기 */}
       <div className={CARD}>
-        <div className="px-6 py-4 border-b border-[#EEF1F6] flex items-center justify-between gap-3">
+        <div className="px-5 py-4 border-b border-[#EEF1F6] flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">PENDING</div>
             <div className="text-[18px] font-black text-[#0F1A30]">전송 대기 <span className="tabular-nums">{pending.length}</span>건 <span className="text-[13px] font-bold text-[#7A879C]">· 전송 완료 {sentCount}건</span></div>
@@ -132,7 +132,7 @@ export default function GsheetMinePanel() {
           <button
             onClick={() => { if (window.confirm(`대기 중인 오더 ${pending.length}건을 구글시트로 보낼까요?\n(각 날짜 칸 맨 위에 들어가고 그날 순번이 다시 매겨집니다)`)) run("send"); }}
             disabled={!!busy || pending.length === 0}
-            className="h-12 px-6 rounded-2xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-40 shadow-[0_8px_18px_rgba(15,26,48,0.25)]">
+            className="h-12 px-6 w-full sm:w-auto rounded-2xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-40 shadow-[0_8px_18px_rgba(15,26,48,0.25)]">
             {busy === "send" ? "전송 중…" : `구글시트로 전송 (${pending.length}건)`}
           </button>
         </div>
@@ -148,11 +148,11 @@ export default function GsheetMinePanel() {
           ) : (
             <div className="rounded-2xl border border-[#E3E8F0] overflow-hidden">
               {pending.map((o, i) => (
-                <div key={o.id} className={`grid grid-cols-[110px_minmax(0,1fr)_minmax(0,1.4fr)_110px] gap-3 items-center px-4 py-3 text-[13.5px] ${i > 0 ? "border-t border-[#EEF1F6]" : ""}`}>
+                <div key={o.id} className={`grid grid-cols-[86px_minmax(0,1fr)] sm:grid-cols-[110px_minmax(0,1fr)_minmax(0,1.4fr)_110px] gap-x-3 gap-y-0.5 items-center px-4 py-3 text-[13.5px] ${i > 0 ? "border-t border-[#EEF1F6]" : ""}`}>
                   <span className="font-extrabold text-[#0F1A30] tabular-nums">{o.상차일 || "-"}</span>
                   <span className="font-bold text-[#0F1A30] truncate">{o.거래처명 || "-"}</span>
-                  <span className="text-[#3A4A66] truncate">{o.상차지명 || "-"} → {o.하차지명 || "-"}</span>
-                  <span className="text-right text-[#7A879C] font-semibold">{o.차량번호 || o.배차상태 || ""}</span>
+                  <span className="text-[#3A4A66] truncate col-start-2 sm:col-start-auto">{o.상차지명 || "-"} → {o.하차지명 || "-"}</span>
+                  <span className="text-[#7A879C] font-semibold col-start-2 sm:col-start-auto sm:text-right">{o.차량번호 || o.배차상태 || ""}</span>
                 </div>
               ))}
             </div>
