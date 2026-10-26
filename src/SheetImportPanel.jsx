@@ -278,6 +278,7 @@ export default function SheetImportPanel() {
     try {
       await setDoc(doc(db, "importBatches", batchId), {
         companyName: company, by: me, at: serverTimestamp(), source: book.source, sheetTitle: book.title || "",
+        spreadsheetId: book.source === "excel" ? "" : ((url.match(/\/d\/([a-zA-Z0-9_-]+)/) || [])[1] || ""),
         tabs: checked.tabs, status: "importing", count: 0,
       });
       const registered = { clients: 0, places: 0, drivers: 0 };
@@ -329,6 +330,12 @@ export default function SheetImportPanel() {
       await setDoc(doc(db, "importBatches", batchId), { status: "done", ...result }, { merge: true });
       // 홈 화면 합계를 다시 계산하라는 표시
       await setDoc(doc(db, "systemConfig", "dataVersion"), { [company]: serverTimestamp() }, { merge: true }).catch(() => {});
+      // ⭐ 연결된 구글시트(배차현황)에서 가져왔으면 시트의 원래 줄과 바로 연결 — 이후 프로그램에서 수정·삭제하면 시트에도 반영
+      if (book.source !== "excel") {
+        setProgress({ pct: 99, step: "구글시트 줄과 연결 중" });
+        try { const lk = await callApi("gsheetMine", { action: "linkImport", batchId }); result.linked = lk.linked; result.notLinked = lk.notFound?.length || 0; }
+        catch { /* 다른 시트에서 가져온 경우 등 — 연결 없이 끝 */ }
+      }
       setProgress({ pct: 100, step: "완료", done: true, result });
     } catch (e) {
       await setDoc(doc(db, "importBatches", batchId), { status: "error", error: String(e?.message || e) }, { merge: true }).catch(() => {});
@@ -336,6 +343,13 @@ export default function SheetImportPanel() {
     }
   };
 
+  const linkBatch = async (b) => {
+    setBusy(`link_${b.id}`);
+    try {
+      const r = await callApi("gsheetMine", { action: "linkImport", batchId: b.id });
+      alert(`구글시트 줄과 ${r.linked}건 연결했습니다.${r.notFound?.length ? `\n시트에서 같은 줄을 못 찾은 ${r.notFound.length}건(날짜·거래처·상하차지가 다르거나 이미 연결됨):\n${r.notFound.slice(0, 15).join("\n")}` : ""}\n\n연결된 오더는 프로그램에서 수정·삭제하면 시트에도 반영됩니다.`);
+    } catch (e) { alert(e.message); } finally { setBusy(""); }
+  };
   const cancelBatch = async (b) => {
     if (!window.confirm(`${fmtTime(b.at)}에 가져온 ${b.companyName} 오더 ${(b.count || 0).toLocaleString()}건(자동 등록된 거래처·상하차지·기사 포함)을 모두 지울까요?`)) return;
     setBusy(`cancel_${b.id}`);
@@ -546,6 +560,12 @@ export default function SheetImportPanel() {
                           : <span className="px-3 py-1 rounded-full text-[12.5px] font-bold bg-amber-100 text-amber-700">진행 중</span>}
                   </td>
                   <td className="px-4 py-3 text-center">
+                    {b.status === "done" && b.source !== "excel" && (
+                      <button onClick={() => linkBatch(b)} disabled={busy === `link_${b.id}`} title="시트의 원래 줄과 연결 — 이후 프로그램에서 수정·삭제하면 시트에도 반영"
+                        className="mr-2 px-3.5 py-1.5 rounded-xl bg-[#0F1A30] text-white text-[13px] font-bold disabled:opacity-60">
+                        {busy === `link_${b.id}` ? "연결 중…" : b.gsheetLinked ? `시트 연결됨 ${b.gsheetLinked}건` : "시트와 연결"}
+                      </button>
+                    )}
                     {b.status !== "canceled" && <button onClick={() => cancelBatch(b)} disabled={busy === `cancel_${b.id}`} className="px-3.5 py-1.5 rounded-xl border border-red-300 text-red-600 text-[13px] font-bold hover:bg-red-50 disabled:opacity-60">{busy === `cancel_${b.id}` ? "지우는 중…" : "가져오기 취소"}</button>}
                   </td>
                 </tr>
@@ -573,6 +593,7 @@ export default function SheetImportPanel() {
                 <div className="mt-5 rounded-2xl bg-[#F5F8FD] border border-[#E3E8F0] px-5 py-4 text-[14px] text-[#0F1A30] leading-relaxed">
                   오더 <b>{progress.result.count.toLocaleString()}건</b>을 가져왔습니다.
                   {opts.register && <> 자동 등록: 거래처 {progress.result.registered.clients} · 상하차지 {progress.result.registered.places} · 기사 {progress.result.registered.drivers}</>}
+                  {progress.result.linked != null && <> · 구글시트 줄 연결 {progress.result.linked}건{progress.result.notLinked ? `(못 찾음 ${progress.result.notLinked}건 — 아래 기록의 [시트와 연결]로 다시 시도)` : ""}</>}
                 </div>
               )}
               {(progress.done || progress.error) && <button onClick={() => { setProgress(null); if (progress.done) setChecked(null); }} className="mt-5 w-full py-3.5 rounded-xl bg-[#1B2B4B] text-white text-[15px] font-bold">확인</button>}

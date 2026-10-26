@@ -2169,7 +2169,7 @@ async function syncOneDispatchToGsheet(docId, eventData, eventBefore) {
   const data = snap.data();
   if (data.source === "transport_transmit") return;
   // "내 오더만 보내기" 표시가 있는 오더는 회사명과 상관없이 대상, 전체 연결이 꺼져 있으면 그 오더만 대상
-  if (!GSHEET_PROGRAM_LINK_ENABLED && !(data._gsheetMine && (data._gsheetMineSent || data._gsheetSync?.doc === docId))) return;
+  if (!GSHEET_PROGRAM_LINK_ENABLED && !(data._gsheetMine && (data._gsheetMineSent || [docId, docId.split("/").pop()].includes(data._gsheetSync?.doc)))) return;
   const outOfScope = (!data._gsheetMine && (data.companyName || "돌캐") !== GSHEET_TARGET_COMPANY) || data.블라인드 === true;
   // 새로 생긴 문서에 딸려온 옛 방식 포인터(문서ID 없음)는 복사 원본의 것 — 무시
   const createdNow = !eventBefore;
@@ -3099,7 +3099,11 @@ exports.syncDispatchToGoogleSheet =
       //    ② 관리자메뉴 [구글시트로 전송]을 누르면 대기 오더를 한 번에 넣고 _gsheetMineSent 표시
       //    ③ 전송된 오더는 그 뒤 수정·삭제가 시트의 그 줄에 그대로 반영된다
       if (!GSHEET_PROGRAM_LINK_ENABLED) {
-        const sentOf = (d, id) => !!(d && (d._gsheetMineSent || (d._gsheetMine && d._gsheetSync?.doc === id)));
+        // ⭐ 가져오기 취소처럼 "프로그램에서만 지우고 시트 줄은 남겨야" 하는 경우 — 표시가 있으면 시트는 건드리지 않는다
+        if (after?._gsheetKeepRow || (!after && before?._gsheetKeepRow)) return;
+        // ⭐ 2026-10-27 수정 — 포인터의 doc 값은 "orders/abc" 형식이라 문서ID("abc")와 비교하면 늘 달랐다
+        //    (실시간 방식 때 보낸 오더의 수정·삭제가 시트에 안 가던 원인)
+        const sentOf = (d) => !!(d && (d._gsheetMineSent || (d._gsheetMine && [dispatchId, `${col}/${dispatchId}`].includes(d._gsheetSync?.doc))));
         let isMine = !!(after?._gsheetMine || before?._gsheetMine);
         if (!isMine && !before && after) {
           const mine = await getGsheetMineConfig();
@@ -3113,9 +3117,11 @@ exports.syncDispatchToGoogleSheet =
           return; // 전송 대기 — [구글시트로 전송] 버튼을 누를 때 들어간다
         }
         if (!isMine) return;
-        const wasSent = sentOf(before, dispatchId);
-        const isSent = sentOf(after, dispatchId) || wasSent;
+        const wasSent = sentOf(before);
+        const isSent = sentOf(after) || wasSent;
         if (!isSent) return; // 아직 전송 안 한 오더는 시트와 무관(수정·삭제해도 아무 일 없음)
+        // ⭐ 운송사 초기화 중(대량 삭제)에는 시트 줄을 지우지 않는다 — 시트는 사람이 직접 관리하는 기록
+        if (!after && await isBulkModeFor(before?.companyName)) return;
         // 전체 덮어쓰기 저장으로 표시가 빠졌으면 다시 단다(동기화는 아래에서 최신 문서를 다시 읽어 이어서 처리)
         if (after && (!after._gsheetMine || !after._gsheetMineSent)) {
           await change.after.ref.update({ _gsheetMine: true, _gsheetMineSent: true }).catch(() => {});
@@ -3939,6 +3945,74 @@ exports.gsheetMine = functions.runWith({ timeoutSeconds: 540, memory: "512MB" })
   try {
     const me = await requireTotalMaster(req);
     const toJson = (d) => d ? { enabled: !!d.enabled, email: d.email || "", since: d.since?.toMillis?.() || null, updatedBy: d.updatedBy || "" } : { enabled: false };
+    if (body.action === "linkImport") {
+      // 구글시트에서 가져온 오더를 시트의 원래 줄과 연결 — 날짜·거래처·상차지·하차지가 같고 오더ID가 비어 있는 줄에 오더ID를 적는다.
+      // 연결된 오더는 그 뒤 프로그램에서 수정·삭제하면 시트의 그 줄도 같이 바뀐다.
+      const batchId = String(body.batchId || "");
+      const bs = await db.collection("importBatches").doc(batchId || "x").get();
+      if (!bs.exists) { res.status(404).json({ error: "가져오기 기록을 찾을 수 없습니다." }); return; }
+      const bdat = bs.data();
+      if (bdat.status === "canceled") { res.status(400).json({ error: "취소된 가져오기입니다." }); return; }
+      if (bdat.source === "excel") { res.status(400).json({ error: "엑셀에서 가져온 오더는 시트와 연결할 수 없습니다." }); return; }
+      const meta = await gsheetApi("GET", "?fields=properties.title");
+      if (bdat.spreadsheetId ? bdat.spreadsheetId !== GSHEET_SPREADSHEET_ID : bdat.sheetTitle !== meta?.properties?.title) {
+        res.status(400).json({ error: `연결된 구글시트(${meta?.properties?.title || ""})에서 가져온 기록만 연결할 수 있습니다.` }); return;
+      }
+      const docs = [];
+      for (const c of ["orders", "dispatch"]) {
+        const snap = await db.collection(c).where("importBatchId", "==", batchId).get();
+        snap.docs.forEach((d) => docs.push({ ref: d.ref, path: `${c}/${d.id}`, data: d.data() }));
+      }
+      const norm = (v) => String(v ?? "").replace(/\s+/g, "").toLowerCase();
+      const byTab = new Map();
+      for (const x of docs) {
+        if (x.data._gsheetMineSent) continue; // 이미 연결됨
+        const tab = gsheetMonthTabName(x.data.상차일);
+        if (!tab) continue;
+        if (!byTab.has(tab)) byTab.set(tab, []);
+        byTab.get(tab).push(x);
+      }
+      const titles = new Set((await getGsheetSheetList()).map((t) => t.title));
+      let linked = 0; const notFound = [];
+      for (const [tab, list] of byTab) {
+        if (!titles.has(tab)) { list.forEach((x) => notFound.push(`${x.data.상차일} ${x.data.거래처명 || ""}`)); continue; }
+        await withGsheetTabLock(tab, async () => {
+          const colMap = await ensureGsheetIdColumn(tab);
+          const need = ["상차일", "거래처명", "상차지", "하차지", "오더ID"];
+          if (need.some((k) => !colMap[k])) { list.forEach((x) => notFound.push(`${x.data.상차일} ${x.data.거래처명 || ""}(시트 머리줄 확인 필요)`)); return; }
+          const got = await gsheetApi("GET", `/values:batchGet?${need.map((k) => `ranges=${encodeURIComponent(`${quoteTab(tab)}!${colMap[k]}2:${colMap[k]}3000`)}`).join("&")}`);
+          const colVals = (got.valueRanges || []).map((r) => r.values || []);
+          const n = Math.max(...colVals.map((v) => v.length), 0);
+          const rows = [];
+          for (let i = 0; i < n; i++) {
+            const g = (k) => String(colVals[need.indexOf(k)][i]?.[0] ?? "").trim();
+            rows.push({ row: i + 2, date: gsheetNormDate(g("상차일"), tab.startsWith("2") ? `20${tab.slice(0, 2)}` : ""), client: norm(g("거래처명")), pick: norm(g("상차지")), drop: norm(g("하차지")), id: g("오더ID"), used: false });
+          }
+          const writes = []; const ptrs = [];
+          for (const x of list) {
+            const d = x.data;
+            const hit = rows.find((r) => !r.used && !r.id && r.date === gsheetNormDate(d.상차일) &&
+              r.client === norm(d.거래처명) && r.pick === norm(d.상차지명) && r.drop === norm(d.하차지명));
+            if (!hit) { notFound.push(`${d.상차일} ${d.거래처명 || ""} ${d.상차지명 || ""}→${d.하차지명 || ""}`); continue; }
+            hit.used = true;
+            writes.push({ range: `${quoteTab(tab)}!${colMap.오더ID}${hit.row}`, values: [[x.path]] });
+            ptrs.push({ x, row: hit.row });
+          }
+          for (let i = 0; i < writes.length; i += 200) {
+            await gsheetApi("POST", "/values:batchUpdate", { data: { valueInputOption: "RAW", data: writes.slice(i, i + 200) } });
+          }
+          for (let i = 0; i < ptrs.length; i += 400) {
+            const wb = db.batch();
+            ptrs.slice(i, i + 400).forEach(({ x, row }) => wb.update(x.ref, { _gsheetMine: true, _gsheetMineSent: true, _gsheetSync: { tab, row, doc: x.path } }));
+            await wb.commit();
+          }
+          linked += ptrs.length;
+        });
+      }
+      await db.collection("importBatches").doc(batchId).set({ gsheetLinked: linked, gsheetLinkedAt: FieldValue.serverTimestamp() }, { merge: true });
+      res.json({ linked, notFound, total: docs.length });
+      return;
+    }
     if (body.action === "send") {
       // 전송 대기 오더를 한 번에 시트로 — 날짜 순, 같은 날짜는 먼저 등록한 것부터 넣는다(새 오더가 그날 맨 위에 쌓이므로
       // 결과적으로 프로그램 화면처럼 최근 등록이 위). 한 건씩 차례로 처리해야 줄 위치가 꼬이지 않는다.
@@ -3947,7 +4021,7 @@ exports.gsheetMine = functions.runWith({ timeoutSeconds: 540, memory: "512MB" })
         const snap = await db.collection(c).where("_gsheetMine", "==", true).get();
         snap.docs.forEach((d) => {
           const x = d.data();
-          if (x._gsheetMineSent || x._gsheetSync?.doc === d.id) return;
+          if (x._gsheetMineSent || [d.id, `${c}/${d.id}`].includes(x._gsheetSync?.doc)) return;
           pend.push({ ref: d.ref, path: `${c}/${d.id}`, data: x });
         });
       }
@@ -4049,6 +4123,15 @@ exports.sheetImport = functions
         await setBulkMode(b.companyName, true);
         let removed = 0;
         try {
+          // ⭐ 시트와 연결된 오더는 먼저 "시트 줄은 남김" 표시를 단 뒤 지운다(가져오기 취소가 시트의 수기 줄까지 지우지 않게)
+          for (const col of ["orders", "dispatch"]) {
+            const linked = await db.collection(col).where("importBatchId", "==", batchId).where("_gsheetMine", "==", true).get();
+            for (let i = 0; i < linked.docs.length; i += 400) {
+              const wb = db.batch();
+              linked.docs.slice(i, i + 400).forEach((d) => wb.update(d.ref, { _gsheetKeepRow: true }));
+              await wb.commit();
+            }
+          }
           const writer = db.bulkWriter();
           for (const col of ["orders", "dispatch", "clients", "places", "drivers"]) {
             const snap = await db.collection(col).where("importBatchId", "==", batchId).get();
