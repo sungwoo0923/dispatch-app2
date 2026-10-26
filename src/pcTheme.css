@@ -192,6 +192,10 @@
 }
 .kp-pc .kp-grid tbody td {
   background-color: transparent !important;
+  /* ⭐ 일부 칸(차량번호·이름·전화 등)에 붙은 "border"(사방 테두리) 때문에 그 칸만 상자처럼 보여
+     머리줄을 침범한 것처럼 보였다 — 가로 구분선만 남기고 나머지 테두리는 없앤다 */
+  border-left: none !important;
+  border-top: none !important;
   border-right: none !important;
   border-bottom: 1px solid #EEF1F6 !important;
   color: #1F2A44 !important;

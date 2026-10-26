@@ -684,7 +684,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     sessionLogs: "접속이력",
     companyReset: "운송사 초기화",
     sheetImport: "구글시트 가져오기",
-    gsheetMine: "구글시트 보내기",
+    gsheetMine: "구글시트 전송",
     forceUpdate: "화주사 강제 업데이트",
     permissions: "권한 관리",
     landingEdit: "랜딩페이지 편집",
