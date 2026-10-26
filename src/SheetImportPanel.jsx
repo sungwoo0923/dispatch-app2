@@ -142,7 +142,7 @@ export default function SheetImportPanel() {
   const [picked, setPicked] = React.useState({}); // title -> headerRow(number) | undefined
   const [mapping, setMapping] = React.useState({});
   const [checked, setChecked] = React.useState(null); // 검사 결과
-  const [opts, setOpts] = React.useState({ skipDup: true, register: true });
+  const [opts, setOpts] = React.useState({ skipDup: true, register: true, from: "", to: "" }); // from/to = 상차일 기간(비우면 전체)
   const [busy, setBusy] = React.useState("");
   const [err, setErr] = React.useState("");
   const [progress, setProgress] = React.useState(null); // { pct, step, done, result, error }
@@ -264,7 +264,9 @@ export default function SheetImportPanel() {
     } catch (e) { setErr(e.message); } finally { setBusy(""); }
   };
 
-  const toImport = checked ? checked.rows.filter((r) => !r.__problems.length && !(opts.skipDup && r.__dup)) : [];
+  // ⭐ 상차일 기간(2026-10-26) — 예: 10-27부터만 가져오기. 기간 밖 줄은 검사 결과에서 빼고 가져오지 않는다
+  const inRange = (r) => !r.상차일 ? !(opts.from || opts.to) : ((!opts.from || r.상차일 >= opts.from) && (!opts.to || r.상차일 <= opts.to));
+  const toImport = checked ? checked.rows.filter((r) => inRange(r) && !r.__problems.length && !(opts.skipDup && r.__dup)) : [];
 
   // 3) 저장
   const runImport = async () => {
@@ -341,8 +343,9 @@ export default function SheetImportPanel() {
   };
 
   const input = "w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-[14.5px] outline-none focus:border-[#1B2B4B] bg-white";
-  const problems = checked ? checked.rows.filter((r) => r.__problems.length) : [];
-  const dups = checked ? checked.rows.filter((r) => r.__dup) : [];
+  const problems = checked ? checked.rows.filter((r) => r.__problems.length && inRange(r)) : [];
+  const dups = checked ? checked.rows.filter((r) => r.__dup && inRange(r)) : [];
+  const outOfRange = checked ? checked.rows.filter((r) => !inRange(r)).length : 0;
 
   return (
     <div className="space-y-6">
@@ -452,8 +455,17 @@ export default function SheetImportPanel() {
       {checked && (
         <section className={`${CARD} p-6`}>
           <Head eyebrow="STEP 4" title="검사 결과" desc={`${company}에 가져올 오더를 확인하세요.`} />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {[["읽은 오더", checked.rows.length, "text-[#0F1A30]"], ["가져올 오더", toImport.length, "text-emerald-600"], ["이미 있는 오더(중복)", dups.length, "text-amber-600"], ["확인 필요", problems.length, "text-red-600"]].map(([k, v, c]) => (
+          {/* 상차일 기간 */}
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-[#E3E8F0] bg-white px-4 py-3">
+            <span className="text-[14px] font-extrabold text-[#0F1A30]">상차일 기간</span>
+            <input type="date" value={opts.from} onChange={(e) => setOpts((o) => ({ ...o, from: e.target.value }))} className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30]" />
+            <span className="text-[#9AA9C3]">~</span>
+            <input type="date" value={opts.to} onChange={(e) => setOpts((o) => ({ ...o, to: e.target.value }))} className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30]" />
+            {(opts.from || opts.to) && <button onClick={() => setOpts((o) => ({ ...o, from: "", to: "" }))} className="h-9 px-3 rounded-xl border border-[#E3E8F0] text-[13px] font-bold text-[#5B6B85]">전체</button>}
+            <span className="text-[13px] text-[#7A879C]">비우면 전체 · 예) 2026-10-27 부터만 가져오려면 앞칸만 입력</span>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            {[["읽은 오더", checked.rows.length, "text-[#0F1A30]"], ["가져올 오더", toImport.length, "text-[#0F1A30]"], ["기간 밖(제외)", outOfRange, "text-[#7A879C]"], ["이미 있는 오더(중복)", dups.length, "text-[#3A4A66]"], ["확인 필요", problems.length, "text-[#3A4A66]"]].map(([k, v, c]) => (
               <div key={k} className="rounded-2xl bg-[#F5F8FD] border border-[#E3E8F0] px-4 py-3">
                 <div className="text-[13px] font-semibold text-gray-500">{k}</div>
                 <div className={`text-[26px] font-black tabular-nums ${c}`}>{v.toLocaleString()}</div>
@@ -483,8 +495,8 @@ export default function SheetImportPanel() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#EEF1F6]">
-                {checked.rows.slice(0, 150).map((r, i) => (
-                  <tr key={i} className={r.__problems.length ? "bg-red-50" : r.__dup ? "bg-amber-50" : ""}>
+                {((opts.from || opts.to) ? checked.rows.filter(inRange) : checked.rows).slice(0, 150).map((r, i) => (
+                  <tr key={i} className={r.__problems.length ? "bg-[#EEF3FB]" : r.__dup ? "bg-[#F5F8FD]" : ""}>
                     <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{r.__tab}</td>
                     <td className="px-3 py-2 font-semibold whitespace-nowrap">{r.상차일 || <span className="text-red-600">?</span>}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{r.거래처명}</td>
@@ -494,7 +506,7 @@ export default function SheetImportPanel() {
                     <td className="px-3 py-2 whitespace-nowrap">{r.이름}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{r.청구운임 ? Number(r.청구운임).toLocaleString() : ""}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{r.기사운임 ? Number(r.기사운임).toLocaleString() : ""}</td>
-                    <td className="px-3 py-2 whitespace-nowrap font-semibold">{r.__problems.length ? <span className="text-red-600">확인 필요</span> : r.__dup ? <span className="text-amber-600">중복</span> : <span className="text-emerald-600">가져옴</span>}</td>
+                    <td className="px-3 py-2 whitespace-nowrap font-semibold">{!inRange(r) ? <span className="text-[#9AA9C3]">기간 밖</span> : r.__problems.length ? <span className="text-[#0F1A30] underline">확인 필요</span> : r.__dup ? <span className="text-[#7A879C]">중복</span> : <span className="text-[#0F1A30]">가져옴</span>}</td>
                   </tr>
                 ))}
               </tbody>
