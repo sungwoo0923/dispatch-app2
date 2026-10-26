@@ -538,7 +538,6 @@ export default function ShipperStatus() {
 
   // 알림 클릭 -> 해당 오더로 포커스 이동 + 하이라이트
   const focusOnOrder = (order) => {
-    setHideCanceled(false);
     setFilter("전체");
     setKeyword("");
     const orderDate = toYMD(order.상차일);

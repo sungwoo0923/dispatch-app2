@@ -1,6 +1,6 @@
 // ===================== DispatchApp.jsx (PART 1/8) — START =====================
 import { loadTmap } from "./tmapLoader";
-import { hideBlind, isBlindHidden, canSeeBlind } from "./blind";
+import { hideBlind, isBlindHidden, canSeeBlind, autoBlindNew } from "./blind";
 import { checkHolidayDispatch, findRestConflict, confirmRestDispatch, restAckKey } from "./holidayConfirm";
 import { drawTmapTrafficRoute, TRAFFIC_LEGEND } from "./mapStyle";
 import html2canvas from "html2canvas";
@@ -2607,6 +2607,7 @@ import { pcBootStore, useMiniStore, makeBootTracker, markBootBase } from "./boot
 import { auth, db, storage, DEFAULT_COMPANY } from "./firebase";
 import { LoginManagerModal } from "./LoginManager";
 import "./pcTheme.css";
+import "./pcColorRemap.css"; // ⭐ PC 알록달록 금지(남색 계열)
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 // 기사전달용 업로드 링크 단축 — /upload?id=...&t=... (길고 낯설어 기사들이 거부감을
@@ -4020,6 +4021,7 @@ const addDispatch = async (recordIn) => {
     // ⭐ 등록일 hover 툴팁에서 "PC로 등록/모바일로 등록"을 보여주기 위한 등록기기 —
     // 이미 값이 있으면(예: 복사 등록으로 원본 값을 이어받은 경우) 덮어쓰지 않는다.
     등록기기: record?.등록기기 || "PC",
+    ...(autoBlindNew() ? { 블라인드: true } : {}), // ⭐ 블라인드 모드 켜짐 → 새 오더 전부 블라인드
     // 등록과 동시에 차량번호까지 포함되어 생성되는 경우(기사 정보 포함 등록 등)에도 완료시각을 남긴다
     ...(String(record?.차량번호 || "").trim() && !record?.배차완료일시 ? { 배차완료일시: Date.now() } : {}),
     // ⭐ "배차한시간"(등록일 hover 툴팁)이 표시하는 필드는 배차완료일시가 아니라
@@ -4785,6 +4787,7 @@ const markEditRequestSeen = async (order) => {
     removeClient,
     approvedShippers,
     myRealName,
+    myPhone,
     loadRange,
     loadFullHistory,
     historyLoading,
@@ -7071,6 +7074,7 @@ useEffect(() => {
     removeClient,
     approvedShippers,
     myRealName,
+    myPhone,
     loadRange,
     loadFullHistory,
     historyLoading,
@@ -8035,6 +8039,7 @@ return (
                 role={role}
                 userCompany={userCompany}
                 dispatchData={dispatchDataFiltered}
+                setDispatchData={setDispatchData}
                 patchDispatch={patchDispatchSafe}
                 removeDispatch={removeDispatchSafe}
                 drivers={drivers}
@@ -19121,7 +19126,7 @@ className={`
               // ⭐ 이미 화면에 있는 행 데이터를 알고 있으니(rows.find), patchDispatch가
               // 다시 캐시/서버 조회를 하지 않도록 knownPrev로 바로 넘긴다 — 이 팝업의
               // "변경" 버튼을 눌렀을 때 느껴지던 지연의 유력한 원인이었다.
-              const row = rows.find(r => r._id === confirmChange.rowId);
+              const row = (dispatchData || []).find(r => r._id === confirmChange.rowId);
 if (confirmChange.key === "지급방식") {
   if (confirmChange.after === "취소") {
     patch.배차상태 = "배차취소";
@@ -19402,7 +19407,7 @@ setConfirmChange(null);
         {(form.경유상차목록||[]).filter(s=>s.업체명?.trim()).length > 0 && (
   <button
     type="button"
-    onClick={() => { setStopEditType("pickup"); setStopEditOpen(true); }}
+    onClick={() => { setStopType("pickup"); const arr = (form.경유상차목록 || []).map(s => cleanStopCargo({ ...s, 상차일: s.상차일 || form.상차일 || "" })); setStopList(arr.length ? arr : [{ 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"", 톤수값:"", 톤수타입:"", 차량톤수:"", 상차일:"", 상차시간:"", 하차일:"", 하차시간:"", 방법:"" }]); setStopPopupOpen(true); }}
     className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-[#1B2B4B] text-white hover:bg-[#243a60] transition"
   >
     경유+{(form.경유상차목록||[]).filter(s=>s.업체명?.trim()).length}
@@ -19453,7 +19458,7 @@ setConfirmChange(null);
         {(form.경유하차목록||[]).filter(s=>s.업체명?.trim()).length > 0 && (
   <button
     type="button"
-    onClick={() => { setStopEditType("drop"); setStopEditOpen(true); }}
+    onClick={() => { setStopType("drop"); const arr = (form.경유하차목록 || []).map(s => cleanStopCargo({ ...s, 하차일: s.하차일 || form.하차일 || "" })); setStopList(arr.length ? arr : [{ 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"", 톤수값:"", 톤수타입:"", 차량톤수:"", 상차일:"", 상차시간:"", 하차일:"", 하차시간:"", 방법:"" }]); setStopPopupOpen(true); }}
     className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-[#1B2B4B] text-white hover:bg-[#243a60] transition"
   >
     경유+{(form.경유하차목록||[]).filter(s=>s.업체명?.trim()).length}
@@ -26690,56 +26695,7 @@ const handleUrgentSnooze = (minutes) => {
     setSnoozeRecheckTrigger((n) => n + 1);
   }, minutes * 60 * 1000);
 };
-  // ------------------------
-  // 🔁 동일 노선 추천 불러오기
-  // ------------------------
-  const loadSimilarOrders = React.useCallback((fromName, toName) => {
-    if (!fromName || !toName) {
-      setSimilarOrders([]);
-      return;
-    }
-
-    try {
-      const qRef = query(
-        collection(db, "dispatch"),
-        where("상차지명", "==", fromName),
-        where("하차지명", "==", toName),
-        orderBy("상차일", "desc"),
-        limit(5)
-      );
-
-      onSnapshot(qRef, (snap) => {
-        const list = hideBlind(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-        setSimilarOrders(list);
-      });
-    } catch (e) {
-      console.error("동일 노선 추천 오류", e);
-      setSimilarOrders([]);
-    }
-  }, []);
-  // ⭐ 운임조회 실행 함수
-  const handleFareCheck = () => {
-    if (!newOrder.상차지명 || !newOrder.하차지명) {
-      showAlert("상차지명과 하차지명을 입력해야 운임조회가 가능합니다.");
-      return;
-    }
-
-    const result = calcFare(historyDispatchData, {
-      pickup: newOrder.상차지명,
-      drop: newOrder.하차지명,
-      vehicle: newOrder.차량종류,
-      ton: newOrder.차량톤수,
-      cargo: newOrder.화물내용,
-    });
-
-    if (!result) {
-      showAlert("유사 운임 데이터를 찾을 수 없습니다.");
-      return;
-    }
-
-    setFareResult(result);
-    setFareOpen(true);
-  };
+  // (미사용 '동일 노선 추천'/'운임조회' 함수 제거 — 정의되지 않은 orderBy·setFareOpen을 참조하던 죽은 코드)
 
   // ------------------------
   // 숫자 변환
@@ -32697,7 +32653,7 @@ const payload = stripUndefined({
     업체전달상태: "전달완료",
     업체전달일시: Date.now(),
     업체전달방법: "선택수정",
-    업체전달자: sender,
+    업체전달자: auth?.currentUser?.email ?? "unknown",
   }),
 });
 
@@ -34782,6 +34738,18 @@ setConfirmChange(null);
         </div>
       )}
 
+      {/* ===== 신규 기사 등록 모달 (RealtimeStatus) ===== */}
+      {newDriverModalOpen && newDriverModalData && (
+        <NewDriverModal
+          data={newDriverModalData}
+          onClose={() => { setNewDriverModalOpen(false); setNewDriverModalData(null); }}
+          onConfirm={(driverInfo, mode) => {
+            newDriverModalData.onConfirm(driverInfo, mode);
+            setNewDriverModalOpen(false);
+            setNewDriverModalData(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -34832,18 +34800,6 @@ function MemoMore({ text = "" }) {
         </div>
       )}
 
-      {/* ===== 신규 기사 등록 모달 (RealtimeStatus) ===== */}
-      {newDriverModalOpen && newDriverModalData && (
-        <NewDriverModal
-          data={newDriverModalData}
-          onClose={() => { setNewDriverModalOpen(false); setNewDriverModalData(null); }}
-          onConfirm={(driverInfo, mode) => {
-            newDriverModalData.onConfirm(driverInfo, mode);
-            setNewDriverModalOpen(false);
-            setNewDriverModalData(null);
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -35082,6 +35038,16 @@ const lunchByName = React.useMemo(() => buildLunchByName(clients, placeRows), [c
 // 넣어 자동으로 복구한다(세션당 같은 오더는 1회만 시도, 한 번에 과도하게
 // 쓰지 않도록 상한을 둔다).
 const backfilledConfirmRef = React.useRef(new Set());
+// ⭐ 오류 수정: 이 화면엔 toMs가 없어 소급 보정 타이머가 매번 오류로 멈췄다
+const toMs = (v) => {
+  if (v == null) return 0;
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  if (typeof v === "string") { const t = Date.parse(v); return Number.isNaN(t) ? 0 : t; }
+  if (v instanceof Date) return v.getTime();
+  if (typeof v?.toMillis === "function") return v.toMillis();
+  if (typeof v?.seconds === "number") return v.seconds * 1000;
+  return 0;
+};
 const backfillDispatchDataRef = React.useRef(dispatchData);
 React.useEffect(() => { backfillDispatchDataRef.current = dispatchData; }, [dispatchData]);
 React.useEffect(() => {
@@ -39870,7 +39836,7 @@ return (
           setShowCreate={setShowCreate}
           newOrder={newOrder}
           setNewOrder={setNewOrder}
-          addDispatch={addDispatchSafe}
+          addDispatch={addDispatch}
           clients={clients}
           drivers={drivers}        // ⭐ 추가
           upsertDriver={upsertDriver} // ⭐ 신규 기사 등록에 필요
@@ -44747,6 +44713,18 @@ setCopyPlaceOptions(list);
           </div>
         </div>
       )}
+      {/* ===== 신규 기사 등록 모달 (DispatchStatus) ===== */}
+      {newDriverModalOpen5 && newDriverModalData5 && (
+        <NewDriverModal
+          data={newDriverModalData5}
+          onClose={() => { setNewDriverModalOpen5(false); setNewDriverModalData5(null); }}
+          onConfirm={(driverInfo, mode) => {
+            newDriverModalData5.onConfirm(driverInfo, mode);
+            setNewDriverModalOpen5(false);
+            setNewDriverModalData5(null);
+          }}
+        />
+      )}
     </div>
 
   );
@@ -44854,6 +44832,7 @@ function NewOrderPopup({
   clients,
   drivers,       // ⭐ 추가
   upsertDriver,  // ⭐ 추가
+  showAlert = (m) => alert(m),
 }) {
   const handleChange = (key, value) =>
     setNewOrder((prev) => ({ ...prev, [key]: value }));
@@ -45276,18 +45255,6 @@ function NewOrderPopup({
       </div>
 
 
-      {/* ===== 신규 기사 등록 모달 (DispatchStatus) ===== */}
-      {newDriverModalOpen5 && newDriverModalData5 && (
-        <NewDriverModal
-          data={newDriverModalData5}
-          onClose={() => { setNewDriverModalOpen5(false); setNewDriverModalData5(null); }}
-          onConfirm={(driverInfo, mode) => {
-            newDriverModalData5.onConfirm(driverInfo, mode);
-            setNewDriverModalOpen5(false);
-            setNewDriverModalData5(null);
-          }}
-        />
-      )}
 
     </div>
   );
@@ -47490,7 +47457,7 @@ const isKrHoliday = (dateStr) => {
 };
 
 // ===================== DispatchApp.jsx (PART 6/8 — Settlement Premium) — START =====================
-function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], isViewer = false, role, userCompany = "" }) {
+function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], isViewer = false, role, userCompany = "", showAlert = (m) => alert(m) }) {
   // ⭐ 연간 매출 목표(순수 운송료 목표 금액 / 제외 거래처 성장률)는 회사마다 다르므로
   // 하드코딩하지 않고 회사관리(RevenueTargetSection)에서 설정한 값을 불러온다.
   // 아직 설정한 적 없으면 0(미설정)으로 표시하고, "달성률" 계산은 0으로 처리한다.
@@ -49489,7 +49456,7 @@ const tableData = React.useMemo(() => {
 // ===================== DispatchApp.jsx (PART 6/8 — END) =====================
 
 // ===================== DispatchApp.jsx (PART 7/8 — 미배차현황) =====================
-function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDispatch, clients = [], places = [], upsertDriver, upsertClient, isViewer = false, setCargoAddPopup = () => {}, approvedShippers = [], role, userCompany = "" }) {
+function UnassignedStatus({ dispatchData, setDispatchData = () => {}, drivers = [], patchDispatch, removeDispatch, clients = [], places = [], upsertDriver, upsertClient, isViewer = false, setCargoAddPopup = () => {}, approvedShippers = [], role, userCompany = "" }) {
   // ⭐ 회사별 커스텀 드롭다운 옵션(Part B) — 오더복사/수정 패널의 상/하차방법·화물타입·톤수타입에 사용.
   const loadMethodOptions = useCompanyDropdownOptions("상하차방법", role, userCompany);
   const cargoTypeOptionsCustom = useCompanyDropdownOptions("화물타입", role, userCompany);
@@ -54093,8 +54060,8 @@ const handleBatchSettle = async (targetStatus) => {
   onClick={() => {
     const found = (clients||[]).find(c => c.거래처명 === selClient);
     setEmailTo(found?.이메일 || found?.연락처이메일 || "");
-    setArEmailFromMM(monthFilter !== "all" ? monthFilter : "01");
-    setArEmailToMM(monthFilter !== "all" ? monthFilter : "12");
+    setArEmailFromMM(monthFrom || "01");
+    setArEmailToMM(monthTo || "12");
     const unpaid = monthRows.filter(r => r.정산상태 === "미정산");
     const unpaidAmt = unpaid.reduce((s,r) => s + r.총청구금액, 0);
     setEmailBody(`안녕하세요, ${selClient} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${THIS_YEAR}년 미수금 현황을 안내드립니다.\n\n미정산 월수: ${unpaid.length}개월\n미정산 금액: ${unpaidAmt.toLocaleString()}원\n\n${unpaid.map(r => `  - ${r.yyyymm} : ${r.총청구금액.toLocaleString()}원`).join("\n")}\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n정산 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);

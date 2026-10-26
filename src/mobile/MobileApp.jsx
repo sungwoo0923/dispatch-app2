@@ -1,5 +1,5 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
-import { hideBlind, isBlindHidden, canSeeBlind } from "../blind";
+import { hideBlind, isBlindHidden, canSeeBlind, autoBlindNew } from "../blind";
 import { checkHolidayDispatch, findRestConflict, confirmRestDispatch, restAckKey } from "../holidayConfirm";
 import html2canvas from "html2canvas";
 import { LoginManagerModal } from "../LoginManager";
@@ -32,6 +32,7 @@ const resyncCheckingStore = createMiniStore(false);
 const bootStageStore = createMiniStore({ server: 0, apply: 0, applyCount: 0, ready: 0 });
 import { createPortal } from "react-dom";
 import "./mobileTheme.css";
+import BlindMinePanel from "../BlindMinePanel";
 import GsheetMinePanel from "../GsheetMinePanel"; // ⭐ 모바일 A/B 디자인 + 알록달록 금지(남색 계열)
 import KpBootScreen from "../KpBootScreen";
 import { isMeaningfulChange } from "../bootProgress";
@@ -4257,7 +4258,7 @@ const groupedByDate = useMemo(() => {
       혼적여부: form.혼적여부 || "독차",
       혼적: form.혼적여부 === "혼적",   // ← PC boolean 호환
       긴급: form.긴급 === true,          // ← PC 긴급 버튼과 동일 필드
-      ...(canSeeBlind() ? { 블라인드: form.블라인드 === true } : {}), // ⭐ 최고관리자 전용 블라인드
+      ...(canSeeBlind() ? { 블라인드: form.블라인드 === true || (!form._editId && autoBlindNew()) } : {}), // ⭐ 최고관리자 전용 블라인드(블라인드 모드면 새 오더 자동)
       운행유형: form.운행유형 || "",     // ← PC 왕복/편도 버튼과 동일 필드
       회전수: form.운행유형 === "왕복" ? Math.max(1, Number(form.회전수) || 1) : 1, // ⭐ 회전 운행(왕복일 때만)
       적요: form.적요 || "",
@@ -4465,6 +4466,7 @@ const groupedByDate = useMemo(() => {
           // ⭐ 기사 정보까지 채워서 등록과 동시에 배차완료 상태로 저장되는 경우, PC의
           // "배차한시간" 툴팁이 읽는 배차확정일시도 같이 남겨야 한다(없으면 항상 "-").
           ...(rowData.배차상태 === "배차완료" && !rowData.배차확정일시 ? { 배차확정일시: serverTimestamp(), 배차확정자: dispatcherName } : {}),
+          ...(autoBlindNew() ? { 블라인드: true } : {}), // ⭐ 블라인드 모드 → 새 오더 자동 블라인드
         };
         const writePromise = setDoc(doc(db, collName, newId), finalData);
 
@@ -5113,6 +5115,7 @@ const deleteSingleOrder = async (order) => {
         등록기기: "모바일",
         작성자: auth.currentUser?.email || "",
         등록자명: dispatcherName || "",
+        ...(autoBlindNew() ? { 블라인드: true } : {}), // ⭐ 블라인드 모드 → 새 오더 자동 블라인드
       };
       const writePromise = setDoc(doc(db, collName, newId), finalData);
 
@@ -5314,6 +5317,7 @@ const title =
   : page === "fleet" ? "지입차관리"
   : page === "intel" ? "경영인텔리전스"
   : page === "gsheet" ? "구글시트 전송"
+  : page === "blind" ? "블라인드 모드"
   : "상세보기";
 
   // ------------------------------------------------------------------
@@ -5661,7 +5665,7 @@ const title =
             setPage("list");
           }
         }
-    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet" || page === "blind"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
@@ -5840,6 +5844,7 @@ onGoAttendance={() => {
           onGoFleet={() => { setPage("fleet"); setShowMenu(false); }}
           onGoIntel={() => { setPage("intel"); setShowMenu(false); }}
           onGoGsheet={() => { setPage("gsheet"); setShowMenu(false); }}
+          onGoBlind={() => { setPage("blind"); setShowMenu(false); }}
           onDeleteAll={deleteAllOrders}
           setUiScale={setUiScale}
           uiScale={uiScale}
@@ -6789,6 +6794,7 @@ setOpenMemo={setOpenMemo}
         {page === "intel" && <MobileIntelView dispatchData={allOrders} cardVersionB={cardVersionB} />}
         {/* ⭐ 구글시트 전송(최고관리자) — PC 관리자메뉴와 같은 화면 */}
         {page === "gsheet" && role === "totalMaster" && <div className="px-3 py-3"><GsheetMinePanel /></div>}
+        {page === "blind" && role === "totalMaster" && <div className="px-3 py-3"><BlindMinePanel /></div>}
 
         {page === "unassigned" && (
   <MobileUnassignedList
@@ -7626,6 +7632,7 @@ function MobileSideMenu({
   onGoFleet,
   onGoIntel,
   onGoGsheet,
+  onGoBlind,
 }) {
   const [loginMgrOpen, setLoginMgrOpen] = useState(false); // ⭐ 로그인 관리
   const myName =
@@ -7751,6 +7758,7 @@ function MobileSideMenu({
               <MenuItem label="지입차관리" onClick={onGoFleet} dark={dark} />
               <MenuItem label="경영인텔리전스" onClick={onGoIntel} dark={dark} />
               <MenuItem label="구글시트 전송" onClick={onGoGsheet} dark={dark} />
+              <MenuItem label="블라인드 모드" onClick={onGoBlind} dark={dark} />
               <MenuItem label="회사코드조회" onClick={openCodeLookup} dark={dark} />
             </MenuSection>
           )}
@@ -7777,7 +7785,7 @@ function MobileSideMenu({
             <div className={`text-[11px] font-semibold tracking-wider mb-2 ${dark ? "text-white/50" : "text-blue-500"}`}>화면 크기</div>
             <div className="flex gap-1.5">
               {[{ v: 1, label: "기본" }, { v: 1.1, label: "크게" }, { v: 1.2, label: "아주 크게" }].map(({ v, label }) => (
-                <button key={v} onClick={() => { setUiScale(v); localStorage.setItem(uiScaleKey, v); }}
+                <button key={v} onClick={() => { setUiScale(v); localStorage.setItem((window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true) ? "uiScale_pwa" : "uiScale_browser", v); }}
                   className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
                     uiScale === v
                       ? (dark ? "bg-white text-[#1B2B4B]" : "bg-blue-600 text-white")
@@ -19685,7 +19693,7 @@ function MobileNationalFareSearch() {
           <button
             onClick={lookup}
             disabled={nfLoading}
-            className={`flex-1 py-3 rounded-xl ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white text-[14px] font-bold disabled:opacity-50 flex items-center justify-center gap-2`}
+            className={`flex-1 py-3 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-bold disabled:opacity-50 flex items-center justify-center gap-2`}
           >
             {nfLoading ? (
               <>
@@ -19712,7 +19720,7 @@ function MobileNationalFareSearch() {
       {/* 운임 결과 */}
       {nfResult && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} px-4 py-3`}>
+          <div className={`bg-[#1B2B4B] px-4 py-3`}>
             <div className="text-white font-bold text-[13px] truncate">{nfResult.from} → {nfResult.to}</div>
             <div className="text-white/60 text-[12px] mt-0.5">
               도로거리 {nfResult.km}km · {cat.label}
