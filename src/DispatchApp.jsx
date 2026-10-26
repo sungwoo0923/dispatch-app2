@@ -3071,6 +3071,130 @@ function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, compan
   );
 }
 
+// ⭐ 선택삭제 확인(2026-10-27 리디자인) — 실시간배차현황·배차현황·미배차현황 공용. 한 줄 요약 목록 + 합계, 남색 계열만
+function KpDeleteConfirm({ rows = [], note = "삭제 후에도 되돌리기로 복구할 수 있습니다", onCancel, onConfirm }) {
+  const list = rows.filter(Boolean);
+  const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}`;
+  const sum = list.reduce((a, r) => { a.sale += Number(r.청구운임) || 0; a.drv += Number(r.기사운임) || 0; return a; }, { sale: 0, drv: 0 });
+  return (
+    <div
+      className="fixed inset-0 z-[99999] flex items-center justify-center bg-[#0F1A30]/45 backdrop-blur-[2px]"
+      tabIndex={-1}
+      ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") { e.preventDefault(); onConfirm(); }
+        if (e.key === "Escape") onCancel();
+      }}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}
+    >
+      <div className="w-[560px] max-w-[94vw] max-h-[84vh] flex flex-col bg-white rounded-[24px] border border-[#E3E8F0] shadow-[0_24px_64px_rgba(15,26,48,0.3)] overflow-hidden">
+        <div className="px-7 pt-6 pb-5 flex items-start gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-[#EEF3FB] text-[#0F1A30] flex items-center justify-center shrink-0">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M10 11v6M14 11v6" /><path d="M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
+          </div>
+          <div className="min-w-0">
+            <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">DELETE</div>
+            <div className="text-[20px] font-black text-[#0F1A30] leading-tight">오더 <span className="tabular-nums">{list.length}</span>건을 삭제할까요?</div>
+            <div className="text-[13px] text-[#7A879C] mt-1">{note}</div>
+          </div>
+        </div>
+        <div className="mx-7 grid grid-cols-3 rounded-2xl border border-[#E3E8F0] overflow-hidden">
+          {[["청구 합계", sum.sale], ["기사 합계", sum.drv], ["수수료", sum.sale - sum.drv]].map(([k, v], i) => (
+            <div key={k} className={`px-4 py-2.5 text-center ${i ? "border-l border-[#E3E8F0]" : ""}`}>
+              <div className="text-[11.5px] font-bold text-[#7A879C]">{k}</div>
+              <div className="text-[16px] font-black text-[#0F1A30] tabular-nums">{won(v)}<span className="text-[11px] font-bold text-[#9AA9C3] ml-0.5">원</span></div>
+            </div>
+          ))}
+        </div>
+        <div className="mx-7 mt-3 mb-1 flex-1 min-h-0 overflow-y-auto rounded-2xl border border-[#E3E8F0]">
+          {list.map((r, idx) => (
+            <div key={r._id || idx} className={`flex items-center gap-3 px-4 py-3 ${idx ? "border-t border-[#EEF1F6]" : ""}`}>
+              <span className="w-6 text-[12px] font-extrabold text-[#9AA9C3] tabular-nums shrink-0">{idx + 1}</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[14px] font-extrabold text-[#0F1A30] truncate">{r.거래처명 || "-"}</span>
+                  <span className="text-[12px] font-bold text-[#7A879C] tabular-nums shrink-0">{String(r.상차일 || "").slice(5).replace("-", ".")}</span>
+                </div>
+                <div className="text-[12.5px] text-[#5B6B85] truncate">{r.상차지명 || "-"} → {r.하차지명 || "-"}{r.차량번호 ? ` · ${r.차량번호}` : ""}</div>
+              </div>
+              <span className={`shrink-0 h-6 px-2.5 inline-flex items-center rounded-full text-[11px] font-extrabold ${r.배차상태 === "배차완료" ? "bg-[#0F1A30] text-white" : "bg-white text-[#3A4A66] border border-[#C9D2E0]"}`}>{r.배차상태 || "배차중"}</span>
+            </div>
+          ))}
+        </div>
+        <div className="px-7 py-5 flex gap-2.5">
+          <button onClick={onCancel} className="flex-1 h-12 rounded-2xl border border-[#E3E8F0] bg-white text-[#3A4A66] text-[14.5px] font-extrabold hover:bg-[#F5F8FD] transition">취소 <span className="text-[11px] font-bold text-[#9AA9C3] ml-1">ESC</span></button>
+          <button onClick={onConfirm} className="flex-1 h-12 rounded-2xl bg-[#0F1A30] text-white text-[14.5px] font-black hover:bg-[#1B2B4B] transition shadow-[0_8px_18px_rgba(15,26,48,0.25)]">삭제 <span className="text-[11px] font-bold text-white/50 ml-1">ENTER</span></button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ⭐ PC 길게 눌러 선택 모드(2026-10-27) — 오더 줄을 마우스로 0.5초 이상 누르고 있으면 선택 모드가 켜지고,
+//    그 뒤로는 줄 어디를 눌러도 체크된다(입력칸·버튼은 그대로 동작). 아래 가운데 막대로 지금 모드를 표시, ESC로 끝.
+function useKpLongPressSelect({ toggle, isSelected }) {
+  const [mode, setMode] = React.useState(false);
+  const timer = React.useRef(null);
+  const start = React.useRef(null);
+  const swallowClick = React.useRef(false);
+  const rowIdOf = (el) => { const tr = el?.closest?.('tr[id^="row-"]'); return tr ? tr.id.slice(4) : null; };
+  const interactive = (el) => !!el?.closest?.('input,select,textarea,button,a,label,[contenteditable="true"]');
+  const cancel = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } };
+  React.useEffect(() => {
+    if (!mode) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") setMode(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mode]);
+  React.useEffect(() => cancel, []);
+  const tbodyProps = {
+    onMouseDown: (e) => {
+      if (e.button !== 0 || interactive(e.target)) return;
+      const id = rowIdOf(e.target);
+      if (!id) return;
+      start.current = { x: e.clientX, y: e.clientY };
+      cancel();
+      timer.current = setTimeout(() => {
+        timer.current = null;
+        swallowClick.current = true; // 손을 뗄 때 생기는 클릭 한 번은 무시(방금 고른 줄이 바로 풀리지 않게)
+        setMode(true);
+        if (!isSelected(id)) toggle(id);
+      }, 550);
+    },
+    onMouseMove: (e) => {
+      if (timer.current && start.current && (Math.abs(e.clientX - start.current.x) > 6 || Math.abs(e.clientY - start.current.y) > 6)) cancel();
+    },
+    onMouseUp: cancel,
+    onMouseLeave: cancel,
+    onClickCapture: (e) => {
+      if (swallowClick.current) { swallowClick.current = false; e.stopPropagation(); e.preventDefault(); return; }
+      if (!mode || interactive(e.target)) return;
+      const id = rowIdOf(e.target);
+      if (!id) return;
+      e.stopPropagation();
+      toggle(id);
+    },
+    onDoubleClickCapture: (e) => { if (mode) { e.stopPropagation(); e.preventDefault(); } },
+  };
+  return { selectMode: mode, setSelectMode: setMode, tbodyProps };
+}
+function KpSelectModeBar({ count, onSelectAll, onClear, onExit }) {
+  return createPortal(
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[99990] flex items-center gap-2 pl-4 pr-2 py-2 rounded-2xl text-white shadow-[0_16px_40px_rgba(15,26,48,0.35)]"
+      style={{ background: "linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%)" }}>
+      <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+      <span className="text-[13.5px] font-extrabold">선택 모드</span>
+      <span className="text-[13px] text-white/70">줄을 누르면 체크됩니다 ·</span>
+      <span className="text-[14px] font-black tabular-nums">{count}건</span>
+      <span className="w-px h-5 bg-white/20 mx-1" />
+      <button onClick={onSelectAll} className="h-8 px-3 rounded-xl bg-white/10 hover:bg-white/20 text-[12.5px] font-bold">전체 선택</button>
+      <button onClick={onClear} className="h-8 px-3 rounded-xl bg-white/10 hover:bg-white/20 text-[12.5px] font-bold">선택 해제</button>
+      <button onClick={onExit} className="h-8 px-3 rounded-xl bg-white text-[#0F1A30] text-[12.5px] font-extrabold">끝내기 <span className="text-[10.5px] text-[#7A879C] ml-0.5">ESC</span></button>
+    </div>,
+    document.body
+  );
+}
+
 const kpTabWrap = "inline-flex items-center gap-1 p-1 rounded-[14px] bg-[#EEF2F8] border border-[#E3E8F0]";
 const kpTabCls = (on) => `px-5 h-9 rounded-[10px] text-[13.5px] transition whitespace-nowrap ${
   on ? "bg-white text-[#0F1A30] font-extrabold shadow-[0_1px_2px_rgba(16,24,40,0.08),0_4px_10px_rgba(16,24,40,0.08)]"
@@ -5446,7 +5570,7 @@ function ToastProvider({ children }) {
     });
 
     // 화주사 수정요청/기사취소요청은 승인이 필요한 중요 건이라 놓치지 않도록 더 오래 유지한다.
-    const duration = (type === "editRequest" || type === "cancelRequest") ? 8000 : 3000;
+    const duration = (type === "editRequest" || type === "cancelRequest") ? 8000 : 4000;
     setTimeout(() => {
       setToasts((prev) => prev.filter(t => t.id !== id));
     }, duration);
@@ -5526,79 +5650,60 @@ function ToastProvider({ children }) {
         }
       `}</style>
 
-      {/* 상단 중앙 알림 배너 */}
-      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[99999] space-y-2 pointer-events-none" style={{ width: "min(560px, 92vw)" }}>
-        {toasts.filter(t => t.type !== "editRequest" && t.type !== "cancelRequest").map(t => (
-          <div
-            key={t.id}
-            className="toast-enter pointer-events-auto cursor-pointer rounded-2xl shadow-2xl border overflow-hidden"
-            style={{
-              background: t.type === "dispatch" || t.type === "orderRegistered"
-                ? "linear-gradient(135deg, #1B2B4B 0%, #2d4a7a 100%)"
-                : t.type === "order"
-                ? "linear-gradient(135deg, #065f46 0%, #10b981 100%)"
-                : t.type === "shipperEdit"
-                ? "linear-gradient(135deg, #3b5998 0%, #0f2151 100%)"
-                : t.type === "cancel"
-                ? "linear-gradient(135deg, #991b1b 0%, #ef4444 100%)"
-                : "#1e293b",
-            }}
-            onClick={() => handleToastClick(t)}
-          >
-            <div className="flex items-start gap-3 px-4 py-3">
-              {/* 아이콘 */}
-              <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center shrink-0 mt-0.5">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  {t.type === "dispatch" ? (
-                    <><rect x="1" y="7" width="14" height="11" rx="1.5"/><path d="M15 11h4l3 3.5V18h-7z"/><circle cx="6.5" cy="19.5" r="1.8"/><circle cx="17" cy="19.5" r="1.8"/></>
-                  ) : t.type === "order" || t.type === "orderRegistered" ? (
-                    <><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M3 7l9 5 9-5"/><path d="M12 12v9"/></>
-                  ) : t.type === "shipperEdit" ? (
-                    <><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></>
-                  ) : t.type === "cancel" ? (
-                    <><circle cx="12" cy="12" r="9"/><line x1="7" y1="7" x2="17" y2="17"/></>
-                  ) : (
-                    <><path d="M12 3a5 5 0 0 0-5 5v3.5L5 15h14l-2-3.5V8a5 5 0 0 0-5-5z"/><path d="M10 18a2 2 0 0 0 4 0"/></>
-                  )}
-                </svg>
-              </div>
-
-              {/* 내용 */}
-              <div className="flex-1 min-w-0">
-                <div className="text-white text-[13px] font-bold leading-snug">
-                  {t.type === "dispatch" ? "배차 완료" : t.type === "orderRegistered" ? "오더 등록" : t.type === "order" ? "신규 오더 등록" : t.type === "shipperEdit" ? "화주사 수정" : t.type === "cancel" ? "오더 취소" : "알림"}
-                </div>
-                <div className="text-white/80 text-[12px] mt-0.5 leading-relaxed break-words">
-                  {t.message}
-                </div>
-                {t.meta?.orderId && (t.meta?.source === "shipper" || t.meta?.source === "shipper_mobile") ? (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleToastClick(t); }}
-                    className="mt-2 px-3 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold transition"
-                  >
-                    배차확인
-                  </button>
-                ) : t.meta?.orderId && (
-                  <div className="text-white/50 text-[10px] mt-1">
-                    클릭하면 해당 오더로 이동합니다
+      {/* ⭐ 2026-10-27 — 알림을 화면 가운데 위에 큰 카드로 여러 장 쌓던 것을 오른쪽 위 작은 카드로.
+            같은 종류(예: 오더 등록 6건)는 한 장으로 묶어 "6건"과 짧은 목록만 보여준다(표를 가리지 않게) */}
+      {(() => {
+        const LABEL = { dispatch: "배차 완료", orderRegistered: "오더 등록", order: "신규 오더(화주사)", shipperEdit: "화주사 수정", cancel: "오더 취소" };
+        const ICON = {
+          dispatch: <><rect x="1" y="7" width="14" height="11" rx="1.5"/><path d="M15 11h4l3 3.5V18h-7z"/><circle cx="6.5" cy="19.5" r="1.8"/><circle cx="17" cy="19.5" r="1.8"/></>,
+          order: <><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M3 7l9 5 9-5"/><path d="M12 12v9"/></>,
+          shipperEdit: <><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></>,
+          cancel: <><circle cx="12" cy="12" r="9"/><line x1="7" y1="7" x2="17" y2="17"/></>,
+          other: <><path d="M12 3a5 5 0 0 0-5 5v3.5L5 15h14l-2-3.5V8a5 5 0 0 0-5-5z"/><path d="M10 18a2 2 0 0 0 4 0"/></>,
+        };
+        const list = toasts.filter(t => t.type !== "editRequest" && t.type !== "cancelRequest");
+        const groups = [];
+        list.forEach((t) => { const g = groups.find((x) => x.type === t.type); if (g) g.items.push(t); else groups.push({ type: t.type, items: [t] }); });
+        return (
+          <div className="fixed top-[72px] right-5 z-[99999] space-y-2 pointer-events-none" style={{ width: "min(360px, 92vw)" }}>
+            {groups.map((g) => {
+              const latest = g.items[g.items.length - 1];
+              const many = g.items.length > 1;
+              const strong = g.type === "order" || g.type === "cancel";
+              return (
+                <div key={g.type} className="toast-enter pointer-events-auto rounded-[18px] bg-white border border-[#E3E8F0] shadow-[0_12px_32px_rgba(15,26,48,0.18)] overflow-hidden">
+                  <div className={`flex items-center gap-3 pl-3 pr-2 py-2.5 border-l-4 ${strong ? "border-l-[#0F1A30]" : "border-l-[#4B6CB7]"}`}>
+                    <div className={`w-8 h-8 rounded-[10px] flex items-center justify-center shrink-0 ${strong ? "bg-[#0F1A30] text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{ICON[g.type === "orderRegistered" ? "order" : g.type] || ICON.other}</svg>
+                    </div>
+                    <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleToastClick(latest)}>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[13px] font-extrabold text-[#0F1A30]">{LABEL[g.type] || "알림"}</span>
+                        {many && <span className="h-5 px-1.5 rounded-full bg-[#0F1A30] text-white text-[11px] font-extrabold inline-flex items-center tabular-nums">{g.items.length}건</span>}
+                      </div>
+                      {!many && <div className="text-[12px] text-[#5B6B85] truncate">{latest.message}</div>}
+                    </div>
+                    {latest.meta?.orderId && (latest.meta?.source === "shipper" || latest.meta?.source === "shipper_mobile") && !many && (
+                      <button onClick={(e) => { e.stopPropagation(); handleToastClick(latest); }} className="h-7 px-2.5 rounded-lg bg-[#0F1A30] text-white text-[11.5px] font-bold shrink-0">배차확인</button>
+                    )}
+                    <button className="w-7 h-7 rounded-lg text-[#9AA9C3] hover:text-[#0F1A30] hover:bg-[#F5F8FD] shrink-0" title="닫기"
+                      onClick={(e) => { e.stopPropagation(); g.items.forEach((t) => removeToast(t.id)); }}>✕</button>
                   </div>
-                )}
-              </div>
-
-              {/* 닫기 */}
-              <button
-                className="text-white/40 hover:text-white text-[18px] leading-none shrink-0 mt-0.5 px-1"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removeToast(t.id);
-                }}
-              >
-                ✕
-              </button>
-            </div>
+                  {many && (
+                    <div className="px-3 pb-2.5 -mt-0.5">
+                      {g.items.slice(-4).reverse().map((t) => (
+                        <button key={t.id} onClick={() => handleToastClick(t)}
+                          className="w-full text-left text-[12px] text-[#3A4A66] truncate px-2 py-1 rounded-lg hover:bg-[#F5F8FD]">{t.message}</button>
+                      ))}
+                      {g.items.length > 4 && <div className="px-2 text-[11px] font-bold text-[#9AA9C3]">외 {g.items.length - 4}건</div>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-        ))}
-      </div>
+        );
+      })()}
 
       {/* 우하단 알림 배너 — 화주사 수정요청/기사취소요청 전용 (상단 알림과 별도로 항상 눈에 띄게) */}
       <div className="fixed bottom-5 right-5 z-[99999] space-y-2 pointer-events-none" style={{ width: "360px", maxWidth: "90vw" }}>
@@ -27339,6 +27444,7 @@ if (sortKey) {
     setSelected((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
+  const rtLongPress = useKpLongPressSelect({ toggle: toggleSelect, isSelected: (id) => selected.includes(id) });
   // ------------------------
   // 📌 선택수정 저장
   // ------------------------
@@ -29256,7 +29362,7 @@ const head = isDark
             </tr>
           </thead>
 
-          <tbody>
+          <tbody {...rtLongPress.tbodyProps} className={rtLongPress.selectMode ? "kp-select-mode" : ""}>
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={27} className="py-16 text-center text-[13px] text-gray-500">
@@ -29319,6 +29425,9 @@ const head = isDark
         </table>
       </div>
       <StickyHScrollbar targetRef={rtTableWrapRef} />
+      {rtLongPress.selectMode && (
+        <KpSelectModeBar count={selected.length} onSelectAll={() => setSelected(filtered.map((r) => r._id))} onClear={() => setSelected([])} onExit={() => rtLongPress.setSelectMode(false)} />
+      )}
       </div>
 {/* ================= 임박 미배차 팝업 ================= */}
 {menu === "실시간배차현황" && notificationsEnabled && urgentPopup.length > 0 && (
@@ -33665,54 +33774,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
 
 {/* ======================= 선택삭제 확인 팝업 ======================= */}
       {deleteConfirmOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
-          tabIndex={-1}
-          ref={el => { if(el) setTimeout(()=>el.focus(),0); }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") { e.preventDefault(); executeDelete(); }
-            if (e.key === "Escape") setDeleteConfirmOpen(false);
-          }}
-        >
-          <div className="bg-white rounded-2xl shadow-2xl w-[460px] max-h-[80vh] overflow-y-auto overflow-hidden">
-            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-red-500/25 flex items-center justify-center shrink-0">
-                <svg className="w-5 h-5 text-red-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-              </div>
-              <div>
-                <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.선택한 오더를 삭제하시겠습니까?" defaultText="선택한 오더를 삭제하시겠습니까?" /></h3>
-                <p className="text-white/60 text-[12px] mt-0.5">삭제 후에도 되돌리기로 복구할 수 있습니다</p>
-              </div>
-            </div>
-            <div className="px-5 py-4 space-y-3 text-sm max-h-[50vh] overflow-y-auto">
-              {deleteList.map((r,idx)=>{
-                const sale=r.청구운임||0; const drv=r.기사운임||0; const fee=sale-drv;
-                return (
-                  <div key={r._id} className="border border-gray-200 rounded-xl p-4 bg-gray-50">
-                    <div className="flex justify-between items-center pb-2 border-b border-gray-200 mb-2">
-                      <div className="font-bold text-[#1B2B4B]">{idx+1}. {r.거래처명||"-"}</div>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.배차상태==="배차완료"?"bg-[#1B2B4B] text-white":r.배차상태==="승인대기"?"bg-amber-100 text-amber-700":"bg-gray-100 text-gray-500"}`}>{r.배차상태}</span>
-                    </div>
-                    <div className="space-y-1 text-gray-700 text-[13px]">
-                      <div><b>상차</b> {r.상차일} · {r.상차지명}</div>
-                      <div><b>하차</b> {r.하차일} · {r.하차지명}</div>
-                      <div><b>차량</b> {r.차량번호||"-"} / {r.이름||"-"}</div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 mt-3 text-center text-[12px]">
-                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-500 text-[10px]">청구</div><div className="font-bold text-[#1B2B4B]">{Number(sale).toLocaleString()}원</div></div>
-                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-500 text-[10px]">기사</div><div className="font-bold text-gray-700">{Number(drv).toLocaleString()}원</div></div>
-                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-500 text-[10px]">수수료</div><div className={`font-bold ${fee<0?"text-red-600":"text-[#1B2B4B]"}`}>{fee.toLocaleString()}원</div></div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="px-5 py-4 border-t flex gap-3">
-              <button onClick={()=>setDeleteConfirmOpen(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px]">취소 (ESC)</button>
-              <button onClick={executeDelete} className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-[13px]">삭제 실행 (Enter)</button>
-            </div>
-          </div>
-        </div>
+        <KpDeleteConfirm rows={deleteList} onCancel={() => setDeleteConfirmOpen(false)} onConfirm={executeDelete} />
       )}
 
       {showUndo && (
@@ -37857,6 +37919,7 @@ if (mode === "driver") {
     setSelected((prev) =>
       prev.size === rows.length ? new Set() : new Set(rows.map((r) => getId(r)))
     );
+  const dsLongPress = useKpLongPressSelect({ toggle: toggleOne, isSelected: (id) => selected.has(id) });
 
   const updateEdited = (row, key, value) =>
     setEdited((prev) => {
@@ -39314,7 +39377,7 @@ return (
             </tr>
           </thead>
 
-          <tbody>
+          <tbody {...dsLongPress.tbodyProps} className={dsLongPress.selectMode ? "kp-select-mode" : ""}>
             {pageRows.length === 0 && (
               <tr>
                 <td colSpan={29} className="py-16 text-center text-[13px] text-gray-500">
@@ -39779,6 +39842,9 @@ return (
         </table>
       </div>
       <StickyHScrollbar targetRef={dsTableWrapRef} />
+      {dsLongPress.selectMode && (
+        <KpSelectModeBar count={selected.size} onSelectAll={() => setSelected(new Set(pageRows.map((r) => getId(r))))} onClear={() => setSelected(new Set())} onExit={() => dsLongPress.setSelectMode(false)} />
+      )}
       </div>
 
       {/* ⭐ 하단 페이지 이동 — 목록을 끝까지 스크롤한 뒤에도 맨 위로 다시 올라가지
@@ -43154,58 +43220,7 @@ setCopyPlaceOptions(list);
       )}
       {/* ========================== 선택삭제 팝업 ========================== */}
       {showDeletePopup && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
-          tabIndex={-1}
-          ref={el => { if(el) setTimeout(()=>el.focus(), 0); }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") { e.preventDefault(); deleteRowsWithUndo(); }
-            if (e.key === "Escape") setShowDeletePopup(false);
-          }}
-        >
-          <div className="bg-white rounded-2xl shadow-2xl w-[460px] max-h-[80vh] overflow-y-auto overflow-hidden">
-            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-red-500/25 flex items-center justify-center shrink-0">
-                <svg className="w-5 h-5 text-red-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-              </div>
-              <div>
-                <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.선택한 오더를 삭제하시겠습니까?" defaultText="선택한 오더를 삭제하시겠습니까?" /></h3>
-                <p className="text-white/60 text-[12px] mt-0.5">삭제 후에도 되돌리기로 복구할 수 있습니다</p>
-              </div>
-            </div>
-            <div className="px-5 py-4 space-y-3 text-sm max-h-[50vh] overflow-y-auto">
-              {[...selected].map((id, idx) => {
-                const r = dispatchData.find(d => getId(d) === id);
-                if (!r) return null;
-                const sale = r.청구운임 || 0;
-                const drv = r.기사운임 || 0;
-                const fee = sale - drv;
-                return (
-                  <div key={id} className="border border-gray-200 rounded-xl p-4 bg-gray-50">
-                    <div className="flex justify-between items-center pb-2 border-b border-gray-200 mb-2">
-                      <div className="font-bold text-[#1B2B4B]">{idx + 1}. {r.거래처명 || "-"}</div>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.배차상태 === "배차완료" ? "bg-[#1B2B4B] text-white" : r.배차상태 === "승인대기" ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-500"}`}>{r.배차상태}</span>
-                    </div>
-                    <div className="space-y-1 text-gray-700 text-[13px]">
-                      <div><b>상차</b> {r.상차일} · {r.상차지명}</div>
-                      <div><b>하차</b> {r.하차일} · {r.하차지명}</div>
-                      <div><b>차량</b> {r.차량번호 || "-"} / {r.이름 || "-"}</div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 mt-3 text-center text-[12px]">
-                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-500 text-[10px]">청구</div><div className="font-bold text-[#1B2B4B]">{Number(sale).toLocaleString()}원</div></div>
-                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-500 text-[10px]">기사</div><div className="font-bold text-gray-700">{Number(drv).toLocaleString()}원</div></div>
-                      <div className="bg-white border border-gray-200 rounded-lg p-2"><div className="text-gray-500 text-[10px]">수수료</div><div className={`font-bold ${fee < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>{fee.toLocaleString()}원</div></div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="px-5 py-4 border-t flex gap-3">
-              <button onClick={() => setShowDeletePopup(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px]">취소 (ESC)</button>
-              <button onClick={deleteRowsWithUndo} className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-[13px]">삭제 실행 (Enter)</button>
-            </div>
-          </div>
-        </div>
+        <KpDeleteConfirm rows={[...selected].map((id) => dispatchData.find((d) => getId(d) === id))} onCancel={() => setShowDeletePopup(false)} onConfirm={deleteRowsWithUndo} />
       )}
 
       {/* ========================== 되돌리기 알림 ========================== */}
@@ -50172,50 +50187,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
 
       {/* 삭제 확인 팝업 */}
       {deleteConfirmOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
-          tabIndex={-1}
-          ref={el => { if (el) setTimeout(() => el.focus(), 0); }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") { e.preventDefault(); removeDocs(Array.from(selectedIds)); }
-            if (e.key === "Escape") setDeleteConfirmOpen(false);
-          }}
-        >
-          <div className="bg-white rounded-2xl shadow-2xl w-[460px] max-h-[80vh] overflow-hidden flex flex-col">
-            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center gap-3 shrink-0">
-              <div className="w-9 h-9 rounded-full bg-red-500/25 flex items-center justify-center shrink-0">
-                <svg className="w-5 h-5 text-red-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-              </div>
-              <div>
-                <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.선택한 오더를 삭제하시겠습니까?" defaultText="선택한 오더를 삭제하시겠습니까?" /></h3>
-                <p className="text-white/60 text-[12px] mt-0.5">삭제된 오더는 복구되지 않습니다</p>
-              </div>
-            </div>
-            <div className="px-5 py-4 space-y-3 overflow-y-auto flex-1">
-              {Array.from(selectedIds).map((id, idx) => {
-                const r = filtered.find(d => d._id === id);
-                if (!r) return null;
-                return (
-                  <div key={id} className="border border-gray-200 rounded-xl p-4 bg-gray-50">
-                    <div className="flex justify-between items-center pb-2 border-b border-gray-200 mb-2">
-                      <div className="font-bold text-[#1B2B4B] text-[13px]">{idx + 1}. {r.거래처명 || "-"}</div>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.배차상태 === "배차완료" ? "bg-[#1B2B4B] text-white" : r.배차상태 === "승인대기" ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-500"}`}>{r.배차상태 || "배차중"}</span>
-                    </div>
-                    <div className="space-y-1 text-gray-700 text-[12px]">
-                      <div><span className="font-semibold text-gray-500 w-10 inline-block">상차</span>{r.상차일 || "-"} · {r.상차지명 || "-"}</div>
-                      <div><span className="font-semibold text-gray-500 w-10 inline-block">하차</span>{r.하차지명 || "-"}</div>
-                      {r.화물내용 && <div><span className="font-semibold text-gray-500 w-10 inline-block">화물</span>{r.화물내용}</div>}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="px-5 py-4 border-t flex gap-3 shrink-0">
-              <button onClick={() => setDeleteConfirmOpen(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px]">취소 (ESC)</button>
-              <button onClick={() => removeDocs(Array.from(selectedIds))} className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-[13px]">삭제 실행 (Enter)</button>
-            </div>
-          </div>
-        </div>
+        <KpDeleteConfirm rows={Array.from(selectedIds).map((id) => filtered.find((d) => d._id === id))} note="삭제된 오더는 복구되지 않습니다" onCancel={() => setDeleteConfirmOpen(false)} onConfirm={() => removeDocs(Array.from(selectedIds))} />
       )}
 
       {/* 빠른 배차 팝업 */}

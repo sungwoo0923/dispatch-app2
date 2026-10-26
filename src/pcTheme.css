@@ -272,3 +272,8 @@
   accent-color: #2D4C82;
   cursor: pointer;
 }
+
+/* ⭐ 길게 눌러 선택 모드 — 줄 전체가 눌리는 대상임을 보여준다 */
+.kp-pc .kp-grid tbody.kp-select-mode tr { cursor: pointer; user-select: none; }
+.kp-pc .kp-grid tbody.kp-select-mode tr:hover { background-color: #E6EEFB; }
+.kp-pc .kp-grid tbody.kp-select-mode tr:hover > td:first-child { box-shadow: inset 4px 0 0 #0F1A30; }
