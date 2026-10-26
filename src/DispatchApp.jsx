@@ -4103,7 +4103,9 @@ const patchDispatch = async (_id, patch, knownPrev) => {
   });
 
   // 차량번호가 명시적으로 빈값 → 이름/전화/배차상태 전부 초기화
-  if ("차량번호" in patch && !String(patch.차량번호 || "").trim()) {
+  // ⭐ 2026-10-27 — 원래 차량이 있었는데 지운 경우(=배차 취소)에만. 오더복사수정 패널은 오더 전체를 저장하므로
+  //    아직 배차 전(차량번호 빈값)인 오더를 저장할 때마다 여기로 들어와 배차방식(24시·직접배차)을 지워버렸다.
+  if ("차량번호" in patch && !String(patch.차량번호 || "").trim() && String(prev?.차량번호 || "").trim()) {
     patch.이름 = "";
     patch.전화번호 = "";
     patch.기사명 = "";

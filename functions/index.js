@@ -1267,6 +1267,130 @@ async function renumberGsheetDate(tabName, date) {
     await gsheetApi("POST", "/values:batchUpdate", { data: { valueInputOption: "RAW", data: data.slice(i, i + 200) } });
   }
 }
+// 여러 날짜의 순번을 한 번 읽고 한 번 써서 다시 매긴다
+async function renumberGsheetDates(tabName, dateList) {
+  const targets = new Set(dateList.map((d) => gsheetNormDate(d)).filter(Boolean));
+  if (!targets.size) return;
+  const colMap = await getGsheetColumnMap(tabName);
+  if (!colMap.순번 || !colMap.상차일) return;
+  const res = await gsheetApi("GET", `/values:batchGet?ranges=${encodeURIComponent(`${quoteTab(tabName)}!${colMap.상차일}2:${colMap.상차일}3000`)}&ranges=${encodeURIComponent(`${quoteTab(tabName)}!${colMap.순번}2:${colMap.순번}3000`)}`);
+  const dates = res.valueRanges?.[0]?.values || [];
+  const seqs = res.valueRanges?.[1]?.values || [];
+  const yearHint = [...targets][0].slice(0, 4);
+  const counter = new Map();
+  const data = [];
+  for (let i = 0; i < dates.length; i++) {
+    const d = gsheetNormDate(dates[i]?.[0], yearHint);
+    if (!targets.has(d)) continue;
+    const n = (counter.get(d) || 0) + 1; counter.set(d, n);
+    if (String(seqs[i]?.[0] ?? "").trim() !== String(n)) data.push({ range: `${quoteTab(tabName)}!${colMap.순번}${i + 2}`, values: [[n]] });
+  }
+  for (let i = 0; i < data.length; i += 500) {
+    await gsheetApi("POST", "/values:batchUpdate", { data: { valueInputOption: "RAW", data: data.slice(i, i + 500) } });
+  }
+}
+
+// ⭐ [구글시트로 전송] 한 번에 넣기(2026-10-27) — 예전 백필처럼 탭마다 한 번 읽고, 줄을 한 번에 끼워넣고,
+//    값을 한 번에 쓰고, 순번을 한 번에 다시 매긴다(예전엔 오더마다 8번 넘게 시트를 오가 6건에도 한참 걸렸다).
+//    items: [{ ref, path, data }] — 날짜 오름차순·같은 날짜는 먼저 등록한 것부터
+async function sendGsheetMineBatch(items) {
+  const byTab = new Map();
+  const skipped = [];
+  for (const it of items) {
+    const tab = isGsheetCanceled(it.data) || it.data.블라인드 === true ? null : gsheetMonthTabName(it.data.상차일);
+    if (!tab) { skipped.push(it); continue; }
+    if (!byTab.has(tab)) byTab.set(tab, []);
+    byTab.get(tab).push(it);
+  }
+  let sent = 0;
+  for (const [tab, list] of byTab) {
+    await ensureGsheetMonthTab(tab);
+    let already = [];
+    await withGsheetTabLock(tab, async () => {
+      const colMap = await ensureGsheetIdColumn(tab);
+      const sheetProps = (await getGsheetSheetList()).find((x) => x.title === tab);
+      const dateCol = colMap.상차일 || "B";
+      const got = await gsheetApi("GET", `/values:batchGet?ranges=${encodeURIComponent(`${quoteTab(tab)}!${dateCol}2:${dateCol}3000`)}${colMap.오더ID ? `&ranges=${encodeURIComponent(`${quoteTab(tab)}!${colMap.오더ID}2:${colMap.오더ID}3000`)}` : ""}`);
+      const dateVals = got.valueRanges?.[0]?.values || [];
+      const idVals = got.valueRanges?.[1]?.values || [];
+      const existingIds = new Set(idVals.map((r) => String(r?.[0] ?? "").trim()).filter(Boolean));
+      const fresh = list.filter((it) => !existingIds.has(it.path));
+      already = list.filter((it) => existingIds.has(it.path)); // 이미 시트에 있는 오더는 아래에서 한 건씩 맞춘다
+
+      // 날짜 칸(블록) — findGsheetInsertPosition과 같은 기준
+      const yearHint = gsheetNormDate(list[0].data.상차일).slice(0, 4);
+      const blocks = []; let open = null;
+      for (let i = 0; i < dateVals.length; i++) {
+        const v = gsheetNormDate(dateVals[i]?.[0], yearHint); const row = i + 2;
+        if (!v) { open = null; continue; }
+        if (open && open.date === v) { open.endRow = row; continue; }
+        open = { date: v, startRow: row, endRow: row }; blocks.push(open);
+      }
+      // 날짜별로 묶기(같은 날짜는 최근 등록이 맨 위)
+      const groups = new Map();
+      for (const it of fresh) { const d = gsheetNormDate(it.data.상차일); if (!groups.has(d)) groups.set(d, []); groups.get(d).push(it); }
+      for (const g of groups.values()) g.reverse();
+      // 끼워넣을 자리: 같은 날짜 칸 맨 위 / 다음 날짜 칸 앞(+빈 구분줄) / 맨 끝(빈 구분줄 다음)
+      const plans = []; // { at, rows:[it | null(빈 구분줄)], inherit } — 같은 자리에 넣을 것은 날짜 순서대로 한 묶음
+      const planAt = (at, inherit) => { let p = plans.find((x) => x.at === at); if (!p) { p = { at, rows: [], inherit }; plans.push(p); } return p; };
+      const tail = [];
+      for (const d of [...groups.keys()].sort()) {
+        const g = groups.get(d);
+        const same = blocks.find((b) => b.date === d);
+        if (same) { planAt(same.startRow, false).rows.push(...g); continue; }
+        const next = blocks.find((b) => b.date > d);
+        if (next) { planAt(next.startRow, next.startRow > 2).rows.push(...g, null); continue; }
+        if (blocks.length || tail.length) tail.push(null);
+        tail.push(...g);
+      }
+      // 아래쪽 자리부터 끼워넣어야 위쪽 자리 번호가 안 바뀐다
+      plans.sort((a, b) => b.at - a.at);
+      const requests = plans.map((p) => ({ insertDimension: { range: { sheetId: sheetProps.sheetId, dimension: "ROWS", startIndex: p.at - 1, endIndex: p.at - 1 + p.rows.length }, inheritFromBefore: p.inherit } }));
+      const finalRows = [];
+      for (const p of plans) {
+        const shift = plans.filter((q) => q.at < p.at).reduce((n, q) => n + q.rows.length, 0);
+        p.rows.forEach((it, i) => { if (it) finalRows.push({ it, row: p.at + shift + i }); });
+      }
+      const totalInserted = plans.reduce((n, p) => n + p.rows.length, 0);
+      if (tail.length) {
+        // 맨 끝: 마지막 날짜 칸 아래 비어 있는 줄에 이어 쓴다(모자라면 줄을 늘림)
+        const lastEnd = blocks.length ? blocks[blocks.length - 1].endRow + totalInserted : 1;
+        let r = lastEnd + 1;
+        for (const it of tail) { if (it) finalRows.push({ it, row: r }); r += 1; }
+        const have = (sheetProps.gridProperties?.rowCount || 1) + totalInserted;
+        if (r > have) requests.push({ insertDimension: { range: { sheetId: sheetProps.sheetId, dimension: "ROWS", startIndex: have, endIndex: r }, inheritFromBefore: true } }); // 서식은 바로 위 줄에서 이어받음
+      }
+      if (requests.length) await gsheetApi("POST", ":batchUpdate", { data: { requests } });
+      const ranges = [];
+      finalRows.forEach(({ it, row }) => ranges.push(...buildGsheetOrderRowRanges(tab, row, it.data, colMap, it.path)));
+      for (let i = 0; i < ranges.length; i += 500) {
+        await gsheetApi("POST", "/values:batchUpdate", { data: { valueInputOption: "USER_ENTERED", data: ranges.slice(i, i + 500) } });
+      }
+      await renumberGsheetDates(tab, [...groups.keys()]).catch((e) => console.warn("순번 다시 매기기 실패:", e?.message || e));
+      for (let i = 0; i < finalRows.length; i += 400) {
+        const wb = db.batch();
+        finalRows.slice(i, i + 400).forEach(({ it, row }) => wb.update(it.ref, { _gsheetMineSent: true, _gsheetMineSentAt: FieldValue.serverTimestamp(), _gsheetSync: { tab, row, doc: it.path } }));
+        await wb.commit();
+      }
+      sent += finalRows.length;
+    });
+    for (const it of already) {
+      await it.ref.update({ _gsheetMineSent: true, _gsheetMineSentAt: FieldValue.serverTimestamp() });
+      await syncOneDispatchToGsheet(it.path, { ...it.data, _gsheetMineSent: true }, { ...it.data, _gsheetMineSent: true });
+      sent += 1;
+    }
+  }
+  // 취소·블라인드·날짜 없는 오더는 시트에 넣지 않고 전송 처리만(나중에 다시 살아나면 그때 반영)
+  for (const it of skipped) await it.ref.update({ _gsheetMineSent: true, _gsheetMineSentAt: FieldValue.serverTimestamp() }).catch(() => {});
+  // 기사 기준표(고유값) — 차량번호별 한 번씩
+  const seen = new Set();
+  for (const it of items) {
+    const plate = String(it.data.차량번호 || "").trim();
+    if (!plate || seen.has(plate)) continue; seen.add(plate);
+    await ensureDriverInGsheetUniqueTab(plate, it.data.이름, it.data.전화번호).catch(() => {});
+  }
+  return { sent, skipped: skipped.length };
+}
 const GSHEET_LINK_OFF_MESSAGE = "프로그램과 구글시트 연결이 끊겨 있습니다(시트 수기 작성 중) — 시트를 덮어쓰지 않도록 이 작업은 실행하지 않았습니다.";
 // 이 시트 전용 동기화 대상 회사명 — 다른 회사 데이터가 섞이지 않도록 반드시 필터링한다.
 const GSHEET_TARGET_COMPANY = "돌캐";
@@ -1500,6 +1624,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // 실패한 적이 있음. 429/5xx를 만나면 잠깐 쉬었다가 자동으로 다시 시도한다.
 async function gsheetApi(method, path, opts = {}, retriesLeft = 5) {
   const client = await getGsheetAuthClient();
+  if (method === "POST" && path === ":batchUpdate") _gsheetSheetListCache = { at: 0, v: null }; // 행·열·탭 구조가 바뀜
   try {
     const res = await client.request({
       url: `https://sheets.googleapis.com/v4/spreadsheets/${GSHEET_SPREADSHEET_ID}${path}`,
@@ -1573,9 +1698,14 @@ function gsheetTabSortKey(title) {
   return parseInt(m[1], 10) * 12 + parseInt(m[2], 10);
 }
 
+// ⭐ 2026-10-27 속도 — 탭 목록을 오더마다 2~3번씩 다시 받던 것을 20초 동안 재사용(탭·행 구조를 바꾸면 바로 버림)
+let _gsheetSheetListCache = { at: 0, v: null };
 async function getGsheetSheetList() {
+  if (_gsheetSheetListCache.v && Date.now() - _gsheetSheetListCache.at < 20000) return _gsheetSheetListCache.v;
   const data = await gsheetApi("GET", "?fields=sheets.properties");
-  return (data.sheets || []).map((s) => s.properties);
+  const v = (data.sheets || []).map((s) => s.properties);
+  _gsheetSheetListCache = { at: Date.now(), v };
+  return v;
 }
 
 // 배차상태 열은 (배차상태 헤더가 있는) 열 2행 셀 하나에만 있는 =ARRAYFORMULA(...)가
@@ -1828,6 +1958,9 @@ async function insertGsheetDataRows(sheetId, atRow, count, inheritFromBefore) {
 // excludeDocPath("col/id")로 넘긴 문서는 제외한다 — 지금 막 옮기는 중인 그 문서
 // 자신이 아직 예전 _gsheetSync(옮기기 전 행 번호)를 들고 있어 잘못 걸릴 수 있어서.
 async function shiftGsheetRowPointersFrom(tabName, fromRow, delta, excludeDocPath) {
+  // ⭐ "내 오더만 보내기" 모드는 오더ID 열로만 줄을 찾으므로 줄번호 기록을 고칠 필요가 없다.
+  //    (예전엔 줄 하나 넣고 뺄 때마다 그 달 오더 수백 건의 기록을 고쳐 써서 한 건에 10초 넘게 걸렸다)
+  if (!GSHEET_PROGRAM_LINK_ENABLED) return;
   for (const col of ["orders", "dispatch"]) {
     let snap;
     try {
@@ -1913,7 +2046,22 @@ async function removeGsheetRowUnlocked(tabName, row) {
     // ⭐ 이 달의 첫 동기화 오더(2행)가 지워지는 경우, 배차상태 열 2행에 있던 ARRAYFORMULA
     // 소스 셀 자체가 같이 삭제된다 — clearGsheetDataRows와 동일한 이유로 매번 재심는다
     // (2행이 아닐 때는 그냥 같은 값을 덮어쓰는 것뿐이라 부작용 없음).
-    if (removedDate) await renumberGsheetDate(tabName, removedDate).catch((e) => console.warn("순번 다시 매기기 실패:", e?.message || e));
+    if (removedDate) {
+      await renumberGsheetDate(tabName, removedDate).catch((e) => console.warn("순번 다시 매기기 실패:", e?.message || e));
+      // 그 날짜 줄이 하나도 안 남아 빈 구분줄이 두 줄 연속이 되면 한 줄 지운다
+      try {
+        const cm = await getGsheetColumnMap(tabName);
+        if (cm.상차일 && row > 2) {
+          const lastCol = gsheetColLetter(Math.max(gsheetColIndexFromLetter(cm.상차일), gsheetColIndexFromLetter(cm.거래처명 || "A")));
+          const got = await gsheetApi("GET", `/values/${encodeURIComponent(`${quoteTab(tabName)}!A${row - 1}:${lastCol}${row}`)}`);
+          const v = got.values || [];
+          const blank = (r) => !(r || []).some((c) => String(c ?? "").trim());
+          if (blank(v[0]) && blank(v[1])) {
+            await gsheetApi("POST", ":batchUpdate", { data: { requests: [{ deleteDimension: { range: { sheetId: sheet.sheetId, dimension: "ROWS", startIndex: row - 1, endIndex: row } } }] } });
+          }
+        }
+      } catch (e) { console.warn("빈 줄 정리 실패(무시):", e?.message || e); }
+    }
     if (row === 2 && GSHEET_PROGRAM_LINK_ENABLED) {
       const colMap = await getGsheetColumnMap(tabName);
       if (colMap.배차상태) {
@@ -1926,7 +2074,7 @@ async function removeGsheetRowUnlocked(tabName, row) {
       }
     }
 
-    for (const col of ["orders", "dispatch"]) {
+    for (const col of (GSHEET_PROGRAM_LINK_ENABLED ? ["orders", "dispatch"] : [])) { // 내 오더 모드는 줄번호 기록 보정 생략(위 shift와 같은 이유)
       let snap;
       try {
         snap = await db.collection(col).where("_gsheetSync.tab", "==", tabName).get();
@@ -2047,6 +2195,14 @@ function gsheetFormulaA(row, colMap) {
 // 연달아 쓰는 쪽(백필)은 미리 한 번만 조회해서 넘겨 API 호출을 아낀다.
 async function writeGsheetOrderRow(tabName, row, data, colMap, docId) {
   colMap = colMap || (await getGsheetColumnMap(tabName));
+  const rangesData = buildGsheetOrderRowRanges(tabName, row, data, colMap, docId);
+  if (!rangesData.length) return;
+  await gsheetApi("POST", "/values:batchUpdate", {
+    data: { valueInputOption: "USER_ENTERED", data: rangesData },
+  });
+}
+// 한 줄에 쓸 값·수식 목록만 만든다(여러 줄을 한 번에 쓸 때 모아서 보냄)
+function buildGsheetOrderRowRanges(tabName, row, data, colMap, docId) {
   const rangesData = [];
   if (docId && colMap.오더ID) rangesData.push({ range: `${quoteTab(tabName)}!${colMap.오더ID}${row}`, values: [[docId]] });
   const fieldValues = buildGsheetFieldValues(data);
@@ -2072,10 +2228,7 @@ async function writeGsheetOrderRow(tabName, row, data, colMap, docId) {
   if (colMap.순번) {
     rangesData.push({ range: `${quoteTab(tabName)}!${colMap.순번}${row}`, values: [[gsheetFormulaA(row, colMap)]] });
   }
-  if (!rangesData.length) return;
-  await gsheetApi("POST", "/values:batchUpdate", {
-    data: { valueInputOption: "USER_ENTERED", data: rangesData },
-  });
+  return rangesData;
 }
 
 // ======================= 오더ID 열(시트 행 ↔ 오더 1:1 연결) =======================
@@ -4028,15 +4181,11 @@ exports.gsheetMine = functions.runWith({ timeoutSeconds: 540, memory: "512MB" })
       const ms = (v) => (v?.toMillis ? v.toMillis() : typeof v === "number" ? v : 0);
       pend.sort((a, b) => String(a.data.상차일 || "").localeCompare(String(b.data.상차일 || "")) || ms(a.data.createdAt) - ms(b.data.createdAt));
       let sent = 0; const failed = [];
-      for (const p of pend) {
-        try {
-          await p.ref.update({ _gsheetMineSent: true, _gsheetMineSentAt: FieldValue.serverTimestamp() });
-          await syncOneDispatchToGsheet(p.path, { ...p.data, _gsheetMineSent: true }, { ...p.data, _gsheetMineSent: true });
-          sent += 1;
-        } catch (e) {
-          failed.push(`${p.data.상차일 || ""} ${p.data.거래처명 || ""}: ${e?.message || e}`);
-          await p.ref.update({ _gsheetMineSent: FieldValue.delete() }).catch(() => {}); // 다음에 다시 보낼 수 있게
-        }
+      try {
+        sent = (await sendGsheetMineBatch(pend)).sent;
+      } catch (e) {
+        console.error("구글시트 한 번에 보내기 실패:", e);
+        failed.push(String(e?.message || e)); // 표시가 안 달린 오더는 대기로 남아 다시 누르면 재시도
       }
       _gsheetMineCache = { at: 0, v: null };
       res.json({ sent, failed, total: pend.length });
