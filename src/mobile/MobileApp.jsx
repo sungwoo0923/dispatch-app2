@@ -51,6 +51,7 @@ import {
 import {
   collection,
   getDocs,
+  getDocsFromCache,
   getDocsFromServer,
   addDoc,
   deleteDoc,
@@ -2322,8 +2323,15 @@ const quickRange = (days) => {
       return next;
     }));
   }, []);
-  const fetchRows = React.useCallback(async (makeQuery) => {
-    setHistoryLoading((n) => n + 1);
+  const fetchRows = React.useCallback(async (makeQuery, { quiet = false } = {}) => {
+    if (!quiet) setHistoryLoading((n) => n + 1); // quiet = 화면 뒤에서 미리 받기(상단 "오더 불러오는 중" 표시 없음)
+    // ⭐ 2026-10-26 — 폰에 저장돼 있는 예전 오더를 먼저 바로 보여준다(불러오기·운임조회가 LTE에서 한참 걸리던 문제).
+    //    이어서 서버에서 최신본을 받아 덮어쓴다(삭제·수정된 오더도 서버 기준으로 맞춰짐).
+    Promise.all(["dispatch", "orders"].map((col) =>
+      getDocsFromCache(makeQuery(collection(db, col))).then((snap) =>
+        snap.docs.map((d) => ({ _id: d.id, id: d.id, __col: col, ...d.data() }))).catch(() => [])))
+      .then((parts) => { const rows = parts.flat().filter((o) => o.source !== "transport_transmit"); if (rows.length) mergeExtra(rows); })
+      .catch(() => {});
     try {
       const snaps = await Promise.all(["dispatch", "orders"].map((col) =>
         getDocs(makeQuery(collection(db, col))).then((snap) =>
@@ -2334,7 +2342,7 @@ const quickRange = (days) => {
     } catch {
       return null; // 실패 — "받은 것"으로 기록하지 않게(다음에 다시 시도)
     } finally {
-      setHistoryLoading((n) => Math.max(0, n - 1));
+      if (!quiet) setHistoryLoading((n) => Math.max(0, n - 1));
     }
   }, [mergeExtra]);
   const loadRange = React.useCallback(async (from, to) => {
@@ -2349,12 +2357,12 @@ const quickRange = (days) => {
     if (rows === null) { loadedRangesRef.current = loadedRangesRef.current.filter((r) => r !== range); return []; } // 실패한 기간은 다시 받을 수 있게
     return rows;
   }, [fetchRows]);
-  const loadFullHistory = React.useCallback(() => {
+  const loadFullHistory = React.useCallback((opts) => {
     if (fullLoadedRef.current) return Promise.resolve();
     if (fullLoadingRef.current) return fullLoadingRef.current;
     // 최근 13개월(그보다 예전 기간은 날짜 조회 시 그 기간만 따로 불러온다)
     const hStart = historyStartDate();
-    fullLoadingRef.current = fetchRows((c) => query(c, where("상차일", ">=", hStart), where("상차일", "<", mobileLiveStart())))
+    fullLoadingRef.current = fetchRows((c) => query(c, where("상차일", ">=", hStart), where("상차일", "<", mobileLiveStart())), { quiet: !!opts?.quiet })
       .then((rows) => { if (rows !== null) { fullLoadedRef.current = true; loadedRangesRef.current.push([hStart, prevDayStr(mobileLiveStart())]); } })
       .finally(() => { fullLoadingRef.current = null; });
     return fullLoadingRef.current;
@@ -14125,6 +14133,8 @@ const [formConflictPopup, setFormConflictPopup] = useState(null);
 const [showOrderCopyModal, setShowOrderCopyModal] = useState(false);
 // ⭐ 오더복사는 예전 오더 전체가 필요 — 복사창을 열 때 1회 불러온다(타이핑 중엔 불러오지 않아 버벅임 방지)
 useEffect(() => { if (showOrderCopyModal) onNeedHistory?.(); }, [showOrderCopyModal]); // eslint-disable-line react-hooks/exhaustive-deps
+// ⭐ 화물등록 화면을 열면 잠시 뒤 예전 오더를 미리 받아둔다 — [불러오기]를 누를 때 바로 목록이 뜨도록(한 번 받으면 다시 안 받음)
+useEffect(() => { const t = setTimeout(() => onNeedHistory?.({ quiet: true }), 1200); return () => clearTimeout(t); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 const [showClientPickerModal, setShowClientPickerModal] = useState(false);
 const [clientPickerSearch, setClientPickerSearch] = useState("");
 const [contactPopup, setContactPopup] = useState(null);

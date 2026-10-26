@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { safeLocalSet, isQuota, freeLocalStorage, trimLocalStorage } from "./safeStorage";
 import { auth, db } from "./firebase";
-import { signInWithEmailAndPassword, sendPasswordResetEmail, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence, getAuth } from "firebase/auth";
+import { signInWithEmailAndPassword, sendPasswordResetEmail, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence, getAuth, multiFactor } from "firebase/auth";
 import { initializeApp, getApps } from "firebase/app";
 import BigCheck from "./components/BigCheck";
 import { doc, getDoc, getFirestore, collection, getDocs, query, where } from "firebase/firestore";
@@ -89,7 +89,16 @@ export default function TransportLogin() {
     try {
       return await signInWithEmailAndPassword(authInst, email.trim(), pw);
     } catch (e) {
-      if (e?.code === "auth/multi-factor-auth-required") return askMfa(e, authInst);
+      if (e?.code === "auth/multi-factor-auth-required") {
+        const r = await askMfa(e, authInst);
+        // ⭐ 2026-10-26 — 예전 방식(Firebase 계정 자체에 등록된 문자인증)은 모바일·회사코드 검색까지 매번 문자를 요구했다.
+        //    지금은 PC 전용 인증(PcVerifyGate)을 쓰므로, 한 번 통과하면 예전 등록을 자동으로 지운다(이후 모바일은 문자 없음).
+        try {
+          const mf = multiFactor(r.user);
+          for (const f of [...(mf.enrolledFactors || [])]) await mf.unenroll(f);
+        } catch (err) { console.warn("예전 2차 인증 해제 실패:", err?.code || err); }
+        return r;
+      }
       throw e;
     }
   };

@@ -18,7 +18,6 @@ import {
 } from "./loginSessions";
 import { LoginManagerModal } from "./LoginManager";
 import { PcVerifyGate, isPcMfaPassed } from "./MfaModal";
-import { getDeviceKind } from "./loginSessions";
 import { doc, onSnapshot, addDoc, collection, serverTimestamp, query, orderBy, limit, getDocs, deleteDoc } from "firebase/firestore";
 
 // 역할별 대형 화면은 지연 로딩(code-splitting)한다 — 이전에는 전부 하나의 번들로
@@ -190,7 +189,8 @@ export default function App() {
     window.addEventListener("storage", h); // 다른 탭에서 인증하면 이 탭도 바로 열린다
     return () => { window.removeEventListener("kp-pc-mfa-ok", h); window.removeEventListener("storage", h); };
   }, []);
-  const isPcDevice = getDeviceKind() === "pc";
+  // ⭐ PC 화면(DispatchApp)을 보여줄 때만 — 화면을 고르는 기준(isSmartPhone)과 똑같이 판단해야 폴더블·분할화면에서 모바일인데 묻는 일이 없다
+  const isPcDevice = !isSmartPhone();
   const needPcMfa = !!(user && role === "totalMaster" && isPcDevice && masterPcPhone && !isPcMfaPassed(user.uid)) && pcMfaTick >= 0;
   // 아직 번호를 등록하지 않았으면(PC에서) 로그인할 때 한 번 안내한다
   const [mfaNag, setMfaNag] = useState(false);
