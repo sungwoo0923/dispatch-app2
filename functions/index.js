@@ -4179,6 +4179,65 @@ exports.gsheetMine = functions.runWith({ timeoutSeconds: 540, memory: "512MB" })
       res.json({ linked, notFound, total: docs.length });
       return;
     }
+    if (body.action === "resend") {
+      // ⭐ 날짜 재전송 — 고른 기간(상차일)의 "내 오더"를 프로그램 내용 그대로 시트에 다시 쓴다.
+      //  - 시트에 그 오더 줄(오더ID)이 있으면 그 줄 전체를 덮어쓰기(수식 칸 포함 — 시트에서 잘못 지운 값도 복구)
+      //  - 줄이 없으면(시트에서 지웠거나 아직 안 보냄) 그 날짜 칸 맨 위에 새로 넣기
+      //  - 같은 오더 줄이 여러 개면 1줄만 남긴다 / 오더ID가 없는 줄(직접 적은 줄)은 건드리지 않는다
+      const from = String(body.from || "").slice(0, 10);
+      const to = String(body.to || body.from || "").slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || to < from) { res.status(400).json({ error: "날짜를 확인해 주세요." }); return; }
+      const items = [];
+      for (const c of ["orders", "dispatch"]) {
+        const snap = await db.collection(c).where("_gsheetMine", "==", true).get();
+        snap.docs.forEach((d) => {
+          const x = d.data(); const dt = String(x.상차일 || "").slice(0, 10);
+          if (dt < from || dt > to || isGsheetCanceled(x)) return;
+          items.push({ ref: d.ref, path: `${c}/${d.id}`, data: x });
+        });
+      }
+      const ms = (v) => (v?.toMillis ? v.toMillis() : typeof v === "number" ? v : 0);
+      items.sort((a, b) => String(a.data.상차일 || "").localeCompare(String(b.data.상차일 || "")) || ms(a.data.createdAt) - ms(b.data.createdAt));
+      const byTab = new Map();
+      for (const it of items) { const tab = gsheetMonthTabName(it.data.상차일); if (!tab) continue; if (!byTab.has(tab)) byTab.set(tab, []); byTab.get(tab).push(it); }
+      let rewritten = 0; const missing = [];
+      for (const [tab, list] of byTab) {
+        await ensureGsheetMonthTab(tab);
+        await withGsheetTabLock(tab, async () => {
+          const colMap = await ensureGsheetIdColumn(tab);
+          if (!colMap.오더ID) { missing.push(...list); return; }
+          const readIds = async () => {
+            const got = await gsheetApi("GET", `/values/${encodeURIComponent(`${quoteTab(tab)}!${colMap.오더ID}2:${colMap.오더ID}6000`)}`);
+            const m = new Map();
+            (got.values || []).forEach((v, i) => { const id = String(v?.[0] || "").trim(); if (!id) return; if (!m.has(id)) m.set(id, []); m.get(id).push(i + 2); });
+            return m;
+          };
+          let idRows = await readIds();
+          // 같은 오더 줄이 여러 개면 맨 위 1줄만 남긴다(아래 줄부터 지움)
+          const dups = list.flatMap((it) => (idRows.get(it.path) || []).slice(1)).sort((a, b) => b - a);
+          if (dups.length) { for (const r of dups) await removeGsheetRowUnlocked(tab, r); idRows = await readIds(); }
+          const ranges = []; const ptrs = [];
+          for (const it of list) {
+            const row = (idRows.get(it.path) || [])[0];
+            if (!row) { missing.push(it); continue; }
+            ranges.push(...buildGsheetOrderRowRanges(tab, row, it.data, colMap, it.path));
+            ptrs.push({ it, row });
+          }
+          for (let i = 0; i < ranges.length; i += 500) {
+            await gsheetApi("POST", "/values:batchUpdate", { data: { valueInputOption: "USER_ENTERED", data: ranges.slice(i, i + 500) } });
+          }
+          await Promise.all(ptrs.map(({ it, row }) => it.ref.update({ _gsheetMineSent: true, _gsheetMineSentAt: FieldValue.serverTimestamp(), _gsheetSync: { tab, row, doc: it.path } }).catch(() => {})));
+          rewritten += ptrs.length;
+          const dates = [...new Set(list.map((it) => it.data.상차일))];
+          await renumberGsheetDates(tab, dates).catch((e) => console.warn("순번 다시 매기기 실패:", e?.message || e));
+        });
+      }
+      // 시트에 줄이 없던 오더는 새로 넣는다(그 날짜 칸 맨 위)
+      let inserted = 0;
+      if (missing.length) inserted = (await sendGsheetMineBatch(missing)).sent;
+      res.json({ total: items.length, rewritten, inserted, from, to });
+      return;
+    }
     if (body.action === "cleanup") {
       // ⭐ 시트 정리 — 오더ID가 적혀 있는데 프로그램에는 없는(지워진) 오더의 줄을 지운다. 사람이 적은 줄(오더ID 없음)은 건드리지 않는다.
       const months = Array.isArray(body.tabs) && body.tabs.length ? body.tabs : (() => {

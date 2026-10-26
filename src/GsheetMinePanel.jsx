@@ -49,6 +49,9 @@ export default function GsheetMinePanel() {
   const [busy, setBusy] = React.useState("");
   const [err, setErr] = React.useState("");
   const [result, setResult] = React.useState(null);
+  const todayStr = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const [rsFrom, setRsFrom] = React.useState(todayStr);
+  const [rsTo, setRsTo] = React.useState(todayStr);
   const mine = useMineOrders();
   const isSent = (o) => o._gsheetMineSent || o._gsheetSync?.doc === o.id;
   const pending = mine.filter((o) => !isSent(o))
@@ -58,9 +61,10 @@ export default function GsheetMinePanel() {
   const run = async (action) => {
     setBusy(action); setErr(""); if (action !== "status") setResult(null);
     try {
-      const d = await callApi({ action, email });
+      const d = await callApi(action === "resend" ? { action, from: rsFrom, to: rsTo || rsFrom } : { action, email });
       if (action === "send") { setResult(d); await callApi({ action: "status" }).then(setSt).catch(() => {}); }
       else if (action === "cleanup") setResult({ cleanup: d });
+      else if (action === "resend") setResult({ resend: d });
       else { setSt(d); if (d.email && action === "status") setEmail(d.email); }
     } catch (e) { setErr(e.message); } finally { setBusy(""); }
   };
@@ -143,7 +147,13 @@ export default function GsheetMinePanel() {
             <div className="mt-1 text-[12px] text-[#5B6B85]">확인한 탭: {(result.cleanup.tabs || []).join(", ")}</div>
           </div>
         )}
-        {result && !result.cleanup && (
+        {result?.resend && (
+          <div className="mx-6 mt-4 px-4 py-3 rounded-2xl bg-[#F5F8FD] border border-[#EDF1F7] text-[13.5px] text-[#0F1A30]">
+            <b>재전송 완료 · {result.resend.from}{result.resend.to !== result.resend.from ? ` ~ ${result.resend.to}` : ""} 내 오더 {result.resend.total}건</b>
+            <div className="mt-1 text-[12px] text-[#5B6B85]">시트 줄 덮어쓰기 {result.resend.rewritten}건 · 시트에 없어서 새로 넣기 {result.resend.inserted}건</div>
+          </div>
+        )}
+        {result && !result.cleanup && !result.resend && (
           <div className="mx-6 mt-4 px-4 py-3 rounded-2xl bg-[#F5F8FD] border border-[#EDF1F7] text-[13.5px] text-[#0F1A30]">
             <b>{result.sent}건 전송 완료</b>{result.failed?.length ? ` · 실패 ${result.failed.length}건(다시 누르면 재시도)` : ""}
             {result.failed?.length > 0 && <div className="mt-1 text-[12px] text-[#5B6B85]">{result.failed.join(" / ")}</div>}
@@ -169,6 +179,26 @@ export default function GsheetMinePanel() {
             <li>전송 전에 삭제한 오더는 보내지 않습니다. 전송 후 삭제·배차취소하면 시트에서도 지워지고 그날 순번이 다시 매겨집니다.</li>
             <li>시트의 줄은 맨 오른쪽 숨겨진 "오더ID" 열로 찾습니다 — 이 열은 지우지 말아 주세요.</li>
           </ul>
+          {/* ⭐ 날짜 재전송 — 시트에서 잘못 고치거나 지운 내 오더를 프로그램 내용 그대로 다시 쓴다 */}
+          <div className="mt-5 px-4 py-4 rounded-2xl border border-[#E3E8F0] space-y-3">
+            <div>
+              <div className="text-[14.5px] font-black text-[#0F1A30]">날짜 재전송</div>
+              <div className="text-[12.5px] text-[#5B6B85] mt-0.5">고른 날짜의 내 오더를 프로그램 내용 그대로 시트에 다시 씁니다(있는 줄은 덮어쓰기, 지워진 줄은 다시 넣기). 직접 적은 줄은 건드리지 않습니다.</div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input type="date" value={rsFrom} onChange={(e) => { setRsFrom(e.target.value); if (!rsTo || rsTo < e.target.value) setRsTo(e.target.value); }}
+                className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#4B6CB7]" />
+              <span className="text-[13px] font-bold text-[#7A879C]">~</span>
+              <input type="date" value={rsTo} min={rsFrom || undefined} onChange={(e) => setRsTo(e.target.value)}
+                className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#4B6CB7]" />
+              <button
+                onClick={() => { if (window.confirm(`${rsFrom}${rsTo && rsTo !== rsFrom ? ` ~ ${rsTo}` : ""} 내 오더를 시트에 다시 보낼까요?\n시트에서 직접 고친 내용은 프로그램 내용으로 덮어써집니다.`)) run("resend"); }}
+                disabled={!!busy || !rsFrom}
+                className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black disabled:opacity-50">
+                {busy === "resend" ? "재전송 중…" : "재전송"}
+              </button>
+            </div>
+          </div>
           <button
             onClick={() => { if (window.confirm("시트 정리를 할까요?\n이번 달·지난달 탭에서, 프로그램에서 이미 지운 오더의 줄만 찾아 지웁니다.\n(직접 적은 줄은 건드리지 않습니다)")) run("cleanup"); }}
             disabled={!!busy}
