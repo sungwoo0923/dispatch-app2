@@ -10,9 +10,7 @@
 /* ── 상단 머리줄 ── */
 .kp-m .kp-m-header { min-height: 56px; }
 .kp-m-a .kp-m-header {
-  background: rgba(255, 255, 255, 0.92) !important;
-  backdrop-filter: saturate(1.4) blur(14px);
-  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  background: #FFFFFF !important; /* ⭐ 끊김 개선 — 흐림(blur) 효과는 스크롤할 때마다 머리줄 뒤를 다시 그려 폰에서 버벅였다 */
   border-bottom: 1px solid var(--m-line) !important;
   box-shadow: 0 4px 18px rgba(16, 24, 40, 0.05);
 }

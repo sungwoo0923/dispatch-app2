@@ -21543,8 +21543,8 @@ function StopBadge({ count, list, type = "pickup", onSave, placeRows = [], timeO
       </button>
 
       {/* 뷰 팝업 */}
-      {open && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center">
+      {open && createPortal( // ⭐ 표 레이어 분리(끊김 개선) 뒤에도 화면 전체에 뜨도록 body에 그린다
+        <div className="kp-pc-pop fixed inset-0 z-[99999] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" />
           <div className="relative bg-white rounded-2xl shadow-2xl w-[480px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between shrink-0">
@@ -21595,7 +21595,7 @@ function StopBadge({ count, list, type = "pickup", onSave, placeRows = [], timeO
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* 수정 팝업 (3파트와 동일) */}
       <StopEditModal
@@ -21675,8 +21675,8 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
       </button>
 
       {/* ── 조회 팝업 ── */}
-      {open && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]"
+      {open && createPortal( // ⭐ 표 레이어 분리(끊김 개선) 뒤에도 화면 전체에 뜨도록 body에 그린다
+        <div className="kp-pc-pop fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]"
           onClick={() => setOpen(false)}
           onKeyDown={e => { if (e.key === "Enter") e.stopPropagation(); }}>
           <div className="bg-white rounded-2xl shadow-2xl w-[520px] max-w-[92vw] max-h-[85vh] flex flex-col overflow-hidden"
@@ -21758,7 +21758,7 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* 수정 팝업 (3파트와 동일) */}
       <StopEditModal
@@ -29559,7 +29559,7 @@ const head = isDark
     delete payload.톤수타입;
 
 const savedId = copyTarget._id;
-    showAlert("오더 수정 완료");
+    sflowToast("오더 수정 완료", "success"); // ⭐ 확인 버튼을 눌러야 닫히던 창 → 오른쪽 위 알림(바로 다음 작업 가능)
     setCopyPanelOpen(false);
     // ⭐ 일마감 검증에서 열었던 수정이면, 방금 고친 내용이 반영되도록 검증을
     // 자동으로 다시 계산한다(오류/경고 + 24시콜 비교결과 모두).
@@ -29606,7 +29606,7 @@ flashRow(savedId);
     }
     const ok = await submitCopyOrderPC(copyTarget, approvedShippers);
     if (ok === false) return;
-    showAlert("복사 등록 완료");
+    sflowToast("복사 등록 완료", "success");
     setCopyPanelOpen(false);
     setDailyCloseIssueCtx(null);
     if (copyTarget.상차지명) savePlaceSmart(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "", null, undefined,
@@ -34833,8 +34833,8 @@ function MemoIconCell({ text = "", urgency = "" }) {
         )}
       </button>
 
-      {open && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
+      {open && createPortal( // ⭐ 표 레이어 분리(끊김 개선) 뒤에도 화면 전체에 뜨도록 body에 그린다
+        <div className="kp-pc-pop fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
           <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-w-[92vw] border border-gray-100" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-5 py-4 rounded-t-2xl flex items-center gap-3">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -34858,7 +34858,7 @@ function MemoIconCell({ text = "", urgency = "" }) {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   );
 }
@@ -34888,8 +34888,8 @@ function NoteIconCell({ value = "", onSave }) {
         </svg>
       </button>
 
-      {open && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
+      {open && createPortal( // ⭐ 표 레이어 분리(끊김 개선) 뒤에도 화면 전체에 뜨도록 body에 그린다
+        <div className="kp-pc-pop fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
           <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-w-[92vw] border border-gray-100" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-5 py-4 rounded-t-2xl flex items-center gap-3">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -34932,7 +34932,7 @@ function NoteIconCell({ value = "", onSave }) {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   );
 }
@@ -41222,7 +41222,7 @@ return (
 
 // ✅ UI 먼저
     setCopyPanelOpen(false);
-    showAlert("오더 수정 완료");
+    sflowToast("오더 수정 완료", "success"); // ⭐ 확인 버튼 없이 바로 다음 작업
     setEdited(prev => { const next = { ...prev }; delete next[id]; return next; });
     // ⭐ 일마감 검증에서 열었던 수정이면, 방금 고친 내용이 반영되도록 검증을
     // 자동으로 다시 계산한다(오류/경고 + 24시콜 비교결과 모두).
@@ -41271,7 +41271,7 @@ return (
 
     const ok = await submitCopyOrderPC(copyTarget, approvedShippers);
     if (ok === false) return;
-    showAlert("복사 등록 완료");
+    sflowToast("복사 등록 완료", "success");
 
     setCopyPanelOpen(false);
     setDailyCloseIssueCtx(null);
@@ -44742,9 +44742,9 @@ function AddressCell({ text = "", max = 5, valueClassName = "", popupTitle = "�
           더보기
         </button>
       )}
-      {open && (
+      {open && createPortal( // ⭐ 표 레이어 분리(끊김 개선) 뒤에도 화면 전체에 뜨도록 body에 그린다
         <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
+          className="kp-pc-pop fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
           onClick={() => setOpen(false)}
         >
           <div
@@ -44762,7 +44762,7 @@ function AddressCell({ text = "", max = 5, valueClassName = "", popupTitle = "�
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   );
 }

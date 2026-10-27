@@ -312,6 +312,73 @@ const _dismissedToasts = new Set();
 const _firestoreSeenKeys = new Set();
 let _firestoreSeenLoaded = false;
 
+// ⭐ 끊김 개선(2026-10-27) — 미배차 롤링 목록. 3초마다 넘기는 상태를 여기에만 두어 홈 화면 전체가 다시 그려지지 않게 한다.
+function PendingTicker({ orders: allPendingOrders = [], onOrderDoubleClick }) {
+  const TICKER_PAGE_SIZE = 6;
+  const [tickerPage, setTickerPage] = useState(0);
+  const totalTickerPages = Math.max(1, Math.ceil(allPendingOrders.length / TICKER_PAGE_SIZE));
+
+  useEffect(() => {
+    if (allPendingOrders.length <= TICKER_PAGE_SIZE) return;
+    const t = setInterval(() => {
+      setTickerPage(p => (p + 1) % totalTickerPages);
+    }, 3000);
+    return () => clearInterval(t);
+  }, [allPendingOrders.length, totalTickerPages]);
+  return (
+    <>
+    {/* ticker rows */}
+    <div
+      key={tickerPage}
+      style={{ animation: "tickerSlideUp 0.45s cubic-bezier(0.4,0,0.2,1)" }}
+    >
+      {allPendingOrders.slice(tickerPage * TICKER_PAGE_SIZE, tickerPage * TICKER_PAGE_SIZE + TICKER_PAGE_SIZE).map((d, i) => {
+        const 상차일 = (d?.상차일자 || d?.상차일 || d?.상차 || "").slice(5);
+        const 하차일 = (d?.하차일자 || d?.하차일 || "").slice(5);
+        const status = d?.배차상태 || "미배차";
+        return (
+          <div
+            key={i}
+            className="grid items-center border-b border-[#EEF1F6] hover:bg-[#F5F8FD] cursor-pointer transition w-full bg-white"
+            style={{ gridTemplateColumns: "1fr 1.3fr 1fr 1.3fr 1.6fr 1.4fr 1.4fr 1.2fr 1.2fr 0.7fr 1.2fr" }}
+            onDoubleClick={() => onOrderDoubleClick && onOrderDoubleClick(d)}
+          >
+            <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{상차일}</span>
+            <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.상차시간 || ""}</span>
+            <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{하차일}</span>
+            <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.하차시간 || ""}</span>
+            <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.거래처명 || ""}</span>
+            <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.상차지명 || ""}</span>
+            <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.하차지명 || ""}</span>
+            <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.화물내용 || ""}</span>
+            <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.차량종류 || ""}</span>
+            <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.차량톤수 || ""}</span>
+            <span className="text-center px-2 py-3 whitespace-nowrap"><span className="inline-block px-2.5 py-0.5 rounded-full text-[12px] font-bold bg-red-50 text-red-600">{status}</span></span>
+          </div>
+        );
+      })}
+    </div>
+    {/* page indicator */}
+    {totalTickerPages > 1 && (
+      <div className="flex justify-center gap-1 py-2.5">
+        {Array.from({ length: Math.min(totalTickerPages, 12) }).map((_, i) => (
+          <div
+            key={i}
+            className="rounded-full transition-all duration-300 cursor-pointer"
+            onClick={() => setTickerPage(i)}
+            style={{
+              width: i === tickerPage ? 16 : 6,
+              height: 6,
+              background: i === tickerPage ? "#1B2B4B" : "#d1d5db",
+            }}
+          />
+        ))}
+      </div>
+    )}
+    </>
+  );
+}
+
 /* ===================== HOME DASHBOARD ===================== */
 export default function HomeDashboard({ role, user, userCompany = "", pending, delayed, dispatchData = [], onOrderDoubleClick }) {
   // ⭐ 년 매출·당월 매출·누적 오더 — 예전엔 새로고침할 때마다 올해 오더 전체(수천~만 건)를 서버에서 다시 받아
@@ -714,17 +781,7 @@ React.useEffect(() => {
       });
   }, [dispatchData]);
 
-  const TICKER_PAGE_SIZE = 6;
-  const [tickerPage, setTickerPage] = useState(0);
-  const totalTickerPages = Math.max(1, Math.ceil(allPendingOrders.length / TICKER_PAGE_SIZE));
-
-  useEffect(() => {
-    if (allPendingOrders.length <= TICKER_PAGE_SIZE) return;
-    const t = setInterval(() => {
-      setTickerPage(p => (p + 1) % totalTickerPages);
-    }, 3000);
-    return () => clearInterval(t);
-  }, [allPendingOrders.length, totalTickerPages]);
+  // ⭐ 미배차 롤링 목록은 PendingTicker(아래)가 따로 넘긴다 — 3초마다 홈 화면 전체를 다시 그리던 원인
 
   const formInput = "w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100 transition";
 
@@ -941,54 +998,7 @@ React.useEffect(() => {
                   <span key={h} className="text-center px-2 py-2.5 whitespace-nowrap">{h}</span>
                 ))}
               </div>
-              {/* ticker rows */}
-              <div
-                key={tickerPage}
-                style={{ animation: "tickerSlideUp 0.45s cubic-bezier(0.4,0,0.2,1)" }}
-              >
-                {allPendingOrders.slice(tickerPage * TICKER_PAGE_SIZE, tickerPage * TICKER_PAGE_SIZE + TICKER_PAGE_SIZE).map((d, i) => {
-                  const 상차일 = (d?.상차일자 || d?.상차일 || d?.상차 || "").slice(5);
-                  const 하차일 = (d?.하차일자 || d?.하차일 || "").slice(5);
-                  const status = d?.배차상태 || "미배차";
-                  return (
-                    <div
-                      key={i}
-                      className="grid items-center border-b border-[#EEF1F6] hover:bg-[#F5F8FD] cursor-pointer transition w-full bg-white"
-                      style={{ gridTemplateColumns: "1fr 1.3fr 1fr 1.3fr 1.6fr 1.4fr 1.4fr 1.2fr 1.2fr 0.7fr 1.2fr" }}
-                      onDoubleClick={() => onOrderDoubleClick && onOrderDoubleClick(d)}
-                    >
-                      <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{상차일}</span>
-                      <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.상차시간 || ""}</span>
-                      <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{하차일}</span>
-                      <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.하차시간 || ""}</span>
-                      <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.거래처명 || ""}</span>
-                      <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.상차지명 || ""}</span>
-                      <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.하차지명 || ""}</span>
-                      <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.화물내용 || ""}</span>
-                      <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.차량종류 || ""}</span>
-                      <span className="text-center px-2 py-3 text-[13.5px] font-semibold text-[#0F1A30] truncate">{d?.차량톤수 || ""}</span>
-                      <span className="text-center px-2 py-3 whitespace-nowrap"><span className="inline-block px-2.5 py-0.5 rounded-full text-[12px] font-bold bg-red-50 text-red-600">{status}</span></span>
-                    </div>
-                  );
-                })}
-              </div>
-              {/* page indicator */}
-              {totalTickerPages > 1 && (
-                <div className="flex justify-center gap-1 py-2.5">
-                  {Array.from({ length: Math.min(totalTickerPages, 12) }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="rounded-full transition-all duration-300 cursor-pointer"
-                      onClick={() => setTickerPage(i)}
-                      style={{
-                        width: i === tickerPage ? 16 : 6,
-                        height: 6,
-                        background: i === tickerPage ? "#1B2B4B" : "#d1d5db",
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
+              <PendingTicker orders={allPendingOrders} onOrderDoubleClick={onOrderDoubleClick} />
             </div>
           )}
           <style>{`

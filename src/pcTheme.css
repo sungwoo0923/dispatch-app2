@@ -277,3 +277,8 @@
 .kp-pc .kp-grid tbody.kp-select-mode tr { cursor: pointer; user-select: none; }
 .kp-pc .kp-grid tbody.kp-select-mode tr:hover { background-color: #E6EEFB; }
 .kp-pc .kp-grid tbody.kp-select-mode tr:hover > td:first-child { box-shadow: inset 4px 0 0 #0F1A30; }
+
+/* ⭐ 끊김 개선(2026-10-27) — 배차 표를 따로 그리는 층(레이어)으로 분리한다. 팝업·오더복사수정패널에서 글자를 칠 때마다
+   뒤에 있는 큰 표 전체를 다시 그리던 비용(키 입력 1번에 약 25ms)이 사라진다.
+   표 안 팝업(메모·주소·경유지)은 화면 전체(body)에 그리도록 바꿔 두어 위치가 틀어지지 않는다. */
+.kp-pc .kp-grid > table { will-change: transform; }

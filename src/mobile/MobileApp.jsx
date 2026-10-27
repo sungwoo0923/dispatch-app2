@@ -2316,30 +2316,33 @@ const quickRange = (days) => {
   const loadedRangesRef = useRef([]); // [from, to] 목록
   const fullLoadedRef = useRef(false);
   const fullLoadingRef = useRef(null);
-  const mergeExtra = React.useCallback((rows) => {
+  const mergeExtra = React.useCallback((rows, { urgent = false } = {}) => {
     if (!rows.length) return;
-    // 많은 오더를 합치는 작업은 낮은 우선순위로 — 입력·스크롤이 먼저 반응하게(저사양 폰 버벅임 방지)
-    startTransition(() => setExtraMap((prev) => {
+    const apply = () => setExtraMap((prev) => {
       const next = new Map(prev);
       rows.forEach((r) => next.set(`${r.__col}/${r._id}`, r));
       return next;
-    }));
+    });
+    // 많은 오더를 합치는 작업은 낮은 우선순위로 — 입력·스크롤이 먼저 반응하게(저사양 폰 버벅임 방지)
+    // ⭐ 단, 사용자가 기다리는 목록(불러오기 첫 단계)은 바로 반영 — 낮은 우선순위는 검색어를 칠 때마다
+    //    밀려서 "몇 번 껐다 켜야 목록이 뜨던" 원인이었다.
+    if (urgent) apply(); else startTransition(apply);
   }, []);
-  const fetchRows = React.useCallback(async (makeQuery, { quiet = false } = {}) => {
+  const fetchRows = React.useCallback(async (makeQuery, { quiet = false, urgent = false } = {}) => {
     if (!quiet) setHistoryLoading((n) => n + 1); // quiet = 화면 뒤에서 미리 받기(상단 "오더 불러오는 중" 표시 없음)
     // ⭐ 2026-10-26 — 폰에 저장돼 있는 예전 오더를 먼저 바로 보여준다(불러오기·운임조회가 LTE에서 한참 걸리던 문제).
     //    이어서 서버에서 최신본을 받아 덮어쓴다(삭제·수정된 오더도 서버 기준으로 맞춰짐).
     Promise.all(["dispatch", "orders"].map((col) =>
       getDocsFromCache(makeQuery(collection(db, col))).then((snap) =>
         snap.docs.map((d) => ({ _id: d.id, id: d.id, __col: col, ...d.data() }))).catch(() => [])))
-      .then((parts) => { const rows = parts.flat().filter((o) => o.source !== "transport_transmit"); if (rows.length) mergeExtra(rows); })
+      .then((parts) => { const rows = parts.flat().filter((o) => o.source !== "transport_transmit"); if (rows.length) mergeExtra(rows, { urgent }); })
       .catch(() => {});
     try {
       const snaps = await Promise.all(["dispatch", "orders"].map((col) =>
         getDocs(makeQuery(collection(db, col))).then((snap) =>
           snap.docs.map((d) => ({ _id: d.id, id: d.id, __col: col, ...d.data() })))));
       const rows = snaps.flat().filter((o) => o.source !== "transport_transmit");
-      mergeExtra(rows);
+      mergeExtra(rows, { urgent });
       return rows;
     } catch {
       return null; // 실패 — "받은 것"으로 기록하지 않게(다음에 다시 시도)
@@ -2363,10 +2366,21 @@ const quickRange = (days) => {
     if (fullLoadedRef.current) return Promise.resolve();
     if (fullLoadingRef.current) return fullLoadingRef.current;
     // 최근 13개월(그보다 예전 기간은 날짜 조회 시 그 기간만 따로 불러온다)
+    // ⭐ 2026-10-27 속도 — 13개월을 한 번에 받으면 LTE에서 한참 걸려 불러오기 목록이 비어 보였다.
+    //    ① 최근 2개월을 먼저 받아 바로 보여주고 ② 나머지 기간은 이어서 뒤에서 받는다.
     const hStart = historyStartDate();
-    fullLoadingRef.current = fetchRows((c) => query(c, where("상차일", ">=", hStart), where("상차일", "<", mobileLiveStart())), { quiet: !!opts?.quiet })
-      .then((rows) => { if (rows !== null) { fullLoadedRef.current = true; loadedRangesRef.current.push([hStart, prevDayStr(mobileLiveStart())]); } })
-      .finally(() => { fullLoadingRef.current = null; });
+    const liveStart = mobileLiveStart();
+    const midStart = (() => { const d = new Date(`${liveStart}T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - 2); return d.toISOString().slice(0, 10); })();
+    const quiet = !!opts?.quiet;
+    fullLoadingRef.current = (async () => {
+      const recent = await fetchRows((c) => query(c, where("상차일", ">=", midStart), where("상차일", "<", liveStart)), { quiet, urgent: !quiet });
+      if (recent === null) return;
+      loadedRangesRef.current.push([midStart, prevDayStr(liveStart)]);
+      const older = await fetchRows((c) => query(c, where("상차일", ">=", hStart), where("상차일", "<", midStart)), { quiet: true });
+      if (older === null) return;
+      fullLoadedRef.current = true;
+      loadedRangesRef.current.push([hStart, prevDayStr(midStart)]);
+    })().finally(() => { fullLoadingRef.current = null; });
     return fullLoadingRef.current;
   }, [fetchRows]);
   // ⭐ 여러 사용자 실시간 일치 — 미배차 전부 + 앱을 연 뒤 누군가 등록·수정한 오더(날짜 무관) +
@@ -2718,10 +2732,14 @@ collections.forEach((name) => {
       // 🔥 모든 FCM 토큰 수집
       const sendPush = async (title, body) => {
         try {
-          const snap = await getDocs(collection(db, "users"));
-          const tokens = snap.docs
-            .map(d => d.data().fcmToken)
-            .filter(Boolean);
+          // ⭐ 끊김 — 예전엔 새 오더 1건마다 회원 전체(users)를 서버에서 다시 받았다. 10분 동안은 받아 둔 목록을 쓴다.
+          const cache = window.__kpPushTokens;
+          let tokens = cache && Date.now() - cache.at < 10 * 60 * 1000 ? cache.tokens : null;
+          if (!tokens) {
+            const snap = await getDocs(collection(db, "users"));
+            tokens = snap.docs.map(d => d.data().fcmToken).filter(Boolean);
+            window.__kpPushTokens = { at: Date.now(), tokens };
+          }
           if (!tokens.length) return;
 
           await fetch("/api/notify", {
@@ -3027,7 +3045,12 @@ useEffect(() => {
     // ⭐ 사용자 요청 — 예전엔 돌아올 때마다 서버에 조회를 12번 따로 보내고 "최신 정보 확인 중"을 띄웠다(새 정보가
     // 없어도 뜨고, 뜰 때마다 화면이 끊김). 이제는 이미 연결된 실시간 구독을 바로 다시 붙이기만 한다 — 그동안
     // 바뀐 것만 조용히 들어오고(새 정보가 없으면 아무 일도 없음), 표시도 띄우지 않는다.
-    if (hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) setTimeout(reconnectNow, 300);
+    // ⭐ 2026-10-27 끊김 — 돌아오자마자(0.3초) 연결을 끊었다 다시 붙이면 바로 누른 등록·수정 저장이 그동안 멈춰 있었다.
+    //    화면이 먼저 그려지고 손이 한가할 때(최대 1.5초 안) 다시 붙인다.
+    if (hiddenAt && Date.now() - hiddenAt >= HIDDEN_THRESHOLD_MS) {
+      const ric = window.requestIdleCallback || ((fn) => setTimeout(fn, 600));
+      setTimeout(() => ric(() => reconnectNow(), { timeout: 1500 }), 300);
+    }
   };
 
   // bfcache(뒤로가기 등으로 페이지가 통째로 캐시에서 복원)로 돌아온 경우도 같은
@@ -14148,7 +14171,17 @@ const [showNewDriver, setShowNewDriver] = useState(false);
 const [formConflictPopup, setFormConflictPopup] = useState(null);
 const [showOrderCopyModal, setShowOrderCopyModal] = useState(false);
 // ⭐ 오더복사는 예전 오더 전체가 필요 — 복사창을 열 때 1회 불러온다(타이핑 중엔 불러오지 않아 버벅임 방지)
-useEffect(() => { if (showOrderCopyModal) onNeedHistory?.(); }, [showOrderCopyModal]); // eslint-disable-line react-hooks/exhaustive-deps
+const [orderCopyHistLoading, setOrderCopyHistLoading] = useState(false);
+useEffect(() => {
+  if (!showOrderCopyModal) return undefined;
+  let alive = true;
+  const pr = onNeedHistory?.();
+  if (pr && typeof pr.then === "function") {
+    setOrderCopyHistLoading(true);
+    pr.finally(() => { if (alive) setOrderCopyHistLoading(false); });
+  }
+  return () => { alive = false; };
+}, [showOrderCopyModal]); // eslint-disable-line react-hooks/exhaustive-deps
 
 const [showClientPickerModal, setShowClientPickerModal] = useState(false);
 const [clientPickerSearch, setClientPickerSearch] = useState("");
@@ -17561,6 +17594,9 @@ const pickDrop = (c) => {
 
       {/* 목록 */}
       <div className="overflow-y-auto flex-1 px-4 py-2 space-y-2">
+        {orderCopyHistLoading && (
+          <div className="text-[12px] text-[#5B6B85] text-center py-1">예전 오더를 받는 중이에요 — 받는 대로 목록에 바로 추가돼요</div>
+        )}
         {orderCopyList
           .map(o => (
             <button
