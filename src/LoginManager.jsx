@@ -240,6 +240,8 @@ export function AdminSessionsPanel({ isTotalMaster, company, roleLabels = {} }) 
   const myId = getMySessionId();
   const rows = (list || [])
     .filter((s) => isTotalMaster || (s.companyName || DEFAULT_COMPANY) === company)
+    // ⭐ 최고관리자는 실무자가 아니라 프로그램 관리 계정 — 다른 사람 화면에는 접속 상태를 보이지 않는다
+    .filter((s) => isTotalMaster || !isTotalMasterRole(s.role, s.email))
     .filter((s) => !q || [s.name, s.email, s.companyName, s.device].some((v) => String(v || "").includes(q)))
     .sort((a, b) => sessionLastMs(b) - sessionLastMs(a));
   // ⭐ 최고관리자의 로그인은 최고관리자만 끊을 수 있다(관리자 화면에서는 잠금 표시)

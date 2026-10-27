@@ -2609,7 +2609,9 @@ import { LoginManagerModal } from "./LoginManager";
 import "./pcTheme.css";
 import "./pcColorRemap.css"; // ⭐ PC 알록달록 금지(남색 계열)
 import { OrderTimeline, OrderTimelineModal } from "./OrderTimeline";
-import { RecurringRegisterModal } from "./AutomationPanels";
+import { isTMUser } from "./staffFilter";
+import OrgChart from "./OrgChart";
+import { RecurringManagerModal, CloseReportModal } from "./AutomationPanels";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 // 기사전달용 업로드 링크 단축 — /upload?id=...&t=... (길고 낯설어 기사들이 거부감을
@@ -6907,6 +6909,8 @@ useEffect(() => {
   const [weekendCheckPopup, setWeekendCheckPopup] = useState(false);
   useEffect(() => {
     if (!user?.uid) return;
+    // ⭐ 최고관리자는 출근하는 직원이 아니라 프로그램 관리 계정 — 출근 기록을 남기지 않는다
+    if (role === "totalMaster" || user?.email === "tjddnqkf@naver.com") return;
     const company = role === "totalMaster"
       ? (localStorage.getItem("loginCompany") || userCompany || "")
       : (userCompany || localStorage.getItem("userCompany") || "");
@@ -8674,17 +8678,15 @@ return (
 // ===================== DispatchApp.jsx (PART 2/8) — END =====================
 
 // ===================== DispatchApp.jsx (PART 3/8) — START =====================
-// ⭐ 오더복사수정패널 위쪽 버튼 — [변경 이력] 창 / [정기 오더로] 등록 창 (2026-10-27)
+// ⭐ 오더복사수정패널 위쪽 버튼 — [변경 이력] 창 (2026-10-27)
 function CopyPanelExtras({ order, userNameMap }) {
-  const [open, setOpen] = React.useState(""); // "" | "history" | "recurring"
+  const [open, setOpen] = React.useState(""); // "" | "history"
   const nameOf = (u) => userNameMap?.get?.(String(u || "").trim().toLowerCase());
   const btn = "px-3.5 py-2 rounded-lg text-[13px] font-bold border border-[#DCE3EE] bg-white text-[#0F1A30] hover:border-[#1B2B4B] transition";
   return (
     <>
       <button type="button" className={btn} onClick={() => setOpen("history")}>변경 이력</button>
-      <button type="button" className={btn} onClick={() => setOpen("recurring")} title="고른 요일마다 이 오더를 자동으로 만들기">정기 오더로</button>
       {open === "history" && createPortal(<OrderTimelineModal order={order} userName={nameOf} onClose={() => setOpen("")} />, document.body)}
-      {open === "recurring" && createPortal(<RecurringRegisterModal order={order} onClose={() => setOpen("")} onSaved={() => sflowToast("정기 오더로 등록했습니다 — 관리자메뉴 › 업무 자동화에서 관리", "success")} />, document.body)}
     </>
   );
 }
@@ -9080,7 +9082,7 @@ function renderTimeWithCond(time, cond) {
 const [placeConflictQueue, setPlaceConflictQueue] = React.useState([]);
 const [placeConflictOpen, setPlaceConflictOpen] = React.useState(false);
       const [aiRecommend, setAiRecommend] = React.useState(null);
-      const [aiPopupOpen, setAiPopupOpen] = React.useState(false);
+      const [recurringOpen, setRecurringOpen] = React.useState(false); // ⭐ 정기오더 창
       const [areaFareHint, setAreaFareHint] = React.useState(null);
       const [distanceFareEstimate, setDistanceFareEstimate] = React.useState(null);
       const [showFareRouteMap, setShowFareRouteMap] = React.useState(false); // ⭐ 운임추천 바 "경로보기"
@@ -14489,15 +14491,15 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
       단가표
     </button>
 
-    {/* AI 추천 */}
+    {/* ⭐ 정기오더 — 지금 입력한 오더를 요일·시각마다 자동 등록 */}
     <button
       type="button"
-      disabled={!aiRecommend}
-      onClick={() => setAiPopupOpen(true)}
-      className="px-3 py-1.5 text-sm font-bold rounded-lg bg-white text-indigo-600 border border-indigo-300 hover:bg-indigo-50 disabled:opacity-40 transition"
+      onClick={() => setRecurringOpen(true)}
+      className="px-3 py-1.5 text-sm font-bold rounded-lg bg-white text-[#1B2B4B] border border-[#1B2B4B] hover:bg-[#F5F8FD] transition"
     >
-      AI 추천
+      정기오더
     </button>
+    {recurringOpen && createPortal(<RecurringManagerModal form={form} onClose={() => setRecurringOpen(false)} />, document.body)}
 
   </div>
 
@@ -16381,100 +16383,6 @@ className={`
       />
     </div>
   </>
-)}
-{/* ===============================
-    🤖 AI 배차 추천 (FULL ROW)
-   =============================== */}
-{/* ================= 🤖 AI 추천 팝업 ================= */}
-{aiPopupOpen && aiRecommend && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-    <div className="bg-white rounded-2xl w-[520px] max-w-[94vw] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-
-      {/* 헤더 */}
-      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 2v4" /><path d="m6.4 5.4 2.8 2.8" /><path d="M2 13h4" /><path d="m5.4 20.6 2.8-2.8" />
-            <path d="M12 22v-4" /><path d="m18.6 20.6-2.8-2.8" /><path d="M22 13h-4" /><path d="m18.6 5.4-2.8 2.8" />
-            <circle cx="12" cy="13" r="3.5" />
-          </svg>
-          <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.AI 운임 추천" defaultText="AI 운임 추천" /></h3>
-        </div>
-        <button onClick={() => setAiPopupOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-lg font-bold transition">×</button>
-      </div>
-
-      <div className="px-6 py-5">
-        {/* 요약 */}
-        <div className={`mb-3 p-3.5 rounded-xl text-[13px] leading-relaxed font-semibold ${
-          aiRecommend.isOutlier ? "bg-red-50 text-red-700" : "bg-[#eef1f7] text-[#1B2B4B]"
-        }`}>
-          {makeAiExplain(aiRecommend)}
-        </div>
-
-        {/* ⭐ 연휴·성수기(특수일) 포함 여부 — 기본은 제외(꺼짐), 켜면 특수일까지 포함해서
-            다시 계산한다. 자사운임표에도 동일한 토글이 있다. */}
-        <label className="flex items-center gap-1.5 mb-4 cursor-pointer select-none w-fit">
-          <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-black"
-            checked={includeSpecialFare} onChange={() => setIncludeSpecialFare(v => !v)} />
-          <span className="text-[12px] font-semibold text-gray-600">특수일(연휴·성수기)도 평균에 포함</span>
-        </label>
-
-        {/* 추천 수치 */}
-        <div className="grid grid-cols-2 gap-2.5 mb-1">
-          <div className="bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-3">
-            <div className="text-[11px] font-bold text-gray-500 mb-1">차량 / 톤수</div>
-            <div className="text-[14px] font-bold text-gray-900">{aiRecommend.vehicle} / {form.차량톤수 || "미입력"}</div>
-          </div>
-          <div className="bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-3">
-            <div className="text-[11px] font-bold text-gray-500 mb-1">표본 건수</div>
-            <div className="text-[14px] font-bold text-gray-900 flex items-center flex-wrap gap-1">
-              {aiRecommend.sampleCount}건
-              {aiRecommend.excludedSpecialCount > 0 && (
-                <span className="px-1.5 py-0.5 rounded bg-black text-white text-[10px] font-extrabold">
-                  연휴·성수기 {aiRecommend.excludedSpecialCount}건 제외
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-3">
-            <div className="text-[11px] font-bold text-gray-500 mb-1">추천 청구운임</div>
-            <div className="text-[14px] font-bold text-[#1B2B4B]">{aiRecommend.fareMin.toLocaleString()} ~ {aiRecommend.fareMax.toLocaleString()}원</div>
-          </div>
-          <div className="bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-3">
-            <div className="text-[11px] font-bold text-gray-500 mb-1">평균 기사운임</div>
-            <div className="text-[14px] font-bold text-gray-900">{aiRecommend.driverAvg.toLocaleString()}원</div>
-          </div>
-          <div className="col-span-2 bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-3 flex items-center justify-between">
-            <div className="text-[11px] font-bold text-gray-500">예상 마진율</div>
-            <div className={`text-[15px] font-extrabold ${
-              aiRecommend.marginPercent >= 15 ? "text-emerald-600" : aiRecommend.marginPercent >= 5 ? "text-orange-500" : "text-red-500"
-            }`}>{aiRecommend.marginPercent}%</div>
-          </div>
-        </div>
-      </div>
-
-      {/* 버튼 */}
-      <div className="px-6 pb-5 flex justify-end gap-2">
-        <button
-          className="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-[13px] font-bold hover:bg-gray-200 transition"
-          onClick={() => setAiPopupOpen(false)}
-        >
-          닫기
-        </button>
-
-        <button
-          className="px-4 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"
-          onClick={() => {
-            onChange("청구운임", String(aiRecommend.fareAvg));
-            onChange("기사운임", String(aiRecommend.driverAvg));
-            setAiPopupOpen(false);
-          }}
-        >
-          추천 운임 적용
-        </button>
-      </div>
-    </div>
-  </div>
 )}
 {/* ================= 경유지 추가 팝업 (멀티 입력) ================= */}
 {stopPopupOpen && (
@@ -25662,6 +25570,7 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
 
   // ===================== 일마감 상태 =====================
   const [dailyCloseOpen, setDailyCloseOpen] = React.useState(false);
+const [closeReportOpen, setCloseReportOpen] = React.useState(false); // ⭐ 마감보고 전송 창
   const [dailyCloseResult, setDailyCloseResult] = React.useState(null);
   const [dailyCloseFilter, setDailyCloseFilter] = React.useState("all");
   const [closeFileResult, setCloseFileResult] = React.useState(null);
@@ -34456,6 +34365,13 @@ setConfirmChange(null);
           보고서 출력
         </button>
         <button
+          className="flex-1 py-2.5 rounded-xl bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#F5F8FD] font-bold text-[13px] transition"
+          onClick={() => setCloseReportOpen(true)}
+        >
+          마감보고 전송
+        </button>
+        {closeReportOpen && createPortal(<CloseReportModal result={dailyCloseResult} onClose={() => setCloseReportOpen(false)} />, document.body)}
+        <button
           className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition"
           onClick={() => {
             runDailyClose();
@@ -35295,6 +35211,7 @@ React.useEffect(() => {
 
 const [warningPopup, setWarningPopup] = React.useState(null);
 const [dailyCloseOpen, setDailyCloseOpen] = React.useState(false);
+const [closeReportOpen, setCloseReportOpen] = React.useState(false); // ⭐ 마감보고 전송 창
 const [dailyCloseResult, setDailyCloseResult] = React.useState(null);
 const [dailyCloseFilter, setDailyCloseFilter] = React.useState("all");
 const [closeFileResult, setCloseFileResult] = React.useState(null);
@@ -43899,6 +43816,11 @@ setCopyPlaceOptions(list);
           onClick={handleDailyReport}>
           보고서 출력
         </button>
+        <button className="flex-1 py-2.5 rounded-xl bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#F5F8FD] font-bold text-[13px] transition"
+          onClick={() => setCloseReportOpen(true)}>
+          마감보고 전송
+        </button>
+        {closeReportOpen && createPortal(<CloseReportModal result={dailyCloseResult} onClose={() => setCloseReportOpen(false)} />, document.body)}
         <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition"
           onClick={() => {
             runDailyClose();
@@ -59371,6 +59293,12 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
   const [mySchedules, setMySchedules] = useState([]);
   const [myName, setMyName] = useState("");
   const [myInfo, setMyInfo] = useState({});
+  // ⭐ 명함에 넣을 운송사 주소(회사정보)
+  const [companyAddr, setCompanyAddr] = useState("");
+  useEffect(() => {
+    if (!co) return;
+    fetchCompanyPrintInfo(co).then((ci) => setCompanyAddr(ci?.address || ci?.주소 || "")).catch(() => {});
+  }, [co]);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -59510,11 +59438,11 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
             <div className="absolute -left-16 -bottom-24 w-72 h-72 rounded-full" style={{ background: "radial-gradient(circle, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 70%)" }} />
             <div className="absolute inset-0" style={{ backgroundImage: "linear-gradient(115deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0) 60%)" }} />
             <div className="relative h-full flex flex-col px-8 py-7">
+              {/* ⭐ 운송사마다 쓰는 명함 — 프로그램 로고·이름은 넣지 않고 운송사 이름만 */}
               <div className="flex items-center gap-2.5">
-                <img src="/icons/sflow-icon.png" alt="" className="w-8 h-8 rounded-lg ring-1 ring-white/20" crossOrigin="anonymous" />
                 <div className="min-w-0">
-                  <div className="text-[15px] font-black tracking-tight truncate">{co || "KP-Flow"}</div>
-                  <div className="text-[10px] font-semibold tracking-[0.25em] text-blue-200/70">KP-FLOW LOGISTICS</div>
+                  <div className="text-[15px] font-black tracking-tight truncate">{co || "운송사"}</div>
+                  <div className="text-[10px] font-semibold tracking-[0.25em] text-blue-200/70">LOGISTICS</div>
                 </div>
                 <div className="ml-auto text-[10px] font-bold tracking-[0.2em] text-white/40">DIGITAL CARD</div>
               </div>
@@ -59525,6 +59453,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
               <div className="mt-5 pt-4 border-t border-white/15 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[13px]">
                 <div className="flex items-center gap-2 text-white/90 min-w-0"><Ico className="shrink-0 text-blue-200" d={<><rect x="7" y="2" width="10" height="20" rx="2.5" /><path d="M11 18h2" /></>} /><span className="truncate">{phone || "연락처 미등록"}</span></div>
                 <div className="flex items-center gap-2 text-white/90 min-w-0"><Ico className="shrink-0 text-blue-200" d={<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>} /><span className="truncate">{user?.email || "-"}</span></div>
+                {companyAddr && <div className="col-span-2 flex items-center gap-2 text-white/80 min-w-0"><Ico className="shrink-0 text-blue-200" d={<><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></>} /><span className="truncate">{companyAddr}</span></div>}
               </div>
             </div>
           </div>
@@ -59660,10 +59589,10 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
 function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats, myStats, cardImage, setCardImage, cardImageUploading, setCardImageUploading, showAlert }) {
   const [tab, setTab] = React.useState("회사정보");
   const canViewHR = role === "totalMaster" || role === "hrManager";
-  const tabs = canViewHR ? ["회사정보", "내정보", "출근기록부", "인사관리부"] : ["회사정보", "내정보", "출근기록부"];
+  const tabs = canViewHR ? ["회사정보", "조직도", "내정보", "출근기록부", "인사관리부"] : ["회사정보", "조직도", "내정보", "출근기록부"];
 
   // ⭐ 디자인 개편 — 관리자메뉴와 같은 왼쪽 메뉴바 + 상단 인사 카드(AdminShell 공용 레이아웃)
-  const TAB_ICONS = { 회사정보: "building", 내정보: "user", 출근기록부: "clock", 인사관리부: "idcard" };
+  const TAB_ICONS = { 회사정보: "building", 조직도: "users", 내정보: "user", 출근기록부: "clock", 인사관리부: "idcard" };
   const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
   const myName = user?.displayName || (user?.email || "").split("@")[0] || "";
   return (
@@ -59685,6 +59614,7 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
       {tab === "회사정보" && (
         <CompanyProfile userCompany={userCompany} role={role} userId={userId} />
       )}
+      {tab === "조직도" && <OrgChart userCompany={userCompany} />}
       {tab === "내정보" && (
         <MyProfilePage
           user={user}
@@ -59828,7 +59758,7 @@ function HRManagementPage({ userCompany, role, userId }) {
     if (!company) return;
     const q = query(collection(db, "users"), where("companyName", "==", company));
     const unsub = onSnapshot(q, snap => {
-      setMembers(snap.docs.map(d => ({ uid: d.id, ...d.data() })).filter(u => u.approved !== false));
+      setMembers(snap.docs.map(d => ({ uid: d.id, ...d.data() })).filter(u => u.approved !== false && !isTMUser(u))); // ⭐ 최고관리자는 인사 대상 아님
     }, () => {});
     return () => unsub();
   }, [company]);

@@ -3466,6 +3466,8 @@ function _todayKSTStr() {
 
 // 자동 출근 처리
 async function _autoCheckIn(co, uid, name, onSuccess) {
+  // ⭐ 최고관리자는 출근하는 직원이 아니라 프로그램 관리 계정 — 출근 기록을 남기지 않는다
+  if (localStorage.getItem("role") === "totalMaster" || auth.currentUser?.email === "tjddnqkf@naver.com") return;
   const today = _todayKSTStr();
   const attRef = doc(db, "attendance", `${today}_${uid}`);
   const existing = await getDoc(attRef);

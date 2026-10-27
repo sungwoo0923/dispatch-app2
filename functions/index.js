@@ -4120,6 +4120,20 @@ async function requireAdminRole(req, body) {
   return { decoded, isTM, company, email: decoded.email || "" };
 }
 
+// 배차 업무 직원(관리자·실무자 등) — 기사·화주 제외. 회사는 본인 소속(최고관리자는 화면에서 고른 회사)
+async function requireStaff(req, body) {
+  const authz = String(req.get("Authorization") || "");
+  const token = authz.startsWith("Bearer ") ? authz.slice(7) : "";
+  if (!token) throw Object.assign(new Error("로그인이 필요합니다."), { status: 401 });
+  const decoded = await getAuth().verifyIdToken(token);
+  const u = await db.collection("users").doc(decoded.uid).get();
+  const ud = u.exists ? u.data() : {};
+  const isTM = decoded.email === "tjddnqkf@naver.com" || ud.role === "totalMaster";
+  if (!isTM && (ud.approved === false || ["driver", "shipper"].includes(ud.role) || !u.exists)) throw Object.assign(new Error("사용 권한이 없습니다."), { status: 403 });
+  const company = isTM ? String(body?.company || ud.companyName || "돌캐") : String(ud.companyName || "돌캐");
+  return { decoded, isTM, company, email: decoded.email || "", name: ud.name || "" };
+}
+
 // 🗑️ 휴지통 — 오더가 어떤 화면·경로로 지워지든(PC·모바일·선택삭제·기사앱) 지우기 직전 내용을 7일 보관한다.
 //    (예전엔 삭제 기록에 오더 번호만 남아 Firebase 시점 복구 설정이 없으면 되살릴 수 없었다)
 exports.archiveDeletedOrder = functions.firestore.document("{col}/{orderId}").onDelete(async (snap, ctx) => {
@@ -4239,6 +4253,47 @@ exports.restoreDeleted = functions.runWith({ timeoutSeconds: 300, memory: "512MB
       res.json({ restored, requested: items.length });
       return;
     }
+    if (body.action === "purge") {
+      // 🔥 완전삭제 — 휴지통의 오더를 되돌릴 수 없게 어디에도 남기지 않고 지운다(한 번에 최대 20건 — 화면이 나눠 보내며 진행률을 보여준다)
+      const items = (Array.isArray(body.items) ? body.items : []).filter((x) => ["orders", "dispatch"].includes(x?.col) && x?.id).slice(0, 20);
+      let purged = 0; const skipped = [];
+      for (const x of items) {
+        const path = `${x.col}/${x.id}`;
+        if ((await db.doc(path).get()).exists) { skipped.push(path); continue; } // 살아 있는 오더는 지우지 않는다(휴지통 것만)
+        const tRef = db.collection("orderTrash").doc(`${x.col}_${x.id}`);
+        const t = await tRef.get();
+        const data = t.exists ? (t.data().data || {}) : {};
+        if (t.exists && !mine(t.data().companyName)) { skipped.push(path); continue; }
+        if (!t.exists && !me.isTM) { skipped.push(path); continue; }
+        const files = new Set();
+        collectStoragePaths(data, files);
+        const wipeDoc = async (ref) => {
+          const att = await ref.collection("attachments").get().catch(() => null);
+          att?.docs.forEach((d) => collectStoragePaths(d.data(), files));
+          await db.recursiveDelete(ref).catch(() => {}); // 문서 + 첨부(하위 컬렉션)
+        };
+        await wipeDoc(db.doc(path));
+        // 화주사 전송 사본 · 기사 운행기록 사본 · 기사 알림 · 위치 · 짧은 링크
+        for (const col of ["orders", "dispatch"]) {
+          const mirrors = await db.collection(col).where("originId", "==", x.id).get().catch(() => null);
+          for (const m of mirrors?.docs || []) { collectStoragePaths(m.data(), files); await wipeDoc(m.ref); await db.collection("liveLocations").doc(m.id).delete().catch(() => {}); }
+        }
+        const byField = [["driver_completed_archive", "originalOrderId"], ["driver_notifications", "orderId"], ["shortLinks", "id"]];
+        for (const [col, f] of byField) {
+          const q = await db.collection(col).where(f, "==", x.id).get().catch(() => null);
+          for (const d of q?.docs || []) await d.ref.delete().catch(() => {});
+        }
+        await db.collection("liveLocations").doc(x.id).delete().catch(() => {});
+        if (data._gsheetSync || data._gsheetMine) await removeDocFromGsheet(path, data).catch(() => {}); // 시트에 남은 줄
+        for (const f of files) await resetBucket().file(f).delete().catch(() => {});
+        await db.collection("deletedOrders").doc(`${x.col}_${x.id}`).delete().catch(() => {});
+        await tRef.delete();
+        purged += 1;
+      }
+      await db.collection("resetLogs").add({ kind: "purgeOrders", by: me.email, company: me.company, count: purged, at: FieldValue.serverTimestamp() }).catch(() => {});
+      res.json({ purged, skipped });
+      return;
+    }
     res.status(400).json({ error: "알 수 없는 요청입니다." });
   } catch (e) {
     console.error("휴지통 오류:", e);
@@ -4246,14 +4301,15 @@ exports.restoreDeleted = functions.runWith({ timeoutSeconds: 300, memory: "512MB
   }
 });
 
-// 🔁 정기 오더 — recurringOrders/{id}: { companyName, name, days:[0~6(일~토)], active, withDriver, order:{오더 내용}, dropOffset, createdBy }
-//    매일 정한 시각(기본 17시)에 "내일" 요일에 해당하는 정기 오더를 만든다. 같은 날짜로는 한 번만 만든다(recurringRuns 표시).
+// 🔁 정기오더 — recurringOrders/{id}: { companyName, name, days:[0~6(일~토)], createHour, createWhen("prev"=전날|"same"=당일),
+//    active, withDriver, order:{오더 내용}, dropOffset, createdBy }
+//    정기오더마다 정한 시각에 그 요일 오더를 만든다(전날 미리 또는 당일). 같은 날짜로는 한 번만 만든다(recurringRuns 표시).
 const RECURRING_FIELDS = ["거래처명", "거래처전화번호", "거래처담당자", "상차지명", "상차지주소", "상차지담당자", "상차지담당자번호", "하차지명", "하차지주소", "하차지담당자", "하차지담당자번호",
   "상차시간", "상차시간기준", "하차시간", "하차시간기준", "상차방법", "하차방법", "차량종류", "차량톤수", "화물내용", "지급방식", "배차방식", "청구운임", "기사운임", "수수료",
   "혼적", "독차", "혼적여부", "운행유형", "회전수", "메모", "적요", "전달사항", "전달사항고정", "경유상차목록", "경유하차목록", "경유지_상차", "경유지_하차",
   "상차지오더메모", "하차지오더메모", "companyName", "company", "운송사명", "운송사코드", "companyCode"];
 const RECURRING_DRIVER_FIELDS = ["차량번호", "이름", "전화번호", "기사명"];
-async function generateRecurringOrders(date, { company = null, ids = null } = {}) {
+async function generateRecurringOrders(date, { company = null, ids = null, checkDays = true } = {}) {
   const dow = new Date(`${date}T00:00:00Z`).getUTCDay();
   const snap = await db.collection("recurringOrders").where("active", "==", true).get();
   let created = 0; const names = [];
@@ -4261,7 +4317,7 @@ async function generateRecurringOrders(date, { company = null, ids = null } = {}
     const tp = t.data();
     if (company && (tp.companyName || "돌캐") !== company) continue;
     if (ids && !ids.includes(t.id)) continue;
-    if (!ids && !(tp.days || []).includes(dow)) continue;
+    if (checkDays && !(tp.days || []).includes(dow)) continue;
     if ((tp.skipDates || []).includes(date)) continue;
     const marker = db.collection("recurringRuns").doc(`${t.id}_${date}`);
     try { await marker.create({ at: FieldValue.serverTimestamp(), tpl: t.id, date }); } catch { continue; } // 이미 만든 날
@@ -4311,54 +4367,23 @@ async function buildDailySummary(company, date) {
     at: FieldValue.serverTimestamp(),
   };
 }
-async function sendDailySummary(company, date) {
-  const sm = await buildDailySummary(company, date);
-  await db.collection("dailySummaries").doc(`${company}_${date}`).set(sm);
-  const users = await db.collection("users").get();
-  const tokens = [];
-  users.docs.forEach((d) => {
-    const u = d.data();
-    const isTM = u.role === "totalMaster" || u.email === "tjddnqkf@naver.com";
-    if (!u.fcmToken || !(isTM || (u.role === "admin" && (u.companyName || "돌캐") === company))) return;
-    if (u.pushPrefs?.마감요약 === false) return;
-    tokens.push(u.fcmToken);
-  });
-  const won = (n) => `${Math.round(n).toLocaleString("ko-KR")}원`;
-  await sendPushAndCleanup(tokens, {
-    notification: {
-      title: `📊 ${date.slice(5).replace("-", "/")} 마감 요약 · ${company}`,
-      body: `오더 ${sm.count}건 (배차완료 ${sm.done} · 미배차 ${sm.pending}) · 매출 ${won(sm.revenue)} · 수익 ${won(sm.profit)}\n내일 오더 ${sm.tomorrowCount}건 중 미배차 ${sm.tomorrowPending}건`,
-    },
-    android: { priority: "high" },
-  }, "마감요약").catch((e) => console.warn("마감 요약 푸시 실패:", e?.message || e));
-  return sm;
-}
-const AUTOMATION_DEFAULT = { recurringHour: 17, summaryEnabled: true, summaryHour: 19 };
-async function automationSettingsFor(company) {
-  const s = await db.collection("automationSettings").doc(company).get().catch(() => null);
-  return { ...AUTOMATION_DEFAULT, ...(s?.exists ? s.data() : {}) };
-}
-
-// ⏰ 매시 5분(한국시간) — 정기 오더 생성 / 마감 요약 / 휴지통 7일 지난 것 비우기
+// ⏰ 매시 5분(한국시간) — 정기오더 생성(정기오더마다 정한 시각) / 휴지통 7일 지난 것 비우기
 exports.hourlyJobs = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).pubsub.schedule("5 * * * *").timeZone("Asia/Seoul").onRun(async () => {
   const hour = new Date(Date.now() + KST_MS).getUTCHours();
   const today = kstDateStr();
-  // 회사 목록 = 정기 오더·설정이 있는 회사 + 오늘 오더가 있는 회사
-  const companies = new Set();
-  (await db.collection("recurringOrders").where("active", "==", true).get()).docs.forEach((d) => companies.add(d.data().companyName || "돌캐"));
-  (await db.collection("automationSettings").get()).docs.forEach((d) => companies.add(d.id));
-  for (const col of ["orders", "dispatch"]) (await db.collection(col).where("상차일", "==", today).select("companyName", "source").get()).docs.forEach((d) => { if (d.get("source") !== "transport_transmit") companies.add(d.get("companyName") || "돌캐"); });
-  for (const c of companies) {
-    const cfg = await automationSettingsFor(c);
-    if (hour === Number(cfg.recurringHour)) await generateRecurringOrders(addDaysStr(today, 1), { company: c }).catch((e) => console.error("정기 오더 실패:", c, e));
-    if (cfg.summaryEnabled && hour === Number(cfg.summaryHour)) await sendDailySummary(c, today).catch((e) => console.error("마감 요약 실패:", c, e));
+  const tpls = await db.collection("recurringOrders").where("active", "==", true).get();
+  for (const t of tpls.docs) {
+    const tp = t.data();
+    if (Number(tp.createHour ?? 17) !== hour) continue;
+    const date = tp.createWhen === "same" ? today : addDaysStr(today, 1);
+    await generateRecurringOrders(date, { ids: [t.id] }).catch((e) => console.error("정기오더 실패:", t.id, e));
   }
   const old = await db.collection("orderTrash").where("expireAt", "<", Timestamp.now()).limit(400).get();
   if (!old.empty) { const wb = db.batch(); old.docs.forEach((d) => wb.delete(d.ref)); await wb.commit(); }
   return null;
 });
 
-// 화면에서 쓰는 통로 — POST { action: "recurringRun", date, ids? } / { action: "summaryNow", date }
+// 화면에서 쓰는 통로(직원 누구나) — POST { action: "recurringRun", date } / { action: "closeReport", date, preview? | to:[uid], memo, check }
 exports.automation = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -4369,17 +4394,34 @@ exports.automation = functions.runWith({ timeoutSeconds: 300, memory: "512MB" })
   if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
   body = body || {};
   try {
-    const me = await requireAdminRole(req, body);
+    const me = await requireStaff(req, body);
     const date = String(body.date || "");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { res.status(400).json({ error: "날짜를 확인해 주세요." }); return; }
     if (body.action === "recurringRun") {
-      res.json(await generateRecurringOrders(date, { company: me.company, ids: Array.isArray(body.ids) && body.ids.length ? body.ids : null }));
+      res.json(await generateRecurringOrders(date, { company: me.company }));
       return;
     }
-    if (body.action === "summaryNow") {
+    if (body.action === "closeReport") {
       const sm = await buildDailySummary(me.company, date);
-      await db.collection("dailySummaries").doc(`${me.company}_${date}`).set(sm);
-      res.json({ ...sm, at: Date.now() });
+      if (body.preview) { res.json({ ...sm, at: Date.now() }); return; }
+      const to = (Array.isArray(body.to) ? body.to : []).map(String).slice(0, 100);
+      if (!to.length) { res.status(400).json({ error: "받을 사람을 골라 주세요." }); return; }
+      const users = (await db.getAll(...to.map((uid) => db.collection("users").doc(uid)))).filter((d) => d.exists && (d.data().companyName || "돌캐") === me.company);
+      const memo = String(body.memo || "").slice(0, 500);
+      const check = body.check && typeof body.check === "object" ? body.check : null;
+      const sender = me.name || me.email.split("@")[0];
+      const won = (n) => `${Math.round(n).toLocaleString("ko-KR")}원`;
+      const title = `📨 ${date.slice(5).replace("-", "/")} 마감보고 · ${sender}`;
+      const lines = [
+        `오더 ${sm.count}건 (완료 ${sm.done} · 미배차 ${sm.pending}) · 매출 ${won(sm.revenue)} · 수익 ${won(sm.profit)}`,
+        `내일 오더 ${sm.tomorrowCount}건 중 미배차 ${sm.tomorrowPending}건`,
+        check ? `검증 ${check.passed}/${check.total} · 오류 ${check.errors} · 경고 ${check.warnings}` : "",
+        memo ? `메모: ${memo}` : "",
+      ].filter(Boolean);
+      await db.collection("closeReports").add({ company: me.company, date, by: me.email, byName: sender, to: users.map((d) => d.id), memo, check, summary: { ...sm, at: null }, at: FieldValue.serverTimestamp() });
+      const tokens = users.map((d) => d.data().fcmToken).filter(Boolean);
+      await sendPushAndCleanup(tokens, { notification: { title, body: lines.join("\n") }, android: { priority: "high" } }, "마감보고").catch((e) => console.warn("마감보고 푸시 실패:", e?.message || e));
+      res.json({ recipients: users.length, pushed: tokens.length });
       return;
     }
     res.status(400).json({ error: "알 수 없는 요청입니다." });

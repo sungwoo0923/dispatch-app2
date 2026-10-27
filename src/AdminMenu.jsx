@@ -28,7 +28,6 @@ import SheetImportPanel from "./SheetImportPanel";
 import GsheetMinePanel from "./GsheetMinePanel";
 import BlindMinePanel from "./BlindMinePanel";
 import TrashPanel from "./TrashPanel";
-import { RecurringOrdersPanel, DailySummaryPanel } from "./AutomationPanels";
 import { useCustomRoles } from "./customRoles";
 import { EditableText } from "./EditMode";
 import { useLoadOrderRange, monthEnd, monthStart } from "./orderHistory";
@@ -142,7 +141,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     ? ["totalMaster", "admin", "hrManager", "user", "viewer", "driver", "shipper", "test", ...customRoles.map(r => r.key)]
     : ["admin", "user", "viewer", "driver", "shipper", "test", ...customRoles.map(r => r.key)];
   const effectiveCompany = myCompany || parentCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY;
-  // 휴지통·정기 오더·마감 요약이 다루는 회사 — 최고관리자는 지금 들어가 있는 회사
+  // 휴지통이 다루는 회사 — 최고관리자는 지금 들어가 있는 회사
   const autoCompany = (isTotalMaster && localStorage.getItem("loginCompany")) || effectiveCompany;
 
   useEffect(() => {
@@ -692,8 +691,6 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     gsheetMine: "구글시트 전송",
     blindMine: "블라인드 모드",
     trash: "휴지통",
-    recurring: "정기 오더",
-    dailySummary: "마감 요약",
     forceUpdate: "화주사 강제 업데이트",
     permissions: "권한 관리",
     landingEdit: "랜딩페이지 편집",
@@ -703,7 +700,6 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     { key: "members", label: "회원 관리", tabs: ["members"] },
     { key: "shipperMgmt", label: "화주사 관리", tabs: ["linked", "transmit", "inquiries", "landingInquiries"] },
     { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "forceUpdate", "permissions", "sheetImport", "gsheetMine", "blindMine", "trash", "companyReset"] },
-    { key: "auto", label: "업무 자동화", tabs: ["recurring", "dailySummary"] },
     { key: "settings", label: "환경 설정", tabs: ["landingEdit", "notifTemplate"] },
   ]
     .map((g) => ({ ...g, tabs: g.tabs.filter((t) => !REQUIRES_MASTER_TABS.has(t) || isTotalMaster) }))
@@ -715,7 +711,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   // ⭐ 디자인 개편 — 왼쪽 메뉴바(그룹별) + 상단 인사 카드 + 숫자 카드(AdminShell 공용 레이아웃)
   const TAB_ICONS = {
     members: "users", linked: "link", transmit: "send", inquiries: "chat", landingInquiries: "inbox",
-    loginSessions: "phone", companyReset: "trash", sheetImport: "sheet", gsheetMine: "send", blindMine: "key", trash: "trash", recurring: "refresh", dailySummary: "money", sessionLogs: "history", forceUpdate: "refresh", permissions: "key",
+    loginSessions: "phone", companyReset: "trash", sheetImport: "sheet", gsheetMine: "send", blindMine: "key", trash: "trash", sessionLogs: "history", forceUpdate: "refresh", permissions: "key",
     landingEdit: "globe", notifTemplate: "bell",
   };
   const shellGroups = tabGroups.map((g) => ({
@@ -783,7 +779,18 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                 <div className="overflow-y-auto flex-1 p-2">
                   {filtered.length === 0 ? (
                     <div className="py-16 text-center text-[13px] text-[#9AA9C3]">검색 결과가 없습니다</div>
-                  ) : filtered.map(u => {
+                  ) : (() => {
+                    // ⭐ 부서(팀)별로 묶어서 보여준다 — 팀 이름순, 미배정은 맨 아래
+                    const groups = new Map();
+                    filtered.forEach((u) => { const t = String(u.team || "").trim() || "미배정"; if (!groups.has(t)) groups.set(t, []); groups.get(t).push(u); });
+                    const names = [...groups.keys()].sort((a, b) => (a === "미배정") - (b === "미배정") || a.localeCompare(b, "ko"));
+                    return names.map((t) => (
+                      <div key={t} className="mb-2">
+                        <div className="sticky top-0 z-[1] flex items-center justify-between px-3 py-1.5 mb-0.5 bg-white/95">
+                          <span className="text-[12px] font-black tracking-wide text-[#1B2B4B]">{t}</span>
+                          <span className="text-[11.5px] font-bold text-[#9AA9C3] tabular-nums">{groups.get(t).length}명</span>
+                        </div>
+                        {groups.get(t).map(u => {
                     const isMe = me?.uid === u.id;
                     const resigned = u.employmentStatus === "퇴사";
                     const on = manageUser?.id === u.id;
@@ -797,7 +804,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             <span className={`text-[14px] font-extrabold truncate ${on ? "text-white" : "text-[#0F1A30]"}`}>{u.name || u.email}</span>
                             {isMe && <span className={`text-[10px] font-extrabold px-1.5 rounded ${on ? "bg-white/15 text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>나</span>}
                           </span>
-                          <span className={`block text-[11.5px] truncate ${on ? "text-white/60" : "text-[#7A879C]"}`}>{[u.position, u.team || "미배정", roleLabels[u.role || "user"] || u.role].filter(Boolean).join(" · ")}</span>
+                          <span className={`block text-[11.5px] truncate ${on ? "text-white/60" : "text-[#7A879C]"}`}>{[u.position, roleLabels[u.role || "user"] || u.role].filter(Boolean).join(" · ")}</span>
                         </span>
                         <span className={`shrink-0 text-[10.5px] font-extrabold px-2 py-0.5 rounded-full ${
                           resigned ? (on ? "bg-white/10 text-white/70" : "bg-[#F1F4F9] text-[#7A879C]")
@@ -807,6 +814,9 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                       </button>
                     );
                   })}
+                      </div>
+                    ));
+                  })()}
                 </div>
               </div>
 
@@ -1260,8 +1270,6 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
           {adminTab === "gsheetMine" && isTotalMaster && <GsheetMinePanel />}
           {adminTab === "blindMine" && isTotalMaster && <BlindMinePanel />}
           {adminTab === "trash" && <TrashPanel company={autoCompany} />}
-          {adminTab === "recurring" && <RecurringOrdersPanel company={autoCompany} />}
-          {adminTab === "dailySummary" && <DailySummaryPanel company={autoCompany} />}
 
           {/* ====== 접속이력 탭 (최고관리자 전용) ====== */}
           {adminTab === "sessionLogs" && isTotalMaster && (() => {

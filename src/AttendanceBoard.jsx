@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { collection, deleteDoc, doc, onSnapshot, query, setDoc, where, addDoc, arrayUnion, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { db, DEFAULT_COMPANY } from "./firebase";
+import { isTMUser } from "./staffFilter";
 import { ATTENDANCE_STATUS_COLOR, LEAVE_TYPE_LABEL, isWeekend, findApprovedLeaveForDate, isHoliday, KR_NATIONAL_HOLIDAYS } from "./attendanceUtils";
 
 const ADMIN_ROLES = ["totalMaster", "admin"];
@@ -29,7 +30,10 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [employees, setEmployees] = useState([]);
-  const [records, setRecords] = useState([]);
+  const [recordsAll, setRecords] = useState([]);
+  const [tmUids, setTmUids] = useState(() => new Set());
+  // ⭐ 최고관리자의 예전 출근 기록도 보이지 않게
+  const records = useMemo(() => recordsAll.filter(r => !tmUids.has(r.uid)), [recordsAll, tmUids]);
   const [editCell, setEditCell] = useState(null);
   const [schedules, setSchedules] = useState([]);
   const [holidays, setHolidays] = useState([]);
@@ -91,7 +95,9 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   useEffect(() => {
     const q = query(collection(db, "users"), where("companyName", "==", company));
     const unsub = onSnapshot(q, snap => {
-      setEmployees(snap.docs.map(d => ({ uid: d.id, ...d.data() })).filter(u => u.approved !== false));
+      const all = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+      setTmUids(new Set(all.filter(isTMUser).map(u => u.uid)));
+      setEmployees(all.filter(u => u.approved !== false && !isTMUser(u))); // ⭐ 최고관리자는 출근기록부에서 제외
     }, () => {});
     return () => unsub();
   }, [company]);

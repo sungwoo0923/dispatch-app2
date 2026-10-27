@@ -16,6 +16,9 @@ export default function TrashPanel({ company = "" }) {
   const [data, setData] = React.useState(null);
   const [sel, setSel] = React.useState(() => new Set());
   const [done, setDone] = React.useState(null);
+  const [purgeAsk, setPurgeAsk] = React.useState(false);
+  const [purgeText, setPurgeText] = React.useState("");
+  const [purgeProg, setPurgeProg] = React.useState(null); // { done, total }
 
   const load = React.useCallback(async () => {
     setBusy("list"); setErr(""); setSel(new Set());
@@ -46,11 +49,32 @@ export default function TrashPanel({ company = "" }) {
     } catch (e) { setErr(e.message); } finally { setBusy(""); }
   };
 
+  // 🔥 완전삭제 — 5건씩 나눠 보내며 진행률을 보여준다. 되돌릴 수 없다.
+  const purge = async () => {
+    const list = (data?.items || []).filter((x) => sel.has(keyOf(x))).map(({ col, id }) => ({ col, id }));
+    if (!list.length) return;
+    setPurgeAsk(false); setPurgeText(""); setErr("");
+    setPurgeProg({ done: 0, total: list.length });
+    const gone = new Set();
+    try {
+      for (let i = 0; i < list.length; i += 5) {
+        const chunk = list.slice(i, i + 5);
+        await callFn("restoreDeleted", { action: "purge", items: chunk, company });
+        chunk.forEach((x) => gone.add(`${x.col}/${x.id}`));
+        setPurgeProg({ done: Math.min(list.length, i + chunk.length), total: list.length });
+      }
+      setDone(null);
+    } catch (e) { setErr(`완전삭제 중 오류 — ${gone.size}건까지 지웠습니다: ${e.message}`); }
+    setData((p) => p && { ...p, items: p.items.filter((x) => !gone.has(keyOf(x))) });
+    setSel(new Set());
+    setTimeout(() => setPurgeProg(null), 600);
+  };
+
   const input = "h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#4B6CB7]";
   return (
     <div className={KP_CARD}>
       <KpCardHead eyebrow="TRASH" title="휴지통"
-        desc={<>지운 오더는 <b className="text-[#0F1A30]">7일 동안</b> 여기에 보관됩니다. 골라서 지우기 직전 그대로 되살릴 수 있습니다.</>} />
+        desc={<>지운 오더는 <b className="text-[#0F1A30]">7일 동안</b> 여기에 보관됩니다. 골라서 되살리거나, <b className="text-[#0F1A30]">완전삭제</b>로 흔적 없이 지울 수 있습니다.</>} />
       <div className="px-5 sm:px-6 py-5 space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[13px] font-bold text-[#7A879C]">지운 날</span>
@@ -77,10 +101,16 @@ export default function TrashPanel({ company = "" }) {
               <input type="checkbox" checked={allOn} disabled={!items.length} onChange={() => setSel(allOn ? new Set() : new Set(items.map(keyOf)))} />
               전체 선택 <span className="text-[#7A879C] font-semibold">({sel.size}/{items.length}건)</span>
             </label>
-            <button onClick={restore} disabled={!!busy || sel.size === 0}
-              className="h-11 px-6 rounded-2xl bg-[#0F1A30] text-white text-[14.5px] font-black disabled:opacity-40 shadow-[0_8px_18px_rgba(15,26,48,0.22)]">
-              {busy === "restore" ? "되살리는 중…" : `선택 복구 (${sel.size}건)`}
-            </button>
+            <div className="flex gap-2">
+              <button onClick={() => setPurgeAsk(true)} disabled={!!busy || !!purgeProg || sel.size === 0}
+                className="h-11 px-5 rounded-2xl border border-[#0F1A30] text-[#0F1A30] text-[14px] font-black disabled:opacity-30">
+                완전삭제
+              </button>
+              <button onClick={restore} disabled={!!busy || !!purgeProg || sel.size === 0}
+                className="h-11 px-6 rounded-2xl bg-[#0F1A30] text-white text-[14.5px] font-black disabled:opacity-40 shadow-[0_8px_18px_rgba(15,26,48,0.22)]">
+                {busy === "restore" ? "되살리는 중…" : `선택 복구 (${sel.size}건)`}
+              </button>
+            </div>
           </div>
         )}
 
@@ -105,6 +135,41 @@ export default function TrashPanel({ company = "" }) {
           </div>
         ))}
       </div>
+
+      {/* 완전삭제 확인 — "완전삭제"를 직접 입력해야 진행 */}
+      {purgeAsk && (
+        <div className="fixed inset-0 z-[1000000] bg-[#0F1A30]/50 flex items-center justify-center p-4" onClick={() => setPurgeAsk(false)}>
+          <div className="w-full max-w-[440px] bg-white rounded-[22px] shadow-[0_24px_60px_rgba(15,26,48,0.35)] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-5 bg-[#0F1A30] text-white">
+              <div className="text-[11px] font-extrabold tracking-[0.22em] text-white/60">PERMANENT DELETE</div>
+              <div className="text-[19px] font-black">완전삭제 · {sel.size}건</div>
+            </div>
+            <div className="px-6 py-5 space-y-3 text-[13.5px] text-[#3A4A66] leading-relaxed">
+              <p>선택한 오더를 <b className="text-[#0F1A30]">휴지통·첨부파일·화주사 사본·기사 알림·운행기록 사본·구글시트 줄</b>까지 모두 지웁니다.</p>
+              <p className="font-black text-[#0F1A30]">지운 뒤에는 절대 되돌릴 수 없습니다.</p>
+              <input value={purgeText} onChange={(e) => setPurgeText(e.target.value)} placeholder="계속하려면 '완전삭제'를 입력하세요" autoFocus
+                className="w-full h-11 px-3.5 rounded-xl border border-[#DCE3EE] text-[14px] font-bold text-[#0F1A30] outline-none focus:border-[#0F1A30]" />
+            </div>
+            <div className="px-6 pb-5 flex gap-2">
+              <button onClick={() => setPurgeAsk(false)} className="flex-1 h-12 rounded-2xl border border-[#E3E8F0] text-[#0F1A30] text-[14.5px] font-black">취소</button>
+              <button onClick={purge} disabled={purgeText.trim() !== "완전삭제"} className="flex-[1.3] h-12 rounded-2xl bg-[#0F1A30] text-white text-[14.5px] font-black disabled:opacity-30">완전삭제</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* 완전삭제 진행률 */}
+      {purgeProg && (
+        <div className="fixed inset-0 z-[1000001] bg-[#0F1A30]/60 flex items-center justify-center p-4">
+          <div className="w-full max-w-[380px] bg-white rounded-[22px] px-7 py-7 shadow-[0_24px_60px_rgba(15,26,48,0.35)] text-center">
+            <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">DELETING</div>
+            <div className="text-[44px] font-black text-[#0F1A30] tabular-nums leading-tight mt-1">{Math.round((purgeProg.done / purgeProg.total) * 100)}<span className="text-[20px]">%</span></div>
+            <div className="mt-3 h-2.5 rounded-full bg-[#EEF1F6] overflow-hidden">
+              <div className="h-full rounded-full bg-gradient-to-r from-[#1B2B4B] to-[#4B6CB7] transition-all duration-300" style={{ width: `${(purgeProg.done / purgeProg.total) * 100}%` }} />
+            </div>
+            <div className="mt-3 text-[13px] font-bold text-[#5B6B85]">{purgeProg.done} / {purgeProg.total}건 완전삭제 {purgeProg.done === purgeProg.total ? "완료" : "중… 창을 닫지 마세요"}</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
