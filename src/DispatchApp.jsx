@@ -2608,6 +2608,8 @@ import { auth, db, storage, DEFAULT_COMPANY } from "./firebase";
 import { LoginManagerModal } from "./LoginManager";
 import "./pcTheme.css";
 import "./pcColorRemap.css"; // ⭐ PC 알록달록 금지(남색 계열)
+import { OrderTimeline, OrderTimelineModal } from "./OrderTimeline";
+import { RecurringRegisterModal } from "./AutomationPanels";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 // 기사전달용 업로드 링크 단축 — /upload?id=...&t=... (길고 낯설어 기사들이 거부감을
@@ -8672,6 +8674,21 @@ return (
 // ===================== DispatchApp.jsx (PART 2/8) — END =====================
 
 // ===================== DispatchApp.jsx (PART 3/8) — START =====================
+// ⭐ 오더복사수정패널 위쪽 버튼 — [변경 이력] 창 / [정기 오더로] 등록 창 (2026-10-27)
+function CopyPanelExtras({ order, userNameMap }) {
+  const [open, setOpen] = React.useState(""); // "" | "history" | "recurring"
+  const nameOf = (u) => userNameMap?.get?.(String(u || "").trim().toLowerCase());
+  const btn = "px-3.5 py-2 rounded-lg text-[13px] font-bold border border-[#DCE3EE] bg-white text-[#0F1A30] hover:border-[#1B2B4B] transition";
+  return (
+    <>
+      <button type="button" className={btn} onClick={() => setOpen("history")}>변경 이력</button>
+      <button type="button" className={btn} onClick={() => setOpen("recurring")} title="고른 요일마다 이 오더를 자동으로 만들기">정기 오더로</button>
+      {open === "history" && createPortal(<OrderTimelineModal order={order} userName={nameOf} onClose={() => setOpen("")} />, document.body)}
+      {open === "recurring" && createPortal(<RecurringRegisterModal order={order} onClose={() => setOpen("")} onSaved={() => sflowToast("정기 오더로 등록했습니다 — 관리자메뉴 › 업무 자동화에서 관리", "success")} />, document.body)}
+    </>
+  );
+}
+
 function ToggleBadge({ active, onClick, activeCls, inactiveCls, children }) {
   return (
     <button
@@ -29501,6 +29518,7 @@ const head = isDark
       title="패널 스타일 전환 (A: 우측고정 / B: 중앙이동)">
       {copyPanelStyle}
     </button>
+    <CopyPanelExtras order={copyTarget} userNameMap={userNameMap} />
     {/* 운임조회 */}
     <button
       onClick={handleCopyFareSearch}
@@ -30584,21 +30602,11 @@ value={copyTarget?.화물수량 || ""}
   </div>
 </section>
 
-{/* ===================== 수정이력 ===================== */}
-{Array.isArray(copyTarget.history) && copyTarget.history.length > 0 && (
-  <div className="bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
-    <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">수정이력</div>
-    <div className="max-h-48 overflow-y-auto space-y-2">
-      {[...copyTarget.history].reverse().map((h, i) => (
-        <div key={i} className="flex items-start gap-3 text-[12px] pb-2 border-b border-gray-50 last:border-b-0">
-          <span className="text-gray-500 whitespace-nowrap shrink-0">{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
-          <span className="text-gray-500 shrink-0">{h.user}</span>
-          <span className="text-gray-700"><span className="font-semibold">{h.field}</span>: <span className="text-gray-500">{String(h.before ?? "없음")}</span> → <span className="font-semibold text-[#1B2B4B]">{String(h.after ?? "없음")}</span></span>
-        </div>
-      ))}
-    </div>
-  </div>
-)}
+{/* ===================== 변경 이력(공용 타임라인) ===================== */}
+<div className="bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
+  <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">변경 이력</div>
+  <div className="max-h-64 overflow-y-auto pr-1"><OrderTimeline order={copyTarget} size="sm" userName={(u) => userNameMap?.get?.(String(u || "").trim().toLowerCase())} /></div>
+</div>
 
 {/* ===================== 복사패널 운임조회 - 이력없음 확인 ===================== */}
 {copyAddrConfirmOpen && (
@@ -32532,26 +32540,11 @@ value={copyTarget?.화물수량 || ""}
               </div>
             )}
 
-            {/* 수정이력 */}
-            {Array.isArray(editTarget.history) &&
-              editTarget.history.length > 0 && (
-                <div className="mt-4 border-t pt-3">
-                  <div className="text-[12px] font-bold text-[#1B2B4B] mb-2">수정이력</div>
-                  <div className="max-h-40 overflow-y-auto space-y-1.5">
-                    {editTarget.history
-                      .filter(h => !IGNORE_HISTORY_FIELDS.has(h.field))
-                      .slice()
-                      .reverse()
-                      .map((h, i) => (
-                        <div key={i} className="flex items-start gap-2 text-[11px] pb-1.5 border-b border-gray-50 last:border-b-0">
-                          <span className="text-gray-500 whitespace-nowrap shrink-0">{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
-                          <span className="text-gray-500 shrink-0">{h.user}</span>
-                          <span className="text-gray-700"><span className="font-semibold">{h.field}</span>: <span className="text-gray-500">{String(h.before ?? "없음")}</span> → <span className="font-semibold text-[#1B2B4B]">{String(h.after ?? "없음")}</span></span>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
+            {/* 변경 이력(공용 타임라인) */}
+            <div className="mt-4 border-t pt-3">
+              <div className="text-[12px] font-bold text-[#1B2B4B] mb-2">변경 이력</div>
+              <div className="max-h-48 overflow-y-auto pr-1"><OrderTimeline order={editTarget} size="sm" userName={(u) => userNameMap?.get?.(String(u || "").trim().toLowerCase())} /></div>
+            </div>
 
             {/* ------------------------------------------------ */}
             {/* 🔵 저장/취소 */}
@@ -41163,6 +41156,7 @@ return (
       title="패널 스타일 전환 (A: 우측고정 / B: 중앙이동)">
       {copyPanelStyle}
     </button>
+    <CopyPanelExtras order={copyTarget} userNameMap={userNameMap} />
     <button
     onClick={handleCopyFareSearch}
     className="px-4 py-2 rounded-lg text-[13px] font-bold transition
@@ -47460,7 +47454,6 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
     new Date().getFullYear()
   );
   const [detailClient, setDetailClient] = React.useState(null);
-  const [aiMode, setAiMode] = React.useState(null);
   const [monthCompareOpen, setMonthCompareOpen] = React.useState(false); // ⭐ 월 비교 분석
   const [marginReportOpen, setMarginReportOpen] = React.useState(false); // ⭐ 매익률 원인 보고서
   const [monthCloseOpen, setMonthCloseOpen] = React.useState(false); // ⭐ 월 마감 점검
@@ -48115,9 +48108,6 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
                 {canSeeStaffPerf && (
                   <button onClick={() => setStaffPerfOpen(true)} className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[12px] font-bold hover:bg-white/90 transition">담당자별 실적</button>
                 )}
-                <button onClick={() => setAiMode("summary")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20"><EditableText id="settlement.report.AI요약" defaultText="AI 요약" /></button>
-                <button onClick={() => setAiMode("suggest")} className="px-3 py-1.5 rounded-lg bg-emerald-500/80 text-white text-[12px] font-semibold hover:bg-emerald-500 transition"><EditableText id="settlement.report.AI제안" defaultText="AI 제안" /></button>
-                <button onClick={() => setAiMode("report")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20"><EditableText id="settlement.report.보고서" defaultText="보고서" /></button>
                 <CustomSelect
                   className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-1.5 text-[13px] focus:outline-none ml-1"
                   value={selectedYear}
@@ -48180,14 +48170,6 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
             client={detailClient}
             rows={monthRows.filter((r) => r.거래처명 === detailClient)}
             onClose={() => setDetailClient(null)}
-          />
-        )}
-        {aiMode && (
-          <AIInsightModal
-            mode={aiMode}
-            monthRows={monthRows}
-            forecast2026={forecast2026}
-            onClose={() => setAiMode(null)}
           />
         )}
 
@@ -48467,57 +48449,6 @@ function WeekdayAnalysisChart({ monthRows = [] }) {
 }
 
 
-function AIInsightModal({ mode, monthRows = [], forecast2026, onClose }) {
-  const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
-  const sale = monthRows.reduce((a, r) => a + toInt(r.청구운임), 0);
-  const driver = monthRows.reduce((a, r) => a + toInt(r.기사운임), 0);
-  const profit = sale - driver;
-  const rate = sale ? (profit / sale) * 100 : 0;
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center">
-      <div className="bg-white rounded-2xl w-[520px] shadow-2xl overflow-hidden">
-        <div className="bg-[#1B2B4B] px-6 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-              <span className="text-[14px]">🤖</span>
-            </div>
-            <h3 className="text-[14px] font-bold text-white">
-              {mode === "summary" && "AI 요약"}
-              {mode === "suggest" && "AI 액션 제안"}
-              {mode === "report" && "AI 보고서"}
-            </h3>
-          </div>
-          <button onClick={onClose} className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/20 transition">✕</button>
-        </div>
-        <div className="p-6 space-y-4">
-          {mode === "summary" && (
-            <p className="text-[13px] text-gray-700 leading-relaxed">
-              당월 매출 <b>{sale.toLocaleString()}원</b>, 수익 <b>{profit.toLocaleString()}원</b>, 수익률 <b>{rate.toFixed(1)}%</b>입니다.
-              <br />현재 추세 기준 2026년 예상 매출은{" "}
-              <b className="text-indigo-700">{forecast2026.normal.toLocaleString()}원</b>입니다.
-            </p>
-          )}
-          {mode === "suggest" && (
-            <ul className="list-disc pl-5 text-[13px] text-gray-700 space-y-1">
-              <li>상위 거래처 운임 재협상 검토</li>
-              <li>수익률 10% 미만 거래처 관리 필요</li>
-              <li>고정 거래처 비중 확대 권장</li>
-            </ul>
-          )}
-          {mode === "report" && (
-            <textarea
-              readOnly
-              className="w-full h-40 border border-gray-200 rounded-lg p-3 text-[13px] bg-gray-50"
-              value={`2026년 매출 요약 보고\n\n총 매출: ${sale.toLocaleString()}원\n총 수익: ${profit.toLocaleString()}원\n수익률: ${rate.toFixed(1)}%\n\n전반적으로 안정적인 성장 흐름을 유지 중입니다.`}
-            />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function SettlementClientAnalysis({ topRows = [], dropRows = [], newClients = [], targetMonth }) {
   return (
     <>
@@ -48584,10 +48515,6 @@ function SettlementMonthlyHeader({ targetMonth, monthRows, monthPureRows, foreca
           <StatCard title="예상 수익" value={`${forecast.profit.toLocaleString()}원`} variant="forecast" />
         </div>
 
-        {/* AI 인사이트 — "순수 운송 매출"이라고 표기하는 만큼, 거래처관리에서 제외
-            체크한 거래처는 뺀 monthPureRows를 넘긴다(예전엔 monthRows를 그대로
-            넘겨서 "총 매출"과 "순수 운송 매출"이 항상 같은 숫자로 보였다). */}
-        <AIPremiumInsight rows={monthPureRows || monthRows} targetMonth={targetMonth} forecast2026={forecast2026} yPure={null} />
 
       </div>
     </section>
@@ -48863,46 +48790,6 @@ function ScenarioCard({ title, value, tone, highlight = false }) {
   );
 }
 
-function AIPremiumInsight({ rows = [], targetMonth, forecast2026, yPure }) {
-  const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
-  const totalSale = rows.reduce((a, r) => a + toInt(r.청구운임), 0);
-  const totalDriver = rows.reduce((a, r) => a + toInt(r.기사운임), 0);
-  const profit = totalSale - totalDriver;
-  const profitRate = totalSale === 0 ? 0 : (profit / totalSale) * 100;
-
-  return (
-    <div className="bg-gradient-to-br from-indigo-50 via-blue-50 to-white rounded-2xl border border-indigo-200 shadow-sm overflow-hidden">
-      <div className="px-6 py-4 border-b border-indigo-100 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-          <span className="text-[14px]">🤖</span>
-        </div>
-        <div>
-          <h3 className="text-[14px] font-bold text-indigo-800">AI 프리미엄 인사이트</h3>
-          <p className="text-[11px] text-indigo-500">데이터 기반 자동 분석</p>
-        </div>
-      </div>
-      <div className="p-6 space-y-4">
-        <p className="text-[13px] text-gray-700 leading-relaxed">
-          {targetMonth} 기준 순수 운송 매출은 <b>{totalSale.toLocaleString()}원</b>, 수익은 <b>{profit.toLocaleString()}원</b>으로 수익률 <b>{profitRate.toFixed(1)}%</b>를 기록 중입니다.
-        </p>
-        <p className="text-[13px] text-gray-700 leading-relaxed">
-          현재 추세가 유지될 경우 2026년 예상 매출은
-          <b className="text-indigo-700"> {forecast2026.normal.toLocaleString()}원</b> 수준으로 예상됩니다.
-        </p>
-        <div className="bg-white border border-indigo-100 rounded-xl p-4 text-[13px]">
-          <p className="font-semibold text-gray-800 mb-1">AI 요약 코멘트</p>
-          <p className="text-gray-600">
-            고정 거래처 비중이 안정적이며, 전년 대비 성장 여력이 충분합니다. 상위 거래처 집중 관리 시 연간 목표 달성 가능성이 높습니다.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ⭐ 매출관리 화면 개편 — 예전엔 이 컴포넌트가 카드(네이비 헤더+연도 선택+AI 버튼)
-// 하나를 통째로 그렸지만, 지금은 "매출 리포트" 카드 안의 한 섹션으로 합쳐져서
-// 렌더링된다. 연도 선택/AI 버튼은 그 상위 카드의 공통 헤더가 담당한다.
 function YearlySummaryChart({ rows = [], year, clients = [], places = [] }) {
   const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
   // ⭐ 성능 최적화 — clients/places가 바뀔 때만 이름→플래그 Map을 새로 만들어

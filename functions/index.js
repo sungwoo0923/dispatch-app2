@@ -266,6 +266,7 @@ exports.notifyNewDispatch =
       if (!data) return;
       // ⭐ 구글시트 가져오기로 한꺼번에 만든 예전 오더, 초기화 복원 중인 오더는 알림을 보내지 않는다
       if (data.importBatchId) return;
+      if (data._recurring) return; // ⭐ 정기 오더 자동 생성분은 알림 없음(한꺼번에 만들어져 알림이 쏟아지지 않게)
       if (await isBulkModeFor(data.companyName)) return;
 
       // ⭐ 화주사 전송 사본(source==="transport_transmit")은 이미 있던 오더를
@@ -4098,17 +4099,60 @@ async function setBulkMode(company, on) {
   if (on) await sleep(11000);
 }
 
-// ⭐ 삭제 오더 복구(2026-10-27, 최고관리자) — 프로그램에서 삭제하면 deletedOrders/{col}_{id}에 "언제 지웠는지"만 남는다.
-//    Firestore의 "지난 시점 읽기"로 지우기 직전 내용을 읽어 되살린다.
-//    ⚠️ 지난 시점 읽기는 Firebase 콘솔에서 "특정 시점 복구(PITR)"가 켜져 있어야 7일 전까지 된다(꺼져 있으면 1시간 전까지만).
-//  POST { action: "list", date: "YYYY-MM-DD"(지운 날, 한국시간) } → 그날 지운 오더 목록(내용 포함)
-//  POST { action: "restore", items: [{ col, id, at }] } → 되살리기(알림·구글시트 자동처리는 막고 넣는다)
+// ===================== 🗑️ 휴지통 · 🔁 정기 오더 · 📊 마감 요약 (2026-10-27) =====================
+const TRASH_KEEP_DAYS = 7;
+const KST_MS = 9 * 3600 * 1000;
+const kstDateStr = (ms = Date.now()) => new Date(ms + KST_MS).toISOString().slice(0, 10);
+const addDaysStr = (ymd, n) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const isCanceledOrder = (d) => d?.배차상태 === "배차취소" || GSHEET_CANCELED_STATUS_LIST.includes(d?.상태);
+
+// 관리자(admin)·최고관리자만 — 관리자는 자기 회사 것만 다룬다
+async function requireAdminRole(req, body) {
+  const authz = String(req.get("Authorization") || "");
+  const token = authz.startsWith("Bearer ") ? authz.slice(7) : "";
+  if (!token) throw Object.assign(new Error("로그인이 필요합니다."), { status: 401 });
+  const decoded = await getAuth().verifyIdToken(token);
+  const u = await db.collection("users").doc(decoded.uid).get();
+  const ud = u.exists ? u.data() : {};
+  const isTM = decoded.email === "tjddnqkf@naver.com" || ud.role === "totalMaster";
+  if (!isTM && ud.role !== "admin") throw Object.assign(new Error("관리자만 사용할 수 있습니다."), { status: 403 });
+  const company = isTM ? String(body?.company || ud.companyName || "돌캐") : String(ud.companyName || "돌캐");
+  return { decoded, isTM, company, email: decoded.email || "" };
+}
+
+// 🗑️ 휴지통 — 오더가 어떤 화면·경로로 지워지든(PC·모바일·선택삭제·기사앱) 지우기 직전 내용을 7일 보관한다.
+//    (예전엔 삭제 기록에 오더 번호만 남아 Firebase 시점 복구 설정이 없으면 되살릴 수 없었다)
+exports.archiveDeletedOrder = functions.firestore.document("{col}/{orderId}").onDelete(async (snap, ctx) => {
+  const { col, orderId } = ctx.params;
+  if (!["orders", "dispatch"].includes(col)) return;
+  const data = snap.data();
+  if (!data || data.source === "transport_transmit") return; // 화주사 전송 사본은 원본이 따로 있다
+  const company = data.companyName || "돌캐";
+  if (await isBulkModeFor(company)) return; // 운송사 초기화·가져오기 취소는 자체 보관함이 있다
+  const log = await db.collection("deletedOrders").doc(`${col}_${orderId}`).get().catch(() => null);
+  await db.collection("orderTrash").doc(`${col}_${orderId}`).set({
+    col, id: orderId, data, companyName: company,
+    deletedAt: FieldValue.serverTimestamp(), deletedBy: log?.exists ? (log.data().by || "") : "",
+    expireAt: Timestamp.fromMillis(Date.now() + TRASH_KEEP_DAYS * 86400000),
+    상차일: data.상차일 || "", 거래처명: data.거래처명 || "", 상차지명: data.상차지명 || "", 하차지명: data.하차지명 || "",
+  });
+});
+
+// 지난 시점 읽기(PITR) — 휴지통 생기기 전에 지운 오더용
 const readBeforeDelete = async (col, id, atMs) => {
   const ref = db.collection(col).doc(id);
-  const readTime = Timestamp.fromMillis(Math.floor((atMs - 60 * 1000) / 60000) * 60000); // 지우기 1분 전(분 단위로 맞춤 — PITR은 분 단위만 허용)
+  const readTime = Timestamp.fromMillis(Math.floor((atMs - 60 * 1000) / 60000) * 60000); // 지우기 1분 전(분 단위만 허용)
   const snap = await db.runTransaction((t) => t.get(ref), { readOnly: true, readTime });
   return snap.exists ? snap.data() : null;
 };
+const trashRow = (col, id, at, data, by, source) => ({
+  col, id, at, source, deletedBy: by || "",
+  상차일: data.상차일 || "", 거래처명: data.거래처명 || "", 상차지명: data.상차지명 || "", 하차지명: data.하차지명 || "",
+  차량번호: data.차량번호 || "", 청구운임: data.청구운임 || 0, 배차상태: data.배차상태 || "", 회사: data.companyName || "돌캐",
+});
+
+//  POST { action: "list", from, to }  → 그 기간(지운 날, 한국시간)에 지운 오더 — 휴지통 우선, 없으면(최고관리자) 시점 복구로 읽기
+//  POST { action: "restore", items: [{ col, id, at }] } → 되살리기(알림은 막고 넣는다)
 exports.restoreDeleted = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -4119,61 +4163,76 @@ exports.restoreDeleted = functions.runWith({ timeoutSeconds: 300, memory: "512MB
   if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
   body = body || {};
   try {
-    await requireTotalMaster(req);
+    const me = await requireAdminRole(req, body);
+    const mine = (c) => me.isTM || (c || "돌캐") === me.company;
     if (body.action === "list") {
-      const date = String(body.date || "");
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { res.status(400).json({ error: "날짜를 확인해 주세요." }); return; }
-      const start = new Date(`${date}T00:00:00+09:00`); const end = new Date(start.getTime() + 86400000);
-      const logs = await db.collection("deletedOrders").where("at", ">=", Timestamp.fromDate(start)).where("at", "<", Timestamp.fromDate(end)).get();
-      const items = []; let pitrOff = false; let failed = 0; let missing = 0; let already = 0;
-      const list = logs.docs.map((d) => ({ ...d.data(), at: d.data().at?.toMillis?.() || 0 })).filter((x) => x.col && x.id && x.at);
-      for (let i = 0; i < list.length; i += 10) {
-        await Promise.all(list.slice(i, i + 10).map(async (x) => {
-          try {
-            const now = await db.collection(x.col).doc(x.id).get();
-            if (now.exists) { already += 1; return; } // 이미 되살아남
-            const data = await readBeforeDelete(x.col, x.id, x.at);
-            if (!data) { missing += 1; return; } // 지우기 전 내용을 못 읽음(보관 기간 지남 등)
-            items.push({ col: x.col, id: x.id, at: x.at, 상차일: data.상차일 || "", 하차일: data.하차일 || "", 거래처명: data.거래처명 || "", 상차지명: data.상차지명 || "", 하차지명: data.하차지명 || "",
-              차량번호: data.차량번호 || "", 이름: data.이름 || "", 청구운임: data.청구운임 || 0, 배차상태: data.배차상태 || "", 회사: data.companyName || "", 작성자: data.작성자 || "" });
-          } catch (e) {
-            failed += 1;
-            if (/FAILED_PRECONDITION|INVALID_ARGUMENT|read_time|readTime|too old|version retention/i.test(String(e?.message || e))) pitrOff = true;
-            else console.warn("삭제 오더 읽기 실패:", x.col, x.id, e?.message || e);
-          }
-        }));
+      const from = String(body.from || body.date || ""); const to = String(body.to || body.from || body.date || "");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || to < from) { res.status(400).json({ error: "날짜를 확인해 주세요." }); return; }
+      const start = Timestamp.fromDate(new Date(`${from}T00:00:00+09:00`));
+      const end = Timestamp.fromDate(new Date(new Date(`${to}T00:00:00+09:00`).getTime() + 86400000));
+      const items = []; const seen = new Set();
+      const trash = await db.collection("orderTrash").where("deletedAt", ">=", start).where("deletedAt", "<", end).get();
+      const live = new Set();
+      const keys = trash.docs.map((d) => d.data());
+      for (let i = 0; i < keys.length; i += 300) {
+        (await db.getAll(...keys.slice(i, i + 300).map((t) => db.collection(t.col).doc(t.id)))).forEach((d) => { if (d.exists) live.add(d.ref.path); });
       }
-      items.sort((a, b) => a.at - b.at);
-      res.json({ date, logged: list.length, items, failed, missing, already, pitrOff });
+      keys.forEach((t) => {
+        seen.add(`${t.col}/${t.id}`);
+        if (!mine(t.companyName) || live.has(`${t.col}/${t.id}`)) return;
+        items.push(trashRow(t.col, t.id, t.deletedAt?.toMillis?.() || 0, t.data || {}, t.deletedBy, "trash"));
+      });
+      // 휴지통이 생기기 전 삭제분 — 시점 복구(PITR)가 켜져 있어야 읽힌다(최고관리자만)
+      let pitrOff = false; let missing = 0;
+      if (me.isTM) {
+        const logs = await db.collection("deletedOrders").where("at", ">=", start).where("at", "<", end).get();
+        const old = logs.docs.map((d) => ({ ...d.data(), at: d.data().at?.toMillis?.() || 0 })).filter((x) => x.col && x.id && x.at && !seen.has(`${x.col}/${x.id}`));
+        for (let i = 0; i < old.length; i += 10) {
+          await Promise.all(old.slice(i, i + 10).map(async (x) => {
+            try {
+              if ((await db.collection(x.col).doc(x.id).get()).exists) return;
+              const data = await readBeforeDelete(x.col, x.id, x.at);
+              if (!data) { missing += 1; return; }
+              items.push(trashRow(x.col, x.id, x.at, data, x.by, "pitr"));
+            } catch (e) {
+              missing += 1;
+              if (/FAILED_PRECONDITION|INVALID_ARGUMENT|read_time|readTime|too old|version retention/i.test(String(e?.message || e))) pitrOff = true;
+            }
+          }));
+        }
+      }
+      items.sort((a, b) => b.at - a.at);
+      res.json({ from, to, items, missing, pitrOff });
       return;
     }
     if (body.action === "restore") {
-      const items = (Array.isArray(body.items) ? body.items : []).filter((x) => ["orders", "dispatch"].includes(x?.col) && x?.id && x?.at).slice(0, 500);
+      const items = (Array.isArray(body.items) ? body.items : []).filter((x) => ["orders", "dispatch"].includes(x?.col) && x?.id).slice(0, 500);
       if (!items.length) { res.status(400).json({ error: "되살릴 오더를 골라 주세요." }); return; }
       const got = [];
       for (let i = 0; i < items.length; i += 10) {
         await Promise.all(items.slice(i, i + 10).map(async (x) => {
-          const now = await db.collection(x.col).doc(x.id).get();
-          if (now.exists) return;
-          const data = await readBeforeDelete(x.col, x.id, Number(x.at)).catch(() => null);
-          if (data) got.push({ ...x, data });
+          if ((await db.collection(x.col).doc(x.id).get()).exists) return;
+          const t = await db.collection("orderTrash").doc(`${x.col}_${x.id}`).get();
+          const data = t.exists ? t.data().data : (me.isTM && x.at ? await readBeforeDelete(x.col, x.id, Number(x.at)).catch(() => null) : null);
+          if (data && mine(data.companyName)) got.push({ ...x, data });
         }));
       }
       const companies = [...new Set(got.map((g) => g.data.companyName || "돌캐"))];
       for (const c of companies) await setBulkMode(c, true); // 되살리는 동안 "신규 오더" 알림이 쏟아지지 않게
       let restored = 0;
       try {
-        for (let i = 0; i < got.length; i += 400) {
+        for (let i = 0; i < got.length; i += 300) {
           const wb = db.batch();
-          got.slice(i, i + 400).forEach((g) => {
-            wb.set(db.collection(g.col).doc(g.id), { ...g.data, _lastModified: Date.now(), 복구일시: FieldValue.serverTimestamp() });
+          got.slice(i, i + 300).forEach((g) => {
+            wb.set(db.collection(g.col).doc(g.id), { ...g.data, _lastModified: Date.now(), 복구일시: FieldValue.serverTimestamp(), 복구자: me.email });
             wb.delete(db.collection("deletedOrders").doc(`${g.col}_${g.id}`));
+            wb.delete(db.collection("orderTrash").doc(`${g.col}_${g.id}`));
           });
           await wb.commit();
-          restored += Math.min(400, got.length - i);
+          restored += Math.min(300, got.length - i);
         }
       } finally {
-        await sleep(5000); // 방금 넣은 오더의 자동처리(알림)가 끝날 때까지 잠깐 유지
+        await sleep(5000);
         for (const c of companies) await setBulkMode(c, false);
       }
       for (const c of companies) await bumpDataVersion(c);
@@ -4182,7 +4241,150 @@ exports.restoreDeleted = functions.runWith({ timeoutSeconds: 300, memory: "512MB
     }
     res.status(400).json({ error: "알 수 없는 요청입니다." });
   } catch (e) {
-    console.error("삭제 오더 복구 오류:", e);
+    console.error("휴지통 오류:", e);
+    res.status(e.status || 500).json({ error: e.message || "오류" });
+  }
+});
+
+// 🔁 정기 오더 — recurringOrders/{id}: { companyName, name, days:[0~6(일~토)], active, withDriver, order:{오더 내용}, dropOffset, createdBy }
+//    매일 정한 시각(기본 17시)에 "내일" 요일에 해당하는 정기 오더를 만든다. 같은 날짜로는 한 번만 만든다(recurringRuns 표시).
+const RECURRING_FIELDS = ["거래처명", "거래처전화번호", "거래처담당자", "상차지명", "상차지주소", "상차지담당자", "상차지담당자번호", "하차지명", "하차지주소", "하차지담당자", "하차지담당자번호",
+  "상차시간", "상차시간기준", "하차시간", "하차시간기준", "상차방법", "하차방법", "차량종류", "차량톤수", "화물내용", "지급방식", "배차방식", "청구운임", "기사운임", "수수료",
+  "혼적", "독차", "혼적여부", "운행유형", "회전수", "메모", "적요", "전달사항", "전달사항고정", "경유상차목록", "경유하차목록", "경유지_상차", "경유지_하차",
+  "상차지오더메모", "하차지오더메모", "companyName", "company", "운송사명", "운송사코드", "companyCode"];
+const RECURRING_DRIVER_FIELDS = ["차량번호", "이름", "전화번호", "기사명"];
+async function generateRecurringOrders(date, { company = null, ids = null } = {}) {
+  const dow = new Date(`${date}T00:00:00Z`).getUTCDay();
+  const snap = await db.collection("recurringOrders").where("active", "==", true).get();
+  let created = 0; const names = [];
+  for (const t of snap.docs) {
+    const tp = t.data();
+    if (company && (tp.companyName || "돌캐") !== company) continue;
+    if (ids && !ids.includes(t.id)) continue;
+    if (!ids && !(tp.days || []).includes(dow)) continue;
+    if ((tp.skipDates || []).includes(date)) continue;
+    const marker = db.collection("recurringRuns").doc(`${t.id}_${date}`);
+    try { await marker.create({ at: FieldValue.serverTimestamp(), tpl: t.id, date }); } catch { continue; } // 이미 만든 날
+    const src = tp.order || {};
+    const o = {};
+    RECURRING_FIELDS.forEach((k) => { if (src[k] !== undefined) o[k] = src[k]; });
+    if (tp.withDriver) RECURRING_DRIVER_FIELDS.forEach((k) => { if (src[k] !== undefined) o[k] = src[k]; });
+    const hasDriver = !!(tp.withDriver && String(o.차량번호 || "").trim());
+    const id = `rec_${t.id}_${date}`;
+    Object.assign(o, {
+      _id: id, 상차일: date, 하차일: addDaysStr(date, Number(tp.dropOffset) || 0), 등록일: kstDateStr(),
+      companyName: o.companyName || tp.companyName || "돌캐",
+      배차상태: hasDriver ? "배차완료" : "배차중",
+      ...(hasDriver ? { 배차확정일시: FieldValue.serverTimestamp(), 배차확정자: "정기 오더", 배차완료일시: Date.now() } : {}),
+      작성자: tp.createdBy || "", 등록기기: "정기", 정기오더: { id: t.id, name: tp.name || "" }, _recurring: true,
+      createdAt: FieldValue.serverTimestamp(), updatedAt: Date.now(), _lastModified: Date.now(),
+    });
+    await db.collection("orders").doc(id).create(o).then(() => { created += 1; names.push(tp.name || `${o.거래처명} ${o.상차지명}→${o.하차지명}`); })
+      .catch((e) => console.warn("정기 오더 생성 실패:", t.id, e?.message || e));
+    await t.ref.update({ lastRunDate: date }).catch(() => {});
+  }
+  return { created, names };
+}
+
+// 📊 마감 요약 — 그날(상차일) 오더 건수·배차완료·미배차·매출·수익 + 내일 오더/미배차
+async function buildDailySummary(company, date) {
+  const tomorrow = addDaysStr(date, 1);
+  const rows = { [date]: [], [tomorrow]: [] };
+  for (const col of ["orders", "dispatch"]) {
+    const snap = await db.collection(col).where("상차일", "in", [date, tomorrow]).get();
+    snap.docs.forEach((d) => {
+      const x = d.data();
+      if (x.source === "transport_transmit" || isCanceledOrder(x) || (x.companyName || "돌캐") !== company) return;
+      rows[String(x.상차일)]?.push(x);
+    });
+  }
+  const num = (v) => Number(String(v ?? "").replace(/[^\d.-]/g, "")) || 0;
+  const t = rows[date];
+  const revenue = t.reduce((a, x) => a + num(x.청구운임), 0);
+  const pay = t.reduce((a, x) => a + num(x.기사운임), 0);
+  return {
+    company, date, count: t.length,
+    done: t.filter((x) => x.배차상태 === "배차완료").length,
+    pending: t.filter((x) => x.배차상태 !== "배차완료").length,
+    revenue, pay, profit: revenue - pay,
+    tomorrowCount: rows[tomorrow].length, tomorrowPending: rows[tomorrow].filter((x) => x.배차상태 !== "배차완료").length,
+    at: FieldValue.serverTimestamp(),
+  };
+}
+async function sendDailySummary(company, date) {
+  const sm = await buildDailySummary(company, date);
+  await db.collection("dailySummaries").doc(`${company}_${date}`).set(sm);
+  const users = await db.collection("users").get();
+  const tokens = [];
+  users.docs.forEach((d) => {
+    const u = d.data();
+    const isTM = u.role === "totalMaster" || u.email === "tjddnqkf@naver.com";
+    if (!u.fcmToken || !(isTM || (u.role === "admin" && (u.companyName || "돌캐") === company))) return;
+    if (u.pushPrefs?.마감요약 === false) return;
+    tokens.push(u.fcmToken);
+  });
+  const won = (n) => `${Math.round(n).toLocaleString("ko-KR")}원`;
+  await sendPushAndCleanup(tokens, {
+    notification: {
+      title: `📊 ${date.slice(5).replace("-", "/")} 마감 요약 · ${company}`,
+      body: `오더 ${sm.count}건 (배차완료 ${sm.done} · 미배차 ${sm.pending}) · 매출 ${won(sm.revenue)} · 수익 ${won(sm.profit)}\n내일 오더 ${sm.tomorrowCount}건 중 미배차 ${sm.tomorrowPending}건`,
+    },
+    android: { priority: "high" },
+  }, "마감요약").catch((e) => console.warn("마감 요약 푸시 실패:", e?.message || e));
+  return sm;
+}
+const AUTOMATION_DEFAULT = { recurringHour: 17, summaryEnabled: true, summaryHour: 19 };
+async function automationSettingsFor(company) {
+  const s = await db.collection("automationSettings").doc(company).get().catch(() => null);
+  return { ...AUTOMATION_DEFAULT, ...(s?.exists ? s.data() : {}) };
+}
+
+// ⏰ 매시 5분(한국시간) — 정기 오더 생성 / 마감 요약 / 휴지통 7일 지난 것 비우기
+exports.hourlyJobs = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).pubsub.schedule("5 * * * *").timeZone("Asia/Seoul").onRun(async () => {
+  const hour = new Date(Date.now() + KST_MS).getUTCHours();
+  const today = kstDateStr();
+  // 회사 목록 = 정기 오더·설정이 있는 회사 + 오늘 오더가 있는 회사
+  const companies = new Set();
+  (await db.collection("recurringOrders").where("active", "==", true).get()).docs.forEach((d) => companies.add(d.data().companyName || "돌캐"));
+  (await db.collection("automationSettings").get()).docs.forEach((d) => companies.add(d.id));
+  for (const col of ["orders", "dispatch"]) (await db.collection(col).where("상차일", "==", today).select("companyName", "source").get()).docs.forEach((d) => { if (d.get("source") !== "transport_transmit") companies.add(d.get("companyName") || "돌캐"); });
+  for (const c of companies) {
+    const cfg = await automationSettingsFor(c);
+    if (hour === Number(cfg.recurringHour)) await generateRecurringOrders(addDaysStr(today, 1), { company: c }).catch((e) => console.error("정기 오더 실패:", c, e));
+    if (cfg.summaryEnabled && hour === Number(cfg.summaryHour)) await sendDailySummary(c, today).catch((e) => console.error("마감 요약 실패:", c, e));
+  }
+  const old = await db.collection("orderTrash").where("expireAt", "<", Timestamp.now()).limit(400).get();
+  if (!old.empty) { const wb = db.batch(); old.docs.forEach((d) => wb.delete(d.ref)); await wb.commit(); }
+  return null;
+});
+
+// 화면에서 쓰는 통로 — POST { action: "recurringRun", date, ids? } / { action: "summaryNow", date }
+exports.automation = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
+  let body = req.body;
+  if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
+  body = body || {};
+  try {
+    const me = await requireAdminRole(req, body);
+    const date = String(body.date || "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { res.status(400).json({ error: "날짜를 확인해 주세요." }); return; }
+    if (body.action === "recurringRun") {
+      res.json(await generateRecurringOrders(date, { company: me.company, ids: Array.isArray(body.ids) && body.ids.length ? body.ids : null }));
+      return;
+    }
+    if (body.action === "summaryNow") {
+      const sm = await buildDailySummary(me.company, date);
+      await db.collection("dailySummaries").doc(`${me.company}_${date}`).set(sm);
+      res.json({ ...sm, at: Date.now() });
+      return;
+    }
+    res.status(400).json({ error: "알 수 없는 요청입니다." });
+  } catch (e) {
+    console.error("자동화 오류:", e);
     res.status(e.status || 500).json({ error: e.message || "오류" });
   }
 });

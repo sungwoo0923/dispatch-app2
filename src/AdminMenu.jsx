@@ -27,7 +27,8 @@ import CompanyResetPanel from "./CompanyResetPanel";
 import SheetImportPanel from "./SheetImportPanel";
 import GsheetMinePanel from "./GsheetMinePanel";
 import BlindMinePanel from "./BlindMinePanel";
-import RestoreDeletedPanel from "./RestoreDeletedPanel";
+import TrashPanel from "./TrashPanel";
+import { RecurringOrdersPanel, DailySummaryPanel } from "./AutomationPanels";
 import { useCustomRoles } from "./customRoles";
 import { EditableText } from "./EditMode";
 import { useLoadOrderRange, monthEnd, monthStart } from "./orderHistory";
@@ -141,6 +142,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     ? ["totalMaster", "admin", "hrManager", "user", "viewer", "driver", "shipper", "test", ...customRoles.map(r => r.key)]
     : ["admin", "user", "viewer", "driver", "shipper", "test", ...customRoles.map(r => r.key)];
   const effectiveCompany = myCompany || parentCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY;
+  // 휴지통·정기 오더·마감 요약이 다루는 회사 — 최고관리자는 지금 들어가 있는 회사
+  const autoCompany = (isTotalMaster && localStorage.getItem("loginCompany")) || effectiveCompany;
 
   useEffect(() => {
     if (!me) return;
@@ -674,7 +677,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   // 게이팅과 동일한 기준을 그대로 옮긴 것 — 권한 자체는 안 바뀜).
   const REQUIRES_MASTER_TABS = new Set([
     "landingInquiries", "sessionLogs", "forceUpdate", "permissions",
-    "landingEdit", "notifTemplate", "companyReset", "sheetImport", "gsheetMine", "blindMine", "restoreDeleted",
+    "landingEdit", "notifTemplate", "companyReset", "sheetImport", "gsheetMine", "blindMine",
   ]);
   const TAB_LABELS = {
     members: "회원 관리",
@@ -688,7 +691,9 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     sheetImport: "구글시트 가져오기",
     gsheetMine: "구글시트 전송",
     blindMine: "블라인드 모드",
-    restoreDeleted: "삭제 오더 복구",
+    trash: "휴지통",
+    recurring: "정기 오더",
+    dailySummary: "마감 요약",
     forceUpdate: "화주사 강제 업데이트",
     permissions: "권한 관리",
     landingEdit: "랜딩페이지 편집",
@@ -697,7 +702,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const tabGroups = [
     { key: "members", label: "회원 관리", tabs: ["members"] },
     { key: "shipperMgmt", label: "화주사 관리", tabs: ["linked", "transmit", "inquiries", "landingInquiries"] },
-    { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "forceUpdate", "permissions", "sheetImport", "gsheetMine", "blindMine", "restoreDeleted", "companyReset"] },
+    { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "forceUpdate", "permissions", "sheetImport", "gsheetMine", "blindMine", "trash", "companyReset"] },
+    { key: "auto", label: "업무 자동화", tabs: ["recurring", "dailySummary"] },
     { key: "settings", label: "환경 설정", tabs: ["landingEdit", "notifTemplate"] },
   ]
     .map((g) => ({ ...g, tabs: g.tabs.filter((t) => !REQUIRES_MASTER_TABS.has(t) || isTotalMaster) }))
@@ -709,7 +715,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   // ⭐ 디자인 개편 — 왼쪽 메뉴바(그룹별) + 상단 인사 카드 + 숫자 카드(AdminShell 공용 레이아웃)
   const TAB_ICONS = {
     members: "users", linked: "link", transmit: "send", inquiries: "chat", landingInquiries: "inbox",
-    loginSessions: "phone", companyReset: "trash", sheetImport: "sheet", gsheetMine: "send", blindMine: "key", restoreDeleted: "history", sessionLogs: "history", forceUpdate: "refresh", permissions: "key",
+    loginSessions: "phone", companyReset: "trash", sheetImport: "sheet", gsheetMine: "send", blindMine: "key", trash: "trash", recurring: "refresh", dailySummary: "money", sessionLogs: "history", forceUpdate: "refresh", permissions: "key",
     landingEdit: "globe", notifTemplate: "bell",
   };
   const shellGroups = tabGroups.map((g) => ({
@@ -1253,7 +1259,9 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
           {adminTab === "sheetImport" && isTotalMaster && <SheetImportPanel />}
           {adminTab === "gsheetMine" && isTotalMaster && <GsheetMinePanel />}
           {adminTab === "blindMine" && isTotalMaster && <BlindMinePanel />}
-          {adminTab === "restoreDeleted" && isTotalMaster && <RestoreDeletedPanel />}
+          {adminTab === "trash" && <TrashPanel company={autoCompany} />}
+          {adminTab === "recurring" && <RecurringOrdersPanel company={autoCompany} />}
+          {adminTab === "dailySummary" && <DailySummaryPanel company={autoCompany} />}
 
           {/* ====== 접속이력 탭 (최고관리자 전용) ====== */}
           {adminTab === "sessionLogs" && isTotalMaster && (() => {

@@ -4,7 +4,7 @@
 // (Firestore는 오래 끊겼다 다시 연결될 때 구독 범위 전체를 다시 읽은 것으로 과금 → 범위 축소)
 import React from "react";
 import { collection, doc, onSnapshot, query, where, setDoc, deleteDoc, getDoc, Timestamp, serverTimestamp } from "firebase/firestore";
-import { db } from "./firebase";
+import { db, auth } from "./firebase";
 
 export const PC_LIVE_DAYS = 7;
 export const pcLiveWindowStart = () => new Date(Date.now() + 9 * 3600e3 - PC_LIVE_DAYS * 86400e3).toISOString().slice(0, 10);
@@ -83,7 +83,8 @@ export function subscribeOrderSync({ since: sinceIn, onRows, onDeleted }) {
 // 삭제 기록만 남기기(삭제는 호출한 쪽이 직접 하는 경우)
 export function logOrderDeletion(col, id) {
   if (!col || !id) return;
-  setDoc(doc(db, "deletedOrders", `${col}_${id}`), { col, id, at: serverTimestamp() }).catch(() => {});
+  // by: 지운 사람(휴지통 화면에 표시)
+  setDoc(doc(db, "deletedOrders", `${col}_${id}`), { col, id, at: serverTimestamp(), by: auth.currentUser?.email || "" }).catch(() => {});
 }
 
 // 오더 삭제 + 삭제 기록(다른 사용자 화면에서도 바로 사라지게)

@@ -280,20 +280,6 @@ function DataRow({ label, value, sub, barPct, rank }) {
   );
 }
 
-function InsightBlock({ level, title, body }) {
-  const colors = { info: { bg: "#f0f4f9", border: "#1B2B4B", dot: "#1B2B4B" }, warn: { bg: "#fdf8f0", border: "#b45309", dot: "#d97706" }, good: { bg: "#f0faf4", border: "#065f46", dot: "#059669" } };
-  const c = colors[level] || colors.info;
-  return (
-    <div className="rounded-xl border-l-4 p-4" style={{ background: c.bg, borderLeftColor: c.border }}>
-      <div className="flex items-center gap-2 mb-1.5">
-        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: c.dot }} />
-        <span className="text-[13px] font-bold" style={{ color: c.border }}>{title}</span>
-      </div>
-      <div className="text-[13px] text-gray-600 leading-relaxed pl-4">{body}</div>
-    </div>
-  );
-}
-
 // ─────────────────────────────────────────────────────────
 //  TAB: 종합 개요
 // ─────────────────────────────────────────────────────────
@@ -940,171 +926,6 @@ function OperationsTab({ data }) {
 }
 
 // ─────────────────────────────────────────────────────────
-//  TAB: AI 인사이트
-// ─────────────────────────────────────────────────────────
-function InsightsTab({ data }) {
-  const now = new Date();
-  const cy = String(now.getFullYear());
-  const cm = String(now.getMonth() + 1).padStart(2, "0");
-  const pm = String(now.getMonth() === 0 ? 12 : now.getMonth()).padStart(2, "0");
-  const pmY = String(now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear());
-
-  const insights = useMemo(() => {
-    const result = [];
-    if (!data.length) return result;
-
-    const tmRows = data.filter(d => d.상차일?.startsWith(`${cy}-${cm}`));
-    const lmRows = data.filter(d => d.상차일?.startsWith(`${pmY}-${pm}`));
-    const cyRows = data.filter(d => getY(d.상차일) === cy);
-    const tmRev = tmRows.reduce((s, d) => s + toInt(d.청구운임), 0);
-    const lmRev = lmRows.reduce((s, d) => s + toInt(d.청구운임), 0);
-    const cyRev = cyRows.reduce((s, d) => s + toInt(d.청구운임), 0);
-    const cyCost = cyRows.reduce((s, d) => s + toInt(d.기사운임), 0);
-    const unassigned = data.filter(d => !d.차량번호?.trim() && !d.이름?.trim());
-
-    // 1. 전월 대비 매출
-    if (lmRev > 0) {
-      const chg = ((tmRev - lmRev) / lmRev * 100);
-      result.push({
-        level: chg >= 5 ? "good" : chg <= -10 ? "warn" : "info",
-        title: `${cm}월 매출 전월 대비 ${chg >= 0 ? "상승" : "하락"}`,
-        body: `이번 달 누적 매출 ${tmRev.toLocaleString()}원 — 전월(${lmRev.toLocaleString()}원) 대비 ${Math.abs(chg).toFixed(1)}% ${chg >= 0 ? "증가했습니다." : "감소했습니다."} ${chg <= -10 ? "매출 하락 원인을 파악하고 주요 거래처 유지 전략이 필요합니다." : chg >= 15 ? "매출 성과가 우수합니다. 이 흐름을 유지하기 위한 거래처 관리가 중요합니다." : ""}`,
-      });
-    }
-
-    // 2. 마진율 분석
-    const marginR = cyRev > 0 ? (cyRev - cyCost) / cyRev * 100 : 0;
-    result.push({
-      level: marginR >= 20 ? "good" : marginR >= 10 ? "info" : "warn",
-      title: `연간 마진율 ${marginR.toFixed(1)}%`,
-      body: `올해 수익 ${(cyRev - cyCost).toLocaleString()}원으로 마진율 ${marginR.toFixed(1)}%. ${marginR >= 20 ? "높은 수익성을 유지 중입니다." : marginR >= 10 ? "양호한 수준이나 운임 단가 최적화로 개선 여지가 있습니다." : "수수료율이 낮습니다. 청구운임 단가 검토를 권장합니다."}`,
-    });
-
-    // 3. 거래처 집중도
-    const clientMap = {};
-    data.forEach(d => { const k = d.거래처명?.trim(); if (k && isRealClient(k)) { clientMap[k] = (clientMap[k] || 0) + toInt(d.청구운임); } });
-    const sortedClients = Object.entries(clientMap).sort((a, b) => b[1] - a[1]);
-    const totalRev = sortedClients.reduce((s, [, v]) => s + v, 0);
-    const top3Rev = sortedClients.slice(0, 3).reduce((s, [, v]) => s + v, 0);
-    const top3Pct = totalRev > 0 ? (top3Rev / totalRev * 100) : 0;
-    const top3Names = sortedClients.slice(0, 3).map(([n]) => n).join(", ");
-    result.push({
-      level: top3Pct >= 60 ? "warn" : top3Pct >= 40 ? "info" : "good",
-      title: `상위 3개 거래처 집중도 ${top3Pct.toFixed(1)}%`,
-      body: `${top3Names} 3곳이 전체 매출의 ${top3Pct.toFixed(1)}%를 차지합니다. ${top3Pct >= 60 ? "특정 거래처 의존도가 높아 계약 종료 리스크에 노출될 수 있습니다. 신규 거래처 발굴을 권장합니다." : top3Pct >= 40 ? "적정 수준의 집중도입니다. 균형 잡힌 포트폴리오 유지를 권장합니다." : "거래처가 잘 분산되어 있어 리스크가 낮습니다."}`,
-    });
-
-    // 4. 미배차 현황
-    if (unassigned.length > 0) {
-      const unPct = (unassigned.length / data.length * 100);
-      result.push({
-        level: unPct >= 10 ? "warn" : "info",
-        title: `미배차 오더 ${unassigned.length}건 (${unPct.toFixed(1)}%)`,
-        body: `전체 오더 중 ${unassigned.length}건이 차량번호 또는 기사명이 미등록된 상태입니다. ${unPct >= 10 ? "미배차율이 높습니다. 배차 프로세스 점검이 필요합니다." : "미배차 오더를 확인하고 배차를 완료해 주세요."}`,
-      });
-    }
-
-    // 5. 성수기 분석
-    const monthlyRev = {};
-    data.forEach(d => {
-      const m = getYM(d.상차일);
-      if (m) { monthlyRev[m] = (monthlyRev[m] || 0) + toInt(d.청구운임); }
-    });
-    const sortedMonths = Object.entries(monthlyRev).sort((a, b) => b[1] - a[1]);
-    if (sortedMonths.length >= 3) {
-      const topMonth = sortedMonths[0];
-      const lowMonth = sortedMonths[sortedMonths.length - 1];
-      result.push({
-        level: "info",
-        title: `성수기·비수기 패턴 분석`,
-        body: `최고 매출 월: ${topMonth[0]} (${topMonth[1].toLocaleString()}원) / 최저 매출 월: ${lowMonth[0]} (${lowMonth[1].toLocaleString()}원). 계절 패턴에 맞춰 비수기 신규 거래처 유치 전략을 수립하세요.`,
-      });
-    }
-
-    // 6. 최우수 기사
-    const driverMap = {};
-    data.forEach(d => {
-      const k = d.이름?.trim();
-      if (!k || !isPersonName(k)) return;
-      driverMap[k] = driverMap[k] || { count: 0, pay: 0 };
-      driverMap[k].count++;
-      driverMap[k].pay += toInt(d.기사운임);
-    });
-    const topDrivers = Object.entries(driverMap).sort((a, b) => b[1].count - a[1].count).slice(0, 3);
-    if (topDrivers.length > 0) {
-      result.push({
-        level: "info",
-        title: `핵심 기사 현황`,
-        body: `상위 3인 기사: ${topDrivers.map(([n, v]) => `${n}(${v.count}건, ${v.pay.toLocaleString()}원)`).join(" / ")}. 핵심 기사와의 장기 관계 유지가 안정적 운영에 중요합니다.`,
-      });
-    }
-
-    // 7. 배차방식 분석
-    const dispMap = {};
-    data.forEach(d => { const k = d.배차방식?.trim() || "미설정"; dispMap[k] = (dispMap[k] || 0) + 1; });
-    const sortedDisp = Object.entries(dispMap).sort((a, b) => b[1] - a[1]);
-    if (sortedDisp.length > 1) {
-      const top = sortedDisp[0];
-      result.push({
-        level: "info",
-        title: `배차 방식 현황`,
-        body: `주요 배차 방식: "${top[0]}" ${top[1]}건 (${fmtPct(top[1], data.length)}). ${sortedDisp.length > 1 ? `그 외 ${sortedDisp.slice(1).map(([k, v]) => `${k}: ${v}건`).join(", ")}.` : ""} 배차 방식별 수익성을 정기적으로 비교 분석하세요.`,
-      });
-    }
-
-    // 8. 성장률 전망
-    const last6 = Array.from({ length: 6 }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
-      const prefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      return data.filter(x => getYM(x.상차일) === prefix).reduce((s, x) => s + toInt(x.청구운임), 0);
-    }).filter(v => v > 0);
-    if (last6.length >= 3) {
-      const trend6 = last6.length > 1 ? (last6[last6.length - 1] - last6[0]) / last6[0] * 100 : 0;
-      result.push({
-        level: trend6 >= 10 ? "good" : trend6 <= -10 ? "warn" : "info",
-        title: `최근 6개월 추세: ${trend6 >= 0 ? "상승" : "하락"} 기조`,
-        body: `최근 6개월 매출 기준 ${Math.abs(trend6).toFixed(1)}% ${trend6 >= 0 ? "성장" : "감소"} 추세입니다. ${trend6 >= 10 ? "지속 성장을 위한 운영 역량 강화와 기사 확보가 필요합니다." : trend6 <= -10 ? "매출 감소 원인 분석 후 주요 거래처와 재계약 협의를 권장합니다." : "안정적인 기조를 유지하고 있습니다."}`,
-      });
-    }
-
-    return result;
-  }, [data]);
-
-  const now2 = new Date();
-  const genTime = `${now2.getFullYear()}.${String(now2.getMonth()+1).padStart(2,"0")}.${String(now2.getDate()).padStart(2,"0")} ${String(now2.getHours()).padStart(2,"0")}:${String(now2.getMinutes()).padStart(2,"0")}`;
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-[15px] font-bold text-[#1B2B4B]">AI 데이터 분석 리포트</div>
-          <div className="text-[12px] text-gray-400 mt-0.5">전체 {data.length}건의 배차 데이터 기반 자동 분석</div>
-        </div>
-        <div className="text-[12px] text-gray-400 bg-gray-50 border border-gray-100 px-3 py-1.5 rounded-lg">
-          생성 시각: {genTime}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        {insights.map((ins, i) => (
-          <InsightBlock key={i} level={ins.level} title={ins.title} body={ins.body} />
-        ))}
-        {insights.length === 0 && (
-          <div className="col-span-2 text-center py-16 text-gray-300 text-[14px]">분석할 데이터가 없습니다</div>
-        )}
-      </div>
-
-      <div className="bg-[#f4f6f9] rounded-xl border border-gray-100 p-5">
-        <div className="text-[12px] font-bold text-gray-400 mb-1">분석 기준 안내</div>
-        <div className="text-[12px] text-gray-400 leading-relaxed">
-          본 리포트는 등록된 배차 데이터 전체를 기반으로 자동 생성됩니다. 마진율은 (청구운임 - 기사운임) / 청구운임으로 계산되며, 기타 비용(유류비, 보험료 등)은 포함되지 않습니다. 전략적 의사결정 시 실제 원가 구조를 추가로 반영하세요.
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────
 //  MAIN EXPORT
 // ─────────────────────────────────────────────────────────
 const TABS = [
@@ -1113,7 +934,6 @@ const TABS = [
   { id: "client",      label: "거래처 분석" },
   { id: "driver",      label: "기사·차량"   },
   { id: "operations",  label: "운영 지표"   },
-  { id: "insights",    label: "AI 인사이트" },
 ];
 
 export default function ExecutiveDashboard({ dispatchData = [], fixedRows = [] }) {
@@ -1180,12 +1000,10 @@ export default function ExecutiveDashboard({ dispatchData = [], fixedRows = [] }
         </div>
       </div>
 
-      {/* 날짜 필터 (AI 인사이트 탭 제외) */}
-      {activeTab !== "insights" && (
-        <div className="bg-white border-b border-gray-100 px-6 py-3">
-          <DateRangePicker range={dateRange} onChange={setDateRange} allData={allData} />
-        </div>
-      )}
+      {/* 날짜 필터 */}
+      <div className="bg-white border-b border-gray-100 px-6 py-3">
+        <DateRangePicker range={dateRange} onChange={setDateRange} allData={allData} />
+      </div>
 
       {/* 콘텐츠 */}
       <div className="p-6">
@@ -1194,7 +1012,6 @@ export default function ExecutiveDashboard({ dispatchData = [], fixedRows = [] }
         {activeTab === "client"     && <ClientTab      data={filteredData} />}
         {activeTab === "driver"     && <DriverTab      data={filteredData} />}
         {activeTab === "operations" && <OperationsTab  data={filteredData} />}
-        {activeTab === "insights"   && <InsightsTab    data={allData} />}
       </div>
     </div>
   );

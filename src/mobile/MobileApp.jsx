@@ -33,7 +33,8 @@ const bootStageStore = createMiniStore({ server: 0, apply: 0, applyCount: 0, rea
 import { createPortal } from "react-dom";
 import "./mobileTheme.css";
 import BlindMinePanel from "../BlindMinePanel";
-import GsheetMinePanel from "../GsheetMinePanel"; // ⭐ 모바일 A/B 디자인 + 알록달록 금지(남색 계열)
+import GsheetMinePanel from "../GsheetMinePanel";
+import { OrderTimeline } from "../OrderTimeline"; // ⭐ 모바일 A/B 디자인 + 알록달록 금지(남색 계열)
 import KpBootScreen from "../KpBootScreen";
 import { isMeaningfulChange } from "../bootProgress";
 import { Scale, Package, Snowflake, Car, Bike, Truck, Forklift, Mic, Sparkles, Download, RotateCcw, Building2, ArrowUpDown, StickyNote, MessageSquare, History } from "lucide-react";
@@ -1753,38 +1754,23 @@ function CancelOrSwapRequestModal({ type, order, onApprove, onReject, onClose })
   );
 }
 
-// 수정이력 뷰어 (PC DispatchApp.jsx와 동일한 history 배열 포맷을 사용)
-// 경유지 필드는 값이 배열/객체라 "[object Object]" 형태로 이력에 남고, 두 필드명을
-// 서로 동기화하는 내부 로직 때문에 실제 변경이 없어도 이력이 남는 경우가 있어
-// (과거에 이미 이렇게 저장된 오더도 있으므로) 화면에 표시할 때도 걸러낸다.
-const HISTORY_HIDDEN_FIELDS = new Set(["경유상차목록", "경유하차목록", "경유지_상차", "경유지_하차", "경유지상차", "경유지하차"]);
-function HistoryViewerModal({ history = [], onClose }) {
-  const items = [...history].filter(h => h && h.field && !HISTORY_HIDDEN_FIELDS.has(h.field)).reverse();
+// ⭐ 2026-10-27 — PC와 같은 공용 타임라인(등록·수정·배차확정·업체전달·복구를 한 흐름으로)
+function HistoryViewerModal({ order, onClose }) {
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex flex-col justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50" />
-      <div className="relative bg-white rounded-t-3xl max-h-[75vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <div className="relative bg-white rounded-t-3xl max-h-[78vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-center pt-3 pb-1 shrink-0">
           <div className="w-10 h-1 rounded-full bg-gray-300" />
         </div>
-        <div className="px-4 pb-2 flex items-center justify-between shrink-0">
-          <div className="font-bold text-[15px] text-gray-800">수정이력</div>
+        <div className="px-5 pb-3 flex items-center justify-between shrink-0">
+          <div>
+            <div className="font-black text-[16px] text-[#0F1A30]">변경 이력</div>
+            <div className="text-[12px] text-[#7A879C] truncate">{order?.상차일} · {order?.거래처명} · {order?.상차지명} → {order?.하차지명}</div>
+          </div>
           <button onClick={onClose} className="text-gray-400 text-lg">×</button>
         </div>
-        <div className="px-4 pb-6 overflow-y-auto space-y-2">
-          {items.length === 0 && <div className="text-center text-gray-400 text-sm py-8">수정이력이 없습니다.</div>}
-          {items.map((h, i) => (
-            <div key={i} className="border-b border-gray-100 pb-2 last:border-b-0">
-              <div className="flex items-center gap-2 text-[11px] text-gray-400 mb-0.5">
-                <span>{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
-                <span>{h.user}</span>
-              </div>
-              <div className="text-[13px] text-gray-700">
-                <span className="font-bold">{h.field}</span>: <span className="text-gray-400">{String(h.before ?? "없음") || "없음"}</span> → <span className="font-bold text-[#1B2B4B]">{String(h.after ?? "없음") || "없음"}</span>
-              </div>
-            </div>
-          ))}
-        </div>
+        <div className="px-5 pb-8 overflow-y-auto"><OrderTimeline order={order} size="sm" /></div>
       </div>
     </div>,
     document.body
@@ -12408,7 +12394,7 @@ const handleAssignClick = () => {
         {[
           (order.메모 || order.적요) && { label: "메모", Icon: StickyNote, on: () => setShowMemoPopup(true) },
           order.전달사항?.trim() && { label: "전달사항", Icon: MessageSquare, on: () => setShowNoticePopup(true) },
-          (Array.isArray(order.history) && order.history.length > 0) && { label: "수정이력", Icon: History, on: () => setShowHistory(true) },
+          { label: "변경 이력", Icon: History, on: () => setShowHistory(true) },
         ].filter(Boolean).map(({ label, Icon, on }) => (
           <button key={label} onClick={on}
             className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[11.5px] font-bold ${cardVersionB ? "bg-white/10 text-white border border-white/15" : "bg-[#F5F8FD] text-[#1B2B4B] border border-[#E3E8F0]"}`}>
@@ -12458,7 +12444,7 @@ const handleAssignClick = () => {
         </div>
       )}
       {showHistory && (
-        <HistoryViewerModal history={order.history} onClose={() => setShowHistory(false)} />
+        <HistoryViewerModal order={order} onClose={() => setShowHistory(false)} />
       )}
       {showRequestModal && activeRequestType === "edit" && (
         <EditRequestModal order={order} onApprove={approveEditReq} onReject={rejectEditReq} onClose={() => setShowRequestModal(false)} />
