@@ -50,6 +50,7 @@ const DriverLogin = React.lazy(() => import("./driver/DriverLogin"));
 const DriverRegister = React.lazy(() => import("./driver/DriverRegister"));
 
 import Login from "./Login";
+import KpLogoMark, { KP_MARK_CSS } from "./KpLogoMark";
 import TransportLogin from "./TransportLogin";
 const Signup = React.lazy(() => import("./Signup"));
 import ShipperLogin from "./shipper/ShipperLogin";
@@ -98,6 +99,26 @@ function isTabletDevice() {
   const isMidScreen = window.innerWidth >= 768 && window.innerWidth <= 1366;
   const hasTouch = navigator.maxTouchPoints > 1;
   return isIpad || isAndroidTablet || (isMidScreen && hasTouch);
+}
+
+// 🔷 첫 화면(스플래시) — 네이비 배경, 디지털 로고 마크, 얇은 진행 막대
+function KpSplash() {
+  const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+  return (
+    <div style={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "radial-gradient(90% 60% at 50% 0%, #22396A 0%, #0F1A30 55%, #060D1C 100%)", userSelect: "none", WebkitUserSelect: "none", overflow: "hidden" }}>
+      <style>{KP_MARK_CSS + `
+        @keyframes kpSplashUp { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+        @keyframes kpSplashBar { 0% { transform: translateX(-100%) } 100% { transform: translateX(250%) } }
+      `}</style>
+      <div style={{ position: "absolute", left: "50%", top: "50%", width: 360, height: 360, transform: "translate(-50%,-58%)", borderRadius: "50%", background: "radial-gradient(circle, rgba(110,149,232,0.22), transparent 65%)" }} />
+      <div style={{ position: "relative", filter: "drop-shadow(0 14px 30px rgba(0,0,0,0.45))" }}><KpLogoMark size={92} /></div>
+      <div style={{ position: "relative", marginTop: 22, color: "#fff", fontFamily: MONO, fontWeight: 900, fontSize: 22, letterSpacing: "0.32em", paddingLeft: "0.32em", animation: "kpSplashUp .45s ease .15s both" }}>KP-FLOW</div>
+      <div style={{ position: "relative", marginTop: 6, color: "rgba(207,224,255,0.45)", fontWeight: 700, fontSize: 10.5, letterSpacing: "0.3em", paddingLeft: "0.3em", animation: "kpSplashUp .45s ease .22s both" }}>LOGISTICS DISPATCH SYSTEM</div>
+      <div style={{ position: "relative", marginTop: 28, width: 120, height: 2, borderRadius: 2, background: "rgba(255,255,255,0.08)", overflow: "hidden", animation: "kpSplashUp .45s ease .3s both" }}>
+        <div style={{ width: "40%", height: "100%", borderRadius: 2, background: "linear-gradient(90deg, transparent, #CFE0FF, transparent)", animation: "kpSplashBar 1.1s ease-in-out infinite" }} />
+      </div>
+    </div>
+  );
 }
 
 export default function App() {
@@ -631,49 +652,16 @@ export default function App() {
     return <Router><Routes><Route path="*" element={<React.Suspense fallback={null}><ShortLinkRedirect code={shortLinkMatch[1]} /></React.Suspense>} /></Routes></Router>;
   }
 
-  // 로딩/스플래시
+  // 로딩/스플래시 — ⭐ 2026-10-28 디지털 리디자인(네이비 + 디지털 로고 마크). index.html의 첫 화면과 똑같이 생겨서
+  // "앱 파일 받는 중 → 로그인 확인 중" 사이에 화면이 바뀌는 티가 나지 않는다.
   if (loading || !splashDone) {
-    return (
-      <div style={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", backgroundColor: "#ffffff", userSelect: "none", WebkitUserSelect: "none" }}>
-        <style>{`
-          @keyframes splashLogoIn {
-            0%   { opacity: 0; transform: scale(0.8) translateY(12px); }
-            70%  { opacity: 1; transform: scale(1.03) translateY(-2px); }
-            100% { opacity: 1; transform: scale(1) translateY(0); }
-          }
-          @keyframes splashDotPulse {
-            0%, 100% { opacity: 0.3; transform: scale(0.8); }
-            50%       { opacity: 1;   transform: scale(1); }
-          }
-          .splash-logo-img { animation: splashLogoIn 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) 0.1s both; pointer-events: none; -webkit-user-drag: none; }
-          .splash-dot { width: 7px; height: 7px; border-radius: 50%; background: #1B2B4B; }
-          .splash-dot-1 { animation: splashDotPulse 1.1s ease-in-out 0.9s infinite; }
-          .splash-dot-2 { animation: splashDotPulse 1.1s ease-in-out 1.1s infinite; }
-          .splash-dot-3 { animation: splashDotPulse 1.1s ease-in-out 1.3s infinite; }
-        `}</style>
-        <img
-          src="/icons/sflow-logo.png"
-          alt="KP-Flow Logistics"
-          draggable={false}
-          onDragStart={e => e.preventDefault()}
-          className="splash-logo-img"
-          style={{ width: "60vw", maxWidth: "280px" }}
-        />
-        {loading && (
-          <div style={{ display: "flex", gap: "9px", marginTop: "28px" }}>
-            <div className="splash-dot splash-dot-1" />
-            <div className="splash-dot splash-dot-2" />
-            <div className="splash-dot splash-dot-3" />
-          </div>
-        )}
-      </div>
-    );
+    return <KpSplash />;
   }
 
   const isMobile = isSmartPhone();
 
   const routeFallback = (
-    <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#ffffff" }}>
+    <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "radial-gradient(90% 60% at 50% 0%, #22396A 0%, #0F1A30 55%, #060D1C 100%)" }}>
       <style>{`
         @keyframes routeFallbackPulse {
           0%, 100% { opacity: 0.3; transform: scale(0.8); }
@@ -681,9 +669,9 @@ export default function App() {
         }
       `}</style>
       <div style={{ display: "flex", gap: "9px" }}>
-        <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#1B2B4B", animation: "routeFallbackPulse 1.1s ease-in-out 0.9s infinite" }} />
-        <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#1B2B4B", animation: "routeFallbackPulse 1.1s ease-in-out 1.1s infinite" }} />
-        <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#1B2B4B", animation: "routeFallbackPulse 1.1s ease-in-out 1.3s infinite" }} />
+        <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#8FB0F0", animation: "routeFallbackPulse 1.1s ease-in-out 0.9s infinite" }} />
+        <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#8FB0F0", animation: "routeFallbackPulse 1.1s ease-in-out 1.1s infinite" }} />
+        <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#8FB0F0", animation: "routeFallbackPulse 1.1s ease-in-out 1.3s infinite" }} />
       </div>
     </div>
   );
