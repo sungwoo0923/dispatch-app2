@@ -42,6 +42,9 @@ export default function TransportLogin() {
   const [codeLookupQ, setCodeLookupQ] = useState("");
   const [codeResults, setCodeResults] = useState([]);
   const [codeSearching, setCodeSearching] = useState(false);
+  const [showPw, setShowPw] = useState(false);
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
   const navigate = useNavigate();
 
   // Enter key in popup
@@ -314,223 +317,197 @@ export default function TransportLogin() {
     if (e.key === "Enter" && !loading) login();
   };
 
+  const fieldIcon = {
+    code: <><rect x="3" y="11" width="18" height="10" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>,
+    company: <><path d="M3 21h18" /><path d="M5 21V7l7-4 7 4v14" /><path d="M9 9h1M14 9h1M9 13h1M14 13h1M9 17h1M14 17h1" /></>,
+    email: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>,
+    pw: <><circle cx="8" cy="15" r="4" /><path d="m10.8 12.2 9.2-9.2M17 6l3 3M14 9l2 2" /></>,
+  };
+  const field = (key, label, input) => (
+    <div className="mb-3.5">
+      <div className="flex items-center justify-between mb-1.5">
+        <label className="text-[11.5px] font-extrabold tracking-[0.12em] text-[#7A879C]">{label}</label>
+        {key === "code" && isMasterEmail && (
+          <button type="button" onClick={() => { setShowCodeLookup(true); setCodeLookupQ(""); setCodeResults([]); setCodeError(""); }}
+            className="text-[11.5px] text-[#4B6CB7] font-extrabold hover:underline">회사코드 찾기</button>
+        )}
+      </div>
+      <div className="group flex items-center gap-2.5 h-[50px] px-4 rounded-[14px] bg-[#F5F7FB] border border-[#E3E8F0] transition focus-within:bg-white focus-within:border-[#2D4C82] focus-within:shadow-[0_0_0_4px_rgba(45,76,130,0.10)]">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="text-[#9AA9C3] group-focus-within:text-[#1B2B4B] shrink-0">{fieldIcon[key]}</svg>
+        {input}
+      </div>
+    </div>
+  );
+  const inputCls = "flex-1 min-w-0 bg-transparent outline-none text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#B4BFD0] placeholder:font-medium";
+  const pad = (n) => String(n).padStart(2, "0");
+
   return (
     <>
     {mfaUi}
-    <div
-      className="min-h-screen flex items-center justify-center px-4 relative"
-      style={{ background: "linear-gradient(135deg, #061832 0%, #0B2554 50%, #0D2B66 100%)" }}
-    >
-      {/* Top-right app icon */}
-      <div className="fixed top-4 right-4 z-50">
-        <img
-          src="/icons/sflow-icon.png"
-          alt="KP-Flow"
-          className="w-20 h-20 rounded-2xl shadow-lg"
-        />
-      </div>
+    <style>{`
+      @keyframes kpLoginIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+      @keyframes kpPulse { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+      @keyframes kpScan { from { transform: translateY(-100%); } to { transform: translateY(100%); } }
+      .kp-login-in { animation: kpLoginIn .5s cubic-bezier(.2,.8,.2,1) both; }
+      .kp-pulse { animation: kpPulse 1.6s ease-in-out infinite; }
+    `}</style>
+    <div className="min-h-screen w-full flex items-stretch bg-[#F2F4F8]">
+      {/* 왼쪽 — 브랜드 패널(PC) */}
+      <div className="hidden lg:flex relative flex-col justify-between w-[46%] max-w-[720px] overflow-hidden px-14 py-12 text-white"
+        style={{ background: "linear-gradient(150deg, #060E1F 0%, #0F1A30 45%, #1B2B4B 100%)" }}>
+        <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)", backgroundSize: "44px 44px" }} />
+        <div className="absolute -right-40 -top-40 w-[520px] h-[520px] rounded-full" style={{ background: "radial-gradient(circle, rgba(110,149,232,0.22), transparent 65%)" }} />
+        <div className="absolute -left-24 bottom-[-180px] w-[460px] h-[460px] rounded-full" style={{ background: "radial-gradient(circle, rgba(75,108,183,0.18), transparent 65%)" }} />
 
-      <div
-        className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-white/10"
-        style={{ background: "rgba(255,255,255,0.97)" }}
-      >
-        {/* Card header */}
-        <div
-          className="px-10 pt-8 pb-6 text-center"
-          style={{ background: "#1B2B4B" }}
-        >
-          <h1 className="text-2xl font-extrabold text-white tracking-tight">
-            S-Flow Logistics
-          </h1>
-          <p className="text-blue-200 text-sm mt-1">운송사 로그인</p>
+        <div className="relative flex items-center gap-3">
+          <img src="/icons/sflow-icon.png" alt="" className="w-11 h-11 rounded-[13px] ring-1 ring-white/20" />
+          <div>
+            <div className="text-[18px] font-black tracking-[0.18em]">KP-FLOW</div>
+            <div className="text-[10.5px] font-bold tracking-[0.3em] text-white/45">LOGISTICS DISPATCH SYSTEM</div>
+          </div>
         </div>
 
-        {/* Card body */}
-        <div className="px-10 py-8">
-
-          {/* 회사코드 */}
-          <div className="mb-4">
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                회사코드 <span className="text-red-500">*</span>
-              </label>
-              {/* ⭐ 최고관리자 전용 — 이메일 칸에 최고관리자 계정을 입력했을 때만 보인다 */}
-              {isMasterEmail && (
-                <button
-                  type="button"
-                  onClick={() => { setShowCodeLookup(true); setCodeLookupQ(""); setCodeResults([]); setCodeError(""); }}
-                  className="text-[11px] text-[#1B2B4B] font-semibold hover:underline"
-                >
-                  회사코드 찾기
-                </button>
-              )}
-            </div>
-            <input
-              type="text"
-              placeholder="승인 후 발급된 코드 입력 (필수)"
-              value={companyCode}
-              onChange={(e) => setCompanyCode(e.target.value.toUpperCase())}
-              onKeyDown={handleKeyDown}
-              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30 focus:border-[#1B2B4B] transition"
-            />
+        <div className="relative">
+          <div className="flex items-center gap-2 text-[11.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#6E95E8] kp-pulse" /> SYSTEM ONLINE
           </div>
-
-          {/* 회사명 */}
-          <div className="mb-4">
-            <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">
-              회사명 <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              placeholder="회사명을 입력하세요"
-              value={companyName}
-              onChange={(e) => setCompanyName(e.target.value)}
-              onKeyDown={handleKeyDown}
-              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30 focus:border-[#1B2B4B] transition"
-            />
+          <div className="mt-4 font-black leading-none tabular-nums" style={{ fontSize: 88, letterSpacing: "-0.02em", fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>
+            {pad(now.getHours())}<span className="kp-pulse text-white/40">:</span>{pad(now.getMinutes())}
+            <span className="text-[30px] text-white/35 ml-2">{pad(now.getSeconds())}</span>
           </div>
-
-          {/* 이메일 */}
-          <div className="mb-4">
-            <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">
-              이메일 <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="email"
-              placeholder="이메일 주소"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={handleKeyDown}
-              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30 focus:border-[#1B2B4B] transition"
-            />
+          <div className="mt-3 text-[15px] font-semibold text-white/60">
+            {now.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long" })}
           </div>
+          <div className="mt-10 text-[30px] font-black leading-snug tracking-tight">배차의 모든 순간을<br />하나의 흐름으로.</div>
+          <div className="mt-3 text-[14px] text-white/50 leading-relaxed">오더 등록부터 배차·정산·마감까지<br />운송사 업무를 한 화면에서 처리합니다.</div>
+        </div>
 
-          {/* 비밀번호 */}
-          <div className="mb-5">
-            <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">
-              비밀번호 <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="password"
-              placeholder="비밀번호"
-              value={pw}
-              onChange={(e) => setPw(e.target.value)}
-              onKeyDown={handleKeyDown}
-              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30 focus:border-[#1B2B4B] transition"
-            />
-          </div>
-
-          {/* ⭐ 로그인 정보 저장 / 자동 로그인 */}
-          <div className="flex items-center justify-between mb-4 -mt-1">
-            <BigCheck checked={rememberInfo} onChange={setRememberInfo} label="로그인 정보 저장" />
-            <BigCheck checked={autoLogin} onChange={setAutoLogin} label="자동 로그인" />
-          </div>
-
-          {error && (
-            <p className="text-red-500 text-sm mb-3 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-              {error}
-            </p>
-          )}
-          {msg && (
-            <p className="text-green-600 text-sm mb-3 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-              {msg}
-            </p>
-          )}
-
-          {/* Login button */}
-          <button
-            onClick={login}
-            disabled={loading}
-            className="w-full text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition-opacity disabled:opacity-60"
-            style={{ background: "#1B2B4B" }}
-          >
-            {loading ? <Loader2 size={18} className="animate-spin" /> : null}
-            로그인
-          </button>
-
-          {/* Password reset */}
-          {!loading && (
-            <div className="text-center mt-3">
-              <button
-                onClick={resetPw}
-                className="text-xs text-gray-400 hover:text-gray-600 underline transition"
-              >
-                비밀번호 찾기
-              </button>
-            </div>
-          )}
-
-          <div className="border-t border-gray-100 my-5" />
-
-          {/* Bottom links */}
-          <div className="flex justify-center gap-6 text-sm">
-            <Link
-              to="/signup"
-              className="text-[#1B2B4B] font-medium hover:underline transition"
-            >
-              운송사 회원가입
-            </Link>
-            <Link
-              to="/login"
-              className="text-gray-400 hover:text-gray-600 transition"
-            >
-              다른 유형으로 로그인
-            </Link>
-          </div>
+        <div className="relative flex items-center gap-6 text-[11px] font-bold tracking-[0.2em] text-white/35">
+          <span>SECURE · TLS</span><span>REAL-TIME SYNC</span><span>© KP-FLOW</span>
         </div>
       </div>
 
-      {/* Login success popup */}
-      {showPopup && (
-        <div className="fixed inset-0 bg-black/50 z-[999] flex items-center justify-center">
-          <div className="w-[340px] rounded-2xl shadow-2xl overflow-hidden">
-            {/* Header */}
-            <div style={{ background: "#1B2B4B", padding: "22px 28px 18px" }}>
-              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.15em", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", marginBottom: 6 }}>LOGIN COMPLETE</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: "#fff" }}>로그인 완료</div>
+      {/* 오른쪽 — 로그인 폼 */}
+      <div className="flex-1 min-w-0 flex items-center justify-center px-4 py-10 relative">
+        <div className="kp-login-in w-full max-w-[420px]">
+          {/* 모바일 머리 */}
+          <div className="lg:hidden flex flex-col items-center mb-7">
+            <img src="/icons/sflow-icon.png" alt="" className="w-16 h-16 rounded-[18px] shadow-[0_10px_24px_rgba(15,26,48,0.25)]" />
+            <div className="mt-3 text-[20px] font-black tracking-[0.18em] text-[#0F1A30]">KP-FLOW</div>
+            <div className="text-[10.5px] font-bold tracking-[0.3em] text-[#9AA9C3]">LOGISTICS DISPATCH SYSTEM</div>
+          </div>
+
+          <div className="bg-white rounded-[26px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_24px_60px_rgba(15,26,48,0.10)] px-8 sm:px-10 pt-9 pb-8">
+            <div className="text-[11.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]">TRANSPORT SIGN IN</div>
+            <h1 className="mt-1 text-[26px] font-black text-[#0F1A30] tracking-tight">운송사 로그인</h1>
+            <p className="text-[13.5px] text-[#7A879C] mt-1 mb-7">승인 메일로 받은 회사코드로 로그인하세요</p>
+
+            {field("code", "회사코드", (
+              <input type="text" placeholder="승인 후 발급된 코드" value={companyCode} onChange={(e) => setCompanyCode(e.target.value.toUpperCase())} onKeyDown={handleKeyDown}
+                className={`${inputCls} ${companyCode ? "tracking-[0.12em] font-mono" : ""}`} />
+            ))}
+            {field("company", "회사명", (
+              <input type="text" placeholder="가입한 회사명" value={companyName} onChange={(e) => setCompanyName(e.target.value)} onKeyDown={handleKeyDown} className={inputCls} />
+            ))}
+            {field("email", "이메일", (
+              <input type="email" placeholder="name@company.com" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={handleKeyDown} className={inputCls} />
+            ))}
+            {field("pw", "비밀번호", (
+              <>
+                <input type={showPw ? "text" : "password"} placeholder="비밀번호" value={pw} onChange={(e) => setPw(e.target.value)} onKeyDown={handleKeyDown} className={inputCls} />
+                <button type="button" onClick={() => setShowPw((v) => !v)} className="text-[11.5px] font-extrabold text-[#9AA9C3] hover:text-[#0F1A30] shrink-0">{showPw ? "숨기기" : "보기"}</button>
+              </>
+            ))}
+
+            {/* ⭐ 로그인 정보 저장 / 자동 로그인 */}
+            <div className="flex items-center justify-between mt-4 mb-5">
+              <BigCheck checked={rememberInfo} onChange={setRememberInfo} label="로그인 정보 저장" />
+              <BigCheck checked={autoLogin} onChange={setAutoLogin} label="자동 로그인" />
             </div>
-            {/* Body */}
-            <div style={{ background: "#fff", padding: "24px 28px" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 20 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #f0f2f5", paddingBottom: 10 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: "#9ca3af", letterSpacing: "0.04em", minWidth: 64 }}>로그인 일시</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "#1B2B4B" }}>{loginTime}</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: "#9ca3af", letterSpacing: "0.04em", minWidth: 64 }}>아이디</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "#1B2B4B" }}>{email}</span>
-                </div>
+
+            {error && (
+              <div className="flex gap-2 text-[13px] font-semibold text-[#0F1A30] mb-4 bg-[#FFF5F4] border border-[#F3D3CF] rounded-xl px-3.5 py-2.5">
+                <span className="text-[#C2453D] font-black">!</span><span>{error}</span>
               </div>
+            )}
+            {msg && (
+              <div className="text-[13px] font-semibold text-[#0F1A30] mb-4 bg-[#F2F6FC] border border-[#D9E3F3] rounded-xl px-3.5 py-2.5">{msg}</div>
+            )}
 
-              {/* SVG circular countdown */}
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-                <div style={{ position: "relative", width: 72, height: 72 }}>
-                  <svg width="72" height="72" style={{ transform: "rotate(-90deg)" }}>
-                    <circle cx="36" cy="36" r="30" stroke="#e5e7eb" strokeWidth="5" fill="none" />
-                    <circle
-                      cx="36" cy="36" r="30"
-                      stroke="#1B2B4B"
-                      strokeWidth="5"
-                      fill="none"
-                      strokeDasharray={2 * Math.PI * 30}
-                      strokeDashoffset={(2 * Math.PI * 30 * countdown) / 3}
-                      strokeLinecap="round"
-                      style={{ transition: "stroke-dashoffset 1s linear" }}
-                    />
+            <button onClick={login} disabled={loading}
+              className="w-full h-[54px] rounded-[15px] text-white text-[15.5px] font-black tracking-[0.04em] flex items-center justify-center gap-2 shadow-[0_14px_28px_rgba(15,26,48,0.28)] hover:brightness-110 active:scale-[0.99] transition disabled:opacity-60"
+              style={{ background: "linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%)" }}>
+              {loading ? <Loader2 size={18} className="animate-spin" /> : null}
+              {loading ? "확인 중…" : "로그인"}
+              {!loading && <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>}
+            </button>
+
+            {!loading && (
+              <div className="text-center mt-3.5">
+                <button onClick={resetPw} className="text-[12.5px] font-bold text-[#9AA9C3] hover:text-[#0F1A30] transition">비밀번호를 잊으셨나요?</button>
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 my-6"><span className="flex-1 h-px bg-[#EEF1F6]" /><span className="text-[11px] font-bold tracking-[0.2em] text-[#C2CBD9]">OR</span><span className="flex-1 h-px bg-[#EEF1F6]" /></div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <Link to="/signup" className="h-11 rounded-xl border border-[#0F1A30] text-[#0F1A30] text-[13.5px] font-black flex items-center justify-center hover:bg-[#0F1A30] hover:text-white transition">운송사 회원가입</Link>
+              <Link to="/login" className="h-11 rounded-xl border border-[#E3E8F0] text-[#5B6B85] text-[13.5px] font-bold flex items-center justify-center hover:bg-[#F5F7FB] transition">다른 유형 로그인</Link>
+            </div>
+          </div>
+          <div className="text-center mt-5 text-[11px] font-bold tracking-[0.2em] text-[#B4BFD0]">KP-FLOW · LOGISTICS</div>
+        </div>
+      </div>
+
+      {/* 로그인 완료 — 디지털 카운트다운 */}
+      {showPopup && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center px-4" style={{ background: "rgba(6,14,31,0.72)" }}>
+          <div className="kp-login-in relative w-full max-w-[380px] rounded-[28px] overflow-hidden text-white shadow-[0_30px_80px_rgba(0,0,0,0.5)] ring-1 ring-white/10"
+            style={{ background: "linear-gradient(160deg, #0B1428 0%, #0F1A30 50%, #1B2B4B 100%)" }}>
+            <div className="absolute inset-0 opacity-[0.06]" style={{ backgroundImage: "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)", backgroundSize: "28px 28px" }} />
+            <div className="relative px-8 pt-8 pb-7">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-[11px] font-extrabold tracking-[0.28em] text-[#8FB0F0]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#6E95E8] kp-pulse" /> AUTHENTICATED
+                </div>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8FB0F0" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="m9 12 2 2 4-4" /></svg>
+              </div>
+              <div className="mt-3 text-[24px] font-black tracking-tight">로그인 완료</div>
+              <div className="text-[13px] text-white/55 mt-0.5">{companyName || "KP-FLOW"}</div>
+
+              {/* 큰 디지털 카운트 */}
+              <div className="mt-7 flex flex-col items-center">
+                <div className="relative w-[148px] h-[148px]">
+                  <svg width="148" height="148" className="-rotate-90">
+                    <circle cx="74" cy="74" r="64" stroke="rgba(255,255,255,0.08)" strokeWidth="6" fill="none" />
+                    <circle cx="74" cy="74" r="64" stroke="url(#kpRing)" strokeWidth="6" fill="none" strokeLinecap="round"
+                      strokeDasharray={2 * Math.PI * 64} strokeDashoffset={(2 * Math.PI * 64 * (3 - countdown)) / 3}
+                      style={{ transition: "stroke-dashoffset 1s linear" }} />
+                    <defs><linearGradient id="kpRing" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#8FB0F0" /><stop offset="100%" stopColor="#ffffff" /></linearGradient></defs>
                   </svg>
-                  <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 800, color: "#1B2B4B" }}>
-                    {countdown}
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <div key={countdown} className="kp-login-in font-black tabular-nums leading-none" style={{ fontSize: 60, fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{pad(countdown)}</div>
+                    <div className="text-[10px] font-extrabold tracking-[0.3em] text-white/40 mt-1">SEC</div>
                   </div>
                 </div>
+                <div className="mt-4 flex gap-1.5">
+                  {[3, 2, 1].map((n) => <span key={n} className={`h-1 w-10 rounded-full transition-colors duration-500 ${countdown < n ? "bg-white" : "bg-white/15"}`} />)}
+                </div>
+                <div className="mt-3 text-[12.5px] font-semibold text-white/55">잠시 후 업무 화면으로 이동합니다</div>
               </div>
 
-              <div style={{ textAlign: "center", fontSize: 12, color: "#9ca3af", marginBottom: 18 }}>오늘도 좋은 하루 되세요</div>
+              <div className="mt-7 rounded-2xl bg-white/[0.05] ring-1 ring-white/10 divide-y divide-white/10">
+                {[["ACCOUNT", email], ["SIGNED IN", loginTime]].map(([k, v]) => (
+                  <div key={k} className="flex items-center justify-between px-4 py-3 gap-3">
+                    <span className="text-[10.5px] font-extrabold tracking-[0.22em] text-white/40 shrink-0">{k}</span>
+                    <span className="text-[13px] font-bold text-white/90 truncate tabular-nums">{v}</span>
+                  </div>
+                ))}
+              </div>
 
-              <button
-                onClick={() => { sessionStorage.removeItem("skipLoginPopup"); navigate("/app", { replace: true }); }}
-                style={{ width: "100%", background: "#1B2B4B", color: "#fff", padding: "13px", borderRadius: 10, border: "none", fontSize: 14, fontWeight: 700, cursor: "pointer", letterSpacing: "0.02em" }}
-              >
-                확인
+              <button onClick={() => { sessionStorage.removeItem("skipLoginPopup"); navigate("/app", { replace: true }); }}
+                className="mt-5 w-full h-[50px] rounded-[14px] bg-white text-[#0F1A30] text-[14.5px] font-black tracking-[0.04em] hover:bg-[#EEF3FB] transition">
+                바로 시작하기 <span className="text-[#9AA9C3] font-bold text-[12px] ml-1">Enter</span>
               </button>
             </div>
           </div>

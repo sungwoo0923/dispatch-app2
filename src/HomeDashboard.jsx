@@ -12,6 +12,8 @@ import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import { EditableText } from "./EditMode";
 import { pcLiveWindowStart, pcPrevDay } from "./orderHistory";
 import { pcBootStore, markBootBase } from "./bootProgress";
+import { createPortal } from "react-dom";
+import { BannerCard, BannerStyles } from "./BannerCenter";
 
 /* ===== 공통 Modal ===== */
 function Modal({ title, onClose, children }) {
@@ -477,19 +479,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const [approvalNotifQueue, setApprovalNotifQueue] = useState([]);
   const [confirmDialog, setConfirmDialog] = useState(null); // { message, onConfirm }
 
-React.useEffect(() => {
-  if (!toast) return;
-  const snap = toast; // capture current toast
-  const t = setTimeout(() => {
-    if (snap?.data?.id) {
-      const _k=`${snap.type}_${snap.data.id}`;
-      _dismissedToasts.add(_k);
-      try{const _s=new Set(JSON.parse(localStorage.getItem("permDismissed")||"[]"));_s.add(_k);localStorage.setItem("permDismissed",JSON.stringify([..._s].slice(-300)));}catch{}
-    }
-    setToast(null);
-  }, 10000);
-  return () => clearTimeout(t);
-}, [toast]);
+// (배너 닫힘·10초 자동 닫힘은 BannerCard가 처리 — 마우스를 올리면 멈춘다)
 
   const getViewCompany = () => role === "totalMaster"
     ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
@@ -651,6 +641,7 @@ React.useEffect(() => {
       const added = snap.docChanges().find(c => c.type === "added" && !c.doc.metadata.hasPendingWrites);
       if (!added) return;
       const data = { id: added.doc.id, ...added.doc.data(), date: formatCreatedAt(added.doc.data().createdAt) };
+      if (data.category === "인사발령") return; // 인사발령은 사내메일 배너로 뜬다
       const seenKeyN = `notice_${data.id}`;
       if (getSeenToasts()[seenKeyN] || isAlreadySeen(seenKeyN)) return;
       markToastSeen(seenKeyN); addPermDismissed(seenKeyN);
@@ -1256,6 +1247,7 @@ React.useEffect(() => {
               <option>업데이트</option>
               <option>안내</option>
               <option>긴급</option>
+              <option>인사발령</option>
             </select>
             <select className={formInput} value={noticeForm.author} onChange={e => setNoticeForm({ ...noticeForm, author: e.target.value })}>
               <option value="">작성자 선택</option>
@@ -1284,6 +1276,7 @@ React.useEffect(() => {
             <div><div className="text-[13px] text-gray-500 mb-0.5">제목</div><div className="font-semibold">{selectedNotice.title}</div></div>
             <div><div className="text-[13px] text-gray-500 mb-0.5">작성자</div><div>{selectedNotice.author}</div></div>
             <div><div className="text-[13px] text-gray-500 mb-0.5">작성일</div><div>{selectedNotice.date}</div></div>
+            {selectedNotice.image && <img src={selectedNotice.image} alt="" className="w-full rounded-lg border border-gray-200" />}
             <div><div className="text-[13px] text-gray-500 mb-0.5">내용</div><div className="whitespace-pre-wrap leading-relaxed bg-gray-50 rounded-lg p-3">{selectedNotice.content}</div></div>
           </div>
           {(!isViewer) && (() => {
@@ -1610,31 +1603,19 @@ React.useEffect(() => {
         </Modal>
       )}
 
-     {/* ===== 토스트 ===== */}
-      <style>{`
-        @keyframes toastSlideIn {
-          from { transform: translateX(120%); opacity: 0; }
-          to   { transform: translateX(0);   opacity: 1; }
-        }
-      @keyframes toastProgress {
-          from { width: 100%; }
-          to   { width: 0%; }
-        }
-        .toast-enter { animation: toastSlideIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards; }
-        .toast-bar   { animation: toastProgress 10s linear forwards; }
-      `}</style>
-
-      {toast && (() => {
-        const cfg = {
-          notice:   { icon: "📢", label: "공지사항 등록",  accent: "#3B82F6", bg: "#EFF6FF", body: toast.data.title },
-          schedule: { icon: "📅", label: "일정 등록",      accent: "#10B981", bg: "#ECFDF5", body: `[${toast.data.type}] ${toast.data.name || ""}` },
-          handover: { icon: "📝", label: "인수인계 등록",  accent: "#F59E0B", bg: "#FFFBEB", body: toast.data.text },
-        }[toast.type] || {};
-
-        return (
-          <div
-            className="toast-enter fixed bottom-6 right-6 z-50 cursor-pointer select-none"
-            style={{ width: 320 }}
+     {/* ===== 토스트(오른쪽 아래 배너) — BannerCenter.jsx의 공용 카드 ===== */}
+      {toast && createPortal(
+        <div className="fixed bottom-6 right-6 z-[999980] pointer-events-none">
+          <BannerStyles />
+          <BannerCard
+            id={`${toast.type}_${toast.data?.id}`}
+            kind={toast.type}
+            title={toast.type === "notice" ? toast.data.title : toast.type === "schedule" ? `[${toast.data.type}] ${toast.data.name || ""}` : toast.data.text}
+            body={toast.type === "notice" ? String(toast.data.content || "").slice(0, 120) : toast.type === "handover" ? (toast.data.receiver ? `${toast.data.author || ""} → ${toast.data.receiver}` : "") : (toast.data.date || "")}
+            from={toast.type === "notice" ? toast.data.author : ""}
+            image={toast.type === "notice" ? toast.data.image : null}
+            duration={10000}
+            onClose={() => { const k = `${toast.type}_${toast.data?.id}`; if (toast.data?.id) { markToastSeen(k); _dismissedToasts.add(k); addPermDismissed(k); addFirestoreSeenKey(k); } setToast(null); }}
             onClick={() => {
               const k = `${toast.type}_${toast.data?.id}`;
               if (toast.data?.id) { markToastSeen(k); _dismissedToasts.add(k); addPermDismissed(k); addFirestoreSeenKey(k); }
@@ -1643,52 +1624,8 @@ React.useEffect(() => {
               else if (toast.type === "handover") setSelectedHandover(toast.data);
               setToast(null);
             }}
-          >
-            <div className="rounded-2xl overflow-hidden shadow-2xl border border-gray-100"
-              style={{ background: "#fff" }}>
-
-              {/* 상단 헤더 */}
-              <div className="flex items-center justify-between px-4 py-3"
-                style={{ background: "#1B2B4B" }}>
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl flex items-center justify-center text-[18px]"
-                    style={{ background: "rgba(255,255,255,0.15)" }}>
-                    {cfg.icon}
-                  </div>
-                  <div>
-                    <div className="text-white font-bold text-[13px] leading-tight">새 알림</div>
-                    <div className="text-white/60 text-[11px]">{cfg.label}</div>
-                  </div>
-                </div>
-                <button
-                  onClick={e => { e.stopPropagation(); const k = `${toast.type}_${toast.data?.id}`; if (toast.data?.id) { markToastSeen(k); _dismissedToasts.add(k); addPermDismissed(k); addFirestoreSeenKey(k); } setToast(null); }}
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-white/50 hover:text-white hover:bg-white/20 transition text-[14px]"
-                >✕</button>
-              </div>
-
-              {/* 본문 */}
-              <div className="px-4 py-3" style={{ background: cfg.bg }}>
-                <div className="text-[13px] font-semibold text-gray-800 line-clamp-2 leading-relaxed">
-                  {cfg.body}
-                </div>
-                <div className="flex items-center gap-1 mt-2">
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full text-white"
-                    style={{ background: cfg.accent }}>
-                    {cfg.label}
-                  </span>
-                  <span className="text-[11px] text-gray-500">· 클릭하여 확인</span>
-                </div>
-              </div>
-
-              {/* 하단 진행바 */}
-              <div className="h-1" style={{ background: "#f1f5f9" }}>
-                <div className="toast-bar h-full rounded-full"
-                  style={{ background: cfg.accent }} />
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+          />
+        </div>, document.body)}
       {confirmDialog && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/30">
           <div className="bg-white rounded-xl shadow-xl p-6 w-[300px] flex flex-col gap-4">

@@ -256,7 +256,7 @@ export function CloseReportModal({ result, onClose }) {
           <div className="py-6 text-center space-y-2">
             <div className="w-14 h-14 mx-auto rounded-2xl bg-[#0F1A30] text-white flex items-center justify-center text-[24px]">✓</div>
             <div className="text-[17px] font-black text-[#0F1A30]">{sent.recipients}명에게 보냈습니다</div>
-            <div className="text-[13px] text-[#7A879C]">{sent.pushed < sent.recipients ? `${sent.recipients - sent.pushed}명은 알림을 켜지 않아 앱 안 기록으로만 남았습니다` : "모두 휴대폰 알림으로 받습니다"}</div>
+            <div className="text-[13px] text-[#7A879C]">사내메일함에 도착했고, 접속 중이면 화면 오른쪽 아래 배너로 뜹니다.<br />{sent.pushed < sent.recipients ? `휴대폰 푸시: ${sent.pushed}명 (나머지 ${sent.recipients - sent.pushed}명은 휴대폰 알림을 켜지 않음)` : "모두 휴대폰 푸시로도 받습니다"}</div>
             <button onClick={onClose} className="mt-3 h-11 px-8 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black">닫기</button>
           </div>
         </Box>

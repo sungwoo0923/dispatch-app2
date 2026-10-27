@@ -82,6 +82,8 @@ import { calcLeaveBalance } from "../leaveUtils";
 import { RotationPicker, RotationBadge, expandRotation, rotationNotice } from "../rotation";
 import { isWeekend, findApprovedLeaveForDate, isHoliday } from "../attendanceUtils";
 import MonthCompareAnalysis from "../MonthCompareAnalysis";
+import { MailHeaderButton } from "../InternalMail";
+import BannerCenter from "../BannerCenter";
 
 
 
@@ -5637,9 +5639,12 @@ const title =
   </div>
 )}
 
+      <BannerCenter bottom={86} />
       <MobileHeader
   title={title}
   cardVersionB={cardVersionB}
+  mailCompany={["driver", "shipper"].includes(role) ? "" : (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY)}
+  mailName={mobileUsers.find(u => (u.uid || u.id) === user?.uid)?.name || ""}
   onBack={
     page === "form"
       ? () => {
@@ -6345,6 +6350,7 @@ onGoAttendance={() => {
         </div>
         <div>
           <div className="text-[11px] text-gray-400 mb-0.5">내용</div>
+          {selectedNotice.image && <img src={selectedNotice.image} alt="" className="w-full rounded-lg border border-gray-200 mb-2" />}
           <div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3 text-gray-700 leading-relaxed">{selectedNotice.content}</div>
         </div>
         {(() => {
@@ -6391,6 +6397,7 @@ onGoAttendance={() => {
           <option>업데이트</option>
           <option>안내</option>
           <option>긴급</option>
+          <option>인사발령</option>
         </select>
         <select
           className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
@@ -7272,7 +7279,7 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
 // ----------------------------------------------------------------------
 // 공통 헤더 / 사이드 메뉴
 // ----------------------------------------------------------------------
-const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh, onValidateOrders, onMenu, notifCount = 0, onNotifClick, cardVersionB = false, messengerUnread = 0, onMessengerClick }) {
+const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh, onValidateOrders, onMenu, notifCount = 0, onNotifClick, cardVersionB = false, messengerUnread = 0, onMessengerClick, mailCompany = "", mailName = "" }) {
   // ⭐ 2026-10-22 디자인 개선 — A형: 반투명 흰 머리줄 / B형: 남색 그라데이션 머리줄. 버튼은 둥근 네모 타일.
   const isListPage = title === "등록내역";
   const iconColor = cardVersionB ? "#ffffff" : "#1B2B4B";
@@ -7326,6 +7333,10 @@ const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh
             </svg>
             {messengerUnread > 0 && <span className={countCls}>{messengerUnread > 99 ? "99+" : messengerUnread}</span>}
           </button>
+        )}
+        {mailCompany && (
+          <MailHeaderButton company={mailCompany} myName={mailName} className="kp-m-hbtn relative" color={iconColor}
+            badgeCls={cardVersionB ? "bg-white text-[#1B2B4B] ring-[#1B2B4B]" : "bg-[#1B2B4B] text-white ring-white"} />
         )}
         <button className="kp-m-hbtn relative" onClick={onNotifClick} aria-label="알림">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">

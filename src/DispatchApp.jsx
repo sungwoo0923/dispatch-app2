@@ -2611,6 +2611,9 @@ import "./pcColorRemap.css"; // ⭐ PC 알록달록 금지(남색 계열)
 import { OrderTimeline, OrderTimelineModal } from "./OrderTimeline";
 import { isTMUser } from "./staffFilter";
 import OrgChart from "./OrgChart";
+import { MailHeaderButton } from "./InternalMail";
+import BannerCenter from "./BannerCenter";
+import PersonnelOrder from "./PersonnelOrder";
 import { RecurringManagerModal, CloseReportModal } from "./AutomationPanels";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -7392,6 +7395,7 @@ const [revenuePassword, setRevenuePassword] = React.useState(null); // null = no
 const [revenuePasswordLoaded, setRevenuePasswordLoaded] = React.useState(false);
 const [revenuePasswordError, setRevenuePasswordError] = React.useState(""); // 불러오기 실패 사유
 const [revenuePasswordRetry, setRevenuePasswordRetry] = React.useState(0);
+const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // ⭐ 잠금 화면에서 비밀번호 변경
 const [hasUpdate, setHasUpdate] = React.useState(false);
 React.useEffect(() => {
   const handler = () => setHasUpdate(true);
@@ -7590,6 +7594,7 @@ return (
         company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")}
         email={user?.email}
       />
+      <BannerCenter />
       {/* ===== 통합 헤더 네비 ===== */}
       <header className="kp-topnav sticky top-0 z-50 mb-6 w-full">
 
@@ -7692,6 +7697,7 @@ return (
             <span className="text-white/45 text-[12px] font-medium hidden 2xl:block truncate max-w-[150px]">
               {user?.email}
             </span>
+            <MailHeaderButton company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY) : (userCompany || DEFAULT_COMPANY)} myName={myRealName} />
             <button
               onClick={() => { setMyInfoNameDraft(myRealName); setMyInfoPhoneDraft(myPhone); setShowMyInfo(true); }}
               className="kp-icon-btn transition"
@@ -8144,13 +8150,14 @@ return (
                   ) : (
                     <div className="text-center py-4 text-gray-500 text-[13px]">로딩 중...</div>
                   )
-                ) : !revenuePassword ? (
+                ) : (revenuePwSetupOpen || (!revenuePassword && (role === "admin" || role === "totalMaster"))) ? (
+                  // ⭐ 비밀번호 설정·변경은 이 창에서(관리자 이상) — 예전엔 회사관리 › 운영 설정에 있었다
                   <div>
-                    <div className="text-[13px] text-gray-500 text-center mb-4">비밀번호가 설정되지 않았습니다.<br/>관리자가 회사관리에서 비밀번호를 설정해 주세요.</div>
-                    {role === "admin" && (
-                      <button onClick={() => setMenu("회사관리")} className="w-full py-2.5 bg-[#1B2B4B] text-white rounded-xl text-[13px] font-bold hover:bg-[#243860] transition">회사관리로 이동</button>
-                    )}
+                    <RevenuePasswordSection companyName={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()} />
+                    {revenuePassword && <button type="button" onClick={() => setRevenuePwSetupOpen(false)} className="w-full mt-3 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-[13px] font-semibold hover:bg-gray-50 transition">비밀번호 입력으로 돌아가기</button>}
                   </div>
+                ) : !revenuePassword ? (
+                  <div className="text-[13px] text-gray-500 text-center">비밀번호가 설정되지 않았습니다.<br/>관리자에게 설정을 요청해 주세요.</div>
                 ) : (
                   <form onSubmit={(e) => {
                     e.preventDefault();
@@ -8173,6 +8180,9 @@ return (
                     />
                     {revenuePassError && <div className="text-red-500 text-[12px] text-center mb-3 font-medium">비밀번호가 올바르지 않습니다</div>}
                     <button type="submit" className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl text-[14px] font-bold hover:bg-[#243860] transition"><EditableText id="misc.btn.6942.확인" defaultText="확인" /></button>
+                    {(role === "admin" || role === "totalMaster") && (
+                      <button type="button" onClick={() => setRevenuePwSetupOpen(true)} className="w-full mt-2 py-2.5 border border-[#1B2B4B]/30 text-[#1B2B4B] rounded-xl text-[13px] font-semibold hover:bg-[#F5F8FD] transition">비밀번호 변경</button>
+                    )}
                     {role === "totalMaster" && (
                       <button type="button" onClick={async () => {
                         if (!window.confirm("매출관리 비밀번호를 초기화하시겠습니까?")) return;
@@ -47333,8 +47343,7 @@ const isKrHoliday = (dateStr) => {
 
 // ===================== DispatchApp.jsx (PART 6/8 — Settlement Premium) — START =====================
 function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], isViewer = false, role, userCompany = "", showAlert = (m) => alert(m) }) {
-  // ⭐ 매출관리 비밀번호 변경(관리자 이상) — 예전엔 회사관리 › 운영 설정에 있었다
-  const [revenuePwOpen, setRevenuePwOpen] = React.useState(false);
+
   // ⭐ 연간 매출 목표(순수 운송료 목표 금액 / 제외 거래처 성장률)는 회사마다 다르므로
   // 하드코딩하지 않고 회사관리(RevenueTargetSection)에서 설정한 값을 불러온다.
   // 아직 설정한 적 없으면 0(미설정)으로 표시하고, "달성률" 계산은 0으로 처리한다.
@@ -48010,9 +48019,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
                 <button onClick={() => setMarginReportOpen(true)} className="px-3 py-1.5 rounded-lg bg-amber-400 text-[#1B2B4B] text-[12px] font-bold hover:bg-amber-300 transition">매익률 원인 보고서</button>
                 <button onClick={() => setMonthCompareOpen(true)} className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[12px] font-bold hover:bg-white/90 transition">월 비교 분석</button>
                 <button onClick={() => setMonthCloseOpen(true)} className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[12px] font-bold hover:bg-white/90 transition">월 마감 점검</button>
-                {(role === "admin" || role === "totalMaster") && (
-                  <button onClick={() => setRevenuePwOpen(true)} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-bold hover:bg-white/20 transition border border-white/25">비밀번호 변경</button>
-                )}
+
                 {canSeeStaffPerf && (
                   <button onClick={() => setStaffPerfOpen(true)} className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[12px] font-bold hover:bg-white/90 transition">담당자별 실적</button>
                 )}
@@ -48083,16 +48090,6 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
 
 </div>
       )} {/* overview tab end */}
-      {revenuePwOpen && createPortal(
-        <div className="fixed inset-0 z-[1000000] bg-[#0F1A30]/45 flex items-center justify-center p-4" onClick={() => setRevenuePwOpen(false)}>
-          <div className="w-full max-w-[460px] bg-white rounded-[22px] shadow-[0_24px_60px_rgba(15,26,48,0.35)] overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 bg-gradient-to-r from-[#0F1A30] via-[#1B2B4B] to-[#2D4C82] text-white flex items-center justify-between">
-              <div className="text-[16px] font-black">매출관리 비밀번호</div>
-              <button onClick={() => setRevenuePwOpen(false)} className="w-8 h-8 rounded-lg bg-white/10 text-white">✕</button>
-            </div>
-            <div className="p-6"><RevenuePasswordSection companyName={userCompany || localStorage.getItem("userCompany") || ""} /></div>
-          </div>
-        </div>, document.body)}
     </div>
   );
 }
@@ -60029,7 +60026,7 @@ function HRManagementPage({ userCompany, role, userId }) {
             <div className={`flex-1 flex flex-col min-w-0 ${hrCard}`}>
             <div className="px-5 py-3 border-b border-[#EEF1F6] flex items-center justify-between gap-3">
               <div className="inline-flex items-center gap-1 p-1 rounded-[14px] bg-[#EEF2F8] border border-[#E3E8F0]">
-                {["이력서", "근태/근속", "인사발령 이력"].map(t => (
+                {["이력서", "근태/근속", ...(canManage ? ["인사발령"] : []), "인사발령 이력"].map(t => (
                   <button key={t} onClick={() => { setActiveTab(t); cancelEdit(); }}
                     className={`px-4 h-9 rounded-[10px] text-[13.5px] transition whitespace-nowrap ${activeTab === t ? "bg-white text-[#0F1A30] font-extrabold shadow-[0_1px_2px_rgba(16,24,40,0.08),0_4px_10px_rgba(16,24,40,0.08)]" : "text-[#5B6B85] font-bold hover:text-[#0F1A30]"}`}>{t}</button>
                 ))}
@@ -60163,6 +60160,9 @@ function HRManagementPage({ userCompany, role, userId }) {
                     )}
                   </div>
                 </div>
+              ) : activeTab === "인사발령" && canManage ? (
+                <PersonnelOrder company={company} target={selected} isSelf={selected.uid === userId}
+                  myName={members.find(m => m.uid === userId)?.name || auth.currentUser?.email?.split("@")[0] || ""} />
               ) : activeTab === "근태/근속" ? (
                 <div>
                   <div className="flex justify-end gap-2 mb-4">

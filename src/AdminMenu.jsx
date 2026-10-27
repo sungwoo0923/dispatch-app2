@@ -542,6 +542,17 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const saveEdit = async () => {
     if (isViewer) return _viewerAlert();
     if (!editName.trim()) return alert("이름을 입력하세요.");
+    // ⭐ 2026-10-27 — 최고관리자 외에는 회원관리에서 본인의 이름·핸드폰번호만 고칠 수 있다(직책·부서·권한은 인사관리부 › 인사발령)
+    if (!isTotalMaster) {
+      if (me?.uid !== manageUser.id) return alert("본인 정보만 수정할 수 있습니다.");
+      const mine = { name: editName.trim(), phone: editPhone.trim() };
+      try {
+        await setDoc(doc(db, "users", manageUser.id), mine, { merge: true });
+        setManageUser(prev => ({ ...prev, ...mine }));
+        setEditMode(false);
+      } catch { alert("저장 중 오류가 발생했습니다."); }
+      return;
+    }
     if (editRole === "totalMaster" && !isTotalMaster) return alert("totalMaster 권한은 부여할 수 없습니다.");
     if (editRole === "hrManager" && !isTotalMaster) return alert("인사관리자 권한은 최고관리자만 부여할 수 있습니다.");
     const history = [...(manageUser.personnelHistory || [])];
@@ -879,12 +890,19 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">PROFILE</div>
                             <div className="text-[17px] font-black text-[#0F1A30]">{editMode ? "정보 수정" : "회원 정보"}</div>
                           </div>
-                          {!editMode && (
+                          {/* ⭐ 승인·수정·퇴사·삭제는 최고관리자만. 그 외에는 본인 이름·핸드폰번호만 수정 */}
+                          {!isTotalMaster && me?.uid === u.id && !editMode && (
+                            <button onClick={() => setEditMode(true)} className="h-10 px-4 rounded-xl text-[13px] font-extrabold bg-[#0F1A30] text-white hover:bg-[#1B2B4B] transition">내 이름·번호 수정</button>
+                          )}
+                          {!isTotalMaster && me?.uid !== u.id && !editMode && (
+                            <span className="text-[12px] font-bold text-[#9AA9C3]">직책·부서·권한 변경은 인사관리부 › 인사발령</span>
+                          )}
+                          {isTotalMaster && !editMode && (
                             <button onClick={() => toggleApprove(u)} className={`h-10 px-4 rounded-xl text-[13px] font-extrabold transition ${u.approved ? "border border-[#E3E8F0] text-[#3A4A66] hover:bg-[#F5F8FD]" : "bg-[#0F1A30] text-white hover:bg-[#1B2B4B]"}`}>
                               {u.approved ? <EditableText id="adminMenu.members.승인해제" defaultText="승인 해제" /> : <EditableText id="adminMenu.members.승인" defaultText="승인" />}
                             </button>
                           )}
-                          {canManage && !editMode && (
+                          {isTotalMaster && canManage && !editMode && (
                             <>
                               <button onClick={() => setEditMode(true)} className="h-10 px-4 rounded-xl text-[13px] font-extrabold bg-[#0F1A30] text-white hover:bg-[#1B2B4B] transition"><EditableText id="adminMenu.members.정보수정" defaultText="정보 수정" /></button>
                               <button onClick={() => setResignStatus(u, !resigned)} className="h-10 px-4 rounded-xl text-[13px] font-extrabold border border-[#E3E8F0] text-[#3A4A66] hover:bg-[#F5F8FD] transition">
@@ -942,7 +960,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                           <div className="grid grid-cols-2 gap-3 mb-4">
                             <div>
                               <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">회사명</label>
-                              <input value={editCompany} onChange={e => setEditCompany(e.target.value)}
+                              <input value={editCompany} onChange={e => setEditCompany(e.target.value)} disabled={!isTotalMaster}
                                 className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10" />
                             </div>
                             <div>
@@ -952,7 +970,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             </div>
                             <div>
                               <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">직책</label>
-                              <CustomSelect value={editPosition} onChange={e => setEditPosition(e.target.value)}
+                              <CustomSelect value={editPosition} onChange={e => setEditPosition(e.target.value)} disabled={!isTotalMaster}
                                 className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
                                 <option value="">선택 안 함</option>
                                 {(editPosition && !POSITION_OPTIONS.includes(editPosition)) && (
@@ -963,7 +981,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             </div>
                             <div>
                               <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">부서</label>
-                              <CustomSelect value={editTeam} onChange={e => setEditTeam(e.target.value)}
+                              <CustomSelect value={editTeam} onChange={e => setEditTeam(e.target.value)} disabled={!isTotalMaster}
                                 className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
                                 <option value="">미배정</option>
                                 {TEAM_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
@@ -982,7 +1000,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             </div>
                             <div>
                               <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">권한</label>
-                              <CustomSelect value={editRole} onChange={e => setEditRole(e.target.value)}
+                              <CustomSelect value={editRole} onChange={e => setEditRole(e.target.value)} disabled={!isTotalMaster}
                                 className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
                                 {ROLES.map(r => <option key={r} value={r}>{roleLabels[r] || r}</option>)}
                               </CustomSelect>

@@ -4383,6 +4383,22 @@ exports.hourlyJobs = functions.runWith({ timeoutSeconds: 300, memory: "512MB" })
   return null;
 });
 
+// 📧 사내메일 — 새 메일이 생기면 받는 사람 휴대폰·PC로 푸시(보낸 사람 본인은 제외)
+exports.notifyInternalMail = functions.firestore.document("internalMails/{id}").onCreate(async (snap) => {
+  const m = snap.data() || {};
+  const to = (Array.isArray(m.to) ? m.to : []).filter((u) => u && u !== m.fromUid).slice(0, 500);
+  if (!to.length) return null;
+  const tokens = [];
+  for (let i = 0; i < to.length; i += 100) {
+    const docs = await db.getAll(...to.slice(i, i + 100).map((uid) => db.collection("users").doc(uid)));
+    docs.forEach((d) => { if (d.exists && (d.data().companyName || "돌캐") === (m.company || "돌캐") && d.data().fcmToken) tokens.push(d.data().fcmToken); });
+  }
+  const head = m.kind === "hr" ? "📢 인사발령" : m.kind === "closeReport" ? "📨 마감보고" : `📧 ${m.fromName || "사내메일"}`;
+  const body = m.kind === "closeReport" ? String(m.body || "") : `${m.subject || ""}${m.body ? `\n${String(m.body).replace(/\s+/g, " ").slice(0, 80)}` : ""}`;
+  await sendPushAndCleanup([...new Set(tokens)], { notification: { title: m.kind === "closeReport" ? `📨 ${m.subject || "마감보고"}` : head, body }, android: { priority: "high" } }, "사내메일");
+  return null;
+});
+
 // 화면에서 쓰는 통로(직원 누구나) — POST { action: "recurringRun", date } / { action: "closeReport", date, preview? | to:[uid], memo, check }
 exports.automation = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
@@ -4419,8 +4435,14 @@ exports.automation = functions.runWith({ timeoutSeconds: 300, memory: "512MB" })
         memo ? `메모: ${memo}` : "",
       ].filter(Boolean);
       await db.collection("closeReports").add({ company: me.company, date, by: me.email, byName: sender, to: users.map((d) => d.id), memo, check, summary: { ...sm, at: null }, at: FieldValue.serverTimestamp() });
-      const tokens = users.map((d) => d.data().fcmToken).filter(Boolean);
-      await sendPushAndCleanup(tokens, { notification: { title, body: lines.join("\n") }, android: { priority: "high" } }, "마감보고").catch((e) => console.warn("마감보고 푸시 실패:", e?.message || e));
+      // 📧 사내메일로도 남긴다 — 메일함·화면 배너로 보이고, 푸시는 notifyInternalMail 트리거가 보낸다
+      await db.collection("internalMails").add({
+        company: me.company, fromUid: me.decoded.uid, fromEmail: me.email, fromName: sender,
+        to: users.map((d) => d.id), toNames: users.map((d) => d.data().name || d.data().email || ""),
+        subject: title.replace(/^📨\s*/, ""), body: lines.join("\n"), images: [], kind: "closeReport",
+        at: FieldValue.serverTimestamp(), readBy: [], deletedBy: [],
+      });
+      const tokens = users.filter((d) => d.id !== me.decoded.uid).map((d) => d.data().fcmToken).filter(Boolean);
       res.json({ recipients: users.length, pushed: tokens.length });
       return;
     }

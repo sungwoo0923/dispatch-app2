@@ -248,6 +248,15 @@ service cloud.firestore {
       allow read: if isTotalMasterUser();
       allow write: if false;
     }
+    // 📧 사내메일함 — 보낸 사람·받는 사람만 읽고, 받은 사람은 읽음/삭제 표시만 고칠 수 있다.
+    match /internalMails/{id} {
+      allow read: if isApproved() && (request.auth.uid in resource.data.get('to', []) || resource.data.get('fromUid', '') == request.auth.uid);
+      allow create: if isApproved() && request.resource.data.get('fromUid', '') == request.auth.uid
+        && request.resource.data.get('to', []) is list && request.resource.data.get('to', []).size() <= 500;
+      allow update: if isApproved() && request.auth.uid in resource.data.get('to', [])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'deletedBy']);
+      allow delete: if false;
+    }
     match /sessionLogs/{id} {
       allow create: if isSignedIn();
       allow read, update, delete: if isApproved();
@@ -261,7 +270,7 @@ service cloud.firestore {
     // ⭐ 규칙은 "하나라도 허용하면 허용"이라, 서버 전용 컬렉션(초기화 비밀번호·보관함·기록)은
     // 여기서 빼야 위의 "allow … if false"가 실제로 막힌다.
     match /{col}/{rest=**} {
-      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns']);
+      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails']);
     }
   }
 }

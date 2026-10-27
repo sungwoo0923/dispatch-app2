@@ -46,17 +46,19 @@ export function findApprovedLeaveForDate(schedules, uid, dateStr, employeeName) 
   return hit ? (LEAVE_TYPE_LABEL[hit.type] || hit.type) : null;
 }
 
+// ⭐ 2026-10-27 — 출근·연차·외근 등이 한눈에 구분되도록 상태마다 색을 다르게 둔다(프로그램 전체 남색 규칙의 예외).
+//    PC·모바일 테마의 "색 → 남색" 변환을 타지 않도록 색을 직접 지정(hex)한다. 채도를 낮춘 고급스러운 톤.
 export const ATTENDANCE_STATUS_COLOR = {
   "출근": "bg-[#1B2B4B] text-white",
-  "휴무": "bg-gray-100 text-gray-400",
-  "공휴일": "bg-gray-200 text-gray-500",
-  "연차": "bg-violet-700 text-white",
-  "오전반차": "bg-amber-600 text-white",
-  "오후반차": "bg-amber-700 text-white",
-  "외근": "bg-blue-700 text-white",
-  "병가": "bg-red-700 text-white",
-  "경조사": "bg-emerald-700 text-white",
-  "조퇴": "bg-orange-700 text-white",
+  "휴무": "bg-[#EEF1F6] text-[#9AA9C3]",
+  "공휴일": "bg-[#E2E6EE] text-[#6B778C]",
+  "연차": "bg-[#7C5CC4] text-white",
+  "오전반차": "bg-[#C98A1B] text-white",
+  "오후반차": "bg-[#A8740F] text-white",
+  "외근": "bg-[#2F7FD8] text-white",
+  "병가": "bg-[#C2453D] text-white",
+  "경조사": "bg-[#2E8B6B] text-white",
+  "조퇴": "bg-[#D06A2B] text-white",
 };
 
 // 대한민국 법정공휴일(자동) — 회사가 별도로 지정하지 않아도 기본 반영됨.
