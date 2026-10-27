@@ -51,54 +51,23 @@ export default function UploadPage() {
   const imgZoomRef = useRef(null);
   const imgPinchRef = useRef({ dist: null, scale: 1, baseScale: 1, tx: 0, ty: 0, baseTx: 0, baseTy: 0, pointers: {} });
 
-  // 결제일 계산 로직 — 회사마다 규칙이 다를 수 있어 companySettings/{companyName}의
-  // 결제일규칙(관리자가 회사정보 화면에서 설정)을 반영한다. 규칙이 없으면 기존 기본값
-  // (평일+3일 / 금요일→익주 화요일 / 주말→화요일)을 그대로 사용한다.
+  // 결제일 계산 — 회사관리 › 회사정보에서 정한 "계산서 발행 후 N일"(companySettings/{회사}.결제일규칙.payDays).
+  //   예전 규칙(평일 일수)만 있는 회사는 그 일수를 이어서 쓴다. 입금일이 주말이면 다음 월요일로 안내한다.
   const DAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
-  const DEFAULT_PAYMENT_RULE = { weekdayDays: 3, fridayTargetDow: 2, weekendTargetDow: 2 };
+  const DEFAULT_PAYMENT_RULE = { payDays: 3 };
   const [paymentRule, setPaymentRule] = useState(DEFAULT_PAYMENT_RULE);
+  const payDays = Math.max(0, Number(paymentRule?.payDays ?? paymentRule?.weekdayDays ?? 3) || 0);
 
-  const calcPaymentDate = (dateStr, rule = paymentRule) => {
+  const calcPaymentDate = (dateStr) => {
     if (!dateStr) return null;
     const d = new Date(dateStr + "T00:00:00");
     if (isNaN(d.getTime())) return null;
-    const dow = d.getDay(); // 0=일,1=월,2=화,3=수,4=목,5=금,6=토
-    const r = rule || DEFAULT_PAYMENT_RULE;
-
-    const addDays = (base, n) => {
-      const rr = new Date(base);
-      rr.setDate(rr.getDate() + n);
-      return rr;
-    };
-    const fmtDate = (dt) => {
-      const y = dt.getFullYear(), m = String(dt.getMonth()+1).padStart(2,"0"), dd = String(dt.getDate()).padStart(2,"0");
-      const yoil = DAYS_KO[dt.getDay()];
-      return `${y}-${m}-${dd} (${yoil}요일)`;
-    };
-    // 오늘(base) 기준으로 다음(에 오는) targetDow 요일 날짜. forceNextWeek=true면
-    // 오늘이 이미 target 요일이어도 무조건 다음 주로 넘긴다(금요일→"익주" 화요일 같은 경우).
-    const nextWeekdayOccurrence = (base, targetDow, forceNextWeek) => {
-      let diff = (targetDow - base.getDay() + 7) % 7;
-      if (diff === 0 && forceNextWeek) diff = 7;
-      return addDays(base, diff);
-    };
-
-    let result, desc;
-    if (dow === 5) { // 금요일
-      const rd = nextWeekdayOccurrence(d, r.fridayTargetDow, true);
-      result = fmtDate(rd); desc = `금요일 계산서 → 익주 ${DAYS_KO[r.fridayTargetDow]}요일 입금`;
-    } else if (dow === 6 || dow === 0) { // 주말
-      const rd = nextWeekdayOccurrence(d, r.weekendTargetDow, false);
-      result = fmtDate(rd); desc = `주말 계산서 → ${DAYS_KO[r.weekendTargetDow]}요일 입금`;
-    } else { // 평일 월~목
-      let rd = addDays(d, r.weekdayDays);
-      // 주말이면 다음 월요일로
-      if (rd.getDay() === 6) rd = addDays(rd, 2);
-      else if (rd.getDay() === 0) rd = addDays(rd, 1);
-      desc = `${DAYS_KO[dow]}요일 계산서 → ${r.weekdayDays}일 후 입금`;
-      result = fmtDate(rd);
-    }
-    return { result, desc };
+    const rd = new Date(d);
+    rd.setDate(rd.getDate() + payDays);
+    if (rd.getDay() === 6) rd.setDate(rd.getDate() + 2);
+    else if (rd.getDay() === 0) rd.setDate(rd.getDate() + 1);
+    const y = rd.getFullYear(), m = String(rd.getMonth() + 1).padStart(2, "0"), dd = String(rd.getDate()).padStart(2, "0");
+    return { result: `${y}-${m}-${dd} (${DAYS_KO[rd.getDay()]}요일)`, desc: `계산서 발행 → ${payDays}일 후 입금` };
   };
 
   const isCold = React.useMemo(() => {
@@ -194,7 +163,7 @@ export default function UploadPage() {
       try {
         const snap = await getDoc(doc(db, "companySettings", cname));
         const saved = snap.exists() ? snap.data()?.결제일규칙 : null;
-        if (saved) setPaymentRule({ ...DEFAULT_PAYMENT_RULE, ...saved });
+        if (saved) setPaymentRule(saved);
       } catch (e) {
         // 규칙 조회 실패시 기본값 그대로 사용
       }
@@ -784,9 +753,7 @@ export default function UploadPage() {
                             <div style={{ fontSize: 18, fontWeight: 900, color: "#1B2B4B" }}>{calc.result}</div>
                             <div style={{ marginTop: 12, padding: "10px 12px", background: "white", borderRadius: 8, fontSize: 11, color: "#64748b", lineHeight: 1.6 }}>
                               <div style={{ fontWeight: 700, color: "#374151", marginBottom: 4 }}>입금 규칙 안내</div>
-                              <div>금요일 계산서 → 익주 {DAYS_KO[paymentRule.fridayTargetDow]}요일</div>
-                              <div>주말(토/일) 계산서 → {DAYS_KO[paymentRule.weekendTargetDow]}요일</div>
-                              <div>평일(월~목) 계산서 → {paymentRule.weekdayDays}일 후</div>
+                              <div>계산서 발행일로부터 {payDays}일 후 입금 (주말이면 다음 월요일)</div>
                               <div style={{ marginTop: 6, color: "#9ca3af", fontSize: 10 }}>* 공휴일의 경우 담당자에게 문의해 주세요.</div>
                             </div>
                           </div>
@@ -796,9 +763,7 @@ export default function UploadPage() {
                       {!invoiceDate && (
                         <div style={{ background: "#f8fafc", borderRadius: 10, padding: "14px", fontSize: 12, color: "#64748b", lineHeight: 1.7 }}>
                           <div style={{ fontWeight: 700, color: "#374151", marginBottom: 6 }}>입금 규칙 안내</div>
-                          <div>금요일 계산서 → 익주 {DAYS_KO[paymentRule.fridayTargetDow]}요일</div>
-                          <div>주말(토/일) 계산서 → {DAYS_KO[paymentRule.weekendTargetDow]}요일</div>
-                          <div>평일(월~목) 계산서 → {paymentRule.weekdayDays}일 후</div>
+                          <div>계산서 발행일로부터 {payDays}일 후 입금 (주말이면 다음 월요일)</div>
                           <div style={{ marginTop: 8, color: "#9ca3af", fontSize: 11 }}>* 공휴일의 경우 담당자에게 문의해 주세요.</div>
                         </div>
                       )}

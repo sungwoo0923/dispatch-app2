@@ -6892,19 +6892,6 @@ useEffect(() => {
     return () => { cancelled = true; clearInterval(timer); };
   }, [userCompany]);
 
-  // ⭐ 배차마당(카페사이트) 공유 온/오프 — companySettings/{회사명}.cafeSyncOn.
-  // 회사정보 화면에서 토글하고, 여기서는 배차요청장의 "배차마당 등록" 버튼이
-  // 참고할 수 있도록 실시간으로 구독만 해 둔다.
-  const [cafeSyncOn, setCafeSyncOn] = useState(false);
-  useEffect(() => {
-    const co = (userCompany || localStorage.getItem("userCompany") || "").trim();
-    if (!co) return;
-    const unsub = onSnapshot(doc(db, "companySettings", co), (snap) => {
-      setCafeSyncOn(!!snap.data()?.cafeSyncOn);
-    }, () => {});
-    return () => unsub();
-  }, [userCompany]);
-
   // ⭐ 출근기록부: 자동 출근체크 + 주말 출근여부 팝업
   const [weekendCheckPopup, setWeekendCheckPopup] = useState(false);
   useEffect(() => {
@@ -13017,15 +13004,12 @@ const savePromise = Promise.all(Array.from({ length: saveCount }, (_, i) => {
   return Promise.all(expandRotation({ ...rec, 상차일: dateForOrder, 하차일: dropDateForOrder, ...specialPatch }).map(r => addDispatch(r)));
 }));
 
-// ★ 배차마당(카페사이트) 공유 — "배차마당 등록" 버튼으로 저장했고, 회사 설정에서
-// 온(on) 상태일 때만 카페 게시판에도 같은 오더를 올린다. 배차마당은 이 프로그램과
+// ★ 배차마당(카페사이트) 공유 — "저장 + 배차마당 등록" 버튼으로 저장하면 카페 게시판에도 같은 오더를 올린다.
+// (2026-10-27 — 회사정보의 공유 온/오프 스위치는 없앴다. 이 버튼을 누르는 것 자체가 공유한다는 뜻) 배차마당은 이 프로그램과
 // 완전히 분리된 별도 사이트(별도 저장소/배포)라 코드는 공유하지 않고, 같은
 // Firestore 프로젝트의 cafeOrders 컬렉션에 직접(self-contained) 기록만 한다.
 // 실패해도 정작 오더 저장 자체는 이미 끝났으므로 여기서 막지 않고 조용히 넘어간다.
-// ★ cafeSyncOn은 typeof로 방어 — 이 팝업이 놓인 클로저가 어떤 경로로 렌더링되든
-// (미확인 스코프 경계로 인해 상단 useState가 안 잡힐 수 있는 경우까지) 절대 오더
-// 저장 자체를 깨뜨리지 않도록 한다.
-if (shareToCafe && typeof cafeSyncOn !== "undefined" && cafeSyncOn) {
+if (shareToCafe) {
   (async () => {
     try {
       const printerInfo = await fetchPrinterInfo();
@@ -19457,11 +19441,8 @@ setConfirmChange(null);
         disabled={isSaving}
         className="w-full py-2.5 bg-[#1B2B4B] hover:bg-[#243a60] text-white rounded-lg font-semibold text-[13px] transition disabled:opacity-50"
         onClick={() => doSave(true)}>
-        {isSaving ? "저장 중..." : (typeof cafeSyncOn !== "undefined" && cafeSyncOn) ? "저장 + 배차마당 등록" : "배차마당 등록 (공유 OFF 상태)"}
+        {isSaving ? "저장 중..." : "저장 + 배차마당 등록"}
       </button>
-      {!(typeof cafeSyncOn !== "undefined" && cafeSyncOn) && (
-        <p className="text-[11px] text-gray-500 mt-1.5 text-center">회사정보에서 배차마당 공유를 켜면 이 오더가 배차마당에도 함께 올라갑니다.</p>
-      )}
     </div>
 
   </div>
@@ -47352,6 +47333,8 @@ const isKrHoliday = (dateStr) => {
 
 // ===================== DispatchApp.jsx (PART 6/8 — Settlement Premium) — START =====================
 function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], isViewer = false, role, userCompany = "", showAlert = (m) => alert(m) }) {
+  // ⭐ 매출관리 비밀번호 변경(관리자 이상) — 예전엔 회사관리 › 운영 설정에 있었다
+  const [revenuePwOpen, setRevenuePwOpen] = React.useState(false);
   // ⭐ 연간 매출 목표(순수 운송료 목표 금액 / 제외 거래처 성장률)는 회사마다 다르므로
   // 하드코딩하지 않고 회사관리(RevenueTargetSection)에서 설정한 값을 불러온다.
   // 아직 설정한 적 없으면 0(미설정)으로 표시하고, "달성률" 계산은 0으로 처리한다.
@@ -48027,6 +48010,9 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
                 <button onClick={() => setMarginReportOpen(true)} className="px-3 py-1.5 rounded-lg bg-amber-400 text-[#1B2B4B] text-[12px] font-bold hover:bg-amber-300 transition">매익률 원인 보고서</button>
                 <button onClick={() => setMonthCompareOpen(true)} className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[12px] font-bold hover:bg-white/90 transition">월 비교 분석</button>
                 <button onClick={() => setMonthCloseOpen(true)} className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[12px] font-bold hover:bg-white/90 transition">월 마감 점검</button>
+                {(role === "admin" || role === "totalMaster") && (
+                  <button onClick={() => setRevenuePwOpen(true)} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-bold hover:bg-white/20 transition border border-white/25">비밀번호 변경</button>
+                )}
                 {canSeeStaffPerf && (
                   <button onClick={() => setStaffPerfOpen(true)} className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[12px] font-bold hover:bg-white/90 transition">담당자별 실적</button>
                 )}
@@ -48097,6 +48083,16 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
 
 </div>
       )} {/* overview tab end */}
+      {revenuePwOpen && createPortal(
+        <div className="fixed inset-0 z-[1000000] bg-[#0F1A30]/45 flex items-center justify-center p-4" onClick={() => setRevenuePwOpen(false)}>
+          <div className="w-full max-w-[460px] bg-white rounded-[22px] shadow-[0_24px_60px_rgba(15,26,48,0.35)] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 bg-gradient-to-r from-[#0F1A30] via-[#1B2B4B] to-[#2D4C82] text-white flex items-center justify-between">
+              <div className="text-[16px] font-black">매출관리 비밀번호</div>
+              <button onClick={() => setRevenuePwOpen(false)} className="w-8 h-8 rounded-lg bg-white/10 text-white">✕</button>
+            </div>
+            <div className="p-6"><RevenuePasswordSection companyName={userCompany || localStorage.getItem("userCompany") || ""} /></div>
+          </div>
+        </div>, document.body)}
     </div>
   );
 }
@@ -50741,6 +50737,8 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
 
 
 // ===================== DispatchApp.jsx (PART 8/8) — START =====================
+// 미수금관리 — 거래처 칸에서 고르는 "전체 거래처"
+const AR_ALL = "전체 거래처";
 function ClientSettlement({ dispatchData, setDispatchData, userCompany = "", clients = [], setClients, upsertClient, showAlert = (m) => alert(m), patchDispatch, cardImage, setCardImage, cardImageUploading, setCardImageUploading, isViewer = false }) {
 
   // ★ 오더 상세 팝업
@@ -50821,7 +50819,8 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   const [showEdit, setShowEdit] = useState(false);
   const [searched, setSearched] = useState(false);
   // ★ 명세서 포함 오더 선택 목록 내 세부검색 (쉼표로 여러 검색어 입력 시 OR 매칭)
-  const [invoiceRowFilter, setInvoiceRowFilter] = useState("");
+  // ⭐ 명세서 편집 모드 — 미리보기 안에서 줄을 빼고(휴지통) 되돌린다(2026-10-27, 위쪽 "포함할 오더 선택" 카드 대신)
+  const [invoiceEdit, setInvoiceEdit] = useState(false);
 
   // ★ 드롭다운 상태
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -50971,22 +50970,9 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
 
   const selectedRowsInvoice = rowsInvoice.filter(r => selectedInvoiceIds.has(r._id));
 
-  // ★ 명세서 포함 오더 선택 목록의 세부검색 — 쉼표로 구분한 여러 검색어 중 하나라도
-  // 상차지/하차지/경유지/화물명/차량번호에 포함되면 매칭 (OR 조건)
-  const invoiceFilterTerms = useMemo(
-    () => invoiceRowFilter.split(/[,，]/).map(s => s.trim().toLowerCase()).filter(Boolean),
-    [invoiceRowFilter]
-  );
-  const filteredRowsInvoice = useMemo(() => {
-    if (invoiceFilterTerms.length === 0) return rowsInvoice;
-    return rowsInvoice.filter(r => {
-      const hay = [
-        r.상차지명, r.하차지명, r.화물내용, r.차량번호, r.거래처명,
-        mergeViaNames([r.경유상차목록, r.경유지_상차, r.경유하차목록, r.경유지_하차]),
-      ].join(" ").toLowerCase();
-      return invoiceFilterTerms.some(t => hay.includes(t));
-    });
-  }, [rowsInvoice, invoiceFilterTerms]);
+  const excludedRowsInvoice = rowsInvoice.filter(r => !selectedInvoiceIds.has(r._id));
+  const excludeInvoiceRow = (id) => setSelectedInvoiceIds(prev => { const next = new Set(prev); next.delete(id); return next; });
+  const restoreInvoiceRow = (id) => setSelectedInvoiceIds(prev => new Set([...prev, id]));
 
   const mapped = selectedRowsInvoice.map((r, i) => {
     const viaLists = [r.경유상차목록, r.경유지_상차, r.경유하차목록, r.경유지_하차];
@@ -51300,6 +51286,19 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   const [statusFilter, setStatusFilter] = useState("전체");
   const [selectedMonths, setSelectedMonths] = useState(new Set());
   const [memoMap, setMemoMap] = useState({});
+  const [depositGuideOpen, setDepositGuideOpen] = useState(false);
+  // ⭐ 입금 기록(arPayments) — 일부입금 누계를 "거래처|월"별로 더해 둔다(입금 엑셀 자동 매칭이 남긴다)
+  const arCompany = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim();
+  const [arPayments, setArPayments] = useState([]);
+  useEffect(() => {
+    if (!arCompany) return undefined;
+    return onSnapshot(query(collection(db, "arPayments"), where("company", "==", arCompany)), (snap) => setArPayments(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
+  }, [arCompany]);
+  const arPaidMap = useMemo(() => {
+    const m = new Map();
+    arPayments.forEach(p => { const k = `${p.client}|${p.yyyymm}`; m.set(k, (m.get(k) || 0) + (Number(p.amount) || 0)); });
+    return m;
+  }, [arPayments]);
 
   // ★ 미수금관리 거래처 드롭다운
   const [arDropOpen, setArDropOpen] = useState(false);
@@ -51311,7 +51310,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
 
   const arOptions = useMemo(() => {
     const q = (arInput || "").trim().toLowerCase();
-    if (!q) return clientOptions8;
+    if (!q) return [AR_ALL, ...clientOptions8]; // ⭐ 맨 위 "전체 거래처"
     const norm = (s) => s.toLowerCase().replace(/\s+/g, "");
     const nq = norm(q);
     const exact = [], starts = [], includes = [];
@@ -51321,7 +51320,8 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
       else if (nn.startsWith(nq)) starts.push(name);
       else if (nn.includes(nq)) includes.push(name);
     });
-    return [...exact, ...starts, ...includes].slice(0, 15);
+    const all = AR_ALL.includes(q.replace(/\s+/g, " ")) ? [AR_ALL] : [];
+    return [...all, ...exact, ...starts, ...includes].slice(0, 15);
   }, [arInput, clientOptions8]);
 
   React.useEffect(() => {
@@ -51359,18 +51359,20 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     else if (e.key === "Tab") { const pick = arOptions[arDropIdx]; if (pick) selectArClient(pick); }
   };
 
-  const toggleMonthSelect = (yyyymm) => setSelectedMonths(prev => {
-    const n = new Set(prev); n.has(yyyymm) ? n.delete(yyyymm) : n.add(yyyymm); return n;
+  // 선택 키 = "거래처|월" (전체 거래처로 볼 때 같은 달이 여러 거래처에 있으므로)
+  const toggleMonthSelect = (k) => setSelectedMonths(prev => {
+    const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n;
   });
   const toggleAllMonths = (rows) => setSelectedMonths(prev =>
-    prev.size === rows.length ? new Set() : new Set(rows.map(r => r.yyyymm))
+    prev.size === rows.length ? new Set() : new Set(rows.map(r => r.k))
   );
   const clearSel = () => setSelectedMonths(new Set());
 
 const monthRowsRaw = useMemo(() => {
     if (!selClient) return [];
     const list = Array.isArray(dispatchData) ? dispatchData : [];
-    const base = list.filter(r => (r.배차상태||"") === "배차완료" && (r.거래처명||"") === selClient);
+    const isAll = selClient === AR_ALL;
+    const base = list.filter(r => (r.배차상태||"") === "배차완료" && (isAll || (r.거래처명||"") === selClient));
     const nowMM = new Date().getMonth() + 1;
     const currentYYYYMM = `${THIS_YEAR}-${String(nowMM).padStart(2,"0")}`;
 
@@ -51386,9 +51388,12 @@ const monthRowsRaw = useMemo(() => {
       }
     }
 
-    return allMonths.map(yyyymm => {
+    // ⭐ 전체 거래처 — 거래처마다 오더가 있는 달만 한 줄씩
+    const clientsInRange = isAll ? [...new Set(base.filter(r => allMonths.some(m => String(r.상차일||"").startsWith(m))).map(r => r.거래처명 || ""))].filter(Boolean).sort((a, b) => a.localeCompare(b, "ko")) : [selClient];
+    return clientsInRange.flatMap(client => allMonths.map(yyyymm => {
       const mm = yyyymm.slice(5);
-      const rows = base.filter(r => String(r.상차일||"").startsWith(yyyymm));
+      const rows = base.filter(r => String(r.상차일||"").startsWith(yyyymm) && (!isAll || (r.거래처명||"") === client));
+      if (isAll && !rows.length) return null;
       const total = rows.reduce((s, r) => s + toInt(r.청구운임), 0);
       const allDone = rows.length > 0 && rows.every(r => r.정산상태?.[yyyymm] === "정산완료");
 
@@ -51398,21 +51403,28 @@ const monthRowsRaw = useMemo(() => {
       else status = "미정산";
 
       const dates = rows.map(r => r.정산일?.[yyyymm]).filter(Boolean).sort();
-      return { yyyymm, mm, year: yyyymm.slice(0,4), 거래처명: selClient, 건수: rows.length, 총청구금액: total, 정산상태: status, 정산일: dates.at(-1)||"", _rows: rows };
-    });
-  }, [dispatchData, selClient, yearFrom, monthFrom, yearTo, monthTo]);
+      const k = `${client}|${yyyymm}`;
+      const paid = arPaidMap.get(k) || 0; // 일부입금 누계
+      const due = Math.round(total * 1.1);
+      if (status !== "정산완료" && paid > 0) status = "일부입금";
+      return { k, yyyymm, mm, year: yyyymm.slice(0,4), 거래처명: client, 건수: rows.length, 총청구금액: total, 정산상태: status, 정산일: dates.at(-1)||"", _rows: rows, 입금누계: paid, 잔액: Math.max(0, due - paid) };
+    }).filter(Boolean));
+  }, [dispatchData, selClient, yearFrom, monthFrom, yearTo, monthTo, arPaidMap]);
 
   const monthRows = useMemo(() => {
     let rows = [...monthRowsRaw];
-    if (statusFilter !== "전체") rows = rows.filter(r => r.정산상태 === statusFilter);
+    // 일부입금도 아직 다 받지 못한 달이므로 "미정산"으로 거를 때 함께 보인다
+    if (statusFilter !== "전체") rows = rows.filter(r => r.정산상태 === statusFilter || (statusFilter === "미정산" && r.정산상태 === "일부입금"));
     return rows;
   }, [monthRowsRaw, statusFilter]);
 
   const kpi = useMemo(() => ({
     전체건수: monthRows.reduce((s, r) => s + r.건수, 0),
     총청구: monthRows.reduce((s, r) => s + r.총청구금액, 0),
-    미정산월: monthRows.filter(r => r.정산상태 === "미정산").length,
-    미정산금: monthRows.filter(r => r.정산상태 === "미정산").reduce((s, r) => s + r.총청구금액, 0),
+    미정산월: monthRows.filter(r => r.정산상태 === "미정산" || r.정산상태 === "일부입금").length,
+    // 일부입금 달은 받은 만큼(공급가 기준) 빼고 남은 금액만
+    미정산금: monthRows.filter(r => r.정산상태 === "미정산" || r.정산상태 === "일부입금")
+      .reduce((s, r) => s + (r.정산상태 === "일부입금" ? Math.max(0, r.총청구금액 - Math.round((r.입금누계 || 0) / 1.1)) : r.총청구금액), 0),
     완료금: monthRows.filter(r => r.정산상태 === "정산완료").reduce((s, r) => s + r.총청구금액, 0),
   }), [monthRows]);
 
@@ -51442,7 +51454,7 @@ const monthRowsRaw = useMemo(() => {
 };
 
   const settleSelected = async () => {
-  const targets = monthRows.filter(r => selectedMonths.has(r.yyyymm));
+  const targets = monthRows.filter(r => selectedMonths.has(r.k));
   if (!targets.length) return showAlert("선택된 월이 없습니다.");
 
   const allIds = [];
@@ -51518,12 +51530,12 @@ const monthRowsRaw = useMemo(() => {
       순번: idx + 1, 청구월: row.yyyymm, 거래처명: row.거래처명,
       건수: row.건수, 총청구금액: toInt(row.총청구금액),
       정산상태: row.정산상태, 정산일: row.정산일 || "",
-      메모: memoMap[row.yyyymm] || "",
+      메모: memoMap[row.k] || "",
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "미수금_월집계");
-    XLSX.writeFile(wb, `미수금_${selClient}_${THIS_YEAR}.xlsx`);
+    XLSX.writeFile(wb, `미수금_${selClient === AR_ALL ? "전체거래처" : selClient}_${THIS_YEAR}.xlsx`);
   };
 
   // ★ 입금 엑셀 업로드 → 자동 매칭 → 정산완료
@@ -52231,41 +52243,73 @@ const handleBatchSettle = async (targetStatus) => {
 
       if (!deposits.length) return showAlert("입금 내역을 찾을 수 없습니다.\n(입금액, 적요/입금자명 컬럼이 필요합니다)");
 
-      // ★ 미정산 월별 데이터와 매칭
-      const unsettled = monthRowsRaw.filter(r => r.정산상태 === "미정산" && r.총청구금액 > 0);
-
-      const matches = [];
-      const unmatched = [];
-
-      deposits.forEach(dep => {
-        // 1) 금액 정확 일치 (세액 포함 합계 = 공급가 * 1.1)
-        const found = unsettled.find(row => {
-          const totalWithTax = Math.round(row.총청구금액 * 1.1);
-          const totalNoTax = row.총청구금액;
-          return (
-            dep.amount === totalWithTax ||
-            dep.amount === totalNoTax ||
-            Math.abs(dep.amount - totalWithTax) <= 10 // ±10원 오차 허용
-          );
-        });
-
-        if (found) {
-          // 2) 입금자명과 거래처명 유사도 체크 (보너스 확인)
-          const nameMatch = dep.name &&
-            (dep.name.includes(found.거래처명) ||
-             found.거래처명.includes(dep.name) ||
-             normalizeForMatch(dep.name) === normalizeForMatch(found.거래처명));
-
-          matches.push({
-            deposit: dep,
-            matched: found,
-            confidence: nameMatch ? "높음" : "금액일치",
-          });
-        } else {
-          unmatched.push(dep);
-        }
+      // ⭐ 2026-10-27 자동 매칭 — 선택한 거래처와 상관없이 조회 기간의 "모든 거래처" 미정산 월과 맞춰 본다.
+      //  ① 입금자명으로 거래처를 찾고 ② 그 거래처의 미정산 달 중 금액이 딱 맞는 달 → 정산완료
+      //  ③ 딱 맞는 달이 없으면 오래된 달부터 채움 — 다 채운 달은 정산완료, 모자란 달은 일부입금, 남으면 초과입금
+      //  ④ 입금자명이 어느 거래처와도 안 맞으면 금액이 딱 맞는 달이 하나뿐일 때만 "이름 확인" 제안
+      const isAllMonth = (ym) => ym >= `${yearFrom}-${monthFrom}` && ym <= `${yearTo}-${monthTo}`;
+      const book = new Map(); // client -> [{ k, yyyymm, rows, total, due, paid }]
+      (Array.isArray(dispatchData) ? dispatchData : []).forEach(r => {
+        if ((r.배차상태 || "") !== "배차완료" || !r.거래처명) return;
+        const ym = String(r.상차일 || "").slice(0, 7);
+        if (!isAllMonth(ym) || r.정산상태?.[ym] === "정산완료") return;
+        if (!book.has(r.거래처명)) book.set(r.거래처명, new Map());
+        const mm = book.get(r.거래처명);
+        if (!mm.has(ym)) mm.set(ym, { k: `${r.거래처명}|${ym}`, client: r.거래처명, yyyymm: ym, rows: [], total: 0 });
+        const e = mm.get(ym); e.rows.push(r); e.total += toInt(r.청구운임);
       });
-
+      const months = new Map(); // client -> sorted list
+      book.forEach((mm, client) => months.set(client, [...mm.values()].filter(e => e.total > 0).map(e => {
+        const paid = arPaidMap.get(e.k) || 0;
+        return { ...e, paid, due: Math.round(e.total * 1.1), remain: Math.max(0, Math.round(e.total * 1.1) - paid) };
+      }).sort((a, b) => a.yyyymm.localeCompare(b.yyyymm))));
+      const nm = (x) => normalizeForMatch(x);
+      const findClient = (depName) => {
+        const d = nm(depName); if (!d || d.length < 2) return null;
+        let best = null;
+        months.forEach((list, client) => {
+          const c = nm(client); if (!c || !list.length) return;
+          if (d === c || d.includes(c) || (c.includes(d) && d.length >= 2)) { if (!best || c.length > nm(best).length) best = client; }
+        });
+        return best;
+      };
+      const TOL = 10;
+      const used = new Map(); // 같은 엑셀 안에서 이미 배분한 금액(k -> 금액)
+      const remainOf = (e) => Math.max(0, e.remain - (used.get(e.k) || 0));
+      const matches = []; const unmatched = [];
+      deposits.forEach(dep => {
+        const client = findClient(dep.name);
+        if (client) {
+          const list = months.get(client).filter(e => remainOf(e) > 0);
+          const exact = list.find(e => Math.abs(dep.amount - remainOf(e)) <= TOL || (e.paid === 0 && dep.amount === e.total));
+          let alloc = [];
+          if (exact) alloc = [{ e: exact, amount: dep.amount, full: true }];
+          else {
+            let left = dep.amount;
+            for (const e of list) {
+              if (left <= 0) break;
+              const r = remainOf(e);
+              if (left + TOL >= r) { alloc.push({ e, amount: Math.min(left, r), full: true }); left -= r; }
+              else { alloc.push({ e, amount: left, full: false }); left = 0; }
+            }
+            if (left > TOL) alloc.over = left;
+          }
+          alloc.forEach(a => used.set(a.e.k, (used.get(a.e.k) || 0) + a.amount));
+          if (!alloc.length) { unmatched.push({ ...dep, reason: `${client} — 남은 미정산이 없습니다` }); return; }
+          const fulls = alloc.filter(a => a.full).length;
+          const kind = alloc.over ? "초과입금" : exact ? "정산완료" : alloc.some(a => !a.full) ? (fulls ? "정산+일부입금" : "일부입금") : "여러 달 정산";
+          matches.push({ deposit: dep, client, alloc: alloc.map(a => ({ k: a.e.k, yyyymm: a.e.yyyymm, amount: a.amount, full: a.full, due: a.e.due, rows: a.e.rows })), over: alloc.over || 0, kind, confidence: "이름일치" });
+          return;
+        }
+        // 입금자명으로 못 찾음 — 금액이 딱 맞는 달이 하나뿐이면 제안
+        const cands = [];
+        months.forEach((list) => list.forEach(e => { if (remainOf(e) > 0 && (Math.abs(dep.amount - remainOf(e)) <= TOL || dep.amount === e.total)) cands.push(e); }));
+        if (cands.length === 1) {
+          const e = cands[0];
+          used.set(e.k, (used.get(e.k) || 0) + dep.amount);
+          matches.push({ deposit: dep, client: e.client, alloc: [{ k: e.k, yyyymm: e.yyyymm, amount: dep.amount, full: true, due: e.due, rows: e.rows }], over: 0, kind: "정산완료", confidence: "금액만 일치" });
+        } else unmatched.push({ ...dep, reason: cands.length ? `금액이 같은 달이 ${cands.length}곳 — 직접 확인` : "맞는 거래처·금액 없음" });
+      });
       setBankMatchResult({ matches, unmatched, deposits });
     };
 
@@ -52280,50 +52324,42 @@ const handleBatchSettle = async (targetStatus) => {
       .replace(/[^가-힣a-zA-Z0-9]/g, "")
       .toLowerCase();
 
-  // ★ 매칭 결과에서 정산완료 처리
-  const applyBankMatch = async (matchItem) => {
-  const row = matchItem.matched;
-  const dateStr = todayStr8();
-  const ids = [];
-
-  for (const r of row._rows || []) {
-    if (!r._id) continue;
-    ids.push(r._id);
-    await patchMonthOnDoc(r._id, row.yyyymm, "정산완료", dateStr);
-  }
-
-  // ★ 로컬 반영
-  if (typeof setDispatchData === "function") {
-    setDispatchData(prev => prev.map(d => {
-      if (!ids.includes(d._id)) return d;
-      return {
-        ...d,
-        정산상태: { ...(typeof d.정산상태 === "object" ? d.정산상태 : {}), [row.yyyymm]: "정산완료" },
-        정산일: { ...(typeof d.정산일 === "object" ? d.정산일 : {}), [row.yyyymm]: dateStr },
-      };
-    }));
-  }
-
-  setBankMatchResult(prev => ({
-    ...prev,
-    matches: prev.matches.filter(m => m !== matchItem),
-  }));
-  showAlert(`${row.거래처명} ${row.yyyymm} → 정산완료 (입금액: ${matchItem.deposit.amount.toLocaleString()}원)`);
-};
-
-
-  // ★ 전체 매칭 일괄 적용
-  const applyAllBankMatches = async () => {
-    if (!bankMatchResult?.matches?.length) return;
+  // ⭐ 매칭 결과 적용 — 다 채운 달은 정산완료, 모자란 달은 입금 기록(일부입금)으로 남긴다
+  const applyOneMatch = async (m) => {
     const dateStr = todayStr8();
-    for (const m of bankMatchResult.matches) {
-      for (const r of m.matched._rows || []) {
+    const ids = new Map();
+    for (const a of m.alloc) {
+      await addDoc(collection(db, "arPayments"), {
+        company: arCompany, client: m.client, yyyymm: a.yyyymm, amount: a.amount, full: a.full,
+        depositName: m.deposit.name || "", depositDate: m.deposit.date || "", at: serverTimestamp(), by: auth.currentUser?.email || "",
+      });
+      if (!a.full) continue;
+      for (const r of a.rows || []) {
         if (!r._id) continue;
-        await patchMonthOnDoc(r._id, m.matched.yyyymm, "정산완료", dateStr);
+        await patchMonthOnDoc(r._id, a.yyyymm, "정산완료", dateStr);
+        ids.set(r._id, a.yyyymm);
       }
     }
-    showAlert(`${bankMatchResult.matches.length}건 일괄 정산완료 처리됨`);
-    setBankMatchResult(null);
+    if (ids.size && typeof setDispatchData === "function") {
+      setDispatchData(prev => prev.map(d => {
+        const ym = ids.get(d._id); if (!ym) return d;
+        return { ...d,
+          정산상태: { ...(typeof d.정산상태 === "object" ? d.정산상태 : {}), [ym]: "정산완료" },
+          정산일: { ...(typeof d.정산일 === "object" ? d.정산일 : {}), [ym]: dateStr } };
+      }));
+    }
+  };
+  const applyBankMatch = async (m) => {
+    await applyOneMatch(m);
+    setBankMatchResult(prev => ({ ...prev, matches: prev.matches.filter(x => x !== m) }));
+    sflowToast(`${m.client} ${m.deposit.amount.toLocaleString()}원 반영 — ${m.kind}`, "success");
+  };
+  // 이름까지 맞은 것만 한꺼번에(금액만 맞은 건 사람이 확인)
+  const applyAllBankMatches = async () => {
+    const list = (bankMatchResult?.matches || []).filter(m => m.confidence === "이름일치");
+    for (const m of list) await applyOneMatch(m);
+    setBankMatchResult(prev => ({ ...prev, matches: prev.matches.filter(m => !list.includes(m)) }));
+    sflowToast(`${list.length}건 입금 반영 완료`, "success");
   };
 
   const tabBtn = (key, label, badge) => (
@@ -52562,111 +52598,6 @@ const handleBatchSettle = async (targetStatus) => {
             )}
           </div>
 
-          {/* ★ 조회결과 중 명세서에 포함할 오더 선택 (특정 오더만 골라서 명세서 발급) */}
-          {searched && rowsInvoice.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
-              <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
-                <div className="text-[13px] font-bold text-gray-600">
-                  명세서에 포함할 오더 선택
-                  <span className="text-[12px] text-gray-500 font-normal ml-1">(체크 해제하면 아래 명세서에서 빠집니다)</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    autoComplete="off"
-                    value={invoiceRowFilter}
-                    onChange={(e) => setInvoiceRowFilter(e.target.value)}
-                    placeholder="세부검색 (예: gs부산센터, gs양산센터)"
-                    className="px-2.5 py-1 text-[12px] border border-gray-200 rounded-lg w-[220px] outline-none focus:border-[#1B2B4B]"
-                  />
-                  {invoiceRowFilter && (
-                    <button
-                      onClick={() => setInvoiceRowFilter("")}
-                      className="px-2 py-1 rounded-lg bg-gray-100 text-gray-500 text-[12px] font-semibold hover:bg-gray-200 transition"
-                    >
-                      검색초기화
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setSelectedInvoiceIds(prev => new Set([...prev, ...filteredRowsInvoice.map(r => r._id)]))}
-                    className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition"
-                  >
-                    {invoiceRowFilter ? "검색결과 선택" : "전체선택"}
-                  </button>
-                  <button
-                    onClick={() => setSelectedInvoiceIds(prev => {
-                      const next = new Set(prev);
-                      filteredRowsInvoice.forEach(r => next.delete(r._id));
-                      return next;
-                    })}
-                    className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition"
-                  >
-                    {invoiceRowFilter ? "검색결과 해제" : "전체해제"}
-                  </button>
-                </div>
-              </div>
-              {invoiceRowFilter && (
-                <div className="text-[12px] text-gray-500 mb-2">검색결과 {filteredRowsInvoice.length}건 / 전체 {rowsInvoice.length}건</div>
-              )}
-              <div className="overflow-x-auto max-h-64 overflow-y-auto border border-gray-100 rounded-lg">
-                <table className="w-full text-[12px]">
-                  <thead>
-                    <tr className="bg-gray-50 sticky top-0">
-                      <th className="px-2 py-2 w-8"></th>
-                      <th className="px-2 py-2 text-center"><EditableText id="settlement.detail.header.날짜" defaultText="날짜" /></th>
-                      <th className="px-2 py-2 text-center"><EditableText id="settlement.detail.header.상차지" defaultText="상차지" /></th>
-                      <th className="px-2 py-2 text-center"><EditableText id="settlement.detail.header.하차지" defaultText="하차지" /></th>
-                      <th className="px-2 py-2 text-center"><EditableText id="settlement.detail.header.경유지" defaultText="경유지" /></th>
-                      <th className="px-2 py-2 text-center"><EditableText id="settlement.detail.header.화물명" defaultText="화물명" /></th>
-                      <th className="px-2 py-2 text-center"><EditableText id="settlement.detail.header.차량번호" defaultText="차량번호" /></th>
-                      <th className="px-2 py-2 text-right"><EditableText id="settlement.detail.header.청구운임" defaultText="청구운임" /></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredRowsInvoice.length === 0 ? (
-                      <tr><td colSpan={8} className="text-center text-gray-500 py-6 text-[12px]">검색 결과가 없습니다.</td></tr>
-                    ) : filteredRowsInvoice.map((r) => {
-                      const checked = selectedInvoiceIds.has(r._id);
-                      return (
-                        <tr
-                          key={r._id}
-                          className={`border-t border-gray-50 cursor-pointer ${checked ? "" : "opacity-40"}`}
-                          onClick={() => {
-                            setSelectedInvoiceIds(prev => {
-                              const next = new Set(prev);
-                              if (next.has(r._id)) next.delete(r._id); else next.add(r._id);
-                              return next;
-                            });
-                          }}
-                        >
-                          <td className="px-2 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
-                            <input autoComplete="off"
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => {
-                                setSelectedInvoiceIds(prev => {
-                                  const next = new Set(prev);
-                                  if (next.has(r._id)) next.delete(r._id); else next.add(r._id);
-                                  return next;
-                                });
-                              }}
-                            />
-                          </td>
-                          <td className="px-2 py-1.5 text-center whitespace-nowrap">{r.상차일 || ""}</td>
-                          <td className="px-2 py-1.5 text-center">{r.상차지명 || ""}</td>
-                          <td className="px-2 py-1.5 text-center">{r.하차지명 || ""}</td>
-                          <td className="px-2 py-1.5 text-center">{mergeViaNames([r.경유상차목록, r.경유지_상차, r.경유하차목록, r.경유지_하차])}</td>
-                          <td className="px-2 py-1.5 text-center">{mergeViaCargoText(r.화물내용, [r.경유상차목록, r.경유지_상차, r.경유하차목록, r.경유지_하차])}</td>
-                          <td className="px-2 py-1.5 text-center text-[11px]">{r.차량번호 || ""}</td>
-                          <td className="px-2 py-1.5 text-right font-semibold">{won(toInt(r.청구운임))}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
           {/* 미조회 상태 */}
           {!searched && (
             <div className="flex flex-col items-center justify-center py-20 text-gray-500">
@@ -52816,6 +52747,20 @@ const handleBatchSettle = async (targetStatus) => {
                 </div>
               </div>
 
+              {/* ⭐ 편집 — 명세서에서 뺄 줄을 고른다(인쇄·이미지에는 이 버튼들이 나오지 않음) */}
+              {searched && rowsInvoice.length > 0 && (
+                <div data-html2canvas-ignore="true" className="print:hidden px-6 py-2.5 flex items-center justify-end gap-2 border-b border-gray-100 bg-[#F8FAFD]">
+                  {invoiceEdit && excludedRowsInvoice.length > 0 && (
+                    <button onClick={() => setSelectedInvoiceIds(new Set(rowsInvoice.map(r => r._id)))}
+                      className="h-8 px-3 rounded-lg border border-[#1B2B4B]/40 text-[#1B2B4B] text-[12.5px] font-bold hover:bg-white">모두 되돌리기 ({excludedRowsInvoice.length}건)</button>
+                  )}
+                  <button onClick={() => setInvoiceEdit(v => !v)}
+                    className={`h-8 px-4 rounded-lg text-[12.5px] font-black ${invoiceEdit ? "bg-[#1B2B4B] text-white" : "border border-[#1B2B4B] text-[#1B2B4B] hover:bg-white"}`}>
+                    {invoiceEdit ? "편집 완료" : `편집${excludedRowsInvoice.length ? ` · ${excludedRowsInvoice.length}건 빠짐` : ""}`}
+                  </button>
+                </div>
+              )}
+
               {/* 내역 테이블 */}
               <div className="overflow-x-auto">
                 <table className="w-full text-[13px]">
@@ -52824,6 +52769,7 @@ const handleBatchSettle = async (targetStatus) => {
                       {["No","날짜","상차지","하차지","경유지","화물명","기사명","차량번호","공급가액","세액(10%)","합계"].map(h=>(
                         <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap"><EditableText id={`taxInvoice.table.header.${h}`} defaultText={h} /></th>
                       ))}
+                      {invoiceEdit && <th data-html2canvas-ignore="true" className="print:hidden px-2 py-3 w-12" />}
                     </tr>
                   </thead>
                   <tbody>
@@ -52863,6 +52809,14 @@ const handleBatchSettle = async (targetStatus) => {
                           <td className="px-3 py-2.5 text-right font-semibold">{won(m.공급가액)}</td>
                           <td className="px-3 py-2.5 text-right text-blue-600">{won(m.세액)}</td>
                           <td className="px-3 py-2.5 text-right font-bold text-[#1B2B4B]">{won(m.공급가액+m.세액)}</td>
+                          {invoiceEdit && (
+                            <td data-html2canvas-ignore="true" className="print:hidden px-2 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                              <button onClick={() => excludeInvoiceRow(selectedRowsInvoice[i]._id)} title="이 명세서에서 빼기"
+                                className="w-8 h-8 rounded-lg border border-[#DCE3EE] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white inline-flex items-center justify-center">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" /></svg>
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       ))
 
@@ -52873,8 +52827,23 @@ const handleBatchSettle = async (targetStatus) => {
                         <td className="px-3 py-3 text-right text-white font-bold">{won(합계공급가)}</td>
                         <td className="px-3 py-3 text-right text-blue-300 font-bold">{won(합계세액)}</td>
                         <td className="px-3 py-3 text-right text-yellow-300 font-extrabold">{won(합계공급가+합계세액)}</td>
+                        {invoiceEdit && <td data-html2canvas-ignore="true" className="print:hidden" />}
                       </tr>
                     )}
+                    {/* 편집 중 — 뺀 줄(되돌리기) */}
+                    {invoiceEdit && excludedRowsInvoice.map((r) => (
+                      <tr key={`ex-${r._id}`} data-html2canvas-ignore="true" className="print:hidden bg-[#F5F8FD] text-[#9AA9C3]">
+                        <td className="px-3 py-2 text-center">–</td>
+                        <td className="px-3 py-2 text-center whitespace-nowrap line-through">{r.상차일}</td>
+                        <td className="px-3 py-2 text-center line-through">{r.상차지명}</td>
+                        <td className="px-3 py-2 text-center line-through">{r.하차지명}</td>
+                        <td colSpan={4} className="px-3 py-2 text-center text-[12px]">명세서에서 뺀 오더</td>
+                        <td colSpan={3} className="px-3 py-2 text-right line-through">{won(toInt(r.청구운임))}</td>
+                        <td className="px-2 py-2 text-center">
+                          <button onClick={() => restoreInvoiceRow(r._id)} className="h-8 px-2.5 rounded-lg bg-white border border-[#1B2B4B]/40 text-[#1B2B4B] text-[12px] font-bold whitespace-nowrap">되돌리기</button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -53830,150 +53799,16 @@ const handleBatchSettle = async (targetStatus) => {
                   입금확인(엑셀)
                   <input autoComplete="off" type="file" accept=".xlsx,.xls,.csv" hidden onChange={handleBankExcelUpload} />
                 </label>
-                <button
-                  onClick={() => { setArFromYear(yearFrom); setArFromMM(monthFrom); setArToYear(yearTo); setArToMM(monthTo); setArReportOpen(true); }}
-                  className="px-3 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition"
-                >
-                  미수금보고서
-                </button>
-                <button
-                  onClick={() => { setBatchModalOpen(true); setBatchClients(new Set()); setBatchClientQ(""); }}
-                  className="px-3 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"
-                >
-                  일괄정산처리
-                </button>
-                <button
-  disabled={!selClient}
-  onClick={() => {
-    const found = (clients||[]).find(c => c.거래처명 === selClient);
-    setEmailTo(found?.이메일 || found?.연락처이메일 || "");
-    setArEmailFromMM(monthFrom || "01");
-    setArEmailToMM(monthTo || "12");
-    const unpaid = monthRows.filter(r => r.정산상태 === "미정산");
-    const unpaidAmt = unpaid.reduce((s,r) => s + r.총청구금액, 0);
-    setEmailBody(`안녕하세요, ${selClient} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${THIS_YEAR}년 미수금 현황을 안내드립니다.\n\n미정산 월수: ${unpaid.length}개월\n미정산 금액: ${unpaidAmt.toLocaleString()}원\n\n${unpaid.map(r => `  - ${r.yyyymm} : ${r.총청구금액.toLocaleString()}원`).join("\n")}\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n정산 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
-    setEmailScheduleOn(false); setEmailScheduleAt("");
-    setArEmailOpen(true);
-  }}
-  className={`px-3 py-2 rounded-lg text-[13px] font-semibold transition border ${selClient ? "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white" : "bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed"}`}
->
-  이메일발송
-</button>
-            </div>
-          </div>
-          {/* KPI 카드 */}
-          {selClient && (
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
-              {[
-                {label:"총 오더건수", val:`${kpi.전체건수}건`, color:"text-[#1B2B4B]"},
-                {label:"총 청구금액", val:`${won(kpi.총청구)}원`, color:"text-blue-600"},
-                {label:"미정산 월수", val:`${kpi.미정산월}개월`, color:"text-amber-500"},
-                {label:"미정산 금액", val:`${won(kpi.미정산금)}원`, color:"text-red-500"},
-                {label:"정산완료 금액", val:`${won(kpi.완료금)}원`, color:"text-emerald-600"},
-              ].map(({label,val,color})=>(
-                <div key={label} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                  <div className="text-[11px] font-bold text-gray-500 mb-1">{label}</div>
-                  <div className={`text-[18px] font-extrabold ${color}`}>{val}</div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* 테이블 */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
-            {selClient && (
-              <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 bg-[#1B2B4B]/4">
-                <span className="text-[12px] font-bold text-gray-500">조회 거래처</span>
-                <span className="text-[14px] font-extrabold text-[#1B2B4B]">{selClient}</span>
-                <span className="text-[12px] text-gray-500">— {THIS_YEAR}년 월별 정산 현황</span>
-              </div>
-            )}
-            <table className="text-[13px]" style={{tableLayout:"fixed", width:"722px"}}>
-              <colgroup>
-                <col style={{width:"40px"}} />
-                <col style={{width:"48px"}} />
-                <col style={{width:"88px"}} />
-                <col style={{width:"56px"}} />
-                <col style={{width:"130px"}} />
-                <col style={{width:"100px"}} />
-                <col style={{width:"100px"}} />
-                <col style={{width:"160px"}} />
-              </colgroup>
-              <thead>
-                <tr className="bg-[#1B2B4B]">
-                  <th
-                    className="px-2 py-3 text-white text-center cursor-pointer select-none"
-                    onClick={() => toggleAllMonths(monthRows)}
-                  >
-                    <input autoComplete="off"
-                      type="checkbox"
-                      onChange={() => toggleAllMonths(monthRows)}
-                      checked={selectedMonths.size > 0 && selectedMonths.size === monthRows.length}
-                      onClick={e => e.stopPropagation()}
-                    />
-                  </th>
-                  {["순번","청구월","건수","총 청구금액","정산상태","정산일","메모"].map(label=>(
-                    <th key={label} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap"><EditableText id={`settlement.monthly.header.${label}`} defaultText={label} /></th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {!selClient ? (
-                  <tr><td colSpan={8} className="text-center text-gray-500 py-16 text-[14px]">거래처를 검색하세요.</td></tr>
-                ) : monthRows.length === 0 ? (
-                  <tr><td colSpan={8} className="text-center text-gray-500 py-16 text-[14px]">표시할 데이터가 없습니다.</td></tr>
-                ) : (
-                  monthRows.map((row, idx) => (
-                    <tr key={row.yyyymm} className={idx%2===0?"bg-white":"bg-gray-50/60"}>
-                      <td
-                        className="px-3 py-3 text-center border-b border-gray-100 cursor-pointer select-none"
-                        onClick={() => toggleMonthSelect(row.yyyymm)}
-                      >
-                        <input autoComplete="off"
-                          type="checkbox"
-                          checked={selectedMonths.has(row.yyyymm)}
-                          onChange={() => toggleMonthSelect(row.yyyymm)}
-                          onClick={e => e.stopPropagation()}
-                        />
-                      </td>
-                      <td className="px-3 py-3 text-center text-gray-500 border-b border-gray-100">{idx+1}</td>
-                      <td className="px-3 py-3 text-center font-bold text-[#1B2B4B] border-b border-gray-100">{row.yyyymm}</td>
-                      <td className="px-3 py-3 text-center border-b border-gray-100">{row.건수}건</td>
-                      <td className="px-3 py-3 text-right font-bold border-b border-gray-100">
-                        <span className={row.총청구금액>0?"text-[#1B2B4B]":"text-gray-500"}>
-                          {won(row.총청구금액)}원
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-center border-b border-gray-100 cursor-pointer select-none"
-                        onClick={()=>toggleMonthStatus(row)} title="클릭하여 상태 전환">
-                        <span className={`px-3 py-1 rounded-lg text-[13px] font-bold text-white ${
-                          row.정산상태==="정산완료" ? "bg-emerald-600"
-                          : row.정산상태==="진행중"  ? "bg-blue-500"
-                          : "bg-amber-500"
-                        }`}>
-                          {row.정산상태}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-center text-gray-500 border-b border-gray-100">{row.정산일||"-"}</td>
-                      <td className="px-3 py-3 border-b border-gray-100">
-                        <input autoComplete="off"
-                          className="border rounded-lg px-2 py-1 text-[12px] w-full outline-none focus:border-[#1B2B4B]"
-                          placeholder="메모 입력"
-                          value={memoMap[row.yyyymm]||""}
-                          onChange={e=>setMemoMap(p=>({...p,[row.yyyymm]:e.target.value}))}
-                        />
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-                            <div className="mt-2 text-[12px] text-gray-500">· 정산상태 클릭 시 해당 월 전체 오더에 정산상태/정산일이 저장됩니다.</div>
-
-                             {/* ★ 입금 엑셀 업로드 가이드 */}
-          <div className="mt-6 p-6 bg-[#f8f9fb] border border-gray-200 rounded-2xl shadow-sm">
-            <p className="font-extrabold mb-3 text-[16px] text-[#1B2B4B]">입금확인 엑셀 양식 안내</p>
+                <button onClick={() => setDepositGuideOpen(true)} className="px-3 py-2 rounded-lg bg-white border border-[#1B2B4B]/40 text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#F5F8FD] transition">입금양식안내</button>
+                {depositGuideOpen && createPortal(
+                  <div className="fixed inset-0 z-[1000000] bg-[#0F1A30]/45 flex items-center justify-center p-4" onClick={() => setDepositGuideOpen(false)}>
+                    <div className="w-full max-w-[760px] max-h-[88vh] overflow-y-auto bg-white rounded-[22px] shadow-[0_24px_60px_rgba(15,26,48,0.35)]" onClick={(e) => e.stopPropagation()}>
+                      <div className="sticky top-0 px-6 py-4 bg-gradient-to-r from-[#0F1A30] via-[#1B2B4B] to-[#2D4C82] text-white flex items-center justify-between">
+                        <div><div className="text-[11px] font-extrabold tracking-[0.22em] text-white/60">GUIDE</div><div className="text-[17px] font-black">입금확인 엑셀 양식 안내</div></div>
+                        <button onClick={() => setDepositGuideOpen(false)} className="w-8 h-8 rounded-lg bg-white/10">✕</button>
+                      </div>
+<div className="p-6">
+            
             <p className="mb-4 text-[14px] text-gray-600 leading-relaxed">
               아래와 같은 형식의 <b className="text-[#1B2B4B]">기업은행 거래내역 엑셀</b> 파일을 업로드하면 자동으로 미정산 건과 매칭합니다.
             </p>
@@ -54048,6 +53883,154 @@ const handleBatchSettle = async (targetStatus) => {
               </div>
             </div>
           </div>
+                    </div>
+                  </div>, document.body)}
+                <button
+                  onClick={() => { setArFromYear(yearFrom); setArFromMM(monthFrom); setArToYear(yearTo); setArToMM(monthTo); setArReportOpen(true); }}
+                  className="px-3 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition"
+                >
+                  미수금보고서
+                </button>
+                <button
+                  onClick={() => { setBatchModalOpen(true); setBatchClients(new Set()); setBatchClientQ(""); }}
+                  className="px-3 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"
+                >
+                  일괄정산처리
+                </button>
+                <button
+  disabled={!selClient}
+  onClick={() => {
+    const found = (clients||[]).find(c => c.거래처명 === selClient);
+    setEmailTo(found?.이메일 || found?.연락처이메일 || "");
+    setArEmailFromMM(monthFrom || "01");
+    setArEmailToMM(monthTo || "12");
+    const unpaid = monthRows.filter(r => r.정산상태 === "미정산");
+    const unpaidAmt = unpaid.reduce((s,r) => s + r.총청구금액, 0);
+    setEmailBody(`안녕하세요, ${selClient} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${THIS_YEAR}년 미수금 현황을 안내드립니다.\n\n미정산 월수: ${unpaid.length}개월\n미정산 금액: ${unpaidAmt.toLocaleString()}원\n\n${unpaid.map(r => `  - ${r.yyyymm} : ${r.총청구금액.toLocaleString()}원`).join("\n")}\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n정산 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
+    setEmailScheduleOn(false); setEmailScheduleAt("");
+    setArEmailOpen(true);
+  }}
+  className={`px-3 py-2 rounded-lg text-[13px] font-semibold transition border ${selClient ? "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white" : "bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed"}`}
+>
+  이메일발송
+</button>
+            </div>
+          </div>
+          {/* KPI 카드 */}
+          {selClient && (
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+              {[
+                {label:"총 오더건수", val:`${kpi.전체건수}건`, color:"text-[#1B2B4B]"},
+                {label:"총 청구금액", val:`${won(kpi.총청구)}원`, color:"text-blue-600"},
+                {label:"미정산 월수", val:`${kpi.미정산월}개월`, color:"text-amber-500"},
+                {label:"미정산 금액", val:`${won(kpi.미정산금)}원`, color:"text-red-500"},
+                {label:"정산완료 금액", val:`${won(kpi.완료금)}원`, color:"text-emerald-600"},
+              ].map(({label,val,color})=>(
+                <div key={label} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                  <div className="text-[11px] font-bold text-gray-500 mb-1">{label}</div>
+                  <div className={`text-[18px] font-extrabold ${color}`}>{val}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 테이블 */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+            {selClient && (
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 bg-[#1B2B4B]/4">
+                <span className="text-[12px] font-bold text-gray-500">조회 거래처</span>
+                <span className="text-[14px] font-extrabold text-[#1B2B4B]">{selClient}</span>
+                {selClient === AR_ALL && <span className="text-[12px] text-gray-500">거래처별·월별로 한 줄씩</span>}
+                <span className="text-[12px] text-gray-500">— {THIS_YEAR}년 월별 정산 현황</span>
+              </div>
+            )}
+            <table className="text-[13px]" style={{tableLayout:"fixed", width: selClient === AR_ALL ? "882px" : "722px"}}>
+              <colgroup>
+                <col style={{width:"40px"}} />
+                {selClient === AR_ALL && <col style={{width:"160px"}} />}
+                <col style={{width:"48px"}} />
+                <col style={{width:"88px"}} />
+                <col style={{width:"56px"}} />
+                <col style={{width:"130px"}} />
+                <col style={{width:"100px"}} />
+                <col style={{width:"100px"}} />
+                <col style={{width:"160px"}} />
+              </colgroup>
+              <thead>
+                <tr className="bg-[#1B2B4B]">
+                  <th
+                    className="px-2 py-3 text-white text-center cursor-pointer select-none"
+                    onClick={() => toggleAllMonths(monthRows)}
+                  >
+                    <input autoComplete="off"
+                      type="checkbox"
+                      onChange={() => toggleAllMonths(monthRows)}
+                      checked={selectedMonths.size > 0 && selectedMonths.size === monthRows.length}
+                      onClick={e => e.stopPropagation()}
+                    />
+                  </th>
+                  {[...(selClient === AR_ALL ? ["거래처"] : []), "순번","청구월","건수","총 청구금액","정산상태","정산일","메모"].map(label=>(
+                    <th key={label} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap"><EditableText id={`settlement.monthly.header.${label}`} defaultText={label} /></th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {!selClient ? (
+                  <tr><td colSpan={8} className="text-center text-gray-500 py-16 text-[14px]">거래처를 검색하세요.</td></tr>
+                ) : monthRows.length === 0 ? (
+                  <tr><td colSpan={8} className="text-center text-gray-500 py-16 text-[14px]">표시할 데이터가 없습니다.</td></tr>
+                ) : (
+                  monthRows.map((row, idx) => (
+                    <tr key={row.k} className={idx%2===0?"bg-white":"bg-gray-50/60"}>
+                      <td
+                        className="px-3 py-3 text-center border-b border-gray-100 cursor-pointer select-none"
+                        onClick={() => toggleMonthSelect(row.k)}
+                      >
+                        <input autoComplete="off"
+                          type="checkbox"
+                          checked={selectedMonths.has(row.k)}
+                          onChange={() => toggleMonthSelect(row.k)}
+                          onClick={e => e.stopPropagation()}
+                        />
+                      </td>
+                      {selClient === AR_ALL && <td className="px-3 py-3 font-bold text-[#0F1A30] border-b border-gray-100 truncate">{row.거래처명}</td>}
+                      <td className="px-3 py-3 text-center text-gray-500 border-b border-gray-100">{idx+1}</td>
+                      <td className="px-3 py-3 text-center font-bold text-[#1B2B4B] border-b border-gray-100">{row.yyyymm}</td>
+                      <td className="px-3 py-3 text-center border-b border-gray-100">{row.건수}건</td>
+                      <td className="px-3 py-3 text-right font-bold border-b border-gray-100">
+                        <span className={row.총청구금액>0?"text-[#1B2B4B]":"text-gray-500"}>
+                          {won(row.총청구금액)}원
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-center border-b border-gray-100 cursor-pointer select-none"
+                        onClick={()=>toggleMonthStatus(row)} title="클릭하여 상태 전환">
+                        <span className={`px-3 py-1 rounded-lg text-[13px] font-bold text-white ${
+                          row.정산상태==="정산완료" ? "bg-emerald-600"
+                          : row.정산상태==="진행중"  ? "bg-blue-500"
+                          : "bg-amber-500"
+                        }`}>
+                          {row.정산상태}
+                        </span>
+                        {row.정산상태 === "일부입금" && <div className="mt-1 text-[11px] text-gray-500 whitespace-nowrap">입금 {won(row.입금누계)} · 잔액 {won(row.잔액)}</div>}
+                      </td>
+                      <td className="px-3 py-3 text-center text-gray-500 border-b border-gray-100">{row.정산일||"-"}</td>
+                      <td className="px-3 py-3 border-b border-gray-100">
+                        <input autoComplete="off"
+                          className="border rounded-lg px-2 py-1 text-[12px] w-full outline-none focus:border-[#1B2B4B]"
+                          placeholder="메모 입력"
+                          value={memoMap[row.k]||""}
+                          onChange={e=>setMemoMap(p=>({...p,[row.k]:e.target.value}))}
+                        />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+                            <div className="mt-2 text-[12px] text-gray-500">· 정산상태 클릭 시 해당 월 전체 오더에 정산상태/정산일이 저장됩니다.</div>
+
+
           {/* 미수금 보고서 기간 + 거래처 선택 */}
 {arReportOpen && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
@@ -54400,93 +54383,72 @@ const handleBatchSettle = async (targetStatus) => {
           )}
           {/* ★ 입금 매칭 결과 팝업 */}
 
-          {bankMatchResult && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-              <div className="bg-white rounded-2xl shadow-2xl w-[700px] max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                {/* 헤더 */}
-                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between rounded-t-2xl">
+          {bankMatchResult && (() => {
+            const ms = bankMatchResult.matches;
+            const autoCount = ms.filter(m => m.confidence === "이름일치").length;
+            const KIND = { "정산완료": "bg-[#0F1A30] text-white", "여러 달 정산": "bg-[#0F1A30] text-white", "정산+일부입금": "bg-[#2D4C82] text-white", "일부입금": "bg-[#EEF3FB] text-[#1B2B4B]", "초과입금": "border border-[#0F1A30] text-[#0F1A30]" };
+            return (
+            <div className="fixed inset-0 bg-[#0F1A30]/45 flex items-center justify-center z-[99999] p-4" onClick={() => setBankMatchResult(null)}>
+              <div className="bg-[#F7F9FC] rounded-[22px] shadow-[0_24px_60px_rgba(15,26,48,0.35)] w-full max-w-[760px] max-h-[88vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="px-6 py-5 bg-gradient-to-r from-[#0F1A30] via-[#1B2B4B] to-[#2D4C82] text-white flex items-start justify-between gap-3 shrink-0">
                   <div>
-                    <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.입금 매칭 결과" defaultText="입금 매칭 결과" /></h3>
-                    <p className="text-white/60 text-[12px] mt-0.5">
-                      업로드 {bankMatchResult.deposits.length}건 중 매칭 {bankMatchResult.matches.length}건
-                    </p>
+                    <div className="text-[11px] font-extrabold tracking-[0.22em] text-white/60">DEPOSIT MATCHING</div>
+                    <div className="text-[19px] font-black">입금 자동 매칭</div>
+                    <div className="text-[12.5px] text-white/70 mt-0.5">입금 {bankMatchResult.deposits.length}건 · 찾음 {ms.length}건 · 확인 필요 {bankMatchResult.unmatched.length}건</div>
                   </div>
-                  <button className="text-white/60 hover:text-white text-lg" onClick={() => setBankMatchResult(null)}>✕</button>
+                  <button className="w-8 h-8 rounded-lg bg-white/10 text-white shrink-0" onClick={() => setBankMatchResult(null)}>✕</button>
                 </div>
-
-                {/* 매칭 성공 목록 */}
-                {bankMatchResult.matches.length > 0 && (
-                  <div className="p-5">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-[14px] font-bold text-emerald-700">✅ 매칭 성공 ({bankMatchResult.matches.length}건)</h4>
-                      <button
-                        onClick={applyAllBankMatches}
-                        className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[13px] font-bold hover:bg-emerald-700 transition"
-                      >
-                        전체 정산완료 적용
-                      </button>
+                <div className="overflow-y-auto p-5 space-y-3">
+                  {ms.length > 0 && (
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-[13px] text-[#5B6B85]">다 채운 달은 <b className="text-[#0F1A30]">정산완료</b>, 모자란 달은 <b className="text-[#0F1A30]">일부입금</b>(잔액 표시)으로 반영됩니다.</div>
+                      {autoCount > 0 && <button onClick={applyAllBankMatches} className="h-10 px-4 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black shrink-0">이름 맞은 {autoCount}건 모두 반영</button>}
                     </div>
-                    <div className="space-y-2">
-                      {bankMatchResult.matches.map((m, i) => (
-                        <div key={i} className="border border-emerald-200 rounded-xl p-4 bg-emerald-50/50 flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="font-bold text-[#1B2B4B] text-[14px]">{m.matched.거래처명}</span>
-                              <span className="text-[12px] text-gray-500">{m.matched.yyyymm}</span>
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                m.confidence === "높음" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
-                              }`}>
-                                신뢰도: {m.confidence}
-                              </span>
-                            </div>
-                            <div className="text-[12px] text-gray-600">
-                              입금: <b className="text-blue-600">{m.deposit.amount.toLocaleString()}원</b>
-                              {m.deposit.name && <span className="ml-2">({m.deposit.name})</span>}
-                              <span className="mx-2">→</span>
-                              청구(세포함): <b>{Math.round(m.matched.총청구금액 * 1.1).toLocaleString()}원</b>
-                            </div>
+                  )}
+                  {ms.map((m, idx) => (
+                    <div key={idx} className="bg-white rounded-2xl border border-[#E3E8F0] px-4 py-3.5">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[15px] font-black text-[#0F1A30]">{m.client}</span>
+                            <span className={`text-[11.5px] font-extrabold px-2 py-0.5 rounded-full ${KIND[m.kind] || "bg-[#EEF3FB] text-[#1B2B4B]"}`}>{m.kind}</span>
+                            <span className={`text-[11px] font-bold ${m.confidence === "이름일치" ? "text-[#4B6CB7]" : "text-[#0F1A30] underline"}`}>{m.confidence === "이름일치" ? "입금자명 일치" : "금액만 일치 — 입금자 확인"}</span>
                           </div>
-                          <button
-                            onClick={() => applyBankMatch(m)}
-                            className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-[12px] font-bold hover:bg-emerald-700 transition ml-3"
-                          >
-                            적용
-                          </button>
+                          <div className="text-[12.5px] text-[#5B6B85] mt-0.5">{m.deposit.date} · 입금자 {m.deposit.name || "-"} · <b className="text-[#0F1A30]">{m.deposit.amount.toLocaleString()}원</b></div>
                         </div>
-                      ))}
+                        <button onClick={() => applyBankMatch(m)} className="h-9 px-4 rounded-xl bg-[#0F1A30] text-white text-[12.5px] font-black shrink-0">반영</button>
+                      </div>
+                      <div className="mt-2.5 flex flex-wrap gap-1.5">
+                        {m.alloc.map(a => (
+                          <span key={a.k} className={`text-[12px] font-bold px-2.5 py-1 rounded-lg ${a.full ? "bg-[#F5F8FD] text-[#0F1A30] border border-[#E3E8F0]" : "bg-white text-[#1B2B4B] border border-dashed border-[#4B6CB7]"}`}>
+                            {a.yyyymm} · {a.amount.toLocaleString()}원 {a.full ? "→ 정산완료" : `→ 일부입금 (청구 ${a.due.toLocaleString()}원)`}
+                          </span>
+                        ))}
+                        {m.over > 0 && <span className="text-[12px] font-bold px-2.5 py-1 rounded-lg border border-[#0F1A30] text-[#0F1A30]">초과 {m.over.toLocaleString()}원 — 확인 필요</span>}
+                      </div>
                     </div>
-                  </div>
-                )}
-
-                {/* 매칭 실패 목록 */}
-                {bankMatchResult.unmatched.length > 0 && (
-                  <div className="p-5 border-t">
-                    <h4 className="text-[14px] font-bold text-gray-500 mb-3">❌ 매칭 실패 ({bankMatchResult.unmatched.length}건)</h4>
-                    <div className="space-y-1.5">
-                      {bankMatchResult.unmatched.map((d, i) => (
-                        <div key={i} className="flex items-center gap-4 text-[12px] text-gray-600 bg-gray-50 rounded-lg px-4 py-2.5">
-                          <span className="font-semibold text-gray-800">{d.amount.toLocaleString()}원</span>
-                          <span>{d.name || "-"}</span>
-                          <span className="text-gray-500">{d.date}</span>
-                        </div>
-                      ))}
+                  ))}
+                  {bankMatchResult.unmatched.length > 0 && (
+                    <div className="bg-white rounded-2xl border border-dashed border-[#C9D2E0] px-4 py-3.5">
+                      <div className="text-[13.5px] font-black text-[#0F1A30] mb-2">확인 필요 {bankMatchResult.unmatched.length}건</div>
+                      <div className="space-y-1.5">
+                        {bankMatchResult.unmatched.map((d, i) => (
+                          <div key={i} className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-[12.5px] text-[#3A4A66]">
+                            <span className="font-bold text-[#0F1A30] tabular-nums">{d.amount.toLocaleString()}원</span>
+                            <span>{d.name || "-"}</span>
+                            <span className="text-[#9AA9C3]">{d.date}</span>
+                            <span className="text-[#7A879C]">— {d.reason}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <p className="text-[11px] text-gray-500 mt-2">* 미정산 월 금액(세액포함)과 일치하지 않는 입금 건입니다. 수동으로 확인하세요.</p>
-                  </div>
-                )}
-
-                {/* 하단 */}
-                <div className="px-5 py-4 border-t bg-gray-50 rounded-b-2xl">
-                  <button
-                    onClick={() => setBankMatchResult(null)}
-                    className="w-full py-2.5 rounded-xl bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300 transition"
-                  >
-                    닫기
-                  </button>
+                  )}
+                  {!ms.length && !bankMatchResult.unmatched.length && <div className="py-10 text-center text-[13.5px] text-[#9AA9C3]">입금 내역이 없습니다</div>}
                 </div>
               </div>
             </div>
-)}
+            );
+          })()}
 
           {/* ══ 미수금 이메일 발송 모달 ══ */}
           {arEmailOpen && (
@@ -58981,33 +58943,32 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
 // ===================== DispatchApp.jsx (PART 11/11) — END =====================
 
 // ===================== 회사 정보 관리 =====================
-// ─────────── 결제일(계산서 발행 → 입금 규칙) 설정 섹션 ───────────
-// 회사마다 계산서 발행일 기준 입금 규칙이 다를 수 있어(예전엔 전 회사가 동일하게
-// "평일+3일/금요일→익주화요일/주말→화요일"로 고정돼 있었다), 관리자/최고관리자가
-// 회사별로 직접 설정할 수 있게 한다. 기사업로드링크(UploadPage.jsx)의 "결제일 정보"
-// 팝업이 이 값을 그대로 읽어서 계산한다.
-const DAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
+// ─────────── 결제일(계산서 발행 → 입금) 설정 섹션 ───────────
+// ⭐ 2026-10-27 — 예전의 평일/금요일/주말 규칙(최대 14일)을 없애고 "계산서 발행 후 N일" 하나로 통일했다.
+//    30일·60일처럼 회사가 직접 정한다. 기사업로드링크(UploadPage.jsx)의 "결제일 정보"가 이 값을 그대로 읽는다.
+//    (예전 설정만 있는 회사는 평일 일수를 그대로 이어서 쓴다)
+const payDaysOf = (rule) => Math.max(0, Number(rule?.payDays ?? rule?.weekdayDays ?? 3) || 0);
 function PaymentDateRuleSection({ companyName }) {
-  const [rule, setRule] = React.useState(null);
+  const [days, setDays] = React.useState("");
   const [loaded, setLoaded] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [msg, setMsg] = React.useState("");
 
-  const DEFAULT_RULE = { weekdayDays: 3, fridayTargetDow: 2, weekendTargetDow: 2 };
-
   React.useEffect(() => {
     if (!companyName) return;
     const unsub = onSnapshot(doc(db, "companySettings", companyName.trim()), (snap) => {
-      setRule({ ...DEFAULT_RULE, ...(snap.data()?.결제일규칙 || {}) });
+      setDays(String(payDaysOf(snap.data()?.결제일규칙)));
       setLoaded(true);
     });
     return () => unsub();
   }, [companyName]);
 
   const handleSave = async () => {
+    const n = Math.round(Number(days));
+    if (!Number.isFinite(n) || n < 0 || n > 365) { setMsg("0~365 사이 숫자로 입력해 주세요."); return; }
     setSaving(true);
     try {
-      await setDoc(doc(db, "companySettings", companyName.trim()), { 결제일규칙: rule }, { merge: true });
+      await setDoc(doc(db, "companySettings", companyName.trim()), { 결제일규칙: { payDays: n } }, { merge: true });
       setMsg("저장되었습니다.");
       setTimeout(() => setMsg(""), 2500);
     } catch (e) {
@@ -59016,53 +58977,33 @@ function PaymentDateRuleSection({ companyName }) {
     setSaving(false);
   };
 
-  if (!loaded || !rule) {
-    return (
-      <div>
-        <p className="text-[16px] font-black text-[#0F1A30] mb-4">결제일(계산서→입금) 규칙</p>
-        <div className="text-[13px] text-gray-500">로딩 중...</div>
-      </div>
-    );
-  }
-
   return (
     <div>
-      <p className="text-[16px] font-black text-[#0F1A30] mb-1">결제일(계산서→입금) 규칙</p>
+      <p className="text-[16px] font-black text-[#0F1A30] mb-1">결제일</p>
       <p className="text-[13.5px] text-gray-500 mb-5 leading-relaxed">
-        기사가 업로드 링크의 "결제일 정보"에서 계산서 발행일을 입력하면, 아래 규칙으로 입금 예정일을 안내합니다.
+        계산서 발행일로부터 며칠 뒤에 입금하는지 정합니다. 기사 업로드 링크의 "결제일 정보"에 그대로 안내됩니다(주말이면 다음 월요일).
       </p>
-      <div className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-[14.5px] text-gray-800 font-semibold">평일(월~목) 계산서 → </span>
-          <div className="flex items-center gap-2 shrink-0">
-            <input type="number" min={1} max={14} value={rule.weekdayDays}
-              onChange={e => setRule(r => ({ ...r, weekdayDays: Math.max(1, Math.min(14, Number(e.target.value) || 1)) }))}
-              className="w-16 border border-gray-200 rounded-lg px-2.5 py-2 text-[14.5px] text-center focus:outline-none focus:border-[#1B2B4B]" />
+      {!loaded ? <div className="text-[13px] text-gray-500">로딩 중...</div> : (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="text-[14.5px] text-gray-800 font-semibold">계산서 발행 후</span>
+            <input type="number" min={0} max={365} value={days} onChange={(e) => setDays(e.target.value.replace(/[^\d]/g, ""))}
+              className="w-24 border border-gray-200 rounded-lg px-2.5 py-2 text-[16px] font-black text-center text-[#0F1A30] focus:outline-none focus:border-[#1B2B4B]" />
             <span className="text-[14.5px] text-gray-800 font-semibold">일 후 입금</span>
           </div>
+          <div className="flex flex-wrap gap-1.5">
+            {[3, 7, 15, 30, 45, 60, 90].map((n) => (
+              <button key={n} type="button" onClick={() => setDays(String(n))}
+                className={`h-8 px-3 rounded-lg text-[12.5px] font-bold border ${String(n) === days ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:border-[#1B2B4B]"}`}>{n}일</button>
+            ))}
+          </div>
+          {msg && <div className="text-[12px] font-medium text-[#1B2B4B]">{msg}</div>}
+          <button onClick={handleSave} disabled={saving}
+            className="w-full py-3 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[14px] font-bold transition disabled:opacity-40">
+            {saving ? "저장 중..." : "저장"}
+          </button>
         </div>
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-[14.5px] text-gray-800 font-semibold">금요일 계산서 → 익주</span>
-          <select value={rule.fridayTargetDow}
-            onChange={e => setRule(r => ({ ...r, fridayTargetDow: Number(e.target.value) }))}
-            className="border border-gray-200 rounded-lg px-2.5 py-2 text-[14.5px] focus:outline-none focus:border-[#1B2B4B] shrink-0">
-            {DAYS_KO.map((d, i) => <option key={i} value={i}>{d}요일 입금</option>)}
-          </select>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-[14.5px] text-gray-800 font-semibold">주말(토/일) 계산서 →</span>
-          <select value={rule.weekendTargetDow}
-            onChange={e => setRule(r => ({ ...r, weekendTargetDow: Number(e.target.value) }))}
-            className="border border-gray-200 rounded-lg px-2.5 py-2 text-[14.5px] focus:outline-none focus:border-[#1B2B4B] shrink-0">
-            {DAYS_KO.map((d, i) => <option key={i} value={i}>{d}요일 입금</option>)}
-          </select>
-        </div>
-        {msg && <div className="text-[12px] font-medium text-emerald-600">{msg}</div>}
-        <button onClick={handleSave} disabled={saving}
-          className="w-full py-3 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[14px] font-bold transition disabled:opacity-40">
-          {saving ? "저장 중..." : "저장"}
-        </button>
-      </div>
+      )}
     </div>
   );
 }
@@ -60587,26 +60528,6 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
   const [bankSaving, setBankSaving] = React.useState(false);
   const [bankEditOpen, setBankEditOpen] = React.useState(false);
 
-  // ★ 배차마당(카페사이트) 공유 온/오프 — companySettings/{회사명}.cafeSyncOn
-  const [cafeSyncOn, setCafeSyncOn] = React.useState(false);
-  const [cafeSyncSaving, setCafeSyncSaving] = React.useState(false);
-  React.useEffect(() => {
-    if (!companyName) return;
-    const unsub = onSnapshot(doc(db, "companySettings", companyName), (snap) => {
-      setCafeSyncOn(!!snap.data()?.cafeSyncOn);
-    });
-    return () => unsub();
-  }, [companyName]);
-  const toggleCafeSync = async () => {
-    if (cafeSyncSaving) return;
-    setCafeSyncSaving(true);
-    try {
-      await setDoc(doc(db, "companySettings", companyName), { cafeSyncOn: !cafeSyncOn }, { merge: true });
-    } finally {
-      setCafeSyncSaving(false);
-    }
-  };
-
   // 수정 요청 상태
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [editForm, setEditForm] = React.useState({});
@@ -60942,69 +60863,56 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
               <div className="mt-0.5 text-[18px] font-black text-[#0F1A30] tracking-tight">회사 서류</div>
               <div className="text-[13.5px] text-gray-500 mt-1">사업자등록증과 직인은 거래명세서·보고서 등 필요한 곳에 자동으로 쓰입니다</div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <div className="flex items-center mb-3">
-                  <span className="text-[15px] font-bold text-[#0F1A30]">사업자등록증</span>
-                  <button className="ml-auto px-3.5 py-1.5 text-[13px] font-bold rounded-lg border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/5 disabled:opacity-40"
-                    onClick={() => fileRef.current?.click()} disabled={uploading}>{uploading ? uploadProgress : filePreviewSrc ? "다시 올리기" : "파일 선택"}</button>
-                  <input autoComplete="off" ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={e => handleFileUpload(e.target.files?.[0])} />
-                </div>
-          <div
-            className={`border-2 border-dashed rounded-xl transition min-h-[180px] flex flex-col ${dragOver ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200"}`}
-            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={e => { e.preventDefault(); setDragOver(false); handleFileUpload(e.dataTransfer.files?.[0]); }}
-          >
-            {filePreviewSrc ? (
-              <div className="p-3 space-y-3 flex-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-semibold text-gray-700 truncate flex-1 mr-2">{appData.사업자등록증파일명 || "사업자등록증"}</span>
+            {/* ⭐ 2026-10-27 — 미리보기 없이 "등록됨/미등록"만 간단히. 복사·다운로드·다시 올리기는 그대로 */}
+            <input autoComplete="off" ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={e => handleFileUpload(e.target.files?.[0])} />
+            <input autoComplete="off" ref={sealFileRef} type="file" accept="image/*" className="hidden" onChange={e => handleSealUpload(e.target.files?.[0])} />
+            <div className="space-y-3">
+              {[
+                {
+                  key: "biz", title: "사업자등록증", done: !!filePreviewSrc, sub: filePreviewSrc ? (appData.사업자등록증파일명 || "등록된 파일") : "JPG·PNG·PDF / 최대 3MB",
+                  busy: uploading ? uploadProgress : "", onUpload: () => fileRef.current?.click(),
+                  onDrop: (f) => handleFileUpload(f),
+                  actions: filePreviewSrc ? [
+                    ...(isImage ? [{ label: "이미지 복사", on: handleCopyImage }] : []),
+                    { label: "다운로드", on: handleDownload, primary: true },
+                  ] : [],
+                },
+                {
+                  key: "seal", title: "직인(도장)", done: !!appData?.직인이미지, sub: appData?.직인이미지 ? "거래명세서·보고서에 자동으로 찍힙니다" : "배경이 투명한 PNG 권장 / 최대 1MB",
+                  busy: sealUploading ? "업로드 중..." : "", onUpload: () => sealFileRef.current?.click(),
+                  onDrop: (f) => handleSealUpload(f),
+                  actions: appData?.직인이미지 ? [{ label: "다운로드", primary: true, on: () => { const a = document.createElement("a"); a.href = appData.직인이미지; a.download = `${companyName || "직인"}_직인.png`; a.click(); } }] : [],
+                },
+              ].map((d) => (
+                <div key={d.key}
+                  onDragOver={(e) => { e.preventDefault(); setDragOver(d.key); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={(e) => { e.preventDefault(); setDragOver(false); d.onDrop(e.dataTransfer.files?.[0]); }}
+                  className={`flex flex-wrap items-center gap-4 px-5 py-4 rounded-2xl border transition ${dragOver === d.key ? "border-[#1B2B4B] bg-[#F5F8FD]" : "border-[#E3E8F0] bg-white"}`}>
+                  <span className={`w-11 h-11 rounded-[14px] flex items-center justify-center shrink-0 ${d.done ? "bg-[#0F1A30] text-white" : "bg-[#F1F4F9] text-[#9AA9C3]"}`}>
+                    {d.done
+                      ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5 10 17.5 19 7" /></svg>
+                      : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[15px] font-black text-[#0F1A30]">{d.title}</span>
+                      <span className={`text-[11.5px] font-extrabold px-2 py-0.5 rounded-full ${d.done ? "bg-[#0F1A30] text-white" : "border border-[#C9D2E0] text-[#7A879C]"}`}>{d.done ? "등록됨" : "미등록"}</span>
+                    </div>
+                    <div className="text-[12.5px] text-[#7A879C] truncate mt-0.5">{d.sub}</div>
+                  </div>
                   <div className="flex gap-1.5 shrink-0">
-                    {isImage && <button className="px-2.5 py-1.5 text-[12px] rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition" onClick={handleCopyImage}><EditableText id="misc.btn.57388.이미지 복사" defaultText="이미지 복사" /></button>}
-                    <button className="px-2.5 py-1.5 text-[12px] rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60] transition" onClick={handleDownload}><EditableText id="misc.btn.57389.다운로드" defaultText="다운로드" /></button>
+                    {d.actions.map((a) => (
+                      <button key={a.label} onClick={a.on}
+                        className={`h-9 px-3.5 rounded-lg text-[12.5px] font-bold transition ${a.primary ? "bg-[#1B2B4B] text-white hover:bg-[#243a60]" : "border border-[#D9E0EA] text-[#1B2B4B] hover:bg-[#F5F8FD]"}`}>{a.label}</button>
+                    ))}
+                    <button onClick={d.onUpload} disabled={!!d.busy}
+                      className="h-9 px-3.5 rounded-lg text-[12.5px] font-bold border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/5 disabled:opacity-40">
+                      {d.busy || (d.done ? "다시 올리기" : "등록하기")}
+                    </button>
                   </div>
                 </div>
-                {isImage && (
-                  <img src={filePreviewSrc} alt="사업자등록증" className="w-full max-h-[200px] object-contain rounded-xl bg-gray-50 border border-gray-100" />
-                )}
-              </div>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center py-10 cursor-pointer" onClick={() => fileRef.current?.click()}>
-                <svg className="w-10 h-10 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <p className="text-[13px] font-semibold text-gray-500">클릭 또는 드래그하여 업로드</p>
-                <p className="text-[12px] text-gray-500 mt-1">JPG, PNG, WEBP, PDF / 최대 3MB</p>
-              </div>
-            )}
-          </div>
-              </div>
-              <div>
-                <div className="flex items-center mb-3">
-                  <span className="text-[15px] font-bold text-[#0F1A30]">직인(도장)</span>
-                  <button className="ml-auto px-3.5 py-1.5 text-[13px] font-bold rounded-lg border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/5 disabled:opacity-40"
-                    onClick={() => sealFileRef.current?.click()} disabled={sealUploading}>{sealUploading ? "업로드 중..." : appData?.직인이미지 ? "다시 올리기" : "이미지 선택"}</button>
-                  <input autoComplete="off" ref={sealFileRef} type="file" accept="image/*" className="hidden" onChange={e => handleSealUpload(e.target.files?.[0])} />
-                </div>
-          <div
-            className="border-2 border-dashed rounded-xl transition min-h-[180px] flex items-center justify-center cursor-pointer border-gray-200 bg-gray-50"
-            onClick={() => sealFileRef.current?.click()}
-          >
-            {appData?.직인이미지 ? (
-              <img src={appData.직인이미지} alt="직인" className="max-h-[120px] max-w-[160px] object-contain" style={{ mixBlendMode: "multiply" }} />
-            ) : (
-              <div className="flex flex-col items-center py-6">
-                <svg className="w-9 h-9 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l1.5-3h15L21 8v11a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
-                </svg>
-                <p className="text-[13px] font-semibold text-gray-500">클릭하여 도장 이미지 업로드</p>
-                <p className="text-[12px] text-gray-500 mt-1">배경이 투명한 PNG 권장 / 최대 1MB</p>
-              </div>
-            )}
-          </div>
-              </div>
+              ))}
             </div>
           </section>
 
@@ -61081,21 +60989,6 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
             <div className="mt-0.5 text-[20px] font-black text-[#0F1A30] tracking-tight">운영 설정</div>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className={`${KP_CARD} p-6 flex items-center gap-5`}>
-              <div className="flex-1">
-                <p className="text-[16px] font-black text-[#0F1A30]">배차마당 공유</p>
-                <p className="text-[13.5px] text-gray-500 mt-1 leading-relaxed">켜두면 배차요청장에서 "배차마당 등록"으로 저장한 오더가 배차마당(카페사이트)에도 함께 올라갑니다.</p>
-              </div>
-              <button onClick={toggleCafeSync} disabled={cafeSyncSaving}
-                className={`relative w-12 h-7 rounded-full transition-colors duration-200 shrink-0 ${cafeSyncOn ? "bg-[#1B2B4B]" : "bg-gray-300"} ${cafeSyncSaving ? "opacity-60 cursor-wait" : "cursor-pointer"}`}>
-                <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200 ${cafeSyncOn ? "translate-x-5" : "translate-x-0"}`} />
-              </button>
-            </div>
-            {isAdmin && (
-              <div className={`${KP_CARD} p-6`}>
-                <RevenuePasswordSection companyName={companyName} />
-              </div>
-            )}
             {isAdmin && (
               <div className={`${KP_CARD} p-6`}>
                 <PaymentDateRuleSection companyName={companyName} />
