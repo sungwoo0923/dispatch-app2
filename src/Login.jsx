@@ -8,6 +8,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { db, doc, onSnapshot } from "./firebase";
+import KpTruck3D from "./KpTruck3D";
 
 const DEFAULT_FOOTER = "© 2025 KP-Flow Logistics. All rights reserved.";
 const FONT_FAMILY_MAP = {
@@ -92,91 +93,130 @@ export default function Login() {
       : "radial-gradient(120% 70% at 50% 0%, #2A3F6B 0%, #1B2B4B 45%, #0F1A30 100%)";
   const fontFamily = FONT_FAMILY_MAP[c.fontFamily] || FONT_FAMILY_MAP.noto;
 
+  // 디지털 시계(초 단위)
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
+  const pad = (n) => String(n).padStart(2, "0");
+  const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#0F1A30] text-white select-none" style={{ fontFamily }}>
-      {/* 배경 — 관리자가 올린 영상 > 이미지 > 기본 네이비 */}
+    <div className="relative min-h-screen overflow-hidden bg-[#060D1C] text-white select-none" style={{ fontFamily }}>
+      {/* 배경 — 관리자가 올린 영상 > 이미지 > 기본(디지털 격자) */}
       {c.backgroundVideoUrl ? (
         <video key={c.backgroundVideoUrl} className="absolute inset-0 w-full h-full object-cover" src={c.backgroundVideoUrl} autoPlay loop muted playsInline preload="auto" />
       ) : c.backgroundImageUrl ? (
         <img className="absolute inset-0 w-full h-full object-cover" src={c.backgroundImageUrl} alt="" />
       ) : null}
-      <div className="absolute inset-0" style={{ background: overlayBackground }} />
+      <div className="absolute inset-0" style={{ background: hasMedia || c.overlayColor ? overlayBackground : "radial-gradient(90% 60% at 50% 0%, #22396A 0%, #0F1A30 55%, #060D1C 100%)" }} />
+      {/* 원근 격자 바닥 */}
+      <div className="absolute inset-x-0 bottom-0 h-[55%] pointer-events-none overflow-hidden" style={{ perspective: "520px" }} aria-hidden="true">
+        <div className="absolute inset-x-[-50%] top-0 h-[200%] kp-grid-floor" style={{
+          backgroundImage: "linear-gradient(rgba(143,176,240,0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(143,176,240,0.16) 1px, transparent 1px)",
+          backgroundSize: "56px 56px", transform: "rotateX(62deg)", transformOrigin: "50% 0",
+          maskImage: "linear-gradient(180deg, transparent 0%, #000 35%, #000 100%)", WebkitMaskImage: "linear-gradient(180deg, transparent 0%, #000 35%, #000 100%)",
+        }} />
+      </div>
       <style>{`
-        @keyframes kpLoginIn { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
-        @keyframes kpLoginTruck { 0% { transform: translateX(-40px) } 100% { transform: translateX(calc(100% + 40px)) } }
-        @keyframes kpLoginFloat { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-1.5px) } }
+        @keyframes kpLoginIn { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: none } }
+        @keyframes kpRoad { from { transform: translateX(0) } to { transform: translateX(-40px) } }
+        @keyframes kpGrid { from { background-position: 0 0 } to { background-position: 0 56px } }
+        @keyframes kpBlink { 0%,100% { opacity: .35 } 50% { opacity: 1 } }
+        @keyframes kpPacket { 0% { transform: translateX(0); opacity: 0 } 15% { opacity: 1 } 85% { opacity: 1 } 100% { transform: translateX(var(--d)); opacity: 0 } }
+        .kp-grid-floor { animation: kpGrid 2.4s linear infinite; }
+        .kp-blink { animation: kpBlink 1.6s ease-in-out infinite; }
       `}</style>
 
-      <div className="relative z-10 min-h-screen flex flex-col items-center px-5" style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 56px)", paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)" }}>
-        <div className="w-full max-w-[420px] flex flex-col flex-1">
-          {/* 로고 */}
-          <div className="flex flex-col items-center" style={{ animation: "kpLoginIn 0.5s ease both" }}>
-            <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-16 h-16 sm:w-20 sm:h-20 rounded-[18px] sm:rounded-[22px] shadow-[0_10px_28px_rgba(0,0,0,0.35)] ring-1 ring-white/15" />
-            <h1 className="mt-3.5 text-[26px] sm:text-[30px] font-black tracking-tight">KP-Flow</h1>
-            <p className="mt-1 text-[13px] font-semibold tracking-[0.18em] text-blue-200/65">배차관리 시스템</p>
+      <div className="relative z-10 min-h-screen flex flex-col px-5 lg:px-12" style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 28px)", paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)" }}>
+        {/* 맨 위 — 브랜드 + 상태 */}
+        <div className="w-full max-w-[1120px] mx-auto flex items-center justify-between gap-3" style={{ animation: "kpLoginIn .5s ease both" }}>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-9 h-9 rounded-[11px] ring-1 ring-white/20 shrink-0" />
+            <div className="min-w-0 leading-tight">
+              <div className="text-[15px] font-black tracking-[0.2em] whitespace-nowrap" style={{ fontFamily: MONO }}>KP-FLOW</div>
+              <div className="hidden sm:block text-[9.5px] font-bold tracking-[0.28em] text-white/40 whitespace-nowrap">LOGISTICS DISPATCH SYSTEM</div>
+            </div>
           </div>
+          <div className="flex items-center gap-2 h-8 px-3 rounded-full bg-white/[0.06] ring-1 ring-white/10 text-[11px] font-bold tabular-nums whitespace-nowrap shrink-0" style={{ fontFamily: MONO }}>
+            <span className="w-1.5 h-1.5 rounded-full bg-[#8FB0F0] kp-blink" />
+            <span className="text-white/50 hidden sm:inline">ONLINE</span>
+            <span>{pad(now.getHours())}:{pad(now.getMinutes())}<span className="text-white/40">:{pad(now.getSeconds())}</span></span>
+          </div>
+        </div>
 
-          {/* 트럭이 지나가는 길 */}
-          <div className="relative h-7 mt-7 mb-7 mx-1 overflow-hidden" aria-hidden="true">
-            <div className="absolute left-0 right-0 bottom-1 h-[2px]" style={{ backgroundImage: "linear-gradient(90deg, rgba(255,255,255,0.28) 50%, transparent 50%)", backgroundSize: "12px 2px" }} />
-            <div className="absolute bottom-1 left-0 w-full" style={{ animation: "kpLoginTruck 7s linear infinite", willChange: "transform" }}>
-              <svg width="32" height="23" viewBox="0 0 30 22" style={{ display: "block", animation: "kpLoginFloat 0.5s ease-in-out infinite" }}>
-                <rect x="1" y="3" width="17" height="12" rx="2" fill="#E8EEF9" />
-                <path d="M18 7h5.5l4 4.5V15H18z" fill="#93C5FD" />
-                <rect x="20" y="8.3" width="3.2" height="2.6" rx="0.6" fill="#1B2B4B" />
-                <circle cx="7" cy="17" r="2.6" fill="#0F1A30" stroke="#E8EEF9" strokeWidth="1.3" />
-                <circle cx="22.5" cy="17" r="2.6" fill="#0F1A30" stroke="#E8EEF9" strokeWidth="1.3" />
-              </svg>
+        <div className="flex-1 w-full max-w-[1120px] mx-auto grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-8 lg:gap-16 items-center py-8">
+          {/* 왼쪽(PC) / 위(모바일) — 3D 트럭 히어로 */}
+          <div className="min-w-0 flex flex-col items-center lg:items-start" style={{ animation: "kpLoginIn .55s ease .05s both" }}>
+            <div className="hidden lg:block text-[11.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>REAL-TIME DISPATCH</div>
+            <h1 className="hidden lg:block mt-3 text-[44px] font-black leading-[1.15] tracking-tight">배차의 모든 순간을<br />하나의 흐름으로.</h1>
+            <p className="hidden lg:block mt-3 text-[15px] text-white/50 leading-relaxed">오더 등록부터 배차 · 정산 · 마감까지<br />운송 업무를 한 화면에서.</p>
+
+            {/* 도로 + 트럭 */}
+            <div className="relative w-full max-w-[460px] h-[120px] lg:h-[150px] mt-2 lg:mt-10 overflow-hidden" aria-hidden="true">
+              <div className="absolute left-0 right-0 bottom-[22px] h-[2px] overflow-hidden rounded-full">
+                <div className="absolute inset-y-0 left-0" style={{ width: "calc(100% + 40px)", backgroundImage: "linear-gradient(90deg, rgba(207,224,255,0.55) 50%, transparent 50%)", backgroundSize: "40px 2px", animation: "kpRoad .5s linear infinite" }} />
+              </div>
+              <div className="absolute left-0 right-0 bottom-[14px] h-[18px] rounded-full" style={{ background: "radial-gradient(50% 50% at 50% 50%, rgba(110,149,232,0.35), transparent 70%)" }} />
+              {[0, 1, 2].map((k) => (
+                <span key={k} className="absolute bottom-[21px] left-0 w-1.5 h-1.5 rounded-full bg-[#CFE0FF]" style={{ "--d": "460px", animation: `kpPacket 2.4s linear ${k * 0.8}s infinite`, boxShadow: "0 0 8px #8FB0F0" }} />
+              ))}
+              <div className="absolute left-1/2 -translate-x-1/2 bottom-[16px] lg:bottom-[14px]">
+                <KpTruck3D width={typeof window !== "undefined" && window.innerWidth >= 1024 ? 220 : 170} />
+              </div>
+            </div>
+            <div className="lg:hidden mt-1 text-center">
+              <div className="text-[22px] font-black tracking-tight">KP-Flow</div>
+              <div className="text-[11px] font-bold tracking-[0.28em] text-white/45 mt-0.5">배차관리 시스템</div>
             </div>
           </div>
 
           {/* 계정 선택 */}
-          <p className="text-[14px] font-bold text-blue-100/80 mb-3 px-1">어떤 계정으로 들어가시나요?</p>
-          <div className="flex flex-col gap-3">
-            {ROLES.map((r, i) => {
-              const main = r.key === lastRole;
-              return (
-                <Link
-                  key={r.key}
-                  to={r.to}
-                  onClick={() => remember(r.key)}
-                  className={`group flex items-center gap-3.5 rounded-[18px] px-4 py-4 sm:py-[18px] transition-transform active:scale-[0.98] ${
-                    main
-                      ? "bg-white text-[#1B2B4B] shadow-[0_12px_30px_rgba(0,0,0,0.3)]"
-                      : "bg-white/[0.07] ring-1 ring-white/10 hover:bg-white/[0.11]"
-                  }`}
-                  style={{ animation: `kpLoginIn 0.5s ease ${0.08 + i * 0.06}s both` }}
-                >
-                  <div className={`w-12 h-12 shrink-0 rounded-[14px] flex items-center justify-center ${main ? "bg-[#EEF3FB]" : "bg-blue-400/[0.18]"}`}>
-                    {r.icon(main ? "#1B2B4B" : "#93C5FD")}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 whitespace-nowrap">
-                      <span className="text-[17px] font-extrabold">{r.title}</span>
-                      {main && hasHistory && <span className="text-[10.5px] font-extrabold text-blue-600 bg-blue-100 rounded-full px-2 py-0.5">최근 로그인</span>}
-                    </div>
-                    <div className={`mt-0.5 text-[12.5px] truncate ${main ? "text-gray-500" : "text-blue-100/60"}`}>{r.desc}</div>
-                  </div>
-                  <svg className={`shrink-0 transition-transform group-hover:translate-x-0.5 ${main ? "text-[#1B2B4B]/50" : "text-white/40"}`} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
-                </Link>
-              );
-            })}
-          </div>
-
-          {/* 회원가입 — 계정 종류별 한 줄 */}
-          <div className="mt-auto pt-10 text-center">
-            <p className="text-[13px] text-blue-100/55">처음 오셨나요? 회원가입</p>
-            <div className="mt-2 flex items-center justify-center gap-1 text-[13px] font-bold">
-              {ROLES.map((r, i) => (
-                <React.Fragment key={r.key}>
-                  {i > 0 && <span className="text-white/20 px-1">·</span>}
-                  <Link to={r.signup} onClick={() => remember(r.key)} className="text-blue-300 hover:text-blue-200 px-1 py-1">{r.title.replace(" (기사)", "")}</Link>
-                </React.Fragment>
-              ))}
+          <div className="min-w-0 w-full max-w-[440px] mx-auto lg:mx-0 lg:justify-self-end">
+            <div className="flex items-end justify-between mb-3 px-1" style={{ animation: "kpLoginIn .5s ease .1s both" }}>
+              <div>
+                <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>SELECT ACCOUNT</div>
+                <div className="mt-1 text-[16px] font-black">어떤 계정으로 들어가시나요?</div>
+              </div>
             </div>
-            <p className="mt-6 text-[11px] text-white/25">{c.footerText || DEFAULT_FOOTER}</p>
+            <div className="flex flex-col gap-2.5">
+              {ROLES.map((r, i) => {
+                const main = r.key === lastRole;
+                return (
+                  <Link key={r.key} to={r.to} onClick={() => remember(r.key)}
+                    className={`group relative flex items-center gap-3.5 rounded-[18px] px-4 py-3.5 transition active:scale-[0.985] overflow-hidden ${
+                      main ? "bg-white text-[#0F1A30] shadow-[0_16px_36px_rgba(0,0,0,0.35)]" : "bg-white/[0.05] ring-1 ring-white/10 hover:bg-white/[0.09] hover:ring-white/20"}`}
+                    style={{ animation: `kpLoginIn .5s ease ${0.14 + i * 0.06}s both` }}>
+                    <span className={`text-[11px] font-black tabular-nums w-5 shrink-0 ${main ? "text-[#9AA9C3]" : "text-white/30"}`} style={{ fontFamily: MONO }}>{pad(i + 1)}</span>
+                    <div className={`w-11 h-11 shrink-0 rounded-[13px] flex items-center justify-center ${main ? "bg-gradient-to-br from-[#0F1A30] to-[#2D4C82]" : "bg-white/[0.08] ring-1 ring-white/10"}`}>
+                      {r.icon(main ? "#FFFFFF" : "#CFE0FF")}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 whitespace-nowrap min-w-0">
+                        <span className="text-[16.5px] font-black truncate">{r.title}</span>
+                        {main && hasHistory && <span className="text-[10px] font-extrabold text-white bg-[#1B2B4B] rounded-full px-2 py-0.5 shrink-0">최근</span>}
+                      </div>
+                      <div className={`mt-0.5 text-[12.5px] truncate whitespace-nowrap ${main ? "text-[#7A879C]" : "text-white/50"}`}>{r.desc}</div>
+                    </div>
+                    <span className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition group-hover:translate-x-0.5 ${main ? "bg-[#0F1A30] text-white" : "bg-white/[0.06] text-white/60"}`}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+
+            {/* 회원가입 — 계정 종류별 */}
+            <div className="mt-5 flex items-center justify-between gap-2 rounded-[16px] max-[340px]:flex-col max-[340px]:items-stretch bg-white/[0.04] ring-1 ring-white/10 px-4 py-3" style={{ animation: "kpLoginIn .5s ease .32s both" }}>
+              <span className="text-[12.5px] font-bold text-white/55 whitespace-nowrap">회원가입</span>
+              <div className="flex items-center justify-end gap-1 text-[12.5px] font-black whitespace-nowrap max-[340px]:justify-between">
+                {ROLES.map((r) => (
+                  <Link key={r.key} to={r.signup} onClick={() => remember(r.key)} className="px-2.5 h-7 inline-flex items-center rounded-full bg-white/[0.07] hover:bg-white/[0.14] text-white transition">{r.title.replace(" (기사)", "")}</Link>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
+
+        <p className="text-center text-[10.5px] font-bold tracking-[0.12em] text-white/25">{c.footerText || DEFAULT_FOOTER}</p>
       </div>
     </div>
   );

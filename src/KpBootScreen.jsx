@@ -3,6 +3,7 @@
 // 4단계가 차례대로 0 → 100% 채워진다. 전부 100%가 되면 부드럽게 사라지며 최신 상태로 열린다.
 // targets: 단계별 목표 %(0~100) 4개 / subs: 단계 옆에 보일 보조 문구 / variant: "mobile" | "pc"
 import React, { useState, useEffect, useRef } from "react";
+import KpTruck3D from "./KpTruck3D";
 
 export const BOOT_STEPS = ["저장된 오더 불러오기", "서버 확인", "최신 오더 반영", "화면 준비"];
 
@@ -97,77 +98,96 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
 
   const activeIdx = completed.findIndex((c) => !c);
   const bar = (v) => ({ transform: `scaleX(${v / 100})`, transformOrigin: "0 50%", transition: `transform ${STEP_MS}ms ease-out`, willChange: "transform" });
-  const truckW = 30 * Z.truck;
+  const truckW = 30 * Z.truck * 3.2;
+  const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+  const pc = variant === "pc";
   return (
     <div
-      className="fixed inset-0 z-[100001] flex flex-col items-center justify-center px-6 select-none"
+      className="fixed inset-0 z-[100001] flex flex-col items-center justify-center px-6 select-none overflow-hidden"
       style={{
-        background: "radial-gradient(120% 80% at 50% 0%, #2A3F6B 0%, #1B2B4B 45%, #0F1A30 100%)",
+        background: "radial-gradient(90% 60% at 50% 0%, #22396A 0%, #0F1A30 55%, #060D1C 100%)",
         zIndex,
         opacity: leaving ? 0 : 1,
         transition: "opacity 0.2s ease",
       }}
     >
       <style>{`
-        @keyframes kpBootFloat { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-1.5px) } }
-        @keyframes kpBootDash { from { transform: translateX(0) } to { transform: translateX(-12px) } }
+        @keyframes kpBootDash { from { transform: translateX(0) } to { transform: translateX(-24px) } }
         @keyframes kpBootFade { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
         @keyframes kpBootRing { 0% { transform: scale(1); opacity: 0.7 } 100% { transform: scale(1.7); opacity: 0 } }
+        @keyframes kpBootBlink { 0%,100% { opacity: .35 } 50% { opacity: 1 } }
       `}</style>
-      <div className={`w-full ${Z.box} flex flex-col min-w-0`}>
+      {/* 원근 격자 바닥(정지 — 끊김 방지로 움직이지 않음) */}
+      <div className="absolute inset-x-0 bottom-0 h-[45%] pointer-events-none overflow-hidden" style={{ perspective: "520px" }} aria-hidden="true">
+        <div className="absolute inset-x-[-50%] top-0 h-[200%]" style={{
+          backgroundImage: "linear-gradient(rgba(143,176,240,0.14) 1px, transparent 1px), linear-gradient(90deg, rgba(143,176,240,0.14) 1px, transparent 1px)",
+          backgroundSize: "56px 56px", transform: "rotateX(62deg)", transformOrigin: "50% 0",
+          maskImage: "linear-gradient(180deg, transparent 0%, #000 40%)", WebkitMaskImage: "linear-gradient(180deg, transparent 0%, #000 40%)",
+        }} />
+      </div>
+
+      <div className={`relative w-full ${Z.box} flex flex-col min-w-0`}>
         {/* 로고 */}
-        <div className={`flex flex-col items-center ${Z.logoGap}`}>
-          <img src="/icons/sflow-icon.png" alt="KP-Flow" className={`${Z.logo} shadow-[0_8px_24px_rgba(0,0,0,0.35)] ring-1 ring-white/15`} />
-          <div className={`mt-3 text-white ${Z.title} font-black tracking-tight`}>KP-Flow</div>
-          <div className={`mt-0.5 ${Z.tag} font-semibold tracking-[0.2em] text-blue-200/60 whitespace-nowrap`}>배차관리 시스템</div>
-        </div>
-
-        {/* 트럭이 전체 진행률만큼 달리는 길 */}
-        <div className="relative h-9 mb-1">
-          <div className="absolute left-0 right-0 bottom-1.5 h-[2px] overflow-hidden opacity-30">
-            <div
-              className="absolute left-0 top-0 h-[2px]"
-              style={{ width: "calc(100% + 12px)", backgroundImage: "linear-gradient(90deg, #fff 50%, transparent 50%)", backgroundSize: "12px 2px", animation: "kpBootDash 0.6s linear infinite", willChange: "transform" }}
-            />
-          </div>
-          <div className="absolute left-0 right-0 bottom-1.5 h-[2px] rounded-full bg-gradient-to-r from-blue-400 to-sky-300" style={bar(overall)} />
-          {/* 트럭 — 길 폭(트럭 폭 제외)만큼의 상자를 진행률만큼 옮긴다 */}
-          <div className="absolute left-0 bottom-1.5" style={{ width: `calc(100% - ${truckW}px)`, transform: `translateX(${overall}%)`, transition: `transform ${STEP_MS}ms ease-out`, willChange: "transform" }}>
-            <svg width={truckW} height={22 * Z.truck} viewBox="0 0 30 22" style={{ display: "block", animation: "kpBootFloat 0.5s ease-in-out infinite" }}>
-              <rect x="1" y="3" width="17" height="12" rx="2" fill="#E8EEF9" />
-              <path d="M18 7h5.5l4 4.5V15H18z" fill="#93C5FD" />
-              <rect x="20" y="8.3" width="3.2" height="2.6" rx="0.6" fill="#1B2B4B" />
-              <circle cx="7" cy="17" r="2.6" fill="#0F1A30" stroke="#E8EEF9" strokeWidth="1.3" />
-              <circle cx="22.5" cy="17" r="2.6" fill="#0F1A30" stroke="#E8EEF9" strokeWidth="1.3" />
-            </svg>
+        <div className={`flex items-center justify-center gap-2.5 ${pc ? "mb-10" : "mb-7"}`}>
+          <img src="/icons/sflow-icon.png" alt="KP-Flow" className={`${pc ? "w-12 h-12 rounded-[14px]" : "w-10 h-10 rounded-[12px]"} ring-1 ring-white/20 shadow-[0_8px_24px_rgba(0,0,0,0.35)]`} />
+          <div className="leading-tight text-left">
+            <div className={`text-white font-black tracking-[0.2em] whitespace-nowrap ${pc ? "text-[20px]" : "text-[16px]"}`} style={{ fontFamily: MONO }}>KP-FLOW</div>
+            <div className={`font-bold tracking-[0.26em] text-white/40 whitespace-nowrap ${pc ? "text-[11px]" : "text-[9.5px]"}`}>배차관리 시스템</div>
           </div>
         </div>
-        <div className="flex justify-between items-baseline gap-2 mb-7 whitespace-nowrap">
-          <span className={`${Z.status} font-bold text-blue-100/70 truncate min-w-0`}>{activeIdx === -1 ? "준비 완료" : `${steps[activeIdx]} 중…`}</span>
-          <span className={`${Z.pct} font-black text-white tabular-nums leading-none shrink-0`}><span ref={pctRef}>0</span><span className={`${Z.pctUnit} text-blue-200/70 ml-0.5`}>%</span></span>
+
+        {/* 큰 숫자 % */}
+        <div className="flex items-end justify-between gap-3 whitespace-nowrap">
+          <div className="min-w-0">
+            <div className={`flex items-center gap-1.5 font-extrabold tracking-[0.24em] text-[#8FB0F0] ${pc ? "text-[11.5px]" : "text-[10px]"}`} style={{ fontFamily: MONO }}>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#8FB0F0]" style={{ animation: "kpBootBlink 1.2s ease-in-out infinite" }} />
+              {activeIdx === -1 ? "READY" : "SYNCING"}
+            </div>
+            <div className={`mt-1 ${Z.status} font-bold text-white/70 truncate`}>{activeIdx === -1 ? "준비 완료" : `${steps[activeIdx]} 중…`}</div>
+          </div>
+          <div className="font-black text-white tabular-nums leading-none shrink-0" style={{ fontFamily: MONO, fontSize: pc ? 64 : 48, letterSpacing: "-0.04em" }}>
+            <span ref={pctRef}>0</span><span className="text-white/35" style={{ fontSize: pc ? 26 : 20, marginLeft: 2 }}>%</span>
+          </div>
         </div>
 
-        {/* 단계별 진행 (배경 흐림 효과는 저사양 폰에서 매 프레임 다시 칠해져 끊김 원인이라 쓰지 않는다) */}
-        <div className={`flex flex-col ${Z.card} rounded-2xl bg-white/[0.07] ring-1 ring-white/10`}>
+        {/* 도로 — 진행만큼 빛나는 길 위를 3D 트럭이 달린다 */}
+        <div className={`relative ${pc ? "h-[104px] mt-3" : "h-[86px] mt-2"} mb-6`}>
+          <div className="absolute left-0 right-0 bottom-[18px] h-[3px] rounded-full bg-white/[0.08] overflow-hidden">
+            <div className="absolute left-0 top-0 h-full" style={{ width: "calc(100% + 24px)", backgroundImage: "linear-gradient(90deg, rgba(255,255,255,0.35) 50%, transparent 50%)", backgroundSize: "24px 3px", animation: "kpBootDash 0.5s linear infinite", willChange: "transform" }} />
+          </div>
+          <div className="absolute left-0 right-0 bottom-[18px] h-[3px] rounded-full" style={{ ...bar(overall), background: "linear-gradient(90deg, #4B6CB7, #CFE0FF)", boxShadow: "0 0 12px rgba(143,176,240,0.8)" }} />
+          {/* 눈금 */}
+          <div className="absolute left-0 right-0 bottom-0 flex justify-between text-[9px] font-bold text-white/25 tabular-nums" style={{ fontFamily: MONO }}>
+            {["0", "25", "50", "75", "100"].map((t) => <span key={t}>{t}</span>)}
+          </div>
+          <div className="absolute left-0 bottom-[16px]" style={{ width: `calc(100% - ${truckW}px)`, transform: `translateX(${overall}%)`, transition: `transform ${STEP_MS}ms ease-out`, willChange: "transform" }}>
+            <KpTruck3D width={truckW} />
+          </div>
+        </div>
+
+        {/* 단계별 진행 */}
+        <div className={`flex flex-col ${Z.card} rounded-[20px] bg-white/[0.05] ring-1 ring-white/10`}>
           {steps.map((label, i) => {
             const v = Math.round(shown[i]);
             const done = completed[i];
             const active = i === activeIdx;
             return (
-              <div key={label} className="flex items-center gap-3" style={{ opacity: done || active ? 1 : 0.38, transition: "opacity 0.2s" }}>
-                <div className={`${Z.dot} relative shrink-0 rounded-full flex items-center justify-center font-black ${done ? "bg-blue-400 text-[#0F1A30]" : active ? "bg-white/10 text-white ring-2 ring-blue-400" : "bg-white/10 text-white/50"}`}>
-                  {active && <span className="absolute inset-0 rounded-full ring-2 ring-blue-400" style={{ animation: "kpBootRing 1.2s ease-out infinite", willChange: "transform, opacity" }} />}
+              <div key={label} className="flex items-center gap-3" style={{ opacity: done || active ? 1 : 0.35, transition: "opacity 0.2s" }}>
+                <div className={`${Z.dot} relative shrink-0 rounded-[8px] flex items-center justify-center font-black tabular-nums ${done ? "bg-[#CFE0FF] text-[#0F1A30]" : active ? "bg-white/10 text-white ring-1 ring-[#8FB0F0]" : "bg-white/[0.06] text-white/50"}`} style={{ fontFamily: MONO }}>
+                  {active && <span className="absolute inset-0 rounded-[8px] ring-1 ring-[#8FB0F0]" style={{ animation: "kpBootRing 1.2s ease-out infinite", willChange: "transform, opacity" }} />}
                   {done ? (
-                    <svg width="11" height="11" viewBox="0 0 12 12"><path d="M2.5 6.3l2.4 2.4 4.6-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                  ) : i + 1}
+                    <svg width="11" height="11" viewBox="0 0 12 12"><path d="M2.5 6.3l2.4 2.4 4.6-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  ) : String(i + 1).padStart(2, "0")}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-baseline gap-2 whitespace-nowrap">
-                    <span className={`${Z.label} font-bold truncate min-w-0 ${done ? "text-white" : "text-blue-50/90"}`}>{label}</span>
-                    <span className={`${Z.sub} font-bold tabular-nums text-blue-200/80 shrink-0`}>{subs[i] && (done || active) ? subs[i] : `${v}%`}</span>
+                    <span className={`${Z.label} font-bold truncate min-w-0 ${done ? "text-white" : "text-white/85"}`}>{label}</span>
+                    <span className={`${Z.sub} font-bold tabular-nums text-[#CFE0FF]/80 shrink-0`} style={{ fontFamily: MONO }}>{subs[i] && (done || active) ? subs[i] : `${String(v).padStart(3, " ")}%`}</span>
                   </div>
-                  <div className={`mt-1.5 ${Z.bar} rounded-full bg-white/10 overflow-hidden`}>
-                    <div className="h-full w-full rounded-full bg-gradient-to-r from-blue-400 to-sky-300" style={bar(v)} />
+                  <div className={`mt-1.5 ${Z.bar} rounded-full bg-white/[0.08] overflow-hidden relative`}>
+                    <div className="h-full w-full rounded-full" style={{ ...bar(v), background: "linear-gradient(90deg, #4B6CB7, #CFE0FF)" }} />
+                    {/* 디지털 눈금 틈 */}
+                    <div className="absolute inset-0" style={{ backgroundImage: "repeating-linear-gradient(90deg, transparent 0 7px, rgba(6,13,28,0.9) 7px 9px)" }} />
                   </div>
                 </div>
               </div>
@@ -176,21 +196,18 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
         </div>
 
         {/* 안내 문구 — 처음부터 표시(자리를 미리 잡아 두어 문구가 바뀌어도 화면이 들썩이지 않게) */}
-        <div className={`mt-4 flex flex-col items-center text-center ${variant === "pc" ? "min-h-[88px]" : "min-h-[84px]"}`}>
+        <div className={`mt-4 flex flex-col items-center text-center ${pc ? "min-h-[88px]" : "min-h-[84px]"}`}>
           {/* ⚠️ 첫 문구는 효과 없이 바로 보이게 — 앱이 막 켜져 바쁜 순간엔 "서서히 나타나기" 효과가 멈춰 있어
               문구가 투명한 채로 있다가 로딩이 다 끝나서야 보였다. 문구가 바뀔 때만 효과를 준다. */}
           <div key={notice.title} className="flex flex-col items-center gap-1 max-w-full" style={offline || phase > 0 ? { animation: "kpBootFade 0.4s ease" } : undefined}>
-            <div className={`flex items-center gap-1.5 ${Z.label} font-bold text-sky-200 whitespace-nowrap max-w-full`}>
-              <svg className="shrink-0" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
-              {notice.title}
+            <div className={`flex items-center gap-1.5 ${Z.label} font-bold text-white/85 whitespace-nowrap max-w-full`}>
+              <svg className="shrink-0 text-[#8FB0F0]" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+              <span className="truncate">{notice.title}</span>
             </div>
-            <div className={`${Z.sub} font-semibold text-blue-100/55`}>{notice.desc}</div>
+            <div className={`${Z.sub} font-semibold text-white/45`}>{notice.desc}</div>
             {canSkip && (
-              <button
-                type="button"
-                onClick={onSkip}
-                className={`mt-2 px-4 py-1.5 rounded-full bg-white/10 ring-1 ring-white/20 text-white ${Z.sub} font-bold active:bg-white/20`}
-              >
+              <button type="button" onClick={onSkip}
+                className={`mt-2 px-4 py-1.5 rounded-full bg-white text-[#0F1A30] ${Z.sub} font-black active:opacity-80`}>
                 저장된 오더로 먼저 열기
               </button>
             )}

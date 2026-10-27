@@ -324,3 +324,12 @@
 .kp-m .to-red-800{--tw-gradient-to:#0F1A30 var(--tw-gradient-to-position)}
 .kp-m .ring-red-200{--tw-ring-color:#D5DCE7}
 .kp-m .ring-red-300{--tw-ring-color:#C3CEDF}
+
+/* ── 좁은 화면(폴드 분할화면 등) — 뱃지·알약 글자가 "배차중 / 1"처럼 두 줄로 쪼개지지 않게 ── */
+.kp-m span[class*="rounded-full"],
+.kp-m span[class*="rounded-md"],
+.kp-m span[class*="rounded-lg"] { white-space: nowrap; }
+@media (max-width: 400px) {
+  .kp-m .kp-m-hbtn { width: 30px; height: 30px; border-radius: 9px; }
+  .kp-m .kp-m-hbtn svg { width: 15px; height: 15px; }
+}

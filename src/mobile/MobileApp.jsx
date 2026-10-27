@@ -7288,8 +7288,8 @@ const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh
   }`;
 
   return (
-    <div className="kp-m-header relative flex items-center justify-between gap-2 px-3.5 pb-2.5 sticky top-0 z-30"
-      style={{ willChange: "transform", transform: "translateZ(0)", WebkitTransform: "translateZ(0)", paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.6rem)" }}>
+    <div className="kp-m-header relative grid items-center gap-1.5 px-3 pb-2.5 sticky top-0 z-30"
+      style={{ gridTemplateColumns: "minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr)", willChange: "transform", transform: "translateZ(0)", WebkitTransform: "translateZ(0)", paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.6rem)" }}>
       <div className="shrink-0 flex items-center gap-1">
         {/* 새로고침은 왼쪽으로 — 오른쪽 버튼이 많아도 가운데 제목과 겹치지 않게 */}
         {onRefresh && (
@@ -7312,10 +7312,10 @@ const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh
         )}
       </div>
 
-      {/* ⭐ 제목은 버튼 개수와 상관없이 화면 정중앙 */}
-      <div className="absolute left-1/2 -translate-x-1/2 bottom-2.5 max-w-[44%] text-center leading-none pointer-events-none">
-        <div className={`text-[9.5px] font-extrabold tracking-[0.24em] ${cardVersionB ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`}>KP-FLOW</div>
-        <div className={`mt-1 font-black text-[16px] tracking-tight truncate ${cardVersionB ? "text-white" : "text-[#0F1A30]"}`}>{title}</div>
+      {/* ⭐ 제목 — 양쪽 버튼 칸을 같은 폭으로 잡아 가운데, 화면이 좁으면(분할화면) 버튼과 겹치지 않고 제목이 줄어든다 */}
+      <div className="min-w-0 text-center leading-none pointer-events-none overflow-hidden">
+        <div className={`text-[9.5px] font-extrabold tracking-[0.24em] whitespace-nowrap ${cardVersionB ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`}>KP-FLOW</div>
+        <div className={`mt-1 font-black text-[16px] tracking-tight truncate whitespace-nowrap ${cardVersionB ? "text-white" : "text-[#0F1A30]"}`}>{title}</div>
       </div>
 
       <div className="shrink-0 flex items-center gap-1 justify-end">
@@ -7710,18 +7710,21 @@ function MobileSideMenu({
         <div className={`px-5 pt-5 pb-4 flex items-start justify-between gap-3 ${
           dark ? "border-b border-white/10" : "border-b border-[#EEF1F6]"
         }`}>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2.5">
               <img src="/icons/sflow-icon.png" alt="KP-Flow" className={`w-9 h-9 rounded-[11px] shrink-0 ${dark ? "ring-1 ring-white/15" : "ring-1 ring-[#E3E8F0]"}`} />
               <div className="min-w-0">
                 <div className={`text-[10px] font-extrabold tracking-[0.22em] ${dark ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`}>DISPATCH</div>
-                <div className={`text-[15px] font-black tracking-tight truncate ${dark ? "text-white" : "text-[#0F1A30]"}`}>KP-Flow 모바일</div>
+                <div className={`text-[15px] font-black tracking-tight truncate whitespace-nowrap ${dark ? "text-white" : "text-[#0F1A30]"}`}>KP-Flow</div>
               </div>
             </div>
-            <div className={`mt-3 inline-flex items-center gap-2 px-2.5 py-1.5 rounded-xl ${dark ? "bg-white/[0.08] border border-white/10" : "bg-[#F5F8FD] border border-[#E3E8F0]"}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${dark ? "bg-white" : "bg-[#1B2B4B]"}`} />
-              <span className={`text-[12.5px] font-bold ${dark ? "text-white" : "text-[#0F1A30]"}`}>{myName}</span>
-              <span className={`text-[11px] ${dark ? "text-white/50" : "text-[#7A879C]"}`}>{fmtLoginTime(loginTime)}</span>
+            {/* 이름·접속시각 — 좁은 화면에서도 글자가 쪼개지지 않게 이름 한 줄, 시각 한 줄로 */}
+            <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-xl max-w-full ${dark ? "bg-white/[0.08] border border-white/10" : "bg-[#F5F8FD] border border-[#E3E8F0]"}`}>
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dark ? "bg-white" : "bg-[#1B2B4B]"}`} />
+              <div className="min-w-0 leading-tight">
+                <div className={`text-[12.5px] font-bold truncate whitespace-nowrap ${dark ? "text-white" : "text-[#0F1A30]"}`}>{myName}</div>
+                <div className={`text-[11px] tabular-nums truncate whitespace-nowrap ${dark ? "text-white/50" : "text-[#7A879C]"}`}>{fmtLoginTime(loginTime)}</div>
+              </div>
             </div>
           </div>
           <button
@@ -8819,8 +8822,8 @@ const summary = useMemo(() => {
               key={t}
               onClick={() => setStatusTab(t)}
               className={cardVersionB
-                ? `flex-1 py-2.5 text-[13px] font-semibold border-b-2 transition-colors flex items-center justify-center gap-1 ${statusTab === t ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-transparent text-gray-400"}`
-                : `flex-1 h-9 rounded-xl text-[13px] font-extrabold transition-colors flex items-center justify-center gap-1.5 ${statusTab === t ? "bg-[#0F1A30] text-white shadow-[0_4px_12px_rgba(15,26,48,0.25)]" : "text-[#7A879C]"}`}
+                ? `flex-1 min-w-0 whitespace-nowrap py-2.5 text-[13px] font-semibold border-b-2 transition-colors flex items-center justify-center gap-1 ${statusTab === t ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-transparent text-gray-400"}`
+                : `flex-1 min-w-0 whitespace-nowrap px-1 h-9 rounded-xl text-[13px] max-[380px]:text-[12px] font-extrabold transition-colors flex items-center justify-center gap-1 ${statusTab === t ? "bg-[#0F1A30] text-white shadow-[0_4px_12px_rgba(15,26,48,0.25)]" : "text-[#7A879C]"}`}
             >
               {t}
               {count !== null && (
@@ -9096,19 +9099,19 @@ const summary = useMemo(() => {
           const list = groupedByDate.get(dateKey) || [];
           return (
             <div key={dateKey}>
-            <div className={`flex items-center justify-between mb-3 px-1 ${cardVersionB ? "py-0.5" : ""}`}>
+            <div className={`flex items-center justify-between gap-2 mb-3 px-1 ${cardVersionB ? "py-0.5" : ""}`}>
 
   {/* 날짜 */}
   {cardVersionB ? (
     <div className="font-bold text-[13px] text-[#1B2B4B] tracking-tight">{formatDateHeader(dateKey)}</div>
   ) : (
-    <div className="flex items-baseline gap-2">
-      <span className="text-[20px] font-black text-[#0F1A30] tracking-tight tabular-nums">{formatDateHeader(dateKey)}</span>
-      <span className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]">ORDERS</span>
+    <div className="flex items-baseline gap-2 min-w-0 whitespace-nowrap">
+      <span className="text-[20px] max-[380px]:text-[17px] font-black text-[#0F1A30] tracking-tight tabular-nums">{formatDateHeader(dateKey)}</span>
+      <span className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3] max-[400px]:hidden">ORDERS</span>
     </div>
   )}
 
-  <div className="flex gap-1">
+  <div className="flex gap-1 shrink-0 whitespace-nowrap">
     {statusTab === "전체" && (
       <>
         {cardVersionB ? (
