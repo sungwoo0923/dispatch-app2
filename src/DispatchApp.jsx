@@ -3655,6 +3655,7 @@ const liveWindowStart = pcLiveWindowStart(); // ⭐ 13개월 → 최근 7일~(�
       changes.forEach((ch) => {
         const d = ch.doc.data() || {};
         const id = ch.doc.id;
+        if (isBlindHidden(d)) return; // ⭐ 블라인드 오더는 최고관리자 외에는 알림도 띄우지 않는다
 
         // ⚠️ addDispatch가 실제로 쓰는 컬렉션은 COLL.dispatch="orders"다 — 즉 운송사
         // 자신의 오더 등록/수기입력/오더복사도 전부 여기(orders 리스너)로 들어온다.
@@ -13656,72 +13657,54 @@ React.useEffect(() => {
   return () => window.removeEventListener("keydown", onKeyDown);
 }, []);
 // 🔍 오더복사 리스트
+// ⭐ 2026-10-27 속도 — 예전엔 글자 하나 칠 때마다 13개월치 오더 전체(수천~만 건)를 거르고, 경유지 글자를 풀고,
+//    정렬까지 다시 했다(F4 검색이 버벅이던 원인). 창이 열려 있을 때 데이터가 바뀔 때만 한 번
+//    "최신순 정렬 + 검색용 글자"를 만들어 두고, 타이핑 때는 그 글자에서 찾기만 한다. 입력도 먼저 반응하게 검색은 한 박자 늦게.
+const copyIndex = React.useMemo(() => {
+  if (!copyOpen) return [];
+  const safeArr = (v) => {
+    if (Array.isArray(v)) return v;
+    if (typeof v === "string") { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } }
+    return [];
+  };
+  const low = (v) => String(v || "").toLowerCase();
+  const arr = (Array.isArray(dispatchData) ? dispatchData : []).map((r) => ({
+    r,
+    hay: [r.거래처명, r.상차지명, r.하차지명, r.화물내용].map(low).join("\u0001"),
+    via: [...safeArr(r.경유상차목록), ...safeArr(r.경유하차목록)].map((x) => x?.업체명 || "").join(" ").toLowerCase(),
+  }));
+  arr.sort((a, b) =>
+    (b.r.상차일 || "").localeCompare(a.r.상차일 || "") ||
+    (b.r.상차시간 || "").localeCompare(a.r.상차시간 || "")
+  );
+  return arr;
+}, [copyOpen, dispatchData]);
+const copyQDeferred = React.useDeferredValue(copyQ);
 const copyList = React.useMemo(() => {
-  const q = copyQ.trim().toLowerCase();
+  const q = copyQDeferred.trim().toLowerCase();
 
   // 검색어 없으면 비표시 (기존 기능 유지)
   if (!q) return [];
-
-  // ⭐ 전체 데이터 사용
-  let arr = Array.isArray(dispatchData) ? [...dispatchData] : [];
-  // ⭐ 왕복만 보기 필터
-if (onlyRoundTrip) {
-  arr = arr.filter(r => r.운행유형 === "왕복");
-}
-  // ⭐ 현황패널 필터 적용
-  if (filterType && filterValue) {
-    arr = arr.filter(
-      (r) => String(r[filterType] || "").toLowerCase() === String(filterValue).toLowerCase()
-    );
+  const fv = filterType && filterValue ? String(filterValue).toLowerCase() : null;
+  // 최신순(이미 정렬됨) · 조건 기준 중복 제거(먼저 들어온 최신 1건이 대표)
+  const dedupMap = new Map();
+  for (const { r, hay, via } of copyIndex) {
+    if (onlyRoundTrip && r.운행유형 !== "왕복") continue; // ⭐ 왕복만 보기
+    if (fv !== null && String(r[filterType] || "").toLowerCase() !== fv) continue; // ⭐ 현황패널 필터
+    const hit = copyFilterType !== "전체"
+      ? String(r[copyFilterType] || "").toLowerCase().includes(q)
+      : (hay.includes(q) || via.includes(q)); // ✅ 경유지명도 검색
+    if (!hit) continue;
+    const key = makeCopyOrderKey(r);
+    if (!dedupMap.has(key)) dedupMap.set(key, r);
   }
-  // ⭐ 필드 기준 검색
-  if (copyFilterType !== "전체") {
-    arr = arr.filter((r) =>
-      String(r[copyFilterType] || "").toLowerCase().includes(q)
-    );
-} else {
-    arr = arr.filter((r) => {
-      const basicMatch = ["거래처명", "상차지명", "하차지명", "화물내용"].some((k) =>
-        String(r[k] || "").toLowerCase().includes(q)
-      );
-      if (basicMatch) return true;
-      // ✅ 경유지명도 검색
-     const safeArr = (v) => {
-        if (Array.isArray(v)) return v;
-        if (typeof v === "string") { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } }
-        return [];
-      };
-      const viaNames = [
-        ...safeArr(r.경유상차목록).map(s => s.업체명 || ""),
-        ...safeArr(r.경유하차목록).map(s => s.업체명 || ""),
-      ].join(" ").toLowerCase();
-      return viaNames.includes(q);
-    });
-  }
-
-  // ⭐ 최신순 정렬
-  arr = arr.slice().sort((a, b) =>
-    (b.상차일 || "").localeCompare(a.상차일 || "") ||
-    (b.상차시간 || "").localeCompare(a.상차시간 || "")
-  );
-
-  // ⭐ 조건 기준 중복 제거 (대표 1건만)
-const dedupMap = new Map();
-
-// 최신순이므로, 먼저 들어온 것이 대표
-arr.forEach((r) => {
-  const key = makeCopyOrderKey(r);
-  if (!dedupMap.has(key)) {
-    dedupMap.set(key, r);
-  }
-});
-return Array.from(dedupMap.values());
-}, [dispatchData, copyQ, copyFilterType, filterType, filterValue, onlyRoundTrip]);
+  return Array.from(dedupMap.values());
+}, [copyIndex, copyQDeferred, copyFilterType, filterType, filterValue, onlyRoundTrip]);
 
 // 오더복사 "더보기" 전 기본 표시 목록 (최근 1건, 전체필터시 역할별 1건씩)
 const copyListShort = React.useMemo(() => {
   if (!copyList.length) return [];
-  const q = copyQ.trim().toLowerCase();
+  const q = copyQDeferred.trim().toLowerCase();
   if (copyFilterType === "전체" && q) {
     const seen = new Set();
     const out = [];
@@ -13735,7 +13718,7 @@ const copyListShort = React.useMemo(() => {
     return out.length ? out : [copyList[0]];
   }
   return [copyList[0]];
-}, [copyList, copyQ, copyFilterType]);
+}, [copyList, copyQDeferred, copyFilterType]);
 
 // 검색어/필터 변경 시 더보기 초기화
 React.useEffect(() => { setCopyShowMore(false); }, [copyQ, copyFilterType]);
@@ -18197,7 +18180,7 @@ className={`
                   <p className="text-[12px] text-gray-500 mt-2 font-semibold">
                     {copyList.length > 0
                       ? copyShowMore
-                        ? `전체 ${copyList.length}건 표시 중 · 더블클릭하면 바로 복사됩니다`
+                        ? `전체 ${copyList.length}건${copyList.length > 300 ? " 중 최근 300건" : ""} 표시 중 · 더블클릭하면 바로 복사됩니다`
                         : `최근 ${copyListShort.length}건 표시 중 (전체 ${copyList.length}건) · 더블클릭하면 바로 복사됩니다`
                       : "검색 결과가 없습니다"}
                   </p>
@@ -18229,7 +18212,7 @@ className={`
                         </td>
                       </tr>
                     ) : (
-                      (copyShowMore ? copyList : copyListShort).map((row) => (
+                      (copyShowMore ? copyList.slice(0, 300) : copyListShort).map((row) => ( // ⭐ 한 번에 300건까지만 그림(수천 줄을 그리면 멈춤)
                         <tr
   key={row._id}
   id={`row-${row._id}`}

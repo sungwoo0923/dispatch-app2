@@ -2729,31 +2729,13 @@ collections.forEach((name) => {
       if (!dispatchPrevStatus.current[name]) dispatchPrevStatus.current[name] = new Map();
       const prevMap = dispatchPrevStatus.current[name];
 
-      // 🔥 모든 FCM 토큰 수집
-      const sendPush = async (title, body) => {
-        try {
-          // ⭐ 끊김 — 예전엔 새 오더 1건마다 회원 전체(users)를 서버에서 다시 받았다. 10분 동안은 받아 둔 목록을 쓴다.
-          const cache = window.__kpPushTokens;
-          let tokens = cache && Date.now() - cache.at < 10 * 60 * 1000 ? cache.tokens : null;
-          if (!tokens) {
-            const snap = await getDocs(collection(db, "users"));
-            tokens = snap.docs.map(d => d.data().fcmToken).filter(Boolean);
-            window.__kpPushTokens = { at: Date.now(), tokens };
-          }
-          if (!tokens.length) return;
-
-          await fetch("/api/notify", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ tokens, title, body }),
-          });
-        } catch (e) {
-          console.error("푸시 실패", e);
-        }
-      };
+      // ⭐ 2026-10-27 — 예전엔 앱이 켜진 폰마다 회원 전체에게 푸시를 "또" 보냈다. 푸시는 서버(functions: notifyNewDispatch 등)가
+      //    이미 보내고 있어 알림이 폰 수만큼 중복됐고, 블라인드 오더·알림 설정(받을 종류)도 무시됐다. 화면 안 알림만 남긴다.
+      const sendPush = () => {};
 
       snap.docChanges().forEach((change) => {
         const data = { id: change.doc.id, ...change.doc.data() };
+        if (isBlindHidden(data)) return; // ⭐ 블라인드 오더는 최고관리자 외에는 알림도 띄우지 않는다
 
         if (change.type === "added" && data.상차지명) {
           sendPush(
