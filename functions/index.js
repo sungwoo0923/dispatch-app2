@@ -9,7 +9,7 @@
 // 이 파일 전체가 v1 스타일로 작성돼 있으므로 v1 서브패스에서 명시적으로 가져온다.
 const functions = require("firebase-functions/v1");
 const { initializeApp } = require("firebase-admin/app");
-const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
 const { getAuth } = require("firebase-admin/auth");
 const fetch = require("node-fetch");
@@ -4097,6 +4097,95 @@ async function setBulkMode(company, on) {
   // 다른 서버 인스턴스의 10초 캐시가 새 값을 볼 때까지 잠깐 기다린다
   if (on) await sleep(11000);
 }
+
+// ⭐ 삭제 오더 복구(2026-10-27, 최고관리자) — 프로그램에서 삭제하면 deletedOrders/{col}_{id}에 "언제 지웠는지"만 남는다.
+//    Firestore의 "지난 시점 읽기"로 지우기 직전 내용을 읽어 되살린다.
+//    ⚠️ 지난 시점 읽기는 Firebase 콘솔에서 "특정 시점 복구(PITR)"가 켜져 있어야 7일 전까지 된다(꺼져 있으면 1시간 전까지만).
+//  POST { action: "list", date: "YYYY-MM-DD"(지운 날, 한국시간) } → 그날 지운 오더 목록(내용 포함)
+//  POST { action: "restore", items: [{ col, id, at }] } → 되살리기(알림·구글시트 자동처리는 막고 넣는다)
+const readBeforeDelete = async (col, id, atMs) => {
+  const ref = db.collection(col).doc(id);
+  const readTime = Timestamp.fromMillis(Math.floor((atMs - 60 * 1000) / 60000) * 60000); // 지우기 1분 전(분 단위로 맞춤 — PITR은 분 단위만 허용)
+  const snap = await db.runTransaction((t) => t.get(ref), { readOnly: true, readTime });
+  return snap.exists ? snap.data() : null;
+};
+exports.restoreDeleted = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
+  let body = req.body;
+  if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
+  body = body || {};
+  try {
+    await requireTotalMaster(req);
+    if (body.action === "list") {
+      const date = String(body.date || "");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { res.status(400).json({ error: "날짜를 확인해 주세요." }); return; }
+      const start = new Date(`${date}T00:00:00+09:00`); const end = new Date(start.getTime() + 86400000);
+      const logs = await db.collection("deletedOrders").where("at", ">=", Timestamp.fromDate(start)).where("at", "<", Timestamp.fromDate(end)).get();
+      const items = []; let pitrOff = false; let failed = 0; let missing = 0; let already = 0;
+      const list = logs.docs.map((d) => ({ ...d.data(), at: d.data().at?.toMillis?.() || 0 })).filter((x) => x.col && x.id && x.at);
+      for (let i = 0; i < list.length; i += 10) {
+        await Promise.all(list.slice(i, i + 10).map(async (x) => {
+          try {
+            const now = await db.collection(x.col).doc(x.id).get();
+            if (now.exists) { already += 1; return; } // 이미 되살아남
+            const data = await readBeforeDelete(x.col, x.id, x.at);
+            if (!data) { missing += 1; return; } // 지우기 전 내용을 못 읽음(보관 기간 지남 등)
+            items.push({ col: x.col, id: x.id, at: x.at, 상차일: data.상차일 || "", 하차일: data.하차일 || "", 거래처명: data.거래처명 || "", 상차지명: data.상차지명 || "", 하차지명: data.하차지명 || "",
+              차량번호: data.차량번호 || "", 이름: data.이름 || "", 청구운임: data.청구운임 || 0, 배차상태: data.배차상태 || "", 회사: data.companyName || "", 작성자: data.작성자 || "" });
+          } catch (e) {
+            failed += 1;
+            if (/FAILED_PRECONDITION|INVALID_ARGUMENT|read_time|readTime|too old|version retention/i.test(String(e?.message || e))) pitrOff = true;
+            else console.warn("삭제 오더 읽기 실패:", x.col, x.id, e?.message || e);
+          }
+        }));
+      }
+      items.sort((a, b) => a.at - b.at);
+      res.json({ date, logged: list.length, items, failed, missing, already, pitrOff });
+      return;
+    }
+    if (body.action === "restore") {
+      const items = (Array.isArray(body.items) ? body.items : []).filter((x) => ["orders", "dispatch"].includes(x?.col) && x?.id && x?.at).slice(0, 500);
+      if (!items.length) { res.status(400).json({ error: "되살릴 오더를 골라 주세요." }); return; }
+      const got = [];
+      for (let i = 0; i < items.length; i += 10) {
+        await Promise.all(items.slice(i, i + 10).map(async (x) => {
+          const now = await db.collection(x.col).doc(x.id).get();
+          if (now.exists) return;
+          const data = await readBeforeDelete(x.col, x.id, Number(x.at)).catch(() => null);
+          if (data) got.push({ ...x, data });
+        }));
+      }
+      const companies = [...new Set(got.map((g) => g.data.companyName || "돌캐"))];
+      for (const c of companies) await setBulkMode(c, true); // 되살리는 동안 "신규 오더" 알림이 쏟아지지 않게
+      let restored = 0;
+      try {
+        for (let i = 0; i < got.length; i += 400) {
+          const wb = db.batch();
+          got.slice(i, i + 400).forEach((g) => {
+            wb.set(db.collection(g.col).doc(g.id), { ...g.data, _lastModified: Date.now(), 복구일시: FieldValue.serverTimestamp() });
+            wb.delete(db.collection("deletedOrders").doc(`${g.col}_${g.id}`));
+          });
+          await wb.commit();
+          restored += Math.min(400, got.length - i);
+        }
+      } finally {
+        await sleep(5000); // 방금 넣은 오더의 자동처리(알림)가 끝날 때까지 잠깐 유지
+        for (const c of companies) await setBulkMode(c, false);
+      }
+      for (const c of companies) await bumpDataVersion(c);
+      res.json({ restored, requested: items.length });
+      return;
+    }
+    res.status(400).json({ error: "알 수 없는 요청입니다." });
+  } catch (e) {
+    console.error("삭제 오더 복구 오류:", e);
+    res.status(e.status || 500).json({ error: e.message || "오류" });
+  }
+});
 
 // ⭐ "내 오더만 구글시트로 보내기" 켜기/끄기(최고관리자) — POST { action: "status" | "enable" | "disable", email }
 exports.gsheetMine = functions.runWith({ timeoutSeconds: 540, memory: "512MB" }).https.onRequest(async (req, res) => {
