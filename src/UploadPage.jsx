@@ -479,110 +479,120 @@ export default function UploadPage() {
   };
 
   // ────────────────────────────────────────────────────────
-  // 렌더
+  // 렌더 — 2026-10-28 디지털 리디자인(네이비 관제 스타일·단계 표시·하단 고정 버튼)
   // ────────────────────────────────────────────────────────
+  const stepNo = status === "done" ? 3 : uploadStep;
+  const pickupName = order?.상차지명 || "-";
+  const dropName = order?.하차지명 || "-";
   return (
-    <div style={{ fontFamily: "'Noto Sans KR', sans-serif", minHeight: "100vh", background: "#f0f2f5", overscrollBehaviorY: "contain", touchAction: "pan-y" }}>
+    <div className="kpu" style={{ fontFamily: "'Pretendard','Noto Sans KR',sans-serif", minHeight: "100vh", background: "#EEF2F8", overscrollBehaviorY: "contain", touchAction: "pan-y", color: "#0F1A30" }}>
       <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet" />
+      <style>{UPLOAD_CSS}</style>
 
-      {/* ── 헤더 ── */}
-      <div style={{ background: "#1B2B4B", padding: "16px 24px", display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{ width: 36, height: 36, background: "rgba(255,255,255,0.15)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ color: "white", fontSize: 20, fontWeight: 900 }}>KP</span>
-        </div>
-        <div>
-          <div style={{ color: "white", fontWeight: 900, fontSize: 16, letterSpacing: "-0.3px" }}>KP-Flow</div>
-          <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>인수증 / 서류 업로드</div>
+      {/* ── 헤더 + 단계 ── */}
+      <div className="kpu-hero">
+        <div style={{ maxWidth: 520, margin: "0 auto", padding: "18px 18px 20px", position: "relative" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 42, height: 42, borderRadius: 13, background: "linear-gradient(135deg,#2D4C82,#0B1428)", border: "1px solid rgba(207,224,255,.35)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 0 4px rgba(143,176,240,.08)" }}>
+              <span style={{ color: "#fff", fontSize: 16, fontWeight: 900, letterSpacing: "-0.5px" }}>KP</span>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="kpu-mono" style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>KP-FLOW · DRIVER UPLOAD</div>
+              <div style={{ color: "#fff", fontWeight: 900, fontSize: 19, letterSpacing: "-0.3px", marginTop: 2 }}>인수증 · 서류 업로드</div>
+            </div>
+            {!isManual && order && status === "ready" && (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 28, padding: "0 10px", borderRadius: 99, border: "1px solid rgba(143,176,240,.4)", background: "rgba(143,176,240,.12)", color: "#CFE0FF", fontSize: 11.5, fontWeight: 800 }}>
+                <span className={sharingLoc ? "kpu-pulse" : ""} style={{ width: 7, height: 7, borderRadius: "50%", background: sharingLoc ? "#CFE0FF" : "#6B7FA6", boxShadow: sharingLoc ? "0 0 8px #8FB0F0" : "none" }} />
+                {sharingLoc ? "GPS ON" : "GPS OFF"}
+              </span>
+            )}
+          </div>
+          {(status === "ready" || status === "done") && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 18 }}>
+              {[["01", "확인사항"], ["02", "사진 · 서명"], ["03", "전송 완료"]].map(([n, l], i) => {
+                const on = stepNo === i + 1, done = stepNo > i + 1;
+                return (
+                  <div key={n}>
+                    <div style={{ height: 4, borderRadius: 99, background: on || done ? "linear-gradient(90deg,#8FB0F0,#CFE0FF)" : "rgba(143,176,240,.18)", boxShadow: on ? "0 0 10px rgba(143,176,240,.7)" : "none" }} />
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 7 }}>
+                      <span className="kpu-mono" style={{ fontSize: 11, fontWeight: 800, color: on || done ? "#CFE0FF" : "#6B7FA6" }}>{done ? "✓" : n}</span>
+                      <span style={{ fontSize: 12.5, fontWeight: 800, color: on ? "#fff" : done ? "#CFE0FF" : "#6B7FA6" }}>{l}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ── 위치정보 제공 동의 팝업 — 링크로 들어오면 위치 공유가 시작되기 전에
-          반드시 먼저 뜨고, 승인해야만 위치 공유가 켜진다 ── */}
+      {/* ── 위치정보 제공 동의 팝업 — 승인해야만 위치 공유가 켜진다 ── */}
       {status === "ready" && !isManual && order && locConsent === null && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10000, padding: 20 }}>
-          <div style={{ background: "white", borderRadius: 20, width: "100%", maxWidth: 420, overflow: "hidden", boxShadow: "0 12px 40px rgba(0,0,0,0.3)" }}>
-            <div style={{ background: "#1B2B4B", padding: "20px 22px" }}>
-              <div style={{ color: "white", fontWeight: 800, fontSize: 16 }}>위치정보 제공 동의</div>
-              <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 12.5, marginTop: 4, fontWeight: 500 }}>상/하차 확인을 위한 안내입니다</div>
+        <div className="kpu-overlay" style={{ alignItems: "flex-end" }}>
+          <div className="kpu-sheet">
+            <div style={{ width: 54, height: 54, borderRadius: 18, margin: "4px auto 12px", background: "linear-gradient(135deg,#2D4C82,#1B2B4B)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 10px 22px rgba(27,43,75,.3)" }}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg>
             </div>
-            <div style={{ padding: "20px 22px 4px" }}>
-              <div style={{ fontSize: 14, color: "#1e293b", lineHeight: 1.75, fontWeight: 500 }}>
-                운송사에서 상/하차 여부를 확인하기 위하여 위치정보를 공유받을 수 있습니다.
-              </div>
-              <div style={{ fontSize: 12.5, color: "#64748b", lineHeight: 1.7, marginTop: 10, fontWeight: 500 }}>
-                이 화면을 보고 계신 동안에만 위치가 전송되며, 화면을 벗어나거나 끄면 전송이 즉시 중단됩니다. 원치 않으시면 아래 <b style={{ color: "#334155" }}>거절</b> 버튼을 눌러주세요.
-              </div>
+            <div style={{ textAlign: "center", fontWeight: 900, fontSize: 19 }}>위치정보 제공 동의</div>
+            <div style={{ textAlign: "center", fontSize: 13, color: "#64748b", marginTop: 4, fontWeight: 600 }}>상/하차 확인을 위한 안내입니다</div>
+            <div style={{ marginTop: 16, padding: "14px 16px", borderRadius: 14, background: "#F4F7FC", border: "1px solid #E3E8F0", fontSize: 14.5, lineHeight: 1.7, color: "#1e293b", fontWeight: 500 }}>
+              운송사에서 상/하차 여부를 확인하기 위하여 위치정보를 공유받을 수 있습니다.
+              <div style={{ fontSize: 13, color: "#64748b", marginTop: 8 }}>이 화면을 보고 계신 동안에만 위치가 전송되며, 화면을 벗어나거나 끄면 전송이 즉시 중단됩니다. 원치 않으시면 <b style={{ color: "#334155" }}>거절</b>을 눌러주세요.</div>
             </div>
-            <div style={{ display: "flex", gap: 10, padding: "20px 22px 22px" }}>
-              <button
-                onClick={() => { setLocConsent(false); setSharingLoc(false); }}
-                style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: "1.5px solid #e2e8f0", background: "white", color: "#475569", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
-              >
-                거절
-              </button>
-              <button
-                onClick={() => setLocConsent(true)}
-                style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: "none", background: "#1B2B4B", color: "white", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
-              >
-                승인
-              </button>
+            <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+              <button className="kpu-btn-ghost" style={{ flex: 1 }} onClick={() => { setLocConsent(false); setSharingLoc(false); }}>거절</button>
+              <button className="kpu-btn" style={{ flex: 1.5 }} onClick={() => setLocConsent(true)}>승인하고 시작</button>
             </div>
           </div>
         </div>
       )}
 
-      <div style={{ maxWidth: 480, margin: "0 auto", padding: "20px 16px 40px" }}>
+      <div style={{ maxWidth: 520, margin: "-6px auto 0", padding: "0 14px 120px", position: "relative" }}>
 
         {/* ── 로딩 ── */}
         {status === "loading" && (
-          <div style={cardStyle}>
-            <div style={{ textAlign: "center", padding: "40px 0", color: "#6b7280" }}>
-              <div style={{ fontWeight: 700, fontSize: 16 }}>배차 정보 불러오는 중...</div>
-            </div>
+          <div className="kpu-card" style={{ textAlign: "center", padding: "46px 20px" }}>
+            <div className="kpu-spin" style={{ width: 40, height: 40, margin: "0 auto 14px", borderRadius: "50%", border: "3px solid #DCE3EF", borderTopColor: "#1B2B4B" }} />
+            <div style={{ fontWeight: 800, fontSize: 16 }}>배차 정보 불러오는 중…</div>
+            <div className="kpu-mono" style={{ fontSize: 11, color: "#94A3B8", marginTop: 6, letterSpacing: "0.2em" }}>CONNECTING</div>
           </div>
         )}
 
-        {/* ── 오류 ── */}
-        {status === "error" && (
-          <div style={cardStyle}>
-            <div style={{ textAlign: "center", padding: "40px 0", color: "#ef4444" }}>
-              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>링크가 올바르지 않습니다</div>
-              <div style={{ color: "#9ca3af", fontSize: 13 }}>배차 담당자에게 링크를 다시 요청해주세요.</div>
+        {/* ── 오류 / 잠김 ── */}
+        {(status === "error" || status === "locked") && (
+          <div className="kpu-card" style={{ textAlign: "center", padding: "40px 22px" }}>
+            <div style={{ width: 60, height: 60, borderRadius: 20, margin: "0 auto 14px", background: "#F4F7FC", border: "1.5px solid #C9D3E4", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {status === "locked"
+                ? <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1B2B4B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+                : <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1B2B4B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2" /><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2" /><path d="M4 4l16 16" /></svg>}
             </div>
-          </div>
-        )}
-
-        {/* ── 이미 업로드 완료되어 재접속이 막힌 링크 ── */}
-        {status === "locked" && (
-          <div style={cardStyle}>
-            <div style={{ textAlign: "center", padding: "40px 0", color: "#ef4444" }}>
-              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>이미 업로드가 완료된 링크입니다</div>
-              <div style={{ color: "#9ca3af", fontSize: 13 }}>
-                이 링크로는 다시 접속하거나 재업로드할 수 없습니다.<br />
-                재업로드가 필요하면 배차 담당자에게 새 링크를 요청해주세요.
-              </div>
+            <div style={{ fontWeight: 900, fontSize: 18 }}>{status === "locked" ? "이미 업로드가 완료된 링크입니다" : "링크가 올바르지 않습니다"}</div>
+            <div style={{ color: "#64748b", fontSize: 14, marginTop: 8, lineHeight: 1.7 }}>
+              {status === "locked"
+                ? <>이 링크로는 다시 접속하거나 재업로드할 수 없습니다.<br />재업로드가 필요하면 배차 담당자에게 새 링크를 요청해주세요.</>
+                : "배차 담당자에게 링크를 다시 요청해주세요."}
             </div>
           </div>
         )}
 
         {/* ── 업로드 완료 ── */}
         {status === "done" && (
-          <div style={cardStyle}>
-            <div style={{ textAlign: "center", paddingTop: 24, paddingBottom: 8 }}>
-              <div style={{ fontWeight: 900, fontSize: 18, color: "#1B2B4B", marginBottom: 4 }}>업로드 완료!</div>
-              <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 16 }}>
-                {uploaded.length}개 파일이 전달되었습니다.
+          <div className="kpu-card" style={{ padding: "26px 18px 18px" }}>
+            <div style={{ textAlign: "center" }}>
+              <div className="kpu-pop" style={{ width: 76, height: 76, margin: "0 auto", borderRadius: "50%", background: "linear-gradient(135deg,#2D4C82,#1B2B4B)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 0 8px rgba(27,43,75,.08), 0 14px 30px rgba(27,43,75,.3)" }}>
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
               </div>
+              <div className="kpu-mono" style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.26em", color: "#4B6CB7", marginTop: 16 }}>UPLOAD COMPLETE</div>
+              <div style={{ fontWeight: 900, fontSize: 22, marginTop: 4 }}>전송이 완료되었습니다</div>
+              <div style={{ color: "#64748b", fontSize: 14, marginTop: 4 }}><b className="kpu-mono" style={{ color: "#1B2B4B" }}>{uploaded.length}</b>개 파일이 운송사에 전달되었습니다. 수고하셨습니다!</div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, margin: "18px 0 6px" }}>
               {uploaded.map((f, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, background: "#f8fafc", borderRadius: 10, padding: "10px 12px" }}>
-                  {f.url && (
-                    <img src={f.url} alt={f.name} style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 6, border: "1px solid #e2e8f0", flexShrink: 0 }} />
-                  )}
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, background: "#F4F7FC", border: "1px solid #E3E8F0", borderRadius: 14, padding: "10px 12px" }}>
+                  {f.url && <img src={f.url} alt={f.name} style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 10, border: "1px solid #DCE3EF", flexShrink: 0 }} />}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, color: "#1e293b", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
-                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>업로드 완료</div>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
+                    <div style={{ fontSize: 12, color: "#4B6CB7", fontWeight: 800, marginTop: 2 }}>✓ 전송 완료</div>
                   </div>
                   {f.docId && !isManual && (
                     <button
@@ -593,462 +603,219 @@ export default function UploadPage() {
                           await deleteDoc(doc(db, col, orderId, "attachments", f.docId));
                           await updateDoc(doc(db, col, orderId), { attachCount: increment(-1) });
                           setUploaded(prev => prev.filter((_, idx) => idx !== i));
-                        } catch(e) { alert("삭제 실패: " + e.message); }
+                        } catch (e) { alert("삭제 실패: " + e.message); }
                       }}
-                      style={{ padding: "5px 10px", borderRadius: 7, border: "1px solid #fca5a5", background: "#fff", color: "#ef4444", fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}
-                    >
-                      삭제
-                    </button>
+                      style={{ height: 32, padding: "0 12px", borderRadius: 9, border: "1px solid #C9D3E4", background: "#fff", color: "#1B2B4B", fontSize: 12.5, fontWeight: 800, cursor: "pointer", flexShrink: 0 }}
+                    >삭제</button>
                   )}
                 </div>
               ))}
             </div>
             {isManual && (
-              <button
-                onClick={() => { setStatus("ready"); setUploaded([]); }}
-                style={{ ...btnOutline, width: "100%", textAlign: "center" }}
-              >
-                추가 업로드
-              </button>
+              <button className="kpu-btn-ghost" style={{ width: "100%", marginTop: 8 }} onClick={() => { setStatus("ready"); setUploaded([]); setUploadStep(2); }}>추가 업로드</button>
             )}
           </div>
         )}
 
-        {/* ── 메인 업로드 UI ── */}
+        {/* ── 메인 업로드 ── */}
         {status === "ready" && (
           <>
           {uploadStep === 1 && (
           <>
-            {/* 오더 정보 카드 (오더 기반 모드) */}
+            {/* 운송 티켓(오더 기반) */}
             {!isManual && order && (
-              <div style={cardStyle}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                  <div style={{ width: 4, height: 20, background: "#1B2B4B", borderRadius: 2 }} />
-                  <span style={{ fontWeight: 700, fontSize: 14, color: "#1B2B4B" }}>배차 정보</span>
+              <div className="kpu-ticket">
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <span className="kpu-mono" style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: "0.22em", color: "#8FB0F0" }}>TRANSPORT TICKET</span>
+                  <span className="kpu-mono" style={{ fontSize: 12.5, fontWeight: 800, color: "#0F1A30", background: "#CFE0FF", padding: "3px 9px", borderRadius: 8 }}>{order.상차일 || "-"}</span>
                 </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                  <InfoBox label="기사명" value={order.이름 || "-"} />
-                  <InfoBox label="차량번호" value={order.차량번호 || "-"} />
-                  <InfoBox label="연락처" value={order.전화번호 ? <MaskedPhone value={order.전화번호} /> : "-"} />
-                  <div style={{ borderBottom: "2px solid #e2e8f0", padding: "0 2px 8px" }}>
-                    <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, marginBottom: 4 }}>상차일</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#1e293b" }}>{order.상차일 || "-"}</div>
-                    <div style={{ fontSize: 10, color: "#ef4444", marginTop: 2 }}>* 상차일 기준으로 선택하세요</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 10, marginTop: 16 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 800, color: "#8FB0F0" }}>상차지</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: "#fff", marginTop: 3, lineHeight: 1.25, wordBreak: "keep-all" }}>{pickupName}</div>
+                    {order.상차시간 && <div className="kpu-mono" style={{ fontSize: 12, color: "rgba(207,224,255,.75)", marginTop: 3 }}>{order.상차시간}</div>}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                    <svg width="34" height="18" viewBox="0 0 34 18"><path d="M1 9h28" stroke="#8FB0F0" strokeWidth="1.6" strokeDasharray="3 3" /><path d="M26 4l6 5-6 5" fill="none" stroke="#CFE0FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  </div>
+                  <div style={{ minWidth: 0, textAlign: "right" }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 800, color: "#8FB0F0" }}>하차지</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: "#fff", marginTop: 3, lineHeight: 1.25, wordBreak: "keep-all" }}>{dropName}</div>
+                    {order.하차시간 && <div className="kpu-mono" style={{ fontSize: 12, color: "rgba(207,224,255,.75)", marginTop: 3 }}>{order.하차시간}</div>}
                   </div>
                 </div>
-
-                <div style={{ marginTop: 16, display: "flex", alignItems: "flex-end", gap: 10 }}>
-                  <div style={{ flex: 1, borderBottom: "2px solid #e2e8f0", padding: "0 2px 8px" }}>
-                    <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, marginBottom: 4 }}>상차지</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#1e293b" }}>{order.상차지명 || "-"}</div>
-                  </div>
-                  <div style={{ color: "#94a3b8", fontSize: 16, paddingBottom: 8 }}>→</div>
-                  <div style={{ flex: 1, textAlign: "right", borderBottom: "2px solid #e2e8f0", padding: "0 2px 8px" }}>
-                    <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, marginBottom: 4 }}>하차지</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#1e293b" }}>{order.하차지명 || "-"}</div>
-                  </div>
-                </div>
-
-                {/* 실시간 위치 공유 토글 */}
-                <div style={{ marginTop: 10, background: "#f8fafc", borderRadius: 8, padding: "10px 12px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 6 }}>
-                        {sharingLoc && <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#10b981", display: "inline-block", animation: "uploadLocPulse 1.4s ease-in-out infinite" }} />}
-                        실시간 위치 공유
-                      </div>
-                      <div style={{ fontSize: 12, color: "#475569", marginTop: 3, lineHeight: 1.5, fontWeight: 500 }}>
-                        {sharingLoc
-                          ? "운송사에서 상/하차 여부를 확인하기 위하여 위치정보를 공유받고 있습니다. 원치 않으시면 버튼을 눌러 꺼주세요."
-                          : "운송사에서 상/하차 여부를 확인하기 위하여 위치정보를 공유받을 수 있습니다. 원하시면 버튼을 눌러 켜주세요."}
-                      </div>
+                <div className="kpu-perf" />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                  {[["기사", order.이름 || "-"], ["차량번호", order.차량번호 || "-"], ["연락처", order.전화번호 ? <MaskedPhone value={order.전화번호} /> : "-"]].map(([k, v]) => (
+                    <div key={k} style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: "#8FB0F0" }}>{k}</div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: "#fff", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v}</div>
                     </div>
-                    <button
-                      onClick={() => setSharingLoc(v => {
-                        const next = !v;
-                        // 수동으로 다시 "켜기"를 누르는 것도 명시적 동의로 취급한다 —
-                        // 팝업에서 거절한 뒤에도 이 버튼으로 다시 켤 수 있어야 한다.
-                        if (next) setLocConsent(true);
-                        return next;
-                      })}
-                      style={{
-                        padding: "8px 14px", borderRadius: 20, border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer",
-                        background: sharingLoc ? "#1B2B4B" : "#e2e8f0", color: sharingLoc ? "#fff" : "#475569",
-                      }}
-                    >
-                      {sharingLoc ? "끄기" : "켜기"}
-                    </button>
-                  </div>
-                  {locError && <div style={{ fontSize: 10.5, color: "#ef4444", marginTop: 6 }}>{locError}</div>}
+                  ))}
                 </div>
-                <style>{`@keyframes uploadLocPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }`}</style>
+                {(order.차량종류 || order.화물내용 || order.차량톤수) && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
+                    {[order.차량톤수, order.차량종류, order.화물내용].filter(Boolean).map((t) => (
+                      <span key={t} style={{ fontSize: 12, fontWeight: 800, color: "#CFE0FF", border: "1px solid rgba(143,176,240,.35)", background: "rgba(143,176,240,.1)", padding: "3px 9px", borderRadius: 8 }}>{t}</span>
+                    ))}
+                  </div>
+                )}
+                <div style={{ marginTop: 10, fontSize: 11.5, color: "rgba(207,224,255,.6)", fontWeight: 600 }}>* 서류는 상차일 기준으로 올려주세요</div>
               </div>
             )}
 
-            {/* 결제일 정보 버튼 */}
-            <button
-              onClick={() => setShowPaymentCalc(true)}
-              style={{ width: "100%", padding: "13px 16px", background: "#1B2B4B", color: "white", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-              결제일 정보
+            {/* 실시간 위치 공유 */}
+            {!isManual && order && (
+              <div className="kpu-card" style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 42, height: 42, borderRadius: 13, flexShrink: 0, background: sharingLoc ? "linear-gradient(135deg,#2D4C82,#1B2B4B)" : "#F4F7FC", border: sharingLoc ? "none" : "1px solid #E3E8F0", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+                  {sharingLoc && <span className="kpu-ring" />}
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={sharingLoc ? "#fff" : "#94A3B8"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 900 }}>실시간 위치 공유 <span className="kpu-mono" style={{ fontSize: 11, color: sharingLoc ? "#4B6CB7" : "#94A3B8", marginLeft: 4 }}>{sharingLoc ? "LIVE" : "OFF"}</span></div>
+                  <div style={{ fontSize: 12.5, color: "#64748b", marginTop: 2, lineHeight: 1.5 }}>
+                    {sharingLoc ? "상/하차 확인을 위해 위치를 공유하고 있습니다." : "켜면 운송사가 상/하차를 확인할 수 있습니다."}
+                    {lastLoc && sharingLoc && <span className="kpu-mono" style={{ display: "block", fontSize: 11, color: "#94A3B8" }}>{lastLoc.lat.toFixed(4)}, {lastLoc.lng.toFixed(4)}</span>}
+                  </div>
+                  {locError && <div style={{ fontSize: 12, color: "#1B2B4B", fontWeight: 700, marginTop: 4 }}>⚠ {locError}</div>}
+                </div>
+                <button
+                  onClick={() => setSharingLoc(v => {
+                    const next = !v;
+                    // 수동으로 다시 "켜기"를 누르는 것도 명시적 동의로 취급한다
+                    if (next) setLocConsent(true);
+                    return next;
+                  })}
+                  aria-label="위치 공유 켜기/끄기"
+                  style={{ position: "relative", width: 52, height: 30, borderRadius: 99, border: "none", cursor: "pointer", flexShrink: 0, background: sharingLoc ? "#1B2B4B" : "#DCE3EF", transition: "background .2s" }}
+                >
+                  <span style={{ position: "absolute", top: 3, left: sharingLoc ? 25 : 3, width: 24, height: 24, borderRadius: "50%", background: "#fff", boxShadow: "0 2px 6px rgba(0,0,0,.2)", transition: "left .2s" }} />
+                </button>
+              </div>
+            )}
+
+            {/* 수동 입력 */}
+            {isManual && (
+              <div className="kpu-card">
+                <div className="kpu-head"><span className="kpu-dot" />배차 정보 입력<span className="kpu-mono kpu-code">MANUAL</span></div>
+                {[
+                  ["상차일", "date", manualDate, setManualDate, "", "* 상차일 기준으로 선택하세요"],
+                  ["차량번호", "text", manualCar, setManualCar, "예: 12가 3456"],
+                  ["기사명", "text", manualName, setManualName, "기사 이름을 입력하세요"],
+                ].map(([label, type, val, set, ph, hint]) => (
+                  <label key={label} style={{ display: "block", marginTop: 12 }}>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: "#334155" }}>{label}{hint && <span style={{ fontSize: 11.5, color: "#4B6CB7", marginLeft: 6 }}>{hint}</span>}</span>
+                    <input type={type} value={val} onChange={e => set(e.target.value)} placeholder={ph} className="kpu-input" />
+                  </label>
+                ))}
+              </div>
+            )}
+
+            {/* 결제일 안내 */}
+            <button className="kpu-card kpu-row" onClick={() => setShowPaymentCalc(true)}>
+              <span style={{ width: 40, height: 40, borderRadius: 12, background: "#F4F7FC", border: "1px solid #E3E8F0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B2B4B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+              </span>
+              <span style={{ flex: 1, textAlign: "left" }}>
+                <span style={{ display: "block", fontSize: 15, fontWeight: 900, color: "#0F1A30" }}>결제일 안내</span>
+                <span style={{ display: "block", fontSize: 12.5, color: "#64748b", marginTop: 1 }}>계산서 발행일로 입금 예정일을 확인하세요</span>
+              </span>
+              <span style={{ color: "#94A3B8", fontSize: 20, fontWeight: 700 }}>›</span>
             </button>
 
-            {/* 결제일 정보 모달 */}
-            {showPaymentCalc && (
-              <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 9999 }} onClick={() => setShowPaymentCalc(false)}>
-                <div style={{ background: "white", borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 40px", boxShadow: "0 -8px 32px rgba(0,0,0,0.15)" }} onClick={e => e.stopPropagation()}>
-                  <div style={{ width: 40, height: 4, background: "#e2e8f0", borderRadius: 2, margin: "0 auto 20px" }} />
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                    <div style={{ width: 4, height: 20, background: "#1B2B4B", borderRadius: 2 }} />
-                    <span style={{ fontWeight: 700, fontSize: 15, color: "#1B2B4B" }}>결제일 정보</span>
-                  </div>
-
-                  {(!isManual && order && (order.지급방식 === "선불" || order.지급방식 === "착불")) ? (
-                    // 선불/착불 오더는 계산서 발행 규칙이 아니라 상차지와의 직접 정산 건이므로
-                    // 계산서/입금 계산 UI 대신 안내 문구 + (있으면) 상차지 담당자 연락처를 보여준다.
-                    <div style={{ marginTop: 14 }}>
-                      <div style={{ background: "#eef1f7", border: "1.5px solid #b8c5d9", borderRadius: 12, padding: "18px 16px" }}>
-                        <div style={{ fontSize: 14, color: "#1B2B4B", fontWeight: 800, lineHeight: 1.7 }}>
-                          📋 해당 오더는 <b>{order.지급방식}</b> 오더입니다.<br />
-                          상차지에 문의해주세요.
-                        </div>
-                        {order.상차지담당자번호 ? (
-                          <a
-                            href={`tel:${order.상차지담당자번호}`}
-                            style={{ marginTop: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                              background: "#1B2B4B", color: "white", borderRadius: 10, padding: "13px", fontWeight: 700, fontSize: 14, textDecoration: "none" }}
-                          >
-                            📞 상차지({order.상차지명 || "-"})로 바로 전화하기 · {order.상차지담당자번호}
-                          </a>
-                        ) : (
-                          <div style={{ marginTop: 10, fontSize: 12, color: "#64748b", lineHeight: 1.6 }}>
-                            등록된 상차지 담당자 연락처가 없습니다. 배차 담당자에게 문의해주세요.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <p style={{ fontSize: 12, color: "#94a3b8", marginBottom: 18, paddingLeft: 12 }}>계산서 발행일을 선택하면 입금 예정일을 안내해 드립니다.</p>
-
-                      <div style={{ marginBottom: 16 }}>
-                        <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>계산서 발행일</label>
-                        <input
-                          type="date"
-                          value={invoiceDate}
-                          onChange={e => setInvoiceDate(e.target.value)}
-                          style={{ width: "100%", padding: "11px 14px", border: "2px solid #1B2B4B", borderRadius: 10, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box", outline: "none", color: "#1e293b" }}
-                        />
-                      </div>
-
-                      {invoiceDate && (() => {
-                        const calc = calcPaymentDate(invoiceDate);
-                        if (!calc) return null;
-                        return (
-                          <div style={{ background: "#eef1f7", border: "1.5px solid #b8c5d9", borderRadius: 12, padding: "16px" }}>
-                            <div style={{ fontSize: 11, color: "#1B2B4B", fontWeight: 700, marginBottom: 6 }}>{calc.desc}</div>
-                            <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>입금 예정일</div>
-                            <div style={{ fontSize: 18, fontWeight: 900, color: "#1B2B4B" }}>{calc.result}</div>
-                            <div style={{ marginTop: 12, padding: "10px 12px", background: "white", borderRadius: 8, fontSize: 11, color: "#64748b", lineHeight: 1.6 }}>
-                              <div style={{ fontWeight: 700, color: "#374151", marginBottom: 4 }}>입금 규칙 안내</div>
-                              <div>계산서 발행일로부터 {payDays}일 후 입금 (주말이면 다음 월요일)</div>
-                              <div style={{ marginTop: 6, color: "#9ca3af", fontSize: 10 }}>* 공휴일의 경우 담당자에게 문의해 주세요.</div>
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      {!invoiceDate && (
-                        <div style={{ background: "#f8fafc", borderRadius: 10, padding: "14px", fontSize: 12, color: "#64748b", lineHeight: 1.7 }}>
-                          <div style={{ fontWeight: 700, color: "#374151", marginBottom: 6 }}>입금 규칙 안내</div>
-                          <div>계산서 발행일로부터 {payDays}일 후 입금 (주말이면 다음 월요일)</div>
-                          <div style={{ marginTop: 8, color: "#9ca3af", fontSize: 11 }}>* 공휴일의 경우 담당자에게 문의해 주세요.</div>
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  <button
-                    onClick={() => setShowPaymentCalc(false)}
-                    style={{ marginTop: 20, width: "100%", padding: "13px", background: "#f1f5f9", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, color: "#64748b", cursor: "pointer" }}
-                  >닫기</button>
-                </div>
+            {/* 확인사항 */}
+            <div className="kpu-card">
+              <div className="kpu-head">
+                <span className="kpu-dot" />업로드 전 확인사항
+                <span className="kpu-mono" style={{ marginLeft: "auto", fontSize: 13, fontWeight: 800, color: allChecked ? "#1B2B4B" : "#94A3B8" }}>{checks.filter(Boolean).length}/{checks.length}</span>
               </div>
-            )}
-
-            {/* 수동 입력 카드 (수동 모드) */}
-            {isManual && (
-              <div style={cardStyle}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                  <div style={{ width: 4, height: 20, background: "#1B2B4B", borderRadius: 2 }} />
-                  <span style={{ fontWeight: 700, fontSize: 14, color: "#1B2B4B" }}>배차 정보 입력</span>
-                </div>
-
-                {/* 상차일 */}
-                <div style={{ marginBottom: 16 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                    <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>상차일</label>
-                    <span style={{ fontSize: 11, color: "#ef4444", fontWeight: 600 }}>* 상차일 기준으로 선택하세요</span>
-                  </div>
-                  <input
-                    type="date"
-                    value={manualDate}
-                    onChange={e => setManualDate(e.target.value)}
-                    style={underlineInputStyle}
-                    onFocus={e => { e.target.style.borderColor = "#1B2B4B"; }}
-                    onBlur={e => { e.target.style.borderColor = "#e2e8f0"; }}
-                  />
-                </div>
-
-                {/* 차량번호 */}
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>차량번호</label>
-                  <input
-                    type="text"
-                    value={manualCar}
-                    onChange={e => setManualCar(e.target.value)}
-                    placeholder="예: 12가 3456"
-                    style={underlineInputStyle}
-                    onFocus={e => { e.target.style.borderColor = "#1B2B4B"; }}
-                    onBlur={e => { e.target.style.borderColor = "#e2e8f0"; }}
-                  />
-                </div>
-
-                {/* 기사명 */}
-                <div>
-                  <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>기사명</label>
-                  <input
-                    type="text"
-                    value={manualName}
-                    onChange={e => setManualName(e.target.value)}
-                    placeholder="기사 이름을 입력하세요"
-                    style={underlineInputStyle}
-                    onFocus={e => { e.target.style.borderColor = "#1B2B4B"; }}
-                    onBlur={e => { e.target.style.borderColor = "#e2e8f0"; }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* 체크리스트 카드 */}
-            <div style={cardStyle}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                <div style={{ width: 4, height: 20, background: "#1B2B4B", borderRadius: 2 }} />
-                <span style={{ fontWeight: 700, fontSize: 14, color: "#1B2B4B" }}>업로드 전 확인사항</span>
-                <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: allChecked ? "#1B2B4B" : "#94a3b8" }}>
-                  {checks.filter(Boolean).length}/{checks.length} 완료
-                </span>
+              <div style={{ height: 6, borderRadius: 99, background: "#EEF1F6", overflow: "hidden", margin: "4px 0 12px" }}>
+                <div style={{ height: "100%", width: `${checks.length ? (checks.filter(Boolean).length / checks.length) * 100 : 0}%`, background: "linear-gradient(90deg,#4B6CB7,#1B2B4B)", transition: "width .25s" }} />
               </div>
               {checkItems.map((text, i) => (
-                <div key={i} onClick={() => setChecks(prev => { const n=[...prev]; n[i]=!n[i]; return n; })}
-                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
-                    borderRadius: 10, marginBottom: 8, cursor: "pointer",
-                    background: checks[i] ? "#1B2B4B" : "#f8fafc",
-                    border: `1.5px solid ${checks[i] ? "#1B2B4B" : "#e2e8f0"}`,
-                    transition: "all 0.15s" }}>
-                  <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                    background: checks[i] ? "white" : "white",
-                    border: `2px solid ${checks[i] ? "white" : "#cbd5e1"}`,
-                    display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {checks[i] && <span style={{ color: "#1B2B4B", fontSize: 13, fontWeight: 900, lineHeight: 1 }}>✓</span>}
-                  </div>
-                  <span style={{ fontSize: 13, color: checks[i] ? "#ffffff" : "#374151",
-                    fontWeight: checks[i] ? 700 : 400 }}>{text}</span>
+                <div key={i} onClick={() => setChecks(prev => { const n = [...prev]; n[i] = !n[i]; return n; })}
+                  className="kpu-check" style={{ background: checks[i] ? "linear-gradient(135deg,#1B2B4B,#2D4C82)" : "#F7F9FC", borderColor: checks[i] ? "#1B2B4B" : "#E3E8F0" }}>
+                  <span style={{ width: 24, height: 24, borderRadius: 8, flexShrink: 0, background: checks[i] ? "#fff" : "#fff", border: `2px solid ${checks[i] ? "#fff" : "#C9D3E4"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {checks[i] && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1B2B4B" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}
+                  </span>
+                  <span style={{ fontSize: 14.5, color: checks[i] ? "#fff" : "#1e293b", fontWeight: checks[i] ? 800 : 600, lineHeight: 1.45 }}>{text}</span>
                 </div>
               ))}
-              <div style={{ marginTop: 10, background: "#eef2f8", border: "1.5px solid #c7d2e3", borderRadius: 10, padding: "12px 14px" }}>
-                <div style={{ fontSize: 13, color: "#1B2B4B", fontWeight: 800, lineHeight: 1.6 }}>
-                  ⚠️ 파렛트 전표나 거래명세서가 없다면 업로드하지 않으셔도 됩니다.
-                </div>
-                <div style={{ fontSize: 12.5, color: "#374151", fontWeight: 600, marginTop: 6, lineHeight: 1.6 }}>
-                  위 항목만 모두 체크하면 다음 단계로 진행할 수 있습니다.
-                </div>
+              <div style={{ marginTop: 6, padding: "12px 14px", borderRadius: 12, background: "#EEF3FB", border: "1px solid #C9D3E4" }}>
+                <div style={{ fontSize: 13.5, color: "#1B2B4B", fontWeight: 800, lineHeight: 1.6 }}>파렛트 전표나 거래명세서가 없다면 업로드하지 않으셔도 됩니다.</div>
+                <div style={{ fontSize: 12.5, color: "#475569", fontWeight: 600, marginTop: 3 }}>위 항목을 모두 체크하면 다음 단계로 진행할 수 있습니다.</div>
               </div>
             </div>
 
-            {/* 다음 버튼: 확인사항을 모두 체크해야 활성화 */}
-            <button
-              onClick={() => allChecked && setUploadStep(2)}
-              disabled={!allChecked}
-              style={{
-                width: "100%",
-                padding: "14px",
-                borderRadius: 12,
-                border: "none",
-                background: allChecked ? "#1B2B4B" : "#cbd5e1",
-                opacity: allChecked ? 1 : 0.7,
-                color: "white",
-                fontWeight: 700,
-                fontSize: 15,
-                cursor: allChecked ? "pointer" : "not-allowed",
-                fontFamily: "'Noto Sans KR', sans-serif",
-                transition: "background 0.2s",
-              }}
-            >
-              다음
-            </button>
+            <div className="kpu-dock">
+              <button className="kpu-btn" style={{ width: "100%", height: 54, fontSize: 16 }} disabled={!allChecked} onClick={() => allChecked && setUploadStep(2)}>
+                {allChecked ? "다음 단계 — 사진 촬영" : `확인사항을 체크해주세요 (${checks.filter(Boolean).length}/${checks.length})`}
+              </button>
+            </div>
           </>
           )}
 
           {uploadStep === 2 && (
           <>
-            {/* 이전 단계로 */}
-            <button
-              onClick={() => setUploadStep(1)}
-              style={{ background: "none", border: "none", color: "#6b7280", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: "4px 0 12px", display: "flex", alignItems: "center", gap: 4 }}
-            >
-              ← 배차정보로 돌아가기
+            <button onClick={() => setUploadStep(1)} style={{ background: "none", border: "none", color: "#475569", fontSize: 14, fontWeight: 800, cursor: "pointer", padding: "14px 2px 8px", display: "flex", alignItems: "center", gap: 4 }}>
+              ‹ 확인사항으로 돌아가기
             </button>
 
-            {/* 거래명세서 예시 */}
-            <div style={cardStyle}>
-              <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid #e2e8f0", cursor: "zoom-in" }}
-                onClick={() => setImgZoomOpen(true)}>
-                <img src="/거래명세서.png" alt="거래명세서 예시" style={{ width: "100%", display: "block" }}
-                  onError={(e) => { e.target.style.display = "none"; }} />
-              </div>
-              <div style={{ textAlign: "center", marginTop: 8, fontSize: 12, color: "#94a3b8" }}>거래명세서 예시 (클릭하여 확대)</div>
-            </div>
-
-            {/* 거래명세서 이미지 확대 모달 */}
-            {imgZoomOpen && (
-              <div
-                style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "none" }}
-                onClick={() => setImgZoomOpen(false)}
-              >
-                <button
-                  onClick={() => setImgZoomOpen(false)}
-                  style={{ position: "absolute", top: 16, right: 16, background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "50%", width: 40, height: 40, color: "white", fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2 }}
-                >✕</button>
-                <div
-                  ref={imgZoomRef}
-                  style={{ touchAction: "none", userSelect: "none", display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "100%" }}
-                  onClick={e => e.stopPropagation()}
-                  onPointerDown={e => {
-                    const p = imgPinchRef.current;
-                    p.pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
-                    e.currentTarget.setPointerCapture(e.pointerId);
-                    const pts = Object.values(p.pointers);
-                    if (pts.length === 2) {
-                      const dx = pts[1].x - pts[0].x, dy = pts[1].y - pts[0].y;
-                      p.dist = Math.sqrt(dx*dx + dy*dy);
-                      p.baseScale = p.scale;
-                      p.baseTx = p.tx; p.baseTy = p.ty;
-                    } else if (pts.length === 1) {
-                      p.baseTx = p.tx; p.baseTy = p.ty;
-                      p.startX = e.clientX; p.startY = e.clientY;
-                    }
-                  }}
-                  onPointerMove={e => {
-                    const p = imgPinchRef.current;
-                    p.pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
-                    const pts = Object.values(p.pointers);
-                    const img = imgZoomRef.current?.querySelector("img");
-                    if (!img) return;
-                    if (pts.length === 2) {
-                      const dx = pts[1].x - pts[0].x, dy = pts[1].y - pts[0].y;
-                      const newDist = Math.sqrt(dx*dx + dy*dy);
-                      p.scale = Math.min(Math.max(p.baseScale * (newDist / p.dist), 0.5), 5);
-                    } else if (pts.length === 1 && p.scale > 1) {
-                      p.tx = p.baseTx + (e.clientX - p.startX);
-                      p.ty = p.baseTy + (e.clientY - p.startY);
-                    }
-                    img.style.transform = `scale(${p.scale}) translate(${p.tx/p.scale}px, ${p.ty/p.scale}px)`;
-                  }}
-                  onPointerUp={e => {
-                    delete imgPinchRef.current.pointers[e.pointerId];
-                    const pts = Object.values(imgPinchRef.current.pointers);
-                    if (pts.length === 1) {
-                      imgPinchRef.current.startX = pts[0].x;
-                      imgPinchRef.current.startY = pts[0].y;
-                      imgPinchRef.current.baseTx = imgPinchRef.current.tx;
-                      imgPinchRef.current.baseTy = imgPinchRef.current.ty;
-                    }
-                  }}
-                >
-                  <img
-                    src="/거래명세서.png"
-                    alt="거래명세서 예시"
-                    style={{ maxWidth: "90vw", maxHeight: "90vh", objectFit: "contain", transformOrigin: "center center", transition: "transform 0.05s", userSelect: "none", pointerEvents: "none" }}
-                    onError={e => { e.target.style.display = "none"; }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* 업로드 영역 */}
-            <div style={cardStyle}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                <div style={{ width: 4, height: 20, background: "#3b82f6", borderRadius: 2 }} />
-                <span style={{ fontWeight: 700, fontSize: 14, color: "#1B2B4B" }}>파일 선택</span>
-              </div>
-
+            {/* 촬영 영역 */}
+            <div className="kpu-card">
+              <div className="kpu-head"><span className="kpu-dot" />서류 사진<span className="kpu-mono kpu-code">CAPTURE</span></div>
               <div
                 onClick={() => inputRef.current?.click()}
                 onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
                 onDragLeave={() => setDrag(false)}
                 onDrop={(e) => { e.preventDefault(); setDrag(false); handleFiles(e.dataTransfer.files); }}
-                style={{
-                  border: `2px dashed ${drag ? "#3b82f6" : "#cbd5e1"}`,
-                  borderRadius: 12,
-                  padding: "28px 16px",
-                  textAlign: "center",
-                  cursor: "pointer",
-                  background: drag ? "#eff6ff" : "#f8fafc",
-                  transition: "all 0.2s",
-                  marginBottom: 14,
-                }}
+                className="kpu-drop"
+                style={{ borderColor: drag ? "#1B2B4B" : "#9FB2D6", background: drag ? "#EEF3FB" : "linear-gradient(180deg,#F7F9FC,#EEF3FB)" }}
               >
-                <div style={{ fontSize: 36, marginBottom: 8, color: "#94a3b8" }}>+</div>
-                <div style={{ fontWeight: 700, color: "#1B2B4B", fontSize: 15, marginBottom: 4 }}>사진을 탭하여 선택하세요</div>
-                <div style={{ fontSize: 12, color: "#94a3b8" }}>JPG, PNG, PDF 지원 · 여러 장 동시 선택 가능</div>
-                <input
-                  ref={inputRef}
-                  type="file"
-                  accept="image/*,application/pdf"
-                  multiple
-                  style={{ display: "none" }}
-                  onChange={(e) => handleFiles(e.target.files)}
-                />
+                <span className="kpu-corner tl" /><span className="kpu-corner tr" /><span className="kpu-corner bl" /><span className="kpu-corner br" />
+                <div style={{ width: 62, height: 62, borderRadius: 20, margin: "0 auto 12px", background: "linear-gradient(135deg,#2D4C82,#1B2B4B)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 10px 22px rgba(27,43,75,.3)" }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg>
+                </div>
+                <div style={{ fontWeight: 900, fontSize: 17 }}>촬영하거나 사진을 선택하세요</div>
+                <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>JPG · PNG · PDF · 여러 장 한 번에 가능</div>
+                <input ref={inputRef} type="file" accept="image/*,application/pdf" multiple style={{ display: "none" }} onChange={(e) => handleFiles(e.target.files)} />
               </div>
 
               {previews.length > 0 && (
-                <div style={{ marginBottom: 14 }}>
-                  <div style={{ fontSize: 12, color: "#6b7280", fontWeight: 600, marginBottom: 8 }}>선택된 파일 ({previews.length}장)</div>
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+                    <span style={{ fontSize: 13.5, fontWeight: 800, color: "#334155" }}>선택된 파일</span>
+                    <span className="kpu-mono" style={{ fontSize: 14, fontWeight: 800, color: "#1B2B4B" }}>{previews.length}장</span>
+                  </div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
                     {previews.map((p, i) => (
-                      <div key={i} style={{ position: "relative", borderRadius: 8, overflow: "hidden", aspectRatio: "1", background: "#f1f5f9" }}>
+                      <div key={i} style={{ position: "relative", borderRadius: 12, overflow: "hidden", aspectRatio: "1", background: "#EEF1F6", border: "1px solid #DCE3EF" }}>
                         {p.type.startsWith("image/") ? (
                           <img src={p.src} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                         ) : (
-                          <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontSize: 28 }}>
-                            <span style={{ fontSize: 22, fontWeight: 700, color: "#6b7280" }}>PDF</span>
-                            <span style={{ fontSize: 10, color: "#6b7280", marginTop: 4 }}>PDF</span>
-                          </div>
+                          <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><span className="kpu-mono" style={{ fontSize: 18, fontWeight: 800, color: "#1B2B4B" }}>PDF</span></div>
                         )}
+                        <span className="kpu-mono" style={{ position: "absolute", left: 6, bottom: 6, fontSize: 10.5, fontWeight: 800, color: "#fff", background: "rgba(15,26,48,.75)", padding: "1px 6px", borderRadius: 6 }}>{String(i + 1).padStart(2, "0")}</span>
                         {uploading && progress[i] > 0 && progress[i] < 100 && (
-                          <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <span style={{ color: "white", fontWeight: 700, fontSize: 16 }}>{progress[i]}%</span>
+                          <div style={{ position: "absolute", inset: 0, background: "rgba(15,26,48,.6)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                            <span className="kpu-mono" style={{ color: "#fff", fontWeight: 800, fontSize: 17 }}>{progress[i]}%</span>
+                            <span style={{ width: "70%", height: 4, borderRadius: 99, background: "rgba(255,255,255,.25)", overflow: "hidden" }}><span style={{ display: "block", height: "100%", width: `${progress[i]}%`, background: "#CFE0FF" }} /></span>
                           </div>
                         )}
                         {uploading && progress[i] === 100 && (
-                          <div style={{ position: "absolute", inset: 0, background: "rgba(5,150,105,0.7)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <span style={{ color: "white", fontSize: 24 }}>✓</span>
+                          <div style={{ position: "absolute", inset: 0, background: "rgba(27,43,75,.72)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
                           </div>
                         )}
                         {uploading && progress[i] === -1 && (
-                          <div style={{ position: "absolute", inset: 0, background: "rgba(220,38,38,0.75)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                            <span style={{ color: "white", fontSize: 20 }}>✕</span>
-                            <span style={{ color: "white", fontSize: 11, fontWeight: 700, marginTop: 2 }}>실패</span>
+                          <div style={{ position: "absolute", inset: 0, background: "rgba(15,26,48,.82)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                            <span style={{ color: "#fff", fontSize: 20, fontWeight: 900 }}>!</span>
+                            <span style={{ color: "#fff", fontSize: 12, fontWeight: 800 }}>실패 · 다시 시도</span>
                           </div>
                         )}
                         {!uploading && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); removeFile(i); }}
-                            style={{ position: "absolute", top: 4, right: 4, width: 20, height: 20, borderRadius: "50%", background: "rgba(0,0,0,0.6)", color: "white", border: "none", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}
-                          >×</button>
+                          <button onClick={(e) => { e.stopPropagation(); removeFile(i); }}
+                            style={{ position: "absolute", top: 6, right: 6, width: 24, height: 24, borderRadius: 8, background: "rgba(15,26,48,.75)", color: "#fff", border: "none", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>×</button>
                         )}
                       </div>
                     ))}
@@ -1056,133 +823,206 @@ export default function UploadPage() {
                 </div>
               )}
 
+              {/* 거래명세서 예시 */}
+              <button onClick={() => setImgZoomOpen(true)} style={{ marginTop: 14, width: "100%", display: "flex", alignItems: "center", gap: 12, padding: 10, borderRadius: 14, border: "1px solid #E3E8F0", background: "#fff", cursor: "zoom-in", textAlign: "left" }}>
+                <img src="/거래명세서.png" alt="거래명세서 예시" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 10, border: "1px solid #E3E8F0", flexShrink: 0 }} onError={(e) => { e.target.style.display = "none"; }} />
+                <span style={{ flex: 1 }}>
+                  <span style={{ display: "block", fontSize: 14, fontWeight: 900 }}>거래명세서 촬영 예시</span>
+                  <span style={{ display: "block", fontSize: 12.5, color: "#64748b", marginTop: 2 }}>한 장씩 선명하게 · 누르면 크게 보기</span>
+                </span>
+                <span style={{ color: "#94A3B8", fontSize: 20 }}>›</span>
+              </button>
             </div>
 
-            {/* 서명 카드 (마지막 단계) */}
-            <div style={cardStyle}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                <div style={{ width: 4, height: 20, background: "#1B2B4B", borderRadius: 2 }} />
-                <span style={{ fontWeight: 700, fontSize: 14, color: "#1B2B4B" }}>서명</span>
-                {signed && <span style={{ marginLeft: "auto", fontSize: 11, color: "#059669", fontWeight: 700 }}>서명 완료</span>}
+            {/* 서명 */}
+            <div className="kpu-card">
+              <div className="kpu-head">
+                <span className="kpu-dot" />서명
+                {signed
+                  ? <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 900, color: "#fff", background: "#1B2B4B", padding: "3px 9px", borderRadius: 8 }}>✓ 서명 완료</span>
+                  : <span className="kpu-mono kpu-code">SIGNATURE</span>}
               </div>
-              <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 10 }}>
-                아래 칸에 서명해주세요 (손가락으로 서명)
-              </div>
-              <canvas
-                ref={sigRef}
-                width={440}
-                height={120}
-                style={{ width: "100%", height: 120, border: "1.5px solid #cbd5e1", borderRadius: 10, background: "#f8fafc", touchAction: "none", display: "block", pointerEvents: signed ? "none" : "auto" }}
-                onPointerDown={(e) => {
-                  if (signed) return;
-                  // 서명칸에 touchAction:"none"이 걸려 있는데, 포인터를 이 캔버스에
-                  // 명시적으로 캡처해두지 않으면 손가락이 캔버스 경계를 살짝 벗어나는
-                  // 순간 브라우저가 "스크롤해야 하나 그려야 하나" 판단을 못 해 그 제스처
-                  // 전체가 멈춰버리는 기종이 있었다(일부 안드로이드/윈도우 터치 기기).
-                  // 캡처해두면 손가락이 캔버스 밖으로 나가도 이벤트가 계속 이 캔버스로만
-                  // 온다 — 서명 중 화면이 안 넘어가고 버벅이던 현상의 원인.
-                  try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
-                  setSigDrawing(true);
-                  const rect = sigRef.current.getBoundingClientRect();
-                  const ctx = sigRef.current.getContext("2d");
-                  const scaleX = sigRef.current.width / rect.width;
-                  const scaleY = sigRef.current.height / rect.height;
-                  ctx.beginPath();
-                  ctx.moveTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY);
-                }}
-                onPointerMove={(e) => {
-                  if (!sigDrawing || signed) return;
-                  const rect = sigRef.current.getBoundingClientRect();
-                  const ctx = sigRef.current.getContext("2d");
-                  const scaleX = sigRef.current.width / rect.width;
-                  const scaleY = sigRef.current.height / rect.height;
-                  ctx.lineWidth = 2.5;
-                  ctx.strokeStyle = "#1B2B4B";
-                  ctx.lineCap = "round";
-                  ctx.lineTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY);
-                  ctx.stroke();
-                }}
-                onPointerUp={(e) => {
-                  try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
-                  setSigDrawing(prevDrawing => {
-                    if (prevDrawing) setSigned(true);
-                    return false;
-                  });
-                }}
-                onPointerLeave={(e) => {
-                  // 포인터를 캡처한 상태라 대부분은 여기 도달하지 않고 onPointerUp으로
-                  // 끝나지만, 캡처를 지원하지 않는 기종을 위한 안전장치로 남겨둔다.
-                  try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
-                  setSigDrawing(prevDrawing => {
-                    if (prevDrawing) setSigned(true);
-                    return false;
-                  });
-                }}
-              />
-              <button
-                onClick={() => {
-                  const ctx = sigRef.current.getContext("2d");
-                  ctx.clearRect(0, 0, sigRef.current.width, sigRef.current.height);
-                  setSigned(false);
-                }}
-                style={{ marginTop: 8, padding: "6px 14px", borderRadius: 7, border: "1px solid #e2e8f0", background: "white", color: "#6b7280", fontSize: 12, cursor: "pointer" }}
-              >
-                다시 서명
-              </button>
-
-              {files.length > 0 && (
-                <button
-                  onClick={() => setConfirmPopup(true)}
-                  disabled={uploading}
-                  style={{
-                    width: "100%",
-                    marginTop: 16,
-                    padding: "14px",
-                    borderRadius: 12,
-                    border: "none",
-                    background: uploading ? "#94a3b8" : "#1B2B4B",
-                    color: "white",
-                    fontWeight: 700,
-                    fontSize: 15,
-                    cursor: uploading ? "not-allowed" : "pointer",
-                    fontFamily: "'Noto Sans KR', sans-serif",
-                    transition: "background 0.2s",
+              <div style={{ fontSize: 13, color: "#64748b", margin: "2px 0 10px" }}>아래 칸에 손가락으로 서명해주세요</div>
+              <div style={{ position: "relative" }}>
+                <canvas
+                  ref={sigRef}
+                  width={440}
+                  height={140}
+                  style={{ width: "100%", height: 140, border: `1.5px ${signed ? "solid #1B2B4B" : "dashed #9FB2D6"}`, borderRadius: 14, background: "repeating-linear-gradient(0deg,#F7F9FC 0 27px,#EEF1F6 27px 28px)", touchAction: "none", display: "block", pointerEvents: signed ? "none" : "auto" }}
+                  onPointerDown={(e) => {
+                    if (signed) return;
+                    // 포인터를 캔버스에 캡처 — 손가락이 경계를 벗어나도 서명이 끊기지 않게
+                    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+                    setSigDrawing(true);
+                    const rect = sigRef.current.getBoundingClientRect();
+                    const ctx = sigRef.current.getContext("2d");
+                    const scaleX = sigRef.current.width / rect.width;
+                    const scaleY = sigRef.current.height / rect.height;
+                    ctx.beginPath();
+                    ctx.moveTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY);
                   }}
-                >
-                  {uploading ? `업로드 중...` : `${files.length}장 업로드하기`}
-                </button>
-              )}
+                  onPointerMove={(e) => {
+                    if (!sigDrawing || signed) return;
+                    const rect = sigRef.current.getBoundingClientRect();
+                    const ctx = sigRef.current.getContext("2d");
+                    const scaleX = sigRef.current.width / rect.width;
+                    const scaleY = sigRef.current.height / rect.height;
+                    ctx.lineWidth = 2.8;
+                    ctx.strokeStyle = "#0F1A30";
+                    ctx.lineCap = "round";
+                    ctx.lineJoin = "round";
+                    ctx.lineTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY);
+                    ctx.stroke();
+                  }}
+                  onPointerUp={(e) => {
+                    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+                    setSigDrawing(prevDrawing => { if (prevDrawing) setSigned(true); return false; });
+                  }}
+                  onPointerLeave={(e) => {
+                    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+                    setSigDrawing(prevDrawing => { if (prevDrawing) setSigned(true); return false; });
+                  }}
+                />
+                {!signed && <span className="kpu-mono" style={{ position: "absolute", left: 14, bottom: 10, fontSize: 11, color: "#A7B3C6", pointerEvents: "none", letterSpacing: "0.2em" }}>SIGN HERE ✕ ______</span>}
+              </div>
+              <button
+                onClick={() => { const ctx = sigRef.current.getContext("2d"); ctx.clearRect(0, 0, sigRef.current.width, sigRef.current.height); setSigned(false); }}
+                style={{ marginTop: 10, height: 36, padding: "0 14px", borderRadius: 10, border: "1px solid #DCE3EF", background: "#fff", color: "#475569", fontSize: 13, fontWeight: 800, cursor: "pointer" }}
+              >다시 서명</button>
+            </div>
+
+            <div className="kpu-dock">
+              <button className="kpu-btn" style={{ width: "100%", height: 54, fontSize: 16 }} disabled={!files.length || uploading} onClick={() => setConfirmPopup(true)}>
+                {uploading ? "전송 중…" : files.length ? `${files.length}장 전송하기` : "사진을 먼저 선택해주세요"}
+              </button>
             </div>
           </>
           )}
           </>
         )}
 
-        {/* ── 업로드 등록 확인 팝업 ── */}
+        {/* 결제일 안내 시트 */}
+        {showPaymentCalc && (
+          <div className="kpu-overlay" style={{ alignItems: "flex-end" }} onClick={() => setShowPaymentCalc(false)}>
+            <div className="kpu-sheet" onClick={e => e.stopPropagation()}>
+              <div style={{ width: 40, height: 4, background: "#DCE3EF", borderRadius: 2, margin: "0 auto 16px" }} />
+              <div className="kpu-mono" style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: "0.24em", color: "#4B6CB7" }}>PAYMENT</div>
+              <div style={{ fontWeight: 900, fontSize: 19, marginTop: 2 }}>결제일 안내</div>
+              {(!isManual && order && (order.지급방식 === "선불" || order.지급방식 === "착불")) ? (
+                // 선불/착불 오더는 상차지와 직접 정산 — 안내 + 상차지 담당자 연락처
+                <div style={{ marginTop: 14, padding: "16px", borderRadius: 14, background: "#EEF3FB", border: "1px solid #C9D3E4" }}>
+                  <div style={{ fontSize: 15, color: "#1B2B4B", fontWeight: 800, lineHeight: 1.7 }}>해당 오더는 <b>{order.지급방식}</b> 오더입니다.<br />상차지에 문의해주세요.</div>
+                  {order.상차지담당자번호 ? (
+                    <a href={`tel:${order.상차지담당자번호}`} className="kpu-btn" style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, textDecoration: "none", height: 50 }}>
+                      상차지({order.상차지명 || "-"}) 전화하기 · {order.상차지담당자번호}
+                    </a>
+                  ) : (
+                    <div style={{ marginTop: 10, fontSize: 13, color: "#64748b" }}>등록된 상차지 담당자 연락처가 없습니다. 배차 담당자에게 문의해주세요.</div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>계산서 발행일을 고르면 입금 예정일을 알려드립니다.</div>
+                  <label style={{ display: "block", marginTop: 14, fontSize: 13, fontWeight: 800, color: "#334155" }}>계산서 발행일
+                    <input type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} className="kpu-input" />
+                  </label>
+                  {invoiceDate && (() => {
+                    const calc = calcPaymentDate(invoiceDate);
+                    if (!calc) return null;
+                    return (
+                      <div style={{ marginTop: 14, borderRadius: 16, padding: "16px 18px", color: "#fff", background: "linear-gradient(135deg,#0F1A30,#1B2B4B 60%,#2D4C82)" }}>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: "#8FB0F0" }}>{calc.desc}</div>
+                        <div style={{ fontSize: 12.5, color: "rgba(207,224,255,.7)", marginTop: 8 }}>입금 예정일</div>
+                        <div className="kpu-mono" style={{ fontSize: 22, fontWeight: 800, marginTop: 2 }}>{calc.result}</div>
+                      </div>
+                    );
+                  })()}
+                  <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 12, background: "#F7F9FC", border: "1px solid #E3E8F0", fontSize: 13, color: "#475569", lineHeight: 1.7 }}>
+                    <b style={{ color: "#0F1A30" }}>입금 규칙</b> · 계산서 발행일로부터 {payDays}일 후 입금 (주말이면 다음 월요일)
+                    <div style={{ fontSize: 12, color: "#94A3B8" }}>* 공휴일은 담당자에게 문의해 주세요.</div>
+                  </div>
+                </>
+              )}
+              <button className="kpu-btn-ghost" style={{ width: "100%", marginTop: 16 }} onClick={() => setShowPaymentCalc(false)}>닫기</button>
+            </div>
+          </div>
+        )}
+
+        {/* 거래명세서 확대 */}
+        {imgZoomOpen && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(11,20,40,0.94)", zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "none" }} onClick={() => setImgZoomOpen(false)}>
+            <button onClick={() => setImgZoomOpen(false)} style={{ position: "absolute", top: 16, right: 16, background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,.25)", borderRadius: 12, width: 42, height: 42, color: "white", fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2 }}>✕</button>
+            <div
+              ref={imgZoomRef}
+              style={{ touchAction: "none", userSelect: "none", display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "100%" }}
+              onClick={e => e.stopPropagation()}
+              onPointerDown={e => {
+                const p = imgPinchRef.current;
+                p.pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+                e.currentTarget.setPointerCapture(e.pointerId);
+                const pts = Object.values(p.pointers);
+                if (pts.length === 2) {
+                  const dx = pts[1].x - pts[0].x, dy = pts[1].y - pts[0].y;
+                  p.dist = Math.sqrt(dx * dx + dy * dy);
+                  p.baseScale = p.scale;
+                  p.baseTx = p.tx; p.baseTy = p.ty;
+                } else if (pts.length === 1) {
+                  p.baseTx = p.tx; p.baseTy = p.ty;
+                  p.startX = e.clientX; p.startY = e.clientY;
+                }
+              }}
+              onPointerMove={e => {
+                const p = imgPinchRef.current;
+                p.pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+                const pts = Object.values(p.pointers);
+                const img = imgZoomRef.current?.querySelector("img");
+                if (!img) return;
+                if (pts.length === 2) {
+                  const dx = pts[1].x - pts[0].x, dy = pts[1].y - pts[0].y;
+                  const newDist = Math.sqrt(dx * dx + dy * dy);
+                  p.scale = Math.min(Math.max(p.baseScale * (newDist / p.dist), 0.5), 5);
+                } else if (pts.length === 1 && p.scale > 1) {
+                  p.tx = p.baseTx + (e.clientX - p.startX);
+                  p.ty = p.baseTy + (e.clientY - p.startY);
+                }
+                img.style.transform = `scale(${p.scale}) translate(${p.tx / p.scale}px, ${p.ty / p.scale}px)`;
+              }}
+              onPointerUp={e => {
+                delete imgPinchRef.current.pointers[e.pointerId];
+                const pts = Object.values(imgPinchRef.current.pointers);
+                if (pts.length === 1) {
+                  imgPinchRef.current.startX = pts[0].x;
+                  imgPinchRef.current.startY = pts[0].y;
+                  imgPinchRef.current.baseTx = imgPinchRef.current.tx;
+                  imgPinchRef.current.baseTy = imgPinchRef.current.ty;
+                }
+              }}
+            >
+              <img src="/거래명세서.png" alt="거래명세서 예시" style={{ maxWidth: "92vw", maxHeight: "88vh", objectFit: "contain", transformOrigin: "center center", transition: "transform 0.05s", userSelect: "none", pointerEvents: "none", borderRadius: 8 }} onError={e => { e.target.style.display = "none"; }} />
+            </div>
+          </div>
+        )}
+
+        {/* 전송 확인 */}
         {confirmPopup && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 99999, padding: 20 }}>
-            <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 400, padding: "24px 20px", boxShadow: "0 12px 40px rgba(0,0,0,0.25)" }}>
-              <div style={{ fontWeight: 900, fontSize: 16, color: "#1B2B4B", marginBottom: 10 }}>업로드 등록 안내</div>
-              <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.7, marginBottom: 20 }}>
-                <b>{!isManual && order ? (order.거래처명 || order.상차지명 || "이 오더") : (manualCar || "입력하신 정보")}</b>
-                {!isManual && order?.상차일 ? ` (${order.상차일})` : ""} 건에 서류/사진 <b>{files.length}장</b>을 업로드합니다.
-                <br /><br />
-                등록 후에는 <b>이 링크로 다시 접속하거나 재업로드할 수 없습니다.</b><br />
-                사진을 다시 한 번 확인한 후 등록해주세요.
+          <div className="kpu-overlay" style={{ alignItems: "flex-end" }}>
+            <div className="kpu-sheet">
+              <div className="kpu-mono" style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: "0.24em", color: "#4B6CB7" }}>CONFIRM</div>
+              <div style={{ fontWeight: 900, fontSize: 19, marginTop: 2 }}>전송 전 확인</div>
+              <div style={{ marginTop: 12, padding: "14px 16px", borderRadius: 14, background: "#F4F7FC", border: "1px solid #E3E8F0" }}>
+                <div style={{ fontSize: 15, fontWeight: 900 }}>{!isManual && order ? (order.거래처명 || order.상차지명 || "이 오더") : (manualCar || "입력하신 정보")}</div>
+                <div className="kpu-mono" style={{ fontSize: 12.5, color: "#64748b", marginTop: 2 }}>{!isManual && order?.상차일 ? order.상차일 : manualDate || ""}</div>
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: "#fff", background: "#1B2B4B", padding: "4px 10px", borderRadius: 8 }}>사진 {files.length}장</span>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: signed ? "#1B2B4B" : "#94A3B8", border: `1px solid ${signed ? "#1B2B4B" : "#DCE3EF"}`, padding: "3px 10px", borderRadius: 8 }}>{signed ? "서명 포함" : "서명 없음"}</span>
+                </div>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  onClick={() => setConfirmPopup(false)}
-                  style={{ flex: 1, padding: "12px", borderRadius: 10, border: "1px solid #e2e8f0", background: "white", color: "#6b7280", fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: "'Noto Sans KR', sans-serif" }}
-                >
-                  취소
-                </button>
-                <button
-                  onClick={() => { setConfirmPopup(false); handleUpload(); }}
-                  style={{ flex: 1, padding: "12px", borderRadius: 10, border: "none", background: "#1B2B4B", color: "white", fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: "'Noto Sans KR', sans-serif" }}
-                >
-                  등록
-                </button>
+              <div style={{ fontSize: 13.5, color: "#334155", lineHeight: 1.7, marginTop: 12 }}>
+                전송하면 <b>이 링크로 다시 접속하거나 재업로드할 수 없습니다.</b> 사진을 한 번 더 확인해주세요.
+              </div>
+              <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+                <button className="kpu-btn-ghost" style={{ flex: 1 }} onClick={() => setConfirmPopup(false)}>취소</button>
+                <button className="kpu-btn" style={{ flex: 1.6 }} onClick={() => { setConfirmPopup(false); handleUpload(); }}>전송하기</button>
               </div>
             </div>
           </div>
@@ -1193,41 +1033,60 @@ export default function UploadPage() {
 }
 
 // ────────────────────────────────────────
-// 스타일 상수
+// 스타일(2026-10-28 디지털 리디자인)
 // ────────────────────────────────────────
-const cardStyle = {
-  background: "white",
-  borderRadius: 14,
-  padding: "18px 16px",
-  marginBottom: 14,
-  boxShadow: "0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)",
-};
-
-const underlineInputStyle = {
-  width: "100%",
-  padding: "8px 2px",
-  border: "none",
-  borderBottom: "2px solid #e2e8f0",
-  borderRadius: 0,
-  fontSize: 14,
-  fontFamily: "inherit",
-  boxSizing: "border-box",
-  outline: "none",
-  background: "transparent",
-  transition: "border-color 0.15s",
-};
-
-const btnOutline = {
-  padding: "10px 24px",
-  borderRadius: 8,
-  border: "1.5px solid #1B2B4B",
-  background: "white",
-  color: "#1B2B4B",
-  fontWeight: 700,
-  fontSize: 14,
-  cursor: "pointer",
-  fontFamily: "'Noto Sans KR', sans-serif",
-};
+const UPLOAD_CSS = `
+  .kpu * { box-sizing: border-box; }
+  .kpu-mono { font-family: 'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace; }
+  .kpu-hero {
+    background:
+      linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px,
+      linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px,
+      linear-gradient(135deg, #0B1428 0%, #1B2B4B 60%, #2D4C82 100%);
+    border-radius: 0 0 26px 26px; box-shadow: 0 14px 30px rgba(11,20,40,.25); padding-bottom: 14px;
+  }
+  .kpu-card { display: block; width: 100%; background: #fff; border: 1px solid #E3E8F0; border-radius: 20px; padding: 16px; margin-top: 12px;
+    box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 10px 24px rgba(16,24,40,.06); font-family: inherit; color: inherit; }
+  .kpu-row { display: flex; align-items: center; gap: 12px; cursor: pointer; text-align: left; }
+  .kpu-row:active, .kpu-check:active { transform: scale(.99); }
+  .kpu-head { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 900; color: #0F1A30; margin-bottom: 6px; }
+  .kpu-dot { width: 8px; height: 8px; border-radius: 2px; background: #1B2B4B; transform: rotate(45deg); }
+  .kpu-code { margin-left: auto; font-size: 10.5px; font-weight: 800; letter-spacing: .2em; color: #94A3B8; }
+  .kpu-ticket { position: relative; margin-top: 12px; border-radius: 22px; padding: 18px; color: #fff; overflow: hidden;
+    background:
+      radial-gradient(400px 160px at 100% 0%, rgba(110,149,232,.35), transparent 60%),
+      linear-gradient(135deg, #0F1A30 0%, #1B2B4B 60%, #24396A 100%);
+    box-shadow: 0 16px 34px rgba(15,26,48,.32); border: 1px solid #0B1428; }
+  .kpu-perf { height: 1px; margin: 16px -18px 14px; background-image: linear-gradient(90deg, rgba(143,176,240,.45) 50%, transparent 50%); background-size: 10px 1px; position: relative; }
+  .kpu-perf::before, .kpu-perf::after { content: ""; position: absolute; top: -9px; width: 18px; height: 18px; border-radius: 50%; background: #EEF2F8; }
+  .kpu-perf::before { left: -9px; } .kpu-perf::after { right: -9px; }
+  .kpu-check { display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-radius: 14px; margin-bottom: 8px; cursor: pointer; border: 1.5px solid; transition: all .15s; }
+  .kpu-input { display: block; width: 100%; margin-top: 6px; height: 48px; padding: 0 14px; border-radius: 12px; border: 1.5px solid #DCE3EF; background: #F7F9FC; font-size: 15.5px; font-weight: 700; color: #0F1A30; font-family: inherit; outline: none; }
+  .kpu-input:focus { border-color: #1B2B4B; background: #fff; box-shadow: 0 0 0 4px rgba(27,43,75,.08); }
+  .kpu-drop { position: relative; border: 2px dashed; border-radius: 18px; padding: 26px 16px; text-align: center; cursor: pointer; transition: all .2s; margin-top: 8px; }
+  .kpu-corner { position: absolute; width: 16px; height: 16px; border-color: #1B2B4B; border-style: solid; }
+  .kpu-corner.tl { top: 10px; left: 10px; border-width: 2.5px 0 0 2.5px; border-radius: 4px 0 0 0; }
+  .kpu-corner.tr { top: 10px; right: 10px; border-width: 2.5px 2.5px 0 0; border-radius: 0 4px 0 0; }
+  .kpu-corner.bl { bottom: 10px; left: 10px; border-width: 0 0 2.5px 2.5px; border-radius: 0 0 0 4px; }
+  .kpu-corner.br { bottom: 10px; right: 10px; border-width: 0 2.5px 2.5px 0; border-radius: 0 0 4px 0; }
+  .kpu-btn { height: 50px; border: none; border-radius: 15px; background: linear-gradient(135deg, #1B2B4B, #2D4C82); color: #fff; font-size: 15px; font-weight: 900; cursor: pointer; font-family: inherit; box-shadow: 0 10px 22px rgba(27,43,75,.3); transition: filter .15s, opacity .15s; }
+  .kpu-btn:disabled { background: #C9D3E4; box-shadow: none; cursor: not-allowed; color: #fff; }
+  .kpu-btn:not(:disabled):active { filter: brightness(1.12); }
+  .kpu-btn-ghost { height: 50px; border-radius: 15px; border: 1.5px solid #DCE3EF; background: #fff; color: #334155; font-size: 15px; font-weight: 800; cursor: pointer; font-family: inherit; }
+  .kpu-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(180deg, rgba(238,242,248,0), #EEF2F8 35%); }
+  .kpu-dock > * { max-width: 492px; margin: 0 auto; display: block; }
+  .kpu-overlay { position: fixed; inset: 0; background: rgba(11,20,40,.6); display: flex; justify-content: center; z-index: 10000; padding: 0; }
+  .kpu-sheet { width: 100%; max-width: 520px; background: #fff; border-radius: 26px 26px 0 0; padding: 20px 18px calc(22px + env(safe-area-inset-bottom)); box-shadow: 0 -12px 40px rgba(0,0,0,.25); animation: kpuUp .28s cubic-bezier(.2,.9,.3,1.05) both; max-height: 92vh; overflow-y: auto; }
+  @keyframes kpuUp { from { transform: translateY(40px); opacity: 0 } to { transform: none; opacity: 1 } }
+  @keyframes kpuPulse { 0%,100% { opacity: 1 } 50% { opacity: .3 } }
+  .kpu-pulse { animation: kpuPulse 1.4s ease-in-out infinite; }
+  @keyframes kpuRing { 0% { transform: scale(.8); opacity: .7 } 100% { transform: scale(1.6); opacity: 0 } }
+  .kpu-ring { position: absolute; inset: 0; border-radius: 13px; border: 2px solid #4B6CB7; animation: kpuRing 1.6s ease-out infinite; }
+  @keyframes kpuSpin { to { transform: rotate(360deg) } }
+  .kpu-spin { animation: kpuSpin .9s linear infinite; }
+  @keyframes kpuPop { 0% { transform: scale(.4); opacity: 0 } 70% { transform: scale(1.08) } 100% { transform: scale(1); opacity: 1 } }
+  .kpu-pop { animation: kpuPop .5s cubic-bezier(.2,.9,.3,1.2) both; }
+`;
 
 // ────────────────────────────────────────
 // 서브 컴포넌트
