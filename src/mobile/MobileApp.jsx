@@ -79,6 +79,7 @@ import { updateDoc, setDoc } from "../orderWrite"; // ⭐ 오더 수정시각 �
 import { db, auth, FUNCTIONS_BASE, DEFAULT_COMPANY } from "../firebase";
 import { signOut } from "firebase/auth";
 import { version as APP_VERSION } from "../../package.json";
+import { useNewVersion, openUpdatePopup } from "../VersionCheck";
 import { calcLeaveBalance } from "../leaveUtils";
 import { RotationPicker, RotationBadge, expandRotation, rotationNotice } from "../rotation";
 import { isWeekend, findApprovedLeaveForDate, isHoliday } from "../attendanceUtils";
@@ -7282,7 +7283,22 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
 // ----------------------------------------------------------------------
 // 공통 헤더 / 사이드 메뉴
 // ----------------------------------------------------------------------
+// ⭐ 버전 표시(2026-10-28) — 새 버전이 배포되면 "NEW" 표시, 누르면 업데이트 안내 카드가 뜬다.
+function MobileVersionChip({ dark = false }) {
+  const newVer = useNewVersion();
+  if (!newVer) {
+    return <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${dark ? "text-white/60 bg-white/10" : "text-[#1B2B4B] bg-[#EEF3FB]"}`}>v{APP_VERSION}</span>;
+  }
+  return (
+    <button type="button" onClick={openUpdatePopup} className="inline-flex items-center gap-1.5 h-6 pl-1 pr-2 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold active:scale-95">
+      <span className="px-1.5 h-4 inline-flex items-center rounded-full bg-white text-[#1B2B4B] text-[9.5px] font-black">NEW</span>
+      v{APP_VERSION} → v{newVer.version || "?"}
+    </button>
+  );
+}
+
 const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh, onValidateOrders, onMenu, notifCount = 0, onNotifClick, cardVersionB = false, messengerUnread = 0, onMessengerClick, mailCompany = "", mailName = "" }) {
+  const newVer = useNewVersion(); // ⭐ 새 버전 배포 시 메뉴 버튼에 점 표시
   // ⭐ 2026-10-22 디자인 개선 — A형: 반투명 흰 머리줄 / B형: 남색 그라데이션 머리줄. 버튼은 둥근 네모 타일.
   const isListPage = title === "등록내역";
   const iconColor = cardVersionB ? "#ffffff" : "#1B2B4B";
@@ -7303,8 +7319,9 @@ const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh
           </button>
         )}
         {isListPage ? (
-          <button onClick={onMenu} className="kp-m-hbtn" aria-label="메뉴">
+          <button onClick={onMenu} className="kp-m-hbtn relative" aria-label="메뉴">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.2" strokeLinecap="round"><path d="M4 7h16M4 12h11M4 17h16" /></svg>
+            {newVer && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#1B2B4B] ring-2 ring-white" />}
           </button>
         ) : (
           onBack && (
@@ -7842,7 +7859,7 @@ function MobileSideMenu({
           </div>
           <div className="px-5 py-2 flex items-center justify-between">
             <span className={`text-[11px] ${dark ? "text-white/40" : "text-gray-400"}`}>버전</span>
-            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${dark ? "text-white/60 bg-white/10" : "text-blue-600 bg-blue-50"}`}>v{APP_VERSION}</span>
+            <MobileVersionChip dark={dark} />
           </div>
         </div>
       </div>
@@ -18687,7 +18704,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
         <div className="text-[12px] font-bold text-gray-400 uppercase tracking-wider px-4 pt-4 pb-2">앱 정보</div>
         {[
           { label: "앱 이름", value: "(주)KP-Flow 모바일" },
-          { label: "버전", value: `v${typeof APP_VERSION !== "undefined" ? APP_VERSION : "–"}` },
+          { label: "버전", value: <MobileVersionChip /> },
           { label: "플랫폼", value: navigator.userAgent.includes("Android") ? "Android" : navigator.userAgent.includes("iPhone") ? "iOS" : "Web" },
         ].map(({ label, value }) => (
           <div key={label} className="flex items-center justify-between px-4 py-3 border-t border-gray-50">

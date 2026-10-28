@@ -2,7 +2,8 @@
 // 🛰 접속 버전 확인(2026-10-28) — PC·모바일 공용. 처음 켤 때(그리고 10분마다·화면에 돌아올 때)
 //  서버의 /version.json(빌드할 때 자동 생성)과 지금 실행 중인 빌드를 비교한다.
 //  - 최신이면: 아래쪽에 "최신 버전" 알약을 3.5초 띄우고 사라진다(접속당 1번).
-//  - 이전 버전이면: 새 버전 안내 카드 + [지금 업데이트](캐시를 비우고 새로 받기).
+//  - 이전 버전이면(2026-10-28 변경): 팝업을 강제로 띄우지 않는다. 버전 표시 자리(PC 상단 로고 옆·
+//    모바일 메뉴 버튼/버전칸)에 "NEW" 표시만 하고, 그걸 누르면(openUpdatePopup) 새 버전 안내 카드가 뜬다.
 import React, { useCallback, useEffect, useState } from "react";
 import { hardReloadForUpdate } from "./UpdateBanner";
 
@@ -18,9 +19,20 @@ const stamp = (iso) => {
   return `${k.slice(5, 7)}.${k.slice(8, 10)} ${k.slice(11, 16)}`;
 };
 
+// ⭐ 새 버전 여부를 화면 어디서든 볼 수 있게 공유(버전 표시 자리의 NEW 표시용)
+let newVer = null;
+const subs = new Set();
+const setNewVer = (v) => { newVer = v; subs.forEach((f) => f(v)); };
+export function useNewVersion() {
+  const [v, setV] = useState(newVer);
+  useEffect(() => { subs.add(setV); setV(newVer); return () => { subs.delete(setV); }; }, []);
+  return v; // null = 최신, { version, build } = 새 버전 있음
+}
+export const openUpdatePopup = () => window.dispatchEvent(new Event("kpOpenUpdate"));
+
 export default function VersionCheck() {
   const [state, setState] = useState(null); // { kind: "ok" | "old", latest }
-  const [hidden, setHidden] = useState(false);
+  const [hidden, setHidden] = useState(true); // 새 버전 안내 카드는 버전 표시를 눌렀을 때만 연다
 
   const check = useCallback(async (first) => {
     try {
@@ -29,7 +41,7 @@ export default function VersionCheck() {
       const latest = await r.json();
       if (!latest?.build) return;
       const old = CUR_BUILD && latest.build > CUR_BUILD; // 서버 빌드가 더 새로우면 이전 버전
-      if (old) { setState({ kind: "old", latest }); setHidden(false); return; }
+      if (old) { setState({ kind: "old", latest }); setNewVer(latest); return; }
       if (first) {
         let shown = false;
         try { shown = sessionStorage.getItem("kpVerOkShown") === CUR_BUILD; sessionStorage.setItem("kpVerOkShown", CUR_BUILD); } catch { /* 무시 */ }
@@ -42,21 +54,15 @@ export default function VersionCheck() {
     const t = setTimeout(() => check(true), 2500);
     const iv = setInterval(() => check(false), 10 * 60 * 1000);
     const onVis = () => { if (document.visibilityState === "visible") check(false); };
+    const onOpen = () => { setHidden(false); check(false); };
     document.addEventListener("visibilitychange", onVis);
-    return () => { clearTimeout(t); clearInterval(iv); document.removeEventListener("visibilitychange", onVis); };
+    window.addEventListener("kpOpenUpdate", onOpen);
+    return () => { clearTimeout(t); clearInterval(iv); document.removeEventListener("visibilitychange", onVis); window.removeEventListener("kpOpenUpdate", onOpen); };
   }, [check]);
 
   if (!state) return null;
   const isOld = state.kind === "old";
-  if (isOld && hidden) {
-    return (
-      <button type="button" onClick={() => setHidden(false)} style={{ position: "fixed", left: 14, bottom: 14, zIndex: 2147483600, height: 34, padding: "0 12px", borderRadius: 99, border: "1px solid rgba(143,176,240,.45)", background: "linear-gradient(120deg,#0B1428,#1B2B4B)", color: "#CFE0FF", fontSize: 12.5, fontWeight: 800, boxShadow: "0 8px 20px rgba(11,20,40,.35)", display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer" }}>
-        <span className="kp-ver-dot" style={{ width: 7, height: 7, borderRadius: "50%", background: "#CFE0FF", boxShadow: "0 0 8px #8FB0F0" }} />
-        새 버전 있음
-        <style>{VC_CSS}</style>
-      </button>
-    );
-  }
+  if (isOld && hidden) return null;
   return (
     <div style={{ position: "fixed", left: "50%", bottom: 22, transform: "translateX(-50%)", zIndex: 2147483600, width: isOld ? "min(420px, calc(100vw - 24px))" : "auto", fontFamily: "'Pretendard','Noto Sans KR',sans-serif" }} className="kp-ver-in">
       <style>{VC_CSS}</style>

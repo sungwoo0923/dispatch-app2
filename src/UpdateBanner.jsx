@@ -1,7 +1,5 @@
 // src/UpdateBanner.jsx
 import React from "react";
-import { db } from "./firebase";
-import { doc, onSnapshot } from "firebase/firestore";
 
 // ⭐ 2026-08-26 사용자 요청 히스토리:
 // 1) 배포할 때마다 "새 버전이 준비되었습니다" 배너가 뜨는 게 불편하니 꺼달라고 함.
@@ -17,6 +15,9 @@ import { doc, onSnapshot } from "firebase/firestore";
 //    bannerEnabled state 참고). 문서가 아직 없으면(기본 배포 상태) 자동으로
 //    OFF다. 코드에 박아둔 상수로 다시 되돌리지 말 것 — 최고관리자가 UI로 켜고
 //    끄는 게 지금의 정상 동작이다.
+// 4) 2026-10-28: 상단 강제 배너와 "업데이트알림 ON/OFF" 버튼을 없앰 — 새 버전은
+//    버전 표시 자리의 NEW 표시(VersionCheck.jsx)로 안내하고, 누르면 안내 카드가 뜬다.
+//    이 컴포넌트는 이제 화면에 아무것도 그리지 않고 서비스워커 새 버전 확인만 한다.
 
 // 업데이트 버튼 클릭 시 단순 새로고침만으로는, 이전에 설치된 서비스워커/캐시가
 // 새 배포와 꼬여있는 경우(구버전 SW가 새 index.html은 네트워크로 받아오면서도
@@ -38,146 +39,21 @@ export const hardReloadForUpdate = async () => {
 };
 
 export default function UpdateBanner() {
-  const [visible, setVisible] = React.useState(false);
-  const [blinking, setBlinking] = React.useState(false);
-
-  // 최고관리자가 켠 상태인지 실시간 구독 — 문서가 없으면(기본 배포 상태) false.
-  // ref로도 같이 들고 있는 이유: 아래 activateUpdate가 []-dep useEffect 안에서
-  // 한 번만 만들어지므로, state를 직접 참조하면 클로저에 갇힌 초깃값(false)만
-  // 계속 보게 된다 — ref를 통해 항상 최신 값을 읽는다.
-  const [bannerEnabled, setBannerEnabled] = React.useState(false);
-  const bannerEnabledRef = React.useRef(false);
-  React.useEffect(() => { bannerEnabledRef.current = bannerEnabled; }, [bannerEnabled]);
-
-  React.useEffect(() => {
-    const unsub = onSnapshot(doc(db, "appSettings", "updateBanner"), (snap) => {
-      setBannerEnabled(snap.exists() ? !!snap.data()?.enabled : false);
-    }, () => {});
-    return () => unsub();
-  }, []);
-
   React.useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
-
-    const activateUpdate = () => {
-      if (!bannerEnabledRef.current) return;
-      setVisible(true);
-      window.dispatchEvent(new Event("appUpdateAvailable"));
-    };
-
-    navigator.serviceWorker.addEventListener("controllerchange", () => {
-      activateUpdate();
-    });
-
     // ⭐ 새 서비스워커를 감지해도 자동으로 APPLY_UPDATE(skipWaiting)를 보내지
-    // 않는다 — 사용자가 새로고침하거나 앱을 완전히 껐다 켜야만 새 버전이
-    // 적용되게 해달라는 요청. main.jsx도 동일하게 처리돼 있다.
-
+    // 않는다 — 사용자가 업데이트를 누르거나 앱을 껐다 켜야만 새 버전이 적용된다.
     const interval = setInterval(() => {
       navigator.serviceWorker.ready.then(reg => reg.update()).catch(() => {});
     }, 5 * 60 * 1000);
-
     const onFocus = () => {
       navigator.serviceWorker.ready.then(reg => reg.update()).catch(() => {});
     };
     window.addEventListener("focus", onFocus);
-
     return () => {
       clearInterval(interval);
       window.removeEventListener("focus", onFocus);
     };
   }, []);
-
-  // ⭐ 예전엔 10초 뒤 깜빡이다 13초에 저절로 사라졌는데, 그 사이에 화면을 안
-  // 보고 있으면 배너를 놓치고 계속 예전 버전으로 남는 문제가 있었다 — 이제는
-  // 10초 뒤 살짝 깜빡이기만 하고, 사용자가 직접 닫거나 업데이트를 누르기
-  // 전까지는 계속 떠 있는다.
-  React.useEffect(() => {
-    if (!visible) return;
-    const blinkTimer = setTimeout(() => setBlinking(true), 10000);
-    return () => clearTimeout(blinkTimer);
-  }, [visible]);
-
-  if (!visible) return null;
-
-  return (
-    <>
-      <style>{`
-        @keyframes bannerDown {
-          from { opacity: 0; transform: translateY(-100%); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes bannerBlink {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.25; }
-        }
-        .update-banner {
-          animation: bannerDown 0.4s ease-out forwards;
-        }
-        .update-banner-blink {
-          animation: bannerBlink 1.4s ease-in-out infinite;
-        }
-      `}</style>
-      <div
-        className={blinking ? "update-banner-blink" : "update-banner"}
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 999999,
-          background: "#1B2B4B",
-          color: "white",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: "16px",
-          padding: "10px 20px",
-          fontSize: "13px",
-          fontWeight: 600,
-          letterSpacing: "0.2px",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
-          fontFamily: "'Noto Sans KR', sans-serif",
-        }}
-      >
-        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#4ade80", flexShrink: 0 }} />
-          새 버전이 준비되었습니다.
-        </span>
-        <button
-          onClick={hardReloadForUpdate}
-          style={{
-            background: "white",
-            color: "#1B2B4B",
-            border: "none",
-            borderRadius: "6px",
-            padding: "5px 16px",
-            fontSize: "13px",
-            fontWeight: 700,
-            cursor: "pointer",
-            letterSpacing: "0.2px",
-            flexShrink: 0,
-          }}
-        >
-          업데이트
-        </button>
-        <button
-          onClick={() => setVisible(false)}
-          style={{
-            background: "transparent",
-            color: "rgba(255,255,255,0.6)",
-            border: "none",
-            fontSize: "18px",
-            cursor: "pointer",
-            lineHeight: 1,
-            padding: "0 4px",
-            flexShrink: 0,
-          }}
-          title="닫기"
-        >
-          ×
-        </button>
-      </div>
-    </>
-  );
+  return null;
 }

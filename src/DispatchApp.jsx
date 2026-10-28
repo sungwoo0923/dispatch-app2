@@ -13,7 +13,7 @@ import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, LabelList, PieChar
 import * as XLSX from "xlsx";
 import JSZip from "jszip";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
-import { hardReloadForUpdate } from "./UpdateBanner";
+import { useNewVersion, openUpdatePopup } from "./VersionCheck";
 import CustomDatePicker, { specialDemandInfo, KOREAN_HOLIDAYS, shortHolidayLabel } from "./CustomDatePicker";
 import { ensureWeatherLoaded, getWeatherSpecialInfo } from "./weatherUtil";
 import AdminMenu from "./AdminMenu";
@@ -5668,6 +5668,7 @@ function ToastProvider({ children }) {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.35; }
         }
+        .kp-newver-dot { animation: versionBlink 1.2s ease-in-out infinite; box-shadow: 0 0 8px #8FB0F0; }
         @keyframes toastFlashBorder {
           0%   { box-shadow: 0 0 0 0 rgba(59,130,246,0); }
           30%  { box-shadow: 0 0 0 4px rgba(59,130,246,0.4), 0 0 20px rgba(59,130,246,0.3); }
@@ -7308,30 +7309,6 @@ useEffect(() => {
     navigate("/login");
   };
 
-  // ---------------- 업데이트 알림 배너 on/off (최고관리자 전용) ----------------
-  // "새 버전이 준비되었습니다" 배너를 최고관리자가 직접 켜고 끌 수 있게 한다.
-  // Firestore(appSettings/updateBanner)에 저장해 전체 사용자(PC/모바일)에게
-  // 실시간으로 동일하게 반영되고, 문서가 아직 없거나 로딩 전에는 안전하게
-  // 꺼짐(false)으로 취급한다 — 배포 시 기본값도 OFF.
-  const [updateBannerEnabled, setUpdateBannerEnabledState] = useState(false);
-  useEffect(() => {
-    const unsub = onSnapshot(doc(db, "appSettings", "updateBanner"), (snap) => {
-      setUpdateBannerEnabledState(snap.exists() ? !!snap.data()?.enabled : false);
-    }, () => {});
-    return () => unsub();
-  }, []);
-  const toggleUpdateBanner = async () => {
-    try {
-      await setDoc(doc(db, "appSettings", "updateBanner"), {
-        enabled: !updateBannerEnabled,
-        updatedAt: serverTimestamp(),
-        updatedBy: user?.email || "",
-      }, { merge: true });
-    } catch (e) {
-      showAlert("업데이트 알림 설정 변경 실패: " + e.message);
-    }
-  };
-
   // ---------------- 옵션 리스트 ----------------
   const timeOptions = useMemo(
     () =>
@@ -7412,12 +7389,7 @@ const [revenuePasswordLoaded, setRevenuePasswordLoaded] = React.useState(false);
 const [revenuePasswordError, setRevenuePasswordError] = React.useState(""); // 불러오기 실패 사유
 const [revenuePasswordRetry, setRevenuePasswordRetry] = React.useState(0);
 const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // ⭐ 잠금 화면에서 비밀번호 변경
-const [hasUpdate, setHasUpdate] = React.useState(false);
-React.useEffect(() => {
-  const handler = () => setHasUpdate(true);
-  window.addEventListener("appUpdateAvailable", handler);
-  return () => window.removeEventListener("appUpdateAvailable", handler);
-}, []);
+const newVer = useNewVersion(); // ⭐ 새 버전이 배포되면 버전 표시 옆에 NEW(누르면 업데이트 안내)
 
   // ---------------- 역할별 차단 메뉴 ----------------
   // 최고관리자가 새로 만든 커스텀 권한(역할) — 메뉴별 접근범위(숨김/조회/조회+수정)를
@@ -7637,13 +7609,15 @@ return (
                     {co}
                   </span>
                 )}
-                {hasUpdate ? (
+                {newVer ? (
                   <button
-                    onClick={hardReloadForUpdate}
-                    style={{ animation: "versionBlink 1.2s ease-in-out infinite" }}
-                    className="text-[13px] font-bold text-yellow-300 bg-white/10 border border-yellow-300/60 rounded px-2 py-0.5 cursor-pointer shrink-0"
+                    onClick={openUpdatePopup}
+                    title={`새 버전 v${newVer.version || ""}이 배포되었습니다 — 눌러서 업데이트`}
+                    className="kp-newver shrink-0 inline-flex items-center gap-1.5 h-6 pl-1.5 pr-2 rounded-full bg-white/[0.08] border border-[#8FB0F0]/60 text-[11px] font-mono font-bold text-white/85 hover:bg-white/[0.16] cursor-pointer"
                   >
-                    v{__APP_VERSION__} 업데이트
+                    <span className="px-1.5 h-4 inline-flex items-center rounded-full bg-white text-[#0F1A30] text-[9.5px] font-black tracking-wider">NEW</span>
+                    v{__APP_VERSION__}
+                    <span className="kp-newver-dot w-1.5 h-1.5 rounded-full bg-[#CFE0FF]" />
                   </button>
                 ) : (
                   <span className="text-[11px] font-mono text-white/45 shrink-0">v{__APP_VERSION__}</span>
@@ -7743,23 +7717,6 @@ return (
                 </svg>
               )}
             </button>
-
-            {/* 업데이트 알림 배너 on/off — 최고관리자에게만 보임. 켜면 전체
-                사용자에게 "새 버전이 준비되었습니다" 배너가 뜨고, 끄면 아무에게도
-                안 뜬다(현재 배포 기본값: OFF). */}
-            {role === "totalMaster" && (
-              <button
-                onClick={toggleUpdateBanner}
-                className={`kp-chip-btn text-[12px] transition ${
-                  updateBannerEnabled ? "!bg-white !text-[#0F1A30] !border-white" : ""
-                }`}
-                title={updateBannerEnabled
-                  ? "업데이트 알림 배너: 전체 ON — 클릭 시 끄기"
-                  : "업데이트 알림 배너: 전체 OFF — 클릭 시 켜기"}
-              >
-                업데이트알림 {updateBannerEnabled ? "ON" : "OFF"}
-              </button>
-            )}
 
             {/* ⭐ 최적화 버튼 — 새로고침 없이 현재 화면(배차관리/실시간배차현황/배차현황)의
                 누적된 렌더링 상태만 가볍게 초기화한다. */}
