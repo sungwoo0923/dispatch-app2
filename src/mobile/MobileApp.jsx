@@ -85,6 +85,7 @@ import { isWeekend, findApprovedLeaveForDate, isHoliday } from "../attendanceUti
 import MonthCompareAnalysis from "../MonthCompareAnalysis";
 import { MailHeaderButton } from "../InternalMail";
 import BannerCenter from "../BannerCenter";
+import OrderScanModal from "../OrderScanModal";
 
 
 
@@ -15020,7 +15021,7 @@ const pickDrop = (c) => {
             onClick: () => { setVoiceSheet(true); setVoiceTranscript(""); setVoiceParsed(null); },
           },
           !isLockedShipperEdit && {
-            key: "smart", Icon: Sparkles, label: "오더분석",
+            key: "smart", Icon: Sparkles, label: "오더스캔",
             onClick: () => setShowSmartParser(true),
           },
           {
@@ -17629,7 +17630,18 @@ const pickDrop = (c) => {
                   혼적여부: o.혼적여부 || "독차",
                 }));
                 setShowOrderCopyModal(false);
-                showToast("오더 정보가 불러와졌습니다");
+                // ⭐ 2026-10-28 — 불러온 상/하차지에 담당자가 여러 명이면 담당자 선택창을 먼저(PC 오더복사와 동일)
+                const pend = [];
+                [["pickup", o.상차지명], ["drop", o.하차지명]].forEach(([type, nm]) => {
+                  if (!nm) return;
+                  const found = (clients || []).find((c) => normalizeCompany(c.거래처명 || "") === normalizeCompany(nm));
+                  if (!found) return;
+                  const cs = (Array.isArray(found.contacts) ? found.contacts : []).filter((ct) => ct.name?.trim());
+                  const uniq = [...new Map(cs.map((ct) => [ct.name.trim(), ct])).values()];
+                  if (uniq.length > 1) pend.push({ type, place: found, contacts: uniq });
+                });
+                if (pend.length) setTimeout(() => openContactPopup(pend), 120);
+                else showToast("오더 정보가 불러와졌습니다");
               }}
             >
               <div className="flex items-center justify-between gap-2 mb-1">
@@ -17702,39 +17714,32 @@ const pickDrop = (c) => {
   </div>
 )}
 
+      {/* ⭐ 2026-10-28 오더 스캔(PC와 같은 인식기) — 글 붙여넣기 · 캡처 사진 */}
       {showSmartParser && (
-        <SmartOrderParser
+        <OrderScanModal
+          places={clients || []}
           clients={clients || []}
-          drivers={drivers || []}
-          cardVersionB={cardVersionB}
-          onApply={(parsed) => {
-            setForm(prev => ({
-              ...prev,
-              ...(parsed.상차일 && { 상차일: parsed.상차일 }),
-              ...(parsed.하차일 && { 하차일: parsed.하차일 }),
-              ...(parsed.상차시간 && { 상차시간: parsed.상차시간 }),
-              ...(parsed.하차시간 && { 하차시간: parsed.하차시간 }),
-              ...(parsed.하차시간기준 && { 하차시간기준: parsed.하차시간기준 }),
-              ...(parsed.상차지명 && { 상차지명: parsed.상차지명 }),
-              ...(parsed.상차지주소 && { 상차지주소: parsed.상차지주소 }),
-              ...(parsed.상차지담당자 && { 상차지담당자: parsed.상차지담당자 }),
-              ...(parsed.상차지담당자번호 && { 상차지담당자번호: parsed.상차지담당자번호 }),
-              ...(parsed.하차지명 && { 하차지명: parsed.하차지명 }),
-              ...(parsed.하차지주소 && { 하차지주소: parsed.하차지주소 }),
-              ...(parsed.하차지담당자 && { 하차지담당자: parsed.하차지담당자 }),
-              ...(parsed.하차지담당자번호 && { 하차지담당자번호: parsed.하차지담당자번호 }),
-              ...(parsed.톤수 && { 톤수: parsed.톤수 }),
-              ...(parsed.차종 && { 차종: parsed.차종 }),
-              ...(parsed.화물내용 && { 화물내용: parsed.화물내용 }),
-              ...(parsed.상차방법 && { 상차방법: parsed.상차방법 }),
-              ...(parsed.하차방법 && { 하차방법: parsed.하차방법 }),
-              ...(parsed.지급방식 && { 지급방식: parsed.지급방식 }),
-              ...(parsed.기사명 && { 기사명: parsed.기사명 }),
-              ...(parsed.전화번호 && { 전화번호: parsed.전화번호 }),
-              ...(parsed.차량번호 && { 차량번호: parsed.차량번호 }),
-            }));
-          }}
           onClose={() => setShowSmartParser(false)}
+          onApply={(patch, memo, info = {}) => {
+            const m = { ...patch };
+            if (m.차량톤수 !== undefined) { m.톤수 = m.차량톤수; delete m.차량톤수; }
+            if (m.차량종류 !== undefined) { m.차종 = m.차량종류; delete m.차량종류; }
+            if (m.혼적 === true) { m.혼적여부 = "혼적"; }
+            delete m.혼적; delete m.화물타입;
+            if (m.청구운임) m.청구운임 = Number(m.청구운임) || 0;
+            setForm((prev) => ({ ...prev, ...m, ...(memo ? { 적요: [prev.적요, memo].filter(Boolean).join("\n") } : {}) }));
+            setShowSmartParser(false);
+            // 등록 업체로 맞췄고 담당자가 여러 명인데 오더에 담당자가 없으면 → 담당자 선택창
+            const items = [];
+            [["pickup", info.pickupPlace, info.pickupMgrScanned], ["drop", info.dropPlace, info.dropMgrScanned]].forEach(([type, pl, scanned]) => {
+              if (!pl || scanned) return;
+              const cs = (Array.isArray(pl.contacts) ? pl.contacts : pl._contacts || []).filter((c) => c.name?.trim());
+              const uniq = [...new Map(cs.map((c) => [c.name.trim(), c])).values()];
+              if (uniq.length > 1) items.push({ type, place: pl, contacts: uniq });
+            });
+            if (items.length) setTimeout(() => openContactPopup(items), 80);
+            else showToast?.("스캔한 오더가 입력되었습니다 — 확인 후 등록하세요");
+          }}
         />
       )}
 

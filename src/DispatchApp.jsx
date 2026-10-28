@@ -14677,14 +14677,24 @@ title="상차지 ↔ 하차지 교체"
     clients={clients}
     initial={orderScanInit}
     onClose={() => { setShowOrderParser(false); setOrderScanInit(null); }}
-    onApply={(patch, memo) => {
+    onApply={(patch, memo, info = {}) => {
       setForm((p) => ({ ...p, ...patch, ...(memo ? { 메모: [p.메모, memo].filter(Boolean).join("\n") } : {}) }));
       if (patch.상차지명) setAutoPickMatched(true);
       if (patch.하차지명) setAutoDropMatched(true);
       if (patch.차량종류) setVehicleQuery(patch.차량종류);
       if (patch.거래처명) setClientQuery(patch.거래처명);
       setShowOrderParser(false); setOrderScanInit(null);
-      showAlert("✅ 스캔한 오더 내용이 입력되었습니다. 확인 후 저장하세요.");
+      // ⭐ 등록 업체로 맞췄고 담당자가 여러 명인데 오더에 담당자가 안 적혀 있으면 → 담당자 선택창 먼저
+      const contactItems = [];
+      [["pickup", info.pickupPlace, info.pickupMgrScanned], ["drop", info.dropPlace, info.dropMgrScanned]].forEach(([type, pl, scanned]) => {
+        if (!pl || scanned) return;
+        const full = findPlaceByName(pl.업체명) || pl;
+        const cs = (full.contacts || pl._contacts || []).filter((c) => c.name?.trim());
+        const uniq = [...new Map(cs.map((c) => [c.name.trim(), c])).values()];
+        if (uniq.length > 1) contactItems.push({ type, place: full, contacts: uniq });
+      });
+      if (contactItems.length) setTimeout(() => openContactPopup(contactItems), 60);
+      else showAlert("✅ 스캔한 오더 내용이 입력되었습니다. 확인 후 저장하세요.");
     }}
   />
 )}

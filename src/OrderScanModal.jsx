@@ -52,7 +52,17 @@ async function prepImage(dataUrl) {
   return { canvas: c, scale, w: img.width, h: img.height };
 }
 
-export default function OrderScanModal({ onClose, onApply, places = [], clients = [], initial = null }) {
+// 등록 업체 목록을 인식기가 쓰는 모양으로(PC 하차지거래처 { 업체명 } / 모바일 { 거래처명, contacts } 모두)
+function normPlaces(list) {
+  return (list || []).map((p) => {
+    const cs = (Array.isArray(p.contacts) ? p.contacts : []).filter((c) => c && (String(c.name || "").trim() || String(c.phone || "").trim()));
+    const pri = cs.find((c) => c.isPrimary) || cs[0];
+    return { ...p, 업체명: p.업체명 || p.거래처명 || p.하차지명 || "", 주소: p.주소 || p.하차지주소 || "", 담당자: p.담당자 || pri?.name || "", 담당자번호: p.담당자번호 || pri?.phone || "", _contacts: cs };
+  }).filter((p) => p.업체명);
+}
+
+export default function OrderScanModal({ onClose, onApply, places: placesRaw = [], clients = [], initial = null }) {
+  const places = React.useMemo(() => normPlaces(placesRaw), [placesRaw]);
   const [stage, setStage] = React.useState("input"); // input | scanning | result
   const [src, setSrc] = React.useState(null); // { type: "text", text } | { type: "image", url, w, h }
   const [typed, setTyped] = React.useState("");
@@ -213,8 +223,15 @@ export default function OrderScanModal({ onClose, onApply, places = [], clients 
     }
     if (v.혼적 === true) patch.혼적 = true;
     if (v.긴급 === true) patch.긴급 = true;
+    if (v.전달사항) patch.전달사항 = v.전달사항;
     const memo = [v.메모추가, unknownToMemo && result?.unknown?.length ? result.unknown.join(" / ") : ""].filter(Boolean).join(" / ");
-    onApply(patch, memo);
+    // 등록 업체로 맞춘 경우 그 업체(담당자 여러 명이면 화면에서 담당자 선택창을 띄우게)
+    const placeOf = (P) => places.find((p) => p.업체명 === v[`${P}명`]) || null;
+    onApply(patch, memo, {
+      pickupPlace: placeOf("상차지"), dropPlace: placeOf("하차지"),
+      pickupMgrScanned: result?.fields?.상차지담당자 && !result.fields.상차지담당자.via,
+      dropMgrScanned: result?.fields?.하차지담당자 && !result.fields.하차지담당자.via,
+    });
   };
 
   // ── 화면 ──
@@ -241,16 +258,16 @@ export default function OrderScanModal({ onClose, onApply, places = [], clients 
   const scanning = stage === "scanning";
 
   return createPortal(
-    <div className="fixed inset-0 z-[2000000] flex items-center justify-center p-5" style={{ background: "rgba(6,13,28,0.62)" }} onMouseDown={onClose}>
+    <div className="fixed inset-0 z-[2000000] flex items-center justify-center p-0 sm:p-5" style={{ background: "rgba(6,13,28,0.62)" }} onMouseDown={onClose}>
       <style>{`
         @keyframes osIn { from { opacity: 0; transform: translateY(10px) scale(.985) } to { opacity: 1; transform: none } }
         @keyframes osTag { from { opacity: 0; transform: translateX(-6px) } to { opacity: 1; transform: none } }
         @keyframes osPulse { 0%,100% { opacity: .55 } 50% { opacity: 1 } }
       `}</style>
-      <div className="w-full max-w-[1180px] h-[min(820px,92vh)] rounded-[26px] overflow-hidden flex flex-col bg-[#F4F6FA] shadow-[0_30px_80px_rgba(0,0,0,0.45)] ring-1 ring-white/10"
+      <div className="w-full max-w-[1180px] h-full sm:h-[min(820px,92vh)] rounded-none sm:rounded-[26px] overflow-hidden flex flex-col bg-[#F4F6FA] shadow-[0_30px_80px_rgba(0,0,0,0.45)] ring-1 ring-white/10"
         style={{ animation: "osIn .28s cubic-bezier(.2,.9,.3,1.1) both" }} onMouseDown={(e) => e.stopPropagation()}>
         {/* 머리 */}
-        <div className="relative px-7 py-4 flex items-center gap-4 text-white shrink-0" style={{ background: "linear-gradient(120deg,#0B1428 0%,#0F1A30 45%,#1B2B4B 80%,#2D4C82 100%)" }}>
+        <div className="relative px-4 sm:px-7 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 text-white shrink-0" style={{ background: "linear-gradient(120deg,#0B1428 0%,#0F1A30 45%,#1B2B4B 80%,#2D4C82 100%)" }}>
           <span className="absolute inset-0 opacity-[0.08] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "24px 24px" }} />
           <div className="relative w-10 h-10 rounded-[12px] bg-white/10 ring-1 ring-white/20 flex items-center justify-center">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#CFE0FF" strokeWidth="2" strokeLinecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" /><path d="M3 12h18" /></svg>
@@ -268,22 +285,22 @@ export default function OrderScanModal({ onClose, onApply, places = [], clients 
 
         {stage === "input" ? (
           // ── 붙여넣기 화면 ──
-          <div className="flex-1 min-h-0 grid grid-cols-[1.15fr_1fr] gap-5 p-6">
-            <div className="relative rounded-[22px] border-2 border-dashed border-[#C9D2E0] bg-white flex flex-col items-center justify-center text-center px-8 hover:border-[#4B6CB7] transition"
+          <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-1 md:grid-cols-[1.15fr_1fr] gap-3 md:gap-5 p-3 md:p-6">
+            <div className="relative rounded-[22px] border-2 border-dashed border-[#C9D2E0] bg-white flex flex-col items-center justify-center text-center px-5 md:px-8 py-6 md:py-0 hover:border-[#4B6CB7] transition"
               onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); readFile(e.dataTransfer.files?.[0]); }}>
               <div className="w-16 h-16 rounded-[18px] flex items-center justify-center shadow-[0_12px_26px_rgba(15,26,48,0.3)]" style={{ background: "linear-gradient(135deg,#0F1A30,#2D4C82)" }}>
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><path d="M9 12h6M9 16h4" /></svg>
               </div>
-              <div className="mt-5 text-[20px] font-black text-[#0F1A30]">Ctrl + V 로 붙여넣기</div>
+              <div className="mt-5 text-[20px] font-black text-[#0F1A30]"><span className="hidden md:inline">Ctrl + V 로 붙여넣기</span><span className="md:hidden">캡처 사진으로 스캔</span></div>
               <div className="mt-1.5 text-[13.5px] text-[#5B6B85] leading-relaxed">카톡·문자로 받은 <b className="text-[#0F1A30]">오더 글</b>도, 업체가 보낸 오더를 <b className="text-[#0F1A30]">캡처한 이미지</b>도<br />그대로 붙여넣으면 자동으로 스캔합니다</div>
               <div className="mt-5 flex gap-2">
-                <button onClick={() => fileRef.current?.click()} className="h-10 px-4 rounded-[12px] border border-[#E3E8F0] bg-white text-[#0F1A30] text-[13px] font-bold hover:border-[#4B6CB7]">이미지 파일 선택</button>
+                <button onClick={() => fileRef.current?.click()} className="h-10 px-4 rounded-[12px] border border-[#E3E8F0] bg-white text-[#0F1A30] text-[13px] font-bold hover:border-[#4B6CB7]">사진 · 이미지 선택</button>
                 <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { readFile(e.target.files?.[0]); e.target.value = ""; }} />
               </div>
               <div className="mt-4 text-[11.5px] text-[#9AA9C3]">이미지는 끌어다 놓아도 됩니다 · 여러 건이 한 번에 와도 오더별로 나눠 드려요</div>
               {err && <div className="mt-4 px-4 py-2 rounded-xl bg-[#FFF5F4] border border-[#F3D3CF] text-[12.5px] font-bold text-[#0F1A30]">! {err}</div>}
             </div>
-            <div className="flex flex-col min-h-0 rounded-[22px] bg-white border border-[#E3E8F0] p-5">
+            <div className="flex flex-col min-h-[260px] md:min-h-0 rounded-[22px] bg-white border border-[#E3E8F0] p-4 md:p-5">
               <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>TEXT</div>
               <div className="text-[15px] font-black text-[#0F1A30]">직접 입력 · 붙여넣기</div>
               <textarea data-os-input="1" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={"예)\n상차: 크레팜 인천 서구 원창동 381-12\n하차: 케이씨로지스 14시까지\n5톤 냉동윙 6파레트 / 운임 32만"}
@@ -293,7 +310,7 @@ export default function OrderScanModal({ onClose, onApply, places = [], clients 
           </div>
         ) : (
           // ── 스캔 · 결과 화면 ──
-          <div className="flex-1 min-h-0 grid grid-cols-[1.1fr_1fr] gap-5 p-6">
+          <div className="flex-1 min-h-0 grid grid-cols-1 grid-rows-[minmax(0,34%)_minmax(0,1fr)] md:grid-rows-1 md:grid-cols-[1.1fr_1fr] gap-3 md:gap-5 p-3 md:p-6">
             {/* 왼쪽: 원문(글/이미지) + 스캔 빛줄 */}
             <div className="relative min-h-0 rounded-[22px] bg-white border border-[#E3E8F0] overflow-hidden flex flex-col">
               <div className="px-5 py-3 flex items-center gap-2 border-b border-[#EEF1F6] shrink-0">
@@ -418,7 +435,8 @@ export default function OrderScanModal({ onClose, onApply, places = [], clients 
                             const iss = issueOf(k);
                             const st = !has ? "none" : f?.conf === "high" && !f?.via ? "ok" : "guess";
                             return (
-                              <div key={k} className="flex items-center gap-2.5 px-3 py-1.5">
+                              <div key={k}>
+                              <div className="flex items-center gap-2.5 px-3 py-1.5">
                                 <span className={`w-5 h-5 shrink-0 rounded-full flex items-center justify-center text-[10px] font-black ${iss ? (iss.level === "error" ? "bg-[#0F1A30] text-white" : "bg-[#4B6CB7] text-white") : st === "ok" ? "bg-[#0F1A30] text-white" : st === "guess" ? "bg-white text-[#0F1A30] ring-1 ring-[#0F1A30]" : "bg-[#F1F4F9] text-[#B4BFD0]"}`}>
                                   {iss ? (iss.level === "error" ? "✕" : "!") : st === "none" ? "–" : "✓"}
                                 </span>
@@ -427,7 +445,30 @@ export default function OrderScanModal({ onClose, onApply, places = [], clients 
                                   onChange={(e) => setVals((p) => ({ ...p, [k]: k === "청구운임" ? e.target.value.replace(/[^\d]/g, "") : e.target.value }))}
                                   placeholder={has ? "" : "인식 못함"}
                                   className={`flex-1 min-w-0 h-8 px-2 rounded-[8px] text-[13px] font-bold outline-none focus:bg-[#F2F6FC] ${has ? "text-[#0F1A30]" : "placeholder:text-[#C2CBD9] placeholder:font-semibold"}`} />
-                                {f?.via ? <span className="shrink-0 text-[10px] font-bold text-[#4B6CB7] whitespace-nowrap">{f.via}</span> : st === "guess" ? <span className="shrink-0 text-[10px] font-bold text-[#9AA9C3]">추정</span> : null}
+                                {f?.via ? <span className="shrink-0 text-[10px] font-bold text-[#4B6CB7] whitespace-nowrap hidden sm:inline">{f.via}</span> : st === "guess" ? <span className="shrink-0 text-[10px] font-bold text-[#9AA9C3]">추정</span> : null}
+                              </div>
+                              {/* 스캔한 글자와 다른 등록 업체로 맞춘 경우 — 원래 글자로 되돌리기 */}
+                              {f?.scanned && vals[k] !== f.scanned && (
+                                <div className="flex items-center gap-2 pl-[38px] pr-3 pb-2 -mt-0.5 text-[11px]">
+                                  <span className="text-[#9AA9C3] truncate">스캔: {f.scanned}</span>
+                                  <button onClick={() => setVals((p) => ({ ...p, [k]: f.scanned }))} className="shrink-0 font-bold text-[#4B6CB7] underline underline-offset-2">스캔한 그대로 쓰기</button>
+                                </div>
+                              )}
+                              {f?.scanned && vals[k] === f.scanned && f.value && (
+                                <div className="flex items-center gap-2 pl-[38px] pr-3 pb-2 -mt-0.5 text-[11px]">
+                                  <span className="text-[#9AA9C3] truncate">등록 업체: {f.value}</span>
+                                  <button onClick={() => setVals((p) => ({ ...p, [k]: f.value }))} className="shrink-0 font-bold text-[#4B6CB7] underline underline-offset-2">등록 업체로 되돌리기</button>
+                                </div>
+                              )}
+                              {f?.suggest && vals[k] !== f.suggest.업체명 && (
+                                <div className="flex items-center gap-2 pl-[38px] pr-3 pb-2 -mt-0.5 text-[11px]">
+                                  <span className="text-[#5B6B85] truncate">등록 업체 '{f.suggest.업체명}' · {f.suggest.주소}</span>
+                                  <button onClick={() => {
+                                    const P = k.startsWith("상차") ? "상차지" : "하차지";
+                                    setVals((p) => ({ ...p, [k]: f.suggest.업체명, [`${P}주소`]: f.suggest.주소 || p[`${P}주소`], [`${P}담당자`]: p[`${P}담당자`] || f.suggest.담당자, [`${P}담당자번호`]: p[`${P}담당자번호`] || f.suggest.담당자번호 }));
+                                  }} className="shrink-0 h-6 px-2 rounded-md bg-[#0F1A30] text-white font-black">등록 업체로 바꾸기</button>
+                                </div>
+                              )}
                               </div>
                             );
                           })}
@@ -441,6 +482,16 @@ export default function OrderScanModal({ onClose, onApply, places = [], clients 
                       ))}
                       <button onClick={() => setVals((p) => ({ ...p, 운행유형: p.운행유형 === "왕복" ? "" : "왕복" }))} className={`h-8 px-3 rounded-[10px] text-[12px] font-black ${vals.운행유형 === "왕복" ? "bg-[#0F1A30] text-white" : "bg-[#F1F4F9] text-[#5B6B85]"}`}>왕복</button>
                     </div>
+                    {vals.전달사항 !== undefined && (
+                      <div>
+                        <div className="flex items-baseline gap-2 mb-1.5">
+                          <span className="text-[13px] font-black text-[#0F1A30]">기사 전달사항</span>
+                          <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3]" style={{ fontFamily: MONO }}>NOTICE</span>
+                        </div>
+                        <textarea value={vals.전달사항 || ""} onChange={(e) => setVals((p) => ({ ...p, 전달사항: e.target.value }))} rows={Math.min(8, String(vals.전달사항 || "").split("\n").length + 1)}
+                          className="w-full rounded-[12px] border border-[#EEF1F6] bg-[#F7F9FC] px-3 py-2 text-[12.5px] font-semibold text-[#0F1A30] leading-relaxed outline-none focus:bg-white focus:border-[#4B6CB7]" />
+                      </div>
+                    )}
                     {vals.메모추가 && (
                       <div className="rounded-[12px] bg-[#F7F9FC] border border-[#EEF1F6] px-3 py-2 text-[12.5px] text-[#3A4A66]"><b className="text-[#0F1A30]">메모로 들어갈 내용</b> · {vals.메모추가}</div>
                     )}
@@ -456,8 +507,8 @@ export default function OrderScanModal({ onClose, onApply, places = [], clients 
                   </>
                 )}
               </div>
-              <div className="px-5 py-3.5 border-t border-[#EEF1F6] flex items-center gap-2 shrink-0">
-                <span className="text-[11.5px] text-[#9AA9C3] leading-snug">칸을 눌러 바로 고칠 수 있어요<br />적용 후 저장 전에 한 번 더 확인하세요</span>
+              <div className="px-4 md:px-5 py-3 md:py-3.5 border-t border-[#EEF1F6] flex items-center gap-2 shrink-0">
+                <span className="hidden md:block text-[11.5px] text-[#9AA9C3] leading-snug">칸을 눌러 바로 고칠 수 있어요<br />적용 후 저장 전에 한 번 더 확인하세요</span>
                 <button onClick={onClose} className="ml-auto h-11 px-4 rounded-[13px] border border-[#E3E8F0] text-[#3A4A66] text-[13px] font-bold">취소</button>
                 <button onClick={apply} disabled={!result || scanning} className="h-11 px-6 rounded-[13px] text-white text-[14px] font-black disabled:opacity-40 shadow-[0_10px_22px_rgba(15,26,48,0.28)]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>배차관리에 적용</button>
               </div>

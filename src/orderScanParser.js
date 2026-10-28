@@ -32,12 +32,14 @@ const LABELS = {
   dropMethod: ["하차방법", "하차방식"],
   pickup: ["상차지", "상차처", "상차장소", "상차위치", "상차", "출발지", "출발", "출고지", "출고처", "출하지", "출하처", "픽업지", "픽업", "보내는곳", "보내는분", "발송지", "발송처", "적재지", "from"],
   drop: ["하차지", "하차처", "하차장소", "하차위치", "하차", "하자", "도착지", "도착", "착지", "납품처", "납품지", "납품", "배송지", "배송처", "받는곳", "입고지", "입고처", "to"],
+  weight: ["총중량", "중량", "무게", "총무게", "적재중량"],
   cargo: ["화물내용", "화물", "품목", "제품", "물품", "물량", "수량", "적재물", "내용물", "상품", "짐"],
   vehicle: ["필요차량", "요청차량", "차량종류", "차량톤수", "차량규격", "차량", "차종", "톤수", "차량사양"],
   fare: ["청구운임", "운임", "운송료", "운반비", "운송비", "금액", "단가", "요금", "비용", "운임비"],
   client: ["거래처", "거래처명", "화주", "화주사", "의뢰처", "의뢰업체", "고객사", "요청업체", "업체명", "회사명"],
   manager: ["담당자", "담당", "연락처", "전화", "전화번호", "연락", "휴대폰", "핸드폰", "tel", "hp"],
-  memo: ["비고", "메모", "특이사항", "요청사항", "참고", "참고사항", "주의사항", "기타", "전달사항"],
+  memo: ["비고", "메모", "특이사항", "요청사항", "참고", "참고사항", "기타"],
+  notice: ["전달사항", "주의사항", "기사전달", "기사님께", "입고프로세스", "하차프로세스", "상차프로세스", "입고안내", "하차안내", "작업안내", "프로세스", "#"],
 };
 // 긴 라벨부터 비교(“상차지주소”가 “상차지”보다 먼저 잡히게)
 const LABEL_LIST = Object.entries(LABELS).flatMap(([k, arr]) => arr.map((w) => ({ k, w }))).sort((a, b) => b.w.length - a.w.length);
@@ -150,7 +152,8 @@ export function addressQuality(addr) {
   return "weak";
 }
 
-const PHONE_RE = /(?:0\d{1,2}|1[5-8]\d{2})[-.\s)]?\d{3,4}[-.\s]?\d{4}|01[016789]\d{7,8}/g;
+// 휴대폰·지역번호(010-1234-5678, 02-123-4567) / 대표번호(1533-2525, 1588 0000) — 대표번호는 4+4자리
+const PHONE_RE = /(?<!\d)(?:0\d{1,2}[-.\s)]?\d{3,4}[-.\s]?\d{4}|1[5-9]\d{2}[-.\s]?\d{4}|01[016789]\d{7,8})(?!\d)/g;
 function normPhone(p) {
   const d = String(p).replace(/[Oo]/g, "0").replace(/[lI|]/g, "1").replace(/\D/g, "");
   if (/^1[5-8]\d{6}$/.test(d)) return `${d.slice(0, 4)}-${d.slice(4)}`;
@@ -168,6 +171,9 @@ function findManager(text) {
   const s = String(text || "");
   let m = s.match(new RegExp(`(?:담당자?|인수자|받는분|수령인)\\s*[:=]?\\s*([가-힣]{2,4})`));
   if (m) return m[1];
+  // "고민정 (010-6652-6415)", "이환주 주임 (1533-2525)" — 번호 바로 앞 이름
+  m = s.match(new RegExp(`(?:^|[^가-힣])([가-힣]{2,4})\\s*(?:${TITLE})?\\s*[(:\\-]?\\s*(?:0\\d{1,2}|1[5-9]\\d{2})[-.\\s)]?\\d{3,4}`));
+  if (m && !/^(상차|하차|도착|출발|담당|연락|전화|화물|차량|기사|대표|번호)/.test(m[1])) return m[1];
   m = s.match(new RegExp(`(?:^|[^가-힣])([가-힣]{1,4})\\s*(${TITLE})(?![가-힣])`));
   if (m && !/^(상차|하차|도착|출발|담당|연락|전화|화물|차량|기사)/.test(m[1])) return m[1].length === 1 ? `${m[1]}${m[2]}` : m[1];
   return "";
@@ -257,6 +263,16 @@ export function findCargo(text) {
   return null;
 }
 
+// 중량: 600kg, 600키로, 1.2톤(화물 무게), 0.6t → 차량톤수 칸에 "600kg"/"1.2톤"으로
+export function findWeight(text) {
+  const s = String(text || "");
+  const kg = s.match(/(\d[\d,.]*)\s*(?:kg|KG|Kg|㎏|키로그램|키로|킬로그램|킬로)/);
+  if (kg) { const n = Number(kg[1].replace(/,/g, "")); if (n > 0 && n < 50000) return `${n}kg`; }
+  const t = s.match(/(\d+(?:\.\d+)?)\s*(?:톤|t|T)(?![a-zA-Z])/);
+  if (t) { const n = Number(t[1]); if (n > 0 && n <= 30) return `${n}톤`; }
+  return "";
+}
+
 // 운임: 15만, 15만원, 150,000원, 15.5만
 export function findFare(text, labeled) {
   const s = String(text || "");
@@ -337,6 +353,46 @@ function matchPlaceByAddr(addr, places) {
   return places.find((p) => { const pk = addrKey(p.주소); return pk && (pk === k || (kt && tail(pk) === kt && pk.slice(0, 4) === k.slice(0, 4))); }) || null;
 }
 
+// 이름 핵심만 — "원창동 반찬단지 물류센터" → "반찬단지", "(주)농협하나로유통" → "농협하나로유통"
+export function coreName(n) {
+  let t = String(n || "").replace(/\(주\)|㈜|주식회사|\(유\)|유한회사/g, " ").replace(/\(.*?\)/g, " ").trim();
+  const toks = t.split(/\s+/).filter(Boolean);
+  while (toks.length > 1 && /^(?:[가-힣]{1,4}(?:동|읍|면|리|시|구|군)|서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)$/.test(toks[0])) toks.shift();
+  t = toks.join("");
+  let prev;
+  do { prev = t; t = t.replace(/(?:제\d+)?(?:물류센터|물류창고|배송센터|유통센터|센터|물류|본사|본점|지점|직영점|공장|창고|사업장|매장|\d+공장|\d+센터)$/, ""); } while (t !== prev && t.length > 2);
+  return t.toLowerCase();
+}
+export function namesSimilar(a, b) {
+  const x = coreName(a), y = coreName(b);
+  if (x.length < 2 || y.length < 2) return false;
+  return x === y || x.includes(y) || y.includes(x);
+}
+function matchPlaceBySimilarName(name, places, exclude) {
+  const x = coreName(name);
+  if (x.length < 2) return null;
+  let best = null, bestScore = 0;
+  for (const p of places) {
+    if (exclude && nk(p.업체명) === nk(exclude)) continue;
+    const y = coreName(p.업체명);
+    if (y.length < 2) continue;
+    let sc = 0;
+    if (x === y) sc = 100;
+    else if (x.includes(y)) sc = 60 + y.length;
+    else if (y.includes(x)) sc = 50 + x.length;
+    if (sc > bestScore) { best = p; bestScore = sc; }
+  }
+  return best;
+}
+const tailOf = (a) => { const m = addrKey(a).match(/[가-힣0-9]+(?:로|길|번길|대로|동|리|가)(?:산)?\d+(?:-\d+)?/); return m ? m[0] : ""; };
+export function sameAddr(a, b) {
+  const x = addrKey(a), y = addrKey(b);
+  if (!x || !y) return false;
+  if (x === y || x.includes(y) || y.includes(x)) return true;
+  const tx = tailOf(a), ty = tailOf(b);
+  return !!tx && tx === ty;
+}
+
 // ── 여러 건 나누기 ──
 export function splitOrders(text) {
   const raw = String(text || "").replace(/\r/g, "");
@@ -388,6 +444,7 @@ export function parseOrderScan(text, { places = [], clients = [], today = new Da
   const markRole = (i, r) => { if (!roles[i] || roles[i] === "기타") roles[i] = r; };
   const sec = { pickup: { lines: [], labeled: false }, drop: { lines: [], labeled: false } };
   const globalLines = [];
+  const noticeLines = []; // "#입고 프로세스"처럼 기사님께 전달할 안내 묶음
   let cur = null;
   // 상차/하차 라벨이 하나라도 있으면 화살표(A → B) 줄은 경로 설명으로만 본다
   const hasSectionLabel = lines.some((L) => { const lb = matchLabel(L.text); return lb && ["pickup", "drop", "pickupAddr", "dropAddr"].includes(lb.k); });
@@ -396,6 +453,10 @@ export function parseOrderScan(text, { places = [], clients = [], today = new Da
   for (const L of lines) {
     if (GREET_RE.test(L.text) && !findAddress(L.text) && !findPhones(L.text).length) { markRole(L.i, "기타"); continue; }
     const lab = matchLabel(L.text);
+    // 안내 묶음(#입고 프로세스 …) 안에서는 "상차지: / 하차지:"처럼 콜론 붙은 새 구역 라벨이 나오기 전까지 전부 안내문
+    if (cur === "notice" && !(lab && ["pickup", "drop", "pickupAddr", "dropAddr", "pickupTime", "dropTime"].includes(lab.k) && /[:：]/.test(L.text.slice(0, 10)))) {
+      noticeLines.push(String(rawLines[L.i] || L.text).trim()); markRole(L.i, "전달"); continue;
+    }
     if (lab) {
       const v = lab.value;
       switch (lab.k) {
@@ -427,6 +488,12 @@ export function parseOrderScan(text, { places = [], clients = [], today = new Da
           continue;
         }
         case "memo": { if (v) set("메모추가", v, "high", L.i); markRole(L.i, "메모"); continue; }
+        case "weight": {
+          const w = findWeight(v); if (w) set("차량톤수", w, "high", L.i);
+          const c = findCargo(v.replace(/\d[\d,.]*\s*(?:kg|KG|Kg|㎏|키로그램|키로|킬로그램|킬로)/g, "")); if (c) { set("화물내용", c.value, "high", L.i); set("화물단위", c.unit, "high", L.i); }
+          markRole(L.i, "화물"); continue;
+        }
+        case "notice": { cur = "notice"; noticeLines.push(String(rawLines[L.i] || L.text).trim().replace(/^#\s*/, "")); markRole(L.i, "전달"); continue; }
         default: break;
       }
     }
@@ -439,6 +506,11 @@ export function parseOrderScan(text, { places = [], clients = [], today = new Da
       sec.drop.lines.push({ ...L, text: strip(arrow[2]) });
       markRole(L.i, "경로");
       continue;
+    }
+    // 괄호만 있는 줄 "(미준수 시 회송)" → 메모
+    if (/^\(.*\)$/.test(L.text) && !findAddress(L.text) && !findPhones(L.text).length) {
+      F.메모추가 = { value: [F.메모추가?.value, L.text.replace(/^\(|\)$/g, "")].filter(Boolean).join(" / "), conf: "mid", line: L.i };
+      markRole(L.i, "메모"); continue;
     }
     if (cur) {
       // 구역 아래 줄이라도 차량·화물만 적힌 줄이면 그 역할로 표시(업체명 후보에서도 빠진다)
@@ -539,26 +611,42 @@ export function parseOrderScan(text, { places = [], clients = [], today = new Da
     if (hit) set("거래처명", hit, "mid", -1);
   }
 
+  // 기사님께 전달할 안내(입고 프로세스 등) → 전달사항
+  if (noticeLines.length) F.전달사항 = { value: noticeLines.map((x) => x.replace(/^->\s*/, "→ ").replace(/\s+/g, " ")).join("\n"), conf: "high", line: -1 };
+
   // ── 등록된 하차지거래처와 맞추기 ──
   const issues = [];
   const matched = {};
   for (const P of ["상차지", "하차지"]) {
     const name = F[`${P}명`]?.value || "";
     const addr = F[`${P}주소`]?.value || "";
+    const S = sec[P === "상차지" ? "pickup" : "drop"];
+    const other = P === "하차지" ? (matched.상차지?.업체명 || F.상차지명?.value) : null;
+    // ① 이름이 똑같은 등록 업체
     let place = name ? matchPlaceByName(name, places) : null;
+    let how = place ? "등록 업체" : "";
     if (!place) {
-      const S = sec[P === "상차지" ? "pickup" : "drop"];
-      const txt = S.lines.map((x) => x.text).join(" ");
-      if (txt) place = findPlaceInText(txt, places, P === "하차지" ? F.상차지명?.value : null);
-      if (place) set(`${P}명`, place.업체명, "high", S.lines[0]?.i ?? -1);
-    }
-    if (!place && !name && addr) {
-      place = matchPlaceByAddr(addr, places);
-      if (place) { F[`${P}명`] = { value: place.업체명, conf: "mid", line: F[`${P}주소`].line, via: "주소로 찾은 등록 업체" }; }
+      // ② 같은 주소로 등록된 업체 / ③ 이름이 비슷한 등록 업체(지역명·"물류센터" 같은 꼬리말 빼고 비교)
+      const byAddr = addr ? matchPlaceByAddr(addr, places) : null;
+      const byName = name ? matchPlaceBySimilarName(name, places, other) : null;
+      const byText = !name && S.lines.length ? findPlaceInText(S.lines.map((x) => x.text).join(" "), places, other) : null;
+      if (byAddr && (!name || namesSimilar(name, byAddr.업체명))) { place = byAddr; how = name ? "주소·이름이 같은 등록 업체" : "주소로 찾은 등록 업체"; }
+      else if (byName && (!addr || !byName.주소 || sameAddr(addr, byName.주소))) { place = byName; how = "이름이 비슷한 등록 업체"; }
+      else if (byText && (!addr || !byText.주소 || sameAddr(addr, byText.주소))) { place = byText; how = "등록 업체"; }
+      else if (byAddr) {
+        // 주소는 같은데 이름이 전혀 다름 → 자동으로 바꾸지 않고 제안만
+        if (F[`${P}명`]) F[`${P}명`].suggest = byAddr;
+        issues.push({ field: `${P}명`, level: "info", msg: `같은 주소로 등록된 '${byAddr.업체명}'이(가) 있습니다 — 같은 곳이면 [등록 업체로 바꾸기]를 누르세요` });
+      } else if (byName && addr && byName.주소 && !sameAddr(addr, byName.주소)) {
+        if (F[`${P}명`]) F[`${P}명`].suggest = byName;
+        issues.push({ field: `${P}명`, level: "info", msg: `이름이 비슷한 '${byName.업체명}'이(가) 등록돼 있지만 주소가 다릅니다 — 같은 곳인지 확인하세요` });
+      }
     }
     if (place) {
       matched[P] = place;
-      if (!F[`${P}주소`] && place.주소) F[`${P}주소`] = { value: place.주소, conf: "mid", line: -1, via: "등록 업체 주소" };
+      const scanned = name && nk(name) !== nk(place.업체명) ? name : "";
+      F[`${P}명`] = { value: place.업체명, conf: "high", line: F[`${P}명`]?.line ?? F[`${P}주소`]?.line ?? -1, via: how, scanned };
+      if (place.주소 && (!addr || !sameAddr(addr, place.주소))) F[`${P}주소`] = { value: place.주소, conf: "mid", line: F[`${P}주소`]?.line ?? -1, via: addr ? "등록 업체 주소(스캔 주소와 다름)" : "등록 업체 주소", scanned: addr };
       if (!F[`${P}담당자`] && place.담당자) F[`${P}담당자`] = { value: place.담당자, conf: "mid", line: -1, via: "등록 업체 담당자" };
       if (!F[`${P}담당자번호`] && place.담당자번호) F[`${P}담당자번호`] = { value: place.담당자번호, conf: "mid", line: -1, via: "등록 업체 연락처" };
     }
