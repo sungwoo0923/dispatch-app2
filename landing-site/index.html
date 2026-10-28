@@ -3,138 +3,173 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>KP-Flow Logistics - 화물 운송사를 위한 배차관리 프로그램</title>
-<meta name="description" content="KP-Flow는 화물 운송사를 위한 올인원 배차관리 솔루션입니다. 배차관리, 실시간 배차현황, 지입차관리, 정산관리까지 한 프로그램에서 관리하세요." />
-<meta property="og:title" content="KP-Flow Logistics - 화물 운송사를 위한 배차관리 프로그램" />
-<meta property="og:description" content="배차관리, 실시간 배차현황, 지입차관리, 정산관리까지 한 프로그램에서 관리하는 올인원 운송사 솔루션" />
+<title>KP-Flow | 화물 운송사 배차관리 프로그램 · 배차부터 정산까지</title>
+<meta name="description" content="KP-Flow는 화물 운송사를 위한 올인원 배차관리 프로그램입니다. 배차관리, 실시간 배차현황, 지입차 관제, 정산·매출, 기사 서류 업로드, 전자결재까지 PC와 모바일에서 한 번에 관리하세요." />
+<meta name="keywords" content="배차관리 프로그램, 화물 배차 프로그램, 운송사 프로그램, 배차 프로그램, 화물 정산, 지입차 관리, 운송관리 시스템, TMS, KP-Flow" />
+<meta name="robots" content="index,follow" />
+<meta name="theme-color" content="#0F1A30" />
+<link rel="canonical" href="https://dispatch-app2-vskk.vercel.app/" />
+<!-- 네이버 서치어드바이저 사이트 소유확인: 네이버에서 받은 값으로 바꿔 넣으세요 -->
+<!-- <meta name="naver-site-verification" content="여기에_네이버_확인코드" /> -->
 <meta property="og:type" content="website" />
+<meta property="og:site_name" content="KP-Flow" />
+<meta property="og:title" content="KP-Flow | 화물 운송사 배차관리 프로그램" />
+<meta property="og:description" content="배차부터 정산까지 — 배차관리, 실시간 현황, 지입차 관제, 정산, 전자결재를 하나로" />
+<meta property="og:url" content="https://dispatch-app2-vskk.vercel.app/" />
+<meta property="og:image" content="https://dispatch-app2-vskk.vercel.app/og-image.png" />
+<meta property="og:locale" content="ko_KR" />
 <link rel="icon" type="image/png" href="/icons/sflow-icon.png" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
 <link rel="stylesheet" href="style.css" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"KP-Flow","applicationCategory":"BusinessApplication","operatingSystem":"Web, Android, iOS","description":"화물 운송사를 위한 배차관리·정산·지입차 관제 프로그램","url":"https://dispatch-app2-vskk.vercel.app/","inLanguage":"ko-KR","offers":{"@type":"Offer","price":"0","priceCurrency":"KRW","description":"무료 체험"}}
+</script>
 </head>
 <body>
 
 <header>
   <div class="wrap header-inner">
-    <div class="brand">
-      <img src="/icons/sflow-icon.png" alt="KP-Flow" />
-      <span>KP-Flow</span>
-    </div>
-    <div style="display:flex; align-items:center; gap:10px;">
-      <button class="btn btn-navy" onclick="document.getElementById('inquiry-form').scrollIntoView({behavior:'smooth'})">무료 체험 신청</button>
-      <a class="btn btn-outline" href="login.html">로그인</a>
+    <a class="brand" href="/"><img src="/icons/sflow-icon.png" alt="KP-Flow" /><span><b>KP-Flow</b><small>DISPATCH</small></span></a>
+    <nav class="nav">
+      <a href="#features">주요 기능</a>
+      <a href="#why">왜 KP-Flow</a>
+      <a href="#steps">도입 절차</a>
+      <a href="#inquiry-form">무료 체험</a>
+    </nav>
+    <div class="header-cta">
+      <a class="btn btn-white" href="#inquiry-form">무료 체험 신청</a>
+      <a class="btn btn-ghost" href="login.html">로그인</a>
     </div>
   </div>
 </header>
 
-<section class="hero">
-  <div class="hero-inner">
-    <div class="badge">화물 운송사를 위한 올인원 배차관리 솔루션</div>
-    <h1>배차부터 정산까지,<br /><span>KP-Flow</span> 하나로 끝내세요</h1>
-    <p>배차관리, 실시간 추적, 지입차관리, 정산관리까지 —<br />운송사 운영에 필요한 모든 기능을 하나의 프로그램에서 관리하세요.</p>
-    <div class="hero-actions">
-      <button class="btn btn-navy btn-lg" onclick="document.getElementById('inquiry-form').scrollIntoView({behavior:'smooth'})">무료 체험 신청하기</button>
-      <a class="btn btn-outline btn-lg" href="login.html">로그인</a>
+<section class="hero dark">
+  <div class="wrap hero-inner">
+    <div>
+      <div class="eyebrow">ALL-IN-ONE DISPATCH PLATFORM</div>
+      <h1>배차부터 정산까지,<br /><span>KP-Flow</span> 하나로 끝내세요</h1>
+      <p class="lead">엑셀로 하던 배차·정산 업무를 하나의 프로그램으로.<br />배차관리, 실시간 현황, 지입차 관제, 매출 분석, 전자결재까지 PC와 모바일에서 함께 씁니다.</p>
+      <div class="hero-actions">
+        <a class="btn btn-white btn-lg" href="#inquiry-form">무료 체험 신청하기 <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+        <a class="btn btn-ghost btn-lg" href="login.html">로그인</a>
+      </div>
+      <div class="hero-meta">
+        <span><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>엑셀 자료 이관 지원</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/></svg>PC · 모바일 앱</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3"/><path d="M4 4v4h4M20 20v-4h-4"/></svg>실시간 동기화</span>
+      </div>
+    </div>
+    <div class="mock" aria-hidden="true">
+      <div class="mock-bar"><span class="dot"></span>LIVE DISPATCH · 화면 예시</div>
+      <div class="mock-kpi">
+        <div><small>오늘 오더</small><b>128</b></div>
+        <div><small>배차완료</small><b>119</b></div>
+        <div><small>매익률</small><b>14.2%</b></div>
+      </div>
+      <div class="mock-rows">
+        <div class="mock-row"><span class="t">09:00</span><span><b>인천 서구 → 평택 포승</b><em>11톤 윙 · 잡화 10파레트</em></span><span class="pill on">배차완료</span></div>
+        <div class="mock-row"><span class="t">13:00</span><span><b>화성 향남 → 부산 강서</b><em>5톤 냉장탑 · 의약품</em></span><span class="pill">배차중</span></div>
+        <div class="mock-row"><span class="t">15:30</span><span><b>김포 고촌 → 대전 유성</b><em>1톤 탑 · 전자부품</em></span><span class="pill on">배차완료</span></div>
+      </div>
     </div>
   </div>
 </section>
 
-<section>
-  <div class="section-label">주요 기능</div>
-  <h2 class="section-title">운송 업무에 꼭 필요한 기능만</h2>
-  <div class="features">
-    <div class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6"/><path d="M9 16h6"/></svg></div><h3>배차관리</h3><p>상/하차지, 차량, 운임까지 한 화면에서 빠르게 등록하고 배차하세요.</p></div>
-    <div class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></div><h3>실시간 배차현황</h3><p>진행 중인 오더와 기사 위치를 실시간으로 확인할 수 있습니다.</p></div>
-    <div class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14v10"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg></div><h3>지입차관리</h3><p>지입/직영 차량의 노선, 배차 이력, 정산 내역을 한 번에 관리합니다.</p></div>
-    <div class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4M10 10h4M10 14h4M10 18h4"/></svg></div><h3>거래처관리</h3><p>상/하차지 거래처 정보와 담당자 연락처를 체계적으로 관리합니다.</p></div>
-    <div class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/></svg></div><h3>정산관리</h3><p>기사운임, 거래처 정산을 자동으로 집계해 실수를 줄여줍니다.</p></div>
-    <div class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><h3>기사관리</h3><p>기사 등록부터 등급 관리, 서류 업로드까지 한곳에서 처리합니다.</p></div>
-    <div class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/></svg></div><h3>온도/차량 관제</h3><p>냉동/냉장 차량의 온도와 적재함 상태를 원격으로 확인합니다.</p></div>
-    <div class="feature-card"><div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></div><h3>권한별 접근 관리</h3><p>역할에 따라 메뉴 접근 범위를 세밀하게 설정할 수 있습니다.</p></div>
+<div class="strip">
+  <div class="wrap strip-inner">
+    <div><b>PC + APP</b><small>사무실과 현장에서 동시에</small></div>
+    <div><b>REAL-TIME</b><small>모든 화면 실시간 동기화</small></div>
+    <div><b>EXCEL → KP</b><small>기존 엑셀 자료 이관 지원</small></div>
+    <div><b>FREE TRIAL</b><small>먼저 써보고 결정하세요</small></div>
+  </div>
+</div>
+
+<section class="block" id="features">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow">FEATURES</div>
+      <h2>운송 업무에 꼭 필요한 기능만,<br />현장 배차팀장이 직접 설계했습니다</h2>
+      <p>매일 쓰는 배차 화면부터 월말 정산까지 — 운송사 실무 흐름 그대로 만들었습니다.</p>
+    </div>
+    <div class="features">
+      <div class="feature"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h6"/></svg></div><small>DISPATCH</small><h3>배차관리 · 오더 스캔</h3><p>오더를 한 화면에서 등록하고, 문자·카톡 오더는 사진·글 스캔으로 자동 입력합니다.</p></div>
+      <div class="feature"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg></div><small>LIVE</small><h3>실시간 배차현황</h3><p>진행 중 오더와 미배차 건수를 실시간으로 보고, PC·모바일이 즉시 동기화됩니다.</p></div>
+      <div class="feature"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="13" height="10" rx="1.5"/><path d="M14 9h4l3 3v4h-7"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg></div><small>FLEET</small><h3>지입차 관제</h3><p>지입·직영 차량의 노선과 위치, 운행 현황을 관제 화면에서 한눈에 확인합니다.</p></div>
+      <div class="feature"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><path d="M6 16v-5M11 16V7M16 16v-8M21 16V4"/></svg></div><small>REVENUE</small><h3>정산 · 매출 대시보드</h3><p>기사운임·청구운임·매익률을 자동 집계하고 거래처 순위와 추이를 시각화합니다.</p></div>
+      <div class="feature"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V5l8-2v18M12 7l8 2v12"/><path d="M8 9h.01M8 13h.01M8 17h.01M16 13h.01M16 17h.01"/></svg></div><small>CLIENTS</small><h3>거래처 · 운임표</h3><p>상·하차지 거래처와 자사 운임표를 관리하고 배차 등록 때 자동으로 불러옵니다.</p></div>
+      <div class="feature"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v4h16v-4"/></svg></div><small>DRIVER LINK</small><h3>기사 서류 업로드</h3><p>기사에게 링크만 보내면 인수증·거래명세서 사진과 서명을 바로 받습니다.</p></div>
+      <div class="feature"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6l-1 7h4l1 4H5l1-4h4z"/><path d="M5 18h14M7 21h10"/></svg></div><small>WORKFLOW</small><h3>전자결재 · 사내메일</h3><p>휴가·지출결의·운임변경 품의까지 결재선대로 처리하고 사내메일로 소통합니다.</p></div>
+      <div class="feature"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v6c0 4.5 3 7.7 7 9 4-1.3 7-4.5 7-9V6z"/><path d="m9 12 2 2 4-4"/></svg></div><small>SECURITY</small><h3>권한 · 보안</h3><p>역할별 메뉴 권한, 접속 기기 관리, 로그인 기록으로 회사 데이터를 지킵니다.</p></div>
+    </div>
   </div>
 </section>
 
-<section class="steps-section">
-  <h2 class="steps-title">도입은 이렇게 진행돼요</h2>
-  <div class="steps">
-    <div class="step-card"><div class="step-num">1</div><h4>체험 신청</h4><p>아래 폼으로 회사 정보를 남겨주세요</p></div>
-    <div class="step-card"><div class="step-num">2</div><h4>상담 및 세팅</h4><p>담당자가 연락드려 거래처·기사 등 기초 자료 세팅을 도와드립니다</p></div>
-    <div class="step-card"><div class="step-num">3</div><h4>무료 체험</h4><p>전용 계정으로 실제 업무에 써보시고 결정하세요</p></div>
+<section class="block alt" id="why">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow">WHY KP-FLOW</div>
+      <h2>엑셀에서 프로그램으로, 이렇게 달라집니다</h2>
+    </div>
+    <div class="why">
+      <div><div class="eyebrow">01</div><b>입력은 한 번만</b><p>오더 스캔과 거래처·운임표 자동 불러오기로 같은 내용을 여러 번 적지 않습니다.</p></div>
+      <div><div class="eyebrow">02</div><b>모두가 같은 화면</b><p>배차팀·영업·정산이 같은 데이터를 실시간으로 보니, 전화로 확인할 일이 줄어듭니다.</p></div>
+      <div><div class="eyebrow">03</div><b>숫자가 바로 보임</b><p>매출·매익률·담당자별 실적이 대시보드로 자동 집계되어 마감이 빨라집니다.</p></div>
+    </div>
   </div>
 </section>
 
-<section id="inquiry-form">
-  <div class="form-section">
-    <div class="section-label">무료 체험 신청</div>
-    <h2 class="section-title" style="margin-bottom:0;">무료로 먼저 써보세요</h2>
-    <p class="sub">신청하시면 담당자가 연락드려 체험 계정을 열어드립니다. 엑셀 자료 이관도 도와드립니다.</p>
+<section class="block" id="steps">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow">ONBOARDING</div>
+      <h2>도입은 이렇게 진행됩니다</h2>
+    </div>
+    <div class="steps">
+      <div class="step"><span class="n">01</span><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h6"/></svg></div><h4>체험 신청</h4><p>아래 양식으로 회사 정보를 남겨 주세요.</p></div>
+      <div class="step"><span class="n">02</span><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V5l8-2v18M12 7l8 2v12"/><path d="M8 9h.01M8 13h.01M8 17h.01M16 13h.01M16 17h.01"/></svg></div><h4>상담 및 세팅</h4><p>담당자가 연락드려 거래처·기사 등 기초 자료 세팅과 엑셀 이관을 도와드립니다.</p></div>
+      <div class="step"><span class="n">03</span><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg></div><h4>무료 체험</h4><p>전용 계정으로 실제 업무에 써 보시고 결정하세요.</p></div>
+    </div>
+  </div>
+</section>
 
-    <form id="inquiryForm">
-      <div>
-        <label>회사명 *</label>
-        <input id="f-company" autocomplete="off" placeholder="회사명을 입력해주세요" />
+<section class="block alt" id="inquiry-form">
+  <div class="wrap inquiry">
+    <div class="inq-info dark">
+      <div class="eyebrow">FREE TRIAL</div>
+      <h2>무료로 먼저<br />써 보세요</h2>
+      <p>신청하시면 담당자가 연락드려 체험 계정을 열어드립니다.</p>
+      <ul>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>엑셀 거래처·기사 자료 이관 지원</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>PC 프로그램 + 모바일 앱 함께 제공</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>회사별 권한·메뉴 맞춤 설정</li>
+      </ul>
+    </div>
+    <div class="form-card">
+      <form id="inquiryForm">
+        <div><label>회사명 *</label><input id="f-company" autocomplete="organization" placeholder="회사명" /></div>
+        <div><label>담당자명 *</label><input id="f-name" autocomplete="name" placeholder="담당자 성함" /></div>
+        <div><label>연락처 *</label><input id="f-phone" autocomplete="tel" inputmode="numeric" placeholder="010-0000-0000" /></div>
+        <div><label>이메일</label><input id="f-email" autocomplete="email" placeholder="example@company.com" /></div>
+        <div><label>운영 차량 대수</label><select id="f-vehicles"><option value="">선택해 주세요</option><option>10대 미만</option><option>10~30대</option><option>30~100대</option><option>100대 이상</option></select></div>
+        <div><label>배차 담당 인원</label><select id="f-staff"><option value="">선택해 주세요</option><option>1~2명</option><option>3~5명</option><option>6~10명</option><option>10명 이상</option></select></div>
+        <div class="full"><label>현재 배차 관리 방식</label><select id="f-current"><option value="">선택해 주세요</option><option>엑셀</option><option>다른 배차 프로그램</option><option>수기·메모</option><option>기타</option></select></div>
+        <div class="full"><label>문의 내용</label><textarea id="f-message" rows="4" placeholder="필요한 기능, 궁금한 점을 자유롭게 남겨 주세요."></textarea></div>
+        <div id="form-error" class="error-text" style="display:none;"></div>
+        <button type="submit" id="submitBtn" class="submit-btn">무료 체험 신청</button>
+      </form>
+      <div id="successBox" class="success-box" style="display:none;">
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg></div>
+        <h3>체험 신청이 접수되었습니다</h3>
+        <p>담당자 확인 후 입력하신 연락처로 안내드리겠습니다.</p>
       </div>
-      <div>
-        <label>담당자명 *</label>
-        <input id="f-name" autocomplete="off" placeholder="담당자 성함" />
-      </div>
-      <div>
-        <label>연락처 *</label>
-        <input id="f-phone" autocomplete="off" placeholder="010-0000-0000" />
-      </div>
-      <div>
-        <label>이메일</label>
-        <input id="f-email" autocomplete="off" placeholder="example@company.com" />
-      </div>
-      <div>
-        <label>운영 차량 대수</label>
-        <select id="f-vehicles">
-          <option value="">선택해주세요</option>
-          <option>10대 미만</option>
-          <option>10~30대</option>
-          <option>30~100대</option>
-          <option>100대 이상</option>
-        </select>
-      </div>
-      <div>
-        <label>배차 담당 인원</label>
-        <select id="f-staff">
-          <option value="">선택해주세요</option>
-          <option>1~2명</option>
-          <option>3~5명</option>
-          <option>6~10명</option>
-          <option>10명 이상</option>
-        </select>
-      </div>
-      <div>
-        <label>현재 배차 관리 방식</label>
-        <select id="f-current">
-          <option value="">선택해주세요</option>
-          <option>엑셀</option>
-          <option>다른 배차 프로그램</option>
-          <option>수기·메모</option>
-          <option>기타</option>
-        </select>
-      </div>
-      <div>
-        <label>문의 내용</label>
-        <textarea id="f-message" rows="4" placeholder="필요한 기능, 궁금한 점을 자유롭게 남겨주세요."></textarea>
-      </div>
-      <div id="form-error" class="error-text" style="display:none;"></div>
-      <button type="submit" id="submitBtn" class="submit-btn">무료 체험 신청</button>
-    </form>
-
-    <div id="successBox" class="success-box" style="display:none;">
-      <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg></div>
-      <h3>체험 신청이 접수되었습니다</h3>
-      <p>담당자 확인 후 입력하신 연락처로 안내드리겠습니다.</p>
     </div>
   </div>
 </section>
 
 <footer>
   <div class="wrap footer-inner">
-    <div class="contact"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z"/></svg>무료 체험 신청 및 상담은 위 폼을 이용해 주세요.</div>
+    <a class="brand" href="/"><img src="/icons/sflow-icon.png" alt="KP-Flow" /><span><b>KP-Flow</b><small>DISPATCH</small></span></a>
+    <div class="footer-links"><a href="#features">주요 기능</a><a href="#inquiry-form">무료 체험</a><a href="login.html">로그인</a></div>
     <div class="copy">© <span id="year"></span> KP-Flow. All rights reserved.</div>
   </div>
 </footer>

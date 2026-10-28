@@ -1,12 +1,16 @@
 // ======================= cafe-site/src/CafeLogin.jsx =======================
+// 2026-10-28 리디자인 — 배차 프로그램과 같은 네이비 톤 분할 화면(AuthLayout)
 import React, { useState } from "react";
 import { auth } from "./firebase";
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { Link, useNavigate } from "react-router-dom";
+import AuthLayout from "./AuthLayout";
+import { Icon, inputCls, btnPrimary, btnPrimaryStyle } from "./ui";
 
 export default function CafeLogin() {
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
@@ -32,51 +36,47 @@ export default function CafeLogin() {
     if (!email.trim()) return setError("비밀번호를 재설정할 이메일을 입력해주세요.");
     try {
       await sendPasswordResetEmail(auth, email.trim());
-      setMsg("비밀번호 재설정 메일을 보냈습니다.");
+      setMsg("비밀번호 재설정 메일을 보냈습니다. 메일함을 확인해 주세요.");
     } catch {
       setError("재설정 메일 발송에 실패했습니다.");
     }
   };
 
-  const inputCls = "w-full border border-gray-200 rounded-xl px-4 py-3 text-[14px] text-gray-900 outline-none focus:border-[#1B2B4B] transition";
-
   return (
-    <div className="min-h-screen bg-[#f4f6fa] flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-[400px]">
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center gap-2 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-[#1B2B4B] flex items-center justify-center text-white font-black text-[15px]">배</div>
-            <span className="text-[19px] font-black text-[#1B2B4B] tracking-tight">배차마당</span>
+    <AuthLayout en="SIGN IN" title="로그인"
+      footer={<a href="https://dispatch-app2.vercel.app/login" target="_blank" rel="noreferrer" className="text-[12.5px] font-semibold text-[#7A879C] hover:text-[#0F1A30]">배차관리 프로그램(KP-Flow) 바로가기 ↗</a>}>
+      <form className="space-y-3.5" onSubmit={(e) => { e.preventDefault(); login(); }}>
+        <label className="block">
+          <span className="text-[12.5px] font-bold text-[#5B6B85]">이메일</span>
+          <div className="relative mt-1.5">
+            <Icon name="mail" size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#9AA9C3]" />
+            <input className={`${inputCls} pl-11`} placeholder="name@company.com" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
-          <p className="text-[13px] text-gray-400">화물 배차 정보 공유 커뮤니티</p>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-7 space-y-3"
-          onKeyDown={e => { if (e.key === "Enter") login(); }}>
-          <input className={inputCls} placeholder="이메일" type="email" autoComplete="off"
-            value={email} onChange={e => setEmail(e.target.value)} />
-          <input className={inputCls} placeholder="비밀번호" type="password" autoComplete="off"
-            value={pw} onChange={e => setPw(e.target.value)} />
-
-          {error && <div className="text-[12px] text-red-500 font-semibold px-1">{error}</div>}
-          {msg && <div className="text-[12px] text-emerald-600 font-semibold px-1">{msg}</div>}
-
-          <button onClick={login} disabled={loading}
-            className="w-full py-3 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[14px] transition disabled:opacity-50">
-            {loading ? "로그인 중..." : "로그인"}
-          </button>
-
-          <div className="flex items-center justify-between pt-1">
-            <button onClick={resetPw} className="text-[12px] text-gray-400 hover:text-gray-600">비밀번호를 잊으셨나요?</button>
-            <Link to="/signup" className="text-[13px] font-semibold text-[#1B2B4B] hover:underline">회원가입</Link>
+        </label>
+        <label className="block">
+          <span className="text-[12.5px] font-bold text-[#5B6B85]">비밀번호</span>
+          <div className="relative mt-1.5">
+            <Icon name="lock" size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#9AA9C3]" />
+            <input className={`${inputCls} pl-11 pr-16`} placeholder="비밀번호" type={showPw ? "text" : "password"} autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} />
+            <button type="button" onClick={() => setShowPw((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] font-bold text-[#7A879C] hover:text-[#0F1A30]">{showPw ? "숨기기" : "보기"}</button>
           </div>
-        </div>
+        </label>
 
-        <div className="text-center mt-4">
-          <a href="https://dispatch-app2.vercel.app/login" target="_blank" rel="noreferrer"
-            className="text-[12px] text-gray-400 hover:text-gray-600">배차관리 프로그램으로 돌아가기 ↗</a>
+        {error && <div className="rounded-xl bg-[#F5F8FD] border border-[#DCE3EE] px-3.5 py-2.5 text-[13px] font-bold text-[#0F1A30]">⚠ {error}</div>}
+        {msg && <div className="rounded-xl bg-[#EEF3FB] border border-[#D5E0F2] px-3.5 py-2.5 text-[13px] font-bold text-[#1B2B4B]">✓ {msg}</div>}
+
+        <button type="submit" disabled={loading} className={`w-full ${btnPrimary}`} style={btnPrimaryStyle}>
+          {loading ? "로그인 중…" : "로그인"}
+        </button>
+
+        <div className="flex items-center justify-between pt-1">
+          <button type="button" onClick={resetPw} className="text-[13px] font-semibold text-[#7A879C] hover:text-[#0F1A30]">비밀번호를 잊으셨나요?</button>
+          <Link to="/signup" className="text-[13.5px] font-black text-[#1B2B4B] hover:underline">회원가입 →</Link>
         </div>
+      </form>
+      <div className="mt-6 pt-5 border-t border-[#EEF1F6] text-[12.5px] text-[#7A879C] leading-relaxed">
+        처음이신가요? 회원가입은 무료이며 가입 즉시 오더를 올리고 배차신청할 수 있습니다.
       </div>
-    </div>
+    </AuthLayout>
   );
 }

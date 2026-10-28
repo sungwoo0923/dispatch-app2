@@ -17,8 +17,11 @@ const emptyForm = {
   혼적: false, 운행유형: "편도", 긴급: false, 경유여부: false,
 };
 
-const field = "w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[13px] text-gray-900 outline-none focus:border-[#1B2B4B] transition";
-const label = "text-[12px] font-bold text-gray-500 mb-1 block";
+// ⭐ 2026-10-28 리디자인 — 네이비 톤 입력칸·구역 제목
+const field = "w-full h-11 border border-[#DCE3EE] rounded-xl px-3.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 transition placeholder:text-[#9AA9C3] placeholder:font-medium";
+const label = "text-[12px] font-bold text-[#5B6B85] mb-1.5 block";
+const chip = (on) => `h-9 px-3.5 text-[12.5px] font-black rounded-xl border transition ${on ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#5B6B85] border-[#DCE3EE] hover:border-[#4B6CB7]"}`;
+const Sec = ({ en, title }) => <div className="flex items-center gap-2 pt-1"><span className="text-[10px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{en}</span><span className="text-[13.5px] font-black text-[#0F1A30]">{title}</span><span className="flex-1 h-px bg-[#EEF1F6]" /></div>;
 
 // 실제로 존재하지 않을 법한 예시 — 자사 등록 거래처와 혼동되지 않게 가공의 이름만 쓴다.
 const PLACEHOLDERS = {
@@ -118,12 +121,16 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
 
   const body = (
     <>
-        <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
-          <div className="text-white font-bold text-[15px]">{editing ? "오더 수정" : inline ? "빠른 오더 등록" : "오더 등록"}</div>
-          {!inline && <button onClick={onClose} className="text-white/60 hover:text-white text-xl leading-none">×</button>}
+        <div className="px-6 py-4 flex items-center justify-between shrink-0 text-white" style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+          <div>
+            <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{editing ? "EDIT ORDER" : inline ? "QUICK POST" : "NEW ORDER"}</div>
+            <div className="font-black text-[17px]">{editing ? "오더 수정" : inline ? "빠른 오더 등록" : "오더 등록"}</div>
+          </div>
+          {!inline && <button type="button" onClick={onClose} className="w-9 h-9 rounded-xl hover:bg-white/10 text-white/70 text-[20px] leading-none">×</button>}
         </div>
 
         <div className={`flex-1 overflow-y-auto space-y-4 ${inline ? "p-4" : "p-6"}`}>
+          <Sec en="ROUTE" title="상·하차지" />
           {/* 상차지 */}
           <div>
             <label className={label}>상차지명 / 주소 *</label>
@@ -151,6 +158,7 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
             />
           </div>
 
+          <Sec en="SCHEDULE" title="일시" />
           {/* 상/하차 일시 */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -171,6 +179,7 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
             </div>
           </div>
 
+          <Sec en="CARGO" title="화물 · 차량" />
           {/* 화물 정보 */}
           <div>
             <label className={label}>화물내용 *</label>
@@ -200,7 +209,7 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
                 <select
                   value={tonUnit}
                   onChange={e => { setTonUnit(e.target.value); setTonValue(""); }}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 text-[12px] font-bold text-[#1B2B4B] border border-gray-200 rounded-md px-1.5 py-1 outline-none cursor-pointer bg-white"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[12px] font-black text-[#0F1A30] border border-[#DCE3EE] rounded-lg px-1.5 py-1 outline-none cursor-pointer bg-[#F5F8FD]"
                 >
                   {TON_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                 </select>
@@ -216,7 +225,7 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
           </div>
           {showLift && (
             <button type="button" onClick={() => set("리프트", !form.리프트)}
-              className={`px-3 py-1.5 text-[12px] font-bold rounded-lg border transition ${form.리프트 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+              className={chip(form.리프트)}>
               {form.리프트 ? "✓ " : ""}리프트 차량
             </button>
           )}
@@ -246,6 +255,7 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
             </div>
           </div>
 
+          <Sec en="PAYMENT" title="운임 · 옵션" />
           {/* 운임 */}
           <div>
             <label className={label}>운임</label>
@@ -262,7 +272,7 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-gray-400 font-semibold pointer-events-none">원</span>
               </div>
               <button type="button" onClick={() => set("협의", !form.협의)}
-                className={`shrink-0 px-3 py-2.5 text-[12px] font-bold rounded-lg border transition ${form.협의 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+                className={`${chip(form.협의)} !h-11 shrink-0`}>
                 {form.협의 ? "✓ " : ""}협의가능
               </button>
             </div>
@@ -276,31 +286,31 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
               ["경유여부", "경유"],
             ].map(([k, l]) => (
               <button type="button" key={k} onClick={() => set(k, !form[k])}
-                className={`px-3 py-1.5 text-[12px] font-bold rounded-lg border transition ${form[k] ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+                className={chip(form[k])}>
                 {l}
               </button>
             ))}
             <button type="button" onClick={() => set("운행유형", form.운행유형 === "왕복" ? "편도" : "왕복")}
-              className={`px-3 py-1.5 text-[12px] font-bold rounded-lg border transition ${form.운행유형 === "왕복" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+              className={chip(form.운행유형 === "왕복")}>
               {form.운행유형 === "왕복" ? "왕복" : "편도"} (클릭시 전환)
             </button>
           </div>
 
           <div>
             <label className={label}>메모</label>
-            <textarea className={field} rows={3} value={form.메모} onChange={e => set("메모", e.target.value)} placeholder="추가로 전달할 내용이 있다면 적어주세요." />
+            <textarea className={`${field} !h-auto py-2.5`} rows={3} value={form.메모} onChange={e => set("메모", e.target.value)} placeholder="추가로 전달할 내용이 있다면 적어주세요." />
           </div>
 
-          {error && <div className="text-[12px] text-red-500 font-semibold">{error}</div>}
-          {done && <div className="text-[12px] text-emerald-600 font-semibold">✓ {done}</div>}
+          {error && <div className="rounded-xl bg-[#F5F8FD] border border-[#DCE3EE] px-3.5 py-2.5 text-[13px] font-bold text-[#0F1A30]">⚠ {error}</div>}
+          {done && <div className="rounded-xl bg-[#0F1A30] px-3.5 py-2.5 text-[13px] font-black text-white">✓ {done}</div>}
         </div>
 
-        <div className={`border-t border-gray-100 flex gap-3 shrink-0 ${inline ? "px-4 py-3" : "px-6 py-4"}`}>
-          <button onClick={inline ? resetForm : onClose} className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px] transition">
+        <div className={`border-t border-[#E3E8F0] bg-white flex gap-2.5 shrink-0 ${inline ? "px-4 py-3" : "px-6 py-4"}`}>
+          <button type="button" onClick={inline ? resetForm : onClose} className="flex-1 h-12 rounded-xl border border-[#DCE3EE] text-[#5B6B85] font-bold text-[13.5px] hover:bg-[#F5F8FD] transition">
             {inline ? "초기화" : "취소"}
           </button>
-          <button onClick={submit} disabled={saving}
-            className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition disabled:opacity-50">
+          <button type="button" onClick={submit} disabled={saving}
+            className="flex-[1.6] h-12 rounded-xl text-white font-black text-[14px] transition disabled:opacity-50 shadow-[0_10px_24px_rgba(15,26,48,0.25)]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
             {saving ? "저장 중..." : editing ? "수정 완료" : "등록하기"}
           </button>
         </div>
@@ -309,7 +319,7 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
 
   if (inline) {
     return (
-      <div className="bg-white border border-gray-200 rounded-2xl flex flex-col overflow-hidden h-full">
+      <div className="bg-white border border-[#E3E8F0] rounded-[20px] flex flex-col overflow-hidden h-full shadow-[0_6px_20px_rgba(15,26,48,0.05)]">
         {body}
       </div>
     );
@@ -318,8 +328,8 @@ export default function CafeOrderForm({ profile, editing, onClose, onSaved, orde
   // 바깥(어두운 배경)을 클릭해도 닫히지 않게 한다 — 입력 중 실수로 닫혀 내용이 날아가는 것 방지.
   // 닫기는 × 버튼 / 취소 버튼으로만.
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-w-full max-h-[90vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-[#0F1A30]/55 backdrop-blur-[2px] flex items-end sm:items-center justify-center z-[9999] sm:p-4">
+      <div className="bg-white sm:rounded-[24px] rounded-t-[24px] shadow-[0_24px_60px_rgba(15,26,48,0.4)] w-full sm:w-[680px] max-h-[94vh] flex flex-col overflow-hidden">
         {body}
       </div>
     </div>

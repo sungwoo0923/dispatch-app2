@@ -2,20 +2,15 @@
 import React, { useState, useEffect, useRef } from "react";
 import { APPLY_CANCEL_WINDOW_MS } from "./cafeConstants";
 import { applyToCafeOrder, cancelCafeApply, finalizeCafeApplyIfDue, deleteCafeOrder, cancelCafeOrder, fetchCafeContact } from "./cafeApi";
+import { GRID_BG, MONO, Icon, StatusBadge, Tag } from "./ui";
+// ⭐ 2026-10-28 리디자인 — 경로 카드 + 정보 그리드, 상태는 네이비 한 계열(색 구분 없음)
 
-const STATUS_META = {
-  open:      { label: "대기중",   cls: "bg-gray-100 text-gray-600" },
-  applying:  { label: "신청중",   cls: "bg-amber-50 text-amber-700" },
-  confirmed: { label: "배차완료", cls: "bg-emerald-50 text-emerald-700" },
-  cancelled: { label: "취소됨",   cls: "bg-red-50 text-red-600" },
-};
-
-function Row({ label, value }) {
+function Cell({ label, value, strong }) {
   if (!value) return null;
   return (
-    <div className="flex items-start gap-3 py-1.5">
-      <div className="w-20 shrink-0 text-[12px] font-bold text-gray-400">{label}</div>
-      <div className="text-[13px] text-gray-800 font-medium">{value}</div>
+    <div className="rounded-xl bg-[#F8FAFD] border border-[#EEF1F6] px-3.5 py-2.5 min-w-0">
+      <div className="text-[11px] font-bold text-[#7A879C]">{label}</div>
+      <div className={`text-[14px] mt-0.5 break-words ${strong ? "font-black text-[#0F1A30]" : "font-bold text-[#1F2A44]"}`}>{value}</div>
     </div>
   );
 }
@@ -28,7 +23,6 @@ export default function CafeOrderDetail({ order, profile, onClose, onEdit }) {
 
   const isMine = order.posterUid === profile.uid;
   const isApplicant = order.applicantUid === profile.uid;
-  const meta = STATUS_META[order.status] || STATUS_META.open;
 
   // 신청중 상태 카운트다운(10초) — 본인이 신청자라면 취소 가능 구간, 아니라면 마감 임박 표시.
   useEffect(() => {
@@ -89,108 +83,118 @@ export default function CafeOrderDetail({ order, profile, onClose, onEdit }) {
   const callHref = (phone) => `tel:${(phone || "").replace(/[^\d]/g, "")}`;
   const smsHref = (phone) => `sms:${(phone || "").replace(/[^\d]/g, "")}`;
 
+  const contactBox = (who, phone) => (
+    <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <div className="text-[12px] font-bold text-white/60">{who}</div>
+        <div className="text-[18px] font-black tracking-wide" style={{ fontFamily: MONO }}>{phone || "-"}</div>
+      </div>
+      <div className="flex gap-2 shrink-0">
+        <a href={callHref(phone)} className="h-10 px-4 rounded-xl bg-white text-[#0F1A30] text-[13px] font-black inline-flex items-center gap-1.5"><Icon name="phone" size={15} />전화</a>
+        <a href={smsHref(phone)} className="h-10 px-4 rounded-xl ring-1 ring-white/30 text-white text-[13px] font-black inline-flex items-center gap-1.5"><Icon name="chat" size={15} />문자</a>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-w-full max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${meta.cls}`}>{meta.label}</span>
-              {order.긴급 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/15 text-white">긴급</span>}
-            </div>
-            <div className="text-white font-bold text-[16px] truncate">{order.상차지명} → {order.하차지명}</div>
+    <div className="fixed inset-0 bg-[#0F1A30]/55 backdrop-blur-[2px] flex items-end sm:items-center justify-center z-[9999] sm:p-4" onClick={onClose}>
+      <div className="bg-[#F4F6FA] sm:rounded-[24px] rounded-t-[24px] shadow-[0_24px_60px_rgba(15,26,48,0.4)] w-full sm:w-[600px] max-h-[92vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-6 pt-5 pb-5 text-white shrink-0 relative" style={GRID_BG}>
+          <div className="flex items-center gap-1.5">
+            <StatusBadge status={order.status} />
+            {order.긴급 && <span className="h-[22px] px-1.5 rounded-md bg-white text-[#0F1A30] text-[11px] font-black inline-flex items-center">긴급</span>}
+            {order.운행유형 === "왕복" && <span className="h-[22px] px-1.5 rounded-md ring-1 ring-white/30 text-[11px] font-black inline-flex items-center">왕복</span>}
+            <button type="button" onClick={onClose} className="ml-auto w-9 h-9 rounded-xl hover:bg-white/10 flex items-center justify-center text-white/70"><Icon name="close" size={18} /></button>
           </div>
-          <button onClick={onClose} className="text-white/60 hover:text-white text-xl leading-none shrink-0">×</button>
+          <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+            <div className="min-w-0">
+              <div className="text-[10px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>FROM · 상차</div>
+              <div className="text-[19px] font-black truncate">{order.상차지명}</div>
+              <div className="text-[12px] text-white/55 truncate">{order.상차지주소 || " "}</div>
+            </div>
+            <span className="w-10 h-10 rounded-full bg-white/10 ring-1 ring-white/20 flex items-center justify-center"><Icon name="arrow" size={17} /></span>
+            <div className="min-w-0 text-right">
+              <div className="text-[10px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>TO · 하차</div>
+              <div className="text-[19px] font-black truncate">{order.하차지명}</div>
+              <div className="text-[12px] text-white/55 truncate">{order.하차지주소 || " "}</div>
+            </div>
+          </div>
+          <div className="mt-4 flex items-center justify-between rounded-xl bg-white/[0.07] ring-1 ring-white/10 px-4 py-2.5">
+            <span className="text-[12.5px] font-bold text-white/70">운임</span>
+            <span className="text-[22px] font-black" style={{ fontFamily: MONO }}>{order.운임 || "협의"}</span>
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="mb-4 pb-4 border-b border-gray-100">
-            <Row label="상차지" value={`${order.상차지명}${order.상차지주소 ? ` (${order.상차지주소})` : ""}`} />
-            <Row label="상차일시" value={`${order.상차일 || "-"} ${order.상차시간 || ""}`} />
-            <Row label="하차지" value={`${order.하차지명}${order.하차지주소 ? ` (${order.하차지주소})` : ""}`} />
-            <Row label="하차일시" value={order.하차일 ? `${order.하차일} ${order.하차시간 || ""}` : (order.하차시간 || null)} />
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          <div className="grid grid-cols-2 gap-2">
+            <Cell label="상차일시" value={`${order.상차일 || "-"} ${order.상차시간 || ""}`} strong />
+            <Cell label="하차일시" value={order.하차일 ? `${order.하차일} ${order.하차시간 || ""}` : (order.하차시간 || "-")} strong />
+            <Cell label="화물내용" value={order.화물내용} strong />
+            <Cell label="차량" value={[order.차량톤수, order.차량종류, order.리프트 ? "리프트" : ""].filter(Boolean).join(" · ") || "-"} />
+            <Cell label="상차방법" value={order.상차방법} />
+            <Cell label="하차방법" value={order.하차방법} />
+            <Cell label="지급방식" value={order.지급방식} />
+            <Cell label="옵션" value={[order.운행유형 === "왕복" && "왕복", order.혼적 && "혼적", order.경유여부 && "경유"].filter(Boolean).join(" · ") || null} />
           </div>
-          <div className="mb-4 pb-4 border-b border-gray-100">
-            <Row label="화물내용" value={order.화물내용} />
-            <Row label="차량톤수" value={order.차량톤수} />
-            <Row label="차량종류" value={order.차량종류} />
-            <Row label="지급방식" value={order.지급방식} />
-            <Row label="상차방법" value={order.상차방법} />
-            <Row label="하차방법" value={order.하차방법} />
-            <Row label="운임" value={order.운임 || "협의"} />
-            <Row label="옵션" value={[order.운행유형 === "왕복" && "왕복", order.혼적 && "혼적", order.경유여부 && "경유"].filter(Boolean).join(" · ") || null} />
-            {order.메모 && <Row label="메모" value={order.메모} />}
-          </div>
-          <div>
-            <Row label="등록자" value={`${order.companyName || "-"}${order.posterNickname ? ` · ${order.posterNickname}` : ""}`} />
+          {order.메모 && <div className="rounded-xl bg-white border border-[#E3E8F0] px-4 py-3"><div className="text-[11px] font-bold text-[#7A879C]">메모</div><div className="text-[14px] text-[#1F2A44] whitespace-pre-wrap mt-0.5">{order.메모}</div></div>}
+          <div className="flex items-center gap-3 rounded-xl bg-white border border-[#E3E8F0] px-4 py-3">
+            <span className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-black shrink-0" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}>{String(order.companyName || "?").slice(0, 1)}</span>
+            <div className="min-w-0">
+              <div className="text-[11px] font-bold text-[#7A879C]">등록자</div>
+              <div className="text-[14px] font-black text-[#0F1A30] truncate">{order.companyName || "-"}{order.posterNickname ? <span className="font-bold text-[#7A879C]"> · {order.posterNickname}</span> : null}</div>
+            </div>
+            {isMine && <span className="ml-auto"><Tag>내 오더</Tag></span>}
           </div>
 
           {/* 신청중 카운트다운 */}
           {order.status === "applying" && (
-            <div className="mt-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+            <div className="rounded-2xl border-2 border-[#1B2B4B] bg-white px-4 py-3.5">
               {isApplicant ? (
-                <div className="flex items-center justify-between">
-                  <div className="text-[13px] font-bold text-amber-700">
-                    신청 완료 처리까지 {remain != null ? remain : "-"}초
+                <div className="flex items-center gap-3">
+                  <div className="relative w-12 h-12 shrink-0">
+                    <svg viewBox="0 0 36 36" className="w-12 h-12 -rotate-90"><circle cx="18" cy="18" r="15" fill="none" stroke="#EEF1F6" strokeWidth="3.5" /><circle cx="18" cy="18" r="15" fill="none" stroke="#1B2B4B" strokeWidth="3.5" strokeDasharray={`${((remain || 0) / 10) * 94} 94`} strokeLinecap="round" /></svg>
+                    <span className="absolute inset-0 flex items-center justify-center text-[15px] font-black text-[#0F1A30]" style={{ fontFamily: MONO }}>{remain != null ? remain : "-"}</span>
                   </div>
-                  <button onClick={handleCancelApply}
-                    className="px-3 py-1.5 rounded-lg bg-white border border-amber-300 text-amber-700 text-[12px] font-bold hover:bg-amber-100 transition">
-                    신청취소
-                  </button>
+                  <div className="flex-1 text-[13.5px] font-bold text-[#0F1A30]">배차 확정까지 {remain != null ? remain : "-"}초 — 지금은 취소할 수 있습니다</div>
+                  <button type="button" onClick={handleCancelApply} className="h-10 px-4 rounded-xl border border-[#0F1A30] text-[#0F1A30] text-[13px] font-black">신청취소</button>
                 </div>
               ) : (
-                <div className="text-[13px] font-bold text-amber-700">다른 기사님이 신청 처리 중입니다.</div>
+                <div className="text-[13.5px] font-bold text-[#0F1A30]">다른 회원이 배차신청을 진행하고 있습니다.</div>
               )}
             </div>
           )}
 
           {/* 배차완료 — 연락처 공개 */}
           {order.status === "confirmed" && (isMine || isApplicant) && (
-            <div className="mt-4 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
-              <div className="text-[12px] font-bold text-emerald-700 mb-2">배차완료 — 연락처가 공개되었습니다</div>
-              {!contact ? (
-                <div className="text-[12px] text-emerald-600">연락처를 불러오는 중...</div>
-              ) : isMine ? (
-                <div className="flex items-center justify-between">
-                  <div className="text-[13px] font-bold text-gray-800">{order.applicantName || order.applicantNickname || "신청 기사"} · {contact.applicantPhone || "-"}</div>
-                  <div className="flex gap-2">
-                    <a href={callHref(contact.applicantPhone)} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition">전화</a>
-                    <a href={smsHref(contact.applicantPhone)} className="px-3 py-1.5 rounded-lg border border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold hover:bg-[#1B2B4B]/5 transition">문자</a>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between">
-                  <div className="text-[13px] font-bold text-gray-800">{order.companyName} · {contact.posterPhone || "-"}</div>
-                  <div className="flex gap-2">
-                    <a href={callHref(contact.posterPhone)} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition">전화</a>
-                    <a href={smsHref(contact.posterPhone)} className="px-3 py-1.5 rounded-lg border border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold hover:bg-[#1B2B4B]/5 transition">문자</a>
-                  </div>
-                </div>
-              )}
+            <div className="rounded-2xl px-5 py-4 text-white" style={GRID_BG}>
+              <div className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0] mb-2" style={{ fontFamily: MONO }}>CONFIRMED · 연락처 공개</div>
+              {!contact ? <div className="text-[13px] text-white/70">연락처를 불러오는 중…</div>
+                : isMine ? contactBox(order.applicantName || order.applicantNickname || "신청자", contact.applicantPhone)
+                  : contactBox(order.companyName || "등록자", contact.posterPhone)}
             </div>
           )}
         </div>
 
         {/* 하단 액션 */}
-        <div className="px-6 py-4 border-t border-gray-100 flex gap-3 shrink-0">
+        <div className="px-5 py-4 border-t border-[#E3E8F0] bg-white flex gap-2.5 shrink-0 pb-[max(16px,env(safe-area-inset-bottom))]">
           {isMine ? (
             <>
-              <button onClick={handleDelete} className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-500 text-[13px] font-semibold hover:bg-gray-50 transition">삭제</button>
+              <button type="button" onClick={handleDelete} className="h-12 px-4 rounded-xl border border-[#DCE3EE] text-[#7A879C] text-[13.5px] font-bold hover:bg-[#F5F8FD]">삭제</button>
               {order.status !== "cancelled" && order.status !== "confirmed" && (
-                <button onClick={handleCancelOrder} className="px-4 py-2.5 rounded-xl border border-red-200 text-red-500 text-[13px] font-semibold hover:bg-red-50 transition">오더취소</button>
+                <button type="button" onClick={handleCancelOrder} className="h-12 px-4 rounded-xl border border-[#0F1A30] text-[#0F1A30] text-[13.5px] font-black">오더취소</button>
               )}
               {order.status === "open" && (
-                <button onClick={() => onEdit(order)} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition">수정</button>
+                <button type="button" onClick={() => onEdit(order)} className="flex-1 h-12 rounded-xl text-white font-black text-[14px]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>수정</button>
               )}
             </>
           ) : order.status === "open" ? (
-            <button onClick={handleApply} disabled={applying}
-              className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition disabled:opacity-50">
-              {applying ? "신청 중..." : "배차신청"}
+            <button type="button" onClick={handleApply} disabled={applying}
+              className="flex-1 h-12 rounded-xl text-white font-black text-[15px] disabled:opacity-50 inline-flex items-center justify-center gap-2 shadow-[0_10px_24px_rgba(15,26,48,0.25)]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
+              <Icon name="bolt" size={17} />{applying ? "신청 중…" : "배차신청"}
             </button>
           ) : (
-            <div className="flex-1 py-2.5 text-center text-[13px] font-semibold text-gray-400">
-              {order.status === "cancelled" ? "취소된 오더입니다" : "이미 신청이 진행 중인 오더입니다"}
+            <div className="flex-1 h-12 flex items-center justify-center text-[13.5px] font-bold text-[#9AA9C3]">
+              {order.status === "cancelled" ? "취소된 오더입니다" : order.status === "confirmed" ? "배차가 완료된 오더입니다" : "신청이 진행 중인 오더입니다"}
             </div>
           )}
         </div>

@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /orders/
+
+Sitemap: https://baecha-madang.vercel.app/sitemap.xml

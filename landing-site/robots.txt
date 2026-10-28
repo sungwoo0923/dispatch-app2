@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://dispatch-app2-vskk.vercel.app/sitemap.xml

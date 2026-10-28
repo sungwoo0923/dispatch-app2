@@ -115,7 +115,7 @@ export default function PlaceAutocomplete({
     else if (e.key === "Escape") setOpen(null);
   };
 
-  const field = "w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[13px] text-gray-900 outline-none focus:border-[#1B2B4B] transition";
+  const field = "w-full h-11 border border-[#DCE3EE] rounded-xl px-3.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 transition placeholder:text-[#9AA9C3] placeholder:font-medium";
 
   return (
     <div className="relative" ref={wrapRef}>
@@ -143,7 +143,7 @@ export default function PlaceAutocomplete({
         </div>
       </div>
       {open && options.length > 0 && (
-        <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-72 overflow-auto">
+        <div className="absolute z-50 left-0 right-0 top-full mt-1.5 bg-white border border-[#DCE3EE] rounded-xl shadow-[0_18px_40px_rgba(15,26,48,0.18)] max-h-72 overflow-auto">
           {options.map((p, i) => (
             <div key={p.src + p.name + p.addr + i}
               className={`px-3 py-2 text-[13px] cursor-pointer border-b border-gray-50 last:border-0 ${i === activeIdx ? "bg-[#1B2B4B]/10" : "hover:bg-gray-50"}`}

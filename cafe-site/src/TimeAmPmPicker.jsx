@@ -40,9 +40,9 @@ export default function TimeAmPmPicker({ value, onChange, disabled = false }) {
     }
   };
 
-  const btnBase = "px-2.5 py-1.5 text-[12px] font-semibold rounded-lg border transition";
-  const act = "bg-[#1B2B4B] text-white border-[#1B2B4B]";
-  const inact = "bg-white text-gray-600 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]";
+  const btnBase = "h-11 px-2.5 text-[12.5px] font-black rounded-xl border transition";
+  const act = "bg-[#0F1A30] text-white border-[#0F1A30]";
+  const inact = "bg-white text-[#5B6B85] border-[#DCE3EE] hover:border-[#4B6CB7] hover:text-[#0F1A30]";
 
   return (
     <div className="flex items-center gap-1.5 flex-nowrap">
@@ -54,7 +54,7 @@ export default function TimeAmPmPicker({ value, onChange, disabled = false }) {
         value={value || ""}
         disabled={disabled}
         onChange={e => onChange(e.target.value)}
-        className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] w-[120px] shrink-0 disabled:bg-gray-100 disabled:text-gray-400 bg-white"
+        className="h-11 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold outline-none focus:border-[#4B6CB7] flex-1 min-w-0 disabled:bg-[#F5F7FA] disabled:text-[#9AA9C3] bg-white"
       >
         <option value="">시간 선택</option>
         {times.map(t => (

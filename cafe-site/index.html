@@ -3,12 +3,56 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>배차마당 | 화물 배차 정보 공유 커뮤니티</title>
-    <meta name="description" content="배차마당 — 누구나 오더를 올리고 서로 배차를 잡는 카페형 화물 배차 정보 공유 커뮤니티" />
+    <title>배차마당 | 실시간 화물 오더 공유 · 배차 정보 플랫폼</title>
+    <meta name="description" content="배차마당은 운송사·화주·차주가 화물 오더를 올리고 실시간으로 배차를 잡는 무료 배차 정보 공유 플랫폼입니다. 윙바디·카고·냉동탑 등 차종별, 지역별 오더 검색과 10초 배차 확정을 지원합니다." />
+    <meta name="keywords" content="배차마당, 화물 오더, 배차, 화물 배차, 오더 공유, 운송사, 화주, 차주, 화물차, 윙바디, 카고, 냉동탑, 1톤, 5톤, 11톤, 화물정보망" />
+    <meta name="robots" content="index,follow" />
+    <meta name="theme-color" content="#0F1A30" />
+    <link rel="canonical" href="https://baecha-madang.vercel.app/" />
+    <!-- 네이버 서치어드바이저 사이트 소유확인: 네이버에서 받은 값으로 content를 바꿔 넣으세요 -->
+    <!-- <meta name="naver-site-verification" content="여기에_네이버_확인코드" /> -->
+    <!-- 구글 서치콘솔 소유확인(선택) -->
+    <!-- <meta name="google-site-verification" content="여기에_구글_확인코드" /> -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="배차마당" />
+    <meta property="og:title" content="배차마당 | 실시간 화물 오더 공유 플랫폼" />
+    <meta property="og:description" content="운송사·화주·차주가 함께 쓰는 실시간 화물 오더 공유 · 배차 정보 플랫폼" />
+    <meta property="og:url" content="https://baecha-madang.vercel.app/" />
+    <meta property="og:image" content="https://baecha-madang.vercel.app/og-image.png" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/og-icon.png" />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
+    <script type="application/ld+json">
+      {"@context":"https://schema.org","@type":"WebSite","name":"배차마당","alternateName":"BAECHA MADANG","url":"https://baecha-madang.vercel.app/","description":"운송사·화주·차주가 화물 오더를 올리고 실시간으로 배차를 잡는 배차 정보 공유 플랫폼","inLanguage":"ko-KR"}
+    </script>
+    <style>
+      body { margin: 0; background: #0F1A30; font-family: "Pretendard", "Noto Sans KR", system-ui, sans-serif; }
+      #seo { color: #cfd8ea; padding: 48px 24px; max-width: 760px; margin: 0 auto; line-height: 1.7; }
+      #seo h1 { color: #fff; font-size: 28px; margin: 0 0 12px; }
+      #seo h2 { color: #fff; font-size: 18px; margin: 28px 0 8px; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- 화면이 뜨기 전(그리고 검색 로봇)에게 보이는 소개글 — 앱이 뜨면 자동으로 바뀐다 -->
+      <main id="seo">
+        <h1>배차마당 — 실시간 화물 오더 공유 플랫폼</h1>
+        <p>배차마당은 운송사·화주·차주가 함께 쓰는 화물 배차 정보 공유 플랫폼입니다. 남는 오더는 올리고, 필요한 오더는 바로 배차신청하세요.</p>
+        <h2>주요 기능</h2>
+        <ul>
+          <li>실시간 오더 공유 — 회원이 올린 화물 오더가 모든 화면에 즉시 표시됩니다.</li>
+          <li>10초 배차 확정 — 배차신청 후 10초 안에는 취소할 수 있고, 지나면 자동으로 확정됩니다.</li>
+          <li>연락처 보호 — 배차가 확정된 당사자끼리만 연락처가 공개됩니다.</li>
+          <li>차종·지역 검색 — 윙바디, 카고, 탑, 냉장·냉동탑, 라보·다마스까지 차종과 상·하차 지역으로 찾습니다.</li>
+        </ul>
+        <h2>이용 방법</h2>
+        <p>무료 회원가입 → 오더 올리기 또는 실시간 배차현황에서 오더 찾기 → 배차신청 → 확정 후 전화·문자로 진행.</p>
+        <p><a href="/signup" style="color:#fff">무료 회원가입</a> · <a href="/login" style="color:#fff">로그인</a></p>
+      </main>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

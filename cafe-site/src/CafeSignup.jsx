@@ -1,10 +1,20 @@
 // ======================= cafe-site/src/CafeSignup.jsx =======================
 // 배차마당 회원가입 — 운송사/화주사처럼 승인 절차 없이 가입 즉시 이용 가능하다.
+// 2026-10-28 리디자인 — 로그인과 같은 분할 화면(AuthLayout)
 import React, { useState } from "react";
 import { auth, db } from "./firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { Link, useNavigate } from "react-router-dom";
+import AuthLayout from "./AuthLayout";
+import { inputCls, btnPrimary, btnPrimaryStyle } from "./ui";
+
+const F = ({ label, children }) => (
+  <label className="block">
+    <span className="text-[12.5px] font-bold text-[#5B6B85]">{label}</span>
+    <div className="mt-1.5">{children}</div>
+  </label>
+);
 
 export default function CafeSignup() {
   const [email, setEmail] = useState("");
@@ -14,6 +24,7 @@ export default function CafeSignup() {
   const [name, setName] = useState("");
   const [nickname, setNickname] = useState("");
   const [phone, setPhone] = useState("");
+  const [agree, setAgree] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const nav = useNavigate();
@@ -32,6 +43,7 @@ export default function CafeSignup() {
     }
     if (pw.length < 6) return setError("비밀번호는 6자 이상이어야 합니다.");
     if (pw !== pw2) return setError("비밀번호가 일치하지 않습니다.");
+    if (!agree) return setError("연락처 공개 안내에 동의해 주세요.");
 
     setLoading(true);
     try {
@@ -57,58 +69,33 @@ export default function CafeSignup() {
     }
   };
 
-  const inputCls = "w-full border border-gray-200 rounded-xl px-4 py-3 text-[14px] text-gray-900 outline-none focus:border-[#1B2B4B] transition";
-
   return (
-    <div className="min-h-screen bg-[#f4f6fa] flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-[420px]">
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center gap-2 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-[#1B2B4B] flex items-center justify-center text-white font-black text-[15px]">배</div>
-            <span className="text-[19px] font-black text-[#1B2B4B] tracking-tight">배차마당</span>
-          </div>
-          <p className="text-[13px] text-gray-400">화물 배차 정보 공유 커뮤니티</p>
+    <AuthLayout en="CREATE ACCOUNT" title="회원가입"
+      footer={<Link to="/login" className="text-[13px] font-semibold text-[#7A879C] hover:text-[#0F1A30]">이미 계정이 있으신가요? <b className="text-[#1B2B4B]">로그인</b></Link>}>
+      <form className="space-y-3.5" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+        <F label="이메일 (아이디)"><input className={inputCls} placeholder="name@company.com" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} /></F>
+        <div className="grid grid-cols-2 gap-2.5">
+          <F label="비밀번호"><input className={inputCls} placeholder="6자 이상" type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} /></F>
+          <F label="비밀번호 확인"><input className={inputCls} placeholder="한 번 더" type="password" autoComplete="new-password" value={pw2} onChange={(e) => setPw2(e.target.value)} /></F>
         </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-7 space-y-3">
-          <h2 className="text-[16px] font-bold text-gray-900 mb-1">회원가입</h2>
-
-          <input className={inputCls} placeholder="이메일 (아이디)" type="email" autoComplete="off"
-            value={email} onChange={e => setEmail(e.target.value)} />
-          <div className="grid grid-cols-2 gap-2">
-            <input className={inputCls} placeholder="비밀번호 (6자 이상)" type="password" autoComplete="off"
-              value={pw} onChange={e => setPw(e.target.value)} />
-            <input className={inputCls} placeholder="비밀번호 확인" type="password" autoComplete="off"
-              value={pw2} onChange={e => setPw2(e.target.value)} />
-          </div>
-          <input className={inputCls} placeholder="회사명 (개인 차주는 상호/성함)" autoComplete="off"
-            value={companyName} onChange={e => setCompanyName(e.target.value)} />
-          <div className="grid grid-cols-2 gap-2">
-            <input className={inputCls} placeholder="이름" autoComplete="off"
-              value={name} onChange={e => setName(e.target.value)} />
-            <input className={inputCls} placeholder="닉네임" autoComplete="off"
-              value={nickname} onChange={e => setNickname(e.target.value)} />
-          </div>
-          <input className={inputCls} placeholder="휴대폰번호" autoComplete="off"
-            value={phone} onChange={e => setPhone(formatPhone(e.target.value))} />
-
-          {error && <div className="text-[12px] text-red-500 font-semibold px-1">{error}</div>}
-
-          <button onClick={submit} disabled={loading}
-            className="w-full py-3 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[14px] transition disabled:opacity-50 mt-2">
-            {loading ? "가입 중..." : "가입하고 시작하기"}
-          </button>
-
-          <div className="text-center pt-2">
-            <Link to="/login" className="text-[13px] text-gray-500 hover:text-[#1B2B4B]">이미 계정이 있으신가요? 로그인</Link>
-          </div>
+        <F label="회사명"><input className={inputCls} placeholder="개인 차주는 상호 또는 성함" autoComplete="organization" value={companyName} onChange={(e) => setCompanyName(e.target.value)} /></F>
+        <div className="grid grid-cols-2 gap-2.5">
+          <F label="이름"><input className={inputCls} placeholder="홍길동" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} /></F>
+          <F label="닉네임"><input className={inputCls} placeholder="게시판 표시 이름" autoComplete="off" value={nickname} onChange={(e) => setNickname(e.target.value)} /></F>
         </div>
+        <F label="휴대폰번호"><input className={inputCls} placeholder="010-0000-0000" inputMode="numeric" autoComplete="tel" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} /></F>
 
-        <div className="text-center mt-4">
-          <a href="https://dispatch-app2.vercel.app/login" target="_blank" rel="noreferrer"
-            className="text-[12px] text-gray-400 hover:text-gray-600">배차관리 프로그램으로 돌아가기 ↗</a>
-        </div>
-      </div>
-    </div>
+        <label className="flex items-start gap-2.5 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3.5 py-3 cursor-pointer">
+          <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5 w-4 h-4 accent-[#1B2B4B]" />
+          <span className="text-[12.5px] text-[#3A4A66] leading-relaxed">배차가 <b>확정된 상대방에게만</b> 회사명·이름·휴대폰번호가 공개되는 것에 동의합니다.</span>
+        </label>
+
+        {error && <div className="rounded-xl bg-[#F5F8FD] border border-[#DCE3EE] px-3.5 py-2.5 text-[13px] font-bold text-[#0F1A30]">⚠ {error}</div>}
+
+        <button type="submit" disabled={loading} className={`w-full ${btnPrimary}`} style={btnPrimaryStyle}>
+          {loading ? "가입 중…" : "가입하고 시작하기"}
+        </button>
+      </form>
+    </AuthLayout>
   );
 }
