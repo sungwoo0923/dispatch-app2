@@ -3644,7 +3644,8 @@ useEffect(() => {
 const [detailFrom, setDetailFrom] = useState(null);
   const [statusTab, setStatusTab] = useState("전체");
   const [showMenu, setShowMenu] = useState(false);
-  const [cardVersionB, setCardVersionB] = useState(() => localStorage.getItem("cardVersion") === "B");
+  // ⭐ 2026-10-28 — 처음 들어오면 누구나 B스타일. 사용자가 직접 A로 바꾼 경우에만 A(새 키 cardVersionV2 — 예전 저장값은 무시)
+  const [cardVersionB, setCardVersionB] = useState(() => { try { return localStorage.getItem("cardVersionV2") !== "A"; } catch { return true; } });
 
   useEffect(() => {
     if (!showMenu) return;
@@ -5851,7 +5852,7 @@ onGoAttendance={() => {
           cardVersionB={cardVersionB}
           onToggleCardVersion={(v) => {
             setCardVersionB(v);
-            localStorage.setItem("cardVersion", v ? "B" : "A");
+            localStorage.setItem("cardVersionV2", v ? "B" : "A"); localStorage.setItem("cardVersion", v ? "B" : "A");
           }}
         />
       )}
@@ -22091,7 +22092,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
               <div className="flex gap-1.5">
                 {[false, true].map(v => (
                   <button key={String(v)} type="button"
-                    onClick={() => { setCardVersionB(v); localStorage.setItem("cardVersion", v ? "B" : "A"); }}
+                    onClick={() => { setCardVersionB(v); localStorage.setItem("cardVersionV2", v ? "B" : "A"); localStorage.setItem("cardVersion", v ? "B" : "A"); }}
                     className={`px-3 py-1.5 rounded-xl text-[12px] font-bold transition-all ${cardVersionB === v ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-500"}`}>
                     {v ? "B형" : "A형"}
                   </button>

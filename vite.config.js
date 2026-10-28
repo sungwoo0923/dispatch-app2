@@ -67,6 +67,8 @@ function fuelApiDevMiddleware() {
   };
 }
 
+const BUILD_TIME = new Date().toISOString(); // 화면 버전 확인(VersionCheck)용 — 번들과 version.json이 같은 값을 쓴다
+
 export default defineConfig({
   plugins: [
     react({ jsxRuntime: "automatic" }),
@@ -85,6 +87,10 @@ export default defineConfig({
           fs.writeFileSync(swPath, content);
           console.log("✅ sw.js VERSION updated:", buildId);
         }
+        // ⭐ 접속 버전 확인용 — 화면(VersionCheck)이 이 파일과 자기 빌드 시각을 비교한다
+        if (fs.existsSync("./dist")) {
+          fs.writeFileSync("./dist/version.json", JSON.stringify({ version: getAppVersion(), build: BUILD_TIME }));
+        }
       },
     },
   ],
@@ -100,6 +106,6 @@ export default defineConfig({
 
   define: {
     __APP_VERSION__: JSON.stringify(getAppVersion()),
-    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+    __BUILD_TIME__: JSON.stringify(BUILD_TIME),
   },
 });

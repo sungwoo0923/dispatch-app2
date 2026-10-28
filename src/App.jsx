@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { safeLocalSet } from "./safeStorage";
 import UpdateBanner from "./UpdateBanner";
+import VersionCheck from "./VersionCheck";
 import {
   BrowserRouter as Router,
   Routes,
@@ -682,6 +683,7 @@ export default function App() {
     <>
       {/* 자동 업데이트 배너 (팝업 없이 상단 배너로 표시 후 자동 새로고침). */}
       <UpdateBanner />
+      <VersionCheck />
 
       {/* ⭐ 중복 로그인 선택창 */}
       {sessionConflict && (

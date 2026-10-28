@@ -275,7 +275,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
   const metric = (g) => (rankBy === "profit" ? g.p : rankBy === "cnt" ? g.c : g.s);
 
   return (
-    <section className="hd-deck" style={{ position: "relative", overflow: "hidden", borderRadius: 26, padding: "22px 24px 24px", color: C.ink }}>
+    <section className="hd-deck" style={{ position: "relative", overflow: "hidden", borderRadius: 26, padding: "22px 24px 24px", color: C.ink, minHeight: "calc(100vh - 120px)" }}>
       <style>{HD_CSS}</style>
       <div className="hd-scan" />
 
@@ -328,7 +328,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, height: 0, borderTop: `2px dashed ${C.hi}` }} />수익</span>
             </div>
           </div>
-          <div style={{ height: 250 }}>
+          <div style={{ height: "clamp(260px, 34vh, 400px)" }}>
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={trend} margin={{ top: 10, right: 6, left: 0, bottom: 0 }}>
                 <defs>
@@ -380,7 +380,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
           {staffRank.length === 0 ? (
             <div style={{ padding: "40px 0", textAlign: "center", fontSize: 14, color: C.dim }}>{ready ? "이번 달 실적이 아직 없습니다" : "계산 중…"}</div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 7, maxHeight: 330, overflowY: "auto" }} className="hd-scroll">
+            <div style={{ display: "flex", flexDirection: "column", gap: 7, maxHeight: "clamp(330px, 36vh, 480px)", overflowY: "auto" }} className="hd-scroll">
               {staffRank.slice(0, 10).map((g, i) => {
                 const v = metric(g);
                 const share = staffTotal ? (g.s / staffTotal) * 100 : 0;

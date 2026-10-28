@@ -773,7 +773,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   const filteredMsgs = msgSearch ? messages.filter(m => m.text?.includes(msgSearch)) : messages;
 
   // ── 테마 (themeColor prop이 있으면 그 색으로 고정, 없으면 A형=블루/화이트, B형=네이비) ──
-  const isThemeA = !themeColor && localStorage.getItem("cardVersion") !== "B";
+  const isThemeA = !themeColor && localStorage.getItem("cardVersionV2") === "A";
   const themeHdr = themeColor || (isThemeA ? "linear-gradient(135deg, #3b82f6, #1d4ed8)" : "#1B2B4B");
   const themeMyBubble = themeColor || (isThemeA ? "#2563eb" : "#1B2B4B");
   const themeChatBg = themeColor ? "#eef1f7" : (isThemeA ? "#eff6ff" : "#f0f4f8");

@@ -15,6 +15,7 @@ import { pcBootStore, markBootBase } from "./bootProgress";
 import { createPortal } from "react-dom";
 import { BannerCard, BannerStyles } from "./BannerCenter";
 import HomeDeck, { buildPastStats } from "./HomeDeck";
+import KpSubNav from "./KpSubNav";
 
 /* ===== 공통 Modal ===== */
 function Modal({ title, onClose, children }) {
@@ -124,9 +125,9 @@ function BoardTable({ headers, rows }) {
   return (
     <table className="w-full text-[13px]">
       <thead>
-        <tr className="bg-gray-50 border-b border-gray-200">
+        <tr style={{ background: "linear-gradient(90deg,#0F1A30,#1B2B4B 50%,#24396A)" }}>
           {headers.map((h, i) => (
-            <th key={i} className={`px-3 py-2.5 font-semibold text-gray-500 text-[12px] whitespace-nowrap ${h.align || "text-center"}`}
+            <th key={i} className={`px-3 py-3 font-extrabold text-white text-[13px] whitespace-nowrap ${h.align || "text-center"}`}
               style={{ width: h.width }}>
               <EditableText id={`home.table.header.${h.label}`} defaultText={h.label} />
             </th>
@@ -142,10 +143,11 @@ function BoardTable({ headers, rows }) {
 function Pagination({ page, total, onChange }) {
   if (total <= 1) return null;
   return (
-    <div className="flex justify-center gap-1 pt-3">
+    <div className="flex justify-center gap-1.5 pt-4">
       {Array.from({ length: total }).map((_, i) => (
         <button key={i} onClick={() => onChange(i + 1)}
-          className={`w-7 h-7 rounded-lg text-[12px] font-semibold transition ${i + 1 === page ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
+          style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}
+          className={`w-9 h-9 rounded-xl text-[13px] font-extrabold transition ${i + 1 === page ? "bg-[#1B2B4B] text-white shadow-[0_4px_10px_rgba(27,43,75,0.25)]" : "bg-white border border-[#E3E8F0] text-[#4b5563] hover:bg-[#F4F7FC]"}`}>
           {i + 1}
         </button>
       ))}
@@ -455,7 +457,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
 
   const [period, setPeriod] = useState("7d");
   const isViewer = role === "viewer";
-  const [boardTab, setBoardTab] = React.useState("공지사항");
+  const [boardTab, setBoardTab] = React.useState("대시보드"); // ⭐ 2026-10-28 — 홈 왼쪽 사이드바: 대시보드 | 공지사항 | 휴가/외근 | 인수인계
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [noticeForm, setNoticeForm] = React.useState({ category: "공지사항", author: "", content: "", audience: "internal" });
   const [scheduleOpen, setScheduleOpen] = React.useState(false);
@@ -464,9 +466,9 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const [schedules, setSchedules] = React.useState([]);
   const [handovers, setHandovers] = React.useState([]);
 
-  const NOTICE_PAGE_SIZE = 5;
+  const NOTICE_PAGE_SIZE = 12;
   const [noticePage, setNoticePage] = useState(1);
-  const SCHEDULE_PAGE_SIZE = 5;
+  const SCHEDULE_PAGE_SIZE = 12;
   const [schedulePage, setSchedulePage] = useState(1);
   const [scheduleAuthorSearch, setScheduleAuthorSearch] = useState("");
 
@@ -685,7 +687,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const scheduleTotalPages = Math.ceil(filteredSchedules.length / SCHEDULE_PAGE_SIZE);
   const pagedSchedules = useMemo(() => { const s = (schedulePage - 1) * SCHEDULE_PAGE_SIZE; return filteredSchedules.slice(s, s + SCHEDULE_PAGE_SIZE); }, [filteredSchedules, schedulePage]);
 
-  const HANDOVER_PAGE_SIZE = 5;
+  const HANDOVER_PAGE_SIZE = 12;
   const [handoverPage, setHandoverPage] = useState(1);
   const handoverTotalPages = Math.ceil(handovers.length / HANDOVER_PAGE_SIZE);
   const pagedHandovers = useMemo(() => { const s = (handoverPage - 1) * HANDOVER_PAGE_SIZE; return handovers.slice(s, s + HANDOVER_PAGE_SIZE); }, [handovers, handoverPage]);
@@ -814,8 +816,19 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
     return unsub;
   }, [user?.uid]);
 
+  const pendingApprovalCountNav = schedules.filter(s => (s.approvers || []).some(a => a.uid === user?.uid && (!a.status || a.status === "pending"))).length;
+  const unreadHandoverCountNav = handovers.filter(h => user?.uid === h.receiverUid && !h.readBy?.includes(h.receiverUid)).length;
   return (
-    <div className="bg-[#F4F6FA] min-h-screen px-7 py-6 space-y-6">
+    <KpSubNav noBleed code="HOME" title="홈" icon="dashboard" active={boardTab} onSelect={setBoardTab} bodyClass="px-5 py-4"
+      groups={[
+        { label: "관제", items: [{ key: "대시보드", label: "대시보드", en: "OPERATIONS", icon: "pulse" }] },
+        { label: "사내 게시판", items: [
+          { key: "공지사항", label: "공지사항", en: "NOTICE", icon: "bell", badge: 0 },
+          { key: "휴가/외근", label: "휴가/외근", en: "SCHEDULE", icon: "clock", badge: pendingApprovalCountNav },
+          { key: "인수인계", label: "인수인계", en: "HANDOVER", icon: "send", badge: unreadHandoverCountNav },
+        ] },
+      ]}>
+    <div className="space-y-5">
 
       {/* 결재 알림 배너 (큐 방식 - 여러 알림 순차 표시) */}
       {approvalNotifQueue.length > 0 && (() => {
@@ -843,66 +856,53 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       })()}
 
       {/* ===== 관제 데크 — 오늘 실적 · 매출 추이 · 매익률 · 담당자 순위 · 거래처 Top (2026-10-28 리디자인, 미배차 현황은 뺌) ===== */}
-      <HomeDeck
+      {boardTab === "대시보드" && <HomeDeck
         dispatchData={dispatchData}
         pastCache={pastCache}
         liveStart={liveStartStr}
         users={users}
         isMaster={role === "totalMaster"}
         myName={users.find((u) => u.id === user?.uid)?.name || user?.displayName || (user?.email || "").split("@")[0] || ""}
-      />
+      />}
 
-      {/* ===== 통합 게시판 ===== */}
-      <div className={`${KP_HOME_CARD} overflow-hidden`}>
-        <div className="px-6 pt-5">
-          <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">BOARD</div>
-          <h3 className="mt-0.5 text-[18px] font-black text-[#0F1A30] tracking-tight">사내 게시판</h3>
-        </div>
-        {/* 헤더: 탭 + 등록 버튼 */}
-        <div className="flex items-center border-b border-[#EEF1F6] px-4 mt-2">
-          <div className="flex gap-0">
-            {(() => {
-              const pendingApprovalCount = schedules.filter(s => (s.approvers || []).some(a => a.uid === user?.uid && (!a.status || a.status === "pending"))).length;
-              const unreadHandoverCount = handovers.filter(h => user?.uid === h.receiverUid && !h.readBy?.includes(h.receiverUid)).length;
-              return [
-                { key: "공지사항", badge: 0 },
-                { key: "휴가/외근", badge: pendingApprovalCount },
-                { key: "인수인계", badge: unreadHandoverCount },
-              ].map(({ key, badge }) => {
-                const isActive = boardTab === key;
-                return (
-                  <button
-                    key={key}
-                    onClick={() => setBoardTab(key)}
-                    className={`relative px-5 py-3.5 text-[14.5px] font-bold transition border-b-2 ${
-                      isActive
-                        ? "text-[#1B2B4B] border-[#1B2B4B]"
-                        : "text-gray-500 border-transparent hover:text-gray-600"
-                    }`}
-                  >
-                    <EditableText id={`home.board.tab.${key}`} defaultText={key} />
-                    {badge > 0 && (
-                      <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold">{badge}</span>
-                    )}
-                  </button>
-                );
-              });
-            })()}
+      {/* ===== 사내 게시판(왼쪽 사이드바에서 고름) — 2026-10-28 디지털 리디자인 ===== */}
+      {boardTab !== "대시보드" && (
+      <div className="kp-board space-y-4">
+        <div className="relative overflow-hidden rounded-[22px] px-7 py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]"
+          style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+          <div>
+            <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>
+              BOARD · {boardTab === "공지사항" ? "NOTICE" : boardTab === "휴가/외근" ? "SCHEDULE" : "HANDOVER"}
+            </div>
+            <h2 className="text-[24px] font-black tracking-tight mt-1">{boardTab}</h2>
+            <p className="text-[14px] text-blue-100/75 mt-1 font-medium">
+              {boardTab === "공지사항" ? "회사 공지·안내를 등록하고 확인합니다" : boardTab === "휴가/외근" ? "휴가·외근 일정을 올리고 결재를 받습니다" : "업무를 넘기고 받는 사람이 확인했는지 봅니다"}
+            </p>
           </div>
-          <div className="ml-auto">
-            {!isViewer && boardTab === "공지사항" && <RegBtn onClick={() => { setSelectedNotice(null); setNoticeForm({ category: "공지사항", author: "", content: "" }); setNoticeOpen(true); }} />}
-            {!isViewer && boardTab === "휴가/외근" && <RegBtn onClick={() => { setSelectedSchedule(null); setScheduleForm({ type: "휴가", authorName: "", start: "", end: "", memo: "", approvers: [] }); setScheduleOpen(true); }} />}
-            {!isViewer && boardTab === "인수인계" && (
-              <RegBtn onClick={() => {
-                const me = users.find(u => u.id === user?.uid);
-                setSelectedHandover(null);
-                setHandoverForm({ text: "", author: me?.name || "", authorUid: user?.uid || "", receiver: "", receiverUid: "", date: todayStr });
-                setHandoverOpen(true);
-              }} />
+          <div className="flex items-center gap-3">
+            {[
+              boardTab === "공지사항" ? ["전체", notices.length] : boardTab === "휴가/외근" ? ["전체", schedules.length] : ["전체", handovers.length],
+              boardTab === "휴가/외근" ? ["내 결재 대기", pendingApprovalCountNav] : boardTab === "인수인계" ? ["내 미확인", unreadHandoverCountNav] : ["이번 달", notices.filter((n) => String(n.date || "").slice(0, 7) === todayStr.slice(0, 7)).length],
+            ].map(([k, v]) => (
+              <div key={k} className="rounded-2xl bg-white/[0.08] ring-1 ring-white/15 px-4 py-2 text-center min-w-[96px]">
+                <div className="text-[12px] font-bold text-blue-100/70">{k}</div>
+                <div className="text-[22px] font-black leading-tight" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{v}</div>
+              </div>
+            ))}
+            {!isViewer && (
+              <button
+                onClick={() => {
+                  if (boardTab === "공지사항") { setSelectedNotice(null); setNoticeForm({ category: "공지사항", author: "", content: "" }); setNoticeOpen(true); }
+                  else if (boardTab === "휴가/외근") { setSelectedSchedule(null); setScheduleForm({ type: "휴가", authorName: "", start: "", end: "", memo: "", approvers: [] }); setScheduleOpen(true); }
+                  else { const me = users.find(u => u.id === user?.uid); setSelectedHandover(null); setHandoverForm({ text: "", author: me?.name || "", authorUid: user?.uid || "", receiver: "", receiverUid: "", date: todayStr }); setHandoverOpen(true); }
+                }}
+                className="h-12 px-5 rounded-2xl bg-white text-[#0F1A30] text-[15px] font-black shadow-[0_8px_20px_rgba(0,0,0,0.25)] hover:brightness-95 transition">
+                + 새로 등록
+              </button>
             )}
           </div>
         </div>
-
+      <div className={`${KP_HOME_CARD} overflow-hidden`}>
         {/* 탭 콘텐츠 */}
         <div className="p-5">
           {/* 공지사항 탭 */}
@@ -1019,7 +1019,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
               <>
                 <table className="w-full text-[13px]">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200">
+                    <tr style={{ background: "linear-gradient(90deg,#0F1A30,#1B2B4B 50%,#24396A)" }} className="[&>th]:!text-white [&>th]:!text-[13px] [&>th]:!font-extrabold [&>th]:!py-3">
                       <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 whitespace-nowrap w-[44px]">No</th>
                       <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 whitespace-nowrap w-[90px]">등록날짜</th>
                       <th className="px-3 py-2.5 text-center text-[12px] font-semibold text-gray-500 whitespace-nowrap w-[70px]">등록시간</th>
@@ -1078,6 +1078,8 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
           )}
         </div>
       </div>
+      </div>
+      )}
 
       {/* ===== 모달들 ===== */}
       {noticeOpen && (
@@ -1487,5 +1489,11 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         </div>
       )}
     </div>
+    <style>{`
+      .kp-board table td { font-size: 14.5px !important; padding-top: 13px !important; padding-bottom: 13px !important; }
+      .kp-board table tbody tr { transition: background .12s; }
+      .kp-board table tbody tr:hover { background: #F4F7FC !important; }
+    `}</style>
+    </KpSubNav>
   );
 }
