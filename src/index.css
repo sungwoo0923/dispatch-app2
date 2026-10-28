@@ -185,3 +185,8 @@ table tbody tr:nth-child(odd) td {
 /* ⭐ 끊김 개선(2026-10-27) — 배경 흐림(backdrop-filter)은 뒤에 있는 큰 표·목록을 매 프레임 다시 흐리게 그려서
    팝업에서 글자를 칠 때마다(PC 오더복사수정패널 기준 키 입력 1번에 약 2배) 화면이 버벅였다. 흐림만 끄고 어두운 배경은 그대로 둔다. */
 [class*="backdrop-blur"] { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+
+/* ⭐ 2026-10-28 배차관리 등록폼 — 좁아져도 라벨·날짜·작은 버튼 글자가 세로로 쪼개지지 않게 */
+.kp-date-row, .kp-date-row * { white-space: nowrap; }
+.kp-order-form label { white-space: nowrap; }
+.kp-order-form > div { min-width: 0; }

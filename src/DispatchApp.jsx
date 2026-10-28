@@ -434,11 +434,11 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
   const clockStr = `${pad2(clock.getHours())}:${pad2(clock.getMinutes())}:${pad2(clock.getSeconds())}`;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden flex flex-col" style={{ flex: "0 0 calc(38% - 12px)", minWidth: 240 }}>
+    <div className="bg-white border border-[#E3E8F0] rounded-[24px] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] overflow-hidden flex flex-col" style={{ flex: multiMode ? "0 0 calc(38% - 12px)" : "0 0 clamp(300px, 26%, 400px)", minWidth: 240 }}>
       {/* 헤더 — 오늘 날짜 + 디지털 시계 */}
-      <div className="bg-[#1B2B4B] px-5 py-3 flex items-center justify-between shrink-0">
+      <div className="px-5 py-3.5 flex items-center justify-between shrink-0" style={{ background: "linear-gradient(120deg,#0B1428,#0F1A30 50%,#1B2B4B)" }}>
         <div>
-          <div className="text-[10px] text-white/50 font-semibold tracking-widest">TODAY</div>
+          <div className="text-[10px] text-[#8FB0F0] font-extrabold tracking-[0.28em]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>TODAY</div>
           <div className="text-[13px] text-white font-bold">{todayStr}</div>
         </div>
         <div className="text-right">
@@ -13917,21 +13917,22 @@ const toggleOrderCardStyle = () => {
 };
 
 // 입력창 (A: 카드형 / B: 밑줄형 — 오더복사수정패널과 동일한 밑줄 스타일)
+// ⭐ 2026-10-28 디지털 리디자인 — B(기본)는 연한 칸에 둥근 모서리, 누르면 흰 바탕+테두리 빛. 글씨 크고 또렷하게.
 const inputCls = orderCardStyle === "B"
-  ? "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] font-bold text-gray-900 bg-transparent focus:outline-none focus:border-[#1B2B4B] transition"
+  ? "w-full h-10 px-3 rounded-[11px] border border-[#E3E8F0] bg-[#F7F9FC] text-[13.5px] font-bold text-[#0F1A30] placeholder:text-[#A7B3C6] placeholder:font-medium focus:outline-none focus:bg-white focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 transition"
   : "w-full px-3 py-2 text-sm rounded-lg border border-gray-200 shadow-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 placeholder:text-gray-500 transition";
 
 // 라벨 (카카오T 스타일) — min-h + flex로 아이콘 버튼이 붙은 라벨과 일반
 // 텍스트 라벨의 높이를 통일해, 같은 grid row의 옆 칸 입력창끼리 높이가
 // 들쑥날쑥해지는 것을 방지한다.
 const labelCls =
-  "flex items-center h-[22px] overflow-visible text-[15px] font-semibold text-black mb-1";
+  "flex items-center gap-1 h-[22px] overflow-visible whitespace-nowrap text-[12.5px] font-extrabold tracking-[0.01em] text-[#3A4A66] mb-1.5";
 
 // 메모/전달사항 textarea (A: 카드형 / B: 밑줄형)
 const textareaCls = orderCardStyle === "B"
-  ? "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] font-bold text-gray-900 bg-transparent resize-none focus:outline-none focus:border-[#1B2B4B] transition"
+  ? "w-full rounded-[12px] border border-[#E3E8F0] bg-[#F7F9FC] px-3.5 py-2.5 text-[13.5px] font-bold text-[#0F1A30] placeholder:text-[#A7B3C6] placeholder:font-medium resize-none focus:outline-none focus:bg-white focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 transition"
   : "w-full border-2 border-gray-300 rounded-xl px-4 py-3 text-[13px] resize-none bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.04),0_2px_8px_rgba(0,0,0,0.04)] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] focus:shadow-[0_0_0_1px_rgba(27,43,75,0.12),0_4px_12px_rgba(27,43,75,0.08)] placeholder:text-gray-500 transition-all";
-    const reqStar = <span className="text-red-500">*</span>;
+    const reqStar = <span className="text-[#4B6CB7]">*</span>;
     const AutoBadge = ({ show }) => null;
 function FuelPriceWidget({ apiKey }) {
   const [prices, setPrices] = React.useState([]);
@@ -14626,7 +14627,7 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
 )}
   <div className="w-px h-7 bg-gray-200" />
   {/* 날짜 시간 ▼ */}
-<div className="flex items-center gap-3 text-sm">
+<div className="kp-date-row flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
 
 {/* ================= 상차 ================= */}
   <label className="text-[13px] font-bold text-[#1B2B4B]">상차</label>
@@ -14867,21 +14868,24 @@ title="상차지 ↔ 하차지 교체"
     else if (e.key === "ArrowRight" && atEnd) { e.preventDefault(); arrowHopFocus(el, 1); }
   }}
 className="
-grid grid-cols-8 gap-4
+kp-order-form
+grid grid-cols-8 gap-x-3.5 gap-y-4
 bg-white
-border border-[#E6ECF5]
-rounded-2xl
+border border-[#E3E8F0]
+rounded-[24px]
 pt-0 pb-6 px-6
 overflow-hidden
-shadow-sm
+shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
 "
 >
   
   {/* ================== 오더 정보 (카드 최상단 네이비 헤더) ================== */}
-<div className="col-span-8 -mx-6 -mt-0 mb-3">
-  <div className="bg-[#1B2B4B] px-6 py-3 flex items-center justify-between">
-    <span className="text-[14px] font-bold text-white tracking-wide">
-      <EditableText id="orderForm.header.오더정보" defaultText="오더 정보" />
+<div className="col-span-8 -mx-6 -mt-0 mb-2">
+  <div className="relative px-6 py-3.5 flex items-center justify-between overflow-hidden" style={{ background: "linear-gradient(120deg,#0B1428 0%,#0F1A30 40%,#1B2B4B 75%,#2D4C82 100%)" }}>
+    <span className="absolute inset-0 opacity-[0.08] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
+    <span className="relative flex items-baseline gap-2.5">
+      <span className="text-[10px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>ORDER ENTRY</span>
+      <span className="text-[15px] font-black text-white"><EditableText id="orderForm.header.오더정보" defaultText="오더 정보" /></span>
     </span>
     <div className="flex items-center gap-1.5">
       <button type="button" onClick={openMultiRegister}
@@ -15663,7 +15667,8 @@ const similar = placeList.filter(p => {
 
   {/* 상차지명 + 자동완성 */}
   <div className="relative">
-    <label className="flex items-center h-[22px] overflow-visible gap-1.5 text-[16px] font-bold text-blue-600 mb-1">
+    <label className="flex items-center h-[22px] overflow-visible gap-1.5 whitespace-nowrap text-[12.5px] font-black text-[#0F1A30] mb-1.5">
+  <span className="w-2 h-2 rounded-[2px] bg-[#0F1A30] shrink-0" />
   <EditableText id="orderForm.label.상차지" defaultText="상차지" /> {reqStar}
   <OrderMemoIconButton onClick={() => openOrderMemoEditor("pickup")} title="상차지 오더메모" hasMemo={hasOrderMemoFor("pickup")} size={20} />
 </label>
@@ -15834,7 +15839,8 @@ className={`
 
 {/* 하차지명 + 자동완성 */}
 <div className="relative">
-  <label className="flex items-center h-[22px] overflow-visible gap-1.5 text-[16px] font-bold text-red-500 mb-1">
+  <label className="flex items-center h-[22px] overflow-visible gap-1.5 whitespace-nowrap text-[12.5px] font-black text-[#0F1A30] mb-1.5">
+    <span className="w-2 h-2 rounded-[2px] bg-[#CFE0FF] ring-1 ring-[#4B6CB7] shrink-0" />
     <EditableText id="orderForm.label.하차지" defaultText="하차지" /> {reqStar}
     <OrderMemoIconButton onClick={() => openOrderMemoEditor("drop")} title="하차지 오더메모" hasMemo={hasOrderMemoFor("drop")} size={20} />
   </label>
@@ -16954,20 +16960,7 @@ className={`
 
   <div className="relative">
     <textarea
-      className="
-        w-full
-        border-2 border-[#1B2B4B]
-        rounded-xl
-        px-4 py-2.5
-        text-[13px]
-        resize-none
-        bg-white
-        shadow-[0_0_0_1px_rgba(27,43,75,0.08),0_2px_8px_rgba(27,43,75,0.06)]
-        focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30 focus:border-[#1B2B4B]
-        focus:shadow-[0_0_0_1px_rgba(27,43,75,0.15),0_4px_12px_rgba(27,43,75,0.1)]
-        placeholder:text-gray-500
-        transition-all
-      "
+      className="w-full rounded-[12px] border border-[#CFD8E6] bg-[#F7F9FC] px-3.5 py-2 text-[13px] font-bold text-[#0F1A30] resize-none placeholder:text-[#A7B3C6] placeholder:font-medium focus:outline-none focus:bg-white focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 transition"
       rows={2}
       data-arrownav
 
@@ -18278,7 +18271,7 @@ className={`
            {/* ==================== 상단: 입력폼 + Today 사이드패널 ==================== */}
 <div className="flex items-stretch gap-3 w-full mb-4" style={{ minWidth: 0 }}>
   {/* 왼쪽: 폼 */}
-  <div style={{ flex: "0 0 62%", maxWidth: "62%", minWidth: 0, overflow: "hidden" }}>
+  <div style={{ flex: "1 1 0", minWidth: 0, overflow: "hidden" }}>
     {renderForm()}
   </div>
 
@@ -56079,56 +56072,81 @@ function DriverManagement({ drivers, upsertDriver, removeDriver, showAlert = (m)
   return (
     <div className="p-4">
 
-      {/* 헤더 */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-[18px] font-bold text-[#1B2B4B]"><EditableText id="driver.header.title" defaultText="기사관리" /></h2>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="px-4 py-2 rounded-lg text-[13px] font-bold transition bg-[#1B2B4B] text-white hover:bg-[#243a60]"
-          >
+      {/* ⭐ 2026-10-28 디지털 리디자인 — 숫자 타일(누르면 등급별 보기) + 한 줄 검색바 + 오른쪽 작업 버튼 */}
+      <div className="grid grid-cols-5 gap-3 mb-4">
+        {[
+          {label:"전체", en:"ALL", val:kpi.전체, key:"전체"},
+          {label:"일반", en:"GENERAL", val:kpi.일반, key:"일반"},
+          {label:"직영", en:"DIRECT", val:kpi.직영, key:"직영"},
+          {label:"지입", en:"CONSIGNED", val:kpi.지입, key:"지입"},
+          {label:"블랙", en:"BLOCKED", val:kpi.블랙, key:"블랙"},
+        ].map(({label,en,val,key}) => {
+          const on = gradeFilter===key && (showAll || searched);
+          return (
+            <button key={key} onClick={() => { setGradeFilter(key); setShowAll(true); }}
+              className={`relative overflow-hidden rounded-[20px] px-5 py-4 text-left transition ${on ? "text-white shadow-[0_14px_30px_rgba(15,26,48,0.28)]" : "bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)] hover:border-[#4B6CB7]"}`}
+              style={on ? { background: "linear-gradient(125deg,#0B1428,#0F1A30 45%,#1B2B4B 80%,#2D4C82)" } : undefined}>
+              {on && <span className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "18px 18px" }} />}
+              <div className={`relative text-[10px] font-extrabold tracking-[0.24em] ${on ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`} style={{ fontFamily: KP_MONO }}>{en}</div>
+              <div className="relative flex items-end justify-between mt-1">
+                <span className={`text-[14px] font-black ${on ? "text-white" : "text-[#0F1A30]"}`}><EditableText id={`driver.kpi.${label}`} defaultText={label} /></span>
+                <span className={`text-[28px] font-black leading-none tabular-nums ${on ? "text-white" : "text-[#0F1A30]"}`} style={{ fontFamily: KP_MONO }}>{val}</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 검색바 + 작업 버튼 */}
+      <div className="flex flex-wrap items-center gap-2.5 mb-4">
+        <div className="flex items-center h-12 flex-1 min-w-[420px] max-w-[720px] rounded-[16px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)] focus-within:border-[#4B6CB7] focus-within:ring-4 focus-within:ring-[#4B6CB7]/10 overflow-hidden">
+          <select className="h-full pl-4 pr-2 bg-transparent text-[13.5px] font-black text-[#0F1A30] outline-none border-r border-[#EEF1F6] cursor-pointer"
+            value={qField} onChange={e => { setQField(e.target.value); setSearched(false); }}>
+            {["전체","차량번호","기사명","연락처"].map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+          <svg className="ml-3 shrink-0 text-[#9AA9C3]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-5-5" /></svg>
+          <input autoComplete="off"
+            className="flex-1 min-w-0 h-full px-2.5 bg-transparent text-[14.5px] font-bold text-[#0F1A30] outline-none placeholder:text-[#A7B3C6] placeholder:font-medium"
+            placeholder="차량번호 · 기사명 · 연락처로 찾기 (Enter)"
+            value={q}
+            onChange={e => { setQ(e.target.value); setSearched(false); }}
+            onKeyDown={e => { if (e.key==="Enter") setSearched(true); }}
+          />
+          <button onClick={()=>setSearched(true)} className="h-9 mr-1.5 px-5 rounded-[12px] bg-[#0F1A30] text-white text-[13.5px] font-black hover:bg-[#1B2B4B]">검색</button>
+        </div>
+        <div className="flex items-center gap-1 h-12 px-1.5 rounded-[16px] bg-[#EEF2F8] border border-[#E3E8F0]">
+          {["전체","일반","직영","지입","블랙"].map(g => (
+            <button key={g} onClick={() => setGradeFilter(g)}
+              className={`h-9 px-3.5 rounded-[11px] text-[13px] font-black transition ${gradeFilter===g ? "bg-white text-[#0F1A30] shadow-[0_4px_10px_rgba(15,26,48,0.1)]" : "text-[#5B6B85] hover:text-[#0F1A30]"}`}>{g}</button>
+          ))}
+        </div>
+        <span className="text-[13px] font-bold text-[#5B6B85] px-1 whitespace-nowrap">총 <b className="text-[#0F1A30] tabular-nums">{filtered.length}</b>명</span>
+        <div className="ml-auto flex items-center gap-2">
+          <button onClick={() => setShowAddForm(true)}
+            className="h-11 px-4 rounded-[13px] text-[13.5px] font-black text-white shadow-[0_10px_22px_rgba(15,26,48,0.25)] hover:brightness-110 transition" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
             + <EditableText id="driver.toolbar.기사등록" defaultText="기사 등록" />
           </button>
           <button
             onClick={() => { setShowAll(v=>!v); setQ(""); setSearched(false); setGradeFilter("전체"); }}
-            className={`px-4 py-2 rounded-lg text-[13px] font-bold transition ${showAll ? "bg-[#1B2B4B] text-white" : "bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}
-          >
+            className={`h-11 px-4 rounded-[13px] text-[13px] font-bold transition ${showAll ? "bg-[#0F1A30] text-white" : "bg-white border border-[#E3E8F0] text-[#0F1A30] hover:border-[#4B6CB7]"}`}>
             {showAll ? <EditableText id="driver.toolbar.전체보기닫기" defaultText="전체보기 닫기" /> : <EditableText id="driver.toolbar.전체보기" defaultText="전체보기" />}
           </button>
-          <label className="px-4 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold cursor-pointer hover:bg-[#1B2B4B] hover:text-white transition">
+          <label className="h-11 px-4 inline-flex items-center rounded-[13px] bg-white border border-[#E3E8F0] text-[#0F1A30] text-[13px] font-bold cursor-pointer hover:border-[#4B6CB7] transition">
             <EditableText id="driver.toolbar.엑셀업로드" defaultText="엑셀 업로드" />
             <input autoComplete="off" type="file" accept=".xlsx,.xls" onChange={onExcel} className="hidden" />
           </label>
-          <button onClick={downloadExcel} className="px-4 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#1B2B4B] hover:text-white transition">
+          <button onClick={downloadExcel} className="h-11 px-4 rounded-[13px] bg-white border border-[#E3E8F0] text-[#0F1A30] text-[13px] font-bold hover:border-[#4B6CB7] transition">
             <EditableText id="driver.toolbar.엑셀다운로드" defaultText="엑셀 다운로드" />
           </button>
           <button
             onClick={() => { setCleanupOpen(true); setCleanupQ(""); setCleanupQField("전체"); setCleanupSelected(new Set()); setCleanupDone(false); }}
-            className="px-4 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#1B2B4B] hover:text-white transition"
-          >
+            className="h-11 px-4 rounded-[13px] bg-white border border-[#E3E8F0] text-[#0F1A30] text-[13px] font-bold hover:border-[#4B6CB7] transition">
             <EditableText id="driver.toolbar.기사정리" defaultText="기사정리" />
           </button>
-          <button onClick={removeSelected} className="px-4 py-2 rounded-lg bg-red-600 text-white text-[13px] font-bold hover:bg-red-700 transition">
+          <button onClick={removeSelected} className="h-11 px-4 rounded-[13px] bg-white border border-[#0F1A30] text-[#0F1A30] text-[13px] font-black hover:bg-[#0F1A30] hover:text-white transition">
             <EditableText id="driver.toolbar.선택삭제" defaultText="선택 삭제" />
           </button>
         </div>
-      </div>
-
-      {/* KPI 카드 */}
-      <div className="grid grid-cols-5 gap-3 mb-4">
-        {[
-          {label:"전체", val:kpi.전체, key:"전체"},
-          {label:"일반", val:kpi.일반, key:"일반"},
-          {label:"직영", val:kpi.직영, key:"직영"},
-          {label:"지입", val:kpi.지입, key:"지입"},
-          {label:"블랙", val:kpi.블랙, key:"블랙"},
-        ].map(({label,val,key}) => (
-          <button key={key} onClick={() => { setGradeFilter(key); setShowAll(true); }}
-            className={`rounded-xl border p-4 text-center shadow-sm transition ${gradeFilter===key ? "bg-[#1B2B4B] border-[#1B2B4B]" : "bg-white border-gray-200 hover:border-[#1B2B4B]"}`}>
-            <div className={`text-[24px] font-extrabold ${gradeFilter===key ? "text-white" : "text-[#1B2B4B]"}`}>{val}</div>
-            <div className={`text-[12px] font-semibold mt-0.5 ${gradeFilter===key ? "text-white/70" : "text-gray-500"}`}><EditableText id={`driver.kpi.${label}`} defaultText={label} /></div>
-          </button>
-        ))}
       </div>
 
       {/* 신규 등록 팝업 */}
@@ -56247,83 +56265,23 @@ function DriverManagement({ drivers, upsertDriver, removeDriver, showAlert = (m)
         </div>
       )}
 
-      {/* 자사운임표 메뉴와 동일한 레이아웃 — 왼쪽 검색 패널 / 오른쪽 결과 */}
-      <div className="grid grid-cols-[320px_1fr] gap-4 items-start">
-
-        {/* ───────── 왼쪽: 검색 패널 ───────── */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <div className="mb-4">
-            <label className="block text-[12px] font-bold text-gray-900 mb-1">검색 구분</label>
-            <select
-              className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none transition"
-              value={qField}
-              onChange={e => { setQField(e.target.value); setSearched(false); }}
-            >
-              <option value="전체">전체</option>
-              <option value="차량번호">차량번호</option>
-              <option value="기사명">기사명</option>
-              <option value="연락처">연락처</option>
-            </select>
-          </div>
-          <div className="mb-4">
-            <label className="block text-[12px] font-bold text-gray-900 mb-1">검색어</label>
-            <input autoComplete="off"
-              className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-400 transition"
-              placeholder="차량번호·기사명·연락처"
-              value={q}
-              onChange={e => { setQ(e.target.value); setSearched(false); }}
-              onKeyDown={e => { if (e.key==="Enter") setSearched(true); }}
-            />
-          </div>
-          <button onClick={()=>setSearched(true)}
-            className="w-full py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition mb-5">
-            검색
-          </button>
-
-          <div className="mb-1.5">
-            <label className="block text-[12px] font-bold text-gray-900 mb-1">등급</label>
-            <select className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none transition cursor-pointer"
-              value={gradeFilter} onChange={e => setGradeFilter(e.target.value)}>
-              {["전체","일반","직영","지입","블랙"].map(g => (
-                <option key={g} value={g}>{g}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="mt-5 pt-4 border-t border-gray-100 text-[12px] text-gray-500 font-medium">
-            총 <b className="text-[#1B2B4B]">{filtered.length}</b>명
-          </div>
-
-          {/* 페이지네이션 — 검색창 아래(좌측 패널)로 이동 */}
-          {(showAll || searched) && totalPages > 1 && (
-            <div className="mt-3 flex items-center justify-center gap-2">
-              <button disabled={page===1} onClick={()=>setPage(p=>Math.max(1,p-1))}
-                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition ${page===1 ? "bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed" : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
-                이전
-              </button>
-              <span className="text-[12px] font-semibold text-gray-600 whitespace-nowrap">
-                {page} <span className="text-gray-500">/ {totalPages}</span>
-              </span>
-              <button disabled={page===totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))}
-                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition ${page===totalPages ? "bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed" : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
-                다음
-              </button>
-            </div>
-          )}
-        </div>
-
+      {/* 결과 (검색은 위 검색바) */}
+      <div className="flex flex-col gap-4">
         {/* ───────── 오른쪽: 검색 결과 ───────── */}
         <div className="min-w-0">
           {/* 미조회 상태 */}
           {!showAll && !searched && (
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col items-center justify-center py-20 text-gray-500">
-              <div className="text-[15px] font-semibold">검색어를 입력하거나 전체보기 버튼을 누르세요.</div>
+            <div className="relative overflow-hidden rounded-[22px] flex flex-col items-center justify-center py-20 text-white" style={{ background: "radial-gradient(90% 80% at 50% 0%, #22396A 0%, #0F1A30 60%, #0B1428 100%)" }}>
+              <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "28px 28px" }} />
+              <div className="relative text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mb-2" style={{ fontFamily: KP_MONO }}>DRIVER SEARCH</div>
+              <div className="relative text-[16px] font-black">위 검색바에 차량번호·기사명·연락처를 입력하세요</div>
+              <div className="relative text-[13px] text-white/55 mt-1">숫자 타일을 누르면 등급별 기사가 바로 보입니다</div>
             </div>
           )}
 
           {/* 테이블 */}
           {(showAll || searched) && (
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] overflow-hidden">
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="bg-[#1B2B4B]">
@@ -56397,6 +56355,22 @@ function DriverManagement({ drivers, upsertDriver, removeDriver, showAlert = (m)
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+          {/* 페이지네이션 — 표 아래 */}
+          {(showAll || searched) && totalPages > 1 && (
+            <div className="mt-3 flex items-center justify-center gap-2">
+              <button disabled={page===1} onClick={()=>setPage(p=>Math.max(1,p-1))}
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition ${page===1 ? "bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed" : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
+                이전
+              </button>
+              <span className="text-[12px] font-semibold text-gray-600 whitespace-nowrap">
+                {page} <span className="text-gray-500">/ {totalPages}</span>
+              </span>
+              <button disabled={page===totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))}
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition ${page===totalPages ? "bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed" : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
+                다음
+              </button>
             </div>
           )}
         </div>
@@ -56899,6 +56873,52 @@ function BizRegOcrModal({ imageBase64, onClose, onApply }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ⭐ 2026-10-28 거래처관리·기사관리 공용 디지털 부품 — 숫자 타일 / 한 줄 검색바 / 빈 화면 안내 / 버튼
+const KP_GRADE_EN = { 전체: "ALL", 일반: "GENERAL", 블랙: "BLOCKED", 주의: "CAUTION", 이탈: "CHURNED", 직영: "DIRECT", 지입: "CONSIGNED" };
+const KP_BTN = "h-11 px-4 rounded-[13px] bg-white border border-[#E3E8F0] text-[#0F1A30] text-[13px] font-bold hover:border-[#4B6CB7] transition whitespace-nowrap";
+const KP_BTN_PRIMARY = "h-11 px-4 rounded-[13px] text-white text-[13.5px] font-black shadow-[0_10px_22px_rgba(15,26,48,0.25)] hover:brightness-110 transition whitespace-nowrap";
+const KP_BTN_PRIMARY_BG = { background: "linear-gradient(120deg,#0F1A30,#2D4C82)" };
+const KP_BTN_DANGER = "h-11 px-4 rounded-[13px] bg-white border border-[#0F1A30] text-[#0F1A30] text-[13px] font-black hover:bg-[#0F1A30] hover:text-white transition whitespace-nowrap";
+function KpStatTile({ on, en, label, value, onClick }) {
+  return (
+    <button onClick={onClick}
+      className={`relative overflow-hidden rounded-[20px] px-5 py-4 text-left transition ${on ? "text-white shadow-[0_14px_30px_rgba(15,26,48,0.28)]" : "bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)] hover:border-[#4B6CB7]"}`}
+      style={on ? { background: "linear-gradient(125deg,#0B1428,#0F1A30 45%,#1B2B4B 80%,#2D4C82)" } : undefined}>
+      {on && <span className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "18px 18px" }} />}
+      <div className={`relative text-[10px] font-extrabold tracking-[0.24em] ${on ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`} style={{ fontFamily: KP_MONO }}>{en || ""}</div>
+      <div className="relative flex items-end justify-between mt-1">
+        <span className={`text-[14px] font-black ${on ? "text-white" : "text-[#0F1A30]"}`}>{label}</span>
+        <span className={`text-[28px] font-black leading-none tabular-nums ${on ? "text-white" : "text-[#0F1A30]"}`} style={{ fontFamily: KP_MONO }}>{value}</span>
+      </div>
+    </button>
+  );
+}
+function KpSearchBar({ options, field, onField, value, onChange, onSearch, placeholder }) {
+  return (
+    <div className="flex items-center h-12 flex-1 min-w-[380px] max-w-[680px] rounded-[16px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)] focus-within:border-[#4B6CB7] focus-within:ring-4 focus-within:ring-[#4B6CB7]/10 overflow-hidden">
+      {options && (
+        <select className="h-full pl-4 pr-2 bg-transparent text-[13.5px] font-black text-[#0F1A30] outline-none border-r border-[#EEF1F6] cursor-pointer" value={field} onChange={(e) => onField(e.target.value)}>
+          {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+      )}
+      <svg className="ml-3 shrink-0 text-[#9AA9C3]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-5-5" /></svg>
+      <input autoComplete="off" className="flex-1 min-w-0 h-full px-2.5 bg-transparent text-[14.5px] font-bold text-[#0F1A30] outline-none placeholder:text-[#A7B3C6] placeholder:font-medium"
+        placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") onSearch(); }} />
+      <button onClick={onSearch} className="h-9 mr-1.5 px-5 rounded-[12px] bg-[#0F1A30] text-white text-[13.5px] font-black hover:bg-[#1B2B4B]">검색</button>
+    </div>
+  );
+}
+function KpEmptySearch({ en, title, sub }) {
+  return (
+    <div className="relative overflow-hidden rounded-[22px] flex flex-col items-center justify-center py-16 text-white" style={{ background: "radial-gradient(90% 80% at 50% 0%, #22396A 0%, #0F1A30 60%, #0B1428 100%)" }}>
+      <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "28px 28px" }} />
+      <div className="relative text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mb-2" style={{ fontFamily: KP_MONO }}>{en}</div>
+      <div className="relative text-[16px] font-black">{title}</div>
+      {sub && <div className="relative text-[13px] text-white/55 mt-1">{sub}</div>}
     </div>
   );
 }
@@ -57774,58 +57794,35 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
               { key: "주의", label: "주의" },
               { key: "이탈", label: "이탈" },
             ].map(({ key, label }) => (
-              <button key={key} onClick={() => setPlaceGradeFilter(key)}
-                className={`rounded-xl p-4 text-center border transition hover:opacity-90 ${
-                  placeGradeFilter === key
-                    ? "bg-[#1B2B4B] text-white border-[#1B2B4B] shadow"
-                    : "bg-white text-gray-700 border-gray-200 hover:border-[#1B2B4B]"
-                }`}>
-                <div className={`text-[22px] font-extrabold ${placeGradeFilter === key ? "text-white" : "text-[#1B2B4B]"}`}>
-                  {gradeStats[key] || 0}
-                </div>
-                <div className={`text-[11px] font-semibold mt-0.5 ${placeGradeFilter === key ? "text-white/70" : "text-gray-500"}`}>
-                  {label}
-                </div>
-              </button>
+              <KpStatTile key={key} on={placeGradeFilter === key} en={KP_GRADE_EN[key]} label={label} value={gradeStats[key] || 0} onClick={() => setPlaceGradeFilter(key)} />
             ))}
           </div>
 
           {/* 검색 + 버튼 바 */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[34px]">
-              <select className="px-2 h-full text-[12px] bg-[#1B2B4B] text-white outline-none cursor-pointer"
-                value={placeFilterType} onChange={(e) => setPlaceFilterType(e.target.value)}>
-                <option value="업체명">업체명</option>
-                <option value="주소">주소</option>
-              </select>
-              <input autoComplete="off" className="px-3 h-full text-[13px] w-56 outline-none"
-                placeholder="검색 후 Enter"
-                value={placeQ}
-                onChange={(e) => { setPlaceQ(e.target.value); setPlaceSearched(false); }}
-                onKeyDown={(e) => { if (e.key === "Enter") setPlaceSearched(true); }} />
-            </div>
-            <button onClick={() => setPlaceSearched(true)}
-              className="h-[34px] px-4 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:bg-[#243a60] transition"><EditableText id="client.dropPlace.toolbar.검색" defaultText="검색" /></button>
+            <KpSearchBar options={["업체명", "주소"]} field={placeFilterType} onField={setPlaceFilterType}
+              value={placeQ} onChange={(v) => { setPlaceQ(v); setPlaceSearched(false); }} onSearch={() => setPlaceSearched(true)}
+              placeholder="하차지 업체명 · 주소로 찾기 (Enter)" />
             {(placeSearched || placeGradeFilter !== "전체") && (
-              <span className="text-xs text-gray-500">검색결과 {filteredPlaces.length}건</span>
+              <span className="text-[13px] font-bold text-[#5B6B85] px-1 whitespace-nowrap">검색결과 <b className="text-[#0F1A30] tabular-nums">{filteredPlaces.length}</b>건</span>
             )}
             <div className="ml-auto flex items-center gap-2">
               <button onClick={() => setShowNewPlaceForm(true)}
-                className="h-[34px] px-4 rounded-lg text-sm font-semibold border transition border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white">
+                className={KP_BTN_PRIMARY} style={KP_BTN_PRIMARY_BG}>
                 + <EditableText id="client.dropPlace.toolbar.신규등록" defaultText="신규등록" />
               </button>
-              <label className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg cursor-pointer text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition flex items-center">
+              <label className={`${KP_BTN} cursor-pointer inline-flex items-center`}>
                 <EditableText id="client.dropPlace.toolbar.엑셀업로드" defaultText="엑셀 업로드" />
                 <input autoComplete="off" type="file" accept=".xlsx,.xls" onChange={onExcelPlaces} className="hidden" />
               </label>
               <button onClick={downloadPlaceExcel}
-                className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition"><EditableText id="client.dropPlace.toolbar.다운로드" defaultText="다운로드" /></button>
+                className={KP_BTN}><EditableText id="client.dropPlace.toolbar.다운로드" defaultText="다운로드" /></button>
               <button onClick={() => { setPlaceDupOpen(true); setPlaceDupDone(false); setPlaceDupSelected(new Set()); }}
-                className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">
+                className={KP_BTN}>
                 <EditableText id="client.dropPlace.toolbar.거래처정리" defaultText="거래처정리" />
               </button>
               <button onClick={removeSelectedPlaces}
-                className="h-[34px] px-4 border border-red-300 rounded-lg text-sm text-red-600 font-semibold hover:bg-red-50 transition">
+                className={KP_BTN_DANGER}>
                 <EditableText id="client.dropPlace.toolbar.선택삭제" defaultText="선택삭제" /> {placeSelected.size > 0 && `(${placeSelected.size})`}
               </button>
             </div>
@@ -57886,9 +57883,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
 
           {/* 안내 / 빈 결과 */}
           {!placeSearched && placeGradeFilter === "전체" && (
-            <div className="bg-white rounded-xl border text-center py-14 text-gray-500 text-sm">
-              검색어를 입력하거나 위 등급 카드를 클릭하세요
-            </div>
+            <KpEmptySearch en="PLACE SEARCH" title="위 검색바에 하차지 업체명이나 주소를 입력하세요" sub="숫자 타일을 누르면 등급별 하차지가 바로 보입니다" />
           )}
           {(placeSearched || placeGradeFilter !== "전체") && filteredPlaces.length === 0 && (
             <div className="bg-white rounded-xl border text-center py-14 text-gray-500 text-sm">검색 결과가 없습니다</div>
@@ -58197,37 +58192,32 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
 
           {/* 툴바 */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[34px]">
-              <span className="px-3 bg-[#1B2B4B] text-white text-[12px] font-semibold h-full flex items-center">검색</span>
-              <input autoComplete="off" className="px-3 h-full text-[13px] w-56 outline-none"
-                placeholder="거래처명, 사업자번호, 담당자..."
-                value={q} onChange={(e) => setQ(e.target.value)} />
-            </div>
-            <span className="text-sm text-gray-500">{filtered.length}건</span>
+            <KpSearchBar value={q} onChange={setQ} onSearch={() => {}} placeholder="거래처명 · 사업자번호 · 담당자로 바로 찾기" />
+            <span className="text-[13px] font-bold text-[#5B6B85] px-1 whitespace-nowrap"><b className="text-[#0F1A30] tabular-nums">{filtered.length}</b>건</span>
             <button
               onClick={() => { setShowAllClients(v => !v); setQ(""); }}
-              className={`h-[34px] px-4 rounded-lg text-sm font-semibold transition ${showAllClients ? "bg-[#1B2B4B] text-white" : "bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
+              className={showAllClients ? "h-11 px-4 rounded-[13px] bg-[#0F1A30] text-white text-[13px] font-bold whitespace-nowrap" : KP_BTN}>
               {showAllClients ? <EditableText id="client.baseClient.toolbar.전체보기닫기" defaultText="전체보기 닫기" /> : <EditableText id="client.baseClient.toolbar.전체보기" defaultText="전체보기" />}
             </button>
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex flex-wrap items-center gap-2">
               <button onClick={() => { setShowImportPopup(true); setImportQ(""); setImportSelected([]); }}
-                className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">
+                className={KP_BTN}>
                 <EditableText id="client.baseClient.toolbar.하차지에서불러오기" defaultText="하차지에서 불러오기" />
               </button>
               {mismatchCandidates.length > 0 && (
                 <button onClick={() => { setMismatchSelected(new Set(mismatchCandidates.map(m => m.client.id || m.client.거래처명))); setShowMismatchPopup(true); }}
-                  className="h-[34px] px-4 border border-orange-400 rounded-lg text-sm text-orange-600 font-semibold hover:bg-orange-500 hover:text-white hover:border-orange-500 transition">
+                  className={KP_BTN_DANGER}>
                   <EditableText id="client.baseClient.toolbar.담당자불일치복구" defaultText="담당자 불일치 복구" /> ({mismatchCandidates.length})
                 </button>
               )}
-              <label className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg cursor-pointer text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition flex items-center">
+              <label className={`${KP_BTN} cursor-pointer inline-flex items-center`}>
                 <EditableText id="client.baseClient.toolbar.엑셀업로드" defaultText="엑셀 업로드" />
                 <input autoComplete="off" type="file" accept=".xlsx,.xls" onChange={onExcel} className="hidden" />
               </label>
               <button onClick={downloadClientExcel}
-                className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition"><EditableText id="client.baseClient.toolbar.다운로드" defaultText="다운로드" /></button>
+                className={KP_BTN}><EditableText id="client.baseClient.toolbar.다운로드" defaultText="다운로드" /></button>
               <button onClick={removeSelectedFn}
-                className="h-[34px] px-4 border border-red-300 rounded-lg text-sm text-red-600 font-semibold hover:bg-red-50 transition">
+                className={KP_BTN_DANGER}>
                 <EditableText id="client.baseClient.toolbar.선택삭제" defaultText="선택삭제" /> {selected.size > 0 && `(${selected.size})`}
               </button>
               <button
@@ -58238,11 +58228,11 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                   const row = rows.find(r => (r.id || r.거래처명) === id);
                   if (row) setEditClientModal({ ...row, 기사전달주의사항: (row.기사전달주의사항 || "").trim() ? row.기사전달주의사항 : defaultDriverNoticeTemplate(row.거래처명) });
                 }}
-                className="h-[34px] px-4 border border-[#1B2B4B] rounded-lg text-sm text-[#1B2B4B] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">
+                className={KP_BTN}>
                 <EditableText id="client.baseClient.toolbar.선택수정" defaultText="선택수정" /> {selected.size === 1 && "(1)"}
               </button>
               <button onClick={() => setShowNewClientModal(true)}
-                className="h-[34px] px-4 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:bg-[#243a60] transition">
+                className={KP_BTN_PRIMARY} style={KP_BTN_PRIMARY_BG}>
                 + 신규등록
               </button>
             </div>
@@ -58634,9 +58624,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
               </div>
             </div>
           ) : (
-            <div className="bg-white rounded-xl border text-center py-14 text-gray-500 text-sm">
-              {q ? "검색 결과가 없습니다" : (showAllClients ? "등록된 거래처가 없습니다" : "검색어를 입력하거나 전체보기 버튼을 누르세요.")}
-            </div>
+            <KpEmptySearch en="CLIENT SEARCH" title={q ? "검색 결과가 없습니다" : (showAllClients ? "등록된 거래처가 없습니다" : "위 검색바에 거래처명·사업자번호·담당자를 입력하세요")} sub={q || showAllClients ? "" : "전체보기를 누르면 모든 거래처가 보입니다"} />
           )}
         </div>
       )}

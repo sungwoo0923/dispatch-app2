@@ -837,7 +837,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                   <tr>
                     <td colSpan={COL_SPAN} className="py-16 text-center text-[14px] text-gray-400">
                       <div className="flex flex-col items-center gap-2">
-                        <span className="text-3xl">📅</span>
+                        <span className="w-12 h-12 rounded-[14px] flex items-center justify-center" style={{ background: "linear-gradient(135deg,#0F1A30,#2D4C82)" }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg></span>
                         <span>조회할 기간을 설정해주세요</span>
                         <button onClick={() => { setStartDate(thisMonthStart()); setEndDate(thisMonthEnd()); }} className="mt-2 px-4 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">이번 달 조회</button>
                       </div>
