@@ -52,6 +52,8 @@ export default function UploadPage() {
   const [showPaymentCalc, setShowPaymentCalc] = useState(false);
   const [invoiceDate, setInvoiceDate] = useState("");
   const [imgZoomOpen, setImgZoomOpen] = useState(false);
+  const [zoomSrc, setZoomSrc] = useState("/거래명세서.png");
+  const openZoom = (src) => { imgPinchRef.current = { dist: null, scale: 1, baseScale: 1, tx: 0, ty: 0, baseTx: 0, baseTy: 0, pointers: {} }; setZoomSrc(src); setImgZoomOpen(true); };
   const imgZoomRef = useRef(null);
   const imgPinchRef = useRef({ dist: null, scale: 1, baseScale: 1, tx: 0, ty: 0, baseTx: 0, baseTy: 0, pointers: {} });
 
@@ -827,15 +829,56 @@ export default function UploadPage() {
                 </div>
               )}
 
-              {/* 거래명세서 예시 */}
-              <button onClick={() => setImgZoomOpen(true)} style={{ marginTop: 14, width: "100%", display: "flex", alignItems: "center", gap: 12, padding: 10, borderRadius: 14, border: "1px solid #E3E8F0", background: "#fff", cursor: "zoom-in", textAlign: "left" }}>
-                <img src="/거래명세서.png" alt="거래명세서 예시" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 10, border: "1px solid #E3E8F0", flexShrink: 0 }} onError={(e) => { e.target.style.display = "none"; }} />
-                <span style={{ flex: 1 }}>
-                  <span style={{ display: "block", fontSize: 14, fontWeight: 900 }}>거래명세서 촬영 예시</span>
-                  <span style={{ display: "block", fontSize: 12.5, color: "#64748b", marginTop: 2 }}>한 장씩 선명하게 · 누르면 크게 보기</span>
-                </span>
-                <span style={{ color: "#94A3B8", fontSize: 20 }}>›</span>
-              </button>
+              {/* ⭐ 촬영 가이드(2026-10-28) — 예전엔 서류가 한 사진에 모두 들어간 예시라 "한 장에 다 찍어야 하나요?"
+                  문의가 있었다. 서류마다 따로 잘라 "서류 1장 = 사진 1장"으로 보여준다. */}
+              <div style={{ marginTop: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                  <span style={{ fontSize: 15, fontWeight: 900 }}>촬영 가이드</span>
+                  <span className="kpu-mono" style={{ fontSize: 11.5, fontWeight: 800, color: "#fff", background: "#1B2B4B", padding: "3px 9px", borderRadius: 8 }}>서류 1장 = 사진 1장</span>
+                </div>
+                {/* 잘못된 예 / 올바른 예 */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <button onClick={() => openZoom("/guide/doc-all-wrong.jpg")} style={{ position: "relative", padding: 0, border: "1.5px solid #C9D3E4", borderRadius: 14, overflow: "hidden", background: "#fff", cursor: "zoom-in", textAlign: "left" }}>
+                    <img src="/guide/doc-all-wrong.jpg" alt="잘못된 예" style={{ width: "100%", height: 88, objectFit: "cover", display: "block", filter: "grayscale(.6) brightness(.85)" }} />
+                    <span style={{ position: "absolute", inset: 0, height: 88, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <span style={{ width: 44, height: 44, borderRadius: "50%", background: "rgba(15,26,48,.85)", color: "#fff", fontSize: 26, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</span>
+                    </span>
+                    <span style={{ display: "block", padding: "7px 10px", fontSize: 12.5, fontWeight: 800, color: "#64748b" }}>한 사진에 여러 장 ✕</span>
+                  </button>
+                  <div style={{ position: "relative", border: "1.5px solid #1B2B4B", borderRadius: 14, overflow: "hidden", background: "#fff" }}>
+                    <div style={{ height: 88, display: "grid", gridTemplateColumns: isCold ? "1.6fr 1fr 1fr" : "1.6fr 1fr", gridTemplateRows: "82px", gap: 3, padding: 3, background: "#EEF3FB", overflow: "hidden" }}>
+                      <img src="/guide/doc-invoice.jpg" alt="" style={{ width: "100%", height: 82, objectFit: "cover", borderRadius: 6, display: "block" }} />
+                      <img src="/guide/doc-pallet-1.jpg" alt="" style={{ width: "100%", height: 82, objectFit: "cover", objectPosition: "top", borderRadius: 6, display: "block" }} />
+                      {isCold && <img src="/guide/doc-tacho.jpg" alt="" style={{ width: "100%", height: 82, objectFit: "cover", objectPosition: "top", borderRadius: 6, display: "block" }} />}
+                    </div>
+                    <span style={{ position: "absolute", right: 6, top: 6, width: 28, height: 28, borderRadius: "50%", background: "#1B2B4B", color: "#fff", fontSize: 15, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid #fff" }}>○</span>
+                    <span style={{ display: "block", padding: "7px 10px", fontSize: 12.5, fontWeight: 900, color: "#1B2B4B" }}>한 장씩 따로 찍기 ○</span>
+                  </div>
+                </div>
+                {/* 서류별 카드(옆으로 넘기기) */}
+                <div className="kpu-guide">
+                  {[
+                    { src: "/guide/doc-invoice.jpg", no: "01", title: "거래명세서", tag: "필수", tip: "종이 전체가 화면에 꽉 차게, 글씨가 읽히도록 1장" },
+                    { src: "/guide/doc-pallet-1.jpg", no: "02", title: "파렛트 전표", tag: "서명 필수", tip: "싸인 받은 전표를 1장씩 (풀회사용)" },
+                    { src: "/guide/doc-pallet-2.jpg", no: "03", title: "파렛트 전표", tag: "전표가 더 있으면", tip: "운송회사용 등 나머지 전표도 각각 1장씩" },
+                    ...(isCold ? [{ src: "/guide/doc-tacho.jpg", no: "04", title: "타코메타 기록지", tag: "냉장·냉동", tip: "온도 기록지는 따로 1장" }] : []),
+                  ].map((g) => (
+                    <button key={g.no} onClick={() => openZoom(g.src)} className="kpu-guide-card">
+                      <span style={{ position: "relative", display: "block", height: 150, background: "linear-gradient(180deg,#F4F7FC,#E3E8F0)", borderRadius: 12, overflow: "hidden" }}>
+                        <img src={g.src} alt={g.title} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
+                        <span className="kpu-mono" style={{ position: "absolute", left: 8, top: 8, fontSize: 11, fontWeight: 800, color: "#fff", background: "rgba(15,26,48,.85)", padding: "2px 8px", borderRadius: 7 }}>사진 {g.no}</span>
+                        <span style={{ position: "absolute", right: 8, bottom: 8, fontSize: 11, fontWeight: 800, color: "#1B2B4B", background: "rgba(255,255,255,.92)", padding: "2px 7px", borderRadius: 7, border: "1px solid #DCE3EF" }}>크게 보기</span>
+                      </span>
+                      <span style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
+                        <span style={{ fontSize: 14.5, fontWeight: 900, color: "#0F1A30" }}>{g.title}</span>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: "#1B2B4B", background: "#EEF3FB", border: "1px solid #C9D3E4", padding: "1px 7px", borderRadius: 6, whiteSpace: "nowrap" }}>{g.tag}</span>
+                      </span>
+                      <span style={{ display: "block", fontSize: 12.5, color: "#64748b", marginTop: 3, lineHeight: 1.45 }}>{g.tip}</span>
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 6, textAlign: "center" }}>← 옆으로 넘겨서 서류별 예시를 확인하세요 →</div>
+              </div>
             </div>
 
             {/* 서명 — 2026-10-28 고급 서명 패드(작은 칸 + 크게 서명하기 전체화면) */}
@@ -1096,7 +1139,7 @@ export default function UploadPage() {
                 }
               }}
             >
-              <img src="/거래명세서.png" alt="거래명세서 예시" style={{ maxWidth: "92vw", maxHeight: "88vh", objectFit: "contain", transformOrigin: "center center", transition: "transform 0.05s", userSelect: "none", pointerEvents: "none", borderRadius: 8 }} onError={e => { e.target.style.display = "none"; }} />
+              <img src={zoomSrc} alt="촬영 예시" style={{ maxWidth: "92vw", maxHeight: "88vh", objectFit: "contain", transformOrigin: "center center", transition: "transform 0.05s", userSelect: "none", pointerEvents: "none", borderRadius: 8 }} onError={e => { e.target.style.display = "none"; }} />
             </div>
           </div>
         )}
@@ -1158,6 +1201,9 @@ const UPLOAD_CSS = `
   .kpu-perf { height: 1px; margin: 16px -18px 14px; background-image: linear-gradient(90deg, rgba(143,176,240,.45) 50%, transparent 50%); background-size: 10px 1px; position: relative; }
   .kpu-perf::before, .kpu-perf::after { content: ""; position: absolute; top: -9px; width: 18px; height: 18px; border-radius: 50%; background: #EEF2F8; }
   .kpu-perf::before { left: -9px; } .kpu-perf::after { right: -9px; }
+  .kpu-guide { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 10px 2px 4px; margin: 0 -2px; -webkit-overflow-scrolling: touch; }
+  .kpu-guide::-webkit-scrollbar { display: none; }
+  .kpu-guide-card { flex: 0 0 72%; scroll-snap-align: start; text-align: left; padding: 8px; border-radius: 16px; border: 1px solid #E3E8F0; background: #fff; cursor: zoom-in; font-family: inherit; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
   .kpu-check { display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-radius: 14px; margin-bottom: 8px; cursor: pointer; border: 1.5px solid; transition: all .15s; }
   .kpu-input { display: block; width: 100%; margin-top: 6px; height: 48px; padding: 0 14px; border-radius: 12px; border: 1.5px solid #DCE3EF; background: #F7F9FC; font-size: 15.5px; font-weight: 700; color: #0F1A30; font-family: inherit; outline: none; }
   .kpu-input:focus { border-color: #1B2B4B; background: #fff; box-shadow: 0 0 0 4px rgba(27,43,75,.08); }
