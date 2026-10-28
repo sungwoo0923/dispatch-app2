@@ -21,10 +21,10 @@ const statOf = (list) => {
   return { sale, profit: sale - driver, cnt: list.length, rate: sale ? ((sale - driver) / sale) * 100 : 0 };
 };
 
-function Delta({ cur, prev, suffix = "" }) {
-  if (!prev) return <span style={{ fontFamily: MONO, fontSize: 12.5, color: "#9ca3af" }}>비교 없음</span>;
+function Delta({ cur, prev, suffix = "", dark = false }) {
+  if (!prev) return <span style={{ fontFamily: MONO, fontSize: 12.5, color: dark ? "rgba(207,224,255,.6)" : "#9ca3af" }}>비교 없음</span>;
   const r = ((cur - prev) / Math.abs(prev)) * 100;
-  return <span style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 800, color: r >= 0 ? NAVY : "#64748b" }}>{r >= 0 ? "▲" : "▼"} {Math.abs(r).toFixed(1)}%{suffix}</span>;
+  return <span style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 800, color: dark ? (r >= 0 ? "#CFE0FF" : "rgba(207,224,255,.7)") : (r >= 0 ? NAVY : "#64748b") }}>{r >= 0 ? "▲" : "▼"} {Math.abs(r).toFixed(1)}%{suffix}</span>;
 }
 
 function Tile({ code, label, value, unit, foot, dark }) {
@@ -159,7 +159,7 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {/* KPI */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0,1fr))", gap: 12 }}>
-        <Tile dark code="REVENUE" label={`${M}월 매출`} value={short(m.sale)} unit="원" foot={<><Delta cur={m.sale} prev={pm.sale} /><span>전월 같은 기간</span></>} />
+        <Tile dark code="REVENUE" label={`${M}월 매출`} value={short(m.sale)} unit="원" foot={<><Delta dark cur={m.sale} prev={pm.sale} /><span>전월 같은 기간</span></>} />
         <Tile code="PROFIT" label={`${M}월 수익`} value={short(m.profit)} unit="원" foot={<><Delta cur={m.profit} prev={pm.profit} /><span>전월 같은 기간</span></>} />
         <Tile code="MARGIN" label="매익률" value={m.rate.toFixed(1)} unit="%" foot={<span>전월 <b style={{ fontFamily: MONO, color: NAVY }}>{pmAll.rate.toFixed(1)}%</b> · {(m.rate - pmAll.rate >= 0 ? "+" : "") + (m.rate - pmAll.rate).toFixed(1)}%p</span>} />
         <Tile code="ORDERS" label="오더 건수" value={m.cnt.toLocaleString()} unit="건" foot={<span>건당 <b style={{ fontFamily: MONO, color: NAVY }}>{short(m.cnt ? m.sale / m.cnt : 0)}</b>원 · <Delta cur={m.cnt} prev={pm.cnt} /></span>} />
@@ -311,3 +311,5 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
     </div>
   );
 }
+
+export { Tile as RvTile, Delta as RvDelta, short as rvShort, Ring as RvRing };

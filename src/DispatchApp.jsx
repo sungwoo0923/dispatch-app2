@@ -2616,7 +2616,8 @@ import PersonnelOrder from "./PersonnelOrder";
 import OrderScanModal, { looksLikeOrder, scanDropDate } from "./OrderScanModal";
 import KpSubNav from "./KpSubNav";
 import PlatformMonitor from "./PlatformMonitor";
-import RevenueDashboard, { RvCard } from "./RevenueDashboard";
+import RevenueDashboard from "./RevenueDashboard";
+import { TargetPage, ClientsPage, TrendPage, YearlyPage, QueryPage } from "./RevenuePages";
 import { RecurringManagerModal, CloseReportModal } from "./AutomationPanels";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -47115,6 +47116,9 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
     useLoadOrderRange(yStart < mStart ? yStart : mStart, histToday());
   }
   useLoadFullOrderHistory(monthCompareOpen || marginReportOpen);
+  // ⭐ 거래처 동향(12개월 히트맵)·목표/연간(작년 비교) 화면을 열면 필요한 기간만 더 불러온다
+  useLoadOrderRange(monthStartAgo(targetMonth, 11), histToday(), activeTab === "trend");
+  useLoadOrderRange(`${(activeTab === "yearly" ? selectedYear : Number(targetMonth.slice(0, 4))) - 1}-01-01`, histToday(), activeTab === "target" || activeTab === "yearly");
   const canSeeStaffPerf = role === "admin" || role === "totalMaster";
   // ⭐ AI 월간비교분석 탭에서 선택한 두 달 — 탭을 옮겨도(activeTab 전환으로
   // MonthCompareInsight가 unmount/remount 되어도) 선택이 유지되도록 상위인
@@ -47549,180 +47553,21 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
       )}
 
       {rvPage === "target" && (
-        <RvCard code="TARGET" title="누적 현황 · 목표 대비 실적 · 전망" bodyStyle={{ padding: 24 }}>
-          <div className="space-y-8">
-            <SettlementMonthlyHeader
-              monthRows={monthRows}
-              monthPureRows={monthPureRows}
-              forecast={forecast}
-              forecast2026={forecast2026}
-              targetMonth={targetMonth}
-            />
-
-            <div className="border-t border-gray-200" />
-
-            {/* ================= 🎯 연간 목표 대비 실적 · 2026 매출 전망 ================= */}
-            <section>
-              <h4 className="text-[13px] font-bold text-[#1B2B4B] mb-3">연간 목표 대비 실적 · 2026 매출 전망</h4>
-              <div className="space-y-6">
-
-                {/* 순수 운송 매출 — 제외 거래처가 없으면 "총 운송료"와 완전히 같은 숫자라
-                    구분 의미가 없으므로 라벨만 "운송 매출"로 단순화한다. */}
-                <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
-                  <p className="text-sm font-semibold text-gray-800 mb-4">{hasExcludedClients ? "순수 운송 매출" : "운송 매출"}</p>
-                  <div className="grid grid-cols-4 gap-4 text-center">
-                    <Metric label="작년" value={won(lastYearPure.sale)} />
-                    <Metric label="목표" value={PURE_TARGET_2026 > 0 ? won(PURE_TARGET_2026) : "미설정"} valueClass="text-indigo-700" />
-                    <Metric label="현재" value={won(yPure.sale)} valueClass="text-gray-900" />
-                    <Metric label="달성률" value={PURE_TARGET_2026 > 0 ? `${achieveRate(yPure.sale, PURE_TARGET_2026).toFixed(1)}%` : "—"} valueClass="text-indigo-800" />
-                  </div>
-                </div>
-
-                {/* 제외 거래처 매출 — 거래처관리에서 "순수매출제외"로 체크한 거래처가
-                    하나라도 있을 때만 보여준다 (예전엔 "후레쉬 물류"로 고정돼있었음). */}
-                {hasExcludedClients && (
-                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
-                    <p className="text-sm font-semibold text-gray-700 mb-4">제외 거래처 매출</p>
-                    <div className="grid grid-cols-4 gap-4 text-center">
-                      <Metric label="작년" value={won(lastYearFresh.sale)} />
-                      <Metric label="목표" value={won(FRESH_TARGET_2026)} valueClass="text-indigo-700" />
-                      <Metric label="현재" value={won(yFresh.sale)} valueClass="text-gray-900" />
-                      <Metric label="달성률" value={`${achieveRate(yFresh.sale, FRESH_TARGET_2026).toFixed(1)}%`} valueClass="text-indigo-800" />
-                    </div>
-                  </div>
-                )}
-
-                {/* 구분선 */}
-                <div className="flex items-center gap-3 pt-2">
-                  <span className="text-xs font-semibold text-gray-500">2026 매출 전망 (순수 운송)</span>
-                  <div className="flex-1 border-t border-gray-300" />
-                </div>
-
-                {/* 2026 매출 전망 */}
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <ScenarioCard title="보수적 시나리오" value={forecast2026.conservative} tone="gray" />
-                  <ScenarioCard title="기준 시나리오" value={forecast2026.normal} tone="indigo" highlight />
-                  <ScenarioCard title="공격적 시나리오" value={forecast2026.aggressive} tone="gray" />
-                </div>
-
-              </div>
-            </section>
-
-            <div className="border-t border-gray-200" />
-
-            {/* ================= KPI – 총 운송료 ================= */}
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-[13px] font-bold text-[#1B2B4B]">{hasExcludedClients ? "총 운송료 (전체 거래처)" : "총 운송료"}</h4>
-                <span className="text-[11px] text-gray-400">배차 + 고정거래처</span>
-              </div>
-              <table className="w-full text-[13px] border-collapse text-center">
-                <thead className="bg-gray-50 text-gray-600">
-                  <tr>
-                    <th className="border p-2"><EditableText id="settlement.table.header.구분" defaultText="구분" /></th>
-                    <th className="border p-2"><EditableText id="settlement.table.header.매출" defaultText="매출" /></th>
-                    <th className="border p-2"><EditableText id="settlement.table.header.운반비" defaultText="운반비" /></th>
-                    <th className="border p-2"><EditableText id="settlement.table.header.수익" defaultText="수익" /></th>
-                    <th className="border p-2"><EditableText id="settlement.table.header.수익률" defaultText="수익률" /></th>
-                    <th className="border p-2"><EditableText id="settlement.table.header.전월대비" defaultText="전월대비" /></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    ["월", m, "month"],
-                    ["년", y, null],
-                  ].map(([label, data, key], i) => (
-                    <tr key={i} className="font-semibold">
-                      <td className="border p-2 bg-gray-50">{label}</td>
-                      <td className="border p-2 text-indigo-700">{won(data.sale)}</td>
-                      <td className="border p-2 text-gray-600">{won(data.driver)}</td>
-                      <td className="border p-2 text-emerald-600">{won(data.profit)}</td>
-                      <td className="border p-2 text-indigo-700">{ratePct(profitRate(data.sale, data.profit))}</td>
-                      <td className={`border p-2 ${key ? rateClass(vr[key]) : "text-gray-500"}`}>
-                        {key ? rateText(vr[key]) : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
-
-            {/* ================= KPI – 순수 운송 =================
-                제외 거래처가 없으면 위 "총 운송료"와 완전히 같은 숫자라 통째로 숨긴다. */}
-            {hasExcludedClients && (
-              <>
-                <div className="border-t border-gray-200" />
-                <section>
-                  <h4 className="text-[13px] font-bold text-[#1B2B4B] mb-3"><EditableText id="settlement.pureRevenue.title" defaultText="순수 운송료 (제외 거래처 미포함)" /></h4>
-                  <table className="w-full text-[13px] border-collapse text-center">
-                    <thead className="bg-gray-50 text-gray-600">
-                      <tr>
-                        <th className="border p-2"><EditableText id="settlement.pureRevenue.header.구분" defaultText="구분" /></th>
-                        <th className="border p-2"><EditableText id="settlement.pureRevenue.header.매출" defaultText="매출" /></th>
-                        <th className="border p-2"><EditableText id="settlement.pureRevenue.header.운반비" defaultText="운반비" /></th>
-                        <th className="border p-2"><EditableText id="settlement.pureRevenue.header.수익" defaultText="수익" /></th>
-                        <th className="border p-2"><EditableText id="settlement.pureRevenue.header.수익률" defaultText="수익률" /></th>
-                        <th className="border p-2"><EditableText id="settlement.pureRevenue.header.전월대비" defaultText="전월대비" /></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[
-                        ["일", dPure, null],
-                        ["월", mPure, "month"],
-                        ["년", yPure, null],
-                      ].map(([label, data, key], i) => (
-                        <tr key={i} className="font-semibold">
-                          <td className="border p-2 bg-gray-50">{label}</td>
-                          <td className="border p-2 text-indigo-700">{won(data.sale)}</td>
-                          <td className="border p-2 text-gray-600">{won(data.driver)}</td>
-                          <td className="border p-2 text-emerald-600">{won(data.profit)}</td>
-                          <td className="border p-2 text-indigo-700">{ratePct(profitRate(data.sale, data.profit))}</td>
-                          <td className={`border p-2 ${key ? rateClass(vrPure[key]) : "text-gray-500"}`}>
-                            {key ? rateText(vrPure[key]) : "—"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </section>
-              </>
-            )}
-
-          </div>
-        </RvCard>
+        <TargetPage rows={rows} targetMonth={targetMonth} yearTarget={PURE_TARGET_2026} isExcluded={isExcludedFast} hasExcluded={hasExcludedClients}
+          forecast={forecast} forecast2026={forecast2026} excludedTarget={FRESH_TARGET_2026} />
       )}
 
       {rvPage === "clients" && (
-        <RvCard code="RANKING" title={`${targetMonth} 거래처 순위 · 감소 · 신규`} bodyStyle={{ padding: 24 }}>
-            <SettlementClientAnalysis
-              topRows={monthRows.filter((r) => !isExcludedClient(r.거래처명) && !isRankingExcludedFast(r.거래처명))}
-              dropRows={rows.filter((r) => !isExcludedClient(r.거래처명) && !isRankingExcludedFast(r.거래처명))}
-              newClients={newClients}
-              targetMonth={targetMonth}
-            />
-        </RvCard>
+        <ClientsPage rows={rows} targetMonth={targetMonth} isRankExcluded={(n) => isExcludedClient(n) || isRankingExcludedFast(n)} onOpenClient={setDetailClient} />
       )}
 
       {rvPage === "trend" && (
-        <ClientCompareDashboard
-          dispatchData={dispatchData}
-          places={places}
-          fixedRows={fixedRows}
-          clients={clients}
-        />
+        <TrendPage rows={rows} targetMonth={targetMonth} isRankExcluded={(n) => isExcludedClient(n) || isRankingExcludedFast(n)} />
       )}
 
-      {rvPage === "yearly" && (
-        <RvCard code="YEARLY" title={`${selectedYear}년 월별 요약`} bodyStyle={{ padding: 24 }}>
-          <YearlySummaryChart rows={rows} year={selectedYear} clients={clients} places={places} />
-        </RvCard>
-      )}
+      {rvPage === "yearly" && <YearlyPage rows={rows} year={selectedYear} />}
 
-      {rvPage === "query" && (
-        <RvCard code="QUERY" title="거래처별 기간 조회" bodyStyle={{ padding: 24 }}>
-          <ClientPeriodQuery rows={rows} clients={clients} />
-        </RvCard>
-      )}
+      {rvPage === "query" && <QueryPage rows={rows} clients={clients} />}
 
               {monthCloseOpen && (
                 <MonthCloseCheck dispatchData={dispatchData} isViewer={isViewer} onClose={() => setMonthCloseOpen(false)} />
