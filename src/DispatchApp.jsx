@@ -17,7 +17,6 @@ import { hardReloadForUpdate } from "./UpdateBanner";
 import CustomDatePicker, { specialDemandInfo, KOREAN_HOLIDAYS, shortHolidayLabel } from "./CustomDatePicker";
 import { ensureWeatherLoaded, getWeatherSpecialInfo } from "./weatherUtil";
 import AdminMenu from "./AdminMenu";
-import CompanyApplications from "./CompanyApplications";
 import { calcFare } from "./fareUtil";
 import FixedClients from "./FixedClients";
 import FleetManagement from "./FleetManagement";
@@ -29,7 +28,6 @@ import RateCard from "./RateCard";
 import DispatchFormNew from "./DispatchFormNew";
 import AiAssistant from "./AiAssistant";
 import DeliverySignaturePage from "./DeliverySignaturePage";
-import ExecutiveDashboard from "./ExecutiveDashboard";
 import InternalMessenger from "./InternalMessenger";
 import { calcLeaveBalance } from "./leaveUtils";
 import { TEAM_OPTIONS, POSITION_OPTIONS, TEAM_BADGE_CLASS, TEAM_BADGE_CLASS_UNASSIGNED } from "./hrConstants";
@@ -2616,6 +2614,8 @@ import { MailHeaderButton } from "./InternalMail";
 import BannerCenter from "./BannerCenter";
 import PersonnelOrder from "./PersonnelOrder";
 import OrderScanModal, { looksLikeOrder, scanDropDate } from "./OrderScanModal";
+import KpSubNav from "./KpSubNav";
+import PlatformMonitor from "./PlatformMonitor";
 import { RecurringManagerModal, CloseReportModal } from "./AutomationPanels";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -2961,7 +2961,7 @@ const KP_PAGE_META = {
   // 지입차관리는 화면 자체 머리말(지입차량 관제)이 있어 생략
   매출관리: { en: "REVENUE", desc: "매출·매입·수익 분석", icon: "M4 20V10M10 20V4M16 20v-7M22 20H2" },
   정산관리: { en: "SETTLEMENT", desc: "거래처 정산과 기사 지급 관리", icon: "M3 6h18v12H3zM3 10h18M7 15h4" },
-  관리센터: { en: "CONTROL CENTER", desc: "경영 지표와 가입 신청 관리", icon: "M12 3l8 4v6c0 4-3.5 7-8 8-4.5-1-8-4-8-8V7z" },
+  관리센터: { en: "CONTROL CENTER", desc: "가입사 사용량·접속·청구 관제", icon: "M12 3l8 4v6c0 4-3.5 7-8 8-4.5-1-8-4-8-8V7z" },
 };
 // ⭐ 2026-10-28 디지털 머리말 — 영문 태그·날짜·시계를 고정폭 디지털 글씨로, 아이콘 타일에 은은한 격자
 function KpPageClock() {
@@ -7005,7 +7005,6 @@ useEffect(() => {
   const [배차현황Tab, set배차현황Tab] = useState("배차현황");
   const [거래처관리Tab, set거래처관리Tab] = useState("하차지거래처");
   const [정산관리Tab, set정산관리Tab] = useState("거래처정산");
-  const [관리센터Tab, set관리센터Tab] = useState("경영인텔리전스");
   // ⭐ 내 정보 패널 ON/OFF
   const [showMyInfo, setShowMyInfo] = useState(false);
   // ⭐ 내 정보 — 이름/연락처 수정용 임시 입력값(패널 열 때마다 현재 값으로 초기화)
@@ -8007,15 +8006,8 @@ return (
         )}
 
         {menu === "배차현황" && (
-          <div>
-            <div className={`${kpTabWrap} mb-1`}>
-              {["배차현황", "미배차현황"].map(tab => (
-                <button key={tab} onClick={() => set배차현황Tab(tab)}
-                  className={kpTabCls(배차현황Tab === tab)}>
-                  {tab}
-                </button>
-              ))}
-            </div>
+          <KpSubNav code="DISPATCH" title="배차현황" icon="truck" active={배차현황Tab} onSelect={set배차현황Tab}
+            items={[{ key: "배차현황", label: "배차현황", en: "ALL ORDERS", icon: "list" }, { key: "미배차현황", label: "미배차현황", en: "PENDING", icon: "hourglass" }]}>
             {배차현황Tab === "배차현황" && (
               <DispatchStatus
                 key={`ds-${viewResetKey}`}
@@ -8062,7 +8054,7 @@ return (
                 approvedShippers={approvedShippers}
               />
             )}
-          </div>
+          </KpSubNav>
         )}
         {menu === "단가표" && (
           <RateCard dispatchData={dispatchDataFiltered} userCompany={userCompany || localStorage.getItem("userCompany") || ""} clients={clients} />
@@ -8079,15 +8071,11 @@ return (
         )}
 
         {menu === "거래처관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer || !!customRole) && (
-          <>
-          <div className={`${kpTabWrap} mb-1`}>
-            {["하차지거래처", "기본거래처", "고정거래처관리", "고정노선관리"].map(tab => (
-              <button key={tab} onClick={() => set거래처관리Tab(tab)}
-                className={kpTabCls(거래처관리Tab === tab)}>
-                <EditableText id={`nav.거래처관리.${tab}`} defaultText={tab} />
-              </button>
-            ))}
-          </div>
+          <KpSubNav code="CLIENTS" title="거래처관리" icon="building" active={거래처관리Tab} onSelect={set거래처관리Tab}
+            groups={[
+              { label: "거래처", items: [{ key: "하차지거래처", label: "하차지거래처", en: "PLACES", icon: "pin" }, { key: "기본거래처", label: "기본거래처", en: "CLIENTS", icon: "building" }] },
+              { label: "고정 운송", items: [{ key: "고정거래처관리", label: "고정거래처관리", en: "FIXED", icon: "idcard" }, { key: "고정노선관리", label: "고정노선관리", en: "ROUTES", icon: "route" }] },
+            ]}>
           {(거래처관리Tab === "하차지거래처" || 거래처관리Tab === "기본거래처") && (
             <ClientManagement
               key={거래처관리Tab}
@@ -8112,7 +8100,7 @@ return (
               <DeliverySignaturePage />
             </div>
           )}
-          </>
+          </KpSubNav>
         )}
 
         {menu === "지입차관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer || !!customRole) && (
@@ -8216,14 +8204,8 @@ return (
 
         {정산관리Visited && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
           <div style={{ display: menu === "정산관리" ? undefined : "none" }}>
-          <div className={`${kpTabWrap} mb-1`}>
-            {["거래처정산", "지급관리"].map(tab => (
-              <button key={tab} onClick={() => set정산관리Tab(tab)}
-                className={kpTabCls(정산관리Tab === tab)}>
-                {tab}
-              </button>
-            ))}
-          </div>
+          <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={정산관리Tab} onSelect={set정산관리Tab}
+            items={[{ key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "지급관리", en: "PAYOUT", icon: "wallet" }]}>
           {/* 거래명세서 검색/선택 상태 유지를 위해 지급관리 탭으로 전환해도 언마운트하지 않고 숨기기만 한다 */}
           <div style={{ display: 정산관리Tab === "거래처정산" ? undefined : "none" }}>
             <ClientSettlement
@@ -8250,6 +8232,7 @@ return (
               />
             </div>
           )}
+          </KpSubNav>
           </div>
         )}
 
@@ -8274,24 +8257,8 @@ return (
 
         {menu === "관리자메뉴" && (role === "admin" || role === "totalMaster" || isViewer) && <AdminMenu parentRole={role} parentCompany={userCompany || localStorage.getItem("userCompany") || ""} isViewer={isViewer} dispatchData={dispatchData} places={places} />}
 
-        {menu === "관리센터" && role === "totalMaster" && (
-          <div>
-            <div className={`${kpTabWrap} mb-4`}>
-              {["경영인텔리전스", "가입신청관리"].map(tab => (
-                <button key={tab} onClick={() => set관리센터Tab(tab)}
-                  className={kpTabCls(관리센터Tab === tab)}>
-                  <EditableText id={`nav.관리센터.${tab}`} defaultText={tab} />
-                </button>
-              ))}
-            </div>
-            {관리센터Tab === "경영인텔리전스" && (
-              <ExecutiveDashboard dispatchData={dispatchData || []} fixedRows={fixedRows} />
-            )}
-            {관리센터Tab === "가입신청관리" && (
-              <CompanyApplications />
-            )}
-          </div>
-        )}
+        {/* ⭐ 2026-10-28 — 관리센터는 "운송사 하나"가 아니라 프로그램 전체(가입 운송사·화주사) 관제 */}
+        {menu === "관리센터" && role === "totalMaster" && <PlatformMonitor />}
 
       </main>
       </div>

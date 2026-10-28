@@ -4380,6 +4380,7 @@ exports.hourlyJobs = functions.runWith({ timeoutSeconds: 300, memory: "512MB" })
   }
   const old = await db.collection("orderTrash").where("expireAt", "<", Timestamp.now()).limit(400).get();
   if (!old.empty) { const wb = db.batch(); old.docs.forEach((d) => wb.delete(d.ref)); await wb.commit(); }
+  if (hour === 4) await computePlatformStats().catch((e) => console.error("플랫폼 관제 집계 실패:", e)); // 🛰 관리센터 숫자 매일 갱신
   return null;
 });
 
@@ -4760,3 +4761,153 @@ exports.sheetImport = functions
       res.status(e.status || 500).json({ error: e?.message || String(e) });
     }
   });
+
+// ===================== 🛰 플랫폼 관제(최고관리자 전용, 2026-10-28) =====================
+// 이 프로그램에 가입한 운송사·화주사별 사용량(계정·접속·오더·데이터량)을 한 번에 모아
+// siteConfig/platformStats 한 문서에 저장한다. 화면은 이 문서만 읽는다(읽기 비용 최소화).
+//  - 매일 새벽 4시(hourlyJobs)에 자동 갱신 + 관리센터의 "지금 갱신" 버튼(10분에 1번까지)
+async function computePlatformStats() {
+  const today = kstDateStr();
+  const month = today.slice(0, 7);
+  const pmDate = new Date(`${month}-01T00:00:00Z`); pmDate.setUTCMonth(pmDate.getUTCMonth() - 1);
+  const prevMonth = pmDate.toISOString().slice(0, 7);
+  const d30 = addDaysStr(today, -29);
+  const from = `${prevMonth}-01` < d30 ? `${prevMonth}-01` : d30;
+  const companies = {};
+  const co = (name) => {
+    const k = String(name || "돌캐").trim() || "돌캐";
+    if (!companies[k]) companies[k] = {
+      name: k, kind: "transport", staff: 0, admins: 0, drivers: 0, shippers: 0, pending: 0,
+      online: 0, onlinePc: 0, onlineMobile: 0, lastSeen: 0,
+      m: { cnt: 0, sale: 0, profit: 0 }, pm: { cnt: 0, sale: 0, profit: 0 }, pmSame: { cnt: 0, sale: 0 },
+      daily: {}, lastOrder: "", totalOrders: 0, places: 0, clients: 0, fleet: 0, appliedAt: 0, code: "", rep: "", phone: "", linked: "",
+    };
+    return companies[k];
+  };
+  const tsMs = (t) => (t?.toMillis ? t.toMillis() : t?._seconds ? t._seconds * 1000 : t?.seconds ? t.seconds * 1000 : 0);
+
+  // 1) 가입 신청(운송사·화주사) — 회사 기본정보
+  const [tApps, sApps] = await Promise.all([db.collection("transportApplications").get(), db.collection("companyApplications").get()]);
+  tApps.docs.forEach((d) => {
+    const a = d.data() || {};
+    if (!a.companyName || a.status === "rejected") return;
+    const c = co(a.companyName);
+    c.kind = "transport"; c.appliedAt = c.appliedAt || tsMs(a.createdAt); c.code = c.code || a.companyCode || "";
+    c.rep = c.rep || a.name || a.representative || ""; c.phone = c.phone || a.phone || a.phoneNumber || ""; c.appStatus = a.status || "pending";
+  });
+  const shippers = {};
+  sApps.docs.forEach((d) => {
+    const a = d.data() || {};
+    if (!a.companyName || a.status === "rejected") return;
+    const k = String(a.companyName).trim();
+    shippers[k] = {
+      name: k, kind: "shipper", appliedAt: tsMs(a.createdAt), status: a.status || "pending", code: a.companyCode || "",
+      linked: a.linkedTransportCompany?.companyName || "", linkStatus: a.transportApprovalStatus || "", rep: a.name || "", phone: a.phone || a.phoneNumber || "",
+      users: 0, online: 0, lastSeen: 0,
+    };
+  });
+
+  // 2) 계정
+  const users = await db.collection("users").get();
+  const userCompany = {};
+  users.docs.forEach((d) => {
+    const u = d.data() || {};
+    if (u.role === "totalMaster" || u.email === "tjddnqkf@naver.com" || u.role === "cafeUser") return;
+    userCompany[d.id] = u.companyName || "돌캐";
+    if (u.role === "shipper") {
+      const k = String(u.companyName || "").trim();
+      if (shippers[k]) shippers[k].users += 1;
+      else if (k) shippers[k] = { name: k, kind: "shipper", appliedAt: 0, status: "approved", linked: "", users: 1, online: 0, lastSeen: 0 };
+      return;
+    }
+    const c = co(u.companyName);
+    if (u.role === "driver") { c.drivers += 1; return; }
+    c.staff += 1;
+    if (u.role === "admin") c.admins += 1;
+    if (u.approved === false) c.pending += 1;
+  });
+
+  // 3) 접속(로그인 세션)
+  const sess = await db.collection("loginSessions").where("active", "==", true).get();
+  const dayAgo = Date.now() - 86400000;
+  sess.docs.forEach((d) => {
+    const s = d.data() || {};
+    if (s.role === "totalMaster") return;
+    const seen = tsMs(s.lastSeen) || tsMs(s.createdAt);
+    const k = String(s.companyName || userCompany[s.uid] || "").trim();
+    if (s.role === "shipper" && shippers[k]) { if (seen > dayAgo) shippers[k].online += 1; shippers[k].lastSeen = Math.max(shippers[k].lastSeen, seen); return; }
+    if (!k) return;
+    const c = co(k);
+    c.lastSeen = Math.max(c.lastSeen, seen);
+    if (seen > dayAgo) { c.online += 1; if (s.kind === "mobile") c.onlineMobile += 1; else c.onlinePc += 1; }
+  });
+
+  // 4) 오더(이번 달·전월·최근 30일) — 필요한 칸만 읽는다
+  const platformDaily = {};
+  const dayNo = Number(today.slice(8));
+  for (const col of ["orders", "dispatch"]) {
+    const snap = await db.collection(col).where("상차일", ">=", from).select("companyName", "상차일", "청구운임", "기사운임", "배차상태", "상태", "source").get();
+    snap.docs.forEach((d) => {
+      const r = d.data() || {};
+      if (r.source === "transport_transmit" || isCanceledOrder(r)) return;
+      const day = String(r.상차일 || "").slice(0, 10);
+      if (!day || day > addDaysStr(today, 60)) return;
+      const c = co(r.companyName);
+      const sale = Number(String(r.청구운임 || 0).replace(/[^\d-]/g, "")) || 0;
+      const profit = sale - (Number(String(r.기사운임 || 0).replace(/[^\d-]/g, "")) || 0);
+      if (day.startsWith(month)) { c.m.cnt += 1; c.m.sale += sale; c.m.profit += profit; }
+      else if (day.startsWith(prevMonth)) {
+        c.pm.cnt += 1; c.pm.sale += sale; c.pm.profit += profit;
+        if (Number(day.slice(8)) <= dayNo) { c.pmSame.cnt += 1; c.pmSame.sale += sale; }
+      }
+      if (day >= d30 && day <= today) {
+        c.daily[day] = (c.daily[day] || 0) + 1;
+        const p = platformDaily[day] || (platformDaily[day] = { cnt: 0, sale: 0 });
+        p.cnt += 1; p.sale += sale;
+      }
+      if (day <= today && day > c.lastOrder) c.lastOrder = day;
+    });
+  }
+
+  // 5) 데이터량(문서 수) — 회사별 count 집계(문서 1천 개당 읽기 1회)
+  const names = Object.keys(companies);
+  const countOf = async (col, name) => {
+    try { const r = await db.collection(col).where("companyName", "==", name).count().get(); return r.data().count || 0; } catch { return 0; }
+  };
+  for (let i = 0; i < names.length; i += 5) {
+    await Promise.all(names.slice(i, i + 5).map(async (n) => {
+      const c = companies[n];
+      const [o1, o2, pl, cl, fl] = await Promise.all([countOf("orders", n), countOf("dispatch", n), countOf("places", n), countOf("clients", n), countOf("drivers", n)]);
+      c.totalOrders = o1 + o2; c.places = pl; c.clients = cl; c.fleet = fl;
+    }));
+  }
+  // 오더도 계정도 없는 빈 이름은 뺀다
+  Object.keys(companies).forEach((k) => { const c = companies[k]; if (!c.staff && !c.totalOrders && !c.appliedAt) delete companies[k]; });
+
+  const out = {
+    updatedAt: FieldValue.serverTimestamp(), updatedAtMs: Date.now(), today, month, prevMonth,
+    companies: Object.values(companies), shippers: Object.values(shippers), platformDaily,
+  };
+  await db.collection("siteConfig").doc("platformStats").set(out);
+  return { companies: out.companies.length, shippers: out.shippers.length };
+}
+
+//  POST (최고관리자만) → 지금 다시 집계. 10분 안에 다시 누르면 기존 값을 그대로 둔다.
+exports.platformStats = functions.runWith({ timeoutSeconds: 300, memory: "1GB" }).https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
+  try {
+    const me = await requireAdminRole(req, {});
+    if (!me.isTM) { res.status(403).json({ error: "최고관리자만 사용할 수 있습니다." }); return; }
+    const cur = await db.collection("siteConfig").doc("platformStats").get();
+    const last = cur.exists ? Number(cur.data().updatedAtMs || 0) : 0;
+    if (Date.now() - last < 10 * 60 * 1000) { res.json({ ok: true, skipped: true, nextInSec: Math.ceil((10 * 60 * 1000 - (Date.now() - last)) / 1000) }); return; }
+    res.json({ ok: true, ...(await computePlatformStats()) });
+  } catch (e) {
+    console.error("플랫폼 관제 집계 실패:", e);
+    res.status(e.status || 500).json({ error: e?.message || String(e) });
+  }
+});
