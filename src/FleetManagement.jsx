@@ -467,21 +467,81 @@ function PinConfirmModal({ onConfirmed, onCancel, title = "삭제 확인" }) {
 
 // ─── KpiCard ─────────────────────────────────────────────────────────────────
 
-function KpiCard({ label, value, sub, primary, accent }) {
-  if (primary) {
-    return (
-      <div style={{ background: `linear-gradient(135deg,${NAVY_DARK} 0%,${NAVY_LIGHT} 100%)`, borderRadius: 12, padding: "18px 22px", boxShadow: "0 2px 8px rgba(27,43,75,.18)" }}>
-        <p style={{ color: "rgba(255,255,255,.65)", fontSize: 14, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", margin: "0 0 8px" }}>{label}</p>
-        <p style={{ color: "#fff", fontSize: 34, fontWeight: 800, lineHeight: 1, margin: 0 }}>{value}</p>
-        {sub && <p style={{ color: "rgba(255,255,255,.45)", fontSize: 14, margin: "7px 0 0" }}>{sub}</p>}
-      </div>
-    );
-  }
+// 🛰 관제 화면 공용 — 숫자/영문 라벨용 고정폭 글씨 + 실시간 시계
+const FC_MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+function FleetClock({ dark = true }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
+  const p = (n) => String(n).padStart(2, "0");
+  const wd = ["일", "월", "화", "수", "목", "금", "토"][now.getDay()];
   return (
-    <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "18px 22px" }}>
-      <p style={{ color: "#6b7280", fontSize: 14, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", margin: "0 0 8px" }}>{label}</p>
-      <p style={{ color: accent || NAVY, fontSize: 34, fontWeight: 800, lineHeight: 1, margin: 0 }}>{value}</p>
-      {sub && <p style={{ color: "#9ca3af", fontSize: 14, margin: "7px 0 0" }}>{sub}</p>}
+    <div style={{ textAlign: "right", lineHeight: 1.1 }}>
+      <div style={{ fontFamily: FC_MONO, fontSize: 26, fontWeight: 800, color: dark ? "#fff" : NAVY, letterSpacing: "0.04em" }}>
+        {p(now.getHours())}<span className="fc-colon">:</span>{p(now.getMinutes())}<span style={{ fontSize: 15, opacity: 0.55, marginLeft: 3 }}>{p(now.getSeconds())}</span>
+      </div>
+      <div style={{ fontFamily: FC_MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: dark ? "rgba(207,224,255,.6)" : "#6b7280", marginTop: 3 }}>
+        {now.getFullYear()}.{p(now.getMonth() + 1)}.{p(now.getDate())} ({wd}) KST
+      </div>
+    </div>
+  );
+}
+
+// ⭐ 리디자인 — 관제 KPI 타일. 숫자는 고정폭 디지털 글씨, 색은 네이비 계열만(알록달록 금지).
+//  accent 인자는 예전 호출 호환용으로 받기만 하고 쓰지 않는다.
+function KpiCard({ label, value, sub, primary, code, icon }) {
+  const dark = !!primary;
+  return (
+    <div className={dark ? "fc-grid-bg" : ""} style={{
+      position: "relative", overflow: "hidden", borderRadius: 14, padding: "16px 18px 14px",
+      background: dark ? "linear-gradient(135deg,#0F1A30 0%,#1B2B4B 60%,#2D4C82 100%)" : "#fff",
+      border: dark ? "1px solid #0F1A30" : "1px solid #E3E8F0",
+      boxShadow: dark ? "0 8px 22px rgba(15,26,48,.28)" : "0 1px 2px rgba(16,24,40,.04), 0 6px 16px rgba(16,24,40,.05)",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          {icon ? (
+            <span style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: dark ? "rgba(255,255,255,.1)" : "#EEF2F9", border: dark ? "1px solid rgba(207,224,255,.18)" : "1px solid #DCE3EF" }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={dark ? "#CFE0FF" : NAVY} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{icon}</svg>
+            </span>
+          ) : null}
+          <span style={{ fontSize: 14, fontWeight: 800, color: dark ? "rgba(255,255,255,.82)" : "#4b5563", whiteSpace: "nowrap" }}>{label}</span>
+        </span>
+        {code && <span style={{ fontFamily: FC_MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.16em", color: dark ? "rgba(143,176,240,.85)" : "#94A3B8" }}>{code}</span>}
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 12 }}>
+        <span style={{ fontFamily: FC_MONO, fontSize: 34, fontWeight: 800, lineHeight: 1, color: dark ? "#fff" : "#0F1A30", letterSpacing: "-0.02em" }}>{value}</span>
+        {sub && <span style={{ fontSize: 13, fontWeight: 600, color: dark ? "rgba(207,224,255,.55)" : "#9ca3af", whiteSpace: "nowrap" }}>{sub}</span>}
+      </div>
+      <div style={{ position: "absolute", left: 18, right: 18, bottom: 0, height: 3, borderRadius: "3px 3px 0 0", background: dark ? "linear-gradient(90deg,#8FB0F0,rgba(143,176,240,0))" : "linear-gradient(90deg,#1B2B4B,rgba(27,43,75,0))", opacity: dark ? 0.9 : 0.55 }} />
+    </div>
+  );
+}
+
+// 관제 화면 공용 CSS(그리드 배경·시계 깜빡임·지도 톤·메뉴 hover)
+const FC_CSS = `
+  .fc-grid-bg { background-image: linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px), linear-gradient(135deg,#0F1A30 0%,#1B2B4B 60%,#2D4C82 100%) !important; background-size: 22px 22px, 22px 22px, 100% 100% !important; }
+  @keyframes fcColon { 0%,49% { opacity: 1 } 50%,100% { opacity: .25 } }
+  .fc-colon { animation: fcColon 1s steps(1) infinite; }
+  @keyframes fcScan { 0% { transform: translateX(-100%) } 100% { transform: translateX(260%) } }
+  .fc-scanline { position: absolute; top: 0; bottom: 0; width: 38%; background: linear-gradient(90deg, rgba(143,176,240,0), rgba(143,176,240,.12), rgba(143,176,240,0)); animation: fcScan 6s linear infinite; pointer-events: none; }
+  .fc-map-tiles { filter: grayscale(.85) contrast(.95) brightness(1.04); }
+  .fc-nav-btn:hover { background: #EEF2F9 !important; }
+  .fc-nav-btn.on:hover { background: linear-gradient(135deg,#1B2B4B,#2D4C82) !important; }
+  .fc-hbtn:hover { background: rgba(255,255,255,.16) !important; }
+  .fc-route-card { transition: box-shadow .15s, border-color .15s; }
+  .fc-route-card:hover { box-shadow: 0 2px 4px rgba(16,24,40,.05), 0 14px 32px rgba(27,43,75,.10) !important; border-color: #C9D3E4 !important; }
+`;
+
+// 관제 패널 머리줄(영문 코드 + 제목 + 오른쪽 내용)
+function FcPanelHead({ code, title, right, dark }) {
+  return (
+    <div style={{ padding: "11px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexShrink: 0, background: dark ? "linear-gradient(90deg,#0F1A30,#1B2B4B)" : "#F7F9FC", borderBottom: dark ? "1px solid #0F1A30" : "1px solid #E8EDF4" }}>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+        <span style={{ width: 7, height: 7, borderRadius: 2, background: dark ? "#8FB0F0" : NAVY, transform: "rotate(45deg)", flexShrink: 0 }} />
+        {code && <span style={{ fontFamily: FC_MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: dark ? "rgba(143,176,240,.9)" : "#94A3B8" }}>{code}</span>}
+        <span style={{ fontSize: 16, fontWeight: 800, color: dark ? "#fff" : NAVY, whiteSpace: "nowrap" }}>{title}</span>
+      </span>
+      {right}
     </div>
   );
 }
@@ -700,7 +760,7 @@ function FleetMap({ drivers, center, onSelect, selectedPath = [], fitAllCount = 
       <MapRecenter center={center} />
       <FitAll count={fitAllCount} drivers={drivers} />
       {selectedPath.length >= 2 && <FitPath points={selectedPath} resetKey={selectedDriver?.id} />}
-      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
+      <TileLayer className="fc-map-tiles" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
 
       {/* ⭐ 이동 동선 — 예전엔 GPS 점을 하나하나 원으로 찍어 다닥다닥 보였다. 도로에 맞춘
           경로(OSRM, 없으면 GPS)를 매끈한 선 하나로 그리고, 출발점과 상태가 바뀐 지점만 표시 */}
@@ -1374,24 +1434,24 @@ function driverDispatchStatus(orders, todayStr, live) {
   // ⭐ 버그수정 — 노선관리에 넘어오는 live는 가공된 기사 객체라 상태가 "상태" 필드에 있다
   // (status/mainStatus만 보고 있어서 휴차처리해도 "배차대기"로 보였다).
   if (live?.status === "휴차" || live?.mainStatus === "휴차" || live?.상태 === "휴차") {
-    return { label: "휴차", bg: "#e5e7eb", color: "#374151" };
+    return { label: "휴차", bg: "#e5e7eb", color: "#4b5563" };
   }
-  if (!orders.length) return { label: "배차대기", bg: "#fef3c7", color: "#92400e" };
+  if (!orders.length) return { label: "배차대기", bg: "#fff", color: NAVY, border: "1px dashed #94A3B8" };
   // ⭐ 지입 기사 오더수락 플로우 — 기사확인상태가 있으면(차량번호를 지입 기사에게
   // 배정한 오더) 시간 추정 대신 실제 수락 여부로 상태를 보여준다.
   const checkStates = orders.map(r => r.기사확인상태).filter(Boolean);
-  if (checkStates.includes("수락")) return { label: "운송중", bg: "#dbeafe", color: "#1e40af" };
-  if (checkStates.includes("대기")) return { label: "오더확인중", bg: "#fef3c7", color: "#92400e" };
+  if (checkStates.includes("수락")) return { label: "운송중", bg: NAVY, color: "#fff" };
+  if (checkStates.includes("대기")) return { label: "오더확인중", bg: "#EEF2F9", color: NAVY, border: "1px solid #C9D3E4" };
   // ⭐ 버그수정 — "완료"/"거절" 상태를 전혀 체크하지 않아서, 배정된 오더가 전부
   // 운송완료(또는 거절)됐는데도 시간 기반 폴백으로 떨어져 "운송중"이 계속 떠 있었다.
   // 지입 기사는 오더를 다 마치면 다음 배차를 받을 수 있는 대기 상태로 봐야 한다.
   if (checkStates.length > 0 && checkStates.every(s => s === "완료" || s === "거절")) {
-    return { label: "배차대기", bg: "#fef3c7", color: "#92400e" };
+    return { label: "배차대기", bg: "#fff", color: NAVY, border: "1px dashed #94A3B8" };
   }
   const progs = orders.map(r => computeOrderProgress(r, r.상차일, todayStr));
-  if (progs.includes("progress")) return { label: "운송중", bg: "#dbeafe", color: "#1e40af" };
-  if (progs.every(p => p === "done")) return { label: "배차완료", bg: "#dcfce7", color: "#166534" };
-  return { label: "배차예정", bg: "#eef1f6", color: "#374151" };
+  if (progs.includes("progress")) return { label: "운송중", bg: NAVY, color: "#fff" };
+  if (progs.every(p => p === "done")) return { label: "배차완료", bg: "#DCE3EF", color: "#0F1A30" };
+  return { label: "배차예정", bg: "#EEF2F9", color: "#24396A" };
 }
 function computeOrderProgress(order, selectedDate, todayStr) {
   if (selectedDate < todayStr) return "done";
@@ -2818,25 +2878,25 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
   ] : [];
 
   return (
-    <div style={{ background: "#fff", border: `1px solid ${hasConflict ? "#f59e0b" : "#e5e7eb"}`, borderRadius: 12, overflow: "hidden" }}>
+    <div className="fc-route-card" style={{ background: "#fff", border: `1px solid ${hasConflict ? "#f59e0b" : "#E3E8F0"}`, borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 2px rgba(16,24,40,.04), 0 6px 16px rgba(16,24,40,.05)" }}>
       {/* 헤더: 기사 기본정보를 라벨 붙은 그리드로 — 값 글자는 짙은 색으로 가독성 확보 */}
-      <div style={{ padding: "14px 16px", borderBottom: "1px solid #f0f2f5", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", rowGap: 14 }}>
+      <div style={{ padding: "14px 16px", borderBottom: "1px solid #E8EDF4", background: "linear-gradient(180deg,#FBFCFE 0%,#F4F7FB 100%)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", rowGap: 14 }}>
         {/* ⭐ 사용자 요청 — 이름만 있던 자리에 차량번호/연락처도 같이 가로로 보여준다(지입/직영 뱃지는 그대로 유지). */}
         {/* ⭐ 사용자 요청 — 기사정보가 작고 고정폭(monospace) 글씨라 뭉개져 보였다. 4/5파트
             오더와 같은 기본 글씨체로 바꾸고, 사원증/명함처럼 크게 한눈에 보이게 만든다. */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
           {index != null && (
-            <span style={{ fontSize: 14, fontWeight: 800, color: "#9ca3af", minWidth: 20, textAlign: "right", flexShrink: 0 }}>{index}</span>
+            <span style={{ fontFamily: FC_MONO, fontSize: 13, fontWeight: 800, color: "#94A3B8", minWidth: 26, textAlign: "center", flexShrink: 0, letterSpacing: "0.04em" }}>{String(index).padStart(2, "0")}</span>
           )}
           <div
             onDoubleClick={() => setJourneyOpen(true)}
             title="더블클릭하면 이 기사의 전체 이동 노선을 봅니다"
             style={{
             display: "flex", alignItems: "center", gap: 12, padding: "10px 16px 10px 12px", minWidth: 290, cursor: "pointer", userSelect: "none",
-            border: "1px solid #dbe1ea", borderLeft: `5px solid ${driver.등급 === "직영" ? "#0f766e" : NAVY}`, borderRadius: 12,
-            background: "linear-gradient(135deg, #ffffff 0%, #f4f7fb 100%)", boxShadow: "0 2px 8px rgba(27,43,75,0.08)",
+            border: "1px solid #DCE3EF", borderLeft: `5px solid ${driver.등급 === "직영" ? "#0f766e" : NAVY}`, borderRadius: 12,
+            background: "#fff", boxShadow: "0 2px 8px rgba(27,43,75,0.08)",
           }}>
-            <div style={{ width: 46, height: 46, borderRadius: 12, background: NAVY, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 900, flexShrink: 0 }}>
+            <div style={{ width: 46, height: 46, borderRadius: 12, background: "linear-gradient(135deg,#2D4C82 0%,#0F1A30 100%)", boxShadow: "inset 0 0 0 1px rgba(207,224,255,.25), 0 4px 10px rgba(15,26,48,.25)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 900, flexShrink: 0 }}>
               {String(driver.이름 || "?").slice(0, 1)}
             </div>
             <div style={{ minWidth: 0 }}>
@@ -2847,7 +2907,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, flexWrap: "wrap" }}>
                 {/* 번호판 모양 */}
-                <span style={{ fontSize: 15, fontWeight: 800, color: "#111827", padding: "1px 9px", border: "1.5px solid #111827", borderRadius: 5, background: "#fff", letterSpacing: "0.02em" }}>{driver.차량번호 || "-"}</span>
+                <span style={{ fontSize: 15, fontWeight: 800, color: "#0F1A30", padding: "1px 10px", border: "1.5px solid #0F1A30", borderRadius: 6, background: "linear-gradient(180deg,#fff,#F1F4F9)", letterSpacing: "0.03em", boxShadow: "inset 0 -1px 0 rgba(15,26,48,.12)" }}>{driver.차량번호 || "-"}</span>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 15, fontWeight: 700, color: "#374151" }}>
                   <svg width="13" height="13" fill="none" stroke="#6b7280" strokeWidth="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                   {driver.전화번호 && driver.전화번호 !== "-" ? formatPhone(driver.전화번호) : "-"}
@@ -2861,15 +2921,15 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
             기사정보 카드와 같은 디자인(테두리·그라데이션·그림자)의 한 장짜리 정보 카드로 묶는다. */}
         <div style={{
           flex: "1 1 auto", display: "flex", alignItems: "stretch", flexWrap: "wrap", rowGap: 10,
-          padding: "10px 6px", border: "1px solid #dbe1ea", borderRadius: 12,
-          background: "linear-gradient(135deg, #ffffff 0%, #f4f7fb 100%)", boxShadow: "0 2px 8px rgba(27,43,75,0.08)",
+          padding: "10px 6px", border: "1px solid #DCE3EF", borderRadius: 12,
+          background: "#fff", boxShadow: "0 2px 8px rgba(27,43,75,0.06)",
         }}>
         <InfoField label="배차상태" first>
           {(() => {
             const st = driverDispatchStatus(orders, todayStr, live);
             const activeOrder = st.label === "운송중" ? findActiveOrder(orders, todayStr) : null;
             return (
-              <span style={{ fontSize: 14, fontWeight: 800, padding: "3px 10px", borderRadius: 6, background: st.bg, color: st.color, display: "inline-block" }}>
+              <span style={{ fontSize: 14, fontWeight: 800, padding: "3px 10px", borderRadius: 6, background: st.bg, color: st.color, border: st.border || "1px solid transparent", display: "inline-block" }}>
                 {activeOrder ? <TransitPhaseLabel order={activeOrder} live={live} driverId={driver.id} fallback={st.label} /> : st.label}
               </span>
             );
@@ -2878,7 +2938,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
         <InfoField label="거주지" value={driver.거주지 || "-"} />
         <InfoField label="근무가능요일">
           {(driver.근무요일 && driver.근무요일.length) ? (
-            // ⭐ 사용자 요청 — 오늘 요일을 빨간 동그라미로 바로 눈에 띄게 표시
+            // ⭐ 사용자 요청 — 오늘 요일을 동그라미로 바로 눈에 띄게 표시(네이비)
             <span style={{ display: "inline-flex", gap: 4 }}>
               {driver.근무요일.map(w => {
                 const isToday = w === weekdayKoOf(todayStr);
@@ -2887,7 +2947,8 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                     display: "inline-flex", alignItems: "center", justifyContent: "center",
                     width: 22, height: 22, borderRadius: "50%", fontSize: 14, fontWeight: 800,
                     color: isToday ? "#fff" : "#111827",
-                    background: isToday ? "#ef4444" : "transparent",
+                    background: isToday ? NAVY : "transparent",
+                    boxShadow: isToday ? "0 0 0 2px rgba(27,43,75,.18)" : "none",
                   }}>{w}</span>
                 );
               })}
@@ -2913,11 +2974,12 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexShrink: 0 }}>
           <button onClick={() => setJourneyOpen(true)}
-            style={{ padding: "7px 12px", borderRadius: 8, border: "none", background: NAVY, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+            style={{ height: 34, padding: "0 13px", borderRadius: 9, border: "none", background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", boxShadow: "0 4px 10px rgba(27,43,75,.22)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="2.2" /><circle cx="18" cy="18" r="2.2" /><path d="M6 8.2V14a3 3 0 0 0 3 3h3a3 3 0 0 1 3 3v-2" /></svg>
             이동노선
           </button>
           <button onClick={() => onOpenDetail(driver)}
-            style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid " + NAVY, background: "#fff", color: NAVY, fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+            style={{ height: 34, padding: "0 13px", borderRadius: 9, border: "1px solid #C9D3E4", background: "#fff", color: NAVY, fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
             상세보기
           </button>
         </div>
@@ -2942,7 +3004,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
               <thead>
                 {/* ⭐ 사용자 요청 — 헤더가 너무 밋밋해서(연회색 작은 글씨) 네이비 배경 +
                     흰색 굵은 글씨 + 중앙정렬로 프로그램 색감에 맞춤 */}
-                <tr style={{ background: NAVY }}>
+                <tr style={{ background: "linear-gradient(90deg,#0F1A30,#1B2B4B 40%,#24396A)" }}>
                   {ROUTE_COLS.map(h => (
                     <th key={h || "stamp"} style={{ padding: !h ? 0 : ROUTE_NARROW_COLS.has(h) ? "9px 6px" : "9px 16px", width: h ? undefined : 0, fontSize: 12, fontWeight: 800, color: "#fff", textAlign: "center", letterSpacing: ".02em", whiteSpace: "nowrap" }}>{h}</th>
                   ))}
@@ -3067,8 +3129,9 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
           </div>
 
           {/* 요약: 첫 오더 상/하차 예상시간 + (2건 이상이면) 마지막 오더 하차완료 예상 */}
-          <div style={{ padding: "9px 16px", background: "#f8f9fb", borderTop: "1px solid #f0f2f5", fontSize: 13, color: "#374151", fontWeight: 600 }}>
-            {isSingleDay ? "오늘 총" : "조회기간 총"} <b style={{ color: NAVY }}>{orders.length}</b>건 · 운임 합계 <b style={{ color: NAVY }}>{fareSum.toLocaleString()}원</b> · 첫 상차 <b>{first.상차일}{" "}{first.상차시간 || "즉시"}</b> → 첫 오더 하차예상 <b>{first.하차시간 || "즉시"}</b>
+          <div style={{ padding: "9px 16px", background: "#F7F9FC", borderTop: "1px solid #E8EDF4", fontSize: 13, color: "#374151", fontWeight: 600 }}>
+            <span style={{ fontFamily: FC_MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.16em", color: "#94A3B8", marginRight: 8 }}>SUMMARY</span>
+            {isSingleDay ? "오늘 총" : "조회기간 총"} <b style={{ fontFamily: FC_MONO, color: NAVY }}>{orders.length}</b>건 · 운임 합계 <b style={{ fontFamily: FC_MONO, color: NAVY }}>{fareSum.toLocaleString()}원</b> · 첫 상차 <b>{first.상차일}{" "}{first.상차시간 || "즉시"}</b> → 첫 오더 하차예상 <b>{first.하차시간 || "즉시"}</b>
             {orders.length > 1 && (
               <> · 마지막 오더 하차완료 예상 <b>{last.하차시간 || "즉시"}{last.하차일 && last.하차일 !== first.상차일 ? `(${last.하차일})` : ""}</b></>
             )}
@@ -3933,41 +3996,28 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
 
   return (
     <div>
-      {/* KPI — 담당 기준 요약 카드 */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 16 }}>
-        {[
-          { label: "총 등록기사", value: kpi.total, icon: KPI_ICONS.truck, accent: NAVY },
-          { label: "내 담당차량", value: kpi.mine, icon: KPI_ICONS.user, accent: "#2563eb" },
-          { label: "내 담당 · 배차중", value: kpi.inProgress, icon: KPI_ICONS.route, accent: "#f59e0b" },
-          { label: "내 담당 · 배차완료", value: kpi.completed, icon: KPI_ICONS.check, accent: "#16a34a" },
-        ].map(c => (
-          <div key={c.label} style={{
-            background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "16px 18px",
-            display: "flex", alignItems: "center", gap: 14, position: "relative", overflow: "hidden",
-          }}>
-            <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: c.accent }} />
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: `${c.accent}14`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={c.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                {c.icon}
-              </svg>
-            </div>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#9ca3af", marginBottom: 2 }}>{c.label}</div>
-              <div style={{ fontSize: 24, fontWeight: 900, color: "#111827", lineHeight: 1 }}>{c.value}</div>
-            </div>
-          </div>
-        ))}
+      {/* KPI — 담당 기준 요약 카드(디지털 타일, 네이비 단색) */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 14 }}>
+        <KpiCard label="총 등록기사" value={kpi.total} sub="대" code="FLEET" icon={KPI_ICONS.truck} primary />
+        <KpiCard label="내 담당차량" value={kpi.mine} sub="대" code="MINE" icon={KPI_ICONS.user} />
+        <KpiCard label="내 담당 · 배차중" value={kpi.inProgress} sub="대" code="ACTIVE" icon={KPI_ICONS.route} />
+        <KpiCard label="내 담당 · 배차완료" value={kpi.completed} sub="대" code="DONE" icon={KPI_ICONS.check} />
       </div>
 
-      {/* 상단 바: 검색 + 어제/당일/내일 + KPI */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
-        <input
-          placeholder="기사명, 차량번호, 거주지 검색"
-          value={q}
-          onChange={e => setQ(e.target.value)}
-          style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14, minWidth: 220, outline: "none", boxSizing: "border-box" }}
-        />
-        <div style={{ display: "flex", gap: 4 }}>
+      {/* 상단 바: 검색 + 어제/당일/내일 + 기간 조회 — 하나의 관제 툴바 */}
+      <div style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 14, boxShadow: "0 1px 2px rgba(16,24,40,.04)", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+        <div style={{ position: "relative", flex: "0 1 260px", minWidth: 200 }}>
+          <svg width="15" height="15" fill="none" stroke="#94A3B8" strokeWidth="2.2" viewBox="0 0 24 24" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
+            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" strokeLinecap="round" />
+          </svg>
+          <input
+            placeholder="기사명, 차량번호, 거주지 검색"
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            style={{ width: "100%", height: 36, paddingLeft: 36, paddingRight: 10, borderRadius: 10, border: "1px solid #DCE3EF", background: "#F7F9FC", fontSize: 14, outline: "none", boxSizing: "border-box" }}
+          />
+        </div>
+        <div style={{ display: "flex", gap: 3, background: "#F1F4F9", border: "1px solid #E3E8F0", borderRadius: 10, padding: 3 }}>
           {["yesterday", "today", "tomorrow"].map((mode, i) => {
             const labels = ["어제", "당일", "내일"];
             const active = dayMode === mode;
@@ -3978,8 +4028,9 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
                 setDayMode(mode); setRangeStart(d); setRangeEnd(d); setAppliedStart(d); setAppliedEnd(d);
               }}
                 style={{
-                  height: 34, padding: "0 14px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer",
-                  background: active ? NAVY : "#f3f4f6", color: active ? "#fff" : "#374151", transition: "all .12s",
+                  height: 28, padding: "0 14px", borderRadius: 7, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                  background: active ? NAVY : "transparent", color: active ? "#fff" : "#4b5563", transition: "all .12s",
+                  boxShadow: active ? "0 3px 8px rgba(27,43,75,.25)" : "none",
                 }}>
                 {labels[i]}
               </button>
@@ -4000,7 +4051,7 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
           style={{ height: 34, padding: "0 16px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 800, cursor: "pointer", background: NAVY, color: "#fff" }}>
           조회
         </button>
-        <span style={{ fontSize: 13, color: "#9ca3af" }}>
+        <span style={{ fontFamily: FC_MONO, fontSize: 13, fontWeight: 700, color: "#64748B", padding: "0 10px", height: 28, display: "inline-flex", alignItems: "center", borderRadius: 7, background: "#F7F9FC", border: "1px solid #E3E8F0" }}>
           {isSingleDay ? `${appliedStart} (${weekdayKoOf(appliedStart)})` : `${appliedStart} ~ ${appliedEnd}`}
         </span>
         <button onClick={() => setOnlyIdle(v => !v)}
@@ -4015,29 +4066,34 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4h13v11H1z" /><path d="M14 8h4l3 3v4h-7z" /><circle cx="5.5" cy="17.5" r="2" /><circle cx="17.5" cy="17.5" r="2" /></svg>
           실시간 위치 지도
         </button>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 16, fontSize: 14, color: "#6b7280" }}>
-          <span>{scope === "mine" ? "내 담당" : "전체"} <b style={{ color: NAVY }}>{scopedDrivers.length}</b>대</span>
-          <span>배차 <b style={{ color: "#111827" }}>{dispatchedCount}</b>대</span>
-          <span>미배차 <b style={{ color: "#111827" }}>{scopedDrivers.length - dispatchedCount}</b>대</span>
-        </div>
       </div>
 
-      {/* 내 담당 / 전체 토글 */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 14, background: "#f3f4f6", borderRadius: 8, padding: 3, width: "fit-content" }}>
+      {/* 내 담당 / 전체 토글 + 집계 */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+      <div style={{ display: "flex", gap: 3, background: "#fff", border: "1px solid #E3E8F0", borderRadius: 10, padding: 3, width: "fit-content", boxShadow: "0 1px 2px rgba(16,24,40,.04)" }}>
         {[["mine", "내 담당 차량", drivers.filter(d => d.담당자?.uid === myUid).length], ["all", "전체 지입차", drivers.length]].map(([key, label, count]) => (
           <button key={key} onClick={() => setScope(key)}
             style={{
-              padding: "6px 16px", borderRadius: 6, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer",
-              background: scope === key ? NAVY : "transparent", color: scope === key ? "#fff" : "#6b7280", transition: "all .12s",
-              display: "flex", alignItems: "center", gap: 6,
+              height: 32, padding: "0 16px", borderRadius: 8, border: "none", fontSize: 14, fontWeight: 700, cursor: "pointer",
+              background: scope === key ? "linear-gradient(135deg,#1B2B4B,#2D4C82)" : "transparent", color: scope === key ? "#fff" : "#6b7280", transition: "all .12s",
+              boxShadow: scope === key ? "0 4px 10px rgba(27,43,75,.25)" : "none",
+              display: "flex", alignItems: "center", gap: 7,
             }}>
             {label}
             <span style={{
-              fontSize: 11, fontWeight: 800, padding: "1px 6px", borderRadius: 99,
-              background: scope === key ? "rgba(255,255,255,.22)" : "#e5e7eb", color: scope === key ? "#fff" : "#6b7280",
+              fontFamily: FC_MONO, fontSize: 12, fontWeight: 800, padding: "1px 7px", borderRadius: 99,
+              background: scope === key ? "rgba(255,255,255,.2)" : "#EEF2F9", color: scope === key ? "#fff" : NAVY,
             }}>{count}</span>
           </button>
         ))}
+      </div>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "stretch", background: "#fff", border: "1px solid #E3E8F0", borderRadius: 10, overflow: "hidden", boxShadow: "0 1px 2px rgba(16,24,40,.04)" }}>
+          {[[scope === "mine" ? "내 담당" : "전체", scopedDrivers.length], ["배차", dispatchedCount], ["미배차", scopedDrivers.length - dispatchedCount]].map(([l, v], i) => (
+            <span key={l} style={{ display: "inline-flex", alignItems: "baseline", gap: 6, padding: "6px 14px", borderLeft: i ? "1px solid #E3E8F0" : "none", fontSize: 13, fontWeight: 700, color: "#6b7280" }}>
+              {l} <b style={{ fontFamily: FC_MONO, fontSize: 17, color: i === 0 ? NAVY : "#111827" }}>{v}</b>대
+            </span>
+          ))}
+        </div>
       </div>
 
       {driverRows.length === 0 ? (
@@ -6202,51 +6258,43 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
       fontFamily: "'Pretendard','Noto Sans KR','Apple SD Gothic Neo',sans-serif",
     }}>
 
-      {/* ═══ 헤더 ═══ */}
-      <div style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 18, boxShadow: "0 1px 2px rgba(16,24,40,0.04), 0 10px 28px rgba(16,24,40,0.06)", padding: "16px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 14, background: "linear-gradient(135deg, #1B2B4B 0%, #2D4C82 100%)", boxShadow: "0 6px 16px rgba(27,43,75,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <svg width="22" height="22" fill="none" stroke="white" strokeWidth="1.7" viewBox="0 0 24 24">
+      {/* ═══ 헤더 — 관제센터 스타일(네이비 그리드 + 디지털 시계) ═══ */}
+      <div className="fc-grid-bg" style={{ position: "relative", overflow: "hidden", borderRadius: 18, border: "1px solid #0F1A30", boxShadow: "0 12px 30px rgba(15,26,48,.28)", padding: "18px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 14 }}>
+        <div className="fc-scanline" />
+        <div style={{ display: "flex", alignItems: "center", gap: 16, position: "relative" }}>
+          <div style={{ width: 50, height: 50, borderRadius: 15, background: "linear-gradient(135deg,#2D4C82 0%,#0B1428 100%)", border: "1px solid rgba(207,224,255,.35)", boxShadow: "0 0 0 4px rgba(143,176,240,.08), 0 8px 20px rgba(0,0,0,.3)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <svg width="24" height="24" fill="none" stroke="#fff" strokeWidth="1.7" viewBox="0 0 24 24">
               <rect x="1" y="3" width="15" height="13" rx="1" /><path d="M16 8h4l3 3v5h-7V8Z" />
               <circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" />
             </svg>
           </div>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.22em", color: "#4B6CB7" }}>FLEET</div>
-            <h1 style={{ fontSize: 20, fontWeight: 900, color: "#0F1A30", margin: 0, letterSpacing: "-0.02em" }}>지입차량 관제</h1>
-            <p style={{ fontSize: 15, color: "#6b7280", margin: "2px 0 0" }}>실시간 차량 모니터링 시스템</p>
+            <div style={{ fontFamily: FC_MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>FLEET CONTROL CENTER</div>
+            <h1 style={{ fontSize: 22, fontWeight: 900, color: "#fff", margin: "2px 0 0", letterSpacing: "-0.02em" }}>지입차량 관제</h1>
+            <p style={{ fontSize: 14, color: "rgba(207,224,255,.65)", margin: "3px 0 0", display: "flex", alignItems: "center", gap: 8 }}>
+              실시간 차량 모니터링 시스템
+              <span style={{ fontFamily: FC_MONO, fontSize: 12, color: "rgba(207,224,255,.5)" }}>
+                {loading ? "· SYNCING…" : lastUpdated ? `· SYNC ${lastUpdated.toLocaleTimeString("ko-KR", { hour12: false })}` : ""}
+              </span>
+            </p>
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {loading ? (
-            <span style={{ fontSize: 15, color: "#9ca3af" }}>데이터 불러오는 중...</span>
-          ) : lastUpdated ? (
-            <span style={{ fontSize: 15, color: "#6b7280" }}>갱신: {lastUpdated.toLocaleTimeString("ko-KR")}</span>
-          ) : null}
-
+        <div style={{ display: "flex", alignItems: "center", gap: 10, position: "relative", flexWrap: "wrap" }}>
           <button
+            className="fc-hbtn"
             onClick={() => setCompanyLocModal(true)}
-            style={{
-              display: "inline-flex", alignItems: "center", gap: 6,
-              padding: "7px 15px", borderRadius: 8, border: "1px solid #d1d5db",
-              background: "white", cursor: "pointer",
-              fontSize: 16, fontWeight: 700, color: NAVY,
-            }}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 38, padding: "0 15px", borderRadius: 10, border: "1px solid rgba(207,224,255,.25)", background: "rgba(255,255,255,.08)", cursor: "pointer", fontSize: 15, fontWeight: 700, color: "#fff" }}
           >
             <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round"/><circle cx="12" cy="10" r="3"/></svg>
             기본 출근지
           </button>
 
           <button
+            className="fc-hbtn"
             onClick={handleRefresh}
             disabled={loading}
-            style={{
-              display: "inline-flex", alignItems: "center", gap: 6,
-              padding: "7px 15px", borderRadius: 8, border: "1px solid #d1d5db",
-              background: loading ? "#f9fafb" : "white", cursor: loading ? "not-allowed" : "pointer",
-              fontSize: 16, fontWeight: 700, color: loading ? "#9ca3af" : NAVY,
-            }}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 38, padding: "0 15px", borderRadius: 10, border: "1px solid rgba(207,224,255,.25)", background: "rgba(255,255,255,.08)", cursor: loading ? "not-allowed" : "pointer", fontSize: 15, fontWeight: 700, color: loading ? "rgba(255,255,255,.45)" : "#fff" }}
           >
             <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
               <path d="M23 4v6h-6M1 20v-6h6" strokeLinecap="round" strokeLinejoin="round" />
@@ -6255,10 +6303,13 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
             새로고침
           </button>
 
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "5px 13px", borderRadius: 99, border: "1px solid #d1fae5", fontSize: 15, color: "#065f46", fontWeight: 600, background: "#f0fdf4" }}>
-            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#10b981", display: "inline-block", animation: "fmLivePulse 2s infinite" }} />
-            실시간 연결
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 7, height: 38, padding: "0 14px", borderRadius: 10, border: "1px solid rgba(143,176,240,.45)", fontFamily: FC_MONO, fontSize: 13, color: "#CFE0FF", fontWeight: 800, letterSpacing: "0.12em", background: "rgba(143,176,240,.12)" }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#CFE0FF", boxShadow: "0 0 8px #8FB0F0", display: "inline-block", animation: "fmLivePulse 2s infinite" }} />
+            LIVE
           </span>
+
+          <div style={{ width: 1, height: 38, background: "rgba(207,224,255,.18)", margin: "0 4px" }} />
+          <FleetClock />
         </div>
       </div>
 
@@ -6266,39 +6317,51 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
       <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
         {/* ── 왼쪽 메뉴 ── */}
         <div style={{
-          width: 190, flexShrink: 0, background: "#fff", border: "1px solid #e5e7eb",
-          borderRadius: 10, padding: 6, display: "flex", flexDirection: "column", gap: 2,
-          position: "sticky", top: 12,
+          width: 196, flexShrink: 0, background: "#fff", border: "1px solid #E3E8F0",
+          borderRadius: 14, padding: 8, display: "flex", flexDirection: "column", gap: 3,
+          position: "sticky", top: 12, boxShadow: "0 1px 2px rgba(16,24,40,.04), 0 8px 20px rgba(16,24,40,.05)",
         }}>
+          <div style={{ fontFamily: FC_MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.22em", color: "#94A3B8", padding: "6px 10px 8px" }}>MODULES</div>
           {[
-            ["tracking", "관제현황"],
-            ["route", "노선관리"],
-            ["settlement", "정산관리"],
-            ["history", "이력 조회"],
-            ["attendance", "출근기록부"],
-            ["temperature", "온도 관제"],
-            ["cargo-camera", "적재함 카메라"],
-            ["registration", "기사 등록 관리"],
-          ].map(([key, label]) => (
+            ["tracking", "관제현황", "LIVE", <><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /><circle cx="12" cy="12" r="8" /></>],
+            ["route", "노선관리", "ROUTE", <><circle cx="6" cy="6" r="2.2" /><circle cx="18" cy="18" r="2.2" /><path d="M6 8.2V14a3 3 0 0 0 3 3h3a3 3 0 0 1 3 3v-2" /></>],
+            ["settlement", "정산관리", "PAY", <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 10h18M7 15h4" /></>],
+            ["history", "이력 조회", "LOG", <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>],
+            ["attendance", "출근기록부", "ATT", <><rect x="4" y="4" width="16" height="17" rx="2" /><path d="M8 2v4M16 2v4M4 10h16" /></>],
+            ["temperature", "온도 관제", "TEMP", <><path d="M14 14.8V4a2 2 0 0 0-4 0v10.8a4 4 0 1 0 4 0Z" /></>],
+            ["cargo-camera", "적재함 카메라", "CAM", <><rect x="2" y="7" width="14" height="11" rx="2" /><path d="m16 11 6-3v9l-6-3" /></>],
+            ["registration", "기사 등록 관리", "REG", <><circle cx="10" cy="8" r="4" /><path d="M3 20c0-4 3-7 7-7M17 14v6M14 17h6" /></>],
+          ].map(([key, label, code, icon]) => {
+            const on = mainTab === key;
+            return (
             <button
               key={key}
+              className={"fc-nav-btn" + (on ? " on" : "")}
               onClick={() => setMainTab(key)}
               style={{
-                padding: "11px 14px", border: "none", borderRadius: 7, textAlign: "left",
-                background: mainTab === key ? NAVY : "transparent",
-                color: mainTab === key ? "#fff" : "#374151",
-                fontSize: 16, fontWeight: 700, cursor: "pointer", transition: "all .15s",
-                display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+                position: "relative", padding: "10px 10px", border: "none", borderRadius: 10, textAlign: "left",
+                background: on ? "linear-gradient(135deg,#1B2B4B,#2D4C82)" : "transparent",
+                boxShadow: on ? "0 6px 14px rgba(27,43,75,.25)" : "none",
+                color: on ? "#fff" : "#374151",
+                fontSize: 15, fontWeight: 700, cursor: "pointer", transition: "all .15s",
+                display: "flex", alignItems: "center", gap: 10,
               }}
             >
-              {label}
+              <span style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: on ? "rgba(255,255,255,.14)" : "#EEF2F9" }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={on ? "#fff" : NAVY} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{icon}</svg>
+              </span>
+              <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap" }}>
+                {label}
+                <span style={{ display: "block", fontFamily: FC_MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: "0.18em", color: on ? "rgba(207,224,255,.75)" : "#A0AEC0", marginTop: 1 }}>{code}</span>
+              </span>
               {key === "registration" && pendingCount > 0 && (
-                <span style={{ background: "#ef4444", color: "white", fontSize: 14, fontWeight: 800, padding: "1px 7px", borderRadius: 99 }}>
+                <span style={{ background: "#ef4444", color: "white", fontSize: 13, fontWeight: 800, padding: "1px 7px", borderRadius: 99 }}>
                   {pendingCount}
                 </span>
               )}
             </button>
-          ))}
+            );
+          })}
         </div>
 
         {/* ── 오른쪽 콘텐츠 ── */}
@@ -6337,10 +6400,10 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
         <>
           {/* KPI */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
-            <KpiCard label="총 등록" value={kpi.total} sub="전체 기사 수" primary />
-            <KpiCard label="현재 접속중" value={kpi.connected} sub="앱 활성" />
-            <KpiCard label="운송중" value={kpi.driving} sub="현재 주행" accent="#10b981" />
-            <KpiCard label="근무중" value={kpi.onDuty} sub="출근~복귀 합산" />
+            <KpiCard label="총 등록" value={kpi.total} sub="전체 기사 수" code="TOTAL" icon={KPI_ICONS.truck} primary />
+            <KpiCard label="현재 접속중" value={kpi.connected} sub="앱 활성" code="ONLINE" icon={<><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0" /><circle cx="12" cy="19.5" r="1" /></>} />
+            <KpiCard label="운송중" value={kpi.driving} sub="현재 주행" code="DRIVING" icon={KPI_ICONS.route} />
+            <KpiCard label="근무중" value={kpi.onDuty} sub="출근~복귀 합산" code="ON DUTY" icon={KPI_ICONS.user} />
           </div>
 
           {/* 출발지 변경 요청 */}
@@ -6408,10 +6471,10 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
             </div>
           )}
 
-          {/* 검색 + 필터 */}
-          <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ position: "relative", flex: "1 1 220px", minWidth: 160 }}>
-              <svg width="14" height="14" fill="none" stroke="#9ca3af" strokeWidth="2.2" viewBox="0 0 24 24" style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
+          {/* 검색 + 필터 + 동선 날짜 — 하나의 관제 툴바 */}
+          <div style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 14, boxShadow: "0 1px 2px rgba(16,24,40,.04)", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ position: "relative", flex: "1 1 240px", minWidth: 180 }}>
+              <svg width="15" height="15" fill="none" stroke="#94A3B8" strokeWidth="2.2" viewBox="0 0 24 24" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
                 <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" strokeLinecap="round" />
               </svg>
               <input
@@ -6419,10 +6482,10 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
                 placeholder="기사명 / 차량번호 검색  예) 88어8888"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                style={{ width: "100%", paddingLeft: 34, paddingRight: 10, paddingTop: 9, paddingBottom: 9, border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 16, color: "#374151", outline: "none", background: "#fafafa", boxSizing: "border-box" }}
+                style={{ width: "100%", height: 38, paddingLeft: 36, paddingRight: 10, border: "1px solid #DCE3EF", borderRadius: 10, fontSize: 15, color: "#111827", outline: "none", background: "#F7F9FC", boxSizing: "border-box" }}
               />
             </div>
-            <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 3, flexWrap: "wrap", background: "#F1F4F9", border: "1px solid #E3E8F0", borderRadius: 10, padding: 3 }}>
               {FLEET_PHASE_FILTERS.map(opt => {
                 const active = statusFilter === opt;
                 return (
@@ -6430,78 +6493,80 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
                     key={opt}
                     onClick={() => setStatusFilter(opt)}
                     style={{
-                      padding: "6px 12px", borderRadius: 7,
-                      border: active ? `1.5px solid ${NAVY}` : "1px solid #e5e7eb",
-                      background: active ? NAVY : "#fff",
-                      color: active ? "#fff" : "#374151",
-                      fontSize: 15, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap",
+                      height: 30, padding: "0 11px", borderRadius: 8, border: "none",
+                      background: active ? NAVY : "transparent",
+                      boxShadow: active ? "0 3px 8px rgba(27,43,75,.25)" : "none",
+                      color: active ? "#fff" : "#4b5563",
+                      fontSize: 14, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap",
                       display: "inline-flex", alignItems: "center", gap: 5,
                     }}
                   >
                     {opt !== "전체" && (
-                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: active ? "rgba(255,255,255,.75)" : (FLEET_PHASE_COLORS[opt] || "#9ca3af"), display: "inline-block" }} />
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: active ? "rgba(255,255,255,.8)" : (FLEET_PHASE_COLORS[opt] || "#9ca3af"), display: "inline-block" }} />
                     )}
                     {opt}
                   </button>
                 );
               })}
             </div>
-            <span style={{ fontSize: 15, color: "#6b7280", marginLeft: "auto", whiteSpace: "nowrap", fontWeight: 600 }}>
-              {filteredRows.length}명 / 전체 {drivers.length}명
+            <div style={{ display: "flex", alignItems: "center", gap: 6, paddingLeft: 10, borderLeft: "1px solid #E3E8F0" }}>
+              <span style={{ fontFamily: FC_MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.14em", color: "#94A3B8", whiteSpace: "nowrap" }}>TRACK</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: "#4b5563", whiteSpace: "nowrap" }}>동선 날짜</span>
+              <input
+                type="date"
+                value={selectedTrackDate}
+                max={todayDate}
+                onChange={e => setSelectedTrackDate(e.target.value)}
+                style={{ height: 34, padding: "0 8px", border: "1px solid #DCE3EF", borderRadius: 8, fontSize: 14, color: NAVY, fontWeight: 700, outline: "none", width: "auto", background: "#fff" }}
+              />
+              {selectedTrackDate !== yesterdayDate && (
+                <button
+                  onClick={() => setSelectedTrackDate(yesterdayDate)}
+                  style={{ height: 34, padding: "0 11px", border: "1px solid #DCE3EF", borderRadius: 8, background: "white", color: "#374151", fontSize: 14, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+                >
+                  어제
+                </button>
+              )}
+              {selectedTrackDate !== todayDate && (
+                <button
+                  onClick={() => setSelectedTrackDate(todayDate)}
+                  style={{ height: 34, padding: "0 11px", border: "none", borderRadius: 8, background: NAVY, color: "white", fontSize: 14, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+                >
+                  오늘
+                </button>
+              )}
+            </div>
+            <span style={{ marginLeft: "auto", whiteSpace: "nowrap", fontSize: 14, fontWeight: 700, color: "#6b7280" }}>
+              <b style={{ fontFamily: FC_MONO, fontSize: 17, color: NAVY }}>{filteredRows.length}</b> / {drivers.length}명
             </span>
-          </div>
-
-          {/* 날짜별 동선 조회 */}
-          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:10 }}>
-            <span style={{ fontSize: 14, fontWeight:700, color:"#6b7280", whiteSpace:"nowrap" }}>동선 날짜</span>
-            <input
-              type="date"
-              value={selectedTrackDate}
-              max={todayDate}
-              onChange={e => setSelectedTrackDate(e.target.value)}
-              style={{ padding:"5px 8px", border:"1px solid #e5e7eb", borderRadius:7, fontSize: 15, color:NAVY, outline:"none", width:"auto" }}
-            />
-            {selectedTrackDate !== yesterdayDate && (
-              <button
-                onClick={() => setSelectedTrackDate(yesterdayDate)}
-                style={{ padding:"5px 11px", border:"1px solid #e5e7eb", borderRadius:7, background:"white", color:"#374151", fontSize: 14, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap" }}
-              >
-                어제
-              </button>
-            )}
-            {selectedTrackDate !== todayDate && (
-              <button
-                onClick={() => setSelectedTrackDate(todayDate)}
-                style={{ padding:"5px 11px", border:"none", borderRadius:7, background:NAVY, color:"white", fontSize: 14, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap" }}
-              >
-                오늘
-              </button>
-            )}
           </div>
 
           {/* 테이블 + 지도 */}
           <div style={{ display: "flex", gap: 16, alignItems: "stretch", minHeight: 520 }}>
-            <div style={{ flex: "0 0 40%", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden", display: "flex", flexDirection: "column", minWidth: 0 }}>
-              <div style={{ padding: "12px 16px", borderBottom: "1px solid #f0f2f5", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-                <span style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>기사 목록</span>
-                <span style={{ fontSize: 15, color: "#6b7280", fontWeight: 600 }}>{filteredRows.length}명</span>
-              </div>
+            <div style={{ flex: "0 0 40%", background: "#fff", border: "1px solid #E3E8F0", borderRadius: 14, overflow: "hidden", display: "flex", flexDirection: "column", minWidth: 0, boxShadow: "0 1px 2px rgba(16,24,40,.04), 0 8px 20px rgba(16,24,40,.05)" }}>
+              <FcPanelHead code="UNITS" title="기사 목록" right={<span style={{ fontFamily: FC_MONO, fontSize: 14, color: NAVY, fontWeight: 800 }}>{filteredRows.length}<span style={{ fontFamily: "inherit", fontSize: 13, color: "#6b7280", fontWeight: 600 }}> 명</span></span>} />
               <div style={{ flex: 1, overflowY: "auto", overflowX: "auto" }}>
                 <DriverTable phaseById={phaseById} rows={filteredRows} selectedId={selected?.id} onSelect={handleSelect} onFocusMap={handleFocusMap} onContextMenu={handleContextMenu} todayPhotos={todayDriverPhotos} onViewPhotos={setPhotoViewerPhotos} />
               </div>
             </div>
 
-            <div style={{ flex: "1 1 60%", border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden", minWidth: 0, minHeight: 520, position: "relative", isolation: "isolate" }}>
-              <div style={{ position: "absolute", top: 12, left: 12, zIndex: 1000, display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ background: "rgba(255,255,255,0.93)", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 13px", fontSize: 15, fontWeight: 700, color: NAVY, backdropFilter: "blur(4px)", boxShadow: "0 1px 6px rgba(0,0,0,.08)", display: "flex", alignItems: "center", gap: 7 }}>
-                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#10b981", display: "inline-block" }} />
+            <div style={{ flex: "1 1 60%", border: "1px solid #0F1A30", borderRadius: 14, overflow: "hidden", minWidth: 0, minHeight: 520, position: "relative", isolation: "isolate", display: "flex", flexDirection: "column", boxShadow: "0 10px 26px rgba(15,26,48,.18)", background: "#0F1A30" }}>
+              <FcPanelHead dark code="LIVE MAP" title="실시간 위치" right={<span style={{ fontFamily: FC_MONO, fontSize: 12, fontWeight: 800, letterSpacing: "0.12em", color: "#CFE0FF" }}>GPS · {filteredRows.filter(d => d.location).length} UNITS</span>} />
+              <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
+              {/* 지도 네 모서리 조준선(HUD) */}
+              {[{ top: 10, left: 10, b: "borderTop", c: "borderLeft" }, { top: 10, right: 10, b: "borderTop", c: "borderRight" }, { bottom: 10, left: 10, b: "borderBottom", c: "borderLeft" }, { bottom: 10, right: 10, b: "borderBottom", c: "borderRight" }].map((k, i) => (
+                <span key={i} style={{ position: "absolute", zIndex: 999, width: 18, height: 18, pointerEvents: "none", top: k.top, left: k.left, right: k.right, bottom: k.bottom, [k.b]: "2px solid rgba(27,43,75,.55)", [k.c]: "2px solid rgba(27,43,75,.55)" }} />
+              ))}
+              <div style={{ position: "absolute", top: 12, left: 52, zIndex: 1000, display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ background: "rgba(15,26,48,0.88)", border: "1px solid rgba(143,176,240,.35)", borderRadius: 9, padding: "6px 13px", fontSize: 14, fontWeight: 700, color: "#fff", backdropFilter: "blur(4px)", boxShadow: "0 4px 12px rgba(0,0,0,.18)", display: "flex", alignItems: "center", gap: 7 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#CFE0FF", boxShadow: "0 0 6px #8FB0F0", display: "inline-block", animation: "fmLivePulse 2s infinite" }} />
                   1분 주기 갱신
-                  <span style={{ color: "#6b7280", fontWeight: 500 }}>{filteredRows.filter(d => d.location).length}대</span>
+                  <span style={{ fontFamily: FC_MONO, color: "#CFE0FF", fontWeight: 800 }}>{filteredRows.filter(d => d.location).length}대</span>
                 </div>
                 <button
                   onClick={handleMapRefresh}
                   title="지도 위치 즉시 새로고침"
-                  style={{ background: "rgba(255,255,255,0.93)", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 11px", fontSize: 14, fontWeight: 700, color: NAVY, backdropFilter: "blur(4px)", boxShadow: "0 1px 6px rgba(0,0,0,.08)", cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
+                  style={{ background: "rgba(255,255,255,0.95)", border: "1px solid #DCE3EF", borderRadius: 9, padding: "6px 11px", fontSize: 14, fontWeight: 700, color: NAVY, backdropFilter: "blur(4px)", boxShadow: "0 4px 12px rgba(0,0,0,.12)", cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
                 >
                   <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   새로고침
@@ -6509,12 +6574,13 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
                 <button
                   onClick={() => setFitAllCount(c => c + 1)}
                   title="전체 기사 위치 맞추기"
-                  style={{ background: "rgba(255,255,255,0.93)", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 11px", fontSize: 14, fontWeight: 600, color: NAVY, backdropFilter: "blur(4px)", boxShadow: "0 1px 6px rgba(0,0,0,.08)", cursor: "pointer" }}
+                  style={{ background: "rgba(255,255,255,0.95)", border: "1px solid #DCE3EF", borderRadius: 9, padding: "6px 11px", fontSize: 14, fontWeight: 700, color: NAVY, backdropFilter: "blur(4px)", boxShadow: "0 4px 12px rgba(0,0,0,.12)", cursor: "pointer" }}
                 >
                   전체 보기
                 </button>
               </div>
               <FleetMap drivers={filteredRows} center={mapCenter} onSelect={handleSelect} selectedPath={selectedPath} roadPath={roadPath} fitAllCount={fitAllCount} selectedDriver={selected} />
+              </div>
             </div>
           </div>
 
@@ -6540,10 +6606,11 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
           )}
 
           {/* 실시간 활동 피드 */}
-          <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden" }}>
-            <div style={{ padding: "14px 20px", borderBottom: "1px solid #f0f2f5", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 2px rgba(16,24,40,.04), 0 8px 20px rgba(16,24,40,.05)" }}>
+            <div style={{ padding: "13px 20px", borderBottom: "1px solid #E8EDF4", background: "#F7F9FC", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#10b981", display: "inline-block", animation: "fmLivePulse 2s infinite" }} />
+                <span style={{ width: 9, height: 9, borderRadius: "50%", background: NAVY, boxShadow: "0 0 0 3px rgba(27,43,75,.15)", display: "inline-block", animation: "fmLivePulse 2s infinite" }} />
+                <span style={{ fontFamily: FC_MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#94A3B8" }}>EVENT FEED</span>
                 <span style={{ fontSize: 17, fontWeight: 800, color: NAVY }}>실시간 활동 피드</span>
                 <span style={{ fontSize: 15, color: "#9ca3af" }}>기사가 버튼을 누를 때마다 즉시 기록</span>
               </div>
@@ -6608,6 +6675,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
 
       <style>{`
         @keyframes fmLivePulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+        ${FC_CSS}
       `}</style>
 
       {pinModal && (
