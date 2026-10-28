@@ -10,6 +10,15 @@ HTML/CSS/JS라 어디에든 그대로 올릴 수 있습니다.
   새 탭에서 연결됩니다. 나중에 프로그램 자체에 별도 도메인을 연결하면 이 링크만
   바꿔주면 됩니다.
 
+## 현재 배포 (2026-10-29)
+
+- Vercel 프로젝트 `dispatch-app2-vskk` ← GitHub `sungwoo0923/dispatch-app2` 연결
+  - Root Directory `landing-site`, Framework Other, 빌드 명령 없음, Output `.`
+  - main에 push하면 자동 배포. `landing-site` 안의 파일이 바뀐 때만 빌드한다(`vercel.json`의 ignoreCommand).
+- 주소: https://dispatch-app2-vskk.vercel.app
+- 검색 등록용 파일: `robots.txt`, `sitemap.xml`, `og-image.png`(링크 미리보기). 네이버 서치어드바이저
+  소유확인 코드는 `index.html`의 `naver-site-verification` 주석 자리에 넣는다.
+
 ## 새 Vercel 프로젝트로 배포하기 (기존 프로그램과 완전히 분리)
 
 1. https://vercel.com 에서 "Add New… → Project" 클릭

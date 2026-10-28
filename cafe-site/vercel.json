@@ -1,4 +1,5 @@
 {
+  "git": { "deploymentEnabled": { "claude/*": false } },
   "ignoreCommand": "git diff --quiet HEAD^ HEAD -- .",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
