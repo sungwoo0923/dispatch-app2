@@ -12731,15 +12731,17 @@ function makeCopyOrderKey(r) {
     .filter(s => s.업체명?.trim()).map(s => s.업체명.trim()).join(",");
   const dropVia = safeArr(r.경유하차목록)
     .filter(s => s.업체명?.trim()).map(s => s.업체명.trim()).join(",");
+  // ⭐ 2026-10-28 사용자 요청 — 화물내용·톤수가 다르다고 같은 노선이 여러 건 뜨지 않게, 기준을
+  //    "거래처명 + 상차지 + 하차지(+경유) + 차량종류(+편도/왕복)"로만 묶는다(최신 1건이 대표).
+  //    화물내용·톤수는 복사 때 비워서 넣으므로 구분할 필요가 없다.
   return [
     r.운행유형 || "편도",
+    normalizeKey(r.거래처명 || ""),
     normalizeKey(r.상차지명 || ""),
     pickupVia,
     normalizeKey(r.하차지명 || ""),
     dropVia,
-    extractTonNum(r.차량톤수) ?? "",
-    r.차량종류 || "",
-    getPalletFromCargoText(r.화물내용) ?? "TON"
+    String(r.차량종류 || "").trim(),
   ].join("|");
 }
 
@@ -13728,24 +13730,9 @@ const copyList = React.useMemo(() => {
   return Array.from(dedupMap.values());
 }, [copyIndex, copyQDeferred, copyFilterType, filterType, filterValue, onlyRoundTrip]);
 
-// 오더복사 "더보기" 전 기본 표시 목록 (최근 1건, 전체필터시 역할별 1건씩)
-const copyListShort = React.useMemo(() => {
-  if (!copyList.length) return [];
-  const q = copyQDeferred.trim().toLowerCase();
-  if (copyFilterType === "전체" && q) {
-    const seen = new Set();
-    const out = [];
-    // 상차지로 매칭되는 것 1건
-    const pu = copyList.find(r => String(r.상차지명||"").toLowerCase().includes(q));
-    if (pu) { seen.add(pu._id); out.push(pu); }
-    // 하차지로 매칭되는 것 1건 (다른 레코드)
-    const dr = copyList.find(r => !seen.has(r._id) && String(r.하차지명||"").toLowerCase().includes(q));
-    if (dr) out.push(dr);
-    // 둘 다 없으면 그냥 첫 번째
-    return out.length ? out : [copyList[0]];
-  }
-  return [copyList[0]];
-}, [copyList, copyQDeferred, copyFilterType]);
+// 오더복사 기본 표시 목록 — ⭐ 2026-10-28: 위 기준(거래처·상차지·하차지·차량종류)으로 이미 한 건씩만 남으므로
+// 그대로 다 보여준다(상차로 1건, 하차로 1건, 차량종류·거래처가 다르면 그만큼). 한 번에 300건까지만 그린다.
+const copyListShort = React.useMemo(() => copyList.slice(0, 300), [copyList]);
 
 // 검색어/필터 변경 시 더보기 초기화
 React.useEffect(() => { setCopyShowMore(false); }, [copyQ, copyFilterType]);
@@ -13788,11 +13775,11 @@ const applyCopy = (r) => {
     경유지_상차: (() => { const pa=(v)=>{if(Array.isArray(v))return v;try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];}};const a=pa(r.경유지_상차);const b=pa(r.경유상차목록);return a.length?a:b; })(),
     경유지_하차: (() => { const pa=(v)=>{if(Array.isArray(v))return v;try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];}};const a=pa(r.경유지_하차);const b=pa(r.경유하차목록);return a.length?a:b; })(),
 
-    // 기타
-    화물내용: cargoBase,
+    // 기타 — ⭐ 화물내용·톤수는 오더마다 달라서 복사하지 않는다(빈칸, 2026-10-28 사용자 요청)
+    화물내용: "",
     화물타입: detectedType,
     차량종류: r.차량종류 || "",
-    차량톤수: r.차량톤수 || "",
+    차량톤수: "",
     상차방법: r.상차방법 || "",
     하차방법: r.하차방법 || "",
     상차일: todayStr,
@@ -18112,9 +18099,7 @@ className={`
                 {copyQ && (
                   <p className="text-[12px] text-gray-500 mt-2 font-semibold">
                     {copyList.length > 0
-                      ? copyShowMore
-                        ? `전체 ${copyList.length}건${copyList.length > 300 ? " 중 최근 300건" : ""} 표시 중 · 더블클릭하면 바로 복사됩니다`
-                        : `최근 ${copyListShort.length}건 표시 중 (전체 ${copyList.length}건) · 더블클릭하면 바로 복사됩니다`
+                      ? `${copyList.length}건${copyList.length > 300 ? " 중 최근 300건" : ""} · 같은 거래처·상하차지·차량종류는 최신 1건만 · 화물내용·톤수는 빈칸으로 복사 · 더블클릭하면 바로 복사`
                       : "검색 결과가 없습니다"}
                   </p>
                 )}

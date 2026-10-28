@@ -14514,7 +14514,19 @@ const orderCopyList = useMemo(() => {
     }
     out.push(o);
   }
-  return out.sort((a, b) => (b.상차일 || "").localeCompare(a.상차일 || "")).slice(0, 30);
+  // ⭐ 2026-10-28 — PC 오더복사와 같은 기준: 거래처명 + 상차지 + 하차지(+경유) + 차량종류(+편도/왕복)가 같으면
+  //    최신 1건만(화물내용·톤수가 달라도 한 건). 화물내용·톤수는 불러올 때 비운다.
+  const nk = (v) => String(v || "").replace(/\s+/g, "").toLowerCase();
+  const viaNames = (v) => { let a = v; if (typeof a === "string") { try { a = JSON.parse(a); } catch { a = []; } } return (Array.isArray(a) ? a : []).map((x) => nk(x?.업체명)).filter(Boolean).join(","); };
+  const seen = new Set();
+  const uniq = [];
+  for (const o of out.sort((a, b) => (b.상차일 || "").localeCompare(a.상차일 || "") || String(b.상차시간 || "").localeCompare(String(a.상차시간 || "")))) {
+    const key = [o.운행유형 || "편도", nk(o.거래처명), nk(o.상차지명), viaNames(o.경유상차목록), nk(o.하차지명), viaNames(o.경유하차목록), String(o.차량종류 || o.차종 || "").trim()].join("|");
+    if (seen.has(key)) continue;
+    seen.add(key); uniq.push(o);
+    if (uniq.length >= 30) break;
+  }
+  return uniq;
 }, [showOrderCopyModal, orders, orderCopySearchDeferred, orderCopySearchField]);
 
 // 톤수 분리 state
@@ -17604,9 +17616,10 @@ const pickDrop = (c) => {
                   상차시간기준: o.상차시간기준 || null,
                   하차시간: o.하차시간 || "",
                   하차시간기준: o.하차시간기준 || null,
-                  톤수: o.톤수 || o.차량톤수 || "",
+                  // ⭐ 톤수·화물내용은 오더마다 달라서 불러오지 않는다(빈칸) — 2026-10-28 사용자 요청
+                  톤수: "",
                   차종: o.차종 || o.차량종류 || "",
-                  화물내용: o.화물내용 || "",
+                  화물내용: "",
                   상차방법: o.상차방법 || "",
                   하차방법: o.하차방법 || "",
                   지급방식: o.지급방식 || "",
