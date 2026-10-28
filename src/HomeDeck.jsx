@@ -5,7 +5,7 @@
 //  지난 기간(실시간 범위 이전) 합계는 HomeDashboard가 하루 1번 계산해 둔 pastCache(v4)를 쓰고,
 //  최근 7일은 실시간 오더(dispatchData)로 더한다.
 import React, { useEffect, useMemo, useState } from "react";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Line, ComposedChart, Bar, Cell } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Line, ComposedChart, Bar, BarChart, Cell, PieChart, Pie } from "recharts";
 import { creatorOf } from "./monthCompare";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
@@ -21,6 +21,17 @@ const short = (n) => {
   if (a >= 1e8) return `${(n / 1e8).toFixed(a >= 1e9 ? 0 : 1)}억`;
   if (a >= 1e4) return `${Math.round(n / 1e4).toLocaleString()}만`;
   return Math.round(n || 0).toLocaleString();
+};
+
+// 상차시간 → 시(0~23). "오전 9시" "09:00" "14시30분" "즉시" 등. 모르면 null
+const hourOf = (t) => {
+  const s = String(t || "");
+  const m = s.match(/(오전|오후|새벽|아침|저녁|밤)?\s*(\d{1,2})\s*(?:시|:)/);
+  if (!m) return null;
+  let h = Number(m[2]);
+  if (/오후|저녁|밤/.test(m[1] || "") && h < 12) h += 12;
+  if (/새벽/.test(m[1] || "") && h === 12) h = 0;
+  return h >= 0 && h <= 23 ? h : null;
 };
 
 // ─── 지난 기간 집계(하루 1번) — 일별 / 이번 달 담당자별 / 이번 달 거래처별 ─────────────
@@ -267,6 +278,45 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
   }, [pastCache, live, thisMonth]);
   const clientTotal = topClients.reduce((a, c) => a + c.v, 0);
 
+  // ── 아래 줄(운영 현황) — 오늘·내일 배차판 / 상차 시간대 / 차종 구성 / 주요 노선 / 요일 패턴 ──
+  const tomorrow = addDay(today, 1);
+  const ops = useMemo(() => {
+    const t = live.rows.filter((r) => dateOf(r) === today);
+    const tm = dispatchData.filter((r) => !isCancelled(r) && r.source !== "transport_transmit" && dateOf(r) === tomorrow);
+    const done = (list) => list.filter((r) => r.배차상태 === "배차완료").length;
+    const hours = Array.from({ length: 24 }, (_, h) => ({ h: `${h}`, t: 0, n: 0 }));
+    let immediate = 0;
+    t.forEach((r) => { const h = hourOf(r.상차시간); if (h == null) immediate += 1; else hours[h].t += 1; });
+    tm.forEach((r) => { const h = hourOf(r.상차시간); if (h != null) hours[h].n += 1; });
+    const span = hours.filter((x, i) => i >= 5 && i <= 20);
+    const week = live.rows.filter((r) => dateOf(r) >= addDay(today, -6) && dateOf(r) <= today);
+    const cars = {}, routes = {};
+    week.forEach((r) => {
+      const c = String(r.차량종류 || "미지정").trim() || "미지정";
+      cars[c] = (cars[c] || 0) + 1;
+      const k = `${r.상차지명 || "-"} → ${r.하차지명 || "-"}`;
+      const e = routes[k] || (routes[k] = { k, cnt: 0, sale: 0 });
+      e.cnt += 1; e.sale += toWon(r.청구운임);
+    });
+    const carList = Object.entries(cars).sort((a, b) => b[1] - a[1]);
+    const carTop = carList.slice(0, 5).map(([name, v]) => ({ name, v }));
+    const rest = carList.slice(5).reduce((a, [, v]) => a + v, 0);
+    if (rest) carTop.push({ name: "기타", v: rest });
+    return {
+      today: { all: t.length, done: done(t), pending: t.length - done(t), immediate },
+      tomorrow: { all: tm.length, done: done(tm), pending: tm.length - done(tm) },
+      hours: span, cars: carTop, weekCnt: week.length,
+      routes: Object.values(routes).sort((a, b) => b.cnt - a.cnt || b.sale - a.sale).slice(0, 5),
+    };
+  }, [live, dispatchData, today, tomorrow]);
+  const weekdayAvg = useMemo(() => {
+    const W = ["일", "월", "화", "수", "목", "금", "토"].map((l) => ({ l, sum: 0, n: 0 }));
+    for (let i = 1; i <= 56; i++) { const dd = addDay(today, -i); const w = new Date(`${dd}T00:00:00Z`).getUTCDay(); const v = dayVal(dd); W[w].sum += v[2]; W[w].n += 1; }
+    const tw = new Date(`${today}T00:00:00Z`).getUTCDay();
+    return W.map((x, i) => ({ label: x.l, v: x.n ? Math.round((x.sum / x.n) * 10) / 10 : 0, on: i === tw }));
+  }, [days, today]); // eslint-disable-line react-hooks/exhaustive-deps
+  const CAR_SHADES = ["#CFE0FF", "#8FB0F0", "#6E95E8", "#4B6CB7", "#2D4C82", "#1B2B4B"];
+
   const d = new Date();
   const dateText = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ${["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][d.getDay()]}`;
   const hour = d.getHours();
@@ -402,6 +452,28 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
           <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end", gap: 16, fontSize: 12, fontWeight: 700, color: C.dim }}>
             <span>건수 · 매익률</span><span>매출 점유율</span>
           </div>
+          {/* 담당자별 매출 비중(한 줄 막대) + 1인 평균 — 담당자가 적어도 칸이 비어 보이지 않게 */}
+          {staffRank.length > 0 && (
+            <div style={{ marginTop: "auto", paddingTop: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, fontWeight: 800, color: C.sub, marginBottom: 6 }}>
+                <span>담당자별 매출 비중</span>
+                <span>1인 평균 <b style={{ fontFamily: MONO, color: "#fff" }}>{short(staffTotal / staffRank.length)}</b> · 총 <b style={{ fontFamily: MONO, color: "#fff" }}>{short(staffTotal)}</b></span>
+              </div>
+              <div style={{ display: "flex", height: 14, borderRadius: 99, overflow: "hidden", background: "rgba(143,176,240,.1)" }}>
+                {staffRank.slice(0, 8).map((g, i) => (
+                  <div key={g.name} title={`${g.name} ${staffTotal ? ((g.s / staffTotal) * 100).toFixed(1) : 0}%`} style={{ width: `${staffTotal ? (g.s / staffTotal) * 100 : 0}%`, background: ["#CFE0FF", "#8FB0F0", "#6E95E8", "#4B6CB7", "#2D4C82", "#24396A", "#1B2B4B", "#16243F"][i], borderRight: "1px solid rgba(11,20,40,.6)" }} />
+                ))}
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", marginTop: 7 }}>
+                {staffRank.slice(0, 8).map((g, i) => (
+                  <span key={g.name} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 700, color: C.sub }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 2, background: ["#CFE0FF", "#8FB0F0", "#6E95E8", "#4B6CB7", "#2D4C82", "#24396A", "#1B2B4B", "#16243F"][i] }} />
+                    {g.name} <b style={{ fontFamily: MONO, color: "#fff" }}>{staffTotal ? ((g.s / staffTotal) * 100).toFixed(0) : 0}%</b>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </Panel>
 
         <Panel code="CLIENTS" title={`${Number(thisMonth.slice(5))}월 Top 거래처`}>
@@ -420,6 +492,104 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
                   </div>
                   <div style={{ height: 6, borderRadius: 99, background: "rgba(143,176,240,.1)", overflow: "hidden" }}>
                     <div style={{ height: "100%", width: `${(c.v / topClients[0].v) * 100}%`, borderRadius: 99, background: i === 0 ? `linear-gradient(90deg,#4B6CB7,${C.hi})` : `rgba(110,149,232,${0.85 - i * 0.1})` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+      </div>
+
+      {/* ── 운영 현황(2026-10-28 추가) — 오늘·내일 배차판 / 상차 시간대 / 차종 / 주요 노선 / 요일 패턴 ── */}
+      <div style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1.5fr) minmax(0,1fr) minmax(0,1.2fr)", gap: 14, marginTop: 14 }}>
+        <Panel code="BOARD" title="오늘 · 내일 배차판">
+          {[["오늘", today, ops.today], ["내일", tomorrow, ops.tomorrow]].map(([k, dd, o]) => (
+            <div key={k} style={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <span style={{ fontSize: 14, fontWeight: 800, color: "#fff" }}>{k} <span style={{ fontFamily: MONO, fontSize: 11.5, color: C.dim }}>{dd.slice(5).replace("-", "/")}</span></span>
+                <span style={{ fontFamily: MONO, fontSize: 20, fontWeight: 800, color: "#fff" }}>{o.all}<span style={{ fontSize: 12, color: C.dim, marginLeft: 3 }}>건</span></span>
+              </div>
+              <div style={{ display: "flex", height: 10, borderRadius: 99, overflow: "hidden", background: "rgba(143,176,240,.12)", marginTop: 6 }}>
+                <div style={{ width: `${o.all ? (o.done / o.all) * 100 : 0}%`, background: `linear-gradient(90deg,#4B6CB7,${C.hi})` }} />
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 5, fontSize: 12, fontWeight: 700, color: C.sub }}>
+                <span>배차완료 <b style={{ fontFamily: MONO, color: C.hi }}>{o.done}</b></span>
+                <span>배차중 <b style={{ fontFamily: MONO, color: "#fff" }}>{o.pending}</b></span>
+              </div>
+            </div>
+          ))}
+          <div style={{ fontSize: 12, color: C.dim, fontWeight: 600 }}>오늘 "즉시·시간미정" 상차 <b style={{ fontFamily: MONO, color: C.sub }}>{ops.today.immediate}</b>건</div>
+        </Panel>
+
+        <Panel code="TIMELINE" title="상차 시간대 분포" right={<span style={{ display: "flex", gap: 10, fontSize: 11.5, fontWeight: 700, color: C.sub }}><span><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 2, background: C.glow, marginRight: 4 }} />오늘</span><span><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 2, background: "rgba(143,176,240,.35)", marginRight: 4 }} />내일</span></span>}>
+          <div style={{ height: 200 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={ops.hours} margin={{ top: 6, right: 4, left: 0, bottom: 0 }} barGap={1}>
+                <CartesianGrid stroke="rgba(143,176,240,.08)" vertical={false} />
+                <XAxis dataKey="h" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "rgba(207,224,255,.5)", fontFamily: MONO }} tickFormatter={(h) => `${h}시`} interval={1} />
+                <YAxis allowDecimals={false} axisLine={false} tickLine={false} width={24} tick={{ fontSize: 10.5, fill: "rgba(207,224,255,.4)", fontFamily: MONO }} />
+                <Tooltip cursor={{ fill: "rgba(143,176,240,.08)" }} contentStyle={{ background: "rgba(11,20,40,.96)", border: `1px solid ${C.line}`, borderRadius: 10, color: C.ink, fontSize: 12.5, fontWeight: 700 }} labelFormatter={(h) => `${h}시 상차`} formatter={(v, n) => [`${v}건`, n === "t" ? "오늘" : "내일"]} />
+                <Bar dataKey="t" fill={C.glow} radius={[4, 4, 0, 0]} barSize={9} />
+                <Bar dataKey="n" fill="rgba(143,176,240,.35)" radius={[4, 4, 0, 0]} barSize={9} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Panel>
+
+        <Panel code="FLEET MIX" title="최근 7일 차종 구성">
+          {ops.cars.length === 0 ? <div style={{ padding: "40px 0", textAlign: "center", fontSize: 13.5, color: C.dim }}>데이터 없음</div> : (
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ width: 120, height: 120, position: "relative", flexShrink: 0 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={ops.cars} dataKey="v" nameKey="name" innerRadius={38} outerRadius={56} paddingAngle={2} stroke="none">
+                      {ops.cars.map((x, i) => <Cell key={x.name} fill={CAR_SHADES[i % CAR_SHADES.length]} />)}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+                  <span style={{ fontFamily: MONO, fontSize: 17, fontWeight: 800, color: "#fff" }}>{ops.weekCnt}</span>
+                  <span style={{ fontSize: 10.5, color: C.dim, fontWeight: 700 }}>건</span>
+                </div>
+              </div>
+              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 5 }}>
+                {ops.cars.map((x, i) => (
+                  <div key={x.name} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 2, flexShrink: 0, background: CAR_SHADES[i % CAR_SHADES.length] }} />
+                    <span style={{ flex: 1, minWidth: 0, color: C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.name}</span>
+                    <span style={{ fontFamily: MONO, color: C.sub }}>{ops.weekCnt ? Math.round((x.v / ops.weekCnt) * 100) : 0}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: C.sub, marginBottom: 4 }}>요일별 평균 오더 <span style={{ color: C.dim, fontWeight: 600 }}>(최근 8주)</span></div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4, alignItems: "end", height: 54 }}>
+              {(() => { const mx = Math.max(1, ...weekdayAvg.map((w) => w.v)); return weekdayAvg.map((w) => (
+                <div key={w.label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }} title={`${w.label}요일 평균 ${w.v}건`}>
+                  <div style={{ width: "100%", height: Math.max(3, (w.v / mx) * 36), borderRadius: 4, background: w.on ? `linear-gradient(180deg,${C.hi},#4B6CB7)` : "rgba(110,149,232,.4)", boxShadow: w.on ? `0 0 8px ${C.glow}` : "none" }} />
+                  <span style={{ fontSize: 10.5, fontWeight: 800, color: w.on ? "#fff" : C.dim }}>{w.label}</span>
+                </div>
+              )); })()}
+            </div>
+          </div>
+        </Panel>
+
+        <Panel code="ROUTES" title="최근 7일 주요 노선">
+          {ops.routes.length === 0 ? <div style={{ padding: "40px 0", textAlign: "center", fontSize: 13.5, color: C.dim }}>데이터 없음</div> : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+              {ops.routes.map((x, i) => (
+                <div key={x.k}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+                      <span style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 800, color: i === 0 ? "#fff" : C.dim }}>{String(i + 1).padStart(2, "0")}</span>
+                      <span style={{ fontSize: 13.5, fontWeight: 800, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.k}</span>
+                    </span>
+                    <span style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 800, color: C.hi, whiteSpace: "nowrap" }}>{x.cnt}건 · {short(x.sale)}</span>
+                  </div>
+                  <div style={{ height: 5, borderRadius: 99, background: "rgba(143,176,240,.1)", marginTop: 4, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${(x.cnt / ops.routes[0].cnt) * 100}%`, background: i === 0 ? `linear-gradient(90deg,#4B6CB7,${C.hi})` : "rgba(110,149,232,.7)", borderRadius: 99 }} />
                   </div>
                 </div>
               ))}
