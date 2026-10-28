@@ -3,6 +3,7 @@
 //   지운 기간을 고르면 목록이 나오고, 골라서 되살린다. 관리자는 자기 회사 것만, 최고관리자는 전체.
 //   휴지통이 생기기 전에 지운 오더는 Firebase "특정 시점 복구(PITR)"가 켜져 있을 때만 최고관리자에게 함께 보인다.
 import React from "react";
+import { imeFocusRef } from "./imeFocus";
 import { callFn, KP_CARD, KpCardHead, kstToday, addDays, won } from "./kpApi";
 
 const fmtAt = (ms) => new Date(ms).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -147,7 +148,7 @@ export default function TrashPanel({ company = "" }) {
             <div className="px-6 py-5 space-y-3 text-[13.5px] text-[#3A4A66] leading-relaxed">
               <p>선택한 오더를 <b className="text-[#0F1A30]">휴지통·첨부파일·화주사 사본·기사 알림·운행기록 사본·구글시트 줄</b>까지 모두 지웁니다.</p>
               <p className="font-black text-[#0F1A30]">지운 뒤에는 절대 되돌릴 수 없습니다.</p>
-              <input value={purgeText} onChange={(e) => setPurgeText(e.target.value)} placeholder="계속하려면 '완전삭제'를 입력하세요" autoFocus
+              <input value={purgeText} onChange={(e) => setPurgeText(e.target.value)} placeholder="계속하려면 '완전삭제'를 입력하세요" ref={imeFocusRef}
                 className="w-full h-11 px-3.5 rounded-xl border border-[#DCE3EE] text-[14px] font-bold text-[#0F1A30] outline-none focus:border-[#0F1A30]" />
             </div>
             <div className="px-6 pb-5 flex gap-2">

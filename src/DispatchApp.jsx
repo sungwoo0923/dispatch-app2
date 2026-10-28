@@ -1,5 +1,6 @@
 // ===================== DispatchApp.jsx (PART 1/8) — START =====================
 import { loadTmap } from "./tmapLoader";
+import { imeFocusRef } from "./imeFocus";
 import { hideBlind, isBlindHidden, canSeeBlind, autoBlindNew } from "./blind";
 import { checkHolidayDispatch, findRestConflict, confirmRestDispatch, restAckKey } from "./holidayConfirm";
 import { drawTmapTrafficRoute, TRAFFIC_LEGEND } from "./mapStyle";
@@ -2717,7 +2718,7 @@ function ContactListEditor({ contacts, onChange }) {
         <div key={i} className="px-3 py-2">
           {editingIdx === i ? (
             <div className="flex items-center gap-2">
-              <input autoComplete="off" autoFocus className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]"
+              <input autoComplete="off" ref={imeFocusRef} className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]"
                 placeholder="이름" value={draft.name} onChange={e => setDraft(p => ({ ...p, name: e.target.value }))} />
               <input autoComplete="off" className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]"
                 placeholder="전화번호" value={draft.phone} onChange={e => setDraft(p => ({ ...p, phone: formatPhone(e.target.value) }))} />
@@ -2848,7 +2849,7 @@ function OrderMemoModal({ type, name, memo, popupShow, notice, onCancel, onSave 
         </div>
         <div className="px-6 py-5 space-y-3">
           <textarea
-            autoFocus
+            ref={imeFocusRef}
             rows={5}
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] resize-none"
             placeholder="이 거래처를 상/하차지명에 입력할 때마다 안내 팝업으로 뜰 메모"
@@ -2953,7 +2954,7 @@ const KP_PAGE_META = {
   실시간배차현황: { en: "LIVE BOARD", desc: "어제·오늘·내일 오더를 실시간으로", icon: "M3 12h4l3-8 4 16 3-8h4" },
   배차현황: { en: "DISPATCH STATUS", desc: "기간별 배차 내역 조회·수정", icon: "M4 5h16M4 12h16M4 19h10" },
   단가표: { en: "RATE CARD", desc: "거래처·구간별 운임 단가", icon: "M4 4h16v16H4zM4 10h16M10 4v16" },
-  운임조회: { en: "FARE LOOKUP", desc: "과거 운임으로 적정 운임 확인", icon: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-5-5" },
+  // 운임조회는 화면 자체 머리말(FARE LOOKUP 헤더 + 전국/자사 탭)이 있어 생략
   기사관리: { en: "DRIVERS", desc: "기사 정보와 차량 관리", icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 4-6 8-6s8 2 8 6" },
   거래처관리: { en: "CLIENTS", desc: "거래처·하차지·고정 노선 관리", icon: "M4 21V7l8-4 8 4v14M9 21v-6h6v6" },
   // 지입차관리는 화면 자체 머리말(지입차량 관제)이 있어 생략
@@ -2961,29 +2962,42 @@ const KP_PAGE_META = {
   정산관리: { en: "SETTLEMENT", desc: "거래처 정산과 기사 지급 관리", icon: "M3 6h18v12H3zM3 10h18M7 15h4" },
   관리센터: { en: "CONTROL CENTER", desc: "경영 지표와 가입 신청 관리", icon: "M12 3l8 4v6c0 4-3.5 7-8 8-4.5-1-8-4-8-8V7z" },
 };
+// ⭐ 2026-10-28 디지털 머리말 — 영문 태그·날짜·시계를 고정폭 디지털 글씨로, 아이콘 타일에 은은한 격자
+function KpPageClock() {
+  const [now, setNow] = React.useState(() => new Date());
+  React.useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000 * 15); return () => clearInterval(t); }, []);
+  const k = new Date(now.getTime() + 9 * 3600e3);
+  const ymd = k.toISOString().slice(0, 10).replace(/-/g, ".");
+  const dow = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][k.getUTCDay()];
+  const hm = k.toISOString().slice(11, 16);
+  return (
+    <div className="ml-auto hidden lg:flex items-center gap-2.5 h-10 pl-3 pr-1 rounded-[14px] bg-[#F5F8FD] border border-[#E3E8F0] shrink-0 tabular-nums" style={{ fontFamily: KP_MONO }}>
+      <span className="w-1.5 h-1.5 rounded-full bg-[#4B6CB7] animate-pulse" />
+      <span className="text-[12.5px] font-bold text-[#3A4A66]">{ymd}</span>
+      <span className="text-[10.5px] font-extrabold tracking-[0.18em] text-[#9AA9C3]">{dow}</span>
+      <span className="h-8 px-2.5 rounded-[10px] bg-[#0F1A30] text-white text-[13px] font-black flex items-center">{hm}</span>
+    </div>
+  );
+}
+const KP_MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 function KpPageHeader({ menu }) {
   const meta = KP_PAGE_META[menu];
   if (!meta) return null;
-  const now = new Date(Date.now() + 9 * 3600e3);
-  const ymd = now.toISOString().slice(0, 10).replace(/-/g, ".");
-  const dow = ["일", "월", "화", "수", "목", "금", "토"][now.getUTCDay()];
   return (
     <div className="flex items-center gap-4 pb-4 mb-4 border-b border-[#EEF1F6]">
-      <div className="w-11 h-11 rounded-[14px] flex items-center justify-center shrink-0 shadow-[0_6px_16px_rgba(27,43,75,0.25)]"
-        style={{ background: "linear-gradient(135deg, #1B2B4B 0%, #2D4C82 100%)" }}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={meta.icon} /></svg>
+      <div className="relative w-12 h-12 rounded-[15px] flex items-center justify-center shrink-0 overflow-hidden shadow-[0_8px_20px_rgba(15,26,48,0.28)] ring-1 ring-white/10"
+        style={{ background: "linear-gradient(135deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%)" }}>
+        <span className="absolute inset-0 opacity-[0.12]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "8px 8px" }} />
+        <svg className="relative" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={meta.icon} /></svg>
       </div>
       <div className="min-w-0">
-        <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">{meta.en}</div>
-        <div className="flex items-baseline gap-3">
-          <h2 className="text-[20px] font-black text-[#0F1A30] tracking-tight leading-tight">{menu}</h2>
+        <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]" style={{ fontFamily: KP_MONO }}>{meta.en}</div>
+        <div className="flex items-baseline gap-3 min-w-0">
+          <h2 className="text-[21px] font-black text-[#0F1A30] tracking-tight leading-tight whitespace-nowrap">{menu}</h2>
           <span className="text-[13.5px] text-[#5B6B85] font-medium truncate">{meta.desc}</span>
         </div>
       </div>
-      <div className="ml-auto hidden lg:flex items-center gap-2 px-3 h-9 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] text-[13px] font-bold text-[#3A4A66] shrink-0">
-        <span className="w-1.5 h-1.5 rounded-full bg-[#4B6CB7]" />
-        {ymd} ({dow})
-      </div>
+      <KpPageClock />
     </div>
   );
 }
@@ -8625,7 +8639,7 @@ return (
             placeholder="수량 (예: 2)"
             value={_cargoAddQty}
             onChange={e => _setCargoAddQty(e.target.value)}
-            autoFocus
+            ref={imeFocusRef}
             onKeyDown={e => {
               if (e.key === "Enter") {
                 const item = _cargoAddType ? `${_cargoAddQty}${_cargoAddType}` : _cargoAddQty;
@@ -15480,7 +15494,7 @@ shadow-sm
       </div>
       <div className="px-6 py-5 space-y-3">
         <textarea
-          autoFocus
+          ref={imeFocusRef}
           rows={5}
           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] resize-none"
           placeholder="이 거래처를 상/하차지명에 입력할 때마다 안내 팝업으로 뜰 메모"
@@ -18058,7 +18072,7 @@ className={`
                     <option value="화물내용">화물내용</option>
                   </CustomSelect>
                   <input autoComplete="off"
-                    autoFocus
+                    ref={imeFocusRef}
                     type="text"
                     placeholder="검색어를 입력하세요"
                     className="border border-gray-200 bg-white px-4 py-2 rounded-xl text-[13px] flex-1 outline-none focus:ring-2 focus:ring-[#1B2B4B]/20 focus:border-[#1B2B4B]"
@@ -18323,7 +18337,7 @@ className={`
   <div
     className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
-    ref={(el) => { if (el && editingContactIdx === null && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
+    ref={(el) => { if (el && editingContactIdx === null && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; requestAnimationFrame(() => setTimeout(() => (contactSearchInputRef.current || el).focus(), 0)); } }} /* ⌨️ 검색칸에 바로 커서 — 바탕에 먼저 두면 첫 글자가 영문으로 들어갔다 */
     onKeyDown={(e) => {
       // ⭐ 담당자 이름/전화번호를 인라인 수정 중일 때는 이 컨테이너 레벨의
       // 방향키 이동/검색창 자동포커스 로직을 절대 가로채면 안 된다. 수정 폼의
@@ -18401,7 +18415,7 @@ className={`
               /* ── 인라인 수정 폼 ── */
               <div className="space-y-2" onClick={e => e.stopPropagation()}>
                 <input autoComplete="off"
-                  autoFocus
+                  ref={imeFocusRef}
                   className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
                   placeholder="이름"
                   value={editContactData.name}
@@ -18562,7 +18576,7 @@ className={`
       </div>
       <div className="px-6 py-5 space-y-3">
         <textarea
-          autoFocus
+          ref={imeFocusRef}
           rows={5}
           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] resize-none"
           placeholder="이 거래처를 상/하차지명에 입력할 때마다 안내 팝업으로 뜰 메모"
@@ -19639,7 +19653,7 @@ setConfirmChange(null);
             placeholder="업체명 입력"
             value={newClientModalData.name}
             onChange={e => setNewClientModalData(p => ({ ...p, name: e.target.value }))}
-            autoFocus
+            ref={imeFocusRef}
             onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); document.getElementById("nc-addr")?.focus(); } }}
           />
         </div>
@@ -28792,7 +28806,7 @@ const head = isDark
             placeholder="업체명 입력"
             value={newClientModalData.name}
             onChange={e => setNewClientModalData(p => ({ ...p, name: e.target.value }))}
-            autoFocus
+            ref={imeFocusRef}
           />
         </div>
         <div>
@@ -28953,7 +28967,7 @@ const head = isDark
   return (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
-    ref={(el) => { if (el && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
+    ref={(el) => { if (el && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; requestAnimationFrame(() => setTimeout(() => (panelContactSearchInputRef4.current || el).focus(), 0)); } }}
     onKeyDown={(e) => {
       if (e.key === "ArrowDown") { e.preventDefault(); setPanelContactActive4(i => Math.min(i + 1, visible4.length - 1)); }
       else if (e.key === "ArrowUp") { e.preventDefault(); setPanelContactActive4(i => Math.max(i - 1, 0)); }
@@ -32872,7 +32886,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             placeholder="홍길동"
             value={quickRegName}
             onChange={e => setQuickRegName(e.target.value)}
-            autoFocus
+            ref={imeFocusRef}
             onKeyDown={async e => {
               if (e.key === "Enter" && quickRegName.trim()) {
                 const formatted = formatPhone(quickRegPhone);
@@ -34791,7 +34805,7 @@ function NoteIconCell({ value = "", onSave }) {
                   rows={4}
                   value={draft}
                   onChange={e => setDraft(e.target.value)}
-                  autoFocus
+                  ref={imeFocusRef}
                   onKeyDown={e => { if (e.key === "Escape") setEditing(false); }}
                 />
               ) : (
@@ -38752,7 +38766,7 @@ return (
             placeholder="업체명 입력"
             value={newClientModalData.name}
             onChange={e => setNewClientModalData(p => ({ ...p, name: e.target.value }))}
-            autoFocus
+            ref={imeFocusRef}
           />
         </div>
         <div>
@@ -38912,7 +38926,7 @@ return (
   return (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
-    ref={(el) => { if (el && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; setTimeout(() => el.focus(), 0); } }}
+    ref={(el) => { if (el && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; requestAnimationFrame(() => setTimeout(() => (panelContactSearchInputRef5.current || el).focus(), 0)); } }}
     onKeyDown={(e) => {
       if (e.key === "ArrowDown") { e.preventDefault(); setPanelContactActive5(i => Math.min(i + 1, visible5.length - 1)); }
       else if (e.key === "ArrowUp") { e.preventDefault(); setPanelContactActive5(i => Math.max(i - 1, 0)); }
@@ -42895,7 +42909,7 @@ setCopyPlaceOptions(list);
                         placeholder="홍길동"
                         value={quickRegName5}
                         onChange={e => setQuickRegName5(e.target.value)}
-                        autoFocus
+                        ref={imeFocusRef}
                       />
                     </div>
                     <div>
@@ -44514,7 +44528,7 @@ setCopyPlaceOptions(list);
                         placeholder="홍길동"
                         value={quickRegName5}
                         onChange={e => setQuickRegName5(e.target.value)}
-                        autoFocus
+                        ref={imeFocusRef}
                         onKeyDown={async e => {
                           if (e.key === "Enter" && quickRegName5.trim()) {
                             const formatted = formatPhone(quickRegPhone5);
@@ -50023,7 +50037,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                   placeholder="업체명 입력"
                   value={newClientModalData.name}
                   onChange={e => setNewClientModalData(p => ({ ...p, name: e.target.value }))}
-                  autoFocus
+                  ref={imeFocusRef}
                 />
               </div>
               <div>
@@ -52979,7 +52993,7 @@ const handleBatchSettle = async (targetStatus) => {
                                   setGeneralEmailAddrOpen(false);
                                 } else if (e.key === "Escape") { e.preventDefault(); setGeneralEmailAddrOpen(false); }
                               }}
-                              autoFocus />
+                              ref={imeFocusRef} />
                           </div>
                           {(clients || []).filter(c => c.이메일 && (!generalEmailAddrQuery || (c.거래처명||"").includes(generalEmailAddrQuery))).length === 0 ? (
                             <div className="px-4 py-6 text-center text-[13px] text-gray-500">

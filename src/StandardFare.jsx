@@ -398,7 +398,7 @@ function AddressSearch({ value, onChange, onSelect, placeholder }) {
           {suggestions.map((s, i) => (
             <div
               key={i}
-              className="px-3 py-2.5 text-[13px] cursor-pointer hover:bg-blue-50 text-gray-700 border-b border-gray-50 last:border-0"
+              className="px-3 py-2.5 text-[13px] cursor-pointer hover:bg-[#F2F6FC] text-[#0F1A30] border-b border-[#F1F4F9] last:border-0"
               onMouseDown={() => handleSelect(s)}
             >
               {s.address}
@@ -417,8 +417,9 @@ function PlaceSuggest({ value, onChange, names = [], placeholder, onKeyDown }) {
 
   useEffect(() => { setQuery(value || ""); }, [value]);
 
+  const dq = React.useDeferredValue(query);
   const filtered = useMemo(() => {
-    const q = (query || "").replace(/\s+/g, "").toLowerCase();
+    const q = (dq || "").replace(/\s+/g, "").toLowerCase();
     if (!q || q.length < 1) return [];
     return names
       .map(n => {
@@ -433,12 +434,12 @@ function PlaceSuggest({ value, onChange, names = [], placeholder, onKeyDown }) {
       .sort((a, b) => b.score - a.score)
       .slice(0, 12)
       .map(x => x.name);
-  }, [query, names]);
+  }, [dq, names]);
 
   return (
     <div className="relative">
       <input autoComplete="off"
-        className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-400 transition"
+        className="w-full h-11 px-3.5 text-[14px] font-semibold text-[#0F1A30] rounded-[12px] border border-[#E3E8F0] bg-[#F7F9FC] focus:bg-white focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 focus:outline-none placeholder:text-[#A7B3C6] placeholder:font-medium transition"
         placeholder={placeholder}
         value={query}
         onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
@@ -447,11 +448,11 @@ function PlaceSuggest({ value, onChange, names = [], placeholder, onKeyDown }) {
         onKeyDown={e => { if (e.key === "Escape") setOpen(false); if (onKeyDown) onKeyDown(e); }}
       />
       {open && filtered.length > 0 && (
-        <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-52 overflow-y-auto">
+        <div className="absolute z-50 left-0 right-0 top-full mt-1.5 bg-white border border-[#E3E8F0] rounded-[14px] shadow-[0_18px_40px_rgba(15,26,48,0.18)] max-h-52 overflow-y-auto py-1">
           {filtered.map((n, i) => (
             <div
               key={i}
-              className="px-3 py-2 text-[13px] cursor-pointer hover:bg-blue-50 text-gray-700 border-b border-gray-50 last:border-0"
+              className="px-3.5 py-2 text-[13.5px] font-semibold cursor-pointer hover:bg-[#F2F6FC] text-[#0F1A30]"
               onMouseDown={() => { setQuery(n); onChange(n); setOpen(false); }}
             >
               {n}
@@ -470,11 +471,12 @@ function ClientSearch({ value, onChange, clients }) {
   const [activeIdx, setActiveIdx] = useState(0);
   const listRef = useRef(null);
 
+  const dq = React.useDeferredValue(query);
   const filtered = useMemo(() => {
-    const q = clean(query);
+    const q = clean(dq);
     if (!q) return clients.slice(0, 10);
     return clients.filter(c => clean(c).includes(q)).slice(0, 10);
-  }, [query, clients]);
+  }, [dq, clients]);
 
   useEffect(() => {
     if (!listRef.current) return;
@@ -487,7 +489,7 @@ function ClientSearch({ value, onChange, clients }) {
   return (
     <div className="relative">
       <input autoComplete="off"
-        className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-400 transition"
+        className="w-full h-11 px-3.5 text-[14px] font-semibold text-[#0F1A30] rounded-[12px] border border-[#E3E8F0] bg-[#F7F9FC] focus:bg-white focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 focus:outline-none placeholder:text-[#A7B3C6] placeholder:font-medium transition"
         placeholder="거래처 검색..."
         value={query}
         onChange={e => { setQuery(e.target.value); onChange(e.target.value === "" ? "전체" : e.target.value); setOpen(true); setActiveIdx(0); }}
@@ -502,10 +504,10 @@ function ClientSearch({ value, onChange, clients }) {
         onBlur={() => setTimeout(() => setOpen(false), 150)}
       />
       {open && filtered.length > 0 && (
-        <div ref={listRef} className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+        <div ref={listRef} className="absolute z-50 left-0 right-0 top-full mt-1.5 bg-white border border-[#E3E8F0] rounded-[14px] shadow-[0_18px_40px_rgba(15,26,48,0.18)] max-h-48 overflow-y-auto py-1">
           <div className="px-3 py-2 text-[12px] font-medium cursor-pointer hover:bg-gray-50 text-gray-500" onMouseDown={() => { setQuery(""); onChange("전체"); setOpen(false); }}>전체</div>
           {filtered.map((c, i) => (
-            <div key={c} className={`px-3 py-2 text-[13px] font-medium cursor-pointer transition ${i === activeIdx ? "bg-blue-50 text-blue-700" : "hover:bg-gray-50 text-gray-700"}`} onMouseDown={() => select(c)}>{c}</div>
+            <div key={c} className={`px-3 py-2 text-[13px] font-medium cursor-pointer transition ${i === activeIdx ? "bg-[#0F1A30] text-white" : "hover:bg-[#F2F6FC] text-[#0F1A30]"}`} onMouseDown={() => select(c)}>{c}</div>
           ))}
         </div>
       )}
@@ -514,9 +516,9 @@ function ClientSearch({ value, onChange, clients }) {
 }
 
 function FareLevelBadge({ level }) {
-  if (level === "NORMAL") return <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-700">표준</span>;
-  if (level === "TIGHT")  return <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-orange-100 text-orange-700">▲ 상승</span>;
-  if (level === "SPIKE")  return <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-700">프리미엄</span>;
+  if (level === "NORMAL") return <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#EEF3FB] text-[#1B2B4B] border border-[#DCE3EE]">표준</span>;
+  if (level === "TIGHT")  return <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#4B6CB7] text-white">▲ 상승</span>;
+  if (level === "SPIKE")  return <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#0F1A30] text-white">프리미엄</span>;
   return <span className="px-2 py-0.5 rounded-full text-[11px] bg-gray-100 text-gray-500">-</span>;
 }
 
@@ -709,16 +711,19 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
   const liveWindowStart = useMemo(() => getMonthsAgoKST(13), []);
 
   useEffect(() => {
-    let dispatchCache = [];
-    let ordersCache = [];
-
-    const merge = () => {
-      const map = new Map();
-      dispatchCache.forEach(r => map.set(r._id, r));
-      ordersCache.forEach(r => map.set(r._id, r));
-      setDispatchData(Array.from(map.values()));
+    // ⭐ 렉 개선(2026-10-28) — 예전엔 오더 하나만 바뀌어도 13개월치(수천 건)를 전부 다시 변환·합치고 화면 전체를
+    // 다시 그렸다(입력 중이면 글자가 끊김). 이제 바뀐 문서만 반영하고, 0.3초씩 모아서 낮은 우선순위로 갱신한다.
+    const dispatchCache = new Map();
+    const ordersCache = new Map();
+    let timer = null;
+    const flush = () => {
+      timer = null;
+      React.startTransition(() => {
+        const map = new Map(dispatchCache);
+        ordersCache.forEach((v, k) => map.set(k, v));
+        setDispatchData(Array.from(map.values()));
+      });
     };
-
     const mapDoc = (d) => {
       const data = d.data();
       return {
@@ -728,20 +733,27 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
         하차일: toYMD(data.하차일),
       };
     };
+    const apply = (cache, keep) => (snap) => {
+      snap.docChanges().forEach((ch) => {
+        if (ch.type === "removed") { cache.delete(ch.doc.id); return; }
+        const r = mapDoc(ch.doc);
+        if (keep && !keep(r)) cache.delete(ch.doc.id); else cache.set(ch.doc.id, r);
+      });
+      if (!timer) timer = setTimeout(flush, 300);
+    };
 
-    const unsub1 = onSnapshot(query(collection(db, "dispatch"), where("상차일", ">=", liveWindowStart)), (snap) => { dispatchCache = snap.docs.map(mapDoc); merge(); });
+    const unsub1 = onSnapshot(query(collection(db, "dispatch"), where("상차일", ">=", liveWindowStart)), apply(dispatchCache), () => {});
     // "orders" 컬렉션에는 이 운송사가 직접 등록한 오더 외에, autoTransmitToShipper로
     // 화주사 화면에 전송한 사본(source: "transport_transmit")도 함께 들어있다. 이
     // 사본은 originId로 가리키는 원본이 "dispatch"(또는 "orders") 쪽에 이미 별도
     // 문서로 존재하므로, 그대로 합치면 같은 오더가 서로 다른 id로 두 번 집계된다.
-    const unsub2 = onSnapshot(query(collection(db, "orders"), where("상차일", ">=", liveWindowStart)), (snap) => {
-      ordersCache = snap.docs.map(mapDoc).filter(r => r.source !== "transport_transmit");
-      merge();
-    });
-    return () => { unsub1(); unsub2(); };
+    const unsub2 = onSnapshot(query(collection(db, "orders"), where("상차일", ">=", liveWindowStart)), apply(ordersCache, (r) => r.source !== "transport_transmit"), () => {});
+    return () => { unsub1(); unsub2(); if (timer) clearTimeout(timer); };
   }, [liveWindowStart]);
 
   useEffect(() => {
+    // 입력할 때마다 저장하지 않고, 멈춘 뒤 0.5초 후 한 번만
+    const tm = setTimeout(() => {
     const save=(k,v)=>{try{localStorage.setItem(k,v);}catch{}};
     save("sf_pickup", pickup);
     save("sf_drop", drop);
@@ -752,6 +764,8 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     save("sf_dropAddr", dropAddr);
     save("sf_client", client);
     save("sf_mode", searchMode);
+    }, 500);
+    return () => clearTimeout(tm);
   }, [pickup, drop, cargo, ton, vehicle, pickupAddr, dropAddr, client, searchMode]);
 
   const clientList = useMemo(() =>
@@ -1017,193 +1031,14 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     return { count: result.length, avg, min: Math.min(...fares), max: Math.max(...fares), avgDriver, normal, spike, specialCount };
   }, [result, includeSpecial]);
 
-  const inputCls = "w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-400 transition";
-  const labelCls = "block text-[12px] font-bold text-gray-900 mb-1";
-  const cat = VEHICLE_CATEGORIES[nfVehicleCategory];
-
-  return (
-    <div className={embedded ? "w-full" : "p-5 bg-gray-50 min-h-screen"}>
-
-      {/* 페이지 헤더 — 단독 페이지일 때만 표시 */}
-      {!embedded && (
-        <div className="mb-4">
-          <h2 className="text-[18px] font-bold text-[#1B2B4B]">표준 운임표</h2>
-          <p className="text-[12px] text-gray-500 mt-0.5">배차 데이터 기반 운임 조회 및 노선별 평균 운임 분석</p>
-        </div>
-      )}
-
-      {/* 탭 네비게이션 — 단독 페이지일 때만 표시 (전국운임조회는 운임조회 메뉴로 이동) */}
-      {!embedded && (
-        <div className="flex gap-1 mb-4 border-b border-gray-200">
-          {[
-            { key: "표준운임", label: "표준운임 조회" },
-          ].map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-5 py-2.5 text-[13px] font-semibold border-b-2 transition ${
-                activeTab === tab.key
-                  ? "border-[#1B2B4B] text-[#1B2B4B]"
-                  : "border-transparent text-gray-500 hover:text-gray-600"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* ====== 표준운임 조회 탭 ====== */}
-      {activeTab === "표준운임" && (
-        <div className="grid grid-cols-[320px_1fr] gap-4 items-start">
-
-          {/* ───────── 왼쪽: 검색 패널 ───────── */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-
-            {/* 검색 모드 토글 */}
-            <div className="flex gap-1.5 mb-5">
-              <button
-                type="button"
-                onClick={() => setSearchMode("client")}
-                className={`flex-1 py-2 text-[13px] font-bold rounded-lg border transition ${
-                  searchMode === "client" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
-                }`}
-              >
-                거래처로 검색
-              </button>
-              <button
-                type="button"
-                onClick={() => setSearchMode("address")}
-                className={`flex-1 py-2 text-[13px] font-bold rounded-lg border transition ${
-                  searchMode === "address" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
-                }`}
-              >
-                주소로 검색
-              </button>
-            </div>
-
-            {searchMode === "client" ? (
-              <div className="space-y-4 mb-4">
-                <div>
-                  <label className={labelCls}>거래처</label>
-                  <ClientSearch key={resetKey} value={client === "전체" ? "" : client} onChange={v=>setClient(v||"전체")} clients={clientList} />
-                </div>
-                <div>
-                  <label className={labelCls}>상차지명 <span className="text-red-400">*</span></label>
-                  <PlaceSuggest value={pickup} onChange={setPickup} names={pickupNames} placeholder="예: 송원" onKeyDown={e=>e.key==="Enter"&&search()} />
-                </div>
-                <div>
-                  <label className={labelCls}>하차지명 <span className="text-red-400">*</span></label>
-                  <PlaceSuggest value={drop} onChange={setDrop} names={dropNames} placeholder="예: 유통센터" onKeyDown={e=>e.key==="Enter"&&search()} />
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4 mb-4">
-                <div>
-                  <label className={labelCls}>거래처</label>
-                  <ClientSearch key={resetKey} value={client === "전체" ? "" : client} onChange={v=>setClient(v||"전체")} clients={clientList} />
-                </div>
-                <div>
-                  <label className={labelCls}>상차지 주소 <span className="text-red-400">*</span></label>
-                  <input autoComplete="off" className={inputCls} placeholder="예: 인천 서구" value={pickupAddr} onChange={e=>setPickupAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
-                </div>
-                <div>
-                  <label className={labelCls}>하차지 주소 <span className="text-red-400">*</span></label>
-                  <input autoComplete="off" className={inputCls} placeholder="예: 서울 송파구" value={dropAddr} onChange={e=>setDropAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
-                </div>
-              </div>
-            )}
-
-            <label className="flex items-center gap-1.5 mb-2 cursor-pointer select-none w-fit">
-              <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={includeVia} onChange={() => setIncludeVia(v => !v)} />
-              <span className="text-[12px] font-semibold text-gray-600">경유지명도 검색에 포함</span>
-            </label>
-            <label className="flex items-center gap-1.5 mb-2 cursor-pointer select-none w-fit" title="경유지가 있는 오더는 청구운임에 경유 구간 요금까지 섞여있어, 순수 상차지→하차지 단일구간 시세만 보려면 꺼주세요.">
-              <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={includeViaOrders} onChange={() => setIncludeViaOrders(v => !v)} />
-              <span className="text-[12px] font-semibold text-gray-600">경유지 있는 오더도 결과·평균에 포함</span>
-            </label>
-            <label className="flex items-center gap-1.5 mb-4 cursor-pointer select-none w-fit" title="연휴·성수기·우천/폭설 등 특수일로 표시된 오더는 평소보다 운임이 높게 형성된 경우가 많아 기본적으로 평균 계산에서 제외됩니다(우천/폭설은 자동 감지). 켜면 특수일 포함 전체 기준으로 다시 계산합니다.">
-              <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={includeSpecial} onChange={() => setIncludeSpecial(v => !v)} />
-              <span className="text-[12px] font-semibold text-gray-600">특수일(연휴·성수기·기상)도 평균에 포함</span>
-            </label>
-
-            <div className="space-y-4 mb-5">
-              <div>
-                <label className={labelCls}>차량종류</label>
-                <select className={inputCls} value={vehicle} onChange={e=>setVehicle(e.target.value)}>
-                  {VEHICLE_TYPES.map(v=><option key={v} value={v}>{v}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>차량톤수</label>
-                <input autoComplete="off" className={inputCls} placeholder="예: 1, 5" value={ton} onChange={e=>setTon(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
-              </div>
-              <div>
-                <label className={labelCls}>화물내용</label>
-                <input autoComplete="off" className={inputCls} placeholder="예: 5파레트" value={cargo} onChange={e=>setCargo(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
-              </div>
-              <div>
-                <label className={labelCls}>정렬방식</label>
-                <select className={inputCls} value={sortKey} onChange={e=>setSortKey(e.target.value)}>
-                  <option value="date_desc">최신순</option>
-                  <option value="date_asc">오래된순</option>
-                  <option value="cargo_asc">화물내용 (숫자순)</option>
-                  <option value="vehicle_asc">차량종류순</option>
-                  <option value="fare_desc">청구운임 높은순</option>
-                  <option value="fare_asc">청구운임 낮은순</option>
-                  <option value="level">운임레벨 (표준→프리미엄)</option>
-                  <option value="level_spike">운임레벨 (프리미엄우선)</option>
-                  <option value="driver_desc">기사운임 높은순</option>
-                  <option value="fee_desc">수수료 높은순</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                <button onClick={search} disabled={checkingOldHistory} className="flex-1 px-4 py-2 bg-[#1B2B4B] text-white text-[13px] font-semibold rounded-lg hover:bg-[#243a60] transition disabled:opacity-60">
-                  {checkingOldHistory ? "이전 이력 확인 중..." : "조회"}
-                </button>
-                <button onClick={reset} className="flex-1 px-4 py-2 bg-white text-gray-500 text-[13px] font-semibold rounded-lg border border-gray-200 hover:bg-gray-50 transition">초기화</button>
-              </div>
-              <div className="text-[12px] text-gray-500">Enter 키로도 조회</div>
-            </div>
-          </div>
-
-          {/* ───────── 오른쪽: 결과 패널 ───────── */}
-          <div className="space-y-3 min-w-0">
-            {!searched && (
-              <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-16 text-gray-500">
-                <div className="text-[14px] font-semibold mb-1">왼쪽에서 조건을 입력하고 조회하세요</div>
-                <div className="text-[12px]">노선·거래처·차량 조건에 맞는 운임 히스토리를 보여드립니다</div>
-              </div>
-            )}
-
-            {stats && (
-              <div className="bg-[#1B2B4B] rounded-lg flex items-stretch divide-x divide-white/15 overflow-hidden">
-                {[
-                  { label: "조회 건수", value: `${stats.count}건` },
-                  { label: "평균 청구운임", value: `${stats.avg.toLocaleString()}원`, sub: stats.specialCount > 0 ? `연휴·성수기 ${stats.specialCount}건 ${includeSpecial ? "포함" : "제외"}` : undefined },
-                  { label: "최저 운임", value: `${stats.min.toLocaleString()}원` },
-                  { label: "최고 운임", value: `${stats.max.toLocaleString()}원` },
-                  { label: "평균 기사운임", value: `${stats.avgDriver.toLocaleString()}원`, sub: `마진 ${(stats.avg-stats.avgDriver).toLocaleString()}원` },
-                  { label: "프리미엄 건수", value: `${stats.spike}건`, sub: `표준 ${stats.normal}건` },
-                ].map((s, i) => (
-                  <div key={i} className="flex-1 min-w-0 px-2.5 py-2 text-center">
-                    <div className="text-[10px] font-bold text-white/70 truncate">{s.label}</div>
-                    <div className="text-[13px] font-bold text-white truncate">{s.value}</div>
-                    {s.sub && <div className="text-[10px] font-semibold text-white/60 truncate">{s.sub}</div>}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {searched && (
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+  // ⭐ 렉 개선 — 결과표(수백~수천 줄)는 결과가 바뀔 때만 다시 그린다. 예전엔 왼쪽 입력칸에 한 글자 칠 때마다
+  // 표 전체를 다시 그려서 글자가 끊겨 들어갔다.
+  const resultTableEl = useMemo(() => (
+              <div className="bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] overflow-hidden">
                 <div className="overflow-auto max-h-[calc(100vh-360px)]">
                   <table className="w-full min-w-[1500px] text-[13px]">
                     <thead className="sticky top-0 z-10">
-                      <tr className="bg-[#1B2B4B]">
+                      <tr className="bg-[#0F1A30]">
                         {["상차일","긴급","상차지명","상차지주소","하차지명","하차지주소","경유지","화물내용","차량종류","차량톤수","혼적","청구운임","운임레벨","기사운임","수수료","메모"].map(h=>(
                           <th key={h} className="px-3 py-3 text-center text-[13px] font-bold text-white whitespace-nowrap border-b border-white/10">{h}</th>
                         ))}
@@ -1229,7 +1064,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                           ];
                           const waypointText = [...new Set(_allViaNames)].join(" → ");
                           return (
-                            <tr key={r._id} className={`border-b border-gray-100 transition hover:bg-blue-50/40 ${i%2===0?"bg-white":"bg-gray-50/40"}`}>
+                            <tr key={r._id} className={`border-b border-gray-100 transition hover:bg-[#F2F6FC] ${i%2===0?"bg-white":"bg-gray-50/40"}`}>
                               <td className="px-3 py-2.5 text-center text-[13px] text-gray-700 font-medium whitespace-nowrap">
                                 {r.상차일}
                                 {isSpecialDemandRow(r) && (
@@ -1269,8 +1104,198 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                     </tbody>
                   </table>
                 </div>
+              </div>), [result, includeSpecial]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const inputCls = "w-full h-11 px-3.5 text-[14px] font-semibold text-[#0F1A30] rounded-[12px] border border-[#E3E8F0] bg-[#F7F9FC] focus:bg-white focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 focus:outline-none placeholder:text-[#A7B3C6] placeholder:font-medium transition";
+  const labelCls = "block text-[11.5px] font-extrabold tracking-[0.06em] text-[#7A879C] mb-1.5";
+  const cat = VEHICLE_CATEGORIES[nfVehicleCategory];
+
+  return (
+    <div className={embedded ? "w-full" : "p-5 bg-gray-50 min-h-screen"}>
+
+      {/* 페이지 헤더 — 단독 페이지일 때만 표시 */}
+      {!embedded && (
+        <div className="mb-4">
+          <h2 className="text-[18px] font-bold text-[#1B2B4B]">표준 운임표</h2>
+          <p className="text-[12px] text-gray-500 mt-0.5">배차 데이터 기반 운임 조회 및 노선별 평균 운임 분석</p>
+        </div>
+      )}
+
+      {/* 탭 네비게이션 — 단독 페이지일 때만 표시 (전국운임조회는 운임조회 메뉴로 이동) */}
+      {!embedded && (
+        <div className="flex gap-1 mb-4 border-b border-gray-200">
+          {[
+            { key: "표준운임", label: "표준운임 조회" },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-5 py-2.5 text-[13px] font-semibold border-b-2 transition ${
+                activeTab === tab.key
+                  ? "border-[#1B2B4B] text-[#1B2B4B]"
+                  : "border-transparent text-gray-500 hover:text-gray-600"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ====== 표준운임 조회 탭 ====== */}
+      {activeTab === "표준운임" && (
+        <div className="grid grid-cols-[320px_1fr] gap-4 items-start">
+
+          {/* ───────── 왼쪽: 검색 패널 ───────── */}
+          <div className="bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] p-5 sticky top-4">
+            <div className="mb-4">
+              <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>SEARCH</div>
+              <div className="text-[17px] font-black text-[#0F1A30]">조회 조건</div>
+            </div>
+
+            {/* 검색 모드 토글 */}
+            <div className="flex p-1 gap-1 mb-5 rounded-[14px] bg-[#EEF2F8] border border-[#E3E8F0]">
+              <button
+                type="button"
+                onClick={() => setSearchMode("client")}
+                className={`flex-1 h-9 text-[13px] font-black rounded-[10px] transition ${
+                  searchMode === "client" ? "bg-[#0F1A30] text-white shadow-[0_6px_14px_rgba(15,26,48,0.25)]" : "text-[#5B6B85] hover:text-[#0F1A30]"
+                }`}
+              >
+                거래처로 검색
+              </button>
+              <button
+                type="button"
+                onClick={() => setSearchMode("address")}
+                className={`flex-1 h-9 text-[13px] font-black rounded-[10px] transition ${
+                  searchMode === "address" ? "bg-[#0F1A30] text-white shadow-[0_6px_14px_rgba(15,26,48,0.25)]" : "text-[#5B6B85] hover:text-[#0F1A30]"
+                }`}
+              >
+                주소로 검색
+              </button>
+            </div>
+
+            {searchMode === "client" ? (
+              <div className="space-y-4 mb-4">
+                <div>
+                  <label className={labelCls}>거래처</label>
+                  <ClientSearch key={resetKey} value={client === "전체" ? "" : client} onChange={v=>setClient(v||"전체")} clients={clientList} />
+                </div>
+                <div>
+                  <label className={labelCls}>상차지명 <span className="text-[#4B6CB7]">*</span></label>
+                  <PlaceSuggest value={pickup} onChange={setPickup} names={pickupNames} placeholder="예: 송원" onKeyDown={e=>e.key==="Enter"&&search()} />
+                </div>
+                <div>
+                  <label className={labelCls}>하차지명 <span className="text-[#4B6CB7]">*</span></label>
+                  <PlaceSuggest value={drop} onChange={setDrop} names={dropNames} placeholder="예: 유통센터" onKeyDown={e=>e.key==="Enter"&&search()} />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4 mb-4">
+                <div>
+                  <label className={labelCls}>거래처</label>
+                  <ClientSearch key={resetKey} value={client === "전체" ? "" : client} onChange={v=>setClient(v||"전체")} clients={clientList} />
+                </div>
+                <div>
+                  <label className={labelCls}>상차지 주소 <span className="text-[#4B6CB7]">*</span></label>
+                  <input autoComplete="off" className={inputCls} placeholder="예: 인천 서구" value={pickupAddr} onChange={e=>setPickupAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+                </div>
+                <div>
+                  <label className={labelCls}>하차지 주소 <span className="text-[#4B6CB7]">*</span></label>
+                  <input autoComplete="off" className={inputCls} placeholder="예: 서울 송파구" value={dropAddr} onChange={e=>setDropAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+                </div>
               </div>
             )}
+
+            <label className="flex items-center gap-1.5 mb-2 cursor-pointer select-none w-fit">
+              <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={includeVia} onChange={() => setIncludeVia(v => !v)} />
+              <span className="text-[12.5px] font-semibold text-[#3A4A66]">경유지명도 검색에 포함</span>
+            </label>
+            <label className="flex items-center gap-1.5 mb-2 cursor-pointer select-none w-fit" title="경유지가 있는 오더는 청구운임에 경유 구간 요금까지 섞여있어, 순수 상차지→하차지 단일구간 시세만 보려면 꺼주세요.">
+              <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={includeViaOrders} onChange={() => setIncludeViaOrders(v => !v)} />
+              <span className="text-[12.5px] font-semibold text-[#3A4A66]">경유지 있는 오더도 결과·평균에 포함</span>
+            </label>
+            <label className="flex items-center gap-1.5 mb-4 cursor-pointer select-none w-fit" title="연휴·성수기·우천/폭설 등 특수일로 표시된 오더는 평소보다 운임이 높게 형성된 경우가 많아 기본적으로 평균 계산에서 제외됩니다(우천/폭설은 자동 감지). 켜면 특수일 포함 전체 기준으로 다시 계산합니다.">
+              <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={includeSpecial} onChange={() => setIncludeSpecial(v => !v)} />
+              <span className="text-[12.5px] font-semibold text-[#3A4A66]">특수일(연휴·성수기·기상)도 평균에 포함</span>
+            </label>
+
+            <div className="space-y-4 mb-5">
+              <div>
+                <label className={labelCls}>차량종류</label>
+                <select className={inputCls} value={vehicle} onChange={e=>setVehicle(e.target.value)}>
+                  {VEHICLE_TYPES.map(v=><option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>차량톤수</label>
+                <input autoComplete="off" className={inputCls} placeholder="예: 1, 5" value={ton} onChange={e=>setTon(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+              </div>
+              <div>
+                <label className={labelCls}>화물내용</label>
+                <input autoComplete="off" className={inputCls} placeholder="예: 5파레트" value={cargo} onChange={e=>setCargo(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+              </div>
+              <div>
+                <label className={labelCls}>정렬방식</label>
+                <select className={inputCls} value={sortKey} onChange={e=>setSortKey(e.target.value)}>
+                  <option value="date_desc">최신순</option>
+                  <option value="date_asc">오래된순</option>
+                  <option value="cargo_asc">화물내용 (숫자순)</option>
+                  <option value="vehicle_asc">차량종류순</option>
+                  <option value="fare_desc">청구운임 높은순</option>
+                  <option value="fare_asc">청구운임 낮은순</option>
+                  <option value="level">운임레벨 (표준→프리미엄)</option>
+                  <option value="level_spike">운임레벨 (프리미엄우선)</option>
+                  <option value="driver_desc">기사운임 높은순</option>
+                  <option value="fee_desc">수수료 높은순</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <button onClick={search} disabled={checkingOldHistory} className="flex-[2] h-12 px-4 text-white text-[14.5px] font-black rounded-[14px] shadow-[0_12px_24px_rgba(15,26,48,0.28)] hover:brightness-110 transition disabled:opacity-60" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
+                  {checkingOldHistory ? "이전 이력 확인 중..." : "조회"}
+                </button>
+                <button onClick={reset} className="flex-1 h-12 px-4 bg-white text-[#3A4A66] text-[13.5px] font-bold rounded-[14px] border border-[#E3E8F0] hover:bg-[#F5F7FB] transition">초기화</button>
+              </div>
+              <div className="text-[11.5px] text-[#9AA9C3] text-center pt-1">Enter 키로도 조회</div>
+            </div>
+          </div>
+
+          {/* ───────── 오른쪽: 결과 패널 ───────── */}
+          <div className="space-y-3 min-w-0">
+            {!searched && (
+              <div className="relative overflow-hidden rounded-[22px] flex flex-col items-center justify-center py-20 text-white" style={{ background: "radial-gradient(90% 80% at 50% 0%, #22396A 0%, #0F1A30 60%, #0B1428 100%)" }}>
+                <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "28px 28px" }} />
+                <div className="relative w-14 h-14 rounded-[16px] bg-white/[0.08] ring-1 ring-white/15 flex items-center justify-center mb-4">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#CFE0FF" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-5-5" /></svg>
+                </div>
+                <div className="relative text-[16px] font-black mb-1">왼쪽에서 조건을 입력하고 조회하세요</div>
+                <div className="relative text-[13px] text-white/55">노선·거래처·차량 조건에 맞는 실거래 운임 히스토리를 보여드립니다</div>
+              </div>
+            )}
+
+            {stats && (
+              <div className="rounded-[20px] flex items-stretch divide-x divide-white/10 overflow-hidden shadow-[0_16px_36px_rgba(15,26,48,0.25)]" style={{ background: "linear-gradient(120deg,#0B1428,#0F1A30 50%,#1B2B4B)" }}>
+                {[
+                  { label: "조회 건수", value: `${stats.count}건` },
+                  { label: "평균 청구운임", value: `${stats.avg.toLocaleString()}원`, sub: stats.specialCount > 0 ? `연휴·성수기 ${stats.specialCount}건 ${includeSpecial ? "포함" : "제외"}` : undefined },
+                  { label: "최저 운임", value: `${stats.min.toLocaleString()}원` },
+                  { label: "최고 운임", value: `${stats.max.toLocaleString()}원` },
+                  { label: "평균 기사운임", value: `${stats.avgDriver.toLocaleString()}원`, sub: `마진 ${(stats.avg-stats.avgDriver).toLocaleString()}원` },
+                  { label: "프리미엄 건수", value: `${stats.spike}건`, sub: `표준 ${stats.normal}건` },
+                ].map((s, i) => (
+                  <div key={i} className="flex-1 min-w-0 px-3 py-3.5 text-center">
+                    <div className="text-[10.5px] font-extrabold tracking-[0.06em] text-white/50 truncate">{s.label}</div>
+                    <div className="text-[17px] font-black text-white truncate tabular-nums mt-0.5">{s.value}</div>
+                    {s.sub && <div className="text-[10.5px] font-semibold text-[#8FB0F0] truncate">{s.sub}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {searched && resultTableEl}
           </div>
         </div>
       )}

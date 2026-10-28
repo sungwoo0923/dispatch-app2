@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { imeFocusRef } from "./imeFocus";
 import southKorea from "@svg-maps/south-korea";
 import StandardFare from "./StandardFare";
 import { db } from "./firebase";
@@ -495,6 +496,74 @@ function VehicleIconSvg({ id, sel }) {
 }
 
 // ─── 전국운임조회 탭 ───────────────────────────────────────────────────────
+// ─── 🗺️ 디지털 지도(2026-10-28) — 네이비 바탕 + 격자 + 빛나는 경로. 입력과 상관없이 바뀔 때만 다시 그린다 ───
+const KoreaMap=React.memo(function KoreaMap({fromP,toP,viaKey,aPath,onPick}){
+  const [hover,setHover]=useState(null);
+  const provinces=Object.keys(PROVINCE_PATHS);
+  const SMALL=["서울","인천","세종","대전","대구","광주","울산","부산","제주"];
+  const viaProvs=viaKey?viaKey.split("|"):[];
+  const MONO="'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+  return(
+    <svg viewBox="0 0 524 631" className="w-full h-full" preserveAspectRatio="xMidYMid meet" style={{userSelect:"none",display:"block"}}>
+      <defs>
+        <radialGradient id="kmBg" cx="50%" cy="20%" r="85%"><stop offset="0%" stopColor="#1C3160"/><stop offset="55%" stopColor="#0F1A30"/><stop offset="100%" stopColor="#070E1E"/></radialGradient>
+        <pattern id="kmGrid" width="22" height="22" patternUnits="userSpaceOnUse"><path d="M22 0H0V22" fill="none" stroke="rgba(143,176,240,0.07)" strokeWidth="1"/></pattern>
+        <linearGradient id="kmFrom" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#6E95E8"/><stop offset="100%" stopColor="#2D4C82"/></linearGradient>
+        <linearGradient id="kmTo" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#E6EEFC"/><stop offset="100%" stopColor="#8FB0F0"/></linearGradient>
+        <filter id="kmGlow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <marker id="kmArr" markerWidth="10" markerHeight="10" refX="6" refY="5" orient="auto"><path d="M0,1 L9,5 L0,9 Z" fill="#E6EEFC"/></marker>
+      </defs>
+      <style>{`@keyframes kmDash{to{stroke-dashoffset:-24}} @keyframes kmPulse{0%{r:6;opacity:.8}100%{r:18;opacity:0}} .km-route{animation:kmDash 1s linear infinite}`}</style>
+      {provinces.map(prov=>{
+        const isFr=prov===fromP,isTo=prov===toP,isVia=viaProvs.includes(prov),isHov=prov===hover;
+        const fill=isFr?"url(#kmFrom)":isTo?"url(#kmTo)":isVia?"#2D4C82":isHov?"#24407A":"#16264A";
+        return(
+          <path key={prov} d={PROVINCE_PATHS[prov]} fill={fill}
+            stroke={isFr||isTo?"#E6EEFC":isHov?"#CFE0FF":"rgba(143,176,240,0.42)"} strokeWidth={isFr||isTo?1.6:isHov?1.3:0.8}
+            filter={isFr||isTo?"url(#kmGlow)":undefined}
+            style={{cursor:"pointer",transition:"fill .15s, stroke .15s"}}
+            onMouseEnter={()=>setHover(prov)} onMouseLeave={()=>setHover(h=>h===prov?null:h)} onClick={()=>onPick(prov)}/>
+        );
+      })}
+      {provinces.map(prov=>{
+        if(prov===fromP||prov===toP)return null;
+        const[lx,ly]=PROVINCE_LABEL_POS[prov]||[0,0];
+        const isSmall=SMALL.includes(prov),isHov=prov===hover;
+        return <text key={`l-${prov}`} x={lx} y={ly} textAnchor="middle" dominantBaseline="middle" fontSize={isSmall?10:12.5} fontWeight="800"
+          fill={isHov?"#FFFFFF":"rgba(207,224,255,0.62)"} style={{pointerEvents:"none",letterSpacing:"0.04em"}}>{prov}</text>;
+      })}
+      {aPath&&<>
+        <path d={aPath} fill="none" stroke="rgba(143,176,240,0.35)" strokeWidth="7" strokeLinecap="round"/>
+        <path d={aPath} fill="none" stroke="#E6EEFC" strokeWidth="2.4" strokeLinecap="round" strokeDasharray="8 4" className="km-route" markerEnd="url(#kmArr)"/>
+      </>}
+      {[fromP&&{prov:fromP,tag:"FROM",label:"출발",dark:true},toP&&{prov:toP,tag:"TO",label:"도착",dark:false}].filter(Boolean).map(({prov,tag,label,dark})=>{
+        const pos=PROVINCE_LABEL_POS[prov];if(!pos)return null;
+        const[bx,by]=pos,ty=by-(SMALL.includes(prov)?30:36);
+        return(
+          <g key={tag} style={{pointerEvents:"none"}}>
+            <circle cx={bx} cy={by} r="6" fill="none" stroke="#CFE0FF" strokeWidth="1.5"><animate attributeName="r" from="5" to="18" dur="1.6s" repeatCount="indefinite"/><animate attributeName="opacity" from="0.9" to="0" dur="1.6s" repeatCount="indefinite"/></circle>
+            <circle cx={bx} cy={by} r="4" fill="#FFFFFF"/>
+            <line x1={bx} y1={by-5} x2={bx} y2={ty+12} stroke="#CFE0FF" strokeWidth="1.4" strokeOpacity="0.8"/>
+            <rect x={bx-34} y={ty-14} width="68" height="26" rx="8" fill={dark?"#0B1428":"#FFFFFF"} stroke="#CFE0FF" strokeWidth="1.2"/>
+            <text x={bx-26} y={ty-0.5} dominantBaseline="middle" fontSize="8" fontWeight="900" fill={dark?"#8FB0F0":"#4B6CB7"} style={{fontFamily:MONO,letterSpacing:"0.1em"}}>{tag}</text>
+            <text x={bx+14} y={ty-0.5} textAnchor="middle" dominantBaseline="middle" fontSize="11" fontWeight="900" fill={dark?"#FFFFFF":"#0F1A30"}>{prov}</text>
+          </g>
+        );
+      })}
+      {viaProvs.map((vp,i)=>{
+        const pos=PROVINCE_LABEL_POS[vp];if(!pos)return null;
+        const[bx,by]=pos;
+        return(
+          <g key={`v-${i}`} style={{pointerEvents:"none"}}>
+            <rect x={bx-15} y={by-30} width="30" height="18" rx="6" fill="#0B1428" stroke="#8FB0F0" strokeWidth="1"/>
+            <text x={bx} y={by-21} textAnchor="middle" dominantBaseline="middle" fontSize="9" fontWeight="900" fill="#CFE0FF" style={{fontFamily:MONO}}>V{i+1}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+});
+
 function NationalFareTab() {
   const [vehicle,setVehicle]=useState("1ton");
   const [cargoType,setCargoType]=useState("일반");
@@ -504,7 +573,6 @@ function NationalFareTab() {
   const [fromC,setFromC]=useState(null);
   const [toP,setToP]=useState(null);
   const [toC,setToC]=useState(null);
-  const [hover,setHover]=useState(null);
   const [cityStep,setCityStep]=useState(null);
   const [fromSearch,setFromSearch]=useState("");
   const [fromResults,setFromResults]=useState([]);
@@ -537,12 +605,15 @@ function NationalFareTab() {
   useEffect(()=>{
     const d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); d.setMonth(d.getMonth()-13);
     const liveWindowStart=d.toISOString().slice(0,10);
-    let c1=[],c2=[];
-    const merge=()=>{const m=new Map();[...c1,...c2].forEach(r=>m.set(r._id,r));setDispatchData([...m.values()]);};
-    const mapDoc=d=>({_id:d.id,...d.data()});
-    const u1=onSnapshot(query(collection(db,"dispatch"),where("상차일",">=",liveWindowStart)),s=>{c1=s.docs.map(mapDoc);merge();});
-    const u2=onSnapshot(query(collection(db,"orders"),where("상차일",">=",liveWindowStart)),s=>{c2=s.docs.map(mapDoc);merge();});
-    return()=>{u1();u2();};
+    // ⭐ 렉 개선 — 오더 하나만 바뀌어도 전체(수천 건)를 다시 만들던 것을 "바뀐 것만" 반영하고,
+    // 화면 갱신은 낮은 우선순위(startTransition)로 미뤄 입력 중 타이핑이 끊기지 않게 한다.
+    const c1=new Map(),c2=new Map();
+    let t=null;
+    const flush=()=>{t=null;React.startTransition(()=>{const m=new Map(c1);c2.forEach((v,k)=>m.set(k,v));setDispatchData([...m.values()]);});};
+    const apply=(cache)=>(snap)=>{snap.docChanges().forEach(ch=>{if(ch.type==="removed")cache.delete(ch.doc.id);else cache.set(ch.doc.id,{_id:ch.doc.id,...ch.doc.data()});});if(!t)t=setTimeout(flush,300);};
+    const u1=onSnapshot(query(collection(db,"dispatch"),where("상차일",">=",liveWindowStart)),apply(c1),()=>{});
+    const u2=onSnapshot(query(collection(db,"orders"),where("상차일",">=",liveWindowStart)),apply(c2),()=>{});
+    return()=>{u1();u2();if(t)clearTimeout(t);};
   },[]);
   useEffect(()=>{
     if(fromSelectedRef.current){fromSelectedRef.current=false;return;}
@@ -730,6 +801,9 @@ function NationalFareTab() {
     if(step==="from"){setFromP(prov);setCityStep("from");}
     else if(step==="to"){setToP(prov);setCityStep("to");}
   };
+  // ⭐ 지도는 따로 떼어(memo) 입력할 때마다 다시 그리지 않는다 — 클릭 함수는 ref로 넘겨 지도 쪽이 바뀌지 않게
+  const provClickRef=useRef(onProvClick); provClickRef.current=onProvClick;
+  const onPickProv=useCallback((p)=>provClickRef.current(p),[]);
   const onCitySelect=(city)=>{
     // Show 3rd level sub-district selection
     setSubCity(city);
@@ -844,10 +918,10 @@ function NationalFareTab() {
       <div className="flex-[4] flex flex-col gap-4 min-w-0">
 
         {/* 독차/혼적 토글 */}
-        <div className="flex rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+        <div className="flex p-1 gap-1 rounded-[16px] bg-[#EEF2F8] border border-[#E3E8F0]">
           {["독차","혼적"].map(m=>(
             <button key={m} onClick={()=>{setFreightMode(m);setMixWeightKg("");setMixCbm("");}}
-              className={`flex-1 py-2.5 text-[13px] font-bold transition ${freightMode===m?"bg-[#1B2B4B] text-white":"bg-white text-gray-500 hover:bg-gray-50"}`}>
+              className={`flex-1 h-10 rounded-[12px] text-[13.5px] font-black transition ${freightMode===m?"bg-[#0F1A30] text-white shadow-[0_6px_14px_rgba(15,26,48,0.25)]":"text-[#5B6B85] hover:text-[#0F1A30]"}`}>
               {m==="혼적"?"혼적(합짐)":m}
             </button>
           ))}
@@ -855,12 +929,12 @@ function NationalFareTab() {
 
         {/* 상·하차지 */}
         <div>
-          <p className="text-[13px] font-extrabold text-[#1B2B4B] mb-2">상·하차지 입력 <span className="text-red-500">*</span></p>
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-visible">
+          <p className="flex items-center gap-2 text-[13px] font-black text-[#0F1A30] mb-2.5"><span className="w-1 h-3.5 rounded-full bg-gradient-to-b from-[#0F1A30] to-[#4B6CB7]"/>상·하차지 입력 <span className="text-[#4B6CB7]">*</span></p>
+          <div className="bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] overflow-visible">
             {/* 상차지 */}
             <div ref={fromRef} className="relative border-b border-gray-100">
-              <div className={`flex items-center gap-3 px-4 py-3 ${step==="from"||cityStep==="from"?"bg-blue-50/50":""}`}>
-                <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0"/>
+              <div className={`flex items-center gap-3 px-4 py-3.5 rounded-t-[20px] ${step==="from"||cityStep==="from"?"bg-[#F2F6FC]":""}`}>
+                <div className="w-2.5 h-2.5 rounded-[3px] bg-[#0F1A30] shrink-0"/>
                 <span className="text-[11px] font-bold text-gray-500 w-10 shrink-0">상차지</span>
                 {fromC&&!cityStep?(
                   <span className="font-extrabold text-[13px] text-[#1B2B4B] truncate flex-1">{fromP} {fromC.n}</span>
@@ -874,14 +948,14 @@ function NationalFareTab() {
                   />
                 )}
                 {(fromC||fromSearch)&&(
-                  <button className="text-gray-400 hover:text-red-400 text-lg leading-none shrink-0" onClick={e=>{e.stopPropagation();setFromP(null);setFromC(null);setFromSearch("");setFromResults([]);setStep("from");}}>×</button>
+                  <button className="text-gray-400 hover:text-[#0F1A30] text-lg leading-none shrink-0" onClick={e=>{e.stopPropagation();setFromP(null);setFromC(null);setFromSearch("");setFromResults([]);setStep("from");}}>×</button>
                 )}
               </div>
               {fromResults.length>0&&(
                 <div className="absolute left-0 right-0 top-full bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden mt-1">
                   {fromResults.map((r,i)=>(
                     <button key={i} onClick={()=>selectFrom(r)}
-                      className="w-full px-4 py-2.5 text-left hover:bg-blue-50 transition border-b border-gray-50 last:border-0">
+                      className="w-full px-4 py-2.5 text-left hover:bg-[#F2F6FC] transition border-b border-gray-50 last:border-0">
                       <div className="text-[12px] font-bold text-[#1B2B4B]">{r.name}</div>
                       <div className="text-[11px] text-gray-500">{r.full}</div>
                     </button>
@@ -893,7 +967,7 @@ function NationalFareTab() {
             {vias.map((via,i)=>(
               <div key={i} className="relative border-t border-gray-100">
                 <div className="flex items-center gap-3 px-4 py-3">
-                  <div className="w-2 h-2 rounded-full bg-gray-400 shrink-0"/>
+                  <div className="w-2.5 h-2.5 rounded-[3px] bg-[#4B6CB7] shrink-0"/>
                   <span className="text-[11px] font-bold text-gray-500 w-10 shrink-0">경유{i+1}</span>
                   {via.coord?(
                     <span className="font-semibold text-[13px] text-[#1B2B4B] truncate flex-1">{via.search}</span>
@@ -903,10 +977,10 @@ function NationalFareTab() {
                       placeholder="경유지 검색"
                       value={via.search}
                       onChange={e=>updateViaSearch(i,e.target.value)}
-                      autoFocus
+                      ref={imeFocusRef}
                     />
                   )}
-                  <button className="text-gray-400 hover:text-red-400 text-lg leading-none shrink-0" onClick={e=>{e.stopPropagation();removeVia(i);}}>×</button>
+                  <button className="text-gray-400 hover:text-[#0F1A30] text-lg leading-none shrink-0" onClick={e=>{e.stopPropagation();removeVia(i);}}>×</button>
                 </div>
                 {(viaResults[i]||[]).length>0&&(
                   <div className="absolute left-0 right-0 top-full bg-white border border-gray-200 rounded-xl shadow-xl z-[60] overflow-hidden mt-1">
@@ -923,8 +997,8 @@ function NationalFareTab() {
             ))}
             {/* 하차지 */}
             <div ref={toRef} className="relative border-t border-gray-100">
-              <div className={`flex items-center gap-3 px-4 py-3 ${step==="to"||cityStep==="to"?"bg-orange-50/50":""}`}>
-                <div className="w-2 h-2 rounded-full bg-orange-400 shrink-0"/>
+              <div className={`flex items-center gap-3 px-4 py-3.5 rounded-b-[20px] ${step==="to"||cityStep==="to"?"bg-[#F2F6FC]":""}`}>
+                <div className="w-2.5 h-2.5 rounded-[3px] bg-[#CFE0FF] ring-1 ring-[#4B6CB7] shrink-0"/>
                 <span className="text-[11px] font-bold text-gray-500 w-10 shrink-0">하차지</span>
                 {toC&&!cityStep?(
                   <span className="font-extrabold text-[13px] text-[#1B2B4B] truncate flex-1">{toP} {toC.n}</span>
@@ -939,14 +1013,14 @@ function NationalFareTab() {
                   />
                 )}
                 {(toC||toSearch)&&(
-                  <button className="text-gray-400 hover:text-red-400 text-lg leading-none shrink-0" onClick={e=>{e.stopPropagation();setToP(null);setToC(null);setToSearch("");setToResults([]);setStep("to");}}>×</button>
+                  <button className="text-gray-400 hover:text-[#0F1A30] text-lg leading-none shrink-0" onClick={e=>{e.stopPropagation();setToP(null);setToC(null);setToSearch("");setToResults([]);setStep("to");}}>×</button>
                 )}
               </div>
               {toResults.length>0&&(
                 <div className="absolute left-0 right-0 top-full bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden mt-1">
                   {toResults.map((r,i)=>(
                     <button key={i} onClick={()=>selectTo(r)}
-                      className="w-full px-4 py-2.5 text-left hover:bg-orange-50 transition border-b border-gray-50 last:border-0">
+                      className="w-full px-4 py-2.5 text-left hover:bg-[#F2F6FC] transition border-b border-gray-50 last:border-0">
                       <div className="text-[12px] font-bold text-[#1B2B4B]">{r.name}</div>
                       <div className="text-[11px] text-gray-500">{r.full}</div>
                     </button>
@@ -959,18 +1033,18 @@ function NationalFareTab() {
             {vias.length<3&&(
               <button onClick={addVia} className="text-[11px] font-semibold text-[#1B2B4B]/70 hover:text-[#1B2B4B] border border-dashed border-[#1B2B4B]/30 hover:border-[#1B2B4B]/60 rounded-lg px-2.5 py-1 transition">+ 경유 추가</button>
             )}
-            {(fromP||toP||vias.length>0)&&<button onClick={reset} className="text-[11px] text-gray-500 hover:text-red-500 transition">초기화</button>}
+            {(fromP||toP||vias.length>0)&&<button onClick={reset} className="text-[11px] text-gray-500 hover:text-[#0F1A30] transition">초기화</button>}
           </div>
         </div>
 
         {/* 독차: 차량 선택 */}
         {freightMode==="독차"&&(
           <div>
-            <p className="text-[13px] font-extrabold text-[#1B2B4B] mb-2">차량 선택 <span className="text-red-500">*</span></p>
+            <p className="flex items-center gap-2 text-[13px] font-black text-[#0F1A30] mb-2.5"><span className="w-1 h-3.5 rounded-full bg-gradient-to-b from-[#0F1A30] to-[#4B6CB7]"/>차량 선택 <span className="text-[#4B6CB7]">*</span></p>
             <div className="grid grid-cols-5 gap-2">
               {vehicles.map(v=>(
                 <button key={v.id} onClick={()=>setVehicle(v.id)}
-                  className={`flex flex-col items-center py-3 px-1 rounded-xl border-2 transition ${vehicle===v.id?"bg-[#1B2B4B] border-[#1B2B4B] shadow-lg":"bg-white border-gray-200 hover:border-[#1B2B4B]/50"}`}>
+                  className={`flex flex-col items-center py-3 px-1 rounded-[14px] border transition ${vehicle===v.id?"bg-[#0F1A30] border-[#0F1A30] shadow-[0_10px_22px_rgba(15,26,48,0.28)]":"bg-white border-[#E3E8F0] hover:border-[#4B6CB7]"}`}>
                   <div className="w-full flex justify-center mb-1.5 overflow-hidden" style={{height:30}}>
                     <VehicleIconSvg id={v.id} sel={vehicle===v.id}/>
                   </div>
@@ -986,7 +1060,7 @@ function NationalFareTab() {
         {/* 혼적: 중량/CBM */}
         {freightMode==="혼적"&&(
           <div>
-            <p className="text-[13px] font-extrabold text-[#1B2B4B] mb-2">화물 중량 / 부피</p>
+            <p className="flex items-center gap-2 text-[13px] font-black text-[#0F1A30] mb-2.5"><span className="w-1 h-3.5 rounded-full bg-gradient-to-b from-[#0F1A30] to-[#4B6CB7]"/>화물 중량 / 부피</p>
             <div className="flex gap-3 bg-white rounded-xl border border-gray-200 p-4">
               <div className="flex-1">
                 <label className="block text-[11px] font-bold text-gray-500 mb-1.5">중량 (kg)</label>
@@ -1010,7 +1084,7 @@ function NationalFareTab() {
 
         {/* 화물 유형 */}
         <div>
-          <p className="text-[13px] font-extrabold text-[#1B2B4B] mb-2">화물 유형</p>
+          <p className="flex items-center gap-2 text-[13px] font-black text-[#0F1A30] mb-2.5"><span className="w-1 h-3.5 rounded-full bg-gradient-to-b from-[#0F1A30] to-[#4B6CB7]"/>화물 유형</p>
           <div className="flex gap-2">
             {CARGO_TYPES.map(ct=>{
               // 냉장/냉동은 차종별 정액(독차 기준), 위험물은 비율 할증 — 버튼에 미리 얼마가
@@ -1021,7 +1095,7 @@ function NationalFareTab() {
                 : (ct.surcharge ? `+${Math.round(ct.surcharge*100)}%` : null);
               return (
                 <button key={ct.id} onClick={()=>setCargoType(ct.id)}
-                  className={`flex-1 py-2.5 rounded-xl text-[13px] font-bold border-2 transition ${cargoType===ct.id?"bg-[#1B2B4B] text-white border-[#1B2B4B] shadow-md":"bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B]/40"}`}>
+                  className={`flex-1 py-2.5 rounded-[14px] text-[13px] font-black border transition ${cargoType===ct.id?"bg-[#0F1A30] text-white border-[#0F1A30] shadow-[0_8px_18px_rgba(15,26,48,0.25)]":"bg-white text-[#5B6B85] border-[#E3E8F0] hover:border-[#4B6CB7]"}`}>
                   {ct.name}
                   {sub && <span className={`block text-[10px] font-semibold mt-0.5 ${cargoType===ct.id?"text-white/70":"text-gray-500"}`}>{sub}</span>}
                 </button>
@@ -1032,8 +1106,8 @@ function NationalFareTab() {
 
         {/* 추가 옵션 */}
         {freightMode==="독차"&&(
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <p className="text-[12px] font-bold text-[#1B2B4B] mb-2.5">추가 옵션</p>
+          <div className="bg-white rounded-[20px] border border-[#E3E8F0] p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+            <p className="text-[12px] font-black text-[#0F1A30] mb-2.5">추가 옵션</p>
             <div className="flex flex-wrap gap-2">
               {[
                 {id:"roundTrip",label:"왕복 운행",sub:"×1.8",active:roundTrip,set:()=>setRoundTrip(p=>!p)},
@@ -1042,7 +1116,7 @@ function NationalFareTab() {
                 {id:"liftgate",label:"리프트",sub:SURCHARGE_LIFTGATE[vehicle]>0?`+${Number((SURCHARGE_LIFTGATE[vehicle]/10000).toFixed(1))}만원`:null,active:liftgate,set:()=>setLiftgate(p=>!p)},
               ].map(opt=>(
                 <button key={opt.id} onClick={opt.set}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-bold border-2 transition ${opt.active?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B]/40"}`}>
+                  className={`flex items-center gap-1.5 px-3 h-9 rounded-[12px] text-[13px] font-bold border transition ${opt.active?"bg-[#0F1A30] text-white border-[#0F1A30]":"bg-[#F5F7FB] text-[#3A4A66] border-[#E3E8F0] hover:border-[#4B6CB7]"}`}>
                   {opt.label}
                   {opt.sub&&<span className={`text-[11px] font-semibold ${opt.active?"text-white/70":"text-gray-500"}`}>{opt.sub}</span>}
                 </button>
@@ -1053,11 +1127,11 @@ function NationalFareTab() {
 
         {/* 결과 카드 */}
         {result&&step==="result"&&(
-          <div className="rounded-2xl overflow-hidden shadow-xl border border-[#1B2B4B]/10"
-            style={{background:"linear-gradient(150deg,#0f1e38 0%,#1B2B4B 50%,#243a60 100%)"}}>
+          <div className="rounded-[22px] overflow-hidden shadow-[0_20px_44px_rgba(15,26,48,0.3)] ring-1 ring-white/10"
+            style={{background:"linear-gradient(150deg,#0B1428 0%,#0F1A30 45%,#1B2B4B 100%)"}}>
             <div className="p-5">
               <div className="flex items-center gap-2 mb-3 flex-wrap">
-                <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full ${result.mode==="혼적"?"bg-orange-400/90":"bg-blue-400/90"} text-white`}>
+                <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-white/15 text-white`}>
                   {result.mode==="혼적"?"혼적(합짐)":"독차"}
                 </span>
                 {result.isRound&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/20 text-white">왕복</span>}
@@ -1071,17 +1145,17 @@ function NationalFareTab() {
               <div className="mb-3">
                 <div className="text-[10px] text-white/40 font-semibold mb-1">예상 운임 (VAT 별도)</div>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-[24px] font-black text-white">{fmtMoney(result.min)}</span>
+                  <span className="text-[26px] font-black text-white tabular-nums">{fmtMoney(result.min)}</span>
                   <span className="text-white/30 text-[18px]">~</span>
-                  <span className="text-[24px] font-black text-white">{fmtMoney(result.max)}</span>
+                  <span className="text-[26px] font-black text-white tabular-nums">{fmtMoney(result.max)}</span>
                 </div>
               </div>
               <div className="bg-white/8 rounded-xl p-3 mb-3">
                 <div className="flex justify-between items-center mb-1">
                   <span className="text-[11px] text-white/50 font-semibold">평균 운임</span>
-                  <span className="text-[20px] font-black text-yellow-300">{fmtMoney(result.avg)}</span>
+                  <span className="text-[22px] font-black text-white tabular-nums">{fmtMoney(result.avg)}</span>
                 </div>
-                <div className="h-1.5 bg-white/10 rounded-full"><div className="h-full bg-gradient-to-r from-blue-400 to-yellow-300 rounded-full" style={{width:"55%"}}/></div>
+                <div className="h-1.5 bg-white/10 rounded-full"><div className="h-full bg-gradient-to-r from-[#4B6CB7] to-[#CFE0FF] rounded-full" style={{width:"55%"}}/></div>
               </div>
               <div className="grid grid-cols-2 gap-2 mb-3">
                 {[
@@ -1111,14 +1185,14 @@ function NationalFareTab() {
                     {refData.charge&&(
                       <div className="bg-white/6 rounded-xl px-3 py-2">
                         <div className="text-[9px] text-white/35 font-semibold mb-1">청구운임</div>
-                        <div className="text-[11px] font-bold text-blue-300">{fmtMoney(refData.charge.avg)} 평균</div>
+                        <div className="text-[11px] font-bold text-[#CFE0FF]">{fmtMoney(refData.charge.avg)} 평균</div>
                         <div className="text-[10px] text-white/40">{fmtMoney(refData.charge.min)}~{fmtMoney(refData.charge.max)}</div>
                       </div>
                     )}
                     {refData.driver&&(
                       <div className="bg-white/6 rounded-xl px-3 py-2">
                         <div className="text-[9px] text-white/35 font-semibold mb-1">기사운임</div>
-                        <div className="text-[11px] font-bold text-green-300">{fmtMoney(refData.driver.avg)} 평균</div>
+                        <div className="text-[11px] font-bold text-white">{fmtMoney(refData.driver.avg)} 평균</div>
                         <div className="text-[10px] text-white/40">{fmtMoney(refData.driver.min)}~{fmtMoney(refData.driver.max)}</div>
                       </div>
                     )}
@@ -1139,7 +1213,7 @@ function NationalFareTab() {
         {cityStep&&(
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
             <div className="flex items-center gap-2 mb-3">
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-extrabold shrink-0 ${cityStep==="from"?"bg-[#1B2B4B]":"bg-orange-400"}`}>
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-extrabold shrink-0 ${cityStep==="from"?"bg-[#0F1A30]":"bg-[#4B6CB7]"}`}>
                 {cityStep==="from"?"출":"하"}
               </div>
               <span className="text-[14px] font-extrabold text-[#1B2B4B]">{cityStep==="from"?fromP:toP}</span>
@@ -1160,7 +1234,7 @@ function NationalFareTab() {
         {subCityStep&&(
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
             <div className="flex items-center gap-2 mb-3">
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-extrabold shrink-0 ${subCityStep==="from"?"bg-[#1B2B4B]":"bg-orange-400"}`}>
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-extrabold shrink-0 ${subCityStep==="from"?"bg-[#0F1A30]":"bg-[#4B6CB7]"}`}>
                 {subCityStep==="from"?"출":"하"}
               </div>
               <span className="text-[14px] font-extrabold text-[#1B2B4B]">{subCity?.n}</span>
@@ -1173,7 +1247,7 @@ function NationalFareTab() {
             ):(
               <div className="grid grid-cols-3 gap-1.5 max-h-[240px] overflow-y-auto">
                 <button onClick={onSelectWholeCity}
-                  className="px-2 py-2 text-[11px] font-extrabold text-[#1B2B4B] border-2 border-[#1B2B4B]/30 rounded-xl hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] transition bg-blue-50/50 col-span-1">
+                  className="px-2 py-2 text-[11px] font-extrabold text-[#1B2B4B] border-2 border-[#1B2B4B]/30 rounded-xl hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] transition bg-[#F2F6FC] col-span-1">
                   {subCity?.n} 전체
                 </button>
                 {subDistricts.map(sd=>(
@@ -1191,113 +1265,34 @@ function NationalFareTab() {
         )}
       </div>
 
-      {/* ── 오른쪽 지도 ── */}
-      <div className="flex-[6] min-w-0 rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden bg-white sticky"
-        style={{top:16,height:"calc(100vh - 250px)",minHeight:560}}>
-        <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-3 shrink-0">
+      {/* ── 오른쪽 지도 (디지털) ── */}
+      <div className="flex-[6] min-w-0 rounded-[24px] flex flex-col overflow-hidden sticky ring-1 ring-[#0F1A30]/10 shadow-[0_24px_60px_rgba(15,26,48,0.28)]"
+        style={{top:16,height:"calc(100vh - 250px)",minHeight:560,background:"radial-gradient(90% 70% at 50% 15%, #1C3160 0%, #0F1A30 55%, #070E1E 100%)"}}>
+        <div className="px-5 py-3.5 flex items-center gap-3 shrink-0 border-b border-white/[0.08]">
+          <span className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{fontFamily:"'JetBrains Mono','SF Mono',ui-monospace,monospace"}}>ROUTE MAP</span>
           {step!=="result"&&(
-            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold ${step==="from"?"bg-[#1B2B4B] text-white":step==="via"?"bg-green-600 text-white":"bg-orange-400 text-white"}`}>
-              <span className="w-1.5 h-1.5 rounded-full bg-white/80"/>
+            <span className="inline-flex items-center gap-1.5 h-7 px-3 rounded-full bg-white/[0.07] ring-1 ring-white/10 text-[11.5px] font-bold text-white/85 whitespace-nowrap">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#8FB0F0] animate-pulse"/>
               {step==="from"?"출발 지역을 선택하세요":step==="via"?"경유지를 입력하세요":"도착 지역을 선택하세요"}
-            </div>
+            </span>
           )}
           {step==="result"&&fromP&&toP&&(
-            <div className="flex items-center gap-2 text-[13px]">
-              <span className="font-extrabold text-blue-600">{fromP} {fromC?.n}</span>
-              <span className="text-gray-400">→</span>
-              <span className="font-extrabold text-orange-500">{toP} {toC?.n}</span>
+            <div className="flex items-center gap-2 text-[13px] min-w-0 whitespace-nowrap">
+              <span className="font-black text-white truncate">{fromP} {fromC?.n}</span>
+              <svg width="18" height="10" viewBox="0 0 18 10" className="shrink-0"><path d="M0 5h15M11 1l4 4-4 4" fill="none" stroke="#8FB0F0" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <span className="font-black text-[#CFE0FF] truncate">{toP} {toC?.n}</span>
             </div>
           )}
-          {(fromP||toP)&&<button onClick={reset} className="ml-auto text-[11px] text-gray-500 hover:text-red-500 border border-gray-200 rounded-md px-2 py-1">초기화</button>}
+          {(fromP||toP)&&<button onClick={reset} className="ml-auto h-7 px-3 rounded-lg bg-white/[0.07] hover:bg-white/[0.14] text-white/70 text-[11.5px] font-bold">초기화</button>}
         </div>
-        <div className="flex-1 min-h-0">
-          <svg viewBox="0 0 524 631" className="w-full h-full" preserveAspectRatio="xMidYMid meet" style={{userSelect:"none",display:"block"}}>
-            <defs>
-              <linearGradient id="nfLight" x1="15%" y1="5%" x2="85%" y2="95%">
-                <stop offset="0%" stopColor="white" stopOpacity="0.25"/>
-                <stop offset="50%" stopColor="white" stopOpacity="0.02"/>
-                <stop offset="100%" stopColor="#0a1428" stopOpacity="0.05"/>
-              </linearGradient>
-              <radialGradient id="nfGlow" cx="38%" cy="30%" r="65%">
-                <stop offset="0%" stopColor="white" stopOpacity="0.5"/>
-                <stop offset="100%" stopColor="white" stopOpacity="0"/>
-              </radialGradient>
-              <filter id="nfShad" x="-4%" y="-4%" width="108%" height="108%">
-                <feDropShadow dx="0.3" dy="0.8" stdDeviation="0.8" floodColor="#4a6080" floodOpacity="0.08"/>
-              </filter>
-              <filter id="nfHov" x="-8%" y="-8%" width="116%" height="116%">
-                <feDropShadow dx="1" dy="3" stdDeviation="3" floodColor="#1B2B4B" floodOpacity="0.32"/>
-              </filter>
-              <filter id="nfSel" x="-10%" y="-10%" width="120%" height="120%">
-                <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="#3b82f6" floodOpacity="0.45"/>
-                <feDropShadow dx="1" dy="3" stdDeviation="2" floodColor="#1B2B4B" floodOpacity="0.25"/>
-              </filter>
-              <marker id="nfArr" markerWidth="11" markerHeight="11" refX="6" refY="5.5" orient="auto">
-                <path d="M 0,1 L 10,5.5 L 0,10 Z" fill="#3b82f6"/>
-              </marker>
-            </defs>
-            <rect width="524" height="631" fill="white"/>
-            {provinces.map(prov=>{
-              const isFr=prov===fromP,isTo=prov===toP,isHov=prov===hover,isAct=isFr||isTo;
-              let fill=PROVINCE_COLORS[prov]||"#c8d8e8";
-              if(isFr) fill="#3b82f6";
-              else if(isTo) fill="#f97316";
-              else if(isHov) fill="#9ac0e8";
-              return(
-                <g key={prov}>
-                  <path d={PROVINCE_PATHS[prov]} fill={fill}
-                    stroke={isAct?"rgba(255,255,255,0.95)":isHov?"#4a8fcc":"rgba(255,255,255,0.8)"}
-                    strokeWidth={isAct?2:isHov?1.5:1}
-                    filter={isAct?"url(#nfSel)":isHov?"url(#nfHov)":"url(#nfShad)"}
-                    style={{cursor:"pointer",transition:"fill 0.15s,stroke 0.15s"}}
-                    onMouseEnter={()=>setHover(prov)} onMouseLeave={()=>setHover(null)}
-                    onClick={()=>onProvClick(prov)}/>
-                  <path d={PROVINCE_PATHS[prov]} fill={isAct?"url(#nfGlow)":"url(#nfLight)"} stroke="none" style={{pointerEvents:"none"}}/>
-                </g>
-              );
-            })}
-            {provinces.map(prov=>{
-              if(prov===fromP||prov===toP) return null;
-              const isSmall=SMALL.includes(prov),isHovL=prov===hover;
-              const[lx,ly]=PROVINCE_LABEL_POS[prov]||[0,0];
-              return(
-                <text key={`nl-${prov}`} x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
-                  fontSize={isSmall?11:14} fontWeight={isHovL?"800":"700"}
-                  fill={isHovL?"#1a5fa8":"#1B2B4B"} style={{pointerEvents:"none",transition:"fill 0.15s"}}>{prov}</text>
-              );
-            })}
-            {[fromP&&{prov:fromP,label:"출",color:"#3b82f6",border:"#2563eb"},toP&&{prov:toP,label:"하",color:"#f97316",border:"#ea580c"}]
-              .filter(Boolean).map(({prov,label,color,border})=>{
-                const pos=PROVINCE_LABEL_POS[prov];if(!pos)return null;
-                const[bx,by]=pos,stemY=by-(SMALL.includes(prov)?28:34);
-                return(
-                  <g key={label} style={{pointerEvents:"none"}}>
-                    <circle cx={bx} cy={by} r={5} fill={color} fillOpacity="0.85"/>
-                    <line x1={bx} y1={by-6} x2={bx} y2={stemY+22} stroke={color} strokeWidth="2" strokeOpacity="0.6"/>
-                    <circle cx={bx} cy={stemY} r={20} fill={color} stroke="white" strokeWidth="2.5" filter="url(#nfSel)"/>
-                    <text x={bx} y={stemY} textAnchor="middle" dominantBaseline="middle" fontSize="13" fontWeight="900" fill="white">{label}</text>
-                    <rect x={bx-22} y={stemY+23} width="44" height="16" rx="8" fill="white" fillOpacity="0.92" stroke={border} strokeWidth="1"/>
-                    <text x={bx} y={stemY+31} textAnchor="middle" dominantBaseline="middle" fontSize="10" fontWeight="800" fill={border}>{prov}</text>
-                  </g>
-                );
-              })}
-            {activeViaProvs.map((via,i)=>{
-              const pos=PROVINCE_LABEL_POS[via.prov];if(!pos)return null;
-              const[bx,by]=pos,stemY=by-(SMALL.includes(via.prov)?22:28);
-              return(
-                <g key={`via-${i}`} style={{pointerEvents:"none"}}>
-                  <circle cx={bx} cy={stemY} r={14} fill="#6b7280" stroke="white" strokeWidth="2" filter="url(#nfSel)"/>
-                  <text x={bx} y={stemY} textAnchor="middle" dominantBaseline="middle" fontSize="11" fontWeight="900" fill="white">경{i+1}</text>
-                </g>
-              );
-            })}
-            {aPath&&<path d={aPath} fill="none" stroke="#3b82f6" strokeWidth="3.5" strokeLinecap="round" markerEnd="url(#nfArr)"/>}
-          </svg>
+        <div className="flex-1 min-h-0" style={{backgroundImage:"linear-gradient(rgba(143,176,240,0.07) 1px,transparent 1px),linear-gradient(90deg,rgba(143,176,240,0.07) 1px,transparent 1px)",backgroundSize:"24px 24px"}}>
+          <KoreaMap fromP={fromP} toP={toP} viaKey={activeViaProvs.map(v=>v.prov).join("|")} aPath={aPath} onPick={onPickProv}/>
         </div>
-        <div className="px-4 py-2 border-t border-gray-100 flex items-center gap-4 shrink-0">
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"/><span className="text-[11px] font-semibold text-gray-500">출발지</span></div>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-orange-400 inline-block"/><span className="text-[11px] font-semibold text-gray-500">도착지</span></div>
-          <span className="ml-auto text-[10px] text-gray-400">지역 클릭 또는 직접 입력 → 운임 확인</span>
+        <div className="px-5 py-2.5 border-t border-white/[0.08] flex items-center gap-4 shrink-0 text-[11px] font-bold text-white/55">
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px] bg-gradient-to-br from-[#6E95E8] to-[#2D4C82] ring-1 ring-white/40"/>출발</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px] bg-gradient-to-br from-[#E6EEFC] to-[#8FB0F0]"/>도착</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px] bg-[#2D4C82]"/>경유</span>
+          <span className="ml-auto text-white/35">지역 클릭 또는 직접 입력 → 운임 확인</span>
         </div>
       </div>
     </div>
@@ -1306,44 +1301,38 @@ function NationalFareTab() {
 
 // ─── 자사운임표 컴포넌트 ──────────────────────────────────────────────────
 function CompanyFareTab() {
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="rounded-2xl overflow-hidden border border-[#1B2B4B]/10"
-        style={{background:"linear-gradient(135deg,#1B2B4B 0%,#243a60 60%,#2a4470 100%)"}}>
-        <div className="px-6 py-5 flex items-center justify-between">
-          <div>
-            <h2 className="text-[20px] font-black text-white leading-tight tracking-tight">자사 운임표 조회</h2>
-            <p className="text-[12px] text-white/50 font-medium mt-1">실거래 데이터 기반 · 노선별 운임 히스토리</p>
-          </div>
-          <div className="flex gap-3">
-            <div className="bg-white/10 rounded-xl px-4 py-2.5 text-center">
-              <div className="text-[10px] text-white/50 font-semibold">데이터 기준</div>
-              <div className="text-[13px] font-black text-white">실거래</div>
-            </div>
-            <div className="bg-white/10 rounded-xl px-4 py-2.5 text-center">
-              <div className="text-[10px] text-white/50 font-semibold">업데이트</div>
-              <div className="text-[13px] font-black text-white">실시간</div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <StandardFare embedded={true} defaultTab="표준운임"/>
-    </div>
-  );
+  return <StandardFare embedded={true} defaultTab="표준운임"/>;
 }
 
-// ─── 메인 컴포넌트 ────────────────────────────────────────────────────────
+// ─── 메인 컴포넌트 — 디지털 헤더 + 탭 ───────────────────────────────────────
+const FARE_TABS=[
+  {key:"전국운임조회",en:"NATIONAL",desc:"지역·차종 기준 전국 시세 계산"},
+  {key:"자사운임표",en:"COMPANY",desc:"우리 회사 실거래 운임 히스토리"},
+];
 export default function FreightRateInquiry(){
   const [activeTab,setActiveTab]=useState("전국운임조회");
+  const MONO="'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
   return(
     <div className="w-full">
-      <div className="flex items-center gap-1 mb-5 border-b border-gray-200">
-        {["전국운임조회","자사운임표"].map(tab=>(
-          <button key={tab} onClick={()=>setActiveTab(tab)}
-            className={`px-5 py-2.5 text-[14px] font-extrabold transition border-b-2 -mb-px ${activeTab===tab?"border-[#1B2B4B] text-[#1B2B4B]":"border-transparent text-gray-500 hover:text-gray-600"}`}>
-            {tab}
-          </button>
-        ))}
+      <div className="relative overflow-hidden rounded-[24px] mb-5 px-7 py-5 text-white shadow-[0_18px_40px_rgba(15,26,48,0.25)]"
+        style={{background:"linear-gradient(125deg,#0B1428 0%,#0F1A30 45%,#1B2B4B 80%,#2D4C82 100%)"}}>
+        <div className="absolute inset-0 opacity-[0.08]" style={{backgroundImage:"linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)",backgroundSize:"32px 32px"}}/>
+        <div className="relative flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{fontFamily:MONO}}>FARE LOOKUP</div>
+            <div className="text-[26px] font-black tracking-tight leading-tight mt-0.5">운임조회</div>
+            <div className="text-[13px] text-white/55 mt-0.5">{FARE_TABS.find(t=>t.key===activeTab)?.desc}</div>
+          </div>
+          <div className="flex p-1 gap-1 rounded-[16px] bg-white/[0.07] ring-1 ring-white/10">
+            {FARE_TABS.map(t=>(
+              <button key={t.key} onClick={()=>setActiveTab(t.key)}
+                className={`h-12 px-5 rounded-[12px] text-left transition whitespace-nowrap ${activeTab===t.key?"bg-white text-[#0F1A30] shadow-[0_8px_20px_rgba(0,0,0,0.25)]":"text-white/70 hover:text-white hover:bg-white/[0.06]"}`}>
+                <div className={`text-[9.5px] font-extrabold tracking-[0.24em] ${activeTab===t.key?"text-[#4B6CB7]":"text-white/40"}`} style={{fontFamily:MONO}}>{t.en}</div>
+                <div className="text-[14px] font-black leading-tight">{t.key}</div>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
       {activeTab==="전국운임조회"&&<NationalFareTab/>}
       {activeTab==="자사운임표"&&<CompanyFareTab/>}

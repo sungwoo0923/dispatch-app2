@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { imeFocusRef } from "./imeFocus";
 import { createPortal } from "react-dom";
 import {
   collection, addDoc, onSnapshot, query, orderBy, limit,
@@ -1102,7 +1103,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
               <div style={{ fontSize: 14, fontWeight: 700, color: "#1B2B4B", marginBottom: 12 }}>공지사항 전송</div>
               <textarea value={noticeInput} onChange={e => setNoticeInput(e.target.value)}
                 placeholder="공지 내용을 입력하세요..."
-                rows={4} autoFocus
+                rows={4} ref={imeFocusRef}
                 style={{ width: "100%", border: "1px solid #e5e7eb", borderRadius: 10, padding: "10px 12px", fontSize: 13, outline: "none", resize: "none", boxSizing: "border-box" }} />
               <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                 <button onClick={() => setShowNoticeInput(false)}
@@ -1305,7 +1306,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
             onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#1B2B4B", marginBottom: 12 }}>공지사항 전송</div>
             <textarea value={noticeInput} onChange={e => setNoticeInput(e.target.value)}
-              placeholder="공지 내용을 입력하세요..." rows={4} autoFocus
+              placeholder="공지 내용을 입력하세요..." rows={4} ref={imeFocusRef}
               style={{ width: "100%", border: "1px solid #e5e7eb", borderRadius: 10, padding: "10px 12px", fontSize: 13, outline: "none", resize: "none", boxSizing: "border-box" }} />
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <button onClick={() => setShowNoticeInput(false)}
@@ -1620,7 +1621,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
           <input value={msgSearch} onChange={e => setMsgSearch(e.target.value)}
             placeholder="메시지 검색..."
             style={{ width: "100%", border: "1px solid #e5e7eb", borderRadius: 20, padding: "5px 12px", fontSize: 12, outline: "none", boxSizing: "border-box" }}
-            autoFocus />
+            ref={imeFocusRef} />
         </div>
       )}
 
@@ -1728,7 +1729,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                           <input value={editText} onChange={e => setEditText(e.target.value)}
                             onKeyDown={e => { if (e.key === "Enter") onSaveEdit(); if (e.key === "Escape") setEditMsg(null); }}
                             style={{ border: "1px solid #1B2B4B", borderRadius: 10, padding: "6px 10px", fontSize: 13, outline: "none", minWidth: 120 }}
-                            autoFocus />
+                            ref={imeFocusRef} />
                           <button onClick={onSaveEdit} style={{ background: "#1B2B4B", color: "#fff", border: "none", borderRadius: 8, padding: "5px 8px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>저장</button>
                           <button onClick={() => setEditMsg(null)} style={{ background: "#e5e7eb", color: "#374151", border: "none", borderRadius: 8, padding: "5px 8px", fontSize: 11, cursor: "pointer" }}>취소</button>
                         </div>

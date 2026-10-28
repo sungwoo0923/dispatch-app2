@@ -1,5 +1,6 @@
 // ======================= FleetManagement.jsx =======================
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { imeFocusRef } from "./imeFocus";
 import "leaflet/dist/leaflet.css";
 import { db, auth } from "./firebase";
 import {
@@ -3662,7 +3663,7 @@ function FleetLiveMapModal({ drivers, liveById, dispatchData, onClose }) {
           <div style={{ width: 400, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", background: "#f8f9fb" }}>
             <div style={{ padding: 12, borderBottom: "1px solid #e5e7eb", display: "flex", flexDirection: "column", gap: 8, background: "#fff" }}>
               <input
-                autoFocus
+                ref={imeFocusRef}
                 value={q}
                 onChange={e => setQ(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && listRows[0]) focusRow(listRows[0]); }}

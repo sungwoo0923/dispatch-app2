@@ -1,5 +1,6 @@
 // src/CompanyApplications.jsx
 import React, { useState, useEffect, useMemo } from "react";
+import { imeFocusRef } from "./imeFocus";
 import { db, auth } from "./firebase";
 import {
   collection, onSnapshot, doc, updateDoc, getDoc, serverTimestamp, query, where, deleteDoc, addDoc,
@@ -1203,7 +1204,7 @@ export default function CompanyApplications() {
                 <div className="flex items-center gap-2 border border-gray-200 rounded-xl overflow-hidden bg-white focus-within:border-[#1B2B4B] transition">
                   <svg className="ml-3 w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                   <input
-                    autoFocus
+                    ref={imeFocusRef}
                     value={codeLookupQuery}
                     onChange={e => setCodeLookupQuery(e.target.value)}
                     placeholder="회사명 입력"

@@ -6,6 +6,7 @@
 //  [한눈에 비교] 모든 역할 × 모든 메뉴 권한 표
 // 저장 형식은 예전과 같다(customRoles/{역할키} = { label, menus }) — 실제 메뉴 차단은 DispatchApp이 그대로 읽는다.
 import React from "react";
+import { imeFocusRef } from "./imeFocus";
 import { db } from "./firebase";
 import { doc, updateDoc } from "firebase/firestore";
 import {
@@ -240,7 +241,7 @@ export default function RolePermissionsPanel({ users = [], roleLabels = {} }) {
               </div>
               {creating && (
                 <div className="rounded-xl border border-[#1B2B4B]/30 bg-white p-3 space-y-2 mb-2">
-                  <input autoFocus autoComplete="off" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="역할 이름 (예: 부관리자)" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]" />
+                  <input ref={imeFocusRef} autoComplete="off" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="역할 이름 (예: 부관리자)" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]" />
                   <select value={copyFrom} onChange={(e) => setCopyFrom(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none bg-white">
                     <option value="">처음부터 (HOME만 보이게)</option>
                     {allEditable.map((r) => <option key={r.key} value={r.key}>{r.label} 권한 복사해서 시작</option>)}

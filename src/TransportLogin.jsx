@@ -1,5 +1,6 @@
 // ======================= src/TransportLogin.jsx =======================
 import React, { useState, useEffect } from "react";
+import { imeFocusRef } from "./imeFocus";
 import { safeLocalSet, isQuota, freeLocalStorage, trimLocalStorage } from "./safeStorage";
 import { auth, db } from "./firebase";
 import { signInWithEmailAndPassword, sendPasswordResetEmail, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence, getAuth, multiFactor } from "firebase/auth";
@@ -530,7 +531,7 @@ export default function TransportLogin() {
             <div className="p-5">
               <div className="flex gap-2 mb-4">
                 <input
-                  autoFocus
+                  ref={imeFocusRef}
                   value={codeLookupQ}
                   onChange={e => setCodeLookupQ(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") searchCompanyCode(); }}

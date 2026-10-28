@@ -1,5 +1,6 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
 import { hideBlind, isBlindHidden, canSeeBlind, autoBlindNew } from "../blind";
+import { imeFocusRef } from "../imeFocus";
 import { checkHolidayDispatch, findRestConflict, confirmRestDispatch, restAckKey } from "../holidayConfirm";
 import html2canvas from "html2canvas";
 import { LoginManagerModal } from "../LoginManager";
@@ -7868,7 +7869,7 @@ function MobileSideMenu({
               <div className="flex items-center gap-2 border border-gray-200 rounded-xl overflow-hidden bg-white focus-within:border-[#1B2B4B] transition">
                 <svg className="ml-3 w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                 <input autoComplete="off"
-                  autoFocus
+                  ref={imeFocusRef}
                   value={codeLookupQuery}
                   onChange={e => setCodeLookupQuery(e.target.value)}
                   placeholder="회사명 입력"
@@ -15694,7 +15695,7 @@ const pickDrop = (c) => {
                     placeholder="수량 (예: 2)" inputMode={mCargoAddType ? "decimal" : "text"}
                     value={mCargoAddQty}
                     onChange={e => setMCargoAddQty(mCargoAddType ? e.target.value.replace(/[^0-9.]/g, "") : e.target.value)}
-                    autoFocus />
+                    ref={imeFocusRef} />
                   <div className="relative w-[76px] shrink-0">
                     <select className={`appearance-none w-full border-0 rounded-lg px-2 pr-5 py-2 text-[12px] font-bold text-white outline-none ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
                       value={mCargoAddType} onChange={e => setMCargoAddType(e.target.value)}>
@@ -17404,7 +17405,7 @@ const pickDrop = (c) => {
       </div>
       <div className="px-5 py-4 space-y-3">
         <textarea
-          autoFocus
+          ref={imeFocusRef}
           rows={4}
           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] resize-none"
           placeholder="이 거래처를 상/하차지명에 입력할 때마다 안내 팝업으로 뜰 메모"
@@ -17571,7 +17572,7 @@ const pickDrop = (c) => {
             placeholder="검색어를 입력하세요"
             value={orderCopySearch}
             onChange={e => setOrderCopySearch(e.target.value)}
-            autoFocus
+            ref={imeFocusRef}
           />
         </div>
       </div>
@@ -17651,7 +17652,7 @@ const pickDrop = (c) => {
           placeholder="업체명 또는 주소로 검색"
           value={clientPickerSearch}
           onChange={e => setClientPickerSearch(e.target.value)}
-          autoFocus
+          ref={imeFocusRef}
         />
       </div>
       <div className="overflow-y-auto flex-1 px-4 py-2 space-y-2">

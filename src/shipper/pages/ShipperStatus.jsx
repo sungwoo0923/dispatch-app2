@@ -1,4 +1,5 @@
 import { loadTmap } from "../../tmapLoader";
+import { imeFocusRef } from "../../imeFocus";
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { db, auth } from "../../firebase";
 import ShipperOrder from "./ShipperOrder";
@@ -2200,7 +2201,7 @@ function CancelReasonModal({ count, onSubmit, onClose }) {
         <div className="px-6 py-5">
           <label className="text-[13px] font-semibold text-gray-600 mb-1.5 block">취소 사유</label>
           <textarea
-            autoFocus
+            ref={imeFocusRef}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="취소 사유를 입력해주세요 (선택 입력)"
