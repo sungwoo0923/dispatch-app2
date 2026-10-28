@@ -9,6 +9,8 @@
 //     cc:[{uid,name}], ccUids, participants, step, status(pending|approved|rejected|withdrawn), createdAt, updatedAt, history:[…] }
 //  - 알림(2026-10-28 변경): 사내메일 대신 서버 트리거(notifyApproval)가 휴대폰 푸시, BannerCenter가 화면 배너.
 //    상신 → 지금 차례 결재자만 / 승인·반려·취소 결과 → 기안자만. 그 외 사람에게는 안 간다.
+//  - 결과 기록 메일: 최종 승인·반려·결재 취소 결과는 기안자 사내메일(공문함)에도 남긴다(푸시·배너는 위 경로로 한 번만).
+//  - 보관함에서 삭제: 끝난 문서(완료·반려·회수·취소)는 각자 자기 보관함에서만 숨긴다(hiddenBy) — 원본은 회사 기록으로 남고 "삭제한 문서"에서 되돌릴 수 있다.
 //  - 수정: 첫 결재자가 문서를 열어보기 전까지만(열람하면 잠김 → 회수 후 재기안).
 //  - 승인 후 취소: 기안자가 「결재 취소 요청」(사유) → 같은 결재선이 다시 승인하면 "결재 취소"로 바뀐다.
 //    문서는 지우지 않고 모두의 보관함에 "결재 취소" 도장으로 남는다(감사 기록). 연차 사용일수도 자동 복구.
@@ -16,9 +18,9 @@ import React from "react";
 import { createPortal } from "react-dom";
 import html2canvas from "html2canvas";
 import { db, auth } from "./firebase";
-import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, serverTimestamp } from "firebase/firestore";
 import { ShellIcon } from "./AdminShell";
-import { useCompanyStaff, compressImage } from "./InternalMail";
+import { useCompanyStaff, compressImage, sendInternalMail } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
 import {
   APPROVAL_CATS, APPROVAL_FORMS, formOf, formsOfCat, initialData, missingFields, fieldText, suggestLine,
@@ -58,7 +60,7 @@ export function useApprovalCounts() {
   const uid = auth.currentUser?.uid;
   const list = useApprovals(uid);
   return React.useMemo(() => {
-    const l = list || [];
+    const l = (list || []).filter((d) => !(d.hiddenBy || []).includes(uid));
     return {
       todo: l.filter((d) => myTurn(d, uid)).length,
       mineNew: l.filter((d) => mineUnread(d, uid)).length,
@@ -634,6 +636,18 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit }) {
         patch.cancel = c;
       }
       await updateDoc(doc(db, "approvals", d.id), patch);
+      // 📧 결과는 기안자 사내메일(공문함)에도 기록 — 푸시·배너는 notifyApproval·BannerCenter가 따로 한 번 보낸다
+      const result = patch.status === "approved" ? ["결재 완료", "문서가 최종 승인되었습니다."]
+        : patch.status === "rejected" ? ["반려", `${me.name}님이 문서를 반려했습니다.\n반려 사유: ${comment.trim()}`]
+          : patch.status === "cancelled" ? ["결재 취소 승인", "결재 취소 요청이 승인되어 문서가 취소되었습니다."]
+            : patch.cancel?.status === "rejected" ? ["결재 취소 거부", `${me.name}님이 결재 취소 요청을 거부했습니다.\n사유: ${comment.trim()}`] : null;
+      if (result && d.drafterUid !== me.uid) {
+        sendInternalMail({
+          company, to: [{ uid: d.drafterUid, name: d.drafter?.name || "" }], kind: "approval", fromName: me.name,
+          subject: `[${result[0]}] ${d.title}`,
+          body: `${result[1]}\n\n· 문서번호: ${d.docNo}\n· 양식: ${d.formLabel}\n· 내용: ${d.summary || ""}${d.amount ? `\n· 금액: ${fmtWon(d.amount)}` : ""}\n\n홈 › 전자결재 › 내 기안함에서 확인하세요.`,
+        }).catch(() => {});
+      }
       setComment(""); setCancelAsk(false);
     } catch (e) { window.alert(`처리 실패: ${e.message}`); } finally { setBusy(false); }
   };
@@ -712,6 +726,13 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit }) {
               {mine && d.status === "approved" && d.cancel?.status !== "pending" && !cancelAsk && <button type="button" onClick={() => { setCancelAsk(true); setComment(""); }} className="h-9 px-3.5 rounded-lg border border-[#0F1A30] text-[12.5px] font-black text-[#0F1A30]">결재 취소 요청</button>}
               {mine && ["rejected", "withdrawn"].includes(d.status) && <button type="button" onClick={() => onRedraft(d)} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">재기안</button>}
               {mine && ["approved", "cancelled"].includes(d.status) && <button type="button" onClick={() => onRedraft({ ...d, id: null })} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#3A4A66]">복사해서 새로 쓰기</button>}
+              {(() => {
+                const hidden = (d.hiddenBy || []).includes(me.uid);
+                const finished = d.status !== "pending" && !(d.status === "approved" && d.cancel?.status === "pending");
+                if (hidden) return <button type="button" onClick={() => updateDoc(doc(db, "approvals", d.id), { hiddenBy: arrayRemove(me.uid) }).catch((e) => window.alert(e.message))} className="h-9 px-3.5 rounded-lg border border-[#0F1A30] text-[12.5px] font-black text-[#0F1A30]">보관함으로 되돌리기</button>;
+                if (!finished) return null;
+                return <button type="button" onClick={async () => { if (!window.confirm("내 보관함에서 이 문서를 삭제할까요?\n(회사 기록 원본은 남고, 결재함 › 삭제한 문서에서 되돌릴 수 있습니다)")) return; await updateDoc(doc(db, "approvals", d.id), { hiddenBy: arrayUnion(me.uid) }).catch((e) => window.alert(e.message)); onClose(); }} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#7A879C]">삭제</button>;
+              })()}
               <button type="button" onClick={print} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#3A4A66]">인쇄</button>
             </div>
             {mine && d.status === "pending" && (
@@ -885,8 +906,10 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   React.useEffect(() => { if (openId) { setOpen(openId); onOpened?.(); } }, [openId]); // eslint-disable-line react-hooks/exhaustive-deps
   const leave = useLeaveStatus(meFull, list);
 
-  const L = list || [];
   const uid = me.uid;
+  const isHidden = (d) => (d.hiddenBy || []).includes(uid);
+  const L = (list || []).filter((d) => !isHidden(d));
+  const hiddenL = (list || []).filter(isHidden);
   const inLine = (d) => (d.line || []).some((s) => s.uid === uid);
   const sets = {
     todo: L.filter((d) => myTurn(d, uid)),
@@ -896,6 +919,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
     cancelled: L.filter((d) => d.status === "cancelled" && inLine(d)),
     cc: L.filter((d) => (d.ccUids || []).includes(uid)),
     company: companyAll,
+    hidden: hiddenL,
   };
   const mineL = L.filter((d) => d.drafterUid === uid);
   const mineSets = { all: mineL, pending: mineL.filter((d) => d.status === "pending"), approved: mineL.filter((d) => d.status === "approved"), rejected: mineL.filter((d) => d.status === "rejected"), cancelled: mineL.filter((d) => d.status === "cancelled"), withdrawn: mineL.filter((d) => d.status === "withdrawn") };
@@ -950,7 +974,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
 
       {page === "inbox" && (
         <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
-          <Tabs tab={tab} setTab={setTab} tabs={[["todo", "결재 대기", sets.todo.length], ["progress", "진행 중", sets.progress.length], ["done", "결재 완료", 0], ["rejected", "반려", 0], ["cancelled", "결재 취소", 0], ["cc", "참조 문서", sets.cc.filter((d) => ccUnread(d, uid)).length], ...(admin ? [["company", "회사 전체", 0]] : [])]} />
+          <Tabs tab={tab} setTab={setTab} tabs={[["todo", "결재 대기", sets.todo.length], ["progress", "진행 중", sets.progress.length], ["done", "결재 완료", 0], ["rejected", "반려", 0], ["cancelled", "결재 취소", 0], ["cc", "참조 문서", sets.cc.filter((d) => ccUnread(d, uid)).length], ...(admin ? [["company", "회사 전체", 0]] : []), ["hidden", "삭제한 문서", 0]]} />
           <DocList uid={uid} docs={tab === "company" ? companyAll : (list === null ? null : sets[tab] || [])} onOpen={(d) => setOpen(d.id)} empty={tab === "todo" ? "결재할 문서가 없습니다" : "문서가 없습니다"} />
         </div>
       )}

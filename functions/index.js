@@ -4400,6 +4400,7 @@ async function pushInternalMail(m) {
 exports.notifyInternalMail = functions.firestore.document("internalMails/{id}").onCreate(async (snap) => {
   const m = snap.data() || {};
   if (m.status === "draft" || m.status === "scheduled") return null; // 임시보관·예약 메일은 보낼 때 알린다
+  if (m.kind === "approval") return null; // 전자결재 결과 기록 메일 — 푸시는 notifyApproval이 이미 보냈다
   await pushInternalMail(m);
   return null;
 });

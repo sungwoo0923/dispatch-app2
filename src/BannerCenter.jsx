@@ -103,6 +103,7 @@ export default function BannerCenter({ bottom = 24 }) {
         if (c.type !== "added") return;
         const m = { id: c.doc.id, ...c.doc.data() };
         if (m.fromUid === uid) return;
+        if (m.kind === "approval") return; // 전자결재 결과 메일은 기록용 — 배너는 결재 변화 감지(아래)에서 한 번만
         const at = m.at?.toMillis ? m.at.toMillis() : Date.now();
         if (at < startedAt) return;
         setItems((p) => (p.some((x) => x.id === m.id) ? p : [...p, m].slice(-4)));
