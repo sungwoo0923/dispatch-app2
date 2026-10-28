@@ -45,6 +45,10 @@ export default function UploadPage() {
   const sigRef                    = useRef(null);
   const [signed, setSigned]       = useState(false);
   const [sigDrawing, setSigDrawing] = useState(false);
+  const [bigSign, setBigSign] = useState(false); // 크게 서명하기(전체화면)
+  const [signedAt, setSignedAt] = useState(null);
+  const bigRef = useRef(null);
+  const bigDrawRef = useRef({ drawing: false, drawn: false });
   const [showPaymentCalc, setShowPaymentCalc] = useState(false);
   const [invoiceDate, setInvoiceDate] = useState("");
   const [imgZoomOpen, setImgZoomOpen] = useState(false);
@@ -834,62 +838,156 @@ export default function UploadPage() {
               </button>
             </div>
 
-            {/* 서명 */}
-            <div className="kpu-card">
-              <div className="kpu-head">
-                <span className="kpu-dot" />서명
+            {/* 서명 — 2026-10-28 고급 서명 패드(작은 칸 + 크게 서명하기 전체화면) */}
+            <div className="kpu-card" style={{ padding: 0, overflow: "hidden" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 16px", background: "linear-gradient(120deg,#0F1A30,#1B2B4B 60%,#2D4C82)", color: "#fff" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#CFE0FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 17c3-1 4-6 6-6s1 5 3 5 3-4 5-4 2 2 4 2" /><path d="M3 21h18" /></svg>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 15.5, fontWeight: 900 }}>서명</div>
+                  <div className="kpu-mono" style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.22em", color: "#8FB0F0" }}>SIGNATURE PAD</div>
+                </div>
                 {signed
-                  ? <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 900, color: "#fff", background: "#1B2B4B", padding: "3px 9px", borderRadius: 8 }}>✓ 서명 완료</span>
-                  : <span className="kpu-mono kpu-code">SIGNATURE</span>}
+                  ? <span style={{ fontSize: 12, fontWeight: 900, color: "#0F1A30", background: "#CFE0FF", padding: "4px 10px", borderRadius: 8 }}>✓ 서명 완료</span>
+                  : <span style={{ fontSize: 12, fontWeight: 800, color: "#CFE0FF", border: "1px solid rgba(207,224,255,.4)", padding: "3px 9px", borderRadius: 8 }}>미서명</span>}
               </div>
-              <div style={{ fontSize: 13, color: "#64748b", margin: "2px 0 10px" }}>아래 칸에 손가락으로 서명해주세요</div>
-              <div style={{ position: "relative" }}>
-                <canvas
-                  ref={sigRef}
-                  width={440}
-                  height={140}
-                  style={{ width: "100%", height: 140, border: `1.5px ${signed ? "solid #1B2B4B" : "dashed #9FB2D6"}`, borderRadius: 14, background: "repeating-linear-gradient(0deg,#F7F9FC 0 27px,#EEF1F6 27px 28px)", touchAction: "none", display: "block", pointerEvents: signed ? "none" : "auto" }}
-                  onPointerDown={(e) => {
-                    if (signed) return;
-                    // 포인터를 캔버스에 캡처 — 손가락이 경계를 벗어나도 서명이 끊기지 않게
-                    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
-                    setSigDrawing(true);
-                    const rect = sigRef.current.getBoundingClientRect();
-                    const ctx = sigRef.current.getContext("2d");
-                    const scaleX = sigRef.current.width / rect.width;
-                    const scaleY = sigRef.current.height / rect.height;
-                    ctx.beginPath();
-                    ctx.moveTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY);
-                  }}
-                  onPointerMove={(e) => {
-                    if (!sigDrawing || signed) return;
-                    const rect = sigRef.current.getBoundingClientRect();
-                    const ctx = sigRef.current.getContext("2d");
-                    const scaleX = sigRef.current.width / rect.width;
-                    const scaleY = sigRef.current.height / rect.height;
-                    ctx.lineWidth = 2.8;
-                    ctx.strokeStyle = "#0F1A30";
-                    ctx.lineCap = "round";
-                    ctx.lineJoin = "round";
-                    ctx.lineTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY);
-                    ctx.stroke();
-                  }}
-                  onPointerUp={(e) => {
-                    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
-                    setSigDrawing(prevDrawing => { if (prevDrawing) setSigned(true); return false; });
-                  }}
-                  onPointerLeave={(e) => {
-                    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
-                    setSigDrawing(prevDrawing => { if (prevDrawing) setSigned(true); return false; });
-                  }}
-                />
-                {!signed && <span className="kpu-mono" style={{ position: "absolute", left: 14, bottom: 10, fontSize: 11, color: "#A7B3C6", pointerEvents: "none", letterSpacing: "0.2em" }}>SIGN HERE ✕ ______</span>}
+              <div style={{ padding: 16 }}>
+                <div style={{ fontSize: 13.5, color: "#475569", marginBottom: 10, fontWeight: 600 }}>
+                  {signed ? "서명이 저장되었습니다. 첫 번째 사진과 함께 전송됩니다." : "아래 칸에 손가락으로 서명하거나, ‘크게 서명하기’를 눌러 넓은 화면에서 서명하세요."}
+                </div>
+                <div style={{ position: "relative", borderRadius: 16, padding: 2, background: signed ? "linear-gradient(135deg,#1B2B4B,#4B6CB7)" : "repeating-linear-gradient(90deg,#9FB2D6 0 8px,transparent 8px 14px)" }}>
+                  <div style={{ position: "relative", borderRadius: 14, overflow: "hidden", background: "#fff" }}>
+                    <canvas
+                      ref={sigRef}
+                      width={440}
+                      height={150}
+                      style={{ width: "100%", height: 150, background: "linear-gradient(#fff 0 0) padding-box", touchAction: "none", display: "block", pointerEvents: signed ? "none" : "auto" }}
+                      onPointerDown={(e) => {
+                        if (signed) return;
+                        // 포인터를 캔버스에 캡처 — 손가락이 경계를 벗어나도 서명이 끊기지 않게
+                        try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+                        setSigDrawing(true);
+                        const rect = sigRef.current.getBoundingClientRect();
+                        const ctx = sigRef.current.getContext("2d");
+                        const scaleX = sigRef.current.width / rect.width;
+                        const scaleY = sigRef.current.height / rect.height;
+                        ctx.beginPath();
+                        ctx.moveTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY);
+                      }}
+                      onPointerMove={(e) => {
+                        if (!sigDrawing || signed) return;
+                        const rect = sigRef.current.getBoundingClientRect();
+                        const ctx = sigRef.current.getContext("2d");
+                        const scaleX = sigRef.current.width / rect.width;
+                        const scaleY = sigRef.current.height / rect.height;
+                        ctx.lineWidth = 2.8;
+                        ctx.strokeStyle = "#0F1A30";
+                        ctx.lineCap = "round";
+                        ctx.lineJoin = "round";
+                        ctx.lineTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY);
+                        ctx.stroke();
+                      }}
+                      onPointerUp={(e) => {
+                        try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+                        setSigDrawing(prevDrawing => { if (prevDrawing) { setSigned(true); setSignedAt(new Date()); } return false; });
+                      }}
+                      onPointerLeave={(e) => {
+                        try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+                        setSigDrawing(prevDrawing => { if (prevDrawing) { setSigned(true); setSignedAt(new Date()); } return false; });
+                      }}
+                    />
+                    {/* 서명 기준선 */}
+                    <div style={{ position: "absolute", left: 18, right: 18, bottom: 34, height: 0, borderTop: "1.5px dashed #C9D3E4", pointerEvents: "none" }} />
+                    <span style={{ position: "absolute", left: 18, bottom: 38, fontSize: 18, fontWeight: 900, color: "#C9D3E4", pointerEvents: "none" }}>✕</span>
+                    {!signed && <span className="kpu-mono" style={{ position: "absolute", right: 16, top: 12, fontSize: 10.5, color: "#A7B3C6", pointerEvents: "none", letterSpacing: "0.22em" }}>SIGN HERE</span>}
+                  </div>
+                </div>
+                {signed && (
+                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 12.5, fontWeight: 700, color: "#475569" }}>
+                    <span>서명자 <b style={{ color: "#0F1A30" }}>{(!isManual && order?.이름) || manualName || "-"}</b></span>
+                    <span className="kpu-mono">{signedAt ? `${signedAt.getFullYear()}.${String(signedAt.getMonth() + 1).padStart(2, "0")}.${String(signedAt.getDate()).padStart(2, "0")} ${String(signedAt.getHours()).padStart(2, "0")}:${String(signedAt.getMinutes()).padStart(2, "0")}` : ""}</span>
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  <button
+                    onClick={() => { const ctx = sigRef.current.getContext("2d"); ctx.clearRect(0, 0, sigRef.current.width, sigRef.current.height); setSigned(false); setSignedAt(null); }}
+                    className="kpu-btn-ghost" style={{ flex: 1, height: 44, fontSize: 14 }}
+                  >다시 서명</button>
+                  <button onClick={() => { bigDrawRef.current = { drawing: false, drawn: false }; setBigSign(true); }} className="kpu-btn" style={{ flex: 1.3, height: 44, fontSize: 14 }}>
+                    크게 서명하기
+                  </button>
+                </div>
               </div>
-              <button
-                onClick={() => { const ctx = sigRef.current.getContext("2d"); ctx.clearRect(0, 0, sigRef.current.width, sigRef.current.height); setSigned(false); }}
-                style={{ marginTop: 10, height: 36, padding: "0 14px", borderRadius: 10, border: "1px solid #DCE3EF", background: "#fff", color: "#475569", fontSize: 13, fontWeight: 800, cursor: "pointer" }}
-              >다시 서명</button>
             </div>
+
+            {/* 크게 서명하기 — 전체화면 서명 패드(가로로 돌리면 더 넓게) */}
+            {bigSign && (
+              <div style={{ position: "fixed", inset: 0, zIndex: 100000, display: "flex", flexDirection: "column", background: "linear-gradient(rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(135deg,#0B1428,#1B2B4B 60%,#2D4C82)", padding: "14px 14px calc(14px + env(safe-area-inset-bottom))" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, color: "#fff", marginBottom: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <div className="kpu-mono" style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: "0.24em", color: "#8FB0F0" }}>FULL SCREEN SIGNATURE</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, marginTop: 2 }}>넓은 칸에 서명해주세요</div>
+                  </div>
+                  <button onClick={() => setBigSign(false)} style={{ width: 40, height: 40, borderRadius: 12, border: "1px solid rgba(255,255,255,.25)", background: "rgba(255,255,255,.1)", color: "#fff", fontSize: 18, cursor: "pointer" }}>✕</button>
+                </div>
+                <div style={{ position: "relative", flex: 1, minHeight: 200, borderRadius: 20, background: "#fff", overflow: "hidden", boxShadow: "0 20px 40px rgba(0,0,0,.35)" }}>
+                  <canvas
+                    ref={(el) => {
+                      bigRef.current = el;
+                      if (el && !el.dataset.sized) {
+                        const r = el.getBoundingClientRect();
+                        el.width = Math.max(300, Math.round(r.width * 2));
+                        el.height = Math.max(200, Math.round(r.height * 2));
+                        el.dataset.sized = "1";
+                      }
+                    }}
+                    style={{ width: "100%", height: "100%", display: "block", touchAction: "none" }}
+                    onPointerDown={(e) => {
+                      try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+                      const c = bigRef.current; const r = c.getBoundingClientRect(); const ctx = c.getContext("2d");
+                      bigDrawRef.current.drawing = true;
+                      ctx.beginPath();
+                      ctx.moveTo((e.clientX - r.left) * (c.width / r.width), (e.clientY - r.top) * (c.height / r.height));
+                    }}
+                    onPointerMove={(e) => {
+                      if (!bigDrawRef.current.drawing) return;
+                      const c = bigRef.current; const r = c.getBoundingClientRect(); const ctx = c.getContext("2d");
+                      ctx.lineWidth = 6; ctx.strokeStyle = "#0F1A30"; ctx.lineCap = "round"; ctx.lineJoin = "round";
+                                      const x = (e.clientX - r.left) * (c.width / r.width), y = (e.clientY - r.top) * (c.height / r.height);
+                      ctx.lineTo(x, y);
+                      ctx.stroke();
+                      const B = bigDrawRef.current;
+                      B.drawn = true;
+                      B.box = B.box ? { x0: Math.min(B.box.x0, x), y0: Math.min(B.box.y0, y), x1: Math.max(B.box.x1, x), y1: Math.max(B.box.y1, y) } : { x0: x, y0: y, x1: x, y1: y };
+                    }}
+                    onPointerUp={(e) => { try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {} bigDrawRef.current.drawing = false; }}
+                    onPointerLeave={() => { bigDrawRef.current.drawing = false; }}
+                  />
+                  <div style={{ position: "absolute", left: 28, right: 28, bottom: "28%", borderTop: "2px dashed #C9D3E4", pointerEvents: "none" }} />
+                  <span style={{ position: "absolute", left: 28, bottom: "calc(28% + 6px)", fontSize: 26, fontWeight: 900, color: "#C9D3E4", pointerEvents: "none" }}>✕</span>
+                  <span className="kpu-mono" style={{ position: "absolute", right: 18, top: 14, fontSize: 11, color: "#A7B3C6", letterSpacing: "0.22em", pointerEvents: "none" }}>SIGN HERE</span>
+                </div>
+                <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+                  <button className="kpu-btn-ghost" style={{ flex: 1, background: "rgba(255,255,255,.1)", color: "#fff", borderColor: "rgba(255,255,255,.3)" }}
+                    onClick={() => { const c = bigRef.current; c.getContext("2d").clearRect(0, 0, c.width, c.height); bigDrawRef.current = { drawing: false, drawn: false }; }}>지우기</button>
+                  <button className="kpu-btn" style={{ flex: 1.6, background: "#fff", color: "#0F1A30" }}
+                    onClick={() => {
+                      if (!bigDrawRef.current.drawn) { alert("서명을 해주세요."); return; }
+                      // 실제로 그린 부분만 잘라 작은 서명칸(전송용)에 꽉 차게 옮겨 그린다
+                      const src = bigRef.current, dst = sigRef.current;
+                      const ctx = dst.getContext("2d");
+                      ctx.clearRect(0, 0, dst.width, dst.height);
+                      const bx = bigDrawRef.current.box || { x0: 0, y0: 0, x1: src.width, y1: src.height };
+                      const pad = 14;
+                      const sx = Math.max(0, bx.x0 - pad), sy = Math.max(0, bx.y0 - pad);
+                      const sw = Math.min(src.width, bx.x1 + pad) - sx, sh = Math.min(src.height, bx.y1 + pad) - sy;
+                      const k = Math.min((dst.width - 24) / sw, (dst.height - 20) / sh, 1);
+                      const w = sw * k, h = sh * k;
+                      ctx.drawImage(src, sx, sy, sw, sh, (dst.width - w) / 2, (dst.height - h) / 2, w, h);
+                      setSigned(true); setSignedAt(new Date()); setBigSign(false);
+                    }}>서명 완료</button>
+                </div>
+              </div>
+            )}
 
             <div className="kpu-dock">
               <button className="kpu-btn" style={{ width: "100%", height: 54, fontSize: 16 }} disabled={!files.length || uploading} onClick={() => setConfirmPopup(true)}>

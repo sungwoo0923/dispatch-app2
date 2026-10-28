@@ -9639,6 +9639,17 @@ function CardAttachViewer({ order, onClose, showToast, showSuccess }) {
   const col = order.__col || order._col || "dispatch";
   const docId = order._id || order.id;
 
+  // ⭐ 버그수정(2026-10-28) — 팝업을 연 동안 PC에서 완료처리/미완료로 바꾸면 여기에도 바로 반영
+  useEffect(() => {
+    if (!docId) return undefined;
+    return onSnapshot(doc(db, col, docId), (d) => {
+      if (!d.exists()) return;
+      const v = (d.data() || {}).attachViewed === true;
+      setIsViewed(v);
+      attachViewedWrittenRef.current = v;
+    }, () => {});
+  }, [col, docId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     setLoading(true);
     const unsub = onSnapshot(collection(db, col, docId, "attachments"), snap => {

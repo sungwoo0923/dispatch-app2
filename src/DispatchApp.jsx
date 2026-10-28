@@ -22535,6 +22535,44 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
   // 실제 첨부파일이 없어도 "다른 방법으로 서류를 확인했다"고 수동으로 표시해둔
   // 오더(attachViewed)는 완료로 인정한다 — 그리드의 첨부 아이콘/첨부뷰어 하단
   // "완료처리" 버튼과 동일한 기준을 여기서도 그대로 따른다.
+  // ⭐ 버그수정(2026-10-28) — 조회 버튼을 누른 순간의 목록을 그대로 들고 있어서, 모바일(또는 다른 PC)에서
+  //   완료처리/미완료로 바꿔도 열려 있는 이 화면에는 반영되지 않았다. 실시간 오더(dispatchData)에 있는
+  //   완료 표시(attachViewed)를 우선으로 겹쳐 보여준다(다른 기기에서 바꾼 것도 바로 반영).
+  //   패널을 연 뒤 어느 기기에서든 수정된 오더(_lastModified)만 실시간으로 받아 겹친다 — 읽기 비용이 작다.
+  const [liveViewed, setLiveViewed] = React.useState(() => new Map());
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const since = Date.now() - 60 * 1000;
+    const unsubs = ["orders", "dispatch"].map((col) => onSnapshot(
+      query(collection(db, col), where("_lastModified", ">=", since)),
+      (snap) => {
+        const ch = snap.docChanges().filter((c) => c.type !== "removed");
+        if (!ch.length) return;
+        setLiveViewed((prev) => {
+          const m = new Map(prev);
+          ch.forEach((c) => m.set(c.doc.id, (c.doc.data() || {}).attachViewed === true));
+          return m;
+        });
+      },
+      () => {},
+    ));
+    return () => unsubs.forEach((u) => u());
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(() => {
+    if (!results.length) return;
+    setResults((prev) => {
+      let changed = false;
+      const next = prev.map((r) => {
+        if (!liveViewed.has(r._id)) return r;
+        const v = liveViewed.get(r._id);
+        if ((r.attachViewed === true) === v) return r;
+        changed = true;
+        return { ...r, attachViewed: v };
+      });
+      return changed ? next : prev;
+    });
+    setViewRow((prev) => (prev && liveViewed.has(prev._id) && (prev.attachViewed === true) !== liveViewed.get(prev._id) ? { ...prev, attachViewed: liveViewed.get(prev._id) } : prev));
+  }, [liveViewed]); // eslint-disable-line react-hooks/exhaustive-deps
   const isDone = (r) => getCnt(r) > 0 || r.attachViewed === true;
 
   React.useEffect(() => {
@@ -22567,7 +22605,8 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
       if (!cancelled) { setVerifiedCounts(Object.fromEntries(entries)); setCountsLoading(false); }
     })();
     return () => { cancelled = true; };
-  }, [results]);
+    // 완료 표시만 바뀐 경우엔 첨부 개수를 다시 세지 않는다(조회 목록이 바뀔 때만)
+  }, [results.map((r) => r._id).join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 전체저장(zip) 진행 상태 — 아래 handleSaveAllZip에서 사용. 훅은 조건부 return
   // 이전에 선언해야 하므로(Rules of Hooks) 여기 미리 선언해둔다.
