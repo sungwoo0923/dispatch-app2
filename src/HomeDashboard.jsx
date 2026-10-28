@@ -17,6 +17,8 @@ import { BannerCard, BannerStyles } from "./BannerCenter";
 import HomeDeck, { buildPastStats } from "./HomeDeck";
 import KpSubNav from "./KpSubNav";
 import { MailWorkspace, MAIL_FOLDERS, useMailCounts, folderBadge } from "./InternalMail";
+import ApprovalCenter, { useApprovalCounts } from "./Approval";
+import BoardPage, { BOARDS, canSeeBoard, useBoardLatest } from "./BoardPosts";
 
 /* ===== 공통 Modal ===== */
 function Modal({ title, onClose, children }) {
@@ -598,17 +600,8 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       setSchedules(list);
       if (initialLoad) {
         initialLoad = false;
-        showTodayToast("schedule", list); // 접속 시 오늘 항목 알림
-        return;
+        return; // ⭐ 2026-10-28 휴가/외근 게시판은 전자결재로 바뀌어 알림을 띄우지 않는다
       }
-      // 실시간 신규 등록 알림
-      const added = snap.docChanges().find(c => c.type === "added" && !c.doc.metadata.hasPendingWrites);
-      if (!added) return;
-      const data = { id: added.doc.id, ...added.doc.data() };
-      const seenKeyS = `schedule_${data.id}`;
-      if (getSeenToasts()[seenKeyS] || isAlreadySeen(seenKeyS)) return;
-      markToastSeen(seenKeyS); addPermDismissed(seenKeyS);
-      setToast({ type: "schedule", data });
     });
     return () => unsub();
   }, [showTodayToast]);
@@ -823,7 +816,10 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const [boardSeen, setBoardSeen] = useState(() => { try { return JSON.parse(localStorage.getItem(seenKey) || "{}"); } catch { return {}; } });
   const seenFloor = useRef(Date.now() - 3 * 86400e3); // 처음 쓰는 PC는 최근 3일 글만 NEW
   const newestOf = (list) => list.reduce((mx, it) => (it.authorUid && it.authorUid === user?.uid ? mx : Math.max(mx, (it.createdAt?.seconds || 0) * 1000)), 0);
-  const boardNewest = { 공지사항: newestOf(notices), "휴가/외근": newestOf(schedules), 인수인계: newestOf(handovers) };
+  const meHome = (() => { const u = users.find((x) => x.id === user?.uid) || {}; return { uid: user?.uid, name: u.name || user?.displayName || (user?.email || "").split("@")[0] || "", team: u.team || "", position: u.position || "", role: role || u.role || "" }; })();
+  const boardLatest = useBoardLatest(getViewCompany(), meHome);
+  const apCounts = useApprovalCounts();
+  const boardNewest = { 공지사항: newestOf(notices), 인수인계: newestOf(handovers), ...Object.fromEntries(Object.keys(BOARDS).map((b) => [`board:${b}`, boardLatest[b] || 0])) };
   const isBoardNew = (k) => boardNewest[k] > (boardSeen[k] ?? seenFloor.current);
   const curNewest = boardNewest[boardTab] || 0;
   useEffect(() => {
@@ -846,12 +842,20 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         { label: "관제", items: [{ key: "대시보드", label: "대시보드", en: "OPERATIONS", icon: "pulse" }] },
         { label: "사내 게시판", items: [
           { key: "공지사항", label: "공지사항", en: "NOTICE", icon: "bell", badge: isBoardNew("공지사항") ? "N" : 0, badgeTitle: "새 글" },
-          { key: "휴가/외근", label: "휴가/외근", en: "SCHEDULE", icon: "clock", badge: pendingApprovalCountNav || (isBoardNew("휴가/외근") ? "N" : 0), badgeTitle: pendingApprovalCountNav ? "내 결재 대기" : "새 글" },
-          { key: "인수인계", label: "인수인계", en: "HANDOVER", icon: "send", badge: unreadHandoverCountNav || (isBoardNew("인수인계") ? "N" : 0), badgeTitle: unreadHandoverCountNav ? "내 미확인" : "새 글" },
+          ...Object.entries(BOARDS).filter(([b]) => canSeeBoard(b, meHome)).map(([b, B]) => ({ key: `board:${b}`, label: B.label, en: B.en, icon: B.icon, badge: isBoardNew(`board:${b}`) ? "N" : 0, badgeTitle: "새 글" })),
+        ] },
+        { label: "전자결재", items: [
+          { key: "ap:inbox", label: "결재함", en: "INBOX", icon: "stamp", badge: apCounts.todo, badgeTitle: "내 결재 차례" },
+          { key: "ap:leave", label: "근태·휴가 신청", en: "ATTENDANCE", icon: "clock" },
+          { key: "ap:expense", label: "비용·지출 결의", en: "EXPENSE", icon: "wallet" },
+          { key: "ap:draft", label: "업무 기안·품의", en: "PROPOSAL", icon: "file" },
+          { key: "ap:mine", label: "내 기안함", en: "MY DOCUMENTS", icon: "send", badge: apCounts.rejectedMine, badgeTitle: "반려된 내 문서" },
+          { key: "ap:lines", label: "결재선 관리", en: "LINES", icon: "route" },
         ] },
         { label: "커뮤니케이션 센터", items: [
           { key: "mail", label: "사내메일함", en: "MAILBOX", icon: "mail", badge: mailCounts.unread, badgeTitle: "안 읽은 메일",
             sub: MAIL_FOLDERS.map((f) => ({ key: `mail:${f.key}`, label: f.label, icon: f.icon, badge: folderBadge(f.key, mailCounts), soft: !["inbox", "unread"].includes(f.key) })) },
+          { key: "인수인계", label: "인수인계", en: "HANDOVER", icon: "link", badge: unreadHandoverCountNav || (isBoardNew("인수인계") ? "N" : 0), badgeTitle: unreadHandoverCountNav ? "내 미확인" : "새 글" },
         ] },
       ]}>
     <div className="space-y-5">
@@ -896,8 +900,12 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         <MailWorkspace embedded company={getViewCompany()} myName={myNameHome} box={boardTab.slice(5)} setBox={(b) => setBoardTab(`mail:${b}`)} height="calc(100vh - 122px)" />
       )}
 
+      {/* ===== 전자결재 · 자유/관리자/임원 게시판(2026-10-28) ===== */}
+      {String(boardTab).startsWith("ap:") && <ApprovalCenter company={getViewCompany()} me={meHome} page={boardTab.slice(3)} setPage={(p) => setBoardTab(`ap:${p}`)} />}
+      {String(boardTab).startsWith("board:") && <BoardPage company={getViewCompany()} me={meHome} board={boardTab.slice(6)} />}
+
       {/* ===== 사내 게시판(왼쪽 사이드바에서 고름) — 2026-10-28 디지털 리디자인 ===== */}
-      {boardTab !== "대시보드" && !isMailTab && (
+      {(boardTab === "공지사항" || boardTab === "인수인계") && (
       <div className="kp-board space-y-4">
         <div className="relative overflow-hidden rounded-[22px] px-7 py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]"
           style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>

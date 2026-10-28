@@ -4393,7 +4393,7 @@ async function pushInternalMail(m) {
     const docs = await db.getAll(...to.slice(i, i + 100).map((uid) => db.collection("users").doc(uid)));
     docs.forEach((d) => { if (d.exists && (d.data().companyName || "돌캐") === (m.company || "돌캐") && d.data().fcmToken) tokens.push(d.data().fcmToken); });
   }
-  const head = m.kind === "hr" ? "📢 인사발령" : m.kind === "closeReport" ? "📨 마감보고" : `📧 ${m.important ? "[중요] " : ""}${m.fromName || "사내메일"}`;
+  const head = m.kind === "hr" ? "📢 인사발령" : m.kind === "closeReport" ? "📨 마감보고" : m.kind === "approval" ? `📝 전자결재 · ${m.fromName || ""}` : `📧 ${m.important ? "[중요] " : ""}${m.fromName || "사내메일"}`;
   const body = m.kind === "closeReport" ? String(m.body || "") : `${m.subject || ""}${m.body ? `\n${String(m.body).replace(/\s+/g, " ").slice(0, 80)}` : ""}`;
   await sendPushAndCleanup([...new Set(tokens)], { notification: { title: m.kind === "closeReport" ? `📨 ${m.subject || "마감보고"}` : head, body }, android: { priority: "high" } }, "사내메일");
 }

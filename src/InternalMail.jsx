@@ -23,7 +23,7 @@ const fmtAt = (ms, full) => {
   if (!full && d.toDateString() === today.toDateString()) return d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
   return d.toLocaleString("ko-KR", full ? { year: "numeric", month: "long", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" } : { month: "numeric", day: "numeric" });
 };
-const KIND_LABEL = { hr: "인사발령", closeReport: "마감보고" };
+const KIND_LABEL = { hr: "인사발령", closeReport: "마감보고", approval: "전자결재" };
 
 // 이미지를 JPEG로 줄인다(긴 변 1400px) — 메일 1통에 3장까지 담을 수 있게
 export function compressImage(src, max = 1400, quality = 0.82) {
@@ -171,7 +171,7 @@ export const MAIL_FOLDERS = [
   { key: "unread", label: "안읽은 메일", icon: "mail" },
   { key: "starred", label: "별표 메일", icon: "star" },
   { key: "important", label: "중요 메일", icon: "flag" },
-  { key: "official", label: "공문함", icon: "stamp", hint: "인사발령·마감보고" },
+  { key: "official", label: "공문함", icon: "stamp", hint: "인사발령·마감보고·전자결재" },
   { key: "sent", label: "보낸메일함", icon: "send" },
   { key: "self", label: "내게쓴메일함", icon: "user" },
   { key: "scheduled", label: "예약메일함", icon: "clock" },
@@ -213,7 +213,7 @@ export function splitFolders(inbox, mine, uid) {
     unread: sort(received.filter((m) => !has(m.readBy, uid))),
     starred: sort(all.filter((m) => alive(m) && has(m.starredBy, uid))),
     important: sort(received.filter((m) => m.important)),
-    official: sort(received.filter((m) => m.kind === "hr" || m.kind === "closeReport")),
+    official: sort(received.filter((m) => m.kind === "hr" || m.kind === "closeReport" || m.kind === "approval")),
     sent: sort(sentAll.filter((m) => alive(m) && !isSelfMail(m, uid))),
     self: sort(sentAll.filter((m) => alive(m) && isSelfMail(m, uid))),
     scheduled: sort(my.filter((m) => statusOf(m) === "scheduled"), (m) => -toMs(m.scheduledAt)),

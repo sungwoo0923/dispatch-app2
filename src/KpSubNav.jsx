@@ -50,9 +50,9 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
         style={{ width: collapsed ? 72 : 228, background: "linear-gradient(180deg, #16264A 0%, #1B2B4B 55%, #14213D 100%)" }}
       >
         <div className={`pt-5 pb-4 border-b border-white/10 flex items-center gap-3 ${collapsed ? "px-0 justify-center" : "px-4"}`}>
-          <div className="w-10 h-10 rounded-xl bg-white/10 ring-1 ring-white/15 flex items-center justify-center shrink-0">
+          <button type="button" onClick={collapsed ? toggle : undefined} title={collapsed ? "메뉴 펼치기" : undefined} className={`w-10 h-10 rounded-xl bg-white/10 ring-1 ring-white/15 flex items-center justify-center shrink-0 ${collapsed ? "cursor-pointer hover:bg-white/20" : "cursor-default"}`}>
             <ShellIcon name={icon} size={19} />
-          </div>
+          </button>
           {!collapsed && (
             <div className="min-w-0">
               <div style={{ fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: "0.22em" }} className="text-blue-200/70">{code}</div>
@@ -90,9 +90,9 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
             </div>
           )}
         </nav>
-        <button type="button" onClick={toggle} className="m-3 h-9 rounded-xl text-[12.5px] font-bold text-blue-100/70 hover:text-white hover:bg-white/[0.08] border border-white/10 flex items-center justify-center gap-2" title={collapsed ? "메뉴 펼치기" : "메뉴 접기"}>
+        <button type="button" onClick={toggle} className={`relative z-[5] shrink-0 h-10 rounded-xl text-[12.5px] font-bold border flex items-center justify-center gap-2 ${collapsed ? "mx-2 my-3 !h-12 flex-col !gap-0.5 !text-[10.5px] bg-white/10 text-white border-white/20 hover:bg-white/20" : "m-3 text-blue-100/70 hover:text-white hover:bg-white/[0.08] border-white/10"}`} title={collapsed ? "메뉴 펼치기" : "메뉴 접기"}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: collapsed ? "rotate(180deg)" : "none" }}><path d="M15 6l-6 6 6 6" /></svg>
-          {!collapsed && "메뉴 접기"}
+          {collapsed ? "펼치기" : "메뉴 접기"}
         </button>
       </aside>
       <main className={`flex-1 min-w-0 h-full overflow-y-auto ${bodyClass}`}>{children}</main>
