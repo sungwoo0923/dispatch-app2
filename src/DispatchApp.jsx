@@ -434,7 +434,7 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
   const clockStr = `${pad2(clock.getHours())}:${pad2(clock.getMinutes())}:${pad2(clock.getSeconds())}`;
 
   return (
-    <div className="bg-white border border-[#E3E8F0] rounded-[24px] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] overflow-hidden flex flex-col" style={{ flex: multiMode ? "0 0 calc(38% - 12px)" : "0 0 clamp(300px, 26%, 400px)", minWidth: 240 }}>
+    <div className="bg-white border border-[#E3E8F0] rounded-[24px] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] overflow-hidden flex flex-col" style={{ flex: "0 0 calc(38% - 12px)", minWidth: 240 }}>
       {/* 헤더 — 오늘 날짜 + 디지털 시계 */}
       <div className="px-5 py-3.5 flex items-center justify-between shrink-0" style={{ background: "linear-gradient(120deg,#0B1428,#0F1A30 50%,#1B2B4B)" }}>
         <div>
@@ -18271,7 +18271,7 @@ className={`
            {/* ==================== 상단: 입력폼 + Today 사이드패널 ==================== */}
 <div className="flex items-stretch gap-3 w-full mb-4" style={{ minWidth: 0 }}>
   {/* 왼쪽: 폼 */}
-  <div style={{ flex: "1 1 0", minWidth: 0, overflow: "hidden" }}>
+  <div style={{ flex: "0 0 62%", maxWidth: "62%", minWidth: 0, overflow: "hidden" }}>
     {renderForm()}
   </div>
 
