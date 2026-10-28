@@ -1,24 +1,39 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "claude/*": false
+    }
+  },
   "functions": {
     "api/fuel.js": {
       "maxDuration": 10,
-      "regions": ["icn1"]
+      "regions": [
+        "icn1"
+      ]
     },
     "api/upload-page.js": {
       "maxDuration": 10,
-      "regions": ["icn1"]
+      "regions": [
+        "icn1"
+      ]
     },
     "api/send-email.js": {
       "maxDuration": 30,
-      "regions": ["icn1"]
+      "regions": [
+        "icn1"
+      ]
     },
     "api/send24.js": {
       "maxDuration": 30,
-      "regions": ["icn1"]
+      "regions": [
+        "icn1"
+      ]
     },
     "api/call24-meta.js": {
       "maxDuration": 15,
-      "regions": ["icn1"]
+      "regions": [
+        "icn1"
+      ]
     }
   },
   "routes": [
