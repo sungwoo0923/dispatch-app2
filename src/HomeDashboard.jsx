@@ -19,6 +19,7 @@ import KpSubNav from "./KpSubNav";
 import { MailWorkspace, MAIL_FOLDERS, useMailCounts, folderBadge } from "./InternalMail";
 import ApprovalCenter, { useApprovalCounts } from "./Approval";
 import BoardPage, { BOARDS, canSeeBoard, useBoardLatest } from "./BoardPosts";
+import { NoticeWriter, HandoverWriter, NOTICE_WRITER_ROLES, handoverReceivers } from "./HomeWriters";
 
 /* ===== 공통 Modal ===== */
 function Modal({ title, onClose, children }) {
@@ -819,6 +820,19 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const meHome = (() => { const u = users.find((x) => x.id === user?.uid) || {}; return { uid: user?.uid, name: u.name || user?.displayName || (user?.email || "").split("@")[0] || "", team: u.team || "", position: u.position || "", role: role || u.role || "" }; })();
   const boardLatest = useBoardLatest(getViewCompany(), meHome);
   const apCounts = useApprovalCounts();
+  // 🔔 결재 배너를 누르면 홈 › 전자결재로 와서 그 문서를 연다(DispatchApp이 홈으로 옮겨 준 뒤 이 값을 남겨 둔다)
+  const [apOpenId, setApOpenId] = useState(null);
+  useEffect(() => {
+    const take = () => {
+      const p = window.__kpOpenApproval;
+      if (!p) return;
+      window.__kpOpenApproval = null;
+      setBoardTab(`ap:${p.page || "inbox"}`); setApOpenId(p.id);
+    };
+    take();
+    window.addEventListener("kp-open-approval", take);
+    return () => window.removeEventListener("kp-open-approval", take);
+  }, []);
   const boardNewest = { 공지사항: newestOf(notices), 인수인계: newestOf(handovers), ...Object.fromEntries(Object.keys(BOARDS).map((b) => [`board:${b}`, boardLatest[b] || 0])) };
   const isBoardNew = (k) => boardNewest[k] > (boardSeen[k] ?? seenFloor.current);
   const curNewest = boardNewest[boardTab] || 0;
@@ -835,7 +849,10 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const myNameHome = users.find((u) => u.id === user?.uid)?.name || user?.displayName || (user?.email || "").split("@")[0] || "";
 
   const pendingApprovalCountNav = schedules.filter(s => (s.approvers || []).some(a => a.uid === user?.uid && (!a.status || a.status === "pending"))).length;
-  const unreadHandoverCountNav = handovers.filter(h => user?.uid === h.receiverUid && !h.readBy?.includes(h.receiverUid)).length;
+  const unreadHandoverCountNav = handovers.filter(h => handoverReceivers(h).includes(user?.uid) && !h.readBy?.includes(user?.uid)).length;
+  const canWriteNotice = NOTICE_WRITER_ROLES.includes(role);
+  // ✍ 공지·인수인계 글쓰기는 팝업 대신 넓은 작성 화면(HomeWriters.jsx)
+  const writerActive = (boardTab === "공지사항" && noticeOpen) || (boardTab === "인수인계" && (handoverOpen || handoverEditMode));
   return (
     <KpSubNav noBleed code="HOME" title="홈" icon="dashboard" active={boardTab} onSelect={setBoardTab} bodyClass="px-5 py-4"
       groups={[
@@ -849,7 +866,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
           { key: "ap:leave", label: "근태·휴가 신청", en: "ATTENDANCE", icon: "clock" },
           { key: "ap:expense", label: "비용·지출 결의", en: "EXPENSE", icon: "wallet" },
           { key: "ap:draft", label: "업무 기안·품의", en: "PROPOSAL", icon: "file" },
-          { key: "ap:mine", label: "내 기안함", en: "MY DOCUMENTS", icon: "send", badge: apCounts.rejectedMine, badgeTitle: "반려된 내 문서" },
+          { key: "ap:mine", label: "내 기안함", en: "MY DOCUMENTS", icon: "send", badge: apCounts.mineNew, badgeTitle: "새 결재 결과(승인·반려·취소)" },
           { key: "ap:lines", label: "결재선 관리", en: "LINES", icon: "route" },
         ] },
         { label: "커뮤니케이션 센터", items: [
@@ -901,11 +918,19 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       )}
 
       {/* ===== 전자결재 · 자유/관리자/임원 게시판(2026-10-28) ===== */}
-      {String(boardTab).startsWith("ap:") && <ApprovalCenter company={getViewCompany()} me={meHome} page={boardTab.slice(3)} setPage={(p) => setBoardTab(`ap:${p}`)} />}
+      {String(boardTab).startsWith("ap:") && <ApprovalCenter company={getViewCompany()} me={meHome} page={boardTab.slice(3)} setPage={(p) => setBoardTab(`ap:${p}`)} openId={apOpenId} onOpened={() => setApOpenId(null)} />}
       {String(boardTab).startsWith("board:") && <BoardPage company={getViewCompany()} me={meHome} board={boardTab.slice(6)} />}
 
       {/* ===== 사내 게시판(왼쪽 사이드바에서 고름) — 2026-10-28 디지털 리디자인 ===== */}
-      {(boardTab === "공지사항" || boardTab === "인수인계") && (
+      {boardTab === "공지사항" && noticeOpen && (
+        <NoticeWriter me={meHome} company={getViewCompany()} initial={selectedNotice} onCancel={() => setNoticeOpen(false)} onSaved={() => { setNoticeOpen(false); setSelectedNotice(null); }} />
+      )}
+      {boardTab === "인수인계" && (handoverOpen || handoverEditMode) && (
+        <HandoverWriter me={meHome} company={getViewCompany()} initial={handoverEditMode ? selectedHandover : null}
+          onCancel={() => { setHandoverOpen(false); setHandoverEditMode(false); isEditingHandoverRef.current = false; }}
+          onSaved={() => { setHandoverOpen(false); setHandoverEditMode(false); setSelectedHandover(null); isEditingHandoverRef.current = false; }} />
+      )}
+      {(boardTab === "공지사항" || boardTab === "인수인계") && !writerActive && (
       <div className="kp-board space-y-4">
         <div className="relative overflow-hidden rounded-[22px] px-7 py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]"
           style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
@@ -928,7 +953,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
                 <div className="text-[22px] font-black leading-tight" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{v}</div>
               </div>
             ))}
-            {!isViewer && (
+            {!isViewer && (boardTab !== "공지사항" || canWriteNotice) && (
               <button
                 onClick={() => {
                   if (boardTab === "공지사항") { setSelectedNotice(null); setNoticeForm({ category: "공지사항", author: "", content: "" }); setNoticeOpen(true); }
@@ -1070,16 +1095,18 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {pagedHandovers.map((h, idx) => {
-                      const receiverRead = h.readBy?.includes(h.receiverUid);
-                      const isReceiver = user?.uid === h.receiverUid;
+                      const rcv = handoverReceivers(h);
+                      const readN = rcv.filter((u) => (h.readBy || []).includes(u)).length;
+                      const receiverRead = rcv.length > 0 && readN === rcv.length;
+                      const isReceiver = rcv.includes(user?.uid);
                       const isAuthor = user?.uid === h.authorUid;
-                      const unread = isReceiver && !receiverRead;
+                      const unread = isReceiver && !(h.readBy || []).includes(user?.uid);
                       const dateStr = (h.date || formatCreatedAt(h.createdAt) || "").replaceAll("-", ".");
                       return (
                         <tr key={h.id}
                           onClick={async () => {
                             setSelectedHandover(h);
-                            if (isReceiver && !receiverRead) {
+                            if (unread) {
                               await updateDoc(doc(db, "handovers", h.id), { readBy: [...(h.readBy || []), user.uid] });
                             }
                           }}
@@ -1094,7 +1121,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
                           <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">{dateStr}</td>
                           <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">{formatCreatedAtTime(h.createdAt)}</td>
                           <td className="px-3 py-2.5 text-center text-[13px] font-semibold text-gray-700">{h.author}</td>
-                          <td className="px-3 py-2.5 text-center text-[12px] text-gray-600 whitespace-nowrap">{h.receiver || "-"}</td>
+                          <td className="px-3 py-2.5 text-center text-[12px] text-gray-600 whitespace-nowrap">{(h.receivers || []).length > 1 ? `${h.receivers[0].name} 외 ${h.receivers.length - 1}명` : (h.receiver || "-")}</td>
                           <td className="px-3 py-2.5 text-[13px] text-gray-800 whitespace-nowrap">{(() => {
                             const d = h.date || formatCreatedAt(h.createdAt) || "";
                             if (!d) return "업무 인수인계";
@@ -1103,7 +1130,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
                           })()}</td>
                           <td className="px-3 py-2.5 text-center whitespace-nowrap">
                             <span className={`text-[11px] px-2 py-0.5 rounded font-semibold ${receiverRead ? "bg-[#EEF1F7] text-[#1B2B4B]" : "bg-red-50 text-red-500"}`}>
-                              {receiverRead ? "확인" : "미확인"}
+                              {rcv.length > 1 ? `${readN}/${rcv.length} 확인` : receiverRead ? "확인" : "미확인"}
                             </span>
                           </td>
                         </tr>
@@ -1121,45 +1148,6 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       )}
 
       {/* ===== 모달들 ===== */}
-      {noticeOpen && (
-        <Modal title={selectedNotice ? "공지사항 수정" : "공지사항 등록"} onClose={() => { setNoticeOpen(false); setSelectedNotice(null); }}>
-          <div className="space-y-3">
-            <div className="flex gap-1.5">
-              {[["internal", "내부용 (운송사만)"], ["shipper", "화주사 대상"]].map(([v, l]) => (
-                <button key={v} type="button" onClick={() => setNoticeForm({ ...noticeForm, audience: v })}
-                  className={`flex-1 py-2 rounded-lg text-[12px] font-semibold border transition ${noticeForm.audience === v ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}>
-                  {l}
-                </button>
-              ))}
-            </div>
-            <select className={formInput} value={noticeForm.category} onChange={e => setNoticeForm({ ...noticeForm, category: e.target.value })}>
-              <option>공지사항</option>
-              <option>업데이트</option>
-              <option>안내</option>
-              <option>긴급</option>
-              <option>인사발령</option>
-            </select>
-            <select className={formInput} value={noticeForm.author} onChange={e => setNoticeForm({ ...noticeForm, author: e.target.value })}>
-              <option value="">작성자 선택</option>
-              {users.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
-            </select>
-            <textarea placeholder="내용" rows={4} className={formInput} value={noticeForm.content} onChange={e => setNoticeForm({ ...noticeForm, content: e.target.value })} />
-            <button onClick={async () => {
-              if (!noticeForm.author) { alert("작성자를 선택하세요"); return; }
-              const now = new Date();
-              const y = now.getFullYear(), m = String(now.getMonth()+1).padStart(2,"0"), d = String(now.getDate()).padStart(2,"0");
-              const autoTitle = `${y}년 ${m}월 ${d}일 ${noticeForm.category}`;
-              if (selectedNotice?.id) {
-                await updateDoc(doc(db, "notices", selectedNotice.id), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content, audience: noticeForm.audience || "internal" });
-              } else {
-                await addDoc(collection(db, "notices"), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content, audience: noticeForm.audience || "internal", authorUid: user?.uid || "", createdAt: serverTimestamp(), companyName: getViewCompany() });
-              }
-              setNoticeForm({ category: "공지사항", author: "", content: "", audience: "internal" }); setNoticeOpen(false); setSelectedNotice(null);
-            }} className="w-full bg-[#1B2B4B] text-white py-2.5 rounded-lg font-semibold text-[14px] hover:bg-[#243a60] transition"><EditableText id="misc.btn.1055.저장" defaultText="저장" /></button>
-          </div>
-        </Modal>
-      )}
-
       {selectedNotice && !noticeOpen && (
         <Modal title="공지사항 상세" onClose={() => setSelectedNotice(null)}>
           <div className="space-y-3 text-[14px]">
@@ -1171,12 +1159,12 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
           </div>
           {(!isViewer) && (() => {
             const isSA = role === "superadmin" || role === "totalMaster";
-            const isNoticeAuthor = isSA || (selectedNotice.authorUid ? selectedNotice.authorUid === user?.uid : !selectedNotice.authorUid);
+            const isNoticeAuthor = isSA || (canWriteNotice && (selectedNotice.authorUid ? selectedNotice.authorUid === user?.uid : !selectedNotice.authorUid));
             if (!isNoticeAuthor) return null;
             return (
             <div className="flex gap-2 mt-4 pt-4 border-t">
               <button onClick={() => setConfirmDialog({ message: "공지사항을 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); } })} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition"><EditableText id="home.notice.삭제" defaultText="삭제" /></button>
-              <button onClick={() => { setNoticeForm({ category: selectedNotice.category || "공지사항", author: selectedNotice.author, content: selectedNotice.content, audience: selectedNotice.audience || "internal" }); setNoticeOpen(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"><EditableText id="home.notice.수정" defaultText="수정" /></button>
+              <button onClick={() => { setNoticeOpen(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"><EditableText id="home.notice.수정" defaultText="수정" /></button>
             </div>
             );
           })()}
@@ -1424,33 +1412,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         );
       })()}
 
-      {handoverOpen && (
-        <Modal title="인수인계 등록" onClose={() => setHandoverOpen(false)}>
-          <div className="space-y-3">
-            <select className={formInput} value={handoverForm.receiver} onChange={e => { const s = users.find(u => u.name === e.target.value); setHandoverForm({ ...handoverForm, receiver: s?.name || "", receiverUid: s?.uid || s?.id }); }}>
-              <option value="">받는 사람 선택</option>
-              {users.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
-            </select>
-            <input type="date" className={formInput} value={handoverForm.date} onChange={e => setHandoverForm({ ...handoverForm, date: e.target.value })} />
-            <textarea rows={4} placeholder="인수인계 내용" className={formInput} value={handoverForm.text} onChange={e => setHandoverForm({ ...handoverForm, text: e.target.value })} />
-            <button onClick={async () => {
-              if (!handoverForm.authorUid) { alert("로그인 정보가 없습니다."); return; }
-              if (!handoverForm.receiver) { alert("받는 사람을 선택하세요"); return; }
-              if (!handoverForm.text.trim()) { alert("내용을 입력하세요"); return; }
-              const me = users.find(u => u.id === user?.uid);
-              if (selectedHandover?.id) {
-                await updateDoc(doc(db, "handovers", selectedHandover.id), { ...handoverForm, author: me?.name || "사용자", authorUid: user?.uid });
-              } else {
-                await addDoc(collection(db, "handovers"), { ...handoverForm, author: me?.name || "사용자", authorUid: user?.uid, createdAt: serverTimestamp(), readBy: [], companyName: getViewCompany() });
-              }
-              setHandoverForm({ text: "", author: me?.name || "", authorUid: user?.uid || "", receiver: "", receiverUid: "", date: todayStr });
-              setHandoverOpen(false); setSelectedHandover(null); isEditingHandoverRef.current = false;
-            }} className="w-full bg-[#1B2B4B] text-white py-2.5 rounded-lg font-semibold text-[14px] hover:bg-[#243a60] transition"><EditableText id="misc.btn.1336.저장" defaultText="저장" /></button>
-          </div>
-        </Modal>
-      )}
-
-      {selectedHandover && (
+      {selectedHandover && !handoverEditMode && (
         <Modal title={handoverEditMode ? "인수인계 수정" : "인수인계 상세"} onClose={() => { setSelectedHandover(null); setHandoverEditMode(false); }}>
           {handoverEditMode ? (
             <div className="space-y-3">
@@ -1473,7 +1435,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
             <>
               <div className="space-y-3 text-[14px]">
                 <div><div className="text-[13px] text-gray-500 mb-0.5">작성자</div><div className="font-semibold">{selectedHandover.author}</div></div>
-                <div><div className="text-[13px] text-gray-500 mb-0.5">받는 사람</div><div>{selectedHandover.receiver}</div></div>
+                <div><div className="text-[13px] text-gray-500 mb-0.5">받는 사람</div><div>{(selectedHandover.receivers || []).length ? selectedHandover.receivers.map((r) => `${r.name}${(selectedHandover.readBy || []).includes(r.uid) ? " ✓" : ""}`).join(", ") : selectedHandover.receiver}</div></div>
                 <div><div className="text-[13px] text-gray-500 mb-0.5">기준 날짜</div><div>{selectedHandover.date}</div></div>
                 <div><div className="text-[13px] text-gray-500 mb-0.5">내용</div><div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3 leading-relaxed">{selectedHandover.text}</div></div>
               </div>

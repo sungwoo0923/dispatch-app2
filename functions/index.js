@@ -4404,6 +4404,33 @@ exports.notifyInternalMail = functions.firestore.document("internalMails/{id}").
   return null;
 });
 
+// 📝 전자결재 푸시(2026-10-28) — 지금 결재할 차례가 된 사람, 결과가 나온 기안자에게만 보낸다(화면 배너는 BannerCenter)
+exports.notifyApproval = functions.firestore.document("approvals/{id}").onWrite(async (chg) => {
+  const b = chg.before.exists ? chg.before.data() : null;
+  const a = chg.after.exists ? chg.after.data() : null;
+  if (!a) return null;
+  const t = a.title || a.formLabel || "결재 문서";
+  const turn = (d) => (d && d.status === "pending" ? d.line?.[d.step]?.uid : null);
+  const cTurn = (d) => (d && d.status === "approved" && d.cancel?.status === "pending" ? d.cancel.line?.[d.cancel.step]?.uid : null);
+  const msgs = [];
+  if (turn(a) && turn(a) !== turn(b)) msgs.push([turn(a), `📝 결재 요청 · ${a.drafter?.name || ""}`, `${t}\n${a.summary || ""}`]);
+  if (cTurn(a) && cTurn(a) !== cTurn(b)) msgs.push([cTurn(a), `📝 결재 취소 요청 · ${a.drafter?.name || ""}`, `${t}\n사유: ${a.cancel?.reason || ""}`]);
+  if (b && a.drafterUid) {
+    const newly = (a.line || []).filter((x, i) => x.status === "approved" && b.line?.[i]?.status !== "approved");
+    if (a.status === "approved" && b.status !== "approved") msgs.push([a.drafterUid, "✅ 최종 승인", `${t} — 결재가 모두 끝났습니다.`]);
+    else if (a.status === "pending" && newly.length) msgs.push([a.drafterUid, `✔ ${newly[0].name} ${newly[0].position || ""} 승인`, `${t} (${(a.line || []).filter((x) => x.status === "approved").length}/${(a.line || []).length})`]);
+    if (a.status === "rejected" && b.status !== "rejected") { const r = (a.line || []).find((x) => x.status === "rejected"); msgs.push([a.drafterUid, `↩ 반려 · ${r?.name || ""}`, `${t}\n사유: ${r?.comment || ""}`]); }
+    if (a.status === "cancelled" && b.status !== "cancelled") msgs.push([a.drafterUid, "결재 취소 승인", `${t} 문서가 결재 취소되었습니다.`]);
+    if (a.cancel?.status === "rejected" && b.cancel?.status !== "rejected") { const r = (a.cancel.line || []).find((x) => x.status === "rejected"); msgs.push([a.drafterUid, `결재 취소 거부 · ${r?.name || ""}`, `${t}\n${r?.comment || ""}`]); }
+  }
+  for (const [uid, title, body] of msgs) {
+    const u = await db.collection("users").doc(uid).get();
+    const tok = u.exists ? u.data().fcmToken : null;
+    if (tok) await sendPushAndCleanup([tok], { notification: { title, body }, android: { priority: "high" } }, "전자결재").catch((e) => console.error("결재 푸시 실패:", e));
+  }
+  return null;
+});
+
 // ⏰ 예약 메일(2026-10-28) — 5분마다 보낼 시간이 된 예약 메일을 실제로 보낸다.
 //  예약 중에는 to가 비어 있어(받는 사람이 미리 못 봄) pendingTo에 담겨 있다가 이때 to로 옮긴다.
 exports.sendScheduledMails = functions.pubsub.schedule("every 5 minutes").timeZone("Asia/Seoul").onRun(async () => {

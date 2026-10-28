@@ -10,6 +10,8 @@ export const APPROVAL_CATS = [
   { key: "draft", label: "업무 기안·품의", en: "PROPOSAL", icon: "file", desc: "기안·품의서 · 운임 변경 · 신규 거래처 · 차량 정비 · 제증명" },
 ];
 
+import { isWeekend, isHoliday } from "./attendanceUtils";
+
 const won = (n) => `${Math.round(Number(n) || 0).toLocaleString("ko-KR")}원`;
 export const fmtWon = won;
 const dayDiff = (r) => {
@@ -18,10 +20,47 @@ const dayDiff = (r) => {
   if (isNaN(a) || isNaN(b) || b < a) return 0;
   return Math.round((b - a) / 86400000) + 1;
 };
+// 주말·공휴일(대체·임시공휴일 포함)을 뺀 실제 근무일 수 — 휴가 일수는 이걸로 센다
+const pad = (n) => String(n).padStart(2, "0");
+const dstr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+export const bizDays = (r) => {
+  if (!r?.start) return 0;
+  const a = new Date(`${r.start}T00:00:00`); const b = new Date(`${r.end || r.start}T00:00:00`);
+  if (isNaN(a) || isNaN(b) || b < a) return 0;
+  let n = 0;
+  for (let d = new Date(a); d <= b; d.setDate(d.getDate() + 1)) { const k = dstr(d); if (!isWeekend(k) && !isHoliday(k, [])) n += 1; }
+  return n;
+};
 export const rangeText = (r) => (r?.start ? (r.end && r.end !== r.start ? `${r.start} ~ ${r.end}` : r.start) : "");
 const itemsTotal = (rows) => (rows || []).reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.price) || 0), 0);
 const costsTotal = (rows) => (rows || []).reduce((s, r) => s + (Number(r.amount) || 0), 0);
 export { itemsTotal, costsTotal, dayDiff };
+
+// 📅 연차·월차 발생(근로기준법 기준) — 입사일 기준 회기
+//  1년 미만: 1개월 개근마다 1일(최대 11일, "월차") / 1년 이상: 15일 + 3년차부터 2년마다 1일(최대 25일)
+export function leaveEntitlement(hireDate, now = new Date()) {
+  if (!hireDate) return null;
+  const hire = new Date(`${hireDate}T00:00:00`);
+  if (isNaN(hire)) return null;
+  const months = Math.max(0, (now.getFullYear() - hire.getFullYear()) * 12 + (now.getMonth() - hire.getMonth()) - (now.getDate() < hire.getDate() ? 1 : 0));
+  const years = Math.floor(months / 12);
+  const add = (base, y) => { const d = new Date(base); d.setFullYear(d.getFullYear() + y); return d; };
+  if (years < 1) {
+    const end = add(hire, 1); end.setDate(end.getDate() - 1);
+    return { label: "월차", years, months, total: Math.min(11, months), from: dstr(hire), to: dstr(end) };
+  }
+  const start = add(hire, years);
+  const end = add(hire, years + 1); end.setDate(end.getDate() - 1);
+  return { label: "연차", years, months, total: Math.min(25, 15 + Math.floor((years - 1) / 2)), from: dstr(start), to: dstr(end) };
+}
+// 연차로 차감하는 신청인지 / 며칠인지
+export const LEAVE_KINDS = ["연차", "하계휴가"];
+export function leaveUseOf(d) {
+  if (!d || d.cat !== "leave") return null;
+  if (d.form === "annual" && LEAVE_KINDS.includes(d.data?.kind || "연차")) return { date: d.data?.period?.start || "", days: bizDays(d.data?.period) };
+  if (d.form === "half") return { date: d.data?.date || "", days: String(d.data?.ampm || "").includes("반반차") ? 0.25 : 0.5 };
+  return null;
+}
 
 const ACCOUNTS = ["복리후생비", "여비교통비", "차량유지비", "운반비", "접대비", "소모품비", "통신비", "지급수수료", "교육훈련비", "도서인쇄비", "기타"];
 const PAY = ["법인카드", "개인카드(정산 요청)", "계좌이체", "현금"];
@@ -36,7 +75,7 @@ export const APPROVAL_FORMS = [
       { k: "proxy", label: "업무 대행자", type: "staff" },
       { k: "contact", label: "비상 연락처", type: "text", ph: "010-0000-0000" },
     ],
-    days: (d) => dayDiff(d.period), summary: (d) => `${d.kind || "연차"} ${rangeText(d.period)} (${dayDiff(d.period)}일)` },
+    days: (d) => bizDays(d.period), summary: (d) => `${d.kind || "연차"} ${rangeText(d.period)} (${bizDays(d.period)}일)` },
   { key: "half", cat: "leave", label: "반차", title: "반 차 신 청 서", code: "HH",
     fields: [
       { k: "date", label: "날짜", type: "date", required: true },
@@ -83,7 +122,7 @@ export const APPROVAL_FORMS = [
       { k: "flower", label: "화환·조화", type: "select", options: ["요청", "요청 안 함"], def: "요청 안 함" },
       { k: "place", label: "장소", type: "text" },
     ],
-    days: (d) => dayDiff(d.period), summary: (d) => `${d.kind || ""} ${d.eventDate || ""}` },
+    days: (d) => bizDays(d.period), summary: (d) => `${d.kind || ""} ${d.eventDate || ""}` },
   { key: "sick", cat: "leave", label: "병가", title: "병 가 신 청 서", code: "HS",
     fields: [
       { k: "period", label: "기간", type: "daterange", required: true },
@@ -91,7 +130,7 @@ export const APPROVAL_FORMS = [
       { k: "doc", label: "증빙", type: "select", options: ["진단서 첨부", "소견서 첨부", "추후 제출", "없음"], def: "추후 제출" },
       { k: "proxy", label: "업무 대행자", type: "staff" },
     ],
-    days: (d) => dayDiff(d.period), summary: (d) => `병가 ${rangeText(d.period)} (${dayDiff(d.period)}일)` },
+    days: (d) => bizDays(d.period), summary: (d) => `병가 ${rangeText(d.period)} (${bizDays(d.period)}일)` },
   { key: "holiday", cat: "leave", label: "휴일근무·대체휴무", title: "휴 일 근 무 신 청 서", code: "HW",
     fields: [
       { k: "workDate", label: "근무일", type: "date", required: true },
@@ -269,7 +308,7 @@ export function missingFields(form, d) {
 // 필드 값을 문서에 보일 글자로
 export function fieldText(f, v, staff) {
   if (v === undefined || v === null || v === "") return "";
-  if (f.type === "daterange") { const n = dayDiff(v); return v.start ? `${rangeText(v)}${n ? ` (${n}일)` : ""}` : ""; }
+  if (f.type === "daterange") { const n = dayDiff(v); const b = bizDays(v); return v.start ? `${rangeText(v)}${n ? ` (${n}일${b !== n ? ` · 주말·공휴일 빼고 ${b}일` : ""})` : ""}` : ""; }
   if (f.type === "money") return Number(v) ? won(v) : "";
   if (f.type === "number") return String(v);
   if (f.type === "staff") { const u = (staff || []).find((x) => x.uid === v); return u ? `${u.name}${u.position ? ` ${u.position}` : ""}` : ""; }

@@ -291,13 +291,18 @@ service cloud.firestore {
     }
 
     // 🗂 사내 게시판(자유·관리자·임원) — 볼 수 있는 사람만 읽고 쓴다
+    // 임원게시판은 권한(임원 기준)을 정하기 전까지 최고관리자만
     function canSeeBoard(b) {
       return b == 'free' || isSuperEmail() || myUser().get('role', '') == 'totalMaster'
-        || (b == 'admin' && (myUser().get('role', '') in ['admin', 'hrManager'] || isExecUser()))
-        || (b == 'exec' && isExecUser());
+        || (b == 'admin' && myUser().get('role', '') in ['admin', 'hrManager']);
     }
     function isBoardAdmin() {
       return isSuperEmail() || myUser().get('role', '') in ['admin', 'totalMaster', 'hrManager'];
+    }
+    // 📢 공지사항 — 누구나 읽고, 쓰기·수정·삭제는 관리자(관리자·인사관리자·최고관리자)만
+    match /notices/{id} {
+      allow read: if isApproved();
+      allow write: if isApproved() && isBoardAdmin();
     }
     match /boardPosts/{id} {
       allow read: if isApproved() && canSeeBoard(resource.data.board);
@@ -321,7 +326,7 @@ service cloud.firestore {
     // ⭐ 규칙은 "하나라도 허용하면 허용"이라, 서버 전용 컬렉션(초기화 비밀번호·보관함·기록)은
     // 여기서 빼야 위의 "allow … if false"가 실제로 막힌다.
     match /{col}/{rest=**} {
-      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts']);
+      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices']);
     }
   }
 }

@@ -2,14 +2,13 @@
 // 🗂 사내 게시판(2026-10-28) — 자유게시판 · 관리자게시판 · 임원게시판
 //  boardPosts/{id}: { company, board(free|admin|exec), title, content, images, pinned, authorUid, authorName, authorPosition,
 //                     createdAt, updatedAt, readBy:[uid], comments:[{ id, uid, name, text, at }] }
-//  - 관리자게시판: 관리자·최고관리자·인사관리자·임원 / 임원게시판: 임원(이사 이상)·최고관리자만 — 보안규칙도 같은 기준
+//  - 관리자게시판: 관리자·최고관리자·인사관리자 / 임원게시판: 권한 설정 전까지 최고관리자만 — 보안규칙도 같은 기준
 //  - 글쓴이·관리자는 수정·삭제, 관리자는 상단 고정. 댓글, 조회수(읽은 사람 수), 새 글 N 표시.
 import React from "react";
 import { db } from "./firebase";
 import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
 import { ShellIcon } from "./AdminShell";
 import { compressImage } from "./InternalMail";
-import { isExecPosition } from "./approvalForms";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const toMs = (v) => (v?.toMillis ? v.toMillis() : typeof v === "number" ? v : v?.seconds ? v.seconds * 1000 : 0);
@@ -22,14 +21,15 @@ const fmt = (ms, full) => {
 
 export const BOARDS = {
   free: { label: "자유게시판", en: "FREE BOARD", icon: "chat", desc: "업무 팁 · 맛집 · 사는 이야기 — 누구나 자유롭게" },
-  admin: { label: "관리자게시판", en: "MANAGERS", icon: "shield", desc: "관리자·임원만 보는 운영 논의 공간" },
-  exec: { label: "임원게시판", en: "EXECUTIVE", icon: "key", desc: "임원 전용 — 경영 현안 · 보고" },
+  admin: { label: "관리자게시판", en: "MANAGERS", icon: "shield", desc: "관리자만 보는 운영 논의 공간" },
+  exec: { label: "임원게시판", en: "EXECUTIVE", icon: "key", desc: "임원 전용 — 권한 설정 전까지 최고관리자만 보입니다" },
 };
 const isAdminRole = (r) => ["admin", "totalMaster", "hrManager"].includes(r);
+// ⭐ 2026-10-28: 임원게시판 권한(임원 직책 기준)은 아직 정하지 않아 최고관리자만 보이게 둔다 — 추후 설정
 export function canSeeBoard(board, me) {
   if (board === "free") return true;
-  if (board === "admin") return isAdminRole(me?.role) || isExecPosition(me?.position);
-  if (board === "exec") return me?.role === "totalMaster" || isExecPosition(me?.position);
+  if (board === "admin") return isAdminRole(me?.role);
+  if (board === "exec") return me?.role === "totalMaster";
   return false;
 }
 

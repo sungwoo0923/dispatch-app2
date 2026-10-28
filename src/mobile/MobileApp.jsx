@@ -3622,7 +3622,7 @@ useEffect(() => {
   if (userReadNoticeAt === null || userReadScheduleAt === null) return;
   const hasUnreadNotice = notices.some(n => (n.createdAt?.seconds || 0) > userReadNoticeAt);
   const hasUnreadSchedule = schedules.some(s => (s.approvers || []).some(a => a.uid === currentUser.uid && (!a.status || a.status === "pending")));
-  const hasUnreadHandover = handovers.some(h => h.receiverUid === currentUser.uid && !(h.readBy || []).includes(currentUser.uid));
+  const hasUnreadHandover = handovers.some(h => (h.receiverUids?.length ? h.receiverUids : [h.receiverUid]).includes(currentUser.uid) && !(h.readBy || []).includes(currentUser.uid));
   if (!hasUnreadNotice && !hasUnreadSchedule && !hasUnreadHandover) return;
   unreadPopupShownRef.current = true;
   const timer = setTimeout(() => setShowUnreadPopup(true), 1800);
@@ -5503,7 +5503,7 @@ const title =
 {showUnreadPopup && (() => {
   const unreadNotices = notices.filter(n => (n.createdAt?.seconds || 0) > (userReadNoticeAt || 0));
   const unreadSchedules = schedules.filter(s => (s.approvers || []).some(a => a.uid === currentUser?.uid && (!a.status || a.status === "pending")));
-  const unreadHandovers = handovers.filter(h => h.receiverUid === currentUser?.uid && !(h.readBy || []).includes(currentUser?.uid));
+  const unreadHandovers = handovers.filter(h => (h.receiverUids?.length ? h.receiverUids : [h.receiverUid]).includes(currentUser?.uid) && !(h.readBy || []).includes(currentUser?.uid));
   const totalCount = unreadNotices.length + unreadSchedules.length + unreadHandovers.length;
   if (totalCount === 0) return null;
   return cardVersionB ? (
@@ -5869,7 +5869,7 @@ onGoAttendance={() => {
       <div className={`grid text-[11px] font-semibold text-white px-3 py-2.5 ${accentCls}`}
         style={{ gridTemplateColumns: "72px 1fr 56px" }}>
         <span>날짜</span><span className="text-center">제목</span>
-        {role !== "viewer" ? (
+        {["admin", "totalMaster", "hrManager", "superadmin"].includes(role) ? (
           <button onClick={(e) => { e.stopPropagation(); setSelectedNotice(null); setNoticeForm({ category: "공지사항", author: mobileUsers.find(u => u.id === currentUser?.uid)?.name || "", content: "", audience: "internal" }); setNoticeOpen(true); }}
             className="text-right text-white text-[11px] font-semibold opacity-80 hover:opacity-100">+ 등록</button>
         ) : (
@@ -6288,8 +6288,9 @@ onGoAttendance={() => {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {handovers.slice((handoverPage - 1) * HANDOVER_PAGE_SIZE, handoverPage * HANDOVER_PAGE_SIZE).map(h => {
-                const receiverRead = h.readBy?.includes(h.receiverUid);
-                const isReceiver = currentUser?.uid === h.receiverUid;
+                const rcvUids = h.receiverUids?.length ? h.receiverUids : [h.receiverUid];
+                const isReceiver = rcvUids.includes(currentUser?.uid);
+                const receiverRead = isReceiver ? (h.readBy || []).includes(currentUser?.uid) : rcvUids.every((u) => (h.readBy || []).includes(u));
                 const isAuthor = currentUser?.uid === h.authorUid;
                 const unread = isReceiver && !receiverRead;
                 return (
@@ -6403,14 +6404,7 @@ onGoAttendance={() => {
           <option>긴급</option>
           <option>인사발령</option>
         </select>
-        <select
-          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
-          value={noticeForm.author}
-          onChange={e => setNoticeForm(f => ({ ...f, author: e.target.value }))}
-        >
-          <option value="">작성자 선택</option>
-          {mobileUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
-        </select>
+        <div className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-gray-50 text-gray-700">작성자 <b>{noticeForm.author || mobileUsers.find(u => u.id === currentUser?.uid)?.name || ""}</b> <span className="text-gray-400">(자동)</span></div>
         <textarea
           rows={4}
           placeholder="내용"
@@ -6420,7 +6414,8 @@ onGoAttendance={() => {
         />
         <button
           onClick={async () => {
-            if (!noticeForm.author) { alert("작성자를 선택해주세요."); return; }
+            // ⭐ 작성자는 올리는 사람으로 고정(2026-10-28)
+            noticeForm.author = noticeForm.author || mobileUsers.find(u => u.id === currentUser?.uid)?.name || "";
             const now = new Date();
             const y = now.getFullYear(), m = String(now.getMonth()+1).padStart(2,"0"), d = String(now.getDate()).padStart(2,"0");
             const autoTitle = `${y}년 ${m}월 ${d}일 ${noticeForm.category}`;
@@ -6479,6 +6474,8 @@ onGoAttendance={() => {
           const me = mobileUsers.find(u => u.id === currentUser?.uid);
           await addDoc(collection(db, "handovers"), {
             ...handoverForm,
+            receiverUids: handoverForm.receiverUid ? [handoverForm.receiverUid] : [],
+            receivers: handoverForm.receiverUid ? [{ uid: handoverForm.receiverUid, name: handoverForm.receiver || "" }] : [],
             author: me?.name || "사용자",
             authorUid: currentUser?.uid || "",
             createdAt: serverTimestamp(),
@@ -6535,6 +6532,10 @@ onGoAttendance={() => {
                 const me = mobileUsers.find(u => u.id === currentUser?.uid);
                 await updateDoc(doc(db, "handovers", selectedHandover.id), {
                   ...handoverForm,
+                  // PC에서 여러 명에게 보낸 인수인계는 받는 사람을 바꾸지 않았으면 그대로 둔다
+                  ...(handoverForm.receiverUid === selectedHandover.receiverUid && selectedHandover.receiverUids?.length
+                    ? { receiverUids: selectedHandover.receiverUids, receivers: selectedHandover.receivers || [] }
+                    : { receiverUids: handoverForm.receiverUid ? [handoverForm.receiverUid] : [], receivers: handoverForm.receiverUid ? [{ uid: handoverForm.receiverUid, name: handoverForm.receiver || "" }] : [] }),
                   author: me?.name || "사용자",
                   authorUid: currentUser?.uid || "",
                 });

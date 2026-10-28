@@ -15,8 +15,29 @@ const ICONS = {
   notice: <><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /></>,
   schedule: <><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></>,
   handover: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></>,
+  approval: <><path d="M9 3h6l-1 7h4l1 4H5l1-4h4z" /><path d="M5 18h14M7 21h10" /></>,
 };
-export const BANNER_LABEL = { mail: "사내메일", hr: "인사발령", closeReport: "마감보고", notice: "공지사항", schedule: "일정", handover: "인수인계" };
+export const BANNER_LABEL = { mail: "사내메일", hr: "인사발령", closeReport: "마감보고", notice: "공지사항", schedule: "일정", handover: "인수인계", approval: "전자결재" };
+
+// 📝 전자결재 변화 중 "나"에게 알릴 것만 골라낸다(서버 푸시 notifyApproval과 같은 기준)
+//  - 내가 결재할 차례가 됨(결재 요청 / 결재 취소 요청) / 내가 올린 문서가 승인·반려·최종 승인·취소 결과를 받음
+function approvalEvents(b, a, uid) {
+  const out = [];
+  const t = a.title || a.formLabel || "결재 문서";
+  const turn = (d) => (d && d.status === "pending" ? d.line?.[d.step]?.uid : null);
+  const cTurn = (d) => (d && d.status === "approved" && d.cancel?.status === "pending" ? d.cancel.line?.[d.cancel.step]?.uid : null);
+  if (turn(a) === uid && turn(b) !== uid) out.push({ title: `결재 요청 · ${t}`, body: `${a.drafter?.name || ""} ${a.drafter?.position || ""} · ${a.summary || ""}`, page: "inbox" });
+  if (cTurn(a) === uid && cTurn(b) !== uid) out.push({ title: `결재 취소 요청 · ${t}`, body: `${a.drafter?.name || ""} · 사유: ${a.cancel?.reason || ""}`, page: "inbox" });
+  if (a.drafterUid === uid && b) {
+    const newly = (a.line || []).filter((x, i) => x.status === "approved" && b.line?.[i]?.status !== "approved");
+    if (a.status === "approved" && b.status !== "approved") out.push({ title: `최종 승인 · ${t}`, body: "결재가 모두 끝났습니다.", page: "mine" });
+    else if (a.status === "pending" && newly.length) out.push({ title: `${newly[0].name} ${newly[0].position || ""} 승인 · ${t}`, body: `${(a.line || []).filter((x) => x.status === "approved").length}/${(a.line || []).length} 승인${newly[0].comment ? ` · ${newly[0].comment}` : ""}`, page: "mine" });
+    if (a.status === "rejected" && b.status !== "rejected") { const r = (a.line || []).find((x) => x.status === "rejected"); out.push({ title: `반려 · ${t}`, body: `${r?.name || ""} · 사유: ${r?.comment || ""}`, page: "mine" }); }
+    if (a.status === "cancelled" && b.status !== "cancelled") out.push({ title: `결재 취소 승인 · ${t}`, body: "문서가 결재 취소되었습니다.", page: "mine" });
+    if (a.cancel?.status === "rejected" && b.cancel?.status !== "rejected") { const r = (a.cancel.line || []).find((x) => x.status === "rejected"); out.push({ title: `결재 취소 거부 · ${t}`, body: `${r?.name || ""} · ${r?.comment || ""}`, page: "mine" }); }
+  }
+  return out;
+}
 
 export function BannerCard({ id, kind = "mail", label, title, body, from, image, duration = 10000, onClick, onClose }) {
   const [hover, setHover] = React.useState(false);
@@ -88,6 +109,25 @@ export default function BannerCenter({ bottom = 24 }) {
       });
     }, () => {});
   }, [uid]);
+  // 전자결재 — 접속해 있는 동안 생긴 변화만(처음 불러온 상태와 비교)
+  React.useEffect(() => {
+    if (!uid) return undefined;
+    const prev = new Map();
+    let first = true;
+    return onSnapshot(query(collection(db, "approvals"), where("participants", "array-contains", uid)), (snap) => {
+      snap.docChanges().forEach((c) => {
+        const a = { id: c.doc.id, ...c.doc.data() };
+        if (!first && c.type !== "removed") {
+          approvalEvents(prev.get(a.id) || null, a, uid).forEach((ev, k) => {
+            const id = `ap-${a.id}-${Date.now()}-${k}`;
+            setItems((p) => [...p, { id, kind: "approval", fromName: "", subject: ev.title, body: ev.body, approvalId: a.id, page: ev.page }].slice(-4));
+          });
+        }
+        prev.set(a.id, a);
+      });
+      first = false;
+    }, () => {});
+  }, [uid]);
   const close = React.useCallback((id) => setItems((p) => p.filter((x) => x.id !== id)), []);
   if (!items.length) return <BannerStyles />;
   return createPortal(
@@ -95,11 +135,15 @@ export default function BannerCenter({ bottom = 24 }) {
       <BannerStyles />
       <div className="fixed right-3 sm:right-6 z-[999990] flex flex-col gap-2.5 items-end pointer-events-none" style={{ bottom }}>
         {items.map((m) => (
-          <BannerCard key={m.id} id={m.id} kind={m.kind === "hr" || m.kind === "closeReport" ? m.kind : "mail"}
+          <BannerCard key={m.id} id={m.id} kind={m.kind === "hr" || m.kind === "closeReport" || m.kind === "approval" ? m.kind : "mail"}
             from={m.fromName} title={m.subject || "(제목 없음)"} body={String(m.body || "").replace(/\n{2,}/g, "\n").slice(0, 160)}
             image={(m.images || [])[0]} duration={m.kind === "hr" ? 15000 : 10000}
             onClose={close}
-            onClick={() => { window.dispatchEvent(new CustomEvent("kp-open-mail", { detail: { id: m.id } })); close(m.id); }} />
+            onClick={() => {
+              if (m.kind === "approval") { window.__kpOpenApproval = { id: m.approvalId, page: m.page }; window.dispatchEvent(new Event("kp-open-approval")); }
+              else window.dispatchEvent(new CustomEvent("kp-open-mail", { detail: { id: m.id } }));
+              close(m.id);
+            }} />
         ))}
       </div>
     </>, document.body);

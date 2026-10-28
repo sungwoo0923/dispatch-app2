@@ -7,17 +7,22 @@
 //  approvals/{id}: { company, docNo, cat, form, formLabel, title, summary, amount, days, data, images,
 //     drafterUid, drafter{uid,name,team,position}, line:[{uid,name,position,team,kind,status(wait|pending|approved|rejected),at,comment}],
 //     cc:[{uid,name}], ccUids, participants, step, status(pending|approved|rejected|withdrawn), createdAt, updatedAt, history:[…] }
-//  - 다음 결재자·기안자·참조자에게 사내메일(kind "approval")로 알린다 → 휴대폰 푸시·화면 배너.
+//  - 알림(2026-10-28 변경): 사내메일 대신 서버 트리거(notifyApproval)가 휴대폰 푸시, BannerCenter가 화면 배너.
+//    상신 → 지금 차례 결재자만 / 승인·반려·취소 결과 → 기안자만. 그 외 사람에게는 안 간다.
+//  - 수정: 첫 결재자가 문서를 열어보기 전까지만(열람하면 잠김 → 회수 후 재기안).
+//  - 승인 후 취소: 기안자가 「결재 취소 요청」(사유) → 같은 결재선이 다시 승인하면 "결재 취소"로 바뀐다.
+//    문서는 지우지 않고 모두의 보관함에 "결재 취소" 도장으로 남는다(감사 기록). 연차 사용일수도 자동 복구.
 import React from "react";
 import { createPortal } from "react-dom";
 import html2canvas from "html2canvas";
 import { db, auth } from "./firebase";
 import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
 import { ShellIcon } from "./AdminShell";
-import { useCompanyStaff, sendInternalMail, compressImage } from "./InternalMail";
+import { useCompanyStaff, compressImage } from "./InternalMail";
+import CustomDatePicker from "./CustomDatePicker";
 import {
   APPROVAL_CATS, APPROVAL_FORMS, formOf, formsOfCat, initialData, missingFields, fieldText, suggestLine,
-  itemsTotal, costsTotal, fmtWon, dayDiff,
+  itemsTotal, costsTotal, fmtWon, dayDiff, bizDays, leaveEntitlement, leaveUseOf,
 } from "./approvalForms";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
@@ -26,7 +31,7 @@ const pad2 = (n) => String(n).padStart(2, "0");
 const ymd = (ms) => { const d = new Date(ms || Date.now()); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
 const korDate = (ms) => { const d = new Date(ms || Date.now()); return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`; };
 const mmdd = (ms) => { const d = new Date(ms); return `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`; };
-const STATUS = { pending: "진행 중", approved: "결재 완료", rejected: "반려", withdrawn: "회수" };
+const STATUS = { pending: "진행 중", approved: "결재 완료", rejected: "반려", withdrawn: "회수", cancelled: "결재 취소" };
 const catOf = (k) => APPROVAL_CATS.find((c) => c.key === k) || APPROVAL_CATS[0];
 const isAdminRole = (r) => ["admin", "totalMaster", "hrManager"].includes(r);
 
@@ -40,7 +45,14 @@ export function useApprovals(uid) {
   }, [uid]);
   return list;
 }
-const myTurn = (d, uid) => d.status === "pending" && d.line?.[d.step]?.uid === uid;
+// 내 결재 차례(일반 결재 또는 결재 취소 요청)
+const cancelTurn = (d, uid) => d.status === "approved" && d.cancel?.status === "pending" && d.cancel.line?.[d.cancel.step]?.uid === uid;
+export const myTurn = (d, uid) => (d.status === "pending" && d.line?.[d.step]?.uid === uid) || cancelTurn(d, uid);
+// 기안자가 아직 확인 안 한 결과(승인 진행·완료·반려·취소 결과)
+export const mineUnread = (d, uid) => d.drafterUid === uid && (d.drafterUnread === true || (d.drafterUnread === undefined && d.status === "rejected" && !(d.seenBy || []).includes(uid)));
+const ccUnread = (d, uid) => (d.ccUids || []).includes(uid) && d.status === "approved" && !(d.ccReadBy || []).includes(uid);
+// 첫 결재자가 열어보기 전이면 수정 가능
+const canEdit = (d, uid) => d.drafterUid === uid && d.status === "pending" && !(d.line || []).some((s) => s.status !== "wait" && s.status !== "pending") && !d.line?.[0]?.viewedAt;
 // 사이드바 숫자
 export function useApprovalCounts() {
   const uid = auth.currentUser?.uid;
@@ -49,18 +61,12 @@ export function useApprovalCounts() {
     const l = list || [];
     return {
       todo: l.filter((d) => myTurn(d, uid)).length,
-      rejectedMine: l.filter((d) => d.drafterUid === uid && d.status === "rejected" && !(d.seenBy || []).includes(uid)).length,
+      mineNew: l.filter((d) => mineUnread(d, uid)).length,
+      ccNew: l.filter((d) => ccUnread(d, uid)).length,
       myPending: l.filter((d) => d.drafterUid === uid && d.status === "pending").length,
     };
   }, [list, uid]);
 }
-
-async function notify(company, fromName, to, subject, body) {
-  const list = (to || []).filter((u) => u?.uid && u.uid !== auth.currentUser?.uid);
-  if (!list.length) return;
-  await sendInternalMail({ company, to: list, subject, body, kind: "approval", fromName }).catch(() => {});
-}
-const docBrief = (d) => `· 문서번호: ${d.docNo}\n· 양식: ${d.formLabel}\n· 기안자: ${d.drafter?.name || ""} ${d.drafter?.position || ""}\n· 내용: ${d.summary || ""}${d.amount ? `\n· 금액: ${fmtWon(d.amount)}` : ""}\n\n홈 › 전자결재 › 결재함에서 확인하세요.`;
 
 // ─────────────────────────── 결재 문서(미리보기·보기 공용) ───────────────────────────
 function Stamp({ step }) {
@@ -98,14 +104,13 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
   const fields = form.fields || [];
   return (
     <div ref={paperRef} className="mx-auto bg-white w-full max-w-[780px] px-10 py-10 shadow-[0_10px_30px_rgba(15,26,48,0.12)] relative" style={{ fontFamily: "'Pretendard','Noto Sans KR',sans-serif", minHeight: 1000 }}>
-      {status && status !== "pending" && (
-        <div className="absolute top-8 left-8 px-3 py-1 rounded-md border-2 border-[#0F1A30] text-[13px] font-black text-[#0F1A30] tracking-widest rotate-[-6deg]">{STATUS[status]}</div>
-      )}
       <div className="flex items-start justify-between gap-6">
         <div className="pt-4 min-w-0">
           <div className="text-[11.5px] font-extrabold tracking-[0.3em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>{catOf(form.cat).en} · {form.code}</div>
           <div className="text-[30px] font-black tracking-[0.12em] text-[#0F1A30] mt-1 whitespace-nowrap">{form.title}</div>
-          <div className="text-[12.5px] text-[#5A6A85] mt-1" style={{ fontFamily: MONO }}>{docNo || "문서번호는 상신할 때 자동 부여"}</div>
+          <div className="text-[12.5px] text-[#5A6A85] mt-1 flex items-center gap-2" style={{ fontFamily: MONO }}>{docNo || "문서번호는 상신할 때 자동 부여"}
+            {status && status !== "pending" && <span className="px-2 py-0.5 rounded border-2 border-[#0F1A30] text-[12px] font-black text-[#0F1A30] tracking-widest" style={{ fontFamily: "inherit" }}>{STATUS[status]}</span>}
+          </div>
         </div>
         {/* 결재란 */}
         <div className="shrink-0 flex border border-[#0F1A30]">
@@ -202,7 +207,7 @@ function FieldInput({ f, value, onChange, staff, meUid }) {
   if (f.type === "textarea") return <textarea value={value || ""} onChange={(e) => onChange(e.target.value)} rows={f.rows || 3} placeholder={f.ph || ""} className={`${inp} h-auto py-2 leading-relaxed resize-y`} />;
   if (f.type === "select") return <select value={value || ""} onChange={(e) => onChange(e.target.value)} className={inp}>{f.options.map((o) => <option key={o} value={o}>{o}</option>)}</select>;
   if (f.type === "staff") return <StaffSelect value={value} onChange={onChange} staff={staff} exclude={[meUid]} placeholder="선택 안 함" />;
-  if (f.type === "date") return <input type="date" value={value || ""} onChange={(e) => onChange(e.target.value)} className={inp} />;
+  if (f.type === "date") return <CustomDatePicker value={value || ""} onChange={(e) => onChange(e.target.value)} className={inp} showIcon placeholder="날짜 선택" />;
   if (f.type === "time") return <input type="time" value={value || ""} onChange={(e) => onChange(e.target.value)} className={inp} />;
   if (f.type === "number") return <input type="number" inputMode="numeric" value={value ?? ""} onChange={(e) => onChange(e.target.value)} className={inp} />;
   if (f.type === "money") {
@@ -219,11 +224,11 @@ function FieldInput({ f, value, onChange, staff, meUid }) {
     return (
       <div>
         <div className="flex items-center gap-1.5">
-          <input type="date" value={v.start || ""} onChange={(e) => onChange({ ...v, start: e.target.value, end: v.end && v.end >= e.target.value ? v.end : e.target.value })} className={inp} />
+          <div className="flex-1 min-w-0"><CustomDatePicker value={v.start || ""} onChange={(e) => onChange({ ...v, start: e.target.value, end: v.end && v.end >= e.target.value ? v.end : e.target.value })} className={inp} showIcon placeholder="시작일" /></div>
           <span className="text-[#9AA9C3] font-bold">~</span>
-          <input type="date" value={v.end || ""} min={v.start || undefined} onChange={(e) => onChange({ ...v, end: e.target.value })} className={inp} />
+          <div className="flex-1 min-w-0"><CustomDatePicker value={v.end || ""} onChange={(e) => onChange({ ...v, end: e.target.value && v.start && e.target.value < v.start ? v.start : e.target.value })} className={inp} showIcon placeholder="종료일" /></div>
         </div>
-        {n > 0 && <div className="mt-1 text-[12px] font-bold text-[#1B2B4B]">총 {n}일</div>}
+        {n > 0 && <div className="mt-1 text-[12px] font-bold text-[#1B2B4B]">총 {n}일{bizDays(v) !== n ? ` · 주말·공휴일 빼면 ${bizDays(v)}일` : ""}</div>}
       </div>
     );
   }
@@ -343,8 +348,82 @@ function LineEditor({ line, setLine, cc, setCc, staff, me, company, cat }) {
   );
 }
 
+// ─────────────────────────── 내 연차 현황 ───────────────────────────
+//  입사일(userProfiles.hireDate) 기준 회기 동안 — 전자결재 연차·반차(승인=사용, 진행 중=대기)
+//  + 예전 휴가/외근 게시판에 올린 휴가·반차(2026년부터, 반려 제외)도 사용으로 센다.
+function useLeaveStatus(me, list) {
+  const [hireDate, setHireDate] = React.useState(null);
+  const [olds, setOlds] = React.useState([]);
+  React.useEffect(() => {
+    if (!me.uid) return undefined;
+    const a = onSnapshot(doc(db, "userProfiles", me.uid), (s) => setHireDate((s.exists() && s.data().hireDate) || ""), () => setHireDate(""));
+    const b = onSnapshot(query(collection(db, "schedules"), where("authorUid", "==", me.uid)), (s) => setOlds(s.docs.map((d) => d.data())), () => setOlds([]));
+    return () => { a(); b(); };
+  }, [me.uid]);
+  return React.useMemo(() => {
+    const ent = leaveEntitlement(hireDate || "");
+    if (!ent) return { ent: null, hireDate, loading: hireDate === null };
+    const inPeriod = (dt) => dt && dt >= ent.from && dt <= ent.to;
+    let used = 0; let pending = 0;
+    (list || []).filter((d) => d.drafterUid === me.uid).forEach((d) => {
+      const u = leaveUseOf(d);
+      if (!u || !inPeriod(u.date)) return;
+      if (d.status === "approved") used += u.days;
+      else if (d.status === "pending") pending += u.days;
+    });
+    olds.forEach((x) => {
+      if ((x.approvers || []).some((a) => a.status === "rejected") || !x.start || x.start < "2026-01-01" || !inPeriod(x.start)) return;
+      if (x.type === "휴가") used += bizDays({ start: x.start, end: x.end || x.start });
+      else if (x.type === "오전반차" || x.type === "오후반차") used += 0.5;
+    });
+    return { ent, hireDate, used, pending, remain: ent.total - used };
+  }, [hireDate, olds, list, me.uid]);
+}
+
+function LeaveCard({ leave, thisDays }) {
+  if (!leave || leave.loading) return null;
+  if (!leave.ent) {
+    return (
+      <div className="rounded-2xl border border-dashed border-[#C9D2E0] bg-white p-4 text-[13px] text-[#5B6B85] leading-relaxed">
+        <b className="text-[#0F1A30]">입사일이 등록되지 않아 연차를 계산할 수 없습니다.</b><br />내 정보 또는 인사관리부에서 입사일을 등록하면 발생·사용·잔여 연차가 자동으로 표시됩니다.
+      </div>
+    );
+  }
+  const { ent, used, pending, remain } = leave;
+  const after = remain - pending - (thisDays || 0);
+  const pct = (v) => `${Math.max(0, Math.min(100, (v / Math.max(ent.total, 1)) * 100))}%`;
+  const y = Math.floor(ent.months / 12); const m = ent.months % 12;
+  return (
+    <div className="rounded-2xl p-5 text-white shadow-[0_12px_28px_rgba(15,26,48,0.22)]" style={{ background: "linear-gradient(120deg,#0F1A30,#1B2B4B 60%,#2D4C82)" }}>
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>MY LEAVE</span>
+        <span className="ml-auto text-[11.5px] font-bold text-white/55">입사 {leave.hireDate} · 근속 {y ? `${y}년 ` : ""}{m}개월</span>
+      </div>
+      <div className="mt-1 text-[16px] font-black">내 {ent.label} 현황 <span className="text-[12px] font-bold text-white/55">{ent.from} ~ {ent.to}</span></div>
+      <div className="mt-3 grid grid-cols-4 gap-2">
+        {[["발생", ent.total], ["사용", used], ["결재 대기", pending], ["잔여", remain]].map(([l, v]) => (
+          <div key={l} className={`rounded-xl px-2.5 py-2 ${l === "잔여" ? "bg-white text-[#0F1A30]" : "bg-white/[0.08]"}`}>
+            <div className={`text-[11px] font-bold ${l === "잔여" ? "text-[#5B6B85]" : "text-white/55"}`}>{l}</div>
+            <div className="text-[19px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}<span className="text-[11px] font-bold ml-0.5">일</span></div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 h-2 rounded-full bg-white/10 overflow-hidden flex">
+        <div className="h-full bg-white" style={{ width: pct(used) }} />
+        <div className="h-full bg-white/45" style={{ width: pct(pending) }} />
+        <div className="h-full bg-[#8FB0F0]" style={{ width: pct(thisDays || 0) }} />
+      </div>
+      <div className="mt-2 flex items-center justify-between text-[12px] font-bold">
+        <span className="text-white/60">사용 · 대기 · 이번 신청</span>
+        {thisDays > 0 && <span className={after < 0 ? "text-white underline" : "text-white/90"}>이번 신청 {thisDays}일 → 신청 후 잔여 {after}일{after < 0 ? " (초과)" : ""}</span>}
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────── 작성 화면 ───────────────────────────
-function Composer({ company, me, staff, cat, preset, onDone }) {
+function Composer({ company, me, staff, cat, preset, onDone, leave, getLive }) {
+  const editId = preset?.editId || null;
   const forms = formsOfCat(cat);
   const [formKey, setFormKey] = React.useState(preset?.form && formOf(preset.form).cat === cat ? preset.form : forms[0].key);
   const form = formOf(formKey);
@@ -360,7 +439,7 @@ function Composer({ company, me, staff, cat, preset, onDone }) {
 
   // 결재선이 비어 있으면 직원 목록이 오는 대로 자동 추천
   React.useEffect(() => { if (!autoLined.current && staff && staff.length) { autoLined.current = true; setLine(suggestLine(staff, me)); } }, [staff, me]);
-  const pickForm = (k) => { setFormKey(k); setData(initialData(formOf(k))); setTitle(""); setMsg(""); };
+  const pickForm = (k) => { if (editId) return; setFormKey(k); setData(initialData(formOf(k))); setTitle(""); setMsg(""); };
   const autoTitle = form.titleOf ? form.titleOf(data) : `${form.label} · ${me.name}`;
   const finalTitle = (title || autoTitle || form.label).trim();
 
@@ -368,6 +447,20 @@ function Composer({ company, me, staff, cat, preset, onDone }) {
     const miss = missingFields(form, data);
     if (miss.length) { setMsg(`필수 입력: ${miss.join(", ")}`); return; }
     if (!line.length) { setMsg("결재자를 1명 이상 지정해 주세요."); return; }
+    if (editId) {
+      const live = getLive?.(editId);
+      if (!live || !canEdit(live, me.uid)) { setMsg("결재자가 이미 문서를 열어봐서 수정할 수 없습니다. 회수 후 재기안해 주세요."); return; }
+      if (!window.confirm("수정한 내용으로 문서를 바꿀까요?")) return;
+      setBusy(true); setMsg("");
+      try {
+        await updateDoc(doc(db, "approvals", editId), {
+          title: finalTitle, data, images, summary: form.summary ? form.summary(data) : "", amount: form.amount ? form.amount(data) : 0, days: form.days ? form.days(data) : 0,
+          updatedAt: serverTimestamp(), history: arrayUnion({ at: Date.now(), uid: me.uid, name: me.name, action: "수정", comment: "" }),
+        });
+        onDone();
+      } catch (e) { setMsg(e.message || "수정 실패"); } finally { setBusy(false); }
+      return;
+    }
     if (!window.confirm(`「${finalTitle}」 문서를 ${line.map((s) => s.name).join(" → ")} 순서로 결재 상신할까요?`)) return;
     setBusy(true); setMsg("");
     try {
@@ -383,7 +476,6 @@ function Composer({ company, me, staff, cat, preset, onDone }) {
         history: [{ at: Date.now(), uid: me.uid, name: me.name, action: "상신", comment: "" }], redraftOf: preset?.id || null,
       };
       await addDoc(collection(db, "approvals"), payload);
-      notify(company, me.name, [L[0]], `[결재 요청] ${finalTitle}`, `${me.name}님이 결재를 요청했습니다.\n\n${docBrief(payload)}`);
       onDone();
     } catch (e) { setMsg(e.message || "상신 실패"); } finally { setBusy(false); }
   };
@@ -391,7 +483,8 @@ function Composer({ company, me, staff, cat, preset, onDone }) {
   const half = (f) => f.half;
   return (
     <>
-    <div className="flex flex-wrap gap-2 mb-4">
+    {editId && <div className="mb-3 rounded-xl bg-[#0F1A30] text-white px-4 py-2.5 text-[13px] font-bold">문서 수정 중 · {preset.docNo} — 결재자가 열어보기 전까지만 고칠 수 있습니다. 결재선·참조자는 바꿀 수 없습니다(바꾸려면 회수 후 재기안).</div>}
+    <div className={`flex flex-wrap gap-2 mb-4 ${editId ? "hidden" : ""}`}>
       {forms.map((f) => (
         <button key={f.key} type="button" onClick={() => pickForm(f.key)}
           className={`h-9 px-3.5 rounded-xl text-[13px] font-black border transition ${f.key === formKey ? "bg-[#0F1A30] text-white border-[#0F1A30] shadow-[0_6px_16px_rgba(15,26,48,0.25)]" : "bg-white text-[#3A4A66] border-[#E3E8F0] hover:border-[#4B6CB7]"}`}>{f.label}</button>
@@ -399,13 +492,14 @@ function Composer({ company, me, staff, cat, preset, onDone }) {
     </div>
     <div className="grid gap-5" style={{ gridTemplateColumns: "minmax(360px, 420px) 1fr" }}>
       <div className="space-y-4">
+        {(formKey === "annual" || formKey === "half") && <LeaveCard leave={leave} thisDays={editId ? 0 : (leaveUseOf({ cat, form: formKey, data })?.days || 0)} />}
         <div className="rounded-2xl border border-[#E3E8F0] bg-white p-5 space-y-3.5">
           <div>
             <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>FORM</div>
             <div className="text-[16px] font-black text-[#0F1A30]">양식 · 내용</div>
           </div>
           <label className="block"><span className="text-[12.5px] font-bold text-[#7A879C]">양식</span>
-            <select value={formKey} onChange={(e) => pickForm(e.target.value)} className={`${inp} !h-11 font-black`}>{forms.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}</select>
+            <select value={formKey} disabled={!!editId} onChange={(e) => pickForm(e.target.value)} className={`${inp} !h-11 font-black disabled:bg-[#F5F7FA]`}>{forms.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}</select>
           </label>
           <label className="block"><span className="text-[12.5px] font-bold text-[#7A879C]">문서 제목 <span className="font-semibold">(비우면 자동)</span></span>
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={autoTitle} className={inp} />
@@ -437,11 +531,16 @@ function Composer({ company, me, staff, cat, preset, onDone }) {
             <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>APPROVAL LINE</div>
             <div className="text-[16px] font-black text-[#0F1A30]">결재선</div>
           </div>
-          <LineEditor line={line} setLine={setLine} cc={cc} setCc={setCc} staff={staff} me={me} company={company} cat={cat} />
+          {editId ? (
+            <div className="space-y-1.5">
+              {line.map((s, i) => <div key={i} className="h-9 px-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] flex items-center gap-2 text-[13px]"><span className="w-6 h-6 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-black flex items-center justify-center">{i + 1}</span><b className="text-[#0F1A30]">{s.name}</b><span className="text-[#7A879C]">{s.position} · {s.kind || "결재"}</span></div>)}
+              {cc.length > 0 && <div className="text-[12.5px] text-[#5B6B85] px-1">참조 {cc.map((c) => c.name).join(", ")}</div>}
+            </div>
+          ) : <LineEditor line={line} setLine={setLine} cc={cc} setCc={setCc} staff={staff} me={me} company={company} cat={cat} />}
         </div>
         {msg && <div className="rounded-xl bg-white border border-[#DCE3EE] px-4 py-2.5 text-[13px] font-bold text-[#0F1A30]">⚠ {msg}</div>}
         <button type="button" onClick={submit} disabled={busy} className="w-full h-14 rounded-2xl text-white text-[15.5px] font-black shadow-[0_12px_26px_rgba(15,26,48,0.28)] disabled:opacity-60 inline-flex items-center justify-center gap-2" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
-          <ShellIcon name="send" size={17} />{busy ? "상신 중…" : "결재 상신"}
+          <ShellIcon name={editId ? "pen" : "send"} size={17} />{busy ? (editId ? "저장 중…" : "상신 중…") : editId ? "수정 저장" : "결재 상신"}
         </button>
       </div>
       <div className="rounded-2xl bg-[#E9EDF3] p-5 overflow-auto">
@@ -465,7 +564,7 @@ function Progress({ d }) {
       {(d.line || []).map((s, i) => (
         <React.Fragment key={i}>
           {i > 0 && <span className={`w-3 h-[2px] ${s.status === "approved" || (d.line[i - 1].status === "approved") ? "bg-[#1B2B4B]" : "bg-[#DCE3EE]"}`} />}
-          <span title={`${s.name} ${s.position} · ${s.status === "approved" ? "승인" : s.status === "rejected" ? "반려" : s.status === "pending" ? "결재 중" : "대기"}`}
+          <span title={`${s.name} ${s.position} · ${s.status === "approved" ? "승인" : s.status === "rejected" ? "반려" : s.status === "pending" ? (s.viewedAt ? "열람함 · 결재 중" : "결재 중(미열람)") : "대기"}`}
             className={`w-[22px] h-[22px] rounded-full text-[10px] font-black flex items-center justify-center ${s.status === "approved" ? "bg-[#1B2B4B] text-white" : s.status === "rejected" ? "bg-[#0F1A30] text-white" : s.status === "pending" ? "bg-white text-[#1B2B4B] ring-2 ring-[#1B2B4B]" : "bg-[#EEF1F6] text-[#9AA9C3]"}`}>
             {s.status === "rejected" ? "✕" : String(s.name || "?").slice(0, 1)}
           </span>
@@ -475,51 +574,67 @@ function Progress({ d }) {
   );
 }
 
-function Viewer({ d, me, staff, company, onClose, onRedraft }) {
+function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit }) {
   const form = formOf(d.form);
   const [comment, setComment] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [cancelAsk, setCancelAsk] = React.useState(false);
   const paperRef = React.useRef(null);
   const turn = myTurn(d, me.uid);
+  const cTurn = cancelTurn(d, me.uid);
   const mine = d.drafterUid === me.uid;
   const anyApproved = (d.line || []).some((s) => s.status === "approved");
+  // 열면 읽음 처리 — 기안자: 결과 확인 / 참조자: 완료 문서 확인 / 지금 차례 결재자: 열람 시각(이후 기안자 수정 잠김)
   React.useEffect(() => {
-    if (mine && d.status === "rejected" && !(d.seenBy || []).includes(me.uid)) updateDoc(doc(db, "approvals", d.id), { seenBy: arrayUnion(me.uid) }).catch(() => {});
-  }, [d, mine, me.uid]);
+    const patch = {};
+    if (mineUnread(d, me.uid)) { patch.drafterUnread = false; patch.seenBy = arrayUnion(me.uid); }
+    if (ccUnread(d, me.uid)) patch.ccReadBy = arrayUnion(me.uid);
+    if (d.status === "pending" && d.line?.[d.step]?.uid === me.uid && !d.line[d.step].viewedAt) patch.line = d.line.map((s, i) => (i === d.step ? { ...s, viewedAt: Date.now() } : s));
+    if (Object.keys(patch).length) updateDoc(doc(db, "approvals", d.id), patch).catch(() => {});
+  }, [d, me.uid]);
 
   const act = async (kind) => {
-    if (kind === "reject" && !comment.trim()) { window.alert("반려 사유를 적어 주세요."); return; }
-    if (!window.confirm(kind === "approve" ? "승인할까요?" : kind === "reject" ? "반려할까요?" : kind === "withdraw" ? "결재를 회수할까요? (아직 아무도 승인하지 않은 문서만)" : "의견을 남길까요?")) return;
+    const isCancelFlow = kind.startsWith("c-");
+    if ((kind === "reject" || kind === "c-reject") && !comment.trim()) { window.alert("반려 사유를 적어 주세요."); return; }
+    if (kind === "cancel-req" && !comment.trim()) { window.alert("취소 사유를 적어 주세요."); return; }
+    const ask = { approve: "승인할까요?", reject: "반려할까요?", withdraw: "결재를 회수할까요?", comment: "의견을 남길까요?", "cancel-req": "승인된 문서의 결재 취소를 요청할까요? 결재자들이 다시 승인하면 취소됩니다.", "c-approve": "결재 취소를 승인할까요?", "c-reject": "결재 취소 요청을 반려할까요?" }[kind];
+    if (!window.confirm(ask)) return;
     setBusy(true);
     try {
-      const line = (d.line || []).map((s) => ({ ...s }));
-      const i = d.step || 0;
-      const h = { at: Date.now(), uid: me.uid, name: me.name, action: { approve: "승인", reject: "반려", withdraw: "회수", comment: "의견" }[kind], comment: comment.trim() };
+      const now = Date.now();
+      const h = { at: now, uid: me.uid, name: me.name, action: { approve: "승인", reject: "반려", withdraw: "회수", comment: "의견", "cancel-req": "결재 취소 요청", "c-approve": "취소 승인", "c-reject": "취소 반려" }[kind], comment: comment.trim() };
       const patch = { updatedAt: serverTimestamp(), history: arrayUnion(h) };
-      if (kind === "approve") {
-        line[i] = { ...line[i], status: "approved", at: Date.now(), comment: comment.trim() };
-        const next = i + 1 < line.length ? i + 1 : -1;
-        if (next >= 0) line[next] = { ...line[next], status: "pending" };
-        Object.assign(patch, { line, step: next >= 0 ? next : i, status: next >= 0 ? "pending" : "approved" });
-        await updateDoc(doc(db, "approvals", d.id), patch);
-        const nd = { ...d, line };
-        if (next >= 0) notify(company, me.name, [line[next]], `[결재 요청] ${d.title}`, `${d.drafter?.name}님이 올린 문서가 ${me.name}님 승인 후 결재 차례가 되었습니다.\n\n${docBrief(nd)}`);
-        else {
-          notify(company, me.name, [{ uid: d.drafterUid, name: d.drafter?.name }], `[결재 완료] ${d.title}`, `문서가 최종 승인되었습니다.\n\n${docBrief(nd)}`);
-          notify(company, me.name, d.cc || [], `[결재 참조] ${d.title}`, `참조자로 지정된 문서가 최종 승인되었습니다.\n\n${docBrief(nd)}`);
+      if (kind === "approve" || kind === "reject") {
+        const line = (d.line || []).map((x) => ({ ...x }));
+        const i = d.step || 0;
+        if (kind === "approve") {
+          line[i] = { ...line[i], status: "approved", at: now, comment: comment.trim() };
+          const next = i + 1 < line.length ? i + 1 : -1;
+          if (next >= 0) line[next] = { ...line[next], status: "pending" };
+          Object.assign(patch, { line, step: next >= 0 ? next : i, status: next >= 0 ? "pending" : "approved", drafterUnread: true });
+        } else {
+          line[i] = { ...line[i], status: "rejected", at: now, comment: comment.trim() };
+          Object.assign(patch, { line, status: "rejected", drafterUnread: true });
         }
-      } else if (kind === "reject") {
-        line[i] = { ...line[i], status: "rejected", at: Date.now(), comment: comment.trim() };
-        Object.assign(patch, { line, status: "rejected" });
-        await updateDoc(doc(db, "approvals", d.id), patch);
-        notify(company, me.name, [{ uid: d.drafterUid, name: d.drafter?.name }], `[반려] ${d.title}`, `${me.name}님이 문서를 반려했습니다.\n반려 사유: ${comment.trim()}\n\n${docBrief(d)}`);
       } else if (kind === "withdraw") {
         Object.assign(patch, { status: "withdrawn" });
-        await updateDoc(doc(db, "approvals", d.id), patch);
-      } else {
-        await updateDoc(doc(db, "approvals", d.id), patch);
+      } else if (kind === "cancel-req") {
+        const cl = (d.line || []).map((x, i) => ({ uid: x.uid, name: x.name, position: x.position || "", kind: x.kind || "결재", status: i === 0 ? "pending" : "wait", at: 0, comment: "" }));
+        Object.assign(patch, { cancel: { status: "pending", reason: comment.trim(), at: now, step: 0, line: cl } });
+      } else if (isCancelFlow) {
+        const c = { ...d.cancel, line: (d.cancel?.line || []).map((x) => ({ ...x })) };
+        const i = c.step || 0;
+        if (kind === "c-approve") {
+          c.line[i] = { ...c.line[i], status: "approved", at: now, comment: comment.trim() };
+          if (i + 1 < c.line.length) { c.step = i + 1; c.line[i + 1] = { ...c.line[i + 1], status: "pending" }; } else { c.status = "approved"; patch.status = "cancelled"; patch.drafterUnread = true; }
+        } else {
+          c.line[i] = { ...c.line[i], status: "rejected", at: now, comment: comment.trim() };
+          c.status = "rejected"; patch.drafterUnread = true;
+        }
+        patch.cancel = c;
       }
-      setComment("");
+      await updateDoc(doc(db, "approvals", d.id), patch);
+      setComment(""); setCancelAsk(false);
     } catch (e) { window.alert(`처리 실패: ${e.message}`); } finally { setBusy(false); }
   };
   const print = async () => {
@@ -553,32 +668,58 @@ function Viewer({ d, me, staff, company, onClose, onRedraft }) {
           <div className="flex-1 overflow-y-auto p-5 space-y-4">
             <div className="rounded-2xl p-4 text-white" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
               <div className="text-[12px] font-bold text-white/60">{d.formLabel} · {d.drafter?.name} {d.drafter?.position}</div>
-              <div className="text-[20px] font-black mt-0.5">{STATUS[d.status]}{d.status === "pending" && d.line?.[d.step] ? ` · ${d.line[d.step].name} 차례` : ""}</div>
+              <div className="text-[20px] font-black mt-0.5">{d.cancel?.status === "pending" && d.status === "approved" ? `결재 취소 검토 중 · ${d.cancel.line?.[d.cancel.step]?.name || ""} 차례` : `${STATUS[d.status]}${d.status === "pending" && d.line?.[d.step] ? ` · ${d.line[d.step].name} 차례${d.line[d.step].viewedAt ? "(열람함)" : ""}` : ""}`}</div>
               {(d.amount > 0 || d.days > 0) && <div className="text-[13px] font-bold text-white/80 mt-1">{d.days > 0 ? `${d.days}일` : ""}{d.days > 0 && d.amount > 0 ? " · " : ""}{d.amount > 0 ? fmtWon(d.amount) : ""}</div>}
               <div className="mt-3"><Progress d={d} /></div>
             </div>
+            {d.cancel && (
+              <div className="rounded-2xl border border-[#DCE3EE] bg-[#F8FAFD] p-4">
+                <div className="text-[13px] font-black text-[#0F1A30]">결재 취소 요청 · {d.cancel.status === "pending" ? "진행 중" : d.cancel.status === "approved" ? "취소 완료" : "취소 반려"}</div>
+                <div className="text-[12.5px] text-[#3A4A66] mt-1 whitespace-pre-wrap">사유: {d.cancel.reason}</div>
+                <div className="mt-2 flex flex-wrap gap-1">{(d.cancel.line || []).map((x, i) => <span key={i} className={`h-6 px-2 rounded-md text-[11.5px] font-bold inline-flex items-center ${x.status === "approved" ? "bg-[#1B2B4B] text-white" : x.status === "rejected" ? "bg-[#0F1A30] text-white" : x.status === "pending" ? "border border-[#1B2B4B] text-[#1B2B4B]" : "bg-[#EEF1F6] text-[#9AA9C3]"}`}>{x.name} {x.status === "approved" ? "동의" : x.status === "rejected" ? "거부" : x.status === "pending" ? "검토 중" : "대기"}</span>)}</div>
+              </div>
+            )}
             {turn && (
               <div className="rounded-2xl border-2 border-[#1B2B4B] p-4 space-y-2.5">
-                <div className="text-[14px] font-black text-[#0F1A30]">내 결재 차례입니다</div>
-                <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} placeholder="결재 의견 (반려할 때는 꼭 적어 주세요)" className={`${inp} h-auto py-2`} />
+                <div className="text-[14px] font-black text-[#0F1A30]">{cTurn ? "결재 취소 요청 — 내 검토 차례" : "내 결재 차례입니다"}</div>
+                <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} placeholder={cTurn ? "의견 (거부할 때는 사유 필수)" : "결재 의견 (반려할 때는 꼭 적어 주세요)"} className={`${inp} h-auto py-2`} />
                 <div className="flex gap-2">
-                  <button type="button" disabled={busy} onClick={() => act("reject")} className="flex-1 h-11 rounded-xl border border-[#0F1A30] text-[#0F1A30] text-[14px] font-black disabled:opacity-50">반려</button>
-                  <button type="button" disabled={busy} onClick={() => act("approve")} className="flex-[1.6] h-11 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black disabled:opacity-50">{(d.line[d.step]?.kind || "결재") === "합의" ? "합의" : "승인"}</button>
+                  <button type="button" disabled={busy} onClick={() => act(cTurn ? "c-reject" : "reject")} className="flex-1 h-11 rounded-xl border border-[#0F1A30] text-[#0F1A30] text-[14px] font-black disabled:opacity-50">{cTurn ? "취소 거부" : "반려"}</button>
+                  <button type="button" disabled={busy} onClick={() => act(cTurn ? "c-approve" : "approve")} className="flex-[1.6] h-11 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black disabled:opacity-50">{cTurn ? "취소 승인" : (d.line[d.step]?.kind || "결재") === "합의" ? "합의" : "승인"}</button>
                 </div>
               </div>
             )}
-            {!turn && d.status === "pending" && (
+            {mine && cancelAsk && (
+              <div className="rounded-2xl border-2 border-[#1B2B4B] p-4 space-y-2.5">
+                <div className="text-[14px] font-black text-[#0F1A30]">결재 취소 요청</div>
+                <div className="text-[12.5px] text-[#5B6B85] leading-relaxed">승인된 문서를 취소하려면 결재자들의 동의가 필요합니다. 같은 결재선 순서로 다시 승인받으면 「결재 취소」로 바뀌고, 연차는 자동으로 돌려받습니다.</div>
+                <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} placeholder="취소 사유 (예: 일정 변경으로 휴가 취소)" className={`${inp} h-auto py-2`} />
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => { setCancelAsk(false); setComment(""); }} className="flex-1 h-10 rounded-xl border border-[#DCE3EE] text-[13px] font-bold text-[#5B6B85]">닫기</button>
+                  <button type="button" disabled={busy} onClick={() => act("cancel-req")} className="flex-[1.6] h-10 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black disabled:opacity-50">취소 요청 보내기</button>
+                </div>
+              </div>
+            )}
+            {!turn && !cancelAsk && d.status === "pending" && (
               <div className="space-y-2">
                 <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="의견 남기기" className={`${inp} h-auto py-2`} />
                 <button type="button" disabled={busy || !comment.trim()} onClick={() => act("comment")} className="w-full h-10 rounded-xl border border-[#DCE3EE] text-[13px] font-bold text-[#3A4A66] disabled:opacity-40">의견 등록</button>
               </div>
             )}
             <div className="flex flex-wrap gap-1.5">
+              {canEdit(d, me.uid) && <button type="button" onClick={() => onEdit(d)} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">수정</button>}
               {mine && d.status === "pending" && !anyApproved && <button type="button" disabled={busy} onClick={() => act("withdraw")} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#3A4A66]">회수</button>}
+              {mine && d.status === "approved" && d.cancel?.status !== "pending" && !cancelAsk && <button type="button" onClick={() => { setCancelAsk(true); setComment(""); }} className="h-9 px-3.5 rounded-lg border border-[#0F1A30] text-[12.5px] font-black text-[#0F1A30]">결재 취소 요청</button>}
               {mine && ["rejected", "withdrawn"].includes(d.status) && <button type="button" onClick={() => onRedraft(d)} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">재기안</button>}
-              {mine && d.status === "approved" && <button type="button" onClick={() => onRedraft({ ...d, id: null })} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#3A4A66]">복사해서 새로 쓰기</button>}
+              {mine && ["approved", "cancelled"].includes(d.status) && <button type="button" onClick={() => onRedraft({ ...d, id: null })} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#3A4A66]">복사해서 새로 쓰기</button>}
               <button type="button" onClick={print} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#3A4A66]">인쇄</button>
             </div>
+            {mine && d.status === "pending" && (
+              <div className="text-[11.5px] text-[#9AA9C3] leading-relaxed">
+                {canEdit(d, me.uid) ? "· 첫 결재자가 열어보기 전이라 수정할 수 있습니다." : d.line?.[0]?.viewedAt ? `· ${d.line[0].name}님이 ${new Date(d.line[0].viewedAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}에 열람해 수정이 잠겼습니다.` : ""}
+                {!anyApproved ? " 아직 승인 전이라 회수 후 재기안할 수 있습니다." : " 승인이 진행된 문서는 회수할 수 없습니다 — 현재 결재자에게 반려를 요청하세요."}
+              </div>
+            )}
             <div>
               <div className="text-[12.5px] font-black text-[#0F1A30] mb-2">결재 이력</div>
               <div className="relative pl-4 space-y-3 before:absolute before:left-[5px] before:top-1 before:bottom-1 before:w-[2px] before:bg-[#E3E8F0]">
@@ -614,7 +755,9 @@ function DocList({ docs, onOpen, empty, uid }) {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-black px-1.5 py-0.5 rounded border border-[#0F1A30] text-[#0F1A30] shrink-0">{d.formLabel}</span>
-              {myTurn(d, uid) && <span className="text-[11px] font-black px-1.5 py-0.5 rounded bg-[#0F1A30] text-white shrink-0">내 차례</span>}
+              {myTurn(d, uid) && <span className="text-[11px] font-black px-1.5 py-0.5 rounded bg-[#0F1A30] text-white shrink-0">{cancelTurn(d, uid) ? "취소 검토" : "내 차례"}</span>}
+              {(mineUnread(d, uid) || ccUnread(d, uid)) && <span className="w-[18px] h-[18px] rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center shrink-0">N</span>}
+              {d.cancel?.status === "pending" && d.status === "approved" && !cancelTurn(d, uid) && <span className="text-[11px] font-black px-1.5 py-0.5 rounded border border-[#9AA9C3] text-[#5B6B85] shrink-0">취소 요청 중</span>}
               <span className="text-[14.5px] font-black text-[#0F1A30] truncate">{d.title}</span>
             </div>
             <div className="text-[12.5px] text-[#7A879C] truncate mt-0.5">{d.summary}</div>
@@ -722,7 +865,7 @@ function LinesPage({ company, me, staff }) {
 
 // ─────────────────────────── 메인 ───────────────────────────
 //  page: inbox | mine | leave | expense | draft | lines
-export default function ApprovalCenter({ company, me, page, setPage }) {
+export default function ApprovalCenter({ company, me, page, setPage, openId, onOpened }) {
   const staff = useCompanyStaff(company);
   const list = useApprovals(me.uid);
   const [open, setOpen] = React.useState(null);
@@ -738,6 +881,9 @@ export default function ApprovalCenter({ company, me, page, setPage }) {
   }, [admin, tab, company]);
   const meFull = React.useMemo(() => ({ ...me, ...((staff || []).find((u) => u.uid === me.uid) ? { team: (staff || []).find((u) => u.uid === me.uid).team || me.team, position: (staff || []).find((u) => u.uid === me.uid).position || me.position } : {}) }), [me, staff]);
   const cur = open ? ([...(list || []), ...(companyAll || [])].find((x) => x.id === open) || null) : null;
+  // 배너를 눌러 들어오면 그 문서를 바로 연다
+  React.useEffect(() => { if (openId) { setOpen(openId); onOpened?.(); } }, [openId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const leave = useLeaveStatus(meFull, list);
 
   const L = list || [];
   const uid = me.uid;
@@ -747,15 +893,18 @@ export default function ApprovalCenter({ company, me, page, setPage }) {
     progress: L.filter((d) => d.status === "pending" && inLine(d) && !myTurn(d, uid)),
     done: L.filter((d) => d.status === "approved" && inLine(d)),
     rejected: L.filter((d) => d.status === "rejected" && inLine(d)),
+    cancelled: L.filter((d) => d.status === "cancelled" && inLine(d)),
     cc: L.filter((d) => (d.ccUids || []).includes(uid)),
     company: companyAll,
   };
   const mineL = L.filter((d) => d.drafterUid === uid);
-  const mineSets = { all: mineL, pending: mineL.filter((d) => d.status === "pending"), approved: mineL.filter((d) => d.status === "approved"), rejected: mineL.filter((d) => d.status === "rejected"), withdrawn: mineL.filter((d) => d.status === "withdrawn") };
-  const redraft = (d) => { setOpen(null); setPreset({ ...d }); setPage(d.cat); };
+  const mineSets = { all: mineL, pending: mineL.filter((d) => d.status === "pending"), approved: mineL.filter((d) => d.status === "approved"), rejected: mineL.filter((d) => d.status === "rejected"), cancelled: mineL.filter((d) => d.status === "cancelled"), withdrawn: mineL.filter((d) => d.status === "withdrawn") };
+  const redraft = (d) => { setOpen(null); setPreset({ ...d, editId: null }); setPage(d.cat); };
+  const edit = (d) => { setOpen(null); setPreset({ ...d, editId: d.id }); setPage(d.cat); };
+  const unreadIn = (arr) => (arr || []).filter((d) => mineUnread(d, uid)).length;
 
   const year = new Date().getFullYear();
-  const leaveUsed = mineL.filter((d) => d.status === "approved" && ["annual", "half"].includes(d.form) && String(ymd(toMs(d.createdAt))).startsWith(String(year))).reduce((s, d) => s + (Number(d.days) || 0), 0);
+  void year;
   const spentMonth = mineL.filter((d) => d.status === "approved" && d.cat === "expense" && ymd(toMs(d.createdAt)).slice(0, 7) === ymd().slice(0, 7)).reduce((s, d) => s + (Number(d.amount) || 0), 0);
 
   const isCat = ["leave", "expense", "draft"].includes(page);
@@ -764,7 +913,7 @@ export default function ApprovalCenter({ company, me, page, setPage }) {
   const heroEn = isCat ? cat.en : page === "inbox" ? "INBOX" : page === "mine" ? "MY DOCUMENTS" : "APPROVAL LINES";
   const heroDesc = isCat ? cat.desc : page === "inbox" ? "내 차례인 문서를 결재하고, 진행·완료된 문서를 확인합니다" : page === "mine" ? "내가 올린 문서의 결재 진행 상황을 봅니다" : "자주 쓰는 결재 순서를 저장해 두고 문서 작성 때 불러옵니다";
   const kpis = isCat
-    ? (page === "leave" ? [["올해 사용 휴가", `${leaveUsed}일`], ["진행 중", mineSets.pending.filter((d) => d.cat === "leave").length]] : page === "expense" ? [["이번 달 승인 금액", fmtWon(spentMonth)], ["진행 중", mineSets.pending.filter((d) => d.cat === "expense").length]] : [["진행 중", mineSets.pending.filter((d) => d.cat === "draft").length], ["완료", mineSets.approved.filter((d) => d.cat === "draft").length]])
+    ? (page === "leave" ? [[leave?.ent ? `잔여 ${leave.ent.label}` : "잔여 연차", leave?.ent ? `${leave.remain}일` : "-"], ["진행 중", mineSets.pending.filter((d) => d.cat === "leave").length]] : page === "expense" ? [["이번 달 승인 금액", fmtWon(spentMonth)], ["진행 중", mineSets.pending.filter((d) => d.cat === "expense").length]] : [["진행 중", mineSets.pending.filter((d) => d.cat === "draft").length], ["완료", mineSets.approved.filter((d) => d.cat === "draft").length]])
     : [["결재 대기", sets.todo.length], ["내 진행 문서", mineSets.pending.length], ["반려", mineSets.rejected.length]];
 
   return (
@@ -793,26 +942,27 @@ export default function ApprovalCenter({ company, me, page, setPage }) {
 
       {isCat && (
         <>
-          <Composer key={`${page}-${preset?.id || "new"}`} company={company} me={meFull} staff={staff} cat={page} preset={preset?.cat === page ? preset : null}
+          <Composer key={`${page}-${preset?.editId || preset?.id || "new"}`} company={company} me={meFull} staff={staff} cat={page} preset={preset?.cat === page ? preset : null}
+            leave={leave} getLive={(id) => (list || []).find((x) => x.id === id)}
             onDone={() => { setPreset(null); setPage("mine"); }} />
         </>
       )}
 
       {page === "inbox" && (
         <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
-          <Tabs tab={tab} setTab={setTab} tabs={[["todo", "결재 대기", sets.todo.length], ["progress", "진행 중", sets.progress.length], ["done", "결재 완료", 0], ["rejected", "반려", 0], ["cc", "참조 문서", 0], ...(admin ? [["company", "회사 전체", 0]] : [])]} />
+          <Tabs tab={tab} setTab={setTab} tabs={[["todo", "결재 대기", sets.todo.length], ["progress", "진행 중", sets.progress.length], ["done", "결재 완료", 0], ["rejected", "반려", 0], ["cancelled", "결재 취소", 0], ["cc", "참조 문서", sets.cc.filter((d) => ccUnread(d, uid)).length], ...(admin ? [["company", "회사 전체", 0]] : [])]} />
           <DocList uid={uid} docs={tab === "company" ? companyAll : (list === null ? null : sets[tab] || [])} onOpen={(d) => setOpen(d.id)} empty={tab === "todo" ? "결재할 문서가 없습니다" : "문서가 없습니다"} />
         </div>
       )}
       {page === "mine" && (
         <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
-          <Tabs tab={tab} setTab={setTab} tabs={[["all", "전체", mineSets.all.length], ["pending", "진행 중", mineSets.pending.length], ["approved", "완료", 0], ["rejected", "반려", mineSets.rejected.length], ["withdrawn", "회수", 0]]} />
+          <Tabs tab={tab} setTab={setTab} tabs={[["all", "전체", unreadIn(mineSets.all)], ["pending", "진행 중", unreadIn(mineSets.pending)], ["approved", "완료", unreadIn(mineSets.approved)], ["rejected", "반려", unreadIn(mineSets.rejected)], ["cancelled", "결재 취소", unreadIn(mineSets.cancelled)], ["withdrawn", "회수", 0]]} />
           <DocList uid={uid} docs={list === null ? null : mineSets[tab] || []} onOpen={(d) => setOpen(d.id)} empty="올린 문서가 없습니다. 위 버튼으로 새 문서를 작성하세요." />
         </div>
       )}
       {page === "lines" && <LinesPage company={company} me={meFull} staff={staff} />}
 
-      {cur && <Viewer d={cur} me={meFull} staff={staff} company={company} onClose={() => setOpen(null)} onRedraft={redraft} />}
+      {cur && <Viewer d={cur} me={meFull} staff={staff} company={company} onClose={() => setOpen(null)} onRedraft={redraft} onEdit={edit} />}
     </div>
   );
 }

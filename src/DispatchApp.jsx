@@ -7323,6 +7323,12 @@ useEffect(() => {
   const tonOptions = useMemo(() => Array.from({ length: 25 }, (_, i) => `${i + 1}톤`), []);
 
  const [menu, setMenu] = useState("HOME");
+ // 🔔 전자결재 배너를 누르면 홈으로 옮긴다 — 문서 열기는 HomeDashboard가 window.__kpOpenApproval을 받아서 한다
+ useEffect(() => {
+   const h = () => setMenu("HOME");
+   window.addEventListener("kp-open-approval", h);
+   return () => window.removeEventListener("kp-open-approval", h);
+ }, []);
   // 정산관리(거래명세서 검색/선택 상태)는 다른 메뉴로 이동했다 돌아와도 유지되도록,
   // 한 번 방문하면 언마운트하지 않고 CSS로만 숨긴다.
   const [정산관리Visited, set정산관리Visited] = useState(false);
