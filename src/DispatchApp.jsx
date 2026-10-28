@@ -2615,6 +2615,7 @@ import OrgChart from "./OrgChart";
 import { MailHeaderButton } from "./InternalMail";
 import BannerCenter from "./BannerCenter";
 import PersonnelOrder from "./PersonnelOrder";
+import OrderScanModal, { looksLikeOrder } from "./OrderScanModal";
 import { RecurringManagerModal, CloseReportModal } from "./AutomationPanels";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -13905,33 +13906,33 @@ setCopyOpen(false);
 
 // 오더 정보 카드 스타일 — A: 카드형, B: 밑줄형(기본 — 직접 A로 바꾼 사용자만 A 유지). 사용자가 마지막으로
 // 선택한 스타일을 localStorage에 저장해 재접속/다른 탭 이동 후에도 유지한다.
+// ⭐ 2026-10-28 — A: 원래 밑줄형(기본 고정), B: 둥근 박스형(디지털). 사용자가 B로 바꾼 경우에만 B 유지.
+//    (예전 저장값과 뜻이 바뀌어 새 이름 "orderCardStyle2"로 저장 — 모두 A부터 시작)
 const [orderCardStyle, setOrderCardStyle] = React.useState(() => {
-  try { return localStorage.getItem("orderCardStyle") === "A" ? "A" : "B"; } catch { return "B"; }
+  try { return localStorage.getItem("orderCardStyle2") === "B" ? "B" : "A"; } catch { return "A"; }
 });
 const toggleOrderCardStyle = () => {
   setOrderCardStyle(prev => {
-    const next = prev === "B" ? "A" : "B";
-    try { localStorage.setItem("orderCardStyle", next); } catch {}
+    const next = prev === "A" ? "B" : "A";
+    try { localStorage.setItem("orderCardStyle2", next); } catch {}
     return next;
   });
 };
 
-// 입력창 (A: 카드형 / B: 밑줄형 — 오더복사수정패널과 동일한 밑줄 스타일)
-// ⭐ 2026-10-28 디지털 리디자인 — B(기본)는 연한 칸에 둥근 모서리, 누르면 흰 바탕+테두리 빛. 글씨 크고 또렷하게.
-const inputCls = orderCardStyle === "B"
-  ? "w-full h-10 px-3 rounded-[11px] border border-[#E3E8F0] bg-[#F7F9FC] text-[13.5px] font-bold text-[#0F1A30] placeholder:text-[#A7B3C6] placeholder:font-medium focus:outline-none focus:bg-white focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 transition"
-  : "w-full px-3 py-2 text-sm rounded-lg border border-gray-200 shadow-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 placeholder:text-gray-500 transition";
+// 입력창 (A: 밑줄형 — 원래 디자인 / B: 둥근 박스형 — 디지털)
+const inputCls = orderCardStyle === "A"
+  ? "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] font-bold text-gray-900 bg-transparent focus:outline-none focus:border-[#1B2B4B] transition"
+  : "w-full h-10 px-3 rounded-[11px] border border-[#E3E8F0] bg-[#F7F9FC] text-[13.5px] font-bold text-[#0F1A30] placeholder:text-[#A7B3C6] placeholder:font-medium focus:outline-none focus:bg-white focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 transition";
 
-// 라벨 (카카오T 스타일) — min-h + flex로 아이콘 버튼이 붙은 라벨과 일반
-// 텍스트 라벨의 높이를 통일해, 같은 grid row의 옆 칸 입력창끼리 높이가
-// 들쑥날쑥해지는 것을 방지한다.
-const labelCls =
-  "flex items-center gap-1 h-[22px] overflow-visible whitespace-nowrap text-[12.5px] font-extrabold tracking-[0.01em] text-[#3A4A66] mb-1.5";
+// 라벨 — min-h + flex로 아이콘 버튼이 붙은 라벨과 일반 텍스트 라벨의 높이를 통일
+const labelCls = orderCardStyle === "A"
+  ? "flex items-center h-[22px] overflow-visible text-[15px] font-semibold text-black mb-1"
+  : "flex items-center gap-1 h-[22px] overflow-visible whitespace-nowrap text-[12.5px] font-extrabold tracking-[0.01em] text-[#3A4A66] mb-1.5";
 
-// 메모/전달사항 textarea (A: 카드형 / B: 밑줄형)
-const textareaCls = orderCardStyle === "B"
-  ? "w-full rounded-[12px] border border-[#E3E8F0] bg-[#F7F9FC] px-3.5 py-2.5 text-[13.5px] font-bold text-[#0F1A30] placeholder:text-[#A7B3C6] placeholder:font-medium resize-none focus:outline-none focus:bg-white focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 transition"
-  : "w-full border-2 border-gray-300 rounded-xl px-4 py-3 text-[13px] resize-none bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.04),0_2px_8px_rgba(0,0,0,0.04)] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] focus:shadow-[0_0_0_1px_rgba(27,43,75,0.12),0_4px_12px_rgba(27,43,75,0.08)] placeholder:text-gray-500 transition-all";
+// 메모/전달사항 textarea (A: 밑줄형 / B: 박스형)
+const textareaCls = orderCardStyle === "A"
+  ? "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] font-bold text-gray-900 bg-transparent resize-none focus:outline-none focus:border-[#1B2B4B] transition"
+  : "w-full rounded-[12px] border border-[#E3E8F0] bg-[#F7F9FC] px-3.5 py-2.5 text-[13.5px] font-bold text-[#0F1A30] placeholder:text-[#A7B3C6] placeholder:font-medium resize-none focus:outline-none focus:bg-white focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 transition";
     const reqStar = <span className="text-[#4B6CB7]">*</span>;
     const AutoBadge = ({ show }) => null;
 function FuelPriceWidget({ apiKey }) {
@@ -14234,194 +14235,33 @@ const applySmartDriverInput = async (text) => {
 // ===============================
 // 📋 오더 자동 파싱 상태
 // ===============================
-const [orderParseText, setOrderParseText] = React.useState("");
 const [showOrderParser, setShowOrderParser] = React.useState(false);
-
-const parseOrderText = (text) => {
-  const lines = text.split(/\n/).map(l => l.trim()).filter(Boolean);
-
-  // ─── Format A: numbered items "1. 상차시간:", "2. 상차지:" ───
-  const numberedMap = {};
-  lines.forEach(line => {
-    const m = line.match(/^(\d+)\s*[.\s]\s*(.+?)\s*[:：]\s*(.+)$/);
-    if (m) numberedMap[m[2].trim()] = m[3].trim();
-  });
-  const hasNumberedFormat = Object.keys(numberedMap).length >= 2;
-
-  if (hasNumberedFormat) {
-    const pickupRaw = numberedMap["상차지"] || numberedMap["상차 지"] || "";
-    const dropRaw = numberedMap["하차지"] || numberedMap["하차 지"] || "";
-    const pickupTimeRaw = numberedMap["상차시간"] || numberedMap["상차 시간"] || "";
-    const dropTimeRaw = numberedMap["하차시간"] || numberedMap["하차 시간"] || "";
-    const productRaw = numberedMap["제품"] || numberedMap["화물"] || numberedMap["품목"] || "";
-    const vehicleRaw = numberedMap["필요차량"] || numberedMap["차량"] || numberedMap["차종"] || "";
-
-    // Extract company name from address string (last non-address token)
-    const extractNameFromAddr = (raw) => {
-      const addrPrefixes = /^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)/;
-      if (addrPrefixes.test(raw)) {
-        // Address comes first, company name may be at end
-        const m = raw.match(/([가-힣A-Za-z0-9()\-\s]+(?:물류센터|하역장|센터|물류|창고|마트|마켓|슈퍼|공장))/);
-        return m ? m[1].trim() : "";
-      }
-      return raw;
-    };
-
-    const parseTime = (t = "") => {
-      if (!t) return "";
-      const cleaned = t.replace(/[^0-9시]/g, " ").trim();
-      const m = cleaned.match(/(\d+)/);
-      if (!m) return t;
-      const h = Number(m[1]);
-      if (h > 24) return "";
-      if (h >= 0 && h < 12) return `오전 ${h === 0 ? 12 : h}:00`;
-      if (h === 12) return "오후 12:00";
-      if (h > 12 && h <= 23) return `오후 ${h - 12}:00`;
-      return t;
-    };
-
-    const extractCold = (raw = "") => {
-      if (/냉동/.test(raw)) return "냉동탑";
-      if (/냉장/.test(raw)) return "냉장탑";
-      if (/윙/.test(raw)) return "윙바디";
-      return "";
-    };
-
-    const palletM = (productRaw + " " + vehicleRaw).match(/(\d+)\s*(파레트?|파렛트?|PLT|pallet)/i);
-    const cargoStr = palletM ? `${palletM[1]}파렛트` : (productRaw ? productRaw.split(/\(|\//).at(0).trim() : "");
-    const coldType = extractCold(productRaw + " " + vehicleRaw);
-
-    // For numbered format, address includes company name inline - try to split
-    const splitAddr = (raw) => {
-      const addrM = raw.match(/((?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)[^\n]+)/);
-      const addr = addrM ? addrM[1].trim() : "";
-      // Company name: everything after the address, or before it
-      let name = "";
-      if (addr && raw.length > addr.length) {
-        name = raw.replace(addr, "").replace(/[-\/\s]+/g, " ").trim();
-      }
-      return { name, addr };
-    };
-
-    const pu = splitAddr(pickupRaw);
-    const dr = splitAddr(dropRaw);
-
-    return {
-      상차지명: pu.name || extractNameFromAddr(pickupRaw),
-      상차지주소: pu.addr || (pu.name ? "" : pickupRaw),
-      상차시간: parseTime(pickupTimeRaw),
-      하차지명: dr.name || extractNameFromAddr(dropRaw),
-      하차지주소: dr.addr || (dr.name ? "" : dropRaw),
-      하차시간: parseTime(dropTimeRaw),
-      하차일: /익일|다음날|29일|30일|31일/.test(dropTimeRaw + " " + (numberedMap["하차일"] || "")) ? _tomorrowStr() : _todayStr(),
-      화물내용: cargoStr,
-      차량톤수: "",
-      차량종류: coldType,
-    };
-  }
-
-  // ─── Format B: "상차지? :" / "하차지? :" prefix (with optional typo "하자") ───
-  const fullText = text;
-  const pickupMarker = /상차지?\s*[:：]/;
-  const dropMarker = /하차지?\s*[:：]|하자\s*\d*\s*[:：]/;
-
-  let pickupStart = -1, dropStart = -1;
-  lines.forEach((l, i) => {
-    if (pickupMarker.test(l) && pickupStart < 0) pickupStart = i;
-    if (dropMarker.test(l) && dropStart < 0) dropStart = i;
-  });
-
-  const extractInfo = (sectionLines) => {
-    const info = {};
-    const normLine = l => l.replace(/\s+/g, " ").trim();
-    sectionLines.forEach(line => {
-      const clean = normLine(line);
-      // address
-      if (/^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)/.test(clean)) info.주소 = clean.split(/[\/,]/)[0].trim();
-      // time
-      const timeM = clean.match(/(?:상차|하차)?시간\s*[:：]?\s*(.+)/i); if (timeM) info.시간 = timeM[1].trim();
-      // phone: full or short (1533-2525 style)
-      const phoneM = clean.match(/(?:0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}|\d{4}[-]\d{4})/); if (phoneM) info.전화번호 = phoneM[0];
-      // manager with title
-      const manM = clean.match(/([가-힣]{2,4})\s*(대표|주임|팀장|부장|과장|실장|사원|이사|님|대리|차장|과장|팀원)/); if (manM) info.담당자 = manM[1];
-      if (/냉동/.test(clean)) info.차량종류 = "냉동탑";
-      else if (/냉장/.test(clean)) info.차량종류 = "냉장탑";
-      else if (/윙바디/.test(clean)) info.차량종류 = "윙바디";
-      // pallet
-      const pM = clean.match(/(\d+)\s*(파렛트?|파레트|PLT|p)\b/i); if (pM) info.파렛 = pM[1];
-      // weight
-      const wM = clean.match(/(\d[\d,]+)\s*kg/i); if (wM) info.중량 = wM[1].replace(/,/g, "");
-    });
-    // company name: first short line that isn't an address, time, or phone
-    const nameLine = sectionLines.find(l => {
-      const c = normLine(l);
-      return !/(상차|하차|시간|주소|[:：\d]|kg|파렛|냉동|냉장|윙|카고|타코|중량|대표|원|km)/.test(c) &&
-        c.length >= 2 && c.length <= 30 &&
-        !/^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)/.test(c);
-    });
-    if (nameLine) info.업체명 = normLine(nameLine).replace(/\(주\)/g, "").replace(/\(.+?\)/g, "").replace(/[-\s]+$/, "").trim();
-    return info;
+const [orderScanInit, setOrderScanInit] = React.useState(null); // 화면에서 Ctrl+V로 열 때 넘길 내용 { text } | { image }
+// ⭐ 2026-10-28 — 배차관리 화면 아무 곳(입력칸 밖)에서 Ctrl+V: 캡처 이미지나 오더처럼 보이는 글이면 오더 스캔 창을 바로 연다
+React.useEffect(() => {
+  const onPaste = (e) => {
+    if (showOrderParser) return;
+    const el = e.target;
+    const tag = (el?.tagName || "").toLowerCase();
+    if (tag === "input" || tag === "textarea" || el?.isContentEditable) return;
+    if (document.querySelector(".fixed.inset-0")) return; // 다른 팝업이 떠 있으면 건드리지 않음
+    const items = [...(e.clipboardData?.items || [])];
+    const img = items.find((it) => it.type?.startsWith("image/"));
+    if (img) {
+      e.preventDefault();
+      const fr = new FileReader();
+      fr.onload = () => { setOrderScanInit({ image: fr.result }); setShowOrderParser(true); };
+      fr.readAsDataURL(img.getAsFile());
+      return;
+    }
+    const t = e.clipboardData?.getData("text") || "";
+    if (looksLikeOrder(t)) { e.preventDefault(); setOrderScanInit({ text: t }); setShowOrderParser(true); }
   };
+  window.addEventListener("paste", onPaste);
+  return () => window.removeEventListener("paste", onPaste);
+}, [showOrderParser]);
 
-  let pickupLines, dropLines;
-  if (pickupStart >= 0 && dropStart > pickupStart) {
-    // Extract inline name from the marker line if present
-    const puMarkerLine = lines[pickupStart];
-    const puInline = puMarkerLine.replace(pickupMarker, "").trim();
-    pickupLines = puInline ? [puInline, ...lines.slice(pickupStart + 1, dropStart)] : lines.slice(pickupStart + 1, dropStart);
-    const drMarkerLine = lines[dropStart];
-    const drInline = drMarkerLine.replace(dropMarker, "").trim();
-    dropLines = drInline ? [drInline, ...lines.slice(dropStart + 1)] : lines.slice(dropStart + 1);
-  } else {
-    // Fallback: split at midpoint
-    const mid = Math.floor(lines.length / 2);
-    pickupLines = lines.slice(0, mid);
-    dropLines = lines.slice(mid);
-  }
-
-  const pickup = extractInfo(pickupLines);
-  const drop = extractInfo(dropLines);
-
-  const isNextDay = /익일|다음날/.test(text);
-  const parseTime = (t = "") => {
-    if (!t) return "";
-    const n = t.replace(/익일|당일|다음날/g, "").match(/(\d+)/);
-    if (!n) return "";
-    const h = Number(n[1]);
-    if (h >= 0 && h < 12) return `오전 ${h === 0 ? 12 : h}:00`;
-    if (h === 12) return "오후 12:00";
-    if (h > 12 && h <= 23) return `오후 ${h - 12}:00`;
-    return t;
-  };
-
-  return {
-    상차지명: pickup.업체명 || "",
-    상차지주소: pickup.주소 || "",
-    상차지담당자: pickup.담당자 || "",
-    상차지담당자번호: pickup.전화번호 || "",
-    상차시간: parseTime(pickup.시간 || ""),
-    하차지명: drop.업체명 || "",
-    하차지주소: drop.주소 || "",
-    하차지담당자: drop.담당자 || "",
-    하차지담당자번호: drop.전화번호 || "",
-    하차시간: parseTime(drop.시간 || ""),
-    하차일: isNextDay ? _tomorrowStr() : _todayStr(),
-    화물내용: drop.파렛 ? `${drop.파렛}파렛트` : (pickup.파렛 ? `${pickup.파렛}파렛트` : ""),
-    차량톤수: drop.중량 ? `${drop.중량}kg` : (pickup.중량 ? `${pickup.중량}kg` : ""),
-    차량종류: drop.차량종류 || pickup.차량종류 || "",
-  };
-};
-const applyOrderParse = () => {
-  if (!orderParseText.trim()) return;
-  const parsed = parseOrderText(orderParseText);
-  if (Object.values(parsed).every(v=>!v)) { showAlert("분석 가능한 내용을 찾지 못했습니다."); return; }
-  setForm(p=>({...p,...parsed}));
-  if (parsed.상차지명) setAutoPickMatched(true);
-  if (parsed.하차지명) setAutoDropMatched(true);
-  if (parsed.차량종류) setVehicleQuery(parsed.차량종류);
-  setOrderParseText(""); setShowOrderParser(false);
-showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 저장하세요.");
-};
+// (예전 "오더 붙여넣기" 글 분석기는 OrderScanModal + orderScanParser.js로 옮겼다 — 2026-10-28)
     const renderForm = () => (
       <>
         <div className="flex items-center gap-4 mb-3">
@@ -14459,7 +14299,7 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
     {/* 오더 자동파싱 */}
     <button
       type="button"
-      onClick={() => setShowOrderParser(v => !v)}
+      onClick={() => { setOrderScanInit(null); setShowOrderParser(true); }}
       className="px-3 py-1.5 text-sm font-bold rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60] transition"
     >
       오더 붙여넣기
@@ -14832,24 +14672,21 @@ title="상차지 ↔ 하차지 교체"
 </div>
 {/* ===== 오더 자동파싱 영역 ===== */}
 {showOrderParser && (
-  <div className="mb-4 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-    <div className="bg-[#1B2B4B] px-4 py-2.5 flex items-center justify-between">
-      <span className="text-[13px] font-bold text-white">오더 붙여넣기 - 자동 입력</span>
-      <button type="button" onClick={() => setShowOrderParser(false)} className="w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 text-white text-base leading-none flex items-center justify-center transition">×</button>
-    </div>
-    <div className="p-4">
-      <textarea
-        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm h-28 resize-none bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/20 focus:border-[#1B2B4B]/30"
-        placeholder={"카카오톡/문자 오더 내용을 그대로 붙여넣으세요.\n예)\n상차지\n반찬단지 물류센터\n인천 서구 북항로 28-29\n이환주 주임 1533-2525\n하차지\n하성글로벌\n경기도 이천시 신둔면 서이천로 796\n류용철 010-3715-4058\n중량:5,500kg / 7파렛트 / 냉동"}
-        value={orderParseText}
-        onChange={e => setOrderParseText(e.target.value)}
-      />
-      <div className="flex justify-end gap-2 mt-3">
-        <button type="button" onClick={() => setOrderParseText("")} className="px-3 py-1.5 text-xs rounded-lg bg-gray-100 border border-gray-200 text-gray-500 hover:bg-gray-200"><EditableText id="misc.btn.13304.지우기" defaultText="지우기" /></button>
-        <button type="button" onClick={applyOrderParse} className="px-4 py-1.5 text-xs font-bold rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60]"><EditableText id="misc.btn.13305.자동 분석 적용" defaultText="자동 분석 적용" /></button>
-      </div>
-    </div>
-  </div>
+  <OrderScanModal
+    places={placeList}
+    clients={clients}
+    initial={orderScanInit}
+    onClose={() => { setShowOrderParser(false); setOrderScanInit(null); }}
+    onApply={(patch, memo) => {
+      setForm((p) => ({ ...p, ...patch, ...(memo ? { 메모: [p.메모, memo].filter(Boolean).join("\n") } : {}) }));
+      if (patch.상차지명) setAutoPickMatched(true);
+      if (patch.하차지명) setAutoDropMatched(true);
+      if (patch.차량종류) setVehicleQuery(patch.차량종류);
+      if (patch.거래처명) setClientQuery(patch.거래처명);
+      setShowOrderParser(false); setOrderScanInit(null);
+      showAlert("✅ 스캔한 오더 내용이 입력되었습니다. 확인 후 저장하세요.");
+    }}
+  />
 )}
 <form
   onSubmit={handleSubmit}
@@ -14895,7 +14732,7 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
       </button>
       <button type="button" onClick={toggleOrderCardStyle}
         className="px-3 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white text-[13px] font-bold transition"
-        title="입력창 스타일 전환 (A: 카드형 / B: 밑줄형)">
+        title="입력창 스타일 전환 (A: 밑줄형 / B: 박스형)">
         {orderCardStyle}
       </button>
     </div>
@@ -15667,8 +15504,8 @@ const similar = placeList.filter(p => {
 
   {/* 상차지명 + 자동완성 */}
   <div className="relative">
-    <label className="flex items-center h-[22px] overflow-visible gap-1.5 whitespace-nowrap text-[12.5px] font-black text-[#0F1A30] mb-1.5">
-  <span className="w-2 h-2 rounded-[2px] bg-[#0F1A30] shrink-0" />
+    <label className={orderCardStyle === "A" ? "flex items-center h-[22px] overflow-visible gap-1.5 text-[16px] font-bold text-blue-600 mb-1" : "flex items-center h-[22px] overflow-visible gap-1.5 whitespace-nowrap text-[12.5px] font-black text-[#0F1A30] mb-1.5"}>
+  {orderCardStyle === "B" && <span className="w-2 h-2 rounded-[2px] bg-[#0F1A30] shrink-0" />}
   <EditableText id="orderForm.label.상차지" defaultText="상차지" /> {reqStar}
   <OrderMemoIconButton onClick={() => openOrderMemoEditor("pickup")} title="상차지 오더메모" hasMemo={hasOrderMemoFor("pickup")} size={20} />
 </label>
@@ -15839,8 +15676,8 @@ className={`
 
 {/* 하차지명 + 자동완성 */}
 <div className="relative">
-  <label className="flex items-center h-[22px] overflow-visible gap-1.5 whitespace-nowrap text-[12.5px] font-black text-[#0F1A30] mb-1.5">
-    <span className="w-2 h-2 rounded-[2px] bg-[#CFE0FF] ring-1 ring-[#4B6CB7] shrink-0" />
+  <label className={orderCardStyle === "A" ? "flex items-center h-[22px] overflow-visible gap-1.5 text-[16px] font-bold text-red-500 mb-1" : "flex items-center h-[22px] overflow-visible gap-1.5 whitespace-nowrap text-[12.5px] font-black text-[#0F1A30] mb-1.5"}>
+    {orderCardStyle === "B" && <span className="w-2 h-2 rounded-[2px] bg-[#CFE0FF] ring-1 ring-[#4B6CB7] shrink-0" />}
     <EditableText id="orderForm.label.하차지" defaultText="하차지" /> {reqStar}
     <OrderMemoIconButton onClick={() => openOrderMemoEditor("drop")} title="하차지 오더메모" hasMemo={hasOrderMemoFor("drop")} size={20} />
   </label>
@@ -16960,7 +16797,9 @@ className={`
 
   <div className="relative">
     <textarea
-      className="w-full rounded-[12px] border border-[#CFD8E6] bg-[#F7F9FC] px-3.5 py-2 text-[13px] font-bold text-[#0F1A30] resize-none placeholder:text-[#A7B3C6] placeholder:font-medium focus:outline-none focus:bg-white focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 transition"
+      className={orderCardStyle === "A"
+        ? "w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-2.5 text-[13px] resize-none bg-white shadow-[0_0_0_1px_rgba(27,43,75,0.08),0_2px_8px_rgba(27,43,75,0.06)] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30 focus:border-[#1B2B4B] placeholder:text-gray-500 transition-all"
+        : "w-full rounded-[12px] border border-[#CFD8E6] bg-[#F7F9FC] px-3.5 py-2 text-[13px] font-bold text-[#0F1A30] resize-none placeholder:text-[#A7B3C6] placeholder:font-medium focus:outline-none focus:bg-white focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 transition"}
       rows={2}
       data-arrownav
 

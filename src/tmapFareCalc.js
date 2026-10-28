@@ -376,3 +376,32 @@ export async function estimateDistanceFare({ pickupAddr, dropAddr, vehicleText, 
 
   return { distance: roadDist, min, max, avg, vehicleId: vt.id };
 }
+
+// ⭐ 2026-10-28 오더 스캔 — 주소가 실제로 있는지 확인. 통신 실패와 "없는 주소"를 구분해 돌려준다.
+//   { status: "ok", area, precise } | { status: "notfound" } | { status: "error" }
+//   precise: 건물/번지까지 맞았는지(T맵 matchFlag가 시·구·동 수준이면 false)
+export async function verifyAddress(rawAddr) {
+  const addr = String(rawAddr || "").trim();
+  if (!addr) return { status: "notfound" };
+  const tries = [normalizeAddrSpacing(addr), addr.replace(/\(.*?\)/g, "").replace(/\s+/g, " ").trim()];
+  let sawResponse = false;
+  for (const a of [...new Set(tries)]) {
+    try {
+      const url = "https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=" + encodeURIComponent(a);
+      const res = await fetch(url, { method: "GET", headers: { Accept: "application/json", appKey: TMAP_KEY } });
+      if (res.status === 204 || res.status === 400 || res.status === 404) { sawResponse = true; continue; }
+      if (!res.ok) continue;
+      sawResponse = true;
+      const data = await res.json().catch(() => null);
+      const c = data?.coordinateInfo?.coordinate?.[0];
+      const pt = pickTmapCoord(c);
+      if (pt) {
+        const flag = String(c.matchFlag || "");
+        // M11~M13·L시리즈: 시/구/동 수준 근사 — 번지까지는 못 찾음
+        const precise = !(/^M1[1-3]$/.test(flag) || /^M2[1-2]$/.test(flag)) && !!(c.bunji || c.buildingIndex || c.newBuildingIndex || c.newRoadName || /^(N|L5|M3|M4|M5|M6)/.test(flag) || flag === "");
+        return { status: "ok", precise, area: [c.city_do, c.gu_gun, c.legalDong || c.eup_myun || c.newRoadName].filter(Boolean).join(" ") };
+      }
+    } catch { /* 통신 실패 */ }
+  }
+  return { status: sawResponse ? "notfound" : "error" };
+}
