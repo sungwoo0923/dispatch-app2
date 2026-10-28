@@ -4385,18 +4385,43 @@ exports.hourlyJobs = functions.runWith({ timeoutSeconds: 300, memory: "512MB" })
 });
 
 // 📧 사내메일 — 새 메일이 생기면 받는 사람 휴대폰·PC로 푸시(보낸 사람 본인은 제외)
-exports.notifyInternalMail = functions.firestore.document("internalMails/{id}").onCreate(async (snap) => {
-  const m = snap.data() || {};
+async function pushInternalMail(m) {
   const to = (Array.isArray(m.to) ? m.to : []).filter((u) => u && u !== m.fromUid).slice(0, 500);
-  if (!to.length) return null;
+  if (!to.length) return;
   const tokens = [];
   for (let i = 0; i < to.length; i += 100) {
     const docs = await db.getAll(...to.slice(i, i + 100).map((uid) => db.collection("users").doc(uid)));
     docs.forEach((d) => { if (d.exists && (d.data().companyName || "돌캐") === (m.company || "돌캐") && d.data().fcmToken) tokens.push(d.data().fcmToken); });
   }
-  const head = m.kind === "hr" ? "📢 인사발령" : m.kind === "closeReport" ? "📨 마감보고" : `📧 ${m.fromName || "사내메일"}`;
+  const head = m.kind === "hr" ? "📢 인사발령" : m.kind === "closeReport" ? "📨 마감보고" : `📧 ${m.important ? "[중요] " : ""}${m.fromName || "사내메일"}`;
   const body = m.kind === "closeReport" ? String(m.body || "") : `${m.subject || ""}${m.body ? `\n${String(m.body).replace(/\s+/g, " ").slice(0, 80)}` : ""}`;
   await sendPushAndCleanup([...new Set(tokens)], { notification: { title: m.kind === "closeReport" ? `📨 ${m.subject || "마감보고"}` : head, body }, android: { priority: "high" } }, "사내메일");
+}
+exports.notifyInternalMail = functions.firestore.document("internalMails/{id}").onCreate(async (snap) => {
+  const m = snap.data() || {};
+  if (m.status === "draft" || m.status === "scheduled") return null; // 임시보관·예약 메일은 보낼 때 알린다
+  await pushInternalMail(m);
+  return null;
+});
+
+// ⏰ 예약 메일(2026-10-28) — 5분마다 보낼 시간이 된 예약 메일을 실제로 보낸다.
+//  예약 중에는 to가 비어 있어(받는 사람이 미리 못 봄) pendingTo에 담겨 있다가 이때 to로 옮긴다.
+exports.sendScheduledMails = functions.pubsub.schedule("every 5 minutes").timeZone("Asia/Seoul").onRun(async () => {
+  const due = await db.collection("internalMails").where("scheduledAt", "<=", Timestamp.now()).limit(100).get();
+  for (const d of due.docs) {
+    const m = d.data() || {};
+    if (m.status !== "scheduled") continue;
+    const to = [...new Set((Array.isArray(m.pendingTo) ? m.pendingTo : []).map(String))].slice(0, 500);
+    const sent = {
+      status: "sent", to, toNames: Array.isArray(m.pendingToNames) ? m.pendingToNames : [],
+      cc: Array.isArray(m.pendingCc) ? m.pendingCc : [], ccNames: Array.isArray(m.pendingCcNames) ? m.pendingCcNames : [],
+      scheduledFor: m.scheduledAt, scheduledAt: FieldValue.delete(),
+      pendingTo: FieldValue.delete(), pendingToNames: FieldValue.delete(), pendingCc: FieldValue.delete(), pendingCcNames: FieldValue.delete(),
+      at: FieldValue.serverTimestamp(),
+    };
+    await d.ref.update(sent);
+    await pushInternalMail({ ...m, to }).catch((e) => console.error("예약 메일 푸시 실패:", e));
+  }
   return null;
 });
 

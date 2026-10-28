@@ -1,7 +1,8 @@
 // ======================= src/KpSubNav.jsx =======================
 // ⭐ 속메뉴 공용 왼쪽 사이드바(2026-10-28) — 관리자메뉴처럼 거래처관리·매출관리·정산관리·관리센터·배차현황의
 //  속메뉴를 왼쪽 메뉴바로 보여준다. 접기(아이콘만)를 누르면 본문이 넓어진다(PC에 기억).
-//  items: [{ key, label, icon, badge, en }]  /  groups: [{ label, items }]  (둘 중 하나)
+//  items: [{ key, label, icon, badge, en, sub }]  /  groups: [{ label, items }]  (둘 중 하나)
+//   - badge: 숫자(카톡처럼 개수) 또는 "N"(새 글), soft: true면 빨간 대신 옅은 배지(예약·임시보관 개수 등) / sub: 하위메뉴 [{ key, label, icon, badge }] — 부모나 하위가 열려 있으면 펼친다
 //  actions: [{ key, label, icon, onClick }] — 화면 전환 대신 팝업을 여는 버튼(예: 월 비교 분석)
 import React, { useState } from "react";
 import { ShellIcon } from "./AdminShell";
@@ -13,18 +14,20 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
   const toggle = () => setCollapsed((v) => { try { localStorage.setItem("kpSubNavCollapsed", v ? "0" : "1"); } catch { /* 저장 실패 무시 */ } return !v; });
   const gs = groups || [{ label: "", items: items || [] }];
 
-  const Btn = ({ it, on, onClick }) => (
+  const hasBadge = (b) => (typeof b === "string" ? !!b : b > 0);
+  const badgeTxt = (b) => (typeof b === "number" && b > 99 ? "99+" : b);
+  const Btn = ({ it, on, onClick, sub = false }) => (
     <button
       type="button"
       onClick={onClick}
       title={collapsed ? it.label : undefined}
-      className={`w-full flex items-center gap-3 rounded-xl text-[14px] font-semibold transition ${collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2.5"} ${
+      className={`w-full flex items-center gap-3 rounded-xl font-semibold transition ${sub ? "text-[13px]" : "text-[14px]"} ${collapsed ? "justify-center px-0 py-2.5" : sub ? "pl-5 pr-3 py-1.5" : "px-3 py-2.5"} ${
         on ? "bg-white text-[#1B2B4B] shadow-[0_6px_16px_rgba(0,0,0,0.22)]" : "text-blue-50/80 hover:bg-white/[0.08] hover:text-white"
       }`}
     >
-      <span className={`relative w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${on ? "bg-[#EEF3FB]" : "bg-white/[0.06]"}`}>
-        <ShellIcon name={it.icon} size={17} className={on ? "text-[#1B2B4B]" : "text-blue-200/85"} />
-        {collapsed && it.badge > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500" />}
+      <span className={`relative rounded-lg flex items-center justify-center shrink-0 ${sub ? "w-6 h-6" : "w-8 h-8"} ${on ? "bg-[#EEF3FB]" : "bg-white/[0.06]"}`}>
+        <ShellIcon name={it.icon} size={sub ? 14 : 17} className={on ? "text-[#1B2B4B]" : "text-blue-200/85"} />
+        {collapsed && hasBadge(it.badge) && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500" />}
       </span>
       {!collapsed && (
         <>
@@ -32,8 +35,8 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
             <span className="block truncate">{it.label}</span>
             {it.en && <span className="block truncate" style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: "0.18em", opacity: on ? 0.55 : 0.45 }}>{it.en}</span>}
           </span>
-          {it.badge > 0 && (
-            <span className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-extrabold flex items-center justify-center ${on ? "bg-[#1B2B4B] text-white" : "bg-rose-500 text-white"}`}>{it.badge}</span>
+          {hasBadge(it.badge) && (
+            <span title={it.badgeTitle} className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-extrabold flex items-center justify-center tabular-nums ${typeof it.badge === "string" ? "tracking-wider " : ""}${on ? "bg-[#1B2B4B] text-white" : it.soft ? "bg-white/15 text-white" : "bg-rose-500 text-white"}`}>{badgeTxt(it.badge)}</span>
           )}
         </>
       )}
@@ -62,7 +65,19 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
             <div key={g.label || gi}>
               {g.label && !collapsed && <div className="px-3 mb-1.5 text-[11px] font-bold text-blue-200/45">{g.label}</div>}
               <div className="space-y-1">
-                {g.items.map((it) => <Btn key={it.key} it={it} on={it.key === active} onClick={() => onSelect?.(it.key)} />)}
+                {g.items.map((it) => {
+                  const open = it.sub && (it.key === active || it.sub.some((x) => x.key === active));
+                  return (
+                    <React.Fragment key={it.key}>
+                      <Btn it={it} on={it.key === active || (open && collapsed)} onClick={() => onSelect?.(it.sub ? it.sub[0].key : it.key)} />
+                      {open && !collapsed && (
+                        <div className="ml-4 pl-1 border-l border-white/10 space-y-0.5 py-0.5">
+                          {it.sub.map((x) => <Btn key={x.key} it={x} sub on={x.key === active} onClick={() => onSelect?.(x.key)} />)}
+                        </div>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </div>
             </div>
           ))}

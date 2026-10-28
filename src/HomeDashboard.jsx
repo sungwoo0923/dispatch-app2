@@ -16,6 +16,7 @@ import { createPortal } from "react-dom";
 import { BannerCard, BannerStyles } from "./BannerCenter";
 import HomeDeck, { buildPastStats } from "./HomeDeck";
 import KpSubNav from "./KpSubNav";
+import { MailWorkspace, MAIL_FOLDERS, useMailCounts, folderBadge } from "./InternalMail";
 
 /* ===== 공통 Modal ===== */
 function Modal({ title, onClose, children }) {
@@ -816,6 +817,27 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
     return unsub;
   }, [user?.uid]);
 
+  // ⭐ 사이드바 NEW 표시(2026-10-28) — 마지막으로 그 게시판을 본 뒤 남이 새로 올린 글이 있으면 "N". 들어가서 보면 사라진다.
+  const mailCounts = useMailCounts();
+  const seenKey = `kpBoardSeen:${user?.uid || ""}`;
+  const [boardSeen, setBoardSeen] = useState(() => { try { return JSON.parse(localStorage.getItem(seenKey) || "{}"); } catch { return {}; } });
+  const seenFloor = useRef(Date.now() - 3 * 86400e3); // 처음 쓰는 PC는 최근 3일 글만 NEW
+  const newestOf = (list) => list.reduce((mx, it) => (it.authorUid && it.authorUid === user?.uid ? mx : Math.max(mx, (it.createdAt?.seconds || 0) * 1000)), 0);
+  const boardNewest = { 공지사항: newestOf(notices), "휴가/외근": newestOf(schedules), 인수인계: newestOf(handovers) };
+  const isBoardNew = (k) => boardNewest[k] > (boardSeen[k] ?? seenFloor.current);
+  const curNewest = boardNewest[boardTab] || 0;
+  useEffect(() => {
+    if (!(boardTab in boardNewest)) return;
+    setBoardSeen((p) => {
+      const n = { ...p, [boardTab]: Math.max(Date.now(), curNewest) };
+      try { localStorage.setItem(seenKey, JSON.stringify(n)); } catch { /* 저장 실패 무시 */ }
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boardTab, curNewest, seenKey]);
+  const isMailTab = String(boardTab).startsWith("mail:");
+  const myNameHome = users.find((u) => u.id === user?.uid)?.name || user?.displayName || (user?.email || "").split("@")[0] || "";
+
   const pendingApprovalCountNav = schedules.filter(s => (s.approvers || []).some(a => a.uid === user?.uid && (!a.status || a.status === "pending"))).length;
   const unreadHandoverCountNav = handovers.filter(h => user?.uid === h.receiverUid && !h.readBy?.includes(h.receiverUid)).length;
   return (
@@ -823,9 +845,13 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       groups={[
         { label: "관제", items: [{ key: "대시보드", label: "대시보드", en: "OPERATIONS", icon: "pulse" }] },
         { label: "사내 게시판", items: [
-          { key: "공지사항", label: "공지사항", en: "NOTICE", icon: "bell", badge: 0 },
-          { key: "휴가/외근", label: "휴가/외근", en: "SCHEDULE", icon: "clock", badge: pendingApprovalCountNav },
-          { key: "인수인계", label: "인수인계", en: "HANDOVER", icon: "send", badge: unreadHandoverCountNav },
+          { key: "공지사항", label: "공지사항", en: "NOTICE", icon: "bell", badge: isBoardNew("공지사항") ? "N" : 0, badgeTitle: "새 글" },
+          { key: "휴가/외근", label: "휴가/외근", en: "SCHEDULE", icon: "clock", badge: pendingApprovalCountNav || (isBoardNew("휴가/외근") ? "N" : 0), badgeTitle: pendingApprovalCountNav ? "내 결재 대기" : "새 글" },
+          { key: "인수인계", label: "인수인계", en: "HANDOVER", icon: "send", badge: unreadHandoverCountNav || (isBoardNew("인수인계") ? "N" : 0), badgeTitle: unreadHandoverCountNav ? "내 미확인" : "새 글" },
+        ] },
+        { label: "커뮤니케이션 센터", items: [
+          { key: "mail", label: "사내메일함", en: "MAILBOX", icon: "mail", badge: mailCounts.unread, badgeTitle: "안 읽은 메일",
+            sub: MAIL_FOLDERS.map((f) => ({ key: `mail:${f.key}`, label: f.label, icon: f.icon, badge: folderBadge(f.key, mailCounts), soft: !["inbox", "unread"].includes(f.key) })) },
         ] },
       ]}>
     <div className="space-y-5">
@@ -865,8 +891,13 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         myName={users.find((u) => u.id === user?.uid)?.name || user?.displayName || (user?.email || "").split("@")[0] || ""}
       />}
 
+      {/* ===== 커뮤니케이션 센터 · 사내메일함(왼쪽 사이드바의 하위 메일함) — 2026-10-28 ===== */}
+      {isMailTab && (
+        <MailWorkspace embedded company={getViewCompany()} myName={myNameHome} box={boardTab.slice(5)} setBox={(b) => setBoardTab(`mail:${b}`)} height="calc(100vh - 122px)" />
+      )}
+
       {/* ===== 사내 게시판(왼쪽 사이드바에서 고름) — 2026-10-28 디지털 리디자인 ===== */}
-      {boardTab !== "대시보드" && (
+      {boardTab !== "대시보드" && !isMailTab && (
       <div className="kp-board space-y-4">
         <div className="relative overflow-hidden rounded-[22px] px-7 py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]"
           style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>

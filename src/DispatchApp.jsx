@@ -7966,7 +7966,7 @@ return (
 
         {menu === "배차현황" && (
           <KpSubNav code="DISPATCH" title="배차현황" icon="truck" active={배차현황Tab} onSelect={set배차현황Tab}
-            items={[{ key: "배차현황", label: "배차현황", en: "ALL ORDERS", icon: "list" }, { key: "미배차현황", label: "미배차현황", en: "PENDING", icon: "hourglass" }]}>
+            items={(() => { const n = (dispatchDataFiltered || []).filter((r) => (r.배차상태 || "") === "배차중").length; return [{ key: "배차현황", label: "배차현황", en: "ALL ORDERS", icon: "list", badge: n, badgeTitle: `미배차 ${n}건` }, { key: "미배차현황", label: "미배차현황", en: "PENDING", icon: "hourglass", badge: n, badgeTitle: `미배차 ${n}건` }]; })()}>
             {배차현황Tab === "배차현황" && (
               <DispatchStatus
                 key={`ds-${viewResetKey}`}
@@ -59392,6 +59392,18 @@ function HRManagementPage({ userCompany, role, userId }) {
     imgEl.onerror = () => { URL.revokeObjectURL(objUrl); setPhotoUploading(false); };
     imgEl.src = objUrl;
   };
+  // ⭐ 증명사진 빼기(2026-10-28)
+  const handlePhotoRemove = async () => {
+    if (!selectedUid || !window.confirm("증명사진을 삭제할까요?")) return;
+    setPhotoUploading(true);
+    try {
+      await setDoc(doc(db, "hrResumes", selectedUid), { photoUrl: deleteField() }, { merge: true });
+    } catch (err) {
+      alert("사진 삭제 실패: " + err.message);
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
 
   const setTeam = async (uid, team) => {
     try { await setDoc(doc(db, "users", uid), { team }, { merge: true }); }
@@ -59579,10 +59591,15 @@ function HRManagementPage({ userCompany, role, userId }) {
                       <div className="w-[136px] h-[176px] flex-shrink-0 rounded-[20px] overflow-hidden bg-[#F5F8FD] border border-[#DCE3EE] flex items-center justify-center relative">
                         {resume.photoUrl ? <img src={resume.photoUrl} className="w-full h-full object-cover" /> : <span className="text-[13px] font-bold text-[#9AA9C3]">증명사진</span>}
                         {canEditThis && (
-                          <label className={`absolute bottom-0 inset-x-0 text-center text-[12px] font-bold py-1.5 cursor-pointer ${photoUploading ? "bg-[#DCE3EE] text-[#5B6B85]" : "bg-[#0F1A30]/80 text-white hover:bg-[#0F1A30]"}`}>
-                            {photoUploading ? "업로드중" : "사진 변경"}
-                            <input autoComplete="off" type="file" accept="image/*" className="hidden" disabled={photoUploading} onChange={handlePhotoUpload} />
-                          </label>
+                          <div className="absolute bottom-0 inset-x-0 flex">
+                            <label className={`flex-1 text-center text-[12px] font-bold py-1.5 cursor-pointer ${photoUploading ? "bg-[#DCE3EE] text-[#5B6B85]" : "bg-[#0F1A30]/80 text-white hover:bg-[#0F1A30]"}`}>
+                              {photoUploading ? "처리중" : resume.photoUrl ? "사진 변경" : "사진 등록"}
+                              <input autoComplete="off" type="file" accept="image/*" className="hidden" disabled={photoUploading} onChange={(e) => { handlePhotoUpload(e); e.target.value = ""; }} />
+                            </label>
+                            {resume.photoUrl && !photoUploading && (
+                              <button type="button" onClick={handlePhotoRemove} className="px-2.5 text-[12px] font-bold py-1.5 bg-[#0F1A30]/60 text-white/90 hover:bg-[#0F1A30] border-l border-white/20">삭제</button>
+                            )}
+                          </div>
                         )}
                       </div>
                       <div className="flex-1 grid grid-cols-3 gap-3">

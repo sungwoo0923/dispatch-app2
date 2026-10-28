@@ -250,12 +250,21 @@ service cloud.firestore {
     }
     // 📧 사내메일함 — 보낸 사람·받는 사람만 읽고, 받은 사람은 읽음/삭제 표시만 고칠 수 있다.
     match /internalMails/{id} {
+      // ⭐ 2026-10-28 메일함 고도화 — status: sent(기본) | draft(임시보관) | scheduled(예약, 서버가 보낼 때 to를 채운다)
+      //  임시보관·예약 메일은 to가 비어 있어야 해서 받는 사람이 미리 볼 수 없다.
       allow read: if isApproved() && (request.auth.uid in resource.data.get('to', []) || resource.data.get('fromUid', '') == request.auth.uid);
       allow create: if isApproved() && request.resource.data.get('fromUid', '') == request.auth.uid
-        && request.resource.data.get('to', []) is list && request.resource.data.get('to', []).size() <= 500;
-      allow update: if isApproved() && request.auth.uid in resource.data.get('to', [])
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'deletedBy']);
-      allow delete: if false;
+        && request.resource.data.get('to', []) is list && request.resource.data.get('to', []).size() <= 500
+        && (!(request.resource.data.get('status', 'sent') in ['draft', 'scheduled']) || request.resource.data.get('to', []).size() == 0);
+      allow update: if isApproved() && (
+        (request.auth.uid in resource.data.get('to', [])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'deletedBy', 'starredBy', 'purgedBy']))
+        || (resource.data.get('fromUid', '') == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'deletedBy', 'starredBy', 'purgedBy', 'recalledFor']))
+        || (resource.data.get('fromUid', '') == request.auth.uid && resource.data.get('status', 'sent') in ['draft', 'scheduled']
+          && request.resource.data.get('fromUid', '') == request.auth.uid && request.resource.data.get('status', 'sent') in ['draft', 'scheduled']
+          && request.resource.data.get('to', []).size() == 0));
+      allow delete: if isApproved() && resource.data.get('fromUid', '') == request.auth.uid && resource.data.get('status', 'sent') in ['draft', 'scheduled'];
     }
     match /sessionLogs/{id} {
       allow create: if isSignedIn();

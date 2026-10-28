@@ -39,6 +39,13 @@ const ICONS = {
   compare: <><path d="M8 3v18M16 3v18" /><path d="M3 8h5M16 16h5M3 14h5M16 10h5" /></>,
   server: <><rect x="3" y="4" width="18" height="7" rx="1.5" /><rect x="3" y="13" width="18" height="7" rx="1.5" /><path d="M7 7.5h.01M7 16.5h.01" /></>,
   pulse: <><path d="M3 12h4l3-7 4 14 3-7h4" /></>,
+  mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>,
+  star: <><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z" /></>,
+  pen: <><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></>,
+  file: <><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v4h4M9 13h6M9 17h4" /></>,
+  flag: <><path d="M5 21V4M5 4h11l-2 4 2 4H5" /></>,
+  stamp: <><path d="M9 3h6l-1 7h4l1 4H5l1-4h4z" /><path d="M5 18h14M7 21h10" /></>,
+  eye: <><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></>,
 };
 
 export function ShellIcon({ name, size = 18, className = "", strokeWidth = 1.9 }) {
