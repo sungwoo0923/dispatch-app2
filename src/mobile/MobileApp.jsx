@@ -10357,13 +10357,19 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
           }
         }
       }
-      await updateDoc(doc(db, col, id), patch);
+      // ⭐ 속도개선(2026-10-28) — 예전엔 서버가 "저장됐다"고 답할 때까지(await) 기다려서, LTE가 약하면
+      //   "저장 중…"이 몇 초씩 걸렸다. Firestore는 폰 화면에 먼저 바로 반영하고 서버 전송은 뒤에서
+      //   알아서 끝내므로, 기다리지 않고 바로 닫는다. 서버 저장이 실패하면 그때 알림으로 알려준다.
+      updateDoc(doc(db, col, id), patch).catch((err) => {
+        if (typeof showToast === "function") showToast(`저장 실패 — 다시 시도해주세요 (${err?.message || err})`);
+        else alert("저장 실패: " + (err?.message || err));
+      });
       syncShipperMirrorMobile(order, patch).catch(() => {});
-      // ⭐ 신규 기사면 다른 화면들과 동일하게 기사관리에도 자동 등록한다.
+      // ⭐ 신규 기사면 다른 화면들과 동일하게 기사관리에도 자동 등록한다(이것도 뒤에서).
       if (isNewDriver && carNo && typeof upsertDriver === "function") {
         const already = (drivers || []).find(d => nd(d.차량번호) === nd(carNo));
         if (!already) {
-          await upsertDriver({ 차량번호: carNo, 이름: driverName || "", 전화번호: driverPhone || "" });
+          Promise.resolve(upsertDriver({ 차량번호: carNo, 이름: driverName || "", 전화번호: driverPhone || "" })).catch(() => {});
         }
       }
       onSuccess?.();
@@ -11369,7 +11375,9 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
     setSaving(true);
     try {
       const id = order.id || order._id;
-      await updateDoc(doc(db, order.__col || "dispatch", id), { ...changed, updatedAt: serverTimestamp(), _lastModified: Date.now() });
+      // ⭐ 속도개선 — 서버 응답을 기다리지 않는다(폰 화면엔 즉시 반영, 실패 시에만 알림)
+      updateDoc(doc(db, order.__col || "dispatch", id), { ...changed, updatedAt: serverTimestamp(), _lastModified: Date.now() })
+        .catch((err) => alert("저장 실패: " + (err?.message || err)));
       syncShipperMirrorMobile(order, changed).catch(() => {});
       onSaved(id, changed);
     } catch (e) {
@@ -11760,7 +11768,7 @@ function MobileOrderDetail({
       수수료: claim - (drv != null ? drv : (Number(order.기사운임) || 0)),
     };
     try {
-      await updateDoc(doc(db, col, id), patch);
+      updateDoc(doc(db, col, id), patch).catch(() => showToast("적용 중 오류가 발생했습니다.")); // ⭐ 속도개선 — 기다리지 않음
       if (typeof onOrderUpdate === "function") onOrderUpdate(id, patch);
       // 상세보기 즉시 반영
       if (typeof setSelectedOrder === "function") {
@@ -12255,15 +12263,16 @@ const handleAssignClick = () => {
         }
       }
 
-      await updateDoc(doc(db, colName, docId), driverPatch);
+      // ⭐ 속도개선 — 서버 응답을 기다리지 않는다(폰 화면엔 즉시 반영, 실패 시에만 알림)
+      updateDoc(doc(db, colName, docId), driverPatch).catch((err) => alert("저장 실패: " + (err?.message || err)));
       syncShipperMirrorMobile(order, driverPatch).catch(() => {});
 
-      // 신규 기사면 기사관리에 등록
+      // 신규 기사면 기사관리에 등록(뒤에서)
       if (isNewDriver && carNo) {
         const nd = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
         const existing = driversRef.current.find(d => nd(d.차량번호) === nd(carNo));
         if (!existing) {
-          await upsertDriver({ 차량번호: carNo, 이름: name || "", 전화번호: phone || "" });
+          Promise.resolve(upsertDriver({ 차량번호: carNo, 이름: name || "", 전화번호: phone || "" })).catch(() => {});
         }
       }
 
