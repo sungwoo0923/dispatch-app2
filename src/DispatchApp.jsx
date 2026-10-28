@@ -18989,313 +18989,238 @@ setConfirmChange(null);
 
 {/* ⭐ 지도 영역 닫기 */}
 
-      {/* ================= 오른쪽 정보 패널 ================= */}
-<div className="w-[460px] border-l flex flex-col bg-white">
+      {/* ================= 오른쪽 정보 패널 — 배차요청장(2026-10-28 디지털 리디자인: 글씨 크게·네이비) ================= */}
+<div className="w-[480px] border-l border-[#E3E8F0] flex flex-col bg-[#F4F6FA]">
 
   {/* 패널 헤더 */}
-  <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
-    <div>
-      <div className="text-white font-bold text-[15px] tracking-tight">배차요청장</div>
-      <div className="text-white/50 text-[11px] mt-0.5 font-medium">
-        {form.상차일} · {form.거래처명 || "-"}
+  <div className="relative overflow-hidden px-6 py-5 shrink-0 text-white"
+    style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>DISPATCH REQUEST</div>
+        <div className="text-[21px] font-black tracking-tight mt-1">배차요청장</div>
+        <div className="text-[14px] text-blue-100/80 mt-1 font-semibold truncate">
+          <span style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{form.상차일 || "-"}</span> · {form.거래처명 || "-"}
+        </div>
       </div>
-    </div>
-    <div className="flex items-center gap-2">
-      <div className="flex items-center gap-1 bg-white/10 rounded-lg px-2 py-1 border border-white/20">
-        <span className="text-white/60 text-[10px] font-semibold mr-1">수량</span>
-        <button type="button" className="w-5 h-5 rounded bg-white/20 text-white text-sm font-bold flex items-center justify-center hover:bg-white/30"
-          onClick={() => setMultiCount(v => Math.max(1, v - 1))}>-</button>
-        <span className="text-white font-bold text-[13px] min-w-[18px] text-center">{multiCount}</span>
-        <button type="button" className="w-5 h-5 rounded bg-white/20 text-white text-sm font-bold flex items-center justify-center hover:bg-white/30"
-          onClick={() => setMultiCount(v => Math.min(10, v + 1))}>+</button>
-      </div>
-      <div className="flex gap-1.5">
-        {form.긴급 && (
-          <span className="px-2 py-0.5 bg-white/15 text-white text-[10px] font-bold rounded border border-white/20">긴급</span>
-        )}
-        {form.운행유형 === "왕복" && (
-          <span className="px-2 py-0.5 bg-white/15 text-white text-[10px] font-bold rounded border border-white/20">왕복</span>
-        )}
-        {form.혼적 && (
-          <span className="px-2 py-0.5 bg-white/15 text-white text-[10px] font-bold rounded border border-white/20">혼적</span>
-        )}
+      <div className="flex flex-col items-end gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 bg-white/10 rounded-xl px-2 py-1.5 ring-1 ring-white/20">
+          <span className="text-blue-100/75 text-[12px] font-bold mr-1">수량</span>
+          <button type="button" className="w-7 h-7 rounded-lg bg-white/15 text-white text-[16px] font-bold flex items-center justify-center hover:bg-white/25"
+            onClick={() => setMultiCount(v => Math.max(1, v - 1))}>-</button>
+          <span className="text-white font-black text-[17px] min-w-[24px] text-center" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{multiCount}</span>
+          <button type="button" className="w-7 h-7 rounded-lg bg-white/15 text-white text-[16px] font-bold flex items-center justify-center hover:bg-white/25"
+            onClick={() => setMultiCount(v => Math.min(10, v + 1))}>+</button>
+        </div>
+        <div className="flex gap-1.5">
+          {form.긴급 && <span className="px-2.5 py-0.5 bg-white text-[#1B2B4B] text-[12px] font-black rounded-md">긴급</span>}
+          {form.운행유형 === "왕복" && <span className="px-2.5 py-0.5 bg-white/15 text-white text-[12px] font-bold rounded-md ring-1 ring-white/25">왕복</span>}
+          {form.혼적 && <span className="px-2.5 py-0.5 bg-white/15 text-white text-[12px] font-bold rounded-md ring-1 ring-white/25">혼적</span>}
+        </div>
       </div>
     </div>
   </div>
-  <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
 
+  <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
 
-    {/* 결제 금액 */}
-    <div className="px-6 py-4">
-      <div className="text-[15px] text-gray-500 font-semibold mb-1">결제예정금액 (VAT 별도)</div>
-      <div className="flex items-baseline gap-1 mb-3">
-        <span className="text-[30px] font-black text-[#1B2B4B] leading-none">
+    {/* 결제 금액 + 전달상태 */}
+    <div className="bg-white rounded-2xl border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04)] px-5 py-4">
+      <div className="flex items-center justify-between">
+        <span className="text-[14px] font-bold text-gray-600">결제예정금액 <span className="text-gray-400 font-semibold">(VAT 별도)</span></span>
+        <span className="text-[10.5px] font-extrabold tracking-[0.18em] text-[#94A3B8]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>FARE</span>
+      </div>
+      <div className="flex items-baseline gap-1.5 mt-1.5">
+        <span className="text-[34px] font-black text-[#0F1A30] leading-none tracking-tight" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>
           <CountUp value={Number(form.청구운임 || 0)} />
         </span>
-        <span className="text-[14px] font-semibold text-gray-500">원~</span>
+        <span className="text-[15px] font-bold text-gray-500">원~</span>
       </div>
       {(form.기사운임 || form.지급방식) && (
-        <div className="space-y-1">
+        <div className="mt-3 grid grid-cols-2 gap-2">
           {form.기사운임 && (
-            <div className="flex justify-between text-[12px]">
-              <span className="text-gray-500">기사운임</span>
-              <span className="font-semibold text-gray-700">{Number(form.기사운임).toLocaleString()}원</span>
+            <div className="rounded-xl bg-[#F4F7FC] border border-[#E3E8F0] px-3 py-2">
+              <div className="text-[12px] font-bold text-gray-500">기사운임</div>
+              <div className="text-[15px] font-black text-[#1B2B4B]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{Number(form.기사운임).toLocaleString()}원</div>
             </div>
           )}
           {form.지급방식 && (
-            <div className="flex justify-between text-[12px]">
-              <span className="text-gray-500">지급방식</span>
-              <span className="font-semibold text-gray-700">{form.지급방식}</span>
+            <div className="rounded-xl bg-[#F4F7FC] border border-[#E3E8F0] px-3 py-2">
+              <div className="text-[12px] font-bold text-gray-500">지급방식</div>
+              <div className="text-[15px] font-black text-[#1B2B4B]">{form.지급방식}</div>
             </div>
           )}
         </div>
       )}
-    </div>
-
-    {/* 전달상태 — 기본은 항상 OFF(미전달)이고, 켜서 등록하면 전달완료 상태로
-        바로 등록된다. 그리드/수정패널의 미전달·전달완료 토글과 같은 필드
-        (업체전달상태)를 쓰므로 동작이 완전히 동일하다. */}
-    <div className="px-6 py-4">
-      <div className="flex items-center justify-between">
-        <span className="text-[13px] font-semibold text-gray-700">전달상태</span>
+      {/* 전달상태 — 기본 OFF(미전달). 켜서 등록하면 전달완료로 등록(업체전달상태 필드) */}
+      <div className="mt-3 pt-3 border-t border-[#EEF1F6] flex items-center justify-between">
+        <div>
+          <div className="text-[14.5px] font-bold text-gray-800">전달상태</div>
+          <div className="text-[12.5px] text-gray-500 mt-0.5">{form.업체전달상태 === "전달완료" ? "전달완료 상태로 등록됩니다" : "미전달 상태로 등록됩니다"}</div>
+        </div>
         <button
           type="button"
           onClick={() => setForm(p => ({ ...p, 업체전달상태: p.업체전달상태 === "전달완료" ? "미전달" : "전달완료" }))}
-          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-            form.업체전달상태 === "전달완료" ? "bg-[#1B2B4B]" : "bg-gray-200"
-          }`}
+          className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${form.업체전달상태 === "전달완료" ? "bg-[#1B2B4B]" : "bg-gray-200"}`}
         >
-          <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${
-            form.업체전달상태 === "전달완료" ? "translate-x-4" : "translate-x-0.5"
-          }`}/>
+          <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${form.업체전달상태 === "전달완료" ? "translate-x-6" : "translate-x-1"}`} />
         </button>
       </div>
-      <p className="text-[11px] text-gray-400 mt-1">
-        {form.업체전달상태 === "전달완료" ? "전달완료 상태로 등록됩니다" : "미전달 상태로 등록됩니다"}
-      </p>
     </div>
 
     {/* 화물 정보 */}
-    <div className="px-6 py-4">
-      <div className="text-[11px] text-gray-500 font-semibold mb-2">화물 정보</div>
+    <div className="bg-white rounded-2xl border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04)] px-5 py-4">
+      <div className="flex items-center justify-between mb-2.5">
+        <span className="text-[14px] font-bold text-gray-600">화물 정보</span>
+        <span className="text-[10.5px] font-extrabold tracking-[0.18em] text-[#94A3B8]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>CARGO</span>
+      </div>
       <div className="grid grid-cols-3 gap-2 text-center">
         {[
           { label: "화물", value: mergeViaCargoText(form.화물내용, [form.경유상차목록, form.경유하차목록]) },
           { label: "차량", value: form.차량종류 },
           { label: "톤수", value: mergeViaTonnage(form.차량톤수, [form.경유상차목록, form.경유하차목록]) },
         ].map(({ label, value }) => (
-          <div key={label} className="border border-gray-200 rounded-lg py-2 px-1 bg-gray-50">
-            <div className="text-[13px] text-gray-500 mb-0.5">{label}</div>
-            <div className="text-[13px] font-bold text-gray-800">{value || "-"}</div>
+          <div key={label} className="rounded-xl py-2.5 px-1.5 bg-[#F4F7FC] border border-[#E3E8F0]">
+            <div className="text-[12.5px] font-bold text-gray-500 mb-0.5">{label}</div>
+            <div className="text-[16px] font-black text-[#0F1A30] break-keep">{value || "-"}</div>
           </div>
         ))}
       </div>
       {(form.상차방법 || form.하차방법) && (
-        <div className="mt-2 flex justify-between text-[11px] text-gray-500 pt-2 border-t border-gray-100">
-          <span>상차 <span className="font-semibold text-gray-700">{form.상차방법 || "-"}</span></span>
-          <span>하차 <span className="font-semibold text-gray-700">{form.하차방법 || "-"}</span></span>
+        <div className="mt-2.5 grid grid-cols-2 gap-2 text-[14px]">
+          <div className="flex justify-between rounded-lg px-3 py-1.5 bg-white border border-[#EEF1F6]"><span className="text-gray-500 font-semibold">상차</span><b className="text-[#1B2B4B]">{form.상차방법 || "-"}</b></div>
+          <div className="flex justify-between rounded-lg px-3 py-1.5 bg-white border border-[#EEF1F6]"><span className="text-gray-500 font-semibold">하차</span><b className="text-[#1B2B4B]">{form.하차방법 || "-"}</b></div>
         </div>
       )}
     </div>
 
-    {/* 상차지 */}
-    <div className="px-6 py-4">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-[#1B2B4B]" />
-          <span className="text-[13px] font-bold text-[#1B2B4B]">상차지</span>
-          {form.상차시간 && (
-            <span className="text-[10px] text-gray-500 font-medium">
-              {form.상차시간}{form.상차시간기준 ? ` ${form.상차시간기준}` : ""}
-            </span>
-          )}
-        </div>
-        {(form.경유상차목록||[]).filter(s=>s.업체명?.trim()).length > 0 && (
-  <button
-    type="button"
-    onClick={() => { setStopType("pickup"); const arr = (form.경유상차목록 || []).map(s => cleanStopCargo({ ...s, 상차일: s.상차일 || form.상차일 || "" })); setStopList(arr.length ? arr : [{ 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"", 톤수값:"", 톤수타입:"", 차량톤수:"", 상차일:"", 상차시간:"", 하차일:"", 하차시간:"", 방법:"" }]); setStopPopupOpen(true); }}
-    className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-[#1B2B4B] text-white hover:bg-[#243a60] transition"
-  >
-    경유+{(form.경유상차목록||[]).filter(s=>s.업체명?.trim()).length}
-  </button>
-)}
+    {/* 운송 경로 — 상차 → (경유) → 하차 타임라인 */}
+    <div className="bg-white rounded-2xl border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04)] px-5 py-4">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[14px] font-bold text-gray-600">운송 경로</span>
+        <span className="text-[10.5px] font-extrabold tracking-[0.18em] text-[#94A3B8]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>ROUTE</span>
       </div>
-      <div className="pl-4 border-l-2 border-[#1B2B4B]">
-        <div className="font-bold text-[14px] text-gray-900">{form.상차지명 || "-"}</div>
-        <div className="text-[12px] text-gray-500 mt-0.5">{form.상차지주소 || "-"}</div>
-        {(form.상차지담당자 || form.상차지담당자번호) && (
-          <div className="text-[12px] text-gray-600 mt-1">
-            {form.상차지담당자 || ""}{form.상차지담당자번호 ? ` · ${form.상차지담당자번호}` : ""}
-          </div>
-        )}
-      </div>
-      {/* 경유 상차지 */}
-      {(form.경유상차목록 || []).filter(s => s.업체명?.trim()).map((s, i) => (
-        <div key={i} className="mt-2 pl-4 border-l-2 border-dashed border-gray-300">
-          <div className="text-[10px] font-bold text-gray-500 mb-0.5">경유상차지 {i+1}</div>
-          <div className="text-[13px] font-semibold text-gray-800">{s.업체명}</div>
-          {s.주소 && <div className="text-[11px] text-gray-500">{s.주소}</div>}
-          {s.담당자 && (
-          <div className="text-[11px] text-gray-600">
-            {s.담당자}{s.담당자번호 ? ` · ${s.담당자번호}` : ""}
-          </div>
-        )}
-        {s.메모 && (
-          <div className="text-[11px] text-amber-700 bg-amber-50 rounded px-1.5 py-0.5 mt-0.5">
-            {s.메모}
-          </div>
-        )}
-        </div>
-      ))}
-    </div>
-
-    {/* 하차지 */}
-    <div className="px-6 py-4">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-gray-500" />
-          <span className="text-[13px] font-bold text-gray-600">하차지</span>
-          {form.하차시간 && (
-            <span className="text-[10px] text-gray-500 font-medium">
-              {form.하차시간}{form.하차시간기준 ? ` ${form.하차시간기준}` : ""}
-            </span>
-          )}
-        </div>
-        {(form.경유하차목록||[]).filter(s=>s.업체명?.trim()).length > 0 && (
-  <button
-    type="button"
-    onClick={() => { setStopType("drop"); const arr = (form.경유하차목록 || []).map(s => cleanStopCargo({ ...s, 하차일: s.하차일 || form.하차일 || "" })); setStopList(arr.length ? arr : [{ 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"", 톤수값:"", 톤수타입:"", 차량톤수:"", 상차일:"", 상차시간:"", 하차일:"", 하차시간:"", 방법:"" }]); setStopPopupOpen(true); }}
-    className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-[#1B2B4B] text-white hover:bg-[#243a60] transition"
-  >
-    경유+{(form.경유하차목록||[]).filter(s=>s.업체명?.trim()).length}
-  </button>
-)}
-      </div>
-      <div className="pl-4 border-l-2 border-gray-400">
-        <div className="font-bold text-[14px] text-gray-900">{form.하차지명 || "-"}</div>
-        <div className="text-[12px] text-gray-500 mt-0.5">{form.하차지주소 || "-"}</div>
-        {(form.하차지담당자 || form.하차지담당자번호) && (
-          <div className="text-[12px] text-gray-600 mt-1">
-            {form.하차지담당자 || ""}{form.하차지담당자번호 ? ` · ${form.하차지담당자번호}` : ""}
-          </div>
-        )}
-      </div>
-      {/* 경유 하차지 */}
-      {(form.경유하차목록 || []).filter(s => s.업체명?.trim()).map((s, i) => (
-        <div key={i} className="mt-2 pl-4 border-l-2 border-dashed border-gray-200">
-          <div className="text-[10px] font-bold text-gray-500 mb-0.5">경유하차지 {i+1}</div>
-          <div className="text-[13px] font-semibold text-gray-800">{s.업체명}</div>
-          {s.주소 && <div className="text-[11px] text-gray-500">{s.주소}</div>}
-          {s.담당자 && (
-          <div className="text-[11px] text-gray-600">
-            {s.담당자}{s.담당자번호 ? ` · ${s.담당자번호}` : ""}
-          </div>
-        )}
-        {s.메모 && (
-          <div className="text-[11px] text-amber-700 bg-amber-50 rounded px-1.5 py-0.5 mt-0.5">
-            {s.메모}
-          </div>
-        )}
-        </div>
-      ))}
-    </div>
-
-    {/* 경로 정보 */}{/* 경로 정보 */}
-    {routeInfo && (routeInfo.distanceKm > 0 || routeInfo.durationMin > 0) && (
-      <div className="px-6 py-4">
-        <div className="text-[11px] text-gray-500 font-semibold mb-2">경로 정보</div>
-        <div className="flex gap-3">
-          <div className="flex-1 border border-gray-200 rounded-lg py-2 text-center bg-gray-50">
-            <div className="text-[10px] text-gray-500 mb-0.5">총 거리</div>
-            <div className="text-[15px] font-black text-[#1B2B4B]">
-              {routeInfo.distanceKm.toFixed(1)}
-              <span className="text-[10px] font-semibold text-gray-500 ml-0.5">km</span>
-            </div>
-          </div>
-          <div className="flex-1 border border-gray-200 rounded-lg py-2 text-center bg-gray-50">
-            <div className="text-[10px] text-gray-500 mb-0.5">예상 시간</div>
-            <div className="text-[15px] font-black text-[#1B2B4B]">
-              {routeInfo.durationMin}
-              <span className="text-[10px] font-semibold text-gray-500 ml-0.5">분</span>
-            </div>
-          </div>
-          {(fareStats?.fare > 0 || distanceFareEstimate?.avg > 0) && (
-            <div className="flex-1 border border-gray-200 rounded-lg py-2 text-center bg-gray-50">
-              <div className="text-[10px] text-gray-500 mb-0.5">예상 운임</div>
-              <div className="text-[13px] font-black text-[#1B2B4B]">
-                {(fareStats?.fare || distanceFareEstimate?.avg).toLocaleString()}
-                <span className="text-[10px] font-semibold text-gray-500 ml-0.5">원~</span>
+      {[
+        { key: "pickup", tag: "상", label: "상차지", name: form.상차지명, addr: form.상차지주소, mgr: form.상차지담당자, tel: form.상차지담당자번호, time: form.상차시간, basis: form.상차시간기준, via: form.경유상차목록, viaLabel: "경유상차지", dateKey: "상차일", filled: true },
+        { key: "drop", tag: "하", label: "하차지", name: form.하차지명, addr: form.하차지주소, mgr: form.하차지담당자, tel: form.하차지담당자번호, time: form.하차시간, basis: form.하차시간기준, via: form.경유하차목록, viaLabel: "경유하차지", dateKey: "하차일", filled: false },
+      ].map((P, pi) => {
+        const vias = (P.via || []).filter(s => s.업체명?.trim());
+        return (
+          <div key={P.key} className="relative pl-11 pb-1">
+            {pi === 0 && <span className="absolute left-[15px] top-8 bottom-[-6px] w-[2px] bg-gradient-to-b from-[#1B2B4B] to-[#94A3B8]" />}
+            <span className={`absolute left-0 top-0 w-8 h-8 rounded-xl flex items-center justify-center text-[14px] font-black ${P.filled ? "bg-[#1B2B4B] text-white shadow-[0_4px_10px_rgba(27,43,75,0.3)]" : "bg-white text-[#1B2B4B] border-2 border-[#1B2B4B]"}`}>{P.tag}</span>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-[13px] font-extrabold text-gray-500">{P.label}</span>
+                {P.time && <span className="px-2 py-0.5 rounded-md bg-[#EEF3FB] text-[#1B2B4B] text-[12.5px] font-bold">{P.time}{P.basis ? ` ${P.basis}` : ""}</span>}
               </div>
+              {vias.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => { setStopType(P.key); const arr = (P.via || []).map(s => cleanStopCargo({ ...s, [P.dateKey]: s[P.dateKey] || form[P.dateKey] || "" })); setStopList(arr.length ? arr : [{ 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"", 톤수값:"", 톤수타입:"", 차량톤수:"", 상차일:"", 상차시간:"", 하차일:"", 하차시간:"", 방법:"" }]); setStopPopupOpen(true); }}
+                  className="px-2.5 py-0.5 text-[12px] font-bold rounded-full bg-[#1B2B4B] text-white hover:bg-[#243a60] transition shrink-0"
+                >
+                  경유+{vias.length}
+                </button>
+              )}
             </div>
-          )}
+            <div className="mt-1 text-[17px] font-black text-[#0F1A30] leading-snug">{P.name || "-"}</div>
+            <div className="text-[14px] text-gray-600 mt-0.5 leading-snug">{P.addr || "-"}</div>
+            {(P.mgr || P.tel) && (
+              <div className="text-[14px] text-gray-700 mt-1 font-semibold">
+                {P.mgr || ""}{P.tel ? <span style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{P.mgr ? " · " : ""}{P.tel}</span> : null}
+              </div>
+            )}
+            {vias.map((s, i) => (
+              <div key={i} className="mt-2.5 ml-1 pl-3 border-l-2 border-dashed border-[#C9D3E4]">
+                <div className="text-[12px] font-extrabold text-gray-500">{P.viaLabel} {i + 1}</div>
+                <div className="text-[15px] font-bold text-gray-900">{s.업체명}</div>
+                {s.주소 && <div className="text-[13px] text-gray-600">{s.주소}</div>}
+                {s.담당자 && <div className="text-[13px] text-gray-700">{s.담당자}{s.담당자번호 ? ` · ${s.담당자번호}` : ""}</div>}
+                {s.메모 && <div className="text-[13px] text-[#1B2B4B] bg-[#EEF3FB] rounded-md px-2 py-0.5 mt-1">{s.메모}</div>}
+              </div>
+            ))}
+            {pi === 0 && <div className="h-4" />}
+          </div>
+        );
+      })}
+    </div>
+
+    {/* 경로 정보 */}
+    {routeInfo && (routeInfo.distanceKm > 0 || routeInfo.durationMin > 0) && (
+      <div className="rounded-2xl px-5 py-4 text-white" style={{ background: "linear-gradient(135deg,#0F1A30 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+        <div className="flex items-center justify-between mb-2.5">
+          <span className="text-[14px] font-bold text-blue-100/85">경로 정보</span>
+          <span className="text-[10.5px] font-extrabold tracking-[0.18em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>DISTANCE</span>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            ["총 거리", routeInfo.distanceKm.toFixed(1), "km"],
+            ["예상 시간", routeInfo.durationMin, "분"],
+            ...((fareStats?.fare > 0 || distanceFareEstimate?.avg > 0) ? [["예상 운임", (fareStats?.fare || distanceFareEstimate?.avg).toLocaleString(), "원~"]] : []),
+          ].map(([k, v, u]) => (
+            <div key={k} className="rounded-xl bg-white/[0.07] ring-1 ring-white/15 px-2 py-2 text-center">
+              <div className="text-[12px] font-bold text-blue-100/70">{k}</div>
+              <div className="text-[17px] font-black mt-0.5" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{v}<span className="text-[11.5px] font-bold text-blue-100/70 ml-0.5">{u}</span></div>
+            </div>
+          ))}
         </div>
       </div>
     )}
 
     {/* 메모 / 전달사항 */}
     {(form.메모?.trim() || form.전달사항?.trim()) && (
-      <div className="px-6 py-4 space-y-3">
+      <div className="bg-white rounded-2xl border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04)] px-5 py-4 space-y-3">
         {form.메모?.trim() && (
           <div>
-            <div className="text-[11px] text-gray-500 font-semibold mb-1">메모</div>
-            <div className="text-[12px] text-gray-700 leading-relaxed bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-              {form.메모}
-            </div>
+            <div className="text-[13.5px] text-gray-600 font-bold mb-1.5">메모</div>
+            <div className="text-[14.5px] text-gray-800 leading-relaxed bg-[#F4F7FC] border border-[#E3E8F0] rounded-xl px-3.5 py-2.5 whitespace-pre-wrap">{form.메모}</div>
           </div>
         )}
         {form.전달사항?.trim() && (
           <div>
-            <div className="text-[11px] text-gray-500 font-semibold mb-1">전달사항</div>
-            <div className="text-[12px] text-gray-700 leading-relaxed bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-              {form.전달사항}
-            </div>
+            <div className="text-[13.5px] text-gray-600 font-bold mb-1.5">기사 전달사항</div>
+            <div className="text-[14.5px] text-gray-800 leading-relaxed bg-[#F4F7FC] border border-[#E3E8F0] rounded-xl px-3.5 py-2.5 whitespace-pre-wrap">{form.전달사항}</div>
           </div>
         )}
       </div>
     )}
 
-    {/* 배차마당 등록 — 저장과 동시에(온 상태일 때) 배차마당 카페사이트에도 공유 */}
-    <div className="px-6 py-4">
-      <button type="button"
-        disabled={isSaving}
-        className="w-full py-2.5 bg-[#1B2B4B] hover:bg-[#243a60] text-white rounded-lg font-semibold text-[13px] transition disabled:opacity-50"
-        onClick={() => doSave(true)}>
-        {isSaving ? "저장 중..." : "저장 + 배차마당 등록"}
-      </button>
-    </div>
+    {/* 배차마당 등록 — 저장과 동시에 배차마당 카페사이트에도 공유 */}
+    <button type="button"
+      disabled={isSaving}
+      className="w-full h-11 rounded-xl border-2 border-[#1B2B4B] bg-white text-[#1B2B4B] hover:bg-[#F4F7FC] font-black text-[14.5px] transition disabled:opacity-50"
+      onClick={() => doSave(true)}>
+      {isSaving ? "저장 중..." : "저장 + 배차마당 등록"}
+    </button>
 
   </div>
 
   {/* 날짜 개별 설정 (수량 2개 이상일 때) */}
   {multiCount > 1 && (
-    <div className="px-4 py-3 border-t border-gray-100 shrink-0">
+    <div className="px-5 py-3 border-t border-[#E3E8F0] bg-white shrink-0">
       <div className="flex items-center justify-between mb-2">
         <div>
-          <span className="text-[12px] font-bold text-[#1B2B4B]">날짜 개별 설정</span>
-          <span className="text-[10px] text-gray-500 ml-1.5">{multiCount}건 상차일/하차일 개별 지정</span>
+          <span className="text-[14px] font-black text-[#1B2B4B]">날짜 개별 설정</span>
+          <span className="text-[12px] text-gray-500 ml-1.5">{multiCount}건 상차일/하차일 개별 지정</span>
         </div>
         <button
           type="button"
           onClick={() => setUseSeparateDates(v => !v)}
-          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-            useSeparateDates ? "bg-[#1B2B4B]" : "bg-gray-200"
-          }`}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${useSeparateDates ? "bg-[#1B2B4B]" : "bg-gray-200"}`}
         >
-          <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${
-            useSeparateDates ? "translate-x-4" : "translate-x-0.5"
-          }`}/>
+          <span className={`inline-block h-4.5 w-4.5 rounded-full bg-white shadow transition-transform ${useSeparateDates ? "translate-x-5" : "translate-x-1"}`} style={{ width: 18, height: 18 }} />
         </button>
       </div>
       {useSeparateDates && (
         <div className="space-y-1.5">
           <div className="flex items-center gap-2 mb-1">
-            <div className="w-8 shrink-0" />
-            <span className="flex-1 text-[10px] font-bold text-gray-500 text-center">상차일</span>
-            <span className="flex-1 text-[10px] font-bold text-gray-500 text-center">하차일</span>
+            <div className="w-9 shrink-0" />
+            <span className="flex-1 text-[12px] font-bold text-gray-500 text-center">상차일</span>
+            <span className="flex-1 text-[12px] font-bold text-gray-500 text-center">하차일</span>
           </div>
           {Array.from({ length: multiCount }, (_, i) => (
             <div key={i} className="flex items-center gap-2">
-              <span className="text-[11px] font-bold text-gray-500 w-8 shrink-0 text-right">{i + 1}번</span>
+              <span className="text-[13px] font-bold text-gray-500 w-9 shrink-0 text-right">{i + 1}번</span>
               <CustomDatePicker
                 value={orderDates[i] || form.상차일 || ""}
                 onChange={e => {
@@ -19309,7 +19234,7 @@ setConfirmChange(null);
                     setOrderDropDates(nd);
                   }
                 }}
-                className="flex-1 px-2 py-1 text-[12px] font-medium border border-gray-200 rounded-lg focus:border-[#1B2B4B] outline-none bg-white"
+                className="flex-1 px-2 py-1.5 text-[13.5px] font-semibold border border-gray-200 rounded-lg focus:border-[#1B2B4B] outline-none bg-white"
               />
               <CustomDatePicker
                 value={orderDropDates[i] || orderDates[i] || form.상차일 || ""}
@@ -19318,7 +19243,7 @@ setConfirmChange(null);
                   nd[i] = e.target.value;
                   setOrderDropDates(nd);
                 }}
-                className="flex-1 px-2 py-1 text-[12px] font-medium border border-gray-200 rounded-lg focus:border-[#1B2B4B] outline-none bg-white"
+                className="flex-1 px-2 py-1.5 text-[13.5px] font-semibold border border-gray-200 rounded-lg focus:border-[#1B2B4B] outline-none bg-white"
               />
             </div>
           ))}
@@ -19328,7 +19253,7 @@ setConfirmChange(null);
               setOrderDates(Array.from({ length: multiCount }, () => form.상차일 || ""));
               setOrderDropDates(Array.from({ length: multiCount }, () => form.상차일 || ""));
             }}
-            className="w-full mt-0.5 py-1 text-[10px] font-semibold text-gray-500 hover:text-gray-600 transition text-center"
+            className="w-full mt-0.5 py-1 text-[12px] font-semibold text-gray-500 hover:text-gray-700 transition text-center"
           >
             전체 날짜 초기화
           </button>
@@ -19338,17 +19263,17 @@ setConfirmChange(null);
   )}
 
   {/* 하단 고정 버튼 */}
-  <div className="px-4 py-4 border-t border-gray-200 bg-white flex gap-3 shrink-0">
+  <div className="px-4 py-4 border-t border-[#E3E8F0] bg-white flex gap-3 shrink-0">
     <button
-      className="flex-1 py-2.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px] transition border border-gray-200"
+      className="flex-1 h-12 rounded-xl bg-white hover:bg-gray-50 text-gray-700 font-bold text-[15px] transition border border-[#DCE3EF]"
       onClick={() => setConfirmOpen(false)}>
       취소
     </button>
     <button
       id="confirm-save-btn"
       disabled={isSaving}
-      className={`flex-1 py-2.5 rounded-lg text-white font-bold text-[13px] transition
-        ${isSaving ? "bg-gray-400 cursor-not-allowed" : "bg-[#1B2B4B] hover:bg-[#243a60]"}`}
+      className={`flex-[1.4] h-12 rounded-xl text-white font-black text-[15.5px] transition shadow-[0_8px_18px_rgba(27,43,75,0.28)]
+        ${isSaving ? "bg-gray-400 cursor-not-allowed" : "bg-gradient-to-r from-[#1B2B4B] to-[#2D4C82] hover:brightness-110"}`}
       onClick={() => doSave(false)}>
       {isSaving ? "저장 중..." : multiCount > 1 ? `${multiCount}건 등록하기` : "배차등록하기"}
     </button>
