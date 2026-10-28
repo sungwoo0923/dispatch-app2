@@ -2615,7 +2615,7 @@ import OrgChart from "./OrgChart";
 import { MailHeaderButton } from "./InternalMail";
 import BannerCenter from "./BannerCenter";
 import PersonnelOrder from "./PersonnelOrder";
-import OrderScanModal, { looksLikeOrder } from "./OrderScanModal";
+import OrderScanModal, { looksLikeOrder, scanDropDate } from "./OrderScanModal";
 import { RecurringManagerModal, CloseReportModal } from "./AutomationPanels";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -14678,7 +14678,7 @@ title="상차지 ↔ 하차지 교체"
     initial={orderScanInit}
     onClose={() => { setShowOrderParser(false); setOrderScanInit(null); }}
     onApply={(patch, memo, info = {}) => {
-      setForm((p) => ({ ...p, ...patch, ...(memo ? { 메모: [p.메모, memo].filter(Boolean).join("\n") } : {}) }));
+      setForm((p) => ({ ...p, ...patch, ...scanDropDate(patch, info, p.상차일), ...(memo ? { 메모: [p.메모, memo].filter(Boolean).join("\n") } : {}) }));
       if (patch.상차지명) setAutoPickMatched(true);
       if (patch.하차지명) setAutoDropMatched(true);
       if (patch.차량종류) setVehicleQuery(patch.차량종류);

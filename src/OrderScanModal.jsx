@@ -61,6 +61,20 @@ function normPlaces(list) {
   }).filter((p) => p.업체명);
 }
 
+// "2026-10-30" + n일 → "2026-10-31"
+function shiftDay(ymdStr, n) {
+  const d = new Date(`${ymdStr}T00:00:00`);
+  if (isNaN(d)) return ymdStr;
+  d.setDate(d.getDate() + (n || 0));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// 스캔에 상차일이 없을 때 — 화면에 이미 있는 상차일 기준으로 하차일(당착/익착)을 맞춘다
+export function scanDropDate(patch, info, formPickDate) {
+  if (patch.상차일 || !formPickDate || info?.dropRel == null) return {};
+  return { 하차일: shiftDay(formPickDate, info.dropRel) };
+}
+
 export default function OrderScanModal({ onClose, onApply, places: placesRaw = [], clients = [], initial = null }) {
   const places = React.useMemo(() => normPlaces(placesRaw), [placesRaw]);
   const [stage, setStage] = React.useState("input"); // input | scanning | result
@@ -215,6 +229,11 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
     const copy = ["거래처명", "상차지명", "상차지주소", "상차지담당자", "상차지담당자번호", "상차시간", "상차시간기준", "상차일", "상차방법",
       "하차지명", "하차지주소", "하차지담당자", "하차지담당자번호", "하차시간", "하차시간기준", "하차일", "하차방법", "차량톤수", "차량종류", "운행유형"];
     copy.forEach((k) => { if (v[k] !== undefined && v[k] !== "") patch[k] = v[k]; });
+    // ⭐ 사용자 요청 — 하차 날짜가 따로 안 적혀 있으면 당착(하차일 = 상차일).
+    //  "익착/내일하차/낼착"처럼 상대 표기면 상차일 기준 +1일. 하차일을 화면에서 직접 고쳤으면 그대로 둔다.
+    const dF = result?.fields?.하차일;
+    const dropRel = dF ? (dF.rel ?? null) : (v.하차일 ? null : 0);
+    if (v.상차일 && dropRel != null && (!dF || v.하차일 === dF.value)) patch.하차일 = shiftDay(v.상차일, dropRel);
     if (v.청구운임) patch.청구운임 = String(v.청구운임).replace(/[^\d]/g, "");
     if (v.화물내용) {
       const unit = v.화물단위 || (/(파레트|박스|통)$/.exec(v.화물내용) || [])[1] || "";
@@ -231,6 +250,7 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
       pickupPlace: placeOf("상차지"), dropPlace: placeOf("하차지"),
       pickupMgrScanned: result?.fields?.상차지담당자 && !result.fields.상차지담당자.via,
       dropMgrScanned: result?.fields?.하차지담당자 && !result.fields.하차지담당자.via,
+      dropRel, // 상차일이 스캔에 없을 때 화면의 상차일 기준으로 하차일을 맞추는 데 쓴다
     });
   };
 

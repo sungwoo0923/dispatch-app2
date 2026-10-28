@@ -204,9 +204,10 @@ export function findTime(text) {
 // 날짜: 10/29, 10.29, 10월 29일, 29일, 내일, 익일, 모레, 오늘·금일·당일
 export function findDate(text, today = new Date()) {
   const s = String(text || "");
-  if (/모레/.test(s)) return { value: ymd(addDays(today, 2)), raw: "모레" };
-  if (/내일|명일|익일|다음날|익착/.test(s)) return { value: ymd(addDays(today, 1)), raw: "내일" };
-  if (/오늘|금일|당일|당착/.test(s)) return { value: ymd(today), raw: "오늘" };
+  // rel = 기준일(오늘)로부터 며칠 뒤인지 — 하차일은 나중에 "상차일" 기준으로 다시 계산한다
+  if (/모레/.test(s)) return { value: ymd(addDays(today, 2)), raw: "모레", rel: 2 };
+  if (/내일|명일|익일|다음날|익착|명착|(?<![가-힣])낼(?![가-힣])|낼\s*(?:착|하차|도착)/.test(s)) return { value: ymd(addDays(today, 1)), raw: "내일", rel: 1 };
+  if (/오늘|금일|당일|당착/.test(s)) return { value: ymd(today), raw: "오늘", rel: 0 };
   let m = s.match(/(20\d{2})[-./년\s]+(\d{1,2})[-./월\s]+(\d{1,2})/);
   let y, mo, d;
   if (m) { y = +m[1]; mo = +m[2]; d = +m[3]; }
@@ -440,6 +441,8 @@ export function parseOrderScan(text, { places = [], clients = [], today = new Da
     if (F[key] && rank[F[key].conf] >= rank[conf]) return;
     F[key] = { value, conf, line };
   };
+  // 하차일 — "내일/익일/당일" 같은 상대 표기면 rel(상차일로부터 며칠)도 같이 기억
+  const setDrop = (d, conf, line) => { const before = F.하차일; set("하차일", d.value, conf, line); if (F.하차일 !== before) F.하차일.rel = d.rel ?? null; };
   const roles = {}; // 원문 줄 번호 → 역할
   const markRole = (i, r) => { if (!roles[i] || roles[i] === "기타") roles[i] = r; };
   const sec = { pickup: { lines: [], labeled: false }, drop: { lines: [], labeled: false } };
@@ -465,9 +468,9 @@ export function parseOrderScan(text, { places = [], clients = [], today = new Da
         case "pickupAddr": { const a = findAddress(v); set("상차지주소", a ? a.addr : v, "high", L.i); markRole(L.i, "상차"); cur = "pickup"; sec.pickup.labeled = true; continue; }
         case "dropAddr": { const a = findAddress(v); set("하차지주소", a ? a.addr : v, "high", L.i); markRole(L.i, "하차"); cur = "drop"; sec.drop.labeled = true; continue; }
         case "pickupTime": { const t = findTime(v); if (t?.value) { set("상차시간", t.value, "high", L.i); if (t.basis) set("상차시간기준", t.basis, "high", L.i); } const d = findDate(v, today); if (d) set("상차일", d.value, "high", L.i); if (t?.note) set("메모추가", `상차 ${t.note}`, "mid", L.i); markRole(L.i, "시간"); continue; }
-        case "dropTime": { const t = findTime(v); if (t?.value) { set("하차시간", t.value, "high", L.i); if (t.basis) set("하차시간기준", t.basis, "high", L.i); } const d = findDate(v, today); if (d) set("하차일", d.value, "high", L.i); if (t?.note) set("메모추가", `하차 ${t.note}`, "mid", L.i); markRole(L.i, "시간"); continue; }
+        case "dropTime": { const t = findTime(v); if (t?.value) { set("하차시간", t.value, "high", L.i); if (t.basis) set("하차시간기준", t.basis, "high", L.i); } const d = findDate(v, today); if (d) setDrop(d, "high", L.i); if (t?.note) set("메모추가", `하차 ${t.note}`, "mid", L.i); markRole(L.i, "시간"); continue; }
         case "pickupDate": { const d = findDate(v, today); if (d) set("상차일", d.value, "high", L.i); const t = findTime(v); if (t?.value) set("상차시간", t.value, "mid", L.i); markRole(L.i, "날짜"); continue; }
-        case "dropDate": { const d = findDate(v, today); if (d) set("하차일", d.value, "high", L.i); const t = findTime(v); if (t?.value) set("하차시간", t.value, "mid", L.i); markRole(L.i, "날짜"); continue; }
+        case "dropDate": { const d = findDate(v, today); if (d) setDrop(d, "high", L.i); const t = findTime(v); if (t?.value) set("하차시간", t.value, "mid", L.i); markRole(L.i, "날짜"); continue; }
         case "date": { const d = findDate(v, today); if (d) set("상차일", d.value, "high", L.i); markRole(L.i, "날짜"); continue; }
         case "pickupMgr": { const p = findPhones(v)[0]; if (p) set("상차지담당자번호", p.phone, "high", L.i); const m = findManager(v) || nameCandidate(v.replace(PHONE_RE, "")); if (m && m.length <= 6) set("상차지담당자", m, "high", L.i); markRole(L.i, "상차"); continue; }
         case "dropMgr": { const p = findPhones(v)[0]; if (p) set("하차지담당자번호", p.phone, "high", L.i); const m = findManager(v) || nameCandidate(v.replace(PHONE_RE, "")); if (m && m.length <= 6) set("하차지담당자", m, "high", L.i); markRole(L.i, "하차"); continue; }
@@ -558,7 +561,7 @@ export function parseOrderScan(text, { places = [], clients = [], today = new Da
     // 시간·날짜
     const t = findTime(all);
     if (t?.value) { set(`${P === "상차지" ? "상차" : "하차"}시간`, t.value, "mid", first.i); if (t.basis) set(`${P === "상차지" ? "상차" : "하차"}시간기준`, t.basis, "mid", first.i); }
-    const d = findDate(all, today); if (d) set(P === "상차지" ? "상차일" : "하차일", d.value, "mid", first.i);
+    const d = findDate(all, today); if (d) { if (P === "상차지") set("상차일", d.value, "mid", first.i); else setDrop(d, "mid", first.i); }
     // 작업방법
     const mt = methodOf(all); if (mt) set(P === "상차지" ? "상차방법" : "하차방법", mt, "mid", first.i);
     // 업체명: 각 줄에서 주소/전화 빼고 남은 글
@@ -595,10 +598,21 @@ export function parseOrderScan(text, { places = [], clients = [], today = new Da
     if (f) set("청구운임", f, fm ? "mid" : "low", -1);
   }
   if (!F.상차일) { const d = findDate(gl, today); if (d) set("상차일", d.value, "mid", -1); }
-  if (!F.하차일 && /익일\s*하차|익착|다음날\s*하차|하차\s*익일|내일\s*하차/.test(full)) {
-    const base = F.상차일 ? new Date(F.상차일.value + "T00:00:00") : today;
-    set("하차일", ymd(addDays(base, 1)), "mid", -1);
+  // ⭐ 하차 날짜가 문장 속에 있는 경우 — "익착/낼착/내일하차/익일 하차", "31일 하차/31일착", "하차 31일", "10/31 하차"
+  if (!F.하차일) {
+    const rel = full.match(/익일\s*(?:하차|도착|착)|익착|명착|낼\s*(?:착|하차|도착)|다음\s*날\s*(?:하차|도착|착)|내일\s*(?:하차|도착|착)|하차\s*[:：]?\s*(?:익일|내일|낼|다음\s*날)|모레\s*(?:하차|도착|착)/);
+    const same = full.match(/당착|당일\s*(?:하차|도착|착)|하차\s*[:：]?\s*당일/);
+    const abs = full.match(/(?<![\d:])((?:\d{1,2}\s*(?:\/|\.|월)\s*\d{1,2}\s*일?)|\d{1,2}\s*일)\s*(?:하차|도착|착)(?![가-힣])|하차\s*[:：]?\s*((?:\d{1,2}\s*(?:\/|월)\s*)?\d{1,2}\s*일)/);
+    if (rel) setDrop({ value: ymd(addDays(today, /모레/.test(rel[0]) ? 2 : 1)), rel: /모레/.test(rel[0]) ? 2 : 1 }, "mid", -1);
+    else if (same) setDrop({ value: ymd(today), rel: 0 }, "mid", -1);
+    else if (abs) { const d = findDate(abs[1] || abs[2], today); if (d) setDrop(d, "mid", -1); }
   }
+  // 상대 표기(내일/익일/당일)는 오늘이 아니라 "상차일" 기준으로 다시 계산
+  if (F.하차일 && F.하차일.rel != null && F.상차일) {
+    F.하차일.value = ymd(addDays(new Date(F.상차일.value + "T00:00:00"), F.하차일.rel));
+  }
+  // ⭐ 사용자 요청 — 하차 날짜가 따로 안 적혀 있으면(즉시·빈칸) 보통 당착 → 하차일 = 상차일
+  if (!F.하차일 && F.상차일) { F.하차일 = { value: F.상차일.value, conf: "mid", line: -1, rel: 0, auto: true }; }
   if (!F.상차시간) { const t = findTime(gl); if (t?.value) set("상차시간", t.value, "low", -1); }
   if (/혼적|합짐|혼載/.test(full)) set("혼적", true, "mid", -1);
   if (/왕복/.test(full)) set("운행유형", "왕복", "mid", -1);

@@ -85,7 +85,7 @@ import { isWeekend, findApprovedLeaveForDate, isHoliday } from "../attendanceUti
 import MonthCompareAnalysis from "../MonthCompareAnalysis";
 import { MailHeaderButton } from "../InternalMail";
 import BannerCenter from "../BannerCenter";
-import OrderScanModal from "../OrderScanModal";
+import OrderScanModal, { scanDropDate } from "../OrderScanModal";
 
 
 
@@ -17727,7 +17727,7 @@ const pickDrop = (c) => {
             if (m.혼적 === true) { m.혼적여부 = "혼적"; }
             delete m.혼적; delete m.화물타입;
             if (m.청구운임) m.청구운임 = Number(m.청구운임) || 0;
-            setForm((prev) => ({ ...prev, ...m, ...(memo ? { 적요: [prev.적요, memo].filter(Boolean).join("\n") } : {}) }));
+            setForm((prev) => ({ ...prev, ...m, ...scanDropDate(patch, info, prev.상차일), ...(memo ? { 적요: [prev.적요, memo].filter(Boolean).join("\n") } : {}) }));
             setShowSmartParser(false);
             // 등록 업체로 맞췄고 담당자가 여러 명인데 오더에 담당자가 없으면 → 담당자 선택창
             const items = [];
