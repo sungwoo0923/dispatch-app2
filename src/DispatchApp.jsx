@@ -2616,6 +2616,7 @@ import PersonnelOrder from "./PersonnelOrder";
 import OrderScanModal, { looksLikeOrder, scanDropDate } from "./OrderScanModal";
 import KpSubNav from "./KpSubNav";
 import PlatformMonitor from "./PlatformMonitor";
+import RevenueDashboard, { RvCard } from "./RevenueDashboard";
 import { RecurringManagerModal, CloseReportModal } from "./AutomationPanels";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -47168,7 +47169,8 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
     return () => unsub();
   }, [userCompany]);
 
-  const [activeTab, setActiveTab] = React.useState("overview"); // overview | client_compare
+  const [activeTab, setActiveTab] = React.useState(() => { try { return localStorage.getItem("rvPage") || "dashboard"; } catch { return "dashboard"; } });
+  React.useEffect(() => { try { localStorage.setItem("rvPage", activeTab); } catch { /* 무시 */ } }, [activeTab]);
   const [targetMonth, setTargetMonth] = React.useState(
     new Date().toISOString().slice(0, 7)
   );
@@ -47542,33 +47544,18 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   // ================================
   // 🧩 UI RENDER
   // ================================
-  return (
-    <div id="settlement-capture" className="bg-gray-50 min-h-screen">
-
-      {/* ================= 페이지 헤더 ================= */}
-      <div className="bg-white px-8 py-6 border-b border-gray-200">
-  <div className="flex items-center justify-between">
-    <div>
-      <h1 className="text-[20px] font-bold text-[#1B2B4B] tracking-tight"><EditableText id="settlement.header.title" defaultText="매출관리" /></h1>
-      <p className="text-[12px] text-gray-500 mt-1"><EditableText id="settlement.header.subtitle" defaultText="매출 · 수익 · 거래처 분석 리포트" /></p>
-    </div>
-    <div className="flex items-center gap-2">
-      <button
-        onClick={() => exportSettlementCapture("png")}
-        className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-[13px] font-semibold hover:bg-gray-200 transition border border-gray-200"
-      >
-        <EditableText id="settlement.header.PNG캡쳐" defaultText="PNG 캡쳐" />
-      </button>
-      <button
-        onClick={() => exportSettlementCapture("pdf")}
-        className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-[13px] font-semibold hover:bg-indigo-500 transition"
-      >
-        <EditableText id="settlement.header.PDF저장" defaultText="PDF 저장" />
-      </button>
-      <button
-        onClick={() => {
-
-                const headers = ["상차일","거래처명","상차지명","하차지명","청구운임","기사운임","수수료","배차상태"];
+  // ⭐ 2026-10-28 리디자인 — 왼쪽 사이드바(분석 화면 6개 + 리포트 도구) + 디지털 대시보드
+  const RV_PAGES = {
+    dashboard: { label: "매출 대시보드", en: "DASHBOARD", icon: "dashboard" },
+    target: { label: "목표·전망", en: "TARGET", icon: "trend" },
+    clients: { label: "거래처 순위·신규", en: "RANKING", icon: "list" },
+    trend: { label: "거래처 동향 분석", en: "TRENDS", icon: "pulse" },
+    yearly: { label: "연간 요약", en: "YEARLY", icon: "chart" },
+    query: { label: "거래처 기간 조회", en: "QUERY", icon: "history" },
+  };
+  const rvPage = RV_PAGES[activeTab] ? activeTab : "dashboard";
+  const exportCsv = () => {
+    const headers = ["상차일","거래처명","상차지명","하차지명","청구운임","기사운임","수수료","배차상태"];
                 const csvRows = [headers.join(",")];
                 monthRows.forEach((r) => {
                   csvRows.push(headers.map((h) => `"${String(r[h] || "").replace(/"/g, '""')}"`).join(","));
@@ -47579,92 +47566,66 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
                 a.href = url;
                 a.download = `매출관리_${targetMonth}.csv`;
                 a.click();
-              }}
-               className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold hover:bg-emerald-500 transition"
-            >
-              <EditableText id="settlement.header.CSV내보내기" defaultText="CSV 내보내기" />
-            </button>
-          </div>
-        </div>
-      </div>
-{/* ================= 탭 네비게이션 ================= */}
-      <div className="px-8 border-b border-gray-200 bg-white flex items-center">
-        <div className="flex gap-0">
-          {[
-            { key: "overview", label: "매출 개요" },
-            { key: "client_compare", label: "거래처 동향 분석" },
-          ].map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-5 py-3 text-[13px] font-semibold border-b-2 transition-colors ${
-                activeTab === tab.key
-                  ? "border-[#1B2B4B] text-[#1B2B4B]"
-                  : "border-transparent text-gray-500 hover:text-gray-600"
-              }`}
-            >
-              <EditableText id={`settlement.tab.${tab.key}`} defaultText={tab.label} />
-            </button>
-          ))}
-        </div>
-        <div className="ml-auto">
-          <div className="bg-white rounded-xl border border-gray-200 px-4 py-2 flex items-center gap-3">
-            <span className="text-[12px] text-gray-500">당월 수익률</span>
-            <span className={`text-[16px] font-bold ${monthProfitRate >= 15 ? "text-emerald-600" : monthProfitRate >= 10 ? "text-blue-600" : "text-rose-600"}`}>
-              {monthProfitRate.toFixed(1)}%
-            </span>
-            <div className="w-px h-5 bg-gray-200" />
-            <span className="text-[12px] text-gray-500">당월 수익</span>
-            <span className="text-[16px] font-bold text-emerald-600">
-              {monthProfit.toLocaleString()}원
-            </span>
-          </div>
-        </div>
-      </div>
+  };
+  const rvBtn = "h-9 px-3.5 rounded-[10px] text-[13px] font-bold border transition inline-flex items-center gap-1.5";
+  return (
+    <KpSubNav code="REVENUE" title="매출관리" icon="chart" active={rvPage} onSelect={setActiveTab}
+      groups={[{ label: "분석", items: Object.entries(RV_PAGES).map(([key, v]) => ({ key, ...v })) }]}
+      actionsLabel="리포트 도구"
+      actions={[
+        { key: "a1", label: "월 비교 분석", icon: "compare", onClick: () => setMonthCompareOpen(true) },
+        { key: "a2", label: "매익률 원인 보고서", icon: "alert", onClick: () => setMarginReportOpen(true) },
+        { key: "a3", label: "월 마감 점검", icon: "check", onClick: () => setMonthCloseOpen(true) },
+        ...(canSeeStaffPerf ? [{ key: "a4", label: "담당자별 실적", icon: "users", onClick: () => setStaffPerfOpen(true) }] : []),
+      ]}>
+    <div id="settlement-capture" className="max-w-[1560px] mx-auto">
 
-
-      {/* ================= 거래처 동향 분석 탭 ================= */}
-      {activeTab === "client_compare" && (
-        <ClientCompareDashboard
-          dispatchData={dispatchData}
-          places={places}
-          fixedRows={fixedRows}
-          clients={clients}
-        />
-      )}
-{/* ================= 매출 개요 탭 ================= */}
-      {activeTab === "overview" && (
-      <div className="px-8 py-6 grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-
-        {/* ================= LEFT PANEL =================
-            누적현황 및 월 예상지표 ~ 신규거래처까지 카드 하나로 합쳐 하나의 리포트처럼
-            보이게 한다. 섹션마다 있던 반복된 네이비 헤더는 없애고, 카드 전체에 헤더
-            하나(+월 선택)만 두고 내부는 작은 소제목 + 구분선으로 나눈다. */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-            <div>
-              <h3 className="text-[15px] font-bold text-white">매출 현황 리포트</h3>
-              <p className="text-[11px] text-white/50 mt-0.5">누적현황 · 목표 대비 실적 · 거래처 분석</p>
-            </div>
-            <CustomSelect
-              className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-1.5 text-[13px] focus:outline-none"
-              value={targetMonth}
-              onChange={(e) => setTargetMonth(e.target.value)}
-            >
+      {/* ── 머리줄: 화면 제목 + 기준 월 + 내보내기 ── */}
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+        <div>
+          <div style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }} className="text-[11px] font-extrabold tracking-[0.24em] text-[#4B6CB7]">REVENUE · {RV_PAGES[rvPage].en}</div>
+          <h1 className="text-[22px] font-black text-[#0F1A30] tracking-tight mt-0.5">{RV_PAGES[rvPage].label}</h1>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {rvPage === "yearly" ? (
+            <CustomSelect className="h-9 bg-white border border-[#DCE3EF] text-[#1B2B4B] rounded-[10px] px-3 text-[14px] font-bold focus:outline-none" value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))}>
+              {Array.from(new Set(rows.map((r) => r.상차일?.slice(0, 4)).filter(Boolean))).sort((a, b) => b - a).map((yy) => (
+                <option key={yy} value={Number(yy)}>{yy}년</option>
+              ))}
+            </CustomSelect>
+          ) : (
+            <CustomSelect className="h-9 bg-white border border-[#DCE3EF] text-[#1B2B4B] rounded-[10px] px-3 text-[14px] font-bold focus:outline-none" value={targetMonth} onChange={(e) => setTargetMonth(e.target.value)}>
               {Array.from({ length: 12 }, (_, i) => {
-                const d = new Date();
-                d.setMonth(d.getMonth() - i);
-                return (
-                  <option key={i} className="text-gray-900">
-                    {d.toISOString().slice(0, 7)}
-                  </option>
-                );
+                const dd = new Date();
+                dd.setMonth(dd.getMonth() - i);
+                return <option key={i}>{dd.toISOString().slice(0, 7)}</option>;
               })}
             </CustomSelect>
-          </div>
+          )}
+          <div className="w-px h-6 bg-[#E3E8F0] mx-1" />
+          <button onClick={() => exportSettlementCapture("png")} className={`${rvBtn} bg-white border-[#DCE3EF] text-[#1B2B4B] hover:bg-[#F4F7FC]`}>PNG</button>
+          <button onClick={() => exportSettlementCapture("pdf")} className={`${rvBtn} bg-white border-[#DCE3EF] text-[#1B2B4B] hover:bg-[#F4F7FC]`}>PDF</button>
+          <button onClick={exportCsv} className={`${rvBtn} bg-[#1B2B4B] border-[#1B2B4B] text-white hover:bg-[#24396A]`}>CSV 내보내기</button>
+        </div>
+      </div>
 
-          <div className="p-6 space-y-8">
+      {rvPage === "dashboard" && (
+        <RevenueDashboard
+          rows={rows}
+          targetMonth={targetMonth}
+          forecast={forecast}
+          yearTarget={PURE_TARGET_2026}
+          yearPureSale={yPure.sale}
+          hasExcluded={hasExcludedClients}
+          rankRows={monthRows.filter((r) => !isExcludedClient(r.거래처명) && !isRankingExcludedFast(r.거래처명))}
+          isRankExcluded={(n) => isExcludedClient(n) || isRankingExcludedFast(n)}
+          onOpenClient={setDetailClient}
+        />
+      )}
 
+      {rvPage === "target" && (
+        <RvCard code="TARGET" title="누적 현황 · 목표 대비 실적 · 전망" bodyStyle={{ padding: 24 }}>
+          <div className="space-y-8">
             <SettlementMonthlyHeader
               monthRows={monthRows}
               monthPureRows={monthPureRows}
@@ -47802,51 +47763,42 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
               </>
             )}
 
+          </div>
+        </RvCard>
+      )}
+
+      {rvPage === "clients" && (
+        <RvCard code="RANKING" title={`${targetMonth} 거래처 순위 · 감소 · 신규`} bodyStyle={{ padding: 24 }}>
             <SettlementClientAnalysis
               topRows={monthRows.filter((r) => !isExcludedClient(r.거래처명) && !isRankingExcludedFast(r.거래처명))}
               dropRows={rows.filter((r) => !isExcludedClient(r.거래처명) && !isRankingExcludedFast(r.거래처명))}
               newClients={newClients}
               targetMonth={targetMonth}
             />
+        </RvCard>
+      )}
 
-          </div>
-        </div>
+      {rvPage === "trend" && (
+        <ClientCompareDashboard
+          dispatchData={dispatchData}
+          places={places}
+          fixedRows={fixedRows}
+          clients={clients}
+        />
+      )}
 
-        {/* ================= RIGHT PANEL =================
-            월별 매출·수익·수익률 요약 + 요일별 수주 분석 + 거래처별 기간 조회를
-            카드 하나로 합쳤다("기간별 매출·운임·수수료 추이"·"스마트 인사이트"는
-            제거하고, 그 자리에 새로 만든 거래처별 기간 조회로 대체). */}
-        <div className="flex flex-col gap-6 flex-1">
-          <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-              <div>
-                <h3 className="text-[15px] font-bold text-white"><EditableText id="settlement.report.title" defaultText="매출 리포트" /></h3>
-                <p className="text-[11px] text-white/50 mt-0.5"><EditableText id="settlement.report.subtitle" defaultText="월별 요약 · 요일별 수주 · 거래처별 기간 조회" /></p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setMarginReportOpen(true)} className="px-3 py-1.5 rounded-lg bg-amber-400 text-[#1B2B4B] text-[12px] font-bold hover:bg-amber-300 transition">매익률 원인 보고서</button>
-                <button onClick={() => setMonthCompareOpen(true)} className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[12px] font-bold hover:bg-white/90 transition">월 비교 분석</button>
-                <button onClick={() => setMonthCloseOpen(true)} className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[12px] font-bold hover:bg-white/90 transition">월 마감 점검</button>
+      {rvPage === "yearly" && (
+        <RvCard code="YEARLY" title={`${selectedYear}년 월별 요약`} bodyStyle={{ padding: 24 }}>
+          <YearlySummaryChart rows={rows} year={selectedYear} clients={clients} places={places} />
+        </RvCard>
+      )}
 
-                {canSeeStaffPerf && (
-                  <button onClick={() => setStaffPerfOpen(true)} className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[12px] font-bold hover:bg-white/90 transition">담당자별 실적</button>
-                )}
-                <CustomSelect
-                  className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-1.5 text-[13px] focus:outline-none ml-1"
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(Number(e.target.value))}
-                >
-                  {Array.from(new Set(rows.map((r) => r.상차일?.slice(0, 4)).filter(Boolean)))
-                    .sort((a, b) => b - a)
-                    .map((y) => (
-                      <option key={y} value={Number(y)} className="text-gray-900">{y}년</option>
-                    ))}
-                </CustomSelect>
-              </div>
-            </div>
+      {rvPage === "query" && (
+        <RvCard code="QUERY" title="거래처별 기간 조회" bodyStyle={{ padding: 24 }}>
+          <ClientPeriodQuery rows={rows} clients={clients} />
+        </RvCard>
+      )}
 
-            <div className="p-6 space-y-8">
-              <YearlySummaryChart rows={rows} year={selectedYear} clients={clients} places={places} />
               {monthCloseOpen && (
                 <MonthCloseCheck dispatchData={dispatchData} isViewer={isViewer} onClose={() => setMonthCloseOpen(false)} />
               )}
@@ -47876,18 +47828,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
                 />
               )}
 
-              <div className="border-t border-gray-200" />
 
-              <WeekdayAnalysisChart monthRows={monthRows} />
-
-              <div className="border-t border-gray-200" />
-
-              <ClientPeriodQuery rows={rows} clients={clients} />
-            </div>
-          </div>
-        </div>
-
-        {/* ================= DETAIL POPUP ================= */}
         {detailClient && (
           <SettlementDetailPopup
             client={detailClient}
@@ -47895,10 +47836,8 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
             onClose={() => setDetailClient(null)}
           />
         )}
-
-</div>
-      )} {/* overview tab end */}
     </div>
+    </KpSubNav>
   );
 }
 
