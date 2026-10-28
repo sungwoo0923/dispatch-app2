@@ -8809,7 +8809,7 @@ const summary = useMemo(() => {
     <>
     <div>
       {/* 상태 탭 */}
-      <div className={cardVersionB ? "flex border-b bg-white" : "kp-a-tabs mx-3 mt-3 flex gap-1 p-1 rounded-2xl bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_6px_16px_rgba(16,24,40,0.05)]"}>
+      <div className={cardVersionB ? "kp-b-tabs flex px-2" : "kp-a-tabs mx-3 mt-3 flex gap-1 p-1 rounded-2xl bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_6px_16px_rgba(16,24,40,0.05)]"}>
         {tabs.map((t) => {
           let count = null;
           if (statusTab === "전체") {
@@ -8824,14 +8824,14 @@ const summary = useMemo(() => {
               key={t}
               onClick={() => setStatusTab(t)}
               className={cardVersionB
-                ? `flex-1 min-w-0 whitespace-nowrap py-2.5 text-[13px] font-semibold border-b-2 transition-colors flex items-center justify-center gap-1 ${statusTab === t ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-transparent text-gray-400"}`
+                ? `kp-b-tab flex-1 min-w-0 whitespace-nowrap h-11 text-[14px] font-extrabold transition-colors flex items-center justify-center gap-1.5 ${statusTab === t ? "on text-white" : "text-[#8FA3C7]"}`
                 : `flex-1 min-w-0 whitespace-nowrap px-1 h-9 rounded-xl text-[13px] max-[380px]:text-[12px] font-extrabold transition-colors flex items-center justify-center gap-1 ${statusTab === t ? "bg-[#0F1A30] text-white shadow-[0_4px_12px_rgba(15,26,48,0.25)]" : "text-[#7A879C]"}`}
             >
               {t}
               {count !== null && (
-                <span className={`text-[10px] font-bold ${
-                  statusTab === t ? "opacity-60" : "opacity-40"
-                }`}>{count}</span>
+                <span className={cardVersionB
+                  ? `kp-b-mono text-[11px] font-extrabold px-1.5 rounded-md ${statusTab === t ? "bg-white/15 text-[#CFE0FF]" : "text-[#6B7FA6]"}`
+                  : `text-[10px] font-bold ${statusTab === t ? "opacity-60" : "opacity-40"}`}>{count}</span>
               )}
             </button>
           );
@@ -8839,14 +8839,14 @@ const summary = useMemo(() => {
       </div>
 
       {/* 날짜/퀵범위/필터 */}
-      <div className={cardVersionB ? "border-b px-4 pt-3 pb-3 space-y-2.5 overflow-hidden bg-white" : "px-3 pt-3 pb-1 space-y-2.5"}>
+      <div className={cardVersionB ? "kp-b-filter px-3 pt-3 pb-3 space-y-2.5 overflow-hidden" : "px-3 pt-3 pb-1 space-y-2.5"}>
         {(() => {
           // KPI 다이얼 패널만 A/B 테마를 따르고(하나는 다크 네이비, 하나는 라이트),
           // 그 아래 필터 영역은 페이지 배경이 항상 흰색이므로 공통 라이트 스타일을 사용한다.
           const dt = cardVersionB
             ? {
-                panel: "bg-gradient-to-br from-[#16233d] to-[#1B2B4B] shadow-lg shadow-[#1B2B4B]/20",
-                label: "text-white/40",
+                panel: "kp-b-kpi !rounded-[20px] !py-3.5",
+                label: "text-[#8FB0F0]",
                 value: "text-white",
                 divider: "border-white/10",
                 glow: "0 0 10px rgba(120,170,255,0.35)",
@@ -8863,7 +8863,7 @@ const summary = useMemo(() => {
           const segActive = `bg-white shadow ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"}`;
           const segInactive = "text-gray-500";
           const field = cardVersionB
-            ? "bg-gray-50 text-gray-800 border border-gray-200 focus:border-[#1B2B4B]/30 focus:ring-[#1B2B4B]/10"
+            ? "bg-white text-[#0F1A30] font-semibold border border-[#DCE3EF] shadow-[0_1px_2px_rgba(16,24,40,0.04)] focus:border-[#1B2B4B]/40 focus:ring-[#1B2B4B]/10"
             : "bg-white text-[#0F1A30] font-semibold border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04)] focus:border-[#0F1A30]/40 focus:ring-[#0F1A30]/10";
           const icon = "text-gray-400";
           const rangeText = "text-gray-500";
@@ -8880,15 +8880,19 @@ const summary = useMemo(() => {
               {/* KPI 디지털 다이얼 */}
               <div className={`flex rounded-2xl overflow-hidden mt-2 py-3 ${dt.panel}`}>
                 {[
-                  { label: "청구", value: summary.totalClaim },
-                  { label: "기사", value: summary.totalDriver },
-                  { label: "수수료", value: summary.totalFee },
-                ].map(({ label, value }, i) => (
+                  { label: "청구", en: "CLAIM", value: summary.totalClaim },
+                  { label: "기사", en: "DRIVER", value: summary.totalDriver },
+                  { label: "수수료", en: "MARGIN", value: summary.totalFee },
+                ].map(({ label, en, value }, i) => (
                   <div key={label} className={`flex-1 text-center px-1 ${i > 0 ? `border-l ${dt.divider}` : ""}`}>
-                    <div className={`text-[9px] font-bold tracking-[0.15em] uppercase mb-1 ${dt.label}`}>{label}</div>
+                    {cardVersionB ? (
+                      <div className="mb-1 leading-none"><span className="kp-b-mono text-[8.5px] font-extrabold tracking-[0.2em] text-[#6E8BC4]">{en}</span> <span className="text-[11px] font-bold text-[#CFE0FF]">{label}</span></div>
+                    ) : (
+                      <div className={`text-[9px] font-bold tracking-[0.15em] uppercase mb-1 ${dt.label}`}>{label}</div>
+                    )}
                     <div
-                      className={`text-[14px] font-extrabold tabular-nums whitespace-nowrap ${dt.value}`}
-                      style={{ fontFamily: cardVersionB ? "monospace" : undefined, textShadow: dt.glow }}
+                      className={`${cardVersionB ? "kp-b-mono text-[15.5px]" : "text-[14px]"} font-extrabold tabular-nums whitespace-nowrap ${dt.value}`}
+                      style={{ textShadow: dt.glow }}
                     >
                       <DialNumber value={value} />
                     </div>
@@ -9042,9 +9046,10 @@ const summary = useMemo(() => {
       </div>
 
       {/* ── 조회 건수 + 선택 버튼 바 ── */}
-      <div className={`flex items-center justify-between gap-2 px-4 py-2 ${cardVersionB ? "border-b bg-gray-50 border-gray-100" : ""}`}>
+      <div className={`flex items-center justify-between gap-2 px-4 py-2 ${cardVersionB ? "kp-b-countbar" : ""}`}>
         <span className={`text-[12px] whitespace-nowrap shrink-0 ${cardVersionB ? "text-gray-500 font-medium" : "text-gray-500"}`}>
-          총 <span className={cardVersionB ? "font-bold text-[#1B2B4B]" : "font-black text-[#0F1A30] text-[14px]"}>{allVisibleOrders.length}</span>건
+          {cardVersionB && <span className="kp-b-mono text-[9.5px] font-extrabold tracking-[0.2em] text-[#94A3B8] mr-1.5">TOTAL</span>}
+          총 <span className={cardVersionB ? "kp-b-mono font-extrabold text-[#0F1A30] text-[15px]" : "font-black text-[#0F1A30] text-[14px]"}>{allVisibleOrders.length}</span>건
           {multiSelectMode && selectedIds.size > 0 && (
             <span className="ml-1.5 font-bold text-[#1B2B4B]">· {selectedIds.size}개 선택</span>
           )}
@@ -9056,9 +9061,9 @@ const summary = useMemo(() => {
               activeFilterCount > 0
                 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
                 : cardVersionB
-                  ? "bg-white text-[#1B2B4B] border-[#1B2B4B]/30 hover:bg-[#1B2B4B]/5"
+                  ? "bg-white text-[#1B2B4B] border-[#DCE3EF] shadow-[0_1px_2px_rgba(16,24,40,0.05)]"
                   : "bg-white text-[#0F1A30] border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.05)]"
-            } whitespace-nowrap shrink-0 ${cardVersionB ? "px-2.5 py-1 rounded-lg" : "px-3 py-1.5 rounded-full font-bold"}`}
+            } whitespace-nowrap shrink-0 ${cardVersionB ? "px-3 py-1.5 rounded-[10px] font-bold" : "px-3 py-1.5 rounded-full font-bold"}`}
           >
             오더필터{activeFilterCount > 0 && ` (${activeFilterCount})`}
           </button>
@@ -9068,9 +9073,9 @@ const summary = useMemo(() => {
               orderSortMode !== "default"
                 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
                 : cardVersionB
-                  ? "bg-white text-[#1B2B4B] border-[#1B2B4B]/30 hover:bg-[#1B2B4B]/5"
+                  ? "bg-white text-[#1B2B4B] border-[#DCE3EF] shadow-[0_1px_2px_rgba(16,24,40,0.05)]"
                   : "bg-white text-[#0F1A30] border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.05)]"
-            } whitespace-nowrap shrink-0 ${cardVersionB ? "px-2.5 py-1 rounded-lg" : "px-3 py-1.5 rounded-full font-bold"}`}
+            } whitespace-nowrap shrink-0 ${cardVersionB ? "px-3 py-1.5 rounded-[10px] font-bold" : "px-3 py-1.5 rounded-full font-bold"}`}
           >
             정렬{orderSortMode !== "default" && ` · ${ORDER_SORT_OPTIONS.find(o => o.key === orderSortMode)?.label || ""}`}
           </button>
@@ -9080,9 +9085,9 @@ const summary = useMemo(() => {
               multiSelectMode
                 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
                 : cardVersionB
-                  ? "bg-white text-[#1B2B4B] border-[#1B2B4B]/30 hover:bg-[#1B2B4B]/5"
+                  ? "bg-white text-[#1B2B4B] border-[#DCE3EF] shadow-[0_1px_2px_rgba(16,24,40,0.05)]"
                   : "bg-white text-[#0F1A30] border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.05)]"
-            } whitespace-nowrap shrink-0 ${cardVersionB ? "px-2.5 py-1 rounded-lg" : "px-3 py-1.5 rounded-full font-bold"}`}
+            } whitespace-nowrap shrink-0 ${cardVersionB ? "px-3 py-1.5 rounded-[10px] font-bold" : "px-3 py-1.5 rounded-full font-bold"}`}
           >
             {multiSelectMode ? "선택 취소" : "다중선택"}
           </button>
@@ -9090,7 +9095,7 @@ const summary = useMemo(() => {
       </div>
 
       {/* 카드 목록 */}
-      <div className={`px-3 py-3 space-y-4 ${cardVersionB ? "bg-[#F0F3F8]" : ""}`}>
+      <div className={`px-3 py-3 space-y-4 ${cardVersionB ? "kp-b-list" : ""}`}>
         {dates.length === 0 && (
           <div className="py-10 text-center text-gray-400 text-sm">
             조회된 배차내역이 없습니다.
@@ -9105,7 +9110,11 @@ const summary = useMemo(() => {
 
   {/* 날짜 */}
   {cardVersionB ? (
-    <div className="font-bold text-[13px] text-[#1B2B4B] tracking-tight">{formatDateHeader(dateKey)}</div>
+    <div className="flex items-center gap-2 min-w-0 whitespace-nowrap">
+      <span className="w-1.5 h-4 rounded-full bg-gradient-to-b from-[#2D4C82] to-[#1B2B4B]" />
+      <span className="kp-b-mono text-[16px] max-[380px]:text-[14px] font-extrabold text-[#0F1A30] tracking-tight">{formatDateHeader(dateKey)}</span>
+      <span className="kp-b-mono text-[9px] font-extrabold tracking-[0.22em] text-[#94A3B8] max-[400px]:hidden">ORDERS</span>
+    </div>
   ) : (
     <div className="flex items-baseline gap-2 min-w-0 whitespace-nowrap">
       <span className="text-[20px] max-[380px]:text-[17px] font-black text-[#0F1A30] tracking-tight tabular-nums">{formatDateHeader(dateKey)}</span>
@@ -9118,11 +9127,11 @@ const summary = useMemo(() => {
       <>
         {cardVersionB ? (
           <>
-            <span className="text-[11px] px-2 py-0.5 rounded-md bg-[#1B2B4B]/5 text-[#1B2B4B] font-semibold border border-[#1B2B4B]/10">
-              배차중 {statusCount.ing}
+            <span className="text-[11px] px-2 py-0.5 rounded-md bg-white text-[#1B2B4B] font-extrabold border border-[#DCE3EF]">
+              배차중 <span className="kp-b-mono">{statusCount.ing}</span>
             </span>
-            <span className="text-[11px] px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 font-semibold">
-              완료 {statusCount.done}
+            <span className="text-[11px] px-2 py-0.5 rounded-md bg-[#1B2B4B] text-white font-extrabold">
+              완료 <span className="kp-b-mono">{statusCount.done}</span>
             </span>
           </>
         ) : (
@@ -10704,56 +10713,80 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
     String(order.차량종류 || order.차종 || "").includes("냉동");
 
   if (cardVersionB) {
-    // ── B VERSION: 상태 액센트 + 디지털 포인트 디자인 ──
+    // ── B VERSION(2026-10-28 디지털 리디자인): 관제 패널형 카드 — 상/하 마커 · 고정폭 숫자 · 네이비 단색 ──
+    const MONO_B = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+    const pStopsB = validStops(order.경유상차목록 || order.경유지_상차);
+    const dStopsB = validStops(order.경유하차목록 || order.경유지_하차);
+    const viaStopsB = [...pStopsB, ...dStopsB];
+    const RouteRow = ({ tag, filled, name, addr, time, day }) => (
+      <div className="flex items-start gap-2.5">
+        <span
+          className={`relative z-10 w-[22px] h-[22px] rounded-[7px] flex items-center justify-center shrink-0 text-[11px] font-black ${filled ? "text-white" : "bg-white"}`}
+          style={filled ? { background: "linear-gradient(135deg,#2D4C82,#1B2B4B)", boxShadow: "0 3px 8px rgba(27,43,75,.28)" } : { border: "2px solid #1B2B4B", color: "#1B2B4B" }}
+        >{tag}</span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[1.02em] font-extrabold text-[#0F1A30] truncate leading-tight">{name}</span>
+            <span className="flex items-center gap-1 shrink-0">
+              <span className="text-[0.74em] font-bold text-[#1B2B4B] bg-[#EEF3FB] px-1.5 py-0.5 rounded-md tabular-nums" style={{ fontFamily: MONO_B }}>{time}</span>
+              {day && <span className={`text-[0.68em] px-1 py-0.5 rounded border tabular-nums font-semibold ${dayBadgeClass(day)}`}>{day}</span>}
+            </span>
+          </div>
+          {addr && <div className="text-[0.76em] text-[#64748B] mt-0.5 truncate">{addr}</div>}
+        </div>
+      </div>
+    );
     return (
       <>
       <div
         className={
-          "kp-m-card relative bg-white rounded-2xl border shadow-sm transition-colors overflow-hidden " +
+          "kp-m-card kp-b-card relative bg-white rounded-[18px] border transition-colors overflow-hidden " +
           (selected ? "kp-m-card-on " : "") +
           (selected
-            ? "border-[#1B2B4B] shadow-[0_0_0_2px_rgba(27,43,75,0.12)]"
+            ? "border-[#1B2B4B]"
             : flash
-              ? "border-blue-300 shadow-[0_0_0_3px_rgba(59,130,246,0.15)]"
-              : "border-gray-100") +
+              ? "border-[#9FB3D9] shadow-[0_0_0_3px_rgba(110,149,232,0.18)]"
+              : "border-[#E3E8F0]") +
           (statusBlink && !selected ? " card-status-blink" : "")
         }
-        style={{ borderLeft: `4px solid ${statusDot}`, "--glow-c": statusRing }}
+        style={{ "--glow-c": statusRing }}
         onClick={onSelect}
       >
-        {/* 상단 정보 바 — 왼쪽: 날짜/거래처명/첨부, 오른쪽: 냉장탑/배차상태 */}
-        {/* ⭐ 화면이 좁으면(폴더블 분할화면) 배지가 서로 겹치지 않고 다음 줄로 내려가게 flex-wrap */}
-        <div className="px-3 py-1.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1" style={{ background: `linear-gradient(90deg, ${statusWash}, transparent)` }}>
+        {/* 왼쪽 상태 레일 */}
+        <span className="absolute left-0 top-0 bottom-0 w-[4px]" style={{ background: `linear-gradient(180deg, ${statusDot}, ${statusRing})` }} />
+
+        {/* 머리줄 — 날짜·거래처·첨부·뱃지 | 메모·냉장·상태 */}
+        <div className="pl-4 pr-3 pt-2.5 pb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-[#EEF1F6]" style={{ background: `linear-gradient(90deg, ${statusWash}, rgba(255,255,255,0) 70%)` }}>
           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-            <span className="text-[0.68em] text-gray-400 tabular-nums shrink-0">{String(order.상차일 || "").slice(5)}</span>
+            <span className="text-[0.7em] font-extrabold text-white bg-[#1B2B4B] px-1.5 py-0.5 rounded-md tabular-nums shrink-0" style={{ fontFamily: MONO_B }}>{String(order.상차일 || "").slice(5) || "--"}</span>
             {order.거래처명 && (
-              <span className="text-[0.72em] font-semibold text-gray-500 truncate max-w-[90px]">{order.거래처명}</span>
+              <span className="text-[0.8em] font-extrabold text-[#1B2B4B] truncate max-w-[120px]">{order.거래처명}</span>
             )}
             <button
               style={{ touchAction: "manipulation" }}
               onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
-              className={`flex items-center gap-0.5 text-[0.68em] font-semibold tabular-nums shrink-0 ${
+              className={`flex items-center gap-0.5 text-[0.68em] font-bold tabular-nums shrink-0 px-1.5 py-0.5 rounded-md border ${
                 order.attachViewed
-                  ? "text-[#1B2B4B]"
+                  ? "text-[#1B2B4B] border-[#C9D3E4] bg-white"
                   : order.attachCount > 0
-                  ? "text-emerald-600"
-                  : "text-gray-300"
+                  ? "text-white bg-[#4B6CB7] border-[#4B6CB7]"
+                  : "text-[#A7B3C6] border-[#E3E8F0] bg-white"
               }`}
             >
               <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
               {(order.attachCount > 0) ? order.attachCount : "-"}
               {order.업로드잠금해제만료 && new Date(order.업로드잠금해제만료).getTime() > Date.now() && (
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#9FB3D9] animate-pulse" />
               )}
               {order.재업로드완료알림 === true && (
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#CFE0FF] animate-pulse" />
               )}
             </button>
             {isUrgentOrder(order) && (
-              <span className="text-[0.68em] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded shrink-0">긴급</span>
+              <span className="text-[0.68em] font-black text-white bg-[#0F1A30] px-1.5 py-0.5 rounded-md shrink-0">긴급</span>
             )}
             {String(order.운행유형 || "").trim() === "왕복" && (
-              <span className="text-[0.68em] font-extrabold tracking-wide bg-[#1B2B4B] text-white px-1.5 py-0.5 rounded shrink-0">왕복</span>
+              <span className="text-[0.68em] font-extrabold tracking-wide border border-[#1B2B4B] text-[#1B2B4B] px-1.5 py-0.5 rounded-md shrink-0">왕복</span>
             )}
             <RotationBadge order={order} className="!ml-0 shrink-0 !text-[0.68em] !px-1.5 !py-0.5 !rounded" />
           </div>
@@ -10761,11 +10794,8 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             {activeRequestType && (
               <button
                 onClick={openRequestModal}
-                className="text-[0.7em] font-extrabold"
-                style={{
-                  color: activeRequestType === "cancel" ? "#dc2626" : activeRequestType === "swap" ? "#f97316" : "#0284c7",
-                  animation: "dispatchingPulse 1.8s ease-in-out infinite",
-                }}
+                className="text-[0.7em] font-black px-1.5 py-0.5 rounded-md bg-[#0F1A30] text-white"
+                style={{ animation: "dispatchingPulse 1.8s ease-in-out infinite" }}
               >
                 요청
               </button>
@@ -10773,13 +10803,13 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             {(order.메모 || order.적요) && (
               <button
                 onClick={(e) => { e.stopPropagation(); onOpenMemo(order); }}
-                className="memo-blink text-[0.7em] text-[#1B2B4B] font-extrabold"
+                className="memo-blink text-[0.7em] text-[#1B2B4B] font-extrabold px-1.5 py-0.5 rounded-md border border-[#C9D3E4] bg-white"
               >
                 메모
               </button>
             )}
             {isCold && (
-              <span className="inline-flex items-center gap-0.5 text-[0.68em] text-white font-bold bg-gradient-to-r from-sky-500 to-cyan-500 shadow-sm px-1.5 py-0.5 rounded-full">
+              <span className="inline-flex items-center gap-0.5 text-[0.68em] text-[#1B2B4B] font-bold bg-[#EEF3FB] border border-[#C9D3E4] px-1.5 py-0.5 rounded-md">
                 <Snowflake className="w-2.5 h-2.5" />
                 {(() => {
                   const vt = String(order.차량종류 || order.차종 || "");
@@ -10792,134 +10822,75 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
               <TransportStatusBadge order={order} compact onClick={openReqModal} />
               {isRecentlyEditedByShipper && !isEditRequested && (
                 <span title="화주사가 오더 정보를 수정했습니다"
-                  className="absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-white" />
+                  className="absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-full bg-[#6E95E8] border-2 border-white" />
               )}
             </div>
           </div>
         </div>
 
-        {/* 본문 */}
-        <div className="px-3 py-2.5">
-          {/* 상/하차 */}
-          {(() => {
-            const pStops = validStops(order.경유상차목록 || order.경유지_상차);
-            const dStops = validStops(order.경유하차목록 || order.경유지_하차);
-            const viaStops = [...pStops, ...dStops];
-            return (
-              <div className="relative flex flex-col">
-                {/* 상/경유/하차를 관통하는 하나의 연결선 — 각 점(마커)과 항상 같은 세로 중심(7px)에 고정 */}
-                <div className="absolute left-[7px] top-[7px] bottom-[7px] w-px bg-gray-200" />
-                {/* 상차 */}
-                <div className="flex items-center gap-2">
-                  <div className="relative z-10 w-[14px] h-[14px] flex items-center justify-center shrink-0">
-                    <div className="w-2 h-2 rounded-full border-2 bg-white" style={{ borderColor: statusDot }} />
-                  </div>
-                  <div className="flex-1 min-w-0 py-1">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0 truncate">
-                        <span className="text-[1em] font-bold text-gray-900">{pickupName}</span>
-                        {pickupAddrShort && (
-                          <span className="text-[0.75em] text-gray-400 ml-1">({pickupAddrShort})</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0 ml-1">
-                        <span className="text-[0.75em] text-gray-500 tabular-nums">{pickupTime}</span>
-                        {pickupStatus && <span className={`text-[0.68em] px-1 py-0.5 rounded border tabular-nums font-semibold ${dayBadgeClass(pickupStatus)}`}>{pickupStatus}</span>}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                {/* 경유 */}
-                {viaStops.map((s, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <div className="relative z-10 w-[14px] h-[14px] flex items-center justify-center shrink-0">
-                      <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                    </div>
-                    <div className="flex-1 min-w-0 py-1">
-                      <span className="text-[0.75em] font-extrabold text-amber-600">경유</span>
-                      <span className="text-[0.8em] font-bold text-gray-700 ml-1">{s.업체명 || "-"}</span>
-                    </div>
-                  </div>
-                ))}
-                {/* 하차 */}
-                <div className="flex items-center gap-2">
-                  <div className="relative z-10 w-[14px] h-[14px] flex items-center justify-center shrink-0">
-                    <div className="w-2 h-2 rounded-full" style={{ background: statusDot, opacity: 0.5 }} />
-                  </div>
-                  <div className="flex-1 min-w-0 py-1">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0 truncate">
-                        <span className="text-[1em] font-bold text-gray-900">{dropName}</span>
-                        {dropAddrShort && (
-                          <span className="text-[0.75em] text-gray-400 ml-1">({dropAddrShort})</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0 ml-1">
-                        <span className="text-[0.75em] text-gray-500 tabular-nums">{dropTime}</span>
-                        {dropStatus && <span className={`text-[0.68em] px-1 py-0.5 rounded border tabular-nums font-semibold ${dayBadgeClass(dropStatus)}`}>{dropStatus}</span>}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+        {/* 본문 — 상차 → (경유) → 하차 */}
+        <div className="pl-4 pr-3 pt-2.5 pb-2.5">
+          <div className="relative flex flex-col gap-2">
+            <span className="absolute left-[10px] top-[18px] w-[2px] rounded-full" style={{ bottom: dropAddrShort ? 30 : 11, background: "linear-gradient(180deg,#1B2B4B,#9FB3D9)" }} />
+            {RouteRow({ tag: "상", filled: true, name: pickupName, addr: pickupAddrShort, time: pickupTime, day: pickupStatus })}
+            {viaStopsB.map((s, i) => (
+              <div key={i} className="flex items-center gap-2.5">
+                <span className="relative z-10 w-[22px] flex justify-center shrink-0"><span className="w-2 h-2 rounded-full bg-white border-2 border-[#6E8BC4]" /></span>
+                <span className="text-[0.72em] font-black text-[#4B6CB7] tracking-wide">경유</span>
+                <span className="text-[0.82em] font-bold text-[#334155] truncate">{s.업체명 || "-"}</span>
               </div>
-            );
-          })()}
+            ))}
+            {RouteRow({ tag: "하", filled: false, name: dropName, addr: dropAddrShort, time: dropTime, day: dropStatus })}
+          </div>
 
-          {/* 하단 정보 — 화물내용/톤수/차종과 청구/기사 운임. 일반 휴대폰 화면(380px~)에서는 한
-              줄로 나란히 정렬해 높이를 맞추고, 그보다 좁은 화면(폴더블 커버 등)에서는 화물정보와
-              운임 두 줄로 내려 겹치거나 뒤섞이지 않게 한다. 청구/기사는 항상 세로로 줄바꿈해서 표시.
-              가로 폭만으로는 "좁은 휴대폰"과 "분할화면(가로폭은 좁지만 세로는 그대로인 창)"을
-              구분할 수 없으므로, 가로세로 비율이 세로로 매우 긴 창(분할화면 등)이면 폭이 380px를
-              넘더라도 강제로 세로 배치를 유지한다. */}
-          <div
-            className="flex flex-col min-[380px]:flex-row min-[380px]:items-center min-[380px]:justify-between [@media(max-aspect-ratio:2/5)]:!flex-col [@media(max-aspect-ratio:2/5)]:!items-stretch gap-1 mt-2.5 px-2.5 py-2 rounded-xl bg-white"
-            style={{ border: `1px solid ${statusRing}` }}
-          >
-            <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0 min-[380px]:flex-1 [@media(max-aspect-ratio:2/5)]:!flex-none text-[0.88em] leading-relaxed">
+          {/* 화물·차량 | 운임 — 좁은 화면(폴더블·분할화면)에서는 두 줄로 */}
+          <div className="flex flex-col min-[380px]:flex-row min-[380px]:items-stretch [@media(max-aspect-ratio:2/5)]:!flex-col gap-2 mt-3">
+            <div className="flex flex-wrap items-center gap-1.5 min-w-0 min-[380px]:flex-1 px-2.5 py-2 rounded-xl bg-[#F4F7FC] border border-[#E3E8F0] text-[0.84em]">
               {cargo && (
-                <span className="font-extrabold text-amber-600 whitespace-nowrap inline-flex items-center gap-1.5">
-                  <Package className="w-3.5 h-3.5 text-amber-500 shrink-0" /> <CargoTag text={cargo} />
+                <span className="font-extrabold text-[#0F1A30] whitespace-nowrap inline-flex items-center gap-1">
+                  <Package className="w-3.5 h-3.5 text-[#4B6CB7] shrink-0" /> <CargoTag text={cargo} />
                 </span>
               )}
               {ton && (
-                <span className="font-bold text-gray-900 whitespace-nowrap inline-flex items-center gap-1">
-                  <Scale className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {ton}
+                <span className="font-bold text-[#0F1A30] whitespace-nowrap inline-flex items-center gap-1">
+                  <Scale className="w-3.5 h-3.5 text-[#4B6CB7] shrink-0" /> {ton}
                 </span>
               )}
               {carType && (
                 <span className="font-bold text-[#1B2B4B] whitespace-nowrap inline-flex items-center gap-1">
-                  <VehicleTypeIcon type={carType} className="w-3.5 h-3.5 text-[#1B2B4B] shrink-0" /> {carType}
+                  <VehicleTypeIcon type={carType} className="w-3.5 h-3.5 text-[#4B6CB7] shrink-0" /> {carType}
                 </span>
               )}
               {!ton && !carType && !cargo && <span className="text-gray-400">-</span>}
-            </span>
-            <div className="flex flex-col items-end gap-0.5 shrink-0">
-              <span className="flex items-baseline gap-1">
-                <span className="text-[0.58em] text-gray-400 font-semibold">청구</span>
-                <span className="text-[0.8em] font-bold text-gray-900 tabular-nums">{fmtMoney(claim)}</span>
+            </div>
+            <div className="flex min-[380px]:flex-col justify-between min-[380px]:justify-center gap-x-4 gap-y-0.5 shrink-0 px-3 py-1.5 rounded-xl text-white" style={{ background: "linear-gradient(135deg,#0F1A30,#1B2B4B 60%,#2D4C82)" }}>
+              <span className="flex items-baseline justify-between gap-2">
+                <span className="text-[0.6em] text-[#8FB0F0] font-black tracking-[0.12em]">청구</span>
+                <span className="text-[0.86em] font-extrabold tabular-nums" style={{ fontFamily: MONO_B }}>{fmtMoney(claim)}</span>
               </span>
-              <span className="flex items-baseline gap-1">
-                <span className="text-[0.58em] text-gray-400 font-semibold">기사</span>
-                <span className="text-[0.8em] font-bold text-amber-600 tabular-nums">{fmtMoney(fee)}</span>
+              <span className="flex items-baseline justify-between gap-2">
+                <span className="text-[0.6em] text-[#8FB0F0] font-black tracking-[0.12em]">기사</span>
+                <span className="text-[0.86em] font-bold tabular-nums text-[#CFE0FF]" style={{ fontFamily: MONO_B }}>{fmtMoney(fee)}</span>
               </span>
             </div>
           </div>
 
           {/* 배차완료 시 기사 연락 */}
           {state === "배차완료" && (order.이름 || order.차량번호) && (
-            <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-dashed border-gray-100">
-              <span className="text-[0.75em] text-gray-400 truncate flex-1">
-                {[order.차량번호, order.이름, order.전화번호 ? formatPhone(order.전화번호) : ""].filter(Boolean).join(" · ")}
+            <div className="flex items-center gap-2 mt-2.5 pt-2.5 border-t border-dashed border-[#E3E8F0]">
+              {order.차량번호 && <span className="text-[0.74em] font-extrabold text-[#0F1A30] px-1.5 py-0.5 rounded-md border-[1.5px] border-[#0F1A30] shrink-0" style={{ fontFamily: MONO_B }}>{order.차량번호}</span>}
+              <span className="text-[0.8em] font-bold text-[#334155] truncate flex-1">
+                {[order.이름, order.전화번호 ? formatPhone(order.전화번호) : ""].filter(Boolean).join(" · ")}
               </span>
               {order.전화번호 && (
-                <div className="flex gap-1">
-                  <a href={`tel:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}
-                    className="shrink-0 w-7 h-7 rounded-full bg-[#1B2B4B] flex items-center justify-center">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.59a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.7 16z"/></svg>
+                <div className="flex gap-1.5">
+                  <a href={`tel:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation", background: "linear-gradient(135deg,#2D4C82,#1B2B4B)" }}
+                    className="shrink-0 w-8 h-8 rounded-xl flex items-center justify-center shadow-[0_3px_8px_rgba(27,43,75,.28)]">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.59a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.7 16z"/></svg>
                   </a>
                   <a href={`sms:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}
-                    className="shrink-0 w-7 h-7 rounded-full border border-[#1B2B4B] flex items-center justify-center">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1B2B4B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    className="shrink-0 w-8 h-8 rounded-xl border border-[#C9D3E4] bg-white flex items-center justify-center">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1B2B4B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                   </a>
                 </div>
               )}
