@@ -7628,7 +7628,7 @@ return (
                     <span className="kp-newver-dot w-1.5 h-1.5 rounded-full bg-[#CFE0FF]" />
                   </button>
                 ) : (
-                  <span className="hidden min-[1600px]:inline text-[11px] font-mono text-white/45 shrink-0">v{__APP_VERSION__}</span>
+                  <span className="hidden min-[2050px]:inline text-[11px] font-mono text-white/45 shrink-0">v{__APP_VERSION__}</span>
                 )}
                 <EditModeToggleButton className="ml-1" />
               </div>
@@ -7639,7 +7639,7 @@ return (
                      {/* ★ 태블릿/PC 공용 메뉴 — 전체 가로 스크롤 보장 */}
           <nav
             /* ⭐ 가운데 정렬은 justify-center 대신 양끝 auto 여백으로 — justify-center는 화면이 좁으면 맨 앞(HOME)·맨 뒤 메뉴가 잘리고 스크롤로도 안 보였다 */
-            className="flex-1 flex items-center gap-0.5 2xl:gap-1 overflow-x-auto [&>*:first-child]:ml-auto [&>*:last-child]:mr-auto"
+            className="flex-1 flex items-center gap-0.5 min-[2050px]:gap-1 overflow-x-auto [&>*:first-child]:ml-auto [&>*:last-child]:mr-auto"
             /* 노트북처럼 메뉴가 다 안 들어가는 화면 — 마우스 휠을 굴리면 메뉴가 옆으로 넘어간다 */
             onWheel={(e) => { const el = e.currentTarget; if (el.scrollWidth > el.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) el.scrollLeft += e.deltaY; }}
             style={{
@@ -7675,7 +7675,7 @@ return (
                   key={m}
                   disabled={isBlocked}
                   onClick={() => handleMenuClick(m)}
-                  className={`kp-nav-btn relative px-2.5 h-[34px] rounded-[10px] text-[13px] 2xl:text-[14px] 2xl:px-3 whitespace-nowrap transition-all flex-shrink-0
+                  className={`kp-nav-btn relative px-2.5 h-[34px] rounded-[10px] text-[13.5px] min-[2050px]:text-[14px] min-[2050px]:px-3 whitespace-nowrap transition-all flex-shrink-0
                     ${isBlocked
                       ? "text-white/20 cursor-not-allowed"
                       : isActive
