@@ -282,3 +282,10 @@
    뒤에 있는 큰 표 전체를 다시 그리던 비용(키 입력 1번에 약 25ms)이 사라진다.
    표 안 팝업(메모·주소·경유지)은 화면 전체(body)에 그리도록 바꿔 두어 위치가 틀어지지 않는다. */
 .kp-pc .kp-grid > table { will-change: transform; }
+
+/* ⭐ 2026-10-29 매출관리(매출 대시보드~거래처 기간 조회) — 넓은 모니터에서는 화면을 꽉 채우고
+   글씨·차트가 작아 보이지 않게 화면 크기에 맞춰 살짝 키운다 */
+@media (min-width: 2100px) { .kp-rv-zoom { zoom: 1.12; } }
+@media (min-width: 2400px) { .kp-rv-zoom { zoom: 1.22; } }
+@media (min-width: 3000px) { .kp-rv-zoom { zoom: 1.45; } }
+.kp-rv-zoom.kp-rv-nozoom { zoom: 1 !important; }

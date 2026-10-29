@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import { useLoadFullOrderHistory } from "./orderHistory";
 import { db } from "./firebase";
 import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, where, serverTimestamp } from "firebase/firestore";
+import KpSubNav from "./KpSubNav";
 
 // 단가표 메뉴 전체에서 쓰는 표준 차량톤수 목록 — 다목적지 단가표의 기본(삭제 불가) 컬럼으로도 사용된다.
 const STANDARD_TON_LABELS = ["다마스/라보","1톤","1.4톤","2.5톤","3.5톤","3.5톤광폭","5톤","5톤축","5톤플축","8톤","11톤","11톤축","15톤","18톤","25톤"];
@@ -48,6 +49,16 @@ export function useCompanyInfo(userCompany) {
   }, [userCompany]);
   return info;
 }
+
+// 단가표 하단 원형 도장 글씨 — 예전엔 "RUN 25"가 고정으로 찍혀 다른 회사 단가표에도 남의 회사 도장이 나왔다.
+// 로그인한 회사명을 2줄(최대 6글자)로 나눠 찍는다.
+const stampLabel = (name) => {
+  const s = String(name || "").replace(/\(주\)|㈜|주식회사|\s/g, "").slice(0, 6);
+  if (!s) return "";
+  if (s.length <= 3) return s;
+  const h = Math.ceil(s.length / 2);
+  return `${s.slice(0, h)}<br>${s.slice(h)}`;
+};
 
 const TON_BUCKETS = [
   { label: "다마스/라보", min: 0,    max: 0.6,  display: "다마스/라보" },
@@ -140,7 +151,7 @@ function OrderDetailModal({ rows, bucket, fareField, onClose }) {
               {rows.map((r,i)=>{
                 const fare=Number(String(r.청구운임||0).replace(/[^\d]/g,"")); const driver=Number(String(r.기사운임||0).replace(/[^\d]/g,"")); const margin=fare-driver;
                 return (
-                  <tr key={i} className={`hover:bg-blue-50/40 transition ${i%2===0?"bg-white":"bg-gray-50/40"}`}>
+                  <tr key={i} className={`hover:bg-[#F5F8FD] transition ${i%2===0?"bg-white":"bg-gray-50/40"}`}>
                     <td className="px-3 py-2.5 text-center text-[12px] text-gray-500 whitespace-nowrap">{r.상차일||"-"}</td>
                     <td className="px-3 py-2.5 text-center text-[13px] font-medium text-gray-800 whitespace-nowrap">{r.거래처명||"-"}</td>
                     <td className="px-3 py-2.5 text-center text-[12px] text-gray-600 max-w-[80px] truncate" title={r.상차지명}>{r.상차지명||"-"}</td>
@@ -148,11 +159,11 @@ function OrderDetailModal({ rows, bucket, fareField, onClose }) {
                     <td className="px-3 py-2.5 text-center text-[12px] text-gray-600 whitespace-nowrap">{r.차량종류||"-"}</td>
                     <td className="px-3 py-2.5 text-center text-[12px] text-gray-600 whitespace-nowrap">{r.차량톤수||"-"}</td>
                     <td className="px-3 py-2.5 text-center text-[12px] text-gray-600 whitespace-nowrap">{r.화물내용||"-"}</td>
-                    <td className="px-3 py-2.5 text-center text-[13px] font-bold text-blue-700 whitespace-nowrap">{fare.toLocaleString()}원</td>
-                    <td className="px-3 py-2.5 text-center text-[13px] text-emerald-600 font-medium whitespace-nowrap">{driver.toLocaleString()}원</td>
+                    <td className="px-3 py-2.5 text-center text-[13px] font-bold text-[#1B2B4B] whitespace-nowrap">{fare.toLocaleString()}원</td>
+                    <td className="px-3 py-2.5 text-center text-[13px] text-[#4B6CB7] font-medium whitespace-nowrap">{driver.toLocaleString()}원</td>
                     <td className="px-3 py-2.5 text-center text-[12px] text-gray-500 whitespace-nowrap">{margin.toLocaleString()}원</td>
                     <td className="px-3 py-2.5 text-center">
-                      {r.혼적 ? <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[11px] font-semibold">혼적</span>
+                      {r.혼적 ? <span className="px-1.5 py-0.5 bg-[#1B2B4B] text-white rounded text-[11px] font-semibold">혼적</span>
                                : <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-[11px]">독차</span>}
                     </td>
                   </tr>
@@ -162,8 +173,8 @@ function OrderDetailModal({ rows, bucket, fareField, onClose }) {
           </table>
         </div>
         <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex gap-6 text-[12px] text-gray-600">
-          <span>평균 청구: <b className="text-blue-700">{avgFare.toLocaleString()}원</b></span>
-          <span>평균 기사: <b className="text-emerald-600">{avgDriver.toLocaleString()}원</b></span>
+          <span>평균 청구: <b className="text-[#1B2B4B]">{avgFare.toLocaleString()}원</b></span>
+          <span>평균 기사: <b className="text-[#4B6CB7]">{avgDriver.toLocaleString()}원</b></span>
           <span>평균 수수료: <b className="text-gray-800">{avgMargin.toLocaleString()}원</b></span>
         </div>
       </div>
@@ -188,7 +199,7 @@ function BaseNameAutocomplete({ initialValue, clients = [], onCommit }) {
   return (
     <div className="relative">
       <input autoComplete="off"
-        className="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-400 transition"
+        className="w-full h-11 px-3.5 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] text-[14px] font-semibold text-[#0F1A30] placeholder:text-[#9AA9C3] placeholder:font-medium focus:bg-white focus:outline-none transition"
         placeholder="기본거래처에서 검색 또는 직접 입력"
         value={value}
         onChange={e => { setValue(e.target.value); setOpen(true); setActiveIdx(0); }}
@@ -208,7 +219,7 @@ function BaseNameAutocomplete({ initialValue, clients = [], onCommit }) {
         <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
           {opts.map((c, i) => (
             <div key={c.id || c.거래처명 || i}
-              className={`px-3 py-2 text-[13px] cursor-pointer border-b border-gray-50 ${i === activeIdx ? "bg-blue-100" : "hover:bg-blue-50"}`}
+              className={`px-3 py-2 text-[13px] cursor-pointer border-b border-gray-50 ${i === activeIdx ? "bg-[#EEF3FB]" : "hover:bg-[#F5F8FD]"}`}
               onMouseEnter={() => setActiveIdx(i)}
               onMouseDown={e => { e.preventDefault(); commit(c.거래처명, c.주소 || ""); }}>
               <div className="font-semibold text-[#1B2B4B]">{c.거래처명}</div>
@@ -787,7 +798,7 @@ ${manualInfo.note ? `<div class="notice"><b>※ 특이사항</b><br>${manualInfo
     <div style="text-align:right;font-size:13px;color:#555;line-height:1.6;">
       <b style="color:#1B2B4B;font-size:15px;">${COMPANY.name}</b><br>${COMPANY.manager} ${COMPANY.phone}
     </div>
-    <div class="stamp">RUN<br>25</div>
+    ${stampLabel(COMPANY.name) ? `<div class="stamp">${stampLabel(COMPANY.name)}</div>` : ""}
   </div>
 </div>
 </div></body></html>`);
@@ -917,7 +928,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
     <div style="text-align:right;font-size:13px;color:#555;line-height:1.6;">
       <b style="color:#1B2B4B;font-size:15px;">${COMPANY.name}</b><br>${COMPANY.manager} ${COMPANY.phone}
     </div>
-    <div class="stamp">RUN<br>25</div>
+    ${stampLabel(COMPANY.name) ? `<div class="stamp">${stampLabel(COMPANY.name)}</div>` : ""}
   </div>
 </div>
 </div></body></html>`);
@@ -930,37 +941,56 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
   const inputCls="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-400 transition";
   const labelCls="block text-[12px] font-bold text-gray-900 mb-1";
 
+  // ⭐ 2026-10-29 리디자인 — 매출관리·배차현황과 같은 왼쪽 속메뉴(KpSubNav) + 네이비 디지털 카드
+  const RC_MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+  const seg = (on) => `flex-1 h-10 rounded-[10px] text-[13px] font-bold transition ${on ? "bg-white text-[#0F1A30] shadow-[0_2px_8px_rgba(15,26,48,0.14)]" : "text-[#5B6B85] hover:text-[#0F1A30]"}`;
+  const Eyebrow = ({ children }) => <div style={{ fontFamily: RC_MONO }} className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#4B6CB7]">{children}</div>;
+  const FieldLabel = ({ children, req }) => <div className="text-[12px] font-bold text-[#3A4A66] mb-1.5">{children}{req && <span className="text-[#4B6CB7] ml-0.5">*</span>}</div>;
+  const boxInput = "w-full h-11 px-3.5 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] text-[14px] font-semibold text-[#0F1A30] placeholder:text-[#9AA9C3] placeholder:font-medium focus:bg-white focus:outline-none transition";
+  const PrintIcon = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><path d="M6 14h12v7H6z" /></svg>;
+  const resetRoute = () => { setPickup(""); setDrop(""); setVGroup(""); setMixedFilter("전체"); setFareField("청구운임"); setViewMode("톤수별"); setExcludeQuery(""); setExcludeList([]); setExcludeDropdown([]); setResult(null); setSearched(false); };
+  const resultRows = result?.rows || [];
+  const bestRow = resultRows.length ? resultRows.reduce((a, b) => (b.stats.count > a.stats.count ? b : a), resultRows[0]) : null;
+
   return (
-    <div className="p-5 bg-gray-50 min-h-screen">
-      <div className="flex items-center justify-between mb-5">
+    <KpSubNav code="RATE CARD" title="단가표" icon="money" active={pageMode} onSelect={setPageMode}
+      items={[
+        { key: "노선별", label: "노선별 단가표", en: "ROUTE", icon: "route" },
+        { key: "다목적지", label: "다목적지 단가표", en: "MULTI DEST", icon: "pin", badge: multiSheets.length, soft: true, badgeTitle: `저장된 단가표 ${multiSheets.length}개` },
+      ]}
+      actionsLabel="도구"
+      actions={[
+        { key: "manual", label: "직접 작성", icon: "pen", onClick: openManualModal },
+        { key: "history", label: "발행 이력", icon: "history", onClick: () => setHistoryModal(true), badge: printHistory.length, soft: true },
+      ]}>
+    <div className="min-h-full">
+      {/* ── 머리줄 ── */}
+      <div className="flex items-end justify-between gap-3 flex-wrap mb-5">
         <div>
-          <h2 className="text-[18px] font-bold text-[#1B2B4B]">운송 단가표 생성</h2>
-          <p className="text-[12px] text-gray-500 mt-0.5">
-            {pageMode === "노선별" ? "노선별 톤수 단가표를 자동 생성하여 고객사에 제공하세요" : "기준지 1곳 → 하차지 여러 곳의 파렛/차량 구간별 단가를 한 표로 관리하세요"}
+          <Eyebrow>RATE CARD · {pageMode === "노선별" ? "ROUTE" : "MULTI DESTINATION"}</Eyebrow>
+          <h1 className="text-[22px] font-black text-[#0F1A30] tracking-tight mt-0.5">{pageMode === "노선별" ? "노선별 단가표" : "다목적지 단가표"}</h1>
+          <p className="text-[13px] text-[#5B6B85] mt-0.5">
+            {pageMode === "노선별" ? "과거 배차 실적으로 노선·톤수별 권장 단가를 자동 계산합니다" : "기준지 1곳 → 하차지 여러 곳의 톤수·구간별 단가를 한 표로 관리합니다"}
           </p>
         </div>
         <div className="flex items-center gap-2">
           {pageMode === "노선별" ? (
             <>
-              <button onClick={() => setHistoryModal(true)} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 text-[13px] font-semibold rounded-xl hover:bg-gray-50 transition shadow-sm">
+              <button onClick={() => setHistoryModal(true)} className="h-10 px-4 inline-flex items-center gap-2 rounded-xl bg-white border border-[#DCE3EF] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#F5F8FD] transition">
                 발행 이력
-                {printHistory.length > 0 && <span className="ml-1 px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded-full text-[11px] font-bold">{printHistory.length}</span>}
+                {printHistory.length > 0 && <span style={{ fontFamily: RC_MONO }} className="min-w-[20px] h-5 px-1.5 rounded-full bg-[#EEF3FB] text-[#1B2B4B] text-[11px] font-extrabold inline-flex items-center justify-center">{printHistory.length}</span>}
               </button>
-              <button onClick={openManualModal} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white text-[13px] font-bold rounded-xl hover:bg-emerald-700 transition shadow-sm">
-                단가표 작성
-              </button>
-              <button onClick={handlePrint} className="flex items-center gap-2 px-5 py-2.5 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-xl hover:bg-[#243a60] transition shadow-sm">
-                🖨 인쇄 / PDF 저장
+              <button onClick={openManualModal} className="h-10 px-4 rounded-xl bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#F5F8FD] transition">직접 작성</button>
+              <button onClick={handlePrint} disabled={!result || resultRows.length === 0} className="h-10 px-5 inline-flex items-center gap-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#2D4C82] transition disabled:opacity-40 disabled:cursor-not-allowed">
+                <PrintIcon />인쇄 / PDF 저장
               </button>
             </>
           ) : (
             selectedSheet && (
               <>
-                <button onClick={() => setMultiUploadOpen(true)} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 text-[13px] font-semibold rounded-xl hover:bg-gray-50 transition shadow-sm">
-                  엑셀업로드
-                </button>
-                <button onClick={() => handleMultiPrint(selectedSheet)} className="flex items-center gap-2 px-5 py-2.5 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-xl hover:bg-[#243a60] transition shadow-sm">
-                  🖨 인쇄 / PDF 저장
+                <button onClick={() => setMultiUploadOpen(true)} className="h-10 px-4 rounded-xl bg-white border border-[#DCE3EF] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#F5F8FD] transition">엑셀 업로드</button>
+                <button onClick={() => handleMultiPrint(selectedSheet)} className="h-10 px-5 inline-flex items-center gap-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#2D4C82] transition">
+                  <PrintIcon />인쇄 / PDF 저장
                 </button>
               </>
             )
@@ -968,100 +998,78 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
         </div>
       </div>
 
-      {/* 노선별 단가표 / 다목적지 단가표 전환 탭 */}
-      <div className="flex gap-2 mb-4">
-        {["노선별", "다목적지"].map(m => (
-          <button key={m} onClick={() => setPageMode(m)}
-            className={`px-5 py-2 text-[13px] font-bold rounded-lg transition border ${
-              pageMode === m ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
-            }`}>
-            {m === "노선별" ? "노선별 단가표" : "다목적지 단가표"}
-          </button>
-        ))}
-      </div>
-
       {pageMode === "노선별" && (
-      <>
-      {/* 좌우 분할: 왼쪽 검색/입력, 오른쪽 결과 (자사운임표와 동일한 레이아웃) */}
-      <div className="grid grid-cols-[320px_1fr] gap-4 items-start">
+      <div className="grid grid-cols-[360px_1fr] gap-5 items-start">
 
-        {/* 왼쪽: 검색 패널 */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <div className="text-[13px] font-bold text-[#1B2B4B] mb-4">노선 조건 입력</div>
-          <div className="space-y-4">
-            <div>
-              <label className={labelCls}>상차지역 <span className="text-red-400">*</span></label>
-              <input autoComplete="off" className={inputCls} placeholder="예: 인천" value={pickup} onChange={e=>setPickup(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} />
+        {/* ── 왼쪽: 노선 조건 ── */}
+        <div className="bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] overflow-hidden">
+          <div className="relative px-5 py-4 text-white overflow-hidden" style={{ background: "linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%)" }}>
+            <span className="absolute inset-0 opacity-[0.10]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "14px 14px" }} />
+            <div className="relative">
+              <div style={{ fontFamily: RC_MONO }} className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]">ROUTE INPUT</div>
+              <div className="text-[16px] font-black mt-0.5">노선 조건</div>
             </div>
+          </div>
+
+          <div className="p-5 space-y-5">
+            {/* 상·하차 — 연결선으로 묶은 입력 */}
             <div>
-              <label className={labelCls}>하차지역 <span className="text-red-400">*</span></label>
-              <input autoComplete="off" className={inputCls} placeholder="예: 부산" value={drop} onChange={e=>setDrop(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} />
-            </div>
-            <div>
-              <label className={labelCls}>차량종류 <span className="text-red-400">*</span></label>
-              <select className={inputCls} value={vGroup} onChange={e=>setVGroup(e.target.value)}>
-                <option value="">선택</option>
-                {VEHICLE_GROUPS.map(g=><option key={g.value} value={g.value}>{g.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>조회 방식</label>
-              <select
-                className={inputCls}
-                value={viewMode}
-                onChange={e => setViewMode(e.target.value)}
-              >
-                <option value="톤수별">톤수별</option>
-                <option value="파렛수별">파렛수별 (1~18파렛)</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>혼적 여부</label>
-              <div className="flex gap-1 mt-1">
-                {["전체","독차","혼적"].map(opt=>(
-                  <button key={opt} type="button" onClick={()=>setMixedFilter(opt)}
-                    className={`flex-1 py-2 text-[12px] font-semibold rounded-lg border transition-all ${mixedFilter===opt?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
-                    {opt}
-                  </button>
+              <FieldLabel req>상 · 하차 지역</FieldLabel>
+              <div className="rounded-2xl border border-[#E3E8F0] bg-[#F5F8FD] overflow-hidden">
+                {[["상차", pickup, setPickup, "예: 인천"], ["하차", drop, setDrop, "예: 부산"]].map(([lb, val, set, ph], i) => (
+                  <label key={lb} className={`flex items-center gap-3 px-3.5 h-12 cursor-text ${i === 0 ? "border-b border-[#E3E8F0]" : ""}`}>
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${i === 0 ? "bg-[#1B2B4B]" : "border-2 border-[#4B6CB7] bg-white"}`} />
+                    <span className="text-[12px] font-extrabold text-[#5B6B85] w-8 shrink-0">{lb}</span>
+                    <input autoComplete="off" className="flex-1 min-w-0 bg-transparent !border-0 !shadow-none text-[14px] font-bold text-[#0F1A30] placeholder:text-[#9AA9C3] placeholder:font-medium focus:outline-none" placeholder={ph} value={val} onChange={e => set(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSearch()} />
+                  </label>
                 ))}
               </div>
             </div>
+
+            {/* 차량종류 — 선택 타일 */}
             <div>
-              <label className={labelCls}>조회 기준</label>
-              <div className="flex gap-1 mt-1">
-                {[["청구운임","청구가"],["기사운임","기사운임"]].map(([val,label])=>(
-                  <button key={val} type="button" onClick={()=>setFareField(val)}
-                    className={`flex-1 py-2 text-[12px] font-semibold rounded-lg border transition-all ${fareField===val?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
-                    {label}
+              <FieldLabel req>차량 종류</FieldLabel>
+              <div className="grid grid-cols-2 gap-1.5">
+                {VEHICLE_GROUPS.map((g, i) => (
+                  <button key={g.value} type="button" onClick={() => setVGroup(g.value)}
+                    className={`h-11 px-3 rounded-xl border text-[12.5px] font-bold text-left transition ${i === 0 ? "col-span-2" : ""} ${
+                      vGroup === g.value ? "bg-[#1B2B4B] border-[#1B2B4B] text-white shadow-[0_6px_16px_rgba(27,43,75,0.25)]" : "bg-white border-[#E3E8F0] text-[#3A4A66] hover:border-[#8FB0F0]"
+                    }`}>
+                    {g.label}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* 🔥 거래처 제외 필터 */}
+            {/* 세그먼트 3종 */}
+            {[
+              ["조회 방식", viewMode, setViewMode, [["톤수별", "톤수별"], ["파렛수별", "파렛수별"]]],
+              ["혼적 여부", mixedFilter, setMixedFilter, [["전체", "전체"], ["독차", "독차"], ["혼적", "혼적"]]],
+              ["조회 기준", fareField, setFareField, [["청구운임", "청구가"], ["기사운임", "기사운임"]]],
+            ].map(([lb, val, set, opts]) => (
+              <div key={lb}>
+                <FieldLabel>{lb}</FieldLabel>
+                <div className="flex gap-1 p-1 rounded-xl bg-[#EEF2F8]">
+                  {opts.map(([v, l]) => <button key={v} type="button" onClick={() => set(v)} className={seg(val === v)}>{l}</button>)}
+                </div>
+              </div>
+            ))}
+
+            {/* 거래처 제외 */}
             <div>
-              <label className={labelCls}>거래처 제외 (선택)</label>
+              <FieldLabel>거래처 제외 <span className="font-medium text-[#9AA9C3]">(선택)</span></FieldLabel>
               <div className="relative" ref={excludeRef}>
-                <input autoComplete="off"
-                  className={inputCls}
-                  placeholder="제외할 거래처 검색"
+                <input autoComplete="off" className={boxInput} placeholder="제외할 거래처 검색"
                   value={excludeQuery}
                   onChange={e => handleExcludeSearch(e.target.value)}
                   onFocus={() => { if (excludeQuery) handleExcludeSearch(excludeQuery); }}
                   onBlur={() => setTimeout(() => setExcludeDropdown([]), 200)}
                 />
                 {excludeDropdown.length > 0 && (
-                  <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
+                  <div className="absolute z-50 w-full bg-white border border-[#E3E8F0] rounded-xl shadow-[0_16px_40px_rgba(15,26,48,0.18)] mt-1 max-h-48 overflow-y-auto">
                     {excludeDropdown.map(name => (
-                      <button
-                        key={name}
-                        type="button"
-                        className="w-full text-left px-3 py-2 text-[13px] hover:bg-gray-50 transition flex items-center gap-2"
-                        onMouseDown={() => addExclude(name)}
-                      >
-                        <span className="w-4 h-4 rounded border border-gray-300 flex items-center justify-center text-[10px]">
-                          {excludeList.includes(name) ? "✓" : ""}
-                        </span>
+                      <button key={name} type="button" className="w-full text-left px-3 py-2.5 text-[13px] font-semibold text-[#1B2B4B] hover:bg-[#F5F8FD] transition flex items-center gap-2" onMouseDown={() => addExclude(name)}>
+                        <span className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] ${excludeList.includes(name) ? "bg-[#1B2B4B] border-[#1B2B4B] text-white" : "border-[#C9D2E0]"}`}>{excludeList.includes(name) ? "✓" : ""}</span>
                         <span>{name}</span>
                       </button>
                     ))}
@@ -1071,213 +1079,264 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
               {excludeList.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {excludeList.map(name => (
-                    <span
-                      key={name}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-50 border border-red-200 text-[12px] font-semibold text-red-700"
-                    >
+                    <span key={name} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 h-7 rounded-full bg-[#EEF3FB] border border-[#DCE3EF] text-[12px] font-bold text-[#1B2B4B]">
                       {name}
-                      <button
-                        type="button"
-                        onClick={() => removeExclude(name)}
-                        className="text-red-400 hover:text-red-600 text-[14px] leading-none ml-0.5"
-                      >
-                        ✕
-                      </button>
+                      <button type="button" onClick={() => removeExclude(name)} className="w-4 h-4 rounded-full text-[#5B6B85] hover:bg-[#1B2B4B] hover:text-white text-[11px] leading-none flex items-center justify-center">✕</button>
                     </span>
                   ))}
                 </div>
               )}
             </div>
-          </div>
 
-          <div className="flex items-center gap-2 mt-5">
-            <button onClick={handleSearch} className="flex-1 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">단가표 생성</button>
-            <button onClick={()=>{setPickup("");setDrop("");setVGroup("");setMixedFilter("전체");setFareField("청구운임");setViewMode("톤수별");setExcludeQuery("");setExcludeList([]);setExcludeDropdown([]);setResult(null);setSearched(false);}} className="px-3 py-2 bg-white border border-gray-200 text-gray-500 text-[13px] rounded-lg hover:bg-gray-50 transition">초기화</button>
+            <div className="flex items-center gap-2 pt-1">
+              <button onClick={handleSearch} className="flex-1 h-12 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-black hover:bg-[#2D4C82] transition">단가표 생성</button>
+              <button onClick={resetRoute} className="h-12 px-4 rounded-xl bg-white border border-[#DCE3EF] text-[#5B6B85] text-[13px] font-bold hover:bg-[#F5F8FD] transition">초기화</button>
+            </div>
+            <p className="text-[11.5px] text-[#7A89A3] leading-relaxed">냉장/냉동 · 카고/윙바디 · 다마스/라보는 각각 통합 집계 · 단가는 1만원 단위 절사 · 데이터 수(건)를 누르면 상세 오더를 볼 수 있습니다
+              {viewMode === "파렛수별" && " · 파렛수별은 화물내용에 파렛수가 적힌 오더만 집계합니다"}
+            </p>
           </div>
-          <p className="text-[11px] text-gray-500 mt-3 leading-relaxed">※ 냉장/냉동 통합 · 카고/윙바디 통합 · 다마스/라보 통합 · 단가는 1만원 단위 절사 · 데이터 수(건) 클릭 시 상세 오더 확인 가능
-            {viewMode==="파렛수별" && " · 파렛수별 조회 시 화물내용에 파렛수가 입력된 데이터만 집계됩니다"}
-          </p>
         </div>
 
-        {/* 오른쪽: 결과 패널 */}
-        <div className="min-w-0">
+        {/* ── 오른쪽: 결과 ── */}
+        <div className="min-w-0 space-y-4">
           {!searched && (
-            <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-16 text-gray-500">
-              <div className="text-[14px] font-semibold mb-1">왼쪽에서 노선 조건을 입력하고 단가표를 생성하세요</div>
-              <div className="text-[12px]">노선·차량 조건에 맞는 단가표를 자동으로 계산해 보여드립니다</div>
+            <div className="relative rounded-[20px] overflow-hidden text-center py-20 px-6" style={{ background: "radial-gradient(90% 120% at 50% 0%, #22396A 0%, #0F1A30 60%, #0B1428 100%)" }}>
+              <span className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "28px 28px" }} />
+              <div className="relative">
+                <div style={{ fontFamily: RC_MONO }} className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]">RATE ENGINE · READY</div>
+                <div className="text-[18px] font-black text-white mt-2">왼쪽에서 노선 조건을 입력하고 단가표를 생성하세요</div>
+                <div className="text-[13px] text-white/55 mt-1.5">과거 배차 실적에서 극단값을 걸러내고 톤수별 권장 단가를 계산합니다</div>
+              </div>
             </div>
           )}
 
           {searched && result && (
-        <div>
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-4 overflow-hidden">
-            <div className="bg-[#1B2B4B] px-6 py-5 flex justify-between items-center">
-              <div>
-                <div className="text-[22px] font-black text-white tracking-tight">{COMPANY.name}</div>
-                <div className="text-[11px] text-white/60 mt-0.5">화물 운송 전문</div>
-              </div>
-              <div className="text-right text-[12px] text-white/80 leading-6">
-                <div className="font-bold text-white text-[14px]">{COMPANY.manager}</div>
-                <div>📞 {COMPANY.phone} &nbsp;|&nbsp; ☎ {COMPANY.tel}</div>
-                <div>✉ {COMPANY.email}</div>
-                <div className="text-white/60">{COMPANY.address}</div>
-              </div>
-            </div>
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2 overflow-x-auto">
-              <div className="shrink-0">
-                <div className="text-[16px] font-bold text-[#1B2B4B]">운송 단가표</div>
-                <div className="text-[11px] text-gray-500">발행일: {today}</div>
-              </div>
-              <div className="flex items-center gap-1.5 flex-nowrap">
-                <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 whitespace-nowrap">
-                  <span className="text-[13px] font-bold text-[#1B2B4B]">{result.pickup}</span>
-                  <span className="text-blue-500 font-bold">→</span>
-                  <span className="text-[13px] font-bold text-[#1B2B4B]">{result.drop}</span>
-                </div>
-                <div className="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-2 text-[11px] text-gray-600 whitespace-nowrap">차량: <b className="text-[#1B2B4B]">{result.groupLabel}</b></div>
-                <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-2.5 py-2 text-[11px] font-bold text-indigo-700 whitespace-nowrap">{result.viewMode}</div>
-                {result.mixedFilter!=="전체" && <div className="bg-violet-50 border border-violet-200 rounded-lg px-2.5 py-2 text-[11px] font-bold text-violet-700 whitespace-nowrap">{result.mixedFilter}</div>}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-2 text-[11px] text-blue-600 font-semibold whitespace-nowrap">{result.fareField==="청구운임"?"청구가 기준":"기사운임 기준"}</div>
-                <div className="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-2 text-[11px] text-gray-500 whitespace-nowrap">조회 <b className="text-[#1B2B4B]">{result.totalCount}</b>건</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-4">
-            <table className="w-full text-[13px]">
-              <thead>
-                <tr className="bg-[#1B2B4B]">
-                  {[result.viewMode==="파렛수별"?"파렛 수":"차량 톤수","권장 단가","운임 범위","데이터 수","신뢰도","변동성"].map(h=>(
-                    <th key={h} className="px-4 py-3.5 text-center text-[13px] font-bold text-white border-b border-white/10">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {result.rows.length===0 ? (
-                  <tr><td colSpan={6} className="py-16 text-center text-gray-500 text-[13px]">해당 조건에 맞는 데이터가 없습니다</td></tr>
-                ) : result.rows.map((row,i)=>{
-                  const s=row.stats; const conf=confidence(s.count);
-                  const vLevel=s.variance>40?"높음":s.variance>20?"보통":"낮음";
-                  const vColor=s.variance>40?"text-gray-700":s.variance>20?"text-gray-600":"text-gray-500";
-                  return (
-                    <tr key={i} className={`border-b border-gray-100 hover:bg-blue-50/30 transition ${i%2===0?"bg-white":"bg-gray-50/40"}`}>
-                      <td className="px-4 py-3.5 text-center font-bold text-[#1B2B4B] text-[15px]">{row.display}</td>
-                      <td className="px-4 py-3.5 text-center">
-                        <span className="text-[17px] font-black text-blue-700">{s.avg.toLocaleString()}</span>
-                        <span className="text-[12px] text-gray-500 ml-1">원</span>
-                      </td>
-                      <td className="px-4 py-3.5 text-center text-[13px] text-gray-700 font-semibold">{roundDown10k(s.min).toLocaleString()} ~ {roundDown10k(s.max).toLocaleString()}원</td>
-                      <td className="px-4 py-3.5 text-center">
-                        <button onClick={()=>setDetailModal({rows:s.rows, bucket:row.display})}
-                          className="text-[13px] font-bold text-blue-600 hover:underline hover:text-blue-800 transition px-2 py-1 rounded-lg hover:bg-blue-50">
-                          {s.count}건
-                        </button>
-                      </td>
-                      <td className="px-4 py-3.5 text-center">
-                        <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${conf.bg} ${conf.color}`}>{conf.label}</span>
-                      </td>
-                      <td className="px-4 py-3.5 text-center">
-                        <span className={`text-[12px] font-semibold ${vColor}`}>{vLevel}{s.trimmed&&<span className="ml-1 text-[10px] text-gray-500">(보정)</span>}</span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-              <div className="text-[13px] font-bold text-gray-700 mb-2">안내사항</div>
-              <ul className="text-[12px] text-gray-600 space-y-1 leading-relaxed">
-                <li>• 위 단가는 과거 실적 기반 참고 단가입니다 (1만원 단위 절사)</li>
-                <li>• 유가·수급 상황에 따라 실제 운임은 달라질 수 있습니다</li>
-                <li>• 신뢰도 "낮음"은 데이터 샘플이 적어 변동 가능성이 높습니다</li>
-                <li>• 데이터 수(건) 클릭 시 상세 오더 내역을 확인할 수 있습니다</li>
-              </ul>
-            </div>
-            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-              <div className="text-[13px] font-bold text-gray-700 mb-2">변동성 기준</div>
-              <div className="space-y-1.5 text-[12px]">
-                {[["낮음","bg-gray-200 text-gray-700","평균 ±20% 이내, 안정적"],["보통","bg-gray-200 text-gray-600","평균 ±20~40% 수준"],["높음","bg-gray-300 text-gray-700","연휴·수급에 따라 변동 큼, 협의 권장"]].map(([l,cls,desc])=>(
-                  <div key={l} className="flex items-center gap-2">
-                    <span className={`px-2 py-0.5 rounded font-semibold text-[11px] ${cls}`}>{l}</span>
-                    <span className="text-gray-600">{desc}</span>
+            <>
+              {/* 결과 머리 — 회사 + 노선 */}
+              <div className="relative rounded-[20px] overflow-hidden text-white" style={{ background: "linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%)" }}>
+                <span className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "18px 18px" }} />
+                <div className="relative px-6 py-5 flex items-start justify-between gap-6 flex-wrap">
+                  <div className="min-w-0">
+                    <div style={{ fontFamily: RC_MONO }} className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]">TRANSPORT RATE CARD · {today}</div>
+                    <div className="flex items-center gap-3 mt-2 flex-wrap">
+                      <span className="text-[28px] font-black tracking-tight">{result.pickup}</span>
+                      <svg width="34" height="14" viewBox="0 0 34 14" fill="none" stroke="#8FB0F0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 7h30M25 1l6 6-6 6" /></svg>
+                      <span className="text-[28px] font-black tracking-tight">{result.drop}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-3 flex-wrap">
+                      {[result.groupLabel, result.viewMode, result.mixedFilter !== "전체" ? result.mixedFilter : null, result.fareField === "청구운임" ? "청구가 기준" : "기사운임 기준"].filter(Boolean).map(t => (
+                        <span key={t} className="h-7 px-2.5 inline-flex items-center rounded-lg bg-white/10 border border-white/15 text-[12px] font-bold text-white/90">{t}</span>
+                      ))}
+                    </div>
                   </div>
-                ))}
-                <div className="text-[11px] text-gray-500 mt-1">※ IQR 방식으로 극단값 자동 제거 후 산출</div>
+                  <div className="text-right text-[12.5px] text-white/70 leading-6 shrink-0">
+                    <div className="text-[17px] font-black text-white">{COMPANY.name}</div>
+                    {COMPANY.manager && <div className="font-bold text-white/85">{COMPANY.manager}</div>}
+                    {(COMPANY.phone || COMPANY.tel) && <div style={{ fontFamily: RC_MONO }} className="text-[12px]">{[COMPANY.phone, COMPANY.tel].filter(Boolean).join("  ·  ")}</div>}
+                    {COMPANY.email && <div style={{ fontFamily: RC_MONO }} className="text-[12px]">{COMPANY.email}</div>}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-4 flex items-center justify-between">
-            <div className="text-[11px] text-gray-500">본 자료는 영업 참고용이며 정식 계약서가 아닙니다.</div>
-            <div className="flex items-center gap-4">
-              <div className="text-right text-[13px] text-gray-600 leading-6">
-                <div className="font-bold text-[#1B2B4B] text-[15px]">{COMPANY.name}</div>
-                <div>{COMPANY.manager} &nbsp; {COMPANY.phone}</div>
+              {/* 요약 타일 */}
+              {resultRows.length > 0 && (
+                <div className="grid grid-cols-4 gap-3">
+                  {[
+                    ["조회 오더", "ORDERS", result.totalCount, "건"],
+                    ["집계 구간", "BUCKETS", resultRows.length, "개"],
+                    ["최저 권장 단가", "MIN", Math.min(...resultRows.map(r => r.stats.avg)).toLocaleString(), "원"],
+                    ["최다 실적 구간", "TOP", bestRow ? bestRow.display : "-", bestRow ? `${bestRow.stats.count}건` : ""],
+                  ].map(([lb, en, v, unit], i) => (
+                    <div key={en} className={`rounded-2xl border px-4 py-3.5 ${i === 0 ? "bg-[#0F1A30] border-[#0F1A30] text-white" : "bg-white border-[#E3E8F0]"}`}>
+                      <div className="flex items-center justify-between">
+                        <span className={`text-[12px] font-bold ${i === 0 ? "text-white/80" : "text-[#3A4A66]"}`}>{lb}</span>
+                        <span style={{ fontFamily: RC_MONO }} className={`text-[9.5px] font-extrabold tracking-[0.2em] ${i === 0 ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`}>{en}</span>
+                      </div>
+                      <div className="mt-1.5 flex items-baseline gap-1">
+                        <span style={{ fontFamily: RC_MONO }} className={`text-[22px] font-black tabular-nums ${i === 0 ? "text-white" : "text-[#0F1A30]"}`}>{v}</span>
+                        <span className={`text-[12px] font-bold ${i === 0 ? "text-white/60" : "text-[#7A89A3]"}`}>{unit}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* 단가 표 */}
+              {resultRows.length > 0 && (
+              <div className="bg-white rounded-[20px] border border-[#E3E8F0] overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-[#EEF1F6] flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rotate-45 bg-[#1B2B4B]" />
+                  <span style={{ fontFamily: RC_MONO }} className="text-[10.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]">RATES</span>
+                  <span className="text-[15px] font-black text-[#0F1A30]">{result.viewMode === "파렛수별" ? "파렛수별" : "톤수별"} 권장 단가</span>
+                </div>
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="bg-[#F5F8FD] border-b border-[#E3E8F0]">
+                      {[result.viewMode === "파렛수별" ? "파렛 수" : "차량 톤수", "권장 단가", "운임 범위", "데이터 수", "신뢰도", "변동성"].map(h => (
+                        <th key={h} className="px-4 py-3 text-center text-[12px] font-extrabold text-[#5B6B85] tracking-wide">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resultRows.map((row, i) => {
+                      const s = row.stats; const conf = confidence(s.count);
+                      const vLevel = s.variance > 40 ? "높음" : s.variance > 20 ? "보통" : "낮음";
+                      const confN = conf.label === "높음" ? 3 : conf.label === "보통" ? 2 : 1;
+                      return (
+                        <tr key={i} className="border-b border-[#EEF1F6] last:border-0 hover:bg-[#F5F8FD] transition">
+                          <td className="px-4 py-4 text-center">
+                            <span className="inline-flex items-center justify-center min-w-[78px] h-8 px-3 rounded-lg bg-[#EEF3FB] text-[14px] font-black text-[#1B2B4B]">{row.display}</span>
+                          </td>
+                          <td className="px-4 py-4 text-center">
+                            <span style={{ fontFamily: RC_MONO }} className="text-[19px] font-black text-[#0F1A30] tabular-nums">{s.avg.toLocaleString()}</span>
+                            <span className="text-[12px] text-[#7A89A3] ml-1 font-bold">원</span>
+                          </td>
+                          <td style={{ fontFamily: RC_MONO }} className="px-4 py-4 text-center text-[13px] text-[#3A4A66] font-bold tabular-nums">{roundDown10k(s.min).toLocaleString()} ~ {roundDown10k(s.max).toLocaleString()}</td>
+                          <td className="px-4 py-4 text-center">
+                            <button onClick={() => setDetailModal({ rows: s.rows, bucket: row.display })} style={{ fontFamily: RC_MONO }}
+                              className="h-8 px-3 rounded-lg border border-[#DCE3EF] text-[13px] font-extrabold text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] transition tabular-nums">
+                              {s.count}건
+                            </button>
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="flex items-center justify-center gap-2">
+                              <span className="flex gap-0.5">{[1, 2, 3].map(n => <span key={n} className={`w-2 h-4 rounded-sm ${n <= confN ? "bg-[#1B2B4B]" : "bg-[#DCE3EF]"}`} />)}</span>
+                              <span className="text-[12px] font-bold text-[#3A4A66] w-7">{conf.label}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 text-center">
+                            <span className={`text-[12px] font-bold ${vLevel === "높음" ? "text-[#0F1A30]" : vLevel === "보통" ? "text-[#3A4A66]" : "text-[#7A89A3]"}`}>{vLevel}</span>
+                            {s.trimmed && <span className="ml-1 text-[10.5px] text-[#9AA9C3] font-bold">(보정)</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-              <div className="w-14 h-14 rounded-full border-2 border-[#1B2B4B] flex items-center justify-center text-[11px] font-black text-[#1B2B4B] text-center leading-tight">RUN<br/>25</div>
-            </div>
-          </div>
-        </div>
-          )}
+              )}
 
-          {searched && result && result.rows.length===0 && (
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm py-16 text-center text-gray-500 text-[13px]">
-              조건에 맞는 데이터가 없습니다. 상/하차 지역명을 더 넓게 입력하거나 혼적 여부를 "전체"로 변경해보세요.
-            </div>
+              {resultRows.length > 0 && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-2xl border border-[#E3E8F0] bg-[#F5F8FD] p-4">
+                  <div className="text-[13px] font-black text-[#1B2B4B] mb-2">안내사항</div>
+                  <ul className="text-[12.5px] text-[#3A4A66] space-y-1 leading-relaxed">
+                    <li>· 위 단가는 과거 실적 기반 참고 단가입니다 (1만원 단위 절사)</li>
+                    <li>· 유가·수급 상황에 따라 실제 운임은 달라질 수 있습니다</li>
+                    <li>· 신뢰도 "낮음"은 데이터가 적어 변동 가능성이 높습니다</li>
+                    <li>· 데이터 수(건)를 누르면 상세 오더 내역을 볼 수 있습니다</li>
+                  </ul>
+                </div>
+                <div className="rounded-2xl border border-[#E3E8F0] bg-[#F5F8FD] p-4">
+                  <div className="text-[13px] font-black text-[#1B2B4B] mb-2">변동성 기준</div>
+                  <div className="space-y-1.5 text-[12.5px]">
+                    {[["낮음", "평균 ±20% 이내, 안정적"], ["보통", "평균 ±20~40% 수준"], ["높음", "연휴·수급에 따라 변동 큼, 협의 권장"]].map(([l, desc]) => (
+                      <div key={l} className="flex items-center gap-2">
+                        <span className="w-10 h-6 rounded-md bg-white border border-[#DCE3EF] text-[11px] font-extrabold text-[#1B2B4B] flex items-center justify-center">{l}</span>
+                        <span className="text-[#3A4A66]">{desc}</span>
+                      </div>
+                    ))}
+                    <div className="text-[11.5px] text-[#7A89A3] pt-0.5">※ IQR 방식으로 극단값을 자동 제거한 뒤 산출합니다</div>
+                  </div>
+                </div>
+              </div>
+              )}
+
+              {resultRows.length > 0 && (
+              <div className="bg-white rounded-2xl border border-[#E3E8F0] px-6 py-4 flex items-center justify-between">
+                <div className="text-[11.5px] text-[#7A89A3]">본 자료는 영업 참고용이며 정식 계약서가 아닙니다.</div>
+                <div className="flex items-center gap-4">
+                  <div className="text-right text-[13px] text-[#3A4A66] leading-6">
+                    <div className="font-black text-[#0F1A30] text-[15px]">{COMPANY.name}</div>
+                    <div>{COMPANY.manager} &nbsp; {COMPANY.phone}</div>
+                  </div>
+                  {stampLabel(COMPANY.name) && (
+                    <div className="w-14 h-14 rounded-full border-2 border-[#1B2B4B] flex items-center justify-center text-[11px] font-black text-[#1B2B4B] text-center leading-tight" dangerouslySetInnerHTML={{ __html: stampLabel(COMPANY.name) }} />
+                  )}
+                </div>
+              </div>
+              )}
+
+              {resultRows.length === 0 && (
+                <div className="bg-white rounded-[20px] border border-[#E3E8F0] py-16 text-center">
+                  <div className="text-[15px] font-black text-[#0F1A30]">조건에 맞는 데이터가 없습니다</div>
+                  <div className="text-[13px] text-[#5B6B85] mt-1">상·하차 지역명을 더 넓게 입력하거나 혼적 여부를 "전체"로 바꿔 보세요.</div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
-      </>
       )}
 
       {pageMode === "다목적지" && (
-        <div className="grid grid-cols-[280px_1fr] gap-4 items-start">
+        <div className="grid grid-cols-[300px_1fr] gap-5 items-start">
           {/* 왼쪽: 저장된 단가표 목록 */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-            <button onClick={createMultiSheet} disabled={multiSaving}
-              className="w-full py-2.5 mb-3 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition disabled:opacity-50">
-              + 새 단가표 만들기
-            </button>
-            {multiSheets.length === 0 ? (
-              <div className="text-center text-gray-500 text-[12px] py-8">
-                아직 만든 다목적지 단가표가 없습니다.<br/>기준지(상차지) 1곳을 기준으로 여러 하차지의 단가를 관리해보세요.
+          <div className="bg-white rounded-[20px] border border-[#E3E8F0] overflow-hidden">
+            <div className="px-4 pt-4 pb-3 border-b border-[#EEF1F6]">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Eyebrow>SHEETS</Eyebrow>
+                  <div className="text-[15px] font-black text-[#0F1A30]">저장된 단가표</div>
+                </div>
+                <span style={{ fontFamily: RC_MONO }} className="h-6 px-2 rounded-full bg-[#EEF3FB] text-[#1B2B4B] text-[11px] font-extrabold inline-flex items-center">{multiSheets.length}</span>
               </div>
-            ) : (
-              <div className="space-y-1.5">
-                {multiSheets.map(s => (
-                  <button key={s.id} onClick={() => setMultiSelectedId(s.id)}
-                    className={`w-full text-left px-3 py-2.5 rounded-lg border transition ${
-                      multiSelectedId === s.id ? "bg-[#1B2B4B] border-[#1B2B4B] text-white" : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
-                    }`}>
-                    <div className="font-bold text-[13px] truncate">{s.baseName || "이름 없음"}</div>
-                    <div className={`text-[11px] mt-0.5 ${multiSelectedId === s.id ? "text-white/60" : "text-gray-500"}`}>하차지 {(s.rows || []).length}곳</div>
-                  </button>
-                ))}
-              </div>
-            )}
+              <button onClick={createMultiSheet} disabled={multiSaving}
+                className="w-full h-11 mt-3 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-black hover:bg-[#2D4C82] transition disabled:opacity-50">
+                + 새 단가표 만들기
+              </button>
+            </div>
+            <div className="p-3 max-h-[calc(100vh-360px)] overflow-y-auto">
+              {multiSheets.length === 0 ? (
+                <div className="text-center text-[#7A89A3] text-[12.5px] py-10 leading-relaxed">
+                  아직 만든 다목적지 단가표가 없습니다.<br />기준지(상차지) 1곳 기준으로<br />여러 하차지의 단가를 관리해 보세요.
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {multiSheets.map(s => {
+                    const on = multiSelectedId === s.id;
+                    return (
+                      <button key={s.id} onClick={() => setMultiSelectedId(s.id)}
+                        className={`w-full text-left px-3 py-2.5 rounded-xl border flex items-center gap-3 transition ${on ? "bg-[#1B2B4B] border-[#1B2B4B] text-white shadow-[0_8px_20px_rgba(27,43,75,0.25)]" : "bg-white border-[#E3E8F0] text-[#1B2B4B] hover:bg-[#F5F8FD]"}`}>
+                        <span className={`w-9 h-9 rounded-lg flex items-center justify-center text-[13px] font-black shrink-0 ${on ? "bg-white/15 text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>{(s.baseName || "?").slice(0, 1)}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block font-bold text-[13.5px] truncate">{s.baseName || "이름 없음"}</span>
+                          <span style={{ fontFamily: RC_MONO }} className={`block text-[11px] mt-0.5 ${on ? "text-white/60" : "text-[#7A89A3]"}`}>하차지 {(s.rows || []).length}곳 · 구간 {(s.columns || []).length}개</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* 오른쪽: 선택된 단가표 편집/미리보기 */}
+          {/* 오른쪽: 선택된 단가표 편집 */}
           <div className="min-w-0">
             {!selectedSheet ? (
-              <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-16 text-gray-500">
-                <div className="text-[14px] font-semibold mb-1">왼쪽에서 단가표를 선택하거나 새로 만드세요</div>
-                <div className="text-[12px]">기준지 1곳(예: 화주사 창고) 기준으로 하차지 여러 곳의 단가를 한 표로 관리합니다</div>
+              <div className="relative rounded-[20px] overflow-hidden text-center py-20 px-6" style={{ background: "radial-gradient(90% 120% at 50% 0%, #22396A 0%, #0F1A30 60%, #0B1428 100%)" }}>
+                <span className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "28px 28px" }} />
+                <div className="relative">
+                  <div style={{ fontFamily: RC_MONO }} className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]">MULTI DESTINATION</div>
+                  <div className="text-[18px] font-black text-white mt-2">왼쪽에서 단가표를 선택하거나 새로 만드세요</div>
+                  <div className="text-[13px] text-white/55 mt-1.5">기준지 1곳(예: 화주사 창고)에서 여러 하차지로 가는 단가를 한 표로 관리합니다</div>
+                </div>
               </div>
             ) : (
               <div className="space-y-4">
                 {/* 기준지 정보 */}
-                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+                <div className="bg-white rounded-[20px] border border-[#E3E8F0] p-5">
                   <div className="flex items-center justify-between mb-4">
-                    <div className="text-[13px] font-bold text-[#1B2B4B]">기준지(상차지) 정보</div>
-                    <button onClick={() => removeMultiSheet(selectedSheet.id)} className="text-[12px] text-red-400 hover:text-red-600 transition">단가표 삭제</button>
+                    <div>
+                      <Eyebrow>BASE</Eyebrow>
+                      <div className="text-[15px] font-black text-[#0F1A30]">기준지(상차지) 정보</div>
+                    </div>
+                    <button onClick={() => removeMultiSheet(selectedSheet.id)} className="h-9 px-3 rounded-lg border border-[#DCE3EF] text-[12.5px] font-bold text-[#5B6B85] hover:bg-[#0F1A30] hover:text-white hover:border-[#0F1A30] transition">단가표 삭제</button>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className={labelCls}>기준지명 <span className="text-gray-500 font-normal">(기본거래처에서 검색)</span></label>
+                      <FieldLabel>기준지명 <span className="font-medium text-[#9AA9C3]">(기본거래처에서 검색)</span></FieldLabel>
                       <BaseNameAutocomplete
                         key={selectedSheet.id + "-base"}
                         initialValue={selectedSheet.baseName || ""}
@@ -1290,8 +1349,8 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                       />
                     </div>
                     <div>
-                      <label className={labelCls}>주소</label>
-                      <input autoComplete="off" className={inputCls} placeholder="기준지 주소"
+                      <FieldLabel>주소</FieldLabel>
+                      <input autoComplete="off" className={boxInput} placeholder="기준지 주소"
                         defaultValue={selectedSheet.baseAddress || ""}
                         onBlur={e => patchSheet(selectedSheet.id, { baseAddress: e.target.value })}
                         key={selectedSheet.id + "-addr"}
@@ -1299,9 +1358,9 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                     </div>
                   </div>
                   <div className="mt-4">
-                    <label className={labelCls}>안내사항 (줄바꿈으로 여러 줄 입력, 표 상단에 그대로 표시됩니다)</label>
+                    <FieldLabel>안내사항 <span className="font-medium text-[#9AA9C3]">(줄바꿈으로 여러 줄 · 표 위에 그대로 표시)</span></FieldLabel>
                     <textarea
-                      className="w-full px-3 py-2 text-[12.5px] rounded-lg border border-gray-200 focus:border-[#1B2B4B] focus:outline-none leading-relaxed"
+                      className="w-full px-3.5 py-3 text-[13px] rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] focus:bg-white focus:outline-none leading-relaxed text-[#0F1A30]"
                       rows={3}
                       placeholder={"예: 1. 파레트(1100*1100), 배차 시 파레트 크기 공지\n2. 하차 후 거래명세서/파레트전표 서명 후 문자 전송"}
                       defaultValue={selectedSheet.note || ""}
@@ -1312,22 +1371,26 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                 </div>
 
                 {/* 단가 매트릭스 표 */}
-                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                  <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-                    <div className="text-[13px] font-bold text-[#1B2B4B]">하차지별 단가표</div>
+                <div className="bg-white rounded-[20px] border border-[#E3E8F0] overflow-hidden">
+                  <div className="px-5 py-3.5 border-b border-[#EEF1F6] flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <button onClick={addMultiColumn} className="px-3 py-1.5 text-[12px] font-semibold text-[#1B2B4B] border border-[#1B2B4B]/30 rounded-lg hover:bg-[#1B2B4B]/5 transition">+ 구간 추가</button>
-                      <button onClick={addMultiRow} className="px-3 py-1.5 text-[12px] font-semibold text-white bg-[#1B2B4B] rounded-lg hover:bg-[#243a60] transition">+ 하차지 추가</button>
+                      <span className="w-1.5 h-1.5 rotate-45 bg-[#1B2B4B]" />
+                      <span style={{ fontFamily: RC_MONO }} className="text-[10.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]">MATRIX</span>
+                      <span className="text-[15px] font-black text-[#0F1A30]">하차지별 단가표</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={addMultiColumn} className="h-9 px-3 rounded-lg border border-[#DCE3EF] text-[12.5px] font-bold text-[#1B2B4B] hover:bg-[#F5F8FD] transition">+ 구간 추가</button>
+                      <button onClick={addMultiRow} className="h-9 px-3 rounded-lg bg-[#1B2B4B] text-[12.5px] font-bold text-white hover:bg-[#2D4C82] transition">+ 하차지 추가</button>
                     </div>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-[12.5px] border-collapse">
                       <thead>
-                        <tr className="bg-[#1B2B4B]">
-                          <th className="px-3 py-2.5 text-left text-white font-bold whitespace-nowrap min-w-[140px] border border-white/15">하차지</th>
-                          <th className="px-3 py-2.5 text-left text-white font-bold whitespace-nowrap min-w-[200px] border border-white/15">주소</th>
+                        <tr className="bg-[#0F1A30]">
+                          <th className="px-3 py-3 text-left text-white font-bold whitespace-nowrap min-w-[150px] border-r border-white/10">하차지</th>
+                          <th className="px-3 py-3 text-left text-white font-bold whitespace-nowrap min-w-[220px] border-r border-white/10">주소</th>
                           {(selectedSheet.columns || []).map((c, ci, arr) => (
-                            <th key={c.id} className="px-2 py-2 text-center text-white font-bold whitespace-nowrap min-w-[110px] border border-white/15">
+                            <th key={c.id} className="px-2 py-2.5 text-center text-white font-bold whitespace-nowrap min-w-[110px] border-r border-white/10">
                               <div className="flex items-center justify-center gap-0.5">
                                 <button onClick={() => moveMultiColumn(c.id, -1)} disabled={ci === 0}
                                   className="text-white/40 hover:text-white text-[10px] leading-none shrink-0 disabled:opacity-0 disabled:pointer-events-none" title="왼쪽으로 이동">◀</button>
@@ -1335,7 +1398,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                                   <span className="text-white text-[12px] px-0.5">{c.label}</span>
                                 ) : (
                                   <input autoComplete="off"
-                                    className="w-full bg-transparent text-white text-center font-bold text-[12px] border-b border-white/30 focus:border-white focus:outline-none placeholder:text-white/40"
+                                    className="w-full bg-transparent !border-0 !border-b !border-white/30 !shadow-none text-white text-center font-bold text-[12px] focus:outline-none placeholder:text-white/40"
                                     defaultValue={c.label}
                                     onBlur={e => updateMultiColumnLabel(c.id, e.target.value)}
                                     key={c.id + "-label"}
@@ -1349,42 +1412,43 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                               </div>
                             </th>
                           ))}
-                          <th className="px-2 py-2 text-white w-8 border border-white/15"></th>
+                          <th className="px-2 py-2 text-white w-10"></th>
                         </tr>
                       </thead>
                       <tbody>
                         {(selectedSheet.rows || []).length === 0 ? (
-                          <tr><td colSpan={(selectedSheet.columns || []).length + 3} className="py-12 text-center text-gray-500 border border-gray-200">
-                            하차지를 추가하거나, 엑셀업로드로 한번에 가져오세요
+                          <tr><td colSpan={(selectedSheet.columns || []).length + 3} className="py-14 text-center text-[#7A89A3] text-[13px]">
+                            하차지를 추가하거나, 엑셀 업로드로 한 번에 가져오세요
                           </td></tr>
-                        ) : (selectedSheet.rows || []).map((r, i) => (
-                          <tr key={r.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/40"}>
-                            <td className="px-2 py-1.5 border border-gray-200">
-                              <input autoComplete="off" className="w-full px-2 py-1.5 text-[12.5px] font-semibold text-[#1B2B4B] rounded border border-transparent hover:border-gray-200 focus:border-[#1B2B4B] focus:outline-none"
+                        ) : (selectedSheet.rows || []).map((r) => (
+                          <tr key={r.id} className="border-b border-[#EEF1F6] hover:bg-[#F5F8FD]/70">
+                            <td className="px-2 py-1.5 border-r border-[#EEF1F6]">
+                              <input autoComplete="off" className="w-full px-2 py-1.5 text-[13px] font-bold text-[#0F1A30] rounded-lg border border-transparent hover:border-[#DCE3EF] focus:outline-none bg-transparent"
                                 defaultValue={r.name} onBlur={e => updateMultiRowField(r.id, "name", e.target.value)} key={r.id + "-name"} />
                             </td>
-                            <td className="px-2 py-1.5 border border-gray-200">
-                              <input autoComplete="off" className="w-full px-2 py-1.5 text-[12px] text-gray-600 rounded border border-transparent hover:border-gray-200 focus:border-[#1B2B4B] focus:outline-none"
+                            <td className="px-2 py-1.5 border-r border-[#EEF1F6]">
+                              <input autoComplete="off" className="w-full px-2 py-1.5 text-[12px] text-[#5B6B85] rounded-lg border border-transparent hover:border-[#DCE3EF] focus:outline-none bg-transparent"
                                 defaultValue={r.address} onBlur={e => updateMultiRowField(r.id, "address", e.target.value)} key={r.id + "-addr"} />
                             </td>
                             {(selectedSheet.columns || []).map(c => (
-                              <td key={c.id} className="px-2 py-1.5 border border-gray-200">
-                                <input autoComplete="off" className="w-full px-2 py-1.5 text-[12.5px] font-bold text-blue-700 text-right rounded border border-transparent hover:border-gray-200 focus:border-[#1B2B4B] focus:outline-none"
+                              <td key={c.id} className="px-2 py-1.5 border-r border-[#EEF1F6]">
+                                <input autoComplete="off" style={{ fontFamily: RC_MONO }}
+                                  className="w-full px-2 py-1.5 text-[13px] font-extrabold text-[#1B2B4B] text-right tabular-nums rounded-lg border border-transparent hover:border-[#DCE3EF] focus:outline-none bg-transparent placeholder:text-[#C9D2E0]"
                                   placeholder="-"
                                   defaultValue={r.prices?.[c.id] ? Number(r.prices[c.id]).toLocaleString() : ""}
                                   onBlur={e => updateMultiRowPrice(r.id, c.id, e.target.value)}
                                   key={r.id + c.id + "-price"} />
                               </td>
                             ))}
-                            <td className="px-2 py-1.5 text-center border border-gray-200">
-                              <button onClick={() => removeMultiRow(r.id)} className="w-6 h-6 rounded-full bg-red-50 border border-red-200 text-red-500 hover:bg-red-100 text-[12px] leading-none flex items-center justify-center mx-auto transition">✕</button>
+                            <td className="px-2 py-1.5 text-center">
+                              <button onClick={() => removeMultiRow(r.id)} title="하차지 삭제" className="w-7 h-7 rounded-lg border border-[#DCE3EF] text-[#7A89A3] hover:bg-[#0F1A30] hover:text-white hover:border-[#0F1A30] text-[12px] leading-none flex items-center justify-center mx-auto transition">✕</button>
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                  <p className="px-5 py-3 text-[11px] text-gray-500 border-t border-gray-100">※ 입력칸에서 벗어나면(포커스 아웃) 자동 저장됩니다 · 연락처는 별도로 관리하지 않습니다</p>
+                  <p className="px-5 py-3 text-[11.5px] text-[#7A89A3] border-t border-[#EEF1F6]">※ 입력칸에서 벗어나면 자동 저장됩니다 · 연락처는 별도로 관리하지 않습니다</p>
                 </div>
               </div>
             )}
@@ -1404,13 +1468,13 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
               <button onClick={() => setMultiUploadOpen(false)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
             </div>
             <div className="overflow-y-auto flex-1 p-6 space-y-5">
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <div className="bg-[#F5F8FD] border border-[#E3E8F0] rounded-xl p-4">
                 <p className="text-[12px] text-gray-600 leading-relaxed mb-3">
                   ① 먼저 업로드 양식을 내려받으세요. 지금 이 단가표의 컬럼(하차지·주소·톤수)이 그대로 헤더로 채워져 있습니다.<br/>
                   ② 양식의 값 칸에 하차지명·주소·톤수별 단가를 채워 넣으세요 (톤수 헤더 이름은 그대로 두어야 정확히 매칭됩니다).<br/>
                   ③ 완성한 파일을 아래에서 업로드하면 톤수 컬럼명이 일치하는 칸에 자동으로 들어갑니다. 목록에 없는 톤수명을 새로 쓰면 새 구간이 자동으로 추가됩니다.
                 </p>
-                <button onClick={() => downloadMultiTemplate(selectedSheet)} className="w-full py-2 bg-white border border-blue-300 text-blue-700 text-[13px] font-bold rounded-lg hover:bg-blue-100 transition">
+                <button onClick={() => downloadMultiTemplate(selectedSheet)} className="w-full py-2 bg-white border border-[#1B2B4B]/30 text-[#1B2B4B] text-[13px] font-bold rounded-lg hover:bg-[#F5F8FD] transition">
                   업로드 양식 다운로드
                 </button>
               </div>
@@ -1445,7 +1509,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
 
             <div className="overflow-y-auto flex-1 p-6 space-y-5">
               {/* 노선 정보 입력 */}
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <div className="bg-[#F5F8FD] border border-[#E3E8F0] rounded-xl p-4">
                 <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">노선 정보</div>
                 <datalist id="manual-vehicle-types">
                   {VEHICLE_GROUPS.map(g => <option key={g.value} value={g.label} />)}
@@ -1453,19 +1517,19 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                 <div className="grid grid-cols-4 gap-3 mb-3">
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-500 mb-1">거래처명</label>
-                    <input autoComplete="off" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="예: (주)홍길동물류" value={manualInfo.client} onChange={e => setManualInfo(p => ({ ...p, client: e.target.value }))} />
+                    <input autoComplete="off" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:outline-none" placeholder="예: (주)홍길동물류" value={manualInfo.client} onChange={e => setManualInfo(p => ({ ...p, client: e.target.value }))} />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-500 mb-1">상차지역 <span className="text-red-400">*</span></label>
-                    <input autoComplete="off" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="예: 인천" value={manualInfo.pickup} onChange={e => setManualInfo(p => ({ ...p, pickup: e.target.value }))} />
+                    <label className="block text-[11px] font-semibold text-gray-500 mb-1">상차지역 <span className="text-[#4B6CB7]">*</span></label>
+                    <input autoComplete="off" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:outline-none" placeholder="예: 인천" value={manualInfo.pickup} onChange={e => setManualInfo(p => ({ ...p, pickup: e.target.value }))} />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-500 mb-1">하차지역 <span className="text-red-400">*</span></label>
-                    <input autoComplete="off" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="예: 부산" value={manualInfo.drop} onChange={e => setManualInfo(p => ({ ...p, drop: e.target.value }))} />
+                    <label className="block text-[11px] font-semibold text-gray-500 mb-1">하차지역 <span className="text-[#4B6CB7]">*</span></label>
+                    <input autoComplete="off" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:outline-none" placeholder="예: 부산" value={manualInfo.drop} onChange={e => setManualInfo(p => ({ ...p, drop: e.target.value }))} />
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-500 mb-1">차량종류</label>
-                    <input autoComplete="off" list="manual-vehicle-types" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="선택 또는 직접 입력" value={manualInfo.vehicle} onChange={e => setManualInfo(p => ({ ...p, vehicle: e.target.value }))} />
+                    <input autoComplete="off" list="manual-vehicle-types" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:outline-none" placeholder="선택 또는 직접 입력" value={manualInfo.vehicle} onChange={e => setManualInfo(p => ({ ...p, vehicle: e.target.value }))} />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
@@ -1485,7 +1549,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                     <div className="flex gap-1">
                       {[["청구운임", "청구가"], ["기사운임", "기사운임"]].map(([val, label]) => (
                         <button key={val} type="button" onClick={() => setManualInfo(p => ({ ...p, fareField: val }))}
-                          className={`flex-1 py-2 text-[12px] font-semibold rounded-lg border transition-all ${manualInfo.fareField === val ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
+                          className={`flex-1 py-2 text-[12px] font-semibold rounded-lg border transition-all ${manualInfo.fareField === val ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
                           {label}
                         </button>
                       ))}
@@ -1493,7 +1557,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-500 mb-1">특이사항 / 메모</label>
-                    <input autoComplete="off" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="단가표 하단에 추가될 메모 (선택)" value={manualInfo.note} onChange={e => setManualInfo(p => ({ ...p, note: e.target.value }))} />
+                    <input autoComplete="off" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:outline-none" placeholder="단가표 하단에 추가될 메모 (선택)" value={manualInfo.note} onChange={e => setManualInfo(p => ({ ...p, note: e.target.value }))} />
                   </div>
                 </div>
               </div>
@@ -1502,7 +1566,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <div className="text-[13px] font-bold text-[#1B2B4B]">단가 행 입력</div>
-                  <button onClick={addManualRow} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-[12px] font-bold rounded-lg hover:bg-blue-700 transition">
+                  <button onClick={addManualRow} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1B2B4B] text-white text-[12px] font-bold rounded-lg hover:bg-[#2D4C82] transition">
                     + 행 추가
                   </button>
                 </div>
@@ -1524,7 +1588,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                           <td className="px-2 py-2">
                             <input autoComplete="off"
                               list="manual-ton-options"
-                              className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:border-blue-400 focus:outline-none text-center font-bold text-[#1B2B4B]"
+                              className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:outline-none text-center font-bold text-[#1B2B4B]"
                               placeholder="선택 또는 직접 입력"
                               value={row.display}
                               onChange={e => updateManualRow(i, "display", e.target.value)}
@@ -1532,7 +1596,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                           </td>
                           <td className="px-2 py-2">
                             <input autoComplete="off"
-                              className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:border-blue-400 focus:outline-none text-right font-bold text-blue-700"
+                              className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:outline-none text-right font-bold text-[#1B2B4B]"
                               placeholder="예: 150,000"
                               value={row.avg}
                               onChange={e => { const n = e.target.value.replace(/[^\d]/g, ""); updateManualRow(i, "avg", n ? Number(n).toLocaleString() : ""); }}
@@ -1540,7 +1604,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                           </td>
                           <td className="px-2 py-2">
                             <input autoComplete="off"
-                              className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:border-blue-400 focus:outline-none text-right text-gray-600"
+                              className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:outline-none text-right text-gray-600"
                               placeholder="예: 130,000"
                               value={row.min}
                               onChange={e => { const n = e.target.value.replace(/[^\d]/g, ""); updateManualRow(i, "min", n ? Number(n).toLocaleString() : ""); }}
@@ -1548,7 +1612,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                           </td>
                           <td className="px-2 py-2">
                             <input autoComplete="off"
-                              className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:border-blue-400 focus:outline-none text-right text-gray-600"
+                              className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:outline-none text-right text-gray-600"
                               placeholder="예: 180,000"
                               value={row.max}
                               onChange={e => { const n = e.target.value.replace(/[^\d]/g, ""); updateManualRow(i, "max", n ? Number(n).toLocaleString() : ""); }}
@@ -1556,7 +1620,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                           </td>
                           <td className="px-2 py-2">
                             <select
-                              className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:border-blue-400 focus:outline-none text-center"
+                              className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:outline-none text-center"
                               value={row.varianceLabel}
                               onChange={e => updateManualRow(i, "varianceLabel", e.target.value)}
                             >
@@ -1567,7 +1631,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                           </td>
                           <td className="px-2 py-2">
                             <select
-                              className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:border-blue-400 focus:outline-none text-center"
+                              className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:outline-none text-center"
                               value={row.confLabel}
                               onChange={e => updateManualRow(i, "confLabel", e.target.value)}
                             >
@@ -1578,7 +1642,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                           </td>
                           <td className="px-2 py-2 text-center">
                             {manualRows.length > 1 && (
-                              <button onClick={() => removeManualRow(i)} className="w-6 h-6 rounded-full bg-red-50 border border-red-200 text-red-500 hover:bg-red-100 text-[13px] leading-none flex items-center justify-center mx-auto transition">✕</button>
+                              <button onClick={() => removeManualRow(i)} className="w-6 h-6 rounded-full bg-white border border-[#DCE3EF] text-[#7A89A3] hover:bg-[#0F1A30] hover:text-white text-[13px] leading-none flex items-center justify-center mx-auto transition">✕</button>
                             )}
                           </td>
                         </tr>
@@ -1594,9 +1658,9 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
             <div className="border-t border-gray-100 px-6 py-4 bg-gray-50 flex items-center justify-between">
               <button onClick={() => setManualModal(false)} className="px-4 py-2 text-[13px] text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition">닫기</button>
               <div className="flex gap-2">
-                <button onClick={addManualRow} className="px-4 py-2 text-[13px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition">+ 행 추가</button>
+                <button onClick={addManualRow} className="px-4 py-2 text-[13px] font-semibold text-[#1B2B4B] bg-white border border-[#1B2B4B]/30 rounded-lg hover:bg-[#F5F8FD] transition">+ 행 추가</button>
                 <button onClick={handleManualPrint} className="flex items-center gap-2 px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition shadow-sm">
-                  🖨 인쇄 / PDF 저장
+                  인쇄 / PDF 저장
                 </button>
               </div>
             </div>
@@ -1737,5 +1801,6 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
         );
       })()}
     </div>
+    </KpSubNav>
   );
 }

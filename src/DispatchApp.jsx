@@ -7628,7 +7628,7 @@ return (
                     <span className="kp-newver-dot w-1.5 h-1.5 rounded-full bg-[#CFE0FF]" />
                   </button>
                 ) : (
-                  <span className="text-[11px] font-mono text-white/45 shrink-0">v{__APP_VERSION__}</span>
+                  <span className="hidden min-[1600px]:inline text-[11px] font-mono text-white/45 shrink-0">v{__APP_VERSION__}</span>
                 )}
                 <EditModeToggleButton className="ml-1" />
               </div>
@@ -7638,7 +7638,10 @@ return (
           {/* 중앙 메뉴 */}
                      {/* ★ 태블릿/PC 공용 메뉴 — 전체 가로 스크롤 보장 */}
           <nav
-            className="flex-1 flex items-center gap-1 overflow-x-auto xl:justify-center"
+            /* ⭐ 가운데 정렬은 justify-center 대신 양끝 auto 여백으로 — justify-center는 화면이 좁으면 맨 앞(HOME)·맨 뒤 메뉴가 잘리고 스크롤로도 안 보였다 */
+            className="flex-1 flex items-center gap-0.5 2xl:gap-1 overflow-x-auto [&>*:first-child]:ml-auto [&>*:last-child]:mr-auto"
+            /* 노트북처럼 메뉴가 다 안 들어가는 화면 — 마우스 휠을 굴리면 메뉴가 옆으로 넘어간다 */
+            onWheel={(e) => { const el = e.currentTarget; if (el.scrollWidth > el.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) el.scrollLeft += e.deltaY; }}
             style={{
               WebkitOverflowScrolling: "touch",
               scrollbarWidth: "none",
@@ -7672,7 +7675,7 @@ return (
                   key={m}
                   disabled={isBlocked}
                   onClick={() => handleMenuClick(m)}
-                  className={`kp-nav-btn relative px-3 h-[34px] rounded-[10px] text-[13px] xl:text-[14px] xl:px-3.5 whitespace-nowrap transition-all flex-shrink-0
+                  className={`kp-nav-btn relative px-2.5 h-[34px] rounded-[10px] text-[13px] 2xl:text-[14px] 2xl:px-3 whitespace-nowrap transition-all flex-shrink-0
                     ${isBlocked
                       ? "text-white/20 cursor-not-allowed"
                       : isActive
@@ -8071,17 +8074,9 @@ return (
         )}
 
         {menu === "지입차관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer || !!customRole) && (
-          <div>
-            <div className="flex gap-2 px-4 pt-4 pb-4">
-              <button
-                className="px-5 py-2 text-[13px] font-bold rounded-lg transition border bg-[#1B2B4B] text-white border-[#1B2B4B]"
-              >
-                지입차관리
-              </button>
-            </div>
-            <div className="px-4">
-              <FleetManagement dispatchData={dispatchDataFiltered} role={role} />
-            </div>
+          // ⭐ 탭이 하나뿐이라 눌러도 아무 일 없던 "지입차관리" 버튼을 없앴다(화면 자체 머리말 "지입차량 관제"가 있다)
+          <div className="px-4 pt-4">
+            <FleetManagement dispatchData={dispatchDataFiltered} role={role} />
           </div>
         )}
 
@@ -47159,7 +47154,10 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   const exportSettlementCapture = async (type = "png") => {
     const el = document.getElementById("settlement-capture");
     if (!el) { showAlert("캡쳐 영역을 찾을 수 없습니다."); return; }
-    const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+    // 넓은 모니터용 확대(zoom)는 캡쳐할 때만 잠시 끈다 — html2canvas가 확대를 제대로 그리지 못한다
+    el.classList.add("kp-rv-nozoom");
+    let canvas;
+    try { canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" }); } finally { el.classList.remove("kp-rv-nozoom"); }
     if (type === "png") {
       const link = document.createElement("a");
       link.download = `매출관리_${targetMonth}.png`;
@@ -47511,7 +47509,8 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
         { key: "a3", label: "월 마감 점검", icon: "check", onClick: () => setMonthCloseOpen(true) },
         ...(canSeeStaffPerf ? [{ key: "a4", label: "담당자별 실적", icon: "users", onClick: () => setStaffPerfOpen(true) }] : []),
       ]}>
-    <div id="settlement-capture" className="max-w-[1560px] mx-auto">
+    {/* ⭐ 2026-10-29 — 최대폭(1560px) 제한을 없애 넓은 모니터에서도 좌우 여백 없이 꽉 채운다 */}
+    <div id="settlement-capture" className="kp-rv-zoom w-full">
 
       {/* ── 머리줄: 화면 제목 + 기준 월 + 내보내기 ── */}
       <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
