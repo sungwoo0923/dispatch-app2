@@ -2488,6 +2488,7 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
   const payload = {
     ...copyTarget,
     _id: newId,
+    id: newId, // ⭐ 2026-10-29: 원본(모바일 등록)의 id가 그대로 복사되면 모바일에서 원본·복사본이 같은 오더로 겹쳐 보였다
     화물내용: cargoOverride ?? (copyTarget.화물내용 || ""),
     완료회차: 0, // 회전 운행 진행상황은 새 오더에서 처음부터
     // 복사/수정 패널에서 상차일/하차일을 수정했다면 그 값을 그대로 존중한다 — 무조건
@@ -3304,7 +3305,7 @@ function useRealtimeCollections(user, userCompany, role) {
         getDocs(makeQuery(collection(db, col))).then(snap => snap.docs.map(d => {
           const data = d.data() || {};
           return {
-            _id: d.id, __col: col, ...data,
+            __col: col, ...data, _id: d.id,
             경유지_상차: parseWaypointsShared(data.경유지_상차) || parseWaypointsShared(data.경유상차목록) || [],
             경유지_하차: parseWaypointsShared(data.경유지_하차) || parseWaypointsShared(data.경유하차목록) || [],
           };
@@ -3594,9 +3595,9 @@ const liveWindowStart = pcLiveWindowStart(); // ⭐ 13개월 → 최근 7일~(�
     return null;
   };
   const buildOrderRow = (id, data) => ({
-    _id: id,
     __col: collName,
     ...data,
+    _id: id, // ⭐ 실제 문서 번호가 항상 이긴다(복사로 딸려 온 _id 무시)
     경유지_상차: parseWaypointsShared(data.경유지_상차) || parseWaypointsShared(data.경유상차목록) || [],
     경유지_하차: parseWaypointsShared(data.경유지_하차) || parseWaypointsShared(data.경유하차목록) || [],
   });
@@ -3801,10 +3802,11 @@ const liveWindowStart = pcLiveWindowStart(); // ⭐ 13개월 → 최근 7일~(�
   // orders 리스너와 동일한 이유로, 변경된 문서만 다시 가공한다.
   const dispatchRowMap = new Map();
   const dispatchRawPrev = new Map();
+  // ⭐ 2026-10-29: 문서 안의 _id(복사로 딸려 온 값)가 실제 문서 번호를 덮지 않게 실제 번호를 마지막에 둔다
   const buildDispatchRow = (id, data) => ({
-    _id: id,
     __col: "dispatch",
     ...data,
+    _id: id,
     경유지_상차: parseWaypointsShared(data.경유지_상차) || parseWaypointsShared(data.경유상차목록) || [],
     경유지_하차: parseWaypointsShared(data.경유지_하차) || parseWaypointsShared(data.경유하차목록) || [],
   });
@@ -22598,7 +22600,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
           where("상차일", "<=", dateTo)
         );
         const snap = await getDocs(qy);
-        return snap.docs.map(d => ({ _id: d.id, __col: colName, ...d.data() }));
+        return snap.docs.map(d => ({ __col: colName, ...d.data(), _id: d.id }));
       };
       const [orders, dispatch] = await Promise.all([fetchOne("orders"), fetchOne("dispatch")]);
       const merged = [...orders, ...dispatch].filter(r =>

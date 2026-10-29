@@ -2325,13 +2325,13 @@ const quickRange = (days) => {
     //    이어서 서버에서 최신본을 받아 덮어쓴다(삭제·수정된 오더도 서버 기준으로 맞춰짐).
     Promise.all(["dispatch", "orders"].map((col) =>
       getDocsFromCache(makeQuery(collection(db, col))).then((snap) =>
-        snap.docs.map((d) => ({ _id: d.id, id: d.id, __col: col, ...d.data() }))).catch(() => [])))
+        snap.docs.map((d) => ({ __col: col, ...d.data(), _id: d.id, id: d.id }))).catch(() => [])))
       .then((parts) => { const rows = parts.flat().filter((o) => o.source !== "transport_transmit"); if (rows.length) mergeExtra(rows, { urgent }); })
       .catch(() => {});
     try {
       const snaps = await Promise.all(["dispatch", "orders"].map((col) =>
         getDocs(makeQuery(collection(db, col))).then((snap) =>
-          snap.docs.map((d) => ({ _id: d.id, id: d.id, __col: col, ...d.data() })))));
+          snap.docs.map((d) => ({ __col: col, ...d.data(), _id: d.id, id: d.id })))));
       const rows = snaps.flat().filter((o) => o.source !== "transport_transmit");
       mergeExtra(rows, { urgent });
       return rows;
@@ -2395,7 +2395,7 @@ const quickRange = (days) => {
         outside.forEach(({ col, id, data }) => {
           const key = `${col}/${id}`;
           if (data.source === "transport_transmit") { next.delete(key); return; }
-          next.set(key, { _id: id, id, __col: col, ...data });
+          next.set(key, { __col: col, ...data, _id: id, id });
         });
         return next;
       })),
@@ -2671,11 +2671,13 @@ collections.forEach((name) => {
       // 표시되면 안 된다 — PC(DispatchApp.jsx)와 동일한 기준으로 제외한다.
       // 화주사가 취소(소프트 삭제)한 오더도 PC와 동일하게 배차중처럼 보이지 않도록 제외한다
       // (getStatus가 차량번호 유무만으로 상태를 판정해 취소건이 "배차중"으로 잘못 표시되던 버그).
+      // ⭐ 2026-10-29: 문서 안에 저장된 id/_id(복사등록 때 원본 값이 딸려 온 경우)가 실제 문서 번호를
+      //  덮어쓰면 원본·복사본이 같은 번호가 되어 카드가 겹쳐 여러 장 보였다 — 실제 문서 번호를 항상 마지막에 둔다.
       snap.docChanges().forEach((ch) => {
         if (ch.type === "removed") objCache.delete(ch.doc.id);
-        else objCache.set(ch.doc.id, { _id: ch.doc.id, id: ch.doc.id, __col: name, ...ch.doc.data() });
+        else objCache.set(ch.doc.id, { __col: name, ...ch.doc.data(), _id: ch.doc.id, id: ch.doc.id });
       });
-      const allMapped = snap.docs.map((d) => objCache.get(d.id) || { _id: d.id, id: d.id, __col: name, ...d.data() })
+      const allMapped = snap.docs.map((d) => objCache.get(d.id) || { __col: name, ...d.data(), _id: d.id, id: d.id })
         .filter((o) => o.source !== "transport_transmit");
       const list = allMapped.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태));
       // ⭐ 취소내역 화면용 — 같은 스냅샷에서 취소 상태인 것만 따로 모은다(리스너 중복 없이).
@@ -2869,7 +2871,7 @@ const refreshFromServer = React.useCallback(async ({ force = false, since, manua
     let failed = 0;
     let doneJobs = 0;
     const results = await Promise.all(jobs.map((j) => getDocsFromServer(j.q)
-      .then((snap) => ({ j, rows: snap.docs.map((d) => ({ _id: d.id, id: d.id, __col: j.col, ...d.data() })) }))
+      .then((snap) => ({ j, rows: snap.docs.map((d) => ({ __col: j.col, ...d.data(), _id: d.id, id: d.id })) }))
       .catch(() => { failed += 1; return { j, rows: [] }; })
       .finally(() => { doneJobs += 1; stage({ server: Math.round((doneJobs / jobs.length) * 100) }); })));
     if (failed === jobs.length) throw new Error("all failed");
@@ -9185,7 +9187,8 @@ const summary = useMemo(() => {
                   const oid = o.id || o._id;
                   const isChecked = selectedIds.has(oid);
                   return (
-                    <div key={oid} className={`relative rounded-xl ${multiSelectMode ? "pl-10 transition-all" : ""}`}
+                    // ⭐ 2026-10-29: 화면 키는 컬렉션+실제 문서번호 — 키가 겹치면 조회 결과와 상관없는 카드가 남아 보였다
+                    <div key={`${o.__col || ""}/${o._id || o.id}`} className={`relative rounded-xl ${multiSelectMode ? "pl-10 transition-all" : ""}`}
                       style={{ WebkitTouchCallout: "none", userSelect: "none", WebkitUserSelect: "none" }}
                       onContextMenu={(e) => e.preventDefault()}
                       onTouchStart={multiSelectMode ? undefined : (e) => {
@@ -21765,7 +21768,7 @@ return (
             <div className="space-y-2">
               {list.map((o) => (
                 <div
-                  key={o.id}
+                  key={`${o.__col || ""}/${o._id || o.id}`}
                   ref={(el) => { if (el) orderRefs.current[o.id] = el; }}
                   style={{ scrollMarginTop: 90, WebkitTouchCallout: "none", userSelect: "none", WebkitUserSelect: "none" }}
                   onContextMenu={(e) => e.preventDefault()}
