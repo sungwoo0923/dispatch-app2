@@ -119,10 +119,11 @@ const getDate = (offset = 0) => {
   return d.toISOString().slice(0, 10);
 };
 
+const ORDER_MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const SEARCH_TYPES = ["통합", "상차지명", "하차지명", "상차지주소", "하차지주소", "운송사명"];
 
-const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:ring-2 focus:ring-[#1B2B4B]/40 focus:border-[#1B2B4B] outline-none";
-const labelCls = "block text-xs font-bold text-gray-600 mb-1";
+const inputCls = "w-full border border-[#D5DEEC] rounded-[11px] px-3 h-11 text-sm text-[#0F1A30] font-semibold bg-white focus:ring-4 focus:ring-[#8FB0F0]/30 focus:border-[#2D4C82] outline-none transition";
+const labelCls = "block text-[12px] font-extrabold text-[#5B6B85] mb-1.5 tracking-tight";
 
 export default function ShipperOrder({ editData, onClose }) {
   const user = auth.currentUser;
@@ -742,27 +743,29 @@ export default function ShipperOrder({ editData, onClose }) {
   };
 
   return (
-    <div className="flex gap-5 w-full p-6 max-w-[1200px]">
+    <div className={`flex gap-5 w-full ${onClose ? "p-6 max-w-[1200px]" : ""}`}>
 
       {/* 왼쪽: 입력 폼 */}
-      <div className="flex-1 min-w-0 bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-5">
+      <div className="flex-1 min-w-0 bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] overflow-hidden">
 
         {/* 헤더 */}
-        <div className="flex justify-between items-center border-b pb-4">
-          <h2 className="text-lg font-bold text-gray-900">{editId || editData ? "오더 수정" : "일반배차 등록"}</h2>
+        <div className="relative overflow-hidden flex justify-between items-center px-6 h-[68px] text-white" style={{ background: "linear-gradient(135deg,#0F1A30 0%,#1B2B4B 55%,#2D4C82 100%)" }}>
+          <span className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "18px 18px" }} />
+          <div className="relative">
+            <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: ORDER_MONO }}>ORDER CONSOLE</div>
+            <h2 className="text-[18px] font-black tracking-tight">{editId || editData ? "오더 수정" : "일반배차 등록"}</h2>
+          </div>
           <button onClick={() => { if (window.confirm("입력값을 초기화하시겠습니까?")) resetForm(); }}
-            className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg">
+            className="relative px-4 h-9 text-[13px] bg-white/10 hover:bg-white/20 ring-1 ring-white/25 text-white font-extrabold rounded-[10px]">
             초기화
           </button>
         </div>
+        <div className="p-6 space-y-6">
 
         {/* 운송의뢰사 */}
         <div>
-          <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-            <span className="w-1 h-4 bg-[#1B2B4B] rounded-full inline-block" />
-            운송의뢰사
-          </div>
-          <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+          <div className="mb-3 flex items-center gap-2.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-[9px] text-[11px] font-black text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", fontFamily: ORDER_MONO }}>01</span><span className="text-[15px] font-black text-[#0F1A30]">운송의뢰사</span></div>
+          <div className="bg-[#F7F9FC] border border-[#E9EEF5] rounded-[16px] p-4 space-y-3">
             <div className="relative">
               <label className={labelCls}>운송사명</label>
               <input
@@ -809,11 +812,8 @@ export default function ShipperOrder({ editData, onClose }) {
 
         {/* 거래처 정보 */}
         <div>
-          <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-            <span className="w-1 h-4 bg-[#1B2B4B] rounded-full inline-block" />
-            거래처 정보
-          </div>
-          <div className="bg-gray-50 rounded-xl p-4">
+          <div className="mb-3 flex items-center gap-2.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-[9px] text-[11px] font-black text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", fontFamily: ORDER_MONO }}>02</span><span className="text-[15px] font-black text-[#0F1A30]">거래처 정보</span></div>
+          <div className="bg-[#F7F9FC] border border-[#E9EEF5] rounded-[16px] p-4">
             <label className={labelCls}>거래처명</label>
             <div className="flex gap-2">
               {companyEditable ? (
@@ -848,11 +848,8 @@ export default function ShipperOrder({ editData, onClose }) {
 
         {/* 운송 일정 */}
         <div>
-          <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-            <span className="w-1 h-4 bg-[#1B2B4B] rounded-full inline-block" />
-            운송 일정
-          </div>
-          <div className="bg-gray-50 rounded-xl p-4 space-y-4">
+          <div className="mb-3 flex items-center gap-2.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-[9px] text-[11px] font-black text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", fontFamily: ORDER_MONO }}>03</span><span className="text-[15px] font-black text-[#0F1A30]">운송 일정</span></div>
+          <div className="bg-[#F7F9FC] border border-[#E9EEF5] rounded-[16px] p-4 space-y-4">
 
             {/* 상차 */}
             <div>
@@ -916,11 +913,8 @@ export default function ShipperOrder({ editData, onClose }) {
 
         {/* 상·하차 정보 */}
         <div>
-          <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-            <span className="w-1 h-4 bg-[#1B2B4B] rounded-full inline-block" />
-            상·하차 정보
-          </div>
-          <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-2 gap-4">
+          <div className="mb-3 flex items-center gap-2.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-[9px] text-[11px] font-black text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", fontFamily: ORDER_MONO }}>04</span><span className="text-[15px] font-black text-[#0F1A30]">상·하차 정보</span></div>
+          <div className="bg-[#F7F9FC] border border-[#E9EEF5] rounded-[16px] p-4 grid grid-cols-2 gap-4">
             {/* 상차지 */}
             <div className="space-y-2">
               <div className="text-xs font-bold text-gray-700 mb-2 border-b pb-1">상차지</div>
@@ -1009,11 +1003,8 @@ export default function ShipperOrder({ editData, onClose }) {
 
         {/* 화물 정보 */}
         <div>
-          <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-            <span className="w-1 h-4 bg-[#1B2B4B] rounded-full inline-block" />
-            화물 정보
-          </div>
-          <div className="bg-gray-50 rounded-xl p-4 space-y-4">
+          <div className="mb-3 flex items-center gap-2.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-[9px] text-[11px] font-black text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", fontFamily: ORDER_MONO }}>05</span><span className="text-[15px] font-black text-[#0F1A30]">화물 정보</span></div>
+          <div className="bg-[#F7F9FC] border border-[#E9EEF5] rounded-[16px] p-4 space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={labelCls}>차량종류</label>
@@ -1075,11 +1066,8 @@ export default function ShipperOrder({ editData, onClose }) {
 
         {/* 배차옵션 */}
         <div>
-          <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-            <span className="w-1 h-4 bg-[#1B2B4B] rounded-full inline-block" />
-            배차옵션
-          </div>
-          <div className="bg-gray-50 rounded-xl p-4 flex gap-2">
+          <div className="mb-3 flex items-center gap-2.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-[9px] text-[11px] font-black text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", fontFamily: ORDER_MONO }}>06</span><span className="text-[15px] font-black text-[#0F1A30]">배차옵션</span></div>
+          <div className="bg-[#F7F9FC] border border-[#E9EEF5] rounded-[16px] p-4 flex gap-2">
             <button type="button"
               onClick={() => setForm(p => ({ ...p, 독차: true, 혼적: false }))}
               className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${form.독차 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
@@ -1100,11 +1088,8 @@ export default function ShipperOrder({ editData, onClose }) {
 
         {/* 상하차방법 / 결제방식 */}
         <div>
-          <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-            <span className="w-1 h-4 bg-[#1B2B4B] rounded-full inline-block" />
-            상하차방법 / 결제방식
-          </div>
-          <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-3 gap-4">
+          <div className="mb-3 flex items-center gap-2.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-[9px] text-[11px] font-black text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", fontFamily: ORDER_MONO }}>07</span><span className="text-[15px] font-black text-[#0F1A30]">상하차방법 / 결제방식</span></div>
+          <div className="bg-[#F7F9FC] border border-[#E9EEF5] rounded-[16px] p-4 grid grid-cols-3 gap-4">
             <div>
               <label className={labelCls}>상차방법</label>
               <select className={inputCls + errCls("상차방법")} value={form.상차방법} onChange={e => onChange("상차방법", e.target.value)}>
@@ -1130,9 +1115,9 @@ export default function ShipperOrder({ editData, onClose }) {
         </div>
 
         {/* 버튼 */}
-        <div className="flex justify-end gap-3 pt-2 border-t">
+        <div className="flex justify-end gap-3 pt-5 border-t border-[#EEF1F6]">
           <button onClick={() => onClose ? onClose() : navigate(-1)}
-            className="px-6 py-2.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-sm">
+            className="px-6 h-11 rounded-[12px] bg-white border border-[#C9D4E6] hover:bg-[#F5F8FD] text-[#1B2B4B] font-extrabold text-sm">
             취소
           </button>
           <button
@@ -1151,16 +1136,21 @@ export default function ShipperOrder({ editData, onClose }) {
               setCoords({ start, end });
               setPreviewOpen(true);
             }}
-            className="px-8 py-2.5 rounded-lg bg-[#1B2B4B] hover:opacity-90 text-white font-bold text-sm"
+            className="px-10 h-11 rounded-[12px] hover:opacity-90 text-white font-black text-sm shadow-[0_8px_20px_rgba(27,43,75,0.3)]" style={{ background: "linear-gradient(135deg,#0F1A30,#1B2B4B 55%,#2D4C82)" }}
           >
             {editId || editData ? "저장" : "오더 등록"}
           </button>
         </div>
+        </div>
       </div>
 
       {/* 오른쪽: 오더 불러오기 */}
-      <div className="w-[400px] bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex flex-col">
-        <div className="font-bold text-gray-900 text-base mb-4 border-b pb-3">오더 불러오기</div>
+      <div className="w-[420px] shrink-0 bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] p-5 flex flex-col self-start sticky top-[84px]">
+        <div className="flex items-center gap-2 mb-4 pb-3 border-b border-[#EEF1F6]">
+          <span className="w-1.5 h-1.5 rotate-45 bg-[#2D4C82]" />
+          <span className="text-[10px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: ORDER_MONO }}>HISTORY</span>
+          <span className="text-[15.5px] font-black text-[#0F1A30]">오더 불러오기</span>
+        </div>
 
         {/* 검색 필터 */}
         <div className="space-y-2 mb-3">
@@ -1188,7 +1178,7 @@ export default function ShipperOrder({ editData, onClose }) {
 
         <div className="space-y-2 flex-1 overflow-y-auto max-h-[680px]">
           {searchResults.map(item => (
-            <div key={item.id} className="border border-gray-200 rounded-xl p-3 hover:bg-[#eef1f7] hover:border-[#c7d1e3] transition cursor-pointer"
+            <div key={item.id} className="border border-[#E3E8F0] rounded-[14px] p-3.5 hover:bg-[#F5F8FD] hover:border-[#8FB0F0] transition cursor-pointer"
               onClick={() => applyOrder(item)}>
               <div className="font-bold text-sm text-gray-900">
                 {item.상차지명 || "-"} → {item.하차지명 || "-"}

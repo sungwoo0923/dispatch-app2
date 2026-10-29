@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import { db, auth } from "../../firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { doc, getDoc } from "firebase/firestore";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Line, ComposedChart, Bar, BarChart, Cell } from "recharts";
+import { HD_MONO as MONO, HD_C as C, HD_CSS, Clock, Panel, Delta, Tile, DarkTip, Gauge, Seg, hdShort as short } from "../../HomeDeck";
 
 const getTodayKST = () => {
   const now = new Date();
@@ -108,173 +110,293 @@ export default function ShipperHome() {
 
   const maxWd = Math.max(...weekdayData.map(d => d.count), 1);
 
-  // ⭐ 2026-10-29 리디자인 — 운송사 PC 홈과 같은 네이비 디지털 대시보드(알록달록한 링 대신 남색 단계)
-  const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+  // ⭐ 2026-10-29 리디자인 — 운송사 PC 홈(HomeDeck)과 같은 어두운 네이비 "관제 데크"
+  const [range, setRange] = useState("30d");
+  const addDay = (ymd, n) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const isCancel = (o) => ["취소", "배차취소", "오더취소", "취소됨"].includes(o.상태) || o.배차상태 === "배차취소";
+  const fare = (o) => Number(String(o.청구운임 ?? 0).replace(/[^\d-]/g, "")) || 0;
   const pct = (a, b) => (b > 0 ? Math.round((a / b) * 100) : 0);
-  const tiles = [
-    { label: "전체 오더", en: "ORDERS", value: kpi.전체, unit: "건", sub: `취소 ${kpi.취소}건 별도`, bar: 100, dark: true },
-    { label: "배차 대기", en: "WAITING", value: kpi.배차대기, unit: "건", sub: `전체의 ${pct(kpi.배차대기, kpi.전체)}% · 차량 미배정`, bar: pct(kpi.배차대기, kpi.전체) },
-    { label: "배차 완료", en: "ASSIGNED", value: kpi.배차완료, unit: "건", sub: `전체의 ${pct(kpi.배차완료, kpi.전체)}% · 차량 배정됨`, bar: pct(kpi.배차완료, kpi.전체) },
-    { label: "이번 달 운송료", en: "MONTH", value: Math.round(kpi.월매출 / 10000).toLocaleString(), unit: "만원", sub: `누적 ${kpi.전체매출.toLocaleString()}원`, bar: null },
-  ];
+
+  // 일별 [운송료, 건수, 배차완료]
+  const days = useMemo(() => {
+    const m = {};
+    orders.forEach((o) => {
+      if (isCancel(o)) return;
+      const d = toYMD(o.상차일);
+      if (!d) return;
+      const e = m[d] || (m[d] = [0, 0, 0]);
+      e[0] += fare(o); e[1] += 1; if (o.차량번호 && String(o.차량번호).trim()) e[2] += 1;
+    });
+    return m;
+  }, [orders]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dv = (d) => days[d] || [0, 0, 0];
+  const yesterday = addDay(today, -1), tomorrow = addDay(today, 1);
+  const t0 = dv(today), t1 = dv(yesterday), tm = dv(tomorrow);
+  const last14 = Array.from({ length: 14 }, (_, i) => addDay(today, i - 13));
+  const sparkC = last14.map((d) => ({ v: dv(d)[1] }));
+  const sparkS = last14.map((d) => ({ v: dv(d)[0] }));
+  const sparkD = last14.map((d) => ({ v: dv(d)[2] }));
+  const thisMonth = today.slice(0, 7);
+  const sumRange = (from, to) => Object.entries(days).reduce((a, [d, v]) => (d >= from && d <= to ? [a[0] + v[0], a[1] + v[1], a[2] + v[2]] : a), [0, 0, 0]);
+  const mNow = sumRange(`${thisMonth}-01`, today);
+  const prevStart = (() => { const d = new Date(`${thisMonth}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - 1); return d.toISOString().slice(0, 10); })();
+  const mPrev = sumRange(prevStart, addDay(prevStart, Number(today.slice(8)) - 1));
+  const yNow = sumRange(`${today.slice(0, 4)}-01-01`, today);
+  const waitingAll = kpi.배차대기;
+
+  const trend = useMemo(() => {
+    if (range === "year") {
+      const y = today.slice(0, 4);
+      return Array.from({ length: 12 }, (_, i) => {
+        const ym = `${y}-${String(i + 1).padStart(2, "0")}`;
+        const v = Object.entries(days).reduce((a, [d, x]) => (d.startsWith(ym) ? [a[0] + x[0], a[1] + x[1]] : a), [0, 0]);
+        return { label: `${i + 1}월`, s: v[0], c: v[1], on: ym === thisMonth };
+      });
+    }
+    const n = range === "7d" ? 7 : 30;
+    return Array.from({ length: n }, (_, i) => {
+      const d = addDay(today, i - (n - 1));
+      const v = dv(d);
+      return { label: `${Number(d.slice(5, 7))}/${Number(d.slice(8))}`, s: v[0], c: v[1], on: d === today };
+    });
+  }, [range, days, today]); // eslint-disable-line react-hooks/exhaustive-deps
+  const trendSum = trend.reduce((a, x) => [a[0] + x.s, a[1] + x.c], [0, 0]);
+  const peak = trend.reduce((a, x) => (x.s > a.s ? x : a), { s: 0, label: "-" });
+
+  // 최근 30일 노선 / 하차지 / 차종
+  const ops = useMemo(() => {
+    const from = addDay(today, -29);
+    const routes = {}, cars = {};
+    orders.forEach((o) => {
+      const d = toYMD(o.상차일);
+      if (isCancel(o) || !d || d < from || d > today) return;
+      const k = `${o.상차지명 || "-"} → ${o.하차지명 || "-"}`;
+      const e = routes[k] || (routes[k] = { k, cnt: 0, sale: 0 });
+      e.cnt += 1; e.sale += fare(o);
+      const c = `${o.차량톤수 || o.톤수 || ""} ${o.차량종류 || ""}`.trim() || "미지정";
+      cars[c] = (cars[c] || 0) + 1;
+    });
+    return {
+      routes: Object.values(routes).sort((a, b) => b.cnt - a.cnt || b.sale - a.sale).slice(0, 6),
+      cars: Object.entries(cars).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([name, v]) => ({ name, v })),
+    };
+  }, [orders, today]); // eslint-disable-line react-hooks/exhaustive-deps
+  const routeMax = Math.max(1, ...ops.routes.map((r) => r.cnt));
+  const carTotal = ops.cars.reduce((a, c) => a + c.v, 0);
+  const CAR_SHADES = ["#CFE0FF", "#8FB0F0", "#6E95E8", "#4B6CB7", "#2D4C82", "#1B2B4B"];
+
+  const now = new Date();
+  const dateText = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, "0")}.${String(now.getDate()).padStart(2, "0")} ${["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][now.getDay()]}`;
+  const hour = now.getHours();
+  const hello = hour < 12 ? "좋은 아침입니다" : hour < 18 ? "오늘도 수고 많으십니다" : "오늘 하루 고생하셨습니다";
+  const myName = userData?.name || userData?.이름 || "";
+  const company = userData?.companyName || userData?.company || "";
   const todayPct = pct(kpi.당일완료, kpi.당일전체);
+  const tomorrowRows = orders.filter((o) => !isCancel(o) && toYMD(o.상차일) === tomorrow);
+  const tomorrowDone = tomorrowRows.filter((o) => o.차량번호 && String(o.차량번호).trim()).length;
+
+  const chip = (o) => {
+    const st = getStatus(o);
+    const style = st.label === "배차완료"
+      ? { background: "linear-gradient(135deg,#4B6CB7,#2D4C82)", color: "#fff", border: "1px solid rgba(143,176,240,.45)" }
+      : st.label === "취소"
+        ? { background: "transparent", color: "rgba(207,224,255,.38)", border: "1px solid rgba(143,176,240,.14)" }
+        : st.label === "요청"
+          ? { background: "transparent", color: C.hi, border: "1px dashed rgba(143,176,240,.55)" }
+          : { background: "rgba(143,176,240,.14)", color: C.hi, border: "1px solid rgba(143,176,240,.25)" };
+    return <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 8, fontSize: 12, fontWeight: 800, whiteSpace: "nowrap", ...style }}>{st.label}</span>;
+  };
+  const th = { padding: "9px 10px", fontSize: 12, fontWeight: 800, color: C.dim, textAlign: "center", whiteSpace: "nowrap", borderBottom: `1px solid ${C.line}` };
+  const td = { padding: "10px 10px", fontSize: 13.5, textAlign: "center", whiteSpace: "nowrap", borderBottom: `1px solid rgba(143,176,240,.07)`, color: C.ink };
 
   return (
-    <div className="space-y-4" style={{ fontFeatureSettings: '"tnum"' }}>
+    <section className="hd-deck" style={{ position: "relative", overflow: "hidden", borderRadius: 26, padding: "22px 24px 24px", color: C.ink, minHeight: "calc(100vh - 110px)", fontFeatureSettings: '"tnum"' }}>
+      <style>{HD_CSS}</style>
+      <div className="hd-scan" />
 
-      {/* KPI 타일 */}
-      <div className="grid grid-cols-4 gap-4">
-        {tiles.map((t) => (
-          <div key={t.en}
-            className={`relative overflow-hidden rounded-[20px] px-5 py-4 border ${t.dark ? "border-transparent text-white shadow-[0_14px_30px_rgba(15,26,48,0.28)]" : "bg-white border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)]"}`}
-            style={t.dark ? { background: "linear-gradient(135deg,#0F1A30 0%,#1B2B4B 55%,#2D4C82 100%)" } : undefined}>
-            {t.dark && <span className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "16px 16px" }} />}
-            <div className="relative flex items-center justify-between">
-              <span className={`text-[13px] font-bold ${t.dark ? "text-white/85" : "text-[#3A4A66]"}`}>{t.label}</span>
-              <span className={`text-[9.5px] font-extrabold tracking-[0.22em] ${t.dark ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`} style={{ fontFamily: MONO }}>{t.en}</span>
-            </div>
-            <div className="relative mt-2 flex items-baseline gap-1">
-              <span className={`text-[30px] font-black leading-none ${t.dark ? "text-white" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO }}>{t.value}</span>
-              <span className={`text-[13px] font-bold ${t.dark ? "text-white/60" : "text-[#7A89A3]"}`}>{t.unit}</span>
-            </div>
-            <div className={`relative text-[11.5px] mt-1.5 ${t.dark ? "text-white/55" : "text-[#7A89A3]"}`}>{t.sub}</div>
-            {t.bar != null && (
-              <div className={`relative h-1 rounded-full mt-3 overflow-hidden ${t.dark ? "bg-white/15" : "bg-[#EEF2F8]"}`}>
-                <div className={`h-full rounded-full ${t.dark ? "bg-[#8FB0F0]" : "bg-[#1B2B4B]"}`} style={{ width: `${t.bar}%`, transition: "width .6s ease" }} />
-              </div>
-            )}
+      {/* ── 머리줄 ── */}
+      <div style={{ position: "relative", display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20, flexWrap: "wrap", marginBottom: 18 }}>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 800, letterSpacing: "0.28em", color: C.glow }}>KP-FLOW · SHIPPER DECK</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "2px 9px", borderRadius: 99, border: "1px solid rgba(143,176,240,.35)", fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.14em", color: C.hi }}>
+              <span className="hd-pulse" style={{ width: 6, height: 6, borderRadius: "50%", background: C.hi, boxShadow: `0 0 8px ${C.glow}` }} />LIVE
+            </span>
+            {company && <span style={{ padding: "2px 10px", borderRadius: 99, background: "rgba(143,176,240,.12)", fontSize: 12, fontWeight: 800, color: C.hi }}>{company}</span>}
           </div>
-        ))}
+          <h1 style={{ margin: "8px 0 0", fontSize: 28, fontWeight: 900, letterSpacing: "-0.02em", color: "#fff" }}>{myName ? `${myName}님, ${hello}` : hello}</h1>
+          <p style={{ margin: "6px 0 0", fontSize: 15, fontWeight: 600, color: C.sub }}>
+            오늘 상차 <b style={{ color: "#fff", fontFamily: MONO }}>{kpi.당일전체}</b>건 · 배차완료 <b style={{ color: "#fff", fontFamily: MONO }}>{kpi.당일완료}</b>건 · 배차 대기 <b style={{ color: "#fff", fontFamily: MONO }}>{kpi.당일대기}</b>건
+          </p>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <Clock />
+          <div style={{ marginTop: 6, fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.16em", color: C.dim }}>{dateText} · KST</div>
+        </div>
       </div>
 
-      {/* 당일 현황 + 요일별 배차 추이 */}
-      <div className="grid grid-cols-3 gap-4">
+      {/* ── KPI 타일 ── */}
+      <div style={{ position: "relative", display: "grid", gridTemplateColumns: "repeat(5, minmax(0,1fr))", gap: 12, marginBottom: 14 }}>
+        <Tile primary code="TODAY" label="오늘 상차" value={kpi.당일전체.toLocaleString()} unit="건" spark={sparkC} sparkId="shS1"
+          foot={<><Delta cur={t0[1]} prev={t1[1]} /><span>어제 대비</span></>} />
+        <Tile code="ASSIGNED" label="오늘 배차완료" value={kpi.당일완료.toLocaleString()} unit="건" spark={sparkD} sparkId="shS2"
+          foot={<span>완료율 <b style={{ fontFamily: MONO, color: C.hi }}>{todayPct}%</b></span>} />
+        <Tile code="WAITING" label="배차 대기" value={waitingAll.toLocaleString()} unit="건"
+          foot={<span>전체 오더의 <b style={{ fontFamily: MONO, color: C.hi }}>{pct(waitingAll, kpi.전체)}%</b> · 차량 미배정</span>} />
+        <Tile code="MONTH" label="이번 달 운송료" value={short(mNow[0])} unit="원" spark={sparkS} sparkId="shS3"
+          foot={<><Delta cur={mNow[0]} prev={mPrev[0]} /><span>전월 같은 기간 대비</span></>} />
+        <Tile code="YEAR" label="올해 운송료" value={short(yNow[0])} unit="원"
+          foot={<span>누적 <b style={{ fontFamily: MONO, color: C.hi }}>{yNow[1].toLocaleString()}</b>건 · 건당 <b style={{ fontFamily: MONO, color: C.hi }}>{short(yNow[1] ? yNow[0] / yNow[1] : 0)}</b></span>} />
+      </div>
 
-        {/* 당일 배차 현황 */}
-        <div className="relative overflow-hidden rounded-[20px] p-5 text-white" style={{ background: "radial-gradient(90% 90% at 30% 0%, #22396A 0%, #0F1A30 60%, #0B1428 100%)" }}>
-          <span className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
-          <div className="relative flex items-center justify-between">
-            <div>
-              <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>TODAY</div>
-              <div className="text-[15px] font-black">당일 배차 현황</div>
+      {/* ── 운송료 추이 + 게이지 ── */}
+      <div style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(0,2.25fr) minmax(0,1fr)", gap: 14, marginBottom: 14 }}>
+        <Panel code="TREND" title="운송료 추이" right={<Seg value={range} onChange={setRange} items={[["7d", "7일"], ["30d", "30일"], ["year", "올해"]]} />}>
+          <div style={{ display: "flex", gap: 22, marginBottom: 6, flexWrap: "wrap" }}>
+            {[["기간 운송료", Math.round(trendSum[0]).toLocaleString() + "원"], ["건수", `${trendSum[1].toLocaleString()}건`], ["건당 평균", short(trendSum[1] ? trendSum[0] / trendSum[1] : 0)], ["최고", `${peak.label} · ${short(peak.s)}`]].map(([k, v]) => (
+              <div key={k}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.dim }}>{k}</div>
+                <div style={{ fontFamily: MONO, fontSize: 16.5, fontWeight: 800, color: "#fff" }}>{v}</div>
+              </div>
+            ))}
+            <div style={{ marginLeft: "auto", display: "flex", gap: 14, alignItems: "center", fontSize: 12, fontWeight: 700, color: C.sub }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, height: 3, borderRadius: 2, background: C.glow }} />운송료</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, height: 0, borderTop: `2px dashed ${C.hi}` }} />건수</span>
             </div>
-            <span className="text-[11px] text-white/45" style={{ fontFamily: MONO }}>{today}</span>
           </div>
-          <div className="relative flex items-center gap-5 mt-4">
-            <RingGauge value={kpi.당일완료} total={kpi.당일전체} size={124} stroke={11} color="#8FB0F0" trackColor="rgba(255,255,255,0.10)" />
-            <div className="flex-1 space-y-2.5">
-              {[["전체", kpi.당일전체, "bg-white/10"], ["대기", kpi.당일대기, "bg-white/[0.06] ring-1 ring-white/15"], ["완료", kpi.당일완료, "bg-[#8FB0F0]/25"]].map(([l, v, cls]) => (
-                <div key={l} className={`flex items-center justify-between rounded-xl px-3 h-10 ${cls}`}>
-                  <span className="text-[12.5px] font-bold text-white/75">{l}</span>
-                  <span className="text-[16px] font-black" style={{ fontFamily: MONO }}>{v}<span className="text-[11px] text-white/50 ml-0.5">건</span></span>
+          <div style={{ height: "clamp(250px, 32vh, 380px)" }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={trend} margin={{ top: 10, right: 6, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="shArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.accent} stopOpacity={0.5} /><stop offset="100%" stopColor={C.accent} stopOpacity={0} /></linearGradient>
+                  <linearGradient id="shBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.hi} /><stop offset="100%" stopColor="#2D4C82" /></linearGradient>
+                </defs>
+                <CartesianGrid stroke="rgba(143,176,240,.08)" vertical={false} />
+                <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11.5, fill: "rgba(207,224,255,.5)", fontFamily: MONO }} interval={range === "30d" ? 3 : 0} dy={6} />
+                <YAxis yAxisId="s" axisLine={false} tickLine={false} width={46} tick={{ fontSize: 11, fill: "rgba(207,224,255,.4)", fontFamily: MONO }} tickFormatter={short} />
+                <YAxis yAxisId="c" orientation="right" axisLine={false} tickLine={false} width={30} allowDecimals={false} tick={{ fontSize: 11, fill: "rgba(207,224,255,.3)", fontFamily: MONO }} />
+                <Tooltip content={<DarkTip />} cursor={{ stroke: "rgba(143,176,240,.35)", strokeDasharray: "3 3" }} />
+                {range === "year" ? (
+                  <Bar yAxisId="s" dataKey="s" name="운송료" radius={[6, 6, 0, 0]} barSize={22}>
+                    {trend.map((x) => <Cell key={x.label} fill={x.on ? "url(#shBar)" : "rgba(110,149,232,.35)"} />)}
+                  </Bar>
+                ) : (
+                  <Area yAxisId="s" type="monotone" dataKey="s" name="운송료" stroke={C.glow} strokeWidth={2.6} fill="url(#shArea)" dot={false} activeDot={{ r: 5, fill: "#fff", stroke: C.glow, strokeWidth: 3 }} animationDuration={800} />
+                )}
+                <Line yAxisId="c" type="monotone" dataKey="c" name="건수" stroke={C.hi} strokeWidth={1.8} strokeDasharray="5 4" dot={false} animationDuration={800} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </Panel>
+
+        <Panel code="DISPATCH" title="오늘 배차 완료율">
+          <Gauge value={todayPct} max={100} label={`${todayPct}%`} sub={`${kpi.당일완료} / ${kpi.당일전체}건 차량 배정`} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
+            {[["오늘 운송료", short(t0[0])], ["이번 달 건수", `${mNow[1].toLocaleString()}건`], ["월 배차완료", `${mNow[2].toLocaleString()}건`], ["누적 오더", `${kpi.전체.toLocaleString()}건`]].map(([k, v]) => (
+              <div key={k} style={{ borderRadius: 11, padding: "9px 11px", background: "rgba(255,255,255,.035)", border: `1px solid ${C.line}` }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.dim }}>{k}</div>
+                <div style={{ fontFamily: MONO, fontSize: 16, fontWeight: 800, color: "#fff", marginTop: 2 }}>{v}</div>
+              </div>
+            ))}
+          </div>
+          {[["오늘", kpi.당일완료, kpi.당일전체], ["내일", tomorrowDone, tomorrowRows.length]].map(([l, a, b]) => (
+            <div key={l} style={{ marginTop: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, fontWeight: 700, color: C.sub, marginBottom: 6 }}>
+                <span>{l} 배차 진행</span>
+                <span style={{ fontFamily: MONO, color: "#fff" }}>{a}/{b} · {pct(a, b)}%</span>
+              </div>
+              <div style={{ height: 8, borderRadius: 99, background: "rgba(143,176,240,.12)", overflow: "hidden" }}>
+                <div style={{ width: `${pct(a, b)}%`, height: "100%", borderRadius: 99, background: "linear-gradient(90deg,#2D4C82,#CFE0FF)", boxShadow: `0 0 10px ${C.glow}`, transition: "width .6s" }} />
+              </div>
+            </div>
+          ))}
+        </Panel>
+      </div>
+
+      {/* ── 아래 줄 — 오늘 오더판 / 주요 노선 / 요일 · 차종 ── */}
+      <div style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(0,1.9fr) minmax(0,1fr) minmax(0,1fr)", gap: 14 }}>
+        <Panel code="BOARD" title="오늘 오더판" right={<span style={{ fontFamily: MONO, fontSize: 12, color: C.dim }}>{today} · {recent.length}건</span>}>
+          {recent.length === 0 ? (
+            <div style={{ height: 220, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: C.dim }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: C.sub }}>오늘 상차 예정 오더가 없습니다</div>
+              <div style={{ fontSize: 12.5, marginTop: 4 }}>운송 › 일반배차등록에서 새 오더를 요청할 수 있습니다</div>
+            </div>
+          ) : (
+            <div className="hd-scroll" style={{ maxHeight: 330, overflow: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead style={{ position: "sticky", top: 0, background: "#111F3B" }}>
+                  <tr>{["상차시간", "상차지 → 하차지", "차량", "차량번호", "기사", "연락처", "운송료", "상태"].map((h) => <th key={h} style={th}>{h}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {recent.map((o) => (
+                    <tr key={o.id}>
+                      <td className="hd-sub" style={{ ...td, fontFamily: MONO }}>{o.상차시간 || "-"}</td>
+                      <td style={{ ...td, textAlign: "left", fontWeight: 800, maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis" }}>{o.상차지명 || "-"} <span style={{ color: C.glow }}>→</span> {o.하차지명 || "-"}</td>
+                      <td className="hd-sub" style={td}>{`${o.차량톤수 || o.톤수 || ""} ${o.차량종류 || ""}`.trim() || "-"}</td>
+                      <td style={{ ...td, fontWeight: 800 }}>{o.차량번호 || "-"}</td>
+                      <td style={td}>{o.이름 || "-"}</td>
+                      <td className="hd-sub" style={{ ...td, fontFamily: MONO }}>{formatPhoneDisplay(o.전화번호)}</td>
+                      <td style={{ ...td, fontFamily: MONO, fontWeight: 800 }}>{fare(o) ? fare(o).toLocaleString() : "-"}</td>
+                      <td style={td}>{chip(o)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+
+        <Panel code="ROUTES" title="주요 노선" right={<span style={{ fontFamily: MONO, fontSize: 11.5, color: C.dim }}>최근 30일</span>}>
+          {ops.routes.length === 0 ? <div style={{ color: C.dim, fontSize: 13, padding: "30px 0", textAlign: "center" }}>데이터 없음</div> : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+              {ops.routes.map((r, i) => (
+                <div key={r.k}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13, fontWeight: 700 }}>
+                    <span style={{ display: "flex", gap: 8, minWidth: 0 }}>
+                      <span style={{ fontFamily: MONO, color: i === 0 ? C.hi : C.dim }}>{String(i + 1).padStart(2, "0")}</span>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: C.ink }}>{r.k}</span>
+                    </span>
+                    <span style={{ fontFamily: MONO, color: "#fff", whiteSpace: "nowrap" }}>{r.cnt}건</span>
+                  </div>
+                  <div style={{ marginTop: 5, height: 6, borderRadius: 99, background: "rgba(143,176,240,.1)", overflow: "hidden" }}>
+                    <div style={{ width: `${(r.cnt / routeMax) * 100}%`, height: "100%", borderRadius: 99, background: i === 0 ? "linear-gradient(90deg,#4B6CB7,#CFE0FF)" : "rgba(110,149,232,.55)" }} />
+                  </div>
+                  <div style={{ marginTop: 3, fontFamily: MONO, fontSize: 11.5, color: C.dim }}>{Math.round(r.sale).toLocaleString()}원</div>
                 </div>
               ))}
-              <div className="text-[11px] text-white/50 text-right" style={{ fontFamily: MONO }}>완료율 {todayPct}%</div>
             </div>
-          </div>
-        </div>
+          )}
+        </Panel>
 
-        {/* 요일별 배차 추이 */}
-        <div className="col-span-2 bg-white rounded-[20px] p-5 border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)]">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rotate-45 bg-[#1B2B4B]" />
-              <span className="text-[10px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: MONO }}>WEEKDAY</span>
-              <span className="text-[15px] font-black text-[#0F1A30]">이번 달 요일별 배차</span>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+          <Panel code="WEEKDAY" title="이번 달 요일별">
+            <div style={{ height: 130 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={weekdayData} margin={{ top: 14, right: 0, left: 0, bottom: 0 }}>
+                  <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "rgba(207,224,255,.55)" }} />
+                  <Bar dataKey="count" radius={[5, 5, 0, 0]} barSize={18} label={{ position: "top", fill: C.hi, fontSize: 11, fontFamily: MONO }} isAnimationActive={false}>
+                    {weekdayData.map((x) => <Cell key={x.day} fill={x.count === maxWd && x.count > 0 ? "#CFE0FF" : "rgba(110,149,232,.45)"} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-            <span className="text-[11px] text-[#9AA9C3]" style={{ fontFamily: MONO }}>MAX {maxWd}건</span>
-          </div>
-          <div className="flex items-end justify-between gap-3 h-36 px-1">
-            {weekdayData.map(({ day, count }) => {
-              const h = Math.max((count / maxWd) * 84, count > 0 ? 6 : 2);
-              const isWeekend = day === "일" || day === "토";
-              const isMax = count === maxWd && count > 0;
-              return (
-                <div key={day} className="flex flex-col items-center flex-1 gap-2 h-full">
-                  <div className="w-full flex-1 flex flex-col justify-end items-center gap-1.5">
-                    {count > 0 && <div className="text-[11.5px] font-black text-[#1B2B4B]" style={{ fontFamily: MONO }}>{count}</div>}
-                    <div className="w-full max-w-[56px] rounded-t-lg transition-all"
-                      style={{ height: `${h}px`, background: isMax ? "linear-gradient(180deg,#2D4C82,#0F1A30)" : isWeekend ? "#DCE3EF" : "#9FB5DD" }} />
-                  </div>
-                  <div className={`text-[12px] font-bold ${isWeekend ? "text-[#9AA9C3]" : "text-[#3A4A66]"}`}>{day}</div>
+          </Panel>
+          <Panel code="FLEET" title="차종 구성" right={<span style={{ fontFamily: MONO, fontSize: 11.5, color: C.dim }}>30일 · {carTotal}건</span>}>
+            <div style={{ display: "flex", height: 10, borderRadius: 99, overflow: "hidden", marginBottom: 10, background: "rgba(143,176,240,.1)" }}>
+              {ops.cars.map((c, i) => <div key={c.name} style={{ width: `${(c.v / Math.max(1, carTotal)) * 100}%`, background: CAR_SHADES[i] }} />)}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 12px" }}>
+              {ops.cars.map((c, i) => (
+                <div key={c.name} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, minWidth: 0 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 2, background: CAR_SHADES[i], flexShrink: 0 }} />
+                  <span style={{ color: C.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
+                  <span style={{ marginLeft: "auto", fontFamily: MONO, fontWeight: 800, color: "#fff" }}>{c.v}</span>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          </Panel>
         </div>
       </div>
-
-      {/* 당일 오더 */}
-      <div className="bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-[#EEF1F6] flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rotate-45 bg-[#1B2B4B]" />
-            <span className="text-[10px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: MONO }}>TODAY ORDERS</span>
-            <span className="text-[15px] font-black text-[#0F1A30]">당일 오더</span>
-          </div>
-          <span className="text-[11.5px] text-[#7A89A3]" style={{ fontFamily: MONO }}>{today} · {recent.length}건</span>
-        </div>
-        {recent.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-36 text-[#9AA9C3]">
-            <div className="text-[14px] font-bold text-[#5B6B85]">오늘 상차 예정 오더가 없습니다</div>
-            <div className="text-[12px] mt-1">운송 › 일반배차등록에서 새 오더를 요청할 수 있습니다</div>
-          </div>
-        ) : (
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="bg-[#F5F8FD] text-[#5B6B85] text-[12px] font-extrabold">
-                {["상차일", "거래처", "상차지", "하차지", "차량번호", "기사명", "연락처", "청구운임", "상태"].map((h) => <th key={h} className="px-3 py-2.5 text-center">{h}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {recent.map((o) => {
-                const st = getStatus(o);
-                return (
-                  <tr key={o.id} className="border-t border-[#EEF1F6] hover:bg-[#F5F8FD] transition">
-                    <td className="px-3 py-2.5 text-center text-[#5B6B85] whitespace-nowrap" style={{ fontFamily: MONO }}>{o.상차일 || "-"}</td>
-                    <td className="px-3 py-2.5 text-center font-bold text-[#0F1A30] truncate max-w-[120px]">{o.거래처명 || "-"}</td>
-                    <td className="px-3 py-2.5 text-center text-[#3A4A66] truncate max-w-[120px]">{o.상차지명 || "-"}</td>
-                    <td className="px-3 py-2.5 text-center text-[#3A4A66] truncate max-w-[120px]">{o.하차지명 || "-"}</td>
-                    <td className="px-3 py-2.5 text-center text-[#0F1A30] font-bold whitespace-nowrap">{o.차량번호 || "-"}</td>
-                    <td className="px-3 py-2.5 text-center text-[#3A4A66] whitespace-nowrap">{o.이름 || "-"}</td>
-                    <td className="px-3 py-2.5 text-center text-[#5B6B85] whitespace-nowrap" style={{ fontFamily: MONO }}>{formatPhoneDisplay(o.전화번호)}</td>
-                    <td className="px-3 py-2.5 text-center text-[#0F1A30] font-black whitespace-nowrap" style={{ fontFamily: MONO }}>
-                      {o.청구운임 ? Number(o.청구운임).toLocaleString() + "원" : "-"}
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      <span className={`inline-block px-2.5 py-1 rounded-lg text-[11px] font-bold ${st.cls}`}>{st.label}</span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// 값/전체 비율을 도넛(링) 게이지로 표시 — 중앙에 값을 보여준다.
-function RingGauge({ value, total, size = 88, stroke = 10, color = "#8FB0F0", trackColor = "#E3E8F0" }) {
-  const pct = total > 0 ? Math.min(value / total, 1) : 0;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const dash = c * pct;
-  return (
-    <div className="relative flex items-center justify-center shrink-0" style={{ width: size, height: size }}>
-      <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={trackColor} strokeWidth={stroke} />
-        <circle
-          cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke}
-          strokeDasharray={`${dash} ${c - dash}`} strokeLinecap="round"
-          style={{ transition: "stroke-dasharray 0.6s ease" }}
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <div className="text-[26px] font-black text-white leading-none" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{value}</div>
-        <div className="text-[10.5px] text-white/50 mt-1">/ {total}건 완료</div>
-      </div>
-    </div>
+    </section>
   );
 }

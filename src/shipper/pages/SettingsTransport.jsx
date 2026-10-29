@@ -67,8 +67,8 @@ export default function SettingsTransport() {
 
   if (!linked?.companyName) {
     return (
-      <div className="bg-white rounded-xl px-8 py-8">
-        <h2 className="text-[18px] font-bold text-gray-800 mb-6">운송사 관리</h2>
+      <div className="bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] px-7 py-6">
+        <div className="mb-6"><div className="text-[10px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>CARRIERS</div><h2 className="text-[19px] font-black text-[#0F1A30] tracking-tight">운송사 관리</h2></div>
         <div className="bg-gray-50 border border-gray-200 rounded-xl px-6 py-10 text-center">
           <div className="text-[14px] text-gray-500">연동된 운송사가 없습니다.</div>
           <div className="text-[13px] text-gray-400 mt-1">
@@ -82,12 +82,12 @@ export default function SettingsTransport() {
   const detail = transportDetail;
 
   return (
-    <div className="bg-white rounded-xl px-8 py-8">
-      <h2 className="text-[18px] font-bold text-gray-800 mb-6">운송사 관리</h2>
+    <div className="bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] px-7 py-6">
+      <div className="mb-6"><div className="text-[10px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>CARRIERS</div><h2 className="text-[19px] font-black text-[#0F1A30] tracking-tight">운송사 관리</h2></div>
 
       <div className="mb-3">
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-[#EEF2F8] text-[#1B2B4B] border border-[#C9D4E6]">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#2D4C82]" />
           연동 완료
         </span>
       </div>

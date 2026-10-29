@@ -618,5 +618,13 @@ const HD_CSS = `
   .hd-pulse { animation: hdPulse 1.6s ease-in-out infinite; }
   @keyframes hdScan { 0% { transform: translateY(-120%) } 100% { transform: translateY(900%) } }
   .hd-scan { position: absolute; left: 0; right: 0; top: 0; height: 90px; background: linear-gradient(180deg, rgba(143,176,240,0), rgba(143,176,240,.05), rgba(143,176,240,0)); animation: hdScan 9s linear infinite; pointer-events: none; }
+  .hd-deck table tbody td, .hd-deck table tbody tr:hover td, .hd-deck table tbody tr:nth-child(even) td, .hd-deck table tbody tr:nth-child(odd) td { background: transparent !important; border-left: none !important; border-right: none !important; color: #E8EEF9 !important; font-size: 13.5px !important; }
+  .hd-deck table tbody td.hd-sub { color: rgba(207,224,255,.62) !important; }
+  .hd-deck table tbody tr { border-bottom: 1px solid rgba(143,176,240,.07); height: 44px; }
+  .hd-deck table tbody tr:hover td { background: rgba(143,176,240,.06) !important; }
+  .hd-deck table thead th { background: #111F3B !important; color: rgba(207,224,255,.45) !important; border-left: none !important; border-right: none !important; }
   .hd-scroll::-webkit-scrollbar { width: 6px } .hd-scroll::-webkit-scrollbar-thumb { background: rgba(143,176,240,.25); border-radius: 9px }
 `;
+
+// 화주사 대시보드(ShipperHome)도 같은 관제 데크 부품을 쓴다.
+export { MONO as HD_MONO, C as HD_C, HD_CSS, Clock, Panel, Delta, Tile, DarkTip, Gauge, Seg, short as hdShort };

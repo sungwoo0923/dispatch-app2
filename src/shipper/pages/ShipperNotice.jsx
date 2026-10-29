@@ -39,24 +39,25 @@ export default function ShipperNotice() {
   };
 
   return (
-    <div className="bg-white rounded-xl px-8 py-6">
+    <div className="bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] px-7 py-6">
 
       {loading ? (
         <div className="py-20 text-center text-gray-400">불러오는 중...</div>
       ) : notices.length === 0 ? (
         <div className="py-20 text-center text-gray-400">
-          <div className="text-base font-medium mb-1">등록된 공지사항이 없습니다</div>
+          <div className="mx-auto mb-4 w-16 h-16 rounded-[20px] flex items-center justify-center shadow-[0_10px_24px_rgba(15,26,48,0.25)]" style={{ background: "linear-gradient(135deg,#0F1A30,#1B2B4B 55%,#2D4C82)" }}><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#CFE0FF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0" /></svg></div>
+          <div className="text-[16px] font-black text-[#0F1A30] mb-1">등록된 공지사항이 없습니다</div>
           <div className="text-sm text-gray-300">새로운 소식이 있으면 이 곳에 안내됩니다</div>
         </div>
       ) : (
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <div className="border border-[#E3E8F0] rounded-[16px] overflow-hidden">
           {notices.map((n, idx) => (
             <div key={n.id} className={idx > 0 ? "border-t border-gray-100" : ""}>
               <button
                 className="w-full text-left px-5 py-4 flex items-center gap-3 hover:bg-gray-50 transition"
                 onClick={() => setExpanded(expanded === n.id ? null : n.id)}>
                 {n.pinned && (
-                  <span className="shrink-0 px-2 py-0.5 rounded bg-[#2f3e55] text-white text-[11px] font-bold">
+                  <span className="shrink-0 px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold">
                     중요
                   </span>
                 )}

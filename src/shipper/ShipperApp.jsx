@@ -461,7 +461,7 @@ const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
 
       {/* ================= CONTENT ================= */}
       <main className="w-full px-6 2xl:px-8 py-5">
-        <ShipperPageHeader pathname={location.pathname} right={<ShipperLiveTicker events={liveEvents} onOpenBig={() => setLiveBigOpen(true)} />} />
+        {location.pathname.replace(/\/$/, "") !== "/shipper" && <ShipperPageHeader pathname={location.pathname} right={<ShipperLiveTicker events={liveEvents} onOpenBig={() => setLiveBigOpen(true)} />} />}
         <Routes>
           <Route index element={<ShipperHome />} />
           <Route path="order" element={<ShipperOrder />} />

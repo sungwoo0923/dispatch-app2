@@ -193,12 +193,12 @@ export default function SettingsAddress() {
   };
 
   return (
-    <div className="bg-white rounded-xl px-8 py-6">
+    <div className="bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] px-7 py-6">
 
       {/* 상단 */}
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-[20px] font-bold text-gray-800">주소록 관리</h2>
+          <div className=""><div className="text-[10px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>ADDRESS</div><h2 className="text-[19px] font-black text-[#0F1A30] tracking-tight">주소록 관리</h2></div>
           <p className="text-sm text-gray-400 mt-0.5">오더 등록 시 입력한 장소가 자동으로 저장됩니다</p>
         </div>
         <div className="flex gap-2">

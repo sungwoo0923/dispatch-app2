@@ -65,7 +65,7 @@ export default function ShipperInquiry() {
   const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none";
 
   return (
-    <div className="bg-white rounded-xl px-8 py-6">
+    <div className="bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] px-7 py-6">
       <div className="flex justify-between items-center mb-6">
         <div className="text-[15px] font-black text-[#0F1A30]">내 문의</div>
         <button onClick={() => setTab("write")}
@@ -89,14 +89,15 @@ export default function ShipperInquiry() {
           <div className="py-20 text-center text-gray-400">불러오는 중...</div>
         ) : inquiries.length === 0 ? (
           <div className="py-20 text-center text-gray-400">
-            <div className="text-base font-medium mb-1">등록된 문의가 없습니다</div>
+            <div className="mx-auto mb-4 w-16 h-16 rounded-[20px] flex items-center justify-center shadow-[0_10px_24px_rgba(15,26,48,0.25)]" style={{ background: "linear-gradient(135deg,#0F1A30,#1B2B4B 55%,#2D4C82)" }}><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#CFE0FF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg></div>
+          <div className="text-[16px] font-black text-[#0F1A30] mb-1">등록된 문의가 없습니다</div>
             <div className="text-sm text-gray-300 mb-4">궁금한 사항을 문의해주세요</div>
             <button onClick={() => setTab("write")} className="bg-[#1B2B4B] text-white px-5 py-2 rounded-lg text-sm font-semibold">
               문의하기
             </button>
           </div>
         ) : (
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
+          <div className="border border-[#E3E8F0] rounded-[16px] overflow-hidden">
             {inquiries.map((q, idx) => (
               <div key={q.id} className={idx > 0 ? "border-t border-gray-100" : ""}>
                 <button
@@ -148,7 +149,7 @@ export default function ShipperInquiry() {
           <div className="flex gap-2">
             <button onClick={() => setTab("list")} className="flex-1 border py-2.5 rounded-lg text-sm font-medium">취소</button>
             <button onClick={submit} disabled={submitting}
-              className="flex-1 bg-[#2f3e55] text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-[#1e3a5f] disabled:opacity-50">
+              className="flex-1 bg-[#1B2B4B] text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-[#1e3a5f] disabled:opacity-50">
               {submitting ? "등록 중..." : "문의 등록"}
             </button>
           </div>

@@ -43,13 +43,13 @@ export default function SettingsProfile() {
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-6">
+    <div className="bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] p-6 space-y-6">
 
       {/* 회사정보 */}
       <div>
         <div className="flex justify-between items-center mb-3">
-          <div className="text-sm font-bold text-gray-800 flex items-center gap-2">
-            <span className="w-1 h-4 bg-[#1B2B4B] rounded-full inline-block" />
+          <div className="text-[15px] font-black text-[#0F1A30] flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rotate-45 bg-[#2D4C82] inline-block" />
             회사정보
           </div>
           <button
@@ -59,7 +59,7 @@ export default function SettingsProfile() {
             수정
           </button>
         </div>
-        <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+        <div className="bg-[#F7F9FC] border border-[#E9EEF5] rounded-[16px] p-4 space-y-3">
           <Row label="회사명" value={data.companyName} />
           <Row label="대표" value={data.ceo || data.name} />
           <Row label="주소" value={data.address} />
@@ -73,22 +73,22 @@ export default function SettingsProfile() {
 
       {/* 은행정보 */}
       <div>
-        <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-          <span className="w-1 h-4 bg-[#1B2B4B] rounded-full inline-block" />
+        <div className="text-[15px] font-black text-[#0F1A30] mb-3 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rotate-45 bg-[#2D4C82] inline-block" />
           은행정보
         </div>
-        <div className="bg-gray-50 rounded-xl p-4">
+        <div className="bg-[#F7F9FC] border border-[#E9EEF5] rounded-[16px] p-4">
           <Row label="은행정보" value={data.bank} />
         </div>
       </div>
 
       {/* 연락처 */}
       <div>
-        <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-          <span className="w-1 h-4 bg-[#1B2B4B] rounded-full inline-block" />
+        <div className="text-[15px] font-black text-[#0F1A30] mb-3 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rotate-45 bg-[#2D4C82] inline-block" />
           연락처
         </div>
-        <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+        <div className="bg-[#F7F9FC] border border-[#E9EEF5] rounded-[16px] p-4 space-y-3">
           <Row label="전화번호" value={data.tel ? formatPhone(data.tel) : data.tel} />
           <Row label="팩스" value={data.fax ? formatPhone(data.fax) : data.fax} />
         </div>

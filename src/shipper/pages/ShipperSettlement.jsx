@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { DeckStrip, SegTabs } from "../ShipUi";
 import { db, auth } from "../../firebase";
 import { collection, query, where, onSnapshot, getDocs } from "firebase/firestore";
 import { doc, getDoc } from "firebase/firestore";
@@ -315,14 +316,14 @@ export default function ShipperSettlement() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
 
       {/* 필터 */}
-      <div className="bg-white rounded-xl p-5 shadow-sm flex items-center gap-4 flex-wrap">
-        <div className="font-bold text-gray-800">정산 기간</div>
-        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="border rounded-lg px-3 py-2 text-sm" />
+      <div className="bg-white rounded-[20px] border border-[#E3E8F0] px-5 py-4 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rotate-45 bg-[#2D4C82]" /><span className="text-[10px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>PERIOD</span><span className="font-black text-[#0F1A30]">정산 기간</span></div>
+        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="border border-[#D5DEEC] rounded-[11px] px-3 h-10 text-sm font-semibold text-[#0F1A30]" />
         <span className="text-gray-400">~</span>
-        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="border rounded-lg px-3 py-2 text-sm" />
+        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="border border-[#D5DEEC] rounded-[11px] px-3 h-10 text-sm font-semibold text-[#0F1A30]" />
 
         <div className="flex gap-2">
           {[
@@ -333,7 +334,7 @@ export default function ShipperSettlement() {
             const isActive = startDate === preset.start && endDate === preset.end;
             return (
               <button key={preset.label} onClick={() => { setStartDate(preset.start); setEndDate(preset.end); }}
-                className={`px-3 py-2 rounded-lg text-sm font-semibold transition ${isActive ? "bg-[#1B2B4B] text-white" : "bg-[#eef1f7] text-[#1B2B4B] hover:bg-[#e2e7f2]"}`}>
+                className={`px-3.5 h-10 rounded-[11px] text-sm font-extrabold transition border ${isActive ? "text-white border-transparent shadow-[0_6px_16px_rgba(27,43,75,0.25)]" : "bg-[#EEF2F8] border-[#E3E8F0] text-[#1B2B4B] hover:bg-white"}`} style={isActive ? { background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" } : undefined}>
                 {preset.label}
               </button>
             );
@@ -341,34 +342,27 @@ export default function ShipperSettlement() {
         </div>
 
         <div className="flex gap-2 ml-auto">
-          <button onClick={openInvoice} className="px-4 py-2 bg-white border border-[#1B2B4B] text-[#1B2B4B] rounded-lg text-sm font-semibold hover:bg-[#eef1f7]">정산 내역서</button>
-          <button onClick={handleExcel} className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold hover:opacity-90">엑셀 다운로드</button>
+          <button onClick={openInvoice} className="px-4 h-10 bg-white border border-[#C9D4E6] text-[#1B2B4B] rounded-[11px] text-sm font-extrabold hover:bg-[#F5F8FD]">정산 내역서</button>
+          <button onClick={handleExcel} className="px-4 h-10 bg-[#0F1A30] text-white rounded-[11px] text-sm font-extrabold hover:opacity-90">엑셀 다운로드</button>
         </div>
       </div>
 
       {/* KPI */}
-      <div className="grid grid-cols-4 gap-4">
-        <SumCard title="조회 건수" value={`${activeFiltered.length}건`} />
-        <SumCard title="총 청구금액" value={`${totalBilling.toLocaleString()}원`} color="text-[#1B2B4B]" />
-        <SumCard title="평균 운임" value={activeFiltered.length > 0 ? `${Math.round(totalBilling / activeFiltered.length).toLocaleString()}원` : "-"} color="text-emerald-600" />
-        <SumCard title="취소 건수" value={`${filtered.filter(o => o.상태 === "취소").length}건`} color="text-rose-600" />
-      </div>
+      <DeckStrip items={[
+        { code: "COUNT", label: "조회 건수", value: activeFiltered.length.toLocaleString(), unit: "건", foot: <span>{startDate} ~ {endDate}</span> },
+        { code: "BILLING", label: "총 청구금액", value: totalBilling.toLocaleString(), unit: "원", foot: <span>취소 제외 운송료 합계</span> },
+        { code: "AVERAGE", label: "평균 운임", value: activeFiltered.length > 0 ? Math.round(totalBilling / activeFiltered.length).toLocaleString() : "-", unit: activeFiltered.length > 0 ? "원" : "", foot: <span>건당 평균 청구운임</span> },
+        { code: "CANCEL", label: "취소 건수", value: filtered.filter(o => o.상태 === "취소").length.toLocaleString(), unit: "건", foot: <span>정산 대상에서 제외</span> },
+      ]} />
 
       {/* 그룹 분석 + 상세 */}
       <div className="grid grid-cols-3 gap-4">
 
         {/* 그룹 분석 */}
-        <div className="col-span-1 bg-white rounded-xl shadow-sm border border-gray-100">
-          <div className="px-5 py-4 border-b flex items-center justify-between">
-            <div className="font-bold text-gray-800">분석</div>
-            <div className="flex gap-1">
-              {["month", "transport"].map(g => (
-                <button key={g} onClick={() => { setGroupBy(g); setSelectedGroup(null); }}
-                  className={`px-2.5 py-1 rounded text-[12px] font-semibold ${groupBy === g ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
-                  {GROUP_LABEL[g]}
-                </button>
-              ))}
-            </div>
+        <div className="col-span-1 bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] overflow-hidden">
+          <div className="px-5 h-[54px] border-b border-[#EEF1F6] flex items-center justify-between">
+            <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rotate-45 bg-[#2D4C82]" /><span className="text-[10px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>ANALYSIS</span><span className="font-black text-[#0F1A30]">분석</span></div>
+            <SegTabs value={groupBy} onChange={(g) => { setGroupBy(g); setSelectedGroup(null); }} items={["month", "transport"].map((g) => [g, GROUP_LABEL[g]])} />
           </div>
           <div className="p-4 space-y-2 max-h-[360px] overflow-y-auto">
             {groups.map((g) => {
@@ -443,9 +437,9 @@ export default function ShipperSettlement() {
         </div>
 
         {/* 상세 오더 */}
-        <div className="col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col">
-          <div className="px-5 py-4 border-b font-bold text-gray-800 flex items-center justify-between">
-            <span>{selectedGroup ? `${groupLabelOf(selectedGroup)} 상세` : "전체 오더 목록"}</span>
+        <div className="col-span-2 bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] overflow-hidden flex flex-col">
+          <div className="px-5 h-[54px] border-b border-[#EEF1F6] font-black text-[#0F1A30] flex items-center justify-between">
+            <span className="flex items-center gap-2"><span className="w-1.5 h-1.5 rotate-45 bg-[#2D4C82]" /><span className="text-[10px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>ORDERS</span>{selectedGroup ? `${groupLabelOf(selectedGroup)} 상세` : "전체 오더 목록"}</span>
             {selectedGroup && (
               <button onClick={() => setSelectedGroup(null)} className="text-[12px] text-gray-400 hover:text-[#1B2B4B] font-semibold">
                 전체보기

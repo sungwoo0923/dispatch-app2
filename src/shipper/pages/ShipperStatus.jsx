@@ -17,6 +17,7 @@ import {
 } from "firebase/firestore";
 import { updateDoc, setDoc } from "../../orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { useNavigate } from "react-router-dom";
+import { DeckStrip, SegTabs } from "../ShipUi";
 import { deleteOrderWithLog } from "../../orderHistory";
 
 // 운송사 프로그램(DispatchApp.jsx StatusBadge)과 동일한 배지 디자인 — 단색 배경 + 흰 글씨 + rounded-lg
@@ -927,39 +928,27 @@ export default function ShipperStatus() {
           위해 렌더링을 제거했다(감지/추적 로직 자체는 오더 목록 상태 갱신에 계속 쓰이므로 유지). */}
 
       {/* 메인 */}
-      <div className="flex-1 min-w-0 px-8 py-6 bg-[#f4f7fb] space-y-6 transition-all duration-300">
+      <div className="flex-1 min-w-0 space-y-4 transition-all duration-300">
 
         {/* KPI */}
-        <div className="grid grid-cols-5 gap-4">
-          <KPI title="전체 오더" value={kpi.total} />
-          <KPI title="요청" value={kpi.요청} color="text-slate-700" />
-          <KPI title="배차완료" value={kpi.배차완료} color="text-emerald-600" />
-          <KPI title="취소" value={kpi.취소} color="text-rose-700" />
-          <KPI title="총 운송료" value={`${kpi.총금액.toLocaleString()}원`} color="text-[#1B2B4B]" />
-        </div>
+        <DeckStrip items={[
+          { code: "ORDERS", label: "전체 오더", value: kpi.total.toLocaleString(), unit: "건", foot: <span>등록된 전체 운송 요청</span> },
+          { code: "REQUEST", label: "요청", value: kpi.요청.toLocaleString(), unit: "건", foot: <span>운송사 확인 대기</span> },
+          { code: "RUNNING", label: "배차중", value: Math.max(0, kpi.total - kpi.배차완료 - kpi.요청).toLocaleString(), unit: "건", foot: <span>차량 배정 진행 중</span> },
+          { code: "ASSIGNED", label: "배차완료", value: kpi.배차완료.toLocaleString(), unit: "건", foot: <span>완료율 <b style={{ color: "#CFE0FF" }}>{kpi.total ? Math.round((kpi.배차완료 / kpi.total) * 100) : 0}%</b> · 취소 {kpi.취소}건 별도</span> },
+          { code: "AMOUNT", label: "총 운송료", value: kpi.총금액.toLocaleString(), unit: "원", foot: <span>취소 제외 청구운임 합계</span> },
+        ]} />
 
-        <div className="bg-white rounded-xl p-4 space-y-3 shadow-sm">
+        <div className="bg-white rounded-[20px] border border-[#E3E8F0] p-4 space-y-3 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)]">
 
           {/* 상태 필터 */}
           <div className="flex gap-2 flex-wrap items-center justify-between">
             <div className="flex gap-2 flex-wrap items-center">
-              {["전체", "요청", "배차중", "배차완료", "배차취소"].map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setFilter(s)}
-                  className={`px-4 py-2 rounded-lg text-sm font-semibold ${
-                    filter === s
-                      ? "bg-[#1B2B4B] text-white"
-                      : "bg-[#eef1f7] text-[#1B2B4B] hover:bg-[#e2e7f2]"
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
+              <SegTabs value={filter} onChange={setFilter} items={["전체", "요청", "배차중", "배차완료", "배차취소"]} />
             </div>
-            <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#eef1f7] text-[13px] font-bold text-[#1B2B4B]">
+            <div className="flex items-center gap-2 px-4 h-10 rounded-[12px] text-[13px] font-bold text-white" style={{ background: "linear-gradient(135deg,#0F1A30,#1B2B4B 60%,#2D4C82)", fontFeatureSettings: '"tnum"' }}>
               <span>조회결과 {rows.length.toLocaleString()}건</span>
-              <span className="text-[#c7d1e3]">|</span>
+              <span className="text-white/30">|</span>
               <span>총 청구운임 {rows.reduce((sum, o) => sum + (Number(o.청구운임) || 0), 0).toLocaleString()}원</span>
             </div>
           </div>
@@ -968,16 +957,16 @@ export default function ShipperStatus() {
 
             {/* 검색 영역 */}
             <div className="flex gap-2 items-center flex-wrap">
-              <input type="date" value={startDate} min={minAllowedDate} onChange={(e) => handleStartDateChange(e.target.value)} className="border rounded-lg px-3 py-2 text-sm" />
+              <input type="date" value={startDate} min={minAllowedDate} onChange={(e) => handleStartDateChange(e.target.value)} className="border border-[#D5DEEC] rounded-[11px] px-3 h-10 text-sm font-semibold text-[#0F1A30]" style={{ fontFamily: "var(--kp-mono, inherit)" }} />
               <span>~</span>
-              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="border rounded-lg px-3 py-2 text-sm" />
+              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="border border-[#D5DEEC] rounded-[11px] px-3 h-10 text-sm font-semibold text-[#0F1A30]" style={{ fontFamily: "var(--kp-mono, inherit)" }} />
               {viewLimitActive && (
                 <span className="text-[11px] text-gray-400">※ 최근 6개월까지 조회 가능</span>
               )}
 
               <button
                 onClick={() => { const t = getTodayKST(); setStartDate(t); setEndDate(t); }}
-                className="px-3 py-2 bg-[#eef1f7] text-[#1B2B4B] rounded-lg text-sm font-semibold hover:bg-[#e2e7f2]"
+                className="px-3.5 h-10 bg-[#EEF2F8] border border-[#E3E8F0] text-[#1B2B4B] rounded-[11px] text-sm font-extrabold hover:bg-white"
               >당일</button>
 
               <button
@@ -987,17 +976,17 @@ export default function ShipperStatus() {
                   const tmr = kst.toISOString().slice(0, 10);
                   setStartDate(tmr); setEndDate(tmr);
                 }}
-                className="px-3 py-2 bg-[#eef1f7] text-[#1B2B4B] rounded-lg text-sm font-semibold hover:bg-[#e2e7f2]"
+                className="px-3.5 h-10 bg-[#EEF2F8] border border-[#E3E8F0] text-[#1B2B4B] rounded-[11px] text-sm font-extrabold hover:bg-white"
               >내일</button>
 
               <button
                 onClick={() => { setStartDate(getMonthStartKST()); setEndDate(getMonthEndKST()); }}
-                className="px-3 py-2 bg-[#eef1f7] text-[#1B2B4B] rounded-lg text-sm font-semibold hover:bg-[#e2e7f2]"
+                className="px-3.5 h-10 bg-[#EEF2F8] border border-[#E3E8F0] text-[#1B2B4B] rounded-[11px] text-sm font-extrabold hover:bg-white"
               >이번달</button>
 
               <button
                 onClick={() => { setStartDate(getPrevMonthStartKST()); setEndDate(getPrevMonthEndKST()); }}
-                className="px-3 py-2 bg-[#eef1f7] text-[#1B2B4B] rounded-lg text-sm font-semibold hover:bg-[#e2e7f2]"
+                className="px-3.5 h-10 bg-[#EEF2F8] border border-[#E3E8F0] text-[#1B2B4B] rounded-[11px] text-sm font-extrabold hover:bg-white"
               >이전달</button>
 
               <select
@@ -1041,15 +1030,15 @@ export default function ShipperStatus() {
 
             {/* 버튼 */}
             <div className="flex gap-2">
-              <button onClick={() => navigate("/shipper/order")} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold">+ 배차등록</button>
-              <button onClick={handleEditSelected} className="px-4 py-2 bg-gray-600 text-white rounded-lg text-sm font-semibold">선택수정</button>
-              <button onClick={handleDeleteSelected} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold">{filter === "배차취소" ? "선택삭제" : "오더삭제"}</button>
-              <button onClick={handleExcelDownload} className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-semibold">엑셀다운</button>
+              <button onClick={() => navigate("/shipper/order")} className="px-4 h-10 text-white rounded-[11px] text-sm font-extrabold shadow-[0_6px_16px_rgba(27,43,75,0.25)]" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}>+ 배차등록</button>
+              <button onClick={handleEditSelected} className="px-4 h-10 bg-white border border-[#C9D4E6] text-[#1B2B4B] rounded-[11px] text-sm font-extrabold hover:bg-[#F5F8FD]">선택수정</button>
+              <button onClick={handleDeleteSelected} className="px-4 h-10 bg-white border border-[#C9D4E6] text-[#1B2B4B] rounded-[11px] text-sm font-extrabold hover:bg-[#F5F8FD]">{filter === "배차취소" ? "선택삭제" : "오더삭제"}</button>
+              <button onClick={handleExcelDownload} className="px-4 h-10 bg-[#0F1A30] text-white rounded-[11px] text-sm font-extrabold">엑셀다운</button>
             </div>
           </div>
         </div>
 
-        <div ref={scrollRef} className="bg-white rounded-xl shadow-sm overflow-x-auto">
+        <div ref={scrollRef} className="bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] overflow-x-auto">
           <table className="border-collapse text-[14px]" style={{ minWidth: "2730px", width: "100%" }}>
             <colgroup>
               <col style={{ width: 40 }} /><col style={{ width: 60 }} />
@@ -1069,7 +1058,7 @@ export default function ShipperStatus() {
               <col style={{ width: 75 }} />
             </colgroup>
             <thead>
-              <tr className="bg-[#eef3fb] text-gray-800 font-extrabold text-[13px]">
+              <tr className="bg-[#1B2B4B] text-white font-extrabold text-[13px]">
                 {[
                   <input key="chk" type="checkbox"
                     checked={selectedIds.length === rows.length && rows.length > 0}
