@@ -113,6 +113,7 @@ export const CONTRACT_CSS = `
   .kp-contract{font-family:'Pretendard','Noto Sans KR','Malgun Gothic',sans-serif;color:#0F1A30;font-size:13.5px;line-height:1.85}
   .kp-contract h1{font-size:24px;letter-spacing:.18em;text-align:center;margin:4px 0 20px;font-weight:900}
   .kp-contract h4{font-size:14px;font-weight:900;margin:14px 0 2px}
+  .kp-contract.big{font-size:15.5px;line-height:1.9} .kp-contract.big h1{font-size:28px} .kp-contract.big h4{font-size:16px;margin-top:18px}
   .kp-contract p{margin:0} .kp-contract .sp{height:8px}
   .kp-contract mark{background:#EEF3FB;color:#1B2B4B;font-weight:800;padding:0 3px;border-radius:3px}
   .kp-contract .blank{display:inline-block;min-width:80px;border-bottom:1px solid #8FB0F0;color:#9AA9C3;font-size:11.5px}
@@ -304,7 +305,7 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
       <input type={type} value={vars[k] || ""} placeholder={ph} onChange={(e) => set(k, e.target.value)} className={`${inp} mt-1`} /></label>
   );
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,460px)_minmax(0,1fr)] items-start">
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,400px)_minmax(0,1fr)] items-start">
       <div className="space-y-4">
         <Card code="SOURCE" title="양식 · 견적 불러오기">
           <div className="space-y-3">
@@ -353,8 +354,8 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
           <span className="text-[12px] font-bold text-[#7A879C]">밝게 표시된 곳이 채워진 값입니다</span>
         </div>
         <style>{CONTRACT_CSS}</style>
-        <div className="bg-white mx-auto max-w-[820px] px-10 py-10 shadow-[0_10px_30px_rgba(15,26,48,0.12)]">
-          <div className="kp-contract" dangerouslySetInnerHTML={{ __html: renderContractHtml(template.body, vars, { highlight: true }) }} />
+        <div className="bg-white mx-auto w-full max-w-[1180px] px-12 py-12 shadow-[0_10px_30px_rgba(15,26,48,0.12)]">
+          <div className="kp-contract big" dangerouslySetInnerHTML={{ __html: renderContractHtml(template.body, vars, { highlight: true }) }} />
           <div dangerouslySetInnerHTML={{ __html: signBlockHtml({ supplier: cfg.supplier, supplierSeal: tpl.supplierSeal, vars, status: "작성" }) }} />
         </div>
       </div>
@@ -392,7 +393,7 @@ export function ContractTemplates() {
           <button type="button" onClick={save} disabled={!dirty} className="h-10 px-5 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black disabled:opacity-40">{dirty ? "저장" : "저장됨"}</button>
         </div>
       </div>
-      <div className="grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)_minmax(0,1fr)] items-start">
+      <div className="grid gap-4 xl:grid-cols-[240px_minmax(0,1fr)] 2xl:grid-cols-[240px_minmax(0,0.9fr)_minmax(0,1.1fr)] items-start">
         <Card code="LIST" title="양식" bodyClass="p-2">
           {st.templates.map((x, i) => (
             <div key={x.id} className={`flex items-center gap-1 rounded-xl ${i === cur ? "bg-[#1B2B4B] text-white" : "hover:bg-[#F5F8FD] text-[#0F1A30]"}`}>
@@ -418,9 +419,9 @@ export function ContractTemplates() {
           <textarea ref={taRef} value={t.body} onChange={(e) => upd({ body: e.target.value })} rows={28} className={`${inp} h-auto py-3 leading-[1.75] text-[13px] font-medium`} style={{ fontFamily: "inherit" }} />
           <div className="mt-2 text-[11.5px] text-[#9AA9C3] leading-relaxed">작성 규칙: 맨 앞에 <b>#</b> 을 붙이면 제목, <b>제N조</b>로 시작하는 줄은 굵은 조항 제목이 됩니다.</div>
         </Card>
-        <Card code="PREVIEW" title="미리보기" bodyClass="p-0">
+        <Card code="PREVIEW" title="미리보기" bodyClass="p-0" className="xl:col-start-2 2xl:col-start-auto">
           <style>{CONTRACT_CSS}</style>
-          <div className="max-h-[900px] overflow-auto bg-[#E9EDF3] p-4"><div className="bg-white px-8 py-8 shadow"><div className="kp-contract" dangerouslySetInnerHTML={{ __html: renderContractHtml(t.body, sample, { highlight: true }) }} /></div></div>
+          <div className="max-h-[900px] overflow-auto bg-[#E9EDF3] p-4"><div className="bg-white px-10 py-10 shadow"><div className="kp-contract big" dangerouslySetInnerHTML={{ __html: renderContractHtml(t.body, sample, { highlight: true }) }} /></div></div>
         </Card>
       </div>
     </div>

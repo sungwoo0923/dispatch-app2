@@ -4,6 +4,7 @@
 //  - 비밀번호 변경(변경 후 다른 기기 자동 로그아웃 선택)
 //  - 최근 로그인 기록(로그아웃·끊김 사유)
 //  - AdminSessionsPanel: 관리자메뉴용 — 지금 로그인 중인 모든 계정(관리자는 자기 회사만) 보기·강제 로그아웃
+import Pager, { pageCount, pageSlice } from "./Pager";
 import React from "react";
 import { createPortal } from "react-dom";
 import { auth, db, DEFAULT_COMPANY } from "./firebase";
@@ -235,6 +236,8 @@ export function AdminSessionsPanel({ isTotalMaster, company, roleLabels = {} }) 
   const [list, setList] = React.useState(null);
   const [q, setQ] = React.useState("");
   const [busy, setBusy] = React.useState(null);
+  const [page, setPage] = React.useState(1);
+  React.useEffect(() => { setPage(1); }, [q]);
   React.useEffect(() => onSnapshot(query(collection(db, SESSIONS_COLL), where("active", "==", true)),
     (snap) => setList(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setList([])), []);
   const myId = getMySessionId();
@@ -270,7 +273,7 @@ export function AdminSessionsPanel({ isTotalMaster, company, roleLabels = {} }) 
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {rows.map((s) => (
+            {pageSlice(rows, Math.min(page, pageCount(rows.length))).map((s) => (
               <tr key={s.id} className="hover:bg-gray-50">
                 <td className="px-2 py-2.5 text-center text-gray-700">{s.companyName || "-"}</td>
                 <td className="px-2 py-2.5 text-center font-semibold">{s.name || "-"}</td>
@@ -296,6 +299,7 @@ export function AdminSessionsPanel({ isTotalMaster, company, roleLabels = {} }) 
           </tbody>
         </table>
       )}
+      <Pager page={Math.min(page, pageCount(rows.length))} total={rows.length} onPage={setPage} />
     </div>
   );
 }

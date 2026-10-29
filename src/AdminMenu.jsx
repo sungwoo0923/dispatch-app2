@@ -87,7 +87,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const [sessionLogs, setSessionLogs] = useState([]);
   const [sessionLogEventFilter, setSessionLogEventFilter] = useState("all");
   const [sessionLogPage, setSessionLogPage] = useState(1);
-  const SESSION_LOG_PAGE_SIZE = 10;
+  const SESSION_LOG_PAGE_SIZE = 20;
   const [users, setUsers] = useState([]);
   const [allShipperApps, setAllShipperApps] = useState([]);
   const [search, setSearch] = useState("");
@@ -170,7 +170,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   // 최고관리자 전용 접속이력(로그인/로그아웃) — 탭을 열었을 때만 구독한다.
   useEffect(() => {
     if (!isTotalMaster || adminTab !== "sessionLogs") return;
-    const q = query(collection(db, "sessionLogs"), orderBy("at", "desc"), limit(50));
+    const q = query(collection(db, "sessionLogs"), orderBy("at", "desc"), limit(200));
     const unsub = onSnapshot(q, (snap) => {
       setSessionLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
@@ -1302,7 +1302,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
             return (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
-                <span className="text-[13px] font-semibold text-gray-600">최근 50건 중 {filteredLogs.length}건 · 10건씩 표시</span>
+                <span className="text-[13px] font-semibold text-gray-600">최근 200건 중 {filteredLogs.length}건 · 20건씩 표시</span>
                 <select
                   value={sessionLogEventFilter}
                   onChange={e => { setSessionLogEventFilter(e.target.value); setSessionLogPage(1); }}

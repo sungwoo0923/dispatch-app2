@@ -115,7 +115,7 @@ function makePinIcon(label, color) {
 // ⭐ 경로보기 팝업 — 오더정보/등록화면 등 어디서든 상/하차지 주소만 넘기면 Tmap
 // 위에 실제 도로 경로(폴리라인)와 출발/도착(+경유) 마커를 그려준다. PC/모바일 공용.
 // 디자인은 프로그램 전체 톤(네이비 헤더 + 무채색)에 맞춰 알록달록한 색 없이 구성.
-export default function RouteMapModal({ pickupAddr, dropAddr, pickupName, dropName, viaPickup = [], viaDrop = [], driverId, orderDate, onClose }) {
+export default function RouteMapModal({ pickupAddr, dropAddr, pickupName, dropName, viaPickup = [], viaDrop = [], driverId, orderDate, onClose, inline = false, className = "" }) {
   const mapId = React.useRef(`route-map-modal-${Math.random().toString(36).slice(2)}`).current;
   const [status, setStatus] = React.useState("loading"); // loading | ready | error
   const [info, setInfo] = React.useState(null); // { distanceKm, durationMin }
@@ -259,18 +259,8 @@ export default function RouteMapModal({ pickupAddr, dropAddr, pickupName, dropNa
     }
   }, [driverTrack, liveLoc, status]);
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999] p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-[720px] max-w-full h-[560px] max-h-[88vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="bg-[#1B2B4B] px-5 py-3.5 flex items-center justify-between shrink-0">
-          <div className="min-w-0">
-            <div className="text-white font-bold text-[14px]">경로보기</div>
-            <div className="text-white/60 text-[11px] mt-0.5 truncate">
-              {pickupName || pickupAddr || "-"} → {dropName || dropAddr || "-"}
-            </div>
-          </div>
-          <button onClick={onClose} className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 text-white text-base flex items-center justify-center shrink-0">×</button>
-        </div>
+  // inline: 오더정보 팝업처럼 다른 창 안에 지도만 바로 넣어 보여줄 때(헤더/배경 없이)
+  const mapArea = (
         <div className="flex-1 relative bg-gray-100">
           <div id={mapId} className="w-full h-full" />
           {status === "loading" && (
@@ -296,7 +286,7 @@ export default function RouteMapModal({ pickupAddr, dropAddr, pickupName, dropNa
               <div className="w-px h-8 bg-gray-200" />
               <div>
                 <div className="text-[11px] font-bold text-gray-500">지금 출발 시 도착</div>
-                <div className="text-[18px] font-black text-[#2563eb] leading-tight">
+                <div className="text-[18px] font-black text-[#2D4C82] leading-tight">
                   {(() => { const d = new Date(Date.now() + info.durationMin * 60000); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; })()}
                 </div>
               </div>
@@ -311,6 +301,21 @@ export default function RouteMapModal({ pickupAddr, dropAddr, pickupName, dropNa
             </div>
           )}
         </div>
+  );
+  if (inline) return <div className={`relative flex flex-col w-full h-full ${className}`}>{mapArea}</div>;
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999] p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[720px] max-w-full h-[560px] max-h-[88vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-[#1B2B4B] px-5 py-3.5 flex items-center justify-between shrink-0">
+          <div className="min-w-0">
+            <div className="text-white font-bold text-[14px]">경로보기</div>
+            <div className="text-white/60 text-[11px] mt-0.5 truncate">
+              {pickupName || pickupAddr || "-"} → {dropName || dropAddr || "-"}
+            </div>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 text-white text-base flex items-center justify-center shrink-0">×</button>
+        </div>
+        {mapArea}
       </div>
     </div>
   );

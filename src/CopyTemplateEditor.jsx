@@ -122,8 +122,8 @@ export function CopyTemplateHost({ canEdit = true }) {
   }, []);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[100050] bg-[#0B1428]/60 backdrop-blur-[2px] flex items-center justify-center p-4" onClick={() => setOpen(false)}>
-      <div className="w-full max-w-[1080px] max-h-[92vh] overflow-y-auto rounded-3xl bg-[#F4F6FA] shadow-[0_30px_80px_rgba(11,20,40,0.45)]" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[100050] bg-[#0B1428]/60 backdrop-blur-[2px] flex items-center justify-center p-4">
+      <div className="w-full max-w-[1080px] max-h-[92vh] overflow-y-auto rounded-3xl bg-[#F4F6FA] shadow-[0_30px_80px_rgba(11,20,40,0.45)]">
         <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
           <div>
             <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>COPY · TEMPLATE</div>

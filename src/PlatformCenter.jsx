@@ -5,6 +5,7 @@
 //   · 새로 추가: 오늘 할 일, 도입 문의, 계약(전자서명), 수납 관리, 플랫폼 공지, 접속 이력, 로그인 관리
 //  최고관리자가 로그인하면 /choose 에서 "배차 프로그램 / 관리자 관리센터" 중 고른다.
 //  ⭐ 알록달록 금지 — 네이비 계열만.
+import Pager, { pageCount, pageSlice } from "./Pager";
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
@@ -310,6 +311,8 @@ function SessionLogsPanel() {
   const list = useCol("sessionLogs", "at", 400);
   const [q, setQ] = React.useState("");
   const [ev, setEv] = React.useState("all");
+  const [page, setPage] = React.useState(1);
+  React.useEffect(() => { setPage(1); }, [q, ev]);
   if (!list) return <div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>;
   const rows = list.filter((l) => (ev === "all" || l.event === ev) && (!q || [l.name, l.email, l.companyName, l.device, l.ip].some((v) => String(v || "").includes(q))));
   const events = [...new Set(list.map((l) => l.event).filter(Boolean))];
@@ -321,9 +324,9 @@ function SessionLogsPanel() {
           <select value={ev} onChange={(e) => setEv(e.target.value)} className="h-9 px-2 rounded-lg border border-[#DCE3EE] text-[13px] font-bold"><option value="all">전체</option>{events.map((e) => <option key={e} value={e}>{e}</option>)}</select>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="검색" className="h-9 w-48 px-3 rounded-lg border border-[#DCE3EE] text-[13px]" />
         </div>}>
-        <div className="overflow-x-auto max-h-[70vh]"><table className="w-full text-[13.5px]" style={{ minWidth: 820 }}>
+        <div className="overflow-x-auto"><table className="w-full text-[13.5px]" style={{ minWidth: 820 }}>
           <thead className="sticky top-0"><tr className="bg-[#1B2B4B] text-white">{["시각", "구분", "회사", "이름", "이메일", "기기"].map((h) => <th key={h} className="px-3 py-2.5 text-center font-extrabold">{h}</th>)}</tr></thead>
-          <tbody>{rows.map((l) => (
+          <tbody>{pageSlice(rows, Math.min(page, pageCount(rows.length))).map((l) => (
             <tr key={l.id} className="border-t border-[#EEF1F6]">
               <td className="px-3 py-2 text-center text-[12.5px] text-[#5B6B85] whitespace-nowrap" style={{ fontFamily: MONO }}>{msOf(l.at) ? new Date(msOf(l.at)).toLocaleString("ko-KR", { hour12: false }) : "-"}</td>
               <td className="px-3 py-2 text-center"><span className="px-2 py-0.5 rounded-md bg-[#EEF2F8] text-[#1B2B4B] text-[12px] font-black">{l.event || "-"}</span></td>
@@ -333,6 +336,7 @@ function SessionLogsPanel() {
               <td className="px-3 py-2 text-center text-[12.5px] text-[#7A89A3] truncate max-w-[220px]">{l.device || "-"}</td>
             </tr>))}</tbody>
         </table></div>
+        <Pager page={Math.min(page, pageCount(rows.length))} total={rows.length} onPage={setPage} />
       </Card>
     </div>
   );

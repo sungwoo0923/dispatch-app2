@@ -439,14 +439,19 @@ export function QuoteBuilder({ initial, onSaved }) {
               const on = plan.id === q.chosen.plan.id, best = plan.id === q.best.plan.id;
               return (
                 <button key={plan.id} type="button" onClick={() => set({ planId: plan.id })} className={`text-left rounded-xl p-3.5 border-2 transition ${on ? "border-[#1B2B4B] bg-[#F5F8FD]" : "border-[#E3E8F0] hover:border-[#8FB0F0]"}`}>
-                  <div className="flex items-center justify-between"><b className="text-[15px] text-[#0F1A30]">{plan.name}</b>{best && <span className="px-1.5 py-0.5 rounded-md bg-[#1B2B4B] text-white text-[10.5px] font-black">최저</span>}</div>
-                  <div className="text-[20px] font-black text-[#1B2B4B] mt-1" style={{ fontFamily: MONO }}>{won(m.total)}</div>
-                  <div className="text-[11.5px] text-[#7A879C] leading-relaxed mt-1">기본 {won(m.base)}{m.seats ? ` + 계정 ${won(m.seats)}` : ""}{m.orders ? ` + 오더 ${won(m.orders)}` : ""}{m.fleet ? ` + 지입 ${won(m.fleet)}` : ""}{m.storage ? ` + 저장 ${won(m.storage)}` : ""}</div>
+                  <div className="flex items-center justify-between"><b className="text-[15px] text-[#0F1A30]">{plan.name}</b>{best && <span className="px-1.5 py-0.5 rounded-md bg-[#1B2B4B] text-white text-[10.5px] font-black">이 고객 최저가</span>}</div>
+                  <div className="text-[12px] font-bold text-[#5B6B85] mt-1">정가 월 {won(m.base)} · {num(plan.seats)}명 · {num(plan.orders).toLocaleString()}건 포함</div>
+                  <div className="text-[20px] font-black text-[#1B2B4B] mt-1" style={{ fontFamily: MONO }}>{won(m.total)}<span className="text-[11.5px] font-bold text-[#7A879C] ml-1">/ 월 (이 고객 기준)</span></div>
+                  <div className="text-[11.5px] text-[#7A879C] leading-relaxed mt-1">
+                    {m.seats || m.orders || m.fleet || m.storage
+                      ? <>초과분 추가: {[m.seats ? `계정 ${Math.max(0, num(inp.staff) - num(plan.seats))}명 ${won(m.seats)}` : "", m.orders ? `오더 ${Math.max(0, num(inp.orders) - num(plan.orders)).toLocaleString()}건 ${won(m.orders)}` : "", m.fleet ? `지입 ${won(m.fleet)}` : "", m.storage ? `저장 ${won(m.storage)}` : ""].filter(Boolean).join(" + ")}</>
+                      : "추가 요금 없음 (포함 범위 안)"}
+                  </div>
                 </button>
               );
             })}
           </div>
-          <div className="mt-3 text-[12px] text-[#7A879C]">카드를 누르면 그 요금제로 견적이 바뀝니다. 사용 규모가 커지면 상위 요금제가 오히려 쌀 수 있습니다.</div>
+          <div className="mt-3 text-[12px] text-[#7A879C]">카드를 누르면 그 요금제로 견적이 바뀝니다. 정가는 베이직이 가장 싸지만, 포함된 계정·오더를 넘으면 초과 요금이 붙어 상위 요금제가 더 쌀 수 있습니다.</div>
         </Card>
 
         <Card code="DETAIL" title={`${q.periodLabel} 계산 내역`}>
