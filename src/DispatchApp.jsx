@@ -43,7 +43,7 @@ import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate, is
 import FreightRateInquiry from "./FreightRateInquiry";
 import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnabled } from "./notificationSettings";
 import { CustomSelect } from "./CustomSelect";
-import { estimateDistanceFare, geocodeAddress, haversineKm } from "./tmapFareCalc";
+import { estimateDistanceFare, geocodeAddress, haversineKm, specialSurcharge } from "./tmapFareCalc";
 import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
 import RouteMapModal from "./RouteMapModal";
 import MonthCompareAnalysis from "./MonthCompareAnalysis";
@@ -10964,6 +10964,7 @@ let base = (dispatchData || []).filter(r => {
   let list = base;
   let level = "주소";
   let motorFallback = false;
+  let coldSurcharge = null;
 
   if (vehicle) {
     const vg = normalizeVehicleGroup(vehicle);
@@ -10980,6 +10981,11 @@ let base = (dispatchData || []).filter(r => {
         level = "차량";
         motorFallback = true;
       }
+    } else if (vg === "COLD") {
+      // ⭐ 냉장/냉동 이력이 부족하면 일반차량 이력에 냉장·냉동 할증을 얹어 추정한다
+      //   (예전엔 일반 운임 그대로 나와 특수차량 예상운임이 낮게 보였다)
+      if (vehicleFiltered.length > 0) list = vehicleFiltered;
+      else { coldSurcharge = specialSurcharge(vehicle, ""); level = `일반차량 + ${coldSurcharge.label} 할증 ${Math.round(coldSurcharge.rate * 100)}%`; }
     } else {
       list = vehicleFiltered.length > 0 ? vehicleFiltered : list;
     }
@@ -11009,11 +11015,12 @@ let base = (dispatchData || []).filter(r => {
   }
 
   const fares = list.map(r =>
-    Number(String(r.청구운임).replace(/[^\d]/g, ""))
-  );
+    Number(String(r.청구운임).replace(/[^\d]/g, "")) * (1 + (coldSurcharge?.rate || 0))
+  ).map(v => (coldSurcharge ? Math.round(v / 5000) * 5000 : v));
 
 return {
-  level,
+  level: level === "차량" || level === "톤수" || level === "화물" ? (coldSurcharge ? `${level} · ${coldSurcharge.label} 할증` : level) : level,
+  surchargeLabel: coldSurcharge?.label || "",
   min: Math.min(...fares),
   max: Math.max(...fares),
   avg: Math.round(fares.reduce((a,b)=>a+b,0) / fares.length),
@@ -14477,7 +14484,7 @@ React.useEffect(() => {
       <span className="text-white/60 text-xs">
         {areaFareHint
           ? <>기준: {areaFareHint.motorFallback ? "일반차량(오토바이 참고)" : areaFareHint.level}<span className="ml-1">({areaFareHint.count}건)</span></>
-          : `티맵 ${distanceFareEstimate.distance}km 기준 추정`}
+          : `티맵 ${distanceFareEstimate.distance}km 기준 추정${distanceFareEstimate.surchargeLabel ? ` · ${distanceFareEstimate.surchargeLabel} 할증 +${Math.round(distanceFareEstimate.surchargeRate * 100)}%` : ""}`}
       </span>
       <span className="ml-auto font-bold text-white">
         {areaFareHint
@@ -19027,7 +19034,7 @@ setConfirmChange(null);
       <div className="pt-1 pb-1">
         <FareGauge min={distanceFareEstimate.min} avg={distanceFareEstimate.avg} max={distanceFareEstimate.max} />
         <div className="text-[11px] text-gray-500 text-center -mt-1">
-          티맵 {distanceFareEstimate.distance}km · {distanceFareEstimate.min.toLocaleString()}~{distanceFareEstimate.max.toLocaleString()}원 추정
+          티맵 {distanceFareEstimate.distance}km · {distanceFareEstimate.min.toLocaleString()}~{distanceFareEstimate.max.toLocaleString()}원 추정{distanceFareEstimate.surchargeLabel ? ` · ${distanceFareEstimate.surchargeLabel} 할증 +${Math.round(distanceFareEstimate.surchargeRate * 100)}% 포함` : ""}
         </div>
       </div>
     )}

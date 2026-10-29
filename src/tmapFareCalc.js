@@ -352,11 +352,16 @@ export async function getDrivingPathByCoords(from, to) {
   }
 }
 
-// 화물내용 텍스트에 냉장/냉동/위험물 키워드가 있으면 할증률 적용
-function cargoSurcharge(cargoText = "") {
-  if (/냉장|냉동/.test(cargoText)) return 0.15;
-  if (/위험물/.test(cargoText)) return 0.20;
-  return 0;
+// ⭐ 특수차량·특수화물 할증 — 차량종류(냉동탑·냉장윙 등)나 화물내용에 키워드가 있으면 적용.
+//   예전엔 화물내용만 봐서 차량종류에 "냉동"이라고 적어도 일반 운임으로 나왔다.
+//   냉동(-18℃ 이하 유지)이 냉장보다 장비·연료 부담이 커 할증을 더 둔다.
+export const SPECIAL_SURCHARGE = { 냉동: 0.25, 냉장: 0.2, 위험물: 0.2 };
+export function specialSurcharge(vehicleText = "", cargoText = "") {
+  const t = `${vehicleText || ""} ${cargoText || ""}`;
+  if (/냉동/.test(t)) return { rate: SPECIAL_SURCHARGE.냉동, label: "냉동" };
+  if (/냉장/.test(t)) return { rate: SPECIAL_SURCHARGE.냉장, label: "냉장" };
+  if (/위험물/.test(t)) return { rate: SPECIAL_SURCHARGE.위험물, label: "위험물" };
+  return { rate: 0, label: "" };
 }
 
 // 상/하차지 주소, 차량종류/톤수, 화물내용을 바탕으로 티맵 거리 기준 운임 범위를 추정한다.
@@ -367,14 +372,15 @@ export async function estimateDistanceFare({ pickupAddr, dropAddr, vehicleText, 
   const roadDist = Math.round(haversineKm(from.lat, from.lon, to.lat, to.lon) * 1.25);
   const vt = matchVehicleType(vehicleText, tonText, cargoText) || DEFAULT_VEHICLE;
   const base = vt.base + vt.perKm * roadDist;
-  const surcharged = Math.max(vt.min, base) * (1 + cargoSurcharge(cargoText));
+  const sp = specialSurcharge(vehicleText, cargoText);
+  const surcharged = Math.max(vt.min, base) * (1 + sp.rate);
   const avg = Math.round(surcharged / 5000) * 5000;
   const min = Math.round(avg * 0.85 / 5000) * 5000;
   const max = Math.round(avg * 1.15 / 5000) * 5000;
 
   if (![roadDist, min, max, avg].every(Number.isFinite)) return null;
 
-  return { distance: roadDist, min, max, avg, vehicleId: vt.id };
+  return { distance: roadDist, min, max, avg, vehicleId: vt.id, surchargeLabel: sp.label, surchargeRate: sp.rate };
 }
 
 // ⭐ 2026-10-28 오더 스캔 — 주소가 실제로 있는지 확인. 통신 실패와 "없는 주소"를 구분해 돌려준다.
