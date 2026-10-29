@@ -57,7 +57,7 @@ export default function UploadPage() {
   const imgZoomRef = useRef(null);
   const imgPinchRef = useRef({ dist: null, scale: 1, baseScale: 1, tx: 0, ty: 0, baseTx: 0, baseTy: 0, pointers: {} });
 
-  // 결제일 계산 — 회사관리 › 회사정보에서 정한 "계산서 발행 후 N일"(companySettings/{회사}.결제일규칙.payDays).
+  // 결제일 계산 — 정산관리 › 지급관리에서 정한 "계산서 발행 후 N일"(companySettings/{회사}.결제일규칙.payDays).
   //   예전 규칙(평일 일수)만 있는 회사는 그 일수를 이어서 쓴다. 입금일이 주말이면 다음 월요일로 안내한다.
   const DAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
   const DEFAULT_PAYMENT_RULE = { payDays: 3 };

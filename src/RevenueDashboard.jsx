@@ -2,7 +2,7 @@
 // 📊 매출관리 › 매출 대시보드(2026-10-28 리디자인) — 필요한 숫자만 한 화면에.
 //  월 실적 KPI · 누적 매출 레이스(이번 달 vs 전월) · 월별 추이 · 목표 달성 링 · 거래처 Top10 · 증감 거래처 · 담당자 · 요일.
 //  ⭐ 알록달록 금지 — 네이비 계열만.
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Cell, BarChart } from "recharts";
 import { creatorOf } from "./monthCompare";
 
@@ -81,7 +81,70 @@ function Ring({ pct, label, sub }) {
 
 const tipStyle = { borderRadius: 10, border: "1px solid #E3E8F0", boxShadow: "0 8px 22px rgba(15,26,48,.12)", fontSize: 13, fontWeight: 700 };
 
-export default function RevenueDashboard({ rows = [], targetMonth, forecast, yearTarget = 0, yearPureSale = 0, rankRows = [], isRankExcluded = () => false, hasExcluded = false, onOpenClient }) {
+// ─── 연간 매출목표 설정(2026-10-29 회사관리에서 이곳으로 이동) ───
+// 저장 위치는 그대로 companySettings/{회사}.매출목표 { 순수매출목표, 제외거래처매출성장률 }.
+function TargetEditButton({ onClick, hasTarget }) {
+  return (
+    <button type="button" onClick={onClick}
+      style={{ height: 28, padding: "0 11px", borderRadius: 8, border: `1px solid ${hasTarget ? "#C9D4E6" : NAVY}`, background: hasTarget ? "#fff" : NAVY, color: hasTarget ? NAVY : "#fff", fontSize: 12.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>
+      {hasTarget ? "목표 수정" : "목표 설정"}
+    </button>
+  );
+}
+
+function TargetEditor({ config, hasExcluded, lastYearSale = 0, year, onSave, onCancel }) {
+  const [amount, setAmount] = useState(String(Number(config?.순수매출목표) || ""));
+  const [growth, setGrowth] = useState(String(config?.제외거래처매출성장률 ?? 3));
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+  const n = Number(String(amount).replace(/[^\d]/g, "")) || 0;
+  const presets = lastYearSale > 0 ? [5, 10, 15, 20].map((p) => [`전년 +${p}%`, Math.round((lastYearSale * (1 + p / 100)) / 1e6) * 1e6]) : [];
+  const inputSt = { width: "100%", height: 40, border: "1px solid #D5DEEC", borderRadius: 10, padding: "0 12px", fontFamily: MONO, fontSize: 16, fontWeight: 800, color: "#0F1A30", textAlign: "right", outline: "none", boxSizing: "border-box" };
+  const save = async () => {
+    const g = Number(growth);
+    if (hasExcluded && (!Number.isFinite(g) || g < -100 || g > 1000)) { setErr("성장률은 -100 ~ 1000 사이로 입력해 주세요."); return; }
+    setSaving(true); setErr("");
+    try { await onSave({ 순수매출목표: n, 제외거래처매출성장률: Number.isFinite(g) ? g : 3 }); }
+    catch (e) { setErr("저장 실패: " + (e?.message || "알 수 없는 오류")); setSaving(false); }
+  };
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); save(); }} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <label style={{ fontSize: 12.5, fontWeight: 800, color: "#4b5563" }}>
+        {year}년 {hasExcluded ? "순수 운송료" : "운송 매출"} 목표
+        <div style={{ position: "relative", marginTop: 5 }}>
+          <input autoFocus inputMode="numeric" value={n ? n.toLocaleString() : ""} placeholder="0" onChange={(e) => setAmount(e.target.value)} style={{ ...inputSt, paddingRight: 30 }} />
+          <span style={{ position: "absolute", right: 11, top: 11, fontSize: 13, fontWeight: 700, color: "#6b7280" }}>원</span>
+        </div>
+        <div style={{ marginTop: 4, fontFamily: MONO, fontSize: 12, color: "#6b7280", textAlign: "right" }}>{n ? `≈ ${short(n)}원 · 월 ${short(n / 12)}원` : "0원이면 '미설정'으로 표시됩니다"}</div>
+      </label>
+      {presets.length > 0 && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {presets.map(([l, v]) => (
+            <button key={l} type="button" onClick={() => setAmount(String(v))}
+              style={{ height: 28, padding: "0 10px", borderRadius: 8, border: `1px solid ${v === n ? NAVY : "#D5DEEC"}`, background: v === n ? NAVY : "#fff", color: v === n ? "#fff" : "#3A4A66", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>{l}</button>
+          ))}
+          <span style={{ fontSize: 11.5, color: "#94A3B8", alignSelf: "center" }}>전년 실적 {short(lastYearSale)}원 기준</span>
+        </div>
+      )}
+      {hasExcluded && (
+        <label style={{ fontSize: 12.5, fontWeight: 800, color: "#4b5563" }}>
+          제외 거래처 매출 성장률(전년 대비)
+          <div style={{ position: "relative", marginTop: 5 }}>
+            <input inputMode="decimal" value={growth} onChange={(e) => setGrowth(e.target.value.replace(/[^\d.-]/g, ""))} style={{ ...inputSt, paddingRight: 30 }} />
+            <span style={{ position: "absolute", right: 11, top: 11, fontSize: 13, fontWeight: 700, color: "#6b7280" }}>%</span>
+          </div>
+        </label>
+      )}
+      {err && <div style={{ fontSize: 12, fontWeight: 700, color: NAVY }}>{err}</div>}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button type="button" onClick={onCancel} style={{ flex: 1, height: 38, borderRadius: 10, border: "1px solid #D5DEEC", background: "#fff", color: "#3A4A66", fontWeight: 800, fontSize: 13.5, cursor: "pointer" }}>취소</button>
+        <button type="submit" disabled={saving} style={{ flex: 2, height: 38, borderRadius: 10, border: "none", background: NAVY, color: "#fff", fontWeight: 800, fontSize: 13.5, cursor: "pointer", opacity: saving ? 0.6 : 1 }}>{saving ? "저장 중…" : "목표 저장"}</button>
+      </div>
+    </form>
+  );
+}
+
+export default function RevenueDashboard({ rows = [], targetMonth, forecast, yearTarget = 0, yearPureSale = 0, rankRows = [], isRankExcluded = () => false, hasExcluded = false, onOpenClient, targetConfig = null, onSaveTarget = null, lastYearSale = 0 }) {
   const [Y, M] = targetMonth.split("-").map(Number);
   const daysInMonth = new Date(Y, M, 0).getDate();
   const prevYm = (() => { const d = new Date(Y, M - 2, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; })();
@@ -152,6 +215,7 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
   const bestWd = weekday.reduce((a, w) => (w.avg > a.avg ? w : a), { avg: 0, label: "-" });
 
   const achieve = yearTarget > 0 ? yearPureSale / yearTarget : 0;
+  const [editTarget, setEditTarget] = useState(false);
   const elapsedYear = (() => { const s = new Date(Y, 0, 1), e = new Date(Y + 1, 0, 1), n = Math.min(Date.now(), e.getTime()); return Math.max(0, Math.min(1, (n - s) / (e - s))); })();
   const staffMax = Math.max(1, ...staff.map((s) => s.sale));
 
@@ -193,11 +257,15 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
           </div>
         </RvCard>
 
-        <RvCard code="TARGET" title={`${Y}년 목표 달성`}>
+        <RvCard code="TARGET" title={`${Y}년 목표 달성`} right={onSaveTarget && <TargetEditButton onClick={() => setEditTarget(true)} hasTarget={yearTarget > 0} />}>
+          {editTarget && onSaveTarget ? (
+            <TargetEditor config={targetConfig} hasExcluded={hasExcluded} lastYearSale={lastYearSale} year={Y}
+              onCancel={() => setEditTarget(false)} onSave={async (v) => { await onSaveTarget(v); setEditTarget(false); }} />
+          ) : (<>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <Ring pct={achieve} label={yearTarget > 0 ? `${(achieve * 100).toFixed(1)}%` : "—"} sub={yearTarget > 0 ? "목표 대비" : "목표 미설정"} />
             <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 9 }}>
-              {[[hasExcluded ? "순수 운송 매출" : "운송 매출", `${short(yearPureSale)}원`], ["연간 목표", yearTarget > 0 ? `${short(yearTarget)}원` : "회사관리에서 설정"], ["남은 금액", yearTarget > 0 ? `${short(Math.max(0, yearTarget - yearPureSale))}원` : "-"]].map(([k, v]) => (
+              {[[hasExcluded ? "순수 운송 매출" : "운송 매출", `${short(yearPureSale)}원`], ["연간 목표", yearTarget > 0 ? `${short(yearTarget)}원` : (onSaveTarget ? "오른쪽 위 '목표 설정'" : "관리자에게 설정 요청")], ["남은 금액", yearTarget > 0 ? `${short(Math.max(0, yearTarget - yearPureSale))}원` : "-"]].map(([k, v]) => (
                 <div key={k}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: "#6b7280" }}>{k}</div>
                   <div style={{ fontFamily: MONO, fontSize: 16, fontWeight: 800, color: "#0F1A30" }}>{v}</div>
@@ -205,18 +273,34 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
               ))}
             </div>
           </div>
-          {yearTarget > 0 && (
-            <div style={{ marginTop: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, fontWeight: 700, color: "#4b5563", marginBottom: 5 }}>
-                <span>연도 진행 <b style={{ fontFamily: MONO }}>{(elapsedYear * 100).toFixed(0)}%</b></span>
-                <span style={{ color: achieve >= elapsedYear ? NAVY : "#64748b" }}>{achieve >= elapsedYear ? "목표 페이스 이상" : "목표 페이스 미달"}</span>
+          {yearTarget > 0 && (() => {
+            // 목표 페이스 — 오늘까지 와 있어야 할 금액과의 차이, 남은 달에 매달 필요한 매출
+            const paceAmt = Math.round(yearTarget * elapsedYear);
+            const gap = yearPureSale - paceAmt;
+            const monthsLeft = Y === new Date().getFullYear() ? 12 - new Date().getMonth() : 0;
+            const perMonth = monthsLeft > 0 ? Math.max(0, yearTarget - yearPureSale) / monthsLeft : 0;
+            return (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, fontWeight: 700, color: "#4b5563", marginBottom: 5 }}>
+                  <span>연도 진행 <b style={{ fontFamily: MONO }}>{(elapsedYear * 100).toFixed(0)}%</b></span>
+                  <span style={{ color: achieve >= elapsedYear ? NAVY : "#64748b" }}>{achieve >= elapsedYear ? "목표 페이스 이상" : "목표 페이스 미달"}</span>
+                </div>
+                <div style={{ position: "relative", height: 8, borderRadius: 99, background: "#E8EDF4" }}>
+                  <div style={{ height: "100%", width: `${Math.min(100, achieve * 100)}%`, borderRadius: 99, background: `linear-gradient(90deg,#4B6CB7,${NAVY})` }} />
+                  <span style={{ position: "absolute", top: -3, left: `calc(${elapsedYear * 100}% - 1px)`, width: 2, height: 14, background: "#0F1A30" }} />
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
+                  {[["페이스 대비", `${gap >= 0 ? "+" : "−"}${short(Math.abs(gap))}원`], [monthsLeft > 0 ? `남은 ${monthsLeft}개월 월평균 필요` : "월평균 필요", monthsLeft > 0 ? `${short(perMonth)}원` : "-"]].map(([k, v]) => (
+                    <div key={k} style={{ borderRadius: 10, padding: "8px 10px", background: "#F5F8FD", border: "1px solid #E3E8F0" }}>
+                      <div style={{ fontSize: 11.5, fontWeight: 700, color: "#6b7280" }}>{k}</div>
+                      <div style={{ fontFamily: MONO, fontSize: 14.5, fontWeight: 800, color: "#0F1A30", marginTop: 1 }}>{v}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div style={{ position: "relative", height: 8, borderRadius: 99, background: "#E8EDF4" }}>
-                <div style={{ height: "100%", width: `${Math.min(100, achieve * 100)}%`, borderRadius: 99, background: `linear-gradient(90deg,#4B6CB7,${NAVY})` }} />
-                <span style={{ position: "absolute", top: -3, left: `calc(${elapsedYear * 100}% - 1px)`, width: 2, height: 14, background: "#0F1A30" }} />
-              </div>
-            </div>
-          )}
+            );
+          })()}
+          </>)}
         </RvCard>
       </div>
 

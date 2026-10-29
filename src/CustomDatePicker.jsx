@@ -100,6 +100,9 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
     // 클릭할 때마다 팝업이 닫히지 않고 onToggleWorkDate로 켜고/끈다.
     multiSelect = false, multiActive = false, onToggleMulti, workDates = [], onToggleWorkDate, onClearWorkDates,
     displayOverride,
+    // ⭐ 2026-10-29 키보드 입력 — Tab으로 이 칸에 들어오면 달력이 바로 열린다(마우스 클릭 포커스는 제외).
+    //    끄고 싶은 곳만 openOnFocus={false}.
+    openOnFocus = true,
   },
   ref
 ) {
@@ -109,6 +112,9 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
   const [menuRect, setMenuRect] = React.useState(null);
   const btnRef = React.useRef(null);
   const menuRef = React.useRef(null);
+  // 키보드 달력 이동 — 방향키로 움직이는 "커서 날짜"(Enter로 확정). 포커스는 계속 트리거 버튼에 둔다.
+  const [cursor, setCursor] = React.useState("");
+  const pointerFocusRef = React.useRef(false); // 마우스/터치로 눌러 생긴 포커스인지(그땐 onClick이 연다)
   React.useImperativeHandle(ref, () => ({ focus: () => btnRef.current?.focus() }));
 
   const updateMenuRect = React.useCallback(() => {
@@ -135,6 +141,7 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
       const d = new Date(value);
       if (!isNaN(d)) { setViewYear(d.getFullYear()); setViewMonth(d.getMonth()); }
     }
+    setCursor(/^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? String(value) : "");
     updateMenuRect();
     const close = () => setOpen(false);
     const onDocDown = (e) => {
@@ -166,6 +173,47 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
   const yearOptions = [];
   for (let y = now.getFullYear() - 6; y <= now.getFullYear() + 3; y++) yearOptions.push(y);
 
+  // 커서를 n일 옮긴다(달이 바뀌면 보이는 달도 따라감)
+  const moveCursor = (days) => {
+    const base = cursor || value || todayStr;
+    const d = new Date(`${String(base).slice(0, 10)}T00:00:00`);
+    if (isNaN(d)) return;
+    d.setDate(d.getDate() + days);
+    const next = fmt(d.getFullYear(), d.getMonth(), d.getDate());
+    setCursor(next); setViewYear(d.getFullYear()); setViewMonth(d.getMonth());
+  };
+  const moveCursorMonth = (delta) => {
+    const base = cursor || value || todayStr;
+    const d = new Date(`${String(base).slice(0, 10)}T00:00:00`);
+    if (isNaN(d)) return;
+    const day = d.getDate();
+    d.setDate(1); d.setMonth(d.getMonth() + delta);
+    d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+    setCursor(fmt(d.getFullYear(), d.getMonth(), d.getDate())); setViewYear(d.getFullYear()); setViewMonth(d.getMonth());
+  };
+  const commit = (dateStr) => {
+    if (multiActive) { onToggleWorkDate?.(dateStr); return; }
+    onChange?.({ target: { value: dateStr } }); setOpen(false);
+  };
+  const onKeyDown = (e) => {
+    if (disabled) return;
+    if (!open) {
+      if (e.key === "ArrowDown" || (e.altKey && e.key === "ArrowDown")) { e.preventDefault(); setOpen(true); }
+      return; // Enter/Space는 버튼 기본 동작(click)으로 열린다
+    }
+    const map = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
+    if (map[e.key] != null) { e.preventDefault(); moveCursor(map[e.key]); return; }
+    if (e.key === "PageUp" || e.key === "PageDown") { e.preventDefault(); moveCursorMonth(e.key === "PageUp" ? -1 : 1); return; }
+    if (e.key === "Home") { e.preventDefault(); setCursor(todayStr); setViewYear(now.getFullYear()); setViewMonth(now.getMonth()); return; }
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); commit(cursor || value || todayStr); return; }
+    if (e.key === "Escape") { e.preventDefault(); setOpen(false); return; }
+    if (e.key === "Tab") {
+      // 방향키로 날짜를 골라둔 상태면 그 날짜로 확정하고 다음 칸으로(드롭다운과 같은 규칙), 아니면 그대로 지나간다
+      if (cursor && cursor !== value && !multiActive) onChange?.({ target: { value: cursor } });
+      setOpen(false);
+    }
+  };
+
   const goMonth = (delta) => {
     setViewMonth((m) => {
       let nm = m + delta;
@@ -183,6 +231,19 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
         type="button"
         ref={btnRef}
         disabled={disabled}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onPointerDown={() => { pointerFocusRef.current = true; }}
+        onFocus={() => {
+          // Tab(키보드)으로 들어왔을 때만 바로 연다 — 마우스는 뒤따르는 click이 열고 닫는다
+          if (!pointerFocusRef.current && openOnFocus && !disabled) setOpen(true);
+          pointerFocusRef.current = false;
+        }}
+        onBlur={(e) => {
+          // 포커스가 달력 밖으로 나가면 닫는다(달력 안 연/월 선택칸으로 옮겨간 경우는 유지)
+          if (!(menuRef.current && e.relatedTarget && menuRef.current.contains(e.relatedTarget))) setOpen(false);
+        }}
+        onKeyDown={onKeyDown}
         onClick={() => { if (disabled) return; setOpen((v) => !v); }}
         className={`${className} text-left ${showIcon ? "flex items-center justify-between gap-1.5" : ""}`}
       >
@@ -196,6 +257,8 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
       {open && menuRect && createPortal(
         <div
           ref={menuRef}
+          // 달력 안을 눌러도 트리거 버튼의 포커스를 유지(연/월 선택칸은 직접 포커스가 필요하므로 제외)
+          onMouseDown={(e) => { if (e.target.tagName !== "SELECT" && e.target.tagName !== "OPTION") e.preventDefault(); }}
           style={{ position: "fixed", left: menuRect.left, top: menuRect.top, bottom: menuRect.bottom }}
           className="z-[999999] bg-white border border-gray-200 rounded-xl shadow-2xl p-3 w-[320px] max-w-[94vw]"
         >
@@ -228,6 +291,7 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
               // 클릭도 단일값 커밋이 아니라 목록 토글(팝업 유지)로 동작한다.
               const isSelected = multiActive ? workDates.includes(dateStr) : dateStr === value;
               const isToday = dateStr === todayStr;
+              const isCursor = dateStr === cursor && !isSelected;
               const dow = new Date(viewYear, viewMonth, d).getDay();
               const holidayName = KOREAN_HOLIDAYS[dateStr];
               const isSunday = dow === 0;
@@ -246,6 +310,7 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
                   }}
                   className={`h-11 rounded-lg text-[13px] font-semibold transition flex flex-col items-center justify-center leading-none gap-0.5 ${
                     isSelected ? (multiActive ? "bg-black" : "bg-[#1B2B4B]") :
+                    isCursor ? "ring-2 ring-[#4B6CB7] bg-[#EEF3FB]" :
                     isToday ? "border-2 border-[#1B2B4B]" :
                     "hover:bg-gray-100"
                   }`}
@@ -260,6 +325,7 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
               );
             })}
           </div>
+          <div className="hidden md:block mt-1 text-[10.5px] text-gray-400 text-center">방향키 이동 · Enter 선택 · PgUp/PgDn 달 이동 · Esc 닫기</div>
           <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-100">
             <div className="flex items-center gap-3">
               <button type="button"

@@ -22,6 +22,7 @@ import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc
 import { ShellIcon } from "./AdminShell";
 import { useCompanyStaff, compressImage, sendInternalMail } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
+import CustomSelect from "./CustomSelect";
 import {
   APPROVAL_CATS, APPROVAL_FORMS, formOf, formsOfCat, initialData, missingFields, fieldText, suggestLine,
   itemsTotal, costsTotal, fmtWon, dayDiff, bizDays, leaveEntitlement, leaveUseOf,
@@ -199,15 +200,15 @@ function StaffSelect({ value, onChange, staff, exclude = [], placeholder = "선�
     return [...g.entries()];
   }, [staff, exclude]);
   return (
-    <select value={value || ""} onChange={(e) => onChange(e.target.value)} className={inp}>
+    <CustomSelect openOnFocus value={value || ""} onChange={(e) => onChange(e.target.value)} className={inp}>
       <option value="">{placeholder}</option>
       {groups.map(([t, us]) => <optgroup key={t} label={t}>{us.map((u) => <option key={u.uid} value={u.uid}>{u.name}{u.position ? ` ${u.position}` : ""}</option>)}</optgroup>)}
-    </select>
+    </CustomSelect>
   );
 }
 function FieldInput({ f, value, onChange, staff, meUid }) {
   if (f.type === "textarea") return <textarea value={value || ""} onChange={(e) => onChange(e.target.value)} rows={f.rows || 3} placeholder={f.ph || ""} className={`${inp} h-auto py-2 leading-relaxed resize-y`} />;
-  if (f.type === "select") return <select value={value || ""} onChange={(e) => onChange(e.target.value)} className={inp}>{f.options.map((o) => <option key={o} value={o}>{o}</option>)}</select>;
+  if (f.type === "select") return <CustomSelect openOnFocus value={value || ""} onChange={(e) => onChange(e.target.value)} className={inp}>{f.options.map((o) => <option key={o} value={o}>{o}</option>)}</CustomSelect>;
   if (f.type === "staff") return <StaffSelect value={value} onChange={onChange} staff={staff} exclude={[meUid]} placeholder="선택 안 함" />;
   if (f.type === "date") return <CustomDatePicker value={value || ""} onChange={(e) => onChange(e.target.value)} className={inp} showIcon placeholder="날짜 선택" />;
   if (f.type === "time") return <input type="time" value={value || ""} onChange={(e) => onChange(e.target.value)} className={inp} />;
@@ -311,11 +312,11 @@ function LineEditor({ line, setLine, cc, setCc, staff, me, company, cat }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-1.5">
-        <select value="" onChange={(e) => { load(e.target.value); e.target.value = ""; }} className={`${inp} flex-1`}>
+        <CustomSelect openOnFocus value="" onChange={(e) => { load(e.target.value); e.target.value = ""; }} className={`${inp} flex-1`}>
           <option value="">결재선 불러오기…</option>
           <option value="__auto">자동 추천(부서장 → 임원 → 대표)</option>
           {tpls.filter((t) => !t.cats?.length || t.cats.includes(cat)).map((t) => <option key={t.id} value={t.id}>{t.shared ? "[공용] " : ""}{t.name}</option>)}
-        </select>
+        </CustomSelect>
         <button type="button" onClick={save} disabled={!line.length} className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[12.5px] font-bold text-[#3A4A66] disabled:opacity-40 shrink-0">저장</button>
       </div>
       <div className="space-y-1.5">
@@ -327,9 +328,9 @@ function LineEditor({ line, setLine, cc, setCc, staff, me, company, cat }) {
           <div key={`${s.uid}-${i}`} className="flex items-center gap-1.5">
             <span className="w-6 h-6 shrink-0 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-black flex items-center justify-center">{i + 1}</span>
             <div className="flex-1 min-w-0"><StaffSelect value={s.uid} staff={staff} exclude={used.filter((u) => u !== s.uid)} onChange={(uid) => { const u = pickUser(staff, uid); if (u) setLine((p) => p.map((x, j) => (j === i ? { ...x, ...u } : x))); }} /></div>
-            <select value={s.kind || "결재"} onChange={(e) => setLine((p) => p.map((x, j) => (j === i ? { ...x, kind: e.target.value } : x)))} className={`${inp} !w-[74px] shrink-0 px-2`}>
+            <CustomSelect openOnFocus value={s.kind || "결재"} onChange={(e) => setLine((p) => p.map((x, j) => (j === i ? { ...x, kind: e.target.value } : x)))} className={`${inp} !w-[74px] shrink-0 px-2`}>
               <option>결재</option><option>합의</option>
-            </select>
+            </CustomSelect>
             <div className="flex flex-col shrink-0">
               <button type="button" onClick={() => move(i, -1)} className="w-6 h-4 text-[10px] text-[#7A879C] hover:text-[#0F1A30]">▲</button>
               <button type="button" onClick={() => move(i, 1)} className="w-6 h-4 text-[10px] text-[#7A879C] hover:text-[#0F1A30]">▼</button>
@@ -501,7 +502,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive }) {
             <div className="text-[16px] font-black text-[#0F1A30]">양식 · 내용</div>
           </div>
           <label className="block"><span className="text-[12.5px] font-bold text-[#7A879C]">양식</span>
-            <select value={formKey} disabled={!!editId} onChange={(e) => pickForm(e.target.value)} className={`${inp} !h-11 font-black disabled:bg-[#F5F7FA]`}>{forms.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}</select>
+            <CustomSelect openOnFocus value={formKey} disabled={!!editId} onChange={(e) => pickForm(e.target.value)} className={`${inp} !h-11 font-black disabled:bg-[#F5F7FA]`}>{forms.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}</CustomSelect>
           </label>
           <label className="block"><span className="text-[12.5px] font-bold text-[#7A879C]">문서 제목 <span className="font-semibold">(비우면 자동)</span></span>
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={autoTitle} className={inp} />

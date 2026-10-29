@@ -60,7 +60,7 @@ export function TargetPage({ rows = [], targetMonth, yearTarget = 0, isExcluded 
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={grid4}>
         <RvTile dark code="YTD" label={`${Y}년 누적 ${hasExcluded ? "순수 " : ""}매출`} value={rvShort(ytd)} unit="원" foot={<><RvDelta dark cur={ytd} prev={ytdLast} /><span>작년 같은 기간</span></>} />
-        <RvTile code="TARGET" label="연간 목표" value={yearTarget > 0 ? rvShort(yearTarget) : "미설정"} unit={yearTarget > 0 ? "원" : ""} foot={yearTarget > 0 ? <span>남은 금액 {rvShort(Math.max(0, yearTarget - ytd))}원</span> : <span>회사관리 › 매출목표에서 설정</span>} />
+        <RvTile code="TARGET" label="연간 목표" value={yearTarget > 0 ? rvShort(yearTarget) : "미설정"} unit={yearTarget > 0 ? "원" : ""} foot={yearTarget > 0 ? <span>남은 금액 {rvShort(Math.max(0, yearTarget - ytd))}원</span> : <span>매출 대시보드 › 목표 설정에서 입력</span>} />
         <RvTile code="ACHIEVE" label="목표 달성률" value={yearTarget > 0 ? (achieve * 100).toFixed(1) : "—"} unit={yearTarget > 0 ? "%" : ""} foot={<span>연도 진행 {Math.round((curM / 12) * 100)}%</span>} />
         <RvTile code="RUN RATE" label="연말 예상(현재 페이스)" value={rvShort(runRate)} unit="원" foot={<span>월평균 {rvShort(curM ? ytd / curM : 0)}원</span>} />
       </div>

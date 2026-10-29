@@ -8191,6 +8191,8 @@ return (
               <PaymentManagement
                 dispatchData={dispatchDataFiltered}
                 patchDispatch={patchDispatchSafe}
+                companyName={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()}
+                canEditPayDay={role === "admin" || role === "totalMaster"}
               />
             </div>
           )}
@@ -47079,13 +47081,20 @@ const isKrHoliday = (dateStr) => {
 function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], isViewer = false, role, userCompany = "", showAlert = (m) => alert(m) }) {
 
   // ⭐ 연간 매출 목표(순수 운송료 목표 금액 / 제외 거래처 성장률)는 회사마다 다르므로
-  // 하드코딩하지 않고 회사관리(RevenueTargetSection)에서 설정한 값을 불러온다.
+  // 하드코딩하지 않고 매출 대시보드 › 목표 달성 카드에서 설정한 값을 불러온다.
   // 아직 설정한 적 없으면 0(미설정)으로 표시하고, "달성률" 계산은 0으로 처리한다.
   const [revenueTarget, setRevenueTarget] = React.useState({ pureTarget: 0, excludedGrowthRate: 3 });
+  const [revenueTargetRaw, setRevenueTargetRaw] = React.useState(null); // 설정 편집기 초기값(저장 형식 그대로)
+  // ⭐ 2026-10-29 — 목표 설정은 매출 대시보드의 "목표 달성" 카드에서(관리자 이상). 예전엔 회사관리 › 운영 설정.
+  const canEditRevenueTarget = role === "admin" || role === "totalMaster";
+  const saveRevenueTarget = React.useCallback(async (t) => {
+    await setDoc(doc(db, "companySettings", userCompany.trim()), { 매출목표: t }, { merge: true });
+  }, [userCompany]);
   React.useEffect(() => {
     if (!userCompany) return;
     const unsub = onSnapshot(doc(db, "companySettings", userCompany.trim()), (snap) => {
       const t = snap.data()?.매출목표 || {};
+      setRevenueTargetRaw(t);
       setRevenueTarget({
         pureTarget: Number(t.순수매출목표) || 0,
         excludedGrowthRate: t.제외거래처매출성장률 != null ? Number(t.제외거래처매출성장률) : 3,
@@ -47548,6 +47557,9 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
           forecast={forecast}
           yearTarget={PURE_TARGET_2026}
           yearPureSale={yPure.sale}
+          targetConfig={revenueTargetRaw}
+          onSaveTarget={canEditRevenueTarget && userCompany ? saveRevenueTarget : null}
+          lastYearSale={lastYearPure.sale}
           hasExcluded={hasExcludedClients}
           rankRows={monthRows.filter((r) => !isExcludedClient(r.거래처명) && !isRankingExcludedFast(r.거래처명))}
           isRankExcluded={(n) => isExcludedClient(n) || isRankingExcludedFast(n)}
@@ -54585,7 +54597,7 @@ const handleBatchSettle = async (targetStatus) => {
 // ===================== DispatchApp.jsx (PART 8/8) — END =====================
 
 // ===================== DispatchApp.jsx (PART 9/9) — START =====================
-function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], drivers = [] }) {
+function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], drivers = [], companyName = "", canEditPayDay = false }) {
 
   const todayStr9 = () => new Date().toISOString().slice(0, 10);
   const thisMonthStr = () => new Date().toISOString().slice(0, 7);
@@ -54908,6 +54920,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
           <p className="text-[12px] text-gray-500 mt-0.5"><EditableText id="payment.subtitle" defaultText="배차완료 오더의 기사운임 지급 현황 관리" /></p>
         </div>
         <div className="flex gap-2 items-center flex-wrap">
+          <PaymentDateRuleChip companyName={companyName} canEdit={canEditPayDay} />
           <div className="flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-[12px]">
             <span className="text-gray-500 font-semibold">산재보험료율</span>
             <input autoComplete="off" type="number" min={0} max={10} step={0.01}
@@ -58520,85 +58533,42 @@ function PaymentDateRuleSection({ companyName }) {
   );
 }
 
-// ─────────── 연간 매출 목표 설정 섹션 ───────────
-// 매출관리(Settlement)의 "연간 목표 대비 실적" 카드에서 쓰는 목표 금액 — 예전엔
-// 돌캐 전용 숫자가 코드에 그대로 박혀있었는데, 회사마다 목표가 다르므로 회사관리에서
-// 직접 입력하게 한다. 순수 운송료는 금액을 직접 입력하고, 제외 거래처(거래처관리에서
-// "순수매출제외" 체크한 거래처) 매출은 작년 실적 대비 성장률(%)로 목표를 자동 계산한다.
-function RevenueTargetSection({ companyName }) {
-  const [target, setTarget] = React.useState(null);
-  const [loaded, setLoaded] = React.useState(false);
-  const [saving, setSaving] = React.useState(false);
-  const [msg, setMsg] = React.useState("");
-
-  const DEFAULT_TARGET = { 순수매출목표: 0, 제외거래처매출성장률: 3 };
-
+// ─────────── 결제일 칩(정산관리 › 지급관리 머리줄) ───────────
+// ⭐ 2026-10-29 — 결제일은 "기사에게 언제 입금하나"를 정하는 지급 규칙이라 회사관리에서
+//    지급관리로 옮겼다. 현재 값을 늘 보여주고, 관리자만 눌러서 바꾼다(저장 위치·형식은 그대로).
+function PaymentDateRuleChip({ companyName, canEdit }) {
+  const [days, setDays] = React.useState(null);
+  const [open, setOpen] = React.useState(false);
   React.useEffect(() => {
     if (!companyName) return;
-    const unsub = onSnapshot(doc(db, "companySettings", companyName.trim()), (snap) => {
-      setTarget({ ...DEFAULT_TARGET, ...(snap.data()?.매출목표 || {}) });
-      setLoaded(true);
-    });
+    const unsub = onSnapshot(doc(db, "companySettings", companyName.trim()), (snap) => setDays(payDaysOf(snap.data()?.결제일규칙)), () => setDays(null));
     return () => unsub();
   }, [companyName]);
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await setDoc(doc(db, "companySettings", companyName.trim()), { 매출목표: target }, { merge: true });
-      setMsg("저장되었습니다.");
-      setTimeout(() => setMsg(""), 2500);
-    } catch (e) {
-      setMsg("저장 실패: " + e.message);
-    }
-    setSaving(false);
-  };
-
-  if (!loaded || !target) {
-    return (
-      <div>
-        <p className="text-[16px] font-black text-[#0F1A30] mb-4">연간 매출 목표</p>
-        <div className="text-[13px] text-gray-500">로딩 중...</div>
-      </div>
-    );
-  }
-
   return (
-    <div>
-      <p className="text-[16px] font-black text-[#0F1A30] mb-1">연간 매출 목표</p>
-      <p className="text-[13.5px] text-gray-500 mb-5 leading-relaxed">
-        매출관리 화면의 "연간 목표 대비 실적" 카드에서 달성률을 계산하는 데 쓰입니다. 미설정 시 "미설정"으로 표시됩니다.
-      </p>
-      <div className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-[14.5px] text-gray-800 font-semibold">순수 운송료 목표 (연간)</span>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <input type="number" min={0} value={target.순수매출목표 || ""}
-              placeholder="0"
-              onChange={e => setTarget(t => ({ ...t, 순수매출목표: Math.max(0, Number(e.target.value) || 0) }))}
-              className="w-32 border border-gray-200 rounded-lg px-2.5 py-2 text-[14.5px] text-right focus:outline-none focus:border-[#1B2B4B]" />
-            <span className="text-[14.5px] text-gray-800 font-semibold">원</span>
+    <>
+      <button type="button" onClick={() => canEdit && setOpen(true)} disabled={!canEdit}
+        title={canEdit ? "결제일 설정" : "결제일 설정은 관리자만 변경할 수 있습니다"}
+        className={`flex items-center gap-2 h-[34px] pl-2 pr-3 rounded-lg border text-[12px] bg-white ${canEdit ? "border-[#C9D4E6] hover:border-[#1B2B4B] cursor-pointer" : "border-gray-200 cursor-default"}`}>
+        <span className="px-1.5 py-0.5 rounded-md bg-[#1B2B4B] text-white text-[10px] font-extrabold tracking-[0.12em]">PAYDAY</span>
+        <span className="text-gray-500 font-semibold">결제일</span>
+        <span className="font-black text-[#0F1A30]">{days == null ? "…" : `계산서 발행 후 ${days}일`}</span>
+        {canEdit && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#5B6B85" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>}
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-[99999] bg-black/40 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-[460px] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 bg-[#1B2B4B]">
+              <div>
+                <div className="text-[10px] font-extrabold tracking-[0.22em] text-[#8FB0F0]">PAYOUT RULE</div>
+                <div className="text-white font-bold text-[15px]">결제일 설정</div>
+              </div>
+              <button onClick={() => setOpen(false)} className="text-white/70 hover:text-white text-xl leading-none">✕</button>
+            </div>
+            <div className="p-6"><PaymentDateRuleSection companyName={companyName} /></div>
           </div>
         </div>
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-[14.5px] text-gray-800 font-semibold">제외 거래처 매출 성장률 (전년 대비)</span>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <input type="number" min={-100} max={1000} value={target.제외거래처매출성장률 ?? 3}
-              onChange={e => setTarget(t => ({ ...t, 제외거래처매출성장률: Number(e.target.value) || 0 }))}
-              className="w-20 border border-gray-200 rounded-lg px-2.5 py-2 text-[14.5px] text-right focus:outline-none focus:border-[#1B2B4B]" />
-            <span className="text-[14.5px] text-gray-800 font-semibold">%</span>
-          </div>
-        </div>
-        <p className="text-[12.5px] text-gray-500 leading-relaxed">
-          "제외 거래처"는 거래처관리 수정 팝업에서 "순수 운송료 매출 통계에서 제외"를 체크한 거래처입니다. 체크된 거래처가 하나도 없으면 이 항목은 매출관리 화면에 표시되지 않습니다.
-        </p>
-        {msg && <div className="text-[12px] font-medium text-emerald-600">{msg}</div>}
-        <button onClick={handleSave} disabled={saving}
-          className="w-full py-3 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[14px] font-bold transition disabled:opacity-40">
-          {saving ? "저장 중..." : "저장"}
-        </button>
-      </div>
-    </div>
+      )}
+    </>
   );
 }
 
@@ -60071,32 +60041,36 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
   const showMsg = (msg) => { setAlertMsg(msg); setTimeout(() => setAlertMsg(""), 3500); };
 
   // 회사 정보 로드: type === "신규" 문서 우선
+  // ⭐ 2026-10-29 로딩 개선 — 예전엔 transportApplications "전체"(모든 운송사 가입신청 +
+  //    사업자등록증·직인 base64 이미지, 문서당 최대 수 MB)를 실시간 구독한 뒤 화면에서 우리 회사만
+  //    골라냈다. 운송사가 늘수록 다운로드가 커져 "불러오는 중"이 길어졌던 원인.
+  //    이제 우리 회사 이름으로만 조회한다. 이름 앞뒤 공백이 다르게 저장된 옛 문서만 1회 전체 조회로 보완.
+  const pickCompanyDoc = (docs) => {
+    const same = docs.filter(d => (d.companyName || "").trim() === companyName.trim());
+    return same.find(d => d.type === "신규" && d.status === "approved")   // 신규 가입 문서(최초 등록 정보) 우선
+      || same.find(d => d.type === "신규")                                // 없으면 type === "신규" 중 아무거나
+      || same.find(d => d.status === "approved")                          // 그래도 없으면 같은 회사명 승인 문서
+      || null;
+  };
   React.useEffect(() => {
     if (!companyName) { setLoading(false); return; }
-    const unsub = onSnapshot(collection(db, "transportApplications"), (snap) => {
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      // 신규 가입 문서 (최초 등록 정보) 우선
-      let found = docs.find(d =>
-        (d.companyName || "").trim() === companyName.trim() && d.type === "신규" && d.status === "approved"
-      );
-      // 없으면 type === "신규" 중 아무거나
-      if (!found) found = docs.find(d =>
-        (d.companyName || "").trim() === companyName.trim() && d.type === "신규"
-      );
-      // 그래도 없으면 같은 회사명 아무거나
-      if (!found) found = docs.find(d =>
-        (d.companyName || "").trim() === companyName.trim() && d.status === "approved"
-      );
-      setAppData(found || null);
-      setLoading(false);
+    let fallbackTried = false;
+    const unsub = onSnapshot(query(collection(db, "transportApplications"), where("companyName", "==", companyName)), (snap) => {
+      const found = pickCompanyDoc(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      if (found || fallbackTried) { setAppData(found); setLoading(false); return; }
+      fallbackTried = true;
+      getDocs(collection(db, "transportApplications"))
+        .then((all) => setAppData(pickCompanyDoc(all.docs.map(d => ({ id: d.id, ...d.data() })))))
+        .catch(() => setAppData(null))
+        .finally(() => setLoading(false));
     }, () => setLoading(false)); // 읽기 실패(권한·네트워크)해도 "불러오는 중"에 멈추지 않게
     return () => unsub();
-  }, [companyName]);
+  }, [companyName]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 이 계정의 처리된 수정 요청 실시간 감지
+  // 이 계정의 처리된 수정 요청 실시간 감지 — 내 요청만 조회(예전엔 전체 회사 요청을 받았다)
   React.useEffect(() => {
     if (!currentUserId) return;
-    const unsub = onSnapshot(collection(db, "companyEditRequests"), (snap) => {
+    const unsub = onSnapshot(query(collection(db, "companyEditRequests"), where("requestedByUserId", "==", currentUserId)), (snap) => {
       const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       const resolved = docs.find(d =>
         d.requestedByUserId === currentUserId &&
@@ -60514,25 +60488,8 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
           </section>
         </div>
 
-        {/* 운영 설정 */}
-        <div>
-          <div className="px-1 mb-4">
-            <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">SETTINGS</div>
-            <div className="mt-0.5 text-[20px] font-black text-[#0F1A30] tracking-tight">운영 설정</div>
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {isAdmin && (
-              <div className={`${KP_CARD} p-6`}>
-                <PaymentDateRuleSection companyName={companyName} />
-              </div>
-            )}
-            {isAdmin && (
-              <div className={`${KP_CARD} p-6`}>
-                <RevenueTargetSection companyName={companyName} />
-              </div>
-            )}
-          </div>
-        </div>
+        {/* ⭐ 2026-10-29 — "운영 설정"(결제일·연간 매출목표)은 업무에 맞는 메뉴로 옮겼다.
+            결제일 → 정산관리 › 지급관리 / 연간 매출목표 → 매출관리 › 매출 대시보드. 저장 위치(companySettings)는 그대로. */}
       </div>
 
       {/* 계좌 확인 팝업 */}

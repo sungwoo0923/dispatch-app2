@@ -16,20 +16,37 @@ const CustomSelect = React.forwardRef(function CustomSelect(
   // 열리는" 버그가 있었다. 포커스가 방금 목록을 열었다는 걸 기록해뒀다가, 바로 이어지는
   // click에서는 토글을 건너뛰어(이미 열려있는 상태 유지) 이 경합을 없앤다.
   const justOpenedByFocusRef = React.useRef(false);
+  // 목록을 연 뒤 사용자가 실제로 항목을 고르고 있었는지(방향키/마우스 이동). Tab으로 그냥
+  // 지나갈 때(openOnFocus로 열렸다가 바로 Tab) 첫 항목이 멋대로 선택되던 문제를 막는다.
+  const navigatedRef = React.useRef(false);
   React.useImperativeHandle(ref, () => ({
     focus: () => btnRef.current?.focus(),
     scrollIntoView: (opts) => btnRef.current?.scrollIntoView(opts),
     value,
   }));
 
-  const options = React.Children.toArray(children)
-    .filter((c) => c && typeof c === "object" && c.type === "option")
-    .map((c) => ({
-      value: c.props.value !== undefined ? c.props.value : (typeof c.props.children === "string" ? c.props.children : ""),
-      label: c.props.children,
-      disabled: !!c.props.disabled,
-    }));
-  const current = options.find((o) => String(o.value) === String(value ?? ""));
+  // <option>과 <optgroup>(그룹 머리줄 + 그 안의 option) 모두 지원 — 그룹 머리줄은 선택 불가 항목으로 둔다.
+  const toOpt = (c) => ({
+    value: c.props.value !== undefined ? c.props.value : (typeof c.props.children === "string" ? c.props.children : ""),
+    label: c.props.children,
+    disabled: !!c.props.disabled,
+  });
+  const options = [];
+  React.Children.toArray(children).forEach((c) => {
+    if (!c || typeof c !== "object") return;
+    if (c.type === "option") options.push(toOpt(c));
+    else if (c.type === "optgroup") {
+      options.push({ value: `__group__${c.props.label}`, label: c.props.label, disabled: true, header: true });
+      React.Children.toArray(c.props.children).forEach((o) => { if (o && o.type === "option") options.push(toOpt(o)); });
+    }
+  });
+  const current = options.find((o) => !o.header && String(o.value) === String(value ?? ""));
+  const startIdx = () => {
+    const i = options.findIndex((o) => !o.header && String(o.value) === String(value ?? ""));
+    if (i >= 0) return i;
+    const j = options.findIndex((o) => !o.disabled);
+    return j >= 0 ? j : 0;
+  };
   const [activeIdx, setActiveIdx] = React.useState(-1);
 
   // 옵션 글자 길이에 맞춰 드롭다운 목록 폭을 넉넉히 잡는다 — 트리거(닫힌 버튼)가
@@ -72,6 +89,7 @@ const CustomSelect = React.forwardRef(function CustomSelect(
 
   React.useEffect(() => {
     if (!open) return;
+    navigatedRef.current = false;
     updateMenuRect();
     // 목록 자체의 overflow-auto 스크롤도 캡처 단계에서 "scroll" 이벤트를 발생시키므로,
     // 타겟을 가리지 않고 반응하면 목록 안에서 스크롤만 해도 오작동한다(무시).
@@ -148,27 +166,32 @@ const CustomSelect = React.forwardRef(function CustomSelect(
           if (openOnFocus && !disabled) {
             setOpen(true);
             justOpenedByFocusRef.current = true;
-            setActiveIdx(Math.max(0, options.findIndex((o) => String(o.value) === String(value ?? ""))));
+            setActiveIdx(startIdx());
           }
           onFocus?.(e);
         }}
-        onBlur={(e) => { justOpenedByFocusRef.current = false; onBlur?.(e); }}
+        onBlur={(e) => {
+          justOpenedByFocusRef.current = false;
+          // 포커스가 목록 밖으로 나가면(Shift+Tab, 다른 칸 클릭 등) 목록도 닫는다 — 예전엔 열린 채 남았다.
+          if (!(menuRef.current && e.relatedTarget && menuRef.current.contains(e.relatedTarget))) setOpen(false);
+          onBlur?.(e);
+        }}
         onClick={() => {
           if (disabled) return;
           if (justOpenedByFocusRef.current) {
             // 이번 클릭은 방금 포커스가 이미 연 것과 같은 상호작용 — 다시 닫지 않는다.
             justOpenedByFocusRef.current = false;
-            setActiveIdx(Math.max(0, options.findIndex((o) => String(o.value) === String(value ?? ""))));
+            setActiveIdx(startIdx());
             return;
           }
           setOpen((v) => !v);
-          setActiveIdx(Math.max(0, options.findIndex((o) => String(o.value) === String(value ?? ""))));
+          setActiveIdx(startIdx());
         }}
         onKeyDown={(e) => {
           onKeyDown?.(e);
           if (disabled || e.defaultPrevented) return;
           if (["ArrowDown", "ArrowUp", "Enter", " ", "Escape"].includes(e.key)) e.preventDefault();
-          if (!open && (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ")) { setOpen(true); setActiveIdx(Math.max(0, options.findIndex((o) => String(o.value) === String(value ?? "")))); return; }
+          if (!open && (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ")) { setOpen(true); setActiveIdx(startIdx()); return; }
           // ⭐ arrowNav — 좌우 방향키로 필드 사이를 이동할 때, 이 드롭다운 칸에
           // 도착하면 먼저 목록이 열리고(위/아래로 훑어볼 수 있게), 선택 없이 같은
           // 방향키를 한 번 더 누르면 목록을 닫고 옆 칸으로 계속 이동한다. 여기서는
@@ -177,7 +200,7 @@ const CustomSelect = React.forwardRef(function CustomSelect(
           if (arrowNav && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
             if (!open) {
               setOpen(true);
-              setActiveIdx(Math.max(0, options.findIndex((o) => String(o.value) === String(value ?? ""))));
+              setActiveIdx(startIdx());
               e.stopPropagation(); // 여는 동작 — 위임 핸들러까지 버블링되어 옆 칸으로 넘어가지 않게 막는다
               return;
             }
@@ -185,6 +208,7 @@ const CustomSelect = React.forwardRef(function CustomSelect(
             return; // 닫는 동작 — stopPropagation 하지 않아 위임 핸들러가 옆 칸으로 이동시킨다
           }
           if (!open) return;
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") navigatedRef.current = true;
           if (e.key === "ArrowDown") {
             setActiveIdx((i) => {
               let next = i;
@@ -215,8 +239,9 @@ const CustomSelect = React.forwardRef(function CustomSelect(
             // 드롭다운이 열린 채로 Tab을 누르면 선택 없이 바로 다음 칸으로 넘어가
             // 버렸다 — 먼저 현재 활성 항목을 선택(Enter와 동일)한 뒤, Tab의 기본
             // 동작(다음 입력창으로 포커스 이동)은 그대로 이어지게 둔다.
+            // 단, 목록을 훑지 않고 Tab으로 지나가기만 한 경우엔 값을 바꾸지 않는다.
             const o = options[activeIdx];
-            if (o && !o.disabled) onChange?.({ target: { value: o.value } });
+            if (navigatedRef.current && o && !o.disabled) onChange?.({ target: { value: o.value } });
             setOpen(false);
           }
         }}
@@ -230,6 +255,7 @@ const CustomSelect = React.forwardRef(function CustomSelect(
       {open && menuRect && createPortal(
         <div
           ref={menuRef}
+          onMouseDown={(e) => e.preventDefault()}
           style={{
             position: "fixed",
             left: menuRect.left,
@@ -247,14 +273,14 @@ const CustomSelect = React.forwardRef(function CustomSelect(
           {options.map((o, i) => (
             <div
               key={i}
-              onMouseEnter={() => setActiveIdx(i)}
+              onMouseEnter={() => { if (!o.disabled) { setActiveIdx(i); navigatedRef.current = true; } }}
               onMouseDown={(e) => {
                 e.preventDefault();
                 if (o.disabled) return;
                 onChange?.({ target: { value: o.value } });
                 setOpen(false);
               }}
-              className={`px-3 py-2 text-[13px] cursor-pointer whitespace-nowrap ${
+              className={o.header ? "px-3 pt-2 pb-1 text-[11px] font-extrabold tracking-wide text-gray-400 cursor-default select-none" : `px-3 py-2 text-[13px] cursor-pointer whitespace-nowrap ${
                 o.disabled
                   ? "text-gray-300 cursor-not-allowed"
                   : i === activeIdx
