@@ -35,6 +35,9 @@ export const SALES_DEFAULT = {
   trainingFee: 200000,       // 추가 현장 교육 1회
   waiveSetupMonths: 12,      // 이 기간 이상 약정 시 도입비 면제
   annualFreeMonths: 2,       // 연간 선결제 시 무료 개월
+  semiDiscountRate: 5,       // 6개월 선결제 할인율(%) — 단기(6개월) 고객용
+  semiSetupRate: 50,         // 6개월 약정 시 초기 도입비 할인율(%)
+  minContractMonths: 6,      // 최소 약정 기간
   storageGB: 10,             // 사진·파일 기본 제공 용량
   storagePerGB: 3000,        // 초과 1GB/월
   devDayRate: 400000,        // 맞춤 개발 1일 단가
@@ -67,8 +70,11 @@ export function quoteOf(cfg, inp) {
   if (!chosen) return null;
   const months = Math.max(1, num(inp.contractMonths) || 12);
   const waived = !!inp.waiveSetup && months >= num(cfg.waiveSetupMonths);
+  // 단기(최소 약정 이상 · 면제 기간 미만) 약정은 도입비 일부 할인
+  const setupHalf = !waived && !!inp.waiveSetup && months >= num(cfg.minContractMonths ?? 6) && num(cfg.semiSetupRate) > 0;
+  const setupAmount = waived ? 0 : setupHalf ? Math.round(num(cfg.setupFee) * (1 - num(cfg.semiSetupRate) / 100)) : num(cfg.setupFee);
   const oneTime = [
-    { label: "초기 도입비", note: "계정 세팅 · 기본 데이터 이전 · 교육 1회", amount: waived ? 0 : num(cfg.setupFee), list: num(cfg.setupFee), waived },
+    { label: "초기 도입비", note: `계정 세팅 · 기본 데이터 이전 · 교육 1회${setupHalf ? ` (단기 약정 ${num(cfg.semiSetupRate)}% 할인)` : ""}`, amount: setupAmount, list: num(cfg.setupFee), waived },
     ...(inp.migration ? [{ label: "대량 데이터 이전", note: "기존 프로그램·엑셀 이관", amount: num(cfg.migrationFee) }] : []),
     ...(num(inp.training) > 0 ? [{ label: `추가 현장 교육 ${num(inp.training)}회`, note: "", amount: num(inp.training) * num(cfg.trainingFee) }] : []),
     ...(num(inp.devDays) > 0 ? [{ label: `맞춤 개발 ${num(inp.devDays)}일`, note: inp.devDesc || "", amount: num(inp.devDays) * num(cfg.devDayRate) }] : []),
@@ -81,10 +87,12 @@ export function quoteOf(cfg, inp) {
   const paidMonths = year - free;
   const promoMonths = Math.min(num(inp.promoMonths), paidMonths);
   const promoDiscount = Math.round(monthly * promoMonths * (num(inp.promoRate) / 100));
+  // 6개월 선결제 — 실제 내는 이용료에서 할인율만큼
+  const semiDiscount = inp.billing === "semi" ? Math.round((monthly * paidMonths - promoDiscount) * (num(cfg.semiDiscountRate) / 100)) : 0;
   const extraDiscount = num(inp.extraDiscount);
-  const firstYearUse = monthly * paidMonths - promoDiscount - extraDiscount;
+  const firstYearUse = monthly * paidMonths - promoDiscount - semiDiscount - extraDiscount;
   const firstYear = Math.max(0, firstYearUse) + oneTimeTotal;
-  return { byPlan, best, chosen, monthly, oneTime, oneTimeTotal, waived, year, free, paidMonths, promoMonths, promoDiscount, extraDiscount, firstYearUse: Math.max(0, firstYearUse), firstYear, vat: Math.round(firstYear * 0.1), avgMonthly: Math.round(firstYear / year) };
+  return { periodLabel: year >= 12 ? "1년차" : `약정 ${year}개월`, semiDiscount, byPlan, best, chosen, monthly, oneTime, oneTimeTotal, waived, year, free, paidMonths, promoMonths, promoDiscount, extraDiscount, firstYearUse: Math.max(0, firstYearUse), firstYear, vat: Math.round(firstYear * 0.1), avgMonthly: Math.round(firstYear / year) };
 }
 
 // ─── 인쇄용 문서(새 창 → 인쇄 / PDF로 저장) ───
@@ -141,13 +149,13 @@ export function quoteHtml(cfg, inp, q, no) {
       <table><tr><th style="width:84px">수신</th><td><b style="font-size:15px">${esc(inp.customer || "-")}</b> 귀중</td></tr>
         ${inp.contact ? `<tr><th>담당자</th><td>${esc(inp.contact)}</td></tr>` : ""}${inp.phone ? `<tr><th>연락처</th><td>${esc(inp.phone)}</td></tr>` : ""}
         <tr><th>사용 규모</th><td>직원 ${num(inp.staff)}명 · 월 오더 ${num(inp.orders).toLocaleString()}건${num(inp.fleet) ? ` · 지입차 ${num(inp.fleet)}대` : ""}</td></tr>
-        <tr><th>계약 조건</th><td>${num(inp.contractMonths)}개월 약정 · ${inp.billing === "annual" ? `연간 선결제(${q.free}개월 무료)` : "월 결제"}</td></tr></table>
+        <tr><th>계약 조건</th><td>${num(inp.contractMonths)}개월 약정 · ${inp.billing === "annual" ? `연간 선결제(${q.free}개월 무료)` : inp.billing === "semi" ? `6개월 선결제(${num(cfg.semiDiscountRate)}% 할인)` : "월 결제"}</td></tr></table>
       <table>${supplierRows(cfg.supplier)}</table>
     </div>
     <div class="sum">
       <div class="on"><span>월 이용료</span><b>${won(q.monthly)}</b></div>
       <div><span>초기 비용(1회)</span><b>${won(q.oneTimeTotal)}</b></div>
-      <div><span>1년차 총액 (VAT 별도)</span><b>${won(q.firstYear)}</b></div>
+      <div><span>${q.periodLabel} 총액 (VAT 별도)</span><b>${won(q.firstYear)}</b></div>
     </div>
     <h3>월 이용료</h3>
     <table><thead><tr><th style="width:24%">항목</th><th>내용</th><th style="width:8%">수량</th><th style="width:18%">월 금액</th></tr></thead><tbody>${trs(rows)}
@@ -155,16 +163,17 @@ export function quoteHtml(cfg, inp, q, no) {
     <h3>초기 비용 (1회)</h3>
     <table><thead><tr><th style="width:24%">항목</th><th>내용</th><th style="width:8%">수량</th><th style="width:18%">금액</th></tr></thead><tbody>${once}
       <tr><th colspan="3">초기 비용 합계</th><th class="r mono">${won(q.oneTimeTotal)}</th></tr></tbody></table>
-    <h3>1년차 예상 비용</h3>
+    <h3>${q.periodLabel} 예상 비용</h3>
     <table><tbody>
       <tr><td>이용료 ${q.paidMonths}개월${q.free ? ` (연간 선결제 ${q.free}개월 무료)` : ""}</td><td class="r mono" style="width:30%">${won(q.monthly * q.paidMonths)}</td></tr>
       ${q.promoDiscount ? `<tr><td>도입 프로모션 — 첫 ${q.promoMonths}개월 ${num(inp.promoRate)}% 할인</td><td class="r mono">- ${won(q.promoDiscount)}</td></tr>` : ""}
+      ${q.semiDiscount ? `<tr><td>6개월 선결제 할인 ${num(cfg.semiDiscountRate)}%</td><td class="r mono">- ${won(q.semiDiscount)}</td></tr>` : ""}
       ${q.extraDiscount ? `<tr><td>특별 할인</td><td class="r mono">- ${won(q.extraDiscount)}</td></tr>` : ""}
       <tr><td>초기 비용</td><td class="r mono">${won(q.oneTimeTotal)}</td></tr>
-      <tr><th>1년차 합계 (VAT 별도)</th><th class="r mono">${won(q.firstYear)}</th></tr>
+      <tr><th>${q.periodLabel} 합계 (VAT 별도)</th><th class="r mono">${won(q.firstYear)}</th></tr>
       <tr><td>부가세 10%</td><td class="r mono">${won(q.vat)}</td></tr>
-      <tr><th>1년차 합계 (VAT 포함)</th><th class="r mono" style="font-size:15px">${won(q.firstYear + q.vat)}</th></tr>
-      <tr><td colspan="2" style="color:#5B6B85">→ 1년 평균 월 ${won(q.avgMonthly)} (VAT 별도)</td></tr>
+      <tr><th>${q.periodLabel} 합계 (VAT 포함)</th><th class="r mono" style="font-size:15px">${won(q.firstYear + q.vat)}</th></tr>
+      <tr><td colspan="2" style="color:#5B6B85">→ ${q.periodLabel === "1년차" ? "1년" : q.periodLabel} 평균 월 ${won(q.avgMonthly)} (VAT 별도)</td></tr>
     </tbody></table>
     <h3>${esc(p.name)} 요금제 포함 기능</h3><ul>${(p.features || []).map((f) => `<li>${esc(f)}</li>`).join("")}<li>${esc(cfg.messaging)}</li><li>사진 · 파일 저장 ${num(cfg.storageGB)}GB 기본 제공</li></ul>
     <h3>계약 조건</h3><ul>${(cfg.terms || []).map((t) => `<li>${esc(t)}</li>`).join("")}${inp.memo ? `<li><b>${esc(inp.memo)}</b></li>` : ""}</ul>
@@ -179,7 +188,7 @@ export function priceSheetHtml(cfg) {
       <ul>${(p.features || []).map((f) => `<li>${esc(f)}</li>`).join("")}</ul></div>`).join("");
   const opt = [["추가 직원 계정", `1명당 월 ${won(cfg.extraSeat)}`], ["초과 오더", `1건당 ${won(cfg.extraOrder)}`], ["지입차 관리(GPS·운행기록·사진)", `1대당 월 ${won(cfg.fleetPerVehicle)}`], ["일반 기사 기사앱 · 화주사 포털", "무료"],
     ["추가 저장 용량", `${cfg.storageGB}GB 기본 · 초과 1GB당 월 ${won(cfg.storagePerGB)}`], ["문자 · 알림톡", "발송 건수만큼 실비"]];
-  const once = [["초기 도입비", `${won(cfg.setupFee)} — ${cfg.waiveSetupMonths}개월 이상 약정 시 면제`], ["대량 데이터 이전", won(cfg.migrationFee)], ["추가 현장 교육", `1회 ${won(cfg.trainingFee)}`], ["맞춤 개발", `1일 ${won(cfg.devDayRate)}`], ["연간 선결제", `${cfg.annualFreeMonths}개월 무료`]];
+  const once = [["초기 도입비", `${won(cfg.setupFee)} — ${cfg.waiveSetupMonths}개월 이상 약정 시 면제`], ["대량 데이터 이전", won(cfg.migrationFee)], ["추가 현장 교육", `1회 ${won(cfg.trainingFee)}`], ["맞춤 개발", `1일 ${won(cfg.devDayRate)}`], ["연간 선결제", `${cfg.annualFreeMonths}개월 무료`], ["단기 계약(최소 " + (cfg.minContractMonths ?? 6) + "개월)", `6개월 선결제 ${cfg.semiDiscountRate}% 할인 · 도입비 ${cfg.semiSetupRate}% 할인`]];
   const t = (rows) => `<table><tbody>${rows.map(([a, b]) => `<tr><th style="width:42%">${a}</th><td>${b}</td></tr>`).join("")}</tbody></table>`;
   return `<div class="page">
     <div class="hero"><div><div class="eyebrow">KP-FLOW · PRICING</div><h1>요 금 안 내</h1></div><div style="font-size:12px;text-align:right">${ymd()} 기준 · 부가세 별도</div></div>
@@ -240,7 +249,7 @@ export function PricingEditor() {
   };
   const OPTS = [
     ["월 추가 옵션", [["extraSeat", "추가 직원 계정 (1명/월)", "원"], ["extraOrder", "포함량 초과 오더 (1건)", "원"], ["fleetPerVehicle", "지입차 관리 (1대/월)", "원"], ["storageGB", "기본 저장 용량", "GB"], ["storagePerGB", "초과 저장 (1GB/월)", "원"]]],
-    ["1회 비용 · 혜택", [["setupFee", "초기 도입비", "원"], ["waiveSetupMonths", "도입비 면제 약정 기간", "개월"], ["migrationFee", "대량 데이터 이전", "원"], ["trainingFee", "추가 현장 교육 (1회)", "원"], ["devDayRate", "맞춤 개발 (1일)", "원"], ["annualFreeMonths", "연간 선결제 무료", "개월"], ["validDays", "견적 유효기간", "일"]]],
+    ["1회 비용 · 혜택", [["setupFee", "초기 도입비", "원"], ["waiveSetupMonths", "도입비 면제 약정 기간", "개월"], ["migrationFee", "대량 데이터 이전", "원"], ["trainingFee", "추가 현장 교육 (1회)", "원"], ["devDayRate", "맞춤 개발 (1일)", "원"], ["annualFreeMonths", "연간 선결제 무료", "개월"], ["minContractMonths", "최소 약정 기간", "개월"], ["semiDiscountRate", "6개월 선결제 할인", "%"], ["semiSetupRate", "단기 약정 도입비 할인", "%"], ["validDays", "견적 유효기간", "일"]]],
   ];
   return (
     <div className="space-y-4">
@@ -322,7 +331,12 @@ export function PricingEditor() {
 const BLANK_INPUT = { customer: "", contact: "", phone: "", staff: 8, orders: 2500, fleet: 0, storageGB: 0, planId: "auto", contractMonths: 12, billing: "monthly", waiveSetup: true, migration: false, training: 0, devDays: 0, devDesc: "", promoMonths: 0, promoRate: 0, extraDiscount: 0, memo: "" };
 export function QuoteBuilder({ initial, onSaved }) {
   const cfg = useSalesPricing();
-  const [inp, setInp] = React.useState(() => ({ ...BLANK_INPUT, ...(initial?.input || {}) }));
+  const [inp, setInp] = React.useState(() => {
+    // 관리센터 > 도입 문의에서 "이 업체로 견적서 만들기"로 넘어온 경우 고객 정보를 미리 채움(한 번만)
+    let seed = {};
+    if (!initial) { try { seed = JSON.parse(sessionStorage.getItem("kpQuoteSeed") || "{}"); sessionStorage.removeItem("kpQuoteSeed"); } catch { seed = {}; } }
+    return { ...BLANK_INPUT, ...seed, ...(initial?.input || {}) };
+  });
   const [savedId, setSavedId] = React.useState(initial?.id || null);
   const [savedNo, setSavedNo] = React.useState(initial?.no || "");
   const [busy, setBusy] = React.useState(false);
@@ -373,14 +387,14 @@ export function QuoteBuilder({ initial, onSaved }) {
         <Card code="PLAN" title="요금제 · 계약">
           <div className="space-y-3">
             <div><L>요금제</L><Seg k="planId" v={inp.planId} items={[["auto", "자동 추천"], ...cfg.plans.map((p) => [p.id, p.name])]} /></div>
-            <div><L>약정</L><Seg k="contractMonths" v={inp.contractMonths} items={[[1, "무약정"], [12, "12개월"], [24, "24개월"]]} /></div>
-            <div><L>결제</L><Seg k="billing" v={inp.billing} items={[["monthly", "월 결제"], ["annual", `연간 선결제 (${cfg.annualFreeMonths}개월 무료)`]]} /></div>
+            <div><L>약정 (최소 {num(cfg.minContractMonths ?? 6)}개월)</L><Seg k="contractMonths" v={inp.contractMonths} items={[[6, "6개월"], [12, "12개월"], [24, "24개월"]]} /></div>
+            <div><L>결제</L><Seg k="billing" v={inp.billing} items={[["monthly", "월 결제"], ["semi", `6개월 선결제 (-${num(cfg.semiDiscountRate)}%)`], ["annual", `연간 선결제 (${cfg.annualFreeMonths}개월 무료)`]]} /></div>
           </div>
         </Card>
         <Card code="ONE-TIME" title="초기 비용 · 할인">
           <div className="space-y-2.5">
             <label className="flex items-center gap-2 text-[14px] font-bold text-[#3A4A66]"><input type="checkbox" checked={inp.waiveSetup} onChange={(e) => set({ waiveSetup: e.target.checked })} />도입비 면제 ({cfg.waiveSetupMonths}개월 이상 약정 시)</label>
-            {inp.waiveSetup && num(inp.contractMonths) < num(cfg.waiveSetupMonths) && <div className="text-[12px] font-bold text-[#1B2B4B]">※ 약정이 {cfg.waiveSetupMonths}개월보다 짧아 면제가 적용되지 않습니다.</div>}
+            {inp.waiveSetup && num(inp.contractMonths) < num(cfg.waiveSetupMonths) && <div className="text-[12px] font-bold text-[#1B2B4B]">※ {cfg.waiveSetupMonths}개월 미만 약정이라 면제 대신 도입비 {num(cfg.semiSetupRate)}% 할인이 적용됩니다.</div>}
             <label className="flex items-center gap-2 text-[14px] font-bold text-[#3A4A66]"><input type="checkbox" checked={inp.migration} onChange={(e) => set({ migration: e.target.checked })} />대량 데이터 이전 (+{won(cfg.migrationFee)})</label>
             <div className="flex items-center justify-between"><span className="text-[14px] font-bold text-[#3A4A66]">추가 현장 교육</span><NumIn value={inp.training} onChange={(v) => set({ training: v })} unit="회" w="w-20" /></div>
             <div className="flex items-center justify-between"><span className="text-[14px] font-bold text-[#3A4A66]">맞춤 개발</span><NumIn value={inp.devDays} onChange={(v) => set({ devDays: v })} unit="일" w="w-20" /></div>
@@ -404,14 +418,14 @@ export function QuoteBuilder({ initial, onSaved }) {
             <div className="text-[12.5px] text-white/60">{inp.customer || "고객사"} · {q.chosen.plan.name} 요금제{inp.planId === "auto" ? " (자동 추천)" : ""}</div>
           </div>
           <div className="grid grid-cols-3 gap-2 mt-3">
-            {[["월 이용료", q.monthly, true], ["초기 비용", q.oneTimeTotal], ["1년차 총액", q.firstYear]].map(([l, v, on]) => (
+            {[["월 이용료", q.monthly, true], ["초기 비용", q.oneTimeTotal], [`${q.periodLabel} 총액`, q.firstYear]].map(([l, v, on]) => (
               <div key={l} className={`rounded-xl px-3.5 py-3 border ${on ? "border-[#8FB0F0]/45" : "border-[#8FB0F0]/15"}`} style={{ background: on ? "linear-gradient(140deg, rgba(75,108,183,.55), rgba(45,76,130,.25))" : "rgba(255,255,255,.04)" }}>
                 <div className="text-[12px] font-bold text-white/60">{l}</div>
                 <div className="text-[22px] font-black mt-0.5" style={{ fontFamily: MONO }}>{won(v)}</div>
               </div>
             ))}
           </div>
-          <div className="mt-2.5 text-[12.5px] text-white/60">VAT 포함 1년차 {won(q.firstYear + q.vat)} · 1년 평균 월 {won(q.avgMonthly)}</div>
+          <div className="mt-2.5 text-[12.5px] text-white/60">VAT 포함 {q.periodLabel} {won(q.firstYear + q.vat)} · 평균 월 {won(q.avgMonthly)}</div>
           <div className="mt-4 flex gap-2 flex-wrap">
             <button type="button" onClick={() => openPrint(`견적서_${inp.customer || "고객사"}`, quoteHtml(cfg, inp, q, savedNo))} className="h-10 px-5 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black">견적서 보기 · 인쇄</button>
             <button type="button" onClick={save} disabled={busy} className="h-10 px-5 rounded-xl bg-white/10 ring-1 ring-white/25 text-white text-[13.5px] font-black disabled:opacity-50">{busy ? "저장 중…" : savedId ? "견적 수정 저장" : "견적 저장"}</button>
@@ -435,18 +449,19 @@ export function QuoteBuilder({ initial, onSaved }) {
           <div className="mt-3 text-[12px] text-[#7A879C]">카드를 누르면 그 요금제로 견적이 바뀝니다. 사용 규모가 커지면 상위 요금제가 오히려 쌀 수 있습니다.</div>
         </Card>
 
-        <Card code="DETAIL" title="1년차 계산 내역">
+        <Card code="DETAIL" title={`${q.periodLabel} 계산 내역`}>
           <table className="w-full text-[14px]">
             <tbody>
               {[
                 [`이용료 ${q.paidMonths}개월${q.free ? ` (연간 선결제 ${q.free}개월 무료)` : ""}`, q.monthly * q.paidMonths],
                 ...(q.promoDiscount ? [[`프로모션 첫 ${q.promoMonths}개월 ${num(inp.promoRate)}% 할인`, -q.promoDiscount]] : []),
+                ...(q.semiDiscount ? [[`6개월 선결제 할인 ${num(cfg.semiDiscountRate)}%`, -q.semiDiscount]] : []),
                 ...(q.extraDiscount ? [["특별 할인", -q.extraDiscount]] : []),
                 ...q.oneTime.map((x) => [`${x.label}${x.waived ? " (약정 면제)" : ""}`, x.amount]),
               ].map(([l, v]) => (
                 <tr key={l} className="border-t border-[#EEF1F6]"><td className="py-2 text-[#3A4A66] font-semibold">{l}</td><td className="py-2 text-right font-black text-[#0F1A30]" style={{ fontFamily: MONO }}>{v < 0 ? `- ${won(-v)}` : won(v)}</td></tr>
               ))}
-              <tr className="border-t-2 border-[#1B2B4B]"><td className="py-2.5 font-black text-[#0F1A30]">1년차 합계 (VAT 별도)</td><td className="py-2.5 text-right font-black text-[16px] text-[#1B2B4B]" style={{ fontFamily: MONO }}>{won(q.firstYear)}</td></tr>
+              <tr className="border-t-2 border-[#1B2B4B]"><td className="py-2.5 font-black text-[#0F1A30]">{q.periodLabel} 합계 (VAT 별도)</td><td className="py-2.5 text-right font-black text-[16px] text-[#1B2B4B]" style={{ fontFamily: MONO }}>{won(q.firstYear)}</td></tr>
             </tbody>
           </table>
         </Card>
@@ -457,7 +472,7 @@ export function QuoteBuilder({ initial, onSaved }) {
 
 // ═══════════════════════════ ③ 견적 이력 ═══════════════════════════
 const STATUSES = ["작성", "발송", "협의 중", "계약", "보류", "실패"];
-export function QuoteHistory({ onOpen }) {
+export function QuoteHistory({ onOpen, onContract }) {
   const cfg = useSalesPricing();
   const [list, setList] = React.useState(null);
   React.useEffect(() => onSnapshot(query(collection(db, "salesQuotes"), orderBy("createdAt", "desc")), (s) => setList(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setList([])), []);
@@ -497,6 +512,7 @@ export function QuoteHistory({ onOpen }) {
                     <td className="px-3 py-2 text-center text-[12.5px] text-[#7A879C]" style={{ fontFamily: MONO }}>{x.createdAt?.toDate ? ymd(x.createdAt.toDate()) : "-"}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-right">
                       <button type="button" onClick={() => onOpen?.(x)} className="h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black mr-1">열기</button>
+                      {onContract && <button type="button" onClick={() => onContract(x)} className="h-8 px-3 rounded-lg border border-[#1B2B4B] text-[12.5px] font-black text-[#1B2B4B] mr-1">계약서 만들기</button>}
                       <button type="button" onClick={() => { const c = x.pricing ? mergeDefaults(x.pricing) : cfg; if (!c) return; const inp = { ...BLANK_INPUT, ...x.input }; const q = quoteOf(c, inp); q && openPrint(`견적서_${x.customer}`, quoteHtml(c, inp, q, x.no)); }} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B] mr-1">인쇄</button>
                       <button type="button" onClick={() => window.confirm(`${x.customer} 견적(${x.no})을 삭제할까요?`) && deleteDoc(doc(db, "salesQuotes", x.id))} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#7A879C]">삭제</button>
                     </td>

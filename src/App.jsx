@@ -64,6 +64,9 @@ const DriverSearchPage = React.lazy(() => import("./DriverSearchPage"));
 const ShortLinkRedirect = React.lazy(() => import("./ShortLinkRedirect"));
 const StandardFare = React.lazy(() => import("./StandardFare"));
 const ChangePassword = React.lazy(() => import("./ChangePassword"));
+const PlatformCenter = React.lazy(() => import("./PlatformCenter"));
+const EntryChooser = React.lazy(() => import("./PlatformCenter").then((m) => ({ default: m.EntryChooser })));
+const ContractSign = React.lazy(() => import("./ContractSign"));
 
 // ⭐ 관리자 겸 개발자 계정 — 배차/화주/모바일 등 프로그램 어디서든, users 문서
 // 상태(role 필드 오타, 퇴사 처리, 문서 자체가 없는 경우 등)와 무관하게 무조건
@@ -121,6 +124,9 @@ function KpSplash() {
     </div>
   );
 }
+
+// 최고관리자 진입 선택(탭/창 단위로 기억 — 새로 로그인하거나 창을 닫으면 다시 고른다)
+const kpEntry = () => { try { return sessionStorage.getItem("kpEntry") || ""; } catch { return ""; } };
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -550,6 +556,7 @@ export default function App() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       if (!u) {
+        try { sessionStorage.removeItem("kpEntry"); } catch { }
         if (sessionLogRef.current.uid && sessionLogRef.current.info) {
           addDoc(collection(db, "sessionLogs"), {
             ...sessionLogRef.current.info,
@@ -656,6 +663,12 @@ export default function App() {
   const shortLinkMatch = window.location.pathname.match(/^\/u\/([A-Za-z0-9]+)$/);
   if (shortLinkMatch) {
     return <Router><Routes><Route path="*" element={<React.Suspense fallback={null}><ShortLinkRedirect code={shortLinkMatch[1]} /></React.Suspense>} /></Routes></Router>;
+  }
+
+  // ✍ 전자계약 서명 링크 (/sign/{계약ID}) — 로그인 없이 고객이 열어 서명
+  const signMatch = window.location.pathname.match(/^\/sign\/([A-Za-z0-9_-]+)$/);
+  if (signMatch) {
+    return <Router><Routes><Route path="*" element={<React.Suspense fallback={null}><ContractSign id={signMatch[1]} /></React.Suspense>} /></Routes></Router>;
   }
 
   // 로딩/스플래시 — ⭐ 2026-10-28 디지털 리디자인(네이비 + 디지털 로고 마크). index.html의 첫 화면과 똑같이 생겨서
@@ -845,9 +858,21 @@ export default function App() {
             path="/app"
             element={
               user && role !== "shipper" && role !== "driver" && approved
-                ? (isMobile ? <MobileApp role={role} user={user} userCompany={userCompany} /> : <DispatchApp role={role} user={user} userCompany={userCompany} />)
+                ? (role === "totalMaster" && !isMobile && kpEntry() !== "app"
+                    ? <Navigate to="/choose" replace />
+                    : isMobile ? <MobileApp role={role} user={user} userCompany={userCompany} /> : <DispatchApp role={role} user={user} userCompany={userCompany} />)
                 : <Navigate to="/login" replace />
             }
+          />
+
+          {/* 🛰 최고관리자: 로그인할 때마다 "관리자 관리센터 / 배차 프로그램" 선택 */}
+          <Route
+            path="/choose"
+            element={user && role === "totalMaster" ? <EntryChooser user={user} /> : <Navigate to="/app" replace />}
+          />
+          <Route
+            path="/platform"
+            element={user && role === "totalMaster" ? <PlatformCenter user={user} /> : <Navigate to="/app" replace />}
           />
 
           <Route path="/change-password" element={<ChangePassword />} />

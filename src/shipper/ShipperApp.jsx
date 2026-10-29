@@ -1,4 +1,5 @@
 // ======================= src/shipper/ShipperApp.jsx =======================
+import PlatformNoticeBanner from "../PlatformNoticeBanner";
 import React, { useEffect, useState, useRef } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { signOut } from "firebase/auth";
@@ -396,6 +397,7 @@ const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
         ))}
       </div>
 
+      <PlatformNoticeBanner audience="shipper" />
       {/* ================= HEADER ================= */}
       {/* ⭐ 2026-10-29 리디자인 — 운송사 PC(KP-Flow)와 같은 네이비 디지털 상단바 */}
       <header className="kp-topnav sticky top-0 z-40 text-white">

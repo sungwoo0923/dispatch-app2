@@ -1,4 +1,8 @@
 // ===================== DispatchApp.jsx (PART 1/8) — START =====================
+import { buildCopyText, getCopyTpl, useCopyTemplates } from "./copyTemplates";
+import { CopyTemplateHost, openCopyTemplateEditor } from "./CopyTemplateEditor";
+import OnboardingHost from "./Onboarding";
+import PlatformNoticeBanner from "./PlatformNoticeBanner";
 import { loadTmap } from "./tmapLoader";
 import { imeFocusRef } from "./imeFocus";
 import { hideBlind, isBlindHidden, canSeeBlind, autoBlindNew } from "./blind";
@@ -2626,7 +2630,6 @@ import BannerCenter from "./BannerCenter";
 import PersonnelOrder from "./PersonnelOrder";
 import OrderScanModal, { looksLikeOrder, scanDropDate } from "./OrderScanModal";
 import KpSubNav from "./KpSubNav";
-import PlatformMonitor from "./PlatformMonitor";
 import RevenueDashboard from "./RevenueDashboard";
 import { TargetPage, ClientsPage, TrendPage, YearlyPage, QueryPage } from "./RevenuePages";
 import { RecurringManagerModal, CloseReportModal } from "./AutomationPanels";
@@ -2635,6 +2638,33 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 // 기사전달용 업로드 링크 단축 — /upload?id=...&t=... (길고 낯설어 기사들이 거부감을
 // 느낄 수 있는 형태)를 /u/{code} 형태로 줄인다. code는 토큰에서 파생시켜, 같은
 // 오더/토큰으로 여러 번 복사해도 항상 같은 링크가 나오게 한다(중복 문서는 덮어쓰기).
+// 📋 기사복사 문구 치환 값(copyTemplates.js의 COPY_VARS)
+function copyVarsOf(r, { 업로드링크 = "", cold = false, plate = "", name = "", phone = "", fare = 0, payLabel = "", company = "" }) {
+  return {
+    업로드링크,
+    온도안내: cold ? "*냉장(0~10도유지),냉동(-18도이하)*" : "*관련 서류 업로드 필수*",
+    결제안내: r.지급방식 === "착불" ? "*착불건입니다*" : r.지급방식 === "선불" ? "*선불건입니다*" : "*결제일 링크 참고하세요*",
+    서류안내: cold ? "※ 거래명세서/타코메타 기록지 함께 촬영업로드" : "※ 거래명세서 서류 업로드",
+    차량번호: plate, 기사명: name, 연락처: phone, 운임: Number(fare || 0).toLocaleString(), 지급구분: payLabel, 지급방식: r.지급방식 || "",
+    상차지: r.상차지명 || "", 하차지: r.하차지명 || "", 상차일: r.상차일 || "",
+    회사명: (localStorage.getItem("loginCompany") || company || localStorage.getItem("userCompany") || "").trim(),
+  };
+}
+// 📋 기사복사용 업로드 링크(오더별 토큰) 발급 — 업로드 완료로 잠긴 토큰이면 새로 발급
+function issueUploadUrl(r) {
+  let token = r.업로드토큰;
+  if (!token || r.업로드잠금) {
+    token = crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+    const patch = { 업로드토큰: token, 업로드잠금: false };
+    updateDoc(doc(db, "dispatch", r._id), patch).catch(() => {});
+    if (r._transmittedOrderId) {
+      updateDoc(doc(db, "orders", r._transmittedOrderId), patch).catch(() => {});
+    } else if (r.originCol && r.originId) {
+      updateDoc(doc(db, r.originCol, r.originId), patch).catch(() => {});
+    }
+  }
+  return buildShortUploadUrl(r._id, token);
+}
 function buildShortUploadUrl(orderId, token) {
   const code = String(token || "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 8) || Math.random().toString(36).slice(2, 10);
   setDoc(doc(db, "shortLinks", code), { id: orderId, t: token, createdAt: serverTimestamp() }, { merge: true }).catch(() => {});
@@ -6823,6 +6853,7 @@ export default function DispatchApp({ role, user, userCompany = "" }) {
   // 참고하는 특수운임 판정에 쓰인다(weatherUtil.js). 앱 진입 시 한 번만
   // 받아오면 되므로 최상위 컴포넌트에서 호출한다.
   useEffect(() => { ensureWeatherLoaded(); }, []);
+  useCopyTemplates(); // 📋 기사복사 문구(회사별 설정) 실시간 반영
   // ⭐ 고정거래처 매출 실시간 구독
   const [fixedRows, setFixedRows] = useState([]);
 // ⭐ 고정거래처 매출 Firestore 실시간 구독
@@ -7557,7 +7588,8 @@ const newVer = useNewVersion(); // ⭐ 새 버전이 배포되면 버전 표시 
     if (customRole && getMenuAccess(customRoles, role, m) === "hidden") return "hidden";
     const isBlocked = !customRole && (role === "user" || role === "test" || isViewer) && blockedMenus.includes(m);
     if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster" && !isViewer) return "hidden";
-    if (m === "관리센터" && role !== "totalMaster") return "hidden";
+    // ⭐ 2026-10-29 관리센터는 별도 화면(/platform, 관리자 관리센터)으로 옮겼다 — 배차 프로그램 메뉴에서는 숨김
+    if (m === "관리센터") return "hidden";
     if (isBlocked && (role === "test" || isViewer)) return "hidden";
     return isBlocked ? "blocked" : "ok";
   };
@@ -7601,6 +7633,9 @@ return (
         email={user?.email}
       />
       <BannerCenter />
+      <PlatformNoticeBanner audience="carrier" />
+      <CopyTemplateHost canEdit={role === "admin" || role === "totalMaster"} />
+      <OnboardingHost role={role} userCompany={userCompany} />
       {/* ===== 통합 헤더 네비 ===== */}
       <header className="kp-topnav sticky top-0 z-50 mb-6 w-full">
 
@@ -7738,6 +7773,12 @@ return (
                 </svg>
               )}
             </button>
+
+            {/* ⭐ 최고관리자 — 관리자 관리센터(플랫폼 운영 화면)로 바로 전환 */}
+            {role === "totalMaster" && (
+              <button type="button" onClick={() => { try { sessionStorage.setItem("kpEntry", "platform"); } catch { /* 무시 */ } navigate("/platform"); }}
+                className="kp-chip-btn text-[12px] transition" title="관리자 관리센터로 전환">관리센터 ↗</button>
+            )}
 
             {/* ⭐ 최적화 버튼 — 새로고침 없이 현재 화면(배차관리/실시간배차현황/배차현황)의
                 누적된 렌더링 상태만 가볍게 초기화한다. */}
@@ -8232,7 +8273,6 @@ return (
         {menu === "관리자메뉴" && (role === "admin" || role === "totalMaster" || isViewer) && <AdminMenu parentRole={role} parentCompany={userCompany || localStorage.getItem("userCompany") || ""} isViewer={isViewer} dispatchData={dispatchData} places={places} />}
 
         {/* ⭐ 2026-10-28 — 관리센터는 "운송사 하나"가 아니라 프로그램 전체(가입 운송사·화주사) 관제 */}
-        {menu === "관리센터" && role === "totalMaster" && <PlatformMonitor />}
 
       </main>
       </div>
@@ -23884,6 +23924,8 @@ function RealtimeStatus({
   markEditRequestSeen = () => {},
   approvedShippers = [],
 }) {
+const cpCargoTypeOptions = useCompanyDropdownOptions("화물타입", role, userCompany); // 오더복사 수정 창 단위(회사별 설정)
+const cpTonTypeOptions = useCompanyDropdownOptions("톤수타입", role, userCompany);
 const loadMethodOptions = useCompanyDropdownOptions("상하차방법", role, userCompany);
 const rtTableWrapRef = React.useRef(null);
 const mergedClients = React.useMemo(() => {
@@ -24708,20 +24750,7 @@ ${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번�
 // 업로드 링크는 오더별 토큰을 함께 담는다 — 기사가 업로드를 완료(등록)하면
 // 이 토큰은 잠기고, 이후 "기사전달용" 복사를 다시 하면 새 토큰이 발급되어
 // 예전 링크(구 토큰)로는 더 이상 접속할 수 없게 된다.
-const uploadUrl = (() => {
-  let token = r.업로드토큰;
-  if (!token || r.업로드잠금) {
-    token = crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-    const patch = { 업로드토큰: token, 업로드잠금: false };
-    updateDoc(doc(db, "dispatch", r._id), patch).catch(() => {});
-    if (r._transmittedOrderId) {
-      updateDoc(doc(db, "orders", r._transmittedOrderId), patch).catch(() => {});
-    } else if (r.originCol && r.originId) {
-      updateDoc(doc(db, r.originCol, r.originId), patch).catch(() => {});
-    }
-  }
-  return buildShortUploadUrl(r._id, token);
-})();
+const uploadUrl = getCopyTpl("driver").includeUpload ? issueUploadUrl(r) : "";
 
 // 상/하차지명으로 거래처(clients)/하차지거래처(places) 레코드를 찾아 저장된
 // 기사전달주의사항을 붙인다.
@@ -24806,24 +24835,22 @@ ${kind}방법 : ${e.method || "-"}`;
 
 const coreBlockD = isChainD ? _chainBlockD : _fanOutBlockD;
 
-return `[파렛전표/거래명세서 업로드]
-미 전송시 운임 지연 될 수 있습니다.
-👇👇👇👇👇👇👇👇👇👇👇👇
-${uploadUrl}
-
-${/(냉장|냉동)/i.test(r.차량종류||r.차종||"") ? "*냉장(0~10도유지),냉동(-18도이하)*\n" : "*관련 서류 업로드 필수*\n"}${r.지급방식 === "착불" ? "*착불건입니다*" : r.지급방식 === "선불" ? "*선불건입니다*" : "*결제일 링크 참고하세요*"}
-${isChainD ? "" : dateNotice}${dateText}${r.운행유형 === "왕복" ? "\n[왕복운행]" : ""}${rotationNotice(r)}
+const _ctColdD = /(냉장|냉동)/i.test(r.차량종류||r.차종||"");
+const _ctBodyD = `${isChainD ? "" : dateNotice}${dateText}${r.운행유형 === "왕복" ? "\n[왕복운행]" : ""}${rotationNotice(r)}
 
 ${coreBlockD}
 
 화물 : ${_totTon4d}${_totCargo4d ? ` / ${_totCargo4d}` : ""} ${r.차량종류 || r.차종}
-결제방법 : ${r.지급방식 === "계산서" ? `계산서(${r.배차방식 === "24시" ? "24시발행" : (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim() || "-"})` : (r.지급방식 || "-")}${driverNoteText}${noticeBlock ? `\n\n${noticeBlock}` : ""}
-
-※ 인수증(파렛전표) 서명 받은 후 업로드필수
-KPP/아주파렛트 상차시 각각 전표업로드 필수
-${/(냉장|냉동)/i.test(r.차량종류||r.차종||"") ? "※ 거래명세서/타코메타 기록지 함께 촬영업로드" : "※ 거래명세서 서류 업로드"}
-※ 서류/전표 없는 건이면 업로드 하지마세요.
-※ 미업로드 시 운임 지급 지연될 수 있습니다`.replace(/\n{3,}/g, "\n\n").trim();
+결제방법 : ${r.지급방식 === "계산서" ? `계산서(${r.배차방식 === "24시" ? "24시발행" : (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim() || "-"})` : (r.지급방식 || "-")}${driverNoteText}${noticeBlock ? `\n\n${noticeBlock}` : ""}`;
+return buildCopyText("driver", {
+  body: _ctBodyD,
+  vars: copyVarsOf(r, { 업로드링크: uploadUrl, cold: _ctColdD, plate, name, phone, fare, payLabel }),
+  defaults: {
+    uploadBlock: "[파렛전표/거래명세서 업로드]\n미 전송시 운임 지연 될 수 있습니다.\n👇👇👇👇👇👇👇👇👇👇👇👇\n{업로드링크}",
+    top: "{온도안내}\n{결제안내}",
+    bottom: "※ 인수증(파렛전표) 서명 받은 후 업로드필수\nKPP/아주파렛트 상차시 각각 전표업로드 필수\n{서류안내}\n※ 서류/전표 없는 건이면 업로드 하지마세요.\n※ 미업로드 시 운임 지급 지연될 수 있습니다",
+  },
+});
 }
 
 /* ================= FULL ================= */
@@ -24996,15 +25023,15 @@ ${kind}방법 : ${e.method || "-"}`;
 
 const coreBlockF = isChainF ? _chainBlockF : _fanOutBlockF;
 
-return `${isChainF ? "" : dateNotice}${r.상차일 || ""} ${yoil}${r.운행유형 === "왕복" ? "\n[왕복운행]" : ""}${rotationNotice(r)}
+return buildCopyText("full", {
+  body: `${isChainF ? "" : dateNotice}${r.상차일 || ""} ${yoil}${r.운행유형 === "왕복" ? "\n[왕복운행]" : ""}${rotationNotice(r)}
 
 ${coreBlockF}
 
 중량 : ${_totTon4f}${_totCargo4f ? ` / ${_totCargo4f}` : ""} ${r.차량종류 || ""}
-결제방법 : ${r.지급방식 || "-"}
-
-${plate} ${name} ${phone}
-${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
+결제방법 : ${r.지급방식 || "-"}`,
+  vars: copyVarsOf(r, { 업로드링크: getCopyTpl("full").includeUpload ? issueUploadUrl(r) : "", cold: /(냉장|냉동)/i.test(r.차량종류 || r.차종 || ""), plate, name, phone, fare, payLabel }),
+});
     })
     .join("\n\n");
 
@@ -28049,7 +28076,7 @@ const openDailyCloseIssueDetail = (rowId) => {
   // 아래 정규화(화물수량/화물타입/톤수값/톤수타입 분리)는 우클릭 메뉴의 "수정"
   // 버튼이 오더복사/수정 패널(copyTarget)을 열 때 하는 것과 동일하다.
   const raw = String(row?.화물내용 || "");
-  const KNOWN_SUFFIXES = ["파레트", "파렛트", "박스", "통"];
+  const KNOWN_SUFFIXES = [...new Set(["파레트", "파렛트", "박스", "통", ...cpCargoTypeOptions])].sort((a, b) => b.length - a.length);
   let cargoNum = "", cargoType = "";
   const rawBase = raw.split("+")[0];
   for (const s of KNOWN_SUFFIXES) {
@@ -30066,8 +30093,7 @@ checkWarningStatus(c.거래처명, "거래처");
         }}
       >
         <option value="">선택</option>
-        <option value="톤">톤</option>
-        <option value="kg">kg</option>
+        {[...new Set([...cpTonTypeOptions, ...(copyTarget?.톤수타입 ? [copyTarget.톤수타입] : [])])].map((v) => <option key={v} value={v}>{v}</option>)}
       </CustomSelect>
 
     </div>
@@ -30117,9 +30143,7 @@ value={copyTarget?.화물수량 || ""}
       }}
     >
       <option value="">없음</option>
-      <option value="파레트">파레트</option>
-      <option value="박스">박스</option>
-      <option value="통">통</option>
+      {[...new Set([...cpCargoTypeOptions, ...(copyTarget?.화물타입 ? [copyTarget.화물타입] : [])])].map((v) => <option key={v} value={v}>{v}</option>)}
     </CustomSelect>
 
   </div>
@@ -32836,7 +32860,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
               const r = contextMenu.row;
               const latest = dispatchData.find(d => d._id === r._id) || r;
               const raw = String(latest?.화물내용 || "");
-              const KNOWN_SUFFIXES = ["파레트","파렛트","박스","통"];
+              const KNOWN_SUFFIXES = [...new Set(["파레트", "파렛트", "박스", "통", ...cpCargoTypeOptions])].sort((a, b) => b.length - a.length);
               let cargoNum = "", cargoType = "";
               const rawBase21 = raw.split("+")[0];
               for (const s of KNOWN_SUFFIXES) { if (rawBase21.endsWith(s)) { cargoNum = rawBase21.slice(0, -s.length).trim(); cargoType = s; break; } }
@@ -33348,14 +33372,15 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
           { type: "basic", label: "차량 · 기사 · 연락처", desc: "차량번호 / 기사명 / 전화번호", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> },
           { type: "fare", label: "운임 포함", desc: "부가세 / 선불 / 착불 형식", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> },
           { type: "full", label: "전체 상세", desc: "상하차 + 화물 + 기사 정보", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> },
-          { type: "driver", label: "기사 전달용", desc: "운행 정보 + 업로드 링크 포함", primary: true, icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><path d="M19 8v6M22 11h-6"/></svg> },
+          { type: "driver", label: "기사 전달용", desc: "운행 정보 + 전달 문구(⚙ 문구 설정에서 변경)", primary: true, icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><path d="M19 8v6M22 11h-6"/></svg> },
         ];
         return (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
             <div className="bg-white w-full max-w-md rounded-t-2xl pb-8 shadow-2xl" onClick={e => e.stopPropagation()}>
               <div className="flex justify-center pt-3 pb-2"><div className="w-10 h-1 rounded-full bg-gray-200" /></div>
-              <div className="px-5 pb-3 border-b border-gray-100">
+              <div className="px-5 pb-3 border-b border-gray-100 flex items-center justify-between">
                 <div className="font-bold text-[15px] text-[#1B2B4B]">복사 형식 선택</div>
+                <button type="button" onClick={openCopyTemplateEditor} className="h-7 px-2.5 rounded-lg border border-[#DCE3EE] text-[11.5px] font-bold text-[#2D4C82] hover:bg-[#F2F6FC]" title="전체 상세 · 기사 전달용 문구와 업로드 링크 포함 여부를 바꿉니다">⚙ 문구 설정</button>
               </div>
               <div className="px-4 py-3 space-y-2">
                 {copyOptions.map(({ type, label, desc, icon, primary }) => (
@@ -34590,6 +34615,8 @@ function DispatchStatus({
   // 중복으로 읽어들였다).
   userNameMap = new Map(),
 }) {
+const cpCargoTypeOptions = useCompanyDropdownOptions("화물타입", role, userCompany); // 오더복사 수정 창 단위(회사별 설정)
+const cpTonTypeOptions = useCompanyDropdownOptions("톤수타입", role, userCompany);
 const loadMethodOptions = useCompanyDropdownOptions("상하차방법", role, userCompany);
 const dsTableWrapRef = React.useRef(null);
 const [companyBankData, setCompanyBankData] = React.useState(null);
@@ -35765,7 +35792,7 @@ const openDailyCloseIssueDetail = (rowId) => {
   // 아래 정규화(화물수량/화물타입/톤수값/톤수타입 분리)는 우클릭 메뉴의 "수정"
   // 버튼이 오더복사/수정 패널(copyTarget)을 열 때 하는 것과 동일하다.
   const raw = String(row?.화물내용 || "");
-  const KNOWN_SUFFIXES = ["파레트", "파렛트", "박스", "통"];
+  const KNOWN_SUFFIXES = [...new Set(["파레트", "파렛트", "박스", "통", ...cpCargoTypeOptions])].sort((a, b) => b.length - a.length);
   let cargoNum = "", cargoType = "";
   const rawBase = raw.split("+")[0];
   for (const s of KNOWN_SUFFIXES) {
@@ -36723,20 +36750,7 @@ const BANCHAN_NOTICE = `
           // 업로드 링크는 오더별 토큰을 함께 담는다 — 기사가 업로드를 완료(등록)하면
           // 이 토큰은 잠기고, 이후 "기사전달용" 복사를 다시 하면 새 토큰이 발급되어
           // 예전 링크(구 토큰)로는 더 이상 접속할 수 없게 된다.
-          const uploadUrl = (() => {
-            let token = r.업로드토큰;
-            if (!token || r.업로드잠금) {
-              token = crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-              const patch = { 업로드토큰: token, 업로드잠금: false };
-              updateDoc(doc(db, "dispatch", r._id), patch).catch(() => {});
-              if (r._transmittedOrderId) {
-                updateDoc(doc(db, "orders", r._transmittedOrderId), patch).catch(() => {});
-              } else if (r.originCol && r.originId) {
-                updateDoc(doc(db, r.originCol, r.originId), patch).catch(() => {});
-              }
-            }
-            return buildShortUploadUrl(r._id, token);
-          })();
+          const uploadUrl = getCopyTpl("driver").includeUpload ? issueUploadUrl(r) : "";
 
 // 상/하차지명으로 거래처(clients)/하차지거래처(places) 레코드를 찾아 저장된
 // 기사전달주의사항을 붙인다.
@@ -36832,24 +36846,22 @@ ${kind}방법 : ${e.method || "-"}`;
 
 const coreBlock5d = isChain5d ? _chainBlock5d : _fanOutBlock5d;
 
-return `[파렛전표/거래명세서 업로드]
-(파렛전표/명세서없으면 미업로드)
-👇👇👇👇👇👇👇👇👇👇👇👇
-${uploadUrl}
-
-${/(냉장|냉동)/i.test(r.차량종류||"-") ? "*냉장(0~10도유지),냉동(-18도이하)*\n" : "*관련 서류 업로드 필수*\n"}${r.지급방식 === "착불" ? "*착불건입니다*" : r.지급방식 === "선불" ? "*선불건입니다*" : "*결제일 링크 참고하세요*"}
-${isChain5d ? "" : dateNotice}${dateText}${r.운행유형==="왕복"?"\n[왕복운행]":""}${rotationNotice(r)}
+const _ctCold5d = /(냉장|냉동)/i.test(r.차량종류||"-");
+const _ctBody5d = `${isChain5d ? "" : dateNotice}${dateText}${r.운행유형==="왕복"?"\n[왕복운행]":""}${rotationNotice(r)}
 
 ${coreBlock5d}
 
 화물 : ${_totTon5d}${_totCargo5d?` / ${_totCargo5d}`:""} ${r.차량종류||"-"}
-결제방법 : ${r.지급방식 === "계산서" ? `계산서(${r.배차방식 === "24시" ? "24시발행" : (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "").trim() || "-"})` : (r.지급방식||"-")}${driverNoteText}${noticeBlock?`\n\n${noticeBlock}`:""}
-
-※ 인수증(파렛전표) 서명 받은 후 업로드필수
-KPP/아주파렛트 상차시 각각 전표업로드 필수
-${/(냉장|냉동)/i.test(r.차량종류||"-") ? "※ 거래명세서/타코메타 기록지 함께 촬영업로드" : "※ 거래명세서 서류 업로드"}
-※ 서류/전표 없는 건이면 업로드 하지마세요
-※ 미업로드 시 운임 지급 지연될 수 있습니다`.replace(/\n{3,}/g, "\n\n").trim();
+결제방법 : ${r.지급방식 === "계산서" ? `계산서(${r.배차방식 === "24시" ? "24시발행" : (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "").trim() || "-"})` : (r.지급방식||"-")}${driverNoteText}${noticeBlock?`\n\n${noticeBlock}`:""}`;
+return buildCopyText("driver", {
+  body: _ctBody5d,
+  vars: copyVarsOf(r, { 업로드링크: uploadUrl, cold: _ctCold5d, plate, name, phone, fare, payLabel, company: userCompany }),
+  defaults: {
+    uploadBlock: "[파렛전표/거래명세서 업로드]\n(파렛전표/명세서없으면 미업로드)\n👇👇👇👇👇👇👇👇👇👇👇👇\n{업로드링크}",
+    top: "{온도안내}\n{결제안내}",
+    bottom: "※ 인수증(파렛전표) 서명 받은 후 업로드필수\nKPP/아주파렛트 상차시 각각 전표업로드 필수\n{서류안내}\n※ 서류/전표 없는 건이면 업로드 하지마세요\n※ 미업로드 시 운임 지급 지연될 수 있습니다",
+  },
+});
         }
 
         // =====================
@@ -36973,15 +36985,15 @@ ${kind}방법 : ${e.method || "-"}`;
 
 const coreBlock5f = isChain5f ? _chainBlock5f : _fanOutBlock5f;
 
-        return `${isChain5f ? "" : dateNotice}${r.상차일||""} ${yoil}${r.운행유형==="왕복"?"\n[왕복운행]":""}${rotationNotice(r)}
+        return buildCopyText("full", {
+          body: `${isChain5f ? "" : dateNotice}${r.상차일||""} ${yoil}${r.운행유형==="왕복"?"\n[왕복운행]":""}${rotationNotice(r)}
 
 ${coreBlock5f}
 
 중량 : ${_totTon5f}${_totCargo5f?` / ${_totCargo5f}`:""} ${r.차량종류||""}
-결제방법 : ${r.지급방식||"-"}
-
-${plate} ${name} ${phone}
-${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
+결제방법 : ${r.지급방식||"-"}`,
+          vars: copyVarsOf(r, { 업로드링크: getCopyTpl("full").includeUpload ? issueUploadUrl(r) : "", cold: /(냉장|냉동)/i.test(r.차량종류 || "-"), plate, name, phone, fare, payLabel, company: userCompany }),
+        });
       })
       .join("\n\n");
 
@@ -37397,7 +37409,18 @@ if (mode === "driver") {
     return "";
   };
 
+  // 대용량 업로드 엑셀 양식(첫 줄 = 열 이름, 둘째 줄 = 예시)
+  const BULK_COLS = ["상차일", "상차시간", "하차일", "하차시간", "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소", "화물내용", "차량종류", "차량톤수", "차량번호", "이름", "전화번호", "청구운임", "기사운임", "지급방식", "배차방식", "메모", "배차상태"];
+  const downloadBulkTemplate = () => {
+    const sample = ["2026-11-03", "09:00", "2026-11-03", "15:00", "동원F&B", "동원F&B 이천센터", "경기 이천시 마장면 100", "CJ 대구센터", "대구 달서구 성서로 10", "16파레트", "윙바디", "11톤", "", "", "", 450000, 400000, "계산서", "24시", "", "배차중"];
+    const ws = XLSX.utils.aoa_to_sheet([BULK_COLS, sample]);
+    ws["!cols"] = BULK_COLS.map((c) => ({ wch: Math.max(10, c.length * 2 + 4) }));
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "오더");
+    XLSX.writeFile(wb, "대용량업로드_양식.xlsx");
+  };
+
   const handleBulkFile = (e) => {
+    if (!(role === "admin" || role === "totalMaster")) { showAlert("대용량 업로드는 관리자만 사용할 수 있습니다."); return; }
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -37463,7 +37486,9 @@ if (mode === "driver") {
         return;
       }
 
-      if (!confirm(`${mapped.length}건을 업로드하시겠습니까?`)) return;
+      const _dates = mapped.map((m) => m.상차일).filter(Boolean).sort();
+      const _matched = mapped.filter((m) => m.배차상태 === "배차완료").length;
+      if (!confirm(`${mapped.length}건을 업로드하시겠습니까?\n\n· 상차일: ${_dates.length ? `${_dates[0]} ~ ${_dates[_dates.length - 1]}` : "없음(오늘 날짜로 등록)"}\n· 기사 자동 매칭: ${_matched}건\n· 청구운임 합계: ${mapped.reduce((a, m) => a + (m.청구운임 || 0), 0).toLocaleString()}원`)) return;
 
       try {
         for (const item of mapped) {
@@ -37665,7 +37690,7 @@ if (first) {
   const cargoRaw = String(latestFirst.화물내용 || "");
 
   // ✅ suffix 기반 분리만 수행 (base만 파싱)
-  const KNOWN_SUFFIXES = ["파레트","파렛트","박스","통"];
+  const KNOWN_SUFFIXES = [...new Set(["파레트", "파렛트", "박스", "통", ...cpCargoTypeOptions])].sort((a, b) => b.length - a.length);
   let cargoQty = "", cargoType = "";
   const cargoRawBase = cargoRaw.split("+")[0];
   for (const s of KNOWN_SUFFIXES) {
@@ -38877,7 +38902,11 @@ return (
   const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n여기를 눌러 업로드해주세요\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
   setBulkUploadConfirm5({ phones, body: msg });
 }} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="status.toolbar.업로드링크" defaultText="업로드링크" />{selected.size>1?` (${selected.size})`:""}</button>
-          <label className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 cursor-pointer whitespace-nowrap"><EditableText id="status.toolbar.대용량업로드" defaultText="대용량 업로드" /><input autoComplete="off" type="file" accept=".xlsx,.xls" hidden onChange={handleBulkFile}/></label>
+          {/* 📥 대용량 업로드 — 과거 오더 이관·초기 세팅용이라 회사 관리자·최고관리자만 보인다(일반 직원은 숨김) */}
+          {(role === "admin" || role === "totalMaster") && (<>
+          <label className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 cursor-pointer whitespace-nowrap" title="엑셀로 오더를 한꺼번에 등록합니다 (관리자 전용)"><EditableText id="status.toolbar.대용량업로드" defaultText="대용량 업로드" /><input autoComplete="off" type="file" accept=".xlsx,.xls" hidden onChange={(e) => { handleBulkFile(e); e.target.value = ""; }}/></label>
+          <button type="button" onClick={downloadBulkTemplate} className="px-2 py-1 rounded-lg border border-gray-300 bg-white text-gray-700 text-[11px] font-semibold shadow-sm hover:bg-gray-50 whitespace-nowrap" title="대용량 업로드용 엑셀 양식 받기">양식</button>
+          </>)}
           <button className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>{if(!selected.size)return showAlert("삭제할 항목이 없습니다.");setShowDeletePopup(true);}}><EditableText id="status.toolbar.선택삭제" defaultText="선택삭제" /></button>
           <button className="px-2 py-1 rounded-lg bg-gray-300 text-gray-800 text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>setSelected(new Set())}><EditableText id="status.toolbar.선택초기화" defaultText="선택초기화" /></button>
           <button className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={downloadExcel}><EditableText id="status.toolbar.엑셀다운" defaultText="엑셀다운" /></button>
@@ -41685,8 +41714,7 @@ setCopyPlaceOptions(list);
       }}
     >
       <option value="">선택</option>
-      <option value="톤">톤</option>
-      <option value="kg">kg</option>
+      {[...new Set([...cpTonTypeOptions, ...(copyTarget?.톤수타입 ? [copyTarget.톤수타입] : [])])].map((v) => <option key={v} value={v}>{v}</option>)}
     </CustomSelect>
 
   </div>
@@ -41726,9 +41754,7 @@ setCopyPlaceOptions(list);
       }}
     >
       <option value="">없음</option>
-      <option value="파레트">파레트</option>
-      <option value="박스">박스</option>
-      <option value="통">통</option>
+      {[...new Set([...cpCargoTypeOptions, ...(copyTarget?.화물타입 ? [copyTarget.화물타입] : [])])].map((v) => <option key={v} value={v}>{v}</option>)}
     </CustomSelect>
 
   </div>
@@ -42822,7 +42848,10 @@ setCopyPlaceOptions(list);
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
           <div className="bg-white rounded-2xl shadow-2xl w-[320px] overflow-hidden">
             <div className="bg-[#1B2B4B] px-5 py-4">
-              <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.복사 방식 선택" defaultText="복사 방식 선택" /></h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.복사 방식 선택" defaultText="복사 방식 선택" /></h3>
+                <button type="button" onClick={openCopyTemplateEditor} className="h-7 px-2.5 rounded-lg bg-white/10 border border-white/20 text-[11.5px] font-bold text-white hover:bg-white/20" title="전체 상세 · 기사 전달용 문구와 업로드 링크 포함 여부를 바꿉니다">⚙ 문구 설정</button>
+              </div>
             </div>
             <div className="p-4 space-y-2">
               <button onClick={() => copyMessage("basic")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
@@ -43702,7 +43731,7 @@ setCopyPlaceOptions(list);
               // 오더복사수정패널을 연다 (선택한 오더 수정 팝업은 폐지)
               const r = contextMenuDS.row;
               const raw = String(r.화물내용 || "");
-              const KNOWN_SUFFIXES = ["파레트","파렛트","박스","통"];
+              const KNOWN_SUFFIXES = [...new Set(["파레트", "파렛트", "박스", "통", ...cpCargoTypeOptions])].sort((a, b) => b.length - a.length);
               let cargoNum = "", cargoType = "";
               const rawBase29 = raw.split("+")[0];
               for (const s of KNOWN_SUFFIXES) { if (rawBase29.endsWith(s)) { cargoNum = rawBase29.slice(0, -s.length).trim(); cargoType = s; break; } }

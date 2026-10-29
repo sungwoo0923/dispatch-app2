@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { imeFocusRef } from "./imeFocus";
 import { db, auth } from "./firebase";
 import {
-  collection, onSnapshot, doc, updateDoc, getDoc, serverTimestamp, query, where, deleteDoc, addDoc,
+  collection, onSnapshot, doc, updateDoc, getDoc, setDoc, serverTimestamp, query, where, deleteDoc, addDoc,
 } from "firebase/firestore";
 import { EditableText } from "./EditMode";
 
@@ -319,6 +319,10 @@ export default function CompanyApplications() {
         companyCode,
         processedAt: serverTimestamp(),
       });
+      // 🚀 신규 운송사 → 그 회사 관리자가 처음 들어올 때 튜토리얼 + 초기 설정 마법사를 띄운다(Onboarding.jsx)
+      if (app.type !== "기존" && app.companyName) {
+        try { await setDoc(doc(db, "companySettings", app.companyName.trim()), { onboarding: { pending: true, approvedAt: serverTimestamp() } }, { merge: true }); } catch (_) {}
+      }
       if (app.userId && app.userId !== auth.currentUser?.uid) {
         try {
           await updateDoc(doc(db, "users", app.userId), {

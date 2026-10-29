@@ -1,4 +1,6 @@
 // src/AdminMenu.jsx
+import { CopyTemplateEditor } from "./CopyTemplateEditor";
+import { openSetupWizard, openTutorial } from "./Onboarding";
 import AdminShell from "./AdminShell";
 import React, { useEffect, useState, useMemo } from "react";
 import { auth, db, storage, FUNCTIONS_BASE, DEFAULT_COMPANY } from "./firebase";
@@ -706,12 +708,14 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     permissions: "권한 관리",
     landingEdit: "랜딩페이지 편집",
     notifTemplate: "알림 문구 설정",
+    setup: "초기 설정 · 튜토리얼",
+    copyTemplate: "기사복사 문구",
   };
   const tabGroups = [
     { key: "members", label: "회원 관리", tabs: ["members"] },
     { key: "shipperMgmt", label: "화주사 관리", tabs: ["linked", "transmit", "inquiries", "landingInquiries"] },
     { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "forceUpdate", "permissions", "sheetImport", "gsheetMine", "blindMine", "trash", "companyReset"] },
-    { key: "settings", label: "환경 설정", tabs: ["landingEdit", "notifTemplate"] },
+    { key: "settings", label: "환경 설정", tabs: ["setup", "copyTemplate", "landingEdit", "notifTemplate"] },
   ]
     .map((g) => ({ ...g, tabs: g.tabs.filter((t) => !REQUIRES_MASTER_TABS.has(t) || isTotalMaster) }))
     .filter((g) => g.tabs.length > 0);
@@ -723,7 +727,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const TAB_ICONS = {
     members: "users", linked: "link", transmit: "send", inquiries: "chat", landingInquiries: "inbox",
     loginSessions: "phone", companyReset: "trash", sheetImport: "sheet", gsheetMine: "send", blindMine: "key", trash: "trash", sessionLogs: "history", forceUpdate: "refresh", permissions: "key",
-    landingEdit: "globe", notifTemplate: "bell",
+    landingEdit: "globe", notifTemplate: "bell", setup: "check", copyTemplate: "list",
   };
   const shellGroups = tabGroups.map((g) => ({
     label: g.label,
@@ -1421,6 +1425,25 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
 
           {/* ====== 알림 문구 설정 탭 (최고관리자 전용) ====== */}
           {adminTab === "notifTemplate" && isTotalMaster && <NotifTemplatePanel />}
+          {adminTab === "copyTemplate" && (
+            <div className="bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_10px_28px_rgba(16,24,40,0.06)] p-6">
+              <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">COPY · TEMPLATE</div>
+              <div className="text-[18px] font-black text-[#0F1A30] mb-4">기사복사 문구 설정</div>
+              <CopyTemplateEditor canEdit={!isViewer} />
+            </div>
+          )}
+          {adminTab === "setup" && (
+            <div className="grid gap-4 md:grid-cols-2">
+              {[["TUTORIAL", "튜토리얼 다시 보기", "프로그램 주요 흐름을 5장으로 둘러봅니다.", openTutorial], ["SETUP WIZARD", "초기 설정 마법사", "단위 · 선택 목록 · 결제일 · 복사 문구 · 매출목표를 한 번에 정합니다.", openSetupWizard]].map(([en, t, d, fn]) => (
+                <button key={en} type="button" onClick={fn} className="text-left rounded-[20px] p-6 text-white shadow-[0_14px_34px_rgba(15,26,48,0.22)] hover:-translate-y-0.5 transition" style={{ background: "linear-gradient(135deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
+                  <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]">{en}</div>
+                  <div className="text-[19px] font-black mt-1">{t}</div>
+                  <div className="text-[13px] text-white/60 mt-1">{d}</div>
+                  <div className="mt-4 inline-flex h-9 items-center px-4 rounded-xl bg-white text-[#0F1A30] text-[13px] font-black">열기 →</div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* 모바일 미리보기 */}
@@ -1775,7 +1798,7 @@ function notifFieldsFor(cfg, typeKey, defaultFields) {
   return Array.isArray(f) && f.length ? f : defaultFields;
 }
 
-function NotifTemplatePanel() {
+export function NotifTemplatePanel() {
   const [config, setConfig] = useState(null); // null = 로딩중
   const [saving, setSaving] = useState(false);
 
@@ -1904,7 +1927,7 @@ function FieldRow({ label, value, onChange, placeholder }) {
   );
 }
 
-function LandingPageEditPanel() {
+export function LandingPageEditPanel() {
   const [form, setForm] = useState(null); // null = 로딩중
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -2186,7 +2209,7 @@ function LandingPageEditPanel() {
   );
 }
 
-function ShipperForceUpdatePanel({ currentVersion }) {
+export function ShipperForceUpdatePanel({ currentVersion }) {
   const [minVersion, setMinVersion] = useState(null);
   const [updatedAt, setUpdatedAt] = useState(null);
   const [sending, setSending] = useState(false);

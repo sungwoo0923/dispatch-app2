@@ -125,8 +125,13 @@ function HealthBar({ v }) {
 }
 
 // ─── 본체 ────────────────────────────────────────────────────────────────────
-export default function PlatformMonitor({ demoStats = null }) { // demoStats: 화면 점검용(실제 화면에선 안 씀)
-  const [tab, setTab] = useState(() => { try { return localStorage.getItem("pmTab") || "overview"; } catch { return "overview"; } });
+// ⭐ 2026-10-29 — 관리자 관리센터(PlatformCenter, /platform)가 상단·왼쪽 메뉴를 직접 그리고 이 화면은 내용만 그린다(bare).
+//    bare가 아니면 예전처럼 왼쪽 메뉴까지 스스로 그린다.
+function NavWrap({ bare, children, ...p }) { return bare ? <>{children}</> : <KpSubNav {...p}>{children}</KpSubNav>; }
+export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab, bare = false, onContract }) { // demoStats: 화면 점검용(실제 화면에선 안 씀)
+  const [tabState, setTabState] = useState(() => { try { return localStorage.getItem("pmTab") || "overview"; } catch { return "overview"; } });
+  const tab = tabProp || tabState;
+  const setTab = onTab || setTabState;
   const [openQuote, setOpenQuote] = useState(null); // 견적 이력 → "열기"로 불러온 견적
   const [stats, setStats] = useState(null);
   const [loaded, setLoaded] = useState(false);
@@ -137,7 +142,7 @@ export default function PlatformMonitor({ demoStats = null }) { // demoStats: �
   const [sortKey, setSortKey] = useState("orders");
   const [detail, setDetail] = useState(null);
 
-  useEffect(() => { try { localStorage.setItem("pmTab", tab); } catch { /* 무시 */ } }, [tab]);
+  useEffect(() => { if (!tabProp) { try { localStorage.setItem("pmTab", tab); } catch { /* 무시 */ } } }, [tab, tabProp]);
   useEffect(() => {
     if (demoStats) { setStats(demoStats); setLoaded(true); return undefined; }
     const u1 = onSnapshot(doc(db, "siteConfig", "platformStats"), (s) => { setStats(s.exists() ? s.data() : null); setLoaded(true); }, () => setLoaded(true));
@@ -243,7 +248,7 @@ export default function PlatformMonitor({ demoStats = null }) { // demoStats: �
   const td = { padding: "10px 10px", fontSize: 14, fontWeight: 700, color: "#111827", whiteSpace: "nowrap", textAlign: "center", borderTop: "1px solid #EEF1F6" };
 
   return (
-    <KpSubNav code="PLATFORM" title="관리센터" icon="server" active={tab} onSelect={setTab}
+    <NavWrap bare={bare} code="PLATFORM" title="관리센터" icon="server" active={tab} onSelect={setTab}
       groups={[
         { label: "관제", items: [
           { key: "overview", label: "플랫폼 개요", en: "OVERVIEW", icon: "pulse" },
@@ -266,7 +271,7 @@ export default function PlatformMonitor({ demoStats = null }) { // demoStats: �
       {tab !== "applications" && !tab.startsWith("sales:") && empty}
       {tab === "sales:plans" && <PricingEditor />}
       {tab === "sales:quote" && <QuoteBuilder initial={openQuote} />}
-      {tab === "sales:history" && <QuoteHistory onOpen={(x) => { setOpenQuote(x); setTab("sales:quote"); }} />}
+      {tab === "sales:history" && <QuoteHistory onOpen={(x) => { setOpenQuote(x); setTab("sales:quote"); }} onContract={onContract} />}
 
       {/* ═══ 플랫폼 개요 ═══ */}
       {tab === "overview" && stats && (
@@ -490,7 +495,7 @@ export default function PlatformMonitor({ demoStats = null }) { // demoStats: �
           </div>
         </div>
       )}
-    </KpSubNav>
+    </NavWrap>
   );
 }
 
