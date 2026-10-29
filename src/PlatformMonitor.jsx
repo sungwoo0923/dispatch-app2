@@ -9,6 +9,7 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGri
 import { db, auth, FUNCTIONS_BASE } from "./firebase";
 import KpSubNav from "./KpSubNav";
 import CompanyApplications from "./CompanyApplications";
+import { PricingEditor, QuoteBuilder, QuoteHistory } from "./SalesQuote";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const NAVY = "#1B2B4B";
@@ -126,6 +127,7 @@ function HealthBar({ v }) {
 // ─── 본체 ────────────────────────────────────────────────────────────────────
 export default function PlatformMonitor({ demoStats = null }) { // demoStats: 화면 점검용(실제 화면에선 안 씀)
   const [tab, setTab] = useState(() => { try { return localStorage.getItem("pmTab") || "overview"; } catch { return "overview"; } });
+  const [openQuote, setOpenQuote] = useState(null); // 견적 이력 → "열기"로 불러온 견적
   const [stats, setStats] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [pricing, setPricing] = useState(DEFAULT_PRICING);
@@ -252,10 +254,19 @@ export default function PlatformMonitor({ demoStats = null }) { // demoStats: �
           { key: "billing", label: "요금·청구", en: "BILLING", icon: "money" },
           { key: "applications", label: "가입신청관리", en: "APPLICATIONS", icon: "inbox", badge: shippers.filter((s) => s.status === "pending").length },
         ] },
+        // ⭐ 2026-10-29 영업 — 요금제(언제든 수정) · 견적서 작성/인쇄 · 견적 이력(상태 관리)
+        { label: "영업", items: [
+          { key: "sales:plans", label: "요금제 관리", en: "PRICING", icon: "sheet" },
+          { key: "sales:quote", label: "견적서 작성", en: "QUOTATION", icon: "file" },
+          { key: "sales:history", label: "견적 이력", en: "PIPELINE", icon: "history" },
+        ] },
       ]}>
       <style>{PM_CSS}</style>
-      {tab !== "applications" && headBar}
-      {tab !== "applications" && empty}
+      {tab !== "applications" && !tab.startsWith("sales:") && headBar}
+      {tab !== "applications" && !tab.startsWith("sales:") && empty}
+      {tab === "sales:plans" && <PricingEditor />}
+      {tab === "sales:quote" && <QuoteBuilder initial={openQuote} />}
+      {tab === "sales:history" && <QuoteHistory onOpen={(x) => { setOpenQuote(x); setTab("sales:quote"); }} />}
 
       {/* ═══ 플랫폼 개요 ═══ */}
       {tab === "overview" && stats && (
