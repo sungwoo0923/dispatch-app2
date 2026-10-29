@@ -10,6 +10,7 @@ export default async function handler(req, res) {
     out.test = { code: r.code, message: r.message, ok: r.code === 1, count: Array.isArray(r.data) ? r.data.length : 0, hint: r.code === 1 ? "" : explain24(r.code, r.message) };
   } catch (e) {
     out.test = { ok: false, code: -97, message: e.message, hint: explain24(-97, e.message) };
+    if (!RELAY_URL && !out.vercelIp) out.vercelIp = await outboundIp().catch(() => "unknown");
   }
   res.status(200).json(out);
 }

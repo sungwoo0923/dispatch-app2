@@ -34,6 +34,12 @@
       "regions": [
         "icn1"
       ]
+    },
+    "api/call24-diag.js": {
+      "maxDuration": 30,
+      "regions": [
+        "icn1"
+      ]
     }
   },
   "routes": [
