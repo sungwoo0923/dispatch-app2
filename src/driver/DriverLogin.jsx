@@ -182,108 +182,125 @@ export default function DriverLogin() {
     }
   };
 
+  // ⭐ 2026-10-29 리디자인 — 운송사 로그인(TransportLogin)과 같은 화면 구성(왼쪽 디지털 브랜드 패널 + 오른쪽 로그인 카드)
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
+  const pad = (n) => String(n).padStart(2, "0");
+  const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+  const fieldIcon = {
+    company: <><path d="M3 21h18" /><path d="M5 21V7l7-4 7 4v14" /><path d="M9 9h1M14 9h1M9 13h1M14 13h1M9 17h1M14 17h1" /></>,
+    car: <><rect x="1" y="6" width="13" height="10" rx="1.5" /><path d="M14 9h4l3 3.5V16h-7z" /><circle cx="5.5" cy="17.5" r="1.8" /><circle cx="17.5" cy="17.5" r="1.8" /></>,
+    name: <><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></>,
+  };
+  const field = (key, label, input) => (
+    <div className="mb-3.5">
+      <label className="block mb-1.5 text-[11.5px] font-extrabold tracking-[0.12em] text-[#7A879C]">{label}</label>
+      <div className="group flex items-center gap-2.5 h-[50px] px-4 rounded-[14px] bg-[#F5F7FB] border border-[#E3E8F0] transition focus-within:bg-white focus-within:border-[#2D4C82] focus-within:shadow-[0_0_0_4px_rgba(45,76,130,0.10)]">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="text-[#9AA9C3] group-focus-within:text-[#1B2B4B] shrink-0">{fieldIcon[key]}</svg>
+        {input}
+      </div>
+    </div>
+  );
+  const inputCls = "flex-1 min-w-0 bg-transparent outline-none text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#B4BFD0] placeholder:font-medium";
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#061832] via-[#0B2554] to-[#0D2B66] px-4">
-      {/* 상단 우측 로고 */}
-      <div className="absolute top-4 right-4">
-        <img
-          src="/icons/sflow-icon.png"
-          alt="KP-Flow"
-          className="w-9 h-9 rounded-xl shadow-md"
-        />
+    <>
+    <style>{`
+      @keyframes kpLoginIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+      @keyframes kpPulse { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+      .kp-login-in { animation: kpLoginIn .5s cubic-bezier(.2,.8,.2,1) both; }
+      .kp-pulse { animation: kpPulse 1.6s ease-in-out infinite; }
+    `}</style>
+    <div className="min-h-screen w-full flex items-stretch bg-[#F2F4F8]">
+      {/* 왼쪽 — 브랜드 패널(PC) */}
+      <div className="hidden lg:flex relative flex-col justify-between w-[46%] max-w-[720px] overflow-hidden px-14 py-12 text-white"
+        style={{ background: "linear-gradient(150deg, #060E1F 0%, #0F1A30 45%, #1B2B4B 100%)" }}>
+        <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)", backgroundSize: "44px 44px" }} />
+        <div className="absolute -right-40 -top-40 w-[520px] h-[520px] rounded-full" style={{ background: "radial-gradient(circle, rgba(110,149,232,0.22), transparent 65%)" }} />
+        <div className="relative flex items-center gap-3">
+          <img src="/icons/sflow-icon.png" alt="" className="w-11 h-11 rounded-[13px] ring-1 ring-white/20" />
+          <div>
+            <div className="text-[18px] font-black tracking-[0.18em]">KP-FLOW</div>
+            <div className="text-[10.5px] font-bold tracking-[0.3em] text-white/45">DRIVER APP</div>
+          </div>
+        </div>
+        <div className="relative">
+          <div className="flex items-center gap-2 text-[11.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#6E95E8] kp-pulse" /> SYSTEM ONLINE
+          </div>
+          <div className="mt-4 font-black leading-none tabular-nums" style={{ fontSize: 88, letterSpacing: "-0.02em", fontFamily: MONO }}>
+            {pad(now.getHours())}<span className="kp-pulse text-white/40">:</span>{pad(now.getMinutes())}
+            <span className="text-[30px] text-white/35 ml-2">{pad(now.getSeconds())}</span>
+          </div>
+          <div className="mt-3 text-[15px] font-semibold text-white/60">
+            {now.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long" })}
+          </div>
+          <div className="mt-10 text-[30px] font-black leading-snug tracking-tight">버튼 하나로<br />운행이 기록됩니다.</div>
+          <div className="mt-3 text-[14px] text-white/50 leading-relaxed">출근 · 상차 · 하차 · 인수증까지<br />기사님 업무를 한 화면에서 처리합니다.</div>
+        </div>
+        <div className="relative flex items-center gap-6 text-[11px] font-bold tracking-[0.2em] text-white/35">
+          <span>SECURE · TLS</span><span>GPS LIVE</span><span>© KP-FLOW</span>
+        </div>
       </div>
 
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-8">
-        {/* 타이틀 */}
-        <div className="text-center mb-8">
-          <h1 className="text-[22px] font-extrabold text-[#1B2B4B] tracking-tight">
-            기사 로그인
-          </h1>
-          <p className="text-[13px] text-gray-400 mt-1">
-            차량번호와 이름으로 로그인합니다
-          </p>
-        </div>
-
-        {/* 입력 필드 */}
-        <div className="space-y-4">
-          <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
-              소속 회사명
-            </label>
-            <input
-              value={companyNameState}
-              onChange={(e) => setCompanyName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && login()}
-              placeholder="가입한 운송사명을 입력하세요"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition"
-            />
+      {/* 오른쪽 — 로그인 폼 */}
+      <div className="flex-1 min-w-0 flex items-center justify-center px-4 py-10 relative">
+        <div className="kp-login-in w-full max-w-[420px]">
+          {/* 모바일 머리 */}
+          <div className="lg:hidden flex flex-col items-center mb-7">
+            <img src="/icons/sflow-icon.png" alt="" className="w-16 h-16 rounded-[18px] shadow-[0_10px_24px_rgba(15,26,48,0.25)]" />
+            <div className="mt-3 text-[20px] font-black tracking-[0.18em] text-[#0F1A30]">KP-FLOW</div>
+            <div className="text-[10.5px] font-bold tracking-[0.3em] text-[#9AA9C3]">DRIVER APP</div>
+            <div className="mt-3 flex items-center gap-2 h-8 px-3 rounded-full bg-white border border-[#E3E8F0] text-[12px] font-bold text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#4B6CB7] kp-pulse" />{pad(now.getHours())}:{pad(now.getMinutes())}<span className="text-[#9AA9C3]">:{pad(now.getSeconds())}</span>
+            </div>
           </div>
 
-          <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
-              차량번호
-            </label>
-            <input
-              value={carNoState}
-              onChange={(e) => setCarNo(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && login()}
-              placeholder="예: 경기97가1234"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition"
-            />
+          <div className="bg-white rounded-[26px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_24px_60px_rgba(15,26,48,0.10)] px-7 sm:px-10 pt-9 pb-8">
+            <div className="text-[11.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]">DRIVER SIGN IN</div>
+            <h1 className="mt-1 text-[26px] font-black text-[#0F1A30] tracking-tight">기사 로그인</h1>
+            <p className="text-[13.5px] text-[#7A879C] mt-1 mb-7">소속 회사 · 차량번호 · 이름으로 로그인하세요</p>
+
+            {field("company", "소속 회사명", (
+              <input value={companyNameState} onChange={(e) => setCompanyName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} placeholder="가입한 운송사명" className={inputCls} />
+            ))}
+            {field("car", "차량번호", (
+              <input value={carNoState} onChange={(e) => setCarNo(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} placeholder="예: 경기97가1234" className={inputCls} />
+            ))}
+            {field("name", "기사 이름", (
+              <input value={nameState} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} placeholder="이름" className={inputCls} />
+            ))}
+
+            {/* ⭐ 정보 저장 / 자동 로그인 */}
+            <div className="flex items-center justify-between mt-4 mb-5">
+              <BigCheck checked={rememberInfo} onChange={(v) => { setRememberInfo(v); if (!v) setAutoLogin(false); }} label="기본정보 저장" />
+              <BigCheck checked={autoLogin} onChange={(v) => { setAutoLogin(v); if (v) setRememberInfo(true); }} label="자동 로그인" />
+            </div>
+
+            {error && (
+              <div className="flex gap-2 text-[13px] font-semibold text-[#0F1A30] mb-4 bg-[#F2F6FC] border border-[#D9E3F3] rounded-xl px-3.5 py-2.5">
+                <span className="text-[#1B2B4B] font-black">!</span><span>{error}</span>
+              </div>
+            )}
+
+            <button onClick={() => login()} disabled={loggingIn}
+              className="w-full h-[54px] rounded-[15px] text-white text-[15.5px] font-black tracking-[0.04em] flex items-center justify-center gap-2 shadow-[0_14px_28px_rgba(15,26,48,0.28)] hover:brightness-110 active:scale-[0.99] transition disabled:opacity-60"
+              style={{ background: "linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%)" }}>
+              {loggingIn ? "확인 중…" : "로그인"}
+              {!loggingIn && <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>}
+            </button>
+
+            <div className="flex items-center gap-3 my-6"><span className="flex-1 h-px bg-[#EEF1F6]" /><span className="text-[11px] font-bold tracking-[0.2em] text-[#C2CBD9]">OR</span><span className="flex-1 h-px bg-[#EEF1F6]" /></div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <button onClick={() => navigate("/driver-register")} className="h-11 rounded-xl border border-[#0F1A30] text-[#0F1A30] text-[13.5px] font-black flex items-center justify-center hover:bg-[#0F1A30] hover:text-white transition">기사 등록하기</button>
+              <button onClick={() => navigate("/login")} className="h-11 rounded-xl border border-[#E3E8F0] text-[#5B6B85] text-[13.5px] font-bold flex items-center justify-center hover:bg-[#F5F7FB] transition">다른 유형 로그인</button>
+            </div>
           </div>
-
-          <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
-              기사 이름
-            </label>
-            <input
-              value={nameState}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && login()}
-              placeholder="이름 입력"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition"
-            />
-          </div>
-        </div>
-
-        {/* ⭐ 정보 저장 / 자동 로그인 */}
-        <div className="mt-4 flex items-center justify-between">
-          <BigCheck checked={rememberInfo} onChange={(v) => { setRememberInfo(v); if (!v) setAutoLogin(false); }} label="기본정보 저장" />
-          <BigCheck checked={autoLogin} onChange={(v) => { setAutoLogin(v); if (v) setRememberInfo(true); }} label="자동 로그인" />
-        </div>
-
-        {/* 에러 메시지 */}
-        {error && (
-          <div className="mt-4 bg-red-50 border border-red-200 text-red-600 text-[13px] px-4 py-3 rounded-xl">
-            {error}
-          </div>
-        )}
-
-        {/* 로그인 버튼 */}
-        <button
-          onClick={() => login()}
-          disabled={loggingIn}
-          className="mt-6 w-full bg-[#1B2B4B] text-white py-3 rounded-xl font-bold text-[15px] hover:bg-[#243a60] transition disabled:opacity-60"
-        >
-          {loggingIn ? "로그인 중..." : "로그인"}
-        </button>
-
-        {/* 하단 링크 */}
-        <div className="mt-5 flex flex-col items-center gap-2">
-          <button
-            onClick={() => navigate("/driver-register")}
-            className="text-[13px] text-[#1B2B4B] font-semibold hover:underline"
-          >
-            기사 등록하기
-          </button>
-          <button
-            onClick={() => navigate("/login")}
-            className="text-[12px] text-gray-400 hover:underline"
-          >
-            다른 유형으로 로그인
-          </button>
+          <div className="text-center mt-5 text-[11px] font-bold tracking-[0.2em] text-[#B4BFD0]">KP-FLOW · DRIVER</div>
         </div>
       </div>
     </div>
+    </>
   );
 }
