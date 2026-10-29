@@ -197,9 +197,29 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isTotalMasterUser();
     }
-    // 🧾 플랫폼 청구·입금 기록 — 최고관리자만
+    // 🧾 플랫폼 청구·입금 기록 — 최고관리자는 전부, 고객사는 자기 회사 청구서만 읽고 "입금 알림(payNotice)"만 남길 수 있다
     match /platformInvoices/{id} {
-      allow read, write: if isTotalMasterUser();
+      allow read: if isTotalMasterUser()
+        || (isApproved() && resource.data.company == myUser().get('companyName', ''));
+      allow write: if isTotalMasterUser();
+      allow update: if isApproved()
+        && resource.data.company == myUser().get('companyName', '')
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['payNotice']);
+    }
+    // 💳 회사별 요금제 — 로그인 사용자는 읽기(메뉴 잠금 판단), 지정은 최고관리자만
+    match /companyPlans/{company} {
+      allow read: if isSignedIn();
+      allow write: if isTotalMasterUser();
+    }
+    // 💳 공개 요금(가격·포함량·입금 계좌) — 고객사 화면의 요금 비교·결제 안내용
+    match /publicPricing/{id} {
+      allow read: if isSignedIn();
+      allow write: if isTotalMasterUser();
+    }
+    // 💳 요금제 변경 요청 — 고객사는 자기 회사 이름으로만 만들 수 있고, 처리는 최고관리자
+    match /planRequests/{id} {
+      allow create: if isApproved() && request.resource.data.company == myUser().get('companyName', '');
+      allow read, update, delete: if isTotalMasterUser();
     }
     match /siteConfig/{docId} {
       allow get, list: if isTotalMasterUser();
@@ -371,7 +391,7 @@ service cloud.firestore {
     // ⭐ 규칙은 "하나라도 허용하면 허용"이라, 서버 전용 컬렉션(초기화 비밀번호·보관함·기록)은
     // 여기서 빼야 위의 "allow … if false"가 실제로 막힌다.
     match /{col}/{rest=**} {
-      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices']);
+      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests']);
     }
   }
 }

@@ -1,4 +1,5 @@
 // src/AdminMenu.jsx
+import BillingCenter from "./BillingCenter";
 import { CopyTemplateEditor } from "./CopyTemplateEditor";
 import { openSetupWizard, openTutorial } from "./Onboarding";
 import AdminShell from "./AdminShell";
@@ -709,13 +710,14 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     landingEdit: "랜딩페이지 편집",
     notifTemplate: "알림 문구 설정",
     setup: "초기 설정 · 튜토리얼",
+    billing: "구독 · 결제",
     copyTemplate: "기사복사 문구",
   };
   const tabGroups = [
     { key: "members", label: "회원 관리", tabs: ["members"] },
     { key: "shipperMgmt", label: "화주사 관리", tabs: ["linked", "transmit", "inquiries", "landingInquiries"] },
     { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "forceUpdate", "permissions", "sheetImport", "gsheetMine", "blindMine", "trash", "companyReset"] },
-    { key: "settings", label: "환경 설정", tabs: ["setup", "copyTemplate", "landingEdit", "notifTemplate"] },
+    { key: "settings", label: "환경 설정", tabs: ["billing", "setup", "copyTemplate", "landingEdit", "notifTemplate"] },
   ]
     .map((g) => ({ ...g, tabs: g.tabs.filter((t) => !REQUIRES_MASTER_TABS.has(t) || isTotalMaster) }))
     .filter((g) => g.tabs.length > 0);
@@ -727,7 +729,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const TAB_ICONS = {
     members: "users", linked: "link", transmit: "send", inquiries: "chat", landingInquiries: "inbox",
     loginSessions: "phone", companyReset: "trash", sheetImport: "sheet", gsheetMine: "send", blindMine: "key", trash: "trash", sessionLogs: "history", forceUpdate: "refresh", permissions: "key",
-    landingEdit: "globe", notifTemplate: "bell", setup: "check", copyTemplate: "list",
+    landingEdit: "globe", notifTemplate: "bell", setup: "check", copyTemplate: "list", billing: "money",
   };
   const shellGroups = tabGroups.map((g) => ({
     label: g.label,
@@ -1425,6 +1427,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
 
           {/* ====== 알림 문구 설정 탭 (최고관리자 전용) ====== */}
           {adminTab === "notifTemplate" && isTotalMaster && <NotifTemplatePanel />}
+          {adminTab === "billing" && <BillingCenter userEmail={me?.email || ""} userName={myDisplayName} canEdit={!isViewer} />}
           {adminTab === "copyTemplate" && (
             <div className="bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_10px_28px_rgba(16,24,40,0.06)] p-6">
               <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">COPY · TEMPLATE</div>

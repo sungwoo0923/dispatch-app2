@@ -7,6 +7,7 @@
 import React from "react";
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
+import { PlanMatrix, PLAN_DEFAULTS, PLAN_IDS, PLAN_MATRIX_CSS, planFeatureLines, planMatrixHtml } from "./plans";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const NAVY = "#1B2B4B";
@@ -19,14 +20,9 @@ const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").
 
 // ─── 기본 요금제(처음 한 번 — 이후엔 화면에서 고친 값이 저장되어 쓰인다) ───
 export const SALES_DEFAULT = {
-  plans: [
-    { id: "basic", name: "베이직", en: "BASIC", price: 99000, seats: 3, orders: 1000, target: "소규모 주선사 · 1~3인",
-      features: ["배차관리 · 실시간 배차현황", "거래처 · 하차지 · 기사 관리", "단가표 · 전국 운임조회", "기사앱(일반 기사 무료)", "PC · 모바일 동시 사용"] },
-    { id: "standard", name: "스탠다드", en: "STANDARD", price: 199000, seats: 10, orders: 3000, target: "일반 운송사 · 4~10인", recommended: true,
-      features: ["베이직 전체 기능", "화주사 전용 포털(화주 무료)", "매출관리 · 정산 · 지급관리", "전자결재 · 사내메일 · 게시판", "인사 · 출근기록 관리"] },
-    { id: "pro", name: "프로", en: "PRO", price: 349000, seats: 25, orders: 8000, target: "중견 운송사 · 10인 이상",
-      features: ["스탠다드 전체 기능", "우선 기술지원(당일 응대)", "맞춤 리포트 · 데이터 추출", "분기별 운영 점검 미팅", "신규 기능 우선 적용"] },
-  ],
+  // ⭐ 2026-10-30 4단 요금제(라이트·베이직·스탠다드·프로) — 기능 범위는 plans.jsx의 FEATURE_ROWS 한 곳에서 정한다
+  planVersion: 2,
+  plans: PLAN_DEFAULTS.map((p) => ({ ...p, features: planFeatureLines(p.id) })),
   extraSeat: 15000,          // 추가 직원 계정 1명/월
   extraOrder: 50,            // 포함량 초과 오더 1건
   fleetPerVehicle: 7000,     // 지입차 관리(GPS·운행기록·사진) 1대/월
@@ -52,7 +48,13 @@ export const SALES_DEFAULT = {
     "약정 기간 중 요금제 상향은 언제든 가능하며 차액만 청구합니다.",
   ],
 };
-const mergeDefaults = (v) => ({ ...SALES_DEFAULT, ...(v || {}), supplier: { ...SALES_DEFAULT.supplier, ...(v?.supplier || {}) }, plans: v?.plans?.length ? v.plans : SALES_DEFAULT.plans, terms: v?.terms?.length ? v.terms : SALES_DEFAULT.terms });
+// 예전(3단) 저장값이면 4단 구성으로 바꾸되, 같은 요금제의 가격은 그대로 이어받는다
+const upgradePlans = (v) => {
+  if (!v?.plans?.length) return SALES_DEFAULT.plans;
+  if (v.planVersion >= 2) return v.plans;
+  return SALES_DEFAULT.plans.map((p) => { const old = v.plans.find((x) => x.id === p.id); return old?.price ? { ...p, price: old.price } : p; });
+};
+const mergeDefaults = (v) => ({ ...SALES_DEFAULT, ...(v || {}), planVersion: 2, supplier: { ...SALES_DEFAULT.supplier, ...(v?.supplier || {}) }, plans: upgradePlans(v), terms: v?.terms?.length ? v.terms : SALES_DEFAULT.terms });
 
 // ─── 계산 ───
 export function monthlyOf(plan, cfg, inp) {
@@ -96,7 +98,7 @@ export function quoteOf(cfg, inp) {
 }
 
 // ─── 인쇄용 문서(새 창 → 인쇄 / PDF로 저장) ───
-const DOC_CSS = `
+const DOC_CSS = `${PLAN_MATRIX_CSS}
   *{box-sizing:border-box} body{margin:0;background:#E9EDF3;font-family:'Pretendard','Noto Sans KR','Malgun Gothic',sans-serif;color:#0F1A30}
   .page{width:210mm;min-height:297mm;margin:10mm auto;background:#fff;padding:16mm 15mm;position:relative}
   .mono{font-family:${MONO}} .eyebrow{font-family:${MONO};font-size:10px;font-weight:800;letter-spacing:.3em;color:#4B6CB7}
@@ -175,6 +177,7 @@ export function quoteHtml(cfg, inp, q, no) {
       <tr><th>${q.periodLabel} 합계 (VAT 포함)</th><th class="r mono" style="font-size:15px">${won(q.firstYear + q.vat)}</th></tr>
       <tr><td colspan="2" style="color:#5B6B85">→ ${q.periodLabel === "1년차" ? "1년" : q.periodLabel} 평균 월 ${won(q.avgMonthly)} (VAT 별도)</td></tr>
     </tbody></table>
+    <h3>요금제별 사용 범위 (선택: ${esc(p.name)})</h3>${planMatrixHtml(cfg.plans, PLAN_IDS.includes(p.id) ? p.id : null)}
     <h3>${esc(p.name)} 요금제 포함 기능</h3><ul>${(p.features || []).map((f) => `<li>${esc(f)}</li>`).join("")}<li>${esc(cfg.messaging)}</li><li>사진 · 파일 저장 ${num(cfg.storageGB)}GB 기본 제공</li></ul>
     <h3>계약 조건</h3><ul>${(cfg.terms || []).map((t) => `<li>${esc(t)}</li>`).join("")}${inp.memo ? `<li><b>${esc(inp.memo)}</b></li>` : ""}</ul>
     <div class="foot"><span>KP-FLOW · LOGISTICS DISPATCH SYSTEM</span><span>${esc(cfg.supplier.name)}</span></div>
@@ -192,7 +195,8 @@ export function priceSheetHtml(cfg) {
   const t = (rows) => `<table><tbody>${rows.map(([a, b]) => `<tr><th style="width:42%">${a}</th><td>${b}</td></tr>`).join("")}</tbody></table>`;
   return `<div class="page">
     <div class="hero"><div><div class="eyebrow">KP-FLOW · PRICING</div><h1>요 금 안 내</h1></div><div style="font-size:12px;text-align:right">${ymd()} 기준 · 부가세 별도</div></div>
-    <h3>요금제</h3><div class="plans" style="grid-template-columns:repeat(${Math.min(3, cfg.plans.length)},1fr)">${plans}</div>
+    <h3>요금제</h3><div class="plans" style="grid-template-columns:repeat(${Math.min(4, cfg.plans.length)},1fr)">${plans}</div>
+    <h3>요금제별 사용 범위</h3>${planMatrixHtml(cfg.plans)}
     <h3>추가 옵션 (월)</h3>${t(opt)}<h3>1회 비용 · 결제 혜택</h3>${t(once)}
     <h3>안내</h3><ul>${(cfg.terms || []).map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
     <div class="foot"><span>KP-FLOW · LOGISTICS DISPATCH SYSTEM</span><span>${esc(cfg.supplier.name)}</span></div></div>`;
@@ -244,7 +248,15 @@ export function PricingEditor() {
   const set = (patch) => { setCfg((c) => ({ ...c, ...patch })); setDirty(true); };
   const setPlan = (i, patch) => set({ plans: cfg.plans.map((p, k) => (k === i ? { ...p, ...patch } : p)) });
   const save = async () => {
-    try { await setDoc(doc(db, "siteConfig", "salesPricing"), { ...cfg, updatedAt: serverTimestamp() }); setDirty(false); setMsg("저장했습니다. 새로 만드는 견적서부터 바로 적용됩니다."); }
+    try {
+      await setDoc(doc(db, "siteConfig", "salesPricing"), { ...cfg, updatedAt: serverTimestamp() });
+      // 고객사 화면(구독·결제, 잠금 안내)에 보여줄 공개 요금 — 가격·포함량·입금 계좌만
+      await setDoc(doc(db, "publicPricing", "current"), {
+        plans: cfg.plans.map(({ id, name, en, price, seats, orders, target, recommended }) => ({ id, name, en, price: num(price), seats: num(seats), orders: num(orders), target: target || "", recommended: !!recommended })),
+        extraSeat: num(cfg.extraSeat), extraOrder: num(cfg.extraOrder), bank: cfg.supplier?.bank || "", supplier: cfg.supplier?.name || "KP-Flow", supplierBizNo: cfg.supplier?.bizNo || "", supplierEmail: cfg.supplier?.email || "", supplierPhone: cfg.supplier?.phone || "",
+        updatedAt: serverTimestamp(),
+      });
+      setDirty(false); setMsg("저장했습니다. 새로 만드는 견적서부터 바로 적용됩니다."); }
     catch (e) { setMsg(`저장 실패: ${e.message}`); }
   };
   const OPTS = [
@@ -264,6 +276,10 @@ export function PricingEditor() {
       {msg && <div className="rounded-xl border border-[#DCE3EE] bg-white px-4 py-2.5 text-[13px] font-bold text-[#1B2B4B]">{msg}</div>}
 
       {/* 요금제 표 — 열 = 요금제 */}
+      <Card code="SCOPE" title="요금제별 사용 범위 (실제 메뉴 잠금 기준)" right={<Btn onClick={() => set({ plans: cfg.plans.map((x) => (PLAN_IDS.includes(x.id) ? { ...x, features: planFeatureLines(x.id) } : x)) })}>포함 기능 문구를 이 표로 다시 채우기</Btn>}>
+        <div className="text-[12.5px] text-[#5B6B85] mb-3">✓ 표시는 고객사 프로그램에서 실제로 열리는 범위입니다. 아래 "포함 기능" 칸은 견적서·요금 안내에 찍히는 설명 문구입니다. 회사별 요금제 지정은 청구 › 수납 관리에서 합니다.</div>
+        <PlanMatrix plans={cfg.plans} compact />
+      </Card>
       <Card code="PLANS" title="요금제" right={<Btn onClick={() => set({ plans: [...cfg.plans, { id: `p${Date.now()}`, name: "새 요금제", en: "PLAN", price: 0, seats: 1, orders: 500, target: "", features: [] }] })}>+ 요금제 추가</Btn>}>
         <div className="overflow-x-auto -m-5">
           <table className="w-full border-collapse text-[14px]" style={{ minWidth: 220 + cfg.plans.length * 230 }}>

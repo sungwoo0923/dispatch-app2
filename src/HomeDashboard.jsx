@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from "react";
+import { homeItemFeature, openPlanLock, planIncludes, usePlan } from "./plans";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, ReferenceDot,
@@ -389,6 +390,14 @@ function PendingTicker({ orders: allPendingOrders = [], onOrderDoubleClick }) {
 }
 
 /* ===================== HOME DASHBOARD ===================== */
+// 💳 요금제에 전자결재·메일·게시판(groupware)이 없으면 그 항목들을 잠금 항목 하나로 바꾼다(공지사항·대시보드는 그대로)
+function lockHomeGroups(planId, groups) {
+  if (planIncludes(planId, "groupware")) return groups;
+  const out = groups.map((g) => ({ ...g, items: g.items.filter((it) => !homeItemFeature(it.key)) })).filter((g) => g.items.length);
+  out.push({ label: "베이직 이상", items: [{ key: "lock:groupware", label: "전자결재 · 메일 · 게시판", en: "LOCKED · BASIC", icon: "key" }] });
+  return out;
+}
+
 export default function HomeDashboard({ role, user, userCompany = "", pending, delayed, dispatchData = [], onOrderDoubleClick }) {
   // ⭐ 년 매출·당월 매출·누적 오더 — 예전엔 새로고침할 때마다 올해 오더 전체(수천~만 건)를 서버에서 다시 받아
   // 새로고침이 느리고 버벅였다. "실시간 범위(최근 7일) 이전" 기간의 합계는 하루 동안 거의 안 바뀌므로
@@ -852,10 +861,12 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const unreadHandoverCountNav = handovers.filter(h => handoverReceivers(h).includes(user?.uid) && !h.readBy?.includes(user?.uid)).length;
   const canWriteNotice = NOTICE_WRITER_ROLES.includes(role);
   // ✍ 공지·인수인계 글쓰기는 팝업 대신 넓은 작성 화면(HomeWriters.jsx)
+  const { planId } = usePlan();
   const writerActive = (boardTab === "공지사항" && noticeOpen) || (boardTab === "인수인계" && (handoverOpen || handoverEditMode));
   return (
-    <KpSubNav noBleed code="HOME" title="홈" icon="dashboard" active={boardTab} onSelect={setBoardTab} bodyClass="px-5 py-4"
-      groups={[
+    <KpSubNav noBleed code="HOME" title="홈" icon="dashboard" active={boardTab}
+      onSelect={(k) => { if (String(k).startsWith("lock:")) { openPlanLock(String(k).slice(5)); return; } setBoardTab(k); }} bodyClass="px-5 py-4"
+      groups={lockHomeGroups(planId, [
         { label: "관제", items: [{ key: "대시보드", label: "대시보드", en: "OPERATIONS", icon: "pulse" }] },
         { label: "사내 게시판", items: [
           { key: "공지사항", label: "공지사항", en: "NOTICE", icon: "bell", badge: isBoardNew("공지사항") ? "N" : 0, badgeTitle: "새 글" },
@@ -874,7 +885,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
             sub: MAIL_FOLDERS.map((f) => ({ key: `mail:${f.key}`, label: f.label, icon: f.icon, badge: folderBadge(f.key, mailCounts), soft: !["inbox", "unread"].includes(f.key) })) },
           { key: "인수인계", label: "인수인계", en: "HANDOVER", icon: "link", badge: unreadHandoverCountNav || (isBoardNew("인수인계") ? "N" : 0), badgeTitle: unreadHandoverCountNav ? "내 미확인" : "새 글" },
         ] },
-      ]}>
+      ])}>
     <div className="space-y-5">
 
       {/* 결재 알림 배너 (큐 방식 - 여러 알림 순차 표시) */}

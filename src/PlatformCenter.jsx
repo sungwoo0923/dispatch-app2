@@ -9,10 +9,11 @@ import Pager, { pageCount, pageSlice } from "./Pager";
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
-import { addDoc, collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import KpSubNav from "./KpSubNav";
 import PlatformMonitor, { estimateBill } from "./PlatformMonitor";
+import { useSalesPricing } from "./SalesQuote";
 import { ContractBuilder, ContractList, ContractTemplates } from "./ContractCenter";
 import { NotifTemplatePanel, LandingPageEditPanel, ShipperForceUpdatePanel } from "./AdminMenu";
 import { AdminSessionsPanel } from "./LoginManager";
@@ -98,7 +99,7 @@ function Clock() {
 }
 function useCol(name, order = "createdAt", n = 300) {
   const [list, setList] = React.useState(null);
-  React.useEffect(() => onSnapshot(query(collection(db, name), orderBy(order, "desc"), limit(n)), (s) => setList(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setList([])), [name, order, n]);
+  React.useEffect(() => onSnapshot(order ? query(collection(db, name), orderBy(order, "desc"), limit(n)) : query(collection(db, name), limit(n)), (s) => setList(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setList([])), [name, order, n]);
   return list;
 }
 const msOf = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : typeof v === "number" ? v : 0);
@@ -108,11 +109,15 @@ function TodayPanel({ go }) {
   const quotes = useCol("salesQuotes");
   const contracts = useCol("contracts");
   const inquiries = useCol("landingInquiries");
+  const planReqs = useCol("planRequests");
+  const invoices = useCol("platformInvoices", null);
   const [apps, setApps] = React.useState([]);
   React.useEffect(() => onSnapshot(collection(db, "companyApplications"), (s) => setApps(s.docs.map((d) => d.data())), () => {}), []);
   const today = ymd();
   const soonLimit = (() => { const d = new Date(); d.setMonth(d.getMonth() + 2); return ymd(d); })();
   const tasks = [
+    ...(planReqs || []).filter((r) => r.status === "요청").map((r) => ({ code: "PLAN", text: `${r.company} 요금제 변경 요청 → ${r.toName || r.to}`, sub: `${r.byName || r.by || ""} · 청구 › 수납 관리에서 요금제 지정`, to: "payments", lv: 2 })),
+    ...(invoices || []).filter((v) => v.payNotice && v.status !== "입금완료").map((v) => ({ code: "PAID?", text: `${v.company} 입금 알림 — ${Number(v.amount || 0).toLocaleString()}원 (${v.month})`, sub: `${v.payNotice.name || ""} ${v.payNotice.date || ""} · 통장 확인 후 입금완료 처리`, to: "payments", lv: 2 })),
     ...(inquiries || []).filter((q) => !q.status || q.status === "신규").map((q) => ({ code: "LEAD", text: `${q.companyName || "업체"} 도입 문의 — 아직 연락 전`, sub: q.phone || "", to: "inquiries", lv: 2 })),
     ...apps.filter((a) => a.status === "pending").map((a) => ({ code: "APPLY", text: `${a.companyName || a.name || "화주사"} 가입 승인 대기`, sub: "", to: "applications", lv: 2 })),
     ...(contracts || []).filter((c) => c.status === "발송").map((c) => ({ code: "SIGN", text: `${c.vars?.고객사 || c.title || "계약"} 계약서 서명 대기 ${c.viewedAt ? "(열람함)" : "(미열람)"}`, sub: c.no, to: "contract:list", lv: 1 })),
@@ -213,9 +218,29 @@ function PaymentsPanel() {
     return () => { u1(); u2(); };
   }, []);
   React.useEffect(() => onSnapshot(query(collection(db, "platformInvoices")), (s) => { const m = {}; s.docs.forEach((d) => { m[d.id] = d.data(); }); setRows(m); }, () => {}), []);
+  // 💳 회사별 요금제(companyPlans) + 요금제 가격(요금제 관리)
+  const sales = useSalesPricing();
+  const [plans, setPlans] = React.useState({});
+  React.useEffect(() => onSnapshot(collection(db, "companyPlans"), (s) => { const m = {}; s.docs.forEach((d) => { m[d.id] = d.data(); }); setPlans(m); }, () => {}), []);
+  const setPlan = async (company, planId) => {
+    try {
+      if (planId) await setDoc(doc(db, "companyPlans", company), { planId, since: ymd(), updatedAt: serverTimestamp() }, { merge: true });
+      else await deleteDoc(doc(db, "companyPlans", company));
+      // 이 회사의 대기 중 요금제 변경 요청은 처리됨으로
+      const open = await getDocs(query(collection(db, "planRequests"), where("company", "==", company), where("status", "==", "요청")));
+      await Promise.all(open.docs.map((d) => updateDoc(d.ref, { status: "처리", handledAt: serverTimestamp(), appliedPlan: planId || "" })));
+    } catch (e) { window.alert(e.message); }
+  };
+  const planBill = (c, base) => {
+    const pid = plans[c.name]?.planId; const p = pid && sales?.plans?.find((x) => x.id === pid);
+    if (!p) return base;
+    const seats = Math.max(0, (c.staff || 0) - Number(p.seats || 0)) * Number(sales.extraSeat || 0);
+    const orders = Math.max(0, (base.projected || 0) - Number(p.orders || 0)) * Number(sales.extraOrder || 0);
+    return { ...base, base: Number(p.price || 0), seats, orders, total: Number(p.price || 0) + seats + orders };
+  };
   if (!stats || !pricing) return <div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>;
   const days = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
-  const companies = (stats.companies || []).map((c) => ({ ...c, bill: estimateBill(c, pricing, days, days) }));
+  const companies = (stats.companies || []).map((c) => ({ ...c, bill: planBill(c, estimateBill(c, pricing, days, days)) }));
   const key = (c) => `${month}_${c.name}`.replace(/\//g, "_");
   const amountOf = (c) => rows[key(c)]?.amount ?? c.bill.total;
   const sum = (st) => companies.filter((c) => (rows[key(c)]?.status || "미청구") === st).reduce((a, c) => a + amountOf(c), 0);
@@ -234,11 +259,17 @@ function PaymentsPanel() {
       </div>
       <Card code="LEDGER" title={`${Number(month.slice(5))}월 수납 원장`} bodyClass="p-0">
         {companies.length === 0 ? <div className="py-14 text-center text-[#9AA9C3]">집계된 가입사가 없습니다 — 대시보드 › 플랫폼 개요에서 '지금 갱신'을 눌러 주세요.</div> : (
-          <div className="overflow-x-auto"><table className="w-full text-[14px]" style={{ minWidth: 860 }}>
-            <thead><tr className="bg-[#1B2B4B] text-white">{["운송사", "청구액(VAT 별도)", "상태", "입금일", "메모"].map((h) => <th key={h} className="px-3 py-2.5 text-center font-extrabold">{h}</th>)}</tr></thead>
+          <div className="overflow-x-auto"><table className="w-full text-[14px]" style={{ minWidth: 1040 }}>
+            <thead><tr className="bg-[#1B2B4B] text-white">{["운송사", "요금제", "청구액(VAT 별도)", "상태", "입금일", "메모"].map((h) => <th key={h} className="px-3 py-2.5 text-center font-extrabold">{h}</th>)}</tr></thead>
             <tbody>{companies.map((c) => { const r = rows[key(c)] || {}; return (
               <tr key={c.name} className="border-t border-[#EEF1F6]">
-                <td className="px-3 py-2 font-black text-[#0F1A30]">{c.name}</td>
+                <td className="px-3 py-2 font-black text-[#0F1A30]">{c.name}{r.payNotice && <div className="mt-0.5 inline-block px-2 py-0.5 rounded-md bg-[#0F1A30] text-white text-[11px] font-black">입금 알림 · {r.payNotice.name || ""} {r.payNotice.date || ""}</div>}</td>
+                <td className="px-3 py-2 text-center">
+                  <select value={plans[c.name]?.planId || ""} onChange={(e) => setPlan(c.name, e.target.value)} className="h-9 px-2 rounded-lg border border-[#DCE3EE] font-bold text-[13px]">
+                    <option value="">미지정(전체 기능)</option>
+                    {(sales?.plans || []).filter((p) => ["lite", "basic", "standard", "pro"].includes(p.id)).map((p) => <option key={p.id} value={p.id}>{p.name} · {Number(p.price || 0).toLocaleString()}</option>)}
+                  </select>
+                </td>
                 <td className="px-3 py-2 text-right"><input defaultValue={amountOf(c).toLocaleString()} key={`${key(c)}_${amountOf(c)}`} onBlur={(e) => save(c, { amount: Number(e.target.value.replace(/[^\d]/g, "")) || 0 })} className="w-36 h-9 px-2 rounded-lg border border-[#DCE3EE] text-right font-black" style={{ fontFamily: MONO }} /></td>
                 <td className="px-3 py-2 text-center"><div className="inline-flex gap-1">{PAY_STATUS.map((st) => (
                   <button key={st} type="button" onClick={() => save(c, { status: st, ...(st === "입금완료" && !r.paidAt ? { paidAt: ymd() } : {}) })} className={`h-8 px-2.5 rounded-lg text-[12px] font-black border ${(r.status || "미청구") === st ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-[#DCE3EE] text-[#5B6B85]"}`}>{st}</button>))}</div></td>

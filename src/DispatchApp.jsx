@@ -1,4 +1,6 @@
 // ===================== DispatchApp.jsx (PART 1/8) — START =====================
+import { MENU_FEATURE, planIncludes, openPlanLock, featureOn, useCompanyPlanId, PlanValueProvider, PlanValueSync, PlanLockHost, LockIcon } from "./plans";
+import ProInsight from "./ProInsight";
 import BulkUploadChooser from "./BulkUploadChooser";
 import { buildCopyText, getCopyTpl, useCopyTemplates } from "./copyTemplates";
 import { CopyTemplateHost, openCopyTemplateEditor } from "./CopyTemplateEditor";
@@ -176,6 +178,31 @@ const _lunchNameKey = (s = "") => String(s || "").toLowerCase().replace(/\s+/g, 
    수행했으며 얼마의 운임을 지급하는지를 증빙하는 문서 형태로 보여준다.
    확대/축소 미리보기 + 이미지/PDF 저장 + 인쇄를 지원한다.
 --------------------------------------------------*/
+// 📡 24시콜 연결 진단 줄 — 지금 중계 서버/직접 중 어떤 경로로 나가는지, 나가는 IP, 24시콜 응답을 한 번에 확인
+function Call24DiagBar() {
+  const [d, setD] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const run = async () => {
+    setBusy(true);
+    try { const r = await fetch("/api/call24-diag"); setD(await r.json()); } catch (e) { setD({ test: { ok: false, message: e.message } }); } finally { setBusy(false); }
+  };
+  const ip = d ? (d.mode === "relay" ? d.relay?.ip : d.vercelIp) : "";
+  return (
+    <div className="rounded-xl border border-[#DCE3EE] bg-white px-4 py-2.5 flex items-center gap-3 flex-wrap text-[12px]">
+      <span className="text-[10px] font-extrabold tracking-[0.2em] text-[#4B6CB7]">CONNECTION</span>
+      {!d ? <span className="font-bold text-[#5B6B85]">전송이 안 되면 먼저 연결 진단을 눌러 보세요.</span> : (
+        <>
+          <span className={`px-2 py-0.5 rounded-md font-black ${d.test?.ok ? "bg-[#0F1A30] text-white" : "bg-[#EEF2F8] text-[#1B2B4B]"}`}>{d.test?.ok ? "24시콜 연결 정상" : `연결 실패 (${d.test?.code ?? "-"})`}</span>
+          <span className="font-bold text-[#3A4A66]">경로: {d.mode === "relay" ? "고정 IP 중계 서버" : "Vercel 직접(IP 수시 변경)"}</span>
+          {ip && <span className="font-bold text-[#3A4A66]">발신 IP: <b className="text-[#0F1A30]">{ip}</b></span>}
+          {d.test?.hint && <span className="w-full font-black text-[#0F1A30]">→ {d.test.hint}</span>}
+        </>
+      )}
+      <button type="button" onClick={run} disabled={busy} className="ml-auto h-8 px-3 rounded-lg bg-[#0F1A30] text-white font-black disabled:opacity-50">{busy ? "확인 중…" : "연결 진단"}</button>
+    </div>
+  );
+}
+
 // "인천광역시 서구 ..." → "인천광역시 서구" 처럼 앞의 두 토큰만 남겨 간단주소로 축약
 function fareCertShortAddr(addr = "") {
   const s = String(addr || "").trim();
@@ -3098,13 +3125,13 @@ const KP_SIDE_GROUPS = [
   { label: "배차", items: ["HOME", "배차관리", "실시간배차현황", "배차현황"] },
   { label: "운임", items: ["단가표", "운임조회"] },
   { label: "기사 · 거래처", items: ["기사관리", "거래처관리", "지입차관리"] },
-  { label: "매출 · 정산", items: ["매출관리", "정산관리"] },
+  { label: "매출 · 정산", items: ["매출관리", "정산관리", "인사이트"] },
   { label: "관리", items: ["회사관리", "관리자메뉴", "관리센터"] },
 ];
 const KP_SIDE_ICONS = {
   HOME: "dashboard", 배차관리: "truck", 실시간배차현황: "bell", 배차현황: "sheet", 단가표: "money", 운임조회: "globe",
   기사관리: "user", 거래처관리: "building", 지입차관리: "link", 매출관리: "check", 정산관리: "inbox",
-  회사관리: "idcard", 관리자메뉴: "key", 관리센터: "shield",
+  회사관리: "idcard", 관리자메뉴: "key", 관리센터: "shield", 인사이트: "chart",
 };
 function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, company, email }) {
   React.useEffect(() => {
@@ -3169,6 +3196,7 @@ function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, compan
                       >
                         <ShellIcon name={KP_SIDE_ICONS[m]} size={18} className={on ? "text-[#1B2B4B]" : "text-blue-200/80"} />
                         <span className="flex-1 text-left truncate">{m}</span>
+                        {st === "locked" && <span className="opacity-60"><LockIcon size={12} /></span>}
                         {on && <span className="w-1.5 h-1.5 rounded-full bg-[#4B6CB7]" />}
                       </button>
                     );
@@ -6873,6 +6901,9 @@ export default function DispatchApp({ role, user, userCompany = "" }) {
   // 받아오면 되므로 최상위 컴포넌트에서 호출한다.
   useEffect(() => { ensureWeatherLoaded(); }, []);
   useCopyTemplates(); // 📋 기사복사 문구(회사별 설정) 실시간 반영
+  // 💳 회사 요금제(미지정이면 전체 기능) — 메뉴 잠금·프로 기능 판단에 쓴다
+  const planCompany = (role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany) : (userCompany || localStorage.getItem("userCompany")) || "").trim();
+  const planId = useCompanyPlanId(planCompany);
   // ⭐ 고정거래처 매출 실시간 구독
   const [fixedRows, setFixedRows] = useState([]);
 // ⭐ 고정거래처 매출 Firestore 실시간 구독
@@ -7537,6 +7568,7 @@ const newVer = useNewVersion(); // ⭐ 새 버전이 배포되면 버전 표시 
 
   // ---------------- 메뉴 클릭 제어 ----------------
   const handleMenuClick = (m) => {
+    if (MENU_FEATURE[m] && !planIncludes(planId, MENU_FEATURE[m])) { openPlanLock(MENU_FEATURE[m]); return; }
     if ((role === "user" || role === "test") && blockedMenus.includes(m)) return;
     if (m !== "매출관리") setRevenueUnlocked(false);
     React.startTransition(() => setMenu(m));
@@ -7609,10 +7641,15 @@ const newVer = useNewVersion(); // ⭐ 새 버전이 배포되면 버전 표시 
     if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster" && !isViewer) return "hidden";
     // ⭐ 2026-10-29 관리센터는 별도 화면(/platform, 관리자 관리센터)으로 옮겼다 — 배차 프로그램 메뉴에서는 숨김
     if (m === "관리센터") return "hidden";
+    // 💎 인사이트(마진 분석)는 관리자만
+    if (m === "인사이트" && role !== "admin" && role !== "totalMaster") return "hidden";
+    // 💳 요금제에 없는 메뉴는 잠금(눌러도 들어가지 않고 요금제 안내가 뜬다)
+    if (MENU_FEATURE[m] && !planIncludes(planId, MENU_FEATURE[m])) return "locked";
     if (isBlocked && (role === "test" || isViewer)) return "hidden";
     return isBlocked ? "blocked" : "ok";
   };
 return (
+    <PlanValueProvider planId={planId} company={planCompany}>
     <OrderHistoryContext.Provider value={orderHistoryApi}>
     <EditModeProvider role={role} userCompany={userCompany}>
     <ToastProvider>
@@ -7654,6 +7691,8 @@ return (
       <BannerCenter />
       <PlatformNoticeBanner audience="carrier" />
       <CopyTemplateHost canEdit={role === "admin" || role === "totalMaster"} />
+      <PlanValueSync planId={planId} />
+      <PlanLockHost userEmail={user?.email || ""} userName={myRealName || ""} />
       <OnboardingHost role={role} userCompany={userCompany} />
       {/* ===== 통합 헤더 네비 ===== */}
       <header className="kp-topnav sticky top-0 z-50 mb-6 w-full">
@@ -7726,6 +7765,7 @@ return (
               "지입차관리",
               "매출관리",
               "정산관리",
+              "인사이트",
               "회사관리",
               "관리자메뉴",
               "관리센터",
@@ -7748,6 +7788,8 @@ return (
                     }`}
                 >
                   <EditableText id={`nav.${m}`} defaultText={m} />
+                  {st === "locked" && <span className="ml-1 opacity-60"><LockIcon /></span>}
+                  {m === "인사이트" && st !== "locked" && <span className="ml-1 px-1 py-px rounded bg-[#8FB0F0]/20 text-[#8FB0F0] text-[9px] font-black tracking-wider align-middle">PRO</span>}
                   {!isBlocked && isActive && (
                     <span className="absolute left-1/2 -translate-x-1/2 -bottom-[7px] w-5 h-[3px] bg-[#6E95E8] rounded-full" />
                   )}
@@ -8013,6 +8055,10 @@ return (
             markEditRequestSeen={markEditRequestSeen}
             approvedShippers={approvedShippers}
           />
+        )}
+
+        {menu === "인사이트" && (role === "admin" || role === "totalMaster") && planIncludes(planId, "insight") && (
+          <ProInsight data={dispatchDataFiltered} companyName={planCompany} />
         )}
 
         {menu === "실시간배차현황" && (
@@ -8685,6 +8731,7 @@ return (
     </ToastProvider>
     </EditModeProvider>
     </OrderHistoryContext.Provider>
+    </PlanValueProvider>
   );
 }
 // ===================== DispatchApp.jsx (PART 2/8) — END =====================
@@ -13601,7 +13648,7 @@ const fetchCall24Meta = async (body) => {
     });
     const json = await res.json();
     if (json?.success) { setCall24MetaError(null); return json.list || []; }
-    setCall24MetaError({ code: json?.code, message: json?.message || "조회 실패", serverIp: json?.serverIp });
+    setCall24MetaError({ code: json?.code, message: json?.message || "조회 실패", serverIp: json?.serverIp, hint: json?.hint });
     return [];
   } catch (e) {
     setCall24MetaError({ code: "-", message: e.message });
@@ -17359,6 +17406,7 @@ className={`
     <button
       type="button"
       onClick={() => {
+        if (!featureOn("call24")) { openPlanLock("call24"); return; } // 💎 프로 요금제 기능
         const { 거래처명, 상차지명, 하차지명, 상차일, 하차일 } = form;
         if (!거래처명 || !상차지명 || !하차지명) return showAlert("거래처/상차지명/하차지명을 입력해주세요.");
         if (!상차일 || !하차일) return showAlert("상차일/하차일은 반드시 필요합니다.");
@@ -17565,8 +17613,10 @@ className={`
 
               {/* 바디 */}
               <div className="overflow-y-auto flex-1 p-6 space-y-5">
+                <Call24DiagBar />
                 {call24MetaError && (
-                  <div className="rounded-xl px-5 py-3 text-[12px] font-semibold border bg-amber-50 border-amber-200 text-amber-800">
+                  <div className="rounded-xl px-5 py-3 text-[12px] font-semibold border bg-[#F2F5FA] border-[#DCE3EE] text-[#1B2B4B]">
+                    {call24MetaError.hint && <div className="mb-1 text-[12.5px] font-black text-[#0F1A30]">⚠ {call24MetaError.hint}</div>}
                     {`주소/톤수/차종 목록을 24시콜에서 불러오지 못했습니다 — 코드: ${call24MetaError.code} / ${call24MetaError.message}`}
                     {call24MetaError.serverIp && (
                       <div className="mt-1 text-[11px] font-normal opacity-80">
@@ -17788,11 +17838,12 @@ className={`
 
                 {/* 결과 */}
                 {send24Result && (
-                  <div className={`rounded-xl px-5 py-4 text-[13px] font-semibold border ${send24Result.ok ? "bg-green-50 border-green-200 text-green-800" : "bg-red-50 border-red-200 text-red-800"}`}>
+                  <div className={`rounded-xl px-5 py-4 text-[13px] font-semibold border ${send24Result.ok ? "bg-[#0F1A30] border-[#0F1A30] text-white" : "bg-[#F2F5FA] border-[#B8C6DD] text-[#0F1A30]"}`}>
                     {send24Result.ok
                       ? `전송 완료  오더번호: ${send24Result.ordNo || "-"}  /  ${send24Result.msg}`
                       : <>
                           {`전송 실패  코드: ${send24Result.code}  /  ${send24Result.msg}`}
+                          {send24Result.hint && <div className="mt-1 text-[12.5px] font-black">→ {send24Result.hint}</div>}
                           {send24Result.serverIp && /ip/i.test(send24Result.msg || "") && (
                             <div className="mt-1 text-[11px] font-normal opacity-80">
                               서버 IP: <span className="font-bold">{send24Result.serverIp}</span>
@@ -17839,7 +17890,7 @@ className={`
                         setSend24Result({ ok: true, ordNo: res.ordNo, msg: res.resultMsg || "성공" });
                       } else {
                         await patchDispatch(form._id, { "24시전송여부": false, "24시전송로그": [...prevLogs, newLog] });
-                        setSend24Result({ ok: false, code: res?.resultCode || "-", msg: errMsg, serverIp: res?._serverIp });
+                        setSend24Result({ ok: false, code: res?.resultCode || "-", msg: errMsg, serverIp: res?._serverIp, hint: res?.hint });
                       }
                     } catch(e) {
                       setSend24Result({ ok: false, code: "-", msg: e.message });
