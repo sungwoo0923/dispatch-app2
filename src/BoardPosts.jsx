@@ -20,8 +20,8 @@ const fmt = (ms, full) => {
 };
 
 export const BOARDS = {
-  free: { label: "자유게시판", en: "FREE BOARD", icon: "chat", desc: "업무 팁 · 맛집 · 사는 이야기 — 누구나 자유롭게" },
-  admin: { label: "관리자게시판", en: "MANAGERS", icon: "shield", desc: "관리자만 보는 운영 논의 공간" },
+  free: { label: "자유게시판", en: "FREE BOARD", icon: "chat", desc: "자유로운 소통과 이야기를 나누는 공간입니다." },
+  admin: { label: "관리자게시판", en: "MANAGERS", icon: "shield", desc: "관리자 전용 공지 및 운영 정보를 공유합니다." },
   exec: { label: "임원게시판", en: "EXECUTIVE", icon: "key", desc: "임원 전용 — 권한 설정 전까지 최고관리자만 보입니다" },
 };
 const isAdminRole = (r) => ["admin", "totalMaster", "hrManager"].includes(r);
@@ -171,7 +171,8 @@ export default function BoardPage({ company, me, board }) {
                 <div className="ml-auto flex gap-1.5">
                   {admin && <button type="button" onClick={() => updateDoc(doc(db, "boardPosts", cur.id), { pinned: !cur.pinned })} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12px] font-bold text-[#3A4A66]">{cur.pinned ? "고정 해제" : "상단 고정"}</button>}
                   {cur.authorUid === me.uid && <button type="button" onClick={() => setForm({ id: cur.id, title: cur.title, content: cur.content, images: cur.images || [], pinned: !!cur.pinned, pinnedOrig: !!cur.pinned })} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12px] font-bold text-[#3A4A66]">수정</button>}
-                  <button type="button" onClick={() => remove(cur)} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12px] font-bold text-[#7A879C]">삭제</button>
+                  {/* 삭제는 작성자 본인만(최고관리자는 운영상 예외) — 서버 규칙(firestore.rules)과 같은 기준 */}
+                  {(cur.authorUid === me.uid || me.role === "totalMaster") && <button type="button" onClick={() => remove(cur)} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12px] font-bold text-[#7A879C]">삭제</button>}
                 </div>
               )}
             </div>

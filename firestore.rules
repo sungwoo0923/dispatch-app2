@@ -287,6 +287,9 @@ service cloud.firestore {
         && request.resource.data.get('drafterUid', '') == resource.data.get('drafterUid', '')
         && request.resource.data.get('participants', []) == resource.data.get('participants', [])
         && request.resource.data.get('company', '') == resource.data.get('company', '');
+      // 회사 관리자(결재함 › 회사 전체)는 참여자가 아니어도 "내 보관함에서 삭제/되돌리기"(hiddenBy)만 바꿀 수 있다
+      allow update: if isApproved() && isCompanyAdmin(resource.data.get('company', ''))
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hiddenBy']);
       allow delete: if false;
     }
 
@@ -302,7 +305,20 @@ service cloud.firestore {
     // 📢 공지사항 — 누구나 읽고, 쓰기·수정·삭제는 관리자(관리자·인사관리자·최고관리자)만
     match /notices/{id} {
       allow read: if isApproved();
-      allow write: if isApproved() && isBoardAdmin();
+      allow create: if isApproved() && isBoardAdmin();
+      // 수정·삭제는 작성자 본인만(최고관리자 예외). 작성자 기록이 없는 옛 공지는 공지 작성 권한자가 관리
+      allow update, delete: if isApproved() && isBoardAdmin()
+        && (resource.data.get('authorUid', '') == request.auth.uid || resource.data.get('authorUid', '') == ''
+            || isSuperEmail() || myUser().get('role', '') == 'totalMaster');
+    }
+    // 📋 인수인계 — 받는 사람의 "확인"(readBy)은 누구나, 내용 수정·삭제는 작성자 본인만(최고관리자 예외)
+    match /handovers/{id} {
+      allow read, create: if isApproved();
+      allow update: if isApproved() && (resource.data.get('authorUid', '') == request.auth.uid || resource.data.get('authorUid', '') == ''
+        || isSuperEmail() || myUser().get('role', '') == 'totalMaster'
+        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']));
+      allow delete: if isApproved() && (resource.data.get('authorUid', '') == request.auth.uid || resource.data.get('authorUid', '') == ''
+        || isSuperEmail() || myUser().get('role', '') == 'totalMaster');
     }
     match /boardPosts/{id} {
       allow read: if isApproved() && canSeeBoard(resource.data.board);
@@ -311,7 +327,8 @@ service cloud.firestore {
         && request.resource.data.get('board', '') == resource.data.board
         && (resource.data.get('authorUid', '') == request.auth.uid || isBoardAdmin()
             || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'comments']));
-      allow delete: if isApproved() && canSeeBoard(resource.data.board) && (resource.data.get('authorUid', '') == request.auth.uid || isBoardAdmin());
+      // 삭제는 작성자 본인만(최고관리자는 운영상 예외)
+      allow delete: if isApproved() && canSeeBoard(resource.data.board) && (resource.data.get('authorUid', '') == request.auth.uid || isSuperEmail() || myUser().get('role', '') == 'totalMaster');
     }
     match /sessionLogs/{id} {
       allow create: if isSignedIn();
@@ -326,7 +343,7 @@ service cloud.firestore {
     // ⭐ 규칙은 "하나라도 허용하면 허용"이라, 서버 전용 컬렉션(초기화 비밀번호·보관함·기록)은
     // 여기서 빼야 위의 "allow … if false"가 실제로 막힌다.
     match /{col}/{rest=**} {
-      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices']);
+      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers']);
     }
   }
 }

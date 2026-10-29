@@ -509,8 +509,13 @@ export default function App() {
     const timer = setTimeout(() => setMinSplashDone(true), MIN_MS);
     return () => clearTimeout(timer);
   }, []);
+  // ⭐ 2026-10-29 — 로고 화면이 너무 빨리 지나간다는 의견으로 PC·모바일 모두 1초 더 보여준다
+  //    (준비가 끝난 뒤 1초 유지 → 실제 로딩이 길어도 항상 지금보다 정확히 1초 길게 보인다)
+  const SPLASH_EXTRA_MS = 1000;
   useEffect(() => {
-    if (!loading && minSplashDone) setSplashDone(true);
+    if (loading || !minSplashDone) return;
+    const t = setTimeout(() => setSplashDone(true), SPLASH_EXTRA_MS);
+    return () => clearTimeout(t);
   }, [loading, minSplashDone]);
 
   const updateShownRef = useRef(false);

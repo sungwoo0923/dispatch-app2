@@ -938,9 +938,9 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
             <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>
               BOARD · {boardTab === "공지사항" ? "NOTICE" : boardTab === "휴가/외근" ? "SCHEDULE" : "HANDOVER"}
             </div>
-            <h2 className="text-[24px] font-black tracking-tight mt-1">{boardTab}</h2>
-            <p className="text-[14px] text-blue-100/75 mt-1 font-medium">
-              {boardTab === "공지사항" ? "회사 공지·안내를 등록하고 확인합니다" : boardTab === "휴가/외근" ? "휴가·외근 일정을 올리고 결재를 받습니다" : "업무를 넘기고 받는 사람이 확인했는지 봅니다"}
+            <h2 className="text-[24px] font-black tracking-tight mt-0.5">{boardTab}</h2>
+            <p className="text-[13px] text-white/60 mt-0.5">
+              {boardTab === "공지사항" ? "회사 공지 및 주요 안내 사항을 확인합니다." : boardTab === "휴가/외근" ? "휴가·외근 일정을 올리고 결재를 받습니다" : "업무를 넘기고 받는 사람이 확인했는지 봅니다"}
             </p>
           </div>
           <div className="flex items-center gap-3">

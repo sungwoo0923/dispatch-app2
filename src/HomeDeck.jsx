@@ -320,7 +320,6 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
   const d = new Date();
   const dateText = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ${["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][d.getDay()]}`;
   const hour = d.getHours();
-  const hello = hour < 12 ? "좋은 아침입니다" : hour < 18 ? "오늘도 수고 많으십니다" : "오늘 하루 고생하셨습니다";
   const ready = !!pastCache;
   const metric = (g) => (rankBy === "profit" ? g.p : rankBy === "cnt" ? g.c : g.s);
 
@@ -338,7 +337,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
               <span className="hd-pulse" style={{ width: 6, height: 6, borderRadius: "50%", background: C.hi, boxShadow: `0 0 8px ${C.glow}` }} />LIVE
             </span>
           </div>
-          <h1 style={{ margin: "8px 0 0", fontSize: 28, fontWeight: 900, letterSpacing: "-0.02em", color: "#fff" }}>{myName ? `${myName}님, ${hello}` : hello}</h1>
+          <h1 style={{ margin: "8px 0 0", fontSize: 28, fontWeight: 900, letterSpacing: "-0.02em", color: "#fff" }}>{myName ? `${myName}님 반갑습니다, 좋은 하루 되세요.` : "반갑습니다, 좋은 하루 되세요."}</h1>
           <p style={{ margin: "6px 0 0", fontSize: 15, fontWeight: 600, color: C.sub }}>
             오늘 접수 <b style={{ color: "#fff", fontFamily: MONO }}>{t0[2].toLocaleString()}</b>건 · 배차완료 <b style={{ color: "#fff", fontFamily: MONO }}>{doneToday.toLocaleString()}</b>건 · 오늘 매출 <b style={{ color: "#fff", fontFamily: MONO }}>{won(t0[0])}</b>원
           </p>

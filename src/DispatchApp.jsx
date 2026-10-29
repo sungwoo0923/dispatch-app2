@@ -2010,13 +2010,13 @@ const inputStyle =
 
 // ⭐ 2026-10-29 오더복사/수정 패널 전용 — 라벨을 입력칸 왼쪽에 두어(세로 → 가로) 패널 높이를 절반 가까이 줄인다.
 const CpField = ({ label, children }) => (
-  <div className="grid grid-cols-[108px_minmax(0,1fr)] items-center gap-2 min-h-[34px]">
-    <div className="text-[12px] font-bold text-[#5B6B85] flex items-center gap-1 leading-tight whitespace-nowrap">{label}</div>
+  <div className="grid grid-cols-[118px_minmax(0,1fr)] items-center gap-2 min-h-[40px]">
+    <div className="text-[13.5px] font-bold text-[#5B6B85] flex items-center gap-1 leading-tight whitespace-nowrap">{label}</div>
     <div className="min-w-0">{children}</div>
   </div>
 );
 const cpInputStyle =
-  "w-full border-0 border-b border-[#D5DEEC] rounded-none px-1 py-1 text-[13px] font-bold text-gray-900 bg-transparent focus:outline-none focus:border-[#1B2B4B] transition";
+  "w-full border-0 border-b border-[#D5DEEC] rounded-none px-1 py-1.5 text-[14.5px] font-bold text-gray-900 bg-transparent focus:outline-none focus:border-[#1B2B4B] transition";
 
 const todayStr = () => {
   const d = new Date();
@@ -29145,17 +29145,17 @@ const head = isDark
       } : undefined}
     >
 
-      <div className="cp-compact px-4 pb-4 space-y-3 text-[13px]">
+      <div className="cp-compact px-5 pb-5 space-y-4 text-[14px]">
 
         {/* HEADER — B스타일에서는 이 영역을 드래그 손잡이로 사용 */}
 <div
-  className="sticky top-0 z-20 -mx-4 mb-1 flex justify-between items-center gap-3 px-5 py-2.5 text-white shadow-[0_6px_18px_rgba(11,20,40,0.25)]"
+  className="sticky top-0 z-20 -mx-5 mb-1 flex justify-between items-center gap-3 px-5 py-2.5 text-white shadow-[0_6px_18px_rgba(11,20,40,0.25)]"
   onMouseDown={copyPanelStyle === "B" ? handleCopyPanelDragStart : undefined}
   style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)", ...(copyPanelStyle === "B" ? { cursor: "grab" } : {}) }}
 >
   <div className="min-w-0">
     <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>ORDER · COPY / EDIT</div>
-    <h2 className="text-[16px] font-black leading-tight"><EditableText id="copyPanel.title" defaultText="오더 복사 / 수정 패널" /> <span className="ml-1 text-[12.5px] font-semibold text-white/60">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</span></h2>
+    <h2 className="text-[18px] font-black leading-tight"><EditableText id="copyPanel.title" defaultText="오더 복사 / 수정 패널" /> <span className="ml-1 text-[13.5px] font-semibold text-white/60">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</span></h2>
   </div>
   <div className="flex gap-2 items-center">
     {/* A/B 스타일 전환 */}
@@ -29298,22 +29298,22 @@ flashRow(savedId);
 )}
 {/* ================= 거래처 정보 ================= */}
 <section className="bg-white rounded-xl border border-[#E3E8F0]">
-  <div className="bg-[#1B2B4B] px-4 py-1.5 rounded-t-xl"><h3 className="text-[12.5px] font-bold text-white"><EditableText id="copyPanel.section.거래처정보" defaultText="거래처 정보" /></h3></div>
-  <div className="px-4 py-2.5 grid grid-cols-1 lg:grid-cols-[auto_minmax(0,1fr)] gap-x-8 gap-y-2 items-end">
+  <div className="bg-[#1B2B4B] px-5 py-2 rounded-t-xl"><h3 className="text-[14px] font-bold text-white"><EditableText id="copyPanel.section.거래처정보" defaultText="거래처 정보" /></h3></div>
+  <div className="px-5 py-3 grid grid-cols-1 lg:grid-cols-[auto_minmax(0,1fr)] gap-x-8 gap-y-2 items-end">
 {/* ================= 오더 유형 버튼 ================= */}
 <div className="flex items-center gap-2 flex-wrap">
-  <span className="text-[12px] font-bold text-[#5B6B85] mr-1">오더 유형</span>
+  <span className="text-[13.5px] font-bold text-[#5B6B85] mr-1">오더 유형</span>
   <button type="button"
     onClick={() => setCopyTarget(p => ({ ...p, 독차: !p.독차, 혼적: p.독차 ? p.혼적 : false }))}
-    className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.독차 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
+    className={`px-4 py-1.5 rounded-lg text-[13px] font-bold border transition-all ${copyTarget.독차 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
   ><EditableText id="misc.btn.26993.독차" defaultText="독차" /></button>
   <button type="button"
     onClick={() => setCopyTarget(p => ({ ...p, 혼적: !p.혼적, 독차: p.혼적 ? p.독차 : false }))}
-    className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
+    className={`px-4 py-1.5 rounded-lg text-[13px] font-bold border transition-all ${copyTarget.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
   ><EditableText id="misc.btn.26997.혼적" defaultText="혼적" /></button>
   <button type="button"
     onClick={() => setCopyTarget(p => (p.운행유형 === "왕복" ? { ...p, 운행유형: "편도", 회전수: 1, 메모: withRotationMemo(p.메모, 1) } : { ...p, 운행유형: "왕복" }))}
-    className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.운행유형 === "왕복" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
+    className={`px-4 py-1.5 rounded-lg text-[13px] font-bold border transition-all ${copyTarget.운행유형 === "왕복" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
   ><EditableText id="misc.btn.27001.왕복" defaultText="왕복" /></button>
   {/* ⭐ 왕복일 때만 회전수 선택 (기존 오더 수정/복사는 한 오더로 묶기) */}
   {copyTarget.운행유형 === "왕복" && (
@@ -29322,12 +29322,12 @@ flashRow(savedId);
   )}
   <button type="button"
     onClick={() => setCopyTarget(p => ({ ...p, 긴급: !p.긴급 }))}
-    className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.긴급 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
+    className={`px-4 py-1.5 rounded-lg text-[13px] font-bold border transition-all ${copyTarget.긴급 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
   ><EditableText id="misc.btn.27005.긴급" defaultText="긴급" /></button>
 </div>
 
 
-  <div className="space-y-1">
+  <div className="space-y-1.5">
     <div className="flex items-center justify-between">
       <div className="text-[13px] font-bold text-gray-900">거래처명</div>
       <button type="button" onClick={() => openNewClientModal(copyTarget?.거래처명)}
@@ -29431,13 +29431,13 @@ checkWarningStatus(c.거래처명, "거래처");
 </section>
         {/* ================= 상하차 정보 ================= */}
 <section className="bg-white rounded-xl border border-[#E3E8F0] overflow-hidden">
-  <div className="bg-[#1B2B4B] px-4 py-1.5"><h3 className="text-[12.5px] font-bold text-white"><EditableText id="copyPanel.section.상하차정보" defaultText="상하차 정보" /></h3></div>
-  <div className="px-4 py-2.5">
+  <div className="bg-[#1B2B4B] px-5 py-2"><h3 className="text-[14px] font-bold text-white"><EditableText id="copyPanel.section.상하차정보" defaultText="상하차 정보" /></h3></div>
+  <div className="px-5 py-3">
 
   <div className="grid grid-cols-2 gap-x-8">
 
     {/* 상차 */}
-    <div className="space-y-1">
+    <div className="space-y-1.5">
       <div className="text-[12px] font-bold text-blue-600 pb-1 border-b border-blue-100">상차</div>
       <CpField label={<>
         상차일
@@ -29667,7 +29667,7 @@ checkWarningStatus(c.거래처명, "거래처");
 
 
 {/* 하차 */}
-    <div className="space-y-1">
+    <div className="space-y-1.5">
       <div className="text-[12px] font-bold text-red-500 pb-1 border-b border-red-100">하차</div>
       <CpField label="하차일">
         <CustomDatePicker
@@ -29862,11 +29862,11 @@ checkWarningStatus(c.거래처명, "거래처");
 </section>
 {/* ===== 스마트 기사 검색 (복사패널) ===== */}
 <section className="bg-white rounded-xl border border-[#E3E8F0] divide-y divide-gray-100 overflow-hidden">
-  <div className="px-4 pt-2.5 pb-0"><h3 className="text-[12.5px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사 스마트 검색</h3></div>
+  <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사 스마트 검색</h3></div>
 <div className="px-4 py-2">
     <div className="relative" style={{overflow: "visible"}}>
       <input autoComplete="off"
-        className="w-full border-2 border-[#1B2B4B] rounded-lg px-3 py-1.5 text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-500"
+        className="w-full border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[14px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-500"
         placeholder="이름·차량번호·전화번호 또는 문자 복붙 → 엔터로 자동 적용"
         value={smartQ4}
         onChange={e=>handleSmart4Input(e.target.value)}
@@ -29893,10 +29893,10 @@ checkWarningStatus(c.거래처명, "거래처");
   </div>
 
 {/* ================= 기사정보 ================= */}
-  <div className="px-4 pt-2.5 pb-0"><h3 className="text-[12.5px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사정보</h3></div>
-  <div className="px-4 py-2.5">
+  <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사정보</h3></div>
+  <div className="px-5 py-3">
 
-  <div className="grid grid-cols-3 gap-x-6 gap-y-1">
+  <div className="grid grid-cols-3 gap-x-6 gap-y-1.5">
 
     <CpField label="차량번호">
       <input autoComplete="off"
@@ -29993,10 +29993,10 @@ checkWarningStatus(c.거래처명, "거래처");
   </div>
 </div>
 {/* ================= 화물정보 ================= */}
-  <div className="px-4 pt-2.5 pb-0"><h3 className="text-[12.5px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>화물정보</h3></div>
-  <div className="px-4 py-2.5">
+  <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>화물정보</h3></div>
+  <div className="px-5 py-3">
 
-  <div className="grid grid-cols-3 gap-x-6 gap-y-1">
+  <div className="grid grid-cols-3 gap-x-6 gap-y-1.5">
 
     <CpField label="차량종류">
       <CustomSelect
@@ -30032,7 +30032,7 @@ checkWarningStatus(c.거래처명, "거래처");
       {/* 입력 */}
       <input autoComplete="off"
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-        className="flex-1 px-3 py-2 outline-none"
+        className="flex-1 min-w-0 w-0 px-3 py-2 text-[14.5px] font-bold outline-none"
         value={copyTarget?.톤수값 || ""}
         onChange={(e) => {
           const v = e.target.value;
@@ -30051,14 +30051,7 @@ checkWarningStatus(c.거래처명, "거래처");
       {/* 드롭다운 */}
       <CustomSelect
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-        className="
-          px-3 py-2
-          bg-[#1B2B4B]
-          text-white
-          font-bold
-          outline-none
-          cursor-pointer
-        "
+        className="shrink-0 w-[78px] pl-3 pr-6 py-2 bg-[#1B2B4B] text-white text-[14px] font-bold outline-none cursor-pointer"
         value={copyTarget?.톤수타입 || ""}
         onChange={(e) => {
           const type = e.target.value;
@@ -30090,7 +30083,7 @@ checkWarningStatus(c.거래처명, "거래처");
     {/* 입력 */}
     <input autoComplete="off"
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-      className="flex-1 px-3 py-2 outline-none"
+      className="flex-1 min-w-0 w-0 px-3 py-2 text-[14.5px] font-bold outline-none"
 value={copyTarget?.화물수량 || ""}
       onChange={(e) => {
         const v = e.target.value;
@@ -30109,14 +30102,7 @@ value={copyTarget?.화물수량 || ""}
     {/* 드롭다운 */}
     <CustomSelect
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-      className="
-        px-3 py-2
-        bg-[#1B2B4B]
-        text-white
-        font-bold
-        outline-none
-        cursor-pointer
-      "
+      className="shrink-0 w-[96px] pl-3 pr-6 py-2 bg-[#1B2B4B] text-white text-[14px] font-bold outline-none cursor-pointer"
       value={copyTarget?.화물타입 || ""}
       onChange={(e) => {
         const type = e.target.value;
@@ -30143,8 +30129,8 @@ value={copyTarget?.화물수량 || ""}
   </div>
 </div>
         {/* ================= 결제 정보 ================= */}
-          <div className="px-4 pt-2.5 pb-0"><h3 className="text-[12.5px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>결제 정보</h3></div>
-          <div className="px-4 py-2.5">
+          <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>결제 정보</h3></div>
+          <div className="px-5 py-3">
 
           <div className="grid grid-cols-3 xl:grid-cols-5 gap-x-5 gap-y-1">
 
@@ -30178,7 +30164,7 @@ value={copyTarget?.화물수량 || ""}
 
             <CpField label="수수료">
               {(() => { const _f = Number(copyTarget.청구운임||0) - Number(copyTarget.기사운임||0); return (
-              <div className={`bg-[#EEF2F8] rounded-md px-2 py-1 font-black text-[14px] text-right whitespace-nowrap tabular-nums ${_f < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>
+              <div className={`bg-[#EEF2F8] rounded-md px-2 py-1.5 font-black text-[15px] text-right whitespace-nowrap tabular-nums ${_f < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>
                 {_f.toLocaleString()} 원
               </div>
               ); })()}
@@ -30215,12 +30201,12 @@ value={copyTarget?.화물수량 || ""}
           </div>
         </div>
 {/* ================= 메모 + 전달사항 ================= */}
-  <div className="px-4 pt-2.5 pb-0"><h3 className="text-[12.5px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>메모 / 전달사항</h3></div>
-  <div className="px-4 py-2.5 grid grid-cols-2 gap-3">
+  <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>메모 / 전달사항</h3></div>
+  <div className="px-5 py-3 grid grid-cols-2 gap-3">
     <div>
-      <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">메모</label>
+      <label className="block text-[13.5px] font-bold text-[#5B6B85] mb-1">메모</label>
       <textarea
-        className="w-full min-h-[64px] px-3 py-2 text-[13px] rounded-lg border border-[#D5DEEC] bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-500 transition-all"
+        className="w-full min-h-[96px] px-3 py-2 text-[14px] rounded-lg border border-[#D5DEEC] bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-500 transition-all"
         placeholder="메모를 입력하세요"
         value={copyTarget?.메모 ?? ""}
         onChange={(e)=>setCopyTarget(p=>({...p, 메모:e.target.value}))}
@@ -30228,7 +30214,7 @@ value={copyTarget?.화물수량 || ""}
     </div>
     <div>
       <div className="flex items-center justify-between mb-1">
-        <label className="text-[12px] font-bold text-[#5B6B85]">전달사항</label>
+        <label className="text-[13.5px] font-bold text-[#5B6B85]">전달사항</label>
         <button type="button"
           onClick={() => setCopyTarget(p => ({ ...p, 전달사항고정: !p.전달사항고정 }))}
           className={`px-2 py-0.5 rounded text-xs font-semibold border transition-all ${copyTarget?.전달사항고정 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
@@ -30236,7 +30222,7 @@ value={copyTarget?.화물수량 || ""}
         </button>
       </div>
       <textarea
-        className="w-full min-h-[64px] px-3 py-2 text-[13px] rounded-lg border border-[#D5DEEC] bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-500 transition-all"
+        className="w-full min-h-[96px] px-3 py-2 text-[14px] rounded-lg border border-[#D5DEEC] bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-500 transition-all"
         placeholder="기사에게 전달할 내용"
         value={copyTarget?.전달사항 ?? ""}
         onChange={(e)=>setCopyTarget(p=>({...p, 전달사항:e.target.value}))}
@@ -30247,7 +30233,7 @@ value={copyTarget?.화물수량 || ""}
 
 {/* ===================== 변경 이력(공용 타임라인) ===================== */}
 <details className="bg-white rounded-xl border border-[#E3E8F0] px-4 py-2 group">
-  <summary className="cursor-pointer select-none text-[12.5px] font-bold text-[#1B2B4B] list-none flex items-center gap-1.5"><span className="inline-block transition-transform group-open:rotate-90">›</span>변경 이력 <span className="font-semibold text-[#9AA9C3]">(눌러서 펼치기 · 위 '변경 이력' 버튼으로도 볼 수 있음)</span></summary>
+  <summary className="cursor-pointer select-none text-[13.5px] font-bold text-[#1B2B4B] list-none flex items-center gap-1.5"><span className="inline-block transition-transform group-open:rotate-90">›</span>변경 이력 <span className="font-semibold text-[#9AA9C3]">(눌러서 펼치기 · 위 '변경 이력' 버튼으로도 볼 수 있음)</span></summary>
   <div className="mt-2 max-h-64 overflow-y-auto pr-1"><OrderTimeline order={copyTarget} size="sm" userName={(u) => userNameMap?.get?.(String(u || "").trim().toLowerCase())} /></div>
 </details>
 

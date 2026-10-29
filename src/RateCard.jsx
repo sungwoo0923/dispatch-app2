@@ -1105,8 +1105,8 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
               <span className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "28px 28px" }} />
               <div className="relative">
                 <div style={{ fontFamily: RC_MONO }} className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]">RATE ENGINE · READY</div>
-                <div className="text-[18px] font-black text-white mt-2">왼쪽에서 노선 조건을 입력하고 단가표를 생성하세요</div>
-                <div className="text-[13px] text-white/55 mt-1.5">과거 배차 실적에서 극단값을 걸러내고 톤수별 권장 단가를 계산합니다</div>
+                <div className="text-[18px] font-black text-white mt-2">좌측 검색 조건을 입력하여 단가표 생성</div>
+                <div className="text-[13px] text-white/55 mt-1.5">배차 데이터를 분석하여 특이값을 제외한 톤수별 권장 단가를 계산합니다.</div>
               </div>
             </div>
           )}
@@ -1319,8 +1319,8 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                 <span className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "28px 28px" }} />
                 <div className="relative">
                   <div style={{ fontFamily: RC_MONO }} className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]">MULTI DESTINATION</div>
-                  <div className="text-[18px] font-black text-white mt-2">왼쪽에서 단가표를 선택하거나 새로 만드세요</div>
-                  <div className="text-[13px] text-white/55 mt-1.5">기준지 1곳(예: 화주사 창고)에서 여러 하차지로 가는 단가를 한 표로 관리합니다</div>
+                  <div className="text-[18px] font-black text-white mt-2">좌측 패널에서 단가표를 선택하거나 새 단가표 생성</div>
+                  <div className="text-[13px] text-white/55 mt-1.5">메인 상차지 기준, 다중 하차지별 운송 단가를 통합 관리합니다.</div>
                 </div>
               </div>
             ) : (

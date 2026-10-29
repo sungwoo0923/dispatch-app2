@@ -13,10 +13,12 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem("kpSubNavCollapsed") === "1"; } catch { return false; } });
   const toggle = () => setCollapsed((v) => { try { localStorage.setItem("kpSubNavCollapsed", v ? "0" : "1"); } catch { /* 저장 실패 무시 */ } return !v; });
   const gs = groups || [{ label: "", items: items || [] }];
+  // 하위메뉴(사내메일함 등) 접기 — 펼쳐진 부모를 한 번 더 누르면 접히고, 다시 누르면 펼쳐진다(보던 화면은 그대로)
+  const [folded, setFolded] = useState({});
 
   const hasBadge = (b) => (typeof b === "string" ? !!b : b > 0);
   const badgeTxt = (b) => (typeof b === "number" && b > 99 ? "99+" : b);
-  const Btn = ({ it, on, onClick, sub = false }) => (
+  const Btn = ({ it, on, onClick, sub = false, caret = null }) => (
     <button
       type="button"
       onClick={onClick}
@@ -38,6 +40,7 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
           {hasBadge(it.badge) && (
             <span title={it.badgeTitle} className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-extrabold flex items-center justify-center tabular-nums ${typeof it.badge === "string" ? "tracking-wider " : ""}${on ? "bg-[#1B2B4B] text-white" : it.soft ? "bg-white/15 text-white" : "bg-rose-500 text-white"}`}>{badgeTxt(it.badge)}</span>
           )}
+          {caret && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-60" style={{ transform: caret === "up" ? "rotate(180deg)" : "none", transition: "transform .15s" }}><path d="M6 9l6 6 6-6" /></svg>}
         </>
       )}
     </button>
@@ -66,10 +69,17 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
               {g.label && !collapsed && <div className="px-3 mb-1.5 text-[11px] font-bold text-blue-200/45">{g.label}</div>}
               <div className="space-y-1">
                 {g.items.map((it) => {
-                  const open = it.sub && (it.key === active || it.sub.some((x) => x.key === active));
+                  const inside = it.sub && (it.key === active || it.sub.some((x) => x.key === active));
+                  const open = inside && !folded[it.key];
+                  const clickParent = () => {
+                    if (!it.sub) { onSelect?.(it.key); return; }
+                    if (inside) { setFolded((f) => ({ ...f, [it.key]: !f[it.key] })); return; }
+                    setFolded((f) => ({ ...f, [it.key]: false }));
+                    onSelect?.(it.sub[0].key);
+                  };
                   return (
                     <React.Fragment key={it.key}>
-                      <Btn it={it} on={it.key === active || (open && collapsed)} onClick={() => onSelect?.(it.sub ? it.sub[0].key : it.key)} />
+                      <Btn it={it} on={it.key === active || (inside && collapsed) || (inside && !open)} caret={it.sub && !collapsed ? (open ? "up" : "down") : null} onClick={clickParent} />
                       {open && !collapsed && (
                         <div className="ml-4 pl-1 border-l border-white/10 space-y-0.5 py-0.5">
                           {it.sub.map((x) => <Btn key={x.key} it={x} sub on={x.key === active} onClick={() => onSelect?.(x.key)} />)}

@@ -102,6 +102,27 @@ function Cell({ label, children, wide, last }) {
   );
 }
 
+// ⭐ 2026-10-29 미리보기 문서가 작다는 의견 — 문서(기본 폭 780px)를 보이는 칸 폭에 맞춰 키운다(최대 1.5배).
+//    인쇄·이미지 저장(html2canvas) 때는 잠깐 원래 크기(1배)로 되돌려 찍는다.
+function FitPaper({ children, base = 820, max = 1.5 }) {
+  const ref = React.useRef(null);
+  const [z, setZ] = React.useState(1);
+  React.useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setZ(Math.max(1, Math.min(max, Math.floor((e.contentRect.width / base) * 100) / 100))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [base, max]);
+  return <div ref={ref}><div data-fitpaper style={{ zoom: z }}>{children}</div></div>;
+}
+const captureAt1x = async (el, opts) => {
+  const box = el?.closest?.("[data-fitpaper]");
+  const prev = box?.style.zoom;
+  if (box) box.style.zoom = "1";
+  try { return await html2canvas(el, opts); } finally { if (box) box.style.zoom = prev; }
+};
+
 export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, createdMs, staff, status, paperRef }) {
   const cols = [{ uid: drafter?.uid, name: drafter?.name, position: drafter?.position || "기안", kind: "기안", status: "approved", at: createdMs }, ...(line || [])];
   const fields = form.fields || [];
@@ -443,6 +464,12 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive }) {
   // 결재선이 비어 있으면 직원 목록이 오는 대로 자동 추천
   React.useEffect(() => { if (!autoLined.current && staff && staff.length) { autoLined.current = true; setLine(suggestLine(staff, me)); } }, [staff, me]);
   const pickForm = (k) => { if (editId) return; setFormKey(k); setData(initialData(formOf(k))); setTitle(""); setMsg(""); };
+  // 입력 초기화 — 같은 양식을 처음 상태로(제목·내용·첨부·결재선 추천값). 저장된 문서에는 영향 없음
+  const resetAll = () => {
+    if (!window.confirm("입력한 내용을 모두 지우고 처음 상태로 되돌릴까요?")) return;
+    setData(initialData(form)); setTitle(""); setImages([]); setCc([]); setMsg("");
+    setLine(staff && staff.length ? suggestLine(staff, me) : []);
+  };
   const autoTitle = form.titleOf ? form.titleOf(data) : `${form.label} · ${me.name}`;
   const finalTitle = (title || autoTitle || form.label).trim();
 
@@ -542,6 +569,11 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive }) {
           ) : <LineEditor line={line} setLine={setLine} cc={cc} setCc={setCc} staff={staff} me={me} company={company} cat={cat} />}
         </div>
         {msg && <div className="rounded-xl bg-white border border-[#DCE3EE] px-4 py-2.5 text-[13px] font-bold text-[#0F1A30]">⚠ {msg}</div>}
+        {!editId && (
+          <button type="button" onClick={resetAll} className="w-full h-11 rounded-2xl border border-[#DCE3EE] bg-white text-[13.5px] font-black text-[#3A4A66] hover:border-[#4B6CB7] inline-flex items-center justify-center gap-2">
+            <ShellIcon name="refresh" size={15} />입력 내용 초기화
+          </button>
+        )}
         <button type="button" onClick={submit} disabled={busy} className="w-full h-14 rounded-2xl text-white text-[15.5px] font-black shadow-[0_12px_26px_rgba(15,26,48,0.28)] disabled:opacity-60 inline-flex items-center justify-center gap-2" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
           <ShellIcon name={editId ? "pen" : "send"} size={17} />{busy ? (editId ? "저장 중…" : "상신 중…") : editId ? "수정 저장" : "결재 상신"}
         </button>
@@ -552,7 +584,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive }) {
             <span className="text-[12px] font-extrabold tracking-[0.2em] text-[#5A6A85]" style={{ fontFamily: MONO }}>LIVE PREVIEW</span>
             <span className="text-[12px] font-bold text-[#7A879C]">입력하는 대로 문서가 바로 만들어집니다</span>
           </div>
-          <ApprovalPaper form={form} data={data} title={finalTitle} line={line.map((s, i) => ({ ...s, status: i === 0 ? "pending" : "wait" }))} cc={cc} drafter={me} createdMs={Date.now()} staff={staff} />
+          <FitPaper><ApprovalPaper form={form} data={data} title={finalTitle} line={line.map((s, i) => ({ ...s, status: i === 0 ? "pending" : "wait" }))} cc={cc} drafter={me} createdMs={Date.now()} staff={staff} /></FitPaper>
         </div>
       </div>
     </div>
@@ -653,7 +685,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit }) {
     } catch (e) { window.alert(`처리 실패: ${e.message}`); } finally { setBusy(false); }
   };
   const print = async () => {
-    const canvas = await html2canvas(paperRef.current, { scale: 2, backgroundColor: "#ffffff" });
+    const canvas = await captureAt1x(paperRef.current, { scale: 2, backgroundColor: "#ffffff" });
     const w = window.open("", "_blank", "width=900,height=1000");
     if (!w) return;
     w.document.write(`<html><head><title>${d.docNo}</title><style>body{margin:0}img{width:100%}</style></head><body><img src="${canvas.toDataURL("image/png")}"><script>window.onload=function(){setTimeout(function(){window.print()},300)}</script></body></html>`);
@@ -664,7 +696,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit }) {
     <div className="fixed inset-0 z-[1000000] bg-[#0F1A30]/50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="w-full max-w-[1280px] h-[92vh] bg-[#F4F6FA] rounded-[24px] overflow-hidden flex shadow-[0_24px_60px_rgba(15,26,48,0.4)]" onClick={(e) => e.stopPropagation()}>
         <div className="flex-1 overflow-auto p-6 bg-[#E9EDF3]">
-          <ApprovalPaper paperRef={paperRef} form={form} data={d.data} title={d.title} line={d.line} cc={d.cc} drafter={d.drafter} docNo={d.docNo} createdMs={toMs(d.createdAt)} staff={staff} status={d.status} />
+          <FitPaper><ApprovalPaper paperRef={paperRef} form={form} data={d.data} title={d.title} line={d.line} cc={d.cc} drafter={d.drafter} docNo={d.docNo} createdMs={toMs(d.createdAt)} staff={staff} status={d.status} /></FitPaper>
           {(d.images || []).length > 0 && (
             <div className="max-w-[780px] mx-auto mt-4 bg-white rounded-2xl p-4">
               <div className="text-[12.5px] font-black text-[#7A879C] mb-2">첨부 {d.images.length}장</div>
@@ -936,7 +968,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   const cat = isCat ? catOf(page) : null;
   const heroTitle = isCat ? cat.label : page === "inbox" ? "결재함" : page === "mine" ? "내 기안함" : "결재선 관리";
   const heroEn = isCat ? cat.en : page === "inbox" ? "INBOX" : page === "mine" ? "MY DOCUMENTS" : "APPROVAL LINES";
-  const heroDesc = isCat ? cat.desc : page === "inbox" ? "내 차례인 문서를 결재하고, 진행·완료된 문서를 확인합니다" : page === "mine" ? "내가 올린 문서의 결재 진행 상황을 봅니다" : "자주 쓰는 결재 순서를 저장해 두고 문서 작성 때 불러옵니다";
+  const heroDesc = isCat ? cat.desc : page === "inbox" ? "결재 대기 문서를 처리하고 진행·완료 현황을 확인합니다." : page === "mine" ? "내가 올린 문서의 결재 진행 상황을 봅니다" : "자주 쓰는 결재 순서를 저장해 두고 문서 작성 때 불러옵니다";
   const kpis = isCat
     ? (page === "leave" ? [[leave?.ent ? `잔여 ${leave.ent.label}` : "잔여 연차", leave?.ent ? `${leave.remain}일` : "-"], ["진행 중", mineSets.pending.filter((d) => d.cat === "leave").length]] : page === "expense" ? [["이번 달 승인 금액", fmtWon(spentMonth)], ["진행 중", mineSets.pending.filter((d) => d.cat === "expense").length]] : [["진행 중", mineSets.pending.filter((d) => d.cat === "draft").length], ["완료", mineSets.approved.filter((d) => d.cat === "draft").length]])
     : [["결재 대기", sets.todo.length], ["내 진행 문서", mineSets.pending.length], ["반려", mineSets.rejected.length]];
