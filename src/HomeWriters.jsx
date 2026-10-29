@@ -60,16 +60,43 @@ export function NoticeWriter({ me, company, initial, onCancel, onSaved }) {
           <button type="button" onClick={save} disabled={busy} className="h-11 px-6 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black inline-flex items-center gap-2 disabled:opacity-50"><ShellIcon name="send" size={15} />{busy ? "저장 중…" : initial?.id ? "수정 저장" : "공지 등록"}</button>
         </div>
       </Hero>
-      <div className="grid gap-5" style={{ gridTemplateColumns: "1fr 320px" }}>
-        <div className="rounded-2xl bg-white border border-[#E3E8F0] p-6 space-y-5">
+      {/* ⭐ 2026-10-29 — 공개 대상·분류를 오른쪽 칸에서 입력 순서의 맨 앞(제목 위)으로 옮겼다.
+          분류가 자동 제목에도 쓰이므로 "누구에게 → 어떤 글 → 제목 → 내용" 순서로 위에서 아래로만 입력하면 된다. */}
+      <div className="rounded-2xl bg-white border border-[#E3E8F0] p-5 sm:p-6 space-y-5">
+        <div className="grid gap-4 md:grid-cols-[minmax(0,300px)_minmax(0,1fr)_auto] md:items-end">
           <div>
-            <Label hint="(비우면 날짜 + 분류로 자동)">제목</Label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={autoTitle} className={`${inp} h-12 text-[16px] font-bold`} />
+            <Label>공개 대상</Label>
+            <div role="radiogroup" aria-label="공개 대상" className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-[#F1F4F9] border border-[#E3E8F0]">
+              {[["internal", "내부용", "운송사 직원만"], ["shipper", "화주사 대상", "화주 화면에도"]].map(([v, l, s2]) => (
+                <button key={v} type="button" role="radio" aria-checked={audience === v} onClick={() => setAudience(v)}
+                  className={`rounded-lg px-3 py-1.5 text-left transition ${audience === v ? "bg-[#0F1A30] text-white shadow-[0_4px_12px_rgba(15,26,48,0.25)]" : "text-[#3A4A66] hover:bg-white"}`}>
+                  <div className="text-[13.5px] font-black leading-tight">{l}</div><div className={`text-[11px] leading-tight ${audience === v ? "text-white/60" : "text-[#9AA9C3]"}`}>{s2}</div>
+                </button>
+              ))}
+            </div>
           </div>
           <div>
-            <Label>내용</Label>
-            <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={16} placeholder="공지할 내용을 입력하세요" className={`${inp} py-3.5 leading-[1.85] resize-y min-h-[360px]`} />
+            <Label>분류</Label>
+            <div role="radiogroup" aria-label="분류" className="flex flex-wrap gap-1.5">
+              {["공지사항", "업데이트", "안내", "긴급", "인사발령"].map((c) => (
+                <button key={c} type="button" role="radio" aria-checked={category === c} onClick={() => setCategory(c)} className={`h-[46px] px-4 rounded-xl text-[13.5px] font-black border ${category === c ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE] hover:border-[#4B6CB7]"}`}>{c}</button>
+              ))}
+            </div>
           </div>
+          <div className="flex items-center gap-2.5 h-[46px] px-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0]" title="작성자는 올리는 사람으로 자동 기록됩니다">
+            <span className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-[13px] font-black" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}>{String(initial?.author || me.name || "?").slice(0, 1)}</span>
+            <div className="leading-tight"><div className="text-[13.5px] font-black text-[#0F1A30]">{initial?.author || me.name}</div><div className="text-[11px] text-[#7A879C]">작성자 · 자동</div></div>
+          </div>
+        </div>
+        <div>
+          <Label hint="(비우면 날짜 + 분류로 자동)">제목</Label>
+          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={autoTitle} className={`${inp} h-12 text-[16px] font-bold`} />
+        </div>
+        <div>
+          <Label>내용</Label>
+          <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={16} placeholder="공지할 내용을 입력하세요" className={`${inp} py-3.5 leading-[1.85] resize-y min-h-[360px]`} />
+        </div>
+        <div className="flex items-end justify-between gap-4 flex-wrap">
           <div>
             <Label hint="(1장)">이미지</Label>
             <div className="flex items-center gap-3">
@@ -82,32 +109,10 @@ export function NoticeWriter({ me, company, initial, onCancel, onSaved }) {
               <input ref={fileRef} type="file" accept="image/*" hidden onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) setImage(await compressImage(f, 1400, 0.8).catch(() => "")); }} />
             </div>
           </div>
-        </div>
-        <div className="space-y-4">
-          <div className="rounded-2xl bg-white border border-[#E3E8F0] p-5">
-            <Label>작성자</Label>
-            <div className="flex items-center gap-3 px-3.5 py-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0]">
-              <span className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-black" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}>{String(initial?.author || me.name || "?").slice(0, 1)}</span>
-              <div><div className="text-[14.5px] font-black text-[#0F1A30]">{initial?.author || me.name}</div><div className="text-[12px] text-[#7A879C]">{me.position || ""} · 자동 기록</div></div>
-            </div>
-          </div>
-          <div className="rounded-2xl bg-white border border-[#E3E8F0] p-5">
-            <Label>공개 대상</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {[["internal", "내부용", "운송사 직원만"], ["shipper", "화주사 대상", "화주 화면에도 표시"]].map(([v, l, s]) => (
-                <button key={v} type="button" onClick={() => setAudience(v)} className={`rounded-xl px-3 py-2.5 text-left border transition ${audience === v ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`}>
-                  <div className="text-[13.5px] font-black">{l}</div><div className={`text-[11.5px] ${audience === v ? "text-white/60" : "text-[#9AA9C3]"}`}>{s}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="rounded-2xl bg-white border border-[#E3E8F0] p-5">
-            <Label>분류</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {["공지사항", "업데이트", "안내", "긴급", "인사발령"].map((c) => (
-                <button key={c} type="button" onClick={() => setCategory(c)} className={`h-9 px-3.5 rounded-xl text-[13px] font-black border ${category === c ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`}>{c}</button>
-              ))}
-            </div>
+          {/* 입력을 마친 자리에서 바로 등록 — 위 머리줄까지 마우스를 올리지 않아도 된다 */}
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={onCancel} className="h-11 px-5 rounded-xl bg-white border border-[#DCE3EE] text-[#3A4A66] text-[13.5px] font-bold">취소</button>
+            <button type="button" onClick={save} disabled={busy} className="h-11 px-6 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black inline-flex items-center gap-2 disabled:opacity-50"><ShellIcon name="send" size={15} />{busy ? "저장 중…" : initial?.id ? "수정 저장" : "공지 등록"}</button>
           </div>
         </div>
       </div>
