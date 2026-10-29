@@ -1,6 +1,6 @@
 import { loadTmap } from "../../tmapLoader";
 import { drawTmapTrafficRoute } from "../../mapStyle";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { db, auth } from "../../firebase";
 import {
   addDoc,
@@ -617,6 +617,33 @@ export default function ShipperOrder({ editData, onClose }) {
 
   // 운송사 프로그램의 "오더복사" 기능과 동일한 규칙: 날짜는 오늘로, 상하차시간은 원본과 동일하게,
   // 화물내용/톤수/파렛트사는 새로 입력하도록 비워둔다.
+  // ⭐ 오른쪽 정보 패널용 — 우리 회사 최근 오더(오더 불러오기와 같은 조회, 화면을 열 때 1번)
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  useEffect(() => {
+    if (onClose || !company) return;
+    let alive = true;
+    setHistoryLoading(true);
+    getDocs(query(collection(db, "orders"), where("shipperCompany", "==", company), limit(200)))
+      .then((snap) => {
+        if (!alive) return;
+        setHistory(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((o) => o.지급방식 !== "손실")
+          .sort((a, b) => ((b.createdAt?.seconds || b.createdAt || 0) - (a.createdAt?.seconds || a.createdAt || 0)) || String(b.등록일 || b.상차일 || "").localeCompare(String(a.등록일 || a.상차일 || ""))));
+      })
+      .catch(() => alive && setHistory([]))
+      .finally(() => alive && setHistoryLoading(false));
+    return () => { alive = false; };
+  }, [company, onClose]);
+  // 자주 쓰는 상/하차지 한 번 누르면 이름·주소·담당자를 채운다
+  const pickPlace = (type, p) => {
+    setForm((f) => ({
+      ...f,
+      [`${type}지명`]: p.name, [`${type}지주소`]: p.addr,
+      [`${type}담당자명`]: p.manager || f[`${type}담당자명`] || "", [`${type}담당자번호`]: p.phone || f[`${type}담당자번호`] || "",
+    }));
+    setErrors((e) => ({ ...e, [`${type}지명`]: false, [`${type}지주소`]: false }));
+  };
+
   const applyOrder = async (item) => {
     setForm(p => ({
       ...p,
@@ -743,7 +770,7 @@ export default function ShipperOrder({ editData, onClose }) {
   };
 
   return (
-    <div className={`flex gap-5 w-full ${onClose ? "p-6 max-w-[1200px]" : ""}`}>
+    <div className={onClose ? "flex gap-5 w-full p-6 max-w-[1200px]" : "grid grid-cols-1 xl:grid-cols-2 gap-5 w-full items-start"}>
 
       {/* 왼쪽: 입력 폼 */}
       <div className="flex-1 min-w-0 bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] overflow-hidden">
@@ -1144,8 +1171,14 @@ export default function ShipperOrder({ editData, onClose }) {
         </div>
       </div>
 
-      {/* 오른쪽: 오더 불러오기 */}
-      <div className="w-[420px] shrink-0 bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] p-5 flex flex-col self-start sticky top-[84px]">
+      {/* 오른쪽(2026-10-29 50:50) — 등록 체크리스트·최근 등록·자주 쓰는 상/하차지 + 오더 불러오기 */}
+      <div className={onClose ? "contents" : "min-w-0 space-y-4 xl:sticky xl:top-[84px]"}>
+      {!onClose && (
+        <OrderSidePanel form={form} cargoRows={cargoRows} company={companyEditable ? companyEdit : company}
+          history={history} historyLoading={historyLoading} onApply={applyOrder} onPickPlace={pickPlace} />
+      )}
+      {/* 오더 불러오기 */}
+      <div className={`${onClose ? "w-[420px] shrink-0 self-start sticky top-[84px]" : "w-full"} bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] p-5 flex flex-col`}>
         <div className="flex items-center gap-2 mb-4 pb-3 border-b border-[#EEF1F6]">
           <span className="w-1.5 h-1.5 rotate-45 bg-[#2D4C82]" />
           <span className="text-[10px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: ORDER_MONO }}>HISTORY</span>
@@ -1200,6 +1233,7 @@ export default function ShipperOrder({ editData, onClose }) {
             </div>
           ))}
         </div>
+      </div>
       </div>
 
       {/* 경로 미리보기 팝업 */}
@@ -1461,5 +1495,141 @@ function ViaStopModal({ type, list, onSave, onClose, orderDate = "" }) {
         </div>
       </div>
     </div>
+  );
+}
+
+
+// ─────────────────────────── 오른쪽 정보 패널(2026-10-29) ───────────────────────────
+// 꾸밈 없이 바로 쓰는 것만: ① 등록 체크리스트(필수 항목 진행) ② 진행 단계 안내 ③ 최근 등록 ④ 자주 쓰는 상·하차지
+const SIDE_CARD = "bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)]";
+function SideHead({ code, title, right }) {
+  return (
+    <div className="flex items-center gap-2 px-5 h-[50px] border-b border-[#EEF1F6]">
+      <span className="w-1.5 h-1.5 rotate-45 bg-[#2D4C82]" />
+      <span className="text-[10px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: ORDER_MONO }}>{code}</span>
+      <span className="text-[15px] font-black text-[#0F1A30]">{title}</span>
+      <span className="ml-auto">{right}</span>
+    </div>
+  );
+}
+function OrderSidePanel({ form, cargoRows, company, history, historyLoading, onApply, onPickPlace }) {
+  const [placeTab, setPlaceTab] = useState("상차");
+  const checks = [
+    ["운송사", !!form.운송사명?.trim()],
+    ["거래처", !!company?.trim()],
+    ["상차지", !!(form.상차지명?.trim() && form.상차지주소?.trim())],
+    ["하차지", !!(form.하차지명?.trim() && form.하차지주소?.trim())],
+    ["일정", !!(form.상차일 && form.하차일)],
+    ["차량", !!(form.차량종류 && String(form.차량톤수 || "").trim())],
+    ["화물", cargoRows.some((r) => r.qty)],
+    ["상하차·결제", !!(form.상차방법 && form.하차방법 && form.지급방식)],
+  ];
+  const done = checks.filter(([, ok]) => ok).length;
+  const pct = Math.round((done / checks.length) * 100);
+  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const active = history.filter((o) => String(o.상차일 || "").slice(0, 10) >= today && !["취소", "배차취소"].includes(o.상태));
+  const stat = {
+    요청: active.filter((o) => o.화주사확인대기 && !(o.차량번호 || "").trim()).length,
+    배차완료: active.filter((o) => (o.차량번호 || "").trim()).length,
+  };
+  stat.배차중 = active.length - stat.요청 - stat.배차완료;
+  const places = useMemo(() => {
+    const agg = (type) => {
+      const m = new Map();
+      history.forEach((o) => {
+        const name = (o[`${type}지명`] || "").trim(); if (!name) return;
+        const addr = (o[`${type}지주소`] || "").trim();
+        const k = `${name}|${addr}`;
+        const e = m.get(k) || { name, addr, cnt: 0, manager: o[`${type}담당자명`] || "", phone: o[`${type}담당자번호`] || "" };
+        e.cnt += 1; m.set(k, e);
+      });
+      return [...m.values()].sort((a, b) => b.cnt - a.cnt).slice(0, 6);
+    };
+    return { 상차: agg("상차"), 하차: agg("하차") };
+  }, [history]);
+  const recent = history.slice(0, 5);
+  return (
+    <>
+      <div className={SIDE_CARD}>
+        <SideHead code="CHECK" title="등록 체크리스트" right={<span className="text-[12px] font-extrabold text-[#5B6B85]" style={{ fontFamily: ORDER_MONO }}>{done}/{checks.length}</span>} />
+        <div className="p-5">
+          <div className="h-2 rounded-full bg-[#EEF2F8] overflow-hidden mb-3.5">
+            <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: "linear-gradient(90deg,#2D4C82,#1B2B4B)" }} />
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+            {checks.map(([l, ok]) => (
+              <div key={l} className={`flex items-center gap-1.5 h-9 px-2.5 rounded-[10px] text-[12.5px] font-bold border ${ok ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#7A89A3] border-[#E3E8F0]"}`}>
+                <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${ok ? "bg-white/20" : "border border-[#C9D4E6]"}`}>{ok ? "✓" : ""}</span>{l}
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 grid grid-cols-4 gap-1.5 text-center">
+            {[["요청", "운송사 확인 대기"], ["배차중", "차량 배정 중"], ["배차완료", "차량 배정됨"], ["운송", "상차~하차"]].map(([l, d], i) => (
+              <div key={l} className="relative">
+                <div className={`mx-auto w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black ${i === 0 ? "bg-[#1B2B4B] text-white" : "bg-[#EEF2F8] text-[#1B2B4B]"}`} style={{ fontFamily: ORDER_MONO }}>{i + 1}</div>
+                <div className="text-[12.5px] font-black text-[#0F1A30] mt-1">{l}</div>
+                <div className="text-[10.5px] text-[#9AA9C3] leading-tight">{d}</div>
+                {stat[l] != null && <div className="mt-1 text-[12px] font-extrabold text-[#2D4C82]" style={{ fontFamily: ORDER_MONO }}>{stat[l]}건</div>}
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-[11.5px] text-[#7A89A3] leading-relaxed">등록하면 운송사에 바로 전달되고, 차량이 배정되면 운송목록과 알림으로 기사·차량번호를 알려드립니다. (숫자: 오늘 이후 상차 오더)</p>
+        </div>
+      </div>
+
+      <div className={SIDE_CARD}>
+        <SideHead code="PLACES" title="자주 쓰는 상·하차지" right={
+          <div className="inline-flex p-0.5 rounded-[9px] bg-[#EEF2F8]">
+            {["상차", "하차"].map((t) => (
+              <button key={t} type="button" onClick={() => setPlaceTab(t)} className={`h-7 px-3 rounded-[7px] text-[12px] font-extrabold ${placeTab === t ? "bg-[#1B2B4B] text-white" : "text-[#3A4A66]"}`}>{t}지</button>
+            ))}
+          </div>
+        } />
+        <div className="p-3">
+          {historyLoading ? <div className="py-6 text-center text-[13px] text-[#9AA9C3]">불러오는 중…</div>
+            : places[placeTab].length === 0 ? <div className="py-6 text-center text-[13px] text-[#9AA9C3]">아직 등록 기록이 없습니다</div>
+            : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {places[placeTab].map((p) => (
+                  <button key={`${p.name}|${p.addr}`} type="button" onClick={() => onPickPlace(placeTab, p)} title={`${placeTab}지로 넣기`}
+                    className="text-left px-3 py-2.5 rounded-[12px] border border-[#E3E8F0] hover:border-[#4B6CB7] hover:bg-[#F5F8FD] transition">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[13.5px] font-black text-[#0F1A30] truncate">{p.name}</span>
+                      <span className="shrink-0 text-[11px] font-extrabold text-[#5B6B85]" style={{ fontFamily: ORDER_MONO }}>{p.cnt}회</span>
+                    </div>
+                    <div className="text-[11.5px] text-[#7A89A3] truncate">{p.addr || "주소 없음"}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          <div className="px-2 pt-2 text-[11px] text-[#9AA9C3]">누르면 왼쪽 {placeTab}지 이름·주소·담당자가 채워집니다</div>
+        </div>
+      </div>
+
+      <div className={SIDE_CARD}>
+        <SideHead code="RECENT" title="최근 등록" right={<span className="text-[11.5px] text-[#9AA9C3]">누르면 내용 복사</span>} />
+        <div className="p-3">
+          {historyLoading ? <div className="py-6 text-center text-[13px] text-[#9AA9C3]">불러오는 중…</div>
+            : recent.length === 0 ? <div className="py-6 text-center text-[13px] text-[#9AA9C3]">최근 등록한 오더가 없습니다</div>
+            : (
+              <div className="divide-y divide-[#EEF1F6]">
+                {recent.map((o) => {
+                  const ok = (o.차량번호 || "").trim();
+                  return (
+                    <button key={o.id} type="button" onClick={() => onApply(o)} className="w-full flex items-center gap-3 px-2 py-2.5 text-left hover:bg-[#F5F8FD] rounded-[10px]">
+                      <span className="shrink-0 w-[74px] text-[12px] font-bold text-[#5B6B85]" style={{ fontFamily: ORDER_MONO }}>{String(o.상차일 || "").slice(5, 10).replace("-", "/") || "-"}</span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[13.5px] font-black text-[#0F1A30] truncate">{o.상차지명 || "-"} → {o.하차지명 || "-"}</span>
+                        <span className="block text-[11.5px] text-[#7A89A3] truncate">{[o.차량톤수, o.차량종류, o.운송사명].filter(Boolean).join(" · ")}</span>
+                      </span>
+                      <span className={`shrink-0 px-2 py-0.5 rounded-md text-[11px] font-extrabold ${ok ? "bg-[#1B2B4B] text-white" : "bg-[#DCE6F7] text-[#1B2B4B]"}`}>{ok ? "배차완료" : "배차중"}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+        </div>
+      </div>
+    </>
   );
 }
