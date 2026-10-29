@@ -196,14 +196,19 @@ const getTransportEditEntries = (order) => {
   return hist.filter(h => Math.abs((h.at || 0) - maxAt) < 5000);
 };
 
+// ⭐ 2026-10-29 리디자인 — 상태색도 네이비 단계로만(알록달록 금지)
+const ST_DONE = { bg: "linear-gradient(135deg,#1B2B4B,#2D4C82)", dot: "#CFE0FF", text: "#FFFFFF", ring: "rgba(143,176,240,0.45)" };
+const ST_RUN = { bg: "#DCE6F7", dot: "#2D4C82", text: "#1B2B4B", ring: "#C9D4E6" };
+const ST_REQ = { bg: "#FFFFFF", dot: "#4B6CB7", text: "#1B2B4B", ring: "#8FB0F0" };
+const ST_OFF = { bg: "#E9EDF3", dot: "#7A89A3", text: "#5B6B85", ring: "#D5DEEC" };
 const STATUS_DOT_STYLE = {
-  취소: { dot: "#f87171", text: "#fecaca", ring: "rgba(248,113,113,0.4)" },
-  배차완료: { dot: "#34d399", text: "#a7f3d0", ring: "rgba(52,211,153,0.4)" },
-  배차요청: { dot: "#fbbf24", text: "#fde68a", ring: "rgba(251,191,36,0.4)" },
-  요청보류: { dot: "#f87171", text: "#fecaca", ring: "rgba(248,113,113,0.4)" },
-  배차중: { dot: "#60a5fa", text: "#bfdbfe", ring: "rgba(96,165,250,0.4)" },
-  취소요청: { dot: "#f87171", text: "#fecaca", ring: "rgba(248,113,113,0.4)" },
-  재배차요청: { dot: "#fb923c", text: "#fed7aa", ring: "rgba(251,146,60,0.4)" },
+  취소: ST_OFF,
+  배차완료: ST_DONE,
+  배차요청: ST_REQ,
+  요청보류: ST_OFF,
+  배차중: ST_RUN,
+  취소요청: ST_OFF,
+  재배차요청: ST_REQ,
 };
 
 // 배차완료 이후 화주사가 걸어둔 요청(오더취소/기사변경)이 아직 운송사 승인 대기중일 때는
@@ -236,22 +241,20 @@ const getOrderSortTime = (o) => {
 };
 
 function StatusBadge({ order, className = "" }) {
-  const { label, blink, dot, text, ring } = getStatusBadge(order);
+  const { label, blink, dot, text, ring, bg } = getStatusBadge(order);
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-bold tracking-wide whitespace-nowrap ${className}`}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[8px] text-[11px] font-extrabold tracking-wide whitespace-nowrap ${className}`}
       style={{
-        background: "linear-gradient(135deg,#1e3a5f,#0f2035)",
+        background: bg,
         color: text,
         border: `1px solid ${ring}`,
-        boxShadow: "0 1px 2px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.06)",
       }}
     >
       <span
         className="w-1.5 h-1.5 rounded-full shrink-0"
         style={{
           background: dot,
-          boxShadow: `0 0 4px ${dot}`,
           animation: blink ? "dotPulse 1.4s ease-in-out infinite" : "none",
         }}
       />
@@ -394,7 +397,14 @@ const parseTonnage = (val = "") => {
 const 차량종류목록 = ["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "오토바이"];
 const 화물단위목록 = ["파레트", "박스", "없음", "개"];
 const 톤수단위목록 = ["톤", "kg", "없음"];
-const NAVY = "#1e3a5f";
+const NAVY = "#1B2B4B";
+const M_MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+function MClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
+  const p = (n) => String(n).padStart(2, "0");
+  return <span className="text-[15px] font-black text-white tabular-nums" style={{ fontFamily: M_MONO }}>{p(now.getHours())}:{p(now.getMinutes())}<span className="text-[11px] text-white/40 ml-0.5">{p(now.getSeconds())}</span></span>;
+}
 const EMPTY_FORM = () => ({
   운송사명: "", 운송사코드: "",
   상차지명: "", 상차지주소: "", 상차지담당자: "", 상차지담당자번호: "",
@@ -740,9 +750,11 @@ export default function ShipperMobileApp() {
         <div className="fixed inset-0 z-40">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowMenu(false)} />
           <div className="absolute left-0 top-0 bottom-0 w-64 bg-white shadow-xl flex flex-col">
-            <div className="px-4 py-4 border-b" style={{ background: NAVY }}>
-              <div className="text-white font-bold text-base mb-1">KP-Flow 화주</div>
-              <div className="text-blue-200 text-xs">{menuTime}</div>
+            <div className="relative overflow-hidden px-5 py-5" style={{ background: "radial-gradient(120% 90% at 20% 0%, #22396A 0%, #0F1A30 60%, #0B1428 100%)" }}>
+              <span className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "16px 16px" }} />
+              <div className="relative text-[9.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>KP-FLOW · SHIPPER</div>
+              <div className="relative text-white font-black text-[17px] mt-1">{userData.companyName || "화주사"}</div>
+              <div className="relative text-white/55 text-[12px] mt-0.5" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{menuTime}</div>
             </div>
             <div className="flex-1 px-4 py-3 space-y-1 overflow-y-auto">
               <div className="text-xs text-gray-400 font-semibold px-2 py-1 mt-1">메뉴</div>
@@ -761,7 +773,7 @@ export default function ShipperMobileApp() {
             <div className="border-t px-4 py-3">
               <div className="text-xs text-gray-400 mb-0.5">{userData.companyName}</div>
               <div className="text-sm text-gray-600 mb-3">{user.email}</div>
-              <button onClick={logout} className="w-full py-2 bg-red-500 text-white rounded-lg text-sm font-semibold">
+              <button onClick={logout} className="w-full h-10 bg-[#0F1A30] text-white rounded-[11px] text-sm font-extrabold">
                 로그아웃
               </button>
             </div>
@@ -770,10 +782,16 @@ export default function ShipperMobileApp() {
       )}
 
       {/* 헤더 */}
-      <div className="flex items-center justify-between px-4 py-3 sticky top-0 z-30" style={{ background: NAVY }}>
-        <button onClick={() => setShowMenu(true)} className="text-white text-sm font-semibold">MENU</button>
-        <div className="text-white font-bold text-base">KP-Flow 화주</div>
-        <div className="flex items-center gap-3">
+      <div className="relative overflow-hidden flex items-center justify-between px-4 h-[58px] sticky top-0 z-30 shadow-[0_6px_18px_rgba(11,20,40,0.25)]" style={{ background: "linear-gradient(135deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+        <span className="absolute inset-0 opacity-[0.07] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "16px 16px" }} />
+        <button onClick={() => setShowMenu(true)} className="relative w-9 h-9 rounded-[11px] bg-white/10 ring-1 ring-white/15 flex items-center justify-center text-white" aria-label="메뉴">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h10" /></svg>
+        </button>
+        <div className="relative text-center leading-none">
+          <div className="text-white font-black text-[16px] tracking-[0.06em]">KP-FLOW</div>
+          <div className="text-[9px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mt-1" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>SHIPPER</div>
+        </div>
+        <div className="relative flex items-center gap-3">
           <button onClick={() => setShowMessenger(true)} className="relative text-white/90">
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -784,7 +802,7 @@ export default function ShipperMobileApp() {
               </span>
             )}
           </button>
-          <button onClick={() => navTo("mypage")} className="text-white text-xs opacity-80">
+          <button onClick={() => navTo("mypage")} className="text-white text-[12px] font-bold px-2.5 h-8 rounded-[10px] bg-white/10 ring-1 ring-white/15">
             {userData.name || user.email?.split("@")[0]}
           </button>
         </div>
@@ -850,10 +868,10 @@ export default function ShipperMobileApp() {
       </div>
 
       {/* 하단 탭바 */}
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-t flex z-30">
-        <TabBtn label="홈" active={page === "home"} onClick={() => setPage("home")} />
-        <TabBtn label="배차요청" active={page === "order"} onClick={() => setPage("order")} />
-        <TabBtn label="운송내역" active={page === "history"} onClick={() => setPage("history")} />
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white/95 backdrop-blur border-t border-[#E3E8F0] flex z-30 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-6px_20px_rgba(15,26,48,0.06)]">
+        <TabBtn label="홈" icon="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z" active={page === "home"} onClick={() => setPage("home")} />
+        <TabBtn label="배차요청" icon="M12 5v14M5 12h14" active={page === "order"} onClick={() => setPage("order")} />
+        <TabBtn label="운송내역" icon="M1 3h15v13H1zM16 8h4l3 3v5h-7zM5.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5M18.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5" active={page === "history"} onClick={() => setPage("history")} />
       </div>
     </div>
   );
@@ -883,38 +901,81 @@ function ShipperHomeM({ kpi, orders, onSelect, onGoOrder, onEdit, user }) {
       })
       .reduce((sum, o) => sum + Number(o.청구운임 || 0), 0);
   }, [orders]);
+  const week = useMemo(() => {
+    const t = todayStr();
+    return Array.from({ length: 14 }, (_, i) => {
+      const d = new Date(`${t}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + i - 13);
+      const k = d.toISOString().slice(0, 10);
+      const v = orders.filter((o) => String(o.상차일 || "").slice(0, 10) === k && o.상태 !== "취소").length;
+      return { k, v, on: k === t, l: i % 2 === 1 ? String(d.getUTCDate()) : "" };
+    });
+  }, [orders]);
+  const weekMax = Math.max(1, ...week.map((d) => d.v));
+  const todayRows = orders.filter((o) => String(o.상차일 || "").slice(0, 10) === todayStr() && o.상태 !== "취소");
+  const todayAll = todayRows.length;
+  const todayDone = todayRows.filter((o) => o.차량번호 && String(o.차량번호).trim()).length;
 
   return (
     <div className="px-4 py-4 space-y-4">
-      <div className="rounded-2xl p-4" style={{ background: "linear-gradient(135deg, #0f1f33, #1e3a5f)" }}>
-        <div className="text-[11px] font-semibold tracking-wide mb-1" style={{ color: "rgba(191,219,254,0.7)" }}>
-          이번달 예상 정산액
+      {/* ⭐ 2026-10-29 리디자인 — 운송사 홈과 같은 네이비 관제 데크 */}
+      <div className="relative overflow-hidden rounded-[22px] p-4 text-white shadow-[0_16px_34px_rgba(11,20,40,0.3)]"
+        style={{ background: "linear-gradient(rgba(143,176,240,.05) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.05) 1px, transparent 1px) 0 0/22px 22px, radial-gradient(400px 200px at 90% -10%, rgba(75,108,183,.45), transparent 60%), linear-gradient(160deg,#0B1428 0%,#111F3B 55%,#0E1830 100%)" }}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-[9.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: M_MONO }}>SHIPPER DECK</span>
+            <span className="inline-flex items-center gap-1 px-1.5 py-[1px] rounded-full border border-[#8FB0F0]/40 text-[9px] font-extrabold tracking-[0.14em] text-[#CFE0FF]" style={{ fontFamily: M_MONO }}>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#CFE0FF] animate-pulse" />LIVE
+            </span>
+          </div>
+          <MClock />
         </div>
-        <div className="text-3xl font-bold text-white tabular-nums" style={{ fontFamily: "monospace", textShadow: "0 0 10px rgba(96,165,250,0.45)" }}>
+        <div className="mt-3 text-[11.5px] font-bold text-white/55">이번달 예상 정산액</div>
+        <div className="text-[30px] font-black tabular-nums leading-tight" style={{ fontFamily: M_MONO }}>
           <OdometerNumber value={monthAmount} suffix="원" />
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <KpiCard title="전체 운송" value={kpi.total} color="text-gray-800" />
-        <KpiCard title="오늘 운송" value={kpi.today} color="text-blue-600" />
-        <KpiCard title="배차중" value={kpi.배차중} color="text-orange-500" />
-        <KpiCard title="배차완료" value={kpi.완료} color="text-emerald-600" />
+        <div className="mt-3 flex items-end gap-[5px] h-12">
+          {week.map((d) => (
+            <div key={d.k} className="flex-1 flex flex-col items-center gap-1">
+              <div className="w-full rounded-t-[4px]" style={{ height: `${Math.max(3, (d.v / weekMax) * 34)}px`, background: d.on ? "linear-gradient(180deg,#CFE0FF,#6E95E8)" : "rgba(110,149,232,.35)" }} />
+              <span className={`text-[9px] ${d.on ? "text-[#CFE0FF] font-extrabold" : "text-white/35"}`} style={{ fontFamily: M_MONO }}>{d.l}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 grid grid-cols-4 gap-1.5">
+          {[["전체", kpi.total, "TOTAL"], ["오늘", kpi.today, "TODAY"], ["배차중", kpi.배차중, "RUN"], ["완료", kpi.완료, "DONE"]].map(([l, v, en], i) => (
+            <div key={en} className={`rounded-[12px] px-2 py-2 border ${i === 1 ? "border-[#8FB0F0]/45" : "border-[#8FB0F0]/15"}`}
+              style={{ background: i === 1 ? "linear-gradient(140deg, rgba(75,108,183,.55), rgba(45,76,130,.25))" : "rgba(255,255,255,.04)" }}>
+              <div className="text-[8.5px] font-extrabold tracking-[0.16em] text-white/40" style={{ fontFamily: M_MONO }}>{en}</div>
+              <div className="text-[19px] font-black leading-tight tabular-nums" style={{ fontFamily: M_MONO }}><OdometerNumber value={v} /></div>
+              <div className="text-[10.5px] font-bold text-white/55">{l}</div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3">
+          <div className="flex justify-between text-[11px] font-bold text-white/60 mb-1.5">
+            <span>오늘 배차 진행</span>
+            <span className="text-white" style={{ fontFamily: M_MONO }}>{todayDone}/{todayAll} · {todayAll ? Math.round((todayDone / todayAll) * 100) : 0}%</span>
+          </div>
+          <div className="h-[7px] rounded-full bg-[#8FB0F0]/15 overflow-hidden">
+            <div className="h-full rounded-full" style={{ width: `${todayAll ? (todayDone / todayAll) * 100 : 0}%`, background: "linear-gradient(90deg,#2D4C82,#CFE0FF)", boxShadow: "0 0 10px #8FB0F0" }} />
+          </div>
+        </div>
       </div>
 
       <button onClick={onGoOrder}
-        className="w-full py-4 text-white rounded-2xl font-bold text-base shadow"
-        style={{ background: NAVY }}>
-        + 배차요청
+        className="w-full h-14 text-white rounded-[18px] font-black text-[16px] flex items-center justify-center gap-2 shadow-[0_10px_24px_rgba(27,43,75,0.3)]"
+        style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+        배차요청
       </button>
 
       <div>
         {/* 날짜 조회 */}
         <div className="flex gap-2 mb-2">
           <input type="date" value={viewDate} onChange={(e) => setViewDate(e.target.value)}
-            className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm" />
+            className="flex-1 border border-[#D5DEEC] bg-white rounded-[11px] px-3 h-10 text-sm font-semibold text-[#0F1A30]" />
           <button onClick={() => setQueriedDate(viewDate)}
-            className="px-3 py-1.5 text-xs font-semibold text-white rounded-lg shrink-0"
+            className="px-4 h-10 text-xs font-extrabold text-white rounded-[11px] shrink-0"
             style={{ background: NAVY }}>
             조회
           </button>
@@ -925,8 +986,11 @@ function ShipperHomeM({ kpi, orders, onSelect, onGoOrder, onEdit, user }) {
             </button>
           )}
         </div>
-        <div className="text-sm font-bold text-gray-700 mb-2">
-          {queriedDate === todayStr() ? "오늘" : queriedDate} 운송 ({viewOrders.length}건)
+        <div className="flex items-center gap-2 mb-2 mt-1">
+          <span className="w-1.5 h-1.5 rotate-45 bg-[#2D4C82]" />
+          <span className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: M_MONO }}>BOARD</span>
+          <span className="text-[15px] font-black text-[#0F1A30]">{queriedDate === todayStr() ? "오늘" : queriedDate} 운송</span>
+          <span className="ml-auto text-[12px] font-extrabold text-[#5B6B85]" style={{ fontFamily: M_MONO }}>{viewOrders.length}건</span>
         </div>
         {viewOrders.length === 0 ? (
           <div className="text-center text-gray-400 text-sm py-6 bg-white rounded-xl border">
@@ -1829,7 +1893,7 @@ function ShipperDetailM({ order, onBack, onEdit, user }) {
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-[16px] border border-[#E3E8F0] overflow-hidden shadow-[0_4px_14px_rgba(15,26,48,0.05)]">
         <DetailGroup label="기본정보">
           <MDetailRow label="거래처" value={order.거래처명 || "-"} />
           <MDetailRow label="상차" value={`${order.상차일 || "-"} ${timeLabel(order.상차시간, order.상차시간구분)}`} />
@@ -1980,7 +2044,7 @@ function ShipperMyPageM({ user, userData, onBack, showToast, orders }) {
       </div>
 
       {/* 프로필 */}
-      <div className="rounded-2xl p-5 text-center text-white" style={{ background: NAVY }}>
+      <div className="relative overflow-hidden rounded-[22px] p-5 text-center text-white shadow-[0_16px_34px_rgba(11,20,40,0.3)]" style={{ background: "linear-gradient(rgba(143,176,240,.06) 1px, transparent 1px) 0 0/20px 20px, linear-gradient(90deg, rgba(143,176,240,.06) 1px, transparent 1px) 0 0/20px 20px, radial-gradient(300px 160px at 85% -10%, rgba(75,108,183,.5), transparent 60%), linear-gradient(160deg,#0B1428,#16264A)" }}>
         <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold mx-auto mb-2">
           {(userData.name || user.email || "?")[0].toUpperCase()}
         </div>
@@ -2465,10 +2529,10 @@ function ShipperSettlementM({ orders = [], user, userData, onBack }) {
 
       <div className="bg-white border border-gray-200 rounded-xl p-3 space-y-2">
         <div className="flex gap-2">
-          <input type="date" className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm"
+          <input type="date" className="flex-1 min-w-0 w-0 border border-[#D5DEEC] rounded-[11px] px-2 h-10 text-sm font-semibold"
             value={startDate} onChange={(e) => setStartDate(e.target.value)} />
           <span className="text-gray-400 self-center text-sm">~</span>
-          <input type="date" className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm"
+          <input type="date" className="flex-1 min-w-0 w-0 border border-[#D5DEEC] rounded-[11px] px-2 h-10 text-sm font-semibold"
             value={endDate} onChange={(e) => setEndDate(e.target.value)} />
         </div>
         <div className="flex gap-2">
@@ -2603,7 +2667,7 @@ function ShipperSettingsM({ onBack, showToast, uiScale, setUiScale }) {
         <div className="font-bold text-base">설정</div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-[16px] border border-[#E3E8F0] overflow-hidden shadow-[0_4px_14px_rgba(15,26,48,0.05)]">
         <SettingsGroup label="화면">
           <MRow label="글씨 크기">
             <div className="flex gap-1.5">
@@ -2862,19 +2926,23 @@ function OrderCardActionSheet({ order, onEdit, onDelete, onSwapDriver, onClose }
   );
 }
 
-function KpiCard({ title, value, color }) {
+function KpiCard({ title, value }) {
+  // 숫자는 굴러가는 숫자로, "10건"/"3,220,000원" 같은 글자는 그대로 보여준다(예전엔 글자를 넘기면 0으로 표시되던 문제).
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3">
-      <div className="text-xs text-gray-400 mb-1">{title}</div>
-      <div className={`text-2xl font-bold tabular-nums ${color}`}><OdometerNumber value={value} /></div>
+    <div className="relative overflow-hidden rounded-[16px] px-3.5 py-3 text-white border border-[#8FB0F0]/15 shadow-[0_8px_20px_rgba(11,20,40,0.18)]"
+      style={{ background: "linear-gradient(160deg,#0B1428 0%,#16264A 100%)" }}>
+      <div className="text-[11px] font-bold text-white/55 mb-1">{title}</div>
+      <div className="text-[21px] font-black tabular-nums leading-tight truncate" style={{ fontFamily: M_MONO }}>
+        {typeof value === "number" ? <OdometerNumber value={value} /> : value}
+      </div>
     </div>
   );
 }
 
 function MSection({ title, children }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-3 py-2 border-b text-xs font-bold text-white" style={{ background: NAVY }}>{title}</div>
+    <div className="bg-white rounded-[16px] border border-[#E3E8F0] overflow-hidden shadow-[0_4px_14px_rgba(15,26,48,0.05)]">
+      <div className="px-3.5 py-2.5 text-[12px] font-extrabold text-white tracking-tight" style={{ background: "linear-gradient(135deg,#0F1A30,#1B2B4B 60%,#2D4C82)" }}>{title}</div>
       <div className="divide-y">{children}</div>
     </div>
   );
@@ -2891,8 +2959,8 @@ function MRow({ label, children }) {
 
 function MCard({ title, children }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      {title && <div className="px-3 py-2 border-b text-xs font-bold text-white" style={{ background: NAVY }}>{title}</div>}
+    <div className="bg-white rounded-[16px] border border-[#E3E8F0] overflow-hidden shadow-[0_4px_14px_rgba(15,26,48,0.05)]">
+      {title && <div className="px-3.5 py-2.5 text-[12px] font-extrabold text-white tracking-tight" style={{ background: "linear-gradient(135deg,#0F1A30,#1B2B4B 60%,#2D4C82)" }}>{title}</div>}
       <div className="px-3 py-2 divide-y">{children}</div>
     </div>
   );
@@ -2907,12 +2975,14 @@ function MDetailRow({ label, value }) {
   );
 }
 
-function TabBtn({ label, active, onClick }) {
+function TabBtn({ label, icon, active, onClick }) {
   return (
-    <button onClick={onClick}
-      className={`flex-1 flex flex-col items-center py-3 text-xs gap-0.5 font-semibold ${active ? "text-[#1e3a5f]" : "text-gray-400"}`}>
-      <div className={`w-1.5 h-1.5 rounded-full mb-0.5 ${active ? "bg-[#1e3a5f]" : "bg-transparent"}`} />
-      {label}
+    <button onClick={onClick} className="flex-1 flex flex-col items-center justify-center gap-1 py-2">
+      <span className={`w-12 h-8 rounded-[11px] flex items-center justify-center transition ${active ? "text-white shadow-[0_6px_14px_rgba(27,43,75,0.3)]" : "text-[#9AA9C3]"}`}
+        style={active ? { background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" } : undefined}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={icon} /></svg>
+      </span>
+      <span className={`text-[11px] font-extrabold ${active ? "text-[#0F1A30]" : "text-[#9AA9C3]"}`}>{label}</span>
     </button>
   );
 }
@@ -2920,8 +2990,8 @@ function TabBtn({ label, active, onClick }) {
 function MMenuItem({ label, active, onClick }) {
   return (
     <button onClick={onClick}
-      className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition ${active ? "text-white" : "hover:bg-gray-100 text-gray-700"}`}
-      style={active ? { background: NAVY } : {}}>
+      className={`w-full text-left px-3 py-2.5 rounded-[11px] text-sm font-bold transition ${active ? "text-white shadow-[0_6px_14px_rgba(27,43,75,0.25)]" : "hover:bg-[#F5F8FD] text-[#3A4A66]"}`}
+      style={active ? { background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" } : {}}>
       {label}
     </button>
   );
