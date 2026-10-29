@@ -23,6 +23,10 @@ import ChangePassword from "./pages/ChangePassword";
 import ShipperNotice from "./pages/ShipperNotice";
 import ShipperInquiry from "./pages/ShipperInquiry";
 import InternalMessenger from "../InternalMessenger";
+import "../pcTheme.css";
+import "../kpNavyTheme.css";
+
+const SHIP_MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 
 const myInfoLabelCls = "block text-xs font-bold text-gray-600 mb-1";
 const myInfoInputCls = "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:ring-2 focus:ring-[#1B2B4B]/40 focus:border-[#1B2B4B] outline-none";
@@ -327,7 +331,7 @@ const isTotalMasterUser = user?.email === TOTAL_MASTER_EMAIL;
 const isMaster = isTotalMasterUser || userData?.permissions?.master;
 const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
   return (
-    <div className="min-h-screen bg-[#f3f4f6]">
+    <div className="kp-pc kp-ship min-h-screen">
       {/* ================= 강제 업데이트 배너 ================= */}
       {forceUpdateNeeded && (
         <div
@@ -335,7 +339,7 @@ const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
           style={{ background: "#1B2B4B", color: "white", fontSize: 13, fontWeight: 600 }}
         >
           <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#4ade80" }} />
+            <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#8FB0F0" }} />
             새 버전이 있습니다. 새로고침해서 업데이트해주세요.
           </span>
           <button
@@ -359,10 +363,10 @@ const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
             className="shipper-global-toast-enter pointer-events-auto cursor-pointer rounded-2xl shadow-2xl border overflow-hidden"
             style={{
               background: t.type === "cancel"
-                ? "linear-gradient(135deg, #991b1b 0%, #ef4444 100%)"
+                ? "linear-gradient(135deg, #0B1428 0%, #1B2B4B 100%)"
                 : t.type === "attach"
-                ? "linear-gradient(135deg, #065f46 0%, #10b981 100%)"
-                : "linear-gradient(135deg, #1B2B4B 0%, #2d4a7a 100%)",
+                ? "linear-gradient(135deg, #1B2B4B 0%, #2D4C82 100%)"
+                : "linear-gradient(135deg, #1B2B4B 0%, #2D4C82 100%)",
             }}
             onClick={() => handleGlobalToastClick(t)}
           >
@@ -393,134 +397,71 @@ const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
       </div>
 
       {/* ================= HEADER ================= */}
-      <header className="bg-[#2f3e55] text-white">
-  <div className="px-8 py-4 flex items-center gap-4 relative">
-
-    {/* 좌측 로고 + 실시간 현황판 */}
-    <div className="flex items-center gap-4 min-w-0 flex-1">
-
-      {/* 로고 */}
-      <div
-        onClick={() => navigate("/shipper")}
-        className="text-lg font-bold cursor-pointer shrink-0"
-      >
-        KP-FLOW
-      </div>
-      <span className="text-[11px] font-mono text-white/50 shrink-0">v{__APP_VERSION__}</span>
-
-      <ShipperLiveTicker events={liveEvents} onOpenBig={() => setLiveBigOpen(true)} />
-    </div>
-
-<nav className="absolute left-1/2 -translate-x-1/2 flex items-center gap-6 text-sm font-semibold whitespace-nowrap">
-
-  <MenuBtn
-    label="대시보드"
-    active={location.pathname === "/shipper"}
-    onClick={() => navigate("/shipper")}
-  />
-
-{/* 운송 (호버 시 하위메뉴) */}
-{(isMaster || isSubMaster || userData?.permissions?.transport) && (
-  <div
-    className="relative"
-    onMouseEnter={() => setTransportMenuOpen(true)}
-    onMouseLeave={() => setTransportMenuOpen(false)}
-  >
-    <MenuBtn
-      label="운송"
-      active={location.pathname.includes("/shipper/transport") || location.pathname.includes("/shipper/order")}
-      onClick={() => navigate("/shipper/transport")}
-    />
-    {transportMenuOpen && (
-      <div className="absolute left-0 top-full pt-2 z-50">
-        <div className="w-48 bg-white rounded-xl shadow-2xl border border-gray-100 py-1.5 overflow-hidden">
-          <button
-            onClick={() => { navigate("/shipper/transport"); setTransportMenuOpen(false); }}
-            className="w-full text-left px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-[#eef1f7] hover:text-[#1B2B4B] transition"
-          >
-            운송목록
+      {/* ⭐ 2026-10-29 리디자인 — 운송사 PC(KP-Flow)와 같은 네이비 디지털 상단바 */}
+      <header className="kp-topnav sticky top-0 z-40 text-white">
+        <div className="h-[60px] px-6 flex items-center gap-4">
+          {/* 로고 */}
+          <button onClick={() => navigate("/shipper")} className="flex items-center gap-2.5 shrink-0">
+            <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-8 h-8 rounded-[10px] ring-1 ring-white/15 shadow-[0_4px_12px_rgba(0,0,0,0.25)]" />
+            <span className="flex flex-col leading-none text-left">
+              <span className="font-black text-[15px] tracking-tight">KP-Flow</span>
+              <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0] mt-1">SHIPPER</span>
+            </span>
           </button>
-          <button
-            onClick={() => { navigate("/shipper/order"); setTransportMenuOpen(false); }}
-            className="w-full text-left px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-[#eef1f7] hover:text-[#1B2B4B] transition"
-          >
-            일반배차등록
-          </button>
-          <button
-            onClick={() => setTransportMenuOpen(false)}
-            className="w-full text-left px-4 py-2.5 text-sm font-semibold text-gray-300 cursor-not-allowed"
-            title="준비 중인 기능입니다"
-          >
-            대량배차등록 <span className="text-[10px] text-gray-300">(준비중)</span>
-          </button>
+          {companyName && (
+            <span className="px-2.5 h-7 inline-flex items-center rounded-lg bg-white/[0.07] border border-white/10 text-[13px] font-bold text-white/90 truncate max-w-[140px] shrink-0">{companyName}</span>
+          )}
+          <span className="hidden 2xl:inline text-[11px] font-mono text-white/40 shrink-0">v{__APP_VERSION__}</span>
+
+          {/* 메뉴 */}
+          <nav className="flex-1 min-w-0 flex items-center gap-1 overflow-x-auto no-scrollbar [&>*:first-child]:ml-auto [&>*:last-child]:mr-auto">
+            <MenuBtn label="대시보드" active={location.pathname === "/shipper"} onClick={() => navigate("/shipper")} />
+            {(isMaster || isSubMaster || userData?.permissions?.transport) && (
+              <div className="relative" onMouseEnter={() => setTransportMenuOpen(true)} onMouseLeave={() => setTransportMenuOpen(false)}>
+                <MenuBtn label="운송" caret active={location.pathname.includes("/shipper/transport") || location.pathname.includes("/shipper/order")} onClick={() => navigate("/shipper/transport")} />
+                {transportMenuOpen && (
+                  <div className="fixed pt-2 z-50" style={{ marginTop: 0 }}>
+                    <div className="w-52 bg-white rounded-2xl shadow-[0_20px_50px_rgba(15,26,48,0.28)] border border-[#E3E8F0] p-1.5">
+                      {[["운송목록", "TRANSPORT", "/shipper/transport"], ["일반배차등록", "NEW ORDER", "/shipper/order"]].map(([l, en, to]) => (
+                        <button key={to} onClick={() => { navigate(to); setTransportMenuOpen(false); }}
+                          className={`w-full text-left px-3 py-2.5 rounded-xl transition ${location.pathname.includes(to) ? "bg-[#EEF3FB]" : "hover:bg-[#F5F8FD]"}`}>
+                          <span className="block text-[13.5px] font-bold text-[#0F1A30]">{l}</span>
+                          <span className="block text-[9.5px] font-extrabold tracking-[0.2em] text-[#9AA9C3]" style={{ fontFamily: SHIP_MONO }}>{en}</span>
+                        </button>
+                      ))}
+                      <div className="px-3 py-2.5 rounded-xl text-[13.5px] font-bold text-[#C9D2E0] cursor-not-allowed" title="준비 중인 기능입니다">대량배차등록 <span className="text-[10.5px]">(준비중)</span></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {(isMaster || isSubMaster || userData?.permissions?.settlement) && (
+              <MenuBtn label="정산" active={location.pathname.includes("/shipper/settlement")} onClick={() => navigate("/shipper/settlement")} />
+            )}
+            {(isMaster || isSubMaster) && (
+              <MenuBtn label="마스터설정" active={location.pathname.includes("/shipper/settings")} onClick={() => navigate("/shipper/settings")} />
+            )}
+            <MenuBtn label="공지사항" active={location.pathname.includes("/shipper/notice")} onClick={() => navigate("/shipper/notice")} />
+            <MenuBtn label="문의사항" active={location.pathname.includes("/shipper/inquiry")} onClick={() => navigate("/shipper/inquiry")} />
+          </nav>
+
+          {/* 우측 */}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="hidden xl:block text-right leading-tight mr-1">
+              <div className="text-[13px] font-bold text-white/90">{form.name || userData?.name || companyName}</div>
+              <div className="text-[11px] text-white/45">{user.email}</div>
+            </div>
+            <button onClick={() => setMyInfoOpen(true)} title="내 정보" className="kp-icon-btn transition">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></svg>
+            </button>
+            <button onClick={logout} className="h-[34px] px-3.5 rounded-[10px] bg-white/[0.08] border border-white/15 text-[13px] font-bold text-white/85 hover:bg-white hover:text-[#0F1A30] transition">로그아웃</button>
+          </div>
         </div>
-      </div>
-    )}
-  </div>
-)}
+      </header>
 
-{/* 정산 */}
-{(isMaster || isSubMaster || userData?.permissions?.settlement) && (
-  <MenuBtn
-    label="정산"
-    active={location.pathname.includes("/shipper/settlement")}
-    onClick={() => navigate("/shipper/settlement")}
-  />
-)}
-
-{/* 마스터 */}
-{(isMaster || isSubMaster) && (
-  <MenuBtn
-    label="마스터설정"
-    active={location.pathname.includes("/shipper/settings")}
-    onClick={() => navigate("/shipper/settings")}
-  />
-)}
-
-<MenuBtn
-  label="공지사항"
-  active={location.pathname.includes("/shipper/notice")}
-  onClick={() => navigate("/shipper/notice")}
-/>
-
-<MenuBtn
-  label="문의사항"
-  active={location.pathname.includes("/shipper/inquiry")}
-  onClick={() => navigate("/shipper/inquiry")}
-/>
-
-</nav>
-
-    {/* 우측 */}
-    <div className="flex items-center gap-4 justify-end ml-auto shrink-0">
-      <div className="text-sm text-right">
-        <div>{companyName}</div>
-        <div className="text-xs text-gray-300">{user.email}</div>
-      </div>
-<button
-  onClick={() => setMyInfoOpen(true)}
-  className="bg-white/10 hover:bg-white/20 border border-white/15 px-3 py-1.5 rounded-lg text-sm font-semibold transition"
->
-  내정보
-</button>
-      <button
-        onClick={logout}
-        className="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-sm"
-      >
-        로그아웃
-      </button>
-    </div>
-  </div>
-</header>
       {/* ================= CONTENT ================= */}
-      <main
-  className={
-    location.pathname.startsWith("/shipper/status") ||
-location.pathname.startsWith("/shipper/transport")
-      ? "w-full px-8 py-6"
-      : "w-full px-8 py-6"
-  }
->
+      <main className="w-full px-6 2xl:px-8 py-5">
+        <ShipperPageHeader pathname={location.pathname} right={<ShipperLiveTicker events={liveEvents} onOpenBig={() => setLiveBigOpen(true)} />} />
         <Routes>
           <Route index element={<ShipperHome />} />
           <Route path="order" element={<ShipperOrder />} />
@@ -693,7 +634,7 @@ function ShipperLiveTicker({ events, onOpenBig }) {
   const current = events[idx] || null;
 
   return (
-    <div className="hidden md:flex items-center gap-2 bg-white/8 border border-white/10 rounded-full pl-3 pr-1.5 py-1.5 min-w-0 max-w-[480px] flex-1">
+    <div className="hidden lg:flex items-center gap-2 h-10 pl-3 pr-1 rounded-[14px] bg-[#F5F8FD] border border-[#E3E8F0] min-w-0 w-[420px] max-w-[42vw]">
       <style>{`
         @keyframes shipperTickerSlideIn {
           from { opacity: 0; transform: translateY(8px); }
@@ -701,22 +642,23 @@ function ShipperLiveTicker({ events, onOpenBig }) {
         }
         .shipper-ticker-slide { animation: shipperTickerSlideIn 0.4s ease; }
       `}</style>
-      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 animate-pulse" />
+      <span className="text-[9.5px] font-extrabold tracking-[0.2em] text-[#4B6CB7] shrink-0" style={{ fontFamily: SHIP_MONO }}>LIVE</span>
+      <span className="w-1.5 h-1.5 rounded-full bg-[#4B6CB7] shrink-0 animate-pulse" />
       <div className="flex-1 min-w-0 h-[18px] overflow-hidden relative">
         <div key={current ? current.id : "empty"} className="shipper-ticker-slide absolute inset-0 flex items-center gap-1.5">
           {current ? (
             <>
-              <span className="text-[12px] text-white/85 whitespace-nowrap">{current.text}</span>
-              <span className="text-[11px] text-white/40 shrink-0">{_fmtTimeKST(current.time)}</span>
+              <span className="text-[12.5px] font-semibold text-[#1B2B4B] whitespace-nowrap truncate">{current.text}</span>
+              <span className="text-[11px] text-[#9AA9C3] shrink-0">{_fmtTimeKST(current.time)}</span>
             </>
           ) : (
-            <span className="text-[12px] text-white/40">오늘 발생한 이벤트가 없습니다</span>
+            <span className="text-[12.5px] text-[#9AA9C3]">오늘 발생한 이벤트가 없습니다</span>
           )}
         </div>
       </div>
       <button
         onClick={onOpenBig}
-        className="shrink-0 text-white/50 hover:text-white text-[11px] font-semibold px-2 py-1 rounded-full hover:bg-white/10 transition whitespace-nowrap"
+        className="shrink-0 h-8 px-2.5 rounded-[10px] bg-[#0F1A30] text-white text-[11.5px] font-bold hover:bg-[#2D4C82] transition whitespace-nowrap"
       >
         크게보기
       </button>
@@ -751,7 +693,7 @@ function ShipperLiveBigModal({ events, onClose }) {
           ) : (
             events.map((e) => (
               <div key={e.id} className="bg-white rounded-xl px-4 py-3 border border-gray-100 flex items-start gap-3">
-                <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${e.type === "배차완료" ? "bg-emerald-500" : "bg-amber-500"}`} />
+                <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${e.type === "배차완료" ? "bg-[#1B2B4B]" : "bg-white border-2 border-[#4B6CB7]"}`} />
                 <div className="flex-1 min-w-0 text-[13px] text-gray-800">{e.text}</div>
                 <span className="text-[11px] text-gray-400 shrink-0 whitespace-nowrap">{_fmtTimeKST(e.time)}</span>
               </div>
@@ -763,18 +705,51 @@ function ShipperLiveBigModal({ events, onClose }) {
   );
 }
 
-function MenuBtn({ label, active, onClick }) {
+function MenuBtn({ label, active, onClick, caret }) {
   return (
     <button
       onClick={onClick}
-      className={`
-        px-3 py-1.5 rounded-md transition-all
-        ${active
-          ? "bg-[#28406b] text-white font-semibold ring-1 ring-emerald-400/30"
-          : "text-gray-200 hover:text-white hover:bg-[#28406b] hover:ring-1 hover:ring-emerald-400/30"}
-      `}
+      className={`kp-nav-btn relative px-3 2xl:px-3.5 h-[34px] rounded-[10px] text-[13.5px] whitespace-nowrap transition-all flex-shrink-0 inline-flex items-center gap-1 ${
+        active ? "bg-white text-[#0F1A30] font-extrabold shadow-[0_4px_14px_rgba(0,0,0,0.25)]" : "text-white/65 font-semibold hover:text-white hover:bg-white/[0.09]"
+      }`}
     >
       {label}
+      {caret && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="opacity-60"><path d="m6 9 6 6 6-6" /></svg>}
     </button>
+  );
+}
+
+// ⭐ 화면 머리말 — 운송사 PC의 KpPageHeader와 같은 모양(영문 태그 + 제목 + 설명 + 오른쪽 실시간 현황)
+const TRUCK_ICON = "M3 7h13l5 5v5h-2M3 7v10h2m0 0a2 2 0 1 0 4 0m-4 0a2 2 0 1 1 4 0m0 0h6m0 0a2 2 0 1 0 4 0m-4 0a2 2 0 1 1 4 0";
+const SHIP_PAGE_META = [
+  ["/shipper/transport", "TRANSPORT", "운송목록", "등록한 오더의 배차 진행 상황을 실시간으로 확인합니다", TRUCK_ICON],
+  ["/shipper/status", "TRANSPORT", "운송목록", "등록한 오더의 배차 진행 상황을 실시간으로 확인합니다", TRUCK_ICON],
+  ["/shipper/order", "NEW ORDER", "일반배차등록", "운송사에 보낼 배차 요청을 등록합니다", "M12 5v14M5 12h14"],
+  ["/shipper/settlement", "SETTLEMENT", "정산", "기간별 운송료와 지급방식을 확인합니다", "M3 6h18v12H3zM3 10h18M7 15h4"],
+  ["/shipper/settings", "MASTER", "마스터설정", "회사 정보 · 이용자 · 운송사 · 주소록을 관리합니다", "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"],
+  ["/shipper/change-password", "SECURITY", "비밀번호 변경", "로그인 비밀번호를 변경합니다", "M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4"],
+  ["/shipper/notice", "NOTICE", "공지사항", "운영팀의 공지와 서비스 업데이트 소식", "M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"],
+  ["/shipper/inquiry", "SUPPORT", "문의사항", "서비스 이용 중 궁금한 점을 문의합니다", "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"],
+  ["/shipper", "DASHBOARD", "대시보드", "오늘 배차 현황과 이번 달 운송 실적을 한눈에", "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"],
+];
+function ShipperPageHeader({ pathname, right }) {
+  const m = SHIP_PAGE_META.find(([p]) => pathname === p || pathname.startsWith(p + "/")) || SHIP_PAGE_META[SHIP_PAGE_META.length - 1];
+  const [, en, title, desc, icon] = m;
+  return (
+    <div className="flex items-center gap-4 mb-5">
+      <div className="relative w-12 h-12 rounded-[15px] flex items-center justify-center shrink-0 overflow-hidden shadow-[0_8px_20px_rgba(15,26,48,0.28)] ring-1 ring-white/10"
+        style={{ background: "linear-gradient(135deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%)" }}>
+        <span className="absolute inset-0 opacity-[0.12]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "8px 8px" }} />
+        <svg className="relative" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={icon} /></svg>
+      </div>
+      <div className="min-w-0">
+        <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]" style={{ fontFamily: SHIP_MONO }}>{en}</div>
+        <div className="flex items-baseline gap-3 min-w-0">
+          <h2 className="text-[21px] font-black text-[#0F1A30] tracking-tight leading-tight whitespace-nowrap">{title}</h2>
+          <span className="text-[13.5px] text-[#5B6B85] font-medium truncate">{desc}</span>
+        </div>
+      </div>
+      <div className="ml-auto shrink-0">{right}</div>
+    </div>
   );
 }

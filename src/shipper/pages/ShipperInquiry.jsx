@@ -67,12 +67,9 @@ export default function ShipperInquiry() {
   return (
     <div className="bg-white rounded-xl px-8 py-6">
       <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-[20px] font-bold text-gray-800">문의사항</h2>
-          <p className="text-sm text-gray-400 mt-0.5">서비스 이용 중 궁금한 점을 문의해주세요</p>
-        </div>
+        <div className="text-[15px] font-black text-[#0F1A30]">내 문의</div>
         <button onClick={() => setTab("write")}
-          className="bg-[#2f3e55] text-white px-4 py-2 text-sm rounded-md font-medium hover:bg-[#1e3a5f]">
+          className="bg-[#1B2B4B] text-white px-4 py-2 text-sm rounded-md font-medium hover:bg-[#1e3a5f]">
           + 문의하기
         </button>
       </div>
@@ -94,7 +91,7 @@ export default function ShipperInquiry() {
           <div className="py-20 text-center text-gray-400">
             <div className="text-base font-medium mb-1">등록된 문의가 없습니다</div>
             <div className="text-sm text-gray-300 mb-4">궁금한 사항을 문의해주세요</div>
-            <button onClick={() => setTab("write")} className="bg-[#2f3e55] text-white px-5 py-2 rounded-lg text-sm font-semibold">
+            <button onClick={() => setTab("write")} className="bg-[#1B2B4B] text-white px-5 py-2 rounded-lg text-sm font-semibold">
               문의하기
             </button>
           </div>

@@ -302,12 +302,12 @@ export default function ShipperSettlement() {
 
   const SortTh = ({ label, sortField }) => (
     <th
-      className="px-2 py-2.5 text-center cursor-pointer select-none hover:text-emerald-300 transition whitespace-nowrap text-white"
+      className="px-2 py-2.5 text-center cursor-pointer select-none hover:text-[#8FB0F0] transition whitespace-nowrap text-white"
       onClick={() => toggleSort(sortField)}
     >
       <span className="inline-flex items-center gap-1">
         {label}
-        <span className={`text-[10px] ${sortKey === sortField ? "text-emerald-300" : "text-white/40"}`}>
+        <span className={`text-[10px] ${sortKey === sortField ? "text-[#8FB0F0]" : "text-white/40"}`}>
           {sortKey === sortField ? (sortDir === "asc" ? "▲" : "▼") : "▲▼"}
         </span>
       </span>

@@ -21,10 +21,11 @@ import { deleteOrderWithLog } from "../../orderHistory";
 
 // 운송사 프로그램(DispatchApp.jsx StatusBadge)과 동일한 배지 디자인 — 단색 배경 + 흰 글씨 + rounded-lg
 const STATUS = {
-  요청: { label: "요청", cls: "bg-amber-500 text-white" },
-  배차중: { label: "배차중", cls: "bg-amber-500 text-white" },
+  // ⭐ 2026-10-29 네이비 단계색 — 요청(테두리) → 배차중(연한 남색) → 배차완료(진한 남색), 취소는 회색
+  요청: { label: "요청", cls: "bg-white text-[#1B2B4B] ring-1 ring-inset ring-[#8FB0F0]" },
+  배차중: { label: "배차중", cls: "bg-[#DCE6F7] text-[#1B2B4B]" },
   배차완료: { label: "배차완료", cls: "bg-[#1B2B4B] text-white" },
-  배차취소: { label: "취소", cls: "bg-red-600 text-white" },
+  배차취소: { label: "취소", cls: "bg-[#E9EDF3] text-[#7A89A3]" },
 };
 
 // 운송사 수정 팝업에서 필드명을 사람이 읽기 쉬운 라벨로 표시하기 위한 매핑

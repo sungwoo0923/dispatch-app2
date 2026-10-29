@@ -40,10 +40,6 @@ export default function ShipperNotice() {
 
   return (
     <div className="bg-white rounded-xl px-8 py-6">
-      <div className="mb-6">
-        <h2 className="text-[20px] font-bold text-gray-800">공지사항</h2>
-        <p className="text-sm text-gray-400 mt-0.5">운영팀의 공지 및 서비스 업데이트 소식을 확인하세요</p>
-      </div>
 
       {loading ? (
         <div className="py-20 text-center text-gray-400">불러오는 중...</div>

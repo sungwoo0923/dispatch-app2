@@ -22,6 +22,7 @@ import { updateDoc } from "../orderWrite"; // ⭐ 오더 수정시각 자동 기
 import InternalMessenger from "../InternalMessenger";
 import html2canvas from "html2canvas";
 import { deleteOrderWithLog } from "../orderHistory";
+import "../kpNavyTheme.css";
 
 // ======================================================================
 // 유틸
@@ -660,7 +661,8 @@ export default function ShipperMobileApp() {
   }
 
   return (
-    <div className="w-full max-w-md mx-auto min-h-screen bg-gray-50 flex flex-col relative">
+    // ⭐ kp-ship — 화주사 PC와 같은 네이비 색 정리 레이어(kpNavyTheme.css) 적용
+    <div className="kp-ship w-full max-w-md mx-auto min-h-screen bg-[#F4F6FA] flex flex-col relative">
       <style>{`@keyframes dotPulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.5; transform:scale(0.8); } }`}</style>
 
       {toast && (
