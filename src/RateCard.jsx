@@ -15,6 +15,85 @@ const STANDARD_TON_LABELS = ["다마스/라보","1톤","1.4톤","2.5톤","3.5톤
 // transportApplications(가입 시 등록한 사업자정보) 문서를 실시간으로 읽어와
 // 회사마다 자기 정보로 찍히게 한다 — RateCard 컴포넌트 안 useCompanyInfo 훅 참고.
 const EMPTY_COMPANY = { name: "", manager: "", phone: "", email: "", address: "", tel: "" };
+// 🧾 단가표 인쇄 양식(가로) — 1톤부터 톤수가 가로로 쭉, 위에 거래처·구간·독차/혼적·차량종류
+//  [편집] 누르면 칸을 바로 고쳐서 인쇄할 수 있다.
+function rateCardHtml({ company = {}, info = {}, rows = [], today = new Date().toLocaleDateString("ko-KR") }) {
+  const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const money = (v) => { const n = Number(String(v ?? "").replace(/[^\d]/g, "")); return n ? n.toLocaleString() : "-"; };
+  const cols = rows.filter((r) => String(r.display || "").trim());
+  const chip = (k, v) => `<div class="chip"><span>${k}</span><b>${esc(v || "-")}</b></div>`;
+  const level = (v) => `<span class="lv lv-${v === "높음" ? "h" : v === "보통" ? "m" : "l"}">${esc(v || "-")}</span>`;
+  return `<html><head><meta charset="utf-8"><title>단가표_${esc(info.client || "")}_${esc(info.pickup)}_${esc(info.drop)}</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;900&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet">
+<style>
+@page{size:A4 landscape;margin:10mm}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Noto Sans KR','Malgun Gothic',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{background:#EEF2F8;color:#0F1A30}
+.page{width:1123px;margin:18px auto;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 18px 50px rgba(15,26,48,.18)}
+.hero{padding:22px 30px;color:#fff;display:flex;justify-content:space-between;align-items:flex-end;gap:20px;background:linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)}
+.en{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:800;letter-spacing:.3em;color:#8FB0F0}
+.title{font-size:30px;font-weight:900;letter-spacing:.06em;margin-top:2px}
+.co{text-align:right;font-size:12.5px;line-height:1.7;color:rgba(255,255,255,.75)}
+.co b{color:#fff;font-size:16px}
+.route{display:flex;align-items:center;gap:14px;padding:18px 30px;border-bottom:1px solid #E3E8F0}
+.pt{font-size:22px;font-weight:900}
+.arrow{flex:0 0 auto;height:2px;width:70px;background:linear-gradient(90deg,#2D4C82,#8FB0F0);position:relative}
+.arrow:after{content:"";position:absolute;right:-2px;top:-5px;border:6px solid transparent;border-left:9px solid #8FB0F0}
+.chips{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.chip{border:1px solid #DCE3EE;border-radius:10px;padding:6px 12px;background:#F5F8FD}
+.chip span{display:block;font-size:10.5px;color:#7A89A3;font-weight:700}.chip b{font-size:14px;font-weight:900}
+.wrap{padding:18px 30px 8px;overflow:hidden}
+table{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed}
+th,td{text-align:center;padding:11px 4px;font-size:13px;border-bottom:1px solid #EEF1F6}
+thead th{background:#0B1428;color:#fff;font-weight:900;font-size:13.5px;white-space:nowrap}
+thead th:first-child{border-radius:10px 0 0 0;width:110px;background:#1B2B4B}
+thead th:last-child{border-radius:0 10px 0 0}
+tbody th{background:#F3F6FA;color:#3A4A66;font-size:12.5px;font-weight:900;text-align:left;padding-left:14px}
+.price{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:800;color:#0B1428}
+.range{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#5B6B85;font-weight:600;line-height:1.5}
+.lv{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:900}
+.lv-h{background:#0F1A30;color:#fff}.lv-m{background:#DCE6F7;color:#1B2B4B}.lv-l{background:#F3F6FA;color:#7A89A3;border:1px solid #E3E8F0}
+.foot{display:flex;gap:16px;padding:14px 30px 24px;align-items:stretch}
+.notice{flex:1;background:#F5F8FD;border:1px solid #DCE3EE;border-radius:12px;padding:12px 16px;font-size:11.5px;line-height:1.8;color:#3A4A66}
+.memo{flex:1;border:1px dashed #C9D6EE;border-radius:12px;padding:12px 16px;font-size:12.5px;line-height:1.7;white-space:pre-wrap}
+.stampbox{width:190px;border-radius:12px;background:#0F1A30;color:#fff;padding:12px 16px;font-size:12px;line-height:1.7}
+.stampbox b{font-size:15px}
+.bar{max-width:1123px;margin:14px auto 0;display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#fff;border:1px solid #DCE3EE;border-radius:12px;font-size:12.5px;color:#5B6B85}
+.bar button{height:36px;padding:0 16px;border-radius:10px;border:none;font-weight:900;font-size:13px;cursor:pointer;margin-left:6px}
+.edit [contenteditable]{outline:2px dashed #8FB0F0;outline-offset:-3px;border-radius:4px}
+@media print{body{background:#fff}.bar{display:none}.page{margin:0;box-shadow:none;border-radius:0;width:auto}}
+</style></head><body>
+<div class="bar"><span>A4 가로로 인쇄됩니다 · [편집]을 누르면 금액·문구를 바로 고칠 수 있어요</span><span>
+<button style="background:#EEF3FC;color:#1B2B4B" onclick="document.body.classList.toggle('edit');document.querySelectorAll('[data-ed]').forEach(function(e){e.contentEditable=document.body.classList.contains('edit')});this.textContent=document.body.classList.contains('edit')?'편집 끝':'편집'">편집</button>
+<button style="background:#0F1A30;color:#fff" onclick="window.print()">인쇄 · PDF 저장</button></span></div>
+<div class="page">
+  <div class="hero">
+    <div><div class="en">VEHICLE RATE CARD · ${esc(today)}</div><div class="title">운송 단가표</div></div>
+    <div class="co"><b>${esc(company.name || "")}</b><br>${esc(company.manager || "")} ${esc(company.phone || "")}${company.tel ? ` · ☎ ${esc(company.tel)}` : ""}<br>${esc(company.email || "")}</div>
+  </div>
+  <div class="route">
+    <div><div class="en" style="color:#2D4C82">FROM</div><div class="pt" data-ed>${esc(info.pickup || "출발지")}</div></div>
+    <div class="arrow"></div>
+    <div><div class="en" style="color:#2D4C82">TO</div><div class="pt" data-ed>${esc(info.drop || "도착지")}</div></div>
+    <div class="chips">${chip("거래처", info.client)}${chip("배차 형태", info.mixed && info.mixed !== "전체" ? info.mixed : "독차·혼적")}${chip("차량 종류", info.vehicle)}${chip("단가 기준", info.fareField === "기사운임" ? "기사운임" : "청구운임 (VAT 별도)")}</div>
+  </div>
+  <div class="wrap"><table>
+    <thead><tr><th>차량 톤수</th>${cols.map((r) => `<th>${esc(r.display)}</th>`).join("")}</tr></thead>
+    <tbody>
+      <tr><th>권장 단가</th>${cols.map((r) => `<td><span class="price" data-ed>${money(r.avg)}</span></td>`).join("")}</tr>
+      <tr><th>운임 범위</th>${cols.map((r) => `<td><div class="range" data-ed>${r.min || r.max ? `${money(r.min)}<br>~ ${money(r.max)}` : "-"}</div></td>`).join("")}</tr>
+      <tr><th>변동성</th>${cols.map((r) => `<td>${level(r.varianceLabel)}</td>`).join("")}</tr>
+      <tr><th>신뢰도</th>${cols.map((r) => `<td>${level(r.confLabel)}</td>`).join("")}</tr>
+    </tbody>
+  </table></div>
+  <div class="foot">
+    <div class="notice"><b>안내</b><br>· 1만원 단위 절사 참고 단가이며 부가세 별도입니다.<br>· 유가·차량 수급·상하차 조건(대기·수작업·경유)에 따라 달라질 수 있습니다.<br>· 정확한 견적은 담당자에게 문의해 주세요.</div>
+    ${info.note ? `<div class="memo" data-ed><b>특이사항</b><br>${esc(info.note)}</div>` : `<div class="memo" data-ed><b>특이사항</b><br> </div>`}
+    <div class="stampbox"><span style="opacity:.6">발행</span><br><b>${esc(company.name || "")}</b><br>${esc(today)}</div>
+  </div>
+</div></body></html>`;
+}
+
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙) — 단가표/견적서
 // 곳곳에서 COMPANY.phone/tel을 그대로 찍어쓰므로, 여기서 한 번만 포맷해두면 모든
@@ -756,92 +835,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
     addHistoryEntry({ source: "manual", pickup: manualInfo.pickup, drop: manualInfo.drop, vehicle: manualInfo.vehicle, fareField: manualInfo.fareField, mixedFilter: manualInfo.mixedFilter, rowCount: manualRows.length, client: manualInfo.client, savedRows: manualRows.map(r => ({ display: r.display, avg: Number(String(r.avg).replace(/[^\d]/g,""))||0, min: Number(String(r.min).replace(/[^\d]/g,""))||0, max: Number(String(r.max).replace(/[^\d]/g,""))||0, count: 1, variance: 0 })) });
     const today = new Date().toLocaleDateString("ko-KR");
     const w = window.open("", "_blank");
-    w.document.write(`<html><head><title>단가표_${manualInfo.pickup}_${manualInfo.drop}</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:'Malgun Gothic',sans-serif;}
-body{background:white;color:#111;}
-.wrapper{width:794px;margin:0 auto;padding:40px 48px;}
-.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:20px;border-bottom:3px solid #1B2B4B;}
-.logo{font-size:28px;font-weight:900;color:#1B2B4B;}
-.logo span{color:#3B82F6;}
-.company-info{text-align:right;font-size:12px;color:#555;line-height:1.7;}
-.doc-title{font-size:22px;font-weight:900;color:#1B2B4B;margin-bottom:4px;}
-.doc-sub{font-size:13px;color:#666;margin-bottom:24px;}
-.route-bar{display:flex;gap:12px;align-items:center;background:#F0F4FF;border:1px solid #C7D9FF;border-radius:10px;padding:14px 20px;margin-bottom:24px;}
-.route-item{font-size:13px;color:#444;}
-.route-item b{color:#1B2B4B;font-size:15px;}
-.route-arrow{font-size:20px;color:#3B82F6;font-weight:900;}
-table{width:100%;border-collapse:collapse;font-size:13px;}
-thead tr{background:#1B2B4B;}
-thead th{color:white;padding:11px 14px;text-align:center;font-weight:700;}
-tbody tr:nth-child(even){background:#F9FAFB;}
-td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
-.td-ton{font-weight:700;color:#1B2B4B;font-size:14px;}
-.td-price{font-weight:800;color:#2563EB;font-size:15px;}
-.badge-high{background:#E5E7EB;color:#374151;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;}
-.badge-mid{background:#E5E7EB;color:#4B5563;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;}
-.badge-low{background:#F3F4F6;color:#6B7280;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;}
-.var-high{color:#374151;font-weight:700;font-size:12px;}
-.var-mid{color:#4B5563;font-weight:700;font-size:12px;}
-.var-low{color:#6B7280;font-weight:700;font-size:12px;}
-.notice{margin-top:28px;padding:14px 18px;background:#F8FAFF;border:1px solid #C7D9FF;border-radius:8px;font-size:11.5px;color:#374151;line-height:1.8;}
-.footer{margin-top:36px;padding-top:16px;border-top:1px solid #E5E7EB;display:flex;justify-content:space-between;align-items:flex-end;}
-.stamp{width:64px;height:64px;border:2.5px solid #1B2B4B;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:#1B2B4B;margin-left:16px;text-align:center;line-height:1.3;}
-@media print{.no-print{display:none!important;}}
-</style></head><body>
-<div class="wrapper">
-<div class="no-print" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#F8FAFF;border:1px solid #E0E7FF;border-radius:10px;">
-  <span style="font-size:12px;color:#6B7280;">인쇄 또는 PDF로 저장하려면 아래 버튼을 클릭하세요</span>
-  <div style="display:flex;gap:8px;">
-    <button onclick="window.print()" style="padding:8px 20px;background:#1B2B4B;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">인쇄</button>
-    <button onclick="window.print()" style="padding:8px 20px;background:#2563EB;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">PDF 저장</button>
-  </div>
-</div>
-<div class="header">
-  <div><div class="logo">RU<span>N</span>25</div><div style="font-size:11px;color:#888;margin-top:4px;">화물 운송 전문</div></div>
-  <div class="company-info"><div><b>${COMPANY.manager}</b></div><div>📞 ${COMPANY.phone} | ☎ ${COMPANY.tel}</div><div>✉ ${COMPANY.email}</div><div>${COMPANY.address}</div></div>
-</div>
-<div class="doc-title">운송 단가표</div>
-<div class="doc-sub">Vehicle Rate Card | 발행일: ${today}</div>
-<div class="route-bar">
-  <div class="route-item"><b>${manualInfo.pickup || "출발지"}</b></div>
-  <div class="route-arrow">→</div>
-  <div class="route-item"><b>${manualInfo.drop || "도착지"}</b></div>
-  <div style="flex:1"></div>
-  ${manualInfo.client ? `<div class="route-item">거래처: <b>${manualInfo.client}</b></div>` : ""}
-  ${manualInfo.vehicle ? `<div class="route-item" style="margin-left:12px;">차량: <b>${manualInfo.vehicle}</b></div>` : ""}
-  ${manualInfo.mixedFilter !== "전체" ? `<div class="route-item" style="margin-left:12px;">[${manualInfo.mixedFilter}]</div>` : ""}
-  <div class="route-item" style="margin-left:12px;">조회기준: <b>${manualInfo.fareField}</b></div>
-</div>
-<table>
-  <thead><tr>
-    <th>차량 톤수</th><th>권장 단가</th><th>운임 범위</th><th>변동성</th><th>신뢰도</th>
-  </tr></thead>
-  <tbody>${manualRows.map(row => {
-    const vClass = row.varianceLabel === "높음" ? "var-high" : row.varianceLabel === "보통" ? "var-mid" : "var-low";
-    const cClass = row.confLabel === "높음" ? "badge-high" : row.confLabel === "보통" ? "badge-mid" : "badge-low";
-    const avgNum = Number(String(row.avg).replace(/[^\d]/g, ""));
-    return `<tr>
-      <td class="td-ton">${row.display || "-"}</td>
-      <td class="td-price">${avgNum ? avgNum.toLocaleString() + "원" : "-"}</td>
-      <td style="color:#374151;font-size:13px;font-weight:600;">${row.min && row.max ? row.min + " ~ " + row.max + "원" : "-"}</td>
-      <td><span class="${vClass}">${row.varianceLabel}</span></td>
-      <td><span class="${cClass}">${row.confLabel}</span></td>
-    </tr>`;
-  }).join("")}</tbody>
-</table>
-${manualInfo.note ? `<div class="notice"><b>※ 특이사항</b><br>${manualInfo.note.replace(/\n/g, "<br>")}</div>` : ""}
-<div class="notice" style="margin-top:${manualInfo.note ? "12px" : "28px"}"><b>※ 안내사항</b><br>• 위 단가는 ${manualInfo.pickup || "출발지"} ↔ ${manualInfo.drop || "도착지"} 구간 참고 단가입니다 (1만원 단위 절사).<br>• 유가 변동, 차량 수급 상황에 따라 실제 운임은 달라질 수 있습니다.<br>• 신뢰도 '낮음'은 변동 가능성이 높으니 참고용으로만 활용하시기 바랍니다.<br>• 정확한 견적은 담당자에게 직접 문의해 주시기 바랍니다.</div>
-<div class="footer">
-  <div style="font-size:11px;color:#aaa;">본 자료는 영업 참고용이며 정식 계약서가 아닙니다.</div>
-  <div style="display:flex;align-items:center;">
-    <div style="text-align:right;font-size:13px;color:#555;line-height:1.6;">
-      <b style="color:#1B2B4B;font-size:15px;">${COMPANY.name}</b><br>${COMPANY.manager} ${COMPANY.phone}
-    </div>
-    ${stampLabel(COMPANY.name) ? `<div class="stamp">${stampLabel(COMPANY.name)}</div>` : ""}
-  </div>
-</div>
-</div></body></html>`);
+    w.document.write(rateCardHtml({ company: COMPANY, info: { client: manualInfo.client, pickup: manualInfo.pickup, drop: manualInfo.drop, mixed: manualInfo.mixedFilter, vehicle: manualInfo.vehicle, fareField: manualInfo.fareField, note: manualInfo.note }, rows: manualRows, today }));
     w.document.close();
     w.focus();
   };
@@ -851,127 +845,7 @@ ${manualInfo.note ? `<div class="notice"><b>※ 특이사항</b><br>${manualInfo
     addHistoryEntry({ source: "auto", pickup: result.pickup, drop: result.drop, vehicle: result.groupLabel, fareField: result.fareField, mixedFilter: result.mixedFilter, rowCount: result.rows.length, client: "", savedRows: result.rows });
     const today = new Date().toLocaleDateString("ko-KR");
     const w = window.open("", "_blank");
-    w.document.write(`<html><head><title>단가표_${result.pickup}_${result.drop}</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:'Malgun Gothic',sans-serif;}
-body{background:white;color:#111;}
-.wrapper{width:794px;margin:0 auto;padding:40px 48px;}
-.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:20px;border-bottom:3px solid #1B2B4B;}
-.logo{font-size:28px;font-weight:900;color:#1B2B4B;}
-.logo span{color:#3B82F6;}
-.company-info{text-align:right;font-size:12px;color:#555;line-height:1.7;}
-.doc-title{font-size:22px;font-weight:900;color:#1B2B4B;margin-bottom:4px;}
-.doc-sub{font-size:13px;color:#666;margin-bottom:24px;}
-.route-bar{display:flex;gap:12px;align-items:center;background:#F0F4FF;border:1px solid #C7D9FF;border-radius:10px;padding:14px 20px;margin-bottom:24px;}
-.route-item{font-size:13px;color:#444;}
-.route-item b{color:#1B2B4B;font-size:15px;}
-.route-arrow{font-size:20px;color:#3B82F6;font-weight:900;}
-table{width:100%;border-collapse:collapse;font-size:13px;}
-thead tr{background:#1B2B4B;}
-thead th{color:white;padding:11px 14px;text-align:center;font-weight:700;}
-tbody tr:nth-child(even){background:#F9FAFB;}
-td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
-.td-ton{font-weight:700;color:#1B2B4B;font-size:14px;}
-.td-price{font-weight:800;color:#2563EB;font-size:15px;}
-.badge-high{background:#D1FAE5;color:#065F46;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;}
-.badge-mid{background:#FEF3C7;color:#92400E;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;}
-.badge-low{background:#FEE2E2;color:#991B1B;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;}
-.var-high{color:#374151;font-weight:700;font-size:12px;}
-.var-mid{color:#4B5563;font-weight:700;font-size:12px;}
-.var-low{color:#6B7280;font-weight:700;font-size:12px;}
-.notice{margin-top:28px;padding:14px 18px;background:#F8FAFF;border:1px solid #C7D9FF;border-radius:8px;font-size:11.5px;color:#374151;line-height:1.8;}
-.footer{margin-top:36px;padding-top:16px;border-top:1px solid #E5E7EB;display:flex;justify-content:space-between;align-items:flex-end;}
-.stamp{width:64px;height:64px;border:2.5px solid #1B2B4B;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:#1B2B4B;margin-left:16px;text-align:center;line-height:1.3;}
-@media print{.no-print{display:none!important;}}
-</style></head><body>
-<div class="wrapper">
-<div class="no-print" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#F8FAFF;border:1px solid #E0E7FF;border-radius:10px;">
-  <button onclick="document.querySelectorAll('.edit-cell').forEach(el=>{el.style.display=el.style.display==='none'?'inline-block':'none';document.querySelectorAll('.view-cell').forEach(v=>{v.style.display=v.style.display==='none'?'inline':'none'});})" style="padding:8px 20px;background:#1B2B4B;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">수정</button>
-  <div style="display:flex;gap:8px;">
-    <button onclick="window.print()" style="padding:8px 20px;background:#1B2B4B;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">인쇄</button>
-    <button onclick="window.print()" style="padding:8px 20px;background:#2563EB;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">PDF 저장</button>
-  </div>
-</div>
-<div class="header">
-  <div><div class="logo">RU<span>N</span>25</div><div style="font-size:11px;color:#888;margin-top:4px;">화물 운송 전문</div></div>
-  <div class="company-info"><div><b>${COMPANY.manager}</b></div><div>📞 ${COMPANY.phone} | ☎ ${COMPANY.tel}</div><div>✉ ${COMPANY.email}</div><div>${COMPANY.address}</div></div>
-</div>
-<div class="doc-title">운송 단가표</div>
-<div class="doc-sub">Vehicle Rate Card | 발행일: ${today}</div>
-<div class="route-bar">
-  <div class="route-item"><b>${result.pickup}</b></div>
-  <div class="route-arrow">→</div>
-  <div class="route-item"><b>${result.drop}</b></div>
-  <div style="flex:1"></div>
-  <div class="route-item">차량: <b>${result.groupLabel}</b></div>
-  ${result.mixedFilter !== "전체" ? `<div class="route-item" style="margin-left:12px;">[${result.mixedFilter}]</div>` : ""}
-  <div class="route-item" style="margin-left:12px;">조회기준: <b>${result.fareField}</b></div>
-  <div class="route-item" style="margin-left:12px;">근거 <b>${result.totalCount}</b>건</div>
-</div>
-<table>
-  <thead><tr>
-    <th>${result.viewMode === "파렛수별" ? "파렛 수" : "차량 톤수"}</th>
-    <th>권장 단가</th>
-    <th>운임 범위</th>
-    <th>변동성</th>
-    <th>신뢰도</th>
-  </tr></thead>
-  <tbody>${result.rows.map((row, i) => {
-    const s = row.stats;
-    const vLabel = s.variance > 40 ? "높음" : s.variance > 20 ? "보통" : "낮음";
-    const vClass = s.variance > 40 ? "var-high" : s.variance > 20 ? "var-mid" : "var-low";
-    const cLabel = s.count >= 10 ? "높음" : s.count >= 4 ? "보통" : "낮음";
-    const cClass = s.count >= 10 ? "badge-high" : s.count >= 4 ? "badge-mid" : "badge-low";
-    const rowId = `row-${i}`;
-    const tonOptions = result.viewMode === "파렛수별"
-      ? PALLET_BUCKETS.map(b => b.display)
-      : TON_BUCKETS.map(b => b.display);
-    return `<tr>
-      <td class="td-ton">
-        <span class="view-cell">${row.display}</span>
-        <select class="edit-cell" style="display:none;padding:4px;font-size:13px;font-weight:700;" onchange="this.parentElement.querySelector('.view-cell').textContent=this.value">
-          ${tonOptions.map(o => `<option value="${o}" ${o === row.display ? "selected" : ""}>${o}</option>`).join("")}
-        </select>
-      </td>
-      <td class="td-price">
-        <span class="view-cell">${s.avg.toLocaleString()}원</span>
-        <input autoComplete="off" class="edit-cell" type="text" style="display:none;width:120px;text-align:right;padding:4px;font-size:14px;font-weight:800;color:#2563EB;" value="${s.avg.toLocaleString()}" oninput="var n=this.value.replace(/[^\\d]/g,'');this.value=n?Number(n).toLocaleString():'0'" onchange="this.parentElement.querySelector('.view-cell').textContent=this.value+'원'">
-      </td>
-      <td>
-        <span class="view-cell" style="color:#374151;font-size:13px;font-weight:600;">${roundDown10k(s.min).toLocaleString()} ~ ${roundDown10k(s.max).toLocaleString()}원</span>
-        <span class="edit-cell" style="display:none;font-size:11px;">
-          <input autoComplete="off" type="text" style="width:80px;text-align:right;padding:3px;font-size:11px;" value="${roundDown10k(s.min).toLocaleString()}" oninput="var n=this.value.replace(/[^\\d]/g,'');this.value=n?Number(n).toLocaleString():'0'">
-          ~
-          <input autoComplete="off" type="text" style="width:80px;text-align:right;padding:3px;font-size:11px;" value="${roundDown10k(s.max).toLocaleString()}" oninput="var n=this.value.replace(/[^\\d]/g,'');this.value=n?Number(n).toLocaleString():'0'">
-          원
-        </span>
-      </td>
-      <td>
-        <span class="view-cell ${vClass}">${vLabel}</span>
-        <select class="edit-cell" style="display:none;padding:4px;font-size:12px;font-weight:700;" onchange="var v=this.value;var el=this.parentElement.querySelector('.view-cell');el.textContent=v;el.className='view-cell '+(v==='높음'?'var-high':v==='보통'?'var-mid':'var-low')">
-          ${["낮음", "보통", "높음"].map(o => `<option value="${o}" ${o === vLabel ? "selected" : ""}>${o}</option>`).join("")}
-        </select>
-      </td>
-      <td>
-        <span class="view-cell"><span class="${cClass}">${cLabel}</span></span>
-        <select class="edit-cell" style="display:none;padding:4px;font-size:12px;font-weight:700;" onchange="var v=this.value;var el=this.parentElement.querySelector('.view-cell');el.innerHTML='<span class=\\'badge-'+(v==='높음'?'high':v==='보통'?'mid':'low')+'\\'>' +v+'</span>'">
-          ${["낮음", "보통", "높음"].map(o => `<option value="${o}" ${o === cLabel ? "selected" : ""}>${o}</option>`).join("")}
-        </select>
-      </td>
-    </tr>`;
-  }).join("")}</tbody>
-</table>
-<div class="notice"><b>※ 안내사항</b><br>• 위 단가는 ${result.pickup} ↔ ${result.drop} 구간의 과거 실적(${result.fareField}) 기반 참고 단가입니다 (1만원 단위 절사).<br>• 유가 변동, 차량 수급 상황에 따라 실제 운임은 달라질 수 있습니다.<br>• 신뢰도 '낮음'은 데이터 샘플이 적어 변동 가능성이 높으니 참고용으로만 활용하시기 바랍니다.<br>• 정확한 견적은 담당자에게 직접 문의해 주시기 바랍니다.</div>
-<div class="footer">
-  <div style="font-size:11px;color:#aaa;">본 자료는 영업 참고용이며 정식 계약서가 아닙니다.</div>
-  <div style="display:flex;align-items:center;">
-    <div style="text-align:right;font-size:13px;color:#555;line-height:1.6;">
-      <b style="color:#1B2B4B;font-size:15px;">${COMPANY.name}</b><br>${COMPANY.manager} ${COMPANY.phone}
-    </div>
-    ${stampLabel(COMPANY.name) ? `<div class="stamp">${stampLabel(COMPANY.name)}</div>` : ""}
-  </div>
-</div>
-</div></body></html>`);
+    w.document.write(rateCardHtml({ company: COMPANY, info: { client: "", pickup: result.pickup, drop: result.drop, mixed: result.mixedFilter, vehicle: result.groupLabel, fareField: result.fareField }, rows: result.rows.map((r) => ({ display: r.display, avg: r.stats.avg, min: r.stats.min ? roundDown10k(r.stats.min) : "", max: r.stats.max ? roundDown10k(r.stats.max) : "", varianceLabel: r.stats.variance > 40 ? "높음" : r.stats.variance > 20 ? "보통" : "낮음", confLabel: r.stats.count >= 10 ? "높음" : r.stats.count >= 4 ? "보통" : "낮음" })), today }));
     w.document.close();
     w.focus();
   };

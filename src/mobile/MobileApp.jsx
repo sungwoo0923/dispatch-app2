@@ -174,7 +174,7 @@ const REVERSED_DATE_ORDER_MSG = "하차일은 상차일보다 빠를 수 없습�
 // 보낼 때 쓰는 메시지 — 오더의 날짜/상·하차지명을 자동으로 채운다. 브라우저(웹앱)는
 // 보안정책상 SMS를 직접 발송할 수 없어(iOS/안드로이드 공통 제약), sms: 링크로
 // 기사 폰의 문자 앱을 이 내용으로 미리 채워 열어주는 데까지만 가능하다 — 마지막
-// 전송 버튼은 문자 앱에서 기사가 아니라 배차담당자가 직접 한 번 더 눌러야 한다.
+// 전송 버튼은 문자 앱에서 기사님이 아니라 배차담당자가 직접 한 번 더 눌러야 한다.
 function buildAttachUploadSmsMobile(order) {
   const baseUrl = window.location.origin;
   const date = (order?.상차일 || "").slice(0, 10);
@@ -748,7 +748,7 @@ function findDuplicateOrders(form, existingRows) {
 
 // ⭐ 등록내역 헤더의 "오더 검증" 버튼 — 이미 등록된 오더들 중, 상/하차지·운임 등
 // 오더 내용은 물론 기사명·차량번호·전화번호까지 전부 똑같은 것들끼리 묶어서
-// 찾아낸다(단순히 같은 기사가 같은 날 다른 오더를 여러 건 뛰는 정상적인 경우까지
+// 찾아낸다(단순히 같은 기사님이 같은 날 다른 오더를 여러 건 뛰는 정상적인 경우까지
 // 중복으로 잘못 잡지 않도록, 기사정보까지 완전히 같은 것만 중복으로 본다).
 function findExactDuplicateOrderGroups(list = []) {
   const norm = (s) => String(s || "").replace(/\s+/g, "").trim().toLowerCase();
@@ -1572,9 +1572,9 @@ const TP_STATUS_DOT = {
   승인대기: { dot: "#6E95E8", text: "#DCE4F1", ring: "rgba(110,149,232,0.45)", wash: "rgba(110,149,232,0.10)" },
 };
 
-// ⭐ 지입 기사가 아직 오더를 수락하지 않은 건(기사확인상태==="대기")은 차량번호가
+// ⭐ 지입 기사님이 아직 오더를 수락하지 않은 건(기사확인상태==="대기")은 차량번호가
 // 이미 채워져 있어도(getStatus 기준 "배차완료") PC와 동일하게 "승인대기"로 보여야
-// 한다 — 차량번호만 보고 "배차완료"로 뜨면 실제로는 기사가 수락 전인데도 확정된
+// 한다 — 차량번호만 보고 "배차완료"로 뜨면 실제로는 기사님이 수락 전인데도 확정된
 // 것처럼 오해하게 된다.
 function getTransportBadgeInfo(order) {
   const state = getStatus(order);
@@ -4966,7 +4966,7 @@ const deleteSingleOrder = async (order) => {
       if (!window.confirm("운송이 완료된 오더입니다. 기사를 취소하시겠습니까?")) return;
       archiveCompletedOrderMobile(selectedOrder, selectedOrder.id || selectedOrder._id, "기사취소");
     } else if (selectedOrder.기사확인상태 === "수락") {
-      // 기사가 수락한 뒤 기사만 빠짐 → 기사 운행기록에 "배차취소"
+      // 기사님이 수락한 뒤 기사만 빠짐 → 기사 운행기록에 "배차취소"
       archiveCompletedOrderMobile(selectedOrder, selectedOrder.id || selectedOrder._id, "기사취소");
     }
 
@@ -5022,7 +5022,7 @@ const deleteSingleOrder = async (order) => {
     const fleetMsgD = fleetDeleteConfirmMsgMobile(deleteConfirmMobile);
     if (fleetMsgD && !window.confirm(fleetMsgD)) return;
     notifyFleetCancelMobile(deleteConfirmMobile, deleteConfirmMobile.id);
-    // 기사가 수락(또는 완료)한 오더가 삭제되면 기사 운행기록에 "오더취소"
+    // 기사님이 수락(또는 완료)한 오더가 삭제되면 기사 운행기록에 "오더취소"
     if (["수락", "완료"].includes(deleteConfirmMobile.기사확인상태) && deleteConfirmMobile.차량번호) {
       archiveCompletedOrderMobile(deleteConfirmMobile, deleteConfirmMobile.id, "오더삭제");
     }
@@ -8172,7 +8172,7 @@ function UploadLinkModal({ orders = [], onClose, companyName = "" }) {
 
         {/* 기사 목록 */}
         {drivers.length === 0 ? (
-          <p className="text-[13px] text-gray-400 text-center py-4">전화번호가 등록된 기사가 없습니다.</p>
+          <p className="text-[13px] text-gray-400 text-center py-4">전화번호가 등록된 기사님이 없습니다.</p>
         ) : (
           <div className="space-y-2 mb-4 overflow-y-auto flex-grow">
             {drivers.map(d => (
@@ -9919,7 +9919,7 @@ function CardAttachViewer({ order, onClose, showToast, showSuccess }) {
         )}
         {liveLock?.재업로드완료알림 === true && (
           <div className="mx-4 mt-3 flex items-center gap-1.5 px-3 py-2 bg-emerald-500 text-white text-[12px] font-bold rounded-lg shrink-0 animate-pulse">
-            ✓ 기사가 재업로드를 완료했습니다
+            ✓ 기사님이 재업로드를 완료했습니다
           </div>
         )}
         {liveLock?.업로드잠금 && liveLock?.재업로드완료알림 !== true && (
@@ -10281,7 +10281,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
   // ⭐ 등록되지 않은 차량번호를 입력했을 때 — 상세보기/등록폼과 동일하게 "신규 기사"
   // 뱃지를 보여주고, 저장 시 기사관리에 자동 등록한다.
   const [isNewDriver, setIsNewDriver] = useState(false);
-  // ⭐ 차량번호는 같은데 이름/전화번호가 다른 기존 기사가 감지되면, 조용히 덮어쓰지
+  // ⭐ 차량번호는 같은데 이름/전화번호가 다른 기존 기사님이 감지되면, 조용히 덮어쓰지
   // 않고 PC(DispatchApp.jsx)와 동일하게 선택 팝업을 띄운다.
   const [driverConflictPopup, setDriverConflictPopup] = useState(null);
 
@@ -10768,7 +10768,7 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
     try {
       bgWrite(updateDoc(doc(db, order.__col || "orders", order.id), {
         차량번호: "", 이름: "", 기사명: "", 전화번호: "", 전화: "",
-        배차상태: "배차중", 상태: "배차중", 배차방식: "선택없음", _lastModified: Date.now(), // ⭐ 기사가 빠지면 배차중으로(예전엔 배차완료로 남았다)
+        배차상태: "배차중", 상태: "배차중", 배차방식: "선택없음", _lastModified: Date.now(), // ⭐ 기사님이 빠지면 배차중으로(예전엔 배차완료로 남았다)
         기사취소요청: false, 기사취소요청일시: deleteField(),
         // 재배차 상황이므로 이전에 전달된 전달상태도 함께 초기화한다.
         업체전달상태: "미전달", 정보전달완료: false, 정보전달상태: "미전달", 전달완료일시: null,
@@ -13071,7 +13071,7 @@ const handleAssignClick = () => {
             </div>
 
             <div className="px-5 pt-4 space-y-2">
-              {/* 기존 기사가 있을 때: 3버튼 */}
+              {/* 기존 기사님이 있을 때: 3버튼 */}
               {driverConflictPopup.existing && (
                 <>
                   <div className="grid grid-cols-2 gap-2">
@@ -13998,7 +13998,7 @@ function MobileOrderForm({
   // 자동완성을 위해 하차지거래처(places)까지 합쳐진 풀이라, 여기 그대로 쓰면 관련 없는
   // 하차지명이 거래처 드롭다운에 함께 뜬다.
   const basicClientsOnly = basicClients || clients;
-  // ⭐ 차량번호 입력으로 지입 기사가 매칭되는 순간 휴차(지정 휴차일/오늘 본인 휴차중) 확인 팝업
+  // ⭐ 차량번호 입력으로 지입 기사님이 매칭되는 순간 휴차(지정 휴차일/오늘 본인 휴차중) 확인 팝업
   //   진행: 그대로(저장 때 다시 묻지 않음) / 보류: 입력한 기사 정보를 비운다
   const restAskingRef = useRef("");
   useEffect(() => {
@@ -18102,7 +18102,7 @@ ${Number(order.청구운임||0).toLocaleString()}원 ${(()=>{const pt=order.지�
       ]);
       const noticeBlock = [...new Set([_pNoticeM, _dNoticeM].filter(Boolean))].join("\n\n");
 
-      // 업로드 링크는 오더별 토큰을 함께 담는다 — 기사가 업로드를 완료(등록)하면
+      // 업로드 링크는 오더별 토큰을 함께 담는다 — 기사님이 업로드를 완료(등록)하면
       // 이 토큰은 잠기고, 이후 "기사전달용" 복사를 다시 하면 새 토큰이 발급되어
       // 예전 링크(구 토큰)로는 더 이상 접속할 수 없게 된다.
       const uploadUrl = (() => {
@@ -22107,8 +22107,8 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
   const PUSH_PREF_TYPES = [
     { key: "배차등록", label: "배차등록 알림", sub: "새 오더가 등록되면" },
     { key: "긴급배차", label: "긴급배차 알림", sub: "긴급 오더가 등록되면" },
-    { key: "배차완료", label: "배차완료 알림", sub: "기사가 배정되면" },
-    { key: "재배차", label: "재배차 알림", sub: "배정됐던 기사가 빠져 다시 배차중이 되면" },
+    { key: "배차완료", label: "배차완료 알림", sub: "기사님이 배정되면" },
+    { key: "재배차", label: "재배차 알림", sub: "배정됐던 기사님이 빠져 다시 배차중이 되면" },
     { key: "미배차", label: "미배차 임박 알림", sub: "상차 1시간 전인데 아직 미배차면" },
     { key: "배차취소", label: "배차취소 알림", sub: "오더가 취소되거나 삭제되면" },
   ];

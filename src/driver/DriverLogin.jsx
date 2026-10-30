@@ -8,7 +8,7 @@ import BigCheck from "../components/BigCheck";
 
 // ⭐ 사용자 요청 — 한 번 로그인한 폰에서는 소속회사명/차량번호/이름을 기억하고(정보 저장),
 // "자동 로그인"을 켜두면 로그인 화면에 들어오는 순간 저장된 정보로 바로 로그인한다.
-// 단, 기사가 직접 "로그아웃"을 누른 직후에는 자동 로그인하지 않는다(다시 들어가버리는 것 방지).
+// 단, 기사님이 직접 "로그아웃"을 누른 직후에는 자동 로그인하지 않는다(다시 들어가버리는 것 방지).
 const SAVED_KEY = "driverLoginSaved";
 function loadSaved() {
   try { return JSON.parse(localStorage.getItem(SAVED_KEY) || "null"); } catch { return null; }
@@ -65,7 +65,7 @@ export default function DriverLogin() {
         uid = res.user.uid;
       } catch (signInErr) {
         // ⭐ 사용자 요청 — 관리자가 PC 기사관리에서 지입차를 미리 등록해두면(차량번호로
-        // 문서만 만들어짐, 인증 계정은 아직 없음) 그 기사가 여기서 바로 로그인하려 해도
+        // 문서만 만들어짐, 인증 계정은 아직 없음) 그 기사님이 여기서 바로 로그인하려 해도
         // 로그인용 계정 자체가 없어 매번 실패했다(기사 등록 화면을 따로 거쳐야만 했음).
         // 로그인 시도 중 "그런 계정이 없음" 류 오류가 나면, 입력한 차량번호로 미리
         // 등록된 문서가 있는지 확인해서 이름·회사명이 맞으면 바로 그 자리에서 계정을

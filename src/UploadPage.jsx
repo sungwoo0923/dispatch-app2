@@ -181,13 +181,13 @@ export default function UploadPage() {
   // 브라우저 Geolocation API로 좌표를 받아 오더 문서(+화주사 전송사본)에 기록한다.
   // 화면이 꺼지거나 다른 앱으로 전환되면(특히 iOS Safari) 위치 전송이 멈추는
   // 플랫폼 제약이 있어, "이 화면을 보고 있는 동안의 대략적인 위치"용 기능이다.
-  // 기사가 업로드 링크로 들어오면 별도 조작 없이 곧바로 위치 공유가 시작되도록 기본값 on
+  // 기사님이 업로드 링크로 들어오면 별도 조작 없이 곧바로 위치 공유가 시작되도록 기본값 on
   const [sharingLoc, setSharingLoc] = useState(true);
   const [locError, setLocError] = useState(null);
   const [lastLoc, setLastLoc] = useState(null);
   const watchIdRef = useRef(null);
   const lastLocWriteRef = useRef(0);
-  // 위치 공유는 기사가 동의 팝업에서 "승인"을 눌러야만 시작된다(null=아직 응답
+  // 위치 공유는 기사님이 동의 팝업에서 "승인"을 눌러야만 시작된다(null=아직 응답
   // 안 함, true=승인, false=거절). 거절하면 sharingLoc도 함께 꺼서 위치 공유가
   // 거절된 것으로 간주한다.
   const [locConsent, setLocConsent] = useState(null);

@@ -162,7 +162,7 @@ export function useAddrGeo(addr) {
 }
 
 // ─── 하차 도착예상시간 ──────────────────────────────────────────────────────────
-// ⭐ 사용자 요청 — 기사가 상차지(1km 이내)에 도착한 시각을 기준으로 상차 작업
+// ⭐ 사용자 요청 — 기사님이 상차지(1km 이내)에 도착한 시각을 기준으로 상차 작업
 // 30분 뒤 출발한다고 보고, 상차지→하차지 실도로 소요시간을 더해 도착예상시각을 낸다.
 export const LOADING_MINUTES = 30;
 const ARRIVE_KM = 1;
@@ -239,7 +239,7 @@ function useLiveRouteMinutes(loc, to) {
 
 // ⭐ 사용자 요청 — 하차 도착예상시각
 //  · 상차지 도착 후 아직 상차지(1km 이내)에 있으면: (도착시각+30분 상차, 단 이미 지났으면 지금) + 상차지→하차지 소요시간
-//  · 상차지를 떠나 이동 중이면: 지금 + "현재 위치→하차지" 실시간 소요시간 (기사가 빨리 출발하면 그만큼 당겨짐)
+//  · 상차지를 떠나 이동 중이면: 지금 + "현재 위치→하차지" 실시간 소요시간 (기사님이 빨리 출발하면 그만큼 당겨짐)
 export function useDropEta(order, driverId, location) {
   const pickupGeo = useAddrGeo(order?.상차지주소 || null);
   const dropGeo = useAddrGeo(order?.하차지주소 || null);
@@ -340,7 +340,7 @@ export function RemainEtaText({ order, driverId, location, phase, style, etaStyl
 // ─── 지입 기사 통합 상태(관제현황·노선관리·모바일·기사앱 공통) ───────────────────────
 // ⭐ 사용자 요청 — 지입 기사는 출근/상차중/하차중/복귀중/퇴근 버튼 상태 대신
 //   배차대기 / 오더확인중 / 운송중 / 상차지진입 / 상차지도착 / 하차지진입 / 하차지도착 / 휴차
-// 로 통일해서 보여준다(기사가 출근만 누르고 오더가 없으면 "배차대기").
+// 로 통일해서 보여준다(기사님이 출근만 누르고 오더가 없으면 "배차대기").
 export const FLEET_PHASE_FILTERS = ["전체", "배차대기", "운송중", "상차지진입", "상차지도착", "하차지진입", "하차지도착", "휴차"];
 export const FLEET_PHASE_COLORS = {
   "배차대기": "#92400e", "오더확인중": "#d97706", "운송중": "#1B2B4B",
@@ -371,7 +371,7 @@ export function isPickupVisited(order) {
   return true;
 }
 
-// ⭐ 상차 완료 여부 — 기사가 "상차완료"를 눌렀거나(상차사진 포함), 상차지에 들렀다가 1km 밖으로
+// ⭐ 상차 완료 여부 — 기사님이 "상차완료"를 눌렀거나(상차사진 포함), 상차지에 들렀다가 1km 밖으로
 // 벗어났으면(출발) 상차한 것으로 본다. 상차 전에는 하차지가 가까워도 하차지 상태로 보지 않는다.
 export function isLoaded(order, location) {
   if (!order) return false;

@@ -66,7 +66,7 @@ export function CopyTemplateEditor({ canEdit = true, onSaved, compact = false })
         </div>
 
         <div className="flex items-center justify-between gap-3 rounded-xl border border-[#DCE3EE] bg-white px-4 py-3">
-          <div><div className="text-[13.5px] font-black text-[#0F1A30]">업로드 링크 넣기</div><div className="text-[11.5px] text-[#7A89A3]">기사가 파렛전표·명세서를 올리는 링크를 문구에 포함합니다.</div></div>
+          <div><div className="text-[13.5px] font-black text-[#0F1A30]">업로드 링크 넣기</div><div className="text-[11.5px] text-[#7A89A3]">기사님이 파렛전표·명세서를 올리는 링크를 문구에 포함합니다.</div></div>
           <button type="button" disabled={!canEdit} onClick={() => set({ includeUpload: !d.includeUpload })} aria-pressed={d.includeUpload}
             className={`relative w-[52px] h-7 rounded-full transition ${d.includeUpload ? "bg-[#1B2B4B]" : "bg-[#CBD5E3]"}`}>
             <span className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all ${d.includeUpload ? "left-[26px]" : "left-0.5"}`} />

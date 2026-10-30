@@ -742,18 +742,21 @@ export default function AttendanceBoard({ userCompany, role, user }) {
 
       {/* 출근기록 테이블 */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
-        <table className="border-collapse w-full text-[13px]">
+        <table className="border-collapse w-full text-[13px] min-w-[1150px]">
           <thead>
             <tr>
-              <th className="sticky left-0 bg-white px-3 py-2.5 text-left text-gray-500 font-bold border-b border-r border-gray-100 min-w-[96px]">이름</th>
-              <th className="px-2 py-2.5 text-center font-bold border-b border-gray-100 text-gray-400 min-w-[56px] text-[11px]">근무시간</th>
+              <th className="sticky left-0 z-[1] bg-white px-3 py-2.5 text-left text-[#0F1A30] font-black border-b border-r border-gray-100 min-w-[90px] text-[13.5px]">이름</th>
+              <th className="px-1 py-2.5 text-center font-black border-b border-gray-100 text-[#5B6B85] min-w-[64px] text-[12px]">근무시간</th>
               {dayList.map(d => {
                 const ds = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
                 const wd = new Date(ds + "T00:00:00").getDay();
                 const holiday = isHoliday(ds, holidays);
+                const off = holiday || wd === 0;
                 return (
-                  <th key={d} className={`px-1.5 py-2.5 text-center font-bold border-b border-gray-100 min-w-[42px] ${holiday ? "text-red-500" : wd === 0 ? "text-red-400" : wd === 6 ? "text-blue-400" : "text-gray-400"} ${ds === todayDateStr ? "bg-[#1B2B4B]/5" : ""}`}>
-                    {d}
+                  <th key={d} title={holiday ? "공휴일·휴일" : wd === 0 ? "일요일" : wd === 6 ? "토요일" : ""}
+                    className={`px-0.5 py-2 text-center font-black border-b border-gray-100 min-w-[34px] leading-tight ${ds === todayDateStr ? "bg-[#0F1A30] text-white" : off ? "bg-[#DCE6F7] text-[#0B1428]" : wd === 6 ? "bg-[#EEF3FC] text-[#2D4C82]" : "text-[#5B6B85]"}`}>
+                    <div className="text-[13.5px]">{d}</div>
+                    <div className="text-[10.5px] font-bold opacity-75">{holiday ? "휴일" : ["일", "월", "화", "수", "목", "금", "토"][wd]}</div>
                   </th>
                 );
               })}
@@ -793,7 +796,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                   const hasRejected = !!rejectedChangeMap[rejKey];
 
                   return (
-                    <td key={d} className={`px-0.5 py-1.5 text-center border-b border-gray-50 ${ds === todayDateStr ? "bg-[#1B2B4B]/5" : ""}`}>
+                    <td key={d} className={`px-0.5 py-1.5 text-center border-b border-gray-50 ${ds === todayDateStr ? "bg-[#1B2B4B]/10" : (isHoliday(ds, holidays) || new Date(ds + "T00:00:00").getDay() === 0) ? "bg-[#DCE6F7]/60" : new Date(ds + "T00:00:00").getDay() === 6 ? "bg-[#EEF3FC]/70" : ""}`}>
                       <button
                         disabled={!clickable}
                         onClick={() => {
@@ -810,7 +813,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                             setChangeRequestCell({ emp, date: ds, status: effStatus, rec });
                           }
                         }}
-                        className={`w-9 h-7 mx-auto rounded text-[11px] font-bold flex flex-col items-center justify-center relative ${colorCls || "bg-gray-50 text-gray-300"} ${clickable ? "cursor-pointer hover:opacity-80" : "cursor-default"}`}
+                        className={`w-full max-w-[44px] h-8 mx-auto rounded-md text-[12px] font-black flex flex-col items-center justify-center relative ${colorCls || "bg-gray-50 text-gray-300"} ${clickable ? "cursor-pointer hover:opacity-80" : "cursor-default"}`}
                         title={hasRejected ? `거절: ${rejectedChangeMap[rejKey]}` : tooltipText}
                       >
                         <span>{label || "·"}</span>

@@ -77,6 +77,9 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
   // ⭐ 안내 문구 — 처음부터 보여주고, 오래 걸리면 바꾼다(받다 만 상태로 강제로 열지 않음).
   // 30초가 넘거나 인터넷이 끊겨 있으면 "저장된 오더로 먼저 열기"를 직접 고를 수 있다.
   const [phase, setPhase] = useState(0);
+  // 이 기기에서 처음 여는지(저장된 오더가 없어 처음부터 받아야 함) — 다 열리면 기록
+  const [firstVisit] = useState(() => { try { return !localStorage.getItem("kpBootedOnce"); } catch { return false; } });
+  useEffect(() => () => { try { localStorage.setItem("kpBootedOnce", "1"); } catch { /* 무시 */ } }, []);
   const [offline, setOffline] = useState(typeof navigator !== "undefined" && navigator.onLine === false);
   useEffect(() => {
     const t1 = setTimeout(() => setPhase(1), 20000);
@@ -93,7 +96,9 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
       ? { title: "연결이 많이 느린 것 같아요", desc: "신호가 좋은 곳이나 와이파이에서 더 빨라요" }
       : phase >= 1
         ? { title: "열심히 가져오고 있어요", desc: "조금만 더 기다려 주세요" }
-        : { title: "데이터 환경에 따라 늦어질 수 있어요", desc: "최신 오더를 빠짐없이 받는 중이에요" };
+        : firstVisit
+          ? { title: "처음 접속하면 로딩이 조금 걸릴 수 있어요", desc: "이 기기에 오더를 처음 저장하는 중이에요 · 다음부터는 빨라져요" }
+          : { title: "데이터 환경에 따라 늦어질 수 있어요", desc: "최신 오더를 빠짐없이 받는 중이에요" };
   const canSkip = !!onSkip && (offline || phase >= 2);
 
   const activeIdx = completed.findIndex((c) => !c);

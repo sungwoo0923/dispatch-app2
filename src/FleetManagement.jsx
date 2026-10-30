@@ -583,7 +583,7 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
         <svg width="38" height="38" fill="none" stroke="currentColor" strokeWidth="1.4" viewBox="0 0 24 24" style={{ marginBottom: 12 }}>
           <circle cx="12" cy="12" r="10" /><path d="M12 8v4m0 4h.01" strokeLinecap="round" />
         </svg>
-        <p style={{ fontSize: 16, fontWeight: 600 }}>조건에 맞는 기사가 없습니다</p>
+        <p style={{ fontSize: 16, fontWeight: 600 }}>조건에 맞는 기사님이 없습니다</p>
       </div>
     );
   }
@@ -875,7 +875,7 @@ function ActivityFeed({ logs, driversMap, onDeleteAll }) {
   if (grouped.length === 0) {
     return (
       <div style={{ padding: "36px 16px", textAlign: "center", color: "#9ca3af", fontSize: 16 }}>
-        기사가 버튼을 누르면 여기에 즉시 표시됩니다
+        기사님이 버튼을 누르면 여기에 즉시 표시됩니다
       </div>
     );
   }
@@ -1340,7 +1340,7 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
         <div style={{ background: "#fff", border: "1px solid #e2e7ef", borderRadius: 12, padding: 50, textAlign: "center", color: "#4b5563", fontSize: 17, fontWeight: 700, lineHeight: 1.7 }}>
           {scope === "mine"
             ? <>내가 담당자로 지정된 차량이 없습니다.<br />"전체 목록"에서 담당자를 지정하거나, 노선관리에서 위임받으세요.</>
-            : <>승인된 기사가 없습니다.</>}
+            : <>승인된 기사님이 없습니다.</>}
         </div>
       ) : groups.length === 0 ? (
         <div style={{ background: "#fff", border: "1px solid #e2e7ef", borderRadius: 12, padding: 50, textAlign: "center", color: "#4b5563", fontSize: 17, fontWeight: 700 }}>검색·필터 조건에 맞는 차량이 없습니다.</div>
@@ -1641,7 +1641,7 @@ function useVisitedPickup(driverId, pickupGeo) {
 }
 
 // "운송중" 라벨 하나를 세분화 라벨로 바꿔 보여준다 — 그 외엔 항상 fallback 그대로.
-// ⭐ 버그수정 — 예전엔 기사가 앱에서 "상차 시작/상차완료" 버튼을 직접 눌러야만
+// ⭐ 버그수정 — 예전엔 기사님이 앱에서 "상차 시작/상차완료" 버튼을 직접 눌러야만
 // (live.상태가 "운송중"으로 바뀌어야만) 하차지 방향으로 인식했는데, 실제로는 버튼을
 // 안 누르고 그냥 운전만 해도 상태가 갱신돼야 한다. 버튼 상태는 더 이상 보지 않고,
 // 순수하게 GPS 거리만으로 판단한다: 상차지 1km 이내면 "상차지도착"(지금 거리가
@@ -1664,7 +1664,7 @@ const PHASE_TEXT_COLORS = {
   "상차 예정": "#64748b",
   "위치 확인중": "#9ca3af",
 };
-// ⭐ 관리자가 수정한 오더를 기사가 확인했는지 표시
+// ⭐ 관리자가 수정한 오더를 기사님이 확인했는지 표시
 function ModBadge({ order }) {
   const ms = modificationStatus(order);
   if (!ms) return null;
@@ -2303,7 +2303,7 @@ const ORDER_CHECK_META = {
   완료: { label: "운송완료", bg: "#eef1f6", color: NAVY, border: "1px solid #c7d2e3" },
 };
 
-// ⭐ 사용자 요청 — 지입 기사가 "오늘 사진 전송현황"에서 올린 상차/하차완료 사진을
+// ⭐ 사용자 요청 — 지입 기사님이 "오늘 사진 전송현황"에서 올린 상차/하차완료 사진을
 // 4/5파트 배차현황의 첨부 아이콘과 동일하게 지입차관리 노선표에서도 볼 수 있어야
 // 한다. 같은 orders/{id}/attachments 서브컬렉션을 보는 간단한 뷰어(회전/재업로드
 // 등 고급 기능은 빼고 보기 전용으로).
@@ -2368,7 +2368,7 @@ function FleetAttachViewer({ orderId, col = "orders", onClose }) {
 // ⭐ 사용자 요청 — 이름 필드가 하나도 없으면 마지막엔 이메일을 그대로 보여주고
 // 있었다. staffByEmail(이메일→실명 매핑)이 있으면 이메일 대신 실명으로 바꿔 보여준다.
 // ─── 오더 타임라인 ────────────────────────────────────────────────────────────
-// ⭐ 사용자 요청 — 기사가 오더를 수락/거절/수정확인/상차지도착/상차완료/운송완료한
+// ⭐ 사용자 요청 — 기사님이 오더를 수락/거절/수정확인/상차지도착/상차완료/운송완료한
 // 시각을 오더별로 한눈에. 기사앱이 남기는 기사타임라인 배열(누적 기록)을 기본으로,
 // 이 기능 이전 오더는 기존 일시 필드(기사확인일시/상차지도착일시 등)로 보완한다.
 const TL_META = {
@@ -4131,7 +4131,7 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
         <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 60, textAlign: "center", color: "#9ca3af", fontSize: 16 }}>
           {scope === "mine"
             ? <>아직 담당 지정된 차량이 없습니다.<br />위 "전체 지입차"에서 담당자를 지정해주세요.</>
-            : <>지입/직영 등급 기사가 없습니다.<br />기사관리에서 등급을 지정해주세요.</>}
+            : <>지입/직영 등급 기사님이 없습니다.<br />기사관리에서 등급을 지정해주세요.</>}
         </div>
       ) : visibleRows.length === 0 ? (
         <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 60, textAlign: "center", color: "#9ca3af", fontSize: 16 }}>
@@ -5518,7 +5518,7 @@ function CargoCameraTab({ drivers }) {
           <div style={{ fontSize: 14, color:"#9ca3af", marginTop:2 }}>카메라가 연결된 차량의 영상이 자동으로 표시됩니다</div>
         </div>
         {drivers.length === 0 ? (
-          <div style={{ padding:"40px 20px", textAlign:"center", color:"#9ca3af", fontSize: 15 }}>등록된 기사가 없습니다</div>
+          <div style={{ padding:"40px 20px", textAlign:"center", color:"#9ca3af", fontSize: 15 }}>등록된 기사님이 없습니다</div>
         ) : (
           <div style={{ padding:16, display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(280px, 1fr))", gap:12 }}>
             {drivers.map(d => {
@@ -5596,7 +5596,7 @@ function CargoCameraTab({ drivers }) {
 })();
 
 // ─── 차량 관리 탭 (2026-10-30) ─────────────────────────────────────────────
-// 지입·직영 차량의 주행거리·정비·만기·제원을 한눈에. 기사가 기사앱 '차량' 탭에서 넣은 값을
+// 지입·직영 차량의 주행거리·정비·만기·제원을 한눈에. 기사님이 기사앱 '차량' 탭에서 넣은 값을
 // 그대로 보고, 직원도 같은 화면에서 고친다(누가 고쳤는지 남는다).
 function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
   const rawMap = useMemo(() => Object.fromEntries(driversRaw.map((r) => [r.id, r])), [driversRaw]);
@@ -5623,7 +5623,7 @@ function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
         <div>
           <div style={{ fontFamily: FC_MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>FLEET · VEHICLE CARE</div>
           <div style={{ fontSize: 23, fontWeight: 900, marginTop: 2 }}>차량 관리</div>
-          <div style={{ fontSize: 13.5, color: "rgba(255,255,255,.65)", marginTop: 2 }}>기사가 기사앱에서 입력한 주행거리·정비·만기·제원을 보고 함께 고칩니다. 차종(톤급)별 정비 주기가 자동 적용됩니다.</div>
+          <div style={{ fontSize: 13.5, color: "rgba(255,255,255,.65)", marginTop: 2 }}>기사님이 기사앱에서 입력한 주행거리·정비·만기·제원을 보고 함께 고칩니다. 차종(톤급)별 정비 주기가 자동 적용됩니다.</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           {[["all", "전체"], ["over", "교체 지남"], ["soon", "점검 필요"], ["none", "미설정"]].map(([k, l]) => (
@@ -6577,7 +6577,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
             <div style={{ background: "#fff", border: "1px solid #d1d5db", borderLeft: "3px solid #374151", borderRadius: 8, overflow: "hidden" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", background: "#f8f9fb", borderBottom: "1px solid #e5e7eb" }}>
                 <span style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>출발지 변경 요청 {locChangeRequests.length}건</span>
-                <span style={{ fontSize: 14, color: "#6b7280" }}>기사가 출발지 변경을 요청했습니다</span>
+                <span style={{ fontSize: 14, color: "#6b7280" }}>기사님이 출발지 변경을 요청했습니다</span>
               </div>
               {locChangeRequests.map((req) => (
                 <div key={req.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 14px", borderBottom: "1px solid #f3f4f6", flexWrap: "wrap" }}>
@@ -6778,7 +6778,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
                 <span style={{ width: 9, height: 9, borderRadius: "50%", background: NAVY, boxShadow: "0 0 0 3px rgba(27,43,75,.15)", display: "inline-block", animation: "fmLivePulse 2s infinite" }} />
                 <span style={{ fontFamily: FC_MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#94A3B8" }}>EVENT FEED</span>
                 <span style={{ fontSize: 17, fontWeight: 800, color: NAVY }}>실시간 활동 피드</span>
-                <span style={{ fontSize: 15, color: "#9ca3af" }}>기사가 버튼을 누를 때마다 즉시 기록</span>
+                <span style={{ fontSize: 15, color: "#9ca3af" }}>기사님이 버튼을 누를 때마다 즉시 기록</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 15, color: "#6b7280", fontWeight: 600 }}>최근 {filteredActivityLogs.length}건</span>

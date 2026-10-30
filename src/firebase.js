@@ -1,5 +1,6 @@
 
 // ======================= src/firebase.js (FINAL FIXED) =======================
+import * as FS from "firebase/firestore";
 import { initializeApp } from "firebase/app";
 import {
   getAuth,
@@ -81,6 +82,12 @@ function createDb() {
   }
 }
 export const db = createDb();
+// ⚡ 첫 로딩 "저장된 오더 불러오기" 단축 — PC에 저장된 오더가 많아지면 저장본에서 찾는 데 오래 걸렸다.
+//  자주 쓰는 조회(상차일 범위 등)에 맞춰 저장본 안에 색인을 자동으로 만들어 두게 한다(SDK 기능, 서버 비용 없음).
+try {
+  const mgr = FS.getPersistentCacheIndexManager?.(db);
+  if (mgr) FS.enablePersistentCacheIndexAutoCreation?.(mgr);
+} catch { /* 지원 안 하는 환경 — 그대로 */ }
 export const storage = getStorage(app);
 
 // ====================================================

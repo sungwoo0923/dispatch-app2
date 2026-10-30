@@ -1,6 +1,6 @@
 // ======================= src/VehicleCarePanel.jsx =======================
 // 🚚 차량관리 패널 — 기사앱(본인 차량) · PC 지입차관리 · 모바일 지입차관리에서 같은 화면을 쓴다.
-//  기사가 1차로 입력하고, 운송사 직원이 보고 함께 고친다(drivers/{id} 문서, 누가 언제 고쳤는지 기록).
+//  기사님이 1차로 입력하고, 운송사 직원이 보고 함께 고친다(drivers/{id} 문서, 누가 언제 고쳤는지 기록).
 //  탭: 요약(주행거리·알림) / 정비(교체 기록·다음 예정) / 만기(검사·보험·계약) / 제원 / 기록(주유·수리·연비)
 import React from "react";
 import { arrayUnion, doc, serverTimestamp, setDoc } from "firebase/firestore";

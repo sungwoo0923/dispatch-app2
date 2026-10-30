@@ -14,7 +14,7 @@ const normPlate = (v = "") => String(v).replace(/[\s-]/g, "").toLowerCase();
 
 export const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 
-// 배차하려는 기사가 그 날짜에 휴차(근무요일 아님)인지 — 지입 기사 + 근무요일이 설정된 경우만
+// 배차하려는 기사님이 그 날짜에 휴차(근무요일 아님)인지 — 지입 기사 + 근무요일이 설정된 경우만
 export function findHolidayConflict(drivers, plate, dateStr) {
   const c = findRestConflict(drivers, plate, dateStr);
   return c && c.designated ? c : null;
@@ -22,7 +22,7 @@ export function findHolidayConflict(drivers, plate, dateStr) {
 
 // ⭐ 휴차 확인 — 두 가지를 함께 본다.
 //  1) 지정 휴차: 그 오더의 상차일 요일이 기사 근무가능요일이 아님
-//  2) 본인 휴차: 기사가 앱에서 직접 "휴차"를 누른 상태 — 오늘 오더든 내일 이후 오더든 모두 경고한다.
+//  2) 본인 휴차: 기사님이 앱에서 직접 "휴차"를 누른 상태 — 오늘 오더든 내일 이후 오더든 모두 경고한다.
 //     (다음날 오더를 전날 미리 주는 경우가 많아, 휴차중인 기사에게 가는 오더는 날짜와 상관없이 확인받는다.
 //      "진행"을 누르면 그대로 기사앱으로 전달된다.) 지난 날짜 오더는 제외.
 //     휴차일자가 오늘이 아니면(어제 누르고 안 풀었으면) 지난 상태로 보고 무시한다.

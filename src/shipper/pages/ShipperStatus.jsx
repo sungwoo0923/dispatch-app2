@@ -336,7 +336,7 @@ export default function ShipperStatus() {
         .filter((o) => o.지급방식 !== "손실");
 
       // 첨부 증가 감지 -> 알림
-      // 기사가 여러 장을 연속으로 올리면 장수만큼 onSnapshot이 여러 번 발화해 알림도 그만큼
+      // 기사님이 여러 장을 연속으로 올리면 장수만큼 onSnapshot이 여러 번 발화해 알림도 그만큼
       // 여러 개 뜨던 문제 — 짧은 시간 내 증가분을 하나로 누적했다가 한 번만 알림을 띄운다.
       docs.forEach((o) => {
         const cur = o.attachCount || 0;

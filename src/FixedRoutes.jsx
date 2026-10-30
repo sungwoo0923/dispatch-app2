@@ -1,5 +1,5 @@
 // ======================= src/FixedRoutes.jsx =======================
-// 🛣 고정노선(지입차관리 › 고정노선) — 정해진 요일·시간에 같은 기사가 항상 가는 노선
+// 🛣 고정노선(지입차관리 › 고정노선) — 정해진 요일·시간에 같은 기사님이 항상 가는 노선
 //
 //  구조
 //   fixedRoutes/{id}: { companyName, name, client, color, stops:[{ type, name, addr, time, contact, memo }],
@@ -243,7 +243,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
         <div>
           <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>FIXED ROUTES</div>
           <div className="text-[22px] font-black">고정노선</div>
-          <div className="text-[12.5px] text-white/60">정해진 요일·시간에 같은 기사가 가는 노선 — 배차가 자동으로 만들어집니다</div>
+          <div className="text-[12.5px] text-white/60">정해진 요일·시간에 같은 기사님이 가는 노선 — 배차가 자동으로 만들어집니다</div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {[["전체 노선", `${routes.length}개`], ["운행 중", `${routes.filter((r) => r.active).length}개`], [`오늘(${todayDay})`, `${todayRuns.length}개`]].map(([k, v]) => (

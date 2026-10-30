@@ -254,7 +254,7 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
                 </tr>
               );
             })}
-            {!shown.length && <tr><td colSpan={11} className="py-16 text-center text-[13.5px] font-bold text-[#9AA9C3]">{ym} 기간에 운행한 지입·직영 기사가 없습니다</td></tr>}
+            {!shown.length && <tr><td colSpan={11} className="py-16 text-center text-[13.5px] font-bold text-[#9AA9C3]">{ym} 기간에 운행한 지입·직영 기사님이 없습니다</td></tr>}
           </tbody>
           {shown.length > 0 && (
             <tfoot>

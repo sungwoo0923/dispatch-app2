@@ -826,7 +826,7 @@ function useGpsTracking(uid, driverData) {
       startWatch();
 
       // 30초마다 updatedAt 강제 갱신 (정지 중에도 최신 상태 유지)
-      // ⭐ 버그수정 — 사용자 보고: 기사가 실제로 하차지에 도착했는데도 관리자
+      // ⭐ 버그수정 — 사용자 보고: 기사님이 실제로 하차지에 도착했는데도 관리자
       // 화면엔 한참 전 위치 기준으로 "이동중"이 계속 떠 있었다. 원인은 이 타이머가
       // "정지 중"과 "GPS 수신 자체가 끊김"을 구분 못 하고 lastPosRef의 오래된
       // 좌표에 매번 새 updatedAt을 찍어, 실제로는 수 분~수십 분 전에 멈춘 위치가
@@ -1207,7 +1207,7 @@ export default function DriverHome() {
   }, []);
 
   // 연락처 탭 "회사 연락처" — 회사마다 다른 배차팀 번호를 보여주기 위해, 로그인한
-  // 기사가 소속된 회사의 transportApplications(가입 시 등록한 사업자정보)에서
+  // 기사님이 소속된 회사의 transportApplications(가입 시 등록한 사업자정보)에서
   // 전화번호를 읽어온다(예전엔 "돌캐" 번호가 모든 회사 기사에게 고정 표시됐었음).
   useEffect(() => {
     const co = driver?.companyName;
@@ -1601,7 +1601,7 @@ export default function DriverHome() {
       .catch(() => showToast("복사에 실패했습니다"));
   }, []);
 
-  // ⭐ 사용자 요청 — 지입 기사가 사진 전송현황에서 올리는 상차/하차완료 사진이
+  // ⭐ 사용자 요청 — 지입 기사님이 사진 전송현황에서 올리는 상차/하차완료 사진이
   // PC 관리자 화면의 "첨부"(배차현황 4/5파트와 동일한 아이콘/뷰어)에도 그대로
   // 보여야 한다. driver_photo_logs(기사 개인 이력)에 남기던 것과 별개로, 오더
   // 문서의 attachments 서브컬렉션에도 같은 파일을 올려 PC 쪽 첨부 뷰어가
@@ -2407,7 +2407,7 @@ export default function DriverHome() {
           })()}
 
           {/* 이전 상태로 되돌리기 */}
-          {/* ⭐ 지입 기사가 오더를 받았거나 운송 중이면 되돌리기를 막는다
+          {/* ⭐ 지입 기사님이 오더를 받았거나 운송 중이면 되돌리기를 막는다
               (운송 중에 휴차/출근 등 이전 상태로 돌아가면 관리자 화면 상태가 꼬인다) */}
           {todayLogs.length > 0 && !driver.isFinalCheckout && !(isFleetDriver && hasActiveDispatch) && (
             <div style={{ marginBottom: 14 }}>

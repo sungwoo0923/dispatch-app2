@@ -99,7 +99,7 @@ function computeOrderProgress(order, selectedDate, todayStr) {
   return "progress";
 }
 // PC 지입차관리(FleetManagement.jsx)의 driverDispatchStatus 포팅 — ⭐ 사용자 피드백:
-// 이미 오더를 수락해 운송중인 기사가 카드엔 GPS/출퇴근 로그만 반영된 "출근"으로만
+// 이미 오더를 수락해 운송중인 기사님이 카드엔 GPS/출퇴근 로그만 반영된 "출근"으로만
 // 보여서, 기사확인상태(지입 기사 오더수락 플로우: 대기/수락/완료/거절)를 우선
 // 반영하도록 맞춘다. 기사확인상태 플로우가 없는 일반 오더만 시간 기반 추정으로 폴백.
 function driverDispatchStatus(orders, todayStr, driver) {
@@ -137,7 +137,7 @@ function SpeedBadge({ d, size = 12 }) {
   );
 }
 
-// ⭐ 관리자가 수정한 오더를 기사가 확인했는지 표시(PC 노선관리와 동일)
+// ⭐ 관리자가 수정한 오더를 기사님이 확인했는지 표시(PC 노선관리와 동일)
 function ModBadge({ order }) {
   const ms = modificationStatus(order);
   if (!ms) return null;
@@ -409,7 +409,7 @@ function findActiveTransitOrder(orders, todayStr) {
   }) || null;
 }
 // "운송중" 라벨 하나를 세분화 라벨로 바꿔 보여준다 — 그 외엔 항상 fallback 그대로.
-// ⭐ 버그수정 — 예전엔 기사가 앱에서 "상차 시작/상차완료" 버튼을 직접 눌러야만
+// ⭐ 버그수정 — 예전엔 기사님이 앱에서 "상차 시작/상차완료" 버튼을 직접 눌러야만
 // (driver.상태가 "운송중"으로 바뀌어야만) 하차지 방향으로 인식했는데, 실제로는 버튼을
 // 안 누르고 그냥 운전만 해도 상태가 갱신돼야 한다. 버튼 상태는 더 이상 보지 않고,
 // 순수하게 GPS 거리만으로 판단한다: 상차지 1km 이내면 "상차지도착"(한 번이라도
@@ -1142,7 +1142,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
 
           {filtered.length === 0 ? (
             <div style={{ padding: "32px 0", textAlign: "center", color: "#9AA9C3", fontSize: 14 }}>
-              {drivers.length === 0 ? "등록된 기사가 없습니다"
+              {drivers.length === 0 ? "등록된 기사님이 없습니다"
                 : scopedDrivers.length === 0 ? <>아직 담당 지정된 차량이 없습니다.<br/>"전체 지입차"에서 담당자를 지정해주세요.</>
                 : "검색 결과가 없습니다"}
             </div>
@@ -1449,7 +1449,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
               );
             })}
             {drivers.length === 0 && (
-              <span style={{ fontSize: 13, color: "#9AA9C3", padding: "6px 0" }}>등록된 기사가 없습니다</span>
+              <span style={{ fontSize: 13, color: "#9AA9C3", padding: "6px 0" }}>등록된 기사님이 없습니다</span>
             )}
           </div>
 
@@ -1602,7 +1602,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
         <div style={{ padding: "12px 16px 0" }}>
           {filteredFeed.length === 0 ? (
             <div style={{ padding: "40px 0", textAlign: "center", color: "#9AA9C3", fontSize: 14 }}>
-              기사가 버튼을 누르면 여기에 표시됩니다
+              기사님이 버튼을 누르면 여기에 표시됩니다
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>

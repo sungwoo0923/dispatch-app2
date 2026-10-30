@@ -177,7 +177,7 @@ const _lunchNameKey = (s = "") => String(s || "").toLowerCase().replace(/\s+/g, 
 
 /* -------------------------------------------------
    운임정보(운임확인서) 미리보기 팝업 — 실시간배차현황/배차현황 우클릭 메뉴의
-   "운임정보"에서 연다. 해당 오더가 어느 기사에게 배차되었고 그 기사가 운송을
+   "운임정보"에서 연다. 해당 오더가 어느 기사에게 배차되었고 그 기사님이 운송을
    수행했으며 얼마의 운임을 지급하는지를 증빙하는 문서 형태로 보여준다.
    확대/축소 미리보기 + 이미지/PDF 저장 + 인쇄를 지원한다.
 --------------------------------------------------*/
@@ -325,7 +325,7 @@ function FareCertModal({ row, companyName, onClose }) {
               <div style={{ padding: "22px 34px 30px" }}>
                 <div style={{ fontSize: 13.5, fontWeight: 600, color: "#3A4A66", lineHeight: 1.75, background: "#F5F7FB", border: "1px solid #E3E8F0", borderRadius: 10, padding: "12px 16px" }}>
                   본 확인서는 <b style={{ color: "#0F1A30" }}>{companyName || "운송사"}</b>가 아래 운송 건을 기사 <b style={{ color: "#0F1A30" }}>{r.이름 || "-"}</b>({r.차량번호 || "-"})에게 배차하였고,
-                  해당 기사가 운송을 {done ? "완료하였음" : "수행함"}을 확인하며, 아래 기사운임을 지급함을 증명합니다.
+                  해당 기사님이 운송을 {done ? "완료하였음" : "수행함"}을 확인하며, 아래 기사운임을 지급함을 증명합니다.
                 </div>
 
                 {sec("ROUTE", "운송 정보")}
@@ -406,7 +406,7 @@ function _scheduleDateLabel(d) {
 
 /* -------------------------------------------------
    스케줄표 — 실시간배차현황/배차현황에서 여러 건을 선택 후 우클릭 →
-   "스케줄표"로 열어, 어느 기사가 어느 날짜에 이 노선(들)을 운행하는지
+   "스케줄표"로 열어, 어느 기사님이 어느 날짜에 이 노선(들)을 운행하는지
    날짜별/기사별로 한눈에 정리해 보여준다. 프로그램 밖에서도(업체 전달용
    등) 확인할 수 있도록 이미지/PDF 저장·인쇄·확대축소를 지원한다.
    알록달록한 배색 없이 프로그램 기본 톤(네이비/그레이)만 쓰고, 글자는
@@ -1371,7 +1371,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
   const tdCls = "border border-[#E3E8F0] px-3 py-2 text-[#0F1A30] whitespace-nowrap align-middle";
   const showFare = showFareCharge || showFareDriver;
 
-  // 상세정보(기사용) 카드 — 표 대신 오더 1건을 카드로 펼쳐서, 기사가 실제로 알아야 하는
+  // 상세정보(기사용) 카드 — 표 대신 오더 1건을 카드로 펼쳐서, 기사님이 실제로 알아야 하는
   // 정보(상/하차지 주소·담당자, 화물내용/톤수, 전달사항, 원하면 운임까지)를 한 번에 보여준다.
   // dateOverride: 날짜별 보기에서 복수근무일 오더가 특정 날짜 섹션에 펼쳐져
   // 들어올 때, 카드에는 오더의 상차일(최솟값)이 아니라 그 섹션의 날짜를 보여준다.
@@ -3700,7 +3700,7 @@ const liveWindowStart = pcLiveWindowStart(); // ⭐ 13개월 → 최근 7일~(�
   // 때마다" PC 전체가 순간 렉걸리던 원인) — 실제로 변경된 문서만 다시 가공한다.
   const ordersRowMap = new Map();
   const ordersRawPrev = new Map(); // id -> 직전 raw doc.data() (위치 전용 변경 감지용)
-  // 기사가 업로드링크 화면에서 위치공유를 켜두면 GPS 콜백마다 위치/위치갱신일시
+  // 기사님이 업로드링크 화면에서 위치공유를 켜두면 GPS 콜백마다 위치/위치갱신일시
   // 두 필드만 바뀐 채 계속 write가 들어오는데, 이 두 필드만 바뀐 경우까지 매번
   // 전체 목록을 다시 그리면 위치공유가 켜져 있는 내내 PC 화면이 계속 버벅였다.
   // 실제로 의미 있는(위치 외) 필드가 바뀌었을 때만 전체 재렌더를 트리거한다.
@@ -4304,7 +4304,7 @@ const patchDispatch = async (_id, patch, knownPrev) => {
         }, 100);
       }
     }
-    // 화주사 배차요청 확인 없이 바로 기사가 배정된 경우에도 "배차요청" 상태로 남지 않도록 안전장치로 해제
+    // 화주사 배차요청 확인 없이 바로 기사님이 배정된 경우에도 "배차요청" 상태로 남지 않도록 안전장치로 해제
     patch.화주사확인대기 = false;
   }
 
@@ -4362,7 +4362,7 @@ const patchDispatch = async (_id, patch, knownPrev) => {
     if (!await kpConfirm("운송이 완료된 오더입니다. 기사를 취소하시겠습니까?")) return false;
     archiveCompletedOrderPC(prev, _id, "기사취소");
   } else if ("차량번호" in patch && !String(patch.차량번호 || "").trim() && prev?.기사확인상태 === "수락") {
-    // ⭐ 기사가 수락한 뒤 기사만 빠진 경우도 기사 운행기록에 "배차취소"로 남긴다
+    // ⭐ 기사님이 수락한 뒤 기사만 빠진 경우도 기사 운행기록에 "배차취소"로 남긴다
     archiveCompletedOrderPC(prev, _id, "기사취소");
   }
 
@@ -4455,9 +4455,9 @@ const patchDispatch = async (_id, patch, knownPrev) => {
           patch.기사거절사유 = null;
           patch.기사확인일시 = null;
           patch.기사완료일시 = null;
-          // ⭐ 사용자 요청 — 지입 기사가 아직 오더를 수락하지 않은 동안에는 4/5파트
+          // ⭐ 사용자 요청 — 지입 기사님이 아직 오더를 수락하지 않은 동안에는 4/5파트
           // 배차현황을 포함해 전체적으로 "배차완료"가 아니라 "승인대기"로 보여야
-          // 한다. 기사가 수락/거절하면 각각 배차완료/배차중으로 자동 전환된다
+          // 한다. 기사님이 수락/거절하면 각각 배차완료/배차중으로 자동 전환된다
           // (DriverHome의 handleAcceptOrder/handleRejectOrderSubmit).
           patch.배차상태 = "승인대기";
           addDoc(collection(db, "driver_notifications"), {
@@ -4714,7 +4714,7 @@ const removeDispatch = async (arg, opts = {}) => {
   if (data?.기사확인상태 === "완료") {
     if (!opts.skipCompletedConfirm && !await kpConfirm("운송이 완료된 오더입니다. 오더를 삭제하시겠습니까?")) return;
   }
-  // ⭐ 기사가 수락(또는 완료)한 오더가 삭제되면 기사 운행기록에 "오더취소"로 남긴다
+  // ⭐ 기사님이 수락(또는 완료)한 오더가 삭제되면 기사 운행기록에 "오더취소"로 남긴다
   if ((data?.기사확인상태 === "수락" || data?.기사확인상태 === "완료") && data?.차량번호) {
     archiveCompletedOrderPC(data, id, "오더삭제");
   }
@@ -10429,7 +10429,7 @@ const filterPlaces = (q) => {
   } catch {}
   return { ...emptyForm };
 });
-// ⭐ 차량번호를 입력해 지입 기사가 매칭되는 순간, 그 기사가 휴차(지정 휴차일 또는 오늘 본인 휴차중)면
+// ⭐ 차량번호를 입력해 지입 기사님이 매칭되는 순간, 그 기사님이 휴차(지정 휴차일 또는 오늘 본인 휴차중)면
 // 화면 중앙에 확인 팝업 — 진행: 그대로(저장 때 다시 묻지 않음) / 보류: 입력한 기사 정보를 비운다.
 const restAskingRef = React.useRef("");
 React.useEffect(() => {
@@ -11318,7 +11318,7 @@ const handleMultiRegCarNoChange = (value) => {
   setMrDriverDropdownOpen(false);
 };
 
-// 📌 차량번호 확정(Enter/blur) — 매칭되는 기존 기사가 없으면 신규등록 팝업
+// 📌 차량번호 확정(Enter/blur) — 매칭되는 기존 기사님이 없으면 신규등록 팝업
 const checkMultiRegNewDriver = (carNo) => {
   const clean = (carNo || "").trim().replace(/\s+/g, "");
   if (!clean) return;
@@ -11441,7 +11441,7 @@ const applyMultiRegSmartDriverInput = async (text) => {
 };
 
 // 📌 기사명/전화번호를 손으로 직접 고쳐 적었을 때(blur) — 단일 등록폼의
-// checkDriverConflict()와 동일하게, 차량번호는 있는데 매칭되는 기사가 없으면
+// checkDriverConflict()와 동일하게, 차량번호는 있는데 매칭되는 기사님이 없으면
 // 신규등록 확인을, 있는데 이름/전화번호가 다르면 충돌 확인을 띄운다.
 const checkMultiRegDriverConflict = () => {
   const s = currentMultiSlot;
@@ -12535,7 +12535,7 @@ const checkDriverConflict = () => {
 
   const list = driverMap.get(plate);
 
-  // 🔹 기존 기사가 없으면 → 신규 등록 여부 확인
+  // 🔹 기존 기사님이 없으면 → 신규 등록 여부 확인
   if (!list || list.length === 0) {
     // 차량번호 + 이름 + 전화번호가 모두 있으면 자동 등록 제안
     if (name && phone) {
@@ -12548,7 +12548,7 @@ const checkDriverConflict = () => {
     return;
   }
 
-  // 🔹 기존 기사가 있으면 → 이름/전화번호 비교
+  // 🔹 기존 기사님이 있으면 → 이름/전화번호 비교
   const existing = list[0];
   const existName = (existing.이름 || "").trim();
   const existPhone = (existing.전화번호 || "").replace(/[^\d]/g, "");
@@ -15389,7 +15389,7 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
                 applyMultiSlotDriver({ 차량번호: plate, 이름: name, 전화번호: formatPhone(phone), 배차상태: "배차완료" });
                 setMrSmartDriverQuery(""); setMrSmartDriverMatched([]);
                 setMrDriverConflictPopup(null);
-                showAlert("✅ 신규 기사가 등록되었습니다.");
+                showAlert("✅ 신규 기사님이 등록되었습니다.");
               }}
             >
               신규 기사 등록
@@ -18720,7 +18720,7 @@ className={`
 
       <div className="px-6 pb-6 space-y-3">
 
-        {/* ===== 기존 기사가 있는 경우: 3버튼 ===== */}
+        {/* ===== 기존 기사님이 있는 경우: 3버튼 ===== */}
         {driverConflictPopup.existing && (
           <>
             <div className="grid grid-cols-2 gap-3">
@@ -18754,7 +18754,7 @@ className={`
                 // ⚠️ 위 "기존 정보 덮어쓰기"와 똑같이 차량번호만으로 upsertDriver를 부르면
                 // upsertDriver가 "같은 차량번호 = 같은 문서"로 보고 기존 기사(예: 이봉우)
                 // 문서를 그대로 덮어써버려, "별도 등록"을 눌러도 실제로는 업데이트가
-                // 되어버리는 버그가 있었다 — 새 기사가 목록에 추가로 뜨지 않고, 방금 입력한
+                // 되어버리는 버그가 있었다 — 새 기사님이 목록에 추가로 뜨지 않고, 방금 입력한
                 // 이름도 사라지는 것처럼 보였던 원인. id를 직접 새로 발급해서 넘기면
                 // upsertDriver가 차량번호로 기존 문서를 찾지 않고 진짜 별도 문서를 만든다.
                 await upsertDriver({ id: crypto.randomUUID(), 차량번호: plate, 이름: name, 전화번호: phone });
@@ -18768,7 +18768,7 @@ className={`
           </>
         )}
 
-        {/* ===== 기존 기사가 없는 경우(완전 신규): 2버튼 ===== */}
+        {/* ===== 기존 기사님이 없는 경우(완전 신규): 2버튼 ===== */}
         {!driverConflictPopup.existing && (
           <div className="grid grid-cols-2 gap-3">
             <button
@@ -18787,7 +18787,7 @@ className={`
                 setForm(p=>({...p, 차량번호: plate, 이름: name, 전화번호: formatPhone(phone), 배차상태:"배차완료"}));
                 setSmartDriverQuery(""); setSmartDriverMatched([]);
                 setDriverConflictPopup(null);
-               showAlert("✅ 신규 기사가 등록되었습니다.");
+               showAlert("✅ 신규 기사님이 등록되었습니다.");
               }}
             >
               신규 기사 등록
@@ -20738,11 +20738,11 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, onSaved,
     return null;
   };
 
-  // 기사가 이미 업로드를 완료해 링크가 잠긴 뒤에도, 기존 링크(카톡/문자에 남아있는
+  // 기사님이 이미 업로드를 완료해 링크가 잠긴 뒤에도, 기존 링크(카톡/문자에 남아있는
   // 그 링크)를 그대로 30분간만 다시 열어준다 — 새 링크를 발급/재전송할 필요가 없다.
   // 업로드잠금 자체는 건드리지 않고, 별도의 임시 해제 만료시각만 기록한다
   // (UploadPage가 접근 시 이 시각이 아직 안 지났으면 잠금을 무시하도록 확인).
-  // 기사가 재업로드를 완료하면(handleUpload) 이 만료시각을 즉시 지워 바로 재잠금된다.
+  // 기사님이 재업로드를 완료하면(handleUpload) 이 만료시각을 즉시 지워 바로 재잠금된다.
   const handleAllowReupload = async () => {
     if (isViewer || unlocking) return;
     setUnlocking(true);
@@ -21039,7 +21039,7 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, onSaved,
             <div className="flex items-center gap-2 flex-wrap justify-end">
               {!isViewer && lockState?.재업로드완료알림 === true && (
                 <span className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 text-white text-[12px] font-bold rounded-lg whitespace-nowrap animate-pulse">
-                  ✓ 기사가 재업로드를 완료했습니다
+                  ✓ 기사님이 재업로드를 완료했습니다
                 </span>
               )}
               {!isViewer && lockState?.업로드잠금 && lockState?.재업로드완료알림 !== true && (
@@ -21052,7 +21052,7 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, onSaved,
                   <button
                     onClick={handleAllowReupload}
                     disabled={unlocking}
-                    title="기사가 갖고 있는 기존 업로드 링크를 30분간 다시 열어줍니다"
+                    title="기사님이 갖고 있는 기존 업로드 링크를 30분간 다시 열어줍니다"
                     className="px-3 py-1.5 bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold rounded-lg hover:bg-[#1B2B4B] hover:text-white transition disabled:opacity-50 whitespace-nowrap"
                   >
                     {unlocking ? "처리중..." : "재업로드 허용 (30분)"}
@@ -22437,7 +22437,7 @@ function NewDriverModal({ data, onClose, onConfirm }) {
             </div>
             <div className="text-white/60 text-[12px] mt-0.5">
               {isDuplicate
-                ? `차량번호 [${data.차량번호}]에 등록된 기사가 있습니다`
+                ? `차량번호 [${data.차량번호}]에 등록된 기사님이 있습니다`
                 : `차량번호 [${data.차량번호}]를 신규 등록합니다`}
             </div>
           </div>
@@ -23788,7 +23788,7 @@ function buildOptimalMatchSmsBody(row, companyName) {
   ].join("\n");
 }
 
-// 이 기사가 이 노선을 주로 어느 요일/시간대에 뛰었는지 요약 — "주로 화,목요일 · 오후 운행"
+// 이 기사님이 이 노선을 주로 어느 요일/시간대에 뛰었는지 요약 — "주로 화,목요일 · 오후 운행"
 const _omWeekdays = ["일", "월", "화", "수", "목", "금", "토"];
 function summarizeDayPattern(records) {
   if (!records || !records.length) return null;
@@ -24852,7 +24852,7 @@ const dropStopsTextD = hasDropStopsD
 ${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.하차시간 ? `\n하차시간 : ${s.하차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}${s.방법 ? `\n하차방법 : ${s.방법}` : ""}`;
   }).join("\n\n")
   : "";
-// 업로드 링크는 오더별 토큰을 함께 담는다 — 기사가 업로드를 완료(등록)하면
+// 업로드 링크는 오더별 토큰을 함께 담는다 — 기사님이 업로드를 완료(등록)하면
 // 이 토큰은 잠기고, 이후 "기사전달용" 복사를 다시 하면 새 토큰이 발급되어
 // 예전 링크(구 토큰)로는 더 이상 접속할 수 없게 된다.
 const uploadUrl = getCopyTpl("driver").includeUpload ? issueUploadUrl(r) : "";
@@ -27989,7 +27989,7 @@ const handleCloseFileUpload = async (e) => {
     }
 
     // ── 1:1 정밀 매칭 ─────────────────────────────────────────
-    // 같은 기사가 당일 우리 오더를 여러 건 진행했을 때, 24시콜 각 행을 올바른
+    // 같은 기사님이 당일 우리 오더를 여러 건 진행했을 때, 24시콜 각 행을 올바른
     // 프로그램 레코드 하나와 짝지어야 한다. 이 처리 없으면 24시콜 행 A(예:12만원)의
     // 운임이 프로그램의 다른 오더 B(예:15만원)와도 비교되어, 둘 다 정상 등록인데도
     // "운임 불일치"로 잘못 표시된다.
@@ -30073,7 +30073,7 @@ checkWarningStatus(c.거래처명, "거래처");
         onChange={(e) => {
           const v = e.target.value;
           const plate = normalizePlate(v);
-          // ⚠️ 동일 차량번호로 기사가 여러 명 등록돼 있으면(drivers.find가 임의로 1명만
+          // ⚠️ 동일 차량번호로 기사님이 여러 명 등록돼 있으면(drivers.find가 임의로 1명만
           // 골라 조용히 매칭해버리던 버그) 스마트검색과 동일하게 선택 팝업을 띄운다.
           const matches = driverMap.get(plate) || [];
 
@@ -32648,7 +32648,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
       {driverConfirmInfo.type === "new"
         ? "기사 정보가 없습니다. 빠른등록 후 배차하세요."
         : driverConfirmInfo.type === "mismatch"
-        ? "동일 차량에 다른 기사가 등록되어 있습니다."
+        ? "동일 차량에 다른 기사님이 등록되어 있습니다."
         : "아래 정보로 배차를 진행합니다."}
     </span>
   </div>
@@ -35739,7 +35739,7 @@ const computeCloseFileIssues = (raw) => {
       }
     }
 
-    // ⭐ 같은 기사가 같은 날 우리 오더를 여러 건 진행한 경우, 24시콜 이 파일 행의
+    // ⭐ 같은 기사님이 같은 날 우리 오더를 여러 건 진행한 경우, 24시콜 이 파일 행의
     // 운임과 정확히 일치하는 프로그램 오더가 하나뿐이면 그 오더로 확정한다. 이게
     // 없으면 이 파일 행이 그날의 "다른" 오더와도 비교되어, 둘 다 정상 등록인데도
     // 운임이 서로 다르다는 이유만으로 양쪽 다 불일치로 잘못 표시된다. 합산매칭인
@@ -36850,7 +36850,7 @@ const BANCHAN_NOTICE = `
             ? `\n\n📢 전달사항\n${driverNote.trim()}`
             : "";
 
-          // 업로드 링크는 오더별 토큰을 함께 담는다 — 기사가 업로드를 완료(등록)하면
+          // 업로드 링크는 오더별 토큰을 함께 담는다 — 기사님이 업로드를 완료(등록)하면
           // 이 토큰은 잠기고, 이후 "기사전달용" 복사를 다시 하면 새 토큰이 발급되어
           // 예전 링크(구 토큰)로는 더 이상 접속할 수 없게 된다.
           const uploadUrl = getCopyTpl("driver").includeUpload ? issueUploadUrl(r) : "";
@@ -41717,7 +41717,7 @@ setCopyPlaceOptions(list);
 
       const v = e.target.value;
       const plate = normalizePlate(v);
-      // ⚠️ 동일 차량번호로 기사가 여러 명 등록돼 있으면(drivers.find가 임의로 1명만
+      // ⚠️ 동일 차량번호로 기사님이 여러 명 등록돼 있으면(drivers.find가 임의로 1명만
       // 골라 조용히 매칭해버리던 버그) 스마트검색과 동일하게 선택 팝업을 띄운다.
       const matches = driverMap.get(plate) || [];
 
@@ -55839,7 +55839,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
         const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval:"" });
         let ok = 0;
         const valid = json.filter((r) => String(r.차량번호||r["차량 번호"]||"").replace(/\s+/g,""));
-        if (!valid.length) { showAlert("등록할 기사가 없습니다. (차량번호 열을 확인해 주세요)"); return; }
+        if (!valid.length) { showAlert("등록할 기사님이 없습니다. (차량번호 열을 확인해 주세요)"); return; }
         if (!await kpConfirm(`기사 ${valid.length}명을 등록·갱신할까요?${json.length - valid.length ? `\n(차량번호가 없는 ${json.length - valid.length}줄은 건너뜁니다)` : ""}`)) return;
         for (const r of valid) {
           const 차량번호 = String(r.차량번호||r["차량 번호"]||"").replace(/\s+/g,"");
@@ -56098,7 +56098,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
               <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "28px 28px" }} />
               <div className="relative text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mb-2" style={{ fontFamily: KP_MONO }}>DRIVER SEARCH</div>
               <div className="relative text-[16px] font-black">위 검색바에 차량번호·기사명·연락처를 입력하세요</div>
-              <div className="relative text-[13px] text-white/55 mt-1">숫자 타일을 누르면 등급별 기사가 바로 보입니다</div>
+              <div className="relative text-[13px] text-white/55 mt-1">숫자 타일을 누르면 등급별 기사님이 바로 보입니다</div>
             </div>
           )}
 
@@ -56452,7 +56452,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
               {cleanupTab === "중복기사정리" && (
                 dupGroups.length === 0 ? (
                   <div className="flex items-center justify-center h-40 text-[13px] text-gray-500">
-                    {cleanupDone ? "중복 기사가 정리되었습니다." : "중복된 기사가 없습니다."}
+                    {cleanupDone ? "중복 기사님이 정리되었습니다." : "중복된 기사님이 없습니다."}
                   </div>
                 ) : (
                   <div className="p-4 space-y-4">
