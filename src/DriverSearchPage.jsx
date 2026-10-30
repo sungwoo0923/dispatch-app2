@@ -67,6 +67,9 @@ function InputField({ label, type = "text", value, onChange, placeholder, onKeyD
 export default function DriverSearchPage() {
   const params = new URLSearchParams(window.location.search);
   const sourceFixed = params.get("source") === "fixed";
+  // 🏢 운송사가 보낸 링크에는 회사(co)가 붙어 있다 — 그 회사 오더만 찾는다(예전 링크는 회사 없이 그대로)
+  const linkCo = (params.get("co") || "").trim();
+  const sameCo = (data) => !linkCo || (String(data.companyName || data.company || "").trim() || "돌캐") === linkCo;
   const [date, setDate] = useState(params.get("date") || todayKSTStr());
   const [vehicleNo, setVehicleNo] = useState(params.get("vehicle") || "");
   const [name, setName] = useState(params.get("name") || "");
@@ -107,7 +110,7 @@ export default function DriverSearchPage() {
             const data = d.data();
             const vn = String(data.차량번호 || "").replace(/\s/g, "");
             const nm = String(data.이름 || "").trim();
-            if (vn === trimVehicle && nm === trimName) {
+            if (vn === trimVehicle && nm === trimName && sameCo(data)) {
               matched.push({ _id: d.id, _col: "fixedClients", 상차일: data.날짜, ...data });
             }
           });
@@ -127,7 +130,7 @@ export default function DriverSearchPage() {
               if (data.source === "transport_transmit") return;
               const vn = String(data.차량번호 || "").replace(/\s/g, "");
               const nm = String(data.이름 || "").trim();
-              if (vn === trimVehicle && nm === trimName) {
+              if (vn === trimVehicle && nm === trimName && sameCo(data)) {
                 matched.push({ _id: d.id, _col: colName, ...data });
               }
             });

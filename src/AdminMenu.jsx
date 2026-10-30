@@ -142,7 +142,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const roleLabels = { ...ROLE_LABELS, ...Object.fromEntries(customRoles.map(r => [r.key, r.label])) };
   const ROLES = isTotalMaster
     ? ["totalMaster", "admin", "hrManager", "user", "viewer", "driver", "shipper", "test", ...customRoles.map(r => r.key)]
-    : ["admin", "user", "viewer", "driver", "shipper", "test", ...customRoles.map(r => r.key)];
+    : ["admin", "hrManager", "user", "viewer", "test", ...customRoles.map(r => r.key)];
   const effectiveCompany = myCompany || parentCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY;
   // 휴지통이 다루는 회사 — 최고관리자는 지금 들어가 있는 회사
   const autoCompany = (isTotalMaster && localStorage.getItem("loginCompany")) || effectiveCompany;
@@ -226,6 +226,20 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     } finally {
       setLandingStatusSaving(false);
     }
+  };
+
+  // 👑 회사 마스터 — 신규 운송사를 처음 가입한 계정(users.isMaster). 자기 회사 직원의 승인·권한·부서·직책·퇴사를 정한다.
+  const meDoc = users.find((u) => u.id === me?.uid);
+  const isCompanyMaster = !isTotalMaster && meDoc?.isMaster === true && meDoc?.role !== "shipper" && meDoc?.role !== "driver";
+  const canAdmin = isTotalMaster || isCompanyMaster;
+  const toggleMaster = async (u) => {
+    if (!canAdmin) return;
+    if (u.id === me?.uid && u.isMaster) return alert("본인의 마스터는 해제할 수 없습니다. 다른 직원을 먼저 마스터로 지정해 주세요.");
+    const next = !u.isMaster;
+    if (!window.confirm(next ? `"${u.name || u.email}"님을 마스터로 지정할까요?\n마스터는 직원의 권한·부서·직책을 바꿀 수 있습니다.` : `"${u.name || u.email}"님의 마스터를 해제할까요?`)) return;
+    const history = [...(u.personnelHistory || []), { date: todayStr(), type: next ? "마스터 지정" : "마스터 해제", detail: meDoc?.name || me?.email || "" }];
+    await setDoc(doc(db, "users", u.id), { isMaster: next, ...(next ? { role: "admin" } : {}), personnelHistory: history }, { merge: true });
+    if (manageUser?.id === u.id) setManageUser((prev) => ({ ...prev, isMaster: next, ...(next ? { role: "admin" } : {}), personnelHistory: history }));
   };
 
   const visibleUsers = useMemo(() => {
@@ -546,7 +560,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     if (isViewer) return _viewerAlert();
     if (!editName.trim()) return alert("이름을 입력하세요.");
     // ⭐ 2026-10-27 — 최고관리자 외에는 회원관리에서 본인의 이름·핸드폰번호만 고칠 수 있다(직책·부서·권한은 인사관리부 › 인사발령)
-    if (!isTotalMaster) {
+    if (!canAdmin) {
       if (me?.uid !== manageUser.id) return alert("본인 정보만 수정할 수 있습니다.");
       const mine = { name: editName.trim(), phone: editPhone.trim() };
       try {
@@ -557,7 +571,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
       return;
     }
     if (editRole === "totalMaster" && !isTotalMaster) return alert("totalMaster 권한은 부여할 수 없습니다.");
-    if (editRole === "hrManager" && !isTotalMaster) return alert("인사관리자 권한은 최고관리자만 부여할 수 있습니다.");
+    if (editRole === "hrManager" && !canAdmin) return alert("인사관리자 권한은 최고관리자·마스터만 부여할 수 있습니다.");
+    if (isCompanyMaster && (manageUser.companyName || DEFAULT_COMPANY) !== effectiveCompany) return alert("우리 회사 직원만 수정할 수 있습니다.");
     const history = [...(manageUser.personnelHistory || [])];
     const prevPosition = manageUser.position || "";
     const nextPosition = editPosition.trim();
@@ -572,7 +587,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
       name: editName.trim(),
       phone: editPhone.trim(),
       role: editRole,
-      companyName: editCompany.trim(),
+      companyName: isTotalMaster ? editCompany.trim() : (manageUser.companyName || effectiveCompany),
       position: nextPosition,
       team: editTeam,
       personnelHistory: history,
@@ -820,6 +835,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                           <span className="flex items-center gap-1.5">
                             <span className={`text-[14px] font-extrabold truncate ${on ? "text-white" : "text-[#0F1A30]"}`}>{u.name || u.email}</span>
                             {isMe && <span className={`text-[10px] font-extrabold px-1.5 rounded ${on ? "bg-white/15 text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>나</span>}
+                            {u.isMaster && u.role !== "shipper" && <span className={`text-[10px] font-extrabold px-1.5 rounded whitespace-nowrap ${on ? "bg-white text-[#0F1A30]" : "bg-[#0F1A30] text-white"}`}>마스터</span>}
                           </span>
                           <span className={`block text-[11.5px] truncate ${on ? "text-white/60" : "text-[#7A879C]"}`}>{[u.position, roleLabels[u.role || "user"] || u.role].filter(Boolean).join(" · ")}</span>
                         </span>
@@ -897,18 +913,21 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             <div className="text-[17px] font-black text-[#0F1A30]">{editMode ? "정보 수정" : "회원 정보"}</div>
                           </div>
                           {/* ⭐ 승인·수정·퇴사·삭제는 최고관리자만. 그 외에는 본인 이름·핸드폰번호만 수정 */}
-                          {!isTotalMaster && me?.uid === u.id && !editMode && (
+                          {!canAdmin && me?.uid === u.id && !editMode && (
                             <button onClick={() => setEditMode(true)} className="h-10 px-4 rounded-xl text-[13px] font-extrabold bg-[#0F1A30] text-white hover:bg-[#1B2B4B] transition">내 이름·번호 수정</button>
                           )}
-                          {!isTotalMaster && me?.uid !== u.id && !editMode && (
+                          {!canAdmin && me?.uid !== u.id && !editMode && (
                             <span className="text-[12px] font-bold text-[#9AA9C3]">직책·부서·권한 변경은 인사관리부 › 인사발령</span>
                           )}
-                          {isTotalMaster && !editMode && (
+                          {canAdmin && !editMode && canManage && (
+                            <button onClick={() => toggleMaster(u)} className={`h-10 px-4 rounded-xl text-[13px] font-extrabold transition whitespace-nowrap ${u.isMaster ? "border border-[#0F1A30] text-[#0F1A30]" : "border border-[#E3E8F0] text-[#3A4A66] hover:bg-[#F5F8FD]"}`}>{u.isMaster ? "👑 마스터 해제" : "마스터 지정"}</button>
+                          )}
+                          {canAdmin && !editMode && (
                             <button onClick={() => toggleApprove(u)} className={`h-10 px-4 rounded-xl text-[13px] font-extrabold transition ${u.approved ? "border border-[#E3E8F0] text-[#3A4A66] hover:bg-[#F5F8FD]" : "bg-[#0F1A30] text-white hover:bg-[#1B2B4B]"}`}>
                               {u.approved ? <EditableText id="adminMenu.members.승인해제" defaultText="승인 해제" /> : <EditableText id="adminMenu.members.승인" defaultText="승인" />}
                             </button>
                           )}
-                          {isTotalMaster && canManage && !editMode && (
+                          {canAdmin && canManage && !editMode && (
                             <>
                               <button onClick={() => setEditMode(true)} className="h-10 px-4 rounded-xl text-[13px] font-extrabold bg-[#0F1A30] text-white hover:bg-[#1B2B4B] transition"><EditableText id="adminMenu.members.정보수정" defaultText="정보 수정" /></button>
                               <button onClick={() => setResignStatus(u, !resigned)} className="h-10 px-4 rounded-xl text-[13px] font-extrabold border border-[#E3E8F0] text-[#3A4A66] hover:bg-[#F5F8FD] transition">
@@ -976,7 +995,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             </div>
                             <div>
                               <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">직책</label>
-                              <CustomSelect value={editPosition} onChange={e => setEditPosition(e.target.value)} disabled={!isTotalMaster}
+                              <CustomSelect value={editPosition} onChange={e => setEditPosition(e.target.value)} disabled={!canAdmin}
                                 className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
                                 <option value="">선택 안 함</option>
                                 {(editPosition && !POSITION_OPTIONS.includes(editPosition)) && (
@@ -987,7 +1006,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             </div>
                             <div>
                               <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">부서</label>
-                              <CustomSelect value={editTeam} onChange={e => setEditTeam(e.target.value)} disabled={!isTotalMaster}
+                              <CustomSelect value={editTeam} onChange={e => setEditTeam(e.target.value)} disabled={!canAdmin}
                                 className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
                                 <option value="">미배정</option>
                                 {TEAM_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
@@ -1006,7 +1025,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             </div>
                             <div>
                               <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">권한</label>
-                              <CustomSelect value={editRole} onChange={e => setEditRole(e.target.value)} disabled={!isTotalMaster}
+                              <CustomSelect value={editRole} onChange={e => setEditRole(e.target.value)} disabled={!canAdmin}
                                 className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
                                 {ROLES.map(r => <option key={r} value={r}>{roleLabels[r] || r}</option>)}
                               </CustomSelect>

@@ -1,6 +1,7 @@
 // ======================= src/App.jsx =======================
 
 import React, { useState, useEffect, useRef } from "react";
+import { setTenant } from "./fsTenant";
 import { safeLocalSet } from "./safeStorage";
 import UpdateBanner from "./UpdateBanner";
 import VersionCheck from "./VersionCheck";
@@ -620,10 +621,13 @@ export default function App() {
             // ⭐ 저장된 회사명이 지워졌으면(캐시 정리 등) 본인 문서의 회사 → 기본 회사 순으로 채운다 —
             // 비어 있으면 회사관리·매출관리 등이 어느 회사인지 몰라 "로딩 중"에서 멈췄다.
             const loginCompany = localStorage.getItem("loginCompany") || data.companyName || DEFAULT_COMPANY || "";
+            setTenant(loginCompany);
             setUserCompany(loginCompany);
             safeLocalSet("userCompany", loginCompany);
             safeLocalSet("loginCompany", loginCompany);
           } else {
+            // 🏢 운송사 직원·기사만 자기 회사 데이터로 거른다(화주사·배차마당은 다른 화면 구조라 제외)
+            setTenant(["shipper", "cafeUser"].includes(dataRole) ? "" : (data.companyName || DEFAULT_COMPANY));
             setUserCompany(data.companyName || "");
             safeLocalSet("userCompany", data.companyName || "");
           }
@@ -644,9 +648,11 @@ export default function App() {
           setRole("totalMaster");
           setApproved(true);
           const loginCompany = localStorage.getItem("loginCompany") || DEFAULT_COMPANY || "";
+          setTenant(loginCompany);
           setUserCompany(loginCompany);
           safeLocalSet("userCompany", loginCompany); safeLocalSet("loginCompany", loginCompany); safeLocalSet("role", "totalMaster");
         } else {
+          setTenant("");
           setRole(null);
           setApproved(false);
           setUserCompany("");

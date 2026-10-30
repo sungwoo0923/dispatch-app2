@@ -17,6 +17,7 @@ import CustomDatePicker from "../CustomDatePicker";
 import RouteMapModal from "../RouteMapModal";
 import southKorea from "@svg-maps/south-korea";
 import React, { useState, useMemo, useEffect, useRef, startTransition, useSyncExternalStore } from "react";
+import { withCo } from "../fsTenant";
 // ⭐ 작은 표시 전용 저장소 — "최신 정보 확인 중"·첫 진입 진행률이 바뀔 때 화면 전체(오더 목록)를
 // 다시 그리지 않고 그 표시만 바꾼다(저사양 폰에서 스크롤 끊김 방지)
 function createMiniStore(init) {
@@ -190,7 +191,7 @@ function buildAttachUploadSmsMobile(order) {
   if (vehicle) params.set("vehicle", vehicle);
   const name = (order?.이름 || order?.기사명 || "").trim();
   if (name) params.set("name", name);
-  const url = `${baseUrl}/driver-upload?${params.toString()}`;
+  const url = withCo(`${baseUrl}/driver-upload?${params.toString()}`);
   return [
     `안녕하세요. ${[dateLabel, route].filter(Boolean).join(" ")} 건 관련하여 연락드립니다.`,
     "여기를 눌러 관련 서류를 업로드해주세요",
@@ -8125,7 +8126,7 @@ function UploadLinkModal({ orders = [], onClose, companyName = "" }) {
     if (firstOrder?.상차일) params.set("date", firstOrder.상차일.slice(0, 10));
     if (vehicle) params.set("vehicle", vehicle.replace(/\s/g, ""));
     if (name) params.set("name", name);
-    const uploadUrl = `${baseUrl}/driver-upload?${params.toString()}`;
+    const uploadUrl = withCo(`${baseUrl}/driver-upload?${params.toString()}`);
     lines.push(uploadUrl);
 
     return lines.join("\n");
@@ -8816,7 +8817,7 @@ function MobileOrderList({
     if (vehicle) params.set("vehicle", vehicle);
     const name = (order.이름 || order.기사명 || "").trim();
     if (name) params.set("name", name);
-    const url = `${baseUrl}/driver-upload?${params.toString()}`;
+    const url = withCo(`${baseUrl}/driver-upload?${params.toString()}`);
     const header = `안녕하세요. ${[dateLabel, timeLabel, from && to ? `${from} → ${to}` : (from || to)].filter(Boolean).join(" ")}`;
     return [
       header,
@@ -21703,7 +21704,7 @@ const source = rawSource.filter((o) => {
     if (vehicle) params.set("vehicle", vehicle);
     const name = (order.이름 || order.기사명 || "").trim();
     if (name) params.set("name", name);
-    const url = `${baseUrl}/driver-upload?${params.toString()}`;
+    const url = withCo(`${baseUrl}/driver-upload?${params.toString()}`);
     const header = `안녕하세요. ${[dateLabel, timeLabel, from && to ? `${from} → ${to}` : (from || to)].filter(Boolean).join(" ")}`;
     return [
       header,

@@ -11,6 +11,7 @@ import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { addDoc, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { auth, db } from "./firebase";
+import { pushTenantBypass } from "./fsTenant";
 import KpSubNav from "./KpSubNav";
 import PlatformMonitor, { estimateBill, usePhone } from "./PlatformMonitor";
 import { useSalesPricing } from "./SalesQuote";
@@ -378,6 +379,9 @@ function SessionLogsPanel() {
 // ═══════════════════════ 본체 ═══════════════════════
 export default function PlatformCenter({ user }) {
   const navigate = useNavigate();
+  // 🏢 관리센터는 모든 운송사를 봐야 하므로 회사 거르기를 끈다(자식 화면 구독보다 먼저 — 렌더 중에)
+  const [releaseBypass] = React.useState(() => pushTenantBypass());
+  React.useEffect(() => releaseBypass, [releaseBypass]);
   const [tab, setTabState] = React.useState(() => { try { return localStorage.getItem("pcTab") || "todo"; } catch { return "todo"; } });
   const setTab = (t) => { setTabState(t); try { localStorage.setItem("pcTab", t); } catch { /* 무시 */ } };
   const [contractCtx, setContractCtx] = React.useState({ initial: null, fromQuote: null, key: 0 });

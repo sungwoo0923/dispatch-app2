@@ -152,6 +152,8 @@ function SignupForm({ signupType, onBack }) {
 
   const [companyName, setCompanyName] = useState("");
   const [businessNumber, setBusinessNumber] = useState("");
+  // 💳 신규 운송사 — 쓰실 요금제(승인할 때 이 요금제로 열린다. 관리자가 승인 때 바꿀 수 있음)
+  const [planId, setPlanId] = useState("standard");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
@@ -328,6 +330,7 @@ function SignupForm({ signupType, onBack }) {
         type: signupType,
         companyName: companyName.trim(),
         businessNumber: signupType === "신규" ? businessNumber.trim() : "",
+        requestedPlan: signupType === "신규" ? planId : "",
         email: email.trim(),
         name: name.trim(),
         phone: phone.trim(),
@@ -467,6 +470,21 @@ function SignupForm({ signupType, onBack }) {
                 onChange={(e) => setBusinessNumber(formatBizNum(e.target.value))}
                 placeholder="000-00-00000" maxLength={12}
                 className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]" />
+            </Field>
+          )}
+
+          {signupType === "신규" && (
+            <Field label="요금제" required>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[["lite", "라이트", "월 4.9만"], ["basic", "베이직", "월 9.9만"], ["standard", "스탠다드", "월 15만"], ["pro", "프로", "월 34.9만"]].map(([id, nm, pr]) => (
+                  <button key={id} type="button" onClick={() => setPlanId(id)}
+                    className={`rounded-xl border px-3 py-2.5 text-left transition ${planId === id ? "border-[#1B2B4B] bg-[#1B2B4B] text-white" : "border-gray-200 text-[#1B2B4B] hover:border-[#8FB0F0]"}`}>
+                    <div className="text-[14px] font-black whitespace-nowrap">{nm}</div>
+                    <div className={`text-[12px] font-semibold whitespace-nowrap ${planId === id ? "text-white/70" : "text-gray-500"}`}>{pr} · VAT 별도</div>
+                  </button>
+                ))}
+              </div>
+              <div className="text-[12px] text-gray-500 mt-1.5">승인되면 고른 요금제의 메뉴로 열립니다. 쓰면서 언제든 바꿀 수 있습니다.</div>
             </Field>
           )}
 

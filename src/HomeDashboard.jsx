@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from "react";
+import MasterChecklist from "./MasterChecklist";
 import { homeItemFeature, openPlanLock, planIncludes, usePlan } from "./plans";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip,
@@ -887,6 +888,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         ] },
       ])}>
     <div className="space-y-5">
+      {boardTab === "대시보드" && <MasterChecklist user={user} userCompany={userCompany} />}
 
       {/* 결재 알림 배너 (큐 방식 - 여러 알림 순차 표시) */}
       {approvalNotifQueue.length > 0 && (() => {

@@ -1222,6 +1222,8 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
           shipperUid: user.uid,
           거래처명: userData.companyName,
           shipperCompany: userData.companyName,
+          // 🏢 받는 운송사 — 운송사 화면은 회사별로 오더를 거르므로 반드시 적는다
+          companyName: formToSave.운송사명 || "",
           배차상태: "배차중",
           화주사확인대기: true,
           업체전달상태: "미전달",

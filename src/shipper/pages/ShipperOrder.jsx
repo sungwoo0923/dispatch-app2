@@ -555,6 +555,7 @@ export default function ShipperOrder({ editData, onClose }) {
         role: "shipper",
         source: "shipper",
         company: form.운송사명 || "",
+        companyName: form.운송사명 || "", // 🏢 받는 운송사(운송사 화면이 회사별로 거름)
         companyCode: form.운송사코드 || "",
       });
     }

@@ -14,6 +14,7 @@ import { drawTmapTrafficRoute, TRAFFIC_LEGEND } from "./mapStyle";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { withCo } from "./fsTenant";
 import { createPortal } from "react-dom";
 import { Navigate, useNavigate } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, LabelList, PieChart, Pie, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
@@ -22880,7 +22881,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
       "③ 오더 선택 후 사진 업로드",
       "",
       // ⭐ 회사별 배포(방식 B) — 각 회사 사이트 주소를 따라가도록
-      `${window.location.origin}/driver-upload`,
+      withCo(`${window.location.origin}/driver-upload`),
     ].filter(l => l !== null).join("\n");
     navigator.clipboard.writeText(lines)
       .then(() => { setSendDone(r._id); setTimeout(() => setSendDone(null), 2000); })
@@ -28958,13 +28959,13 @@ const head = isDark
   if (phones.length === 0) {
     // 배차완료(전화번호 있는) 오더를 체크하지 않았으면 기존 동작 그대로 — 클립보드 복사만.
     const selRow=selected.length===1?rows.find(r=>r._id===selected[0]):null;
-    const url=selRow?`${window.location.origin}/driver-upload?date=${encodeURIComponent(selRow.상차일||"")}&vehicle=${encodeURIComponent((selRow.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((selRow.이름||"").trim())}`:`${window.location.origin}/driver-upload`;
+    const url=selRow?withCo(`${window.location.origin}/driver-upload?date=${encodeURIComponent(selRow.상차일||"")}&vehicle=${encodeURIComponent((selRow.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((selRow.이름||"").trim())}`):withCo(`${window.location.origin}/driver-upload`);
     const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n여기를 눌러 업로드해주세요\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
     navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));
     return;
   }
   // 배차완료된 오더를 1건 이상 체크한 상태 — 여러 기사에게 한 번에 문자로 보낼지 확인.
-  const url = `${window.location.origin}/driver-upload`;
+  const url = withCo(`${window.location.origin}/driver-upload`);
   const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n여기를 눌러 업로드해주세요\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
   setBulkUploadConfirm4({ phones, body: msg });
 }} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="realtime.toolbar.업로드링크" defaultText="업로드링크" />{selected.length>1?` (${selected.length})`:""}</button>
@@ -32912,7 +32913,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             className="w-full text-left px-3 py-2 rounded-lg text-[13px] font-semibold text-[#2A3852] hover:bg-[#0F1A30] hover:text-white flex items-center gap-2.5 transition-colors"
             onClick={() => {
               const r = contextMenu.row;
-              const url = `${window.location.origin}/driver-upload?date=${encodeURIComponent(r.상차일||"")}&vehicle=${encodeURIComponent((r.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((r.이름||"").trim())}`;
+              const url = withCo(`${window.location.origin}/driver-upload?date=${encodeURIComponent(r.상차일||"")}&vehicle=${encodeURIComponent((r.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((r.이름||"").trim())}`);
               const msg = `[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n여기를 눌러 업로드해주세요\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
               navigator.clipboard.writeText(msg).then(() => showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(() => showAlert(`링크: ${url}`));
               setContextMenu(null);
@@ -39006,13 +39007,13 @@ return (
   if (phones.length === 0) {
     // 배차완료(전화번호 있는) 오더를 체크하지 않았으면 기존 동작 그대로 — 클립보드 복사만.
     const selRow=selArr.length===1?filtered.find(r=>getId(r)===selArr[0]):null;
-    const url=selRow?`${window.location.origin}/driver-upload?date=${encodeURIComponent(selRow.상차일||"")}&vehicle=${encodeURIComponent((selRow.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((selRow.이름||"").trim())}`:`${window.location.origin}/driver-upload`;
+    const url=selRow?withCo(`${window.location.origin}/driver-upload?date=${encodeURIComponent(selRow.상차일||"")}&vehicle=${encodeURIComponent((selRow.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((selRow.이름||"").trim())}`):withCo(`${window.location.origin}/driver-upload`);
     const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n여기를 눌러 업로드해주세요\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
     navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));
     return;
   }
   // 배차완료된 오더를 1건 이상 체크한 상태 — 여러 기사에게 한 번에 문자로 보낼지 확인.
-  const url = `${window.location.origin}/driver-upload`;
+  const url = withCo(`${window.location.origin}/driver-upload`);
   const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n여기를 눌러 업로드해주세요\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
   setBulkUploadConfirm5({ phones, body: msg });
 }} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="status.toolbar.업로드링크" defaultText="업로드링크" />{selected.size>1?` (${selected.size})`:""}</button>
@@ -43831,7 +43832,7 @@ setCopyPlaceOptions(list);
           <button className="w-full text-left px-3 py-2 rounded-lg text-[13px] font-semibold text-[#2A3852] hover:bg-[#0F1A30] hover:text-white flex items-center gap-2.5 transition-colors"
             onClick={() => {
               const r = contextMenuDS.row;
-              const url = `${window.location.origin}/driver-upload?date=${encodeURIComponent(r.상차일||"")}&vehicle=${encodeURIComponent((r.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((r.이름||"").trim())}`;
+              const url = withCo(`${window.location.origin}/driver-upload?date=${encodeURIComponent(r.상차일||"")}&vehicle=${encodeURIComponent((r.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((r.이름||"").trim())}`);
               const msg = `[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n여기를 눌러 업로드해주세요\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
               navigator.clipboard.writeText(msg).then(() => showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(() => showAlert(`링크: ${url}`));
               setContextMenuDS(null);

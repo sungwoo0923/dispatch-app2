@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { execSync } from "child_process";
 import fs from "fs";
+import { fileURLToPath } from "url";
 
 const getAppVersion = () => {
   if (process.env.APP_VERSION) return process.env.APP_VERSION;
@@ -70,6 +71,11 @@ function fuelApiDevMiddleware() {
 const BUILD_TIME = new Date().toISOString(); // 화면 버전 확인(VersionCheck)용 — 번들과 version.json이 같은 값을 쓴다
 
 export default defineConfig({
+  // 🏢 운송사별 데이터 분리 — 앱 전체의 firebase/firestore를 src/fsTenant.js로 바꿔 끼운다
+  resolve: { alias: [
+    { find: /^firebase\/firestore$/, replacement: fileURLToPath(new URL("./src/fsTenant.js", import.meta.url)) },
+    { find: /^kp-firestore-base$/, replacement: "@firebase/firestore" },
+  ] },
   plugins: [
     react({ jsxRuntime: "automatic" }),
     fuelApiDevMiddleware(),

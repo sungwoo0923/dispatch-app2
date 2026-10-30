@@ -300,6 +300,8 @@ export default function CompanyApplications() {
     }
   };
 
+  const [approvePlan, setApprovePlan] = useState("");
+  useEffect(() => { setApprovePlan(""); }, [managingApp?.id]);
   const approveTransport = async (app) => {
     setProcessing(true);
     try {
@@ -319,6 +321,14 @@ export default function CompanyApplications() {
         companyCode,
         processedAt: serverTimestamp(),
       });
+      // 💳 요금제 연결 — 신청한(또는 승인 때 고른) 요금제로 회사 메뉴가 열린다
+      if (app.type !== "기존" && app.companyName) {
+        const pid = approvePlan || app.requestedPlan || "standard";
+        try {
+          await setDoc(doc(db, "companyPlans", app.companyName.trim()), { planId: pid, since: new Date().toISOString().slice(0, 10), updatedAt: serverTimestamp() }, { merge: true });
+          await updateDoc(doc(db, "transportApplications", app.id), { approvedPlan: pid });
+        } catch (_) {}
+      }
       // 🚀 신규 운송사 → 그 회사 관리자가 처음 들어올 때 튜토리얼 + 초기 설정 마법사를 띄운다(Onboarding.jsx)
       if (app.type !== "기존" && app.companyName) {
         try { await setDoc(doc(db, "companySettings", app.companyName.trim()), { onboarding: { pending: true, approvedAt: serverTimestamp() } }, { merge: true }); } catch (_) {}
@@ -329,6 +339,8 @@ export default function CompanyApplications() {
             approved: true,
             companyCode,
             companyName: app.companyName,
+            // 👑 신규 운송사를 처음 가입한 사람 = 그 회사의 마스터(이후 직원 권한·부서·직책을 정한다)
+            ...(app.type !== "기존" ? { isMaster: true, role: "admin" } : {}),
           });
         } catch (_) {}
       }
@@ -1024,6 +1036,18 @@ export default function CompanyApplications() {
                   if (st === "pending") {
                     return (
                       <>
+                        {activeTab === "운송" && managingApp.type !== "기존" && (
+                          <div className="rounded-xl border border-[#DCE3EE] p-3">
+                            <div className="text-[12px] font-bold text-gray-500 mb-1.5">요금제 (승인하면 이 요금제의 메뉴로 열립니다)</div>
+                            <div className="grid grid-cols-4 gap-1.5">
+                              {[["lite", "라이트"], ["basic", "베이직"], ["standard", "스탠다드"], ["pro", "프로"]].map(([id, nm]) => {
+                                const cur = approvePlan || managingApp.requestedPlan || "standard";
+                                return <button key={id} type="button" onClick={() => setApprovePlan(id)} className={`h-9 rounded-lg text-[12.5px] font-black whitespace-nowrap ${cur === id ? "bg-[#1B2B4B] text-white" : "border border-gray-200 text-[#1B2B4B]"}`}>{nm}</button>;
+                              })}
+                            </div>
+                            {managingApp.requestedPlan && <div className="text-[11.5px] text-gray-500 mt-1.5">신청한 요금제: {({ lite: "라이트", basic: "베이직", standard: "스탠다드", pro: "프로" })[managingApp.requestedPlan] || managingApp.requestedPlan} · 처음 가입자는 이 회사의 마스터 계정이 됩니다</div>}
+                          </div>
+                        )}
                         <button onClick={() => handleApprove(managingApp)} disabled={processing}
                           className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition disabled:opacity-50">
                           <EditableText id="companyApp.managingApp.승인" defaultText="승인" />
