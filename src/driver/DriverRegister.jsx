@@ -4,6 +4,10 @@ import { auth, db } from "../firebase";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, setDoc, getDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
+import { addDoc, collection } from "firebase/firestore";
+import BankAccountInput from "../BankAccountInput";
+import { validateAccount, onlyDigits } from "../bankUtil";
+import { compressImage } from "../InternalMail";
 
 // ⭐ 사용자 요청 — 차량종류/톤수/거주지를 가입할 때 드롭다운으로 선택하게 한다
 // (이전엔 "1톤"/"카고"가 뒤섞인 한 줄짜리 목록 하나만 있었음). 차종은 "직접입력"을
@@ -100,6 +104,12 @@ export default function DriverRegister() {
   const [residenceCity, setResidenceCity] = useState("");
   const [requestNote, setRequestNote] = useState("");
   const [hireDate, setHireDate] = useState("");
+  // 💳 정산 정보(지입·용차 기사 지급용) — 계좌는 지입이면 사실상 필수, 사업자 정보는 선택
+  const [bank, setBank] = useState({ bank: "", acct: "", holder: "" });
+  const [bizNo, setBizNo] = useState("");
+  const [bizName, setBizName] = useState("");
+  const [bizImg, setBizImg] = useState("");
+  const bizFileRef = React.useRef(null);
   const [termsAgreed, setTermsAgreed] = useState(false);
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
   const [gpsAgreed, setGpsAgreed] = useState(false);
@@ -128,6 +138,11 @@ export default function DriverRegister() {
     if (!tonnage) return setError("톤수를 선택해주세요.");
     if (!residenceProvince) return setError("거주지를 선택해주세요.");
     if (RESIDENCE_SUB_REGIONS[residenceProvince] && !residenceCity) return setError("거주 지역(시/군)을 선택해주세요.");
+    if (bank.bank || bank.acct || bank.holder) {
+      const v = validateAccount(bank.bank, bank.acct, bank.holder);
+      if (!v.ok) return setError(`정산 계좌: ${v.msg}`);
+    }
+    if (bizNo && onlyDigits(bizNo).length !== 10) return setError("사업자등록번호는 10자리입니다.");
     if (!termsAgreed || !privacyAgreed || !gpsAgreed) return setError("모든 약관에 동의해주세요.");
 
     const email = makeEmail(carNo.trim());
@@ -153,6 +168,11 @@ export default function DriverRegister() {
     // 계정을 먼저 만들어 로그인 상태를 확보한 뒤 조회하고, 이름·회사명이 다르면
     // 방금 만든 계정을 그 자리에서 삭제해 원상복구한다.
     const normPlate = carNo.trim().replace(/\s+/g, "").toUpperCase();
+    const payInfo = {
+      정산계좌: bank.acct ? { bank: bank.bank, acct: onlyDigits(bank.acct), holder: bank.holder.trim() } : null,
+      사업자번호: onlyDigits(bizNo) || "",
+      사업자상호: bizName.trim(),
+    };
 
     try {
       setLoading(true);
@@ -188,6 +208,7 @@ export default function DriverRegister() {
         요청사항: requestNote.trim(),
         companyName: companyName.trim(),
         hireDate: hireDate || "",
+        ...payInfo,
         approved: false,
         termsAgreed,
         privacyAgreed,
@@ -216,6 +237,7 @@ export default function DriverRegister() {
         거주지: residence,
         요청사항: requestNote.trim(),
         companyName: companyName.trim(),
+        ...payInfo,
         mainStatus: "대기",
         subStatus: "대기",
         status: "대기",
@@ -237,6 +259,12 @@ export default function DriverRegister() {
       });
       if (preRegistered) {
         await deleteDoc(doc(db, "drivers", normPlate)).catch(() => {});
+      }
+      if (bizImg) {
+        await addDoc(collection(db, "driver_documents"), {
+          driverId: uid, companyName: companyName.trim(), docType: "사업자등록증", fileName: "사업자등록증.jpg", fileType: "image/jpeg", dataUrl: bizImg,
+          uploadedAt: { seconds: Math.floor(Date.now() / 1000) }, by: "기사 가입",
+        }).catch(() => {});
       }
 
       await signOut(auth);
@@ -260,10 +288,11 @@ export default function DriverRegister() {
         <img src="/icons/sflow-icon.png" alt="S-Flow" className="w-9 h-9 rounded-xl shadow-md" />
       </div>
 
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-8">
-        <div className="text-center mb-7">
-          <h1 className="text-[22px] font-extrabold text-[#1B2B4B] tracking-tight">기사 등록</h1>
-          <p className="text-[13px] text-gray-400 mt-1">차량번호와 이름으로 계정이 생성됩니다</p>
+      <div className="w-full max-w-md bg-white rounded-[24px] shadow-2xl p-7">
+        <div className="mb-6">
+          <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#2D4C82]">DRIVER · SIGN UP</div>
+          <h1 className="text-[24px] font-black text-[#0B1428] tracking-tight">기사 등록</h1>
+          <p className="text-[13px] text-[#7A89A3] mt-0.5">차량번호가 아이디·비밀번호가 됩니다 · 승인 후 로그인</p>
         </div>
 
         <div className="space-y-4 mb-5">
@@ -417,6 +446,41 @@ export default function DriverRegister() {
             <input type="date" value={hireDate} onChange={(e) => setHireDate(e.target.value)}
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition" />
             <p className="text-[11px] text-gray-400 mt-1.5">입사일을 입력하면 연차/월차가 자동으로 설정됩니다.</p>
+          </div>
+        </div>
+
+        {/* 💳 정산 정보 */}
+        <div className="mb-5 rounded-2xl border border-[#DCE3EE] overflow-hidden">
+          <div className="px-4 py-3 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
+            <div className="text-[10px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">SETTLEMENT</div>
+            <div className="text-[14.5px] font-black">정산 받을 정보</div>
+            <div className="text-[11.5px] text-white/60">지입·용차 운임 지급에 쓰입니다 · 가입 후 내 정보에서 수정 가능</div>
+          </div>
+          <div className="p-4 space-y-3 bg-white">
+            <BankAccountInput value={bank} onChange={setBank} compact noFav />
+            <div>
+              <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">사업자등록번호 <span className="text-gray-400 font-normal">(선택)</span></label>
+              <input inputMode="numeric" value={bizNo} onChange={(e) => { const d = onlyDigits(e.target.value).slice(0, 10); setBizNo(d.length > 5 ? `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}` : d.length > 3 ? `${d.slice(0, 3)}-${d.slice(3)}` : d); }}
+                placeholder="000-00-00000" className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] tabular-nums" />
+            </div>
+            {bizNo && (
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">상호 <span className="text-gray-400 font-normal">(선택)</span></label>
+                <input value={bizName} onChange={(e) => setBizName(e.target.value)} placeholder="사업자등록증의 상호" className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]" />
+              </div>
+            )}
+            <div>
+              <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">사업자등록증 사진 <span className="text-gray-400 font-normal">(선택)</span></label>
+              {bizImg ? (
+                <div className="relative rounded-xl overflow-hidden border border-gray-200">
+                  <img src={bizImg} alt="사업자등록증" className="w-full max-h-48 object-contain bg-[#F3F6FA]" />
+                  <button type="button" onClick={() => setBizImg("")} className="absolute top-2 right-2 h-7 px-2.5 rounded-lg bg-[#0B1428]/80 text-white text-[12px] font-bold">다시 찍기</button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => bizFileRef.current?.click()} className="w-full h-20 rounded-xl border-2 border-dashed border-[#C9D2E0] text-[#5B6B85] text-[13px] font-bold">+ 촬영 또는 사진 선택</button>
+              )}
+              <input ref={bizFileRef} type="file" accept="image/*" capture="environment" hidden onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) setBizImg(await compressImage(f, 1400, 0.8).catch(() => "")); }} />
+            </div>
           </div>
         </div>
 

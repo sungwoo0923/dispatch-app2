@@ -27,6 +27,7 @@ import { rotationCount, rotationDone, rotationLabel } from "../rotation";
 import { haversineKm } from "../tmapFareCalc";
 import VehicleCarePanel, { VehicleSetupWizard, shouldShowSetup } from "../VehicleCarePanel";
 import { careSummary, vehicleDefaults } from "../vehicleCare";
+import DriverDocBox, { useDriverInbox, DriverPayInfoCard } from "./DriverDocBox";
 
 // ⭐ 오더 타임라인 — 기사 행동(수락/거절/수정확인/상차지도착/상차완료/운송완료 등)을
 // 오더 문서의 기사타임라인 배열에 "덮어쓰지 않고" 계속 쌓는다(관리자 지입차관리 타임라인).
@@ -954,6 +955,7 @@ export default function DriverHome() {
   const [uid, setUid] = useState(null);
   const [driver, setDriver] = useState(null);
   const [activeTab, setActiveTab] = useState("home");
+  const inbox = useDriverInbox(uid); // 📂 지급명세서·과태료 서류
   const [statusLoading, setStatusLoading] = useState(false);
   const [toast, setToast] = useState("");
   const [companyDefaultLoc, setCompanyDefaultLoc] = useState(null);
@@ -2118,8 +2120,16 @@ export default function DriverHome() {
       </div>
 
       {/* ─── 탭: 홈 ─── */}
+      {activeTab === "docs" && <DriverDocBox uid={uid} inbox={inbox} />}
       {activeTab === "home" && (
         <div style={{ padding: "16px 16px 0" }}>
+          {inbox.unread > 0 && (
+            <button type="button" onClick={() => setActiveTab("docs")} style={{ width: "100%", textAlign: "left", marginBottom: 12, padding: "12px 14px", borderRadius: 16, border: "1px solid #C9D6EE", background: "#EEF3FC", color: "#0F1A30", cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ width: 34, height: 34, borderRadius: 10, background: "#0F1A30", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900 }}>{inbox.unread}</span>
+              <span style={{ flex: 1 }}><b style={{ fontSize: 14.5 }}>새 서류가 도착했습니다</b><br /><span style={{ fontSize: 12, color: "#5B6B85" }}>지급명세서 · 과태료·사고 서류 — 눌러서 확인</span></span>
+              <span style={{ fontWeight: 900, color: "#2D4C82" }}>›</span>
+            </button>
+          )}
 
           {/* 🚚 차량 정비·만기 알림 — 누르면 차량 탭 */}
           {(() => {
@@ -2587,6 +2597,8 @@ export default function DriverHome() {
               </div>
             ))}
           </div>
+
+          {uid && <DriverPayInfoCard uid={uid} driver={driver || {}} />}
 
           {/* ⭐ 사용자 요청 — 알림/푸시 on-off를 기사 본인이 설정에서 끄고 켤 수 있어야 한다 */}
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8, paddingLeft: 4 }}><span style={{ width: 6, height: 6, background: "#2D4C82", transform: "rotate(45deg)" }} /><span style={{ fontSize: 9.5, fontWeight: 800, color: "#9AA9C3", letterSpacing: "0.22em", fontFamily: DRV_MONO }}>ALERT</span><span style={{ fontSize: 13.5, fontWeight: 900, color: "#0F1A30" }}>알림 설정</span></div>
@@ -3434,6 +3446,11 @@ export default function DriverHome() {
               <rect x="1" y="6" width="14" height="10" rx="1.5"/><path d="M15 10h4l3 3v3h-7z"/><circle cx="6" cy="18" r="1.8"/><circle cx="18" cy="18" r="1.8"/>
             </svg>
           )},
+          { key: "docs", label: "서류함", badge: inbox.unread, icon: (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M8 13h8"/>
+            </svg>
+          )},
           { key: "temperature", label: "온도", icon: (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
@@ -3449,8 +3466,8 @@ export default function DriverHome() {
               <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
             </svg>
           )},
-        ].map(({ key, label, icon }) => (
-          <button key={key} onClick={() => setActiveTab(key)} style={{
+        ].map(({ key, label, icon, badge }) => (
+          <button key={key} onClick={() => setActiveTab(key)} style={{ position: "relative",
             flex: 1, padding: "8px 0 7px", border: "none", background: "none",
             cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
             color: activeTab === key ? "#0F1A30" : "#9AA9C3",
@@ -3463,6 +3480,7 @@ export default function DriverHome() {
               boxShadow: activeTab === key ? "0 6px 14px rgba(27,43,75,0.3)" : "none",
             }}>{icon}</span>
             <span style={{ fontSize: 10.5, letterSpacing: "-0.2px" }}>{label}</span>
+            {badge > 0 && <span style={{ position: "absolute", top: 4, right: "calc(50% - 26px)", minWidth: 16, height: 16, padding: "0 4px", borderRadius: 8, background: "#0B1428", color: "#fff", fontSize: 10, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", border: "1.5px solid #fff" }}>{badge}</span>}
           </button>
         ))}
       </div>

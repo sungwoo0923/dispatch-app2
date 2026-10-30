@@ -35,6 +35,7 @@ import RouteMapModal from "./RouteMapModal";
 import { ReturnTripSuggest } from "./fleetRecommend";
 import { useLoadOrderRange } from "./orderHistory";
 import VehicleCarePanel from "./VehicleCarePanel";
+import { BatchStatementsPanel, PenaltyCenter } from "./FleetPayDocs";
 import { careSummary, vehicleDefaults } from "./vehicleCare";
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
@@ -4894,6 +4895,24 @@ function FleetSettlementTab({ drivers = [], dispatchData = [], role = "", compan
 
 // ─── CheckInLocModal ─────────────────────────────────────────────────────────
 
+// 💸 정산관리 — 일괄 지급명세서(여러 기사 한 번에) / 개별 정산서(한 명 상세)
+function SettlementModes(props) {
+  const [mode, setMode] = useState(() => sfGet("fm_settle_mode", "batch"));
+  useEffect(() => { sfSet("fm_settle_mode", mode); }, [mode]);
+  return (
+    <div>
+      <div className="inline-flex p-1 rounded-2xl bg-white border border-[#E3E8F0] mb-3 gap-1">
+        {[["batch", "일괄 지급명세서"], ["single", "개별 정산서"]].map(([k, l]) => (
+          <button key={k} type="button" onClick={() => setMode(k)} className={`h-9 px-4 rounded-xl text-[13px] font-black ${mode === k ? "bg-[#0F1A30] text-white" : "text-[#5B6B85] hover:bg-[#F3F6FA]"}`}>{l}</button>
+        ))}
+      </div>
+      {mode === "batch"
+        ? <BatchStatementsPanel drivers={props.drivers} dispatchData={props.dispatchData} companyName={props.companyName} supplier={{ name: props.companyName }} />
+        : <FleetSettlementTab {...props} />}
+    </div>
+  );
+}
+
 function CheckInLocModal({ title, initialLoc, onSave, onCancel }) {
   const [addr, setAddr] = React.useState(initialLoc?.name || "");
   const [result, setResult] = React.useState(initialLoc?.lat ? initialLoc : null);
@@ -5993,6 +6012,12 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
         거주지: raw.거주지 || "",
         근무요일: raw.근무요일 || [],
         담당자: raw.담당자 || null,
+        // 💳 정산 정보(기사앱 가입·내 정보 또는 기사관리에서 입력) + 앱 계정(있으면 명세서·서류가 기사앱으로 간다)
+        정산계좌: raw.정산계좌 || null,
+        사업자번호: raw.사업자번호 || "",
+        사업자상호: raw.사업자상호 || "",
+        appUid: raw.uid || "",
+        공제항목: raw.공제항목 || null,
       }))
       .sort((a, b) => a.이름.localeCompare(b.이름, "ko"));
   }, [driversRaw]);
@@ -6418,6 +6443,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
             ["temperature", "온도 관제", "TEMP", <><path d="M14 14.8V4a2 2 0 0 0-4 0v10.8a4 4 0 1 0 4 0Z" /></>],
             ["cargo-camera", "적재함 카메라", "CAM", <><rect x="2" y="7" width="14" height="11" rx="2" /><path d="m16 11 6-3v9l-6-3" /></>],
             ["vehicle", "차량 관리", "CARE", <><rect x="1" y="6" width="14" height="10" rx="1.5" /><path d="M15 10h4l3 3v3h-7z" /><circle cx="6" cy="18" r="1.8" /><circle cx="18" cy="18" r="1.8" /></>],
+            ["penalty", "과태료·사고 서류", "DOC", <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 13h6M9 17h4" /></>],
             ["registration", "기사 등록 관리", "REG", <><circle cx="10" cy="8" r="4" /><path d="M3 20c0-4 3-7 7-7M17 14v6M14 17h6" /></>],
           ].map(([key, label, code, icon]) => {
             const on = mainTab === key;
@@ -6742,8 +6768,9 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
           여부와 무관하게 기사관리에서 등급만 지입/직영으로 지정되면 정산 대상이어야
           하기 때문이다. */}
       {mainTab === "settlement" && (
-        <FleetSettlementTab drivers={routeDrivers} dispatchData={dispatchData} role={role} companyName={myCompanyName} />
+        <SettlementModes drivers={routeDrivers} dispatchData={dispatchData} role={role} companyName={myCompanyName} />
       )}
+      {mainTab === "penalty" && <PenaltyCenter drivers={routeDrivers} companyName={myCompanyName} supplier={{ name: myCompanyName }} />}
 
       {/* ═══ 이력 조회 ═══ */}
       {mainTab === "history" && <HistoryTab drivers={drivers} defaultDriverId={historyPreselect} />}

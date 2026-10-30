@@ -24,7 +24,7 @@ export function useFavAccounts() {
   return [list, save];
 }
 
-export default function BankAccountInput({ value, onChange, compact = false }) {
+export default function BankAccountInput({ value, onChange, compact = false, noFav = false }) {
   const v = typeof value === "string" ? parseBankText(value) : (value || { bank: "", acct: "", holder: "" });
   const set = (patch) => onChange({ ...v, ...patch });
   const [favs, saveFavs] = useFavAccounts();
@@ -52,7 +52,7 @@ export default function BankAccountInput({ value, onChange, compact = false }) {
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
         <span className="text-[11.5px] font-bold text-[#7A89A3]">은행 · 계좌번호 · 예금주</span>
-        <div className="relative" ref={boxRef}>
+        {!noFav && <div className="relative" ref={boxRef}>
           <button type="button" onClick={() => setOpen((o) => !o)}
             className="h-7 px-2.5 rounded-lg border border-[#C9D6EE] bg-[#F3F6FA] text-[12px] font-black text-[#1B2B4B] hover:bg-[#EEF3FC] whitespace-nowrap">
             + 자주 쓰는 계좌{favs.length ? ` ${favs.length}` : ""}
@@ -72,7 +72,7 @@ export default function BankAccountInput({ value, onChange, compact = false }) {
               ))}
             </div>
           )}
-        </div>
+        </div>}
       </div>
       <div className={`grid gap-1.5 ${compact ? "grid-cols-1" : "grid-cols-[130px_minmax(0,1fr)_110px]"}`}>
         <CustomSelect value={v.bank || ""} onChange={(e) => set({ bank: e.target.value, acct: v.acct })} className={inp}>
@@ -89,14 +89,14 @@ export default function BankAccountInput({ value, onChange, compact = false }) {
             {check.level === "ok" ? "✓ " : "! "}{check.msg}
           </span>
         ) : <span />}
-        {check?.ok && !already && (
+        {!noFav && check?.ok && !already && (
           <label className="flex items-center gap-1.5 text-[12px] font-bold text-[#1B2B4B] whitespace-nowrap">
             <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />자주 쓰는 계좌로 등록
           </label>
         )}
-        {already && <span className="text-[12px] font-bold text-[#7A89A3] whitespace-nowrap">★ 자주 쓰는 계좌</span>}
+        {!noFav && already && <span className="text-[12px] font-bold text-[#7A89A3] whitespace-nowrap">★ 자주 쓰는 계좌</span>}
       </div>
-      {remember && check?.ok && !already && (
+      {!noFav && remember && check?.ok && !already && (
         <div className="flex items-center gap-1.5">
           <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="이름 (예: 내 계좌, ○○상사)" className={`${inp} !h-9`} />
           <button type="button" onClick={addFav} className="h-9 px-3 rounded-xl bg-[#1B2B4B] text-white text-[12.5px] font-black whitespace-nowrap">등록</button>
