@@ -648,6 +648,7 @@ export default function App() {
           // approved !== false allows old accounts (undefined) and explicitly true
           // only blocks accounts explicitly set to false (new unapproved signups)
           setApproved(isMasterEmail ? true : data.approved !== false);
+          try { window.__kpMeTeam = String(data.team || "").trim(); } catch { /* 무시 */ }
           if (dataRole === "totalMaster") {
             // totalMaster uses the company they typed at login, not their Firestore doc
             // ⭐ 저장된 회사명이 지워졌으면(캐시 정리 등) 본인 문서의 회사 → 기본 회사 순으로 채운다 —

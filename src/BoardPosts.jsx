@@ -15,7 +15,9 @@ const toMs = (v) => (v?.toMillis ? v.toMillis() : typeof v === "number" ? v : v?
 const fmt = (ms, full) => {
   if (!ms) return "";
   const d = new Date(ms);
-  if (!full && d.toDateString() === new Date().toDateString()) return d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+  const hm = d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
+  if (!full && d.toDateString() === new Date().toDateString()) return hm;
+  if (!full) return `${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ${hm}`;
   return d.toLocaleString("ko-KR", full ? { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" } : { year: "2-digit", month: "2-digit", day: "2-digit" });
 };
 
@@ -85,8 +87,15 @@ export default function BoardPage({ company, me, board }) {
 
   if (!canSeeBoard(board, me)) return <div className="py-20 text-center text-[14px] text-[#9AA9C3]">이 게시판을 볼 권한이 없습니다.</div>;
 
+  const pinnedCount = (posts || []).filter((p) => p.pinned).length;
+  const MAX_PIN = 5;
+  const togglePin = (p) => {
+    if (!p.pinned && pinnedCount >= MAX_PIN) { window.alert(`상단 고정은 ${MAX_PIN}개까지입니다. 다른 고정을 먼저 해제해 주세요.`); return; }
+    updateDoc(doc(db, "boardPosts", p.id), { pinned: !p.pinned }).catch((e) => window.alert(e.message));
+  };
   const save = async () => {
     if (!form.title.trim() || !form.content.trim()) { window.alert("제목과 내용을 입력해 주세요."); return; }
+    if (admin && form.pinned && !form.pinnedOrig && pinnedCount >= MAX_PIN) { window.alert(`상단 고정은 ${MAX_PIN}개까지입니다.`); return; }
     setBusy(true);
     try {
       const data = { title: form.title.trim().slice(0, 200), content: form.content.slice(0, 20000), images: form.images || [], pinned: admin ? !!form.pinned : !!form.pinnedOrig, updatedAt: serverTimestamp() };
@@ -149,7 +158,7 @@ export default function BoardPage({ company, me, board }) {
             ))}
             {(form.images || []).length < 3 && <button type="button" onClick={() => fileRef.current?.click()} className="w-20 h-20 rounded-xl border-2 border-dashed border-[#C9D2E0] text-[#7A879C] text-[12px] font-bold">+ 사진</button>}
             <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={async (e) => { const fs = [...(e.target.files || [])].slice(0, 3 - (form.images || []).length); e.target.value = ""; const out = await Promise.all(fs.map((f) => compressImage(f, 1200, 0.75))).catch(() => []); setForm((p) => ({ ...p, images: [...(p.images || []), ...out].slice(0, 3) })); }} />
-            {admin && <label className="ml-auto flex items-center gap-2 text-[13px] font-bold text-[#0F1A30]"><input type="checkbox" checked={!!form.pinned} onChange={(e) => setForm((p) => ({ ...p, pinned: e.target.checked }))} className="w-4 h-4 accent-[#1B2B4B]" />상단 고정</label>}
+            {admin && <label className="ml-auto flex items-center gap-2 text-[13px] font-bold text-[#0F1A30]"><input type="checkbox" checked={!!form.pinned} onChange={(e) => setForm((p) => ({ ...p, pinned: e.target.checked }))} className="w-4 h-4 accent-[#1B2B4B]" />📌 상단 고정 <span className="text-[11.5px] font-semibold text-[#9AA9C3]">({pinnedCount}/{MAX_PIN})</span></label>}
           </div>
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => setForm(null)} className="h-11 px-5 rounded-xl border border-[#DCE3EE] text-[13.5px] font-bold text-[#5B6B85]">취소</button>
@@ -169,7 +178,7 @@ export default function BoardPage({ company, me, board }) {
               <div><div className="font-black text-[#0F1A30]">{cur.authorName} <span className="font-semibold text-[#7A879C]">{cur.authorPosition}</span></div><div className="text-[12px] text-[#9AA9C3]">{fmt(toMs(cur.createdAt), true)} · 조회 {(cur.readBy || []).length}</div></div>
               {(cur.authorUid === me.uid || admin) && (
                 <div className="ml-auto flex gap-1.5">
-                  {admin && <button type="button" onClick={() => updateDoc(doc(db, "boardPosts", cur.id), { pinned: !cur.pinned })} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12px] font-bold text-[#3A4A66]">{cur.pinned ? "고정 해제" : "상단 고정"}</button>}
+                  {admin && <button type="button" onClick={() => togglePin(cur)} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12px] font-bold text-[#3A4A66]">{cur.pinned ? "고정 해제" : "상단 고정"}</button>}
                   {cur.authorUid === me.uid && <button type="button" onClick={() => setForm({ id: cur.id, title: cur.title, content: cur.content, images: cur.images || [], pinned: !!cur.pinned, pinnedOrig: !!cur.pinned })} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12px] font-bold text-[#3A4A66]">수정</button>}
                   {/* 삭제는 작성자 본인만(최고관리자는 운영상 예외) — 서버 규칙(firestore.rules)과 같은 기준 */}
                   {(cur.authorUid === me.uid || me.role === "totalMaster") && <button type="button" onClick={() => remove(cur)} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12px] font-bold text-[#7A879C]">삭제</button>}
@@ -212,7 +221,7 @@ export default function BoardPage({ company, me, board }) {
             <span className="ml-auto text-[12.5px] font-bold text-[#9AA9C3]">{sorted.length}개의 글</span>
           </div>
           <div className="flex px-5 h-10 items-center bg-[#F8FAFD] border-b border-[#EEF1F6] text-[12px] font-black text-[#7A879C]">
-            <span className="w-14 text-center">번호</span><span className="flex-1">제목</span><span className="w-32">작성자</span><span className="w-24 text-center">날짜</span><span className="w-14 text-center">조회</span>
+            <span className="w-12 text-center">번호</span><span className="flex-1 pl-2">제목</span><span className="w-24">작성자</span><span className="w-[88px] text-right">날짜</span><span className="w-12 text-center">조회</span>
           </div>
           {posts === null ? <div className="py-16 text-center text-[13.5px] text-[#9AA9C3]">불러오는 중…</div> : !shown.length ? (
             <div className="py-16 text-center">
@@ -223,16 +232,16 @@ export default function BoardPage({ company, me, board }) {
             const unread = !(p.readBy || []).includes(me.uid);
             return (
               <button key={p.id} type="button" onClick={() => setOpenId(p.id)} className={`w-full flex px-5 h-[52px] items-center border-b border-[#F1F4F9] text-left hover:bg-[#F8FAFD] ${p.pinned ? "bg-[#F5F8FD]" : ""}`}>
-                <span className="w-14 text-center text-[12.5px] text-[#9AA9C3] tabular-nums">{p.pinned ? <span className="text-[11px] font-black px-1.5 py-0.5 rounded bg-[#0F1A30] text-white">고정</span> : sorted.length - ((page - 1) * PAGE + i)}</span>
-                <span className="flex-1 min-w-0 flex items-center gap-1.5">
-                  <span className={`truncate text-[14px] ${unread ? "font-black text-[#0F1A30]" : "font-semibold text-[#3A4A66]"}`}>{p.title}</span>
+                <span className="w-12 text-center text-[12px] text-[#9AA9C3] tabular-nums">{p.pinned ? <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded bg-[#0F1A30] text-[#8FB0F0]">📌</span> : sorted.length - ((page - 1) * PAGE + i)}</span>
+                <span className="flex-1 min-w-0 flex items-center gap-1.5 pl-2">
+                  <span className={`truncate ${p.pinned ? "text-[14.5px] font-black text-[#0B1428]" : unread ? "text-[14px] font-black text-[#0F1A30]" : "text-[14px] font-semibold text-[#3A4A66]"}`}>{p.title}</span>
                   {(p.comments || []).length > 0 && <span className="text-[12px] font-black text-[#4B6CB7]">[{p.comments.length}]</span>}
                   {(p.images || []).length > 0 && <span className="text-[11px] text-[#9AA9C3]">📷</span>}
                   {isNew(p) && <span className="w-[18px] h-[18px] rounded-full bg-[#1B2B4B] text-white text-[10px] font-black flex items-center justify-center">N</span>}
                 </span>
-                <span className="w-32 truncate text-[13px] font-bold text-[#3A4A66]">{p.authorName} <span className="font-semibold text-[#9AA9C3]">{p.authorPosition}</span></span>
-                <span className="w-24 text-center text-[12.5px] text-[#7A879C] tabular-nums">{fmt(toMs(p.createdAt))}</span>
-                <span className="w-14 text-center text-[12.5px] text-[#7A879C] tabular-nums">{(p.readBy || []).length}</span>
+                <span className="w-24 truncate text-[12.5px] font-bold text-[#3A4A66]">{p.authorName}</span>
+                <span className="w-[88px] text-right text-[12px] text-[#7A879C] tabular-nums whitespace-nowrap">{fmt(toMs(p.createdAt))}</span>
+                <span className="w-12 text-center text-[12px] text-[#7A879C] tabular-nums">{(p.readBy || []).length}</span>
               </button>
             );
           })}

@@ -9,6 +9,7 @@ import { addDoc, collection, doc, serverTimestamp, updateDoc } from "firebase/fi
 import { ShellIcon } from "./AdminShell";
 import { RecipientPicker, useCompanyStaff, compressImage } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
+import { TEAM_OPTIONS } from "./hrConstants";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const inp = "w-full px-4 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] text-[#0F1A30] outline-none focus:border-[#4B6CB7]";
@@ -38,6 +39,8 @@ export function NoticeWriter({ me, company, initial, onCancel, onSaved }) {
   const [title, setTitle] = React.useState(initial?.title || "");
   const [content, setContent] = React.useState(initial?.content || "");
   const [image, setImage] = React.useState(initial?.image || "");
+  const [teams, setTeams] = React.useState(Array.isArray(initial?.teams) ? initial.teams : []); // 비면 전체 직원
+  const [pinned, setPinned] = React.useState(!!initial?.pinned);
   const [busy, setBusy] = React.useState(false);
   const fileRef = React.useRef(null);
   const d = new Date();
@@ -46,7 +49,8 @@ export function NoticeWriter({ me, company, initial, onCancel, onSaved }) {
     if (!content.trim()) { window.alert("내용을 입력해 주세요."); return; }
     setBusy(true);
     try {
-      const data = { title: (title.trim() || autoTitle).slice(0, 200), category, content, audience, image: image || null };
+      const data = { title: (title.trim() || autoTitle).slice(0, 200), category, content, audience, image: image || null,
+        teams: audience === "internal" ? teams : [], pinned, ...(pinned && !initial?.pinned ? { pinnedAt: Date.now() } : {}) };
       if (initial?.id) await updateDoc(doc(db, "notices", initial.id), { ...data, editedAt: serverTimestamp() });
       else await addDoc(collection(db, "notices"), { ...data, author: me.name, authorUid: me.uid, createdAt: serverTimestamp(), companyName: company });
       onSaved?.();
@@ -88,6 +92,22 @@ export function NoticeWriter({ me, company, initial, onCancel, onSaved }) {
             <div className="leading-tight"><div className="text-[13.5px] font-black text-[#0F1A30]">{initial?.author || me.name}</div><div className="text-[11px] text-[#7A879C]">작성자 · 자동</div></div>
           </div>
         </div>
+        {audience === "internal" && (
+          <div>
+            <Label hint="(팀을 고르면 그 팀에만 보입니다 · 아무것도 안 고르면 전체 직원)">세부 공개 대상</Label>
+            <div className="flex flex-wrap gap-1.5">
+              <button type="button" onClick={() => setTeams([])} className={`h-10 px-4 rounded-xl text-[13px] font-black border ${!teams.length ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`}>전체 직원</button>
+              {TEAM_OPTIONS.map((t) => {
+                const on = teams.includes(t);
+                return <button key={t} type="button" onClick={() => setTeams((p) => (on ? p.filter((x) => x !== t) : [...p, t]))} className={`h-10 px-4 rounded-xl text-[13px] font-black border ${on ? "bg-[#2D4C82] text-white border-[#2D4C82]" : "bg-white text-[#3A4A66] border-[#DCE3EE] hover:border-[#2D4C82]"}`}>{on ? "✓ " : ""}{t}</button>;
+              })}
+            </div>
+          </div>
+        )}
+        <label className="inline-flex items-center gap-2 text-[13.5px] font-black text-[#0F1A30] cursor-pointer">
+          <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} className="w-4 h-4 accent-[#1B2B4B]" />
+          📌 상단 고정 <span className="text-[12px] font-semibold text-[#9AA9C3]">(최대 5개 — 넘으면 오래된 고정은 목록으로 내려갑니다)</span>
+        </label>
         <div>
           <Label hint="(비우면 날짜 + 분류로 자동)">제목</Label>
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={autoTitle} className={`${inp} h-12 text-[16px] font-bold`} />

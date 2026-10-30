@@ -15,6 +15,7 @@
 //  - 승인 후 취소: 기안자가 「결재 취소 요청」(사유) → 같은 결재선이 다시 승인하면 "결재 취소"로 바뀐다.
 //    문서는 지우지 않고 모두의 보관함에 "결재 취소" 도장으로 남는다(감사 기록). 연차 사용일수도 자동 복구.
 import React from "react";
+import BankAccountInput, { ReasonTemplates } from "./BankAccountInput";
 import { createPortal } from "react-dom";
 import html2canvas from "html2canvas";
 import { db, auth } from "./firebase";
@@ -228,6 +229,13 @@ function StaffSelect({ value, onChange, staff, exclude = [], placeholder = "선�
   );
 }
 function FieldInput({ f, value, onChange, staff, meUid }) {
+  if (f.type === "bank") return <BankAccountInput value={value} onChange={onChange} />;
+  if (f.type === "textarea" && f.templates) return (
+    <div>
+      <ReasonTemplates templates={f.templates} value={value} onPick={onChange} />
+      <textarea value={value || ""} onChange={(e) => onChange(e.target.value)} rows={f.rows || 3} placeholder={f.ph || "위 양식을 고르거나 직접 입력"} className={`${inp} h-auto py-2 leading-relaxed resize-y`} />
+    </div>
+  );
   if (f.type === "textarea") return <textarea value={value || ""} onChange={(e) => onChange(e.target.value)} rows={f.rows || 3} placeholder={f.ph || ""} className={`${inp} h-auto py-2 leading-relaxed resize-y`} />;
   if (f.type === "select") return <CustomSelect openOnFocus value={value || ""} onChange={(e) => onChange(e.target.value)} className={inp}>{f.options.map((o) => <option key={o} value={o}>{o}</option>)}</CustomSelect>;
   if (f.type === "staff") return <StaffSelect value={value} onChange={onChange} staff={staff} exclude={[meUid]} placeholder="선택 안 함" />;

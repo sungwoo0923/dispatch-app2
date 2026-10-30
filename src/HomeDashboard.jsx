@@ -1,3 +1,4 @@
+import NoticeBoard from "./NoticeBoard";
 import React, { useMemo, useState, useRef, useEffect } from "react";
 import MasterChecklist from "./MasterChecklist";
 import { homeItemFeature, openPlanLock, planIncludes, usePlan } from "./plans";
@@ -127,14 +128,16 @@ function formatCreatedAt(createdAt) {
 }
 
 /* ===== 게시판 테이블 공통 ===== */
+// 메일함처럼 — 번호·날짜·작성자는 좁게, 제목·내용 칸이 남는 폭을 다 쓴다
+const WIDE_COLS = ["제목", "일정", "내용", "인수인계 내용", "업무 내용"];
 function BoardTable({ headers, rows }) {
   return (
-    <table className="w-full text-[13px]">
+    <table className="w-full text-[13px] table-fixed">
       <thead>
         <tr style={{ background: "linear-gradient(90deg,#0F1A30,#1B2B4B 50%,#24396A)" }}>
           {headers.map((h, i) => (
             <th key={i} className={`px-3 py-3 font-extrabold text-white text-[13px] whitespace-nowrap ${h.align || "text-center"}`}
-              style={{ width: h.width }}>
+              style={{ width: WIDE_COLS.includes(h.label) ? undefined : h.width }}>
               <EditableText id={`home.table.header.${h.label}`} defaultText={h.label} />
             </th>
           ))}
@@ -984,36 +987,11 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         <div className="p-5">
           {/* 공지사항 탭 */}
           {boardTab === "공지사항" && (
-            notices.length === 0 ? (
-              <div className="text-[13px] text-gray-500 py-6 text-center">등록된 공지가 없습니다</div>
-            ) : (
-              <>
-                <BoardTable
-                  headers={[
-                    { label: "No", width: "44px" },
-                    { label: "등록날짜", width: "90px" },
-                    { label: "등록시간", width: "70px" },
-                    { label: "작성자", width: "80px" },
-                    { label: "제목", align: "text-left", width: "180px" },
-                  ]}
-                  rows={pagedNotices.map((n, idx) => (
-                    <tr key={n.id} onClick={() => setSelectedNotice(n)} className="cursor-pointer hover:bg-blue-50/50 transition">
-                      <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">{(noticePage - 1) * NOTICE_PAGE_SIZE + idx + 1}</td>
-                      <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">{n.date?.replaceAll("-", ".")}</td>
-                      <td className="px-3 py-2.5 text-center text-[12px] text-gray-500">{formatCreatedAtTime(n.createdAt)}</td>
-                      <td className="px-3 py-2.5 text-center text-[13px] font-semibold text-gray-700">{n.author}</td>
-                      <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800">
-                        {n.audience === "shipper" && (
-                          <span className="inline-block mr-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#EEF3FB] text-[#1B2B4B] align-middle">화주사</span>
-                        )}
-                        {n.title || "공지사항"}
-                      </td>
-                    </tr>
-                  ))}
-                />
-                <Pagination page={noticePage} total={noticeTotalPages} onChange={setNoticePage} />
-              </>
-            )
+            <NoticeBoard notices={notices} me={meHome} canWrite={canWriteNotice} isViewer={isViewer}
+              openId={selectedNotice?.id || null}
+              setOpenId={(id) => setSelectedNotice(id ? (notices.find((x) => x.id === id) || null) : null)}
+              onEdit={(n) => { setSelectedNotice(n); setNoticeOpen(true); }}
+              confirm={(message, onConfirm) => setConfirmDialog({ message, onConfirm })} />
           )}
 
           {/* 휴가/외근 탭 */}
@@ -1161,29 +1139,6 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       )}
 
       {/* ===== 모달들 ===== */}
-      {selectedNotice && !noticeOpen && (
-        <Modal title="공지사항 상세" onClose={() => setSelectedNotice(null)}>
-          <div className="space-y-3 text-[14px]">
-            <div><div className="text-[13px] text-gray-500 mb-0.5">제목</div><div className="font-semibold">{selectedNotice.title}</div></div>
-            <div><div className="text-[13px] text-gray-500 mb-0.5">작성자</div><div>{selectedNotice.author}</div></div>
-            <div><div className="text-[13px] text-gray-500 mb-0.5">작성일</div><div>{selectedNotice.date}</div></div>
-            {selectedNotice.image && <img src={selectedNotice.image} alt="" className="w-full rounded-lg border border-gray-200" />}
-            <div><div className="text-[13px] text-gray-500 mb-0.5">내용</div><div className="whitespace-pre-wrap leading-relaxed bg-gray-50 rounded-lg p-3">{selectedNotice.content}</div></div>
-          </div>
-          {(!isViewer) && (() => {
-            const isSA = role === "superadmin" || role === "totalMaster";
-            const isNoticeAuthor = isSA || (canWriteNotice && (selectedNotice.authorUid ? selectedNotice.authorUid === user?.uid : !selectedNotice.authorUid));
-            if (!isNoticeAuthor) return null;
-            return (
-            <div className="flex gap-2 mt-4 pt-4 border-t">
-              <button onClick={() => setConfirmDialog({ message: "공지사항을 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); } })} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition"><EditableText id="home.notice.삭제" defaultText="삭제" /></button>
-              <button onClick={() => { setNoticeOpen(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"><EditableText id="home.notice.수정" defaultText="수정" /></button>
-            </div>
-            );
-          })()}
-        </Modal>
-      )}
-
       {scheduleOpen && (
         <Modal title="휴가 / 외근 일정 등록" onClose={() => setScheduleOpen(false)}>
           <div className="space-y-3">
@@ -1484,7 +1439,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
             onClick={() => {
               const k = `${toast.type}_${toast.data?.id}`;
               if (toast.data?.id) { markToastSeen(k); _dismissedToasts.add(k); addPermDismissed(k); addFirestoreSeenKey(k); }
-              if (toast.type === "notice") setSelectedNotice(toast.data);
+              if (toast.type === "notice") { setSelectedNotice(toast.data); setBoardTab("공지사항"); }
               else if (toast.type === "schedule") setSelectedSchedule(toast.data);
               else if (toast.type === "handover") setSelectedHandover(toast.data);
               setToast(null);

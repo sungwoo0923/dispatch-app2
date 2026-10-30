@@ -16,6 +16,7 @@ import { subscribeOrderSync, deleteOrderWithLog, historyStartDate } from "../ord
 import CustomDatePicker from "../CustomDatePicker";
 import RouteMapModal from "../RouteMapModal";
 import southKorea from "@svg-maps/south-korea";
+import { canSeeNotice } from "../NoticeBoard";
 import React, { useState, useMemo, useEffect, useRef, startTransition, useSyncExternalStore } from "react";
 import { withCo } from "../fsTenant";
 // ⭐ 작은 표시 전용 저장소 — "최신 정보 확인 중"·첫 진입 진행률이 바뀔 때 화면 전체(오더 목록)를
@@ -3132,10 +3133,14 @@ useEffect(() => {
       }));
       list.sort(
         (a, b) =>
+          (!!b.pinned - !!a.pinned) ||
           (b.createdAt?.seconds || 0) -
           (a.createdAt?.seconds || 0)
       );
-      setNotices(list);
+      // 팀 지정 공지는 그 팀(+작성자·관리자)에게만
+      let meTeam = "";
+      try { meTeam = (window.__kpMeTeam || ""); } catch { /* 무시 */ }
+      setNotices(list.filter((n) => canSeeNotice(n, { uid: user?.uid, role, team: meTeam })));
     }
   );
   return () => unsub();

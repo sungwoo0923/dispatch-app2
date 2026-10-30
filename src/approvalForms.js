@@ -1,3 +1,4 @@
+import { bankText } from "./bankUtil";
 // ======================= src/approvalForms.js =======================
 // 📝 전자결재 양식 정의(2026-10-28) — 3개 묶음(근태·휴가 / 비용·지출 / 업무 기안·품의)과 양식별 입력칸.
 //  필드 type: text | textarea | date | time | daterange | select | number | money | staff | items
@@ -71,7 +72,7 @@ export const APPROVAL_FORMS = [
     fields: [
       { k: "kind", label: "휴가 구분", type: "select", options: ["연차", "하계휴가", "포상휴가", "무급휴가", "기타"], def: "연차" },
       { k: "period", label: "기간", type: "daterange", required: true },
-      { k: "reason", label: "사유", type: "textarea", ph: "개인 사유", required: true },
+      { k: "reason", label: "사유", templates: ["개인 사유", "가족 행사", "병원 진료", "경조사", "자녀 학교 행사"], type: "textarea", ph: "개인 사유", required: true },
       { k: "proxy", label: "업무 대행자", type: "staff" },
       { k: "contact", label: "비상 연락처", type: "text", ph: "010-0000-0000" },
     ],
@@ -80,7 +81,7 @@ export const APPROVAL_FORMS = [
     fields: [
       { k: "date", label: "날짜", type: "date", required: true },
       { k: "ampm", label: "구분", type: "select", options: ["오전 반차", "오후 반차", "반반차(2시간)"], def: "오전 반차" },
-      { k: "reason", label: "사유", type: "textarea", required: true },
+      { k: "reason", label: "사유", templates: ["개인 사유", "가족 행사", "병원 진료", "경조사", "자녀 학교 행사"], type: "textarea", required: true },
       { k: "proxy", label: "업무 대행자", type: "staff" },
     ],
     days: (d) => (String(d.ampm || "").includes("반반차") ? 0.25 : 0.5), summary: (d) => `${d.date || ""} ${d.ampm || "오전 반차"}` },
@@ -89,7 +90,7 @@ export const APPROVAL_FORMS = [
       { k: "kind", label: "구분", type: "select", options: ["조퇴", "지각", "외출"], def: "조퇴" },
       { k: "date", label: "날짜", type: "date", required: true },
       { k: "time", label: "시간", type: "time", required: true },
-      { k: "reason", label: "사유", type: "textarea", required: true },
+      { k: "reason", label: "사유", templates: ["개인 사유", "가족 행사", "병원 진료", "경조사", "자녀 학교 행사"], type: "textarea", required: true },
     ],
     summary: (d) => `${d.kind || "조퇴"} ${d.date || ""} ${d.time || ""}` },
   { key: "outside", cat: "leave", label: "외근", title: "외 근 신 청 서", code: "HO",
@@ -138,7 +139,7 @@ export const APPROVAL_FORMS = [
       { k: "to", label: "종료", type: "time", half: true },
       { k: "comp", label: "보상", type: "select", options: ["대체휴무", "휴일근무수당"], def: "대체휴무" },
       { k: "offDate", label: "대체휴무일", type: "date" },
-      { k: "reason", label: "근무 사유", type: "textarea", required: true },
+      { k: "reason", label: "근무 사유", templates: ["물량 증가 대응", "긴급 배차 대응", "월마감 정산 업무", "시스템 점검"], type: "textarea", required: true },
     ],
     summary: (d) => `${d.workDate || ""} 휴일근무 · ${d.comp || "대체휴무"}` },
   { key: "overtime", cat: "leave", label: "연장·야간근무", title: "연 장 근 무 신 청 서", code: "HN",
@@ -159,8 +160,8 @@ export const APPROVAL_FORMS = [
       { k: "account", label: "계정과목", type: "select", options: ACCOUNTS, def: "소모품비" },
       { k: "pay", label: "결제 수단", type: "select", options: PAY, def: "법인카드" },
       { k: "items", label: "지출 내역", type: "items", required: true },
-      { k: "bank", label: "입금 계좌", type: "text", ph: "계좌이체·개인카드 정산일 때 (은행 / 계좌 / 예금주)" },
-      { k: "reason", label: "지출 사유", type: "textarea", required: true },
+      { k: "bank", label: "입금 계좌", type: "bank" },
+      { k: "reason", label: "지출 사유", templates: ["사무용품 구매", "차량 정비·수리", "유류비 정산", "거래처 접대", "직원 복리후생(식대·간식)", "택배·운송비", "통신비", "교육·세미나", "긴급 부품 구매"], type: "textarea", required: true },
     ],
     amount: (d) => itemsTotal(d.items), summary: (d) => `${d.vendor || ""} · ${d.account || ""} · ${won(itemsTotal(d.items))}` },
   { key: "card", cat: "expense", label: "법인카드 사용보고", title: "법 인 카 드 사 용 보 고 서", code: "EC",
@@ -171,7 +172,7 @@ export const APPROVAL_FORMS = [
       { k: "shop", label: "가맹점", type: "text", required: true },
       { k: "account", label: "계정과목", type: "select", options: ACCOUNTS, def: "복리후생비" },
       { k: "people", label: "사용 인원·참석자", type: "text" },
-      { k: "reason", label: "사용 목적", type: "textarea", required: true },
+      { k: "reason", label: "사용 목적", templates: ["거래처 미팅 식대", "직원 회식", "출장 경비", "사무용품 구매", "차량 유지비", "고객 접대", "업무용 소모품"], type: "textarea", required: true },
     ],
     amount: (d) => Number(d.amountV) || 0, summary: (d) => `${d.shop || ""} · ${won(d.amountV)}` },
   { key: "fuel", cat: "expense", label: "유류비·통행료 정산", title: "유 류 비 · 통 행 료 정 산 서", code: "EF",
@@ -181,7 +182,7 @@ export const APPROVAL_FORMS = [
       { k: "route", label: "주요 운행 구간", type: "text", ph: "예) 인천 남동공단 → 평택항" },
       { k: "costs", label: "정산 항목", type: "costs", preset: ["유류비", "통행료", "주차비", "세차비"] },
       { k: "km", label: "운행 거리(km)", type: "number" },
-      { k: "bank", label: "입금 계좌", type: "text", ph: "은행 / 계좌 / 예금주" },
+      { k: "bank", label: "입금 계좌", type: "bank" },
       { k: "memo", label: "비고", type: "textarea" },
     ],
     amount: (d) => costsTotal(d.costs), summary: (d) => `${d.carNo || ""} · ${rangeText(d.period)} · ${won(costsTotal(d.costs))}` },
@@ -199,8 +200,8 @@ export const APPROVAL_FORMS = [
       { k: "amountV", label: "신청 금액", type: "money", required: true },
       { k: "need", label: "필요일", type: "date", required: true, half: true },
       { k: "settle", label: "정산 예정일", type: "date", half: true },
-      { k: "purpose", label: "사용 목적", type: "textarea", required: true },
-      { k: "bank", label: "입금 계좌", type: "text", ph: "은행 / 계좌 / 예금주" },
+      { k: "purpose", label: "사용 목적", templates: ["거래처 미팅 식대", "직원 회식", "출장 경비", "사무용품 구매", "차량 유지비", "고객 접대", "업무용 소모품"], type: "textarea", required: true },
+      { k: "bank", label: "입금 계좌", type: "bank" },
     ],
     amount: (d) => Number(d.amountV) || 0, summary: (d) => `가지급 ${won(d.amountV)} · 정산 ${d.settle || "-"}` },
   { key: "purchase", cat: "expense", label: "구매요청서", title: "구 매 요 청 서", code: "EP",
@@ -209,7 +210,7 @@ export const APPROVAL_FORMS = [
       { k: "vendor", label: "구매처", type: "text" },
       { k: "need", label: "납기 희망일", type: "date" },
       { k: "place", label: "납품 장소", type: "text" },
-      { k: "reason", label: "구매 사유", type: "textarea", required: true },
+      { k: "reason", label: "구매 사유", templates: ["기존 장비 노후 교체", "신규 입사자 지급", "업무 효율 개선", "소모품 재고 부족", "고장 수리 대체"], type: "textarea", required: true },
     ],
     amount: (d) => itemsTotal(d.items), summary: (d) => `${(d.items || [])[0]?.name || "품목"}${(d.items || []).length > 1 ? ` 외 ${d.items.length - 1}건` : ""} · ${won(itemsTotal(d.items))}` },
   { key: "accident", cat: "expense", label: "운송 사고·파손 처리", title: "운 송 사 고 처 리 품 의 서", code: "ED",
@@ -245,7 +246,7 @@ export const APPROVAL_FORMS = [
       { k: "oldPay", label: "기존 기사운임", type: "money", half: true },
       { k: "newPay", label: "변경 기사운임", type: "money", half: true },
       { k: "effective", label: "적용일", type: "date", required: true },
-      { k: "reason", label: "변경 사유", type: "textarea", required: true },
+      { k: "reason", label: "변경 사유", templates: ["거래 조건 변경", "담당자 변경", "주소 이전", "단가 조정"], type: "textarea", required: true },
     ],
     summary: (d) => `${d.client || ""} ${d.route || ""} ${won(d.oldFare)} → ${won(d.newFare)}` },
   { key: "client", cat: "draft", label: "신규 거래처 등록 품의", title: "신 규 거 래 처 등 록 품 의 서", code: "DC",
@@ -308,6 +309,7 @@ export function missingFields(form, d) {
 // 필드 값을 문서에 보일 글자로
 export function fieldText(f, v, staff) {
   if (v === undefined || v === null || v === "") return "";
+  if (f.type === "bank") return bankText(v);
   if (f.type === "daterange") { const n = dayDiff(v); const b = bizDays(v); return v.start ? `${rangeText(v)}${n ? ` (${n}일${b !== n ? ` · 주말·공휴일 빼고 ${b}일` : ""})` : ""}` : ""; }
   if (f.type === "money") return Number(v) ? won(v) : "";
   if (f.type === "number") return String(v);
