@@ -7843,6 +7843,12 @@ function MobileSideMenu({
             <MenuItem label="매출관리" onClick={onGoSales} dark={dark} />
           </MenuSection>
           {role === "totalMaster" && (
+            <MenuSection title="관리자 관리센터" dark={dark} alwaysOpen>
+              {/* PC 상단 "관리센터 ↗"와 같은 역할 — 플랫폼 운영 화면(/platform)으로 전환 */}
+              <MenuItem label="관리자 관리센터로 전환 ↗" onClick={() => { try { sessionStorage.setItem("kpEntry", "platform"); } catch { /* 무시 */ } window.location.assign("/platform"); }} dark={dark} />
+            </MenuSection>
+          )}
+          {role === "totalMaster" && (
             <MenuSection title="관리자 전용" dark={dark}>
               <MenuItem label="지입차관리" onClick={onGoFleet} dark={dark} />
               <MenuItem label="경영인텔리전스" onClick={onGoIntel} dark={dark} />

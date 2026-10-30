@@ -207,10 +207,10 @@ const inpCls = "h-10 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white tex
 function Card({ code, title, right, children, className = "" }) {
   return (
     <div className={`bg-white rounded-[18px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_26px_rgba(16,24,40,0.05)] overflow-hidden ${className}`}>
-      <div className="flex items-center justify-between gap-3 px-5 h-[50px] bg-[#F7F9FC] border-b border-[#E8EDF4]">
+      <div className="flex items-center justify-between gap-x-3 gap-y-1.5 flex-wrap px-4 sm:px-5 py-2 min-h-[46px] sm:min-h-[50px] bg-[#F7F9FC] border-b border-[#E8EDF4]">
         <div className="flex items-center gap-2 min-w-0"><span className="w-1.5 h-1.5 rotate-45 bg-[#1B2B4B]" />
           <span className="text-[10.5px] font-extrabold tracking-[0.2em] text-[#94A3B8]" style={{ fontFamily: MONO }}>{code}</span>
-          <span className="text-[16px] font-black text-[#0F1A30] truncate">{title}</span></div>
+          <span className="text-[15px] sm:text-[16px] font-black text-[#0F1A30] truncate whitespace-nowrap">{title}</span></div>
         {right}
       </div>
       <div className="p-5">{children}</div>
@@ -377,9 +377,9 @@ export function QuoteBuilder({ initial, onSaved }) {
     } catch (e) { window.alert(`저장 실패: ${e.message}`); } finally { setBusy(false); }
   };
   const L = ({ children }) => <div className="text-[12.5px] font-bold text-[#7A879C] mb-1">{children}</div>;
-  const Seg = ({ v, items, k }) => (
-    <div className="flex gap-1 p-1 rounded-xl bg-[#EEF2F8]">{items.map(([val, label]) => (
-      <button key={val} type="button" onClick={() => set({ [k]: val })} className={`flex-1 h-8 rounded-lg text-[13px] font-black ${String(v) === String(val) ? "bg-[#1B2B4B] text-white" : "text-[#3A4A66]"}`}>{label}</button>))}</div>
+  const Seg = ({ v, items, k, stack = false }) => (
+    <div className={`flex gap-1 p-1 rounded-xl bg-[#EEF2F8] ${stack ? "flex-col sm:flex-row" : ""}`}>{items.map(([val, label]) => (
+      <button key={val} type="button" onClick={() => set({ [k]: val })} className={`flex-1 h-8 px-1 rounded-lg text-[12.5px] sm:text-[13px] font-black whitespace-nowrap ${String(v) === String(val) ? "bg-[#1B2B4B] text-white" : "text-[#3A4A66]"}`}>{label}</button>))}</div>
   );
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,440px)_minmax(0,1fr)] items-start">
@@ -404,7 +404,7 @@ export function QuoteBuilder({ initial, onSaved }) {
           <div className="space-y-3">
             <div><L>요금제</L><Seg k="planId" v={inp.planId} items={[["auto", "자동 추천"], ...cfg.plans.map((p) => [p.id, p.name])]} /></div>
             <div><L>약정 (최소 {num(cfg.minContractMonths ?? 6)}개월)</L><Seg k="contractMonths" v={inp.contractMonths} items={[[6, "6개월"], [12, "12개월"], [24, "24개월"]]} /></div>
-            <div><L>결제</L><Seg k="billing" v={inp.billing} items={[["monthly", "월 결제"], ["semi", `6개월 선결제 (-${num(cfg.semiDiscountRate)}%)`], ["annual", `연간 선결제 (${cfg.annualFreeMonths}개월 무료)`]]} /></div>
+            <div><L>결제</L><Seg k="billing" stack v={inp.billing} items={[["monthly", "월 결제"], ["semi", `6개월 선결제 (-${num(cfg.semiDiscountRate)}%)`], ["annual", `연간 선결제 (${cfg.annualFreeMonths}개월 무료)`]]} /></div>
           </div>
         </Card>
         <Card code="ONE-TIME" title="초기 비용 · 할인">
@@ -429,15 +429,15 @@ export function QuoteBuilder({ initial, onSaved }) {
       {/* 결과 */}
       <div className="space-y-4 xl:sticky xl:top-4">
         <div className="rounded-[20px] p-5 text-white shadow-[0_16px_34px_rgba(11,20,40,0.3)]" style={{ background: "linear-gradient(rgba(143,176,240,.05) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.05) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(150deg,#0B1428,#16264A)" }}>
-          <div className="flex items-center justify-between">
-            <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>QUOTE · {q.chosen.plan.en || q.chosen.plan.name}</div>
-            <div className="text-[12.5px] text-white/60">{inp.customer || "고객사"} · {q.chosen.plan.name} 요금제{inp.planId === "auto" ? " (자동 추천)" : ""}</div>
+          <div className="flex items-center justify-between gap-3 min-w-0">
+            <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0] whitespace-nowrap shrink-0" style={{ fontFamily: MONO }}>QUOTE · {q.chosen.plan.en || q.chosen.plan.name}</div>
+            <div className="text-[12.5px] text-white/60 truncate whitespace-nowrap">{inp.customer || "고객사"} · {q.chosen.plan.name} 요금제{inp.planId === "auto" ? " (자동 추천)" : ""}</div>
           </div>
-          <div className="grid grid-cols-3 gap-2 mt-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
             {[["월 이용료", q.monthly, true], ["초기 비용", q.oneTimeTotal], [`${q.periodLabel} 총액`, q.firstYear]].map(([l, v, on]) => (
-              <div key={l} className={`rounded-xl px-3.5 py-3 border ${on ? "border-[#8FB0F0]/45" : "border-[#8FB0F0]/15"}`} style={{ background: on ? "linear-gradient(140deg, rgba(75,108,183,.55), rgba(45,76,130,.25))" : "rgba(255,255,255,.04)" }}>
-                <div className="text-[12px] font-bold text-white/60">{l}</div>
-                <div className="text-[22px] font-black mt-0.5" style={{ fontFamily: MONO }}>{won(v)}</div>
+              <div key={l} className={`rounded-xl px-3.5 py-2.5 sm:py-3 border flex sm:block items-center justify-between gap-3 ${on ? "border-[#8FB0F0]/45" : "border-[#8FB0F0]/15"}`} style={{ background: on ? "linear-gradient(140deg, rgba(75,108,183,.55), rgba(45,76,130,.25))" : "rgba(255,255,255,.04)" }}>
+                <div className="text-[12px] font-bold text-white/60 whitespace-nowrap">{l}</div>
+                <div className="text-[20px] sm:text-[22px] font-black mt-0.5 whitespace-nowrap" style={{ fontFamily: MONO }}>{won(v)}</div>
               </div>
             ))}
           </div>
@@ -450,14 +450,14 @@ export function QuoteBuilder({ initial, onSaved }) {
         </div>
 
         <Card code="COMPARE" title="요금제별 비교 (이 고객 기준)">
-          <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${q.byPlan.length}, minmax(0,1fr))` }}>
+          <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 min-[1800px]:grid-cols-4">
             {q.byPlan.map(({ plan, m }) => {
               const on = plan.id === q.chosen.plan.id, best = plan.id === q.best.plan.id;
               return (
                 <button key={plan.id} type="button" onClick={() => set({ planId: plan.id })} className={`text-left rounded-xl p-3.5 border-2 transition ${on ? "border-[#1B2B4B] bg-[#F5F8FD]" : "border-[#E3E8F0] hover:border-[#8FB0F0]"}`}>
-                  <div className="flex items-center justify-between"><b className="text-[15px] text-[#0F1A30]">{plan.name}</b>{best && <span className="px-1.5 py-0.5 rounded-md bg-[#1B2B4B] text-white text-[10.5px] font-black">이 고객 최저가</span>}</div>
-                  <div className="text-[12px] font-bold text-[#5B6B85] mt-1">정가 월 {won(m.base)} · {num(plan.seats)}명 · {num(plan.orders).toLocaleString()}건 포함</div>
-                  <div className="text-[20px] font-black text-[#1B2B4B] mt-1" style={{ fontFamily: MONO }}>{won(m.total)}<span className="text-[11.5px] font-bold text-[#7A879C] ml-1">/ 월 (이 고객 기준)</span></div>
+                  <div className="flex items-center justify-between gap-2"><b className="text-[15px] text-[#0F1A30] whitespace-nowrap">{plan.name}</b>{best && <span className="px-1.5 py-0.5 rounded-md bg-[#1B2B4B] text-white text-[10.5px] font-black whitespace-nowrap">이 고객 최저가</span>}</div>
+                  <div className="text-[12px] font-bold text-[#5B6B85] mt-1 truncate whitespace-nowrap">정가 월 {won(m.base)} · {num(plan.seats)}명 · {num(plan.orders).toLocaleString()}건 포함</div>
+                  <div className="text-[20px] font-black text-[#1B2B4B] mt-1 whitespace-nowrap" style={{ fontFamily: MONO }}>{won(m.total)}<span className="text-[11.5px] font-bold text-[#7A879C] ml-1">/ 월</span></div>
                   <div className="text-[11.5px] text-[#7A879C] leading-relaxed mt-1">
                     {m.seats || m.orders || m.fleet || m.storage
                       ? <>초과분 추가: {[m.seats ? `계정 ${Math.max(0, num(inp.staff) - num(plan.seats))}명 ${won(m.seats)}` : "", m.orders ? `오더 ${Math.max(0, num(inp.orders) - num(plan.orders)).toLocaleString()}건 ${won(m.orders)}` : "", m.fleet ? `지입 ${won(m.fleet)}` : "", m.storage ? `저장 ${won(m.storage)}` : ""].filter(Boolean).join(" + ")}</>
@@ -471,7 +471,7 @@ export function QuoteBuilder({ initial, onSaved }) {
         </Card>
 
         <Card code="DETAIL" title={`${q.periodLabel} 계산 내역`}>
-          <table className="w-full text-[14px]">
+          <table className="kp-pm-keep w-full text-[14px]">
             <tbody>
               {[
                 [`이용료 ${q.paidMonths}개월${q.free ? ` (연간 선결제 ${q.free}개월 무료)` : ""}`, q.monthly * q.paidMonths],

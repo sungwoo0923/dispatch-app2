@@ -12,7 +12,7 @@ import { signOut } from "firebase/auth";
 import { addDoc, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import KpSubNav from "./KpSubNav";
-import PlatformMonitor, { estimateBill } from "./PlatformMonitor";
+import PlatformMonitor, { estimateBill, usePhone } from "./PlatformMonitor";
 import { useSalesPricing } from "./SalesQuote";
 import { ContractBuilder, ContractList, ContractTemplates } from "./ContractCenter";
 import { NotifTemplatePanel, LandingPageEditPanel, ShipperForceUpdatePanel } from "./AdminMenu";
@@ -71,10 +71,10 @@ const MONITOR_TABS = ["overview", "companies", "shippers", "applications", "bill
 function Card({ code, title, right, children, bodyClass = "p-5" }) {
   return (
     <div className="bg-white rounded-[18px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_26px_rgba(16,24,40,0.05)] overflow-hidden min-w-0">
-      <div className="flex items-center justify-between gap-3 px-5 h-[50px] bg-[#F7F9FC] border-b border-[#E8EDF4]">
+      <div className="flex items-center justify-between gap-3 px-4 sm:px-5 h-[46px] sm:h-[50px] bg-[#F7F9FC] border-b border-[#E8EDF4]">
         <div className="flex items-center gap-2 min-w-0"><span className="w-1.5 h-1.5 rotate-45 bg-[#1B2B4B]" />
           <span className="text-[10.5px] font-extrabold tracking-[0.2em] text-[#94A3B8]" style={{ fontFamily: MONO }}>{code}</span>
-          <span className="text-[16px] font-black text-[#0F1A30] truncate">{title}</span></div>
+          <span className="text-[15px] sm:text-[16px] font-black text-[#0F1A30] truncate whitespace-nowrap">{title}</span></div>
         {right}
       </div>
       <div className={bodyClass}>{children}</div>
@@ -83,11 +83,11 @@ function Card({ code, title, right, children, bodyClass = "p-5" }) {
 }
 function Hero({ en, title, desc, right }) {
   return (
-    <div className="relative overflow-hidden rounded-[22px] px-6 py-5 mb-4 text-white flex items-center justify-between gap-4 flex-wrap"
+    <div className="kp-hero relative overflow-hidden rounded-[18px] sm:rounded-[22px] px-4 py-3.5 sm:px-6 sm:py-5 mb-3 sm:mb-4 text-white flex items-center justify-between gap-3 sm:gap-4 flex-wrap"
       style={{ background: "linear-gradient(rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, radial-gradient(600px 200px at 85% -20%, rgba(75,108,183,.45), transparent 60%), linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
-      <div><div className="text-[11px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{en}</div>
-        <div className="text-[24px] font-black mt-0.5 tracking-tight">{title}</div>
-        {desc && <div className="text-[13.5px] text-white/65 mt-0.5">{desc}</div>}</div>
+      <div className="min-w-0"><div className="text-[10px] sm:text-[11px] font-extrabold tracking-[0.28em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO }}>{en}</div>
+        <div className="text-[19px] sm:text-[24px] font-black mt-0.5 tracking-tight whitespace-nowrap">{title}</div>
+        {desc && <div className="hidden sm:block text-[13.5px] text-white/65 mt-0.5">{desc}</div>}</div>
       {right}
     </div>
   );
@@ -168,7 +168,7 @@ function InquiriesPanel({ toQuote }) {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px] items-start">
         <Card code="INBOX" title={`문의 ${list.length}건`} bodyClass="p-0">
           {list.length === 0 ? <div className="py-16 text-center text-[#9AA9C3]">들어온 도입 문의가 없습니다.</div> : (
-            <table className="w-full text-[14px]">
+            <div className="overflow-x-auto"><table className="w-full text-[14px] whitespace-nowrap">
               <thead><tr className="bg-[#1B2B4B] text-white">{["회사", "담당자", "연락처", "규모", "접수일", "상태"].map((h) => <th key={h} className="px-3 py-2.5 text-center font-extrabold">{h}</th>)}</tr></thead>
               <tbody>{list.map((q) => (
                 <tr key={q.id} onClick={() => setSel(q.id)} className={`border-t border-[#EEF1F6] cursor-pointer ${sel === q.id ? "bg-[#EEF3FB]" : "hover:bg-[#F5F8FD]"}`}>
@@ -179,7 +179,7 @@ function InquiriesPanel({ toQuote }) {
                   <td className="px-3 py-2.5 text-center text-[12.5px] text-[#5B6B85]" style={{ fontFamily: MONO }}>{msOf(q.createdAt) ? ymd(new Date(msOf(q.createdAt))) : "-"}</td>
                   <td className="px-3 py-2.5 text-center"><span className={`px-2 py-0.5 rounded-md text-[12px] font-black ${(!q.status || q.status === "신규") ? "bg-[#0F1A30] text-white" : "bg-[#EEF2F8] text-[#1B2B4B]"}`}>{q.status || "신규"}</span></td>
                 </tr>))}</tbody>
-            </table>
+            </table></div>
           )}
         </Card>
         <Card code="DETAIL" title={cur ? cur.companyName : "문의를 선택하세요"}>
@@ -321,13 +321,15 @@ function NoticesPanel() {
           {(list || []).length === 0 ? <div className="py-14 text-center text-[#9AA9C3]">게시된 공지가 없습니다.</div> : list.map((n) => {
             const expired = n.endDate && n.endDate < ymd();
             return (
-              <div key={n.id} className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-[#F5F8FD]">
+              <div key={n.id} className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-3 rounded-xl hover:bg-[#F5F8FD] flex-wrap sm:flex-nowrap [&_button]:whitespace-nowrap">
                 <span className={`w-14 text-center py-1 rounded-md text-[11px] font-black ${n.level === "중요" || n.level === "점검" ? "bg-[#0F1A30] text-white" : "bg-[#EEF2F8] text-[#1B2B4B]"}`}>{n.level}</span>
                 <div className="flex-1 min-w-0"><div className={`text-[14.5px] font-black truncate ${n.active && !expired ? "text-[#0F1A30]" : "text-[#9AA9C3] line-through"}`}>{n.title}</div>
                   <div className="text-[12px] text-[#7A89A3]">{{ all: "전체", carrier: "운송사", shipper: "화주사" }[n.audience] || "전체"} · {msOf(n.createdAt) ? ymd(new Date(msOf(n.createdAt))) : ""}{n.endDate ? ` ~ ${n.endDate}` : ""}</div></div>
+                <div className="w-full sm:w-auto flex justify-end gap-1.5 shrink-0">
                 <button type="button" onClick={() => updateDoc(doc(db, "platformNotices", n.id), { active: !n.active })} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B]">{n.active ? "내리기" : "다시 게시"}</button>
                 <button type="button" onClick={() => { setEditId(n.id); setF({ ...blank, ...n }); }} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B]">수정</button>
                 <button type="button" onClick={() => window.confirm("공지를 삭제할까요?") && deleteDoc(doc(db, "platformNotices", n.id))} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#7A879C]">삭제</button>
+                </div>
               </div>
             );
           })}
@@ -353,7 +355,7 @@ function SessionLogsPanel() {
       <Card code="LOG" title={`${rows.length}건`} bodyClass="p-0" right={
         <div className="flex gap-2">
           <select value={ev} onChange={(e) => setEv(e.target.value)} className="h-9 px-2 rounded-lg border border-[#DCE3EE] text-[13px] font-bold"><option value="all">전체</option>{events.map((e) => <option key={e} value={e}>{e}</option>)}</select>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="검색" className="h-9 w-48 px-3 rounded-lg border border-[#DCE3EE] text-[13px]" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="검색" className="h-9 w-28 sm:w-48 px-3 rounded-lg border border-[#DCE3EE] text-[13px]" />
         </div>}>
         <div className="overflow-x-auto"><table className="w-full text-[13.5px]" style={{ minWidth: 820 }}>
           <thead className="sticky top-0"><tr className="bg-[#1B2B4B] text-white">{["시각", "구분", "회사", "이름", "이메일", "기기"].map((h) => <th key={h} className="px-3 py-2.5 text-center font-extrabold">{h}</th>)}</tr></thead>
@@ -380,6 +382,7 @@ export default function PlatformCenter({ user }) {
   const setTab = (t) => { setTabState(t); try { localStorage.setItem("pcTab", t); } catch { /* 무시 */ } };
   const [contractCtx, setContractCtx] = React.useState({ initial: null, fromQuote: null, key: 0 });
   const section = sectionOf(tab);
+  const phone = usePhone();
   React.useEffect(() => { document.title = "KP-Flow 관리자 관리센터"; }, []);
   const toApp = () => { try { sessionStorage.setItem("kpEntry", "app"); } catch { /* 무시 */ } navigate("/app"); };
   const logout = async () => { if (!window.confirm("로그아웃할까요?")) return; try { sessionStorage.removeItem("kpEntry"); } catch { /* 무시 */ } await signOut(auth).catch(() => {}); navigate("/login"); };
@@ -404,6 +407,8 @@ export default function PlatformCenter({ user }) {
   else if (tab === "sessionLogs") body = <SessionLogsPanel />;
   else if (tab === "sheetImport") body = <><Hero en="DATA · IMPORT" title="배차일지 가져오기" desc="구글시트·엑셀 배차일지를 운송사 데이터로 옮깁니다(초기 세팅용)." /><SheetImportPanel /></>;
   else if (tab === "companyReset") body = <><Hero en="DATA · RESET" title="운송사 초기화" desc="⚠ 운송사 데이터를 지웁니다 — 백업 후 신중히 사용하세요." /><CompanyResetPanel /></>;
+
+  if (phone) return <PlatformMobileShell user={user} section={section} tab={tab} setTab={setTab} toApp={toApp} logout={logout}>{body}</PlatformMobileShell>;
 
   return (
     <div className="kp-pc min-h-screen bg-[#EEF1F6]">
@@ -444,6 +449,74 @@ export default function PlatformCenter({ user }) {
   );
 }
 
+// ═══════════════════════ 📱 모바일 관리센터 ═══════════════════════
+//  PC와 같은 메뉴·화면을 폰 폭에 맞춰 보여준다.
+//   · 상단: 로고 · 배차앱 전환 · 로그아웃 / 큰 메뉴(대시보드~보안) 가로 스크롤 / 속메뉴 가로 스크롤
+//   · 본문: 글자 줄바꿈 없이(표는 가로 스크롤), 간격·글자 크기를 폰에 맞게 줄인다
+const PM_MOBILE_CSS = `
+.kp-pm { -webkit-text-size-adjust: 100%; }
+.kp-pm .kp-pm-scroll { scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.kp-pm .kp-pm-scroll::-webkit-scrollbar { display: none; }
+.kp-pm main table { white-space: nowrap; }
+.kp-pm main th, .kp-pm main td { white-space: nowrap; }
+.kp-pm main table:not(.kp-pm-keep) { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.kp-pm main button, .kp-pm main label > span:first-child, .kp-pm main h1, .kp-pm main h2, .kp-pm main h3 { white-space: nowrap; }
+.kp-pm main input, .kp-pm main select, .kp-pm main textarea { font-size: 16px !important; max-width: 100%; }
+.kp-pm main .pm-tile, .kp-pm main .pm-tile-dark { padding: 12px 13px 11px !important; border-radius: 14px !important; }
+.kp-pm main .pm-tile > div:first-child > span:last-child, .kp-pm main .pm-tile-dark > div:first-child > span:last-child { display: none; }
+.kp-pm main .pm-tile span[style*="font-size: 28px"], .kp-pm main .pm-tile-dark span[style*="font-size: 28px"] { font-size: 21px !important; }
+.kp-pm main .pm-tile > div:last-child, .kp-pm main .pm-tile-dark > div:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kp-pm main [class*="max-w-[1180px]"] { padding: 20px 16px !important; }
+.kp-pm main .kp-contract h1 { white-space: normal; font-size: 20px !important; letter-spacing: .08em; }
+.kp-pm main .kp-contract { font-size: 14px; }
+.kp-pm main { word-break: keep-all; }
+.kp-pm main [style*="min-width: 1220px"], .kp-pm main [style*="min-width: 960px"], .kp-pm main [style*="min-width: 820px"] { font-size: 13px; }
+`;
+function PlatformMobileShell({ user, section, tab, setTab, toApp, logout, children }) {
+  const secRef = React.useRef(null);
+  const subRef = React.useRef(null);
+  // 고른 메뉴가 화면 밖이면 가운데로 끌어온다
+  React.useEffect(() => {
+    [secRef.current?.querySelector("[data-on='1']"), subRef.current?.querySelector("[data-on='1']")].forEach((el) => el?.scrollIntoView?.({ inline: "center", block: "nearest" }));
+    window.scrollTo(0, 0);
+  }, [tab]);
+  return (
+    <div className="kp-pm min-h-screen bg-[#EEF1F6]">
+      <style>{PM_MOBILE_CSS}</style>
+      <header className="sticky top-0 z-40 text-white shadow-[0_6px_18px_rgba(11,20,40,0.28)]" style={{ background: "linear-gradient(90deg,#0B1428 0%,#13213F 55%,#1B2B4B 100%)", paddingTop: "env(safe-area-inset-top, 0px)" }}>
+        <div className="h-[52px] flex items-center gap-2 px-3">
+          <img src="/logo.png" alt="" className="w-7 h-7 rounded-lg bg-white object-contain p-0.5 shrink-0" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+          <div className="min-w-0 flex-1 leading-none">
+            <div className="text-[14px] font-black whitespace-nowrap">관리자 관리센터</div>
+            <div className="text-[9px] font-extrabold tracking-[0.26em] text-[#8FB0F0] mt-1 truncate whitespace-nowrap" style={{ fontFamily: MONO }}>{user?.email || "PLATFORM"}</div>
+          </div>
+          <button type="button" onClick={toApp} className="shrink-0 h-8 px-2.5 rounded-lg bg-white text-[#0F1A30] text-[12px] font-black whitespace-nowrap">배차앱 ↗</button>
+          <button type="button" onClick={logout} className="shrink-0 h-8 px-2.5 rounded-lg bg-white/10 ring-1 ring-white/15 text-[12px] font-black whitespace-nowrap">로그아웃</button>
+        </div>
+        <nav ref={secRef} className="kp-pm-scroll flex gap-1 overflow-x-auto px-3 pb-2">
+          {SECTIONS.map((s) => {
+            const on = s.key === section.key;
+            return (
+              <button key={s.key} type="button" data-on={on ? "1" : "0"} onClick={() => setTab(s.items[0].key)}
+                className={`shrink-0 h-8 px-3 rounded-[9px] text-[13px] whitespace-nowrap transition ${on ? "bg-white text-[#0F1A30] font-extrabold" : "text-white/65 font-semibold active:bg-white/10"}`}>{s.label}</button>
+            );
+          })}
+        </nav>
+      </header>
+      <div ref={subRef} className="kp-pm-scroll sticky z-30 flex gap-1.5 overflow-x-auto px-3 py-2 bg-[#F7F9FC] border-b border-[#E3E8F0]" style={{ top: "calc(92px + env(safe-area-inset-top, 0px))" }}>
+        {section.items.map((it) => {
+          const on = it.key === tab;
+          return (
+            <button key={it.key} type="button" data-on={on ? "1" : "0"} onClick={() => setTab(it.key)}
+              className={`shrink-0 h-8 px-3 rounded-full text-[12.5px] font-black whitespace-nowrap border transition ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`}>{it.label}</button>
+          );
+        })}
+      </div>
+      <main className="px-3 pt-3 pb-10 min-w-0 overflow-x-hidden" style={{ paddingBottom: "calc(40px + env(safe-area-inset-bottom, 0px))" }}>{children}</main>
+    </div>
+  );
+}
+
 // 견적 이력에 "계약서 만들기"를 끼워 넣기 위한 얇은 감싸개
 function PlatformMonitorWithContract({ tab, setTab, onContract }) {
   return <PlatformMonitor bare tab={tab} onTab={setTab} onContract={onContract} />;
@@ -455,32 +528,32 @@ export function EntryChooser({ user }) {
   const go = (k) => { try { sessionStorage.setItem("kpEntry", k); } catch { /* 무시 */ } navigate(k === "platform" ? "/platform" : "/app", { replace: true }); };
   const Item = ({ k, en, title, desc, points, primary }) => (
     <button type="button" onClick={() => go(k)}
-      className={`group text-left rounded-[26px] p-7 transition relative overflow-hidden border ${primary ? "border-[#8FB0F0]/40" : "border-white/10"} hover:-translate-y-1 hover:border-[#8FB0F0]/70`}
+      className={`group text-left rounded-[22px] sm:rounded-[26px] p-5 sm:p-7 transition relative overflow-hidden border ${primary ? "border-[#8FB0F0]/40" : "border-white/10"} hover:-translate-y-1 hover:border-[#8FB0F0]/70`}
       style={{ background: primary ? "linear-gradient(150deg, rgba(75,108,183,.45), rgba(27,43,75,.35))" : "rgba(255,255,255,.04)" }}>
-      <div className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{en}</div>
-      <div className="text-[26px] font-black text-white mt-1.5">{title}</div>
-      <div className="text-[14px] text-white/60 mt-1 leading-relaxed">{desc}</div>
-      <ul className="mt-5 space-y-1.5">{points.map((p) => <li key={p} className="flex items-center gap-2 text-[13.5px] font-semibold text-white/80"><span className="w-1.5 h-1.5 rotate-45 bg-[#8FB0F0]" />{p}</li>)}</ul>
-      <div className="mt-6 inline-flex items-center gap-2 h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black group-hover:gap-3 transition-all">들어가기 <span>→</span></div>
+      <div className="text-[10px] sm:text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO }}>{en}</div>
+      <div className="text-[21px] sm:text-[26px] font-black text-white mt-1 sm:mt-1.5 whitespace-nowrap">{title}</div>
+      <div className="text-[12.5px] sm:text-[14px] text-white/60 mt-1 leading-relaxed whitespace-nowrap truncate">{desc}</div>
+      <ul className="mt-3.5 sm:mt-5 grid grid-cols-1 gap-y-1 sm:gap-y-1.5">{points.map((p) => <li key={p} className="flex items-center gap-2 min-w-0 text-[12px] sm:text-[13.5px] font-semibold text-white/80"><span className="w-1.5 h-1.5 rotate-45 bg-[#8FB0F0] shrink-0" /><span className="truncate whitespace-nowrap">{p}</span></li>)}</ul>
+      <div className="mt-4 sm:mt-6 flex sm:inline-flex items-center justify-center gap-2 h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black group-hover:gap-3 transition-all whitespace-nowrap">들어가기 <span>→</span></div>
     </button>
   );
   return (
-    <div className="min-h-screen flex items-center justify-center px-5 py-10 text-white"
+    <div className="min-h-screen flex items-center justify-center px-4 sm:px-5 py-6 sm:py-10 text-white"
       style={{ background: "linear-gradient(rgba(143,176,240,.05) 1px, transparent 1px) 0 0/30px 30px, linear-gradient(90deg, rgba(143,176,240,.05) 1px, transparent 1px) 0 0/30px 30px, radial-gradient(900px 400px at 80% -10%, rgba(75,108,183,.45), transparent 60%), linear-gradient(160deg,#0B1428 0%,#111F3B 55%,#0E1830 100%)" }}>
       <div className="w-full max-w-[980px]">
-        <div className="flex items-end justify-between gap-4 flex-wrap mb-8">
-          <div>
-            <div className="text-[11.5px] font-extrabold tracking-[0.32em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>KP-FLOW · SELECT WORKSPACE</div>
-            <div className="text-[32px] font-black tracking-tight mt-1">어디로 들어갈까요?</div>
-            <div className="text-[14.5px] text-white/55 mt-1">{user?.email} · 최고관리자 계정은 매번 들어갈 곳을 고릅니다.</div>
+        <div className="flex items-end justify-between gap-3 mb-5 sm:mb-8">
+          <div className="min-w-0">
+            <div className="text-[10px] sm:text-[11.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO }}>KP-FLOW · SELECT WORKSPACE</div>
+            <div className="text-[24px] sm:text-[32px] font-black tracking-tight mt-1 whitespace-nowrap">어디로 들어갈까요?</div>
+            <div className="text-[12px] sm:text-[14.5px] text-white/55 mt-1 truncate whitespace-nowrap">{user?.email}<span className="hidden sm:inline"> · 최고관리자 계정은 매번 들어갈 곳을 고릅니다.</span></div>
           </div>
-          <div className="px-3 h-10 rounded-xl bg-white/[0.06] ring-1 ring-white/10 flex items-center"><Clock /></div>
+          <div className="shrink-0 px-2.5 sm:px-3 h-9 sm:h-10 rounded-xl bg-white/[0.06] ring-1 ring-white/10 flex items-center"><Clock /></div>
         </div>
-        <div className="grid md:grid-cols-2 gap-5">
+        <div className="grid md:grid-cols-2 gap-3 sm:gap-5">
           <Item k="platform" primary en="PLATFORM CONTROL" title="관리자 관리센터" desc="이 프로그램 플랫폼을 운영하는 화면입니다." points={["가입사 관제 · 사용량 · 건강도", "요금제 · 견적 · 전자계약", "청구 · 수납 · 플랫폼 공지", "로그인 관리 · 접속 이력 · 데이터"]} />
           <Item k="app" en="DISPATCH WORKSPACE" title="배차 프로그램" desc="운송사 화면으로 들어가 실제 배차 업무를 봅니다." points={["배차관리 · 실시간 배차현황", "매출 · 정산 · 회사관리", "고객사 화면 점검 · 지원", "로그인 때 고른 회사로 진입"]} />
         </div>
-        <div className="mt-6 text-center text-[12px] text-white/35" style={{ fontFamily: MONO }}>들어간 뒤에도 상단 버튼으로 언제든 전환할 수 있습니다</div>
+        <div className="mt-4 sm:mt-6 text-center text-[11px] sm:text-[12px] text-white/35 whitespace-nowrap" style={{ fontFamily: MONO }}>들어간 뒤에도 언제든 전환할 수 있습니다</div>
       </div>
     </div>
   );

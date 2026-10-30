@@ -164,10 +164,10 @@ const inp = "h-10 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[
 function Card({ code, title, right, children, className = "", bodyClass = "p-5" }) {
   return (
     <div className={`bg-white rounded-[18px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_26px_rgba(16,24,40,0.05)] overflow-hidden ${className}`}>
-      <div className="flex items-center justify-between gap-3 px-5 h-[50px] bg-[#F7F9FC] border-b border-[#E8EDF4]">
+      <div className="flex items-center justify-between gap-x-3 gap-y-1.5 flex-wrap px-4 sm:px-5 py-2 min-h-[46px] sm:min-h-[50px] bg-[#F7F9FC] border-b border-[#E8EDF4]">
         <div className="flex items-center gap-2 min-w-0"><span className="w-1.5 h-1.5 rotate-45 bg-[#1B2B4B]" />
           <span className="text-[10.5px] font-extrabold tracking-[0.2em] text-[#94A3B8]" style={{ fontFamily: C_MONO }}>{code}</span>
-          <span className="text-[16px] font-black text-[#0F1A30] truncate">{title}</span></div>
+          <span className="text-[15px] sm:text-[16px] font-black text-[#0F1A30] truncate whitespace-nowrap">{title}</span></div>
         {right}
       </div>
       <div className={bodyClass}>{children}</div>
@@ -349,9 +349,9 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
         </div>
       </div>
       <div className="rounded-[20px] bg-[#E9EDF3] p-5 xl:sticky xl:top-4 max-h-[calc(100vh-140px)] overflow-auto">
-        <div className="flex items-center justify-between mb-3 px-1">
-          <span className="text-[12px] font-extrabold tracking-[0.2em] text-[#5A6A85]" style={{ fontFamily: C_MONO }}>LIVE PREVIEW</span>
-          <span className="text-[12px] font-bold text-[#7A879C]">밝게 표시된 곳이 채워진 값입니다</span>
+        <div className="flex items-center justify-between gap-3 mb-3 px-1 min-w-0">
+          <span className="text-[12px] font-extrabold tracking-[0.2em] text-[#5A6A85] whitespace-nowrap" style={{ fontFamily: C_MONO }}>LIVE PREVIEW</span>
+          <span className="text-[12px] font-bold text-[#7A879C] whitespace-nowrap truncate">밝게 표시된 곳이 채워진 값입니다</span>
         </div>
         <style>{CONTRACT_CSS}</style>
         <div className="bg-white mx-auto w-full max-w-[1180px] px-12 py-12 shadow-[0_10px_30px_rgba(15,26,48,0.12)]">

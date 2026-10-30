@@ -11,6 +11,13 @@ import KpSubNav from "./KpSubNav";
 import CompanyApplications from "./CompanyApplications";
 import { PricingEditor, QuoteBuilder, QuoteHistory } from "./SalesQuote";
 
+// 📱 폰(관리자 관리센터 모바일) — 가로 칸 수를 줄인다
+export function usePhone() {
+  const q = "(max-width: 767px)";
+  const [on, setOn] = useState(() => typeof window !== "undefined" && window.matchMedia(q).matches);
+  useEffect(() => { const m = window.matchMedia(q); const f = () => setOn(m.matches); m.addEventListener("change", f); return () => m.removeEventListener("change", f); }, []);
+  return on;
+}
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const NAVY = "#1B2B4B";
 const DEFAULT_PRICING = { base: 99000, includedSeats: 3, seat: 15000, includedOrders: 1000, perOrder: 50, shipperBase: 0 };
@@ -78,8 +85,8 @@ function Tile({ code, label, value, unit, foot, dark }) {
 function Card({ code, title, right, children, style }) {
   return (
     <div style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 18, boxShadow: "0 1px 2px rgba(16,24,40,.04), 0 10px 26px rgba(16,24,40,.05)", overflow: "hidden", minWidth: 0, ...style }}>
-      <div style={{ padding: "13px 18px", background: "#F7F9FC", borderBottom: "1px solid #E8EDF4", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+      <div style={{ padding: "13px 18px", background: "#F7F9FC", borderBottom: "1px solid #E8EDF4", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, rowGap: 8, flexWrap: "wrap" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 9, minWidth: 0, whiteSpace: "nowrap" }}>
           <span style={{ width: 7, height: 7, borderRadius: 2, background: NAVY, transform: "rotate(45deg)" }} />
           <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#94A3B8" }}>{code}</span>
           <span style={{ fontSize: 16.5, fontWeight: 800, color: "#0F1A30", whiteSpace: "nowrap" }}>{title}</span>
@@ -141,6 +148,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
   const [q, setQ] = useState("");
   const [sortKey, setSortKey] = useState("orders");
   const [detail, setDetail] = useState(null);
+  const phone = usePhone();
 
   useEffect(() => { if (!tabProp) { try { localStorage.setItem("pmTab", tab); } catch { /* 무시 */ } } }, [tab, tabProp]);
   useEffect(() => {
@@ -219,15 +227,15 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
 
   const updatedText = stats?.updatedAtMs ? `${new Date(stats.updatedAtMs).toLocaleString("ko-KR", { hour12: false })} 기준` : "아직 집계 전";
   const headBar = (
-    <div className="pm-hero" style={{ borderRadius: 22, padding: "20px 24px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", color: "#fff", position: "relative", overflow: "hidden" }}>
+    <div className="pm-hero" style={{ borderRadius: phone ? 18 : 22, padding: phone ? "14px 16px" : "20px 24px", marginBottom: phone ? 12 : 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", color: "#fff", position: "relative", overflow: "hidden" }}>
       <div>
         <div style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 800, letterSpacing: "0.28em", color: "#8FB0F0" }}>KP-FLOW · PLATFORM CONTROL</div>
-        <h1 style={{ margin: "6px 0 0", fontSize: 25, fontWeight: 900, letterSpacing: "-0.02em" }}>플랫폼 관제센터</h1>
-        <p style={{ margin: "5px 0 0", fontSize: 14.5, color: "rgba(207,224,255,.72)", fontWeight: 600 }}>가입한 운송사·화주사의 사용 현황과 예상 청구액을 한눈에 봅니다 · <span style={{ fontFamily: MONO }}>{updatedText}</span></p>
+        <h1 style={{ margin: "6px 0 0", fontSize: phone ? 19 : 25, fontWeight: 900, letterSpacing: "-0.02em", whiteSpace: "nowrap" }}>플랫폼 관제센터</h1>
+        <p style={{ margin: "5px 0 0", fontSize: phone ? 12 : 14.5, color: "rgba(207,224,255,.72)", fontWeight: 600, whiteSpace: phone ? "nowrap" : undefined }}>{phone ? null : "가입한 운송사·화주사의 사용 현황과 예상 청구액을 한눈에 봅니다 · "}<span style={{ fontFamily: MONO }}>{updatedText}</span></p>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         {msg && <span style={{ fontSize: 13, fontWeight: 700, color: "#CFE0FF", maxWidth: 380 }}>{msg}</span>}
-        <button type="button" onClick={refresh} disabled={busy} style={{ height: 40, padding: "0 16px", borderRadius: 11, border: "1px solid rgba(207,224,255,.3)", background: "rgba(255,255,255,.1)", color: "#fff", fontSize: 14.5, fontWeight: 800, cursor: busy ? "wait" : "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}>
+        <button type="button" onClick={refresh} disabled={busy} style={{ height: phone ? 36 : 40, padding: phone ? "0 12px" : "0 16px", whiteSpace: "nowrap", borderRadius: 11, border: "1px solid rgba(207,224,255,.3)", background: "rgba(255,255,255,.1)", color: "#fff", fontSize: 14.5, fontWeight: 800, cursor: busy ? "wait" : "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={busy ? "pm-spin" : ""}><path d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3" /><path d="M5 3v5h5M19 21v-5h-5" /></svg>
           {busy ? "집계 중…" : "지금 갱신"}
         </button>
@@ -276,7 +284,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
       {/* ═══ 플랫폼 개요 ═══ */}
       {tab === "overview" && stats && (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: phone ? "repeat(2, minmax(0,1fr))" : "repeat(4, minmax(0,1fr))", gap: phone ? 8 : 12 }}>
             <Tile dark code="CARRIERS" label="가입 운송사" value={companies.length} unit="곳" foot={`활성 ${companies.filter((c) => c.status.key === "active").length} · 신규 ${companies.filter((c) => c.status.key === "new").length} · 휴면 ${companies.filter((c) => c.status.key === "dormant").length}`} />
             <Tile code="SHIPPERS" label="가입 화주사" value={shippers.length} unit="곳" foot={`화주 계정 ${T.shipperUsers}명 · 접속 ${T.shipperOnline}명`} />
             <Tile code="ACCOUNTS" label="전체 계정" value={(T.staff + T.drivers + T.shipperUsers).toLocaleString()} unit="명" foot={`직원 ${T.staff} · 기사 ${T.drivers} · 화주 ${T.shipperUsers}`} />
@@ -287,7 +295,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
             <Tile code="DATA" label="누적 오더(데이터량)" value={T.total.toLocaleString()} unit="건" foot={`거래처 ${companies.reduce((a, c) => a + c.clients, 0).toLocaleString()} · 하차지 ${companies.reduce((a, c) => a + c.places, 0).toLocaleString()}`} />
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.9fr) minmax(0,1fr)", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: phone ? "minmax(0,1fr)" : "minmax(0,1.9fr) minmax(0,1fr)", gap: 14 }}>
             <Card code="VOLUME" title="플랫폼 일별 오더 (최근 30일)" right={<span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 800, color: NAVY }}>{daily.reduce((a, d) => a + d.cnt, 0).toLocaleString()}건</span>}>
               <div style={{ height: 240 }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -318,7 +326,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
           </div>
 
           <Card code="TOP USAGE" title="사용량 상위 운송사 (이번 달)">
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: phone ? "minmax(0,1fr)" : "repeat(auto-fill, minmax(300px, 1fr))", gap: 10 }}>
               {[...companies].sort((a, b) => b.m.cnt - a.m.cnt).slice(0, 8).map((c, i) => (
                 <button key={c.name} type="button" onClick={() => setDetail(c)} style={{ textAlign: "left", cursor: "pointer", display: "grid", gridTemplateColumns: "30px 1fr auto", alignItems: "center", gap: 10, padding: "11px 13px", borderRadius: 12, border: i === 0 ? `1.5px solid ${NAVY}` : "1px solid #E3E8F0", background: i === 0 ? "#F4F7FC" : "#fff" }}>
                   <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 800, color: i < 3 ? NAVY : "#94A3B8" }}>{String(i + 1).padStart(2, "0")}</span>
@@ -341,7 +349,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
       {tab === "companies" && stats && (
         <Card code="CARRIERS" title={`운송사 ${companies.length}곳`} right={
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="회사명·코드 검색" style={{ height: 34, width: 200, padding: "0 12px", borderRadius: 9, border: "1px solid #DCE3EF", fontSize: 14, outline: "none" }} />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="회사명·코드 검색" style={{ height: 34, width: phone ? 110 : 200, padding: "0 12px", borderRadius: 9, border: "1px solid #DCE3EF", fontSize: 14, outline: "none" }} />
             <select value={sortKey} onChange={(e) => setSortKey(e.target.value)} style={{ height: 34, borderRadius: 9, border: "1px solid #DCE3EF", padding: "0 8px", fontSize: 14, fontWeight: 700, color: NAVY }}>
               {[["orders", "이번 달 오더순"], ["gmv", "운송액순"], ["bill", "청구액순"], ["health", "건강도순"], ["staff", "계정 수순"], ["data", "데이터량순"], ["recent", "최근 접속순"]].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
@@ -400,7 +408,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
 
       {/* ═══ 요금·청구 ═══ */}
       {tab === "billing" && (
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(280px,360px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
+        <div style={{ display: "grid", gridTemplateColumns: phone ? "minmax(0,1fr)" : "minmax(280px,360px) minmax(0,1fr)", gap: 14, alignItems: "start" }}>
           <Card code="PLAN" title="요금제 설정">
             <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 12, lineHeight: 1.6 }}>운송사 1곳당 매달 청구할 금액 기준입니다. 바꾸면 바로 저장되고 오른쪽 예상 청구액이 다시 계산됩니다.</div>
             {[["base", "기본료(월)", "원"], ["includedSeats", "기본 포함 직원 계정", "명"], ["seat", "추가 계정 1명당", "원"], ["includedOrders", "기본 포함 오더(월)", "건"], ["perOrder", "초과 오더 1건당", "원"]].map(([k, l, u]) => (
@@ -415,7 +423,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
             ))}
           </Card>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: phone ? "minmax(0,1fr)" : "repeat(3,minmax(0,1fr))", gap: phone ? 8 : 12 }}>
               <Tile dark code="MRR" label="예상 월 청구 합계" value={short(T.mrr)} unit="원" foot={`연 환산 ${short(T.mrr * 12)}원`} />
               <Tile code="ARPA" label="가입사 평균 청구" value={short(companies.length ? T.mrr / companies.length : 0)} unit="원" foot={`${companies.length}곳 기준`} />
               <Tile code="TAKE" label="운송액 대비 청구 비율" value={T.gmv ? ((T.mrr / (T.gmv / dayNo * daysInMonth)) * 100).toFixed(2) : "0.00"} unit="%" foot="월말 환산 운송액 기준" />

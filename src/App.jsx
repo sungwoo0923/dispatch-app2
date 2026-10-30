@@ -858,7 +858,7 @@ export default function App() {
             path="/app"
             element={
               user && role !== "shipper" && role !== "driver" && approved
-                ? (role === "totalMaster" && !isMobile && kpEntry() !== "app"
+                ? (role === "totalMaster" && kpEntry() !== "app"
                     ? <Navigate to="/choose" replace />
                     : isMobile ? <MobileApp role={role} user={user} userCompany={userCompany} /> : <DispatchApp role={role} user={user} userCompany={userCompany} />)
                 : <Navigate to="/login" replace />
