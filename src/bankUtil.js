@@ -35,6 +35,8 @@ export const BANK_NAMES = BANKS.map((b) => b.name);
 const byName = (n) => BANKS.find((b) => b.name === n || n?.includes?.(b.name.replace(/\(.*\)/, "")));
 
 export const onlyDigits = (v) => String(v || "").replace(/\D/g, "");
+// 그 은행 계좌의 보통 자리수(작은 순) — 형식이 정해지지 않은 은행은 빈 배열
+export const accountLengths = (bank) => Object.keys(byName(bank)?.fmt || {}).map(Number).sort((x, y) => x - y);
 
 // 은행에 맞춰 하이픈 — 입력 중에도 자리수만큼 끊어 보여준다
 export function formatAccount(bank, raw) {

@@ -1,5 +1,5 @@
 // src/driver/DriverRegister.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { readPublicCompanies } from "../publicCompanies";
 import CustomDatePicker from "../CustomDatePicker";
 import { auth, db } from "../firebase";
@@ -7,8 +7,7 @@ import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, setDoc, getDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
 import { addDoc, collection } from "firebase/firestore";
-import BankAccountInput from "../BankAccountInput";
-import { validateAccount, onlyDigits } from "../bankUtil";
+import { BANK_NAMES, accountLengths, formatAccount, validateAccount, onlyDigits } from "../bankUtil";
 import { compressImage } from "../InternalMail";
 
 // ⭐ 사용자 요청 — 차량종류/톤수/거주지를 가입할 때 드롭다운으로 선택하게 한다
@@ -81,26 +80,81 @@ const DRIVER_PRIVACY = `수집하는 개인정보 항목
 개인정보 처리 위탁
 서비스 운영을 위해 Firebase(Google LLC)를 이용하며, 데이터는 암호화되어 보관됩니다.`;
 
-function TermsBox({ title, text }) {
+// ⭐ 사용자 요청(2026-10-30) — 한 화면에 길게 늘어선 입력칸을 스크롤로 내리며 채우던 가입을,
+// 단계별로 한 화면씩 [이전]/[다음]으로 넘기며 입력·선택하게 바꿨다. 드롭다운 대신 큰 선택 버튼
+// (기사님이 휴대폰에서 바로 누를 수 있게), 단계마다 입력값을 확인하고 다음으로 넘어간다.
+const STEPS = [
+  { key: "account", en: "ACCOUNT", title: "소속 운송사 · 차량번호", desc: "차량번호가 로그인 아이디·비밀번호가 됩니다" },
+  { key: "profile", en: "PROFILE", title: "기사님 정보", desc: "본인 확인과 배차 연락에 쓰입니다" },
+  { key: "vehicle", en: "VEHICLE", title: "차량 정보", desc: "차량 종류와 톤수를 골라주세요" },
+  { key: "residence", en: "RESIDENCE", title: "거주지", desc: "가까운 배차를 위해 사용됩니다" },
+  { key: "bank", en: "SETTLEMENT", title: "정산 받을 계좌", desc: "지입·용차 운임 지급용 · 가입 후 내 정보에서 수정 가능" },
+  { key: "biz", en: "BUSINESS", title: "사업자 정보", desc: "세금계산서 발행용 · 없으면 건너뛰세요" },
+  { key: "terms", en: "AGREEMENT", title: "약관 동의 · 확인", desc: "입력 내용을 확인하고 등록을 신청하세요" },
+];
+
+const MONO = "'JetBrains Mono','SF Mono',ui-monospace,monospace";
+const inputCls = "w-full h-[52px] border border-[#DCE3EE] rounded-2xl px-4 text-[16px] font-bold text-[#0F1A30] bg-white placeholder:text-[#9AA7BD] placeholder:font-semibold focus:outline-none focus:border-[#2D4C82] focus:ring-4 focus:ring-[#2D4C82]/10 transition";
+
+function Field({ label, req, hint, children }) {
   return (
-    <div className="border border-[#DCE3EE] rounded-xl overflow-hidden">
-      <div className="bg-[#F3F6FA] px-4 py-2 text-[12px] font-bold text-[#1B2B4B] border-b border-[#DCE3EE]">
-        {title}
+    <div>
+      <div className="flex items-baseline justify-between mb-1.5">
+        <label className="text-[13px] font-black text-[#3A4A66]">{label}{req && <span className="text-[#2D4C82] ml-0.5">*</span>}</label>
+        {!req && <span className="text-[11px] font-bold text-[#9AA7BD]">선택</span>}
       </div>
-      <div className="px-4 py-3 h-28 overflow-y-auto text-[12px] text-[#5B6B85] leading-relaxed whitespace-pre-wrap">
-        {text}
+      {children}
+      {hint && <p className="text-[11.5px] text-[#7A89A3] mt-1.5">{hint}</p>}
+    </div>
+  );
+}
+
+// 큰 선택 버튼 묶음 — 드롭다운 대신 한 번에 보이고 바로 누른다
+function Chips({ options, value, onPick, cols = 3, size = "md", label = (o) => o }) {
+  const h = size === "xs" ? "h-8 text-[12.5px]" : size === "sm" ? "h-9 text-[13px]" : "h-11 text-[14px]";
+  return (
+    <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+      {options.map((o) => {
+        const on = o === value;
+        return (
+          <button key={o} type="button" onClick={() => onPick(o)}
+            className={`${h} px-0.5 rounded-xl font-black truncate tracking-tight transition-colors border ${on
+              ? "bg-[#1B2B4B] border-[#1B2B4B] text-white shadow-[0_6px_16px_rgba(27,43,75,.28)]"
+              : "bg-white border-[#DCE3EE] text-[#3A4A66] active:bg-[#EEF3FC]"}`}>
+            {label(o)}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function TermRow({ title, text, checked, onChange }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={`rounded-2xl border ${checked ? "border-[#2D4C82]/40 bg-[#F5F8FD]" : "border-[#DCE3EE] bg-white"}`}>
+      <div className="flex items-center gap-3 px-3.5 h-12">
+        <button type="button" onClick={() => onChange(!checked)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+          <span className={`w-6 h-6 shrink-0 rounded-full grid place-items-center text-[13px] font-black ${checked ? "bg-[#1B2B4B] text-white" : "border-2 border-[#C9D2E0] text-transparent"}`}>✓</span>
+          <span className="text-[14px] font-bold text-[#0F1A30] truncate">{title} <span className="text-[#2D4C82] text-[12px]">(필수)</span></span>
+        </button>
+        <button type="button" onClick={() => setOpen((v) => !v)} className="text-[12px] font-bold text-[#7A89A3] px-2 h-8 shrink-0">{open ? "닫기" : "보기"}</button>
       </div>
+      {open && (
+        <div className="mx-3.5 mb-3 px-3 py-2.5 max-h-36 overflow-y-auto rounded-xl bg-white border border-[#EEF1F6] text-[12px] text-[#5B6B85] leading-relaxed whitespace-pre-wrap">{text}</div>
+      )}
     </div>
   );
 }
 
 export default function DriverRegister() {
+  const [step, setStep] = useState(0);
   const [companyName, setCompanyName] = useState("");
   const [coList, setCoList] = useState([]);
   const [coOpen, setCoOpen] = useState(false);
   useEffect(() => { readPublicCompanies().then(setCoList).catch(() => {}); }, []);
   const coKey = companyName.replace(/\s+/g, "").toLowerCase();
-  const coMatches = coKey ? coList.filter((c) => c.companyName.replace(/\s+/g, "").toLowerCase().includes(coKey) && c.companyName !== companyName).slice(0, 8) : [];
+  const coMatches = coKey ? coList.filter((c) => c.companyName.replace(/\s+/g, "").toLowerCase().includes(coKey) && c.companyName !== companyName).slice(0, 6) : [];
   const [carNo, setCarNo] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -113,10 +167,12 @@ export default function DriverRegister() {
   const [hireDate, setHireDate] = useState("");
   // 💳 정산 정보(지입·용차 기사 지급용) — 계좌는 지입이면 사실상 필수, 사업자 정보는 선택
   const [bank, setBank] = useState({ bank: "", acct: "", holder: "" });
+  const [bankReset, setBankReset] = useState(false);
   const [bizNo, setBizNo] = useState("");
   const [bizName, setBizName] = useState("");
   const [bizImg, setBizImg] = useState("");
-  const bizFileRef = React.useRef(null);
+  const bizFileRef = useRef(null);
+  const acctRef = useRef(null);
   const [termsAgreed, setTermsAgreed] = useState(false);
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
   const [gpsAgreed, setGpsAgreed] = useState(false);
@@ -145,7 +201,7 @@ export default function DriverRegister() {
     if (!tonnage) return setError("톤수를 선택해주세요.");
     if (!residenceProvince) return setError("거주지를 선택해주세요.");
     if (RESIDENCE_SUB_REGIONS[residenceProvince] && !residenceCity) return setError("거주 지역(시/군)을 선택해주세요.");
-    if (bank.bank || bank.acct || bank.holder) {
+    if (bank.acct || bank.holder) {
       const v = validateAccount(bank.bank, bank.acct, bank.holder);
       if (!v.ok) return setError(`정산 계좌: ${v.msg}`);
     }
@@ -289,290 +345,289 @@ export default function DriverRegister() {
     }
   };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-10" style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/26px 26px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/26px 26px, linear-gradient(135deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
-      <div className="absolute top-4 right-4">
-        <img src="/icons/sflow-icon.png" alt="S-Flow" className="w-9 h-9 rounded-xl shadow-md" />
-      </div>
+  // 🏦 PC 운송사 화면(BankAccountInput)과 같은 규칙 — 은행 형식대로 하이픈 자동, 자리수 확인,
+  // 다른 은행으로 바꾸면 계좌번호는 비운다(형식이 달라 그대로 두면 틀린 번호가 저장됨).
+  const pickBank = (b) => {
+    if (b === bank.bank) return;
+    setBankReset(!!bank.acct);
+    setBank((v) => ({ ...v, bank: b, acct: "" }));
+    setTimeout(() => acctRef.current?.focus(), 50);
+  };
+  const acctDigits = onlyDigits(bank.acct);
+  const acctLens = accountLengths(bank.bank);
+  const acctCheck = bank.bank || bank.acct ? validateAccount(bank.bank, bank.acct, bank.holder) : null;
 
-      <div className="w-full max-w-md lg:max-w-[980px] bg-white rounded-[24px] shadow-2xl p-6 sm:p-8 lg:p-10">
-        <div className="mb-6">
-          <div className="text-[11px] font-extrabold tracking-[0.28em] text-[#2D4C82]">DRIVER · SIGN UP</div>
-          <h1 className="text-[27px] font-black text-[#0B1428] tracking-tight">기사님 등록</h1>
-          <p className="text-[13px] text-[#7A89A3] mt-0.5">차량번호가 아이디·비밀번호가 됩니다 · 승인 후 로그인</p>
-        </div>
+  // 단계별 확인 — 통과하면 "", 아니면 안내 문구
+  const checkStep = (i) => {
+    const k = STEPS[i].key;
+    if (k === "account") {
+      if (!companyName.trim()) return "소속 회사명을 입력해주세요.";
+      if (!carNo.trim()) return "차량번호를 입력해주세요.";
+    }
+    if (k === "profile") {
+      if (!name.trim()) return "이름을 입력해주세요.";
+      if (!phone.trim()) return "핸드폰번호를 입력해주세요.";
+      if (onlyDigits(phone).length < 10) return "핸드폰번호를 끝까지 입력해주세요.";
+    }
+    if (k === "vehicle") {
+      if (!vehicleCategory) return "차량 종류를 선택해주세요.";
+      if (vehicleCategory === "직접입력" && !vehicleCategoryCustom.trim()) return "차량 종류를 입력해주세요.";
+      if (!tonnage) return "톤수를 선택해주세요.";
+    }
+    if (k === "residence") {
+      if (!residenceProvince) return "거주지를 선택해주세요.";
+      if (RESIDENCE_SUB_REGIONS[residenceProvince] && !residenceCity) return "거주 지역(시/군)을 선택해주세요.";
+    }
+    if (k === "bank" && (bank.acct || bank.holder)) { // 은행만 고르고 넘기면 계좌 없이 가입
+      const v = validateAccount(bank.bank, bank.acct, bank.holder);
+      if (!v.ok) return `정산 계좌: ${v.msg}`;
+    }
+    if (k === "biz" && bizNo && onlyDigits(bizNo).length !== 10) return "사업자등록번호는 10자리입니다.";
+    if (k === "terms" && (!termsAgreed || !privacyAgreed || !gpsAgreed)) return "모든 약관에 동의해주세요.";
+    return "";
+  };
+  const go = (i) => { setError(""); setStep(Math.max(0, Math.min(STEPS.length - 1, i))); };
+  const next = () => {
+    const msg = checkStep(step);
+    if (msg) return setError(msg);
+    if (step < STEPS.length - 1) return go(step + 1);
+    // 마지막 — 앞 단계에 빠진 값이 있으면 그 단계로 보낸다
+    const bad = STEPS.findIndex((_, i) => checkStep(i));
+    if (bad !== -1) { go(bad); setError(checkStep(bad)); return; }
+    register();
+  };
+  const prev = () => (step === 0 ? navigate("/driver-login") : go(step - 1));
+  const onEnter = (e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); next(); } };
 
-        <div className="grid gap-4 lg:grid-cols-2 lg:gap-x-6 mb-5 [&>*]:min-w-0">
-          <div>
-            <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">
-              소속 회사명 <span className="text-[#2D4C82]">*</span>
-            </label>
-            <div className="relative">
-              <input
-                value={companyName}
-                onChange={(e) => { setCompanyName(e.target.value); setCoOpen(true); }}
-                onFocus={() => setCoOpen(true)} onBlur={() => setTimeout(() => setCoOpen(false), 150)}
-                placeholder="운송사명 검색"
-                className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15 transition"
-              />
-              {coOpen && coMatches.length > 0 && (
-                <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-[#DCE3EE] rounded-xl shadow-[0_18px_40px_rgba(15,26,48,.18)] overflow-hidden max-h-[280px] overflow-y-auto">
-                  {coMatches.map((c) => (
-                    <button key={c.companyName} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setCompanyName(c.companyName); setCoOpen(false); }}
-                      className="w-full text-left px-4 py-3 hover:bg-[#EEF3FC] border-b border-[#EEF1F6] last:border-0">
-                      <div className="text-[15px] font-black text-[#0F1A30]">{c.companyName}</div>
-                      {c.address && <div className="text-[12.5px] text-[#7A89A3] truncate">{c.address}</div>}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <p className="text-[12px] text-[#7A89A3] mt-1">목록에서 고르면 정확히 연결됩니다.</p>
-          </div>
+  const [bankOpen, setBankOpen] = useState(true);
+  const category = vehicleCategory === "직접입력" ? vehicleCategoryCustom.trim() : vehicleCategory;
+  const S = STEPS[step];
+  const last = step === STEPS.length - 1;
+  const allAgreed = termsAgreed && privacyAgreed && gpsAgreed;
+  const setAll = (v) => { setTermsAgreed(v); setPrivacyAgreed(v); setGpsAgreed(v); };
 
-          <div>
-            <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">
-              차량번호 <span className="text-[#2D4C82]">*</span>
-            </label>
-            <input
-              value={carNo}
-              onChange={(e) => setCarNo(e.target.value)}
-              placeholder="예: 경기97가1234"
-              className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15 transition"
-            />
-            <p className="text-[12px] text-[#7A89A3] mt-1">차량번호가 로그인 ID 및 비밀번호로 사용됩니다.</p>
-          </div>
-
-          <div>
-            <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">
-              이름 <span className="text-[#2D4C82]">*</span>
-            </label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="실명 입력"
-              className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15 transition"
-            />
-          </div>
-
-          <div>
-            <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">
-              핸드폰번호 <span className="text-[#2D4C82]">*</span>
-            </label>
-            <input
-              value={phone}
-              onChange={(e) => setPhone(formatPhone(e.target.value))}
-              placeholder="010-0000-0000"
-              className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15 transition"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">
-                차량 종류 <span className="text-[#2D4C82]">*</span>
-              </label>
-              <div className="relative">
-                <select
-                  value={vehicleCategory}
-                  onChange={(e) => setVehicleCategory(e.target.value)}
-                  className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15 transition appearance-none bg-white"
-                >
-                  <option value="">선택</option>
-                  {VEHICLE_CATEGORIES.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#7A89A3] text-xs pointer-events-none">▾</span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">
-                톤수 <span className="text-[#2D4C82]">*</span>
-              </label>
-              <div className="relative">
-                <select
-                  value={tonnage}
-                  onChange={(e) => setTonnage(e.target.value)}
-                  className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15 transition appearance-none bg-white"
-                >
-                  <option value="">선택</option>
-                  {TON_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#7A89A3] text-xs pointer-events-none">▾</span>
-              </div>
-            </div>
-          </div>
-
-          {vehicleCategory === "직접입력" && (
-            <div>
-              <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">차량 종류 직접입력 <span className="text-[#2D4C82]">*</span></label>
-              <input
-                value={vehicleCategoryCustom}
-                onChange={(e) => setVehicleCategoryCustom(e.target.value)}
-                placeholder="예: 리프트탑"
-                className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15 transition"
-              />
+  let body = null;
+  if (S.key === "account") body = (
+    <div className="space-y-5">
+      <Field label="소속 운송사" req hint="목록에서 고르면 정확히 연결됩니다.">
+        <div className="relative">
+          <input value={companyName} autoFocus
+            onChange={(e) => { setCompanyName(e.target.value); setCoOpen(true); }}
+            onFocus={() => setCoOpen(true)} onBlur={() => setTimeout(() => setCoOpen(false), 150)} onKeyDown={onEnter}
+            placeholder="운송사명 검색" className={inputCls} />
+          {coOpen && coMatches.length > 0 && (
+            <div className="absolute z-20 left-0 right-0 top-full mt-1.5 bg-white border border-[#DCE3EE] rounded-2xl shadow-[0_18px_40px_rgba(15,26,48,.18)] overflow-hidden max-h-[260px] overflow-y-auto">
+              {coMatches.map((c) => (
+                <button key={c.companyName} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setCompanyName(c.companyName); setCoOpen(false); }}
+                  className="w-full text-left px-4 py-3 active:bg-[#EEF3FC] hover:bg-[#EEF3FC] border-b border-[#EEF1F6] last:border-0">
+                  <div className="text-[15px] font-black text-[#0F1A30]">{c.companyName}</div>
+                  {c.address && <div className="text-[12px] text-[#7A89A3] truncate">{c.address}</div>}
+                </button>
+              ))}
             </div>
           )}
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">
-                거주지(시/도) <span className="text-[#2D4C82]">*</span>
-              </label>
-              <div className="relative">
-                <select
-                  value={residenceProvince}
-                  onChange={(e) => { setResidenceProvince(e.target.value); setResidenceCity(""); }}
-                  className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15 transition appearance-none bg-white"
-                >
-                  <option value="">선택</option>
-                  {RESIDENCE_PROVINCES.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#7A89A3] text-xs pointer-events-none">▾</span>
-              </div>
-            </div>
-            {RESIDENCE_SUB_REGIONS[residenceProvince] && (
-              <div>
-                <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">
-                  시/군 <span className="text-[#2D4C82]">*</span>
-                </label>
-                <div className="relative">
-                  <select
-                    value={residenceCity}
-                    onChange={(e) => setResidenceCity(e.target.value)}
-                    className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15 transition appearance-none bg-white"
-                  >
-                    <option value="">선택</option>
-                    {RESIDENCE_SUB_REGIONS[residenceProvince].map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#7A89A3] text-xs pointer-events-none">▾</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">요청사항</label>
-            <textarea
-              value={requestNote}
-              onChange={(e) => setRequestNote(e.target.value)}
-              rows={2}
-              placeholder="관리자에게 전달할 요청사항이 있으면 입력하세요"
-              className="w-full border border-[#DCE3EE] rounded-xl px-4 py-3 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15 transition resize-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">입사일</label>
-            <CustomDatePicker value={hireDate} onChange={(e) => setHireDate(e.target.value)} placeholder="입사일 선택 (선택)" showIcon
-              className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] bg-white" />
-            <p className="text-[12px] text-[#7A89A3] mt-1.5">입사일을 입력하면 연차/월차가 자동으로 설정됩니다.</p>
-          </div>
         </div>
-
-        {/* 💳 정산 정보 */}
-        <div className="mb-5 rounded-2xl border border-[#DCE3EE] overflow-hidden">
-          <div className="px-4 py-3 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
-            <div className="text-[10px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">SETTLEMENT</div>
-            <div className="text-[14.5px] font-black">정산 받을 정보</div>
-            <div className="text-[11.5px] text-white/60">지입·용차 운임 지급에 쓰입니다 · 가입 후 내 정보에서 수정 가능</div>
-          </div>
-          <div className="p-4 space-y-3 bg-white">
-            <BankAccountInput value={bank} onChange={setBank} stacked noFav />
-            <div>
-              <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">사업자등록번호 <span className="text-[#7A89A3] font-normal">(선택)</span></label>
-              <input inputMode="numeric" value={bizNo} onChange={(e) => { const d = onlyDigits(e.target.value).slice(0, 10); setBizNo(d.length > 5 ? `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}` : d.length > 3 ? `${d.slice(0, 3)}-${d.slice(3)}` : d); }}
-                placeholder="000-00-00000" className="w-full border border-[#DCE3EE] rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] tabular-nums" />
-            </div>
-            {bizNo && (
-              <div>
-                <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">상호 <span className="text-[#7A89A3] font-normal">(선택)</span></label>
-                <input value={bizName} onChange={(e) => setBizName(e.target.value)} placeholder="사업자등록증의 상호" className="w-full border border-[#DCE3EE] rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]" />
-              </div>
-            )}
-            <div>
-              <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">사업자등록증 사진 <span className="text-[#7A89A3] font-normal">(선택)</span></label>
-              {bizImg ? (
-                <div className="relative rounded-xl overflow-hidden border border-[#DCE3EE]">
-                  <img src={bizImg} alt="사업자등록증" className="w-full max-h-48 object-contain bg-[#F3F6FA]" />
-                  <button type="button" onClick={() => setBizImg("")} className="absolute top-2 right-2 h-7 px-2.5 rounded-lg bg-[#0B1428]/80 text-white text-[12px] font-bold">다시 찍기</button>
-                </div>
-              ) : (
-                <button type="button" onClick={() => bizFileRef.current?.click()} className="w-full h-20 rounded-xl border-2 border-dashed border-[#C9D2E0] text-[#5B6B85] text-[13px] font-bold">+ 촬영 또는 사진 선택</button>
-              )}
-              <input ref={bizFileRef} type="file" accept="image/*" capture="environment" hidden onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) setBizImg(await compressImage(f, 1400, 0.8).catch(() => "")); }} />
-            </div>
-          </div>
-        </div>
-
-        {/* 약관 */}
-        <div className="grid gap-3 lg:grid-cols-2 lg:gap-x-6 mb-5 [&>*]:min-w-0">
-          <TermsBox title="서비스 이용약관" text={DRIVER_TERMS} />
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={termsAgreed}
-              onChange={(e) => setTermsAgreed(e.target.checked)}
-              className="w-4 h-4 accent-[#1B2B4B]"
-            />
-            <span className="text-[13px] text-[#0F1A30] font-medium">서비스 이용약관에 동의합니다 <span className="text-[#2D4C82]">(필수)</span></span>
-          </label>
-
-          <TermsBox title="개인정보처리방침" text={DRIVER_PRIVACY} />
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={privacyAgreed}
-              onChange={(e) => setPrivacyAgreed(e.target.checked)}
-              className="w-4 h-4 accent-[#1B2B4B]"
-            />
-            <span className="text-[13px] text-[#0F1A30] font-medium">개인정보처리방침에 동의합니다 <span className="text-[#2D4C82]">(필수)</span></span>
-          </label>
-
-          <TermsBox title="위치정보 수집 동의" text={DRIVER_GPS} />
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={gpsAgreed}
-              onChange={(e) => setGpsAgreed(e.target.checked)}
-              className="w-4 h-4 accent-[#1B2B4B]"
-            />
-            <span className="text-[13px] text-[#0F1A30] font-medium">위치정보 수집에 동의합니다 <span className="text-[#2D4C82]">(필수)</span></span>
-          </label>
-        </div>
-
-        {success && (
-          <div className="mb-4 bg-[#EEF3FC] border border-[#C9D6EE] text-[#0F1A30] text-[14px] px-4 py-3 rounded-xl font-bold">
-            등록 완료! 관리자 승인 후 로그인이 가능합니다.
-          </div>
+      </Field>
+      <Field label="차량번호" req hint="차량번호가 로그인 ID 및 비밀번호로 사용됩니다.">
+        <input value={carNo} onChange={(e) => setCarNo(e.target.value)} onKeyDown={onEnter} placeholder="예: 경기97가1234" className={inputCls} />
+      </Field>
+    </div>
+  );
+  else if (S.key === "profile") body = (
+    <div className="space-y-5">
+      <Field label="이름" req>
+        <input value={name} autoFocus onChange={(e) => setName(e.target.value)} onKeyDown={onEnter} placeholder="실명 입력" className={inputCls} />
+      </Field>
+      <Field label="핸드폰번호" req>
+        <input value={phone} inputMode="numeric" onChange={(e) => setPhone(formatPhone(e.target.value))} onKeyDown={onEnter} placeholder="010-0000-0000" className={`${inputCls} tabular-nums tracking-wide`} />
+      </Field>
+      <Field label="입사일" hint="입사일을 입력하면 연차/월차가 자동으로 설정됩니다.">
+        <CustomDatePicker value={hireDate} onChange={(e) => setHireDate(e.target.value)} placeholder="입사일 선택" showIcon className={inputCls} />
+      </Field>
+      <Field label="요청사항">
+        <textarea value={requestNote} onChange={(e) => setRequestNote(e.target.value)} rows={2} placeholder="관리자에게 전달할 내용이 있으면 입력하세요"
+          className="w-full border border-[#DCE3EE] rounded-2xl px-4 py-3 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#9AA7BD] focus:outline-none focus:border-[#2D4C82] focus:ring-4 focus:ring-[#2D4C82]/10 transition resize-none" />
+      </Field>
+    </div>
+  );
+  else if (S.key === "vehicle") body = (
+    <div className="space-y-5">
+      <Field label="차량 종류" req>
+        <Chips options={VEHICLE_CATEGORIES} value={vehicleCategory} onPick={setVehicleCategory} cols={3} />
+        {vehicleCategory === "직접입력" && (
+          <input value={vehicleCategoryCustom} autoFocus onChange={(e) => setVehicleCategoryCustom(e.target.value)} onKeyDown={onEnter} placeholder="예: 리프트탑" className={`${inputCls} mt-2`} />
         )}
-
-        {error && (
-          <div className="mb-4 bg-[#0F1A30] text-white text-[14px] font-bold px-4 py-3 rounded-xl">
-            {error}
+      </Field>
+      <Field label="톤수" req>
+        <Chips options={TON_OPTIONS} value={tonnage} onPick={setTonnage} cols={4} size="sm" />
+      </Field>
+    </div>
+  );
+  else if (S.key === "residence") body = (
+    <div className="space-y-5">
+      <Field label="시 / 도" req>
+        <Chips options={RESIDENCE_PROVINCES} value={residenceProvince} onPick={(v) => { setResidenceProvince(v); setResidenceCity(""); }} cols={6} size="xs" />
+      </Field>
+      {RESIDENCE_SUB_REGIONS[residenceProvince] && (
+        <Field label={`${residenceProvince} 시 / 군`} req>
+          <Chips options={RESIDENCE_SUB_REGIONS[residenceProvince]} value={residenceCity} onPick={setResidenceCity} cols={6} size="xs" />
+        </Field>
+      )}
+    </div>
+  );
+  else if (S.key === "bank") body = (
+    <div className="space-y-5">
+      <Field label="은행" req={false}>
+        {bank.bank && !bankOpen ? (
+          <div className="flex items-center gap-3 h-[52px] px-4 rounded-2xl border border-[#2D4C82]/40 bg-[#F5F8FD]">
+            <span className="w-8 h-8 rounded-xl bg-[#1B2B4B] text-white grid place-items-center text-[12px] font-black">{bank.bank.slice(0, 1)}</span>
+            <span className="flex-1 text-[16px] font-black text-[#0F1A30] truncate">{bank.bank}</span>
+            <button type="button" onClick={() => setBankOpen(true)} className="h-8 px-3 rounded-lg border border-[#C9D6EE] bg-white text-[12.5px] font-black text-[#1B2B4B]">변경</button>
           </div>
+        ) : (
+          <Chips options={BANK_NAMES} value={bank.bank} onPick={(b) => { pickBank(b); setBankOpen(false); }} cols={4} size="sm" label={(b) => b.replace(/\(.*\)/, "")} />
         )}
-
-        <button
-          onClick={register}
-          disabled={loading || success}
-          className="w-full h-14 rounded-2xl text-white font-black text-[16px] transition disabled:opacity-60 shadow-[0_12px_26px_rgba(15,26,48,0.28)]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}
-        >
-          {loading ? "등록 중..." : "등록 신청"}
+      </Field>
+      {(!bankOpen || !!bank.bank) && <>
+        <Field label="계좌번호" req={false}>
+          <div className="relative">
+            <input ref={acctRef} inputMode="numeric" value={formatAccount(bank.bank, bank.acct)} disabled={!bank.bank}
+              onChange={(e) => { setBankReset(false); setBank((v) => ({ ...v, acct: onlyDigits(e.target.value).slice(0, 16) })); }} onKeyDown={onEnter}
+              placeholder={bank.bank ? "숫자만 입력하면 하이픈 자동" : "은행을 먼저 고르세요"}
+              className={`${inputCls} pr-24 tabular-nums tracking-wider disabled:bg-[#F3F6FA]`} style={{ fontFamily: acctDigits ? MONO : undefined }} />
+            <span className={`absolute right-3 top-1/2 -translate-y-1/2 px-2 h-7 rounded-lg grid place-items-center text-[12px] font-black tabular-nums ${acctLens.includes(acctDigits.length) ? "bg-[#1B2B4B] text-white" : "bg-[#EEF2F8] text-[#5B6B85]"}`} style={{ fontFamily: MONO }}>
+              {acctDigits.length}{acctLens.length ? `/${acctLens.find((l) => l >= acctDigits.length) || acctLens[acctLens.length - 1]}` : ""}자리
+            </span>
+          </div>
+          <div className="mt-1.5 min-h-[18px] text-[12px] font-bold">
+            {bankReset ? <span className="text-[#2D4C82]">! 은행이 바뀌어 계좌번호를 초기화했습니다 — 다시 입력해 주세요</span>
+              : acctCheck && acctDigits ? <span className={acctCheck.level === "ok" ? "text-[#1B2B4B]" : acctCheck.level === "warn" ? "text-[#2D4C82]" : "text-[#7A89A3]"}>{acctCheck.level === "ok" ? "✓ " : "! "}{acctCheck.msg}</span>
+              : bank.bank && acctLens.length ? <span className="text-[#7A89A3]">{bank.bank} 계좌는 보통 {acctLens.join("·")}자리입니다</span> : null}
+          </div>
+        </Field>
+        <Field label="예금주" req={false}>
+          <input value={bank.holder} onChange={(e) => setBank((v) => ({ ...v, holder: e.target.value }))} onKeyDown={onEnter} placeholder={name ? `예: ${name}` : "예금주"} className={inputCls} />
+        </Field>
+      </>}
+      {!bank.bank && <p className="text-[12px] text-[#7A89A3]">지금 입력하지 않아도 가입 후 내 정보에서 등록할 수 있습니다.</p>}
+    </div>
+  );
+  else if (S.key === "biz") body = (
+    <div className="space-y-5">
+      <Field label="사업자등록번호">
+        <input inputMode="numeric" value={bizNo} onKeyDown={onEnter} onChange={(e) => { const d = onlyDigits(e.target.value).slice(0, 10); setBizNo(d.length > 5 ? `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}` : d.length > 3 ? `${d.slice(0, 3)}-${d.slice(3)}` : d); }}
+          placeholder="000-00-00000" className={`${inputCls} tabular-nums tracking-wider`} style={{ fontFamily: bizNo ? MONO : undefined }} />
+      </Field>
+      {bizNo && (
+        <Field label="상호">
+          <input value={bizName} onChange={(e) => setBizName(e.target.value)} onKeyDown={onEnter} placeholder="사업자등록증의 상호" className={inputCls} />
+        </Field>
+      )}
+      <Field label="사업자등록증 사진">
+        {bizImg ? (
+          <div className="relative rounded-2xl overflow-hidden border border-[#DCE3EE]">
+            <img src={bizImg} alt="사업자등록증" className="w-full max-h-44 object-contain bg-[#F3F6FA]" />
+            <button type="button" onClick={() => setBizImg("")} className="absolute top-2 right-2 h-8 px-3 rounded-lg bg-[#0B1428]/80 text-white text-[12px] font-bold">다시 찍기</button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => bizFileRef.current?.click()} className="w-full h-24 rounded-2xl border-2 border-dashed border-[#C9D2E0] text-[#5B6B85] text-[14px] font-bold active:bg-[#F5F8FD]">+ 촬영 또는 사진 선택</button>
+        )}
+        <input ref={bizFileRef} type="file" accept="image/*" capture="environment" hidden onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) setBizImg(await compressImage(f, 1400, 0.8).catch(() => "")); }} />
+      </Field>
+    </div>
+  );
+  else if (S.key === "terms") {
+    const rows = [
+      ["소속", [companyName, carNo], 0],
+      ["기사", [name, phone], 1],
+      ["차량", [category && tonnage ? `${category} ${tonnage}` : "", residenceCity ? `${residenceProvince} ${residenceCity}` : residenceProvince], 2],
+      ["정산", [bank.acct ? `${bank.bank} ${formatAccount(bank.bank, bank.acct)}` : "계좌 미입력", bank.acct ? bank.holder : ""], 4],
+    ];
+    body = (
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-[#DCE3EE] divide-y divide-[#EEF1F6] overflow-hidden">
+          {rows.map(([k, v, i]) => (
+            <button key={k} type="button" onClick={() => go(i)} className="w-full flex items-center gap-3 px-4 h-10 text-left active:bg-[#F5F8FD]">
+              <span className="w-9 shrink-0 text-[11px] font-extrabold tracking-wider text-[#7A89A3]">{k}</span>
+              <span className="flex-1 min-w-0 text-[13.5px] font-black text-[#0F1A30] truncate tabular-nums">{v.filter(Boolean).join(" · ") || "-"}</span>
+              <span className="text-[11px] font-bold text-[#9AA7BD]">수정</span>
+            </button>
+          ))}
+        </div>
+        <button type="button" onClick={() => setAll(!allAgreed)}
+          className={`w-full flex items-center gap-3 px-4 h-[52px] rounded-2xl text-left ${allAgreed ? "text-white" : "bg-[#F3F6FA] text-[#0F1A30]"}`}
+          style={allAgreed ? { background: "linear-gradient(120deg,#0F1A30,#2D4C82)" } : undefined}>
+          <span className={`w-6 h-6 rounded-full grid place-items-center text-[13px] font-black ${allAgreed ? "bg-white text-[#1B2B4B]" : "border-2 border-[#C9D2E0] text-transparent"}`}>✓</span>
+          <span className="text-[15px] font-black">약관 전체 동의</span>
         </button>
-
-        <div className="mt-5 flex flex-col items-center gap-2">
-          <button
-            onClick={() => navigate("/driver-login")}
-            className="text-[13px] text-[#1B2B4B] font-semibold hover:underline"
-          >
-            로그인으로 돌아가기
-          </button>
-          {!window.Capacitor?.isNativePlatform?.() && <Link to="/login" className="text-[12px] text-[#7A89A3] hover:underline">
-            다른 유형으로 로그인
-          </Link>}
+        <div className="space-y-2">
+          <TermRow title="서비스 이용약관" text={DRIVER_TERMS} checked={termsAgreed} onChange={setTermsAgreed} />
+          <TermRow title="개인정보처리방침" text={DRIVER_PRIVACY} checked={privacyAgreed} onChange={setPrivacyAgreed} />
+          <TermRow title="위치정보 수집 동의" text={DRIVER_GPS} checked={gpsAgreed} onChange={setGpsAgreed} />
         </div>
       </div>
+    );
+  }
+
+  const optional = S.key === "bank" || S.key === "biz";
+  const empty = (S.key === "bank" && !bank.acct && !bank.holder) || (S.key === "biz" && !bizNo && !bizImg);
+
+  return (
+    <div className="h-[100dvh] flex flex-col overflow-hidden" style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/26px 26px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/26px 26px, linear-gradient(135deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+      <div className="w-full max-w-[520px] mx-auto flex-1 min-h-0 flex flex-col lg:py-8">
+        {/* 상단 — 단계 표시 */}
+        <div className="px-5 pb-5 text-white" style={{ paddingTop: "max(env(safe-area-inset-top), 18px)" }}>
+          <div className="flex items-center justify-between">
+            <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]">DRIVER · SIGN UP</div>
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] font-bold text-white/70 tabular-nums" style={{ fontFamily: MONO }}>
+                <span className="text-white">{String(step + 1).padStart(2, "0")}</span> / {String(STEPS.length).padStart(2, "0")}
+              </span>
+              <img src="/icons/sflow-icon.png" alt="" className="w-7 h-7 rounded-lg" />
+            </div>
+          </div>
+          <div className="mt-3 text-[10.5px] font-extrabold tracking-[0.22em] text-white/45" style={{ fontFamily: MONO }}>{S.en}</div>
+          <h1 className="text-[24px] font-black tracking-tight leading-tight">{S.title}</h1>
+          <p className="text-[12.5px] text-white/60 mt-0.5">{S.desc}</p>
+          <div className="mt-4 grid gap-1" style={{ gridTemplateColumns: `repeat(${STEPS.length}, minmax(0,1fr))` }}>
+            {STEPS.map((s, i) => (
+              <button key={s.key} type="button" aria-label={s.title} onClick={() => i < step && go(i)}
+                className={`h-1.5 rounded-full transition-colors duration-300 ${i < step ? "bg-[#8FB0F0]" : i === step ? "bg-white" : "bg-white/15"}`} />
+            ))}
+          </div>
+        </div>
+
+        {/* 입력 — 한 화면에 한 단계 */}
+        <div className="flex-1 min-h-0 bg-white rounded-t-[28px] lg:rounded-[28px] shadow-2xl flex flex-col overflow-hidden">
+          <div key={step} className="flex-1 min-h-0 overflow-y-auto px-5 pt-6 pb-4 kp-step-in">
+            {body}
+            {success && (
+              <div className="mt-4 bg-[#EEF3FC] border border-[#C9D6EE] text-[#0F1A30] text-[14px] px-4 py-3 rounded-2xl font-bold">
+                등록 완료! 관리자 승인 후 로그인이 가능합니다.
+              </div>
+            )}
+          </div>
+
+          {/* 하단 — 이전 / 다음 */}
+          <div className="px-5 pt-3 border-t border-[#EEF1F6] bg-white" style={{ paddingBottom: "max(env(safe-area-inset-bottom), 16px)" }}>
+            {error && <div className="mb-2.5 bg-[#0F1A30] text-white text-[13px] font-bold px-4 py-2.5 rounded-xl">{error}</div>}
+            <div className="flex gap-2">
+              <button type="button" onClick={prev} disabled={loading}
+                className="h-14 w-[34%] rounded-2xl border border-[#DCE3EE] bg-white text-[#3A4A66] font-black text-[15px] active:bg-[#F3F6FA] disabled:opacity-50">
+                {step === 0 ? "로그인" : "이전"}
+              </button>
+              <button type="button" onClick={next} disabled={loading || success}
+                className="h-14 flex-1 rounded-2xl text-white font-black text-[16px] transition disabled:opacity-60 shadow-[0_12px_26px_rgba(15,26,48,0.28)]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
+                {loading ? "등록 중..." : last ? "등록 신청" : optional && empty ? "건너뛰기" : "다음"}
+              </button>
+            </div>
+            {step === 0 && !window.Capacitor?.isNativePlatform?.() && (
+              <div className="mt-2.5 text-center"><Link to="/login" className="text-[12px] text-[#7A89A3] hover:underline">다른 유형으로 로그인</Link></div>
+            )}
+          </div>
+        </div>
+      </div>
+      <style>{`@keyframes kpStepIn{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}.kp-step-in{animation:kpStepIn .22s ease-out}`}</style>
     </div>
   );
 }

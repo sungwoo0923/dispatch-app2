@@ -261,6 +261,9 @@ export default function TransportLogin() {
         // totalMaster: loginCompany를 반드시 갱신해야 헤더에 올바른 회사명이 표시됨
         safeLocalSet("loginCompany", inputCompanyName);
       }
+      safeLocalSet("userCompany", inputCompanyName);
+      // 앱이 이미 예전 회사로 데이터를 거르기 시작했을 수 있어 확인된 회사로 다시 맞추게 알린다
+      window.dispatchEvent(new CustomEvent("kp:loginCompany", { detail: inputCompanyName }));
 
       if (inputCompanyCode) {
         safeLocalSet("transportCode", inputCompanyCode);
