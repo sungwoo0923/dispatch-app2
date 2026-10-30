@@ -1,4 +1,5 @@
 // src/CompanyApplications.jsx
+import { publishCompany } from "./publicCompanies";
 import React, { useState, useEffect, useMemo } from "react";
 import { kpConfirm } from "./kpDialog";
 import { imeFocusRef } from "./imeFocus";
@@ -366,6 +367,7 @@ export default function CompanyApplications() {
   const approveTransport = async (app) => {
     setProcessing(true);
     try {
+      publishCompany(app.companyName, app.type === "신규" ? app.address : "").catch(() => {});
       let companyCode = app.companyCode;
       if (!companyCode) {
         if (app.type === "기존") {

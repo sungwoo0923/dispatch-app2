@@ -293,6 +293,11 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['payNotice']);
     }
     // 💳 회사별 요금제 — 로그인 사용자는 읽기(메뉴 잠금 판단), 지정은 최고관리자만
+    // 🏢 가입 화면용 공개 운송사 목록(이름·주소) — 로그인 전에도 읽는다
+    match /publicCompanies/{id} {
+      allow read: if true;
+      allow write: if isTotalMasterUser() || (isApproved() && request.resource.data.get('companyName', '') == myUser().get('companyName', ''));
+    }
     match /companyPlans/{company} {
       allow read: if isSignedIn();
       allow write: if isTotalMasterUser();
@@ -493,7 +498,7 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && request.auth.uid == uid;
     }
     match /{col}/{rest=**} {
-      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'driverStatements', 'fleetPenalties', 'fixedRoutes',
+      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'driverStatements', 'fleetPenalties', 'fixedRoutes', 'publicCompanies',
         // 🔒 회사별로 잠근 컬렉션(위에서 따로 정함)
         'orders', 'dispatch', 'dispatch_test', 'fixedClients', 'drivers', 'clients', 'places', 'recurringOrders', 'deletedOrders',
         'driver_completed_archive', 'notifications', 'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests',

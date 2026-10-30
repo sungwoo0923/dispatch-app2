@@ -15,6 +15,7 @@ import {
   Navigate,
 } from "react-router-dom";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import { publishCompany, backfillPublicCompanies } from "./publicCompanies";
 import { auth, db, DEFAULT_COMPANY } from "./firebase";
 import { setBlindViewerRole, setAutoBlind } from "./blind";
 import {
@@ -641,6 +642,9 @@ export default function App() {
                 : (data.companyName || ""),
             };
             sessionLogRef.current = { uid: u.uid, info: loginInfo };
+            // 🏢 가입 화면 회사 검색용 공개 목록 채우기
+            if (dataRole === "totalMaster") setTimeout(() => backfillPublicCompanies().catch(() => {}), 4000);
+            else if (data.approved !== false && data.companyName && !["driver", "shipper", "cafeUser"].includes(dataRole)) setTimeout(() => publishCompany(data.companyName).catch(() => {}), 3000);
             addDoc(collection(db, "sessionLogs"), {
               ...loginInfo,
               event: "login",

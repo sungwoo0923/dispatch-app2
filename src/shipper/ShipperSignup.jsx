@@ -4,6 +4,9 @@ import { useNavigate } from "react-router-dom";
 import { checkEmailAvailable } from "../emailCheck";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, deleteUser } from "firebase/auth";
 import { auth, db } from "../firebase";
+import { readPublicCompanies } from "../publicCompanies";
+import CustomSelect from "../CustomSelect";
+import CustomDatePicker from "../CustomDatePicker";
 import {
   doc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc, updateDoc,
 } from "firebase/firestore";
@@ -69,11 +72,11 @@ const formatBizNum = (val) => {
 
 function TermsBox({ title, text }) {
   return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden">
-      <div className="bg-gray-50 px-4 py-2.5 text-[12px] font-bold text-gray-600 border-b border-gray-200">
+    <div className="border border-[#DCE3EE] rounded-xl overflow-hidden">
+      <div className="bg-[#F3F6FA] px-4 py-2.5 text-[13px] font-black text-[#1B2B4B] border-b border-[#DCE3EE]">
         {title}
       </div>
-      <div className="px-4 py-3 h-32 overflow-y-auto text-[12px] text-gray-500 leading-relaxed whitespace-pre-wrap">
+      <div className="px-4 py-3 h-32 overflow-y-auto text-[12.5px] text-[#5B6B85] leading-relaxed whitespace-pre-wrap">
         {text}
       </div>
     </div>
@@ -81,63 +84,38 @@ function TermsBox({ title, text }) {
 }
 
 // ── Step 1: 가입 유형 선택 ────────────────────────────────────────────────────
+const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const GRID_BG = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/26px 26px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/26px 26px, linear-gradient(135deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
 function TypeSelect({ onSelect }) {
   const navigate = useNavigate();
+  const Card = ({ type, en, title, desc, points, dark }) => (
+    <button type="button" onClick={() => onSelect(type)}
+      className={`group text-left rounded-[22px] p-7 border transition-all duration-200 hover:-translate-y-0.5 ${dark ? "bg-[#0F1A30] border-[#0F1A30] text-white shadow-[0_18px_40px_rgba(11,20,40,.35)]" : "bg-white border-[#DCE3EE] text-[#0F1A30] hover:border-[#2D4C82] shadow-[0_8px_24px_rgba(15,26,48,.08)]"}`}>
+      <div className={`text-[11px] font-extrabold tracking-[0.26em] ${dark ? "text-[#8FB0F0]" : "text-[#2D4C82]"}`} style={{ fontFamily: MONO }}>{en}</div>
+      <div className="text-[22px] font-black mt-1.5">{title}</div>
+      <div className={`text-[14px] mt-1 ${dark ? "text-white/65" : "text-[#5B6B85]"}`}>{desc}</div>
+      <div className="mt-5 space-y-2">
+        {points.map((t) => <div key={t} className={`flex items-center gap-2 text-[13.5px] font-semibold ${dark ? "text-white/85" : "text-[#3A4A66]"}`}><span className={`w-1.5 h-1.5 rotate-45 ${dark ? "bg-[#8FB0F0]" : "bg-[#2D4C82]"}`} />{t}</div>)}
+      </div>
+      <div className={`mt-6 h-12 rounded-xl flex items-center justify-center text-[15px] font-black ${dark ? "bg-white text-[#0F1A30]" : "bg-[#0F1A30] text-white"}`}>시작하기 →</div>
+    </button>
+  );
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#f4f6fa] px-4">
-      <div className="w-full max-w-lg">
-        <div className="text-center mb-10">
-          <img
-            src="/icons/sflow-icon.png"
-            alt="S-Flow"
-            className="w-14 h-14 rounded-2xl shadow-md mx-auto mb-5"
-          />
-          <h1 className="text-[26px] font-extrabold text-[#1B2B4B] tracking-tight">
-            화주 회원가입
-          </h1>
-          <p className="text-[14px] text-gray-500 mt-2">가입 유형을 선택해주세요</p>
+    <div className="min-h-screen flex items-center justify-center px-4 py-10" style={{ background: GRID_BG }}>
+      <div className="w-full max-w-[880px]">
+        <div className="text-center mb-8">
+          <img src="/icons/sflow-icon.png" alt="" className="w-14 h-14 rounded-2xl shadow-lg mx-auto mb-4" />
+          <div className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>SHIPPER · SIGN UP</div>
+          <h1 className="text-[30px] font-black text-white tracking-tight mt-1">화주 회원가입</h1>
+          <p className="text-[14.5px] text-white/60 mt-1.5">가입 유형을 골라 주세요</p>
         </div>
-
-        <div className="grid grid-cols-2 gap-4 mb-8">
-          <button
-            onClick={() => onSelect("신규")}
-            className="bg-white border-2 border-[#1B2B4B] rounded-2xl p-8 text-left hover:bg-[#1B2B4B] hover:text-white transition-all group shadow-sm"
-          >
-            <div className="text-[18px] font-extrabold text-[#1B2B4B] group-hover:text-white mb-2">
-              신규 가입신청
-            </div>
-            <div className="text-[13px] text-gray-500 group-hover:text-white/80">
-              처음 이용하시는 회사
-            </div>
-            <div className="text-[11px] text-gray-400 group-hover:text-white/60 mt-2">
-              회사 정보 + 담당자 정보 등록
-            </div>
-          </button>
-
-          <button
-            onClick={() => onSelect("기존")}
-            className="bg-white border-2 border-gray-200 rounded-2xl p-8 text-left hover:border-[#1B2B4B] hover:bg-gray-50 transition-all shadow-sm"
-          >
-            <div className="text-[18px] font-extrabold text-gray-800 mb-2">
-              기존 회사 추가 가입
-            </div>
-            <div className="text-[13px] text-gray-500">
-              이미 등록된 회사의 추가 구성원
-            </div>
-            <div className="text-[11px] text-gray-400 mt-2">
-              회사명 확인 후 담당자 정보 등록
-            </div>
-          </button>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card type="신규" dark en="NEW COMPANY" title="신규 가입신청" desc="처음 이용하시는 회사" points={["회사 정보 · 사업자번호", "거래하는 운송사 연결", "승인 후 오더 요청·현황 조회"]} />
+          <Card type="기존" en="JOIN EXISTING" title="기존 회사 추가 가입" desc="이미 등록된 회사의 추가 구성원" points={["회사명 검색 → 선택", "담당자 정보 입력", "승인되면 바로 사용"]} />
         </div>
-
-        <p className="text-center text-[13px] text-gray-400">
+        <p className="text-center text-[14px] text-white/60 mt-7">
           이미 계정이 있으신가요?{" "}
-          <button
-            onClick={() => navigate("/shipper-login")}
-            className="text-[#1B2B4B] font-semibold hover:underline"
-          >
-            로그인
-          </button>
+          <button onClick={() => navigate("/shipper-login")} className="text-white font-black hover:underline">로그인</button>
         </p>
       </div>
     </div>
@@ -230,12 +208,12 @@ function SignupForm({ signupType, onBack }) {
     setTransportSearching(true);
     setHasTransportSearched(false);
     try {
-      const snap = await getDocs(query(
-        collection(db, "transportApplications"),
-        where("type", "==", "신규"),
-        where("status", "==", "approved"),
-      ));
-      const all = snap.docs.map((d) => ({ ...d.data(), _docId: d.id }));
+      // 로그인 전에도 읽을 수 있는 공개 운송사 목록 먼저, 안 되면 신청서 직접 조회
+      let all = await readPublicCompanies().catch(() => []);
+      if (!all.length) {
+        const snap = await getDocs(query(collection(db, "transportApplications"), where("type", "==", "신규"), where("status", "==", "approved")));
+        all = snap.docs.map((d) => ({ ...d.data(), _docId: d.id }));
+      }
       const matched = all.filter((d) =>
         (d.companyName || "").toLowerCase().includes(q.toLowerCase())
       );
@@ -439,60 +417,60 @@ function SignupForm({ signupType, onBack }) {
 
   return (
     <>
-    <div className="min-h-screen bg-[#f4f6fa] flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-lg bg-white rounded-2xl shadow-lg overflow-hidden">
-        {/* 헤더 */}
-        <div className="bg-[#1B2B4B] px-8 py-6">
-          <button onClick={onBack} className="text-white/60 hover:text-white text-[13px] mb-3 block">
-            ← 뒤로
-          </button>
-          <h1 className="text-[20px] font-extrabold text-white">
-            {signupType === "신규" ? "신규 가입신청" : "기존 회사 추가 가입"}
-          </h1>
-          <p className="text-white/60 text-[13px] mt-1">
-            {signupType === "신규"
-              ? "회사 정보와 담당자 정보를 입력해주세요"
-              : "소속 회사명과 담당자 정보를 입력해주세요"}
-          </p>
+    <div className="min-h-screen bg-[#EEF2F8] flex items-start lg:items-center justify-center px-0 sm:px-4 py-0 sm:py-8">
+      <div className="w-full max-w-[1120px] bg-white sm:rounded-[26px] shadow-[0_24px_60px_rgba(11,20,40,.14)] overflow-hidden lg:grid lg:grid-cols-[340px_minmax(0,1fr)]">
+        <div className="relative text-white px-7 py-7 lg:py-10 flex flex-col" style={{ background: GRID_BG }}>
+          <button type="button" onClick={onBack} className="self-start h-9 px-3.5 rounded-xl bg-white/10 border border-white/20 text-[13px] font-bold hover:bg-white/15">← 가입 유형</button>
+          <div className="mt-6 text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>SHIPPER · {signupType === "신규" ? "NEW COMPANY" : "JOIN EXISTING"}</div>
+          <h1 className="text-[26px] font-black mt-1">{signupType === "신규" ? "신규 가입신청" : "기존 회사 추가 가입"}</h1>
+          <p className="text-white/65 text-[14px] mt-1.5 leading-relaxed">{signupType === "신규" ? "회사 정보와 담당자 정보를 입력해 주세요. 거래하는 운송사를 연결하면 오더 요청이 바로 전달돼요." : "소속 회사를 검색해서 고르고 담당자 정보를 입력해 주세요."}</p>
+          <div className="hidden lg:block mt-8 space-y-3">
+            {["회사 정보", "담당자 정보", "계정 정보", "약관 동의"].map((t, i) => (
+              <div key={t} className="flex items-center gap-3">
+                <span className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center text-[12px] font-black" style={{ fontFamily: MONO }}>{String(i + 1).padStart(2, "0")}</span>
+                <span className="text-[14.5px] font-bold text-white/85">{t}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-5">
+        <form onSubmit={handleSubmit} className="p-5 sm:p-8 lg:p-10 grid grid-cols-1 gap-x-5 gap-y-4 md:grid-cols-2 content-start min-w-0">
 
           {/* 회사 정보 */}
           <SectionLabel>회사 정보</SectionLabel>
 
           {/* 기존 가입: 회사명 검색 */}
           {signupType === "기존" ? (
-            <Field label="회사명" required>
+            <Field label="회사명" required full>
               <div className="flex gap-2">
                 <input
                   value={companySearchQ}
                   onChange={(e) => { setCompanySearchQ(e.target.value); setSelectedCompanyApp(null); setCompanyName(""); }}
                   onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), searchExistingShipperCompany())}
                   placeholder="회사명 검색"
-                  className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                  className="flex-1 min-w-0 h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15"
                 />
                 <button
                   type="button"
                   onClick={searchExistingShipperCompany}
                   disabled={companySearching}
-                  className="px-4 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition whitespace-nowrap disabled:opacity-50"
+                  className="h-12 px-4 sm:px-5 shrink-0 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black hover:bg-[#1B2B4B] transition whitespace-nowrap disabled:opacity-50"
                 >
                   {companySearching ? "검색 중..." : "검색"}
                 </button>
               </div>
 
               {companySuggestions.length > 0 && (
-                <div className="mt-1 border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                <div className="mt-1 border border-[#DCE3EE] rounded-xl overflow-hidden shadow-sm">
                   {companySuggestions.map((item, i) => (
                     <button
                       key={i}
                       type="button"
                       onClick={() => selectCompanySuggestion(item)}
-                      className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition"
+                      className="w-full text-left px-4 py-3 hover:bg-[#EEF3FC] border-b border-[#EEF1F6] last:border-b-0 transition"
                     >
                       <div className="text-[14px] font-bold text-[#1B2B4B]">{item.companyName}</div>
-                      <div className="text-[12px] text-gray-400 mt-0.5 flex flex-wrap gap-x-3">
+                      <div className="text-[12px] text-[#7A89A3] mt-0.5 flex flex-wrap gap-x-3">
                         {item.businessNumber && <span>사업자번호: {item.businessNumber}</span>}
                         {item.name && <span>대표: {item.name}</span>}
                       </div>
@@ -502,19 +480,19 @@ function SignupForm({ signupType, onBack }) {
               )}
 
               {hasCompanySearched && !companySearching && companySuggestions.length === 0 && (
-                <div className="mt-2 bg-amber-50 border border-amber-200 text-amber-700 text-[13px] px-4 py-3 rounded-xl">
+                <div className="mt-2 bg-[#F3F6FA] border border-[#DCE3EE] text-[#1B2B4B] text-[13px] px-4 py-3 rounded-xl">
                   <strong>"{companySearchQ}"</strong>(으)로 등록된 화주 회사가 없습니다.<br />
                   신규가입으로 진행해 주세요.
                 </div>
               )}
 
               {selectedCompanyApp && (
-                <div className="mt-2 flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-2 rounded-xl">
-                  <span className="text-[13px] text-blue-700 font-semibold">{selectedCompanyApp.companyName}</span>
+                <div className="mt-2 flex items-center gap-2 bg-[#EEF3FC] border border-[#C9D6EE] px-3 py-2 rounded-xl">
+                  <span className="text-[13px] text-[#0F1A30] font-semibold">{selectedCompanyApp.companyName}</span>
                   <button
                     type="button"
                     onClick={() => { setSelectedCompanyApp(null); setCompanyName(""); setCompanySearchQ(""); setBusinessNumber(""); setAddress(""); }}
-                    className="text-[11px] text-blue-400 hover:text-red-500 ml-auto"
+                    className="text-[11px] text-[#5B6B85] hover:text-[#0F1A30] ml-auto"
                   >
                     ✕
                   </button>
@@ -527,7 +505,7 @@ function SignupForm({ signupType, onBack }) {
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
                 placeholder="회사명 입력"
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15"
               />
             </Field>
           )}
@@ -540,7 +518,7 @@ function SignupForm({ signupType, onBack }) {
                 onChange={(e) => setBusinessNumber(formatBizNum(e.target.value))}
                 placeholder="000-00-00000"
                 maxLength={12}
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15"
               />
             </Field>
           )}
@@ -551,43 +529,43 @@ function SignupForm({ signupType, onBack }) {
                 value={businessNumber}
                 readOnly
                 placeholder="회사 선택 시 자동 입력"
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] bg-gray-50 focus:outline-none cursor-default"
+                className="w-full border border-[#DCE3EE] rounded-xl px-4 py-2.5 text-[14px] bg-[#F7F9FC] focus:outline-none cursor-default"
               />
             </Field>
           )}
 
           {/* 신규 가입: 연결 운송사 검색 */}
           {signupType === "신규" && (
-            <Field label="연결 운송사">
+            <Field label="연결 운송사" full>
               <div className="flex gap-2">
                 <input
                   value={transportSearchQ}
                   onChange={(e) => { setTransportSearchQ(e.target.value); setSelectedTransport(null); }}
                   onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), searchTransportCompany())}
                   placeholder="운송사명 검색 (선택사항)"
-                  className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                  className="flex-1 min-w-0 h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15"
                 />
                 <button
                   type="button"
                   onClick={searchTransportCompany}
                   disabled={transportSearching}
-                  className="px-4 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition whitespace-nowrap disabled:opacity-50"
+                  className="h-12 px-4 sm:px-5 shrink-0 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black hover:bg-[#1B2B4B] transition whitespace-nowrap disabled:opacity-50"
                 >
                   {transportSearching ? "검색 중..." : "검색"}
                 </button>
               </div>
 
               {transportSuggestions.length > 0 && (
-                <div className="mt-1 border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                <div className="mt-1 border border-[#DCE3EE] rounded-xl overflow-hidden shadow-sm">
                   {transportSuggestions.map((item, i) => (
                     <button
                       key={i}
                       type="button"
                       onClick={() => selectTransportSuggestion(item)}
-                      className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition"
+                      className="w-full text-left px-4 py-3 hover:bg-[#EEF3FC] border-b border-[#EEF1F6] last:border-b-0 transition"
                     >
                       <div className="text-[14px] font-bold text-[#1B2B4B]">{item.companyName}</div>
-                      <div className="text-[12px] text-gray-400 mt-0.5 flex flex-wrap gap-x-3">
+                      <div className="text-[12px] text-[#7A89A3] mt-0.5 flex flex-wrap gap-x-3">
                         {item.businessNumber && <span>사업자번호: {item.businessNumber}</span>}
                         {(item.name || item.representative) && <span>대표: {item.name || item.representative}</span>}
                       </div>
@@ -597,48 +575,48 @@ function SignupForm({ signupType, onBack }) {
               )}
 
               {hasTransportSearched && !transportSearching && transportSuggestions.length === 0 && (
-                <div className="mt-2 bg-amber-50 border border-amber-200 text-amber-700 text-[13px] px-4 py-3 rounded-xl">
+                <div className="mt-2 bg-[#F3F6FA] border border-[#DCE3EE] text-[#1B2B4B] text-[13px] px-4 py-3 rounded-xl">
                   <strong>"{transportSearchQ}"</strong>(으)로 등록된 운송사가 없습니다.
                 </div>
               )}
 
               {selectedTransport && (
-                <div className="mt-2 flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-2 rounded-xl">
-                  <span className="text-[13px] text-blue-700 font-semibold">{selectedTransport.companyName}</span>
-                  <span className="text-[12px] text-gray-400">
+                <div className="mt-2 flex items-center gap-2 bg-[#EEF3FC] border border-[#C9D6EE] px-3 py-2 rounded-xl">
+                  <span className="text-[13px] text-[#0F1A30] font-semibold">{selectedTransport.companyName}</span>
+                  <span className="text-[12px] text-[#7A89A3]">
                     {selectedTransport.businessNumber && `사업자번호: ${selectedTransport.businessNumber}`}
                   </span>
                   <button
                     type="button"
                     onClick={() => { setSelectedTransport(null); setTransportSearchQ(""); }}
-                    className="text-[11px] text-blue-400 hover:text-red-500 ml-auto"
+                    className="text-[11px] text-[#5B6B85] hover:text-[#0F1A30] ml-auto"
                   >
                     ✕
                   </button>
                 </div>
               )}
 
-              <p className="text-[11px] text-gray-400 mt-1">
+              <p className="text-[11px] text-[#7A89A3] mt-1">
                 연결할 운송사를 선택하면 승인 후 오더가 해당 운송사와 연동됩니다.
               </p>
             </Field>
           )}
 
           {/* 주소 */}
-          <Field label="주소">
+          <Field label="주소" full>
             <div className="flex gap-2 mb-2">
               <input
                 value={address}
                 readOnly={signupType === "기존"}
                 onChange={signupType === "신규" ? (e) => setAddress(e.target.value) : undefined}
                 placeholder="주소 검색 버튼을 눌러주세요"
-                className={`flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none ${signupType === "기존" ? "bg-gray-50 cursor-default" : "focus:border-[#1B2B4B]"}`}
+                className={`flex-1 border border-[#DCE3EE] rounded-xl px-4 py-2.5 text-[14px] focus:outline-none ${signupType === "기존" ? "bg-[#F7F9FC] cursor-default" : "focus:border-[#1B2B4B]"}`}
               />
               {signupType === "신규" && (
                 <button
                   type="button"
                   onClick={searchAddress}
-                  className="px-4 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition whitespace-nowrap"
+                  className="h-12 px-4 sm:px-5 shrink-0 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black hover:bg-[#1B2B4B] transition whitespace-nowrap"
                 >
                   주소 검색
                 </button>
@@ -648,7 +626,7 @@ function SignupForm({ signupType, onBack }) {
               value={addressDetail}
               onChange={(e) => setAddressDetail(e.target.value)}
               placeholder="상세주소 입력 (선택)"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+              className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15"
             />
           </Field>
 
@@ -658,50 +636,50 @@ function SignupForm({ signupType, onBack }) {
           <Field label="이름" required>
             <input value={name} onChange={(e) => setName(e.target.value)}
               placeholder="이름 입력"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]" />
+              className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15" />
           </Field>
 
           <Field label="핸드폰번호" required>
             <input value={phone}
               onChange={(e) => setPhone(formatPhone(e.target.value))}
               placeholder="010-0000-0000" maxLength={13}
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]" />
+              className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15" />
           </Field>
 
           <Field label="직책">
-            <select value={position} onChange={(e) => setPosition(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] bg-white">
+            <CustomSelect value={position} onChange={(e) => setPosition(e.target.value)}
+              className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] bg-white">
               <option value="">직책 선택 (선택사항)</option>
               {POSITIONS.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
+            </CustomSelect>
           </Field>
 
           <Field label="입사일">
-            <input type="date" value={hireDate} onChange={(e) => setHireDate(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]" />
-            <p className="text-[11px] text-gray-400 mt-1.5 pl-1">입사일을 입력하면 연차/월차가 자동으로 설정됩니다.</p>
+            <CustomDatePicker value={hireDate} onChange={(e) => setHireDate(e.target.value)} placeholder="입사일 선택 (선택사항)" showIcon
+              className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] bg-white" />
+            <p className="text-[11px] text-[#7A89A3] mt-1.5 pl-1">입사일을 입력하면 연차/월차가 자동으로 설정됩니다.</p>
           </Field>
 
           {/* 계정 정보 */}
           <SectionLabel>계정 정보</SectionLabel>
 
-          <Field label="이메일" required>
+          <Field label="이메일" required full>
             <div className="flex gap-2">
               <input type="email" value={email}
                 onChange={(e) => { setEmail(e.target.value); setEmailChecked(false); setEmailCheckMsg(null); }}
                 placeholder="이메일 입력"
-                className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]" />
+                className="flex-1 min-w-0 h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15" />
               <button
                 type="button"
                 onClick={checkEmailDuplicate}
                 disabled={checkingEmail}
-                className="px-4 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition whitespace-nowrap disabled:opacity-50"
+                className="h-12 px-4 sm:px-5 shrink-0 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black hover:bg-[#1B2B4B] transition whitespace-nowrap disabled:opacity-50"
               >
                 {checkingEmail ? "확인 중..." : "중복확인"}
               </button>
             </div>
             {emailCheckMsg && (
-              <p className={`text-[12px] mt-1 ${emailCheckMsg.ok ? "text-green-600" : "text-red-500"}`}>
+              <p className={`text-[12px] mt-1 ${emailCheckMsg.ok ? "text-[#2D4C82]" : "text-[#0F1A30]"}`}>
                 {emailCheckMsg.msg}
               </p>
             )}
@@ -710,46 +688,46 @@ function SignupForm({ signupType, onBack }) {
           <Field label="비밀번호" required>
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
               placeholder="6자 이상 입력"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]" />
+              className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15" />
           </Field>
 
           <Field label="비밀번호 확인" required>
             <input type="password" value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)}
               placeholder="비밀번호 다시 입력"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]" />
+              className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15" />
           </Field>
 
           {/* 약관 */}
           <SectionLabel>약관 동의</SectionLabel>
 
-          <div className="space-y-3">
-            <TermsBox title="서비스 이용약관" text={SERVICE_TERMS} />
+          <div className="md:col-span-2 grid gap-3 md:grid-cols-2">
+            <div className="space-y-2"><TermsBox title="서비스 이용약관" text={SERVICE_TERMS} />
             <label className="flex items-center gap-2.5 cursor-pointer select-none">
               <input type="checkbox" checked={termsAgreed} onChange={(e) => setTermsAgreed(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 accent-[#1B2B4B] cursor-pointer" />
-              <span className="text-[13px] font-semibold text-gray-700">
-                서비스 이용약관에 동의합니다 <span className="text-red-500">*</span>
+                className="w-4 h-4 rounded accent-[#0F1A30] cursor-pointer" />
+              <span className="text-[14px] font-bold text-[#0F1A30]">
+                서비스 이용약관에 동의합니다 <span className="text-[#2D4C82]">*</span>
               </span>
-            </label>
-
+            </label></div>
+            <div className="space-y-2">
             <TermsBox title="개인정보처리방침" text={PRIVACY_TERMS} />
             <label className="flex items-center gap-2.5 cursor-pointer select-none">
               <input type="checkbox" checked={privacyAgreed} onChange={(e) => setPrivacyAgreed(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 accent-[#1B2B4B] cursor-pointer" />
-              <span className="text-[13px] font-semibold text-gray-700">
-                개인정보처리방침에 동의합니다 <span className="text-red-500">*</span>
+                className="w-4 h-4 rounded accent-[#0F1A30] cursor-pointer" />
+              <span className="text-[14px] font-bold text-[#0F1A30]">
+                개인정보처리방침에 동의합니다 <span className="text-[#2D4C82]">*</span>
               </span>
-            </label>
+            </label></div>
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 text-[13px] px-4 py-3 rounded-xl">
+            <div className="md:col-span-2 bg-[#0F1A30] text-white text-[14px] font-bold px-4 py-3 rounded-xl">
               {error}
             </div>
           )}
 
           <button type="submit" disabled={loading}
-            className="w-full bg-[#1B2B4B] text-white py-3.5 rounded-xl font-bold text-[15px] hover:bg-[#243a60] transition disabled:opacity-50 mt-2">
+            className="md:col-span-2 w-full h-14 rounded-2xl text-white font-black text-[16px] transition disabled:opacity-50 mt-2 shadow-[0_12px_26px_rgba(15,26,48,0.28)]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
             {loading ? "처리 중..." : "가입 신청"}
           </button>
         </form>
@@ -764,12 +742,12 @@ function SignupForm({ signupType, onBack }) {
           className="w-full max-w-md h-[70vh] bg-white rounded-2xl shadow-lg overflow-hidden flex flex-col"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[#EEF1F6]">
             <span className="text-[14px] font-bold text-[#1B2B4B]">주소 검색</span>
             <button
               type="button"
               onClick={() => setAddressPopupOpen(false)}
-              className="text-gray-400 hover:text-gray-600 text-[16px] leading-none"
+              className="text-[#7A89A3] hover:text-[#0F1A30] text-[16px] leading-none"
             >
               ✕
             </button>
@@ -784,18 +762,19 @@ function SignupForm({ signupType, onBack }) {
 
 function SectionLabel({ children }) {
   return (
-    <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider pt-1 pb-1 border-b border-gray-100">
-      {children}
+    <div className="md:col-span-2 flex items-center gap-2.5 pt-3 pb-1 border-b border-[#EEF1F6]">
+      <span className="w-1.5 h-1.5 rotate-45 bg-[#2D4C82]" />
+      <span className="text-[16px] font-black text-[#0F1A30]">{children}</span>
     </div>
   );
 }
 
-function Field({ label, required, children }) {
+function Field({ label, required, children, full }) {
   return (
-    <div>
-      <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
+    <div className={`min-w-0 ${full ? "md:col-span-2" : ""}`}>
+      <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">
         {label}
-        {required && <span className="text-red-500 ml-0.5">*</span>}
+        {required && <span className="text-[#2D4C82] ml-0.5">*</span>}
       </label>
       {children}
     </div>

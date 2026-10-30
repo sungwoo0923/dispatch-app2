@@ -1,5 +1,7 @@
 // src/driver/DriverRegister.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { readPublicCompanies } from "../publicCompanies";
+import CustomDatePicker from "../CustomDatePicker";
 import { auth, db } from "../firebase";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, setDoc, getDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
@@ -81,11 +83,11 @@ const DRIVER_PRIVACY = `수집하는 개인정보 항목
 
 function TermsBox({ title, text }) {
   return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden">
-      <div className="bg-gray-50 px-4 py-2 text-[12px] font-bold text-gray-600 border-b border-gray-200">
+    <div className="border border-[#DCE3EE] rounded-xl overflow-hidden">
+      <div className="bg-[#F3F6FA] px-4 py-2 text-[12px] font-bold text-[#1B2B4B] border-b border-[#DCE3EE]">
         {title}
       </div>
-      <div className="px-4 py-3 h-28 overflow-y-auto text-[12px] text-gray-500 leading-relaxed whitespace-pre-wrap">
+      <div className="px-4 py-3 h-28 overflow-y-auto text-[12px] text-[#5B6B85] leading-relaxed whitespace-pre-wrap">
         {text}
       </div>
     </div>
@@ -94,6 +96,11 @@ function TermsBox({ title, text }) {
 
 export default function DriverRegister() {
   const [companyName, setCompanyName] = useState("");
+  const [coList, setCoList] = useState([]);
+  const [coOpen, setCoOpen] = useState(false);
+  useEffect(() => { readPublicCompanies().then(setCoList).catch(() => {}); }, []);
+  const coKey = companyName.replace(/\s+/g, "").toLowerCase();
+  const coMatches = coKey ? coList.filter((c) => c.companyName.replace(/\s+/g, "").toLowerCase().includes(coKey) && c.companyName !== companyName).slice(0, 8) : [];
   const [carNo, setCarNo] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -283,169 +290,183 @@ export default function DriverRegister() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#061832] via-[#0B2554] to-[#0D2B66] px-4 py-10">
+    <div className="min-h-screen flex items-center justify-center px-4 py-10" style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/26px 26px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/26px 26px, linear-gradient(135deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
       <div className="absolute top-4 right-4">
         <img src="/icons/sflow-icon.png" alt="S-Flow" className="w-9 h-9 rounded-xl shadow-md" />
       </div>
 
-      <div className="w-full max-w-md bg-white rounded-[24px] shadow-2xl p-7">
+      <div className="w-full max-w-md lg:max-w-[980px] bg-white rounded-[24px] shadow-2xl p-6 sm:p-8 lg:p-10">
         <div className="mb-6">
-          <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#2D4C82]">DRIVER · SIGN UP</div>
-          <h1 className="text-[24px] font-black text-[#0B1428] tracking-tight">기사 등록</h1>
+          <div className="text-[11px] font-extrabold tracking-[0.28em] text-[#2D4C82]">DRIVER · SIGN UP</div>
+          <h1 className="text-[27px] font-black text-[#0B1428] tracking-tight">기사님 등록</h1>
           <p className="text-[13px] text-[#7A89A3] mt-0.5">차량번호가 아이디·비밀번호가 됩니다 · 승인 후 로그인</p>
         </div>
 
-        <div className="space-y-4 mb-5">
+        <div className="grid gap-4 lg:grid-cols-2 lg:gap-x-6 mb-5 [&>*]:min-w-0">
           <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
-              소속 회사명 <span className="text-red-400">*</span>
+            <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">
+              소속 회사명 <span className="text-[#2D4C82]">*</span>
             </label>
-            <input
-              value={companyName}
-              onChange={(e) => setCompanyName(e.target.value)}
-              placeholder="가입한 운송사명을 입력하세요"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition"
-            />
-            <p className="text-[11px] text-gray-400 mt-1">관리자가 등록한 회사명과 정확히 일치해야 합니다.</p>
+            <div className="relative">
+              <input
+                value={companyName}
+                onChange={(e) => { setCompanyName(e.target.value); setCoOpen(true); }}
+                onFocus={() => setCoOpen(true)} onBlur={() => setTimeout(() => setCoOpen(false), 150)}
+                placeholder="운송사명 검색"
+                className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15 transition"
+              />
+              {coOpen && coMatches.length > 0 && (
+                <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-[#DCE3EE] rounded-xl shadow-[0_18px_40px_rgba(15,26,48,.18)] overflow-hidden max-h-[280px] overflow-y-auto">
+                  {coMatches.map((c) => (
+                    <button key={c.companyName} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setCompanyName(c.companyName); setCoOpen(false); }}
+                      className="w-full text-left px-4 py-3 hover:bg-[#EEF3FC] border-b border-[#EEF1F6] last:border-0">
+                      <div className="text-[15px] font-black text-[#0F1A30]">{c.companyName}</div>
+                      {c.address && <div className="text-[12.5px] text-[#7A89A3] truncate">{c.address}</div>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <p className="text-[12px] text-[#7A89A3] mt-1">목록에서 고르면 정확히 연결됩니다.</p>
           </div>
 
           <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
-              차량번호 <span className="text-red-400">*</span>
+            <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">
+              차량번호 <span className="text-[#2D4C82]">*</span>
             </label>
             <input
               value={carNo}
               onChange={(e) => setCarNo(e.target.value)}
               placeholder="예: 경기97가1234"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition"
+              className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15 transition"
             />
-            <p className="text-[11px] text-gray-400 mt-1">차량번호가 로그인 ID 및 비밀번호로 사용됩니다.</p>
+            <p className="text-[12px] text-[#7A89A3] mt-1">차량번호가 로그인 ID 및 비밀번호로 사용됩니다.</p>
           </div>
 
           <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
-              이름 <span className="text-red-400">*</span>
+            <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">
+              이름 <span className="text-[#2D4C82]">*</span>
             </label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="실명 입력"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition"
+              className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15 transition"
             />
           </div>
 
           <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
-              핸드폰번호 <span className="text-red-400">*</span>
+            <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">
+              핸드폰번호 <span className="text-[#2D4C82]">*</span>
             </label>
             <input
               value={phone}
               onChange={(e) => setPhone(formatPhone(e.target.value))}
               placeholder="010-0000-0000"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition"
+              className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15 transition"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
-                차량 종류 <span className="text-red-400">*</span>
+              <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">
+                차량 종류 <span className="text-[#2D4C82]">*</span>
               </label>
               <div className="relative">
                 <select
                   value={vehicleCategory}
                   onChange={(e) => setVehicleCategory(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition appearance-none bg-white"
+                  className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15 transition appearance-none bg-white"
                 >
                   <option value="">선택</option>
                   {VEHICLE_CATEGORIES.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none">▾</span>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#7A89A3] text-xs pointer-events-none">▾</span>
               </div>
             </div>
             <div>
-              <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
-                톤수 <span className="text-red-400">*</span>
+              <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">
+                톤수 <span className="text-[#2D4C82]">*</span>
               </label>
               <div className="relative">
                 <select
                   value={tonnage}
                   onChange={(e) => setTonnage(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition appearance-none bg-white"
+                  className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15 transition appearance-none bg-white"
                 >
                   <option value="">선택</option>
                   {TON_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none">▾</span>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#7A89A3] text-xs pointer-events-none">▾</span>
               </div>
             </div>
           </div>
 
           {vehicleCategory === "직접입력" && (
             <div>
-              <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">차량 종류 직접입력 <span className="text-red-400">*</span></label>
+              <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">차량 종류 직접입력 <span className="text-[#2D4C82]">*</span></label>
               <input
                 value={vehicleCategoryCustom}
                 onChange={(e) => setVehicleCategoryCustom(e.target.value)}
                 placeholder="예: 리프트탑"
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition"
+                className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15 transition"
               />
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
-                거주지(시/도) <span className="text-red-400">*</span>
+              <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">
+                거주지(시/도) <span className="text-[#2D4C82]">*</span>
               </label>
               <div className="relative">
                 <select
                   value={residenceProvince}
                   onChange={(e) => { setResidenceProvince(e.target.value); setResidenceCity(""); }}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition appearance-none bg-white"
+                  className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15 transition appearance-none bg-white"
                 >
                   <option value="">선택</option>
                   {RESIDENCE_PROVINCES.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none">▾</span>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#7A89A3] text-xs pointer-events-none">▾</span>
               </div>
             </div>
             {RESIDENCE_SUB_REGIONS[residenceProvince] && (
               <div>
-                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
-                  시/군 <span className="text-red-400">*</span>
+                <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">
+                  시/군 <span className="text-[#2D4C82]">*</span>
                 </label>
                 <div className="relative">
                   <select
                     value={residenceCity}
                     onChange={(e) => setResidenceCity(e.target.value)}
-                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition appearance-none bg-white"
+                    className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15 transition appearance-none bg-white"
                   >
                     <option value="">선택</option>
                     {RESIDENCE_SUB_REGIONS[residenceProvince].map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none">▾</span>
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#7A89A3] text-xs pointer-events-none">▾</span>
                 </div>
               </div>
             )}
           </div>
 
           <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">요청사항</label>
+            <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">요청사항</label>
             <textarea
               value={requestNote}
               onChange={(e) => setRequestNote(e.target.value)}
               rows={2}
               placeholder="관리자에게 전달할 요청사항이 있으면 입력하세요"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition resize-none"
+              className="w-full border border-[#DCE3EE] rounded-xl px-4 py-3 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15 transition resize-none"
             />
           </div>
 
           <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">입사일</label>
-            <input type="date" value={hireDate} onChange={(e) => setHireDate(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition" />
-            <p className="text-[11px] text-gray-400 mt-1.5">입사일을 입력하면 연차/월차가 자동으로 설정됩니다.</p>
+            <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">입사일</label>
+            <CustomDatePicker value={hireDate} onChange={(e) => setHireDate(e.target.value)} placeholder="입사일 선택 (선택)" showIcon
+              className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] bg-white" />
+            <p className="text-[12px] text-[#7A89A3] mt-1.5">입사일을 입력하면 연차/월차가 자동으로 설정됩니다.</p>
           </div>
         </div>
 
@@ -457,22 +478,22 @@ export default function DriverRegister() {
             <div className="text-[11.5px] text-white/60">지입·용차 운임 지급에 쓰입니다 · 가입 후 내 정보에서 수정 가능</div>
           </div>
           <div className="p-4 space-y-3 bg-white">
-            <BankAccountInput value={bank} onChange={setBank} compact noFav />
+            <BankAccountInput value={bank} onChange={setBank} stacked noFav />
             <div>
-              <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">사업자등록번호 <span className="text-gray-400 font-normal">(선택)</span></label>
+              <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">사업자등록번호 <span className="text-[#7A89A3] font-normal">(선택)</span></label>
               <input inputMode="numeric" value={bizNo} onChange={(e) => { const d = onlyDigits(e.target.value).slice(0, 10); setBizNo(d.length > 5 ? `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}` : d.length > 3 ? `${d.slice(0, 3)}-${d.slice(3)}` : d); }}
-                placeholder="000-00-00000" className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] tabular-nums" />
+                placeholder="000-00-00000" className="w-full border border-[#DCE3EE] rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] tabular-nums" />
             </div>
             {bizNo && (
               <div>
-                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">상호 <span className="text-gray-400 font-normal">(선택)</span></label>
-                <input value={bizName} onChange={(e) => setBizName(e.target.value)} placeholder="사업자등록증의 상호" className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]" />
+                <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">상호 <span className="text-[#7A89A3] font-normal">(선택)</span></label>
+                <input value={bizName} onChange={(e) => setBizName(e.target.value)} placeholder="사업자등록증의 상호" className="w-full border border-[#DCE3EE] rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]" />
               </div>
             )}
             <div>
-              <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">사업자등록증 사진 <span className="text-gray-400 font-normal">(선택)</span></label>
+              <label className="block text-[13.5px] font-black text-[#3A4A66] mb-1.5">사업자등록증 사진 <span className="text-[#7A89A3] font-normal">(선택)</span></label>
               {bizImg ? (
-                <div className="relative rounded-xl overflow-hidden border border-gray-200">
+                <div className="relative rounded-xl overflow-hidden border border-[#DCE3EE]">
                   <img src={bizImg} alt="사업자등록증" className="w-full max-h-48 object-contain bg-[#F3F6FA]" />
                   <button type="button" onClick={() => setBizImg("")} className="absolute top-2 right-2 h-7 px-2.5 rounded-lg bg-[#0B1428]/80 text-white text-[12px] font-bold">다시 찍기</button>
                 </div>
@@ -485,7 +506,7 @@ export default function DriverRegister() {
         </div>
 
         {/* 약관 */}
-        <div className="space-y-3 mb-5">
+        <div className="grid gap-3 lg:grid-cols-2 lg:gap-x-6 mb-5 [&>*]:min-w-0">
           <TermsBox title="서비스 이용약관" text={DRIVER_TERMS} />
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -494,7 +515,7 @@ export default function DriverRegister() {
               onChange={(e) => setTermsAgreed(e.target.checked)}
               className="w-4 h-4 accent-[#1B2B4B]"
             />
-            <span className="text-[13px] text-gray-700 font-medium">서비스 이용약관에 동의합니다 <span className="text-red-400">(필수)</span></span>
+            <span className="text-[13px] text-[#0F1A30] font-medium">서비스 이용약관에 동의합니다 <span className="text-[#2D4C82]">(필수)</span></span>
           </label>
 
           <TermsBox title="개인정보처리방침" text={DRIVER_PRIVACY} />
@@ -505,7 +526,7 @@ export default function DriverRegister() {
               onChange={(e) => setPrivacyAgreed(e.target.checked)}
               className="w-4 h-4 accent-[#1B2B4B]"
             />
-            <span className="text-[13px] text-gray-700 font-medium">개인정보처리방침에 동의합니다 <span className="text-red-400">(필수)</span></span>
+            <span className="text-[13px] text-[#0F1A30] font-medium">개인정보처리방침에 동의합니다 <span className="text-[#2D4C82]">(필수)</span></span>
           </label>
 
           <TermsBox title="위치정보 수집 동의" text={DRIVER_GPS} />
@@ -516,18 +537,18 @@ export default function DriverRegister() {
               onChange={(e) => setGpsAgreed(e.target.checked)}
               className="w-4 h-4 accent-[#1B2B4B]"
             />
-            <span className="text-[13px] text-gray-700 font-medium">위치정보 수집에 동의합니다 <span className="text-red-400">(필수)</span></span>
+            <span className="text-[13px] text-[#0F1A30] font-medium">위치정보 수집에 동의합니다 <span className="text-[#2D4C82]">(필수)</span></span>
           </label>
         </div>
 
         {success && (
-          <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 rounded-xl font-semibold">
+          <div className="mb-4 bg-[#EEF3FC] border border-[#C9D6EE] text-[#0F1A30] text-[14px] px-4 py-3 rounded-xl font-bold">
             등록 완료! 관리자 승인 후 로그인이 가능합니다.
           </div>
         )}
 
         {error && (
-          <div className="mb-4 bg-red-50 border border-red-200 text-red-600 text-[13px] px-4 py-3 rounded-xl">
+          <div className="mb-4 bg-[#0F1A30] text-white text-[14px] font-bold px-4 py-3 rounded-xl">
             {error}
           </div>
         )}
@@ -535,7 +556,7 @@ export default function DriverRegister() {
         <button
           onClick={register}
           disabled={loading || success}
-          className="w-full bg-[#1B2B4B] text-white py-3 rounded-xl font-bold text-[15px] hover:bg-[#243a60] transition disabled:opacity-60"
+          className="w-full h-14 rounded-2xl text-white font-black text-[16px] transition disabled:opacity-60 shadow-[0_12px_26px_rgba(15,26,48,0.28)]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}
         >
           {loading ? "등록 중..." : "등록 신청"}
         </button>
@@ -547,7 +568,7 @@ export default function DriverRegister() {
           >
             로그인으로 돌아가기
           </button>
-          {!window.Capacitor?.isNativePlatform?.() && <Link to="/login" className="text-[12px] text-gray-400 hover:underline">
+          {!window.Capacitor?.isNativePlatform?.() && <Link to="/login" className="text-[12px] text-[#7A89A3] hover:underline">
             다른 유형으로 로그인
           </Link>}
         </div>
