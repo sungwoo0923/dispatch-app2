@@ -95,21 +95,21 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
     const unread = me?.uid && !(n.readBy || []).includes(me.uid);
     return (
       <button type="button" onClick={() => setOpenId(n.id)}
-        className={`w-full grid grid-cols-[52px_minmax(0,1fr)_96px_92px] items-center gap-3 px-4 h-[50px] border-b border-[#F1F4F9] text-left transition hover:bg-[#F5F8FD] ${pin ? "bg-[#F3F6FB]" : ""}`}>
+        className={`w-full grid grid-cols-[64px_minmax(0,1fr)_120px_110px] items-center gap-3 px-5 h-[56px] border-b border-[#F1F4F9] text-left transition hover:bg-[#F5F8FD] ${pin ? "bg-[#F3F6FB]" : ""}`}>
         <span className="text-center">
           {pin ? <span className="inline-flex items-center justify-center h-6 px-1.5 rounded-md bg-[#0F1A30] text-[#8FB0F0] text-[10.5px] font-black">📌 고정</span>
-            : <span className="text-[12px] text-[#9AA9C3] tabular-nums" style={{ fontFamily: MONO }}>{no}</span>}
+            : <span className="text-[14px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>{no}</span>}
         </span>
         <span className="min-w-0 flex items-center gap-1.5">
           {n.category && n.category !== "공지사항" && <span className="shrink-0 px-1.5 py-0.5 rounded bg-[#EEF3FC] text-[#1B2B4B] text-[10.5px] font-black">{n.category}</span>}
           {n.audience === "shipper" && <span className="shrink-0 px-1.5 py-0.5 rounded border border-[#C9D6EE] text-[#2D4C82] text-[10.5px] font-black">화주사</span>}
           {(n.teams || []).length > 0 && <span className="shrink-0 px-1.5 py-0.5 rounded border border-[#C9D6EE] text-[#2D4C82] text-[10.5px] font-black">{n.teams.length === 1 ? n.teams[0] : `${n.teams[0]} 외 ${n.teams.length - 1}`}</span>}
-          <span className={`truncate ${pin ? "text-[14.5px] font-black text-[#0B1428]" : unread ? "text-[14px] font-black text-[#0F1A30]" : "text-[14px] font-semibold text-[#3A4A66]"}`}>{n.title || "공지사항"}</span>
+          <span className={`truncate ${pin ? "text-[15.5px] font-black text-[#0B1428]" : unread ? "text-[15px] font-black text-[#0F1A30]" : "text-[15px] font-semibold text-[#3A4A66]"}`}>{n.title || "공지사항"}</span>
           {n.image && <span className="shrink-0 text-[11px] text-[#9AA9C3]">🖼</span>}
-          {isNew(n) && <span className="shrink-0 w-[18px] h-[18px] rounded-full bg-[#1B2B4B] text-white text-[10px] font-black flex items-center justify-center">N</span>}
+          {isNew(n) && unread && <span className="shrink-0 w-[18px] h-[18px] rounded-full bg-[#1B2B4B] text-white text-[10px] font-black flex items-center justify-center">N</span>}
         </span>
-        <span className="truncate text-[12.5px] font-bold text-[#3A4A66]">{n.author || "-"}</span>
-        <span className="text-right text-[12px] text-[#7A879C] tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{shortDate(toMs(n.createdAt))}</span>
+        <span className="truncate text-[14px] font-bold text-[#1B2B4B]">{n.author || "-"}</span>
+        <span className="text-right text-[14px] font-semibold text-[#3A4A66] tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{shortDate(toMs(n.createdAt))}</span>
       </button>
     );
   };
@@ -124,7 +124,7 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
         </div>
         <span className="ml-auto text-[12.5px] font-bold text-[#9AA9C3]">고정 {pinned.length}/{MAX_PINNED} · {visible.length}개의 글</span>
       </div>
-      <div className="grid grid-cols-[52px_minmax(0,1fr)_96px_92px] gap-3 px-4 h-9 items-center bg-[#F8FAFD] border-b border-[#EEF1F6] text-[11.5px] font-black text-[#7A879C]">
+      <div className="grid grid-cols-[64px_minmax(0,1fr)_120px_110px] gap-3 px-5 h-11 items-center bg-[#F3F6FA] border-b border-[#E3E8F0] text-[14px] font-black text-[#1B2B4B]">
         <span className="text-center">번호</span><span>제목</span><span>작성자</span><span className="text-right">날짜</span>
       </div>
       {pinned.map((n) => <Row key={n.id} n={n} pin />)}

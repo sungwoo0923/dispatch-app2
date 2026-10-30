@@ -221,8 +221,8 @@ export default function BoardPage({ company, me, board }) {
             </div>
             <span className="ml-auto text-[12.5px] font-bold text-[#9AA9C3]">{sorted.length}개의 글</span>
           </div>
-          <div className="flex px-5 h-10 items-center bg-[#F8FAFD] border-b border-[#EEF1F6] text-[12px] font-black text-[#7A879C]">
-            <span className="w-12 text-center">번호</span><span className="flex-1 pl-2">제목</span><span className="w-24">작성자</span><span className="w-[88px] text-right">날짜</span><span className="w-12 text-center">조회</span>
+          <div className="flex px-5 h-11 items-center bg-[#F3F6FA] border-b border-[#E3E8F0] text-[14px] font-black text-[#1B2B4B]">
+            <span className="w-14 text-center">번호</span><span className="flex-1 pl-2">제목</span><span className="w-28">작성자</span><span className="w-[110px] text-right">날짜</span><span className="w-14 text-center">조회</span>
           </div>
           {posts === null ? <div className="py-16 text-center text-[13.5px] text-[#9AA9C3]">불러오는 중…</div> : !shown.length ? (
             <div className="py-16 text-center">
@@ -232,17 +232,17 @@ export default function BoardPage({ company, me, board }) {
           ) : shown.map((p, i) => {
             const unread = !(p.readBy || []).includes(me.uid);
             return (
-              <button key={p.id} type="button" onClick={() => setOpenId(p.id)} className={`w-full flex px-5 h-[52px] items-center border-b border-[#F1F4F9] text-left hover:bg-[#F8FAFD] ${p.pinned ? "bg-[#F5F8FD]" : ""}`}>
-                <span className="w-12 text-center text-[12px] text-[#9AA9C3] tabular-nums">{p.pinned ? <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded bg-[#0F1A30] text-[#8FB0F0]">📌</span> : sorted.length - ((page - 1) * PAGE + i)}</span>
+              <button key={p.id} type="button" onClick={() => setOpenId(p.id)} className={`w-full flex px-5 h-[56px] items-center border-b border-[#F1F4F9] text-left hover:bg-[#F8FAFD] ${p.pinned ? "bg-[#F5F8FD]" : ""}`}>
+                <span className="w-14 text-center text-[14px] font-bold text-[#5B6B85] tabular-nums">{p.pinned ? <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded bg-[#0F1A30] text-[#8FB0F0]">📌</span> : sorted.length - ((page - 1) * PAGE + i)}</span>
                 <span className="flex-1 min-w-0 flex items-center gap-1.5 pl-2">
-                  <span className={`truncate ${p.pinned ? "text-[14.5px] font-black text-[#0B1428]" : unread ? "text-[14px] font-black text-[#0F1A30]" : "text-[14px] font-semibold text-[#3A4A66]"}`}>{p.title}</span>
+                  <span className={`truncate ${p.pinned ? "text-[15.5px] font-black text-[#0B1428]" : unread ? "text-[15px] font-black text-[#0F1A30]" : "text-[15px] font-semibold text-[#3A4A66]"}`}>{p.title}</span>
                   {(p.comments || []).length > 0 && <span className="text-[12px] font-black text-[#4B6CB7]">[{p.comments.length}]</span>}
                   {(p.images || []).length > 0 && <span className="text-[11px] text-[#9AA9C3]">📷</span>}
-                  {isNew(p) && <span className="w-[18px] h-[18px] rounded-full bg-[#1B2B4B] text-white text-[10px] font-black flex items-center justify-center">N</span>}
+                  {isNew(p) && unread && <span className="w-[18px] h-[18px] rounded-full bg-[#1B2B4B] text-white text-[10px] font-black flex items-center justify-center">N</span>}
                 </span>
-                <span className="w-24 truncate text-[12.5px] font-bold text-[#3A4A66]">{p.authorName}</span>
-                <span className="w-[88px] text-right text-[12px] text-[#7A879C] tabular-nums whitespace-nowrap">{fmt(toMs(p.createdAt))}</span>
-                <span className="w-12 text-center text-[12px] text-[#7A879C] tabular-nums">{(p.readBy || []).length}</span>
+                <span className="w-28 truncate text-[14px] font-bold text-[#1B2B4B]">{p.authorName}</span>
+                <span className="w-[110px] text-right text-[14px] font-semibold text-[#3A4A66] tabular-nums whitespace-nowrap">{fmt(toMs(p.createdAt))}</span>
+                <span className="w-14 text-center text-[14px] font-semibold text-[#3A4A66] tabular-nums">{(p.readBy || []).length}</span>
               </button>
             );
           })}

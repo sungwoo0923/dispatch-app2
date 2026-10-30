@@ -25,7 +25,7 @@ export function useFavAccounts() {
   return [list, save];
 }
 
-export default function BankAccountInput({ value, onChange, compact = false, noFav = false }) {
+export default function BankAccountInput({ value, onChange, compact = false, stacked = false, noFav = false }) {
   const v = typeof value === "string" ? parseBankText(value) : (value || { bank: "", acct: "", holder: "" });
   const set = (patch) => onChange({ ...v, ...patch });
   const [favs, saveFavs] = useFavAccounts();
@@ -75,14 +75,14 @@ export default function BankAccountInput({ value, onChange, compact = false, noF
           )}
         </div>}
       </div>
-      <div className={`grid gap-1.5 ${compact ? "grid-cols-1" : "grid-cols-[130px_minmax(0,1fr)_110px]"}`}>
-        <CustomSelect value={v.bank || ""} onChange={(e) => set({ bank: e.target.value, acct: v.acct })} className={inp}>
+      <div className={`grid gap-1.5 ${compact ? "grid-cols-1" : stacked ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "grid-cols-[130px_minmax(0,1fr)_110px]"}`}>
+        <CustomSelect value={v.bank || ""} onChange={(e) => set({ bank: e.target.value, acct: v.acct })} className={`${inp} ${stacked ? "order-1" : ""}`}>
           <option value="">은행 선택</option>
           {BANK_NAMES.map((b) => <option key={b} value={b}>{b}</option>)}
         </CustomSelect>
         <input inputMode="numeric" value={formatAccount(v.bank, v.acct)} onChange={(e) => set({ acct: onlyDigits(e.target.value) })}
-          placeholder={v.bank ? "숫자만 입력 — 하이픈 자동" : "은행을 먼저 고르세요"} className={`${inp} tabular-nums tracking-wide`} />
-        <input value={v.holder || ""} onChange={(e) => set({ holder: e.target.value })} placeholder="예금주" className={inp} />
+          placeholder={v.bank ? "계좌번호 — 숫자만 입력하면 하이픈 자동" : "은행을 먼저 고르세요"} className={`${inp} tabular-nums tracking-wide ${stacked ? "order-3 col-span-2" : ""}`} />
+        <input value={v.holder || ""} onChange={(e) => set({ holder: e.target.value })} placeholder="예금주" className={`${inp} ${stacked ? "order-2" : ""}`} />
       </div>
       <div className="flex items-center justify-between gap-2 min-h-[22px]">
         {check ? (

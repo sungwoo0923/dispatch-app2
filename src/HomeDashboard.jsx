@@ -132,11 +132,11 @@ function formatCreatedAt(createdAt) {
 const WIDE_COLS = ["제목", "일정", "내용", "인수인계 내용", "업무 내용"];
 function BoardTable({ headers, rows }) {
   return (
-    <table className="w-full text-[13px] table-fixed">
+    <table className="w-full text-[14px] table-fixed">
       <thead>
         <tr style={{ background: "linear-gradient(90deg,#0F1A30,#1B2B4B 50%,#24396A)" }}>
           {headers.map((h, i) => (
-            <th key={i} className={`px-3 py-3 font-extrabold text-white text-[13px] whitespace-nowrap ${h.align || "text-center"}`}
+            <th key={i} className={`px-3 py-3.5 font-extrabold text-white text-[14px] whitespace-nowrap ${h.align || "text-center"}`}
               style={{ width: WIDE_COLS.includes(h.label) ? undefined : h.width }}>
               <EditableText id={`home.table.header.${h.label}`} defaultText={h.label} />
             </th>

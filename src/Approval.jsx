@@ -32,6 +32,7 @@ import {
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const toMs = (v) => (v?.toMillis ? v.toMillis() : typeof v === "number" ? v : v?.seconds ? v.seconds * 1000 : 0);
+const todayDots = () => { const d = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); return d.replace(/-/g, "."); };
 const pad2 = (n) => String(n).padStart(2, "0");
 const ymd = (ms) => { const d = new Date(ms || Date.now()); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
 const korDate = (ms) => { const d = new Date(ms || Date.now()); return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`; };
@@ -78,7 +79,7 @@ function Stamp({ step }) {
   if (step.status === "approved") {
     return (
       <div className="w-[54px] h-[54px] rounded-full border-[2.5px] border-[#1B2B4B] flex flex-col items-center justify-center text-[#1B2B4B] rotate-[-8deg] leading-none">
-        <span className="text-[13px] font-black">{String(step.name || "").slice(0, 3)}</span>
+        <span className="text-[14px] font-black">{String(step.name || "").slice(0, 3)}</span>
         <span className="text-[9.5px] font-black mt-0.5 tracking-wider">{step.kind === "합의" ? "합의" : "승인"}</span>
       </div>
     );
@@ -86,19 +87,19 @@ function Stamp({ step }) {
   if (step.status === "rejected") {
     return (
       <div className="w-[54px] h-[54px] rounded-full border-[2.5px] border-[#0F1A30] bg-[#0F1A30] flex flex-col items-center justify-center text-white rotate-[-8deg] leading-none">
-        <span className="text-[13px] font-black">반려</span>
+        <span className="text-[14px] font-black">반려</span>
         <span className="text-[9px] font-bold mt-0.5">{String(step.name || "").slice(0, 3)}</span>
       </div>
     );
   }
-  if (step.status === "pending") return <span className="text-[11px] font-black text-[#4B6CB7]">결재 중</span>;
+  if (step.status === "pending") return <span className="text-[12px] font-black text-[#4B6CB7]">결재 중</span>;
   return null;
 }
 
 function Cell({ label, children, wide, last }) {
   return (
     <div className={`flex ${last ? "" : "border-b"} border-[#0F1A30]/60`}>
-      <div className="w-[118px] shrink-0 bg-[#EEF1F6] border-r border-[#0F1A30]/60 px-3 py-2.5 text-[13px] font-black text-[#0F1A30] flex items-center">{label}</div>
+      <div className="w-[118px] shrink-0 bg-[#EEF1F6] border-r border-[#0F1A30]/60 px-3 py-2.5 text-[14px] font-black text-[#0F1A30] flex items-center">{label}</div>
       <div className={`flex-1 min-w-0 px-3.5 py-2.5 text-[14px] text-[#0F1A30] whitespace-pre-wrap break-words ${wide ? "" : ""}`}>{children}</div>
     </div>
   );
@@ -132,20 +133,20 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
     <div ref={paperRef} className="mx-auto bg-white w-full max-w-[780px] px-10 py-10 shadow-[0_10px_30px_rgba(15,26,48,0.12)] relative" style={{ fontFamily: "'Pretendard','Noto Sans KR',sans-serif", minHeight: 1000 }}>
       <div className="flex items-start justify-between gap-6">
         <div className="pt-4 min-w-0">
-          <div className="text-[11.5px] font-extrabold tracking-[0.3em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>{catOf(form.cat).en} · {form.code}</div>
+          <div className="text-[12.5px] font-extrabold tracking-[0.3em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>{catOf(form.cat).en} · {form.code}</div>
           <div className="text-[30px] font-black tracking-[0.12em] text-[#0F1A30] mt-1 whitespace-nowrap">{form.title}</div>
-          <div className="text-[12.5px] text-[#5A6A85] mt-1 flex items-center gap-2" style={{ fontFamily: MONO }}>{docNo || "문서번호는 상신할 때 자동 부여"}
-            {status && status !== "pending" && <span className="px-2 py-0.5 rounded border-2 border-[#0F1A30] text-[12px] font-black text-[#0F1A30] tracking-widest" style={{ fontFamily: "inherit" }}>{STATUS[status]}</span>}
+          <div className="text-[13.5px] text-[#5A6A85] mt-1 flex items-center gap-2" style={{ fontFamily: MONO }}>{docNo || "문서번호는 상신할 때 자동 부여"}
+            {status && status !== "pending" && <span className="px-2 py-0.5 rounded border-2 border-[#0F1A30] text-[13px] font-black text-[#0F1A30] tracking-widest" style={{ fontFamily: "inherit" }}>{STATUS[status]}</span>}
           </div>
         </div>
         {/* 결재란 */}
         <div className="shrink-0 flex border border-[#0F1A30]">
-          <div className="w-7 bg-[#EEF1F6] border-r border-[#0F1A30] flex items-center justify-center text-[12px] font-black text-[#0F1A30] leading-tight text-center py-2" style={{ writingMode: "vertical-rl" }}>결 재</div>
+          <div className="w-7 bg-[#EEF1F6] border-r border-[#0F1A30] flex items-center justify-center text-[13px] font-black text-[#0F1A30] leading-tight text-center py-2" style={{ writingMode: "vertical-rl" }}>결 재</div>
           {cols.map((s, i) => (
             <div key={i} className={`w-[74px] flex flex-col ${i < cols.length - 1 ? "border-r border-[#0F1A30]" : ""}`}>
-              <div className="h-7 bg-[#EEF1F6] border-b border-[#0F1A30] flex items-center justify-center text-[11.5px] font-black text-[#0F1A30] truncate px-1">{i === 0 ? "기안" : s.kind === "합의" ? `합의` : s.position || "결재"}</div>
-              <div className="h-[66px] flex items-center justify-center">{i === 0 ? <span className="text-[13px] font-black text-[#0F1A30]">{String(s.name || "").slice(0, 4)}</span> : <Stamp step={s} />}</div>
-              <div className="h-6 border-t border-[#0F1A30] flex items-center justify-center text-[10.5px] text-[#3A4A66] truncate px-1">{s.at && (i === 0 || s.status === "approved" || s.status === "rejected") ? mmdd(s.at) : s.name || "-"}</div>
+              <div className="h-7 bg-[#EEF1F6] border-b border-[#0F1A30] flex items-center justify-center text-[12.5px] font-black text-[#0F1A30] truncate px-1">{i === 0 ? "기안" : s.kind === "합의" ? `합의` : s.position || "결재"}</div>
+              <div className="h-[66px] flex items-center justify-center">{i === 0 ? <span className="text-[14px] font-black text-[#0F1A30]">{String(s.name || "").slice(0, 4)}</span> : <Stamp step={s} />}</div>
+              <div className="h-6 border-t border-[#0F1A30] flex items-center justify-center text-[11.5px] text-[#3A4A66] truncate px-1">{s.at && (i === 0 || s.status === "approved" || s.status === "rejected") ? mmdd(s.at) : s.name || "-"}</div>
             </div>
           ))}
         </div>
@@ -153,12 +154,12 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
 
       <div className="mt-7 border-t-2 border-x border-b border-[#0F1A30]">
         <div className="flex border-b border-[#0F1A30]/60">
-          <div className="flex-1 flex"><div className="w-[118px] shrink-0 bg-[#EEF1F6] border-r border-[#0F1A30]/60 px-3 py-2.5 text-[13px] font-black">기안자</div><div className="flex-1 px-3.5 py-2.5 text-[14px] font-bold">{drafter?.name || "-"} {drafter?.position || ""}</div></div>
-          <div className="flex-1 flex border-l border-[#0F1A30]/60"><div className="w-[96px] shrink-0 bg-[#EEF1F6] border-r border-[#0F1A30]/60 px-3 py-2.5 text-[13px] font-black">소속</div><div className="flex-1 px-3.5 py-2.5 text-[14px]">{drafter?.team || "-"}</div></div>
+          <div className="flex-1 flex"><div className="w-[118px] shrink-0 bg-[#EEF1F6] border-r border-[#0F1A30]/60 px-3 py-2.5 text-[14px] font-black">기안자</div><div className="flex-1 px-3.5 py-2.5 text-[14px] font-bold">{drafter?.name || "-"} {drafter?.position || ""}</div></div>
+          <div className="flex-1 flex border-l border-[#0F1A30]/60"><div className="w-[96px] shrink-0 bg-[#EEF1F6] border-r border-[#0F1A30]/60 px-3 py-2.5 text-[14px] font-black">소속</div><div className="flex-1 px-3.5 py-2.5 text-[14px]">{drafter?.team || "-"}</div></div>
         </div>
         <div className="flex border-b border-[#0F1A30]/60">
-          <div className="flex-1 flex"><div className="w-[118px] shrink-0 bg-[#EEF1F6] border-r border-[#0F1A30]/60 px-3 py-2.5 text-[13px] font-black">기안일</div><div className="flex-1 px-3.5 py-2.5 text-[14px]">{ymd(createdMs)}</div></div>
-          <div className="flex-1 flex border-l border-[#0F1A30]/60"><div className="w-[96px] shrink-0 bg-[#EEF1F6] border-r border-[#0F1A30]/60 px-3 py-2.5 text-[13px] font-black">참조</div><div className="flex-1 px-3.5 py-2.5 text-[13.5px] truncate">{(cc || []).map((c) => c.name).join(", ") || "-"}</div></div>
+          <div className="flex-1 flex"><div className="w-[118px] shrink-0 bg-[#EEF1F6] border-r border-[#0F1A30]/60 px-3 py-2.5 text-[14px] font-black">기안일</div><div className="flex-1 px-3.5 py-2.5 text-[14px]">{ymd(createdMs)}</div></div>
+          <div className="flex-1 flex border-l border-[#0F1A30]/60"><div className="w-[96px] shrink-0 bg-[#EEF1F6] border-r border-[#0F1A30]/60 px-3 py-2.5 text-[14px] font-black">참조</div><div className="flex-1 px-3.5 py-2.5 text-[14.5px] truncate">{(cc || []).map((c) => c.name).join(", ") || "-"}</div></div>
         </div>
         <Cell label="제목"><span className="font-black text-[15px]">{title || `${form.label}`}</span></Cell>
         {fields.map((f, i) => {
@@ -168,7 +169,7 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
             const rows = (v || []).filter((r) => String(r.name || "").trim() || Number(r.price));
             return (
               <Cell key={f.k} label={f.label} last={last}>
-                <div className="border border-[#0F1A30]/40 text-[13px]">
+                <div className="border border-[#0F1A30]/40 text-[14px]">
                   <div className="flex bg-[#F5F7FB] font-black border-b border-[#0F1A30]/40">{["품목", "수량", "단가", "금액"].map((h, k) => <div key={h} className={`px-2 py-1.5 ${k === 0 ? "flex-1" : "w-[90px] text-right"} ${k ? "border-l border-[#0F1A30]/30" : ""}`}>{h}</div>)}</div>
                   {(rows.length ? rows : [{}]).map((r, k) => (
                     <div key={k} className="flex border-b border-[#0F1A30]/20 last:border-b-0">
@@ -186,7 +187,7 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
           if (f.type === "costs") {
             return (
               <Cell key={f.k} label={f.label} last={last}>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[13.5px]">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[14.5px]">
                   {(v || []).map((r, k) => <div key={k} className="flex justify-between border-b border-dotted border-[#0F1A30]/30 py-0.5"><span>{r.label}</span><span className="font-bold">{Number(r.amount) ? fmtWon(r.amount) : "-"}</span></div>)}
                 </div>
                 <div className="mt-2 text-right text-[14px] font-black">합계 {fmtWon(costsTotal(v))}</div>
@@ -209,13 +210,13 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
       })()}
       <div className="text-center mt-12 text-[15px] text-[#1F2A44]">위와 같이 {form.cat === "expense" ? "결의" : form.cat === "draft" ? "기안" : "신청"}하오니 재가하여 주시기 바랍니다.</div>
       <div className="text-center mt-6 text-[14.5px] text-[#3A4A66]">{korDate(createdMs)}</div>
-      <div className="text-center mt-3 text-[17px] font-black text-[#0F1A30] tracking-[0.1em]">{form.cat === "draft" ? "기안자" : "신청인"} {drafter?.name || ""} <span className="text-[13px] font-bold text-[#7A879C]">(인)</span></div>
+      <div className="text-center mt-3 text-[17px] font-black text-[#0F1A30] tracking-[0.1em]">{form.cat === "draft" ? "기안자" : "신청인"} {drafter?.name || ""} <span className="text-[14px] font-bold text-[#5B6B85]">(인)</span></div>
     </div>
   );
 }
 
 // ─────────────────────────── 입력칸 ───────────────────────────
-const inp = "h-10 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#4B6CB7]";
+const inp = "h-11 w-full px-3 rounded-xl border border-[#D3DBE8] bg-white text-[14.5px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15";
 function StaffSelect({ value, onChange, staff, exclude = [], placeholder = "선택" }) {
   const groups = React.useMemo(() => {
     const g = new Map();
@@ -229,14 +230,27 @@ function StaffSelect({ value, onChange, staff, exclude = [], placeholder = "선�
     </CustomSelect>
   );
 }
-function FieldInput({ f, value, onChange, staff, meUid }) {
-  if (f.type === "bank") return <BankAccountInput value={value} onChange={onChange} />;
-  if (f.type === "textarea" && f.templates) return (
-    <div>
-      <ReasonTemplates templates={f.templates} value={value} onPick={onChange} />
-      <textarea value={value || ""} onChange={(e) => onChange(e.target.value)} rows={f.rows || 3} placeholder={f.ph || "위 양식을 고르거나 직접 입력"} className={`${inp} h-auto py-2 leading-relaxed resize-y`} />
+// 사유 — 드롭다운으로 고르고(직접 입력도 가능) 아래 칸에서 이어 쓴다
+function ReasonSelect({ f, value, onChange }) {
+  const v = String(value || "");
+  const first = v.split("\n")[0];
+  const sel = f.templates.includes(first) ? first : v ? "__direct" : "";
+  const rest = sel && sel !== "__direct" ? v.split("\n").slice(1).join("\n") : v;
+  return (
+    <div className="space-y-1.5">
+      <CustomSelect openOnFocus value={sel} onChange={(e) => { const t = e.target.value; if (t === "__direct") onChange(rest || " "); else onChange(t ? [t, rest].filter((x) => x && x.trim()).join("\n") : rest); }} className={inp}>
+        <option value="">{f.label} 선택</option>
+        {f.templates.map((t) => <option key={t} value={t}>{t}</option>)}
+        <option value="__direct">✎ 직접 입력</option>
+      </CustomSelect>
+      {sel && <textarea value={sel === "__direct" ? v.trimStart() : rest} onChange={(e) => onChange(sel === "__direct" ? e.target.value : [sel, e.target.value].filter((x) => x).join("\n"))} rows={f.rows || 2}
+        placeholder={sel === "__direct" ? `${f.label}를 직접 입력` : "덧붙일 내용 (선택)"} className={`${inp} h-auto py-2 leading-relaxed resize-y`} />}
     </div>
   );
+}
+function FieldInput({ f, value, onChange, staff, meUid }) {
+  if (f.type === "bank") return <BankAccountInput value={value} onChange={onChange} stacked />;
+  if (f.type === "textarea" && f.templates) return <ReasonSelect f={f} value={value} onChange={onChange} />;
   if (f.type === "textarea") return <textarea value={value || ""} onChange={(e) => onChange(e.target.value)} rows={f.rows || 3} placeholder={f.ph || ""} className={`${inp} h-auto py-2 leading-relaxed resize-y`} />;
   if (f.type === "select") return <CustomSelect openOnFocus value={value || ""} onChange={(e) => onChange(e.target.value)} className={inp}>{f.options.map((o) => <option key={o} value={o}>{o}</option>)}</CustomSelect>;
   if (f.type === "staff") return <StaffSelect value={value} onChange={onChange} staff={staff} exclude={[meUid]} placeholder="선택 안 함" />;
@@ -247,7 +261,7 @@ function FieldInput({ f, value, onChange, staff, meUid }) {
     return (
       <div className="relative">
         <input inputMode="numeric" value={value ? Number(value).toLocaleString("ko-KR") : ""} onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ""))} placeholder="0" className={`${inp} pr-9 text-right tabular-nums`} />
-        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12.5px] font-bold text-[#9AA9C3]">원</span>
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[13.5px] font-bold text-[#5B6B85]">원</span>
       </div>
     );
   }
@@ -258,10 +272,10 @@ function FieldInput({ f, value, onChange, staff, meUid }) {
       <div>
         <div className="flex items-center gap-1.5">
           <div className="flex-1 min-w-0"><CustomDatePicker value={v.start || ""} onChange={(e) => onChange({ ...v, start: e.target.value, end: v.end && v.end >= e.target.value ? v.end : e.target.value })} className={inp} showIcon placeholder="시작일" /></div>
-          <span className="text-[#9AA9C3] font-bold">~</span>
+          <span className="text-[#5B6B85] font-bold">~</span>
           <div className="flex-1 min-w-0"><CustomDatePicker value={v.end || ""} onChange={(e) => onChange({ ...v, end: e.target.value && v.start && e.target.value < v.start ? v.start : e.target.value })} className={inp} showIcon placeholder="종료일" /></div>
         </div>
-        {n > 0 && <div className="mt-1 text-[12px] font-bold text-[#1B2B4B]">총 {n}일{bizDays(v) !== n ? ` · 주말·공휴일 빼면 ${bizDays(v)}일` : ""}</div>}
+        {n > 0 && <div className="mt-1 text-[13px] font-bold text-[#1B2B4B]">총 {n}일{bizDays(v) !== n ? ` · 주말·공휴일 빼면 ${bizDays(v)}일` : ""}</div>}
       </div>
     );
   }
@@ -275,12 +289,12 @@ function FieldInput({ f, value, onChange, staff, meUid }) {
             <input value={r.name || ""} onChange={(e) => set(i, "name", e.target.value)} placeholder="품목·내용" className={`${inp} flex-1 min-w-0`} />
             <input inputMode="numeric" value={r.qty ?? ""} onChange={(e) => set(i, "qty", e.target.value.replace(/[^\d.]/g, ""))} placeholder="수량" className={`${inp} !w-14 text-center`} />
             <input inputMode="numeric" value={r.price ? Number(r.price).toLocaleString("ko-KR") : ""} onChange={(e) => set(i, "price", e.target.value.replace(/[^\d]/g, ""))} placeholder="단가" className={`${inp} !w-24 text-right`} />
-            <button type="button" onClick={() => onChange(rows.filter((_, j) => j !== i))} disabled={rows.length <= 1} className="w-8 h-8 shrink-0 rounded-lg text-[#9AA9C3] hover:bg-[#F5F8FD] disabled:opacity-30">✕</button>
+            <button type="button" onClick={() => onChange(rows.filter((_, j) => j !== i))} disabled={rows.length <= 1} className="w-8 h-8 shrink-0 rounded-lg text-[#5B6B85] hover:bg-[#F5F8FD] disabled:opacity-30">✕</button>
           </div>
         ))}
         <div className="flex items-center justify-between">
-          <button type="button" onClick={() => onChange([...rows, { name: "", qty: 1, price: "" }])} className="text-[12.5px] font-bold text-[#4B6CB7]">+ 행 추가</button>
-          <span className="text-[13px] font-black text-[#0F1A30]">합계 {fmtWon(itemsTotal(rows))}</span>
+          <button type="button" onClick={() => onChange([...rows, { name: "", qty: 1, price: "" }])} className="text-[13.5px] font-bold text-[#4B6CB7]">+ 행 추가</button>
+          <span className="text-[14px] font-black text-[#0F1A30]">합계 {fmtWon(itemsTotal(rows))}</span>
         </div>
       </div>
     );
@@ -295,14 +309,14 @@ function FieldInput({ f, value, onChange, staff, meUid }) {
             <input value={r.label || ""} onChange={(e) => set(i, "label", e.target.value)} className={`${inp} !w-28 shrink-0`} />
             <div className="relative flex-1">
               <input inputMode="numeric" value={r.amount ? Number(r.amount).toLocaleString("ko-KR") : ""} onChange={(e) => set(i, "amount", e.target.value.replace(/[^\d]/g, ""))} placeholder="0" className={`${inp} pr-8 text-right`} />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] font-bold text-[#9AA9C3]">원</span>
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[13px] font-bold text-[#5B6B85]">원</span>
             </div>
-            <button type="button" onClick={() => onChange(rows.filter((_, j) => j !== i))} className="w-8 h-8 shrink-0 rounded-lg text-[#9AA9C3] hover:bg-[#F5F8FD]">✕</button>
+            <button type="button" onClick={() => onChange(rows.filter((_, j) => j !== i))} className="w-8 h-8 shrink-0 rounded-lg text-[#5B6B85] hover:bg-[#F5F8FD]">✕</button>
           </div>
         ))}
         <div className="flex items-center justify-between">
-          <button type="button" onClick={() => onChange([...rows, { label: "기타", amount: "" }])} className="text-[12.5px] font-bold text-[#4B6CB7]">+ 항목 추가</button>
-          <span className="text-[13px] font-black text-[#0F1A30]">합계 {fmtWon(costsTotal(rows))}</span>
+          <button type="button" onClick={() => onChange([...rows, { label: "기타", amount: "" }])} className="text-[13.5px] font-bold text-[#4B6CB7]">+ 항목 추가</button>
+          <span className="text-[14px] font-black text-[#0F1A30]">합계 {fmtWon(costsTotal(rows))}</span>
         </div>
       </div>
     );
@@ -347,33 +361,33 @@ function LineEditor({ line, setLine, cc, setCc, staff, me, company, cat }) {
           <option value="__auto">자동 추천(부서장 → 임원 → 대표)</option>
           {tpls.filter((t) => !t.cats?.length || t.cats.includes(cat)).map((t) => <option key={t.id} value={t.id}>{t.shared ? "[공용] " : ""}{t.name}</option>)}
         </CustomSelect>
-        <button type="button" onClick={save} disabled={!line.length} className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[12.5px] font-bold text-[#3A4A66] disabled:opacity-40 shrink-0">저장</button>
+        <button type="button" onClick={save} disabled={!line.length} className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[13.5px] font-bold text-[#3A4A66] disabled:opacity-40 shrink-0">저장</button>
       </div>
       <div className="space-y-1.5">
         <div className="flex items-center gap-2 h-10 px-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0]">
-          <span className="w-6 h-6 rounded-lg bg-[#0F1A30] text-white text-[11px] font-black flex items-center justify-center">기</span>
-          <span className="text-[13.5px] font-black text-[#0F1A30]">{me.name}</span><span className="text-[12px] text-[#7A879C]">{me.position} · 기안자</span>
+          <span className="w-6 h-6 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black flex items-center justify-center">기</span>
+          <span className="text-[14.5px] font-black text-[#0F1A30]">{me.name}</span><span className="text-[13px] text-[#5B6B85]">{me.position} · 기안자</span>
         </div>
         {line.map((s, i) => (
           <div key={`${s.uid}-${i}`} className="flex items-center gap-1.5">
-            <span className="w-6 h-6 shrink-0 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-black flex items-center justify-center">{i + 1}</span>
+            <span className="w-6 h-6 shrink-0 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-black flex items-center justify-center">{i + 1}</span>
             <div className="flex-1 min-w-0"><StaffSelect value={s.uid} staff={staff} exclude={used.filter((u) => u !== s.uid)} onChange={(uid) => { const u = pickUser(staff, uid); if (u) setLine((p) => p.map((x, j) => (j === i ? { ...x, ...u } : x))); }} /></div>
             <CustomSelect openOnFocus value={s.kind || "결재"} onChange={(e) => setLine((p) => p.map((x, j) => (j === i ? { ...x, kind: e.target.value } : x)))} className={`${inp} !w-[74px] shrink-0 px-2`}>
               <option>결재</option><option>합의</option>
             </CustomSelect>
             <div className="flex flex-col shrink-0">
-              <button type="button" onClick={() => move(i, -1)} className="w-6 h-4 text-[10px] text-[#7A879C] hover:text-[#0F1A30]">▲</button>
-              <button type="button" onClick={() => move(i, 1)} className="w-6 h-4 text-[10px] text-[#7A879C] hover:text-[#0F1A30]">▼</button>
+              <button type="button" onClick={() => move(i, -1)} className="w-6 h-4 text-[11px] text-[#5B6B85] hover:text-[#0F1A30]">▲</button>
+              <button type="button" onClick={() => move(i, 1)} className="w-6 h-4 text-[11px] text-[#5B6B85] hover:text-[#0F1A30]">▼</button>
             </div>
-            <button type="button" onClick={() => setLine((p) => p.filter((_, j) => j !== i))} className="w-7 h-8 shrink-0 rounded-lg text-[#9AA9C3] hover:bg-[#F5F8FD]">✕</button>
+            <button type="button" onClick={() => setLine((p) => p.filter((_, j) => j !== i))} className="w-7 h-8 shrink-0 rounded-lg text-[#5B6B85] hover:bg-[#F5F8FD]">✕</button>
           </div>
         ))}
         <StaffSelect value="" staff={staff} exclude={used} placeholder="+ 결재자 추가" onChange={(uid) => { const u = pickUser(staff, uid); if (u) setLine((p) => [...p, { ...u, kind: "결재" }]); }} />
       </div>
       <div>
-        <div className="text-[12px] font-bold text-[#7A879C] mb-1.5">참조자 <span className="font-semibold">(결재 완료 시 알림)</span></div>
+        <div className="text-[13px] font-bold text-[#5B6B85] mb-1.5">참조자 <span className="font-semibold">(결재 완료 시 알림)</span></div>
         <div className="flex flex-wrap gap-1.5 mb-1.5">
-          {cc.map((c) => <span key={c.uid} className="h-7 pl-2.5 pr-1 rounded-lg bg-[#EEF3FB] border border-[#D5E0F2] text-[12.5px] font-bold text-[#1B2B4B] inline-flex items-center gap-1">{c.name}<button type="button" onClick={() => setCc((p) => p.filter((x) => x.uid !== c.uid))} className="w-5 h-5 text-[#7A879C]">✕</button></span>)}
+          {cc.map((c) => <span key={c.uid} className="h-7 pl-2.5 pr-1 rounded-lg bg-[#EEF3FB] border border-[#D5E0F2] text-[13.5px] font-bold text-[#1B2B4B] inline-flex items-center gap-1">{c.name}<button type="button" onClick={() => setCc((p) => p.filter((x) => x.uid !== c.uid))} className="w-5 h-5 text-[#5B6B85]">✕</button></span>)}
         </div>
         <StaffSelect value="" staff={staff} exclude={[me.uid, ...cc.map((c) => c.uid)]} placeholder="+ 참조자 추가" onChange={(uid) => { const u = pickUser(staff, uid); if (u) setCc((p) => [...p, { uid: u.uid, name: u.name }]); }} />
       </div>
@@ -417,7 +431,7 @@ function LeaveCard({ leave, thisDays }) {
   if (!leave || leave.loading) return null;
   if (!leave.ent) {
     return (
-      <div className="rounded-2xl border border-dashed border-[#C9D2E0] bg-white p-4 text-[13px] text-[#5B6B85] leading-relaxed">
+      <div className="rounded-2xl border border-dashed border-[#C9D2E0] bg-white p-4 text-[14px] text-[#5B6B85] leading-relaxed">
         <b className="text-[#0F1A30]">입사일이 등록되지 않아 연차를 계산할 수 없습니다.</b><br />내 정보 또는 인사관리부에서 입사일을 등록하면 발생·사용·잔여 연차가 자동으로 표시됩니다.
       </div>
     );
@@ -429,15 +443,15 @@ function LeaveCard({ leave, thisDays }) {
   return (
     <div className="rounded-2xl p-5 text-white shadow-[0_12px_28px_rgba(15,26,48,0.22)]" style={{ background: "linear-gradient(120deg,#0F1A30,#1B2B4B 60%,#2D4C82)" }}>
       <div className="flex items-center gap-2">
-        <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>MY LEAVE</span>
-        <span className="ml-auto text-[11.5px] font-bold text-white/55">입사 {leave.hireDate} · 근속 {y ? `${y}년 ` : ""}{m}개월</span>
+        <span className="text-[12px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>MY LEAVE</span>
+        <span className="ml-auto text-[12.5px] font-bold text-white/55">입사 {leave.hireDate} · 근속 {y ? `${y}년 ` : ""}{m}개월</span>
       </div>
-      <div className="mt-1 text-[16px] font-black">내 {ent.label} 현황 <span className="text-[12px] font-bold text-white/55">{ent.from} ~ {ent.to}</span></div>
+      <div className="mt-1 text-[16px] font-black">내 {ent.label} 현황 <span className="text-[13px] font-bold text-white/55">{ent.from} ~ {ent.to}</span></div>
       <div className="mt-3 grid grid-cols-4 gap-2">
         {[["발생", ent.total], ["사용", used], ["결재 대기", pending], ["잔여", remain]].map(([l, v]) => (
           <div key={l} className={`rounded-xl px-2.5 py-2 ${l === "잔여" ? "bg-white text-[#0F1A30]" : "bg-white/[0.08]"}`}>
-            <div className={`text-[11px] font-bold ${l === "잔여" ? "text-[#5B6B85]" : "text-white/55"}`}>{l}</div>
-            <div className="text-[19px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}<span className="text-[11px] font-bold ml-0.5">일</span></div>
+            <div className={`text-[12px] font-bold ${l === "잔여" ? "text-[#5B6B85]" : "text-white/55"}`}>{l}</div>
+            <div className="text-[19px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}<span className="text-[12px] font-bold ml-0.5">일</span></div>
           </div>
         ))}
       </div>
@@ -446,7 +460,7 @@ function LeaveCard({ leave, thisDays }) {
         <div className="h-full bg-white/45" style={{ width: pct(pending) }} />
         <div className="h-full bg-[#8FB0F0]" style={{ width: pct(thisDays || 0) }} />
       </div>
-      <div className="mt-2 flex items-center justify-between text-[12px] font-bold">
+      <div className="mt-2 flex items-center justify-between text-[13px] font-bold">
         <span className="text-white/60">사용 · 대기 · 이번 신청</span>
         {thisDays > 0 && <span className={after < 0 ? "text-white underline" : "text-white/90"}>이번 신청 {thisDays}일 → 신청 후 잔여 {after}일{after < 0 ? " (초과)" : ""}</span>}
       </div>
@@ -472,19 +486,34 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive }) {
 
   // 결재선이 비어 있으면 직원 목록이 오는 대로 자동 추천
   React.useEffect(() => { if (!autoLined.current && staff && staff.length) { autoLined.current = true; setLine(suggestLine(staff, me)); } }, [staff, me]);
-  const pickForm = (k) => { if (editId) return; setFormKey(k); setData(initialData(formOf(k))); setTitle(""); setMsg(""); };
+  const pickForm = (k) => { if (editId) return; setFormKey(k); setData(initialData(formOf(k))); setTitle(""); setMsg(""); setMissing([]); };
   // 입력 초기화 — 같은 양식을 처음 상태로(제목·내용·첨부·결재선 추천값). 저장된 문서에는 영향 없음
-  const resetAll = () => {
-    if (!window.confirm("입력한 내용을 모두 지우고 처음 상태로 되돌릴까요?")) return;
+  const resetAll = async () => {
+    if (!await kpConfirm("입력한 내용을 모두 지우고 처음 상태로 되돌릴까요?")) return;
     setData(initialData(form)); setTitle(""); setImages([]); setCc([]); setMsg("");
     setLine(staff && staff.length ? suggestLine(staff, me) : []);
   };
-  const autoTitle = form.titleOf ? form.titleOf(data) : `${form.label} · ${me.name}`;
+  const [missing, setMissing] = React.useState([]);
+  const docName = String(form.title || form.label).replace(/\s+/g, "").replace(/·/g, "·");
+  const autoTitle = `${todayDots()} ${docName}_${me.name || ""}${me.position || ""}`;
   const finalTitle = (title || autoTitle || form.label).trim();
 
   const submit = async () => {
     const miss = missingFields(form, data);
-    if (miss.length) { setMsg(`필수 입력: ${miss.join(", ")}`); return; }
+    const missKeys = form.fields.filter((f) => miss.includes(f.label)).map((f) => f.k);
+    setMissing(missKeys);
+    if (miss.length) {
+      setMsg(`빠진 필수 입력: ${miss.join(", ")}`);
+      // 첫 번째 빠진 칸으로 이동 + 포커스
+      setTimeout(() => {
+        const el = document.getElementById(`apf-${missKeys[0]}`);
+        if (!el) return;
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        const t = el.querySelector("input:not([type=hidden]),textarea,button");
+        t?.focus();
+      }, 30);
+      return;
+    }
     if (!line.length) { setMsg("결재자를 1명 이상 지정해 주세요."); return; }
     if (editId) {
       const live = getLive?.(editId);
@@ -522,64 +551,67 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive }) {
   const half = (f) => f.half;
   return (
     <>
-    {editId && <div className="mb-3 rounded-xl bg-[#0F1A30] text-white px-4 py-2.5 text-[13px] font-bold">문서 수정 중 · {preset.docNo} — 결재자가 열어보기 전까지만 고칠 수 있습니다. 결재선·참조자는 바꿀 수 없습니다(바꾸려면 회수 후 재기안).</div>}
+    {editId && <div className="mb-3 rounded-xl bg-[#0F1A30] text-white px-4 py-2.5 text-[14px] font-bold">문서 수정 중 · {preset.docNo} — 결재자가 열어보기 전까지만 고칠 수 있습니다. 결재선·참조자는 바꿀 수 없습니다(바꾸려면 회수 후 재기안).</div>}
     <div className={`flex flex-wrap gap-2 mb-4 ${editId ? "hidden" : ""}`}>
       {forms.map((f) => (
         <button key={f.key} type="button" onClick={() => pickForm(f.key)}
-          className={`h-9 px-3.5 rounded-xl text-[13px] font-black border transition ${f.key === formKey ? "bg-[#0F1A30] text-white border-[#0F1A30] shadow-[0_6px_16px_rgba(15,26,48,0.25)]" : "bg-white text-[#3A4A66] border-[#E3E8F0] hover:border-[#4B6CB7]"}`}>{f.label}</button>
+          className={`h-9 px-3.5 rounded-xl text-[14px] font-black border transition ${f.key === formKey ? "bg-[#0F1A30] text-white border-[#0F1A30] shadow-[0_6px_16px_rgba(15,26,48,0.25)]" : "bg-white text-[#3A4A66] border-[#E3E8F0] hover:border-[#4B6CB7]"}`}>{f.label}</button>
       ))}
     </div>
-    <div className="grid gap-5" style={{ gridTemplateColumns: "minmax(360px, 420px) 1fr" }}>
+    <div className="grid gap-5" style={{ gridTemplateColumns: "minmax(420px, 520px) 1fr" }}>
       <div className="space-y-4">
         {(formKey === "annual" || formKey === "half") && <LeaveCard leave={leave} thisDays={editId ? 0 : (leaveUseOf({ cat, form: formKey, data })?.days || 0)} />}
         <div className="rounded-2xl border border-[#E3E8F0] bg-white p-5 space-y-3.5">
           <div>
-            <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>FORM</div>
+            <div className="text-[12px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>FORM</div>
             <div className="text-[16px] font-black text-[#0F1A30]">양식 · 내용</div>
           </div>
-          <label className="block"><span className="text-[12.5px] font-bold text-[#7A879C]">양식</span>
+          <label className="block"><span className="text-[14.5px] font-black text-[#3A4A66]">양식</span>
             <CustomSelect openOnFocus value={formKey} disabled={!!editId} onChange={(e) => pickForm(e.target.value)} className={`${inp} !h-11 font-black disabled:bg-[#F5F7FA]`}>{forms.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}</CustomSelect>
           </label>
-          <label className="block"><span className="text-[12.5px] font-bold text-[#7A879C]">문서 제목 <span className="font-semibold">(비우면 자동)</span></span>
+          <label className="block"><span className="text-[14.5px] font-black text-[#3A4A66]">문서 제목 <span className="font-semibold text-[#5B6B85]">(비우면 자동 · {autoTitle})</span></span>
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={autoTitle} className={inp} />
           </label>
           <div className="grid grid-cols-2 gap-x-2.5 gap-y-3">
-            {form.fields.map((f) => (
-              <label key={f.k} className={`block ${half(f) ? "" : "col-span-2"}`}>
-                <span className="text-[12.5px] font-bold text-[#7A879C]">{f.label}{f.required && <span className="text-[#0F1A30]"> *</span>}</span>
-                <div className="mt-1"><FieldInput f={f} value={data[f.k]} onChange={(v) => setData((p) => ({ ...p, [f.k]: v }))} staff={staff} meUid={me.uid} /></div>
-              </label>
-            ))}
+            {form.fields.map((f) => {
+              const bad = missing.includes(f.k);
+              return (
+                <div key={f.k} id={`apf-${f.k}`} className={`block rounded-xl ${half(f) && f.type !== "bank" ? "" : "col-span-2"} ${bad ? "ring-2 ring-[#2D4C82] ring-offset-4 bg-[#EEF3FC]" : ""}`}>
+                  <span className={`flex items-center gap-1.5 text-[14.5px] font-black ${bad ? "text-[#0B1428]" : "text-[#3A4A66]"}`}>{f.label}{f.required && <span className="text-[#2D4C82]">*</span>}{bad && <span className="ml-auto h-5 px-2 rounded-md bg-[#0F1A30] text-white text-[12px] font-black inline-flex items-center">입력 필요</span>}</span>
+                  <div className="mt-1.5"><FieldInput f={f} value={data[f.k]} onChange={(v) => { setData((p) => ({ ...p, [f.k]: v })); if (bad) setMissing((m) => m.filter((x) => x !== f.k)); }} staff={staff} meUid={me.uid} /></div>
+                </div>
+              );
+            })}
           </div>
           <div>
-            <span className="text-[12.5px] font-bold text-[#7A879C]">증빙·첨부 이미지 <span className="font-semibold">({images.length}/3 · 영수증·진단서 등)</span></span>
+            <span className="text-[14.5px] font-black text-[#3A4A66]">증빙·첨부 이미지 <span className="font-semibold">({images.length}/3 · 영수증·진단서 등)</span></span>
             <div className="mt-1.5 flex flex-wrap gap-2">
               {images.map((src, i) => (
                 <div key={i} className="relative w-16 h-16 rounded-xl overflow-hidden border border-[#E3E8F0]">
                   <img src={src} alt="" className="w-full h-full object-cover" />
-                  <button type="button" onClick={() => setImages((p) => p.filter((_, k) => k !== i))} className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-[#0F1A30]/80 text-white text-[11px]">✕</button>
+                  <button type="button" onClick={() => setImages((p) => p.filter((_, k) => k !== i))} className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-[#0F1A30]/80 text-white text-[12px]">✕</button>
                 </div>
               ))}
-              {images.length < 3 && <button type="button" onClick={() => fileRef.current?.click()} className="w-16 h-16 rounded-xl border-2 border-dashed border-[#C9D2E0] text-[#7A879C] text-[11.5px] font-bold">+ 첨부</button>}
+              {images.length < 3 && <button type="button" onClick={() => fileRef.current?.click()} className="w-16 h-16 rounded-xl border-2 border-dashed border-[#C9D2E0] text-[#5B6B85] text-[12.5px] font-bold">+ 첨부</button>}
               <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={async (e) => { const fs = [...(e.target.files || [])].slice(0, 3 - images.length); e.target.value = ""; try { const out = await Promise.all(fs.map((f) => compressImage(f, 1200, 0.72))); setImages((p) => [...p, ...out].slice(0, 3)); } catch { setMsg("이미지를 읽지 못했습니다."); } }} />
             </div>
           </div>
         </div>
         <div className="rounded-2xl border border-[#E3E8F0] bg-white p-5">
           <div className="mb-3">
-            <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>APPROVAL LINE</div>
+            <div className="text-[12px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>APPROVAL LINE</div>
             <div className="text-[16px] font-black text-[#0F1A30]">결재선</div>
           </div>
           {editId ? (
             <div className="space-y-1.5">
-              {line.map((s, i) => <div key={i} className="h-9 px-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] flex items-center gap-2 text-[13px]"><span className="w-6 h-6 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-black flex items-center justify-center">{i + 1}</span><b className="text-[#0F1A30]">{s.name}</b><span className="text-[#7A879C]">{s.position} · {s.kind || "결재"}</span></div>)}
-              {cc.length > 0 && <div className="text-[12.5px] text-[#5B6B85] px-1">참조 {cc.map((c) => c.name).join(", ")}</div>}
+              {line.map((s, i) => <div key={i} className="h-9 px-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] flex items-center gap-2 text-[14px]"><span className="w-6 h-6 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-black flex items-center justify-center">{i + 1}</span><b className="text-[#0F1A30]">{s.name}</b><span className="text-[#5B6B85]">{s.position} · {s.kind || "결재"}</span></div>)}
+              {cc.length > 0 && <div className="text-[13.5px] text-[#5B6B85] px-1">참조 {cc.map((c) => c.name).join(", ")}</div>}
             </div>
           ) : <LineEditor line={line} setLine={setLine} cc={cc} setCc={setCc} staff={staff} me={me} company={company} cat={cat} />}
         </div>
-        {msg && <div className="rounded-xl bg-white border border-[#DCE3EE] px-4 py-2.5 text-[13px] font-bold text-[#0F1A30]">⚠ {msg}</div>}
+        {msg && <div className="rounded-xl bg-[#0F1A30] text-white px-4 py-3 text-[14px] font-bold">⚠ {msg}</div>}
         {!editId && (
-          <button type="button" onClick={resetAll} className="w-full h-11 rounded-2xl border border-[#DCE3EE] bg-white text-[13.5px] font-black text-[#3A4A66] hover:border-[#4B6CB7] inline-flex items-center justify-center gap-2">
+          <button type="button" onClick={resetAll} className="w-full h-11 rounded-2xl border border-[#DCE3EE] bg-white text-[14.5px] font-black text-[#3A4A66] hover:border-[#4B6CB7] inline-flex items-center justify-center gap-2">
             <ShellIcon name="refresh" size={15} />입력 내용 초기화
           </button>
         )}
@@ -590,8 +622,8 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive }) {
       <div className="rounded-2xl bg-[#E9EDF3] p-5 overflow-auto">
         <div className="sticky top-0">
           <div className="flex items-center justify-between mb-3 px-1">
-            <span className="text-[12px] font-extrabold tracking-[0.2em] text-[#5A6A85]" style={{ fontFamily: MONO }}>LIVE PREVIEW</span>
-            <span className="text-[12px] font-bold text-[#7A879C]">입력하는 대로 문서가 바로 만들어집니다</span>
+            <span className="text-[13px] font-extrabold tracking-[0.2em] text-[#5A6A85]" style={{ fontFamily: MONO }}>LIVE PREVIEW</span>
+            <span className="text-[13px] font-bold text-[#5B6B85]">입력하는 대로 문서가 바로 만들어집니다</span>
           </div>
           <FitPaper><ApprovalPaper form={form} data={data} title={finalTitle} line={line.map((s, i) => ({ ...s, status: i === 0 ? "pending" : "wait" }))} cc={cc} drafter={me} createdMs={Date.now()} staff={staff} /></FitPaper>
         </div>
@@ -609,7 +641,7 @@ function Progress({ d }) {
         <React.Fragment key={i}>
           {i > 0 && <span className={`w-3 h-[2px] ${s.status === "approved" || (d.line[i - 1].status === "approved") ? "bg-[#1B2B4B]" : "bg-[#DCE3EE]"}`} />}
           <span title={`${s.name} ${s.position} · ${s.status === "approved" ? "승인" : s.status === "rejected" ? "반려" : s.status === "pending" ? (s.viewedAt ? "열람함 · 결재 중" : "결재 중(미열람)") : "대기"}`}
-            className={`w-[22px] h-[22px] rounded-full text-[10px] font-black flex items-center justify-center ${s.status === "approved" ? "bg-[#1B2B4B] text-white" : s.status === "rejected" ? "bg-[#0F1A30] text-white" : s.status === "pending" ? "bg-white text-[#1B2B4B] ring-2 ring-[#1B2B4B]" : "bg-[#EEF1F6] text-[#9AA9C3]"}`}>
+            className={`w-[22px] h-[22px] rounded-full text-[11px] font-black flex items-center justify-center ${s.status === "approved" ? "bg-[#1B2B4B] text-white" : s.status === "rejected" ? "bg-[#0F1A30] text-white" : s.status === "pending" ? "bg-white text-[#1B2B4B] ring-2 ring-[#1B2B4B]" : "bg-[#EEF1F6] text-[#5B6B85]"}`}>
             {s.status === "rejected" ? "✕" : String(s.name || "?").slice(0, 1)}
           </span>
         </React.Fragment>
@@ -708,7 +740,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit }) {
           <FitPaper><ApprovalPaper paperRef={paperRef} form={form} data={d.data} title={d.title} line={d.line} cc={d.cc} drafter={d.drafter} docNo={d.docNo} createdMs={toMs(d.createdAt)} staff={staff} status={d.status} /></FitPaper>
           {(d.images || []).length > 0 && (
             <div className="max-w-[780px] mx-auto mt-4 bg-white rounded-2xl p-4">
-              <div className="text-[12.5px] font-black text-[#7A879C] mb-2">첨부 {d.images.length}장</div>
+              <div className="text-[13.5px] font-black text-[#5B6B85] mb-2">첨부 {d.images.length}장</div>
               <div className="grid grid-cols-3 gap-2">{d.images.map((src, i) => <a key={i} href={src} target="_blank" rel="noreferrer"><img src={src} alt="" className="w-full h-40 object-cover rounded-xl border border-[#E3E8F0]" /></a>)}</div>
             </div>
           )}
@@ -716,23 +748,23 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit }) {
         <aside className="w-[360px] shrink-0 bg-white border-l border-[#E3E8F0] flex flex-col">
           <div className="px-5 py-4 border-b border-[#EEF1F6] flex items-center gap-2">
             <div className="min-w-0">
-              <div className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>{d.docNo}</div>
+              <div className="text-[12px] font-extrabold tracking-[0.2em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>{d.docNo}</div>
               <div className="text-[16px] font-black text-[#0F1A30] truncate">{d.title}</div>
             </div>
-            <button type="button" onClick={onClose} className="ml-auto w-9 h-9 rounded-xl hover:bg-[#F5F8FD] text-[#7A879C] shrink-0">✕</button>
+            <button type="button" onClick={onClose} className="ml-auto w-9 h-9 rounded-xl hover:bg-[#F5F8FD] text-[#5B6B85] shrink-0">✕</button>
           </div>
           <div className="flex-1 overflow-y-auto p-5 space-y-4">
             <div className="rounded-2xl p-4 text-white" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
-              <div className="text-[12px] font-bold text-white/60">{d.formLabel} · {d.drafter?.name} {d.drafter?.position}</div>
+              <div className="text-[13px] font-bold text-white/60">{d.formLabel} · {d.drafter?.name} {d.drafter?.position}</div>
               <div className="text-[20px] font-black mt-0.5">{d.cancel?.status === "pending" && d.status === "approved" ? `결재 취소 검토 중 · ${d.cancel.line?.[d.cancel.step]?.name || ""} 차례` : `${STATUS[d.status]}${d.status === "pending" && d.line?.[d.step] ? ` · ${d.line[d.step].name} 차례${d.line[d.step].viewedAt ? "(열람함)" : ""}` : ""}`}</div>
-              {(d.amount > 0 || d.days > 0) && <div className="text-[13px] font-bold text-white/80 mt-1">{d.days > 0 ? `${d.days}일` : ""}{d.days > 0 && d.amount > 0 ? " · " : ""}{d.amount > 0 ? fmtWon(d.amount) : ""}</div>}
+              {(d.amount > 0 || d.days > 0) && <div className="text-[14px] font-bold text-white/80 mt-1">{d.days > 0 ? `${d.days}일` : ""}{d.days > 0 && d.amount > 0 ? " · " : ""}{d.amount > 0 ? fmtWon(d.amount) : ""}</div>}
               <div className="mt-3"><Progress d={d} /></div>
             </div>
             {d.cancel && (
               <div className="rounded-2xl border border-[#DCE3EE] bg-[#F8FAFD] p-4">
-                <div className="text-[13px] font-black text-[#0F1A30]">결재 취소 요청 · {d.cancel.status === "pending" ? "진행 중" : d.cancel.status === "approved" ? "취소 완료" : "취소 반려"}</div>
-                <div className="text-[12.5px] text-[#3A4A66] mt-1 whitespace-pre-wrap">사유: {d.cancel.reason}</div>
-                <div className="mt-2 flex flex-wrap gap-1">{(d.cancel.line || []).map((x, i) => <span key={i} className={`h-6 px-2 rounded-md text-[11.5px] font-bold inline-flex items-center ${x.status === "approved" ? "bg-[#1B2B4B] text-white" : x.status === "rejected" ? "bg-[#0F1A30] text-white" : x.status === "pending" ? "border border-[#1B2B4B] text-[#1B2B4B]" : "bg-[#EEF1F6] text-[#9AA9C3]"}`}>{x.name} {x.status === "approved" ? "동의" : x.status === "rejected" ? "거부" : x.status === "pending" ? "검토 중" : "대기"}</span>)}</div>
+                <div className="text-[14px] font-black text-[#0F1A30]">결재 취소 요청 · {d.cancel.status === "pending" ? "진행 중" : d.cancel.status === "approved" ? "취소 완료" : "취소 반려"}</div>
+                <div className="text-[13.5px] text-[#3A4A66] mt-1 whitespace-pre-wrap">사유: {d.cancel.reason}</div>
+                <div className="mt-2 flex flex-wrap gap-1">{(d.cancel.line || []).map((x, i) => <span key={i} className={`h-6 px-2 rounded-md text-[12.5px] font-bold inline-flex items-center ${x.status === "approved" ? "bg-[#1B2B4B] text-white" : x.status === "rejected" ? "bg-[#0F1A30] text-white" : x.status === "pending" ? "border border-[#1B2B4B] text-[#1B2B4B]" : "bg-[#EEF1F6] text-[#5B6B85]"}`}>{x.name} {x.status === "approved" ? "동의" : x.status === "rejected" ? "거부" : x.status === "pending" ? "검토 중" : "대기"}</span>)}</div>
               </div>
             )}
             {turn && (
@@ -748,49 +780,49 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit }) {
             {mine && cancelAsk && (
               <div className="rounded-2xl border-2 border-[#1B2B4B] p-4 space-y-2.5">
                 <div className="text-[14px] font-black text-[#0F1A30]">결재 취소 요청</div>
-                <div className="text-[12.5px] text-[#5B6B85] leading-relaxed">승인된 문서를 취소하려면 결재자들의 동의가 필요합니다. 같은 결재선 순서로 다시 승인받으면 「결재 취소」로 바뀌고, 연차는 자동으로 돌려받습니다.</div>
+                <div className="text-[13.5px] text-[#5B6B85] leading-relaxed">승인된 문서를 취소하려면 결재자들의 동의가 필요합니다. 같은 결재선 순서로 다시 승인받으면 「결재 취소」로 바뀌고, 연차는 자동으로 돌려받습니다.</div>
                 <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} placeholder="취소 사유 (예: 일정 변경으로 휴가 취소)" className={`${inp} h-auto py-2`} />
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => { setCancelAsk(false); setComment(""); }} className="flex-1 h-10 rounded-xl border border-[#DCE3EE] text-[13px] font-bold text-[#5B6B85]">닫기</button>
-                  <button type="button" disabled={busy} onClick={() => act("cancel-req")} className="flex-[1.6] h-10 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black disabled:opacity-50">취소 요청 보내기</button>
+                  <button type="button" onClick={() => { setCancelAsk(false); setComment(""); }} className="flex-1 h-10 rounded-xl border border-[#DCE3EE] text-[14px] font-bold text-[#5B6B85]">닫기</button>
+                  <button type="button" disabled={busy} onClick={() => act("cancel-req")} className="flex-[1.6] h-10 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black disabled:opacity-50">취소 요청 보내기</button>
                 </div>
               </div>
             )}
             {!turn && !cancelAsk && d.status === "pending" && (
               <div className="space-y-2">
                 <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="의견 남기기" className={`${inp} h-auto py-2`} />
-                <button type="button" disabled={busy || !comment.trim()} onClick={() => act("comment")} className="w-full h-10 rounded-xl border border-[#DCE3EE] text-[13px] font-bold text-[#3A4A66] disabled:opacity-40">의견 등록</button>
+                <button type="button" disabled={busy || !comment.trim()} onClick={() => act("comment")} className="w-full h-10 rounded-xl border border-[#DCE3EE] text-[14px] font-bold text-[#3A4A66] disabled:opacity-40">의견 등록</button>
               </div>
             )}
             <div className="flex flex-wrap gap-1.5">
-              {canEdit(d, me.uid) && <button type="button" onClick={() => onEdit(d)} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">수정</button>}
-              {mine && d.status === "pending" && !anyApproved && <button type="button" disabled={busy} onClick={() => act("withdraw")} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#3A4A66]">회수</button>}
-              {mine && d.status === "approved" && d.cancel?.status !== "pending" && !cancelAsk && <button type="button" onClick={() => { setCancelAsk(true); setComment(""); }} className="h-9 px-3.5 rounded-lg border border-[#0F1A30] text-[12.5px] font-black text-[#0F1A30]">결재 취소 요청</button>}
-              {mine && ["rejected", "withdrawn"].includes(d.status) && <button type="button" onClick={() => onRedraft(d)} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">재기안</button>}
-              {mine && ["approved", "cancelled"].includes(d.status) && <button type="button" onClick={() => onRedraft({ ...d, id: null })} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#3A4A66]">복사해서 새로 쓰기</button>}
+              {canEdit(d, me.uid) && <button type="button" onClick={() => onEdit(d)} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13.5px] font-black">수정</button>}
+              {mine && d.status === "pending" && !anyApproved && <button type="button" disabled={busy} onClick={() => act("withdraw")} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#3A4A66]">회수</button>}
+              {mine && d.status === "approved" && d.cancel?.status !== "pending" && !cancelAsk && <button type="button" onClick={() => { setCancelAsk(true); setComment(""); }} className="h-9 px-3.5 rounded-lg border border-[#0F1A30] text-[13.5px] font-black text-[#0F1A30]">결재 취소 요청</button>}
+              {mine && ["rejected", "withdrawn"].includes(d.status) && <button type="button" onClick={() => onRedraft(d)} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13.5px] font-black">재기안</button>}
+              {mine && ["approved", "cancelled"].includes(d.status) && <button type="button" onClick={() => onRedraft({ ...d, id: null })} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#3A4A66]">복사해서 새로 쓰기</button>}
               {(() => {
                 const hidden = (d.hiddenBy || []).includes(me.uid);
                 const finished = d.status !== "pending" && !(d.status === "approved" && d.cancel?.status === "pending");
-                if (hidden) return <button type="button" onClick={() => updateDoc(doc(db, "approvals", d.id), { hiddenBy: arrayRemove(me.uid) }).catch((e) => window.alert(e.message))} className="h-9 px-3.5 rounded-lg border border-[#0F1A30] text-[12.5px] font-black text-[#0F1A30]">보관함으로 되돌리기</button>;
+                if (hidden) return <button type="button" onClick={() => updateDoc(doc(db, "approvals", d.id), { hiddenBy: arrayRemove(me.uid) }).catch((e) => window.alert(e.message))} className="h-9 px-3.5 rounded-lg border border-[#0F1A30] text-[13.5px] font-black text-[#0F1A30]">보관함으로 되돌리기</button>;
                 if (!finished) return null;
-                return <button type="button" onClick={async () => { if (!await kpConfirm("내 보관함에서 이 문서를 삭제할까요?\n(회사 기록 원본은 남고, 결재함 › 삭제한 문서에서 되돌릴 수 있습니다)")) return; await updateDoc(doc(db, "approvals", d.id), { hiddenBy: arrayUnion(me.uid) }).catch((e) => window.alert(e.message)); onClose(); }} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#7A879C]">삭제</button>;
+                return <button type="button" onClick={async () => { if (!await kpConfirm("내 보관함에서 이 문서를 삭제할까요?\n(회사 기록 원본은 남고, 결재함 › 삭제한 문서에서 되돌릴 수 있습니다)")) return; await updateDoc(doc(db, "approvals", d.id), { hiddenBy: arrayUnion(me.uid) }).catch((e) => window.alert(e.message)); onClose(); }} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#5B6B85]">삭제</button>;
               })()}
-              <button type="button" onClick={print} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#3A4A66]">인쇄</button>
+              <button type="button" onClick={print} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#3A4A66]">인쇄</button>
             </div>
             {mine && d.status === "pending" && (
-              <div className="text-[11.5px] text-[#9AA9C3] leading-relaxed">
+              <div className="text-[12.5px] text-[#5B6B85] leading-relaxed">
                 {canEdit(d, me.uid) ? "· 첫 결재자가 열어보기 전이라 수정할 수 있습니다." : d.line?.[0]?.viewedAt ? `· ${d.line[0].name}님이 ${new Date(d.line[0].viewedAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}에 열람해 수정이 잠겼습니다.` : ""}
                 {!anyApproved ? " 아직 승인 전이라 회수 후 재기안할 수 있습니다." : " 승인이 진행된 문서는 회수할 수 없습니다 — 현재 결재자에게 반려를 요청하세요."}
               </div>
             )}
             <div>
-              <div className="text-[12.5px] font-black text-[#0F1A30] mb-2">결재 이력</div>
+              <div className="text-[13.5px] font-black text-[#0F1A30] mb-2">결재 이력</div>
               <div className="relative pl-4 space-y-3 before:absolute before:left-[5px] before:top-1 before:bottom-1 before:w-[2px] before:bg-[#E3E8F0]">
                 {(d.history || []).map((h, i) => (
                   <div key={i} className="relative">
                     <span className={`absolute -left-4 top-1 w-3 h-3 rounded-full ring-2 ring-white ${h.action === "반려" ? "bg-[#0F1A30]" : h.action === "승인" ? "bg-[#1B2B4B]" : "bg-[#9AA9C3]"}`} />
-                    <div className="text-[13px]"><b className="text-[#0F1A30]">{h.name}</b> <span className="font-black text-[#1B2B4B]">{h.action}</span> <span className="text-[11.5px] text-[#9AA9C3]">{new Date(h.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span></div>
-                    {h.comment && <div className="mt-1 text-[12.5px] text-[#3A4A66] bg-[#F5F8FD] rounded-lg px-2.5 py-1.5 whitespace-pre-wrap">{h.comment}</div>}
+                    <div className="text-[14px]"><b className="text-[#0F1A30]">{h.name}</b> <span className="font-black text-[#1B2B4B]">{h.action}</span> <span className="text-[12.5px] text-[#5B6B85]">{new Date(h.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span></div>
+                    {h.comment && <div className="mt-1 text-[13.5px] text-[#3A4A66] bg-[#F5F8FD] rounded-lg px-2.5 py-1.5 whitespace-pre-wrap">{h.comment}</div>}
                   </div>
                 ))}
               </div>
@@ -803,11 +835,11 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit }) {
 
 // ─────────────────────────── 문서 목록 ───────────────────────────
 function DocList({ docs, onOpen, empty, uid }) {
-  if (docs === null) return <div className="py-16 text-center text-[13.5px] text-[#9AA9C3]">불러오는 중…</div>;
+  if (docs === null) return <div className="py-16 text-center text-[14.5px] text-[#5B6B85]">불러오는 중…</div>;
   if (!docs.length) return (
     <div className="py-16 text-center">
-      <div className="w-14 h-14 mx-auto rounded-2xl bg-[#F5F8FD] flex items-center justify-center text-[#9AA9C3]"><ShellIcon name="file" size={24} /></div>
-      <div className="mt-3 text-[13.5px] font-bold text-[#9AA9C3]">{empty}</div>
+      <div className="w-14 h-14 mx-auto rounded-2xl bg-[#F5F8FD] flex items-center justify-center text-[#5B6B85]"><ShellIcon name="file" size={24} /></div>
+      <div className="mt-3 text-[14.5px] font-bold text-[#5B6B85]">{empty}</div>
     </div>
   );
   return (
@@ -817,20 +849,20 @@ function DocList({ docs, onOpen, empty, uid }) {
           <span className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}><ShellIcon name={catOf(d.cat).icon} size={18} /></span>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-black px-1.5 py-0.5 rounded border border-[#0F1A30] text-[#0F1A30] shrink-0">{d.formLabel}</span>
-              {myTurn(d, uid) && <span className="text-[11px] font-black px-1.5 py-0.5 rounded bg-[#0F1A30] text-white shrink-0">{cancelTurn(d, uid) ? "취소 검토" : "내 차례"}</span>}
-              {(mineUnread(d, uid) || ccUnread(d, uid)) && <span className="w-[18px] h-[18px] rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center shrink-0">N</span>}
-              {d.cancel?.status === "pending" && d.status === "approved" && !cancelTurn(d, uid) && <span className="text-[11px] font-black px-1.5 py-0.5 rounded border border-[#9AA9C3] text-[#5B6B85] shrink-0">취소 요청 중</span>}
+              <span className="text-[12px] font-black px-1.5 py-0.5 rounded border border-[#0F1A30] text-[#0F1A30] shrink-0">{d.formLabel}</span>
+              {myTurn(d, uid) && <span className="text-[12px] font-black px-1.5 py-0.5 rounded bg-[#0F1A30] text-white shrink-0">{cancelTurn(d, uid) ? "취소 검토" : "내 차례"}</span>}
+              {(mineUnread(d, uid) || ccUnread(d, uid)) && <span className="w-[18px] h-[18px] rounded-full bg-rose-500 text-white text-[11px] font-black flex items-center justify-center shrink-0">N</span>}
+              {d.cancel?.status === "pending" && d.status === "approved" && !cancelTurn(d, uid) && <span className="text-[12px] font-black px-1.5 py-0.5 rounded border border-[#9AA9C3] text-[#5B6B85] shrink-0">취소 요청 중</span>}
               <span className="text-[14.5px] font-black text-[#0F1A30] truncate">{d.title}</span>
             </div>
-            <div className="text-[12.5px] text-[#7A879C] truncate mt-0.5">{d.summary}</div>
+            <div className="text-[13.5px] text-[#5B6B85] truncate mt-0.5">{d.summary}</div>
           </div>
           <div className="hidden xl:block text-right shrink-0 w-[120px]">
-            <div className="text-[13px] font-bold text-[#3A4A66]">{d.drafter?.name} {d.drafter?.position}</div>
-            <div className="text-[11.5px] text-[#9AA9C3]" style={{ fontFamily: MONO }}>{ymd(toMs(d.createdAt))}</div>
+            <div className="text-[14px] font-bold text-[#3A4A66]">{d.drafter?.name} {d.drafter?.position}</div>
+            <div className="text-[12.5px] text-[#5B6B85]" style={{ fontFamily: MONO }}>{ymd(toMs(d.createdAt))}</div>
           </div>
           <div className="shrink-0 w-[150px] flex justify-end"><Progress d={d} /></div>
-          <span className={`shrink-0 w-[72px] text-center h-7 leading-7 rounded-full text-[12px] font-black ${d.status === "approved" ? "bg-[#0F1A30] text-white" : d.status === "pending" ? "bg-[#EEF3FB] text-[#1B2B4B]" : "border border-[#DCE3EE] text-[#7A879C]"}`}>{STATUS[d.status]}</span>
+          <span className={`shrink-0 w-[72px] text-center h-7 leading-7 rounded-full text-[13px] font-black ${d.status === "approved" ? "bg-[#0F1A30] text-white" : d.status === "pending" ? "bg-[#EEF3FB] text-[#1B2B4B]" : "border border-[#DCE3EE] text-[#5B6B85]"}`}>{STATUS[d.status]}</span>
         </button>
       ))}
     </div>
@@ -841,8 +873,8 @@ function Tabs({ tabs, tab, setTab }) {
   return (
     <div className="flex items-center gap-1.5 px-5 pt-4 pb-3 border-b border-[#EEF1F6] overflow-x-auto no-scrollbar">
       {tabs.map(([k, l, n]) => (
-        <button key={k} type="button" onClick={() => setTab(k)} className={`h-9 px-4 rounded-full text-[13px] font-black shrink-0 border inline-flex items-center gap-1.5 ${tab === k ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}>
-          {l}{n > 0 && <span className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] flex items-center justify-center ${tab === k ? "bg-white text-[#0F1A30]" : "bg-[#EEF1F6] text-[#1B2B4B]"}`}>{n}</span>}
+        <button key={k} type="button" onClick={() => setTab(k)} className={`h-9 px-4 rounded-full text-[14px] font-black shrink-0 border inline-flex items-center gap-1.5 ${tab === k ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}>
+          {l}{n > 0 && <span className={`min-w-[20px] h-5 px-1.5 rounded-full text-[12px] flex items-center justify-center ${tab === k ? "bg-white text-[#0F1A30]" : "bg-[#EEF1F6] text-[#1B2B4B]"}`}>{n}</span>}
         </button>
       ))}
     </div>
@@ -867,27 +899,27 @@ function LinesPage({ company, me, staff }) {
       <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
         <div className="px-5 py-4 border-b border-[#EEF1F6] flex items-center">
           <div>
-            <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>TEMPLATES</div>
-            <div className="text-[16px] font-black text-[#0F1A30]">저장된 결재선 <span className="text-[#9AA9C3] text-[13px]">{tpls.length}</span></div>
+            <div className="text-[12px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>TEMPLATES</div>
+            <div className="text-[16px] font-black text-[#0F1A30]">저장된 결재선 <span className="text-[#5B6B85] text-[14px]">{tpls.length}</span></div>
           </div>
-          <button type="button" onClick={() => setEdit({ name: "", cats: [], steps: suggestLine(staff, me), cc: [], shared: admin })} className="ml-auto h-10 px-4 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black">+ 새 결재선</button>
+          <button type="button" onClick={() => setEdit({ name: "", cats: [], steps: suggestLine(staff, me), cc: [], shared: admin })} className="ml-auto h-10 px-4 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black">+ 새 결재선</button>
         </div>
-        {!tpls.length ? <div className="py-16 text-center text-[13.5px] text-[#9AA9C3]">저장된 결재선이 없습니다. 자주 쓰는 결재 순서를 저장해 두면 문서 작성 때 바로 불러옵니다.</div> : (
+        {!tpls.length ? <div className="py-16 text-center text-[14.5px] text-[#5B6B85]">저장된 결재선이 없습니다. 자주 쓰는 결재 순서를 저장해 두면 문서 작성 때 바로 불러옵니다.</div> : (
           <div className="divide-y divide-[#F1F4F9]">
             {tpls.map((t) => (
               <div key={t.id} className="px-5 py-3.5 flex items-center gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    {t.shared && <span className="text-[11px] font-black px-1.5 py-0.5 rounded bg-[#0F1A30] text-white">회사 공용</span>}
+                    {t.shared && <span className="text-[12px] font-black px-1.5 py-0.5 rounded bg-[#0F1A30] text-white">회사 공용</span>}
                     <span className="text-[14.5px] font-black text-[#0F1A30]">{t.name}</span>
-                    <span className="text-[12px] text-[#9AA9C3]">{(t.cats || []).map((c) => catOf(c).label).join(" · ") || "모든 문서"}</span>
+                    <span className="text-[13px] text-[#5B6B85]">{(t.cats || []).map((c) => catOf(c).label).join(" · ") || "모든 문서"}</span>
                   </div>
-                  <div className="text-[12.5px] text-[#5B6B85] mt-0.5">{(t.steps || []).map((s) => `${s.name} ${s.position || ""}${s.kind === "합의" ? "(합의)" : ""}`).join(" → ")}{(t.cc || []).length ? ` · 참조 ${t.cc.map((c) => c.name).join(", ")}` : ""}</div>
+                  <div className="text-[13.5px] text-[#5B6B85] mt-0.5">{(t.steps || []).map((s) => `${s.name} ${s.position || ""}${s.kind === "합의" ? "(합의)" : ""}`).join(" → ")}{(t.cc || []).length ? ` · 참조 ${t.cc.map((c) => c.name).join(", ")}` : ""}</div>
                 </div>
                 {(t.ownerUid === me.uid || admin) && (
                   <>
-                    <button type="button" onClick={() => setEdit({ ...t, cats: t.cats || [], cc: t.cc || [] })} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12px] font-bold text-[#3A4A66]">수정</button>
-                    <button type="button" onClick={() => window.confirm("이 결재선을 지울까요?") && deleteDoc(doc(db, "approvalLines", t.id))} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12px] font-bold text-[#7A879C]">삭제</button>
+                    <button type="button" onClick={() => setEdit({ ...t, cats: t.cats || [], cc: t.cc || [] })} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#3A4A66]">수정</button>
+                    <button type="button" onClick={() => window.confirm("이 결재선을 지울까요?") && deleteDoc(doc(db, "approvalLines", t.id))} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#5B6B85]">삭제</button>
                   </>
                 )}
               </div>
@@ -897,11 +929,11 @@ function LinesPage({ company, me, staff }) {
       </div>
       <div className="rounded-2xl bg-white border border-[#E3E8F0] p-5 space-y-3.5 h-fit">
         {!edit ? (
-          <div className="text-[13.5px] text-[#7A879C] leading-relaxed">
+          <div className="text-[14.5px] text-[#5B6B85] leading-relaxed">
             <div className="text-[16px] font-black text-[#0F1A30] mb-2">결재선이란?</div>
             문서가 거쳐 갈 결재자 순서입니다. <b className="text-[#0F1A30]">결재</b>는 승인·반려 권한, <b className="text-[#0F1A30]">합의</b>는 관련 부서 동의를 받는 단계입니다.
             앞 사람이 승인해야 다음 사람에게 넘어가고, 한 명이라도 반려하면 기안자에게 돌아갑니다. 최종 승인되면 참조자에게도 알림이 갑니다.
-            <div className="mt-3 text-[12.5px]">· 관리자는 <b>회사 공용</b> 결재선을 만들어 전 직원이 쓰게 할 수 있습니다.<br />· 문서 작성 화면의 「결재선 불러오기」에서 바로 고릅니다.</div>
+            <div className="mt-3 text-[13.5px]">· 관리자는 <b>회사 공용</b> 결재선을 만들어 전 직원이 쓰게 할 수 있습니다.<br />· 문서 작성 화면의 「결재선 불러오기」에서 바로 고릅니다.</div>
           </div>
         ) : (
           <>
@@ -910,14 +942,14 @@ function LinesPage({ company, me, staff }) {
             <div className="flex flex-wrap gap-1.5">
               {APPROVAL_CATS.map((c) => {
                 const on = edit.cats.includes(c.key);
-                return <button key={c.key} type="button" onClick={() => setEdit((p) => ({ ...p, cats: on ? p.cats.filter((x) => x !== c.key) : [...p.cats, c.key] }))} className={`h-8 px-3 rounded-full text-[12px] font-bold border ${on ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}>{c.label}</button>;
+                return <button key={c.key} type="button" onClick={() => setEdit((p) => ({ ...p, cats: on ? p.cats.filter((x) => x !== c.key) : [...p.cats, c.key] }))} className={`h-8 px-3 rounded-full text-[13px] font-bold border ${on ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}>{c.label}</button>;
               })}
             </div>
             <LineEditor line={edit.steps} setLine={(fn) => setEdit((p) => ({ ...p, steps: typeof fn === "function" ? fn(p.steps) : fn }))} cc={edit.cc} setCc={(fn) => setEdit((p) => ({ ...p, cc: typeof fn === "function" ? fn(p.cc) : fn }))} staff={staff} me={me} company={company} cat={edit.cats[0] || "leave"} />
-            {admin && <label className="flex items-center gap-2 text-[13px] font-bold text-[#0F1A30]"><input type="checkbox" checked={!!edit.shared} onChange={(e) => setEdit((p) => ({ ...p, shared: e.target.checked }))} className="w-4 h-4 accent-[#1B2B4B]" />회사 공용으로 공개</label>}
+            {admin && <label className="flex items-center gap-2 text-[14px] font-bold text-[#0F1A30]"><input type="checkbox" checked={!!edit.shared} onChange={(e) => setEdit((p) => ({ ...p, shared: e.target.checked }))} className="w-4 h-4 accent-[#1B2B4B]" />회사 공용으로 공개</label>}
             <div className="flex gap-2">
-              <button type="button" onClick={() => setEdit(null)} className="flex-1 h-11 rounded-xl border border-[#DCE3EE] text-[13.5px] font-bold text-[#5B6B85]">취소</button>
-              <button type="button" onClick={save} className="flex-[1.5] h-11 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black">저장</button>
+              <button type="button" onClick={() => setEdit(null)} className="flex-1 h-11 rounded-xl border border-[#DCE3EE] text-[14.5px] font-bold text-[#5B6B85]">취소</button>
+              <button type="button" onClick={save} className="flex-[1.5] h-11 rounded-xl bg-[#0F1A30] text-white text-[14.5px] font-black">저장</button>
             </div>
           </>
         )}
@@ -987,20 +1019,20 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
       <div className="relative overflow-hidden rounded-[22px] px-7 py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]"
         style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <div>
-          <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>E-APPROVAL · {heroEn}</div>
+          <div className="text-[12px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>E-APPROVAL · {heroEn}</div>
           <div className="text-[24px] font-black mt-0.5">{heroTitle}</div>
-          <div className="text-[13px] text-white/60 mt-0.5">{heroDesc}</div>
+          <div className="text-[14px] text-white/60 mt-0.5">{heroDesc}</div>
         </div>
         <div className="flex items-center gap-2.5">
           {kpis.map(([l, v]) => (
             <div key={l} className="min-w-[110px] px-4 py-2.5 rounded-2xl bg-white/[0.07] border border-white/10">
-              <div className="text-[11.5px] font-bold text-white/55">{l}</div>
+              <div className="text-[12.5px] font-bold text-white/55">{l}</div>
               <div className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div>
             </div>
           ))}
           {!isCat && page !== "lines" && (
             <div className="flex flex-col gap-1.5">
-              {APPROVAL_CATS.map((c) => <button key={c.key} type="button" onClick={() => { setPreset(null); setPage(c.key); }} className="h-8 px-3 rounded-lg bg-white text-[#0F1A30] text-[12px] font-black inline-flex items-center gap-1.5"><ShellIcon name={c.icon} size={13} />{c.label}</button>)}
+              {APPROVAL_CATS.map((c) => <button key={c.key} type="button" onClick={() => { setPreset(null); setPage(c.key); }} className="h-8 px-3 rounded-lg bg-white text-[#0F1A30] text-[13px] font-black inline-flex items-center gap-1.5"><ShellIcon name={c.icon} size={13} />{c.label}</button>)}
             </div>
           )}
         </div>
