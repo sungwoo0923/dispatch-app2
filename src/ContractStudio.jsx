@@ -8,7 +8,7 @@ import { db } from "./firebase";
 import { kpAlert, kpConfirm } from "./kpDialog";
 import CustomSelect from "./CustomSelect";
 import CustomDatePicker from "./CustomDatePicker";
-import { DRIVER_KINDS, FREE_TOPICS, contractSpec, fillVars } from "./contractTemplates";
+import { DRIVER_KINDS, LABOR_KINDS, FREE_TOPICS, contractSpec, fillVars } from "./contractTemplates";
 import { useFleetDrivers } from "./FleetPayDocs";
 import { savePng, savePdf, printA4 } from "./a4Export";
 
@@ -19,7 +19,7 @@ const lab = "block text-[13px] font-black text-[#3A4A66] mb-1.5";
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const korDate = (d) => (d ? `${d.slice(0, 4)}년 ${Number(d.slice(5, 7))}월 ${Number(d.slice(8, 10))}일` : "");
-const KIND_LABEL = { driver: "운송계약서", client: "거래처 운송계약서", free: "자율양식 계약서" };
+const KIND_LABEL = { driver: "운송계약서", labor: "근로계약서", client: "거래처 운송계약서", free: "자율양식 계약서" };
 
 // 입력값 → 문서에 넣을 글자(금액은 콤마+원, 날짜는 한글)
 function displayVals(spec, vals) {
@@ -38,8 +38,14 @@ const CAP = PAGE_H - PAD_Y * 2 - FOOT;
 export function ContractPaper({ title, spec, vals, clauses, paperRef }) {
   const dv = displayVals(spec, vals);
   const isClient = spec === contractSpec("client");
-  const left = isClient ? { role: "갑 (화주)", name: vals.을상호, ceo: vals.을대표, biz: vals.을사업자번호, addr: vals.을주소 } : { role: "갑", name: vals.갑상호, ceo: vals.갑대표, biz: vals.갑사업자번호, addr: vals.갑주소, tel: vals.갑연락처 };
-  const right = isClient ? { role: "을 (운송사)", name: vals.갑상호, ceo: vals.갑대표, biz: vals.갑사업자번호, addr: vals.갑주소 } : { role: "을", name: vals.을상호, ceo: vals.을대표, biz: vals.을사업자번호, addr: vals.을주소, tel: vals.을연락처 };
+  const isLabor = Object.values(LABOR_KINDS).includes(spec);
+  if (isLabor) {
+    var leftL = { role: "사업주 (갑)", name: vals.갑상호, ceo: vals.갑대표, biz: vals.갑사업자번호, addr: vals.갑주소, tel: vals.갑연락처 }; // eslint-disable-line no-var
+    var rightL = { role: "근로자 (을)", name: vals.을상호, ceo: "", biz: vals.을사업자번호, addr: vals.을주소, tel: vals.을연락처, birth: true }; // eslint-disable-line no-var
+  }
+  const left0 = isClient ? { role: "갑 (화주)", name: vals.을상호, ceo: vals.을대표, biz: vals.을사업자번호, addr: vals.을주소 } : { role: "갑", name: vals.갑상호, ceo: vals.갑대표, biz: vals.갑사업자번호, addr: vals.갑주소, tel: vals.갑연락처 };
+  const right0 = isClient ? { role: "을 (운송사)", name: vals.갑상호, ceo: vals.갑대표, biz: vals.갑사업자번호, addr: vals.갑주소 } : { role: "을", name: vals.을상호, ceo: vals.을대표, biz: vals.을사업자번호, addr: vals.을주소, tel: vals.을연락처 };
+  const left = isLabor ? leftL : left0; const right = isLabor ? rightL : right0;
   const blocks = [
     <div key="h" style={{ textAlign: "center", borderBottom: "3px double #0F1A30", paddingBottom: 18, marginBottom: 24 }}>
       <div style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: "0.3em", color: "#2D4C82", fontWeight: 800 }}>CONTRACT</div>
@@ -60,8 +66,8 @@ export function ContractPaper({ title, spec, vals, clauses, paperRef }) {
         <div key={i} style={{ border: "1.5px solid #0F1A30", borderRadius: 4, padding: "14px 16px", fontSize: 13.5, lineHeight: 1.9, color: "#0B1428" }}>
           <div style={{ fontWeight: 900, fontSize: 14.5, borderBottom: "1px solid #DCE3EE", paddingBottom: 6, marginBottom: 6 }}>{p.role}</div>
           <div>상호·성명 : <b>{p.name || ""}</b></div>
-          <div>대 표 자 : {p.ceo || ""}</div>
-          <div>사업자번호 : {p.biz || ""}</div>
+          {!p.birth && <div>대 표 자 : {p.ceo || ""}</div>}
+          <div>{p.birth ? "생년월일" : "사업자번호"} : {p.biz || ""}</div>
           <div style={{ overflowWrap: "anywhere" }}>주 소 : {p.addr || ""}</div>
           {p.tel !== undefined && <div>연 락 처 : {p.tel || ""}</div>}
           <div style={{ textAlign: "right", marginTop: 10, fontWeight: 800 }}>(서명 또는 인) <span style={{ display: "inline-block", width: 44, height: 44, border: "1px dashed #7A879C", borderRadius: "50%", verticalAlign: "middle", marginLeft: 6 }} /></div>
@@ -140,6 +146,8 @@ export default function ContractStudio({ company = "", me = {} }) {
   const co = String(company || "").trim();
   const [tab, setTab] = React.useState("driver");
   const [sub, setSub] = React.useState("지입");
+  const [laborSub, setLaborSub] = React.useState("정규직");
+  const [tplName, setTplName] = React.useState(null); // 내 양식 이름 입력 중
   const [freeKey, setFreeKey] = React.useState(FREE_TOPICS[0].key);
   const [vals, setVals] = React.useState({});
   const [clauses, setClauses] = React.useState([]);
@@ -149,7 +157,7 @@ export default function ContractStudio({ company = "", me = {} }) {
   const paperRef = React.useRef(null);
   const drivers = useFleetDrivers();
   const kind = tab === "box" ? null : tab;
-  const subKey = kind === "driver" ? sub : kind === "free" ? freeKey : "";
+  const subKey = kind === "driver" ? sub : kind === "labor" ? laborSub : kind === "free" ? freeKey : "";
   const spec = kind ? contractSpec(kind, subKey) : null;
 
   // 갑(우리 회사) 정보는 한 번 넣으면 기억
@@ -196,12 +204,32 @@ export default function ContractStudio({ company = "", me = {} }) {
     } catch (e) { kpAlert(`저장 실패: ${e?.message || e}`); } finally { setBusy(false); }
   };
   const openSaved = (d) => {
-    setTab(d.kind); if (d.kind === "driver") setSub(d.sub); if (d.kind === "free") setFreeKey(d.sub);
+    setTab(d.kind); if (d.kind === "driver") setSub(d.sub); if (d.kind === "labor") setLaborSub(d.sub); if (d.kind === "free") setFreeKey(d.sub);
     setTimeout(() => { setVals(d.vals || {}); setClauses(d.clauses || []); setEditId(d.id); }, 0);
   };
   const removeSaved = async (d) => { if (await kpConfirm(`「${d.title}」(${d.party || "-"})을 보관함에서 지울까요?`, { title: "계약서 삭제", okText: "삭제", danger: true })) await deleteDoc(doc(db, "companyContracts", d.id)); };
 
   const groups = [...new Set(FREE_TOPICS.map((t) => t.group))];
+  // 📁 내 양식 — 고친 조항·기본값을 이름 붙여 저장해 두고 다음에 그대로 불러 쓴다
+  const docs = saved.filter((d) => !d.template);
+  const myTpls = saved.filter((d) => d.template && d.kind === kind && d.sub === subKey);
+  const saveTpl = async () => {
+    const name = String(tplName || "").trim();
+    if (!name) return kpAlert("양식 이름을 입력해 주세요.");
+    const defaults = {}; Object.entries(vals).forEach(([k, v]) => { if (!k.startsWith("을") && !["계약일", "시작일", "종료일"].includes(k)) defaults[k] = v; });
+    try {
+      const same = myTpls.find((t) => t.templateName === name);
+      const data = { companyName: co, template: true, templateName: name, kind, sub: subKey, title, clauses, defaults, updatedAt: serverTimestamp(), by: me.name || "" };
+      if (same) await updateDoc(doc(db, "companyContracts", same.id), data); else await addDoc(collection(db, "companyContracts"), { ...data, createdAt: serverTimestamp() });
+      setTplName(null); kpAlert(`「${name}」 양식으로 저장했습니다.\n다음부터 [양식]에서 고르면 그대로 불러옵니다.`);
+    } catch (e) { kpAlert(`저장 실패: ${e?.message || e}`); }
+  };
+  const loadTpl = (id) => {
+    if (id === "__base") { setClauses(spec.clauses.map((x) => ({ ...x }))); return; }
+    const t = myTpls.find((x) => x.id === id); if (!t) return;
+    setClauses((t.clauses || []).map((x) => ({ ...x }))); setVals((p) => ({ ...p, ...(t.defaults || {}) }));
+  };
+  const removeTpl = async (t) => { if (await kpConfirm(`내 양식 「${t.templateName}」을 지울까요?`, { title: "양식 삭제", okText: "삭제", danger: true })) await deleteDoc(doc(db, "companyContracts", t.id)); };
   return (
     <div className="space-y-4">
       <div className="relative overflow-hidden rounded-[22px] px-7 py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]"
@@ -212,7 +240,7 @@ export default function ContractStudio({ company = "", me = {} }) {
           <div className="text-[14px] text-white/60 mt-0.5">유형을 고르면 조항이 자동으로 셋팅됩니다 · 모든 조항은 자유롭게 고칠 수 있어요 · 이미지·PDF 저장</div>
         </div>
         <div className="inline-flex p-1 rounded-2xl bg-white/10 border border-white/15 gap-1 flex-wrap">
-          {[["driver", "운송계약서"], ["client", "거래처 운송계약서"], ["free", "자율양식 계약서"], ["box", `보관함 ${saved.length}`]].map(([k, l]) => (
+          {[["driver", "운송계약서"], ["labor", "근로계약서"], ["client", "거래처 운송계약서"], ["free", "자율양식 계약서"], ["box", `보관함 ${docs.length}`]].map(([k, l]) => (
             <button key={k} type="button" onClick={() => setTab(k)} className={`h-10 px-4 rounded-xl text-[14px] font-black whitespace-nowrap ${tab === k ? "bg-white text-[#0F1A30]" : "text-white/80 hover:bg-white/10"}`}>{l}</button>
           ))}
         </div>
@@ -223,12 +251,12 @@ export default function ContractStudio({ company = "", me = {} }) {
           <div className="grid grid-cols-[60px_minmax(0,1.4fr)_minmax(0,1fr)_120px_130px_160px] gap-3 px-5 h-11 items-center bg-[#F3F6FA] border-b border-[#E3E8F0] text-[14px] font-black text-[#1B2B4B]">
             <span>번호</span><span>계약서</span><span>상대방</span><span>유형</span><span>계약일</span><span />
           </div>
-          {saved.map((d, i) => (
+          {docs.map((d, i) => (
             <div key={d.id} className="grid grid-cols-[60px_minmax(0,1.4fr)_minmax(0,1fr)_120px_130px_160px] gap-3 px-5 h-[56px] items-center border-b border-[#F1F4F9] hover:bg-[#F8FAFD]">
-              <span className="text-[14px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>{saved.length - i}</span>
+              <span className="text-[14px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>{docs.length - i}</span>
               <button type="button" onClick={() => openSaved(d)} className="text-left text-[15px] font-black text-[#0F1A30] truncate hover:underline">{d.title}</button>
               <span className="text-[14px] font-bold text-[#1B2B4B] truncate">{d.party || "-"}</span>
-              <span className="text-[13px] font-black text-[#2D4C82]">{KIND_LABEL[d.kind]}{d.kind === "driver" ? `·${d.sub}` : ""}</span>
+              <span className="text-[13px] font-black text-[#2D4C82]">{KIND_LABEL[d.kind]}{d.kind === "driver" || d.kind === "labor" ? `·${d.sub}` : ""}</span>
               <span className="text-[14px] text-[#3A4A66] tabular-nums" style={{ fontFamily: MONO }}>{d.contractDate || "-"}</span>
               <span className="flex gap-1.5 justify-end">
                 <button type="button" onClick={() => openSaved(d)} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black">열기</button>
@@ -236,7 +264,7 @@ export default function ContractStudio({ company = "", me = {} }) {
               </span>
             </div>
           ))}
-          {!saved.length && <div className="py-20 text-center text-[15px] font-bold text-[#7A879C]">저장한 계약서가 없습니다</div>}
+          {!docs.length && <div className="py-20 text-center text-[15px] font-bold text-[#7A879C]">저장한 계약서가 없습니다</div>}
         </div>
       ) : spec && (
         <div className="grid gap-5" style={{ gridTemplateColumns: "minmax(460px, 560px) minmax(0,1fr)" }}>
@@ -256,6 +284,39 @@ export default function ContractStudio({ company = "", me = {} }) {
                   </div>
                 </>
               )}
+              {tab === "labor" && (
+                <div>
+                  <span className={lab}>고용 형태</span>
+                  <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-[#EEF2F8]">
+                    {Object.keys(LABOR_KINDS).map((k) => <button key={k} type="button" onClick={() => setLaborSub(k)} className={`h-11 rounded-lg text-[15px] font-black ${laborSub === k ? "bg-[#0F1A30] text-white shadow" : "text-[#3A4A66]"}`}>{k === "단시간" ? "단시간(알바)" : k}</button>)}
+                  </div>
+                </div>
+              )}
+              <div className="rounded-xl border border-[#DCE3EE] bg-[#F8FAFD] p-3">
+                <span className={lab}>양식 <span className="font-semibold text-[#5B6B85]">기본 양식 또는 저장해 둔 내 양식</span></span>
+                <div className="flex gap-1.5">
+                  <div className="flex-1 min-w-0">
+                    <CustomSelect value="" onChange={(e) => loadTpl(e.target.value)} className={inp}>
+                      <option value="">{myTpls.length ? `내 양식 ${myTpls.length}개 · 골라서 불러오기` : "저장한 내 양식이 없습니다"}</option>
+                      <option value="__base">기본 양식(처음 상태)</option>
+                      {myTpls.map((t) => <option key={t.id} value={t.id}>📁 {t.templateName}</option>)}
+                    </CustomSelect>
+                  </div>
+                  <button type="button" onClick={() => setTplName(tplName === null ? "" : null)} className="h-11 px-3.5 shrink-0 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black whitespace-nowrap">내 양식으로 저장</button>
+                </div>
+                {tplName !== null && (
+                  <div className="flex gap-1.5 mt-2">
+                    <input autoFocus value={tplName} onChange={(e) => setTplName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") saveTpl(); }} placeholder="예: 배차팀 정규직 기본" className={inp} />
+                    <button type="button" onClick={saveTpl} className="h-11 px-4 shrink-0 rounded-xl bg-[#2D4C82] text-white text-[13.5px] font-black">저장</button>
+                  </div>
+                )}
+                {myTpls.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {myTpls.map((t) => <span key={t.id} className="h-8 pl-2.5 pr-1 rounded-lg bg-white border border-[#DCE3EE] text-[12.5px] font-bold text-[#1B2B4B] inline-flex items-center gap-1">📁 {t.templateName}<button type="button" onClick={() => removeTpl(t)} className="w-6 h-6 rounded text-[#7A879C] hover:bg-[#F3F6FA]" aria-label="양식 삭제">✕</button></span>)}
+                  </div>
+                )}
+                <div className="text-[12px] text-[#5B6B85] mt-1.5">조항을 고치거나 추가한 뒤 저장하면 다음부터 그 양식으로 바로 시작할 수 있어요(회사 공용)</div>
+              </div>
               {tab === "free" && (
                 <div>
                   <span className={lab}>계약서 주제</span>

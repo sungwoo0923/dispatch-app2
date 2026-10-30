@@ -3740,7 +3740,7 @@ const liveWindowStart = pcLiveWindowStart(); // ⭐ 13개월 → 최근 7일~(�
   unsubs.push(
     // ⭐ includeMetadataChanges — 저장본(캐시) → 서버와 맞춰지는 순간을 받아 첫 진입 로딩 화면 진행률에 쓴다.
     // (예전엔 서버에 바뀐 게 없으면 그 순간이 안 와서, 알림 기준선이 "캐시본"에 계속 머물렀다)
-    onSnapshot(query(collection(db, collName), where("상차일", ">=", liveWindowStart)), { includeMetadataChanges: true }, (snap) => {
+    subscribeLiveWithFallback(collName, liveWindowStart, (snap) => {
       bootTrackOrders(snap);
       const changes = snap.docChanges();
       let hasSignificantChange = ordersFirstLoad;
@@ -3927,7 +3927,7 @@ const liveWindowStart = pcLiveWindowStart(); // ⭐ 13개월 → 최근 7일~(�
         }
       });
 
-    })
+    }, "orders")
   );
 
     // ✅ 2️⃣ 기존 dispatch 데이터 + 알림 감지
@@ -3947,7 +3947,7 @@ const liveWindowStart = pcLiveWindowStart(); // ⭐ 13개월 → 최근 7일~(�
   });
 
   unsubs.push(
-    onSnapshot(query(collection(db, "dispatch"), where("상차일", ">=", liveWindowStart)), { includeMetadataChanges: true }, (snap) => {
+    subscribeLiveWithFallback("dispatch", liveWindowStart, (snap) => {
       bootTrackDispatch(snap);
       const changes = snap.docChanges();
       let hasSignificantChange = dispatchFirstLoad;
@@ -4050,7 +4050,7 @@ const liveWindowStart = pcLiveWindowStart(); // ⭐ 13개월 → 최근 7일~(�
         }
       });
 
-    })
+    }, "dispatch")
   );
 
 
@@ -4065,7 +4065,7 @@ const liveWindowStart = pcLiveWindowStart(); // ⭐ 13개월 → 최근 7일~(�
         setDrivers(arr);
         idleSave("drivers", arr);
         markBootBase(pcBootStore, "drivers");
-      })
+      }, (err) => { console.warn("[기사 목록] 구독 실패", err?.code || err); markBootBase(pcBootStore, "drivers"); })
     );
     unsubs.push(onSnapshot(collection(db, COLL.clients), (snap) => {
       const viewCompany = role === "totalMaster"
@@ -4077,7 +4077,7 @@ const liveWindowStart = pcLiveWindowStart(); // ⭐ 13개월 → 최근 7일~(�
       setClients(normalizeClients(arr));
       idleSave("clients", arr);
       markBootBase(pcBootStore, "clients");
-    }));
+    }, (err) => { console.warn("[거래처 목록] 구독 실패", err?.code || err); markBootBase(pcBootStore, "clients"); }));
 
     return () => unsubs.forEach(u => u && u());
   }, [user, userCompany, role]);
@@ -6891,6 +6891,32 @@ function CargoExtraChips({ value }) {
 //   ④ 화면 준비: 기사·거래처
 //   ⭐ 2026-10-26 속도 개선 — 홈 통계용 "올해 지난 기간 합계"(1년치 조회)는 더 이상 기다리지 않는다.
 //      로딩 화면이 걷힌 뒤 뒤에서 계산돼 홈 숫자에 더해진다(하루 1번).
+// ⭐ 오더 실시간 구독 — (회사명+상차일) 색인이 아직 없거나 권한 오류로 구독이 실패해도 로딩 화면에서 멈추지 않게.
+//   실패하면 회사 오더 전체를 받는 구독(색인 불필요)으로 바꿔 받고, 상차일 범위는 화면에서 거른다.
+function subscribeLiveWithFallback(col, start, handler, name) {
+  let unsub = () => {};
+  const filtered = (snap) => {
+    const inWin = (d) => String(d.get?.("상차일") || "") >= start;
+    return {
+      metadata: snap.metadata, size: snap.docs.filter(inWin).length,
+      docs: snap.docs.filter(inWin),
+      docChanges: () => snap.docChanges().filter((ch) => ch.type === "removed" || inWin(ch.doc)),
+      forEach: (fn) => snap.docs.filter(inWin).forEach(fn),
+      empty: !snap.docs.some(inWin),
+    };
+  };
+  unsub = onSnapshot(query(collection(db, col), where("상차일", ">=", start)), { includeMetadataChanges: true }, handler, (err) => {
+    console.warn(`[실시간 ${name}] 구독 실패 → 대체 구독으로 전환`, err?.code || err);
+    try { unsub(); } catch { /* 무시 */ }
+    unsub = onSnapshot(query(collection(db, col)), { includeMetadataChanges: true }, (snap) => handler(filtered(snap)), (err2) => {
+      console.warn(`[실시간 ${name}] 대체 구독도 실패`, err2?.code || err2);
+      // 그래도 안 되면 저장본(캐시)으로라도 화면을 연다
+      pcBootStore.set((st) => ({ ...st, cache: { ...st.cache, [name]: true }, server: { ...st.server, [name]: true } }));
+    });
+  });
+  return () => unsub();
+}
+
 function PcBootOverlay({ onDone }) {
   const st = useMiniStore(pcBootStore);
   const [skipped, setSkipped] = useState(false);

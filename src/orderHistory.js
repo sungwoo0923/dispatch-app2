@@ -73,10 +73,17 @@ export function subscribeOrderSync({ since: sinceIn, onRows, onDeleted }) {
     });
   });
   // ③ 삭제 기록 — 서버 시각(at) 기준
-  unsubs.push(onSnapshot(query(collection(db, "deletedOrders"), where("at", ">=", sinceTs)), (snap) => {
-    const keys = snap.docChanges().filter((c) => c.type !== "removed").map((c) => { const d = c.doc.data() || {}; return `${d.col}/${d.id}`; });
+  //   색인(회사명+시각)이 없어 실패하면 회사 삭제 기록 전체를 받아 시각으로 거른다(삭제가 다른 화면·정산에 안 빠지던 원인)
+  const onDelSnap = (snap) => {
+    const keys = snap.docChanges().filter((c) => c.type !== "removed").map((c) => c.doc.data() || {})
+      .filter((d) => { const ms = d.at?.toMillis ? d.at.toMillis() : 0; return !ms || ms >= since; }).map((d) => `${d.col}/${d.id}`);
     if (keys.length) onDeleted(keys);
-  }, () => {}));
+  };
+  let delUnsub = onSnapshot(query(collection(db, "deletedOrders"), where("at", ">=", sinceTs)), onDelSnap, (err) => {
+    console.warn("[삭제 기록] 구독 실패 → 대체 구독", err?.code || err);
+    delUnsub = onSnapshot(collection(db, "deletedOrders"), onDelSnap, () => {});
+  });
+  unsubs.push(() => delUnsub());
   return () => unsubs.forEach((u) => u && u());
 }
 

@@ -309,6 +309,23 @@ function FieldInput({ f, value, onChange, staff, meUid }) {
   if (f.type === "select") return <CustomSelect openOnFocus value={value || ""} onChange={(e) => onChange(e.target.value)} className={inp}>{f.options.map((o) => <option key={o} value={o}>{o}</option>)}</CustomSelect>;
   if (f.type === "staff") return <StaffSelect value={value} onChange={onChange} staff={staff} exclude={[meUid]} placeholder="선택 안 함" />;
   if (f.type === "date") return <CustomDatePicker value={value || ""} onChange={(e) => onChange(e.target.value)} className={inp} showIcon placeholder="날짜 선택" />;
+  if (f.type === "notice") return (
+    <div className="rounded-xl border border-[#C9D6EE] bg-[#F5F8FD] p-3.5 space-y-1.5 max-h-[260px] overflow-y-auto">
+      {(f.text || []).map((t, i) => <div key={i} className="text-[13px] leading-relaxed text-[#1B2B4B] font-semibold">{t}</div>)}
+    </div>
+  );
+  if (f.type === "checks") {
+    const v = value || [];
+    return (
+      <div className="space-y-1.5">
+        {(f.options || []).map((o) => { const on = v.includes(o); return (
+          <button key={o} type="button" onClick={() => onChange(on ? v.filter((x) => x !== o) : [...v, o])} className={`w-full min-h-11 px-3 py-2 rounded-xl border text-left text-[13.5px] font-bold flex items-center gap-2.5 ${on ? "bg-[#0F1A30] border-[#0F1A30] text-white" : "bg-white border-[#D3DBE8] text-[#0F1A30] hover:bg-[#F5F8FD]"}`}>
+            <span className={`w-5 h-5 shrink-0 rounded-md border-2 flex items-center justify-center text-[12px] ${on ? "border-white" : "border-[#9AB0D6]"}`}>{on ? "✓" : ""}</span>{o}
+          </button>
+        ); })}
+      </div>
+    );
+  }
   if (f.type === "timerange") {
     const v = value || {};
     return (

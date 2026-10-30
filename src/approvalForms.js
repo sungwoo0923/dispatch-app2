@@ -346,9 +346,19 @@ export const APPROVAL_FORMS = [
     fields: [
       { k: "hire", label: "입사일", type: "date", half: true },
       { k: "last", label: "퇴직 희망일", type: "date", required: true, half: true },
-      { k: "reason", label: "사직 사유", templates: ["개인 사정", "이직", "학업", "건강", "가정 사정"], type: "textarea", required: true },
-      { k: "handover", label: "인수인계 계획", type: "textarea", rows: 3, ph: "인수자·인계 업무·완료 예정일" },
-      { k: "agree", label: "확인", type: "select", options: ["위 사유로 사직하고자 하며, 재직 중 알게 된 회사의 영업 비밀을 누설하지 않겠습니다."], def: "위 사유로 사직하고자 하며, 재직 중 알게 된 회사의 영업 비밀을 누설하지 않겠습니다." },
+      { k: "reason", label: "사직 사유", templates: ["개인 사정", "이직", "학업", "건강", "가정 사정", "계약 만료"], type: "textarea", required: true },
+      { k: "handover", label: "인수인계 계획", type: "textarea", rows: 3, required: true, ph: "인수자 · 인계 업무(거래처·배차·정산 자료) · 완료 예정일" },
+      { k: "assets", label: "반납할 회사 자산", type: "text", ph: "노트북, 출입카드, 법인카드, 차량 키, 업무 계정 등" },
+      { k: "law", label: "퇴직 시 지켜야 할 사항(관련 법령)", type: "notice", text: [
+        "① 사직의 효력(민법 제660조): 회사가 사직을 받아들이지 않더라도 사직 의사를 밝힌 날부터 1개월이 지나면 효력이 생기며, 월급제는 사직을 밝힌 달의 다음 임금 지급 기간이 끝난 때 효력이 생깁니다. 무단 퇴사로 회사에 손해가 생기면 배상 책임이 생길 수 있으니 퇴직 희망일 30일 전에 제출하는 것을 원칙으로 합니다.",
+        "② 업무 인수인계: 담당하던 거래처·배차·정산 업무와 자료를 후임자에게 인계하고, 인계 완료 확인을 받습니다.",
+        "③ 회사 자산·자료 반납: 노트북·법인카드·출입카드·차량 키 등 회사 자산과 업무 자료(파일·서류)를 반납하고, 개인 저장 장치에 복사하거나 가져가지 않습니다.",
+        "④ 영업비밀·개인정보 보호(부정경쟁방지 및 영업비밀보호에 관한 법률, 개인정보 보호법): 재직 중 알게 된 거래처·운임·기사님 개인정보 등을 퇴직 후에도 누설하거나 부당하게 사용해서는 안 되며, 위반 시 민·형사상 책임을 질 수 있습니다.",
+        "⑤ 금품 청산(근로기준법 제36조): 회사는 퇴직일부터 14일 이내에 임금·퇴직금 등 모든 금품을 지급하며, 사정이 있으면 당사자 합의로 기일을 연장할 수 있습니다.",
+        "⑥ 퇴직금(근로자퇴직급여 보장법): 계속 근로 기간 1년 이상, 4주 평균 주 15시간 이상 근무한 경우 퇴직금이 지급됩니다.",
+        "⑦ 사용증명서(근로기준법 제39조): 퇴직 후에도 재직·경력증명서 발급을 요청할 수 있습니다. 4대 보험 자격 상실 신고는 회사가 처리합니다.",
+      ] },
+      { k: "checks", label: "확인 사항", type: "checks", required: true, options: ["위 퇴직 시 지켜야 할 사항을 읽고 이해했습니다", "인수인계를 성실히 마치겠습니다", "회사 자산과 업무 자료를 모두 반납하겠습니다", "재직 중 알게 된 영업비밀·개인정보를 누설하지 않겠습니다"] },
     ],
     summary: (d) => `퇴직 희망일 ${d.last || ""}` },
 ];
@@ -363,6 +373,7 @@ export function initialData(form) {
     if (f.type === "items") d[f.k] = [{ name: "", qty: 1, price: "" }];
     if (f.type === "costs") d[f.k] = (f.preset || ["항목"]).map((l) => ({ label: l, amount: "" }));
     if (f.type === "daterange") d[f.k] = { start: "", end: "" };
+    if (f.type === "checks") d[f.k] = [];
     if (f.type === "timerange") d[f.k] = { start: f.k === "hours" ? "09:00" : "", end: f.k === "hours" ? "18:00" : "" };
   });
   return d;
@@ -374,6 +385,8 @@ export function missingFields(form, d) {
     if (!f.required) return false;
     const v = d[f.k];
     if (f.type === "daterange" || f.type === "timerange") return !v?.start;
+    if (f.type === "notice") return false;
+    if (f.type === "checks") return (v || []).length < (f.options || []).length;
     if (f.type === "items") return !(v || []).some((r) => String(r.name || "").trim() && Number(r.price));
     return v === undefined || v === null || String(v).trim() === "";
   }).map((f) => f.label);
@@ -381,10 +394,12 @@ export function missingFields(form, d) {
 
 // 필드 값을 문서에 보일 글자로
 export function fieldText(f, v, staff) {
+  if (f.type === "notice") return (f.text || []).join("\n");
   if (v === undefined || v === null || v === "") return "";
   if (f.type === "bank") return bankText(v);
   if (f.type === "daterange") { const n = dayDiff(v); const b = bizDays(v); return v.start ? `${rangeText(v)}${n ? ` (${n}일${b !== n ? ` · 주말·공휴일 빼고 ${b}일` : ""})` : ""}` : ""; }
   if (f.type === "money") return Number(v) ? won(v) : "";
+  if (f.type === "checks") return (v || []).map((x) => `☑ ${x}`).join("\n");
   if (f.type === "timerange") { const t = (hm) => { if (!hm) return ""; const [h, m] = hm.split(":").map(Number); return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${String(m).padStart(2, "0")}`; }; return v?.start ? `${t(v.start)}${v.end ? ` ~ ${t(v.end)}` : ""}` : ""; }
   if (f.type === "number") return String(v);
   if (f.type === "staff") { const u = (staff || []).find((x) => x.uid === v); return u ? `${u.name}${u.position ? ` ${u.position}` : ""}` : ""; }
