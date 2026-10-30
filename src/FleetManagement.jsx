@@ -34,6 +34,8 @@ import CustomDatePicker from "./CustomDatePicker";
 import RouteMapModal from "./RouteMapModal";
 import { ReturnTripSuggest } from "./fleetRecommend";
 import { useLoadOrderRange } from "./orderHistory";
+import VehicleCarePanel from "./VehicleCarePanel";
+import { careSummary, vehicleDefaults } from "./vehicleCare";
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
 
@@ -5531,6 +5533,91 @@ function CargoCameraTab({ drivers }) {
   document.head.appendChild(s);
 })();
 
+// ─── 차량 관리 탭 (2026-10-30) ─────────────────────────────────────────────
+// 지입·직영 차량의 주행거리·정비·만기·제원을 한눈에. 기사가 기사앱 '차량' 탭에서 넣은 값을
+// 그대로 보고, 직원도 같은 화면에서 고친다(누가 고쳤는지 남는다).
+function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
+  const rawMap = useMemo(() => Object.fromEntries(driversRaw.map((r) => [r.id, r])), [driversRaw]);
+  const [sel, setSel] = useState(null);
+  const [filter, setFilter] = useState("all");
+  const [q, setQ] = useState("");
+  const [toast, setToast] = useState("");
+  const rows = useMemo(() => drivers.map((d) => {
+    const raw = rawMap[d.id] || {};
+    return { ...d, raw, v: vehicleDefaults(raw), cs: careSummary({ vehicle: vehicleDefaults(raw), care: raw.care || {} }) };
+  }), [drivers, rawMap]);
+  const shown = rows
+    .filter((r) => filter === "all" || (filter === "over" && r.cs.over) || (filter === "soon" && (r.cs.over || r.cs.soon)) || (filter === "none" && !r.cs.setupDone))
+    .filter((r) => !q || [r.이름, r.차량번호].some((x) => String(x || "").includes(q)))
+    .sort((a, b) => (b.cs.over * 10 + b.cs.soon) - (a.cs.over * 10 + a.cs.soon));
+  const cur = rows.find((r) => r.id === sel) || null;
+  const cnt = { all: rows.length, over: rows.filter((r) => r.cs.over).length, soon: rows.filter((r) => r.cs.over || r.cs.soon).length, none: rows.filter((r) => !r.cs.setupDone).length };
+  const th = { padding: "10px 10px", fontSize: 13, fontWeight: 800, color: "#fff", whiteSpace: "nowrap", textAlign: "center" };
+  const td = { padding: "10px 10px", fontSize: 14, fontWeight: 600, color: "#0F1A30", whiteSpace: "nowrap", borderTop: "1px solid #EEF1F6", textAlign: "center" };
+  const showToast = (m) => { setToast(m); setTimeout(() => setToast(""), 2200); };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ borderRadius: 18, padding: "18px 22px", color: "#fff", background: "linear-gradient(rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontFamily: FC_MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>FLEET · VEHICLE CARE</div>
+          <div style={{ fontSize: 23, fontWeight: 900, marginTop: 2 }}>차량 관리</div>
+          <div style={{ fontSize: 13.5, color: "rgba(255,255,255,.65)", marginTop: 2 }}>기사가 기사앱에서 입력한 주행거리·정비·만기·제원을 보고 함께 고칩니다. 차종(톤급)별 정비 주기가 자동 적용됩니다.</div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {[["all", "전체"], ["over", "교체 지남"], ["soon", "점검 필요"], ["none", "미설정"]].map(([k, l]) => (
+            <button key={k} type="button" onClick={() => setFilter(k)} style={{ minWidth: 86, padding: "8px 12px", borderRadius: 12, border: "1px solid rgba(143,176,240,.3)", background: filter === k ? "#fff" : "rgba(255,255,255,.06)", color: filter === k ? "#0F1A30" : "#fff", cursor: "pointer", textAlign: "left" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.7, whiteSpace: "nowrap" }}>{l}</div>
+              <div style={{ fontFamily: FC_MONO, fontSize: 20, fontWeight: 800 }}>{cnt[k]}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: cur ? "minmax(0,1fr) 440px" : "minmax(0,1fr)", gap: 14, alignItems: "start" }}>
+        <div style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 16, overflow: "hidden" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "#F7F9FC", borderBottom: "1px solid #E8EDF4" }}>
+            <span style={{ fontSize: 16, fontWeight: 900, color: "#0F1A30" }}>차량 {shown.length}대</span>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="기사명·차량번호" style={{ height: 34, width: 200, padding: "0 12px", borderRadius: 9, border: "1px solid #DCE3EF", fontSize: 14 }} />
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
+              <thead><tr style={{ background: "linear-gradient(90deg,#0F1A30,#1B2B4B)" }}>{["차량번호", "기사", "차종", "모델·연식", "주행거리", "엔진오일", "점검 알림", "설정"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+              <tbody>
+                {shown.length === 0 && <tr><td colSpan={8} style={{ ...td, color: "#9AA9C3", padding: 40 }}>해당하는 차량이 없습니다</td></tr>}
+                {shown.map((r) => {
+                  const oil = r.cs.alerts.find((a) => a.key === "engineOil");
+                  const oilLast = r.raw.care?.items?.engineOil;
+                  return (
+                    <tr key={r.id} onClick={() => setSel(r.id === sel ? null : r.id)} style={{ cursor: "pointer", background: r.id === sel ? "#EEF3FB" : undefined }}>
+                      <td style={{ ...td, fontWeight: 800 }}>{r.차량번호}</td>
+                      <td style={td}>{r.이름}<span style={{ marginLeft: 6, fontSize: 11.5, fontWeight: 800, color: "#7A879C" }}>{r.등급}</span></td>
+                      <td style={td}>{[r.v.톤, r.v.적재함].filter(Boolean).join(" ") || "-"}</td>
+                      <td style={{ ...td, color: "#5B6B85" }}>{[r.v.모델, r.v.연식 && `${r.v.연식}년`].filter(Boolean).join(" · ") || "-"}</td>
+                      <td style={{ ...td, fontFamily: FC_MONO, fontWeight: 800 }}>{r.cs.odometer ? `${r.cs.odometer.toLocaleString()}km` : "-"}<div style={{ fontSize: 11, color: "#9AA9C3", fontFamily: "inherit", fontWeight: 600 }}>{r.cs.odometerAt}</div></td>
+                      <td style={td}>{oil ? <span style={{ padding: "2px 8px", borderRadius: 6, background: oil.level === 2 ? "#0F1A30" : "#DCE6F7", color: oil.level === 2 ? "#fff" : NAVY, fontSize: 12, fontWeight: 800 }}>{oil.text}</span> : oilLast ? <span style={{ color: "#5B6B85", fontSize: 13 }}>정상</span> : <span style={{ color: "#C0CADB", fontSize: 13 }}>기록 없음</span>}</td>
+                      <td style={{ ...td, textAlign: "left", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }}>{r.cs.alerts.length ? r.cs.alerts.slice(0, 3).map((a) => a.label).join(" · ") : <span style={{ color: "#9AA9C3" }}>-</span>}{r.cs.alerts.length > 3 ? ` 외 ${r.cs.alerts.length - 3}` : ""}</td>
+                      <td style={td}>{r.cs.setupDone ? <span style={{ fontSize: 12.5, color: "#5B6B85", fontWeight: 700 }}>완료</span> : <span style={{ padding: "2px 8px", borderRadius: 6, border: "1px solid #DCE3EF", fontSize: 12, fontWeight: 800, color: "#7A879C" }}>미설정</span>}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {cur && (
+          <div style={{ background: "#F4F6FA", border: "1px solid #E3E8F0", borderRadius: 16, padding: 14, position: "sticky", top: 12, maxHeight: "calc(100vh - 140px)", overflowY: "auto" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <div><div style={{ fontSize: 18, fontWeight: 900, color: "#0F1A30" }}>{cur.차량번호}</div><div style={{ fontSize: 13, color: "#5B6B85" }}>{cur.이름} · {cur.전화번호}</div></div>
+              <button type="button" onClick={() => setSel(null)} style={{ border: "none", background: "none", fontSize: 22, color: "#9AA9C3", cursor: "pointer" }}>✕</button>
+            </div>
+            <VehicleCarePanel key={cur.id} driverId={cur.id} drv={cur.raw} by={by} staff onToast={showToast} />
+          </div>
+        )}
+      </div>
+      {toast && <div style={{ position: "fixed", bottom: 30, left: "50%", transform: "translateX(-50%)", background: "#0F1A30", color: "#fff", padding: "10px 18px", borderRadius: 12, fontSize: 14, fontWeight: 800, zIndex: 9999 }}>{toast}</div>}
+    </div>
+  );
+}
+
 export default function FleetManagement({ dispatchData = [], role = "" }) {
   // Tab persistence across parent-tab switches → sessionStorage
   // ⭐ 사용자 요청 — 지입차관리에 들어왔을 때 노선/배차상태/담당 차량이 먼저
@@ -6330,6 +6417,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
             ["attendance", "출근기록부", "ATT", <><rect x="4" y="4" width="16" height="17" rx="2" /><path d="M8 2v4M16 2v4M4 10h16" /></>],
             ["temperature", "온도 관제", "TEMP", <><path d="M14 14.8V4a2 2 0 0 0-4 0v10.8a4 4 0 1 0 4 0Z" /></>],
             ["cargo-camera", "적재함 카메라", "CAM", <><rect x="2" y="7" width="14" height="11" rx="2" /><path d="m16 11 6-3v9l-6-3" /></>],
+            ["vehicle", "차량 관리", "CARE", <><rect x="1" y="6" width="14" height="10" rx="1.5" /><path d="M15 10h4l3 3v3h-7z" /><circle cx="6" cy="18" r="1.8" /><circle cx="18" cy="18" r="1.8" /></>],
             ["registration", "기사 등록 관리", "REG", <><circle cx="10" cy="8" r="4" /><path d="M3 20c0-4 3-7 7-7M17 14v6M14 17h6" /></>],
           ].map(([key, label, code, icon]) => {
             const on = mainTab === key;
@@ -6668,6 +6756,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
       {mainTab === "cargo-camera" && <CargoCameraTab drivers={drivers} />}
 
       {/* ═══ 기사 등록 관리 ═══ */}
+      {mainTab === "vehicle" && <VehicleCareTab drivers={routeDrivers} driversRaw={driversRaw} by={`${companyStaffRaw.find(u => u.id === myUid)?.name || auth.currentUser?.email || "직원"}(직원)`} />}
       {mainTab === "registration" && <RegistrationTab usersMap={usersMap} myCompanyName={myCompanyName} driversRaw={driversRaw} myUid={myUid} staff={companyStaff} canDelegate={canDelegate} onAssignManager={assignDriverManager} />}
 
         </div>

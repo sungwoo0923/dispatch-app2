@@ -25,6 +25,8 @@ import { useAddrGeo, computeFleetPhase, useFleetPhaseGeo, getCachedGeo, isPickup
 import { snapshotOrder, changedFields, changedLabels } from "../orderChange";
 import { rotationCount, rotationDone, rotationLabel } from "../rotation";
 import { haversineKm } from "../tmapFareCalc";
+import VehicleCarePanel, { VehicleSetupWizard, shouldShowSetup } from "../VehicleCarePanel";
+import { careSummary, vehicleDefaults } from "../vehicleCare";
 
 // ⭐ 오더 타임라인 — 기사 행동(수락/거절/수정확인/상차지도착/상차완료/운송완료 등)을
 // 오더 문서의 기사타임라인 배열에 "덮어쓰지 않고" 계속 쌓는다(관리자 지입차관리 타임라인).
@@ -1006,6 +1008,9 @@ export default function DriverHome() {
   // Functions가 발송 전에 확인한다(기본값: 켜짐).
   const [pushEnabled, setPushEnabled] = useState(true);
   const seenPendingOrderIdsRef = useRef(new Set());
+  // 🚚 차량관리 — 처음 들어오면 차량 기본 설정 마법사(한 번), 홈에 정비·만기 알림
+  const [vehicleSetup, setVehicleSetup] = useState(false);
+  const vehicleSetupCheckedRef = useRef(false);
   const driverRef = useRef(null);
   const posRef = useRef(null);
 
@@ -1055,6 +1060,11 @@ export default function DriverHome() {
       if (snap.exists()) setDriver(snap.data());
     });
   }, [uid]);
+  useEffect(() => {
+    if (!uid || !driver || vehicleSetupCheckedRef.current) return;
+    vehicleSetupCheckedRef.current = true;
+    if (shouldShowSetup(uid, driver)) setVehicleSetup(true);
+  }, [uid, driver]);
 
   // 내 차량번호로 배정된 오더 구독 (지입 전용 오더수락/거절 플로우)
   // ⭐ 버그수정 — 이 앱은 오더가 "orders"(PC 신규등록 기준 컬렉션) /
@@ -2111,6 +2121,28 @@ export default function DriverHome() {
       {activeTab === "home" && (
         <div style={{ padding: "16px 16px 0" }}>
 
+          {/* 🚚 차량 정비·만기 알림 — 누르면 차량 탭 */}
+          {(() => {
+            const cs = careSummary({ vehicle: vehicleDefaults(driver), care: driver.care || {} });
+            if (!driver.care?.setupDone) return (
+              <button type="button" onClick={() => setVehicleSetup(true)} style={{ width: "100%", textAlign: "left", marginBottom: 12, padding: "12px 14px", borderRadius: 16, border: "1px dashed #8FB0F0", background: "#F5F8FD", cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 20 }}>🚚</span>
+                <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontSize: 14, fontWeight: 900, color: "#0F1A30", whiteSpace: "nowrap" }}>내 차량 기본 설정하기</span><span style={{ display: "block", fontSize: 12, color: "#5B6B85", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>주행거리·엔진오일을 넣으면 정비 시기를 알려드려요</span></span>
+                <span style={{ color: "#4B6CB7", fontWeight: 900 }}>›</span>
+              </button>
+            );
+            if (!cs.alerts.length) return null;
+            return (
+              <button type="button" onClick={() => setActiveTab("vehicle")} style={{ width: "100%", textAlign: "left", marginBottom: 12, padding: "12px 14px", borderRadius: 16, border: "1px solid #0F1A30", background: "#0F1A30", color: "#fff", cursor: "pointer" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <span style={{ fontSize: 14, fontWeight: 900, whiteSpace: "nowrap" }}>🚚 차량 점검 알림 {cs.alerts.length}건</span>
+                  <span style={{ fontSize: 12, color: "#8FB0F0", fontWeight: 800, whiteSpace: "nowrap" }}>확인하기 ›</span>
+                </div>
+                <div style={{ fontSize: 12.5, color: "rgba(255,255,255,.7)", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cs.alerts.slice(0, 3).map((a) => `${a.label} ${a.text}`).join(" · ")}</div>
+              </button>
+            );
+          })()}
+
           {/* 오늘 요약 카드 */}
           <div style={{ borderRadius: 20, padding: "16px", marginBottom: 14, color: "#fff", boxShadow: "0 16px 32px rgba(11,20,40,0.28)", border: "1px solid #0B1428",
             background: "linear-gradient(rgba(143,176,240,.05) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.05) 1px, transparent 1px) 0 0/22px 22px, radial-gradient(360px 160px at 90% -10%, rgba(75,108,183,.45), transparent 60%), linear-gradient(160deg,#0B1428 0%,#111F3B 55%,#0E1830 100%)" }}>
@@ -2413,6 +2445,17 @@ export default function DriverHome() {
       )}
 
       {/* ─── 탭: 온도 관제 ─── */}
+      {activeTab === "vehicle" && (
+        <div style={{ padding: "16px 16px 110px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10, paddingLeft: 4 }}><span style={{ width: 6, height: 6, background: "#2D4C82", transform: "rotate(45deg)" }} /><span style={{ fontSize: 9.5, fontWeight: 800, color: "#9AA9C3", letterSpacing: "0.22em", fontFamily: DRV_MONO }}>VEHICLE</span><span style={{ fontSize: 14, fontWeight: 900, color: "#0F1A30", whiteSpace: "nowrap" }}>내 차량 관리</span><span style={{ marginLeft: "auto", fontSize: 12.5, fontWeight: 800, color: "#5B6B85", whiteSpace: "nowrap" }}>{driver.carNo || driver.차량번호 || ""}</span></div>
+          <VehicleCarePanel driverId={uid} drv={driver} by={`${driver.name || driver.이름 || "기사"}(기사)`} onToast={showToast} />
+        </div>
+      )}
+
+      {vehicleSetup && uid && (
+        <VehicleSetupWizard driverId={uid} drv={driver} by={`${driver.name || driver.이름 || "기사"}(기사)`} onClose={(done) => { setVehicleSetup(false); if (done) { showToast("차량 설정이 저장되었습니다"); setActiveTab("vehicle"); } }} />
+      )}
+
       {activeTab === "temperature" && (
         <div style={{ padding: "16px" }}>
           {/* 헤더 */}
@@ -3384,6 +3427,11 @@ export default function DriverHome() {
           { key: "logs", label: "운행기록", icon: (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+          )},
+          { key: "vehicle", label: "차량", icon: (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="1" y="6" width="14" height="10" rx="1.5"/><path d="M15 10h4l3 3v3h-7z"/><circle cx="6" cy="18" r="1.8"/><circle cx="18" cy="18" r="1.8"/>
             </svg>
           )},
           { key: "temperature", label: "온도", icon: (

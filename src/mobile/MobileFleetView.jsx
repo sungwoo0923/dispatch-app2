@@ -13,6 +13,8 @@ import { getDrivingRoute, geocodeAddress, haversineKm } from "../tmapFareCalc";
 import { ShortAddr, DropEtaText, RemainText, RemainEtaText, FleetStepper, pickCurrentOrder, sortActiveOrders, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS, isPickupVisited } from "../fleetGeo";
 import { LeafletTrack, MapLegend } from "../mapLeaflet";
 import { modificationStatus } from "../orderChange";
+import VehicleCarePanel from "../VehicleCarePanel";
+import { careSummary, vehicleDefaults } from "../vehicleCare";
 
 const NAVY = "#1B2B4B";
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
@@ -586,6 +588,45 @@ function MobileOrderDetailModal({ order, currentId = null, onClose }) {
 
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────────
 
+function MobileVehicleCare({ drivers = [], driversRaw = [], by = "" }) {
+  const rawMap = useMemo(() => Object.fromEntries(driversRaw.map((r) => [r.id, r])), [driversRaw]);
+  const [sel, setSel] = useState(null);
+  const [toast, setToast] = useState("");
+  const rows = drivers.map((d) => { const raw = rawMap[d.id] || {}; const v = vehicleDefaults(raw); return { ...d, raw, v, cs: careSummary({ vehicle: v, care: raw.care || {} }) }; })
+    .sort((a, b) => (b.cs.over * 10 + b.cs.soon) - (a.cs.over * 10 + a.cs.soon));
+  const cur = rows.find((r) => r.id === sel);
+  const showToast = (m) => { setToast(m); setTimeout(() => setToast(""), 2000); };
+  if (cur) return (
+    <div style={{ padding: "12px 16px 90px" }}>
+      <button type="button" onClick={() => setSel(null)} style={{ border: "none", background: "none", color: "#4B6CB7", fontSize: 14, fontWeight: 800, padding: "4px 0", cursor: "pointer" }}>‹ 차량 목록</button>
+      <div style={{ fontSize: 19, fontWeight: 900, color: "#0F1A30", whiteSpace: "nowrap" }}>{cur.차량번호}</div>
+      <div style={{ fontSize: 13, color: "#5B6B85", marginBottom: 6, whiteSpace: "nowrap" }}>{cur.이름} · {[cur.v.톤, cur.v.적재함].filter(Boolean).join(" ")}</div>
+      <VehicleCarePanel key={cur.id} driverId={cur.id} drv={cur.raw} by={by} staff onToast={showToast} />
+      {toast && <div style={{ position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", background: "#0F1A30", color: "#fff", padding: "10px 16px", borderRadius: 12, fontSize: 13.5, fontWeight: 800, zIndex: 9999, whiteSpace: "nowrap" }}>{toast}</div>}
+    </div>
+  );
+  return (
+    <div style={{ padding: "12px 16px 90px", display: "flex", flexDirection: "column", gap: 8 }}>
+      {rows.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "#9AA9C3", fontSize: 14 }}>지입·직영 차량이 없습니다</div>}
+      {rows.map((r) => (
+        <button key={r.id} type="button" onClick={() => setSel(r.id)} style={{ textAlign: "left", background: "#fff", border: `1px solid ${r.cs.over ? "#0F1A30" : "#E3E8F0"}`, borderRadius: 14, padding: "11px 13px", cursor: "pointer" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 15, fontWeight: 900, color: "#0F1A30", whiteSpace: "nowrap" }}>{r.차량번호}</span>
+            <span style={{ fontSize: 12.5, color: "#5B6B85", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.이름} · {[r.v.톤, r.v.적재함].filter(Boolean).join(" ") || "차종 미입력"}</span>
+            <span style={{ marginLeft: "auto", fontFamily: "'JetBrains Mono',monospace", fontSize: 13, fontWeight: 800, color: "#0F1A30", whiteSpace: "nowrap" }}>{r.cs.odometer ? `${r.cs.odometer.toLocaleString()}km` : "-"}</span>
+          </div>
+          <div style={{ display: "flex", gap: 6, marginTop: 6, alignItems: "center", minWidth: 0 }}>
+            {!r.cs.setupDone && <span style={{ padding: "1px 7px", borderRadius: 6, border: "1px solid #DCE3EF", fontSize: 11.5, fontWeight: 800, color: "#7A879C", whiteSpace: "nowrap" }}>미설정</span>}
+            {r.cs.over > 0 && <span style={{ padding: "1px 7px", borderRadius: 6, background: "#0F1A30", color: "#fff", fontSize: 11.5, fontWeight: 800, whiteSpace: "nowrap" }}>지남 {r.cs.over}</span>}
+            {r.cs.soon > 0 && <span style={{ padding: "1px 7px", borderRadius: 6, background: "#DCE6F7", color: "#1B2B4B", fontSize: 11.5, fontWeight: 800, whiteSpace: "nowrap" }}>곧 {r.cs.soon}</span>}
+            <span style={{ fontSize: 12, color: "#7A879C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.cs.alerts.slice(0, 3).map((a) => a.label).join(" · ") || (r.cs.setupDone ? "모두 정상" : "기사앱에서 아직 입력 전")}</span>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function MobileFleetView({ dispatchData = [], userCompany = "", onRegisterBack }) {
   const [driversRaw, setDriversRaw] = useState([]);
   const [usersMap, setUsersMap] = useState({});
@@ -1031,7 +1072,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
 
       {/* 섹션 탭 */}
       <div style={{ display: "flex", margin: "16px 16px 0", background: "#EEF2F8", border: "1px solid #E3E8F0", borderRadius: 14, padding: 4, flexWrap: "nowrap", overflowX: "auto", scrollbarWidth: "none" }}>
-        {[["drivers", "기사 목록"], ["map", "지도"], ["feed", "상태 로그"], ["attendance", "출근기록"]].map(([key, label]) => (
+        {[["drivers", "기사 목록"], ["map", "지도"], ["vehicle", "차량"], ["feed", "상태 로그"], ["attendance", "출근기록"]].map(([key, label]) => (
           <button key={key} onClick={() => setActiveSection(key)} style={{
             flex: 1, padding: "9px 4px", borderRadius: 10, border: "none",
             background: activeSection === key ? "#0F1A30" : "transparent", boxShadow: activeSection === key ? "0 4px 12px rgba(15,26,48,0.25)" : "none",
@@ -1599,6 +1640,11 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
             </div>
           )}
         </div>
+      )}
+
+      {/* ═══ 차량 관리 — 기사앱에서 입력한 주행거리·정비·만기를 보고 같이 고친다 ═══ */}
+      {activeSection === "vehicle" && (
+        <MobileVehicleCare drivers={drivers} driversRaw={driversRaw} by={`${companyStaffRaw.find((u) => u.id === myUid)?.name || auth.currentUser?.email || "직원"}(직원)`} />
       )}
 
       {/* ═══ 출근기록 ═══ */}
