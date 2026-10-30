@@ -168,11 +168,12 @@ export const TRUCK_MODELS = [
   ["벤츠", "악트로스", "25톤"], ["벤츠", "아록스", "25톤"], ["만(MAN)", "TGX", "25톤"], ["만(MAN)", "TGS", "11톤"],
   ["이베코", "S-WAY", "25톤"], ["이베코", "스트랄리스", "25톤"], ["다프(DAF)", "XF", "25톤"],
 ];
-export function searchTruckModels(q, ton = "") {
+export function searchTruckModels(q, ton = "", maker = "") {
   const k = String(q || "").replace(/\s+/g, "").toLowerCase();
   const tonN = parseFloat(String(ton).replace(/[^\d.]/g, "")) || 0;
   const near = (h) => { const n = parseFloat(h) || 0; return tonN ? Math.abs(n - tonN) : 0; };
   return TRUCK_MODELS
+    .filter(([mk]) => !maker || maker === "기타" || mk === maker)
     .filter(([mk, md]) => !k || `${mk}${md}`.replace(/\s+/g, "").toLowerCase().includes(k))
     .sort((a, b) => near(a[2]) - near(b[2]))
     .slice(0, 12)

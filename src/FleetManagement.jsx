@@ -5667,7 +5667,7 @@ function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
         </div>
         {/* ⭐ 오른쪽 사이드바 — 크게, 바깥을 눌러도 닫히지 않고 [닫기]로만 닫힌다. 목록의 다른 차량을 누르면 그 차량으로 바뀐다 */}
         {cur && createPortal(
-          <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "min(680px, 100vw)", zIndex: 9500, background: "#F4F6FA", borderLeft: "1px solid #DCE3EE", boxShadow: "-18px 0 40px rgba(11,20,40,.18)", display: "flex", flexDirection: "column" }}>
+          <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "min(960px, 100vw)", zIndex: 9500, background: "#F4F6FA", borderLeft: "1px solid #DCE3EE", boxShadow: "-18px 0 40px rgba(11,20,40,.18)", display: "flex", flexDirection: "column" }}>
             <div style={{ padding: "18px 22px", color: "#fff", background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 65%,#2D4C82 100%)", display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: FC_MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.24em", color: "#8FB0F0" }}>VEHICLE CARE · DETAIL</div>
@@ -5676,8 +5676,8 @@ function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
               </div>
               <button type="button" onClick={() => setSel(null)} style={{ height: 42, padding: "0 18px", borderRadius: 12, border: "none", background: "#fff", color: "#0F1A30", fontSize: 14, fontWeight: 900, cursor: "pointer" }}>닫기</button>
             </div>
-            <div style={{ flex: 1, overflowY: "auto", padding: 18 }}>
-              <VehicleCarePanel key={cur.id} driverId={cur.id} drv={cur.raw} by={by} staff onToast={showToast} />
+            <div style={{ flex: 1, overflowY: "auto", padding: "20px 26px" }}>
+              <VehicleCarePanel key={cur.id} driverId={cur.id} drv={cur.raw} by={by} staff large onToast={showToast} />
             </div>
           </div>,
           document.body,

@@ -5,7 +5,9 @@
 import React from "react";
 import { arrayUnion, doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
-import { CARE_DATES, CLASS_LABEL, FUELS, GEARS, TONS, VEHICLE_KINDS, careSummary, dateStatus, itemStatus, itemsFor, specFor, tonClass, today, vehicleDefaults, searchTruckModels } from "./vehicleCare";
+import CustomDatePicker from "./CustomDatePicker";
+import { CustomSelect } from "./CustomSelect";
+import { CARE_DATES, CLASS_LABEL, FUELS, GEARS, TONS, VEHICLE_KINDS, careSummary, dateStatus, itemStatus, itemsFor, specFor, tonClass, today, vehicleDefaults, searchTruckModels, TRUCK_MODELS } from "./vehicleCare";
 
 const NAVY = "#1B2B4B";
 const INK = "#0F1A30";
@@ -20,25 +22,64 @@ const LV = {
 };
 const LV_TXT = { 2: "지남", 1: "곧", 0: "정상", "-1": "미입력" };
 
-const box = { background: "#fff", border: "1px solid #E3E8F0", borderRadius: 14, padding: "12px 14px" };
-const inp = { width: "100%", height: 40, padding: "0 11px", borderRadius: 10, border: "1px solid #DCE3EF", fontSize: 15, fontWeight: 600, color: INK, background: "#fff", boxSizing: "border-box", outline: "none" };
-const btn = (dark = true) => ({ height: 40, padding: "0 14px", borderRadius: 10, border: dark ? "none" : "1px solid #DCE3EF", background: dark ? NAVY : "#fff", color: dark ? "#fff" : NAVY, fontSize: 14, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" });
-const lbl = { fontSize: 12, fontWeight: 700, color: "#7A879C", marginBottom: 4, whiteSpace: "nowrap" };
+const box = { background: "#fff", border: "1px solid #E3E8F0", borderRadius: 14, padding: "14px 16px" };
+const inp = { width: "100%", height: 44, padding: "0 11px", borderRadius: 10, border: "1px solid #DCE3EF", fontSize: 15, fontWeight: 600, color: INK, background: "#fff", boxSizing: "border-box", outline: "none" };
+const btn = (dark = true) => ({ height: 44, padding: "0 16px", borderRadius: 11, border: dark ? "none" : "1px solid #DCE3EF", background: dark ? NAVY : "#fff", color: dark ? "#fff" : NAVY, fontSize: 14.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" });
+const lbl = { fontSize: 13, fontWeight: 800, color: "#5B6B85", marginBottom: 5, whiteSpace: "nowrap" };
 
 function Badge({ level, children }) {
   const c = LV[level] || LV[0];
-  return <span style={{ display: "inline-flex", alignItems: "center", height: 22, padding: "0 8px", borderRadius: 7, background: c.bg, color: c.fg, border: `1px solid ${c.bd}`, fontSize: 11.5, fontWeight: 800, whiteSpace: "nowrap" }}>{children ?? LV_TXT[level]}</span>;
+  return <span style={{ display: "inline-flex", alignItems: "center", height: 26, padding: "0 10px", borderRadius: 8, background: c.bg, color: c.fg, border: `1px solid ${c.bd}`, fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap" }}>{children ?? LV_TXT[level]}</span>;
 }
 function Head({ code, title, right }) {
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, margin: "14px 2px 8px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
         <span style={{ width: 6, height: 6, background: "#2D4C82", transform: "rotate(45deg)", flexShrink: 0 }} />
-        <span style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: "0.22em", color: "#9AA9C3" }}>{code}</span>
-        <span style={{ fontSize: 14.5, fontWeight: 900, color: INK, whiteSpace: "nowrap" }}>{title}</span>
+        <span style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.22em", color: "#9AA9C3" }}>{code}</span>
+        <span style={{ fontSize: 16.5, fontWeight: 900, color: INK, whiteSpace: "nowrap" }}>{title}</span>
       </div>
       {right}
     </div>
+  );
+}
+
+// 📅 프로그램 달력(배차관리와 같은 달력)
+const DATE_CLS = "w-full h-11 px-3 rounded-[10px] border border-[#DCE3EF] bg-white text-[15px] font-semibold text-[#0F1A30]";
+function DateIn({ value, onChange, disabled, placeholder }) {
+  return <CustomDatePicker value={value || ""} onChange={(e) => onChange(e.target.value)} disabled={disabled} placeholder={placeholder || "날짜 선택"} className={DATE_CLS} showIcon />;
+}
+
+// 🏭 제조사 → 모델 드롭다운(제조사별 목록) + 직접 입력
+const MAKERS = [...new Set(TRUCK_MODELS.map((m) => m[0]))];
+export function MakerModelFields({ v, setV, inpStyle = inp, Field }) {
+  const models = TRUCK_MODELS.filter((m) => m[0] === v.제조사);
+  const inList = models.some((m) => m[1] === v.모델);
+  const [direct, setDirect] = React.useState(!!v.모델 && !inList);
+  React.useEffect(() => { if (v.모델 && !inList && models.length) setDirect(true); }, [v.제조사]); // eslint-disable-line react-hooks/exhaustive-deps
+  const SEL_CLS = "w-full h-11 px-3 rounded-[10px] border border-[#DCE3EF] bg-white text-[15px] font-semibold text-[#0F1A30]";
+  const wrap = Field || ((label, el) => <label style={{ display: "block", minWidth: 0 }}><div style={lbl}>{label}</div>{el}</label>);
+  return (
+    <>
+      {wrap("제조사", (
+        <CustomSelect value={v.제조사 || ""} onChange={(e) => { const mk = e.target.value; setV((p) => ({ ...p, 제조사: mk, ...(TRUCK_MODELS.some((m) => m[0] === mk && m[1] === p.모델) ? {} : { 모델: "" }) })); setDirect(mk === "기타"); }} className={SEL_CLS}>
+          <option value="">선택</option>
+          {[...MAKERS, "기타"].map((x) => <option key={x} value={x}>{x}</option>)}
+        </CustomSelect>
+      ))}
+      {wrap("모델명", direct || !models.length ? (
+        <div style={{ display: "flex", gap: 6 }}>
+          <ModelSearch value={v.모델} ton={v.톤} maker={v.제조사} onPick={(p) => setV((x) => ({ ...x, ...p }))} style={inpStyle} placeholder={v.제조사 && v.제조사 !== "기타" ? `${v.제조사} 모델 검색 또는 직접 입력` : undefined} />
+          {models.length > 0 && <button type="button" onClick={() => { setDirect(false); setV((x) => ({ ...x, 모델: "" })); }} style={{ ...btn(false), height: inpStyle.height || 44, flexShrink: 0 }}>목록</button>}
+        </div>
+      ) : (
+        <CustomSelect value={inList ? v.모델 : ""} onChange={(e) => { const m = e.target.value; if (m === "__direct") { setDirect(true); setV((x) => ({ ...x, 모델: "" })); } else setV((x) => ({ ...x, 모델: m })); }} className={SEL_CLS}>
+          <option value="">{v.제조사 ? `${v.제조사} 모델 선택` : "제조사를 먼저 선택"}</option>
+          {models.map(([, md, hint]) => <option key={md} value={md}>{md} · {hint}</option>)}
+          <option value="__direct">✎ 직접 입력</option>
+        </CustomSelect>
+      ))}
+    </>
   );
 }
 
@@ -49,7 +90,7 @@ async function save(driverId, by, patch, log) {
   await setDoc(doc(db, "drivers", driverId), data, { merge: true });
 }
 
-export default function VehicleCarePanel({ driverId, drv = {}, by = "", staff = false, initialTab = "summary", onToast }) {
+export default function VehicleCarePanel({ driverId, drv = {}, by = "", staff = false, large = false, initialTab = "summary", onToast }) {
   const [tab, setTab] = React.useState(initialTab);
   const [busy, setBusy] = React.useState(false);
   const toast = (m) => (onToast ? onToast(m) : window.alert(m));
@@ -69,16 +110,16 @@ export default function VehicleCarePanel({ driverId, drv = {}, by = "", staff = 
     <div style={{ fontFamily: "inherit", color: INK }}>
       <div style={{ display: "flex", gap: 4, padding: 4, borderRadius: 12, background: "#EEF2F8", overflowX: "auto" }}>
         {tabs.map(([k, l]) => (
-          <button key={k} type="button" onClick={() => setTab(k)} style={{ flex: 1, minWidth: 54, height: 34, borderRadius: 9, border: "none", background: tab === k ? NAVY : "transparent", color: tab === k ? "#fff" : "#5B6B85", fontSize: 13.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>
+          <button key={k} type="button" onClick={() => setTab(k)} style={{ flex: 1, minWidth: 54, height: large ? 42 : 36, borderRadius: 9, border: "none", background: tab === k ? NAVY : "transparent", color: tab === k ? "#fff" : "#5B6B85", fontSize: large ? 15 : 14, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>
             {l}{k === "items" && sum.over ? ` ${sum.over}` : ""}
           </button>
         ))}
       </div>
 
       {tab === "summary" && <Summary {...{ driverId, by, vehicle, care, sum, odo, logs, busy, run, setTab }} />}
-      {tab === "items" && <Items {...{ driverId, by, items, care, odo, busy, run, staff }} />}
-      {tab === "dates" && <Dates {...{ driverId, by, care, busy, run }} />}
-      {tab === "spec" && <Spec {...{ driverId, by, vehicle, busy, run }} />}
+      {tab === "items" && <Items {...{ driverId, by, items, care, odo, busy, run, staff, large }} />}
+      {tab === "dates" && <Dates {...{ driverId, by, care, busy, run, large }} />}
+      {tab === "spec" && <Spec {...{ driverId, by, vehicle, busy, run, large }} />}
       {tab === "logs" && <Logs {...{ driverId, by, logs, odo, busy, run, items }} />}
 
       {drv.careUpdatedBy && <div style={{ marginTop: 12, fontSize: 11.5, color: "#9AA9C3", textAlign: "right", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>마지막 수정 · {drv.careUpdatedBy}{drv.careUpdatedAt?.toDate ? ` · ${drv.careUpdatedAt.toDate().toLocaleString("ko-KR", { hour12: false })}` : ""}</div>}
@@ -158,7 +199,7 @@ function fuelStats(logs) {
 }
 
 // ─── 정비 항목 ───
-function Items({ driverId, by, items, care, odo, busy, run, staff }) {
+function Items({ driverId, by, items, care, odo, busy, run, staff, large }) {
   const [open, setOpen] = React.useState(null);
   const [f, setF] = React.useState({});
   const [edit, setEdit] = React.useState(false);
@@ -172,23 +213,23 @@ function Items({ driverId, by, items, care, odo, busy, run, staff }) {
   return (
     <>
       <Head code="MAINTENANCE" title="정비 항목" right={staff && <button type="button" onClick={() => setEdit((v) => !v)} style={{ ...btn(false), height: 30, fontSize: 12.5 }}>{edit ? "주기 닫기" : "주기 조정"}</button>} />
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ display: "grid", gridTemplateColumns: large ? "repeat(2,minmax(0,1fr))" : "1fr", gap: 8, alignItems: "start" }}>
         {items.map((it) => {
           const st = itemStatus(it, care); const last = care.items?.[it.key] || {};
           return (
-            <div key={it.key} style={{ ...box, padding: "10px 12px" }}>
+            <div key={it.key} style={{ ...box, padding: "12px 14px", ...(open === it.key ? { gridColumn: "1 / -1", borderColor: "#2D4C82" } : {}) }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <Badge level={st.level} />
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: 14.5, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.label}</div>
-                  <div style={{ fontSize: 11.5, color: "#7A879C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <div style={{ fontSize: 15.5, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.label}</div>
+                  <div style={{ fontSize: 12.5, color: "#7A879C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     주기 {[it.km ? `${it.km.toLocaleString()}km` : "", it.months ? `${it.months}개월` : ""].filter(Boolean).join(" / ")}
-                    {last.date || last.km ? ` · 최근 ${[last.date, last.km ? `${Number(last.km).toLocaleString()}km` : ""].filter(Boolean).join(" ")}` : ""}
+                    {last.date || last.km ? ` · 최근 교체 ${[last.date, last.km ? `${Number(last.km).toLocaleString()}km` : ""].filter(Boolean).join(" ")}` : ""}
                   </div>
                 </div>
-                <button type="button" onClick={() => (open === it.key ? setOpen(null) : start(it))} style={{ ...btn(open !== it.key), height: 32, fontSize: 12.5, padding: "0 10px" }}>{open === it.key ? "닫기" : "교체함"}</button>
+                <button type="button" onClick={() => (open === it.key ? setOpen(null) : start(it))} style={{ ...btn(false), height: 36, fontSize: 13, padding: "0 12px" }}>{open === it.key ? "접기" : "+ 교체 기록"}</button>
               </div>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: st.level === 2 ? INK : "#5B6B85", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{st.text}</div>
+              <div style={{ fontSize: 13.5, fontWeight: 800, color: st.level === 2 ? INK : "#5B6B85", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{st.text}</div>
               {edit && (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 8 }}>
                   <label><div style={lbl}>주기 km</div><input inputMode="numeric" defaultValue={it.km || ""} onBlur={(e) => run(() => save(driverId, by, { care: { intervals: { [it.key]: { km: num(e.target.value), months: it.months } } } }), "주기를 바꿨습니다")} style={inp} /></label>
@@ -198,7 +239,7 @@ function Items({ driverId, by, items, care, odo, busy, run, staff }) {
               {open === it.key && (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 10 }}>
                   <label><div style={lbl}>교체 시 주행거리(km)</div><input inputMode="numeric" value={f.km} onChange={(e) => setF({ ...f, km: e.target.value.replace(/[^\d]/g, "") })} style={inp} /></label>
-                  <label><div style={lbl}>교체일</div><input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} style={inp} /></label>
+                  <label><div style={lbl}>교체일</div><DateIn value={f.date} onChange={(x) => setF({ ...f, date: x })} /></label>
                   <label><div style={lbl}>비용(원)</div><input inputMode="numeric" value={f.cost} onChange={(e) => setF({ ...f, cost: e.target.value.replace(/[^\d]/g, "") })} style={inp} placeholder="선택" /></label>
                   <label><div style={lbl}>정비소</div><input value={f.shop} onChange={(e) => setF({ ...f, shop: e.target.value })} style={inp} placeholder="선택" /></label>
                   <input value={f.memo} onChange={(e) => setF({ ...f, memo: e.target.value })} style={{ ...inp, gridColumn: "1 / -1" }} placeholder="메모 (오일 종류 등)" />
@@ -215,21 +256,21 @@ function Items({ driverId, by, items, care, odo, busy, run, staff }) {
 }
 
 // ─── 만기 ───
-function Dates({ driverId, by, care, busy, run }) {
+function Dates({ driverId, by, care, busy, run, large }) {
   return (
     <>
       <Head code="EXPIRY" title="검사 · 보험 · 계약 만기" />
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ display: "grid", gridTemplateColumns: large ? "repeat(2,minmax(0,1fr))" : "1fr", gap: 8 }}>
         {CARE_DATES.map((d) => {
           const v = care.dates?.[d.key] || ""; const st = dateStatus(v);
           return (
             <div key={d.key} style={{ ...box, padding: "10px 12px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <Badge level={st.level}>{st.level === -1 ? "미입력" : st.text}</Badge>
-                <span style={{ fontSize: 14.5, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.label}</span>
+                <span style={{ fontSize: 15.5, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.label}</span>
               </div>
-              <input type="date" defaultValue={v} key={v} disabled={busy} onChange={(e) => run(() => save(driverId, by, { care: { dates: { [d.key]: e.target.value } } }, { kind: "만기", item: d.key, itemLabel: d.label, date: today(), memo: e.target.value }))} style={{ ...inp, marginTop: 8 }} />
-              {d.hint && <div style={{ fontSize: 11.5, color: "#9AA9C3", marginTop: 4 }}>{d.hint}</div>}
+              <div style={{ marginTop: 8 }}><DateIn value={v} disabled={busy} placeholder="만기일 선택" onChange={(x) => x !== v && run(() => save(driverId, by, { care: { dates: { [d.key]: x } } }, { kind: "만기", item: d.key, itemLabel: d.label, date: today(), memo: x }))} /></div>
+              {d.hint && <div style={{ fontSize: 12.5, color: "#7A879C", marginTop: 5 }}>{d.hint}</div>}
             </div>
           );
         })}
@@ -239,7 +280,7 @@ function Dates({ driverId, by, care, busy, run }) {
 }
 
 // ─── 제원 ───
-function Spec({ driverId, by, vehicle, busy, run }) {
+function Spec({ driverId, by, vehicle, busy, run, large }) {
   const [v, setV] = React.useState(vehicle);
   React.useEffect(() => { setV(vehicle); }, [JSON.stringify(vehicle)]); // eslint-disable-line react-hooks/exhaustive-deps
   const set = (k, x) => setV((p) => ({ ...p, [k]: x }));
@@ -253,21 +294,17 @@ function Spec({ driverId, by, vehicle, busy, run }) {
     <label style={{ minWidth: 0 }}>
       <div style={lbl}>{label}{unit ? ` (${unit})` : ""}</div>
       {list
-        ? <select value={v[k] || ""} onChange={(e) => set(k, e.target.value)} style={inp}><option value="">선택</option>{list.map((x) => <option key={x} value={x}>{x}</option>)}</select>
+        ? <CustomSelect value={v[k] || ""} onChange={(e) => set(k, e.target.value)} className="w-full h-11 px-3 rounded-[10px] border border-[#DCE3EF] bg-white text-[15px] font-semibold text-[#0F1A30]"><option value="">선택</option>{list.map((x) => <option key={x} value={x}>{x}</option>)}</CustomSelect>
         : <input type={type} inputMode={numeric ? "numeric" : undefined} value={v[k] ?? ""} onChange={(e) => set(k, numeric ? e.target.value.replace(/[^\d.]/g, "") : e.target.value)} style={inp} />}
     </label>
   );
   return (
     <>
       <Head code="SPEC" title="차량 제원" right={<button type="button" onClick={fill} style={{ ...btn(false), height: 30, fontSize: 12.5 }}>톤급 표준값 채우기</button>} />
-      <div style={{ ...box, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+      <div style={{ ...box, display: "grid", gridTemplateColumns: large ? "repeat(3,minmax(0,1fr))" : "1fr 1fr", gap: 10 }}>
         {F({ k: "톤", label: "톤수", list: TONS })}
         {F({ k: "적재함", label: "적재함 형태", list: VEHICLE_KINDS })}
-        {F({ k: "제조사", label: "제조사", list: ["현대", "기아", "타타대우", "볼보", "스카니아", "벤츠", "만(MAN)", "이스즈", "기타"] })}
-        <label style={{ display: "block" }}>
-          <span style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: "#7A879C", marginBottom: 3 }}>모델명</span>
-          <ModelSearch value={v.모델} ton={v.톤} onPick={(p) => setV((x) => ({ ...x, ...p }))} style={{ width: "100%", height: 38, padding: "0 10px", borderRadius: 10, border: "1px solid #DCE3EF", fontSize: 14, fontWeight: 700, color: "#0F1A30", boxSizing: "border-box" }} />
-        </label>
+        <MakerModelFields v={v} setV={setV} />
         {F({ k: "연식", label: "연식", unit: "년", numeric: true })}
         {F({ k: "연료", label: "연료", list: FUELS })}
         {F({ k: "변속기", label: "변속기", list: GEARS })}
@@ -306,7 +343,7 @@ function Logs({ driverId, by, logs, odo, busy, run }) {
         <div style={{ gridColumn: "1 / -1", display: "flex", gap: 4, overflowX: "auto" }}>
           {LOG_KINDS.map((k) => <button key={k} type="button" onClick={() => setF({ ...f, kind: k })} style={{ flexShrink: 0, height: 32, padding: "0 12px", borderRadius: 99, border: `1px solid ${f.kind === k ? NAVY : "#DCE3EF"}`, background: f.kind === k ? NAVY : "#fff", color: f.kind === k ? "#fff" : "#3A4A66", fontSize: 13, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>{k}</button>)}
         </div>
-        <label><div style={lbl}>날짜</div><input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} style={inp} /></label>
+        <label><div style={lbl}>날짜</div><DateIn value={f.date} onChange={(x) => setF({ ...f, date: x })} /></label>
         <label><div style={lbl}>주행거리(km)</div><input inputMode="numeric" value={f.km} placeholder={odo ? String(odo) : ""} onChange={(e) => setF({ ...f, km: e.target.value.replace(/[^\d]/g, "") })} style={inp} /></label>
         {(f.kind === "주유" || f.kind === "요소수") && <label><div style={lbl}>{f.kind === "주유" ? "주유량(L)" : "보충량(L)"}</div><input inputMode="decimal" value={f.liters} onChange={(e) => setF({ ...f, liters: e.target.value.replace(/[^\d.]/g, "") })} style={inp} /></label>}
         <label><div style={lbl}>금액(원)</div><input inputMode="numeric" value={f.cost} onChange={(e) => setF({ ...f, cost: e.target.value.replace(/[^\d]/g, "") })} style={inp} /></label>
@@ -335,11 +372,11 @@ function Logs({ driverId, by, logs, odo, busy, run }) {
 // ═══ 기사앱 첫 진입 — 차량 기본 설정 마법사 ═══
 //  가입 후 처음 들어오면(care.setupDone 없음) 바로 뜬다. "나중에"는 하루 동안 다시 안 뜸.
 // 🔎 모델명 — 검색해서 고르거나(톤급에 가까운 순) 그대로 직접 입력
-export function ModelSearch({ value, onPick, ton, style, placeholder }) {
+export function ModelSearch({ value, onPick, ton, maker, style, placeholder }) {
   const [open, setOpen] = React.useState(false);
-  const list = searchTruckModels(value, ton);
+  const list = searchTruckModels(value, ton, maker);
   return (
-    <div style={{ position: "relative" }}>
+    <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
       <input value={value || ""} onChange={(e) => { onPick({ 모델: e.target.value }); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
         placeholder={placeholder || "모델 검색 또는 직접 입력 (예: 메가트럭)"} style={style} />
       {open && list.length > 0 && (
@@ -399,19 +436,18 @@ export function VehicleSetupWizard({ driverId, drv = {}, by = "", onClose }) {
         <div style={{ padding: "6px 18px 0" }}>
           <div style={{ fontSize: 16, fontWeight: 900, color: INK, marginTop: 12 }}>{step + 1}. {steps[step]}</div>
           {step === 0 && <>
-            {field("톤수", <select value={v.톤 || ""} onChange={(e) => set("톤", e.target.value)} style={inp}><option value="">선택</option>{TONS.map((x) => <option key={x}>{x}</option>)}</select>)}
+            {field("톤수", <CustomSelect value={v.톤 || ""} onChange={(e) => set("톤", e.target.value)} className="w-full h-11 px-3 rounded-[10px] border border-[#DCE3EF] bg-white text-[15px] font-semibold text-[#0F1A30]"><option value="">선택</option>{TONS.map((x) => <option key={x} value={x}>{x}</option>)}</CustomSelect>)}
             {field("적재함 형태", <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{VEHICLE_KINDS.map((x) => <button key={x} type="button" onClick={() => set("적재함", x)} style={{ height: 36, padding: "0 12px", borderRadius: 10, border: `1px solid ${v.적재함 === x ? NAVY : "#DCE3EF"}`, background: v.적재함 === x ? NAVY : "#fff", color: v.적재함 === x ? "#fff" : "#3A4A66", fontSize: 13.5, fontWeight: 800, whiteSpace: "nowrap" }}>{x}</button>)}</div>)}
             {s && <div style={{ ...box, marginTop: 10, fontSize: 12.5, color: "#5B6B85", lineHeight: 1.7 }}>
               <b style={{ color: INK }}>{v.톤} 표준 제원</b><br />적재함 {s.l}×{s.w}{s.h ? `×${s.h}` : ""}cm · 최대 {s.maxKg.toLocaleString()}kg<br />{s.axle} · 타이어 {s.tires}개 · {CLASS_LABEL[tonClass(v.톤, v.적재함)]} 정비 기준 적용
             </div>}
           </>}
           {step === 1 && <>
-            {field("제조사", <select value={v.제조사 || ""} onChange={(e) => set("제조사", e.target.value)} style={inp}><option value="">선택</option>{["현대", "기아", "타타대우", "볼보", "스카니아", "벤츠", "만(MAN)", "이스즈", "기타"].map((x) => <option key={x}>{x}</option>)}</select>)}
-            {field("모델명", <ModelSearch value={v.모델} ton={v.톤} onPick={(p) => setV((x) => ({ ...x, ...p }))} style={inp} />)}
+            <MakerModelFields v={v} setV={setV} Field={field} />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
               {field("연식", <input inputMode="numeric" value={v.연식 || ""} onChange={(e) => set("연식", e.target.value.replace(/[^\d]/g, "").slice(0, 4))} placeholder="2022" style={inp} />)}
-              {field("연료", <select value={v.연료 || ""} onChange={(e) => set("연료", e.target.value)} style={inp}>{FUELS.map((x) => <option key={x}>{x}</option>)}</select>)}
-              {field("변속기", <select value={v.변속기 || ""} onChange={(e) => set("변속기", e.target.value)} style={inp}>{GEARS.map((x) => <option key={x}>{x}</option>)}</select>)}
+              {field("연료", <CustomSelect value={v.연료 || ""} onChange={(e) => set("연료", e.target.value)} className="w-full h-11 px-3 rounded-[10px] border border-[#DCE3EF] bg-white text-[15px] font-semibold text-[#0F1A30]">{FUELS.map((x) => <option key={x} value={x}>{x}</option>)}</CustomSelect>)}
+              {field("변속기", <CustomSelect value={v.변속기 || ""} onChange={(e) => set("변속기", e.target.value)} className="w-full h-11 px-3 rounded-[10px] border border-[#DCE3EF] bg-white text-[15px] font-semibold text-[#0F1A30]">{GEARS.map((x) => <option key={x} value={x}>{x}</option>)}</CustomSelect>)}
             </div>
             <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 14, fontWeight: 700 }}><input type="checkbox" checked={!!v.냉동기} onChange={(e) => set("냉동기", e.target.checked)} />냉동기 장착 차량</label>
           </>}
@@ -422,11 +458,11 @@ export function VehicleSetupWizard({ driverId, drv = {}, by = "", onClose }) {
           {step === 3 && <>
             <div style={{ fontSize: 12.5, color: "#5B6B85", marginTop: 8 }}>마지막으로 엔진오일을 간 때를 알면 다음 교환 시기를 알려드립니다. 모르면 비워두세요.</div>
             {field("교환할 때 주행거리 (km)", <input inputMode="numeric" value={oil.km} onChange={(e) => setOil({ ...oil, km: e.target.value.replace(/[^\d]/g, "") })} style={inp} />)}
-            {field("교환한 날짜", <input type="date" value={oil.date} onChange={(e) => setOil({ ...oil, date: e.target.value })} style={inp} />)}
+            {field("교환한 날짜", <DateIn value={oil.date} onChange={(x) => setOil({ ...oil, date: x })} />)}
           </>}
           {step === 4 && <>
-            {field("자동차 정기(종합)검사 만료일", <input type="date" value={dates.inspection} onChange={(e) => setDates({ ...dates, inspection: e.target.value })} style={inp} />)}
-            {field("자동차보험 만기일", <input type="date" value={dates.insurance} onChange={(e) => setDates({ ...dates, insurance: e.target.value })} style={inp} />)}
+            {field("자동차 정기(종합)검사 만료일", <DateIn value={dates.inspection} onChange={(x) => setDates({ ...dates, inspection: x })} />)}
+            {field("자동차보험 만기일", <DateIn value={dates.insurance} onChange={(x) => setDates({ ...dates, insurance: x })} />)}
             <div style={{ fontSize: 12, color: "#7A879C", marginTop: 6 }}>만기 30일 전부터 홈 화면에 알려드립니다. 적재물보험·지입계약 만기는 '차량' 탭에서 넣을 수 있습니다.</div>
           </>}
           <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
