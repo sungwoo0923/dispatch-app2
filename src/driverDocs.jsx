@@ -80,15 +80,18 @@ export function StatementDoc({ st, supplier = {} }) {
 // ───────────── 과태료·사고 서류 ─────────────
 export const PENALTY_KINDS = ["과태료", "범칙금", "통행료 미납", "주정차 위반", "속도위반", "신호위반", "사고 처리", "보험료 할증", "기타"];
 export const PENALTY_PAYERS = ["기사 부담(지급액 공제)", "기사 직접 납부", "회사 부담"];
-export function PenaltyDoc({ p, supplier = {}, onPhoto }) {
+export function PenaltyDoc({ p, supplier = {}, onPhoto, wide }) {
   const photos = p.photos || [];
   const rows = [
     ["구분", p.kind], ["발생 일시", [p.date, p.time].filter(Boolean).join(" ")], ["발생 장소", p.place], ["위반·사고 내용", p.detail],
     ["고지 기관", p.agency], ["고지서 번호", p.docNo], ["금액", p.amount ? `${won(p.amount)}원` : "-"], ["납부 기한", p.dueDate],
     ["부담 방식", p.payer], ["처리 상태", p.status],
   ];
+  const ts = (v) => { const ms = v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : 0; if (!ms) return ""; const d = new Date(ms + 9 * 3600e3); return `${d.toISOString().slice(0, 10)} ${d.toISOString().slice(11, 16)}`; };
+  const hist = [["기사님 확인", ts(p.confirmedAt || p.readAt)], ["납부 완료", ts(p.paidAt) + (p.settledBy ? ` (${p.settledBy})` : "")], ["이의 신청", ts(p.objectedAt)]].filter(([, v]) => v.trim());
+  if (hist.length) rows.push(["처리 이력", hist.map(([k, v]) => `${k} · ${v}`).join("\n")]);
   return (
-    <div style={{ background: "#fff", color: NAVY, fontFamily: "'Noto Sans KR',sans-serif", width: "100%", maxWidth: 760, margin: "0 auto", borderRadius: 14, overflow: "hidden", border: "1px solid #E3E8F0" }}>
+    <div style={{ background: "#fff", color: NAVY, fontFamily: "'Noto Sans KR',sans-serif", width: "100%", maxWidth: wide ? "none" : 760, margin: "0 auto", borderRadius: 14, overflow: "hidden", border: "1px solid #E3E8F0" }}>
       <div style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 65%,#2D4C82 100%)", color: "#fff", padding: "18px 22px", display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
         <div>
           <div style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>VEHICLE NOTICE · {p.docId || ""}</div>

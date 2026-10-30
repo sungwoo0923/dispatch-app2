@@ -150,7 +150,7 @@ service cloud.firestore {
       allow update: if dcol in ['driverStatements', 'fleetPenalties'] && (
         (isOfficeStaff() && coMatch(resource.data) && coKeep()) ||
         (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt', 'confirmedAt', 'status', 'driverMemo'])));
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt', 'confirmedAt', 'status', 'driverMemo', 'paidAt', 'objectedAt', 'driverAction'])));
       allow delete: if dcol in ['driverStatements', 'fleetPenalties'] && isOfficeStaff() && coMatch(resource.data);
     }
     // 🛣 고정노선(지입차관리 › 고정노선) — 직원만

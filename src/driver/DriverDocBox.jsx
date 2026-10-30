@@ -9,6 +9,7 @@ import { StatementDoc, PenaltyDoc, ImageViewer, won, MONO, acctLine } from "../d
 import BankAccountInput from "../BankAccountInput";
 import { validateAccount, onlyDigits } from "../bankUtil";
 import { compressImage } from "../InternalMail";
+import { kpConfirm, kpAlert } from "../kpDialog";
 
 const toMs = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : 0);
 const card = { background: "#fff", borderRadius: 16, border: "1px solid #E3E8F0", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" };
@@ -41,7 +42,20 @@ export default function DriverDocBox({ uid, inbox }) {
   const penalties = [...(inbox?.penalties || [])].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   const openItem = (type, item) => {
     setOpen({ type, item });
-    if (!item.readAt) updateDoc(doc(db, type === "pay" ? "driverStatements" : "fleetPenalties", item.id), { readAt: serverTimestamp(), ...(type === "pay" && item.status === "sent" ? { status: "read" } : {}) }).catch(() => {});
+    if (type === "pen" && (!item.status || item.status === "접수")) {
+      // 기사님이 처음 열면 회사 화면에 "기사 확인"으로 바뀐다
+      updateDoc(doc(db, "fleetPenalties", item.id), { status: "기사 확인", confirmedAt: serverTimestamp(), ...(item.readAt ? {} : { readAt: serverTimestamp() }) }).catch(() => {});
+      setOpen({ type, item: { ...item, status: "기사 확인" } });
+    } else if (!item.readAt) updateDoc(doc(db, type === "pay" ? "driverStatements" : "fleetPenalties", item.id), { readAt: serverTimestamp(), ...(type === "pay" && item.status === "sent" ? { status: "read" } : {}) }).catch(() => {});
+  };
+  const penAction = async (item, action) => {
+    const paid = action === "paid";
+    if (!await kpConfirm(paid ? "납부를 마치셨나요?\n회사에 '납부 완료'로 알려집니다." : "이 서류에 이의를 신청할까요?\n담당자가 확인 후 연락드립니다.", { title: paid ? "납부 완료" : "이의 신청", okText: paid ? "납부 완료" : "이의 신청" })) return;
+    const data = paid ? { status: "납부 완료", paidAt: serverTimestamp(), driverAction: "납부 완료" } : { status: "이의 신청", objectedAt: serverTimestamp(), driverAction: "이의 신청" };
+    try {
+      await updateDoc(doc(db, "fleetPenalties", item.id), data);
+      setOpen((o) => (o ? { ...o, item: { ...o.item, status: data.status, ...(paid ? { paidAt: { seconds: Date.now() / 1000 } } : { objectedAt: { seconds: Date.now() / 1000 } }) } } : o));
+    } catch (e) { kpAlert(`처리하지 못했어요: ${e?.message || e}`); }
   };
   const confirmPay = async (item) => {
     await updateDoc(doc(db, "driverStatements", item.id), { status: "confirmed", confirmedAt: serverTimestamp() }).catch(() => {});
@@ -60,6 +74,18 @@ export default function DriverDocBox({ uid, inbox }) {
             {it.status === "confirmed" ? "✓ 확인 완료" : "내용을 확인했습니다"}
           </button>
         )}
+        {open.type === "pen" && (() => {
+          const done = ["납부 완료", "이의 신청", "취소"].includes(it.status);
+          const deduct = String(it.payer || "").startsWith("기사 부담");
+          if (done) return <div style={{ marginTop: 14, height: 52, borderRadius: 14, background: "#E3E8F0", color: "#3A4A66", fontSize: 15, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>✓ {it.status}{it.settledBy ? ` (${it.settledBy})` : ""}</div>;
+          return (
+            <div style={{ display: "grid", gridTemplateColumns: deduct || String(it.payer || "").startsWith("회사") ? "1fr" : "1fr 1.4fr", gap: 8, marginTop: 14 }}>
+              <button type="button" onClick={() => penAction(it, "object")} style={{ height: 52, borderRadius: 14, border: "1px solid #C9D6EE", background: "#fff", color: "#1B2B4B", fontSize: 15, fontWeight: 900 }}>이의 신청</button>
+              {!deduct && !String(it.payer || "").startsWith("회사") && <button type="button" onClick={() => penAction(it, "paid")} style={{ height: 52, borderRadius: 14, border: "none", background: "linear-gradient(120deg,#0B1428,#2D4C82)", color: "#fff", fontSize: 15.5, fontWeight: 900 }}>납부 완료</button>}
+            </div>
+          );
+        })()}
+        {open.type === "pen" && String(it.payer || "").startsWith("기사 부담") && !["납부 완료", "취소"].includes(it.status) && <div style={{ marginTop: 8, fontSize: 12.5, color: "#7A89A3", textAlign: "center" }}>지급액에서 공제되면 자동으로 납부 완료됩니다</div>}
         {viewer && <ImageViewer images={viewer.images} index={viewer.index} onClose={() => setViewer(null)} name={it.kind || "서류"} />}
       </div>
     );

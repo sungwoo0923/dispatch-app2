@@ -28,7 +28,7 @@ const GROUPS = [
 ];
 
 // 캡처 이미지 → 글자 인식이 잘 되게 키우고(작은 캡처 2배) 흑백·대비를 높인다
-async function prepImage(dataUrl) {
+export async function prepImage(dataUrl) {
   const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = dataUrl; });
   const scale = img.width < 1000 ? 2 : img.width > 2600 ? 2600 / img.width : 1;
   const c = document.createElement("canvas");
