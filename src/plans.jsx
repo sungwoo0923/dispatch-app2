@@ -59,6 +59,7 @@ const PlanCtx = React.createContext({ planId: null, company: "" });
 export function PlanProvider({ company, children }) {
   const [planId, setPlanId] = React.useState(null);
   React.useEffect(() => {
+    if (previewPlan) { setPlanId(previewPlan); return undefined; }
     if (!company) return undefined;
     return onSnapshot(doc(db, "companyPlans", company), (s) => setPlanId(s.exists() ? s.data()?.planId || null : null), () => setPlanId(null));
   }, [company]);
@@ -228,9 +229,13 @@ export const LockIcon = ({ size = 11 }) => (
 );
 
 // DispatchApp처럼 Provider를 직접 그리는 컴포넌트용 — 구독은 직접 하고 값만 내려준다
+// 👀 승인 전 둘러보기 — 가입 때 고른 요금제로 메뉴를 보여준다(서버 조회 없음)
+let previewPlan = null;
+export const setPreviewPlan = (p) => { previewPlan = p || null; };
 export function useCompanyPlanId(company) {
-  const [planId, setPlanId] = React.useState(null);
+  const [planId, setPlanId] = React.useState(previewPlan);
   React.useEffect(() => {
+    if (previewPlan) { setPlanId(previewPlan); return undefined; }
     if (!company) return undefined;
     return onSnapshot(doc(db, "companyPlans", company), (s) => setPlanId(s.exists() ? s.data()?.planId || null : null), () => setPlanId(null));
   }, [company]);

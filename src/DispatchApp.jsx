@@ -24,7 +24,7 @@ import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import { useNewVersion, openUpdatePopup } from "./VersionCheck";
 import CustomDatePicker, { specialDemandInfo, KOREAN_HOLIDAYS, shortHolidayLabel } from "./CustomDatePicker";
 import { ensureWeatherLoaded, getWeatherSpecialInfo } from "./weatherUtil";
-import AdminMenu from "./AdminMenu";
+import AdminMenu, { subscribeUsersLive } from "./AdminMenu";
 import { calcFare } from "./fareUtil";
 import FixedClients from "./FixedClients";
 import FleetManagement from "./FleetManagement";
@@ -2088,14 +2088,16 @@ const inputStyle =
   );
 
 // ⭐ 2026-10-29 오더복사/수정 패널 전용 — 라벨을 입력칸 왼쪽에 두어(세로 → 가로) 패널 높이를 절반 가까이 줄인다.
+// ⭐ 지금 입력 중인 칸(클릭·Tab 이동)은 줄 전체를 네이비로 강조 — 라벨 굵게 + 왼쪽 막대 + 밑줄 두껍게
 const CpField = ({ label, children }) => (
-  <div className="grid grid-cols-[118px_minmax(0,1fr)] items-center gap-2 min-h-[40px]">
-    <div className="text-[13.5px] font-bold text-[#5B6B85] flex items-center gap-1 leading-tight whitespace-nowrap">{label}</div>
+  <div className="group relative grid grid-cols-[118px_minmax(0,1fr)] items-center gap-2 min-h-[40px] -mx-2 px-2 rounded-lg transition-colors focus-within:bg-[#EEF3FC]">
+    <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-[#2D4C82] opacity-0 group-focus-within:opacity-100 transition-opacity" />
+    <div className="text-[13.5px] font-bold text-[#5B6B85] flex items-center gap-1 leading-tight whitespace-nowrap group-focus-within:text-[#0B1428] group-focus-within:font-black">{label}</div>
     <div className="min-w-0">{children}</div>
   </div>
 );
 const cpInputStyle =
-  "w-full border-0 border-b border-[#D5DEEC] rounded-none px-1 py-1.5 text-[14.5px] font-bold text-gray-900 bg-transparent focus:outline-none focus:border-[#1B2B4B] transition";
+  "w-full border-0 border-b border-[#D5DEEC] rounded-none px-1 py-1.5 text-[14.5px] font-bold text-gray-900 bg-transparent focus:outline-none focus:border-b-[3px] focus:border-[#2D4C82] focus:text-[#0B1428] transition";
 
 const todayStr = () => {
   const d = new Date();
@@ -3417,15 +3419,22 @@ function useRealtimeCollections(user, userCompany, role) {
   const fetchHistoryRows = React.useCallback(async (makeQuery) => {
     setHistoryLoading(n => n + 1);
     try {
-      const parts = await Promise.all(["orders", "dispatch"].map(col =>
-        getDocs(makeQuery(collection(db, col))).then(snap => snap.docs.map(d => {
-          const data = d.data() || {};
-          return {
+      // ⚡ 수만 건을 한 번에 변환하면 그동안 입력·스크롤이 멈춘다(끊김) — 400건씩 나눠 사이사이 화면에 양보한다
+      const toRows = async (col, snap) => {
+        const docs = snap.docs; const out = new Array(docs.length);
+        for (let i = 0; i < docs.length; i++) {
+          if (i && i % 400 === 0) await new Promise((r) => setTimeout(r, 0));
+          const d = docs[i]; const data = d.data() || {};
+          out[i] = {
             __col: col, ...data, _id: d.id,
             경유지_상차: parseWaypointsShared(data.경유지_상차) || parseWaypointsShared(data.경유상차목록) || [],
             경유지_하차: parseWaypointsShared(data.경유지_하차) || parseWaypointsShared(data.경유하차목록) || [],
           };
-        }))));
+        }
+        return out;
+      };
+      const parts = await Promise.all(["orders", "dispatch"].map(col =>
+        getDocs(makeQuery(collection(db, col))).then(snap => toRows(col, snap))));
       // 실시간 목록과 같은 기준으로 제외(화주 전송 사본·취소건)
       const rows = parts.flat().filter(row =>
         row.source !== "transport_transmit" &&
@@ -7184,6 +7193,18 @@ useEffect(() => {
   } = useRealtimeCollections(user, userCompany, role);
   const orderHistoryApi = React.useMemo(() => ({ loadRange, loadFullHistory }), [loadRange, loadFullHistory]);
   const [pcBootDone, setPcBootDone] = useState(false);
+  // ⚡ 오더복사·운임 자동매칭이 쓰는 예전 오더(13개월)를 첫 로딩이 끝난 뒤 한가할 때 미리 받아둔다.
+  //   예전엔 오더복사를 열거나 상·하차지를 입력하는 "그 순간" 받기 시작해 입력이 끊기고 검색이 늦게 떴다.
+  useEffect(() => {
+    if (!pcBootDone || !user) return undefined;
+    let idleId = null;
+    const t = setTimeout(() => {
+      const run = () => { loadFullHistory(); subscribeUsersLive(); };
+      if (typeof window.requestIdleCallback === "function") idleId = window.requestIdleCallback(run, { timeout: 6000 });
+      else run();
+    }, 4000);
+    return () => { clearTimeout(t); if (idleId && window.cancelIdleCallback) window.cancelIdleCallback(idleId); };
+  }, [pcBootDone, user, loadFullHistory]);
 
   // ⚠️ 아래 dispatchDataFiltered에서 커스텀 권한(관리자메뉴 > 권한관리에서 만든 역할)
   // 여부를 판단하는 데 필요해서, 원래 더 아래(구 "역할별 차단 메뉴" 구역)에 있던
@@ -47727,33 +47748,33 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
 
       {rvPage === "query" && <QueryPage rows={rows} clients={clients} />}
 
-              {monthCloseOpen && (
-                <MonthCloseCheck dispatchData={dispatchData} isViewer={isViewer} onClose={() => setMonthCloseOpen(false)} />
+              {monthCloseOpen && createPortal(
+                <MonthCloseCheck dispatchData={dispatchData} isViewer={isViewer} onClose={() => setMonthCloseOpen(false)} />, document.body
               )}
-              {staffPerfOpen && canSeeStaffPerf && (
+              {staffPerfOpen && canSeeStaffPerf && createPortal(
                 <StaffPerformance
                   rows={rows}
                   isExcluded={isExcludedFast}
                   hasExcluded={getNetRevenueExcludedNames(clients, places).length > 0}
                   onClose={() => setStaffPerfOpen(false)}
-                />
+                />, document.body
               )}
-              {marginReportOpen && (
+              {marginReportOpen && createPortal(
                 <MarginReportModal
                   rows={rows}
                   initialMonth={targetMonth}
                   isExcluded={isExcludedFast}
                   hasExcluded={getNetRevenueExcludedNames(clients, places).length > 0}
                   onClose={() => setMarginReportOpen(false)}
-                />
+                />, document.body
               )}
-              {monthCompareOpen && (
+              {monthCompareOpen && createPortal(
                 <MonthCompareAnalysis
                   rows={rows}
                   isExcluded={isExcludedFast}
                   hasExcluded={getNetRevenueExcludedNames(clients, places).length > 0}
                   onClose={() => setMonthCompareOpen(false)}
-                />
+                />, document.body
               )}
 
 
@@ -55506,7 +55527,9 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
 }
 // ===================== DispatchApp.jsx (PART 9/9) — END =====================
 // ===================== DispatchApp.jsx (PART 10/10) — START =====================
-function DriverManagement({ drivers, upsertDriver, removeDriver, showAlert = (m) => alert(m), userCompany = "" }) {
+function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, showAlert = (m) => alert(m), userCompany = "" }) {
+  // 이름·차량번호·연락처가 모두 빈 문서(예전 직원 승인 때 잘못 생긴 빈 기사)는 목록에서 뺀다
+  const drivers = React.useMemo(() => (driversRaw || []).filter((r) => String(r.이름 || r.name || "").trim() || String(r.차량번호 || "").trim() || String(r.전화번호 || r.phone || "").trim()), [driversRaw]);
   // ⭐ 사용자 요청 — PC 기사 수정 모달에서도 담당자(위임 대상)를 바로 지정할 수
   // 있어야 한다. 지입차관리(FleetManagement)와 동일한 기준(같은 회사의
   // totalMaster/admin/user)으로 배차자 목록을 가져온다.
@@ -55530,7 +55553,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver, showAlert = (m)
   const [showAddForm, setShowAddForm] = React.useState(false);
   const [newForm, setNewForm] = React.useState({ 차량번호:"", 이름:"", 전화번호:"", 메모:"", 등급:"일반", 거주지:"", 차량종류:"", 차량톤수:"", 요청사항:"", 담당자:null, 근무요일:[] });
   const WEEKDAYS = ["월","화","수","목","금","토","일"];
-  const [showAll, setShowAll] = React.useState(false);
+  const [showAll, setShowAll] = React.useState(true); // 들어오면 바로 전체 목록
   const [page, setPage] = React.useState(1);
   const perPage = 20;
   const [editDriverModal, setEditDriverModal] = React.useState(null); // 더블클릭 수정 팝업
@@ -55804,7 +55827,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver, showAlert = (m)
         </div>
         <div className="flex items-center gap-1 h-12 px-1.5 rounded-[16px] bg-[#EEF2F8] border border-[#E3E8F0]">
           {["전체","일반","직영","지입","블랙"].map(g => (
-            <button key={g} onClick={() => setGradeFilter(g)}
+            <button key={g} onClick={() => { setGradeFilter(g); if (!(q.trim() && searched)) setShowAll(true); }}
               className={`h-9 px-3.5 rounded-[11px] text-[13px] font-black transition ${gradeFilter===g ? "bg-white text-[#0F1A30] shadow-[0_4px_10px_rgba(15,26,48,0.1)]" : "text-[#5B6B85] hover:text-[#0F1A30]"}`}>{g}</button>
           ))}
         </div>
@@ -56735,6 +56758,8 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const [placeSearched, setPlaceSearched] = React.useState(false);
   const [placeFilterType, setPlaceFilterType] = React.useState("업체명");
   const [placeGradeFilter, setPlaceGradeFilter] = React.useState("전체");
+  const [placeShowN, setPlaceShowN] = React.useState(300); // 많으면 300건씩 나눠 그린다(끊김 방지)
+  React.useEffect(() => { setPlaceShowN(300); }, [placeGradeFilter, placeSearched, placeQ]);
   const [placeSelected, setPlaceSelected] = React.useState(new Set());
   const [showDupPreview, setShowDupPreview] = React.useState(false);
   const [dupSelected, setDupSelected] = React.useState(new Set());
@@ -57356,7 +57381,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     if (subTab !== "하차지") return [];
     let list = mergedPlaceRows;
     if (placeGradeFilter !== "전체") list = list.filter(r => (r.등급 || "일반") === placeGradeFilter);
-    if (!placeSearched || !placeQ.trim()) return placeGradeFilter !== "전체" ? list : [];
+    if (!placeSearched || !placeQ.trim()) return list; // '전체'도 바로 전체 목록
     const nq = norm(placeQ);
     if (placeFilterType === "업체명") return list.filter((r) => norm(r.업체명 || "").includes(nq));
     if (placeFilterType === "주소") return list.filter((r) => norm(r.주소 || "").includes(nq));
@@ -57618,10 +57643,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
           )}
 
           {/* 안내 / 빈 결과 */}
-          {!placeSearched && placeGradeFilter === "전체" && (
-            <KpEmptySearch en="PLACE SEARCH" title="위 검색바에 하차지 업체명이나 주소를 입력하세요" sub="숫자 타일을 누르면 등급별 하차지가 바로 보입니다" />
-          )}
-          {(placeSearched || placeGradeFilter !== "전체") && filteredPlaces.length === 0 && (
+          {filteredPlaces.length === 0 && (
             <div className="bg-white rounded-xl border text-center py-14 text-gray-500 text-sm">검색 결과가 없습니다</div>
           )}
 
@@ -57642,7 +57664,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredPlaces.map((r, i) => {
+                    {filteredPlaces.slice(0, placeShowN).map((r, i) => {
                       const id = r.id || r.업체명 || `${i}`;
                       const grade = r.등급 || "일반";
                       return (
@@ -57703,6 +57725,11 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                   </tbody>
                 </table>
               </div>
+              {filteredPlaces.length > placeShowN && (
+                <button type="button" onClick={() => setPlaceShowN((n) => n + 300)} className="w-full h-11 border-t border-[#EEF1F6] text-[13px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD]">
+                  더 보기 ({placeShowN.toLocaleString()} / {filteredPlaces.length.toLocaleString()}건)
+                </button>
+              )}
             </div>
           )}
 

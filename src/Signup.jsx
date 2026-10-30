@@ -1,15 +1,30 @@
 // src/Signup.jsx  —  운송사 회원가입
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { checkEmailAvailable } from "./emailCheck";
+import { checkEmailAvailable, warmSignupFunctions } from "./emailCheck";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "firebase/auth";
 import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import {
   doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc, updateDoc,
 } from "firebase/firestore";
 
+// 운송사 목록 — 가입 화면이 열릴 때 한 번 받아 두고, 입력할 때마다 바로 거른다(드롭다운 즉시)
+let companyListPromise = null;
+function loadCompanyList() {
+  if (!companyListPromise) {
+    companyListPromise = fetch(`${FUNCTIONS_BASE}/findCompany?all=1`).then((r) => (r.ok ? r.json() : null))
+      .then((j) => (Array.isArray(j?.results) ? j.results : null)).catch(() => null)
+      .then((list) => { if (!list) companyListPromise = null; return list; });
+  }
+  return companyListPromise;
+}
 // 기존 회사 검색 — 로그인 전이라 서버 함수(findCompany)로 찾고, 로그인 상태면 직접 조회도 시도
 async function findCompanies(q, exact = false) {
+  const list = await loadCompanyList();
+  if (list) {
+    const key = String(q || "").trim().toLowerCase();
+    return list.filter((c) => { const n = String(c.companyName || "").toLowerCase(); return exact ? n === key : n.includes(key); });
+  }
   const key = String(q || "").trim().toLowerCase();
   try {
     const r = await fetch(`${FUNCTIONS_BASE}/findCompany?q=${encodeURIComponent(key)}${exact ? "&exact=1" : ""}`);
@@ -191,6 +206,13 @@ function SignupForm({ signupType, onBack }) {
   const [hasSearched, setHasSearched] = useState(false);
   const [selectedCompanyApp, setSelectedCompanyApp] = useState(null);
 
+  const [companyList, setCompanyList] = useState(null);
+  useEffect(() => { warmSignupFunctions(); loadCompanyList().then((l) => l && setCompanyList(l)); }, []);
+  const instantMatches = (q) => {
+    const key = String(q || "").trim().toLowerCase();
+    if (!key || !companyList) return [];
+    return companyList.filter((c) => String(c.companyName || "").toLowerCase().includes(key)).slice(0, 8);
+  };
   const searchExistingCompany = async () => {
     const q = companySearchQ.trim();
     if (!q) return;
@@ -318,6 +340,7 @@ function SignupForm({ signupType, onBack }) {
         role: "admin",
         approved: false,
         isMaster: false,
+        requestedPlan: signupType === "신규" ? planId : "",
         status: null,
         createdAt: serverTimestamp(),
       });
@@ -355,7 +378,6 @@ function SignupForm({ signupType, onBack }) {
       await writeUserDocs(res.user.uid);
       await signOut(auth);
       setSuccess(true);
-      setTimeout(() => navigate("/login"), 2500);
     } catch (err) {
       const code = err.code || "";
       if (code === "auth/email-already-in-use") {
@@ -370,7 +392,6 @@ function SignupForm({ signupType, onBack }) {
             await writeUserDocs(reLogin.user.uid);
             await signOut(auth);
             setSuccess(true);
-            setTimeout(() => navigate("/login"), 2500);
           } else {
             await signOut(auth);
             setError("이미 가입된 이메일입니다. 로그인 화면에서 로그인해 주세요.");
@@ -420,7 +441,12 @@ function SignupForm({ signupType, onBack }) {
                 <div className="flex gap-2">
                   <input
                     value={companySearchQ}
-                    onChange={(e) => { setCompanySearchQ(e.target.value); setCompanyName(e.target.value); setCompanySuggestions([]); }}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setCompanySearchQ(v); setCompanyName(v); setSelectedCompanyApp(null);
+                      if (companyList) { setCompanySuggestions(instantMatches(v)); setHasSearched(!!v.trim()); }
+                      else { setCompanySuggestions([]); setHasSearched(false); }
+                    }}
                     onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), searchExistingCompany())}
                     placeholder="회사명 검색"
                     className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
@@ -437,10 +463,7 @@ function SignupForm({ signupType, onBack }) {
                         onClick={() => selectCompanySuggestion(item)}
                         className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-50 last:border-b-0 transition">
                         <div className="text-[14px] font-bold text-[#1B2B4B]">{item.companyName}</div>
-                        <div className="text-[12px] text-gray-400 mt-0.5">
-                          {item.businessNumber && <span className="mr-3">사업자번호: {item.businessNumber}</span>}
-                          {item.name && <span>대표: {item.name}</span>}
-                        </div>
+                        {item.address && <div className="text-[12px] text-gray-400 mt-0.5 truncate">{item.address}</div>}
                       </button>
                     ))}
                   </div>
@@ -592,6 +615,12 @@ function SignupForm({ signupType, onBack }) {
           {success && (
             <div className="bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 rounded-xl font-semibold">
               운송사 가입신청이 완료되었습니다. 관리자 승인 후 로그인이 가능합니다.
+              <div className="grid grid-cols-2 gap-2 mt-2.5">
+                <button type="button" onClick={() => navigate(`/preview?co=${encodeURIComponent(companyName.trim())}&plan=${signupType === "신규" ? planId : ""}`)}
+                  className="h-10 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-black">승인 전 둘러보기</button>
+                <button type="button" onClick={() => navigate("/login")}
+                  className="h-10 rounded-xl border border-[#1B2B4B]/30 bg-white text-[#1B2B4B] text-[13px] font-black">로그인 화면으로</button>
+              </div>
             </div>
           )}
 

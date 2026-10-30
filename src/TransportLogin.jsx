@@ -35,6 +35,7 @@ export default function TransportLogin() {
   const [pw, setPw] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [previewInfo, setPreviewInfo] = useState(null); // 승인 대기 계정 — 둘러보기 버튼
   const [msg, setMsg] = useState(null);
   const [showPopup, setShowPopup] = useState(false);
   const [countdown, setCountdown] = useState(3);
@@ -153,7 +154,7 @@ export default function TransportLogin() {
   };
 
   const login = async () => {
-    setError(null);
+    setError(null); setPreviewInfo(null);
     setMsg(null);
 
     if (!companyCode.trim()) return setError("회사코드는 필수 항목입니다. 승인 안내 이메일을 확인해주세요.");
@@ -234,6 +235,7 @@ export default function TransportLogin() {
         if (!userData.approved) {
           sessionStorage.removeItem("transportValidating");
           await signOut(auth);
+          setPreviewInfo({ co: userData.companyName || "", plan: userData.requestedPlan || "" });
           setError("관리자 승인 대기 중입니다. 승인 후 로그인이 가능합니다.");
           return;
         }
@@ -430,6 +432,10 @@ export default function TransportLogin() {
               <div className="flex gap-2 text-[13px] font-semibold text-[#0F1A30] mb-4 bg-[#FFF5F4] border border-[#F3D3CF] rounded-xl px-3.5 py-2.5">
                 <span className="text-[#C2453D] font-black">!</span><span>{error}</span>
               </div>
+            )}
+            {error && previewInfo && (
+              <button type="button" onClick={() => navigate(`/preview?co=${encodeURIComponent(previewInfo.co)}&plan=${previewInfo.plan}`)}
+                className="w-full h-11 mb-4 rounded-xl bg-[#1B2B4B] text-white text-[13.5px] font-black">승인 전 둘러보기</button>
             )}
             {msg && (
               <div className="text-[13px] font-semibold text-[#0F1A30] mb-4 bg-[#F2F6FC] border border-[#D9E3F3] rounded-xl px-3.5 py-2.5">{msg}</div>

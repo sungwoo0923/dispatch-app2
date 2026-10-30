@@ -83,13 +83,26 @@ const DotBadge = ({ active, label, activeLabel, inactiveLabel }) => (
   </span>
 );
 
+// ⚡ 직원 목록 실시간 캐시 — 한 번 구독하면 화면을 닫아도 유지하고, 다시 열면 마지막 목록을 즉시 보여준다
+let usersLive = { list: null, unsub: null, subs: new Set() };
+export function subscribeUsersLive(fn) {
+  if (fn) { usersLive.subs.add(fn); if (usersLive.list) fn(usersLive.list); }
+  if (!usersLive.unsub) {
+    usersLive.unsub = onSnapshot(collection(db, "users"), (snap) => {
+      usersLive.list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      usersLive.subs.forEach((f) => f(usersLive.list));
+    }, () => { usersLive.unsub = null; });
+  }
+  return () => { if (fn) usersLive.subs.delete(fn); };
+}
+
 export default function AdminMenu({ parentRole = "", parentCompany = "", isViewer = false, dispatchData = [], places = [] }) {
   const [adminTab, setAdminTab] = useState("members");
   const [sessionLogs, setSessionLogs] = useState([]);
   const [sessionLogEventFilter, setSessionLogEventFilter] = useState("all");
   const [sessionLogPage, setSessionLogPage] = useState(1);
   const SESSION_LOG_PAGE_SIZE = 20;
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState(() => usersLive.list || []);
   const [allShipperApps, setAllShipperApps] = useState([]);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -101,6 +114,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const [editPosition, setEditPosition] = useState("");
   const [editTeam, setEditTeam] = useState("");
   const [editMode, setEditMode] = useState(false);
+  const [memberModal, setMemberModal] = useState(false); // 회원 관리 창(승인·거절·정보수정·마스터·퇴사·삭제)
   const [showMobilePreview, setShowMobilePreview] = useState(false);
 
   // 연동 운송사 탭 state
@@ -160,13 +174,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     return () => unsub();
   }, [me?.uid]);
 
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, "users"), (snapshot) => {
-      const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setUsers(list);
-    });
-    return () => unsub();
-  }, []);
+  // ⚡ 직원 목록은 앱이 켜질 때부터 받아 두고 계속 살려 둔다(관리자메뉴를 열 때마다 처음부터 받던 지연 제거)
+  useEffect(() => subscribeUsersLive(setUsers), []);
 
   // 최고관리자 전용 접속이력(로그인/로그아웃) — 탭을 열었을 때만 구독한다.
   useEffect(() => {
@@ -514,7 +523,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
       }
     }
     await setDoc(doc(db, "users", u.id), updateData, { merge: true });
-    await setDoc(doc(db, "drivers", u.id), { active: status, updatedAt: new Date() }, { merge: true });
+    // 기사 계정만 기사 목록 상태를 맞춘다(예전엔 직원 승인 때도 빈 기사 문서가 생겨 기사관리에 '-' 행이 보였다)
+    if (u.role === "driver") await setDoc(doc(db, "drivers", u.id), { active: status, updatedAt: new Date() }, { merge: true });
     // transportApplications 상태도 동기화
     try {
       const tSnap = await getDocs(query(collection(db, "transportApplications"), where("userId", "==", u.id)));
@@ -919,28 +929,16 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                           {!canAdmin && me?.uid !== u.id && !editMode && (
                             <span className="text-[12px] font-bold text-[#9AA9C3]">직책·부서·권한 변경은 인사관리부 › 인사발령</span>
                           )}
-                          {canAdmin && !editMode && canManage && (
-                            <button onClick={() => toggleMaster(u)} className={`h-10 px-4 rounded-xl text-[13px] font-extrabold transition whitespace-nowrap ${u.isMaster ? "border border-[#0F1A30] text-[#0F1A30]" : "border border-[#E3E8F0] text-[#3A4A66] hover:bg-[#F5F8FD]"}`}>{u.isMaster ? "마스터 해제" : "마스터 지정"}</button>
-                          )}
-                          {canAdmin && !editMode && (
-                            <button onClick={() => toggleApprove(u)} className={`h-10 px-4 rounded-xl text-[13px] font-extrabold transition ${u.approved ? "border border-[#E3E8F0] text-[#3A4A66] hover:bg-[#F5F8FD]" : "bg-[#0F1A30] text-white hover:bg-[#1B2B4B]"}`}>
-                              {u.approved ? <EditableText id="adminMenu.members.승인해제" defaultText="승인 해제" /> : <EditableText id="adminMenu.members.승인" defaultText="승인" />}
-                            </button>
-                          )}
+                          {/* ⭐ 버튼은 하나 — 승인 전엔 "승인·거절", 승인 후엔 "정보 수정". 누르면 창 안에서 승인·거절·수정·마스터·퇴사·삭제 */}
                           {canAdmin && canManage && !editMode && (
-                            <>
-                              <button onClick={() => setEditMode(true)} className="h-10 px-4 rounded-xl text-[13px] font-extrabold bg-[#0F1A30] text-white hover:bg-[#1B2B4B] transition"><EditableText id="adminMenu.members.정보수정" defaultText="정보 수정" /></button>
-                              <button onClick={() => setResignStatus(u, !resigned)} className="h-10 px-4 rounded-xl text-[13px] font-extrabold border border-[#E3E8F0] text-[#3A4A66] hover:bg-[#F5F8FD] transition">
-                                {resigned ? <EditableText id="adminMenu.members.복직처리" defaultText="복직 처리" /> : <EditableText id="adminMenu.members.퇴사처리" defaultText="퇴사 처리" />}
-                              </button>
-                              {me?.uid !== u.id && (
-                                <button onClick={() => removeUser(u)} className="h-10 px-4 rounded-xl text-[13px] font-extrabold border border-[#E3E8F0] text-[#7A879C] hover:bg-[#F5F8FD] transition"><EditableText id="adminMenu.members.계정삭제" defaultText="계정 삭제" /></button>
-                              )}
-                            </>
+                            <button onClick={() => { openManage(u); setMemberModal(true); }}
+                              className={`h-10 px-5 rounded-xl text-[13px] font-extrabold transition whitespace-nowrap ${!u.approved && !resigned ? "bg-[#2D4C82] text-white hover:bg-[#1B2B4B]" : "bg-[#0F1A30] text-white hover:bg-[#1B2B4B]"}`}>
+                              {!u.approved && !resigned ? "승인 · 거절" : "정보 수정"}
+                            </button>
                           )}
                         </div>
 
-                      {!editMode ? (
+                      {!(editMode && !memberModal) ? (
                         <div className="px-6 py-5">
                           <div className="grid grid-cols-3 gap-2.5">
                             {[
@@ -1044,6 +1042,23 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                         </div>
                       )}
                       </div>
+                      {memberModal && canAdmin && canManage && (
+                        <MemberManageModal
+                          u={u} me={me} isTotalMaster={isTotalMaster} roles={ROLES} roleLabels={roleLabels}
+                          f={{ editName, setEditName, editPhone, setEditPhone, editRole, setEditRole, editCompany, setEditCompany, editPosition, setEditPosition, editTeam, setEditTeam }}
+                          onClose={() => { setMemberModal(false); setEditMode(false); }}
+                          onSave={async () => { await saveEdit(); setMemberModal(false); }}
+                          onApprove={async () => {
+                            if (!window.confirm(`"${u.name || u.email}"님을 승인할까요?\n입력한 직책·부서·권한으로 저장되고 바로 로그인할 수 있습니다.`)) return;
+                            await saveEdit(); await toggleApprove({ ...u, approved: false }); setMemberModal(false);
+                          }}
+                          onUnapprove={async () => { if (window.confirm(`"${u.name || u.email}"님의 승인을 해제할까요?\n해제하면 로그인이 막힙니다.`)) await toggleApprove({ ...u, approved: true }); }}
+                          onReject={async () => { await removeUser(u); setMemberModal(false); }}
+                          onMaster={() => toggleMaster(u)}
+                          onResign={async () => { if (resigned && !window.confirm(`"${u.name || u.email}"님을 복직 처리할까요?`)) return; await setResignStatus(u, !resigned); }}
+                          onDelete={async () => { await removeUser(u); setMemberModal(false); }}
+                        />
+                      )}
                     </div>
                   );
                 })()}
@@ -1940,6 +1955,93 @@ const LANDING_FONT_OPTIONS = [
   { key: "nanum", label: "나눔고딕" },
   { key: "gothicA1", label: "Gothic A1" },
 ];
+
+// 👤 회원 관리 창 — 버튼 하나로 열고, 그 안에서 승인·거절·정보수정·마스터·퇴사·삭제(모두 확인창)
+function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose, onSave, onApprove, onUnapprove, onReject, onMaster, onResign, onDelete }) {
+  const [busy, setBusy] = useState(false);
+  const pending = !u.approved && u.employmentStatus !== "퇴사";
+  const resigned = u.employmentStatus === "퇴사";
+  const isMe = me?.uid === u.id;
+  const run = (fn) => async () => { if (busy) return; setBusy(true); try { await fn(); } finally { setBusy(false); } };
+  const inp = "w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#2D4C82] focus:ring-4 focus:ring-[#2D4C82]/10 bg-white disabled:bg-[#F5F8FD] disabled:text-[#7A879C]";
+  const lab = "block text-[11.5px] font-bold text-[#7A879C] mb-1.5";
+  return (
+    <div className="fixed inset-0 z-[9999] bg-[#0B1428]/45 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="w-full max-w-[640px] max-h-[92vh] overflow-y-auto rounded-[22px] bg-[#F3F6FA] shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 z-10 px-6 py-5 text-white flex items-start justify-between gap-3" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 65%,#2D4C82 100%)" }}>
+          <div className="min-w-0">
+            <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0] whitespace-nowrap">{pending ? "MEMBER · 가입 승인" : "MEMBER · 정보 수정"}</div>
+            <div className="text-[20px] font-black whitespace-nowrap overflow-hidden text-ellipsis">{u.name || u.email}</div>
+            <div className="text-[12.5px] text-white/70 whitespace-nowrap overflow-hidden text-ellipsis">{u.email}{u.phone ? ` · ${u.phone}` : ""}</div>
+          </div>
+          <span className={`shrink-0 h-8 px-3 inline-flex items-center rounded-full text-[12px] font-black ${pending ? "bg-[#8FB0F0] text-[#0B1428]" : resigned ? "bg-white/10 text-white border border-white/25" : "bg-white text-[#0B1428]"}`}>{resigned ? "퇴사" : pending ? "승인 대기" : "승인 완료"}</span>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4">
+            <div className="text-[13px] font-black text-[#0F1A30] mb-3">정보 {pending ? "확인 · 지정" : "수정"} <span className="text-[11.5px] font-bold text-[#9AA9C3]">직책 · 부서 · 권한</span></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className={lab}>이름</label><input value={f.editName} onChange={(e) => f.setEditName(e.target.value)} className={inp} /></div>
+              <div><label className={lab}>핸드폰번호</label><input value={f.editPhone} onChange={(e) => {
+                let v = e.target.value.replace(/[^0-9]/g, "");
+                if (v.length > 7) v = v.replace(/(\d{3})(\d{4})(\d+)/, "$1-$2-$3"); else if (v.length > 3) v = v.replace(/(\d{3})(\d+)/, "$1-$2");
+                f.setEditPhone(v);
+              }} className={inp} /></div>
+              <div><label className={lab}>직책</label>
+                <CustomSelect value={f.editPosition} onChange={(e) => f.setEditPosition(e.target.value)} className={inp}>
+                  <option value="">선택 안 함</option>
+                  {(f.editPosition && !POSITION_OPTIONS.includes(f.editPosition)) && <option value={f.editPosition}>{f.editPosition}</option>}
+                  {POSITION_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+                </CustomSelect></div>
+              <div><label className={lab}>부서</label>
+                <CustomSelect value={f.editTeam} onChange={(e) => f.setEditTeam(e.target.value)} className={inp}>
+                  <option value="">미배정</option>
+                  {TEAM_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                </CustomSelect></div>
+              <div><label className={lab}>권한</label>
+                <CustomSelect value={f.editRole} onChange={(e) => f.setEditRole(e.target.value)} className={inp}>
+                  {roles.map((r) => <option key={r} value={r}>{roleLabels[r] || r}</option>)}
+                </CustomSelect></div>
+              <div><label className={lab}>회사명</label><input value={f.editCompany} onChange={(e) => f.setEditCompany(e.target.value)} disabled={!isTotalMaster} className={inp} /></div>
+            </div>
+            {u.role !== "shipper" && (
+              <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[#E3E8F0] px-3.5 py-2.5">
+                <div className="min-w-0">
+                  <div className="text-[13px] font-black text-[#0F1A30]">마스터 계정 {u.isMaster && <span className="ml-1 px-1.5 rounded bg-[#0F1A30] text-white text-[10.5px]">지정됨</span>}</div>
+                  <div className="text-[11.5px] text-[#7A879C]">직원 승인·권한·부서·직책을 정할 수 있습니다</div>
+                </div>
+                <button type="button" disabled={busy} onClick={run(onMaster)} className={`shrink-0 h-9 px-3.5 rounded-xl text-[12.5px] font-black ${u.isMaster ? "border border-[#0F1A30] text-[#0F1A30]" : "border border-[#DCE3EE] text-[#1B2B4B] hover:bg-[#F5F8FD]"}`}>{u.isMaster ? "마스터 해제" : "마스터 지정"}</button>
+              </div>
+            )}
+          </div>
+
+          {!pending && (
+            <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4">
+              <div className="text-[13px] font-black text-[#0F1A30] mb-2.5">계정 처리 <span className="text-[11.5px] font-bold text-[#9AA9C3]">누르면 확인창이 먼저 뜹니다</span></div>
+              <div className="grid grid-cols-3 gap-2">
+                <button type="button" disabled={busy || isMe} onClick={run(onResign)} className="h-10 rounded-xl border border-[#DCE3EE] text-[13px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD] disabled:opacity-40">{resigned ? "복직 처리" : "퇴사 처리"}</button>
+                <button type="button" disabled={busy || isMe} onClick={run(onUnapprove)} className="h-10 rounded-xl border border-[#DCE3EE] text-[13px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD] disabled:opacity-40">승인 해제</button>
+                <button type="button" disabled={busy || isMe} onClick={run(onDelete)} className="h-10 rounded-xl border border-[#C9D3E3] text-[13px] font-black text-[#5B6B85] hover:bg-[#F5F8FD] disabled:opacity-40">계정 삭제</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="sticky bottom-0 px-5 py-4 bg-white border-t border-[#E3E8F0] flex gap-2">
+          <button type="button" onClick={onClose} className="h-11 px-5 rounded-xl border border-[#DCE3EE] text-[13.5px] font-bold text-[#3A4A66]">닫기</button>
+          {pending ? (
+            <>
+              <button type="button" disabled={busy} onClick={run(onReject)} className="flex-1 h-11 rounded-xl border border-[#C9D3E3] text-[13.5px] font-black text-[#1B2B4B] disabled:opacity-50">거절</button>
+              <button type="button" disabled={busy} onClick={run(onApprove)} className="flex-[2] h-11 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black disabled:opacity-50">{busy ? "처리 중…" : "이대로 승인"}</button>
+            </>
+          ) : (
+            <button type="button" disabled={busy} onClick={run(onSave)} className="flex-1 h-11 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black disabled:opacity-50">{busy ? "저장 중…" : "저장"}</button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function FieldRow({ label, value, onChange, placeholder }) {
   return (

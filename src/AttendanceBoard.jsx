@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { collection, deleteDoc, doc, onSnapshot, query, setDoc, where, addDoc, arrayUnion, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { collection, deleteDoc, doc, onSnapshot, query, setDoc, where, addDoc, arrayUnion, getDoc, getDocs, serverTimestamp, updateDoc } from "firebase/firestore";
+import { geocodeAddress } from "./tmapFareCalc";
 import { db, DEFAULT_COMPANY } from "./firebase";
 import { isTMUser } from "./staffFilter";
 import { ATTENDANCE_STATUS_COLOR, LEAVE_TYPE_LABEL, isWeekend, findApprovedLeaveForDate, isHoliday, KR_NATIONAL_HOLIDAYS } from "./attendanceUtils";
@@ -129,6 +130,39 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     }, () => {});
     return () => unsub();
   }, [company]);
+
+  // 🏢 출근지가 비어 있으면 운송사가 가입할 때 입력한 회사 주소로 기본 설정(언제든 아래 패널에서 수정)
+  const [companyAddr, setCompanyAddr] = useState("");
+  const autoOfficeRef = React.useRef("");
+  useEffect(() => {
+    if (!company) return;
+    let alive = true;
+    getDocs(query(collection(db, "transportApplications"), where("companyName", "==", company))).then((snap) => {
+      const apps = snap.docs.map((d) => d.data());
+      const a = apps.find((x) => x.type === "신규" && x.address) || apps.find((x) => x.address);
+      if (alive) setCompanyAddr(String(a?.address || "").trim());
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [company]);
+  useEffect(() => {
+    if (!isAdmin || !company || !companyAddr || officeLocation || autoOfficeRef.current === company) return;
+    autoOfficeRef.current = company;
+    geocodeAddress(companyAddr).then((c) => {
+      if (!c?.lat || !c?.lng) return;
+      setDoc(doc(db, "companySettings", company), { officeLocation: { lat: Number(c.lat), lng: Number(c.lng), address: companyAddr, auto: true } }, { merge: true }).catch(() => {});
+    }).catch(() => {});
+  }, [isAdmin, company, companyAddr, officeLocation]);
+  const [findingAddr, setFindingAddr] = useState(false);
+  const findByAddress = async (addr) => {
+    const a = String(addr || "").trim();
+    if (!a) return alert("주소를 입력해 주세요.");
+    setFindingAddr(true);
+    try {
+      const c = await geocodeAddress(a);
+      if (!c?.lat) return alert("주소로 위치를 찾지 못했습니다. 도로명 주소로 다시 입력해 주세요.");
+      setOfficeInput({ lat: String(c.lat), lng: String(c.lng), address: a });
+    } finally { setFindingAddr(false); }
+  };
 
   // ─── 출근지 저장 ────────────────────────────────────────────
   const saveOfficeLocation = async () => {
@@ -492,6 +526,18 @@ export default function AttendanceBoard({ userCompany, role, user }) {
             </div>
           )}
           <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <input type="text" placeholder="주소로 찾기 (예: 인천 서구 완정로 10)"
+                value={officeInput.address} onChange={e => setOfficeInput(p => ({ ...p, address: e.target.value }))}
+                onKeyDown={e => { if (e.key === "Enter") findByAddress(officeInput.address); }}
+                className="flex-1 px-3 py-2 rounded-lg border-2 border-gray-200 text-[13px] font-medium text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" />
+              <button onClick={() => findByAddress(officeInput.address)} disabled={findingAddr}
+                className="px-3 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold disabled:opacity-50 whitespace-nowrap">{findingAddr ? "찾는 중..." : "주소로 위치 찾기"}</button>
+              {companyAddr && (
+                <button onClick={() => findByAddress(companyAddr)} disabled={findingAddr}
+                  className="px-3 py-2 rounded-lg border border-[#1B2B4B]/30 text-[#1B2B4B] text-[13px] font-bold disabled:opacity-50 whitespace-nowrap">가입 주소로</button>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               <button onClick={getCurrentLocation} disabled={gettingLocation}
                 className="px-3 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold disabled:opacity-50 whitespace-nowrap">

@@ -3529,6 +3529,7 @@ exports.checkEmail = functions.https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (req.query.ping === "1") { res.status(200).json({ ok: true }); return; }
   const e = String(req.query.e || "").trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) || e.length > 200) { res.status(400).json({ error: "BAD_EMAIL" }); return; }
   try {
@@ -3548,7 +3549,10 @@ exports.findCompany = functions.https.onRequest(async (req, res) => {
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
   const q = String(req.query.q || "").trim().toLowerCase();
   const exact = req.query.exact === "1";
-  if (!q || q.length > 60) { res.status(200).json({ results: [] }); return; }
+  const all = req.query.all === "1"; // 가입 화면이 열릴 때 목록을 한 번에 받아 입력 즉시 드롭다운으로 거른다
+  if (req.query.ping === "1") { res.status(200).json({ ok: true }); return; }
+  if (!all && (!q || q.length > 60)) { res.status(200).json({ results: [] }); return; }
+  res.set("Cache-Control", "public, max-age=60");
   try {
     const [apps, plans] = await Promise.all([
       db.collection("transportApplications").where("type", "==", "신규").get(),
@@ -3558,10 +3562,12 @@ exports.findCompany = functions.https.onRequest(async (req, res) => {
     apps.docs.forEach((d) => {
       const a = d.data(); const n = String(a.companyName || "").trim();
       if (!n || a.status !== "approved") return;
-      if (!map.has(n)) map.set(n, { companyName: n, address: a.address || "" });
+      const prev = map.get(n);
+      if (!prev || (!prev.address && a.address)) map.set(n, { companyName: n, address: a.address || "" });
     });
     plans.docs.forEach((d) => { const n = String(d.id || "").trim(); if (n && !map.has(n)) map.set(n, { companyName: n, address: "" }); });
-    const results = [...map.values()].filter((c) => (exact ? c.companyName.toLowerCase() === q : c.companyName.toLowerCase().includes(q))).slice(0, 20);
+    const results = all ? [...map.values()].slice(0, 2000)
+      : [...map.values()].filter((c) => (exact ? c.companyName.toLowerCase() === q : c.companyName.toLowerCase().includes(q))).slice(0, 20);
     res.status(200).json({ results });
   } catch (err) {
     res.status(500).json({ results: [], error: "SEARCH_FAILED" });

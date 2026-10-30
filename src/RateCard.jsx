@@ -702,6 +702,45 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
     setManualModal(true);
   };
 
+  // ⚡ 톤수 자동셋팅 — 자주 쓰는 차량 톤수를 한 번에 줄로 깔아 금액만 넣게 한다(이미 넣은 금액은 유지)
+  const TON_PRESET = ["1톤", "1.4톤", "2.5톤", "3.5톤", "3.5톤 광폭", "5톤", "5톤 플러스", "5톤 축", "8톤", "11톤", "11톤 축", "15톤", "18톤", "25톤"];
+  const blankRow = (display = "") => ({ display, avg: "", min: "", max: "", varianceLabel: "낮음", confLabel: "보통" });
+  const autoTonRows = () => setManualRows((prev) => {
+    const had = new Map(prev.filter((r) => String(r.display || "").trim()).map((r) => [String(r.display).replace(/\s+/g, ""), r]));
+    const preset = TON_PRESET.map((t) => had.get(t.replace(/\s+/g, "")) || blankRow(t));
+    const extra = prev.filter((r) => String(r.display || "").trim() && !TON_PRESET.some((t) => t.replace(/\s+/g, "") === String(r.display).replace(/\s+/g, "")));
+    return [...preset, ...extra];
+  });
+  // 📥 엑셀 대용량 — 양식을 받아 톤수별 금액을 채워 올리면 그대로 단가표가 만들어진다
+  const MANUAL_XLSX_HEAD = ["거래처명", "상차지역", "하차지역", "차량종류", "차량톤수", "권장단가", "최소운임", "최대운임"];
+  const downloadManualTemplate = () => {
+    const rows = TON_PRESET.map((t, i) => (i === 0 ? ["(주)예시물류", "인천", "부산", "윙바디", t, 150000, 130000, 180000] : ["", "", "", "", t, "", "", ""]));
+    const ws = XLSX.utils.aoa_to_sheet([MANUAL_XLSX_HEAD, ...rows]);
+    ws["!cols"] = MANUAL_XLSX_HEAD.map((h) => ({ wch: h.length < 5 ? 12 : 14 }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "단가표");
+    XLSX.writeFile(wb, "단가표_업로드양식.xlsx");
+  };
+  const manualFileRef = useRef(null);
+  const uploadManualXlsx = async (file) => {
+    if (!file) return;
+    try {
+      const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "" });
+      const head = (aoa[0] || []).map((h) => String(h).replace(/\s+/g, ""));
+      const col = (name) => head.findIndex((h) => h === name || h.includes(name));
+      const ci = { client: col("거래처"), pick: col("상차"), drop: col("하차"), kind: col("차량종류"), ton: col("톤수"), avg: col("권장"), min: col("최소"), max: col("최대") };
+      if (ci.ton < 0 || ci.avg < 0) return alert("양식이 맞지 않습니다. '양식 받기'로 받은 파일에 입력해 주세요.");
+      const num = (v) => { const n = Number(String(v ?? "").replace(/[^\d]/g, "")); return n ? n.toLocaleString() : ""; };
+      const body = aoa.slice(1).filter((r) => String(r[ci.ton] ?? "").trim());
+      if (!body.length) return alert("톤수가 입력된 줄이 없습니다.");
+      const first = aoa.slice(1).find((r) => [ci.client, ci.pick, ci.drop, ci.kind].some((k) => k >= 0 && String(r[k] ?? "").trim())) || [];
+      const pickV = (k) => (k >= 0 ? String(first[k] ?? "").trim() : "");
+      setManualInfo((p) => ({ ...p, client: pickV(ci.client) || p.client, pickup: pickV(ci.pick) || p.pickup, drop: pickV(ci.drop) || p.drop, vehicle: pickV(ci.kind) || p.vehicle }));
+      setManualRows(body.map((r) => ({ ...blankRow(String(r[ci.ton]).trim()), avg: num(r[ci.avg]), min: ci.min >= 0 ? num(r[ci.min]) : "", max: ci.max >= 0 ? num(r[ci.max]) : "" })));
+    } catch (e) { alert("엑셀을 읽지 못했습니다: " + (e?.message || e)); }
+  };
+
   const addManualRow = () => setManualRows(prev => [...prev, { display: "", avg: "", min: "", max: "", varianceLabel: "낮음", confLabel: "보통" }]);
   const removeManualRow = (idx) => setManualRows(prev => prev.filter((_, i) => i !== idx));
   const updateManualRow = (idx, field, value) => setManualRows(prev => { const next = [...prev]; next[idx] = { ...next[idx], [field]: value }; return next; });
@@ -1497,7 +1536,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
 {/* ===================== 직접 단가표 작성 모달 ===================== */}
       {manualModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999998]" onClick={() => setManualModal(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-[860px] max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[980px] max-w-[96vw] max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             {/* 모달 헤더 */}
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
               <div>
@@ -1566,9 +1605,15 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <div className="text-[13px] font-bold text-[#1B2B4B]">단가 행 입력</div>
-                  <button onClick={addManualRow} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1B2B4B] text-white text-[12px] font-bold rounded-lg hover:bg-[#2D4C82] transition">
-                    + 행 추가
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button onClick={autoTonRows} title="1톤~25톤까지 톤수별 줄을 자동으로 깝니다" className="px-3 py-1.5 bg-[#2D4C82] text-white text-[12px] font-bold rounded-lg hover:bg-[#1B2B4B] transition whitespace-nowrap">톤수 자동셋팅</button>
+                    <button onClick={downloadManualTemplate} className="px-3 py-1.5 border border-[#1B2B4B]/30 text-[#1B2B4B] text-[12px] font-bold rounded-lg hover:bg-[#F3F6FA] transition whitespace-nowrap">엑셀 양식 받기</button>
+                    <button onClick={() => manualFileRef.current?.click()} className="px-3 py-1.5 border border-[#1B2B4B]/30 text-[#1B2B4B] text-[12px] font-bold rounded-lg hover:bg-[#F3F6FA] transition whitespace-nowrap">엑셀 업로드</button>
+                    <input ref={manualFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => { uploadManualXlsx(e.target.files?.[0]); e.target.value = ""; }} />
+                    <button onClick={addManualRow} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1B2B4B] text-white text-[12px] font-bold rounded-lg hover:bg-[#2D4C82] transition whitespace-nowrap">
+                      + 행 추가
+                    </button>
+                  </div>
                 </div>
                 <datalist id="manual-ton-options">
                   {STANDARD_TON_LABELS.map(t => <option key={t} value={t} />)}

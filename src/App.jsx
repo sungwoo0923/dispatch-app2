@@ -1,7 +1,8 @@
 // ======================= src/App.jsx =======================
 
 import React, { useState, useEffect, useRef } from "react";
-import { setTenant, setServerFilter } from "./fsTenant";
+import { setTenant, setServerFilter, setPreviewMode } from "./fsTenant";
+import { setPreviewPlan } from "./plans";
 import { safeLocalSet } from "./safeStorage";
 import UpdateBanner from "./UpdateBanner";
 import VersionCheck from "./VersionCheck";
@@ -132,6 +133,35 @@ const kpEntry = () => { try { return sessionStorage.getItem("kpEntry") || ""; } 
 // ⭐ 버그수정 — 진입 선택값은 /app 화면을 그릴 "그 순간" 읽어야 한다. App 본문에서 읽으면
 //  선택 화면에서 "배차 프로그램"을 눌러도 App이 다시 그려지지 않아 옛 값(선택 전)으로 판단해
 //  선택 화면으로 되돌아갔다(새로고침해야 들어가짐).
+// 👀 승인 전 둘러보기 — 가입 신청 후 승인 전까지 가입 때 고른 요금제의 메뉴로 프로그램을 미리 본다.
+//  서버에는 아무것도 묻지 않고(빈 화면), 저장도 막는다. 나가면 새로고침으로 원래대로.
+const PREVIEW_PLAN_NAME = { lite: "라이트", basic: "베이직", standard: "스탠다드", pro: "프로" };
+function PreviewApp() {
+  const qs = new URLSearchParams(window.location.search);
+  const co = (qs.get("co") || "").trim() || "우리 회사";
+  const plan = PREVIEW_PLAN_NAME[qs.get("plan")] ? qs.get("plan") : "standard";
+  setPreviewMode(true); setPreviewPlan(plan); setTenant(co);
+  const fakeUser = React.useMemo(() => ({ uid: "preview", email: "preview@kp-flow.app", displayName: "둘러보기" }), []);
+  const [toast, setToast] = React.useState(false);
+  React.useEffect(() => {
+    try { localStorage.setItem("userCompany", co); } catch { /* 무시 */ }
+    const on = () => { setToast(true); setTimeout(() => setToast(false), 2600); };
+    window.addEventListener("kp:previewBlocked", on);
+    return () => window.removeEventListener("kp:previewBlocked", on);
+  }, [co]);
+  const exit = () => { try { localStorage.removeItem("userCompany"); } catch { /* 무시 */ } window.location.href = "/login"; };
+  return (
+    <>
+      {isSmartPhone() ? <MobileApp role="admin" user={fakeUser} userCompany={co} /> : <DispatchApp role="admin" user={fakeUser} userCompany={co} />}
+      <div className="fixed left-1/2 -translate-x-1/2 bottom-4 z-[2147483000] flex items-center gap-3 pl-4 pr-1.5 py-1.5 rounded-2xl text-white shadow-[0_12px_30px_rgba(11,20,40,0.35)] max-w-[calc(100vw-24px)]" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
+        <span className="text-[12.5px] font-bold whitespace-nowrap overflow-hidden text-ellipsis">둘러보기 · {co} · {PREVIEW_PLAN_NAME[plan]} 요금제 · 승인 전이라 저장되지 않습니다</span>
+        <button type="button" onClick={exit} className="shrink-0 h-8 px-3 rounded-xl bg-white text-[#0B1428] text-[12.5px] font-black">나가기</button>
+      </div>
+      {toast && <div className="fixed left-1/2 -translate-x-1/2 bottom-20 z-[2147483000] px-4 py-2.5 rounded-xl bg-[#0B1428] text-white text-[13px] font-bold shadow-lg whitespace-nowrap">둘러보기에서는 저장되지 않습니다 · 승인 후 이용해 주세요</div>}
+    </>
+  );
+}
+
 function EntryGate({ children }) {
   return kpEntry() === "app" ? children : <Navigate to="/choose" replace />;
 }
@@ -895,6 +925,7 @@ export default function App() {
           <Route path="/upload" element={<UploadPage />} />
           <Route path="/driver-upload" element={<DriverSearchPage />} />
           <Route path="/no-access" element={<NoAccess />} />
+          <Route path="/preview" element={<PreviewApp />} />
 
           <Route
             path="*"

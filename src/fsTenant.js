@@ -69,26 +69,47 @@ function docCollectionId(ref) {
   return "";
 }
 
+// ⚡ 빠른 필드 읽기 — d.get()은 부를 때마다 필드 경로를 해석·변환해서, 오더가 많은 회사는 스냅샷마다
+//  수만 번 불려 입력·검색이 끊겼다. SDK 내부 값(문자열)을 바로 읽고, 없으면 d.get()으로.
+function fieldStr(d, name) {
+  try {
+    const f = d?._document?.data?.value?.mapValue?.fields;
+    if (f) { const v = f[name]; return v ? (v.stringValue ?? "") : ""; }
+  } catch { /* 아래로 */ }
+  try { const v = d.get(name); return typeof v === "string" ? v : ""; } catch { return ""; }
+}
+// 같은 문서 버전은 결과를 기억한다(바뀌지 않은 문서는 다음 스냅샷에서 같은 내부 객체를 쓴다)
+const keepMemo = new WeakMap();
+function memoKeep(fn, col, t) {
+  return (d) => {
+    const k = d?._document;
+    if (!k || typeof k !== "object") return fn(d);
+    let m = keepMemo.get(k);
+    const tag = col + "|" + t;
+    if (m && m.tag === tag) return m.v;
+    const v = fn(d);
+    keepMemo.set(k, { tag, v });
+    return v;
+  };
+}
 function keeper(col) {
   const t = getTenant();
   if (!t) return null;
   if (STRICT.has(col)) {
-    return (d) => {
-      let c;
-      try { c = d.get("companyName"); } catch { c = undefined; }
+    return memoKeep((d) => {
       // 화주사 계정은 여러 운송사와 연동되는 거래 상대라 목록에서 빼지 않는다(화면이 연동된 곳만 다시 거름)
-      if (col === "users") { try { if (d.get("role") === "shipper") return true; } catch { /* 무시 */ } }
+      if (col === "users" && fieldStr(d, "role") === "shipper") return true;
+      let c = norm(fieldStr(d, "companyName"));
       // 화주사가 등록한 오더는 company(=받는 운송사)에 회사가 적혀 있다
-      if (!norm(c)) { try { c = d.get("company") || d.get("운송사명"); } catch { /* 무시 */ } }
-      return (norm(c) || DEFAULT_CO) === t;
-    };
+      if (!c) c = norm(fieldStr(d, "company") || fieldStr(d, "운송사명"));
+      return (c || DEFAULT_CO) === t;
+    }, col, t);
   }
   if (LOOSE.has(col)) {
-    return (d) => {
-      let c;
-      try { c = d.get("companyName"); } catch { c = undefined; }
-      return !norm(c) || norm(c) === t;
-    };
+    return memoKeep((d) => {
+      const c = norm(fieldStr(d, "companyName"));
+      return !c || c === t;
+    }, col, t);
   }
   return null;
 }
@@ -112,13 +133,58 @@ function injected(ref) {
   const t = getTenant();
   if (!serverFilter || !t) return null;
   const col = topCollectionId(ref);
-  if (!INJECT.has(col)) return null;
+  if (!INJECT.has(col) || noIndex.has(shapeOf(ref))) return null;
   try { return base.query(ref, base.where("companyName", "==", t)); } catch { return null; }
 }
+const noIndex = new Set(); // 색인이 없어 실패했던 조회 모양 — 이번 실행 동안은 바로 조건 없이(서버 왕복 2번 방지)
+// 조회 모양(컬렉션 + 조건 필드·연산 + 정렬) — 값은 빼고
+function shapeOf(ref) {
+  const col = topCollectionId(ref);
+  try {
+    const q = ref?._query;
+    if (!q) return col;
+    const fs = (q.filters || []).map((f) => `${f.field?.canonicalString?.() || ""}${f.op || ""}`).join(",");
+    const ob = (q.explicitOrderBy || []).map((o) => `${o.field?.canonicalString?.() || ""}${o.dir || ""}`).join(",");
+    return `${col}|${fs}|${ob}`;
+  } catch { return col; }
+}
 const needsIndex = (e) => e && (e.code === "failed-precondition" || /index/i.test(String(e.message || "")));
-const warnIndex = (e) => { try { console.error("[운송사 분리] 색인이 아직 없어 회사 조건 없이 조회합니다 —", e?.message || e); } catch { /* 무시 */ } };
+const warnIndex = (e, ref) => { if (ref) noIndex.add(shapeOf(ref)); try { console.error("[운송사 분리] 색인이 아직 없어 회사 조건 없이 조회합니다 —", e?.message || e); } catch { /* 무시 */ } };
+
+// 👀 승인 전 둘러보기 모드 — 서버에 아무것도 묻지 않고(읽기 = 빈 결과, 쓰기 = 막음) 화면만 보여준다
+let preview = false;
+export function setPreviewMode(on) { preview = !!on; if (on) previewSince = Date.now(); }
+export const isPreviewMode = () => preview;
+const META = { fromCache: false, hasPendingWrites: false, isEqual: () => true };
+const emptyDocSnap = (ref) => ({ id: ref?.id || "", ref, exists: () => false, data: () => undefined, get: () => undefined, metadata: META });
+const emptyQuerySnap = (ref) => ({ docs: [], size: 0, empty: true, forEach: () => {}, docChanges: () => [], metadata: META, query: ref, isEqual: () => true });
+const isDocRef = (ref) => ref?.type === "document" || (Array.isArray(ref?.__segs) && ref.__segs.length % 2 === 0);
+let previewWarned = 0; let previewSince = 0;
+// 저장은 조용히 무시(오류로 화면이 멈추지 않게) — 사용자가 직접 저장한 경우만 안내(첫 3초의 자동 저장은 안내 안 함)
+const previewBlocked = (ret) => {
+  if (!previewSince) previewSince = Date.now();
+  if (Date.now() - previewSince > 3000 && Date.now() - previewWarned > 4000) {
+    previewWarned = Date.now();
+    try { window.dispatchEvent(new CustomEvent("kp:previewBlocked")); } catch { /* 무시 */ }
+  }
+  return Promise.resolve(ret);
+};
+function previewSnapshot(ref, args) {
+  const fi = args.findIndex((a) => typeof a === "function");
+  const obs = fi === -1 ? args.find((a) => a && typeof a.next === "function") : null;
+  const cb = fi !== -1 ? args[fi] : obs?.next?.bind(obs);
+  const t = setTimeout(() => { try { cb?.(isDocRef(ref) ? emptyDocSnap(ref) : emptyQuerySnap(ref)); } catch (e) { console.warn(e); } }, 0);
+  return () => clearTimeout(t);
+}
+export function getDoc(ref, ...rest) { return preview ? Promise.resolve(emptyDocSnap(ref)) : base.getDoc(ref, ...rest); }
+export function getDocFromCache(ref, ...rest) { return preview ? Promise.resolve(emptyDocSnap(ref)) : base.getDocFromCache(ref, ...rest); }
+export function getDocFromServer(ref, ...rest) { return preview ? Promise.resolve(emptyDocSnap(ref)) : base.getDocFromServer(ref, ...rest); }
+export function updateDoc(...a) { return preview ? previewBlocked() : base.updateDoc(...a); }
+export function deleteDoc(...a) { return preview ? previewBlocked() : base.deleteDoc(...a); }
+export function runTransaction(...a) { return preview ? previewBlocked() : base.runTransaction(...a); }
 
 export function onSnapshot(ref, ...args) {
+  if (preview) return previewSnapshot(ref, args);
   const col = topCollectionId(ref);
   if (!col || !(STRICT.has(col) || LOOSE.has(col))) return base.onSnapshot(ref, ...args);
   const wrapFn = (fn) => (typeof fn === "function" ? (snap) => fn(wrapSnap(snap, keeper(col))) : fn);
@@ -157,7 +223,7 @@ export function onSnapshot(ref, ...args) {
     return () => { stop2 = true; try { u2?.(); } catch { /* 무시 */ } };
   }
   let unsub = null; let stopped = false;
-  const fallback = (e) => { warnIndex(e); if (stopped) return; try { unsub?.(); } catch { /* 무시 */ } unsub = base.onSnapshot(ref, ...build(null)); };
+  const fallback = (e) => { warnIndex(e, ref); if (stopped) return; try { unsub?.(); } catch { /* 무시 */ } unsub = base.onSnapshot(ref, ...build(null)); };
   // 오류 콜백이 없던 구독도 색인 오류는 받아서 되살린다
   let a2 = build(fallback);
   if (fi !== -1 && typeof args[fi + 1] !== "function") { a2 = [...a2]; a2.splice(fi + 1, 0, (e) => (needsIndex(e) ? fallback(e) : console.warn(e))); }
@@ -166,10 +232,11 @@ export function onSnapshot(ref, ...args) {
 }
 
 const wrapGet = (fn) => async (ref, ...rest) => {
+  if (preview) return emptyQuerySnap(ref);
   const q = injected(ref);
   let snap;
   if (q) {
-    try { snap = await fn(q, ...rest); } catch (e) { if (!needsIndex(e)) throw e; warnIndex(e); snap = await fn(ref, ...rest); }
+    try { snap = await fn(q, ...rest); } catch (e) { if (!needsIndex(e)) throw e; warnIndex(e, ref); snap = await fn(ref, ...rest); }
   } else {
     try { snap = await fn(ref, ...rest); } catch (e) {
       // 스위치가 켜진 뒤 처음 — 서버 거부면 켜고 회사 조건으로 한 번 더
@@ -188,6 +255,7 @@ export const getDocs = wrapGet(base.getDocs);
 export const getDocsFromCache = base.getDocsFromCache ? wrapGet(base.getDocsFromCache) : undefined;
 export const getDocsFromServer = base.getDocsFromServer ? wrapGet(base.getDocsFromServer) : undefined;
 export async function getCountFromServer(ref, ...rest) {
+  if (preview) return { data: () => ({ count: 0 }) };
   const t = getTenant();
   const col = topCollectionId(ref);
   // 건수 세기(모바일 첫 로딩 "오늘 N건" 등) — 기본 회사가 아닌 운송사는 문서마다 회사명이 있으니
@@ -232,12 +300,13 @@ export function doc(first, ...rest) {
   return base.doc(first, ...rest);
 }
 
-export function addDoc(ref, data) { return base.addDoc(ref, stampData(topCollectionId(ref), data)); }
-export function setDoc(ref, data, ...rest) { return base.setDoc(ref, stampData(docCollectionId(ref), data), ...rest); }
+export function addDoc(ref, data) { if (preview) return previewBlocked({ id: `preview-${Date.now()}`, path: "" }); return base.addDoc(ref, stampData(topCollectionId(ref), data)); }
+export function setDoc(ref, data, ...rest) { if (preview) return previewBlocked(); return base.setDoc(ref, stampData(docCollectionId(ref), data), ...rest); }
 export function writeBatch(db) {
   const b = base.writeBatch(db);
   const set = b.set.bind(b);
   b.set = (ref, data, ...rest) => set(ref, stampData(docCollectionId(ref), data), ...rest);
+  if (preview) b.commit = () => previewBlocked();
   return b;
 }
 
