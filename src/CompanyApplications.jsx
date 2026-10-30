@@ -1,5 +1,6 @@
 // src/CompanyApplications.jsx
 import React, { useState, useEffect, useMemo } from "react";
+import { kpConfirm } from "./kpDialog";
 import { imeFocusRef } from "./imeFocus";
 import { db, auth } from "./firebase";
 import {
@@ -116,7 +117,7 @@ export default function CompanyApplications() {
     if (!company || !pid) return;
     const prev = plans[company]?.planId;
     if (prev === pid) return;
-    if (!window.confirm(`"${company}" 요금제를 ${planName(prev)} → ${planName(pid)}(으)로 바꿀까요?\n그 회사 화면의 메뉴가 바로 바뀝니다.`)) return;
+    if (!await kpConfirm(`"${company}" 요금제를 ${planName(prev)} → ${planName(pid)}(으)로 바꿀까요?\n그 회사 화면의 메뉴가 바로 바뀝니다.`)) return;
     setPlanSaving(true);
     try {
       const hist = [...(plans[company]?.history || []), { at: new Date().toISOString(), from: prev || null, to: pid, by: auth.currentUser?.email || "" }].slice(-30);
@@ -475,7 +476,7 @@ export default function CompanyApplications() {
   };
 
   const deleteAccount = async (app) => {
-    if (!window.confirm(`"${app.companyName || app.name}" 계정을 삭제하고 가입 전 상태로 초기화하시겠습니까?\n사용자는 재가입이 가능합니다.`)) return;
+    if (!await kpConfirm(`"${app.companyName || app.name}" 계정을 삭제하고 가입 전 상태로 초기화하시겠습니까?\n사용자는 재가입이 가능합니다.`)) return;
     setProcessing(true);
     try {
       const appCollection = activeTab === "화주" ? "companyApplications" : "transportApplications";

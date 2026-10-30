@@ -10,6 +10,7 @@
 //     → 배차관리·배차현황·실시간배차현황·기사앱에 일반 오더처럼 보이고, "고정노선" 표시가 붙는다.
 //   · 휴무·공휴일·임시 중단은 날짜만 빼면 된다(건너뛸 날짜)
 import React from "react";
+import { kpConfirm } from "./kpDialog";
 import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import CustomDatePicker from "./CustomDatePicker";
@@ -133,7 +134,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
     } catch (e) { window.alert(`저장 실패: ${e?.message || e}`); } finally { setBusy(false); }
   };
   const toggleActive = async (r) => { await updateDoc(doc(db, "fixedRoutes", r.id), { active: !r.active }); };
-  const remove = async (r) => { if (window.confirm(`"${r.name}" 노선을 삭제할까요?\n이미 만들어진 배차는 그대로 남습니다.`)) { await deleteDoc(doc(db, "fixedRoutes", r.id)); setSelId(null); } };
+  const remove = async (r) => { if (await kpConfirm(`"${r.name}" 노선을 삭제할까요?\n이미 만들어진 배차는 그대로 남습니다.`)) { await deleteDoc(doc(db, "fixedRoutes", r.id)); setSelId(null); } };
   const genNow = async () => { genLock.at = 0; const n = await ensureFixedRouteOrders(routes); flash(n ? `배차 ${n}건을 만들었습니다(오늘~7일)` : "새로 만들 배차가 없습니다(이미 모두 있음)"); };
   const ordersOf = (r) => (dispatchData || []).filter((o) => o.고정노선Id === r.id).sort((a, b) => String(b.상차일).localeCompare(String(a.상차일))).slice(0, 8);
 

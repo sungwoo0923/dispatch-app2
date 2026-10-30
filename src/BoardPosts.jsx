@@ -5,6 +5,7 @@
 //  - 관리자게시판: 관리자·최고관리자·인사관리자 / 임원게시판: 권한 설정 전까지 최고관리자만 — 보안규칙도 같은 기준
 //  - 글쓴이·관리자는 수정·삭제, 관리자는 상단 고정. 댓글, 조회수(읽은 사람 수), 새 글 N 표시.
 import React from "react";
+import { kpConfirm } from "./kpDialog";
 import { db } from "./firebase";
 import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
 import { ShellIcon } from "./AdminShell";
@@ -108,7 +109,7 @@ export default function BoardPage({ company, me, board }) {
     } catch (e) { window.alert(`저장 실패: ${e.message}`); } finally { setBusy(false); }
   };
   const remove = async (p) => {
-    if (!window.confirm("이 글을 삭제할까요?")) return;
+    if (!await kpConfirm("이 글을 삭제할까요?")) return;
     await deleteDoc(doc(db, "boardPosts", p.id)).catch((e) => window.alert(e.message));
     setOpenId(null);
   };
@@ -119,7 +120,7 @@ export default function BoardPage({ company, me, board }) {
     setCmt("");
   };
   const delComment = async (c) => {
-    if (!window.confirm("댓글을 지울까요?")) return;
+    if (!await kpConfirm("댓글을 지울까요?")) return;
     await updateDoc(doc(db, "boardPosts", cur.id), { comments: (cur.comments || []).filter((x) => x.id !== c.id) }).catch((e) => window.alert(e.message));
   };
   const isNew = (p) => Date.now() - toMs(p.createdAt) < 24 * 3600e3;

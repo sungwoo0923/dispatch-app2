@@ -1,5 +1,6 @@
 // ===================== src/RateCard.jsx =====================
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { kpConfirm } from "./kpDialog";
 import * as XLSX from "xlsx";
 import { useLoadFullOrderHistory } from "./orderHistory";
 import { db } from "./firebase";
@@ -306,7 +307,7 @@ const [detailModal, setDetailModal] = useState(null);
   };
 
   const removeMultiSheet = async (id) => {
-    if (!window.confirm("이 단가표를 삭제할까요?")) return;
+    if (!await kpConfirm("이 단가표를 삭제할까요?")) return;
     try {
       await deleteDoc(doc(db, "multiRateSheets", id));
       if (multiSelectedId === id) setMultiSelectedId(null);

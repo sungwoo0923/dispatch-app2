@@ -5,6 +5,7 @@
 //     ③ 사내게시판 공지사항(카테고리 "인사발령", 제목 자동 "YYYY년 M월 D일 인사발령") ④ 전 직원 사내메일(이미지 포함)
 //     → 메일 트리거가 휴대폰 푸시, 접속 중인 사람은 화면 오른쪽 아래 배너.
 import React from "react";
+import { kpConfirm } from "./kpDialog";
 import html2canvas from "html2canvas";
 import { db, auth } from "./firebase";
 import { addDoc, collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
@@ -81,8 +82,8 @@ export default function PersonnelOrder({ company, target, myName, isSelf }) {
 
   const send = async () => {
     if (!target) return;
-    if (!changed && !window.confirm("바뀐 직책·부서·권한이 없습니다. 공문만 발송할까요?")) return;
-    if (changed && !window.confirm(`${target.name}님을 ${v("toTeam")} ${v("toPos")}(${v("toRole")})(으)로 발령하고 전 직원에게 공문을 발송할까요?`)) return;
+    if (!changed && !await kpConfirm("바뀐 직책·부서·권한이 없습니다. 공문만 발송할까요?")) return;
+    if (changed && !await kpConfirm(`${target.name}님을 ${v("toTeam")} ${v("toPos")}(${v("toRole")})(으)로 발령하고 전 직원에게 공문을 발송할까요?`)) return;
     // 회원 정보가 바뀌면 "현 소속" 자동 문구도 바뀌므로, 지금 보이는 공문 내용을 그대로 고정해 둔다
     const frozen = Object.fromEntries(Object.keys(auto).map((k) => [k, v(k)]));
     setDoc_(frozen);

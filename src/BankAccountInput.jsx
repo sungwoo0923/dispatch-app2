@@ -3,6 +3,7 @@
 //  + 자주 쓰는 계좌: 처음 입력할 때 "자주 쓰는 계좌로 등록"을 체크하면 저장되고,
 //    다음부터는 [자주 쓰는 계좌] 버튼에서 고르면 세 칸이 한 번에 채워진다(본인만 보임: userPrefs/{uid}).
 import React from "react";
+import { kpConfirm } from "./kpDialog";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import { BANK_NAMES, formatAccount, onlyDigits, parseBankText, validateAccount } from "./bankUtil";
@@ -46,7 +47,7 @@ export default function BankAccountInput({ value, onChange, compact = false, noF
     await saveFavs([...favs, { id: String(Date.now()), label: label.trim() || v.holder || v.bank, bank: v.bank, acct: onlyDigits(v.acct), holder: v.holder || "" }].slice(-20));
     setRemember(false); setLabel("");
   };
-  const removeFav = async (id) => { if (window.confirm("자주 쓰는 계좌에서 뺄까요?")) await saveFavs(favs.filter((f) => f.id !== id)); };
+  const removeFav = async (id) => { if (await kpConfirm("자주 쓰는 계좌에서 뺄까요?")) await saveFavs(favs.filter((f) => f.id !== id)); };
 
   return (
     <div className="space-y-1.5">

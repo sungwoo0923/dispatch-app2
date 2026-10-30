@@ -1,5 +1,6 @@
 // ===================== DispatchApp.jsx (PART 1/8) — START =====================
 import { MENU_FEATURE, planIncludes, openPlanLock, featureOn, useCompanyPlanId, PlanValueProvider, PlanValueSync, PlanLockHost, LockIcon } from "./plans";
+import { kpConfirm } from "./kpDialog";
 import ProInsight from "./ProInsight";
 import BulkUploadChooser, { downloadTemplateXlsx } from "./BulkUploadChooser";
 import { buildCopyText, getCopyTpl, useCopyTemplates } from "./copyTemplates";
@@ -49,7 +50,7 @@ import { estimateDistanceFare, geocodeAddress, haversineKm, specialSurcharge } f
 import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
 import RouteMapModal from "./RouteMapModal";
 import MonthCompareAnalysis from "./MonthCompareAnalysis";
-import MarginReportModal from "./MarginReport";
+import MonthlyReport from "./MonthlyReport";
 import { IdleFleetButton } from "./fleetRecommend";
 import { subscribeOrderSync, deleteOrderWithLog, logOrderDeletion, OrderHistoryContext, useOrderHistory, useLoadOrderRange, useLoadFullOrderHistory, pcLiveWindowStart, pcPrevDay, kstToday as histToday, monthStartAgo, monthEnd, monthStart, historyStartDate } from "./orderHistory";
 import MonthCloseCheck from "./MonthCloseCheck";
@@ -2570,8 +2571,15 @@ const autoTransmitToShipper = async (savedRecord, shipperApp) => {
 // (모듈 최상위 스코프 — RealtimeStatus/DispatchStatus/UnassignedStatus 등 여러 하위
 // 컴포넌트의 "복사 등록" 버튼에서 공통으로 호출되므로 approvedShippers를 인자로 받는다.)
 const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) => {
-  const _pickup = copyTarget.상차일 || todayStr();
-  const _drop = copyTarget.하차일 || todayStr();
+  // ⭐ 지난 날짜 오더를 복사 등록하면 오늘 날짜로(하차일도 같은 간격만큼 함께 이동) — 오늘·앞날짜는 그대로
+  let _pickup = copyTarget.상차일 || todayStr();
+  let _drop = copyTarget.하차일 || todayStr();
+  if (_pickup < todayStr()) {
+    const gap = Math.max(0, Math.round((new Date(`${_drop}T00:00:00`) - new Date(`${_pickup}T00:00:00`)) / 86400000)) || 0;
+    _pickup = todayStr();
+    const d = new Date(`${_pickup}T00:00:00`); d.setDate(d.getDate() + gap);
+    _drop = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
   if (isReversedDateOrder(_pickup, _drop)) {
     globalShowAlert(REVERSED_DATE_ORDER_MSG);
     return false;
@@ -4351,7 +4359,7 @@ const patchDispatch = async (_id, patch, knownPrev) => {
   // 경우, 완료된 운행 기록이 사라진다는 걸 한번 더 확인받는다(그 외 상태는 기존과
   // 동일하게 즉시 처리). 아직 화면 반영/실제 저장 전이라 취소해도 되돌릴 게 없다.
   if ("차량번호" in patch && !String(patch.차량번호 || "").trim() && prev?.기사확인상태 === "완료") {
-    if (!window.confirm("운송이 완료된 오더입니다. 기사를 취소하시겠습니까?")) return false;
+    if (!await kpConfirm("운송이 완료된 오더입니다. 기사를 취소하시겠습니까?")) return false;
     archiveCompletedOrderPC(prev, _id, "기사취소");
   } else if ("차량번호" in patch && !String(patch.차량번호 || "").trim() && prev?.기사확인상태 === "수락") {
     // ⭐ 기사가 수락한 뒤 기사만 빠진 경우도 기사 운행기록에 "배차취소"로 남긴다
@@ -4704,7 +4712,7 @@ const removeDispatch = async (arg, opts = {}) => {
   // 사라지므로, 한번 더 확인받고(다건삭제는 호출부가 이미 물어봤다) 확인/스킵
   // 시 기사 운행일지가 계속 보여줄 수 있도록 스냅샷을 남긴다.
   if (data?.기사확인상태 === "완료") {
-    if (!opts.skipCompletedConfirm && !window.confirm("운송이 완료된 오더입니다. 오더를 삭제하시겠습니까?")) return;
+    if (!opts.skipCompletedConfirm && !await kpConfirm("운송이 완료된 오더입니다. 오더를 삭제하시겠습니까?")) return;
   }
   // ⭐ 기사가 수락(또는 완료)한 오더가 삭제되면 기사 운행기록에 "오더취소"로 남긴다
   if ((data?.기사확인상태 === "수락" || data?.기사확인상태 === "완료") && data?.차량번호) {
@@ -8286,7 +8294,7 @@ return (
                     )}
                     {role === "totalMaster" && (
                       <button type="button" onClick={async () => {
-                        if (!window.confirm("매출관리 비밀번호를 초기화하시겠습니까?")) return;
+                        if (!await kpConfirm("매출관리 비밀번호를 초기화하시겠습니까?")) return;
                         const co = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "").trim();
                         await setDoc(doc(db, "companySettings", co), { revenuePassword: null }, { merge: true });
                         setRevenuePassword(null);
@@ -18375,7 +18383,7 @@ className={`
                     className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition"
                     onClick={async e => {
                       e.stopPropagation();
-                      if (!window.confirm(`"${c.name}" 담당자를 삭제할까요?`)) return;
+                      if (!await kpConfirm(`"${c.name}" 담당자를 삭제할까요?`)) return;
                       const updated = contactPopup.contacts.filter((_, idx) => idx !== i);
                       if (updated.length === 0) { showAlert("담당자가 1명 이하면 삭제할 수 없습니다."); return; }
                       // 삭제 후 primary 재지정
@@ -20755,7 +20763,7 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, onSaved,
 
   const handleDelete = async (item) => {
     if (isViewer) { alert("조회전용 권한으로는 삭제할 수 없습니다."); return; }
-    if (!window.confirm("이 사진을 삭제하시겠습니까?")) return;
+    if (!await kpConfirm("이 사진을 삭제하시겠습니까?")) return;
     try {
       const col = row.__col || "orders";
       await deleteDoc(doc(db, col, row._id, "attachments", item.id));
@@ -26521,7 +26529,7 @@ const handleUrgentSnooze = (minutes) => {
     // ---------------------------
     // 🔥 신규 기사 등록
     // ---------------------------
-    const ok = window.confirm(
+    const ok = await kpConfirm(
       `차량번호 [${rawVal}] 기사 정보가 없습니다.\n신규 기사로 등록할까요?`
     );
     if (!ok) return;
@@ -28204,7 +28212,7 @@ const openDailyCloseIssueDetail = (rowId) => {
     // 개별 confirm은 skipCompletedConfirm으로 건너뛰되, 스냅샷 기록은 그대로 남김).
     const completedInBatch = deleteList.filter(r => r?.기사확인상태 === "완료");
     if (completedInBatch.length > 0) {
-      if (!window.confirm(`운송이 완료된 오더가 ${completedInBatch.length}건 포함되어 있습니다. 오더를 삭제하시겠습니까?`)) return;
+      if (!await kpConfirm(`운송이 완료된 오더가 ${completedInBatch.length}건 포함되어 있습니다. 오더를 삭제하시겠습니까?`)) return;
     }
 
     const ids = deleteList.map(r => r._id);
@@ -32268,7 +32276,7 @@ value={copyTarget?.화물수량 || ""}
                   <button
                     className="px-3 py-1.5 rounded-lg border border-red-300 text-red-500 text-[12px] font-semibold hover:bg-red-50"
                     onClick={async () => {
-                      if (!window.confirm("화주사의 수정요청을 거절하시겠습니까?")) return;
+                      if (!await kpConfirm("화주사의 수정요청을 거절하시겠습니까?")) return;
                       await rejectEditRequest(editTarget);
                       setEditPopupOpen(false);
                     }}
@@ -32279,7 +32287,7 @@ value={copyTarget?.화물수량 || ""}
                     className="px-3 py-1.5 rounded-lg text-white text-[12px] font-semibold"
                     style={{ background: "#1B2B4B" }}
                     onClick={async () => {
-                      if (!window.confirm("화주사의 수정요청을 승인하고 반영하시겠습니까?")) return;
+                      if (!await kpConfirm("화주사의 수정요청을 승인하고 반영하시겠습니까?")) return;
                       await approveEditRequest(editTarget);
                       setEditPopupOpen(false);
                     }}
@@ -37921,7 +37929,7 @@ if (first) {
     // skipCompletedConfirm으로 건너뛰되, 스냅샷 기록은 그대로 남김).
     const completedInBatch = backup.filter(r => r?.기사확인상태 === "완료");
     if (completedInBatch.length > 0) {
-      if (!window.confirm(`운송이 완료된 오더가 ${completedInBatch.length}건 포함되어 있습니다. 오더를 삭제하시겠습니까?`)) return;
+      if (!await kpConfirm(`운송이 완료된 오더가 ${completedInBatch.length}건 포함되어 있습니다. 오더를 삭제하시겠습니까?`)) return;
     }
 
     setBackupDeleted(backup);
@@ -40698,7 +40706,7 @@ return (
                   <button
                     className="px-3 py-1.5 rounded-lg border border-red-300 text-red-500 text-[12px] font-semibold hover:bg-red-50"
                     onClick={async () => {
-                      if (!window.confirm("화주사의 수정요청을 거절하시겠습니까?")) return;
+                      if (!await kpConfirm("화주사의 수정요청을 거절하시겠습니까?")) return;
                       await rejectEditRequest(editTarget);
                       setEditPopupOpen(false);
                     }}
@@ -40709,7 +40717,7 @@ return (
                     className="px-3 py-1.5 rounded-lg text-white text-[12px] font-semibold"
                     style={{ background: "#1B2B4B" }}
                     onClick={async () => {
-                      if (!window.confirm("화주사의 수정요청을 승인하고 반영하시겠습니까?")) return;
+                      if (!await kpConfirm("화주사의 수정요청을 승인하고 반영하시겠습니까?")) return;
                       await approveEditRequest(editTarget);
                       setEditPopupOpen(false);
                     }}
@@ -45842,7 +45850,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
 
   const resetPayment = async (type, name) => {
     if (isViewer) { alert("조회전용 권한으로는 초기화할 수 없습니다."); return; }
-    if (!window.confirm(`${name} 의 ${type === "ar" ? "수금" : "지급"} 내역을 초기화하시겠습니까?`)) return;
+    if (!await kpConfirm(`${name} 의 ${type === "ar" ? "수금" : "지급"} 내역을 초기화하시겠습니까?`)) return;
     setSaving(true);
     try {
       const newAr = type === "ar" ? { ...arPayments, [name]: 0 } : arPayments;
@@ -47676,7 +47684,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
       actionsLabel="리포트 도구"
       actions={[
         { key: "a1", label: "월 비교 분석", icon: "compare", onClick: () => setMonthCompareOpen(true) },
-        { key: "a2", label: "매익률 원인 보고서", icon: "alert", onClick: () => setMarginReportOpen(true) },
+        { key: "a2", label: "월간 경영 보고서", icon: "file", onClick: () => setMarginReportOpen(true) },
         { key: "a3", label: "월 마감 점검", icon: "check", onClick: () => setMonthCloseOpen(true) },
         ...(canSeeStaffPerf ? [{ key: "a4", label: "담당자별 실적", icon: "users", onClick: () => setStaffPerfOpen(true) }] : []),
       ]}>
@@ -47758,9 +47766,8 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
                 />, document.body
               )}
               {marginReportOpen && createPortal(
-                <MarginReportModal
+                <MonthlyReport
                   rows={rows}
-                  initialMonth={targetMonth}
                   isExcluded={isExcludedFast}
                   hasExcluded={getNetRevenueExcludedNames(clients, places).length > 0}
                   onClose={() => setMarginReportOpen(false)}
@@ -51235,7 +51242,7 @@ const monthRowsRaw = useMemo(() => {
 
   const settleAll = async () => {
   if (!monthRows.length) return showAlert("표시된 월이 없습니다.");
-  if (!window.confirm(`${monthRows.length}개월 전체 정산완료 처리하시겠습니까?`)) return;
+  if (!await kpConfirm(`${monthRows.length}개월 전체 정산완료 처리하시겠습니까?`)) return;
 
   const allIds = [];
   const patchMap = {};
@@ -55685,7 +55692,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
       return normalized !== d.전화번호;
     });
     if (!targets.length) return showAlert("변환할 번호가 없습니다. 이미 모두 정규화되어 있습니다.");
-    if (!window.confirm(`${targets.length}건의 전화번호를 자동 정규화하시겠습니까?\n\n예시:\n${targets.slice(0,3).map(d=>`${d.이름}: ${d.전화번호} → ${normalizePhone(d.전화번호)}`).join("\n")}`)) return;
+    if (!await kpConfirm(`${targets.length}건의 전화번호를 자동 정규화하시겠습니까?\n\n예시:\n${targets.slice(0,3).map(d=>`${d.이름}: ${d.전화번호} → ${normalizePhone(d.전화번호)}`).join("\n")}`)) return;
     for (const d of targets) {
       await upsertDriver({ ...d, 전화번호: normalizePhone(d.전화번호) });
     }
@@ -55803,7 +55810,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
 
   const removeSelected = async () => {
     if (!selected.size) return showAlert("선택된 항목이 없습니다.");
-    if (!window.confirm(`${selected.size}건 삭제할까요?`)) return;
+    if (!await kpConfirm(`${selected.size}건 삭제할까요?`)) return;
     for (const id of selected) await removeDriver(id);
     setSelected(new Set());
     showAlert("삭제 완료");
@@ -55833,7 +55840,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
         let ok = 0;
         const valid = json.filter((r) => String(r.차량번호||r["차량 번호"]||"").replace(/\s+/g,""));
         if (!valid.length) { showAlert("등록할 기사가 없습니다. (차량번호 열을 확인해 주세요)"); return; }
-        if (!window.confirm(`기사 ${valid.length}명을 등록·갱신할까요?${json.length - valid.length ? `\n(차량번호가 없는 ${json.length - valid.length}줄은 건너뜁니다)` : ""}`)) return;
+        if (!await kpConfirm(`기사 ${valid.length}명을 등록·갱신할까요?${json.length - valid.length ? `\n(차량번호가 없는 ${json.length - valid.length}줄은 건너뜁니다)` : ""}`)) return;
         for (const r of valid) {
           const 차량번호 = String(r.차량번호||r["차량 번호"]||"").replace(/\s+/g,"");
           if (!차량번호) continue;
@@ -56392,7 +56399,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
               {cleanupTab === "중복기사정리" && cleanupSelected.size > 0 && (
                 <button
                   onClick={async () => {
-                    if (!window.confirm(`선택한 ${cleanupSelected.size}건의 중복 기사를 삭제하시겠습니까?`)) return;
+                    if (!await kpConfirm(`선택한 ${cleanupSelected.size}건의 중복 기사를 삭제하시겠습니까?`)) return;
                     for (const id of cleanupSelected) await removeDriver(id);
                     setCleanupSelected(new Set());
                     setCleanupDone(true);
@@ -56463,7 +56470,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                               onClick={async () => {
                                 const toDelete = sorted.slice(1).map(d => d.id).filter(Boolean);
                                 if (!toDelete.length) return;
-                                if (!window.confirm(`"${representative.차량번호}" 기사를 1건으로 정리합니다. 나머지 ${toDelete.length}건을 삭제합니까?`)) return;
+                                if (!await kpConfirm(`"${representative.차량번호}" 기사를 1건으로 정리합니다. 나머지 ${toDelete.length}건을 삭제합니까?`)) return;
                                 for (const id of toDelete) await removeDriver(id);
                                 showAlert(`정리 완료 — ${toDelete.length}건 삭제`);
                               }}
@@ -57150,7 +57157,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     const nameChanged = !!oldName && !!newName && oldName !== newName;
     let cascadeRename = false;
     if (nameChanged) {
-      cascadeRename = window.confirm(
+      cascadeRename = await kpConfirm(
         `거래처명을 "${oldName}" → "${newName}"(으)로 변경합니다.\n\n` +
         `과거 "${oldName}"으로 등록된 모든 오더의 거래처명도 함께 "${newName}"(으)로 바꿔야 운임조회·매출 이력이 끊기지 않고 계속 이어집니다.\n` +
         `함께 바꾸시겠습니까?\n\n(취소를 누르면 거래처명만 바뀌고, 과거 오더들은 예전 이름 "${oldName}" 그대로 남습니다 — 새 이름은 이력 없는 신규 거래처로 보이게 됩니다)`
@@ -57217,7 +57224,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     const nameChanged = !!oldName && !!newName && oldName !== newName;
     let cascadeRename = false;
     if (nameChanged) {
-      cascadeRename = window.confirm(
+      cascadeRename = await kpConfirm(
         `업체명을 "${oldName}" → "${newName}"(으)로 변경합니다.\n\n` +
         `과거 "${oldName}"으로 등록된 모든 오더의 상차지명/하차지명도 함께 "${newName}"(으)로 바꿔야 운임조회 이력이 끊기지 않고 계속 이어집니다.\n` +
         `함께 바꾸시겠습니까?\n\n(취소를 누르면 업체명만 바뀌고, 과거 오더들은 예전 이름 "${oldName}" 그대로 남습니다)`
@@ -57309,7 +57316,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
         let ok = 0;
         const validC = json.filter((r) => String(r.거래처명 || r["상호"] || r["회사명"] || "").trim());
         if (!validC.length) { showAlert("등록할 거래처가 없습니다. (거래처명 열을 확인해 주세요)"); return; }
-        if (!window.confirm(`거래처 ${validC.length}곳을 등록·갱신할까요?${json.length - validC.length ? `\n(거래처명이 없는 ${json.length - validC.length}줄은 건너뜁니다)` : ""}`)) return;
+        if (!await kpConfirm(`거래처 ${validC.length}곳을 등록·갱신할까요?${json.length - validC.length ? `\n(거래처명이 없는 ${json.length - validC.length}줄은 건너뜁니다)` : ""}`)) return;
         for (const r of validC) {
           const 거래처명 = String(r.거래처명 || r["상호"] || r["회사명"] || "").trim();
           if (!거래처명) continue;
@@ -57573,7 +57580,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
         let ok = 0;
         const newRows = json.filter((r) => { const n = (r.업체명||r["하차지명"]||r["상호"]||"").toString().trim(); const k = normalizePlace((r.주소||r["하차지주소"]||"").toString().trim()); return n && k && !addrMap.has(k); });
         if (!newRows.length) { showAlert("새로 등록할 하차지가 없습니다.\n(업체명·주소가 비었거나, 이미 같은 주소로 등록된 하차지입니다)"); return; }
-        if (!window.confirm(`하차지 ${newRows.length}곳을 새로 등록할까요?${json.length - newRows.length ? `\n(빈 줄·주소 없음·이미 등록된 ${json.length - newRows.length}줄은 건너뜁니다)` : ""}`)) return;
+        if (!await kpConfirm(`하차지 ${newRows.length}곳을 새로 등록할까요?${json.length - newRows.length ? `\n(빈 줄·주소 없음·이미 등록된 ${json.length - newRows.length}줄은 건너뜁니다)` : ""}`)) return;
         for (const r of newRows) {
           const 업체명 = (r.업체명||r["하차지명"]||r["상호"]||"").toString().trim(); if (!업체명) continue;
           const 주소 = (r.주소||r["하차지주소"]||"").toString().trim();
@@ -57840,7 +57847,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             <div className="flex items-center justify-between mb-3">
               <span className="text-[14px] font-bold text-[#1B2B4B]">같은 업체명+주소, 다른 담당자 ({placeAddrDupGroups.length}건)</span>
               <button onClick={async () => {
-                if (!window.confirm(`${placeAddrDupGroups.length}건의 중복 거래처를 병합하시겠습니까?\n담당자 정보가 1개의 거래처로 합쳐집니다.`)) return;
+                if (!await kpConfirm(`${placeAddrDupGroups.length}건의 중복 거래처를 병합하시겠습니까?\n담당자 정보가 1개의 거래처로 합쳐집니다.`)) return;
                 for (const group of placeAddrDupGroups) {
                   const primary = group[0];
                   const duplicates = group.slice(1);
@@ -57910,7 +57917,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                 <span className="text-[13px] font-bold text-[#1B2B4B]">업체명 기준 중복 {placeDupGroups.length}건</span>
                 <button
                   onClick={async () => {
-                    if (!window.confirm("체크된 항목을 모두 삭제하시겠습니까?")) return;
+                    if (!await kpConfirm("체크된 항목을 모두 삭제하시겠습니까?")) return;
                     for (const id of placeDupSelected) {
                       await removePlace(id);
                     }
@@ -57938,7 +57945,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                     <button
                       onClick={async () => {
                         const toDelete = sorted.slice(1);
-                        if (!window.confirm(`"${repr.업체명}" 최신 1건 제외 ${toDelete.length}건을 삭제하시겠습니까?`)) return;
+                        if (!await kpConfirm(`"${repr.업체명}" 최신 1건 제외 ${toDelete.length}건을 삭제하시겠습니까?`)) return;
                         for (const p of toDelete) {
                           await removePlace(p.id);
                         }
@@ -58926,7 +58933,7 @@ function RevenuePasswordSection({ companyName }) {
   };
 
   const handleReset = async () => {
-    if (!window.confirm("비밀번호를 초기화하시겠습니까?")) return;
+    if (!await kpConfirm("비밀번호를 초기화하시겠습니까?")) return;
     try {
       await setDoc(doc(db, "companySettings", companyName.trim()), { revenuePassword: null }, { merge: true });
       setCurrentPw(null);
@@ -59685,7 +59692,7 @@ function HRManagementPage({ userCompany, role, userId }) {
   };
   // ⭐ 증명사진 빼기(2026-10-28)
   const handlePhotoRemove = async () => {
-    if (!selectedUid || !window.confirm("증명사진을 삭제할까요?")) return;
+    if (!selectedUid || !await kpConfirm("증명사진을 삭제할까요?")) return;
     setPhotoUploading(true);
     try {
       await setDoc(doc(db, "hrResumes", selectedUid), { photoUrl: deleteField() }, { merge: true });

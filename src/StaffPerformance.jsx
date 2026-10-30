@@ -26,7 +26,8 @@ function aggregate(list) {
 }
 
 export default function StaffPerformance({ rows = [], isExcluded = () => false, hasExcluded = false, onClose }) {
-  const [month, setMonth] = useState(() => shiftMonth(kstMonth(), -1));
+  // ⭐ 이번 달부터 보여준다(예전엔 지난달로 열리는데 월 선택칸은 이번 달로 보여 "10월인데 9월 실적"으로 보였다)
+  const [month, setMonth] = useState(() => kstMonth());
   useLoadOrderRange(monthStartAgo(month, 1), monthEnd(month)); // ⭐ 고른 달 + 전월(전월 대비)만 불러오기
   const [scope, setScope] = useState(hasExcluded ? "pure" : "all");
   const [sortKey, setSortKey] = useState("profit");
@@ -36,7 +37,7 @@ export default function StaffPerformance({ rows = [], isExcluded = () => false, 
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const months = useMemo(() => [...new Set(rows.map((r) => String(r.상차일 || "").slice(0, 7)).filter((m) => /^\d{4}-\d{2}$/.test(m)))].sort().reverse(), [rows]);
+  const months = useMemo(() => [...new Set([kstMonth(), shiftMonth(kstMonth(), -1), ...rows.map((r) => String(r.상차일 || "").slice(0, 7))].filter((m) => /^\d{4}-\d{2}$/.test(m)))].sort().reverse(), [rows]);
   const prev = shiftMonth(month, -1);
   const inScope = (r) => (scope === "all" ? true : !isExcluded(r.거래처명));
   const cur = useMemo(() => aggregate(rows.filter((r) => String(r.상차일 || "").startsWith(month) && inScope(r))), [rows, month, scope]); // eslint-disable-line react-hooks/exhaustive-deps

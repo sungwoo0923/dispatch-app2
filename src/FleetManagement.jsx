@@ -1,5 +1,6 @@
 // ======================= FleetManagement.jsx =======================
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { kpConfirm } from "./kpDialog";
 import { createPortal } from "react-dom";
 import { imeFocusRef } from "./imeFocus";
 import "leaflet/dist/leaflet.css";
@@ -1209,7 +1210,7 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
 
   const handleApprove = async (uid, doApprove) => {
     if (approvingId) return;
-    if (!doApprove && !window.confirm("이 기사의 승인을 취소할까요? 기사앱 사용이 막힙니다.")) return;
+    if (!doApprove && !await kpConfirm("이 기사의 승인을 취소할까요? 기사앱 사용이 막힙니다.")) return;
     setApprovingId(uid);
     try {
       await updateDoc(doc(db, "users", uid), { approved: doApprove });
@@ -2048,7 +2049,7 @@ function copyOrderAddress(order) {
 // 쓸 수 없다). 완료된 오더는 같은 안전장치(확인+보관함 기록)를 적용한다.
 async function cancelDriverAssignment(order, driver) {
   if (order?.기사확인상태 === "완료") {
-    if (!window.confirm("운송이 완료된 오더입니다. 기사를 취소하시겠습니까?")) return;
+    if (!await kpConfirm("운송이 완료된 오더입니다. 기사를 취소하시겠습니까?")) return;
     addDoc(collection(db, "driver_completed_archive"), {
       driverId: driver.id,
       originalOrderId: order._id,
@@ -2068,7 +2069,7 @@ async function cancelDriverAssignment(order, driver) {
       기사운임: order.기사운임 || "",
       기사완료일시: order.기사완료일시 || null,
     }).catch(() => {});
-  } else if (!window.confirm(`${driver.이름 || ""}(${driver.차량번호 || ""}) 기사 배정을 취소하시겠습니까?`)) {
+  } else if (!await kpConfirm(`${driver.이름 || ""}(${driver.차량번호 || ""}) 기사 배정을 취소하시겠습니까?`)) {
     return;
   }
   const col = order.__col || "orders";
@@ -3297,7 +3298,7 @@ function DriverDocumentsPanel({ driverId }) {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("이 서류를 삭제할까요?")) return;
+    if (!await kpConfirm("이 서류를 삭제할까요?")) return;
     await deleteDoc(doc(db, "driver_documents", id)).catch(() => {});
   };
 

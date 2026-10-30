@@ -15,6 +15,7 @@
 //  - 승인 후 취소: 기안자가 「결재 취소 요청」(사유) → 같은 결재선이 다시 승인하면 "결재 취소"로 바뀐다.
 //    문서는 지우지 않고 모두의 보관함에 "결재 취소" 도장으로 남는다(감사 기록). 연차 사용일수도 자동 복구.
 import React from "react";
+import { kpConfirm } from "./kpDialog";
 import BankAccountInput, { ReasonTemplates } from "./BankAccountInput";
 import { createPortal } from "react-dom";
 import html2canvas from "html2canvas";
@@ -488,7 +489,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive }) {
     if (editId) {
       const live = getLive?.(editId);
       if (!live || !canEdit(live, me.uid)) { setMsg("결재자가 이미 문서를 열어봐서 수정할 수 없습니다. 회수 후 재기안해 주세요."); return; }
-      if (!window.confirm("수정한 내용으로 문서를 바꿀까요?")) return;
+      if (!await kpConfirm("수정한 내용으로 문서를 바꿀까요?")) return;
       setBusy(true); setMsg("");
       try {
         await updateDoc(doc(db, "approvals", editId), {
@@ -499,7 +500,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive }) {
       } catch (e) { setMsg(e.message || "수정 실패"); } finally { setBusy(false); }
       return;
     }
-    if (!window.confirm(`「${finalTitle}」 문서를 ${line.map((s) => s.name).join(" → ")} 순서로 결재 상신할까요?`)) return;
+    if (!await kpConfirm(`「${finalTitle}」 문서를 ${line.map((s) => s.name).join(" → ")} 순서로 결재 상신할까요?`)) return;
     setBusy(true); setMsg("");
     try {
       const now = new Date();
@@ -641,7 +642,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit }) {
     if ((kind === "reject" || kind === "c-reject") && !comment.trim()) { window.alert("반려 사유를 적어 주세요."); return; }
     if (kind === "cancel-req" && !comment.trim()) { window.alert("취소 사유를 적어 주세요."); return; }
     const ask = { approve: "승인할까요?", reject: "반려할까요?", withdraw: "결재를 회수할까요?", comment: "의견을 남길까요?", "cancel-req": "승인된 문서의 결재 취소를 요청할까요? 결재자들이 다시 승인하면 취소됩니다.", "c-approve": "결재 취소를 승인할까요?", "c-reject": "결재 취소 요청을 반려할까요?" }[kind];
-    if (!window.confirm(ask)) return;
+    if (!await kpConfirm(ask)) return;
     setBusy(true);
     try {
       const now = Date.now();
@@ -772,7 +773,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit }) {
                 const finished = d.status !== "pending" && !(d.status === "approved" && d.cancel?.status === "pending");
                 if (hidden) return <button type="button" onClick={() => updateDoc(doc(db, "approvals", d.id), { hiddenBy: arrayRemove(me.uid) }).catch((e) => window.alert(e.message))} className="h-9 px-3.5 rounded-lg border border-[#0F1A30] text-[12.5px] font-black text-[#0F1A30]">보관함으로 되돌리기</button>;
                 if (!finished) return null;
-                return <button type="button" onClick={async () => { if (!window.confirm("내 보관함에서 이 문서를 삭제할까요?\n(회사 기록 원본은 남고, 결재함 › 삭제한 문서에서 되돌릴 수 있습니다)")) return; await updateDoc(doc(db, "approvals", d.id), { hiddenBy: arrayUnion(me.uid) }).catch((e) => window.alert(e.message)); onClose(); }} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#7A879C]">삭제</button>;
+                return <button type="button" onClick={async () => { if (!await kpConfirm("내 보관함에서 이 문서를 삭제할까요?\n(회사 기록 원본은 남고, 결재함 › 삭제한 문서에서 되돌릴 수 있습니다)")) return; await updateDoc(doc(db, "approvals", d.id), { hiddenBy: arrayUnion(me.uid) }).catch((e) => window.alert(e.message)); onClose(); }} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#7A879C]">삭제</button>;
               })()}
               <button type="button" onClick={print} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#3A4A66]">인쇄</button>
             </div>

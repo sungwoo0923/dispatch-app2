@@ -5,6 +5,7 @@
 //  - 고객은 로그인 없이 링크로 열고, 서명 칸만 채울 수 있다(firestore.rules). 서명 후엔 문서 지문(SHA-256)을 함께 남긴다.
 //  ⭐ 알록달록 금지 — 네이비 계열만.
 import React from "react";
+import { kpConfirm } from "./kpDialog";
 import { collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { useSalesPricing } from "./SalesQuote";
@@ -224,7 +225,7 @@ export function ContractList({ onNew, onEdit }) {
                   <td className="px-3 py-2.5 text-center text-[12.5px] text-[#5B6B85]">{c.status === "서명완료" ? `${c.signer?.name || ""} · ${c.signedAt?.toDate ? ymd(c.signedAt.toDate()) : ""}` : c.status === "발송" ? (c.viewedAt ? "열람함" : "미열람") : "-"}</td>
                   <td className="px-3 py-2.5 whitespace-nowrap text-right">
                     {c.status === "작성" && <button type="button" onClick={() => onEdit(c)} className="h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black mr-1">수정</button>}
-                    {c.status === "작성" && <button type="button" onClick={async () => { if (window.confirm(`${c.vars?.고객사} 계약서를 서명 요청 상태로 바꿀까요?\n링크를 고객에게 보내면 로그인 없이 서명할 수 있습니다.`)) { await updateDoc(doc(db, "contracts", c.id), { status: "발송", sentAt: serverTimestamp() }); copy(c); } }} className="h-8 px-3 rounded-lg border border-[#1B2B4B] text-[12.5px] font-black text-[#1B2B4B] mr-1">서명 요청</button>}
+                    {c.status === "작성" && <button type="button" onClick={async () => { if (await kpConfirm(`${c.vars?.고객사} 계약서를 서명 요청 상태로 바꿀까요?\n링크를 고객에게 보내면 로그인 없이 서명할 수 있습니다.`)) { await updateDoc(doc(db, "contracts", c.id), { status: "발송", sentAt: serverTimestamp() }); copy(c); } }} className="h-8 px-3 rounded-lg border border-[#1B2B4B] text-[12.5px] font-black text-[#1B2B4B] mr-1">서명 요청</button>}
                     {c.status === "발송" && <button type="button" onClick={() => copy(c)} className="h-8 px-3 rounded-lg border border-[#1B2B4B] text-[12.5px] font-black text-[#1B2B4B] mr-1">{copied === c.id ? "복사됨 ✓" : "서명 링크 복사"}</button>}
                     <button type="button" onClick={() => printContract(c)} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B] mr-1">보기·인쇄</button>
                     {c.status !== "서명완료" && c.status !== "취소" && <button type="button" onClick={() => window.confirm("이 계약서를 취소할까요? 서명 링크도 더 이상 쓸 수 없습니다.") && updateDoc(doc(db, "contracts", c.id), { status: "취소" })} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#7A879C] mr-1">취소</button>}

@@ -1,5 +1,6 @@
 // src/AdminMenu.jsx
 import BillingCenter from "./BillingCenter";
+import { kpConfirm } from "./kpDialog";
 import { CopyTemplateEditor } from "./CopyTemplateEditor";
 import { openSetupWizard, openTutorial } from "./Onboarding";
 import AdminShell from "./AdminShell";
@@ -245,7 +246,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     if (!canAdmin) return;
     if (u.id === me?.uid && u.isMaster) return alert("본인의 마스터는 해제할 수 없습니다. 다른 직원을 먼저 마스터로 지정해 주세요.");
     const next = !u.isMaster;
-    if (!window.confirm(next ? `"${u.name || u.email}"님을 마스터로 지정할까요?\n마스터는 직원의 권한·부서·직책을 바꿀 수 있습니다.` : `"${u.name || u.email}"님의 마스터를 해제할까요?`)) return;
+    if (!await kpConfirm(next ? `"${u.name || u.email}"님을 마스터로 지정할까요?\n마스터는 직원의 권한·부서·직책을 바꿀 수 있습니다.` : `"${u.name || u.email}"님의 마스터를 해제할까요?`)) return;
     const history = [...(u.personnelHistory || []), { date: todayStr(), type: next ? "마스터 지정" : "마스터 해제", detail: meDoc?.name || me?.email || "" }];
     await setDoc(doc(db, "users", u.id), { isMaster: next, ...(next ? { role: "admin" } : {}), personnelHistory: history }, { merge: true });
     if (manageUser?.id === u.id) setManageUser((prev) => ({ ...prev, isMaster: next, ...(next ? { role: "admin" } : {}), personnelHistory: history }));
@@ -439,7 +440,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     if (isViewer) { _viewerAlert(); return; }
     if (!matchedShipper) { alert("연동 승인된 화주사 중 일치하는 거래처명이 없습니다. 화주사의 회사명과 거래처명이 정확히 일치해야 합니다."); return; }
     if (pendingTransmitMatches.length === 0) { alert("전송할 데이터가 없습니다."); return; }
-    if (!window.confirm(`${matchedShipper.companyName}(으)로 ${pendingTransmitMatches.length}건을 전송하시겠습니까?`)) return;
+    if (!await kpConfirm(`${matchedShipper.companyName}(으)로 ${pendingTransmitMatches.length}건을 전송하시겠습니까?`)) return;
 
     setTransmitting(true);
     let success = 0;
@@ -542,7 +543,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     if (isViewer) return _viewerAlert();
     if (me?.uid === u.id) return alert("본인 계정은 삭제할 수 없습니다.");
     if (!isTotalMaster && (u.companyName || DEFAULT_COMPANY) !== effectiveCompany) return;
-    if (!window.confirm(`"${u.name || u.email}" 계정을 삭제하시겠습니까?\n가입신청 내역도 함께 삭제됩니다.`)) return;
+    if (!await kpConfirm(`"${u.name || u.email}" 계정을 삭제할까요?\n가입신청 내역도 함께 삭제됩니다.`, { title: "계정 삭제", okText: "삭제", danger: true })) return false;
     await deleteDoc(doc(db, "users", u.id));
     try {
       const tSnap = await getDocs(query(collection(db, "transportApplications"), where("userId", "==", u.id)));
@@ -553,6 +554,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
       for (const d of cSnap.docs) await deleteDoc(doc(db, "companyApplications", d.id));
     } catch (_) {}
     setManageUser(null);
+    return true;
   };
 
   const openManage = (u) => {
@@ -614,7 +616,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const setResignStatus = async (u, resign) => {
     if (isViewer) return _viewerAlert();
     if (resign) {
-      if (!window.confirm(`"${u.name || u.email}" 계정을 퇴사 처리하시겠습니까?\n퇴사 처리된 계정은 즉시 로그인이 차단됩니다.`)) return;
+      if (!await kpConfirm(`"${u.name || u.email}" 계정을 퇴사 처리하시겠습니까?\n퇴사 처리된 계정은 즉시 로그인이 차단됩니다.`)) return;
     }
     const history = [...(u.personnelHistory || []), { date: todayStr(), type: resign ? "퇴사" : "복직", detail: resign ? "퇴사 처리" : "복직 처리" }];
     const payload = resign
@@ -1049,14 +1051,14 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                           onClose={() => { setMemberModal(false); setEditMode(false); }}
                           onSave={async () => { await saveEdit(); setMemberModal(false); }}
                           onApprove={async () => {
-                            if (!window.confirm(`"${u.name || u.email}"님을 승인할까요?\n입력한 직책·부서·권한으로 저장되고 바로 로그인할 수 있습니다.`)) return;
+                            if (!await kpConfirm(`"${u.name || u.email}"님을 승인할까요?\n입력한 직책·부서·권한으로 저장되고 바로 로그인할 수 있습니다.`)) return;
                             await saveEdit(); await toggleApprove({ ...u, approved: false }); setMemberModal(false);
                           }}
-                          onUnapprove={async () => { if (window.confirm(`"${u.name || u.email}"님의 승인을 해제할까요?\n해제하면 로그인이 막힙니다.`)) await toggleApprove({ ...u, approved: true }); }}
-                          onReject={async () => { await removeUser(u); setMemberModal(false); }}
+                          onUnapprove={async () => { if (await kpConfirm(`"${u.name || u.email}"님의 승인을 해제할까요?\n해제하면 로그인이 막힙니다.`)) await toggleApprove({ ...u, approved: true }); }}
+                          onReject={async () => { if (await removeUser(u)) setMemberModal(false); }}
                           onMaster={() => toggleMaster(u)}
-                          onResign={async () => { if (resigned && !window.confirm(`"${u.name || u.email}"님을 복직 처리할까요?`)) return; await setResignStatus(u, !resigned); }}
-                          onDelete={async () => { await removeUser(u); setMemberModal(false); }}
+                          onResign={async () => { if (resigned && !await kpConfirm(`"${u.name || u.email}"님을 복직 처리할까요?`)) return; await setResignStatus(u, !resigned); }}
+                          onDelete={async () => { if (await removeUser(u)) setMemberModal(false); }}
                         />
                       )}
                     </div>

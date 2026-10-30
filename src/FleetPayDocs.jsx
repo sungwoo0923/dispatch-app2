@@ -12,6 +12,7 @@
 // [과태료·사고 서류] 회사로 날아온 과태료·범칙금·사고·보험 할증 우편을 서류로 만든다
 //  기사 검색 → 정보 자동 채움 → 고지서 사진 업로드(칸에 맞게) → 미리보기 → 저장(기사앱 서류함에 표시)
 import React from "react";
+import { kpConfirm } from "./kpDialog";
 import { collection, doc, onSnapshot, query, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, where, writeBatch } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import { db, auth } from "./firebase";
@@ -115,7 +116,7 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
     const list = rows.filter((r) => keys.has(r.key));
     if (!list.length) return window.alert("보낼 기사를 선택해 주세요.");
     const noApp = list.filter((r) => !r.d.appUid).length;
-    if (!window.confirm(`${ym} 지급명세서를 ${list.length}명에게 발송할까요?${noApp ? `\n(기사앱 미가입 ${noApp}명은 저장만 되고, 가입하면 서류함에서 보입니다)` : ""}\n같은 기간에 이미 보낸 명세서는 새 내용으로 바뀝니다.`)) return;
+    if (!await kpConfirm(`${ym} 지급명세서를 ${list.length}명에게 발송할까요?${noApp ? `\n(기사앱 미가입 ${noApp}명은 저장만 되고, 가입하면 서류함에서 보입니다)` : ""}\n같은 기간에 이미 보낸 명세서는 새 내용으로 바뀝니다.`)) return;
     setBusy(true);
     try {
       for (let i = 0; i < list.length; i += 400) {
@@ -322,7 +323,7 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
       setForm(null);
     } catch (e) { window.alert(`저장 실패: ${e?.message || e}`); } finally { setBusy(false); }
   };
-  const remove = async (p) => { if (window.confirm("이 서류를 삭제할까요? 기사앱 서류함에서도 사라집니다.")) await deleteDoc(doc(db, "fleetPenalties", p.id)); setView(null); };
+  const remove = async (p) => { if (await kpConfirm("이 서류를 삭제할까요? 기사앱 서류함에서도 사라집니다.")) await deleteDoc(doc(db, "fleetPenalties", p.id)); setView(null); };
   const shown = list.filter((p) => !fk || p.kind === fk);
   const sum = shown.reduce((s, p) => s + toInt(p.amount), 0);
 

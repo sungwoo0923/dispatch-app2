@@ -1,5 +1,6 @@
 // DriverHome.jsx — 지입기사 전용 앱 (리뉴얼)
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { kpConfirm } from "../kpDialog";
 import html2canvas from "html2canvas";
 import { db, auth } from "../firebase";
 import {

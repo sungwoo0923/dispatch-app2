@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { setTenant, setServerFilter, setPreviewMode } from "./fsTenant";
 import { setPreviewPlan } from "./plans";
+import { installEscClose } from "./kpDialog";
+installEscClose();
 import { safeLocalSet } from "./safeStorage";
 import UpdateBanner from "./UpdateBanner";
 import VersionCheck from "./VersionCheck";

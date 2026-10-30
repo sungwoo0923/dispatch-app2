@@ -6,6 +6,7 @@
 //  [한눈에 비교] 모든 역할 × 모든 메뉴 권한 표
 // 저장 형식은 예전과 같다(customRoles/{역할키} = { label, menus }) — 실제 메뉴 차단은 DispatchApp이 그대로 읽는다.
 import React from "react";
+import { kpConfirm } from "./kpDialog";
 import { imeFocusRef } from "./imeFocus";
 import { db } from "./firebase";
 import { doc, updateDoc } from "firebase/firestore";
@@ -136,7 +137,7 @@ export default function RolePermissionsPanel({ users = [], roleLabels = {} }) {
     const msg = isBuiltin
       ? `"${current?.label}" 역할을 처음 기본값으로 되돌릴까요?`
       : `"${current?.label}" 역할을 삭제할까요? 이 역할을 쓰는 직원 ${members.length}명은 메뉴가 모두 숨겨집니다. 먼저 "소속 직원" 탭에서 다른 역할로 옮기는 것을 권합니다.`;
-    if (!window.confirm(msg)) return;
+    if (!await kpConfirm(msg)) return;
     await deleteCustomRole(selectedKey);
     if (!isBuiltin) setSelectedKey("admin");
     flash(isBuiltin ? "기본값으로 되돌렸습니다" : "삭제했습니다");
@@ -152,7 +153,7 @@ export default function RolePermissionsPanel({ users = [], roleLabels = {} }) {
     flash("새 역할을 만들었습니다");
   };
   const changeUserRole = async (u, role) => {
-    if (!window.confirm(`${u.name || u.email}님의 역할을 "${roleLabels[role] || role}"(으)로 바꿀까요?`)) return;
+    if (!await kpConfirm(`${u.name || u.email}님의 역할을 "${roleLabels[role] || role}"(으)로 바꿀까요?`)) return;
     try { await updateDoc(doc(db, "users", u.id), { role }); flash("역할을 바꿨습니다"); } catch (e) { alert(`변경 실패: ${e?.message || e}`); }
   };
 

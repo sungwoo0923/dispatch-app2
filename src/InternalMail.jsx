@@ -10,6 +10,7 @@
 //    일괄 처리·인쇄·서명. 추가 필드: status(sent|draft|scheduled), pendingTo/pendingToNames/pendingCc/pendingCcNames,
 //    scheduledAt, cc/ccNames, important, starredBy, purgedBy, recalledFor
 import React from "react";
+import { kpConfirm } from "./kpDialog";
 import { createPortal } from "react-dom";
 import { db, auth } from "./firebase";
 import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, serverTimestamp, Timestamp } from "firebase/firestore";
@@ -471,7 +472,7 @@ function ReadReceipt({ m, staff, uid }) {
   const unreadRows = rows.filter((r) => !r.read && !r.recalled);
   const recall = async () => {
     if (!unreadRows.length) return;
-    if (!window.confirm(`아직 읽지 않은 ${unreadRows.length}명에게서 이 메일을 회수할까요?\n(이미 읽은 사람에게는 그대로 남습니다)`)) return;
+    if (!await kpConfirm(`아직 읽지 않은 ${unreadRows.length}명에게서 이 메일을 회수할까요?\n(이미 읽은 사람에게는 그대로 남습니다)`)) return;
     await updateDoc(doc(db, "internalMails", m.id), { recalledFor: arrayUnion(...unreadRows.map((r) => r.uid)) }).catch((e) => window.alert("발송 취소 실패: " + e.message));
   };
   if (!rows.length) return null;
@@ -538,7 +539,7 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
   const toggleStar = (m) => upd(m, { starredBy: has(m.starredBy, uid) ? arrayRemove(uid) : arrayUnion(uid) });
   const removeMail = async (m) => {
     if (["drafts", "scheduled"].includes(box) || ["draft", "scheduled"].includes(statusOf(m))) {
-      if (!window.confirm(statusOf(m) === "scheduled" ? "예약을 취소하고 메일을 지울까요?" : "임시보관 메일을 지울까요?")) return;
+      if (!await kpConfirm(statusOf(m) === "scheduled" ? "예약을 취소하고 메일을 지울까요?" : "임시보관 메일을 지울까요?")) return;
       await deleteDoc(doc(db, "internalMails", m.id)).catch(() => {});
     } else await upd(m, { deletedBy: arrayUnion(uid) });
     if (curId === m.id) setCurId(null);
@@ -546,8 +547,8 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
   const bulk = async (act) => {
     const ms = shown.filter((m) => sel.has(m.id));
     if (!ms.length) return;
-    if (act === "purge" && !window.confirm(`${ms.length}통을 영구 삭제할까요? 되돌릴 수 없습니다.`)) return;
-    if (act === "delete" && ["drafts", "scheduled"].includes(box) && !window.confirm(`${ms.length}통을 지울까요?`)) return;
+    if (act === "purge" && !await kpConfirm(`${ms.length}통을 영구 삭제할까요? 되돌릴 수 없습니다.`)) return;
+    if (act === "delete" && ["drafts", "scheduled"].includes(box) && !await kpConfirm(`${ms.length}통을 지울까요?`)) return;
     await Promise.all(ms.map((m) => {
       if (act === "read") return has(m.to, uid) ? upd(m, { readBy: arrayUnion(uid) }) : null;
       if (act === "unread") return has(m.to, uid) ? upd(m, { readBy: arrayRemove(uid) }) : null;
@@ -560,7 +561,7 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
     setSel(new Set());
   };
   const emptyTrash = async () => {
-    if (!folders.trash.length || !window.confirm(`휴지통의 메일 ${folders.trash.length}통을 모두 영구 삭제할까요?`)) return;
+    if (!folders.trash.length || !await kpConfirm(`휴지통의 메일 ${folders.trash.length}통을 모두 영구 삭제할까요?`)) return;
     await Promise.all(folders.trash.map((m) => upd(m, { purgedBy: arrayUnion(uid) })));
   };
 
@@ -576,7 +577,7 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
     important: m.important, scheduledAt: statusOf(m) === "scheduled" ? toMs(m.scheduledAt) : null, self: (m.pendingTo || []).length === 1 && m.pendingTo[0] === uid,
   });
   const sendNow = async (m) => {
-    if (!window.confirm("예약을 풀고 지금 바로 보낼까요?")) return;
+    if (!await kpConfirm("예약을 풀고 지금 바로 보낼까요?")) return;
     const people = (m.pendingTo || []).map((u, i) => ({ uid: u, name: [...(m.pendingToNames || []), ...(m.pendingCcNames || [])][i] || "" }));
     const ccSet = new Set(m.pendingCc || []);
     try {
@@ -755,7 +756,7 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
                   {inTrash ? (
                     <>
                       <Btn primary onClick={() => upd(cur, { deletedBy: arrayRemove(uid) })}>복원</Btn>
-                      <Btn onClick={async () => { if (window.confirm("영구 삭제할까요? 되돌릴 수 없습니다.")) { await upd(cur, { purgedBy: arrayUnion(uid) }); setCurId(null); } }}>영구삭제</Btn>
+                      <Btn onClick={async () => { if (await kpConfirm("영구 삭제할까요? 되돌릴 수 없습니다.")) { await upd(cur, { purgedBy: arrayUnion(uid) }); setCurId(null); } }}>영구삭제</Btn>
                     </>
                   ) : st === "draft" ? (
                     <>
