@@ -18,7 +18,7 @@ import RouteMapModal from "../RouteMapModal";
 import southKorea from "@svg-maps/south-korea";
 import { canSeeNotice } from "../NoticeBoard";
 import React, { useState, useMemo, useEffect, useRef, startTransition, useSyncExternalStore } from "react";
-import { withCo } from "../fsTenant";
+import { withCo, getTenant } from "../fsTenant";
 // ⭐ 작은 표시 전용 저장소 — "최신 정보 확인 중"·첫 진입 진행률이 바뀔 때 화면 전체(오더 목록)를
 // 다시 그리지 않고 그 표시만 바꾼다(저사양 폰에서 스크롤 끊김 방지)
 function createMiniStore(init) {
@@ -3144,7 +3144,7 @@ useEffect(() => {
     }
   );
   return () => unsub();
-}, [secondaryReady]);
+}, [secondaryReady, userCompany]); // 회사가 바뀌면(최고관리자 회사 전환) 다시 구독
 
 // --------------------------------------------------
 // 📅 PC 일정 실시간 구독 (이 위치!)
@@ -3162,7 +3162,7 @@ useEffect(() => {
     }
   );
   return () => unsub();
-}, [secondaryReady]);
+}, [secondaryReady, userCompany]); // 회사가 바뀌면(최고관리자 회사 전환) 다시 구독
 // 자동 마이그레이션: 6월 16일 이전 일정 승인 처리
 React.useEffect(() => {
   schedules.forEach(s => {
@@ -3205,7 +3205,7 @@ useEffect(() => {
   );
 
   return () => unsub();
-}, [secondaryReady]);
+}, [secondaryReady, userCompany]); // 회사가 바뀌면(최고관리자 회사 전환) 다시 구독
 
 // 👤 현재 로그인 사용자 추적
 useEffect(() => {
@@ -6300,7 +6300,7 @@ onGoAttendance={() => {
                 type: scheduleForm.type, name: userName, start: scheduleForm.start, end: scheduleForm.end || scheduleForm.start,
                 memo: scheduleForm.memo, approvers: approversData, approvalStatus: "pending",
                 authorUid: currentUser?.uid || "", createdAt: serverTimestamp(),
-                companyName: mobileUsers.find(u => u.id === currentUser?.uid)?.companyName || "",
+                companyName: getTenant() || localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY,
               });
               for (const a of approversData) {
                 if (a.uid) setDoc(doc(db, "notifications", `req_${newDocRef.id}_${a.uid}`), { toUid: a.uid, type: "approval_request", fromName: userName, scheduleType: scheduleForm.type, scheduleId: newDocRef.id, createdAt: serverTimestamp(), read: false }).catch(() => {});
@@ -6487,7 +6487,7 @@ onGoAttendance={() => {
             if (selectedNotice?.id) {
               await updateDoc(doc(db, "notices", selectedNotice.id), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content, audience: noticeForm.audience || "internal" });
             } else {
-              await addDoc(collection(db, "notices"), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content, audience: noticeForm.audience || "internal", authorUid: currentUser?.uid || "", createdAt: serverTimestamp(), companyName: mobileUsers.find(u => (u.uid||u.id) === currentUser?.uid)?.companyName || "" });
+              await addDoc(collection(db, "notices"), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content, audience: noticeForm.audience || "internal", authorUid: currentUser?.uid || "", createdAt: serverTimestamp(), companyName: getTenant() || localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY });
             }
             setNoticeOpen(false);
             setSelectedNotice(null);

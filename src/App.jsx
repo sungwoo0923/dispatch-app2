@@ -593,6 +593,21 @@ export default function App() {
     } catch {}
   };
 
+  // 🏢 운송사 로그인 화면이 회사명·회사코드 확인을 끝낸 뒤 알려주는 회사 — 최고관리자는 로그인 직후
+  //  사용자 문서가 먼저 도착하면 "지난번에 들어갔던 회사"로 데이터를 걸러서, 돌캐로 들어가도 다른
+  //  운송사 공지·오더가 보였다(헤더만 새 회사). 확인이 끝난 회사로 다시 맞춘다.
+  useEffect(() => {
+    const onCo = (e) => {
+      const co = String(e.detail || "").trim();
+      if (!co) return;
+      setTenant(co);
+      setUserCompany(co);
+      if (sessionLogRef.current.info) sessionLogRef.current.info.companyName = co;
+    };
+    window.addEventListener("kp:loginCompany", onCo);
+    return () => window.removeEventListener("kp:loginCompany", onCo);
+  }, []);
+
   // 인증 + 역할
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
