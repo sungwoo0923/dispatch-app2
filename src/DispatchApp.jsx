@@ -25,6 +25,8 @@ import { useNewVersion, openUpdatePopup } from "./VersionCheck";
 import CustomDatePicker, { specialDemandInfo, KOREAN_HOLIDAYS, shortHolidayLabel } from "./CustomDatePicker";
 import { ensureWeatherLoaded, getWeatherSpecialInfo } from "./weatherUtil";
 import AdminMenu, { subscribeUsersLive } from "./AdminMenu";
+import FleetExtraFields from "./FleetDriverExtra";
+import { useFixedRouteAutoDispatch } from "./FixedRoutes";
 import { calcFare } from "./fareUtil";
 import FixedClients from "./FixedClients";
 import FleetManagement from "./FleetManagement";
@@ -35,7 +37,6 @@ import StandardFare from "./StandardFare";
 import RateCard from "./RateCard";
 import DispatchFormNew from "./DispatchFormNew";
 import AiAssistant from "./AiAssistant";
-import DeliverySignaturePage from "./DeliverySignaturePage";
 import InternalMessenger from "./InternalMessenger";
 import { calcLeaveBalance } from "./leaveUtils";
 import { TEAM_OPTIONS, POSITION_OPTIONS, TEAM_BADGE_CLASS, TEAM_BADGE_CLASS_UNASSIGNED } from "./hrConstants";
@@ -7193,6 +7194,8 @@ useEffect(() => {
   } = useRealtimeCollections(user, userCompany, role);
   const orderHistoryApi = React.useMemo(() => ({ loadRange, loadFullHistory }), [loadRange, loadFullHistory]);
   const [pcBootDone, setPcBootDone] = useState(false);
+  // 🛣 고정노선 — 정해진 요일의 배차를 미리 만들어 배차현황·실시간배차현황·기사앱에 보이게
+  useFixedRouteAutoDispatch(pcBootDone ? (role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany) : userCompany) : "");
   // ⚡ 오더복사·운임 자동매칭이 쓰는 예전 오더(13개월)를 첫 로딩이 끝난 뒤 한가할 때 미리 받아둔다.
   //   예전엔 오더복사를 열거나 상·하차지를 입력하는 "그 순간" 받기 시작해 입력이 끊기고 검색이 늦게 떴다.
   useEffect(() => {
@@ -8181,8 +8184,7 @@ return (
         {menu === "거래처관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer || !!customRole) && (
           <KpSubNav code="CLIENTS" title="거래처관리" icon="building" active={거래처관리Tab} onSelect={set거래처관리Tab}
             groups={[
-              { label: "거래처", items: [{ key: "하차지거래처", label: "하차지거래처", en: "PLACES", icon: "pin" }, { key: "기본거래처", label: "기본거래처", en: "CLIENTS", icon: "building" }] },
-              { label: "고정 운송", items: [{ key: "고정거래처관리", label: "고정거래처관리", en: "FIXED", icon: "idcard" }, { key: "고정노선관리", label: "고정노선관리", en: "ROUTES", icon: "route" }] },
+              { label: "거래처", items: [{ key: "하차지거래처", label: "하차지거래처", en: "PLACES", icon: "pin" }, { key: "기본거래처", label: "기본거래처", en: "CLIENTS", icon: "building" }, { key: "고정거래처관리", label: "고정거래처관리", en: "FIXED", icon: "idcard" }] },
             ]}>
           {(거래처관리Tab === "하차지거래처" || 거래처관리Tab === "기본거래처") && (
             <ClientManagement
@@ -8203,11 +8205,7 @@ return (
               <FixedClients drivers={drivers} upsertDriver={upsertDriverSafe} userCompany={userCompany || localStorage.getItem("userCompany") || ""} role={role} isViewer={isViewer} />
             </div>
           )}
-          {거래처관리Tab === "고정노선관리" && (
-            <div className="p-4">
-              <DeliverySignaturePage />
-            </div>
-          )}
+          {/* ⭐ 고정노선관리는 지입차관리 › 고정노선으로 옮겼다 */}
           </KpSubNav>
         )}
 
@@ -55675,7 +55673,9 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
     // 블랙 등급은 메모가 있으면 무조건 팝업이 뜨도록 별도로 처리되므로(팝업표시 값과 무관),
     // 저장 시점에도 사용자에게 혼란을 주지 않도록 항상 팝업표시:true로 맞춰 저장한다.
     const 팝업표시 = editDriverModal.등급 === "블랙" ? true : editDriverModal.팝업표시 === true;
-    await upsertDriver({ ...editDriverModal, 팝업표시 });
+    // 차량 기본정보(vehicle·care)는 마법사가 따로 저장하므로 여기서 옛 값으로 덮어쓰지 않는다
+    const { vehicle: _v, care: _c, careLogs: _cl, ...rest } = editDriverModal;
+    await upsertDriver({ ...rest, 팝업표시 });
     setEditDriverModal(null);
     showAlert("수정 완료");
   };
@@ -56103,9 +56103,9 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
       {/* ===== 기사 수정 팝업 (더블클릭) ===== */}
       {editDriverModal && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-2xl w-[480px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
-              <h3 className="text-white font-bold text-[15px]">기사 수정 — {editDriverModal.차량번호}</h3>
+          <div className={`bg-white rounded-2xl shadow-2xl ${(editDriverModal.등급 === "지입" || editDriverModal.등급 === "직영") ? "w-[640px]" : "w-[480px]"} max-w-[96vw] max-h-[92vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 flex items-center justify-between sticky top-0 z-10" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
+              <h3 className="text-white font-bold text-[15px]">기사 수정 — {editDriverModal.차량번호}{(editDriverModal.등급 === "지입" || editDriverModal.등급 === "직영") ? <span className="ml-2 px-2 py-0.5 rounded-md bg-white/15 text-[11.5px] font-black">{editDriverModal.등급}</span> : null}</h3>
               <button onClick={() => setEditDriverModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
             </div>
             <div className="px-6 py-5 grid grid-cols-2 gap-4">
@@ -56203,6 +56203,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                       })}
                     </div>
                   </div>
+                  <FleetExtraFields value={editDriverModal} onChange={setEditDriverModal} company={userCompany} />
                 </>
               )}
               <div className="col-span-2">

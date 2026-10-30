@@ -1,5 +1,6 @@
 // ======================= FleetManagement.jsx =======================
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { imeFocusRef } from "./imeFocus";
 import "leaflet/dist/leaflet.css";
 import { db, auth } from "./firebase";
@@ -36,6 +37,9 @@ import { ReturnTripSuggest } from "./fleetRecommend";
 import { useLoadOrderRange } from "./orderHistory";
 import VehicleCarePanel from "./VehicleCarePanel";
 import { BatchStatementsPanel, PenaltyCenter } from "./FleetPayDocs";
+import { AppStatusBadge } from "./FleetDriverExtra";
+import FixedRoutes from "./FixedRoutes";
+import DeliverySignaturePage from "./DeliverySignaturePage";
 import { careSummary, vehicleDefaults } from "./vehicleCare";
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
@@ -1109,7 +1113,7 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
   }, [driversRaw]);
 
   const driverList = useMemo(() => {
-    return Object.entries(usersMap)
+    const list = Object.entries(usersMap)
       .filter(([, u]) => !myCompanyName || !u.companyName || u.companyName === myCompanyName)
       .map(([uid, u]) => {
         const raw = rawById[uid] || {};
@@ -1127,9 +1131,27 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
           online: isRecentlySeen(raw.updatedAt, raw.heartbeatAt),
           lastSeen: raw.heartbeatAt || raw.updatedAt || null,
           hasDriverDoc: !!rawById[uid],
+          appStatus: "joined",
         };
       });
-  }, [usersMap, rawById, myCompanyName]);
+    // ⭐ 기사관리에서 지입·직영으로 지정했지만 아직 기사앱에 가입하지 않은 기사도 목록에 보인다(앱 미가입 표시 + 가입 안내 복사)
+    const joinedPlates = new Set(list.map((d) => String(d.차량번호 || "").replace(/\s+/g, "").toUpperCase()));
+    const extra = driversRaw
+      .filter((r) => (r.등급 === "지입" || r.등급 === "직영") && !usersMap[r.id] && !(r.uid && usersMap[r.uid]))
+      .filter((r) => !myCompanyName || !r.companyName || r.companyName === myCompanyName)
+      .filter((r) => !joinedPlates.has(String(r.차량번호 || "").replace(/\s+/g, "").toUpperCase()))
+      .map((r) => ({
+        uid: r.id, approved: true, noApp: true,
+        이름: String(r.이름 || r.name || "").trim() || "-",
+        차량번호: String(r.차량번호 || "").trim() || "-",
+        전화번호: r.전화번호 || "",
+        차량종류: String(r.차량종류 || "").trim() || "미입력",
+        차량톤수: String(r.차량톤수 || "").trim() || "미입력",
+        등급: r.등급, 담당자: r.담당자 || null, online: false, lastSeen: null, hasDriverDoc: true, createdAt: r.createdAt || null,
+        appStatus: "none", raw: r,
+      }));
+    return [...list, ...extra];
+  }, [usersMap, rawById, myCompanyName, driversRaw]);
 
   const pending = useMemo(() => driverList.filter(d => !d.approved)
     .sort((a, b) => (resolveTs(b.createdAt)?.getTime() || 0) - (resolveTs(a.createdAt)?.getTime() || 0)), [driverList]);
@@ -1218,8 +1240,11 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
             ? <ManagerBadge driver={{ id: d.uid, 이름: d.이름, 담당자: d.담당자 }} staff={staff} canDelegate={canDelegate} onAssign={onAssignManager} big />
             : <span style={{ fontSize: 14, color: "#6b7280", fontWeight: 700 }}>-</span>}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14, fontWeight: 700, color: d.online ? "#047857" : "#6b7280" }}>
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: d.online ? "#10b981" : "#cbd2dc", flexShrink: 0 }} />
+        {d.noApp ? (
+          <div style={{ gridColumn: "span 2", display: "flex", justifyContent: "flex-end" }}><AppStatusBadge d={d.raw || {}} company={myCompanyName} /></div>
+        ) : (<>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14, fontWeight: 700, color: d.online ? NAVY : "#6b7280" }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: d.online ? "#2D4C82" : "#cbd2dc", flexShrink: 0 }} />
           {d.online ? "접속중" : d.lastSeen ? timeAgo(d.lastSeen) : "기록 없음"}
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
@@ -1227,6 +1252,7 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
           <button onClick={() => handleApprove(d.uid, false)} disabled={!!approvingId}
             style={{ padding: "5px 10px", borderRadius: 7, border: "1px solid #e5e7eb", background: "#fff", color: "#6b7280", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>승인취소</button>
         </div>
+        </>)}
       </div>
     );
   };
@@ -1244,7 +1270,8 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
         {stat("내 차량", `${mine.length}대`, NAVY)}
         {stat("전체 등록 기사", `${approved.length}명`)}
-        {stat("지금 앱 접속중", `${approved.filter(d => d.online).length}명`, "#047857")}
+        {stat("지금 앱 접속중", `${approved.filter(d => d.online).length}명`, NAVY)}
+        {stat("앱 미가입", `${approved.filter(d => d.noApp).length}명`, "#5B6B85")}
         {stat("승인 대기", `${pending.length}명`, pending.length ? "#b45309" : "#6b7280")}
       </div>
 
@@ -4895,6 +4922,21 @@ function FleetSettlementTab({ drivers = [], dispatchData = [], role = "", compan
 
 // ─── CheckInLocModal ─────────────────────────────────────────────────────────
 
+// 🛣 고정노선 — 새 고정노선 / 예전 엑셀 경로 정리(인수증)
+function FixedRoutesModes(props) {
+  const [mode, setMode] = useState("routes");
+  return (
+    <div>
+      <div className="inline-flex p-1 rounded-2xl bg-white border border-[#E3E8F0] mb-3 gap-1">
+        {[["routes", "고정노선"], ["excel", "엑셀 경로 정리"]].map(([k, l]) => (
+          <button key={k} type="button" onClick={() => setMode(k)} className={`h-9 px-4 rounded-xl text-[13px] font-black ${mode === k ? "bg-[#0F1A30] text-white" : "text-[#5B6B85] hover:bg-[#F3F6FA]"}`}>{l}</button>
+        ))}
+      </div>
+      {mode === "routes" ? <FixedRoutes {...props} /> : <DeliverySignaturePage />}
+    </div>
+  );
+}
+
 // 💸 정산관리 — 일괄 지급명세서(여러 기사 한 번에) / 개별 정산서(한 명 상세)
 function SettlementModes(props) {
   const [mode, setMode] = useState(() => sfGet("fm_settle_mode", "batch"));
@@ -5591,10 +5633,10 @@ function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
           ))}
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: cur ? "minmax(0,1fr) 440px" : "minmax(0,1fr)", gap: 14, alignItems: "start" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: 14, alignItems: "start", paddingRight: cur ? 700 : 0, transition: "padding .2s" }}>
         <div style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 16, overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "#F7F9FC", borderBottom: "1px solid #E8EDF4" }}>
-            <span style={{ fontSize: 16, fontWeight: 900, color: "#0F1A30" }}>차량 {shown.length}대</span>
+            <span style={{ fontSize: 16, fontWeight: 900, color: "#0F1A30" }}>차량 {shown.length}대 <span style={{ fontSize: 12.5, fontWeight: 700, color: "#9AA9C3", marginLeft: 6 }}>두 번 누르면 오른쪽에 상세가 열립니다</span></span>
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="기사명·차량번호" style={{ height: 34, width: 200, padding: "0 12px", borderRadius: 9, border: "1px solid #DCE3EF", fontSize: 14 }} />
           </div>
           <div style={{ overflowX: "auto" }}>
@@ -5606,7 +5648,7 @@ function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
                   const oil = r.cs.alerts.find((a) => a.key === "engineOil");
                   const oilLast = r.raw.care?.items?.engineOil;
                   return (
-                    <tr key={r.id} onClick={() => setSel(r.id === sel ? null : r.id)} style={{ cursor: "pointer", background: r.id === sel ? "#EEF3FB" : undefined }}>
+                    <tr key={r.id} onDoubleClick={() => setSel(r.id)} onClick={() => { if (sel) setSel(r.id); }} style={{ cursor: "pointer", background: r.id === sel ? "#EEF3FB" : undefined }}>
                       <td style={{ ...td, fontWeight: 800 }}>{r.차량번호}</td>
                       <td style={td}>{r.이름}<span style={{ marginLeft: 6, fontSize: 11.5, fontWeight: 800, color: "#7A879C" }}>{r.등급}</span></td>
                       <td style={td}>{[r.v.톤, r.v.적재함].filter(Boolean).join(" ") || "-"}</td>
@@ -5622,14 +5664,22 @@ function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
             </table>
           </div>
         </div>
-        {cur && (
-          <div style={{ background: "#F4F6FA", border: "1px solid #E3E8F0", borderRadius: 16, padding: 14, position: "sticky", top: 12, maxHeight: "calc(100vh - 140px)", overflowY: "auto" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-              <div><div style={{ fontSize: 18, fontWeight: 900, color: "#0F1A30" }}>{cur.차량번호}</div><div style={{ fontSize: 13, color: "#5B6B85" }}>{cur.이름} · {cur.전화번호}</div></div>
-              <button type="button" onClick={() => setSel(null)} style={{ border: "none", background: "none", fontSize: 22, color: "#9AA9C3", cursor: "pointer" }}>✕</button>
+        {/* ⭐ 오른쪽 사이드바 — 크게, 바깥을 눌러도 닫히지 않고 [닫기]로만 닫힌다. 목록의 다른 차량을 누르면 그 차량으로 바뀐다 */}
+        {cur && createPortal(
+          <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "min(680px, 100vw)", zIndex: 9500, background: "#F4F6FA", borderLeft: "1px solid #DCE3EE", boxShadow: "-18px 0 40px rgba(11,20,40,.18)", display: "flex", flexDirection: "column" }}>
+            <div style={{ padding: "18px 22px", color: "#fff", background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 65%,#2D4C82 100%)", display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: FC_MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.24em", color: "#8FB0F0" }}>VEHICLE CARE · DETAIL</div>
+                <div style={{ fontSize: 24, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cur.차량번호}</div>
+                <div style={{ fontSize: 13.5, color: "rgba(255,255,255,.7)" }}>{cur.이름} · {cur.전화번호} · {[cur.v.톤, cur.v.적재함].filter(Boolean).join(" ")}</div>
+              </div>
+              <button type="button" onClick={() => setSel(null)} style={{ height: 42, padding: "0 18px", borderRadius: 12, border: "none", background: "#fff", color: "#0F1A30", fontSize: 14, fontWeight: 900, cursor: "pointer" }}>닫기</button>
             </div>
-            <VehicleCarePanel key={cur.id} driverId={cur.id} drv={cur.raw} by={by} staff onToast={showToast} />
-          </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: 18 }}>
+              <VehicleCarePanel key={cur.id} driverId={cur.id} drv={cur.raw} by={by} staff onToast={showToast} />
+            </div>
+          </div>,
+          document.body,
         )}
       </div>
       {toast && <div style={{ position: "fixed", bottom: 30, left: "50%", transform: "translateX(-50%)", background: "#0F1A30", color: "#fff", padding: "10px 18px", borderRadius: 12, fontSize: 14, fontWeight: 800, zIndex: 9999 }}>{toast}</div>}
@@ -6437,6 +6487,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
           {[
             ["tracking", "관제현황", "LIVE", <><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /><circle cx="12" cy="12" r="8" /></>],
             ["route", "노선관리", "ROUTE", <><circle cx="6" cy="6" r="2.2" /><circle cx="18" cy="18" r="2.2" /><path d="M6 8.2V14a3 3 0 0 0 3 3h3a3 3 0 0 1 3 3v-2" /></>],
+            ["fixed", "고정노선", "FIXED", <><path d="M4 19V5M20 19V5" /><path d="M4 8h16M4 16h16" /><circle cx="12" cy="12" r="2" /></>],
             ["settlement", "정산관리", "PAY", <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 10h18M7 15h4" /></>],
             ["history", "이력 조회", "LOG", <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>],
             ["attendance", "출근기록부", "ATT", <><rect x="4" y="4" width="16" height="17" rx="2" /><path d="M8 2v4M16 2v4M4 10h16" /></>],
@@ -6770,6 +6821,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
       {mainTab === "settlement" && (
         <SettlementModes drivers={routeDrivers} dispatchData={dispatchData} role={role} companyName={myCompanyName} />
       )}
+      {mainTab === "fixed" && <FixedRoutesModes drivers={routeDrivers} companyName={myCompanyName} dispatchData={dispatchData} />}
       {mainTab === "penalty" && <PenaltyCenter drivers={routeDrivers} companyName={myCompanyName} supplier={{ name: myCompanyName }} />}
 
       {/* ═══ 이력 조회 ═══ */}
