@@ -172,8 +172,11 @@ export function searchTruckModels(q, ton = "", maker = "") {
   const k = String(q || "").replace(/\s+/g, "").toLowerCase();
   const tonN = parseFloat(String(ton).replace(/[^\d.]/g, "")) || 0;
   const near = (h) => { const n = parseFloat(h) || 0; return tonN ? Math.abs(n - tonN) : 0; };
-  return TRUCK_MODELS
-    .filter(([mk]) => !maker || maker === "기타" || mk === maker)
+  const tonKey = String(ton || "").replace(/\s/g, "");
+  let base = TRUCK_MODELS.filter(([mk]) => !maker || maker === "기타" || mk === maker);
+  // 톤수가 정해져 있으면 그 톤수 모델만(그 톤수 모델이 하나도 없을 때만 전체)
+  if (tonKey && base.some((m) => m[2] === tonKey)) base = base.filter((m) => m[2] === tonKey);
+  return base
     .filter(([mk, md]) => !k || `${mk}${md}`.replace(/\s+/g, "").toLowerCase().includes(k))
     .sort((a, b) => near(a[2]) - near(b[2]))
     .slice(0, 12)

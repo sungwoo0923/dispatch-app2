@@ -14,6 +14,7 @@ const INK = "#0F1A30";
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const won = (v) => `${Math.round(Number(v) || 0).toLocaleString()}원`;
 const num = (v) => Number(String(v ?? "").replace(/[^\d.]/g, "")) || 0;
+const comma = (v) => { const d = String(v ?? "").replace(/[^\d]/g, ""); return d ? Number(d).toLocaleString() : ""; };
 const LV = {
   2: { bg: INK, fg: "#fff", bd: INK },
   1: { bg: "#DCE6F7", fg: NAVY, bd: "#C3D3EE" },
@@ -53,7 +54,10 @@ function DateIn({ value, onChange, disabled, placeholder }) {
 // 🏭 제조사 → 모델 드롭다운(제조사별 목록) + 직접 입력
 const MAKERS = [...new Set(TRUCK_MODELS.map((m) => m[0]))];
 export function MakerModelFields({ v, setV, inpStyle = inp, Field }) {
-  const models = TRUCK_MODELS.filter((m) => m[0] === v.제조사);
+  const tonKey = String(v.톤 || "").replace(/\s/g, "");
+  const makerModels = TRUCK_MODELS.filter((m) => m[0] === v.제조사);
+  // 톤수를 정했으면 그 톤수 모델만 보여준다(그 톤수 모델이 없으면 전체)
+  const models = tonKey && makerModels.some((m) => m[2] === tonKey) ? makerModels.filter((m) => m[2] === tonKey) : makerModels;
   const inList = models.some((m) => m[1] === v.모델);
   const [direct, setDirect] = React.useState(!!v.모델 && !inList);
   React.useEffect(() => { if (v.모델 && !inList && models.length) setDirect(true); }, [v.제조사]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -74,7 +78,7 @@ export function MakerModelFields({ v, setV, inpStyle = inp, Field }) {
         </div>
       ) : (
         <CustomSelect value={inList ? v.모델 : ""} onChange={(e) => { const m = e.target.value; if (m === "__direct") { setDirect(true); setV((x) => ({ ...x, 모델: "" })); } else setV((x) => ({ ...x, 모델: m })); }} className={SEL_CLS}>
-          <option value="">{v.제조사 ? `${v.제조사} 모델 선택` : "제조사를 먼저 선택"}</option>
+          <option value="">{v.제조사 ? `${v.제조사}${tonKey && models !== makerModels ? ` ${tonKey}` : ""} 모델 선택` : "제조사를 먼저 선택"}</option>
           {models.map(([, md, hint]) => <option key={md} value={md}>{md} · {hint}</option>)}
           <option value="__direct">✎ 직접 입력</option>
         </CustomSelect>
@@ -149,7 +153,7 @@ function Summary({ driverId, by, vehicle, care, sum, odo, logs, busy, run, setTa
         <div style={{ fontFamily: MONO, fontSize: 30, fontWeight: 800, marginTop: 4, whiteSpace: "nowrap" }}>{odo ? odo.toLocaleString() : "—"}<span style={{ fontSize: 14, marginLeft: 4, opacity: 0.6 }}>km</span></div>
         <div style={{ fontSize: 12, color: "rgba(255,255,255,.6)", whiteSpace: "nowrap" }}>{care.odometerAt ? `${care.odometerAt} 기준` : "아직 입력 전"} · {CLASS_LABEL[tonClass(vehicle.톤, vehicle.적재함)]} 정비 기준</div>
         <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-          <input inputMode="numeric" value={km} onChange={(e) => setKm(e.target.value.replace(/[^\d]/g, ""))} placeholder="현재 계기판 km" style={{ ...inp, height: 40, background: "rgba(255,255,255,.95)" }} />
+          <input inputMode="numeric" value={comma(km)} onChange={(e) => setKm(e.target.value.replace(/[^\d]/g, ""))} placeholder="현재 계기판 km" style={{ ...inp, height: 40, background: "rgba(255,255,255,.95)" }} />
           <button type="button" disabled={busy} onClick={submit} style={{ ...btn(false), border: "none" }}>입력</button>
         </div>
       </div>
@@ -232,15 +236,15 @@ function Items({ driverId, by, items, care, odo, busy, run, staff, large }) {
               <div style={{ fontSize: 13.5, fontWeight: 800, color: st.level === 2 ? INK : "#5B6B85", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{st.text}</div>
               {edit && (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 8 }}>
-                  <label><div style={lbl}>주기 km</div><input inputMode="numeric" defaultValue={it.km || ""} onBlur={(e) => run(() => save(driverId, by, { care: { intervals: { [it.key]: { km: num(e.target.value), months: it.months } } } }), "주기를 바꿨습니다")} style={inp} /></label>
+                  <label><div style={lbl}>주기 km</div><input inputMode="numeric" defaultValue={it.km ? Number(it.km).toLocaleString() : ""} onInput={(e) => { e.target.value = comma(e.target.value); }} onBlur={(e) => run(() => save(driverId, by, { care: { intervals: { [it.key]: { km: num(e.target.value), months: it.months } } } }), "주기를 바꿨습니다")} style={inp} /></label>
                   <label><div style={lbl}>주기 개월</div><input inputMode="numeric" defaultValue={it.months || ""} onBlur={(e) => run(() => save(driverId, by, { care: { intervals: { [it.key]: { km: it.km, months: num(e.target.value) } } } }), "주기를 바꿨습니다")} style={inp} /></label>
                 </div>
               )}
               {open === it.key && (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 10 }}>
-                  <label><div style={lbl}>교체 시 주행거리(km)</div><input inputMode="numeric" value={f.km} onChange={(e) => setF({ ...f, km: e.target.value.replace(/[^\d]/g, "") })} style={inp} /></label>
+                  <label><div style={lbl}>교체 시 주행거리(km)</div><input inputMode="numeric" value={comma(f.km)} onChange={(e) => setF({ ...f, km: e.target.value.replace(/[^\d]/g, "") })} style={inp} /></label>
                   <label><div style={lbl}>교체일</div><DateIn value={f.date} onChange={(x) => setF({ ...f, date: x })} /></label>
-                  <label><div style={lbl}>비용(원)</div><input inputMode="numeric" value={f.cost} onChange={(e) => setF({ ...f, cost: e.target.value.replace(/[^\d]/g, "") })} style={inp} placeholder="선택" /></label>
+                  <label><div style={lbl}>비용(원)</div><input inputMode="numeric" value={comma(f.cost)} onChange={(e) => setF({ ...f, cost: e.target.value.replace(/[^\d]/g, "") })} style={inp} placeholder="선택" /></label>
                   <label><div style={lbl}>정비소</div><input value={f.shop} onChange={(e) => setF({ ...f, shop: e.target.value })} style={inp} placeholder="선택" /></label>
                   <input value={f.memo} onChange={(e) => setF({ ...f, memo: e.target.value })} style={{ ...inp, gridColumn: "1 / -1" }} placeholder="메모 (오일 종류 등)" />
                   <button type="button" disabled={busy} onClick={() => doneOne(it)} style={{ ...btn(), gridColumn: "1 / -1" }}>{busy ? "저장 중…" : "교체 기록 저장"}</button>
@@ -290,12 +294,12 @@ function Spec({ driverId, by, vehicle, busy, run, large }) {
     setV((p) => ({ ...p, 모델: p.모델 || s.models[0], 길이: s.l, 폭: s.w, 높이: s.h || p.높이, 최대적재: s.maxKg, 축: s.axle, 타이어: s.tires, 냉동기: s.reefer || p.냉동기 }));
   };
   const s = specFor(v.톤, v.적재함);
-  const F = ({ k, label, type = "text", unit, list, numeric }) => (
+  const F = ({ k, label, type = "text", unit, list, numeric, commaKey }) => (
     <label style={{ minWidth: 0 }}>
       <div style={lbl}>{label}{unit ? ` (${unit})` : ""}</div>
       {list
         ? <CustomSelect value={v[k] || ""} onChange={(e) => set(k, e.target.value)} className="w-full h-11 px-3 rounded-[10px] border border-[#DCE3EF] bg-white text-[15px] font-semibold text-[#0F1A30]"><option value="">선택</option>{list.map((x) => <option key={x} value={x}>{x}</option>)}</CustomSelect>
-        : <input type={type} inputMode={numeric ? "numeric" : undefined} value={v[k] ?? ""} onChange={(e) => set(k, numeric ? e.target.value.replace(/[^\d.]/g, "") : e.target.value)} style={inp} />}
+        : <input type={type} inputMode={numeric ? "numeric" : undefined} value={commaKey ? comma(v[k]) : (v[k] ?? "")} onChange={(e) => set(k, numeric ? e.target.value.replace(/[^\d.]/g, "") : e.target.value)} style={inp} />}
     </label>
   );
   return (
@@ -312,7 +316,7 @@ function Spec({ driverId, by, vehicle, busy, run, large }) {
         {F({ k: "길이", label: "적재함 길이", unit: "cm", numeric: true })}
         {F({ k: "폭", label: "적재함 폭", unit: "cm", numeric: true })}
         {F({ k: "높이", label: "적재함 높이", unit: "cm", numeric: true })}
-        {F({ k: "최대적재", label: "최대 적재", unit: "kg", numeric: true })}
+        {F({ k: "최대적재", label: "최대 적재", unit: "kg", numeric: true, commaKey: true })}
         {F({ k: "타이어", label: "타이어 개수", unit: "개", numeric: true })}
         {F({ k: "타이어규격", label: "타이어 규격" })}
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap" }}><input type="checkbox" checked={!!v.냉동기} onChange={(e) => set("냉동기", e.target.checked)} />냉동기 장착</label>
@@ -344,9 +348,9 @@ function Logs({ driverId, by, logs, odo, busy, run }) {
           {LOG_KINDS.map((k) => <button key={k} type="button" onClick={() => setF({ ...f, kind: k })} style={{ flexShrink: 0, height: 32, padding: "0 12px", borderRadius: 99, border: `1px solid ${f.kind === k ? NAVY : "#DCE3EF"}`, background: f.kind === k ? NAVY : "#fff", color: f.kind === k ? "#fff" : "#3A4A66", fontSize: 13, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>{k}</button>)}
         </div>
         <label><div style={lbl}>날짜</div><DateIn value={f.date} onChange={(x) => setF({ ...f, date: x })} /></label>
-        <label><div style={lbl}>주행거리(km)</div><input inputMode="numeric" value={f.km} placeholder={odo ? String(odo) : ""} onChange={(e) => setF({ ...f, km: e.target.value.replace(/[^\d]/g, "") })} style={inp} /></label>
+        <label><div style={lbl}>주행거리(km)</div><input inputMode="numeric" value={comma(f.km)} placeholder={odo ? odo.toLocaleString() : ""} onChange={(e) => setF({ ...f, km: e.target.value.replace(/[^\d]/g, "") })} style={inp} /></label>
         {(f.kind === "주유" || f.kind === "요소수") && <label><div style={lbl}>{f.kind === "주유" ? "주유량(L)" : "보충량(L)"}</div><input inputMode="decimal" value={f.liters} onChange={(e) => setF({ ...f, liters: e.target.value.replace(/[^\d.]/g, "") })} style={inp} /></label>}
-        <label><div style={lbl}>금액(원)</div><input inputMode="numeric" value={f.cost} onChange={(e) => setF({ ...f, cost: e.target.value.replace(/[^\d]/g, "") })} style={inp} /></label>
+        <label><div style={lbl}>금액(원)</div><input inputMode="numeric" value={comma(f.cost)} onChange={(e) => setF({ ...f, cost: e.target.value.replace(/[^\d]/g, "") })} style={inp} /></label>
         <input value={f.memo} onChange={(e) => setF({ ...f, memo: e.target.value })} placeholder={f.kind === "사고" ? "사고 내용·보험 접수번호" : "메모"} style={{ ...inp, gridColumn: "1 / -1" }} />
         <button type="button" disabled={busy} onClick={add} style={{ ...btn(), gridColumn: "1 / -1" }}>{busy ? "저장 중…" : `${f.kind} 기록 저장`}</button>
       </div>
@@ -421,9 +425,10 @@ export function VehicleSetupWizard({ driverId, drv = {}, by = "", onClose }) {
     } catch (e) { window.alert(`저장 실패: ${e.message || e}`); } finally { setBusy(false); }
   };
   const field = (label, el) => <label style={{ display: "block", marginTop: 10 }}><div style={lbl}>{label}</div>{el}</label>;
+  const sheet = typeof window !== "undefined" && window.innerWidth < 640; // 휴대폰은 아래에서 올라오는 시트, PC는 화면 중앙
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 9000, background: "rgba(11,20,40,.55)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div style={{ width: "100%", maxWidth: 480, maxHeight: "92vh", overflowY: "auto", background: "#F4F6FA", borderRadius: "22px 22px 0 0", paddingBottom: "calc(16px + env(safe-area-inset-bottom, 0px))" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 99990, background: "rgba(11,20,40,.55)", display: "flex", alignItems: sheet ? "flex-end" : "center", justifyContent: "center", padding: sheet ? 0 : 16 }}>
+      <div style={{ width: "100%", maxWidth: 520, maxHeight: "92vh", overflowY: "auto", background: "#F4F6FA", borderRadius: sheet ? "22px 22px 0 0" : 22, boxShadow: "0 30px 80px rgba(11,20,40,.45)", paddingBottom: "calc(16px + env(safe-area-inset-bottom, 0px))" }}>
         <div style={{ padding: "18px 18px 16px", color: "#fff", borderRadius: "22px 22px 0 0", background: "linear-gradient(135deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: "0.24em", color: "#8FB0F0" }}>VEHICLE SETUP · {step + 1}/{steps.length}</span>
@@ -452,12 +457,12 @@ export function VehicleSetupWizard({ driverId, drv = {}, by = "", onClose }) {
             <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 14, fontWeight: 700 }}><input type="checkbox" checked={!!v.냉동기} onChange={(e) => set("냉동기", e.target.checked)} />냉동기 장착 차량</label>
           </>}
           {step === 2 && <>
-            {field("지금 계기판 주행거리 (km)", <input inputMode="numeric" value={odo} onChange={(e) => setOdo(e.target.value.replace(/[^\d]/g, ""))} placeholder="예: 125000" style={{ ...inp, height: 48, fontSize: 20, fontFamily: MONO }} />)}
+            {field("지금 계기판 주행거리 (km)", <input inputMode="numeric" value={comma(odo)} onChange={(e) => setOdo(e.target.value.replace(/[^\d]/g, ""))} placeholder="예: 125000" style={{ ...inp, height: 48, fontSize: 20, fontFamily: MONO }} />)}
             <div style={{ fontSize: 12, color: "#7A879C", marginTop: 6 }}>계기판의 ODO(총 주행거리) 숫자를 그대로 넣어주세요. 이후엔 '차량' 탭에서 수시로 바꿀 수 있습니다.</div>
           </>}
           {step === 3 && <>
             <div style={{ fontSize: 12.5, color: "#5B6B85", marginTop: 8 }}>마지막으로 엔진오일을 간 때를 알면 다음 교환 시기를 알려드립니다. 모르면 비워두세요.</div>
-            {field("교환할 때 주행거리 (km)", <input inputMode="numeric" value={oil.km} onChange={(e) => setOil({ ...oil, km: e.target.value.replace(/[^\d]/g, "") })} style={inp} />)}
+            {field("교환할 때 주행거리 (km)", <input inputMode="numeric" value={comma(oil.km)} onChange={(e) => setOil({ ...oil, km: e.target.value.replace(/[^\d]/g, "") })} style={inp} />)}
             {field("교환한 날짜", <DateIn value={oil.date} onChange={(x) => setOil({ ...oil, date: x })} />)}
           </>}
           {step === 4 && <>

@@ -254,6 +254,7 @@ const CustomSelect = React.forwardRef(function CustomSelect(
       </button>
       {open && menuRect && createPortal(
         <div
+          data-kp-popup="1"
           ref={menuRef}
           onMouseDown={(e) => e.preventDefault()}
           style={{

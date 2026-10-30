@@ -64,7 +64,7 @@ export default function VersionCheck() {
   const isOld = state.kind === "old";
   if (isOld && hidden) return null;
   return (
-    <div style={{ position: "fixed", left: "50%", bottom: 22, transform: "translateX(-50%)", zIndex: 2147483600, width: isOld ? "min(420px, calc(100vw - 24px))" : "auto", fontFamily: "'Pretendard','Noto Sans KR',sans-serif" }} className="kp-ver-in">
+    <>{isOld && <div style={{ position: "fixed", inset: 0, zIndex: 2147483599, background: "rgba(11,20,40,.35)" }} />}<div style={{ position: "fixed", left: "50%", ...(isOld ? { top: "50%", transform: "translate(-50%,-50%)" } : { bottom: 22, transform: "translateX(-50%)" }), zIndex: 2147483600, width: isOld ? "min(420px, calc(100vw - 24px))" : "auto", fontFamily: "'Pretendard','Noto Sans KR',sans-serif" }} className={isOld ? "kp-ver-in" : "kp-ver-in2"}>
       <style>{VC_CSS}</style>
       {isOld ? (
         <div style={{ borderRadius: 20, overflow: "hidden", color: "#fff", border: "1px solid rgba(143,176,240,.3)", boxShadow: "0 22px 50px rgba(11,20,40,.45)", background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/20px 20px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/20px 20px, linear-gradient(135deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
@@ -101,13 +101,15 @@ export default function VersionCheck() {
           <span style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 800, color: "#8FB0F0" }}>v{CUR_VER} · {stamp(CUR_BUILD)}</span>
         </div>
       )}
-    </div>
+    </div></>
   );
 }
 
 const VC_CSS = `
-  @keyframes kpVerIn { from { opacity: 0; transform: translate(-50%, 14px) } to { opacity: 1; transform: translate(-50%, 0) } }
+  @keyframes kpVerIn { from { opacity: 0; transform: translate(-50%, calc(-50% + 14px)) } to { opacity: 1; transform: translate(-50%, -50%) } }
   .kp-ver-in { animation: kpVerIn .35s cubic-bezier(.2,.9,.3,1.1) both; }
+  @keyframes kpVerIn2 { from { opacity: 0; transform: translate(-50%, 14px) } to { opacity: 1; transform: translate(-50%, 0) } }
+  .kp-ver-in2 { animation: kpVerIn2 .35s cubic-bezier(.2,.9,.3,1.1) both; }
   @keyframes kpVerDot { 0%,100% { opacity: 1 } 50% { opacity: .3 } }
   .kp-ver-dot { animation: kpVerDot 1.4s ease-in-out infinite; }
 `;

@@ -52,25 +52,27 @@ function open(props) {
 export const kpConfirm = (message, opts = {}) => open({ message, ...opts });
 export const kpAlert = (message, opts = {}) => open({ message, alertOnly: true, ...opts });
 
-// ⎋ ESC — 어디서든 맨 위에 열린 창을 닫는다(창의 닫기·✕·취소 버튼을 대신 눌러 준다)
-const CLOSE_RE = /^(✕|×|x|X|닫기|닫기 ✕|취소|← 목록|← 서류함|close)$/;
+// ⎋ ESC — 어디서든 맨 위에 열린 창·사이드바를 닫는다(창의 닫기·✕·취소 버튼을 대신 눌러 준다)
+//  · 드롭다운·달력이 열려 있으면 그것만 닫히게 양보한다
+//  · 다른 화면의 키 처리에 막히지 않도록 가장 먼저(capture) 받는다
+const CLOSE_RE = /^(✕|×|x|X|닫기|닫기 ✕|✕ 닫기|취소|← 목록|← 서류함|close|Close)$/;
 export function installEscClose() {
   if (typeof window === "undefined" || window.__kpEscInstalled) return;
   window.__kpEscInstalled = true;
   window.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape" || e.defaultPrevented) return;
-    if (document.querySelector("[data-kp-dialog]")) return;
-    // 맨 위(나중에 그려진) 화면 덮개 찾기
+    if (e.key !== "Escape" || e.isComposing) return;
+    if (document.querySelector("[data-kp-dialog],[data-kp-popup]")) return;
+    // 맨 위(나중에 그려진) 화면 덮개·사이드바 찾기
     const overlays = [...document.querySelectorAll("body *")].filter((el) => {
       const cs = getComputedStyle(el);
-      if (cs.position !== "fixed" || cs.display === "none" || cs.visibility === "hidden") return false;
+      if (cs.position !== "fixed" || cs.display === "none" || cs.visibility === "hidden" || cs.pointerEvents === "none") return false;
       const r = el.getBoundingClientRect();
-      return r.width >= window.innerWidth * 0.3 && r.height >= window.innerHeight * 0.5 && el.querySelector("button");
+      return r.width >= 280 && r.height >= window.innerHeight * 0.5 && el.querySelector("button");
     });
     for (let i = overlays.length - 1; i >= 0; i--) {
       const btns = [...overlays[i].querySelectorAll("button")].filter((b) => b.offsetParent !== null || getComputedStyle(b).position === "fixed");
       const close = btns.find((b) => CLOSE_RE.test(String(b.textContent || "").trim()) || /닫기|close/i.test(b.getAttribute("aria-label") || b.getAttribute("title") || ""));
       if (close) { e.preventDefault(); close.click(); return; }
     }
-  });
+  }, true);
 }

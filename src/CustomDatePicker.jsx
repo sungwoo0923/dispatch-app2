@@ -256,6 +256,7 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
       </button>
       {open && menuRect && createPortal(
         <div
+          data-kp-popup="1"
           ref={menuRef}
           // 달력 안을 눌러도 트리거 버튼의 포커스를 유지(연/월 선택칸은 직접 포커스가 필요하므로 제외)
           onMouseDown={(e) => { if (e.target.tagName !== "SELECT" && e.target.tagName !== "OPTION") e.preventDefault(); }}

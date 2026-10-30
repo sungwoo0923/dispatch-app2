@@ -76,7 +76,7 @@ export default function BankAccountInput({ value, onChange, compact = false, sta
         </div>}
       </div>
       <div className={`grid gap-1.5 ${compact ? "grid-cols-1" : stacked ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "grid-cols-[130px_minmax(0,1fr)_110px]"}`}>
-        <CustomSelect value={v.bank || ""} onChange={(e) => set({ bank: e.target.value, acct: v.acct })} className={`${inp} ${stacked ? "order-1" : ""}`}>
+        <CustomSelect value={v.bank || ""} onChange={(e) => set({ bank: e.target.value, acct: e.target.value === v.bank ? v.acct : "" })} className={`${inp} ${stacked ? "order-1" : ""}`}>
           <option value="">은행 선택</option>
           {BANK_NAMES.map((b) => <option key={b} value={b}>{b}</option>)}
         </CustomSelect>
