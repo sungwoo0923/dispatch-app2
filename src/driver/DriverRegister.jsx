@@ -547,9 +547,9 @@ export default function DriverRegister() {
           >
             로그인으로 돌아가기
           </button>
-          <Link to="/login" className="text-[12px] text-gray-400 hover:underline">
+          {!window.Capacitor?.isNativePlatform?.() && <Link to="/login" className="text-[12px] text-gray-400 hover:underline">
             다른 유형으로 로그인
-          </Link>
+          </Link>}
         </div>
       </div>
     </div>

@@ -741,7 +741,9 @@ export default function App() {
     </div>
   );
 
-  const rootRedirect = "/login";
+  // 📱 기사앱(APK)은 기사 전용 — 운송사·화주사 선택 없이 바로 기사 로그인
+  const isDriverApk = typeof window !== "undefined" && !!window.Capacitor?.isNativePlatform?.();
+  const rootRedirect = isDriverApk ? "/driver-login" : "/login";
 
   return (
     <>
@@ -831,7 +833,7 @@ export default function App() {
                   : role === "shipper"
                     ? (approved ? <Navigate to="/shipper" replace /> : <Navigate to="/shipper-pending" replace />)
                     : <Navigate to="/app" replace />
-                : <Login />
+                : (isDriverApk ? <Navigate to="/driver-login" replace /> : <Login />)
             }
           />
 
@@ -849,6 +851,7 @@ export default function App() {
                     ? (approved ? <Navigate to="/shipper" replace /> : <Navigate to="/shipper-pending" replace />)
                     : <Navigate to="/app" replace />;
               }
+              if (isDriverApk) return <Navigate to="/driver-login" replace />;
               return <TransportLogin />;
             })()}
           />

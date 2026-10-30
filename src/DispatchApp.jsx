@@ -50430,7 +50430,60 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
 // ===================== DispatchApp.jsx (PART 8/8) — START =====================
 // 미수금관리 — 거래처 칸에서 고르는 "전체 거래처"
 const AR_ALL = "전체 거래처";
+// 💳 거래처 결제 조건 → 결제 예정일 (예: "익월 말일", "익월 10일", "당월 말일", "30일", "익익월 15일")
+function arDueDate(yyyymm, rule) {
+  const r = String(rule || "").replace(/\s+/g, "");
+  if (!r || !/^\d{4}-\d{2}$/.test(String(yyyymm || ""))) return "";
+  const [y, m] = yyyymm.split("-").map(Number);
+  const lastOf = (yy, mm) => new Date(yy, mm, 0).getDate();
+  const fmt = (yy, mm, dd) => { const d = new Date(yy, mm - 1, dd); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+  const add = r.startsWith("익익월") ? 2 : r.startsWith("익월") ? 1 : r.startsWith("당월") ? 0 : null;
+  if (add != null) {
+    const mm = m + add; const yy = y + Math.floor((mm - 1) / 12); const m2 = ((mm - 1) % 12) + 1;
+    if (/말/.test(r)) return fmt(yy, m2, lastOf(yy, m2));
+    const d = parseInt(r.replace(/^(익익월|익월|당월)/, ""), 10);
+    return d ? fmt(yy, m2, Math.min(d, lastOf(yy, m2))) : "";
+  }
+  const days = parseInt(r, 10); // "30일" = 청구월 말일부터 30일 뒤
+  return days ? fmt(y, m, lastOf(y, m) + days) : "";
+}
+function ArClientInfo({ client, name, upsertClient, isViewer }) {
+  const c = client || {};
+  const [rule, setRule] = React.useState(c.결제일 || "");
+  React.useEffect(() => { setRule(c.결제일 || ""); }, [c.결제일]);
+  const save = (v) => { setRule(v); if (!isViewer && client) upsertClient?.({ ...client, 결제일: v }); };
+  const rows = [["사업자번호", c.사업자번호], ["대표자", c.대표자], ["담당자", c.담당자], ["연락처", c.연락처], ["이메일", c.이메일], ["주소", c.주소]];
+  return (
+    <div className="mb-4 rounded-2xl border border-[#E3E8F0] bg-white overflow-hidden">
+      <div className="px-5 py-3 flex items-center justify-between gap-3 flex-wrap text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
+        <div className="min-w-0">
+          <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: KP_MONO }}>CLIENT</div>
+          <div className="text-[17px] font-black truncate">{name}</div>
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[12px] font-bold text-white/70">결제 조건</span>
+          {["당월 말일", "익월 10일", "익월 말일", "익익월 10일", "30일", "60일"].map((v) => (
+            <button key={v} type="button" disabled={isViewer || !client} onClick={() => save(v)} className={`h-8 px-2.5 rounded-lg text-[12px] font-black ${rule === v ? "bg-white text-[#0F1A30]" : "bg-white/10 border border-white/20 text-white"} disabled:opacity-50`}>{v}</button>
+          ))}
+          <input value={rule} onChange={(e) => setRule(e.target.value)} onBlur={(e) => save(e.target.value.trim())} disabled={isViewer || !client} placeholder="직접 (예: 익월 25일)" className="h-8 w-36 px-2.5 rounded-lg bg-white/10 border border-white/20 text-[12.5px] font-bold text-white placeholder:text-white/40 outline-none" />
+        </div>
+      </div>
+      {client ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-px bg-[#EEF1F6]">
+          {rows.map(([k, v]) => (
+            <div key={k} className="bg-white px-4 py-2.5 min-w-0">
+              <div className="text-[11px] font-bold text-[#7A89A3]">{k}</div>
+              <div className="text-[13.5px] font-black text-[#0F1A30] truncate" title={v || ""}>{v || "-"}</div>
+            </div>
+          ))}
+        </div>
+      ) : <div className="px-5 py-3 text-[12.5px] text-[#7A89A3]">기본거래처에 등록되지 않은 거래처입니다 · 거래처관리 › 기본거래처에서 등록하면 정보와 결제 조건이 여기에 보입니다</div>}
+    </div>
+  );
+}
+
 function ClientSettlement({ dispatchData, setDispatchData, userCompany = "", clients = [], setClients, upsertClient, showAlert = (m) => alert(m), patchDispatch, cardImage, setCardImage, cardImageUploading, setCardImageUploading, isViewer = false }) {
+  const [bankBulkOpen, setBankBulkOpen] = React.useState(false);
 
   // ★ 오더 상세 팝업
   const [orderPopup, setOrderPopup] = useState(null);
@@ -51619,13 +51672,13 @@ if (total === 0) return `<td class="zero">-</td>`;
     background:#1B2B4B; border-radius:10px 10px 0 0; }
   .kpi-card.red::before   { background:#dc2626; }
   .kpi-card.green::before { background:#059669; }
-  .kpi-card.amber::before { background:#d97706; }
+  .kpi-card.amber::before { background:#2D4C82; }
   .kpi-label { font-size:9px; font-weight:700; color:#9ca3af; letter-spacing:0.4px;
     text-transform:uppercase; margin-bottom:5px; }
   .kpi-value { font-size:17px; font-weight:900; color:#111827; line-height:1.1; }
   .kpi-value.red   { color:#dc2626; }
   .kpi-value.green { color:#059669; }
-  .kpi-value.amber { color:#d97706; }
+  .kpi-value.amber { color:#2D4C82; }
   .kpi-sub { font-size:8.5px; color:#d1d5db; margin-top:2px; }
 
   .section-label { font-size:11px; font-weight:700; color:#1B2B4B;
@@ -52065,7 +52118,7 @@ const handleBatchSettle = async (targetStatus) => {
     >
       {label}
       {badge > 0 && (
-        <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+        <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#F3F6FA]0 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
           {badge > 9 ? "9+" : badge}
         </span>
       )}
@@ -52145,7 +52198,7 @@ const handleBatchSettle = async (targetStatus) => {
                         key={name + i}
                         ref={el => dropdownItemRefs.current[i] = el}
                         className={`px-4 py-2.5 text-[13px] cursor-pointer transition ${
-                          i === dropdownIdx ? "bg-blue-50 text-blue-700 font-semibold" : "text-gray-700 hover:bg-gray-50"
+                          i === dropdownIdx ? "bg-[#EEF3FC] text-[#1B2B4B] font-semibold" : "text-gray-700 hover:bg-gray-50"
                         }`}
                         onMouseEnter={() => setDropdownIdx(i)}
                         onMouseDown={e => { e.preventDefault(); selectDropdownItem(name); }}
@@ -52159,7 +52212,7 @@ const handleBatchSettle = async (targetStatus) => {
                           return (
                             <>
                               {name.slice(0, idx)}
-                              <span className="text-blue-600 font-bold">{name.slice(idx, idx + q.length)}</span>
+                              <span className="text-[#1B2B4B] font-bold">{name.slice(idx, idx + q.length)}</span>
                               {name.slice(idx + q.length)}
                             </>
                           );
@@ -52282,9 +52335,9 @@ const handleBatchSettle = async (targetStatus) => {
             {searched && (
               <div className="flex gap-4 mt-3 text-[13px] font-semibold">
                 <span className="text-[#1B2B4B]">조회 {rowsInvoice.length}건 중 <b>{mapped.length}건 선택</b></span>
-                <span className="text-blue-600">공급가액 합계 <b>{won(합계공급가)}원</b></span>
-                <span className="text-emerald-600">세액 합계 <b>{won(합계세액)}원</b></span>
-                <span className="text-orange-600">청구 합계 <b>{won(합계공급가 + 합계세액)}원</b></span>
+                <span className="text-[#1B2B4B]">공급가액 합계 <b>{won(합계공급가)}원</b></span>
+                <span className="text-[#0F1A30]">세액 합계 <b>{won(합계세액)}원</b></span>
+                <span className="text-[#2D4C82]">청구 합계 <b>{won(합계공급가 + 합계세액)}원</b></span>
               </div>
             )}
           </div>
@@ -52309,7 +52362,7 @@ const handleBatchSettle = async (targetStatus) => {
                     <div key={ym} className="bg-white rounded-xl border border-gray-200 px-4 py-3 shadow-sm min-w-[160px]">
                       <div className="text-[13px] font-bold text-[#1B2B4B]">{ym}</div>
                       <div className="text-[11px] text-gray-500 mt-0.5">{v.건수}건</div>
-                      <div className="text-[14px] font-extrabold text-blue-700 mt-1">{won(v.공급가액)}원</div>
+                      <div className="text-[14px] font-extrabold text-[#1B2B4B] mt-1">{won(v.공급가액)}원</div>
                       <div className="text-[11px] text-gray-500">세액 {won(v.세액)}원</div>
                     </div>
                   ))}
@@ -52432,7 +52485,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <span className="text-[14px] font-bold text-[#1B2B4B]">
                     일금 {numberToKorean(합계공급가 + 합계세액)} 원정
                   </span>
-                  <span className="text-[14px] font-extrabold text-blue-700">
+                  <span className="text-[14px] font-extrabold text-[#1B2B4B]">
                     (￦ {won(합계공급가 + 합계세액)})
                   </span>
                 </div>
@@ -52470,7 +52523,7 @@ const handleBatchSettle = async (targetStatus) => {
                                                                  mapped.map((m, i) => (
                         <tr
                           key={m.idx}
-                          className={`${i%2===0?"bg-white":"bg-gray-50/60"} hover:bg-blue-50 cursor-pointer transition`}
+                          className={`${i%2===0?"bg-white":"bg-gray-50/60"} hover:bg-[#EEF3FC] cursor-pointer transition`}
                           onClick={() => {
                             const order = selectedRowsInvoice[i];
                             setOrderPopup(order);
@@ -52498,7 +52551,7 @@ const handleBatchSettle = async (targetStatus) => {
                           <td className="px-3 py-2.5 text-center">{m.기사명}</td>
                           <td className="px-3 py-2.5 text-center text-[12px]">{m.차량번호}</td>
                           <td className="px-3 py-2.5 text-right font-semibold">{won(m.공급가액)}</td>
-                          <td className="px-3 py-2.5 text-right text-blue-600">{won(m.세액)}</td>
+                          <td className="px-3 py-2.5 text-right text-[#1B2B4B]">{won(m.세액)}</td>
                           <td className="px-3 py-2.5 text-right font-bold text-[#1B2B4B]">{won(m.공급가액+m.세액)}</td>
                           {invoiceEdit && (
                             <td data-html2canvas-ignore="true" className="print:hidden px-2 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
@@ -52516,8 +52569,8 @@ const handleBatchSettle = async (targetStatus) => {
                       <tr className="bg-[#1B2B4B]">
                         <td colSpan={8} className="px-3 py-3 text-white font-bold text-center">소 계</td>
                         <td className="px-3 py-3 text-right text-white font-bold">{won(합계공급가)}</td>
-                        <td className="px-3 py-3 text-right text-blue-300 font-bold">{won(합계세액)}</td>
-                        <td className="px-3 py-3 text-right text-yellow-300 font-extrabold">{won(합계공급가+합계세액)}</td>
+                        <td className="px-3 py-3 text-right text-[#8FB0F0] font-bold">{won(합계세액)}</td>
+                        <td className="px-3 py-3 text-right text-[#8FB0F0] font-extrabold">{won(합계공급가+합계세액)}</td>
                         {invoiceEdit && <td data-html2canvas-ignore="true" className="print:hidden" />}
                       </tr>
                     )}
@@ -52597,7 +52650,7 @@ const handleBatchSettle = async (targetStatus) => {
                     <EditableText id="orderPopup.닫기" defaultText="닫기" />
                   </button>
                   <button
-                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition"
+                    className="flex-1 py-2.5 rounded-xl bg-[#0F1A30] text-white font-bold hover:bg-[#0F1A30] transition"
                     onClick={async () => {
                       if (isViewer) return showAlert("조회전용 권한으로는 수정할 수 없습니다.");
                       if (!orderPopup._id) return showAlert("저장할 수 없는 오더입니다.");
@@ -52680,7 +52733,7 @@ const handleBatchSettle = async (targetStatus) => {
                               {generalEmailAddrQuery ? "검색 결과 없음" : "등록된 이메일 없음 (거래처관리에서 이메일 등록)"}
                             </div>
                           ) : (clients || []).filter(c => c.이메일 && (!generalEmailAddrQuery || (c.거래처명||"").includes(generalEmailAddrQuery))).map((c, i) => (
-                            <div key={i} className={`px-4 py-2.5 cursor-pointer flex items-center justify-between text-[13px] border-b border-gray-50 ${i===generalEmailAddrActiveIdx?"bg-blue-100":"hover:bg-blue-50"}`}
+                            <div key={i} className={`px-4 py-2.5 cursor-pointer flex items-center justify-between text-[13px] border-b border-gray-50 ${i===generalEmailAddrActiveIdx?"bg-[#EEF3FC]":"hover:bg-[#EEF3FC]"}`}
                               onMouseEnter={() => setGeneralEmailAddrActiveIdx(i)}
                               onMouseDown={e => {
                                 e.preventDefault();
@@ -52707,7 +52760,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-[13px] font-bold text-gray-700">본문</label>
-                      <span className="text-[11px] text-blue-600">직접 작성</span>
+                      <span className="text-[11px] text-[#1B2B4B]">직접 작성</span>
                     </div>
                     <textarea className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-[13px] leading-relaxed resize-none outline-none focus:border-[#1B2B4B]"
                       rows={10} value={generalEmailBody} onChange={e => setGeneralEmailBody(e.target.value)} />
@@ -52715,7 +52768,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <div>
                     <label className="text-[13px] font-bold text-gray-700 mb-1 block">파일 첨부 (선택)</label>
                     <div className="border-2 border-dashed border-gray-300 rounded-xl p-3">
-                      <label className="flex items-center gap-2 cursor-pointer text-[13px] text-blue-600 hover:text-blue-700">
+                      <label className="flex items-center gap-2 cursor-pointer text-[13px] text-[#1B2B4B] hover:text-[#1B2B4B]">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                         파일 선택 (이미지, PDF, Excel 등)
                         <input autoComplete="off" type="file" multiple accept="image/*,.pdf,.xlsx,.xls,.doc,.docx" className="hidden"
@@ -52763,7 +52816,7 @@ const handleBatchSettle = async (targetStatus) => {
                             <div key={i} className="flex items-center justify-between text-[12px] bg-gray-50 rounded px-2 py-1">
                               <span className="truncate text-gray-700">{f.name}</span>
                               <span className="text-gray-500 ml-2 shrink-0">{f.size > 1024*1024 ? `${(f.size/1024/1024).toFixed(1)}MB` : `${Math.round(f.size/1024)}KB`}</span>
-                              <button onClick={() => setGeneralEmailFiles(prev => prev.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 ml-2 shrink-0">×</button>
+                              <button onClick={() => setGeneralEmailFiles(prev => prev.filter((_, j) => j !== i))} className="text-[#0B1428] hover:text-[#0B1428] ml-2 shrink-0">×</button>
                             </div>
                           ))}
                           <div className="text-[11px] text-gray-500 text-right pt-1">
@@ -52889,7 +52942,7 @@ const handleBatchSettle = async (targetStatus) => {
                 <span className="ml-2 text-[11px] text-gray-500">{item.start}~{item.end} · {item.mapped?.length||0}건</span>
               </div>
               {!batchSending && (
-                <button onClick={() => setBatchSendList(prev => prev.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 text-[13px] font-bold px-2 py-1"><EditableText id="misc.btn.50086.삭제" defaultText="삭제" /></button>
+                <button onClick={() => setBatchSendList(prev => prev.filter((_, j) => j !== i))} className="text-[#0B1428] hover:text-[#0B1428] text-[13px] font-bold px-2 py-1"><EditableText id="misc.btn.50086.삭제" defaultText="삭제" /></button>
               )}
             </div>
             <div className="text-[11px] text-gray-500 mb-1.5">
@@ -52908,10 +52961,10 @@ const handleBatchSettle = async (targetStatus) => {
           <div className="text-center py-8 text-[13px] text-gray-500">목록이 비어있습니다</div>
         )}
         {batchSending && batchSendProgress.total > 0 && (
-          <div className="bg-blue-50 rounded-xl border border-blue-200 px-4 py-3 text-[13px]">
-            <div className="font-bold text-blue-700 mb-1">발송 중... {batchSendProgress.done}/{batchSendProgress.total}</div>
+          <div className="bg-[#EEF3FC] rounded-xl border border-[#C9D6EE] px-4 py-3 text-[13px]">
+            <div className="font-bold text-[#1B2B4B] mb-1">발송 중... {batchSendProgress.done}/{batchSendProgress.total}</div>
             {batchSendProgress.failed.length > 0 && (
-              <div className="text-red-600 text-[12px] space-y-0.5 mt-1">
+              <div className="text-[#0B1428] text-[12px] space-y-0.5 mt-1">
                 {batchSendProgress.failed.map((f, i) => (
                   <div key={i}><b>{f.name}</b>: {f.reason}</div>
                 ))}
@@ -53012,7 +53065,7 @@ const handleBatchSettle = async (targetStatus) => {
         <button
           disabled={batchSending}
           onClick={() => { setBatchSendList([]); setBatchSendOpen(false); }}
-          className="px-4 py-2.5 rounded-xl bg-red-100 text-red-600 font-bold text-[13px] hover:bg-red-200 disabled:opacity-50 transition"
+          className="px-4 py-2.5 rounded-xl bg-[#F3F6FA] text-[#0B1428] font-bold text-[13px] hover:bg-[#E3E8F0] disabled:opacity-50 transition"
         ><EditableText id="misc.btn.50210.목록 초기화" defaultText="목록 초기화" /></button>
       </div>
     </div>
@@ -53039,7 +53092,7 @@ const handleBatchSettle = async (targetStatus) => {
                       {scheduledEmailList.map((s) => {
                         const sendAtMs = s.sendAt?.toMillis ? s.sendAt.toMillis() : new Date(s.sendAt || 0).getTime();
                         const statusLabel = { pending: "대기중", sending: "발송 중", sent: "발송완료", failed: "발송실패" }[s.status] || s.status;
-                        const statusCls = { pending: "text-amber-600 bg-amber-50", sending: "text-blue-600 bg-blue-50", sent: "text-emerald-600 bg-emerald-50", failed: "text-red-600 bg-red-50" }[s.status] || "text-gray-500 bg-gray-50";
+                        const statusCls = { pending: "text-[#2D4C82] bg-[#F3F6FA]", sending: "text-[#1B2B4B] bg-[#EEF3FC]", sent: "text-[#0F1A30] bg-[#EEF3FC]", failed: "text-[#0B1428] bg-[#F3F6FA]" }[s.status] || "text-gray-500 bg-gray-50";
                         return (
                           <div key={s.id} className="px-6 py-3 flex items-center gap-3">
                             <div className="min-w-0 flex-1">
@@ -53049,13 +53102,13 @@ const handleBatchSettle = async (targetStatus) => {
                               </div>
                               <div className="text-[11px] text-gray-500 mt-0.5 truncate">
                                 {s.to} · {sendAtMs ? new Date(sendAtMs).toLocaleString("ko-KR") : "-"}
-                                {s.status === "failed" && s.error && <span className="text-red-500"> · {s.error}</span>}
+                                {s.status === "failed" && s.error && <span className="text-[#0B1428]"> · {s.error}</span>}
                               </div>
                             </div>
                             {s.status === "pending" && (
                               <button
                                 onClick={() => deleteDoc(doc(db, "scheduledEmails", s.id)).catch(() => {})}
-                                className="px-3 py-1.5 rounded-lg border border-gray-200 text-[11px] font-semibold text-gray-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition shrink-0"
+                                className="px-3 py-1.5 rounded-lg border border-gray-200 text-[11px] font-semibold text-gray-500 hover:bg-[#F3F6FA] hover:text-[#0B1428] hover:border-[#C9D6EE] transition shrink-0"
                               >
                                 예약취소
                               </button>
@@ -53111,7 +53164,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-[13px] font-bold text-gray-700">발송 내용 미리보기 (직접 수정 가능)</label>
-                      <span className="text-[11px] text-blue-600 font-semibold">편집 가능</span>
+                      <span className="text-[11px] text-[#1B2B4B] font-semibold">편집 가능</span>
                     </div>
                     <textarea
                       className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-[13px] text-gray-900 leading-relaxed resize-none outline-none focus:border-[#1B2B4B] bg-white"
@@ -53134,7 +53187,7 @@ const handleBatchSettle = async (targetStatus) => {
                   </div>
 
                   {/* 안내 문구 */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-[13px] text-blue-800 font-medium">
+                  <div className="bg-[#EEF3FC] border border-[#C9D6EE] rounded-lg px-4 py-3 text-[13px] text-[#1B2B4B] font-medium">
                     발송 버튼 클릭 시 거래명세서가 <b>PDF 파일로 자동 첨부</b>되어 발송됩니다.
                   </div>
 
@@ -53358,7 +53411,7 @@ const handleBatchSettle = async (targetStatus) => {
                       <div className="absolute z-[300] left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
                         {(clients||[]).filter(c => (c.거래처명||"").toLowerCase().includes((editInfo["거래처명"]||"").toLowerCase())).slice(0, 12).map((c, i) => (
                           <div key={i}
-                            className={`px-4 py-2.5 text-[13px] cursor-pointer flex items-center justify-between border-b border-gray-50 ${i===editInfoClientActiveIdx?"bg-blue-100":"hover:bg-blue-50"}`}
+                            className={`px-4 py-2.5 text-[13px] cursor-pointer flex items-center justify-between border-b border-gray-50 ${i===editInfoClientActiveIdx?"bg-[#EEF3FC]":"hover:bg-[#EEF3FC]"}`}
                             onMouseEnter={() => setEditInfoClientActiveIdx(i)}
                             onMouseDown={e => {
                               e.preventDefault();
@@ -53418,7 +53471,7 @@ const handleBatchSettle = async (targetStatus) => {
                           key={name + i}
                           ref={el => arItemRefs.current[i] = el}
                           className={`px-4 py-2.5 text-[13px] cursor-pointer transition ${
-                            i === arDropIdx ? "bg-blue-50 text-blue-700 font-semibold" : "text-gray-700 hover:bg-gray-50"
+                            i === arDropIdx ? "bg-[#EEF3FC] text-[#1B2B4B] font-semibold" : "text-gray-700 hover:bg-gray-50"
                           }`}
                           onMouseEnter={() => setArDropIdx(i)}
                           onMouseDown={e => { e.preventDefault(); selectArClient(name); }}
@@ -53486,11 +53539,25 @@ const handleBatchSettle = async (targetStatus) => {
                   전체 정산완료
                 </button>
                 <button onClick={downloadMonthExcel} className="px-3 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition"><EditableText id="misc.btn.50682.엑셀" defaultText="엑셀" /></button>
-                <label className="px-3 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition cursor-pointer">
-                  입금확인(엑셀)
-                  <input autoComplete="off" type="file" accept=".xlsx,.xls,.csv" hidden onChange={handleBankExcelUpload} />
-                </label>
-                <button onClick={() => setDepositGuideOpen(true)} className="px-3 py-2 rounded-lg bg-white border border-[#1B2B4B]/40 text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#F5F8FD] transition">입금양식안내</button>
+                <button onClick={() => setBankBulkOpen(true)} className="px-3 py-2 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black hover:bg-[#1B2B4B] transition">대용량 업로드</button>
+                <button onClick={() => setDepositGuideOpen(true)} className="px-3 py-2 rounded-lg bg-white border border-[#1B2B4B]/40 text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#F5F8FD] transition">양식 안내</button>
+                {bankBulkOpen && createPortal(
+                  <BulkUploadChooser
+                    title="입금 내역 대용량 업로드"
+                    subtitle="은행 거래내역 엑셀을 올리면 미정산 월과 자동으로 맞춰 입금 처리합니다."
+                    templateDesc="거래일·적요(입금자명)·입금액·잔액·비고 열이 있는 양식을 받습니다. 은행에서 받은 거래내역 엑셀을 그대로 올려도 됩니다."
+                    templateTips={["입금자명이 거래처명과 같거나 포함되면 자동 매칭", "부가세 포함 금액 기준"]}
+                    uploadDesc="엑셀을 고르면 매칭 결과를 먼저 보여드리고, 확인 후 정산완료·일부입금으로 반영합니다."
+                    uploadTips={["입금액이 모자라면 일부입금으로", "매칭 안 된 입금은 따로 표시"]}
+                    onClose={() => setBankBulkOpen(false)}
+                    onTemplate={() => {
+                      const ws = XLSX.utils.aoa_to_sheet([["거래일", "적요(입금자명)", "입금액", "잔액", "비고"], ["2026-10-05", "(주)예시물류", 1100000, 5100000, "9월 운송료"], ["2026-10-06", "홍길동상사", 550000, 5650000, ""]]);
+                      ws["!cols"] = [{ wch: 12 }, { wch: 22 }, { wch: 14 }, { wch: 14 }, { wch: 18 }];
+                      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "입금내역");
+                      XLSX.writeFile(wb, "입금확인_양식.xlsx");
+                    }}
+                    onFile={(e) => { const f = e.target.files?.[0]; setBankBulkOpen(false); if (f) handleBankExcelUpload({ target: { files: [f], value: "" } }); }}
+                  />, document.body)}
                 {depositGuideOpen && createPortal(
                   <div className="fixed inset-0 z-[1000000] bg-[#0F1A30]/45 flex items-center justify-center p-4" onClick={() => setDepositGuideOpen(false)}>
                     <div className="w-full max-w-[760px] max-h-[88vh] overflow-y-auto bg-white rounded-[22px] shadow-[0_24px_60px_rgba(15,26,48,0.35)]" onClick={(e) => e.stopPropagation()}>
@@ -53520,14 +53587,14 @@ const handleBatchSettle = async (targetStatus) => {
                   <tr className="bg-white">
                     <td className="border border-gray-200 px-4 py-3 font-medium text-gray-700">2026-04-25</td>
                     <td className="border border-gray-200 px-4 py-3 font-bold text-[#1B2B4B]">거해</td>
-                    <td className="border border-gray-200 px-4 py-3 font-extrabold text-emerald-700">3,234,000</td>
+                    <td className="border border-gray-200 px-4 py-3 font-extrabold text-[#0F1A30]">3,234,000</td>
                     <td className="border border-gray-200 px-4 py-3 text-gray-500">15,420,000</td>
                     <td className="border border-gray-200 px-4 py-3 text-gray-500"></td>
                   </tr>
                   <tr className="bg-gray-50/80">
                     <td className="border border-gray-200 px-4 py-3 font-medium text-gray-700">2026-04-28</td>
                     <td className="border border-gray-200 px-4 py-3 font-bold text-[#1B2B4B]">㈜대한물류</td>
-                    <td className="border border-gray-200 px-4 py-3 font-extrabold text-emerald-700">5,500,000</td>
+                    <td className="border border-gray-200 px-4 py-3 font-extrabold text-[#0F1A30]">5,500,000</td>
                     <td className="border border-gray-200 px-4 py-3 text-gray-500">20,920,000</td>
                     <td className="border border-gray-200 px-4 py-3 text-gray-500"></td>
                   </tr>
@@ -53552,13 +53619,13 @@ const handleBatchSettle = async (targetStatus) => {
               <div className="flex items-start gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3">
                 <span className="w-7 h-7 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold flex items-center justify-center shrink-0 mt-0.5">3</span>
                 <span className="text-[14px] text-gray-700 font-medium">
-                  <b className="text-emerald-700">입금액</b>과 미정산 월 청구금액(세액포함)이 일치하면 <b className="text-emerald-700">자동 매칭</b>됩니다
+                  <b className="text-[#0F1A30]">입금액</b>과 미정산 월 청구금액(세액포함)이 일치하면 <b className="text-[#0F1A30]">자동 매칭</b>됩니다
                 </span>
               </div>
               <div className="flex items-start gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3">
                 <span className="w-7 h-7 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold flex items-center justify-center shrink-0 mt-0.5">4</span>
                 <span className="text-[14px] text-gray-700 font-medium">
-                  <b className="text-[#1B2B4B]">적요(입금자명)</b>와 거래처명이 유사하면 신뢰도 <b className="text-emerald-700">"높음"</b>으로 표시됩니다
+                  <b className="text-[#1B2B4B]">적요(입금자명)</b>와 거래처명이 유사하면 신뢰도 <b className="text-[#0F1A30]">"높음"</b>으로 표시됩니다
                 </span>
               </div>
             </div>
@@ -53607,23 +53674,26 @@ const handleBatchSettle = async (targetStatus) => {
 </button>
             </div>
           </div>
-          {/* KPI 카드 */}
+          {/* KPI 카드 — 네이비 */}
           {selClient && (
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
               {[
-                {label:"총 오더건수", val:`${kpi.전체건수}건`, color:"text-[#1B2B4B]"},
-                {label:"총 청구금액", val:`${won(kpi.총청구)}원`, color:"text-blue-600"},
-                {label:"미정산 월수", val:`${kpi.미정산월}개월`, color:"text-amber-500"},
-                {label:"미정산 금액", val:`${won(kpi.미정산금)}원`, color:"text-red-500"},
-                {label:"정산완료 금액", val:`${won(kpi.완료금)}원`, color:"text-emerald-600"},
-              ].map(({label,val,color})=>(
-                <div key={label} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                  <div className="text-[11px] font-bold text-gray-500 mb-1">{label}</div>
-                  <div className={`text-[18px] font-extrabold ${color}`}>{val}</div>
+                {label:"총 오더건수", en:"ORDERS", val:`${kpi.전체건수}건`},
+                {label:"총 청구금액", en:"BILLED", val:`${won(kpi.총청구)}원`},
+                {label:"미정산 월수", en:"OPEN MONTHS", val:`${kpi.미정산월}개월`},
+                {label:"미정산 금액", en:"RECEIVABLE", val:`${won(kpi.미정산금)}원`, hot:true},
+                {label:"정산완료 금액", en:"COLLECTED", val:`${won(kpi.완료금)}원`},
+              ].map(({label,en,val,hot})=>(
+                <div key={label} className={`rounded-2xl p-4 border ${hot ? "bg-[#0F1A30] border-[#0F1A30] text-white" : "bg-white border-[#E3E8F0]"}`}>
+                  <div className={`text-[9.5px] font-extrabold tracking-[0.22em] ${hot ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`} style={{ fontFamily: KP_MONO }}>{en}</div>
+                  <div className={`text-[11.5px] font-bold ${hot ? "text-white/70" : "text-[#5B6B85]"}`}>{label}</div>
+                  <div className={`text-[19px] font-black tabular-nums ${hot ? "text-white" : "text-[#0F1A30]"}`} style={{ fontFamily: KP_MONO }}>{val}</div>
                 </div>
               ))}
             </div>
           )}
+          {/* 🏢 거래처 정보 + 결제 조건 */}
+          {selClient && selClient !== AR_ALL && <ArClientInfo client={(clients || []).find((c) => c.거래처명 === selClient)} name={selClient} upsertClient={upsertClient} isViewer={isViewer} />}
 
           {/* 테이블 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
@@ -53635,20 +53705,24 @@ const handleBatchSettle = async (targetStatus) => {
                 <span className="text-[12px] text-gray-500">— {THIS_YEAR}년 월별 정산 현황</span>
               </div>
             )}
-            <table className="text-[13px]" style={{tableLayout:"fixed", width: selClient === AR_ALL ? "882px" : "722px"}}>
+            <table className="text-[13px] w-full min-w-[1080px]" style={{tableLayout:"fixed"}}>
               <colgroup>
                 <col style={{width:"40px"}} />
                 {selClient === AR_ALL && <col style={{width:"160px"}} />}
                 <col style={{width:"48px"}} />
                 <col style={{width:"88px"}} />
                 <col style={{width:"56px"}} />
-                <col style={{width:"130px"}} />
-                <col style={{width:"100px"}} />
-                <col style={{width:"100px"}} />
-                <col style={{width:"160px"}} />
+                <col style={{width:"120px"}} />
+                <col style={{width:"110px"}} />
+                <col style={{width:"110px"}} />
+                <col style={{width:"104px"}} />
+                <col style={{width:"76px"}} />
+                <col style={{width:"110px"}} />
+                <col style={{width:"92px"}} />
+                <col />
               </colgroup>
               <thead>
-                <tr className="bg-[#1B2B4B]">
+                <tr className="bg-[#0B1428]">
                   <th
                     className="px-2 py-3 text-white text-center cursor-pointer select-none"
                     onClick={() => toggleAllMonths(monthRows)}
@@ -53660,16 +53734,16 @@ const handleBatchSettle = async (targetStatus) => {
                       onClick={e => e.stopPropagation()}
                     />
                   </th>
-                  {[...(selClient === AR_ALL ? ["거래처"] : []), "순번","청구월","건수","총 청구금액","정산상태","정산일","메모"].map(label=>(
+                  {[...(selClient === AR_ALL ? ["거래처"] : []), "순번","청구월","건수","총 청구금액","입금액","잔액","결제 예정일","경과","정산상태","정산일","메모"].map(label=>(
                     <th key={label} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap"><EditableText id={`settlement.monthly.header.${label}`} defaultText={label} /></th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {!selClient ? (
-                  <tr><td colSpan={8} className="text-center text-gray-500 py-16 text-[14px]">거래처를 검색하세요.</td></tr>
+                  <tr><td colSpan={13} className="text-center text-gray-500 py-16 text-[14px]">거래처를 검색하세요.</td></tr>
                 ) : monthRows.length === 0 ? (
-                  <tr><td colSpan={8} className="text-center text-gray-500 py-16 text-[14px]">표시할 데이터가 없습니다.</td></tr>
+                  <tr><td colSpan={13} className="text-center text-gray-500 py-16 text-[14px]">표시할 데이터가 없습니다.</td></tr>
                 ) : (
                   monthRows.map((row, idx) => (
                     <tr key={row.k} className={idx%2===0?"bg-white":"bg-gray-50/60"}>
@@ -53693,12 +53767,27 @@ const handleBatchSettle = async (targetStatus) => {
                           {won(row.총청구금액)}원
                         </span>
                       </td>
+                      {(() => {
+                        const 공급청구 = row.총청구금액;
+                        const 청구VAT = Math.round(공급청구 * 1.1);
+                        const 입금 = row.정산상태 === "정산완료" ? 청구VAT : (row.입금누계 || 0);
+                        const 잔 = row.정산상태 === "정산완료" ? 0 : Math.max(0, 청구VAT - 입금);
+                        const rule = ((clients || []).find((c) => c.거래처명 === (row.거래처명 || selClient)) || {}).결제일;
+                        const due = arDueDate(row.yyyymm, rule);
+                        const over = due && 잔 > 0 ? Math.floor((Date.now() - new Date(`${due}T23:59:59+09:00`).getTime()) / 86400000) : null;
+                        return (<>
+                          <td className="px-3 py-3 text-right border-b border-gray-100 tabular-nums text-[#3A4A66]">{입금 ? `${won(입금)}` : "-"}</td>
+                          <td className={`px-3 py-3 text-right border-b border-gray-100 tabular-nums ${잔 ? "font-black text-[#0F1A30]" : "text-[#9AA9C3]"}`}>{잔 ? won(잔) : "0"}</td>
+                          <td className="px-3 py-3 text-center border-b border-gray-100 tabular-nums text-[#3A4A66]">{due || <span className="text-[#C9D3E3]">결제일 미설정</span>}</td>
+                          <td className="px-3 py-3 text-center border-b border-gray-100">{over == null ? "-" : over > 0 ? <span className="px-2 py-0.5 rounded-md bg-[#0F1A30] text-white text-[11.5px] font-black">D+{over}</span> : <span className="text-[12px] font-bold text-[#5B6B85]">D{over === 0 ? "-day" : over}</span>}</td>
+                        </>);
+                      })()}
                       <td className="px-3 py-3 text-center border-b border-gray-100 cursor-pointer select-none"
                         onClick={()=>toggleMonthStatus(row)} title="클릭하여 상태 전환">
-                        <span className={`px-3 py-1 rounded-lg text-[13px] font-bold text-white ${
-                          row.정산상태==="정산완료" ? "bg-emerald-600"
-                          : row.정산상태==="진행중"  ? "bg-blue-500"
-                          : "bg-amber-500"
+                        <span className={`px-3 py-1 rounded-lg text-[12.5px] font-black ${
+                          row.정산상태==="정산완료" ? "bg-[#0F1A30] text-white"
+                          : row.정산상태==="진행중" || row.정산상태==="일부입금" ? "bg-[#2D4C82] text-white"
+                          : "bg-[#EEF3FC] text-[#1B2B4B] border border-[#8FB0F0]"
                         }`}>
                           {row.정산상태}
                         </span>
@@ -54021,7 +54110,7 @@ const handleBatchSettle = async (targetStatus) => {
                               <div className="text-[13px] font-bold text-gray-800 truncate">{name}</div>
                             </div>
                             {unsettledCount > 0 && (
-                              <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">
+                              <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#F3F6FA] text-[#2D4C82]">
                                 미정산 {unsettledCount}개월
                               </span>
                             )}
@@ -54051,7 +54140,7 @@ const handleBatchSettle = async (targetStatus) => {
                       disabled={!batchClients.size}
                       className={`px-5 py-2.5 rounded-xl font-bold text-[13px] transition ${
                         batchClients.size
-                          ? "bg-amber-500 hover:bg-amber-600 text-white"
+                          ? "bg-[#2D4C82] hover:bg-[#1B2B4B] text-white"
                           : "bg-gray-200 text-gray-500 cursor-not-allowed"
                       }`}
                       onClick={() => handleBatchSettle("미정산")}>
@@ -54061,7 +54150,7 @@ const handleBatchSettle = async (targetStatus) => {
                       disabled={!batchClients.size}
                       className={`px-5 py-2.5 rounded-xl font-bold text-[13px] transition ${
                         batchClients.size
-                          ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                          ? "bg-[#0F1A30] hover:bg-[#1B2B4B] text-white"
                           : "bg-gray-200 text-gray-500 cursor-not-allowed"
                       }`}
                       onClick={() => handleBatchSettle("정산완료")}>
@@ -54216,11 +54305,11 @@ const handleBatchSettle = async (targetStatus) => {
                       const fr = monthRowsRaw.filter(r=>{const m=parseInt(r.mm,10);return m>=from&&m<=to&&r.정산상태==="미정산";});
                       const amt = fr.reduce((s,r)=>s+r.총청구금액,0);
                       return fr.length > 0 ? (
-                        <div className="mt-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-[12px] text-red-700 font-semibold">
+                        <div className="mt-2 px-3 py-2 bg-[#F3F6FA] border border-[#C9D6EE] rounded-lg text-[12px] text-[#0B1428] font-semibold">
                           선택 범위 미정산: {fr.length}개월 / {amt.toLocaleString()}원
                         </div>
                       ) : (
-                        <div className="mt-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-[12px] text-emerald-700 font-semibold">
+                        <div className="mt-2 px-3 py-2 bg-[#EEF3FC] border border-[#8FB0F0] rounded-lg text-[12px] text-[#0F1A30] font-semibold">
                           선택 범위 내 미정산 건이 없습니다
                         </div>
                       );
@@ -54250,7 +54339,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-[13px] font-bold text-gray-700">발송 내용 (직접 수정 가능)</label>
-                      <span className="text-[11px] text-blue-600 font-semibold">편집 가능</span>
+                      <span className="text-[11px] text-[#1B2B4B] font-semibold">편집 가능</span>
                     </div>
                     <textarea
                       className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-[13px] text-gray-900 font-medium leading-relaxed resize-none outline-none focus:border-[#1B2B4B] bg-white"
@@ -54273,7 +54362,7 @@ const handleBatchSettle = async (targetStatus) => {
                   </div>
 
                   {/* 안내 */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-[13px] text-blue-800 font-medium">
+                  <div className="bg-[#EEF3FC] border border-[#C9D6EE] rounded-lg px-4 py-3 text-[13px] text-[#1B2B4B] font-medium">
                     선택한 월 범위의 미수금 내역이 <b>엑셀 + 미수금 보고서 PDF</b> 로 자동 첨부됩니다.
                   </div>
 
@@ -54543,7 +54632,7 @@ const handleBatchSettle = async (targetStatus) => {
                 ><EditableText id="misc.btn.51744.선택해제" defaultText="선택해제" /></button>
                 <button
                   onClick={() => setBulkDeleteConfirm(true)}
-                  className="ml-auto px-4 py-1.5 rounded-lg bg-red-500 text-white text-[13px] font-bold hover:bg-red-600 transition"
+                  className="ml-auto px-4 py-1.5 rounded-lg bg-[#F3F6FA]0 text-white text-[13px] font-bold hover:bg-[#0B1428] transition"
                 ><EditableText id="misc.btn.51748.선택 삭제" defaultText="선택 삭제" /></button>
               </div>
             )}
@@ -54569,7 +54658,7 @@ const handleBatchSettle = async (targetStatus) => {
                   onClick={() => setBulkDeleteConfirm(true)}
                   disabled={emailLogs.length === 0}
                   title="전체 삭제"
-                  className="text-white/50 hover:text-red-300 transition disabled:opacity-30 text-[11px] font-semibold"
+                  className="text-white/50 hover:text-[#8FB0F0] transition disabled:opacity-30 text-[11px] font-semibold"
                 ><EditableText id="misc.btn.51774.전체삭제" defaultText="전체삭제" /></button>
               </div>
               <div className="overflow-y-auto flex-1">
@@ -54585,7 +54674,7 @@ const handleBatchSettle = async (targetStatus) => {
                         selectedMail?.id === log.id
                           ? "bg-[#e8edf5] border-l-4 border-l-[#1B2B4B]"
                           : selectedMails.has(log.id)
-                          ? "bg-blue-50 border-l-4 border-l-blue-400"
+                          ? "bg-[#EEF3FC] border-l-4 border-l-[#2D4C82]"
                           : "hover:bg-gray-50 border-l-4 border-l-transparent"
                       }`}
                     >
@@ -54605,7 +54694,7 @@ const handleBatchSettle = async (targetStatus) => {
                       />
                       <div className="flex-1 min-w-0" onClick={() => setSelectedMail(log)}>
                         <div className="flex items-center justify-between mb-1">
-                          <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${log.status === "success" ? "bg-[#1B2B4B] text-white" : "bg-red-600 text-white"}`}>
+                          <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${log.status === "success" ? "bg-[#1B2B4B] text-white" : "bg-[#0B1428] text-white"}`}>
                             {log.type || "메일"}
                           </span>
                           <span className="text-[12px] text-gray-500 shrink-0 ml-1">{log.sentAt ? new Date(log.sentAt).toLocaleDateString("ko-KR", {month:"2-digit",day:"2-digit"}) : ""}</span>
@@ -54641,7 +54730,7 @@ const handleBatchSettle = async (targetStatus) => {
                         {selectedMail.subject || "(제목없음)"}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${selectedMail.status === "success" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${selectedMail.status === "success" ? "bg-[#EEF3FC] text-[#0F1A30]" : "bg-[#F3F6FA] text-[#0B1428]"}`}>
                           {selectedMail.status === "success" ? "발송완료" : "발송실패"}
                         </span>
                         <button onClick={() => setSelectedMail(null)} className="text-gray-500 hover:text-gray-600 text-xl leading-none w-7 h-7 flex items-center justify-center hover:bg-gray-200 rounded transition">×</button>
@@ -54665,7 +54754,7 @@ const handleBatchSettle = async (targetStatus) => {
                       </div>
                     )}
                     {selectedMail.error && (
-                      <div className="mt-2 text-[12px] text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
+                      <div className="mt-2 text-[12px] text-[#0B1428] bg-[#F3F6FA] border border-[#C9D6EE] rounded-lg px-3 py-1.5">
                         오류: {selectedMail.error}
                       </div>
                     )}
@@ -54689,7 +54778,7 @@ const handleBatchSettle = async (targetStatus) => {
                     </div>
                     <button
                       onClick={() => { setDeleteLogConfirm(selectedMail.id); }}
-                      className="px-4 py-2 rounded-lg text-[13px] font-semibold text-red-500 hover:bg-red-50 border border-red-200 transition"
+                      className="px-4 py-2 rounded-lg text-[13px] font-semibold text-[#0B1428] hover:bg-[#F3F6FA] border border-[#C9D6EE] transition"
                     ><EditableText id="misc.btn.51894.삭제" defaultText="삭제" /></button>
                   </div>
                 </>
@@ -54703,7 +54792,7 @@ const handleBatchSettle = async (targetStatus) => {
     {bulkDeleteConfirm && (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]">
         <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden" onClick={e => e.stopPropagation()}>
-          <div className="bg-red-600 px-6 py-4 flex items-center gap-3">
+          <div className="bg-[#0B1428] px-6 py-4 flex items-center gap-3">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M9 6V4h6v2"/></svg>
             <div className="text-white font-bold text-[15px]">
               {selectedMails.size > 0 ? `${selectedMails.size}건 선택 삭제` : "전체 삭제"}
@@ -54713,12 +54802,12 @@ const handleBatchSettle = async (targetStatus) => {
             {selectedMails.size > 0
               ? `선택한 ${selectedMails.size}건의 발송이력을 삭제하시겠습니까?`
               : `발송이력 전체 ${emailLogs.length}건을 삭제하시겠습니까?`}
-            <div className="mt-1 text-[12px] text-red-500">삭제 후 복구할 수 없습니다.</div>
+            <div className="mt-1 text-[12px] text-[#0B1428]">삭제 후 복구할 수 없습니다.</div>
           </div>
           <div className="px-6 pb-5 flex gap-3">
             <button className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold text-[13px] hover:bg-gray-200 transition"
               onClick={() => setBulkDeleteConfirm(false)}><EditableText id="misc.btn.51921.취소" defaultText="취소" /></button>
-            <button className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-bold text-[13px] hover:bg-red-700 transition"
+            <button className="flex-1 py-2.5 rounded-xl bg-[#0B1428] text-white font-bold text-[13px] hover:bg-[#1B2B4B] transition"
               onClick={async () => {
                 const toDelete = selectedMails.size > 0 ? [...selectedMails] : emailLogs.map(l => l.id);
                 await Promise.all(toDelete.map(id => deleteDoc(doc(db, "emailLogs", id)).catch(() => {})));
@@ -55075,43 +55164,46 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   return (
     <div className="space-y-4">
 
-      {/* ── 헤더 ── */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      {/* ── 헤더(네이비 히어로) ── */}
+      <div className="relative overflow-hidden rounded-[22px] px-6 py-5 text-white flex items-center justify-between gap-4 flex-wrap"
+        style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <div>
-          <h2 className="text-[20px] font-bold text-[#1B2B4B]"><EditableText id="payment.title" defaultText="지급관리" /></h2>
-          <p className="text-[12px] text-gray-500 mt-0.5"><EditableText id="payment.subtitle" defaultText="배차완료 오더의 기사운임 지급 현황 관리" /></p>
+          <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KP_MONO }}>SETTLEMENT · PAYOUT</div>
+          <h2 className="text-[22px] font-black"><EditableText id="payment.title" defaultText="지급관리" /></h2>
+          <p className="text-[12.5px] text-white/60"><EditableText id="payment.subtitle" defaultText="배차완료 오더의 기사운임 지급 현황 관리" /></p>
         </div>
         <div className="flex gap-2 items-center flex-wrap">
           <PaymentDateRuleChip companyName={companyName} canEdit={canEditPayDay} />
-          <div className="flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-[12px]">
-            <span className="text-gray-500 font-semibold">산재보험료율</span>
+          <div className="flex items-center gap-1.5 rounded-xl px-3 h-10 bg-white/10 border border-white/20 text-[12px]">
+            <span className="text-white/70 font-bold">산재보험료율</span>
             <input autoComplete="off" type="number" min={0} max={10} step={0.01}
-              className="w-16 border border-gray-200 rounded px-2 py-0.5 text-[12px] text-center outline-none focus:border-[#1B2B4B]"
+              className="w-16 rounded-lg px-2 py-1 text-[12.5px] text-center outline-none bg-white text-[#0F1A30] font-black"
               value={insuranceRate} onChange={e => setInsuranceRate(Number(e.target.value))} />
-            <span className="text-gray-500">%</span>
+            <span className="text-white/70">%</span>
           </div>
-          <label className="px-4 py-2 rounded-lg bg-amber-600 text-white text-[13px] font-semibold hover:bg-amber-700 transition cursor-pointer">
-            엑셀 업로드 (지급매칭)
+          <label className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-white text-[13px] font-black hover:bg-white/15 transition cursor-pointer inline-flex items-center">
+            지급 매칭 업로드
             <input autoComplete="off" type="file" accept=".xlsx,.xls" className="hidden" onChange={handlePayExcelUpload} />
           </label>
-          <button onClick={downloadExcel} className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold hover:bg-emerald-700 transition"><EditableText id="misc.btn.52296.엑셀 다운로드" defaultText="엑셀 다운로드" /></button>
+          <button onClick={downloadExcel} className="h-10 px-4 rounded-xl bg-white text-[#0F1A30] text-[13px] font-black hover:brightness-95 transition"><EditableText id="misc.btn.52296.엑셀 다운로드" defaultText="엑셀 다운로드" /></button>
         </div>
       </div>
 
-      {/* ── KPI 카드 ── */}
+      {/* ── KPI 카드(네이비) ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
         {[
-          { label: "총 건수", val: `${kpi.cnt}건`, color: "text-[#1B2B4B]", bg: "bg-white" },
-          { label: "총 청구운임", val: `${won(kpi.sale)}원`, color: "text-blue-700", bg: "bg-blue-50" },
-          { label: "총 기사운임", val: `${won(kpi.driver)}원`, color: "text-gray-700", bg: "bg-gray-50" },
-          { label: "부가세(10%)", val: `${won(kpi.vatTotal)}원`, color: "text-orange-600", bg: "bg-orange-50" },
-          { label: `산재보험료(${insuranceRate}%)`, val: `${won(kpi.insuranceTotal)}원`, color: "text-purple-700", bg: "bg-purple-50" },
-          { label: "지급완료", val: `${kpi.done}건`, color: "text-emerald-700", bg: "bg-emerald-50" },
-          { label: "미지급 금액", val: `${won(kpi.undoneAmt)}원`, color: "text-red-600", bg: "bg-red-50" },
-        ].map(({ label, val, color, bg }) => (
-          <div key={label} className={`${bg} rounded-xl border border-gray-200 p-4 shadow-sm`}>
-            <div className="text-[11px] font-bold text-gray-500 mb-1">{label}</div>
-            <div className={`text-[15px] font-extrabold ${color}`}>{val}</div>
+          { label: "총 건수", en: "COUNT", val: `${kpi.cnt}건` },
+          { label: "총 청구운임", en: "BILLED", val: `${won(kpi.sale)}원` },
+          { label: "총 기사운임", en: "DRIVER FARE", val: `${won(kpi.driver)}원` },
+          { label: "부가세(10%)", en: "VAT", val: `${won(kpi.vatTotal)}원` },
+          { label: `산재보험료(${insuranceRate}%)`, en: "INSURANCE", val: `${won(kpi.insuranceTotal)}원` },
+          { label: "지급완료", en: "PAID", val: `${kpi.done}건` },
+          { label: "미지급 금액", en: "UNPAID", val: `${won(kpi.undoneAmt)}원`, hot: true },
+        ].map(({ label, en, val, hot }) => (
+          <div key={label} className={`rounded-2xl p-4 border ${hot ? "bg-[#0F1A30] border-[#0F1A30]" : "bg-white border-[#E3E8F0]"}`}>
+            <div className={`text-[9.5px] font-extrabold tracking-[0.22em] ${hot ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`} style={{ fontFamily: KP_MONO }}>{en}</div>
+            <div className={`text-[11.5px] font-bold ${hot ? "text-white/70" : "text-[#5B6B85]"}`}>{label}</div>
+            <div className={`text-[16px] font-black tabular-nums ${hot ? "text-white" : "text-[#0F1A30]"}`} style={{ fontFamily: KP_MONO }}>{val}</div>
           </div>
         ))}
       </div>
@@ -55182,11 +55274,11 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
               <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={selectedPayDate} onChange={e => setSelectedPayDate(e.target.value)} />
             </div>
             <button onClick={() => bulkPay(Array.from(selectedIds), "지급완료")} disabled={!selectedIds.size}
-              className={`px-4 py-2 rounded-lg text-[13px] font-bold text-white transition ${selectedIds.size ? "bg-emerald-600 hover:bg-emerald-700" : "bg-gray-200 text-gray-500 cursor-not-allowed"}`}>
+              className={`px-4 py-2 rounded-lg text-[13px] font-bold text-white transition ${selectedIds.size ? "bg-[#0F1A30] hover:bg-[#1B2B4B]" : "bg-gray-200 text-gray-500 cursor-not-allowed"}`}>
               선택 지급완료
             </button>
             <button onClick={() => bulkPay(Array.from(selectedIds), "지급중")} disabled={!selectedIds.size}
-              className={`px-4 py-2 rounded-lg text-[13px] font-bold text-white transition ${selectedIds.size ? "bg-amber-500 hover:bg-amber-600" : "bg-gray-200 text-gray-500 cursor-not-allowed"}`}>
+              className={`px-4 py-2 rounded-lg text-[13px] font-bold text-white transition ${selectedIds.size ? "bg-[#2D4C82] hover:bg-[#1B2B4B]" : "bg-gray-200 text-gray-500 cursor-not-allowed"}`}>
               선택 미지급
             </button>
             <button onClick={() => bulkPay(filtered.filter(r => (r.지급상태 || "지급중") !== "지급완료").map(r => r._id), "지급완료")}
@@ -55212,7 +55304,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
           <div className="overflow-x-auto">
             <table className="w-full text-[12px]">
               <thead>
-                <tr className="bg-[#1B2B4B]">
+                <tr className="bg-[#0B1428]">
                   {["", "순번", "상차일", "거래처명", "상차지", "하차지", "차량번호", "기사명", "전화번호", "청구운임", "기사운임", "부가세(10%)", `산재보험료(${insuranceRate}%)`, "수수료", "지급방식", "배차방식", "지급상태", "지급일"].map(h => (
                     <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap border-b border-white/10">{h ? <EditableText id={`settlement.table.header.${h}`} defaultText={h} /> : h}</th>
                   ))}
@@ -55227,7 +55319,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                   const isDone = (r.지급상태 || "지급중") === "지급완료";
                   const fee = toInt(r.청구운임) - toInt(r.기사운임);
                   return (
-                    <tr key={r._id || i} className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-blue-50/40 transition`}>
+                    <tr key={r._id || i} className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-[#EEF3FC]/40 transition`}>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">
                         <input autoComplete="off" type="checkbox" checked={selectedIds.has(r._id)} onChange={() => toggleOne(r._id)} className="w-4 h-4" />
                       </td>
@@ -55241,14 +55333,14 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.전화번호 || ""}</td>
                       <td className="px-3 py-2.5 text-right border-b border-gray-100">{won(r.청구운임)}</td>
                       <td className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b border-gray-100">{won(r.기사운임)}</td>
-                      <td className="px-3 py-2.5 text-right text-orange-600 font-semibold border-b border-gray-100">{won(Math.round(toInt(r.기사운임) * vatRate))}</td>
-                      <td className="px-3 py-2.5 text-right text-purple-700 font-semibold border-b border-gray-100">{won(Math.round(toInt(r.기사운임) * insuranceRate / 100))}</td>
-                      <td className={`px-3 py-2.5 text-right font-bold border-b border-gray-100 ${fee >= 0 ? "text-yellow-600" : "text-red-500"}`}>{won(fee)}</td>
+                      <td className="px-3 py-2.5 text-right text-[#2D4C82] font-semibold border-b border-gray-100">{won(Math.round(toInt(r.기사운임) * vatRate))}</td>
+                      <td className="px-3 py-2.5 text-right text-[#1B2B4B] font-semibold border-b border-gray-100">{won(Math.round(toInt(r.기사운임) * insuranceRate / 100))}</td>
+                      <td className={`px-3 py-2.5 text-right font-bold border-b border-gray-100 ${fee >= 0 ? "text-yellow-600" : "text-[#0B1428]"}`}>{won(fee)}</td>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.지급방식 || ""}</td>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.배차방식 || ""}</td>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">
                         <button onClick={() => pay(r._id, isDone ? "지급중" : "지급완료")}
-                          className={`px-3 py-1 rounded-lg text-[11px] font-bold text-white transition ${isDone ? "bg-emerald-600 hover:bg-emerald-700" : "bg-amber-500 hover:bg-amber-600"}`}>
+                          className={`px-3 py-1 rounded-lg text-[11px] font-bold text-white transition ${isDone ? "bg-[#0F1A30] hover:bg-[#1B2B4B]" : "bg-[#2D4C82] hover:bg-[#1B2B4B]"}`}>
                           {isDone ? "✓ 지급완료" : "미지급"}
                         </button>
                       </td>
@@ -55260,12 +55352,12 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
               {/* 합계 행 */}
               {filtered.length > 0 && (
                 <tfoot>
-                  <tr className="bg-[#1B2B4B]">
+                  <tr className="bg-[#0B1428]">
                     <td colSpan={9} className="px-3 py-3 text-white font-bold text-center">합 계 ({filtered.length}건)</td>
                     <td className="px-3 py-3 text-right text-white font-bold">{won(kpi.sale)}</td>
                     <td className="px-3 py-3 text-right text-yellow-300 font-bold">{won(kpi.driver)}</td>
-                    <td className="px-3 py-3 text-right text-orange-300 font-bold">{won(kpi.vatTotal)}</td>
-                    <td className="px-3 py-3 text-right text-purple-300 font-bold">{won(kpi.insuranceTotal)}</td>
+                    <td className="px-3 py-3 text-right text-[#8FB0F0] font-bold">{won(kpi.vatTotal)}</td>
+                    <td className="px-3 py-3 text-right text-[#8FB0F0] font-bold">{won(kpi.insuranceTotal)}</td>
                     <td className="px-3 py-3 text-right text-yellow-300 font-bold">{won(kpi.fee)}</td>
                     <td colSpan={4} className="px-3 py-3 text-center text-white/60 text-[11px]">
                       지급완료 {kpi.done}건 / 미지급 {kpi.undone}건 (미지급액 {won(kpi.undoneAmt)}원)
@@ -55284,7 +55376,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
           <div className="overflow-x-auto">
             <table className="w-full text-[12px]">
               <thead>
-                <tr className="bg-[#1B2B4B]">
+                <tr className="bg-[#0B1428]">
                   {["차량번호", "기사명", "전화번호", "총 건수", "기사운임 합계", "지급완료", "미지급 건수", "미지급 금액", "일괄 지급"].map(h => (
                     <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap border-b border-white/10"><EditableText id={`settlement.byDriver.header.${h}`} defaultText={h} /></th>
                   ))}
@@ -55296,20 +55388,20 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                 ) : driverSummary.length === 0 ? (
                   <tr><td colSpan={9} className="text-center py-16 text-gray-500 text-[13px]">데이터가 없습니다.</td></tr>
                 ) : driverSummary.map((d, i) => (
-                  <tr key={d.차량번호} className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-blue-50/40 transition`}>
+                  <tr key={d.차량번호} className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-[#EEF3FC]/40 transition`}>
                     <td className="px-3 py-3 text-center border-b border-gray-100">{d.차량번호}</td>
                     <td className="px-3 py-3 text-center font-semibold border-b border-gray-100">{d.이름 || "-"}</td>
                     <td className="px-3 py-3 text-center border-b border-gray-100">{d.전화번호 || "-"}</td>
                     <td className="px-3 py-3 text-center border-b border-gray-100">{d.cnt}건</td>
                     <td className="px-3 py-3 text-right font-bold text-[#1B2B4B] border-b border-gray-100">{won(d.기사운임합)}원</td>
                     <td className="px-3 py-3 text-center border-b border-gray-100">
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-[11px]">{d.지급완료}건</span>
+                      <span className="px-2 py-0.5 rounded-full bg-[#EEF3FC] text-[#0F1A30] font-bold text-[11px]">{d.지급완료}건</span>
                     </td>
                     <td className="px-3 py-3 text-center border-b border-gray-100">
-                      {d.미지급 > 0 ? <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold text-[11px]">{d.미지급}건</span> : <span className="text-gray-400">-</span>}
+                      {d.미지급 > 0 ? <span className="px-2 py-0.5 rounded-full bg-[#F3F6FA] text-[#2D4C82] font-bold text-[11px]">{d.미지급}건</span> : <span className="text-gray-400">-</span>}
                     </td>
                     <td className="px-3 py-3 text-right font-bold border-b border-gray-100">
-                      {d.미지급액 > 0 ? <span className="text-red-500">{won(d.미지급액)}원</span> : <span className="text-gray-400">-</span>}
+                      {d.미지급액 > 0 ? <span className="text-[#0B1428]">{won(d.미지급액)}원</span> : <span className="text-gray-400">-</span>}
                     </td>
                     <td className="px-3 py-3 text-center border-b border-gray-100">
                       {d.미지급 > 0 ? (
@@ -55318,7 +55410,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                           미지급 {d.미지급}건 지급
                         </button>
                       ) : (
-                        <span className="text-emerald-600 font-bold text-[11px]">✓ 완료</span>
+                        <span className="text-[#0F1A30] font-bold text-[11px]">✓ 완료</span>
                       )}
                     </td>
                   </tr>
@@ -55326,12 +55418,12 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
               </tbody>
               {driverSummary.length > 0 && (
                 <tfoot>
-                  <tr className="bg-[#1B2B4B]">
+                  <tr className="bg-[#0B1428]">
                     <td colSpan={4} className="px-3 py-3 text-white font-bold text-center">합 계 ({driverSummary.length}명)</td>
                     <td className="px-3 py-3 text-right text-yellow-300 font-bold">{won(kpi.driver)}원</td>
-                    <td className="px-3 py-3 text-center text-emerald-300 font-bold">{kpi.done}건</td>
-                    <td className="px-3 py-3 text-center text-amber-300 font-bold">{kpi.undone}건</td>
-                    <td className="px-3 py-3 text-right text-red-300 font-bold">{won(kpi.undoneAmt)}원</td>
+                    <td className="px-3 py-3 text-center text-[#8FB0F0] font-bold">{kpi.done}건</td>
+                    <td className="px-3 py-3 text-center text-[#8FB0F0] font-bold">{kpi.undone}건</td>
+                    <td className="px-3 py-3 text-right text-[#8FB0F0] font-bold">{won(kpi.undoneAmt)}원</td>
                     <td></td>
                   </tr>
                 </tfoot>
@@ -55352,7 +55444,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                   <div className="text-white font-bold text-[16px]">지급완료 처리 완료</div>
                 </div>
                 <div className="flex-1 flex flex-col items-center justify-center py-12 gap-4">
-                  <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <div className="w-16 h-16 rounded-full bg-[#EEF3FC] flex items-center justify-center">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="20 6 9 17 4 12"/>
                     </svg>
@@ -55376,7 +55468,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                     <div className="text-white font-bold text-[16px]">엑셀 업로드 매칭 결과</div>
                     <div className="text-white/60 text-[12px] mt-0.5">
                       매칭 {payExcelPreview.matched.length}건
-                      {payExcelPreview.matched.some(m=>m.isSumMatch) && <span className="ml-1 text-blue-300">(합산 {payExcelPreview.matched.filter(m=>m.isSumMatch).length}건 포함)</span>}
+                      {payExcelPreview.matched.some(m=>m.isSumMatch) && <span className="ml-1 text-[#8FB0F0]">(합산 {payExcelPreview.matched.filter(m=>m.isSumMatch).length}건 포함)</span>}
                       &nbsp;/ 미매칭 {payExcelPreview.unmatched.length}건
                     </div>
                   </div>
@@ -55386,21 +55478,21 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                   {/* 1:1 매칭 */}
                   {payExcelPreview.matched.filter(m=>!m.isSumMatch).length > 0 && (
                     <div>
-                      <div className="text-[13px] font-bold text-emerald-700 mb-2">
+                      <div className="text-[13px] font-bold text-[#0F1A30] mb-2">
                         1:1 매칭 ({payExcelPreview.matched.filter(m=>!m.isSumMatch).length}건) — 지급완료 처리됩니다
                       </div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-[12px] border-collapse">
                           <thead>
-                            <tr className="bg-emerald-50">
+                            <tr className="bg-[#EEF3FC]">
                               {["엑셀행","차량번호","기사명","상차일","운송료(엑셀)","기사운임(프로그램)","금액일치","산재보험료","지급일"].map(h=>(
-                                <th key={h} className="px-3 py-2 text-center font-bold text-emerald-800 border border-emerald-200"><EditableText id={`settlement.match.header.${h}`} defaultText={h} /></th>
+                                <th key={h} className="px-3 py-2 text-center font-bold text-[#0F1A30] border border-[#8FB0F0]"><EditableText id={`settlement.match.header.${h}`} defaultText={h} /></th>
                               ))}
                             </tr>
                           </thead>
                           <tbody>
                             {payExcelPreview.matched.filter(m=>!m.isSumMatch).map((m,i)=>(
-                              <tr key={i} className={i%2===0?"bg-white":"bg-emerald-50/30"}>
+                              <tr key={i} className={i%2===0?"bg-white":"bg-[#EEF3FC]/30"}>
                                 <td className="px-3 py-2 text-center border border-gray-100 text-gray-500">{m.excelRow}</td>
                                 <td className="px-3 py-2 text-center border border-gray-100">{m.차량번호}</td>
                                 <td className="px-3 py-2 text-center border border-gray-100 font-semibold">{m.기사명}</td>
@@ -55408,7 +55500,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                                 <td className="px-3 py-2 text-right border border-gray-100">{won(m.운송료)}</td>
                                 <td className="px-3 py-2 text-right border border-gray-100">{won(m.dispatch.기사운임)}</td>
                                 <td className="px-3 py-2 text-center border border-gray-100">
-                                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${m.amtMatch?"bg-emerald-100 text-emerald-700":"bg-amber-100 text-amber-700"}`}>
+                                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${m.amtMatch?"bg-[#EEF3FC] text-[#0F1A30]":"bg-[#F3F6FA] text-[#2D4C82]"}`}>
                                     {m.amtMatch?"일치":"차이있음"}
                                   </span>
                                 </td>
@@ -55426,17 +55518,17 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                   {payExcelPreview.matched.filter(m=>m.isSumMatch).length > 0 && (
                     <div>
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="text-[13px] font-bold text-blue-700">합산 매칭 ({payExcelPreview.matched.filter(m=>m.isSumMatch).length}건)</span>
-                        <span className="px-2 py-0.5 bg-blue-100 text-blue-600 text-[11px] rounded-full font-semibold">오더 여러 건을 1장 계산서로 합산 지급</span>
+                        <span className="text-[13px] font-bold text-[#1B2B4B]">합산 매칭 ({payExcelPreview.matched.filter(m=>m.isSumMatch).length}건)</span>
+                        <span className="px-2 py-0.5 bg-[#EEF3FC] text-[#1B2B4B] text-[11px] rounded-full font-semibold">오더 여러 건을 1장 계산서로 합산 지급</span>
                       </div>
                       <div className="space-y-3">
                         {payExcelPreview.matched.filter(m=>m.isSumMatch).map((m,i)=>(
-                          <div key={i} className="border border-blue-200 rounded-lg overflow-hidden">
-                            <div className="bg-blue-50 px-4 py-2 flex items-center justify-between">
-                              <div className="text-[12px] font-bold text-blue-800">
+                          <div key={i} className="border border-[#C9D6EE] rounded-lg overflow-hidden">
+                            <div className="bg-[#EEF3FC] px-4 py-2 flex items-center justify-between">
+                              <div className="text-[12px] font-bold text-[#0F1A30]">
                                 {m.기사명} ({m.차량번호}) · {m.excelDate} · 엑셀: {won(m.excelAmt)}원 = {m.sumRecords.length}건 합산 ({won(m.sumTotal)}원)
                               </div>
-                              <span className="px-2 py-0.5 bg-blue-600 text-white text-[11px] rounded-full font-bold">합산일치</span>
+                              <span className="px-2 py-0.5 bg-[#1B2B4B] text-white text-[11px] rounded-full font-bold">합산일치</span>
                             </div>
                             <table className="w-full text-[11px] border-collapse">
                               <thead>
@@ -55473,25 +55565,25 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                   {/* 미매칭 */}
                   {payExcelPreview.unmatched.length > 0 && (
                     <div>
-                      <div className="text-[13px] font-bold text-red-600 mb-2">미매칭 ({payExcelPreview.unmatched.length}건) — 처리되지 않습니다</div>
+                      <div className="text-[13px] font-bold text-[#0B1428] mb-2">미매칭 ({payExcelPreview.unmatched.length}건) — 처리되지 않습니다</div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-[12px] border-collapse">
                           <thead>
-                            <tr className="bg-red-50">
+                            <tr className="bg-[#F3F6FA]">
                               {["엑셀행","차량번호","기사명","상차일","운송료","미매칭 사유"].map(h=>(
-                                <th key={h} className="px-3 py-2 text-center font-bold text-red-700 border border-red-200"><EditableText id={`settlement.unmatched.header.${h}`} defaultText={h} /></th>
+                                <th key={h} className="px-3 py-2 text-center font-bold text-[#0B1428] border border-[#C9D6EE]"><EditableText id={`settlement.unmatched.header.${h}`} defaultText={h} /></th>
                               ))}
                             </tr>
                           </thead>
                           <tbody>
                             {payExcelPreview.unmatched.map((m,i)=>(
-                              <tr key={i} className={i%2===0?"bg-white":"bg-red-50/30"}>
+                              <tr key={i} className={i%2===0?"bg-white":"bg-[#F3F6FA]/30"}>
                                 <td className="px-3 py-2 text-center border border-gray-100 text-gray-500">{m.excelRow}</td>
                                 <td className="px-3 py-2 text-center border border-gray-100">{m.차량번호}</td>
                                 <td className="px-3 py-2 text-center border border-gray-100">{m.기사명}</td>
                                 <td className="px-3 py-2 text-center border border-gray-100">{m.상차일}</td>
                                 <td className="px-3 py-2 text-right border border-gray-100">{won(m.운송료)}</td>
-                                <td className="px-3 py-2 text-center border border-gray-100 text-red-500 text-[11px]">{m.사유}</td>
+                                <td className="px-3 py-2 text-center border border-gray-100 text-[#0B1428] text-[11px]">{m.사유}</td>
                               </tr>
                             ))}
                           </tbody>

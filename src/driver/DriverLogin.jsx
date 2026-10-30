@@ -292,9 +292,10 @@ export default function DriverLogin() {
 
             <div className="flex items-center gap-3 my-6"><span className="flex-1 h-px bg-[#EEF1F6]" /><span className="text-[11px] font-bold tracking-[0.2em] text-[#C2CBD9]">OR</span><span className="flex-1 h-px bg-[#EEF1F6]" /></div>
 
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className={`grid ${window.Capacitor?.isNativePlatform?.() ? "grid-cols-1" : "grid-cols-2"} gap-2.5`}>
               <button onClick={() => navigate("/driver-register")} className="h-11 rounded-xl border border-[#0F1A30] text-[#0F1A30] text-[13.5px] font-black flex items-center justify-center hover:bg-[#0F1A30] hover:text-white transition">기사 등록하기</button>
-              <button onClick={() => navigate("/login")} className="h-11 rounded-xl border border-[#E3E8F0] text-[#5B6B85] text-[13.5px] font-bold flex items-center justify-center hover:bg-[#F5F7FB] transition">다른 유형 로그인</button>
+              {/* 기사앱(APK)에서는 기사 전용이라 다른 유형 로그인을 숨긴다 */}
+              {!window.Capacitor?.isNativePlatform?.() && <button onClick={() => navigate("/login")} className="h-11 rounded-xl border border-[#E3E8F0] text-[#5B6B85] text-[13.5px] font-bold flex items-center justify-center hover:bg-[#F5F7FB] transition">다른 유형 로그인</button>}
             </div>
           </div>
           <div className="text-center mt-5 text-[11px] font-bold tracking-[0.2em] text-[#B4BFD0]">KP-FLOW · DRIVER</div>

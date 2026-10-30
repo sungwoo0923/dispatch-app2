@@ -5,7 +5,7 @@
 import React from "react";
 import { arrayUnion, doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
-import { CARE_DATES, CLASS_LABEL, FUELS, GEARS, TONS, VEHICLE_KINDS, careSummary, dateStatus, itemStatus, itemsFor, specFor, tonClass, today, vehicleDefaults } from "./vehicleCare";
+import { CARE_DATES, CLASS_LABEL, FUELS, GEARS, TONS, VEHICLE_KINDS, careSummary, dateStatus, itemStatus, itemsFor, specFor, tonClass, today, vehicleDefaults, searchTruckModels } from "./vehicleCare";
 
 const NAVY = "#1B2B4B";
 const INK = "#0F1A30";
@@ -264,7 +264,10 @@ function Spec({ driverId, by, vehicle, busy, run }) {
         {F({ k: "톤", label: "톤수", list: TONS })}
         {F({ k: "적재함", label: "적재함 형태", list: VEHICLE_KINDS })}
         {F({ k: "제조사", label: "제조사", list: ["현대", "기아", "타타대우", "볼보", "스카니아", "벤츠", "만(MAN)", "이스즈", "기타"] })}
-        {F({ k: "모델", label: "모델명" })}
+        <label style={{ display: "block" }}>
+          <span style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: "#7A879C", marginBottom: 3 }}>모델명</span>
+          <ModelSearch value={v.모델} ton={v.톤} onPick={(p) => setV((x) => ({ ...x, ...p }))} style={{ width: "100%", height: 38, padding: "0 10px", borderRadius: 10, border: "1px solid #DCE3EF", fontSize: 14, fontWeight: 700, color: "#0F1A30", boxSizing: "border-box" }} />
+        </label>
         {F({ k: "연식", label: "연식", unit: "년", numeric: true })}
         {F({ k: "연료", label: "연료", list: FUELS })}
         {F({ k: "변속기", label: "변속기", list: GEARS })}
@@ -331,6 +334,30 @@ function Logs({ driverId, by, logs, odo, busy, run }) {
 
 // ═══ 기사앱 첫 진입 — 차량 기본 설정 마법사 ═══
 //  가입 후 처음 들어오면(care.setupDone 없음) 바로 뜬다. "나중에"는 하루 동안 다시 안 뜸.
+// 🔎 모델명 — 검색해서 고르거나(톤급에 가까운 순) 그대로 직접 입력
+export function ModelSearch({ value, onPick, ton, style, placeholder }) {
+  const [open, setOpen] = React.useState(false);
+  const list = searchTruckModels(value, ton);
+  return (
+    <div style={{ position: "relative" }}>
+      <input value={value || ""} onChange={(e) => { onPick({ 모델: e.target.value }); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder={placeholder || "모델 검색 또는 직접 입력 (예: 메가트럭)"} style={style} />
+      {open && list.length > 0 && (
+        <div style={{ position: "absolute", zIndex: 50, left: 0, right: 0, top: "100%", marginTop: 4, maxHeight: 240, overflowY: "auto", background: "#fff", border: "1px solid #DCE3EF", borderRadius: 12, boxShadow: "0 14px 30px rgba(15,26,48,.16)" }}>
+          {list.map((m) => (
+            <button key={m.maker + m.model} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { onPick({ 모델: m.model, 제조사: m.maker }); setOpen(false); }}
+              style={{ display: "flex", width: "100%", alignItems: "center", gap: 8, padding: "10px 12px", border: "none", borderBottom: "1px solid #EEF1F6", background: "#fff", textAlign: "left", cursor: "pointer" }}>
+              <span style={{ fontSize: 11.5, fontWeight: 800, color: "#7A879C", minWidth: 56 }}>{m.maker}</span>
+              <span style={{ fontSize: 14.5, fontWeight: 900, color: "#0F1A30", flex: 1 }}>{m.model}</span>
+              <span style={{ fontSize: 11.5, fontWeight: 800, color: "#2D4C82" }}>{m.hint}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function VehicleSetupWizard({ driverId, drv = {}, by = "", onClose }) {
   const base = vehicleDefaults(drv);
   const [step, setStep] = React.useState(0);
@@ -380,7 +407,7 @@ export function VehicleSetupWizard({ driverId, drv = {}, by = "", onClose }) {
           </>}
           {step === 1 && <>
             {field("제조사", <select value={v.제조사 || ""} onChange={(e) => set("제조사", e.target.value)} style={inp}><option value="">선택</option>{["현대", "기아", "타타대우", "볼보", "스카니아", "벤츠", "만(MAN)", "이스즈", "기타"].map((x) => <option key={x}>{x}</option>)}</select>)}
-            {field("모델명", <input value={v.모델 || ""} onChange={(e) => set("모델", e.target.value)} placeholder={s?.models?.[0] || "예: 포터2"} style={inp} />)}
+            {field("모델명", <ModelSearch value={v.모델} ton={v.톤} onPick={(p) => setV((x) => ({ ...x, ...p }))} style={inp} />)}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
               {field("연식", <input inputMode="numeric" value={v.연식 || ""} onChange={(e) => set("연식", e.target.value.replace(/[^\d]/g, "").slice(0, 4))} placeholder="2022" style={inp} />)}
               {field("연료", <select value={v.연료 || ""} onChange={(e) => set("연료", e.target.value)} style={inp}>{FUELS.map((x) => <option key={x}>{x}</option>)}</select>)}

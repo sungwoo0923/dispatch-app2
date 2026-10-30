@@ -73,7 +73,7 @@ export default function FleetExtraFields({ value: v, onChange, company }) {
           <div className="col-span-2 flex items-center justify-between gap-3 rounded-xl bg-white border border-[#E3E8F0] px-3.5 py-2.5">
             <div className="min-w-0">
               <div className="text-[13px] font-black text-[#0F1A30]">차량 기본정보</div>
-              <div className="text-[12px] text-[#5B6B85] truncate">{veh.model || veh.차명 ? `${veh.model || veh.차명}${veh.year ? ` · ${veh.year}년식` : ""}${v.care?.dates?.inspection ? ` · 검사 ${v.care.dates.inspection}` : ""}${v.care?.dates?.insurance ? ` · 보험 ${v.care.dates.insurance}` : ""}` : "아직 입력 전 — 기사가 앱에서 입력하거나 여기서 직접 입력"}</div>
+              <div className="text-[12px] text-[#5B6B85] truncate">{veh.모델 ? `${veh.제조사 ? `${veh.제조사} ` : ""}${veh.모델}${veh.연식 ? ` · ${veh.연식}년식` : ""}${v.care?.dates?.inspection ? ` · 검사 ${v.care.dates.inspection}` : ""}${v.care?.dates?.insurance ? ` · 보험 ${v.care.dates.insurance}` : ""}` : "아직 입력 전 — 기사가 앱에서 입력하거나 여기서 직접 입력"}</div>
             </div>
             <button type="button" onClick={() => setWizard(true)} disabled={!v.id} className="shrink-0 h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black disabled:opacity-40">{v.care?.setupDone ? "수정" : "입력"}</button>
           </div>

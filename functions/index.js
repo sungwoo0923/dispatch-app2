@@ -4566,6 +4566,58 @@ exports.notifyApproval = functions.firestore.document("approvals/{id}").onWrite(
 
 // ⏰ 예약 메일(2026-10-28) — 5분마다 보낼 시간이 된 예약 메일을 실제로 보낸다.
 //  예약 중에는 to가 비어 있어(받는 사람이 미리 못 봄) pendingTo에 담겨 있다가 이때 to로 옮긴다.
+// 🔔 기사 차량 정비·만기 미리 알림 — 매일 오전 9시(한국 시간)
+//  정기검사·자동차보험·적재물보험·타코 점검·지입계약 만료 3일 전, 엔진오일 교체 시점 500km 전에 기사 휴대폰으로 푸시.
+//  같은 항목·같은 기준 날짜는 한 번만 보낸다(drivers/{id}.careRemind 에 기록).
+const CARE_DATE_LABELS = { inspection: "자동차 정기검사", insurance: "자동차보험", cargoInsurance: "적재물배상책임보험", tacho: "운행기록장치 점검", contract: "지입계약" };
+const OIL_INTERVAL = { small: 7500, mid: 15000, large: 30000 };
+function oilClass(ton) {
+  const n = parseFloat(String(ton || "").replace(/[^\d.]/g, "")) || 0;
+  return n >= 8 ? "large" : n >= 3.5 ? "mid" : "small";
+}
+exports.vehicleCareReminders = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).pubsub.schedule("0 9 * * *").timeZone("Asia/Seoul").onRun(async () => {
+  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const dayDiff = (d) => Math.round((new Date(`${d}T00:00:00Z`) - new Date(`${today}T00:00:00Z`)) / 86400e3);
+  const snap = await db.collection("drivers").get();
+  let sent = 0;
+  for (const d of snap.docs) {
+    const x = d.data() || {};
+    const care = x.care || {};
+    if (!x.uid && !care.setupDone) continue;
+    const remind = x.careRemind || {};
+    const msgs = []; const mark = {};
+    Object.entries(care.dates || {}).forEach(([k, v]) => {
+      if (!v || !CARE_DATE_LABELS[k]) return;
+      const left = dayDiff(String(v).slice(0, 10));
+      if (left >= 0 && left <= 3 && remind[k] !== v) { msgs.push(`${CARE_DATE_LABELS[k]} ${left === 0 ? "오늘 만료" : `${left}일 후 만료(${v})`}`); mark[k] = v; }
+    });
+    const oil = care.items?.engineOil;
+    const odo = Number(care.odometer) || 0;
+    if (oil?.km && odo) {
+      const interval = Number(care.intervals?.engineOil?.km) || OIL_INTERVAL[oilClass(x.vehicle?.톤 || x.차량톤수)];
+      const left = Number(oil.km) + interval - odo;
+      const key = `oil_${oil.km}`;
+      if (left <= 500 && remind.engineOil !== key) { msgs.push(left > 0 ? `엔진오일 교체 ${left.toLocaleString()}km 남음` : `엔진오일 교체 시기 ${(-left).toLocaleString()}km 지남`); mark.engineOil = key; }
+    }
+    if (!msgs.length) continue;
+    const uid = x.uid || d.id;
+    const u = await db.collection("users").doc(uid).get().catch(() => null);
+    const token = u?.exists ? u.data().fcmToken : null;
+    if (token && u.data().driverPushEnabled !== false) {
+      await sendPushAndCleanup([token], {
+        notification: { title: "차량 점검 알림", body: msgs.join(" · ") },
+        data: { type: "vehicle_care", driverId: d.id },
+        android: { priority: "high" },
+        apns: { payload: { aps: { sound: "default" } } },
+      }, "차량 정비 알림").catch(() => {});
+      sent += 1;
+    }
+    await d.ref.set({ careRemind: { ...remind, ...mark, lastAt: today } }, { merge: true }).catch(() => {});
+  }
+  console.log(`🔔 차량 정비 알림 ${sent}명`);
+  return null;
+});
+
 exports.sendScheduledMails = functions.pubsub.schedule("every 5 minutes").timeZone("Asia/Seoul").onRun(async () => {
   const due = await db.collection("internalMails").where("scheduledAt", "<=", Timestamp.now()).limit(100).get();
   for (const d of due.docs) {
