@@ -9,6 +9,7 @@ export const APPROVAL_CATS = [
   { key: "leave", label: "근태·휴가 신청", en: "ATTENDANCE", icon: "clock", desc: "휴가 · 반차 · 조퇴 · 외근 · 출장 · 경조사 · 병가 · 근무 신청" },
   { key: "expense", label: "비용·지출 결의", en: "EXPENSE", icon: "wallet", desc: "지출결의 · 법인카드 · 유류비/통행료 · 출장비 · 가지급금 · 구매 · 사고처리" },
   { key: "draft", label: "업무 기안·품의", en: "PROPOSAL", icon: "file", desc: "기안·품의서 · 운임 변경 · 신규 거래처 · 차량 정비 · 제증명" },
+  { key: "report", label: "업무 보고·인사", en: "REPORT", icon: "list", desc: "일일 업무일지 · 업무 보고서 · 출장 보고서 · 회의록 · 교육 결과 · 시말서 · 사직서" },
 ];
 
 import { isWeekend, isHoliday } from "./attendanceUtils";
@@ -279,6 +280,77 @@ export const APPROVAL_FORMS = [
       { k: "purpose", label: "용도·제출처", type: "text", required: true },
     ],
     summary: (d) => `${d.kind || ""} ${d.count || 1}매 · ${d.purpose || ""}` },
+
+  // ───────── 업무 보고·인사 ─────────
+  { key: "daily", cat: "report", label: "일일 업무일지", title: "일 일 업 무 일 지", code: "RD",
+    fields: [
+      { k: "date", label: "업무일", type: "date", required: true, half: true },
+      { k: "hours", label: "근무 시간", type: "text", ph: "09:00 ~ 18:00", half: true },
+      { k: "done", label: "오늘 한 일", type: "textarea", rows: 6, required: true, ph: "· 배차 32건 처리(긴급 3건)\n· ○○물류 운임 협의\n· 미수금 2건 입금 확인" },
+      { k: "issue", label: "특이사항·이슈", type: "textarea", rows: 3, ph: "사고·지연·민원 등" },
+      { k: "plan", label: "내일 할 일", type: "textarea", rows: 3 },
+    ],
+    titleOf: () => "", summary: (d) => `${d.date || ""} 업무일지` },
+  { key: "workreport", cat: "report", label: "업무 보고서", title: "업 무 보 고 서", code: "RW",
+    fields: [
+      { k: "period", label: "보고 기간", type: "select", options: ["주간", "월간", "분기", "수시"], def: "주간", half: true },
+      { k: "range", label: "기간", type: "daterange", required: true },
+      { k: "subject", label: "보고 제목", type: "text", required: true },
+      { k: "result", label: "주요 실적", type: "textarea", rows: 6, required: true, ph: "· 배차 건수·매출·매익\n· 신규 거래처\n· 개선한 업무" },
+      { k: "issue", label: "문제점·건의", type: "textarea", rows: 3 },
+      { k: "plan", label: "다음 계획", type: "textarea", rows: 3 },
+    ],
+    summary: (d) => `${d.period || ""} · ${d.subject || ""}` },
+  { key: "tripreport", cat: "report", label: "출장 보고서", title: "출 장 보 고 서", code: "RT",
+    fields: [
+      { k: "range", label: "출장 기간", type: "daterange", required: true },
+      { k: "place", label: "출장지·방문처", type: "text", required: true },
+      { k: "purpose", label: "출장 목적", templates: ["거래처 미팅·영업", "현장 점검", "사고 처리", "교육·세미나 참석", "차량 인수·반납"], type: "textarea", required: true },
+      { k: "result", label: "출장 결과", type: "textarea", rows: 6, required: true },
+      { k: "followup", label: "후속 조치", type: "textarea", rows: 3 },
+      { k: "cost", label: "사용 경비", type: "money" },
+    ],
+    amount: (d) => Number(d.cost) || 0, summary: (d) => `${d.place || ""} · ${rangeText(d.range)}` },
+  { key: "minutes", cat: "report", label: "회의록", title: "회 의 록", code: "RM",
+    fields: [
+      { k: "date", label: "회의일", type: "date", required: true, half: true },
+      { k: "time", label: "시간", type: "text", ph: "14:00 ~ 15:00", half: true },
+      { k: "place", label: "장소", type: "text", half: true },
+      { k: "kind", label: "회의 종류", type: "select", options: ["정기 회의", "부서 회의", "거래처 미팅", "안전 회의", "기타"], def: "정기 회의", half: true },
+      { k: "attendees", label: "참석자", type: "text", required: true, ph: "홍길동 팀장, 김철수 대리 …" },
+      { k: "agenda", label: "안건", type: "textarea", rows: 3, required: true },
+      { k: "content", label: "논의 내용", type: "textarea", rows: 6, required: true },
+      { k: "decision", label: "결정 사항·담당·기한", type: "textarea", rows: 3, ph: "· ○○ 운임 5% 인상 — 영업팀 · 11/15까지" },
+    ],
+    summary: (d) => `${d.date || ""} ${d.kind || ""} · ${d.attendees || ""}` },
+  { key: "training", cat: "report", label: "교육·세미나 결과 보고", title: "교 육 결 과 보 고 서", code: "RE",
+    fields: [
+      { k: "name", label: "교육명", type: "text", required: true },
+      { k: "range", label: "교육 기간", type: "daterange", required: true },
+      { k: "org", label: "교육 기관", type: "text" },
+      { k: "content", label: "교육 내용", type: "textarea", rows: 5, required: true },
+      { k: "apply", label: "업무 적용 방안", type: "textarea", rows: 3 },
+      { k: "cost", label: "교육비", type: "money" },
+    ],
+    amount: (d) => Number(d.cost) || 0, summary: (d) => `${d.name || ""} · ${rangeText(d.range)}` },
+  { key: "apology", cat: "report", label: "시말서·경위서", title: "경 위 서", code: "RA",
+    fields: [
+      { k: "kind", label: "구분", type: "select", options: ["경위서", "시말서"], def: "경위서", half: true },
+      { k: "date", label: "발생일", type: "date", required: true, half: true },
+      { k: "what", label: "발생 내용", type: "textarea", rows: 5, required: true },
+      { k: "why", label: "원인", type: "textarea", rows: 3, required: true },
+      { k: "prevent", label: "재발 방지 대책", type: "textarea", rows: 3, required: true },
+    ],
+    summary: (d) => `${d.kind || "경위서"} · ${d.date || ""}` },
+  { key: "resign", cat: "report", label: "사직서", title: "사 직 서", code: "RR",
+    fields: [
+      { k: "hire", label: "입사일", type: "date", half: true },
+      { k: "last", label: "퇴직 희망일", type: "date", required: true, half: true },
+      { k: "reason", label: "사직 사유", templates: ["개인 사정", "이직", "학업", "건강", "가정 사정"], type: "textarea", required: true },
+      { k: "handover", label: "인수인계 계획", type: "textarea", rows: 3, ph: "인수자·인계 업무·완료 예정일" },
+      { k: "agree", label: "확인", type: "select", options: ["위 사유로 사직하고자 하며, 재직 중 알게 된 회사의 영업 비밀을 누설하지 않겠습니다."], def: "위 사유로 사직하고자 하며, 재직 중 알게 된 회사의 영업 비밀을 누설하지 않겠습니다." },
+    ],
+    summary: (d) => `퇴직 희망일 ${d.last || ""}` },
 ];
 
 export const formOf = (key) => APPROVAL_FORMS.find((f) => f.key === key) || APPROVAL_FORMS[0];

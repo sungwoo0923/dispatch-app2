@@ -153,6 +153,11 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt', 'confirmedAt', 'status', 'driverMemo', 'paidAt', 'objectedAt', 'driverAction'])));
       allow delete: if dcol in ['driverStatements', 'fleetPenalties'] && isOfficeStaff() && coMatch(resource.data);
     }
+    // 📜 계약서 보관함(전자결재 › 계약서) — 직원만
+    match /companyContracts/{id} {
+      allow read, update, delete: if isOfficeStaff() && coMatch(resource.data);
+      allow create: if isOfficeStaff() && coCreate();
+    }
     // 🛣 고정노선(지입차관리 › 고정노선) — 직원만
     match /fixedRoutes/{id} {
       allow read, update, delete: if isOfficeStaff() && coMatch(resource.data);
@@ -498,7 +503,7 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && request.auth.uid == uid;
     }
     match /{col}/{rest=**} {
-      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'driverStatements', 'fleetPenalties', 'fixedRoutes', 'publicCompanies',
+      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'driverStatements', 'fleetPenalties', 'fixedRoutes', 'publicCompanies', 'companyContracts',
         // 🔒 회사별로 잠근 컬렉션(위에서 따로 정함)
         'orders', 'dispatch', 'dispatch_test', 'fixedClients', 'drivers', 'clients', 'places', 'recurringOrders', 'deletedOrders',
         'driver_completed_archive', 'notifications', 'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests',

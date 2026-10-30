@@ -21,6 +21,7 @@ import HomeDeck, { buildPastStats } from "./HomeDeck";
 import KpSubNav from "./KpSubNav";
 import { MailWorkspace, MAIL_FOLDERS, useMailCounts, folderBadge } from "./InternalMail";
 import ApprovalCenter, { useApprovalCounts } from "./Approval";
+import ContractStudio from "./ContractStudio";
 import BoardPage, { BOARDS, canSeeBoard, useBoardLatest } from "./BoardPosts";
 import { NoticeWriter, HandoverWriter, NOTICE_WRITER_ROLES, handoverReceivers } from "./HomeWriters";
 
@@ -881,6 +882,8 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
           { key: "ap:leave", label: "근태·휴가 신청", en: "ATTENDANCE", icon: "clock" },
           { key: "ap:expense", label: "비용·지출 결의", en: "EXPENSE", icon: "wallet" },
           { key: "ap:draft", label: "업무 기안·품의", en: "PROPOSAL", icon: "file" },
+          { key: "ap:report", label: "업무 보고·인사", en: "REPORT", icon: "list" },
+          { key: "ap:contract", label: "계약서", en: "CONTRACT", icon: "pen" },
           { key: "ap:mine", label: "내 기안함", en: "MY DOCUMENTS", icon: "send", badge: apCounts.mineNew, badgeTitle: "새 결재 결과(승인·반려·취소)" },
           { key: "ap:lines", label: "결재선 관리", en: "LINES", icon: "route" },
         ] },
@@ -934,7 +937,8 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       )}
 
       {/* ===== 전자결재 · 자유/관리자/임원 게시판(2026-10-28) ===== */}
-      {String(boardTab).startsWith("ap:") && <ApprovalCenter company={getViewCompany()} me={meHome} page={boardTab.slice(3)} setPage={(p) => setBoardTab(`ap:${p}`)} openId={apOpenId} onOpened={() => setApOpenId(null)} />}
+      {boardTab === "ap:contract" && <ContractStudio company={getViewCompany()} me={meHome} />}
+      {String(boardTab).startsWith("ap:") && boardTab !== "ap:contract" && <ApprovalCenter company={getViewCompany()} me={meHome} page={boardTab.slice(3)} setPage={(p) => setBoardTab(`ap:${p}`)} openId={apOpenId} onOpened={() => setApOpenId(null)} />}
       {String(boardTab).startsWith("board:") && <BoardPage company={getViewCompany()} me={meHome} board={boardTab.slice(6)} />}
 
       {/* ===== 사내 게시판(왼쪽 사이드바에서 고름) — 2026-10-28 디지털 리디자인 ===== */}

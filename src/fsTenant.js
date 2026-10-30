@@ -21,7 +21,7 @@ const STRICT = new Set([
   // 사내 업무(공지·일정·인수인계·게시판·전자결재·메일·인사·근태 신청·회계)
   "notices", "schedules", "handovers", "boardPosts", "approvals", "approvalLines", "notifications",
   "scheduledEmails", "emailLogs", "hrResumes", "attendanceRequests", "attendanceChangeRequests", "acctPayments",
-  "driverStatements", "fleetPenalties", "fixedRoutes",
+  "driverStatements", "fleetPenalties", "fixedRoutes", "companyContracts",
 ]);
 // 회사명이 있을 때만 비교하는 컬렉션 — 서버(Cloud Functions)·기사앱 네이티브가 회사명 없이 쓰는 기록
 const LOOSE = new Set([

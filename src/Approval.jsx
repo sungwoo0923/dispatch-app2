@@ -208,7 +208,7 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
           </div>
         );
       })()}
-      <div className="text-center mt-12 text-[15px] text-[#1F2A44]">위와 같이 {form.cat === "expense" ? "결의" : form.cat === "draft" ? "기안" : "신청"}하오니 재가하여 주시기 바랍니다.</div>
+      <div className="text-center mt-12 text-[15px] text-[#1F2A44]">위와 같이 {form.cat === "expense" ? "결의" : form.cat === "draft" ? "기안" : form.cat === "report" ? (form.key === "resign" ? "제출" : "보고") : "신청"}하오니 재가하여 주시기 바랍니다.</div>
       <div className="text-center mt-6 text-[14.5px] text-[#3A4A66]">{korDate(createdMs)}</div>
       <div className="text-center mt-3 text-[17px] font-black text-[#0F1A30] tracking-[0.1em]">{form.cat === "draft" ? "기안자" : "신청인"} {drafter?.name || ""} <span className="text-[14px] font-bold text-[#5B6B85]">(인)</span></div>
     </div>
@@ -228,6 +228,58 @@ function StaffSelect({ value, onChange, staff, exclude = [], placeholder = "선�
       <option value="">{placeholder}</option>
       {groups.map(([t, us]) => <optgroup key={t} label={t}>{us.map((u) => <option key={u.uid} value={u.uid}>{u.name}{u.position ? ` ${u.position}` : ""}</option>)}</optgroup>)}
     </CustomSelect>
+  );
+}
+// 👥 여러 명 한 번에 고르기(결재자·참조자) — 부서별로 묶어 체크
+function StaffMultiPick({ staff, exclude = [], label = "여러 명 한 번에", onAdd }) {
+  const [open, setOpen] = React.useState(false);
+  const [sel, setSel] = React.useState([]);
+  const [q, setQ] = React.useState("");
+  const groups = React.useMemo(() => {
+    const g = new Map();
+    (staff || []).filter((u) => !exclude.includes(u.uid) && (!q.trim() || `${u.name}${u.team}${u.position}`.includes(q.trim()))).forEach((u) => { const t = u.team || "미배정"; if (!g.has(t)) g.set(t, []); g.get(t).push(u); });
+    return [...g.entries()];
+  }, [staff, exclude, q]);
+  const toggle = (uid) => setSel((p) => (p.includes(uid) ? p.filter((x) => x !== uid) : [...p, uid]));
+  return (
+    <>
+      <button type="button" onClick={() => { setSel([]); setQ(""); setOpen(true); }} className="h-10 px-3 rounded-xl border border-dashed border-[#9AB0D6] text-[13px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD] whitespace-nowrap">＋ {label}</button>
+      {open && createPortal(
+        <div className="fixed inset-0 z-[99995] bg-[#0B1428]/55 flex items-center justify-center p-4">
+          <div className="w-full max-w-[560px] max-h-[80vh] rounded-[22px] bg-white overflow-hidden shadow-2xl flex flex-col">
+            <div className="px-6 py-4 text-white flex items-center gap-2" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
+              <div className="flex-1"><div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>MULTI SELECT</div><div className="text-[18px] font-black">{label}</div></div>
+              <button type="button" onClick={() => setOpen(false)} className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-[13.5px] font-black">닫기</button>
+            </div>
+            <div className="p-4 border-b border-[#EEF1F6]"><input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름·부서·직책 검색" className={inp} /></div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {groups.map(([t, us]) => {
+                const allOn = us.every((u) => sel.includes(u.uid));
+                return (
+                  <div key={t}>
+                    <button type="button" onClick={() => setSel((p) => (allOn ? p.filter((x) => !us.some((u) => u.uid === x)) : [...new Set([...p, ...us.map((u) => u.uid)])]))} className="text-[13px] font-black text-[#2D4C82] mb-1.5">{allOn ? "☑" : "☐"} {t} 전체</button>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {us.map((u) => { const on = sel.includes(u.uid); return (
+                        <button key={u.uid} type="button" onClick={() => toggle(u.uid)} className={`h-11 px-3 rounded-xl border text-left text-[14px] font-bold flex items-center gap-2 ${on ? "bg-[#0F1A30] border-[#0F1A30] text-white" : "bg-white border-[#DCE3EE] text-[#0F1A30] hover:bg-[#F5F8FD]"}`}>
+                          <span className="text-[13px]">{on ? "✓" : "＋"}</span><span className="truncate">{u.name} <span className={`text-[12.5px] ${on ? "text-white/70" : "text-[#5B6B85]"}`}>{u.position}</span></span>
+                        </button>
+                      ); })}
+                    </div>
+                  </div>
+                );
+              })}
+              {!groups.length && <div className="py-10 text-center text-[14px] font-bold text-[#5B6B85]">고를 수 있는 직원이 없습니다</div>}
+            </div>
+            <div className="p-4 border-t border-[#EEF1F6] flex items-center gap-2">
+              <span className="text-[14px] font-bold text-[#3A4A66]">{sel.length}명 선택 <span className="text-[12.5px] text-[#5B6B85]">(고른 순서대로 들어갑니다)</span></span>
+              <button type="button" onClick={() => setOpen(false)} className="ml-auto h-11 px-4 rounded-xl border border-[#DCE3EE] text-[14px] font-bold text-[#5B6B85]">취소</button>
+              <button type="button" disabled={!sel.length} onClick={() => { onAdd(sel); setOpen(false); }} className="h-11 px-5 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black disabled:opacity-40">추가</button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
 // 사유 — 드롭다운으로 고르고(직접 입력도 가능) 아래 칸에서 이어 쓴다
@@ -382,14 +434,20 @@ function LineEditor({ line, setLine, cc, setCc, staff, me, company, cat }) {
             <button type="button" onClick={() => setLine((p) => p.filter((_, j) => j !== i))} className="w-7 h-8 shrink-0 rounded-lg text-[#5B6B85] hover:bg-[#F5F8FD]">✕</button>
           </div>
         ))}
-        <StaffSelect value="" staff={staff} exclude={used} placeholder="+ 결재자 추가" onChange={(uid) => { const u = pickUser(staff, uid); if (u) setLine((p) => [...p, { ...u, kind: "결재" }]); }} />
+        <div className="flex gap-1.5">
+          <div className="flex-1 min-w-0"><StaffSelect value="" staff={staff} exclude={used} placeholder="+ 결재자 추가" onChange={(uid) => { const u = pickUser(staff, uid); if (u) setLine((p) => [...p, { ...u, kind: "결재" }]); }} /></div>
+          <StaffMultiPick staff={staff} exclude={used} label="결재자 여러 명" onAdd={(uids) => setLine((p) => [...p, ...uids.map((x) => pickUser(staff, x)).filter(Boolean).map((u) => ({ ...u, kind: "결재" }))])} />
+        </div>
       </div>
       <div>
         <div className="text-[13px] font-bold text-[#5B6B85] mb-1.5">참조자 <span className="font-semibold">(결재 완료 시 알림)</span></div>
         <div className="flex flex-wrap gap-1.5 mb-1.5">
           {cc.map((c) => <span key={c.uid} className="h-7 pl-2.5 pr-1 rounded-lg bg-[#EEF3FB] border border-[#D5E0F2] text-[13.5px] font-bold text-[#1B2B4B] inline-flex items-center gap-1">{c.name}<button type="button" onClick={() => setCc((p) => p.filter((x) => x.uid !== c.uid))} className="w-5 h-5 text-[#5B6B85]">✕</button></span>)}
         </div>
-        <StaffSelect value="" staff={staff} exclude={[me.uid, ...cc.map((c) => c.uid)]} placeholder="+ 참조자 추가" onChange={(uid) => { const u = pickUser(staff, uid); if (u) setCc((p) => [...p, { uid: u.uid, name: u.name }]); }} />
+        <div className="flex gap-1.5">
+          <div className="flex-1 min-w-0"><StaffSelect value="" staff={staff} exclude={[me.uid, ...cc.map((c) => c.uid)]} placeholder="+ 참조자 추가" onChange={(uid) => { const u = pickUser(staff, uid); if (u) setCc((p) => [...p, { uid: u.uid, name: u.name }]); }} /></div>
+          <StaffMultiPick staff={staff} exclude={[me.uid, ...cc.map((c) => c.uid)]} label="참조자 여러 명" onAdd={(uids) => setCc((p) => [...p, ...uids.map((x) => pickUser(staff, x)).filter(Boolean).map((u) => ({ uid: u.uid, name: u.name }))])} />
+        </div>
       </div>
     </div>
   );
@@ -1005,7 +1063,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   void year;
   const spentMonth = mineL.filter((d) => d.status === "approved" && d.cat === "expense" && ymd(toMs(d.createdAt)).slice(0, 7) === ymd().slice(0, 7)).reduce((s, d) => s + (Number(d.amount) || 0), 0);
 
-  const isCat = ["leave", "expense", "draft"].includes(page);
+  const isCat = ["leave", "expense", "draft", "report"].includes(page);
   const cat = isCat ? catOf(page) : null;
   const heroTitle = isCat ? cat.label : page === "inbox" ? "결재함" : page === "mine" ? "내 기안함" : "결재선 관리";
   const heroEn = isCat ? cat.en : page === "inbox" ? "INBOX" : page === "mine" ? "MY DOCUMENTS" : "APPROVAL LINES";
