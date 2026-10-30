@@ -250,7 +250,11 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
           <button type="button" onClick={() => setPreview(0)} disabled={!shown.length} className={btnL}>미리보기</button>
           <button type="button" onClick={summaryExcel} className={btnL}>요약 엑셀</button>
           <button type="button" onClick={bankExcel} className={btnL} title="인터넷뱅킹 다건이체 업로드용">대량이체 엑셀{sel.size ? "(선택)" : ""}</button>
-          <button type="button" onClick={() => sendSelected(sel)} disabled={busy || !sel.size} className={btnD}>{busy ? "발송 중…" : "선택 일괄 발송"}</button>
+          <button type="button" onClick={() => sendSelected(sel)} disabled={busy || !sel.size} className={btnL}>{busy ? "발송 중…" : `선택 발송${sel.size ? ` ${sel.size}명` : ""}`}</button>
+          <button type="button" onClick={() => sendSelected(new Set(shown.filter((r) => !sent[r.key]).map((r) => r.key)))} disabled={busy || !shown.some((r) => !sent[r.key])} className={btnD} title="아직 안 보낸 기사님 전원에게 한 번에 발송">
+            ⇪ 미발송 전체 일괄 발송 {shown.filter((r) => !sent[r.key]).length}명
+          </button>
+          <button type="button" onClick={() => sendSelected(new Set(shown.map((r) => r.key)))} disabled={busy || !shown.length} className={btnL} title="이미 보낸 기사님도 새 내용으로 다시 보냄">전체 재발송</button>
         </div>
       </div>
 

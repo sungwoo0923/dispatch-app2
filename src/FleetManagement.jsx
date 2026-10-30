@@ -4945,13 +4945,19 @@ function SettlementModes(props) {
   return (
     <div>
       <div className="inline-flex p-1 rounded-2xl bg-white border border-[#E3E8F0] mb-3 gap-1">
-        {[["batch", "일괄 지급명세서"], ["single", "개별 정산서"]].map(([k, l]) => (
+        {[["batch", "일괄 지급명세서 · 일괄 발송"], ["single", "개별 정산서"]].map(([k, l]) => (
           <button key={k} type="button" onClick={() => setMode(k)} className={`h-9 px-4 rounded-xl text-[13px] font-black ${mode === k ? "bg-[#0F1A30] text-white" : "text-[#5B6B85] hover:bg-[#F3F6FA]"}`}>{l}</button>
         ))}
       </div>
       {mode === "batch"
         ? <BatchStatementsPanel drivers={props.drivers} dispatchData={props.dispatchData} companyName={props.companyName} supplier={{ name: props.companyName }} />
-        : <FleetSettlementTab {...props} />}
+        : <>
+          <button type="button" onClick={() => setMode("batch")} className="w-full mb-3 rounded-2xl px-5 py-3.5 text-left text-white flex items-center gap-3" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
+            <span className="text-[15px] font-black">여러 기사님에게 한 번에 보내려면 → 일괄 지급명세서 · 일괄 발송</span>
+            <span className="ml-auto h-9 px-4 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black inline-flex items-center">열기</span>
+          </button>
+          <FleetSettlementTab {...props} />
+        </>}
     </div>
   );
 }

@@ -237,6 +237,25 @@
           "arrayConfig": "CONTAINS"
         }
       ]
+    },
+    {
+      "collectionGroup": "dispatch",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "상차지명",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "하차지명",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "상차일",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
     }
   ],
   "fieldOverrides": [
