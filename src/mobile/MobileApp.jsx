@@ -93,6 +93,43 @@ import OrderScanModal, { scanDropDate } from "../OrderScanModal";
 // ⭐ 오더 취소(소프트) 상태로 취급하는 값들 — 이 값이면 등록내역/미배차 등 정상 목록에서는
 // 제외되고, 대신 "취소내역" 화면에서만 보인다(완전삭제 전까지 복구 가능).
 const CANCELED_STATUS_LIST = ["취소", "배차취소", "오더취소", "취소됨"];
+// ⭐ 2026-10-30 모바일 딜레이 — 저장(updateDoc)은 서버가 "받았다"고 답할 때까지 기다린다. LTE에서는 이게 수 초~수십 초라
+//   "기사취소를 눌러도 한참 뒤에 취소된다"의 원인이었다. 화면은 먼저 바꾸고 저장은 뒤에서 마저 하게 한다.
+//   (Firestore는 같은 폰의 실시간 목록에 쓴 내용을 즉시 반영하고, 끊겨도 다시 연결되면 자동으로 보낸다)
+//   실패했을 때만 알린다.
+// ⭐ 화면용 사본 만들기 — 저장용 데이터에는 serverTimestamp()/arrayUnion() 같은 "서버에서 채워질 표시"가 들어 있다.
+//   그대로 화면 상태에 넣으면 수정이력·시각을 읽는 화면들이 깨진 값을 받아 다시 계산하거나 오류가 났다(수정 직후 끊김).
+const localizeSentinels = (patch = {}, prev = {}) => {
+  const out = {};
+  Object.entries(patch).forEach(([k, v]) => {
+    const m = v && typeof v === "object" && !Array.isArray(v) ? v._methodName : null;
+    if (!m) { out[k] = v; return; }
+    if (/serverTimestamp/i.test(m)) out[k] = Timestamp.now();
+    else if (/arrayUnion/i.test(m)) out[k] = [...(Array.isArray(prev[k]) ? prev[k] : []), ...(Array.isArray(v._elements) ? v._elements : [])];
+    else if (/increment/i.test(m)) out[k] = (Number(prev[k]) || 0) + (Number(v._operand) || 0);
+    else if (/delete/i.test(m)) out[k] = undefined;
+    else if (k in prev) out[k] = prev[k];
+  });
+  return out;
+};
+// ⭐ 운임조회 "과거 이력" 후보 판정 — 방금 등록해서 아직 배차 전인 오더(오늘·미래 날짜)는 운임 이력이 아니다.
+//   예전엔 이런 오더도 후보로 잡혀, 내일 날짜로 등록한 직후 운임조회를 누르면 방금 등록한 오더(또는 같이 등록한 여러 건)만 보였다.
+const isFareHistoryCandidate = (o, cur, today) => {
+  if (!o || (cur && (o.id === cur.id || (o._id && o._id === cur._id)))) return false;
+  if (CANCELED_STATUS_LIST.includes(o.상태)) return false;
+  const d = String(o.상차일 || "").slice(0, 10);
+  const confirmed = !!String(o.차량번호 || "").trim() && String(o.배차상태 || o.상태 || "") !== "배차중";
+  if (d >= today && !confirmed) return false;
+  // 지금 보는 오더가 오늘 날짜면 오늘자 다른 오더는 제외(같은 날 중복 입력건과 헷갈리지 않게)
+  if (String(cur?.상차일 || "").slice(0, 10) === today && d === today) return false;
+  return true;
+};
+const bgWrite = (p, what = "저장") => {
+  Promise.resolve(p).catch((e) => {
+    console.error(`${what} 실패:`, e);
+    alert(`${what} 중 오류가 발생했습니다. 네트워크 확인 후 다시 시도해주세요.\n${e?.message || ""}`);
+  });
+};
 
 // 🔥 role 기반 컬렉션 분기
 const role = localStorage.getItem("role") || "user";
@@ -2367,7 +2404,7 @@ const quickRange = (days) => {
       const recent = await fetchRows((c) => query(c, where("상차일", ">=", midStart), where("상차일", "<", liveStart)), { quiet, urgent: !quiet });
       if (recent === null) return;
       loadedRangesRef.current.push([midStart, prevDayStr(liveStart)]);
-      const older = await fetchRows((c) => query(c, where("상차일", ">=", hStart), where("상차일", "<", midStart)), { quiet: true });
+      const older = await fetchRows((c) => query(c, where("상차일", ">=", hStart), where("상차일", "<", midStart)), { quiet }); // 운임조회처럼 기다리는 화면이면 "불러오는 중" 표시를 끝까지 유지
       if (older === null) return;
       fullLoadedRef.current = true;
       loadedRangesRef.current.push([hStart, prevDayStr(midStart)]);
@@ -2437,12 +2474,13 @@ const quickRange = (days) => {
   const allOrders = allOrdersCombined.orders;
   const allCanceledOrders = allOrdersCombined.canceled;
   // 화면에서 바로 고친 값을 실시간 목록·예전 오더 보관소 양쪽에 반영
-  const patchLocalOrder = React.useCallback((id, patch) => {
-    setOrders((prev) => prev.map((o) => (o.id === id || o._id === id) ? { ...o, ...patch } : o));
+  const patchLocalOrder = React.useCallback((id, patchIn) => {
+    const fix = (o) => ({ ...o, ...localizeSentinels(patchIn, o) });
+    setOrders((prev) => prev.map((o) => (o.id === id || o._id === id) ? fix(o) : o));
     setExtraMap((prev) => {
       let hit = false;
       const next = new Map(prev);
-      next.forEach((o, k) => { if (o.id === id || o._id === id) { next.set(k, { ...o, ...patch }); hit = true; } });
+      next.forEach((o, k) => { if (o.id === id || o._id === id) { next.set(k, fix(o)); hit = true; } });
       return hit ? next : prev;
     });
   }, []);
@@ -3635,12 +3673,24 @@ useEffect(() => {
   const [selectedOrder, setSelectedOrder] = useState(null);
   // 상세보기가 열려있는 동안 다른 경로(화주사 재요청/거절 등)로 문서가 바뀌어도
   // selectedOrder는 진입 시점의 스냅샷이라 반영되지 않는다 — 실시간 orders와 동기화한다.
+  // ⭐ 2026-10-30 — 예전엔 목록의 아무 오더나 바뀔 때마다 상세 데이터를 통째로 다시 덮어써서
+  //   ① 상세화면이 계속 다시 그려져 끊기고 ② 방금 누른 기사취소·배차가 아직 반영 전인 예전 값으로
+  //   되돌아갔다가 한참 뒤에야 바뀌었다. 이 오더가 실제로 바뀌었고(같은 객체가 아니고), 화면 값보다
+  //   새로울 때만 반영한다.
+  const lastSyncedLatestRef = useRef(null);
   useEffect(() => {
     if (!selectedOrder) return;
     const id = selectedOrder.id || selectedOrder._id;
     const latest = allOrders.find((o) => (o.id || o._id) === id);
-    if (latest) setSelectedOrder((prev) => (prev ? { ...prev, ...latest } : prev));
-  }, [allOrders]);
+    if (!latest || latest === lastSyncedLatestRef.current) return;
+    lastSyncedLatestRef.current = latest;
+    setSelectedOrder((prev) => {
+      if (!prev) return prev;
+      const pm = Number(prev._lastModified) || 0, lm = Number(latest._lastModified) || 0;
+      if (pm && lm && pm > lm) return prev; // 화면에서 방금 바꾼 값이 더 새롭다(서버 반영 전)
+      return { ...prev, ...latest };
+    });
+  }, [allOrders]); // eslint-disable-line react-hooks/exhaustive-deps
   const [openMemo, setOpenMemo] = useState(null);
   const [deleteConfirmMobile, setDeleteConfirmMobile] = useState(null);
   // 🔙 상세보기 진입 출처 (list | unassigned | status)
@@ -4389,11 +4439,12 @@ const groupedByDate = useMemo(() => {
       syncPlaceFromOrder(docData, pendingMemoExtra).catch(() => {});
 
       // selectedOrder 최신화 (상세보기로 돌아갈 때 최신 데이터 반영)
-      const updated = { ...selectedOrder, ...docData, _id: editId, id: editId };
+      const updated = { ...selectedOrder, ...localizeSentinels(docData, selectedOrder || {}), _id: editId, id: editId };
       setSelectedOrder(updated);
-      setOrders(prev => prev.map(o =>
+      // 목록은 실시간 구독이 곧바로 같은 내용을 반영한다 — 여기서는 낮은 우선순위로만(화면 전환이 먼저)
+      startTransition(() => setOrders(prev => prev.map(o =>
         (o.id === editId || o._id === editId) ? updated : o
-      ));
+      )));
 
       showSuccess("수정 완료");
       // 상세보기에서 진입한 경우 → 상세보기로 복귀, 그 외 → 이전 페이지
@@ -4834,11 +4885,11 @@ const deleteSingleOrder = async (order) => {
       drivers.find((d) => norm(d.차량번호) === norm(차량번호));
 
     if (!existingDriver) {
-      await upsertDriver({
+      bgWrite(upsertDriver({
         차량번호,
         이름: 이름 || "",
         전화번호: 전화번호 || "",
-      });
+      }), "기사 등록");
     }
 
     // 사용자가 선택한 값(이름, 차량번호, 전화번호)을 그대로 저장
@@ -4861,21 +4912,11 @@ const deleteSingleOrder = async (order) => {
       updatedAt: serverTimestamp(),
       _lastModified: Date.now(),
     };
-    await updateDoc(doc(db, selectedOrder.__col, selectedOrder.id), assignPatch);
+    bgWrite(updateDoc(doc(db, selectedOrder.__col, selectedOrder.id), assignPatch), "기사 배차");
     syncShipperMirrorMobile(selectedOrder, assignPatch).catch(() => {});
 
-    setSelectedOrder((prev) =>
-      prev
-        ? {
-          ...prev,
-          배차상태: "배차완료",
-          상태: "배차완료",
-          기사명: 이름,
-          차량번호: 차량번호,
-          전화번호: 전화번호,
-        }
-        : prev
-    );
+    setSelectedOrder((prev) => (prev ? { ...prev, ...localizeSentinels(assignPatch, prev) } : prev));
+    patchLocalOrder(selectedOrder.id, assignPatch);
 
     showSuccess(`기사 배차 완료: ${이름} (${차량번호})`);
   };
@@ -4917,26 +4958,13 @@ const deleteSingleOrder = async (order) => {
   updatedAt: serverTimestamp(),
   _lastModified: Date.now(),
 };
-    await updateDoc(doc(db, selectedOrder.__col, selectedOrder.id), cancelPatch);
+    bgWrite(updateDoc(doc(db, selectedOrder.__col, selectedOrder.id), cancelPatch), "기사 취소");
     syncShipperMirrorMobile(selectedOrder, cancelPatch).catch(() => {});
 
-    setSelectedOrder((prev) =>
-      prev
-        ? {
-          ...prev,
-          배차상태: "배차중",
-          상태: "배차중",
-          기사명: "",
-          차량번호: "",
-          전화번호: "",
-          업체전달상태: "미전달",
-          정보전달완료: false,
-          정보전달상태: "미전달",
-        }
-        : prev
-    );
+    setSelectedOrder((prev) => (prev ? { ...prev, ...localizeSentinels(cancelPatch, prev) } : prev));
+    patchLocalOrder(selectedOrder.id, cancelPatch);
 
-    alert("배차가 취소되었습니다.");
+    showSuccess("배차가 취소되었습니다."); // 막는 알림창 대신 짧은 안내(바로 다음 동작 가능)
   };
 
   // 🔴 오더 취소 = 실제 삭제
@@ -4964,7 +4992,7 @@ const deleteSingleOrder = async (order) => {
       archiveCompletedOrderMobile(deleteConfirmMobile, deleteConfirmMobile.id, "오더삭제");
     }
     // ⭐ 사용자 요청 — 취소내역 없이 완전삭제(모든 화면에서 사라짐)
-    await deleteOrderWithLog(deleteConfirmMobile.__col, deleteConfirmMobile.id);
+    bgWrite(deleteOrderWithLog(deleteConfirmMobile.__col, deleteConfirmMobile.id), "오더 삭제"); // 화면 먼저(삭제는 뒤에서)
     deleteShipperMirrorMobile(deleteConfirmMobile).catch(() => {});
     setDeleteConfirmMobile(null);
     setSelectedOrder(null);
@@ -5002,7 +5030,7 @@ const deleteSingleOrder = async (order) => {
           notifyFleetCancelMobile(order, id);
           if (["수락", "완료"].includes(order.기사확인상태) && order.차량번호) archiveCompletedOrderMobile(order, id, "오더삭제");
           // ⭐ 사용자 요청 — 취소내역 없이 완전삭제(모든 화면에서 사라짐)
-          await deleteOrderWithLog(col, id);
+          bgWrite(deleteOrderWithLog(col, id), "오더 삭제");
           deleteShipperMirrorMobile(order).catch(() => {});
         }
       }
@@ -6689,6 +6717,7 @@ setOpenMemo={setOpenMemo}
             upsertDriver={upsertDriver}
             orders={allOrders}
             onNeedHistory={loadFullHistory}
+            historyLoading={historyLoading}
             cardVersionB={cardVersionB}
             role={role}
             clientNameInputRef={clientNameInputRef}
@@ -6723,6 +6752,7 @@ setOpenMemo={setOpenMemo}
             drivers={drivers}
             orders={allOrders}
             onNeedHistory={loadFullHistory}
+            historyLoading={historyLoading}
             clients={formClientsList}
             basicClients={clients}
             onDuplicate={handleOrderDuplicate}
@@ -10646,13 +10676,13 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
   };
   const approveDispatchRequest = async () => {
     try {
-      await updateDoc(doc(db, order.__col || "orders", order.id), { 화주사확인대기: false, 배차거절: false, 배차중전환일시: Date.now() });
+      bgWrite(updateDoc(doc(db, order.__col || "orders", order.id), { 화주사확인대기: false, 배차거절: false, 배차중전환일시: Date.now() }), "배차요청 승인");
     } catch {}
     setShowReqModal(false);
   };
   const rejectDispatchRequest = async () => {
     try {
-      await updateDoc(doc(db, order.__col || "orders", order.id), { 화주사확인대기: false, 배차거절: true, 배차거절일시: serverTimestamp() });
+      bgWrite(updateDoc(doc(db, order.__col || "orders", order.id), { 화주사확인대기: false, 배차거절: true, 배차거절일시: serverTimestamp() }), "배차요청 거절");
     } catch {}
     setShowReqModal(false);
   };
@@ -10690,22 +10720,23 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
     setShowRequestModal(false);
   };
   const rejectCancelRequest = async () => {
-    try { await updateDoc(doc(db, order.__col || "orders", order.id), { 취소요청: false }); } catch {}
+    bgWrite(updateDoc(doc(db, order.__col || "orders", order.id), { 취소요청: false }), "취소요청 거절");
     setShowRequestModal(false);
   };
   const approveDriverSwap = async () => {
     try {
-      await updateDoc(doc(db, order.__col || "orders", order.id), {
-        차량번호: "", 이름: "", 전화번호: "",
+      bgWrite(updateDoc(doc(db, order.__col || "orders", order.id), {
+        차량번호: "", 이름: "", 기사명: "", 전화번호: "", 전화: "",
+        배차상태: "배차중", 상태: "배차중", 배차방식: "선택없음", _lastModified: Date.now(), // ⭐ 기사가 빠지면 배차중으로(예전엔 배차완료로 남았다)
         기사취소요청: false, 기사취소요청일시: deleteField(),
         // 재배차 상황이므로 이전에 전달된 전달상태도 함께 초기화한다.
         업체전달상태: "미전달", 정보전달완료: false, 정보전달상태: "미전달", 전달완료일시: null,
-      });
+      }), "기사 변경 승인");
     } catch {}
     setShowRequestModal(false);
   };
   const rejectDriverSwap = async () => {
-    try { await updateDoc(doc(db, order.__col || "orders", order.id), { 기사취소요청: false }); } catch {}
+    bgWrite(updateDoc(doc(db, order.__col || "orders", order.id), { 기사취소요청: false }), "기사 변경 거절");
     setShowRequestModal(false);
   };
   const approveEditReq = async () => {
@@ -11511,6 +11542,7 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
 
 function MobileOrderDetail({
   onNeedHistory,
+  historyLoading = 0,
   order,
   onOrderUpdate,
   drivers,
@@ -11627,7 +11659,10 @@ function MobileOrderDetail({
     }
   }, [showDetailFareHistory]);
 
+  // ⭐ 2026-10-30 끊김 — 예전엔 운임조회 창을 열지 않아도 상세화면이 뜰 때마다(그리고 누가 오더를 고칠 때마다)
+  //   13개월치 오더 전체를 비교했다. 운임조회 창을 열었을 때만 계산한다.
   const detailFareMatches = useMemo(() => {
+    if (!showDetailFareHistory) return [];
     if (!orders || orders.length === 0) return [];
 
     const ns = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
@@ -11678,13 +11713,7 @@ function MobileOrderDetail({
     const candidates = [];
 
     orders.forEach(o => {
-      if (o.id === order.id) return;
-      // ⚠️ 예전엔 "오늘 날짜로 등록된 이력"을 무조건 제외했는데, 그러면 오늘 이미
-      // 확정된(배차완료) 진짜 과거 운임 기록도 조회에서 안 보이는 문제가 있었다.
-      // 지금 조회 중인 오더 자체가 오늘 날짜일 때만(같은 날 중복 입력건과 헷갈리지
-      // 않도록) 오늘자 이력을 제외하고, 그 외에는 날짜 상관없이 전부 비교한다.
-      const todayNow = todayKST();
-      if ((order.상차일 || "").slice(0, 10) === todayNow && (o.상차일 || "").slice(0, 10) === todayNow) return;
+      if (!isFareHistoryCandidate(o, order, todayKST())) return;
       const claim = Number(o.청구운임 || 0);
       const drv = Number(o.기사운임 || 0);
       if (!claim && !drv) return;
@@ -11775,7 +11804,7 @@ function MobileOrderDetail({
 
     finalList.sort((a, b) => b.score !== a.score ? b.score - a.score : b.dateStr.localeCompare(a.dateStr));
     return finalList.slice(0, 50);
-  }, [orders, order.상차지주소, order.하차지주소, order.상차지명, order.하차지명, order.차종, order.차량종류, order.거래처명, order.화물내용, order.톤수, order.차량톤수, order.경유상차목록, order.경유하차목록, order.id]);
+  }, [showDetailFareHistory, orders, order.상차지주소, order.하차지주소, order.상차지명, order.하차지명, order.차종, order.차량종류, order.거래처명, order.화물내용, order.톤수, order.차량톤수, order.경유상차목록, order.경유하차목록, order.id]);
 
   const applyFareDirectly = async (claim, drv) => {
     setShowDetailFareHistory(false);
@@ -11861,18 +11890,18 @@ function MobileOrderDetail({
   const approveDispatchRequest = async () => {
     const patch = { 화주사확인대기: false, 배차거절: false, 배차중전환일시: Date.now() };
     try {
-      await updateDoc(doc(db, order.__col || "orders", order.id), patch);
       setSelectedOrder((prev) => (prev ? { ...prev, ...patch } : prev));
       onOrderUpdate?.(order.id, patch);
+      bgWrite(updateDoc(doc(db, order.__col || "orders", order.id), patch), "배차요청 승인");
     } catch {}
     setShowReqModal(false);
   };
   const rejectDispatchRequest = async () => {
     const patch = { 화주사확인대기: false, 배차거절: true, 배차거절일시: serverTimestamp() };
     try {
-      await updateDoc(doc(db, order.__col || "orders", order.id), patch);
       setSelectedOrder((prev) => (prev ? { ...prev, ...patch, 배차거절: true } : prev));
-      onOrderUpdate?.(order.id, { ...patch, 배차거절: true });
+      onOrderUpdate?.(order.id, { ...patch, 배차거절: true, 배차거절일시: Date.now() });
+      bgWrite(updateDoc(doc(db, order.__col || "orders", order.id), patch), "배차요청 거절");
     } catch {}
     setShowReqModal(false);
   };
@@ -11906,24 +11935,24 @@ function MobileOrderDetail({
   };
   const rejectCancelRequest = async () => {
     try {
-      await updateDoc(doc(db, order.__col || "orders", order.id), { 취소요청: false });
       setSelectedOrder((prev) => (prev ? { ...prev, 취소요청: false } : prev));
+      bgWrite(updateDoc(doc(db, order.__col || "orders", order.id), { 취소요청: false }), "취소요청 거절");
     } catch {}
     setShowRequestModal(false);
   };
   const approveDriverSwap = async () => {
     try {
       // 재배차 상황이므로 이전에 전달된 전달상태도 함께 초기화한다.
-      const patch = { 차량번호: "", 이름: "", 전화번호: "", 기사취소요청: false, 기사취소요청일시: deleteField(), 업체전달상태: "미전달", 정보전달완료: false, 정보전달상태: "미전달", 전달완료일시: null };
-      await updateDoc(doc(db, order.__col || "orders", order.id), patch);
-      setSelectedOrder((prev) => (prev ? { ...prev, 차량번호: "", 이름: "", 전화번호: "", 기사취소요청: false, 업체전달상태: "미전달", 정보전달완료: false, 정보전달상태: "미전달" } : prev));
+      const patch = { 차량번호: "", 이름: "", 기사명: "", 전화번호: "", 전화: "", 배차상태: "배차중", 상태: "배차중", 배차방식: "선택없음", _lastModified: Date.now(), 기사취소요청: false, 기사취소요청일시: deleteField(), 업체전달상태: "미전달", 정보전달완료: false, 정보전달상태: "미전달", 전달완료일시: null };
+      setSelectedOrder((prev) => (prev ? { ...prev, 차량번호: "", 이름: "", 기사명: "", 전화번호: "", 배차상태: "배차중", 상태: "배차중", 기사취소요청: false, 업체전달상태: "미전달", 정보전달완료: false, 정보전달상태: "미전달" } : prev));
+      bgWrite(updateDoc(doc(db, order.__col || "orders", order.id), patch), "기사 변경 승인");
     } catch {}
     setShowRequestModal(false);
   };
   const rejectDriverSwap = async () => {
     try {
-      await updateDoc(doc(db, order.__col || "orders", order.id), { 기사취소요청: false });
       setSelectedOrder((prev) => (prev ? { ...prev, 기사취소요청: false } : prev));
+      bgWrite(updateDoc(doc(db, order.__col || "orders", order.id), { 기사취소요청: false }), "기사 변경 거절");
     } catch {}
     setShowRequestModal(false);
   };
@@ -12017,11 +12046,11 @@ const pickupTimeText = order.상차시간
     const col = order.__col || "orders";
     const docId = order._id || order.id;
     try {
-      await updateDoc(doc(db, col, docId), { attachViewed: nextVal });
+      bgWrite(updateDoc(doc(db, col, docId), { attachViewed: nextVal }), "완료 처리");
       if (order._transmittedOrderId) {
-        await updateDoc(doc(db, "orders", order._transmittedOrderId), { attachViewed: nextVal }).catch(() => {});
+        updateDoc(doc(db, "orders", order._transmittedOrderId), { attachViewed: nextVal }).catch(() => {});
       } else if (order.originCol && order.originId) {
-        await updateDoc(doc(db, order.originCol, order.originId), { attachViewed: nextVal }).catch(() => {});
+        updateDoc(doc(db, order.originCol, order.originId), { attachViewed: nextVal }).catch(() => {});
       }
       attachViewedWrittenRef.current = nextVal;
       setDetailAttachViewed(nextVal);
@@ -13084,6 +13113,7 @@ const handleAssignClick = () => {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto overscroll-contain" data-fare-scroll>
+              {historyLoading > 0 && <div className="mx-3 mt-3 px-3 py-2 rounded-lg bg-[#EEF2F8] text-[#1B2B4B] text-[12px] font-bold flex items-center gap-2"><span className="w-3 h-3 border-2 border-[#1B2B4B]/30 border-t-[#1B2B4B] rounded-full animate-spin" />예전 운임 이력을 불러오는 중… 잠시 후 목록이 늘어납니다</div>}
               {(() => {
                 const getLabel = (r) => {
                   const ce = r.tags.includes("화물일치");
@@ -13898,6 +13928,7 @@ function SmartOrderParser({ clients, drivers = [], onApply, onClose, cardVersion
 // ======================================================================
 function MobileOrderForm({
   onNeedHistory,
+  historyLoading = 0,
   form,
   setForm,
   clients,
@@ -14314,8 +14345,7 @@ const fareMatches = useMemo(() => {
     // 확정된(배차완료) 진짜 과거 운임 기록도 조회에서 안 보이는 문제가 있었다.
     // 지금 등록 중인 오더 자체가 오늘 날짜일 때만(같은 날 중복 입력건과 헷갈리지
     // 않도록) 오늘자 이력을 제외하고, 그 외에는 날짜 상관없이 전부 비교한다.
-    const todayNow = todayKST();
-    if ((form.상차일 || "").slice(0, 10) === todayNow && (o.상차일 || "").slice(0, 10) === todayNow) return;
+    if (!isFareHistoryCandidate(o, form, todayKST())) return;
     const claim = Number(o.청구운임 || 0);
     const drv = Number(o.기사운임 || 0);
     if (!claim && !drv) return;
@@ -16301,6 +16331,7 @@ const pickDrop = (c) => {
             </div>
             {/* 콘텐츠 */}
             <div className="flex-1 overflow-y-auto overscroll-contain" data-fare-scroll>
+              {historyLoading > 0 && <div className="mx-3 mt-3 px-3 py-2 rounded-lg bg-[#EEF2F8] text-[#1B2B4B] text-[12px] font-bold flex items-center gap-2"><span className="w-3 h-3 border-2 border-[#1B2B4B]/30 border-t-[#1B2B4B] rounded-full animate-spin" />예전 운임 이력을 불러오는 중… 잠시 후 목록이 늘어납니다</div>}
               {(() => {
                 const hasCargoInput = !!(form.화물내용 || "").trim();
                 const hasTonInput = !!(form.톤수 || "").trim();
