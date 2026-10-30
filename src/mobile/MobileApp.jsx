@@ -124,6 +124,16 @@ const isFareHistoryCandidate = (o, cur, today) => {
   if (String(cur?.상차일 || "").slice(0, 10) === today && d === today) return false;
   return true;
 };
+// on이 true가 된 뒤 ms만큼 지나서 true가 되는 값(구독을 시차를 두고 시작할 때)
+function useDelayedFlag(on, ms) {
+  const [v, setV] = React.useState(false);
+  React.useEffect(() => {
+    if (!on) { setV(false); return undefined; }
+    const t = setTimeout(() => setV(true), ms);
+    return () => clearTimeout(t);
+  }, [on, ms]);
+  return v;
+}
 const bgWrite = (p, what = "저장") => {
   Promise.resolve(p).catch((e) => {
     console.error(`${what} 실패:`, e);
@@ -1911,6 +1921,12 @@ export default function MobileApp({ role, user, userCompany = "" }) {
   // ⭐ LTE 속도 — 앱을 켜면 오더·기사·거래처·공지·일정 등 10여 개 구독이 한꺼번에 전파를 나눠 써서,
   // 약한 LTE에선 정작 오더가 늦게 들어왔다. 오더가 서버와 맞춰진 뒤에 나머지(기사·거래처·공지 등)를 시작한다.
   const [secondaryReady, setSecondaryReady] = useState(false);
+  // ⭐ 2026-10-30 앱을 다시 켤 때 버벅임 — 오더를 다 받은 순간 기사·거래처·상하차지·고정거래처·변경분 구독이
+  //   한꺼번에 시작돼 수천 건이 동시에 들어오며 화면이 멈칫했다. 몇 초 간격으로 나눠서 시작한다.
+  const readyStage2 = useDelayedFlag(secondaryReady, 1200);
+  const readyStage3 = useDelayedFlag(secondaryReady, 2400);
+  const readyStage4 = useDelayedFlag(secondaryReady, 3600);
+  const readyStage5 = useDelayedFlag(secondaryReady, 4800);
   // ⭐ 글자 크기 설정(기본/크게/더 크게) — 아래 zoom 리셋 로직에서 함께 적용되어야
   // 화면 전체(글자+버튼+아이콘)가 실제로 커진다. 쉬운모드는 자체 화면(MobileEasyMode)이
   // 이미 큰 글씨/큰 버튼으로 설계되어 있으므로, 여기서 별도로 확대하지 않는다
@@ -2404,7 +2420,7 @@ const quickRange = (days) => {
       const recent = await fetchRows((c) => query(c, where("상차일", ">=", midStart), where("상차일", "<", liveStart)), { quiet, urgent: !quiet });
       if (recent === null) return;
       loadedRangesRef.current.push([midStart, prevDayStr(liveStart)]);
-      const older = await fetchRows((c) => query(c, where("상차일", ">=", hStart), where("상차일", "<", midStart)), { quiet }); // 운임조회처럼 기다리는 화면이면 "불러오는 중" 표시를 끝까지 유지
+      const older = await fetchRows((c) => query(c, where("상차일", ">=", hStart), where("상차일", "<", midStart)), { quiet: true });
       if (older === null) return;
       fullLoadedRef.current = true;
       loadedRangesRef.current.push([hStart, prevDayStr(midStart)]);
@@ -2417,7 +2433,7 @@ const quickRange = (days) => {
   // 고정해 두어, 늦게 시작해도 그사이 다른 사람이 고친 예전 오더까지 빠짐없이 받는다.
   const syncSinceRef = useRef(Date.now() - 60 * 1000);
   useEffect(() => {
-    if (!secondaryReady) return undefined;
+    if (!readyStage2) return undefined;
     const since = syncSinceRef.current;
     return subscribeOrderSync({
       since,
@@ -2443,7 +2459,20 @@ const quickRange = (days) => {
         return next;
       })),
     });
-  }, [secondaryReady]);
+  }, [readyStage2]);
+  // ⭐ 2026-10-30 운임조회 즉시 표시 — 예전엔 운임조회를 누른 순간에야 13개월치를 받기 시작해 한참 기다렸다.
+  //   앱이 자리 잡은 뒤(첫 화면 로딩·최신화가 끝나고 25초 후, 폰이 한가할 때) 화면 뒤에서 조용히 미리 받아둔다.
+  //   앱을 켤 때의 버벅임을 피하려고 일부러 늦게 시작한다.
+  useEffect(() => {
+    if (!secondaryReady) return undefined;
+    let idleId = null;
+    const t = setTimeout(() => {
+      const run = () => loadFullHistory({ quiet: true });
+      if (typeof window.requestIdleCallback === "function") idleId = window.requestIdleCallback(run, { timeout: 10000 });
+      else run();
+    }, 25000);
+    return () => { clearTimeout(t); if (idleId && window.cancelIdleCallback) window.cancelIdleCallback(idleId); };
+  }, [secondaryReady, loadFullHistory]);
   const canceledLoadedRef = useRef(false);
   const loadCanceledHistory = React.useCallback(async () => {
     if (canceledLoadedRef.current) return;
@@ -3346,7 +3375,7 @@ useEffect(() => {
 
 
   useEffect(() => {
-    if (!secondaryReady) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
+    if (!readyStage3) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
     // ⭐ PC(DispatchApp.jsx)는 drivers 구독에 companyName 필터가 있는데, 모바일은 이
     // 필터가 통째로 빠져있어 다른 회사의 기사 목록까지 그대로 받아오고 있었다 —
     // PC와 동일한 기준(companyName 없는 옛 문서는 "돌캐"로 취급)으로 맞춘다.
@@ -3358,11 +3387,11 @@ useEffect(() => {
       startTransition(() => setDrivers(list)); // 끊김 방지(낮은 우선순위)
     });
     return () => unsub();
-  }, [userCompany, secondaryReady]);
+  }, [userCompany, readyStage3]);
 
   // 🔥 하차지 거래처(places)도 clients에 병합
 useEffect(() => {
-  if (!secondaryReady) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
+  if (!readyStage4) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
   // ⭐ PC(DispatchApp.jsx)의 places 구독과 동일하게 companyName 필터를 맞춘다 —
   // 이 필터가 없어서 다른 회사의 하차지거래처까지 그대로 받아오고 있었다.
   const co = userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY;
@@ -3411,11 +3440,11 @@ useEffect(() => {
   });
 
   return () => unsub();
-}, [userCompany, secondaryReady]);
+}, [userCompany, readyStage4]);
 
 // 고정거래처관리 리스너
 useEffect(() => {
-  if (!secondaryReady) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
+  if (!readyStage5) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
   const co = userCompany || localStorage.getItem("userCompany") || "";
   const unsub = onSnapshot(collection(db, "fixedClients"), (snap) => {
     const list = snap.docs
@@ -3424,11 +3453,11 @@ useEffect(() => {
     startTransition(() => setFixedClientRows(list)); // 끊김 방지(낮은 우선순위)
   });
   return () => unsub();
-}, [userCompany, secondaryReady]);
+}, [userCompany, readyStage5]);
 
 // 🏢 기본거래처(clients) 리스너
 useEffect(() => {
-  if (!secondaryReady) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
+  if (!readyStage5) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
   const co = userCompany || localStorage.getItem("userCompany") || "";
   const unsub = onSnapshot(collection(db, "clients"), (snap) => {
     const list = snap.docs
@@ -3453,7 +3482,7 @@ useEffect(() => {
     startTransition(() => setClients(list)); // 끊김 방지(낮은 우선순위)
   });
   return () => unsub();
-}, [userCompany, secondaryReady]);
+}, [userCompany, readyStage5]);
 
   // --------------------------------------------------
   // 2. 화면 상태 / 필터
@@ -13113,7 +13142,7 @@ const handleAssignClick = () => {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto overscroll-contain" data-fare-scroll>
-              {historyLoading > 0 && <div className="mx-3 mt-3 px-3 py-2 rounded-lg bg-[#EEF2F8] text-[#1B2B4B] text-[12px] font-bold flex items-center gap-2"><span className="w-3 h-3 border-2 border-[#1B2B4B]/30 border-t-[#1B2B4B] rounded-full animate-spin" />예전 운임 이력을 불러오는 중… 잠시 후 목록이 늘어납니다</div>}
+              {historyLoading > 0 && detailFareMatches.length === 0 && <div className="mx-3 mt-3 px-3 py-2 rounded-lg bg-[#EEF2F8] text-[#1B2B4B] text-[12px] font-bold flex items-center gap-2"><span className="w-3 h-3 border-2 border-[#1B2B4B]/30 border-t-[#1B2B4B] rounded-full animate-spin" />운임 이력을 불러오는 중…</div>}
               {(() => {
                 const getLabel = (r) => {
                   const ce = r.tags.includes("화물일치");
@@ -16331,7 +16360,7 @@ const pickDrop = (c) => {
             </div>
             {/* 콘텐츠 */}
             <div className="flex-1 overflow-y-auto overscroll-contain" data-fare-scroll>
-              {historyLoading > 0 && <div className="mx-3 mt-3 px-3 py-2 rounded-lg bg-[#EEF2F8] text-[#1B2B4B] text-[12px] font-bold flex items-center gap-2"><span className="w-3 h-3 border-2 border-[#1B2B4B]/30 border-t-[#1B2B4B] rounded-full animate-spin" />예전 운임 이력을 불러오는 중… 잠시 후 목록이 늘어납니다</div>}
+              {historyLoading > 0 && fareMatches.length === 0 && <div className="mx-3 mt-3 px-3 py-2 rounded-lg bg-[#EEF2F8] text-[#1B2B4B] text-[12px] font-bold flex items-center gap-2"><span className="w-3 h-3 border-2 border-[#1B2B4B]/30 border-t-[#1B2B4B] rounded-full animate-spin" />운임 이력을 불러오는 중…</div>}
               {(() => {
                 const hasCargoInput = !!(form.화물내용 || "").trim();
                 const hasTonInput = !!(form.톤수 || "").trim();
@@ -17908,12 +17937,26 @@ const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 �
   // 클립보드 복사도, 문자 앱 열기 팝업도, 에러 표시도 전혀 안 뜨고 아무 반응이
   // 없는 것처럼 보였다. 전체를 try/catch로 감싸 무슨 일이 있어도 최소한
   // 사용자에게 실패했다는 걸 보여주고 콘솔에 원인을 남긴다.
+  // ⭐ 2026-10-30 — 기사전달용 복사가 "눌러도 반응 없음 / 문자 팝업 없이 복사만"이던 원인:
+  //   누른 뒤에 상/하차지 주의사항을 서버에서 2~4번 조회했다(LTE에서 수 초). 그동안 아무 표시가 없고,
+  //   늦어지면 폰이 버튼 누름을 만료시켜 복사가 어긋났다. 창이 열릴 때 미리 받아두고,
+  //   누르면 받아둔 값으로 바로 복사한다(못 받았으면 최대 0.8초만 기다림).
+  const noticePrefetchRef = useRef(null);
+  useEffect(() => {
+    if (!order) return;
+    noticePrefetchRef.current = Promise.all([findDriverNoticeMobile(order.상차지명), findDriverNoticeMobile(order.하차지명)]).catch(() => ["", ""]);
+  }, [order?.상차지명, order?.하차지명]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [copyBusy, setCopyBusy] = useState(false);
   const copy = async (type) => {
+    if (copyBusy) return; // 두 번 눌림 방지
+    setCopyBusy(true);
     try {
       await copyImpl(type);
     } catch (e) {
       console.error("복사 실패:", e);
       alert("복사에 실패했습니다: " + (e?.message || e));
+    } finally {
+      setCopyBusy(false);
     }
   };
 
@@ -18041,9 +18084,9 @@ ${Number(order.청구운임||0).toLocaleString()}원 ${(()=>{const pt=order.지�
     else if (type === "driver") {
       const carTypeText = String(order.차량종류 || order.차종 || "");
       const isColdVeh = carTypeText.includes("냉장") || carTypeText.includes("냉동");
-      const [_pNoticeM, _dNoticeM] = await Promise.all([
-        findDriverNoticeMobile(order.상차지명),
-        findDriverNoticeMobile(order.하차지명),
+      const [_pNoticeM, _dNoticeM] = await Promise.race([
+        noticePrefetchRef.current || Promise.resolve(["", ""]),
+        new Promise((r) => setTimeout(() => r(["", ""]), 800)),
       ]);
       const noticeBlock = [...new Set([_pNoticeM, _dNoticeM].filter(Boolean))].join("\n\n");
 
@@ -18193,11 +18236,13 @@ ${coreBlockMd}${order.전달사항?.trim() ? `\n\n📢 전달사항\n${order.전
     }
 
     if (type === "driver") {
-      const phone = (order.전화번호 || order.전화 || "").replace(/[^0-9]/g, "");
+      const phone = String(order.전화번호 || order.전화 || "").replace(/[^0-9]/g, "");
       if (phone) {
         setSmsConfirm({ phone, body: text });
         return;
       }
+      // 전화번호가 없으면 문자 팝업을 띄울 수 없다 — 왜 팝업이 없는지 알려준다
+      alert("복사되었습니다.\n기사 전화번호가 없어 문자 보내기 창은 열지 않았습니다.");
       onCopySuccess?.("기사 문자 복사 완료");
       // ⚠️ 여기서 onAfterFullCopy로 폴백하면 안 된다 — onAfterFullCopy는 "전달상태를
       // 전달완료로 바꿀까요?" 확인 팝업을 띄우는 용도라, 기사전달용 복사(driver)에서까지

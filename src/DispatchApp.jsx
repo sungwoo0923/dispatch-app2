@@ -1,7 +1,7 @@
 // ===================== DispatchApp.jsx (PART 1/8) — START =====================
 import { MENU_FEATURE, planIncludes, openPlanLock, featureOn, useCompanyPlanId, PlanValueProvider, PlanValueSync, PlanLockHost, LockIcon } from "./plans";
 import ProInsight from "./ProInsight";
-import BulkUploadChooser from "./BulkUploadChooser";
+import BulkUploadChooser, { downloadTemplateXlsx } from "./BulkUploadChooser";
 import { buildCopyText, getCopyTpl, useCopyTemplates } from "./copyTemplates";
 import { CopyTemplateHost, openCopyTemplateEditor } from "./CopyTemplateEditor";
 import OnboardingHost from "./Onboarding";
@@ -55705,6 +55705,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver, showAlert = (m)
     XLSX.writeFile(wb, "기사관리.xlsx");
   };
 
+  const [driverBulkOpen, setDriverBulkOpen] = React.useState(false);
   const onExcel = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -55714,7 +55715,10 @@ function DriverManagement({ drivers, upsertDriver, removeDriver, showAlert = (m)
         const wb = XLSX.read(new Uint8Array(evt.target.result), { type:"array" });
         const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval:"" });
         let ok = 0;
-        for (const r of json) {
+        const valid = json.filter((r) => String(r.차량번호||r["차량 번호"]||"").replace(/\s+/g,""));
+        if (!valid.length) { showAlert("등록할 기사가 없습니다. (차량번호 열을 확인해 주세요)"); return; }
+        if (!window.confirm(`기사 ${valid.length}명을 등록·갱신할까요?${json.length - valid.length ? `\n(차량번호가 없는 ${json.length - valid.length}줄은 건너뜁니다)` : ""}`)) return;
+        for (const r of valid) {
           const 차량번호 = String(r.차량번호||r["차량 번호"]||"").replace(/\s+/g,"");
           if (!차량번호) continue;
           // ⭐ addNew와 동일한 이유로 id를 강제로 새로 만들지 않는다 — 이미 기사앱으로
@@ -55814,10 +55818,23 @@ function DriverManagement({ drivers, upsertDriver, removeDriver, showAlert = (m)
             className={`h-11 px-4 rounded-[13px] text-[13px] font-bold transition ${showAll ? "bg-[#0F1A30] text-white" : "bg-white border border-[#E3E8F0] text-[#0F1A30] hover:border-[#4B6CB7]"}`}>
             {showAll ? <EditableText id="driver.toolbar.전체보기닫기" defaultText="전체보기 닫기" /> : <EditableText id="driver.toolbar.전체보기" defaultText="전체보기" />}
           </button>
-          <label className="h-11 px-4 inline-flex items-center rounded-[13px] bg-white border border-[#E3E8F0] text-[#0F1A30] text-[13px] font-bold cursor-pointer hover:border-[#4B6CB7] transition">
-            <EditableText id="driver.toolbar.엑셀업로드" defaultText="엑셀 업로드" />
-            <input autoComplete="off" type="file" accept=".xlsx,.xls" onChange={onExcel} className="hidden" />
-          </label>
+          <button type="button" onClick={() => setDriverBulkOpen(true)} className="h-11 px-4 inline-flex items-center rounded-[13px] bg-white border border-[#E3E8F0] text-[#0F1A30] text-[13px] font-bold cursor-pointer hover:border-[#4B6CB7] transition">
+            <EditableText id="driver.toolbar.엑셀업로드" defaultText="대용량 업로드" />
+          </button>
+          {driverBulkOpen && (
+            <BulkUploadChooser
+              title="기사 대용량 업로드" subtitle="엑셀로 기사를 한꺼번에 등록·수정합니다. 처음이면 양식부터 받아 주세요."
+              templateDesc="차량번호·이름·전화번호·등급·메모 열과 예시, 작성 안내가 들어 있는 양식을 받습니다."
+              templateTips={["차량번호는 필수 (없는 줄은 건너뜀)", "등급: 일반 / 직영 / 지입 / 블랙"]}
+              uploadDesc="작성한 양식을 고르면 등록할 건수를 먼저 보여드리고, 확인 후 반영합니다."
+              uploadTips={["이미 있는 차량번호는 내용만 갱신", "기사앱 가입 차량도 같은 기사로 합쳐짐"]}
+              onClose={() => setDriverBulkOpen(false)}
+              onTemplate={() => downloadTemplateXlsx(XLSX, "기사관리_양식.xlsx", "기사관리", ["차량번호", "이름", "전화번호", "등급", "메모"],
+                [["경기12가3456", "김기사", "010-1234-5678", "일반", ""], ["서울34나5678", "이기사", "010-9876-5432", "지입", "평일만 가능"]],
+                [["예시 2줄", "예시 줄은 지우고 기사를 한 줄에 한 명씩 입력하세요."], ["차량번호", "필수. 띄어쓰기는 자동으로 지웁니다."], ["등급", "일반 / 직영 / 지입 / 블랙 중 하나 (비우면 일반)"], ["이미 등록된 기사", "같은 차량번호가 있으면 새로 만들지 않고 내용만 고칩니다."]])}
+              onFile={(e) => { setDriverBulkOpen(false); onExcel(e); }}
+            />
+          )}
           <button onClick={downloadExcel} className="h-11 px-4 rounded-[13px] bg-white border border-[#E3E8F0] text-[#0F1A30] text-[13px] font-bold hover:border-[#4B6CB7] transition">
             <EditableText id="driver.toolbar.엑셀다운로드" defaultText="엑셀 다운로드" />
           </button>
@@ -57133,6 +57150,35 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     showAlert("삭제 완료");
   };
 
+  // 📥 대용량 업로드 선택창(양식 다운로드 / 엑셀 업로드) — "client"(기본거래처) | "place"(하차지거래처)
+  const [clientBulkKind, setClientBulkKind] = React.useState(null);
+  const clientBulkChooser = clientBulkKind && (clientBulkKind === "client" ? (
+    <BulkUploadChooser
+      title="기본거래처 대용량 업로드" subtitle="엑셀로 거래처를 한꺼번에 등록·수정합니다. 처음이면 양식부터 받아 주세요."
+      templateDesc="거래처명·사업자번호·대표자·주소·담당자·연락처 등 열과 예시, 작성 안내가 들어 있는 양식을 받습니다."
+      templateTips={["거래처명은 필수 (없는 줄은 건너뜀)", "같은 거래처명이 있으면 내용만 갱신"]}
+      uploadDesc="작성한 양식을 고르면 등록할 건수를 먼저 보여드리고, 확인 후 반영합니다."
+      uploadTips={["빈 줄은 자동으로 건너뜀", "일반메모·오더메모도 함께 저장"]}
+      onClose={() => setClientBulkKind(null)}
+      onTemplate={() => downloadTemplateXlsx(XLSX, "기본거래처_양식.xlsx", "거래처", ["거래처명", "사업자번호", "대표자", "업태", "종목", "주소", "담당자", "연락처", "이메일", "일반메모", "오더메모"],
+        [["동원F&B", "123-45-67890", "홍길동", "제조", "식품", "서울 서초구 마방로 68", "김대리", "02-1234-5678", "kim@example.com", "", "파레트 회수 필수"]],
+        [["예시 1줄", "예시 줄은 지우고 거래처를 한 줄에 하나씩 입력하세요."], ["거래처명", "필수. 같은 이름이 이미 있으면 새로 만들지 않고 내용만 고칩니다."], ["일반메모 / 오더메모", "오더메모는 오더 등록 시 함께 보이는 메모입니다."]])}
+      onFile={(e) => { setClientBulkKind(null); onExcel(e); }}
+    />
+  ) : (
+    <BulkUploadChooser
+      title="하차지거래처 대용량 업로드" subtitle="엑셀로 하차지를 한꺼번에 등록합니다. 처음이면 양식부터 받아 주세요."
+      templateDesc="업체명·주소·담당자·담당자번호·메모 열과 예시, 작성 안내가 들어 있는 양식을 받습니다."
+      templateTips={["업체명·주소는 필수", "같은 주소가 이미 있으면 건너뜀(중복 방지)"]}
+      uploadDesc="작성한 양식을 고르면 새로 등록될 건수를 먼저 보여드리고, 확인 후 반영합니다."
+      uploadTips={["빈 줄·주소 없는 줄은 건너뜀", "주소는 도로명/지번 모두 가능"]}
+      onClose={() => setClientBulkKind(null)}
+      onTemplate={() => downloadTemplateXlsx(XLSX, "하차지거래처_양식.xlsx", "하차지", ["업체명", "주소", "담당자", "담당자번호", "메모"],
+        [["CJ 대구센터", "대구 달서구 성서로 10", "박과장", "010-2222-3333", "하차 09시 이후"], ["이마트 광주센터", "광주 광산구 하남산단 5", "", "", ""]],
+        [["예시 2줄", "예시 줄은 지우고 하차지를 한 줄에 하나씩 입력하세요."], ["업체명 · 주소", "필수. 주소가 없으면 그 줄은 건너뜁니다."], ["중복", "이미 같은 주소로 등록된 하차지는 건너뜁니다."]])}
+      onFile={(e) => { setClientBulkKind(null); onExcelPlaces(e); }}
+    />
+  ));
   const onExcel = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -57142,8 +57188,11 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
         const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
         const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
         let ok = 0;
-        for (const r of json) {
-          const 거래처명 = (r.거래처명 || r["상호"] || r["회사명"] || "").trim();
+        const validC = json.filter((r) => String(r.거래처명 || r["상호"] || r["회사명"] || "").trim());
+        if (!validC.length) { showAlert("등록할 거래처가 없습니다. (거래처명 열을 확인해 주세요)"); return; }
+        if (!window.confirm(`거래처 ${validC.length}곳을 등록·갱신할까요?${json.length - validC.length ? `\n(거래처명이 없는 ${json.length - validC.length}줄은 건너뜁니다)` : ""}`)) return;
+        for (const r of validC) {
+          const 거래처명 = String(r.거래처명 || r["상호"] || r["회사명"] || "").trim();
           if (!거래처명) continue;
           await upsertClient?.({
             거래처명,
@@ -57403,7 +57452,10 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
         const addrMap = new Map();
         for (const p of placeRows) { const k = normalizePlace(p.주소 || ""); if (k) addrMap.set(k, p); }
         let ok = 0;
-        for (const r of json) {
+        const newRows = json.filter((r) => { const n = (r.업체명||r["하차지명"]||r["상호"]||"").toString().trim(); const k = normalizePlace((r.주소||r["하차지주소"]||"").toString().trim()); return n && k && !addrMap.has(k); });
+        if (!newRows.length) { showAlert("새로 등록할 하차지가 없습니다.\n(업체명·주소가 비었거나, 이미 같은 주소로 등록된 하차지입니다)"); return; }
+        if (!window.confirm(`하차지 ${newRows.length}곳을 새로 등록할까요?${json.length - newRows.length ? `\n(빈 줄·주소 없음·이미 등록된 ${json.length - newRows.length}줄은 건너뜁니다)` : ""}`)) return;
+        for (const r of newRows) {
           const 업체명 = (r.업체명||r["하차지명"]||r["상호"]||"").toString().trim(); if (!업체명) continue;
           const 주소 = (r.주소||r["하차지주소"]||"").toString().trim();
           const k = normalizePlace(주소); if (!k || addrMap.has(k)) continue;
@@ -57433,6 +57485,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   // ═══════════════════════════════════════════════════
   return (
     <div className="p-4">
+      {clientBulkChooser}
 
       {/* 탭 */}
       {!hideTabs && (
@@ -57494,10 +57547,9 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                 className={KP_BTN_PRIMARY} style={KP_BTN_PRIMARY_BG}>
                 + <EditableText id="client.dropPlace.toolbar.신규등록" defaultText="신규등록" />
               </button>
-              <label className={`${KP_BTN} cursor-pointer inline-flex items-center`}>
-                <EditableText id="client.dropPlace.toolbar.엑셀업로드" defaultText="엑셀 업로드" />
-                <input autoComplete="off" type="file" accept=".xlsx,.xls" onChange={onExcelPlaces} className="hidden" />
-              </label>
+              <button type="button" onClick={() => setClientBulkKind("place")} className={`${KP_BTN} cursor-pointer inline-flex items-center`}>
+                <EditableText id="client.dropPlace.toolbar.엑셀업로드" defaultText="대용량 업로드" />
+              </button>
               <button onClick={downloadPlaceExcel}
                 className={KP_BTN}><EditableText id="client.dropPlace.toolbar.다운로드" defaultText="다운로드" /></button>
               <button onClick={() => { setPlaceDupOpen(true); setPlaceDupDone(false); setPlaceDupSelected(new Set()); }}
@@ -57893,10 +57945,9 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                   <EditableText id="client.baseClient.toolbar.담당자불일치복구" defaultText="담당자 불일치 복구" /> ({mismatchCandidates.length})
                 </button>
               )}
-              <label className={`${KP_BTN} cursor-pointer inline-flex items-center`}>
-                <EditableText id="client.baseClient.toolbar.엑셀업로드" defaultText="엑셀 업로드" />
-                <input autoComplete="off" type="file" accept=".xlsx,.xls" onChange={onExcel} className="hidden" />
-              </label>
+              <button type="button" onClick={() => setClientBulkKind("client")} className={`${KP_BTN} cursor-pointer inline-flex items-center`}>
+                <EditableText id="client.baseClient.toolbar.엑셀업로드" defaultText="대용량 업로드" />
+              </button>
               <button onClick={downloadClientExcel}
                 className={KP_BTN}><EditableText id="client.baseClient.toolbar.다운로드" defaultText="다운로드" /></button>
               <button onClick={removeSelectedFn}
