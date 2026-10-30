@@ -18241,8 +18241,6 @@ ${coreBlockMd}${order.전달사항?.trim() ? `\n\n📢 전달사항\n${order.전
         setSmsConfirm({ phone, body: text });
         return;
       }
-      // 전화번호가 없으면 문자 팝업을 띄울 수 없다 — 왜 팝업이 없는지 알려준다
-      alert("복사되었습니다.\n기사 전화번호가 없어 문자 보내기 창은 열지 않았습니다.");
       onCopySuccess?.("기사 문자 복사 완료");
       // ⚠️ 여기서 onAfterFullCopy로 폴백하면 안 된다 — onAfterFullCopy는 "전달상태를
       // 전달완료로 바꿀까요?" 확인 팝업을 띄우는 용도라, 기사전달용 복사(driver)에서까지
