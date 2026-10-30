@@ -10,10 +10,12 @@
 //     → 배차관리·배차현황·실시간배차현황·기사앱에 일반 오더처럼 보이고, "고정노선" 표시가 붙는다.
 //   · 휴무·공휴일·임시 중단은 날짜만 빼면 된다(건너뛸 날짜)
 import React from "react";
-import { kpConfirm } from "./kpDialog";
+import { kpConfirm, kpAlert } from "./kpDialog";
 import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import CustomDatePicker from "./CustomDatePicker";
+import { CustomSelect } from "./CustomSelect";
+import { TimeSelect, MultiDateSelect, korTimeLabel } from "./kpInputs";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const DAYS = ["월", "화", "수", "목", "금", "토", "일"];
@@ -25,10 +27,83 @@ const kst = (offsetDays = 0) => new Date(Date.now() + 9 * 3600e3 + offsetDays * 
 const dayOf = (ymd) => DAYS[(new Date(`${ymd}T00:00:00Z`).getUTCDay() + 6) % 7];
 const korTime = (hm) => { if (!hm) return ""; const [h, m] = hm.split(":").map(Number); return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${String(m).padStart(2, "0")}`; };
 const card = "rounded-[18px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)]";
-const inp = "h-10 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
-const lab = "block text-[11.5px] font-bold text-[#7A89A3] mb-1";
+const inp = "h-11 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15";
+const lab = "flex items-center gap-1.5 text-[13px] font-black text-[#3A4A66] mb-1.5 whitespace-nowrap";
+const norm = (v) => String(v || "").toLowerCase().replace(/\(주\)|㈜/g, "").replace(/\s+/g, "");
+const placeKey = (name) => norm(name).replace(/[^\uAC00-\uD7A3a-z0-9]/gi, "");
+const NewTag = () => <span className="inline-flex items-center h-5 px-1.5 rounded-md bg-[#0F1A30] text-white text-[10.5px] font-black tracking-wide">신규</span>;
+const Step = ({ n, title, sub }) => (
+  <div className="flex items-baseline gap-2.5 mb-3.5">
+    <span className="text-[12px] font-black text-[#2D4C82] tracking-[0.14em]" style={{ fontFamily: MONO }}>STEP {n}</span>
+    <span className="text-[17px] font-black text-[#0F1A30]">{title}</span>
+    {sub && <span className="text-[12.5px] font-semibold text-[#9AA9C3]">{sub}</span>}
+  </div>
+);
+
+// 🔎 배차관리처럼 — 입력하면 등록된 거래처·상하차지가 바로 뜬다(↑↓ Enter)
+function Suggest({ value, onChange, onPick, items, k, sub, placeholder }) {
+  const [open, setOpen] = React.useState(false);
+  const [hi, setHi] = React.useState(0);
+  const q = norm(value);
+  const list = q ? items.filter((x) => norm(x[k]).includes(q)).sort((a, b) => (norm(a[k]).startsWith(q) ? 0 : 1) - (norm(b[k]).startsWith(q) ? 0 : 1)).slice(0, 10) : [];
+  const pick = (x) => { onPick(x); setOpen(false); };
+  return (
+    <div className="relative flex-1 min-w-0">
+      <input value={value} onChange={(e) => { onChange(e.target.value); setOpen(true); setHi(0); }} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown={(e) => { if (!open || !list.length) return; if (e.key === "ArrowDown") { e.preventDefault(); setHi((h) => Math.min(list.length - 1, h + 1)); } else if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(0, h - 1)); } else if (e.key === "Enter") { e.preventDefault(); pick(list[hi]); } }}
+        placeholder={placeholder} className={inp} autoComplete="off" />
+      {open && list.length > 0 && (
+        <div className="absolute z-30 left-0 right-0 top-full mt-1 rounded-xl border border-[#DCE3EE] bg-white shadow-[0_18px_40px_rgba(15,26,48,.18)] overflow-hidden max-h-[300px] overflow-y-auto">
+          {list.map((x, i) => (
+            <button key={x.id || x._id || x[k] + i} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => pick(x)} onMouseEnter={() => setHi(i)}
+              className={`w-full text-left px-3.5 py-2.5 border-b border-[#EEF1F6] last:border-0 ${i === hi ? "bg-[#EEF3FC]" : "bg-white"}`}>
+              <div className="text-[14px] font-black text-[#0F1A30] truncate">{x[k]}</div>
+              {sub(x) && <div className="text-[12px] text-[#7A89A3] truncate">{sub(x)}</div>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 🆕 거래처 신규등록 — 배차관리와 같은 항목
+function NewClientModal({ data, setData, busy, onClose, onSave }) {
+  const f = (k, label, ph, type) => (
+    <label className="block"><span className={lab}>{label}</span>
+      <input value={data[k]} type={type || "text"} onChange={(e) => setData((p) => ({ ...p, [k]: e.target.value }))} placeholder={ph} className={inp} autoFocus={k === "name"} />
+    </label>
+  );
+  return (
+    <div className="fixed inset-0 z-[99999] bg-[#0B1428]/55 flex items-center justify-center p-4">
+      <div className="w-full max-w-[520px] rounded-[22px] bg-white overflow-hidden shadow-2xl">
+        <div className="px-6 py-5 text-white flex items-center justify-between" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
+          <div>
+            <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>NEW CLIENT</div>
+            <div className="text-[20px] font-black">거래처 신규등록</div>
+          </div>
+          <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-[13.5px] font-black">닫기</button>
+        </div>
+        <div className="p-6 space-y-3">
+          {f("name", "업체명 *", "업체명 입력")}
+          {f("addr", "주소", "주소 입력 (선택)")}
+          <div className="grid grid-cols-2 gap-3">{f("manager", "담당자", "담당자명 (선택)")}{f("phone", "연락처", "010-0000-0000 (선택)")}</div>
+          {f("email", "이메일", "example@email.com (선택)", "email")}
+          <label className="block"><span className={lab}>등급</span>
+            <CustomSelect value={data.grade} onChange={(e) => setData((p) => ({ ...p, grade: e.target.value }))} className={inp}>{["일반", "블랙", "주의", "이탈"].map((g) => <option key={g} value={g}>{g}</option>)}</CustomSelect>
+          </label>
+          {f("memo", "메모", "메모 (선택)")}
+        </div>
+        <div className="px-6 pb-6 flex gap-2">
+          <button type="button" onClick={onClose} className="flex-1 h-12 rounded-xl border border-[#DCE3EE] text-[14.5px] font-bold text-[#5B6B85]">취소</button>
+          <button type="button" onClick={onSave} disabled={busy} className="flex-[1.4] h-12 rounded-xl bg-[#0F1A30] text-white text-[14.5px] font-black disabled:opacity-50">등록 완료</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 const blankStop = (type = "하차") => ({ type, name: "", addr: "", time: "", contact: "", memo: "" });
-const blankRoute = () => ({ name: "", client: "", color: COLORS[2], stops: [blankStop("상차"), blankStop("하차")], days: ["월", "화", "수", "목", "금"], startTime: "08:00", tonnage: "", vehicleType: "", fareClient: "", fareDriver: "", driverKey: "", driverName: "", carNo: "", phone: "", startDate: kst(), endDate: "", skipDates: [], autoDispatch: true, active: true, memo: "" });
+const blankRoute = () => ({ name: "", client: "", color: COLORS[2], stops: [blankStop("상차"), blankStop("하차")], days: ["월", "화", "수", "목", "금"], startTime: "", tonnage: "", vehicleType: "", fareClient: "", fareDriver: "", driverKey: "", driverName: "", carNo: "", phone: "", startDate: kst(), endDate: "", skipDates: [], autoDispatch: true, autoAccept: true, active: true, memo: "" });
 
 // ─── 배차 자동 생성 — 오늘부터 N일 앞까지, 노선·날짜마다 한 건(문서 번호 고정이라 여러 명이 동시에 열어도 중복 없음) ───
 export function routeOrderFor(r, date) {
@@ -51,6 +126,8 @@ export function routeOrderFor(r, date) {
     청구운임: toInt(r.fareClient), 기사운임: toInt(r.fareDriver),
     차량번호: r.carNo || "", 이름: r.driverName || "", 전화번호: r.phone || "",
     배차상태: hasDriver ? "배차완료" : "배차중", ...(hasDriver ? { 배차완료일시: Date.now() } : {}),
+    // 고정노선은 매번 수락할 필요 없이 바로 "수락" 상태로(노선에서 끌 수 있음)
+    ...(hasDriver && r.autoAccept !== false ? { 기사확인상태: "수락", 기사확인일시: Date.now(), 자동수락: "고정노선" } : {}),
     배차방식: "고정노선", 지급방식: "계산서", 혼적여부: "독차",
     메모: [`[고정노선] ${r.name || ""}`, r.memo || ""].filter(Boolean).join(" · "),
     고정노선Id: r.id, 고정노선명: r.name || "",
@@ -104,6 +181,15 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
   const [busy, setBusy] = React.useState(false);
   const [q, setQ] = React.useState("");
   const [msg, setMsg] = React.useState("");
+  const [clients, setClients] = React.useState([]);
+  const [places, setPlaces] = React.useState([]);
+  const [newClient, setNewClient] = React.useState(null);
+  React.useEffect(() => {
+    if (!co) return undefined;
+    const u1 = onSnapshot(collection(db, "clients"), (s) => setClients(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((c) => !c.companyName || c.companyName === co).filter((c) => c.거래처명 || c.id)), () => setClients([]));
+    const u2 = onSnapshot(collection(db, "places"), (s) => setPlaces(s.docs.map((d) => ({ _id: d.id, ...d.data() })).filter((p) => (!p.companyName || p.companyName === co) && p.업체명)), () => setPlaces([]));
+    return () => { u1(); u2(); };
+  }, [co]);
   React.useEffect(() => {
     if (!co) return undefined;
     return onSnapshot(query(collection(db, "fixedRoutes"), where("companyName", "==", co)), (s) => setRoutes(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name), "ko"))), () => setRoutes([]));
@@ -118,8 +204,8 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
   const moveStop = (i, d) => setForm((p) => { const a = [...p.stops]; const j = i + d; if (j < 0 || j >= a.length) return p; [a[i], a[j]] = [a[j], a[i]]; return { ...p, stops: a }; });
   const pickDriver = (key) => { const d = drivers.find((x) => x.id === key); setForm((p) => ({ ...p, driverKey: key, driverName: d?.이름 || "", carNo: d?.차량번호 && d.차량번호 !== "-" ? d.차량번호 : "", phone: d?.전화번호 && d.전화번호 !== "-" ? d.전화번호 : "", tonnage: p.tonnage || d?.차량톤수 || "", vehicleType: p.vehicleType || d?.차량종류 || "" })); };
   const save = async () => {
-    if (!form.name.trim()) return window.alert("노선 이름을 입력해 주세요.");
-    if (!(form.stops || []).some((s) => s.name.trim() || s.addr.trim())) return window.alert("정류지를 한 곳 이상 입력해 주세요.");
+    if (!form.name.trim()) return kpAlert("노선 이름을 입력해 주세요.");
+    if (!(form.stops || []).some((s) => s.name.trim() || s.addr.trim())) return kpAlert("정류지를 한 곳 이상 입력해 주세요.");
     setBusy(true);
     try {
       const data = { ...form, companyName: co, stops: form.stops.filter((s) => s.name.trim() || s.addr.trim()), updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.email || "" };
@@ -127,11 +213,23 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
       let id = form.id;
       if (id) await updateDoc(doc(db, "fixedRoutes", id), data);
       else { const ref = await addDoc(collection(db, "fixedRoutes"), { ...data, createdAt: serverTimestamp() }); id = ref.id; }
+      // 신규 상하차지는 하차지 목록에도 등록(배차관리 자동완성에 바로 뜨도록)
+      await Promise.all(data.stops.filter((st) => st.name.trim() && !places.some((p) => norm(p.업체명) === norm(st.name))).map((st) =>
+        setDoc(doc(db, "places", placeKey(st.name) || `fr_${Date.now()}`), { 업체명: st.name.trim(), 주소: st.addr || "", 담당자번호: st.contact || "", 메모: st.memo || "", companyName: co }, { merge: true }).catch(() => {})));
       setForm(null); setSelId(id);
       genLock.at = 0;
       const n = await ensureFixedRouteOrders([{ ...data, id }]);
       flash(n ? `저장했습니다 · 배차 ${n}건을 미리 만들었습니다` : "저장했습니다");
-    } catch (e) { window.alert(`저장 실패: ${e?.message || e}`); } finally { setBusy(false); }
+    } catch (e) { kpAlert(`저장 실패: ${e?.message || e}`); } finally { setBusy(false); }
+  };
+  const saveNewClient = async () => {
+    const n = newClient.name.trim();
+    if (!n) return kpAlert("업체명을 입력해 주세요.");
+    setBusy(true);
+    try {
+      await setDoc(doc(db, "clients", n), { id: n, 거래처명: n, 주소: newClient.addr, 담당자: newClient.manager, 연락처: newClient.phone, 이메일: newClient.email, 메모: newClient.memo, 등급: newClient.grade, companyName: co }, { merge: true });
+      set("client", n); setNewClient(null); flash("신규 거래처를 등록했습니다");
+    } catch (e) { kpAlert(`등록 실패: ${e?.message || e}`); } finally { setBusy(false); }
   };
   const toggleActive = async (r) => { await updateDoc(doc(db, "fixedRoutes", r.id), { active: !r.active }); };
   const remove = async (r) => { if (await kpConfirm(`"${r.name}" 노선을 삭제할까요?\n이미 만들어진 배차는 그대로 남습니다.`)) { await deleteDoc(doc(db, "fixedRoutes", r.id)); setSelId(null); } };
@@ -141,100 +239,126 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
   // ───────────── 편집 화면 ─────────────
   if (form) {
     const stops = form.stops || [];
+    const clientNew = form.client.trim() && !clients.some((c) => norm(c.거래처명 || c.id) === norm(form.client));
     return (
       <div>
-        <div className="relative overflow-hidden rounded-[22px] px-6 py-5 text-white flex items-center justify-between gap-4 flex-wrap mb-4" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+        <div className="relative overflow-hidden rounded-[22px] px-7 py-6 text-white flex items-center justify-between gap-4 flex-wrap mb-4"
+          style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
           <div>
-            <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>FIXED ROUTE · {form.id ? "EDIT" : "NEW"}</div>
-            <div className="text-[22px] font-black">{form.id ? "고정노선 수정" : "고정노선 만들기"}</div>
-            <div className="text-[12.5px] text-white/60">정류지 → 요일·시간 → 기사·운임 순서로 입력하면, 정해진 날마다 배차가 자동으로 생깁니다</div>
+            <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>FIXED ROUTE · {form.id ? "EDIT" : "NEW"}</div>
+            <div className="text-[25px] font-black">{form.id ? "고정노선 수정" : "고정노선 만들기"}</div>
+            <div className="mt-2 flex items-center gap-1.5 text-[12.5px] font-bold">
+              {["① 거래처·경로", "② 요일·시간", "③ 기사님·운임"].map((t, i) => <span key={t} className="flex items-center gap-1.5"><span className="px-2.5 py-1 rounded-lg bg-white/10 border border-white/15">{t}</span>{i < 2 && <span className="text-white/40">›</span>}</span>)}
+            </div>
           </div>
           <div className="flex gap-2">
-            <button type="button" onClick={() => setForm(null)} className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-[13px] font-bold">취소</button>
-            <button type="button" onClick={save} disabled={busy} className="h-10 px-5 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black disabled:opacity-50">{busy ? "저장 중…" : "저장"}</button>
+            <button type="button" onClick={() => setForm(null)} className="h-12 px-5 rounded-xl bg-white/10 border border-white/20 text-[14.5px] font-bold">취소</button>
+            <button type="button" onClick={save} disabled={busy} className="h-12 px-6 rounded-xl bg-white text-[#0F1A30] text-[15px] font-black disabled:opacity-50">{busy ? "저장 중…" : "저장"}</button>
           </div>
         </div>
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
           <div className={`${card} p-5`}>
-            <div className="grid grid-cols-2 gap-3 mb-4">
+            <Step n="01" title="거래처 · 경로" sub="등록된 거래처·상하차지에서 고르거나 새로 입력" />
+            <div className="grid grid-cols-2 gap-3 mb-5">
               <div><label className={lab}>노선 이름 *</label><input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="예: 평택 물류센터 → 수원 3곳" className={inp} /></div>
-              <div><label className={lab}>거래처(청구처)</label><input value={form.client} onChange={(e) => set("client", e.target.value)} placeholder="배차 거래처명" className={inp} /></div>
+              <div>
+                <label className={lab}>거래처(청구처) {clientNew && <NewTag />}</label>
+                <div className="flex gap-1.5">
+                  <Suggest value={form.client} onChange={(v) => set("client", v)} items={clients} k="거래처명" sub={(c) => c.주소 || c.담당자 || ""} placeholder="거래처명 검색" onPick={(c) => set("client", c.거래처명 || c.id)} />
+                  <button type="button" onClick={() => setNewClient({ name: form.client.trim(), addr: "", manager: "", phone: "", email: "", memo: "", grade: "일반" })} className="h-11 px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-black text-[#1B2B4B] whitespace-nowrap hover:bg-[#F5F8FD]">+ 신규등록</button>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-[14px] font-black text-[#0F1A30]">정류지 <span className="text-[12px] font-semibold text-[#9AA9C3]">순서대로 · 1곳~여러 곳 · 거점 포함</span></div>
-              <div className="flex gap-1">{["상차", "경유", "거점"].map((t) => <button key={t} type="button" onClick={() => setForm((p) => { const a = [...p.stops]; a.splice(Math.max(0, a.length - 1), 0, blankStop(t)); return { ...p, stops: a }; })} className="h-8 px-2.5 rounded-lg border border-[#DCE3EE] text-[12px] font-black text-[#1B2B4B] hover:bg-[#F3F6FA]">+ {t}</button>)}</div>
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="text-[15px] font-black text-[#0F1A30]">정류지 <span className="text-[12.5px] font-semibold text-[#9AA9C3]">순서대로 · 1곳~여러 곳</span></div>
+              <div className="flex gap-1.5">{["상차", "경유", "거점"].map((t) => <button key={t} type="button" onClick={() => setForm((p) => { const a = [...p.stops]; a.splice(Math.max(0, a.length - 1), 0, blankStop(t)); return { ...p, stops: a }; })} className="h-9 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[13px] font-black text-[#1B2B4B] hover:bg-[#F3F6FA]">+ {t}</button>)}</div>
             </div>
             <div className="relative">
-              <div className="absolute left-[17px] top-4 bottom-4 w-[2px] bg-[#DCE3EE]" />
-              {stops.map((s, i) => (
-                <div key={i} className="relative flex gap-3 mb-2.5">
-                  <span className={`relative z-[1] mt-2 w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-[12px] font-black ${i === 0 || i === stops.length - 1 ? "bg-[#0F1A30] text-white" : "bg-white border-2 border-[#2D4C82] text-[#2D4C82]"}`}>{i + 1}</span>
-                  <div className="flex-1 min-w-0 rounded-xl border border-[#E3E8F0] bg-[#F7F9FC] p-2.5">
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      {STOP_TYPES.map((t) => <button key={t} type="button" onClick={() => setStop(i, { type: t })} className={`h-7 px-2.5 rounded-md text-[11.5px] font-black ${s.type === t ? "bg-[#0F1A30] text-white" : "bg-white border border-[#DCE3EE] text-[#5B6B85]"}`}>{t}</button>)}
-                      <input type="time" value={s.time} onChange={(e) => setStop(i, { time: e.target.value })} className="ml-auto h-7 px-2 rounded-md border border-[#DCE3EE] text-[12px] font-bold" title="도착·작업 시각" />
-                      <button type="button" onClick={() => moveStop(i, -1)} disabled={i === 0} className="w-7 h-7 rounded-md border border-[#DCE3EE] bg-white text-[12px] disabled:opacity-30">↑</button>
-                      <button type="button" onClick={() => moveStop(i, 1)} disabled={i === stops.length - 1} className="w-7 h-7 rounded-md border border-[#DCE3EE] bg-white text-[12px] disabled:opacity-30">↓</button>
-                      <button type="button" onClick={() => setForm((p) => ({ ...p, stops: p.stops.filter((_, j) => j !== i) }))} disabled={stops.length <= 1} className="w-7 h-7 rounded-md text-[#9AA9C3] hover:bg-white disabled:opacity-30">✕</button>
-                    </div>
-                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-1.5">
-                      <input value={s.name} onChange={(e) => setStop(i, { name: e.target.value })} placeholder="업체·장소명" className={`${inp} !h-9`} />
-                      <input value={s.addr} onChange={(e) => setStop(i, { addr: e.target.value })} placeholder="주소" className={`${inp} !h-9`} />
-                      <input value={s.contact} onChange={(e) => setStop(i, { contact: e.target.value })} placeholder="연락처(선택)" className={`${inp} !h-9`} />
-                      <input value={s.memo} onChange={(e) => setStop(i, { memo: e.target.value })} placeholder="메모(출입·하역 방법 등)" className={`${inp} !h-9`} />
+              <div className="absolute left-[19px] top-5 bottom-5 w-[2px] bg-gradient-to-b from-[#0F1A30] via-[#C9D6EE] to-[#0F1A30]" />
+              {stops.map((s, i) => {
+                const isNew = (s.name || "").trim() && !places.some((p) => norm(p.업체명) === norm(s.name));
+                return (
+                  <div key={i} className="relative flex gap-3 mb-3">
+                    <span className={`relative z-[1] mt-3 w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-[13px] font-black shadow ${i === 0 || i === stops.length - 1 ? "bg-[#0F1A30] text-white" : "bg-white border-2 border-[#2D4C82] text-[#2D4C82]"}`} style={{ fontFamily: MONO }}>{String(i + 1).padStart(2, "0")}</span>
+                    <div className="flex-1 min-w-0 rounded-2xl border border-[#E3E8F0] bg-[#F8FAFD] p-3">
+                      <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+                        <div className="inline-flex p-0.5 rounded-lg bg-white border border-[#E3E8F0]">
+                          {STOP_TYPES.map((t) => <button key={t} type="button" onClick={() => setStop(i, { type: t })} className={`h-8 px-3 rounded-md text-[12.5px] font-black ${s.type === t ? "bg-[#0F1A30] text-white" : "text-[#5B6B85]"}`}>{t}</button>)}
+                        </div>
+                        {isNew && <NewTag />}
+                        <div className="ml-auto flex items-center gap-1.5">
+                          <TimeSelect value={s.time} onChange={(v) => setStop(i, { time: v })} />
+                          <button type="button" onClick={() => moveStop(i, -1)} disabled={i === 0} className="w-9 h-9 rounded-lg border border-[#DCE3EE] bg-white text-[13px] disabled:opacity-30" aria-label="위로">↑</button>
+                          <button type="button" onClick={() => moveStop(i, 1)} disabled={i === stops.length - 1} className="w-9 h-9 rounded-lg border border-[#DCE3EE] bg-white text-[13px] disabled:opacity-30" aria-label="아래로">↓</button>
+                          <button type="button" onClick={() => setForm((p) => ({ ...p, stops: p.stops.filter((_, j) => j !== i) }))} disabled={stops.length <= 1} className="w-9 h-9 rounded-lg text-[#9AA9C3] hover:bg-white disabled:opacity-30" aria-label="정류지 삭제">✕</button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-2">
+                        <Suggest value={s.name} onChange={(v) => setStop(i, { name: v })} items={places} k="업체명" sub={(p) => p.주소 || ""} placeholder={`${s.type}지 검색 (업체·장소명)`}
+                          onPick={(p) => setStop(i, { name: p.업체명 || "", addr: p.주소 || s.addr, contact: p.담당자번호 || s.contact, memo: s.memo || p.메모 || "" })} />
+                        <input value={s.addr} onChange={(e) => setStop(i, { addr: e.target.value })} placeholder="주소" className={inp} />
+                        <input value={s.contact} onChange={(e) => setStop(i, { contact: e.target.value })} placeholder="연락처(선택)" className={inp} />
+                        <input value={s.memo} onChange={(e) => setStop(i, { memo: e.target.value })} placeholder="메모(출입·하역 방법 등)" className={inp} />
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
+            <div className="text-[12.5px] text-[#7A89A3] mt-1">시간을 비우면 <b className="text-[#1B2B4B]">즉시</b>로 등록됩니다 · <NewTag /> 표시된 상하차지는 저장할 때 하차지 목록에 함께 등록됩니다</div>
           </div>
           <div className="space-y-4">
             <div className={`${card} p-5`}>
-              <div className="text-[14px] font-black text-[#0F1A30] mb-2">요일 · 시간 · 기간</div>
-              <div className="flex gap-1.5 mb-3">
-                {DAYS.map((d) => { const on = (form.days || []).includes(d); return <button key={d} type="button" onClick={() => set("days", on ? form.days.filter((x) => x !== d) : [...(form.days || []), d])} className={`w-10 h-10 rounded-xl text-[13px] font-black ${on ? "bg-[#0F1A30] text-white" : "bg-white border border-[#DCE3EE] text-[#5B6B85]"}`}>{d}</button>; })}
+              <Step n="02" title="요일 · 시간 · 기간" />
+              <div className="grid grid-cols-7 gap-1.5 mb-2.5">
+                {DAYS.map((d) => { const on = (form.days || []).includes(d); return <button key={d} type="button" onClick={() => set("days", on ? form.days.filter((x) => x !== d) : DAYS.filter((x) => x === d || (form.days || []).includes(x)))} className={`h-12 rounded-xl text-[15px] font-black transition ${on ? "bg-[#0F1A30] text-white shadow" : "bg-white border border-[#DCE3EE] text-[#5B6B85]"}`}>{d}</button>; })}
               </div>
-              <div className="flex flex-wrap gap-1.5 mb-3">
-                {[["평일", ["월", "화", "수", "목", "금"]], ["월~토", ["월", "화", "수", "목", "금", "토"]], ["매일", DAYS], ["월수금", ["월", "수", "금"]], ["화목", ["화", "목"]]].map(([l, ds]) => <button key={l} type="button" onClick={() => set("days", ds)} className="h-8 px-3 rounded-lg bg-[#F3F6FA] text-[12px] font-bold text-[#3A4A66]">{l}</button>)}
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                {[["평일", ["월", "화", "수", "목", "금"]], ["월~토", ["월", "화", "수", "목", "금", "토"]], ["매일", DAYS], ["월수금", ["월", "수", "금"]], ["화목", ["화", "목"]]].map(([l, ds]) => <button key={l} type="button" onClick={() => set("days", ds)} className="h-9 px-3.5 rounded-lg bg-[#F3F6FA] text-[13px] font-bold text-[#3A4A66] hover:bg-[#EAF0F8]">{l}</button>)}
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div><label className={lab}>출발(상차) 시각</label><input type="time" value={form.startTime} onChange={(e) => set("startTime", e.target.value)} className={inp} /></div>
+              <div className="mb-3"><label className={lab}>출발(상차) 시간</label><TimeSelect value={form.startTime} onChange={(v) => set("startTime", v)} /></div>
+              <div className="grid grid-cols-2 gap-2.5">
                 <div><label className={lab}>시작일</label><CustomDatePicker value={form.startDate} onChange={(e) => set("startDate", e.target.value)} className={inp} showIcon /></div>
                 <div><label className={lab}>종료일(선택)</label><CustomDatePicker value={form.endDate} onChange={(e) => set("endDate", e.target.value)} className={inp} showIcon placeholder="계속" /></div>
               </div>
               <div className="mt-3">
-                <label className={lab}>쉬는 날(건너뛸 날짜)</label>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {(form.skipDates || []).map((d) => <button key={d} type="button" onClick={() => set("skipDates", form.skipDates.filter((x) => x !== d))} className="h-8 px-2.5 rounded-lg bg-[#EEF3FC] border border-[#C9D6EE] text-[12px] font-bold text-[#1B2B4B]">{d} ✕</button>)}
-                  <input type="date" onChange={(e) => { if (e.target.value && !(form.skipDates || []).includes(e.target.value)) set("skipDates", [...(form.skipDates || []), e.target.value].sort()); e.target.value = ""; }} className="h-8 px-2 rounded-lg border border-[#DCE3EE] text-[12px]" />
-                </div>
+                <label className={lab}>쉬는 날 <span className="font-semibold text-[#9AA9C3]">달력에서 여러 날을 눌러 고르세요</span></label>
+                <MultiDateSelect value={form.skipDates || []} onChange={(v) => set("skipDates", v)} className={inp} placeholder="쉬는 날 고르기" />
+                {(form.skipDates || []).length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {form.skipDates.map((d) => <button key={d} type="button" onClick={() => set("skipDates", form.skipDates.filter((x) => x !== d))} className="h-8 px-2.5 rounded-lg bg-[#EEF3FC] border border-[#C9D6EE] text-[12.5px] font-bold text-[#1B2B4B] tabular-nums" style={{ fontFamily: MONO }}>{d.slice(5).replace("-", ".")}({dayOf(d)}) ✕</button>)}
+                  </div>
+                )}
               </div>
             </div>
             <div className={`${card} p-5`}>
-              <div className="text-[14px] font-black text-[#0F1A30] mb-2">배정 기사 · 차량 · 운임</div>
-              <label className={lab}>기사(지입·직영)</label>
-              <select value={form.driverKey} onChange={(e) => pickDriver(e.target.value)} className={inp}>
+              <Step n="03" title="기사님 · 차량 · 운임" />
+              <label className={lab}>배정 기사님(지입·직영)</label>
+              <CustomSelect value={form.driverKey} onChange={(e) => pickDriver(e.target.value)} className={inp}>
                 <option value="">미배정(배차중으로 생성)</option>
                 {drivers.map((d) => <option key={d.id} value={d.id}>{d.이름} · {d.차량번호}{d.차량톤수 ? ` · ${d.차량톤수}` : ""}</option>)}
-              </select>
-              <div className="grid grid-cols-2 gap-2 mt-2">
+              </CustomSelect>
+              <div className="grid grid-cols-2 gap-2.5 mt-2.5">
                 <div><label className={lab}>톤수</label><input value={form.tonnage} onChange={(e) => set("tonnage", e.target.value)} placeholder="예: 5톤" className={inp} /></div>
                 <div><label className={lab}>차량 종류</label><input value={form.vehicleType} onChange={(e) => set("vehicleType", e.target.value)} placeholder="예: 윙바디" className={inp} /></div>
-                <div><label className={lab}>청구운임(1회)</label><input inputMode="numeric" value={form.fareClient ? won(form.fareClient) : ""} onChange={(e) => set("fareClient", e.target.value.replace(/[^\d]/g, ""))} className={`${inp} text-right`} /></div>
-                <div><label className={lab}>기사운임(1회)</label><input inputMode="numeric" value={form.fareDriver ? won(form.fareDriver) : ""} onChange={(e) => set("fareDriver", e.target.value.replace(/[^\d]/g, ""))} className={`${inp} text-right`} /></div>
+                <div><label className={lab}>청구운임(1회)</label><input inputMode="numeric" value={form.fareClient ? won(form.fareClient) : ""} onChange={(e) => set("fareClient", e.target.value.replace(/[^\d]/g, ""))} className={`${inp} text-right tabular-nums`} style={{ fontFamily: MONO }} /></div>
+                <div><label className={lab}>기사운임(1회)</label><input inputMode="numeric" value={form.fareDriver ? won(form.fareDriver) : ""} onChange={(e) => set("fareDriver", e.target.value.replace(/[^\d]/g, ""))} className={`${inp} text-right tabular-nums`} style={{ fontFamily: MONO }} /></div>
               </div>
-              <label className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[#E3E8F0] px-3.5 py-2.5 cursor-pointer">
-                <span><span className="block text-[13px] font-black text-[#0F1A30]">배차 자동 등록</span><span className="block text-[11.5px] text-[#7A89A3]">정해진 요일에 배차가 미리 생겨 배차현황·실시간배차현황·기사앱에 보입니다</span></span>
-                <input type="checkbox" checked={!!form.autoDispatch} onChange={(e) => set("autoDispatch", e.target.checked)} className="w-5 h-5 accent-[#0F1A30]" />
-              </label>
-              <textarea value={form.memo} onChange={(e) => set("memo", e.target.value)} rows={2} placeholder="노선 메모(기사 전달사항으로도 들어갑니다)" className={`${inp} !h-auto py-2 mt-2`} />
+              {[["autoDispatch", "배차 자동 등록", "정해진 요일에 배차가 미리 생겨 배차현황·실시간배차현황·기사앱에 보입니다"],
+                ["autoAccept", "기사님 수락 생략(자동 수락)", "고정노선은 매번 수락할 필요 없이 '수락' 상태로 들어갑니다 · 기사님은 운행만 하면 됩니다"]].map(([k, t, d]) => (
+                <label key={k} className="mt-2.5 flex items-center justify-between gap-3 rounded-xl border border-[#E3E8F0] px-4 py-3 cursor-pointer hover:bg-[#F8FAFD]">
+                  <span><span className="block text-[14px] font-black text-[#0F1A30]">{t}</span><span className="block text-[12.5px] text-[#7A89A3]">{d}</span></span>
+                  <input type="checkbox" checked={form[k] !== false} onChange={(e) => set(k, e.target.checked)} className="w-5 h-5 accent-[#0F1A30]" />
+                </label>
+              ))}
+              <textarea value={form.memo} onChange={(e) => set("memo", e.target.value)} rows={2} placeholder="노선 메모(기사님 전달사항으로도 들어갑니다)" className={`${inp} !h-auto py-2.5 mt-2.5`} />
             </div>
           </div>
         </div>
+        {newClient && <NewClientModal data={newClient} setData={setNewClient} busy={busy} onClose={() => setNewClient(null)} onSave={saveNewClient} />}
       </div>
     );
   }
-
   // ───────────── 목록 · 상세 ─────────────
   return (
     <div>
@@ -274,7 +398,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                 </div>
                 <div className="mt-1.5 flex items-center gap-1 flex-wrap">
                   {DAYS.map((d) => <span key={d} className={`w-5 h-5 rounded text-[10.5px] font-black flex items-center justify-center ${(r.days || []).includes(d) ? (on ? "bg-white text-[#0F1A30]" : "bg-[#1B2B4B] text-white") : (on ? "text-white/30" : "text-[#C9D3E3]")}`}>{d}</span>)}
-                  <span className={`ml-1.5 text-[12px] font-bold ${on ? "text-white/80" : "text-[#3A4A66]"}`}>{r.startTime} · {r.driverName || "기사 미배정"}{r.carNo ? ` (${r.carNo})` : ""}</span>
+                  <span className={`ml-1.5 text-[12px] font-bold ${on ? "text-white/80" : "text-[#3A4A66]"}`}>{korTimeLabel(r.startTime)} · {r.driverName || "기사님 미배정"}{r.carNo ? ` (${r.carNo})` : ""}</span>
                 </div>
               </button>
             );
@@ -305,7 +429,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                     {(sel.stops || []).map((s, i) => (
                       <div key={i} className="relative pb-3">
                         <span className={`absolute -left-[22px] top-0.5 w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center ${i === 0 || i === sel.stops.length - 1 ? "bg-[#0F1A30] text-white" : "bg-white border-2 border-[#2D4C82] text-[#2D4C82]"}`}>{i + 1}</span>
-                        <div className="text-[13.5px] font-black text-[#0F1A30]">{s.name || "-"} <span className="text-[11px] font-black px-1.5 py-0.5 rounded bg-[#EEF3FC] text-[#1B2B4B] ml-1">{s.type}</span>{s.time && <span className="ml-1 text-[11.5px] font-bold text-[#5B6B85]">{s.time}</span>}</div>
+                        <div className="text-[13.5px] font-black text-[#0F1A30]">{s.name || "-"} <span className="text-[11px] font-black px-1.5 py-0.5 rounded bg-[#EEF3FC] text-[#1B2B4B] ml-1">{s.type}</span><span className="ml-1 text-[11.5px] font-bold text-[#5B6B85]">{korTimeLabel(s.time)}</span></div>
                         <div className="text-[12px] text-[#5B6B85]">{s.addr}</div>
                         {s.memo && <div className="text-[11.5px] text-[#7A89A3]">{s.memo}</div>}
                       </div>
@@ -313,7 +437,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                   </div>
                 </div>
                 <div className="space-y-2">
-                  {[["요일", (sel.days || []).join(" ") || "-"], ["출발", sel.startTime || "-"], ["기간", `${sel.startDate || "-"} ~ ${sel.endDate || "계속"}`], ["기사", sel.driverName ? `${sel.driverName} · ${sel.carNo}` : "미배정"], ["차량", [sel.tonnage, sel.vehicleType].filter(Boolean).join(" ") || "-"], ["운임", `청구 ${won(sel.fareClient)} · 기사 ${won(sel.fareDriver)}`], ["자동 배차", sel.autoDispatch ? "켜짐" : "꺼짐"]].map(([k, v]) => (
+                  {[["요일", (sel.days || []).join(" ") || "-"], ["출발", korTimeLabel(sel.startTime)], ["기간", `${sel.startDate || "-"} ~ ${sel.endDate || "계속"}`], ["기사", sel.driverName ? `${sel.driverName} · ${sel.carNo}` : "미배정"], ["차량", [sel.tonnage, sel.vehicleType].filter(Boolean).join(" ") || "-"], ["운임", `청구 ${won(sel.fareClient)} · 기사 ${won(sel.fareDriver)}`], ["자동 배차", sel.autoDispatch ? "켜짐" : "꺼짐"], ["기사님 수락", sel.autoAccept === false ? "매번 수락" : "자동 수락"]].map(([k, v]) => (
                     <div key={k} className="flex justify-between gap-2 rounded-lg bg-[#F5F8FD] px-3 py-2"><span className="text-[12px] font-bold text-[#7A89A3]">{k}</span><span className="text-[13px] font-black text-[#0F1A30] text-right">{v}</span></div>
                   ))}
                 </div>
