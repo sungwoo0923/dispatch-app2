@@ -3,10 +3,22 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { checkEmailAvailable } from "./emailCheck";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "firebase/auth";
-import { auth, db } from "./firebase";
+import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import {
   doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc, updateDoc,
 } from "firebase/firestore";
+
+// 기존 회사 검색 — 로그인 전이라 서버 함수(findCompany)로 찾고, 로그인 상태면 직접 조회도 시도
+async function findCompanies(q, exact = false) {
+  const key = String(q || "").trim().toLowerCase();
+  try {
+    const r = await fetch(`${FUNCTIONS_BASE}/findCompany?q=${encodeURIComponent(key)}${exact ? "&exact=1" : ""}`);
+    if (r.ok) { const j = await r.json(); if (Array.isArray(j.results)) return j.results; }
+  } catch { /* 함수 배포 전 */ }
+  const snap = await getDocs(query(collection(db, "transportApplications"), where("type", "==", "신규"), where("status", "==", "approved")));
+  return snap.docs.map((d) => ({ ...d.data(), _docId: d.id }))
+    .filter((d) => { const n = (d.companyName || "").trim().toLowerCase(); return exact ? n === key : n.includes(key); });
+}
 
 const POSITIONS = ["대표", "이사", "팀장", "과장", "대리", "사원", "기타"];
 
@@ -185,16 +197,7 @@ function SignupForm({ signupType, onBack }) {
     setCompanySearching(true);
     setHasSearched(false);
     try {
-      const snap = await getDocs(query(
-        collection(db, "transportApplications"),
-        where("type", "==", "신규"),
-        where("status", "==", "approved")
-      ));
-      const all = snap.docs.map((d) => ({ ...d.data(), _docId: d.id }));
-      const matched = all.filter((d) =>
-        (d.companyName || "").toLowerCase().includes(q.toLowerCase())
-      );
-      setCompanySuggestions(matched);
+      setCompanySuggestions(await findCompanies(q));
     } catch (_) {
       setCompanySuggestions([]);
     } finally {
@@ -268,17 +271,12 @@ function SignupForm({ signupType, onBack }) {
   }, [addressPopupOpen]);
 
   const validateExistingCompany = async () => {
-    const q = query(
-      collection(db, "transportApplications"),
-      where("companyName", "==", companyName.trim()),
-      where("type", "==", "신규"),
-    );
-    const snap = await getDocs(q);
-    const valid = snap.docs.some((d) => d.data().status !== "rejected");
-    if (!valid) {
-      setError(
-        `"${companyName.trim()}"으로 신청된 가입 내역이 없습니다. 관리자에게 문의하세요.`
-      );
+    const n = companyName.trim();
+    if (selectedCompanyApp && selectedCompanyApp.companyName === n) return true;
+    let found = null;
+    try { found = (await findCompanies(n, true)).length > 0; } catch { found = null; }
+    if (found === false) {
+      setError(`"${n}"(으)로 등록된 운송사가 없습니다. 회사명 검색 후 선택해주세요.`);
       return false;
     }
     return true;

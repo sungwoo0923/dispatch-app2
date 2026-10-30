@@ -3540,6 +3540,34 @@ exports.checkEmail = functions.https.onRequest(async (req, res) => {
   }
 });
 
+// 🏢 가입 화면 "기존 회사" 검색 — 로그인 전에는 규칙상 transportApplications 를 읽을 수 없어
+//  항상 "등록된 운송사가 없습니다"가 떴다. 승인된 운송사의 회사명·주소만 내려준다(다른 정보 없음).
+exports.findCompany = functions.https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  const q = String(req.query.q || "").trim().toLowerCase();
+  const exact = req.query.exact === "1";
+  if (!q || q.length > 60) { res.status(200).json({ results: [] }); return; }
+  try {
+    const [apps, plans] = await Promise.all([
+      db.collection("transportApplications").where("type", "==", "신규").get(),
+      db.collection("companyPlans").get().catch(() => ({ docs: [] })),
+    ]);
+    const map = new Map();
+    apps.docs.forEach((d) => {
+      const a = d.data(); const n = String(a.companyName || "").trim();
+      if (!n || a.status !== "approved") return;
+      if (!map.has(n)) map.set(n, { companyName: n, address: a.address || "" });
+    });
+    plans.docs.forEach((d) => { const n = String(d.id || "").trim(); if (n && !map.has(n)) map.set(n, { companyName: n, address: "" }); });
+    const results = [...map.values()].filter((c) => (exact ? c.companyName.toLowerCase() === q : c.companyName.toLowerCase().includes(q))).slice(0, 20);
+    res.status(200).json({ results });
+  } catch (err) {
+    res.status(500).json({ results: [], error: "SEARCH_FAILED" });
+  }
+});
+
 exports.lookupCompanyCode = functions.https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "GET, OPTIONS");

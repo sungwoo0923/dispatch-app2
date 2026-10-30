@@ -352,7 +352,7 @@ function TenancyPanel() {
   const [msg, setMsg] = React.useState("");
   React.useEffect(() => onSnapshot(doc(db, "systemConfig", "tenancy"), (s) => setCfg(s.exists() ? s.data() : {}), () => setCfg({})), []);
   const run = async () => {
-    if (!window.confirm("모든 운송사 데이터의 예전 문서에 회사명을 채웁니다(회사명이 없는 문서는 '돌캐' 또는 화주 오더의 받는 운송사).\n오래 걸릴 수 있으니 창을 닫지 마세요. 진행할까요?")) return;
+    if (!window.confirm("회사명이 빈칸인 예전 문서에 운송사를 적습니다.\n· 화주사가 보낸 오더 → 받은 운송사\n· 나머지 → 돌캐(운송사 칸이 생기기 전부터 쓰던 운송사)\n이미 회사명이 있는 문서는 건드리지 않습니다.\n오래 걸릴 수 있으니 창을 닫지 마세요. 진행할까요?")) return;
     setBusy(true); setMsg("");
     try {
       const token = await auth.currentUser?.getIdToken();
@@ -389,7 +389,7 @@ function TenancyPanel() {
       <Card code="STEPS" title="순서대로 진행">
         <div className="grid gap-3 lg:grid-cols-3">
           {step(1, "예전 데이터 회사명 채우기", !!cfg?.backfilledAt, <>
-            회사명이 없는 예전 문서에 회사를 적습니다. (서버 함수 tenantMigrate 배포 필요)
+            운송사 칸이 생기기 전 문서(회사명 빈칸)에 운송사를 적습니다. 화주사가 보낸 오더는 받은 운송사로, 나머지는 원래 쓰던 운송사 <b>돌캐</b>로 들어갑니다. 지금도 빈칸은 돌캐 데이터로 보이고 있어 화면 변화는 없고, 서버 잠금을 켜기 위한 정리입니다.
             <button type="button" disabled={busy} onClick={run} className="mt-3 w-full h-10 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black disabled:opacity-50">{busy ? "정리 중…" : cfg?.backfilledAt ? "다시 실행" : "실행"}</button>
           </>)}
           {step(2, "서버 분리 켜기", cfg?.serverFilter === true, <>

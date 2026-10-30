@@ -46,21 +46,38 @@ const statusLabel = (s) =>
   s === "approved" ? "승인" : s === "rejected" ? "거절" : "대기";
 
 const StatusBadge = ({ status }) => {
-  const dotColor = status === "approved" ? "bg-emerald-500" : status === "rejected" ? "bg-red-400" : "bg-gray-400";
-  const textColor = status === "approved" ? "text-emerald-700" : status === "rejected" ? "text-red-600" : "text-gray-500";
-  const bgColor = status === "approved" ? "bg-emerald-50 border-emerald-200" : status === "rejected" ? "bg-red-50 border-red-200" : "bg-gray-100 border-gray-200";
+  const cls = status === "approved" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+    : status === "rejected" ? "bg-white text-[#7A89A3] border-[#C9D3E3] line-through"
+    : "bg-[#EEF3FC] text-[#2D4C82] border-[#8FB0F0]";
   return (
-    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold border ${bgColor} ${textColor}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
+    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold border whitespace-nowrap ${cls}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${status === "approved" ? "bg-[#8FB0F0]" : status === "rejected" ? "bg-[#C9D3E3]" : "bg-[#2D4C82]"}`} />
       {statusLabel(status)}
     </span>
   );
 };
 
 const InfoRow = ({ label, value }) => (
-  <div className="flex items-start px-4 py-3 border-b border-gray-50 last:border-b-0 odd:bg-gray-50/50">
-    <span className="text-[12px] text-gray-400 w-28 shrink-0"><EditableText id={`companyApp.infoRow.${label}`} defaultText={label} /></span>
-    <span className="text-[13px] font-medium text-gray-800">{value || "-"}</span>
+  <div className="flex items-start px-4 py-2.5 border-b border-[#EEF1F6] last:border-b-0 min-w-0">
+    <span className="text-[12px] text-[#7A89A3] w-24 shrink-0 whitespace-nowrap"><EditableText id={`companyApp.infoRow.${label}`} defaultText={label} /></span>
+    <span className="text-[13px] font-semibold text-[#0F1A30] min-w-0 break-all">{value || "-"}</span>
+  </div>
+);
+
+const PLANS = [["lite", "라이트"], ["basic", "베이직"], ["standard", "스탠다드"], ["pro", "프로"]];
+const planName = (id) => (PLANS.find(([k]) => k === id) || [])[1] || id || "-";
+const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+// 상세 패널의 섹션 카드
+const Sec = ({ title, en, children, right }) => (
+  <div className="rounded-2xl border border-[#E3E8F0] bg-white overflow-hidden">
+    <div className="px-4 py-2.5 flex items-center justify-between gap-2 border-b border-[#EEF1F6] bg-[#F7F9FC]">
+      <div className="min-w-0 flex items-baseline gap-2">
+        {en && <span className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO }}>{en}</span>}
+        <span className="text-[13px] font-black text-[#0F1A30] whitespace-nowrap">{title}</span>
+      </div>
+      {right}
+    </div>
+    {children}
   </div>
 );
 
@@ -87,6 +104,26 @@ export default function CompanyApplications() {
   const [editRejectReason, setEditRejectReason] = useState("");
   const [showEditRejectInput, setShowEditRejectInput] = useState(false);
   const [viewLimitDraft, setViewLimitDraft] = useState("");
+  // 💳 회사별 요금제(companyPlans/{회사}) — 목록에 표시 + 상세 패널에서 최고관리자가 변경
+  const [plans, setPlans] = useState({});
+  const [planDraft, setPlanDraft] = useState("");
+  const [planSaving, setPlanSaving] = useState(false);
+  useEffect(() => onSnapshot(collection(db, "companyPlans"), (s) => {
+    const m = {}; s.docs.forEach((d) => { m[d.id] = d.data(); }); setPlans(m);
+  }, () => setPlans({})), []);
+  useEffect(() => { setPlanDraft(""); }, [managingApp?.id]);
+  const savePlan = async (company, pid) => {
+    if (!company || !pid) return;
+    const prev = plans[company]?.planId;
+    if (prev === pid) return;
+    if (!window.confirm(`"${company}" 요금제를 ${planName(prev)} → ${planName(pid)}(으)로 바꿀까요?\n그 회사 화면의 메뉴가 바로 바뀝니다.`)) return;
+    setPlanSaving(true);
+    try {
+      const hist = [...(plans[company]?.history || []), { at: new Date().toISOString(), from: prev || null, to: pid, by: auth.currentUser?.email || "" }].slice(-30);
+      await setDoc(doc(db, "companyPlans", company), { planId: pid, since: new Date().toISOString().slice(0, 10), updatedAt: serverTimestamp(), history: hist }, { merge: true });
+      setPlanDraft("");
+    } catch (e) { alert("요금제 변경 실패: " + (e?.message || e)); } finally { setPlanSaving(false); }
+  };
 
   useEffect(() => {
     setViewLimitDraft(managingApp?.viewLimitUnlockedUntil || "");
@@ -468,17 +505,17 @@ export default function CompanyApplications() {
     const data = activeData;
     if (activeTab === "기사") {
       return [
-        { label: "전체", value: data.length, color: "text-[#1B2B4B]", bg: "bg-[#1B2B4B]/10" },
-        { label: "대기", value: data.filter((a) => a.approved === false && a.status !== "rejected").length, color: "text-amber-600", bg: "bg-amber-50" },
-        { label: "승인", value: data.filter((a) => a.approved === true).length, color: "text-emerald-600", bg: "bg-emerald-50" },
-        { label: "거절", value: data.filter((a) => a.status === "rejected").length, color: "text-red-500", bg: "bg-red-50" },
+        { label: "전체", en: "TOTAL", value: data.length },
+        { label: "대기", en: "PENDING", value: data.filter((a) => a.approved === false && a.status !== "rejected").length, hot: true },
+        { label: "승인", en: "APPROVED", value: data.filter((a) => a.approved === true).length },
+        { label: "거절", en: "REJECTED", value: data.filter((a) => a.status === "rejected").length },
       ];
     }
     return [
-      { label: "전체", value: data.length, color: "text-[#1B2B4B]", bg: "bg-[#1B2B4B]/10" },
-      { label: "검토 대기", value: data.filter((a) => a.status === "pending").length, color: "text-amber-600", bg: "bg-amber-50" },
-      { label: "승인 완료", value: data.filter((a) => a.status === "approved").length, color: "text-emerald-600", bg: "bg-emerald-50" },
-      { label: "거절", value: data.filter((a) => a.status === "rejected").length, color: "text-red-500", bg: "bg-red-50" },
+      { label: "전체", en: "TOTAL", value: data.length },
+      { label: "검토 대기", en: "PENDING", value: data.filter((a) => a.status === "pending").length, hot: true },
+      { label: "승인 완료", en: "APPROVED", value: data.filter((a) => a.status === "approved").length },
+      { label: "거절", en: "REJECTED", value: data.filter((a) => a.status === "rejected").length },
     ];
   }, [activeData, activeTab]);
 
@@ -489,57 +526,60 @@ export default function CompanyApplications() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      {/* 헤더 */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-[22px] font-bold text-[#1B2B4B]"><EditableText id="companyApp.header.title" defaultText="가입신청 관리" /></h1>
-          <p className="text-[13px] text-gray-400 mt-0.5">
-            {activeTab === "화주" ? <EditableText id="companyApp.header.subtitle.화주" defaultText="화주 신청 관리" /> : activeTab === "운송" ? <EditableText id="companyApp.header.subtitle.운송" defaultText="운송사 신청 관리" /> : <EditableText id="companyApp.header.subtitle.기사" defaultText="기사 신청 관리" />}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
+    <div className="min-h-screen bg-[#F3F6FA] p-4 md:p-6">
+      {/* 헤더 — 네이비 히어로 + KPI */}
+      <div className="rounded-[22px] overflow-hidden mb-4 shadow-[0_10px_26px_rgba(15,26,48,0.12)]" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+        <div className="px-5 md:px-7 pt-5 pb-4 flex items-start justify-between gap-4 flex-wrap">
+          <div className="min-w-0">
+            <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO }}>APPLICATIONS · 가입 심사</div>
+            <h1 className="text-[22px] font-black text-white whitespace-nowrap"><EditableText id="companyApp.header.title" defaultText="가입신청 관리" /></h1>
+            <p className="text-[12.5px] text-white/60 whitespace-nowrap">
+              {activeTab === "화주" ? <EditableText id="companyApp.header.subtitle.화주" defaultText="화주 신청 관리" /> : activeTab === "운송" ? <EditableText id="companyApp.header.subtitle.운송" defaultText="운송사 신청 관리" /> : activeTab === "기사" ? <EditableText id="companyApp.header.subtitle.기사" defaultText="기사 신청 관리" /> : "회사 정보 수정 요청"}
+              {activeTab === "운송" && " · 요금제 확인·변경"}
+            </p>
+          </div>
           <button
             onClick={() => { setShowCodeLookup(true); setCodeLookupQuery(""); }}
-            className="px-4 py-2 rounded-lg text-[13px] font-semibold bg-[#1B2B4B] text-white hover:bg-[#243d6a] transition"
+            className="h-9 px-4 rounded-xl text-[12.5px] font-black bg-white/10 ring-1 ring-white/25 text-white hover:bg-white/15 transition whitespace-nowrap"
           >
             <EditableText id="companyApp.header.회사코드조회" defaultText="회사코드 조회" />
           </button>
-          {activeTab !== "수정요청" && (
-          <div className="grid grid-cols-4 gap-3">
-            {statsCards.map(({ label, value, color, bg }) => (
-              <div key={label} className={`${bg} rounded-xl px-4 py-2.5 text-center`}>
-                <div className={`text-[22px] font-bold ${color}`}>{value}</div>
-                <div className="text-[11px] text-gray-500"><EditableText id={`companyApp.stat.${label}`} defaultText={label} /></div>
-              </div>
+        </div>
+        {activeTab !== "수정요청" && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-white/10 border-t border-white/10">
+            {statsCards.map(({ label, en, value, hot }) => (
+              <button key={label} type="button"
+                onClick={() => setStatusFilter(en === "TOTAL" ? "all" : en === "PENDING" ? "pending" : en === "APPROVED" ? "approved" : "rejected")}
+                className={`text-left px-5 py-3 transition ${hot && value > 0 ? "bg-[#2D4C82]/60" : "bg-[#0B1428]/40"} hover:bg-white/10`}>
+                <div className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{en}</div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-[24px] font-black text-white tabular-nums" style={{ fontFamily: MONO }}>{value}</span>
+                  <span className="text-[12px] text-white/60 whitespace-nowrap"><EditableText id={`companyApp.stat.${label}`} defaultText={label} /></span>
+                </div>
+              </button>
             ))}
           </div>
-          )}
-        </div>
+        )}
       </div>
 
-      {/* 탭 */}
-      <div className="flex gap-2 mb-4">
+      {/* 탭 — 세그먼트 */}
+      <div className="inline-flex p-1 rounded-2xl bg-white border border-[#E3E8F0] mb-4 gap-1 max-w-full overflow-x-auto">
         {[
-          { key: "화주", label: "화주 신청" },
-          { key: "운송", label: "운송 신청" },
-          { key: "기사", label: "기사 신청" },
-          { key: "수정요청", label: "수정 요청", badge: pendingEditCount },
-        ].map(({ key, label, badge }) => (
+          { key: "화주", label: "화주 신청", n: companyApps.filter((a) => a.status === "pending").length },
+          { key: "운송", label: "운송 신청", n: transportApps.filter((a) => a.status === "pending").length },
+          { key: "기사", label: "기사 신청", n: driverApps.filter((a) => a.approved === false && a.status !== "rejected").length },
+          { key: "수정요청", label: "수정 요청", n: pendingEditCount },
+        ].map(({ key, label, n }) => (
           <button
             key={key}
             onClick={() => handleTabChange(key)}
-            className={`relative px-5 py-2 rounded-lg text-[13px] font-semibold border transition ${
-              activeTab === key
-                ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-                : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"
+            className={`h-9 px-4 rounded-xl text-[13px] font-black transition whitespace-nowrap inline-flex items-center gap-1.5 ${
+              activeTab === key ? "bg-[#1B2B4B] text-white" : "text-[#5B6B85] hover:bg-[#F3F6FA]"
             }`}
           >
             <EditableText id={`companyApp.tab.${key}`} defaultText={label} />
-            {badge > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
-                {badge}
-              </span>
+            {n > 0 && (
+              <span className={`min-w-[18px] h-[18px] px-1 rounded-full text-[10.5px] font-black flex items-center justify-center ${activeTab === key ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-[#1B2B4B] text-white"}`}>{n}</span>
             )}
           </button>
         ))}
@@ -565,7 +605,7 @@ export default function CompanyApplications() {
                         {req.requestedByEmail || "-"} &nbsp;|&nbsp; {req.createdAt?.seconds ? new Date(req.createdAt.seconds * 1000).toLocaleDateString("ko-KR") : "-"}
                       </div>
                     </div>
-                    <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${req.status === "approved" ? "bg-emerald-50 border-emerald-200 text-emerald-700" : req.status === "rejected" ? "bg-red-50 border-red-200 text-red-700" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
+                    <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${req.status === "approved" ? "bg-[#1B2B4B] border-[#1B2B4B] text-white" : req.status === "rejected" ? "bg-white border-[#C9D3E3] text-[#7A89A3]" : "bg-[#EEF3FC] border-[#8FB0F0] text-[#2D4C82]"}`}>
                       {req.status === "approved" ? <EditableText id="companyApp.editReq.승인됨" defaultText="승인됨" /> : req.status === "rejected" ? <EditableText id="companyApp.editReq.거절됨" defaultText="거절됨" /> : <EditableText id="companyApp.editReq.검토대기" defaultText="검토 대기" />}
                     </span>
                   </div>
@@ -660,7 +700,7 @@ export default function CompanyApplications() {
                         <EditableText id="companyApp.editReviewModal.취소" defaultText="취소" />
                       </button>
                       <button
-                        className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-[13px] font-bold transition disabled:opacity-50"
+                        className="flex-1 py-2.5 rounded-xl bg-[#0B1428] hover:bg-[#1B2B4B] text-white text-[13px] font-bold transition disabled:opacity-50"
                         disabled={processing || !editRejectReason.trim()}
                         onClick={() => rejectEditRequest(reviewingEdit, editRejectReason)}>
                         {processing ? <EditableText id="companyApp.처리중" defaultText="처리 중..." /> : <EditableText id="companyApp.editReviewModal.거절확정" defaultText="거절 확정" />}
@@ -676,11 +716,11 @@ export default function CompanyApplications() {
 
       {/* 기존 탭 필터 + 테이블 */}
       <div style={{ display: activeTab === "수정요청" ? "none" : "block" }}>
-      <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 mb-4 flex items-center gap-3 flex-wrap">
+      <div className="bg-white rounded-2xl border border-[#E3E8F0] px-4 py-3 mb-3 flex items-center gap-3 flex-wrap">
         <div className="flex gap-1.5">
           {[["all", "전체"], ["pending", "대기"], ["approved", "승인"], ["rejected", "거절"]].map(([v, l]) => (
             <button key={v} onClick={() => setStatusFilter(v)}
-              className={`h-8 px-3.5 rounded-full text-[12px] font-semibold border transition ${statusFilter === v ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+              className={`h-8 px-3.5 rounded-lg text-[12px] font-black border transition whitespace-nowrap ${statusFilter === v ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#5B6B85] border-[#DCE3EE] hover:bg-[#F3F6FA]"}`}>
               {l}
             </button>
           ))}
@@ -691,7 +731,7 @@ export default function CompanyApplications() {
             <div className="flex gap-1.5">
               {[["all", "전체 유형"], ["신규", "신규"], ["기존", "기존"]].map(([v, l]) => (
                 <button key={v} onClick={() => setTypeFilter(v)}
-                  className={`h-8 px-3.5 rounded-full text-[12px] font-semibold border transition ${typeFilter === v ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+                  className={`h-8 px-3.5 rounded-lg text-[12px] font-black border transition whitespace-nowrap ${typeFilter === v ? "bg-[#2D4C82] text-white border-[#2D4C82]" : "bg-white text-[#5B6B85] border-[#DCE3EE] hover:bg-[#F3F6FA]"}`}>
                   {l}
                 </button>
               ))}
@@ -703,29 +743,29 @@ export default function CompanyApplications() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="회사명·이름·연락처 검색"
-            className="h-8 px-3 rounded-lg border border-gray-200 text-[12px] focus:outline-none focus:border-[#1B2B4B] w-48"
+            className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12px] focus:outline-none focus:border-[#2D4C82] w-48 bg-[#F7F9FC]"
           />
           {searchQuery && (
             <button onClick={() => setSearchQuery("")} className="text-gray-400 hover:text-gray-600 text-[12px]">✕</button>
           )}
-          <span className="text-[13px] text-gray-400 font-medium">{filtered.length}건</span>
+          <span className="text-[13px] text-[#1B2B4B] font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{filtered.length}건</span>
         </div>
       </div>
 
       {/* 테이블 */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-visible">
+      <div className="bg-white rounded-2xl border border-[#E3E8F0] overflow-x-auto">
         {activeTab !== "기사" ? (
           <table className="w-full text-[13px]">
             <thead>
-              <tr className="bg-[#1B2B4B]">
-                {["신청일시", "유형", "회사명", "사업자번호", "이름", "연락처", "직책", "약관동의", "상태", "관리"].map((h) => (
-                  <th key={h} className="px-3 py-3 text-center text-[12px] font-semibold text-white whitespace-nowrap">
+              <tr className="bg-[#0B1428]">
+                {["신청일시", "유형", "회사명", "사업자번호", "이름", "연락처", "직책", activeTab === "운송" ? "요금제" : "약관동의", "상태", "관리"].map((h) => (
+                  <th key={h} className="px-3 py-3 text-center text-[11.5px] font-black text-[#C9D6EE] whitespace-nowrap tracking-wide">
                     <EditableText id={`companyApp.table1.header.${h}`} defaultText={h} />
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-[#EEF1F6]">
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="py-16 text-center text-[13px] text-gray-400">신청 내역이 없습니다</td>
@@ -733,22 +773,30 @@ export default function CompanyApplications() {
               ) : (
                 filtered.map((app, idx) => (
                   <tr key={app.id}
-                    className={`hover:bg-blue-50/30 transition ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/30"}`}>
+                    onClick={() => setManagingApp(app)}
+                    className={`cursor-pointer hover:bg-[#EEF3FC] transition ${managingApp?.id === app.id ? "bg-[#EEF3FC]" : idx % 2 === 0 ? "bg-white" : "bg-[#FAFBFD]"}`}>
                     <td className="px-3 py-3 text-center text-[12px] text-gray-500 whitespace-nowrap">{fmtDate(app.createdAt)}</td>
                     <td className="px-3 py-3 text-center">
-                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${app.type === "신규" ? "bg-[#1B2B4B]/10 text-[#1B2B4B] border-[#1B2B4B]/20" : "bg-gray-100 text-gray-600 border-gray-200"}`}>
+                      <span className={`px-2 py-0.5 rounded-md text-[11px] font-black border whitespace-nowrap ${app.type === "신규" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}>
                         {app.type}
                       </span>
                     </td>
-                    <td className="px-3 py-3 text-center font-semibold text-gray-800">{app.companyName}</td>
+                    <td className="px-3 py-3 text-center font-black text-[#0F1A30] whitespace-nowrap">{app.companyName}</td>
                     <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.businessNumber || "-"}</td>
                     <td className="px-3 py-3 text-center text-gray-800">{app.name}</td>
                     <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.phone ? formatPhone(app.phone) : app.phone}</td>
                     <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.position || "-"}</td>
-                    <td className="px-3 py-3 text-center">
-                      <span className={`text-[11px] font-bold ${app.termsAgreed && app.privacyAgreed ? "text-emerald-600" : "text-red-500"}`}>
-                        {app.termsAgreed && app.privacyAgreed ? "동의" : "미동의"}
-                      </span>
+                    <td className="px-3 py-3 text-center whitespace-nowrap">
+                      {activeTab === "운송" ? (() => {
+                        const cur = plans[(app.companyName || "").trim()]?.planId;
+                        return app.type === "기존" ? <span className="text-[11.5px] text-[#9AA9C3]">회사 요금제</span>
+                          : cur ? <span className="px-2 py-0.5 rounded-md text-[11px] font-black bg-[#EEF3FC] text-[#1B2B4B] border border-[#8FB0F0]">{planName(cur)}</span>
+                          : <span className="text-[11.5px] text-[#7A89A3]">신청 {planName(app.requestedPlan || "standard")}</span>;
+                      })() : (
+                        <span className={`text-[11px] font-bold ${app.termsAgreed && app.privacyAgreed ? "text-[#1B2B4B]" : "text-[#9AA9C3] line-through"}`}>
+                          {app.termsAgreed && app.privacyAgreed ? "동의" : "미동의"}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-3 text-center">
                       <div className="flex flex-col items-center gap-0.5">
@@ -765,12 +813,12 @@ export default function CompanyApplications() {
                         )}
                         {app.status === "approved" && app.userStatus === "suspended" && (
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
-                            <span className="w-1 h-1 rounded-full bg-amber-400" />정지
+                            <span className="w-1 h-1 rounded-full bg-[#2D4C82]" />정지
                           </span>
                         )}
                         {app.status === "approved" && app.userStatus === "banned" && (
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
-                            <span className="w-1 h-1 rounded-full bg-red-400" />영구정지
+                            <span className="w-1 h-1 rounded-full bg-[#0B1428]" />영구정지
                           </span>
                         )}
                       </div>
@@ -778,7 +826,7 @@ export default function CompanyApplications() {
                     <td className="px-3 py-3 text-center">
                       <button
                         onClick={() => setManagingApp(app)}
-                        className="px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/10 transition"
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-black bg-[#1B2B4B] text-white hover:bg-[#2D4C82] transition whitespace-nowrap"
                       >
                         관리
                       </button>
@@ -792,15 +840,15 @@ export default function CompanyApplications() {
           /* 기사 탭 */
           <table className="w-full text-[13px]">
             <thead>
-              <tr className="bg-[#1B2B4B]">
+              <tr className="bg-[#0B1428]">
                 {["신청일시", "이름", "차량번호", "차종", "연락처", "상태", "관리"].map((h) => (
-                  <th key={h} className="px-3 py-3 text-center text-[12px] font-semibold text-white whitespace-nowrap">
+                  <th key={h} className="px-3 py-3 text-center text-[11.5px] font-black text-[#C9D6EE] whitespace-nowrap tracking-wide">
                     <EditableText id={`companyApp.table2.header.${h}`} defaultText={h} />
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-[#EEF1F6]">
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-16 text-center text-[13px] text-gray-400">신청 내역이 없습니다</td>
@@ -810,9 +858,10 @@ export default function CompanyApplications() {
                   const st = driverStatus(app);
                   return (
                     <tr key={app.id}
-                      className={`hover:bg-blue-50/30 transition ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/30"}`}>
+                      onClick={() => setManagingApp(app)}
+                    className={`cursor-pointer hover:bg-[#EEF3FC] transition ${managingApp?.id === app.id ? "bg-[#EEF3FC]" : idx % 2 === 0 ? "bg-white" : "bg-[#FAFBFD]"}`}>
                       <td className="px-3 py-3 text-center text-[12px] text-gray-500 whitespace-nowrap">{fmtDate(app.createdAt)}</td>
-                      <td className="px-3 py-3 text-center font-semibold text-gray-800">{app.name || app.displayName || "-"}</td>
+                      <td className="px-3 py-3 text-center font-black text-[#0F1A30] whitespace-nowrap">{app.name || app.displayName || "-"}</td>
                       <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.vehicleNumber || app.licensePlate || "-"}</td>
                       <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.vehicleType || "-"}</td>
                       <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{(app.phone || app.phoneNumber) ? formatPhone(app.phone || app.phoneNumber) : "-"}</td>
@@ -820,7 +869,7 @@ export default function CompanyApplications() {
                       <td className="px-3 py-3 text-center">
                         <button
                           onClick={() => setManagingApp(app)}
-                          className="px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/10 transition"
+                          className="px-3 py-1.5 rounded-lg text-[11px] font-black bg-[#1B2B4B] text-white hover:bg-[#2D4C82] transition whitespace-nowrap"
                         >
                           관리
                         </button>
@@ -836,32 +885,78 @@ export default function CompanyApplications() {
 
       {/* ====== 통합 관리 팝업 ====== */}
       {managingApp && !showRejectModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+        <div className="fixed inset-0 bg-[#0B1428]/45 flex justify-end z-50"
           onClick={() => setManagingApp(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-[520px] max-h-[88vh] overflow-y-auto"
+          <div className="bg-[#F3F6FA] shadow-2xl w-full max-w-[760px] h-full overflow-y-auto flex flex-col"
             onClick={(e) => e.stopPropagation()}>
-            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0">
-              <div>
-                <h3 className="text-white font-bold text-[15px]">
-                  {activeTab === "기사" ? <EditableText id="companyApp.managingApp.title.기사" defaultText="기사 신청 관리" /> : <EditableText id="companyApp.managingApp.title.기본" defaultText="가입신청 관리" />}
-                </h3>
-                <p className="text-white/60 text-[12px] mt-0.5">
-                  {activeTab === "기사"
-                    ? (managingApp.name || managingApp.displayName || "-")
-                    : `${managingApp.companyName} / ${managingApp.name}`}
-                </p>
+            <div className="px-6 py-5 flex items-start justify-between gap-3 sticky top-0 z-10" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 65%,#2D4C82 100%)" }}>
+              <div className="min-w-0">
+                <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO }}>
+                  {activeTab === "기사" ? "DRIVER" : activeTab === "운송" ? "CARRIER" : "SHIPPER"} · {managingApp.type === "기존" ? "기존 회사 추가" : activeTab === "기사" ? "기사 신청" : "신규 가입"}
+                </div>
+                <div className="text-white text-[20px] font-black whitespace-nowrap overflow-hidden text-ellipsis">
+                  {activeTab === "기사" ? (managingApp.name || managingApp.displayName || "-") : (managingApp.companyName || "-")}
+                </div>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  <StatusBadge status={activeTab === "기사" ? driverStatus(managingApp) : managingApp.status} />
+                  {activeTab !== "기사" && <span className="text-[12px] text-white/70 whitespace-nowrap">{managingApp.name}{managingApp.position ? ` · ${managingApp.position}` : ""}</span>}
+                  {activeTab === "운송" && plans[(managingApp.companyName || "").trim()]?.planId && <span className="px-2 py-0.5 rounded-md text-[11px] font-black bg-[#8FB0F0] text-[#0B1428] whitespace-nowrap">{planName(plans[(managingApp.companyName || "").trim()].planId)}</span>}
+                </div>
               </div>
-              <button onClick={() => setManagingApp(null)} className="text-white/60 hover:text-white text-lg">✕</button>
+              <button onClick={() => setManagingApp(null)} className="w-9 h-9 shrink-0 rounded-xl bg-white/10 ring-1 ring-white/20 text-white/80 hover:text-white">✕</button>
             </div>
 
-            <div className="p-6 space-y-5">
+            <div className="p-5 space-y-4 flex-1">
+              {/* 💳 요금제 (운송 탭) — 신청 요금제·현재 요금제 확인, 최고관리자 변경 */}
+              {activeTab === "운송" && (() => {
+                const co = (managingApp.companyName || "").trim();
+                const curPlan = plans[co];
+                const approved = managingApp.status === "approved";
+                const sel = planDraft || curPlan?.planId || "";
+                return (
+                  <Sec title="요금제" en="PLAN" right={curPlan?.since && <span className="text-[11.5px] text-[#7A89A3] whitespace-nowrap">{curPlan.since}부터</span>}>
+                    <div className="px-4 py-3 grid grid-cols-3 gap-2">
+                      {[["신청한 요금제", managingApp.type === "기존" ? "-" : planName(managingApp.requestedPlan || "standard")], ["현재 요금제", curPlan?.planId ? planName(curPlan.planId) : "미지정"], ["변경 이력", `${(curPlan?.history || []).length}회`]].map(([k, v]) => (
+                        <div key={k} className="rounded-xl bg-[#F7F9FC] border border-[#EEF1F6] px-3 py-2 min-w-0">
+                          <div className="text-[11px] text-[#7A89A3] whitespace-nowrap">{k}</div>
+                          <div className="text-[15px] font-black text-[#0F1A30] whitespace-nowrap">{v}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {approved && co ? (
+                      <div className="px-4 pb-4">
+                        <div className="text-[12px] font-bold text-[#5B6B85] mb-1.5">요금제 변경 (최고관리자) · 저장하면 그 회사 메뉴가 바로 바뀝니다</div>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {PLANS.map(([id, nm]) => (
+                            <button key={id} type="button" onClick={() => setPlanDraft(id)}
+                              className={`h-10 rounded-xl text-[13px] font-black whitespace-nowrap transition ${sel === id ? "bg-[#1B2B4B] text-white" : "bg-white border border-[#DCE3EE] text-[#1B2B4B] hover:bg-[#F3F6FA]"}`}>
+                              {nm}{curPlan?.planId === id ? " ✓" : ""}
+                            </button>
+                          ))}
+                        </div>
+                        <button type="button" disabled={planSaving || !planDraft || planDraft === curPlan?.planId} onClick={() => savePlan(co, planDraft)}
+                          className="mt-2 w-full h-10 rounded-xl bg-[#2D4C82] text-white text-[13px] font-black disabled:opacity-40">{planSaving ? "저장 중…" : "요금제 변경 저장"}</button>
+                        {(curPlan?.history || []).length > 0 && (
+                          <div className="mt-2 space-y-0.5">
+                            {[...curPlan.history].reverse().slice(0, 3).map((h, i) => (
+                              <div key={i} className="text-[11.5px] text-[#7A89A3] whitespace-nowrap overflow-hidden text-ellipsis">{String(h.at || "").slice(0, 10)} · {planName(h.from) || "미지정"} → {planName(h.to)}{h.by ? ` · ${h.by}` : ""}</div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="px-4 pb-3 text-[12px] text-[#7A89A3]">{managingApp.type === "기존" ? "기존 회사 추가 가입은 그 회사 요금제를 따릅니다." : "승인할 때 아래에서 요금제를 고르면 바로 적용됩니다."}</div>
+                    )}
+                  </Sec>
+                );
+              })()}
               {/* 기본 정보 */}
-              <div className="border border-gray-100 rounded-xl overflow-hidden">
-                <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">
+              <div className="rounded-2xl border border-[#E3E8F0] bg-white overflow-hidden">
+                <div className="bg-[#F7F9FC] px-4 py-2.5 text-[13px] font-black text-[#0F1A30] border-b border-[#EEF1F6]">
                   {activeTab === "기사" ? <EditableText id="companyApp.managingApp.section.기사정보" defaultText="기사 정보" /> : <EditableText id="companyApp.managingApp.section.신청정보" defaultText="신청 정보" />}
                 </div>
                 {activeTab !== "기사" ? (
-                  <>
+                  <div className="grid md:grid-cols-2 md:[&>*:nth-child(odd)]:border-r md:[&>*]:border-[#EEF1F6]">
                     <InfoRow label="신청 유형" value={managingApp.type === "신규" ? "신규 가입신청" : "기존 회사 추가 가입"} />
                     <InfoRow label="신청 일시" value={fmtDate(managingApp.createdAt)} />
                     <InfoRow label="회사명" value={managingApp.companyName} />
@@ -871,9 +966,9 @@ export default function CompanyApplications() {
                     <InfoRow label="연락처" value={managingApp.phone ? formatPhone(managingApp.phone) : managingApp.phone} />
                     <InfoRow label="직책" value={managingApp.position} />
                     <InfoRow label="주소" value={managingApp.address} />
-                  </>
+                  </div>
                 ) : (
-                  <>
+                  <div className="grid md:grid-cols-2 md:[&>*:nth-child(odd)]:border-r md:[&>*]:border-[#EEF1F6]">
                     <InfoRow label="신청 일시" value={fmtDate(managingApp.createdAt)} />
                     <InfoRow label="이름" value={managingApp.name || managingApp.displayName} />
                     <InfoRow label="이메일" value={managingApp.email} />
@@ -881,14 +976,14 @@ export default function CompanyApplications() {
                     <InfoRow label="차량번호" value={managingApp.vehicleNumber || managingApp.licensePlate} />
                     <InfoRow label="차종" value={managingApp.vehicleType} />
                     <InfoRow label="주소" value={managingApp.address} />
-                  </>
+                  </div>
                 )}
               </div>
 
               {/* 연결 운송사 (화주 탭만) */}
               {activeTab === "화주" && managingApp.linkedTransportCompany && (
-                <div className="border border-gray-100 rounded-xl overflow-hidden">
-                  <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                <div className="rounded-2xl border border-[#E3E8F0] bg-white overflow-hidden">
+                  <div className="bg-[#F7F9FC] px-4 py-2.5 text-[13px] font-black text-[#0F1A30] border-b border-[#EEF1F6]">
                     <EditableText id="companyApp.managingApp.section.연결운송사" defaultText="연결 운송사" />
                   </div>
                   <InfoRow label="운송사명" value={managingApp.linkedTransportCompany.companyName} />
@@ -898,8 +993,8 @@ export default function CompanyApplications() {
                     <>
                       <div className="flex items-center gap-2 px-4 py-3 border-t border-gray-50">
                         <span className="text-[12px] text-gray-400 w-28 shrink-0"><EditableText id="companyApp.managingApp.운송사승인" defaultText="운송사 승인" /></span>
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold border bg-[#1B2B4B] text-white border-[#1B2B4B]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#8FB0F0]" />
                           <EditableText id="companyApp.managingApp.1차승인완료" defaultText="1차 승인 완료" />
                         </span>
                       </div>
@@ -909,8 +1004,8 @@ export default function CompanyApplications() {
                   {managingApp.transportApprovalStatus === "rejected" && (
                     <div className="flex items-center gap-2 px-4 py-3 border-t border-gray-50">
                       <span className="text-[12px] text-gray-400 w-28 shrink-0"><EditableText id="companyApp.managingApp.운송사결과" defaultText="운송사 결과" /></span>
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold border bg-red-50 text-red-600 border-red-200">
-                        <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold border bg-white text-[#7A89A3] border-[#C9D3E3]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#C9D3E3]" />
                         <EditableText id="companyApp.managingApp.운송사거절" defaultText="운송사 거절" />
                       </span>
                     </div>
@@ -920,8 +1015,8 @@ export default function CompanyApplications() {
 
               {/* 약관 동의 (화주/운송) */}
               {activeTab !== "기사" && (
-                <div className="border border-gray-100 rounded-xl overflow-hidden">
-                  <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                <div className="rounded-2xl border border-[#E3E8F0] bg-white overflow-hidden">
+                  <div className="bg-[#F7F9FC] px-4 py-2.5 text-[13px] font-black text-[#0F1A30] border-b border-[#EEF1F6]">
                     <EditableText id="companyApp.managingApp.section.약관동의" defaultText="약관 동의" />
                   </div>
                   {[
@@ -930,7 +1025,7 @@ export default function CompanyApplications() {
                   ].map(([label, agreed]) => (
                     <div key={label} className="flex items-center justify-between px-4 py-3 border-t border-gray-50 first:border-t-0">
                       <span className="text-[13px] text-gray-600"><EditableText id={`companyApp.managingApp.terms.${label}`} defaultText={label} /></span>
-                      <span className={`text-[12px] font-bold ${agreed ? "text-emerald-600" : "text-red-500"}`}>
+                      <span className={`text-[12px] font-bold ${agreed ? "text-[#1B2B4B]" : "text-[#9AA9C3] line-through"}`}>
                         {agreed ? <EditableText id="companyApp.managingApp.동의" defaultText="동의" /> : <EditableText id="companyApp.managingApp.미동의" defaultText="미동의" />}
                       </span>
                     </div>
@@ -939,8 +1034,8 @@ export default function CompanyApplications() {
               )}
 
               {/* 처리 상태 */}
-              <div className="border border-gray-100 rounded-xl overflow-hidden">
-                <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100"><EditableText id="companyApp.managingApp.section.처리상태" defaultText="처리 상태" /></div>
+              <div className="rounded-2xl border border-[#E3E8F0] bg-white overflow-hidden">
+                <div className="bg-[#F7F9FC] px-4 py-2.5 text-[13px] font-black text-[#0F1A30] border-b border-[#EEF1F6]"><EditableText id="companyApp.managingApp.section.처리상태" defaultText="처리 상태" /></div>
                 <div className="px-4 py-3 flex items-center justify-between">
                   {(() => {
                     const st = activeTab === "기사" ? driverStatus(managingApp) : managingApp.status;
@@ -953,12 +1048,12 @@ export default function CompanyApplications() {
                           )}
                           {managingApp.status === "approved" && managingApp.userStatus === "suspended" && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />사용정지
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#2D4C82]" />사용정지
                             </span>
                           )}
                           {managingApp.status === "approved" && managingApp.userStatus === "banned" && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
-                              <span className="w-1.5 h-1.5 rounded-full bg-red-400" />영구정지
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#0B1428]" />영구정지
                             </span>
                           )}
                         </div>
@@ -976,16 +1071,16 @@ export default function CompanyApplications() {
 
               {/* 운송목록 조회기간 제한 (화주 탭 + 승인된 회사) */}
               {activeTab === "화주" && managingApp.status === "approved" && (
-                <div className="border border-gray-100 rounded-xl overflow-hidden">
-                  <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                <div className="rounded-2xl border border-[#E3E8F0] bg-white overflow-hidden">
+                  <div className="bg-[#F7F9FC] px-4 py-2.5 text-[13px] font-black text-[#0F1A30] border-b border-[#EEF1F6]">
                     <EditableText id="companyApp.managingApp.section.조회기간제한" defaultText="운송목록 조회기간 제한" />
                   </div>
                   <div className="px-4 py-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-[13px] text-gray-600"><EditableText id="companyApp.managingApp.현재상태" defaultText="현재 상태" /></span>
                       {managingApp.viewLimitUnlockedUntil && managingApp.viewLimitUnlockedUntil >= todayStr() ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-[#1B2B4B] text-white border border-[#1B2B4B]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#8FB0F0]" />
                           {managingApp.viewLimitUnlockedUntil}<EditableText id="companyApp.managingApp.까지확장허용" defaultText="까지 확장 허용" />
                         </span>
                       ) : (
@@ -1016,8 +1111,8 @@ export default function CompanyApplications() {
 
               {/* 계정 권한 (운송 탭 — 최고관리자) */}
               {activeTab === "운송" && managingApp.userId && tUser && (
-                <div className="border border-gray-100 rounded-xl overflow-hidden">
-                  <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">계정 권한</div>
+                <div className="rounded-2xl border border-[#E3E8F0] bg-white overflow-hidden">
+                  <div className="bg-[#F7F9FC] px-4 py-2.5 text-[13px] font-black text-[#0F1A30] border-b border-[#EEF1F6]">계정 권한</div>
                   <div className="px-4 py-4 space-y-3">
                     <div className="text-[12.5px] text-gray-500">지금: <b className="text-[#1B2B4B]">{({ admin: "관리자", hrManager: "인사관리자", user: "실무자", test: "정산·회계", viewer: "조회전용" })[tUser.role] || tUser.role || "-"}</b>{tUser.isMaster ? " · 마스터" : ""}</div>
                     <div className="grid grid-cols-5 gap-1.5">
@@ -1037,8 +1132,8 @@ export default function CompanyApplications() {
 
               {/* 권한 관리 (화주 탭 + userId 있는 경우) */}
               {activeTab === "화주" && managingApp.userId && appUserPerms !== null && (
-                <div className="border border-gray-100 rounded-xl overflow-hidden">
-                  <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100"><EditableText id="companyApp.managingApp.section.권한관리" defaultText="권한 관리" /></div>
+                <div className="rounded-2xl border border-[#E3E8F0] bg-white overflow-hidden">
+                  <div className="bg-[#F7F9FC] px-4 py-2.5 text-[13px] font-black text-[#0F1A30] border-b border-[#EEF1F6]"><EditableText id="companyApp.managingApp.section.권한관리" defaultText="권한 관리" /></div>
                   <div className="px-4 py-4">
                     <div className="grid grid-cols-4 gap-2 mb-3">
                     {[
@@ -1073,8 +1168,8 @@ export default function CompanyApplications() {
                 </div>
               )}
 
-              {/* 액션 버튼 */}
-              <div className="space-y-2">
+              {/* 액션 버튼 — 패널 아래 고정 */}
+              <div className="sticky bottom-0 -mx-5 -mb-5 px-5 py-4 bg-white border-t border-[#E3E8F0] space-y-2 shadow-[0_-8px_20px_rgba(15,26,48,0.06)]">
                 {(() => {
                   const st = activeTab === "기사" ? driverStatus(managingApp) : managingApp.status;
                   if (st === "pending") {
@@ -1105,7 +1200,7 @@ export default function CompanyApplications() {
                   }
                   if (st === "approved" && activeTab !== "기사") {
                     return (
-                      <>
+                      <div className="grid grid-cols-3 gap-2 [&>button]:!w-full">
                         {managingApp.userStatus !== "suspended" && managingApp.userStatus !== "banned" ? (
                           <>
                             <button onClick={() => changeUserStatus(managingApp, "suspended")} disabled={processing}
@@ -1127,7 +1222,7 @@ export default function CompanyApplications() {
                           className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-500 hover:bg-gray-50 transition disabled:opacity-50">
                           <EditableText id="companyApp.managingApp.삭제초기화" defaultText="삭제 (가입 전 초기화)" />
                         </button>
-                      </>
+                      </div>
                     );
                   }
                   if (st === "rejected") {

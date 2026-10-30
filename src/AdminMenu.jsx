@@ -1455,8 +1455,14 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
             </div>
           )}
           {adminTab === "setup" && (
-            <div className="grid gap-4 md:grid-cols-2">
-              {[["TUTORIAL", "튜토리얼 다시 보기", "프로그램 주요 흐름을 5장으로 둘러봅니다.", openTutorial], ["SETUP WIZARD", "초기 설정 마법사", "단위 · 선택 목록 · 결제일 · 복사 문구 · 매출목표를 한 번에 정합니다.", openSetupWizard]].map(([en, t, d, fn]) => (
+            <div className="grid gap-4 md:grid-cols-3">
+              {[["TUTORIAL", "튜토리얼 다시 보기", "프로그램 주요 흐름을 5장으로 둘러봅니다.", openTutorial], ["SETUP WIZARD", "초기 설정 마법사", "단위 · 선택 목록 · 결제일 · 복사 문구 · 매출목표를 한 번에 정합니다.", openSetupWizard],
+                ["CHECKLIST", "시작 체크리스트 다시 보기", "숨긴 시작 체크리스트(회사정보·직원 초대·권한·기사·거래처·첫 오더·요금제)를 홈 맨 위에 다시 띄웁니다.", async () => {
+                  try {
+                    await setDoc(doc(db, "companySettings", effectiveCompany), { masterChecklistDone: false }, { merge: true });
+                    window.__setMainTab?.("HOME");
+                  } catch (e) { alert("다시 띄우기 실패: " + (e?.message || e)); }
+                }]].map(([en, t, d, fn]) => (
                 <button key={en} type="button" onClick={fn} className="text-left rounded-[20px] p-6 text-white shadow-[0_14px_34px_rgba(15,26,48,0.22)] hover:-translate-y-0.5 transition" style={{ background: "linear-gradient(135deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
                   <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]">{en}</div>
                   <div className="text-[19px] font-black mt-1">{t}</div>

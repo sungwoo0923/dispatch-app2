@@ -188,8 +188,19 @@ export const getDocs = wrapGet(base.getDocs);
 export const getDocsFromCache = base.getDocsFromCache ? wrapGet(base.getDocsFromCache) : undefined;
 export const getDocsFromServer = base.getDocsFromServer ? wrapGet(base.getDocsFromServer) : undefined;
 export async function getCountFromServer(ref, ...rest) {
-  const q = injected(ref);
-  if (q) { try { return await base.getCountFromServer(q, ...rest); } catch (e) { if (!needsIndex(e)) throw e; warnIndex(e); } }
+  const t = getTenant();
+  const col = topCollectionId(ref);
+  // 건수 세기(모바일 첫 로딩 "오늘 N건" 등) — 기본 회사가 아닌 운송사는 문서마다 회사명이 있으니
+  // 스위치와 상관없이 서버에서 회사 조건으로 센다. 색인이 아직 없으면 받아서 직접 센다.
+  const q = injected(ref) || (t && t !== DEFAULT_CO && INJECT.has(col) ? base.query(ref, base.where("companyName", "==", t)) : null);
+  if (q) {
+    try { return await base.getCountFromServer(q, ...rest); } catch (e) {
+      if (!needsIndex(e)) throw e; warnIndex(e);
+      const snap = wrapSnap(await base.getDocs(ref), keeper(col));
+      const n = snap.size;
+      return { data: () => ({ count: n }) };
+    }
+  }
   return base.getCountFromServer(ref, ...rest);
 }
 
