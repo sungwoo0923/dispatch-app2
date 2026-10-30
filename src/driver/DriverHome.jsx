@@ -382,6 +382,20 @@ function OrderDetailBody({ o, onCopy, changed = [] }) {
       <style>{`@keyframes kpRedBlink { 0%,100% { opacity: 1; } 50% { opacity: .35; } }`}</style>
       <LocBlock title="상차" name={o.상차지명} addr={o.상차지주소} when={fmtDT(o.상차일, o.상차시간)} manager={o.상차지담당자} managerPhone={o.상차지담당자번호} onCopy={onCopy}
         chName={any("상차지명")} chAddr={any("상차지주소")} chWhen={any("상차일", "상차시간")} chManager={any("상차지담당자", "상차지담당자번호")} />
+      {/* 🛣 경유·거점 — 여러 곳을 들르는 오더(고정노선 등)는 순서대로 보여준다(하차지별 운임이 있으면 함께) */}
+      {[...(Array.isArray(o.경유지_상차) ? o.경유지_상차.map((w) => ({ ...w, _k: "상차 경유", _t: w.상차시간 })) : []), ...(Array.isArray(o.경유지_하차) ? o.경유지_하차.map((w) => ({ ...w, _k: w.구분 || "경유", _t: w.하차시간 })) : [])]
+        .filter((w) => w.업체명 || w.주소).map((w, i) => (
+          <div key={`wp${i}`} style={{ padding: "8px 0 8px 10px", borderBottom: "1px solid #EEF2F8", borderLeft: "3px solid #8FB0F0" }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 10.5, fontWeight: 900, color: "#2D4C82", letterSpacing: "0.08em" }}>{w._k} {i + 1}</span>
+              <span style={{ fontSize: 14, fontWeight: 900, color: "#0F1A30" }}>{w.업체명 || "-"}</span>
+              {w._t && <span style={{ fontSize: 11.5, fontWeight: 800, color: "#1B2B4B", background: "#EEF2F8", borderRadius: 6, padding: "1px 6px" }}>{w._t}</span>}
+              {Number(w.기사운임) > 0 && <span style={{ marginLeft: "auto", fontSize: 12.5, fontWeight: 900, color: "#0B1428" }}>{Number(w.기사운임).toLocaleString()}원</span>}
+            </div>
+            {w.주소 && <div style={{ fontSize: 12, color: "#5B6B85", marginTop: 2 }}>{w.주소}</div>}
+            {(w.화물내용 || w.차량톤수) && <div style={{ fontSize: 11.5, color: "#7A89A3", marginTop: 2 }}>{[w.화물내용, w.차량톤수].filter(Boolean).join(" · ")}</div>}
+          </div>
+        ))}
       <LocBlock title="하차" name={o.하차지명} addr={o.하차지주소} when={fmtDT(o.하차일, o.하차시간)} manager={o.하차지담당자} managerPhone={o.하차지담당자번호} onCopy={onCopy}
         chName={any("하차지명")} chAddr={any("하차지주소")} chWhen={any("하차일", "하차시간")} chManager={any("하차지담당자", "하차지담당자번호")} />
       {(o.화물내용 || o.차량톤수) && (
@@ -396,6 +410,14 @@ function OrderDetailBody({ o, onCopy, changed = [] }) {
           <span style={{ fontWeight: 700, flexShrink: 0 }}>운임</span>
           <span style={{ fontWeight: 800, color: "#1B2B4B", ...(any("기사운임", "지급방식") ? CHG : {}) }}>{o.기사운임 ? `${Number(String(o.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원` : "-"}</span>
           {o.지급방식 && <span style={{ color: "#5B6B85" }}>· {o.지급방식}</span>}
+        </div>
+      )}
+      {Array.isArray(o.구간운임) && o.구간운임.some((g) => Number(g.기사) > 0) && (
+        <div style={{ fontSize: 12, color: "#3A4A66", padding: "8px 0", borderBottom: "1px solid #EEF2F8" }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>하차지별 운임</div>
+          {o.구간운임.filter((g) => Number(g.기사) > 0).map((g, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}><span>{g.구분} · {g.name}</span><b style={{ color: "#1B2B4B" }}>{Number(g.기사).toLocaleString()}원</b></div>
+          ))}
         </div>
       )}
       {o.전달사항 && (

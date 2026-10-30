@@ -126,7 +126,7 @@ function DeductionEditor({ title, sub, value = [], auto = [], gross = 0, onSave,
 
 // ═════════════════════ 지급명세서 공용 계산(일괄·개별 같은 값) ═════════════════════
 const penForDriver = (p, d) => p.driverKey === d.id || p.driverId === d.id || (d.appUid && p.driverId === d.appUid);
-const viaNames = (r) => [r.경유지_상차, r.경유지_하차, r.경유상차목록, r.경유하차목록].flatMap((a) => (Array.isArray(a) ? a : [])).map((w) => w?.업체명 || w?.name || "").filter(Boolean).join(", ");
+const viaNames = (r) => [r.경유지_상차, r.경유지_하차, r.경유상차목록, r.경유하차목록].flatMap((a) => (Array.isArray(a) ? a : [])).map((w) => (w?.업체명 || w?.name || "") + (Number(w?.기사운임) > 0 ? `(${Number(w.기사운임).toLocaleString()})` : "")).filter(Boolean).join(", ");
 function useStatements({ drivers, dispatchData, co, ym, vatMode, includeEmpty = false }) {
   const [from, to] = monthRange(ym);
   const settings = useCompanyDoc("companySettings", co);
