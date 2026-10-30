@@ -128,6 +128,13 @@ function KpSplash() {
 // 최고관리자 진입 선택(탭/창 단위로 기억 — 새로 로그인하거나 창을 닫으면 다시 고른다)
 const kpEntry = () => { try { return sessionStorage.getItem("kpEntry") || ""; } catch { return ""; } };
 
+// ⭐ 버그수정 — 진입 선택값은 /app 화면을 그릴 "그 순간" 읽어야 한다. App 본문에서 읽으면
+//  선택 화면에서 "배차 프로그램"을 눌러도 App이 다시 그려지지 않아 옛 값(선택 전)으로 판단해
+//  선택 화면으로 되돌아갔다(새로고침해야 들어가짐).
+function EntryGate({ children }) {
+  return kpEntry() === "app" ? children : <Navigate to="/choose" replace />;
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
@@ -858,8 +865,8 @@ export default function App() {
             path="/app"
             element={
               user && role !== "shipper" && role !== "driver" && approved
-                ? (role === "totalMaster" && kpEntry() !== "app"
-                    ? <Navigate to="/choose" replace />
+                ? (role === "totalMaster"
+                    ? <EntryGate>{isMobile ? <MobileApp role={role} user={user} userCompany={userCompany} /> : <DispatchApp role={role} user={user} userCompany={userCompany} />}</EntryGate>
                     : isMobile ? <MobileApp role={role} user={user} userCompany={userCompany} /> : <DispatchApp role={role} user={user} userCompany={userCompany} />)
                 : <Navigate to="/login" replace />
             }

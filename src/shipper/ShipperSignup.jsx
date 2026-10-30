@@ -1,6 +1,7 @@
 // src/shipper/ShipperSignup.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { checkEmailAvailable } from "../emailCheck";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, deleteUser } from "firebase/auth";
 import { auth, db } from "../firebase";
 import {
@@ -295,13 +296,13 @@ function SignupForm({ signupType, onBack }) {
     setEmailCheckMsg(null);
     try {
       // Firestore 활성 계정만 체크 (삭제/탈퇴된 계정은 재가입 허용)
-      const snap = await getDocs(query(collection(db, "users"), where("email", "==", trimmed)));
-      if (!snap.empty) {
+      const st = await checkEmailAvailable(trimmed);
+      if (st === "used") {
         setEmailChecked(false);
         setEmailCheckMsg({ ok: false, msg: "이미 사용 중인 이메일입니다." });
       } else {
         setEmailChecked(true);
-        setEmailCheckMsg({ ok: true, msg: "사용 가능한 이메일입니다." });
+        setEmailCheckMsg({ ok: true, msg: st === "free" ? "사용 가능한 이메일입니다." : "확인되었습니다. 이미 가입된 이메일이면 가입 신청 때 안내됩니다." });
       }
     } catch {
       setEmailCheckMsg({ ok: false, msg: "확인 중 오류가 발생했습니다." });

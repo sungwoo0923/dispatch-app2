@@ -3442,6 +3442,23 @@ exports.checkGsheetMonth = functions
    포함하지 않는다(로그인 전 누구나 호출 가능한 엔드포인트이므로).
    호출: GET https://.../lookupCompanyCode?q=검색어
 ================================================================== */
+// 📧 가입 화면 이메일 중복확인 — 로그인 전 화면은 보안 규칙상 users 목록을 못 읽어서
+//  "사용 중 여부"만 서버가 대신 알려준다(문서 내용은 돌려주지 않음). 삭제·탈퇴 계정은 재가입 허용.
+exports.checkEmail = functions.https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  const e = String(req.query.e || "").trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) || e.length > 200) { res.status(400).json({ error: "BAD_EMAIL" }); return; }
+  try {
+    const snap = await db.collection("users").where("email", "==", e).limit(5).get();
+    const used = snap.docs.some((d) => !["deleted", "withdrawn"].includes(d.data().status));
+    res.status(200).json({ used });
+  } catch (err) {
+    res.status(500).json({ error: "CHECK_FAILED" });
+  }
+});
+
 exports.lookupCompanyCode = functions.https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "GET, OPTIONS");

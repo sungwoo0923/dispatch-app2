@@ -1,10 +1,11 @@
 // src/Signup.jsx  —  운송사 회원가입
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { checkEmailAvailable } from "./emailCheck";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "firebase/auth";
 import { auth, db } from "./firebase";
 import {
-  doc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc, updateDoc,
+  doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc, updateDoc,
 } from "firebase/firestore";
 
 const POSITIONS = ["대표", "이사", "팀장", "과장", "대리", "사원", "기타"];
@@ -220,9 +221,11 @@ function SignupForm({ signupType, onBack }) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return setEmailCheckMsg({ text: "올바른 이메일 형식을 입력해주세요.", type: "error" });
     setEmailChecking(true);
     try {
-      const snap = await getDocs(query(collection(db, "users"), where("email", "==", e)));
-      if (snap.empty) {
+      const st = await checkEmailAvailable(e);
+      if (st === "free") {
         setEmailCheckMsg({ text: "사용 가능한 이메일입니다.", type: "ok" });
+      } else if (st === "unknown") {
+        setEmailCheckMsg({ text: "확인되었습니다. 이미 가입된 이메일이면 가입 신청 때 안내됩니다.", type: "ok" });
       } else {
         setEmailCheckMsg({ text: "이미 사용 중인 이메일입니다.", type: "error" });
       }
@@ -355,29 +358,24 @@ function SignupForm({ signupType, onBack }) {
     } catch (err) {
       const code = err.code || "";
       if (code === "auth/email-already-in-use") {
-        // 관리자가 계정을 삭제했는지 확인 (Firestore에 해당 이메일 문서가 없는 경우)
+        // 관리자가 계정을 삭제했는지 확인 — 로그인 전에는 users 목록을 못 읽으므로
+        // 입력한 비밀번호로 먼저 로그인해 "내 문서"만 확인한다(본인 문서는 읽기 허용).
         try {
-          const snap = await getDocs(query(collection(db, "users"), where("email", "==", email.trim())));
-          const existingDoc = snap.docs[0];
-          const isDeleted = !existingDoc || existingDoc.data().status === "deleted" || existingDoc.data().status === "withdrawn";
+          const reLogin = await signInWithEmailAndPassword(auth, email.trim(), password);
+          const mine = await getDoc(doc(db, "users", reLogin.user.uid)).catch(() => null);
+          const d = mine?.exists() ? mine.data() : null;
+          const isDeleted = !d || d.status === "deleted" || d.status === "withdrawn";
           if (isDeleted) {
-            // 기존 Auth 계정으로 로그인 후 재가입 처리
-            try {
-              const reLogin = await signInWithEmailAndPassword(auth, email.trim(), password);
-              await writeUserDocs(reLogin.user.uid);
-              await signOut(auth);
-              setSuccess(true);
-              setTimeout(() => navigate("/login"), 2500);
-            } catch (_) {
-              setError(
-                "이전에 사용하던 비밀번호를 입력해 주세요. 비밀번호를 잊으셨다면 로그인 화면의 비밀번호 재설정을 이용해 주세요."
-              );
-            }
+            await writeUserDocs(reLogin.user.uid);
+            await signOut(auth);
+            setSuccess(true);
+            setTimeout(() => navigate("/login"), 2500);
           } else {
-            setError("이미 가입된 이메일입니다.");
+            await signOut(auth);
+            setError("이미 가입된 이메일입니다. 로그인 화면에서 로그인해 주세요.");
           }
         } catch (_) {
-          setError("이미 가입된 이메일입니다.");
+          setError("이미 가입된 이메일입니다. 예전에 쓰던 계정이면 그때 비밀번호를 입력하거나, 로그인 화면의 비밀번호 재설정을 이용해 주세요.");
         }
       } else if (code === "auth/invalid-email") {
         setError("올바른 이메일 형식을 입력해주세요.");
