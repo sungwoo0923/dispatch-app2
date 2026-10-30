@@ -1,5 +1,5 @@
 // ======================= src/MasterChecklist.jsx =======================
-// 👑 마스터 시작 체크리스트(2026-10-30) — 신규 운송사를 처음 가입한 마스터 계정의 홈 맨 위에 뜬다.
+// 마스터 시작 체크리스트(2026-10-30) — 신규 운송사를 처음 가입한 마스터 계정의 홈 맨 위에 뜬다.
 //  회사가 실제로 굴러가려면 마스터가 먼저 해 둘 일을 순서대로 보여주고, 끝난 항목은 자동으로 체크된다.
 //  모두 끝내거나 "숨기기"를 누르면 companySettings/{회사}.masterChecklistDone 로 다시 안 뜬다.
 import React from "react";
@@ -33,7 +33,8 @@ export default function MasterChecklist({ user, userCompany }) {
     if (!co) return undefined;
     return onSnapshot(doc(db, "companySettings", co), (s) => setSettings(s.exists() ? s.data() : {}), () => setSettings({}));
   }, [co]);
-  const isMaster = me?.isMaster === true && me?.role !== "shipper";
+  // 마스터 계정 + 막 승인된 신규 운송사의 관리자(승인 때 onboarding 표시가 생김)에게 바로 보인다
+  const isMaster = (me?.isMaster === true || (["admin", "totalMaster"].includes(me?.role) && !!settings?.onboarding)) && me?.role !== "shipper";
   React.useEffect(() => {
     if (!isMaster || !co || settings?.masterChecklistDone) return;
     let alive = true;
@@ -69,8 +70,8 @@ export default function MasterChecklist({ user, userCompany }) {
       <div className="px-5 py-4 text-white flex items-center justify-between gap-4 flex-wrap" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <div className="min-w-0">
           <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO }}>MASTER · GETTING STARTED</div>
-          <div className="text-[19px] font-black whitespace-nowrap">👑 {co} 시작 체크리스트</div>
-          <div className="text-[12.5px] text-white/65 whitespace-nowrap">마스터 계정만 보입니다 · 끝난 항목은 자동으로 체크됩니다</div>
+          <div className="text-[19px] font-black whitespace-nowrap">{co} 시작 체크리스트</div>
+          <div className="text-[12.5px] text-white/65 whitespace-nowrap">처음 시작하는 관리자에게 보입니다 · 끝난 항목은 자동으로 체크됩니다</div>
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">

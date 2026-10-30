@@ -10,7 +10,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { addDoc, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
-import { auth, db } from "./firebase";
+import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import { pushTenantBypass } from "./fsTenant";
 import KpSubNav from "./KpSubNav";
 import PlatformMonitor, { estimateBill, usePhone } from "./PlatformMonitor";
@@ -59,6 +59,7 @@ const SECTIONS = [
     { key: "landingEdit", label: "랜딩페이지 편집", en: "LANDING", icon: "globe" },
   ] },
   { key: "data", label: "보안·데이터", en: "SECURITY", icon: "shield", items: [
+    { key: "tenancy", label: "운송사 분리", en: "ISOLATION", icon: "shield" },
     { key: "sessions", label: "로그인 관리", en: "SESSIONS", icon: "key" },
     { key: "sessionLogs", label: "접속 이력", en: "AUDIT LOG", icon: "history" },
     { key: "sheetImport", label: "배차일지 가져오기", en: "IMPORT", icon: "sheet" },
@@ -340,6 +341,81 @@ function NoticesPanel() {
   );
 }
 
+// ═══════════════════════ 운송사 분리(서버 잠금) ═══════════════════════
+const TENANT_COLS = ["orders", "dispatch", "dispatch_test", "drivers", "clients", "places", "fixedClients", "recurringOrders",
+  "deletedOrders", "driver_completed_archive", "notices", "schedules", "handovers", "boardPosts", "approvals", "approvalLines",
+  "notifications", "scheduledEmails", "emailLogs", "hrResumes", "attendanceRequests", "attendanceChangeRequests", "acctPayments"];
+function TenancyPanel() {
+  const [cfg, setCfg] = React.useState(null);
+  const [prog, setProg] = React.useState({});
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState("");
+  React.useEffect(() => onSnapshot(doc(db, "systemConfig", "tenancy"), (s) => setCfg(s.exists() ? s.data() : {}), () => setCfg({})), []);
+  const run = async () => {
+    if (!window.confirm("모든 운송사 데이터의 예전 문서에 회사명을 채웁니다(회사명이 없는 문서는 '돌캐' 또는 화주 오더의 받는 운송사).\n오래 걸릴 수 있으니 창을 닫지 마세요. 진행할까요?")) return;
+    setBusy(true); setMsg("");
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      for (const col of TENANT_COLS) {
+        let cursor = null; let scanned = 0; let updated = 0;
+        for (;;) {
+          setProg((p) => ({ ...p, [col]: { scanned, updated, state: "진행 중" } }));
+          const r = await fetch(`${FUNCTIONS_BASE}/tenantMigrate`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ col, cursor }) });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(`${col}: ${j.error || r.status}${r.status === 404 ? " (서버 함수 배포가 필요합니다)" : ""}`);
+          scanned += j.scanned || 0; updated += j.updated || 0; cursor = j.cursor;
+          if (j.done) break;
+        }
+        setProg((p) => ({ ...p, [col]: { scanned, updated, state: "완료" } }));
+      }
+      await setDoc(doc(db, "systemConfig", "tenancy"), { backfilledAt: serverTimestamp() }, { merge: true });
+      setMsg("예전 데이터 정리 완료 — 이제 '서버 분리 켜기'를 누르세요.");
+    } catch (e) { setMsg(`실패: ${e.message || e}`); } finally { setBusy(false); }
+  };
+  const toggle = async (on) => {
+    if (on && !cfg?.backfilledAt) { window.alert("먼저 1단계(예전 데이터 정리)를 끝내야 합니다."); return; }
+    if (!window.confirm(on ? "서버 분리를 켭니다. 모든 화면이 우리 회사 조건으로 조회합니다.\n켠 뒤 PC에서 규칙을 배포하면 서버가 다른 운송사 조회를 거부합니다." : "서버 분리를 끕니다(규칙을 배포한 뒤라면 끄면 안 됩니다).")) return;
+    await setDoc(doc(db, "systemConfig", "tenancy"), { serverFilter: on, serverFilterAt: serverTimestamp() }, { merge: true });
+  };
+  const step = (n, title, done, children) => (
+    <div className={`rounded-2xl border p-4 ${done ? "border-[#0F1A30] bg-[#F5F8FD]" : "border-[#E3E8F0] bg-white"}`}>
+      <div className="flex items-center gap-2"><span className={`w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-black ${done ? "bg-[#0F1A30] text-white" : "border-2 border-[#C9D3E3] text-[#9AA9C3]"}`}>{done ? "✓" : n}</span><span className="text-[15px] font-black text-[#0F1A30] whitespace-nowrap">{title}</span></div>
+      <div className="mt-2 text-[13px] text-[#5B6B85] leading-relaxed">{children}</div>
+    </div>
+  );
+  return (
+    <div className="space-y-4">
+      <Hero en="SECURITY · ISOLATION" title="운송사 분리" desc="운송사끼리 오더·기사·거래처·사내 데이터가 절대 섞이지 않도록 서버에서부터 잠급니다." />
+      <Card code="STEPS" title="순서대로 진행">
+        <div className="grid gap-3 lg:grid-cols-3">
+          {step(1, "예전 데이터 회사명 채우기", !!cfg?.backfilledAt, <>
+            회사명이 없는 예전 문서에 회사를 적습니다. (서버 함수 tenantMigrate 배포 필요)
+            <button type="button" disabled={busy} onClick={run} className="mt-3 w-full h-10 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black disabled:opacity-50">{busy ? "정리 중…" : cfg?.backfilledAt ? "다시 실행" : "실행"}</button>
+          </>)}
+          {step(2, "서버 분리 켜기", cfg?.serverFilter === true, <>
+            모든 화면이 "우리 회사" 조건을 붙여 조회합니다. 직원들은 새로고침 한 번이면 적용됩니다.
+            <button type="button" onClick={() => toggle(!cfg?.serverFilter)} className={`mt-3 w-full h-10 rounded-xl text-[13.5px] font-black ${cfg?.serverFilter ? "border border-[#DCE3EE] text-[#3A4A66]" : "bg-[#0F1A30] text-white"}`}>{cfg?.serverFilter ? "끄기" : "켜기"}</button>
+          </>)}
+          {step(3, "PC에서 규칙·색인 배포", false, <>
+            켠 뒤 10분쯤 지나(직원 화면이 새 버전으로 바뀐 뒤) PC에서:<br /><code className="text-[12px] font-bold text-[#1B2B4B]">firebase deploy --only firestore</code>
+          </>)}
+        </div>
+        {msg && <div className="mt-3 rounded-xl bg-[#0F1A30] text-white px-4 py-2.5 text-[13px] font-bold">{msg}</div>}
+        {Object.keys(prog).length > 0 && (
+          <div className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-2">
+            {TENANT_COLS.filter((c) => prog[c]).map((c) => (
+              <div key={c} className="rounded-xl border border-[#E3E8F0] px-3 py-2">
+                <div className="text-[12.5px] font-black text-[#0F1A30]" style={{ fontFamily: MONO }}>{c}</div>
+                <div className="text-[12px] text-[#5B6B85] whitespace-nowrap">{prog[c].state} · {prog[c].scanned.toLocaleString()}건 중 {prog[c].updated.toLocaleString()}건 채움</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 // ═══════════════════════ 접속 이력 ═══════════════════════
 function SessionLogsPanel() {
   const list = useCol("sessionLogs", "at", 400);
@@ -409,6 +485,7 @@ export default function PlatformCenter({ user }) {
   else if (tab === "landingEdit") body = <><Hero en="OPERATIONS · LANDING" title="랜딩페이지 편집" desc="로그인 전 홈페이지 문구·이미지를 바꿉니다." /><LandingPageEditPanel /></>;
   else if (tab === "sessions") body = <><Hero en="SECURITY · SESSIONS" title="로그인 관리" desc="지금 로그인 중인 모든 기기를 보고, 필요하면 강제로 내보냅니다." /><AdminSessionsPanel isTotalMaster company="" /></>;
   else if (tab === "sessionLogs") body = <SessionLogsPanel />;
+  else if (tab === "tenancy") body = <TenancyPanel />;
   else if (tab === "sheetImport") body = <><Hero en="DATA · IMPORT" title="배차일지 가져오기" desc="구글시트·엑셀 배차일지를 운송사 데이터로 옮깁니다(초기 세팅용)." /><SheetImportPanel /></>;
   else if (tab === "companyReset") body = <><Hero en="DATA · RESET" title="운송사 초기화" desc="⚠ 운송사 데이터를 지웁니다 — 백업 후 신중히 사용하세요." /><CompanyResetPanel /></>;
 

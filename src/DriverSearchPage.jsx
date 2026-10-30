@@ -3,7 +3,7 @@
 // 사용: /driver-upload
 
 import React, { useState, useEffect } from "react";
-import { db } from "./firebase";
+import { db, FUNCTIONS_BASE } from "./firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
 
 const cardStyle = {
@@ -96,6 +96,16 @@ export default function DriverSearchPage() {
     setError(null);
     setLoading(true);
     setResults(null);
+
+    // 🔒 서버 검색 우선 — 서버 규칙으로 오더 목록이 잠긴 뒤에도, 날짜·차량번호·이름이 모두 맞는 오더만 받는다
+    try {
+      const qs = new URLSearchParams({ date, vehicle: trimVehicle, name: trimName, ...(linkCo ? { co: linkCo } : {}), ...(sourceFixed ? { source: "fixed" } : {}) });
+      const r = await fetch(`${FUNCTIONS_BASE}/driverSearch?${qs.toString()}`);
+      if (r.ok) {
+        const j = await r.json();
+        if (Array.isArray(j.results)) { setResults(j.results); setLoading(false); return; }
+      }
+    } catch { /* 서버 함수 배포 전 — 아래 직접 조회 */ }
 
     try {
       const matched = [];

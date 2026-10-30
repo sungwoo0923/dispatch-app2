@@ -3442,6 +3442,87 @@ exports.checkGsheetMonth = functions
    포함하지 않는다(로그인 전 누구나 호출 가능한 엔드포인트이므로).
    호출: GET https://.../lookupCompanyCode?q=검색어
 ================================================================== */
+// 🏢 운송사 분리 2단계 — 회사명 없는 예전 문서에 회사명을 채운다(최고관리자만, 관리센터 버튼이 여러 번 나눠 부름).
+//  회사명이 없으면: company(화주사 오더의 받는 운송사·결재/게시판의 회사) → 없으면 기본 회사("돌캐")
+const TENANT_COLS = ["orders", "dispatch", "dispatch_test", "drivers", "clients", "places", "fixedClients", "recurringOrders",
+  "deletedOrders", "driver_completed_archive", "notices", "schedules", "handovers", "boardPosts", "approvals", "approvalLines",
+  "notifications", "scheduledEmails", "emailLogs", "hrResumes", "attendanceRequests", "attendanceChangeRequests", "acctPayments"];
+async function requireTotalMaster(req) {
+  const authz = String(req.get("Authorization") || "");
+  const token = authz.startsWith("Bearer ") ? authz.slice(7) : "";
+  if (!token) return false;
+  const decoded = await getAuth().verifyIdToken(token).catch(() => null);
+  if (!decoded) return false;
+  if (decoded.email === "tjddnqkf@naver.com") return true;
+  const u = await db.collection("users").doc(decoded.uid).get();
+  return u.exists && u.data().role === "totalMaster";
+}
+exports.tenantMigrate = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await requireTotalMaster(req))) { res.status(403).json({ error: "FORBIDDEN" }); return; }
+  const col = String(req.body?.col || "");
+  if (!TENANT_COLS.includes(col)) { res.status(400).json({ error: "BAD_COL", cols: TENANT_COLS }); return; }
+  let cursor = req.body?.cursor || null;
+  const started = Date.now();
+  let scanned = 0, updated = 0, done = false;
+  const { FieldPath } = require("firebase-admin/firestore");
+  while (Date.now() - started < 200000) {
+    let q = db.collection(col).orderBy(FieldPath.documentId()).limit(400);
+    if (cursor) q = q.startAfter(cursor);
+    const snap = await q.get();
+    if (snap.empty) { done = true; break; }
+    const batch = db.batch(); let n = 0;
+    snap.docs.forEach((d) => {
+      const x = d.data() || {};
+      const c = typeof x.companyName === "string" ? x.companyName.trim() : "";
+      if (c) return;
+      const fb = (typeof x.company === "string" && x.company.trim()) || (typeof x.운송사명 === "string" && x.운송사명.trim()) || "돌캐";
+      batch.update(d.ref, { companyName: fb }); n += 1;
+    });
+    if (n) await batch.commit();
+    scanned += snap.size; updated += n;
+    cursor = snap.docs[snap.docs.length - 1].id;
+    if (snap.size < 400) { done = true; break; }
+  }
+  res.status(200).json({ col, cursor, scanned, updated, done });
+});
+
+// 🔎 기사 통합 업로드 링크(/driver-upload) 검색 — 로그인 없는 화면이라, 서버 규칙을 잠근 뒤에는
+//  오더 목록을 직접 못 읽는다. 날짜·차량번호·이름(+회사)이 모두 맞는 오더만 필요한 칸만 돌려준다.
+exports.driverSearch = functions.https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  const date = String(req.query.date || "").trim();
+  const vehicle = String(req.query.vehicle || "").replace(/\s/g, "");
+  const name = String(req.query.name || "").trim();
+  const co = String(req.query.co || "").trim();
+  const fixed = req.query.source === "fixed";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !vehicle || !name) { res.status(400).json({ error: "BAD_PARAMS" }); return; }
+  const pick = (id, col, x) => ({ _id: id, _col: col, 상차일: x.상차일 || x.날짜 || "", 차량번호: x.차량번호 || "", 이름: x.이름 || "", 거래처명: x.거래처명 || "",
+    상차지명: x.상차지명 || "", 하차지명: x.하차지명 || "", 화물내용: x.화물내용 || "", 배차상태: x.배차상태 || "", attachCount: x.attachCount || 0, 업로드토큰: x.업로드토큰 || "" });
+  const same = (x) => String(x.차량번호 || "").replace(/\s/g, "") === vehicle && String(x.이름 || "").trim() === name
+    && (!co || (String(x.companyName || x.company || "").trim() || "돌캐") === co);
+  try {
+    const out = [];
+    if (fixed) {
+      const s = await db.collection("fixedClients").where("날짜", "==", date).get();
+      s.docs.forEach((d) => { const x = d.data() || {}; if (same(x)) out.push(pick(d.id, "fixedClients", x)); });
+    } else {
+      for (const col of ["orders", "dispatch"]) {
+        const s = await db.collection(col).where("상차일", "==", date).get();
+        s.docs.forEach((d) => { const x = d.data() || {}; if (x.source !== "transport_transmit" && same(x)) out.push(pick(d.id, col, x)); });
+      }
+    }
+    res.status(200).json({ results: out });
+  } catch (e) {
+    res.status(500).json({ error: "SEARCH_FAILED" });
+  }
+});
+
 // 📧 가입 화면 이메일 중복확인 — 로그인 전 화면은 보안 규칙상 users 목록을 못 읽어서
 //  "사용 중 여부"만 서버가 대신 알려준다(문서 내용은 돌려주지 않음). 삭제·탈퇴 계정은 재가입 허용.
 exports.checkEmail = functions.https.onRequest(async (req, res) => {

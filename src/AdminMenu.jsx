@@ -920,7 +920,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             <span className="text-[12px] font-bold text-[#9AA9C3]">직책·부서·권한 변경은 인사관리부 › 인사발령</span>
                           )}
                           {canAdmin && !editMode && canManage && (
-                            <button onClick={() => toggleMaster(u)} className={`h-10 px-4 rounded-xl text-[13px] font-extrabold transition whitespace-nowrap ${u.isMaster ? "border border-[#0F1A30] text-[#0F1A30]" : "border border-[#E3E8F0] text-[#3A4A66] hover:bg-[#F5F8FD]"}`}>{u.isMaster ? "👑 마스터 해제" : "마스터 지정"}</button>
+                            <button onClick={() => toggleMaster(u)} className={`h-10 px-4 rounded-xl text-[13px] font-extrabold transition whitespace-nowrap ${u.isMaster ? "border border-[#0F1A30] text-[#0F1A30]" : "border border-[#E3E8F0] text-[#3A4A66] hover:bg-[#F5F8FD]"}`}>{u.isMaster ? "마스터 해제" : "마스터 지정"}</button>
                           )}
                           {canAdmin && !editMode && (
                             <button onClick={() => toggleApprove(u)} className={`h-10 px-4 rounded-xl text-[13px] font-extrabold transition ${u.approved ? "border border-[#E3E8F0] text-[#3A4A66] hover:bg-[#F5F8FD]" : "bg-[#0F1A30] text-white hover:bg-[#1B2B4B]"}`}>

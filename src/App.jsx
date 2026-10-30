@@ -1,7 +1,7 @@
 // ======================= src/App.jsx =======================
 
 import React, { useState, useEffect, useRef } from "react";
-import { setTenant } from "./fsTenant";
+import { setTenant, setServerFilter } from "./fsTenant";
 import { safeLocalSet } from "./safeStorage";
 import UpdateBanner from "./UpdateBanner";
 import VersionCheck from "./VersionCheck";
@@ -20,7 +20,7 @@ import {
 } from "./loginSessions";
 import { LoginManagerModal } from "./LoginManager";
 import { PcVerifyGate, isPcMfaPassed } from "./MfaModal";
-import { doc, onSnapshot, addDoc, collection, serverTimestamp, query, orderBy, limit, getDocs, deleteDoc } from "firebase/firestore";
+import { doc, onSnapshot, addDoc, collection, serverTimestamp, query, orderBy, limit, getDocs, getDoc, deleteDoc } from "firebase/firestore";
 
 // 역할별 대형 화면은 지연 로딩(code-splitting)한다 — 이전에는 전부 하나의 번들로
 // 즉시 로드되어, 로그인 화면 하나만 보려 해도 운송사/화주사/모바일 프로그램 전체
@@ -580,6 +580,8 @@ export default function App() {
       }
       setUser(u);
       const isMasterEmail = u.email === TOTAL_MASTER_EMAIL;
+      // 🔒 운송사 분리 2단계 스위치(관리센터에서 예전 데이터 정리 후 켜짐) — 로그인 때마다 최신 값으로
+      getDoc(doc(db, "systemConfig", "tenancy")).then((t) => setServerFilter(t.exists() && t.data()?.serverFilter === true)).catch(() => {});
       const unsubUser = onSnapshot(doc(db, "users", u.uid), (snap) => {
         if (snap.exists()) {
           const data = snap.data();

@@ -28,6 +28,8 @@ const LOOSE = new Set([
   "location_change_requests", "emergency_alerts", "collision_alerts", "cargo_temp", "cargo_camera",
   "deliverySignatureHistory", "attendance", "holidays", "driver_uploads", "fleet_settings", "importBatches",
 ]);
+// 서버 조회에 회사 조건을 붙일 컬렉션(직원 목록은 화주사 연동 때문에 화면에서만 거름)
+const INJECT = new Set([...STRICT].filter((c) => c !== "users"));
 // 쓸 때 회사명을 붙일 컬렉션(users는 가입·승인에서 따로 정하므로 제외)
 const STAMP = new Set([...STRICT, ...LOOSE].filter((c) => c !== "users"));
 
@@ -35,6 +37,12 @@ let tenant = "";      // 지금 회사 — 비면 거르지 않음
 let bypass = 0;       // 관리자 관리센터처럼 전체를 봐야 하는 화면(>0이면 거르지 않음)
 const norm = (v) => String(v ?? "").trim();
 export function setTenant(co) { tenant = norm(co); }
+// 🔒 2단계(서버 규칙 잠금) — 예전 문서에 회사명을 다 채운 뒤(관리센터 › 운송사 분리) 켜진다.
+//  켜지면 회사 데이터 조회에 "companyName == 우리 회사" 조건을 붙여 서버에서부터 우리 회사 것만 받는다
+//  (서버 규칙이 회사가 다른 조회를 거부하므로 반드시 필요).
+let serverFilter = (() => { try { return localStorage.getItem("kpServerFilter") === "1"; } catch { return false; } })();
+export function setServerFilter(on) { serverFilter = !!on; try { localStorage.setItem("kpServerFilter", on ? "1" : "0"); } catch { /* 무시 */ } }
+export const isServerFilterOn = () => serverFilter;
 export function getTenant() { return bypass > 0 ? "" : tenant; }
 export function pushTenantBypass() { bypass += 1; return () => { bypass = Math.max(0, bypass - 1); }; }
 
@@ -71,7 +79,7 @@ function keeper(col) {
       // 화주사 계정은 여러 운송사와 연동되는 거래 상대라 목록에서 빼지 않는다(화면이 연동된 곳만 다시 거름)
       if (col === "users") { try { if (d.get("role") === "shipper") return true; } catch { /* 무시 */ } }
       // 화주사가 등록한 오더는 company(=받는 운송사)에 회사가 적혀 있다
-      if (!norm(c)) { try { c = d.get("company"); } catch { /* 무시 */ } }
+      if (!norm(c)) { try { c = d.get("company") || d.get("운송사명"); } catch { /* 무시 */ } }
       return (norm(c) || DEFAULT_CO) === t;
     };
   }
@@ -99,28 +107,91 @@ function wrapSnap(snap, keep) {
   };
 }
 
+// 회사 조건을 붙인 조회 — 색인이 아직 없으면(failed-precondition) 조건 없이 다시 해서 화면이 비지 않게 한다
+function injected(ref) {
+  const t = getTenant();
+  if (!serverFilter || !t) return null;
+  const col = topCollectionId(ref);
+  if (!INJECT.has(col)) return null;
+  try { return base.query(ref, base.where("companyName", "==", t)); } catch { return null; }
+}
+const needsIndex = (e) => e && (e.code === "failed-precondition" || /index/i.test(String(e.message || "")));
+const warnIndex = (e) => { try { console.error("[운송사 분리] 색인이 아직 없어 회사 조건 없이 조회합니다 —", e?.message || e); } catch { /* 무시 */ } };
+
 export function onSnapshot(ref, ...args) {
   const col = topCollectionId(ref);
   if (!col || !(STRICT.has(col) || LOOSE.has(col))) return base.onSnapshot(ref, ...args);
   const wrapFn = (fn) => (typeof fn === "function" ? (snap) => fn(wrapSnap(snap, keeper(col))) : fn);
   // onSnapshot(ref, cb, err) / (ref, options, cb, err) / (ref, { next, error }) / (ref, options, { next })
   const fi = args.findIndex((a) => typeof a === "function");
-  const out = args.map((a, i) => {
+  const build = (onIndexErr) => args.map((a, i) => {
     if (i === fi) return wrapFn(a);
-    if (fi === -1 && a && typeof a === "object" && typeof a.next === "function") return { ...a, next: wrapFn(a.next) };
+    if (fi !== -1 && i === fi + 1 && typeof a === "function" && onIndexErr) return (e) => (needsIndex(e) ? onIndexErr(e) : a(e));
+    if (fi === -1 && a && typeof a === "object" && typeof a.next === "function") {
+      return { ...a, next: wrapFn(a.next), error: (e) => (onIndexErr && needsIndex(e) ? onIndexErr(e) : a.error?.(e)) };
+    }
     return a;
   });
-  return base.onSnapshot(ref, ...out);
+  let q = injected(ref);
+  if (!q) {
+    // 스위치가 켜졌는데 이 화면이 아직 모르는 경우 — 서버가 거부(permission-denied)하면 켜고 회사 조건으로 다시 구독
+    if (!(getTenant() && INJECT.has(col))) return base.onSnapshot(ref, ...build(null));
+    let u2 = null; let stop2 = false;
+    const heal = (e) => {
+      if (stop2 || !e || e.code !== "permission-denied") return false;
+      setServerFilter(true);
+      const q2 = injected(ref);
+      if (!q2) return false;
+      try { u2?.(); } catch { /* 무시 */ }
+      u2 = base.onSnapshot(q2, ...build(null));
+      return true;
+    };
+    let a3 = args.map((a, i) => {
+      if (i === fi) return wrapFn(a);
+      if (fi !== -1 && i === fi + 1 && typeof a === "function") return (e) => { if (!heal(e)) a(e); };
+      if (fi === -1 && a && typeof a === "object" && typeof a.next === "function") return { ...a, next: wrapFn(a.next), error: (e) => { if (!heal(e)) a.error?.(e); } };
+      return a;
+    });
+    if (fi !== -1 && typeof args[fi + 1] !== "function") { a3 = [...a3]; a3.splice(fi + 1, 0, (e) => { if (!heal(e)) console.warn(e); }); }
+    u2 = base.onSnapshot(ref, ...a3);
+    return () => { stop2 = true; try { u2?.(); } catch { /* 무시 */ } };
+  }
+  let unsub = null; let stopped = false;
+  const fallback = (e) => { warnIndex(e); if (stopped) return; try { unsub?.(); } catch { /* 무시 */ } unsub = base.onSnapshot(ref, ...build(null)); };
+  // 오류 콜백이 없던 구독도 색인 오류는 받아서 되살린다
+  let a2 = build(fallback);
+  if (fi !== -1 && typeof args[fi + 1] !== "function") { a2 = [...a2]; a2.splice(fi + 1, 0, (e) => (needsIndex(e) ? fallback(e) : console.warn(e))); }
+  unsub = base.onSnapshot(q, ...a2);
+  return () => { stopped = true; try { unsub?.(); } catch { /* 무시 */ } };
 }
 
 const wrapGet = (fn) => async (ref, ...rest) => {
-  const snap = await fn(ref, ...rest);
+  const q = injected(ref);
+  let snap;
+  if (q) {
+    try { snap = await fn(q, ...rest); } catch (e) { if (!needsIndex(e)) throw e; warnIndex(e); snap = await fn(ref, ...rest); }
+  } else {
+    try { snap = await fn(ref, ...rest); } catch (e) {
+      // 스위치가 켜진 뒤 처음 — 서버 거부면 켜고 회사 조건으로 한 번 더
+      const c0 = topCollectionId(ref);
+      if (e?.code !== "permission-denied" || !getTenant() || !INJECT.has(c0)) throw e;
+      setServerFilter(true);
+      const q2 = injected(ref);
+      if (!q2) throw e;
+      snap = await fn(q2, ...rest);
+    }
+  }
   const col = topCollectionId(ref);
   return col ? wrapSnap(snap, keeper(col)) : snap;
 };
 export const getDocs = wrapGet(base.getDocs);
 export const getDocsFromCache = base.getDocsFromCache ? wrapGet(base.getDocsFromCache) : undefined;
 export const getDocsFromServer = base.getDocsFromServer ? wrapGet(base.getDocsFromServer) : undefined;
+export async function getCountFromServer(ref, ...rest) {
+  const q = injected(ref);
+  if (q) { try { return await base.getCountFromServer(q, ...rest); } catch (e) { if (!needsIndex(e)) throw e; warnIndex(e); } }
+  return base.getCountFromServer(ref, ...rest);
+}
 
 const stampData = (col, data) => {
   const t = getTenant();
@@ -130,7 +201,7 @@ const stampData = (col, data) => {
 };
 // 이름으로 문서 번호를 만드는 컬렉션(하차지·기본거래처) — 운송사끼리 같은 업체명을 쓰면 같은 문서를
 // 덮어쓰게 되므로, 기본 회사가 아닌 운송사는 "회사__이름"으로 따로 만든다(예전 문서는 그대로).
-const KEYED = new Set(["places", "clients", "fleet_settings"]); // fleet_settings/default = 회사 기본 출근지
+const KEYED = new Set(["places", "clients", "fleet_settings", "acctPayments"]); // fleet_settings/default = 회사 기본 출근지, acctPayments/{연도}
 const prefixOf = () => { const t = getTenant(); return t && t !== DEFAULT_CO ? `${t.replace(/\//g, "_")}__` : ""; };
 const keyId = (col, id) => {
   const pre = prefixOf();

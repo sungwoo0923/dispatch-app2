@@ -157,6 +157,29 @@ export default function CompanyApplications() {
     });
   }, [managingApp?.userId, activeTab]);
 
+  // 👤 운송사 가입자 계정 권한(최고관리자) — 역할·마스터 여부를 가입신청관리에서 바로 바꾼다
+  const [tUser, setTUser] = useState(null);
+  const [tRole, setTRole] = useState("admin");
+  const [tMaster, setTMaster] = useState(false);
+  const [tSaving, setTSaving] = useState(false);
+  useEffect(() => {
+    if (!managingApp?.userId || activeTab !== "운송") { setTUser(null); return; }
+    getDoc(doc(db, "users", managingApp.userId)).then((snap) => {
+      const u = snap.exists() ? snap.data() : null;
+      setTUser(u); setTRole(u?.role || "admin"); setTMaster(u?.isMaster === true);
+    }).catch(() => setTUser(null));
+  }, [managingApp?.userId, activeTab]);
+  const saveTransportRole = async () => {
+    if (!managingApp?.userId) return;
+    setTSaving(true);
+    try {
+      const history = [...(tUser?.personnelHistory || []), { date: new Date().toISOString().slice(0, 10), type: "권한변경(최고관리자)", detail: `${tUser?.role || "-"} → ${tRole}${tMaster ? " · 마스터" : ""}` }];
+      await updateDoc(doc(db, "users", managingApp.userId), { role: tRole, isMaster: tMaster, personnelHistory: history });
+      setTUser((p) => ({ ...(p || {}), role: tRole, isMaster: tMaster, personnelHistory: history }));
+      alert("계정 권한을 저장했습니다. 그 사람이 다시 들어오면 바로 적용됩니다.");
+    } catch (e) { alert("저장 실패: " + (e?.message || e)); } finally { setTSaving(false); }
+  };
+
   const handleTabChange = (tab) => {
     setActiveTab(tab);
     setStatusFilter("pending");
@@ -987,6 +1010,27 @@ export default function CompanyApplications() {
                       </button>
                     )}
                     <p className="text-[11px] text-gray-400">해제 만료일까지는 6개월 이전 데이터도 화주사 화면(PC/모바일)에서 조회할 수 있습니다.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* 계정 권한 (운송 탭 — 최고관리자) */}
+              {activeTab === "운송" && managingApp.userId && tUser && (
+                <div className="border border-gray-100 rounded-xl overflow-hidden">
+                  <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">계정 권한</div>
+                  <div className="px-4 py-4 space-y-3">
+                    <div className="text-[12.5px] text-gray-500">지금: <b className="text-[#1B2B4B]">{({ admin: "관리자", hrManager: "인사관리자", user: "실무자", test: "정산·회계", viewer: "조회전용" })[tUser.role] || tUser.role || "-"}</b>{tUser.isMaster ? " · 마스터" : ""}</div>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {[["admin", "관리자"], ["hrManager", "인사관리자"], ["user", "실무자"], ["test", "정산·회계"], ["viewer", "조회전용"]].map(([k, l]) => (
+                        <button key={k} type="button" onClick={() => setTRole(k)} className={`h-9 rounded-lg text-[12px] font-bold whitespace-nowrap ${tRole === k ? "bg-[#1B2B4B] text-white" : "border border-gray-200 text-[#1B2B4B]"}`}>{l}</button>
+                      ))}
+                    </div>
+                    <label className="flex items-center gap-2 text-[13px] font-semibold text-[#1B2B4B]">
+                      <input type="checkbox" checked={tMaster} onChange={(e) => { setTMaster(e.target.checked); if (e.target.checked) setTRole("admin"); }} />
+                      마스터 계정 (그 회사 직원의 승인·권한·부서·직책을 정함)
+                    </label>
+                    <button type="button" disabled={tSaving} onClick={saveTransportRole}
+                      className="w-full py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition disabled:opacity-50">{tSaving ? "저장 중…" : "계정 권한 저장"}</button>
                   </div>
                 </div>
               )}

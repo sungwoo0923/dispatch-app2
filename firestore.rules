@@ -61,6 +61,43 @@ service cloud.firestore {
       );
     }
 
+    // ────────────────────────────────────────────────────────────
+    // 🏢 운송사(회사)별 데이터 잠금 — 2026-10-30
+    // 회사 데이터는 문서의 companyName이 내 계정의 회사와 같을 때만 읽고 쓴다(최고관리자는 전체).
+    // 앱은 조회할 때 "companyName == 우리 회사" 조건을 붙여서 보낸다(규칙은 조회 조건을 보고 판단).
+    // ────────────────────────────────────────────────────────────
+    function myCo() {
+      return myUser().get('companyName', '돌캐');
+    }
+    // 잠금 스위치 — 관리센터 › 운송사 분리에서 "예전 데이터 정리 → 서버 분리 켜기"를 한 뒤에만 회사 검사를 한다.
+    // (켜기 전에는 예전 규칙과 똑같이 동작하므로, 이 규칙을 먼저 배포해도 기존 화면이 깨지지 않는다)
+    function locked() {
+      return exists(/databases/$(database)/documents/systemConfig/tenancy) &&
+        get(/databases/$(database)/documents/systemConfig/tenancy).data.get('serverFilter', false) == true;
+    }
+    function isShipperUser() {
+      return myUser().get('role', '') == 'shipper';
+    }
+    // 같은 운송사 직원·기사
+    function coMatch(d) {
+      return isTotalMasterUser() || (isApproved() && (!locked() || (!isShipperUser() && d.companyName == myCo())));
+    }
+    // 새 문서는 반드시 우리 회사 이름으로
+    function coCreate() {
+      return isTotalMasterUser() || (isApproved() && (!locked() || (!isShipperUser() && request.resource.data.get('companyName', '') == myCo())));
+    }
+    // 수정해도 회사는 못 바꾼다
+    function coKeep() {
+      return isTotalMasterUser() || !locked() || request.resource.data.get('companyName', '') == resource.data.get('companyName', '');
+    }
+    // 화주사 — 자기 회사가 등록/전송받은 오더만
+    function shipperOwns(d) {
+      return isApproved() && isShipperUser() && (d.get('shipperCompany', '') == myCo() || d.get('shipperUid', '') == request.auth.uid);
+    }
+    function shipperCreate() {
+      return isApproved() && isShipperUser() && request.resource.data.get('shipperUid', '') == request.auth.uid;
+    }
+
     // 비로그인 상태(기사)가 업로드 페이지에서 건드릴 수 있는 필드는 이 3개뿐이다.
     // 업로드토큰은 절대 포함하지 않는다 — 그건 로그인한 운송사 앱만 발급할 수 있어야
     // 링크 잠금/재발급 로직이 실제로 의미가 있다.
@@ -73,30 +110,59 @@ service cloud.firestore {
     // 로그인 없이 접근하는 공개 배차/기사 관련 문서
     // (기사에게 문자/카톡으로 전달되는 인수증 업로드 링크, 통합 업로드 검색 링크)
     // ────────────────────────────────────────────────────────────
+    // 🔒 오더 — 한 건 조회(get)는 업로드 링크(오더 번호 = 추측 불가)를 위해 열어 두고,
+    //  목록 조회는 같은 운송사(또는 그 오더의 화주사)만. 기사 통합 업로드 검색은 서버 함수(driverSearch)로 옮겼다.
     match /orders/{id} {
       allow get: if true;
-      // ⚠️ /driver-upload(DriverSearchPage)가 로그인 없이 상차일로 목록 조회를 하기 때문에
-      // list는 열려 있어야 한다. 이 경로를 서버(Vercel 함수)로 옮기기 전까지는
-      // "그 날짜의 전체 오더 목록이 링크 소지자에게 노출될 수 있다"는 제한된 리스크가 남는다.
-      allow list: if true;
-      allow update: if isApproved() || isPublicOrderUpdate();
-      allow create, delete: if isApproved();
+      allow list: if !locked() || coMatch(resource.data) || shipperOwns(resource.data);
+      allow create: if coCreate() || shipperCreate();
+      allow update: if (coMatch(resource.data) && coKeep()) || isPublicOrderUpdate() || shipperOwns(resource.data);
+      allow delete: if coMatch(resource.data) || shipperOwns(resource.data);
     }
     match /dispatch/{id} {
       allow get: if true;
-      allow list: if true;
-      allow update: if isApproved() || isPublicOrderUpdate();
-      allow create, delete: if isApproved();
+      allow list: if !locked() || coMatch(resource.data) || shipperOwns(resource.data);
+      allow create: if coCreate() || shipperCreate();
+      allow update: if (coMatch(resource.data) && coKeep()) || isPublicOrderUpdate() || shipperOwns(resource.data);
+      allow delete: if coMatch(resource.data) || shipperOwns(resource.data);
     }
     match /dispatch_test/{id} {
-      allow get: if true;
-      allow list, create, update, delete: if isApproved();
+      allow read, delete: if coMatch(resource.data);
+      allow create: if coCreate();
+      allow update: if coMatch(resource.data) && coKeep();
     }
     match /fixedClients/{id} {
       allow get: if true;
-      allow list: if true; // /driver-upload?source=fixed 검색용
-      allow update: if isApproved() || isPublicOrderUpdate();
-      allow create, delete: if isApproved();
+      allow list: if !locked() || coMatch(resource.data);
+      allow update: if (coMatch(resource.data) && coKeep()) || isPublicOrderUpdate();
+      allow create: if coCreate();
+      allow delete: if coMatch(resource.data);
+    }
+    // 🔒 회사 데이터(거래처·하차지·정기오더·삭제기록·알림·일정·메일·인사·근태신청·회계·결재선)
+    match /{tcol}/{id} {
+      allow read: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines']
+        && coMatch(resource.data);
+      allow create: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines']
+        && coCreate();
+      allow update: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines']
+        && coMatch(resource.data) && coKeep();
+      allow delete: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines']
+        && coMatch(resource.data);
+    }
+    // 화주사 주소록(places) — 화주 본인이 등록한 주소만
+    match /places/{id} {
+      allow read, update, delete: if isApproved() && isShipperUser() && resource.data.get('userId', '') == request.auth.uid;
+      allow create: if isApproved() && isShipperUser() && request.resource.data.get('userId', '') == request.auth.uid;
+    }
+    // 알림 — 받는 사람 본인은 읽고 "읽음" 표시
+    match /notifications/{id} {
+      allow read: if isApproved() && resource.data.get('toUid', '') == request.auth.uid;
+      allow update: if isApproved() && resource.data.get('toUid', '') == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']);
     }
 
     // 기사전달용 업로드 링크 단축 — /u/{code}가 로그인 없이 code로 원본
@@ -245,10 +311,12 @@ service cloud.firestore {
     match /drivers/{driverId} {
       // 기사앱 가입/로그인 때 차량번호 문서(PC 선등록) 확인용 단건 조회
       allow get: if isSignedIn();
-      allow list: if isApproved();
-      allow create, update: if isApproved() || (isSignedIn() && request.auth.uid == driverId);
+      // 🔒 기사·지입차 목록은 같은 운송사만
+      allow list: if coMatch(resource.data);
+      allow create: if coCreate() || (isSignedIn() && request.auth.uid == driverId);
+      allow update: if (coMatch(resource.data) && coKeep()) || (isSignedIn() && request.auth.uid == driverId);
       // 가입 후 선등록 문서(drivers/{차량번호}) 정리 — 승인 전에는 본인 차량번호 문서만
-      allow delete: if isApproved() || (isSignedIn() &&
+      allow delete: if coMatch(resource.data) || (isSignedIn() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         myUser().get('carNo', '') is string && myUser().get('carNo', '') != '' &&
         plateId(myUser().carNo) == driverId);
@@ -326,8 +394,9 @@ service cloud.firestore {
       return myUser().get('position', '') in ['이사', '상무', '전무', '부사장', '사장', '대표', '대표이사', '본부장', '임원'];
     }
     match /approvals/{id} {
-      allow read: if isApproved() && (request.auth.uid in resource.data.get('participants', []) || isCompanyAdmin(resource.data.get('company', '')));
-      allow create: if isApproved() && request.resource.data.get('drafterUid', '') == request.auth.uid
+      allow read: if isApproved() && (isTotalMasterUser() || !locked() || resource.data.companyName == myCo())
+        && (request.auth.uid in resource.data.get('participants', []) || isCompanyAdmin(resource.data.get('company', '')));
+      allow create: if coCreate() && request.resource.data.get('drafterUid', '') == request.auth.uid
         && request.resource.data.get('status', '') == 'pending'
         && request.auth.uid in request.resource.data.get('participants', []);
       // 기안자·참여자 수정 — 기안자·참여자 목록과 회사는 못 바꾼다(결재 진행·회수·의견·읽음)
@@ -352,31 +421,33 @@ service cloud.firestore {
     }
     // 📢 공지사항 — 누구나 읽고, 쓰기·수정·삭제는 관리자(관리자·인사관리자·최고관리자)만
     match /notices/{id} {
-      allow read: if isApproved();
-      allow create: if isApproved() && isBoardAdmin();
+      // 🔒 같은 운송사 공지만 · 화주사는 화주 대상 공지만
+      allow read: if coMatch(resource.data) || (isApproved() && isShipperUser() && resource.data.get('audience', '') in ['shipper', 'all']);
+      allow create: if coCreate() && isBoardAdmin();
       // 수정·삭제는 작성자 본인만(최고관리자 예외). 작성자 기록이 없는 옛 공지는 공지 작성 권한자가 관리
-      allow update, delete: if isApproved() && isBoardAdmin()
+      allow update, delete: if coMatch(resource.data) && isBoardAdmin()
         && (resource.data.get('authorUid', '') == request.auth.uid || resource.data.get('authorUid', '') == ''
             || isSuperEmail() || myUser().get('role', '') == 'totalMaster');
     }
     // 📋 인수인계 — 받는 사람의 "확인"(readBy)은 누구나, 내용 수정·삭제는 작성자 본인만(최고관리자 예외)
     match /handovers/{id} {
-      allow read, create: if isApproved();
-      allow update: if isApproved() && (resource.data.get('authorUid', '') == request.auth.uid || resource.data.get('authorUid', '') == ''
+      allow read: if coMatch(resource.data);
+      allow create: if coCreate();
+      allow update: if coMatch(resource.data) && (resource.data.get('authorUid', '') == request.auth.uid || resource.data.get('authorUid', '') == ''
         || isSuperEmail() || myUser().get('role', '') == 'totalMaster'
         || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']));
-      allow delete: if isApproved() && (resource.data.get('authorUid', '') == request.auth.uid || resource.data.get('authorUid', '') == ''
+      allow delete: if coMatch(resource.data) && (resource.data.get('authorUid', '') == request.auth.uid || resource.data.get('authorUid', '') == ''
         || isSuperEmail() || myUser().get('role', '') == 'totalMaster');
     }
     match /boardPosts/{id} {
-      allow read: if isApproved() && canSeeBoard(resource.data.board);
-      allow create: if isApproved() && request.resource.data.get('authorUid', '') == request.auth.uid && canSeeBoard(request.resource.data.get('board', ''));
-      allow update: if isApproved() && canSeeBoard(resource.data.board)
+      allow read: if coMatch(resource.data) && canSeeBoard(resource.data.board);
+      allow create: if coCreate() && request.resource.data.get('authorUid', '') == request.auth.uid && canSeeBoard(request.resource.data.get('board', ''));
+      allow update: if coMatch(resource.data) && canSeeBoard(resource.data.board)
         && request.resource.data.get('board', '') == resource.data.board
         && (resource.data.get('authorUid', '') == request.auth.uid || isBoardAdmin()
             || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'comments']));
       // 삭제는 작성자 본인만(최고관리자는 운영상 예외)
-      allow delete: if isApproved() && canSeeBoard(resource.data.board) && (resource.data.get('authorUid', '') == request.auth.uid || isSuperEmail() || myUser().get('role', '') == 'totalMaster');
+      allow delete: if coMatch(resource.data) && canSeeBoard(resource.data.board) && (resource.data.get('authorUid', '') == request.auth.uid || isSuperEmail() || myUser().get('role', '') == 'totalMaster');
     }
     match /sessionLogs/{id} {
       allow create: if isSignedIn();
@@ -391,7 +462,11 @@ service cloud.firestore {
     // ⭐ 규칙은 "하나라도 허용하면 허용"이라, 서버 전용 컬렉션(초기화 비밀번호·보관함·기록)은
     // 여기서 빼야 위의 "allow … if false"가 실제로 막힌다.
     match /{col}/{rest=**} {
-      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests']);
+      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests',
+        // 🔒 회사별로 잠근 컬렉션(위에서 따로 정함)
+        'orders', 'dispatch', 'dispatch_test', 'fixedClients', 'drivers', 'clients', 'places', 'recurringOrders', 'deletedOrders',
+        'driver_completed_archive', 'notifications', 'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests',
+        'attendanceChangeRequests', 'acctPayments', 'approvalLines']);
     }
   }
 }
