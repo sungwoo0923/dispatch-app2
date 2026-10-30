@@ -4,7 +4,7 @@
 //  ⭐ 알록달록 금지 — 네이비 계열만.
 import React, { useMemo, useState } from "react";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Cell, BarChart } from "recharts";
-import { creatorOf } from "./monthCompare";
+import { creatorOf, useStaffNames } from "./monthCompare";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const NAVY = "#1B2B4B";
@@ -193,7 +193,8 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
     };
   }, [rankRows, prevSame, prevRows, targetMonth, isRankExcluded]);
 
-  // 담당자
+  // 담당자 — 계정 이메일이 아니라 직원 이름으로
+  const namesVer = useStaffNames();
   const staff = useMemo(() => {
     const g = {};
     monthRows.forEach((r) => {
@@ -204,7 +205,7 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
       e.sale += toInt(r.청구운임); e.profit += toInt(r.청구운임) - toInt(r.기사운임); e.cnt += 1;
     });
     return Object.values(g).sort((a, b) => b.sale - a.sale).slice(0, 8);
-  }, [monthRows]);
+  }, [monthRows, namesVer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 요일
   const weekday = useMemo(() => {

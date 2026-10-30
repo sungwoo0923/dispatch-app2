@@ -1,7 +1,7 @@
 // ===================== 배차담당자별 실적 (관리자 전용) =====================
 // ⭐ 담당자(오더 등록자)별 건수·매출·수익·수익률·저마진 건수를 월 단위로 보고 전월과 비교한다.
 import React, { useMemo, useState, useEffect } from "react";
-import { toWon, creatorOf } from "./monthCompare";
+import { toWon, creatorOf, useStaffNames } from "./monthCompare";
 import { useLoadOrderRange, monthEnd, monthStartAgo } from "./orderHistory";
 
 const NAVY = "#1B2B4B";
@@ -40,8 +40,9 @@ export default function StaffPerformance({ rows = [], isExcluded = () => false, 
   const months = useMemo(() => [...new Set([kstMonth(), shiftMonth(kstMonth(), -1), ...rows.map((r) => String(r.상차일 || "").slice(0, 7))].filter((m) => /^\d{4}-\d{2}$/.test(m)))].sort().reverse(), [rows]);
   const prev = shiftMonth(month, -1);
   const inScope = (r) => (scope === "all" ? true : !isExcluded(r.거래처명));
-  const cur = useMemo(() => aggregate(rows.filter((r) => String(r.상차일 || "").startsWith(month) && inScope(r))), [rows, month, scope]); // eslint-disable-line react-hooks/exhaustive-deps
-  const before = useMemo(() => aggregate(rows.filter((r) => String(r.상차일 || "").startsWith(prev) && inScope(r))), [rows, prev, scope]); // eslint-disable-line react-hooks/exhaustive-deps
+  const namesVer = useStaffNames(); // 계정 이메일 → 직원 이름
+  const cur = useMemo(() => aggregate(rows.filter((r) => String(r.상차일 || "").startsWith(month) && inScope(r))), [rows, month, scope, namesVer]); // eslint-disable-line react-hooks/exhaustive-deps
+  const before = useMemo(() => aggregate(rows.filter((r) => String(r.상차일 || "").startsWith(prev) && inScope(r))), [rows, prev, scope, namesVer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const list = [...cur.values()].map((g) => {
     const p = before.get(g.key);

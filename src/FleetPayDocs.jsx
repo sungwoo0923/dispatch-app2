@@ -238,11 +238,25 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "대량이체");
     XLSX.writeFile(wb, `대량이체_${co}_${ym}.xlsx`);
   };
+  // 📥 엑셀 다운로드 — 시트 3개: 지급 요약 / 운행 내역(전체) / 공제 내역
   const summaryExcel = () => {
-    const aoa = [["순번", "차량번호", "기사명", "전화번호", "사업자번호", "사업자명", "운행건수", "운임합계", "부가세", "공제합계", "공제 내역", "실지급액", "은행", "계좌", "예금주", "발송상태"]];
-    rows.forEach((r, i) => { const b = r.d.정산계좌 || {}; aoa.push([i + 1, r.d.차량번호, r.d.이름, r.d.전화번호 || "", fmtBiz(r.d.사업자번호), r.d.사업자상호 || "", r.trips.length, r.gross, r.vat, r.deductTotal, r.deductions.map((x) => `${x.label} ${won(x.amount)}`).join(", "), r.net, b.bank || "", b.acct ? formatAccount(b.bank, b.acct) : "", b.holder || "", sent[r.key]?.status ? ({ sent: "발송", read: "읽음", confirmed: "확인" }[sent[r.key].status] || "발송") : "미발송"]); });
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), "지급명세 요약");
-    XLSX.writeFile(wb, `지급명세요약_${co}_${ym}.xlsx`);
+    const list = sel.size ? rows.filter((r) => sel.has(r.key)) : shown;
+    if (!list.length) { kpAlert("내려받을 기사님이 없습니다."); return; }
+    const wb = XLSX.utils.book_new();
+    const A = [["순번", "차량번호", "기사명", "등급", "전화번호", "사업자번호", "사업자명", "운행건수", "운임합계", "부가세", "공제합계", "실지급액", "은행", "계좌", "예금주", "계좌확인", "발송상태"]];
+    list.forEach((r, i) => { const b = r.d.정산계좌 || {}; A.push([i + 1, r.d.차량번호, r.d.이름, r.d.등급 || "", r.d.전화번호 || "", fmtBiz(r.d.사업자번호), r.d.사업자상호 || "", r.trips.length, r.gross, r.vat, r.deductTotal, r.net, b.bank || "", b.acct ? formatAccount(b.bank, b.acct) : "", b.holder || "", r.bankCheck.level === "ok" ? "계좌확인완료" : r.bankCheck.msg, sent[r.key]?.status ? ({ sent: "발송", read: "읽음", confirmed: "확인" }[sent[r.key].status] || "발송") : "미발송"]); });
+    A.push([], ["", "합계", "", "", "", "", "", list.reduce((s, r) => s + r.trips.length, 0), list.reduce((s, r) => s + r.gross, 0), list.reduce((s, r) => s + r.vat, 0), list.reduce((s, r) => s + r.deductTotal, 0), list.reduce((s, r) => s + r.net, 0)]);
+    const ws1 = XLSX.utils.aoa_to_sheet(A); ws1["!cols"] = [6, 12, 10, 6, 14, 14, 14, 8, 12, 10, 12, 12, 10, 18, 10, 12, 8].map((wch) => ({ wch }));
+    XLSX.utils.book_append_sheet(wb, ws1, "지급 요약");
+    const B = [["기사명", "차량번호", "순번", "상차일", "거래처", "상차지", "경유(기사운임)", "하차지", "화물", "톤수", "기사운임"]];
+    list.forEach((r) => r.trips.forEach((t, i) => B.push([r.d.이름, r.d.차량번호, i + 1, t.date, t.client, t.from, t.via, t.to, t.cargo, t.ton, t.fare])));
+    const ws2 = XLSX.utils.aoa_to_sheet(B); ws2["!cols"] = [10, 12, 6, 12, 16, 16, 24, 16, 12, 8, 12].map((wch) => ({ wch }));
+    XLSX.utils.book_append_sheet(wb, ws2, "운행 내역");
+    const C = [["기사명", "차량번호", "공제 항목", "금액"]];
+    list.forEach((r) => r.deductions.forEach((d) => C.push([r.d.이름, r.d.차량번호, d.label, d.amount])));
+    const ws3 = XLSX.utils.aoa_to_sheet(C); ws3["!cols"] = [10, 12, 24, 12].map((wch) => ({ wch }));
+    XLSX.utils.book_append_sheet(wb, ws3, "공제 내역");
+    XLSX.writeFile(wb, `지입정산_${co}_${ym}${sel.size ? "_선택" : ""}.xlsx`);
   };
   const onSaveDed = async (list) => {
     if (dedEdit.key === "__common__") await saveCommon(list);
@@ -256,6 +270,7 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
       <Hero en="SETTLEMENT · BATCH" title="일괄 지급명세서" desc="월을 고르면 기사님별 운임·공제·실지급액이 자동 계산됩니다 · 미리보고 한 번에 발송">
         <div className="flex items-center gap-2 flex-wrap">
           <MonthPicker value={ym} onChange={(v) => { setYm(v); setSel(new Set()); }} dark />
+          <button type="button" onClick={summaryExcel} className="h-10 px-4 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black whitespace-nowrap">⇩ 엑셀 다운로드</button>
           <Stat k="대상 기사님" v={`${rows.length}명`} />
           <Stat k="운행" v={`${totals.n}건`} />
           <Stat k="실지급 합계" v={`${won(totals.net)}원`} />
@@ -271,7 +286,7 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
         <div className="ml-auto flex items-center gap-2 flex-wrap">
           <span className="text-[14px] font-bold text-[#5B6B85] whitespace-nowrap">선택 {sel.size}명</span>
           <button type="button" onClick={() => setPreview(0)} disabled={!shown.length} className={btnL}>미리보기</button>
-          <button type="button" onClick={summaryExcel} className={btnL}>요약 엑셀</button>
+          <button type="button" onClick={summaryExcel} className={btnL} title="지급 요약·운행 내역·공제 내역 3개 시트">⇩ 엑셀 다운로드{sel.size ? `(선택 ${sel.size}명)` : ""}</button>
           <button type="button" onClick={bankExcel} className={btnL} title="인터넷뱅킹 다건이체 업로드용">대량이체 엑셀{sel.size ? "(선택)" : ""}</button>
           <button type="button" onClick={() => sendSelected(sel)} disabled={busy || !sel.size} className={btnL}>{busy ? "발송 중…" : `선택 발송${sel.size ? ` ${sel.size}명` : ""}`}</button>
           <button type="button" onClick={() => sendSelected(new Set(shown.filter((r) => !sent[r.key]).map((r) => r.key)))} disabled={busy || !shown.some((r) => !sent[r.key])} className={btnD} title="아직 안 보낸 기사님 전원에게 한 번에 발송">
@@ -411,6 +426,7 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
       <Hero en="SETTLEMENT · DRIVER" title="개별 정산서" desc="기사님 한 분씩 운행 내역·공제·실지급액을 자세히 보고 인쇄·저장·발송합니다">
         <div className="flex items-center gap-2 flex-wrap">
           <MonthPicker value={ym} onChange={setYm} dark />
+          <button type="button" onClick={() => { const list = rows.filter((r) => r.trips.length || r.deductTotal); if (!list.length) { kpAlert("내려받을 내용이 없습니다."); return; } const wb = XLSX.utils.book_new(); list.forEach((r) => { const aoa = [["순번", "상차일", "거래처", "상차지", "경유", "하차지", "화물", "톤수", "기사운임"]]; r.trips.forEach((t, i) => aoa.push([i + 1, t.date, t.client, t.from, t.via, t.to, t.cargo, t.ton, t.fare])); aoa.push([], ["", "", "", "", "", "", "", "운임 합계", r.gross], ["", "", "", "", "", "", "", "부가세", r.vat]); r.deductions.forEach((d) => aoa.push(["", "", "", "", "", "", "", `공제 · ${d.label}`, -d.amount])); aoa.push(["", "", "", "", "", "", "", "실지급액", r.net]); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), String(`${r.d.이름}_${r.d.차량번호}`).replace(/[\\/?*[\]:]/g, "").slice(0, 31)); }); XLSX.writeFile(wb, `개별정산서_전체_${co}_${ym}.xlsx`); }} className="h-10 px-4 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black whitespace-nowrap" title="기사님별 시트로 한 파일에">⇩ 전체 엑셀</button>
           <Stat k="운행 기사님" v={`${rows.filter((r) => r.trips.length).length}명`} />
           <Stat k="실지급 합계" v={`${won(rows.reduce((s, r) => s + (r.trips.length || r.deductTotal ? r.net : 0), 0))}원`} />
         </div>
@@ -466,7 +482,7 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
                 <button type="button" onClick={() => setDedEdit(true)} className={btnL}>공제 {cur.deductions.length}건 보기·추가</button>
                 <div className="ml-auto flex gap-2 flex-wrap">
                   <button type="button" onClick={() => setPreview(true)} className={btnL}>미리보기</button>
-                  <button type="button" onClick={excel} className={btnL}>엑셀</button>
+                  <button type="button" onClick={excel} className={btnL}>⇩ 엑셀 다운로드</button>
                   <button type="button" onClick={() => setPreview("img")} className={btnL}>이미지·PDF 저장</button>
                   <button type="button" onClick={doSend} disabled={busy} className={btnD}>{busy ? "발송 중…" : "기사앱으로 발송"}</button>
                 </div>

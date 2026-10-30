@@ -10,6 +10,10 @@
 // 항목별 "수익률 하락 기여" = 수익B_항목 − 매출B_항목 × 수익률A(전체)
 //   → 모든 항목을 더하면 수익률효과와 정확히 같다(어디서 마진이 깎였는지).
 
+import { useEffect, useState } from "react";
+import { collection, onSnapshot } from "firebase/firestore";
+import { db } from "./firebase";
+
 export const toWon = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 
 export function statsOf(list) {
@@ -25,9 +29,39 @@ export function statsOf(list) {
   };
 }
 
+// 👤 담당자는 무조건 "이름"으로 — 오더에는 계정 이메일(작성자)만 있는 경우가 많아 직원 명부(users)로 바꾼다
+const STAFF_NAME = new Map();
+const nameSubs = new Set();
+let nameStarted = false;
+export function ensureStaffNames() {
+  if (nameStarted) return;
+  nameStarted = true;
+  onSnapshot(collection(db, "users"), (snap) => {
+    STAFF_NAME.clear();
+    snap.docs.forEach((d) => {
+      const u = d.data() || {};
+      const n = String(u.name || u.이름 || u.담당자명 || u.displayName || "").trim();
+      if (!n) return;
+      const em = String(u.email || "").trim().toLowerCase();
+      if (em) { STAFF_NAME.set(em, n); STAFF_NAME.set(em.split("@")[0], n); }
+      STAFF_NAME.set(d.id, n);
+    });
+    nameSubs.forEach((f) => f(Date.now()));
+  }, () => { nameStarted = false; });
+}
+// 화면에서 쓰기: const namesVer = useStaffNames(); → useMemo 의존성에 넣으면 이름이 오는 대로 다시 계산
+export function useStaffNames() {
+  const [v, setV] = useState(0);
+  useEffect(() => { ensureStaffNames(); nameSubs.add(setV); return () => { nameSubs.delete(setV); }; }, []);
+  return v;
+}
 export const creatorOf = (r) => {
-  const raw = String(r.등록자명 || r.createdByName || r.등록자 || r.작성자 || r.createdByEmail || "").trim();
-  return raw.includes("@") ? raw.split("@")[0] : raw;
+  const named = String(r.등록자명 || r.createdByName || "").trim();
+  if (named && !named.includes("@")) return STAFF_NAME.get(named.toLowerCase()) || named;
+  const raw = String(r.등록자 || r.작성자 || r.createdByEmail || named || "").trim();
+  if (!raw) return "";
+  const key = raw.toLowerCase();
+  return STAFF_NAME.get(key) || STAFF_NAME.get(key.split("@")[0]) || (raw.includes("@") ? raw.split("@")[0] : raw);
 };
 
 export const COMPARE_DIMS = [
