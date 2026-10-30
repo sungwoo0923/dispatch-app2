@@ -22,6 +22,7 @@ import CustomDatePicker from "./CustomDatePicker";
 import { CustomSelect } from "./CustomSelect";
 import { TimeSelect, korTimeLabel, MonthPicker, kstYm } from "./kpInputs";
 import { scanPenaltyImage, parsePenaltyText } from "./penaltyScan";
+import { savePng as savePngA4, savePdf as savePdfA4, printA4 } from "./a4Export";
 
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 const CANCELED = ["배차취소", "취소", "오더취소", "취소됨"];
@@ -153,6 +154,8 @@ function useStatements({ drivers, dispatchData, co, ym, vatMode, includeEmpty = 
       const rp = String(r.차량번호 || "").trim(); const rn = String(r.이름 || "").trim();
       if (!((plate && plate !== "-" && rp === plate) || ((!plate || plate === "-") && name && rn === name))) return false;
       if (CANCELED.includes(r.배차상태 || "") || CANCELED.includes(r.상태 || "")) return false;
+      // 기사님이 아직 수락하지 않았거나(승인대기) 거절한 오더는 정산에 넣지 않는다
+      if (r.배차상태 === "승인대기" || ["대기", "거절"].includes(r.기사확인상태 || "")) return false;
       const day = r.상차일 || ""; if (day < from || day > to) return false;
       return toInt(r.기사운임) > 0;
     }).sort((a, b) => String(a.상차일).localeCompare(String(b.상차일)))
@@ -398,18 +401,9 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
   const cur = rows.find((r) => r.key === selKey) || list[0] || null;
   const trips = cur ? cur.trips.filter((t) => !tq.trim() || `${t.client}${t.from}${t.to}${t.via}${t.cargo}`.includes(tq.trim())) : [];
 
-  const capture = async () => {
-    const { default: html2canvas } = await import("html2canvas");
-    return html2canvas(docRef.current, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
-  };
-  const saveImage = async () => { const c = await capture(); const a = document.createElement("a"); a.href = c.toDataURL("image/png"); a.download = `정산서_${cur.d.이름}_${ym}.png`; a.click(); };
-  const savePdf = async () => {
-    const c = await capture(); const { jsPDF } = await import("jspdf");
-    const pdf = new jsPDF({ unit: "mm", format: "a4" }); const w = 210; const h = (c.height * w) / c.width;
-    let y = 0; const img = c.toDataURL("image/png");
-    while (y < h) { if (y) pdf.addPage(); pdf.addImage(img, "PNG", 0, -y, w, h); y += 297; }
-    pdf.save(`정산서_${cur.d.이름}_${ym}.pdf`);
-  };
+  const saveImage = () => savePngA4(docRef.current, `정산서_${cur.d.이름}_${ym}`);
+  const savePdf = () => savePdfA4(docRef.current, `정산서_${cur.d.이름}_${ym}`);
+  const printDoc = () => printA4(docRef.current, `정산서_${cur.d.이름}_${ym}`);
   const excel = () => {
     const aoa = [["순번", "상차일", "거래처", "상차지", "경유", "하차지", "화물", "톤수", "기사운임"]];
     cur.trips.forEach((t, i) => aoa.push([i + 1, t.date, t.client, t.from, t.via, t.to, t.cargo, t.ton, t.fare]));
@@ -528,6 +522,7 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
                 <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>STATEMENT · {ym}</div>
                 <div className="text-[20px] font-black truncate">{cur.d.이름} · {cur.d.차량번호}</div>
               </div>
+              <button type="button" onClick={printDoc} className="h-11 px-4 rounded-xl bg-white/10 border border-white/20 text-[14px] font-black">인쇄</button>
               <button type="button" onClick={saveImage} className="h-11 px-4 rounded-xl bg-white/10 border border-white/20 text-[14px] font-black">이미지 저장</button>
               <button type="button" onClick={savePdf} className="h-11 px-4 rounded-xl bg-white/10 border border-white/20 text-[14px] font-black">PDF 저장</button>
               <button type="button" onClick={() => setPreview(false)} className="h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black">닫기</button>

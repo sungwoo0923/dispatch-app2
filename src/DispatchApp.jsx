@@ -5212,6 +5212,8 @@ const RichStatusBadge = ({ s, urgent, cancelReq, editReq, onCancelClick, onEditC
       ? "bg-amber-500 text-white"
       : s === "배차취소"
       ? "bg-red-600 text-white"
+      : s === "승인대기"
+      ? "bg-white text-[#1B2B4B] ring-1 ring-[#9FB3D9]"
       : "hidden";
   return (
     <span className={`px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap ${color}`}>
@@ -21298,59 +21300,8 @@ function StopBadge({ count, list, type = "pickup", onSave, placeRows = [], timeO
       </button>
 
       {/* 뷰 팝업 */}
-      {open && createPortal( // ⭐ 표 레이어 분리(끊김 개선) 뒤에도 화면 전체에 뜨도록 body에 그린다
-        <div className="kp-pc-pop fixed inset-0 z-[99999] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50" />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-[480px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between shrink-0">
-              <div>
-                <div className="text-white font-bold text-[15px]">경유 {type === "pickup" ? "상차지" : "하차지"} ({validList.length}곳)</div>
-                <div className="text-white/50 text-[11px] mt-0.5">전체 경유지 상세 정보</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={handleCopy}
-                  className={`px-3 py-1.5 rounded-lg text-[12px] font-bold transition ${copied ? "bg-emerald-500 text-white" : "bg-white/15 text-white hover:bg-white/25"}`}>
-                  {copied ? "복사됨" : "복사"}
-                </button>
-                <button type="button" onClick={() => setOpen(false)}
-                  className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white text-lg flex items-center justify-center">×</button>
-              </div>
-            </div>
-            <div className="overflow-y-auto flex-1 p-4 space-y-3">
-              {validList.map((s, i) => {
-                const timeVal = formatWaypointTime(s, type, orderDate) || s[timeKey];
-                return (
-                  <div key={i} className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
-                    <div className="bg-[#1B2B4B]/8 px-4 py-2 border-b border-gray-200 flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-[#1B2B4B] text-white text-[10px] font-bold flex items-center justify-center shrink-0">{i + 1}</div>
-                      <span className="text-[13px] font-bold text-[#1B2B4B]">{s.업체명}</span>
-                    </div>
-                    <div className="px-4 py-3 space-y-2">
-                      {s.주소 && <div className="flex gap-2"><span className="text-[10px] font-bold text-gray-500 w-14 shrink-0">주소</span><span className="text-[12px] text-gray-700 break-words min-w-0">{s.주소}</span></div>}
-                      {(s.담당자||s.담당자번호) && <div className="flex gap-2"><span className="text-[10px] font-bold text-gray-500 w-14 shrink-0">담당자</span><span className="text-[12px] text-gray-700">{s.담당자}{s.담당자번호?` (${s.담당자번호})`:""}</span></div>}
-                      {timeVal && <div className="flex gap-2"><span className="text-[10px] font-bold text-gray-500 w-14 shrink-0">{timeLabel}</span><span className="text-[12px] font-semibold text-[#1B2B4B]">{timeVal}</span></div>}
-                      {(stripNoneVal(s.화물내용)||stripNoneVal(s.차량톤수)||stripNoneVal(s.톤수값)) && (
-                        <div className="flex gap-3 pt-1 border-t border-gray-100">
-                          {stripNoneVal(s.화물내용) && <div className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-center"><div className="text-[9px] text-gray-500 font-bold mb-0.5">화물내용</div><div className="text-[13px] font-bold text-gray-800">{stripNoneVal(s.화물내용)}</div></div>}
-                          {(stripNoneVal(s.차량톤수)||stripNoneVal(s.톤수값)) && <div className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-center"><div className="text-[9px] text-gray-500 font-bold mb-0.5">화물톤수</div><div className="text-[13px] font-bold text-gray-800">{toTonUnit(stripNoneVal(s.차량톤수)||stripNoneVal(s.톤수값))}</div></div>}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 shrink-0 flex gap-2">
-              {onSave && (
-                <button type="button" onClick={() => { setOpen(false); setEditModalOpen(true); }}
-                  className="flex-1 py-2 rounded-xl bg-amber-500 text-white text-[13px] font-bold hover:bg-amber-600 transition"><EditableText id="misc.btn.19785.수정" defaultText="수정" /></button>
-              )}
-              <button type="button" onClick={() => setOpen(false)}
-                className="flex-1 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"><EditableText id="misc.btn.19788.닫기" defaultText="닫기" /></button>
-            </div>
-          </div>
-        </div>
-      , document.body)}
+      {open && <WaypointViewModal list={validList} type={type} orderDate={orderDate} onClose={() => setOpen(false)} onCopy={handleCopy} copied={copied}
+        onEdit={onSave ? () => { setOpen(false); setEditModalOpen(true); } : null} />}
 
       {/* 수정 팝업 (3파트와 동일) */}
       <StopEditModal
@@ -21430,90 +21381,8 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
       </button>
 
       {/* ── 조회 팝업 ── */}
-      {open && createPortal( // ⭐ 표 레이어 분리(끊김 개선) 뒤에도 화면 전체에 뜨도록 body에 그린다
-        <div className="kp-pc-pop fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]"
-          onClick={() => setOpen(false)}
-          onKeyDown={e => { if (e.key === "Enter") e.stopPropagation(); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-[520px] max-w-[92vw] max-h-[85vh] flex flex-col overflow-hidden"
-            onClick={e => e.stopPropagation()}>
-
-            {/* 헤더 */}
-            <div className="px-6 py-4 flex items-center justify-between bg-[#1B2B4B] shrink-0">
-              <h3 className="text-white font-bold text-[16px]">
-                {label} ({count}곳)
-              </h3>
-              <div className="flex items-center gap-2">
-                <button onClick={handleCopy}
-                  className="px-3 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[12px] font-bold">
-                  {copied ? "복사완료" : "복사"}
-                </button>
-                <button onClick={() => setOpen(false)}
-                  className="text-white/70 hover:text-white text-xl leading-none">✕</button>
-              </div>
-            </div>
-
-            {/* 본문 - 읽기 전용 */}
-            <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
-              <p className="text-[12px] text-gray-500 -mt-1">전체 경유지 상세 정보</p>
-              {list.map((s, i) => {
-                const cargo = (() => {
-                  const raw = stripNoneVal(s.화물내용);
-                  if (/파레트|파렛트|박스|통/.test(raw)) return raw;
-                  const qty = raw || s.화물수량 || "";
-                  const tp = s.화물타입 || "";
-                  if (!qty) return "";
-                  return tp && tp !== "없음" ? `${qty}${tp}` : qty;
-                })();
-                const ton = (() => {
-                  const raw = stripNoneVal(s.차량톤수);
-                  if (/톤|kg/.test(raw)) return toTonUnit(raw);
-                  const val = s.톤수값 || raw || "";
-                  const tp = s.톤수타입 || "";
-                  if (!val) return "";
-                  return toTonUnit(tp && tp !== "없음" ? `${val}${tp}` : val);
-                })();
-                const Row = (label2, value) => value ? (
-                  <div className="flex gap-1 text-[13px] pb-1.5 border-b border-gray-200 min-w-0">
-                    <span className="text-gray-500 shrink-0">{label2} :</span>
-                    <span className="text-gray-800 font-semibold break-words min-w-0">{value}</span>
-                  </div>
-                ) : null;
-                return (
-                  <div key={i} className="rounded-xl border border-gray-200 p-5 bg-gray-50">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="w-7 h-7 rounded-full flex items-center justify-center
-                        text-[12px] font-bold text-white bg-[#1B2B4B]">{i + 1}</span>
-                      <span className="text-[15px] font-bold text-gray-900">{s.업체명 || "-"}</span>
-                    </div>
-                    <div className="space-y-2">
-                      {Row("주소", s.주소)}
-                      {Row("담당자", (s.담당자 || s.담당자번호) ? `${s.담당자 || "-"}${s.담당자번호 ? ` (${s.담당자번호})` : ""}` : "")}
-                      {Row("화물내용", cargo)}
-                      {Row("화물톤수", ton)}
-                      {isPickup
-                        ? Row("상차시간", formatWaypointTime(s, "pickup", orderDate))
-                        : Row("하차시간", formatWaypointTime(s, "drop", orderDate))}
-                      {s.메모 && <div className="text-[12px] text-gray-500 pt-0.5">메모 : {s.메모}</div>}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* 하단 버튼 */}
-            <div className="px-5 py-4 border-t border-gray-100 bg-gray-50 flex items-center gap-3 shrink-0">
-              {(editable || onEdit) && (
-                <button onClick={() => { setOpen(false); setEditModalOpen(true); }}
-                  className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600
-                    text-white text-[13px] font-bold"><EditableText id="misc.btn.19945.수정" defaultText="수정" /></button>
-              )}
-              <button onClick={() => setOpen(false)}
-                className="flex-1 py-2.5 rounded-xl bg-gray-200 hover:bg-gray-300
-                  text-[#1B2B4B] text-[13px] font-bold"><EditableText id="misc.btn.19949.닫기" defaultText="닫기" /></button>
-            </div>
-          </div>
-        </div>
-      , document.body)}
+      {open && <WaypointViewModal list={list} type={type} orderDate={orderDate} onClose={() => setOpen(false)} onCopy={handleCopy} copied={copied}
+        onEdit={(editable || onEdit) ? () => { setOpen(false); setEditModalOpen(true); } : null} />}
 
       {/* 수정 팝업 (3파트와 동일) */}
       <StopEditModal
@@ -21527,6 +21396,85 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
         orderDate={orderDate}
       />
     </>
+  );
+}
+
+
+// ===================== 경유지 보기 팝업(2026-10-31 리디자인) — 경유+N 배지 공용 =====================
+//  정류지마다 순번·업체·시간·주소·담당·화물·톤수, 고정노선에서 따로 넣은 경유지 운임(청구·기사)까지
+function WaypointViewModal({ list = [], type = "drop", orderDate = "", onClose, onCopy, copied, onEdit }) {
+  const isPickup = type === "pickup";
+  const MONO_W = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+  const cargoOf = (s) => { const raw = stripNoneVal(s.화물내용); if (/파레트|파렛트|박스|통/.test(raw)) return raw; const qty = raw || s.화물수량 || ""; const tp = s.화물타입 || ""; if (!qty) return ""; return tp && tp !== "없음" ? `${qty}${tp}` : qty; };
+  const tonOf = (s) => { const raw = stripNoneVal(s.차량톤수); if (/톤|kg/.test(raw)) return toTonUnit(raw); const val = s.톤수값 || raw || ""; const tp = s.톤수타입 || ""; if (!val) return ""; return toTonUnit(tp && tp !== "없음" ? `${val}${tp}` : val); };
+  const money = (v) => (Number(v) ? `${Number(v).toLocaleString()}원` : "");
+  const sumC = list.reduce((a, s) => a + (Number(s.청구운임) || 0), 0);
+  const sumD = list.reduce((a, s) => a + (Number(s.기사운임) || 0), 0);
+  return createPortal(
+    <div className="kp-pc-pop fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-[#0B1428]/55 backdrop-blur-[2px]" onClick={onClose} onKeyDown={(e) => { if (e.key === "Enter") e.stopPropagation(); }}>
+      <div className="relative w-[600px] max-w-[94vw] max-h-[86vh] rounded-[22px] bg-[#F4F6FA] shadow-[0_30px_80px_rgba(11,20,40,.45)] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="relative shrink-0 px-6 py-5 text-white overflow-hidden" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+          <span className="absolute inset-0 opacity-[0.07] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
+          <div className="relative flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: MONO_W }}>WAYPOINTS · {isPickup ? "PICKUP" : "DROP"}</div>
+              <div className="text-[20px] font-black mt-0.5">경유 {isPickup ? "상차지" : "하차지"} {list.length}곳</div>
+            </div>
+            <button type="button" onClick={onCopy} className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-[13.5px] font-black">{copied ? "✓ 복사됨" : "복사"}</button>
+            <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black" aria-label="닫기">닫기</button>
+          </div>
+          {(sumC > 0 || sumD > 0) && (
+            <div className="relative grid grid-cols-2 gap-2 mt-4">
+              {[["경유지 청구운임 합계", money(sumC) || "-"], ["경유지 기사운임 합계", money(sumD) || "-"]].map(([k, v]) => (
+                <div key={k} className="rounded-xl bg-white/[0.07] border border-white/10 px-4 py-2"><div className="text-[11.5px] font-bold text-white/55">{k}</div><div className="text-[17px] font-black tabular-nums" style={{ fontFamily: MONO_W }}>{v}</div></div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto p-5">
+          <div className="relative">
+            <div className="absolute left-[17px] top-4 bottom-4 w-[2px] bg-[#C9D6EE]" />
+            {list.map((s, i) => {
+              const time = formatWaypointTime(s, isPickup ? "pickup" : "drop", orderDate) || (isPickup ? s.상차시간 : s.하차시간);
+              const cargo = cargoOf(s); const ton = tonOf(s);
+              const hasFare = Number(s.청구운임) || Number(s.기사운임);
+              return (
+                <div key={i} className="relative flex gap-3 mb-3 last:mb-0">
+                  <span className="relative z-[1] w-9 h-9 shrink-0 rounded-xl bg-[#0F1A30] text-white flex items-center justify-center text-[13px] font-black" style={{ fontFamily: MONO_W }}>{String(i + 1).padStart(2, "0")}</span>
+                  <div className="flex-1 min-w-0 rounded-2xl bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04)] p-4">
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      {s.구분 && <span className="text-[11px] font-extrabold tracking-[0.12em] text-[#2D4C82]">{s.구분}</span>}
+                      <span className="text-[16px] font-black text-[#0F1A30]">{s.업체명 || "-"}</span>
+                      <span className="px-2 py-0.5 rounded-md bg-[#EEF2F8] text-[12.5px] font-black text-[#1B2B4B]">{time || "즉시"}</span>
+                    </div>
+                    {s.주소 && <div className="text-[13.5px] font-semibold text-[#3A4A66] mt-1 break-words">{s.주소}</div>}
+                    {(s.담당자 || s.담당자번호) && <div className="text-[13px] text-[#5B6B85] mt-0.5">담당 {s.담당자 || ""}{s.담당자번호 ? ` · ${s.담당자번호}` : ""}</div>}
+                    {(cargo || ton || s.메모) && (
+                      <div className="flex flex-wrap gap-1.5 mt-2.5">
+                        {cargo && <span className="h-7 px-2.5 rounded-lg bg-[#F3F6FA] border border-[#E3E8F0] text-[12.5px] font-bold text-[#1B2B4B] inline-flex items-center">화물 {cargo}</span>}
+                        {ton && <span className="h-7 px-2.5 rounded-lg bg-[#F3F6FA] border border-[#E3E8F0] text-[12.5px] font-bold text-[#1B2B4B] inline-flex items-center">톤수 {ton}</span>}
+                        {s.메모 && <span className="h-7 px-2.5 rounded-lg bg-[#F3F6FA] border border-[#E3E8F0] text-[12.5px] font-semibold text-[#3A4A66] inline-flex items-center">{s.메모}</span>}
+                      </div>
+                    )}
+                    {hasFare ? (
+                      <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-[#EEF1F6]">
+                        <div><div className="text-[11.5px] font-bold text-[#7A89A3]">이 곳 청구운임</div><div className="text-[15px] font-black text-[#0B1428] tabular-nums" style={{ fontFamily: MONO_W }}>{money(s.청구운임) || "-"}</div></div>
+                        <div><div className="text-[11.5px] font-bold text-[#7A89A3]">이 곳 기사운임</div><div className="text-[15px] font-black text-[#0B1428] tabular-nums" style={{ fontFamily: MONO_W }}>{money(s.기사운임) || "-"}</div></div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div className="shrink-0 px-5 py-4 bg-white border-t border-[#E3E8F0] flex gap-2">
+          {onEdit && <button type="button" onClick={onEdit} className="flex-1 h-12 rounded-xl border border-[#DCE3EE] text-[14.5px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD]">수정</button>}
+          <button type="button" onClick={onClose} className="flex-[1.4] h-12 rounded-xl bg-[#0F1A30] text-white text-[14.5px] font-black">닫기</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 

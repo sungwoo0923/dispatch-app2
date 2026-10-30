@@ -31,47 +31,51 @@ export function StatementDoc({ st, supplier = {} }) {
         </div>
       </div>
       <div style={{ padding: "18px 24px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8, marginBottom: 16 }}>
+        {/* 기사님 정보 — 2줄 배치, 줄임표 없이 전부 보이게 */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
           {[["기사", st.driverName], ["차량번호", st.carNo], ["사업자번호", st.bizNo ? String(st.bizNo).replace(/(\d{3})(\d{2})(\d{5})/, "$1-$2-$3") : "-"], ["입금 계좌", st.bank ? bankText(st.bank) : "미등록"]].map(([k, v]) => (
-            <div key={k} style={{ background: "#F5F8FD", border: "1px solid #E3E8F0", borderRadius: 10, padding: "8px 12px", minWidth: 0 }}>
-              <div style={{ fontSize: 11, color: "#7A89A3", fontWeight: 700 }}>{k}</div>
-              <div style={{ fontSize: 14, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v || "-"}</div>
+            <div key={k} style={{ background: "#F5F8FD", border: "1px solid #DCE3EE", borderRadius: 10, padding: "9px 13px", minWidth: 0 }}>
+              <div style={{ fontSize: 12, color: "#5B6B85", fontWeight: 800 }}>{k}</div>
+              <div style={{ fontSize: 15, fontWeight: 900, color: "#0B1428", wordBreak: "keep-all", overflowWrap: "anywhere", lineHeight: 1.45, marginTop: 2 }}>{v || "-"}</div>
             </div>
           ))}
         </div>
-        <div style={{ borderRadius: 14, background: NAVY, color: "#fff", padding: "14px 18px", display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 16 }}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: "#8FB0F0" }}>실 지급액</span>
+        <div style={{ borderRadius: 14, background: NAVY, color: "#fff", padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 16 }}>
+          <span style={{ fontSize: 14, fontWeight: 800, color: "#8FB0F0" }}>실 지급액</span>
           <span style={{ fontSize: 28, fontWeight: 900, fontFamily: MONO }}>{won(st.net)}<span style={{ fontSize: 14, marginLeft: 3 }}>원</span></span>
         </div>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, color: "#0B1428" }}>
           <thead>
             <tr style={{ background: "#EEF3FC" }}>
-              {["일자", "거래처", "상차", "하차", "운임"].map((h, i) => <th key={h} style={{ padding: "7px 8px", textAlign: i === 4 ? "right" : "left", fontWeight: 900, color: "#1B2B4B", borderBottom: "1px solid #DCE3EE" }}>{h}</th>)}
+              {["일자", "거래처", "상차", "하차", "운임"].map((h, i) => <th key={h} style={{ padding: "9px 10px", textAlign: i === 4 ? "right" : "left", fontWeight: 900, fontSize: 13.5, color: "#1B2B4B", borderBottom: "1.5px solid #C9D6EE", whiteSpace: "nowrap" }}>{h}</th>)}
             </tr>
           </thead>
           <tbody>
             {trips.map((t, i) => (
-              <tr key={i} style={{ borderBottom: "1px solid #EEF1F6" }}>
-                <td style={{ padding: "6px 8px", whiteSpace: "nowrap", fontFamily: MONO }}>{String(t.date || "").slice(5)}</td>
-                <td style={{ padding: "6px 8px" }}>{t.client}</td>
-                <td style={{ padding: "6px 8px" }}>{t.from}</td>
-                <td style={{ padding: "6px 8px" }}>{t.to}</td>
-                <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 800, fontFamily: MONO }}>{won(t.fare)}</td>
+              <tr key={i} style={{ borderBottom: "1px solid #E3E8F0" }}>
+                <td style={{ padding: "8px 10px", whiteSpace: "nowrap", fontFamily: MONO, fontWeight: 700 }}>{String(t.date || "").slice(5)}</td>
+                <td style={{ padding: "8px 10px", fontWeight: 700 }}>{t.client}</td>
+                <td style={{ padding: "8px 10px", fontWeight: 600 }}>{t.from}</td>
+                <td style={{ padding: "8px 10px", fontWeight: 600 }}>{t.to}{t.via ? <div style={{ fontSize: 12, color: "#3A4A66", marginTop: 2 }}>경유 {t.via}</div> : null}</td>
+                <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 900, fontFamily: MONO, whiteSpace: "nowrap" }}>{won(t.fare)}</td>
               </tr>
             ))}
-            {!trips.length && <tr><td colSpan={5} style={{ padding: 14, textAlign: "center", color: "#9AA9C3" }}>운행 내역 없음</td></tr>}
+            {!trips.length && <tr><td colSpan={5} style={{ padding: 14, textAlign: "center", color: "#5B6B85", fontWeight: 700 }}>운행 내역 없음</td></tr>}
           </tbody>
         </table>
-        <div style={{ marginTop: 14, display: "grid", gap: 4, fontSize: 13.5 }}>
+        <div style={{ marginTop: 16, display: "grid", gap: 2, fontSize: 15 }}>
           {[["운행 건수", `${trips.length}건`], ["운임 합계(공급가액)", `${won(st.gross)}원`], ...(st.vat ? [["부가세(10%)", `${won(st.vat)}원`]] : []),
             ...ded.map((d) => [`공제 · ${d.label}`, `- ${won(d.amount)}원`]), ["공제 합계", `- ${won(st.deductTotal)}원`]].map(([k, v]) => (
-            <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "5px 2px", borderBottom: "1px dashed #E3E8F0" }}>
-              <span style={{ color: "#5B6B85", fontWeight: 700 }}>{k}</span><b style={{ fontFamily: MONO }}>{v}</b>
+            <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 2px", borderBottom: "1px solid #E3E8F0" }}>
+              <span style={{ color: "#1B2B4B", fontWeight: 800 }}>{k}</span><b style={{ fontFamily: MONO, color: "#0B1428", whiteSpace: "nowrap" }}>{v}</b>
             </div>
           ))}
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 2px 2px" }}>
+            <span style={{ color: "#0B1428", fontWeight: 900, fontSize: 16 }}>실 지급액</span><b style={{ fontFamily: MONO, color: "#0B1428", fontSize: 17 }}>{won(st.net)}원</b>
+          </div>
         </div>
         {st.memo && <div style={{ marginTop: 12, padding: "10px 12px", background: "#F5F8FD", borderRadius: 10, fontSize: 12.5, color: "#3A4A66", whiteSpace: "pre-wrap" }}>{st.memo}</div>}
-        <div style={{ marginTop: 14, fontSize: 11, color: "#9AA9C3", textAlign: "right" }}>{supplier.name || st.companyName} · {supplier.contact || ""}</div>
+        <div style={{ marginTop: 14, fontSize: 12.5, color: "#3A4A66", fontWeight: 700, textAlign: "right" }}>{supplier.name || st.companyName}{supplier.contact ? ` · ${supplier.contact}` : ""}</div>
       </div>
     </div>
   );
@@ -103,16 +107,16 @@ export function PenaltyDoc({ p, supplier = {}, onPhoto, wide }) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8, marginBottom: 14 }}>
           {[["대상 기사", p.driverName], ["차량번호", p.carNo], ["연락처", p.phone]].map(([k, v]) => (
             <div key={k} style={{ background: "#F5F8FD", border: "1px solid #E3E8F0", borderRadius: 10, padding: "8px 12px" }}>
-              <div style={{ fontSize: 11, color: "#7A89A3", fontWeight: 700 }}>{k}</div>
-              <div style={{ fontSize: 14.5, fontWeight: 900 }}>{v || "-"}</div>
+              <div style={{ fontSize: 12, color: "#5B6B85", fontWeight: 800 }}>{k}</div>
+              <div style={{ fontSize: 15, fontWeight: 900, color: "#0B1428", overflowWrap: "anywhere" }}>{v || "-"}</div>
             </div>
           ))}
         </div>
         <div style={{ border: "1px solid #E3E8F0", borderRadius: 12, overflow: "hidden" }}>
           {rows.map(([k, v], i) => (
             <div key={k} style={{ display: "grid", gridTemplateColumns: "120px 1fr", borderTop: i ? "1px solid #EEF1F6" : "none" }}>
-              <div style={{ background: "#F7F9FC", padding: "8px 12px", fontSize: 12.5, fontWeight: 800, color: "#5B6B85" }}>{k}</div>
-              <div style={{ padding: "8px 12px", fontSize: 13.5, fontWeight: k === "금액" ? 900 : 600, whiteSpace: "pre-wrap" }}>{v || "-"}</div>
+              <div style={{ background: "#F3F6FA", padding: "9px 12px", fontSize: 13.5, fontWeight: 800, color: "#1B2B4B" }}>{k}</div>
+              <div style={{ padding: "9px 12px", fontSize: 14.5, fontWeight: k === "금액" ? 900 : 700, color: "#0B1428", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{v || "-"}</div>
             </div>
           ))}
         </div>

@@ -10,6 +10,7 @@ import CustomSelect from "./CustomSelect";
 import CustomDatePicker from "./CustomDatePicker";
 import { DRIVER_KINDS, FREE_TOPICS, contractSpec, fillVars } from "./contractTemplates";
 import { useFleetDrivers } from "./FleetPayDocs";
+import { savePng, savePdf, printA4 } from "./a4Export";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const card = "rounded-[18px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)]";
@@ -31,44 +32,106 @@ function displayVals(spec, vals) {
   return out;
 }
 
+// A4 한 장 = 794×1123px(96dpi). 조항이 장 경계에서 잘리지 않게 장마다 나눠 담는다.
+const PAGE_W = 794, PAGE_H = 1123, PAD_Y = 60, PAD_X = 70, FOOT = 30;
+const CAP = PAGE_H - PAD_Y * 2 - FOOT;
 export function ContractPaper({ title, spec, vals, clauses, paperRef }) {
   const dv = displayVals(spec, vals);
-  const aName = vals.갑상호 || "＿＿＿＿"; const bName = vals.을상호 || "＿＿＿＿";
   const isClient = spec === contractSpec("client");
   const left = isClient ? { role: "갑 (화주)", name: vals.을상호, ceo: vals.을대표, biz: vals.을사업자번호, addr: vals.을주소 } : { role: "갑", name: vals.갑상호, ceo: vals.갑대표, biz: vals.갑사업자번호, addr: vals.갑주소, tel: vals.갑연락처 };
   const right = isClient ? { role: "을 (운송사)", name: vals.갑상호, ceo: vals.갑대표, biz: vals.갑사업자번호, addr: vals.갑주소 } : { role: "을", name: vals.을상호, ceo: vals.을대표, biz: vals.을사업자번호, addr: vals.을주소, tel: vals.을연락처 };
-  void aName; void bName;
+  const blocks = [
+    <div key="h" style={{ textAlign: "center", borderBottom: "3px double #0F1A30", paddingBottom: 18, marginBottom: 24 }}>
+      <div style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: "0.3em", color: "#2D4C82", fontWeight: 800 }}>CONTRACT</div>
+      <div style={{ fontSize: 27, fontWeight: 900, letterSpacing: "0.06em", marginTop: 6 }}>{title}</div>
+    </div>,
+    ...clauses.map((cl, i) => (
+      <div key={`c${i}`} style={{ paddingBottom: 14, fontSize: 14.5, lineHeight: 1.9, color: "#0B1428" }}>
+        {cl.title && <div style={{ fontWeight: 900, fontSize: 15 }}>{fillVars(cl.title, dv)}</div>}
+        <div style={{ whiteSpace: "pre-wrap", textAlign: "justify" }}>{fillVars(cl.body, dv)}</div>
+      </div>
+    )),
+    <div key="close" style={{ paddingTop: 10, paddingBottom: 18, textAlign: "center", fontSize: 14.5, lineHeight: 1.9 }}>
+      위 계약의 내용을 증명하기 위하여 계약서 2부를 작성하고, 서명 날인 후 각 1부씩 보관한다.
+      <div style={{ fontSize: 16, fontWeight: 900, marginTop: 10 }}>{korDate(vals.계약일) || "＿＿＿＿년 ＿＿월 ＿＿일"}</div>
+    </div>,
+    <div key="sign" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+      {[left, right].map((p, i) => (
+        <div key={i} style={{ border: "1.5px solid #0F1A30", borderRadius: 4, padding: "14px 16px", fontSize: 13.5, lineHeight: 1.9, color: "#0B1428" }}>
+          <div style={{ fontWeight: 900, fontSize: 14.5, borderBottom: "1px solid #DCE3EE", paddingBottom: 6, marginBottom: 6 }}>{p.role}</div>
+          <div>상호·성명 : <b>{p.name || ""}</b></div>
+          <div>대 표 자 : {p.ceo || ""}</div>
+          <div>사업자번호 : {p.biz || ""}</div>
+          <div style={{ overflowWrap: "anywhere" }}>주 소 : {p.addr || ""}</div>
+          {p.tel !== undefined && <div>연 락 처 : {p.tel || ""}</div>}
+          <div style={{ textAlign: "right", marginTop: 10, fontWeight: 800 }}>(서명 또는 인) <span style={{ display: "inline-block", width: 44, height: 44, border: "1px dashed #7A879C", borderRadius: "50%", verticalAlign: "middle", marginLeft: 6 }} /></div>
+        </div>
+      ))}
+    </div>,
+  ];
+  // 블록 높이를 재서 장을 나눈다
+  const measureRef = React.useRef(null);
+  const [pages, setPages] = React.useState([blocks.map((_, i) => i)]);
+  const sig = JSON.stringify([title, vals, clauses]);
+  React.useLayoutEffect(() => {
+    const box = measureRef.current; if (!box) return;
+    const hs = [...box.children].map((el) => el.offsetHeight);
+    const out = []; let cur = []; let used = 0;
+    hs.forEach((h, i) => {
+      // 마지막 두 블록(맺음말+서명)은 한 장에 같이 — 서명 칸만 다음 장으로 넘어가지 않게
+      const need = i === hs.length - 2 ? h + hs[hs.length - 1] : h;
+      if (cur.length && used + need > CAP) { out.push(cur); cur = []; used = 0; }
+      cur.push(i); used += h;
+    });
+    if (cur.length) out.push(cur);
+    setPages(out);
+  }, [sig]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pageStyle = { width: PAGE_W, height: PAGE_H, background: "#fff", color: "#0F1A30", padding: `${PAD_Y}px ${PAD_X}px`, fontFamily: "'Noto Sans KR',sans-serif", boxSizing: "border-box", position: "relative", overflow: "hidden" };
   return (
-    <div ref={paperRef} style={{ width: 794, minHeight: 1123, background: "#fff", color: "#0F1A30", padding: "64px 70px", fontFamily: "'Noto Sans KR',sans-serif", boxSizing: "border-box" }}>
-      <div style={{ textAlign: "center", borderBottom: "3px double #0F1A30", paddingBottom: 18 }}>
-        <div style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: "0.3em", color: "#2D4C82", fontWeight: 800 }}>CONTRACT</div>
-        <div style={{ fontSize: 27, fontWeight: 900, letterSpacing: "0.06em", marginTop: 6 }}>{title}</div>
-      </div>
-      <div style={{ marginTop: 26, fontSize: 14, lineHeight: 1.95 }}>
-        {clauses.map((cl, i) => (
-          <div key={i} style={{ marginBottom: 14, breakInside: "avoid" }}>
-            {cl.title && <div style={{ fontWeight: 900, fontSize: 14.5 }}>{fillVars(cl.title, dv)}</div>}
-            <div style={{ whiteSpace: "pre-wrap", textAlign: "justify" }}>{fillVars(cl.body, dv)}</div>
+    <>
+      <div ref={measureRef} aria-hidden style={{ position: "absolute", left: -10000, top: 0, width: PAGE_W - PAD_X * 2, fontFamily: "'Noto Sans KR',sans-serif", visibility: "hidden" }}>{blocks}</div>
+      <div ref={paperRef} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        {pages.map((idxs, pi) => (
+          <div key={pi} className="kp-a4page" style={pageStyle}>
+            {idxs.map((i) => blocks[i])}
+            <div style={{ position: "absolute", left: 0, right: 0, bottom: 26, textAlign: "center", fontSize: 12, color: "#5B6B85", fontFamily: MONO }}>- {pi + 1} / {pages.length} -</div>
           </div>
         ))}
       </div>
-      <div style={{ marginTop: 26, textAlign: "center", fontSize: 14.5, lineHeight: 1.9 }}>
-        위 계약의 내용을 증명하기 위하여 계약서 2부를 작성하고, 서명 날인 후 각 1부씩 보관한다.
-        <div style={{ fontSize: 16, fontWeight: 900, marginTop: 10 }}>{korDate(vals.계약일) || "＿＿＿＿년 ＿＿월 ＿＿일"}</div>
+    </>
+  );
+}
+
+// 🔎 기사님 찾기 — 이름·차량번호·전화번호로 검색하거나 ▾로 전체 목록(70명이어도 바로)
+function DriverSearch({ drivers, onPick }) {
+  const [q, setQ] = React.useState("");
+  const [open, setOpen] = React.useState(false);
+  const [hi, setHi] = React.useState(0);
+  const key = q.replace(/\s/g, "");
+  const list = drivers.filter((d) => !key || `${d.이름}${d.차량번호}${d.전화번호}${d.사업자상호 || ""}`.replace(/\s/g, "").includes(key)).slice(0, 50);
+  const pick = (d) => { onPick(d.id); setQ(`${d.이름} · ${d.차량번호}`); setOpen(false); };
+  return (
+    <div className="relative">
+      <div className="flex">
+        <input value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); setHi(0); }} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onKeyDown={(e) => { if (!open || !list.length) return; if (e.key === "ArrowDown") { e.preventDefault(); setHi((h) => Math.min(list.length - 1, h + 1)); } else if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(0, h - 1)); } else if (e.key === "Enter") { e.preventDefault(); pick(list[hi]); } }}
+          placeholder="이름 · 차량번호 · 전화번호로 검색" className={`${inp} !rounded-r-none`} autoComplete="off" />
+        <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => setOpen((v) => !v)} className="h-11 w-11 shrink-0 rounded-r-xl bg-[#0F1A30] text-white text-[13px]" aria-label="전체 목록">▾</button>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginTop: 26 }}>
-        {[left, right].map((p, i) => (
-          <div key={i} style={{ border: "1.5px solid #0F1A30", borderRadius: 4, padding: "14px 16px", fontSize: 13, lineHeight: 1.9 }}>
-            <div style={{ fontWeight: 900, fontSize: 14, borderBottom: "1px solid #DCE3EE", paddingBottom: 6, marginBottom: 6 }}>{p.role}</div>
-            <div>상호·성명 : <b>{p.name || ""}</b></div>
-            <div>대 표 자 : {p.ceo || ""}</div>
-            <div>사업자번호 : {p.biz || ""}</div>
-            <div>주 소 : {p.addr || ""}</div>
-            {p.tel !== undefined && <div>연 락 처 : {p.tel || ""}</div>}
-            <div style={{ textAlign: "right", marginTop: 10, fontWeight: 800 }}>(서명 또는 인) <span style={{ display: "inline-block", width: 44, height: 44, border: "1px dashed #9AA9C3", borderRadius: "50%", verticalAlign: "middle", marginLeft: 6 }} /></div>
-          </div>
-        ))}
-      </div>
+      {open && (
+        <div className="absolute z-30 left-0 right-0 top-full mt-1 rounded-xl border border-[#DCE3EE] bg-white shadow-[0_18px_40px_rgba(15,26,48,.18)] max-h-[320px] overflow-y-auto">
+          {list.map((d, i) => (
+            <button key={d.id} type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(d)} onMouseEnter={() => setHi(i)}
+              className={`w-full text-left px-3.5 py-2.5 border-b border-[#EEF1F6] last:border-0 flex items-center gap-2 ${i === hi ? "bg-[#EEF3FC]" : "bg-white"}`}>
+              <span className="text-[14.5px] font-black text-[#0F1A30]">{d.이름}</span>
+              <span className="text-[13px] font-bold text-[#3A4A66]">{d.차량번호}</span>
+              <span className="text-[12.5px] text-[#5B6B85]">{d.전화번호 !== "-" ? d.전화번호 : ""}</span>
+              <span className="ml-auto text-[11.5px] font-black px-1.5 py-0.5 rounded bg-[#EEF3FC] text-[#1B2B4B]">{d.등급}</span>
+            </button>
+          ))}
+          {!list.length && <div className="px-4 py-6 text-center text-[13.5px] font-bold text-[#5B6B85]">찾는 기사님이 없습니다</div>}
+        </div>
+      )}
     </div>
   );
 }
@@ -113,24 +176,13 @@ export default function ContractStudio({ company = "", me = {} }) {
   const pickDriver = (id) => {
     const d = drivers.find((x) => x.id === id); if (!d) return;
     setVals((p) => ({ ...p, 을상호: d.사업자상호 || d.이름, 을대표: d.사업자상호 ? d.이름 : p.을대표, 을사업자번호: d.사업자번호 || p.을사업자번호, 을연락처: d.전화번호 !== "-" ? d.전화번호 : "", 차량번호: d.차량번호 !== "-" ? d.차량번호 : "", 차종: [d.차량톤수, d.차량종류].filter(Boolean).join(" ") }));
-    if (["지입", "직영", "임대"].includes(d.등급) && tab === "driver") setSub(d.등급);
   };
   const title = spec ? (spec.title) : "";
 
-  const capture = async () => { const { default: h2c } = await import("html2canvas"); return h2c(paperRef.current, { scale: 2, backgroundColor: "#ffffff" }); };
   const fileBase = () => `${title}_${vals.을상호 || ""}_${vals.계약일 || ""}`.replace(/[\\/:*?"<>|]/g, "");
-  const saveImage = async () => { const cv = await capture(); const a = document.createElement("a"); a.href = cv.toDataURL("image/png"); a.download = `${fileBase()}.png`; a.click(); };
-  const savePdf = async () => {
-    const cv = await capture(); const { jsPDF } = await import("jspdf");
-    const pdf = new jsPDF({ unit: "mm", format: "a4" }); const w = 210; const h = (cv.height * w) / cv.width; const img = cv.toDataURL("image/png");
-    let y = 0; while (y < h - 0.5) { if (y) pdf.addPage(); pdf.addImage(img, "PNG", 0, -y, w, h); y += 297; }
-    pdf.save(`${fileBase()}.pdf`);
-  };
-  const print = async () => {
-    const cv = await capture(); const wdw = window.open("", "_blank"); if (!wdw) return;
-    wdw.document.write(`<html><head><title>${title}</title><style>@page{size:A4;margin:0}body{margin:0}img{width:100%}</style></head><body><img src="${cv.toDataURL("image/png")}"><script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>`);
-    wdw.document.close();
-  };
+  const saveImage = () => savePng(paperRef.current, fileBase());
+  const savePdfFile = () => savePdf(paperRef.current, fileBase());
+  const print = () => printA4(paperRef.current, title);
   const missing = spec ? spec.fields.filter((f) => f.req && !String(vals[f.k] || "").trim()).map((f) => f.label) : [];
   const save = async () => {
     if (missing.length) return kpAlert(`필수 입력: ${missing.join(", ")}`);
@@ -200,10 +252,7 @@ export default function ContractStudio({ company = "", me = {} }) {
                   </div>
                   <div>
                     <span className={lab}>기사님 불러오기 <span className="font-semibold text-[#7A879C]">(지입·직영·임대 등록 기사님)</span></span>
-                    <CustomSelect value="" onChange={(e) => pickDriver(e.target.value)} className={inp}>
-                      <option value="">선택하면 차주·차량 정보가 채워집니다</option>
-                      {drivers.map((d) => <option key={d.id} value={d.id}>{d.이름} · {d.차량번호} · {d.등급}</option>)}
-                    </CustomSelect>
+                    <DriverSearch drivers={drivers} onPick={pickDriver} />
                   </div>
                 </>
               )}
@@ -259,12 +308,12 @@ export default function ContractStudio({ company = "", me = {} }) {
                   <button type="button" onClick={resetDoc} className="h-10 px-3.5 rounded-xl border border-[#DCE3EE] text-[13.5px] font-bold text-[#3A4A66]">새로 쓰기</button>
                   <button type="button" onClick={print} className="h-10 px-3.5 rounded-xl border border-[#DCE3EE] text-[13.5px] font-black text-[#1B2B4B]">인쇄</button>
                   <button type="button" onClick={saveImage} className="h-10 px-3.5 rounded-xl border border-[#DCE3EE] text-[13.5px] font-black text-[#1B2B4B]">이미지 저장</button>
-                  <button type="button" onClick={savePdf} className="h-10 px-3.5 rounded-xl border border-[#DCE3EE] text-[13.5px] font-black text-[#1B2B4B]">PDF 저장</button>
+                  <button type="button" onClick={savePdfFile} className="h-10 px-3.5 rounded-xl border border-[#DCE3EE] text-[13.5px] font-black text-[#1B2B4B]">PDF 저장</button>
                   <button type="button" onClick={save} disabled={busy} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black disabled:opacity-50">{busy ? "저장 중…" : "보관함 저장"}</button>
                 </div>
               </div>
-              <div className="rounded-2xl bg-[#E9EDF3] p-4 overflow-auto max-h-[calc(100vh-180px)]">
-                <div className="mx-auto shadow-[0_10px_30px_rgba(15,26,48,.18)]" style={{ width: 794 }}>
+              <div className="relative rounded-2xl bg-[#E9EDF3] p-4 overflow-auto max-h-[calc(100vh-180px)]">
+                <div className="mx-auto [&_.kp-a4page]:shadow-[0_10px_30px_rgba(15,26,48,.18)]" style={{ width: 794 }}>
                   <ContractPaper title={title} spec={spec} vals={vals} clauses={clauses} paperRef={paperRef} />
                 </div>
               </div>

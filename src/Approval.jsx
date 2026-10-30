@@ -19,6 +19,8 @@ import { kpConfirm } from "./kpDialog";
 import BankAccountInput, { ReasonTemplates } from "./BankAccountInput";
 import { createPortal } from "react-dom";
 import html2canvas from "html2canvas";
+import { printA4 } from "./a4Export";
+import { TimeSelect } from "./kpInputs";
 import { db, auth } from "./firebase";
 import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, serverTimestamp } from "firebase/firestore";
 import { ShellIcon } from "./AdminShell";
@@ -307,6 +309,16 @@ function FieldInput({ f, value, onChange, staff, meUid }) {
   if (f.type === "select") return <CustomSelect openOnFocus value={value || ""} onChange={(e) => onChange(e.target.value)} className={inp}>{f.options.map((o) => <option key={o} value={o}>{o}</option>)}</CustomSelect>;
   if (f.type === "staff") return <StaffSelect value={value} onChange={onChange} staff={staff} exclude={[meUid]} placeholder="선택 안 함" />;
   if (f.type === "date") return <CustomDatePicker value={value || ""} onChange={(e) => onChange(e.target.value)} className={inp} showIcon placeholder="날짜 선택" />;
+  if (f.type === "timerange") {
+    const v = value || {};
+    return (
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <TimeSelect value={v.start || ""} onChange={(x) => onChange({ ...v, start: x })} emptyLabel="시작" minuteStep={10} />
+        <span className="text-[#5B6B85] font-black">~</span>
+        <TimeSelect value={v.end || ""} onChange={(x) => onChange({ ...v, end: x })} emptyLabel="종료" minuteStep={10} />
+      </div>
+    );
+  }
   if (f.type === "time") return <input type="time" value={value || ""} onChange={(e) => onChange(e.target.value)} className={inp} />;
   if (f.type === "number") return <input type="number" inputMode="numeric" value={value ?? ""} onChange={(e) => onChange(e.target.value)} className={inp} />;
   if (f.type === "money") {
@@ -527,7 +539,7 @@ function LeaveCard({ leave, thisDays }) {
 }
 
 // ─────────────────────────── 작성 화면 ───────────────────────────
-function Composer({ company, me, staff, cat, preset, onDone, leave, getLive }) {
+function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myDocs = [] }) {
   const editId = preset?.editId || null;
   const forms = formsOfCat(cat);
   const [formKey, setFormKey] = React.useState(preset?.form && formOf(preset.form).cat === cat ? preset.form : forms[0].key);
@@ -783,12 +795,11 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit }) {
       setComment(""); setCancelAsk(false);
     } catch (e) { window.alert(`처리 실패: ${e.message}`); } finally { setBusy(false); }
   };
+  // 🖨 A4 기준으로 나눠서 인쇄(긴 회의록·보고서도 글줄 중간이 잘리지 않게)
   const print = async () => {
-    const canvas = await captureAt1x(paperRef.current, { scale: 2, backgroundColor: "#ffffff" });
-    const w = window.open("", "_blank", "width=900,height=1000");
-    if (!w) return;
-    w.document.write(`<html><head><title>${d.docNo}</title><style>body{margin:0}img{width:100%}</style></head><body><img src="${canvas.toDataURL("image/png")}"><script>window.onload=function(){setTimeout(function(){window.print()},300)}</script></body></html>`);
-    w.document.close();
+    const box = paperRef.current?.closest?.("[data-fitpaper]"); const prev = box?.style.zoom;
+    if (box) box.style.zoom = "1";
+    try { await printA4(paperRef.current, d.docNo); } finally { if (box) box.style.zoom = prev; }
   };
 
   return createPortal(
@@ -1098,7 +1109,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
 
       {isCat && (
         <>
-          <Composer key={`${page}-${preset?.editId || preset?.id || "new"}`} company={company} me={meFull} staff={staff} cat={page} preset={preset?.cat === page ? preset : null}
+          <Composer key={`${page}-${preset?.editId || preset?.id || "new"}`} myDocs={mineL} company={company} me={meFull} staff={staff} cat={page} preset={preset?.cat === page ? preset : null}
             leave={leave} getLive={(id) => (list || []).find((x) => x.id === id)}
             onDone={() => { setPreset(null); setPage("mine"); }} />
         </>

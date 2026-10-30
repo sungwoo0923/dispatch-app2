@@ -547,7 +547,8 @@ exports.notifyFleetDriverNewOrder =
       // 바로 아래 알림 발송 로직이 이어서 처리한다.
       const prevPlateW = normalizePlateServer(before?.["차량번호"] || "");
       const nextPlateW = normalizePlateServer(after["차량번호"] || "");
-      if (nextPlateW && nextPlateW !== prevPlateW && after["기사확인상태"] !== "대기") {
+      // ⭐ 고정노선 "기사님 수락 생략(자동 수락)" 오더는 이미 수락 상태로 만들어진다 — 승인대기로 되돌리지 않는다
+      if (nextPlateW && nextPlateW !== prevPlateW && after["기사확인상태"] !== "대기" && !(after["자동수락"] && after["기사확인상태"] === "수락")) {
         const wDriverSnap = await db.collection("drivers").where("차량번호", "==", after["차량번호"]).limit(5).get();
         const wDriverDoc = wDriverSnap.docs.find((d) => normalizePlateServer(d.data()["차량번호"]) === nextPlateW);
         if (wDriverDoc?.data()?.["등급"] === "지입") {

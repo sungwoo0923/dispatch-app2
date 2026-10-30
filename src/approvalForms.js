@@ -285,12 +285,12 @@ export const APPROVAL_FORMS = [
   { key: "daily", cat: "report", label: "일일 업무일지", title: "일 일 업 무 일 지", code: "RD",
     fields: [
       { k: "date", label: "업무일", type: "date", required: true, half: true },
-      { k: "hours", label: "근무 시간", type: "text", ph: "09:00 ~ 18:00", half: true },
-      { k: "done", label: "오늘 한 일", type: "textarea", rows: 6, required: true, ph: "· 배차 32건 처리(긴급 3건)\n· ○○물류 운임 협의\n· 미수금 2건 입금 확인" },
+      { k: "hours", label: "근무 시간", type: "timerange", half: true },
+      { k: "done", label: "오늘 업무 내용", type: "textarea", rows: 6, required: true, ph: "· 배차 32건 처리(긴급 3건)\n· ○○물류 운임 협의\n· 미수금 2건 입금 확인" },
       { k: "issue", label: "특이사항·이슈", type: "textarea", rows: 3, ph: "사고·지연·민원 등" },
-      { k: "plan", label: "내일 할 일", type: "textarea", rows: 3 },
+      { k: "plan", label: "다음 주 업무 계획", type: "textarea", rows: 3 },
     ],
-    titleOf: () => "", summary: (d) => `${d.date || ""} 업무일지` },
+    summary: (d) => `${d.date || ""} 업무일지` },
   { key: "workreport", cat: "report", label: "업무 보고서", title: "업 무 보 고 서", code: "RW",
     fields: [
       { k: "period", label: "보고 기간", type: "select", options: ["주간", "월간", "분기", "수시"], def: "주간", half: true },
@@ -314,7 +314,7 @@ export const APPROVAL_FORMS = [
   { key: "minutes", cat: "report", label: "회의록", title: "회 의 록", code: "RM",
     fields: [
       { k: "date", label: "회의일", type: "date", required: true, half: true },
-      { k: "time", label: "시간", type: "text", ph: "14:00 ~ 15:00", half: true },
+      { k: "time", label: "회의 시간", type: "timerange", half: true },
       { k: "place", label: "장소", type: "text", half: true },
       { k: "kind", label: "회의 종류", type: "select", options: ["정기 회의", "부서 회의", "거래처 미팅", "안전 회의", "기타"], def: "정기 회의", half: true },
       { k: "attendees", label: "참석자", type: "text", required: true, ph: "홍길동 팀장, 김철수 대리 …" },
@@ -363,6 +363,7 @@ export function initialData(form) {
     if (f.type === "items") d[f.k] = [{ name: "", qty: 1, price: "" }];
     if (f.type === "costs") d[f.k] = (f.preset || ["항목"]).map((l) => ({ label: l, amount: "" }));
     if (f.type === "daterange") d[f.k] = { start: "", end: "" };
+    if (f.type === "timerange") d[f.k] = { start: f.k === "hours" ? "09:00" : "", end: f.k === "hours" ? "18:00" : "" };
   });
   return d;
 }
@@ -372,7 +373,7 @@ export function missingFields(form, d) {
   return (form.fields || []).filter((f) => {
     if (!f.required) return false;
     const v = d[f.k];
-    if (f.type === "daterange") return !v?.start;
+    if (f.type === "daterange" || f.type === "timerange") return !v?.start;
     if (f.type === "items") return !(v || []).some((r) => String(r.name || "").trim() && Number(r.price));
     return v === undefined || v === null || String(v).trim() === "";
   }).map((f) => f.label);
@@ -384,6 +385,7 @@ export function fieldText(f, v, staff) {
   if (f.type === "bank") return bankText(v);
   if (f.type === "daterange") { const n = dayDiff(v); const b = bizDays(v); return v.start ? `${rangeText(v)}${n ? ` (${n}일${b !== n ? ` · 주말·공휴일 빼고 ${b}일` : ""})` : ""}` : ""; }
   if (f.type === "money") return Number(v) ? won(v) : "";
+  if (f.type === "timerange") { const t = (hm) => { if (!hm) return ""; const [h, m] = hm.split(":").map(Number); return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${String(m).padStart(2, "0")}`; }; return v?.start ? `${t(v.start)}${v.end ? ` ~ ${t(v.end)}` : ""}` : ""; }
   if (f.type === "number") return String(v);
   if (f.type === "staff") { const u = (staff || []).find((x) => x.uid === v); return u ? `${u.name}${u.position ? ` ${u.position}` : ""}` : ""; }
   return String(v);

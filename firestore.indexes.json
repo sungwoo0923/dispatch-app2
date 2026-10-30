@@ -9,7 +9,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "상차일",
+          "fieldPath": "`상차일`",
           "order": "ASCENDING"
         }
       ]
@@ -65,7 +65,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "상차일",
+          "fieldPath": "`상차일`",
           "order": "ASCENDING"
         }
       ]
@@ -121,7 +121,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "상차일",
+          "fieldPath": "`상차일`",
           "order": "ASCENDING"
         }
       ]
@@ -243,15 +243,15 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "상차지명",
+          "fieldPath": "`상차지명`",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "하차지명",
+          "fieldPath": "`하차지명`",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "상차일",
+          "fieldPath": "`상차일`",
           "order": "DESCENDING"
         }
       ],
