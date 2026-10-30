@@ -800,7 +800,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
   // 보이고, GPS/위치는 가입된 기사만 자연히 채워지는 식으로 둔다.
   const drivers = useMemo(() => {
     return driversRaw
-      .filter(raw => raw.등급 === "지입" || raw.등급 === "직영")
+      .filter(raw => raw.등급 === "지입" || raw.등급 === "직영" || raw.등급 === "임대")
       .map(raw => {
         const u = usersMap[raw.id] || {};
         return {

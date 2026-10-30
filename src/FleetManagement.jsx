@@ -1138,7 +1138,7 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
     // ⭐ 기사관리에서 지입·직영으로 지정했지만 아직 기사앱에 가입하지 않은 기사도 목록에 보인다(앱 미가입 표시 + 가입 안내 복사)
     const joinedPlates = new Set(list.map((d) => String(d.차량번호 || "").replace(/\s+/g, "").toUpperCase()));
     const extra = driversRaw
-      .filter((r) => (r.등급 === "지입" || r.등급 === "직영") && !usersMap[r.id] && !(r.uid && usersMap[r.uid]))
+      .filter((r) => (r.등급 === "지입" || r.등급 === "직영" || r.등급 === "임대") && !usersMap[r.id] && !(r.uid && usersMap[r.uid]))
       .filter((r) => !myCompanyName || !r.companyName || r.companyName === myCompanyName)
       .filter((r) => !joinedPlates.has(String(r.차량번호 || "").replace(/\s+/g, "").toUpperCase()))
       .map((r) => ({
@@ -5698,7 +5698,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
   // Tab persistence across parent-tab switches → sessionStorage
   // ⭐ 사용자 요청 — 지입차관리에 들어왔을 때 노선/배차상태/담당 차량이 먼저
   // 보여야 하므로, 기본 진입 탭을 실시간관제가 아닌 노선관리로 바꾼다.
-  const [mainTab, setMainTab] = useState(() => sfGet("fm_tab", "route"));
+  const [mainTab, setMainTab] = useState(() => { const t = sfGet("fm_tab", "route"); return t === "settlement" ? "route" : t; });
 
   // Data — init from sessionStorage so page appears populated immediately on re-mount
   const [driversRaw, setDriversRaw] = useState(() => sfGet("fm_drivers_raw", []));
@@ -6043,7 +6043,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
   // 이 화면들(관제현황/이력조회/출근기록부/온도관제/적재함카메라/기사등록관리/노선관리)에
   // 자동으로 반영/제외된다.
   const drivers = useMemo(
-    () => allFleetDrivers.filter(d => d.등급 === "지입" || d.등급 === "직영"),
+    () => allFleetDrivers.filter(d => d.등급 === "지입" || d.등급 === "직영" || d.등급 === "임대"),
     [allFleetDrivers]
   );
 
@@ -6056,7 +6056,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
   // 필터링한다.
   const routeDrivers = useMemo(() => {
     return driversRaw
-      .filter(raw => raw.등급 === "지입" || raw.등급 === "직영")
+      .filter(raw => raw.등급 === "지입" || raw.등급 === "직영" || raw.등급 === "임대")
       .map(raw => ({
         id: raw.id,
         이름: (raw.이름 || raw.name || "").trim() || "-",
@@ -6495,7 +6495,6 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
             ["tracking", "관제현황", "LIVE", <><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /><circle cx="12" cy="12" r="8" /></>],
             ["route", "노선관리", "ROUTE", <><circle cx="6" cy="6" r="2.2" /><circle cx="18" cy="18" r="2.2" /><path d="M6 8.2V14a3 3 0 0 0 3 3h3a3 3 0 0 1 3 3v-2" /></>],
             ["fixed", "고정노선", "FIXED", <><path d="M4 19V5M20 19V5" /><path d="M4 8h16M4 16h16" /><circle cx="12" cy="12" r="2" /></>],
-            ["settlement", "정산관리", "PAY", <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 10h18M7 15h4" /></>],
             ["history", "이력 조회", "LOG", <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>],
             ["attendance", "출근기록부", "ATT", <><rect x="4" y="4" width="16" height="17" rx="2" /><path d="M8 2v4M16 2v4M4 10h16" /></>],
             ["temperature", "온도 관제", "TEMP", <><path d="M14 14.8V4a2 2 0 0 0-4 0v10.8a4 4 0 1 0 4 0Z" /></>],
@@ -6826,7 +6825,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
           여부와 무관하게 기사관리에서 등급만 지입/직영으로 지정되면 정산 대상이어야
           하기 때문이다. */}
       {mainTab === "settlement" && (
-        <SettlementModes drivers={routeDrivers} dispatchData={dispatchData} role={role} companyName={myCompanyName} />
+        <div style={{ padding: 40, textAlign: "center", fontSize: 15, fontWeight: 800, color: "#1B2B4B" }}>지입 정산은 상단 <b>정산관리 › 지입정산관리</b>로 옮겼습니다</div>
       )}
       {mainTab === "fixed" && <FixedRoutesModes drivers={routeDrivers} companyName={myCompanyName} dispatchData={dispatchData} />}
       {mainTab === "penalty" && <PenaltyCenter drivers={routeDrivers} companyName={myCompanyName} supplier={{ name: myCompanyName }} />}

@@ -20,15 +20,14 @@ import { validateAccount, formatAccount } from "./bankUtil";
 import { compressImage } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
 import { CustomSelect } from "./CustomSelect";
-import { TimeSelect, korTimeLabel } from "./kpInputs";
-import { scanPenaltyImage } from "./penaltyScan";
+import { TimeSelect, korTimeLabel, MonthPicker, kstYm } from "./kpInputs";
+import { scanPenaltyImage, parsePenaltyText } from "./penaltyScan";
 
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 const CANCELED = ["배차취소", "취소", "오더취소", "취소됨"];
 const ymOf = (d) => String(d || "").slice(0, 7);
 const monthRange = (ym) => { const [y, m] = ym.split("-").map(Number); const last = new Date(y, m, 0).getDate(); return [`${ym}-01`, `${ym}-${String(last).padStart(2, "0")}`]; };
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
-const prevYm = () => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
 const me = () => auth.currentUser?.email || "직원";
 const digits = (v) => String(v || "").replace(/\D/g, "");
 const fmtBiz = (v) => { const d = digits(v); return d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}` : d; };
@@ -70,33 +69,50 @@ function useCompanyDoc(col, id) {
 }
 
 // ───────── 공제 편집(드롭다운으로 항목 고르고 금액) ─────────
-function DeductionEditor({ title, sub, value = [], gross = 0, onSave, onClose }) {
-  const [list, setList] = React.useState(() => (value.length ? value.map((d) => ({ kind: DED_KINDS.includes(d.label) ? d.label : "기타", label: d.label, amount: String(d.amount || "") })) : [{ kind: "지입료", label: "지입료", amount: "" }]));
+//  auto: 자동으로 들어가는 공제(공통·기사관리·과태료) — 읽기 전용으로 함께 보여준다
+const kindOfLabel = (label) => DED_KINDS.find((k) => String(label || "").startsWith(k)) || "기타";
+function DeductionEditor({ title, sub, value = [], auto = [], gross = 0, onSave, onClose }) {
+  const [list, setList] = React.useState(() => (value.length ? value.map((d) => { const kind = kindOfLabel(d.label); return { kind, label: d.label, amount: String(d.amount || "") }; }) : (auto.length ? [] : [{ kind: "지입료", label: "지입료", amount: "" }])));
   const upd = (i, patch) => setList((p) => p.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const autoAmt = (kind) => (kind === "원천세 3.3%" && gross ? String(Math.round(gross * 0.033)) : "");
-  const total = list.reduce((s, d) => s + toInt(d.amount), 0);
+  const autoTotal = auto.reduce((s, d) => s + toInt(d.amount), 0);
+  const total = autoTotal + list.reduce((s, d) => s + toInt(d.amount), 0);
+  const COLS = "grid-cols-[44px_190px_minmax(0,1fr)_160px_40px]";
   return (
     <div className="fixed inset-0 z-[99995] bg-[#0B1428]/55 flex items-center justify-center p-4">
-      <div className="w-full max-w-[640px] rounded-[22px] bg-white overflow-hidden shadow-2xl">
+      <div className="w-full max-w-[720px] rounded-[22px] bg-white overflow-hidden shadow-2xl">
         <div className="px-6 py-5 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
           <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>DEDUCTIONS</div>
           <div className="text-[20px] font-black">{title}</div>
           {sub && <div className="text-[13px] text-white/65">{sub}</div>}
         </div>
-        <div className="p-6 space-y-2 max-h-[60vh] overflow-y-auto">
-          <div className="grid grid-cols-[44px_190px_minmax(0,1fr)_160px_40px] gap-2 text-[12.5px] font-black text-[#7A89A3] px-1"><span>순번</span><span>공제 항목</span><span>내용(선택)</span><span className="text-right">금액</span><span /></div>
-          {list.map((d, i) => (
-            <div key={i} className="grid grid-cols-[44px_190px_minmax(0,1fr)_160px_40px] gap-2 items-center">
+        <div className="p-6 space-y-2 max-h-[62vh] overflow-y-auto">
+          <div className={`grid ${COLS} gap-2 text-[12.5px] font-black text-[#7A89A3] px-1`}><span>순번</span><span>공제 항목</span><span>내용</span><span className="text-right">금액</span><span /></div>
+          {auto.map((d, i) => (
+            <div key={`a${i}`} className={`grid ${COLS} gap-2 items-center`}>
               <span className="text-[14px] font-black text-[#5B6B85] text-center tabular-nums" style={{ fontFamily: MONO }}>{i + 1}</span>
-              <CustomSelect value={d.kind} onChange={(e) => { const k = e.target.value; upd(i, { kind: k, label: k === "기타" ? "" : k, amount: d.amount || autoAmt(k) }); }} className={`${inp} w-full`}>
-                {DED_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
-              </CustomSelect>
-              <input value={d.kind === "기타" ? d.label : d.label === d.kind ? "" : d.label.replace(`${d.kind} `, "")} onChange={(e) => upd(i, { label: d.kind === "기타" ? e.target.value : `${d.kind}${e.target.value ? ` ${e.target.value}` : ""}` })} placeholder={d.kind === "기타" ? "항목 이름" : "예: 10월분"} className={`${inp} w-full`} />
-              <input inputMode="numeric" value={d.amount ? toInt(d.amount).toLocaleString() : ""} onChange={(e) => upd(i, { amount: e.target.value.replace(/[^\d]/g, "") })} placeholder="0" className={`${inp} w-full text-right tabular-nums`} style={{ fontFamily: MONO }} />
-              <button type="button" onClick={() => setList((p) => p.filter((_, j) => j !== i))} className="w-10 h-10 rounded-xl text-[#9AA9C3] hover:bg-[#F5F8FD] text-[15px]" aria-label="항목 삭제">✕</button>
+              <div className={`${inp} w-full flex items-center bg-[#F5F8FD]`}>{d.kind || kindOfLabel(d.label)}</div>
+              <div className={`${inp} w-full flex items-center gap-1.5 bg-[#F5F8FD] min-w-0`}><span className="shrink-0 h-6 px-1.5 rounded-md bg-[#0F1A30] text-white text-[11px] font-black inline-flex items-center">{d.src}</span><span className="truncate">{d.memo || d.label}</span></div>
+              <div className={`${inp} w-full flex items-center justify-end bg-[#F5F8FD] tabular-nums`} style={{ fontFamily: MONO }}>{won(d.amount)}</div>
+              <span className="w-10 h-10 flex items-center justify-center text-[#9AA9C3]" title={d.src === "과태료" ? "과태료·사고 서류에서 수정" : d.src === "공통" ? "[공통 공제]에서 수정" : "기사관리에서 수정"}>🔒</span>
             </div>
           ))}
+          {list.map((d, j) => {
+            const i = j;
+            return (
+              <div key={j} className={`grid ${COLS} gap-2 items-center`}>
+                <span className="text-[14px] font-black text-[#5B6B85] text-center tabular-nums" style={{ fontFamily: MONO }}>{auto.length + i + 1}</span>
+                <CustomSelect value={d.kind} onChange={(e) => { const k = e.target.value; upd(i, { kind: k, label: k === "기타" ? "" : k, amount: d.amount || autoAmt(k) }); }} className={`${inp} w-full`}>
+                  {DED_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+                </CustomSelect>
+                <input value={d.kind === "기타" ? d.label : d.label === d.kind ? "" : String(d.label).replace(`${d.kind} `, "")} onChange={(e) => upd(i, { label: d.kind === "기타" ? e.target.value : `${d.kind}${e.target.value ? ` ${e.target.value}` : ""}` })} placeholder={d.kind === "기타" ? "항목 이름" : "예: 10월분"} className={`${inp} w-full`} />
+                <input inputMode="numeric" value={d.amount ? toInt(d.amount).toLocaleString() : ""} onChange={(e) => upd(i, { amount: e.target.value.replace(/[^\d]/g, "") })} placeholder="0" className={`${inp} w-full text-right tabular-nums`} style={{ fontFamily: MONO }} />
+                <button type="button" onClick={() => setList((p) => p.filter((_, k) => k !== i))} className="w-10 h-10 rounded-xl text-[#9AA9C3] hover:bg-[#F5F8FD] text-[15px]" aria-label="항목 삭제">✕</button>
+              </div>
+            );
+          })}
           <button type="button" onClick={() => setList((p) => [...p, { kind: "세금", label: "세금", amount: "" }])} className="w-full h-11 rounded-xl border-2 border-dashed border-[#C9D2E0] text-[14px] font-black text-[#5B6B85] hover:bg-[#F7F9FC]">+ 공제 항목 추가</button>
+          {auto.length > 0 && <div className="text-[12.5px] text-[#7A89A3] pt-1">🔒 자동 공제 — 공통 공제는 [공통 공제], 과태료는 과태료·사고 서류, 기사님 고정 공제는 기사관리에서 고칩니다</div>}
         </div>
         <div className="px-6 py-4 border-t border-[#E3E8F0] flex items-center gap-2">
           <div className="text-[14px] font-bold text-[#5B6B85]">합계 <b className="text-[18px] text-[#0B1428] tabular-nums" style={{ fontFamily: MONO }}>{won(total)}</b>원</div>
@@ -108,27 +124,19 @@ function DeductionEditor({ title, sub, value = [], gross = 0, onSave, onClose })
   );
 }
 
-// ═════════════════════ 일괄 지급명세서 ═════════════════════
+// ═════════════════════ 지급명세서 공용 계산(일괄·개별 같은 값) ═════════════════════
 const penForDriver = (p, d) => p.driverKey === d.id || p.driverId === d.id || (d.appUid && p.driverId === d.appUid);
-export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyName = "", supplier = {} }) {
-  const co = String(companyName || "").trim();
-  const [ym, setYm] = React.useState(prevYm());
+const viaNames = (r) => [r.경유지_상차, r.경유지_하차, r.경유상차목록, r.경유하차목록].flatMap((a) => (Array.isArray(a) ? a : [])).map((w) => w?.업체명 || w?.name || "").filter(Boolean).join(", ");
+function useStatements({ drivers, dispatchData, co, ym, vatMode, includeEmpty = false }) {
   const [from, to] = monthRange(ym);
   const settings = useCompanyDoc("companySettings", co);
   const defDeds = (settings.statementDeductions || []).filter((d) => d.label);
-  const [dedEdit, setDedEdit] = React.useState(null); // { key:"__common__" | driverKey, title, value, gross }
-  const [vatMode, setVatMode] = React.useState("biz");
   const draftKey = `kpStmtDraft_${co}_${ym}`;
-  const [edits, setEdits] = React.useState({}); // { driverKey: [{label, amount}] }
+  const [edits, setEdits] = React.useState({});
   React.useEffect(() => { try { setEdits(JSON.parse(localStorage.getItem(draftKey) || "{}")); } catch { setEdits({}); } }, [draftKey]);
   const saveEdits = (next) => { setEdits(next); try { localStorage.setItem(draftKey, JSON.stringify(next)); } catch { /* 저장 불가 */ } };
-  const [sel, setSel] = React.useState(new Set());
-  const [preview, setPreview] = React.useState(null);
   const [sent, setSent] = React.useState({});
   const [penalties, setPenalties] = React.useState([]);
-  const [busy, setBusy] = React.useState(false);
-  const [q, setQ] = React.useState("");
-
   React.useEffect(() => {
     if (!co) return undefined;
     return onSnapshot(query(collection(db, "driverStatements"), where("companyName", "==", co), where("period", "==", ym)), (s) => {
@@ -139,7 +147,6 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
     if (!co) return undefined;
     return onSnapshot(query(collection(db, "fleetPenalties"), where("companyName", "==", co)), (s) => setPenalties(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setPenalties([]));
   }, [co]);
-
   const rows = React.useMemo(() => drivers.map((d) => {
     const plate = String(d.차량번호 || "").trim(); const name = String(d.이름 || "").trim();
     const trips = (dispatchData || []).filter((r) => {
@@ -149,37 +156,32 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
       const day = r.상차일 || ""; if (day < from || day > to) return false;
       return toInt(r.기사운임) > 0;
     }).sort((a, b) => String(a.상차일).localeCompare(String(b.상차일)))
-      .map((r) => ({ date: r.상차일 || "", client: r.거래처명 || "", from: r.상차지명 || "", to: r.하차지명 || "", fare: toInt(r.기사운임) }));
+      .map((r) => ({ date: r.상차일 || "", client: r.거래처명 || "", from: r.상차지명 || "", to: r.하차지명 || "", via: viaNames(r), cargo: r.화물내용 || "", ton: r.차량톤수 || r.톤수 || "", fare: toInt(r.기사운임), route: r.고정노선명 || "" }));
     const gross = trips.reduce((s, t) => s + t.fare, 0);
     const vat = vatMode === "biz" && d.사업자번호 ? Math.round(gross * 0.1) : 0;
     // 기사 부담(공제) 과태료 — 이의 신청·취소는 빼고, 다른 달에 이미 정산된 건도 뺀다
     const penList = penalties.filter((p) => penForDriver(p, d) && String(p.payer || "").startsWith("기사 부담") && (p.deductPeriod || ymOf(p.date)) === ym
       && !["취소", "이의 신청"].includes(p.status) && !(p.status === "납부 완료" && p.settledPeriod && p.settledPeriod !== ym) && !(p.status === "납부 완료" && !p.settledPeriod));
-    const pen = penList.map((p) => ({ label: `${p.kind || "과태료"} ${p.date || ""}`.trim(), amount: toInt(p.amount) }));
-    const perDriver = (d.공제항목 || []).filter((x) => x.label);
+    const auto = [
+      ...defDeds.map((x) => ({ label: x.label, amount: toInt(x.amount), src: "공통", kind: kindOfLabel(x.label) })),
+      ...(d.공제항목 || []).filter((x) => x.label).map((x) => ({ label: x.label, amount: toInt(x.amount), src: "기사관리", kind: kindOfLabel(x.label) })),
+      ...penList.map((p) => ({ label: `${p.kind || "과태료"} ${p.date || ""}`.trim(), amount: toInt(p.amount), src: "과태료", kind: DED_KINDS.includes(p.kind) ? p.kind : "과태료", memo: [p.date, p.summary || p.detail || p.place].filter(Boolean).join(" · ") })),
+    ];
     const extra = (edits[d.id] || []).filter((x) => x.label && toInt(x.amount));
-    const deductions = [...defDeds, ...perDriver, ...pen, ...extra].map((x) => ({ label: x.label, amount: toInt(x.amount) }));
+    const deductions = [...auto, ...extra.map((x) => ({ ...x, src: "추가" }))].map((x) => ({ label: x.label, amount: toInt(x.amount) }));
     const deductTotal = deductions.reduce((s, x) => s + x.amount, 0);
     const bankCheck = d.정산계좌?.acct ? validateAccount(d.정산계좌.bank, d.정산계좌.acct) : { ok: false, level: "error", msg: "계좌 미등록" };
     return {
-      key: d.id, d, trips, gross, vat, deductions, deductTotal, extra, penIds: penList.map((p) => p.id), net: gross + vat - deductTotal, bankCheck,
+      key: d.id, d, trips, gross, vat, auto, deductions, deductTotal, extra, penIds: penList.map((p) => p.id), net: gross + vat - deductTotal, bankCheck,
       st: { companyName: co, driverId: d.appUid || d.id, driverKey: d.id, driverName: name, carNo: plate, phone: d.전화번호 || "", period: ym, from, to, trips, gross, vat, deductions, deductTotal, net: gross + vat - deductTotal, bank: d.정산계좌 || null, bizNo: d.사업자번호 || "", bizName: d.사업자상호 || "" },
     };
-  }).filter((r) => r.trips.length || r.deductTotal), [drivers, dispatchData, from, to, ym, vatMode, penalties, edits, JSON.stringify(defDeds), co]); // eslint-disable-line react-hooks/exhaustive-deps
+  }).filter((r) => includeEmpty || r.trips.length || r.deductTotal), [drivers, dispatchData, from, to, ym, vatMode, penalties, edits, JSON.stringify(defDeds), co, includeEmpty]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const qq = q.replace(/\s/g, "");
-  const shown = rows.filter((r) => !qq || `${r.d.이름}${r.d.차량번호}${r.d.전화번호}${r.d.사업자상호 || ""}`.replace(/\s/g, "").includes(qq));
-  const totals = shown.reduce((a, r) => ({ n: a.n + r.trips.length, gross: a.gross + r.gross, vat: a.vat + r.vat, net: a.net + r.net, ded: a.ded + r.deductTotal }), { n: 0, gross: 0, vat: 0, net: 0, ded: 0 });
-  const allOn = shown.length > 0 && shown.every((r) => sel.has(r.key));
-  const toggle = (k) => setSel((p) => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; });
-
-  const sendSelected = async (keys) => {
-    const list = rows.filter((r) => keys.has(r.key));
-    if (!list.length) return kpAlert("보낼 기사님을 선택해 주세요.");
+  const send = async (list) => {
+    if (!list.length) { kpAlert("보낼 기사님을 선택해 주세요."); return false; }
     const noApp = list.filter((r) => !r.d.appUid).length;
     const penCnt = list.reduce((s, r) => s + r.penIds.length, 0);
-    if (!await kpConfirm(`${ym} 지급명세서를 ${list.length}명에게 발송할까요?\n${noApp ? `기사앱 미가입 ${noApp}명은 저장만 되고, 가입하면 서류함에서 보입니다.\n` : ""}${penCnt ? `지급액에서 공제한 과태료 ${penCnt}건은 "납부 완료"로 바뀝니다.\n` : ""}같은 기간에 이미 보낸 명세서는 새 내용으로 바뀝니다.`, { title: "지급명세서 발송", okText: "발송" })) return;
-    setBusy(true);
+    if (!await kpConfirm(`${ym} 지급명세서를 ${list.length}명에게 발송할까요?\n${noApp ? `기사앱 미가입 ${noApp}명은 저장만 되고, 가입하면 서류함에서 보입니다.\n` : ""}${penCnt ? `지급액에서 공제한 과태료 ${penCnt}건은 "납부 완료"로 바뀝니다.\n` : ""}같은 기간에 이미 보낸 명세서는 새 내용으로 바뀝니다.`, { title: "지급명세서 발송", okText: "발송" })) return false;
     try {
       const ops = [];
       list.forEach((r) => {
@@ -191,10 +193,38 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
         ops.slice(i, i + 400).forEach(([ref, data, merge]) => (merge ? b.set(ref, data, { merge: true }) : b.set(ref, data)));
         await b.commit();
       }
-      setSel(new Set());
       kpAlert(`${list.length}명에게 발송했습니다.`);
-    } catch (e) { kpAlert(`발송 실패: ${e?.message || e}`); } finally { setBusy(false); }
+      return true;
+    } catch (e) { kpAlert(`발송 실패: ${e?.message || e}`); return false; }
   };
+  const saveCommon = (list) => setDoc(doc(db, "companySettings", co), { statementDeductions: list }, { merge: true });
+  return { rows, sent, defDeds, edits, saveEdits, send, saveCommon, from, to };
+}
+const StatusChip = ({ s }) => (!s ? <Chip soft>미발송</Chip> : <Chip dark={s.status === "confirmed"}>{s.status === "confirmed" ? "확인 완료" : s.status === "read" || s.readAt ? "읽음" : "발송됨"}</Chip>);
+const VatToggle = ({ value, onChange }) => (
+  <div className="inline-flex p-1 rounded-xl bg-[#EEF2F8] gap-1">
+    {[["biz", "사업자 기사님 부가세 10%"], ["none", "부가세 없음"]].map(([k, l]) => <button key={k} type="button" onClick={() => onChange(k)} className={`h-9 px-3.5 rounded-lg text-[13.5px] font-black whitespace-nowrap ${value === k ? "bg-white text-[#0F1A30] shadow" : "text-[#5B6B85]"}`}>{l}</button>)}
+  </div>
+);
+
+// ═════════════════════ 일괄 지급명세서 ═════════════════════
+export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyName = "", supplier = {} }) {
+  const co = String(companyName || "").trim();
+  const [ym, setYm] = React.useState(kstYm());
+  const [vatMode, setVatMode] = React.useState("biz");
+  const { rows, sent, defDeds, edits, saveEdits, send, saveCommon } = useStatements({ drivers, dispatchData, co, ym, vatMode });
+  const [dedEdit, setDedEdit] = React.useState(null);
+  const [sel, setSel] = React.useState(new Set());
+  const [preview, setPreview] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [q, setQ] = React.useState("");
+
+  const qq = q.replace(/\s/g, "");
+  const shown = rows.filter((r) => !qq || `${r.d.이름}${r.d.차량번호}${r.d.전화번호}${r.d.사업자상호 || ""}`.replace(/\s/g, "").includes(qq));
+  const totals = shown.reduce((a, r) => ({ n: a.n + r.trips.length, gross: a.gross + r.gross, vat: a.vat + r.vat, net: a.net + r.net, ded: a.ded + r.deductTotal }), { n: 0, gross: 0, vat: 0, net: 0, ded: 0 });
+  const allOn = shown.length > 0 && shown.every((r) => sel.has(r.key));
+  const toggle = (k) => setSel((p) => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const sendSelected = async (keys) => { setBusy(true); const ok = await send(rows.filter((r) => keys.has(r.key))); if (ok) setSel(new Set()); setBusy(false); };
 
   const bankExcel = () => {
     const list = rows.filter((r) => (sel.size ? sel.has(r.key) : true) && r.net > 0);
@@ -215,22 +245,17 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
     XLSX.writeFile(wb, `지급명세요약_${co}_${ym}.xlsx`);
   };
   const onSaveDed = async (list) => {
-    if (dedEdit.key === "__common__") await setDoc(doc(db, "companySettings", co), { statementDeductions: list }, { merge: true });
+    if (dedEdit.key === "__common__") await saveCommon(list);
     else saveEdits({ ...edits, [dedEdit.key]: list });
     setDedEdit(null);
-  };
-  const statusChip = (r) => {
-    const s = sent[r.key];
-    if (!s) return <Chip soft>미발송</Chip>;
-    return <Chip dark={s.status === "confirmed"}>{s.status === "confirmed" ? "확인 완료" : s.status === "read" || s.readAt ? "읽음" : "발송됨"}</Chip>;
   };
   const cur = preview != null ? shown[preview] : null;
 
   return (
     <div>
-      <Hero en="SETTLEMENT · BATCH" title="일괄 지급명세서" desc="기간을 고르면 기사님별 운임·공제·실지급액이 자동 계산됩니다 · 미리보고 한 번에 발송">
+      <Hero en="SETTLEMENT · BATCH" title="일괄 지급명세서" desc="월을 고르면 기사님별 운임·공제·실지급액이 자동 계산됩니다 · 미리보고 한 번에 발송">
         <div className="flex items-center gap-2 flex-wrap">
-          <input type="month" value={ym} onChange={(e) => { setYm(e.target.value); setSel(new Set()); }} className="h-12 px-3.5 rounded-xl bg-white/10 border border-white/20 text-white text-[16px] font-black [color-scheme:dark]" />
+          <MonthPicker value={ym} onChange={(v) => { setYm(v); setSel(new Set()); }} dark />
           <Stat k="대상 기사님" v={`${rows.length}명`} />
           <Stat k="운행" v={`${totals.n}건`} />
           <Stat k="실지급 합계" v={`${won(totals.net)}원`} />
@@ -239,9 +264,7 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
 
       <div className={`${card} p-4 mb-3 flex items-center gap-2 flex-wrap`}>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="기사명 · 차량번호 · 전화번호 찾기" className={`${inp} w-64`} />
-        <div className="inline-flex p-1 rounded-xl bg-[#EEF2F8] gap-1">
-          {[["biz", "사업자 기사님 부가세 10%"], ["none", "부가세 없음"]].map(([k, l]) => <button key={k} type="button" onClick={() => setVatMode(k)} className={`h-9 px-3.5 rounded-lg text-[13.5px] font-black whitespace-nowrap ${vatMode === k ? "bg-white text-[#0F1A30] shadow" : "text-[#5B6B85]"}`}>{l}</button>)}
-        </div>
+        <VatToggle value={vatMode} onChange={setVatMode} />
         <button type="button" onClick={() => setDedEdit({ key: "__common__", title: "공통 공제", sub: "모든 기사님 명세서에 똑같이 들어갑니다", value: defDeds })} className={btnL}>
           공통 공제 {defDeds.length ? `${defDeds.length}건 · ${won(defDeds.reduce((s, d) => s + toInt(d.amount), 0))}원` : "설정"}
         </button>
@@ -282,21 +305,21 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
                 <td className={`${TD} text-right tabular-nums font-bold`} style={{ fontFamily: MONO }}>{won(r.gross)}</td>
                 <td className={`${TD} text-right tabular-nums text-[#5B6B85]`} style={{ fontFamily: MONO }}>{r.vat ? won(r.vat) : "-"}</td>
                 <td className={`${TD} text-right`}>
-                  <button type="button" onClick={() => setDedEdit({ key: r.key, title: `${r.d.이름} 기사님 공제`, sub: `공통·기사관리·과태료 공제는 자동 포함 · 여기서는 이번 달 추가 공제`, value: r.extra, gross: r.gross })}
+                  <button type="button" onClick={() => setDedEdit({ key: r.key, title: `${r.d.이름} 기사님 공제`, sub: "자동 공제(🔒)와 이번 달 추가 공제를 함께 봅니다", value: r.extra, auto: r.auto, gross: r.gross })}
                     title={r.deductions.map((d) => `${d.label} ${won(d.amount)}`).join("\n") || "공제 추가"}
                     className="h-9 px-3 rounded-lg border border-[#DCE3EE] bg-white hover:bg-[#F5F8FD] text-[14px] font-black tabular-nums text-[#1B2B4B]" style={{ fontFamily: MONO }}>
                     {r.deductTotal ? `-${won(r.deductTotal)}` : "+ 공제"}{r.deductions.length ? <span className="ml-1.5 text-[11.5px] text-[#7A89A3]">{r.deductions.length}건</span> : null}
                   </button>
                 </td>
                 <td className={`${TD} text-right tabular-nums font-black text-[15.5px] text-[#0B1428]`} style={{ fontFamily: MONO }}>{won(r.net)}</td>
-                <td className={TD}>{statusChip(r)}</td>
+                <td className={TD}><StatusChip s={sent[r.key]} /></td>
                 <td className={TD}>
                   <button type="button" onClick={() => setPreview(i)} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#1B2B4B]">보기</button>
                   <button type="button" onClick={() => sendSelected(new Set([r.key]))} className="ml-1.5 h-9 px-3.5 rounded-lg bg-[#1B2B4B] text-white text-[13.5px] font-black">발송</button>
                 </td>
               </tr>
             ))}
-            {!shown.length && <tr><td colSpan={16} className="py-20 text-center text-[15px] font-bold text-[#9AA9C3]">{ym} 기간에 운행한 지입·직영 기사님이 없습니다</td></tr>}
+            {!shown.length && <tr><td colSpan={16} className="py-20 text-center text-[15px] font-bold text-[#9AA9C3]">{ym} 기간에 운행한 지입·직영·임대 기사님이 없습니다</td></tr>}
           </tbody>
           {shown.length > 0 && (
             <tfoot>
@@ -313,7 +336,7 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
         </table>
       </div>
 
-      {dedEdit && <DeductionEditor title={dedEdit.title} sub={dedEdit.sub} value={dedEdit.value} gross={dedEdit.gross || 0} onSave={onSaveDed} onClose={() => setDedEdit(null)} />}
+      {dedEdit && <DeductionEditor title={dedEdit.title} sub={dedEdit.sub} value={dedEdit.value} auto={dedEdit.auto || []} gross={dedEdit.gross || 0} onSave={onSaveDed} onClose={() => setDedEdit(null)} />}
 
       {cur && (
         <div className="fixed inset-0 z-[99990] bg-[#0B1428]/55 flex justify-end">
@@ -330,12 +353,288 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
             <div className="flex-1 overflow-y-auto p-6"><StatementDoc st={cur.st} supplier={supplier} /></div>
             <div className="px-6 py-4 bg-white border-t border-[#E3E8F0] flex items-center gap-2">
               <label className="flex items-center gap-2 text-[14px] font-bold text-[#1B2B4B]"><input type="checkbox" className="w-4 h-4" checked={sel.has(cur.key)} onChange={() => toggle(cur.key)} />발송 대상에 포함</label>
-              <span className="ml-auto">{statusChip(cur)}</span>
+              <span className="ml-auto"><StatusChip s={sent[cur.key]} /></span>
               <button type="button" onClick={() => sendSelected(new Set([cur.key]))} className={btnD}>이 기사님에게 발송</button>
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ═════════════════════ 개별 정산서 — 기사님 한 명씩 자세히 ═════════════════════
+//  왼쪽: 기사님 목록(이번 달 운행·실지급) · 오른쪽: 운행 내역 표 + 공제 + 실지급액 + 미리보기·인쇄·이미지·엑셀·발송
+export function SingleStatementPanel({ drivers = [], dispatchData = [], companyName = "", supplier = {} }) {
+  const co = String(companyName || "").trim();
+  const [ym, setYm] = React.useState(kstYm());
+  const [vatMode, setVatMode] = React.useState("biz");
+  const { rows, sent, edits, saveEdits, send } = useStatements({ drivers, dispatchData, co, ym, vatMode, includeEmpty: true });
+  const [selKey, setSelKey] = React.useState("");
+  const [q, setQ] = React.useState("");
+  const [tq, setTq] = React.useState("");
+  const [dedEdit, setDedEdit] = React.useState(false);
+  const [preview, setPreview] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const docRef = React.useRef(null);
+  const sorted = [...rows].sort((a, b) => b.trips.length - a.trips.length || String(a.d.이름).localeCompare(String(b.d.이름), "ko"));
+  const qq = q.replace(/\s/g, "");
+  const list = sorted.filter((r) => !qq || `${r.d.이름}${r.d.차량번호}${r.d.전화번호}`.replace(/\s/g, "").includes(qq));
+  const cur = rows.find((r) => r.key === selKey) || list[0] || null;
+  const trips = cur ? cur.trips.filter((t) => !tq.trim() || `${t.client}${t.from}${t.to}${t.via}${t.cargo}`.includes(tq.trim())) : [];
+
+  const capture = async () => {
+    const { default: html2canvas } = await import("html2canvas");
+    return html2canvas(docRef.current, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+  };
+  const saveImage = async () => { const c = await capture(); const a = document.createElement("a"); a.href = c.toDataURL("image/png"); a.download = `정산서_${cur.d.이름}_${ym}.png`; a.click(); };
+  const savePdf = async () => {
+    const c = await capture(); const { jsPDF } = await import("jspdf");
+    const pdf = new jsPDF({ unit: "mm", format: "a4" }); const w = 210; const h = (c.height * w) / c.width;
+    let y = 0; const img = c.toDataURL("image/png");
+    while (y < h) { if (y) pdf.addPage(); pdf.addImage(img, "PNG", 0, -y, w, h); y += 297; }
+    pdf.save(`정산서_${cur.d.이름}_${ym}.pdf`);
+  };
+  const excel = () => {
+    const aoa = [["순번", "상차일", "거래처", "상차지", "경유", "하차지", "화물", "톤수", "기사운임"]];
+    cur.trips.forEach((t, i) => aoa.push([i + 1, t.date, t.client, t.from, t.via, t.to, t.cargo, t.ton, t.fare]));
+    aoa.push([], ["", "", "", "", "", "", "", "운임 합계", cur.gross], ["", "", "", "", "", "", "", "부가세", cur.vat]);
+    cur.deductions.forEach((d) => aoa.push(["", "", "", "", "", "", "", `공제 · ${d.label}`, -d.amount]));
+    aoa.push(["", "", "", "", "", "", "", "실지급액", cur.net]);
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), "정산서");
+    XLSX.writeFile(wb, `정산서_${cur.d.이름}_${ym}.xlsx`);
+  };
+  const doSend = async () => { setBusy(true); await send([cur]); setBusy(false); };
+
+  return (
+    <div>
+      <Hero en="SETTLEMENT · DRIVER" title="개별 정산서" desc="기사님 한 분씩 운행 내역·공제·실지급액을 자세히 보고 인쇄·저장·발송합니다">
+        <div className="flex items-center gap-2 flex-wrap">
+          <MonthPicker value={ym} onChange={setYm} dark />
+          <Stat k="운행 기사님" v={`${rows.filter((r) => r.trips.length).length}명`} />
+          <Stat k="실지급 합계" v={`${won(rows.reduce((s, r) => s + (r.trips.length || r.deductTotal ? r.net : 0), 0))}원`} />
+        </div>
+      </Hero>
+      <div className="grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
+        <div className={`${card} overflow-hidden self-start`}>
+          <div className="p-3 border-b border-[#EEF1F6]"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="기사명 · 차량번호 찾기" className={`${inp} w-full`} /></div>
+          <div className="max-h-[calc(100vh-320px)] overflow-y-auto">
+            {list.map((r) => {
+              const on = cur && r.key === cur.key;
+              return (
+                <button key={r.key} type="button" onClick={() => setSelKey(r.key)} className={`w-full text-left px-4 py-3 border-b border-[#EEF1F6] transition ${on ? "bg-[#0F1A30] text-white" : "hover:bg-[#F5F8FD]"} ${r.trips.length || r.deductTotal ? "" : "opacity-55"}`}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[15px] font-black truncate flex-1">{r.d.이름} <span className={`text-[12.5px] font-bold ${on ? "text-white/70" : "text-[#7A89A3]"}`}>{r.d.차량번호}</span></span>
+                    <span className={`text-[11.5px] font-black px-1.5 py-0.5 rounded ${on ? "bg-white/15" : "bg-[#EEF3FC] text-[#1B2B4B]"}`}>{r.d.등급 || "지입"}</span>
+                  </div>
+                  <div className={`mt-1 flex items-center justify-between text-[13px] ${on ? "text-white/75" : "text-[#5B6B85]"}`}>
+                    <span>{r.trips.length}건 · {sent[r.key] ? (sent[r.key].status === "confirmed" ? "확인 완료" : "발송됨") : "미발송"}</span>
+                    <b className={`tabular-nums ${on ? "text-white" : "text-[#0B1428]"}`} style={{ fontFamily: MONO }}>{won(r.net)}원</b>
+                  </div>
+                </button>
+              );
+            })}
+            {!list.length && <div className="py-14 text-center text-[14px] font-bold text-[#9AA9C3]">지입·직영·임대 기사님이 없습니다</div>}
+          </div>
+        </div>
+        {!cur ? <div className={`${card} py-24 text-center text-[15px] font-bold text-[#9AA9C3]`}>기사님을 고르세요</div> : (
+          <div className="space-y-3 min-w-0">
+            <div className={`${card} p-5`}>
+              <div className="flex items-start gap-4 flex-wrap">
+                <span className="w-14 h-14 rounded-2xl bg-[#0F1A30] text-white flex items-center justify-center text-[22px] font-black">{String(cur.d.이름).slice(0, 1)}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[22px] font-black text-[#0F1A30]">{cur.d.이름} <span className="text-[15px] font-bold text-[#5B6B85]">{cur.d.차량번호}</span></div>
+                  <div className="text-[13.5px] text-[#5B6B85] mt-0.5 flex flex-wrap gap-x-3">
+                    <span>{cur.d.전화번호 || "-"}</span><span>사업자 {cur.d.사업자번호 ? fmtBiz(cur.d.사업자번호) : "-"}</span><span>{cur.d.사업자상호 || ""}</span>
+                    <span>{cur.d.정산계좌?.acct ? acctLine(cur.d.정산계좌) : "계좌 미등록"}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <VatToggle value={vatMode} onChange={setVatMode} />
+                  <StatusChip s={sent[cur.key]} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 mt-4">
+                {[["운행", `${cur.trips.length}건`], ["운임 합계", won(cur.gross)], ["부가세", won(cur.vat)], ["공제", `-${won(cur.deductTotal)}`], ["실지급액", won(cur.net)]].map(([k, v], i) => (
+                  <div key={k} className={`rounded-xl px-4 py-3 ${i === 4 ? "bg-[#0F1A30] text-white" : "bg-[#F5F8FD] border border-[#E3E8F0]"}`}>
+                    <div className={`text-[12.5px] font-bold ${i === 4 ? "text-[#8FB0F0]" : "text-[#7A89A3]"}`}>{k}</div>
+                    <div className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 flex-wrap mt-4">
+                <button type="button" onClick={() => setDedEdit(true)} className={btnL}>공제 {cur.deductions.length}건 보기·추가</button>
+                <div className="ml-auto flex gap-2 flex-wrap">
+                  <button type="button" onClick={() => setPreview(true)} className={btnL}>미리보기</button>
+                  <button type="button" onClick={excel} className={btnL}>엑셀</button>
+                  <button type="button" onClick={() => setPreview("img")} className={btnL}>이미지·PDF 저장</button>
+                  <button type="button" onClick={doSend} disabled={busy} className={btnD}>{busy ? "발송 중…" : "기사앱으로 발송"}</button>
+                </div>
+              </div>
+            </div>
+            <div className={`${card} overflow-hidden`}>
+              <div className="px-4 py-3 border-b border-[#EEF1F6] flex items-center gap-2">
+                <div className="text-[16px] font-black text-[#0F1A30]">운행 내역 <span className="text-[13px] font-bold text-[#7A89A3]">{ym}</span></div>
+                <input value={tq} onChange={(e) => setTq(e.target.value)} placeholder="거래처·상하차지·화물 거르기" className={`${inp} ml-auto w-72`} />
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1100px]">
+                  <thead><tr className="bg-[#0B1428] text-[#DCE6F7]">{["순번", "상차일", "거래처", "상차지", "경유", "하차지", "화물", "톤수", "기사운임"].map((h) => <th key={h} className={`${TH} ${h === "기사운임" ? "text-right" : ""}`}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    {trips.map((t, i) => (
+                      <tr key={i} className={`border-b border-[#EEF1F6] ${i % 2 ? "bg-[#FAFBFD]" : "bg-white"}`}>
+                        <td className={`${TD} text-[#7A89A3] font-bold tabular-nums`} style={{ fontFamily: MONO }}>{i + 1}</td>
+                        <td className={`${TD} tabular-nums font-bold`} style={{ fontFamily: MONO }}>{t.date}</td>
+                        <td className={`${TD} font-black text-[#0F1A30]`}>{t.client}{t.route && <span className="ml-1.5 text-[11px] font-black px-1.5 py-0.5 rounded bg-[#EEF3FC] text-[#1B2B4B]">고정</span>}</td>
+                        <td className={TD}>{t.from}</td>
+                        <td className={`${TD} text-[#5B6B85] max-w-[220px] overflow-hidden text-ellipsis`} title={t.via}>{t.via || "-"}</td>
+                        <td className={TD}>{t.to}</td>
+                        <td className={`${TD} text-[#5B6B85]`}>{t.cargo || "-"}</td>
+                        <td className={`${TD} text-[#5B6B85]`}>{t.ton || "-"}</td>
+                        <td className={`${TD} text-right font-black tabular-nums`} style={{ fontFamily: MONO }}>{won(t.fare)}</td>
+                      </tr>
+                    ))}
+                    {!trips.length && <tr><td colSpan={9} className="py-16 text-center text-[14px] font-bold text-[#9AA9C3]">{ym} 운행 내역이 없습니다</td></tr>}
+                  </tbody>
+                  {trips.length > 0 && <tfoot><tr className="bg-[#F3F6FA] font-black text-[14.5px]"><td colSpan={8} className="px-3 py-3">합계 {trips.length}건</td><td className="px-3 text-right tabular-nums" style={{ fontFamily: MONO }}>{won(trips.reduce((s, t) => s + t.fare, 0))}</td></tr></tfoot>}
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+      {dedEdit && cur && <DeductionEditor title={`${cur.d.이름} 기사님 공제`} sub="자동 공제(🔒)와 이번 달 추가 공제를 함께 봅니다" value={cur.extra} auto={cur.auto} gross={cur.gross} onSave={(l) => { saveEdits({ ...edits, [cur.key]: l }); setDedEdit(false); }} onClose={() => setDedEdit(false)} />}
+      {preview && cur && (
+        <div className="fixed inset-0 z-[99990] bg-[#0B1428]/55 flex justify-end">
+          <div className="w-full max-w-[1000px] h-full bg-[#F3F6FA] flex flex-col shadow-2xl">
+            <div className="px-6 py-4 flex items-center gap-2 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
+              <div className="min-w-0 flex-1">
+                <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>STATEMENT · {ym}</div>
+                <div className="text-[20px] font-black truncate">{cur.d.이름} · {cur.d.차량번호}</div>
+              </div>
+              <button type="button" onClick={saveImage} className="h-11 px-4 rounded-xl bg-white/10 border border-white/20 text-[14px] font-black">이미지 저장</button>
+              <button type="button" onClick={savePdf} className="h-11 px-4 rounded-xl bg-white/10 border border-white/20 text-[14px] font-black">PDF 저장</button>
+              <button type="button" onClick={() => setPreview(false)} className="h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black">닫기</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6"><div ref={docRef} className="bg-white"><StatementDoc st={cur.st} supplier={supplier} /></div></div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 🔎 고지서 스캔 팝업 — 배차관리 "오더 붙여넣기"와 같은 화면(Ctrl+V · 끌어다 놓기 · 사진 선택 · 글 붙여넣기)
+const SCAN_FIELDS = [["kind", "구분"], ["carNo", "차량번호"], ["date", "발생일"], ["time", "발생 시각"], ["place", "발생 장소"], ["detail", "위반·사고 내용"], ["agency", "고지 기관"], ["docNo", "고지서 번호"], ["amount", "금액"], ["dueDate", "납부 기한"]];
+function PenaltyScanModal({ onClose, onApply }) {
+  const [stage, setStage] = React.useState("input");
+  const [img, setImg] = React.useState("");
+  const [typed, setTyped] = React.useState("");
+  const [prog, setProg] = React.useState({ msg: "", pct: 0 });
+  const [found, setFound] = React.useState(null);
+  const [err, setErr] = React.useState("");
+  const fileRef = React.useRef(null);
+  const run = async (file) => {
+    if (!file) return;
+    setErr("");
+    const data = await compressImage(file, 2000, 0.9).catch(() => "");
+    if (!data) { setErr("이미지를 읽지 못했어요"); return; }
+    setImg(data); setStage("scan"); setFound(null);
+    try {
+      const r = await scanPenaltyImage(data, (msg, pct) => setProg({ msg, pct }));
+      setFound(r.found);
+    } catch (e) { setErr(e?.message || "인식에 실패했어요"); setFound({}); }
+  };
+  const runText = (t) => { if (!t.trim()) return; setImg(""); setStage("scan"); setFound(parsePenaltyText(t).found); };
+  React.useEffect(() => {
+    const onPaste = (e) => {
+      const it = [...(e.clipboardData?.items || [])].find((x) => x.type.startsWith("image/"));
+      if (it) { e.preventDefault(); run(it.getAsFile()); return; }
+      const tag = (e.target?.tagName || "").toLowerCase();
+      if (stage === "input" && tag !== "textarea" && tag !== "input") { const t = e.clipboardData?.getData("text") || ""; if (t.trim()) { e.preventDefault(); setTyped(t); runText(t); } }
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [stage]); // eslint-disable-line react-hooks/exhaustive-deps
+  const cnt = found ? Object.values(found).filter(Boolean).length : 0;
+  return (
+    <div className="fixed inset-0 z-[2000000] flex items-center justify-center p-0 sm:p-5" style={{ background: "rgba(6,13,28,0.62)" }}>
+      <style>{"@keyframes psIn{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}@keyframes psBeam{0%{top:0}100%{top:calc(100% - 3px)}}"}</style>
+      <div className="w-full max-w-[1180px] h-full sm:h-[min(780px,92vh)] rounded-none sm:rounded-[26px] overflow-hidden flex flex-col bg-[#F4F6FA] shadow-[0_30px_80px_rgba(0,0,0,0.45)] ring-1 ring-white/10" style={{ animation: "psIn .28s cubic-bezier(.2,.9,.3,1.1) both" }}>
+        <div className="relative px-4 sm:px-7 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 text-white shrink-0" style={{ background: "linear-gradient(120deg,#0B1428 0%,#0F1A30 45%,#1B2B4B 80%,#2D4C82 100%)" }}>
+          <span className="absolute inset-0 opacity-[0.08] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "24px 24px" }} />
+          <div className="relative w-10 h-10 rounded-[12px] bg-white/10 ring-1 ring-white/20 flex items-center justify-center">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#CFE0FF" strokeWidth="2" strokeLinecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" /><path d="M3 12h18" /></svg>
+          </div>
+          <div className="relative min-w-0">
+            <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>NOTICE SCAN</div>
+            <div className="text-[18px] font-black leading-tight">고지서 스캔</div>
+          </div>
+          <div className="relative ml-4 hidden md:flex items-center gap-2 text-[12px] font-bold text-white/60">
+            <kbd className="px-2 h-6 inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 text-white" style={{ fontFamily: MONO }}>Ctrl</kbd>+<kbd className="px-2 h-6 inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 text-white" style={{ fontFamily: MONO }}>V</kbd>
+            <span>고지서 사진·캡처나 안내 문자를 바로 붙여넣으세요</span>
+          </div>
+          <button type="button" onClick={onClose} className="relative ml-auto w-9 h-9 rounded-[11px] bg-white/10 hover:bg-white/20 text-white text-[16px]" aria-label="닫기">✕</button>
+        </div>
+        {stage === "input" ? (
+          <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-1 md:grid-cols-[1.15fr_1fr] gap-3 md:gap-5 p-3 md:p-6">
+            <div className="relative rounded-[22px] border-2 border-dashed border-[#C9D2E0] bg-white flex flex-col items-center justify-center text-center px-5 md:px-8 py-6 md:py-0 hover:border-[#4B6CB7] transition"
+              onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); run(e.dataTransfer.files?.[0]); }}>
+              <div className="w-16 h-16 rounded-[18px] flex items-center justify-center shadow-[0_12px_26px_rgba(15,26,48,0.3)]" style={{ background: "linear-gradient(135deg,#0F1A30,#2D4C82)" }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" /></svg>
+              </div>
+              <div className="mt-5 text-[20px] font-black text-[#0F1A30]"><span className="hidden md:inline">Ctrl + V 로 붙여넣기</span><span className="md:hidden">고지서 사진으로 스캔</span></div>
+              <div className="mt-1.5 text-[13.5px] text-[#5B6B85] leading-relaxed">과태료·범칙금 <b className="text-[#0F1A30]">고지서 사진</b>이나 <b className="text-[#0F1A30]">캡처</b>를 붙여넣으면<br />차량번호·일시·장소·금액·납부기한을 자동으로 읽어요</div>
+              <div className="mt-5 flex gap-2">
+                <button type="button" onClick={() => fileRef.current?.click()} className="h-10 px-4 rounded-[12px] border border-[#E3E8F0] bg-white text-[#0F1A30] text-[13px] font-bold hover:border-[#4B6CB7]">사진 · 이미지 선택</button>
+                <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { run(e.target.files?.[0]); e.target.value = ""; }} />
+              </div>
+              <div className="mt-4 text-[11.5px] text-[#9AA9C3]">이미지는 끌어다 놓아도 됩니다 · 한글 인식이라 처음 한 번은 조금 걸려요</div>
+              {err && <div className="mt-4 px-4 py-2 rounded-xl bg-[#F3F6FA] border border-[#DCE3EE] text-[12.5px] font-bold text-[#0F1A30]">! {err}</div>}
+            </div>
+            <div className="flex flex-col min-h-[260px] md:min-h-0 rounded-[22px] bg-white border border-[#E3E8F0] p-4 md:p-5">
+              <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>TEXT</div>
+              <div className="text-[15px] font-black text-[#0F1A30]">문자·메일 내용 붙여넣기</div>
+              <textarea value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={"예)\n[과태료 사전통지] 차량번호 서울12가1000\n위반일시 2026.10.12 14:20 / 장소 경부고속도로 서울방향 123km\n제한속도 100km/h 구간 128km/h 주행\n납부금액 70,000원 / 납부기한 2026.11.10 ○○경찰서"}
+                className="mt-3 flex-1 min-h-0 w-full rounded-[14px] border border-[#E3E8F0] bg-[#F7F9FC] px-4 py-3 text-[13.5px] font-semibold text-[#0F1A30] leading-relaxed resize-none outline-none focus:bg-white focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 placeholder:text-[#A7B3C6]" />
+              <button type="button" onClick={() => runText(typed)} disabled={!typed.trim()} className="mt-3 h-12 rounded-[14px] text-white text-[14.5px] font-black disabled:opacity-40 shadow-[0_12px_24px_rgba(15,26,48,0.25)]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>스캔하기</button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 min-h-0 grid grid-cols-1 grid-rows-[minmax(0,40%)_minmax(0,1fr)] md:grid-rows-1 md:grid-cols-[1.1fr_1fr] gap-3 md:gap-5 p-3 md:p-6">
+            <div className="relative min-h-0 rounded-[22px] bg-white border border-[#E3E8F0] overflow-hidden flex flex-col">
+              <div className="px-4 py-3 border-b border-[#EEF1F6] flex items-center gap-2">
+                <span className="text-[13.5px] font-black text-[#0F1A30]">{img ? "고지서 이미지" : "붙여넣은 내용"}</span>
+                {found && <button type="button" onClick={() => { setStage("input"); setFound(null); setImg(""); }} className="ml-auto h-8 px-3 rounded-[10px] border border-[#E3E8F0] text-[12px] font-bold text-[#3A4A66] hover:border-[#4B6CB7]">다시 붙여넣기</button>}
+              </div>
+              <div className="relative flex-1 min-h-0 overflow-auto bg-[#F7F9FC] flex items-start justify-center p-3">
+                {img ? <img src={img} alt="고지서" className="max-w-full" /> : <pre className="whitespace-pre-wrap text-[13.5px] text-[#0F1A30] w-full">{typed}</pre>}
+                {!found && <span className="absolute left-0 right-0 h-[3px] bg-[#8FB0F0] shadow-[0_0_18px_#8FB0F0]" style={{ animation: "psBeam 1.4s ease-in-out infinite alternate" }} />}
+              </div>
+            </div>
+            <div className="min-h-0 rounded-[22px] bg-white border border-[#E3E8F0] flex flex-col overflow-hidden">
+              <div className="px-5 py-4 border-b border-[#EEF1F6]">
+                <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>RESULT</div>
+                <div className="text-[15px] font-black text-[#0F1A30]">{found ? `${cnt}개 항목을 읽었어요` : `${prog.msg || "읽는 중"} ${prog.pct ? `${prog.pct}%` : ""}`}</div>
+                {!found && <div className="mt-2 h-2 rounded-full bg-[#EEF2F8] overflow-hidden"><div className="h-full bg-[#2D4C82] transition-all" style={{ width: `${prog.pct || 5}%` }} /></div>}
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-1.5">
+                {found && SCAN_FIELDS.map(([k, l]) => (
+                  <div key={k} className="grid grid-cols-[110px_minmax(0,1fr)] items-center gap-2">
+                    <span className="text-[13px] font-black text-[#5B6B85]">{l}</span>
+                    <input value={found[k] ?? ""} onChange={(e) => setFound((p) => ({ ...p, [k]: e.target.value }))} placeholder="읽지 못함" className={`${inp} w-full ${found[k] ? "" : "bg-[#F7F9FC]"}`} />
+                  </div>
+                ))}
+                {err && <div className="text-[13px] font-bold text-[#0F1A30]">! {err}</div>}
+              </div>
+              <div className="p-4 border-t border-[#EEF1F6] flex gap-2">
+                <button type="button" onClick={onClose} className={`${btnL} flex-1`}>취소</button>
+                <button type="button" disabled={!found} onClick={() => onApply(found, img)} className={`${btnD} flex-[1.6]`}>서류에 적용</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -364,7 +663,7 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
   const [busy, setBusy] = React.useState(false);
   const [scan, setScan] = React.useState(null); // { msg, pct } | { done, count }
   const fileRef = React.useRef(null);
-  const scanRef = React.useRef(null);
+  const [scanOpen, setScanOpen] = React.useState(false);
   React.useEffect(() => {
     if (!co) return undefined;
     return onSnapshot(query(collection(db, "fleetPenalties"), where("companyName", "==", co)), (s) => setList(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => `${b.date || ""}${b.time || ""}`.localeCompare(`${a.date || ""}${a.time || ""}`))), () => setList([]));
@@ -381,33 +680,22 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
   const pickDriver = (d) => { setForm((p) => ({ ...p, ...driverPatch(d) })); setDq(""); };
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
-  // 🔎 고지서 자동 스캔 — 사진을 붙이고 글자를 읽어 칸을 채운다
-  const runScan = async (file) => {
-    if (!file) return;
-    const img = await compressImage(file, 2000, 0.9).catch(() => "");
-    if (!img) return;
-    setForm((p) => ({ ...(p || blank()), photos: [...((p || {}).photos || []), img].slice(0, 4) }));
-    setScan({ msg: "고지서 읽는 중", pct: 0 });
-    try {
-      const r = await scanPenaltyImage(img, (msg, pct) => setScan({ msg, pct }));
-      const f = r.found;
-      const drv = f.carNo ? drivers.find((d) => normPlate(d.차량번호).endsWith(f.carNo.slice(-4)) && normPlate(d.차량번호).includes(f.carNo.replace(/^\d{2,3}/, "").slice(0, 1))) || drivers.find((d) => normPlate(d.차량번호) === f.carNo) : null;
-      setForm((p) => {
-        const n = { ...p };
-        ["kind", "date", "time", "place", "detail", "agency", "docNo", "dueDate"].forEach((k) => { if (f[k] && (!p[k] || (k === "date" && p.date === kstToday()) || (k === "kind" && p.kind === "과태료"))) n[k] = f[k]; });
-        if (f.amount && !toInt(p.amount)) n.amount = String(f.amount);
-        if (drv && !p.driverName) Object.assign(n, driverPatch(drv));
-        return n;
-      });
-      setScan({ done: true, count: r.count, driver: drv?.이름 || "" });
-    } catch (e) { setScan({ done: true, count: 0, err: e?.message || String(e) }); }
+  // 🔎 고지서 스캔 결과를 서류 칸에 넣는다(차량번호로 기사님도 찾음)
+  const applyScan = (f, img) => {
+    const plate = normPlate(f.carNo);
+    const drv = plate ? drivers.find((d) => normPlate(d.차량번호) === plate) || drivers.find((d) => plate.length >= 4 && normPlate(d.차량번호).endsWith(plate.slice(-4))) : null;
+    setForm((p) => {
+      const n = { ...p };
+      ["kind", "date", "time", "place", "detail", "agency", "docNo", "dueDate"].forEach((k) => { if (f[k]) n[k] = PENALTY_KINDS.includes(f[k]) || k !== "kind" ? f[k] : p.kind; });
+      if (f.amount) n.amount = String(toInt(f.amount));
+      if (img) n.photos = [...(p.photos || []), img].slice(0, 4);
+      if (drv && !p.driverName) Object.assign(n, driverPatch(drv));
+      return n;
+    });
+    setScanOpen(false);
+    const cnt = Object.values(f).filter(Boolean).length;
+    setScan({ done: true, count: cnt, driver: drv?.이름 || "" });
   };
-  React.useEffect(() => {
-    if (!form) return undefined;
-    const onPaste = (e) => { const it = [...(e.clipboardData?.items || [])].find((x) => x.type.startsWith("image/")); if (it) { e.preventDefault(); runScan(it.getAsFile()); } };
-    window.addEventListener("paste", onPaste);
-    return () => window.removeEventListener("paste", onPaste);
-  }, [!!form]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async () => {
     if (!form.driverName) return kpAlert("대상 기사님을 먼저 선택해 주세요.");
@@ -435,14 +723,13 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
     const preview = { ...form, amount: toInt(form.amount), companyName: co, by: me() };
     return (
       <div>
-        <Hero en="VEHICLE NOTICE · WRITE" title={form.id ? "서류 수정" : "과태료·사고 서류 작성"} desc="고지서를 스캔하면 칸이 자동으로 채워집니다 · Ctrl+V로 캡처를 붙여도 됩니다 · 오른쪽 미리보기 그대로 기사앱에 올라갑니다">
+        <Hero en="VEHICLE NOTICE · WRITE" title={form.id ? "서류 수정" : "과태료·사고 서류 작성"} desc="고지서를 스캔하면 칸이 자동으로 채워집니다 · 오른쪽 미리보기 그대로 기사앱에 올라갑니다">
           <div className="flex gap-2">
-            <button type="button" onClick={() => scanRef.current?.click()} className="h-12 px-5 rounded-xl bg-white/10 border border-white/25 text-[14.5px] font-black">⌕ 고지서 자동 스캔</button>
             <button type="button" onClick={() => { setForm(null); setScan(null); }} className="h-12 px-5 rounded-xl bg-white/10 border border-white/20 text-[14.5px] font-bold">취소</button>
             <button type="button" onClick={save} disabled={busy} className="h-12 px-6 rounded-xl bg-white text-[#0F1A30] text-[15px] font-black disabled:opacity-50">{busy ? "저장 중…" : "저장 · 기사님에게 공개"}</button>
           </div>
         </Hero>
-        <input ref={scanRef} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; runScan(f); }} />
+        {scanOpen && <PenaltyScanModal onClose={() => setScanOpen(false)} onApply={applyScan} />}
         {scan && (
           <div className={`${card} px-5 py-3.5 mb-3 flex items-center gap-3`}>
             <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#2D4C82]" style={{ fontFamily: MONO }}>SCAN</span>
@@ -460,6 +747,13 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
         )}
         <div className="grid gap-4 xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]">
           <div className={`${card} p-5 space-y-4`}>
+            <button type="button" onClick={() => setScanOpen(true)} className="w-full rounded-2xl px-4 py-3.5 flex items-center gap-3 text-left text-white shadow-[0_10px_24px_rgba(15,26,48,.22)]" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 65%,#2D4C82)" }}>
+              <span className="w-10 h-10 rounded-xl bg-white/10 ring-1 ring-white/20 flex items-center justify-center shrink-0">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#CFE0FF" strokeWidth="2" strokeLinecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" /><path d="M3 12h18" /></svg>
+              </span>
+              <span className="min-w-0 flex-1"><span className="block text-[15.5px] font-black">고지서 자동 스캔</span><span className="block text-[12.5px] text-white/65">사진·캡처·문자를 붙여넣으면 아래 칸이 자동으로 채워져요</span></span>
+              <span className="h-9 px-3.5 rounded-xl bg-white text-[#0F1A30] text-[13px] font-black inline-flex items-center">스캔</span>
+            </button>
             <div>
               <Label>대상 기사님</Label>
               {form.driverName ? (
@@ -500,7 +794,7 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
               {String(form.payer).startsWith("기사 부담") && (
                 <div className="col-span-2 flex items-center gap-2 flex-wrap rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3.5 py-2.5">
                   <span className="text-[13px] font-black text-[#3A4A66] whitespace-nowrap">공제할 정산월</span>
-                  <input type="month" value={form.deductPeriod || ymOf(form.date)} onChange={(e) => set("deductPeriod", e.target.value)} className={`${inp} !h-10`} />
+                  <MonthPicker value={form.deductPeriod || ymOf(form.date)} onChange={(v) => set("deductPeriod", v)} />
                   <span className="text-[12.5px] text-[#7A89A3]">지급명세서를 보내면 자동으로 "납부 완료"가 됩니다</span>
                 </div>
               )}
@@ -604,3 +898,33 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
 }
 
 export { korTimeLabel };
+
+// ═════════════════════ 정산관리 › 지입정산관리 — 지입·직영·임대 기사님 정산(일괄 / 개별) ═════════════════════
+const FLEET_GRADES = ["지입", "직영", "임대"];
+export function useFleetDrivers() {
+  const [list, setList] = React.useState([]);
+  React.useEffect(() => onSnapshot(collection(db, "drivers"), (s) => setList(s.docs.map((d) => ({ id: d.id, ...d.data() }))
+    .filter((raw) => FLEET_GRADES.includes(raw.등급))
+    .map((raw) => ({
+      id: raw.id, 이름: String(raw.이름 || raw.name || "").trim() || "-", 차량번호: String(raw.차량번호 || raw.carNo || "").trim() || "-",
+      전화번호: String(raw.전화번호 || raw.phone || "").trim() || "-", 등급: raw.등급, 차량종류: raw.차량종류 || "", 차량톤수: String(raw.차량톤수 || raw.톤수 || ""),
+      정산계좌: raw.정산계좌 || null, 사업자번호: raw.사업자번호 || "", 사업자상호: raw.사업자상호 || "", appUid: raw.uid || "", 공제항목: raw.공제항목 || null,
+    })).sort((a, b) => a.이름.localeCompare(b.이름, "ko"))), () => setList([])), []);
+  return list;
+}
+export function FleetSettlementMenu({ dispatchData = [], companyName = "" }) {
+  const drivers = useFleetDrivers();
+  const [mode, setMode] = React.useState(() => { try { return localStorage.getItem("fm_settle_mode2") || "batch"; } catch { return "batch"; } });
+  React.useEffect(() => { try { localStorage.setItem("fm_settle_mode2", mode); } catch { /* 무시 */ } }, [mode]);
+  const props = { drivers, dispatchData, companyName, supplier: { name: companyName } };
+  return (
+    <div className="p-4">
+      <div className="inline-flex p-1 rounded-2xl bg-white border border-[#E3E8F0] mb-3 gap-1">
+        {[["batch", "일괄 지급명세서 · 일괄 발송"], ["single", "개별 정산서"]].map(([k, l]) => (
+          <button key={k} type="button" onClick={() => setMode(k)} className={`h-10 px-5 rounded-xl text-[14px] font-black ${mode === k ? "bg-[#0F1A30] text-white" : "text-[#5B6B85] hover:bg-[#F3F6FA]"}`}>{l}</button>
+        ))}
+      </div>
+      {mode === "batch" ? <BatchStatementsPanel {...props} /> : <SingleStatementPanel {...props} />}
+    </div>
+  );
+}

@@ -31,6 +31,7 @@ import { useFixedRouteAutoDispatch } from "./FixedRoutes";
 import { calcFare } from "./fareUtil";
 import FixedClients from "./FixedClients";
 import FleetManagement from "./FleetManagement";
+import { FleetSettlementMenu, useFleetDrivers } from "./FleetPayDocs";
 import HomeDashboard from "./HomeDashboard";
 import { EditModeProvider, EditableText, EditModeToggleButton } from "./EditMode";
 import { useCompanyDropdownOptions, DropdownOptionsManageButton } from "./companyDropdownOptions";
@@ -8311,7 +8312,7 @@ return (
         {정산관리Visited && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
           <div style={{ display: menu === "정산관리" ? undefined : "none" }}>
           <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={정산관리Tab} onSelect={set정산관리Tab}
-            items={[{ key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "지급관리", en: "PAYOUT", icon: "wallet" }]}>
+            items={[{ key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }]}>
           {/* 거래명세서 검색/선택 상태 유지를 위해 지급관리 탭으로 전환해도 언마운트하지 않고 숨기기만 한다 */}
           <div style={{ display: 정산관리Tab === "거래처정산" ? undefined : "none" }}>
             <ClientSettlement
@@ -8330,6 +8331,9 @@ return (
               isViewer={isViewer}
             />
           </div>
+          {정산관리Tab === "지입정산관리" && (
+            <FleetSettlementMenu dispatchData={dispatchDataFiltered} companyName={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()} />
+          )}
           {정산관리Tab === "지급관리" && (
             <div className="p-4">
               <PaymentManagement
@@ -54906,8 +54910,11 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   };
 
   // ─── 기초 데이터 ───
+  // 🚚 용차지급관리 — 지입·직영·임대 기사님 오더는 빼고(지입정산관리에서 따로) 일반 용차만
+  const fleetDrivers = useFleetDrivers();
+  const fleetPlates = useMemo(() => new Set(fleetDrivers.map((d) => String(d.차량번호 || "").trim()).filter((p) => p && p !== "-")), [fleetDrivers]);
   const base = useMemo(
-    () => (Array.isArray(dispatchData) ? dispatchData : []).filter(r => (r.배차상태 || "") === "배차완료"),
+    () => (Array.isArray(dispatchData) ? dispatchData : []).filter(r => (r.배차상태 || "") === "배차완료" && !fleetPlates.has(String(r.차량번호 || "").trim())),
     [dispatchData]
   );
 
@@ -55176,7 +55183,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
         style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <div>
           <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KP_MONO }}>SETTLEMENT · PAYOUT</div>
-          <h2 className="text-[22px] font-black"><EditableText id="payment.title" defaultText="지급관리" /></h2>
+          <h2 className="text-[22px] font-black"><EditableText id="payment.title2" defaultText="용차지급관리" /></h2>
           <p className="text-[12.5px] text-white/60"><EditableText id="payment.subtitle" defaultText="배차완료 오더의 기사운임 지급 현황 관리" /></p>
         </div>
         <div className="flex gap-2 items-center flex-wrap">
@@ -55782,7 +55789,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
   const addNew = async () => {
     const 차량번호 = (newForm.차량번호||"").replace(/\s+/g,"");
     if (!차량번호) return showAlert("차량번호는 필수입니다.");
-    const isFleet = newForm.등급 === "지입" || newForm.등급 === "직영";
+    const isFleet = newForm.등급 === "지입" || newForm.등급 === "직영" || newForm.등급 === "임대";
     // ⭐ 버그수정 — 여기서 항상 새 랜덤 id를 강제로 지정했더니, 이미 기사앱으로
     // 가입해 실제 위치/상태가 쌓이고 있는 기사의 차량번호를 여기서 다시 입력하면
     // (예: 지입 등급만 뒤늦게 지정) 완전히 별개의 빈 문서가 하나 더 생겼다 —
@@ -55868,6 +55875,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
     if (g === "블랙") return "bg-gray-900 text-white";
     if (g === "직영") return "bg-[#1B2B4B] text-white";
     if (g === "지입") return "bg-[#1B2B4B]/20 text-[#1B2B4B]";
+    if (g === "임대") return "bg-[#2D4C82]/15 text-[#2D4C82]";
     return "bg-gray-100 text-gray-500";
   };
 
@@ -55876,6 +55884,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
     일반: drivers.filter(d=>(d.등급||"일반")==="일반").length,
     직영: drivers.filter(d=>d.등급==="직영").length,
     지입: drivers.filter(d=>d.등급==="지입").length,
+    임대: drivers.filter(d=>d.등급==="임대").length,
     블랙: drivers.filter(d=>d.등급==="블랙").length,
   }), [drivers]);
 
@@ -55883,12 +55892,13 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
     <div className="p-4">
 
       {/* ⭐ 2026-10-28 디지털 리디자인 — 숫자 타일(누르면 등급별 보기) + 한 줄 검색바 + 오른쪽 작업 버튼 */}
-      <div className="grid grid-cols-5 gap-3 mb-4">
+      <div className="grid grid-cols-6 gap-3 mb-4">
         {[
           {label:"전체", en:"ALL", val:kpi.전체, key:"전체"},
           {label:"일반", en:"GENERAL", val:kpi.일반, key:"일반"},
           {label:"직영", en:"DIRECT", val:kpi.직영, key:"직영"},
           {label:"지입", en:"CONSIGNED", val:kpi.지입, key:"지입"},
+          {label:"임대", en:"LEASE", val:kpi.임대, key:"임대"},
           {label:"블랙", en:"BLOCKED", val:kpi.블랙, key:"블랙"},
         ].map(({label,en,val,key}) => {
           const on = gradeFilter===key && (showAll || searched);
@@ -55925,7 +55935,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
           <button onClick={()=>setSearched(true)} className="h-9 mr-1.5 px-5 rounded-[12px] bg-[#0F1A30] text-white text-[13.5px] font-black hover:bg-[#1B2B4B]">검색</button>
         </div>
         <div className="flex items-center gap-1 h-12 px-1.5 rounded-[16px] bg-[#EEF2F8] border border-[#E3E8F0]">
-          {["전체","일반","직영","지입","블랙"].map(g => (
+          {["전체","일반","직영","지입","임대","블랙"].map(g => (
             <button key={g} onClick={() => { setGradeFilter(g); if (!(q.trim() && searched)) setShowAll(true); }}
               className={`h-9 px-3.5 rounded-[11px] text-[13px] font-black transition ${gradeFilter===g ? "bg-white text-[#0F1A30] shadow-[0_4px_10px_rgba(15,26,48,0.1)]" : "text-[#5B6B85] hover:text-[#0F1A30]"}`}>{g}</button>
           ))}
@@ -56007,11 +56017,12 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                   <option value="일반">일반</option>
                   <option value="지입">지입</option>
                   <option value="직영">직영</option>
+                  <option value="임대">임대</option>
                   <option value="블랙">블랙</option>
                 </CustomSelect>
               </div>
               {/* 지입/직영 기사 전용 — 거주지 / 근무가능요일 (노선관리 관제에 연동) */}
-              {(newForm.등급 === "지입" || newForm.등급 === "직영") && (
+              {(newForm.등급 === "지입" || newForm.등급 === "직영" || newForm.등급 === "임대") && (
                 <>
                   <div>
                     <label className="text-[11px] font-semibold text-gray-500 mb-1 block"><EditableText id="driver.addForm.label.거주지" defaultText="거주지" /></label>
@@ -56144,9 +56155,9 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">{r.이름||"-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">{formatPhone(r.전화번호)||"-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500 text-[12px]">{displayRegDate(r) || "-"}</td>
-                        <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500">{(grade==="지입"||grade==="직영") ? (r.담당자?.name || "-") : "-"}</td>
-                        <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500">{(grade==="지입"||grade==="직영") ? (r.거주지 || "-") : "-"}</td>
-                        <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500 text-[12px]">{(grade==="지입"||grade==="직영") ? ((r.근무요일 && r.근무요일.length) ? r.근무요일.join(",") : "-") : "-"}</td>
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500">{(grade==="지입"||grade==="직영"||grade==="임대") ? (r.담당자?.name || "-") : "-"}</td>
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500">{(grade==="지입"||grade==="직영"||grade==="임대") ? (r.거주지 || "-") : "-"}</td>
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500 text-[12px]">{(grade==="지입"||grade==="직영"||grade==="임대") ? ((r.근무요일 && r.근무요일.length) ? r.근무요일.join(",") : "-") : "-"}</td>
                         <td className="px-3 py-2.5 text-center">
                           <span className={`px-2.5 py-1 rounded-lg text-[12px] font-bold ${gradeBadge(grade)}`}>{grade}</span>
                         </td>
@@ -56202,9 +56213,9 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
       {/* ===== 기사 수정 팝업 (더블클릭) ===== */}
       {editDriverModal && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
-          <div className={`bg-white rounded-2xl shadow-2xl ${(editDriverModal.등급 === "지입" || editDriverModal.등급 === "직영") ? "w-[640px]" : "w-[480px]"} max-w-[96vw] max-h-[92vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
+          <div className={`bg-white rounded-2xl shadow-2xl ${(editDriverModal.등급 === "지입" || editDriverModal.등급 === "직영" || editDriverModal.등급 === "임대") ? "w-[640px]" : "w-[480px]"} max-w-[96vw] max-h-[92vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 flex items-center justify-between sticky top-0 z-10" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
-              <h3 className="text-white font-bold text-[15px]">기사 수정 — {editDriverModal.차량번호}{(editDriverModal.등급 === "지입" || editDriverModal.등급 === "직영") ? <span className="ml-2 px-2 py-0.5 rounded-md bg-white/15 text-[11.5px] font-black">{editDriverModal.등급}</span> : null}</h3>
+              <h3 className="text-white font-bold text-[15px]">기사 수정 — {editDriverModal.차량번호}{(editDriverModal.등급 === "지입" || editDriverModal.등급 === "직영" || editDriverModal.등급 === "임대") ? <span className="ml-2 px-2 py-0.5 rounded-md bg-white/15 text-[11.5px] font-black">{editDriverModal.등급}</span> : null}</h3>
               <button onClick={() => setEditDriverModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
             </div>
             <div className="px-6 py-5 grid grid-cols-2 gap-4">
@@ -56234,11 +56245,12 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                   <option value="일반">일반</option>
                   <option value="지입">지입</option>
                   <option value="직영">직영</option>
+                  <option value="임대">임대</option>
                   <option value="블랙">블랙</option>
                 </select>
               </div>
               {/* 지입/직영 기사 전용 — 거주지 / 근무가능요일 (노선관리 관제에 연동) */}
-              {(editDriverModal.등급 === "지입" || editDriverModal.등급 === "직영") && (
+              {(editDriverModal.등급 === "지입" || editDriverModal.등급 === "직영" || editDriverModal.등급 === "임대") && (
                 <>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">거주지</label>
