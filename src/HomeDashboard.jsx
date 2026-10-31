@@ -1,5 +1,6 @@
 import NoticeBoard from "./NoticeBoard";
 import DeptDashboard from "./DeptDashboard";
+import ObituaryWriter from "./ObituaryWriter";
 import { ExecScheduleBoard } from "./ExecSuite";
 import { CompanyRules } from "./HrHub";
 import React, { useMemo, useState, useRef, useEffect } from "react";
@@ -480,8 +481,8 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
 
   const [period, setPeriod] = useState("7d");
   const isViewer = role === "viewer";
-  const [boardTabRaw, setBoardTab] = React.useState("대시보드"); // ⭐ 2026-10-28 — 홈 왼쪽 사이드바: 대시보드 | 공지사항 | 휴가/외근 | 인수인계
-  const boardTab = boardTabRaw === "인수인계" ? "ap:handover" : boardTabRaw; // ⭐ 2026-10-31 인수인계는 전자결재 › 인수인계로 옮김
+  const [boardTabRaw, setBoardTab] = React.useState("대시보드"); // ★ 2026-10-28 — 홈 왼쪽 사이드바: 대시보드 | 공지사항 | 휴가/외근 | 인수인계
+  const boardTab = boardTabRaw === "인수인계" ? "ap:handover" : boardTabRaw; // ★ 2026-10-31 인수인계는 전자결재 › 인수인계로 옮김
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [noticeForm, setNoticeForm] = React.useState({ category: "공지사항", author: "", content: "", audience: "internal" });
   const [scheduleOpen, setScheduleOpen] = React.useState(false);
@@ -621,7 +622,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       setSchedules(list);
       if (initialLoad) {
         initialLoad = false;
-        return; // ⭐ 2026-10-28 휴가/외근 게시판은 전자결재로 바뀌어 알림을 띄우지 않는다
+        return; // ★ 2026-10-28 휴가/외근 게시판은 전자결재로 바뀌어 알림을 띄우지 않는다
       }
     });
     return () => unsub();
@@ -761,7 +762,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
     const map = {};
     dispatchData.forEach(d => {
       const dDate = getLoadDate(d);
-      if (!dDate || dDate.getFullYear() !== currentYear || dDate.getMonth() !== currentMonth) return; // ⭐ 버그수정: 2026년 1월로 고정돼 있었다
+      if (!dDate || dDate.getFullYear() !== currentYear || dDate.getMonth() !== currentMonth) return; // ★ 버그수정: 2026년 1월로 고정돼 있었다
       const name = d?.거래처명;
       if (!name || /\d{2}년\d{1,2}월/.test(name) || name.includes("후레쉬물류")) return;
       map[name] = (map[name] || 0) + Number(d?.청구운임 || 0);
@@ -875,7 +876,8 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const canWriteNotice = NOTICE_WRITER_ROLES.includes(role);
   // ✍ 공지·인수인계 글쓰기는 팝업 대신 넓은 작성 화면(HomeWriters.jsx)
   const { planId } = usePlan();
-  const writerActive = (boardTab === "공지사항" && noticeOpen) || (boardTab === "인수인계" && (handoverOpen || handoverEditMode));
+  const [obitOpen, setObitOpen] = useState(false); // 부고 알림 작성
+  const writerActive = (boardTab === "공지사항" && (noticeOpen || obitOpen)) || (boardTab === "인수인계" && (handoverOpen || handoverEditMode));
   return (
     <KpSubNav noBleed code="HOME" title="홈" icon="dashboard" active={boardTab}
       onSelect={(k) => { if (String(k).startsWith("lock:")) { openPlanLock(String(k).slice(5)); return; } setBoardTab(k); }} bodyClass="px-5 py-4"
@@ -959,6 +961,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       {boardTab === "rules" && <CompanyRules company={getViewCompany()} canEdit={role === "hrManager" || role === "totalMaster"} />}
 
       {/* ===== 사내 게시판(왼쪽 사이드바에서 고름) — 2026-10-28 디지털 리디자인 ===== */}
+      {boardTab === "공지사항" && obitOpen && <ObituaryWriter company={getViewCompany()} me={meHome} onCancel={() => setObitOpen(false)} onSaved={() => setObitOpen(false)} />}
       {boardTab === "공지사항" && noticeOpen && (
         <NoticeWriter me={meHome} company={getViewCompany()} initial={selectedNotice} onCancel={() => setNoticeOpen(false)} onSaved={() => { setNoticeOpen(false); setSelectedNotice(null); }} />
       )}
@@ -1000,6 +1003,10 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
                 className="h-12 px-5 rounded-2xl bg-white text-[#0F1A30] text-[15px] font-black shadow-[0_8px_20px_rgba(0,0,0,0.25)] hover:brightness-95 transition">
                 + 새로 등록
               </button>
+            )}
+            {!isViewer && boardTab === "공지사항" && canWriteNotice && (
+              <button type="button" onClick={() => { setNoticeOpen(false); setObitOpen(true); }}
+                className="h-12 px-5 rounded-2xl bg-[#111] text-white text-[15px] font-black ring-1 ring-white/25 hover:bg-black transition whitespace-nowrap">부고 알림</button>
             )}
           </div>
         </div>

@@ -40,7 +40,7 @@ export function useMobileAlerts({ uid, role, team = "", company = "", onAlert })
       const todo = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((d) => myTurn(d, uid) && !(d.hiddenBy || []).includes(uid));
       set("approval", todo.length);
       const byKey = new Map(todo.map((d) => [`${d.id}_${d.step}_${d.cancel?.step ?? ""}`, d]));
-      w([...byKey.keys()], (k) => { const d = byKey.get(k); return `📝 결재 요청 · ${d.drafter?.name || ""} — ${d.title || d.formLabel || "결재 문서"}`; });
+      w([...byKey.keys()], (k) => { const d = byKey.get(k); return `✎ 결재 요청 · ${d.drafter?.name || ""} — ${d.title || d.formLabel || "결재 문서"}`; });
     }, () => set("approval", 0));
   }, [uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -52,7 +52,7 @@ export function useMobileAlerts({ uid, role, team = "", company = "", onAlert })
       const un = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((h) => handoverTo(h).includes(uid) && !(h.readBy || []).includes(uid));
       set("handover", un.length);
       const byId = new Map(un.map((h) => [h.id, h]));
-      w([...byId.keys()], (id) => `🔁 인수인계 · ${byId.get(id).author || ""}님이 업무를 넘겼습니다`);
+      w([...byId.keys()], (id) => `↻ 인수인계 · ${byId.get(id).author || ""}님이 업무를 넘겼습니다`);
     }, () => set("handover", 0));
   }, [uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -67,7 +67,7 @@ export function useMobileAlerts({ uid, role, team = "", company = "", onAlert })
       set("signupDriver", p.filter((u) => u.role === "driver").length);
       set("signupStaff", p.filter((u) => u.role !== "driver").length);
       const byId = new Map(p.map((u) => [u.id, u]));
-      w([...byId.keys()], (id) => { const u = byId.get(id); return u.role === "driver" ? `🚚 기사 가입 신청 · ${u.name || ""} ${u.carNo || ""}` : `🙋 직원 가입 신청 · ${u.name || u.email || ""}`; });
+      w([...byId.keys()], (id) => { const u = byId.get(id); return u.role === "driver" ? `▸ 기사 가입 신청 · ${u.name || ""} ${u.carNo || ""}` : `◆ 직원 가입 신청 · ${u.name || u.email || ""}`; });
     }, () => { set("signupDriver", 0); set("signupStaff", 0); });
   }, [uid, isAdmin, company]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -81,7 +81,7 @@ export function useMobileAlerts({ uid, role, team = "", company = "", onAlert })
       const un = vis.filter((n) => !(n.readBy || []).includes(uid));
       set("notice", un.length);
       const byId = new Map(vis.map((n) => [n.id, n]));
-      w([...byId.keys()], (id) => { const n = byId.get(id); return `📢 ${n.category || "공지사항"} · ${n.title || ""}`; });
+      w([...byId.keys()], (id) => { const n = byId.get(id); return `◆ ${n.category || "공지사항"} · ${n.title || ""}`; });
     }, () => set("notice", 0));
   }, [uid, role, team]); // eslint-disable-line react-hooks/exhaustive-deps
 

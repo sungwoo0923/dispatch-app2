@@ -18,7 +18,7 @@ import {
   arrayUnion,
   deleteField,
 } from "firebase/firestore";
-import { updateDoc } from "../orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
+import { updateDoc } from "../orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import InternalMessenger from "../InternalMessenger";
 import html2canvas from "html2canvas";
 import { deleteOrderWithLog } from "../orderHistory";

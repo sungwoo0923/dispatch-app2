@@ -21,7 +21,7 @@ import {
   documentId,
   serverTimestamp,
 } from "firebase/firestore";
-import { updateDoc, setDoc } from "./orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
+import { updateDoc, setDoc } from "./orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap } from "react-leaflet";
 import L from "leaflet";
 import * as XLSX from "xlsx";
@@ -1968,7 +1968,7 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
     const isCold = /냉장|냉동/.test(r.차량종류 || "");
     const dateText = `${r.상차일 || ""} ${yoil}`;
     const driverNote = (r.전달사항 || "").trim();
-    const driverNoteText = driverNote ? `\n\n📢 전달사항\n${driverNote}` : "";
+    const driverNoteText = driverNote ? `\n\n◆ 전달사항\n${driverNote}` : "";
     const uploadUrl = buildFleetUploadUrl(r);
     const companyName = (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim() || "-";
 
@@ -1982,7 +1982,7 @@ ${r.하차지주소 || ""}${dCon ? `\n${dCon}` : ""}
 
     return `[파렛전표/거래명세서 업로드]
 (파렛전표/명세서없으면 미업로드)
-👇👇👇👇👇👇👇👇👇👇👇👇
+↓↓↓↓↓↓↓↓↓↓↓↓
 ${uploadUrl}
 
 ${isCold ? "*냉장(0~10도유지),냉동(-18도이하)*\n" : "*관련 서류 업로드 필수*\n"}${r.지급방식 === "착불" ? "*착불건입니다*" : r.지급방식 === "선불" ? "*선불건입니다*" : "*결제일 링크 참고하세요*"}
@@ -3339,7 +3339,7 @@ function DriverDocumentsPanel({ driverId }) {
                 {d.fileType?.startsWith("image/") ? (
                   <img src={d.dataUrl} alt={d.fileName} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
                 ) : (
-                  <span style={{ fontSize: 28 }}>📄</span>
+                  <span style={{ fontSize: 28 }}>▤</span>
                 )}
               </div>
               <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 2 }} title={d.fileName}>{d.fileName}</div>
@@ -3375,7 +3375,7 @@ function DriverRouteDetailModal({ driver, dispatchData, onClose, role = "" }) {
   const todayForRange = kstDateStr();
   const [fromDate, setFromDate] = useState(todayForRange);
   const [toDate, setToDate] = useState(todayForRange);
-  useLoadOrderRange(fromDate, toDate); // ⭐ 고른 기간만 불러오기
+  useLoadOrderRange(fromDate, toDate); // ★ 고른 기간만 불러오기
   const [orderSearch, setOrderSearch] = useState("");
   // 관리자/최고관리자만 기간 제한 없이 조회 가능, 그 이하 직급은 최근 3개월까지만.
   const isUnrestricted = role === "admin" || role === "totalMaster";
@@ -3902,7 +3902,7 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
   const [dayMode, setDayMode] = useState("today"); // "yesterday" | "today" | "tomorrow" | "" (임의 기간)
   const [rangeStart, setRangeStart] = useState(todayStr0);
   const [rangeEnd, setRangeEnd] = useState(todayStr0);
-  useLoadOrderRange(rangeStart, rangeEnd); // ⭐ 고른 기간만 불러오기
+  useLoadOrderRange(rangeStart, rangeEnd); // ★ 고른 기간만 불러오기
   const [appliedStart, setAppliedStart] = useState(todayStr0);
   const [appliedEnd, setAppliedEnd] = useState(todayStr0);
   const [detailDriver, setDetailDriver] = useState(null);
@@ -4186,7 +4186,7 @@ function HistoryTab({ drivers, defaultDriverId }) {
   }, [defaultDriverId]);
   const [fromDate, setFromDate] = useState(todayStr);
   const [toDate, setToDate] = useState(todayStr);
-  useLoadOrderRange(fromDate, toDate); // ⭐ 고른 기간만 불러오기
+  useLoadOrderRange(fromDate, toDate); // ★ 고른 기간만 불러오기
   useLoadOrderRange(`${String(todayStr).slice(0, 7)}-01`, todayStr); // 카드의 이번 달 정산예정 합계용
   const [applied, setApplied] = useState(null);
   const [logs, setLogs] = useState([]);
@@ -4574,7 +4574,7 @@ function FleetSettlementTab({ drivers = [], dispatchData = [], role = "", compan
   const todayStr0 = kstDateStr();
   const [rangeStart, setRangeStart] = useState(`${todayStr0.slice(0, 7)}-01`);
   const [rangeEnd, setRangeEnd] = useState(todayStr0);
-  useLoadOrderRange(rangeStart, rangeEnd); // ⭐ 고른 기간만 불러오기
+  useLoadOrderRange(rangeStart, rangeEnd); // ★ 고른 기간만 불러오기
   const [applied, setApplied] = useState(null); // { driverId, start, end }
   const [rowFilter, setRowFilter] = useState("");
 
@@ -5505,10 +5505,10 @@ function CargoCameraTab({ drivers }) {
         <div style={{ fontSize: 16, fontWeight:800, color:NAVY, marginBottom:16 }}>연동 절차</div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12 }}>
           {[
-            { step:1, title:"카메라 설치", desc:"적재함 내부에 LTE 또는 WiFi IP 카메라를 설치합니다", icon:"📷" },
-            { step:2, title:"스트림 URL 등록", desc:"Firestore cargo_camera/{driverId}에 streamUrl을 등록합니다", icon:"🔗" },
-            { step:3, title:"HLS 변환 서버", desc:"RTSP → HLS 변환 서버(예: MediaMTX) 구성 후 토큰 발급", icon:"⚙️" },
-            { step:4, title:"실시간 모니터링", desc:"이 화면에서 모든 차량 카메라를 동시에 확인합니다", icon:"🖥️" },
+            { step:1, title:"카메라 설치", desc:"적재함 내부에 LTE 또는 WiFi IP 카메라를 설치합니다", icon:"◎" },
+            { step:2, title:"스트림 URL 등록", desc:"Firestore cargo_camera/{driverId}에 streamUrl을 등록합니다", icon:"↗" },
+            { step:3, title:"HLS 변환 서버", desc:"RTSP → HLS 변환 서버(예: MediaMTX) 구성 후 토큰 발급", icon:"⚙" },
+            { step:4, title:"실시간 모니터링", desc:"이 화면에서 모든 차량 카메라를 동시에 확인합니다", icon:"▭" },
           ].map(s => (
             <div key={s.step} style={{ background:"#f8fafc", borderRadius:10, padding:"14px 16px", border:"1px solid #e5e7eb" }}>
               <div style={{ fontSize: 24, marginBottom:8 }}>{s.icon}</div>
@@ -5575,7 +5575,7 @@ function CargoCameraTab({ drivers }) {
 
       {/* 권장 장비 */}
       <div style={{ background:"#fffbeb", border:"1px solid #fcd34d", borderRadius:12, padding:"14px 18px" }}>
-        <div style={{ fontSize: 14, fontWeight:700, color:"#92400e", marginBottom:6 }}>💡 권장 카메라 장비</div>
+        <div style={{ fontSize: 14, fontWeight:700, color:"#92400e", marginBottom:6 }}>※ 권장 카메라 장비</div>
         <div style={{ fontSize: 14, color:"#78350f", lineHeight:1.7 }}>
           Reolink Go, TP-Link Tapo LTE 카메라 등 SIM 카드 내장 IP 카메라 또는 WiFi 카메라를 권장합니다.
           Firestore 경로 <code style={{ background:"rgba(0,0,0,0.06)", padding:"1px 5px", borderRadius:4, fontSize: 13 }}>cargo_camera / {"{"} driverId {"}"}</code>에
@@ -6555,7 +6555,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
             <svg width="22" height="22" fill="white" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ color: "white", fontWeight: 900, fontSize: 17, marginBottom: 6 }}>🚨 긴급 상황 발생! ({emergencyAlerts.length}건)</div>
+            <div style={{ color: "white", fontWeight: 900, fontSize: 17, marginBottom: 6 }}>! 긴급 상황 발생! ({emergencyAlerts.length}건)</div>
             {emergencyAlerts.map(alert => {
               const t = alert.timestamp?.toDate?.() || (alert.timestamp?.seconds ? new Date(alert.timestamp.seconds * 1000) : null);
               return (

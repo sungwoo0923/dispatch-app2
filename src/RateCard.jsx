@@ -69,7 +69,7 @@ tbody th{background:#F3F6FA;color:#3A4A66;font-size:12.5px;font-weight:900;text-
 <div class="page">
   <div class="hero">
     <div><div class="en">VEHICLE RATE CARD · ${esc(today)}</div><div class="title">운송 단가표</div></div>
-    <div class="co"><b>${esc(company.name || "")}</b><br>${esc(company.manager || "")} ${esc(company.phone || "")}${company.tel ? ` · ☎ ${esc(company.tel)}` : ""}<br>${esc(company.email || "")}</div>
+    <div class="co"><b>${esc(company.name || "")}</b><br>${esc(company.manager || "")} ${esc(company.phone || "")}${company.tel ? ` · TEL ${esc(company.tel)}` : ""}<br>${esc(company.email || "")}</div>
   </div>
   <div class="route">
     <div><div class="en" style="color:#2D4C82">FROM</div><div class="pt" data-ed>${esc(info.pickup || "출발지")}</div></div>
@@ -313,7 +313,7 @@ function BaseNameAutocomplete({ initialValue, clients = [], onCommit }) {
 }
 
 export default function RateCard({ dispatchData = [], userCompany = "", clients = [] }) {
-  useLoadFullOrderHistory(true); // ⭐ 단가표 운임 매칭은 예전 오더 전체가 필요 — 메뉴를 열 때 1회
+  useLoadFullOrderHistory(true); // ★ 단가표 운임 매칭은 예전 오더 전체가 필요 — 메뉴를 열 때 1회
   const COMPANY = useCompanyInfo(userCompany);
   const [pickup, setPickup] = useState("");
   const [drop, setDrop] = useState("");

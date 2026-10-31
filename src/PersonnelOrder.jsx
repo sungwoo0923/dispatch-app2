@@ -101,7 +101,7 @@ export default function PersonnelOrder({ company, target, myName, isSelf }) {
         position: next.position, team: next.team,
         personnelHistory: [...(target.personnelHistory || []), { date, type: fv("type"), detail }],
       };
-      const roleNext = isExecProfile(next) && next.role !== "totalMaster" ? "admin" : next.role; // 👔 임원은 무조건 관리자
+      const roleNext = isExecProfile(next) && next.role !== "totalMaster" ? "admin" : next.role; // ◆ 임원은 무조건 관리자
       if (roleNext !== cur.role && !isSelf) patch.role = roleNext;
       await setDoc(doc(db, "users", target.uid), patch, { merge: true });
 

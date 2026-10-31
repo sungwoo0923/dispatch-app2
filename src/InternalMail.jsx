@@ -686,7 +686,7 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
                         {unreadOne && <span className="w-2 h-2 rounded-full bg-[#1B2B4B] shrink-0" />}
                         <span className={`text-[13.5px] truncate ${unreadOne ? "font-black text-[#0F1A30]" : "font-bold text-[#3A4A66]"}`}>{who}</span>
                         <span className="ml-auto text-[11.5px] text-[#9AA9C3] shrink-0 tabular-nums">
-                          {st === "scheduled" ? `⏰ ${fmtAt(toMs(m.scheduledAt), false)} ${new Date(toMs(m.scheduledAt)).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}` : fmtAt(toMs(m.at))}
+                          {st === "scheduled" ? `◷ ${fmtAt(toMs(m.scheduledAt), false)} ${new Date(toMs(m.scheduledAt)).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}` : fmtAt(toMs(m.at))}
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
@@ -694,7 +694,7 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
                         {KIND_LABEL[m.kind] && <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded border border-[#0F1A30] text-[#0F1A30] shrink-0">{KIND_LABEL[m.kind]}</span>}
                         {st === "draft" && <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded border border-[#9AA9C3] text-[#7A879C] shrink-0">임시</span>}
                         <span className={`text-[13.5px] truncate ${unreadOne ? "font-extrabold text-[#0F1A30]" : "text-[#3A4A66]"}`}>{m.subject || "(제목 없음)"}</span>
-                        {(m.images || []).length > 0 && <span className="text-[11px] text-[#9AA9C3] shrink-0">📎{m.images.length}</span>}
+                        {(m.images || []).length > 0 && <span className="text-[11px] text-[#9AA9C3] shrink-0">+{m.images.length}</span>}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[12.5px] text-[#9AA9C3] truncate flex-1">{String(m.body || "").replace(/\s+/g, " ") || " "}</span>
@@ -748,7 +748,7 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
                     {ccNames.length > 0 && <div className="text-[12.5px] text-[#5B6B85]"><b className="text-[#7A879C] font-bold mr-1.5">참조</b>{ccNames.join(", ")}</div>}
                   </div>
                   <div className="text-[12px] text-[#9AA9C3] shrink-0 text-right">
-                    {st === "scheduled" ? <span className="font-bold text-[#1B2B4B]">⏰ {fmtAt(toMs(cur.scheduledAt), true)} 발송 예약</span> : fmtAt(toMs(cur.at), true)}
+                    {st === "scheduled" ? <span className="font-bold text-[#1B2B4B]">◷ {fmtAt(toMs(cur.scheduledAt), true)} 발송 예약</span> : fmtAt(toMs(cur.at), true)}
                     {cur.scheduledFor && <div className="text-[11px]">예약 발송된 메일</div>}
                   </div>
                 </div>

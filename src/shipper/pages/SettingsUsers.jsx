@@ -94,7 +94,7 @@ const arr = snap.docs.map(d => ({
 const me = arr.find(u => u.uid === auth.currentUser.uid);
 
 if (!me) {
-  console.log("❌ 내 계정 못찾음");
+  console.log("✕ 내 계정 못찾음");
   return;
 }
 setMe(me);
@@ -314,7 +314,7 @@ setRejectedList(rejectedList);
       </div>
 {me && selectedUser && (
   <UserEditModal
-    key={selectedUser.uid}   // 🔥 이거 추가 (핵심)
+    key={selectedUser.uid}   // ▲ 이거 추가 (핵심)
     open={open}
     user={selectedUser}
     mode={mode}

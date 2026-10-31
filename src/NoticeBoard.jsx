@@ -69,8 +69,8 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
             )}
           </div>
           <div className="mt-4 flex items-center gap-1.5 flex-wrap">
-            {cur.pinned && <span className="px-2 py-0.5 rounded-md bg-[#0F1A30] text-[#8FB0F0] text-[11px] font-black">📌 고정</span>}
-            {cur.category && <span className="px-2 py-0.5 rounded-md bg-[#EEF3FC] text-[#1B2B4B] text-[11px] font-black">{cur.category}</span>}
+            {cur.pinned && <span className="px-2 py-0.5 rounded-md bg-[#0F1A30] text-[#8FB0F0] text-[11px] font-black">• 고정</span>}
+            {cur.category && <span className={`px-2 py-0.5 rounded-md text-[11px] font-black ${cur.category === "부고" ? "bg-[#1A1A1A] text-white" : "bg-[#EEF3FC] text-[#1B2B4B]"}`}>{cur.category}</span>}
             {cur.audience === "shipper" && <span className="px-2 py-0.5 rounded-md border border-[#C9D6EE] text-[#2D4C82] text-[11px] font-black">화주사 공개</span>}
             {(cur.teams || []).length > 0 && <span className="px-2 py-0.5 rounded-md border border-[#C9D6EE] text-[#2D4C82] text-[11px] font-black">{cur.teams.join(" · ")} 대상</span>}
           </div>
@@ -92,9 +92,9 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
                 className="block w-full max-w-[920px] rounded-2xl overflow-hidden border border-[#E3E8F0] shadow-[0_10px_30px_rgba(15,26,48,0.08)] hover:shadow-[0_14px_36px_rgba(15,26,48,0.14)] transition">
                 <img src={cur.image} alt="" className="w-full h-auto block" />
               </button>
-              <div className="flex gap-2">
-                <a href={cur.image} download={`${String(cur.title || "공문").replace(/[\\/:*?"<>|]/g, "")}.jpg`} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B] inline-flex items-center">⬇ 이미지 저장</a>
-                <span className="text-[12px] text-[#9AA9C3] self-center">이미지를 누르면 원본 크기로 볼 수 있습니다</span>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <a href={cur.image} download={`${String(cur.title || "공문").replace(/[\\/:*?"<>|]/g, "")}.jpg`} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B] inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"><span aria-hidden>⬇</span><span>이미지 저장</span></a>
+                <span className="text-[12px] text-[#9AA9C3] whitespace-nowrap">이미지를 누르면 원본 크기로 볼 수 있습니다</span>
               </div>
             </div>
           )}
@@ -109,16 +109,16 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
       <button type="button" onClick={() => setOpenId(n.id)}
         className={`w-full grid grid-cols-[52px_minmax(0,1fr)_auto] md:grid-cols-[64px_minmax(0,1fr)_120px_110px] items-center gap-2.5 md:gap-3 px-3 md:px-5 h-[60px] md:h-[56px] border-b border-[#F1F4F9] text-left transition hover:bg-[#F5F8FD] ${pin ? "bg-[#F3F6FB]" : ""}`}>
         <span className="text-center">
-          {pin ? <span className="inline-flex items-center justify-center whitespace-nowrap h-6 px-1.5 rounded-md bg-[#0F1A30] text-[#8FB0F0] text-[10.5px] font-black">📌 고정</span>
+          {pin ? <span className="inline-flex items-center justify-center whitespace-nowrap h-6 px-1.5 rounded-md bg-[#0F1A30] text-[#8FB0F0] text-[10.5px] font-black">• 고정</span>
             : <span className="text-[14px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>{no}</span>}
         </span>
         <span className="min-w-0 flex flex-col md:flex-row md:items-center gap-0.5 md:gap-1.5">
         <span className="min-w-0 flex items-center gap-1.5 whitespace-nowrap">
-          {n.category && n.category !== "공지사항" && <span className="shrink-0 px-1.5 py-0.5 rounded bg-[#EEF3FC] text-[#1B2B4B] text-[10.5px] font-black">{n.category}</span>}
+          {n.category && n.category !== "공지사항" && <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10.5px] font-black ${n.category === "부고" ? "bg-[#1A1A1A] text-white" : "bg-[#EEF3FC] text-[#1B2B4B]"}`}>{n.category}</span>}
           {n.audience === "shipper" && <span className="shrink-0 px-1.5 py-0.5 rounded border border-[#C9D6EE] text-[#2D4C82] text-[10.5px] font-black">화주사</span>}
           {(n.teams || []).length > 0 && <span className="shrink-0 px-1.5 py-0.5 rounded border border-[#C9D6EE] text-[#2D4C82] text-[10.5px] font-black">{n.teams.length === 1 ? n.teams[0] : `${n.teams[0]} 외 ${n.teams.length - 1}`}</span>}
           <span className={`truncate ${pin ? "text-[15.5px] font-black text-[#0B1428]" : unread ? "text-[15px] font-black text-[#0F1A30]" : "text-[15px] font-semibold text-[#3A4A66]"}`}>{n.title || "공지사항"}</span>
-          {n.image && <span className="shrink-0 text-[11px] text-[#9AA9C3]">🖼</span>}
+          {n.image && <span className="shrink-0 text-[11px] text-[#9AA9C3]">▣</span>}
           {isNew(n) && unread && <span className="shrink-0 w-[18px] h-[18px] rounded-full bg-[#1B2B4B] text-white text-[10px] font-black flex items-center justify-center">N</span>}
         </span>
         {/* 휴대폰 — 작성자는 제목 아래 줄로 */}

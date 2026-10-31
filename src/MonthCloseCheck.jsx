@@ -6,7 +6,7 @@ import {
   doc,
   serverTimestamp,
 } from "firebase/firestore";
-import { updateDoc } from "./orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
+import { updateDoc } from "./orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { db } from "./firebase";
 import { toWon } from "./monthCompare";
 import { useLoadOrderRange, monthEnd } from "./orderHistory";
@@ -30,7 +30,7 @@ export const CLOSE_CHECKS = [
 
 export default function MonthCloseCheck({ dispatchData = [], onClose, isViewer = false }) {
   const [month, setMonth] = useState(() => shiftMonth(kstMonth(), -1));
-  useLoadOrderRange(`${month}-01`, monthEnd(month)); // ⭐ 고른 달만 불러오기
+  useLoadOrderRange(`${month}-01`, monthEnd(month)); // ★ 고른 달만 불러오기
   const [active, setActive] = useState("noSale");
   const [edits, setEdits] = useState({}); // id → { 청구운임, 기사운임, 지급방식 }
   const [saving, setSaving] = useState({});

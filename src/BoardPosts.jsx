@@ -159,7 +159,7 @@ export default function BoardPage({ company, me, board }) {
             ))}
             {(form.images || []).length < 3 && <button type="button" onClick={() => fileRef.current?.click()} className="w-20 h-20 rounded-xl border-2 border-dashed border-[#C9D2E0] text-[#7A879C] text-[12px] font-bold">+ 사진</button>}
             <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={async (e) => { const fs = [...(e.target.files || [])].slice(0, 3 - (form.images || []).length); e.target.value = ""; const out = await Promise.all(fs.map((f) => compressImage(f, 1200, 0.75))).catch(() => []); setForm((p) => ({ ...p, images: [...(p.images || []), ...out].slice(0, 3) })); }} />
-            {admin && <label className="ml-auto flex items-center gap-2 text-[13px] font-bold text-[#0F1A30]"><input type="checkbox" checked={!!form.pinned} onChange={(e) => setForm((p) => ({ ...p, pinned: e.target.checked }))} className="w-4 h-4 accent-[#1B2B4B]" />📌 상단 고정 <span className="text-[11.5px] font-semibold text-[#9AA9C3]">({pinnedCount}/{MAX_PIN})</span></label>}
+            {admin && <label className="ml-auto flex items-center gap-2 text-[13px] font-bold text-[#0F1A30]"><input type="checkbox" checked={!!form.pinned} onChange={(e) => setForm((p) => ({ ...p, pinned: e.target.checked }))} className="w-4 h-4 accent-[#1B2B4B]" />• 상단 고정 <span className="text-[11.5px] font-semibold text-[#9AA9C3]">({pinnedCount}/{MAX_PIN})</span></label>}
           </div>
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => setForm(null)} className="h-11 px-5 rounded-xl border border-[#DCE3EE] text-[13.5px] font-bold text-[#5B6B85]">취소</button>
@@ -233,11 +233,11 @@ export default function BoardPage({ company, me, board }) {
             const unread = !(p.readBy || []).includes(me.uid);
             return (
               <button key={p.id} type="button" onClick={() => setOpenId(p.id)} className={`w-full flex px-5 h-[56px] items-center border-b border-[#F1F4F9] text-left hover:bg-[#F8FAFD] ${p.pinned ? "bg-[#F5F8FD]" : ""}`}>
-                <span className="w-14 text-center text-[14px] font-bold text-[#5B6B85] tabular-nums">{p.pinned ? <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded bg-[#0F1A30] text-[#8FB0F0]">📌</span> : sorted.length - ((page - 1) * PAGE + i)}</span>
+                <span className="w-14 text-center text-[14px] font-bold text-[#5B6B85] tabular-nums">{p.pinned ? <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded bg-[#0F1A30] text-[#8FB0F0]">•</span> : sorted.length - ((page - 1) * PAGE + i)}</span>
                 <span className="flex-1 min-w-0 flex items-center gap-1.5 pl-2">
                   <span className={`truncate ${p.pinned ? "text-[15.5px] font-black text-[#0B1428]" : unread ? "text-[15px] font-black text-[#0F1A30]" : "text-[15px] font-semibold text-[#3A4A66]"}`}>{p.title}</span>
                   {(p.comments || []).length > 0 && <span className="text-[12px] font-black text-[#4B6CB7]">[{p.comments.length}]</span>}
-                  {(p.images || []).length > 0 && <span className="text-[11px] text-[#9AA9C3]">📷</span>}
+                  {(p.images || []).length > 0 && <span className="text-[11px] text-[#9AA9C3]">◎</span>}
                   {isNew(p) && unread && <span className="w-[18px] h-[18px] rounded-full bg-[#1B2B4B] text-white text-[10px] font-black flex items-center justify-center">N</span>}
                 </span>
                 <span className="w-28 truncate text-[14px] font-bold text-[#1B2B4B]">{p.authorName}</span>

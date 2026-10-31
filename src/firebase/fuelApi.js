@@ -1,7 +1,7 @@
 // src/firebase/fuelApi.js
 export async function getFuelPrice(region = "인천") {
   try {
-    const API_KEY = "F251130200"; // 🔥 발급받은 Key 적용됨
+    const API_KEY = "F251130200"; // ▲ 발급받은 Key 적용됨
     const url = `https://www.opinet.co.kr/api/avgAllPrice.do?code=${API_KEY}&out=json`;
 
     const res = await fetch(url);

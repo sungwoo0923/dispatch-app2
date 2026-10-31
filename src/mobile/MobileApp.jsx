@@ -43,7 +43,7 @@ import { createPortal } from "react-dom";
 import "./mobileTheme.css";
 import BlindMinePanel from "../BlindMinePanel";
 import GsheetMinePanel from "../GsheetMinePanel";
-import { OrderTimeline } from "../OrderTimeline"; // ⭐ 모바일 A/B 디자인 + 알록달록 금지(남색 계열)
+import { OrderTimeline } from "../OrderTimeline"; // ★ 모바일 A/B 디자인 + 알록달록 금지(남색 계열)
 import KpBootScreen from "../KpBootScreen";
 import { isMeaningfulChange } from "../bootProgress";
 import { Scale, Package, Snowflake, Car, Bike, Truck, Forklift, Mic, Sparkles, Download, RotateCcw, Building2, ArrowUpDown, StickyNote, MessageSquare, History } from "lucide-react";
@@ -83,7 +83,7 @@ import {
   disableNetwork,
   enableNetwork,
 } from "firebase/firestore";
-import { updateDoc, setDoc } from "../orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
+import { updateDoc, setDoc } from "../orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { db, auth, FUNCTIONS_BASE, DEFAULT_COMPANY } from "../firebase";
 import { signOut } from "firebase/auth";
 import { version as APP_VERSION } from "../../package.json";
@@ -362,7 +362,7 @@ const findApprovedShipperLiveMobile = async (myCompanyName, targetCompanyName) =
 // autoTransmitToShipper / AdminMenu.jsx의 수동 "화주사 전송"과 동일한 매핑으로
 // 화주사가 볼 수 있는 사본을 즉시 생성한다. (모듈 최상위 스코프)
 const autoTransmitToShipperMobile = async (savedRecord, shipperApp) => {
-  if (savedRecord?.블라인드 === true) return; // ⭐ 블라인드 오더는 화주사에도 전송하지 않는다
+  if (savedRecord?.블라인드 === true) return; // ★ 블라인드 오더는 화주사에도 전송하지 않는다
   let myCompanyCode = "";
   try {
     const uid = auth.currentUser?.uid;
@@ -1986,7 +1986,7 @@ export default function MobileApp({ role, user, userCompany = "", forceExec = fa
   // PC(DispatchApp.jsx)와 동일하게 즉시 화주사 화면에도 사본을 생성한다.
   const [approvedShippers, setApprovedShippers] = useState([]);
   useEffect(() => {
-    if (!secondaryReady) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
+    if (!secondaryReady) return undefined; // ★ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
     const viewCompany = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
     const unsub = onSnapshot(collection(db, "companyApplications"), (snap) => {
       const list = snap.docs
@@ -2136,13 +2136,13 @@ useEffect(() => {
     if (backPressTimerRef.current) clearTimeout(backPressTimerRef.current);
   };
 }, []);
-const alarmEnabledRef = useRef(true);              // 🔔 알람 ref
-const toastMutedRef = useRef(false);               // 🔔 토스트 음소거 ref
-const initialLoadDoneRef = useRef({});             // 🔔 최초로드 구분
-const dispatchPrevStatus = React.useRef({});       // 🔔 배차상태 추적
-const notifiedOrderIdsRef = useRef(new Set());     // 🔔 중복알림 방지
-const prevEditStampRef = useRef({});                // 🔔 화주사 수정 감지 (최종수정일시 추적)
-const prevEditReqRef = useRef({});                  // 🔔 화주사 수정요청(배차완료 오더) 감지
+const alarmEnabledRef = useRef(true);              // ◆ 알람 ref
+const toastMutedRef = useRef(false);               // ◆ 토스트 음소거 ref
+const initialLoadDoneRef = useRef({});             // ◆ 최초로드 구분
+const dispatchPrevStatus = React.useRef({});       // ◆ 배차상태 추적
+const notifiedOrderIdsRef = useRef(new Set());     // ◆ 중복알림 방지
+const prevEditStampRef = useRef({});                // ◆ 화주사 수정 감지 (최종수정일시 추적)
+const prevEditReqRef = useRef({});                  // ◆ 화주사 수정요청(배차완료 오더) 감지
   // 🔕 알림 ON/OFF 상태 (기본 ON)
 const [alarmEnabled, setAlarmEnabled] = useState(
   localStorage.getItem("alarmEnabled") !== "false"
@@ -2351,7 +2351,7 @@ const quickRange = (days) => {
   });
 
   const showToast = (msg) => {
-  if (toastMuted) return;   // 🔥 추가
+  if (toastMuted) return;   // ▲ 추가
   setToast(msg);
   setTimeout(() => setToast(""), 2000);
 };
@@ -2368,7 +2368,7 @@ const quickRange = (days) => {
   const [orders, setOrdersRaw] = useState([]);
   const setOrders = React.useCallback((v) => setOrdersRaw(prev => hideBlind(typeof v === "function" ? v(prev) : v)), []);
   const [canceledOrders, setCanceledOrdersRaw] = useState([]);
-  const setCanceledOrders = React.useCallback((v) => setCanceledOrdersRaw(prev => hideBlind(typeof v === "function" ? v(prev) : v)), []); // ⭐ 취소내역 화면용
+  const setCanceledOrders = React.useCallback((v) => setCanceledOrdersRaw(prev => hideBlind(typeof v === "function" ? v(prev) : v)), []); // ★ 취소내역 화면용
   // ⭐ 앱을 백그라운드에 뒀다가 다시 열었을 때, 서버 재조회가 오래 걸리는 동안(기기가
   // 막 깨어나 네트워크 재연결이 느릴 때) 화면에 남아있던 오래된 오더 상태를 보거나
   // 그걸 보고 조작하는 일이 없도록 잠깐 화면을 덮어두는 오버레이 — refreshNow 참고.
@@ -2825,7 +2825,7 @@ collections.forEach((name) => {
 
       snap.docChanges().forEach((change) => {
         const data = { id: change.doc.id, ...change.doc.data() };
-        if (isBlindHidden(data)) return; // ⭐ 블라인드 오더는 최고관리자 외에는 알림도 띄우지 않는다
+        if (isBlindHidden(data)) return; // ★ 블라인드 오더는 최고관리자 외에는 알림도 띄우지 않는다
 
         if (change.type === "added" && data.상차지명) {
           sendPush(
@@ -3150,9 +3150,9 @@ useEffect(() => {
 // 🔔 PC 공지사항 실시간 구독 (이 위치!)
 // --------------------------------------------------
 useEffect(() => {
-  if (!secondaryReady) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
+  if (!secondaryReady) return undefined; // ★ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
   const unsub = onSnapshot(
-    collection(db, "notices"),   // ⚠️ PC에서 쓰는 컬렉션명
+    collection(db, "notices"),   // ⚠ PC에서 쓰는 컬렉션명
     
     (snap) => {
       const list = snap.docs.map(d => ({
@@ -3178,9 +3178,9 @@ useEffect(() => {
 // 📅 PC 일정 실시간 구독 (이 위치!)
 // --------------------------------------------------
 useEffect(() => {
-  if (!secondaryReady) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
+  if (!secondaryReady) return undefined; // ★ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
   const unsub = onSnapshot(
-    collection(db, "schedules"), // ⚠️ PC에서 쓰는 컬렉션명
+    collection(db, "schedules"), // ⚠ PC에서 쓰는 컬렉션명
     (snap) => {
       const list = snap.docs.map(d => ({
         id: d.id,
@@ -3212,7 +3212,7 @@ React.useEffect(() => {
 // 📝 인수인계 실시간 구독 (★ 여기 추가 ★)
 // --------------------------------------------------
 useEffect(() => {
-  if (!secondaryReady) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
+  if (!secondaryReady) return undefined; // ★ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
   const unsub = onSnapshot(
     collection(db, "handovers"),
     (snap) => {
@@ -3276,7 +3276,7 @@ useEffect(() => {
     });
 
     if (nearOrders.length > 0) {
-  if (toastMuted) return;   // 🔥 이 줄이 핵심
+  if (toastMuted) return;   // ▲ 이 줄이 핵심
 
   setToast(`상차 임박 ${nearOrders.length}건! 확인하세요`);
   navigator.vibrate?.(200);
@@ -3390,7 +3390,7 @@ useEffect(() => {
   });
 
   if (newUrgentOrders.length > 0) {
-  if (toastMuted) return;   // 🔥 추가
+  if (toastMuted) return;   // ▲ 추가
 
   const o = newUrgentOrders[0];
 
@@ -3409,7 +3409,7 @@ useEffect(() => {
 
 
   useEffect(() => {
-    if (!readyStage3) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
+    if (!readyStage3) return undefined; // ★ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
     // ⭐ PC(DispatchApp.jsx)는 drivers 구독에 companyName 필터가 있는데, 모바일은 이
     // 필터가 통째로 빠져있어 다른 회사의 기사 목록까지 그대로 받아오고 있었다 —
     // PC와 동일한 기준(companyName 없는 옛 문서는 "돌캐"로 취급)으로 맞춘다.
@@ -3425,7 +3425,7 @@ useEffect(() => {
 
   // 🔥 하차지 거래처(places)도 clients에 병합
 useEffect(() => {
-  if (!readyStage4) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
+  if (!readyStage4) return undefined; // ★ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
   // ⭐ PC(DispatchApp.jsx)의 places 구독과 동일하게 companyName 필터를 맞춘다 —
   // 이 필터가 없어서 다른 회사의 하차지거래처까지 그대로 받아오고 있었다.
   const co = userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY;
@@ -3478,7 +3478,7 @@ useEffect(() => {
 
 // 고정거래처관리 리스너
 useEffect(() => {
-  if (!readyStage5) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
+  if (!readyStage5) return undefined; // ★ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
   const co = userCompany || localStorage.getItem("userCompany") || "";
   const unsub = onSnapshot(collection(db, "fixedClients"), (snap) => {
     const list = snap.docs
@@ -3491,7 +3491,7 @@ useEffect(() => {
 
 // 🏢 기본거래처(clients) 리스너
 useEffect(() => {
-  if (!readyStage5) return undefined; // ⭐ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
+  if (!readyStage5) return undefined; // ★ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
   const co = userCompany || localStorage.getItem("userCompany") || "";
   const unsub = onSnapshot(collection(db, "clients"), (snap) => {
     const list = snap.docs
@@ -3922,7 +3922,7 @@ if (onlyToday) {
     // 2) 상단 탭: 전체 / 배차중 / 배차완료
     base = base.filter((o) => {
       if (statusTab === "전체") return true;
-      const state = getStatus(o); // 🔥 차량번호 기준 상태
+      const state = getStatus(o); // ▲ 차량번호 기준 상태
       return state === statusTab;
     });
 
@@ -4334,7 +4334,7 @@ const groupedByDate = useMemo(() => {
 
     // 하차일이 상차일보다 앞설 수 없다 (역순 입력 방지)
     if (form.상차일 && form.하차일 && form.하차일 < form.상차일) {
-      alert(`⛔ 하차일(${form.하차일})이 상차일(${form.상차일})보다 앞설 수 없습니다.\n날짜를 다시 확인해주세요.`);
+      alert(`⊘ 하차일(${form.하차일})이 상차일(${form.상차일})보다 앞설 수 없습니다.\n날짜를 다시 확인해주세요.`);
       return;
     }
 
@@ -4372,9 +4372,9 @@ const groupedByDate = useMemo(() => {
       혼적여부: form.혼적여부 || "독차",
       혼적: form.혼적여부 === "혼적",   // ← PC boolean 호환
       긴급: form.긴급 === true,          // ← PC 긴급 버튼과 동일 필드
-      ...(canSeeBlind() ? { 블라인드: form.블라인드 === true || (!form._editId && autoBlindNew()) } : {}), // ⭐ 최고관리자 전용 블라인드(블라인드 모드면 새 오더 자동)
+      ...(canSeeBlind() ? { 블라인드: form.블라인드 === true || (!form._editId && autoBlindNew()) } : {}), // ★ 최고관리자 전용 블라인드(블라인드 모드면 새 오더 자동)
       운행유형: form.운행유형 || "",     // ← PC 왕복/편도 버튼과 동일 필드
-      회전수: form.운행유형 === "왕복" ? Math.max(1, Number(form.회전수) || 1) : 1, // ⭐ 회전 운행(왕복일 때만)
+      회전수: form.운행유형 === "왕복" ? Math.max(1, Number(form.회전수) || 1) : 1, // ★ 회전 운행(왕복일 때만)
       적요: form.적요 || "",
       메모: form.적요 || "",
       전달사항: form.전달사항 || "",
@@ -4581,7 +4581,7 @@ const groupedByDate = useMemo(() => {
           // ⭐ 기사 정보까지 채워서 등록과 동시에 배차완료 상태로 저장되는 경우, PC의
           // "배차한시간" 툴팁이 읽는 배차확정일시도 같이 남겨야 한다(없으면 항상 "-").
           ...(rowData.배차상태 === "배차완료" && !rowData.배차확정일시 ? { 배차확정일시: serverTimestamp(), 배차확정자: dispatcherName } : {}),
-          ...(autoBlindNew() ? { 블라인드: true } : {}), // ⭐ 블라인드 모드 → 새 오더 자동 블라인드
+          ...(autoBlindNew() ? { 블라인드: true } : {}), // ★ 블라인드 모드 → 새 오더 자동 블라인드
         };
         const writePromise = setDoc(doc(db, collName, newId), finalData);
 
@@ -5207,7 +5207,7 @@ const deleteSingleOrder = async (order) => {
         등록기기: "모바일",
         작성자: auth.currentUser?.email || "",
         등록자명: dispatcherName || "",
-        ...(autoBlindNew() ? { 블라인드: true } : {}), // ⭐ 블라인드 모드 → 새 오더 자동 블라인드
+        ...(autoBlindNew() ? { 블라인드: true } : {}), // ★ 블라인드 모드 → 새 오더 자동 블라인드
       };
       const writePromise = setDoc(doc(db, collName, newId), finalData);
 
@@ -5509,7 +5509,7 @@ const title =
             style={{ background: "#b91c1c", animation: "bannerDownMT 0.25s ease-out, urgentUnassignedBlink 1.1s ease-in-out infinite" }}
           >
             <div className="flex items-center gap-2.5">
-              <span className="text-base leading-none shrink-0">🚨</span>
+              <span className="text-base leading-none shrink-0">!</span>
               <div className="flex-1 min-w-0">
                 <div className="text-[11px] font-bold text-white/80">
                   미배차 임박 알림 · 상차 30분 전
@@ -5557,7 +5557,7 @@ const title =
    <button
   onClick={() => {
     setToast("");
-    setToastMuted(true);   // 🔥 다시 안 뜨게 막음
+    setToastMuted(true);   // ▲ 다시 안 뜨게 막음
   }}
   className="text-white/70 hover:text-white text-sm"
 >
@@ -5810,7 +5810,7 @@ const title =
   />
 )}
 {/* 모바일 메신저 - 항상 마운트하여 unread count 추적, mobileVisible로 UI 표시 제어
-    ⭐ LTE 속도 — 첫 진입 땐 오더부터 받고, 메신저(대화방·메시지 구독)는 그다음에 시작한다 */}
+    ★ LTE 속도 — 첫 진입 땐 오더부터 받고, 메신저(대화방·메시지 구독)는 그다음에 시작한다 */}
 {(secondaryReady || showMobileMessenger) && (
 <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 99990, background: "#fff", display: "flex", flexDirection: "column", overflow: "hidden", visibility: showMobileMessenger ? "visible" : "hidden", pointerEvents: showMobileMessenger ? "auto" : "none", paddingTop: "env(safe-area-inset-top, 0px)" }}>
   <InternalMessenger
@@ -5841,8 +5841,8 @@ const title =
     setShowMenu(false);
   }}
 
-          hasNewNotice={hasNewNotice}       // ⭐ 추가
-  hasNewSchedule={hasNewSchedule}   // ⭐ 추가
+          hasNewNotice={hasNewNotice}       // ★ 추가
+  hasNewSchedule={hasNewSchedule}   // ★ 추가
   alarmEnabled={alarmEnabled}
  toggleAlarm={toggleAlarm}
            onGoHandover={() => {
@@ -7088,7 +7088,7 @@ function MobileRevenueGate({ cardVersionB = false, children }) {
 function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = false, clients = [], places = [], loadRange, loadFullHistory }) {
   const [verified, setVerified] = useState(() => sessionStorage.getItem("sales_ok") === "1");
   const [month, setMonth] = useState(new Date(new Date().getTime() + 9*60*60*1000).toISOString().slice(0,7));
-  const [compareOpen, setCompareOpen] = useState(false); // ⭐ 월 비교 분석
+  const [compareOpen, setCompareOpen] = useState(false); // ★ 월 비교 분석
   // ⭐ 선택한 달 + 이전 6개월(추이 그래프)만 그때 불러온다 / 월 비교 분석은 아무 달이나 고르므로 전체
   useEffect(() => {
     const d = new Date(`${month}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - 6);
@@ -7395,7 +7395,7 @@ function MobileVersionChip({ dark = false }) {
 }
 
 const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh, onValidateOrders, onMenu, menuBadge = 0, notifCount = 0, onNotifClick, cardVersionB = false, messengerUnread = 0, onMessengerClick, mailCompany = "", mailName = "" }) {
-  const newVer = useNewVersion(); // ⭐ 새 버전 배포 시 메뉴 버튼에 점 표시
+  const newVer = useNewVersion(); // ★ 새 버전 배포 시 메뉴 버튼에 점 표시
   // ⭐ 2026-10-22 디자인 개선 — A형: 반투명 흰 머리줄 / B형: 남색 그라데이션 머리줄. 버튼은 둥근 네모 타일.
   const isListPage = title === "등록내역" || (!!onMenu && !onBack); // 부서 홈(경리·인사)도 메뉴 버튼
   const iconColor = cardVersionB ? "#ffffff" : "#1B2B4B";
@@ -8308,13 +8308,13 @@ function UploadLinkModal({ orders = [], onClose, companyName = "" }) {
       const [y, m, d] = date.split("-");
       return y && m && d ? `${y}년 ${parseInt(m)}월 ${parseInt(d)}일` : date;
     }).filter(Boolean))];
-    if (dates.length > 0) lines.push(`📅 ${dates.join(", ")}`);
+    if (dates.length > 0) lines.push(`▦ ${dates.join(", ")}`);
     if (dOrders.length > 1) lines.push(`총 ${dOrders.length}건`);
 
     lines.push("파렛전표 및 거래명세서, 타코기록지 등\n관련 서류 업로드를 부탁드립니다.\n미 확인 시 운임 지연이 발생할 수 있습니다.\n");
     lines.push("[인수증 업로드 안내]");
     lines.push("아래 링크에서 서류를 업로드해 주세요.\n");
-    lines.push("📋 업로드 방법");
+    lines.push("▤ 업로드 방법");
     lines.push("① 아래 링크 클릭");
     lines.push("② 날짜·차량번호·이름 확인");
     lines.push("③ 오더 선택 후 사진 업로드");
@@ -8640,14 +8640,14 @@ function MobileEstimateModal({ orders = [], userCompany = "", onClose }) {
 
           {/* 표 — 화면 폭에 맞춰 칸이 절대 겹치거나 벗어나지 않도록, 켜진 금액 컬럼 수(0/1/2개)에
               따라 나머지 컬럼 너비를 다시 배분한다.
-              ⚠️ 이전 버전은 노선/화물내용처럼 길어질 수 있는 칸에 -webkit-line-clamp로 최대 2줄까지만
+              ⚠ 이전 버전은 노선/화물내용처럼 길어질 수 있는 칸에 -webkit-line-clamp로 최대 2줄까지만
               보여주고 그 이상은 …로 잘라버렸는데, 이러면 이미지로 저장/공유할 때도 실제 내용(예: 긴
               장소명)이 통째로 잘려 보이는 문제가 있었다 — 화면 미리보기에서만 살짝 잘려 보이는 건
               괜찮지만, 저장되는 이미지에는 내용이 짤림없이 전부 나와야 한다(PC 스케줄표와 동일).
               그래서 line-clamp/overflow:hidden을 걷어내고 break-all로 긴 텍스트가 셀 너비 안에서
               자연스럽게 줄바꿈되며 행 높이가 늘어나도록 했다 — table-layout:fixed라 칸 너비는
               고정된 채로, 내용이 길면 셀/행이 아래로 길어질 뿐 옆 칸을 침범하지 않는다.
-              ⭐ 그런데 App.css에 전역으로 걸린 `table td { white-space: nowrap !important; }` 규칙이
+              ★ 그런데 App.css에 전역으로 걸린 `table td { white-space: nowrap !important; }` 규칙이
               모든 테이블의 td에 적용되어 break-all을 무시하고 한 줄로 강제되면서, 넘친 텍스트가
               옆 칸/아래 행 위로 겹쳐 보이는 버그가 있었다(글씨가 서로 겹쳐 보이던 원인). !important는
               같은 !important끼리는 CSS 명시도(specificity)로 우선순위가 갈리므로, 이 표에만 붙는
@@ -10964,7 +10964,7 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
     try {
       bgWrite(updateDoc(doc(db, order.__col || "orders", order.id), {
         차량번호: "", 이름: "", 기사명: "", 전화번호: "", 전화: "",
-        배차상태: "배차중", 상태: "배차중", 배차방식: "선택없음", _lastModified: Date.now(), // ⭐ 기사님이 빠지면 배차중으로(예전엔 배차완료로 남았다)
+        배차상태: "배차중", 상태: "배차중", 배차방식: "선택없음", _lastModified: Date.now(), // ★ 기사님이 빠지면 배차중으로(예전엔 배차완료로 남았다)
         기사취소요청: false, 기사취소요청일시: deleteField(),
         // 재배차 상황이므로 이전에 전달된 전달상태도 함께 초기화한다.
         업체전달상태: "미전달", 정보전달완료: false, 정보전달상태: "미전달", 전달완료일시: null,
@@ -11851,7 +11851,7 @@ function MobileOrderDetail({
       .catch(() => { if (!cancelled) setRouteInfo("error"); });
     return () => { cancelled = true; };
   }, [order?.상차지주소, order?.하차지주소]);
-  const [showRouteMap, setShowRouteMap] = useState(false); // ⭐ 상세보기 "경로보기"
+  const [showRouteMap, setShowRouteMap] = useState(false); // ★ 상세보기 "경로보기"
   const [isNewDriver, setIsNewDriver] = useState(false);
   const [showAttachments, setShowAttachments] = useState(false);
   const [attachItems, setAttachItems] = useState([]);
@@ -12055,7 +12055,7 @@ function MobileOrderDetail({
       수수료: claim - (drv != null ? drv : (Number(order.기사운임) || 0)),
     };
     try {
-      updateDoc(doc(db, col, id), patch).catch(() => showToast("적용 중 오류가 발생했습니다.")); // ⭐ 속도개선 — 기다리지 않음
+      updateDoc(doc(db, col, id), patch).catch(() => showToast("적용 중 오류가 발생했습니다.")); // ★ 속도개선 — 기다리지 않음
       if (typeof onOrderUpdate === "function") onOrderUpdate(id, patch);
       // 상세보기 즉시 반영
       if (typeof setSelectedOrder === "function") {
@@ -14031,7 +14031,7 @@ function SmartOrderParser({ clients, drivers = [], onApply, onClose, cardVersion
 
         // Fallback: "하차지: 순수본" pattern
         if (!res.하차지명) {
-          const m = text.match(/(?:하차지|도착지|하차\s*장소)\s*[:：]\s*([^\n\s☎]+)/);
+          const m = text.match(/(?:하차지|도착지|하차\s*장소)\s*[:：]\s*([^\n\sTEL]+)/);
           if (m) {
             const c = matchClientByName(m[1]);
             res.하차지명 = c ? c.거래처명 : m[1].trim();
@@ -14547,7 +14547,7 @@ const fareForm = React.useDeferredValue(React.useMemo(() => ({
 }), [form.상차지주소, form.하차지주소, form.상차지명, form.하차지명, form.차종, form.거래처명, form.화물내용, form.톤수, form.상차일]));
 const fareOrders = React.useDeferredValue(orders);
 const fareMatches = useMemo(() => {
-  const form = fareForm; // ⭐ 타이핑과 분리된(지연된) 입력값으로 계산
+  const form = fareForm; // ★ 타이핑과 분리된(지연된) 입력값으로 계산
   if (!fareOrders || fareOrders.length === 0) return [];
 
   const ns = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
@@ -17660,7 +17660,7 @@ const pickDrop = (c) => {
     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[340px] overflow-hidden">
       <div className={`px-5 py-4 ${clientAlert.등급 === "블랙" ? "bg-gray-900" : clientAlert.등급 === "주의" ? "bg-orange-500" : "bg-[#1B2B4B]"}`}>
         <div className="text-white font-bold text-[15px]">
-          {clientAlert.등급 === "블랙" ? "⛔ 블랙 등급 거래처" : clientAlert.등급 === "주의" ? "⚠️ 주의 등급 거래처" : "📋 거래처 안내"}
+          {clientAlert.등급 === "블랙" ? "⊘ 블랙 등급 거래처" : clientAlert.등급 === "주의" ? "⚠ 주의 등급 거래처" : "▤ 거래처 안내"}
         </div>
         <div className="text-white/70 text-[12px] mt-0.5">{clientAlert.거래처명 || clientAlert.업체명}</div>
       </div>
@@ -18175,21 +18175,21 @@ const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 �
     let text = "";
 
     /* =========================
-       1️⃣ 차량번호 / 기사명 / 전화번호
+       1⃣ 차량번호 / 기사명 / 전화번호
     ========================= */
     if (type === "simple") {
       text = `${order.차량번호 || "-"} ${driverName} ${driverPhone}`;
     }
 
     /* =========================
-       2️⃣ 운임 포함 (기존 함수 유지)
+       2⃣ 운임 포함 (기존 함수 유지)
     ========================= */
     else if (type === "fare") {
       text = buildOrderCopyText(order);
     }
 
     /* =========================
-       3️⃣ 전체 상세 (요청 포맷)
+       3⃣ 전체 상세 (요청 포맷)
     ========================= */
     else if (type === "full") {
       const dayDiff = diffDays(order.상차일, order.하차일);
@@ -18414,13 +18414,13 @@ ${kind}방법 : ${e.method || "-"}`;
 
       text = `[파렛전표/거래명세서 업로드]
 미 전송시 운임 지연 될 수 있습니다.
-👇👇👇👇👇👇👇👇👇👇👇👇
+↓↓↓↓↓↓↓↓↓↓↓↓
 ${uploadUrl}
 
 ${isColdVeh ? "*냉장(0~10도유지),냉동(-18도이하)*\n" : "*관련 서류 업로드 필수*\n"}${order.지급방식 === "착불" ? "*착불건입니다*" : order.지급방식 === "선불" ? "*선불건입니다*" : "*결제일 링크 참고하세요*"}
 ${isChainMd ? "" : dateNotice2}${order.상차일 || ""} ${getYoil(order.상차일)}${order.운행유형 === "왕복" ? "\n[왕복운행]" : ""}${rotationNotice(order)}
 
-${coreBlockMd}${order.전달사항?.trim() ? `\n\n📢 전달사항\n${order.전달사항.trim()}` : ""}
+${coreBlockMd}${order.전달사항?.trim() ? `\n\n◆ 전달사항\n${order.전달사항.trim()}` : ""}
 
 화물 : ${_totTonMd}${_totCargoMd?` / ${_totCargoMd}`:""} ${order.차량종류||order.차종||""}
 결제방법 : ${order.지급방식 === "계산서" ? `계산서(${order.배차방식 === "24시" ? "24시발행" : (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim() || "-"})` : (order.지급방식 || "-")}${noticeBlock?`\n\n${noticeBlock}`:""}
@@ -18971,7 +18971,7 @@ function MobileFixedRouteNotice({ order }) {
   if (!order?.고정노선Id) return null;
   return (
     <div className="rounded-xl border border-[#C9D6EE] bg-[#EEF3FC] px-3 py-2.5 text-[12.5px] text-[#1B2B4B] leading-relaxed">
-      <b className="font-black">🛣 고정노선 오더{order.고정노선명 ? ` · ${order.고정노선명}` : ""}</b>
+      <b className="font-black">▸ 고정노선 오더{order.고정노선명 ? ` · ${order.고정노선명}` : ""}</b>
       <div className="text-[12px] text-[#3A4A66]">여기서 고치면 <b>이 날짜({order.상차일 || "-"}) 오더만</b> 바뀝니다. 앞으로 계속 바꾸려면 <b>지입차관리 › 고정노선</b>에서 수정하세요.</div>
     </div>
   );
@@ -22264,7 +22264,7 @@ return (
 }
 
 function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnabled, toggleAlarm, fontScale, setFontScale, easyMode, setEasyMode, appVersion, showSuccess, onLogout, userCompany, role, currentUser, refreshFromServer }) {
-  const [loginMgrOpen, setLoginMgrOpen] = useState(false); // ⭐ 로그인 관리(기기 연결 끊기·비밀번호 변경)
+  const [loginMgrOpen, setLoginMgrOpen] = useState(false); // ★ 로그인 관리(기기 연결 끊기·비밀번호 변경)
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const isTotalMaster = role === "totalMaster";
@@ -22308,9 +22308,9 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
       const { diagnoseFcmToken } = await import("../firebase");
       const result = await diagnoseFcmToken(currentUser);
       if (result.ok) {
-        alert(`✅ 토큰 발급/저장 성공\n\n${result.token.slice(0, 28)}...\n\n이 기기는 서버와 정상 연결됐습니다. 그래도 실제 알림이 안 오면 종류별 설정(위 알림 종류별 설정)을 다시 확인해주세요.`);
+        alert(`✓ 토큰 발급/저장 성공\n\n${result.token.slice(0, 28)}...\n\n이 기기는 서버와 정상 연결됐습니다. 그래도 실제 알림이 안 오면 종류별 설정(위 알림 종류별 설정)을 다시 확인해주세요.`);
       } else {
-        alert(`❌ 실패\n\n${result.reason}`);
+        alert(`✕ 실패\n\n${result.reason}`);
       }
     } catch (e) {
       alert(`진단 중 예외 발생: ${e?.message || e}`);
@@ -22711,12 +22711,12 @@ function MobileERPPage({ onBack, cardVersionB = false, drivers = [], clients = [
       <div className="flex-1 pb-10">
         <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", padding: "20px 16px 8px", letterSpacing: "0.05em" }}>ERP 메뉴</div>
         <div className="mx-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm bg-white">
-          <SectionCard title="직원관리" sub={`등록 직원 현황`} icon="👥" onClick={() => setSubPage("직원관리")} />
-          <SectionCard title="차량관리" sub={`등록 차량 ${drivers.length}대`} icon="🚛" badge={drivers.length} onClick={() => setSubPage("차량관리")} />
-          <SectionCard title="거래처관리" sub={`거래처 ${allClients.length}곳`} icon="🏢" badge={allClients.length} onClick={() => setSubPage("거래처관리")} />
-          <SectionCard title="급여관리" sub="월별 기사 운임 정산" icon="💰" onClick={() => setSubPage("급여관리")} />
-          <SectionCard title="근태관리" sub="출퇴근·근무 현황" icon="📋" onClick={() => setSubPage("근태관리")} />
-          <SectionCard title="운행일지" sub="차량별 운행 기록" icon="📍" onClick={() => setSubPage("운행일지")} />
+          <SectionCard title="직원관리" sub={`등록 직원 현황`} icon="◆" onClick={() => setSubPage("직원관리")} />
+          <SectionCard title="차량관리" sub={`등록 차량 ${drivers.length}대`} icon="▸" badge={drivers.length} onClick={() => setSubPage("차량관리")} />
+          <SectionCard title="거래처관리" sub={`거래처 ${allClients.length}곳`} icon="◆" badge={allClients.length} onClick={() => setSubPage("거래처관리")} />
+          <SectionCard title="급여관리" sub="월별 기사 운임 정산" icon="₩" onClick={() => setSubPage("급여관리")} />
+          <SectionCard title="근태관리" sub="출퇴근·근무 현황" icon="▤" onClick={() => setSubPage("근태관리")} />
+          <SectionCard title="운행일지" sub="차량별 운행 기록" icon="●" onClick={() => setSubPage("운행일지")} />
         </div>
 
         <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", padding: "20px 16px 8px", letterSpacing: "0.05em" }}>누적 현황</div>

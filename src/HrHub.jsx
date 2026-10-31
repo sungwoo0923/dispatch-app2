@@ -11,6 +11,7 @@ import { useHrOptions, isExecProfile, suggestRole, ROLE_NAME, EXEC_TEAM, TEAM_OP
 import { isTMUser } from "./staffFilter";
 import { RETIRE_REASONS } from "./AcctSuite";
 import { LeaveLedger } from "./HrTools";
+import ObituaryWriter from "./ObituaryWriter";
 
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const inp = "h-11 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
@@ -393,7 +394,7 @@ export function StaffInfoBoard({ company, canManage }) {
               </div>
               <div><Label>사유</Label><textarea value={r.reason} onChange={(e) => setR({ ...r, reason: e.target.value })} rows={4} className={`${inp} h-auto py-2`} /></div>
               <button type="button" onClick={() => printResign(company, sel, r)} className="w-full h-11 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-black text-[#1B2B4B]">{r.type === "권고사직" ? "권고사직 합의서 인쇄" : "퇴직 확인서 인쇄"}</button>
-              <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2.5 text-[12.5px] text-[#5B6B85] leading-relaxed">🔒 퇴사 확정 즉시 이 계정은 로그인할 수 없습니다(로그인 시 "퇴사 처리된 계정" 안내 후 차단). 퇴사 예정 상태에서는 그날까지 로그인됩니다.</div>
+              <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2.5 text-[12.5px] text-[#5B6B85] leading-relaxed">■ 퇴사 확정 즉시 이 계정은 로그인할 수 없습니다(로그인 시 "퇴사 처리된 계정" 안내 후 차단). 퇴사 예정 상태에서는 그날까지 로그인됩니다.</div>
             </div>
           )}
         </Sheet>
@@ -502,7 +503,7 @@ export function CompanyRules({ company, canEdit = false }) {
 }
 
 // ═════════════════ 인사관리부 허브 ═════════════════
-export default function HrHub({ company, canManage, renderRecord, renderAttendance }) {
+export default function HrHub({ company, canManage, renderRecord, renderAttendance, me = {} }) {
   const [tab, setTab] = React.useState(() => { try { const v = sessionStorage.getItem("kpHrTab"); sessionStorage.removeItem("kpHrTab"); return v || "record"; } catch { return "record"; } });
   const [focusUid, setFocusUid] = React.useState(null);
   return (
@@ -520,6 +521,7 @@ export default function HrHub({ company, canManage, renderRecord, renderAttendan
         { label: "설정 · 규정", items: [
           { key: "settings", label: "직책·부서 설정", en: "SETTINGS", icon: "key" },
           { key: "rules", label: "사내 규정", en: "RULES", icon: "list" },
+          { key: "obit", label: "부고 알림", en: "OBITUARY", icon: "bell" },
         ] },
       ]}>
       {tab === "record" && renderRecord?.(focusUid)}
@@ -529,6 +531,7 @@ export default function HrHub({ company, canManage, renderRecord, renderAttendan
       {tab === "attendance" && renderAttendance?.()}
       {tab === "settings" && <HrSettingsPanel company={company} canManage={canManage} />}
       {tab === "rules" && <CompanyRules company={company} canEdit={canManage} />}
+      {tab === "obit" && <ObituaryWriter company={company} me={me} onCancel={() => setTab("record")} onSaved={() => { alert("공지사항에 부고를 올렸습니다."); setTab("record"); }} />}
     </KpSubNav>
   );
 }

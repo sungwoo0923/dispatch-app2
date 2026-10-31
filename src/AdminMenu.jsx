@@ -20,7 +20,7 @@ import {
   orderBy,
   limit,
 } from "firebase/firestore";
-import { setDoc, updateDoc } from "./orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
+import { setDoc, updateDoc } from "./orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { ref as storageRef, uploadBytes, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
 import { EMPLOYMENT_STATUS_OPTIONS, suggestRole, ROLE_NAME, isExecProfile, useHrOptions } from "./hrConstants";
@@ -130,7 +130,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const [transmitCompanyQuery, setTransmitCompanyQuery] = useState("");
   const [transmitFromMonth, setTransmitFromMonth] = useState(monthNow);
   const [transmitToMonth, setTransmitToMonth] = useState(monthNow);
-  useLoadOrderRange(transmitToMonth ? monthStart(transmitFromMonth) : null, monthEnd(transmitToMonth)); // ⭐ 고른 기간만 불러오기(월을 지우면 요청 안 함)
+  useLoadOrderRange(transmitToMonth ? monthStart(transmitFromMonth) : null, monthEnd(transmitToMonth)); // ★ 고른 기간만 불러오기(월을 지우면 요청 안 함)
   const [transmitSearched, setTransmitSearched] = useState(false);
   const [transmitting, setTransmitting] = useState(false);
   const [transmitResult, setTransmitResult] = useState(null);
@@ -1273,7 +1273,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
 
                 {transmitResult && (
                   <div className="mt-3 text-[12px] text-emerald-700">
-                    ✅ {transmitResult.shipper}(으)로 {transmitResult.success}건 전송 완료
+                    ✓ {transmitResult.shipper}(으)로 {transmitResult.success}건 전송 완료
                     {transmitResult.failed > 0 && <span className="text-red-500"> ({transmitResult.failed}건 실패)</span>}
                   </div>
                 )}

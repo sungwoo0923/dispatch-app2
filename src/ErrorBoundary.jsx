@@ -29,7 +29,7 @@ export default class ErrorBoundary extends React.Component {
           alignItems: "center", justifyContent: "center", padding: 24,
           textAlign: "center", background: "#F5F7FA", fontFamily: "sans-serif",
         }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>⚠</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: "#1B2B4B", marginBottom: 8 }}>
             화면을 불러오는 중 오류가 발생했습니다
           </div>

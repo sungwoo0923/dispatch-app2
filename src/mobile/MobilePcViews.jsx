@@ -15,6 +15,7 @@ import NoticeBoard from "../NoticeBoard";
 import { NoticeWriter, NOTICE_WRITER_ROLES } from "../HomeWriters";
 import { OrderHistoryContext } from "../orderHistory";
 import StaffManager from "../StaffManager";
+import ObituaryWriter from "../ObituaryWriter";
 import DeptDashboard from "../DeptDashboard";
 import DriverDocsReview from "../DriverDocsReview";
 import { AssetManager } from "../OfficeBooks";
@@ -116,12 +117,14 @@ function ApprovalView({ company, me, initialPage = "inbox" }) {
 function NoticeView({ company, me }) {
   const [notices, setNotices] = React.useState([]);
   const [writer, setWriter] = React.useState(null); // { initial }
+  const [obit, setObit] = React.useState(false);
   const [openId, setOpenId] = React.useState(null);
   React.useEffect(() => onSnapshot(collection(db, "notices"), (s) => setNotices(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setNotices([])), []);
   const isViewer = me?.role === "viewer";
   const canWrite = NOTICE_WRITER_ROLES.includes(me?.role) && !isViewer;
   const thisMonth = new Date().toISOString().slice(0, 7);
   const monthN = notices.filter((n) => { const ms = n.createdAt?.toMillis ? n.createdAt.toMillis() : (n.createdAt?.seconds || 0) * 1000; return ms && new Date(ms).toISOString().slice(0, 7) === thisMonth; }).length;
+  if (obit) return <div className="kp-m-pc px-2 py-2"><ObituaryWriter company={company} me={me} onCancel={() => setObit(false)} onSaved={() => setObit(false)} /></div>;
   if (writer) return <div className="kp-m-pc"><NoticeWriter me={me} company={company} initial={writer.initial} onCancel={() => setWriter(null)} onSaved={() => setWriter(null)} /></div>;
   return (
     <div className="px-3 py-3 space-y-3 kp-m-pc">
@@ -138,6 +141,7 @@ function NoticeView({ company, me }) {
             </div>
           ))}
           {canWrite && <button type="button" onClick={() => setWriter({ initial: null })} className="h-12 px-4 rounded-2xl bg-white text-[#0F1A30] text-[14px] font-black shrink-0">+ 새로 등록</button>}
+          {canWrite && <button type="button" onClick={() => setObit(true)} className="h-12 px-3.5 rounded-2xl bg-[#111] text-white text-[14px] font-black shrink-0 ring-1 ring-white/25">부고</button>}
         </div>
       </div>
       <div className="rounded-2xl bg-white border border-[#E3E8F0] p-3">

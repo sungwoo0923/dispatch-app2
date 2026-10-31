@@ -29,7 +29,7 @@ export const COPY_VARS = [
 export const COPY_DEFAULTS = {
   driver: {
     includeUpload: true,
-    uploadBlock: "[파렛전표/거래명세서 업로드]\n미 전송시 운임 지연 될 수 있습니다.\n👇👇👇👇👇👇👇👇👇👇👇👇\n{업로드링크}",
+    uploadBlock: "[파렛전표/거래명세서 업로드]\n미 전송시 운임 지연 될 수 있습니다.\n↓↓↓↓↓↓↓↓↓↓↓↓\n{업로드링크}",
     top: "{온도안내}\n{결제안내}",
     bottom: "※ 인수증(파렛전표) 서명 받은 후 업로드필수\nKPP/아주파렛트 상차시 각각 전표업로드 필수\n{서류안내}\n※ 서류/전표 없는 건이면 업로드 하지마세요.\n※ 미업로드 시 운임 지급 지연될 수 있습니다",
   },

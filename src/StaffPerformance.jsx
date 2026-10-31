@@ -28,7 +28,7 @@ function aggregate(list) {
 export default function StaffPerformance({ rows = [], isExcluded = () => false, hasExcluded = false, onClose }) {
   // ⭐ 이번 달부터 보여준다(예전엔 지난달로 열리는데 월 선택칸은 이번 달로 보여 "10월인데 9월 실적"으로 보였다)
   const [month, setMonth] = useState(() => kstMonth());
-  useLoadOrderRange(monthStartAgo(month, 1), monthEnd(month)); // ⭐ 고른 달 + 전월(전월 대비)만 불러오기
+  useLoadOrderRange(monthStartAgo(month, 1), monthEnd(month)); // ★ 고른 달 + 전월(전월 대비)만 불러오기
   const [scope, setScope] = useState(hasExcluded ? "pure" : "all");
   const [sortKey, setSortKey] = useState("profit");
   useEffect(() => {

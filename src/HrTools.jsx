@@ -203,7 +203,7 @@ export function LeaveLedger({ company, isViewer = false, canManage = false }) {
                   </div>
                 ))}
                 <div className="mt-2 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2 text-[11.5px] text-[#5B6B85] leading-relaxed">
-                  🔐 몰래 바꾸지 못하게 — 사유 필수 · 조정 기록은 지울 수 없음(되돌리려면 반대로 조정) · 처리자·시각 자동 기록 · 본인에게 사내메일 자동 통보 · 본인의 "내 연차" 화면에도 조정 내역 표시
+                  ■ 몰래 바꾸지 못하게 — 사유 필수 · 조정 기록은 지울 수 없음(되돌리려면 반대로 조정) · 처리자·시각 자동 기록 · 본인에게 사내메일 자동 통보 · 본인의 "내 연차" 화면에도 조정 내역 표시
                 </div>
               </BookCard>
             )}

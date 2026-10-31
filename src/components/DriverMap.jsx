@@ -88,7 +88,7 @@ export default function DriverMap({ onSelect, center }) {
       </h3>
 
       {/* ===========================
-          ⭐⭐ 추가된 UI 영역 ⭐⭐
+          ★★ 추가된 UI 영역 ★★
       ============================ */}
       <div className="grid grid-cols-2 gap-2 text-xs mb-4">
 
@@ -120,7 +120,7 @@ export default function DriverMap({ onSelect, center }) {
       </div>
 
       {/* ===========================
-          ⭐ 지도 영역 (원본 그대로)
+          ★ 지도 영역 (원본 그대로)
       ============================ */}
       <div style={{ height: "450px", width: "100%" }}>
         <MapContainer
