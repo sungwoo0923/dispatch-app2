@@ -9,7 +9,7 @@ import { kpConfirm } from "./kpDialog";
 import html2canvas from "html2canvas";
 import { db, auth } from "./firebase";
 import { addDoc, collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
-import { TEAM_OPTIONS, positionsForTeam, suggestRole, isExecProfile } from "./hrConstants";
+import { suggestRole, isExecProfile, useHrOptions } from "./hrConstants";
 import { sendInternalMail, useCompanyStaff, compressImage } from "./InternalMail";
 
 export const HR_ROLE_OPTIONS = [
@@ -45,6 +45,8 @@ function Ed({ value, onChange, capture, className = "", placeholder }) {
 }
 
 export default function PersonnelOrder({ company, target, myName, isSelf }) {
+  const hrOpt = useHrOptions(company);
+  const positionsForTeam = hrOpt.positionsFor; const TEAM_OPTIONS = hrOpt.teams;
   const staff = useCompanyStaff(company);
   const cur = { position: target?.position || "", team: target?.team && target.team !== "미배정" ? target.team : "", role: target?.role || "user" };
   const [next, setNext] = React.useState(cur);
@@ -108,7 +110,7 @@ export default function PersonnelOrder({ company, target, myName, isSelf }) {
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       const canvas = await html2canvas(paperRef.current, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
       setCapture(false);
-      const image = await compressImage(canvas.toDataURL("image/jpeg", 0.9), 1400, 0.85);
+      const image = await compressImage(canvas.toDataURL("image/jpeg", 0.92), 1800, 0.88); // 공지에 크게 올라가도 선명하게
 
       const title = `${korDate(date)} 인사발령`;
       const text = `${fv("lead")}\n\n· 발령구분: ${fv("type")}\n· 대상: ${fv("name")}\n· 발령: ${fv("fromTeam")} ${fv("fromPos")} → ${fv("toTeam")} ${fv("toPos")} (${fv("toRole")})\n· 시행일: ${fv("effective")}${fv("note") ? `\n· 비고: ${fv("note")}` : ""}`;

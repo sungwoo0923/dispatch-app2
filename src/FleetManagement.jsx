@@ -6508,7 +6508,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
             ["temperature", "온도 관제", "TEMP", <><path d="M14 14.8V4a2 2 0 0 0-4 0v10.8a4 4 0 1 0 4 0Z" /></>],
             ["cargo-camera", "적재함 카메라", "CAM", <><rect x="2" y="7" width="14" height="11" rx="2" /><path d="m16 11 6-3v9l-6-3" /></>],
             ["vehicle", "차량 관리", "CARE", <><rect x="1" y="6" width="14" height="10" rx="1.5" /><path d="M15 10h4l3 3v3h-7z" /><circle cx="6" cy="18" r="1.8" /><circle cx="18" cy="18" r="1.8" /></>],
-            ["penalty", "과태료·사고 서류", "DOC", <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 13h6M9 17h4" /></>],
+            // ⭐ 2026-10-31 과태료·사고 서류는 기사관리 › 서류관리로 옮겼다(화면은 forceTab="penalty"로 그대로 씀)
             ["registration", "기사 등록 관리", "REG", <><circle cx="10" cy="8" r="4" /><path d="M3 20c0-4 3-7 7-7M17 14v6M14 17h6" /></>],
           ].map(([key, label, code, icon]) => {
             const on = mainTab === key;

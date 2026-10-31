@@ -23,7 +23,7 @@ import {
 import { setDoc, updateDoc } from "./orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { ref as storageRef, uploadBytes, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
-import { TEAM_OPTIONS, EMPLOYMENT_STATUS_OPTIONS, positionsForTeam, suggestRole, ROLE_NAME, isExecProfile } from "./hrConstants";
+import { EMPLOYMENT_STATUS_OPTIONS, suggestRole, ROLE_NAME, isExecProfile, useHrOptions } from "./hrConstants";
 import { CustomSelect } from "./CustomSelect";
 import RolePermissionsPanel from "./RolePermissionsPanel";
 import { AdminSessionsPanel } from "./LoginManager";
@@ -242,6 +242,9 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const meDoc = users.find((u) => u.id === me?.uid);
   const isCompanyMaster = !isTotalMaster && meDoc?.isMaster === true && meDoc?.role !== "shipper" && meDoc?.role !== "driver";
   const canAdmin = isTotalMaster || isCompanyMaster;
+  const hrOpt = useHrOptions(effectiveCompany);
+  const positionsForTeam = hrOpt.positionsFor;
+  const TEAM_OPTIONS = hrOpt.teams;
   // ⭐ 2026-10-31 가입 승인은 관리자·경리·인사관리자부터 — 인사관리자는 인사권(승인 후 정보·권한 변경·퇴사)까지
   const myRoleEff = meDoc?.role || myRole || parentRole;
   const isHrMgr = !canAdmin && myRoleEff === "hrManager";
@@ -1074,7 +1077,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                       {memberModal && canEditMember(u) && canManage && (
                         <MemberManageModal
                           u={u} me={me} isTotalMaster={isTotalMaster} roles={assignableRoles(u.role)} roleLabels={roleLabels}
-                          canMaster={canAdmin} canAccount={canAdmin || isHrMgr} canDelete={canAdmin}
+                          canMaster={canAdmin} canAccount={canAdmin || isHrMgr} canDelete={canAdmin} hrOpt={hrOpt}
                           f={{ editName, setEditName, editPhone, setEditPhone, editRole, setEditRole, editCompany, setEditCompany, editPosition, setEditPosition: onPositionChange, editTeam, setEditTeam: onTeamChange }}
                           onClose={() => { setMemberModal(false); setEditMode(false); }}
                           onSave={async () => { await saveEdit(); setMemberModal(false); }}
@@ -1987,7 +1990,8 @@ const LANDING_FONT_OPTIONS = [
 ];
 
 // 👤 회원 관리 창 — 버튼 하나로 열고, 그 안에서 승인·거절·정보수정·마스터·퇴사·삭제(모두 확인창)
-function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose, onSave, onApprove, onUnapprove, onReject, onMaster, onResign, onDelete, canMaster = true, canAccount = true, canDelete = true }) {
+function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose, onSave, onApprove, onUnapprove, onReject, onMaster, onResign, onDelete, canMaster = true, canAccount = true, canDelete = true, hrOpt }) {
+  const positionsForTeam = hrOpt.positionsFor; const TEAM_OPTIONS = hrOpt.teams;
   const [busy, setBusy] = useState(false);
   const pending = !u.approved && u.employmentStatus !== "퇴사";
   const resigned = u.employmentStatus === "퇴사";

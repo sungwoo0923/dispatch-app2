@@ -85,7 +85,19 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
         </div>
         <div className="px-4 sm:px-8 py-6 sm:py-7 space-y-5">
           <div className="text-[15.5px] text-[#1F2A44] leading-[1.95] whitespace-pre-wrap break-words">{cur.content}</div>
-          {cur.image && <img src={cur.image} alt="" className="max-w-full max-h-[640px] rounded-xl border border-[#E3E8F0]" />}
+          {/* ⭐ 2026-10-31 공문(인사발령 등) 이미지 — 작게 보이던 문제: 본문 폭 가득(최대 920px), 누르면 원본 크기로 */}
+          {cur.image && (
+            <div className="space-y-2">
+              <button type="button" onClick={() => { const w = window.open(""); if (w) { w.document.write(`<title>${String(cur.title || "공문").replace(/</g, "")}</title><body style="margin:0;background:#0F1A30;display:flex;justify-content:center"><img src="${cur.image}" style="max-width:100%;height:auto"/></body>`); w.document.close(); } }}
+                className="block w-full max-w-[920px] rounded-2xl overflow-hidden border border-[#E3E8F0] shadow-[0_10px_30px_rgba(15,26,48,0.08)] hover:shadow-[0_14px_36px_rgba(15,26,48,0.14)] transition">
+                <img src={cur.image} alt="" className="w-full h-auto block" />
+              </button>
+              <div className="flex gap-2">
+                <a href={cur.image} download={`${String(cur.title || "공문").replace(/[\\/:*?"<>|]/g, "")}.jpg`} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B] inline-flex items-center">⬇ 이미지 저장</a>
+                <span className="text-[12px] text-[#9AA9C3] self-center">이미지를 누르면 원본 크기로 볼 수 있습니다</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );

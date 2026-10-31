@@ -12,13 +12,14 @@ import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, C
 import { db, DEFAULT_COMPANY } from "./firebase";
 import { ShellIcon } from "./AdminShell";
 import KpSubNav from "./KpSubNav";
-import ApprovalCenter, { myTurn, useApprovalCounts } from "./Approval";
+import ApprovalCenter, { myTurn, useApprovalCounts, useApprovalSettings, setAutoApproveDaily } from "./Approval";
 import HandoverCenter, { useHandoverUnread } from "./HandoverCenter";
 import { buildPastStats } from "./HomeDeck";
 import { pcLiveWindowStart, pcPrevDay } from "./orderHistory";
 import { isTMUser } from "./staffFilter";
 import { personName } from "./userNames";
 import { useCompanyDriverDocs, docProblems } from "./driverRequiredDocs";
+import { useFundsSummary, isCeoPosition } from "./FundsBoard";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const GOLD = "#D7BC82";
@@ -186,6 +187,10 @@ function Ring({ value, size = 64, label }) {
 // ─────────────────────────── 경영 브리핑 ───────────────────────────
 export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liveStart, me = {} }) {
   const { days, clients, ready } = useYearDays({ company, dispatchData, pastCache, liveStart });
+  const isCeo = isCeoPosition(me?.position);
+  const apSet = useApprovalSettings(company);
+  const autoDaily = apSet.autoApproveDaily === true;
+  const F = useFundsSummary(company, isCeo);
   const approvals = useApprovalsOf(company);
   const { staff, drivers } = useStaff(company);
   const today = kstToday();
@@ -308,6 +313,17 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
           ))}
         </div>
 
+        {/* ── 💰 자금(대표만) ── */}
+        {isCeo && (
+          <button type="button" onClick={() => onGo?.("자금현황")} className="w-full text-left rounded-[22px] border border-[#D7BC82]/30 px-4 md:px-6 py-4 flex flex-wrap items-center gap-x-8 gap-y-3" style={{ background: "linear-gradient(120deg, rgba(215,188,130,.12), rgba(255,255,255,.03))" }}>
+            <span className="min-w-[140px]"><span className="block text-[11px] font-extrabold tracking-[0.28em]" style={{ fontFamily: MONO, color: GOLD }}>TREASURY · 자금</span><span className="block text-[13px] text-white/55 mt-0.5">{F.has ? "통장·현금 잔액(경리 입력 기준)" : "경리가 자금 상태를 입력하면 보입니다"}</span></span>
+            {[["보유 자금", F.has ? `${short(F.cash)}원` : "—"], ["이번 달 순현금흐름", F.has ? `${F.thisMonth.in - F.thisMonth.out >= 0 ? "+" : ""}${short(F.thisMonth.in - F.thisMonth.out)}원` : "—"], ["운영 가능 기간", F.runway != null && F.has ? `${F.runway.toFixed(1)}개월` : "—"], ["대출 잔액", F.has ? `${short(F.loan)}원` : "—"]].map(([l, v]) => (
+              <span key={l}><span className="block text-[12.5px] font-bold text-white/55">{l}</span><span className="block text-[24px] md:text-[28px] font-black tabular-nums leading-tight" style={{ fontFamily: MONO }}>{v}</span></span>
+            ))}
+            <span className="ml-auto text-[14px] font-black text-white/60">자세히 ›</span>
+          </button>
+        )}
+
         {/* ── 매출 추이 · 나의 결재 ── */}
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-3 md:gap-4">
           <Panel en={`PERFORMANCE · ${thisMonth.slice(0, 4)}`} title={range === "year" ? "월별 매출 · 이익 · 이익률" : "최근 30일 매출 · 이익"}
@@ -347,6 +363,14 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
 
           <Panel en="APPROVAL · YOUR TURN" title="나의 결재 대기"
             right={<button type="button" onClick={() => onGo?.("결재함")} className="h-8 px-3 rounded-[10px] border border-white/15 text-[13.5px] font-black text-white/85 whitespace-nowrap hover:bg-white/10">결재함 ›</button>}>
+            {/* 🤖 일일 업무일지 자동 승인 — 켜면 상신과 동시에 승인, 끄면 임원이 직접 확인 */}
+            <button type="button" onClick={() => setAutoApproveDaily(company, !autoDaily, personName(me) || "")}
+              className={`w-full mb-3 rounded-2xl px-3.5 py-2.5 flex items-center gap-3 border text-left transition ${autoDaily ? "border-[#D7BC82]/50 bg-[#D7BC82]/[0.10]" : "border-white/10 bg-white/[0.04]"}`}>
+              <span className="min-w-0 flex-1"><span className="block text-[14px] font-black">일일 업무일지 자동 승인</span><span className="block text-[12.5px] text-white/50">{autoDaily ? "켜짐 — 올라오는 즉시 승인 처리됩니다" : "꺼짐 — 임원이 직접 확인하고 승인합니다"}</span></span>
+              <span className={`relative w-[52px] h-[30px] rounded-full shrink-0 transition ${autoDaily ? "" : "bg-white/15"}`} style={autoDaily ? { background: "linear-gradient(180deg,#F3E3BC,#D7BC82)" } : undefined}>
+                <span className={`absolute top-[3px] w-6 h-6 rounded-full bg-white shadow transition-all ${autoDaily ? "left-[25px]" : "left-[3px]"}`} />
+              </span>
+            </button>
             <div className="flex items-end gap-3 mb-2">
               <span className="text-[44px] font-black leading-none tabular-nums" style={{ fontFamily: MONO, color: mine.length ? "#fff" : "rgba(255,255,255,.35)" }}>{mine.length}</span>
               <span className="text-[13.5px] font-bold text-white/50 pb-1">건 · 회사 진행 중 {pendingAll.length}건{late.length ? ` · 지연 ${late.length}` : ""}</span>
@@ -642,5 +666,143 @@ export function ApprovalWorkspace({ company, me }) {
         ? <HandoverCenter company={company} me={me} isViewer={me?.role === "viewer"} />
         : <ApprovalCenter company={company} me={me} page={page} setPage={setPage} />}
     </KpSubNav>
+  );
+}
+
+// ─────────────────────────── 임원 스케줄(2026-10-31) ───────────────────────────
+// 임원(대표·전무·이사)이 각자 일정을 올리면 모든 직원이 볼 수 있다(홈 › 임원 일정 · 모바일 사내 업무).
+//  execSchedules: { companyName, uid, name, position, title, kind, date, endDate, start, end, place, memo, createdAt }
+export const EXEC_KINDS = ["회의", "미팅", "외근", "출장", "행사", "휴가", "기타"];
+const KIND_DOT = { 회의: "#8FB0F0", 미팅: "#D7BC82", 외근: "#9FE3C4", 출장: "#F1DFB4", 행사: "#CFE0FF", 휴가: "#FFB4A8", 기타: "#AFC6F5" };
+export function useExecSchedules(company) {
+  return useCompanyQuery("execSchedules", company) || [];
+}
+const daysOf = (e) => { const out = []; for (let x = e.date, i = 0; x && x <= (e.endDate || e.date) && i < 40; x = addDay(x, 1), i += 1) out.push(x); return out; };
+export function ExecScheduleBoard({ company, me = {}, canWrite = false }) {
+  const list = useExecSchedules(company);
+  const today = kstToday();
+  const [ym, setYm] = React.useState(today.slice(0, 7));
+  const [pick, setPick] = React.useState(today);
+  const [who, setWho] = React.useState("전체");
+  const [edit, setEdit] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const people = ["전체", ...Array.from(new Set(list.map((e) => e.name).filter(Boolean)))];
+  const shown = list.filter((e) => who === "전체" || e.name === who);
+  const by = {}; shown.forEach((e) => daysOf(e).forEach((d) => { (by[d] = by[d] || []).push(e); }));
+  Object.values(by).forEach((l) => l.sort((a, b) => String(a.start || "").localeCompare(String(b.start || ""))));
+  const first = new Date(`${ym}-01T00:00:00Z`); const startDow = first.getUTCDay();
+  const dim = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+  const cells = Array.from({ length: Math.ceil((startDow + dim) / 7) * 7 }, (_, i) => { const n = i - startDow + 1; return n >= 1 && n <= dim ? `${ym}-${String(n).padStart(2, "0")}` : null; });
+  const move = (n) => { const d = new Date(`${ym}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + n); setYm(d.toISOString().slice(0, 7)); };
+  const upcoming = shown.filter((e) => (e.endDate || e.date) >= today).sort((a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || ""))).slice(0, 8);
+  const blank = (d) => ({ title: "", kind: "회의", date: d || pick, endDate: d || pick, start: "10:00", end: "11:00", place: "", memo: "" });
+  const save = async () => {
+    const e = edit; if (!e.title.trim()) return alert("일정 제목을 입력해 주세요.");
+    setBusy(true);
+    try {
+      const data = { companyName: company, title: e.title.trim(), kind: e.kind, date: e.date, endDate: e.endDate && e.endDate >= e.date ? e.endDate : e.date, start: e.start || "", end: e.end || "", place: e.place.trim(), memo: e.memo.trim() };
+      const { doc: fdoc, addDoc, updateDoc, serverTimestamp } = await import("firebase/firestore");
+      if (e.id) await updateDoc(fdoc(db, "execSchedules", e.id), { ...data, updatedAt: serverTimestamp() });
+      else await addDoc(collection(db, "execSchedules"), { ...data, uid: me.uid || "", name: me.name || "", position: me.position || "", createdAt: serverTimestamp() });
+      setEdit(null);
+    } finally { setBusy(false); }
+  };
+  const remove = async (e) => { if (!window.confirm("이 일정을 지울까요?")) return; const { doc: fdoc, deleteDoc } = await import("firebase/firestore"); await deleteDoc(fdoc(db, "execSchedules", e.id)); setEdit(null); };
+  const dayList = by[pick] || [];
+  const inpD = "h-12 w-full px-3.5 rounded-xl bg-white/[0.06] border border-white/15 text-white text-[15px] font-bold outline-none focus:border-[#D7BC82] placeholder:text-white/30 [color-scheme:dark]";
+  return (
+    <div className="relative rounded-[26px] overflow-hidden text-white" style={{ background: SHELL_BG }}>
+      <div className="absolute inset-0 pointer-events-none" style={{ background: GRID }} />
+      <div className="relative p-3 md:p-6 space-y-4">
+        <div className="flex items-end justify-between gap-3 flex-wrap">
+          <div>
+            <div className="text-[11px] font-extrabold tracking-[0.32em]" style={{ fontFamily: MONO, color: GOLD }}>EXECUTIVE · SCHEDULE</div>
+            <div className="text-[24px] md:text-[30px] font-black mt-1">임원 스케줄</div>
+            <div className="text-[13.5px] text-white/55 mt-0.5">{canWrite ? "등록한 일정은 모든 직원이 볼 수 있습니다" : "대표·임원의 회의·외근·출장 일정입니다"}</div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button type="button" onClick={() => move(-1)} className="w-10 h-10 rounded-xl bg-white/10 border border-white/10 font-black">‹</button>
+            <span className="h-10 px-4 rounded-xl bg-white text-[#0B1530] font-black grid place-items-center tabular-nums text-[15px]" style={{ fontFamily: MONO }}>{ym.replace("-", ".")}</span>
+            <button type="button" onClick={() => move(1)} className="w-10 h-10 rounded-xl bg-white/10 border border-white/10 font-black">›</button>
+            {canWrite && <button type="button" onClick={() => setEdit(blank())} className="h-10 px-4 rounded-xl text-[#1A1405] text-[14px] font-black ml-1" style={{ background: "linear-gradient(180deg,#F3E3BC,#D7BC82)" }}>+ 일정 등록</button>}
+          </div>
+        </div>
+        <div className="flex gap-1.5 overflow-x-auto pb-1">
+          {people.map((p) => <button key={p} type="button" onClick={() => setWho(p)} className={`h-9 px-3.5 rounded-full text-[13px] font-black whitespace-nowrap shrink-0 border ${who === p ? "text-[#1A1405] border-transparent" : "text-white/70 border-white/15 bg-white/[0.04]"}`} style={who === p ? { background: "linear-gradient(180deg,#F3E3BC,#D7BC82)" } : undefined}>{p}</button>)}
+        </div>
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-4">
+          <div className="rounded-[22px] border border-white/[0.08] bg-white/[0.03] overflow-hidden">
+            <div className="grid grid-cols-7 border-b border-white/[0.08]">{DOW.map((d, i) => <div key={d} className={`py-2.5 text-center text-[13px] font-black ${i === 0 ? "text-[#FFB4A8]" : i === 6 ? "text-[#AFC6F5]" : "text-white/55"}`}>{d}</div>)}</div>
+            <div className="grid grid-cols-7">
+              {cells.map((d, i) => {
+                const l = d ? by[d] || [] : [];
+                return (
+                  <button key={i} type="button" disabled={!d} onClick={() => d && setPick(d)} onDoubleClick={() => d && canWrite && setEdit(blank(d))}
+                    className={`text-left min-h-[70px] md:min-h-[112px] p-1 md:p-2 border-b border-r border-white/[0.06] ${!d ? "bg-black/10" : pick === d ? "bg-[#D7BC82]/[0.10] ring-1 ring-inset ring-[#D7BC82]/60" : "hover:bg-white/[0.04]"}`}>
+                    {d && (
+                      <>
+                        <div className={`text-[13px] md:text-[14px] font-black tabular-nums ${d === today ? "w-7 h-7 rounded-full grid place-items-center text-[#1A1405]" : i % 7 === 0 ? "text-[#FFB4A8]" : i % 7 === 6 ? "text-[#AFC6F5]" : "text-white/85"}`} style={{ fontFamily: MONO, ...(d === today ? { background: GOLD } : {}) }}>{Number(d.slice(8))}</div>
+                        <div className="hidden md:block mt-1 space-y-1">
+                          {l.slice(0, 3).map((e) => <div key={`${e.id}${d}`} className="rounded-md px-1.5 py-[2px] text-[11.5px] font-bold truncate bg-white/[0.08] border-l-2" style={{ borderColor: KIND_DOT[e.kind] || GOLD }}>{e.start ? `${e.start} ` : ""}{e.name} · {e.title}</div>)}
+                          {l.length > 3 && <div className="text-[11px] text-white/50 px-1">+{l.length - 3}</div>}
+                        </div>
+                        {l.length > 0 && <div className="md:hidden mt-1 flex gap-0.5 flex-wrap">{l.slice(0, 4).map((e) => <span key={`${e.id}${d}`} className="w-1.5 h-1.5 rounded-full" style={{ background: KIND_DOT[e.kind] || GOLD }} />)}</div>}
+                      </>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="space-y-4">
+            <Panel en="DAY DETAIL" title={`${pick.replace(/-/g, ".")} (${DOW[new Date(`${pick}T00:00:00Z`).getUTCDay()]})`}>
+              {!dayList.length ? <div className="py-6 text-center text-[14px] font-bold text-white/40">일정이 없습니다{canWrite ? " · 날짜를 두 번 누르면 등록" : ""}</div> : dayList.map((e) => (
+                <button key={e.id} type="button" disabled={!canWrite} onClick={() => setEdit({ ...blank(), ...e })} className="w-full text-left rounded-2xl bg-white/[0.05] border border-white/[0.08] px-3.5 py-3 mb-2 enabled:hover:bg-white/[0.09]">
+                  <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full" style={{ background: KIND_DOT[e.kind] || GOLD }} /><span className="text-[12px] font-black text-white/60">{e.kind}</span><span className="ml-auto text-[13px] font-black tabular-nums text-white/80" style={{ fontFamily: MONO }}>{e.start}{e.end ? `–${e.end}` : ""}</span></div>
+                  <div className="text-[16px] font-black mt-1">{e.title}</div>
+                  <div className="text-[13px] text-white/55 mt-0.5">{[`${e.name} ${e.position || ""}`.trim(), e.place].filter(Boolean).join(" · ")}</div>
+                  {e.memo && <div className="text-[12.5px] text-white/45 mt-1">{e.memo}</div>}
+                </button>
+              ))}
+            </Panel>
+            <Panel en="UPCOMING" title="다가오는 일정">
+              {!upcoming.length ? <div className="py-4 text-[14px] font-bold text-white/40">예정된 일정이 없습니다</div> : upcoming.map((e) => (
+                <div key={e.id} className="flex items-center gap-3 py-2 border-b border-white/[0.06] last:border-b-0">
+                  <span className="w-12 shrink-0 text-center"><span className="block text-[11px] font-black text-white/45">{DOW[new Date(`${e.date}T00:00:00Z`).getUTCDay()]}</span><span className="block text-[17px] font-black tabular-nums" style={{ fontFamily: MONO }}>{e.date.slice(5).replace("-", ".")}</span></span>
+                  <span className="min-w-0 flex-1"><span className="block text-[14.5px] font-black truncate">{e.title}</span><span className="block text-[12.5px] text-white/50 truncate">{e.name} · {e.kind}{e.start ? ` · ${e.start}` : ""}</span></span>
+                </div>
+              ))}
+            </Panel>
+          </div>
+        </div>
+      </div>
+      {edit && (
+        <div className="fixed inset-0 z-[100000] bg-black/55 flex justify-end" onClick={() => setEdit(null)}>
+          <div className="h-full w-full md:w-[560px] flex flex-col text-white shadow-[-24px_0_60px_rgba(0,0,0,0.5)]" style={{ background: SHELL_BG }} onClick={(ev) => ev.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-white/10 flex items-center gap-3">
+              <div className="flex-1"><div className="text-[11px] font-extrabold tracking-[0.3em]" style={{ fontFamily: MONO, color: GOLD }}>{edit.id ? "EDIT SCHEDULE" : "NEW SCHEDULE"}</div><div className="text-[22px] font-black">{edit.id ? "일정 수정" : "일정 등록"}</div></div>
+              <button type="button" onClick={() => setEdit(null)} className="w-10 h-10 rounded-xl bg-white/10">✕</button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              <div><div className="text-[13px] font-black text-white/70 mb-1.5">제목</div><input value={edit.title} onChange={(e) => setEdit((p) => ({ ...p, title: e.target.value }))} className={inpD} placeholder="예: ○○물류 대표 미팅" /></div>
+              <div><div className="text-[13px] font-black text-white/70 mb-1.5">구분</div><div className="flex flex-wrap gap-1.5">{EXEC_KINDS.map((k) => <button key={k} type="button" onClick={() => setEdit((p) => ({ ...p, kind: k }))} className={`h-10 px-4 rounded-full text-[14px] font-black border ${edit.kind === k ? "text-[#1A1405] border-transparent" : "text-white/70 border-white/15"}`} style={edit.kind === k ? { background: "linear-gradient(180deg,#F3E3BC,#D7BC82)" } : undefined}>{k}</button>)}</div></div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><div className="text-[13px] font-black text-white/70 mb-1.5">시작일</div><input type="date" value={edit.date} onChange={(e) => setEdit((p) => ({ ...p, date: e.target.value, endDate: p.endDate < e.target.value ? e.target.value : p.endDate }))} className={inpD} /></div>
+                <div><div className="text-[13px] font-black text-white/70 mb-1.5">종료일</div><input type="date" value={edit.endDate} onChange={(e) => setEdit((p) => ({ ...p, endDate: e.target.value }))} className={inpD} /></div>
+                <div><div className="text-[13px] font-black text-white/70 mb-1.5">시작 시각</div><input type="time" value={edit.start} onChange={(e) => setEdit((p) => ({ ...p, start: e.target.value }))} className={inpD} /></div>
+                <div><div className="text-[13px] font-black text-white/70 mb-1.5">종료 시각</div><input type="time" value={edit.end} onChange={(e) => setEdit((p) => ({ ...p, end: e.target.value }))} className={inpD} /></div>
+              </div>
+              <div><div className="text-[13px] font-black text-white/70 mb-1.5">장소</div><input value={edit.place} onChange={(e) => setEdit((p) => ({ ...p, place: e.target.value }))} className={inpD} placeholder="예: 본사 2층 회의실" /></div>
+              <div><div className="text-[13px] font-black text-white/70 mb-1.5">메모</div><textarea value={edit.memo} onChange={(e) => setEdit((p) => ({ ...p, memo: e.target.value }))} rows={4} className={`${inpD} h-auto py-3`} placeholder="참석자·준비 사항 등" /></div>
+            </div>
+            <div className="px-6 py-4 border-t border-white/10 flex gap-2" style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 16px)" }}>
+              {edit.id && <button type="button" onClick={() => remove(edit)} className="h-12 px-4 rounded-xl border border-white/15 text-[14px] font-bold text-[#FFB4A8]">삭제</button>}
+              <button type="button" onClick={() => setEdit(null)} className="h-12 px-5 rounded-xl border border-white/15 text-[14px] font-bold text-white/80">취소</button>
+              <button type="button" disabled={busy} onClick={save} className="flex-1 h-12 rounded-xl text-[#1A1405] text-[15px] font-black disabled:opacity-50" style={{ background: "linear-gradient(180deg,#F3E3BC,#D7BC82)" }}>{busy ? "저장 중…" : "저장 · 전 직원 공개"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

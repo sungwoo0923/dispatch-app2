@@ -1,5 +1,7 @@
 import NoticeBoard from "./NoticeBoard";
 import DeptDashboard from "./DeptDashboard";
+import { ExecScheduleBoard } from "./ExecSuite";
+import { CompanyRules } from "./HrHub";
 import React, { useMemo, useState, useRef, useEffect } from "react";
 import MasterChecklist from "./MasterChecklist";
 import { homeItemFeature, openPlanLock, planIncludes, usePlan } from "./plans";
@@ -882,6 +884,9 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         { label: "사내 게시판", items: [
           { key: "공지사항", label: "공지사항", en: "NOTICE", icon: "bell", badge: isBoardNew("공지사항") ? "N" : 0, badgeTitle: "새 글" },
           ...Object.entries(BOARDS).filter(([b]) => canSeeBoard(b, meHome)).map(([b, B]) => ({ key: `board:${b}`, label: B.label, en: B.en, icon: B.icon, badge: isBoardNew(`board:${b}`) ? "N" : 0, badgeTitle: "새 글" })),
+          // ⭐ 2026-10-31 임원 일정(모든 직원 열람) · 사내 규정(취업규칙 등)
+          { key: "execsched", label: "임원 일정", en: "EXECUTIVE", icon: "pin" },
+          { key: "rules", label: "사내 규정", en: "RULES", icon: "list" },
         ] },
         { label: "전자결재", items: [
           { key: "ap:inbox", label: "결재함", en: "INBOX", icon: "stamp", badge: apCounts.todo, badgeTitle: "내 결재 차례" },
@@ -950,6 +955,8 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       {boardTab === "ap:handover" && <HandoverCenter company={getViewCompany()} me={meHome} isViewer={isViewer} />}
       {String(boardTab).startsWith("ap:") && boardTab !== "ap:contract" && boardTab !== "ap:handover" && <ApprovalCenter company={getViewCompany()} me={meHome} page={boardTab.slice(3)} setPage={(p) => setBoardTab(`ap:${p}`)} openId={apOpenId} onOpened={() => setApOpenId(null)} />}
       {String(boardTab).startsWith("board:") && <BoardPage company={getViewCompany()} me={meHome} board={boardTab.slice(6)} />}
+      {boardTab === "execsched" && <ExecScheduleBoard company={getViewCompany()} me={meHome} canWrite={dept === "exec"} />}
+      {boardTab === "rules" && <CompanyRules company={getViewCompany()} canEdit={role === "hrManager" || role === "totalMaster"} />}
 
       {/* ===== 사내 게시판(왼쪽 사이드바에서 고름) — 2026-10-28 디지털 리디자인 ===== */}
       {boardTab === "공지사항" && noticeOpen && (

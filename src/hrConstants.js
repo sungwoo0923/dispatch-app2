@@ -1,3 +1,6 @@
+import React from "react";
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from "./firebase";
 // 인사관리부 / 회원관리 공용 상수 — 직책, 팀 구분
 // ⭐ 2026-10-31 임원 부서 — 부서를 "임원"으로 고르면 직책은 대표·전무·이사만. 임원은 로그인하면 임원 화면(경영 브리핑)으로.
 export const EXEC_TEAM = "임원";
@@ -40,3 +43,20 @@ export const TEAM_BADGE_CLASS = "bg-[#1B2B4B]/5 text-[#1B2B4B] border-[#1B2B4B]/
 export const TEAM_BADGE_CLASS_UNASSIGNED = "bg-gray-100 text-gray-400 border-gray-200";
 
 export const EMPLOYMENT_STATUS_OPTIONS = ["재직", "휴직", "퇴사"];
+
+// ⚙ 회사별 직책·부서(2026-10-31) — 인사관리부 › 직책·부서 설정에서 추가·숨김. hrSettings/{회사} { teams, positions, execPositions, hiddenTeams, hiddenPositions }
+export function useHrOptions(company) {
+  const [cfg, setCfg] = React.useState({});
+  React.useEffect(() => {
+    if (!company) return undefined;
+    return onSnapshot(doc(db, "hrSettings", company), (d) => setCfg(d.exists() ? d.data() : {}), () => setCfg({}));
+  }, [company]);
+  return React.useMemo(() => {
+    const hideT = new Set(cfg.hiddenTeams || []); const hideP = new Set(cfg.hiddenPositions || []);
+    const teams = [...TEAM_OPTIONS, ...(cfg.teams || [])].filter((t, i, a) => a.indexOf(t) === i && (t === EXEC_TEAM || !hideT.has(t)));
+    const exec = [...EXEC_POSITION_OPTIONS, ...(cfg.execPositions || [])].filter((t, i, a) => a.indexOf(t) === i && !hideP.has(t));
+    const normal = [...POSITION_OPTIONS, ...(cfg.positions || [])].filter((t, i, a) => a.indexOf(t) === i && !hideP.has(t));
+    const positionsFor = (team) => (team === EXEC_TEAM ? exec : team ? normal : [...exec, ...normal]);
+    return { teams, exec, normal, positionsFor, cfg };
+  }, [cfg]);
+}

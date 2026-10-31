@@ -239,11 +239,21 @@ export default function ContractStudio({ company = "", me = {} }) {
           <div className="text-[24px] font-black mt-0.5">계약서</div>
           <div className="text-[14px] text-white/60 mt-0.5">유형을 고르면 조항이 자동으로 셋팅됩니다 · 모든 조항은 자유롭게 고칠 수 있어요 · 이미지·PDF 저장</div>
         </div>
-        <div className="inline-flex p-1 rounded-2xl bg-white/10 border border-white/15 gap-1 flex-wrap">
-          {[["driver", "운송계약서"], ["labor", "근로계약서"], ["client", "거래처 운송계약서"], ["free", "자율양식 계약서"], ["box", `보관함 ${docs.length}`]].map(([k, l]) => (
-            <button key={k} type="button" onClick={() => setTab(k)} className={`h-10 px-4 rounded-xl text-[14px] font-black whitespace-nowrap ${tab === k ? "bg-white text-[#0F1A30]" : "text-white/80 hover:bg-white/10"}`}>{l}</button>
-          ))}
-        </div>
+      </div>
+
+      {/* ⭐ 2026-10-31 계약서 종류 — 오른쪽 끝 버튼 대신 왼쪽 입력칸 맨 위에 드롭다운으로(시야에 바로 들어오게) */}
+      <div className="w-full max-w-[560px]">
+        <label className="block">
+          <span className="block text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7] mb-1.5" style={{ fontFamily: MONO }}>CONTRACT TYPE · 계약서 종류</span>
+          <span className="relative block">
+            <select value={tab} onChange={(e) => setTab(e.target.value)}
+              className="appearance-none w-full h-[52px] pl-12 pr-11 rounded-2xl border-2 border-[#1B2B4B] bg-white text-[16px] font-black text-[#0F1A30] outline-none shadow-[0_6px_18px_rgba(15,26,48,0.10)] focus:ring-4 focus:ring-[#2D4C82]/15 cursor-pointer">
+              {[["driver", "운송계약서 (지입·직영·임대)"], ["labor", "근로계약서"], ["client", "거래처 운송계약서"], ["free", "자율양식 계약서"], ["box", `계약서 보관함 · ${docs.length}건`]].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-xl bg-[#0F1A30] text-white grid place-items-center text-[14px]">{tab === "box" ? "▤" : "✎"}</span>
+            <svg className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[#1B2B4B]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+          </span>
+        </label>
       </div>
 
       {tab === "box" ? (
