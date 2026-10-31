@@ -913,7 +913,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
       </div>
 
       {pageMode === "노선별" && (
-      <div className="grid grid-cols-[360px_1fr] gap-5 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-[360px_1fr] gap-4 md:gap-5 items-start">
 
         {/* ── 왼쪽: 노선 조건 ── */}
         <div className="bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] overflow-hidden">
@@ -1185,7 +1185,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
       )}
 
       {pageMode === "다목적지" && (
-        <div className="grid grid-cols-[300px_1fr] gap-5 items-start">
+        <div className="grid grid-cols-1 md:grid-cols-[300px_1fr] gap-4 md:gap-5 items-start">
           {/* 왼쪽: 저장된 단가표 목록 */}
           <div className="bg-white rounded-[20px] border border-[#E3E8F0] overflow-hidden">
             <div className="px-4 pt-4 pb-3 border-b border-[#EEF1F6]">
