@@ -9,7 +9,7 @@ import { kpConfirm } from "./kpDialog";
 import html2canvas from "html2canvas";
 import { db, auth } from "./firebase";
 import { addDoc, collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
-import { POSITION_OPTIONS, TEAM_OPTIONS } from "./hrConstants";
+import { TEAM_OPTIONS, positionsForTeam, suggestRole } from "./hrConstants";
 import { sendInternalMail, useCompanyStaff, compressImage } from "./InternalMail";
 
 export const HR_ROLE_OPTIONS = [
@@ -18,7 +18,7 @@ export const HR_ROLE_OPTIONS = [
 const roleName = (r) => (HR_ROLE_OPTIONS.find(([k]) => k === r) || [r, r || "-"])[1];
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const korDate = (s) => { const [y, m, d] = String(s || "").split("-").map(Number); return y ? `${y}년 ${m}월 ${d}일` : ""; };
-const RANK = ["인턴", "사원", "주임", "대리", "과장", "차장", "부장", "팀장", "파트장", "이사", "대표이사"];
+const RANK = ["인턴", "사원", "주임", "대리", "과장", "차장", "부장", "팀장", "파트장", "이사", "전무", "대표", "대표이사"];
 
 function autoType(cur, next) {
   const t = [];
@@ -144,15 +144,15 @@ export default function PersonnelOrder({ company, target, myName, isSelf }) {
             <input type="date" value={date} onChange={(e) => { setDate(e.target.value); setDoc_((p) => { const n = { ...p }; delete n.effective; delete n.no; return n; }); }} className={sel} />
           </label>
           <label className="block"><span className="text-[12.5px] font-bold text-[#7A879C]">발령 부서</span>
-            <select value={next.team} onChange={(e) => setNext((p) => ({ ...p, team: e.target.value }))} className={sel}>
+            <select value={next.team} onChange={(e) => { const team = e.target.value; setNext((p) => { const position = positionsForTeam(team).includes(p.position) ? p.position : ""; return { ...p, team, position, role: isSelf || p.role === "totalMaster" ? p.role : suggestRole({ team, position }) }; }); }} className={sel}>
               <option value="">미배정</option>
               {[...new Set([...TEAM_OPTIONS, cur.team].filter(Boolean))].map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </label>
           <label className="block"><span className="text-[12.5px] font-bold text-[#7A879C]">발령 직책</span>
-            <select value={next.position} onChange={(e) => setNext((p) => ({ ...p, position: e.target.value }))} className={sel}>
+            <select value={next.position} onChange={(e) => { const position = e.target.value; setNext((p) => ({ ...p, position, role: isSelf || p.role === "totalMaster" ? p.role : suggestRole({ team: p.team, position }) })); }} className={sel}>
               <option value="">미설정</option>
-              {[...new Set([...POSITION_OPTIONS, cur.position].filter(Boolean))].map((t) => <option key={t} value={t}>{t}</option>)}
+              {[...new Set([...positionsForTeam(next.team), next.position].filter(Boolean))].map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </label>
           <label className="block"><span className="text-[12.5px] font-bold text-[#7A879C]">권한</span>

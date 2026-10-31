@@ -1,4 +1,5 @@
 // src/Signup.jsx  —  운송사 회원가입
+import { EXEC_TEAM, isExecPosition, suggestRole } from "./hrConstants";
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { checkEmailAvailable, warmSignupFunctions } from "./emailCheck";
@@ -47,7 +48,7 @@ async function findCompanies(q, exact = false) {
     .filter((d) => { const n = (d.companyName || "").trim().toLowerCase(); return exact ? n === key : n.includes(key); });
 }
 
-const POSITIONS = ["대표", "이사", "팀장", "과장", "대리", "사원", "기타"];
+const POSITIONS = ["대표", "전무", "이사", "팀장", "과장", "대리", "사원", "기타"];
 
 const SERVICE_TERMS = `제1조 (목적)
 본 약관은 S-Flow 물류 관리 플랫폼(이하 "서비스")의 운송사 회원 이용과 관련하여 권리, 의무 및 책임사항을 규정함을 목적으로 합니다.
@@ -322,9 +323,11 @@ function SignupForm({ signupType, onBack }) {
         name: name.trim(),
         phone: phone.trim(),
         position: position || "",
+        // ⭐ 2026-10-31 대표·전무·이사는 임원 부서로(로그인하면 임원 화면). 기존 회사 합류자는 직책 기준 추천 권한으로 시작
+        team: isExecPosition(position) ? EXEC_TEAM : "",
         hireDate: hireDate || "",
         address: fullAddress,
-        role: "admin",
+        role: signupType === "신규" ? "admin" : suggestRole({ team: isExecPosition(position) ? EXEC_TEAM : "", position }),
         approved: false,
         isMaster: false,
         requestedPlan: signupType === "신규" ? planId : "",

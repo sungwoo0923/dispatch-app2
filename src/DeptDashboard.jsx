@@ -10,6 +10,7 @@ import { ShellIcon } from "./AdminShell";
 import { useFleetDrivers } from "./FleetPayDocs";
 import { useCompanyDriverDocs, docProblems } from "./driverRequiredDocs";
 import { isTMUser } from "./staffFilter";
+import { ExecDashboard } from "./ExecSuite";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const HERO = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
@@ -248,7 +249,8 @@ function HrDashboard({ company, onGo }) {
   );
 }
 
-export default function DeptDashboard({ mode, company, dispatchData, onGo }) {
+export default function DeptDashboard({ mode, company, dispatchData, onGo, pastCache, liveStart, me }) {
+  if (mode === "exec") return <ExecDashboard company={company} dispatchData={dispatchData} onGo={onGo} pastCache={pastCache} liveStart={liveStart} me={me} />;
   if (mode === "acct") return <AcctDashboard company={company} dispatchData={dispatchData} onGo={onGo} />;
   return <HrDashboard company={company} onGo={onGo} />;
 }

@@ -19,6 +19,7 @@ import DeptDashboard from "../DeptDashboard";
 import DriverDocsReview from "../DriverDocsReview";
 import { CashBook, AssetManager } from "../OfficeBooks";
 import { LeaveLedger, OnboardingBoard, CertIssuer } from "../HrTools";
+import { ExecApprovals, TeamSchedule } from "../ExecSuite";
 import { useMyProfile, personName } from "../userNames";
 import MobileFleetView from "./MobileFleetView";
 
@@ -143,7 +144,7 @@ function NoticeView({ company, me }) {
   );
 }
 
-export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], clients = [], places = [], role = "", userCompany = "", me: meIn, loadRange, loadFullHistory, onRegisterBack, initial, onGo }) {
+export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], clients = [], places = [], role = "", userCompany = "", me: meIn, loadRange, loadFullHistory, onRegisterBack, initial, onGo, deptMode }) {
   // ⭐ 이름은 본인 사용자 문서에서(계정 아이디로 적히던 문제)
   const prof = useMyProfile(meIn?.uid);
   const me = React.useMemo(() => (meIn ? { ...meIn, name: personName(prof) || meIn.name, team: prof?.team || meIn.team || "", position: prof?.position || meIn.position || "" } : meIn), [meIn, prof]);
@@ -160,7 +161,11 @@ export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], 
     const isViewer = role === "viewer";
     const wrap = (el) => <div className="px-3 py-3 kp-m-pc">{el}</div>;
     const lazy = (el) => <React.Suspense fallback={<Loading />}><div className="kp-m-pc">{el}</div></React.Suspense>;
-    if (!k) body = wrap(<DeptDashboard mode={role === "hrManager" ? "hr" : "acct"} company={userCompany} dispatchData={dispatchData} onGo={onGo} />);
+    if (!k) body = deptMode === "exec"
+      ? <div className="px-2 py-2"><DeptDashboard mode="exec" company={userCompany} dispatchData={dispatchData} onGo={onGo} me={me} /></div>
+      : wrap(<DeptDashboard mode={deptMode || (role === "hrManager" ? "hr" : "acct")} company={userCompany} dispatchData={dispatchData} onGo={onGo} />);
+    else if (k === "approvals") body = <div className="kp-m-pc kp-m-approval"><ExecApprovals company={userCompany} me={me} /></div>;
+    else if (k === "schedule") body = wrap(<TeamSchedule company={userCompany} />);
     else if (k === "settle") body = lazy(<PcSettleMobile dispatchData={dispatchData} companyName={userCompany} role={role} isViewer={isViewer} />);
     else if (k === "acct") body = lazy(<div className="px-2 py-2"><PcAccounting dispatchData={dispatchData} fixedRows={fixedRows} clients={clients} isViewer={isViewer} /></div>);
     else if (k === "hr") body = lazy(<PcHrPage userCompany={userCompany} role={role} userId={me?.uid || ""} />);
