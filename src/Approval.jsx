@@ -580,7 +580,21 @@ function LeaveCard({ leave, thisDays }) {
 }
 
 // ─────────────────────────── 작성 화면 ───────────────────────────
+// ⚙ 결재 설정(회사별) — 일일 업무일지 자동 승인(임원이 켜고 끈다)
+export function useApprovalSettings(company) {
+  const [s, setS] = React.useState({});
+  React.useEffect(() => {
+    if (!company) return undefined;
+    return onSnapshot(doc(db, "approvalSettings", company), (d) => setS(d.exists() ? d.data() : {}), () => setS({}));
+  }, [company]);
+  return s;
+}
+export async function setAutoApproveDaily(company, on, who = "") {
+  const { setDoc } = await import("firebase/firestore");
+  await setDoc(doc(db, "approvalSettings", company), { companyName: company, autoApproveDaily: !!on, updatedBy: who, updatedAt: serverTimestamp() }, { merge: true });
+}
 function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myDocs = [] }) {
+  const apSettings = useApprovalSettings(company);
   const editId = preset?.editId || null;
   const forms = formsOfCat(cat);
   const [formKey, setFormKey] = React.useState(preset?.form && formOf(preset.form).cat === cat ? preset.form : forms[0].key);
@@ -645,14 +659,19 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
     try {
       const now = new Date();
       const docNo = `${form.code}-${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-      const L = line.map((s, i) => ({ uid: s.uid, name: s.name, position: s.position || "", team: s.team || "", kind: s.kind || "결재", status: i === 0 ? "pending" : "wait", at: 0, comment: "" }));
+      // 🤖 일일 업무일지 자동 승인(임원 설정) — 켜져 있으면 상신과 동시에 결재선 전원 승인 처리
+      const auto = form.key === "daily" && apSettings.autoApproveDaily === true;
+      const L = line.map((s, i) => (auto
+        ? { uid: s.uid, name: s.name, position: s.position || "", team: s.team || "", kind: s.kind || "결재", status: "approved", at: Date.now(), comment: "자동 승인(일일 업무일지)" }
+        : { uid: s.uid, name: s.name, position: s.position || "", team: s.team || "", kind: s.kind || "결재", status: i === 0 ? "pending" : "wait", at: 0, comment: "" }));
       const payload = {
         company, docNo, cat, form: form.key, formLabel: form.label, title: finalTitle,
         summary: form.summary ? form.summary(data) : "", amount: form.amount ? form.amount(data) : 0, days: form.days ? form.days(data) : 0,
         data, images, drafterUid: me.uid, drafter: { uid: me.uid, name: me.name, team: me.team || "", position: me.position || "" },
         line: L, cc, ccUids: cc.map((c) => c.uid), participants: [...new Set([me.uid, ...L.map((s) => s.uid), ...cc.map((c) => c.uid)])],
-        step: 0, status: "pending", createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
-        history: [{ at: Date.now(), uid: me.uid, name: me.name, action: "상신", comment: "" }], redraftOf: preset?.id || null,
+        step: auto ? L.length : 0, status: auto ? "approved" : "pending", createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        history: [{ at: Date.now(), uid: me.uid, name: me.name, action: "상신", comment: "" }, ...(auto ? [{ at: Date.now(), uid: "auto", name: "자동 승인", action: "승인", comment: "임원 설정 — 일일 업무일지 자동 승인" }] : [])], redraftOf: preset?.id || null,
+        ...(auto ? { autoApproved: true } : {}),
       };
       await addDoc(collection(db, "approvals"), payload);
       onDone();
@@ -1020,16 +1039,19 @@ function ListTools({ f, setF, drafters }) {
           </select>
         )}
       </div>
+      {/* ⭐ 2026-10-31 기간 — 빠른 선택 옆에 짧게(날짜칸이 화면 끝까지 길던 문제) */}
+      <div className="flex flex-wrap items-center gap-1.5">
       <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
         {quick.map(([l, a, b]) => (
           <button key={l} type="button" onClick={() => setF({ ...f, from: a, to: b })}
             className={`shrink-0 h-8 px-3 rounded-lg text-[12.5px] font-black border ${on(a, b) ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`}>{l}</button>
         ))}
       </div>
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5 w-full sm:w-[330px] sm:ml-2">
         <CustomDatePicker value={f.from} onChange={(e) => setF({ ...f, from: e.target.value, to: f.to && f.to < e.target.value ? e.target.value : f.to })} className={dp} showIcon placeholder="시작일" />
         <span className="text-[#9AA9C3] font-black">~</span>
         <CustomDatePicker value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} className={dp} showIcon placeholder="종료일" />
+      </div>
       </div>
     </div>
   );

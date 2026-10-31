@@ -4,6 +4,8 @@ import React from "react";
 import { doc, setDoc, getDocs, updateDoc, deleteDoc, query, where, collection, serverTimestamp, onSnapshot } from "firebase/firestore";
 import { db, DEFAULT_COMPANY } from "./firebase";
 import KpSubNav from "./KpSubNav";
+import { Sheet } from "./OfficeBooks";
+import { isExecProfile } from "./hrConstants";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 function Loading() {
@@ -38,6 +40,13 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
   const [users, setUsers] = React.useState(null);
   const [tab, setTab] = React.useState(initialTab);
   const [busy, setBusy] = React.useState("");
+  const [q, setQ] = React.useState("");
+  const [menuOpen, setMenuOpen] = React.useState(null);
+  const [viewResign, setViewResign] = React.useState(null);
+  const [resigns, setResigns] = React.useState([]);
+  const [retire, setRetire] = React.useState({});
+  React.useEffect(() => { if (!company) return undefined; return onSnapshot(query(collection(db, "approvals"), where("company", "==", company)), (s) => setResigns(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((a) => a.form === "resign")), () => setResigns([])); }, [company]);
+  React.useEffect(() => { if (!company) return undefined; return onSnapshot(query(collection(db, "retireCases"), where("companyName", "==", company)), (s) => { const m = {}; s.docs.forEach((d) => { m[d.id] = d.data(); }); setRetire(m); }, () => setRetire({})); }, [company]);
   React.useEffect(() => onSnapshot(collection(db, "users"), (s) => setUsers(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setUsers([])), []);
   const me = (users || []).find((u) => u.id === myUid);
   const isTotal = role === "totalMaster";
@@ -82,15 +91,83 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
     } catch (e) { alert(e.message); } finally { setBusy(""); }
   };
   const changeRole = async (u, r) => {
-    if (!isMaster || r === u.role) return;
+    if (!(isMaster || role === "hrManager") || r === u.role || isExecProfile(u)) return;
     setBusy(u.id);
     try { await setDoc(doc(db, "users", u.id), { role: r }, { merge: true }); } finally { setBusy(""); }
   };
-  const L = lists[tab] || [];
+  const kw = q.trim();
+  const match = (u) => !kw || [u.name, u.email, u.phone, u.team, u.position, u.carNo].some((v) => String(v || "").includes(kw));
+  const L = (lists[tab] || []).filter(match);
   const isDriverTab = tab === "dpending" || tab === "drivers";
+  const canRole = (isMaster || role === "hrManager") && !isViewer;
   const empty = { pending: "승인 대기 중인 직원이 없습니다", staff: "직원이 없습니다", left: "퇴사자가 없습니다", dpending: "가입 신청한 기사님이 없습니다", drivers: "승인된 기사님이 없습니다" }[tab];
+  // 재직 직원 — 팀별로
+  const teamGroups = (() => {
+    const g = {}; L.forEach((u) => { const t = u.team || "미배정"; (g[t] = g[t] || []).push(u); });
+    const order = ["임원", "운영팀", "운송팀", "경리/회계팀", "인사팀", "개발팀", "법무팀"];
+    return Object.entries(g).sort((x, y) => { const a = order.indexOf(x[0]); const c = order.indexOf(y[0]); return (a < 0 ? 99 : a) - (c < 0 ? 99 : c) || x[0].localeCompare(y[0]); })
+      .map(([t, us]) => [t, us.sort((x, y) => String(x.name || "").localeCompare(String(y.name || ""), "ko"))]);
+  })();
+  const resignOf = (uid) => resigns.filter((a) => a.drafterUid === uid).sort((x, y) => (y.createdAt?.seconds || 0) - (x.createdAt?.seconds || 0))[0];
+  const leftGroups = (() => {
+    const g = {}; L.forEach((u) => { const k = String(u.resignedAt || retire[u.id]?.lastDay || "").slice(0, 7) || "날짜 미상"; (g[k] = g[k] || []).push(u); });
+    return Object.entries(g).sort((x, y) => y[0].localeCompare(x[0]));
+  })();
+  const Row = ({ u }) => {
+    const open = menuOpen === u.id;
+    const r = retire[u.id];
+    const rs = resignOf(u.id);
+    return (
+      <div className="relative flex items-center gap-3 px-3.5 md:px-4 py-2.5 hover:bg-[#F8FAFD]">
+        <Avatar name={u.name || u.email} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[14.5px] font-black text-[#0F1A30] truncate">{u.name || "-"}</span>
+            {isDriverTab ? u.carNo && <span className="px-1.5 h-[20px] rounded-md border border-[#0F1A30] text-[#0F1A30] text-[11.5px] font-black grid place-items-center" style={{ fontFamily: MONO }}>{u.carNo}</span>
+              : u.position && <span className="text-[12.5px] font-bold text-[#5B6B85]">{u.position}</span>}
+            {u.isMaster && <span className="px-1.5 h-[18px] rounded-md bg-[#0F1A30] text-white text-[10px] font-black grid place-items-center">마스터</span>}
+            {!isDriverTab && tab !== "left" && <span className="px-1.5 h-[18px] rounded-md bg-[#EEF3FC] text-[#1B2B4B] text-[10.5px] font-black grid place-items-center">{ROLE_LABEL[u.role] || u.role}</span>}
+            {tab === "left" && u.resignType && <span className="px-1.5 h-[18px] rounded-md bg-[#F3F6FA] text-[#5B6B85] text-[10.5px] font-black grid place-items-center">{u.resignType}</span>}
+          </div>
+          <div className="text-[12px] text-[#7A879C] truncate">
+            {isDriverTab ? [u.vehicleType, u.거주지, u.phone].filter(Boolean).join(" · ") : tab === "left" ? [u.team, u.resignedAt && `퇴사 ${u.resignedAt}`, u.phone].filter(Boolean).join(" · ") : [u.email, u.phone].filter(Boolean).join(" · ")}
+          </div>
+        </div>
+        {tab === "left" ? (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className={`h-7 px-2.5 rounded-lg text-[11.5px] font-black grid place-items-center whitespace-nowrap ${r?.steps?.severance?.done ? "bg-[#ECFDF3] text-[#067647]" : r ? "bg-[#FFF4E5] text-[#B54708]" : "bg-[#F3F6FA] text-[#7A879C]"}`}>{r?.steps?.severance?.done ? "퇴직금 지급" : r ? (Number(r.severance) > 0 ? "퇴직금 미지급" : "정산 중") : "정산 전"}</span>
+            <button type="button" disabled={!rs} onClick={() => setViewResign(rs)} className="h-7 px-2.5 rounded-lg border border-[#DCE3EE] text-[11.5px] font-black text-[#1B2B4B] disabled:opacity-35 whitespace-nowrap">사직서</button>
+          </div>
+        ) : !u.approved ? (
+          !isViewer && u.id !== myUid && <div className="flex gap-1.5 shrink-0">
+            <button type="button" disabled={busy === u.id} onClick={() => reject(u)} className="h-8 px-3 rounded-lg text-[12px] font-black border border-[#DCE3EE] text-[#5B6B85] bg-white">거절</button>
+            <button type="button" disabled={busy === u.id} onClick={() => toggleApprove(u)} className="h-8 px-3.5 rounded-lg text-[12px] font-black text-white bg-[#1B2B4B]">승인</button>
+          </div>
+        ) : (!isViewer && u.id !== myUid && (
+          <div className="relative shrink-0">
+            <button type="button" onClick={() => setMenuOpen(open ? null : u.id)} className="w-8 h-8 rounded-lg border border-[#DCE3EE] text-[#5B6B85] font-black">⋯</button>
+            {open && (
+              <div className="absolute right-0 top-9 z-20 w-[210px] rounded-xl bg-white border border-[#E3E8F0] shadow-[0_12px_30px_rgba(15,26,48,0.18)] p-1.5">
+                {!isDriverTab && canRole && !u.isMaster && !isExecProfile(u) && (
+                  <>
+                    <div className="px-2 pt-1 pb-1 text-[10.5px] font-black text-[#9AA9C3]">권한 변경</div>
+                    {["admin", "hrManager", "user", "test", "viewer"].map((rk) => (
+                      <button key={rk} type="button" onClick={() => { setMenuOpen(null); changeRole(u, rk); }} className={`w-full text-left px-2.5 h-8 rounded-lg text-[12.5px] font-bold ${u.role === rk ? "bg-[#EEF3FC] text-[#1B2B4B]" : "text-[#3A4A66] hover:bg-[#F5F8FD]"}`}>{u.role === rk ? "✓ " : ""}{ROLE_LABEL[rk]}</button>
+                    ))}
+                    <div className="h-px bg-[#EEF2F8] my-1" />
+                  </>
+                )}
+                {!isDriverTab && isExecProfile(u) && <div className="px-2.5 py-1.5 text-[11.5px] text-[#7A879C]">임원은 관리자 권한 고정</div>}
+                <button type="button" onClick={() => { setMenuOpen(null); toggleApprove(u); }} className="w-full text-left px-2.5 h-8 rounded-lg text-[12.5px] font-bold text-[#B42318] hover:bg-[#FEF3F2]">승인 해제(로그인 차단)</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
   return (
-    <KpSubNav code="ADMIN · STAFF" title="직원 관리" icon="users" active={tab} onSelect={setTab}
+    <KpSubNav code="ADMIN · STAFF" title="직원 관리" icon="users" active={tab} onSelect={(k) => { setTab(k); setMenuOpen(null); }}
       groups={[
         { label: "직원", items: [
           { key: "pending", label: "직원 승인 대기", en: "PENDING", icon: "hourglass", badge: lists.pending.length },
@@ -102,67 +179,68 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
           { key: "drivers", label: "승인된 기사", en: "DRIVERS", icon: "idcard" },
         ] },
       ]}>
-      <div className="grid grid-cols-3 gap-2 mb-3">
-        {(isDriverTab
-          ? [["가입 대기", lists.dpending.length], ["승인 기사", lists.drivers.length], ["전체", drivers.length]]
-          : [["승인 대기", lists.pending.length], ["재직", lists.staff.length], ["퇴사", lists.left.length]]).map(([l, v]) => (
-          <div key={l} className="rounded-2xl bg-white border border-[#E3E8F0] px-3 py-2.5">
-            <div className="text-[11.5px] font-bold text-[#7A879C]">{l}</div>
-            <div className="text-[20px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>{v}</div>
-          </div>
-        ))}
-      </div>
-      {users === null ? <Loading /> : L.length === 0 ? (
-        <div className="py-16 text-center text-[13px] text-[#9AA9C3] font-bold">{empty}</div>
-      ) : (
-        <div className="space-y-2">
-          {L.map((u) => (
-            <div key={u.id} className="rounded-2xl bg-white border border-[#E3E8F0] px-3.5 py-3">
-              <div className="flex items-center gap-3">
-                <Avatar name={u.name || u.email} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[15px] font-black text-[#0F1A30] truncate">{u.name || "-"}</span>
-                    {u.isMaster && <span className="px-1.5 h-[18px] rounded-md bg-[#0F1A30] text-white text-[10px] font-black grid place-items-center">마스터</span>}
-                    {isDriverTab
-                      ? u.carNo && <span className="px-1.5 h-[20px] rounded-md border border-[#0F1A30] text-[#0F1A30] text-[11.5px] font-black grid place-items-center">{u.carNo}</span>
-                      : u.position && <span className="text-[12px] font-bold text-[#7A879C]">{u.position}</span>}
-                  </div>
-                  <div className="text-[12px] text-[#7A879C] truncate">
-                    {isDriverTab ? [u.vehicleType, u.거주지, u.phone].filter(Boolean).join(" · ") : [u.team, u.email, u.phone].filter(Boolean).join(" · ")}
-                  </div>
-                  {isDriverTab && u.요청사항 && <div className="text-[11.5px] text-[#5B6B85] truncate">요청: {u.요청사항}</div>}
-                </div>
-              </div>
-              {!isViewer && u.id !== myUid && tab !== "left" && (
-                <div className="mt-2.5 flex gap-1.5">
-                  {!u.approved && <button type="button" disabled={busy === u.id} onClick={() => reject(u)} className="h-9 px-3.5 rounded-xl text-[12.5px] font-black border border-[#DCE3EE] text-[#5B6B85] bg-white disabled:opacity-50">거절</button>}
-                  <button type="button" disabled={busy === u.id} onClick={() => toggleApprove(u)}
-                    className={`flex-1 h-9 rounded-xl text-[12.5px] font-black disabled:opacity-50 ${u.approved ? "border border-[#DCE3EE] text-[#3A4A66] bg-white" : "text-white bg-[#1B2B4B]"}`}>
-                    {u.approved ? "승인 해제" : "승인"}
-                  </button>
-                </div>
-              )}
-              {!isDriverTab && tab !== "left" && (
-                <div className="mt-2 flex gap-1 overflow-x-auto no-scrollbar">
-                  {["admin", "hrManager", "user", "test", "viewer"].map((r) => {
-                    const on = (u.role || "user") === r;
-                    const can = isMaster && !u.isMaster && u.id !== myUid;
-                    return (
-                      <button key={r} type="button" disabled={!can || busy === u.id} onClick={() => changeRole(u, r)}
-                        className={`shrink-0 h-7 px-2.5 rounded-lg text-[11.5px] font-black border ${on ? "bg-[#EEF3FC] border-[#2D4C82]/40 text-[#1B2B4B]" : "bg-white border-[#E3E8F0] text-[#9AA9C3]"} ${can ? "" : "cursor-default"}`}>
-                        {ROLE_LABEL[r]}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+      <div className="flex flex-col md:flex-row md:items-center gap-2 mb-3">
+        <div className="grid grid-cols-3 gap-2 md:w-[420px]">
+          {(isDriverTab
+            ? [["가입 대기", lists.dpending.length], ["승인 기사", lists.drivers.length], ["전체", drivers.length]]
+            : [["승인 대기", lists.pending.length], ["재직", lists.staff.length], ["퇴사", lists.left.length]]).map(([l, v]) => (
+            <div key={l} className="rounded-2xl bg-white border border-[#E3E8F0] px-3 py-2">
+              <div className="text-[11.5px] font-bold text-[#7A879C]">{l}</div>
+              <div className="text-[19px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>{v}</div>
             </div>
           ))}
-          {!isMaster && !isDriverTab && <p className="text-[11.5px] text-[#9AA9C3] text-center pt-1">권한 변경은 마스터만 할 수 있습니다</p>}
         </div>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={isDriverTab ? "기사명·차량번호·전화 검색" : "이름·부서·직책·이메일·전화 검색"} className="md:ml-auto h-11 w-full md:w-[300px] px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] outline-none focus:border-[#2D4C82]" />
+      </div>
+      {users === null ? <Loading /> : L.length === 0 ? (
+        <div className="py-16 text-center text-[13px] text-[#9AA9C3] font-bold">{kw ? "검색 결과가 없습니다" : empty}</div>
+      ) : tab === "staff" ? (
+        <div className="space-y-3">
+          {teamGroups.map(([t, us]) => (
+            <div key={t} className="rounded-2xl bg-white border border-[#E3E8F0] overflow-visible">
+              <div className="px-4 py-2.5 border-b border-[#EEF1F6] flex items-center gap-2 bg-[#F7F9FC] rounded-t-2xl">
+                <span className="w-1.5 h-4 rounded-full bg-[#1B2B4B]" />
+                <span className="text-[14px] font-black text-[#0F1A30]">{t}</span>
+                <span className="text-[12px] font-black text-[#7A879C] tabular-nums" style={{ fontFamily: MONO }}>{us.length}명</span>
+              </div>
+              <div className="divide-y divide-[#F1F4F9]">{us.map((u) => <Row key={u.id} u={u} />)}</div>
+            </div>
+          ))}
+        </div>
+      ) : tab === "left" ? (
+        <div className="space-y-3">
+          {leftGroups.map(([m, us]) => (
+            <div key={m} className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-[#EEF1F6] flex items-center gap-2 bg-[#F7F9FC]">
+                <span className="text-[13.5px] font-black text-[#0F1A30]" style={{ fontFamily: MONO }}>{m.replace("-", ".")}</span>
+                <span className="text-[12px] font-bold text-[#7A879C]">퇴사 {us.length}명</span>
+              </div>
+              <div className="divide-y divide-[#F1F4F9]">{us.map((u) => <Row key={u.id} u={u} />)}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-2xl bg-white border border-[#E3E8F0] divide-y divide-[#F1F4F9]">{L.map((u) => <Row key={u.id} u={u} />)}</div>
+      )}
+      {!canRole && !isDriverTab && tab === "staff" && <p className="text-[11.5px] text-[#9AA9C3] text-center pt-2">권한 변경은 마스터·인사관리자만 할 수 있습니다</p>}
+      {viewResign && (
+        <Sheet side en="RESIGNATION · 사직서" title={`${viewResign.drafter?.name || ""} 사직서`} onClose={() => setViewResign(null)}
+          footer={<button type="button" onClick={() => setViewResign(null)} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">닫기</button>}>
+          <div className="rounded-2xl bg-white border border-[#E3E8F0] p-5">
+            <div className="text-center text-[24px] font-black tracking-[0.5em] text-[#0F1A30] pb-3 border-b-2 border-[#0F1A30]">사 직 서</div>
+            <div className="mt-4 grid grid-cols-[110px_1fr] gap-y-2 text-[14px]">
+              {[["문서번호", viewResign.docNo], ["성명", viewResign.drafter?.name], ["소속", [viewResign.drafter?.team, viewResign.drafter?.position].filter(Boolean).join(" · ")], ["입사일", viewResign.data?.hire], ["퇴직 희망일", viewResign.data?.last], ["결재 상태", { approved: "결재 완료", pending: "진행 중", rejected: "반려" }[viewResign.status] || viewResign.status]].map(([k, v]) => (
+                <React.Fragment key={k}><span className="font-black text-[#5B6B85]">{k}</span><span className="font-bold text-[#0F1A30]">{v || "-"}</span></React.Fragment>
+              ))}
+            </div>
+            <div className="mt-4 text-[13px] font-black text-[#5B6B85]">사직 사유</div>
+            <div className="mt-1 rounded-xl bg-[#F7F9FC] border border-[#EEF1F6] p-3 text-[14px] whitespace-pre-wrap">{viewResign.data?.reason || "-"}</div>
+            <div className="mt-3 text-[13px] font-black text-[#5B6B85]">인수인계 계획</div>
+            <div className="mt-1 rounded-xl bg-[#F7F9FC] border border-[#EEF1F6] p-3 text-[14px] whitespace-pre-wrap">{viewResign.data?.handover || "-"}</div>
+            {viewResign.data?.assets && <><div className="mt-3 text-[13px] font-black text-[#5B6B85]">반납 자산</div><div className="mt-1 text-[14px]">{viewResign.data.assets}</div></>}
+          </div>
+        </Sheet>
       )}
     </KpSubNav>
   );
 }
-

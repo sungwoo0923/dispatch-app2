@@ -63,7 +63,23 @@ export const Chip = ({ on, children, onClick }) => (
   <button type="button" onClick={onClick} className={`h-9 px-3.5 rounded-full text-[13px] font-black border whitespace-nowrap shrink-0 ${on ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}>{children}</button>
 );
 const Label = ({ children }) => <div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5 whitespace-nowrap">{children}</div>;
-export function Sheet({ title, en, onClose, children, footer }) {
+export function Sheet({ title, en, onClose, children, footer, side = false }) {
+  // ⭐ 2026-10-31 side — 등록·수정 창을 화면 오른쪽 넓은 사이드 패널로(팝업보다 크게 잘 보이게)
+  if (side) return (
+    <div className="fixed inset-0 z-[100000] bg-[#0F1A30]/45 flex justify-end" onClick={onClose}>
+      <div className="kp-side-panel h-full w-full md:w-[600px] xl:w-[680px] bg-[#F4F6FA] flex flex-col shadow-[-24px_0_60px_rgba(15,26,48,0.35)]" onClick={(e) => e.stopPropagation()}>
+        <div className="px-5 md:px-7 py-5 text-white flex items-center gap-3 shrink-0" style={{ background: HERO_BG, paddingTop: "max(env(safe-area-inset-top, 0px), 20px)" }}>
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{en}</div>
+            <div className="text-[21px] md:text-[23px] font-black truncate">{title}</div>
+          </div>
+          <button type="button" onClick={onClose} className="w-10 h-10 rounded-xl bg-white/10 border border-white/15 shrink-0 text-[15px]">✕</button>
+        </div>
+        <div className="kp-side-body flex-1 overflow-y-auto px-5 md:px-7 py-5 space-y-4">{children}</div>
+        {footer && <div className="shrink-0 px-5 md:px-7 py-4 bg-white border-t border-[#E3E8F0] flex gap-2" style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 16px)" }}>{footer}</div>}
+      </div>
+    </div>
+  );
   return (
     <div className="fixed inset-0 z-[100000] bg-[#0F1A30]/50 flex items-end md:items-center justify-center md:p-4" onClick={onClose}>
       <div className="w-full md:max-w-[640px] max-h-[92vh] bg-[#F4F6FA] rounded-t-[24px] md:rounded-[22px] overflow-hidden flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -100,6 +116,8 @@ const blankEntry = (type = "지출") => ({ date: kstDay(), type, account: type =
 export function CashBook({ company, isViewer = false }) {
   const rows = useCompanyCol("acctLedger", company);
   const recurring = useCompanyCol("acctRecurring", company);
+  const funds = useCompanyCol("acctFunds", company);
+  const [customAcc, setCustomAcc] = React.useState(false);
   const [ym, setYm] = React.useState(kstDay().slice(0, 7));
   const [type, setType] = React.useState("전체");
   const [q, setQ] = React.useState("");
@@ -134,7 +152,7 @@ export function CashBook({ company, isViewer = false }) {
     if (!toInt(e.amount)) return alert("금액을 입력해 주세요.");
     setBusy(true);
     try {
-      const data = { date: e.date, type: e.type, account: e.account, item: e.item.trim(), amount: toInt(e.amount), method: e.method, vendor: e.vendor.trim(), memo: e.memo.trim(), evidence: e.evidence, receipt: e.receipt || "", companyName: company };
+      const data = { date: e.date, type: e.type, account: String(e.account || "").trim() || "기타", fundId: e.fundId || "", item: e.item.trim(), amount: toInt(e.amount), method: e.method, vendor: e.vendor.trim(), memo: e.memo.trim(), evidence: e.evidence, receipt: e.receipt || "", companyName: company };
       if (e.id) await updateDoc(doc(db, "acctLedger", e.id), { ...data, updatedAt: serverTimestamp() });
       else await addDoc(collection(db, "acctLedger"), { ...data, createdAt: serverTimestamp(), createdBy: auth.currentUser?.email || "" });
       setEdit(null);
@@ -237,7 +255,7 @@ export function CashBook({ company, isViewer = false }) {
       </div>
 
       {edit && (
-        <Sheet en={`CASH BOOK · ${edit.id ? "EDIT" : "NEW"}`} title={`${edit.type} ${edit.id ? "수정" : "등록"}`} onClose={() => setEdit(null)}
+        <Sheet side en={`CASH BOOK · ${edit.id ? "EDIT" : "NEW"}`} title={`${edit.type} ${edit.id ? "수정" : "등록"}`} onClose={() => { setEdit(null); setCustomAcc(false); }}
           footer={<>{edit.id && <button type="button" onClick={() => remove(edit)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#B42318]">삭제</button>}<button type="button" onClick={() => setEdit(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button><button type="button" disabled={busy} onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50">{busy ? "저장 중…" : "저장"}</button></>}>
           <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-white border border-[#E3E8F0]">
             {["지출", "수입"].map((t) => <button key={t} type="button" onClick={() => setEdit((p) => ({ ...p, type: t, account: LEDGER_ACCOUNTS[t][0] }))} className={`h-10 rounded-lg text-[14px] font-black ${edit.type === t ? "bg-[#0F1A30] text-white" : "text-[#5B6B85]"}`}>{t}</button>)}
@@ -246,7 +264,32 @@ export function CashBook({ company, isViewer = false }) {
             <div><Label>날짜</Label><CustomDatePicker value={edit.date} onChange={(e) => setEdit((p) => ({ ...p, date: e.target.value }))} className={inp} showIcon /></div>
             <div><Label>금액(원)</Label><input inputMode="numeric" value={edit.amount ? won(edit.amount) : ""} onChange={(e) => setEdit((p) => ({ ...p, amount: e.target.value.replace(/[^\d]/g, "") }))} className={`${inp} text-right tabular-nums`} style={{ fontFamily: MONO }} placeholder="0" /></div>
           </div>
-          <div><Label>계정과목</Label><div className="flex flex-wrap gap-1.5">{LEDGER_ACCOUNTS[edit.type].map((a) => <Chip key={a} on={edit.account === a} onClick={() => setEdit((p) => ({ ...p, account: a }))}>{a}</Chip>)}</div></div>
+          <div><Label>계정과목</Label>
+            {(() => {
+              // 기본 계정 + 이 회사가 직접 입력해 쓴 계정
+              const base = LEDGER_ACCOUNTS[edit.type];
+              const used = [...new Set((rows || []).filter((r) => r.type === edit.type).map((r) => r.account).filter((a) => a && !base.includes(a)))];
+              const all = [...base, ...used];
+              const isCustom = customAcc || (edit.account && !all.includes(edit.account));
+              return (
+                <>
+                  <div className="flex flex-wrap gap-1.5">
+                    {all.map((a) => <Chip key={a} on={!isCustom && edit.account === a} onClick={() => { setCustomAcc(false); setEdit((p) => ({ ...p, account: a })); }}>{a}</Chip>)}
+                    <Chip on={isCustom} onClick={() => { setCustomAcc(true); setEdit((p) => ({ ...p, account: "" })); }}>✎ 직접입력</Chip>
+                  </div>
+                  {isCustom && <input autoFocus value={edit.account} onChange={(e) => setEdit((p) => ({ ...p, account: e.target.value }))} className={`${inp} mt-2`} placeholder="계정과목을 직접 입력 (예: 차량리스료, 협회비)" />}
+                </>
+              );
+            })()}
+          </div>
+          {(funds || []).filter((f) => f.active !== false && f.kind !== "대출").length > 0 && (
+            <div><Label>입출금 계좌 · 현금 <span className="font-semibold text-[#9AA9C3]">(자금 현황 잔액에 반영)</span></Label>
+              <div className="flex flex-wrap gap-1.5">
+                <Chip on={!edit.fundId} onClick={() => setEdit((p) => ({ ...p, fundId: "" }))}>지정 안 함</Chip>
+                {(funds || []).filter((f) => f.active !== false && f.kind !== "대출").map((f) => <Chip key={f.id} on={edit.fundId === f.id} onClick={() => setEdit((p) => ({ ...p, fundId: f.id }))}>{f.name}</Chip>)}
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             <div><Label>내용</Label><input value={edit.item} onChange={(e) => setEdit((p) => ({ ...p, item: e.target.value }))} className={inp} placeholder="예: 복합기 토너, 사무실 생수" /></div>
             <div><Label>거래처(사용처)</Label><input value={edit.vendor} onChange={(e) => setEdit((p) => ({ ...p, vendor: e.target.value }))} className={inp} placeholder="예: ○○문구" /></div>
@@ -262,32 +305,44 @@ export function CashBook({ company, isViewer = false }) {
           <div><Label>메모</Label><input value={edit.memo} onChange={(e) => setEdit((p) => ({ ...p, memo: e.target.value }))} className={inp} placeholder="선택" /></div>
         </Sheet>
       )}
-      {recurOpen && <RecurringEditor company={company} rows={recurring || []} onClose={() => setRecurOpen(false)} />}
+      {recurOpen && <RecurringEditor company={company} rows={recurring || []} ledger={rows || []} onClose={() => setRecurOpen(false)} />}
     </div>
   );
 }
 
-function RecurringEditor({ company, rows, onClose }) {
-  const [f, setF] = React.useState({ name: "", account: "임차료", amount: "", day: "25", method: "자동이체", vendor: "" });
+function RecurringEditor({ company, rows, ledger = [], onClose }) {
+  const [f, setF] = React.useState({ type: "지출", name: "", account: "임차료", amount: "", day: "25", method: "자동이체", vendor: "" });
+  const [custom, setCustom] = React.useState(false);
+  const accs = [...new Set([...LEDGER_ACCOUNTS[f.type], ...ledger.filter((r) => r.type === f.type).map((r) => r.account).filter(Boolean)])];
   const add = async () => {
     if (!f.name.trim() || !toInt(f.amount)) return alert("이름과 금액을 입력해 주세요.");
-    await addDoc(collection(db, "acctRecurring"), { ...f, name: f.name.trim(), amount: toInt(f.amount), type: "지출", active: true, companyName: company, createdAt: serverTimestamp() });
+    if (!String(f.account || "").trim()) return alert("계정과목을 입력해 주세요.");
+    await addDoc(collection(db, "acctRecurring"), { ...f, account: String(f.account).trim(), name: f.name.trim(), amount: toInt(f.amount), active: true, companyName: company, createdAt: serverTimestamp() });
     setF((p) => ({ ...p, name: "", amount: "", vendor: "" }));
   };
   return (
-    <Sheet en="CASH BOOK · RECURRING" title="고정비 관리" onClose={onClose} footer={<button type="button" onClick={onClose} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">닫기</button>}>
-      <div className="rounded-2xl bg-white border border-[#E3E8F0] p-3 space-y-2">
+    <Sheet side en="CASH BOOK · RECURRING" title="고정비 · 정기 수입 관리" onClose={onClose} footer={<button type="button" onClick={onClose} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">닫기</button>}>
+      <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4 space-y-3">
+        <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-[#F4F6FA] border border-[#E3E8F0]">
+          {["지출", "수입"].map((t) => <button key={t} type="button" onClick={() => { setCustom(false); setF((p) => ({ ...p, type: t, account: LEDGER_ACCOUNTS[t][0] })); }} className={`h-10 rounded-lg text-[14px] font-black ${f.type === t ? "bg-[#0F1A30] text-white" : "text-[#5B6B85]"}`}>매달 {t}</button>)}
+        </div>
         <div className="grid grid-cols-2 gap-2">
-          <div><Label>이름</Label><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inp} placeholder="예: 사무실 임대료" /></div>
+          <div><Label>이름</Label><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inp} placeholder={f.type === "지출" ? "예: 사무실 임대료" : "예: 주차장 임대수입"} /></div>
           <div><Label>금액</Label><input inputMode="numeric" value={f.amount ? won(f.amount) : ""} onChange={(e) => setF({ ...f, amount: e.target.value.replace(/[^\d]/g, "") })} className={`${inp} text-right`} /></div>
-          <div><Label>계정과목</Label><select value={f.account} onChange={(e) => setF({ ...f, account: e.target.value })} className={inp}>{LEDGER_ACCOUNTS.지출.map((a) => <option key={a}>{a}</option>)}</select></div>
+          <div><Label>계정과목</Label>
+            <select value={custom ? "__custom" : f.account} onChange={(e) => { if (e.target.value === "__custom") { setCustom(true); setF({ ...f, account: "" }); } else { setCustom(false); setF({ ...f, account: e.target.value }); } }} className={inp}>
+              {accs.map((a) => <option key={a} value={a}>{a}</option>)}
+              <option value="__custom">✎ 직접입력</option>
+            </select>
+            {custom && <input autoFocus value={f.account} onChange={(e) => setF({ ...f, account: e.target.value })} className={`${inp} mt-2`} placeholder="계정과목 직접 입력" />}
+          </div>
           <div><Label>매달 (일)</Label><input inputMode="numeric" value={f.day} onChange={(e) => setF({ ...f, day: e.target.value.replace(/[^\d]/g, "").slice(0, 2) })} className={inp} /></div>
         </div>
         <button type="button" onClick={add} className="w-full h-11 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black">+ 고정비 추가</button>
       </div>
       {rows.map((r) => (
         <div key={r.id} className="rounded-2xl bg-white border border-[#E3E8F0] px-3 py-2.5 flex items-center gap-2">
-          <div className="flex-1 min-w-0"><div className="text-[14px] font-black text-[#0F1A30] truncate">{r.name}</div><div className="text-[11.5px] text-[#7A879C]">{r.account} · 매달 {r.day}일 · {r.method}</div></div>
+          <div className="flex-1 min-w-0"><div className="text-[14px] font-black text-[#0F1A30] truncate">{r.name} <span className={`text-[11px] font-black ${r.type === "수입" ? "text-[#2D4C82]" : "text-[#7A879C]"}`}>{r.type || "지출"}</span></div><div className="text-[11.5px] text-[#7A879C]">{r.account} · 매달 {r.day}일 · {r.method}</div></div>
           <span className="text-[13.5px] font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{won(r.amount)}</span>
           <button type="button" onClick={() => updateDoc(doc(db, "acctRecurring", r.id), { active: r.active === false })} className={`h-8 px-2.5 rounded-lg text-[12px] font-black whitespace-nowrap ${r.active === false ? "border border-[#DCE3EE] text-[#9AA9C3]" : "bg-[#EEF3FC] text-[#1B2B4B]"}`}>{r.active === false ? "꺼짐" : "켜짐"}</button>
           <button type="button" onClick={() => window.confirm("삭제할까요?") && deleteDoc(doc(db, "acctRecurring", r.id))} className="w-8 h-8 rounded-lg text-[#9AA9C3]">✕</button>
@@ -378,7 +433,7 @@ export function AssetManager({ company, isViewer = false }) {
       </BookCard>
 
       {edit && (
-        <Sheet en={`ASSET · ${edit.id ? "EDIT" : "NEW"}`} title={edit.id ? "비품 수정" : "비품 등록"} onClose={() => setEdit(null)}
+        <Sheet side en={`ASSET · ${edit.id ? "EDIT" : "NEW"}`} title={edit.id ? "비품 수정" : "비품 등록"} onClose={() => setEdit(null)}
           footer={<>{edit.id && <button type="button" onClick={async () => { if (window.confirm("삭제할까요? (폐기 처리는 상태를 '폐기'로)")) { await deleteDoc(doc(db, "officeAssets", edit.id)); setEdit(null); } }} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#B42318]">삭제</button>}<button type="button" onClick={() => setEdit(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button><button type="button" disabled={busy} onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50">{busy ? "저장 중…" : "저장"}</button></>}>
           <div><Label>분류</Label><div className="flex flex-wrap gap-1.5">{ASSET_CATS.map((c) => <Chip key={c} on={edit.category === c} onClick={() => setEdit((p) => ({ ...p, category: c, unit: c === "소모품" ? (p.unit === "개" ? "개" : p.unit) : p.unit }))}>{c}</Chip>)}</div></div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">

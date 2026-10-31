@@ -14,6 +14,7 @@ import { ExecDashboard, eventsOf } from "./ExecSuite";
 import { ONBOARD_ITEMS, OFFBOARD_ITEMS } from "./HrTools";
 import { leaveEntitlement, leaveUseOf } from "./approvalForms";
 import { pcLiveWindowStart, pcPrevDay } from "./orderHistory";
+import { useFundsSummary } from "./FundsBoard";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const HERO = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
@@ -172,6 +173,7 @@ function AcctDashboard({ company, dispatchData = [], onGo }) {
   const assets = useCompanyRows("officeAssets", company);
   const users = useCol("users", company, (u) => (u.companyName || DEFAULT_COMPANY) === company);
   const H = useAcctHistory(company, dispatchData);
+  const F = useFundsSummary(company);
   const fleetPlates = React.useMemo(() => new Set((fleet || []).map((d) => String(d.차량번호 || "").trim()).filter((p) => p && p !== "-")), [fleet]);
 
   // 자금(수입·지출 장부)
@@ -211,9 +213,9 @@ function AcctDashboard({ company, dispatchData = [], onGo }) {
   const tax = taxEvents(today).slice(0, 6);
   const todos = [
     ["지출결의 결재 대기", "전자결재 › 비용·지출 결의", `${expPending.length}건`, expPending.length, "전자결재"],
-    ["장부에 안 올린 승인 지출", "수입·지출 › 결재 지출 가져오기", `${notImported.length}건`, notImported.length, "수입지출"],
-    ["이번 달 고정비 미반영", "임대료·통신비 등", `${recurTodo.length}건`, recurTodo.length, "수입지출"],
-    ["증빙 없는 지출", "영수증·세금계산서 첨부", `${noEvidence}건`, noEvidence, "수입지출"],
+    ["장부에 안 올린 승인 지출", "수입·지출 › 결재 지출 가져오기", `${notImported.length}건`, notImported.length, "자금관리:book"],
+    ["이번 달 고정비 미반영", "임대료·통신비 등", `${recurTodo.length}건`, recurTodo.length, "자금관리:book"],
+    ["증빙 없는 지출", "영수증·세금계산서 첨부", `${noEvidence}건`, noEvidence, "자금관리:book"],
     ["용차 지급 대기", "지난달~이번 달 · 지입 제외", `${short(apSum)}원`, ap.length, "정산관리:지급관리"],
     ["소모품 재고 부족", "최소 수량 이하", `${lowStock.length}종`, lowStock.length, "비품관리"],
     ["기사 서류 검토 대기", "통장 사본·사업자등록증 등", `${docWait}명`, docWait, "기사서류"],
@@ -223,14 +225,14 @@ function AcctDashboard({ company, dispatchData = [], onGo }) {
     <div className="space-y-4">
       <Hero en="ACCOUNTING · FINANCE DESK" title="경리·회계 대시보드" desc={`${today.replace(/-/g, ".")} · 자금 흐름 · 미수 · 미지급 · 세무 일정을 한눈에`}
         kpis={[
-          ["이번 달 수입", `${short(inSum)}원`, `지출 ${short(outSum)}원 · 차액 ${inSum - outSum >= 0 ? "+" : ""}${short(inSum - outSum)}원`],
+          ["보유 자금", F.has ? `${short(F.cash)}원` : "미입력", F.has ? `이번 달 수입 ${short(inSum)} · 지출 ${short(outSum)}${F.runway != null ? ` · 런웨이 ${F.runway.toFixed(1)}개월` : ""}` : "자금관리에서 처음 자금 상태 입력"],
           ["미수금(거래처 미정산)", `${short(arSum)}원`, `${new Set(arList.map((x) => x.c)).size}곳 · 지난 2개월`],
           ["미지급(용차 지급 대기)", `${short(apSum)}원`, `${ap.length}건 · 지난달~이번 달`],
           ["이번 달 매출 / 매입", `${short(cur[0])} / ${short(cur[1])}`, `수수료 ${short(cur[0] - cur[1])}원 · ${cur[2]}건`],
         ]} />
       <Quick onGo={onGo} items={[
         ["정산관리", "거래처 정산", "receipt", `미수 ${arList.length}건`], ["정산관리:지급관리", "용차 지급", "wallet", `대기 ${ap.length}건`],
-        ["회계관리", "회계 장부", "money", "미수·미지급·부가세"], ["수입지출", "수입·지출 장부", "sheet", `이번 달 ${monthL.length}건`],
+        ["회계관리", "회계 장부", "money", "미수·미지급·부가세"], ["자금관리", "자금 현황", "wallet", F.has ? `보유 ${short(F.cash)}원` : "처음 자금 입력"],
         ["비품관리", "비품·자산", "list", `재고 부족 ${lowStock.length}`], ["전자결재", "지출결의 결재", "stamp", `대기 ${expPending.length}건`],
         ["매출관리", "매출 분석", "chart", "거래처·월별"], ["배차현황", "배차현황", "truck", "운행 내역 확인"],
       ]} />
@@ -249,7 +251,7 @@ function AcctDashboard({ company, dispatchData = [], onGo }) {
           ))}
           <div className="mt-2 text-[11px] text-[#9AA9C3]">일반 기준 일정입니다 · 휴일이면 다음 영업일</div>
         </Card>
-        <Card en="EXPENSE · THIS MONTH" title="계정과목별 지출" right={<button type="button" onClick={() => onGo?.("수입지출")} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12px] font-black text-[#1B2B4B] whitespace-nowrap">장부 ›</button>}>
+        <Card en="EXPENSE · THIS MONTH" title="계정과목별 지출" right={<button type="button" onClick={() => onGo?.("자금관리:book")} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12px] font-black text-[#1B2B4B] whitespace-nowrap">장부 ›</button>}>
           {!accTop.length ? <Empty t="이번 달 지출 기록이 없습니다" /> : accTop.map(([a, v]) => (
             <div key={a} className="py-1.5">
               <div className="flex items-center justify-between text-[13px]"><span className="font-bold text-[#0F1A30] truncate">{a}</span><span className="font-black tabular-nums" style={{ fontFamily: MONO }}>{short(v)}원</span></div>
