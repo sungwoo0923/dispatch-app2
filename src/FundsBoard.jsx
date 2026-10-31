@@ -76,7 +76,7 @@ function SetupPanel({ company, onClose }) {
   };
   const total = rows.filter((r) => !["대출", "법인카드 한도"].includes(r.kind)).reduce((s, r) => s + toInt(r.balance), 0);
   return (
-    <Sheet side en="FUNDS · INITIAL SETUP" title="처음 자금 상태 입력" onClose={onClose}
+    <Sheet side en="FUNDS · INITIAL SETUP" title="자금 상태 입력" onClose={onClose}
       footer={<><button type="button" onClick={onClose} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button><button type="button" disabled={busy} onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50">{busy ? "저장 중…" : `저장 · 보유 자금 ${won(total)}원`}</button></>}>
       <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4 text-[13px] text-[#5B6B85] leading-relaxed">
         회사 통장·현금·예금·대출의 <b className="text-[#0F1A30]">기준일 잔액</b>을 적어 주세요. 그 뒤로는 수입·지출 장부에서 계좌를 고르면 잔액이 자동으로 바뀝니다.
@@ -168,9 +168,9 @@ export function FundsBoard({ company, canEdit = true }) {
       {!funds.length ? (
         <div className="rounded-[22px] border-2 border-dashed border-[#C9D2E0] bg-white px-6 py-12 text-center">
           <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>GET STARTED</div>
-          <div className="text-[20px] font-black text-[#0F1A30] mt-1">회사 자금 상태를 처음 입력해 주세요</div>
+          <div className="text-[20px] font-black text-[#0F1A30] mt-1">자금 상태를 입력해 주세요</div>
           <div className="text-[13.5px] text-[#7A879C] mt-1">통장·현금·예금·대출의 지금 잔액만 적으면, 이후엔 장부 입출금으로 자동 계산됩니다</div>
-          {canEdit ? <button type="button" onClick={() => setSetup(true)} className="mt-5 h-12 px-6 rounded-2xl bg-[#0F1A30] text-white text-[15px] font-black">처음 자금 상태 입력</button> : <div className="mt-4 text-[13px] font-bold text-[#9AA9C3]">경리 담당자가 입력하면 여기에 보입니다</div>}
+          {canEdit ? <button type="button" onClick={() => setSetup(true)} className="mt-5 h-12 px-6 rounded-2xl bg-[#0F1A30] text-white text-[15px] font-black">자금 상태 입력</button> : <div className="mt-4 text-[13px] font-bold text-[#9AA9C3]">경리 담당자가 입력하면 여기에 보입니다</div>}
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] gap-4">

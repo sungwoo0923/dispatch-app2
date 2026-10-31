@@ -36,7 +36,8 @@ function Avatar({ name }) {
   return <span className="w-10 h-10 rounded-xl bg-[#1B2B4B] text-white grid place-items-center text-[14px] font-black shrink-0">{String(name || "?").slice(0, 1)}</span>;
 }
 
-export default function StaffManager({ company, role, myUid, initialTab = "pending" }) {
+// compact — 경리·인사: 재직 직원·퇴사자는 인사관리부에 있으므로 가입 승인(직원·기사)만
+export default function StaffManager({ company, role, myUid, initialTab = "pending", compact = false }) {
   const [users, setUsers] = React.useState(null);
   const [tab, setTab] = React.useState(initialTab);
   const [busy, setBusy] = React.useState("");
@@ -171,8 +172,7 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
       groups={[
         { label: "직원", items: [
           { key: "pending", label: "직원 승인 대기", en: "PENDING", icon: "hourglass", badge: lists.pending.length },
-          { key: "staff", label: "재직 직원", en: "STAFF", icon: "users" },
-          { key: "left", label: "퇴사자", en: "LEFT", icon: "user" },
+          ...(compact ? [] : [{ key: "staff", label: "재직 직원", en: "STAFF", icon: "users" }, { key: "left", label: "퇴사자", en: "LEFT", icon: "user" }]),
         ] },
         { label: "기사관리", items: [
           { key: "dpending", label: "기사 가입 승인", en: "DRIVER SIGNUP", icon: "truck", badge: lists.dpending.length },

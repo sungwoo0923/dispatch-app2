@@ -140,36 +140,39 @@ export default function DriverDocsReview({ company, isViewer = false }) {
         </div>
         <button type="button" onClick={() => saveAll(cur)} className="h-10 px-4 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black whitespace-nowrap">⬇ 전체 저장</button>
       </div>
-      <div className="p-3 md:p-5 grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-3">
-        {DRIVER_REQUIRED_DOCS.map((def) => {
-          const x = cur.byType[def.key]; const st = docState(x); const t = TONE[st.tone];
-          const isImg = x && String(x.fileType || "").startsWith("image");
-          return (
-            <div key={def.key} className="rounded-2xl border border-[#E3E8F0] overflow-hidden bg-white flex flex-col">
-              <button type="button" disabled={!x} onClick={() => (isImg ? setViewer({ images: [x.dataUrl], name: def.label }) : x && window.open(x.dataUrl))}
-                className="relative aspect-[4/3] bg-[#F3F6FA] grid place-items-center overflow-hidden group">
-                {x && isImg ? <img src={x.dataUrl} alt={def.label} className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.03] transition" />
-                  : x ? <span className="text-[22px] font-black text-[#1B2B4B]" style={{ fontFamily: MONO }}>PDF</span>
-                    : <span className="text-center"><span className="block text-[26px] text-[#C9D2E0]">＋</span><span className="block text-[12px] font-bold text-[#9AA9C3]">미제출</span></span>}
-                <span className="absolute top-2 left-2 h-6 px-2 rounded-md text-[11px] font-black grid place-items-center whitespace-nowrap backdrop-blur" style={{ background: t.bg, color: t.fg, border: `1px solid ${t.bd}` }}>{st.label}</span>
-                {def.required && <span className="absolute top-2 right-2 h-6 px-2 rounded-md bg-[#0F1A30]/85 text-white text-[10.5px] font-black grid place-items-center">필수</span>}
-              </button>
-              <div className="px-3.5 py-3 flex-1 flex flex-col gap-2">
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-[14.5px] font-black text-[#0F1A30] truncate">{def.label}</span>
-                  {x?.만료일 && <span className="text-[11.5px] font-black text-[#5B6B85] tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>~{x.만료일}</span>}
+      {/* ⭐ 2026-10-31 보관함형 — 작은 썸네일 + 서류명·상태·만료일 + 저장/확인/반려를 한 줄로 */}
+      <div className="p-3 md:p-4">
+        <div className="rounded-2xl border border-[#E3E8F0] overflow-hidden divide-y divide-[#EEF2F8]">
+          {DRIVER_REQUIRED_DOCS.map((def, idx) => {
+            const x = cur.byType[def.key]; const st = docState(x); const t = TONE[st.tone];
+            const isImg = x && String(x.fileType || "").startsWith("image");
+            return (
+              <div key={def.key} className={`flex items-center gap-3 px-3 md:px-4 py-2.5 ${idx % 2 ? "bg-[#FBFCFE]" : "bg-white"}`}>
+                <span className="w-6 text-[11px] font-black text-[#9AA9C3] tabular-nums shrink-0" style={{ fontFamily: MONO }}>{String(idx + 1).padStart(2, "0")}</span>
+                <button type="button" disabled={!x} onClick={() => (isImg ? setViewer({ images: [x.dataUrl], name: def.label }) : x && window.open(x.dataUrl))}
+                  className="w-12 h-12 rounded-xl shrink-0 border border-[#E3E8F0] bg-[#F3F6FA] bg-cover bg-center grid place-items-center text-[10px] font-black text-[#9AA9C3]"
+                  style={x && isImg ? { backgroundImage: `url(${x.dataUrl})` } : undefined}>{x ? (isImg ? "" : "PDF") : "＋"}</button>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[14px] font-black text-[#0F1A30]">{def.label}</span>
+                    <span className={`text-[10px] font-black ${def.required ? "text-[#B42318]" : "text-[#9AA9C3]"}`}>{def.required ? "필수" : "선택"}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span className="h-5 px-1.5 rounded-md text-[10.5px] font-black grid place-items-center whitespace-nowrap" style={{ background: t.bg, color: t.fg, border: `1px solid ${t.bd}` }}>{st.label}</span>
+                    {x?.만료일 && <span className="text-[11px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>~{x.만료일}</span>}
+                    {x?.rejectReason && x.status === "반려" && <span className="text-[11px] text-[#B42318] truncate">사유: {x.rejectReason}</span>}
+                  </div>
                 </div>
-                {x?.rejectReason && x.status === "반려" && <div className="text-[12px] text-[#B42318] truncate">사유: {x.rejectReason}</div>}
-                <div className="mt-auto flex gap-1.5 flex-wrap">
-                  {x && <button type="button" onClick={() => saveDocFile(x, cur.d.name, def.label)} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[#1B2B4B] text-[12px] font-black whitespace-nowrap">⬇ 저장</button>}
-                  {!isViewer && x && x.status !== "확인" && <button type="button" disabled={busy === x.id} onClick={() => review(x, "확인")} className="h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black whitespace-nowrap">확인</button>}
-                  {!isViewer && x && x.status !== "반려" && <button type="button" disabled={busy === x.id} onClick={() => review(x, "반려")} className="h-8 px-3 rounded-lg border border-[#FECDCA] text-[#B42318] text-[12px] font-black whitespace-nowrap">반려</button>}
-                  {!isViewer && <button type="button" disabled={busy === def.key} onClick={() => { upTarget.current = { uid: cur.d.uid, def }; fileRef.current?.click(); }} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[#5B6B85] text-[12px] font-bold whitespace-nowrap ml-auto">{busy === def.key ? "올리는 중…" : x ? "교체" : "대신 올리기"}</button>}
+                <div className="flex gap-1.5 shrink-0 flex-wrap justify-end">
+                  {x && <button type="button" onClick={() => saveDocFile(x, cur.d.name, def.label)} className="h-8 px-2.5 rounded-lg border border-[#DCE3EE] text-[#1B2B4B] text-[12px] font-black whitespace-nowrap">⬇ 저장</button>}
+                  {!isViewer && x && x.status !== "확인" && <button type="button" disabled={busy === x.id} onClick={() => review(x, "확인")} className="h-8 px-2.5 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black whitespace-nowrap">확인</button>}
+                  {!isViewer && x && x.status !== "반려" && <button type="button" disabled={busy === x.id} onClick={() => review(x, "반려")} className="h-8 px-2.5 rounded-lg border border-[#FECDCA] text-[#B42318] text-[12px] font-black whitespace-nowrap">반려</button>}
+                  {!isViewer && <button type="button" disabled={busy === def.key} onClick={() => { upTarget.current = { uid: cur.d.uid, def }; fileRef.current?.click(); }} className="h-8 px-2.5 rounded-lg border border-[#DCE3EE] text-[#5B6B85] text-[12px] font-bold whitespace-nowrap">{busy === def.key ? "…" : x ? "교체" : "올리기"}</button>}
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );

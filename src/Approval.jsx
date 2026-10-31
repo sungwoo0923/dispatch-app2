@@ -511,10 +511,11 @@ function LineEditor({ line, setLine, cc, setCc, staff, me, company, cat }) {
 //  + 예전 휴가/외근 게시판에 올린 휴가·반차(2026년부터, 반려 제외)도 사용으로 센다.
 function useLeaveStatus(me, list) {
   const [hireDate, setHireDate] = React.useState(null);
+  const [adjust, setAdjust] = React.useState([]); // 인사관리자 연차 조정 이력(본인에게도 보인다)
   const [olds, setOlds] = React.useState([]);
   React.useEffect(() => {
     if (!me.uid) return undefined;
-    const a = onSnapshot(doc(db, "userProfiles", me.uid), (s) => setHireDate((s.exists() && s.data().hireDate) || ""), () => setHireDate(""));
+    const a = onSnapshot(doc(db, "userProfiles", me.uid), (s) => { setHireDate((s.exists() && s.data().hireDate) || ""); setAdjust((s.exists() && s.data().leaveAdjust) || []); }, () => setHireDate(""));
     const b = onSnapshot(query(collection(db, "schedules"), where("authorUid", "==", me.uid)), (s) => setOlds(s.docs.map((d) => d.data())), () => setOlds([]));
     return () => { a(); b(); };
   }, [me.uid]);
@@ -534,8 +535,10 @@ function useLeaveStatus(me, list) {
       if (x.type === "휴가") used += bizDays({ start: x.start, end: x.end || x.start });
       else if (x.type === "오전반차" || x.type === "오후반차") used += 0.5;
     });
-    return { ent, hireDate, used, pending, remain: ent.total - used };
-  }, [hireDate, olds, list, me.uid]);
+    const adj = (adjust || []).filter((x) => x.period === ent.from);
+    const adjSum = adj.reduce((s2, x) => s2 + (Number(x.days) || 0), 0);
+    return { ent: { ...ent, total: ent.total + adjSum }, hireDate, used, pending, remain: ent.total + adjSum - used, adj, adjSum };
+  }, [hireDate, olds, list, me.uid, adjust]);
 }
 
 function LeaveCard({ leave, thisDays }) {
@@ -558,6 +561,7 @@ function LeaveCard({ leave, thisDays }) {
         <span className="ml-auto text-[12.5px] font-bold text-white/55">입사 {leave.hireDate} · 근속 {y ? `${y}년 ` : ""}{m}개월</span>
       </div>
       <div className="mt-1 text-[16px] font-black">내 {ent.label} 현황 <span className="text-[13px] font-bold text-white/55">{ent.from} ~ {ent.to}</span></div>
+      {leave.adjSum ? <div className="mt-1 text-[12.5px] font-bold text-[#CFE0FF]">인사 조정 {leave.adjSum > 0 ? "+" : ""}{leave.adjSum}일 · {(leave.adj || []).map((x) => x.reason).filter(Boolean).slice(-2).join(" / ")}</div> : null}
       <div className="mt-3 grid grid-cols-4 gap-2">
         {[["발생", ent.total], ["사용", used], ["결재 대기", pending], ["잔여", remain]].map(([l, v]) => (
           <div key={l} className={`rounded-xl px-2.5 py-2 ${l === "잔여" ? "bg-white text-[#0F1A30]" : "bg-white/[0.08]"}`}>
@@ -780,7 +784,7 @@ function Progress({ d }) {
   );
 }
 
-function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit }) {
+function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = false }) {
   const form = formOf(d.form);
   const [comment, setComment] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -862,9 +866,11 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit }) {
     try { await printA4(paperRef.current, d.docNo); } finally { if (box) box.style.zoom = prev; }
   };
 
-  return createPortal(
-    <div className="fixed inset-0 z-[1000000] bg-[#0F1A30]/50 flex items-center justify-center p-0 md:p-4" onClick={onClose}>
-      <div className="w-full max-w-[1280px] h-full md:h-[92vh] bg-[#F4F6FA] md:rounded-[24px] overflow-y-auto md:overflow-hidden flex flex-col md:flex-row shadow-[0_24px_60px_rgba(15,26,48,0.4)]" onClick={(e) => e.stopPropagation()}>
+  // ⭐ 2026-10-31 inline — 넓은 화면에서는 결재함 오른쪽에 바로 미리보기(왼쪽 목록 · 오른쪽 문서)
+  const wrap = (inner) => (inline ? inner : createPortal(
+    <div className="fixed inset-0 z-[1000000] bg-[#0F1A30]/50 flex items-center justify-center p-0 md:p-4" onClick={onClose}>{inner}</div>, document.body));
+  return wrap(
+      <div className={inline ? "w-full h-[calc(100vh-190px)] min-h-[640px] bg-[#F4F6FA] rounded-[20px] border border-[#E3E8F0] overflow-hidden flex flex-row" : "w-full max-w-[1280px] h-full md:h-[92vh] bg-[#F4F6FA] md:rounded-[24px] overflow-y-auto md:overflow-hidden flex flex-col md:flex-row shadow-[0_24px_60px_rgba(15,26,48,0.4)]"} onClick={(e) => e.stopPropagation()}>
         <div className="md:flex-1 md:overflow-auto p-3 md:p-6 bg-[#E9EDF3] order-2 md:order-1">
           <FitPaper><ApprovalPaper paperRef={paperRef} form={form} data={d.data} title={d.title} line={d.line} cc={d.cc} drafter={d.drafter} docNo={d.docNo} createdMs={toMs(d.createdAt)} staff={staff} status={d.status} /></FitPaper>
           {(d.images || []).length > 0 && (
@@ -958,8 +964,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit }) {
             </div>
           </div>
         </aside>
-      </div>
-    </div>, document.body);
+      </div>);
 }
 
 // ─────────────────────────── 문서 목록 ───────────────────────────
@@ -1228,6 +1233,40 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
     ? (page === "leave" ? [[leave?.ent ? `잔여 ${leave.ent.label}` : "잔여 연차", leave?.ent ? `${leave.remain}일` : "-"], ["진행 중", mineSets.pending.filter((d) => d.cat === "leave").length]] : page === "expense" ? [["이번 달 승인 금액", fmtWon(spentMonth)], ["진행 중", mineSets.pending.filter((d) => d.cat === "expense").length]] : [["진행 중", mineSets.pending.filter((d) => d.cat === "draft").length], ["완료", mineSets.approved.filter((d) => d.cat === "draft").length]])
     : [["결재 대기", sets.todo.length], ["내 진행 문서", mineSets.pending.length], ["반려", mineSets.rejected.length]];
 
+  // ⭐ 2026-10-31 넓은 화면(1280px+)은 왼쪽 목록 · 오른쪽 문서 미리보기
+  const [wide, setWide] = React.useState(() => typeof window !== "undefined" && window.innerWidth >= 1280);
+  React.useEffect(() => { const f = () => setWide(window.innerWidth >= 1280); window.addEventListener("resize", f); return () => window.removeEventListener("resize", f); }, []);
+  const inboxList = (
+        <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
+          {(() => {
+            // ⭐ 2026-10-31 탭 숫자는 그 탭의 문서 수(검색·기간 적용), 새 결과는 빨간 점으로 따로
+            const F = (k) => applyListTools(k === "company" ? (companyAll || []) : (sets[k] || []), lf) || [];
+            const keys = ["todo", "progress", "done", "rejected", "cancelled", "cc", ...(admin ? ["company"] : []), "hidden"];
+            const label = { todo: "결재 대기", progress: "진행 중", done: "결재 완료", rejected: "반려", cancelled: "결재 취소", cc: "참조 문서", company: "회사 전체", hidden: "삭제한 문서" };
+            const pool = [...(list || []), ...(companyAll || [])];
+            const drafters = [...new Map(pool.filter((d) => d.drafterUid).map((d) => [d.drafterUid, d.drafter?.name || "-"])).entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1]), "ko"));
+            return (<>
+              <Tabs tab={tab} setTab={setTab} tabs={keys.map((k) => [k, label[k], F(k).length, k === "cc" ? F(k).filter((d) => ccUnread(d, uid)).length : 0])} />
+              <ListTools f={lf} setF={setLf} drafters={drafters} />
+              <DocList uid={uid} docs={tab === "company" ? (companyAll === null ? null : F("company")) : (list === null ? null : F(tab))} onOpen={(d) => setOpen(d.id)} empty={lf.q || lf.from || lf.who ? "조건에 맞는 문서가 없습니다" : tab === "todo" ? "결재할 문서가 없습니다" : "문서가 없습니다"} />
+            </>);
+          })()}
+        </div>
+  );
+  const mineList = (
+        <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
+          {(() => {
+            // ⭐ 2026-10-31 숫자는 문서 수(예전엔 "새 결과" 수라 목록 2건인데 1로 보이고, 열어 보면 숫자가 사라졌다) — 새 결과는 빨간 점
+            const M = (k) => applyListTools(mineSets[k] || [], lf) || [];
+            const keys = [["all", "전체"], ["pending", "진행 중"], ["approved", "완료"], ["rejected", "반려"], ["cancelled", "결재 취소"], ["withdrawn", "회수"]];
+            return (<>
+              <Tabs tab={tab} setTab={setTab} tabs={keys.map(([k, l]) => [k, l, M(k).length, unreadIn(M(k))])} />
+              <ListTools f={lf} setF={setLf} />
+              <DocList uid={uid} docs={list === null ? null : M(tab)} onOpen={(d) => setOpen(d.id)} empty={lf.q || lf.from ? "조건에 맞는 문서가 없습니다" : "올린 문서가 없습니다. 위 버튼으로 새 문서를 작성하세요."} />
+            </>);
+          })()}
+        </div>
+  );
   return (
     <div className="space-y-4">
       <div className="relative overflow-hidden rounded-[22px] px-4 py-4 md:px-7 md:py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]"
@@ -1260,40 +1299,18 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
         </>
       )}
 
-      {page === "inbox" && (
-        <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
-          {(() => {
-            // ⭐ 2026-10-31 탭 숫자는 그 탭의 문서 수(검색·기간 적용), 새 결과는 빨간 점으로 따로
-            const F = (k) => applyListTools(k === "company" ? (companyAll || []) : (sets[k] || []), lf) || [];
-            const keys = ["todo", "progress", "done", "rejected", "cancelled", "cc", ...(admin ? ["company"] : []), "hidden"];
-            const label = { todo: "결재 대기", progress: "진행 중", done: "결재 완료", rejected: "반려", cancelled: "결재 취소", cc: "참조 문서", company: "회사 전체", hidden: "삭제한 문서" };
-            const pool = [...(list || []), ...(companyAll || [])];
-            const drafters = [...new Map(pool.filter((d) => d.drafterUid).map((d) => [d.drafterUid, d.drafter?.name || "-"])).entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1]), "ko"));
-            return (<>
-              <Tabs tab={tab} setTab={setTab} tabs={keys.map((k) => [k, label[k], F(k).length, k === "cc" ? F(k).filter((d) => ccUnread(d, uid)).length : 0])} />
-              <ListTools f={lf} setF={setLf} drafters={drafters} />
-              <DocList uid={uid} docs={tab === "company" ? (companyAll === null ? null : F("company")) : (list === null ? null : F(tab))} onOpen={(d) => setOpen(d.id)} empty={lf.q || lf.from || lf.who ? "조건에 맞는 문서가 없습니다" : tab === "todo" ? "결재할 문서가 없습니다" : "문서가 없습니다"} />
-            </>);
-          })()}
+      {(page === "inbox" || page === "mine") && wide ? (
+        <div className="grid gap-4 items-start" style={{ gridTemplateColumns: "minmax(400px, 0.85fr) minmax(0, 1.5fr)" }}>
+          <div className="min-w-0">{page === "inbox" ? inboxList : mineList}</div>
+          <div className="min-w-0 sticky top-[76px]">
+            {cur ? <Viewer key={cur.id} inline d={cur} me={meFull} staff={staff} company={company} onClose={() => setOpen(null)} onRedraft={redraft} onEdit={edit} />
+              : <div className="h-[calc(100vh-190px)] min-h-[640px] rounded-[20px] border-2 border-dashed border-[#DCE3EE] bg-white grid place-items-center text-center"><div><div className="text-[12px] font-extrabold tracking-[0.24em] text-[#9AA9C3]" style={{ fontFamily: MONO }}>PREVIEW</div><div className="text-[15px] font-black text-[#5B6B85] mt-1">왼쪽 목록에서 문서를 누르면<br />여기에 결재 문서가 바로 보입니다</div></div></div>}
+          </div>
         </div>
-      )}
-      {page === "mine" && (
-        <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
-          {(() => {
-            // ⭐ 2026-10-31 숫자는 문서 수(예전엔 "새 결과" 수라 목록 2건인데 1로 보이고, 열어 보면 숫자가 사라졌다) — 새 결과는 빨간 점
-            const M = (k) => applyListTools(mineSets[k] || [], lf) || [];
-            const keys = [["all", "전체"], ["pending", "진행 중"], ["approved", "완료"], ["rejected", "반려"], ["cancelled", "결재 취소"], ["withdrawn", "회수"]];
-            return (<>
-              <Tabs tab={tab} setTab={setTab} tabs={keys.map(([k, l]) => [k, l, M(k).length, unreadIn(M(k))])} />
-              <ListTools f={lf} setF={setLf} />
-              <DocList uid={uid} docs={list === null ? null : M(tab)} onOpen={(d) => setOpen(d.id)} empty={lf.q || lf.from ? "조건에 맞는 문서가 없습니다" : "올린 문서가 없습니다. 위 버튼으로 새 문서를 작성하세요."} />
-            </>);
-          })()}
-        </div>
-      )}
+      ) : <>{page === "inbox" && inboxList}{page === "mine" && mineList}</>}
       {page === "lines" && <LinesPage company={company} me={meFull} staff={staff} />}
 
-      {cur && <Viewer d={cur} me={meFull} staff={staff} company={company} onClose={() => setOpen(null)} onRedraft={redraft} onEdit={edit} />}
+      {cur && !(wide && (page === "inbox" || page === "mine")) && <Viewer d={cur} me={meFull} staff={staff} company={company} onClose={() => setOpen(null)} onRedraft={redraft} onEdit={edit} />}
     </div>
   );
 }

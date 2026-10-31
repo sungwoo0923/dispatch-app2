@@ -36,6 +36,7 @@ import { AssetManager } from "./OfficeBooks";
 import { FundsWorkspace, FundsBoard, isCeoPosition } from "./FundsBoard";
 import { AccountingOverview, RetireDesk, useYearOrders } from "./AcctSuite";
 import HrHub from "./HrHub";
+import DriverAccounts from "./DriverAccounts";
 import ClassicResume from "./ClassicResume";
 import { LeaveLedger, OnboardingBoard, CertIssuer } from "./HrTools";
 import DriverDocsReview from "./DriverDocsReview";
@@ -3172,9 +3173,10 @@ const KP_SIDE_GROUPS = [
 // 🏢 부서 모드 메뉴 — 경리·회계(test) / 인사관리자(hrManager)
 const DEPT_MENUS = {
   // 경리: 돈(정산·회계·자금) + 확인용 배차현황 — 배차관리·실시간배차현황은 빼고
-  acct: ["HOME", "전자결재", "배차현황", "정산관리", "매출관리", "회계관리", "자금관리", "비품관리", "직원관리", "기사관리", "관리자메뉴", "회사관리"],
+  acct: ["HOME", "전자결재", "배차현황", "정산관리", "매출관리", "회계관리", "자금관리", "비품관리", "기사관리", "관리자메뉴", "회사관리"],
   // 인사: 사람(인사관리부·출근기록부를 회사관리에서 상단으로) — 매출·정산은 빼고
-  hr: ["HOME", "전자결재", "인사관리부", "연차관리", "입퇴사관리", "증명서발급", "직원관리", "기사관리", "관리자메뉴", "회사관리"],
+  // 연차관리·직원 정보·퇴사는 인사관리부 안으로, 직원 승인은 관리자메뉴, 기사 승인은 기사관리 안으로(2026-10-31 중복 정리)
+  hr: ["HOME", "전자결재", "인사관리부", "증명서발급", "기사관리", "관리자메뉴", "회사관리"],
   // 👔 임원(대표·전무·이사) — 보고·결재·매출 중심
   // 결재는 홈 › 전자결재에 다 있어 상단에서 뺐다(2026-10-31)
   exec: ["HOME", "자금현황", "스케줄", "직원일정", "매출관리", "인사이트", "관리자메뉴", "회사관리"],
@@ -3184,12 +3186,11 @@ const DEPT_SIDE_GROUPS = {
   acct: [
     { label: "경리 · 회계", items: ["HOME", "전자결재", "정산관리", "매출관리", "회계관리"] },
     { label: "자금 · 총무", items: ["자금관리", "비품관리"] },
-    { label: "직원 · 기사", items: ["직원관리", "기사관리"] },
+    { label: "기사", items: ["기사관리"] },
     { label: "확인 · 관리", items: ["배차현황", "관리자메뉴", "회사관리"] },
   ],
   hr: [
-    { label: "인사", items: ["HOME", "전자결재", "인사관리부", "연차관리"] },
-    { label: "입·퇴사", items: ["입퇴사관리", "증명서발급", "직원관리"] },
+    { label: "인사", items: ["HOME", "전자결재", "인사관리부", "증명서발급"] },
     { label: "기사", items: ["기사관리"] },
     { label: "관리", items: ["관리자메뉴", "회사관리"] },
   ],
@@ -8175,7 +8176,7 @@ return (
             dispatchData={dispatchDataFiltered}
             onOrderDoubleClick={(order) => setHomeClickedOrder(order)}
             dept={deptMode}
-            onDeptGo={(k) => { const [m, t] = String(k).split(":"); if (m === "정산관리" && t) set정산관리Tab(t); if (m === "출근기록부" || (m === "인사관리부" && t)) { try { sessionStorage.setItem("kpHrTab", m === "출근기록부" ? "attendance" : t); } catch { /* 무시 */ } handleMenuClick("인사관리부"); return; } if (m === "기사서류") { set기사관리Tab("docs:driver"); handleMenuClick("기사관리"); return; } if (m === "자금관리" && t) { try { sessionStorage.setItem("kpFundsTab", t); } catch { /* 무시 */ } } if (m === "결재함") { window.__kpOpenApproval = t ? { id: t, page: "inbox" } : { page: "inbox" }; window.dispatchEvent(new Event("kp-open-approval")); return; } handleMenuClick(m); }}
+            onDeptGo={(k) => { const [m, t] = String(k).split(":"); if (m === "정산관리" && t) set정산관리Tab(t); if (m === "출근기록부" || (m === "인사관리부" && t)) { try { sessionStorage.setItem("kpHrTab", m === "출근기록부" ? "attendance" : t); } catch { /* 무시 */ } handleMenuClick("인사관리부"); return; } if (m === "기사서류") { set기사관리Tab("docs:driver"); handleMenuClick("기사관리"); return; } if (m === "기사승인") { set기사관리Tab("acc:pending"); handleMenuClick("기사관리"); return; } if (m === "자금관리" && t) { try { sessionStorage.setItem("kpFundsTab", t); } catch { /* 무시 */ } } if (m === "결재함") { window.__kpOpenApproval = t ? { id: t, page: "inbox" } : { page: "inbox" }; window.dispatchEvent(new Event("kp-open-approval")); return; } handleMenuClick(m); }}
           />
         )}
 
@@ -8305,6 +8306,7 @@ return (
           <KpSubNav code="DRIVERS" title="기사관리" icon="user" active={기사관리Tab} onSelect={set기사관리Tab}
             groups={[
               { label: "기사", items: [{ key: "drv", label: "기사관리", en: "DRIVERS", icon: "user", sub: ["전체", "일반", "직영", "지입", "임대", "블랙"].map((g) => ({ key: `d:${g}`, label: g === "전체" ? "전체 기사" : g, icon: g === "블랙" ? "alert" : g === "지입" ? "link" : g === "임대" ? "key" : "user", badge: g === "전체" ? 0 : (drivers || []).filter((d) => (d.등급 || "일반") === g && (String(d.이름 || "").trim() || String(d.차량번호 || "").trim())).length, soft: true })) }] },
+              { label: "기사 앱 계정", items: [{ key: "acc", label: "기사 앱 계정", en: "APP ACCOUNTS", icon: "phone", sub: [{ key: "acc:pending", label: "가입 승인", icon: "hourglass" }, { key: "acc:drivers", label: "승인된 기사", icon: "idcard" }] }] },
               { label: "서류관리", items: [{ key: "docs", label: "서류관리", en: "DOCUMENTS", icon: "file", sub: [{ key: "docs:driver", label: "기사 제출 서류", icon: "file" }, { key: "docs:penalty", label: "과태료 · 사고 서류", icon: "alert" }] }] },
             ]}>
             {기사관리Tab.startsWith("d:") && (
@@ -8318,6 +8320,7 @@ return (
                 onGrade={(g) => set기사관리Tab(`d:${g}`)}
               />
             )}
+            {기사관리Tab.startsWith("acc:") && <DriverAccounts company={deptCompany} isViewer={isViewer} tab={기사관리Tab.slice(4)} onTab={(t) => set기사관리Tab(`acc:${t}`)} />}
             {기사관리Tab === "docs:driver" && <DriverDocsReview company={deptCompany} isViewer={isViewer} />}
             {기사관리Tab === "docs:penalty" && <FleetManagement dispatchData={dispatchDataFiltered} role={role} forceTab="penalty" hideChrome />}
           </KpSubNav>
