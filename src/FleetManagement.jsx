@@ -2915,23 +2915,24 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
         {/* ⭐ 사용자 요청 — 이름만 있던 자리에 차량번호/연락처도 같이 가로로 보여준다(지입/직영 뱃지는 그대로 유지). */}
         {/* ⭐ 사용자 요청 — 기사정보가 작고 고정폭(monospace) 글씨라 뭉개져 보였다. 4/5파트
             오더와 같은 기본 글씨체로 바꾸고, 사원증/명함처럼 크게 한눈에 보이게 만든다. */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-          {index != null && (
-            <span style={{ fontFamily: FC_MONO, fontSize: 13, fontWeight: 800, color: "#94A3B8", minWidth: 26, textAlign: "center", flexShrink: 0, letterSpacing: "0.04em" }}>{String(index).padStart(2, "0")}</span>
-          )}
+        {/* ⭐ 2026-10-31 — 순번이 카드 바깥 왼쪽에 따로 있어 밀려 보였다 → 기사정보 카드 안(사진 위 모서리)으로 */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flex: "0 1 auto", minWidth: 0, maxWidth: "100%" }}>
           <div
             onDoubleClick={() => setJourneyOpen(true)}
             title="더블클릭하면 이 기사의 전체 이동 노선을 봅니다"
             style={{
-            display: "flex", alignItems: "center", gap: 12, padding: "10px 16px 10px 12px", minWidth: 290, cursor: "pointer", userSelect: "none",
+            display: "flex", alignItems: "center", gap: 12, padding: "10px 16px 10px 12px", minWidth: "min(290px, 100%)", maxWidth: "100%", cursor: "pointer", userSelect: "none", position: "relative",
             border: "1px solid #DCE3EF", borderLeft: `5px solid ${driver.등급 === "직영" ? "#0f766e" : NAVY}`, borderRadius: 12,
             background: "#fff", boxShadow: "0 2px 8px rgba(27,43,75,0.08)",
           }}>
-            <div style={{ width: 46, height: 46, borderRadius: 12, background: "linear-gradient(135deg,#2D4C82 0%,#0F1A30 100%)", boxShadow: "inset 0 0 0 1px rgba(207,224,255,.25), 0 4px 10px rgba(15,26,48,.25)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 900, flexShrink: 0 }}>
+            <div style={{ width: 46, height: 46, borderRadius: 12, flexShrink: 0, background: "linear-gradient(135deg,#2D4C82 0%,#0F1A30 100%)", boxShadow: "inset 0 0 0 1px rgba(207,224,255,.25), 0 4px 10px rgba(15,26,48,.25)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 900, flexShrink: 0 }}>
               {String(driver.이름 || "?").slice(0, 1)}
             </div>
             <div style={{ minWidth: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", rowGap: 4 }}>
+                {index != null && (
+                  <span style={{ fontFamily: FC_MONO, fontSize: 11.5, fontWeight: 800, color: "#fff", background: "#94A3B8", borderRadius: 6, padding: "1px 6px", letterSpacing: "0.04em" }}>{String(index).padStart(2, "0")}</span>
+                )}
                 <span style={{ fontSize: 20, fontWeight: 900, color: "#111827", letterSpacing: "-0.01em" }}>{driver.이름}</span>
                 <span style={{ fontSize: 12, fontWeight: 800, padding: "2px 8px", borderRadius: 6, background: driver.등급 === "직영" ? "#0f766e" : NAVY, color: "#fff" }}>{driver.등급}</span>
                 <VehicleSpecChip type={driver.차량종류} ton={driver.차량톤수} />

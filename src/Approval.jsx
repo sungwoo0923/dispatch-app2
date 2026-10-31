@@ -115,7 +115,7 @@ function FitPaper({ children, base = 820, max = 1.5 }) {
   React.useLayoutEffect(() => {
     const el = ref.current;
     if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(([e]) => setZ(Math.max(1, Math.min(max, Math.floor((e.contentRect.width / base) * 100) / 100))));
+    const ro = new ResizeObserver(([e]) => setZ(Math.max(e.contentRect.width < 760 ? 0.4 : 1, Math.min(max, Math.floor((e.contentRect.width / base) * 100) / 100))));
     ro.observe(el);
     return () => ro.disconnect();
   }, [base, max]);
@@ -645,7 +645,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
           className={`h-9 px-3.5 rounded-xl text-[14px] font-black border transition ${f.key === formKey ? "bg-[#0F1A30] text-white border-[#0F1A30] shadow-[0_6px_16px_rgba(15,26,48,0.25)]" : "bg-white text-[#3A4A66] border-[#E3E8F0] hover:border-[#4B6CB7]"}`}>{f.label}</button>
       ))}
     </div>
-    <div className="grid gap-5" style={{ gridTemplateColumns: "minmax(420px, 520px) 1fr" }}>
+    <div className="kp-ap-split grid gap-5" style={{ gridTemplateColumns: "minmax(420px, 520px) 1fr" }}>
       <div className="space-y-4">
         {(formKey === "annual" || formKey === "half") && <LeaveCard leave={leave} thisDays={editId ? 0 : (leaveUseOf({ cat, form: formKey, data })?.days || 0)} />}
         <div className="rounded-2xl border border-[#E3E8F0] bg-white p-5 space-y-3.5">
@@ -820,9 +820,9 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit }) {
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[1000000] bg-[#0F1A30]/50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="w-full max-w-[1280px] h-[92vh] bg-[#F4F6FA] rounded-[24px] overflow-hidden flex shadow-[0_24px_60px_rgba(15,26,48,0.4)]" onClick={(e) => e.stopPropagation()}>
-        <div className="flex-1 overflow-auto p-6 bg-[#E9EDF3]">
+    <div className="fixed inset-0 z-[1000000] bg-[#0F1A30]/50 flex items-center justify-center p-0 md:p-4" onClick={onClose}>
+      <div className="w-full max-w-[1280px] h-full md:h-[92vh] bg-[#F4F6FA] md:rounded-[24px] overflow-y-auto md:overflow-hidden flex flex-col md:flex-row shadow-[0_24px_60px_rgba(15,26,48,0.4)]" onClick={(e) => e.stopPropagation()}>
+        <div className="md:flex-1 md:overflow-auto p-3 md:p-6 bg-[#E9EDF3] order-2 md:order-1">
           <FitPaper><ApprovalPaper paperRef={paperRef} form={form} data={d.data} title={d.title} line={d.line} cc={d.cc} drafter={d.drafter} docNo={d.docNo} createdMs={toMs(d.createdAt)} staff={staff} status={d.status} /></FitPaper>
           {(d.images || []).length > 0 && (
             <div className="max-w-[780px] mx-auto mt-4 bg-white rounded-2xl p-4">
@@ -831,7 +831,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit }) {
             </div>
           )}
         </div>
-        <aside className="w-[360px] shrink-0 bg-white border-l border-[#E3E8F0] flex flex-col">
+        <aside className="w-full md:w-[360px] shrink-0 bg-white md:border-l border-[#E3E8F0] flex flex-col order-1 md:order-2">
           <div className="px-5 py-4 border-b border-[#EEF1F6] flex items-center gap-2">
             <div className="min-w-0">
               <div className="text-[12px] font-extrabold tracking-[0.2em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>{d.docNo}</div>
@@ -931,7 +931,7 @@ function DocList({ docs, onOpen, empty, uid }) {
   return (
     <div className="divide-y divide-[#F1F4F9]">
       {docs.map((d) => (
-        <button key={d.id} type="button" onClick={() => onOpen(d)} className="w-full text-left px-5 py-3.5 hover:bg-[#F8FAFD] flex items-center gap-4">
+        <button key={d.id} type="button" onClick={() => onOpen(d)} className="w-full text-left px-3.5 md:px-5 py-3.5 hover:bg-[#F8FAFD] flex items-center gap-2.5 md:gap-4">
           <span className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}><ShellIcon name={catOf(d.cat).icon} size={18} /></span>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
@@ -947,7 +947,7 @@ function DocList({ docs, onOpen, empty, uid }) {
             <div className="text-[14px] font-bold text-[#3A4A66]">{d.drafter?.name} {d.drafter?.position}</div>
             <div className="text-[12.5px] text-[#5B6B85]" style={{ fontFamily: MONO }}>{ymd(toMs(d.createdAt))}</div>
           </div>
-          <div className="shrink-0 w-[150px] flex justify-end"><Progress d={d} /></div>
+          <div className="shrink-0 w-[150px] hidden md:flex justify-end"><Progress d={d} /></div>
           <span className={`shrink-0 w-[72px] text-center h-7 leading-7 rounded-full text-[13px] font-black ${d.status === "approved" ? "bg-[#0F1A30] text-white" : d.status === "pending" ? "bg-[#EEF3FB] text-[#1B2B4B]" : "border border-[#DCE3EE] text-[#5B6B85]"}`}>{STATUS[d.status]}</span>
         </button>
       ))}
@@ -981,7 +981,7 @@ function LinesPage({ company, me, staff }) {
     } catch (e) { window.alert(e.message); }
   };
   return (
-    <div className="grid gap-5" style={{ gridTemplateColumns: "1fr minmax(360px, 440px)" }}>
+    <div className="kp-ap-split grid gap-5" style={{ gridTemplateColumns: "1fr minmax(360px, 440px)" }}>
       <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
         <div className="px-5 py-4 border-b border-[#EEF1F6] flex items-center">
           <div>
@@ -1102,22 +1102,22 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
 
   return (
     <div className="space-y-4">
-      <div className="relative overflow-hidden rounded-[22px] px-7 py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]"
+      <div className="relative overflow-hidden rounded-[22px] px-4 py-4 md:px-7 md:py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]"
         style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <div>
           <div className="text-[12px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>E-APPROVAL · {heroEn}</div>
-          <div className="text-[24px] font-black mt-0.5">{heroTitle}</div>
-          <div className="text-[14px] text-white/60 mt-0.5">{heroDesc}</div>
+          <div className="text-[20px] md:text-[24px] font-black mt-0.5">{heroTitle}</div>
+          <div className="text-[12.5px] md:text-[14px] text-white/60 mt-0.5">{heroDesc}</div>
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap md:flex-nowrap w-full md:w-auto">
           {kpis.map(([l, v]) => (
-            <div key={l} className="min-w-[110px] px-4 py-2.5 rounded-2xl bg-white/[0.07] border border-white/10">
+            <div key={l} className="flex-1 md:flex-none min-w-0 md:min-w-[110px] px-3 md:px-4 py-2 md:py-2.5 rounded-2xl bg-white/[0.07] border border-white/10">
               <div className="text-[12.5px] font-bold text-white/55">{l}</div>
               <div className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div>
             </div>
           ))}
           {!isCat && page !== "lines" && (
-            <div className="flex flex-col gap-1.5">
+            <div className="grid grid-cols-2 md:flex md:flex-col gap-1.5 w-full md:w-auto">
               {APPROVAL_CATS.map((c) => <button key={c.key} type="button" onClick={() => { setPreset(null); setPage(c.key); }} className="h-8 px-3 rounded-lg bg-white text-[#0F1A30] text-[13px] font-black inline-flex items-center gap-1.5"><ShellIcon name={c.icon} size={13} />{c.label}</button>)}
             </div>
           )}

@@ -211,3 +211,8 @@ table tbody tr:nth-child(odd) td {
   .kp-m-pc div:has(> table) { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
   .kp-m-pc table { min-width: 560px; }
 }
+@media (max-width: 767px) {
+  /* 전자결재·인수인계·공지 작성 — 좌우 2단을 위아래로, 화면 밖으로 밀리지 않게 */
+  .kp-ap-split, .kp-writer-split { grid-template-columns: minmax(0, 1fr) !important; }
+  .kp-phone-body { overflow-x: hidden; }
+}

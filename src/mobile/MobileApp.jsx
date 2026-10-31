@@ -21,6 +21,7 @@ import React, { useState, useMemo, useEffect, useRef, startTransition, useSyncEx
 import { withCo, getTenant } from "../fsTenant";
 // 📱 PC와 같은 화면(매출관리·운임조회·단가표·지입차관리·전자결재·직원관리) — 메뉴를 열 때만 불러온다
 const MobilePcView = React.lazy(() => import("./MobilePcViews"));
+import { useMobileAlerts } from "./mobileAlerts";
 // ⭐ 작은 표시 전용 저장소 — "최신 정보 확인 중"·첫 진입 진행률이 바뀔 때 화면 전체(오더 목록)를
 // 다시 그리지 않고 그 표시만 바꾼다(저사양 폰에서 스크롤 끊김 방지)
 function createMiniStore(init) {
@@ -2323,6 +2324,14 @@ const quickRange = (days) => {
   };
   const [quickAssignTarget, setQuickAssignTarget] = useState(null);
   const [successBanner, setSuccessBanner] = useState(null);
+  // 🔔 메뉴 숫자(전자결재·인수인계·가입 신청·공지) + 앱 안 알림 배너 — 2026-10-31
+  const alertCounts = useMobileAlerts({
+    uid: user?.uid,
+    role,
+    team: (() => { try { return window.__kpMeTeam || ""; } catch { return ""; } })(),
+    company: (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim(),
+    onAlert: (msg) => showTopOrderBanner(msg),
+  });
 
   const showToast = (msg) => {
   if (toastMuted) return;   // 🔥 추가
@@ -5751,6 +5760,7 @@ const title =
   onRefresh={page === "list" ? handleRefresh : undefined}
   onValidateOrders={page === "list" ? () => handleValidateOrders(false) : undefined}
   onMenu={page === "list" ? () => setShowMenu(true) : undefined}
+  menuBadge={(alertCounts.approval || 0) + (alertCounts.handover || 0) + (alertCounts.notice || 0) + (["admin", "totalMaster", "superadmin", "viewer"].includes(role) ? (alertCounts.signupStaff || 0) + (alertCounts.signupDriver || 0) : 0)}
   notifCount={unreadCount}
   onNotifClick={() => { setShowNotifPanel(true); markAllRead(); }}
   messengerUnread={messengerUnread}
@@ -5923,6 +5933,8 @@ onGoAttendance={() => {
           onGoGsheet={() => { setPage("gsheet"); setShowMenu(false); }}
           onGoBlind={() => { setPage("blind"); setShowMenu(false); }}
           onGo={(p) => { setPage(p); setShowMenu(false); }}
+          alertCounts={alertCounts}
+          unassignedCount={unassignedOrders.length}
           onDeleteAll={deleteAllOrders}
           setUiScale={setUiScale}
           uiScale={uiScale}
@@ -5935,41 +5947,11 @@ onGoAttendance={() => {
       )}
 
       <div className="flex-1 overflow-y-auto pb-24" style={{ WebkitOverflowScrolling: "touch", scrollbarWidth: "thin", scrollbarColor: "rgba(0,0,0,0.12) transparent" }}>
-        {page === "notice" && (() => {
-  const totalNP = Math.ceil(notices.length / NOTICE_PAGE_SIZE);
-  const pagedN = notices.slice((noticePage - 1) * NOTICE_PAGE_SIZE, noticePage * NOTICE_PAGE_SIZE);
-  const accentCls = cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600";
-  return (
-  <div className="px-4 py-3">
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-      <div className={`grid text-[11px] font-semibold text-white px-3 py-2.5 ${accentCls}`}
-        style={{ gridTemplateColumns: "72px 1fr 56px" }}>
-        <span>날짜</span><span className="text-center">제목</span>
-        {["admin", "totalMaster", "hrManager", "superadmin"].includes(role) ? (
-          <button onClick={(e) => { e.stopPropagation(); setSelectedNotice(null); setNoticeForm({ category: "공지사항", author: mobileUsers.find(u => u.id === currentUser?.uid)?.name || "", content: "", audience: "internal" }); setNoticeOpen(true); }}
-            className="text-right text-white text-[11px] font-semibold opacity-80 hover:opacity-100">+ 등록</button>
-        ) : (
-          <span className="text-right">작성자</span>
+        {page === "notice" && (
+          <React.Suspense fallback={null}>
+            <MobilePcView kind="notice" userCompany={pcViewCompany} me={pcViewMe} role={role} />
+          </React.Suspense>
         )}
-      </div>
-      {notices.length === 0 ? (
-        <div className="text-sm text-gray-400 text-center py-6">등록된 공지가 없습니다.</div>
-      ) : pagedN.map(n => (
-        <button key={n.id} onClick={() => setSelectedNotice(n)}
-          className="w-full grid px-3 py-2.5 border-t border-gray-100 text-left active:bg-gray-50 transition"
-          style={{ gridTemplateColumns: "72px 1fr 56px" }}>
-          <span className="text-[11px] text-gray-400 shrink-0">
-            {n.createdAt?.seconds ? new Date(n.createdAt.seconds * 1000).toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" }).replace(". ", "/").replace(".", "") : "-"}
-          </span>
-          <span className="text-[13px] font-semibold text-gray-800 truncate pr-2 text-center">{n.title || "공지사항"}</span>
-          <span className="text-[11px] text-gray-500 text-right truncate">{n.author || "-"}</span>
-        </button>
-      ))}
-    </div>
-    <MobilePagination page={noticePage} total={totalNP} onChange={setNoticePage} />
-  </div>
-  );
-})()}
 
 {/* ================= 일정 ================= */}
 {page === "schedule" && (
@@ -7380,7 +7362,7 @@ function MobileVersionChip({ dark = false }) {
   );
 }
 
-const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh, onValidateOrders, onMenu, notifCount = 0, onNotifClick, cardVersionB = false, messengerUnread = 0, onMessengerClick, mailCompany = "", mailName = "" }) {
+const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh, onValidateOrders, onMenu, menuBadge = 0, notifCount = 0, onNotifClick, cardVersionB = false, messengerUnread = 0, onMessengerClick, mailCompany = "", mailName = "" }) {
   const newVer = useNewVersion(); // ⭐ 새 버전 배포 시 메뉴 버튼에 점 표시
   // ⭐ 2026-10-22 디자인 개선 — A형: 반투명 흰 머리줄 / B형: 남색 그라데이션 머리줄. 버튼은 둥근 네모 타일.
   const isListPage = title === "등록내역";
@@ -7404,7 +7386,9 @@ const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh
         {isListPage ? (
           <button onClick={onMenu} className="kp-m-hbtn relative" aria-label="메뉴">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.2" strokeLinecap="round"><path d="M4 7h16M4 12h11M4 17h16" /></svg>
-            {newVer && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#1B2B4B] ring-2 ring-white" />}
+            {menuBadge > 0
+              ? <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-black grid place-items-center ring-2 ring-white tabular-nums">{menuBadge > 99 ? "99+" : menuBadge}</span>
+              : newVer && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#1B2B4B] ring-2 ring-white" />}
           </button>
         ) : (
           onBack && (
@@ -7741,11 +7725,11 @@ function MobileSideMenu({
   onGoGsheet,
   onGoBlind,
   onGo,
+  alertCounts,
+  unassignedCount = 0,
 }) {
   const [loginMgrOpen, setLoginMgrOpen] = useState(false); // ⭐ 로그인 관리
-  const myDoc = mobileUsers?.find((u) => u.id === currentUser?.uid) || {};
   const isAdminRole = ["admin", "totalMaster", "superadmin"].includes(role);
-  const isMasterAccount = role === "totalMaster" || (myDoc.isMaster === true && role === "admin");
   const canRevenue = ["admin", "totalMaster", "superadmin", "test", "viewer"].includes(role);
   const canAdminMenu = isAdminRole || role === "viewer";
   const myName =
@@ -7853,34 +7837,30 @@ function MobileSideMenu({
             일반 스크롤바로 오르내리게 통합했다. */}
         <div className="flex-1 overflow-y-auto py-1">
           {/* ⭐ 2026-10-31 — PC 메뉴와 같은 구성·권한 규칙(DispatchApp menuState)으로 정리.
-              실무자: 매출관리 숨김 / 경리·회계: 화물등록·단가표 숨김 / 관리자메뉴: 관리자·마스터·조회전용 /
-              최고관리자 전용(관리센터·구글시트·블라인드·회사코드조회)은 최고관리자만 */}
+              실무자: 매출관리 숨김 / 경리·회계: 화물등록·단가표 숨김 / 관리자 전용 메뉴: 관리자·마스터·조회전용 /
+              최고관리자 전용(관리센터·구글시트·블라인드·회사코드조회)은 최고관리자만.
+              일정(휴가)·인수인계는 전자결재 안으로, 자사운임표는 통합운임조회 안으로 합쳤다(중복 메뉴 정리). */}
           <MenuSection title="배차관리" dark={dark} alwaysOpen>
             <MenuItem label="등록내역" onClick={onGoList} dark={dark} />
             {role !== "test" && <MenuItem label="화물등록" onClick={onGoCreate} dark={dark} />}
-            <MenuItem label="미배차현황" onClick={onGoUnassigned} dark={dark} />
+            <MenuItem label="미배차현황" onClick={onGoUnassigned} badge={unassignedCount > 0 ? unassignedCount : null} dark={dark} />
           </MenuSection>
           <MenuSection title="사내 업무" dark={dark} alwaysOpen>
-            <MenuItem label="전자결재 · 신청 / 결재" onClick={() => onGo?.("approval")} dark={dark} />
-            <MenuItem label="공지사항" onClick={onGoNotice} badge={hasNewNotice ? "NEW" : null} dark={dark} />
-            <MenuItem label="일정" onClick={onGoSchedule} badge={hasNewSchedule ? "NEW" : null} dark={dark} />
-            <MenuItem label="인수인계" onClick={onGoHandover} dark={dark} />
+            <MenuItem label="전자결재" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.handover || 0) || null} dark={dark} />
+            <MenuItem label="공지사항" onClick={onGoNotice} badge={alertCounts?.notice ? alertCounts.notice : hasNewNotice ? "NEW" : null} dark={dark} />
             <MenuItem label="출근기록부" onClick={onGoAttendance} dark={dark} />
           </MenuSection>
           <MenuSection title="운임" dark={dark} alwaysOpen>
-            <MenuItem label="운임조회 · 전국운임조회" onClick={onGoNationalFare} dark={dark} />
-            <MenuItem label="자사운임표" onClick={onGoFare} dark={dark} />
+            <MenuItem label="통합운임조회" onClick={onGoNationalFare} dark={dark} />
             {role !== "test" && <MenuItem label="단가표" onClick={onGoRateCard} dark={dark} />}
           </MenuSection>
           <MenuSection title="기사 · 매출" dark={dark} alwaysOpen>
             <MenuItem label="지입차관리" onClick={onGoFleet} dark={dark} />
             {canRevenue && <MenuItem label="매출관리" onClick={onGoSales} dark={dark} />}
-            {isAdminRole && <MenuItem label="경영인텔리전스" onClick={onGoIntel} dark={dark} />}
           </MenuSection>
           {canAdminMenu && (
-            <MenuSection title={isMasterAccount ? "관리자 메뉴 · 마스터" : "관리자 메뉴"} dark={dark} alwaysOpen>
-              <MenuItem label="직원 관리 · 승인 / 권한" onClick={() => onGo?.("staff")} dark={dark} />
-              <MenuItem label="기사 등록 승인" onClick={() => { try { sessionStorage.setItem("mFleetTab", "registration"); } catch { /* 무시 */ } onGoFleet(); }} dark={dark} />
+            <MenuSection title="관리자 전용 메뉴" dark={dark} alwaysOpen>
+              <MenuItem label="직원 관리" onClick={() => onGo?.("staff")} badge={(alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) || null} dark={dark} />
             </MenuSection>
           )}
           {role === "totalMaster" && (
@@ -8095,11 +8075,12 @@ function MenuItem({ label, onClick, badge, dark }) {
     >
       <span>{label}</span>
       <div className="flex items-center gap-2">
-        {badge && (
-          <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-full leading-none ${dark ? "bg-white text-[#1B2B4B]" : "bg-[#1B2B4B] text-white"}`}>
-            {badge}
-          </span>
-        )}
+        {badge ? (
+          // 숫자(처리할 건수)는 눈에 띄게 빨간 원, "NEW" 같은 글자는 기존 표시
+          typeof badge === "number"
+            ? <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-rose-500 text-white text-[11px] font-black grid place-items-center tabular-nums">{badge > 99 ? "99+" : badge}</span>
+            : <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-full leading-none ${dark ? "bg-white text-[#1B2B4B]" : "bg-[#1B2B4B] text-white"}`}>{badge}</span>
+        ) : null}
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={dark ? "rgba(255,255,255,0.35)" : "#9AA9C3"} strokeWidth="2.2" strokeLinecap="round">
           <path d="M9 6l6 6-6 6" />
         </svg>

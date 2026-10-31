@@ -4565,6 +4565,48 @@ exports.notifyApproval = functions.firestore.document("approvals/{id}").onWrite(
   return null;
 });
 
+// 📢 공지사항 푸시(2026-10-31) — 새 공지가 올라오면 받는 대상 전원에게(작성자 제외)
+//  같은 회사 직원 · 팀 지정 공지는 그 팀 + 관리자만 · 화주사 대상 공지는 직원 + 연동 화주 계정은 화주 화면 공지라 제외
+const NOTICE_ADMIN_ROLES = ["admin", "totalMaster", "superadmin"];
+exports.notifyNotice = functions.firestore.document("notices/{id}").onCreate(async (snap) => {
+  const n = snap.data() || {};
+  const company = n.companyName || "돌캐";
+  const teams = Array.isArray(n.teams) ? n.teams : [];
+  const users = await db.collection("users").where("companyName", "==", company).get();
+  const tokens = [];
+  users.forEach((d) => {
+    const u = d.data() || {};
+    if (d.id === n.authorUid || !u.fcmToken || u.approved === false || u.employmentStatus === "퇴사") return;
+    if (["driver", "shipper", "cafeUser"].includes(u.role)) return;
+    if (teams.length && !NOTICE_ADMIN_ROLES.includes(u.role) && !teams.includes(String(u.team || "").trim())) return;
+    tokens.push(u.fcmToken);
+  });
+  const title = `📢 ${n.category || "공지사항"} · ${n.author || ""}`;
+  const body = `${n.title || ""}${n.content ? `\n${String(n.content).replace(/\s+/g, " ").slice(0, 80)}` : ""}`;
+  await sendPushAndCleanup([...new Set(tokens)], { notification: { title, body }, android: { priority: "high" } }, "공지사항").catch((e) => console.error("공지 푸시 실패:", e));
+  return null;
+});
+
+// 🙋 가입 신청 푸시(2026-10-31) — 직원·기사가 가입 신청하면(승인 대기) 그 회사 관리자 이상 전원에게
+exports.notifySignup = functions.firestore.document("users/{uid}").onCreate(async (snap) => {
+  const u = snap.data() || {};
+  if (u.approved !== false) return null;
+  if (["shipper", "cafeUser", "totalMaster"].includes(u.role)) return null;
+  const company = u.companyName || "돌캐";
+  const admins = await db.collection("users").where("companyName", "==", company).get();
+  const tokens = [];
+  admins.forEach((d) => {
+    const a = d.data() || {};
+    if (d.id === snap.id || !a.fcmToken || a.approved === false || a.employmentStatus === "퇴사") return;
+    if (NOTICE_ADMIN_ROLES.includes(a.role) || a.isMaster === true) tokens.push(a.fcmToken);
+  });
+  const isDriver = u.role === "driver";
+  const title = isDriver ? "🚚 기사 가입 신청" : "🙋 직원 가입 신청";
+  const body = isDriver ? `${u.name || ""} · ${u.carNo || ""} ${u.vehicleType || ""}\n앱 › 관리자 전용 메뉴 › 직원 관리에서 승인해 주세요` : `${u.name || u.email || ""}\n앱 › 관리자 전용 메뉴 › 직원 관리에서 승인해 주세요`;
+  await sendPushAndCleanup([...new Set(tokens)], { notification: { title, body }, android: { priority: "high" } }, "가입신청").catch((e) => console.error("가입 신청 푸시 실패:", e));
+  return null;
+});
+
 // ⏰ 예약 메일(2026-10-28) — 5분마다 보낼 시간이 된 예약 메일을 실제로 보낸다.
 //  예약 중에는 to가 비어 있어(받는 사람이 미리 못 봄) pendingTo에 담겨 있다가 이때 to로 옮긴다.
 // 🔔 기사 차량 정비·만기 미리 알림 — 매일 오전 9시(한국 시간)

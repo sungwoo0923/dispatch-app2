@@ -19,11 +19,11 @@ export const handoverReceivers = (h) => (Array.isArray(h?.receiverUids) && h.rec
 
 function Hero({ en, title, desc, children }) {
   return (
-    <div className="relative overflow-hidden rounded-[22px] px-7 py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]"
+    <div className="relative overflow-hidden rounded-[22px] px-4 py-4 md:px-7 md:py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]"
       style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
       <div>
         <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{en}</div>
-        <div className="text-[24px] font-black mt-0.5">{title}</div>
+        <div className="text-[20px] md:text-[24px] font-black mt-0.5">{title}</div>
         <div className="text-[13px] text-white/60 mt-0.5">{desc}</div>
       </div>
       {children}
@@ -172,7 +172,7 @@ export function HandoverWriter({ me, company, initial, onCancel, onSaved }) {
           <button type="button" onClick={save} disabled={busy} className="h-11 px-6 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black inline-flex items-center gap-2 disabled:opacity-50"><ShellIcon name="send" size={15} />{busy ? "저장 중…" : initial?.id ? "수정 저장" : `인수인계 등록${picked.length ? ` (${picked.length}명)` : ""}`}</button>
         </div>
       </Hero>
-      <div className="grid gap-5" style={{ gridTemplateColumns: "1fr 400px" }}>
+      <div className="kp-writer-split grid gap-5" style={{ gridTemplateColumns: "1fr 400px" }}>
         <div className="rounded-2xl bg-white border border-[#E3E8F0] p-6 space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div>
