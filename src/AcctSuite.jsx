@@ -4,6 +4,7 @@
 //  · 퇴직 정산(경리 전용): 퇴직금(평균임금×30×재직일/365) · 미사용 연차수당 · 4대보험 상실 · 이직확인서(실업급여) ·
 //    퇴직소득 원천징수 · 원천징수영수증 · 퇴직연금 — 법정 기한(D-day)과 처리 상태를 사람별로
 import { loadAcctPayments } from "./acctPayments";
+import { upsertAutoEntry } from "./ledgerAuto";
 import React from "react";
 import { collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, where, serverTimestamp } from "firebase/firestore";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell } from "recharts";
@@ -233,7 +234,14 @@ function RetireCaseSheet({ company, u, c, profile, resign, approvals, isViewer, 
     const next = { ...f, ...extra };
     await setDoc(doc(db, "retireCases", u.id), { companyName: company, uid: u.id, name: u.name || "", team: u.team || "", position: u.position || "", reason: next.reason, lastDay: next.lastDay, hireDate: next.hireDate, avgMonthly: toInt(next.avgMonthly), unusedLeave: Number(next.unusedLeave || 0), dailyOrdinary: toInt(next.dailyOrdinary), pension: next.pension, memo: next.memo, steps: next.steps, severance: sev.amount, leavePay, updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.email || "" }, { merge: true });
   };
-  const toggle = (k) => { if (isViewer) return; const cur = f.steps[k] || {}; const steps = { ...f.steps, [k]: cur.done ? { done: false } : { done: true, at: kstDay() } }; setF((p) => ({ ...p, steps })); save({ steps }); };
+  const toggle = (k) => {
+    if (isViewer) return; const cur = f.steps[k] || {}; const steps = { ...f.steps, [k]: cur.done ? { done: false } : { done: true, at: kstDay() } }; setF((p) => ({ ...p, steps })); save({ steps });
+    // 🔗 2026-11-01 퇴직금·미사용 연차수당 [지급 완료] → 수입·지출 장부 지출(자금 잔액 반영), 체크를 풀면 장부에서 빠진다
+    if (k === "severance" || k === "leavePay") {
+      const on = !cur.done; const amt = k === "severance" ? (sev.eligible ? sev.amount : 0) : leavePay;
+      upsertAutoEntry(db, `${u.id}_${k}`, { company, date: kstDay(), account: k === "severance" ? "퇴직급여" : "급여·상여", item: `${k === "severance" ? "퇴직금" : "미사용 연차수당"} · ${u.name || ""}`, amount: on ? amt : 0, vendor: u.name || "", memo: "퇴직 정산 — 자동 반영", auto: "retire" }).catch(() => {});
+    }
+  };
   const today = kstDay();
   return (
     <Sheet side en="RETIREMENT · SETTLEMENT" title={`${u.name || u.email} 퇴직 정산`} onClose={onClose}

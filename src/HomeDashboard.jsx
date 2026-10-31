@@ -127,10 +127,11 @@ function CountUp({ value, duration = 900 }) {
 
 function formatCreatedAt(createdAt) {
   if (!createdAt) return null;
-  if (createdAt.seconds) return new Date(createdAt.seconds * 1000).toISOString().slice(0, 10);
-  if (createdAt instanceof Date) return createdAt.toISOString().slice(0, 10);
+  const k = (ms) => new Date(ms + 9 * 3600e3).toISOString().slice(0, 10); // 한국 날짜
+  if (createdAt.seconds) return k(createdAt.seconds * 1000);
+  if (createdAt instanceof Date) return k(createdAt.getTime());
   const d = new Date(createdAt);
-  if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  if (!isNaN(d.getTime())) return k(d.getTime());
   return null;
 }
 
@@ -470,7 +471,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
-  const todayStr = now.toISOString().slice(0, 10);
+  const todayStr = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); // 한국 날짜(UTC로 하면 새벽 0~9시에 어제가 됨)
 
   const getLoadDate = (row) => {
     const v = row?.상차일자 || row?.상차일 || row?.상차;
@@ -743,7 +744,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
     for (let i = 6; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(today.getDate() - i);
-      days.push({ key: d.toISOString().slice(0, 10), date: `${d.getMonth() + 1}/${d.getDate()}`, value: 0 });
+      days.push({ key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, date: `${d.getMonth() + 1}/${d.getDate()}`, value: 0 });
     }
     const map = {};
     days.forEach(d => { map[d.key] = d; });

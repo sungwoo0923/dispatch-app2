@@ -18816,8 +18816,8 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
   const myPhone = me?.phone || me?.전화번호 || "";
   const myCompany = userCompany || me?.companyName || localStorage.getItem("userCompany") || "";
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const thisMonth = new Date().toISOString().slice(0, 7);
+  const todayStr = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const thisMonth = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
 
   const myOrders = orders.filter(o => {
     const author = o.작성자 || o.등록자 || "";
@@ -22614,7 +22614,7 @@ function MobileERPPage({ onBack, cardVersionB = false, drivers = [], clients = [
 
   // 통계
   const totalOrders = orders.length;
-  const thisMonth = new Date().toISOString().slice(0, 7);
+  const thisMonth = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
   const monthOrders = orders.filter(o => (o.상차일 || "").startsWith(thisMonth));
   const monthRevenue = monthOrders.reduce((s, o) => s + Number(o.청구운임 || 0), 0);
   const monthDriverFee = monthOrders.reduce((s, o) => s + Number(o.기사운임 || 0), 0);

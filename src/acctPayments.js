@@ -28,3 +28,19 @@ export function saveAcctPayments(db, year, company, ar, ap) {
   const co = coOf(company);
   return setDoc(doc(db, "acctPayments", payDocId(year, co)), { ar, ap, companyName: co, year: Number(year) });
 }
+
+// 📊 손익보고서 수동 입력(plManual) — 같은 문제(연도 문서 공유) → "회사__연도"
+export async function loadPlManual(db, year, company) {
+  const co = coOf(company);
+  const s = await getDoc(doc(db, "plManual", payDocId(year, co)));
+  if (s.exists()) return s.data().rows || {};
+  try {
+    const old = await getDoc(doc(db, "plManual", String(year)));
+    if (old.exists()) { const d = old.data(); if (d.companyName ? d.companyName === co : co === DEFAULT_COMPANY) return d.rows || {}; }
+  } catch { /* 무시 */ }
+  return {};
+}
+export function savePlManual(db, year, company, rows) {
+  const co = coOf(company);
+  return setDoc(doc(db, "plManual", payDocId(year, co)), { rows, companyName: co, year: Number(year) });
+}

@@ -122,7 +122,7 @@ function NoticeView({ company, me }) {
   React.useEffect(() => onSnapshot(collection(db, "notices"), (s) => setNotices(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setNotices([])), []);
   const isViewer = me?.role === "viewer";
   const canWrite = NOTICE_WRITER_ROLES.includes(me?.role) && !isViewer;
-  const thisMonth = new Date().toISOString().slice(0, 7);
+  const thisMonth = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
   const monthN = notices.filter((n) => { const ms = n.createdAt?.toMillis ? n.createdAt.toMillis() : (n.createdAt?.seconds || 0) * 1000; return ms && new Date(ms).toISOString().slice(0, 7) === thisMonth; }).length;
   if (obit) return <div className="kp-m-pc px-2 py-2"><ObituaryWriter company={company} me={me} onCancel={() => setObit(false)} onSaved={() => setObit(false)} /></div>;
   if (writer) return <div className="kp-m-pc"><NoticeWriter me={me} company={company} initial={writer.initial} onCancel={() => setWriter(null)} onSaved={() => setWriter(null)} /></div>;

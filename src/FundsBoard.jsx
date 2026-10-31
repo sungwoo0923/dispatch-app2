@@ -124,7 +124,7 @@ function AccountPanel({ company, acc, funds = [], onClose }) {
   const [check, setCheck] = React.useState({ date: kstDay(), balance: "" });
   const save = async () => {
     if (!f.name.trim()) return alert("이름을 입력해 주세요.");
-    const data = { kind: f.kind, name: f.name.trim(), bank: f.kind === "현금" ? "" : (f.bank || ""), number: f.kind === "현금" ? "" : onlyDigits(f.number), holder: (f.holder || "").trim(), payType: isCard(f) ? (f.payType || "신용") : "", linkFundId: isCard(f) && f.payType === "체크" ? (f.linkFundId || "") : "", memo: (f.memo || "").trim(), openingBalance: toInt(f.openingBalance), openingDate: f.openingDate || kstDay(), companyName: company };
+    const data = { kind: f.kind, name: f.name.trim(), bank: f.kind === "현금" ? "" : (f.bank || ""), number: f.kind === "현금" ? "" : onlyDigits(f.number), holder: (f.holder || "").trim(), payType: isCard(f) ? (f.payType || "신용") : "", linkFundId: isCard(f) && f.payType === "체크" ? (f.linkFundId || "") : "", useFor: f.kind === "대출" ? [] : (f.useFor || []), memo: (f.memo || "").trim(), openingBalance: toInt(f.openingBalance), openingDate: f.openingDate || kstDay(), companyName: company };
     if (acc?.id) await updateDoc(doc(db, "acctFunds", acc.id), { ...data, updatedAt: serverTimestamp() });
     else await addDoc(collection(db, "acctFunds"), { ...data, checks: [], active: true, createdAt: serverTimestamp() });
     onClose();
@@ -151,6 +151,18 @@ function AccountPanel({ company, acc, funds = [], onClose }) {
       )}
       <div className="flex flex-wrap gap-1.5">{FUND_KINDS.map((k) => <Chip key={k} on={f.kind === k} onClick={() => setF((p) => ({ ...p, kind: k, ...(isCard({ kind: k }) !== isCard(p) ? { bank: "", number: "" } : {}) }))}>{k}</Chip>)}</div>
       <FundFields f={f} set={(patch) => setF((p) => ({ ...p, ...patch }))} funds={funds} selfId={acc?.id} />
+      {f.kind !== "대출" && (
+        <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4">
+          <div className="text-[12.5px] font-black text-[#3A4A66]">자동 연동 기본 통장 <span className="font-semibold text-[#9AA9C3]">(다른 화면에서 처리한 돈이 이 통장 잔액에 자동 반영)</span></div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {[["drvpay", "기사운임 지급(정산관리 지급완료)"], ["collect", "거래처 수금(회계관리 입금)"], ["expense", "지출결의·비품·퇴직금"]].map(([k, l]) => {
+              const on = (f.useFor || []).includes(k);
+              return <Chip key={k} on={on} onClick={() => setF((p) => ({ ...p, useFor: on ? (p.useFor || []).filter((x) => x !== k) : [...(p.useFor || []), k] }))}>{on ? "✓ " : ""}{l}</Chip>;
+            })}
+          </div>
+          <div className="mt-2 text-[11.5px] text-[#7A879C]">용도마다 한 통장만 고르세요. 여러 통장에 같은 용도를 고르면 먼저 등록한 통장이 쓰입니다.</div>
+        </div>
+      )}
       {!(isCard(f) && f.payType === "체크" && f.linkFundId) && (
         <div className="grid grid-cols-2 gap-2">
           {!(isCard(f) && f.payType !== "체크") && <div><Lbl>기준일</Lbl><CustomDatePicker value={f.openingDate} onChange={(e) => setF((p) => ({ ...p, openingDate: e.target.value }))} className={inp} showIcon /></div>}
