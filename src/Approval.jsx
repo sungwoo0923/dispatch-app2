@@ -99,11 +99,14 @@ function Stamp({ step }) {
   return null;
 }
 
+// 📱 좁은 화면(휴대폰)용 문서 배치 — 결재란을 제목 아래로, 항목 이름 칸을 좁게(2026-10-31)
+const PaperCompact = React.createContext(false);
 function Cell({ label, children, wide, last }) {
+  const c = React.useContext(PaperCompact);
   return (
     <div className={`flex ${last ? "" : "border-b"} border-[#0F1A30]/60`}>
-      <div className="w-[118px] shrink-0 bg-[#EEF1F6] border-r border-[#0F1A30]/60 px-3 py-2.5 text-[14px] font-black text-[#0F1A30] flex items-center">{label}</div>
-      <div className={`flex-1 min-w-0 px-3.5 py-2.5 text-[14px] text-[#0F1A30] whitespace-pre-wrap break-words ${wide ? "" : ""}`}>{children}</div>
+      <div className={`${c ? "w-[84px] px-2.5 text-[13px]" : "w-[118px] px-3 text-[14px]"} shrink-0 bg-[#EEF1F6] border-r border-[#0F1A30]/60 py-2.5 font-black text-[#0F1A30] flex items-center break-keep`}>{label}</div>
+      <div className={`flex-1 min-w-0 ${c ? "px-2.5 text-[13.5px]" : "px-3.5 text-[14px]"} py-2.5 text-[#0F1A30] whitespace-pre-wrap break-words ${wide ? "" : ""}`}>{children}</div>
     </div>
   );
 }
@@ -113,14 +116,21 @@ function Cell({ label, children, wide, last }) {
 function FitPaper({ children, base = 820, max = 1.5 }) {
   const ref = React.useRef(null);
   const [z, setZ] = React.useState(1);
+  const [compact, setCompact] = React.useState(() => typeof window !== "undefined" && window.innerWidth < 640);
   React.useLayoutEffect(() => {
     const el = ref.current;
     if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(([e]) => setZ(Math.max(e.contentRect.width < 760 ? 0.4 : 1, Math.min(max, Math.floor((e.contentRect.width / base) * 100) / 100))));
+    const ro = new ResizeObserver(([e]) => {
+      const w = e.contentRect.width;
+      // 휴대폰처럼 좁으면 축소하지 않고 좁은 화면용 배치로(글씨는 그대로 읽히게)
+      if (w < 640) { setCompact(true); setZ(1); return; }
+      setCompact(false);
+      setZ(Math.max(1, Math.min(max, Math.floor((w / base) * 100) / 100)));
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, [base, max]);
-  return <div ref={ref}><div data-fitpaper style={{ zoom: z }}>{children}</div></div>;
+  return <div ref={ref}><PaperCompact.Provider value={compact}><div data-fitpaper style={{ zoom: z }}>{children}</div></PaperCompact.Provider></div>;
 }
 const captureAt1x = async (el, opts) => {
   const box = el?.closest?.("[data-fitpaper]");
@@ -132,21 +142,25 @@ const captureAt1x = async (el, opts) => {
 export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, createdMs, staff, status, paperRef }) {
   const cols = [{ uid: drafter?.uid, name: drafter?.name, position: drafter?.position || "기안", kind: "기안", status: "approved", at: createdMs }, ...(line || [])];
   const fields = form.fields || [];
+  const c = React.useContext(PaperCompact);
+  const lw = c ? "w-[84px] px-2.5 text-[13px]" : "w-[118px] px-3 text-[14px]";
+  const lw2 = c ? "w-[84px] px-2.5 text-[13px]" : "w-[96px] px-3 text-[14px]";
+  const iw = c ? "w-[50px] !px-1.5" : "w-[90px]";
   return (
-    <div ref={paperRef} className="mx-auto bg-white w-full max-w-[780px] px-10 py-10 shadow-[0_10px_30px_rgba(15,26,48,0.12)] relative" style={{ fontFamily: "'Pretendard','Noto Sans KR',sans-serif", minHeight: 1000 }}>
-      <div className="flex items-start justify-between gap-6">
-        <div className="pt-4 min-w-0">
+    <div ref={paperRef} className={`mx-auto bg-white w-full max-w-[780px] ${c ? "px-4 py-5" : "px-10 py-10"} shadow-[0_10px_30px_rgba(15,26,48,0.12)] relative`} style={{ fontFamily: "'Pretendard','Noto Sans KR',sans-serif", minHeight: c ? 0 : 1000 }}>
+      <div className={c ? "flex flex-col gap-4" : "flex items-start justify-between gap-6"}>
+        <div className={`${c ? "" : "pt-4"} min-w-0`}>
           <div className="text-[12.5px] font-extrabold tracking-[0.3em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>{catOf(form.cat).en} · {form.code}</div>
-          <div className="text-[30px] font-black tracking-[0.12em] text-[#0F1A30] mt-1 whitespace-nowrap">{form.title}</div>
+          <div className={`${c ? "text-[24px]" : "text-[30px]"} font-black tracking-[0.12em] text-[#0F1A30] mt-1 whitespace-nowrap`}>{form.title}</div>
           <div className="text-[13.5px] text-[#5A6A85] mt-1 flex items-center gap-2" style={{ fontFamily: MONO }}>{docNo || "문서번호는 상신할 때 자동 부여"}
             {status && status !== "pending" && <span className="px-2 py-0.5 rounded border-2 border-[#0F1A30] text-[13px] font-black text-[#0F1A30] tracking-widest" style={{ fontFamily: "inherit" }}>{STATUS[status]}</span>}
           </div>
         </div>
         {/* 결재란 */}
-        <div className="shrink-0 flex border border-[#0F1A30]">
+        <div className={`${c ? "w-full" : "shrink-0"} flex border border-[#0F1A30]`}>
           <div className="w-7 bg-[#EEF1F6] border-r border-[#0F1A30] flex items-center justify-center text-[13px] font-black text-[#0F1A30] leading-tight text-center py-2" style={{ writingMode: "vertical-rl" }}>결 재</div>
           {cols.map((s, i) => (
-            <div key={i} className={`w-[74px] flex flex-col ${i < cols.length - 1 ? "border-r border-[#0F1A30]" : ""}`}>
+            <div key={i} className={`${c ? "flex-1 min-w-0" : "w-[74px]"} flex flex-col ${i < cols.length - 1 ? "border-r border-[#0F1A30]" : ""}`}>
               <div className="h-7 bg-[#EEF1F6] border-b border-[#0F1A30] flex items-center justify-center text-[12.5px] font-black text-[#0F1A30] truncate px-1">{i === 0 ? "기안" : s.kind === "합의" ? `합의` : s.position || "결재"}</div>
               <div className="h-[66px] flex items-center justify-center">{i === 0 ? <span className="text-[14px] font-black text-[#0F1A30]">{String(s.name || "").slice(0, 4)}</span> : <Stamp step={s} />}</div>
               <div className="h-6 border-t border-[#0F1A30] flex items-center justify-center text-[11.5px] text-[#3A4A66] truncate px-1">{s.at && (i === 0 || s.status === "approved" || s.status === "rejected") ? mmdd(s.at) : s.name || "-"}</div>
@@ -155,14 +169,14 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
         </div>
       </div>
 
-      <div className="mt-7 border-t-2 border-x border-b border-[#0F1A30]">
-        <div className="flex border-b border-[#0F1A30]/60">
-          <div className="flex-1 flex"><div className="w-[118px] shrink-0 bg-[#EEF1F6] border-r border-[#0F1A30]/60 px-3 py-2.5 text-[14px] font-black">기안자</div><div className="flex-1 px-3.5 py-2.5 text-[14px] font-bold">{drafter?.name || "-"} {drafter?.position || ""}</div></div>
-          <div className="flex-1 flex border-l border-[#0F1A30]/60"><div className="w-[96px] shrink-0 bg-[#EEF1F6] border-r border-[#0F1A30]/60 px-3 py-2.5 text-[14px] font-black">소속</div><div className="flex-1 px-3.5 py-2.5 text-[14px]">{drafter?.team || "-"}</div></div>
+      <div className={`${c ? "mt-4" : "mt-7"} border-t-2 border-x border-b border-[#0F1A30]`}>
+        <div className={`flex ${c ? "flex-col" : ""} border-b border-[#0F1A30]/60`}>
+          <div className="flex-1 flex"><div className={`${lw} shrink-0 bg-[#EEF1F6] border-r border-[#0F1A30]/60 py-2.5 font-black`}>기안자</div><div className="flex-1 px-3.5 py-2.5 text-[14px] font-bold">{drafter?.name || "-"} {drafter?.position || ""}</div></div>
+          <div className={`flex-1 flex ${c ? "border-t" : "border-l"} border-[#0F1A30]/60`}><div className={`${lw2} shrink-0 bg-[#EEF1F6] border-r border-[#0F1A30]/60 py-2.5 font-black`}>소속</div><div className="flex-1 px-3.5 py-2.5 text-[14px]">{drafter?.team || "-"}</div></div>
         </div>
-        <div className="flex border-b border-[#0F1A30]/60">
-          <div className="flex-1 flex"><div className="w-[118px] shrink-0 bg-[#EEF1F6] border-r border-[#0F1A30]/60 px-3 py-2.5 text-[14px] font-black">기안일</div><div className="flex-1 px-3.5 py-2.5 text-[14px]">{ymd(createdMs)}</div></div>
-          <div className="flex-1 flex border-l border-[#0F1A30]/60"><div className="w-[96px] shrink-0 bg-[#EEF1F6] border-r border-[#0F1A30]/60 px-3 py-2.5 text-[14px] font-black">참조</div><div className="flex-1 px-3.5 py-2.5 text-[14.5px] truncate">{(cc || []).map((c) => c.name).join(", ") || "-"}</div></div>
+        <div className={`flex ${c ? "flex-col" : ""} border-b border-[#0F1A30]/60`}>
+          <div className="flex-1 flex"><div className={`${lw} shrink-0 bg-[#EEF1F6] border-r border-[#0F1A30]/60 py-2.5 font-black`}>기안일</div><div className="flex-1 px-3.5 py-2.5 text-[14px]">{ymd(createdMs)}</div></div>
+          <div className={`flex-1 flex ${c ? "border-t" : "border-l"} border-[#0F1A30]/60`}><div className={`${lw2} shrink-0 bg-[#EEF1F6] border-r border-[#0F1A30]/60 py-2.5 font-black`}>참조</div><div className="flex-1 px-3.5 py-2.5 text-[14.5px] truncate">{(cc || []).map((c) => c.name).join(", ") || "-"}</div></div>
         </div>
         <Cell label="제목"><span className="font-black text-[15px]">{title || `${form.label}`}</span></Cell>
         {fields.map((f, i) => {
@@ -172,17 +186,17 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
             const rows = (v || []).filter((r) => String(r.name || "").trim() || Number(r.price));
             return (
               <Cell key={f.k} label={f.label} last={last}>
-                <div className="border border-[#0F1A30]/40 text-[14px]">
-                  <div className="flex bg-[#F5F7FB] font-black border-b border-[#0F1A30]/40">{["품목", "수량", "단가", "금액"].map((h, k) => <div key={h} className={`px-2 py-1.5 ${k === 0 ? "flex-1" : "w-[90px] text-right"} ${k ? "border-l border-[#0F1A30]/30" : ""}`}>{h}</div>)}</div>
+                <div className={`border border-[#0F1A30]/40 ${c ? "text-[12.5px] -mx-1" : "text-[14px]"}`}>
+                  <div className="flex bg-[#F5F7FB] font-black border-b border-[#0F1A30]/40">{["품목", "수량", "단가", "금액"].map((h, k) => <div key={h} className={`px-2 py-1.5 whitespace-nowrap ${k === 0 ? "flex-1 min-w-0" : `${iw} text-right`} ${k ? "border-l border-[#0F1A30]/30" : ""}`}>{h}</div>)}</div>
                   {(rows.length ? rows : [{}]).map((r, k) => (
                     <div key={k} className="flex border-b border-[#0F1A30]/20 last:border-b-0">
-                      <div className="flex-1 px-2 py-1.5">{r.name || " "}</div>
-                      <div className="w-[90px] px-2 py-1.5 text-right border-l border-[#0F1A30]/20">{r.qty || ""}</div>
-                      <div className="w-[90px] px-2 py-1.5 text-right border-l border-[#0F1A30]/20">{Number(r.price) ? Number(r.price).toLocaleString("ko-KR") : ""}</div>
-                      <div className="w-[90px] px-2 py-1.5 text-right border-l border-[#0F1A30]/20 font-bold">{Number(r.price) ? ((Number(r.qty) || 0) * Number(r.price)).toLocaleString("ko-KR") : ""}</div>
+                      <div className="flex-1 min-w-0 px-2 py-1.5 break-words">{r.name || " "}</div>
+                      <div className={`${iw} px-2 py-1.5 text-right border-l border-[#0F1A30]/20`}>{r.qty || ""}</div>
+                      <div className={`${iw} px-2 py-1.5 text-right border-l border-[#0F1A30]/20`}>{Number(r.price) ? Number(r.price).toLocaleString("ko-KR") : ""}</div>
+                      <div className={`${iw} px-2 py-1.5 text-right border-l border-[#0F1A30]/20 font-bold`}>{Number(r.price) ? ((Number(r.qty) || 0) * Number(r.price)).toLocaleString("ko-KR") : ""}</div>
                     </div>
                   ))}
-                  <div className="flex bg-[#F5F7FB] border-t border-[#0F1A30]/40 font-black"><div className="flex-1 px-2 py-1.5 text-right">합계</div><div className="w-[90px] px-2 py-1.5 text-right">{itemsTotal(v).toLocaleString("ko-KR")}</div></div>
+                  <div className="flex bg-[#F5F7FB] border-t border-[#0F1A30]/40 font-black"><div className="flex-1 px-2 py-1.5 text-right">합계</div><div className={`${iw} px-2 py-1.5 text-right`}>{itemsTotal(v).toLocaleString("ko-KR")}</div></div>
                 </div>
               </Cell>
             );
@@ -190,7 +204,7 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
           if (f.type === "costs") {
             return (
               <Cell key={f.k} label={f.label} last={last}>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[14.5px]">
+                <div className={`grid ${c ? "grid-cols-1" : "grid-cols-2"} gap-x-6 gap-y-1 text-[14.5px]`}>
                   {(v || []).map((r, k) => <div key={k} className="flex justify-between border-b border-dotted border-[#0F1A30]/30 py-0.5"><span>{r.label}</span><span className="font-bold">{Number(r.amount) ? fmtWon(r.amount) : "-"}</span></div>)}
                 </div>
                 <div className="mt-2 text-right text-[14px] font-black">합계 {fmtWon(costsTotal(v))}</div>
