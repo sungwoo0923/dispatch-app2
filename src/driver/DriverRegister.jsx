@@ -94,7 +94,7 @@ const STEPS = [
 ];
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,monospace";
-const inputCls = "w-full h-[52px] border border-[#DCE3EE] rounded-2xl px-4 text-[16px] font-bold text-[#0F1A30] bg-white placeholder:text-[#9AA7BD] placeholder:font-semibold focus:outline-none focus:border-[#2D4C82] focus:ring-4 focus:ring-[#2D4C82]/10 transition";
+const inputCls = "w-full h-12 border border-[#DCE3EE] rounded-xl px-3.5 text-[15px] font-bold text-[#0F1A30] bg-white placeholder:text-[#9AA7BD] placeholder:font-semibold focus:outline-none focus:border-[#2D4C82] focus:ring-4 focus:ring-[#2D4C82]/10 transition";
 
 function Field({ label, req, hint, children }) {
   return (
@@ -408,7 +408,7 @@ export default function DriverRegister() {
 
   let body = null;
   if (S.key === "account") body = (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <Field label="소속 운송사" req hint="목록에서 고르면 정확히 연결됩니다.">
         <div className="relative">
           <input value={companyName} autoFocus
@@ -434,7 +434,7 @@ export default function DriverRegister() {
     </div>
   );
   else if (S.key === "profile") body = (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <Field label="이름" req>
         <input value={name} autoFocus onChange={(e) => setName(e.target.value)} onKeyDown={onEnter} placeholder="실명 입력" className={inputCls} />
       </Field>
@@ -451,7 +451,7 @@ export default function DriverRegister() {
     </div>
   );
   else if (S.key === "vehicle") body = (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <Field label="차량 종류" req>
         <Chips options={VEHICLE_CATEGORIES} value={vehicleCategory} onPick={setVehicleCategory} cols={3} />
         {vehicleCategory === "직접입력" && (
@@ -464,7 +464,7 @@ export default function DriverRegister() {
     </div>
   );
   else if (S.key === "residence") body = (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <Field label="시 / 도" req>
         <Chips options={RESIDENCE_PROVINCES} value={residenceProvince} onPick={(v) => { setResidenceProvince(v); setResidenceCity(""); }} cols={6} size="xs" />
       </Field>
@@ -476,10 +476,10 @@ export default function DriverRegister() {
     </div>
   );
   else if (S.key === "bank") body = (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <Field label="은행" req={false}>
         {bank.bank && !bankOpen ? (
-          <div className="flex items-center gap-3 h-[52px] px-4 rounded-2xl border border-[#2D4C82]/40 bg-[#F5F8FD]">
+          <div className="flex items-center gap-3 h-12 px-3.5 rounded-xl border border-[#2D4C82]/40 bg-[#F5F8FD]">
             <span className="w-8 h-8 rounded-xl bg-[#1B2B4B] text-white grid place-items-center text-[12px] font-black">{bank.bank.slice(0, 1)}</span>
             <span className="flex-1 text-[16px] font-black text-[#0F1A30] truncate">{bank.bank}</span>
             <button type="button" onClick={() => setBankOpen(true)} className="h-8 px-3 rounded-lg border border-[#C9D6EE] bg-white text-[12.5px] font-black text-[#1B2B4B]">변경</button>
@@ -513,7 +513,7 @@ export default function DriverRegister() {
     </div>
   );
   else if (S.key === "biz") body = (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <Field label="사업자등록번호">
         <input inputMode="numeric" value={bizNo} onKeyDown={onEnter} onChange={(e) => { const d = onlyDigits(e.target.value).slice(0, 10); setBizNo(d.length > 5 ? `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}` : d.length > 3 ? `${d.slice(0, 3)}-${d.slice(3)}` : d); }}
           placeholder="000-00-00000" className={`${inputCls} tabular-nums tracking-wider`} style={{ fontFamily: bizNo ? MONO : undefined }} />
@@ -576,7 +576,7 @@ export default function DriverRegister() {
     <div className="h-[100dvh] flex flex-col overflow-hidden" style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/26px 26px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/26px 26px, linear-gradient(135deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
       <div className="w-full max-w-[520px] mx-auto flex-1 min-h-0 flex flex-col lg:py-8">
         {/* 상단 — 단계 표시 */}
-        <div className="px-5 pb-5 text-white" style={{ paddingTop: "max(env(safe-area-inset-top), 18px)" }}>
+        <div className="px-4 pb-4 text-white" style={{ paddingTop: "max(env(safe-area-inset-top), 14px)" }}>
           <div className="flex items-center justify-between">
             <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]">DRIVER · SIGN UP</div>
             <div className="flex items-center gap-2">
@@ -586,10 +586,10 @@ export default function DriverRegister() {
               <img src="/icons/sflow-icon.png" alt="" className="w-7 h-7 rounded-lg" />
             </div>
           </div>
-          <div className="mt-3 text-[10.5px] font-extrabold tracking-[0.22em] text-white/45" style={{ fontFamily: MONO }}>{S.en}</div>
-          <h1 className="text-[24px] font-black tracking-tight leading-tight">{S.title}</h1>
+          <div className="mt-2 text-[10px] font-extrabold tracking-[0.22em] text-white/45" style={{ fontFamily: MONO }}>{S.en}</div>
+          <h1 className="text-[21px] font-black tracking-tight leading-tight">{S.title}</h1>
           <p className="text-[12.5px] text-white/60 mt-0.5">{S.desc}</p>
-          <div className="mt-4 grid gap-1" style={{ gridTemplateColumns: `repeat(${STEPS.length}, minmax(0,1fr))` }}>
+          <div className="mt-3 grid gap-1" style={{ gridTemplateColumns: `repeat(${STEPS.length}, minmax(0,1fr))` }}>
             {STEPS.map((s, i) => (
               <button key={s.key} type="button" aria-label={s.title} onClick={() => i < step && go(i)}
                 className={`h-1.5 rounded-full transition-colors duration-300 ${i < step ? "bg-[#8FB0F0]" : i === step ? "bg-white" : "bg-white/15"}`} />
@@ -599,7 +599,7 @@ export default function DriverRegister() {
 
         {/* 입력 — 한 화면에 한 단계 */}
         <div className="flex-1 min-h-0 bg-white rounded-t-[28px] lg:rounded-[28px] shadow-2xl flex flex-col overflow-hidden">
-          <div key={step} className="flex-1 min-h-0 overflow-y-auto px-5 pt-6 pb-4 kp-step-in">
+          <div key={step} className="flex-1 min-h-0 overflow-y-auto px-4 pt-5 pb-4 kp-step-in">
             {body}
             {success && (
               <div className="mt-4 bg-[#EEF3FC] border border-[#C9D6EE] text-[#0F1A30] text-[14px] px-4 py-3 rounded-2xl font-bold">
@@ -609,15 +609,15 @@ export default function DriverRegister() {
           </div>
 
           {/* 하단 — 이전 / 다음 */}
-          <div className="px-5 pt-3 border-t border-[#EEF1F6] bg-white" style={{ paddingBottom: "max(env(safe-area-inset-bottom), 16px)" }}>
+          <div className="px-4 pt-2.5 border-t border-[#EEF1F6] bg-white" style={{ paddingBottom: "max(env(safe-area-inset-bottom), 12px)" }}>
             {error && <div className="mb-2.5 bg-[#0F1A30] text-white text-[13px] font-bold px-4 py-2.5 rounded-xl">{error}</div>}
             <div className="flex gap-2">
               <button type="button" onClick={prev} disabled={loading}
-                className="h-14 w-[34%] rounded-2xl border border-[#DCE3EE] bg-white text-[#3A4A66] font-black text-[15px] active:bg-[#F3F6FA] disabled:opacity-50">
+                className="h-12 w-[32%] rounded-xl border border-[#DCE3EE] bg-white text-[#3A4A66] font-black text-[15px] active:bg-[#F3F6FA] disabled:opacity-50">
                 {step === 0 ? "로그인" : "이전"}
               </button>
               <button type="button" onClick={next} disabled={loading || success}
-                className="h-14 flex-1 rounded-2xl text-white font-black text-[16px] transition disabled:opacity-60 shadow-[0_12px_26px_rgba(15,26,48,0.28)]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
+                className="h-12 flex-1 rounded-xl text-white font-black text-[15px] transition disabled:opacity-60 shadow-[0_12px_26px_rgba(15,26,48,0.28)]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
                 {loading ? "등록 중..." : last ? "등록 신청" : optional && empty ? "건너뛰기" : "다음"}
               </button>
             </div>

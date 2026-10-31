@@ -9,7 +9,65 @@ import { ShellIcon } from "./AdminShell";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 
+// 📱 휴대폰 폭(모바일 앱에서 PC 화면을 그대로 쓸 때) — 왼쪽 메뉴 대신 위쪽 가로 탭으로 보여준다
+export function useIsPhone() {
+  const q = () => typeof window !== "undefined" && window.innerWidth < 768;
+  const [phone, setPhone] = useState(q);
+  React.useEffect(() => {
+    const on = () => setPhone(q());
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
+  return phone;
+}
+
+function PhoneSubNav({ code, title, icon, groups, actions, active, onSelect, children }) {
+  const flat = [];
+  groups.forEach((g) => g.items.forEach((it) => { if (it.sub) it.sub.forEach((x) => flat.push({ ...x, en: x.en || it.en })); else flat.push(it); }));
+  const cur = flat.find((it) => it.key === active);
+  const barRef = React.useRef(null);
+  React.useEffect(() => {
+    const el = barRef.current?.querySelector("[data-on='1']");
+    if (el) el.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [active]);
+  const hasBadge = (b) => (typeof b === "string" ? !!b : b > 0);
+  return (
+    <div className="bg-[#F4F6FA] min-h-full">
+      <div className="relative text-white shadow-[0_8px_20px_rgba(15,26,48,0.18)]" style={{ background: "linear-gradient(120deg, #0B1428 0%, #1B2B4B 60%, #2D4C82 100%)" }}>
+        <div className="px-3.5 pt-3 pb-2 flex items-center gap-2.5">
+          <span className="w-9 h-9 rounded-xl bg-white/10 ring-1 ring-white/15 flex items-center justify-center shrink-0"><ShellIcon name={icon} size={17} /></span>
+          <div className="min-w-0 flex-1">
+            <div style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: "0.22em" }} className="text-[#8FB0F0] truncate">{code}{cur?.en ? ` · ${cur.en}` : ""}</div>
+            <div className="text-[16px] font-black truncate leading-tight">{cur?.label || title}</div>
+          </div>
+        </div>
+        <div ref={barRef} className="flex gap-1.5 px-3 pb-2.5 overflow-x-auto no-scrollbar" style={{ scrollbarWidth: "none" }}>
+          {flat.map((it) => {
+            const on = it.key === active;
+            return (
+              <button key={it.key} type="button" data-on={on ? "1" : "0"} onClick={() => onSelect?.(it.key)}
+                className={`relative shrink-0 h-8 px-3 rounded-full text-[12.5px] font-black whitespace-nowrap flex items-center gap-1.5 transition ${on ? "bg-white text-[#0F1A30] shadow-[0_4px_12px_rgba(0,0,0,0.25)]" : "bg-white/[0.08] text-white/75 ring-1 ring-white/10"}`}>
+                <ShellIcon name={it.icon} size={13} className={on ? "text-[#2D4C82]" : "text-[#8FB0F0]"} />
+                {it.label}
+                {hasBadge(it.badge) && <span className={`min-w-[16px] h-4 px-1 rounded-full text-[10px] font-extrabold flex items-center justify-center ${on ? "bg-[#1B2B4B] text-white" : it.soft ? "bg-white/20 text-white" : "bg-rose-500 text-white"}`}>{typeof it.badge === "number" && it.badge > 99 ? "99+" : it.badge}</span>}
+              </button>
+            );
+          })}
+          {actions.map((a) => (
+            <button key={a.key} type="button" onClick={a.onClick}
+              className="shrink-0 h-8 px-3 rounded-full text-[12.5px] font-bold whitespace-nowrap flex items-center gap-1.5 border border-dashed border-white/25 text-white/70">
+              <ShellIcon name={a.icon} size={13} className="text-[#8FB0F0]" />{a.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <main className="kp-phone-body px-3 py-3 min-w-0">{children}</main>
+    </div>
+  );
+}
+
 export default function KpSubNav({ code = "MENU", title, icon = "dashboard", items, groups, actions = [], actionsLabel = "도구", active, onSelect, children, bodyClass = "px-6 py-5", noBleed = false }) {
+  const phone = useIsPhone();
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem("kpSubNavCollapsed") === "1"; } catch { return false; } });
   const toggle = () => setCollapsed((v) => { try { localStorage.setItem("kpSubNavCollapsed", v ? "0" : "1"); } catch { /* 저장 실패 무시 */ } return !v; });
   const gs = groups || [{ label: "", items: items || [] }];
@@ -46,6 +104,7 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
     </button>
   );
 
+  if (phone) return <PhoneSubNav code={code} title={title} icon={icon} groups={gs} actions={actions} active={active} onSelect={onSelect}>{children}</PhoneSubNav>;
   return (
     <div className={`flex bg-[#F4F6FA] overflow-hidden ${noBleed ? "rounded-[20px]" : "-m-4"}`} style={{ height: noBleed ? "calc(100vh - 88px)" : "calc(100vh - 80px)" }}>
       <aside

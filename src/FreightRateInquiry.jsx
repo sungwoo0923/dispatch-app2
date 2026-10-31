@@ -915,7 +915,7 @@ function NationalFareTab() {
     // 잘려 보이는 문제가 있었다. 내부 스크롤을 없애고 페이지 자체 스크롤 하나로
     // 통일해 이런 종류의 "잘려서 안 보임" 문제 자체가 생기지 않게 한다. 오른쪽
     // 지도만 sticky로 고정해 왼쪽 폼이 길어져도 화면에서 눈에 계속 보이게 한다.
-    <div className="flex gap-5 items-start">
+    <div className="flex flex-col md:flex-row gap-4 md:gap-5 md:items-start">
 
       {/* 화물 유형 변경 시 운임 차액을 화면 중앙에 잠깐 보여주는 토스트 */}
       {cargoToast&&(
@@ -928,7 +928,7 @@ function NationalFareTab() {
 
       {/* ── 왼쪽 패널 ── */}
       {/* ⭐ 2026-10-29 리디자인 — 흩어져 있던 입력들을 한 장의 "운임 계산 콘솔" 카드로 묶고 01~04 단계로 정리 */}
-      <div className="flex-[4] min-w-0 bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)]">
+      <div className="w-full md:w-auto md:flex-[4] min-w-0 bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)]">
 
         {/* 콘솔 머리 + 독차/혼적 토글 */}
         <div className="relative px-5 pt-4 pb-4 rounded-t-[22px] overflow-hidden text-white" style={{background:"linear-gradient(120deg,#0F1A30 0%,#1B2B4B 55%,#2D4C82 100%)"}}>
@@ -1293,7 +1293,7 @@ function NationalFareTab() {
       </div>
 
       {/* ── 오른쪽 지도 (디지털) ── */}
-      <div className="flex-[6] min-w-0 rounded-[24px] flex flex-col overflow-hidden sticky ring-1 ring-[#0F1A30]/10 shadow-[0_24px_60px_rgba(15,26,48,0.28)]"
+      <div className="kp-fare-map w-full md:w-auto md:flex-[6] min-w-0 rounded-[24px] flex flex-col overflow-hidden sticky ring-1 ring-[#0F1A30]/10 shadow-[0_24px_60px_rgba(15,26,48,0.28)]"
         style={{top:16,height:"calc(100vh - 250px)",minHeight:560,background:"radial-gradient(90% 70% at 50% 15%, #1C3160 0%, #0F1A30 55%, #070E1E 100%)"}}>
         <div className="px-5 py-3.5 flex items-center gap-3 shrink-0 border-b border-white/[0.08]">
           <span className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{fontFamily:"'JetBrains Mono','SF Mono',ui-monospace,monospace"}}>ROUTE MAP</span>
@@ -1336,12 +1336,14 @@ const FARE_TABS=[
   {key:"전국운임조회",en:"NATIONAL",desc:"지역·차종 기준 전국 시세 계산"},
   {key:"자사운임표",en:"COMPANY",desc:"우리 회사 실거래 운임 히스토리"},
 ];
-export default function FreightRateInquiry(){
-  const [activeTab,setActiveTab]=useState("전국운임조회");
+// 📱 forceTab·hideHeader — 모바일 앱이 같은 화면을 탭별로 열 때(머리말·탭은 모바일 화면이 따로 그린다)
+export default function FreightRateInquiry({ forceTab = "", hideHeader = false } = {}){
+  const [tabState,setActiveTab]=useState("전국운임조회");
+  const activeTab=forceTab||tabState;
   const MONO="'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
   return(
     <div className="w-full">
-      <div className="relative overflow-hidden rounded-[24px] mb-5 px-7 py-5 text-white shadow-[0_18px_40px_rgba(15,26,48,0.25)]"
+      {!hideHeader && <div className="relative overflow-hidden rounded-[24px] mb-5 px-7 py-5 text-white shadow-[0_18px_40px_rgba(15,26,48,0.25)]"
         style={{background:"linear-gradient(125deg,#0B1428 0%,#0F1A30 45%,#1B2B4B 80%,#2D4C82 100%)"}}>
         <div className="absolute inset-0 opacity-[0.08]" style={{backgroundImage:"linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)",backgroundSize:"32px 32px"}}/>
         <div className="relative flex flex-wrap items-center justify-between gap-4">
@@ -1360,7 +1362,7 @@ export default function FreightRateInquiry(){
             ))}
           </div>
         </div>
-      </div>
+      </div>}
       {activeTab==="전국운임조회"&&<NationalFareTab/>}
       {activeTab==="자사운임표"&&<CompanyFareTab/>}
     </div>

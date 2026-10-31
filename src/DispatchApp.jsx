@@ -60890,3 +60890,6 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
     </div>
   );
 }
+
+// 📱 모바일 앱 매출관리 — PC와 같은 화면을 그대로 쓴다(MobileApp이 필요할 때만 불러옴)
+export { Settlement as PcSettlement };

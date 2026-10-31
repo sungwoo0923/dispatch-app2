@@ -19,6 +19,8 @@ import southKorea from "@svg-maps/south-korea";
 import { canSeeNotice } from "../NoticeBoard";
 import React, { useState, useMemo, useEffect, useRef, startTransition, useSyncExternalStore } from "react";
 import { withCo, getTenant } from "../fsTenant";
+// 📱 PC와 같은 화면(매출관리·운임조회·단가표·지입차관리·전자결재·직원관리) — 메뉴를 열 때만 불러온다
+const MobilePcView = React.lazy(() => import("./MobilePcViews"));
 // ⭐ 작은 표시 전용 저장소 — "최신 정보 확인 중"·첫 진입 진행률이 바뀔 때 화면 전체(오더 목록)를
 // 다시 그리지 않고 그 표시만 바꾼다(저사양 폰에서 스크롤 끊김 방지)
 function createMiniStore(init) {
@@ -3858,7 +3860,7 @@ const thisMonth = thisMonthKST();
   }, [page, appliedStartDate, appliedEndDate, onlyToday, thisMonth, loadRange]);
   useEffect(() => {
     if (page === "canceled") loadCanceledHistory();
-    else if (page === "fleet" || page === "ratecard" || page === "myinfo") loadFullHistory(); // 누적 매출·운임표·내 전체 실적
+    else if (page === "fleet" || page === "ratecard" || page === "myinfo" || page === "company-fare") loadFullHistory(); // 누적 매출·운임표·내 전체 실적
     else if (page === "intel") {
       const y = todayKST().slice(0, 4);
       const d = new Date(Date.now() + 9 * 3600e3); d.setUTCMonth(d.getUTCMonth() - 6);
@@ -5363,6 +5365,10 @@ const deleteSingleOrder = async (order) => {
     );
   }
 
+// 📱 PC와 같은 화면에 넘길 회사·내 정보(최고관리자는 로그인한 운송사 기준)
+const pcViewCompany = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim();
+const pcViewMeDoc = mobileUsers.find((u) => u.id === currentUser?.uid) || {};
+const pcViewMe = { uid: currentUser?.uid || user?.uid, name: pcViewMeDoc.name || currentUser?.displayName || (currentUser?.email || "").split("@")[0] || "", team: pcViewMeDoc.team || "", position: pcViewMeDoc.position || "", role: role || pcViewMeDoc.role || "" };
 const title =
   page === "list" ? "등록내역"
   : page === "ratecard" ? "단가표"
@@ -5370,7 +5376,11 @@ const title =
   : page === "notice" ? "공지사항"
   : page === "schedule" ? "일정"
   : page === "fare" ? "자사운임표"
-  : page === "national-fare" ? "전국운임 조회"
+  : page === "national-fare" ? "운임조회"
+  : page === "company-fare" ? "운임조회"
+  : page === "sales" ? "매출관리"
+  : page === "approval" ? "전자결재"
+  : page === "staff" ? "직원 관리"
   : page === "status" ? "배차현황"
   : page === "unassigned" ? "미배차현황"
   : page === "canceled" ? "취소내역"
@@ -5732,7 +5742,7 @@ const title =
             setPage("list");
           }
         }
-    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet" || page === "blind"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet" || page === "blind" || page === "company-fare" || page === "sales" || page === "approval" || page === "staff"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
@@ -5874,7 +5884,7 @@ onGoAttendance={() => {
 }}
 
           onGoFare={() => {
-            setPage("fare");
+            setPage("company-fare");
             setShowMenu(false);
           }}
           onGoNationalFare={() => {
@@ -5912,6 +5922,7 @@ onGoAttendance={() => {
           onGoIntel={() => { setPage("intel"); setShowMenu(false); }}
           onGoGsheet={() => { setPage("gsheet"); setShowMenu(false); }}
           onGoBlind={() => { setPage("blind"); setShowMenu(false); }}
+          onGo={(p) => { setPage(p); setShowMenu(false); }}
           onDeleteAll={deleteAllOrders}
           setUiScale={setUiScale}
           uiScale={uiScale}
@@ -6728,16 +6739,11 @@ setOpenMemo={setOpenMemo}
           </div>
         )}
 {page === "sales" && (
-  <MobileSalesPage
-    data={allOrders}
-    loadRange={loadRange}
-    loadFullHistory={loadFullHistory}
-    fixedData={fixedClientRows}
-    onBack={() => setPage("list")}
-    cardVersionB={cardVersionB}
-    clients={clients}
-    places={places}
-  />
+  <MobileRevenueGate cardVersionB={cardVersionB}>
+    <React.Suspense fallback={null}>
+      <MobilePcView kind="revenue" dispatchData={allOrders} fixedRows={fixedClientRows} clients={clients} places={places} role={role} userCompany={pcViewCompany} me={pcViewMe} loadRange={loadRange} loadFullHistory={loadFullHistory} />
+    </React.Suspense>
+  </MobileRevenueGate>
 )}
     {page === "form" && (
           <MobileOrderForm
@@ -6820,16 +6826,14 @@ setOpenMemo={setOpenMemo}
             cardVersionB={cardVersionB}
           />
         )}
-        {page === "national-fare" && (
-          <MobileNationalFare onBack={() => setPage("list")} cardVersionB={cardVersionB} />
-        )}
-        {page === "ratecard" && (
-          <MobileRateCard
-            dispatchData={allOrders}
-            onBack={() => setPage("list")}
-            cardVersionB={cardVersionB}
-            userCompany={userCompany}
-          />
+        {(page === "national-fare" || page === "company-fare" || page === "ratecard" || page === "approval" || page === "staff") && (
+          <React.Suspense fallback={null}>
+            <MobilePcView key={page}
+              kind={page === "ratecard" ? "ratecard" : page === "approval" ? "approval" : page === "staff" ? "staff" : "fare"}
+              initial={page === "company-fare" ? "자사운임표" : undefined}
+              dispatchData={allOrders} clients={clients} places={places} role={role} userCompany={pcViewCompany} me={pcViewMe}
+              loadRange={loadRange} loadFullHistory={loadFullHistory} />
+          </React.Suspense>
         )}
         {page === "myinfo" && (
           <MobileMyInfo
@@ -6862,7 +6866,12 @@ setOpenMemo={setOpenMemo}
             refreshFromServer={refreshFromServer}
           />
         )}
-        {page === "fleet" && <MobileFleetView dispatchData={allOrders} userCompany={userCompany} onRegisterBack={(fn) => { innerBackRef.current = fn; }} />}
+        {page === "fleet" && (
+          <React.Suspense fallback={null}>
+            <MobilePcView kind="fleet" dispatchData={allOrders} role={role} userCompany={pcViewCompany} me={pcViewMe} loadRange={loadRange} loadFullHistory={loadFullHistory}
+              onRegisterBack={(fn) => { innerBackRef.current = fn; }} />
+          </React.Suspense>
+        )}
         {page === "intel" && <MobileIntelView dispatchData={allOrders} cardVersionB={cardVersionB} />}
         {/* ⭐ 구글시트 전송(최고관리자) — PC 관리자메뉴와 같은 화면 */}
         {page === "gsheet" && role === "totalMaster" && <div className="px-3 py-3"><GsheetMinePanel /></div>}
@@ -7054,6 +7063,12 @@ function isNetRevenueExcludedClientMobile(name, clientsList, placesList) {
   const foundPlace = (placesList || []).find((p) => String(p.거래처명 || "").trim() === n);
   if (foundPlace && typeof foundPlace.순수매출제외 === "boolean") return foundPlace.순수매출제외;
   return LEGACY_NET_REVENUE_EXCLUDED_NAMES_MOBILE.some((x) => n.includes(x));
+}
+
+function MobileRevenueGate({ cardVersionB = false, children }) {
+  const [verified, setVerified] = useState(() => sessionStorage.getItem("sales_ok") === "1");
+  if (!verified) return <SalesPinGate cardVersionB={cardVersionB} onVerified={() => { sessionStorage.setItem("sales_ok", "1"); setVerified(true); }} />;
+  return children;
 }
 
 function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = false, clients = [], places = [], loadRange, loadFullHistory }) {
@@ -7725,8 +7740,14 @@ function MobileSideMenu({
   onGoIntel,
   onGoGsheet,
   onGoBlind,
+  onGo,
 }) {
   const [loginMgrOpen, setLoginMgrOpen] = useState(false); // ⭐ 로그인 관리
+  const myDoc = mobileUsers?.find((u) => u.id === currentUser?.uid) || {};
+  const isAdminRole = ["admin", "totalMaster", "superadmin"].includes(role);
+  const isMasterAccount = role === "totalMaster" || (myDoc.isMaster === true && role === "admin");
+  const canRevenue = ["admin", "totalMaster", "superadmin", "test", "viewer"].includes(role);
+  const canAdminMenu = isAdminRole || role === "viewer";
   const myName =
     mobileUsers?.find(u => u.id === currentUser?.uid)?.name ||
     currentUser?.email ||
@@ -7831,33 +7852,41 @@ function MobileSideMenu({
             스크롤되던 걸 없애고, 드로어 전체(메뉴~로그아웃~버전)가 하나로 이어져
             일반 스크롤바로 오르내리게 통합했다. */}
         <div className="flex-1 overflow-y-auto py-1">
+          {/* ⭐ 2026-10-31 — PC 메뉴와 같은 구성·권한 규칙(DispatchApp menuState)으로 정리.
+              실무자: 매출관리 숨김 / 경리·회계: 화물등록·단가표 숨김 / 관리자메뉴: 관리자·마스터·조회전용 /
+              최고관리자 전용(관리센터·구글시트·블라인드·회사코드조회)은 최고관리자만 */}
           <MenuSection title="배차관리" dark={dark} alwaysOpen>
             <MenuItem label="등록내역" onClick={onGoList} dark={dark} />
-            <MenuItem label="화물등록" onClick={onGoCreate} dark={dark} />
+            {role !== "test" && <MenuItem label="화물등록" onClick={onGoCreate} dark={dark} />}
             <MenuItem label="미배차현황" onClick={onGoUnassigned} dark={dark} />
           </MenuSection>
-          <MenuSection title="공지 / 일정" dark={dark} alwaysOpen>
+          <MenuSection title="사내 업무" dark={dark} alwaysOpen>
+            <MenuItem label="전자결재 · 신청 / 결재" onClick={() => onGo?.("approval")} dark={dark} />
             <MenuItem label="공지사항" onClick={onGoNotice} badge={hasNewNotice ? "NEW" : null} dark={dark} />
             <MenuItem label="일정" onClick={onGoSchedule} badge={hasNewSchedule ? "NEW" : null} dark={dark} />
             <MenuItem label="인수인계" onClick={onGoHandover} dark={dark} />
             <MenuItem label="출근기록부" onClick={onGoAttendance} dark={dark} />
           </MenuSection>
-          <MenuSection title="매출 / 운임표" dark={dark} alwaysOpen>
+          <MenuSection title="운임" dark={dark} alwaysOpen>
+            <MenuItem label="운임조회 · 전국운임조회" onClick={onGoNationalFare} dark={dark} />
             <MenuItem label="자사운임표" onClick={onGoFare} dark={dark} />
-            <MenuItem label="전국운임 조회" onClick={onGoNationalFare} dark={dark} />
-            <MenuItem label="단가표" onClick={onGoRateCard} dark={dark} />
-            <MenuItem label="매출관리" onClick={onGoSales} dark={dark} />
+            {role !== "test" && <MenuItem label="단가표" onClick={onGoRateCard} dark={dark} />}
           </MenuSection>
-          {role === "totalMaster" && (
-            <MenuSection title="관리자 관리센터" dark={dark} alwaysOpen>
-              {/* PC 상단 "관리센터 ↗"와 같은 역할 — 플랫폼 운영 화면(/platform)으로 전환 */}
-              <MenuItem label="관리자 관리센터로 전환 ↗" onClick={() => { try { sessionStorage.setItem("kpEntry", "platform"); } catch { /* 무시 */ } window.location.assign("/platform"); }} dark={dark} />
+          <MenuSection title="기사 · 매출" dark={dark} alwaysOpen>
+            <MenuItem label="지입차관리" onClick={onGoFleet} dark={dark} />
+            {canRevenue && <MenuItem label="매출관리" onClick={onGoSales} dark={dark} />}
+            {isAdminRole && <MenuItem label="경영인텔리전스" onClick={onGoIntel} dark={dark} />}
+          </MenuSection>
+          {canAdminMenu && (
+            <MenuSection title={isMasterAccount ? "관리자 메뉴 · 마스터" : "관리자 메뉴"} dark={dark} alwaysOpen>
+              <MenuItem label="직원 관리 · 승인 / 권한" onClick={() => onGo?.("staff")} dark={dark} />
+              <MenuItem label="기사 등록 승인" onClick={() => { try { sessionStorage.setItem("mFleetTab", "registration"); } catch { /* 무시 */ } onGoFleet(); }} dark={dark} />
             </MenuSection>
           )}
           {role === "totalMaster" && (
-            <MenuSection title="관리자 전용" dark={dark}>
-              <MenuItem label="지입차관리" onClick={onGoFleet} dark={dark} />
-              <MenuItem label="경영인텔리전스" onClick={onGoIntel} dark={dark} />
+            <MenuSection title="최고관리자 전용" dark={dark}>
+              {/* PC 상단 "관리센터 ↗"와 같은 역할 — 플랫폼 운영 화면(/platform)으로 전환 */}
+              <MenuItem label="관리자 관리센터로 전환 ↗" onClick={() => { try { sessionStorage.setItem("kpEntry", "platform"); } catch { /* 무시 */ } window.location.assign("/platform"); }} dark={dark} />
               <MenuItem label="구글시트 전송" onClick={onGoGsheet} dark={dark} />
               <MenuItem label="블라인드 모드" onClick={onGoBlind} dark={dark} />
               <MenuItem label="회사코드조회" onClick={openCodeLookup} dark={dark} />
@@ -18666,143 +18695,153 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
     return m > 0 ? `${y}년 ${m}개월 근속` : `${y}년 근속`;
   }, [hireDate]);
 
+  // ⭐ 2026-10-31 리디자인 — 프로그램 공통 디자인(네이비 디지털 히어로 · 영문 코드 · 카드)으로
+  const ROLE_KO = { totalMaster: "최고관리자", admin: "관리자", superadmin: "관리자", hrManager: "인사관리자", user: "실무자", test: "경리/회계", viewer: "조회전용" };
+  const roleKo = ROLE_KO[me?.role] || ROLE_KO[localStorage.getItem("role")] || myRole || "직원";
+  const team = me?.team || me?.부서 || "";
+  const position = me?.position || me?.직책 || "";
+  const platform = navigator.userAgent.includes("Android") ? "Android" : navigator.userAgent.includes("iPhone") ? "iOS" : "Web";
   return (
-    <div className="px-4 py-5 space-y-4 pb-24" style={{ "--myinfo-accent": cardVersionB ? "#1B2B4B" : "#2563eb" }}>
-      {/* 입사일 / 연차·월차 */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-        <div className="text-[12px] font-bold text-gray-400 uppercase tracking-wider mb-3">입사일 / 연차·월차</div>
-        <div className="flex items-center gap-2 mb-3 flex-wrap">
-          <span className="text-[12px] text-gray-500 font-semibold flex-shrink-0">입사일</span>
-          <select value={hireY || ""} onChange={e => handleHireDateChange(Number(e.target.value), hireM, hireD)}
-            className="px-2 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[var(--myinfo-accent)] outline-none focus:border-[var(--myinfo-accent)]">
-            <option value="">년</option>
-            {yearOptions.map(y => <option key={y} value={y}>{y}년</option>)}
-          </select>
-          <select value={hireM || ""} onChange={e => handleHireDateChange(hireY, Number(e.target.value), hireD)}
-            className="px-2 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[var(--myinfo-accent)] outline-none focus:border-[var(--myinfo-accent)]">
-            <option value="">월</option>
-            {monthOptions.map(m => <option key={m} value={m}>{m}월</option>)}
-          </select>
-          <select value={hireD || ""} onChange={e => handleHireDateChange(hireY, hireM, Number(e.target.value))}
-            className="px-2 py-1.5 rounded-lg border border-gray-200 text-[13px] font-bold text-[var(--myinfo-accent)] outline-none focus:border-[var(--myinfo-accent)]">
-            <option value="">일</option>
-            {dayOptions.map(d => <option key={d} value={d}>{d}일</option>)}
-          </select>
-          {hireDateSaving && <span className="text-[10px] text-gray-400">저장중</span>}
-          {yearsOfService && (
-            <span className="ml-auto text-[13px] font-bold text-[var(--myinfo-accent)]">{yearsOfService}</span>
-          )}
+    <div className="px-3.5 pt-3.5 pb-24 space-y-3">
+      {/* 프로필 히어로 */}
+      <div className="relative overflow-hidden rounded-[22px] text-white px-5 pt-5 pb-4 shadow-[0_14px_32px_rgba(15,26,48,0.28)]" style={{ background: KPM_HERO_BG }}>
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO }}>MY PROFILE</span>
+          <span className="h-6 px-2.5 rounded-full bg-white/10 ring-1 ring-white/15 text-[11px] font-black grid place-items-center">{roleKo}{me?.isMaster ? " · 마스터" : ""}</span>
         </div>
-        {leave ? (
-          <div className="grid grid-cols-3 gap-2">
-            <div className="bg-gray-50 rounded-xl p-2.5 text-center border border-gray-100">
-              <div className="text-[15px] font-extrabold text-[var(--myinfo-accent)]">{leave.leaveLabel}</div>
-              <div className="text-[10px] text-gray-400 mt-0.5">구분</div>
-            </div>
-            <div className="bg-gray-50 rounded-xl p-2.5 text-center border border-gray-100">
-              <div className="text-[15px] font-extrabold text-[var(--myinfo-accent)]">{leave.used}일</div>
-              <div className="text-[10px] text-gray-400 mt-0.5">사용</div>
-            </div>
-            <div className="bg-[var(--myinfo-accent)] rounded-xl p-2.5 text-center">
-              <div className="text-[15px] font-extrabold text-white">{leave.remaining}일</div>
-              <div className="text-[10px] text-white/50 mt-0.5">잔여</div>
-            </div>
-            <div className="col-span-3 text-[10px] text-gray-400 mt-1">
-              총 발생 {leave.entitlement}일 · 2026년부터 사용 내역 집계
-            </div>
-            <div className="bg-gray-50 rounded-xl p-2.5 text-center border border-gray-100">
-              <div className="text-[15px] font-extrabold text-[var(--myinfo-accent)]">{leave.sickDays}일</div>
-              <div className="text-[10px] text-gray-400 mt-0.5">병가</div>
-            </div>
-            <div className="bg-gray-50 rounded-xl p-2.5 text-center border border-gray-100">
-              <div className="text-[15px] font-extrabold text-[var(--myinfo-accent)]">{leave.fieldDays}일</div>
-              <div className="text-[10px] text-gray-400 mt-0.5">외근</div>
-            </div>
-          </div>
-        ) : (
-          <div className="text-[11px] text-gray-400">입사일을 설정하면 연차/월차 잔여일수가 표시됩니다.</div>
-        )}
-      </div>
-
-      {/* 프로필 카드 */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className={`${cardVersionB ? "bg-[var(--myinfo-accent)]" : "bg-blue-600"} px-5 py-6 flex items-center gap-4`}>
-          <div>
-            <div className="text-white text-[17px] font-extrabold tracking-tight">{myName}</div>
-            {myRole && <div className="text-white/60 text-[12px] mt-0.5">{myRole}</div>}
-            <div className="text-white/50 text-[11px] mt-1">{myEmail}</div>
+        <div className="mt-3 flex items-center gap-3.5">
+          <span className="w-14 h-14 rounded-2xl bg-white text-[#0F1A30] grid place-items-center text-[22px] font-black shrink-0 shadow-[0_8px_20px_rgba(0,0,0,0.25)]">{myName.slice(0, 1)}</span>
+          <div className="min-w-0">
+            <div className="text-[21px] font-black tracking-tight truncate">{myName}</div>
+            <div className="text-[12.5px] text-white/60 truncate">{[myCompany, team, position].filter(Boolean).join(" · ") || "-"}</div>
+            <div className="text-[11.5px] text-white/45 truncate" style={{ fontFamily: KPM_MONO }}>{myEmail}</div>
           </div>
         </div>
-        <div className="px-5 py-4 space-y-2">
-          {myCompany && (
-            <div className="flex items-center justify-between py-1 border-b border-gray-50">
-              <span className="text-[12px] text-gray-400">회사명</span>
-              <span className="text-[13px] font-semibold text-gray-800">{myCompany}</span>
-            </div>
-          )}
-          {myPhone && (
-            <div className="flex items-center justify-between py-1 border-b border-gray-50">
-              <span className="text-[12px] text-gray-400">연락처</span>
-              <span className="text-[13px] font-semibold text-gray-800">{myPhone}</span>
-            </div>
-          )}
-          <div className="flex items-center justify-between py-1 border-b border-gray-50">
-            <span className="text-[12px] text-gray-400">로그인 시간</span>
-            <span className="text-[13px] font-semibold text-gray-800">{fmtTime(loginTime)}</span>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <div className="rounded-xl bg-white/[0.07] ring-1 ring-white/10 px-3 py-2">
+            <div className="text-[10px] font-bold text-white/50">근속</div>
+            <div className="text-[14px] font-black truncate">{yearsOfService || "입사일 미등록"}</div>
           </div>
-          <div className="flex items-center justify-between py-1">
-            <span className="text-[12px] text-gray-400">계정</span>
-            <span className="text-[12px] text-gray-500 font-mono">{currentUser?.uid?.slice(-8) || "-"}</span>
+          <div className="rounded-xl bg-white/[0.07] ring-1 ring-white/10 px-3 py-2">
+            <div className="text-[10px] font-bold text-white/50">로그인</div>
+            <div className="text-[14px] font-black tabular-nums truncate" style={{ fontFamily: KPM_MONO }}>{fmtTime(loginTime)}</div>
           </div>
         </div>
       </div>
 
-      {/* 활동 통계 */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-        <div className="text-[12px] font-bold text-gray-400 uppercase tracking-wider mb-3">내 활동 통계</div>
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            { label: "오늘 등록", value: todayCount, color: "text-blue-600" },
-            { label: "이번 달", value: thisMonthCount, color: "text-indigo-600" },
-            { label: "배차완료", value: completedCount, color: "text-emerald-600" },
-            { label: "전체 등록", value: totalCount, color: "text-gray-700" },
-          ].map(({ label, value, color }) => (
-            <div key={label} className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
-              <div className={`text-[22px] font-extrabold ${color}`}>{value}</div>
-              <div className="text-[11px] text-gray-400 mt-0.5">{label}</div>
+      {/* 내 활동 */}
+      <KpmCard en="ACTIVITY" title="내 활동 통계">
+        <div className="grid grid-cols-4 gap-1.5">
+          {[["오늘", todayCount], ["이번 달", thisMonthCount], ["배차완료", completedCount], ["전체", totalCount]].map(([l, v], idx) => (
+            <div key={l} className={`rounded-xl px-2 py-2.5 text-center ${idx === 0 ? "bg-[#1B2B4B] text-white" : "bg-[#F5F8FD] border border-[#E3E8F0]"}`}>
+              <div className={`text-[20px] font-black tabular-nums leading-none ${idx === 0 ? "" : "text-[#0F1A30]"}`} style={{ fontFamily: KPM_MONO }}>{v}</div>
+              <div className={`text-[11px] font-bold mt-1 ${idx === 0 ? "text-white/60" : "text-[#7A879C]"}`}>{l}</div>
             </div>
           ))}
         </div>
-      </div>
+      </KpmCard>
 
-      {/* QR 코드 */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-        <div className="text-[12px] font-bold text-gray-400 uppercase tracking-wider mb-3">앱 QR 코드</div>
-        <div className="flex flex-col items-center gap-3">
-          <img
-            src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(window.location.origin)}`}
-            alt="앱 QR코드"
-            className="w-48 h-48 rounded-xl border border-gray-100"
-          />
-          <div className="text-[11px] text-gray-400 text-center">QR코드를 스캔하면 앱으로 바로 접속합니다</div>
-          <div className="text-[11px] text-gray-500 font-semibold break-all text-center">{window.location.origin}</div>
+      {/* 입사일 · 연차 */}
+      <KpmCard en="LEAVE" title="입사일 · 연차" right={hireDateSaving ? <span className="text-[11px] font-bold text-[#7A879C]">저장 중…</span> : yearsOfService ? <span className="text-[12px] font-black text-[#2D4C82]">{yearsOfService}</span> : null}>
+        <div className="grid grid-cols-3 gap-1.5">
+          {[[hireY, (v) => handleHireDateChange(v, hireM, hireD), "년", yearOptions, "년"], [hireM, (v) => handleHireDateChange(hireY, v, hireD), "월", monthOptions, "월"], [hireD, (v) => handleHireDateChange(hireY, hireM, v), "일", dayOptions, "일"]].map(([val, on, ph, opts, suf]) => (
+            <div key={ph} className="relative">
+              <select value={val || ""} onChange={(e) => on(Number(e.target.value))}
+                className="w-full h-11 pl-3 pr-7 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-black text-[#0F1A30] appearance-none outline-none focus:border-[#2D4C82]">
+                <option value="">{ph}</option>
+                {opts.map((o) => <option key={o} value={o}>{o}{suf}</option>)}
+              </select>
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-[#9AA9C3] pointer-events-none">▼</span>
+            </div>
+          ))}
         </div>
-      </div>
+        {leave ? (
+          <>
+            <div className="mt-2.5 grid grid-cols-3 gap-1.5">
+              {[["구분", leave.leaveLabel], ["사용", `${leave.used}일`], ["잔여", `${leave.remaining}일`], ["총 발생", `${leave.entitlement}일`], ["병가", `${leave.sickDays}일`], ["외근", `${leave.fieldDays}일`]].map(([l, v]) => (
+                <div key={l} className={`rounded-xl px-2 py-2 text-center ${l === "잔여" ? "bg-[#1B2B4B] text-white" : "bg-[#F5F8FD] border border-[#E3E8F0]"}`}>
+                  <div className={`text-[15px] font-black tabular-nums ${l === "잔여" ? "" : "text-[#0F1A30]"}`}>{v}</div>
+                  <div className={`text-[10.5px] font-bold ${l === "잔여" ? "text-white/60" : "text-[#7A879C]"}`}>{l}</div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-1.5 text-[10.5px] text-[#9AA9C3]">2026년부터 사용 내역 집계 · 전자결재 › 근태·휴가 신청과 연동</div>
+          </>
+        ) : (
+          <div className="mt-2 text-[11.5px] text-[#7A879C]">입사일을 설정하면 연차/월차 잔여일수가 표시됩니다.</div>
+        )}
+      </KpmCard>
 
-      {/* 앱 정보 */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="text-[12px] font-bold text-gray-400 uppercase tracking-wider px-4 pt-4 pb-2">앱 정보</div>
-        {[
-          { label: "앱 이름", value: "(주)KP-Flow 모바일" },
-          { label: "버전", value: <MobileVersionChip /> },
-          { label: "플랫폼", value: navigator.userAgent.includes("Android") ? "Android" : navigator.userAgent.includes("iPhone") ? "iOS" : "Web" },
-        ].map(({ label, value }) => (
-          <div key={label} className="flex items-center justify-between px-4 py-3 border-t border-gray-50">
-            <span className="text-[12px] text-gray-400">{label}</span>
-            <span className="text-[12px] font-semibold text-gray-700">{value}</span>
-          </div>
+      {/* 계정 정보 */}
+      <KpmCard en="ACCOUNT" title="계정 정보" flush>
+        {[["회사", myCompany || "-"], ["부서 · 직책", [team, position].filter(Boolean).join(" · ") || "-"], ["권한", roleKo + (me?.isMaster ? " · 마스터" : "")], ["연락처", myPhone || "-"], ["이메일", myEmail || "-"], ["계정 ID", currentUser?.uid?.slice(-8) || "-"]].map(([l, v]) => (
+          <KpmRow key={l} label={l} value={v} mono={l === "계정 ID" || l === "연락처"} />
         ))}
+      </KpmCard>
+
+      {/* 앱 */}
+      <KpmCard en="APP" title="앱 정보 · 바로가기 QR">
+        <div className="flex items-center gap-3.5">
+          <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(window.location.origin)}`} alt="앱 QR코드"
+            className="w-[104px] h-[104px] rounded-xl border border-[#E3E8F0] shrink-0 bg-white" />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="flex items-center justify-between gap-2"><span className="text-[11.5px] font-bold text-[#7A879C]">앱</span><span className="text-[12.5px] font-black text-[#0F1A30] truncate">KP-Flow 모바일</span></div>
+            <div className="flex items-center justify-between gap-2"><span className="text-[11.5px] font-bold text-[#7A879C]">버전</span><MobileVersionChip /></div>
+            <div className="flex items-center justify-between gap-2"><span className="text-[11.5px] font-bold text-[#7A879C]">플랫폼</span><span className="text-[12.5px] font-black text-[#0F1A30]">{platform}</span></div>
+            <div className="text-[10.5px] text-[#9AA9C3] break-all">QR을 스캔하면 바로 접속 · {window.location.host}</div>
+          </div>
+        </div>
+      </KpmCard>
+    </div>
+  );
+}
+
+// ── 모바일 공통 디자인 조각(내정보·설정) — PC 화면과 같은 네이비 디지털 톤 ──
+const KPM_MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const KPM_HERO_BG = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(125deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
+function KpmCard({ en, title, right, children, flush = false }) {
+  return (
+    <div className="rounded-[20px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_24px_rgba(16,24,40,0.05)] overflow-hidden">
+      <div className="px-4 pt-3.5 pb-2.5 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: KPM_MONO }}>{en}</div>
+          <div className="text-[15px] font-black text-[#0F1A30] tracking-tight truncate">{title}</div>
+        </div>
+        {right}
       </div>
+      <div className={flush ? "border-t border-[#EEF1F6]" : "px-4 pb-4"}>{children}</div>
+    </div>
+  );
+}
+function KpmRow({ label, sub, value, right, onClick, mono = false, danger = false }) {
+  const Tag = onClick ? "button" : "div";
+  return (
+    <Tag type={onClick ? "button" : undefined} onClick={onClick}
+      className={`w-full flex items-center justify-between gap-3 px-4 py-3 text-left border-b border-[#EEF1F6] last:border-b-0 ${onClick ? "active:bg-[#F5F8FD]" : ""}`}>
+      <div className="min-w-0">
+        <div className={`text-[13.5px] font-bold ${danger ? "text-[#B42318]" : "text-[#0F1A30]"}`}>{label}</div>
+        {sub && <div className="text-[11.5px] text-[#7A879C] mt-0.5 leading-snug">{sub}</div>}
+      </div>
+      {value !== undefined && <span className={`shrink-0 max-w-[60%] text-right text-[13px] font-black text-[#0F1A30] truncate ${mono ? "tabular-nums" : ""}`} style={mono ? { fontFamily: KPM_MONO } : undefined}>{value}</span>}
+      {right && <div className="shrink-0">{right}</div>}
+    </Tag>
+  );
+}
+function KpmToggle({ value, onChange }) {
+  return (
+    <button type="button" onClick={(e) => { e.stopPropagation(); onChange(!value); }}
+      className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${value ? "bg-[#1B2B4B]" : "bg-[#D5DCE7]"}`}>
+      <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${value ? "translate-x-5" : "translate-x-0"}`} />
+    </button>
+  );
+}
+function KpmSeg({ options, value, onPick }) {
+  return (
+    <div className="flex p-0.5 rounded-xl bg-[#EEF2F8]">
+      {options.map(({ v, l }) => (
+        <button key={String(v)} type="button" onClick={() => onPick(v)}
+          className={`h-8 px-2.5 rounded-[10px] text-[12px] font-black transition ${value === v ? "bg-[#1B2B4B] text-white shadow-[0_4px_10px_rgba(27,43,75,0.25)]" : "text-[#5B6B85]"}`}>{l}</button>
+      ))}
     </div>
   );
 }
@@ -22166,180 +22205,77 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     }
   };
 
-  const SectionHeader = ({ title }) => (
-    <div className="px-4 pt-5 pb-1.5">
-      <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">{title}</span>
-    </div>
-  );
-
-  const SettingRow = ({ label, sub, right, onClick, danger }) => (
-    <div
-      className={`w-full flex items-center justify-between px-4 py-3.5 bg-white border-b border-gray-50 ${onClick ? "active:bg-gray-50 cursor-pointer" : ""} ${danger ? "text-red-500" : ""}`}
-      onClick={onClick}
-    >
-      <div className="text-left">
-        <div className={`text-[13px] font-semibold ${danger ? "text-red-500" : "text-gray-800"}`}>{label}</div>
-        {sub && <div className="text-[11px] text-gray-400 mt-0.5">{sub}</div>}
-      </div>
-      {right && <div className="shrink-0">{right}</div>}
-    </div>
-  );
-
-  const Toggle = ({ value, onChange }) => (
-    <button type="button" onClick={() => onChange(!value)}
-      className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${value ? "bg-emerald-500" : "bg-gray-300"}`}>
-      <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${value ? "translate-x-5" : "translate-x-0"}`} />
-    </button>
-  );
+  // ⭐ 2026-10-31 리디자인 — 내정보와 같은 네이비 디지털 톤(히어로 + 영문 코드 카드)
+  const ROLE_KO = { totalMaster: "최고관리자", admin: "관리자", superadmin: "관리자", hrManager: "인사관리자", user: "실무자", test: "경리/회계", viewer: "조회전용" };
+  const go = (label) => <span className="h-8 px-3 rounded-lg border border-[#C9D6EE] bg-[#F5F8FD] text-[12px] font-black text-[#1B2B4B] grid place-items-center">{label}</span>;
+  const pushOnCount = PUSH_PREF_TYPES.filter((t) => isPushPrefOn(pushPrefs, t.key)).length;
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
-      <div className="flex-1 pb-10">
+    <div className="flex flex-col min-h-screen">
+      <div className="flex-1 px-3.5 pt-3.5 pb-10 space-y-3">
 
-        <SectionHeader title="화면" />
-        <div className="mx-4 rounded-2xl overflow-hidden border-2 border-[#1B2B4B]/15 shadow-sm">
-          <div className="px-4 py-3.5 bg-[#f4f7fc]">
-            <div className="flex items-center justify-between">
-              <div className="text-left flex items-center gap-2">
-                <span className="w-7 h-7 rounded-full bg-[#1B2B4B] flex items-center justify-center shrink-0">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8.5" x2="11" y2="11.5"/><circle cx="11" cy="14" r="0.5" fill="white"/></svg>
-                </span>
-                <div>
-                  <div className="text-[13.5px] font-bold text-gray-800">쉬운모드</div>
-                  <div className="text-[11px] text-gray-500 mt-0.5">글씨・버튼・아이콘이 한 번에 크게 보여요</div>
-                </div>
+        {/* 히어로 */}
+        <div className="relative overflow-hidden rounded-[22px] text-white px-5 py-4 shadow-[0_14px_32px_rgba(15,26,48,0.28)]" style={{ background: KPM_HERO_BG }}>
+          <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO }}>SETTINGS · PREFERENCES</div>
+          <div className="text-[21px] font-black tracking-tight mt-0.5">설정</div>
+          <div className="text-[12px] text-white/55 truncate">{[userCompany, ROLE_KO[role] || role, currentUser?.email].filter(Boolean).join(" · ")}</div>
+          <div className="mt-3 grid grid-cols-3 gap-1.5">
+            {[["테마", cardVersionB ? "B형" : "A형"], ["글자", { 1: "기본", 1.1: "크게", 1.2: "아주 크게" }[fontScale] || "기본"], ["알림", alarmEnabled ? `켜짐 · ${pushOnCount}종` : "꺼짐"]].map(([l, v]) => (
+              <div key={l} className="rounded-xl bg-white/[0.07] ring-1 ring-white/10 px-2.5 py-1.5">
+                <div className="text-[10px] font-bold text-white/50">{l}</div>
+                <div className="text-[13px] font-black truncate">{v}</div>
               </div>
-              <Toggle value={easyMode} onChange={(v) => setEasyMode(v)} />
-            </div>
+            ))}
           </div>
-          <SettingRow
-            label="디자인 테마"
-            sub={cardVersionB ? "B형 (다크 네이비 헤더)" : "A형 (라이트)"}
-            right={
-              <div className="flex gap-1.5">
-                {[false, true].map(v => (
-                  <button key={String(v)} type="button"
-                    onClick={() => { setCardVersionB(v); localStorage.setItem("cardVersionV2", v ? "B" : "A"); localStorage.setItem("cardVersion", v ? "B" : "A"); }}
-                    className={`px-3 py-1.5 rounded-xl text-[12px] font-bold transition-all ${cardVersionB === v ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-500"}`}>
-                    {v ? "B형" : "A형"}
-                  </button>
-                ))}
-              </div>
-            }
-          />
-          <SettingRow
-            label="글자 크기"
-            sub="목록/상세 텍스트 크기"
-            right={
-              <div className="flex gap-1.5">
-                {[{v:1,l:"기본"},{v:1.1,l:"크게"},{v:1.2,l:"아주크게"}].map(({v,l}) => (
-                  <button key={v} type="button"
-                    onClick={() => { setFontScale(v); localStorage.setItem("fontScale", String(v)); }}
-                    className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition-all ${fontScale===v ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-500"}`}>
-                    {l}
-                  </button>
-                ))}
-              </div>
-            }
-          />
         </div>
 
-        <SectionHeader title="알림" />
-        <div className="mx-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
-          <SettingRow
-            label="푸시 알림"
-            sub="신규 오더·배차 알림"
-            right={<Toggle value={alarmEnabled} onChange={toggleAlarm} />}
-          />
-          <SettingRow
-            label="알림 종류별 설정"
-            sub="배차완료·배차등록·긴급배차 등 원하는 알림만 받기"
-            onClick={() => setPushPrefsOpen(true)}
-            right={<span className="text-[12px] text-blue-500 font-semibold">설정</span>}
-          />
-        </div>
+        <KpmCard en="DISPLAY" title="화면" flush>
+          <KpmRow label="쉬운모드" sub="글씨·버튼·아이콘이 한 번에 크게 보여요" right={<KpmToggle value={easyMode} onChange={(v) => setEasyMode(v)} />} />
+          <KpmRow label="디자인 테마" sub={cardVersionB ? "B형 · 다크 네이비 헤더" : "A형 · 라이트"}
+            right={<KpmSeg value={cardVersionB} options={[{ v: false, l: "A형" }, { v: true, l: "B형" }]} onPick={(v) => { setCardVersionB(v); localStorage.setItem("cardVersionV2", v ? "B" : "A"); localStorage.setItem("cardVersion", v ? "B" : "A"); }} />} />
+          <KpmRow label="글자 크기" sub="목록·상세 텍스트"
+            right={<KpmSeg value={fontScale} options={[{ v: 1, l: "기본" }, { v: 1.1, l: "크게" }, { v: 1.2, l: "아주" }]} onPick={(v) => { setFontScale(v); localStorage.setItem("fontScale", String(v)); }} />} />
+        </KpmCard>
 
-        <SectionHeader title="데이터" />
-        <div className="mx-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
-          <SettingRow
-            label="앱 새로고침"
-            sub="서버에서 가장 최신 상태를 다시 불러옵니다"
+        <KpmCard en="NOTIFICATION" title="알림" flush>
+          <KpmRow label="푸시 알림" sub="신규 오더·배차 알림" right={<KpmToggle value={alarmEnabled} onChange={toggleAlarm} />} />
+          <KpmRow label="알림 종류별 설정" sub={`배차등록·긴급배차·배차완료 등 · 지금 ${pushOnCount}종 켜짐`} onClick={() => setPushPrefsOpen(true)} right={go("설정")} />
+        </KpmCard>
+
+        <KpmCard en="DATA" title="데이터" flush>
+          <KpmRow label="앱 새로고침" sub="서버에서 가장 최신 상태를 다시 불러옵니다"
             onClick={async () => {
               if (manualRefreshing) return;
               setManualRefreshing(true);
-              // ⭐ 캐시가 꼬여 실시간 반영이 안 먹힐 때를 대비해 로컬/IndexedDB
-              // 캐시를 거치지 않고 서버에서 직접(getDocsFromServer) 다시 읽어온다
-              // (force:true로 쿨다운도 건너뛴다). 화면 새로고침(reload) 없이 목록
-              // 상태만 즉시 갱신되므로 예전처럼 "완료"라고 뜨고도 실제로는 한참
-              // 뒤에야 반영되는 일이 없다. 로딩 화면은 최상위의 공용 재조회
-              // 오버레이(resyncOverlay)가 대신 보여준다.
+              // ⭐ 캐시가 꼬여 실시간 반영이 안 먹힐 때를 대비해 캐시를 거치지 않고 서버에서 직접 다시 읽는다(force:true로 쿨다운 생략)
               const ok = await refreshFromServer?.({ force: true });
               setManualRefreshing(false);
               showSuccess(ok === false ? "새로고침 실패 (네트워크 확인)" : "새로고침 완료 · 최신 상태 반영됨");
             }}
-            right={<span className="text-[12px] text-blue-500 font-semibold">{manualRefreshing ? "갱신 중..." : "실행"}</span>}
-          />
-          <SettingRow
-            label="캐시 초기화"
-            sub="임시 저장 데이터 삭제"
-            onClick={() => { localStorage.clear(); showSuccess("초기화 완료"); }}
-            right={<span className="text-[12px] text-blue-500 font-semibold">실행</span>}
-          />
-        </div>
+            right={go(manualRefreshing ? "갱신 중…" : "실행")} />
+          <KpmRow label="캐시 초기화" sub="이 기기에 임시 저장된 데이터 삭제" onClick={() => { localStorage.clear(); showSuccess("초기화 완료"); }} right={go("실행")} />
+        </KpmCard>
 
         {isTotalMaster && (
-          <>
-            <SectionHeader title="관리자" />
-            <div className="mx-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
-              <SettingRow
-                label="알림 테스트"
-                sub="서버로 안 보내고 이 기기에서 바로 알림창만 확인"
-                onClick={handleTestNotification}
-                right={<span className="text-[12px] text-blue-500 font-semibold">실행</span>}
-              />
-              <SettingRow
-                label="FCM 토큰 진단"
-                sub="서버(FCM)까지 실제로 거쳐서 이 기기가 왜 안 되는지 확인"
-                onClick={runFcmDiagnosis}
-                right={<span className="text-[12px] text-blue-500 font-semibold">{fcmDiagRunning ? "..." : "실행"}</span>}
-              />
-              <SettingRow
-                label="전체 푸시 발송"
-                sub="제목·내용을 직접 써서 앱 설치한 모든 사람에게 발송"
-                onClick={() => setPushComposeOpen(true)}
-                right={<span className="text-[12px] text-blue-500 font-semibold">열기</span>}
-              />
-            </div>
-          </>
+          <KpmCard en="MASTER ONLY" title="최고관리자 도구" flush>
+            <KpmRow label="알림 테스트" sub="서버를 거치지 않고 이 기기에서 알림창만 확인" onClick={handleTestNotification} right={go("실행")} />
+            <KpmRow label="FCM 토큰 진단" sub="서버(FCM)까지 거쳐 이 기기 알림 연결 확인" onClick={runFcmDiagnosis} right={go(fcmDiagRunning ? "…" : "실행")} />
+            <KpmRow label="전체 푸시 발송" sub="앱을 설치한 모든 사람에게 발송" onClick={() => setPushComposeOpen(true)} right={go("열기")} />
+          </KpmCard>
         )}
 
-        <SectionHeader title="계정" />
-        <div className="mx-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
-          <SettingRow label="회사" sub={userCompany || "-"} />
-          <SettingRow
-            label="로그인 관리"
-            sub="로그인된 기기 확인·연결 끊기 · 비밀번호 변경"
-            onClick={() => setLoginMgrOpen(true)}
-            right={<span className="text-[12px] text-blue-500 font-semibold">열기</span>}
-          />
+        <KpmCard en="ACCOUNT" title="계정" flush>
+          <KpmRow label="회사" value={userCompany || "-"} />
+          <KpmRow label="권한" value={ROLE_KO[role] || role || "-"} />
+          <KpmRow label="로그인 관리" sub="로그인된 기기 확인·연결 끊기 · 비밀번호 변경" onClick={() => setLoginMgrOpen(true)} right={go("열기")} />
           {loginMgrOpen && <LoginManagerModal user={currentUser} onClose={() => setLoginMgrOpen(false)} />}
-          <SettingRow
-            label="로그아웃"
-            danger
-            onClick={() => setShowLogoutConfirm(true)}
-          />
-        </div>
+          <KpmRow label="로그아웃" danger onClick={() => setShowLogoutConfirm(true)} />
+        </KpmCard>
 
-        <SectionHeader title="앱 정보" />
-        <div className="mx-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
-          <SettingRow label="버전" sub="KP-FLOW 배차관리" right={
-            <div className="flex items-center gap-1.5">
-              <span className="text-[12px] text-gray-400 font-mono">v{appVersion}</span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-600">최신버전</span>
-            </div>
-          } />
-          <SettingRow label="제작" right={<span className="text-[12px] text-gray-400">KP-FLOW Logistics</span>} />
-        </div>
+        <KpmCard en="ABOUT" title="앱 정보" flush>
+          <KpmRow label="버전" sub="KP-FLOW 배차관리" right={<div className="flex items-center gap-1.5"><span className="text-[12px] text-[#5B6B85] font-bold" style={{ fontFamily: KPM_MONO }}>v{appVersion}</span><span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-[#EEF3FC] text-[#1B2B4B]">최신</span></div>} />
+          <KpmRow label="제작" value="KP-FLOW Logistics" />
+        </KpmCard>
 
       </div>
 
@@ -22382,7 +22318,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
               <button
                 onClick={sendBroadcastPush}
                 disabled={pushSending}
-                className={`w-full py-3 rounded-xl text-white text-[13px] font-bold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} disabled:opacity-40`}
+                className={`w-full py-3 rounded-xl text-white text-[13px] font-bold bg-[#1B2B4B] disabled:opacity-40`}
               >
                 {pushSending ? "발송 중..." : "전체 발송"}
               </button>
@@ -22418,7 +22354,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
                     <div className="text-[13px] font-semibold text-gray-800">{label}</div>
                     <div className="text-[11px] text-gray-400 mt-0.5">{sub}</div>
                   </div>
-                  <Toggle value={isPushPrefOn(pushPrefs, key)} onChange={() => togglePushPref(key)} />
+                  <KpmToggle value={isPushPrefOn(pushPrefs, key)} onChange={() => togglePushPref(key)} />
                 </div>
               ))}
             </div>
@@ -22437,7 +22373,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
             <div className="text-[13px] text-gray-500 mb-5">정말 로그아웃 하시겠습니까?</div>
             <div className="grid grid-cols-2 gap-2">
               <button onClick={() => setShowLogoutConfirm(false)} className="py-3 rounded-xl bg-gray-100 text-gray-700 text-sm font-bold">취소</button>
-              <button onClick={onLogout} className="py-3 rounded-xl bg-red-500 text-white text-sm font-bold">로그아웃</button>
+              <button onClick={onLogout} className="py-3 rounded-xl bg-[#0F1A30] text-white text-sm font-bold">로그아웃</button>
             </div>
           </div>
         </div>

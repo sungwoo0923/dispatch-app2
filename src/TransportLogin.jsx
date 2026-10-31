@@ -338,7 +338,7 @@ export default function TransportLogin() {
             className="text-[11.5px] text-[#4B6CB7] font-extrabold hover:underline">회사코드 찾기</button>
         )}
       </div>
-      <div className="group flex items-center gap-2.5 h-[50px] px-4 rounded-[14px] bg-[#F5F7FB] border border-[#E3E8F0] transition focus-within:bg-white focus-within:border-[#2D4C82] focus-within:shadow-[0_0_0_4px_rgba(45,76,130,0.10)]">
+      <div className="group flex items-center gap-2.5 h-[46px] sm:h-[50px] px-3.5 sm:px-4 rounded-[13px] bg-[#F5F7FB] border border-[#E3E8F0] transition focus-within:bg-white focus-within:border-[#2D4C82] focus-within:shadow-[0_0_0_4px_rgba(45,76,130,0.10)]">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="text-[#9AA9C3] group-focus-within:text-[#1B2B4B] shrink-0">{fieldIcon[key]}</svg>
         {input}
       </div>
@@ -394,19 +394,19 @@ export default function TransportLogin() {
       </div>
 
       {/* 오른쪽 — 로그인 폼 */}
-      <div className="flex-1 min-w-0 flex items-center justify-center px-4 py-10 relative">
+      <div className="flex-1 min-w-0 flex items-center justify-center px-4 py-6 sm:py-10 relative">
         <div className="kp-login-in w-full max-w-[420px]">
           {/* 모바일 머리 */}
-          <div className="lg:hidden flex flex-col items-center mb-7">
-            <img src="/icons/sflow-icon.png" alt="" className="w-16 h-16 rounded-[18px] shadow-[0_10px_24px_rgba(15,26,48,0.25)]" />
-            <div className="mt-3 text-[20px] font-black tracking-[0.18em] text-[#0F1A30]">KP-FLOW</div>
+          <div className="lg:hidden flex flex-col items-center mb-4">
+            <img src="/icons/sflow-icon.png" alt="" className="w-12 h-12 rounded-[14px] shadow-[0_10px_24px_rgba(15,26,48,0.25)]" />
+            <div className="mt-2 text-[17px] font-black tracking-[0.18em] text-[#0F1A30]">KP-FLOW</div>
             <div className="text-[10.5px] font-bold tracking-[0.3em] text-[#9AA9C3]">LOGISTICS DISPATCH SYSTEM</div>
           </div>
 
-          <div className="bg-white rounded-[26px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_24px_60px_rgba(15,26,48,0.10)] px-8 sm:px-10 pt-9 pb-8">
+          <div className="bg-white rounded-[26px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_24px_60px_rgba(15,26,48,0.10)] px-5 sm:px-10 pt-6 sm:pt-9 pb-6 sm:pb-8">
             <div className="text-[11.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]">TRANSPORT SIGN IN</div>
-            <h1 className="mt-1 text-[26px] font-black text-[#0F1A30] tracking-tight">운송사 로그인</h1>
-            <p className="text-[13.5px] text-[#7A879C] mt-1 mb-7">승인 메일로 받은 회사코드로 로그인하세요</p>
+            <h1 className="mt-1 text-[22px] sm:text-[26px] font-black text-[#0F1A30] tracking-tight">운송사 로그인</h1>
+            <p className="text-[12.5px] sm:text-[13.5px] text-[#7A879C] mt-1 mb-5 sm:mb-7">승인 메일로 받은 회사코드로 로그인하세요</p>
 
             {field("code", "회사코드", (
               <input type="text" placeholder="승인 후 발급된 코드" value={companyCode} onChange={(e) => setCompanyCode(e.target.value.toUpperCase())} onKeyDown={handleKeyDown}
@@ -445,7 +445,7 @@ export default function TransportLogin() {
             )}
 
             <button onClick={login} disabled={loading}
-              className="w-full h-[54px] rounded-[15px] text-white text-[15.5px] font-black tracking-[0.04em] flex items-center justify-center gap-2 shadow-[0_14px_28px_rgba(15,26,48,0.28)] hover:brightness-110 active:scale-[0.99] transition disabled:opacity-60"
+              className="w-full h-[50px] sm:h-[54px] rounded-[14px] text-white text-[15px] font-black tracking-[0.04em] flex items-center justify-center gap-2 shadow-[0_14px_28px_rgba(15,26,48,0.28)] hover:brightness-110 active:scale-[0.99] transition disabled:opacity-60"
               style={{ background: "linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%)" }}>
               {loading ? <Loader2 size={18} className="animate-spin" /> : null}
               {loading ? "확인 중…" : "로그인"}

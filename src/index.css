@@ -190,3 +190,24 @@ table tbody tr:nth-child(odd) td {
 .kp-date-row, .kp-date-row * { white-space: nowrap; }
 .kp-order-form label { white-space: nowrap; }
 .kp-order-form > div { min-width: 0; }
+
+/* 📱 모바일 앱에서 PC 화면을 그대로 쓸 때(MobilePcViews) — 휴대폰 폭 보정 */
+@media (max-width: 767px) {
+  .kp-fare-map { position: relative !important; top: auto !important; height: 520px !important; min-height: 0 !important; }
+  .kp-m-pc { min-width: 0; }
+  /* 넓은 표는 화면 안에서 옆으로 밀어 보게 */
+  .kp-m-pc table { font-size: 12.5px; }
+  .kp-m-pc .overflow-x-auto { -webkit-overflow-scrolling: touch; }
+}
+@media (max-width: 767px) {
+  /* 매출관리(PC 화면) — 여러 칸 배치를 휴대폰에서는 위아래로, 숫자 카드는 2칸씩 */
+  .kp-rv-stack { grid-template-columns: minmax(0, 1fr) !important; }
+  .kp-rv-kpi { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important; }
+}
+@media (max-width: 767px) {
+  /* PC 화면의 4~6칸 숫자 카드 줄 → 2칸씩 */
+  .kp-m-pc [style*="repeat(4,"], .kp-m-pc [style*="repeat(4, "], .kp-m-pc [style*="repeat(5,"], .kp-m-pc [style*="repeat(5, "], .kp-m-pc [style*="repeat(6,"], .kp-m-pc [style*="repeat(6, "] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  /* 표를 감싼 칸은 옆으로 밀어서 보게 */
+  .kp-m-pc div:has(> table) { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
+  .kp-m-pc table { min-width: 560px; }
+}

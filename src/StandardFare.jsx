@@ -1144,10 +1144,10 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
 
       {/* ====== 표준운임 조회 탭 ====== */}
       {activeTab === "표준운임" && (
-        <div className="grid grid-cols-[320px_1fr] gap-4 items-start">
+        <div className="grid grid-cols-1 md:grid-cols-[320px_1fr] gap-4 items-start">
 
           {/* ───────── 왼쪽: 검색 패널 ───────── */}
-          <div className="bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] p-5 sticky top-4">
+          <div className="bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] p-5 md:sticky md:top-4 min-w-0">
             <div className="mb-4">
               <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>SEARCH</div>
               <div className="text-[17px] font-black text-[#0F1A30]">조회 조건</div>

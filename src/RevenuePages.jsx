@@ -58,14 +58,14 @@ export function TargetPage({ rows = [], targetMonth, yearTarget = 0, isExcluded 
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <div style={grid4}>
+      <div className="kp-rv-kpi" style={grid4}>
         <RvTile dark code="YTD" label={`${Y}년 누적 ${hasExcluded ? "순수 " : ""}매출`} value={rvShort(ytd)} unit="원" foot={<><RvDelta dark cur={ytd} prev={ytdLast} /><span>작년 같은 기간</span></>} />
         <RvTile code="TARGET" label="연간 목표" value={yearTarget > 0 ? rvShort(yearTarget) : "미설정"} unit={yearTarget > 0 ? "원" : ""} foot={yearTarget > 0 ? <span>남은 금액 {rvShort(Math.max(0, yearTarget - ytd))}원</span> : <span>매출 대시보드 › 목표 설정에서 입력</span>} />
         <RvTile code="ACHIEVE" label="목표 달성률" value={yearTarget > 0 ? (achieve * 100).toFixed(1) : "—"} unit={yearTarget > 0 ? "%" : ""} foot={<span>연도 진행 {Math.round((curM / 12) * 100)}%</span>} />
         <RvTile code="RUN RATE" label="연말 예상(현재 페이스)" value={rvShort(runRate)} unit="원" foot={<span>월평균 {rvShort(curM ? ytd / curM : 0)}원</span>} />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,2.1fr) minmax(0,1fr)", gap: 14 }}>
+      <div className="kp-rv-stack" style={{ display: "grid", gridTemplateColumns: "minmax(0,2.1fr) minmax(0,1fr)", gap: 14 }}>
         <RvCard code="RACE" title="누적 매출 레이스 — 올해 vs 작년 vs 목표 페이스" right={
           <div style={{ display: "flex", gap: 12, fontSize: 12.5, fontWeight: 700, color: "#4b5563" }}>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 14, height: 3, background: NAVY, borderRadius: 2 }} />올해</span>
@@ -115,7 +115,7 @@ export function TargetPage({ rows = [], targetMonth, yearTarget = 0, isExcluded 
         </RvCard>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1fr)", gap: 14 }}>
+      <div className="kp-rv-stack" style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1fr)", gap: 14 }}>
         <RvCard code="SCENARIO" title={`${Y}년 매출 시나리오 비교`}>
           <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
             {scen.map((s) => (
@@ -179,13 +179,13 @@ export function ClientsPage({ rows = [], targetMonth, isRankExcluded = () => fal
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <div style={grid4}>
+      <div className="kp-rv-kpi" style={grid4}>
         <RvTile dark code="CLIENTS" label="거래 거래처" value={data.count} unit="곳" foot={<span>{targetMonth} 기준</span>} />
         <RvTile code="TOP 10" label="상위 10곳 매출 비중" value={data.total ? ((top10Sum / data.total) * 100).toFixed(1) : "0.0"} unit="%" foot={<span>{rvShort(top10Sum)}원 / {rvShort(data.total)}원</span>} />
         <RvTile code="NEW" label="신규 거래처" value={data.fresh.length} unit="곳" foot={<span>매출 {rvShort(data.fresh.reduce((s, x) => s + x.sale, 0))}원</span>} />
         <RvTile code="DROP" label="매출 감소 거래처" value={data.drop.length} unit="곳" foot={<span>감소액 {rvShort(Math.abs(data.drop.reduce((s, x) => s + x.diff, 0)))}원</span>} />
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.6fr) minmax(0,1fr)", gap: 14 }}>
+      <div className="kp-rv-stack" style={{ display: "grid", gridTemplateColumns: "minmax(0,1.6fr) minmax(0,1fr)", gap: 14 }}>
         <RvCard code="TOP 10" title="매출 순위 Top 10">
           {top10.length === 0 ? <Empty /> : (
             <div style={{ height: 380 }}>
@@ -232,7 +232,7 @@ export function ClientsPage({ rows = [], targetMonth, isRankExcluded = () => fal
           )}
         </RvCard>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1fr)", gap: 14 }}>
+      <div className="kp-rv-stack" style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1fr)", gap: 14 }}>
         <RvCard code="DROP" title={`매출 감소 Top 10 (${prevYm} → ${targetMonth})`}>
           {data.drop.length === 0 ? <Empty text="감소한 거래처가 없습니다" /> : data.drop.map((x, i) => (
             <div key={x.name} style={{ display: "grid", gridTemplateColumns: "26px 130px 1fr 92px", alignItems: "center", gap: 10, padding: "7px 0", borderTop: i ? "1px solid #EEF1F6" : "none" }}>
@@ -311,7 +311,7 @@ export function TrendPage({ rows = [], targetMonth, isRankExcluded = () => false
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <div style={grid4}>
+      <div className="kp-rv-kpi" style={grid4}>
         <RvTile dark code="ACTIVE" label="12개월 거래처" value={data.length} unit="곳" foot={<span>{months[0]} ~ {months[11]}</span>} />
         <RvTile code="GROWING" label="성장 거래처" value={data.filter((x) => x.p3 > 0 && x.g > 0.1).length} unit="곳" foot={<span>최근 3개월 +10% 이상</span>} />
         <RvTile code="DECLINING" label="감소 거래처" value={data.filter((x) => x.p3 > 0 && x.g < -0.1).length} unit="곳" foot={<span>최근 3개월 −10% 이상</span>} />
@@ -340,7 +340,7 @@ export function TrendPage({ rows = [], targetMonth, isRankExcluded = () => false
         )}
       </RvCard>
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr)", gap: 14 }}>
+      <div className="kp-rv-stack" style={{ display: "grid", gridTemplateColumns: "minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr)", gap: 14 }}>
         <RvCard code="TREND" title={sel ? `${sel.name} · 12개월 추이` : "거래처 추이"}>
           {!sel ? <Empty /> : (
             <div style={{ height: 230 }}>
@@ -394,7 +394,7 @@ export function YearlyPage({ rows = [], year }) {
   const best = months.reduce((a, m) => (m.sale > a.sale ? m : a), { sale: 0, label: "-" });
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <div style={grid4}>
+      <div className="kp-rv-kpi" style={grid4}>
         <RvTile dark code="REVENUE" label={`${year}년 매출`} value={rvShort(tot.sale)} unit="원" foot={<><RvDelta dark cur={tot.sale} prev={tot.last} /><span>작년 대비</span></>} />
         <RvTile code="PROFIT" label="수익" value={rvShort(tot.profit)} unit="원" foot={<span>수익률 {tot.sale ? ((tot.profit / tot.sale) * 100).toFixed(1) : "0.0"}%</span>} />
         <RvTile code="ORDERS" label="오더 건수" value={tot.cnt.toLocaleString()} unit="건" foot={<span>월평균 {active.length ? Math.round(tot.cnt / active.length).toLocaleString() : 0}건</span>} />
@@ -424,7 +424,7 @@ export function YearlyPage({ rows = [], year }) {
           </ResponsiveContainer>
         </div>
       </RvCard>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0,1fr))", gap: 10 }}>
+      <div className="kp-rv-kpi" style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0,1fr))", gap: 10 }}>
         {months.map((m, i) => {
           const prev = i > 0 ? months[i - 1].sale : 0;
           return (
@@ -503,13 +503,13 @@ export function QueryPage({ rows = [], clients = [] }) {
 
       {!res ? <RvCard code="RESULT" title="조회 결과"><Empty text="기간과 거래처를 고르고 조회를 누르세요" /></RvCard> : (
         <>
-          <div style={grid4}>
+          <div className="kp-rv-kpi" style={grid4}>
             <RvTile dark code="REVENUE" label={applied.client || "전체 거래처"} value={rvShort(res.s.sale)} unit="원" foot={<span>{applied.from} ~ {applied.to}</span>} />
             <RvTile code="PROFIT" label="수익" value={rvShort(res.s.profit)} unit="원" foot={<span>수익률 {res.s.rate.toFixed(1)}%</span>} />
             <RvTile code="ORDERS" label="건수" value={res.s.cnt.toLocaleString()} unit="건" foot={<span>건당 {rvShort(res.s.cnt ? res.s.sale / res.s.cnt : 0)}원</span>} />
             <RvTile code="DRIVER" label="기사운임" value={rvShort(res.s.driver)} unit="원" foot={<span>운행일 {res.daily.length}일</span>} />
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,2fr) minmax(0,1fr)", gap: 14 }}>
+          <div className="kp-rv-stack" style={{ display: "grid", gridTemplateColumns: "minmax(0,2fr) minmax(0,1fr)", gap: 14 }}>
             <RvCard code="DAILY" title="일별 매출 · 수익">
               {res.daily.length === 0 ? <Empty /> : (
                 <div style={{ height: 260 }}>

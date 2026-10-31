@@ -5694,11 +5694,13 @@ function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
   );
 }
 
-export default function FleetManagement({ dispatchData = [], role = "" }) {
+// 📱 forceTab·hideChrome — 모바일 앱이 같은 화면을 모듈별로 열 때(머리말·왼쪽 메뉴는 모바일 화면이 따로 그린다)
+export default function FleetManagement({ dispatchData = [], role = "", forceTab = "", hideChrome = false }) {
   // Tab persistence across parent-tab switches → sessionStorage
   // ⭐ 사용자 요청 — 지입차관리에 들어왔을 때 노선/배차상태/담당 차량이 먼저
   // 보여야 하므로, 기본 진입 탭을 실시간관제가 아닌 노선관리로 바꾼다.
-  const [mainTab, setMainTab] = useState(() => { const t = sfGet("fm_tab", "route"); return t === "settlement" ? "route" : t; });
+  const [mainTab, setMainTab] = useState(() => { if (forceTab) return forceTab; const t = sfGet("fm_tab", "route"); return t === "settlement" ? "route" : t; });
+  useEffect(() => { if (forceTab) setMainTab(forceTab); }, [forceTab]);
 
   // Data — init from sessionStorage so page appears populated immediately on re-mount
   const [driversRaw, setDriversRaw] = useState(() => sfGet("fm_drivers_raw", []));
@@ -6427,6 +6429,7 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
       fontFamily: "'Pretendard','Noto Sans KR','Apple SD Gothic Neo',sans-serif",
     }}>
 
+      {!hideChrome && (<>
       {/* ═══ 헤더 — 관제센터 스타일(네이비 그리드 + 디지털 시계) ═══ */}
       <div className="fc-grid-bg" style={{ position: "relative", overflow: "hidden", borderRadius: 18, border: "1px solid #0F1A30", boxShadow: "0 12px 30px rgba(15,26,48,.28)", padding: "18px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 14 }}>
         <div className="fc-scanline" />
@@ -6482,8 +6485,11 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
         </div>
       </div>
 
+      </>)}
+
       {/* ═══ 메인 레이아웃: 왼쪽 메뉴 + 오른쪽 콘텐츠 ═══ */}
       <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+        {!hideChrome && (<>
         {/* ── 왼쪽 메뉴 ── */}
         <div style={{
           width: 196, flexShrink: 0, background: "#fff", border: "1px solid #E3E8F0",
@@ -6534,6 +6540,8 @@ export default function FleetManagement({ dispatchData = [], role = "" }) {
             );
           })}
         </div>
+
+        </>)}
 
         {/* ── 오른쪽 콘텐츠 ── */}
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>

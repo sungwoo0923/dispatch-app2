@@ -51,7 +51,7 @@ function Tile({ code, label, value, unit, foot, dark }) {
 export function RvCard({ code, title, right, children, style, bodyStyle }) {
   return (
     <div style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 18, boxShadow: "0 1px 2px rgba(16,24,40,.04), 0 10px 26px rgba(16,24,40,.05)", overflow: "hidden", minWidth: 0, ...style }}>
-      <div style={{ padding: "12px 18px", background: "#F7F9FC", borderBottom: "1px solid #E8EDF4", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+      <div style={{ padding: "12px 18px", background: "#F7F9FC", borderBottom: "1px solid #E8EDF4", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", rowGap: 6 }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 9, minWidth: 0 }}>
           <span style={{ width: 7, height: 7, borderRadius: 2, background: NAVY, transform: "rotate(45deg)" }} />
           {code && <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#94A3B8" }}>{code}</span>}
@@ -223,7 +223,7 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {/* KPI */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0,1fr))", gap: 12 }}>
+      <div className="kp-rv-kpi" style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0,1fr))", gap: 12 }}>
         <Tile dark code="REVENUE" label={`${M}월 매출`} value={short(m.sale)} unit="원" foot={<><Delta dark cur={m.sale} prev={pm.sale} /><span>전월 같은 기간</span></>} />
         <Tile code="PROFIT" label={`${M}월 수익`} value={short(m.profit)} unit="원" foot={<><Delta cur={m.profit} prev={pm.profit} /><span>전월 같은 기간</span></>} />
         <Tile code="MARGIN" label="매익률" value={m.rate.toFixed(1)} unit="%" foot={<span>전월 <b style={{ fontFamily: MONO, color: NAVY }}>{pmAll.rate.toFixed(1)}%</b> · {(m.rate - pmAll.rate >= 0 ? "+" : "") + (m.rate - pmAll.rate).toFixed(1)}%p</span>} />
@@ -232,7 +232,7 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
       </div>
 
       {/* 누적 레이스 + 목표 */}
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,2.2fr) minmax(0,1fr)", gap: 14 }}>
+      <div className="kp-rv-stack" style={{ display: "grid", gridTemplateColumns: "minmax(0,2.2fr) minmax(0,1fr)", gap: 14 }}>
         <RvCard code="DAILY" title={`${M}월 일별 매출 · 누적 비교`} right={
           <div style={{ display: "flex", gap: 14, fontSize: 12.5, fontWeight: 700, color: "#4b5563" }}>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: "#9FB2D6" }} />일 매출</span>
@@ -306,7 +306,7 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
       </div>
 
       {/* 월별 + 요일 */}
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,2.2fr) minmax(0,1fr)", gap: 14 }}>
+      <div className="kp-rv-stack" style={{ display: "grid", gridTemplateColumns: "minmax(0,2.2fr) minmax(0,1fr)", gap: 14 }}>
         <RvCard code="MONTHLY" title={`${Y}년 월별 매출 · 매익률`}>
           <div style={{ height: 230 }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -342,7 +342,7 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
       </div>
 
       {/* 거래처 · 증감 · 담당자 */}
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.35fr) minmax(0,1fr) minmax(0,1fr)", gap: 14 }}>
+      <div className="kp-rv-stack" style={{ display: "grid", gridTemplateColumns: "minmax(0,1.35fr) minmax(0,1fr) minmax(0,1fr)", gap: 14 }}>
         <RvCard code="TOP 10" title={`${M}월 거래처 매출 순위`} right={<span style={{ fontSize: 12.5, fontWeight: 700, color: "#6b7280" }}>신규 거래처 <b style={{ fontFamily: MONO, color: NAVY }}>{clients.newCnt}</b>곳</span>}>
           {clients.top.length === 0 ? <div style={{ padding: "30px 0", textAlign: "center", color: "#9ca3af" }}>이 달 매출이 없습니다</div> : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
