@@ -14,6 +14,7 @@ import HandoverCenter, { useHandoverUnread } from "../HandoverCenter";
 import NoticeBoard from "../NoticeBoard";
 import { NoticeWriter, NOTICE_WRITER_ROLES } from "../HomeWriters";
 import { OrderHistoryContext } from "../orderHistory";
+import { useMyProfile, personName } from "../userNames";
 import MobileFleetView from "./MobileFleetView";
 
 // 매출관리는 PC 배차 프로그램 안에 있는 화면이라 그 묶음을 필요할 때만 받아온다
@@ -290,7 +291,10 @@ function StaffView({ company, role, myUid, initialTab = "pending" }) {
   );
 }
 
-export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], clients = [], places = [], role = "", userCompany = "", me, loadRange, loadFullHistory, onRegisterBack, initial }) {
+export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], clients = [], places = [], role = "", userCompany = "", me: meIn, loadRange, loadFullHistory, onRegisterBack, initial }) {
+  // ⭐ 이름은 본인 사용자 문서에서(계정 아이디로 적히던 문제)
+  const prof = useMyProfile(meIn?.uid);
+  const me = React.useMemo(() => (meIn ? { ...meIn, name: personName(prof) || meIn.name, team: prof?.team || meIn.team || "", position: prof?.position || meIn.position || "" } : meIn), [meIn, prof]);
   const history = React.useMemo(() => ({ loadRange: loadRange || (async () => []), loadFullHistory: loadFullHistory || (async () => {}) }), [loadRange, loadFullHistory]);
   let body = null;
   if (kind === "fare") body = <FareView initialTab={initial || "전국운임조회"} />;
