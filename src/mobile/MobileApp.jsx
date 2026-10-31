@@ -1995,7 +1995,10 @@ export default function MobileApp({ role, user, userCompany = "" }) {
     return () => unsub();
   }, [userCompany, secondaryReady]);
 
-  const [page, setPage] = useState("list");
+  // 🏢 2026-10-31 경리(test)·인사(hrManager) 권한 — 배차 화면 없이 부서 홈(dept)으로 바로
+  const deptMode = role === "test" ? "acct" : role === "hrManager" ? "hr" : null;
+  const [page, setPage] = useState(deptMode ? "dept" : "list");
+  useEffect(() => { if (deptMode && page === "list") setPage("dept"); }, [deptMode, page]);
   const listScrollYRef = useRef(0); // 리스트 스크롤 위치 저장
   const unassignedScrollYRef = useRef(0); // 미배차/정보미전달 스크롤 위치 저장
   const [unassignedTab, setUnassignedTab] = useState("미배차"); // 탭 상태 (부모에서 관리)
@@ -5391,6 +5394,8 @@ const title =
   : page === "sales" ? "매출관리"
   : page === "approval" ? "전자결재"
   : page === "staff" ? "직원 관리"
+  : page === "dept" ? (deptMode === "hr" ? "인사관리" : "경리·회계")
+  : String(page).startsWith("dept:") ? ({ "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:cashbook": "수입·지출", "dept:assets": "비품·자산", "dept:hr": "인사기록", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 서류" }[page] || "")
   : page === "status" ? "배차현황"
   : page === "unassigned" ? "미배차현황"
   : page === "canceled" ? "취소내역"
@@ -5752,6 +5757,8 @@ const title =
             setPage("list");
           }
         }
+    : String(page).startsWith("dept:")
+      ? () => setPage("dept")
     : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet" || page === "blind" || page === "company-fare" || page === "sales" || page === "approval" || page === "staff"
       ? () => setPage("list")
       : page === "fare"
@@ -5760,8 +5767,8 @@ const title =
   }
   onRefresh={page === "list" ? handleRefresh : undefined}
   onValidateOrders={page === "list" ? () => handleValidateOrders(false) : undefined}
-  onMenu={page === "list" ? () => setShowMenu(true) : undefined}
-  menuBadge={(alertCounts.approval || 0) + (alertCounts.handover || 0) + (alertCounts.notice || 0) + (["admin", "totalMaster", "superadmin", "viewer"].includes(role) ? (alertCounts.signupStaff || 0) + (alertCounts.signupDriver || 0) : 0)}
+  onMenu={page === "list" || page === "dept" ? () => setShowMenu(true) : undefined}
+  menuBadge={(alertCounts.approval || 0) + (alertCounts.handover || 0) + (alertCounts.notice || 0) + ((["admin", "totalMaster", "superadmin", "viewer"].includes(role) || deptMode) ? (alertCounts.signupStaff || 0) + (alertCounts.signupDriver || 0) : 0)}
   notifCount={unreadCount}
   onNotifClick={() => { setShowNotifPanel(true); markAllRead(); }}
   messengerUnread={messengerUnread}
@@ -5934,6 +5941,7 @@ onGoAttendance={() => {
           onGoGsheet={() => { setPage("gsheet"); setShowMenu(false); }}
           onGoBlind={() => { setPage("blind"); setShowMenu(false); }}
           onGo={(p) => { setPage(p); setShowMenu(false); }}
+          deptMode={deptMode}
           alertCounts={alertCounts}
           unassignedCount={unassignedOrders.length}
           onDeleteAll={deleteAllOrders}
@@ -6721,6 +6729,12 @@ setOpenMemo={setOpenMemo}
           />
           </div>
         )}
+{(page === "dept" || String(page).startsWith("dept:")) && (
+  <React.Suspense fallback={null}>
+    <MobilePcView key={page} kind={page} dispatchData={allOrders} fixedRows={fixedClientRows} clients={clients} places={places} role={role} userCompany={pcViewCompany} me={pcViewMe} loadRange={loadRange} loadFullHistory={loadFullHistory}
+      onGo={(k) => setPage({ 정산관리: "dept:settle", "정산관리:지급관리": "dept:settle", 회계관리: "dept:acct", 매출관리: "sales", 인사관리: "dept:hr", 근태관리: "attendance", 직원관리: "staff", 기사서류: "dept:driverdocs", 기사관리: "dept:driverdocs" }[k] || "dept")} />
+  </React.Suspense>
+)}
 {page === "sales" && (
   <MobileRevenueGate cardVersionB={cardVersionB}>
     <React.Suspense fallback={null}>
@@ -7366,7 +7380,7 @@ function MobileVersionChip({ dark = false }) {
 const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh, onValidateOrders, onMenu, menuBadge = 0, notifCount = 0, onNotifClick, cardVersionB = false, messengerUnread = 0, onMessengerClick, mailCompany = "", mailName = "" }) {
   const newVer = useNewVersion(); // ⭐ 새 버전 배포 시 메뉴 버튼에 점 표시
   // ⭐ 2026-10-22 디자인 개선 — A형: 반투명 흰 머리줄 / B형: 남색 그라데이션 머리줄. 버튼은 둥근 네모 타일.
-  const isListPage = title === "등록내역";
+  const isListPage = title === "등록내역" || (!!onMenu && !onBack); // 부서 홈(경리·인사)도 메뉴 버튼
   const iconColor = cardVersionB ? "#ffffff" : "#1B2B4B";
   const countCls = `absolute -top-1 -right-1 min-w-[17px] h-[17px] text-[10px] font-extrabold rounded-full flex items-center justify-center px-1 leading-none ring-2 ${
     cardVersionB ? "bg-white text-[#1B2B4B] ring-[#1B2B4B]" : "bg-[#1B2B4B] text-white ring-white"
@@ -7728,6 +7742,7 @@ function MobileSideMenu({
   onGo,
   alertCounts,
   unassignedCount = 0,
+  deptMode = null,
 }) {
   const isAdminRole = ["admin", "totalMaster", "superadmin"].includes(role);
   const canRevenue = ["admin", "totalMaster", "superadmin", "test", "viewer"].includes(role);
@@ -7841,16 +7856,47 @@ function MobileSideMenu({
               실무자: 매출관리 숨김 / 경리·회계: 화물등록·단가표 숨김 / 관리자 전용 메뉴: 관리자·마스터·조회전용 /
               최고관리자 전용(관리센터·구글시트·블라인드·회사코드조회)은 최고관리자만.
               일정(휴가)·인수인계는 전자결재 안으로, 자사운임표는 통합운임조회 안으로 합쳤다(중복 메뉴 정리). */}
+          {/* 🏢 경리·인사 권한 — 배차·운임·지입차 메뉴 대신 부서 업무 메뉴 */}
+          {deptMode === "acct" && (<>
+            <MenuSection title="경리 · 회계" en="ACCOUNTING" dark={dark} alwaysOpen>
+              <MenuItem label="경리 홈" icon="dashboard" onClick={() => onGo?.("dept")} dark={dark} />
+              <MenuItem label="정산관리" icon="receipt" onClick={() => onGo?.("dept:settle")} dark={dark} />
+              <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />
+              <MenuItem label="회계관리" icon="money" onClick={() => onGo?.("dept:acct")} dark={dark} />
+            </MenuSection>
+            <MenuSection title="살림" en="OFFICE" dark={dark} alwaysOpen>
+              <MenuItem label="수입·지출" icon="wallet" onClick={() => onGo?.("dept:cashbook")} dark={dark} />
+              <MenuItem label="비품·자산" icon="list" onClick={() => onGo?.("dept:assets")} dark={dark} />
+            </MenuSection>
+          </>)}
+          {deptMode === "hr" && (
+            <MenuSection title="인사" en="HUMAN RESOURCES" dark={dark} alwaysOpen>
+              <MenuItem label="인사 홈" icon="dashboard" onClick={() => onGo?.("dept")} dark={dark} />
+              <MenuItem label="인사기록" icon="idcard" onClick={() => onGo?.("dept:hr")} dark={dark} />
+              <MenuItem label="연차 관리" icon="flag" onClick={() => onGo?.("dept:leave")} dark={dark} />
+              <MenuItem label="입·퇴사 관리" icon="check" onClick={() => onGo?.("dept:onboarding")} dark={dark} />
+              <MenuItem label="증명서 발급" icon="stamp" onClick={() => onGo?.("dept:cert")} dark={dark} />
+            </MenuSection>
+          )}
+          {deptMode && (
+            <MenuSection title="직원 · 기사" en="PEOPLE" dark={dark} alwaysOpen>
+              <MenuItem label="직원 관리" icon="users" onClick={() => onGo?.("staff")} badge={(alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) || null} dark={dark} />
+              <MenuItem label="기사 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} dark={dark} />
+            </MenuSection>
+          )}
+          {!deptMode && (
           <MenuSection title="배차관리" en="DISPATCH" dark={dark} alwaysOpen>
             <MenuItem label="등록내역" icon="list" onClick={onGoList} dark={dark} />
             {role !== "test" && <MenuItem label="화물등록" icon="truck" onClick={onGoCreate} dark={dark} />}
             <MenuItem label="미배차현황" icon="alert" onClick={onGoUnassigned} badge={unassignedCount > 0 ? unassignedCount : null} dark={dark} />
           </MenuSection>
+          )}
           <MenuSection title="사내 업무" en="WORKSPACE" dark={dark} alwaysOpen>
             <MenuItem label="전자결재" icon="stamp" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.handover || 0) || null} dark={dark} />
             <MenuItem label="공지사항" icon="bell" onClick={onGoNotice} badge={alertCounts?.notice ? alertCounts.notice : hasNewNotice ? "NEW" : null} dark={dark} />
             <MenuItem label="출근기록부" icon="clock" onClick={onGoAttendance} dark={dark} />
           </MenuSection>
+          {!deptMode && (<>
           <MenuSection title="운임" en="FARE" dark={dark} alwaysOpen>
             <MenuItem label="통합운임조회" icon="globe" onClick={onGoNationalFare} dark={dark} />
             {role !== "test" && <MenuItem label="단가표" icon="money" onClick={onGoRateCard} dark={dark} />}
@@ -7859,7 +7905,8 @@ function MobileSideMenu({
             <MenuItem label="지입차관리" icon="route" onClick={onGoFleet} dark={dark} />
             {canRevenue && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
           </MenuSection>
-          {canAdminMenu && (
+          </>)}
+          {canAdminMenu && !deptMode && (
             <MenuSection title="관리자 전용 메뉴" en="ADMIN" dark={dark} alwaysOpen>
               <MenuItem label="직원 관리" icon="users" onClick={() => onGo?.("staff")} badge={(alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) || null} dark={dark} />
             </MenuSection>

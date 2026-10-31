@@ -143,6 +143,8 @@ function PreviewApp() {
   const qs = new URLSearchParams(window.location.search);
   const co = (qs.get("co") || "").trim() || "우리 회사";
   const plan = PREVIEW_PLAN_NAME[qs.get("plan")] ? qs.get("plan") : "standard";
+  // 개발 중에만 — 부서 화면(경리 test · 인사 hrManager) 미리보기
+  const pvRole = import.meta.env.DEV && ["test", "hrManager"].includes(qs.get("role")) ? qs.get("role") : "admin";
   setPreviewMode(true); setPreviewPlan(plan); setTenant(co);
   const fakeUser = React.useMemo(() => ({ uid: "preview", email: "preview@kp-flow.app", displayName: "둘러보기" }), []);
   const [toast, setToast] = React.useState(false);
@@ -155,7 +157,7 @@ function PreviewApp() {
   const exit = () => { try { localStorage.removeItem("userCompany"); } catch { /* 무시 */ } window.location.href = "/login"; };
   return (
     <>
-      {isSmartPhone() ? <MobileApp role="admin" user={fakeUser} userCompany={co} /> : <DispatchApp role="admin" user={fakeUser} userCompany={co} />}
+      {isSmartPhone() ? <MobileApp role={pvRole} user={fakeUser} userCompany={co} /> : <DispatchApp role={pvRole} user={fakeUser} userCompany={co} />}
       <div className="fixed left-1/2 -translate-x-1/2 bottom-4 z-[2147483000] flex items-center gap-3 pl-4 pr-1.5 py-1.5 rounded-2xl text-white shadow-[0_12px_30px_rgba(11,20,40,0.35)] max-w-[calc(100vw-24px)]" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
         <span className="text-[12.5px] font-bold whitespace-nowrap overflow-hidden text-ellipsis">둘러보기 · {co} · {PREVIEW_PLAN_NAME[plan]} 요금제 · 승인 전이라 저장되지 않습니다</span>
         <button type="button" onClick={exit} className="shrink-0 h-8 px-3 rounded-xl bg-white text-[#0B1428] text-[12.5px] font-black">나가기</button>

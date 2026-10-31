@@ -1,4 +1,5 @@
 import NoticeBoard from "./NoticeBoard";
+import DeptDashboard from "./DeptDashboard";
 import React, { useMemo, useState, useRef, useEffect } from "react";
 import MasterChecklist from "./MasterChecklist";
 import { homeItemFeature, openPlanLock, planIncludes, usePlan } from "./plans";
@@ -405,7 +406,7 @@ function lockHomeGroups(planId, groups) {
   return out;
 }
 
-export default function HomeDashboard({ role, user, userCompany = "", pending, delayed, dispatchData = [], onOrderDoubleClick }) {
+export default function HomeDashboard({ role, user, userCompany = "", pending, delayed, dispatchData = [], onOrderDoubleClick, dept = null, onDeptGo }) {
   // ⭐ 년 매출·당월 매출·누적 오더 — 예전엔 새로고침할 때마다 올해 오더 전체(수천~만 건)를 서버에서 다시 받아
   // 새로고침이 느리고 버벅였다. "실시간 범위(최근 7일) 이전" 기간의 합계는 하루 동안 거의 안 바뀌므로
   // 하루 1번만 받아 계산해 PC에 저장해 두고(homePastStats), 최근 7일~은 실시간 데이터로 더한다.
@@ -877,7 +878,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
     <KpSubNav noBleed code="HOME" title="홈" icon="dashboard" active={boardTab}
       onSelect={(k) => { if (String(k).startsWith("lock:")) { openPlanLock(String(k).slice(5)); return; } setBoardTab(k); }} bodyClass="px-5 py-4"
       groups={lockHomeGroups(planId, [
-        { label: "관제", items: [{ key: "대시보드", label: "대시보드", en: "OPERATIONS", icon: "pulse" }] },
+        { label: dept ? "부서" : "관제", items: [{ key: "대시보드", label: "대시보드", en: dept === "acct" ? "ACCOUNTING" : dept === "hr" ? "HUMAN RESOURCES" : "OPERATIONS", icon: dept === "acct" ? "money" : dept === "hr" ? "idcard" : "pulse" }] },
         { label: "사내 게시판", items: [
           { key: "공지사항", label: "공지사항", en: "NOTICE", icon: "bell", badge: isBoardNew("공지사항") ? "N" : 0, badgeTitle: "새 글" },
           ...Object.entries(BOARDS).filter(([b]) => canSeeBoard(b, meHome)).map(([b, B]) => ({ key: `board:${b}`, label: B.label, en: B.en, icon: B.icon, badge: isBoardNew(`board:${b}`) ? "N" : 0, badgeTitle: "새 글" })),
@@ -900,7 +901,9 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         ] },
       ])}>
     <div className="space-y-5">
-      {boardTab === "대시보드" && <MasterChecklist user={user} userCompany={userCompany} />}
+      {boardTab === "대시보드" && !dept && <MasterChecklist user={user} userCompany={userCompany} />}
+      {/* 🏢 경리·인사 권한 — 대시보드 내용만 부서 업무로 */}
+      {boardTab === "대시보드" && dept && <DeptDashboard mode={dept} company={getViewCompany()} dispatchData={dispatchData} onGo={onDeptGo} />}
 
       {/* 결재 알림 배너 (큐 방식 - 여러 알림 순차 표시) */}
       {approvalNotifQueue.length > 0 && (() => {
@@ -928,7 +931,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       })()}
 
       {/* ===== 관제 데크 — 오늘 실적 · 매출 추이 · 매익률 · 담당자 순위 · 거래처 Top (2026-10-28 리디자인, 미배차 현황은 뺌) ===== */}
-      {boardTab === "대시보드" && <HomeDeck
+      {boardTab === "대시보드" && !dept && <HomeDeck
         dispatchData={dispatchData}
         pastCache={pastCache}
         liveStart={liveStartStr}
