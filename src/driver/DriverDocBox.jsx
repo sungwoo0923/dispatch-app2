@@ -10,6 +10,8 @@ import BankAccountInput from "../BankAccountInput";
 import { validateAccount, onlyDigits } from "../bankUtil";
 import { compressImage } from "../InternalMail";
 import { kpConfirm, kpAlert } from "../kpDialog";
+import DriverSubmitDocs from "./DriverSubmitDocs";
+import { useDriverDocs, docProblems } from "../driverRequiredDocs";
 
 const toMs = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : 0);
 const card = { background: "#fff", borderRadius: 16, border: "1px solid #E3E8F0", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" };
@@ -34,8 +36,10 @@ export function useDriverInbox(uid) {
   return { statements: st, penalties: pen, unread };
 }
 
-export default function DriverDocBox({ uid, inbox }) {
-  const [tab, setTab] = React.useState("pay");
+export default function DriverDocBox({ uid, inbox, companyName = "" }) {
+  const [tab, setTab] = React.useState(() => { try { const t = sessionStorage.getItem("kpDocTab"); if (t) { sessionStorage.removeItem("kpDocTab"); return t; } } catch (_) { /* 무시 */ } return "pay"; });
+  const myDocs = useDriverDocs(uid);
+  const docNeed = (() => { const p = docProblems(myDocs); return p.missing + p.bad; })();
   const [open, setOpen] = React.useState(null); // { type, item }
   const [viewer, setViewer] = React.useState(null);
   const statements = [...(inbox?.statements || [])].sort((a, b) => String(b.period).localeCompare(String(a.period)));
@@ -97,16 +101,16 @@ export default function DriverDocBox({ uid, inbox }) {
       <div style={{ borderRadius: 20, padding: "18px 18px 14px", color: "#fff", marginBottom: 12, background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <div style={{ fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>DOCUMENTS</div>
         <div style={{ fontSize: 21, fontWeight: 900 }}>서류함</div>
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,.6)" }}>회사가 보낸 지급명세서와 과태료·사고 서류</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 12, padding: 4, borderRadius: 14, background: "rgba(255,255,255,.08)" }}>
-          {[["pay", "지급명세서", statements.filter((x) => !x.readAt).length], ["pen", "과태료·사고", penalties.filter((x) => !x.readAt).length]].map(([k, l, n]) => (
-            <button key={k} type="button" onClick={() => setTab(k)} style={{ height: 38, borderRadius: 11, border: "none", background: tab === k ? "#fff" : "transparent", color: tab === k ? "#0F1A30" : "rgba(255,255,255,.75)", fontSize: 13.5, fontWeight: 900 }}>
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,.6)" }}>회사가 보낸 명세서·과태료 서류 · 회사에 낼 서류 제출</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 12, padding: 4, borderRadius: 14, background: "rgba(255,255,255,.08)" }}>
+          {[["pay", "지급명세서", statements.filter((x) => !x.readAt).length], ["pen", "과태료·사고", penalties.filter((x) => !x.readAt).length], ["submit", "제출 서류", docNeed]].map(([k, l, n]) => (
+            <button key={k} type="button" onClick={() => setTab(k)} style={{ height: 38, borderRadius: 11, border: "none", whiteSpace: "nowrap", background: tab === k ? "#fff" : "transparent", color: tab === k ? "#0F1A30" : "rgba(255,255,255,.75)", fontSize: 12.5, fontWeight: 900 }}>
               {l}{n ? <span style={{ marginLeft: 6, display: "inline-flex", minWidth: 18, height: 18, padding: "0 5px", borderRadius: 9, background: "#8FB0F0", color: "#0B1428", fontSize: 11, alignItems: "center", justifyContent: "center" }}>{n}</span> : null}
             </button>
           ))}
         </div>
       </div>
-      {!list.length ? (
+      {tab === "submit" ? <DriverSubmitDocs uid={uid} companyName={companyName} /> : !list.length ? (
         <div style={{ ...card, padding: "40px 16px", textAlign: "center", color: "#9AA9C3", fontSize: 13.5, fontWeight: 700 }}>{tab === "pay" ? "받은 지급명세서가 없습니다" : "받은 서류가 없습니다"}</div>
       ) : list.map((it) => (
         <button key={it.id} type="button" onClick={() => openItem(tab, it)} style={{ ...card, width: "100%", textAlign: "left", padding: "14px 16px", marginBottom: 8, display: "flex", alignItems: "center", gap: 12 }}>

@@ -57,7 +57,7 @@ export function useMobileAlerts({ uid, role, team = "", company = "", onAlert })
   }, [uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 🙋 가입 신청 — 관리자 이상(조회전용 포함 관리자 메뉴를 보는 사람)
-  const isAdmin = ADMIN_ROLES.includes(role) || role === "viewer";
+  const isAdmin = ADMIN_ROLES.includes(role) || role === "viewer" || role === "test" || role === "hrManager"; // 경리·인사도 직원·기사 승인
   React.useEffect(() => {
     if (!uid || !isAdmin || !company) return undefined;
     const w = watch("signup");

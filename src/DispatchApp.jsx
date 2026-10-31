@@ -28,6 +28,11 @@ import { ensureWeatherLoaded, getWeatherSpecialInfo } from "./weatherUtil";
 import AdminMenu, { subscribeUsersLive } from "./AdminMenu";
 import FleetExtraFields from "./FleetDriverExtra";
 import { useFixedRouteAutoDispatch, FixedRouteEditNotice } from "./FixedRoutes";
+import { deptModeOf } from "./DeptDashboard";
+import { CashBook, AssetManager } from "./OfficeBooks";
+import { LeaveLedger, OnboardingBoard, CertIssuer } from "./HrTools";
+import DriverDocsReview from "./DriverDocsReview";
+import StaffManager from "./StaffManager";
 import { calcFare } from "./fareUtil";
 import FixedClients from "./FixedClients";
 import FleetManagement from "./FleetManagement";
@@ -3092,6 +3097,17 @@ const KP_PAGE_META = {
   매출관리: { en: "REVENUE", desc: "매출·매입·수익 분석", icon: "M4 20V10M10 20V4M16 20v-7M22 20H2" },
   정산관리: { en: "SETTLEMENT", desc: "거래처 정산과 기사 지급 관리", icon: "M3 6h18v12H3zM3 10h18M7 15h4" },
   관리센터: { en: "CONTROL CENTER", desc: "가입사 사용량·접속·청구 관제", icon: "M12 3l8 4v6c0 4-3.5 7-8 8-4.5-1-8-4-8-8V7z" },
+  // 🏢 부서 모드(경리·인사) 메뉴
+  회계관리: { en: "ACCOUNTING", desc: "미수금·미지급금·부가세 — 연간 회계 장부", icon: "M4 4h16v16H4zM8 8h8M8 12h8M8 16h5" },
+  인사관리: { en: "HUMAN RESOURCES", desc: "이력서·인사발령·근태/근속 — 직원 인사 기록", icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 4-6 8-6s8 2 8 6" },
+  근태관리: { en: "ATTENDANCE", desc: "출근기록부 — 출퇴근·휴가·외근 현황", icon: "M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z" },
+  수입지출: { en: "CASH BOOK", desc: "수입·지출 장부 · 증빙 · 고정비", icon: "M3 6h18v12H3zM3 10h18M16 15h2" },
+  비품관리: { en: "ASSETS", desc: "사무 비품·소모품·IT 자산 · 입출고", icon: "M3 7l9-4 9 4-9 4zM3 7v10l9 4 9-4V7M12 11v10" },
+  연차관리: { en: "ANNUAL LEAVE", desc: "입사일 기준 발생·사용·잔여 연차", icon: "M4 5h16v15H4zM4 9h16M8 3v4M16 3v4" },
+  입퇴사관리: { en: "ON/OFF BOARDING", desc: "입사·퇴사 체크리스트와 법정 기한", icon: "M9 11l3 3 8-8M20 12v7H4V5h11" },
+  증명서발급: { en: "CERTIFICATES", desc: "재직·경력증명서 발급과 발급 대장", icon: "M6 3h9l5 5v13H6zM14 3v6h6M9 14h6M9 18h4" },
+  기사서류: { en: "DRIVER DOCUMENTS", desc: "기사 필수 서류 제출·검토·만료 관리", icon: "M6 3h9l5 5v13H6zM14 3v6h6" },
+  직원관리: { en: "STAFF", desc: "직원·기사 가입 승인과 권한", icon: "M16 11a4 4 0 1 0-8 0M3 21c0-4 4-6 9-6s9 2 9 6" },
 };
 // ⭐ 2026-10-28 디지털 머리말 — 영문 태그·날짜·시계를 고정폭 디지털 글씨로, 아이콘 타일에 은은한 격자
 function KpPageClock() {
@@ -3137,16 +3153,40 @@ function KpPageHeader({ menu }) {
 const KP_SIDE_GROUPS = [
   { label: "배차", items: ["HOME", "배차관리", "실시간배차현황", "배차현황"] },
   { label: "운임", items: ["단가표", "운임조회"] },
-  { label: "기사 · 거래처", items: ["기사관리", "거래처관리", "지입차관리"] },
+  { label: "기사 · 거래처", items: ["기사관리", "기사서류", "거래처관리", "지입차관리"] },
   { label: "매출 · 정산", items: ["매출관리", "정산관리", "인사이트"] },
+  { label: "경리 · 회계", items: ["회계관리", "수입지출", "비품관리"] },
+  { label: "인사", items: ["인사관리", "근태관리", "연차관리", "입퇴사관리", "증명서발급", "직원관리"] },
   { label: "관리", items: ["회사관리", "관리자메뉴", "관리센터"] },
 ];
+// 🏢 부서 모드 메뉴 — 경리·회계(test) / 인사관리자(hrManager)
+const DEPT_MENUS = {
+  acct: ["HOME", "정산관리", "매출관리", "회계관리", "수입지출", "비품관리", "기사관리", "기사서류", "직원관리", "회사관리"],
+  hr: ["HOME", "인사관리", "근태관리", "연차관리", "입퇴사관리", "증명서발급", "직원관리", "기사관리", "기사서류", "회사관리"],
+};
+// 부서 모드 왼쪽 메뉴 묶음
+const DEPT_SIDE_GROUPS = {
+  acct: [
+    { label: "경리 · 회계", items: ["HOME", "정산관리", "매출관리", "회계관리"] },
+    { label: "살림", items: ["수입지출", "비품관리"] },
+    { label: "사람", items: ["직원관리", "기사관리", "기사서류"] },
+    { label: "공통", items: ["회사관리"] },
+  ],
+  hr: [
+    { label: "인사", items: ["HOME", "인사관리", "근태관리", "연차관리"] },
+    { label: "입·퇴사", items: ["입퇴사관리", "증명서발급", "직원관리"] },
+    { label: "기사", items: ["기사관리", "기사서류"] },
+    { label: "공통", items: ["회사관리"] },
+  ],
+};
 const KP_SIDE_ICONS = {
   HOME: "dashboard", 배차관리: "truck", 실시간배차현황: "bell", 배차현황: "sheet", 단가표: "money", 운임조회: "globe",
   기사관리: "user", 거래처관리: "building", 지입차관리: "link", 매출관리: "check", 정산관리: "inbox",
   회사관리: "idcard", 관리자메뉴: "key", 관리센터: "shield", 인사이트: "chart",
+  회계관리: "money", 인사관리: "idcard", 근태관리: "clock", 직원관리: "users", 기사서류: "file",
+  수입지출: "wallet", 비품관리: "list", 연차관리: "flag", 입퇴사관리: "check", 증명서발급: "stamp",
 };
-function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, company, email }) {
+function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, company, email, groups = KP_SIDE_GROUPS }) {
   React.useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
@@ -3186,7 +3226,7 @@ function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, compan
           </button>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5 no-scrollbar">
-          {KP_SIDE_GROUPS.map((g) => {
+          {groups.map((g) => {
             const items = g.items.map((m) => ({ m, st: menuState(m) })).filter(({ st }) => st !== "hidden");
             if (!items.length) return null;
             return (
@@ -7557,6 +7597,10 @@ const newVer = useNewVersion(); // ⭐ 새 버전이 배포되면 버전 표시 
   // 직접 설정할 수 있다. 내장 역할(admin/user/test/viewer 등)에는 관여하지 않는다.
   // (customRoles 자체는 위쪽 dispatchDataFiltered 근처에서 이미 구독해뒀다.)
   const customRole = findCustomRole(customRoles, role);
+  const deptMode = deptModeOf(role, customRole);
+  const deptCompany = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
+  // 부서 모드에서 볼 수 없는 메뉴에 머물러 있으면 홈으로
+  React.useEffect(() => { if (deptMode && !DEPT_MENUS[deptMode].includes(menu)) setMenu("HOME"); }, [deptMode, menu]);
   // viewer(조회전용): 관리센터 제외 모든 메뉴 조회 가능, 수정/등록 불가
   const isViewer = role === "viewer" || (!!customRole && getMenuAccess(customRoles, role, menu) === "read");
   const _viewerBlock = () => showAlert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다.");
@@ -7631,7 +7675,7 @@ const newVer = useNewVersion(); // ⭐ 새 버전이 배포되면 버전 표시 
   // ---------------- 메뉴 클릭 제어 ----------------
   const handleMenuClick = (m) => {
     if (MENU_FEATURE[m] && !planIncludes(planId, MENU_FEATURE[m])) { openPlanLock(MENU_FEATURE[m]); return; }
-    if ((role === "user" || role === "test") && blockedMenus.includes(m)) return;
+    if (!deptMode && (role === "user" || role === "test") && blockedMenus.includes(m)) return;
     if (m !== "매출관리") setRevenueUnlocked(false);
     React.startTransition(() => setMenu(m));
   };
@@ -7698,6 +7742,12 @@ const newVer = useNewVersion(); // ⭐ 새 버전이 배포되면 버전 표시 
   // ---------------- 메뉴 UI ----------------
   // 메뉴 보이기 규칙(상단 메뉴·왼쪽 메뉴 공용) — "hidden" | "blocked" | "ok"
   const menuState = (m) => {
+    // 🏢 2026-10-31 부서 모드 — 경리·인사 권한은 배차 메뉴 없이 부서 업무 메뉴만
+    if (deptMode) return (DEPT_MENUS[deptMode].includes(m) ? "ok" : "hidden");
+    if (["회계관리", "인사관리", "근태관리", "직원관리", "기사서류", "수입지출", "비품관리", "연차관리", "입퇴사관리", "증명서발급"].includes(m)) {
+      // 관리자·마스터에게도 보인다 — 실무자·조회전용 등은 숨김
+      return role === "admin" || role === "totalMaster" ? "ok" : "hidden";
+    }
     if (customRole && getMenuAccess(customRoles, role, m) === "hidden") return "hidden";
     const isBlocked = !customRole && (role === "user" || role === "test" || isViewer) && blockedMenus.includes(m);
     if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster" && !isViewer) return "hidden";
@@ -7749,6 +7799,7 @@ return (
         onSelect={handleMenuClick}
         company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")}
         email={user?.email}
+        groups={deptMode ? DEPT_SIDE_GROUPS[deptMode] : KP_SIDE_GROUPS}
       />
       <BannerCenter />
       <PlatformNoticeBanner audience="carrier" />
@@ -7815,7 +7866,7 @@ return (
               minWidth: 0,
             }}
           >
-            {[
+            {(deptMode ? DEPT_MENUS[deptMode] : [
               "HOME",
               "배차관리",
               "실시간배차현황",
@@ -7823,15 +7874,20 @@ return (
               "단가표",
               "운임조회",
               "기사관리",
+              "기사서류",
               "거래처관리",
               "지입차관리",
               "매출관리",
               "정산관리",
+              "회계관리",
+              "인사관리",
+              "근태관리",
+              "직원관리",
               "인사이트",
               "회사관리",
               "관리자메뉴",
               "관리센터",
-            ].map((m) => {
+            ]).map((m) => {
               const st = menuState(m);
               if (st === "hidden") return null;
               const isBlocked = st === "blocked";
@@ -8083,6 +8139,8 @@ return (
             delayed={0}
             dispatchData={dispatchDataFiltered}
             onOrderDoubleClick={(order) => setHomeClickedOrder(order)}
+            dept={deptMode}
+            onDeptGo={(k) => { const [m, t] = String(k).split(":"); if (m === "정산관리" && t) set정산관리Tab(t); handleMenuClick(m); }}
           />
         )}
 
@@ -8208,7 +8266,7 @@ return (
           <RateCard dispatchData={dispatchDataFiltered} userCompany={userCompany || localStorage.getItem("userCompany") || ""} clients={clients} />
         )}
 
-        {menu === "기사관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer || !!customRole) && (
+        {menu === "기사관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || role === "hrManager" || isViewer || !!customRole) && (
           <DriverManagement
             drivers={drivers}
             upsertDriver={upsertDriverSafe}
@@ -8377,6 +8435,18 @@ return (
         )}
 
         {menu === "운임조회" && <FreightRateInquiry />}
+
+        {/* 🏢 2026-10-31 경리·인사 부서 메뉴 */}
+        {menu === "회계관리" && menuState("회계관리") === "ok" && <AccountingDashboard dispatchData={dispatchDataFiltered} fixedRows={fixedRows} clients={clients} isViewer={isViewer} />}
+        {menu === "수입지출" && menuState("수입지출") === "ok" && <CashBook company={deptCompany} isViewer={isViewer} />}
+        {menu === "비품관리" && menuState("비품관리") === "ok" && <AssetManager company={deptCompany} isViewer={isViewer} />}
+        {menu === "인사관리" && menuState("인사관리") === "ok" && <HRManagementPage userCompany={deptCompany} role={role} userId={auth?.currentUser?.uid || ""} />}
+        {menu === "근태관리" && menuState("근태관리") === "ok" && <AttendanceBoard userCompany={deptCompany} role={role} user={user} />}
+        {menu === "연차관리" && menuState("연차관리") === "ok" && <LeaveLedger company={deptCompany} isViewer={isViewer} />}
+        {menu === "입퇴사관리" && menuState("입퇴사관리") === "ok" && <OnboardingBoard company={deptCompany} isViewer={isViewer} />}
+        {menu === "증명서발급" && menuState("증명서발급") === "ok" && <CertIssuer company={deptCompany} isViewer={isViewer} />}
+        {menu === "기사서류" && menuState("기사서류") === "ok" && <DriverDocsReview company={deptCompany} isViewer={isViewer} />}
+        {menu === "직원관리" && menuState("직원관리") === "ok" && <StaffManager company={deptCompany} role={role} myUid={auth?.currentUser?.uid || ""} />}
 
 
         {menu === "회사관리" && (
@@ -59722,9 +59792,9 @@ function HRManagementPage({ userCompany, role, userId }) {
   // ⭐ 2026-10-23 리디자인 — 왼쪽 인원 목록(사진/이니셜) + 오른쪽 사원증(디지털 명함) 머리 + 알약 탭
   const hrCard = "bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)]";
   return (
-    <div className="p-5 flex gap-5" style={{ minHeight: 600 }}>
+    <div className="p-2 md:p-5 flex flex-col md:flex-row gap-3 md:gap-5" style={{ minHeight: 600 }}>
       {/* 좌측: 팀별 인원 목록 */}
-      <div className={`w-[310px] flex-shrink-0 flex flex-col overflow-hidden ${hrCard}`} style={{ maxHeight: 800 }}>
+      <div className={`w-full md:w-[310px] flex-shrink-0 flex flex-col overflow-hidden ${hrCard} max-h-[340px] md:max-h-[800px]`}>
         <div className="px-4 pt-4 pb-3 border-b border-[#EEF1F6]">
           <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">PEOPLE</div>
           <h2 className="text-[17px] font-black text-[#0F1A30] mb-2.5"><EditableText id="hr.title" defaultText="인사관리부" /></h2>
@@ -60895,3 +60965,23 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
 
 // 📱 모바일 앱 매출관리 — PC와 같은 화면을 그대로 쓴다(MobileApp이 필요할 때만 불러옴)
 export { Settlement as PcSettlement };
+
+// 📱 2026-10-31 모바일 경리 모드 — PC 정산관리(용차지급·지입정산)·회계관리·인사관리 화면을 휴대폰에서 그대로
+export function PcSettleMobile({ dispatchData = [], companyName = "", role = "", isViewer = false }) {
+  const [tab, setTab] = React.useState("지급관리");
+  // 지급 상태·지급일 같은 정산 칸만 고치는 간단 저장(배차 검사 없이) — 오더가 있는 컬렉션 그대로
+  const patchDispatch = React.useCallback(async (_id, patch, knownPrev) => {
+    if (!_id) return;
+    const row = knownPrev || dispatchData.find((d) => d._id === _id || d.id === _id);
+    await updateDoc(doc(db, row?.__col || "dispatch", _id), { ...patch, updatedAt: serverTimestamp() });
+  }, [dispatchData]);
+  return (
+    <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={tab} onSelect={setTab}
+      items={[{ key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }]}>
+      {tab === "지급관리"
+        ? <PaymentManagement dispatchData={dispatchData} patchDispatch={isViewer ? async () => {} : patchDispatch} companyName={companyName} canEditPayDay={role === "admin" || role === "totalMaster"} />
+        : <FleetSettlementMenu dispatchData={dispatchData} companyName={companyName} />}
+    </KpSubNav>
+  );
+}
+export { AccountingDashboard as PcAccounting, HRManagementPage as PcHrPage };

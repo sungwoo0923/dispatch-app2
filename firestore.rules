@@ -166,16 +166,16 @@ service cloud.firestore {
     // 🔒 회사 데이터(거래처·하차지·정기오더·삭제기록·알림·일정·메일·인사·근태신청·회계·결재선)
     match /{tcol}/{id} {
       allow read: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
-          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines']
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets']
         && coMatch(resource.data);
       allow create: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
-          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines']
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets']
         && coCreate();
       allow update: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
-          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines']
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets']
         && coMatch(resource.data) && coKeep();
       allow delete: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
-          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines']
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets']
         && coMatch(resource.data);
     }
     // 화주사 주소록(places) — 화주 본인이 등록한 주소만
@@ -507,7 +507,7 @@ service cloud.firestore {
         // 🔒 회사별로 잠근 컬렉션(위에서 따로 정함)
         'orders', 'dispatch', 'dispatch_test', 'fixedClients', 'drivers', 'clients', 'places', 'recurringOrders', 'deletedOrders',
         'driver_completed_archive', 'notifications', 'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests',
-        'attendanceChangeRequests', 'acctPayments', 'approvalLines']);
+        'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets']);
     }
   }
 }

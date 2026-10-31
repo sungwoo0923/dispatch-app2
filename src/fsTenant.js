@@ -22,6 +22,7 @@ const STRICT = new Set([
   "notices", "schedules", "handovers", "boardPosts", "approvals", "approvalLines", "notifications",
   "scheduledEmails", "emailLogs", "hrResumes", "attendanceRequests", "attendanceChangeRequests", "acctPayments",
   "driverStatements", "fleetPenalties", "fixedRoutes", "companyContracts",
+  "acctLedger", "acctRecurring", "officeAssets", // 경리 — 수입·지출 장부 · 고정비 · 비품·자산
 ]);
 // 회사명이 있을 때만 비교하는 컬렉션 — 서버(Cloud Functions)·기사앱 네이티브가 회사명 없이 쓰는 기록
 const LOOSE = new Set([
