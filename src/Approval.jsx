@@ -943,9 +943,21 @@ function DocList({ docs, onOpen, empty, uid }) {
       <div className="mt-3 text-[14.5px] font-bold text-[#5B6B85]">{empty}</div>
     </div>
   );
+  // ⭐ 2026-10-31 날짜별로 묶어서(기안일 기준)
+  const WD = "일월화수목금토";
+  const groups = [];
+  docs.forEach((d) => { const k = ymd(toMs(d.createdAt)); const g = groups[groups.length - 1]; if (g && g.k === k) g.list.push(d); else groups.push({ k, list: [d] }); });
   return (
-    <div className="divide-y divide-[#F1F4F9]">
-      {docs.map((d) => (
+    <div>
+      {groups.map((g) => (
+      <div key={g.k}>
+      <div className="sticky top-0 z-[1] px-3.5 md:px-5 py-1.5 bg-[#F5F8FD] border-y border-[#EEF1F6] flex items-center gap-2">
+        <span className="text-[12.5px] font-black text-[#1B2B4B] tabular-nums" style={{ fontFamily: MONO }}>{g.k.replaceAll("-", ".")}</span>
+        <span className="text-[12px] font-bold text-[#7A879C]">{WD[new Date(g.k + "T00:00:00").getDay()]}요일</span>
+        <span className="ml-auto text-[11.5px] font-bold text-[#9AA9C3]">{g.list.length}건</span>
+      </div>
+      <div className="divide-y divide-[#F1F4F9]">
+      {g.list.map((d) => (
         <button key={d.id} type="button" onClick={() => onOpen(d)} className="w-full text-left px-3.5 md:px-5 py-3.5 hover:bg-[#F8FAFD] flex items-center gap-2.5 md:gap-4">
           <span className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}><ShellIcon name={catOf(d.cat).icon} size={18} /></span>
           <div className="flex-1 min-w-0">
@@ -966,16 +978,73 @@ function DocList({ docs, onOpen, empty, uid }) {
           <span className={`shrink-0 w-[72px] text-center h-7 leading-7 rounded-full text-[13px] font-black ${d.status === "approved" ? "bg-[#0F1A30] text-white" : d.status === "pending" ? "bg-[#EEF3FB] text-[#1B2B4B]" : "border border-[#DCE3EE] text-[#5B6B85]"}`}>{STATUS[d.status]}</span>
         </button>
       ))}
+      </div>
+      </div>
+      ))}
     </div>
   );
 }
 
+// 🔎 목록 검색·기간·기안자 — 결재함·내 기안함 공용(각 탭 안에서 같이 걸러진다)
+const kstNow = () => new Date(Date.now() + 9 * 3600e3);
+const kDay = (off = 0) => { const d = kstNow(); d.setUTCDate(d.getUTCDate() + off); return d.toISOString().slice(0, 10); };
+function ListTools({ f, setF, drafters }) {
+  const quick = [
+    ["전체", "", ""], ["오늘", kDay(0), kDay(0)], ["이번 주", kDay(-((kstNow().getUTCDay() + 6) % 7)), kDay(0)],
+    ["이번 달", kDay(0).slice(0, 8) + "01", kDay(0)], ["3개월", kDay(-90), kDay(0)],
+  ];
+  const on = (a, b) => f.from === a && f.to === b;
+  const dp = "h-10 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-bold text-[#0F1A30]";
+  return (
+    <div className="px-3.5 md:px-5 py-3 border-b border-[#EEF1F6] space-y-2.5 bg-white">
+      <div className="flex gap-2">
+        <div className="relative flex-1 min-w-0">
+          <input value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} placeholder="제목·내용·기안자·문서번호 검색"
+            className="w-full h-10 pl-9 pr-8 rounded-xl border border-[#DCE3EE] bg-[#F8FAFD] text-[13.5px] text-[#0F1A30] outline-none focus:border-[#2D4C82]" />
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9AA9C3]" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+          {f.q && <button type="button" onClick={() => setF({ ...f, q: "" })} className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full text-[#9AA9C3]">✕</button>}
+        </div>
+        {drafters && drafters.length > 1 && (
+          <select value={f.who} onChange={(e) => setF({ ...f, who: e.target.value })} className="h-10 max-w-[42%] px-3 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-bold text-[#0F1A30] outline-none">
+            <option value="">기안자 전체</option>
+            {drafters.map(([uid, name]) => <option key={uid} value={uid}>{name}</option>)}
+          </select>
+        )}
+      </div>
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+        {quick.map(([l, a, b]) => (
+          <button key={l} type="button" onClick={() => setF({ ...f, from: a, to: b })}
+            className={`shrink-0 h-8 px-3 rounded-lg text-[12.5px] font-black border ${on(a, b) ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`}>{l}</button>
+        ))}
+      </div>
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5">
+        <CustomDatePicker value={f.from} onChange={(e) => setF({ ...f, from: e.target.value, to: f.to && f.to < e.target.value ? e.target.value : f.to })} className={dp} showIcon placeholder="시작일" />
+        <span className="text-[#9AA9C3] font-black">~</span>
+        <CustomDatePicker value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} className={dp} showIcon placeholder="종료일" />
+      </div>
+    </div>
+  );
+}
+const applyListTools = (docs, f) => {
+  if (!docs) return docs;
+  const kw = f.q.trim().toLowerCase();
+  return docs.filter((d) => {
+    const day = ymd(toMs(d.createdAt));
+    if (f.from && day < f.from) return false;
+    if (f.to && day > f.to) return false;
+    if (f.who && d.drafterUid !== f.who) return false;
+    if (kw && ![d.title, d.summary, d.formLabel, d.docNo, d.drafter?.name].some((v) => String(v || "").toLowerCase().includes(kw))) return false;
+    return true;
+  });
+};
+
 function Tabs({ tabs, tab, setTab }) {
   return (
     <div className="flex items-center gap-1.5 px-5 pt-4 pb-3 border-b border-[#EEF1F6] overflow-x-auto no-scrollbar">
-      {tabs.map(([k, l, n]) => (
-        <button key={k} type="button" onClick={() => setTab(k)} className={`h-9 px-4 rounded-full text-[14px] font-black shrink-0 border inline-flex items-center gap-1.5 ${tab === k ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}>
-          {l}{n > 0 && <span className={`min-w-[20px] h-5 px-1.5 rounded-full text-[12px] flex items-center justify-center ${tab === k ? "bg-white text-[#0F1A30]" : "bg-[#EEF1F6] text-[#1B2B4B]"}`}>{n}</span>}
+      {tabs.map(([k, l, n, unread]) => (
+        <button key={k} type="button" onClick={() => setTab(k)} className={`relative h-9 px-4 rounded-full text-[14px] font-black shrink-0 border inline-flex items-center gap-1.5 ${tab === k ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}>
+          {l}{n > 0 && <span className={`min-w-[20px] h-5 px-1.5 rounded-full text-[12px] flex items-center justify-center tabular-nums ${tab === k ? "bg-white text-[#0F1A30]" : "bg-[#EEF1F6] text-[#1B2B4B]"}`}>{n}</span>}
+          {unread > 0 && <span title={`새 결과 ${unread}건`} className="absolute -top-1 -right-1 min-w-[17px] h-[17px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-black grid place-items-center ring-2 ring-white">{unread}</span>}
         </button>
       ))}
     </div>
@@ -1076,6 +1145,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   const [preset, setPreset] = React.useState(null);
   const [tab, setTab] = React.useState("todo");
   const [companyAll, setCompanyAll] = React.useState(null);
+  const [lf, setLf] = React.useState({ q: "", from: "", to: "", who: "" }); // 목록 검색·기간·기안자
   const admin = isAdminRole(me.role);
   React.useEffect(() => { setTab(page === "mine" ? "all" : "todo"); }, [page]);
   React.useEffect(() => {
@@ -1161,14 +1231,33 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
 
       {page === "inbox" && (
         <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
-          <Tabs tab={tab} setTab={setTab} tabs={[["todo", "결재 대기", sets.todo.length], ["progress", "진행 중", sets.progress.length], ["done", "결재 완료", 0], ["rejected", "반려", 0], ["cancelled", "결재 취소", 0], ["cc", "참조 문서", sets.cc.filter((d) => ccUnread(d, uid)).length], ...(admin ? [["company", "회사 전체", 0]] : []), ["hidden", "삭제한 문서", 0]]} />
-          <DocList uid={uid} docs={tab === "company" ? companyAll : (list === null ? null : sets[tab] || [])} onOpen={(d) => setOpen(d.id)} empty={tab === "todo" ? "결재할 문서가 없습니다" : "문서가 없습니다"} />
+          {(() => {
+            // ⭐ 2026-10-31 탭 숫자는 그 탭의 문서 수(검색·기간 적용), 새 결과는 빨간 점으로 따로
+            const F = (k) => applyListTools(k === "company" ? (companyAll || []) : (sets[k] || []), lf) || [];
+            const keys = ["todo", "progress", "done", "rejected", "cancelled", "cc", ...(admin ? ["company"] : []), "hidden"];
+            const label = { todo: "결재 대기", progress: "진행 중", done: "결재 완료", rejected: "반려", cancelled: "결재 취소", cc: "참조 문서", company: "회사 전체", hidden: "삭제한 문서" };
+            const pool = [...(list || []), ...(companyAll || [])];
+            const drafters = [...new Map(pool.filter((d) => d.drafterUid).map((d) => [d.drafterUid, d.drafter?.name || "-"])).entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1]), "ko"));
+            return (<>
+              <Tabs tab={tab} setTab={setTab} tabs={keys.map((k) => [k, label[k], F(k).length, k === "cc" ? F(k).filter((d) => ccUnread(d, uid)).length : 0])} />
+              <ListTools f={lf} setF={setLf} drafters={drafters} />
+              <DocList uid={uid} docs={tab === "company" ? (companyAll === null ? null : F("company")) : (list === null ? null : F(tab))} onOpen={(d) => setOpen(d.id)} empty={lf.q || lf.from || lf.who ? "조건에 맞는 문서가 없습니다" : tab === "todo" ? "결재할 문서가 없습니다" : "문서가 없습니다"} />
+            </>);
+          })()}
         </div>
       )}
       {page === "mine" && (
         <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
-          <Tabs tab={tab} setTab={setTab} tabs={[["all", "전체", unreadIn(mineSets.all)], ["pending", "진행 중", unreadIn(mineSets.pending)], ["approved", "완료", unreadIn(mineSets.approved)], ["rejected", "반려", unreadIn(mineSets.rejected)], ["cancelled", "결재 취소", unreadIn(mineSets.cancelled)], ["withdrawn", "회수", 0]]} />
-          <DocList uid={uid} docs={list === null ? null : mineSets[tab] || []} onOpen={(d) => setOpen(d.id)} empty="올린 문서가 없습니다. 위 버튼으로 새 문서를 작성하세요." />
+          {(() => {
+            // ⭐ 2026-10-31 숫자는 문서 수(예전엔 "새 결과" 수라 목록 2건인데 1로 보이고, 열어 보면 숫자가 사라졌다) — 새 결과는 빨간 점
+            const M = (k) => applyListTools(mineSets[k] || [], lf) || [];
+            const keys = [["all", "전체"], ["pending", "진행 중"], ["approved", "완료"], ["rejected", "반려"], ["cancelled", "결재 취소"], ["withdrawn", "회수"]];
+            return (<>
+              <Tabs tab={tab} setTab={setTab} tabs={keys.map(([k, l]) => [k, l, M(k).length, unreadIn(M(k))])} />
+              <ListTools f={lf} setF={setLf} />
+              <DocList uid={uid} docs={list === null ? null : M(tab)} onOpen={(d) => setOpen(d.id)} empty={lf.q || lf.from ? "조건에 맞는 문서가 없습니다" : "올린 문서가 없습니다. 위 버튼으로 새 문서를 작성하세요."} />
+            </>);
+          })()}
         </div>
       )}
       {page === "lines" && <LinesPage company={company} me={meFull} staff={staff} />}

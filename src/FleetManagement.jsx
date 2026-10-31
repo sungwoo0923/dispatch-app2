@@ -2643,11 +2643,12 @@ function DriverJourneyPanel({ driver, orders, live, onClose, dispatchData }) {
   const remainKm = legs.filter(l => !l.done && l.type !== "live" && l.km != null).reduce((s, l) => s + l.km, 0)
     + (legs.find(l => l.type === "live")?.km || 0);
 
-  return (
+  // ⭐ 2026-10-31 화면 최상단에 띄운다(모바일에서 앱 상단바 밑에 깔려 위쪽이 잘렸다)
+  return createPortal(
     <div style={{ position: "fixed", inset: 0, zIndex: 99980, background: "rgba(15,23,42,.28)", fontFamily: "'Noto Sans KR','Malgun Gothic',sans-serif" }} onClick={onClose}>
       <style>{`@keyframes fmSlideIn{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}} @keyframes fmLiveDash{to{stroke-dashoffset:-20}} .fm-journey-live{animation:fmLiveDash 1s linear infinite;} .fm-journey-tiles{filter:grayscale(.85) contrast(.95) brightness(1.04);}`}</style>
       <aside onClick={e => e.stopPropagation()}
-        style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: "min(760px, 100vw)", background: "#f4f6f9", boxShadow: "-12px 0 40px rgba(15,23,42,.25)", display: "flex", flexDirection: "column", animation: "fmSlideIn .22s ease-out" }}>
+        style={{ position: "absolute", top: 0, right: 0, bottom: 0, paddingTop: "env(safe-area-inset-top, 0px)", width: "min(760px, 100vw)", background: "#f4f6f9", boxShadow: "-12px 0 40px rgba(15,23,42,.25)", display: "flex", flexDirection: "column", animation: "fmSlideIn .22s ease-out" }}>
         {/* 헤더 */}
         <div style={{ background: NAVY, padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(255,255,255,.14)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 21, fontWeight: 900, flexShrink: 0 }}>{String(driver.이름 || "?").slice(0, 1)}</div>
@@ -2796,7 +2797,7 @@ function DriverJourneyPanel({ driver, orders, live, onClose, dispatchData }) {
         </div>
       </aside>
     </div>
-  );
+  , document.body);
 }
 
 // ⭐ 노선표 정렬 — 운송완료(완료시각 순) → 진행중/진행예정(수락 순) → 확인대기·기타(상차시간 순) → 거절
