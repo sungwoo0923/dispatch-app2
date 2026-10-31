@@ -4,7 +4,8 @@ import { kpConfirm } from "./kpDialog";
 import { createPortal } from "react-dom";
 import { imeFocusRef } from "./imeFocus";
 import "leaflet/dist/leaflet.css";
-import { db, auth } from "./firebase";
+import { db, auth, DEFAULT_COMPANY } from "./firebase";
+import { getTenant } from "./fsTenant";
 import {
   collection,
   onSnapshot,
@@ -5936,12 +5937,14 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
   }, [refreshKey]);
 
   // ── 회사 기본 출근지 구독 ────────────────────────────────────────────────
+  // ⭐ 2026-11-01 회사별 문서(fleet_settings/co_회사) — 예전 "default"는 모든 운송사가 같이 써서 한 회사가 바꾸면 다른 회사도 바뀌었다
   useEffect(() => {
-    return onSnapshot(
-      doc(db, "fleet_settings", "default"),
-      (snap) => setCompanyDefaultLoc(snap.exists() ? (snap.data().defaultCheckInLocation || null) : null),
-      (err) => console.error("fleet_settings:", err)
-    );
+    const co = getTenant() || DEFAULT_COMPANY;
+    let legacy = null; let mine = undefined;
+    const apply = () => setCompanyDefaultLoc(mine !== undefined ? mine : (co === DEFAULT_COMPANY ? legacy : null));
+    const u1 = onSnapshot(doc(db, "fleet_settings", `co_${co}`), (snap) => { mine = snap.exists() ? (snap.data().defaultCheckInLocation || null) : undefined; apply(); }, (err) => console.error("fleet_settings:", err));
+    const u2 = co === DEFAULT_COMPANY ? onSnapshot(doc(db, "fleet_settings", "default"), (snap) => { legacy = snap.exists() ? (snap.data().defaultCheckInLocation || null) : null; apply(); }, () => {}) : () => {};
+    return () => { u1(); u2(); };
   }, []);
 
   // ── 출발지 변경 요청 구독 ───────────────────────────────────────────────
@@ -6419,7 +6422,8 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
 
   const handleSaveCompanyLoc = useCallback(async (loc) => {
     try {
-      await setDoc(doc(db, "fleet_settings", "default"), { defaultCheckInLocation: loc }, { merge: true });
+      const co = getTenant() || DEFAULT_COMPANY;
+      await setDoc(doc(db, "fleet_settings", `co_${co}`), { defaultCheckInLocation: loc, companyName: co }, { merge: true });
     } catch (e) { console.error("company loc save:", e); }
     setCompanyLocModal(false);
   }, []);

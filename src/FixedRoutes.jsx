@@ -9,6 +9,8 @@
 //   · 배정 기사·요일·시간을 정하면, 그 요일마다 배차가 자동으로 만들어진다(오늘~7일 앞까지, 같은 날 중복 없음)
 //     → 배차관리·배차현황·실시간배차현황·기사앱에 일반 오더처럼 보이고, "고정노선" 표시가 붙는다.
 //   · 휴무·공휴일·임시 중단은 날짜만 빼면 된다(건너뛸 날짜)
+import { coDocKey } from "./coKey";
+import { getTenant } from "./fsTenant";
 import { createPortal } from "react-dom";
 import React from "react";
 import { kpConfirm, kpAlert } from "./kpDialog";
@@ -307,7 +309,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
       else { const ref = await addDoc(collection(db, "fixedRoutes"), { ...data, createdAt: serverTimestamp() }); id = ref.id; }
       // 신규 상하차지는 하차지 목록에도 등록(배차관리 자동완성에 바로 뜨도록)
       await Promise.all(data.stops.filter((st) => st.name.trim() && !places.some((p) => norm(p.업체명) === norm(st.name))).map((st) =>
-        setDoc(doc(db, "places", placeKey(st.name) || `fr_${Date.now()}`), { 업체명: st.name.trim(), 주소: st.addr || "", 담당자번호: st.contact || "", 메모: st.memo || "", companyName: co }, { merge: true }).catch(() => {})));
+        setDoc(doc(db, "places", placeKey(st.name) ? coDocKey(getTenant(), placeKey(st.name)) : `fr_${Date.now()}`), { 업체명: st.name.trim(), 주소: st.addr || "", 담당자번호: st.contact || "", 메모: st.memo || "", companyName: co }, { merge: true }).catch(() => {})));
       setForm(null); setReview(false); setSelId(id);
       // ⭐ 노선을 고치면 이미 만들어 둔 앞으로의 오더 중 "배차현황에서 따로 고치지 않은 것"에 같이 반영
       const prev = form.id ? routes.find((x) => x.id === form.id) : null;
@@ -322,7 +324,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
     if (!n) return kpAlert("업체명을 입력해 주세요.");
     setBusy(true);
     try {
-      await setDoc(doc(db, "clients", n), { id: n, 거래처명: n, 주소: newClient.addr, 담당자: newClient.manager, 연락처: newClient.phone, 이메일: newClient.email, 메모: newClient.memo, 등급: newClient.grade, companyName: co }, { merge: true });
+      await setDoc(doc(db, "clients", coDocKey(getTenant(), n)), { id: coDocKey(getTenant(), n), 거래처명: n, 주소: newClient.addr, 담당자: newClient.manager, 연락처: newClient.phone, 이메일: newClient.email, 메모: newClient.memo, 등급: newClient.grade, companyName: co }, { merge: true });
       set("client", n); setNewClient(null); flash("신규 거래처를 등록했습니다");
     } catch (e) { kpAlert(`등록 실패: ${e?.message || e}`); } finally { setBusy(false); }
   };

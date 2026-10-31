@@ -177,7 +177,7 @@ export function RetireDesk({ company, isViewer = false }) {
   const [filter, setFilter] = React.useState("open");
   React.useEffect(() => { if (!company) return undefined; return onSnapshot(query(collection(db, "users"), where("companyName", "==", company)), (s) => setUsers(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setUsers([])); }, [company]);
   React.useEffect(() => { if (!company) return undefined; return onSnapshot(query(collection(db, "retireCases"), where("companyName", "==", company)), (s) => setCases(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setCases([])); }, [company]);
-  React.useEffect(() => { if (!company) return undefined; return onSnapshot(query(collection(db, "approvals"), where("company", "==", company)), (s) => setApprovals(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((a) => a.cat === "leave" || (a.form === "resign"))), () => setApprovals([])); }, [company]);
+  React.useEffect(() => { if (!company) return undefined; return onSnapshot(query(collection(db, "approvals"), where("company", "==", company), where("cat", "in", ["leave", "report"])), (s) => setApprovals(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((a) => a.cat === "leave" || (a.form === "resign"))), () => setApprovals([])); }, [company]);
   React.useEffect(() => onSnapshot(collection(db, "userProfiles"), (s) => { const m = {}; s.docs.forEach((d) => { m[d.id] = d.data(); }); setProfiles(m); }, () => {}), []);
   const today = kstDay();
   const byId = Object.fromEntries((cases || []).map((c) => [c.id, c]));

@@ -141,7 +141,7 @@ export function CashBook({ company, isViewer = false }) {
   const fileRef = React.useRef(null);
   React.useEffect(() => {
     if (!company) return undefined;
-    return onSnapshot(query(collection(db, "approvals"), where("company", "==", company)), (s) => setApprovals(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((a) => a.cat === "expense" && a.status === "approved")), () => setApprovals([]));
+    return onSnapshot(query(collection(db, "approvals"), where("company", "==", company), where("cat", "==", "expense")), (s) => setApprovals(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((a) => a.cat === "expense" && a.status === "approved")), () => setApprovals([]));
   }, [company]);
   const F = React.useMemo(() => computeFunds(funds || [], rows || []), [funds, rows]);
   const fundOpts = F.list.filter((f) => f.kind !== "대출");

@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { kpConfirm } from "../kpDialog";
 import html2canvas from "html2canvas";
-import { db, auth } from "../firebase";
+import { db, auth, DEFAULT_COMPANY } from "../firebase";
 import {
   doc,
   getDoc,
@@ -1239,11 +1239,16 @@ export default function DriverHome() {
     }, () => {});
   }, [uid]);
 
+  // ⭐ 2026-11-01 소속 회사의 기본 출근지(fleet_settings/co_회사), 없으면 기본 회사만 예전 "default"
   useEffect(() => {
-    return onSnapshot(doc(db, "fleet_settings", "default"), (snap) => {
-      setCompanyDefaultLoc(snap.exists() ? (snap.data().defaultCheckInLocation || null) : null);
-    });
-  }, []);
+    const co = driver?.companyName || "";
+    if (!co) return undefined;
+    let legacy = null; let mine;
+    const apply = () => setCompanyDefaultLoc(mine !== undefined ? mine : (co === DEFAULT_COMPANY ? legacy : null));
+    const u1 = onSnapshot(doc(db, "fleet_settings", `co_${co}`), (snap) => { mine = snap.exists() ? (snap.data().defaultCheckInLocation || null) : undefined; apply(); }, () => {});
+    const u2 = co === DEFAULT_COMPANY ? onSnapshot(doc(db, "fleet_settings", "default"), (snap) => { legacy = snap.exists() ? (snap.data().defaultCheckInLocation || null) : null; apply(); }, () => {}) : () => {};
+    return () => { u1(); u2(); };
+  }, [driver?.companyName]);
 
   // 연락처 탭 "회사 연락처" — 회사마다 다른 배차팀 번호를 보여주기 위해, 로그인한
   // 기사님이 소속된 회사의 transportApplications(가입 시 등록한 사업자정보)에서

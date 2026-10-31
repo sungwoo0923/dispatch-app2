@@ -31,12 +31,15 @@ function useCol(name, company, filterFn) {
   }, [name, company]); // eslint-disable-line react-hooks/exhaustive-deps
   return rows;
 }
-function useCompanyApprovals(company) {
+// cats — 경리는 보안 규칙상 지출결의·근태·보고만 읽을 수 있어 조회에도 분류 조건을 붙인다(없으면 조회 전체가 거부됨)
+function useCompanyApprovals(company, cats = null) {
   const [rows, setRows] = React.useState([]);
+  const ck = cats ? cats.join(",") : "";
   React.useEffect(() => {
     if (!company) return undefined;
-    return onSnapshot(query(collection(db, "approvals"), where("company", "==", company)), (s) => setRows(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setRows([]));
-  }, [company]);
+    const qs = [where("company", "==", company), ...(cats ? [where("cat", "in", cats)] : [])];
+    return onSnapshot(query(collection(db, "approvals"), ...qs), (s) => setRows(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setRows([]));
+  }, [company, ck]); // eslint-disable-line react-hooks/exhaustive-deps
   return rows;
 }
 
@@ -164,7 +167,7 @@ const dDay = (d, today) => { const n = Math.round((new Date(`${d}T00:00:00Z`) - 
 function AcctDashboard({ company, dispatchData = [], onGo }) {
   const today = kst(0); const ym = ymAgo(0);
   const clients = useCol("clients", company);
-  const approvals = useCompanyApprovals(company);
+  const approvals = useCompanyApprovals(company, ["expense"]);
   const fleet = useFleetDrivers();
   const docsBy = useCompanyDriverDocs(company);
   const ledger = useCompanyRows("acctLedger", company);
