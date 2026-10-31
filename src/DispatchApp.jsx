@@ -2728,6 +2728,7 @@ import { OrderTimeline, OrderTimelineModal } from "./OrderTimeline";
 import { isTMUser } from "./staffFilter";
 import OrgChart from "./OrgChart";
 import { MailHeaderButton, sendInternalMail } from "./InternalMail";
+import { loadAcctPayments, saveAcctPayments } from "./acctPayments";
 import BannerCenter from "./BannerCenter";
 import PersonnelOrder from "./PersonnelOrder";
 import OrderScanModal, { looksLikeOrder, scanDropDate } from "./OrderScanModal";
@@ -45838,15 +45839,9 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
   React.useEffect(() => {
     async function load() {
       try {
-        const snap = await getDoc(doc(db, "acctPayments", String(year)));
-        if (snap.exists()) {
-          const d = snap.data();
-          setArPayments(d.ar || {});
-          setApPayments(d.ap || {});
-        } else {
-          setArPayments({});
-          setApPayments({});
-        }
+        const d = await loadAcctPayments(db, year); // ⭐ 회사별 문서
+        setArPayments(d.ar || {});
+        setApPayments(d.ap || {});
       } catch (e) { console.error(e); }
     }
     load();
@@ -45966,7 +45961,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
     try {
       const newAr = type === "ar" ? { ...arPayments, [name]: (arPayments[name] || 0) + amt } : arPayments;
       const newAp = type === "ap" ? { ...apPayments, [name]: (apPayments[name] || 0) + amt } : apPayments;
-      await setDoc(doc(db, "acctPayments", String(year)), { ar: newAr, ap: newAp });
+      await saveAcctPayments(db, year, "", newAr, newAp);
       setArPayments(newAr);
       setApPayments(newAp);
     } catch (e) { console.error(e); } finally { setSaving(false); }
@@ -45979,7 +45974,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
     try {
       const newAr = type === "ar" ? { ...arPayments, [name]: 0 } : arPayments;
       const newAp = type === "ap" ? { ...apPayments, [name]: 0 } : apPayments;
-      await setDoc(doc(db, "acctPayments", String(year)), { ar: newAr, ap: newAp });
+      await saveAcctPayments(db, year, "", newAr, newAp);
       setArPayments(newAr);
       setApPayments(newAp);
     } catch (e) { console.error(e); } finally { setSaving(false); }

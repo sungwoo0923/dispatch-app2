@@ -178,9 +178,15 @@ export function CashBook({ company, isViewer = false }) {
     if (!window.confirm(`전자결재로 승인된 지출결의 ${toImport.length}건을 장부에 넣을까요?`)) return;
     setBusy(true);
     try {
+      // ⭐ 2026-11-01 결제수단에 맞는 통장·카드가 하나뿐이면 자동 지정(자금 잔액에 바로 반영) — 여러 개면 장부에서 골라 주세요
+      const pickFund = (pay) => {
+        const p = String(pay || "");
+        const c = /법인카드/.test(p) ? fundOpts.filter((f) => f.kind === "법인카드" || f.kind === "법인카드 한도") : /현금/.test(p) ? fundOpts.filter((f) => f.kind === "현금") : /계좌|이체/.test(p) ? fundOpts.filter((f) => f.kind === "보통예금") : [];
+        return c.length === 1 ? c[0].id : "";
+      };
       for (const a of toImport) {
         const d = a.data || {};
-        await addDoc(collection(db, "acctLedger"), { date: d.date || d.spendDate || new Date(tsMs(a.createdAt) + 9 * 3600e3).toISOString().slice(0, 10), type: "지출", account: d.account || "기타", item: a.title || a.formLabel || "지출결의", amount: Number(a.amount) || 0, method: d.pay || d.method || "법인카드", vendor: d.vendor || "", memo: `전자결재 ${a.docNo || ""} · ${a.drafter?.name || ""}`, evidence: "전자결재", receipt: (a.images || [])[0] || "", sourceId: a.id, companyName: company, createdAt: serverTimestamp(), createdBy: auth.currentUser?.email || "" });
+        await addDoc(collection(db, "acctLedger"), { fundId: pickFund(d.pay || d.method || "법인카드"), date: d.date || d.spendDate || new Date(tsMs(a.createdAt) + 9 * 3600e3).toISOString().slice(0, 10), type: "지출", account: d.account || "기타", item: a.title || a.formLabel || "지출결의", amount: Number(a.amount) || 0, method: d.pay || d.method || "법인카드", vendor: d.vendor || "", memo: `전자결재 ${a.docNo || ""} · ${a.drafter?.name || ""}`, evidence: "전자결재", receipt: (a.images || [])[0] || "", sourceId: a.id, companyName: company, createdAt: serverTimestamp(), createdBy: auth.currentUser?.email || "" });
       }
     } finally { setBusy(false); }
   };
@@ -191,7 +197,7 @@ export function CashBook({ company, isViewer = false }) {
     try {
       for (const r of recurTodo) {
         const day = String(Math.min(28, Math.max(1, Number(r.day) || 1))).padStart(2, "0");
-        await addDoc(collection(db, "acctLedger"), { date: `${ym}-${day}`, type: r.type || "지출", account: r.account || "기타", item: r.name, amount: toInt(r.amount), method: r.method || "자동이체", vendor: r.vendor || "", memo: "고정비 자동 반영", evidence: "", receipt: "", recurId: r.id, companyName: company, createdAt: serverTimestamp(), createdBy: auth.currentUser?.email || "" });
+        await addDoc(collection(db, "acctLedger"), { date: `${ym}-${day}`, type: r.type || "지출", account: r.account || "기타", item: r.name, amount: toInt(r.amount), method: r.method || "자동이체", fundId: r.fundId || "", vendor: r.vendor || "", memo: "고정비 자동 반영", evidence: "", receipt: "", recurId: r.id, companyName: company, createdAt: serverTimestamp(), createdBy: auth.currentUser?.email || "" });
       }
     } finally { setBusy(false); }
   };
@@ -422,13 +428,13 @@ export function CashBook({ company, isViewer = false }) {
           </div>
         </div>
       )}
-      {recurOpen && <RecurringEditor company={company} rows={recurring || []} ledger={rows || []} onClose={() => setRecurOpen(false)} />}
+      {recurOpen && <RecurringEditor company={company} rows={recurring || []} ledger={rows || []} funds={fundOpts} onClose={() => setRecurOpen(false)} />}
     </div>
   );
 }
 
-function RecurringEditor({ company, rows, ledger = [], onClose }) {
-  const [f, setF] = React.useState({ type: "지출", name: "", account: "임차료", amount: "", day: "25", method: "자동이체", vendor: "" });
+function RecurringEditor({ company, rows, ledger = [], funds = [], onClose }) {
+  const [f, setF] = React.useState({ type: "지출", name: "", account: "임차료", amount: "", day: "25", method: "자동이체", vendor: "", fundId: "" });
   const [custom, setCustom] = React.useState(false);
   const accs = [...new Set([...LEDGER_ACCOUNTS[f.type], ...ledger.filter((r) => r.type === f.type).map((r) => r.account).filter(Boolean)])];
   const add = async () => {
@@ -454,12 +460,18 @@ function RecurringEditor({ company, rows, ledger = [], onClose }) {
             {custom && <input autoFocus value={f.account} onChange={(e) => setF({ ...f, account: e.target.value })} className={`${inp} mt-2`} placeholder="계정과목 직접 입력" />}
           </div>
           <div><Label>매달 (일)</Label><input inputMode="numeric" value={f.day} onChange={(e) => setF({ ...f, day: e.target.value.replace(/[^\d]/g, "").slice(0, 2) })} className={inp} /></div>
+          {funds.length > 0 && <div className="col-span-2"><Label>나가는(들어오는) 통장·카드 <span className="font-semibold text-[#9AA9C3]">(장부에 넣으면 자금 잔액에 반영)</span></Label>
+            <CustomSelect value={f.fundId} onChange={(e) => setF({ ...f, fundId: e.target.value })} className={inp}>
+              <option value="">지정 안 함</option>
+              {funds.map((x) => <option key={x.id} value={x.id}>{`${x.name} · ${x.kind}${x.bank ? ` ${x.bank}` : ""}`}</option>)}
+            </CustomSelect></div>}
         </div>
         <button type="button" onClick={add} className="w-full h-11 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black">+ 고정비 추가</button>
       </div>
       {rows.map((r) => (
         <div key={r.id} className="rounded-2xl bg-white border border-[#E3E8F0] px-3 py-2.5 flex items-center gap-2">
-          <div className="flex-1 min-w-0"><div className="text-[14px] font-black text-[#0F1A30] truncate">{r.name} <span className={`text-[11px] font-black ${r.type === "수입" ? "text-[#2D4C82]" : "text-[#7A879C]"}`}>{r.type || "지출"}</span></div><div className="text-[11.5px] text-[#7A879C]">{r.account} · 매달 {r.day}일 · {r.method}</div></div>
+          <div className="flex-1 min-w-0"><div className="text-[14px] font-black text-[#0F1A30] truncate">{r.name} <span className={`text-[11px] font-black ${r.type === "수입" ? "text-[#2D4C82]" : "text-[#7A879C]"}`}>{r.type || "지출"}</span></div><div className="text-[11.5px] text-[#7A879C]">{r.account} · 매달 {r.day}일 · {r.method}</div>
+            {funds.length > 0 && <select value={r.fundId || ""} onChange={(e) => updateDoc(doc(db, "acctRecurring", r.id), { fundId: e.target.value })} className="mt-1 h-8 px-2 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-bold text-[#1B2B4B] max-w-full"><option value="">통장·카드 지정 안 함</option>{funds.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>}</div>
           <span className="text-[13.5px] font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{won(r.amount)}</span>
           <button type="button" onClick={() => updateDoc(doc(db, "acctRecurring", r.id), { active: r.active === false })} className={`h-8 px-2.5 rounded-lg text-[12px] font-black whitespace-nowrap ${r.active === false ? "border border-[#DCE3EE] text-[#9AA9C3]" : "bg-[#EEF3FC] text-[#1B2B4B]"}`}>{r.active === false ? "꺼짐" : "켜짐"}</button>
           <button type="button" onClick={() => window.confirm("삭제할까요?") && deleteDoc(doc(db, "acctRecurring", r.id))} className="w-8 h-8 rounded-lg text-[#9AA9C3]">✕</button>

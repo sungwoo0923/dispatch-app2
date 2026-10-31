@@ -3,6 +3,7 @@
 //  · 회계 개요: 올해 매출·매입·매출총이익·예상 부가세 · 미수/미지급 · 월별 추이 · 미수 연령 · 분기 부가세 · 계정별 지출
 //  · 퇴직 정산(경리 전용): 퇴직금(평균임금×30×재직일/365) · 미사용 연차수당 · 4대보험 상실 · 이직확인서(실업급여) ·
 //    퇴직소득 원천징수 · 원천징수영수증 · 퇴직연금 — 법정 기한(D-day)과 처리 상태를 사람별로
+import { loadAcctPayments } from "./acctPayments";
 import React from "react";
 import { collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, where, serverTimestamp } from "firebase/firestore";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell } from "recharts";
@@ -56,7 +57,7 @@ export function AccountingOverview({ company, orders }) {
   const y = new Date().getFullYear();
   const [pay, setPay] = React.useState({ ar: {}, ap: {} });
   const [ledger, setLedger] = React.useState([]);
-  React.useEffect(() => { getDoc(doc(db, "acctPayments", String(y))).then((s) => setPay(s.exists() ? { ar: s.data().ar || {}, ap: s.data().ap || {} } : { ar: {}, ap: {} })).catch(() => {}); }, [y]);
+  React.useEffect(() => { loadAcctPayments(db, y, company).then(setPay).catch(() => {}); }, [y, company]);
   React.useEffect(() => { if (!company) return undefined; return onSnapshot(query(collection(db, "acctLedger"), where("companyName", "==", company)), (s) => setLedger(s.docs.map((d) => d.data())), () => setLedger([])); }, [company]);
   if (!orders) return <div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">올해 운행 내역을 불러오는 중…</div>;
   const today = kstDay();
