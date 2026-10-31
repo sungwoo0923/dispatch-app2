@@ -22,7 +22,7 @@ export function TimeSelect({ value = "", onChange, emptyLabel = "즉시", classN
   const box = `h-10 px-2.5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#0F1A30] ${className}`;
   const mins = Array.from({ length: Math.ceil(60 / minuteStep) }, (_, i) => i * minuteStep);
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
       <CustomSelect value={ap} onChange={(e) => set(e.target.value, h12 || "9", m ?? 0)} className={`${box} w-[92px]`}>
         <option value="">{emptyLabel}</option>
         <option value="오전">오전</option>
