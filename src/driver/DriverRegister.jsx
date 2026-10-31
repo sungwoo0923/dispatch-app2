@@ -1,4 +1,5 @@
 // src/driver/DriverRegister.jsx
+import { coDocKey } from "../coKey";
 import React, { useState, useEffect, useRef } from "react";
 import { readPublicCompanies } from "../publicCompanies";
 import CustomDatePicker from "../CustomDatePicker";
@@ -243,7 +244,11 @@ export default function DriverRegister() {
       const uid = res.user.uid;
 
       let preRegistered = null;
-      const preSnap = await getDoc(doc(db, "drivers", normPlate));
+      // ⭐ 2026-11-01 PC 선등록 문서 — 회사별 이름(회사__차량번호) 먼저, 없으면 예전 이름(차량번호)
+        const preKey = coDocKey(companyName.trim(), normPlate);
+        let preSnap = await getDoc(doc(db, "drivers", preKey));
+        if (!preSnap.exists() && preKey !== normPlate) preSnap = await getDoc(doc(db, "drivers", normPlate));
+        const preId = preSnap.exists() ? preSnap.id : normPlate;
       if (preSnap.exists()) {
         const d = preSnap.data();
         const sameName = (d.이름 || d.name || "").trim() === name.trim();
@@ -321,7 +326,7 @@ export default function DriverRegister() {
         } : {}),
       });
       if (preRegistered) {
-        await deleteDoc(doc(db, "drivers", normPlate)).catch(() => {});
+        await deleteDoc(doc(db, "drivers", preId)).catch(() => {});
       }
       if (bizImg) {
         await addDoc(collection(db, "driver_documents"), {

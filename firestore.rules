@@ -441,12 +441,17 @@ service cloud.firestore {
         && (get(p).data.get('screen', '') == 'exec'
           || (!('screen' in get(p).data) && get(p).data.get('label', '').matches('.*임원.*')));
     }
+    // 💼 2026-11-01 경리(test)는 회사 결재 중 지출결의·근태(연차)·보고(사직서)만 읽는다 — 장부 가져오기·퇴직 정산·연차 계산
+    function isAcctApprovalReader(d) {
+      return myUser().get('role', '') == 'test' && myUser().get('companyName', '') == d.get('company', '')
+        && d.get('cat', '') in ['expense', 'leave', 'report'];
+    }
     function isExecUser() {
       return myUser().get('position', '') in ['이사', '상무', '전무', '부사장', '사장', '대표', '대표이사', '본부장', '임원'];
     }
     match /approvals/{id} {
       allow read: if isApproved() && (isTotalMasterUser() || !locked() || resource.data.companyName == myCo())
-        && (request.auth.uid in resource.data.get('participants', []) || isCompanyAdmin(resource.data.get('company', '')));
+        && (request.auth.uid in resource.data.get('participants', []) || isCompanyAdmin(resource.data.get('company', '')) || isAcctApprovalReader(resource.data));
       allow create: if coCreate() && request.resource.data.get('drafterUid', '') == request.auth.uid
         && (request.resource.data.get('status', '') == 'pending'
           // 일일 업무일지 자동 승인 — 회사 결재 설정(approvalSettings/{회사}.autoApproveDaily)이 켜져 있을 때만

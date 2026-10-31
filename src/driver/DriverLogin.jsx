@@ -1,4 +1,5 @@
 // src/driver/DriverLogin.jsx
+import { coDocKey } from "../coKey";
 import React, { useState, useEffect } from "react";
 import { auth, db } from "../firebase";
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
@@ -85,7 +86,11 @@ export default function DriverLogin() {
         }
         uid = res.user.uid;
 
-        const preSnap = await getDoc(doc(db, "drivers", normPlate));
+        // ⭐ 2026-11-01 PC 선등록 문서 — 회사별 이름(회사__차량번호) 먼저, 없으면 예전 이름(차량번호)
+        const preKey = coDocKey(companyName.trim(), normPlate);
+        let preSnap = await getDoc(doc(db, "drivers", preKey));
+        if (!preSnap.exists() && preKey !== normPlate) preSnap = await getDoc(doc(db, "drivers", normPlate));
+        const preId = preSnap.exists() ? preSnap.id : normPlate;
         if (!preSnap.exists()) {
           await res.user.delete().catch(() => {});
           throw signInErr;
@@ -127,7 +132,7 @@ export default function DriverLogin() {
           createdAt: d.createdAt || serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
-        await deleteDoc(doc(db, "drivers", normPlate)).catch(() => {});
+        await deleteDoc(doc(db, "drivers", preId)).catch(() => {});
       }
 
       const snap = await getDoc(doc(db, "users", uid));

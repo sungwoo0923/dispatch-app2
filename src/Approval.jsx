@@ -43,7 +43,7 @@ const korDate = (ms) => { const d = new Date(ms || Date.now()); return `${d.getF
 const mmdd = (ms) => { const d = new Date(ms); return `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`; };
 const STATUS = { pending: "진행 중", approved: "결재 완료", rejected: "반려", withdrawn: "회수", cancelled: "결재 취소" };
 const catOf = (k) => APPROVAL_CATS.find((c) => c.key === k) || APPROVAL_CATS[0];
-const isAdminRole = (r) => ["admin", "totalMaster", "hrManager"].includes(r);
+const isAdminRole = (r) => ["admin", "totalMaster", "hrManager", "hrAcct"].includes(r);
 
 // ─────────────────────────── 데이터 ───────────────────────────
 export function useApprovals(uid) {

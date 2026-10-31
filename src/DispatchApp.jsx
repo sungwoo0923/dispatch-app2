@@ -15,7 +15,8 @@ import { drawTmapTrafficRoute, TRAFFIC_LEGEND } from "./mapStyle";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { withCo } from "./fsTenant";
+import { withCo, getTenant } from "./fsTenant";
+import { coDocKey } from "./coKey";
 import { createPortal } from "react-dom";
 import { Navigate, useNavigate } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, LabelList, PieChart, Pie, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
@@ -4905,7 +4906,7 @@ const markEditRequestSeen = async (order) => {
     // crypto.randomUUID()로 매번 새 문서를 만들면, 짧은 시간에 같은 차량번호로 여러 번
     // 호출될 때(연속 오더 등록 등) 서로의 존재를 모른 채 완전히 동일한 내용의 문서가
     // 여러 개 생긴다 — 차량번호 자체를 문서 id로 써서 항상 같은 문서로 수렴하게 한다.
-    else id = normPlate(driver.차량번호);
+    else id = coDocKey(viewCompany, normPlate(driver.차량번호)); // 회사별 문서 이름(다른 운송사 같은 차량번호와 충돌 방지)
   }
   if (!id) id = crypto.randomUUID();
 
@@ -4952,10 +4953,11 @@ const markEditRequestSeen = async (order) => {
     // 바꾸는 경우)할 때마다 원래 문서 대신 "새 거래처명" 이름의 새 문서를 만들게 된다
     // (하차지거래처 upsertPlace는 _id를 그대로 존중하는데 여기만 예외였다) — 전달된
     // id가 있으면 그것을 최우선으로 쓴다.
-    const id = client.id || client.거래처명 || crypto.randomUUID();
     const viewCompany = role === "totalMaster"
       ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
       : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
+    // ⭐ 2026-11-01 새 거래처 문서 이름은 회사별로(다른 운송사의 같은 거래처명 문서를 덮어쓰던 문제)
+    const id = client.id || (client.거래처명 ? coDocKey(viewCompany, client.거래처명) : crypto.randomUUID());
     await setDoc(
       doc(db, COLL.clients, id),
       { ...client, id, companyName: client.companyName || viewCompany },
@@ -5060,10 +5062,11 @@ const upsertPlace = async (place) => {
     let key = place._id;
     let existingData = null;
     if (!key) {
-      const normalizedKey = makePlaceKey(name);
-      // 1차: 정규화된 키로 문서 존재 확인
-      const normalizedSnap = await getDoc(doc(db, "places", normalizedKey));
-      if (normalizedSnap.exists()) {
+      const myCo = getTenant() || userCompany || DEFAULT_COMPANY;
+      const normalizedKey = coDocKey(myCo, makePlaceKey(name)); // ⭐ 회사별 문서 이름
+      // 1차: 정규화된 키로 문서 존재 확인(다른 회사 문서면 쓰지 않는다)
+      const normalizedSnap = await getDoc(doc(db, "places", normalizedKey)).catch(() => null);
+      if (normalizedSnap?.exists() && (normalizedSnap.data().companyName || DEFAULT_COMPANY) === myCo) {
         key = normalizedKey;
         existingData = normalizedSnap.data();
       } else {
