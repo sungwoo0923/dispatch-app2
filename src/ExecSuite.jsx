@@ -619,3 +619,28 @@ export function TeamSchedule({ company }) {
     </div>
   );
 }
+
+// ─────────────────────────── 전자결재(부서 화면 상단 메뉴) ───────────────────────────
+// 경리·인사 권한 상단 메뉴 › 전자결재 — 홈 왼쪽 전자결재와 같은 화면을 바로
+export function ApprovalWorkspace({ company, me }) {
+  const [page, setPage] = React.useState("inbox");
+  const counts = useApprovalCounts();
+  const hoUnread = useHandoverUnread(me?.uid);
+  return (
+    <KpSubNav code="E-APPROVAL" title="전자결재" icon="stamp" active={page} onSelect={setPage}
+      groups={[{ label: "전자결재", items: [
+        { key: "inbox", label: "결재함", en: "INBOX", icon: "stamp", badge: counts.todo },
+        { key: "leave", label: "근태·휴가 신청", en: "ATTENDANCE", icon: "clock" },
+        { key: "expense", label: "비용·지출 결의", en: "EXPENSE", icon: "wallet" },
+        { key: "draft", label: "업무 기안·품의", en: "PROPOSAL", icon: "file" },
+        { key: "report", label: "업무 보고·인사", en: "REPORT", icon: "list" },
+        { key: "handover", label: "인수인계", en: "HANDOVER", icon: "link", badge: hoUnread },
+        { key: "mine", label: "내 기안함", en: "MY DOCUMENTS", icon: "send", badge: counts.mineNew },
+        { key: "lines", label: "결재선 관리", en: "LINES", icon: "route" },
+      ] }]}>
+      {page === "handover"
+        ? <HandoverCenter company={company} me={me} isViewer={me?.role === "viewer"} />
+        : <ApprovalCenter company={company} me={me} page={page} setPage={setPage} />}
+    </KpSubNav>
+  );
+}
