@@ -62,6 +62,7 @@ import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnable
 import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare, geocodeAddress, haversineKm, specialSurcharge } from "./tmapFareCalc";
 import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen } from "./customRoles";
+import { useReadOnlyGuard } from "./readOnlyGuard";
 import RouteMapModal from "./RouteMapModal";
 import MonthCompareAnalysis from "./MonthCompareAnalysis";
 import MonthlyReport from "./MonthlyReport";
@@ -2726,7 +2727,7 @@ import "./pcColorRemap.css"; // ★ PC 알록달록 금지(남색 계열)
 import { OrderTimeline, OrderTimelineModal } from "./OrderTimeline";
 import { isTMUser } from "./staffFilter";
 import OrgChart from "./OrgChart";
-import { MailHeaderButton } from "./InternalMail";
+import { MailHeaderButton, sendInternalMail } from "./InternalMail";
 import BannerCenter from "./BannerCenter";
 import PersonnelOrder from "./PersonnelOrder";
 import OrderScanModal, { looksLikeOrder, scanDropDate } from "./OrderScanModal";
@@ -6513,7 +6514,7 @@ function FloatingCalculator({ onClose }) {
   const pickCalcSize = (k) => { setCalcSize(k); try { localStorage.setItem("kpWin:calc", k); } catch { /* 무시 */ } };
   const z = ZOOM[calcSize] || 1;
   return (
-    <div style={{
+    <div data-ro-allow style={{
       position: "fixed", bottom: 24, right: 92, zIndex: 99999,
       // ⭐ 적재/톤수 탭 내용(파렛 규격 입력·차량 목록 등)이 좁은 폭에 눌려 잘 안
       // 보인다는 피드백으로 탭별 폭을 전반적으로 넓히고, 글씨 크기도 함께 키웠다.
@@ -7645,6 +7646,9 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   // viewer(조회전용): 관리센터 제외 모든 메뉴 조회 가능, 수정/등록 불가
   const isViewer = role === "viewer" || (!!customRole && getMenuAccess(customRoles, role, menu) === "read");
   const _viewerBlock = () => showAlert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다.");
+  // 🔒 2026-11-01 조회만 허락된 메뉴에서는 수정·저장·삭제 버튼과 표 두 번 누르기(수정 창)를 바로 막는다
+  //  (HOME·전자결재·회사관리(내정보)는 본인 업무라 제외)
+  useReadOnlyGuard(isViewer && !["HOME", "전자결재", "회사관리"].includes(menu), (msg) => showAlert(msg));
   const addDispatchSafe = isViewer ? _viewerBlock : addDispatch;
   const patchDispatchSafe = isViewer ? _viewerBlock : patchDispatch;
   const removeDispatchSafe = isViewer ? _viewerBlock : removeDispatch;
@@ -59470,10 +59474,10 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
   // ⭐ 2026-10-31 인사관리부는 마스터(회사 첫 가입자)·인사관리자만. 인사관리자는 상단 [인사관리부] 안에 다 있으므로 여기서는 뺀다
   const myDocCM = useMyProfile(user?.uid);
   const canViewHR = role === "totalMaster" || role === "hrManager" || myDocCM?.isMaster === true;
-  const tabs = role === "hrManager" ? ["회사정보", "조직도", "내정보"] : canViewHR ? ["회사정보", "조직도", "내정보", "출근기록부", "인사관리부"] : ["회사정보", "조직도", "내정보", "출근기록부"];
+  const tabs = role === "hrManager" ? ["회사정보", "조직도", "내정보", "내 이력서"] : canViewHR ? ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부", "인사관리부"] : ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부"];
 
   // ⭐ 디자인 개편 — 관리자메뉴와 같은 왼쪽 메뉴바 + 상단 인사 카드(AdminShell 공용 레이아웃)
-  const TAB_ICONS = { 회사정보: "building", 조직도: "users", 내정보: "user", 출근기록부: "clock", 인사관리부: "idcard" };
+  const TAB_ICONS = { 회사정보: "building", 조직도: "users", 내정보: "user", "내 이력서": "idcard", 출근기록부: "clock", 인사관리부: "idcard" };
   const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
   const myName = user?.displayName || (user?.email || "").split("@")[0] || "";
   return (
@@ -59496,6 +59500,7 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
         <CompanyProfile userCompany={userCompany} role={role} userId={userId} />
       )}
       {tab === "조직도" && <OrgChart userCompany={userCompany} />}
+      {tab === "내 이력서" && <HRManagementPage userCompany={userCompany} role={role} userId={userId} selfOnly />}
       {tab === "내정보" && (
         <MyProfilePage
           user={user}
@@ -59616,12 +59621,12 @@ function HRAttendancePrintButton({ row }) {
   );
 }
 
-function HRManagementPage({ userCompany, role, userId, focusUid = null }) {
+function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly = false }) {
   const company = userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
   const now = new Date();
   const [members, setMembers] = React.useState([]);
   // ⭐ 인사발령·직책·권한 변경은 마스터(회사 첫 가입자)·인사관리자만
-  const canManage = role === "totalMaster" || role === "hrManager" || members.some((m) => m.uid === userId && m.isMaster === true);
+  const canManage = !selfOnly && (role === "totalMaster" || role === "hrManager" || members.some((m) => m.uid === userId && m.isMaster === true));
   const hrOpt = useHrOptions(company);
   const [profiles, setProfiles] = React.useState({}); // uid -> { hireDate }
   const [schedules, setSchedules] = React.useState([]);
@@ -59695,21 +59700,35 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null }) {
   const numDaysSoFar = now.getDate();
 
   const rows = React.useMemo(() => {
-    return members.map(m => {
+    // ⭐ 2026-11-01 내 이력서(selfOnly) — 본인 기록만
+    return members.filter((m) => !selfOnly || m.uid === userId).map(m => {
       const hireDate = profiles[m.uid]?.hireDate || "";
       const leave = hireDate ? calcLeaveBalance(hireDate, schedules, m.uid, m.name, holidays) : null;
-      let workDays = 0, leaveDays = 0, sickDays = 0;
-      for (let d = 1; d <= numDaysSoFar; d++) {
+      let workDays = 0, leaveDays = 0, sickDays = 0, lateDays = 0, fieldM = 0;
+      // ⭐ 2026-11-01 근태 — 날짜별 상태(달력 시각화) + 지각(출근 시각 > 근무 시작, 기준 없으면 09:00)
+      const startHm = m.workStartTime || "09:00";
+      const toMin = (hm) => { const [h, mm] = String(hm || "").split(":").map(Number); return Number.isFinite(h) ? h * 60 + (mm || 0) : null; };
+      const hmOf = (iso) => { if (!iso) return ""; const t = new Date(iso); return isNaN(t) ? "" : `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`; };
+      const dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      const days = []; const lates = [];
+      for (let d = 1; d <= dim; d++) {
         const ds = `${monthStr}-${String(d).padStart(2, "0")}`;
+        const off = isHoliday(ds, holidays) || isWeekend(ds);
+        if (d > numDaysSoFar) { days.push({ d, ds, status: off ? "휴일" : "", future: true }); continue; }
         const rec = records.find(r => r.uid === m.uid && r.date === ds);
         let status = rec?.status;
         if (!status) {
-          if (isHoliday(ds, holidays) || isWeekend(ds)) continue;
+          if (off) { days.push({ d, ds, status: "휴일" }); continue; }
           status = findApprovedLeaveForDate(schedules, m.uid, ds, m.name) || "출근";
         }
+        const inHm = hmOf(rec?.checkInTime); const outHm = hmOf(rec?.checkOutTime);
+        const late = status === "출근" && !!inHm && toMin(inHm) > toMin(startHm);
         if (status === "출근") workDays++;
         else if (status === "연차" || status === "오전반차" || status === "오후반차") leaveDays++;
         else if (status === "병가") sickDays++;
+        else if (status === "외근" || status === "출장") fieldM++;
+        if (late) { lateDays++; lates.push({ ds, inHm, by: toMin(inHm) - toMin(startHm), reason: rec?.lateReason || "" }); }
+        days.push({ d, ds, status, late, inHm, outHm });
       }
       const pendingApprovals = schedules.filter(s => {
         const approvers = s.approvers || [];
@@ -59721,9 +59740,9 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null }) {
         const months = Math.max(0, (now.getFullYear() - hire.getFullYear()) * 12 + (now.getMonth() - hire.getMonth()) - (now.getDate() < hire.getDate() ? 1 : 0));
         tenureLabel = months >= 12 ? `${Math.floor(months / 12)}년 ${months % 12}개월` : `${months}개월`;
       }
-      return { ...m, hireDate, tenureLabel, leave, workDays, leaveDays, sickDays, pendingApprovals, team: m.team || "미배정" };
+      return { ...m, hireDate, tenureLabel, leave, workDays, leaveDays, sickDays, lateDays, fieldM, days, lates, startHm, pendingApprovals, team: m.team || "미배정" };
     }).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  }, [members, profiles, schedules, holidays, records, monthStr, numDaysSoFar]);
+  }, [members, profiles, schedules, holidays, records, monthStr, numDaysSoFar, selfOnly, userId]);
 
   const filteredRows = React.useMemo(() => {
     return rows.filter(r => {
@@ -59751,6 +59770,9 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null }) {
 
   const selected = rows.find(r => r.uid === selectedUid) || null;
   const resume = selectedUid ? (resumes[selectedUid] || {}) : {};
+  // 인사팀이 새로 제출된 이력서를 열면 "확인함"
+  React.useEffect(() => { if (canManage && selectedUid && resumes[selectedUid]?.hrSeen === false) setDoc(doc(db, "hrResumes", selectedUid), { hrSeen: true, hrSeenAt: Date.now() }, { merge: true }).catch(() => {}); }, [canManage, selectedUid, resumes]);
+  const newResumeCount = canManage ? members.filter((m) => resumes[m.uid]?.hrSeen === false).length : 0;
   const canEditThis = canManage || selectedUid === userId;
 
   const resumeRef = React.useRef(null);
@@ -59792,7 +59814,16 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null }) {
     if (!selectedUid || !draft) return;
     setSaving(true);
     try {
-      await setDoc(doc(db, "hrResumes", selectedUid), draft, { merge: true });
+      // ⭐ 2026-11-01 본인이 작성·저장하면 인사팀에 "새 이력서"로 표시 + 사내메일 알림
+      const bySelf = selectedUid === userId && !canManage;
+      await setDoc(doc(db, "hrResumes", selectedUid), { ...draft, companyName: company, ...(bySelf ? { selfSubmittedAt: Date.now(), hrSeen: false } : {}) }, { merge: true });
+      if (bySelf) {
+        const me = members.find((m) => m.uid === userId) || {};
+        const hrTo = members.filter((m) => m.uid !== userId && (["hrManager", "hrAcct"].includes(m.role) || m.team === "인사팀" || m.isMaster === true) && m.employmentStatus !== "퇴사")
+          .map((m) => ({ uid: m.uid, name: m.name || m.email || "", team: m.team || "", position: m.position || "" }));
+        if (hrTo.length) sendInternalMail({ company, to: hrTo, kind: "hr", fromName: me.name || "", subject: `[이력서 제출] ${me.name || ""}${me.team ? ` · ${me.team}` : ""}`, body: `${me.name || ""}님이 본인 이력서를 작성·저장했습니다.\n\n인사관리부 › 인사 기록에서 확인해 주세요.` }).catch(() => {});
+        alert("이력서를 저장했습니다. 인사팀에 알림이 갔습니다.");
+      }
       setEditMode(false);
       setDraft(null);
     } catch (err) {
@@ -59877,10 +59908,10 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null }) {
   return (
     <div className="p-2 md:p-5 flex flex-col md:flex-row gap-3 md:gap-5" style={{ minHeight: 600 }}>
       {/* 좌측: 팀별 인원 목록 */}
-      <div className={`w-full md:w-[310px] flex-shrink-0 flex flex-col overflow-hidden ${hrCard} max-h-[340px] md:max-h-[800px]`}>
+      <div className={`w-full md:w-[310px] flex-shrink-0 flex-col overflow-hidden ${hrCard} max-h-[340px] md:max-h-[800px] ${selfOnly ? "hidden" : "flex"}`}>
         <div className="px-4 pt-4 pb-3 border-b border-[#EEF1F6]">
           <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">PEOPLE</div>
-          <h2 className="text-[17px] font-black text-[#0F1A30] mb-2.5"><EditableText id="hr.title" defaultText="인사관리부" /></h2>
+          <h2 className="text-[17px] font-black text-[#0F1A30] mb-2.5 flex items-center gap-2"><EditableText id="hr.title" defaultText="인사관리부" />{newResumeCount > 0 && <span className="h-6 px-2 rounded-full bg-[#D92D20] text-white text-[12px] font-black grid place-items-center" title="직원이 새로 제출한 이력서">새 이력서 {newResumeCount}</span>}</h2>
           <div className="flex items-center gap-2 h-10 px-3 rounded-xl border border-[#DCE3EE] bg-white focus-within:border-[#4B6CB7] focus-within:ring-4 focus-within:ring-[#4B6CB7]/10 transition mb-2.5">
             <svg className="w-4 h-4 text-[#9AA9C3] shrink-0" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             <input autoComplete="off" value={search} onChange={e => setSearch(e.target.value)} placeholder="이름/직책 검색"
@@ -59912,7 +59943,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null }) {
                       {photo ? <img src={photo} className="w-full h-full object-cover" /> : (r.name || "?").slice(0, 1)}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className={`text-[14px] font-extrabold truncate ${on ? "text-white" : "text-[#0F1A30]"}`}>{r.name || r.email}</div>
+                      <div className={`text-[14px] font-extrabold truncate ${on ? "text-white" : "text-[#0F1A30]"}`}>{r.name || r.email}{resumes[r.uid]?.hrSeen === false && canManage && <span className="ml-1.5 align-middle text-[10px] font-black px-1.5 py-0.5 rounded bg-[#D92D20] text-white">NEW</span>}</div>
                       <div className={`text-[11.5px] truncate ${on ? "text-white/60" : "text-[#7A879C]"}`}>{r.position || "직책 미설정"}</div>
                     </div>
                     {r.pendingApprovals > 0 && <span className={`shrink-0 min-w-[20px] h-5 px-1.5 rounded-full text-[10.5px] font-extrabold flex items-center justify-center ${on ? "bg-white text-[#0F1A30]" : "bg-[#0F1A30] text-white"}`} title="결재 대기">{r.pendingApprovals}</span>}
@@ -59931,8 +59962,8 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null }) {
             <div className="w-14 h-14 rounded-2xl bg-[#EEF3FB] text-[#1B2B4B] flex items-center justify-center mb-3">
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="9" cy="11" r="2.2" /><path d="M5.5 16c.5-1.6 1.9-2.5 3.5-2.5s3 .9 3.5 2.5M15 10h3M15 13h3" /></svg>
             </div>
-            <div className="text-[15px] font-extrabold text-[#0F1A30]">인원을 선택하세요</div>
-            <div className="text-[13px] text-[#7A879C] mt-1">왼쪽에서 고르면 사원증과 이력서가 보입니다</div>
+            <div className="text-[15px] font-extrabold text-[#0F1A30]">{selfOnly ? "내 인사 정보를 불러오는 중입니다" : "인원을 선택하세요"}</div>
+            <div className="text-[13px] text-[#7A879C] mt-1">{selfOnly ? "승인된 직원 계정이면 잠시 후 내 이력서가 보입니다" : "왼쪽에서 고르면 사원증과 이력서가 보입니다"}</div>
           </div>
         ) : (
           <>
@@ -59985,7 +60016,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null }) {
             <div className={`flex-1 flex flex-col min-w-0 ${hrCard}`}>
             <div className="px-5 py-3 border-b border-[#EEF1F6] flex items-center justify-between gap-3">
               <div className="inline-flex items-center gap-1 p-1 rounded-[14px] bg-[#EEF2F8] border border-[#E3E8F0]">
-                {["이력서", "근태/근속", ...(canManage ? ["인사발령"] : []), "인사발령 이력"].map(t => (
+                {(selfOnly ? ["이력서", "근태/근속"] : ["이력서", "근태/근속", ...(canManage ? ["인사발령"] : []), "인사발령 이력"]).map(t => (
                   <button key={t} onClick={() => { setActiveTab(t); cancelEdit(); }}
                     className={`px-4 h-9 rounded-[10px] text-[13.5px] transition whitespace-nowrap ${activeTab === t ? "bg-white text-[#0F1A30] font-extrabold shadow-[0_1px_2px_rgba(16,24,40,0.08),0_4px_10px_rgba(16,24,40,0.08)]" : "text-[#5B6B85] font-bold hover:text-[#0F1A30]"}`}>{t}</button>
                 ))}
@@ -60149,57 +60180,86 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null }) {
                     <button onClick={() => exportPdf(attendanceRef.current, `근태근속_${selected.name || selected.email}.pdf`)} disabled={exportingPdf}
                       className="h-10 px-4 rounded-xl border border-[#E3E8F0] text-[#3A4A66] text-[13.5px] font-extrabold hover:bg-[#F5F8FD] transition disabled:opacity-50">{exportingPdf ? "저장 중..." : "PDF로 저장"}</button>
                   </div>
-                  <div ref={attendanceRef} className="w-full bg-white rounded-[22px] border border-[#E3E8F0] px-10 py-9">
-                    <div className="flex items-end justify-between pb-5 mb-7 border-b-2 border-[#0F1A30]">
+                  {/* ⭐ 2026-11-01 근태/근속 — 디지털 대시보드: 큰 숫자 · 이달 날짜별 근태 달력 · 지각 내역 · 휴가 게이지 */}
+                  <div ref={attendanceRef} className="w-full rounded-[24px] overflow-hidden text-white" style={{ background: "linear-gradient(rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(150deg,#060C1A 0%,#0F1A30 45%,#1B2B4B 100%)" }}>
+                    <div className="px-6 md:px-9 pt-7 pb-5 flex items-end justify-between gap-4 flex-wrap border-b border-white/10">
                       <div>
-                        <div className="text-[12px] font-extrabold tracking-[0.3em] text-[#4B6CB7]">ATTENDANCE · TENURE</div>
-                        <div className="text-[30px] font-black text-[#0F1A30] tracking-[0.12em] leading-tight">근태 / 근속 현황</div>
+                        <div className="text-[12px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>ATTENDANCE · TENURE · {monthStr.replace("-", ".")}</div>
+                        <div className="text-[28px] font-black tracking-[0.06em] leading-tight">근태 / 근속 현황</div>
                       </div>
                       <div className="text-right">
-                        <div className="text-[17px] font-black text-[#0F1A30]">{selected.name}</div>
-                        <div className="text-[13px] text-[#7A879C]">{selected.team} · {selected.position || "-"}</div>
+                        <div className="text-[18px] font-black">{selected.name}</div>
+                        <div className="text-[13px] text-white/55">{selected.team} · {selected.position || "-"} · 근무 시작 {selected.startHm}</div>
                       </div>
                     </div>
-
-                    {/* 큰 숫자 칸 */}
-                    <div className="grid grid-cols-4 gap-3 mb-6">
-                      {[
-                        { k: "입사일", v: selected.hireDate || "미등록" },
-                        { k: "근속기간", v: selected.tenureLabel || "-" },
-                        { k: "이달 출근", v: `${selected.workDays || 0}일` },
-                        { k: "결재 대기", v: `${selected.pendingApprovals || 0}건` },
-                      ].map(({ k, v }, i) => (
-                        <div key={k} className={`px-5 py-4 rounded-2xl ${i === 1 ? "bg-[#0F1A30] text-white" : "bg-[#F5F8FD] border border-[#EDF1F7]"}`}>
-                          <div className={`text-[13px] font-bold ${i === 1 ? "text-white/60" : "text-[#7A879C]"}`}>{k}</div>
-                          <div className={`text-[22px] font-black mt-1 tabular-nums ${i === 1 ? "text-white" : "text-[#0F1A30]"}`}>{v}</div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* 휴가 막대 */}
-                    <div className="rounded-2xl border border-[#E3E8F0] px-6 py-5 mb-6">
-                      <div className="flex items-baseline justify-between mb-3">
-                        <div className="text-[17px] font-black text-[#0F1A30]">{selected.leave ? selected.leave.leaveLabel : "휴가"}</div>
-                        {selected.leave && <div className="text-[14px] font-bold text-[#5B6B85]">발생 <b className="text-[#0F1A30]">{selected.leave.entitlement}일</b> · 사용 <b className="text-[#0F1A30]">{selected.leave.used}일</b> · 잔여 <b className="text-[#0F1A30]">{selected.leave.remaining}일</b></div>}
+                    <div className="px-6 md:px-9 py-6 space-y-5">
+                      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2.5">
+                        {[
+                          ["입사일", selected.hireDate || "미등록", ""],
+                          ["근속기간", selected.tenureLabel || "-", "gold"],
+                          ["이달 출근", `${selected.workDays || 0}일`, ""],
+                          ["이달 지각", `${selected.lateDays || 0}회`, selected.lateDays ? "warn" : ""],
+                          ["연차·반차", `${selected.leaveDays || 0}일`, ""],
+                          ["병가 · 외근", `${selected.sickDays || 0} · ${selected.fieldM || 0}일`, ""],
+                        ].map(([k, v, tone]) => (
+                          <div key={k} className="rounded-2xl px-4 py-3.5 min-w-0" style={{ background: tone === "gold" ? "linear-gradient(135deg,rgba(215,188,130,0.25),rgba(215,188,130,0.08))" : tone === "warn" ? "rgba(247,144,9,0.14)" : "rgba(255,255,255,0.06)", boxShadow: `inset 0 0 0 1px ${tone === "gold" ? "rgba(215,188,130,0.5)" : tone === "warn" ? "rgba(247,144,9,0.5)" : "rgba(255,255,255,0.1)"}` }}>
+                            <div className="text-[12.5px] font-bold text-white/55">{k}</div>
+                            <div className={`text-[22px] font-black tabular-nums truncate ${tone === "warn" ? "text-[#FEC84B]" : tone === "gold" ? "text-[#F1DFB4]" : ""}`} style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{v}</div>
+                          </div>
+                        ))}
                       </div>
-                      {selected.leave ? (
-                        <div className="h-3.5 rounded-full bg-[#EEF2F8] overflow-hidden">
-                          <div className="h-full rounded-full bg-[#0F1A30]" style={{ width: `${Math.min(100, Math.round((Number(selected.leave.used) || 0) / Math.max(1, Number(selected.leave.entitlement) || 0) * 100))}%` }} />
-                        </div>
-                      ) : <div className="text-[14px] text-[#9AA9C3]">입사일이 등록되지 않아 계산할 수 없습니다</div>}
-                    </div>
 
-                    <div className="rounded-2xl border border-[#E3E8F0] overflow-hidden">
-                      {[
-                        { l: "이달 연차/반차", v: `${selected.leaveDays}일` },
-                        { l: "병가 / 외근", v: selected.leave ? `${selected.leave.sickDays}일 / ${selected.leave.fieldDays}일` : "-" },
-                        { l: selected.leave ? selected.leave.leaveLabel + " 발생/사용/잔여" : "휴가", v: selected.leave ? `${selected.leave.entitlement}일 / ${selected.leave.used}일 / ${selected.leave.remaining}일` : "입사일 미등록" },
-                      ].map((r, i) => (
-                        <div key={r.l} className={`flex items-center px-6 py-4 ${i > 0 ? "border-t border-[#EEF1F6]" : ""}`}>
-                          <span className="w-[260px] text-[15px] font-bold text-[#5B6B85]"><EditableText id={`hr.attendancePreview.label.${r.l}`} defaultText={r.l} /></span>
-                          <span className="text-[16px] font-extrabold text-[#0F1A30]">{r.v}</span>
+                      {/* 이달 근태 달력(한 칸 = 하루) */}
+                      <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.08)" }}>
+                        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                          <div className="text-[15px] font-black">이달 근태</div>
+                          <div className="flex flex-wrap gap-2.5 text-[12px] font-bold text-white/65">
+                            {[["출근", "#4B6CB7"], ["지각", "#F79009"], ["연차·반차", "#32D583"], ["병가", "#F04438"], ["외근·출장", "#8FB0F0"], ["휴일", "rgba(255,255,255,0.12)"]].map(([l, c]) => <span key={l} className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded" style={{ background: c }} />{l}</span>)}
+                          </div>
                         </div>
-                      ))}
+                        <div className="grid gap-1.5" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(42px,1fr))" }}>
+                          {(selected.days || []).map((x) => {
+                            const c = x.late ? "#F79009" : x.status === "출근" ? "#4B6CB7" : /연차|반차/.test(x.status) ? "#32D583" : x.status === "병가" ? "#F04438" : /외근|출장/.test(x.status) ? "#8FB0F0" : x.status === "휴일" ? "rgba(255,255,255,0.10)" : x.status ? "#D7BC82" : "transparent";
+                            return (
+                              <div key={x.d} title={[x.ds, x.status, x.inHm && `출근 ${x.inHm}`, x.outHm && `퇴근 ${x.outHm}`, x.late && "지각"].filter(Boolean).join(" · ")}
+                                className="h-[52px] rounded-lg flex flex-col items-center justify-center" style={{ background: x.future ? "transparent" : c, boxShadow: x.future || !x.status ? "inset 0 0 0 1px rgba(255,255,255,0.12)" : x.late ? "0 0 10px rgba(247,144,9,0.55)" : "none", opacity: x.future ? 0.5 : 1 }}>
+                                <span className="text-[13px] font-black tabular-nums" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{x.d}</span>
+                                <span className="text-[10px] font-bold text-white/80 tabular-nums">{x.late ? x.inHm : x.status === "휴일" ? "" : (x.status || "").slice(0, 2)}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.08)" }}>
+                          <div className="flex items-baseline justify-between mb-2"><div className="text-[15px] font-black">지각 내역</div><div className="text-[12.5px] text-white/50">기준 {selected.startHm} 이후 출근</div></div>
+                          {!(selected.lates || []).length ? <div className="py-6 text-center text-[14px] font-bold text-white/40">이달 지각이 없습니다</div> : (
+                            <div className="divide-y divide-white/10">
+                              {selected.lates.map((l) => (
+                                <div key={l.ds} className="py-2.5 flex items-center gap-3">
+                                  <span className="text-[15px] font-black tabular-nums" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{l.ds.slice(5).replace("-", ".")}</span>
+                                  <span className="text-[14px] font-black text-[#FEC84B] tabular-nums">{l.inHm} 출근</span>
+                                  <span className="text-[13px] font-bold text-white/60">+{l.by}분</span>
+                                  {l.reason && <span className="text-[13px] text-white/55 truncate">· {l.reason}</span>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.08)" }}>
+                          <div className="flex items-baseline justify-between mb-3"><div className="text-[15px] font-black">{selected.leave ? selected.leave.leaveLabel : "휴가"}</div>{selected.leave && <div className="text-[13px] text-white/60">발생 <b className="text-white">{selected.leave.entitlement}</b> · 사용 <b className="text-white">{selected.leave.used}</b> · 잔여 <b className="text-[#6CE9A6]">{selected.leave.remaining}</b>일</div>}</div>
+                          {selected.leave ? (
+                            <>
+                              <div className="h-4 rounded-full bg-white/10 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.round((Number(selected.leave.used) || 0) / Math.max(1, Number(selected.leave.entitlement) || 0) * 100))}%`, background: "linear-gradient(90deg,#4B6CB7,#8FB0F0)", boxShadow: "0 0 10px rgba(143,176,240,0.6)" }} /></div>
+                              <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                                {[["발생", selected.leave.entitlement], ["사용", selected.leave.used], ["잔여", selected.leave.remaining]].map(([k, v]) => <div key={k} className="rounded-xl bg-white/[0.06] py-2"><div className="text-[12px] text-white/50 font-bold">{k}</div><div className="text-[20px] font-black tabular-nums" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{v}</div></div>)}
+                              </div>
+                              <div className="mt-2 text-[12.5px] text-white/50">병가 {selected.leave.sickDays}일 · 외근 {selected.leave.fieldDays}일(회기 누적) · 결재 대기 {selected.pendingApprovals || 0}건</div>
+                            </>
+                          ) : <div className="text-[14px] text-white/45">입사일이 등록되지 않아 계산할 수 없습니다</div>}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

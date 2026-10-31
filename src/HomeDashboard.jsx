@@ -1,7 +1,7 @@
 import NoticeBoard from "./NoticeBoard";
 import DeptDashboard from "./DeptDashboard";
 import ObituaryWriter from "./ObituaryWriter";
-import { ExecScheduleBoard } from "./ExecSuite";
+import { ExecScheduleBoard, canWriteExecSchedule } from "./ExecSuite";
 import { CompanyRules } from "./HrHub";
 import React, { useMemo, useState, useRef, useEffect } from "react";
 import MasterChecklist from "./MasterChecklist";
@@ -957,7 +957,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       {boardTab === "ap:handover" && <HandoverCenter company={getViewCompany()} me={meHome} isViewer={isViewer} />}
       {String(boardTab).startsWith("ap:") && boardTab !== "ap:contract" && boardTab !== "ap:handover" && <ApprovalCenter company={getViewCompany()} me={meHome} page={boardTab.slice(3)} setPage={(p) => setBoardTab(`ap:${p}`)} openId={apOpenId} onOpened={() => setApOpenId(null)} />}
       {String(boardTab).startsWith("board:") && <BoardPage company={getViewCompany()} me={meHome} board={boardTab.slice(6)} />}
-      {boardTab === "execsched" && <ExecScheduleBoard company={getViewCompany()} me={meHome} canWrite={dept === "exec"} />}
+      {boardTab === "execsched" && <ExecScheduleBoard company={getViewCompany()} me={meHome} canWrite={canWriteExecSchedule({ dept, role, team: meHome.team })} />}
       {boardTab === "rules" && <CompanyRules company={getViewCompany()} canEdit={role === "hrManager" || role === "totalMaster"} />}
 
       {/* ===== 사내 게시판(왼쪽 사이드바에서 고름) — 2026-10-28 디지털 리디자인 ===== */}

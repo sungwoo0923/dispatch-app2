@@ -239,7 +239,7 @@ export default function AiAssistant({ dispatches = [], clients = [], controlledO
 
       {/* 채팅 패널 — 크기 조절(작게·보통·크게 · 왼쪽 위 모서리 드래그) */}
       {open && (
-        <div style={{ position: "fixed", bottom: 24, right: 92, width: win.w, height: win.h, zIndex: 9999 }}
+        <div data-ro-allow style={{ position: "fixed", bottom: 24, right: 92, width: win.w, height: win.h, zIndex: 9999 }}
              className="bg-white rounded-[22px] shadow-[0_24px_60px_rgba(15,26,48,0.35)] border border-[#DCE3EE] flex flex-col overflow-hidden">
           <ResizeGrip onMouseDown={win.startDrag} />
           <WinHeader code="AI · ASSISTANT" title="배차 AI 비서" sub="배차 현황 조회" preset={win.preset} onPreset={win.setPreset} onClose={() => setOpen(false)}
