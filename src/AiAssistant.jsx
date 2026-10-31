@@ -19,7 +19,7 @@ export default function AiAssistant({ dispatches = [], clients = [], controlledO
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
   const thisMonth = today.slice(0, 7);
 
   // 날짜 파싱 (Timestamp, string 모두 지원)

@@ -14,6 +14,7 @@
 //  - 수정: 첫 결재자가 문서를 열어보기 전까지만(열람하면 잠김 → 회수 후 재기안).
 //  - 승인 후 취소: 기안자가 「결재 취소 요청」(사유) → 같은 결재선이 다시 승인하면 "결재 취소"로 바뀐다.
 //    문서는 지우지 않고 모두의 보관함에 "결재 취소" 도장으로 남는다(감사 기록). 연차 사용일수도 자동 복구.
+import { defaultFundId } from "./ledgerAuto";
 import React from "react";
 import { kpConfirm } from "./kpDialog";
 import BankAccountInput, { ReasonTemplates } from "./BankAccountInput";
@@ -23,7 +24,7 @@ import { printA4 } from "./a4Export";
 import { TimeSelect } from "./kpInputs";
 import { useMyProfile, useUserNames, personName } from "./userNames";
 import { db, auth } from "./firebase";
-import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, serverTimestamp } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, serverTimestamp, setDoc } from "firebase/firestore";
 import { ShellIcon } from "./AdminShell";
 import { useCompanyStaff, compressImage, sendInternalMail } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
@@ -844,6 +845,16 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
         patch.cancel = c;
       }
       await updateDoc(doc(db, "approvals", d.id), patch);
+      // 🔗 2026-11-01 비용·지출 결의 최종 승인 → 수입·지출 장부에 자동 기록(경리가 [가져오기] 누를 필요 없음, 같은 문서는 한 줄)
+      if (patch.status === "approved" && d.cat === "expense" && Number(d.amount) > 0) {
+        const dd = d.data || {};
+        defaultFundId(db, company, "expense").then((fundId) => setDoc(doc(db, "acctLedger", `appr_${d.id}`), {
+          fundId, date: dd.date || dd.spendDate || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), type: "지출", account: dd.account || "기타",
+          item: d.title || d.formLabel || "지출결의", amount: Number(d.amount) || 0, method: dd.pay || dd.method || "법인카드", vendor: dd.vendor || "",
+          memo: `전자결재 ${d.docNo || ""} · ${d.drafter?.name || ""}`, evidence: "전자결재", receipt: (d.images || [])[0] || "", sourceId: d.id, auto: "approval",
+          companyName: company, createdAt: serverTimestamp(), createdBy: me?.email || "",
+        }, { merge: true })).catch(() => {});
+      }
       // 👶 육아휴직·출산휴가 최종 승인 → 인사 정보 재직 상태 반영(권한이 없으면 인사관리부에서 직접 바꾸면 된다)
       if (patch.status === "approved" && ["parental", "maternity"].includes(d.form) && d.drafterUid) {
         const kind = d.data?.kind || "";

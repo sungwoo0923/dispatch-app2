@@ -4,12 +4,13 @@
 //    전자결재 "비용·지출 결의" 승인분을 한 번에 장부로 가져오기, 매달 나가는 고정비(임대료·통신비 등) 한 번에 반영
 //  · 비품·자산: 사무가구·IT기기·소모품 등 — 수량·위치·담당자·구입가·상태, 소모품은 최소 수량 아래면 "재고 부족", 입출고 이력
 import React from "react";
-import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where, arrayUnion } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, arrayUnion } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import { compressImage } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
 import { CustomSelect } from "./CustomSelect";
 import { computeFunds, isCard, isCredit, last4, fundBadge } from "./fundsCalc";
+import { upsertAutoEntry } from "./ledgerAuto";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 
 export const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
@@ -123,7 +124,9 @@ const METHODS = ["법인카드", "계좌이체", "현금", "개인카드(정산)
 const blankEntry = (type = "지출") => ({ date: kstDay(), type, account: type === "지출" ? "소모품비" : "운송수입", item: "", amount: "", method: type === "지출" ? "법인카드" : "계좌이체", vendor: "", memo: "", evidence: "", receipt: "" });
 
 export function CashBook({ company, isViewer = false }) {
-  const rows = useCompanyCol("acctLedger", company);
+  const rowsRaw = useCompanyCol("acctLedger", company);
+  // 자동 연동 줄 중 금액이 0이 된 것(지급 취소 등)은 숨긴다
+  const rows = React.useMemo(() => (rowsRaw ? rowsRaw.filter((r) => !(r.auto && !toInt(r.amount))) : rowsRaw), [rowsRaw]);
   const recurring = useCompanyCol("acctRecurring", company);
   const funds = useCompanyCol("acctFunds", company);
   const [customAcc, setCustomAcc] = React.useState(false);
@@ -186,19 +189,33 @@ export function CashBook({ company, isViewer = false }) {
       };
       for (const a of toImport) {
         const d = a.data || {};
-        await addDoc(collection(db, "acctLedger"), { fundId: pickFund(d.pay || d.method || "법인카드"), date: d.date || d.spendDate || new Date(tsMs(a.createdAt) + 9 * 3600e3).toISOString().slice(0, 10), type: "지출", account: d.account || "기타", item: a.title || a.formLabel || "지출결의", amount: Number(a.amount) || 0, method: d.pay || d.method || "법인카드", vendor: d.vendor || "", memo: `전자결재 ${a.docNo || ""} · ${a.drafter?.name || ""}`, evidence: "전자결재", receipt: (a.images || [])[0] || "", sourceId: a.id, companyName: company, createdAt: serverTimestamp(), createdBy: auth.currentUser?.email || "" });
+        await setDoc(doc(db, "acctLedger", `appr_${a.id}`), { fundId: pickFund(d.pay || d.method || "법인카드"), date: d.date || d.spendDate || new Date(tsMs(a.createdAt) + 9 * 3600e3).toISOString().slice(0, 10), type: "지출", account: d.account || "기타", item: a.title || a.formLabel || "지출결의", amount: Number(a.amount) || 0, method: d.pay || d.method || "법인카드", vendor: d.vendor || "", memo: `전자결재 ${a.docNo || ""} · ${a.drafter?.name || ""}`, evidence: "전자결재", receipt: (a.images || [])[0] || "", sourceId: a.id, companyName: company, createdAt: serverTimestamp(), createdBy: auth.currentUser?.email || "" }, { merge: true });
       }
     } finally { setBusy(false); }
   };
+  // 고정비 한 달 치를 장부에 — 같은 고정비·같은 달은 한 줄만(문서 이름 고정: 여러 명이 눌러도 두 번 안 들어감)
+  const writeRecur = async (list, month) => {
+    for (const r of list) {
+      const day = String(Math.min(28, Math.max(1, Number(r.day) || 1))).padStart(2, "0");
+      await setDoc(doc(db, "acctLedger", `recur_${r.id}_${month}`), { date: `${month}-${day}`, type: r.type || "지출", account: r.account || "기타", item: r.name, amount: toInt(r.amount), method: r.method || "자동이체", fundId: r.fundId || "", vendor: r.vendor || "", memo: "고정비 자동 반영", evidence: "", receipt: "", recurId: r.id, companyName: company, createdAt: serverTimestamp(), createdBy: auth.currentUser?.email || "" }, { merge: true });
+    }
+  };
+  // ⭐ 2026-11-01 이번 달 고정비는 납부일이 지나면 장부를 열 때 자동 반영(경리·관리자 화면)
+  const autoRecurRef = React.useRef("");
+  React.useEffect(() => {
+    if (isViewer || !rows || !recurring) return;
+    const today = kstDay(); const month = today.slice(0, 7);
+    if (ym !== month || autoRecurRef.current === month) return;
+    const due = recurTodo.filter((r) => Math.min(28, Math.max(1, Number(r.day) || 1)) <= Number(today.slice(8, 10)));
+    autoRecurRef.current = month;
+    if (due.length) writeRecur(due, month).catch(() => {});
+  }, [rows, recurring, ym, isViewer]); // eslint-disable-line react-hooks/exhaustive-deps
   const applyRecurring = async () => {
     if (!recurTodo.length) return;
     if (!window.confirm(`${ym.replace("-", "년 ")}월 고정비 ${recurTodo.length}건을 장부에 넣을까요?`)) return;
     setBusy(true);
     try {
-      for (const r of recurTodo) {
-        const day = String(Math.min(28, Math.max(1, Number(r.day) || 1))).padStart(2, "0");
-        await addDoc(collection(db, "acctLedger"), { date: `${ym}-${day}`, type: r.type || "지출", account: r.account || "기타", item: r.name, amount: toInt(r.amount), method: r.method || "자동이체", fundId: r.fundId || "", vendor: r.vendor || "", memo: "고정비 자동 반영", evidence: "", receipt: "", recurId: r.id, companyName: company, createdAt: serverTimestamp(), createdBy: auth.currentUser?.email || "" });
-      }
+      await writeRecur(recurTodo, ym);
     } finally { setBusy(false); }
   };
   const csv = () => {
@@ -269,7 +286,7 @@ export function CashBook({ company, isViewer = false }) {
                           <td className="px-3 py-2 font-black text-[#1B2B4B] tabular-nums" style={{ fontFamily: MONO }}>{newDay ? String(r.date).slice(5).replace("-", ".") : ""}</td>
                           <td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded-md text-[11px] font-black ${r.type === "수입" ? "bg-[#EEF3FC] text-[#2D4C82]" : "bg-[#0F1A30] text-white"}`}>{r.type}</span></td>
                           <td className="px-3 py-2 font-bold text-[#3A4A66] truncate max-w-[120px]">{r.account}</td>
-                          <td className="px-3 py-2 min-w-0"><span className="font-black text-[#0F1A30]">{r.item || "-"}</span>{r.vendor && <span className="text-[#7A879C]"> · {r.vendor}</span>}{r.method && <span className="ml-1 text-[11px] text-[#9AA9C3]">{r.method}</span>}{F.byId[r.fundId] && <span className="ml-1.5 px-1.5 py-0.5 rounded-md bg-[#EEF3FC] text-[#2D4C82] text-[11px] font-black whitespace-nowrap">{isCard(F.byId[r.fundId]) ? "▭" : "▣"} {F.byId[r.fundId].name}</span>}</td>
+                          <td className="px-3 py-2 min-w-0">{(r.auto || r.recurId || r.sourceId) && <span title={r.memo || "다른 화면에서 자동 반영"} className="mr-1.5 px-1.5 py-0.5 rounded-md bg-[#F3E7CC] text-[#6B5320] text-[10.5px] font-black">자동</span>}<span className="font-black text-[#0F1A30]">{r.item || "-"}</span>{r.auto === "drvpay" && r.count ? <span className="ml-1 text-[11px] text-[#7A879C]">({r.count}건)</span> : null}{r.vendor && <span className="text-[#7A879C]"> · {r.vendor}</span>}{r.method && <span className="ml-1 text-[11px] text-[#9AA9C3]">{r.method}</span>}{F.byId[r.fundId] && <span className="ml-1.5 px-1.5 py-0.5 rounded-md bg-[#EEF3FC] text-[#2D4C82] text-[11px] font-black whitespace-nowrap">{isCard(F.byId[r.fundId]) ? "▭" : "▣"} {F.byId[r.fundId].name}</span>}</td>
                           <td className="px-3 py-2 text-right font-black tabular-nums text-[#2D4C82]" style={{ fontFamily: MONO }}>{r.type === "수입" ? won(r.amount) : ""}</td>
                           <td className="px-3 py-2 text-right font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO }}>{r.type === "지출" ? won(r.amount) : ""}</td>
                           <td className={`px-3 py-2 text-right font-black tabular-nums ${r.bal < 0 ? "text-[#B42318]" : "text-[#1B2B4B]"}`} style={{ fontFamily: MONO }}>{r.bal < 0 ? "−" : ""}{won(Math.abs(r.bal))}</td>
@@ -484,7 +501,7 @@ function RecurringEditor({ company, rows, ledger = [], funds = [], onClose }) {
 // ═════════════════════════ 비품·자산 관리 ═════════════════════════
 export const ASSET_CATS = ["사무가구", "IT기기", "사무기기", "소모품", "차량·장비", "기타"];
 const ASSET_STATUS = ["사용중", "보관", "수리중", "폐기"];
-const blankAsset = () => ({ name: "", category: "IT기기", qty: "1", unit: "개", minQty: "", location: "", holder: "", purchaseDate: kstDay(), price: "", vendor: "", status: "사용중", code: "", memo: "", photo: "" });
+const blankAsset = () => ({ name: "", category: "IT기기", qty: "1", unit: "개", minQty: "", location: "", holder: "", purchaseDate: kstDay(), price: "", vendor: "", status: "사용중", code: "", memo: "", photo: "", toLedger: true });
 
 export function AssetManager({ company, isViewer = false }) {
   const rows = useCompanyCol("officeAssets", company);
@@ -509,8 +526,13 @@ export function AssetManager({ company, isViewer = false }) {
     setBusy(true);
     try {
       const data = { name: e.name.trim(), category: e.category, qty: toInt(e.qty), unit: e.unit || "개", minQty: toInt(e.minQty), location: e.location.trim(), holder: e.holder.trim(), purchaseDate: e.purchaseDate || "", price: toInt(e.price), vendor: e.vendor.trim(), status: e.status, code: e.code.trim(), memo: e.memo.trim(), photo: e.photo || "", companyName: company };
-      if (e.id) await updateDoc(doc(db, "officeAssets", e.id), { ...data, updatedAt: serverTimestamp() });
-      else await addDoc(collection(db, "officeAssets"), { ...data, history: [{ at: Date.now(), kind: "등록", n: data.qty, by: auth.currentUser?.email || "" }], createdAt: serverTimestamp() });
+      const toLedger = e.toLedger !== false;
+      let id = e.id;
+      if (e.id) await updateDoc(doc(db, "officeAssets", e.id), { ...data, toLedger, updatedAt: serverTimestamp() });
+      else id = (await addDoc(collection(db, "officeAssets"), { ...data, toLedger, history: [{ at: Date.now(), kind: "등록", n: data.qty, by: auth.currentUser?.email || "" }], createdAt: serverTimestamp() })).id;
+      // 🔗 2026-11-01 구입가 → 수입·지출 장부 "비품 구입" 지출(자금 잔액 반영). 끄면 장부에서 빠진다
+      const cost = data.category === "소모품" ? data.price : data.price * Math.max(1, data.qty);
+      await upsertAutoEntry(db, id, { company, date: data.purchaseDate, account: data.category === "소모품" ? "소모품비" : "비품구입", item: `비품 구입 · ${data.name}`, amount: toLedger ? cost : 0, vendor: data.vendor, memo: "비품·자산 등록 — 자동 반영", auto: "asset" }).catch(() => {});
       setEdit(null);
     } catch (err) { alert(`저장 실패: ${err.message}`); } finally { setBusy(false); }
   };
@@ -539,7 +561,7 @@ export function AssetManager({ company, isViewer = false }) {
               const isLow = low.includes(a);
               return (
                 <div key={a.id} className={`rounded-2xl border p-3 flex gap-3 ${isLow ? "border-[#F5C2C2] bg-[#FFF8F8]" : "border-[#E3E8F0] bg-white"}`}>
-                  <button type="button" onClick={() => !isViewer && setEdit({ ...blankAsset(), ...a, qty: String(a.qty ?? ""), minQty: String(a.minQty || ""), price: String(a.price || "") })}
+                  <button type="button" onClick={() => !isViewer && setEdit({ ...blankAsset(), ...a, toLedger: a.toLedger === true, qty: String(a.qty ?? ""), minQty: String(a.minQty || ""), price: String(a.price || "") })}
                     className="w-14 h-14 rounded-xl shrink-0 grid place-items-center text-white text-[11px] font-black bg-cover bg-center" style={a.photo ? { backgroundImage: `url(${a.photo})` } : { background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}>{a.photo ? "" : String(a.category || "").slice(0, 2)}</button>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5"><span className="text-[14px] font-black text-[#0F1A30] truncate">{a.name}</span>{a.code && <span className="text-[10.5px] font-bold text-[#9AA9C3] whitespace-nowrap" style={{ fontFamily: MONO }}>{a.code}</span>}</div>
@@ -579,6 +601,7 @@ export function AssetManager({ company, isViewer = false }) {
             <div><Label>담당·사용자</Label><input value={edit.holder} onChange={(e) => setEdit((p) => ({ ...p, holder: e.target.value }))} className={inp} placeholder="예: 홍길동" /></div>
             <div><Label>구입일</Label><CustomDatePicker value={edit.purchaseDate} onChange={(e) => setEdit((p) => ({ ...p, purchaseDate: e.target.value }))} className={inp} showIcon /></div>
             <div><Label>구입가(원)</Label><input inputMode="numeric" value={edit.price ? won(edit.price) : ""} onChange={(e) => setEdit((p) => ({ ...p, price: e.target.value.replace(/[^\d]/g, "") }))} className={`${inp} text-right`} /></div>
+            <label className="col-span-2 flex items-center gap-2 text-[13px] font-bold text-[#1B2B4B]"><input type="checkbox" checked={edit.toLedger !== false} onChange={(e) => setEdit((p) => ({ ...p, toLedger: e.target.checked }))} />구입가를 수입·지출 장부에 지출로 기록(자금 잔액 반영){edit.category !== "소모품" && toInt(edit.qty) > 1 ? ` — 구입가 × ${toInt(edit.qty)}개` : ""}</label>
           </div>
           <div><Label>상태</Label><div className="flex flex-wrap gap-1.5">{ASSET_STATUS.map((c) => <Chip key={c} on={edit.status === c} onClick={() => setEdit((p) => ({ ...p, status: c }))}>{c}</Chip>)}</div></div>
           <div><Label>구입처 · 메모</Label><input value={edit.vendor} onChange={(e) => setEdit((p) => ({ ...p, vendor: e.target.value }))} className={`${inp} mb-2`} placeholder="구입처" /><input value={edit.memo} onChange={(e) => setEdit((p) => ({ ...p, memo: e.target.value }))} className={inp} placeholder="메모(보증기간·시리얼 등)" /></div>

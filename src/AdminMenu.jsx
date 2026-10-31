@@ -127,7 +127,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const [linkedStatusFilter, setLinkedStatusFilter] = useState("pending");
 
   // 화주사 전송 탭 state
-  const monthNow = new Date().toISOString().slice(0, 7);
+  const monthNow = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
   const [transmitCompanyQuery, setTransmitCompanyQuery] = useState("");
   const [transmitFromMonth, setTransmitFromMonth] = useState(monthNow);
   const [transmitToMonth, setTransmitToMonth] = useState(monthNow);

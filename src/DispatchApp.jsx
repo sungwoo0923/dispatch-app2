@@ -2728,7 +2728,8 @@ import { OrderTimeline, OrderTimelineModal } from "./OrderTimeline";
 import { isTMUser } from "./staffFilter";
 import OrgChart from "./OrgChart";
 import { MailHeaderButton, sendInternalMail } from "./InternalMail";
-import { loadAcctPayments, saveAcctPayments } from "./acctPayments";
+import { loadAcctPayments, saveAcctPayments, loadPlManual, savePlManual } from "./acctPayments";
+import { bumpDriverPayout, addClientCollection, removeClientCollections } from "./ledgerAuto";
 import BannerCenter from "./BannerCenter";
 import PersonnelOrder from "./PersonnelOrder";
 import OrderScanModal, { looksLikeOrder, scanDropDate } from "./OrderScanModal";
@@ -37687,7 +37688,7 @@ if (mode === "driver") {
       const mapped = json.filter((row) => ["상차일", "상차지명", "하차지명", "거래처명"].some((k) => String(row[k] || "").trim())).map((row) => {
         const mappedRow = {
           _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
-          등록일: excelDateToISO(row["상차일"]) || new Date().toISOString().slice(0, 10),
+          등록일: excelDateToISO(row["상차일"]) || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10),
           상차일: excelDateToISO(row["상차일"]),
           상차시간: bulkTime(row["상차시간"]),
           하차일: excelDateToISO(row["하차일"]),
@@ -44762,7 +44763,7 @@ function NewOrderPopup({
         운행유형: newOrder.운행유형 || "편도",
         회전수: newOrder.운행유형 === "왕복" ? Math.max(1, Number(newOrder.회전수) || 1) : 1,
         메모: withRotationMemo(newOrder.메모, newOrder.운행유형 === "왕복" ? Number(newOrder.회전수) || 1 : 1),
-        등록일: new Date().toISOString().slice(0, 10),
+        등록일: new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10),
         배차상태: "배차중",
         차량번호: "",
         이름: "",
@@ -45203,12 +45204,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], pla
   React.useEffect(() => {
     async function load() {
       try {
-        const snap = await getDoc(doc(db, "plManual", String(year)));
-        if (snap.exists()) {
-          setManualData(snap.data().rows || {});
-        } else {
-          setManualData({});
-        }
+        setManualData(await loadPlManual(db, year)); // ⭐ 회사별 문서
       } catch (e) {
         console.error("손익보고서 로드 오류:", e);
       }
@@ -45221,9 +45217,10 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], pla
     if (isViewer) { alert("조회전용 권한으로는 저장할 수 없습니다."); return; }
     setSaving(true);
     try {
-      await setDoc(doc(db, "plManual", String(year)), { rows: newData });
+      await savePlManual(db, year, "", newData);
     } catch (e) {
       console.error("손익보고서 저장 오류:", e);
+      alert(`저장 실패: ${e?.message || e}`);
     } finally {
       setSaving(false);
     }
@@ -45876,11 +45873,13 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
     const map = {};
     yearOrders.forEach(r => {
       const d = r.이름 || "미지정";
-      if (!map[d]) map[d] = { total: 0, carNo: r.차량번호 || "" };
+      if (!map[d]) map[d] = { total: 0, carNo: r.차량번호 || "", settled: 0 };
       map[d].total += toInt(r.기사운임);
+      // ⭐ 2026-11-01 정산관리 › 지급관리에서 [지급완료]한 오더도 지급액으로 본다(두 화면 숫자가 달랐음)
+      if ((r.지급상태 || "") === "지급완료") map[d].settled += toInt(r.기사운임);
     });
     return Object.entries(map).map(([d, v]) => {
-      const paid = apPayments[d] || 0;
+      const paid = Math.max(apPayments[d] || 0, v.settled);
       return { driver: d, carNo: v.carNo, total: v.total, paid, outstanding: Math.max(0, v.total - paid) };
     }).sort((a, b) => b.outstanding - a.outstanding);
   }, [yearOrders, apPayments]);
@@ -45962,9 +45961,11 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
       const newAr = type === "ar" ? { ...arPayments, [name]: (arPayments[name] || 0) + amt } : arPayments;
       const newAp = type === "ap" ? { ...apPayments, [name]: (apPayments[name] || 0) + amt } : apPayments;
       await saveAcctPayments(db, year, "", newAr, newAp);
+      // 🔗 2026-11-01 거래처 수금 → 수입·지출 장부(수입)·자금 잔액 자동 반영. 기사 지급은 정산관리 › 지급관리 [지급완료]가 장부에 반영한다(이중 기록 방지)
+      if (type === "ar") addClientCollection(db, { name, amount: amt, year }).catch(() => {});
       setArPayments(newAr);
       setApPayments(newAp);
-    } catch (e) { console.error(e); } finally { setSaving(false); }
+    } catch (e) { console.error(e); alert(`저장 실패: ${e?.message || e}`); } finally { setSaving(false); }
   };
 
   const resetPayment = async (type, name) => {
@@ -45975,9 +45976,10 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
       const newAr = type === "ar" ? { ...arPayments, [name]: 0 } : arPayments;
       const newAp = type === "ap" ? { ...apPayments, [name]: 0 } : apPayments;
       await saveAcctPayments(db, year, "", newAr, newAp);
+      if (type === "ar") removeClientCollections(db, { name, year }).catch(() => {});
       setArPayments(newAr);
       setApPayments(newAp);
-    } catch (e) { console.error(e); } finally { setSaving(false); }
+    } catch (e) { console.error(e); alert(`초기화 실패: ${e?.message || e}`); } finally { setSaving(false); }
   };
 
   const exportVatExcel = async () => {
@@ -47395,7 +47397,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   const [activeTab, setActiveTab] = React.useState(() => { try { return localStorage.getItem("rvPage") || "dashboard"; } catch { return "dashboard"; } });
   React.useEffect(() => { try { localStorage.setItem("rvPage", activeTab); } catch { /* 무시 */ } }, [activeTab]);
   const [targetMonth, setTargetMonth] = React.useState(
-    new Date().toISOString().slice(0, 7)
+    new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7)
   );
   const [selectedYear, setSelectedYear] = React.useState(
     new Date().getFullYear()
@@ -47607,7 +47609,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   const monthProfit = monthSummary.fee;
   const monthProfitRate = monthSummary.sale === 0 ? 0 : (monthProfit / monthSummary.sale) * 100;
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
   const daysInMonth = new Date(yearKey, monthNum, 0).getDate();
   const elapsedDays =
     new Set(monthRows.map((r) => r.상차일).filter((d) => d && d <= today)).size || 1;
@@ -47733,7 +47735,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   };
 
   const todayDate = new Date();
-  const todayKey2 = todayDate.toISOString().slice(0, 10);
+  const todayKey2 = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); // 한국 날짜
   const prevMonthSameDay = (() => {
     const y = todayDate.getFullYear();
     const mo = todayDate.getMonth();
@@ -48703,7 +48705,7 @@ function ClientCompareDashboard({ dispatchData = [], places = [], fixedRows = []
 
   // 오늘 기준 날짜 계산
   const today = new Date();
-  const todayStr = today.toISOString().slice(0, 10);
+  const todayStr = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); // 한국 날짜
   const todayDay = String(today.getDate()).padStart(2, "0");
 
   const curYear  = today.getFullYear();
@@ -50614,7 +50616,7 @@ function ClientSettlement({ dispatchData, setDispatchData, userCompany = "", cli
   // ★ 오더 상세 팝업
   const [orderPopup, setOrderPopup] = useState(null);
   const [orderPopupEdit, setOrderPopupEdit] = useState({});
-  const todayStr8 = () => new Date().toISOString().slice(0, 10);
+  const todayStr8 = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
   const THIS_YEAR = new Date().getFullYear();
   const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
   const won = (n) => toInt(n).toLocaleString();
@@ -50882,7 +50884,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
 
   // ★ 기간 퀵셀렉트
   const setThisMonth = () => {
-    const ym = new Date().toISOString().slice(0, 7);
+    const ym = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
     setStart(`${ym}-01`);
     const lastDay = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
     setEnd(`${ym}-${lastDay}`);
@@ -54980,8 +54982,8 @@ const handleBatchSettle = async (targetStatus) => {
 // ===================== DispatchApp.jsx (PART 9/9) — START =====================
 function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], drivers = [], companyName = "", canEditPayDay = false }) {
 
-  const todayStr9 = () => new Date().toISOString().slice(0, 10);
-  const thisMonthStr = () => new Date().toISOString().slice(0, 7);
+  const todayStr9 = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const thisMonthStr = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
   const lastMonthStr = () => {
     const d = new Date(); d.setMonth(d.getMonth() - 1);
     return d.toISOString().slice(0, 7);
@@ -55081,9 +55083,23 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   }, [filtered]);
 
   // ─── 지급 처리 ───
+  // 🔗 2026-11-01 지급완료/취소 → 수입·지출 장부(지급일별 "기사운임 지급")에 자동 반영
+  const syncPayLedger = (row, nextStatus, nextDate) => {
+    if (!row) return;
+    const amt = toInt(row.기사운임);
+    if (!amt) return;
+    const wasPaid = (row.지급상태 || "지급중") === "지급완료";
+    const co = companyName || row.companyName || "";
+    if (wasPaid) bumpDriverPayout(db, { date: row.지급일 || todayStr9(), amount: -amt, count: -1, company: co }).catch(() => {});
+    if (nextStatus === "지급완료") bumpDriverPayout(db, { date: nextDate, amount: amt, count: 1, company: co }).catch(() => {});
+  };
   const pay = async (id, status) => {
     if (!patchDispatch) return alert("patchDispatch 미연결");
-    await patchDispatch(id, { 지급상태: status, 지급일: status === "지급완료" ? (selectedPayDate || todayStr9()) : "", __system: true });
+    const row = (dispatchData || []).find((r) => r._id === id);
+    const date = status === "지급완료" ? (selectedPayDate || todayStr9()) : "";
+    if (row && (row.지급상태 || "지급중") === status && (row.지급일 || "") === date) return; // 바뀐 게 없으면 장부도 그대로
+    await patchDispatch(id, { 지급상태: status, 지급일: date, __system: true });
+    syncPayLedger(row, status, date);
   };
 
   const bulkPay = async (ids, status) => {
@@ -55278,9 +55294,9 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
         const patch = { 지급상태: "지급완료", 지급일: m.지급일 || selectedPayDate, __system: true };
         if (m.excelInsurance > 0) patch.산재보험료 = m.excelInsurance;
         if (m.isSumMatch) {
-          for (const r of m.sumRecords) { await patchDispatch(r._id, patch); dispatchCount++; }
+          for (const r of m.sumRecords) { await patchDispatch(r._id, patch); syncPayLedger(r, "지급완료", patch.지급일); dispatchCount++; }
         } else {
-          await patchDispatch(m.dispatch._id, patch); dispatchCount++;
+          await patchDispatch(m.dispatch._id, patch); syncPayLedger(m.dispatch, "지급완료", patch.지급일); dispatchCount++;
         }
         totalAmt += m.excelAmt || 0;
       }
@@ -57632,7 +57648,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     if (key !== "등급" && (row[key] || "") === val) return;
     setPlaceRows(prev => prev.map(p => p.id === row.id ? { ...p, [key]: val } : p));
     const updateData = { ...row, _id: row.id, [key]: val };
-    if (key === "등급" && val !== "일반") updateData.등급변경일 = new Date().toISOString().slice(0, 10);
+    if (key === "등급" && val !== "일반") updateData.등급변경일 = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
     await upsertPlace?.(updateData);
   };
 

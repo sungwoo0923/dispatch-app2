@@ -493,7 +493,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
   };
 
   const emptyFastRow = () => ({
-    날짜: new Date().toISOString().slice(0, 10),
+    날짜: new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10),
     거래처명: "", 톤수: "", 수량: 1,
     기사단가: 5091, 수수료단가: 909, 수수료기준: "수량",
     차량번호: "", 이름: "", 핸드폰번호: "",
@@ -601,7 +601,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
 
   const addRow = async () => {
     if (isViewer) { _viewerAlert(); return; }
-    const newRow = { id: crypto.randomUUID(), 날짜: new Date().toISOString().slice(0, 10), 정산완료: false, 거래처명: "", 톤수: "", 수량: 1, 차량번호: "", 이름: "", 핸드폰번호: "", 기사단가: 5091, 수수료단가: 909, 수수료기준: "수량", 선결제: 360, 기사운임: 5091, 수수료: 909, 실수수료: 549, 청구운임: 6000, 지급방식: "착불", companyName: getViewCompany() };
+    const newRow = { id: crypto.randomUUID(), 날짜: new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), 정산완료: false, 거래처명: "", 톤수: "", 수량: 1, 차량번호: "", 이름: "", 핸드폰번호: "", 기사단가: 5091, 수수료단가: 909, 수수료기준: "수량", 선결제: 360, 기사운임: 5091, 수수료: 909, 실수수료: 549, 청구운임: 6000, 지급방식: "착불", companyName: getViewCompany() };
     await setDoc(doc(coll, newRow.id), newRow);
   };
 
@@ -643,7 +643,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
 
   const copyEditToFast = () => {
     if (!editPopupRow) return;
-    setFastRows([calcRow({ ...emptyFastRow(), ...editPopupRow, 날짜: new Date().toISOString().slice(0, 10), 정산완료: false, 선결제: 0 })]);
+    setFastRows([calcRow({ ...emptyFastRow(), ...editPopupRow, 날짜: new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), 정산완료: false, 선결제: 0 })]);
     setEditPopupOpen(false);
     setFastOpen(true);
   };

@@ -144,7 +144,7 @@ export async function generateMonthlyReportPPT({
       x: 0.9, y: 3.75, w: 11.5, h: 0.5,
       fontFace: FONT, fontSize: 16, color: t.secondary, margin: 0,
     });
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
     slide.addText(
       author ? `${today}  ·  ${author}` : today,
       {

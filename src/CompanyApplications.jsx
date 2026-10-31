@@ -124,7 +124,7 @@ export default function CompanyApplications() {
     setPlanSaving(true);
     try {
       const hist = [...(plans[company]?.history || []), { at: new Date().toISOString(), from: prev || null, to: pid, by: auth.currentUser?.email || "" }].slice(-30);
-      await setDoc(doc(db, "companyPlans", company), { planId: pid, since: new Date().toISOString().slice(0, 10), updatedAt: serverTimestamp(), history: hist }, { merge: true });
+      await setDoc(doc(db, "companyPlans", company), { planId: pid, since: new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), updatedAt: serverTimestamp(), history: hist }, { merge: true });
       setPlanDraft("");
     } catch (e) { alert("요금제 변경 실패: " + (e?.message || e)); } finally { setPlanSaving(false); }
   };
@@ -214,7 +214,7 @@ export default function CompanyApplications() {
     if (!managingApp?.userId) return;
     setTSaving(true);
     try {
-      const history = [...(tUser?.personnelHistory || []), { date: new Date().toISOString().slice(0, 10), type: "권한변경(최고관리자)", detail: `${tUser?.role || "-"} → ${tRole}${tMaster ? " · 마스터" : ""}` }];
+      const history = [...(tUser?.personnelHistory || []), { date: new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), type: "권한변경(최고관리자)", detail: `${tUser?.role || "-"} → ${tRole}${tMaster ? " · 마스터" : ""}` }];
       await updateDoc(doc(db, "users", managingApp.userId), { role: tRole, isMaster: tMaster, personnelHistory: history });
       setTUser((p) => ({ ...(p || {}), role: tRole, isMaster: tMaster, personnelHistory: history }));
       alert("계정 권한을 저장했습니다. 그 사람이 다시 들어오면 바로 적용됩니다.");
@@ -390,7 +390,7 @@ export default function CompanyApplications() {
       if (app.type !== "기존" && app.companyName) {
         const pid = approvePlan || app.requestedPlan || "standard";
         try {
-          await setDoc(doc(db, "companyPlans", app.companyName.trim()), { planId: pid, since: new Date().toISOString().slice(0, 10), updatedAt: serverTimestamp() }, { merge: true });
+          await setDoc(doc(db, "companyPlans", app.companyName.trim()), { planId: pid, since: new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), updatedAt: serverTimestamp() }, { merge: true });
           await updateDoc(doc(db, "transportApplications", app.id), { approvedPlan: pid });
         } catch (_) {}
       }
