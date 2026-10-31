@@ -27,7 +27,7 @@ import CustomDatePicker, { specialDemandInfo, KOREAN_HOLIDAYS, shortHolidayLabel
 import { ensureWeatherLoaded, getWeatherSpecialInfo } from "./weatherUtil";
 import AdminMenu, { subscribeUsersLive } from "./AdminMenu";
 import FleetExtraFields from "./FleetDriverExtra";
-import { useFixedRouteAutoDispatch } from "./FixedRoutes";
+import { useFixedRouteAutoDispatch, FixedRouteEditNotice } from "./FixedRoutes";
 import { calcFare } from "./fareUtil";
 import FixedClients from "./FixedClients";
 import FleetManagement from "./FleetManagement";
@@ -30812,6 +30812,7 @@ value={copyTarget?.화물수량 || ""}
             </div>
 
             <div className="p-6 space-y-4 overflow-y-auto text-[14px]">
+            <FixedRouteEditNotice order={editTarget} />
             {/* ⭐ 다목적지 단가표 조회 팝업 (3파트와 동일) */}
             {rateSheetLookupOpen4 && (
               <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999998]">
@@ -39623,6 +39624,7 @@ return (
             </div>
 
             <div className="p-6 space-y-4 overflow-y-auto text-[14px]">
+            <FixedRouteEditNotice order={editTarget} />
             {/* ================= 상태 버튼 그룹 ================= */}
               <div className="flex items-center gap-2 mb-4 flex-wrap">
               <button type="button"

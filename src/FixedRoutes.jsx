@@ -201,6 +201,17 @@ export async function ensureFixedRouteOrders(routes, days = 7) {
   }
   return made;
 }
+// 🛣 배차현황에서 고정노선 오더를 고칠 때 안내 — 이 날짜 오더만 바뀌고, 앞으로 계속은 고정노선에서
+export function FixedRouteEditNotice({ order, className = "" }) {
+  if (!order?.고정노선Id) return null;
+  return (
+    <div className={`rounded-xl border border-[#C9D6EE] bg-[#EEF3FC] px-3.5 py-2.5 text-[13px] text-[#1B2B4B] leading-relaxed ${className}`}>
+      <b className="font-black">🛣 고정노선 오더입니다{order.고정노선명 ? ` · ${order.고정노선명}` : ""}</b>
+      <div className="text-[12.5px] text-[#3A4A66]">여기서 고치면 <b>이 날짜({order.상차일 || "-"}) 오더만</b> 바뀝니다. 앞으로 계속 바꾸려면 <b>지입차관리 › 고정노선</b>에서 노선을 수정하세요.</div>
+    </div>
+  );
+}
+
 // 노선이 바뀌었을 때 — 오늘 이후 아직 운행 전이고, 배차현황에서 따로 고치지 않은(예전 노선으로 만든 값 그대로인) 오더만 새 노선 값으로
 const ROUTE_KEYS = ["상차지명", "상차지주소", "하차지명", "하차지주소", "상차시간", "하차시간", "청구운임", "기사운임", "차량번호", "차량톤수", "차량종류", "화물내용", "거래처명"];
 const ROUTE_WRITE = [...ROUTE_KEYS, "상차지담당자번호", "하차지담당자번호", "경유지_상차", "경유상차목록", "경유지_하차", "경유하차목록", "톤수", "화물타입", "수수료", "구간운임", "이름", "전화번호", "메모", "고정노선명"];
