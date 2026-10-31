@@ -1332,7 +1332,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
 
                         {/* 오늘 배차 노선 전체 — 첫 건은 카드 상단(탭 없이도 보임)에 이미 나오므로,
                             오더가 2건 이상일 때만 PC 노선표처럼 순번 목록으로 전부 보여준다.
-                            ⭐ 사용자 요청 — 줄바꿈 블록 대신 가로형식 표, 중앙정렬, 탭하면
+                            ★ 사용자 요청 — 줄바꿈 블록 대신 가로형식 표, 중앙정렬, 탭하면
                             오더상세내역 팝업. */}
                         {(() => {
                           if (todays.length < 2) return null;

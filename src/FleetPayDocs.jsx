@@ -95,7 +95,7 @@ function DeductionEditor({ title, sub, value = [], auto = [], gross = 0, onSave,
               <div className={`${inp} w-full flex items-center bg-[#F5F8FD]`}>{d.kind || kindOfLabel(d.label)}</div>
               <div className={`${inp} w-full flex items-center gap-1.5 bg-[#F5F8FD] min-w-0`}><span className="shrink-0 h-6 px-1.5 rounded-md bg-[#0F1A30] text-white text-[11px] font-black inline-flex items-center">{d.src}</span><span className="truncate">{d.memo || d.label}</span></div>
               <div className={`${inp} w-full flex items-center justify-end bg-[#F5F8FD] tabular-nums`} style={{ fontFamily: MONO }}>{won(d.amount)}</div>
-              <span className="w-10 h-10 flex items-center justify-center text-[#9AA9C3]" title={d.src === "과태료" ? "과태료·사고 서류에서 수정" : d.src === "공통" ? "[공통 공제]에서 수정" : "기사관리에서 수정"}>🔒</span>
+              <span className="w-10 h-10 flex items-center justify-center text-[#9AA9C3]" title={d.src === "과태료" ? "과태료·사고 서류에서 수정" : d.src === "공통" ? "[공통 공제]에서 수정" : "기사관리에서 수정"}>■</span>
             </div>
           ))}
           {list.map((d, j) => {
@@ -113,7 +113,7 @@ function DeductionEditor({ title, sub, value = [], auto = [], gross = 0, onSave,
             );
           })}
           <button type="button" onClick={() => setList((p) => [...p, { kind: "세금", label: "세금", amount: "" }])} className="w-full h-11 rounded-xl border-2 border-dashed border-[#C9D2E0] text-[14px] font-black text-[#5B6B85] hover:bg-[#F7F9FC]">+ 공제 항목 추가</button>
-          {auto.length > 0 && <div className="text-[12.5px] text-[#7A89A3] pt-1">🔒 자동 공제 — 공통 공제는 [공통 공제], 과태료는 과태료·사고 서류, 기사님 고정 공제는 기사관리에서 고칩니다</div>}
+          {auto.length > 0 && <div className="text-[12.5px] text-[#7A89A3] pt-1">■ 자동 공제 — 공통 공제는 [공통 공제], 과태료는 과태료·사고 서류, 기사님 고정 공제는 기사관리에서 고칩니다</div>}
         </div>
         <div className="px-6 py-4 border-t border-[#E3E8F0] flex items-center gap-2">
           <div className="text-[14px] font-bold text-[#5B6B85]">합계 <b className="text-[18px] text-[#0B1428] tabular-nums" style={{ fontFamily: MONO }}>{won(total)}</b>원</div>
@@ -323,7 +323,7 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
                 <td className={`${TD} text-right tabular-nums font-bold`} style={{ fontFamily: MONO }}>{won(r.gross)}</td>
                 <td className={`${TD} text-right tabular-nums text-[#5B6B85]`} style={{ fontFamily: MONO }}>{r.vat ? won(r.vat) : "-"}</td>
                 <td className={`${TD} text-right`}>
-                  <button type="button" onClick={() => setDedEdit({ key: r.key, title: `${r.d.이름} 기사님 공제`, sub: "자동 공제(🔒)와 이번 달 추가 공제를 함께 봅니다", value: r.extra, auto: r.auto, gross: r.gross })}
+                  <button type="button" onClick={() => setDedEdit({ key: r.key, title: `${r.d.이름} 기사님 공제`, sub: "자동 공제(■)와 이번 달 추가 공제를 함께 봅니다", value: r.extra, auto: r.auto, gross: r.gross })}
                     title={r.deductions.map((d) => `${d.label} ${won(d.amount)}`).join("\n") || "공제 추가"}
                     className="h-9 px-3 rounded-lg border border-[#DCE3EE] bg-white hover:bg-[#F5F8FD] text-[14px] font-black tabular-nums text-[#1B2B4B]" style={{ fontFamily: MONO }}>
                     {r.deductTotal ? `-${won(r.deductTotal)}` : "+ 공제"}{r.deductions.length ? <span className="ml-1.5 text-[11.5px] text-[#7A89A3]">{r.deductions.length}건</span> : null}
@@ -513,7 +513,7 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
           </div>
         )}
       </div>
-      {dedEdit && cur && <DeductionEditor title={`${cur.d.이름} 기사님 공제`} sub="자동 공제(🔒)와 이번 달 추가 공제를 함께 봅니다" value={cur.extra} auto={cur.auto} gross={cur.gross} onSave={(l) => { saveEdits({ ...edits, [cur.key]: l }); setDedEdit(false); }} onClose={() => setDedEdit(false)} />}
+      {dedEdit && cur && <DeductionEditor title={`${cur.d.이름} 기사님 공제`} sub="자동 공제(■)와 이번 달 추가 공제를 함께 봅니다" value={cur.extra} auto={cur.auto} gross={cur.gross} onSave={(l) => { saveEdits({ ...edits, [cur.key]: l }); setDedEdit(false); }} onClose={() => setDedEdit(false)} />}
       {preview && cur && (
         <div className="fixed inset-0 z-[99990] bg-[#0B1428]/55 flex justify-end">
           <div className="w-full max-w-[1000px] h-full bg-[#F3F6FA] flex flex-col shadow-2xl">

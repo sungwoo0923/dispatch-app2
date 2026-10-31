@@ -206,7 +206,7 @@ export function FixedRouteEditNotice({ order, className = "" }) {
   if (!order?.고정노선Id) return null;
   return (
     <div className={`rounded-xl border border-[#C9D6EE] bg-[#EEF3FC] px-3.5 py-2.5 text-[13px] text-[#1B2B4B] leading-relaxed ${className}`}>
-      <b className="font-black">🛣 고정노선 오더입니다{order.고정노선명 ? ` · ${order.고정노선명}` : ""}</b>
+      <b className="font-black">▸ 고정노선 오더입니다{order.고정노선명 ? ` · ${order.고정노선명}` : ""}</b>
       <div className="text-[12.5px] text-[#3A4A66]">여기서 고치면 <b>이 날짜({order.상차일 || "-"}) 오더만</b> 바뀝니다. 앞으로 계속 바꾸려면 <b>지입차관리 › 고정노선</b>에서 노선을 수정하세요.</div>
     </div>
   );

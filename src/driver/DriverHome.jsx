@@ -19,7 +19,7 @@ import {
   increment,
   arrayUnion,
 } from "firebase/firestore";
-import { setDoc, updateDoc } from "../orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
+import { setDoc, updateDoc } from "../orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { registerPlugin } from "@capacitor/core";
 import { useAddrGeo, computeFleetPhase, useFleetPhaseGeo, getCachedGeo, isPickupVisited, sortActiveOrders, isLoaded } from "../fleetGeo";
@@ -714,7 +714,7 @@ function useGpsTracking(uid, driverData) {
   const [pos, setPos] = useState(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const lastPosRef = useRef(null);
-  const lastPosTimeRef = useRef(0);         // ⭐ 실제 GPS 수신 시각(forceInterval이 가짜로 안 찍게)
+  const lastPosTimeRef = useRef(0);         // ★ 실제 GPS 수신 시각(forceInterval이 가짜로 안 찍게)
   const totalDistRef = useRef(0);           // running total — avoids stale closure bug
   const distInitializedRef = useRef(false); // true once synced from Firestore
   const lastGpsStoreRef = useRef(null);     // last point stored to gps_tracks
@@ -993,8 +993,8 @@ export default function DriverHome() {
   const [uid, setUid] = useState(null);
   const [driver, setDriver] = useState(null);
   const [activeTab, setActiveTab] = useState("home");
-  const inbox = useDriverInbox(uid); // 📂 지급명세서·과태료 서류
-  const myReqDocs = useDriverDocs(uid); // 📑 회사에 낼 필수 서류(미제출·반려는 서류함 숫자에 더한다)
+  const inbox = useDriverInbox(uid); // ▤ 지급명세서·과태료 서류
+  const myReqDocs = useDriverDocs(uid); // ▤ 회사에 낼 필수 서류(미제출·반려는 서류함 숫자에 더한다)
   const docNeed = (() => { const p = docProblems(myReqDocs); return p.missing + p.bad; })();
   const [statusLoading, setStatusLoading] = useState(false);
   const [toast, setToast] = useState("");
@@ -2184,7 +2184,7 @@ export default function DriverHome() {
             const cs = careSummary({ vehicle: vehicleDefaults(driver), care: driver.care || {} });
             if (!driver.care?.setupDone) return (
               <button type="button" onClick={() => setVehicleSetup(true)} style={{ width: "100%", textAlign: "left", marginBottom: 12, padding: "12px 14px", borderRadius: 16, border: "1px dashed #8FB0F0", background: "#F5F8FD", cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 20 }}>🚚</span>
+                <span style={{ fontSize: 20 }}>▸</span>
                 <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontSize: 14, fontWeight: 900, color: "#0F1A30", whiteSpace: "nowrap" }}>내 차량 기본 설정하기</span><span style={{ display: "block", fontSize: 12, color: "#5B6B85", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>주행거리·엔진오일을 넣으면 정비 시기를 알려드려요</span></span>
                 <span style={{ color: "#4B6CB7", fontWeight: 900 }}>›</span>
               </button>
@@ -2193,7 +2193,7 @@ export default function DriverHome() {
             return (
               <button type="button" onClick={() => setActiveTab("vehicle")} style={{ width: "100%", textAlign: "left", marginBottom: 12, padding: "12px 14px", borderRadius: 16, border: "1px solid #0F1A30", background: "#0F1A30", color: "#fff", cursor: "pointer" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <span style={{ fontSize: 14, fontWeight: 900, whiteSpace: "nowrap" }}>🚚 차량 점검 알림 {cs.alerts.length}건</span>
+                  <span style={{ fontSize: 14, fontWeight: 900, whiteSpace: "nowrap" }}>▸ 차량 점검 알림 {cs.alerts.length}건</span>
                   <span style={{ fontSize: 12, color: "#8FB0F0", fontWeight: 800, whiteSpace: "nowrap" }}>확인하기 ›</span>
                 </div>
                 <div style={{ fontSize: 12.5, color: "rgba(255,255,255,.7)", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cs.alerts.slice(0, 3).map((a) => `${a.label} ${a.text}`).join(" · ")}</div>

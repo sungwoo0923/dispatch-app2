@@ -396,7 +396,7 @@ function HrDashboard({ company, onGo }) {
           <div className="text-[11px] font-black text-[#4B6CB7] tracking-[0.12em] mt-3 mb-1">연차 사용 촉진 대상</div>
           {!promote.length ? <div className="text-[12px] text-[#9AA9C3] font-bold py-1">대상 없음</div> : promote.slice(0, 4).map(({ u, remain, to }) => <Row key={u.id} l={nm(u)} sub={`회기 종료 ${to}`} v={`잔여 ${remain}일`} tone="bad" />)}
           <div className="text-[11px] font-black text-[#4B6CB7] tracking-[0.12em] mt-3 mb-1">이번 달 입사 기념일</div>
-          {!anniv.length ? <div className="text-[12px] text-[#9AA9C3] font-bold py-1">없음</div> : anniv.slice(0, 4).map(({ u, h, y }) => <Row key={u.id} l={`🎉 ${nm(u)}`} sub={u.team || ""} v={`${h.slice(5).replace("-", ".")} · ${y}주년`} />)}
+          {!anniv.length ? <div className="text-[12px] text-[#9AA9C3] font-bold py-1">없음</div> : anniv.slice(0, 4).map(({ u, h, y }) => <Row key={u.id} l={`★ ${nm(u)}`} sub={u.team || ""} v={`${h.slice(5).replace("-", ".")} · ${y}주년`} />)}
         </Card>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-4">

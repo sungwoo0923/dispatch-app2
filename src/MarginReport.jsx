@@ -306,7 +306,7 @@ export default function MarginReportModal({ rows, initialMonth, isExcluded, hasE
           {/* 핵심: 매출은 늘었는데 이익은 왜 그대로인가 */}
           <div className="rounded-2xl overflow-hidden border-2 border-red-300 bg-white">
             <div className="bg-red-50 px-6 py-3.5 border-b border-red-200 text-[18px] font-black text-red-700">
-              ❗ {A} → {B} 매출은 {T.dSale >= 0 ? `${man(T.dSale)} 늘었는데` : `${man(-T.dSale)} 줄었는데`}, 이익은 {T.dProfit >= 0 ? `${man(T.dProfit)}만 늘었습니다` : `${man(-T.dProfit)} 줄었습니다`}
+              ! {A} → {B} 매출은 {T.dSale >= 0 ? `${man(T.dSale)} 늘었는데` : `${man(-T.dSale)} 줄었는데`}, 이익은 {T.dProfit >= 0 ? `${man(T.dProfit)}만 늘었습니다` : `${man(-T.dProfit)} 줄었습니다`}
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
               <div className="px-6 py-5">

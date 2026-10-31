@@ -2514,7 +2514,7 @@ const findApprovedShipperLive = async (myCompanyName, targetCompanyName) => {
 // "화주사 전송"과 동일한 매핑으로 화주사가 볼 수 있는 사본을 즉시 생성한다.
 // (모듈 최상위 스코프 — useRealtimeCollections 안의 addDispatch에서 호출된다)
 const autoTransmitToShipper = async (savedRecord, shipperApp) => {
-  if (savedRecord?.블라인드 === true) return; // ⭐ 블라인드 오더는 화주사에도 전송하지 않는다
+  if (savedRecord?.블라인드 === true) return; // ★ 블라인드 오더는 화주사에도 전송하지 않는다
   let myCompanyCode = "";
   try {
     const uid = auth.currentUser?.uid;
@@ -2602,7 +2602,7 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
   const payload = {
     ...copyTarget,
     _id: newId,
-    id: newId, // ⭐ 2026-10-29: 원본(모바일 등록)의 id가 그대로 복사되면 모바일에서 원본·복사본이 같은 오더로 겹쳐 보였다
+    id: newId, // ★ 2026-10-29: 원본(모바일 등록)의 id가 그대로 복사되면 모바일에서 원본·복사본이 같은 오더로 겹쳐 보였다
     화물내용: cargoOverride ?? (copyTarget.화물내용 || ""),
     완료회차: 0, // 회전 운행 진행상황은 새 오더에서 처음부터
     // 복사/수정 패널에서 상차일/하차일을 수정했다면 그 값을 그대로 존중한다 — 무조건
@@ -2630,7 +2630,7 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
   delete payload._transmittedOrderId;
   delete payload._transmittedToShipper;
   delete payload._transmittedAt;
-  delete payload._gsheetSync; // ⭐ 원본의 구글시트 줄 연결값이 복사본에 딸려가면 원본 줄을 덮어쓰거나 지웠다
+  delete payload._gsheetSync; // ★ 원본의 구글시트 줄 연결값이 복사본에 딸려가면 원본 줄을 덮어쓰거나 지웠다
 
   const col = copyTarget.__col || "orders";
   await setDoc(doc(db, col, newId), payload);
@@ -2653,7 +2653,7 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
 };
 
 /* -------------------------------------------------
-   배차 수정 이력 생성 함수 (⭐ 반드시 필요)
+   배차 수정 이력 생성 함수 (★ 반드시 필요)
 --------------------------------------------------*/
 function makeDispatchHistory({ userEmail, field, before, after }) {
   return {
@@ -2665,7 +2665,7 @@ function makeDispatchHistory({ userEmail, field, before, after }) {
   };
 }
 /* -------------------------------------------------
-   🔕 수정이력 제외 필드
+   ○ 수정이력 제외 필드
 --------------------------------------------------*/
 const IGNORE_HISTORY_FIELDS = new Set([
   "history",
@@ -2714,14 +2714,14 @@ import {
   where,
   deleteField,
 } from "firebase/firestore";
-import { setDoc, updateDoc } from "./orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
+import { setDoc, updateDoc } from "./orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import KpBootScreen from "./KpBootScreen";
 import AdminShell, { ShellIcon } from "./AdminShell";
 import { pcBootStore, useMiniStore, makeBootTracker, markBootBase } from "./bootProgress";
 import { auth, db, storage, DEFAULT_COMPANY } from "./firebase";
 import { LoginManagerModal } from "./LoginManager";
 import "./pcTheme.css";
-import "./pcColorRemap.css"; // ⭐ PC 알록달록 금지(남색 계열)
+import "./pcColorRemap.css"; // ★ PC 알록달록 금지(남색 계열)
 import { OrderTimeline, OrderTimelineModal } from "./OrderTimeline";
 import { isTMUser } from "./staffFilter";
 import OrgChart from "./OrgChart";
@@ -3745,7 +3745,7 @@ const getMonthsAgoKST = (months) => {
   d.setMonth(d.getMonth() - months);
   return d.toISOString().slice(0, 10);
 };
-const liveWindowStart = pcLiveWindowStart(); // ⭐ 13개월 → 최근 7일~(예전 오더는 화면에서 필요할 때만)
+const liveWindowStart = pcLiveWindowStart(); // ★ 13개월 → 최근 7일~(예전 오더는 화면에서 필요할 때만)
   // orders/dispatch 두 리스너 모두 "캐시가 아닌 진짜" 첫 응답을 받으면 liveDataReady를 켠다.
   let ordersRealFirstDone = false;
   let dispatchRealFirstDone = false;
@@ -3795,7 +3795,7 @@ const liveWindowStart = pcLiveWindowStart(); // ⭐ 13개월 → 최근 7일~(�
   const buildOrderRow = (id, data) => ({
     __col: collName,
     ...data,
-    _id: id, // ⭐ 실제 문서 번호가 항상 이긴다(복사로 딸려 온 _id 무시)
+    _id: id, // ★ 실제 문서 번호가 항상 이긴다(복사로 딸려 온 _id 무시)
     경유지_상차: parseWaypointsShared(data.경유지_상차) || parseWaypointsShared(data.경유상차목록) || [],
     경유지_하차: parseWaypointsShared(data.경유지_하차) || parseWaypointsShared(data.경유하차목록) || [],
   });
@@ -3878,7 +3878,7 @@ const liveWindowStart = pcLiveWindowStart(); // ⭐ 13개월 → 최근 7일~(�
       changes.forEach((ch) => {
         const d = ch.doc.data() || {};
         const id = ch.doc.id;
-        if (isBlindHidden(d)) return; // ⭐ 블라인드 오더는 최고관리자 외에는 알림도 띄우지 않는다
+        if (isBlindHidden(d)) return; // ★ 블라인드 오더는 최고관리자 외에는 알림도 띄우지 않는다
 
         // ⚠️ addDispatch가 실제로 쓰는 컬렉션은 COLL.dispatch="orders"다 — 즉 운송사
         // 자신의 오더 등록/수기입력/오더복사도 전부 여기(orders 리스너)로 들어온다.
@@ -4237,7 +4237,7 @@ const addDispatch = async (recordIn) => {
   }
   if (record && "_restAck" in record) { record = { ...record }; delete record._restAck; }
 
-  const _id = crypto.randomUUID(); // ⭐ 무조건 새로 생성
+  const _id = crypto.randomUUID(); // ★ 무조건 새로 생성
 
   const cleanRecord = stripUndefinedDeep({
     ...record,
@@ -4246,7 +4246,7 @@ const addDispatch = async (recordIn) => {
     // ⭐ 등록일 hover 툴팁에서 "PC로 등록/모바일로 등록"을 보여주기 위한 등록기기 —
     // 이미 값이 있으면(예: 복사 등록으로 원본 값을 이어받은 경우) 덮어쓰지 않는다.
     등록기기: record?.등록기기 || "PC",
-    ...(autoBlindNew() ? { 블라인드: true } : {}), // ⭐ 블라인드 모드 켜짐 → 새 오더 전부 블라인드
+    ...(autoBlindNew() ? { 블라인드: true } : {}), // ★ 블라인드 모드 켜짐 → 새 오더 전부 블라인드
     // 등록과 동시에 차량번호까지 포함되어 생성되는 경우(기사 정보 포함 등록 등)에도 완료시각을 남긴다
     ...(String(record?.차량번호 || "").trim() && !record?.배차완료일시 ? { 배차완료일시: Date.now() } : {}),
     // ⭐ "배차한시간"(등록일 hover 툴팁)이 표시하는 필드는 배차완료일시가 아니라
@@ -4401,7 +4401,7 @@ const patchDispatch = async (_id, patch, knownPrev) => {
       ref = doc(db, "orders", _id);
       snap = await getDoc(ref);
     }
-    if (!snap.exists()) { console.error("❌ 문서 없음", _id); return; }
+    if (!snap.exists()) { console.error("✕ 문서 없음", _id); return; }
     prev = snap.data();
   }
 
@@ -4766,7 +4766,7 @@ const removeDispatch = async (arg, opts = {}) => {
       snap = await getDoc(ref);
     }
     if (!snap.exists()) {
-      console.error("❌ 삭제 대상 없음", id);
+      console.error("✕ 삭제 대상 없음", id);
       return;
     }
     data = snap.data();
@@ -5017,10 +5017,10 @@ const markEditRequestSeen = async (order) => {
     loadFullHistory,
     historyLoading,
   };
-}  // ← ⭐ 이거 반드시 필요
+}  // ← ★ 이거 반드시 필요
 
 /* -------------------------------------------------
-   하차지 Key 생성 함수 (⭐ 반드시 필요)
+   하차지 Key 생성 함수 (★ 반드시 필요)
 --------------------------------------------------*/
 function makePlaceKey(name = "") {
   return String(name)
@@ -5220,7 +5220,7 @@ const upsertPlace = async (place) => {
     return key;
 
   } catch (e) {
-    console.error("⛔ upsertPlace 오류:", e);
+    console.error("⊘ upsertPlace 오류:", e);
   }
 };
 /* -------------------------------------------------
@@ -7011,7 +7011,7 @@ export default function DispatchApp({ role, user, userCompany = "", forceExec = 
   // 참고하는 특수운임 판정에 쓰인다(weatherUtil.js). 앱 진입 시 한 번만
   // 받아오면 되므로 최상위 컴포넌트에서 호출한다.
   useEffect(() => { ensureWeatherLoaded(); }, []);
-  useCopyTemplates(); // 📋 기사복사 문구(회사별 설정) 실시간 반영
+  useCopyTemplates(); // ▤ 기사복사 문구(회사별 설정) 실시간 반영
   // 💳 회사 요금제(미지정이면 전체 기능) — 메뉴 잠금·프로 기능 판단에 쓴다
   const planCompany = (role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany) : (userCompany || localStorage.getItem("userCompany")) || "").trim();
   const planId = useCompanyPlanId(planCompany);
@@ -7211,7 +7211,7 @@ useEffect(() => {
   // ⭐ 여기 추가!
   const [배차현황Tab, set배차현황Tab] = useState("배차현황");
   const [거래처관리Tab, set거래처관리Tab] = useState("하차지거래처");
-  const [기사관리Tab, set기사관리Tab] = useState("d:전체"); // 🚚 기사관리 허브 — d:등급 / docs:driver / docs:penalty
+  const [기사관리Tab, set기사관리Tab] = useState("d:전체"); // ▸ 기사관리 허브 — d:등급 / docs:driver / docs:penalty
   const [정산관리Tab, set정산관리Tab] = useState("거래처정산");
   // ⭐ 내 정보 패널 ON/OFF
   const [showMyInfo, setShowMyInfo] = useState(false);
@@ -7374,7 +7374,7 @@ useEffect(() => {
 
     const myOrders =
       role === "admin"
-        ? dispatchData               // 🔥 관리자 → 전체 데이터
+        ? dispatchData               // ▲ 관리자 → 전체 데이터
         : dispatchData.filter(d =>   // 일반 계정 → 본인 데이터만
           !d?.작성자 || d?.작성자 === user?.email
         );
@@ -7420,8 +7420,8 @@ useEffect(() => {
     return d.toISOString().slice(0, 10);
   }
   /* =================================================
-     📌 전달상태 계산 (오늘 이전 자동 전달완료)
-     👉 DispatchStatus 내부 / 날짜 유틸 바로 아래
+     • 전달상태 계산 (오늘 이전 자동 전달완료)
+     ▸ DispatchStatus 내부 / 날짜 유틸 바로 아래
   ================================================= */
   const getDeliveryStatus = (row) => {
     const today = todayStr();      // ← 이미 쓰고 있는 todayStr 그대로 사용
@@ -7604,7 +7604,7 @@ const closeAlert = () => {
   alertThenRef.current = null;
   if (cb) setTimeout(cb, 50);
 };
-const [loginMgrOpen, setLoginMgrOpen] = React.useState(false); // ⭐ 로그인 관리 창
+const [loginMgrOpen, setLoginMgrOpen] = React.useState(false); // ★ 로그인 관리 창
 // 매출관리 비밀번호 게이트
 const [revenueUnlocked, setRevenueUnlocked] = React.useState(false);
 const [revenuePassInput, setRevenuePassInput] = React.useState("");
@@ -7613,8 +7613,8 @@ const [revenuePassword, setRevenuePassword] = React.useState(null); // null = no
 const [revenuePasswordLoaded, setRevenuePasswordLoaded] = React.useState(false);
 const [revenuePasswordError, setRevenuePasswordError] = React.useState(""); // 불러오기 실패 사유
 const [revenuePasswordRetry, setRevenuePasswordRetry] = React.useState(0);
-const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // ⭐ 잠금 화면에서 비밀번호 변경
-const newVer = useNewVersion(); // ⭐ 새 버전이 배포되면 버전 표시 옆에 NEW(누르면 업데이트 안내)
+const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // ★ 잠금 화면에서 비밀번호 변경
+const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 옆에 NEW(누르면 업데이트 안내)
 
   // ---------------- 역할별 차단 메뉴 ----------------
   // 최고관리자가 새로 만든 커스텀 권한(역할) — 메뉴별 접근범위(숨김/조회/조회+수정)를
@@ -8497,7 +8497,7 @@ return (
         {menu === "자금관리" && menuState("자금관리") === "ok" && <FundsWorkspace company={deptCompany} isViewer={isViewer} />}
         {menu === "비품관리" && menuState("비품관리") === "ok" && <AssetManager company={deptCompany} isViewer={isViewer} />}
         {menu === "인사관리부" && menuState("인사관리부") === "ok" && (
-          <HrHub company={deptCompany} canManage={role === "hrManager" || role === "totalMaster" || myProfileDoc?.isMaster === true}
+          <HrHub company={deptCompany} canManage={role === "hrManager" || role === "totalMaster" || myProfileDoc?.isMaster === true} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "" }}
             renderRecord={(focusUid) => <HRManagementPage userCompany={deptCompany} role={role} userId={auth?.currentUser?.uid || ""} focusUid={focusUid} />}
             renderAttendance={() => <AttendanceBoard userCompany={deptCompany} role={role} user={user} />} />
         )}
@@ -9331,10 +9331,10 @@ function renderTimeWithCond(time, cond) {
 const [placeConflictQueue, setPlaceConflictQueue] = React.useState([]);
 const [placeConflictOpen, setPlaceConflictOpen] = React.useState(false);
       const [aiRecommend, setAiRecommend] = React.useState(null);
-      const [recurringOpen, setRecurringOpen] = React.useState(false); // ⭐ 정기오더 창
+      const [recurringOpen, setRecurringOpen] = React.useState(false); // ★ 정기오더 창
       const [areaFareHint, setAreaFareHint] = React.useState(null);
       const [distanceFareEstimate, setDistanceFareEstimate] = React.useState(null);
-      const [showFareRouteMap, setShowFareRouteMap] = React.useState(false); // ⭐ 운임추천 바 "경로보기"
+      const [showFareRouteMap, setShowFareRouteMap] = React.useState(false); // ★ 운임추천 바 "경로보기"
       const [fareHistoryOpen, setFareHistoryOpen] = React.useState(false);
       const [guideHistoryList, setGuideHistoryList] = React.useState([]);
       const [vehicleSpecOpen, setVehicleSpecOpen] = React.useState(false);
@@ -9484,7 +9484,7 @@ const latestFare = Number(filtered[0].청구운임 || 0);
 const round = (n) => Math.round(n / 10000) * 10000;
 
 setFareStats({
-  fare: round(avg),           // 👉 기본 표시값 (평균 기준)
+  fare: round(avg),           // ▸ 기본 표시값 (평균 기준)
   avg: round(avg),
   latest: round(latestFare),
   count: filtered.length
@@ -9517,7 +9517,7 @@ const data = await res.json();
 
 // 🔥 추가 (핵심)
 if (!data || !data.path || data.path.length === 0) {
-  console.warn("❌ 경로 없음:", data?.error);
+  console.warn("✕ 경로 없음:", data?.error);
   setRouteInfo(null);
   return;
 }
@@ -9564,7 +9564,7 @@ const updateDriver = (v) => {
   setCopyTarget(p => ({
     ...p,
     기사운임: drv,
-    수수료: sale - drv  // ❌ 음수 가능
+    수수료: sale - drv  // ✕ 음수 가능
   }));
 };
       // ================================
@@ -9778,7 +9778,7 @@ ${form.하차지담당자번호 || "-"}
 ${form.차량종류 || ""}
 // 🔽 기사 전달사항 (있을 때만 출력)
 ${form.전달사항?.trim()
-  ? `\n\n📢 기사 전달사항\n${form.전달사항.trim()}`
+  ? `\n\n◆ 기사 전달사항\n${form.전달사항.trim()}`
   : ""
 }
 
@@ -10538,7 +10538,7 @@ const filterPlaces = (q) => {
       화물내용: "",
       화물타입: "파레트",
       톤수타입: "톤",
-      운행유형: "편도",   // ⭐ 추가 (기본값)
+      운행유형: "편도",   // ★ 추가 (기본값)
       차량종류: "",
       차량톤수: "",
       차량번호: "",
@@ -10566,10 +10566,10 @@ const filterPlaces = (q) => {
       혼적: false,
       긴급: false,
       운임보정: null,
-      특수운임: false,       // ⭐ 연휴/성수기 등 특수 수요일 배차 여부(자동감지 + 수동토글)
+      특수운임: false,       // ★ 연휴/성수기 등 특수 수요일 배차 여부(자동감지 + 수동토글)
       특수운임사유: "",
       특수운임수동: false,   // 사용자가 자동감지 결과를 직접 덮어썼는지
-      복수근무일: false,     // ⭐ 묶음 오더 — 연속 기간이 아니라 특정 날짜들만 골라 하나의
+      복수근무일: false,     // ★ 묶음 오더 — 연속 기간이 아니라 특정 날짜들만 골라 하나의
       근무일자목록: [],      // 오더로 등록(예: 9/2,4,5,7~11,14~18). 상차일=최소값, 하차일=최대값으로 자동 연동.
     };
     const cargoInputRef = React.useRef(null);
@@ -10654,7 +10654,7 @@ React.useEffect(() => {
 
     try {
 
-      console.log("📍 지도 렌더 시작");
+      console.log("● 지도 렌더 시작");
 
       // ⭐ Tmap SDK는 이제 필요할 때만 불러온다(첫 화면 로딩 속도 개선)
       await loadTmap().catch(() => {});
@@ -10760,7 +10760,7 @@ React.useEffect(() => {
           // 1️⃣ 원본 주소로 시도
           let result = await geocode(cleaned);
           if (result) {
-            console.log("✅ 원본 주소로 좌표 획득:", cleaned);
+            console.log("✓ 원본 주소로 좌표 획득:", cleaned);
             return result;
           }
 
@@ -10769,7 +10769,7 @@ React.useEffect(() => {
           if (jibun) {
             result = await geocode(jibun);
             if (result) {
-              console.log("✅ 지번 변환 후 좌표 획득:", jibun);
+              console.log("✓ 지번 변환 후 좌표 획득:", jibun);
               return result;
             }
           }
@@ -10779,12 +10779,12 @@ React.useEffect(() => {
           for (const shortAddr of shortened) {
             result = await geocode(shortAddr);
             if (result) {
-              console.log("✅ 축소 주소로 좌표 획득:", shortAddr);
+              console.log("✓ 축소 주소로 좌표 획득:", shortAddr);
               return result;
             }
           }
 
-          console.warn("❌ 모든 방법으로 좌표 획득 실패:", addr);
+          console.warn("✕ 모든 방법으로 좌표 획득 실패:", addr);
           return null;
 
         } catch (e) {
@@ -10871,7 +10871,7 @@ let routeData = null;
 try {
   routeData = await routeRes.json();
 } catch (e) {
-  console.warn("❌ route JSON 파싱 실패");
+  console.warn("✕ route JSON 파싱 실패");
 
   setRouteInfo({
     distanceKm: 0,
@@ -10887,7 +10887,7 @@ if (cancelled) return;
 // 🔥 1차 방어 (핵심)
 // =========================
 if (!routeData?.path || routeData.path.length === 0) {
-  console.warn("❌ 경로 없음:", routeData?.error);
+  console.warn("✕ 경로 없음:", routeData?.error);
 
   // 👉 경로 없을 때도 정보는 표시
   setRouteInfo({
@@ -10910,7 +10910,7 @@ const linePath = routeData.path.map(
 // 🔥 2차 방어 (혹시 데이터 이상)
 // =========================
 if (!linePath || linePath.length === 0) {
-  console.warn("❌ linePath 없음");
+  console.warn("✕ linePath 없음");
   return;
 }
 
@@ -10946,10 +10946,10 @@ if (!bounds.isEmpty()) {
   map.fitBounds(bounds);
   setTimeout(() => { forceMapResize(); map.fitBounds(bounds); }, 200);
 } else {
-  console.warn("❌ bounds 비어있음 → fitBounds 스킵");
+  console.warn("✕ bounds 비어있음 → fitBounds 스킵");
 }
 
-console.log("✅ 지도 + 경로 완료");
+console.log("✓ 지도 + 경로 완료");
 // =========================
 // ⭐ 출발 / 도착 마커 추가
 // =========================
@@ -11248,7 +11248,7 @@ React.useEffect(() => {
 // 많아, 그대로 평균에 섞으면 다음 조회 때 그 특수 운임이 "평소 시세"처럼
 // 추천되는 문제가 있다 — 기본적으로 평균 계산에서 제외한다.
 const similarAll = (dispatchData || []).filter(r =>
-  (r.운행유형 || "편도") === form.운행유형 &&   // ⭐ 추가
+  (r.운행유형 || "편도") === form.운행유형 &&   // ★ 추가
   normalizeKey(r.상차지명) === normalizeKey(pickup) &&
   normalizeKey(r.하차지명) === normalizeKey(drop) &&
   getTotalTonFromOrder(r) === ton &&
@@ -11284,9 +11284,9 @@ setAiRecommend({
   driverAvg,
   marginPercent: Math.round(((fareAvg - driverAvg) / fareAvg) * 100),
   sampleCount: similar.length,
-  excludedSpecialCount,   // ⭐ 특수운임(연휴·성수기)으로 평균에서 제외된 건수
+  excludedSpecialCount,   // ★ 특수운임(연휴·성수기)으로 평균에서 제외된 건수
 
-  hasInputFare: inputFare > 0,   // ⭐ 핵심
+  hasInputFare: inputFare > 0,   // ★ 핵심
   inputFare,
   fareDiffPercent: inputFare > 0 ? Math.round(((inputFare - fareAvg) / fareAvg) * 100) : 0,
 
@@ -12796,7 +12796,7 @@ function checkDuplicateDispatch(form, dispatchData) {
   const targetDate = String(form.상차일 || "").slice(0, 10);
 
   return dispatchData.find((r) => {
-    if (r._id === form._id) return false; // 🔥 자기 자신 제외
+    if (r._id === form._id) return false; // ▲ 자기 자신 제외
     if (!r?.차량번호) return false;
     if (r.차량번호 !== form.차량번호) return false;
     if (r.배차상태 !== "배차완료") return false;
@@ -12857,18 +12857,18 @@ function checkDuplicateDispatch(form, dispatchData) {
       const timeNoAmPm = (t) => t && !t.startsWith("오전") && !t.startsWith("오후");
       if (timeNoAmPm(f.상차시간) || timeNoAmPm(f.하차시간)) {
         setShowAmPmError(true);
-        showAlert("⛔ 시간 선택 시 오전/오후를 함께 선택해주세요.");
+        showAlert("⊘ 시간 선택 시 오전/오후를 함께 선택해주세요.");
         return false;
       }
 
       if (miss.length > 0) {
-        showAlert(`⛔ 날짜가 입력되지 않았습니다.\n[ ${miss.join(", ")} ] 은(는) 반드시 입력해야 합니다.`);
+        showAlert(`⊘ 날짜가 입력되지 않았습니다.\n[ ${miss.join(", ")} ] 은(는) 반드시 입력해야 합니다.`);
         return false;
       }
 
       // 하차일이 상차일보다 앞설 수 없다 (예: 상차 7/27, 하차 7/21처럼 거꾸로 입력된 경우)
       if (f.하차일 < f.상차일) {
-        showAlert(`⛔ 하차일(${f.하차일})이 상차일(${f.상차일})보다 앞설 수 없습니다.\n날짜를 다시 확인해주세요.`);
+        showAlert(`⊘ 하차일(${f.하차일})이 상차일(${f.상차일})보다 앞설 수 없습니다.\n날짜를 다시 확인해주세요.`);
         return false;
       }
 
@@ -13043,9 +13043,9 @@ function makeFareDedupKey(row) {
   return [
     row.상차지명?.trim(),
 row.하차지명?.trim(),
-    pallet ?? "",              // ⭐ 파렛트 수
-    row.차량종류 || "",        // ⭐ 차량종류
-    fare                        // ⭐ 청구운임
+    pallet ?? "",              // ★ 파렛트 수
+    row.차량종류 || "",        // ★ 차량종류
+    fare                        // ★ 청구운임
   ].join("|");
 }
 const palletFareRules = {
@@ -13094,7 +13094,7 @@ const doSave = async (shareToCafe = false) => {
   if (dup) {
     // 교체 후
 showAlert(
-  `⛔ 기사 중복 배차 감지\n\n` +
+  `⊘ 기사 중복 배차 감지\n\n` +
   `차량번호: ${form.차량번호}\n` +
   `기존 상차시간: ${dup.상차시간 || "-"}\n` +
   `기존 하차시간: ${dup.하차시간 || "-"}`
@@ -13369,7 +13369,7 @@ savePromise.catch((err) => {
   }
 };
 const isRoundTrip = form.운행유형 === "왕복";
-const ROUND_DISCOUNT = 0.9; // ⭐ 10% 할인 (조정 가능)
+const ROUND_DISCOUNT = 0.9; // ★ 10% 할인 (조정 가능)
     // ⭐ 다목적지 단가표 매칭 — 지금 입력 중인 하차지명/주소가 단가표 메뉴에 등록된
     // 하차지와 겹치면 "단가표" 버튼이 천천히 깜빡인다. 팝업을 열면 사용자가 입력한
     // 차량톤수 하나만이 아니라, 그 하차지에 등록된 모든 톤수 단가를 한꺼번에 보여준다.
@@ -13691,7 +13691,7 @@ const exactLike = scoredList.filter(r => {
 
   return (
     r.__score >= 90 &&
-    rowPallet === inputCond.pallet   // ⭐ 파렛트 완전 일치
+    rowPallet === inputCond.pallet   // ★ 파렛트 완전 일치
   );
 });
 const similarTop = scoredList
@@ -13963,11 +13963,11 @@ const copyList = React.useMemo(() => {
   // 최신순(이미 정렬됨) · 조건 기준 중복 제거(먼저 들어온 최신 1건이 대표)
   const dedupMap = new Map();
   for (const { r, hay, via } of copyIndex) {
-    if (onlyRoundTrip && r.운행유형 !== "왕복") continue; // ⭐ 왕복만 보기
-    if (fv !== null && String(r[filterType] || "").toLowerCase() !== fv) continue; // ⭐ 현황패널 필터
+    if (onlyRoundTrip && r.운행유형 !== "왕복") continue; // ★ 왕복만 보기
+    if (fv !== null && String(r[filterType] || "").toLowerCase() !== fv) continue; // ★ 현황패널 필터
     const hit = copyFilterType !== "전체"
       ? String(r[copyFilterType] || "").toLowerCase().includes(q)
-      : (hay.includes(q) || via.includes(q)); // ✅ 경유지명도 검색
+      : (hay.includes(q) || via.includes(q)); // ✓ 경유지명도 검색
     if (!hit) continue;
     const key = makeCopyOrderKey(r);
     if (!dedupMap.has(key)) dedupMap.set(key, r);
@@ -14099,7 +14099,7 @@ setCopyOpen(false);
       setVehicleQuery("");
       setAutoPickMatched(false);
       setAutoDropMatched(false);
-      setCopySelected([]);  // ⭐ 체크 상태 초기화
+      setCopySelected([]);  // ★ 체크 상태 초기화
     };
     // =========================================================
     // 📤 공유 (모바일: 카톡 공유창 / PC: 텍스트 복사)
@@ -14112,12 +14112,12 @@ setCopyOpen(false);
       const url = `${location.origin}/upload?id=${encodeURIComponent(r._id || "")}`;
       return `[${userCompany || "운송사"} 운송장 업로드 안내]
 
-✅ 상차일: ${dStr}
-✅ 거래처: ${r.거래처명 || "-"}
-✅ 차량: ${plate} (${name})
+✓ 상차일: ${dStr}
+✓ 거래처: ${r.거래처명 || "-"}
+✓ 차량: ${plate} (${name})
 
-아래 링크에서 운송장/인수증 사진을 업로드해주세요👇
-📎 ${url}`;
+아래 링크에서 운송장/인수증 사진을 업로드해주세요↓
++ ${url}`;
     };
     const shareDispatch = async (r) => {
       const text = shareTextForRow(r);
@@ -14199,7 +14199,7 @@ React.useEffect(() => {
 
   return (
     <div className="mb-4 bg-white rounded-xl shadow-lg border p-4 w-[280px]">
-      <h3 className="font-bold text-gray-800 text-sm mb-2">⛽ 오늘 유가 (전국 평균)</h3>
+      <h3 className="font-bold text-gray-800 text-sm mb-2">◆ 오늘 유가 (전국 평균)</h3>
 
       {prices.length === 0 && (
         <div className="text-gray-500 text-xs">불러오는 중...</div>
@@ -14938,7 +14938,7 @@ title="상차지 ↔ 하차지 교체"
         if (uniq.length > 1) contactItems.push({ type, place: full, contacts: uniq });
       });
       if (contactItems.length) setTimeout(() => openContactPopup(contactItems), 60);
-      else showAlert("✅ 스캔한 오더 내용이 입력되었습니다. 확인 후 저장하세요.");
+      else showAlert("✓ 스캔한 오더 내용이 입력되었습니다. 확인 후 저장하세요.");
     }}
   />
 )}
@@ -15463,7 +15463,7 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between">
         <div>
           <h3 className="text-white font-bold text-[15px]">
-            {mrDriverConflictPopup.existing ? "⚠️ 기사 정보 충돌" : "🆕 신규 기사 등록 확인"}
+            {mrDriverConflictPopup.existing ? "⚠ 기사 정보 충돌" : "NEW 신규 기사 등록 확인"}
           </h3>
           <p className="text-white/60 text-[12px] mt-0.5">
             {mrDriverConflictPopup.existing
@@ -15551,7 +15551,7 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
                 applyMultiSlotDriver({ 차량번호: plate, 이름: name, 전화번호: formatPhone(phone), 배차상태: "배차완료" });
                 setMrSmartDriverQuery(""); setMrSmartDriverMatched([]);
                 setMrDriverConflictPopup(null);
-                showAlert("✅ 신규 기사님이 등록되었습니다.");
+                showAlert("✓ 신규 기사님이 등록되었습니다.");
               }}
             >
               신규 기사 등록
@@ -15859,7 +15859,7 @@ const similar = placeList.filter(p => {
     
 <button
   type="button"
-  tabIndex={-1}   // ⭐ 탭 제외 유지
+  tabIndex={-1}   // ★ 탭 제외 유지
   onClick={() => {
   setStopType("pickup");
 
@@ -16233,13 +16233,13 @@ className={`
     value={vehicleQuery || form.차량종류}
     onChange={(e) => {
       const v = e.target.value;
-      setVehicleQuery(v);          // 👉 입력 상태
-      onChange("차량종류", v);     // 👉 form에는 항상 반영
+      setVehicleQuery(v);          // ▸ 입력 상태
+      onChange("차량종류", v);     // ▸ form에는 항상 반영
       setShowVehicleDropdown(true);
       setVehicleActive(0);
     }}
     onFocus={() => {
-      setShowVehicleDropdown(true); // 👉 클릭만 해도 목록 표시
+      setShowVehicleDropdown(true); // ▸ 클릭만 해도 목록 표시
     }}
     onKeyDown={(e) => {
       const list = filterVehicles(vehicleQuery);
@@ -16394,7 +16394,7 @@ className={`
         {/* ⭐ 연휴·성수기 특수운임 표시 — 공휴일 캘린더 기준 자동감지 + 수동 조정 가능.
             체크해두면 이 오더의 운임은 이후 자사운임표/AI추천 평균 계산에서 제외되어,
             연휴 직전 등 일시적으로 오른 운임이 "평소 시세"처럼 참조되지 않는다.
-            ⚠️ 별도 grid 칸을 새로 차지하면 뒤 필드들이 한 줄씩 밀려버려서, 기존
+            ⚠ 별도 grid 칸을 새로 차지하면 뒤 필드들이 한 줄씩 밀려버려서, 기존
             칸 배치를 안 건드리고 청구운임 라벨 줄 안에 작은 칩으로 끼워 넣는다. */}
         {/* ⚠️ 이전엔 체크 시 "· 사유" 텍스트가 붙어서 칩 너비 자체가 늘어나며
             자리가 옮겨 보이는 문제가 있었다 — 너비를 고정하고, 상태에 따라
@@ -17285,7 +17285,7 @@ className={`
   </div>
 
 {/* =============================== 
-    📝 메모 / 📢 전달사항 (네이비 통일 + 세로 textarea)
+    ✎ 메모 / ◆ 전달사항 (네이비 통일 + 세로 textarea)
    =============================== */}
 <div className="col-span-8 grid grid-cols-2 gap-6 items-start">
 
@@ -17603,7 +17603,7 @@ className={`
     <button
       type="button"
       onClick={() => {
-        if (!featureOn("call24")) { openPlanLock("call24"); return; } // 💎 프로 요금제 기능
+        if (!featureOn("call24")) { openPlanLock("call24"); return; } // ◆ 프로 요금제 기능
         const { 거래처명, 상차지명, 하차지명, 상차일, 하차일 } = form;
         if (!거래처명 || !상차지명 || !하차지명) return showAlert("거래처/상차지명/하차지명을 입력해주세요.");
         if (!상차일 || !하차일) return showAlert("상차일/하차일은 반드시 필요합니다.");
@@ -17657,7 +17657,7 @@ className={`
         shadow-sm flex items-center gap-1.5
       "
     >
-      <span>📡</span> 24시전송
+      <span>◌</span> 24시전송
     </button>
   </div>
 </form>
@@ -17781,10 +17781,10 @@ className={`
   </div>
 </div>}
         {/* ------------------------------
-      🔵 오더복사 팝업 (완성본)
+      ● 오더복사 팝업 (완성본)
 -------------------------------- */}
         {/* ═══════════════════════════════════════════════
-              📡 24시콜 전송 미리보기 팝업
+              ◌ 24시콜 전송 미리보기 팝업
         ═══════════════════════════════════════════════ */}
         {send24PreviewOpen && send24Data && (
           <div
@@ -18097,7 +18097,7 @@ className={`
                   className={`px-7 py-2.5 rounded-xl text-[13px] font-bold text-white transition
                     ${send24Sending || send24Result?.ok ? "bg-gray-400 cursor-not-allowed" : "bg-gradient-to-r from-[#1B2B4B] to-[#2d4a7a] hover:from-[#243a60] hover:to-[#355890]"}`}
                 >
-                  {send24Sending ? "전송 중…" : send24Result?.ok ? "전송됨 ✓" : "📡 전송"}
+                  {send24Sending ? "전송 중…" : send24Result?.ok ? "전송됨 ✓" : "◌ 전송"}
                 </button>
               </div>
             </div>
@@ -18220,7 +18220,7 @@ className={`
                         </td>
                       </tr>
                     ) : (
-                      (copyShowMore ? copyList.slice(0, 300) : copyListShort).map((row) => ( // ⭐ 한 번에 300건까지만 그림(수천 줄을 그리면 멈춤)
+                      (copyShowMore ? copyList.slice(0, 300) : copyListShort).map((row) => ( // ★ 한 번에 300건까지만 그림(수천 줄을 그리면 멈춤)
                         <tr
   key={row._id}
   id={`row-${row._id}`}
@@ -18373,7 +18373,7 @@ className={`
   </div>
 
   {/* 오른쪽: 상/하차일 캘린더 패널 (기존 Today 통계패널 자리를 대체) —
-      ⚠️ 복수근무일 다중선택은 이 패널이 아니라 상차일 입력칸 자체의 달력
+      ⚠ 복수근무일 다중선택은 이 패널이 아니라 상차일 입력칸 자체의 달력
       (CustomDatePicker)에서 처리한다. 사용자 피드백: "오른쪽 패널에 있는
       달력말고 오더정보에 있는 달력에 다중선택 버튼을 넣어달라" — 그래서
       이 패널은 원래대로 단일 상/하차일 선택 전용으로 유지한다. */}
@@ -18412,7 +18412,7 @@ className={`
   <div
     className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
-    ref={(el) => { if (el && editingContactIdx === null && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; requestAnimationFrame(() => setTimeout(() => (contactSearchInputRef.current || el).focus(), 0)); } }} /* ⌨️ 검색칸에 바로 커서 — 바탕에 먼저 두면 첫 글자가 영문으로 들어갔다 */
+    ref={(el) => { if (el && editingContactIdx === null && !el.dataset.autoFocused) { el.dataset.autoFocused = "1"; requestAnimationFrame(() => setTimeout(() => (contactSearchInputRef.current || el).focus(), 0)); } }} /* ⌨ 검색칸에 바로 커서 — 바탕에 먼저 두면 첫 글자가 영문으로 들어갔다 */
     onKeyDown={(e) => {
       // ⭐ 담당자 이름/전화번호를 인라인 수정 중일 때는 이 컨테이너 레벨의
       // 방향키 이동/검색창 자동포커스 로직을 절대 가로채면 안 된다. 수정 폼의
@@ -18452,7 +18452,7 @@ className={`
     <div className="bg-white rounded-2xl shadow-2xl w-[920px] max-w-[96vw] overflow-hidden">
       <div className="bg-[#1B2B4B] px-6 py-4">
     <h3 className="text-white font-bold text-[15px]">
-          {contactPopup.type === "pickup" ? "🔵 상차지" : "🔴 하차지"} 담당자 선택
+          {contactPopup.type === "pickup" ? "● 상차지" : "● 하차지"} 담당자 선택
           {contactQueue.length > 0 && (
             <span className="ml-2 text-[11px] text-white/50">+{contactQueue.length}건 대기</span>
           )}
@@ -18713,7 +18713,7 @@ className={`
         const isGraded = isBlack || isCaution || isDeparture;
         // 등급이 "일반"이라도 메모가 등록돼 있으면 참고할 수 있도록 같은 방식으로 안내한다.
         const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : isDeparture ? "bg-red-600" : "bg-[#1B2B4B]";
-        const icon = isBlack ? "🚫" : isCaution ? "⚠️" : isDeparture ? "⛔" : "📝";
+        const icon = isBlack ? "⊘" : isCaution ? "⚠" : isDeparture ? "⊘" : "✎";
         const title = isBlack ? "블랙 거래처 알림" : isCaution ? "주의 거래처 알림" : isDeparture ? "이탈 거래처 알림" : "거래처 메모 안내";
         const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-orange-50 border-orange-200" : isDeparture ? "bg-red-50 border-red-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
         const badgeCls = isBlack ? "bg-gray-900 text-white" : isCaution ? "bg-orange-500 text-white" : isDeparture ? "bg-red-600 text-white" : "bg-[#1B2B4B] text-white";
@@ -18843,7 +18843,7 @@ className={`
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between">
         <div>
           <h3 className="text-white font-bold text-[15px]">
-            {driverConflictPopup.existing ? "⚠️ 기사 정보 충돌" : "🆕 신규 기사 등록 확인"}
+            {driverConflictPopup.existing ? "⚠ 기사 정보 충돌" : "NEW 신규 기사 등록 확인"}
           </h3>
           <p className="text-white/60 text-[12px] mt-0.5">
             {driverConflictPopup.existing
@@ -18949,7 +18949,7 @@ className={`
                 setForm(p=>({...p, 차량번호: plate, 이름: name, 전화번호: formatPhone(phone), 배차상태:"배차완료"}));
                 setSmartDriverQuery(""); setSmartDriverMatched([]);
                 setDriverConflictPopup(null);
-               showAlert("✅ 신규 기사님이 등록되었습니다.");
+               showAlert("✓ 신규 기사님이 등록되었습니다.");
               }}
             >
               신규 기사 등록
@@ -19150,7 +19150,7 @@ setConfirmChange(null);
     <div className="bg-white rounded-xl shadow-xl w-[1400px] max-w-[95vw] h-[85vh] flex overflow-hidden border">
 
      {/* ================= 지도 영역 =================
-          ⭐ min-h+max-h(내용 기준 자동 높이)로는 내용이 짧은 주문에서 지도 아래
+          ★ min-h+max-h(내용 기준 자동 높이)로는 내용이 짧은 주문에서 지도 아래
           여백이, 내용이 길면 스크롤이 생기는 문제를 양쪽 다 못 잡았다. 오더마다
           패널 내용 분량이 달라 "모달 높이를 내용에 맞춘다"는 전제 자체가
           여백/스크롤 둘 중 하나를 항상 남긴다. 그래서 모달을 h-[85vh]로 완전히
@@ -19616,7 +19616,7 @@ setConfirmChange(null);
             key={i}
             className="p-2 border rounded cursor-pointer hover:bg-gray-50"
             onClick={() => {
-  applyClientSelect(p.업체명); // 🔥 이게 정답
+  applyClientSelect(p.업체명); // ▲ 이게 정답
   setDupPopup({ open: false, input: null, candidates: [] });
 }}
 
@@ -22998,7 +22998,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
     const lines = [
       `안녕하세요 ${companyName || "저희"}운송사입니다.`,
       "",
-      `📅 ${dateStr}`,
+      `▦ ${dateStr}`,
       `상차 : ${r.상차지명 || "-"}`,
       `하차 : ${r.하차지명 || "-"}`,
       r.화물내용 ? `화물 : ${r.화물내용}` : null,
@@ -23112,7 +23112,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
               </button>
               {/* ⭐ 첨부파일 선택삭제/전체삭제 — 오더는 안 지워지고 첨부만 지워지며,
                   완료처리 상태는 유지된다. 조회전용 권한은 버튼 자체를 숨긴다.
-                  ⚠️ 삭제 대상은 "완료" 표시가 아니라 실제 첨부파일이 있는(getCnt>0)
+                  ⚠ 삭제 대상은 "완료" 표시가 아니라 실제 첨부파일이 있는(getCnt>0)
                   오더로만 한정한다 — 파일 없이 수동으로 완료처리만 해둔 오더까지
                   "전체삭제"에 포함되면 의미 없는 삭제만 수백 건 실행하게 된다. */}
               {!isViewer && (
@@ -23417,9 +23417,9 @@ onDoubleClick={(e) => {
 
   setCopyTarget({
     ...latest,
-    화물내용: rawCargo,     // ✅ 원본 보존
-    화물수량: cargoQty,     // ✅ "케이스" → "케이스" (기존: "")
-    화물타입: cargoType,    // ✅ ""
+    화물내용: rawCargo,     // ✓ 원본 보존
+    화물수량: cargoQty,     // ✓ "케이스" → "케이스" (기존: "")
+    화물타입: cargoType,    // ✓ ""
     톤수값: tonMatch ? tonMatch[1] : "",
     톤수타입: tonMatch ? tonMatch[2] : "",
   });
@@ -23976,7 +23976,7 @@ async function scheduleEmailDoc({ companyName, to, subject, html, attachments = 
 }
 
 function OptimalMatchModal({ row, dispatchData, onClose, companyName }) {
-  useLoadFullOrderHistory(!!row); // ⭐ 최적매칭은 예전 오더 전체가 필요 — 열릴 때 1회
+  useLoadFullOrderHistory(!!row); // ★ 최적매칭은 예전 오더 전체가 필요 — 열릴 때 1회
   const toWon = (v) => Number(String(v || "0").replace(/[^\d]/g, "")) || 0;
   const [selected, setSelected] = React.useState(() => new Set());
 
@@ -24523,7 +24523,7 @@ return [...map.values()];
     String(s)
       .toLowerCase()
       .replace(/\s+/g, "")
-      .replace(/[()㈜.,\-]/g, "")   // ❗ 법인표기 제거
+      .replace(/[()㈜.,\-]/g, "")   // ! 법인표기 제거
       .replace(/주식회사|유한회사/g, "")
       .replace(/[^a-z0-9가-힣]/g, "");
 
@@ -24883,7 +24883,7 @@ if (mode === "driver") {
     "";
 
   const driverNoteText = driverNote.trim()
-    ? `\n\n📢 전달사항\n${driverNote.trim()}`
+    ? `\n\n◆ 전달사항\n${driverNote.trim()}`
     : "";
 
   const pickupContact = buildContactLine(
@@ -25059,7 +25059,7 @@ return buildCopyText("driver", {
   body: _ctBodyD,
   vars: copyVarsOf(r, { 업로드링크: uploadUrl, cold: _ctColdD, plate, name, phone, fare, payLabel }),
   defaults: {
-    uploadBlock: "[파렛전표/거래명세서 업로드]\n미 전송시 운임 지연 될 수 있습니다.\n👇👇👇👇👇👇👇👇👇👇👇👇\n{업로드링크}",
+    uploadBlock: "[파렛전표/거래명세서 업로드]\n미 전송시 운임 지연 될 수 있습니다.\n↓↓↓↓↓↓↓↓↓↓↓↓\n{업로드링크}",
     top: "{온도안내}\n{결제안내}",
     bottom: "※ 인수증(파렛전표) 서명 받은 후 업로드필수\nKPP/아주파렛트 상차시 각각 전표업로드 필수\n{서류안내}\n※ 서류/전표 없는 건이면 업로드 하지마세요.\n※ 미업로드 시 운임 지급 지연될 수 있습니다",
   },
@@ -25273,7 +25273,7 @@ ${coreBlockF}
     try {
       const latest = await navigator.clipboard.readText();
       if (latest === text) {
-        showAlert("⏱ 아직 전달되지 않은 것 같습니다.\n카톡에 붙여넣기 하셨나요?");
+        showAlert("◷ 아직 전달되지 않은 것 같습니다.\n카톡에 붙여넣기 하셨나요?");
       }
     } catch (e) {
       console.error("Clipboard read error", e);
@@ -25547,7 +25547,7 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
 
   // ===================== 일마감 상태 =====================
   const [dailyCloseOpen, setDailyCloseOpen] = React.useState(false);
-const [closeReportOpen, setCloseReportOpen] = React.useState(false); // ⭐ 마감보고 전송 창
+const [closeReportOpen, setCloseReportOpen] = React.useState(false); // ★ 마감보고 전송 창
   const [dailyCloseResult, setDailyCloseResult] = React.useState(null);
   const [dailyCloseFilter, setDailyCloseFilter] = React.useState("all");
   const [closeFileResult, setCloseFileResult] = React.useState(null);
@@ -25593,7 +25593,7 @@ const [closeReportOpen, setCloseReportOpen] = React.useState(false); // ⭐ 마�
     });
 
     if (!base.length) {
-      showAlert("📭 동일 상/하차지 운임 이력이 없습니다.");
+      showAlert("○ 동일 상/하차지 운임 이력이 없습니다.");
       return;
     }
 
@@ -28620,27 +28620,27 @@ const openDailyCloseIssueDetail = (rowId) => {
     const url = `${window.location.origin}/upload?id=${row._id}`;
 
     const msg = `
-📦 [배차 정보]
+▣ [배차 정보]
 
-🟦 거래처: ${row.거래처명 || ""}
-📍 상차지: ${row.상차지명 || ""} / ${row.상차지주소 || ""}
-📍 하차지: ${row.하차지명 || ""} / ${row.하차지주소 || ""}
+■ 거래처: ${row.거래처명 || ""}
+● 상차지: ${row.상차지명 || ""} / ${row.상차지주소 || ""}
+● 하차지: ${row.하차지명 || ""} / ${row.하차지주소 || ""}
 
-⏰ 상차: ${row.상차일 || ""} ${row.상차시간 || ""}
-⏰ 하차: ${row.하차일 || ""} ${row.하차시간 || ""}
+◷ 상차: ${row.상차일 || ""} ${row.상차시간 || ""}
+◷ 하차: ${row.하차일 || ""} ${row.하차시간 || ""}
 
-🚚 차량: ${row.차량번호 || ""} / ${row.이름 || ""} (${row.전화번호 || ""})
-💰 기사운임: ${(row.기사운임 || 0).toLocaleString()}원
+▸ 차량: ${row.차량번호 || ""} / ${row.이름 || ""} (${row.전화번호 || ""})
+₩ 기사운임: ${(row.기사운임 || 0).toLocaleString()}원
 
-📝 메모:
+✎ 메모:
 ${row.메모 || ""}
 
-📎 사진 업로드:
++ 사진 업로드:
 ${url}
 `.trim();
 
     navigator.clipboard.writeText(msg);
-    showAlert("📋 공유 메시지가 복사되었습니다!");
+    showAlert("▤ 공유 메시지가 복사되었습니다!");
   };
 
 
@@ -29441,7 +29441,7 @@ const head = isDark
     delete payload.톤수타입;
 
 const savedId = copyTarget._id;
-    sflowToast("오더 수정 완료", "success"); // ⭐ 확인 버튼을 눌러야 닫히던 창 → 오른쪽 위 알림(바로 다음 작업 가능)
+    sflowToast("오더 수정 완료", "success"); // ★ 확인 버튼을 눌러야 닫히던 창 → 오른쪽 위 알림(바로 다음 작업 가능)
     setCopyPanelOpen(false);
     // ⭐ 일마감 검증에서 열었던 수정이면, 방금 고친 내용이 반영되도록 검증을
     // 자동으로 다시 계산한다(오류/경고 + 24시콜 비교결과 모두).
@@ -29583,7 +29583,7 @@ flashRow(savedId);
 
           setCopyTarget(p=>({...p, 거래처명:v}));
 
-          const list = filterEditClients(v);   // ⭐ 이거 중요
+          const list = filterEditClients(v);   // ★ 이거 중요
           setCopyClientOptions(list);
           setShowCopyClientDropdown(true);
           setCopyClientIndex(0);
@@ -31358,7 +31358,7 @@ value={copyTarget?.화물수량 || ""}
                 value={editTarget.거래처명 || ""}
                 onChange={(e) => {
                   const v = e.target.value;
-                  setShowEditPlaceDropdown(false); // 🔥 충돌 방지
+                  setShowEditPlaceDropdown(false); // ▲ 충돌 방지
                   setEditTarget((p) => ({ ...p, 거래처명: v }));
                   setEditClientOptions(filterEditClients(v));
                   setShowEditClientDropdown(true);
@@ -32999,7 +32999,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
       {smart4ConflictPopup && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]">
           <div className="bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden border">
-            <div className="bg-[#1B2B4B] px-6 py-4 flex justify-between items-center"><div><h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.⚠️ 기사 정보 확인" defaultText="⚠️ 기사 정보 확인" /></h3><p className="text-white/60 text-[12px] mt-0.5">동일 차량번호, 다른 기사 정보가 감지되었습니다</p></div><button className="text-white/60 hover:text-white text-lg" onClick={()=>setSmart4ConflictPopup(null)}>✕</button></div>
+            <div className="bg-[#1B2B4B] px-6 py-4 flex justify-between items-center"><div><h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.⚠ 기사 정보 확인" defaultText="⚠ 기사 정보 확인" /></h3><p className="text-white/60 text-[12px] mt-0.5">동일 차량번호, 다른 기사 정보가 감지되었습니다</p></div><button className="text-white/60 hover:text-white text-lg" onClick={()=>setSmart4ConflictPopup(null)}>✕</button></div>
             <div className="px-6 py-5 space-y-4">
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-4"><div className="text-[11px] font-semibold text-gray-500 mb-2">기존 등록 정보</div><div className="font-bold text-[14px]">{smart4ConflictPopup.existing.이름}</div><div className="text-[13px] text-gray-600 mt-1">{smart4ConflictPopup.existing.차량번호} | {formatPhone(smart4ConflictPopup.existing.전화번호)}</div></div>
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4"><div className="text-[11px] font-semibold text-blue-600 mb-2">새로 입력한 정보</div><div className="font-bold text-[14px]">{smart4ConflictPopup.input.name}</div><div className="text-[13px] text-gray-600 mt-1">{smart4ConflictPopup.input.plate} | {formatPhone(smart4ConflictPopup.input.phone)}</div></div>
@@ -34511,7 +34511,7 @@ setConfirmChange(null);
             const isCaution = warningPopup.status === "주의";
             const isDeparture = warningPopup.status === "이탈";
             const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : isDeparture ? "bg-red-600" : "bg-[#1B2B4B]";
-            const icon = isBlack ? "🚫" : isCaution ? "⚠️" : isDeparture ? "⛔" : "📝";
+            const icon = isBlack ? "⊘" : isCaution ? "⚠" : isDeparture ? "⊘" : "✎";
             const title = isBlack ? "블랙 거래처 알림" : isCaution ? "주의 거래처 알림" : isDeparture ? "이탈 거래처 알림" : "거래처 메모 안내";
             const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-orange-50 border-orange-200" : isDeparture ? "bg-red-50 border-red-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
             const memoTextCls = isBlack ? "text-red-600" : isCaution ? "text-orange-600" : isDeparture ? "text-red-600" : "text-[#1B2B4B]";
@@ -34682,7 +34682,7 @@ function MemoIconCell({ text = "", urgency = "" }) {
         )}
       </button>
 
-      {open && createPortal( // ⭐ 표 레이어 분리(끊김 개선) 뒤에도 화면 전체에 뜨도록 body에 그린다
+      {open && createPortal( // ★ 표 레이어 분리(끊김 개선) 뒤에도 화면 전체에 뜨도록 body에 그린다
         <div className="kp-pc-pop fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
           <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-w-[92vw] border border-gray-100" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-5 py-4 rounded-t-2xl flex items-center gap-3">
@@ -34737,7 +34737,7 @@ function NoteIconCell({ value = "", onSave }) {
         </svg>
       </button>
 
-      {open && createPortal( // ⭐ 표 레이어 분리(끊김 개선) 뒤에도 화면 전체에 뜨도록 body에 그린다
+      {open && createPortal( // ★ 표 레이어 분리(끊김 개선) 뒤에도 화면 전체에 뜨도록 body에 그린다
         <div className="kp-pc-pop fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
           <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-w-[92vw] border border-gray-100" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-5 py-4 rounded-t-2xl flex items-center gap-3">
@@ -35170,7 +35170,7 @@ React.useEffect(() => {
 
 const [warningPopup, setWarningPopup] = React.useState(null);
 const [dailyCloseOpen, setDailyCloseOpen] = React.useState(false);
-const [closeReportOpen, setCloseReportOpen] = React.useState(false); // ⭐ 마감보고 전송 창
+const [closeReportOpen, setCloseReportOpen] = React.useState(false); // ★ 마감보고 전송 창
 const [dailyCloseResult, setDailyCloseResult] = React.useState(null);
 const [dailyCloseFilter, setDailyCloseFilter] = React.useState("all");
 const [closeFileResult, setCloseFileResult] = React.useState(null);
@@ -36325,7 +36325,7 @@ const flashRow = React.useCallback((id) => {
   // 팝업을 열었을 때만 채워지는, 해당 오더의 검증 문제점 목록.
   const [dailyCloseIssueCtx, setDailyCloseIssueCtx] = React.useState(null);
   const [bulkRows, setBulkRows] = React.useState([]);
-  const [loaded, setLoaded] = React.useState(false);   // ⭐ 복구완료 여부
+  const [loaded, setLoaded] = React.useState(false);   // ★ 복구완료 여부
   const [matchedDrivers, setMatchedDrivers] = React.useState([]);
   React.useEffect(() => {
   try {
@@ -36371,14 +36371,14 @@ const handleSearch = () => {
   }
 
   if (startDate > endDate) {
-    showAlert("⚠️ 조회 시작일이 종료일보다 늦을 수 없습니다.\n날짜를 다시 확인해주세요.");
+    showAlert("⚠ 조회 시작일이 종료일보다 늦을 수 없습니다.\n날짜를 다시 확인해주세요.");
     return;
   }
 
   if (role !== "totalMaster") {
     const diff = getMonthDiff(startDate, endDate);
     if (diff > 2) {
-      showAlert("⚠️ 조회는 최대 3개월까지만 가능합니다.");
+      showAlert("⚠ 조회는 최대 3개월까지만 가능합니다.");
       return;
     }
   }
@@ -36855,7 +36855,7 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
 // ❄️ 냉장/냉동 차량 안내
 const COLD_NOTICE = `★★★필독★★★
 
-📌 전체보기 또는 모두보기 누르시면
+• 전체보기 또는 모두보기 누르시면
 맨 아래 상/하차 정보 있습니다!
 (안내문 꼭 읽어주세요)
 ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
@@ -36877,7 +36877,7 @@ const COLD_NOTICE = `★★★필독★★★
 // 🚚 일반 차량용 (🔥 동일 포맷으로 통일)
 const NORMAL_NOTICE = `★★★필독★★★
 
-📌 전체보기 또는 모두보기 누르시면
+• 전체보기 또는 모두보기 누르시면
 맨 아래 상/하차 정보 있습니다!
 (안내문 꼭 읽어주세요)
 ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
@@ -36956,7 +36956,7 @@ const BANCHAN_NOTICE = `
             "";
 
           const driverNoteText = driverNote.trim()
-            ? `\n\n📢 전달사항\n${driverNote.trim()}`
+            ? `\n\n◆ 전달사항\n${driverNote.trim()}`
             : "";
 
           // 업로드 링크는 오더별 토큰을 함께 담는다 — 기사님이 업로드를 완료(등록)하면
@@ -37069,7 +37069,7 @@ return buildCopyText("driver", {
   body: _ctBody5d,
   vars: copyVarsOf(r, { 업로드링크: uploadUrl, cold: _ctCold5d, plate, name, phone, fare, payLabel, company: userCompany }),
   defaults: {
-    uploadBlock: "[파렛전표/거래명세서 업로드]\n(파렛전표/명세서없으면 미업로드)\n👇👇👇👇👇👇👇👇👇👇👇👇\n{업로드링크}",
+    uploadBlock: "[파렛전표/거래명세서 업로드]\n(파렛전표/명세서없으면 미업로드)\n↓↓↓↓↓↓↓↓↓↓↓↓\n{업로드링크}",
     top: "{온도안내}\n{결제안내}",
     bottom: "※ 인수증(파렛전표) 서명 받은 후 업로드필수\nKPP/아주파렛트 상차시 각각 전표업로드 필수\n{서류안내}\n※ 서류/전표 없는 건이면 업로드 하지마세요\n※ 미업로드 시 운임 지급 지연될 수 있습니다",
   },
@@ -37360,7 +37360,7 @@ if (mode === "driver") {
     });
 
     if (!base.length) {
-      showAlert("📭 유사 운임 데이터가 없습니다.");
+      showAlert("○ 유사 운임 데이터가 없습니다.");
       return;
     }
 
@@ -37581,7 +37581,7 @@ if (mode === "driver") {
     before: before ?? "",
     after: after ?? "",
     at: new Date().toISOString(),
-    user: "관리자", // 🔥 나중에 로그인 사용자로 교체 가능
+    user: "관리자", // ▲ 나중에 로그인 사용자로 교체 가능
   });
   // ⚡ select 즉시 변경 → 확인 팝업용
   const handleImmediateSelectChange = (row, field, nextValue) => {
@@ -37720,7 +37720,7 @@ if (mode === "driver") {
       });
 
       if (!mapped.length) {
-        showAlert("❌ 엑셀 데이터가 없습니다.");
+        showAlert("✕ 엑셀 데이터가 없습니다.");
         return;
       }
 
@@ -37745,10 +37745,10 @@ if (mode === "driver") {
           });
           if (r === false) fail++; else ok++;
         }
-        showAlert(fail ? `✅ ${ok}건 등록 완료 · ⚠ ${fail}건 실패(하차일이 상차일보다 빠른 줄 등)` : `✅ 대용량 업로드 완료 — ${ok}건 등록되었습니다.`);
+        showAlert(fail ? `✓ ${ok}건 등록 완료 · ⚠ ${fail}건 실패(하차일이 상차일보다 빠른 줄 등)` : `✓ 대용량 업로드 완료 — ${ok}건 등록되었습니다.`);
       } catch (err) {
         console.error(err);
-        showAlert("❌ 업로드 중 오류 발생");
+        showAlert("✕ 업로드 중 오류 발생");
       }
     };
 
@@ -37915,7 +37915,7 @@ if (mode === "driver") {
       )
       .join("\n");
 
-    showAlert(`🚚 자동 기사 추천 결과\n\n${top}`);
+    showAlert(`▸ 자동 기사 추천 결과\n\n${top}`);
   };
   // ================================  
   // 🔵 선택수정 / 수정완료 (팝업 방식)  
@@ -37924,7 +37924,7 @@ if (mode === "driver") {
     if (isViewer) return showAlert("조회전용 권한으로 수정할 수 없습니다.");
     // 🔐 여러 건 선택 시 경고
     if (!editMode && selected.size > 1) {
-      return showAlert("⚠️ 1개의 항목만 선택해주세요.\n(지금은 선택수정 모드입니다)");
+      return showAlert("⚠ 1개의 항목만 선택해주세요.\n(지금은 선택수정 모드입니다)");
     }
 
     // 1) 수정 모드 OFF → 선택수정 버튼 처음 누른 상태
@@ -37962,9 +37962,9 @@ if (first) {
 
   setEditTarget({
     ...latestFirst,
-    화물내용: cargoRaw,     // ✅ 원본 보존
-    화물수량: cargoQty,     // ✅ "케이스" → "케이스" (기존: "")
-    화물타입: cargoType,    // ✅ ""
+    화물내용: cargoRaw,     // ✓ 원본 보존
+    화물수량: cargoQty,     // ✓ "케이스" → "케이스" (기존: "")
+    화물타입: cargoType,    // ✓ ""
     톤수값: tonMatch ? tonMatch[1] : "",
     톤수타입: tonMatch ? tonMatch[2] : "",
     수수료: (Number(latestFirst.청구운임) || 0) - (Number(latestFirst.기사운임) || 0),
@@ -38011,7 +38011,7 @@ if (first) {
       setTimeout(() => {
         const el = document.getElementById(`row-${firstId}`);
         if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-      }, 300);  // 🔥 Firestore 반영 후 스크롤 이동
+      }, 300);  // ▲ Firestore 반영 후 스크롤 이동
     }
 
     setTimeout(() => setJustSaved([]), 1200);
@@ -39286,9 +39286,9 @@ return (
 
   setCopyTarget({
     ...row,
-    화물내용: rawCargo,     // ✅ 원본 보존
-    화물수량: _cNum,        // ✅ "케이스" → "케이스" (기존: "")
-    화물타입: _cType,       // ✅ ""
+    화물내용: rawCargo,     // ✓ 원본 보존
+    화물수량: _cNum,        // ✓ "케이스" → "케이스" (기존: "")
+    화물타입: _cType,       // ✓ ""
     톤수값: tonMatch ? tonMatch[1] : "",
     톤수타입: tonMatch ? tonMatch[2] : "",
   });
@@ -39723,7 +39723,7 @@ return (
       </div>
 
       {/* ---------------------------------------------------------
-          🔵 신규 오더 등록 팝업 (업그레이드 버전)
+          ● 신규 오더 등록 팝업 (업그레이드 버전)
       --------------------------------------------------------- */}
       {showCreate && (
         <NewOrderPopup
@@ -39732,8 +39732,8 @@ return (
           setNewOrder={setNewOrder}
           addDispatch={addDispatch}
           clients={clients}
-          drivers={drivers}        // ⭐ 추가
-          upsertDriver={upsertDriver} // ⭐ 신규 기사 등록에 필요
+          drivers={drivers}        // ★ 추가
+          upsertDriver={upsertDriver} // ★ 신규 기사 등록에 필요
         />
       )}
       {/* ===================== 선택수정(팝업) ===================== */}
@@ -40935,7 +40935,7 @@ return (
 
     const targetId = getId(editTarget);
     if (!targetId) {
-      showAlert("❌ 저장 실패: 오더 ID를 찾을 수 없습니다.");
+      showAlert("✕ 저장 실패: 오더 ID를 찾을 수 없습니다.");
       return;
     }
 
@@ -41123,7 +41123,7 @@ return (
 
 // ✅ UI 먼저
     setCopyPanelOpen(false);
-    sflowToast("오더 수정 완료", "success"); // ⭐ 확인 버튼 없이 바로 다음 작업
+    sflowToast("오더 수정 완료", "success"); // ★ 확인 버튼 없이 바로 다음 작업
     setEdited(prev => { const next = { ...prev }; delete next[id]; return next; });
     // ⭐ 일마감 검증에서 열었던 수정이면, 방금 고친 내용이 반영되도록 검증을
     // 자동으로 다시 계산한다(오류/경고 + 24시콜 비교결과 모두).
@@ -43477,7 +43477,7 @@ setCopyPlaceOptions(list);
           <div className="bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden border">
             <div className="bg-[#1B2B4B] px-6 py-4 flex justify-between items-center">
               <div>
-                <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.⚠️ 기사 정보 확인" defaultText="⚠️ 기사 정보 확인" /></h3>
+                <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.⚠ 기사 정보 확인" defaultText="⚠ 기사 정보 확인" /></h3>
                 <p className="text-white/60 text-[12px] mt-0.5">동일 차량번호, 다른 기사 정보가 감지되었습니다</p>
               </div>
               <button className="text-white/60 hover:text-white text-lg" onClick={()=>setSmart5ConflictPopup(null)}>✕</button>
@@ -43834,7 +43834,7 @@ setCopyPlaceOptions(list);
             // ⭐ 24시콜 파일을 업로드해둔 상태였다면, 파일을 다시 올리지 않아도
             // 방금 고친 내용이 반영된 최신 dispatchData로 비교결과도 다시 계산한다.
             if (closeFileRawRef.current) setCloseFileResult(computeCloseFileIssues(closeFileRawRef.current));
-            setReVerifyToast("🔄 재검증이 완료되었습니다");
+            setReVerifyToast("↻ 재검증이 완료되었습니다");
             setTimeout(() => setReVerifyToast(null), 2500);
           }}>
           재검증
@@ -43877,7 +43877,7 @@ setCopyPlaceOptions(list);
             const isCaution = warningPopup.status === "주의";
             const isDeparture = warningPopup.status === "이탈";
             const headerCls = isBlack ? "bg-gray-900" : isCaution ? "bg-orange-500" : isDeparture ? "bg-red-600" : "bg-[#1B2B4B]";
-            const icon = isBlack ? "🚫" : isCaution ? "⚠️" : isDeparture ? "⛔" : "📝";
+            const icon = isBlack ? "⊘" : isCaution ? "⚠" : isDeparture ? "⊘" : "✎";
             const title = isBlack ? "블랙 거래처 알림" : isCaution ? "주의 거래처 알림" : isDeparture ? "이탈 거래처 알림" : "거래처 메모 안내";
             const boxCls = isBlack ? "bg-red-50 border-red-200" : isCaution ? "bg-orange-50 border-orange-200" : isDeparture ? "bg-red-50 border-red-200" : "bg-[#1B2B4B]/5 border-[#1B2B4B]/20";
             const memoTextCls = isBlack ? "text-red-600" : isCaution ? "text-orange-600" : isDeparture ? "text-red-600" : "text-[#1B2B4B]";
@@ -44648,7 +44648,7 @@ function AddressCell({ text = "", max = 5, valueClassName = "", popupTitle = "�
           더보기
         </button>
       )}
-      {open && createPortal( // ⭐ 표 레이어 분리(끊김 개선) 뒤에도 화면 전체에 뜨도록 body에 그린다
+      {open && createPortal( // ★ 표 레이어 분리(끊김 개선) 뒤에도 화면 전체에 뜨도록 body에 그린다
         <div
           className="kp-pc-pop fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
           onClick={() => setOpen(false)}
@@ -44697,11 +44697,11 @@ function MemoCell({ text }) {
       {showFull && (
         <div
           className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-          onClick={() => setShowFull(false)}   // ✅ 바깥 클릭 닫기
+          onClick={() => setShowFull(false)}   // ✓ 바깥 클릭 닫기
         >
           <div
             className="bg-white p-4 rounded-lg shadow-lg w-[400px]"
-            onClick={(e) => e.stopPropagation()} // ✅ 내부 클릭 전파 차단
+            onClick={(e) => e.stopPropagation()} // ✓ 내부 클릭 전파 차단
           >
             <h3 className="font-semibold mb-2">메모 내용</h3>
 
@@ -44711,7 +44711,7 @@ function MemoCell({ text }) {
 
             <div className="text-right mt-3">
               <button
-                onClick={() => setShowFull(false)} // ✅ 🔥 이게 핵심
+                onClick={() => setShowFull(false)} // ✓ ▲ 이게 핵심
                 className="px-3 py-1 bg-blue-600 text-white rounded"
               >
                 닫기
@@ -44731,8 +44731,8 @@ function NewOrderPopup({
   setNewOrder,
   addDispatch,
   clients,
-  drivers,       // ⭐ 추가
-  upsertDriver,  // ⭐ 추가
+  drivers,       // ★ 추가
+  upsertDriver,  // ★ 추가
   showAlert = (m) => alert(m),
 }) {
   const handleChange = (key, value) =>
@@ -44752,7 +44752,7 @@ function NewOrderPopup({
         차량번호: "",
         이름: "",
         전화번호: "",
-        긴급: false, // ⭐ 이거 꼭
+        긴급: false, // ★ 이거 꼭
 
         업체전달상태: "미전달",
         업체전달일시: null,
@@ -47392,10 +47392,10 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
     new Date().getFullYear()
   );
   const [detailClient, setDetailClient] = React.useState(null);
-  const [monthCompareOpen, setMonthCompareOpen] = React.useState(false); // ⭐ 월 비교 분석
-  const [marginReportOpen, setMarginReportOpen] = React.useState(false); // ⭐ 매익률 원인 보고서
-  const [monthCloseOpen, setMonthCloseOpen] = React.useState(false); // ⭐ 월 마감 점검
-  const [staffPerfOpen, setStaffPerfOpen] = React.useState(false); // ⭐ 배차담당자별 실적(관리자 전용)
+  const [monthCompareOpen, setMonthCompareOpen] = React.useState(false); // ★ 월 비교 분석
+  const [marginReportOpen, setMarginReportOpen] = React.useState(false); // ★ 매익률 원인 보고서
+  const [monthCloseOpen, setMonthCloseOpen] = React.useState(false); // ★ 월 마감 점검
+  const [staffPerfOpen, setStaffPerfOpen] = React.useState(false); // ★ 배차담당자별 실적(관리자 전용)
   // ⭐ 매출관리 — 선택한 연도 전체 + 고른 달 기준 3개월 전(전월 비교·마감 점검·담당자 실적)까지만 불러온다.
   // 월 비교 분석은 아무 달이나 고를 수 있어 열 때 전체를 불러온다.
   {
@@ -49759,8 +49759,8 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             <input autoComplete="off" placeholder="차량번호" value={vehicleNo} onChange={(e) => { const v = e.target.value; setVehicleNo(v); const found = findDriverByVehicleNo(v); if (found) { setMatchedDriver(found); setDriverName(found.name || found.기사명 || ""); setDriverPhone(found.phone || found.전화번호 || ""); setNewDriverPopup(false); } else { setMatchedDriver(null); setDriverName(""); setDriverPhone(""); setNewDriverPopup(normalizeVehicleNo(v).length >= 6); } }} className="border p-2 rounded w-full mb-2" />
             <input autoComplete="off" placeholder="기사명" value={driverName} onChange={(e) => setDriverName(e.target.value)} className="border p-2 rounded w-full mb-2" />
             <input autoComplete="off" placeholder="기사 연락처" value={driverPhone} onChange={(e) => setDriverPhone(formatPhone(e.target.value))} className="border p-2 rounded w-full mb-2" />
-            {matchedDriver && <div className="text-xs text-emerald-600 mb-2">✔ 기존 등록 차량 / 기사 자동 매칭됨</div>}
-            {!matchedDriver && newDriverPopup && <div className="text-xs text-amber-600 mb-2">➕ 등록되지 않은 차량입니다. 신규 기사로 등록됩니다.</div>}
+            {matchedDriver && <div className="text-xs text-emerald-600 mb-2">✓ 기존 등록 차량 / 기사 자동 매칭됨</div>}
+            {!matchedDriver && newDriverPopup && <div className="text-xs text-amber-600 mb-2">+ 등록되지 않은 차량입니다. 신규 기사로 등록됩니다.</div>}
             <input autoComplete="off" placeholder="지불운임" className="border p-2 rounded w-full mb-4" />
             <div className="flex justify-end gap-2">
               <button onClick={() => setQuickAssignOpen(false)} className="px-4 py-2 border rounded"><EditableText id="misc.btn.46835.취소" defaultText="취소" /></button>
@@ -49927,7 +49927,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]" tabIndex={-1} ref={(el) => el && setTimeout(() => el.focus(), 0)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setBlackDriverAlert(null); } }}>
           <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
             <div className="bg-gray-900 px-6 py-4 flex items-center gap-3">
-              <span className="text-2xl">🚫</span>
+              <span className="text-2xl">⊘</span>
               <h3 className="text-white text-lg font-bold">블랙 기사 알림</h3>
             </div>
             <div className="px-6 py-5 space-y-3">
@@ -49951,7 +49951,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
   <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50" tabIndex={-1} ref={warningPopupRef} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setWarningPopup(null); } }}>
     <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
       <div className={`px-6 py-4 flex items-center gap-3 ${warningPopup.status === "블랙" ? "bg-gray-900" : warningPopup.status === "주의" ? "bg-orange-500" : "bg-red-600"}`}>
-        <span className="text-2xl">{warningPopup.status === "블랙" ? "🚫" : warningPopup.status === "주의" ? "⚠️" : "⛔"}</span>
+        <span className="text-2xl">{warningPopup.status === "블랙" ? "⊘" : warningPopup.status === "주의" ? "⚠" : "⊘"}</span>
         <h3 className="text-white text-lg font-bold">{warningPopup.status || "메모"} 거래처 알림</h3>
       </div>
       <div className="px-6 py-5 space-y-3">
@@ -50444,7 +50444,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         )}
                       </div>
                       {copyTarget?.차량번호 && normalizePlate(copyTarget.차량번호).length >= 4 && !copyTarget?.이름 && (
-                        <div className="text-xs text-amber-600 mt-1">⚠️ 등록되지 않은 차량입니다</div>
+                        <div className="text-xs text-amber-600 mt-1">⚠ 등록되지 않은 차량입니다</div>
                       )}
                     </Field>
                     <Field label="기사명">
@@ -51171,7 +51171,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
 
   const arOptions = useMemo(() => {
     const q = (arInput || "").trim().toLowerCase();
-    if (!q) return [AR_ALL, ...clientOptions8]; // ⭐ 맨 위 "전체 거래처"
+    if (!q) return [AR_ALL, ...clientOptions8]; // ★ 맨 위 "전체 거래처"
     const norm = (s) => s.toLowerCase().replace(/\s+/g, "");
     const nq = norm(q);
     const exact = [], starts = [], includes = [];
@@ -53742,7 +53742,7 @@ const handleBatchSettle = async (targetStatus) => {
             {/* 매칭 기준 요약 */}
             <div className="p-4 bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 rounded-xl">
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] text-[#1B2B4B] font-semibold">
-                <span>💡 <b>매칭 기준:</b> 입금액 = 월 총청구금액 × 1.1 (세액포함) ±10원 허용</span>
+                <span>※ <b>매칭 기준:</b> 입금액 = 월 총청구금액 × 1.1 (세액포함) ±10원 허용</span>
                 <span className="text-gray-400">|</span>
                 <span><b>지원 파일:</b> .xlsx, .xls, .csv</span>
                 <span className="text-gray-400">|</span>
@@ -54989,7 +54989,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   const [dispatchMethodFilter, setDispatchMethodFilter] = useState("전체");
   const [loadStart, setLoadStart] = useState(() => `${thisMonthStr()}-01`);
   const [loadEnd, setLoadEnd] = useState(todayStr9);
-  useLoadOrderRange(loadStart || null, loadEnd); // ⭐ 고른 기간만 불러오기
+  useLoadOrderRange(loadStart || null, loadEnd); // ★ 고른 기간만 불러오기
   const [carNoQ, setCarNoQ] = useState("");
   const [nameQ, setNameQ] = useState("");
   const [clientQ, setClientQ] = useState("");
@@ -59150,7 +59150,7 @@ const ProfilePanel = ({ eyebrow, title: t, desc, right, children, className = ""
 );
 
 function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, cardImageUploading, setCardImageUploading, showAlert, userCompany, role }) {
-  const [loginMgrOpen, setLoginMgrOpen] = React.useState(false); // ⭐ 로그인 관리 창
+  const [loginMgrOpen, setLoginMgrOpen] = React.useState(false); // ★ 로그인 관리 창
   const co = role === "totalMaster"
     ? (localStorage.getItem("loginCompany") || userCompany || "")
     : (userCompany || localStorage.getItem("userCompany") || "");
@@ -59631,7 +59631,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null }) {
     if (!company) return;
     const q = query(collection(db, "users"), where("companyName", "==", company));
     const unsub = onSnapshot(q, snap => {
-      setMembers(snap.docs.map(d => ({ uid: d.id, ...d.data() })).filter(u => u.approved !== false && !isTMUser(u))); // ⭐ 최고관리자는 인사 대상 아님
+      setMembers(snap.docs.map(d => ({ uid: d.id, ...d.data() })).filter(u => u.approved !== false && !isTMUser(u))); // ★ 최고관리자는 인사 대상 아님
     }, () => {});
     return () => unsub();
   }, [company]);
@@ -60467,12 +60467,12 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
       </div>
 
       <div className="grid grid-cols-3 gap-4">
-        <ERPCard title="직원관리" icon="👥" sub="임직원 현황 및 권한" onClick={()=>setSubPage("직원관리")} />
-        <ERPCard title="차량관리" icon="🚛" sub={`등록 차량 ${drivers.length}대`} badge={drivers.length} onClick={()=>setSubPage("차량관리")} />
-        <ERPCard title="거래처관리" icon="🏢" sub={`거래처 ${allClients.length}곳`} badge={allClients.length} onClick={()=>setSubPage("거래처관리")} />
-        <ERPCard title="급여관리" icon="💰" sub="월별 기사 운임 정산" onClick={()=>setSubPage("급여관리")} />
-        <ERPCard title="근태관리" icon="📋" sub="준비 중" onClick={()=>{}} />
-        <ERPCard title="운행일지" icon="📍" sub="준비 중" onClick={()=>{}} />
+        <ERPCard title="직원관리" icon="◆" sub="임직원 현황 및 권한" onClick={()=>setSubPage("직원관리")} />
+        <ERPCard title="차량관리" icon="▸" sub={`등록 차량 ${drivers.length}대`} badge={drivers.length} onClick={()=>setSubPage("차량관리")} />
+        <ERPCard title="거래처관리" icon="◆" sub={`거래처 ${allClients.length}곳`} badge={allClients.length} onClick={()=>setSubPage("거래처관리")} />
+        <ERPCard title="급여관리" icon="₩" sub="월별 기사 운임 정산" onClick={()=>setSubPage("급여관리")} />
+        <ERPCard title="근태관리" icon="▤" sub="준비 중" onClick={()=>{}} />
+        <ERPCard title="운행일지" icon="●" sub="준비 중" onClick={()=>{}} />
       </div>
     </div>
   );

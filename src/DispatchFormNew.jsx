@@ -449,7 +449,7 @@ useEffect(() => {
 
   const t = setTimeout(() => {
     handleAutoRouteCalc();
-  }, 800); // ⭐ 중요
+  }, 800); // ★ 중요
 
   return () => clearTimeout(t);
 }, [form.상차지주소, form.하차지주소]);

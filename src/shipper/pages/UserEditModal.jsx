@@ -557,7 +557,7 @@ disabled={!canEdit}
     <input
       type="checkbox"
       defaultChecked
-      disabled={!isLoginMaster}   // 🔥 마스터만 수정 가능
+      disabled={!isLoginMaster}   // ▲ 마스터만 수정 가능
     />
     전체
   </label>
@@ -567,7 +567,7 @@ disabled={!canEdit}
       <input
         type="checkbox"
         defaultChecked
-        disabled={!isLoginMaster}   // 🔥 마스터만 수정 가능
+        disabled={!isLoginMaster}   // ▲ 마스터만 수정 가능
       />
       본사
     </label>

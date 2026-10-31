@@ -309,7 +309,7 @@ export default function ContractStudio({ company = "", me = {} }) {
                     <CustomSelect value="" onChange={(e) => loadTpl(e.target.value)} className={inp}>
                       <option value="">{myTpls.length ? `내 양식 ${myTpls.length}개 · 골라서 불러오기` : "저장한 내 양식이 없습니다"}</option>
                       <option value="__base">기본 양식(처음 상태)</option>
-                      {myTpls.map((t) => <option key={t.id} value={t.id}>📁 {t.templateName}</option>)}
+                      {myTpls.map((t) => <option key={t.id} value={t.id}>▤ {t.templateName}</option>)}
                     </CustomSelect>
                   </div>
                   <button type="button" onClick={() => setTplName(tplName === null ? "" : null)} className="h-11 px-3.5 shrink-0 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black whitespace-nowrap">내 양식으로 저장</button>
@@ -322,7 +322,7 @@ export default function ContractStudio({ company = "", me = {} }) {
                 )}
                 {myTpls.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-2">
-                    {myTpls.map((t) => <span key={t.id} className="h-8 pl-2.5 pr-1 rounded-lg bg-white border border-[#DCE3EE] text-[12.5px] font-bold text-[#1B2B4B] inline-flex items-center gap-1">📁 {t.templateName}<button type="button" onClick={() => removeTpl(t)} className="w-6 h-6 rounded text-[#7A879C] hover:bg-[#F3F6FA]" aria-label="양식 삭제">✕</button></span>)}
+                    {myTpls.map((t) => <span key={t.id} className="h-8 pl-2.5 pr-1 rounded-lg bg-white border border-[#DCE3EE] text-[12.5px] font-bold text-[#1B2B4B] inline-flex items-center gap-1">▤ {t.templateName}<button type="button" onClick={() => removeTpl(t)} className="w-6 h-6 rounded text-[#7A879C] hover:bg-[#F3F6FA]" aria-label="양식 삭제">✕</button></span>)}
                   </div>
                 )}
                 <div className="text-[12px] text-[#5B6B85] mt-1.5">조항을 고치거나 추가한 뒤 저장하면 다음부터 그 양식으로 바로 시작할 수 있어요(회사 공용)</div>

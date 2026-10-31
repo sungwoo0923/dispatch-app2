@@ -209,8 +209,8 @@ export function CashBook({ company, isViewer = false }) {
 
       {!isViewer && (toImport.length > 0 || recurTodo.length > 0) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {toImport.length > 0 && <button type="button" disabled={busy} onClick={importApprovals} className="rounded-2xl border border-[#C9D6EE] bg-[#EEF3FC] px-4 py-3 text-left"><b className="text-[14px] text-[#0F1A30]">📝 승인된 지출결의 {toImport.length}건 가져오기</b><div className="text-[12px] text-[#5B6B85]">전자결재 › 비용·지출 결의에서 승인된 문서를 장부에 넣습니다</div></button>}
-          {recurTodo.length > 0 && <button type="button" disabled={busy} onClick={applyRecurring} className="rounded-2xl border border-[#C9D6EE] bg-[#EEF3FC] px-4 py-3 text-left"><b className="text-[14px] text-[#0F1A30]">🔁 이번 달 고정비 {recurTodo.length}건 반영</b><div className="text-[12px] text-[#5B6B85]">{recurTodo.slice(0, 3).map((r) => r.name).join(" · ")}{recurTodo.length > 3 ? " …" : ""}</div></button>}
+          {toImport.length > 0 && <button type="button" disabled={busy} onClick={importApprovals} className="rounded-2xl border border-[#C9D6EE] bg-[#EEF3FC] px-4 py-3 text-left"><b className="text-[14px] text-[#0F1A30]">✎ 승인된 지출결의 {toImport.length}건 가져오기</b><div className="text-[12px] text-[#5B6B85]">전자결재 › 비용·지출 결의에서 승인된 문서를 장부에 넣습니다</div></button>}
+          {recurTodo.length > 0 && <button type="button" disabled={busy} onClick={applyRecurring} className="rounded-2xl border border-[#C9D6EE] bg-[#EEF3FC] px-4 py-3 text-left"><b className="text-[14px] text-[#0F1A30]">↻ 이번 달 고정비 {recurTodo.length}건 반영</b><div className="text-[12px] text-[#5B6B85]">{recurTodo.slice(0, 3).map((r) => r.name).join(" · ")}{recurTodo.length > 3 ? " …" : ""}</div></button>}
         </div>
       )}
 
@@ -360,7 +360,7 @@ export function CashBook({ company, isViewer = false }) {
             <div className="flex flex-wrap gap-1.5 mb-2">{["세금계산서", "카드전표", "현금영수증", "간이영수증", "증빙 없음"].map((m) => <Chip key={m} on={edit.evidence === m} onClick={() => setEdit((p) => ({ ...p, evidence: m }))}>{m}</Chip>)}</div>
             {edit.receipt ? (
               <div className="relative rounded-xl overflow-hidden border border-[#E3E8F0] bg-white"><img src={edit.receipt} alt="" className="w-full max-h-72 object-contain" /><div className="absolute top-2 right-2 flex gap-1.5"><button type="button" onClick={() => saveImage(edit.receipt, `증빙_${edit.date}_${edit.item || edit.vendor || edit.account}`)} className="h-8 px-3 rounded-lg bg-white/90 text-[#0F1A30] text-[12px] font-black border border-[#DCE3EE]">⬇ 사진 저장</button><button type="button" onClick={() => setEdit((p) => ({ ...p, receipt: "" }))} className="h-8 px-3 rounded-lg bg-[#0F1A30]/80 text-white text-[12px] font-bold">사진 빼기</button></div></div>
-            ) : <button type="button" onClick={() => fileRef.current?.click()} className="w-full h-16 rounded-xl border-2 border-dashed border-[#C9D2E0] bg-white text-[13px] font-bold text-[#5B6B85]">🧾 영수증 사진 찍기·올리기</button>}
+            ) : <button type="button" onClick={() => fileRef.current?.click()} className="w-full h-16 rounded-xl border-2 border-dashed border-[#C9D2E0] bg-white text-[13px] font-bold text-[#5B6B85]">▤ 영수증 사진 찍기·올리기</button>}
             <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) { const r = await compressImage(f, 1400, 0.8).catch(() => ""); setEdit((p) => ({ ...p, receipt: r })); } }} />
           </div>
           <div><Label>메모</Label><input value={edit.memo} onChange={(e) => setEdit((p) => ({ ...p, memo: e.target.value }))} className={inp} placeholder="선택" /></div>
@@ -525,7 +525,7 @@ export function AssetManager({ company, isViewer = false }) {
           <div><Label>구입처 · 메모</Label><input value={edit.vendor} onChange={(e) => setEdit((p) => ({ ...p, vendor: e.target.value }))} className={`${inp} mb-2`} placeholder="구입처" /><input value={edit.memo} onChange={(e) => setEdit((p) => ({ ...p, memo: e.target.value }))} className={inp} placeholder="메모(보증기간·시리얼 등)" /></div>
           <div><Label>사진</Label>
             {edit.photo ? <div className="relative rounded-xl overflow-hidden border border-[#E3E8F0] bg-white"><img src={edit.photo} alt="" className="w-full max-h-48 object-contain" /><button type="button" onClick={() => setEdit((p) => ({ ...p, photo: "" }))} className="absolute top-2 right-2 h-8 px-3 rounded-lg bg-[#0F1A30]/80 text-white text-[12px] font-bold">빼기</button></div>
-              : <button type="button" onClick={() => fileRef.current?.click()} className="w-full h-14 rounded-xl border-2 border-dashed border-[#C9D2E0] bg-white text-[13px] font-bold text-[#5B6B85]">📷 사진 올리기(선택)</button>}
+              : <button type="button" onClick={() => fileRef.current?.click()} className="w-full h-14 rounded-xl border-2 border-dashed border-[#C9D2E0] bg-white text-[13px] font-bold text-[#5B6B85]">◎ 사진 올리기(선택)</button>}
             <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) { const r = await compressImage(f, 1000, 0.75).catch(() => ""); setEdit((p) => ({ ...p, photo: r })); } }} />
           </div>
           {edit.id && (edit.history || []).length > 0 && (

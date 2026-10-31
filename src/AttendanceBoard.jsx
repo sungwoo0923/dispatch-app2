@@ -98,7 +98,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     const unsub = onSnapshot(q, snap => {
       const all = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
       setTmUids(new Set(all.filter(isTMUser).map(u => u.uid)));
-      setEmployees(all.filter(u => u.approved !== false && !isTMUser(u))); // ⭐ 최고관리자는 출근기록부에서 제외
+      setEmployees(all.filter(u => u.approved !== false && !isTMUser(u))); // ★ 최고관리자는 출근기록부에서 제외
     }, () => {});
     return () => unsub();
   }, [company]);

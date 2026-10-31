@@ -108,15 +108,15 @@ async function sendPushAndCleanup(tokens, message, label) {
   try {
     res = await messaging.sendEachForMulticast({ tokens, data, ...restMessage });
   } catch (e) {
-    console.error(`🚫 ${label} 발송 자체 실패:`, e?.message || e);
+    console.error(`⊘ ${label} 발송 자체 실패:`, e?.message || e);
     return undefined;
   }
-  console.log(`✅ ${label} 발송: 성공 ${res.successCount} / 실패 ${res.failureCount}`);
+  console.log(`✓ ${label} 발송: 성공 ${res.successCount} / 실패 ${res.failureCount}`);
   const staleTokens = [];
   res.responses.forEach((r, i) => {
     if (r.success) return;
     const code = r.error?.code;
-    console.warn(`⚠️ ${label} 발송 실패 (token #${i}): ${code || ""} ${r.error?.message || ""}`);
+    console.warn(`⚠ ${label} 발송 실패 (token #${i}): ${code || ""} ${r.error?.message || ""}`);
     if (code && STALE_FCM_TOKEN_ERROR_CODES.has(code)) staleTokens.push(tokens[i]);
   });
   if (!staleTokens.length) return res;
@@ -129,7 +129,7 @@ async function sendPushAndCleanup(tokens, message, label) {
       const batch = db.batch();
       snap.docs.forEach((d) => batch.update(d.ref, { fcmToken: FieldValue.delete() }));
       await batch.commit();
-      console.log(`🧹 만료된 FCM 토큰 ${snap.size}개 정리 완료`);
+      console.log(`◇ 만료된 FCM 토큰 ${snap.size}개 정리 완료`);
     }
   } catch (e) {
     console.warn("만료 FCM 토큰 정리 실패(무시):", e?.message || e);
@@ -138,7 +138,7 @@ async function sendPushAndCleanup(tokens, message, label) {
 }
 
 /* ==============================
-   ✏️ 푸시 알림 내용(본문) 커스터마이징 — 최고관리자가 PC 관리자메뉴에서
+   ✎ 푸시 알림 내용(본문) 커스터마이징 — 최고관리자가 PC 관리자메뉴에서
    설정한다(제목은 고정, 본문에 어떤 필드를 넣을지만 설정 가능).
    설정값은 siteConfig/notificationTemplate 문서 하나에 타입별로 저장된다.
    { 배차등록: { fields: [...] }, 긴급배차: {...}, 배차완료: {...}, 미배차: {...} }
@@ -252,7 +252,7 @@ function buildNotifBody(fieldKeys, d) {
 }
 
 /* ==============================
-   🔔 신규 오더 알림
+   ◆ 신규 오더 알림
 ============================== */
 exports.notifyNewDispatch =
   functions.firestore
@@ -262,11 +262,11 @@ exports.notifyNewDispatch =
       if (!["dispatch", "orders"].includes(col)) return;
 
       const data = snap.data();
-      if (data?.블라인드 === true) return; // ⭐ 블라인드 오더(최고관리자 전용)는 알림 제외
+      if (data?.블라인드 === true) return; // ★ 블라인드 오더(최고관리자 전용)는 알림 제외
       if (!data) return;
       // ⭐ 구글시트 가져오기로 한꺼번에 만든 예전 오더, 초기화 복원 중인 오더는 알림을 보내지 않는다
       if (data.importBatchId) return;
-      if (data._recurring) return; // ⭐ 정기 오더 자동 생성분은 알림 없음(한꺼번에 만들어져 알림이 쏟아지지 않게)
+      if (data._recurring) return; // ★ 정기 오더 자동 생성분은 알림 없음(한꺼번에 만들어져 알림이 쏟아지지 않게)
       if (await isBulkModeFor(data.companyName)) return;
 
       // ⭐ 화주사 전송 사본(source==="transport_transmit")은 이미 있던 오더를
@@ -279,7 +279,7 @@ exports.notifyNewDispatch =
       const type = isUrgent ? "긴급배차" : "배차등록";
       const tokens = await getTokensForType(type);
       if (!tokens.length) {
-        console.log("🚫 FCM 토큰 없음");
+        console.log("⊘ FCM 토큰 없음");
         return;
       }
 
@@ -298,7 +298,7 @@ exports.notifyNewDispatch =
     });
 
 /* ==============================
-   🚚 배차완료 알림
+   ▸ 배차완료 알림
 ============================== */
 exports.notifyDispatchDone =
   functions.firestore
@@ -309,7 +309,7 @@ exports.notifyDispatchDone =
 
       const before = change.before.data();
       const after = change.after.data();
-      if (after?.블라인드 === true) return; // ⭐ 블라인드 오더(최고관리자 전용)는 알림 제외
+      if (after?.블라인드 === true) return; // ★ 블라인드 오더(최고관리자 전용)는 알림 제외
       if (!before || !after) return;
       if (after.source === "transport_transmit") return; // 위와 동일한 이유로 사본은 스킵
 
@@ -336,7 +336,7 @@ exports.notifyDispatchDone =
     });
 
 /* ==============================
-   🔄 재배차 알림 — 배차완료(기사 배정) 상태였다가, 그 기사가 빠지고 다시
+   ↻ 재배차 알림 — 배차완료(기사 배정) 상태였다가, 그 기사가 빠지고 다시
    "배차중" 상태로 돌아간 경우("재배차 필요"). notifyDispatchDone과 반대 방향.
 ============================== */
 exports.notifyRedispatch =
@@ -348,7 +348,7 @@ exports.notifyRedispatch =
 
       const before = change.before.data();
       const after = change.after.data();
-      if (after?.블라인드 === true) return; // ⭐ 블라인드 오더(최고관리자 전용)는 알림 제외
+      if (after?.블라인드 === true) return; // ★ 블라인드 오더(최고관리자 전용)는 알림 제외
       if (!before || !after) return;
       if (after.source === "transport_transmit") return;
 
@@ -374,7 +374,7 @@ exports.notifyRedispatch =
     });
 
 /* ==============================
-   ❌ 배차취소 알림 — 오더가 취소(소프트: 배차상태→배차취소)되거나
+   ✕ 배차취소 알림 — 오더가 취소(소프트: 배차상태→배차취소)되거나
    완전삭제된 경우.
 ============================== */
 exports.notifyDispatchCanceled =
@@ -422,10 +422,10 @@ exports.notifyDispatchCanceled =
               apns: { payload: { aps: { sound: "default" } } },
             }, "지입기사 오더취소(소프트)");
           } else {
-            console.log("🚫 오더취소 기사 푸시 생략(알림꺼짐/토큰없음):", driverDoc.id);
+            console.log("⊘ 오더취소 기사 푸시 생략(알림꺼짐/토큰없음):", driverDoc.id);
           }
         } else {
-          console.log("🚫 오더취소: 배정 기사 문서를 찾을 수 없음:", before["차량번호"]);
+          console.log("⊘ 오더취소: 배정 기사 문서를 찾을 수 없음:", before["차량번호"]);
         }
       } catch (e) { console.error("오더취소 기사 푸시 실패:", e?.message || e); }
 
@@ -509,7 +509,7 @@ function normalizePlateServer(v = "") {
 }
 
 /* ==============================
-   📦 지입 기사 — 새 오더 배정 알림(OS 푸시)
+   ▣ 지입 기사 — 새 오더 배정 알림(OS 푸시)
    DispatchApp.jsx/DriverHome.jsx가 오더의 기사확인상태를 "대기"로 걸면
    (관리자가 지입 기사 차량번호를 새로 입력했을 때) 그 기사 본인에게
    실제 푸시 알림을 보낸다. 기사 쪽은 drivers/{uid} 문서의 차량번호로
@@ -623,15 +623,15 @@ exports.notifyFleetDriverNewOrder =
       const driverDoc = driverSnap.docs.find(
         (d) => normalizePlateServer(d.data()["차량번호"]) === plate
       );
-      if (!driverDoc) { console.log("🚫 배정 기사 문서를 찾을 수 없음:", after["차량번호"]); return; }
+      if (!driverDoc) { console.log("⊘ 배정 기사 문서를 찾을 수 없음:", after["차량번호"]); return; }
 
       const userSnap = await db.collection("users").doc(driverDoc.id).get();
       const userData = userSnap.exists ? userSnap.data() : null;
       // ⭐ 사용자 요청 — 기사 앱 설정에서 알림/푸시를 꺼놨으면(driverPushEnabled===false)
       // 보내지 않는다. 기본값은 켜짐(필드 자체가 없으면 보낸다).
-      if (userData?.driverPushEnabled === false) { console.log("🔕 지입 기사 알림 꺼둠:", driverDoc.id); return; }
+      if (userData?.driverPushEnabled === false) { console.log("○ 지입 기사 알림 꺼둠:", driverDoc.id); return; }
       const token = userData?.fcmToken || null;
-      if (!token) { console.log("🚫 지입 기사 FCM 토큰 없음(앱 미접속 또는 알림권한 미허용):", driverDoc.id); return; }
+      if (!token) { console.log("⊘ 지입 기사 FCM 토큰 없음(앱 미접속 또는 알림권한 미허용):", driverDoc.id); return; }
 
       await sendPushAndCleanup([token], {
         notification: {
@@ -645,7 +645,7 @@ exports.notifyFleetDriverNewOrder =
     });
 
 /* ==============================
-   🙅 지입 기사 — 오더 거절 알림(배차담당자 본인에게 OS 푸시)
+   ⊘ 지입 기사 — 오더 거절 알림(배차담당자 본인에게 OS 푸시)
 ============================== */
 exports.notifyDispatcherOrderRejected =
   functions.firestore
@@ -681,7 +681,7 @@ exports.notifyDispatcherOrderRejected =
     });
 
 /* ==============================
-   ⛽ 유가 API Proxy
+   ◆ 유가 API Proxy
 ============================== */
 exports.fuel = functions.https.onRequest(async (req, res) => {
   const area = req.query.area || "01";
@@ -704,7 +704,7 @@ exports.fuel = functions.https.onRequest(async (req, res) => {
         return res.status(200).json(data);
       }
     } catch (err) {
-      console.warn("🔥 Fuel API endpoint 실패:", err?.message || err);
+      console.warn("▲ Fuel API endpoint 실패:", err?.message || err);
     }
   }
   // api/fuel.js와 동일하게, 모든 endpoint 실패 시 "정보 없음" 대신 최근 전국 평균가 반환
@@ -722,7 +722,7 @@ exports.fuel = functions.https.onRequest(async (req, res) => {
 });
 
 /* ==============================
-   ⏰ 미배차 임박 자동 알림
+   ◷ 미배차 임박 자동 알림
    — 5분마다 실행. 상차 30분 전까지 배차중(기사 미배정)인 오더를 찾아,
    등록한 담당자에게 자동으로 푸시알림을 보낸다. 문자(SMS)는 이 프로젝트에
    유료 SMS 게이트웨이 연동이 없어(모든 "문자보내기"가 sms: 링크로 휴대폰
@@ -774,7 +774,7 @@ exports.notifyUnassignedUrgent = functions.pubsub
           .where("상차일", "==", todayStr)
           .get();
       } catch (e) {
-        console.warn(`⏰ ${col} 조회 실패:`, e?.message || e);
+        console.warn(`◷ ${col} 조회 실패:`, e?.message || e);
         continue;
       }
 
@@ -782,7 +782,7 @@ exports.notifyUnassignedUrgent = functions.pubsub
         const data = docSnap.data();
         if (data.source === "transport_transmit") continue; // 원본(dispatch)과 중복 방지
         if (data.urgentPushSentAt) continue; // 이미 이 오더는 알림을 보냈음
-        if (data.블라인드 === true) continue; // ⭐ 블라인드 오더는 미배차 알림 제외
+        if (data.블라인드 === true) continue; // ★ 블라인드 오더는 미배차 알림 제외
 
         const t24 = normalizeTimeToHHMM(data["상차시간"]);
         if (!t24) continue;
@@ -803,18 +803,18 @@ exports.notifyUnassignedUrgent = functions.pubsub
           }, "미배차 임박");
           sent++;
         } catch (e) {
-          console.warn("⏰ 미배차 임박 알림 발송 실패:", e?.message || e);
+          console.warn("◷ 미배차 임박 알림 발송 실패:", e?.message || e);
         }
 
         await docSnap.ref.update({ urgentPushSentAt: FieldValue.serverTimestamp() }).catch(() => {});
       }
     }
 
-    console.log(`⏰ 미배차 임박 자동 알림 체크 완료 (발송 ${sent}건)`);
+    console.log(`◷ 미배차 임박 자동 알림 체크 완료 (발송 ${sent}건)`);
   });
 
 /* ==============================
-   ✏️ 지입 기사 — 수락한 오더를 관리자가 수정하면 기사에게 알림
+   ✎ 지입 기사 — 수락한 오더를 관리자가 수정하면 기사에게 알림
    상/하차지·일시·화물·운임·담당자·전달사항 중 바뀐 항목을 알려준다(푸시 + 알림함).
    기사앱은 오더의 기사확인값(수락/수정확인 시점 값)과 비교해 빨간 깜빡임 + 수정확인 버튼을 띄운다.
 ============================== */
@@ -878,7 +878,7 @@ exports.notifyFleetOrderModified =
     });
 
 /* ==============================
-   🚚 지입 기사 — 상차/하차 시간 지연 알림
+   ▸ 지입 기사 — 상차/하차 시간 지연 알림
    — 5분마다 실행. 오늘 "수락"(운송중) 상태인 지입 오더 중 상차시간(또는
    하차시간)이 지났는데 기사가 아직 상차지(하차지) 5km(진입) 반경 밖에 있으면,
    기사 본인과 담당자(기사 담당자 + 오더 등록자)에게 푸시를 보낸다.
@@ -956,7 +956,7 @@ exports.notifyFleetLateArrival = functions.pubsub
       try {
         snap = await db.collection(col).where("기사확인상태", "==", "수락").get();
       } catch (e) {
-        console.warn(`🚚 ${col} 조회 실패:`, e?.message || e);
+        console.warn(`▸ ${col} 조회 실패:`, e?.message || e);
         continue;
       }
 
@@ -1026,7 +1026,7 @@ exports.notifyFleetLateArrival = functions.pubsub
           if (mgrTokens.length) {
             await sendPushAndCleanup(mgrTokens, {
               notification: {
-                title: `⚠️ ${c.label} 지연 우려 · ${driverLabel}`,
+                title: `⚠ ${c.label} 지연 우려 · ${driverLabel}`,
                 body: `${c.label}시간(${t24})이 지났지만 아직 ${c.label}지 [${place}] 반경 밖입니다. ${distText}. 기사님께 확인 바랍니다.`,
               },
               data: { type: `fleet_late_${c.kind}`, orderId: docSnap.id },
@@ -1060,11 +1060,11 @@ exports.notifyFleetLateArrival = functions.pubsub
         }
       }
     }
-    console.log(`🚚 지입 상/하차 지연 체크 완료 (발송 ${sent}건)`);
+    console.log(`▸ 지입 상/하차 지연 체크 완료 (발송 ${sent}건)`);
   });
 
 /* ==============================
-   🗑️ 첨부파일 6개월 경과 자동삭제
+   ✕ 첨부파일 6개월 경과 자동삭제
    — 매일 실행되며, 등록(createdAt) 후 6개월이 지난 첨부파일 중
    사용자가 "잠금"을 걸어두지 않은(잠금 !== true) 파일만 삭제한다.
    잠긴 파일은 아무리 오래돼도 이 정리에서 제외된다.
@@ -1102,11 +1102,11 @@ exports.cleanupOldAttachments = functions.pubsub
       }
     }
 
-    console.log(`🗑️ 6개월 경과 첨부파일 자동삭제 완료: ${deleted}건`);
+    console.log(`✕ 6개월 경과 첨부파일 자동삭제 완료: ${deleted}건`);
   });
 
 /* ==============================================================
-   🔔 사내 메신저 새 메시지 알림 (백그라운드 푸시)
+   ◆ 사내 메신저 새 메시지 알림 (백그라운드 푸시)
    ----------------------------------------------------------------
    앱이 백그라운드/완전종료 상태여도 카카오톡처럼 알림창이 뜨게 하는 부분
    중 하나 — 새 메시지(chat_messages)가 생기면 그 방(chat_rooms) 멤버 중
@@ -1144,7 +1144,7 @@ exports.notifyChatMessage = functions.firestore
   });
 
 /* ==============================================================
-   🔔 관리자 발신 푸시 (최고관리자 전용) — 제목/내용을 직접 써서 전체 발송,
+   ◆ 관리자 발신 푸시 (최고관리자 전용) — 제목/내용을 직접 써서 전체 발송,
    또는 특정 uid 한 명(테스트용)에게만 발송.
 ================================================================== */
 const PUSH_SEND_KEY = "kpflow-push-2026";
@@ -1198,7 +1198,7 @@ exports.sendPushNotification = functions.https.onRequest(async (req, res) => {
 });
 
 /* ==============================================================
-   📊 구글시트(배차현황) 실시간 연동
+   ▥ 구글시트(배차현황) 실시간 연동
    ----------------------------------------------------------------
    돌캐(userCompany==="돌캐")가 배차프로그램에 오더를 등록/수정할 때마다,
    기존에 쓰던 구글시트(월별 탭 구조)에도 같은 내용이 실시간으로 반영되게
@@ -1208,7 +1208,7 @@ exports.sendPushNotification = functions.https.onRequest(async (req, res) => {
    "<프로젝트ID>@appspot.gserviceaccount.com")에게 "편집자"로 공유해두기만
    하면 별도 설정 없이 바로 동작한다.
 
-   ⚠️ 주의(범위):
+   ⚠ 주의(범위):
    - 이 함수는 "orders"/"dispatch" 컬렉션 중 companyName이 정확히 "돌캐"인
      문서만 대상으로 한다 — 이 두 컬렉션은 여러 운송사가 함께 쓰는 공용
      컬렉션이라, 회사명으로 거르지 않으면 다른 회사 오더까지 이 개인
@@ -1299,7 +1299,7 @@ async function sendGsheetMineBatch(items) {
   const byTab = new Map();
   const skipped = [];
   for (const it of items) {
-    const tab = isGsheetCanceled(it.data) ? null : gsheetMonthTabName(it.data.상차일); // ⭐ 블라인드여도 내 오더는 시트로 보낸다(프로그램에서만 숨김)
+    const tab = isGsheetCanceled(it.data) ? null : gsheetMonthTabName(it.data.상차일); // ★ 블라인드여도 내 오더는 시트로 보낸다(프로그램에서만 숨김)
     if (!tab) { skipped.push(it); continue; }
     if (!byTab.has(tab)) byTab.set(tab, []);
     byTab.get(tab).push(it);
@@ -1411,7 +1411,7 @@ const GSHEET_UNIQUE_TAB = "고유값";
 const GSHEET_CANCELED_STATUS_LIST = ["취소", "배차취소", "오더취소", "취소됨"];
 
 /* ------------------------------------------------------------------
-   ⭐ 열 위치를 하드코딩(B~J, K, L, M:N ...)하지 않고 매번 그 탭의 1행(헤더)을
+   ★ 열 위치를 하드코딩(B~J, K, L, M:N ...)하지 않고 매번 그 탭의 1행(헤더)을
    읽어서 이름으로 찾는다.
 
    원래 K열이 배차상태였는데, 사용자가 시트에 "경유지" 열을 손으로 끼워넣으면서
@@ -1544,7 +1544,7 @@ function extractGsheetWaypointNames(data) {
 }
 
 /* ------------------------------------------------------------------
-   📇 거래처(기본거래처=clients / 하차지거래처=places) 마스터 데이터를
+   ▤ 거래처(기본거래처=clients / 하차지거래처=places) 마스터 데이터를
    구글시트로 전송 — 관리자용.
    사용자 요청: "컬럼명은 지금 프로그램에 있는거 그대로 전송이 되어야해
    내가 설정하는게 아니라" — 그래서 오더 백필처럼 시트에 미리 있는
@@ -1758,7 +1758,7 @@ async function clearGsheetDataRows(sheetId, rowCount, tabName) {
         },
       });
     } else {
-      console.warn(`⚠️ "${tabName}" 탭에서 배차상태 헤더를 못 찾아 배차상태 수식을 다시 심지 못했습니다.`);
+      console.warn(`⚠ "${tabName}" 탭에서 배차상태 헤더를 못 찾아 배차상태 수식을 다시 심지 못했습니다.`);
     }
   }
 }
@@ -1799,7 +1799,7 @@ async function ensureGsheetMonthTab(tabName) {
 }
 
 /* ==================================================================
-   ✍️ 시트 직접 입력 도우미(2026-10-20 요청) — 월별 탭에 한 번 적용해두면 시트가 알아서 표시한다
+   ✎ 시트 직접 입력 도우미(2026-10-20 요청) — 월별 탭에 한 번 적용해두면 시트가 알아서 표시한다
    ① 필수칸: 그 줄에 뭔가 입력하기 시작했는데 필수칸이 비어 있으면 연한 빨간 배경 → 입력하면 바로 사라짐
       (구글시트 "조건부 서식"은 테두리를 바꿀 수 없어서 배경색으로 표시)
    ② 머리줄: 필수 항목 이름을 빨간 글씨·연한 빨간 배경으로 + 마우스를 올리면 "필수 입력" 메모, 머리줄 고정
@@ -2445,7 +2445,7 @@ async function syncOneDispatchToGsheet(docId, eventData, eventBefore) {
 }
 
 /* ==============================================================
-   📊 (1회성) 이미 등록돼 있던 오더를 구글시트로 일괄 반영 — 관리자용
+   ▥ (1회성) 이미 등록돼 있던 오더를 구글시트로 일괄 반영 — 관리자용
    ----------------------------------------------------------------
    실시간 동기화(syncDispatchToGoogleSheet)는 "배포된 시점 이후" 새로
    등록/수정되는 오더만 반영한다. 이 함수는 그 전에 이미 등록돼 있던
@@ -2590,7 +2590,7 @@ exports.backfillGsheetMonth = functions
         snap.docs.forEach((d) => {
           const data = d.data();
           if (data.source === "transport_transmit") return;
-          if (data.블라인드 === true) return; // ⭐ 실시간 동기화와 같은 기준(예전 백필은 블라인드 오더까지 올려 시트가 더 많았다)
+          if (data.블라인드 === true) return; // ★ 실시간 동기화와 같은 기준(예전 백필은 블라인드 오더까지 올려 시트가 더 많았다)
           if ((data.companyName || "돌캐") === GSHEET_TARGET_COMPANY) {
             items.push({ docId: `${col}/${d.id}`, data });
           }
@@ -2902,7 +2902,7 @@ exports.backfillGsheetMonth = functions
   });
 
 /* ==============================================================
-   📇 (1회성/반복 가능) 기본거래처(clients)/하차지거래처(places)를
+   ▤ (1회성/반복 가능) 기본거래처(clients)/하차지거래처(places)를
    구글시트로 일괄 반영 — 관리자용.
    ----------------------------------------------------------------
    사용자 요청: "컬럼명은 지금 프로그램에 있는거 그대로 전송이 되어야해
@@ -2993,13 +2993,13 @@ exports.backfillGsheetClients = functions
   });
 
 /* ==================================================================
-   📒 일일업무일지(경리) 시트 설정 — 사용자가 퇴사 후에도 프로그램 없이
+   ▤ 일일업무일지(경리) 시트 설정 — 사용자가 퇴사 후에도 프로그램 없이
    구글시트만으로 계속 쓸 수 있게, 월별 탭(26년9월, 26년10월, ...)을
    그대로 읽어가는(QUERY) "보기 전용" 탭을 만들어준다. 프로그램에서
    자동 전송된 오더든, 나중에 사용자가 월별 탭에 직접 입력한 오더든
    QUERY가 원본을 실시간으로 읽으므로 둘 다 자동으로 반영된다.
 
-   ⚠️ 새 컬럼 구성(GSHEET_MONTH_HEADER_COLUMNS, "등록일" 헤더가 있음)으로
+   ⚠ 새 컬럼 구성(GSHEET_MONTH_HEADER_COLUMNS, "등록일" 헤더가 있음)으로
    백필된 달만 포함한다 — 옛 컬럼 구성 탭을 섞으면 QUERY가 위치(Col1,
    Col2...) 기준으로 가져오기 때문에 엉뚱한 값이 들어간다. 헤더 행에
    "등록일"이 있는지로 새/옛 구성을 구분한다.
@@ -3150,7 +3150,7 @@ exports.setupGsheetDailyLedger = functions
   });
 
 /* ==================================================================
-   💼 인수인계 자료(운임 이력)를 구글시트로 전송 — src/HandoverFareReport.jsx
+   ◆ 인수인계 자료(운임 이력)를 구글시트로 전송 — src/HandoverFareReport.jsx
    화면이 이미 거래처/지역별로 묶어서 계산해둔 결과(단위 묶기, 톤수 구분,
    지역명 통일 등 모든 로직은 화면 쪽에만 있음)를 그대로 받아 적기만
    한다 — 그래서 화면 쪽 그룹핑 로직이 바뀌어도 이 함수는 안 고쳐도 된다.
@@ -3305,7 +3305,7 @@ exports.syncDispatchToGoogleSheet =
           try {
             await removeDocFromGsheet(`${col}/${dispatchId}`, before);
           } catch (e) {
-            console.error("📊 구글시트 행 삭제 실패:", e?.message || e);
+            console.error("▥ 구글시트 행 삭제 실패:", e?.message || e);
           }
         }
         return;
@@ -3322,7 +3322,7 @@ exports.syncDispatchToGoogleSheet =
       try {
         await syncOneDispatchToGsheet(`${col}/${dispatchId}`, after, before);
       } catch (e) {
-        console.error("📊 구글시트 동기화 실패:", e?.message || e);
+        console.error("▥ 구글시트 동기화 실패:", e?.message || e);
       }
     });
 
@@ -3340,14 +3340,14 @@ exports.applyGsheetGuides = functions
       for (const t of tabs) {
         try { await applyGsheetInputGuides(t); done.push(t); } catch (e) { failed.push(`${t}(${e?.message || e})`); }
       }
-      res.send(`✅ ${done.length}개 탭에 적용: ${done.join(", ")}${failed.length ? `\n⚠️ 실패: ${failed.join(", ")}` : ""}`);
+      res.send(`✓ ${done.length}개 탭에 적용: ${done.join(", ")}${failed.length ? `\n⚠ 실패: ${failed.join(", ")}` : ""}`);
     } catch (e) {
       res.status(500).send(`적용 실패: ${e?.message || e}`);
     }
   });
 
 /* ==================================================================
-   🔎 구글시트 점검 — 한 달 탭을 프로그램과 날짜별로 비교하고(fix=1이면 자동으로 맞춤)
+   ⌕ 구글시트 점검 — 한 달 탭을 프로그램과 날짜별로 비교하고(fix=1이면 자동으로 맞춤)
    - 시트에만 있는 줄(삭제·취소된 오더, 같은 오더가 2줄, 오더ID 없는 줄): 지움
    - 프로그램에만 있는 오더: 실시간 동기화와 같은 방식으로 넣음
    호출: GET .../checkGsheetMonth?key=<GSHEET_BACKFILL_KEY>&month=YYYY-MM[&fix=1]
@@ -3414,7 +3414,7 @@ exports.checkGsheetMonth = functions
       if (legacy > 0 && !fix) out += `\n\n※ 오더ID 없는 예전 줄이 있으면 정확히 비교할 수 없어요 — 이 달은 "백필"을 한 번 실행해 주세요(모든 줄에 오더ID가 붙습니다).`;
       if (fix) {
         if (legacy > 0) {
-          out += `\n\n⚠️ 오더ID 없는 예전 줄이 있어 자동 정리를 하지 않았습니다 — 이 달은 "백필"을 먼저 실행해 주세요.`;
+          out += `\n\n⚠ 오더ID 없는 예전 줄이 있어 자동 정리를 하지 않았습니다 — 이 달은 "백필"을 먼저 실행해 주세요.`;
         } else {
           await withGsheetTabLock(tabName, async () => {
             for (const r of extra.sort((a, b) => b.row - a.row)) await removeGsheetRowUnlocked(tabName, r.row);
@@ -3423,7 +3423,7 @@ exports.checkGsheetMonth = functions
             const snap = await db.doc(id).get();
             if (snap.exists) await syncOneDispatchToGsheet(id, snap.data(), snap.data());
           }
-          out += `\n\n✅ 정리 완료 — 시트에서 ${extra.length}줄 삭제, ${missing.length}건 추가`;
+          out += `\n\n✓ 정리 완료 — 시트에서 ${extra.length}줄 삭제, ${missing.length}건 추가`;
         }
       }
       res.send(out);
@@ -3434,7 +3434,7 @@ exports.checkGsheetMonth = functions
   });
 
 /* ==================================================================
-   🔍 로그인 전 "회사코드 찾기" — transportApplications 컬렉션은 Firestore
+   ⌕ 로그인 전 "회사코드 찾기" — transportApplications 컬렉션은 Firestore
    규칙상 로그인(isSignedIn())해야 읽을 수 있는데, 이 검색은 정의상 로그인
    "하기 전"에 쓰는 기능이라 브라우저에서 직접 Firestore를 조회하면 항상
    권한 오류로 막혀 "검색 결과가 없습니다"만 뜨는 상태였다. 그래서 서버
@@ -3629,7 +3629,7 @@ exports.lookupCompanyCode = functions.https.onRequest(async (req, res) => {
   }
 });
 /* ==================================================================
-   🧹 운송사 데이터 초기화 — 최고관리자 전용(관리자메뉴 > 운송사 초기화)
+   ◇ 운송사 데이터 초기화 — 최고관리자 전용(관리자메뉴 > 운송사 초기화)
    해당 운송사가 프로그램에 등록한 데이터를 하나도 빠짐없이 지운다.
    - 모든 최상위 컬렉션을 돌면서 아래에 해당하는 문서를 찾는다
      · 회사 필드(companyName/company/회사명/운송사명/transportCompany/companyKey) = 운송사명
@@ -3690,7 +3690,7 @@ function makeResetProgress(jobId, base) {
   };
 }
 const RESET_ORDER_COLLECTIONS = new Set(["orders", "dispatch"]);
-const RESET_KEEP_DAYS = 7; // ⭐ 초기화한 데이터를 이 기간 동안 보관 → 복원 가능
+const RESET_KEEP_DAYS = 7; // ★ 초기화한 데이터를 이 기간 동안 보관 → 복원 가능
 // ⭐ 회사명이 비어 있는 예전 데이터는 프로그램이 "돌캐" 것으로 본다(화면의 companyName || "돌캐" 규칙).
 // 그래서 돌캐를 초기화할 때는 아래 컬렉션에서 회사 필드가 아예 없는 문서도 함께 지운다.
 const RESET_LEGACY_COMPANY = "돌캐";
@@ -4020,7 +4020,7 @@ async function companyResetHandler(req, res) {
         await bumpDataVersion(b.company);
         await ref.set({ status: "restored", restoredAt: FieldValue.serverTimestamp(), restoredBy: me.email || me.uid }, { merge: true });
         await db.collection("resetLogs").add({ company: b.company, by: me.email || me.uid, at: FieldValue.serverTimestamp(), backupId: ref.id, action: "restore", restoredDocs, restoredFiles, restoredAccounts });
-        console.log(`♻️ 운송사 복원: ${b.company} — 문서 ${restoredDocs}, 파일 ${restoredFiles}, 계정 ${restoredAccounts} (by ${me.email})`);
+        console.log(`↻ 운송사 복원: ${b.company} — 문서 ${restoredDocs}, 파일 ${restoredFiles}, 계정 ${restoredAccounts} (by ${me.email})`);
         const result = { ok: true, company: b.company, restoredDocs, restoredFiles, restoredAccounts };
         await prog.done(result);
         res.json(result);
@@ -4133,7 +4133,7 @@ async function companyResetHandler(req, res) {
             company, by: me.email || me.uid, at: FieldValue.serverTimestamp(), deleteAccounts: !!b.deleteAccounts, backupId: jobId,
             deletedDocs: b.topCount || 0, savedDocs: b.docCount || 0, deletedFiles: savedFileObjs.length, disabledAccounts, perCollection: b.perCollection || {}, action: "reset",
           });
-          console.log(`🧹 운송사 초기화: ${company} — 문서 ${b.topCount}(보관 ${b.docCount}), 파일 ${savedFileObjs.length}, 계정 ${disabledAccounts} (by ${me.email})`);
+          console.log(`◇ 운송사 초기화: ${company} — 문서 ${b.topCount}(보관 ${b.docCount}), 파일 ${savedFileObjs.length}, 계정 ${disabledAccounts} (by ${me.email})`);
           b = (await backupRef.get()).data();
         }
         const result = {
@@ -4174,12 +4174,12 @@ exports.purgeExpiredResetBackups = functions.pubsub
       if (d.data().status === "purged") continue;
       await purgeResetBackup(d.ref).catch((e) => console.warn("보관함 비우기 실패", d.id, e?.message));
     }
-    console.log(`🗑️ 만료된 초기화 보관함 정리 ${snap.size}건 확인`);
+    console.log(`✕ 만료된 초기화 보관함 정리 ${snap.size}건 확인`);
     return null;
   });
 
 /* ==================================================================
-   📥 구글시트 → 프로그램 오더 가져오기 (최고관리자 전용, 관리자메뉴 > 구글시트 가져오기)
+   ↓ 구글시트 → 프로그램 오더 가져오기 (최고관리자 전용, 관리자메뉴 > 구글시트 가져오기)
    새 운송사가 쓰던 배차일지 시트를 그대로 옮길 때 쓴다. 시트를 이 프로그램 계정
    (dispatch-app-9b92f@appspot.gserviceaccount.com)에 "보기"로 공유해야 읽을 수 있다.
    - inspect: 시트 탭 목록 + 탭마다 제목줄(첫 5줄 중 글자가 가장 많은 줄) 추측
@@ -4513,7 +4513,7 @@ exports.hourlyJobs = functions.runWith({ timeoutSeconds: 300, memory: "512MB" })
   }
   const old = await db.collection("orderTrash").where("expireAt", "<", Timestamp.now()).limit(400).get();
   if (!old.empty) { const wb = db.batch(); old.docs.forEach((d) => wb.delete(d.ref)); await wb.commit(); }
-  if (hour === 4) await computePlatformStats().catch((e) => console.error("플랫폼 관제 집계 실패:", e)); // 🛰 관리센터 숫자 매일 갱신
+  if (hour === 4) await computePlatformStats().catch((e) => console.error("플랫폼 관제 집계 실패:", e)); // ◇ 관리센터 숫자 매일 갱신
   return null;
 });
 
@@ -4526,9 +4526,9 @@ async function pushInternalMail(m) {
     const docs = await db.getAll(...to.slice(i, i + 100).map((uid) => db.collection("users").doc(uid)));
     docs.forEach((d) => { if (d.exists && (d.data().companyName || "돌캐") === (m.company || "돌캐") && d.data().fcmToken) tokens.push(d.data().fcmToken); });
   }
-  const head = m.kind === "hr" ? "📢 인사발령" : m.kind === "closeReport" ? "📨 마감보고" : m.kind === "approval" ? `📝 전자결재 · ${m.fromName || ""}` : `📧 ${m.important ? "[중요] " : ""}${m.fromName || "사내메일"}`;
+  const head = m.kind === "hr" ? "◆ 인사발령" : m.kind === "closeReport" ? "▸ 마감보고" : m.kind === "approval" ? `✎ 전자결재 · ${m.fromName || ""}` : `▸ ${m.important ? "[중요] " : ""}${m.fromName || "사내메일"}`;
   const body = m.kind === "closeReport" ? String(m.body || "") : `${m.subject || ""}${m.body ? `\n${String(m.body).replace(/\s+/g, " ").slice(0, 80)}` : ""}`;
-  await sendPushAndCleanup([...new Set(tokens)], { notification: { title: m.kind === "closeReport" ? `📨 ${m.subject || "마감보고"}` : head, body }, android: { priority: "high" } }, "사내메일");
+  await sendPushAndCleanup([...new Set(tokens)], { notification: { title: m.kind === "closeReport" ? `▸ ${m.subject || "마감보고"}` : head, body }, android: { priority: "high" } }, "사내메일");
 }
 exports.notifyInternalMail = functions.firestore.document("internalMails/{id}").onCreate(async (snap) => {
   const m = snap.data() || {};
@@ -4547,12 +4547,12 @@ exports.notifyApproval = functions.firestore.document("approvals/{id}").onWrite(
   const turn = (d) => (d && d.status === "pending" ? d.line?.[d.step]?.uid : null);
   const cTurn = (d) => (d && d.status === "approved" && d.cancel?.status === "pending" ? d.cancel.line?.[d.cancel.step]?.uid : null);
   const msgs = [];
-  if (turn(a) && turn(a) !== turn(b)) msgs.push([turn(a), `📝 결재 요청 · ${a.drafter?.name || ""}`, `${t}\n${a.summary || ""}`]);
-  if (cTurn(a) && cTurn(a) !== cTurn(b)) msgs.push([cTurn(a), `📝 결재 취소 요청 · ${a.drafter?.name || ""}`, `${t}\n사유: ${a.cancel?.reason || ""}`]);
+  if (turn(a) && turn(a) !== turn(b)) msgs.push([turn(a), `✎ 결재 요청 · ${a.drafter?.name || ""}`, `${t}\n${a.summary || ""}`]);
+  if (cTurn(a) && cTurn(a) !== cTurn(b)) msgs.push([cTurn(a), `✎ 결재 취소 요청 · ${a.drafter?.name || ""}`, `${t}\n사유: ${a.cancel?.reason || ""}`]);
   if (b && a.drafterUid) {
     const newly = (a.line || []).filter((x, i) => x.status === "approved" && b.line?.[i]?.status !== "approved");
-    if (a.status === "approved" && b.status !== "approved") msgs.push([a.drafterUid, "✅ 최종 승인", `${t} — 결재가 모두 끝났습니다.`]);
-    else if (a.status === "pending" && newly.length) msgs.push([a.drafterUid, `✔ ${newly[0].name} ${newly[0].position || ""} 승인`, `${t} (${(a.line || []).filter((x) => x.status === "approved").length}/${(a.line || []).length})`]);
+    if (a.status === "approved" && b.status !== "approved") msgs.push([a.drafterUid, "✓ 최종 승인", `${t} — 결재가 모두 끝났습니다.`]);
+    else if (a.status === "pending" && newly.length) msgs.push([a.drafterUid, `✓ ${newly[0].name} ${newly[0].position || ""} 승인`, `${t} (${(a.line || []).filter((x) => x.status === "approved").length}/${(a.line || []).length})`]);
     if (a.status === "rejected" && b.status !== "rejected") { const r = (a.line || []).find((x) => x.status === "rejected"); msgs.push([a.drafterUid, `↩ 반려 · ${r?.name || ""}`, `${t}\n사유: ${r?.comment || ""}`]); }
     if (a.status === "cancelled" && b.status !== "cancelled") msgs.push([a.drafterUid, "결재 취소 승인", `${t} 문서가 결재 취소되었습니다.`]);
     if (a.cancel?.status === "rejected" && b.cancel?.status !== "rejected") { const r = (a.cancel.line || []).find((x) => x.status === "rejected"); msgs.push([a.drafterUid, `결재 취소 거부 · ${r?.name || ""}`, `${t}\n${r?.comment || ""}`]); }
@@ -4581,7 +4581,7 @@ exports.notifyNotice = functions.firestore.document("notices/{id}").onCreate(asy
     if (teams.length && !NOTICE_ADMIN_ROLES.includes(u.role) && !teams.includes(String(u.team || "").trim())) return;
     tokens.push(u.fcmToken);
   });
-  const title = `📢 ${n.category || "공지사항"} · ${n.author || ""}`;
+  const title = `◆ ${n.category || "공지사항"} · ${n.author || ""}`;
   const body = `${n.title || ""}${n.content ? `\n${String(n.content).replace(/\s+/g, " ").slice(0, 80)}` : ""}`;
   await sendPushAndCleanup([...new Set(tokens)], { notification: { title, body }, android: { priority: "high" } }, "공지사항").catch((e) => console.error("공지 푸시 실패:", e));
   return null;
@@ -4602,7 +4602,7 @@ exports.notifySignup = functions.firestore.document("users/{uid}").onCreate(asyn
     if ([...NOTICE_ADMIN_ROLES, "test", "hrManager"].includes(a.role) || a.isMaster === true) tokens.push(a.fcmToken);
   });
   const isDriver = u.role === "driver";
-  const title = isDriver ? "🚚 기사 가입 신청" : "🙋 직원 가입 신청";
+  const title = isDriver ? "▸ 기사 가입 신청" : "◆ 직원 가입 신청";
   const body = isDriver ? `${u.name || ""} · ${u.carNo || ""} ${u.vehicleType || ""}\n앱 › 관리자 전용 메뉴 › 직원 관리에서 승인해 주세요` : `${u.name || u.email || ""}\n앱 › 관리자 전용 메뉴 › 직원 관리에서 승인해 주세요`;
   await sendPushAndCleanup([...new Set(tokens)], { notification: { title, body }, android: { priority: "high" } }, "가입신청").catch((e) => console.error("가입 신청 푸시 실패:", e));
   return null;
@@ -4658,7 +4658,7 @@ exports.vehicleCareReminders = functions.runWith({ timeoutSeconds: 300, memory: 
     }
     await d.ref.set({ careRemind: { ...remind, ...mark, lastAt: today } }, { merge: true }).catch(() => {});
   }
-  console.log(`🔔 차량 정비 알림 ${sent}명`);
+  console.log(`◆ 차량 정비 알림 ${sent}명`);
   return null;
 });
 
@@ -4709,7 +4709,7 @@ exports.automation = functions.runWith({ timeoutSeconds: 300, memory: "512MB" })
       const check = body.check && typeof body.check === "object" ? body.check : null;
       const sender = me.name || me.email.split("@")[0];
       const won = (n) => `${Math.round(n).toLocaleString("ko-KR")}원`;
-      const title = `📨 ${date.slice(5).replace("-", "/")} 마감보고 · ${sender}`;
+      const title = `▸ ${date.slice(5).replace("-", "/")} 마감보고 · ${sender}`;
       const lines = [
         `오더 ${sm.count}건 (완료 ${sm.done} · 미배차 ${sm.pending}) · 매출 ${won(sm.revenue)} · 수익 ${won(sm.profit)}`,
         `내일 오더 ${sm.tomorrowCount}건 중 미배차 ${sm.tomorrowPending}건`,
@@ -4721,7 +4721,7 @@ exports.automation = functions.runWith({ timeoutSeconds: 300, memory: "512MB" })
       await db.collection("internalMails").add({
         company: me.company, fromUid: me.decoded.uid, fromEmail: me.email, fromName: sender,
         to: users.map((d) => d.id), toNames: users.map((d) => d.data().name || d.data().email || ""),
-        subject: title.replace(/^📨\s*/, ""), body: lines.join("\n"), images: [], kind: "closeReport",
+        subject: title.replace(/^▸\s*/, ""), body: lines.join("\n"), images: [], kind: "closeReport",
         at: FieldValue.serverTimestamp(), readBy: [], deletedBy: [],
       });
       const tokens = users.filter((d) => d.id !== me.decoded.uid).map((d) => d.data().fcmToken).filter(Boolean);

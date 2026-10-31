@@ -69,7 +69,7 @@ function cleanLine(raw) {
     .replace(/[｜|]/g, " | ")
     .replace(/\t+/g, " ")
     .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, " ") // 이모지
-    .replace(/^[\s\-–—•·*▶▷►▸◆◇■□●○◎※☞→>#]+/, "")
+    .replace(/^[\s\-–—•·*▶▷►▸◆◇■□●○◎※▸→>#]+/, "")
     .replace(/^\(?\s*[0-9]{1,2}\s*[).]\s*(?=[가-힣A-Za-z])/, "") // 1. 1) (1)
     .replace(/^[①-⑳]\s*/, "")
     .replace(/\s+/g, " ")
@@ -501,7 +501,7 @@ export function parseOrderScan(text, { places = [], clients = [], today = new Da
       }
     }
     // 라벨 없는 줄
-    const arrow = !hasSectionLabel && L.text.match(/^(.+?)\s*(?:→|->|=>|⇒|➡|>{1,2}|에서)\s*(.+?)(?:\s*(?:까지|으로|로))?$/);
+    const arrow = !hasSectionLabel && L.text.match(/^(.+?)\s*(?:→|->|=>|⇒|→|>{1,2}|에서)\s*(.+?)(?:\s*(?:까지|으로|로))?$/);
     if (!cur && arrow && !/\d+\s*시\s*$/.test(arrow[1]) && arrow[1].length >= 2 && arrow[2].length >= 2) {
       const d = findDate(arrow[1], today); if (d) set("상차일", d.value, "mid", L.i);
       const strip = (x) => x.replace(/^\s*\d{1,2}\s*[\/.월]\s*\d{1,2}\s*일?\s*(?:\([월화수목금토일]\))?\s*/, "").trim();

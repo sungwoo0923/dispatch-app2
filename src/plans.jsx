@@ -205,7 +205,7 @@ export function PlanLockHost({ userEmail = "", userName = "" }) {
           <div className="relative flex items-start justify-between gap-4">
             <div>
               <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>UPGRADE · {need?.en}</div>
-              <div className="text-[22px] font-black mt-1">🔒 {need?.name} 요금제부터 쓸 수 있는 기능입니다</div>
+              <div className="text-[22px] font-black mt-1">■ {need?.name} 요금제부터 쓸 수 있는 기능입니다</div>
               <div className="text-[13.5px] text-white/70 mt-1">{f?.label}</div>
             </div>
             <button type="button" onClick={() => setFeature(null)} className="h-9 px-3.5 rounded-xl bg-white/10 border border-white/20 text-[13px] font-bold hover:bg-white/20">닫기 ✕</button>

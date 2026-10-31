@@ -106,7 +106,7 @@ export function NoticeWriter({ me, company, initial, onCancel, onSaved }) {
         )}
         <label className="inline-flex items-center gap-2 text-[13.5px] font-black text-[#0F1A30] cursor-pointer">
           <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} className="w-4 h-4 accent-[#1B2B4B]" />
-          📌 상단 고정 <span className="text-[12px] font-semibold text-[#9AA9C3]">(최대 5개 — 넘으면 오래된 고정은 목록으로 내려갑니다)</span>
+          • 상단 고정 <span className="text-[12px] font-semibold text-[#9AA9C3]">(최대 5개 — 넘으면 오래된 고정은 목록으로 내려갑니다)</span>
         </label>
         <div>
           <Label hint="(비우면 날짜 + 분류로 자동)">제목</Label>

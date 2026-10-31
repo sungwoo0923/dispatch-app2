@@ -177,7 +177,7 @@ export function EditModeToggleButton({ className = "" }) {
       }`}
       title="켜면 노란 박스로 표시된 글자를 클릭해서 바로 고칠 수 있습니다"
     >
-      {editMode ? "✏️ 편집모드 켜짐" : "편집모드"}
+      {editMode ? "✎ 편집모드 켜짐" : "편집모드"}
     </button>
   );
 }
