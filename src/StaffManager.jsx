@@ -5,14 +5,14 @@ import { doc, setDoc, getDocs, updateDoc, deleteDoc, query, where, collection, s
 import { db, DEFAULT_COMPANY } from "./firebase";
 import KpSubNav from "./KpSubNav";
 import { Sheet } from "./OfficeBooks";
-import { isExecProfile } from "./hrConstants";
+import { useRoleOptions } from "./customRoles";
+import DriverAccounts from "./DriverAccounts";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 function Loading() {
   return <div className="py-24 flex flex-col items-center gap-3 text-[#7A879C]"><span className="w-6 h-6 border-[3px] border-[#DCE3EE] border-t-[#1B2B4B] rounded-full animate-spin" /><span className="text-[12.5px] font-bold">불러오는 중…</span></div>;
 }
 // ── 직원 관리(관리자·마스터) — PC 관리자메뉴의 직원 승인·권한을 휴대폰에서 ──
-const ROLE_LABEL = { admin: "관리자", hrManager: "인사관리자", hrAcct: "통합인사관리자", user: "실무자", test: "경리/회계", viewer: "조회전용", totalMaster: "최고관리자" };
 // 승인 대기 직원·기사 수(메뉴 숫자)
 export function usePendingSignups(company, enabled = true) {
   const [n, setN] = React.useState({ staff: 0, drivers: 0 });
@@ -38,6 +38,7 @@ function Avatar({ name }) {
 
 // compact — 경리·인사: 재직 직원·퇴사자는 인사관리부에 있으므로 가입 승인(직원·기사)만
 export default function StaffManager({ company, role, myUid, initialTab = "pending", compact = false }) {
+  const ro = useRoleOptions();
   const [users, setUsers] = React.useState(null);
   const [tab, setTab] = React.useState(initialTab);
   const [busy, setBusy] = React.useState("");
@@ -92,7 +93,7 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
     } catch (e) { alert(e.message); } finally { setBusy(""); }
   };
   const changeRole = async (u, r) => {
-    if (!(isMaster || role === "hrManager") || r === u.role || isExecProfile(u)) return;
+    if (!(isMaster || role === "hrManager") || r === u.role) return;
     setBusy(u.id);
     try { await setDoc(doc(db, "users", u.id), { role: r }, { merge: true }); } finally { setBusy(""); }
   };
@@ -127,7 +128,7 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
             {isDriverTab ? u.carNo && <span className="px-1.5 h-[20px] rounded-md border border-[#0F1A30] text-[#0F1A30] text-[11.5px] font-black grid place-items-center" style={{ fontFamily: MONO }}>{u.carNo}</span>
               : u.position && <span className="text-[12.5px] font-bold text-[#5B6B85]">{u.position}</span>}
             {u.isMaster && <span className="px-1.5 h-[18px] rounded-md bg-[#0F1A30] text-white text-[10px] font-black grid place-items-center">마스터</span>}
-            {!isDriverTab && tab !== "left" && <span className="px-1.5 h-[18px] rounded-md bg-[#EEF3FC] text-[#1B2B4B] text-[10.5px] font-black grid place-items-center">{ROLE_LABEL[u.role] || u.role}</span>}
+            {!isDriverTab && tab !== "left" && <span className="px-1.5 h-[18px] rounded-md bg-[#EEF3FC] text-[#1B2B4B] text-[10.5px] font-black grid place-items-center">{ro.label(u.role)}</span>}
             {tab === "left" && u.resignType && <span className="px-1.5 h-[18px] rounded-md bg-[#F3F6FA] text-[#5B6B85] text-[10.5px] font-black grid place-items-center">{u.resignType}</span>}
           </div>
           <div className="text-[12px] text-[#7A879C] truncate">
@@ -148,17 +149,16 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
           <div className="relative shrink-0">
             <button type="button" onClick={() => setMenuOpen(open ? null : u.id)} className="w-8 h-8 rounded-lg border border-[#DCE3EE] text-[#5B6B85] font-black">⋯</button>
             {open && (
-              <div className="absolute right-0 top-9 z-20 w-[210px] rounded-xl bg-white border border-[#E3E8F0] shadow-[0_12px_30px_rgba(15,26,48,0.18)] p-1.5">
-                {!isDriverTab && canRole && !u.isMaster && !isExecProfile(u) && (
+              <div className="absolute right-0 top-9 z-20 w-[230px] max-h-[360px] overflow-y-auto rounded-xl bg-white border border-[#E3E8F0] shadow-[0_12px_30px_rgba(15,26,48,0.18)] p-1.5">
+                {!isDriverTab && canRole && !u.isMaster && (
                   <>
                     <div className="px-2 pt-1 pb-1 text-[10.5px] font-black text-[#9AA9C3]">권한 변경</div>
-                    {["admin", "hrManager", "hrAcct", "user", "test", "viewer"].map((rk) => (
-                      <button key={rk} type="button" onClick={() => { setMenuOpen(null); changeRole(u, rk); }} className={`w-full text-left px-2.5 h-8 rounded-lg text-[12.5px] font-bold ${u.role === rk ? "bg-[#EEF3FC] text-[#1B2B4B]" : "text-[#3A4A66] hover:bg-[#F5F8FD]"}`}>{u.role === rk ? "✓ " : ""}{ROLE_LABEL[rk]}</button>
+                    {ro.options.map(([rk, rl]) => (
+                      <button key={rk} type="button" onClick={() => { setMenuOpen(null); changeRole(u, rk); }} className={`w-full text-left px-2.5 h-8 rounded-lg text-[12.5px] font-bold ${u.role === rk ? "bg-[#EEF3FC] text-[#1B2B4B]" : "text-[#3A4A66] hover:bg-[#F5F8FD]"}`}>{u.role === rk ? "✓ " : ""}{rl}</button>
                     ))}
                     <div className="h-px bg-[#EEF2F8] my-1" />
                   </>
                 )}
-                {!isDriverTab && isExecProfile(u) && <div className="px-2.5 py-1.5 text-[11.5px] text-[#7A879C]">임원은 관리자 권한 고정</div>}
                 <button type="button" onClick={() => { setMenuOpen(null); toggleApprove(u); }} className="w-full text-left px-2.5 h-8 rounded-lg text-[12.5px] font-bold text-[#B42318] hover:bg-[#FEF3F2]">승인 해제(로그인 차단)</button>
               </div>
             )}
@@ -179,6 +179,8 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
           { key: "drivers", label: "승인된 기사", en: "DRIVERS", icon: "idcard" },
         ] },
       ]}>
+      {/* ⭐ 2026-10-31 기사 탭은 기사관리와 같은 디지털 카드(번호판·서류 완비율)로 */}
+      {isDriverTab ? <DriverAccounts company={company} isViewer={isViewer} tab={tab === "dpending" ? "pending" : "drivers"} onTab={(k) => setTab(k === "pending" ? "dpending" : "drivers")} /> : (<>
       <div className="flex flex-col md:flex-row md:items-center gap-2 mb-3">
         <div className="grid grid-cols-3 gap-2 md:w-[420px]">
           {(isDriverTab
@@ -223,6 +225,7 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
         <div className="rounded-2xl bg-white border border-[#E3E8F0] divide-y divide-[#F1F4F9]">{L.map((u) => <Row key={u.id} u={u} />)}</div>
       )}
       {!canRole && !isDriverTab && tab === "staff" && <p className="text-[11.5px] text-[#9AA9C3] text-center pt-2">권한 변경은 마스터·인사관리자만 할 수 있습니다</p>}
+      </>)}
       {viewResign && (
         <Sheet side en="RESIGNATION · 사직서" title={`${viewResign.drafter?.name || ""} 사직서`} onClose={() => setViewResign(null)}
           footer={<button type="button" onClick={() => setViewResign(null)} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">닫기</button>}>

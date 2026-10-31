@@ -18,6 +18,8 @@ import {
   useCustomRoles,
   saveCustomRole,
   deleteCustomRole,
+  roleScreen,
+  ROLE_SCREENS,
 } from "./customRoles";
 
 const genRoleKey = () => `role_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -41,7 +43,7 @@ const MENU_DESC = {
   비품관리: "비품 · 자산 · 입출고", 인사관리부: "인사 기록 · 직원 정보 · 연차 · 규정", 증명서발급: "재직 · 경력증명서", 직원일정: "연차 · 외근 · 출장 달력",
 };
 const ROLE_DESC = {
-  admin: "회사 업무 전체 · 임원(대표·전무·이사)도 이 권한", hrManager: "인사 화면 — 인사관리부·증명서·직원 승인", user: "배차 실무 담당",
+  admin: "회사 업무 전체(배차·정산·관리자메뉴) — 임원 화면 아님", hrManager: "인사 화면 — 인사관리부·증명서·직원 승인", user: "배차 실무 담당",
   test: "경리 화면 — 정산·회계·자금·비품", viewer: "보기만 가능",
 };
 const FIXED_ROLES = [
@@ -117,14 +119,15 @@ export default function RolePermissionsPanel({ users = [], roleLabels = {} }) {
   const memberCount = (key) => users.filter((u) => (u.role || "user") === key).length;
   const members = users.filter((u) => (u.role || "user") === selectedKey);
 
+  const initDraft = () => ({ label: current.label, menus: effectiveMenus(selectedKey, customRoles), screen: isBuiltin ? "" : roleScreen({ ...(saved || {}), key: selectedKey, label: current.label }) });
   // 선택한 역할의 저장된 값으로 편집본을 만든다(저장된 값이 바뀌면 다시 맞춘다)
   const savedSig = JSON.stringify(saved || null);
   React.useEffect(() => {
     if (!current) { setDraft(null); return; }
-    setDraft({ label: current.label, menus: effectiveMenus(selectedKey, customRoles) });
+    setDraft(initDraft());
   }, [selectedKey, savedSig]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const baseline = current ? JSON.stringify({ label: current.label, menus: effectiveMenus(selectedKey, customRoles) }) : "";
+  const baseline = current ? JSON.stringify(initDraft()) : "";
   const dirty = !!draft && JSON.stringify(draft) !== baseline;
   const flash = (t) => { setToast(t); setTimeout(() => setToast(""), 2200); };
 
@@ -138,7 +141,7 @@ export default function RolePermissionsPanel({ users = [], roleLabels = {} }) {
   const save = async () => {
     if (!draft || !draft.label.trim()) return alert("역할 이름을 입력하세요.");
     setSaving(true);
-    try { await saveCustomRole(selectedKey, { label: draft.label.trim(), menus: draft.menus }); flash("저장했습니다"); } catch (e) { alert(`저장 실패: ${e?.message || e}`); } finally { setSaving(false); }
+    try { await saveCustomRole(selectedKey, { label: draft.label.trim(), menus: draft.menus, ...(isBuiltin ? {} : { screen: draft.screen || "" }) }); flash("저장했습니다"); } catch (e) { alert(`저장 실패: ${e?.message || e}`); } finally { setSaving(false); }
   };
   const resetOrDelete = async () => {
     const msg = isBuiltin
@@ -172,6 +175,7 @@ export default function RolePermissionsPanel({ users = [], roleLabels = {} }) {
         <div className="flex items-center gap-2">
           <span className="text-[14px] font-bold text-gray-800 truncate">{r.label}</span>
           {customized && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">수정됨</span>}
+          {!r.builtin && roleScreen(customRoles.find((c) => c.key === r.key)) === "exec" && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ background: "linear-gradient(135deg,#B88A2E,#D7BC82)" }}>임원 화면</span>}
           <span className="ml-auto text-[11.5px] font-bold text-gray-500 shrink-0">{memberCount(r.key)}명</span>
         </div>
         <div className="text-[11.5px] text-gray-500 mt-0.5 mb-2 truncate">{ROLE_DESC[r.key] || "직접 만든 역할"}</div>
@@ -298,7 +302,7 @@ export default function RolePermissionsPanel({ users = [], roleLabels = {} }) {
                 {(saved || !isBuiltin) && (
                   <button onClick={resetOrDelete} className="text-[12.5px] font-bold text-gray-500 hover:text-red-600">{isBuiltin ? "기본값으로" : "역할 삭제"}</button>
                 )}
-                <button onClick={() => setDraft({ label: current.label, menus: effectiveMenus(selectedKey, customRoles) })} disabled={!dirty} className="px-4 py-2 rounded-xl border border-gray-300 text-[13px] font-bold text-gray-600 disabled:opacity-40">되돌리기</button>
+                <button onClick={() => setDraft(initDraft())} disabled={!dirty} className="px-4 py-2 rounded-xl border border-gray-300 text-[13px] font-bold text-gray-600 disabled:opacity-40">되돌리기</button>
                 <button onClick={save} disabled={!dirty || saving} className="px-5 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] disabled:opacity-40">{saving ? "저장 중…" : "저장"}</button>
               </div>
 
@@ -310,6 +314,17 @@ export default function RolePermissionsPanel({ users = [], roleLabels = {} }) {
 
               {tab === "menus" ? (
                 <div className="p-6 space-y-4">
+                  {!isBuiltin && (
+                    <div className="rounded-xl border border-gray-200 px-4 py-3 flex flex-wrap items-center gap-3">
+                      <div className="min-w-0">
+                        <div className="text-[13.5px] font-black text-[#1B2B4B]">로그인하면 보이는 화면</div>
+                        <div className="text-[11.5px] text-gray-500">임원 화면 = 경영 브리핑·결재함·임원 스케줄·직원 일정 (상단 [전체 메뉴]로 아래 메뉴 권한 화면 전환)</div>
+                      </div>
+                      <div className="ml-auto inline-flex rounded-xl bg-gray-100 p-1">
+                        {ROLE_SCREENS.map(([k, l]) => <button key={k || "normal"} onClick={() => setDraft((d) => ({ ...d, screen: k }))} className={`px-3.5 py-1.5 rounded-lg text-[12.5px] font-bold ${(draft.screen || "") === k ? "bg-white text-[#1B2B4B] shadow-sm" : "text-gray-500"}`}>{l}</button>)}
+                      </div>
+                    </div>
+                  )}
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-[12px] font-bold text-gray-500 mr-1">빠른 설정</span>
                     {PRESETS.map((p) => <button key={p.label} onClick={() => setDraft((d) => ({ ...d, menus: p.make() }))} className="px-3 py-1.5 rounded-lg border border-gray-300 text-[12.5px] font-semibold text-gray-700 hover:bg-gray-50">{p.label}</button>)}
@@ -362,7 +377,7 @@ export default function RolePermissionsPanel({ users = [], roleLabels = {} }) {
                             <td className="py-2.5 text-gray-600">{[u.team, u.position].filter(Boolean).join(" · ") || "-"}</td>
                             <td className="py-2.5">
                               <select value={u.role || "user"} onChange={(e) => changeUserRole(u, e.target.value)} className="border border-gray-300 rounded-lg px-2 py-1 text-[12.5px] bg-white">
-                                {allEditable.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+                                {[...allEditable, { key: "hrAcct", label: "통합인사관리자" }].map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
                               </select>
                             </td>
                           </tr>

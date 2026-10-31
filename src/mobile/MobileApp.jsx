@@ -1,6 +1,6 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
 import { useMyProfile } from "../userNames";
-import { isExecProfile } from "../hrConstants";
+import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen } from "../customRoles";
 import { hideBlind, isBlindHidden, canSeeBlind, autoBlindNew } from "../blind";
 import { imeFocusRef } from "../imeFocus";
 import { checkHolidayDispatch, findRestConflict, confirmRestDispatch, restAckKey } from "../holidayConfirm";
@@ -2003,7 +2003,11 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   // 🏢 2026-10-31 경리(test)·인사(hrManager) 권한 — 배차 화면 없이 부서 홈(dept)으로 바로
   // 👔 임원(부서 임원 · 대표/전무/이사) — 경영 브리핑으로 시작. 관리자 권한 임원은 메뉴에서 [전체 메뉴]로 전환
   const myProfM = useMyProfile(user?.uid);
-  const isExecM = forceExec || (!["totalMaster", "test", "hrManager", "shipper", "driver"].includes(role) && isExecProfile(myProfM));
+  // ⭐ 2026-10-31 권한 관리 설정을 모바일에도 — 메뉴 숨김 · 임원 화면은 "임원 화면" 역할만
+  const customRolesM = useCustomRoles();
+  const customRoleM = findCustomRole(customRolesM, role);
+  const isExecM = forceExec || roleScreen(customRoleM) === "exec";
+  const menuOkM = React.useCallback((m) => !customRoleM || getMenuAccess(customRolesM, role, m) !== "hidden", [customRoleM, customRolesM, role]);
   const [execFull, setExecFull] = useState(() => { try { return localStorage.getItem("kpExecFull") === "1"; } catch { return false; } });
   const deptMode = role === "test" ? "acct" : role === "hrManager" ? "hr" : isExecM && !execFull ? "exec" : null;
   const [page, setPage] = useState(deptMode ? "dept" : "list");
@@ -5959,6 +5963,7 @@ onGoAttendance={() => {
           onGo={(p) => { if (p === "list") deptListOkRef.current = true; setPage(p); setShowMenu(false); }}
           deptMode={deptMode}
           isExec={isExecM}
+          menuOk={menuOkM}
           hrAcct={realRole === "hrAcct" ? hrAcctView : null}
           onToggleHrAcct={() => { const v = hrAcctView === "hr" ? "acct" : "hr"; setHrAcctView(v); try { localStorage.setItem("kpHrAcctView", v); } catch { /* 무시 */ } setPage("dept"); setShowMenu(false); }}
           isCeo={forceExec || ["대표", "대표이사", "사장"].includes(String(myProfM?.position || "").trim())}
@@ -7771,8 +7776,10 @@ function MobileSideMenu({
   isCeo = false,
   execFull = false,
   onToggleExec,
+  menuOk = () => true,
 }) {
   const isAdminRole = ["admin", "totalMaster", "superadmin"].includes(role);
+  const ok = menuOk;
   const canRevenue = ["admin", "totalMaster", "superadmin", "test", "viewer"].includes(role);
   const canAdminMenu = isAdminRole || role === "viewer";
   const myName =
@@ -7888,22 +7895,22 @@ function MobileSideMenu({
           {deptMode === "acct" && (<>
             <MenuSection title="경리 · 회계" en="ACCOUNTING" dark={dark} alwaysOpen>
               <MenuItem label="경리 홈" icon="dashboard" onClick={() => onGo?.("dept")} dark={dark} />
-              <MenuItem label="정산관리" icon="receipt" onClick={() => onGo?.("dept:settle")} dark={dark} />
-              <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />
-              <MenuItem label="회계관리" icon="money" onClick={() => onGo?.("dept:acct")} dark={dark} />
+              {ok("정산관리") && <MenuItem label="정산관리" icon="receipt" onClick={() => onGo?.("dept:settle")} dark={dark} />}
+              {ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
+              {ok("회계관리") && <MenuItem label="회계관리" icon="money" onClick={() => onGo?.("dept:acct")} dark={dark} />}
             </MenuSection>
             <MenuSection title="자금 · 총무" en="FINANCE · OFFICE" dark={dark} alwaysOpen>
-              <MenuItem label="자금 관리" icon="wallet" onClick={() => onGo?.("dept:cashbook")} dark={dark} />
-              <MenuItem label="비품·자산" icon="list" onClick={() => onGo?.("dept:assets")} dark={dark} />
-              <MenuItem label="배차현황(확인)" icon="truck" onClick={() => onGo?.("list")} dark={dark} />
+              {ok("자금관리") && <MenuItem label="자금 관리" icon="wallet" onClick={() => onGo?.("dept:cashbook")} dark={dark} />}
+              {ok("비품관리") && <MenuItem label="비품·자산" icon="list" onClick={() => onGo?.("dept:assets")} dark={dark} />}
+              {ok("배차현황") && <MenuItem label="배차현황(확인)" icon="truck" onClick={() => onGo?.("list")} dark={dark} />}
             </MenuSection>
           </>)}
           {deptMode === "hr" && (
             <MenuSection title="인사" en="HUMAN RESOURCES" dark={dark} alwaysOpen>
               <MenuItem label="인사 홈" icon="dashboard" onClick={() => onGo?.("dept")} dark={dark} />
-              <MenuItem label="인사관리부" icon="idcard" onClick={() => onGo?.("dept:hr")} dark={dark} />
+              {ok("인사관리부") && <MenuItem label="인사관리부" icon="idcard" onClick={() => onGo?.("dept:hr")} dark={dark} />}
               <MenuItem label="출근기록부" icon="clock" onClick={onGoAttendance} dark={dark} />
-              <MenuItem label="증명서 발급" icon="stamp" onClick={() => onGo?.("dept:cert")} dark={dark} />
+              {ok("증명서발급") && <MenuItem label="증명서 발급" icon="stamp" onClick={() => onGo?.("dept:cert")} dark={dark} />}
             </MenuSection>
           )}
           {deptMode === "exec" && (
@@ -7911,9 +7918,9 @@ function MobileSideMenu({
               <MenuItem label="경영 브리핑" icon="star" onClick={() => onGo?.("dept")} dark={dark} />
               {isCeo && <MenuItem label="자금 현황" icon="wallet" onClick={() => onGo?.("dept:funds")} dark={dark} />}
               <MenuItem label="임원 스케줄" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />
-              <MenuItem label="직원 일정" icon="clock" onClick={() => onGo?.("dept:schedule")} dark={dark} />
-              {canRevenue && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
-              {isAdminRole && <MenuItem label="경영인텔리전스" icon="trend" onClick={onGoIntel} dark={dark} />}
+              {ok("직원일정") && <MenuItem label="직원 일정" icon="clock" onClick={() => onGo?.("dept:schedule")} dark={dark} />}
+              {(canRevenue || isExec) && ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
+              {(isAdminRole || isExec) && ok("인사이트") && <MenuItem label="경영인텔리전스" icon="trend" onClick={onGoIntel} dark={dark} />}
               {isAdminRole && <MenuItem label="직원 관리" icon="users" onClick={() => onGo?.("staff")} badge={(alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) || null} dark={dark} />}
             </MenuSection>
           )}
@@ -7922,7 +7929,7 @@ function MobileSideMenu({
               <MenuItem label={hrAcct === "hr" ? "경리 화면으로 전환" : "인사 화면으로 전환"} icon="refresh" onClick={onToggleHrAcct} dark={dark} />
             </MenuSection>
           )}
-          {isExec && isAdminRole && (
+          {isExec && (
             <MenuSection title="화면 전환" en="VIEW" dark={dark} alwaysOpen>
               <MenuItem label={execFull ? "임원 화면으로" : "전체 메뉴 보기(배차·정산)"} icon="refresh" onClick={onToggleExec} dark={dark} />
             </MenuSection>
@@ -7935,26 +7942,26 @@ function MobileSideMenu({
           )}
           {!deptMode && (
           <MenuSection title="배차관리" en="DISPATCH" dark={dark} alwaysOpen>
-            <MenuItem label="등록내역" icon="list" onClick={onGoList} dark={dark} />
-            {role !== "test" && <MenuItem label="화물등록" icon="truck" onClick={onGoCreate} dark={dark} />}
-            <MenuItem label="미배차현황" icon="alert" onClick={onGoUnassigned} badge={unassignedCount > 0 ? unassignedCount : null} dark={dark} />
+            {ok("배차현황") && <MenuItem label="등록내역" icon="list" onClick={onGoList} dark={dark} />}
+            {role !== "test" && ok("배차관리") && <MenuItem label="화물등록" icon="truck" onClick={onGoCreate} dark={dark} />}
+            {ok("배차관리") && <MenuItem label="미배차현황" icon="alert" onClick={onGoUnassigned} badge={unassignedCount > 0 ? unassignedCount : null} dark={dark} />}
           </MenuSection>
           )}
           <MenuSection title="사내 업무" en="WORKSPACE" dark={dark} alwaysOpen>
             {deptMode !== "exec" && <MenuItem label="임원 일정" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />}
             <MenuItem label="사내 규정" icon="list" onClick={() => onGo?.("dept:rules")} dark={dark} />
-            <MenuItem label="전자결재" icon="stamp" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.handover || 0) || null} dark={dark} />
+            {ok("전자결재") && <MenuItem label="전자결재" icon="stamp" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.handover || 0) || null} dark={dark} />}
             <MenuItem label="공지사항" icon="bell" onClick={onGoNotice} badge={alertCounts?.notice ? alertCounts.notice : hasNewNotice ? "NEW" : null} dark={dark} />
             <MenuItem label="출근기록부" icon="clock" onClick={onGoAttendance} dark={dark} />
           </MenuSection>
           {!deptMode && (<>
           <MenuSection title="운임" en="FARE" dark={dark} alwaysOpen>
-            <MenuItem label="통합운임조회" icon="globe" onClick={onGoNationalFare} dark={dark} />
-            {role !== "test" && <MenuItem label="단가표" icon="money" onClick={onGoRateCard} dark={dark} />}
+            {ok("운임조회") && <MenuItem label="통합운임조회" icon="globe" onClick={onGoNationalFare} dark={dark} />}
+            {role !== "test" && ok("단가표") && <MenuItem label="단가표" icon="money" onClick={onGoRateCard} dark={dark} />}
           </MenuSection>
           <MenuSection title="기사 · 매출" en="FLEET · REVENUE" dark={dark} alwaysOpen>
-            <MenuItem label="지입차관리" icon="route" onClick={onGoFleet} dark={dark} />
-            {canRevenue && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
+            {ok("지입차관리") && <MenuItem label="지입차관리" icon="route" onClick={onGoFleet} dark={dark} />}
+            {canRevenue && ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
           </MenuSection>
           </>)}
           {canAdminMenu && !deptMode && (

@@ -844,6 +844,17 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
         patch.cancel = c;
       }
       await updateDoc(doc(db, "approvals", d.id), patch);
+      // 👶 육아휴직·출산휴가 최종 승인 → 인사 정보 재직 상태 반영(권한이 없으면 인사관리부에서 직접 바꾸면 된다)
+      if (patch.status === "approved" && ["parental", "maternity"].includes(d.form) && d.drafterUid) {
+        const kind = d.data?.kind || "";
+        const st = d.form === "parental" ? (kind === "육아기 근로시간 단축" ? "" : "육아휴직") : (kind === "출산전후휴가" ? "출산휴가" : "");
+        const pr = d.data?.period || {};
+        const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+        updateDoc(doc(db, "users", d.drafterUid), {
+          ...(st ? { employmentStatus: st, leave: { type: st, from: pr.start || "", to: pr.end || "", memo: `전자결재 ${d.docNo || ""}` } } : {}),
+          personnelHistory: arrayUnion({ date: today, type: kind || st, detail: `${pr.start || ""}${pr.end ? ` ~ ${pr.end}` : ""} · 전자결재 ${d.docNo || ""}` }),
+        }).catch(() => {});
+      }
       // 📧 결과는 기안자 사내메일(공문함)에도 기록 — 푸시·배너는 notifyApproval·BannerCenter가 따로 한 번 보낸다
       const result = patch.status === "approved" ? ["결재 완료", "문서가 최종 승인되었습니다."]
         : patch.status === "rejected" ? ["반려", `${me.name}님이 문서를 반려했습니다.\n반려 사유: ${comment.trim()}`]

@@ -142,6 +142,7 @@ export default function DriverDocsReview({ company, isViewer = false }) {
       </div>
       {/* ⭐ 2026-10-31 보관함형 — 작은 썸네일 + 서류명·상태·만료일 + 저장/확인/반려를 한 줄로 */}
       <div className="p-3 md:p-4">
+        {!isViewer && <div className="mb-3 rounded-xl bg-[#EEF3FC] border border-[#C9D6EE] px-3.5 py-2.5 text-[13px] text-[#1B2B4B] leading-relaxed">기사님이 기사앱으로 올리지 않은 서류는 <b>⬆ 직접 올리기</b>(또는 빈 칸 <b>＋</b>)로 관리자가 사진·PDF를 올릴 수 있습니다. 관리자가 올린 서류는 바로 <b>확인</b> 상태가 되고 기사앱에도 보입니다.</div>}
         <div className="rounded-2xl border border-[#E3E8F0] overflow-hidden divide-y divide-[#EEF2F8]">
           {DRIVER_REQUIRED_DOCS.map((def, idx) => {
             const x = cur.byType[def.key]; const st = docState(x); const t = TONE[st.tone];
@@ -149,9 +150,9 @@ export default function DriverDocsReview({ company, isViewer = false }) {
             return (
               <div key={def.key} className={`flex items-center gap-3 px-3 md:px-4 py-2.5 ${idx % 2 ? "bg-[#FBFCFE]" : "bg-white"}`}>
                 <span className="w-6 text-[11px] font-black text-[#9AA9C3] tabular-nums shrink-0" style={{ fontFamily: MONO }}>{String(idx + 1).padStart(2, "0")}</span>
-                <button type="button" disabled={!x} onClick={() => (isImg ? setViewer({ images: [x.dataUrl], name: def.label }) : x && window.open(x.dataUrl))}
+                <button type="button" disabled={!x && isViewer} title={x ? "크게 보기" : "직접 올리기"} onClick={() => (!x ? (upTarget.current = { uid: cur.d.uid, def }, fileRef.current?.click()) : isImg ? setViewer({ images: [x.dataUrl], name: def.label }) : window.open(x.dataUrl))}
                   className="w-12 h-12 rounded-xl shrink-0 border border-[#E3E8F0] bg-[#F3F6FA] bg-cover bg-center grid place-items-center text-[10px] font-black text-[#9AA9C3]"
-                  style={x && isImg ? { backgroundImage: `url(${x.dataUrl})` } : undefined}>{x ? (isImg ? "" : "PDF") : "＋"}</button>
+                  style={x && isImg ? { backgroundImage: `url(${x.dataUrl})` } : undefined}>{x ? (isImg ? "" : "PDF") : <span className="text-[18px] text-[#2D4C82]">＋</span>}</button>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-[14px] font-black text-[#0F1A30]">{def.label}</span>
@@ -167,7 +168,7 @@ export default function DriverDocsReview({ company, isViewer = false }) {
                   {x && <button type="button" onClick={() => saveDocFile(x, cur.d.name, def.label)} className="h-8 px-2.5 rounded-lg border border-[#DCE3EE] text-[#1B2B4B] text-[12px] font-black whitespace-nowrap">⬇ 저장</button>}
                   {!isViewer && x && x.status !== "확인" && <button type="button" disabled={busy === x.id} onClick={() => review(x, "확인")} className="h-8 px-2.5 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black whitespace-nowrap">확인</button>}
                   {!isViewer && x && x.status !== "반려" && <button type="button" disabled={busy === x.id} onClick={() => review(x, "반려")} className="h-8 px-2.5 rounded-lg border border-[#FECDCA] text-[#B42318] text-[12px] font-black whitespace-nowrap">반려</button>}
-                  {!isViewer && <button type="button" disabled={busy === def.key} onClick={() => { upTarget.current = { uid: cur.d.uid, def }; fileRef.current?.click(); }} className="h-8 px-2.5 rounded-lg border border-[#DCE3EE] text-[#5B6B85] text-[12px] font-bold whitespace-nowrap">{busy === def.key ? "…" : x ? "교체" : "올리기"}</button>}
+                  {!isViewer && <button type="button" disabled={busy === def.key} onClick={() => { upTarget.current = { uid: cur.d.uid, def }; fileRef.current?.click(); }} className={`h-8 px-2.5 rounded-lg text-[12px] font-black whitespace-nowrap ${x ? "border border-[#DCE3EE] text-[#5B6B85]" : "bg-[#2D4C82] text-white"}`}>{busy === def.key ? "올리는 중…" : x ? "⬆ 교체" : "⬆ 직접 올리기"}</button>}
                 </div>
               </div>
             );

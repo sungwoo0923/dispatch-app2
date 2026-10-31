@@ -8,6 +8,8 @@ import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp,
 import { db, auth } from "./firebase";
 import { compressImage } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
+import { CustomSelect } from "./CustomSelect";
+import { computeFunds, isCard, isCredit, last4, fundBadge } from "./fundsCalc";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 
 export const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
@@ -138,6 +140,8 @@ export function CashBook({ company, isViewer = false }) {
     if (!company) return undefined;
     return onSnapshot(query(collection(db, "approvals"), where("company", "==", company)), (s) => setApprovals(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((a) => a.cat === "expense" && a.status === "approved")), () => setApprovals([]));
   }, [company]);
+  const F = React.useMemo(() => computeFunds(funds || [], rows || []), [funds, rows]);
+  const fundOpts = F.list.filter((f) => f.kind !== "대출");
   const month = (rows || []).filter((r) => String(r.date || "").startsWith(ym));
   const income = month.filter((r) => r.type === "수입").reduce((s, r) => s + toInt(r.amount), 0);
   const expense = month.filter((r) => r.type === "지출").reduce((s, r) => s + toInt(r.amount), 0);
@@ -259,7 +263,7 @@ export function CashBook({ company, isViewer = false }) {
                           <td className="px-3 py-2 font-black text-[#1B2B4B] tabular-nums" style={{ fontFamily: MONO }}>{newDay ? String(r.date).slice(5).replace("-", ".") : ""}</td>
                           <td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded-md text-[11px] font-black ${r.type === "수입" ? "bg-[#EEF3FC] text-[#2D4C82]" : "bg-[#0F1A30] text-white"}`}>{r.type}</span></td>
                           <td className="px-3 py-2 font-bold text-[#3A4A66] truncate max-w-[120px]">{r.account}</td>
-                          <td className="px-3 py-2 min-w-0"><span className="font-black text-[#0F1A30]">{r.item || "-"}</span>{r.vendor && <span className="text-[#7A879C]"> · {r.vendor}</span>}{r.method && <span className="ml-1 text-[11px] text-[#9AA9C3]">{r.method}</span>}</td>
+                          <td className="px-3 py-2 min-w-0"><span className="font-black text-[#0F1A30]">{r.item || "-"}</span>{r.vendor && <span className="text-[#7A879C]"> · {r.vendor}</span>}{r.method && <span className="ml-1 text-[11px] text-[#9AA9C3]">{r.method}</span>}{F.byId[r.fundId] && <span className="ml-1.5 px-1.5 py-0.5 rounded-md bg-[#EEF3FC] text-[#2D4C82] text-[11px] font-black whitespace-nowrap">{isCard(F.byId[r.fundId]) ? "▭" : "▣"} {F.byId[r.fundId].name}</span>}</td>
                           <td className="px-3 py-2 text-right font-black tabular-nums text-[#2D4C82]" style={{ fontFamily: MONO }}>{r.type === "수입" ? won(r.amount) : ""}</td>
                           <td className="px-3 py-2 text-right font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO }}>{r.type === "지출" ? won(r.amount) : ""}</td>
                           <td className={`px-3 py-2 text-right font-black tabular-nums ${r.bal < 0 ? "text-[#B42318]" : "text-[#1B2B4B]"}`} style={{ fontFamily: MONO }}>{r.bal < 0 ? "−" : ""}{won(Math.abs(r.bal))}</td>
@@ -283,7 +287,7 @@ export function CashBook({ company, isViewer = false }) {
                 {ledgerRows.map((r) => (
                   <button key={r.id} type="button" onClick={() => !isViewer && setEdit({ ...blankEntry(r.type), ...r, amount: String(r.amount || "") })} className="w-full text-left px-3.5 py-2.5 flex items-center gap-2.5">
                     <span className="w-11 text-center shrink-0"><span className="block text-[13px] font-black text-[#1B2B4B] tabular-nums" style={{ fontFamily: MONO }}>{String(r.date).slice(8)}</span><span className={`block text-[10px] font-black ${r.type === "수입" ? "text-[#2D4C82]" : "text-[#7A879C]"}`}>{r.type}</span></span>
-                    <span className="flex-1 min-w-0"><span className="block text-[14px] font-black text-[#0F1A30] truncate">{r.item || r.vendor || r.account}</span><span className="block text-[11.5px] text-[#7A879C] truncate">{r.account}{r.vendor ? ` · ${r.vendor}` : ""}</span></span>
+                    <span className="flex-1 min-w-0"><span className="block text-[14px] font-black text-[#0F1A30] truncate">{r.item || r.vendor || r.account}</span><span className="block text-[11.5px] text-[#7A879C] truncate">{r.account}{r.vendor ? ` · ${r.vendor}` : ""}{F.byId[r.fundId] ? ` · ${F.byId[r.fundId].name}` : ""}</span></span>
                     {r.receipt && <span onClick={(e) => { e.stopPropagation(); setPhoto(r); }} className="w-8 h-8 rounded-lg border border-[#DCE3EE] bg-cover bg-center shrink-0" style={{ backgroundImage: `url(${r.receipt})` }} />}
                     <span className="text-right shrink-0"><span className={`block text-[14px] font-black tabular-nums ${r.type === "수입" ? "text-[#2D4C82]" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO }}>{r.type === "수입" ? "+" : "−"}{won(r.amount)}</span><span className="block text-[10.5px] text-[#9AA9C3] tabular-nums" style={{ fontFamily: MONO }}>잔 {won(r.bal)}</span></span>
                   </button>
@@ -315,6 +319,32 @@ export function CashBook({ company, isViewer = false }) {
         </div>
       </div>
 
+      {/* ⭐ 2026-10-31 회사 총 자금 — 자금 현황과 같은 계산(장부에서 고른 통장·카드 입출금 반영) */}
+      {fundOpts.length > 0 && (
+        <div className="rounded-[22px] overflow-hidden text-white shadow-[0_14px_32px_rgba(15,26,48,0.22)]" style={{ background: HERO_BG }}>
+          <div className="px-4 md:px-6 py-4 flex items-end justify-between gap-3 flex-wrap border-b border-white/10">
+            <div>
+              <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>COMPANY FUNDS · 회사 총 자금</div>
+              <div className="text-[28px] md:text-[34px] font-black tabular-nums leading-tight" style={{ fontFamily: MONO }}>{won(F.cash)}<span className="text-[16px] text-white/60 ml-1">원</span></div>
+              <div className="text-[12.5px] text-white/55">통장·현금 잔액 합계 · 장부에서 고른 통장·카드 입출금이 바로 반영됩니다</div>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <div className="rounded-2xl bg-white/[0.07] border border-white/10 px-3.5 py-2"><div className="text-[11.5px] font-bold text-white/55">이번 달 카드 사용</div><div className="text-[17px] font-black tabular-nums" style={{ fontFamily: MONO }}>{won(F.cardMonth)}원</div></div>
+              {F.loan > 0 && <div className="rounded-2xl bg-white/[0.07] border border-white/10 px-3.5 py-2"><div className="text-[11.5px] font-bold text-white/55">대출 잔액</div><div className="text-[17px] font-black tabular-nums text-[#FCA5A5]" style={{ fontFamily: MONO }}>−{won(F.loan)}원</div></div>}
+            </div>
+          </div>
+          <div className="px-3 md:px-5 py-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+            {fundOpts.map((f) => (
+              <div key={f.id} className="rounded-2xl bg-white/[0.06] border border-white/10 px-3 py-2.5 flex items-center gap-2.5 min-w-0">
+                <span className="w-9 h-9 rounded-xl grid place-items-center text-[10px] font-black shrink-0" style={{ background: isCard(f) ? "linear-gradient(135deg,#B88A2E,#E2C077)" : "rgba(255,255,255,0.12)" }}>{fundBadge(f)}</span>
+                <span className="flex-1 min-w-0"><span className="block text-[13.5px] font-black truncate">{f.name}</span><span className="block text-[11px] text-white/50 truncate">{isCredit(f) ? `남은 한도 · 이번 달 ${won(f.usedMonth || 0)} 사용` : f.linkName ? `${f.linkName} 연결` : [f.bank, last4(f)].filter(Boolean).join(" ") || f.kind}</span></span>
+                <span className={`text-[15px] font-black tabular-nums shrink-0 ${f.balance < 0 ? "text-[#FCA5A5]" : ""}`} style={{ fontFamily: MONO }}>{f.balance < 0 ? "−" : ""}{won(Math.abs(f.balance))}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {edit && (
         <Sheet side en={`CASH BOOK · ${edit.id ? "EDIT" : "NEW"}`} title={`${edit.type} ${edit.id ? "수정" : "등록"}`} onClose={() => { setEdit(null); setCustomAcc(false); }}
           footer={<>{edit.id && <button type="button" onClick={() => remove(edit)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#B42318]">삭제</button>}<button type="button" onClick={() => setEdit(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button><button type="button" disabled={busy} onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50">{busy ? "저장 중…" : "저장"}</button></>}>
@@ -343,14 +373,31 @@ export function CashBook({ company, isViewer = false }) {
               );
             })()}
           </div>
-          {(funds || []).filter((f) => f.active !== false && f.kind !== "대출").length > 0 && (
-            <div><Label>입출금 계좌 · 현금 <span className="font-semibold text-[#9AA9C3]">(자금 현황 잔액에 반영)</span></Label>
-              <div className="flex flex-wrap gap-1.5">
-                <Chip on={!edit.fundId} onClick={() => setEdit((p) => ({ ...p, fundId: "" }))}>지정 안 함</Chip>
-                {(funds || []).filter((f) => f.active !== false && f.kind !== "대출").map((f) => <Chip key={f.id} on={edit.fundId === f.id} onClick={() => setEdit((p) => ({ ...p, fundId: f.id }))}>{f.name}</Chip>)}
-              </div>
-            </div>
-          )}
+          <div><Label>통장 · 카드 · 현금 <span className="font-semibold text-[#9AA9C3]">(고르면 자금 현황 잔액이 그만큼 {edit.type === "지출" ? "줄어듭니다" : "늘어납니다"})</span></Label>
+            {fundOpts.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-[#C9D2E0] bg-white px-3 py-3 text-[12.5px] font-bold text-[#7A879C]">등록된 통장·카드가 없습니다 — 자금관리 › 자금 현황에서 먼저 등록해 주세요</div>
+            ) : (
+              <CustomSelect value={edit.fundId || ""} onChange={(e) => { const id = e.target.value; const f = F.byId[id]; setEdit((p) => ({ ...p, fundId: id, method: !f ? p.method : f.kind === "현금" ? "현금" : isCard(f) ? (f.kind === "법인카드" ? "법인카드" : "개인카드(정산)") : (["법인카드", "개인카드(정산)", "현금"].includes(p.method) ? "계좌이체" : p.method) })); }} className={inp}>
+                <option value="">지정 안 함 (잔액에 반영하지 않음)</option>
+                {fundOpts.map((f) => <option key={f.id} value={f.id}>{`${f.name} · ${f.kind}${f.bank ? ` ${f.bank}` : ""}${last4(f) ? ` ${last4(f)}` : ""} — ${isCredit(f) ? "남은 한도" : "잔액"} ${won(f.balance)}원`}</option>)}
+              </CustomSelect>
+            )}
+            {(() => {
+              const f = F.byId[edit.fundId];
+              if (!f) return null;
+              const orig = edit.id ? (rows || []).find((r) => r.id === edit.id) : null;
+              const origEff = orig && orig.fundId === f.id ? (orig.type === "수입" ? 1 : -1) * toInt(orig.amount) : 0;
+              const now = f.balance - origEff;
+              const next = now + (edit.type === "수입" ? 1 : -1) * toInt(edit.amount);
+              return (
+                <div className="mt-2 rounded-xl px-3.5 py-3 text-white flex items-center gap-3" style={{ background: HERO_BG }}>
+                  <span className="w-9 h-9 rounded-xl grid place-items-center text-[10px] font-black shrink-0" style={{ background: isCard(f) ? "linear-gradient(135deg,#B88A2E,#E2C077)" : "rgba(255,255,255,0.12)" }}>{fundBadge(f)}</span>
+                  <span className="flex-1 min-w-0"><span className="block text-[13.5px] font-black truncate">{f.name}{f.linkName ? ` → ${f.linkName}` : ""}</span><span className="block text-[11.5px] text-white/55">{isCredit(f) ? "이번 달 남은 한도" : "잔액"} · 저장하면</span></span>
+                  <span className="text-right shrink-0 tabular-nums" style={{ fontFamily: MONO }}><span className="block text-[12px] text-white/55 line-through">{won(now)}</span><span className={`block text-[17px] font-black ${next < 0 ? "text-[#FCA5A5]" : ""}`}>{next < 0 ? "−" : ""}{won(Math.abs(next))}원</span></span>
+                </div>
+              );
+            })()}
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             <div><Label>내용</Label><input value={edit.item} onChange={(e) => setEdit((p) => ({ ...p, item: e.target.value }))} className={inp} placeholder="예: 복합기 토너, 사무실 생수" /></div>
             <div><Label>거래처(사용처)</Label><input value={edit.vendor} onChange={(e) => setEdit((p) => ({ ...p, vendor: e.target.value }))} className={inp} placeholder="예: ○○문구" /></div>

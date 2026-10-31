@@ -15,7 +15,11 @@ const fmtPhone = (v) => {
   if (d.length === 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
   return v || "";
 };
-const STAFF_ROLES = new Set(["admin", "user", "hrManager", "test", "viewer", undefined, null, ""]);
+// ⭐ 2026-10-31 기사·화주·최고관리자만 빼고 모두(통합인사관리자·직접 만든 역할 포함)
+const NON_STAFF = new Set(["driver", "shipper", "cafeUser", "totalMaster"]);
+// ⚡ 다시 열 때 바로 보이게 — 회사별 직원 목록·증명사진을 이 화면을 닫아도 기억(새로고침 전까지)
+const MEMBER_CACHE = new Map();
+const PHOTO_CACHE = new Map();
 
 function Avatar({ name, photo, size = 44 }) {
   return (
@@ -27,26 +31,31 @@ function Avatar({ name, photo, size = 44 }) {
 }
 
 export default function OrgChart({ userCompany }) {
-  const [members, setMembers] = React.useState(null);
-  const [photos, setPhotos] = React.useState({});
+  const [members, setMembers] = React.useState(() => MEMBER_CACHE.get(userCompany) || null);
+  const [photos, setPhotos] = React.useState(() => Object.fromEntries(PHOTO_CACHE));
   const [q, setQ] = React.useState("");
   const [copied, setCopied] = React.useState("");
 
   React.useEffect(() => {
     if (!userCompany) return undefined;
     return onSnapshot(query(collection(db, "users"), where("companyName", "==", userCompany)), (snap) => {
-      setMembers(snap.docs.map((d) => ({ uid: d.id, ...d.data() }))
-        .filter((u) => u.approved !== false && u.employmentStatus !== "퇴사" && !isTMUser(u) && STAFF_ROLES.has(u.role)));
+      const list = snap.docs.map((d) => ({ uid: d.id, ...d.data() }))
+        .filter((u) => u.approved !== false && u.employmentStatus !== "퇴사" && !isTMUser(u) && !NON_STAFF.has(u.role))
+        .map((u) => ({ uid: u.uid, name: u.name, email: u.email, team: u.team, position: u.position, phone: u.phone, 전화번호: u.전화번호 })); // 화면에 쓰는 값만
+      MEMBER_CACHE.set(userCompany, list);
+      setMembers(list);
     }, () => setMembers([]));
   }, [userCompany]);
-  // 증명사진(인사관리부 이력서 사진) — 사람마다 1번만
+  // 증명사진(인사관리부 이력서 사진) — 사람마다 1번만, 한꺼번에 받아 한 번에 그린다(사진마다 다시 그리던 것을 줄임)
   React.useEffect(() => {
-    (members || []).forEach((m) => {
-      if (photos[m.uid] !== undefined) return;
-      setPhotos((p) => ({ ...p, [m.uid]: null }));
-      getDoc(doc(db, "hrResumes", m.uid)).then((s) => { const url = s.exists() ? s.data().photoUrl : null; if (url) setPhotos((p) => ({ ...p, [m.uid]: url })); }).catch(() => {});
-    });
-  }, [members]); // eslint-disable-line react-hooks/exhaustive-deps
+    const need = (members || []).filter((m) => !PHOTO_CACHE.has(m.uid));
+    if (!need.length) return undefined;
+    let alive = true;
+    need.forEach((m) => PHOTO_CACHE.set(m.uid, null));
+    Promise.all(need.map((m) => getDoc(doc(db, "hrResumes", m.uid)).then((s) => [m.uid, s.exists() ? s.data().photoUrl || null : null]).catch(() => [m.uid, null])))
+      .then((pairs) => { pairs.forEach(([k, v]) => PHOTO_CACHE.set(k, v)); if (alive) setPhotos(Object.fromEntries(PHOTO_CACHE)); });
+    return () => { alive = false; };
+  }, [members]);
 
   const teams = React.useMemo(() => {
     const k = q.trim();
@@ -104,28 +113,28 @@ export default function OrgChart({ userCompany }) {
         const Person = ({ m, big, gold }) => {
           const phone = fmtPhone(m.phone || m.전화번호);
           return (
-            <div className={`flex items-center gap-3 rounded-2xl px-3.5 py-2.5 text-left ${gold ? "text-white shadow-[0_14px_30px_rgba(15,26,48,0.3)]" : big ? "bg-gradient-to-r from-[#0F1A30] to-[#2D4C82] text-white shadow-[0_10px_24px_rgba(15,26,48,0.22)]" : "bg-white border border-[#E3E8F0]"}`}
+            <div className={`flex items-center gap-3 rounded-2xl px-3.5 py-2.5 text-left ${gold ? "text-white shadow-[0_14px_30px_rgba(15,26,48,0.3)]" : big ? "bg-gradient-to-r from-[#0F1A30] to-[#2D4C82] text-white shadow-[0_10px_24px_rgba(15,26,48,0.22)]" : "bg-white/[0.06] border border-white/10 text-white backdrop-blur-sm"}`}
               style={gold ? { background: "linear-gradient(120deg,#060C1A,#13213F 60%,#2D4C82)", boxShadow: "inset 0 0 0 1px rgba(215,188,130,.55), 0 14px 30px rgba(15,26,48,.3)" } : undefined}>
               <Avatar name={m.name} photo={photos[m.uid]} size={gold ? 52 : big ? 46 : 38} />
               <div className="min-w-0">
-                <div className="flex items-baseline gap-1.5"><span className={`font-black truncate ${gold ? "text-[17px]" : big ? "text-[15.5px]" : "text-[14px] text-[#0F1A30]"}`}>{m.name || m.email}</span><span className={`text-[12px] font-bold whitespace-nowrap ${gold ? "text-[#D7BC82]" : big ? "text-white/70" : "text-[#7A879C]"}`}>{m.position || ""}</span></div>
-                {phone ? <button type="button" onClick={() => copy(phone, m.uid)} className={`text-[12px] font-semibold tabular-nums ${gold || big ? "text-white/70" : "text-[#5B6B85]"}`}>{copied === m.uid ? "복사됨 ✓" : phone}</button> : null}
+                <div className="flex items-baseline gap-1.5"><span className={`font-black truncate ${gold ? "text-[18px]" : big ? "text-[16px]" : "text-[15px] text-white"}`}>{m.name || m.email}</span><span className={`text-[12.5px] font-bold whitespace-nowrap ${gold ? "text-[#D7BC82]" : big ? "text-white/70" : "text-[#8FB0F0]"}`}>{m.position || ""}</span></div>
+                {phone ? <button type="button" onClick={() => copy(phone, m.uid)} className={`text-[12.5px] font-semibold tabular-nums ${gold || big ? "text-white/70" : "text-white/55"}`}>{copied === m.uid ? "복사됨 ✓" : phone}</button> : null}
               </div>
             </div>
           );
         };
         const Dept = ({ t }) => (
-          <div className="w-[248px] rounded-[20px] bg-[#F7F9FC] border border-[#E3E8F0] p-2.5 text-left">
+          <div className="w-[260px] rounded-[20px] p-2.5 text-left" style={{ background: "linear-gradient(180deg,rgba(255,255,255,0.07),rgba(255,255,255,0.03))", boxShadow: "inset 0 0 0 1px rgba(143,176,240,0.25), 0 12px 28px rgba(0,0,0,0.25)" }}>
             <div className="flex items-center justify-between px-1.5 pb-2">
-              <span className="flex items-center gap-2"><span className="w-1.5 h-5 rounded-full bg-gradient-to-b from-[#1B2B4B] to-[#4B6CB7]" /><span className="text-[15px] font-black text-[#0F1A30]">{t.name}</span></span>
-              <span className="text-[11.5px] font-black text-[#5B6B85] tabular-nums">{t.list.length}명</span>
+              <span className="flex items-center gap-2"><span className="w-1.5 h-5 rounded-full bg-gradient-to-b from-[#8FB0F0] to-[#4B6CB7] shadow-[0_0_8px_rgba(143,176,240,0.8)]" /><span className="text-[16px] font-black text-white">{t.name}</span></span>
+              <span className="text-[12px] font-black text-[#8FB0F0] tabular-nums" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{t.list.length}명</span>
             </div>
             <div className="relative pl-4">
-              <span className="absolute left-[7px] top-3 bottom-5 w-[2px] bg-[#C9D6EE] rounded" />
+              <span className="absolute left-[7px] top-3 bottom-5 w-[2px] bg-[#4B6CB7]/60 rounded" />
               <div className="space-y-1.5">
                 {t.list.map((m, i) => (
                   <div key={m.uid} className="relative">
-                    <span className="absolute -left-[9px] top-1/2 w-[9px] h-[2px] bg-[#C9D6EE]" />
+                    <span className="absolute -left-[9px] top-1/2 w-[9px] h-[2px] bg-[#4B6CB7]/60" />
                     <Person m={m} big={i === 0 && rankOf(m.position) < 50 && t.name !== "미배정"} />
                   </div>
                 ))}
@@ -134,19 +143,19 @@ export default function OrgChart({ userCompany }) {
           </div>
         );
         return (
-          <div className="rounded-[24px] bg-white border border-[#E3E8F0] p-4 md:p-8 overflow-x-auto">
+          <div className="rounded-[24px] p-4 md:p-8 overflow-x-auto" style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(75,108,183,0.35), transparent 60%), linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/24px 24px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/24px 24px, linear-gradient(160deg,#060C1A 0%,#0F1A30 45%,#1B2B4B 100%)", boxShadow: "0 18px 40px rgba(15,26,48,0.3)" }}>
             <style>{`
               .oc-tree, .oc-tree ul { margin: 0; padding: 0; }
               .oc-tree ul { padding-top: 26px; position: relative; display: flex; justify-content: center; }
               .oc-tree li { list-style: none; position: relative; padding: 26px 10px 0; display: flex; flex-direction: column; align-items: center; }
-              .oc-tree li::before, .oc-tree li::after { content: ""; position: absolute; top: 0; right: 50%; width: 50%; height: 26px; border-top: 2px solid #9FB2D6; }
-              .oc-tree li::after { right: auto; left: 50%; border-left: 2px solid #9FB2D6; }
+              .oc-tree li::before, .oc-tree li::after { content: ""; position: absolute; top: 0; right: 50%; width: 50%; height: 26px; border-top: 2px solid rgba(143,176,240,0.55); }
+              .oc-tree li::after { right: auto; left: 50%; border-left: 2px solid rgba(143,176,240,0.55); }
               .oc-tree li:only-child::before, .oc-tree li:only-child::after { display: none; }
               .oc-tree li:only-child { padding-top: 0; }
               .oc-tree li:first-child::before, .oc-tree li:last-child::after { border: 0 none; }
-              .oc-tree li:last-child::before { border-right: 2px solid #9FB2D6; border-radius: 0 10px 0 0; }
+              .oc-tree li:last-child::before { border-right: 2px solid rgba(143,176,240,0.55); border-radius: 0 10px 0 0; }
               .oc-tree li:first-child::after { border-radius: 10px 0 0 0; }
-              .oc-tree ul ul::before { content: ""; position: absolute; top: 0; left: 50%; height: 26px; border-left: 2px solid #9FB2D6; }
+              .oc-tree ul ul::before { content: ""; position: absolute; top: 0; left: 50%; height: 26px; border-left: 2px solid rgba(143,176,240,0.55); }
               .oc-tree > ul { padding-top: 0; }
             `}</style>
             <div className="oc-tree min-w-max mx-auto">
@@ -157,11 +166,11 @@ export default function OrgChart({ userCompany }) {
                   <ul>
                     <li>
                       {execs.length ? (
-                        <div className="rounded-[20px] border border-[#D7BC82]/60 bg-[#FFFCF5] p-2.5">
-                          <div className="text-center text-[11px] font-extrabold tracking-[0.24em] text-[#8C7442] pb-2">EXECUTIVES · 임원진</div>
+                        <div className="rounded-[20px] p-2.5" style={{ background: "rgba(215,188,130,0.06)", boxShadow: "inset 0 0 0 1px rgba(215,188,130,0.45)" }}>
+                          <div className="text-center text-[11.5px] font-extrabold tracking-[0.24em] text-[#D7BC82] pb-2">EXECUTIVES · 임원진</div>
                           <div className="flex gap-2">{execs.map((m) => <Person key={m.uid} m={m} big />)}</div>
                         </div>
-                      ) : <div className="rounded-full px-4 py-1.5 bg-[#EEF3FC] text-[12px] font-black text-[#1B2B4B]">부서</div>}
+                      ) : <div className="rounded-full px-4 py-1.5 bg-white/10 border border-white/15 text-[12.5px] font-black text-white">부서</div>}
                       {depts.length > 0 && (
                         <ul>
                           {depts.map((t) => <li key={t.name}><Dept t={t} /></li>)}
