@@ -392,8 +392,22 @@ function OrderDetailBody({ o, onCopy, changed = [] }) {
               {w._t && <span style={{ fontSize: 11.5, fontWeight: 800, color: "#1B2B4B", background: "#EEF2F8", borderRadius: 6, padding: "1px 6px" }}>{w._t}</span>}
               {Number(w.기사운임) > 0 && <span style={{ marginLeft: "auto", fontSize: 12.5, fontWeight: 900, color: "#0B1428" }}>{Number(w.기사운임).toLocaleString()}원</span>}
             </div>
-            {w.주소 && <div style={{ fontSize: 12, color: "#5B6B85", marginTop: 2 }}>{w.주소}</div>}
+            {/* ⭐ 2026-10-31 경유·거점도 상하차지처럼 주소 복사·길안내·담당자 전화 */}
+            {w.주소 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
+                <span style={{ fontSize: 12, color: "#3A4A66", flex: 1, wordBreak: "break-word" }}>{w.주소}</span>
+                <button onClick={() => onCopy(w.주소, `${w._k}지 주소`)} style={{ fontSize: 11, fontWeight: 700, color: "#1B2B4B", border: "1px solid #c7d2e3", borderRadius: 6, padding: "2px 7px", background: "#fff", flexShrink: 0, cursor: "pointer" }}>복사</button>
+                <NavButton title={w._k} name={w.업체명} addr={w.주소} />
+              </div>
+            )}
+            {(w.담당자번호 || (w.담당자 && w.담당자 !== "담당자")) && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
+                <span style={{ fontSize: 12, color: "#5B6B85" }}>{[w.담당자 && w.담당자 !== "담당자" ? w.담당자 : "", w.담당자번호 ? formatPhone(w.담당자번호) : ""].filter(Boolean).join(" · ")}</span>
+                {w.담당자번호 && <a href={`tel:${String(w.담당자번호).replace(/[^0-9]/g, "")}`} style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: "#1B2B4B", borderRadius: 6, padding: "2px 8px", textDecoration: "none", flexShrink: 0 }}>전화</a>}
+              </div>
+            )}
             {(w.화물내용 || w.차량톤수) && <div style={{ fontSize: 11.5, color: "#7A89A3", marginTop: 2 }}>{[w.화물내용, w.차량톤수].filter(Boolean).join(" · ")}</div>}
+            {(w.메모 || w.방법) && <div style={{ fontSize: 11.5, color: "#7A89A3", marginTop: 2 }}>{[w.방법, w.메모].filter(Boolean).join(" · ")}</div>}
           </div>
         ))}
       <LocBlock title="하차" name={o.하차지명} addr={o.하차지주소} when={fmtDT(o.하차일, o.하차시간)} manager={o.하차지담당자} managerPhone={o.하차지담당자번호} onCopy={onCopy}
