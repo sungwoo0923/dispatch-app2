@@ -22,6 +22,7 @@ import { withCo, getTenant } from "../fsTenant";
 // 📱 PC와 같은 화면(매출관리·운임조회·단가표·지입차관리·전자결재·직원관리) — 메뉴를 열 때만 불러온다
 const MobilePcView = React.lazy(() => import("./MobilePcViews"));
 import { useMobileAlerts } from "./mobileAlerts";
+import { ShellIcon } from "../AdminShell";
 // ⭐ 작은 표시 전용 저장소 — "최신 정보 확인 중"·첫 진입 진행률이 바뀔 때 화면 전체(오더 목록)를
 // 다시 그리지 않고 그 표시만 바꾼다(저사양 폰에서 스크롤 끊김 방지)
 function createMiniStore(init) {
@@ -7794,12 +7795,13 @@ function MobileSideMenu({
     <>
     <div className="fixed inset-0 z-40">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className={`absolute left-0 top-0 bottom-0 w-[78vw] max-w-[300px] shadow-[12px_0_40px_rgba(15,26,48,0.3)] flex flex-col rounded-r-[24px] overflow-hidden ${
+      <div className={`absolute left-0 top-0 bottom-0 ${dark ? "w-[84vw] max-w-[330px]" : "w-[78vw] max-w-[300px]"} shadow-[12px_0_40px_rgba(15,26,48,0.3)] flex flex-col rounded-r-[24px] overflow-hidden ${
         dark ? "text-white" : "bg-white"
-      }`} style={{ paddingTop: "env(safe-area-inset-top, 0px)", background: dark ? "linear-gradient(180deg, #16264A 0%, #1B2B4B 55%, #14213D 100%)" : undefined }}>
+      }`} style={{ paddingTop: "env(safe-area-inset-top, 0px)", background: dark ? "linear-gradient(rgba(143,176,240,.05) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.05) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(170deg, #060E1F 0%, #0F1A30 45%, #1B2B4B 100%)" : undefined }}>
 
+        {dark && <KpmDrawerHead myName={myName} role={role} loginTime={loginTime} onClose={onClose} fmtLoginTime={fmtLoginTime} />}
         {/* 헤더 */}
-        <div className={`px-5 pt-5 pb-4 flex items-start justify-between gap-3 ${
+        {!dark && <div className={`px-5 pt-5 pb-4 flex items-start justify-between gap-3 ${
           dark ? "border-b border-white/10" : "border-b border-[#EEF1F6]"
         }`}>
           <div className="min-w-0 flex-1">
@@ -7829,7 +7831,7 @@ function MobileSideMenu({
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
           </button>
-        </div>
+        </div>}
 
         {/* 메뉴 본문 + 하단 컨트롤 — 사용자 요청: 메뉴 목록만 따로 작은 칸 안에서
             스크롤되던 걸 없애고, 드로어 전체(메뉴~로그아웃~버전)가 하나로 이어져
@@ -7839,43 +7841,46 @@ function MobileSideMenu({
               실무자: 매출관리 숨김 / 경리·회계: 화물등록·단가표 숨김 / 관리자 전용 메뉴: 관리자·마스터·조회전용 /
               최고관리자 전용(관리센터·구글시트·블라인드·회사코드조회)은 최고관리자만.
               일정(휴가)·인수인계는 전자결재 안으로, 자사운임표는 통합운임조회 안으로 합쳤다(중복 메뉴 정리). */}
-          <MenuSection title="배차관리" dark={dark} alwaysOpen>
-            <MenuItem label="등록내역" onClick={onGoList} dark={dark} />
-            {role !== "test" && <MenuItem label="화물등록" onClick={onGoCreate} dark={dark} />}
-            <MenuItem label="미배차현황" onClick={onGoUnassigned} badge={unassignedCount > 0 ? unassignedCount : null} dark={dark} />
+          <MenuSection title="배차관리" en="DISPATCH" dark={dark} alwaysOpen>
+            <MenuItem label="등록내역" icon="list" onClick={onGoList} dark={dark} />
+            {role !== "test" && <MenuItem label="화물등록" icon="truck" onClick={onGoCreate} dark={dark} />}
+            <MenuItem label="미배차현황" icon="alert" onClick={onGoUnassigned} badge={unassignedCount > 0 ? unassignedCount : null} dark={dark} />
           </MenuSection>
-          <MenuSection title="사내 업무" dark={dark} alwaysOpen>
-            <MenuItem label="전자결재" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.handover || 0) || null} dark={dark} />
-            <MenuItem label="공지사항" onClick={onGoNotice} badge={alertCounts?.notice ? alertCounts.notice : hasNewNotice ? "NEW" : null} dark={dark} />
-            <MenuItem label="출근기록부" onClick={onGoAttendance} dark={dark} />
+          <MenuSection title="사내 업무" en="WORKSPACE" dark={dark} alwaysOpen>
+            <MenuItem label="전자결재" icon="stamp" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.handover || 0) || null} dark={dark} />
+            <MenuItem label="공지사항" icon="bell" onClick={onGoNotice} badge={alertCounts?.notice ? alertCounts.notice : hasNewNotice ? "NEW" : null} dark={dark} />
+            <MenuItem label="출근기록부" icon="clock" onClick={onGoAttendance} dark={dark} />
           </MenuSection>
-          <MenuSection title="운임" dark={dark} alwaysOpen>
-            <MenuItem label="통합운임조회" onClick={onGoNationalFare} dark={dark} />
-            {role !== "test" && <MenuItem label="단가표" onClick={onGoRateCard} dark={dark} />}
+          <MenuSection title="운임" en="FARE" dark={dark} alwaysOpen>
+            <MenuItem label="통합운임조회" icon="globe" onClick={onGoNationalFare} dark={dark} />
+            {role !== "test" && <MenuItem label="단가표" icon="money" onClick={onGoRateCard} dark={dark} />}
           </MenuSection>
-          <MenuSection title="기사 · 매출" dark={dark} alwaysOpen>
-            <MenuItem label="지입차관리" onClick={onGoFleet} dark={dark} />
-            {canRevenue && <MenuItem label="매출관리" onClick={onGoSales} dark={dark} />}
+          <MenuSection title="기사 · 매출" en="FLEET · REVENUE" dark={dark} alwaysOpen>
+            <MenuItem label="지입차관리" icon="route" onClick={onGoFleet} dark={dark} />
+            {canRevenue && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
           </MenuSection>
           {canAdminMenu && (
-            <MenuSection title="관리자 전용 메뉴" dark={dark} alwaysOpen>
-              <MenuItem label="직원 관리" onClick={() => onGo?.("staff")} badge={(alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) || null} dark={dark} />
+            <MenuSection title="관리자 전용 메뉴" en="ADMIN" dark={dark} alwaysOpen>
+              <MenuItem label="직원 관리" icon="users" onClick={() => onGo?.("staff")} badge={(alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) || null} dark={dark} />
             </MenuSection>
           )}
           {role === "totalMaster" && (
-            <MenuSection title="최고관리자 전용" dark={dark}>
+            <MenuSection title="최고관리자 전용" en="MASTER" dark={dark}>
               {/* PC 상단 "관리센터 ↗"와 같은 역할 — 플랫폼 운영 화면(/platform)으로 전환 */}
-              <MenuItem label="관리자 관리센터로 전환 ↗" onClick={() => { try { sessionStorage.setItem("kpEntry", "platform"); } catch { /* 무시 */ } window.location.assign("/platform"); }} dark={dark} />
-              <MenuItem label="구글시트 전송" onClick={onGoGsheet} dark={dark} />
-              <MenuItem label="블라인드 모드" onClick={onGoBlind} dark={dark} />
-              <MenuItem label="회사코드조회" onClick={openCodeLookup} dark={dark} />
+              <MenuItem label="관리자 관리센터로 전환 ↗" icon="shield" onClick={() => { try { sessionStorage.setItem("kpEntry", "platform"); } catch { /* 무시 */ } window.location.assign("/platform"); }} dark={dark} />
+              <MenuItem label="구글시트 전송" icon="sheet" onClick={onGoGsheet} dark={dark} />
+              <MenuItem label="블라인드 모드" icon="eye" onClick={onGoBlind} dark={dark} />
+              <MenuItem label="회사코드조회" icon="key" onClick={openCodeLookup} dark={dark} />
             </MenuSection>
           )}
-          <MenuSection title="내 계정" dark={dark}>
-            <MenuItem label="내정보" onClick={onGoMyInfo} dark={dark} />
-            <MenuItem label="설정" onClick={onGoSettings} dark={dark} />
+          <MenuSection title="내 계정" en="ACCOUNT" dark={dark} alwaysOpen={dark}>
+            <MenuItem label="내정보" icon="idcard" onClick={onGoMyInfo} dark={dark} />
+            <MenuItem label="설정" icon="key" onClick={onGoSettings} dark={dark} />
           </MenuSection>
 
+          {dark ? (
+            <KpmDrawerControls alarmEnabled={alarmEnabled} toggleAlarm={toggleAlarm} uiScale={uiScale} setUiScale={setUiScale} cardVersionB={cardVersionB} onToggleCardVersion={onToggleCardVersion} />
+          ) : (<>
           {/* 알림 토글 */}
           <div className={`px-5 py-3 flex items-center justify-between ${dark ? "border-t border-white/10" : "border-t border-blue-100"}`}>
             <span className={`text-[13px] font-semibold ${dark ? "text-white/80" : "text-gray-700"}`}>알림</span>
@@ -7889,20 +7894,10 @@ function MobileSideMenu({
             </button>
           </div>
 
-          {/* 화면 크기 */}
-          <div className={`px-5 py-3 ${dark ? "border-t border-white/10" : "border-t border-blue-50"}`}>
-            <div className={`text-[11px] font-semibold tracking-wider mb-2 ${dark ? "text-white/50" : "text-blue-500"}`}>화면 크기</div>
-            <div className="flex gap-1.5">
-              {[{ v: 1, label: "기본" }, { v: 1.1, label: "크게" }, { v: 1.2, label: "아주 크게" }].map(({ v, label }) => (
-                <button key={v} onClick={() => { setUiScale(v); localStorage.setItem((window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true) ? "uiScale_pwa" : "uiScale_browser", v); }}
-                  className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
-                    uiScale === v
-                      ? (dark ? "bg-white text-[#1B2B4B]" : "bg-blue-600 text-white")
-                      : (dark ? "bg-white/10 text-white/60 hover:bg-white/20" : "bg-blue-50 text-blue-600 hover:bg-blue-100")
-                  }`}
-                >{label}</button>
-              ))}
-            </div>
+          {/* 화면 크기 — 가·가·가 세 단계 한 줄(간단하게) */}
+          <div className="px-5 py-3 border-t border-blue-50 flex items-center justify-between gap-3">
+            <span className="text-[13px] font-semibold text-gray-700">화면 크기</span>
+            <KpmScaleSeg uiScale={uiScale} setUiScale={setUiScale} />
           </div>
 
           {/* 카드 스타일 */}
@@ -7921,18 +7916,16 @@ function MobileSideMenu({
             </div>
           </div>
 
+          </>)}
+
           {/* 로그아웃 — 로그인 관리·비밀번호 변경은 설정 › 계정에서(메뉴에서는 뺐다, 2026-10-31) */}
-          <div className={`px-5 py-3 space-y-2 ${dark ? "border-t border-white/10" : "border-t border-blue-100"}`}>
+          <div className={`${dark ? "px-4 pt-1 pb-2" : "px-5 py-3 border-t border-blue-100"} space-y-2`}>
             <button onClick={logout}
-              className={`w-full py-2.5 rounded-xl text-[13px] font-semibold active:scale-[0.98] transition ${
-                dark
-                  ? "bg-white/10 text-white/80 border border-white/20 hover:bg-white/20"
-                  : "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
-              }`}
-            >로그아웃</button>
+              className={`w-full ${dark ? "h-11 rounded-2xl text-[13.5px] font-black bg-white/[0.05] text-white/80 ring-1 ring-white/15 inline-flex items-center justify-center gap-2" : "py-2.5 rounded-xl text-[13px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"} active:scale-[0.98] transition`}
+            >{dark && <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>}로그아웃</button>
           </div>
-          <div className="px-5 py-2 flex items-center justify-between">
-            <span className={`text-[11px] ${dark ? "text-white/40" : "text-gray-400"}`}>버전</span>
+          <div className={`${dark ? "px-5 pb-4" : "px-5 py-2"} flex items-center justify-between`}>
+            <span className={`text-[11px] ${dark ? "text-white/35 font-bold tracking-[0.2em]" : "text-gray-400"}`} style={dark ? { fontFamily: KPM_MONO } : undefined}>{dark ? "KP-FLOW · BUILD" : "버전"}</span>
             <MobileVersionChip dark={dark} />
           </div>
         </div>
@@ -8026,8 +8019,107 @@ function MobileSideMenu({
 // ⭐ 사용자 요청 — 배차관리/공지·일정/매출·운임표는 자주 쓰는 메뉴라 항상 펼쳐져
 // 있어야 하고(접고 펴는 토글 자체를 없앰), 관리자 전용/내 계정만 기존처럼 접혀있다가
 // 눌러야 펼쳐지면 된다. alwaysOpen이면 펼침/접기 버튼 없이 그냥 항상 보여준다.
-function MenuSection({ title, children, dark, alwaysOpen = false }) {
+// ── 메뉴 B형 머리(디지털 시계 + 프로필) · 컨트롤 카드 · 화면 크기 3단계 ──
+const KPM_ROLE_KO = { totalMaster: "최고관리자", admin: "관리자", superadmin: "관리자", hrManager: "인사관리자", user: "실무자", test: "경리/회계", viewer: "조회전용" };
+function KpmDrawerHead({ myName, role, loginTime, onClose, fmtLoginTime }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
+  const p2 = (n) => String(n).padStart(2, "0");
+  const co = (() => { try { return localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || ""; } catch { return ""; } })();
+  return (
+    <div className="px-4 pt-4 pb-3">
+      <div className="flex items-center gap-2.5">
+        <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-9 h-9 rounded-[11px] shrink-0 ring-1 ring-white/20" />
+        <div className="min-w-0 flex-1">
+          <div className="text-[9.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO }}>DISPATCH · CONSOLE</div>
+          <div className="text-[15px] font-black tracking-tight">KP-Flow</div>
+        </div>
+        <button type="button" onClick={onClose} aria-label="닫기" className="w-9 h-9 rounded-[11px] bg-white/[0.07] ring-1 ring-white/10 grid place-items-center text-white/80">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+        </button>
+      </div>
+      <div className="mt-3.5 flex items-end justify-between">
+        <div className="flex items-center gap-1.5 text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO }}>
+          <span className="w-1.5 h-1.5 rounded-full bg-[#6E95E8] animate-pulse" />SYSTEM ONLINE
+        </div>
+        <div className="font-black tabular-nums leading-none" style={{ fontFamily: KPM_MONO, fontSize: 30, letterSpacing: "-0.02em" }}>
+          {p2(now.getHours())}<span className="text-white/35">:</span>{p2(now.getMinutes())}<span className="text-[14px] text-white/35 ml-1">{p2(now.getSeconds())}</span>
+        </div>
+      </div>
+      <div className="mt-3 rounded-2xl bg-white/[0.06] ring-1 ring-white/10 p-3 flex items-center gap-3">
+        <span className="w-10 h-10 rounded-xl bg-white text-[#0F1A30] grid place-items-center text-[16px] font-black shrink-0">{String(myName || "?").slice(0, 1)}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[14.5px] font-black truncate">{myName}</span>
+            <span className="shrink-0 h-[18px] px-1.5 rounded-md bg-[#8FB0F0]/20 text-[#CFE0FF] text-[10px] font-black grid place-items-center">{KPM_ROLE_KO[role] || "직원"}</span>
+          </div>
+          <div className="text-[11px] text-white/45 truncate tabular-nums">{[co, fmtLoginTime(loginTime) && `접속 ${fmtLoginTime(loginTime)}`].filter(Boolean).join(" · ")}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+const KPM_SCALES = [{ v: 1, l: "기본", fs: 12 }, { v: 1.1, l: "크게", fs: 14.5 }, { v: 1.2, l: "아주 크게", fs: 17 }];
+const saveUiScale = (setUiScale, v) => { setUiScale(v); try { localStorage.setItem((window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true) ? "uiScale_pwa" : "uiScale_browser", v); } catch { /* 무시 */ } };
+function KpmScaleSeg({ uiScale, setUiScale, dark = false }) {
+  return (
+    <div className={`flex p-0.5 rounded-xl ${dark ? "bg-white/[0.06] ring-1 ring-white/10" : "bg-[#EEF2F8]"}`}>
+      {KPM_SCALES.map(({ v, l, fs }) => (
+        <button key={v} type="button" title={l} aria-label={`화면 크기 ${l}`} onClick={() => saveUiScale(setUiScale, v)}
+          className={`w-10 h-8 rounded-[10px] grid place-items-center font-black transition ${uiScale === v ? (dark ? "bg-white text-[#0F1A30]" : "bg-[#1B2B4B] text-white") : (dark ? "text-white/55" : "text-[#5B6B85]")}`}
+          style={{ fontSize: fs }}>가</button>
+      ))}
+    </div>
+  );
+}
+function KpmDrawerControls({ alarmEnabled, toggleAlarm, uiScale, setUiScale, cardVersionB, onToggleCardVersion }) {
+  const row = "flex items-center justify-between gap-3 px-3 h-12";
+  return (
+    <div className="px-3 pt-3.5 pb-2">
+      <div className="px-2 pb-2 flex items-center gap-2">
+        <span className="text-[9.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO }}>CONTROL</span>
+        <span className="text-[11px] font-bold text-white/40">빠른 설정</span>
+        <span className="flex-1 h-px bg-gradient-to-r from-white/15 to-transparent" />
+      </div>
+      <div className="rounded-2xl bg-white/[0.035] ring-1 ring-white/[0.07] divide-y divide-white/[0.06]">
+        <div className={row}>
+          <span className="text-[13.5px] font-bold text-white/85">알림</span>
+          <button type="button" onClick={toggleAlarm} className={`relative w-11 h-6 rounded-full transition-colors ${alarmEnabled ? "bg-[#6E95E8]" : "bg-white/15"}`}>
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${alarmEnabled ? "translate-x-5" : ""}`} />
+          </button>
+        </div>
+        <div className={row}>
+          <span className="text-[13.5px] font-bold text-white/85">화면 크기</span>
+          <KpmScaleSeg uiScale={uiScale} setUiScale={setUiScale} dark />
+        </div>
+        <div className={row}>
+          <span className="text-[13.5px] font-bold text-white/85">카드 스타일</span>
+          <div className="flex p-0.5 rounded-xl bg-white/[0.06] ring-1 ring-white/10">
+            {[{ v: false, l: "A형" }, { v: true, l: "B형" }].map(({ v, l }) => (
+              <button key={String(v)} type="button" onClick={() => onToggleCardVersion(v)} className={`h-8 px-3 rounded-[10px] text-[12px] font-black transition ${cardVersionB === v ? "bg-white text-[#0F1A30]" : "text-white/55"}`}>{l}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MenuSection({ title, en, children, dark, alwaysOpen = false }) {
   const [open, setOpen] = useState(false);
+  if (dark) {
+    // B형 — 영문 코드 + 한글 제목 + 가는 선, 항목은 카드처럼 묶어서
+    return (
+      <div className="px-3 pt-3.5">
+        <div className="px-2 pb-2 flex items-center gap-2">
+          <span className="text-[9.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO }}>{en || title}</span>
+          <span className="text-[11px] font-bold text-white/40">{title}</span>
+          <span className="flex-1 h-px bg-gradient-to-r from-white/15 to-transparent" />
+        </div>
+        <div className="rounded-2xl bg-white/[0.035] ring-1 ring-white/[0.07] p-1 flex flex-col gap-0.5">{children}</div>
+      </div>
+    );
+  }
   if (alwaysOpen) {
     return (
       <div className="mt-1 mb-1">
@@ -8056,7 +8148,23 @@ function MenuSection({ title, children, dark, alwaysOpen = false }) {
   );
 }
 
-function MenuItem({ label, onClick, badge, dark }) {
+function MenuItem({ label, onClick, badge, dark, icon }) {
+  if (dark) {
+    return (
+      <button type="button" onClick={onClick}
+        className="kp-m-drawer-item w-full flex items-center gap-3 px-2.5 h-[46px] rounded-xl text-left transition-colors hover:bg-white/[0.07] active:bg-white/[0.12]">
+        <span className="w-8 h-8 rounded-[10px] shrink-0 grid place-items-center bg-gradient-to-br from-[#2D4C82]/70 to-[#16264A] ring-1 ring-white/10 text-[#CFE0FF]">
+          <ShellIcon name={icon || "dashboard"} size={15} />
+        </span>
+        <span className="flex-1 min-w-0 truncate text-[14.5px] font-bold text-white/90">{label}</span>
+        {badge ? (
+          typeof badge === "number"
+            ? <span className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-rose-500 text-white text-[11px] font-black grid place-items-center tabular-nums shadow-[0_0_0_3px_rgba(244,63,94,0.18)]">{badge > 99 ? "99+" : badge}</span>
+            : <span className="h-[20px] px-2 rounded-full bg-[#8FB0F0]/20 text-[#CFE0FF] text-[10px] font-black grid place-items-center tracking-wider">{badge}</span>
+        ) : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(207,224,255,0.35)" strokeWidth="2.4" strokeLinecap="round"><path d="M9 6l6 6-6 6" /></svg>}
+      </button>
+    );
+  }
   return (
     <button
       className={`kp-m-drawer-item w-full flex items-center justify-between px-5 py-2.5 text-[14px] font-semibold transition-colors ${
