@@ -36,7 +36,7 @@ export const FEATURE_ROWS = [
 export const FEATURE_BY_KEY = Object.fromEntries(FEATURE_ROWS.map((f) => [f.key, f]));
 
 // 상단 메뉴 → 기능 (여기 없는 메뉴는 모든 요금제에서 사용)
-export const MENU_FEATURE = { 지입차관리: "fleet", 회사관리: "hr", 인사이트: "insight" };
+export const MENU_FEATURE = { 지입차관리: "fleet", 회사관리: "hr", 인사이트: "insight", 전자결재: "groupware", 결재함: "groupware" };
 // 홈 왼쪽 사이드바 항목 → 기능
 export const homeItemFeature = (key) => (/^(ap:|mail|board:)/.test(String(key)) || key === "인수인계" ? "groupware" : null);
 

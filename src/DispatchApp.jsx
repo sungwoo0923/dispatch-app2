@@ -29,7 +29,7 @@ import AdminMenu, { subscribeUsersLive } from "./AdminMenu";
 import FleetExtraFields from "./FleetDriverExtra";
 import { useFixedRouteAutoDispatch, FixedRouteEditNotice } from "./FixedRoutes";
 import { deptModeOf } from "./DeptDashboard";
-import { ExecApprovals, TeamSchedule } from "./ExecSuite";
+import { ExecApprovals, TeamSchedule, ApprovalWorkspace } from "./ExecSuite";
 import { useMyProfile } from "./userNames";
 import { isExecProfile } from "./hrConstants";
 import { CashBook, AssetManager } from "./OfficeBooks";
@@ -3165,21 +3165,21 @@ const KP_SIDE_GROUPS = [
 ];
 // 🏢 부서 모드 메뉴 — 경리·회계(test) / 인사관리자(hrManager)
 const DEPT_MENUS = {
-  acct: ["HOME", "정산관리", "매출관리", "회계관리", "수입지출", "비품관리", "기사관리", "기사서류", "직원관리", "회사관리"],
-  hr: ["HOME", "인사관리", "근태관리", "연차관리", "입퇴사관리", "증명서발급", "직원관리", "기사관리", "기사서류", "회사관리"],
+  acct: ["HOME", "전자결재", "정산관리", "매출관리", "회계관리", "수입지출", "비품관리", "기사관리", "기사서류", "직원관리", "회사관리"],
+  hr: ["HOME", "전자결재", "인사관리", "근태관리", "연차관리", "입퇴사관리", "증명서발급", "직원관리", "기사관리", "기사서류", "회사관리"],
   // 👔 임원(대표·전무·이사) — 보고·결재·매출 중심
   exec: ["HOME", "결재함", "직원일정", "매출관리", "인사이트", "실시간배차현황", "관리자메뉴", "회사관리"],
 };
 // 부서 모드 왼쪽 메뉴 묶음
 const DEPT_SIDE_GROUPS = {
   acct: [
-    { label: "경리 · 회계", items: ["HOME", "정산관리", "매출관리", "회계관리"] },
+    { label: "경리 · 회계", items: ["HOME", "전자결재", "정산관리", "매출관리", "회계관리"] },
     { label: "살림", items: ["수입지출", "비품관리"] },
     { label: "사람", items: ["직원관리", "기사관리", "기사서류"] },
     { label: "공통", items: ["회사관리"] },
   ],
   hr: [
-    { label: "인사", items: ["HOME", "인사관리", "근태관리", "연차관리"] },
+    { label: "인사", items: ["HOME", "전자결재", "인사관리", "근태관리", "연차관리"] },
     { label: "입·퇴사", items: ["입퇴사관리", "증명서발급", "직원관리"] },
     { label: "기사", items: ["기사관리", "기사서류"] },
     { label: "공통", items: ["회사관리"] },
@@ -3196,7 +3196,7 @@ const KP_SIDE_ICONS = {
   회사관리: "idcard", 관리자메뉴: "key", 관리센터: "shield", 인사이트: "chart",
   회계관리: "money", 인사관리: "idcard", 근태관리: "clock", 직원관리: "users", 기사서류: "file",
   수입지출: "wallet", 비품관리: "list", 연차관리: "flag", 입퇴사관리: "check", 증명서발급: "stamp",
-  결재함: "stamp", 직원일정: "clock",
+  결재함: "stamp", 직원일정: "clock", 전자결재: "stamp",
 };
 function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, company, email, groups = KP_SIDE_GROUPS }) {
   React.useEffect(() => {
@@ -7764,6 +7764,7 @@ const newVer = useNewVersion(); // ⭐ 새 버전이 배포되면 버전 표시 
     // 👔 임원 화면 — 임원 메뉴만, 그 안에서 권한 규칙은 그대로
     if (deptMode === "exec" && !DEPT_MENUS.exec.includes(m)) return "hidden";
     if (["결재함", "직원일정"].includes(m)) return deptMode === "exec" ? "ok" : "hidden";
+    if (m === "전자결재") return "hidden"; // 일반 화면은 홈 › 전자결재
     // ⭐ 2026-10-31 경리·인사 부서 메뉴는 그 부서 권한에서만(관리자·마스터 화면은 원래대로)
     if (["회계관리", "인사관리", "근태관리", "직원관리", "기사서류", "수입지출", "비품관리", "연차관리", "입퇴사관리", "증명서발급"].includes(m)) return "hidden";
     if (customRole && getMenuAccess(customRoles, role, m) === "hidden") return "hidden";
@@ -8459,6 +8460,7 @@ return (
         {/* 👔 2026-10-31 임원 메뉴 */}
         {menu === "결재함" && menuState("결재함") === "ok" && <ExecApprovals company={deptCompany} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "", team: myProfileDoc?.team || "", position: myProfileDoc?.position || "", role }} />}
         {menu === "직원일정" && menuState("직원일정") === "ok" && <TeamSchedule company={deptCompany} />}
+        {menu === "전자결재" && menuState("전자결재") === "ok" && <ApprovalWorkspace company={deptCompany} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "", team: myProfileDoc?.team || "", position: myProfileDoc?.position || "", role }} />}
         {/* 🏢 2026-10-31 경리·인사 부서 메뉴 */}
         {menu === "회계관리" && menuState("회계관리") === "ok" && <AccountingDashboard dispatchData={dispatchDataFiltered} fixedRows={fixedRows} clients={clients} isViewer={isViewer} />}
         {menu === "수입지출" && menuState("수입지출") === "ok" && <CashBook company={deptCompany} isViewer={isViewer} />}
