@@ -2717,6 +2717,7 @@ import {
 import { setDoc, updateDoc } from "./orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import KpBootScreen from "./KpBootScreen";
 import AdminShell, { ShellIcon } from "./AdminShell";
+import { FabButton, SizeButtons, DOCK_BG } from "./FloatDock";
 import { pcBootStore, useMiniStore, makeBootTracker, markBootBase } from "./bootProgress";
 import { auth, db, storage, DEFAULT_COMPANY } from "./firebase";
 import { LoginManagerModal } from "./LoginManager";
@@ -3168,6 +3169,7 @@ const KP_SIDE_GROUPS = [
   { label: "운임", items: ["단가표", "운임조회"] },
   { label: "기사 · 거래처", items: ["기사관리", "거래처관리", "지입차관리"] },
   { label: "매출 · 정산", items: ["매출관리", "정산관리", "인사이트"] },
+  { label: "부서 업무", items: ["전자결재", "회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급", "직원일정"] },
   { label: "관리", items: ["회사관리", "관리자메뉴", "관리센터"] },
 ];
 // 🏢 부서 모드 메뉴 — 경리·회계(test) / 인사관리자(hrManager)
@@ -6505,30 +6507,36 @@ function FloatingCalculator({ onClose }) {
   const inpSt = { width: "100%", border: "1px solid #cbd5e1", borderRadius: 8, padding: "6px 8px", fontSize: 14, outline: "none", boxSizing: "border-box" };
   const lblSt = { fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 3, display: "block" };
 
+  // ⭐ 2026-10-31 크기 — 작게·보통·크게(계산기 전체가 비율대로 커진다)
+  const ZOOM = { S: 0.88, M: 1, L: 1.28 };
+  const [calcSize, setCalcSize] = React.useState(() => { try { return localStorage.getItem("kpWin:calc") || "M"; } catch { return "M"; } });
+  const pickCalcSize = (k) => { setCalcSize(k); try { localStorage.setItem("kpWin:calc", k); } catch { /* 무시 */ } };
+  const z = ZOOM[calcSize] || 1;
   return (
     <div style={{
-      position: "fixed", bottom: 148, right: 24, zIndex: 99999,
+      position: "fixed", bottom: 24, right: 92, zIndex: 99999,
       // ⭐ 적재/톤수 탭 내용(파렛 규격 입력·차량 목록 등)이 좁은 폭에 눌려 잘 안
       // 보인다는 피드백으로 탭별 폭을 전반적으로 넓히고, 글씨 크기도 함께 키웠다.
-      width: tab === "load" ? 460 : tab === "ton" ? 360 : 300,
-      background: "white", borderRadius: 20,
-      boxShadow: "0 20px 60px rgba(0,0,0,0.22)",
-      border: "1px solid #e2e8f0",
+      width: (tab === "load" ? 460 : tab === "ton" ? 360 : 320) * z,
+      background: "white", borderRadius: 22,
+      boxShadow: "0 24px 60px rgba(15,26,48,0.35)",
+      border: "1px solid #DCE3EE",
       fontFamily: "'Noto Sans KR', sans-serif",
-      maxHeight: "85vh", display: "flex", flexDirection: "column", overflow: "hidden",
+      maxHeight: "calc(100vh - 48px)", display: "flex", flexDirection: "column", overflow: "hidden",
     }}>
-      {/* 탭 헤더 */}
-      <div style={{ background: "#1B2B4B", padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div style={{ display: "flex", gap: 4 }}>
+      {/* 탭 헤더 — 네이비 디지털 */}
+      <div style={{ background: DOCK_BG, padding: "11px 12px 11px 16px", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 10, background: "rgba(255,255,255,0.08)", flex: 1, minWidth: 0 }}>
           {[["calc","계산기"],["ton","톤수"],["load","적재"]].map(([t,l]) => (
-            <button key={t} onClick={() => setTab(t)} style={{ background: tab === t ? "rgba(255,255,255,0.2)" : "none", border: "none", color: "white", fontWeight: tab === t ? 700 : 400, fontSize: 13, cursor: "pointer", padding: "4px 10px", borderRadius: 6 }}>{l}</button>
+            <button key={t} onClick={() => setTab(t)} style={{ flex: 1, background: tab === t ? "#fff" : "transparent", border: "none", color: tab === t ? "#0F1A30" : "rgba(255,255,255,0.75)", fontWeight: 900, fontSize: 12.5, cursor: "pointer", padding: "6px 4px", borderRadius: 8, whiteSpace: "nowrap" }}>{l}</button>
           ))}
         </div>
-        <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.6)", cursor: "pointer", fontSize: 22, lineHeight: 1, padding: 0 }}>×</button>
+        <SizeButtons preset={calcSize} onPick={pickCalcSize} />
+        <button onClick={onClose} title="닫기" style={{ width: 28, height: 28, borderRadius: 8, border: "none", background: "rgba(255,255,255,0.12)", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 900 }}>✕</button>
       </div>
 
       {/* 스크롤 본문 */}
-      <div style={{ overflowY: "auto", flex: 1 }}>
+      <div style={{ overflowY: "auto", flex: 1, zoom: z }}>
 
         {/* ── 계산기 탭 ── */}
         {tab === "calc" && (<>
@@ -7004,7 +7012,10 @@ function PcBootOverlay({ onDone }) {
   return <KpBootScreen targets={targets} subs={subs} onAllDone={onDone} onSkip={() => setSkipped(true)} variant="pc" zIndex={2147483000} />;
 }
 
-export default function DispatchApp({ role, user, userCompany = "", forceExec = false }) {
+export default function DispatchApp({ role: realRole, user, userCompany = "", forceExec = false }) {
+  // 🔀 통합인사관리자(hrAcct) — 경리·인사를 함께 하는 운송사. 상단 버튼으로 경리 화면 ↔ 인사 화면을 바꾼다
+  const [hrAcctView, setHrAcctView] = useState(() => { try { return localStorage.getItem("kpHrAcctView") || "acct"; } catch { return "acct"; } });
+  const role = realRole === "hrAcct" ? (hrAcctView === "hr" ? "hrManager" : "test") : realRole;
   const isTest = role === "test";
   const navigate = useNavigate();
   // ⭐ 오늘 비/눈이 왔는지 자동 인식 — 자사운임표·AI추천 등 운임조회 전반이
@@ -7772,15 +7783,20 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   // 메뉴 보이기 규칙(상단 메뉴·왼쪽 메뉴 공용) — "hidden" | "blocked" | "ok"
   const menuState = (m) => {
     // 🏢 2026-10-31 부서 모드 — 경리·인사 권한은 배차 메뉴 없이 부서 업무 메뉴만
-    if (deptMode && deptMode !== "exec") return (DEPT_MENUS[deptMode].includes(m) ? "ok" : "hidden");
+    // ⚙ 권한 관리에서 경리·인사관리자 메뉴를 숨겼으면 부서 화면에서도 숨긴다
+    if (deptMode && deptMode !== "exec") return (DEPT_MENUS[deptMode].includes(m) && !(customRole && getMenuAccess(customRoles, role, m) === "hidden") ? "ok" : "hidden");
     // 👔 임원 화면 — 임원 메뉴만, 그 안에서 권한 규칙은 그대로
     if (deptMode === "exec" && !DEPT_MENUS.exec.includes(m)) return "hidden";
     // 💰 자금현황은 대표 직책(대표·대표이사·사장)만
     if (m === "자금현황") return deptMode === "exec" && (forceExec || isCeoPosition(myProfileDoc?.position)) ? "ok" : "hidden";
-    if (["결재함", "직원일정", "스케줄"].includes(m)) return deptMode === "exec" ? "ok" : "hidden";
-    if (m === "전자결재") return "hidden"; // 일반 화면은 홈 › 전자결재
-    // ⭐ 2026-10-31 경리·인사 부서 메뉴는 그 부서 권한에서만(관리자·마스터 화면은 원래대로)
-    if (["회계관리", "인사관리부", "출근기록부", "직원관리", "기사서류", "자금관리", "비품관리", "연차관리", "입퇴사관리", "증명서발급"].includes(m)) return "hidden";
+    // ⚙ 직접 만든 권한(권한 관리 › 새 역할)은 부서 메뉴도 켜고 끌 수 있다
+    const isOwnRole = !!customRole && !["admin", "hrManager", "user", "test", "viewer"].includes(role);
+    const ownOk = (x) => isOwnRole && getMenuAccess(customRoles, role, x) !== "hidden";
+    if (["결재함", "스케줄"].includes(m)) return deptMode === "exec" ? "ok" : "hidden";
+    if (m === "직원일정") return deptMode === "exec" || ownOk(m) ? "ok" : "hidden";
+    if (m === "전자결재") return ownOk(m) ? "ok" : "hidden"; // 일반 화면은 홈 › 전자결재
+    // ⭐ 2026-10-31 경리·인사 부서 메뉴는 그 부서 권한(또는 그 메뉴를 켠 직접 만든 권한)에서만
+    if (["회계관리", "인사관리부", "출근기록부", "직원관리", "기사서류", "자금관리", "비품관리", "연차관리", "입퇴사관리", "증명서발급"].includes(m)) return ["회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급"].includes(m) && ownOk(m) ? "ok" : "hidden";
     if (customRole && getMenuAccess(customRoles, role, m) === "hidden") return "hidden";
     const isBlocked = !customRole && (role === "user" || role === "test" || isViewer) && blockedMenus.includes(m);
     if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster" && !isViewer) return "hidden";
@@ -7913,6 +7929,14 @@ return (
               "매출관리",
               "정산관리",
               "인사이트",
+              // 직접 만든 권한에서 켠 부서 메뉴만 보인다(그 외에는 menuState가 숨김)
+              "전자결재",
+              "회계관리",
+              "자금관리",
+              "비품관리",
+              "인사관리부",
+              "증명서발급",
+              "직원일정",
               "회사관리",
               "관리자메뉴",
               "관리센터",
@@ -7988,6 +8012,13 @@ return (
                 className="kp-chip-btn text-[12px] transition" title="관리자 관리센터로 전환">관리센터 ↗</button>
             )}
 
+            {realRole === "hrAcct" && (
+              <button type="button" onClick={() => { const v = hrAcctView === "hr" ? "acct" : "hr"; setHrAcctView(v); try { localStorage.setItem("kpHrAcctView", v); } catch { /* 무시 */ } setMenu("HOME"); }}
+                className="kp-chip-btn text-[12px] transition inline-flex items-center gap-1.5" title="통합인사관리자 — 경리 화면과 인사 화면을 바꿉니다">
+                <span className={`px-1.5 rounded ${hrAcctView === "acct" ? "bg-white text-[#0F1A30]" : "text-white/60"}`}>경리</span>
+                <span className={`px-1.5 rounded ${hrAcctView === "hr" ? "bg-white text-[#0F1A30]" : "text-white/60"}`}>인사</span>
+              </button>
+            )}
             {/* 👔 임원 — 임원 화면 ↔ 전체 메뉴(관리자 권한일 때만) */}
             {isExec && role === "admin" && (
               <button type="button" onClick={toggleExecFull} className="kp-chip-btn text-[12px] transition" title={execFull ? "임원 화면으로 돌아갑니다" : "배차·정산 등 전체 메뉴를 봅니다"}>
@@ -8761,33 +8792,9 @@ return (
 
       {/* 계산기 플로팅 버튼 — 모든 탭에 표시 */}
         <>
-          <button
-            onClick={() => setActiveTool(p => p === "calculator" ? "none" : "calculator")}
-            title="계산기"
-            style={{
-              position: "fixed", bottom: 88, right: 24,
-              zIndex: 99998, width: 56, height: 56,
-              borderRadius: "50%", background: calcOpen ? "#243a60" : "#1B2B4B",
-              color: "white", border: "none", cursor: "pointer",
-              boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              transition: "background 0.2s",
-            }}
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="4" y="2" width="16" height="20" rx="2"/>
-              <line x1="8" y1="6" x2="16" y2="6"/>
-              <circle cx="8" cy="10" r="1" fill="white"/>
-              <circle cx="12" cy="10" r="1" fill="white"/>
-              <circle cx="16" cy="10" r="1" fill="white"/>
-              <circle cx="8" cy="14" r="1" fill="white"/>
-              <circle cx="12" cy="14" r="1" fill="white"/>
-              <circle cx="16" cy="14" r="1" fill="white"/>
-              <circle cx="8" cy="18" r="1" fill="white"/>
-              <circle cx="12" cy="18" r="1" fill="white"/>
-              <line x1="14" y1="18" x2="18" y2="18"/>
-            </svg>
-          </button>
+          <FabButton bottom={88} active={calcOpen} title="계산기" onClick={() => setActiveTool(p => p === "calculator" ? "none" : "calculator")}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2.5" width="16" height="19" rx="3" /><path d="M8 7h8" /><path d="M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01" strokeWidth="2.6" /></svg>
+          </FabButton>
           {calcOpen && <FloatingCalculator onClose={() => setCalcOpen(false)} />}
         </>
 

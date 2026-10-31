@@ -22,24 +22,31 @@ import {
 
 const genRoleKey = () => `role_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
+// ⭐ 2026-10-31 최신화 — 전자결재 · 경리(회계·자금·비품) · 인사(인사관리부·증명서) · 일정
 const MENU_GROUPS = [
-  { title: "배차 업무", menus: ["HOME", "배차관리", "실시간배차현황", "배차현황"] },
+  { title: "기본 · 결재", menus: ["HOME", "전자결재"] },
+  { title: "배차 업무", menus: ["배차관리", "실시간배차현황", "배차현황"] },
   { title: "운임 · 단가", menus: ["단가표", "운임조회"] },
   { title: "기준 정보", menus: ["기사관리", "거래처관리", "지입차관리"] },
-  { title: "재무", menus: ["매출관리", "정산관리"] },
+  { title: "매출 · 정산", menus: ["매출관리", "정산관리", "인사이트"] },
+  { title: "경리", menus: ["회계관리", "자금관리", "비품관리"] },
+  { title: "인사 · 일정", menus: ["인사관리부", "증명서발급", "직원일정"] },
   { title: "회사", menus: ["회사관리"] },
 ];
 const MENU_DESC = {
   HOME: "첫 화면 대시보드", 배차관리: "오더 등록 · 수정", 실시간배차현황: "진행 중인 배차 모니터링", 배차현황: "전체 배차 목록 · 검색",
   단가표: "거래처별 단가표", 운임조회: "지난 운임 조회", 기사관리: "기사 · 차량 정보", 거래처관리: "거래처 · 상하차지",
-  지입차관리: "지입차 운영", 매출관리: "매출 · 매익 리포트", 정산관리: "청구 · 기사 지급", 회사관리: "회사정보 · 출근기록",
+  지입차관리: "지입차 운영", 매출관리: "매출 · 매익 리포트", 정산관리: "청구 · 기사 지급", 회사관리: "회사정보 · 조직도 · 내정보",
+  전자결재: "결재함 · 기안 (홈 안에도 있음)", 인사이트: "마진 분석", 회계관리: "회계 개요 · 장부 · 퇴직 정산", 자금관리: "자금 현황 · 수입·지출 장부",
+  비품관리: "비품 · 자산 · 입출고", 인사관리부: "인사 기록 · 직원 정보 · 연차 · 규정", 증명서발급: "재직 · 경력증명서", 직원일정: "연차 · 외근 · 출장 달력",
 };
 const ROLE_DESC = {
-  admin: "회사 업무 전체를 관리", hrManager: "인사관리부까지 볼 수 있는 실무자", user: "배차 실무 담당",
-  test: "정산 · 회계 담당", viewer: "보기만 가능",
+  admin: "회사 업무 전체 · 임원(대표·전무·이사)도 이 권한", hrManager: "인사 화면 — 인사관리부·증명서·직원 승인", user: "배차 실무 담당",
+  test: "경리 화면 — 정산·회계·자금·비품", viewer: "보기만 가능",
 };
 const FIXED_ROLES = [
   { key: "totalMaster", label: "최고관리자", desc: "모든 메뉴 · 모든 회사 (변경 불가)" },
+  { key: "hrAcct", label: "통합인사관리자", desc: "경리 + 인사 — 각 화면은 위 경리/회계 · 인사관리자 설정을 따름" },
   { key: "driver", label: "기사", desc: "기사앱 전용" },
   { key: "shipper", label: "화주", desc: "화주 프로그램 전용" },
 ];
@@ -238,8 +245,11 @@ export default function RolePermissionsPanel({ users = [], roleLabels = {} }) {
             <div>
               <div className="px-1 mb-2 flex items-center">
                 <span className="text-[12px] font-black text-gray-500 tracking-wide">직접 만든 역할</span>
-                {!creating && <button onClick={() => setCreating(true)} className="ml-auto text-[12px] font-bold text-[#1B2B4B] hover:underline">+ 새 역할</button>}
+
               </div>
+              {!creating && (
+                <button onClick={() => setCreating(true)} className="w-full mb-2 h-12 rounded-xl text-white text-[14px] font-black shadow-[0_8px_20px_rgba(15,26,48,0.22)] hover:brightness-110 transition" style={{ background: "linear-gradient(120deg,#0F1A30,#1B2B4B 60%,#2D4C82)" }}>+ 새 역할 만들기</button>
+              )}
               {creating && (
                 <div className="rounded-xl border border-[#1B2B4B]/30 bg-white p-3 space-y-2 mb-2">
                   <input ref={imeFocusRef} autoComplete="off" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="역할 이름 (예: 부관리자)" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]" />

@@ -1,3 +1,4 @@
+import { FabButton, useWinSize, ResizeGrip, WinHeader } from "./FloatDock";
 import React, { useState, useRef, useEffect } from "react";
 
 /**
@@ -228,62 +229,30 @@ export default function AiAssistant({ dispatches = [], clients = [], controlledO
     { label: "전체 요약", action: () => handleQuery("summary") },
   ];
 
+  const win = useWinSize("ai", { S: { w: 360, h: 460 }, M: { w: 440, h: 600 }, L: { w: 640, h: 820 } });
   return (
     <>
-      {/* 플로팅 버튼 */}
-      <button
-        onClick={() => setOpen(!open)}
-        title="AI 비서"
-        style={{
-          position: "fixed", bottom: 24, right: 24,
-          width: 56, height: 56, borderRadius: "50%",
-          background: "linear-gradient(135deg, #3b82f6, #2563eb)",
-          color: "white", border: "none", cursor: "pointer",
-          boxShadow: "0 4px 16px rgba(59,130,246,0.4)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          zIndex: 9999, transition: "box-shadow 0.2s, transform 0.2s",
-        }}
-        onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.08)"; }}
-        onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}
-      >
-        {open ? (
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        ) : (
-          <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                  d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-          </svg>
-        )}
-      </button>
+      {/* 플로팅 버튼 — 공용 독 디자인 */}
+      <FabButton bottom={24} active={open} title="AI 비서" onClick={() => setOpen(!open)}>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.8 4.6L18 9.4l-4.2 1.8L12 16l-1.8-4.8L6 9.4l4.2-1.8z" /><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" /></svg>
+      </FabButton>
 
-      {/* 채팅 패널 */}
+      {/* 채팅 패널 — 크기 조절(작게·보통·크게 · 왼쪽 위 모서리 드래그) */}
       {open && (
-        <div style={{ position: "fixed", bottom: 92, right: 24, width: 420, minHeight: 400, maxHeight: 700, zIndex: 9999 }}
-             className="bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden">
-          {/* 헤더 */}
-          <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-5 py-4 flex items-center justify-between">
-            <div>
-              <div className="font-bold text-lg">배차 AI 비서</div>
-              <div className="text-sm text-blue-100">배차 현황 조회</div>
-            </div>
-            <button 
-              onClick={() => setMessages([{ role: "assistant", content: "안녕하세요! 배차 AI 비서입니다.\n무엇을 도와드릴까요?" }])}
-              className="text-sm bg-white/20 px-3 py-1.5 rounded-lg hover:bg-white/30"
-            >
-              초기화
-            </button>
-          </div>
+        <div style={{ position: "fixed", bottom: 24, right: 92, width: win.w, height: win.h, zIndex: 9999 }}
+             className="bg-white rounded-[22px] shadow-[0_24px_60px_rgba(15,26,48,0.35)] border border-[#DCE3EE] flex flex-col overflow-hidden">
+          <ResizeGrip onMouseDown={win.startDrag} />
+          <WinHeader code="AI · ASSISTANT" title="배차 AI 비서" sub="배차 현황 조회" preset={win.preset} onPreset={win.setPreset} onClose={() => setOpen(false)}
+            right={<button type="button" onClick={() => setMessages([{ role: "assistant", content: "안녕하세요! 배차 AI 비서입니다.\n무엇을 도와드릴까요?" }])} style={{ height: 26, padding: "0 9px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>초기화</button>} />
 
           {/* 메시지 영역 */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50 min-h-[200px]">
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#F4F6FA] min-h-[160px]">
             {messages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div className={`max-w-[90%] px-4 py-3 rounded-xl text-[15px] leading-relaxed whitespace-pre-wrap
                   ${msg.role === "user" 
-                    ? "bg-blue-500 text-white" 
-                    : "bg-white text-gray-800 shadow-sm border"}`}
+                    ? "bg-[#1B2B4B] text-white rounded-br-md" 
+                    : "bg-white text-[#0F1A30] shadow-sm border border-[#E3E8F0] rounded-bl-md"}`}
                 >
                   {msg.content}
                 </div>
@@ -312,7 +281,7 @@ export default function AiAssistant({ dispatches = [], clients = [], controlledO
                   onClick={btn.action}
                   disabled={loading}
                   className="px-3 py-2.5 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg
-                           hover:bg-blue-50 hover:text-blue-600 transition disabled:opacity-50"
+                           hover:bg-[#EEF3FC] hover:text-[#1B2B4B] transition disabled:opacity-50"
                 >
                   {btn.label}
                 </button>
@@ -334,7 +303,7 @@ export default function AiAssistant({ dispatches = [], clients = [], controlledO
                 }}
                 placeholder="거래처명 검색"
                 className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm 
-                         focus:outline-none focus:ring-2 focus:ring-blue-500"
+                         focus:outline-none focus:ring-2 focus:ring-[#2D4C82]"
                 disabled={loading}
               />
               <button
@@ -346,8 +315,8 @@ export default function AiAssistant({ dispatches = [], clients = [], controlledO
                   }
                 }}
                 disabled={loading || !clientQuery.trim()}
-                className="px-4 py-2.5 bg-blue-500 text-white rounded-lg text-sm font-medium
-                         hover:bg-blue-600 disabled:opacity-50 transition"
+                className="px-4 py-2.5 bg-[#0F1A30] text-white rounded-xl font-black text-sm font-medium
+                         hover:bg-[#1B2B4B] disabled:opacity-50 transition"
               >
                 검색
               </button>

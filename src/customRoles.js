@@ -7,10 +7,14 @@ const COLL = "customRoles";
 // 최고관리자가 커스텀 권한(역할)을 만들 때 접근 범위를 설정할 수 있는 메뉴 목록.
 // 관리자메뉴/관리센터는 권한 관리 자체를 다루는 화면이라 커스텀 권한에는 항상 제외한다
 // (커스텀 권한이 스스로 권한을 더 부여하는 상황을 막기 위함).
+// ⭐ 2026-10-31 최신화 — 전자결재·경리(회계·자금·비품)·인사(인사관리부·증명서)·임원(직원일정·스케줄) 메뉴 추가
 export const CUSTOMIZABLE_MENUS = [
-  "HOME", "배차관리", "실시간배차현황", "배차현황", "단가표", "운임조회",
-  "기사관리", "거래처관리", "지입차관리", "매출관리", "정산관리", "회사관리",
+  "HOME", "전자결재", "배차관리", "실시간배차현황", "배차현황", "단가표", "운임조회",
+  "기사관리", "거래처관리", "지입차관리", "매출관리", "정산관리", "인사이트",
+  "회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급", "직원일정", "회사관리",
 ];
+// 부서·임원 전용 메뉴 — 내장 권한은 원래 쓰던 화면 기준 기본값, 직접 만든 권한은 켜면 그 메뉴가 보인다
+export const DEPT_ONLY_MENUS = ["전자결재", "회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급", "직원일정"];
 
 export function defaultMenuAccess() {
   const m = {};
@@ -35,22 +39,23 @@ export const BUILTIN_EDITABLE_ROLES = [
 // 동일한 기준.
 export function builtinDefaultMenuAccess(roleKey) {
   const write = {};
-  CUSTOMIZABLE_MENUS.forEach(k => { write[k] = "write"; });
+  CUSTOMIZABLE_MENUS.forEach(k => { write[k] = DEPT_ONLY_MENUS.includes(k) ? "hidden" : "write"; });
+  const only = (list) => Object.fromEntries(CUSTOMIZABLE_MENUS.map((k) => [k, list.includes(k) ? "write" : "hidden"]));
+  if (roleKey === "test") return only(["HOME", "전자결재", "배차현황", "정산관리", "매출관리", "회계관리", "자금관리", "비품관리", "기사관리", "회사관리"]);
+  if (roleKey === "hrManager") return only(["HOME", "전자결재", "인사관리부", "증명서발급", "기사관리", "회사관리"]);
   if (roleKey === "admin") {
     // 관리자는 기본적으로 모든 메뉴에 전체 접근 — 여기서 직접 "숨김"으로 바꾸지 않는
     // 이상 지금까지와 동일하게 전 메뉴를 다 쓸 수 있다.
     return write;
   }
-  if (roleKey === "test") {
-    return { ...write, "배차관리": "hidden", "실시간배차현황": "hidden", "단가표": "hidden" };
-  }
+
   if (roleKey === "viewer") {
     const read = {};
-    CUSTOMIZABLE_MENUS.forEach(k => { read[k] = "read"; });
+    CUSTOMIZABLE_MENUS.forEach(k => { read[k] = DEPT_ONLY_MENUS.includes(k) || k === "인사이트" ? "hidden" : "read"; });
     return read;
   }
   // user, hrManager (기존 로직상 hrManager도 user와 동일한 차단 목록을 따름)
-  return { ...write, "매출관리": "hidden", "정산관리": "hidden" };
+  return { ...write, "매출관리": "hidden", "정산관리": "hidden", "인사이트": "hidden" };
 }
 
 export function useCustomRoles() {
@@ -82,5 +87,7 @@ export function findCustomRole(customRoles, roleKey) {
 export function getMenuAccess(customRoles, roleKey, menu) {
   const role = findCustomRole(customRoles, roleKey);
   if (!role) return "write";
-  return role.menus?.[menu] || "hidden";
+  if (role.menus && menu in role.menus) return role.menus[menu];
+  // 예전에 저장된 권한에 없는 새 메뉴 — 내장 권한은 기본값, 직접 만든 권한은 숨김
+  return BUILTIN_EDITABLE_ROLES.some((b) => b.key === roleKey) ? builtinDefaultMenuAccess(roleKey)[menu] || "write" : "hidden";
 }

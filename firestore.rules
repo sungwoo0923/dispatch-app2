@@ -180,10 +180,10 @@ service cloud.firestore {
     }
     // 💰 자금(통장·현금 잔액) — 경리(test)·관리자(대표 등)만. 화면에서는 경리 + 대표 직책만 보이게 한다
     match /acctFunds/{id} {
-      allow read: if coMatch(resource.data) && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin']);
-      allow create: if coCreate() && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin']);
-      allow update: if coMatch(resource.data) && coKeep() && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin']);
-      allow delete: if coMatch(resource.data) && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin']);
+      allow read: if coMatch(resource.data) && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct']);
+      allow create: if coCreate() && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct']);
+      allow update: if coMatch(resource.data) && coKeep() && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct']);
+      allow delete: if coMatch(resource.data) && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct']);
     }
     // 화주사 주소록(places) — 화주 본인이 등록한 주소만
     match /places/{id} {
@@ -430,7 +430,7 @@ service cloud.firestore {
     }
     function isCompanyAdmin(company) {
       return isSuperEmail() || myUser().get('role', '') == 'totalMaster' ||
-        (myUser().get('role', '') in ['admin', 'hrManager'] && myUser().get('companyName', '') == company);
+        (myUser().get('role', '') in ['admin', 'hrManager', 'hrAcct'] && myUser().get('companyName', '') == company);
     }
     function isExecUser() {
       return myUser().get('position', '') in ['이사', '상무', '전무', '부사장', '사장', '대표', '대표이사', '본부장', '임원'];
@@ -439,7 +439,12 @@ service cloud.firestore {
       allow read: if isApproved() && (isTotalMasterUser() || !locked() || resource.data.companyName == myCo())
         && (request.auth.uid in resource.data.get('participants', []) || isCompanyAdmin(resource.data.get('company', '')));
       allow create: if coCreate() && request.resource.data.get('drafterUid', '') == request.auth.uid
-        && request.resource.data.get('status', '') == 'pending'
+        && (request.resource.data.get('status', '') == 'pending'
+          // 일일 업무일지 자동 승인 — 회사 결재 설정(approvalSettings/{회사}.autoApproveDaily)이 켜져 있을 때만
+          || (request.resource.data.get('status', '') == 'approved' && request.resource.data.get('form', '') == 'daily'
+              && request.resource.data.get('autoApproved', false) == true
+              && exists(/databases/$(database)/documents/approvalSettings/$(request.resource.data.get('company', '')))
+              && get(/databases/$(database)/documents/approvalSettings/$(request.resource.data.get('company', ''))).data.get('autoApproveDaily', false) == true))
         && request.auth.uid in request.resource.data.get('participants', []);
       // 기안자·참여자 수정 — 기안자·참여자 목록과 회사는 못 바꾼다(결재 진행·회수·의견·읽음)
       allow update: if isApproved() && request.auth.uid in resource.data.get('participants', [])
@@ -456,10 +461,10 @@ service cloud.firestore {
     // 임원게시판은 권한(임원 기준)을 정하기 전까지 최고관리자만
     function canSeeBoard(b) {
       return b == 'free' || isSuperEmail() || myUser().get('role', '') == 'totalMaster'
-        || (b == 'admin' && myUser().get('role', '') in ['admin', 'hrManager']);
+        || (b == 'admin' && myUser().get('role', '') in ['admin', 'hrManager', 'hrAcct']);
     }
     function isBoardAdmin() {
-      return isSuperEmail() || myUser().get('role', '') in ['admin', 'totalMaster', 'hrManager'];
+      return isSuperEmail() || myUser().get('role', '') in ['admin', 'totalMaster', 'hrManager', 'hrAcct'];
     }
     // 📢 공지사항 — 누구나 읽고, 쓰기·수정·삭제는 관리자(관리자·인사관리자·최고관리자)만
     match /notices/{id} {

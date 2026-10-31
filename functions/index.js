@@ -4599,7 +4599,7 @@ exports.notifySignup = functions.firestore.document("users/{uid}").onCreate(asyn
     const a = d.data() || {};
     if (d.id === snap.id || !a.fcmToken || a.approved === false || a.employmentStatus === "퇴사") return;
     // ⭐ 2026-10-31 관리자·경리·인사관리자도 가입 승인 가능 → 알림도 같이
-    if ([...NOTICE_ADMIN_ROLES, "test", "hrManager"].includes(a.role) || a.isMaster === true) tokens.push(a.fcmToken);
+    if ([...NOTICE_ADMIN_ROLES, "test", "hrManager", "hrAcct"].includes(a.role) || a.isMaster === true) tokens.push(a.fcmToken);
   });
   const isDriver = u.role === "driver";
   const title = isDriver ? "▸ 기사 가입 신청" : "◆ 직원 가입 신청";
