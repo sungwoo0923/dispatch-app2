@@ -31,7 +31,7 @@ import { useFixedRouteAutoDispatch, FixedRouteEditNotice } from "./FixedRoutes";
 import { deptModeOf } from "./DeptDashboard";
 import { ExecApprovals, TeamSchedule, ApprovalWorkspace, ExecScheduleBoard } from "./ExecSuite";
 import { useMyProfile } from "./userNames";
-import { isExecProfile, useHrOptions } from "./hrConstants";
+import { useHrOptions } from "./hrConstants";
 import { AssetManager } from "./OfficeBooks";
 import { FundsWorkspace, FundsBoard, isCeoPosition } from "./FundsBoard";
 import { AccountingOverview, RetireDesk, useYearOrders } from "./AcctSuite";
@@ -61,7 +61,7 @@ import FreightRateInquiry from "./FreightRateInquiry";
 import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnabled } from "./notificationSettings";
 import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare, geocodeAddress, haversineKm, specialSurcharge } from "./tmapFareCalc";
-import { useCustomRoles, findCustomRole, getMenuAccess } from "./customRoles";
+import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen } from "./customRoles";
 import RouteMapModal from "./RouteMapModal";
 import MonthCompareAnalysis from "./MonthCompareAnalysis";
 import MonthlyReport from "./MonthlyReport";
@@ -7634,7 +7634,8 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   const customRole = findCustomRole(customRoles, role);
   // 👔 2026-10-31 임원(부서 임원 · 대표/전무/이사) — 로그인하면 임원 화면. 관리자 권한 임원은 [전체 메뉴]로 실무 화면도 볼 수 있다
   const myProfileDoc = useMyProfile(user?.uid);
-  const isExec = forceExec || ((!customRole || ["admin", "user", "viewer"].includes(role)) && role !== "totalMaster" && role !== "test" && role !== "hrManager" && isExecProfile(myProfileDoc));
+  // ⭐ 2026-10-31 임원 화면은 권한 관리에서 "임원 화면"으로 정한 역할(예: 임원관리자)만 — 관리자 권한은 직책과 무관하게 일반 화면
+  const isExec = forceExec || roleScreen(customRole) === "exec";
   const [execFull, setExecFull] = React.useState(() => { try { return localStorage.getItem("kpExecFull") === "1"; } catch { return false; } });
   const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setMenu("HOME"); };
   const deptMode = deptModeOf(role, customRole) || (isExec && !execFull ? "exec" : null);
@@ -7803,7 +7804,7 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
     // ⭐ 2026-10-29 관리센터는 별도 화면(/platform, 관리자 관리센터)으로 옮겼다 — 배차 프로그램 메뉴에서는 숨김
     if (m === "관리센터") return "hidden";
     // 💎 인사이트(마진 분석)는 관리자만
-    if (m === "인사이트" && role !== "admin" && role !== "totalMaster") return "hidden";
+    if (m === "인사이트" && role !== "admin" && role !== "totalMaster" && !isExec) return "hidden";
     // 💳 요금제에 없는 메뉴는 잠금(눌러도 들어가지 않고 요금제 안내가 뜬다)
     if (MENU_FEATURE[m] && !planIncludes(planId, MENU_FEATURE[m])) return "locked";
     if (isBlocked && (role === "test" || isViewer)) return "hidden";
@@ -8020,7 +8021,7 @@ return (
               </button>
             )}
             {/* 👔 임원 — 임원 화면 ↔ 전체 메뉴(관리자 권한일 때만) */}
-            {isExec && role === "admin" && (
+            {isExec && (
               <button type="button" onClick={toggleExecFull} className="kp-chip-btn text-[12px] transition" title={execFull ? "임원 화면으로 돌아갑니다" : "배차·정산 등 전체 메뉴를 봅니다"}>
                 {execFull ? "임원 화면" : "전체 메뉴"}
               </button>

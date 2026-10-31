@@ -1,4 +1,5 @@
 // src/CompanyApplications.jsx
+import { useRoleOptions } from "./customRoles";
 import { publishCompany } from "./publicCompanies";
 import React, { useState, useEffect, useMemo } from "react";
 import { kpConfirm } from "./kpDialog";
@@ -84,6 +85,7 @@ const Sec = ({ title, en, children, right }) => (
 );
 
 export default function CompanyApplications() {
+  const ro = useRoleOptions();
   const [activeTab, setActiveTab] = useState("화주");
 
   const [companyApps, setCompanyApps] = useState([]);
@@ -1117,9 +1119,9 @@ export default function CompanyApplications() {
                 <div className="rounded-2xl border border-[#E3E8F0] bg-white overflow-hidden">
                   <div className="bg-[#F7F9FC] px-4 py-2.5 text-[13px] font-black text-[#0F1A30] border-b border-[#EEF1F6]">계정 권한</div>
                   <div className="px-4 py-4 space-y-3">
-                    <div className="text-[12.5px] text-gray-500">지금: <b className="text-[#1B2B4B]">{({ admin: "관리자", hrManager: "인사관리자", hrAcct: "통합인사관리자", user: "실무자", test: "정산·회계", viewer: "조회전용" })[tUser.role] || tUser.role || "-"}</b>{tUser.isMaster ? " · 마스터" : ""}</div>
-                    <div className="grid grid-cols-5 gap-1.5">
-                      {[["admin", "관리자"], ["hrManager", "인사관리자"], ["hrAcct", "통합인사관리자"], ["user", "실무자"], ["test", "정산·회계"], ["viewer", "조회전용"]].map(([k, l]) => (
+                    <div className="text-[12.5px] text-gray-500">지금: <b className="text-[#1B2B4B]">{ro.label(tUser.role)}</b>{tUser.isMaster ? " · 마스터" : ""}</div>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {ro.options.map(([k, l]) => (
                         <button key={k} type="button" onClick={() => setTRole(k)} className={`h-9 rounded-lg text-[12px] font-bold whitespace-nowrap ${tRole === k ? "bg-[#1B2B4B] text-white" : "border border-gray-200 text-[#1B2B4B]"}`}>{l}</button>
                       ))}
                     </div>

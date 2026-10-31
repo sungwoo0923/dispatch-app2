@@ -180,7 +180,7 @@ service cloud.firestore {
     }
     // 💰 자금(통장·현금 잔액) — 경리(test)·관리자(대표 등)만. 화면에서는 경리 + 대표 직책만 보이게 한다
     match /acctFunds/{id} {
-      allow read: if coMatch(resource.data) && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct']);
+      allow read: if coMatch(resource.data) && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct'] || isExecRoleUser());
       allow create: if coCreate() && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct']);
       allow update: if coMatch(resource.data) && coKeep() && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct']);
       allow delete: if coMatch(resource.data) && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct']);
@@ -430,7 +430,16 @@ service cloud.firestore {
     }
     function isCompanyAdmin(company) {
       return isSuperEmail() || myUser().get('role', '') == 'totalMaster' ||
-        (myUser().get('role', '') in ['admin', 'hrManager', 'hrAcct'] && myUser().get('companyName', '') == company);
+        ((myUser().get('role', '') in ['admin', 'hrManager', 'hrAcct'] || isExecRoleUser()) && myUser().get('companyName', '') == company);
+    }
+    // 👔 2026-10-31 권한 관리에서 "임원 화면"으로 정한 역할(직접 만든 역할) — 이름에 '임원'이 들어가고 화면 설정이 없으면 임원으로 본다
+    function isExecRoleUser() {
+      let r = myUser().get('role', '');
+      let p = /databases/$(database)/documents/customRoles/$(r);
+      return r != '' && !(r in ['admin', 'hrManager', 'hrAcct', 'user', 'test', 'viewer', 'totalMaster', 'driver', 'shipper'])
+        && exists(p)
+        && (get(p).data.get('screen', '') == 'exec'
+          || (!('screen' in get(p).data) && get(p).data.get('label', '').matches('.*임원.*')));
     }
     function isExecUser() {
       return myUser().get('position', '') in ['이사', '상무', '전무', '부사장', '사장', '대표', '대표이사', '본부장', '임원'];
@@ -461,7 +470,7 @@ service cloud.firestore {
     // 임원게시판은 권한(임원 기준)을 정하기 전까지 최고관리자만
     function canSeeBoard(b) {
       return b == 'free' || isSuperEmail() || myUser().get('role', '') == 'totalMaster'
-        || (b == 'admin' && myUser().get('role', '') in ['admin', 'hrManager', 'hrAcct']);
+        || (b == 'admin' && (myUser().get('role', '') in ['admin', 'hrManager', 'hrAcct'] || isExecRoleUser()));
     }
     function isBoardAdmin() {
       return isSuperEmail() || myUser().get('role', '') in ['admin', 'totalMaster', 'hrManager', 'hrAcct'];

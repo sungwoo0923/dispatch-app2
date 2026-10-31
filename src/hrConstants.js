@@ -42,7 +42,7 @@ export const ROLE_NAME = { admin: "관리자", user: "실무자", test: "경리/
 export const TEAM_BADGE_CLASS = "bg-[#1B2B4B]/5 text-[#1B2B4B] border-[#1B2B4B]/15";
 export const TEAM_BADGE_CLASS_UNASSIGNED = "bg-gray-100 text-gray-400 border-gray-200";
 
-export const EMPLOYMENT_STATUS_OPTIONS = ["재직", "휴직", "퇴사"];
+export const EMPLOYMENT_STATUS_OPTIONS = ["재직", "휴직", "육아휴직", "출산휴가", "퇴사"];
 
 // ⚙ 회사별 직책·부서(2026-10-31) — 인사관리부 › 직책·부서 설정에서 추가·숨김. hrSettings/{회사} { teams, positions, execPositions, hiddenTeams, hiddenPositions }
 export function useHrOptions(company) {

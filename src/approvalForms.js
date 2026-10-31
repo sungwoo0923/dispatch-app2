@@ -6,7 +6,7 @@ import { bankText } from "./bankUtil";
 //  - 양식의 summary(d) → 목록에 보일 한 줄 요약, amount(d) → 금액(비용 양식), days(d) → 휴가 일수
 
 export const APPROVAL_CATS = [
-  { key: "leave", label: "근태·휴가 신청", en: "ATTENDANCE", icon: "clock", desc: "휴가 · 반차 · 조퇴 · 외근 · 출장 · 경조사 · 병가 · 근무 신청" },
+  { key: "leave", label: "근태·휴가 신청", en: "ATTENDANCE", icon: "clock", desc: "휴가 · 반차 · 조퇴 · 외근 · 출장 · 경조사 · 병가 · 육아휴직 · 출산휴가 · 근무 신청" },
   { key: "expense", label: "비용·지출 결의", en: "EXPENSE", icon: "wallet", desc: "지출결의 · 법인카드 · 유류비/통행료 · 출장비 · 가지급금 · 구매 · 사고처리" },
   { key: "draft", label: "업무 기안·품의", en: "PROPOSAL", icon: "file", desc: "기안·품의서 · 운임 변경 · 신규 거래처 · 차량 정비 · 제증명" },
   { key: "report", label: "업무 보고·인사", en: "REPORT", icon: "list", desc: "일일 업무일지 · 업무 보고서 · 출장 보고서 · 회의록 · 교육 결과 · 시말서 · 사직서" },
@@ -133,6 +133,45 @@ export const APPROVAL_FORMS = [
       { k: "proxy", label: "업무 대행자", type: "staff" },
     ],
     days: (d) => bizDays(d.period), summary: (d) => `병가 ${rangeText(d.period)} (${bizDays(d.period)}일)` },
+  // 👶 2026-10-31 육아휴직 · 출산휴가 — 최종 승인되면 인사 정보의 재직 상태가 육아휴직/출산휴가로 바뀐다
+  { key: "parental", cat: "leave", label: "육아휴직·근로시간 단축", title: "육 아 휴 직 신 청 서", code: "HP",
+    fields: [
+      { k: "kind", label: "신청 구분", type: "select", options: ["육아휴직", "육아기 근로시간 단축"], def: "육아휴직" },
+      { k: "child", label: "자녀 이름", type: "text", required: true, half: true },
+      { k: "childBirth", label: "자녀 생년월일(출산 예정일)", type: "date", required: true, half: true },
+      { k: "period", label: "기간", type: "daterange", required: true },
+      { k: "round", label: "사용 차수", type: "select", options: ["처음 사용", "2번째(분할)", "3번째(분할)", "4번째(분할)"], def: "처음 사용", half: true },
+      { k: "spouse", label: "배우자 육아휴직", type: "select", options: ["사용 안 함", "사용(3개월 이상)", "사용 예정", "해당 없음(한부모 등)"], def: "사용 안 함", half: true },
+      { k: "hours", label: "단축 후 근무시간(근로시간 단축만)", type: "text", ph: "예) 주 25시간 · 10:00~16:00" },
+      { k: "proxy", label: "업무 대행자", type: "staff" },
+      { k: "contact", label: "휴직 중 연락처", type: "text", ph: "휴대폰 · 개인 메일" },
+      { k: "law", label: "육아휴직 안내(남녀고용평등과 일·가정 양립 지원에 관한 법률)", type: "notice", text: [
+        "① 대상: 만 8세 이하 또는 초등학교 2학년 이하 자녀를 둔 근로자(제19조). 근로시간 단축은 만 12세 이하 또는 초등학교 6학년 이하 자녀.",
+        "② 기간: 자녀 1명당 1년. 부모가 모두 3개월 이상 쓰거나 한부모·중증 장애아동 부모는 1년 6개월까지. 나눠 쓰기는 3번 나눠 총 4회까지 가능합니다.",
+        "③ 신청: 휴직 시작 예정일 30일 전까지 신청합니다(출산 예정일 전 출산 등 부득이한 경우 7일 전).",
+        "④ 육아휴직 급여(고용보험): 1~3개월 통상임금 100%(월 상한 250만원), 4~6개월 100%(월 상한 200만원), 7개월부터 80%(월 상한 160만원). 고용센터에 직접 신청하며, 회사는 육아휴직 확인서를 제출합니다.",
+        "⑤ 근로시간 단축: 주 15~35시간. 1년 + 쓰지 않은 육아휴직 기간의 2배를 더해 최대 3년까지 쓸 수 있습니다.",
+        "⑥ 보호: 육아휴직을 이유로 해고·불리한 처우를 할 수 없고, 휴직 기간도 근속기간에 들어갑니다. 연차휴가 산정 시에는 출근한 것으로 봅니다(근로기준법 제60조). 끝나면 같은 업무 또는 같은 수준 임금의 업무로 복귀합니다.",
+      ] },
+      { k: "checks", label: "확인 사항", type: "checks", required: true, options: ["위 육아휴직 안내를 읽고 이해했습니다", "휴직 전 업무 인수인계를 마치겠습니다", "복직 예정일 30일 전까지 복직 여부를 알리겠습니다"] },
+    ],
+    days: (d) => dayDiff(d.period), summary: (d) => `${d.kind || "육아휴직"} ${rangeText(d.period)} · 자녀 ${d.child || ""}` },
+  { key: "maternity", cat: "leave", label: "출산휴가·배우자 출산휴가", title: "출 산 휴 가 신 청 서", code: "HB",
+    fields: [
+      { k: "kind", label: "신청 구분", type: "select", options: ["출산전후휴가", "배우자 출산휴가", "유산·사산 휴가"], def: "출산전후휴가" },
+      { k: "due", label: "출산(예정)일", type: "date", required: true, half: true },
+      { k: "multi", label: "다태아", type: "select", options: ["아니오", "예(쌍둥이 이상)"], def: "아니오", half: true },
+      { k: "period", label: "휴가 기간", type: "daterange", required: true },
+      { k: "proxy", label: "업무 대행자", type: "staff" },
+      { k: "doc", label: "증빙", type: "select", options: ["출산 예정일 확인서 첨부", "출생증명서 첨부", "추후 제출"], def: "추후 제출" },
+      { k: "law", label: "출산휴가 안내(근로기준법 제74조 · 남녀고용평등법 제18조의2)", type: "notice", text: [
+        "① 출산전후휴가: 90일(다태아 120일). 출산 후에 45일(다태아 60일) 이상이 되도록 나눠야 합니다. 최초 60일(다태아 75일)은 유급이며, 나머지는 고용보험에서 출산전후휴가 급여를 받습니다.",
+        "② 배우자 출산휴가: 20일(유급). 출산일부터 120일 안에 쓰고, 3번까지 나눠 쓸 수 있습니다.",
+        "③ 유산·사산 휴가: 임신 기간에 따라 5일~90일.",
+        "④ 출산휴가가 끝나면 바로 육아휴직을 이어 쓸 수 있습니다(육아휴직 신청서를 따로 올려 주세요).",
+      ] },
+    ],
+    days: (d) => dayDiff(d.period), summary: (d) => `${d.kind || "출산전후휴가"} ${rangeText(d.period)}` },
   { key: "holiday", cat: "leave", label: "휴일근무·대체휴무", title: "휴 일 근 무 신 청 서", code: "HW",
     fields: [
       { k: "workDate", label: "근무일", type: "date", required: true },

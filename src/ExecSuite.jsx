@@ -102,7 +102,7 @@ function useStaff(company) {
 }
 
 // 결재 문서 → 날짜별 부재 일정
-const LEAVE_LABEL = { annual: "연차", half: "반차", early: "조퇴·지각", outside: "외근", trip: "출장", family: "경조사", sick: "병가", holiday: "대체휴무" };
+const LEAVE_LABEL = { annual: "연차", half: "반차", early: "조퇴·지각", outside: "외근", trip: "출장", family: "경조사", sick: "병가", holiday: "대체휴무", parental: "육아휴직", maternity: "출산휴가" };
 export function eventsOf(a) {
   if (!a || a.cat !== "leave" || !["approved", "pending"].includes(a.status)) return [];
   const d = a.data || {};

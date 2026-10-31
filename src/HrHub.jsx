@@ -12,11 +12,18 @@ import { isTMUser } from "./staffFilter";
 import { RETIRE_REASONS } from "./AcctSuite";
 import { LeaveLedger } from "./HrTools";
 import ObituaryWriter from "./ObituaryWriter";
+import { useRoleOptions } from "./customRoles";
+import { RULE_CATS, RULE_TEMPLATES, fillCompany } from "./companyRuleTemplates";
 
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const inp = "h-11 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
 const Label = ({ children }) => <div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">{children}</div>;
 const ROLE_KEYS = ["admin", "hrManager", "hrAcct", "test", "user", "viewer"];
+// 재직 상태 — 휴직 계열은 재직자로 센다(퇴사·권고사직은 [퇴사] 탭에서 처리)
+export const LEAVE_STATUSES = ["휴직", "육아휴직", "출산휴가"];
+const STATUS_OPTIONS = ["재직", ...LEAVE_STATUSES];
+// 부서·직책으로 권한 추천 — 임원이면 권한 관리의 "임원 화면" 역할(없으면 관리자)
+const suggestFor = (x, execKeys = []) => (isExecProfile(x) && execKeys[0] ? execKeys[0] : suggestRole(x));
 const ROLE_DESC = {
   admin: "배차·정산·매출·관리자메뉴 등 전체 업무(임원은 이 권한으로 고정)",
   hrManager: "인사관리부 화면 — 인사 기록·발령·근태·입퇴사·직원 승인",
@@ -39,6 +46,7 @@ const Avatar = ({ name }) => <span className="w-10 h-10 rounded-xl bg-[#1B2B4B] 
 // ═════════════════ 직원 등록(계정 없이) ═════════════════
 export function StaffRegister({ company, onDone }) {
   const hr = useHrOptions(company);
+  const ro = useRoleOptions();
   const blank = { name: "", phone: "", email: "", team: "", position: "", hireDate: kstDay(), birthDate: "", address: "", employType: "정규직", memo: "" };
   const [f, setF] = React.useState(blank);
   const [busy, setBusy] = React.useState(false);
@@ -47,7 +55,7 @@ export function StaffRegister({ company, onDone }) {
     if (!f.name.trim()) return alert("이름을 입력해 주세요.");
     setBusy(true);
     try {
-      const role = suggestRole({ team: f.team, position: f.position });
+      const role = suggestFor({ team: f.team, position: f.position }, ro.execKeys);
       const ref = await addDoc(collection(db, "users"), {
         companyName: company, name: f.name.trim(), phone: f.phone.trim(), email: f.email.trim(), team: f.team, position: f.position, role, approved: true,
         employmentStatus: "재직", hireDate: f.hireDate, employType: f.employType, noAccount: true, registeredBy: auth.currentUser?.email || "", createdAt: serverTimestamp(),
@@ -79,164 +87,11 @@ export function StaffRegister({ company, onDone }) {
             <div><Label>직책</Label><select value={f.position} onChange={(e) => setF({ ...f, position: e.target.value })} className={inp}><option value="">미설정</option>{hr.positionsFor(f.team).map((p) => <option key={p}>{p}</option>)}</select></div>
             <div><Label>고용 형태</Label><div className="flex flex-wrap gap-1.5">{["정규직", "계약직", "수습", "파트타임", "일용직"].map((k) => <Chip key={k} on={f.employType === k} onClick={() => setF({ ...f, employType: k })}>{k}</Chip>)}</div></div>
             <div><Label>입사일</Label><input type="date" value={f.hireDate} onChange={(e) => setF({ ...f, hireDate: e.target.value })} className={inp} /></div>
-            <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2 text-[12px] text-[#5B6B85]">권한: <b className="text-[#0F1A30]">{ROLE_NAME[suggestRole({ team: f.team, position: f.position })]}</b> (부서·직책 기준) · 계정이 없으므로 로그인은 안 됩니다</div>
+            <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2 text-[12px] text-[#5B6B85]">권한: <b className="text-[#0F1A30]">{ro.label(suggestFor({ team: f.team, position: f.position }, ro.execKeys))}</b> (부서·직책 기준) · 계정이 없으므로 로그인은 안 됩니다</div>
             <button type="button" disabled={busy} onClick={save} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50">{busy ? "등록 중…" : "직원 등록"}</button>
           </div>
         </BookCard>
       </div>
-    </div>
-  );
-}
-
-// ═════════════════ 정보 수정(공문 없이 바로) ═════════════════
-export function HrDirectEdit({ company, canManage }) {
-  const staff = useStaff(company).filter((u) => u.employmentStatus !== "퇴사");
-  const hr = useHrOptions(company);
-  const [q, setQ] = React.useState("");
-  const [sel, setSel] = React.useState(null);
-  const [f, setF] = React.useState(null);
-  const [busy, setBusy] = React.useState(false);
-  const pick = (u) => { setSel(u); setF({ name: u.name || "", phone: u.phone || "", team: u.team || "", position: u.position || "", role: u.role || "user", employType: u.employType || "정규직", employmentStatus: u.employmentStatus || "재직" }); };
-  const exec = f && isExecProfile(f);
-  const save = async () => {
-    if (!sel || !f) return;
-    setBusy(true);
-    try {
-      const role = exec ? "admin" : f.role;
-      const changes = [];
-      if ((sel.team || "") !== f.team) changes.push(`부서 ${sel.team || "미배정"}→${f.team || "미배정"}`);
-      if ((sel.position || "") !== f.position) changes.push(`직책 ${sel.position || "-"}→${f.position || "-"}`);
-      if ((sel.role || "") !== role && !sel.isMaster) changes.push(`권한 ${ROLE_NAME[sel.role] || sel.role}→${ROLE_NAME[role]}`);
-      await updateDoc(doc(db, "users", sel.id), { name: f.name.trim(), phone: f.phone.trim(), team: f.team, position: f.position, ...(sel.isMaster ? {} : { role }), employType: f.employType, employmentStatus: f.employmentStatus, ...(changes.length ? { personnelHistory: arrayUnion({ date: kstDay(), type: "정보 수정", detail: `${changes.join(" · ")} (공문 없음)` }) } : {}) });
-      setSel(null); setF(null);
-    } catch (e) { alert(`저장 실패: ${e.message}`); } finally { setBusy(false); }
-  };
-  const list = staff.filter((u) => !q.trim() || [u.name, u.team, u.position, u.phone].some((v) => String(v || "").includes(q.trim()))).sort((a, b) => String(a.team || "").localeCompare(String(b.team || "")) || String(a.name || "").localeCompare(String(b.name || ""), "ko"));
-  return (
-    <div className="space-y-4">
-      <BookHero en="HR · DIRECT EDIT" title="정보 수정" desc="부서·직책·권한·연락처를 공문(인사발령) 없이 바로 고칩니다 — 변경 내역은 인사 이력에 남습니다" />
-      {!canManage && <div className="rounded-2xl bg-[#FEF3F2] border border-[#FECDCA] px-4 py-3 text-[13px] font-bold text-[#B42318]">직책·부서·권한 변경은 마스터·인사관리자만 할 수 있습니다</div>}
-      <BookCard en="STAFF" title={`재직 직원 ${list.length}명`} right={<input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름·부서·직책 검색" className="h-9 w-[200px] px-3 rounded-lg border border-[#DCE3EE] text-[13px] outline-none" />} flush>
-        <div className="divide-y divide-[#EEF2F8]">
-          {list.map((u) => (
-            <button key={u.id} type="button" disabled={!canManage} onClick={() => pick(u)} className="w-full text-left px-4 py-2.5 flex items-center gap-3 enabled:hover:bg-[#F7F9FC]">
-              <Avatar name={u.name} />
-              <span className="flex-1 min-w-0"><span className="block text-[14.5px] font-black text-[#0F1A30] truncate">{u.name || u.email}{u.noAccount && <span className="ml-1.5 text-[10.5px] font-black text-[#9AA9C3]">계정 없음</span>}</span><span className="block text-[12px] text-[#7A879C] truncate">{[u.team || "미배정", u.position, ROLE_NAME[u.role]].filter(Boolean).join(" · ")}</span></span>
-              {canManage && <span className="text-[12.5px] font-black text-[#2D4C82]">수정 ›</span>}
-            </button>
-          ))}
-        </div>
-      </BookCard>
-      {sel && f && (
-        <Sheet side en="HR · EDIT" title={`${sel.name || sel.email} 정보 수정`} onClose={() => setSel(null)}
-          footer={<><button type="button" onClick={() => setSel(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button><button type="button" disabled={busy} onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50">{busy ? "저장 중…" : "바로 저장(공문 없음)"}</button></>}>
-          <div className="grid grid-cols-2 gap-3">
-            <div><Label>이름</Label><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inp} /></div>
-            <div><Label>연락처</Label><input value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} className={inp} /></div>
-            <div><Label>부서</Label><select value={f.team} onChange={(e) => { const team = e.target.value; const position = hr.positionsFor(team).includes(f.position) ? f.position : ""; setF({ ...f, team, position, role: suggestRole({ team, position }) }); }} className={inp}><option value="">미배정</option>{hr.teams.map((t) => <option key={t}>{t}</option>)}</select></div>
-            <div><Label>직책</Label><select value={f.position} onChange={(e) => setF({ ...f, position: e.target.value, role: suggestRole({ team: f.team, position: e.target.value }) })} className={inp}><option value="">미설정</option>{[...new Set([...hr.positionsFor(f.team), f.position].filter(Boolean))].map((p) => <option key={p}>{p}</option>)}</select></div>
-            <div><Label>권한</Label><select value={exec ? "admin" : f.role} disabled={exec || sel.isMaster} onChange={(e) => setF({ ...f, role: e.target.value })} className={`${inp} disabled:bg-[#F5F8FD] disabled:text-[#9AA9C3]`}>{ROLE_KEYS.map((r) => <option key={r} value={r}>{ROLE_NAME[r]}</option>)}</select><div className="text-[11.5px] text-[#7A879C] mt-1">{sel.isMaster ? "마스터 계정은 관리자 고정" : exec ? "임원은 관리자 고정" : ROLE_DESC[f.role]}</div></div>
-            <div><Label>고용 형태</Label><select value={f.employType} onChange={(e) => setF({ ...f, employType: e.target.value })} className={inp}>{["정규직", "계약직", "수습", "파트타임", "일용직"].map((k) => <option key={k}>{k}</option>)}</select></div>
-            <div><Label>재직 상태</Label><div className="flex gap-1.5">{["재직", "휴직"].map((k) => <Chip key={k} on={f.employmentStatus === k} onClick={() => setF({ ...f, employmentStatus: k })}>{k}</Chip>)}</div></div>
-          </div>
-          <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2.5 text-[12.5px] text-[#5B6B85]">공문을 남기려면 인사 기록 › 인사발령을 쓰세요. 퇴사는 [퇴사·권고사직] 메뉴에서 처리합니다.</div>
-        </Sheet>
-      )}
-    </div>
-  );
-}
-
-// ═════════════════ 퇴사·권고사직 ═════════════════
-export function ResignDesk({ company, canManage }) {
-  const staff = useStaff(company);
-  const [q, setQ] = React.useState("");
-  const [sel, setSel] = React.useState(null);
-  const [f, setF] = React.useState(null);
-  const [busy, setBusy] = React.useState(false);
-  const active = staff.filter((u) => u.employmentStatus !== "퇴사");
-  const planned = active.filter((u) => u.resignPlan?.date);
-  const left = staff.filter((u) => u.employmentStatus === "퇴사").sort((a, b) => String(b.resignedAt || "").localeCompare(String(a.resignedAt || "")));
-  const open = (u) => { setSel(u); setF({ type: u.resignPlan?.type || "자진 퇴사", date: u.resignPlan?.date || kstDay(), reason: u.resignPlan?.reason || "", noticeDate: kstDay() }); };
-  const apply = async (confirmNow) => {
-    if (!sel || !f) return;
-    if (!f.reason.trim()) return alert("사유를 적어 주세요.");
-    const now = confirmNow || f.date <= kstDay();
-    if (!window.confirm(now ? `${sel.name}님을 ${f.type}(퇴사) 처리할까요?\n퇴사 처리하면 로그인이 바로 막히고, 경리 › 퇴직 정산에 올라갑니다.` : `${sel.name}님 ${f.type} 예정(${f.date})으로 등록할까요?\n그날 [퇴사 확정]을 누르면 퇴사 처리됩니다.`)) return;
-    setBusy(true);
-    try {
-      if (now) {
-        await updateDoc(doc(db, "users", sel.id), { employmentStatus: "퇴사", resignedAt: f.date, resignType: f.type, resignReason: f.reason.trim(), resignPlan: null, personnelHistory: arrayUnion({ date: kstDay(), type: f.type, detail: `퇴직일 ${f.date} · ${f.reason.trim()}` }) });
-        await setDoc(doc(db, "retireCases", sel.id), { companyName: company, uid: sel.id, name: sel.name || "", team: sel.team || "", position: sel.position || "", reason: f.type, lastDay: f.date, createdBy: auth.currentUser?.email || "", createdAt: serverTimestamp() }, { merge: true });
-      } else {
-        await updateDoc(doc(db, "users", sel.id), { resignPlan: { type: f.type, date: f.date, reason: f.reason.trim(), noticeDate: f.noticeDate, by: auth.currentUser?.email || "" }, personnelHistory: arrayUnion({ date: kstDay(), type: `${f.type} 통보`, detail: `퇴직 예정일 ${f.date}` }) });
-      }
-      setSel(null);
-    } catch (e) { alert(`처리 실패: ${e.message}`); } finally { setBusy(false); }
-  };
-  const cancelPlan = async (u) => { if (window.confirm(`${u.name}님 퇴사 예정을 취소할까요?`)) await updateDoc(doc(db, "users", u.id), { resignPlan: null, personnelHistory: arrayUnion({ date: kstDay(), type: "퇴사 예정 취소", detail: "" }) }); };
-  const reinstate = async (u) => { if (window.confirm(`${u.name}님을 복직 처리할까요?`)) await updateDoc(doc(db, "users", u.id), { employmentStatus: "재직", resignedAt: null, personnelHistory: arrayUnion({ date: kstDay(), type: "복직", detail: "" }) }); };
-  const printNotice = (u, plan) => printResign(company, u, plan);
-  const list = active.filter((u) => !q.trim() || [u.name, u.team, u.position].some((v) => String(v || "").includes(q.trim())));
-  return (
-    <div className="space-y-4">
-      <BookHero en="HR · OFFBOARDING" title="퇴사 · 권고사직" desc="퇴사·권고사직·계약 만료를 처리하면 로그인이 차단되고 경리 › 퇴직 정산으로 넘어갑니다"
-        kpis={[["재직", `${active.length}명`], ["퇴사 예정", `${planned.length}명`], ["이번 달 퇴사", `${left.filter((u) => String(u.resignedAt || "").startsWith(kstDay().slice(0, 7))).length}명`], ["누적 퇴사", `${left.length}명`]]} />
-      {planned.length > 0 && (
-        <BookCard en="PLANNED" title="퇴사 예정" flush>
-          <div className="divide-y divide-[#EEF2F8]">
-            {planned.map((u) => (
-              <div key={u.id} className="px-4 py-3 flex items-center gap-3 flex-wrap">
-                <Avatar name={u.name} />
-                <span className="flex-1 min-w-0"><span className="block text-[14.5px] font-black text-[#0F1A30]">{u.name} <span className="text-[12px] font-bold text-[#7A879C]">{u.team} · {u.position}</span></span><span className="block text-[12px] text-[#7A879C]">{u.resignPlan.type} · 퇴직 예정 <b style={{ fontFamily: MONO }}>{u.resignPlan.date}</b> · {u.resignPlan.reason}</span></span>
-                <button type="button" onClick={() => printNotice(u, u.resignPlan)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B]">{u.resignPlan.type === "권고사직" ? "합의서 인쇄" : "확인서 인쇄"}</button>
-                {canManage && <button type="button" onClick={() => cancelPlan(u)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#5B6B85]">예정 취소</button>}
-                {canManage && <button type="button" onClick={() => { open(u); }} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">퇴사 확정</button>}
-              </div>
-            ))}
-          </div>
-        </BookCard>
-      )}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <BookCard en="STAFF" title="재직 직원" right={<input value={q} onChange={(e) => setQ(e.target.value)} placeholder="검색" className="h-9 w-[150px] px-3 rounded-lg border border-[#DCE3EE] text-[13px] outline-none" />} flush>
-          <div className="divide-y divide-[#EEF2F8] max-h-[520px] overflow-y-auto">
-            {list.map((u) => (
-              <div key={u.id} className="px-4 py-2.5 flex items-center gap-3">
-                <Avatar name={u.name} />
-                <span className="flex-1 min-w-0"><span className="block text-[14px] font-black text-[#0F1A30] truncate">{u.name || u.email}</span><span className="block text-[12px] text-[#7A879C] truncate">{[u.team, u.position].filter(Boolean).join(" · ")}</span></span>
-                {canManage && !u.isMaster && <button type="button" onClick={() => open(u)} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12px] font-black text-[#B42318]">퇴사 처리</button>}
-              </div>
-            ))}
-          </div>
-        </BookCard>
-        <BookCard en="LEFT" title="퇴사자" flush>
-          {!left.length ? <div className="py-10 text-center text-[13px] font-bold text-[#9AA9C3]">퇴사자가 없습니다</div> : (
-            <div className="divide-y divide-[#EEF2F8] max-h-[520px] overflow-y-auto">
-              {left.map((u) => (
-                <div key={u.id} className="px-4 py-2.5 flex items-center gap-3">
-                  <Avatar name={u.name} />
-                  <span className="flex-1 min-w-0"><span className="block text-[14px] font-black text-[#0F1A30] truncate">{u.name} {u.resignType && <span className="text-[11px] font-black px-1.5 py-0.5 rounded bg-[#F3F6FA] text-[#5B6B85]">{u.resignType}</span>}</span><span className="block text-[12px] text-[#7A879C] truncate" style={{ fontFamily: MONO }}>{u.resignedAt || "-"} · {u.team || ""}</span></span>
-                  <button type="button" onClick={() => printNotice(u, { type: u.resignType || "자진 퇴사", date: u.resignedAt || "", reason: u.resignReason || "" })} className="h-8 px-2.5 rounded-lg border border-[#DCE3EE] text-[12px] font-bold text-[#1B2B4B]">인쇄</button>
-                  {canManage && <button type="button" onClick={() => reinstate(u)} className="h-8 px-2.5 rounded-lg border border-[#DCE3EE] text-[12px] font-bold text-[#5B6B85]">복직</button>}
-                </div>
-              ))}
-            </div>
-          )}
-        </BookCard>
-      </div>
-      {sel && f && (
-        <Sheet side en="HR · RESIGNATION" title={`${sel.name} 퇴사 처리`} onClose={() => setSel(null)}
-          footer={<><button type="button" onClick={() => setSel(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button>{f.date > kstDay() && <button type="button" disabled={busy} onClick={() => apply(false)} className="h-12 px-4 rounded-xl border border-[#0F1A30] bg-white text-[14px] font-black text-[#0F1A30]">예정 등록</button>}<button type="button" disabled={busy} onClick={() => apply(true)} className="flex-1 h-12 rounded-xl bg-[#B42318] text-white text-[15px] font-black disabled:opacity-50">지금 퇴사 확정</button></>}>
-          <div><Label>구분</Label><div className="flex flex-wrap gap-1.5">{RETIRE_REASONS.map((r) => <Chip key={r} on={f.type === r} onClick={() => setF({ ...f, type: r })}>{r}</Chip>)}</div></div>
-          {f.type === "권고사직" && <div className="rounded-xl bg-[#EEF3FC] border border-[#C9D6EE] px-3 py-2.5 text-[12.5px] text-[#1B2B4B] leading-relaxed">권고사직은 근로자 동의(합의서)가 필요하고, 실업급여 수급 대상(비자발적 이직)입니다. 경리에게 이직확인서 제출이 안내됩니다.</div>}
-          {f.type === "해고" && <div className="rounded-xl bg-[#FEF3F2] border border-[#FECDCA] px-3 py-2.5 text-[12.5px] text-[#B42318] leading-relaxed">해고는 정당한 사유와 30일 전 서면 통지(해고예고)가 필요합니다(근로기준법 23·26·27조). 노무 검토 후 진행하세요.</div>}
-          <div className="grid grid-cols-2 gap-3">
-            <div><Label>퇴직일(마지막 근무일)</Label><input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} className={inp} /></div>
-            <div><Label>통보일</Label><input type="date" value={f.noticeDate} onChange={(e) => setF({ ...f, noticeDate: e.target.value })} className={inp} /></div>
-          </div>
-          <div><Label>사유</Label><textarea value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} rows={4} className={`${inp} h-auto py-2`} placeholder="예: 경영상 사유로 인한 인원 조정 / 개인 사정" /></div>
-          <button type="button" onClick={() => printNotice(sel, f)} className="w-full h-11 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-black text-[#1B2B4B]">{f.type === "권고사직" ? "권고사직 합의서 인쇄" : "퇴직 확인서 인쇄"}</button>
-        </Sheet>
-      )}
     </div>
   );
 }
@@ -258,6 +113,7 @@ const tenureOf = (h) => { if (!h) return ""; const m = Math.max(0, Math.floor((n
 export function StaffInfoBoard({ company, canManage }) {
   const all = useStaff(company);
   const hr = useHrOptions(company);
+  const ro = useRoleOptions();
   const [q, setQ] = React.useState("");
   const [sel, setSel] = React.useState(null);
   const [mode, setMode] = React.useState("info"); // info | resign
@@ -273,19 +129,21 @@ export function StaffInfoBoard({ company, canManage }) {
   const groups = (() => { const g = {}; active.filter(match).forEach((u) => { const t = u.team || "미배정"; (g[t] = g[t] || []).push(u); }); return hr.teams.concat(["미배정"]).filter((t) => g[t]).map((t) => [t, g[t].sort((a, b) => hr.positionsFor(t).indexOf(b.position) - hr.positionsFor(t).indexOf(a.position) || String(a.name || "").localeCompare(String(b.name || ""), "ko"))]).concat(Object.keys(g).filter((t) => !hr.teams.includes(t) && t !== "미배정").map((t) => [t, g[t]])); })();
   const open = (u, m = "info") => {
     setSel(u); setMode(m);
-    setF({ name: u.name || "", phone: u.phone || "", team: u.team || "", position: u.position || "", role: u.role || "user", employType: u.employType || "정규직", employmentStatus: u.employmentStatus || "재직" });
+    setF({ name: u.name || "", phone: u.phone || "", team: u.team || "", position: u.position || "", role: u.role || "user", employType: u.employType || "정규직", employmentStatus: u.employmentStatus || "재직", leaveFrom: u.leave?.from || kstDay(), leaveTo: u.leave?.to || "", leaveMemo: u.leave?.memo || "" });
     setR({ type: u.resignPlan?.type || "자진 퇴사", date: u.resignPlan?.date || kstDay(), reason: u.resignPlan?.reason || "", noticeDate: kstDay() });
   };
-  const exec = f && isExecProfile(f);
   const saveInfo = async () => {
+    const onLeave = LEAVE_STATUSES.includes(f.employmentStatus);
+    if (onLeave && !f.leaveFrom) return alert("휴직 시작일을 입력해 주세요.");
     setBusy(true);
     try {
-      const role = exec ? "admin" : f.role;
+      const role = f.role;
       const ch = [];
+      if ((sel.employmentStatus || "재직") !== f.employmentStatus) ch.push(`재직상태 ${sel.employmentStatus || "재직"}→${f.employmentStatus}${onLeave ? ` (${f.leaveFrom}~${f.leaveTo || "미정"})` : ""}`);
       if ((sel.team || "") !== f.team) ch.push(`부서 ${sel.team || "미배정"}→${f.team || "미배정"}`);
       if ((sel.position || "") !== f.position) ch.push(`직책 ${sel.position || "-"}→${f.position || "-"}`);
-      if ((sel.role || "") !== role && !sel.isMaster) ch.push(`권한 ${ROLE_NAME[sel.role] || sel.role}→${ROLE_NAME[role]}`);
-      await updateDoc(doc(db, "users", sel.id), { name: f.name.trim(), phone: f.phone.trim(), team: f.team, position: f.position, ...(sel.isMaster ? {} : { role }), employType: f.employType, employmentStatus: f.employmentStatus, ...(ch.length ? { personnelHistory: arrayUnion({ date: kstDay(), type: "정보 수정", detail: `${ch.join(" · ")} (공문 없음)` }) } : {}) });
+      if ((sel.role || "") !== role && !sel.isMaster) ch.push(`권한 ${ro.label(sel.role)}→${ro.label(role)}`);
+      await updateDoc(doc(db, "users", sel.id), { name: f.name.trim(), phone: f.phone.trim(), team: f.team, position: f.position, ...(sel.isMaster ? {} : { role }), employType: f.employType, employmentStatus: f.employmentStatus, leave: onLeave ? { type: f.employmentStatus, from: f.leaveFrom, to: f.leaveTo || "", memo: (f.leaveMemo || "").trim() } : null, ...(ch.length ? { personnelHistory: arrayUnion({ date: kstDay(), type: "정보 수정", detail: `${ch.join(" · ")} (공문 없음)` }) } : {}) });
       setSel(null);
     } catch (e) { alert(`저장 실패: ${e.message}`); } finally { setBusy(false); }
   };
@@ -317,9 +175,9 @@ export function StaffInfoBoard({ company, canManage }) {
         </span>
       </div>
       <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
-        <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded-md bg-[#EEF3FC] text-[#1B2B4B]">{ROLE_NAME[u.role] || u.role}</span>
+        <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded-md bg-[#EEF3FC] text-[#1B2B4B]">{ro.label(u.role)}</span>
         {u.employType && u.employType !== "정규직" && <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded-md bg-[#F3F6FA] text-[#5B6B85]">{u.employType}</span>}
-        {u.employmentStatus === "휴직" && <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded-md bg-[#F3E7CC] text-[#6B5320]">휴직</span>}
+        {LEAVE_STATUSES.includes(u.employmentStatus) && <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded-md bg-[#F3E7CC] text-[#6B5320]">{u.employmentStatus}{u.leave?.to ? ` ~${String(u.leave.to).slice(2).replace(/-/g, ".")}` : ""}</span>}
         {u.noAccount && <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded-md bg-[#F3F6FA] text-[#9AA9C3]">계정 없음</span>}
         <span className="ml-auto text-[11px] font-bold text-[#9AA9C3] tabular-nums" style={{ fontFamily: MONO }}>{tenureOf(u.hireDate)}</span>
       </div>
@@ -328,7 +186,7 @@ export function StaffInfoBoard({ company, canManage }) {
   return (
     <div className="space-y-4">
       <BookHero en="HR · STAFF BOARD" title="직원 정보 · 퇴사" desc="카드를 누르면 정보 수정(공문 없이 바로)과 퇴사·권고사직 처리를 한 곳에서 합니다"
-        kpis={[["재직", `${active.length}명`, `${groups.length}개 부서`], ["휴직", `${active.filter((u) => u.employmentStatus === "휴직").length}명`], ["퇴사 예정", `${planned.length}명`], ["이번 달 퇴사", `${left.filter((u) => String(u.resignedAt || "").startsWith(kstDay().slice(0, 7))).length}명`]]}
+        kpis={[["재직", `${active.length}명`, `${groups.length}개 부서`], ["휴직 · 육아휴직", `${active.filter((u) => LEAVE_STATUSES.includes(u.employmentStatus)).length}명`, `육아휴직 ${active.filter((u) => u.employmentStatus === "육아휴직").length}명`], ["퇴사 예정", `${planned.length}명`], ["이번 달 퇴사", `${left.filter((u) => String(u.resignedAt || "").startsWith(kstDay().slice(0, 7))).length}명`]]}
         right={<input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름·부서·직책 검색" className="h-10 w-[220px] px-3.5 rounded-xl bg-white/95 text-[#0F1A30] text-[13.5px] font-semibold outline-none" />} />
       {!canManage && <div className="rounded-2xl bg-[#FEF3F2] border border-[#FECDCA] px-4 py-3 text-[13px] font-bold text-[#B42318]">직책·부서·권한 변경과 퇴사 처리는 마스터·인사관리자만 할 수 있습니다</div>}
       {planned.length > 0 && (
@@ -377,11 +235,31 @@ export function StaffInfoBoard({ company, canManage }) {
             <div className="grid grid-cols-2 gap-3">
               <div><Label>이름</Label><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inp} /></div>
               <div><Label>연락처</Label><input value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} className={inp} /></div>
-              <div><Label>부서</Label><select value={f.team} onChange={(e) => { const team = e.target.value; const position = hr.positionsFor(team).includes(f.position) ? f.position : ""; setF({ ...f, team, position, role: suggestRole({ team, position }) }); }} className={inp}><option value="">미배정</option>{hr.teams.map((t) => <option key={t}>{t}</option>)}</select></div>
-              <div><Label>직책</Label><select value={f.position} onChange={(e) => setF({ ...f, position: e.target.value, role: suggestRole({ team: f.team, position: e.target.value }) })} className={inp}><option value="">미설정</option>{[...new Set([...hr.positionsFor(f.team), f.position].filter(Boolean))].map((p) => <option key={p}>{p}</option>)}</select></div>
-              <div><Label>권한</Label><select value={exec ? "admin" : f.role} disabled={exec || sel.isMaster} onChange={(e) => setF({ ...f, role: e.target.value })} className={`${inp} disabled:bg-[#F5F8FD] disabled:text-[#9AA9C3]`}>{ROLE_KEYS.map((x) => <option key={x} value={x}>{ROLE_NAME[x]}</option>)}</select><div className="text-[11.5px] text-[#7A879C] mt-1">{sel.isMaster ? "마스터 계정은 관리자 고정" : exec ? "임원은 관리자 고정" : ROLE_DESC[f.role]}</div></div>
+              <div><Label>부서</Label><select value={f.team} onChange={(e) => { const team = e.target.value; const position = hr.positionsFor(team).includes(f.position) ? f.position : ""; setF({ ...f, team, position, role: suggestFor({ team, position }, ro.execKeys) }); }} className={inp}><option value="">미배정</option>{hr.teams.map((t) => <option key={t}>{t}</option>)}</select></div>
+              <div><Label>직책</Label><select value={f.position} onChange={(e) => setF({ ...f, position: e.target.value, role: suggestFor({ team: f.team, position: e.target.value }, ro.execKeys) })} className={inp}><option value="">미설정</option>{[...new Set([...hr.positionsFor(f.team), f.position].filter(Boolean))].map((p) => <option key={p}>{p}</option>)}</select></div>
+              <div><Label>권한</Label><select value={f.role} disabled={sel.isMaster} onChange={(e) => setF({ ...f, role: e.target.value })} className={`${inp} disabled:bg-[#F5F8FD] disabled:text-[#9AA9C3]`}>{[...ro.options, ...(ro.options.some(([k]) => k === f.role) ? [] : [[f.role, ro.label(f.role)]])].map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select><div className="text-[11.5px] text-[#7A879C] mt-1">{sel.isMaster ? "마스터 계정은 권한을 바꿀 수 없습니다" : ROLE_DESC[f.role] || (ro.execKeys.includes(f.role) ? "임원 화면(경영 브리핑) — 권한 관리에서 만든 역할" : "권한 관리에서 만든 역할 — 메뉴는 그 설정을 따릅니다")}</div></div>
               <div><Label>고용 형태</Label><select value={f.employType} onChange={(e) => setF({ ...f, employType: e.target.value })} className={inp}>{["정규직", "계약직", "수습", "파트타임", "일용직"].map((k) => <option key={k}>{k}</option>)}</select></div>
-              <div className="col-span-2"><Label>재직 상태</Label><div className="flex gap-1.5">{["재직", "휴직"].map((k) => <Chip key={k} on={f.employmentStatus === k} onClick={() => setF({ ...f, employmentStatus: k })}>{k}</Chip>)}</div></div>
+              <div className="col-span-2"><Label>재직 상태</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {STATUS_OPTIONS.map((k) => <Chip key={k} on={f.employmentStatus === k} onClick={() => setF({ ...f, employmentStatus: k })}>{k}</Chip>)}
+                  <span className="w-px h-7 bg-[#DCE3EE] mx-1 self-center" />
+                  {[["퇴사", "자진 퇴사"], ["권고사직", "권고사직"]].map(([l, t]) => <button key={l} type="button" disabled={sel.isMaster} onClick={() => { setR((p) => ({ ...p, type: t })); setMode("resign"); }} className="h-9 px-3.5 rounded-full text-[13px] font-black border border-[#FECDCA] bg-[#FEF3F2] text-[#B42318] disabled:opacity-30 whitespace-nowrap">{l} →</button>)}
+                </div>
+                <div className="text-[11.5px] text-[#7A879C] mt-1">퇴사·권고사직을 누르면 퇴사 처리 화면으로 넘어갑니다(퇴직일·사유·합의서 인쇄 · 확정 시 로그인 차단)</div>
+              </div>
+              {LEAVE_STATUSES.includes(f.employmentStatus) && (
+                <div className="col-span-2 rounded-2xl bg-white border border-[#E3E8F0] p-3.5 space-y-2.5">
+                  <div className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>{f.employmentStatus === "육아휴직" ? "PARENTAL LEAVE" : f.employmentStatus === "출산휴가" ? "MATERNITY LEAVE" : "LEAVE OF ABSENCE"} · 기간</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><Label>시작일</Label><input type="date" value={f.leaveFrom} onChange={(e) => setF({ ...f, leaveFrom: e.target.value })} className={inp} /></div>
+                    <div><Label>복직 예정일</Label><input type="date" value={f.leaveTo} onChange={(e) => setF({ ...f, leaveTo: e.target.value })} className={inp} /></div>
+                  </div>
+                  {f.leaveFrom && f.leaveTo && <div className="text-[12.5px] font-black text-[#1B2B4B]">총 {Math.max(0, Math.round((new Date(f.leaveTo) - new Date(f.leaveFrom)) / 864e5) + 1)}일 · 약 {(Math.max(0, (new Date(f.leaveTo) - new Date(f.leaveFrom)) / 864e5 + 1) / 30.44).toFixed(1)}개월</div>}
+                  <input value={f.leaveMemo} onChange={(e) => setF({ ...f, leaveMemo: e.target.value })} className={inp} placeholder={f.employmentStatus === "육아휴직" ? "자녀 이름·생년월일, 전자결재 문서번호 등" : "사유·메모"} />
+                  {f.employmentStatus === "육아휴직" && <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2.5 text-[12px] text-[#5B6B85] leading-relaxed">만 8세 이하(초2 이하) 자녀 · 최대 1년(부모 모두 3개월 이상 쓰면 1년 6개월) · 휴직 30일 전 신청 · 휴직 기간도 근속·연차 산정에 포함 · 복귀 시 같은 업무(같은 수준 임금) — 급여는 고용센터에서 지급(회사는 확인서 제출)</div>}
+                  {f.employmentStatus === "출산휴가" && <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2.5 text-[12px] text-[#5B6B85] leading-relaxed">출산 전후 90일(다태아 120일) · 출산 후 45일(다태아 60일) 이상 · 최초 60일(다태아 75일) 유급</div>}
+                </div>
+              )}
               <div className="col-span-2 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2.5 text-[12.5px] text-[#5B6B85]">변경 내역은 인사 이력에 남습니다. 공문(인사발령)을 남기려면 인사 기록 › 인사발령을 쓰세요.</div>
             </div>
           ) : (
@@ -407,6 +285,7 @@ export function StaffInfoBoard({ company, canManage }) {
 // ═════════════════ 직책·부서 설정(회사별) ═════════════════
 export function HrSettingsPanel({ company, canManage }) {
   const hr = useHrOptions(company);
+  const ro = useRoleOptions();
   const cfg = hr.cfg || {};
   const [t, setT] = React.useState(""); const [p, setP] = React.useState(""); const [pe, setPe] = React.useState(false);
   const save = (patch) => setDoc(doc(db, "hrSettings", company), { companyName: company, ...patch, updatedAt: serverTimestamp() }, { merge: true });
@@ -423,10 +302,10 @@ export function HrSettingsPanel({ company, canManage }) {
         <BookCard en="DEPARTMENTS" title={`부서 ${hr.teams.length}개`}>
           <div className="flex flex-wrap gap-1.5">{hr.teams.map((v) => <Pill key={v} v={v} base={TEAM_OPTIONS.includes(v)} onX={v === EXEC_TEAM ? null : () => removeTeam(v)} />)}</div>
           {canManage && <div className="mt-3 flex gap-2"><input value={t} onChange={(e) => setT(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addTeam()} className={inp} placeholder="새 부서 (예: 영업팀, 물류센터)" /><button type="button" onClick={addTeam} className="h-11 px-4 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black whitespace-nowrap">+ 추가</button></div>}
-          <div className="mt-2 text-[11.5px] text-[#9AA9C3]">「임원」 부서는 임원 화면과 연결돼 있어 뺄 수 없습니다</div>
+          <div className="mt-2 text-[11.5px] text-[#9AA9C3]">「임원」 부서는 임원 직책·권한 추천과 연결돼 있어 뺄 수 없습니다</div>
         </BookCard>
         <BookCard en="POSITIONS" title="직책">
-          <div className="text-[12px] font-black text-[#4B6CB7] mb-1.5">임원 직책 (부서 임원 전용 · 관리자 권한 고정)</div>
+          <div className="text-[12px] font-black text-[#4B6CB7] mb-1.5">임원 직책 (부서 임원 전용)</div>
           <div className="flex flex-wrap gap-1.5 mb-3">{hr.exec.map((v) => <Pill key={v} v={v} base={EXEC_POSITION_OPTIONS.includes(v)} onX={["대표"].includes(v) ? null : () => removePos(v)} />)}</div>
           <div className="text-[12px] font-black text-[#4B6CB7] mb-1.5">일반 직책</div>
           <div className="flex flex-wrap gap-1.5">{hr.normal.map((v) => <Pill key={v} v={v} base={POSITION_OPTIONS.includes(v)} onX={() => removePos(v)} />)}</div>
@@ -435,10 +314,10 @@ export function HrSettingsPanel({ company, canManage }) {
       </div>
       <BookCard en="ROLES" title="권한(프로그램 사용 범위)">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {ROLE_KEYS.map((r) => <div key={r} className="rounded-xl border border-[#E3E8F0] px-3.5 py-2.5"><div className="text-[14px] font-black text-[#0F1A30]">{ROLE_NAME[r]}</div><div className="text-[12px] text-[#7A879C]">{ROLE_DESC[r]}</div></div>)}
+          {ro.options.map(([r, l]) => <div key={r} className="rounded-xl border border-[#E3E8F0] px-3.5 py-2.5"><div className="text-[14px] font-black text-[#0F1A30]">{l}{!ROLE_DESC[r] && <span className="ml-1.5 text-[10.5px] font-black px-1.5 py-0.5 rounded bg-[#EEF3FC] text-[#2D4C82]">직접 만든 역할</span>}</div><div className="text-[12px] text-[#7A879C]">{ROLE_DESC[r] || (ro.execKeys.includes(r) ? "임원 화면(경영 브리핑) — 메뉴 범위는 권한 관리 설정" : "메뉴 범위는 권한 관리 설정을 따릅니다")}</div></div>)}
         </div>
         <div className="mt-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3.5 py-2.5 text-[12.5px] text-[#5B6B85] leading-relaxed">
-          권한은 화면·보안 규칙과 연결된 <b className="text-[#0F1A30]">프로그램 기능 범위</b>라 회사에서 새로 만들거나 지울 수 없고, 직원마다 위 5가지 중에서 지정합니다. 부서·직책을 고르면 권한이 자동 추천됩니다(임원 → 관리자, 경리/회계팀 → 경리, 인사팀 → 인사관리자, 과장 이상 → 관리자, 그 외 → 실무자).
+          역할 추가·이름 변경·메뉴 범위 수정은 <b className="text-[#0F1A30]">최고관리자 › 관리자메뉴 › 권한 관리</b>에서 합니다. 여기서 만든 역할은 직원 정보·인사발령·직원관리의 권한 목록에 바로 나타납니다. 부서·직책을 고르면 권한이 자동 추천됩니다(임원 → 임원 화면 역할, 경리/회계팀 → 경리, 인사팀 → 인사관리자, 과장 이상 → 관리자, 그 외 → 실무자).
         </div>
       </BookCard>
     </div>
@@ -446,34 +325,45 @@ export function HrSettingsPanel({ company, canManage }) {
 }
 
 // ═════════════════ 사내 규정(취업규칙 등) ═════════════════
-export const RULE_CATS = ["취업규칙", "인사규정", "복무규정", "급여·수당 규정", "휴가 규정", "출장·경비 규정", "차량·운행 안전 규정", "보안·개인정보 규정", "경조사 규정", "기타"];
-const RULE_TEMPLATES = {
-  취업규칙: "제1장 총칙\n 제1조(목적) 이 규칙은 회사와 직원의 근로조건 및 복무에 관한 사항을 정함을 목적으로 한다.\n 제2조(적용 범위) 이 규칙은 회사에 근무하는 모든 직원에게 적용한다.\n\n제2장 채용 및 근로계약\n 제3조(채용) …\n 제4조(수습기간) 신규 채용자는 3개월의 수습기간을 둘 수 있다.\n\n제3장 근로시간 및 휴게\n 제5조(근로시간) 1일 8시간, 1주 40시간을 원칙으로 한다.\n 제6조(휴게) 4시간 근무 시 30분, 8시간 근무 시 1시간의 휴게시간을 준다.\n\n제4장 휴일·휴가\n 제7조(연차유급휴가) 근로기준법 제60조에 따른다.\n\n제5장 임금\n 제8조(임금 지급) 매월 ○일에 통화로 직접 그 전액을 지급한다.\n\n제6장 퇴직\n 제9조(퇴직금) 1년 이상 근속한 직원에게 퇴직급여보장법에 따라 지급한다.\n\n제7장 징계\n 제10조(징계 사유·종류) …\n\n부칙\n 이 규칙은 ____년 __월 __일부터 시행한다.\n\n※ 상시 10명 이상 사업장은 취업규칙을 작성해 관할 고용노동지청에 신고해야 합니다(근로기준법 제93조).",
-  "차량·운행 안전 규정": "제1조(목적) 회사 차량 및 운송 업무의 안전 운행 기준을 정한다.\n제2조(운행 전 점검) 타이어·제동장치·적재 상태를 확인한다.\n제3조(과적·과속 금지) …\n제4조(사고 처리) 사고 즉시 회사에 보고하고 기사관리 › 과태료·사고 서류에 등록한다.",
-};
+export { RULE_CATS };
 export function CompanyRules({ company, canEdit = false }) {
   const [rows, setRows] = React.useState(null);
   const [cat, setCat] = React.useState("전체");
   const [open, setOpen] = React.useState(null);
   const [edit, setEdit] = React.useState(null);
   React.useEffect(() => { if (!company) return undefined; return onSnapshot(query(collection(db, "companyRules"), where("companyName", "==", company)), (s) => setRows(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setRows([])); }, [company]);
-  const list = (rows || []).filter((r) => cat === "전체" || r.category === cat).sort((a, b) => RULE_CATS.indexOf(a.category) - RULE_CATS.indexOf(b.category) || String(a.title).localeCompare(String(b.title)));
+  // ⭐ 2026-10-31 회사가 아직 등록하지 않은 분류는 법령 기반 표준안을 보여 준다(인사관리자가 고쳐서 등록)
+  const tpls = Object.keys(RULE_TEMPLATES).filter((c) => !(rows || []).some((r) => r.category === c)).map((c) => ({ id: `tpl:${c}`, tpl: true, category: c, title: c, body: fillCompany(RULE_TEMPLATES[c], company), effectiveDate: "", version: 0 }));
+  const list = [...(rows || []), ...(rows === null ? [] : tpls)].filter((r) => cat === "전체" || r.category === cat).sort((a, b) => RULE_CATS.indexOf(a.category) - RULE_CATS.indexOf(b.category) || String(a.title).localeCompare(String(b.title)));
+  const [busyAll, setBusyAll] = React.useState(false);
+  const registerAll = async () => {
+    if (!tpls.length || !window.confirm(`표준안 ${tpls.length}건을 우리 회사 규정으로 한 번에 등록할까요?\n(등록 후에도 각각 고칠 수 있습니다)`)) return;
+    setBusyAll(true);
+    try { for (const t of tpls) await addDoc(collection(db, "companyRules"), { companyName: company, title: t.title, category: t.category, body: t.body, effectiveDate: kstDay(), version: 1, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.email || "" }); } finally { setBusyAll(false); }
+  };
   const save = async () => {
     const e = edit; if (!e.title.trim() || !e.body.trim()) return alert("제목과 내용을 입력해 주세요.");
     const data = { companyName: company, title: e.title.trim(), category: e.category, body: e.body, effectiveDate: e.effectiveDate || "", version: e.id ? (Number(e.version) || 1) + 1 : 1, updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.email || "" };
     if (e.id) await updateDoc(doc(db, "companyRules", e.id), data); else await addDoc(collection(db, "companyRules"), { ...data, createdAt: serverTimestamp() });
     setEdit(null);
   };
-  const cur = open ? (rows || []).find((r) => r.id === open) : null;
+  const cur = open ? [...(rows || []), ...tpls].find((r) => r.id === open) : null;
   return (
     <div className="space-y-4">
       <BookHero en="COMPANY · RULES" title="사내 규정" desc="취업규칙·인사·복무·급여·휴가·출장·차량 안전·보안 규정 — 모든 직원이 볼 수 있습니다"
         right={canEdit && <button type="button" onClick={() => setEdit({ title: "", category: "취업규칙", body: "", effectiveDate: kstDay() })} className="h-10 px-4 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black whitespace-nowrap">+ 규정 등록</button>}
-        kpis={[["등록 규정", `${(rows || []).length}건`], ["취업규칙", (rows || []).some((r) => r.category === "취업규칙") ? "등록됨" : "미등록", "10인 이상 신고 의무"]]} />
+        kpis={[["우리 회사 규정", `${(rows || []).length}건`], ["표준안(미등록)", `${tpls.length}건`, "법령 기반 기본안"], ["취업규칙", (rows || []).some((r) => r.category === "취업규칙") ? "등록됨" : "표준안", "10인 이상 신고 의무"]]} />
+      {canEdit && tpls.length > 0 && (
+        <div className="rounded-2xl border border-[#C9D6EE] bg-[#EEF3FC] px-4 py-3 flex items-center gap-3 flex-wrap">
+          <div className="min-w-0 flex-1"><b className="text-[14px] text-[#0F1A30]">표준 규정 {tpls.length}건이 준비돼 있습니다</b><div className="text-[12.5px] text-[#5B6B85]">근로기준법·남녀고용평등법(육아휴직·출산휴가) 등을 바탕으로 만든 기본안입니다. 그대로 등록하거나 열어서 고친 뒤 등록하세요.</div></div>
+          <button type="button" disabled={busyAll} onClick={registerAll} className="h-10 px-4 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black whitespace-nowrap disabled:opacity-50">{busyAll ? "등록 중…" : "표준안 한 번에 등록"}</button>
+        </div>
+      )}
       <div className="flex gap-1.5 overflow-x-auto pb-1">{["전체", ...RULE_CATS].map((c) => <Chip key={c} on={cat === c} onClick={() => setCat(c)}>{c}</Chip>)}</div>
       {cur ? (
-        <BookCard en={cur.category} title={cur.title} right={<div className="flex gap-1.5"><button type="button" onClick={() => setOpen(null)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B]">← 목록</button>{canEdit && <button type="button" onClick={() => setEdit({ ...cur })} className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">수정</button>}</div>}>
-          <div className="text-[12px] text-[#7A879C] mb-3" style={{ fontFamily: MONO }}>v{cur.version || 1} · 시행 {cur.effectiveDate || "-"}</div>
+        <BookCard en={cur.category} title={cur.title} right={<div className="flex gap-1.5"><button type="button" onClick={() => setOpen(null)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B]">← 목록</button>{canEdit && <button type="button" onClick={() => setEdit(cur.tpl ? { title: cur.title, category: cur.category, body: cur.body, effectiveDate: kstDay() } : { ...cur })} className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">{cur.tpl ? "고쳐서 우리 회사 규정으로 등록" : "수정"}</button>}</div>}>
+          {cur.tpl ? <div className="mb-3 rounded-xl bg-[#FFFBF2] border border-[#FEDF89] px-3.5 py-2.5 text-[12.5px] text-[#93370D] font-bold">표준안입니다 — 회사가 아직 등록하지 않아 법령 기반 기본안을 보여 드립니다. 시행 전 회사 사정(금액·기간 등)에 맞게 고쳐 주세요.</div>
+            : <div className="text-[12px] text-[#7A879C] mb-3" style={{ fontFamily: MONO }}>v{cur.version || 1} · 시행 {cur.effectiveDate || "-"}</div>}
           <div className="rounded-2xl bg-[#FBFCFE] border border-[#E3E8F0] px-5 md:px-8 py-6 text-[15px] leading-[1.95] text-[#1F2A44] whitespace-pre-wrap">{cur.body}</div>
         </BookCard>
       ) : (
@@ -483,7 +373,7 @@ export function CompanyRules({ company, canEdit = false }) {
               {list.map((r) => (
                 <button key={r.id} type="button" onClick={() => setOpen(r.id)} className="w-full text-left px-4 py-3.5 flex items-center gap-3 hover:bg-[#F7F9FC]">
                   <span className="w-11 h-11 rounded-2xl bg-[#0F1A30] text-white grid place-items-center text-[16px] shrink-0">§</span>
-                  <span className="flex-1 min-w-0"><span className="block text-[15px] font-black text-[#0F1A30] truncate">{r.title}</span><span className="block text-[12px] text-[#7A879C]">{r.category} · v{r.version || 1} · 시행 {r.effectiveDate || "-"}</span></span>
+                  <span className="flex-1 min-w-0"><span className="block text-[15px] font-black text-[#0F1A30] truncate">{r.title}</span><span className="block text-[12px] text-[#7A879C]">{r.tpl ? <><span className="px-1.5 py-0.5 rounded bg-[#FFF4E5] text-[#B54708] text-[10.5px] font-black mr-1">표준안</span>{r.category} · 법령 기반 기본안</> : `${r.category} · v${r.version || 1} · 시행 ${r.effectiveDate || "-"}`}</span></span>
                   <span className="text-[#9AA9C3]">›</span>
                 </button>
               ))}
@@ -494,9 +384,9 @@ export function CompanyRules({ company, canEdit = false }) {
       {edit && (
         <Sheet side en="RULES · EDIT" title={edit.id ? "규정 수정" : "규정 등록"} onClose={() => setEdit(null)}
           footer={<>{edit.id && <button type="button" onClick={async () => { if (window.confirm("이 규정을 삭제할까요?")) { await deleteDoc(doc(db, "companyRules", edit.id)); setEdit(null); setOpen(null); } }} className="h-12 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#B42318]">삭제</button>}<button type="button" onClick={() => setEdit(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button><button type="button" onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">저장</button></>}>
-          <div><Label>분류</Label><div className="flex flex-wrap gap-1.5">{RULE_CATS.map((c) => <Chip key={c} on={edit.category === c} onClick={() => setEdit((p) => ({ ...p, category: c, title: p.title || c, body: p.body || RULE_TEMPLATES[c] || "" }))}>{c}</Chip>)}</div></div>
+          <div><Label>분류</Label><div className="flex flex-wrap gap-1.5">{RULE_CATS.map((c) => <Chip key={c} on={edit.category === c} onClick={() => setEdit((p) => ({ ...p, category: c, title: p.title || c, body: p.body || fillCompany(RULE_TEMPLATES[c], company) || "" }))}>{c}</Chip>)}</div></div>
           <div className="grid grid-cols-[1fr_170px] gap-2"><div><Label>제목</Label><input value={edit.title} onChange={(e) => setEdit((p) => ({ ...p, title: e.target.value }))} className={inp} /></div><div><Label>시행일</Label><input type="date" value={edit.effectiveDate} onChange={(e) => setEdit((p) => ({ ...p, effectiveDate: e.target.value }))} className={inp} /></div></div>
-          <div><Label>내용 {RULE_TEMPLATES[edit.category] && !edit.body && <button type="button" onClick={() => setEdit((p) => ({ ...p, body: RULE_TEMPLATES[p.category] }))} className="ml-2 text-[12px] font-black text-[#2D4C82]">표준 양식 불러오기</button>}</Label><textarea value={edit.body} onChange={(e) => setEdit((p) => ({ ...p, body: e.target.value }))} rows={22} className="w-full rounded-xl border border-[#DCE3EE] bg-white px-4 py-3 text-[14.5px] leading-[1.85] outline-none focus:border-[#2D4C82]" /></div>
+          <div><Label>내용 {RULE_TEMPLATES[edit.category] && !edit.body && <button type="button" onClick={() => setEdit((p) => ({ ...p, body: fillCompany(RULE_TEMPLATES[p.category], company) }))} className="ml-2 text-[12px] font-black text-[#2D4C82]">표준 양식 불러오기</button>}</Label><textarea value={edit.body} onChange={(e) => setEdit((p) => ({ ...p, body: e.target.value }))} rows={22} className="w-full rounded-xl border border-[#DCE3EE] bg-white px-4 py-3 text-[14.5px] leading-[1.85] outline-none focus:border-[#2D4C82]" /></div>
         </Sheet>
       )}
     </div>

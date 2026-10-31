@@ -91,3 +91,32 @@ export function getMenuAccess(customRoles, roleKey, menu) {
   // 예전에 저장된 권한에 없는 새 메뉴 — 내장 권한은 기본값, 직접 만든 권한은 숨김
   return BUILTIN_EDITABLE_ROLES.some((b) => b.key === roleKey) ? builtinDefaultMenuAccess(roleKey)[menu] || "write" : "hidden";
 }
+
+// 👔 2026-10-31 역할의 "기본 화면" — 권한 관리에서 역할마다 고른다(일반 업무 / 임원 화면).
+//  저장값이 없으면 이름에 "임원"이 들어간 직접 만든 역할은 임원 화면으로 본다.
+//  ※ 내장 역할(관리자·실무자 등)은 임원 화면으로 바꿀 수 없다 — 임원 화면은 임원 역할을 받은 직원만.
+export const ROLE_SCREENS = [["", "일반 업무 화면"], ["exec", "임원 화면 (경영 브리핑)"]];
+export function roleScreen(r) {
+  if (!r || BUILTIN_EDITABLE_ROLES.some((b) => b.key === r.key)) return "";
+  if (typeof r.screen === "string") return r.screen;
+  return /임원/.test(String(r.label || "")) ? "exec" : "";
+}
+
+// 직원 권한 드롭다운 공용 — 기본 역할 + 권한 관리에서 만든 역할(이름 바꾼 기본 역할은 바꾼 이름으로)
+export const BASE_ROLE_OPTIONS = [
+  ["admin", "관리자"], ["hrManager", "인사관리자"], ["hrAcct", "통합인사관리자"], ["test", "경리/회계"], ["user", "실무자"], ["viewer", "조회전용"],
+];
+export function roleOptionsFrom(customRoles = []) {
+  const base = BASE_ROLE_OPTIONS.map(([k, l]) => [k, customRoles.find((r) => r.key === k)?.label || l]);
+  const own = customRoles.filter((r) => !BASE_ROLE_OPTIONS.some(([k]) => k === r.key) && !["totalMaster", "driver", "shipper"].includes(r.key)).map((r) => [r.key, `${r.label || r.key}${roleScreen(r) === "exec" ? " · 임원 화면" : ""}`]);
+  return [...base, ...own];
+}
+export function useRoleOptions() {
+  const customRoles = useCustomRoles();
+  return React.useMemo(() => {
+    const options = roleOptionsFrom(customRoles);
+    const label = (k) => options.find(([x]) => x === k)?.[1] || { totalMaster: "최고관리자", driver: "기사", shipper: "화주" }[k] || k || "-";
+    const execKeys = customRoles.filter((r) => roleScreen(r) === "exec").map((r) => r.key);
+    return { options, label, customRoles, execKeys };
+  }, [customRoles]);
+}

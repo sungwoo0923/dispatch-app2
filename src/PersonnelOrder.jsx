@@ -10,6 +10,7 @@ import html2canvas from "html2canvas";
 import { db, auth } from "./firebase";
 import { addDoc, collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { suggestRole, isExecProfile, useHrOptions } from "./hrConstants";
+import { useRoleOptions } from "./customRoles";
 import { sendInternalMail, useCompanyStaff, compressImage } from "./InternalMail";
 
 export const HR_ROLE_OPTIONS = [
@@ -45,6 +46,9 @@ function Ed({ value, onChange, capture, className = "", placeholder }) {
 }
 
 export default function PersonnelOrder({ company, target, myName, isSelf }) {
+  const ro = useRoleOptions();
+  const roleName = ro.label;
+  const suggestR = (x) => (isExecProfile(x) && ro.execKeys[0] ? ro.execKeys[0] : suggestRole(x));
   const hrOpt = useHrOptions(company);
   const positionsForTeam = hrOpt.positionsFor; const TEAM_OPTIONS = hrOpt.teams;
   const staff = useCompanyStaff(company);
@@ -101,7 +105,7 @@ export default function PersonnelOrder({ company, target, myName, isSelf }) {
         position: next.position, team: next.team,
         personnelHistory: [...(target.personnelHistory || []), { date, type: fv("type"), detail }],
       };
-      const roleNext = isExecProfile(next) && next.role !== "totalMaster" ? "admin" : next.role; // ◆ 임원은 무조건 관리자
+      const roleNext = next.role; // ⭐ 2026-10-31 임원도 권한 관리의 역할을 그대로(임원 화면 역할 추천)
       if (roleNext !== cur.role && !isSelf) patch.role = roleNext;
       await setDoc(doc(db, "users", target.uid), patch, { merge: true });
 
@@ -147,20 +151,20 @@ export default function PersonnelOrder({ company, target, myName, isSelf }) {
             <input type="date" value={date} onChange={(e) => { setDate(e.target.value); setDoc_((p) => { const n = { ...p }; delete n.effective; delete n.no; return n; }); }} className={sel} />
           </label>
           <label className="block"><span className="text-[12.5px] font-bold text-[#7A879C]">발령 부서</span>
-            <select value={next.team} onChange={(e) => { const team = e.target.value; setNext((p) => { const position = positionsForTeam(team).includes(p.position) ? p.position : ""; return { ...p, team, position, role: isSelf || p.role === "totalMaster" ? p.role : suggestRole({ team, position }) }; }); }} className={sel}>
+            <select value={next.team} onChange={(e) => { const team = e.target.value; setNext((p) => { const position = positionsForTeam(team).includes(p.position) ? p.position : ""; return { ...p, team, position, role: isSelf || p.role === "totalMaster" ? p.role : suggestR({ team, position }) }; }); }} className={sel}>
               <option value="">미배정</option>
               {[...new Set([...TEAM_OPTIONS, cur.team].filter(Boolean))].map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </label>
           <label className="block"><span className="text-[12.5px] font-bold text-[#7A879C]">발령 직책</span>
-            <select value={next.position} onChange={(e) => { const position = e.target.value; setNext((p) => ({ ...p, position, role: isSelf || p.role === "totalMaster" ? p.role : suggestRole({ team: p.team, position }) })); }} className={sel}>
+            <select value={next.position} onChange={(e) => { const position = e.target.value; setNext((p) => ({ ...p, position, role: isSelf || p.role === "totalMaster" ? p.role : suggestR({ team: p.team, position }) })); }} className={sel}>
               <option value="">미설정</option>
               {[...new Set([...positionsForTeam(next.team), next.position].filter(Boolean))].map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </label>
           <label className="block"><span className="text-[12.5px] font-bold text-[#7A879C]">권한</span>
-            <select value={isExecProfile(next) && next.role !== "totalMaster" ? "admin" : next.role} disabled={isSelf || isExecProfile(next)} onChange={(e) => setNext((p) => ({ ...p, role: e.target.value }))} className={`${sel} disabled:bg-[#F5F7FA] disabled:text-[#9AA9C3]`}>
-              {[...HR_ROLE_OPTIONS, ...(HR_ROLE_OPTIONS.some(([k]) => k === cur.role) ? [] : [[cur.role, roleName(cur.role)]])].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            <select value={next.role} disabled={isSelf || next.role === "totalMaster"} onChange={(e) => setNext((p) => ({ ...p, role: e.target.value }))} className={`${sel} disabled:bg-[#F5F7FA] disabled:text-[#9AA9C3]`}>
+              {[...ro.options, ...(ro.options.some(([k]) => k === cur.role) ? [] : [[cur.role, roleName(cur.role)]])].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
             {isSelf && <span className="text-[11.5px] text-[#9AA9C3]">본인 권한은 최고관리자만 바꿀 수 있습니다</span>}
           </label>

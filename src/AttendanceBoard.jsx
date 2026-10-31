@@ -24,7 +24,8 @@ function fmtTime(iso) {
 }
 
 export default function AttendanceBoard({ userCompany, role, user }) {
-  const isAdmin = ADMIN_ROLES.includes(role);
+  // ⭐ 2026-10-31 인사관리자(통합인사 포함)도 전 직원 출근기록을 본다
+  const isAdmin = ADMIN_ROLES.includes(role) || ["hrManager", "hrAcct"].includes(role);
   const canApproveRequests = role === "totalMaster" || role === "hrManager";
   const canEditAttendance = role === "totalMaster";
   const now = new Date();
@@ -98,7 +99,8 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     const unsub = onSnapshot(q, snap => {
       const all = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
       setTmUids(new Set(all.filter(isTMUser).map(u => u.uid)));
-      setEmployees(all.filter(u => u.approved !== false && !isTMUser(u))); // ★ 최고관리자는 출근기록부에서 제외
+      // ★ 최고관리자·기사·화주는 출근기록부에서 제외, 퇴사자는 퇴사한 달까지만
+      setEmployees(all.filter(u => u.approved !== false && !isTMUser(u) && !["driver", "shipper", "cafeUser"].includes(u.role)));
     }, () => {});
     return () => unsub();
   }, [company]);
@@ -381,8 +383,9 @@ export default function AttendanceBoard({ userCompany, role, user }) {
 
   const visibleEmployees = useMemo(() => {
     const base = isAdmin ? employees : employees.filter(e => e.uid === user?.uid);
-    return base.filter(e => !hiddenEmpUids.includes(e.uid));
-  }, [employees, isAdmin, user, hiddenEmpUids]);
+    const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
+    return base.filter(e => !hiddenEmpUids.includes(e.uid) && !(e.employmentStatus === "퇴사" && String(e.resignedAt || "0000") < monthStart));
+  }, [employees, isAdmin, user, hiddenEmpUids, year, month]);
 
   const resolveStatus = (uid, ds, name) => {
     const rec = recordMap[`${uid}_${ds}`];
