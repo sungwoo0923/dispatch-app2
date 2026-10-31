@@ -216,3 +216,10 @@ table tbody tr:nth-child(odd) td {
   .kp-ap-split, .kp-writer-split { grid-template-columns: minmax(0, 1fr) !important; }
   .kp-phone-body { overflow-x: hidden; }
 }
+
+/* 📱 아이폰 Safari — 상단바(translateZ로 따로 그려짐)가 화면 안의 팝업(position: fixed)보다 위에 그려져
+   팝업 윗부분이 상단바 밑에 깔리던 문제. 팝업도 같은 방식(합성 레이어)으로 그려지게 해 z-index 순서대로 보이게 한다.
+   transform 값은 건드리지 않는다(가운데 정렬 토스트 등 그대로). */
+@media (hover: none) {
+  .fixed, [style*="position: fixed"], [style*="position:fixed"] { will-change: transform; }
+}

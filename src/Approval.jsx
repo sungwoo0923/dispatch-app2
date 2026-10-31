@@ -103,6 +103,15 @@ function Stamp({ step }) {
 const PaperCompact = React.createContext(false);
 function Cell({ label, children, wide, last }) {
   const c = React.useContext(PaperCompact);
+  if (c) {
+    // 휴대폰 — 항목 이름은 위 띠(한 줄), 내용은 그 아래 전체 폭
+    return (
+      <div className={`${last ? "" : "border-b"} border-[#0F1A30]/60`}>
+        <div className="bg-[#EEF1F6] border-b border-[#0F1A30]/30 px-2.5 py-1.5 text-[12.5px] font-black text-[#0F1A30] whitespace-nowrap overflow-hidden text-ellipsis">{label}</div>
+        <div className="px-2.5 py-2 text-[13.5px] text-[#0F1A30] whitespace-pre-wrap break-words min-h-[34px]">{children}</div>
+      </div>
+    );
+  }
   return (
     <div className={`flex ${last ? "" : "border-b"} border-[#0F1A30]/60`}>
       <div className={`${c ? "w-[84px] px-2.5 text-[13px]" : "w-[118px] px-3 text-[14px]"} shrink-0 bg-[#EEF1F6] border-r border-[#0F1A30]/60 py-2.5 font-black text-[#0F1A30] flex items-center break-keep`}>{label}</div>
@@ -724,7 +733,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
       <div className="rounded-2xl bg-[#E9EDF3] p-5 overflow-auto">
         <div className="sticky top-0">
           <div className="flex items-center justify-between mb-3 px-1">
-            <span className="text-[13px] font-extrabold tracking-[0.2em] text-[#5A6A85]" style={{ fontFamily: MONO }}>LIVE PREVIEW</span>
+            <span className="text-[13px] font-extrabold tracking-[0.2em] text-[#5A6A85] whitespace-nowrap" style={{ fontFamily: MONO }}>LIVE PREVIEW</span>
             <span className="text-[13px] font-bold text-[#5B6B85]">입력하는 대로 문서가 바로 만들어집니다</span>
           </div>
           <FitPaper><ApprovalPaper form={form} data={data} title={finalTitle} line={line.map((s, i) => ({ ...s, status: i === 0 ? "pending" : "wait" }))} cc={cc} drafter={me} createdMs={Date.now()} staff={staff} /></FitPaper>

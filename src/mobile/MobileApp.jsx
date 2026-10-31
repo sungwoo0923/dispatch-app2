@@ -15974,7 +15974,7 @@ const pickDrop = (c) => {
       {/* 배차방식은 화주사 오더라도 운송사가 항상 수정할 수 있어야 하므로 잠금 fieldset 밖에 둔다 */}
       <div className="border-t border-gray-100">
         <RowLabelInput
-          label={<>지급/배차방식 <span className="text-red-500">*</span></>}
+          label={<span className="whitespace-nowrap tracking-tight">지급/배차 <span className="text-red-500">*</span></span>}
           input={
             <div className="flex flex-wrap gap-1.5">
               <fieldset disabled={isLockedShipperEdit} style={{ display: "contents" }}>

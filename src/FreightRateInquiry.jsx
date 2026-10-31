@@ -1073,8 +1073,8 @@ function NationalFareTab() {
                   <div className="w-full flex justify-center mb-1.5 overflow-hidden" style={{height:30}}>
                     <VehicleIconSvg id={v.id} sel={vehicle===v.id}/>
                   </div>
-                  <span className={`text-[11.5px] font-extrabold text-center leading-tight ${vehicle===v.id?"text-white":"text-[#3A4A66]"}`}>
-                    {v.name.replace("(광폭)","(광)").replace("(합짐)","+")}
+                  <span className={`text-[11px] md:text-[11.5px] font-extrabold text-center leading-tight whitespace-nowrap tracking-tight ${vehicle===v.id?"text-white":"text-[#3A4A66]"}`}>
+                    {v.name.replace("(광폭)","(광)").replace("(합짐)","+").replace("라보/다마스","다마스")}
                   </span>
                 </button>
               ))}
@@ -1315,11 +1315,11 @@ function NationalFareTab() {
         <div className="flex-1 min-h-0" style={{backgroundImage:"linear-gradient(rgba(143,176,240,0.07) 1px,transparent 1px),linear-gradient(90deg,rgba(143,176,240,0.07) 1px,transparent 1px)",backgroundSize:"24px 24px"}}>
           <KoreaMap fromP={fromP} toP={toP} viaKey={activeViaProvs.map(v=>v.prov).join("|")} aPath={aPath} onPick={onPickProv}/>
         </div>
-        <div className="px-5 py-2.5 border-t border-white/[0.08] flex items-center gap-4 shrink-0 text-[11px] font-bold text-white/55">
+        <div className="px-4 md:px-5 py-2.5 border-t border-white/[0.08] flex items-center gap-3 md:gap-4 shrink-0 text-[11px] font-bold text-white/55 whitespace-nowrap overflow-hidden">
           <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px] bg-gradient-to-br from-[#6E95E8] to-[#2D4C82] ring-1 ring-white/40"/>출발</span>
           <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px] bg-gradient-to-br from-[#E6EEFC] to-[#8FB0F0]"/>도착</span>
           <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px] bg-[#2D4C82]"/>경유</span>
-          <span className="ml-auto text-white/35">지역 클릭 또는 직접 입력 → 운임 확인</span>
+          <span className="ml-auto text-white/35 truncate min-w-0">지역 클릭 또는 직접 입력 → 운임 확인</span>
         </div>
       </div>
     </div>

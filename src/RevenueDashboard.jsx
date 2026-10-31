@@ -35,9 +35,9 @@ function Tile({ code, label, value, unit, foot, dark }) {
       border: dark ? "1px solid #0F1A30" : "1px solid #E3E8F0",
       boxShadow: dark ? "0 10px 24px rgba(15,26,48,.25)" : "0 1px 2px rgba(16,24,40,.04), 0 8px 20px rgba(16,24,40,.05)",
     }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "2px 8px", flexWrap: "wrap" }}>
         <span style={{ fontSize: 14, fontWeight: 800, color: dark ? "rgba(255,255,255,.82)" : "#4b5563", whiteSpace: "nowrap" }}>{label}</span>
-        <span style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.16em", color: dark ? "rgba(143,176,240,.9)" : "#94A3B8" }}>{code}</span>
+        <span style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.16em", color: dark ? "rgba(143,176,240,.9)" : "#94A3B8", whiteSpace: "nowrap" }}>{code}</span>
       </div>
       <div style={{ marginTop: 9, display: "flex", alignItems: "baseline", gap: 5 }}>
         <span style={{ fontFamily: MONO, fontSize: 27, fontWeight: 800, color: dark ? "#fff" : "#0F1A30", letterSpacing: "-0.02em", whiteSpace: "nowrap" }}>{value}</span>
@@ -54,7 +54,7 @@ export function RvCard({ code, title, right, children, style, bodyStyle }) {
       <div style={{ padding: "12px 18px", background: "#F7F9FC", borderBottom: "1px solid #E8EDF4", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", rowGap: 6 }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 9, minWidth: 0 }}>
           <span style={{ width: 7, height: 7, borderRadius: 2, background: NAVY, transform: "rotate(45deg)" }} />
-          {code && <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#94A3B8" }}>{code}</span>}
+          {code && <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#94A3B8", whiteSpace: "nowrap" }}>{code}</span>}
           <span style={{ fontSize: 16.5, fontWeight: 800, color: "#0F1A30", whiteSpace: "nowrap" }}>{title}</span>
         </span>
         {right}
