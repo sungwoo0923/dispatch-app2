@@ -5137,7 +5137,7 @@ function AttendanceTab({ drivers }) {
             )}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 24, marginTop: 12, paddingTop: 12, borderTop: "1px solid #f0f2f5" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "10px 22px", marginTop: 12, paddingTop: 12, borderTop: "1px solid #f0f2f5" }}>
           {[
             { label: "출근", val: attendance.length, color: NAVY },
             { label: "미출근", val: Math.max(0, drivers.length - attendance.length), color: attendance.length < drivers.length ? "#dc2626" : "#374151" },
@@ -5146,7 +5146,7 @@ function AttendanceTab({ drivers }) {
             { label: "전체 등록", val: drivers.length, color: "#6b7280" },
           ].map(({ label, val, color }) => (
             <div key={label}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "#9ca3af", letterSpacing: ".06em", marginBottom: 3 }}>{label}</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#9ca3af", letterSpacing: ".06em", marginBottom: 3, whiteSpace: "nowrap" }}>{label}</div>
               <div style={{ fontSize: 28, fontWeight: 900, color }}>{val}</div>
             </div>
           ))}
@@ -5579,7 +5579,7 @@ function CargoCameraTab({ drivers }) {
         <div style={{ fontSize: 14, color:"#78350f", lineHeight:1.7 }}>
           Reolink Go, TP-Link Tapo LTE 카메라 등 SIM 카드 내장 IP 카메라 또는 WiFi 카메라를 권장합니다.
           Firestore 경로 <code style={{ background:"rgba(0,0,0,0.06)", padding:"1px 5px", borderRadius:4, fontSize: 13 }}>cargo_camera / {"{"} driverId {"}"}</code>에
-          <code style={{ background:"rgba(0,0,0,0.06)", padding:"1px 5px", borderRadius:4, fontSize: 13, marginLeft:4 }}>streamUrl (HLS)</code>,
+          <code style={{ background:"rgba(0,0,0,0.06)", padding:"1px 5px", borderRadius:4, fontSize: 13, marginLeft:4, whiteSpace: "nowrap" }}>streamUrl (HLS)</code>,
           <code style={{ background:"rgba(0,0,0,0.06)", padding:"1px 5px", borderRadius:4, fontSize: 13, marginLeft:4 }}>active: true</code> 필드를 등록하면 즉시 표시됩니다.
         </div>
       </div>

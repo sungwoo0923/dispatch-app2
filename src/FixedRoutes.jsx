@@ -9,6 +9,7 @@
 //   · 배정 기사·요일·시간을 정하면, 그 요일마다 배차가 자동으로 만들어진다(오늘~7일 앞까지, 같은 날 중복 없음)
 //     → 배차관리·배차현황·실시간배차현황·기사앱에 일반 오더처럼 보이고, "고정노선" 표시가 붙는다.
 //   · 휴무·공휴일·임시 중단은 날짜만 빼면 된다(건너뛸 날짜)
+import { createPortal } from "react-dom";
 import React from "react";
 import { kpConfirm, kpAlert } from "./kpDialog";
 import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
@@ -426,29 +427,31 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
           const t = routeTotals(form);
           const first = st[0] || {}; const last = st[st.length - 1] || {};
           const mid = st.slice(1, -1);
-          return (
-            <div className="fixed inset-0 bg-[#0B1428]/70 backdrop-blur-[3px] flex items-center justify-center z-[999999] p-4">
-              <div className="bg-[#F4F6FA] rounded-[26px] shadow-[0_40px_100px_rgba(0,0,0,0.45)] w-[1320px] max-w-[96vw] h-[86vh] max-h-[900px] overflow-hidden flex flex-col">
-                <div className="relative shrink-0 px-7 pt-5 pb-4 text-white overflow-hidden" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+          // ⭐ 2026-10-31 화면 최상단에(모바일 상단바 밑에 깔리지 않게) · 휴대폰은 전체 화면
+          return createPortal(
+            <div className="fixed inset-0 bg-[#0B1428]/70 backdrop-blur-[3px] flex items-center justify-center z-[999999] p-0 md:p-4">
+              <div className="bg-[#F4F6FA] md:rounded-[26px] shadow-[0_40px_100px_rgba(0,0,0,0.45)] w-full md:w-[1320px] md:max-w-[96vw] h-full md:h-[86vh] md:max-h-[900px] overflow-hidden flex flex-col">
+                <div className="relative shrink-0 px-4 md:px-7 pt-5 pb-4 text-white overflow-hidden" style={{ paddingTop: "max(env(safe-area-inset-top, 0px), 16px)", background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}
+                  >
                   <span className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
                   <div className="relative flex items-start justify-between gap-4">
                     <div className="min-w-0">
                       <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>FIXED ROUTE · CONFIRM</div>
-                      <div className="text-[24px] font-black mt-0.5 truncate">{form.name}</div>
+                      <div className="text-[20px] md:text-[24px] font-black mt-0.5 truncate">{form.name}</div>
                       <div className="flex flex-wrap gap-1.5 mt-2">
                         {[form.client, (form.days || []).join(" "), korTimeLabel(form.startTime), `${form.startDate || ""} ~ ${form.endDate || "계속"}`, form.driverName ? `${form.driverName} ${form.carNo}` : "기사 미배정", [form.tonnage, form.vehicleType].filter(Boolean).join(" ")].filter(Boolean).map((x, i) => <span key={i} className="px-2.5 py-1 rounded-lg bg-white/10 border border-white/15 text-[12.5px] font-bold">{x}</span>)}
                       </div>
                     </div>
-                    <button tabIndex={-1} type="button" onClick={() => setReview(false)} className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-[13.5px] font-black shrink-0">닫기</button>
+                    <button tabIndex={-1} type="button" onClick={() => setReview(false)} className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-[13.5px] font-black shrink-0 whitespace-nowrap">닫기</button>
                   </div>
                   <div className="relative grid grid-cols-2 md:grid-cols-4 gap-2 mt-4">
                     {[["정류지", `${st.length}곳`], ["1회 청구운임", `${won(t.client)}원`], ["1회 기사운임", `${won(t.driver)}원`], ["1회 수수료", `${won(t.client - t.driver)}원`]].map(([k, v]) => (
-                      <div key={k} className="rounded-xl bg-white/[0.07] border border-white/10 px-4 py-2"><div className="text-[11.5px] font-bold text-white/55">{k}</div><div className="text-[18px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div></div>
+                      <div key={k} className="rounded-xl bg-white/[0.07] border border-white/10 px-3 md:px-4 py-2 min-w-0"><div className="text-[11.5px] font-bold text-white/55">{k}</div><div className="text-[18px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div></div>
                     ))}
                   </div>
                 </div>
-                <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-4 p-5">
-                  <div className="min-h-0 overflow-y-auto space-y-3 pr-1">
+                <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden grid grid-cols-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] content-start lg:content-stretch gap-4 p-3 md:p-5">
+                  <div className="lg:min-h-0 lg:overflow-y-auto space-y-3 lg:pr-1">
                     <div className="bg-white rounded-2xl border border-[#E3E8F0] p-4">
                       <div className="text-[13.5px] font-black text-[#0F1A30] mb-3">이동 경로</div>
                       {st.map((x, i) => (
@@ -473,7 +476,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                       <div>· {form.autoDispatch !== false ? "정해진 요일마다 오늘부터 7일 앞까지 배차가 자동으로 생깁니다" : "자동 등록 꺼짐 — [배차 미리 만들기]로 만들 수 있습니다"}{(form.skipDates || []).length ? ` · 쉬는 날 ${form.skipDates.length}일 제외` : ""}</div>
                     </div>
                   </div>
-                  <div className="min-h-[300px] bg-white rounded-2xl border border-[#E3E8F0] overflow-hidden flex flex-col">
+                  <div className="h-[320px] lg:h-auto min-h-[300px] bg-white rounded-2xl border border-[#E3E8F0] overflow-hidden flex flex-col">
                     {first.addr && last.addr ? (
                       <RouteMapModal inline pickupAddr={first.addr} dropAddr={last.addr} pickupName={first.name} dropName={last.name}
                         viaPickup={mid.filter((x) => x.type === "상차").map((x) => x.addr).filter(Boolean)} viaDrop={mid.filter((x) => x.type !== "상차").map((x) => x.addr).filter(Boolean)}
@@ -481,14 +484,14 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                     ) : <div className="flex-1 flex items-center justify-center text-[13.5px] font-bold text-[#9AA9C3]">상차·하차지 주소가 있어야 지도를 볼 수 있습니다</div>}
                   </div>
                 </div>
-                <div className="shrink-0 px-6 py-4 bg-white border-t border-[#E3E8F0] flex items-center gap-2">
-                  <span className="text-[13.5px] font-bold text-[#5B6B85]">내용을 확인하고 최종 저장하세요</span>
-                  <button tabIndex={-1} type="button" onClick={() => setReview(false)} className="ml-auto h-12 px-5 rounded-xl border border-[#DCE3EE] text-[14.5px] font-black text-[#1B2B4B]">수정하기</button>
-                  <button tabIndex={-1} type="button" onClick={save} disabled={busy} className="h-12 px-7 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50">{busy ? "저장 중…" : "최종 저장"}</button>
+                <div className="shrink-0 px-4 md:px-6 py-3 md:py-4 bg-white border-t border-[#E3E8F0] flex items-center gap-2" style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 12px)" }}>
+                  <span className="hidden md:inline text-[13.5px] font-bold text-[#5B6B85]">내용을 확인하고 최종 저장하세요</span>
+                  <button tabIndex={-1} type="button" onClick={() => setReview(false)} className="md:ml-auto flex-1 md:flex-none h-12 px-5 rounded-xl border border-[#DCE3EE] text-[14.5px] font-black text-[#1B2B4B] whitespace-nowrap">수정하기</button>
+                  <button tabIndex={-1} type="button" onClick={save} disabled={busy} className="flex-[2] md:flex-none h-12 px-7 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50 whitespace-nowrap">{busy ? "저장 중…" : "최종 저장"}</button>
                 </div>
               </div>
             </div>
-          );
+          , document.body);
         })()}
         {newClient && <NewClientModal data={newClient} setData={setNewClient} busy={busy} onClose={() => setNewClient(null)} onSave={saveNewClient} />}
       </div>
