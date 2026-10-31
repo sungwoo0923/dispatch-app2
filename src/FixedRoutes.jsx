@@ -12,7 +12,7 @@
 import { createPortal } from "react-dom";
 import React from "react";
 import { kpConfirm, kpAlert } from "./kpDialog";
-import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, setDoc, getDoc, serverTimestamp, arrayUnion } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import CustomDatePicker from "./CustomDatePicker";
 import { CustomSelect } from "./CustomSelect";
@@ -174,6 +174,18 @@ export async function ensureFixedRouteOrders(routes, days = 7) {
       const ref = doc(db, "orders", o._id);
       try {
         const ex = await getDoc(ref);
+        if (!ex.exists()) {
+          // ⭐ 2026-10-31 배차내역에서 지운 고정노선 오더는 다시 만들지 않는다(삭제 기록이 있으면) —
+          //  예전엔 앱을 열 때마다 "없으면 만들기"라 지워도 다시 생겼다. 그 날짜는 노선의 쉬는 날로 남겨 고정노선 화면에도 보이게.
+          const del = await getDoc(doc(db, "deletedOrders", `orders_${o._id}`)).catch(() => null);
+          if (del?.exists()) {
+            if (!(r.skipDates || []).includes(date)) {
+              await updateDoc(doc(db, "fixedRoutes", r.id), { skipDates: arrayUnion(date) }).catch(() => {});
+              r.skipDates = [...(r.skipDates || []), date];
+            }
+            continue;
+          }
+        }
         if (ex.exists()) {
           // 자동 수락 노선인데 서버가 "승인대기"로 바꿔 둔 예전 오더는 바로잡는다
           const d = ex.data() || {};
@@ -189,6 +201,35 @@ export async function ensureFixedRouteOrders(routes, days = 7) {
   }
   return made;
 }
+// 노선이 바뀌었을 때 — 오늘 이후 아직 운행 전이고, 배차현황에서 따로 고치지 않은(예전 노선으로 만든 값 그대로인) 오더만 새 노선 값으로
+const ROUTE_KEYS = ["상차지명", "상차지주소", "하차지명", "하차지주소", "상차시간", "하차시간", "청구운임", "기사운임", "차량번호", "차량톤수", "차량종류", "화물내용", "거래처명"];
+const ROUTE_WRITE = [...ROUTE_KEYS, "상차지담당자번호", "하차지담당자번호", "경유지_상차", "경유상차목록", "경유지_하차", "경유하차목록", "톤수", "화물타입", "수수료", "구간운임", "이름", "전화번호", "메모", "고정노선명"];
+export async function syncFutureRouteOrders(oldR, newR, days = 7) {
+  let n = 0;
+  for (let i = 0; i <= days; i++) {
+    const date = kst(i);
+    const ref = doc(db, "orders", `fr_${newR.id}_${date}`);
+    try {
+      const ex = await getDoc(ref);
+      if (!ex.exists()) continue;
+      const d = ex.data() || {};
+      if (d.배차상태 === "배차취소" || d.상차완료 || d.상차완료일시 || d.상차지도착일시 || d.하차완료 || d.운송완료) continue; // 이미 운행 중·끝남
+      const before = routeOrderFor(oldR, date);
+      const after = routeOrderFor(newR, date);
+      if (!before || !after) continue;
+      const untouched = ROUTE_KEYS.every((k) => String(d[k] ?? "") === String(before[k] ?? ""));
+      if (!untouched) continue; // 배차현황에서 그날만 따로 바꾼 오더는 그대로 둔다
+      const patch = {};
+      ROUTE_WRITE.forEach((k) => { if (after[k] !== undefined) patch[k] = after[k]; });
+      if (String(after.차량번호 || "") !== String(d.차량번호 || "")) Object.assign(patch, { 배차상태: after.배차상태, 기사확인상태: after.기사확인상태 || "", ...(after.자동수락 ? { 자동수락: after.자동수락 } : {}) });
+      patch._lastModified = Date.now();
+      await updateDoc(ref, patch);
+      n += 1;
+    } catch { /* 다음에 */ }
+  }
+  return n;
+}
+
 // 앱 어디서든(배차관리 첫 로딩 뒤) 우리 회사 노선의 배차를 미리 만들어 둔다
 export function useFixedRouteAutoDispatch(company) {
   React.useEffect(() => {
@@ -257,9 +298,12 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
       await Promise.all(data.stops.filter((st) => st.name.trim() && !places.some((p) => norm(p.업체명) === norm(st.name))).map((st) =>
         setDoc(doc(db, "places", placeKey(st.name) || `fr_${Date.now()}`), { 업체명: st.name.trim(), 주소: st.addr || "", 담당자번호: st.contact || "", 메모: st.memo || "", companyName: co }, { merge: true }).catch(() => {})));
       setForm(null); setReview(false); setSelId(id);
+      // ⭐ 노선을 고치면 이미 만들어 둔 앞으로의 오더 중 "배차현황에서 따로 고치지 않은 것"에 같이 반영
+      const prev = form.id ? routes.find((x) => x.id === form.id) : null;
+      const synced = prev ? await syncFutureRouteOrders(prev, { ...data, id }) : 0;
       genLock.at = 0;
       const n = await ensureFixedRouteOrders([{ ...data, id }]);
-      flash(n ? `저장했습니다 · 배차 ${n}건을 미리 만들었습니다` : "저장했습니다");
+      flash([n ? `배차 ${n}건을 미리 만들었습니다` : "", synced ? `앞으로의 배차 ${synced}건에 수정 내용을 반영했습니다` : ""].filter(Boolean).join(" · ") || "저장했습니다");
     } catch (e) { kpAlert(`저장 실패: ${e?.message || e}`); } finally { setBusy(false); }
   };
   const saveNewClient = async () => {
