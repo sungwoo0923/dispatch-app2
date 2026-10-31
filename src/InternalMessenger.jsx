@@ -1142,7 +1142,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
 
       {/* 메신저 패널 */}
       {open && (
-        <div style={{
+        <div data-ro-allow style={{
           position: "fixed", bottom: 24, right: 92,
           width: panelW, height: panelH, zIndex: 99997, borderRadius: 22, boxShadow: "0 24px 60px rgba(15,26,48,0.35)",
         }}>

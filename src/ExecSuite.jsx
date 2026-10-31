@@ -678,8 +678,13 @@ export function useExecSchedules(company) {
   return useCompanyQuery("execSchedules", company) || [];
 }
 const daysOf = (e) => { const out = []; for (let x = e.date, i = 0; x && x <= (e.endDate || e.date) && i < 40; x = addDay(x, 1), i += 1) out.push(x); return out; };
+// ⭐ 2026-11-01 임원 일정은 임원 + 인사 쪽(인사관리자·통합인사·인사팀 직원) 모두 등록
+export const canWriteExecSchedule = ({ dept, role, team } = {}) => dept === "exec" || dept === "hr" || ["hrManager", "hrAcct", "totalMaster"].includes(role) || team === "인사팀";
 export function ExecScheduleBoard({ company, me = {}, canWrite = false }) {
   const list = useExecSchedules(company);
+  const { staff: allStaff } = useStaff(company);
+  // 임원(부서 임원·대표/전무/이사 등) — 인사팀이 대신 등록할 때 누구 일정인지 고른다
+  const execPeople = allStaff.filter((u) => u.team === "임원" || /대표|사장|전무|상무|이사/.test(String(u.position || "")));
   const today = kstToday();
   const [ym, setYm] = React.useState(today.slice(0, 7));
   const [pick, setPick] = React.useState(today);
@@ -695,15 +700,19 @@ export function ExecScheduleBoard({ company, me = {}, canWrite = false }) {
   const cells = Array.from({ length: Math.ceil((startDow + dim) / 7) * 7 }, (_, i) => { const n = i - startDow + 1; return n >= 1 && n <= dim ? `${ym}-${String(n).padStart(2, "0")}` : null; });
   const move = (n) => { const d = new Date(`${ym}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + n); setYm(d.toISOString().slice(0, 7)); };
   const upcoming = shown.filter((e) => (e.endDate || e.date) >= today).sort((a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || ""))).slice(0, 8);
-  const blank = (d) => ({ title: "", kind: "회의", date: d || pick, endDate: d || pick, start: "10:00", end: "11:00", place: "", memo: "" });
+  const meIsExec = execPeople.some((u) => u.id === me.uid);
+  const blank = (d) => ({ title: "", kind: "회의", date: d || pick, endDate: d || pick, start: "10:00", end: "11:00", place: "", memo: "", ownerUid: meIsExec ? me.uid : (execPeople[0]?.id || "") });
   const save = async () => {
     const e = edit; if (!e.title.trim()) return alert("일정 제목을 입력해 주세요.");
     setBusy(true);
     try {
       const data = { companyName: company, title: e.title.trim(), kind: e.kind, date: e.date, endDate: e.endDate && e.endDate >= e.date ? e.endDate : e.date, start: e.start || "", end: e.end || "", place: e.place.trim(), memo: e.memo.trim() };
       const { doc: fdoc, addDoc, updateDoc, serverTimestamp } = await import("firebase/firestore");
-      if (e.id) await updateDoc(fdoc(db, "execSchedules", e.id), { ...data, updatedAt: serverTimestamp() });
-      else await addDoc(collection(db, "execSchedules"), { ...data, uid: me.uid || "", name: me.name || "", position: me.position || "", createdAt: serverTimestamp() });
+      const owner = execPeople.find((u) => u.id === e.ownerUid);
+      const who = owner ? { uid: owner.id, name: personName(owner) || owner.name || "", position: owner.position || "" } : (e.id ? {} : { uid: me.uid || "", name: me.name || "", position: me.position || "" });
+      const byMe = owner && owner.id !== me.uid ? { writerUid: me.uid || "", writerName: me.name || "" } : {};
+      if (e.id) await updateDoc(fdoc(db, "execSchedules", e.id), { ...data, ...who, ...byMe, updatedAt: serverTimestamp() });
+      else await addDoc(collection(db, "execSchedules"), { ...data, ...who, ...byMe, createdAt: serverTimestamp() });
       setEdit(null);
     } finally { setBusy(false); }
   };
@@ -784,6 +793,11 @@ export function ExecScheduleBoard({ company, me = {}, canWrite = false }) {
               <button type="button" onClick={() => setEdit(null)} className="w-10 h-10 rounded-xl bg-white/10">✕</button>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              {execPeople.length > 0 && (
+                <div><div className="text-[13px] font-black text-white/70 mb-1.5">누구 일정인가요 <span className="text-white/40 font-bold">(인사팀이 대신 등록 가능)</span></div>
+                  <div className="flex flex-wrap gap-1.5">{execPeople.map((u) => <button key={u.id} type="button" onClick={() => setEdit((p) => ({ ...p, ownerUid: u.id }))} className={`h-10 px-4 rounded-xl text-[14px] font-black ${(edit.ownerUid || (edit.uid && edit.uid === u.id ? u.id : "")) === u.id || (!edit.ownerUid && edit.uid === u.id) ? "text-[#1A1405]" : "bg-white/[0.06] border border-white/10 text-white/80"}`} style={(edit.ownerUid === u.id || (!edit.ownerUid && edit.uid === u.id)) ? { background: `linear-gradient(180deg,#F1DFB4,${GOLD})` } : undefined}>{personName(u) || u.name} <span className="text-[12px] opacity-70">{u.position}</span></button>)}</div>
+                </div>
+              )}
               <div><div className="text-[13px] font-black text-white/70 mb-1.5">제목</div><input value={edit.title} onChange={(e) => setEdit((p) => ({ ...p, title: e.target.value }))} className={inpD} placeholder="예: ○○물류 대표 미팅" /></div>
               <div><div className="text-[13px] font-black text-white/70 mb-1.5">구분</div><div className="flex flex-wrap gap-1.5">{EXEC_KINDS.map((k) => <button key={k} type="button" onClick={() => setEdit((p) => ({ ...p, kind: k }))} className={`h-10 px-4 rounded-full text-[14px] font-black border ${edit.kind === k ? "text-[#1A1405] border-transparent" : "text-white/70 border-white/15"}`} style={edit.kind === k ? { background: "linear-gradient(180deg,#F3E3BC,#D7BC82)" } : undefined}>{k}</button>)}</div></div>
               <div className="grid grid-cols-2 gap-2">

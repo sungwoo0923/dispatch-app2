@@ -402,11 +402,17 @@ export function CompanyRules({ company, canEdit = false }) {
 export default function HrHub({ company, canManage, renderRecord, renderAttendance, me = {} }) {
   const [tab, setTab] = React.useState(() => { try { const v = sessionStorage.getItem("kpHrTab"); sessionStorage.removeItem("kpHrTab"); return v || "record"; } catch { return "record"; } });
   const [focusUid, setFocusUid] = React.useState(null);
+  // ⭐ 2026-11-01 직원이 직접 작성·제출한 이력서 중 인사팀이 아직 안 본 수 → [인사 기록] 숫자
+  const [newResumes, setNewResumes] = React.useState(0);
+  React.useEffect(() => {
+    if (!company) return undefined;
+    return onSnapshot(query(collection(db, "hrResumes"), where("companyName", "==", company), where("hrSeen", "==", false)), (sn) => setNewResumes(sn.size), () => setNewResumes(0));
+  }, [company]);
   return (
     <KpSubNav code="HUMAN RESOURCES" title="인사관리부" icon="idcard" active={tab} onSelect={setTab}
       groups={[
         { label: "인사", items: [
-          { key: "record", label: "인사 기록", en: "RECORDS", icon: "idcard" },
+          { key: "record", label: "인사 기록", en: "RECORDS", icon: "idcard", badge: newResumes },
           { key: "edit", label: "직원 정보 · 퇴사", en: "STAFF BOARD", icon: "users" },
           { key: "register", label: "직원 등록", en: "REGISTER", icon: "user" },
         ] },

@@ -21,7 +21,7 @@ import DriverDocsReview from "../DriverDocsReview";
 import { AssetManager } from "../OfficeBooks";
 import { FundsWorkspace, FundsBoard } from "../FundsBoard";
 import { LeaveLedger, OnboardingBoard, CertIssuer } from "../HrTools";
-import { ExecApprovals, TeamSchedule, ExecScheduleBoard } from "../ExecSuite";
+import { ExecApprovals, TeamSchedule, ExecScheduleBoard, canWriteExecSchedule } from "../ExecSuite";
 import HrHub, { CompanyRules } from "../HrHub";
 import AttendanceBoard from "../AttendanceBoard";
 import { useMyProfile, personName } from "../userNames";
@@ -181,9 +181,10 @@ export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], 
       renderRecord={(focusUid) => <React.Suspense fallback={<Loading />}><PcHrPage userCompany={userCompany} role={role} userId={me?.uid || ""} focusUid={focusUid} /></React.Suspense>}
       renderAttendance={() => <AttendanceBoard userCompany={userCompany} role={role} user={me} />} /></div>;
     else if (k === "cashbook") body = <div className="kp-m-pc"><FundsWorkspace company={userCompany} isViewer={isViewer} /></div>;
+    else if (k === "myresume") body = <div className="kp-m-pc"><React.Suspense fallback={<Loading />}><PcHrPage userCompany={userCompany} role={role} userId={me?.uid || ""} selfOnly /></React.Suspense></div>;
     else if (k === "rules") body = wrap(<CompanyRules company={userCompany} canEdit={role === "hrManager" || role === "totalMaster"} />);
     else if (k === "funds") body = wrap(<FundsBoard company={userCompany} canEdit={false} />);
-    else if (k === "execsched") body = <div className="px-2 py-2"><ExecScheduleBoard company={userCompany} me={me} canWrite={deptMode === "exec"} /></div>;
+    else if (k === "execsched") body = <div className="px-2 py-2"><ExecScheduleBoard company={userCompany} me={me} canWrite={canWriteExecSchedule({ dept: deptMode, role, team: me?.team })} /></div>;
     else if (k === "assets") body = wrap(<AssetManager company={userCompany} isViewer={isViewer} />);
     else if (k === "leave") body = wrap(<LeaveLedger company={userCompany} isViewer={isViewer} />);
     else if (k === "onboarding") body = wrap(<OnboardingBoard company={userCompany} isViewer={isViewer} />);

@@ -11,7 +11,7 @@ export const DOCK_BG = "linear-gradient(145deg, #0B1428 0%, #1B2B4B 55%, #2D4C82
 export function FabButton({ bottom = 24, right = 24, active = false, title, onClick, badge = 0, children, z = 99998 }) {
   const [hover, setHover] = React.useState(false);
   return (
-    <div style={{ position: "fixed", bottom, right, zIndex: z }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+    <div data-ro-allow style={{ position: "fixed", bottom, right, zIndex: z }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       {hover && !active && (
         <span style={{ position: "absolute", right: 66, top: "50%", transform: "translateY(-50%)", whiteSpace: "nowrap", background: "#0F1A30", color: "#fff", fontSize: 12.5, fontWeight: 800, padding: "6px 10px", borderRadius: 10, boxShadow: "0 8px 20px rgba(15,26,48,0.3)", letterSpacing: "0.02em" }}>{title}</span>
       )}
