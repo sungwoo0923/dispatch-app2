@@ -221,5 +221,7 @@ table tbody tr:nth-child(odd) td {
    팝업 윗부분이 상단바 밑에 깔리던 문제. 팝업도 같은 방식(합성 레이어)으로 그려지게 해 z-index 순서대로 보이게 한다.
    transform 값은 건드리지 않는다(가운데 정렬 토스트 등 그대로). */
 @media (hover: none) {
-  .fixed, [style*="position: fixed"], [style*="position:fixed"] { will-change: transform; }
+  /* ⚠ body는 제외 — 메뉴를 열 때 스크롤 잠금으로 body가 position:fixed가 되는데, 여기에 will-change가 붙으면
+     body가 화면 대신 "기준 틀"이 되어 메뉴 서랍이 페이지 길이만큼 길어지고 맨 아래(로그아웃·업데이트)가 화면 밖으로 밀렸다. */
+  .fixed:not(body), [style*="position: fixed"]:not(body), [style*="position:fixed"]:not(body) { will-change: transform; }
 }
