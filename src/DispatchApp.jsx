@@ -3102,8 +3102,8 @@ const KP_PAGE_META = {
   관리센터: { en: "CONTROL CENTER", desc: "가입사 사용량·접속·청구 관제", icon: "M12 3l8 4v6c0 4-3.5 7-8 8-4.5-1-8-4-8-8V7z" },
   // 🏢 부서 모드(경리·인사) 메뉴
   회계관리: { en: "ACCOUNTING", desc: "미수금·미지급금·부가세 — 연간 회계 장부", icon: "M4 4h16v16H4zM8 8h8M8 12h8M8 16h5" },
-  인사관리: { en: "HUMAN RESOURCES", desc: "이력서·인사발령·근태/근속 — 직원 인사 기록", icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 4-6 8-6s8 2 8 6" },
-  근태관리: { en: "ATTENDANCE", desc: "출근기록부 — 출퇴근·휴가·외근 현황", icon: "M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z" },
+  인사관리부: { en: "HUMAN RESOURCES", desc: "이력서·인사발령·근태/근속 — 직원 인사 기록", icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 4-6 8-6s8 2 8 6" },
+  출근기록부: { en: "ATTENDANCE", desc: "출퇴근·지각·휴가·외근 현황", icon: "M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z" },
   수입지출: { en: "CASH BOOK", desc: "수입·지출 장부 · 증빙 · 고정비", icon: "M3 6h18v12H3zM3 10h18M16 15h2" },
   비품관리: { en: "ASSETS", desc: "사무 비품·소모품·IT 자산 · 입출고", icon: "M3 7l9-4 9 4-9 4zM3 7v10l9 4 9-4V7M12 11v10" },
   연차관리: { en: "ANNUAL LEAVE", desc: "입사일 기준 발생·사용·잔여 연차", icon: "M4 5h16v15H4zM4 9h16M8 3v4M16 3v4" },
@@ -3165,8 +3165,10 @@ const KP_SIDE_GROUPS = [
 ];
 // 🏢 부서 모드 메뉴 — 경리·회계(test) / 인사관리자(hrManager)
 const DEPT_MENUS = {
-  acct: ["HOME", "전자결재", "정산관리", "매출관리", "회계관리", "수입지출", "비품관리", "기사관리", "기사서류", "직원관리", "회사관리"],
-  hr: ["HOME", "전자결재", "인사관리", "근태관리", "연차관리", "입퇴사관리", "증명서발급", "직원관리", "기사관리", "기사서류", "회사관리"],
+  // 경리: 돈(정산·회계·자금) + 확인용 배차현황 — 배차관리·실시간배차현황은 빼고
+  acct: ["HOME", "전자결재", "배차현황", "정산관리", "매출관리", "회계관리", "수입지출", "비품관리", "직원관리", "기사관리", "기사서류", "관리자메뉴", "회사관리"],
+  // 인사: 사람(인사관리부·출근기록부를 회사관리에서 상단으로) — 매출·정산은 빼고
+  hr: ["HOME", "전자결재", "인사관리부", "출근기록부", "연차관리", "입퇴사관리", "증명서발급", "직원관리", "기사관리", "기사서류", "관리자메뉴", "회사관리"],
   // 👔 임원(대표·전무·이사) — 보고·결재·매출 중심
   exec: ["HOME", "결재함", "직원일정", "매출관리", "인사이트", "실시간배차현황", "관리자메뉴", "회사관리"],
 };
@@ -3174,15 +3176,15 @@ const DEPT_MENUS = {
 const DEPT_SIDE_GROUPS = {
   acct: [
     { label: "경리 · 회계", items: ["HOME", "전자결재", "정산관리", "매출관리", "회계관리"] },
-    { label: "살림", items: ["수입지출", "비품관리"] },
-    { label: "사람", items: ["직원관리", "기사관리", "기사서류"] },
-    { label: "공통", items: ["회사관리"] },
+    { label: "자금 · 총무", items: ["수입지출", "비품관리"] },
+    { label: "직원 · 기사", items: ["직원관리", "기사관리", "기사서류"] },
+    { label: "확인 · 관리", items: ["배차현황", "관리자메뉴", "회사관리"] },
   ],
   hr: [
-    { label: "인사", items: ["HOME", "전자결재", "인사관리", "근태관리", "연차관리"] },
+    { label: "인사", items: ["HOME", "전자결재", "인사관리부", "출근기록부", "연차관리"] },
     { label: "입·퇴사", items: ["입퇴사관리", "증명서발급", "직원관리"] },
     { label: "기사", items: ["기사관리", "기사서류"] },
-    { label: "공통", items: ["회사관리"] },
+    { label: "관리", items: ["관리자메뉴", "회사관리"] },
   ],
   exec: [
     { label: "경영", items: ["HOME", "결재함", "매출관리", "인사이트"] },
@@ -3194,7 +3196,7 @@ const KP_SIDE_ICONS = {
   HOME: "dashboard", 배차관리: "truck", 실시간배차현황: "bell", 배차현황: "sheet", 단가표: "money", 운임조회: "globe",
   기사관리: "user", 거래처관리: "building", 지입차관리: "link", 매출관리: "check", 정산관리: "inbox",
   회사관리: "idcard", 관리자메뉴: "key", 관리센터: "shield", 인사이트: "chart",
-  회계관리: "money", 인사관리: "idcard", 근태관리: "clock", 직원관리: "users", 기사서류: "file",
+  회계관리: "money", 인사관리부: "idcard", 출근기록부: "clock", 직원관리: "users", 기사서류: "file",
   수입지출: "wallet", 비품관리: "list", 연차관리: "flag", 입퇴사관리: "check", 증명서발급: "stamp",
   결재함: "stamp", 직원일정: "clock", 전자결재: "stamp",
 };
@@ -7611,7 +7613,7 @@ const newVer = useNewVersion(); // ⭐ 새 버전이 배포되면 버전 표시 
   const customRole = findCustomRole(customRoles, role);
   // 👔 2026-10-31 임원(부서 임원 · 대표/전무/이사) — 로그인하면 임원 화면. 관리자 권한 임원은 [전체 메뉴]로 실무 화면도 볼 수 있다
   const myProfileDoc = useMyProfile(user?.uid);
-  const isExec = forceExec || (!customRole && role !== "totalMaster" && role !== "test" && role !== "hrManager" && isExecProfile(myProfileDoc));
+  const isExec = forceExec || ((!customRole || ["admin", "user", "viewer"].includes(role)) && role !== "totalMaster" && role !== "test" && role !== "hrManager" && isExecProfile(myProfileDoc));
   const [execFull, setExecFull] = React.useState(() => { try { return localStorage.getItem("kpExecFull") === "1"; } catch { return false; } });
   const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setMenu("HOME"); };
   const deptMode = deptModeOf(role, customRole) || (isExec && !execFull ? "exec" : null);
@@ -7766,7 +7768,7 @@ const newVer = useNewVersion(); // ⭐ 새 버전이 배포되면 버전 표시 
     if (["결재함", "직원일정"].includes(m)) return deptMode === "exec" ? "ok" : "hidden";
     if (m === "전자결재") return "hidden"; // 일반 화면은 홈 › 전자결재
     // ⭐ 2026-10-31 경리·인사 부서 메뉴는 그 부서 권한에서만(관리자·마스터 화면은 원래대로)
-    if (["회계관리", "인사관리", "근태관리", "직원관리", "기사서류", "수입지출", "비품관리", "연차관리", "입퇴사관리", "증명서발급"].includes(m)) return "hidden";
+    if (["회계관리", "인사관리부", "출근기록부", "직원관리", "기사서류", "수입지출", "비품관리", "연차관리", "입퇴사관리", "증명서발급"].includes(m)) return "hidden";
     if (customRole && getMenuAccess(customRoles, role, m) === "hidden") return "hidden";
     const isBlocked = !customRole && (role === "user" || role === "test" || isViewer) && blockedMenus.includes(m);
     if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster" && !isViewer) return "hidden";
@@ -8465,8 +8467,8 @@ return (
         {menu === "회계관리" && menuState("회계관리") === "ok" && <AccountingDashboard dispatchData={dispatchDataFiltered} fixedRows={fixedRows} clients={clients} isViewer={isViewer} />}
         {menu === "수입지출" && menuState("수입지출") === "ok" && <CashBook company={deptCompany} isViewer={isViewer} />}
         {menu === "비품관리" && menuState("비품관리") === "ok" && <AssetManager company={deptCompany} isViewer={isViewer} />}
-        {menu === "인사관리" && menuState("인사관리") === "ok" && <HRManagementPage userCompany={deptCompany} role={role} userId={auth?.currentUser?.uid || ""} />}
-        {menu === "근태관리" && menuState("근태관리") === "ok" && <AttendanceBoard userCompany={deptCompany} role={role} user={user} />}
+        {menu === "인사관리부" && menuState("인사관리부") === "ok" && <HRManagementPage userCompany={deptCompany} role={role} userId={auth?.currentUser?.uid || ""} />}
+        {menu === "출근기록부" && menuState("출근기록부") === "ok" && <AttendanceBoard userCompany={deptCompany} role={role} user={user} />}
         {menu === "연차관리" && menuState("연차관리") === "ok" && <LeaveLedger company={deptCompany} isViewer={isViewer} />}
         {menu === "입퇴사관리" && menuState("입퇴사관리") === "ok" && <OnboardingBoard company={deptCompany} isViewer={isViewer} />}
         {menu === "증명서발급" && menuState("증명서발급") === "ok" && <CertIssuer company={deptCompany} isViewer={isViewer} />}
@@ -8490,7 +8492,7 @@ return (
           />
         )}
 
-        {menu === "관리자메뉴" && (role === "admin" || role === "totalMaster" || isViewer) && <AdminMenu parentRole={role} parentCompany={userCompany || localStorage.getItem("userCompany") || ""} isViewer={isViewer} dispatchData={dispatchData} places={places} />}
+        {menu === "관리자메뉴" && (role === "admin" || role === "totalMaster" || isViewer || deptMode === "acct" || deptMode === "hr") && <AdminMenu parentRole={role} parentCompany={userCompany || localStorage.getItem("userCompany") || ""} isViewer={isViewer} dispatchData={dispatchData} places={places} deptMode={deptMode === "acct" || deptMode === "hr" ? deptMode : null} />}
 
         {/* ⭐ 2026-10-28 — 관리센터는 "운송사 하나"가 아니라 프로그램 전체(가입 운송사·화주사) 관제 */}
 

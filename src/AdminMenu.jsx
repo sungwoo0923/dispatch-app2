@@ -97,7 +97,7 @@ export function subscribeUsersLive(fn) {
   return () => { if (fn) usersLive.subs.delete(fn); };
 }
 
-export default function AdminMenu({ parentRole = "", parentCompany = "", isViewer = false, dispatchData = [], places = [] }) {
+export default function AdminMenu({ parentRole = "", parentCompany = "", isViewer = false, dispatchData = [], places = [], deptMode = null }) {
   const [adminTab, setAdminTab] = useState("members");
   const [sessionLogs, setSessionLogs] = useState([]);
   const [sessionLogEventFilter, setSessionLogEventFilter] = useState("all");
@@ -242,6 +242,15 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const meDoc = users.find((u) => u.id === me?.uid);
   const isCompanyMaster = !isTotalMaster && meDoc?.isMaster === true && meDoc?.role !== "shipper" && meDoc?.role !== "driver";
   const canAdmin = isTotalMaster || isCompanyMaster;
+  // ⭐ 2026-10-31 가입 승인은 관리자·경리·인사관리자부터 — 인사관리자는 인사권(승인 후 정보·권한 변경·퇴사)까지
+  const myRoleEff = meDoc?.role || myRole || parentRole;
+  const isHrMgr = !canAdmin && myRoleEff === "hrManager";
+  const canApprove = canAdmin || ["admin", "hrManager", "test"].includes(myRoleEff);
+  const canEditMember = (u) => !!u && (canAdmin || isHrMgr || (canApprove && !u.approved && u.employmentStatus !== "퇴사"));
+  const assignableRoles = (cur) => {
+    const base = canAdmin ? ROLES : isHrMgr ? ROLES.filter((r) => r !== "totalMaster") : myRoleEff === "admin" ? ["admin", "user", "test", "hrManager", "viewer"] : ["user", "test", "viewer"];
+    return cur && !base.includes(cur) ? [cur, ...base] : base;
+  };
   // ⭐ 2026-10-31 부서·직책을 바꾸면 직책 드롭다운을 부서에 맞추고(임원 → 대표·전무·이사) 권한을 추천값으로 맞춘다
   const applySuggest = (team, position) => setEditRole((r) => (r === "totalMaster" ? r : suggestRole({ team, position })));
   const onTeamChange = (t) => {
@@ -581,7 +590,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     if (isViewer) return _viewerAlert();
     if (!editName.trim()) return alert("이름을 입력하세요.");
     // ⭐ 2026-10-27 — 최고관리자 외에는 회원관리에서 본인의 이름·핸드폰번호만 고칠 수 있다(직책·부서·권한은 인사관리부 › 인사발령)
-    if (!canAdmin) {
+    if (!canEditMember(manageUser)) {
       if (me?.uid !== manageUser.id) return alert("본인 정보만 수정할 수 있습니다.");
       const mine = { name: editName.trim(), phone: editPhone.trim() };
       try {
@@ -592,8 +601,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
       return;
     }
     if (editRole === "totalMaster" && !isTotalMaster) return alert("totalMaster 권한은 부여할 수 없습니다.");
-    if (editRole === "hrManager" && !canAdmin) return alert("인사관리자 권한은 최고관리자·마스터만 부여할 수 있습니다.");
-    if (isCompanyMaster && (manageUser.companyName || DEFAULT_COMPANY) !== effectiveCompany) return alert("우리 회사 직원만 수정할 수 있습니다.");
+    if (editRole !== manageUser.role && !assignableRoles().includes(editRole)) return alert("이 권한은 지정할 수 없습니다. 마스터에게 요청해 주세요.");
+    if (!isTotalMaster && (manageUser.companyName || DEFAULT_COMPANY) !== effectiveCompany) return alert("우리 회사 직원만 수정할 수 있습니다.");
     const history = [...(manageUser.personnelHistory || [])];
     const prevPosition = manageUser.position || "";
     const nextPosition = editPosition.trim();
@@ -724,6 +733,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   // 관련 있는 것끼리 묶어 "그룹(1단 탭) 안에 하위 탭(2단 탭)" 구조로 재구성했다.
   // REQUIRES_MASTER에 있는 하위 탭은 최고관리자에게만 보인다(기존 isTotalMaster
   // 게이팅과 동일한 기준을 그대로 옮긴 것 — 권한 자체는 안 바뀜).
+  const DEPT_ADMIN_TABS = { acct: ["members", "billing"], hr: ["members", "loginSessions"] };
   const REQUIRES_MASTER_TABS = new Set([
     "landingInquiries", "sessionLogs", "forceUpdate", "permissions",
     "landingEdit", "notifTemplate", "companyReset", "sheetImport", "gsheetMine", "blindMine",
@@ -756,6 +766,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     { key: "settings", label: "환경 설정", tabs: ["billing", "setup", "copyTemplate", "landingEdit", "notifTemplate"] },
   ]
     .map((g) => ({ ...g, tabs: g.tabs.filter((t) => !REQUIRES_MASTER_TABS.has(t) || isTotalMaster) }))
+    // 🏢 부서 관리자메뉴 — 경리: 회원 승인 + 구독·결제 / 인사: 회원(인사권) + 로그인 관리. 배차용(기사복사 문구·화주사 등)은 뺀다
+    .map((g) => (deptMode ? { ...g, tabs: g.tabs.filter((t) => (DEPT_ADMIN_TABS[deptMode] || []).includes(t)) } : g))
     .filter((g) => g.tabs.length > 0);
   const activeGroup = tabGroups.find((g) => g.tabs.includes(adminTab)) || tabGroups[0];
   const tabBadgeCounts = { linked: linkedPendingCount, inquiries: unansweredInquiryCount, landingInquiries: newLandingInquiryCount };
@@ -783,13 +795,15 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
       active={adminTab}
       onSelect={setAdminTab}
       heroTitle={`안녕하세요, ${myDisplayName}님`}
-      heroSubtitle={todoCount > 0 ? `처리할 일이 ${todoCount}건 있어요 — 승인 대기 ${pendingUserCount} · 연동 대기 ${linkedPendingCount || 0} · 미답변 문의 ${unansweredInquiryCount || 0}` : "처리할 일이 모두 끝났어요. 수고하셨어요!"}
+      heroSubtitle={deptMode ? (pendingUserCount > 0 ? `가입 승인 대기 ${pendingUserCount}명이 있어요 — 회원 관리에서 직책·부서·권한을 정하고 승인해 주세요` : `${deptMode === "hr" ? "인사" : "경리"} 관리자메뉴 — 가입 승인 대기가 없습니다`) : todoCount > 0 ? `처리할 일이 ${todoCount}건 있어요 — 승인 대기 ${pendingUserCount} · 연동 대기 ${linkedPendingCount || 0} · 미답변 문의 ${unansweredInquiryCount || 0}` : "처리할 일이 모두 끝났어요. 수고하셨어요!"}
       heroActions={[{ label: showMobilePreview ? "모바일 미리보기 닫기" : "모바일 미리보기", icon: "phone", active: showMobilePreview, onClick: () => setShowMobilePreview((v) => !v) }]}
       stats={[
         { label: "전체 사용자", value: visibleUsers.length, icon: "users", tone: "navy" },
         { label: "승인 완료", value: visibleUsers.filter((u) => u.approved).length, icon: "check", tone: "green" },
         { label: "승인 대기", value: pendingUserCount, icon: "hourglass", tone: "amber" },
-        { label: "연동 대기 화주사", value: linkedPendingCount || 0, icon: "link", tone: "violet" },
+        deptMode
+          ? { label: "퇴사", value: visibleUsers.filter((u) => u.employmentStatus === "퇴사").length, icon: "user", tone: "violet" }
+          : { label: "연동 대기 화주사", value: linkedPendingCount || 0, icon: "link", tone: "violet" },
       ]}
     >
 
@@ -934,14 +948,14 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             <div className="text-[17px] font-black text-[#0F1A30]">{editMode ? "정보 수정" : "회원 정보"}</div>
                           </div>
                           {/* ⭐ 승인·수정·퇴사·삭제는 최고관리자만. 그 외에는 본인 이름·핸드폰번호만 수정 */}
-                          {!canAdmin && me?.uid === u.id && !editMode && (
+                          {!canEditMember(u) && me?.uid === u.id && !editMode && (
                             <button onClick={() => setEditMode(true)} className="h-10 px-4 rounded-xl text-[13px] font-extrabold bg-[#0F1A30] text-white hover:bg-[#1B2B4B] transition">내 이름·번호 수정</button>
                           )}
-                          {!canAdmin && me?.uid !== u.id && !editMode && (
+                          {!canEditMember(u) && me?.uid !== u.id && !editMode && (
                             <span className="text-[12px] font-bold text-[#9AA9C3]">직책·부서·권한 변경은 인사관리부 › 인사발령</span>
                           )}
                           {/* ⭐ 버튼은 하나 — 승인 전엔 "승인·거절", 승인 후엔 "정보 수정". 누르면 창 안에서 승인·거절·수정·마스터·퇴사·삭제 */}
-                          {canAdmin && canManage && !editMode && (
+                          {canEditMember(u) && canManage && !editMode && (
                             <button onClick={() => { openManage(u); setMemberModal(true); }}
                               className={`h-10 px-5 rounded-xl text-[13px] font-extrabold transition whitespace-nowrap ${!u.approved && !resigned ? "bg-[#2D4C82] text-white hover:bg-[#1B2B4B]" : "bg-[#0F1A30] text-white hover:bg-[#1B2B4B]"}`}>
                               {!u.approved && !resigned ? "승인 · 거절" : "정보 수정"}
@@ -1004,7 +1018,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             </div>
                             <div>
                               <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">직책</label>
-                              <CustomSelect value={editPosition} onChange={e => onPositionChange(e.target.value)} disabled={!canAdmin}
+                              <CustomSelect value={editPosition} onChange={e => onPositionChange(e.target.value)} disabled={!canEditMember(u)}
                                 className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
                                 <option value="">선택 안 함</option>
                                 {(editPosition && !positionsForTeam(editTeam).includes(editPosition)) && (
@@ -1015,7 +1029,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             </div>
                             <div>
                               <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">부서</label>
-                              <CustomSelect value={editTeam} onChange={e => onTeamChange(e.target.value)} disabled={!canAdmin}
+                              <CustomSelect value={editTeam} onChange={e => onTeamChange(e.target.value)} disabled={!canEditMember(u)}
                                 className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
                                 <option value="">미배정</option>
                                 {TEAM_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
@@ -1034,9 +1048,9 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             </div>
                             <div>
                               <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">권한</label>
-                              <CustomSelect value={editRole} onChange={e => setEditRole(e.target.value)} disabled={!canAdmin}
+                              <CustomSelect value={editRole} onChange={e => setEditRole(e.target.value)} disabled={!canEditMember(u)}
                                 className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
-                                {ROLES.map(r => <option key={r} value={r}>{roleLabels[r] || r}</option>)}
+                                {assignableRoles(u.role).map(r => <option key={r} value={r}>{roleLabels[r] || r}</option>)}
                               </CustomSelect>
                               <p className="mt-1 text-[11px] font-bold text-[#7A879C]">추천: {ROLE_NAME[suggestRole({ team: editTeam, position: editPosition })]} (부서·직책 기준)</p>
                             </div>
@@ -1054,9 +1068,10 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                         </div>
                       )}
                       </div>
-                      {memberModal && canAdmin && canManage && (
+                      {memberModal && canEditMember(u) && canManage && (
                         <MemberManageModal
-                          u={u} me={me} isTotalMaster={isTotalMaster} roles={ROLES} roleLabels={roleLabels}
+                          u={u} me={me} isTotalMaster={isTotalMaster} roles={assignableRoles(u.role)} roleLabels={roleLabels}
+                          canMaster={canAdmin} canAccount={canAdmin || isHrMgr} canDelete={canAdmin}
                           f={{ editName, setEditName, editPhone, setEditPhone, editRole, setEditRole, editCompany, setEditCompany, editPosition, setEditPosition: onPositionChange, editTeam, setEditTeam: onTeamChange }}
                           onClose={() => { setMemberModal(false); setEditMode(false); }}
                           onSave={async () => { await saveEdit(); setMemberModal(false); }}
@@ -1969,7 +1984,7 @@ const LANDING_FONT_OPTIONS = [
 ];
 
 // 👤 회원 관리 창 — 버튼 하나로 열고, 그 안에서 승인·거절·정보수정·마스터·퇴사·삭제(모두 확인창)
-function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose, onSave, onApprove, onUnapprove, onReject, onMaster, onResign, onDelete }) {
+function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose, onSave, onApprove, onUnapprove, onReject, onMaster, onResign, onDelete, canMaster = true, canAccount = true, canDelete = true }) {
   const [busy, setBusy] = useState(false);
   const pending = !u.approved && u.employmentStatus !== "퇴사";
   const resigned = u.employmentStatus === "퇴사";
@@ -2017,7 +2032,7 @@ function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose
                 <p className="mt-1 text-[11px] font-bold text-[#7A879C]">추천: {ROLE_NAME[suggestRole({ team: f.editTeam, position: f.editPosition })]} · 부서·직책 기준</p></div>
               <div><label className={lab}>회사명</label><input value={f.editCompany} onChange={(e) => f.setEditCompany(e.target.value)} disabled={!isTotalMaster} className={inp} /></div>
             </div>
-            {u.role !== "shipper" && (
+            {u.role !== "shipper" && canMaster && (
               <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[#E3E8F0] px-3.5 py-2.5">
                 <div className="min-w-0">
                   <div className="text-[13px] font-black text-[#0F1A30]">마스터 계정 {u.isMaster && <span className="ml-1 px-1.5 rounded bg-[#0F1A30] text-white text-[10.5px]">지정됨</span>}</div>
@@ -2028,13 +2043,13 @@ function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose
             )}
           </div>
 
-          {!pending && (
+          {!pending && canAccount && (
             <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4">
               <div className="text-[13px] font-black text-[#0F1A30] mb-2.5">계정 처리 <span className="text-[11.5px] font-bold text-[#9AA9C3]">누르면 확인창이 먼저 뜹니다</span></div>
               <div className="grid grid-cols-3 gap-2">
                 <button type="button" disabled={busy || isMe} onClick={run(onResign)} className="h-10 rounded-xl border border-[#DCE3EE] text-[13px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD] disabled:opacity-40">{resigned ? "복직 처리" : "퇴사 처리"}</button>
                 <button type="button" disabled={busy || isMe} onClick={run(onUnapprove)} className="h-10 rounded-xl border border-[#DCE3EE] text-[13px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD] disabled:opacity-40">승인 해제</button>
-                <button type="button" disabled={busy || isMe} onClick={run(onDelete)} className="h-10 rounded-xl border border-[#C9D3E3] text-[13px] font-black text-[#5B6B85] hover:bg-[#F5F8FD] disabled:opacity-40">계정 삭제</button>
+                <button type="button" disabled={busy || isMe || !canDelete} title={canDelete ? "" : "계정 삭제는 마스터만"} onClick={run(onDelete)} className="h-10 rounded-xl border border-[#C9D3E3] text-[13px] font-black text-[#5B6B85] hover:bg-[#F5F8FD] disabled:opacity-40">계정 삭제</button>
               </div>
             </div>
           )}

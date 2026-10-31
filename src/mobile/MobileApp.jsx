@@ -2004,8 +2004,11 @@ export default function MobileApp({ role, user, userCompany = "", forceExec = fa
   const [execFull, setExecFull] = useState(() => { try { return localStorage.getItem("kpExecFull") === "1"; } catch { return false; } });
   const deptMode = role === "test" ? "acct" : role === "hrManager" ? "hr" : isExecM && !execFull ? "exec" : null;
   const [page, setPage] = useState(deptMode ? "dept" : "list");
+  // 경리는 메뉴의 [배차현황]으로만 오더 목록(등록내역)을 볼 수 있다 — 그 밖에 목록으로 돌아오면 부서 홈으로
+  const deptListOkRef = useRef(false);
   useEffect(() => {
-    if (deptMode && page === "list") setPage("dept");
+    if (!["list", "detail", "form"].includes(page)) deptListOkRef.current = false;
+    if (deptMode && page === "list" && !(deptMode === "acct" && deptListOkRef.current)) setPage("dept");
     if (!deptMode && (page === "dept" || String(page).startsWith("dept:"))) setPage("list");
   }, [deptMode, page]);
   const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setPage(v ? "list" : "dept"); };
@@ -5405,7 +5408,7 @@ const title =
   : page === "approval" ? "전자결재"
   : page === "staff" ? "직원 관리"
   : page === "dept" ? (deptMode === "exec" ? "경영 브리핑" : deptMode === "hr" ? "인사관리" : "경리·회계")
-  : String(page).startsWith("dept:") ? ({ "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:cashbook": "수입·지출", "dept:assets": "비품·자산", "dept:hr": "인사기록", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정" }[page] || "")
+  : String(page).startsWith("dept:") ? ({ "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:cashbook": "수입·지출", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정" }[page] || "")
   : page === "status" ? "배차현황"
   : page === "unassigned" ? "미배차현황"
   : page === "canceled" ? "취소내역"
@@ -5950,7 +5953,7 @@ onGoAttendance={() => {
           onGoIntel={() => { setPage("intel"); setShowMenu(false); }}
           onGoGsheet={() => { setPage("gsheet"); setShowMenu(false); }}
           onGoBlind={() => { setPage("blind"); setShowMenu(false); }}
-          onGo={(p) => { setPage(p); setShowMenu(false); }}
+          onGo={(p) => { if (p === "list") deptListOkRef.current = true; setPage(p); setShowMenu(false); }}
           deptMode={deptMode}
           isExec={isExecM}
           execFull={execFull}
@@ -6745,7 +6748,7 @@ setOpenMemo={setOpenMemo}
 {(page === "dept" || String(page).startsWith("dept:")) && (
   <React.Suspense fallback={null}>
     <MobilePcView key={page} kind={page} deptMode={deptMode} dispatchData={allOrders} fixedRows={fixedClientRows} clients={clients} places={places} role={role} userCompany={pcViewCompany} me={pcViewMe} loadRange={loadRange} loadFullHistory={loadFullHistory}
-      onGo={(k) => { const [m0, id] = String(k).split(":"); if (m0 === "결재함" && id) { try { sessionStorage.setItem("kpExecApOpen", id); } catch { /* 무시 */ } } setPage({ 결재함: "dept:approvals", 직원일정: "dept:schedule", 실시간배차현황: "unassigned", 인사이트: "intel", 정산관리: "dept:settle", "정산관리:지급관리": "dept:settle", 회계관리: "dept:acct", 매출관리: "sales", 인사관리: "dept:hr", 근태관리: "attendance", 직원관리: "staff", 기사서류: "dept:driverdocs", 기사관리: "dept:driverdocs" }[m0 === "결재함" ? "결재함" : k] || "dept"); }} />
+      onGo={(k) => { const [m0, id] = String(k).split(":"); if (k === "배차현황") deptListOkRef.current = true; if (m0 === "결재함" && id) { try { sessionStorage.setItem("kpExecApOpen", id); } catch { /* 무시 */ } } setPage({ 결재함: "dept:approvals", 직원일정: "dept:schedule", 실시간배차현황: "unassigned", 인사이트: "intel", 정산관리: "dept:settle", "정산관리:지급관리": "dept:settle", 회계관리: "dept:acct", 매출관리: "sales", 인사관리부: "dept:hr", 출근기록부: "attendance", 연차관리: "dept:leave", 입퇴사관리: "dept:onboarding", 증명서발급: "dept:cert", 수입지출: "dept:cashbook", 비품관리: "dept:assets", 전자결재: "approval", 배차현황: "list", 관리자메뉴: "staff", 직원관리: "staff", 기사서류: "dept:driverdocs", 기사관리: "dept:driverdocs" }[m0 === "결재함" ? "결재함" : k] || "dept"); }} />
   </React.Suspense>
 )}
 {page === "sales" && (
@@ -7867,7 +7870,7 @@ function MobileSideMenu({
         {/* 메뉴 본문 + 하단 컨트롤 — 사용자 요청: 메뉴 목록만 따로 작은 칸 안에서
             스크롤되던 걸 없애고, 드로어 전체(메뉴~로그아웃~버전)가 하나로 이어져
             일반 스크롤바로 오르내리게 통합했다. */}
-        <div className="flex-1 overflow-y-auto py-1">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-1" style={{ WebkitOverflowScrolling: "touch", paddingBottom: "max(env(safe-area-inset-bottom, 0px), 16px)" }}>
           {/* ⭐ 2026-10-31 — PC 메뉴와 같은 구성·권한 규칙(DispatchApp menuState)으로 정리.
               실무자: 매출관리 숨김 / 경리·회계: 화물등록·단가표 숨김 / 관리자 전용 메뉴: 관리자·마스터·조회전용 /
               최고관리자 전용(관리센터·구글시트·블라인드·회사코드조회)은 최고관리자만.
@@ -7880,15 +7883,17 @@ function MobileSideMenu({
               <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />
               <MenuItem label="회계관리" icon="money" onClick={() => onGo?.("dept:acct")} dark={dark} />
             </MenuSection>
-            <MenuSection title="살림" en="OFFICE" dark={dark} alwaysOpen>
+            <MenuSection title="자금 · 총무" en="FINANCE · OFFICE" dark={dark} alwaysOpen>
               <MenuItem label="수입·지출" icon="wallet" onClick={() => onGo?.("dept:cashbook")} dark={dark} />
               <MenuItem label="비품·자산" icon="list" onClick={() => onGo?.("dept:assets")} dark={dark} />
+              <MenuItem label="배차현황(확인)" icon="truck" onClick={() => onGo?.("list")} dark={dark} />
             </MenuSection>
           </>)}
           {deptMode === "hr" && (
             <MenuSection title="인사" en="HUMAN RESOURCES" dark={dark} alwaysOpen>
               <MenuItem label="인사 홈" icon="dashboard" onClick={() => onGo?.("dept")} dark={dark} />
-              <MenuItem label="인사기록" icon="idcard" onClick={() => onGo?.("dept:hr")} dark={dark} />
+              <MenuItem label="인사관리부" icon="idcard" onClick={() => onGo?.("dept:hr")} dark={dark} />
+              <MenuItem label="출근기록부" icon="clock" onClick={onGoAttendance} dark={dark} />
               <MenuItem label="연차 관리" icon="flag" onClick={() => onGo?.("dept:leave")} dark={dark} />
               <MenuItem label="입·퇴사 관리" icon="check" onClick={() => onGo?.("dept:onboarding")} dark={dark} />
               <MenuItem label="증명서 발급" icon="stamp" onClick={() => onGo?.("dept:cert")} dark={dark} />
