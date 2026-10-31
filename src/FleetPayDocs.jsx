@@ -675,6 +675,8 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
   const [scan, setScan] = React.useState(null); // { msg, pct } | { done, count }
   const fileRef = React.useRef(null);
   const [scanOpen, setScanOpen] = React.useState(false);
+  const viewDocRef = React.useRef(null); // 처리 안내서 인쇄·저장
+  const formDocRef = React.useRef(null);
   React.useEffect(() => {
     if (!co) return undefined;
     return onSnapshot(query(collection(db, "fleetPenalties"), where("companyName", "==", co)), (s) => setList(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => `${b.date || ""}${b.time || ""}`.localeCompare(`${a.date || ""}${a.time || ""}`))), () => setList([]));
@@ -827,7 +829,12 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
           </div>
           <div className="xl:sticky xl:top-3 self-start">
             <div className="text-[11.5px] font-extrabold tracking-[0.22em] text-[#2D4C82] mb-2" style={{ fontFamily: MONO }}>LIVE PREVIEW · 기사앱에 이렇게 보입니다</div>
-            <PenaltyDoc p={preview} supplier={supplier} wide onPhoto={(i) => setViewer({ images: form.photos, index: i })} />
+            <div className="flex gap-2 justify-end mb-2">
+              <button type="button" onClick={() => printA4(formDocRef.current, `과태료처리안내서_${preview.driverName || ""}`)} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B]">인쇄</button>
+              <button type="button" onClick={() => savePngA4(formDocRef.current, `과태료처리안내서_${preview.driverName || ""}`)} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B]">이미지 저장</button>
+              <button type="button" onClick={() => savePdfA4(formDocRef.current, `과태료처리안내서_${preview.driverName || ""}`)} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B]">PDF</button>
+            </div>
+            <div ref={formDocRef}><PenaltyDoc p={preview} supplier={supplier} wide onPhoto={(i) => setViewer({ images: form.photos, index: i })} /></div>
           </div>
         </div>
         {viewer && <ImageViewer images={viewer.images} index={viewer.index} onClose={() => setViewer(null)} name="고지서" />}
@@ -896,10 +903,13 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
                 {PENALTY_STATUSES.map((k) => <option key={k} value={k}>{k}</option>)}
               </CustomSelect>
               <button type="button" onClick={() => { setForm({ ...blank(), ...view }); setView(null); }} className="h-11 px-5 rounded-xl bg-white/10 border border-white/20 text-[14px] font-black">수정</button>
+              <button type="button" onClick={() => printA4(viewDocRef.current, `과태료처리안내서_${view.driverName || ""}_${view.date || ""}`)} className="h-11 px-5 rounded-xl bg-white/10 border border-white/20 text-[14px] font-black">인쇄</button>
+              <button type="button" onClick={() => savePngA4(viewDocRef.current, `과태료처리안내서_${view.driverName || ""}_${view.date || ""}`)} className="h-11 px-5 rounded-xl bg-white/10 border border-white/20 text-[14px] font-black">이미지 저장</button>
+              <button type="button" onClick={() => savePdfA4(viewDocRef.current, `과태료처리안내서_${view.driverName || ""}_${view.date || ""}`)} className="h-11 px-5 rounded-xl bg-white/10 border border-white/20 text-[14px] font-black">PDF</button>
               <button type="button" onClick={() => remove(view)} className="h-11 px-5 rounded-xl bg-white/10 border border-white/20 text-[14px] font-black">삭제</button>
               <button type="button" onClick={() => setView(null)} className="h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black">닫기</button>
             </div>
-            <div className="flex-1 overflow-y-auto p-6"><PenaltyDoc p={view} supplier={supplier} wide onPhoto={(i) => setViewer({ images: view.photos, index: i })} /></div>
+            <div className="flex-1 overflow-y-auto p-6"><div ref={viewDocRef}><PenaltyDoc p={view} supplier={supplier} wide onPhoto={(i) => setViewer({ images: view.photos, index: i })} /></div></div>
           </div>
         </div>
       )}

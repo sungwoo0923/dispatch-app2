@@ -7896,8 +7896,6 @@ function MobileSideMenu({
               <MenuItem label="인사 홈" icon="dashboard" onClick={() => onGo?.("dept")} dark={dark} />
               <MenuItem label="인사관리부" icon="idcard" onClick={() => onGo?.("dept:hr")} dark={dark} />
               <MenuItem label="출근기록부" icon="clock" onClick={onGoAttendance} dark={dark} />
-              <MenuItem label="연차 관리" icon="flag" onClick={() => onGo?.("dept:leave")} dark={dark} />
-              <MenuItem label="입·퇴사 관리" icon="check" onClick={() => onGo?.("dept:onboarding")} dark={dark} />
               <MenuItem label="증명서 발급" icon="stamp" onClick={() => onGo?.("dept:cert")} dark={dark} />
             </MenuSection>
           )}
@@ -7919,7 +7917,7 @@ function MobileSideMenu({
           )}
           {(deptMode === "acct" || deptMode === "hr") && (
             <MenuSection title="직원 · 기사" en="PEOPLE" dark={dark} alwaysOpen>
-              <MenuItem label="직원 관리" icon="users" onClick={() => onGo?.("staff")} badge={(alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) || null} dark={dark} />
+              <MenuItem label="가입 승인(직원·기사)" icon="users" onClick={() => onGo?.("staff")} badge={(alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) || null} dark={dark} />
               <MenuItem label="기사 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} dark={dark} />
             </MenuSection>
           )}

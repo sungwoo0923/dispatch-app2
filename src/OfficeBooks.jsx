@@ -8,9 +8,16 @@ import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp,
 import { db, auth } from "./firebase";
 import { compressImage } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
+import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 
 export const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 export const HERO_BG = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
+// 이미지(데이터 URL) 파일로 저장
+export function saveImage(dataUrl, name = "이미지") {
+  if (!dataUrl) return;
+  const a = document.createElement("a"); a.href = dataUrl; a.download = `${String(name).replace(/[\\/:*?"<>|]/g, "_")}.jpg`;
+  document.body.appendChild(a); a.click(); a.remove();
+}
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 const won = (n) => `${Math.round(Number(n) || 0).toLocaleString("ko-KR")}`;
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -118,6 +125,7 @@ export function CashBook({ company, isViewer = false }) {
   const recurring = useCompanyCol("acctRecurring", company);
   const funds = useCompanyCol("acctFunds", company);
   const [customAcc, setCustomAcc] = React.useState(false);
+  const [photo, setPhoto] = React.useState(null); // 증빙 사진 보기·저장
   const [ym, setYm] = React.useState(kstDay().slice(0, 7));
   const [type, setType] = React.useState("전체");
   const [q, setQ] = React.useState("");
@@ -139,7 +147,9 @@ export function CashBook({ company, isViewer = false }) {
   const kw = q.trim();
   const list = month.filter((r) => (type === "전체" || r.type === type) && (!kw || [r.item, r.vendor, r.account, r.memo].some((v) => String(v || "").includes(kw))))
     .sort((a, b) => String(b.date).localeCompare(String(a.date)) || tsMs(b.createdAt) - tsMs(a.createdAt));
-  const groups = []; list.forEach((r) => { const g = groups[groups.length - 1]; if (g && g.d === r.date) g.l.push(r); else groups.push({ d: r.date, l: [r] }); });
+  // 장부 — 날짜 오름차순 + 누계 잔액(이 달 수입 − 지출)
+  const ledgerRows = (() => { let bal = 0; return [...list].sort((a, b) => String(a.date).localeCompare(String(b.date)) || tsMs(a.createdAt) - tsMs(b.createdAt)).map((r) => { bal += (r.type === "수입" ? 1 : -1) * toInt(r.amount); return { ...r, bal }; }); })();
+  const daily = (() => { const dim = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0).getDate(); let cum = 0; return Array.from({ length: dim }, (_, i) => { const d = `${ym}-${String(i + 1).padStart(2, "0")}`; const l = month.filter((r) => r.date === d); const inn = l.filter((r) => r.type === "수입").reduce((s2, r) => s2 + toInt(r.amount), 0); const out = l.filter((r) => r.type === "지출").reduce((s2, r) => s2 + toInt(r.amount), 0); cum += inn - out; return { d: i + 1, in: inn, out, cum }; }); })();
   const imported = new Set((rows || []).map((r) => r.sourceId).filter(Boolean));
   const toImport = approvals.filter((a) => !imported.has(a.id) && Number(a.amount) > 0);
   const recurDone = new Set(month.map((r) => r.recurId).filter(Boolean));
@@ -205,33 +215,84 @@ export function CashBook({ company, isViewer = false }) {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-4">
+        <div className="space-y-4 min-w-0">
+        {/* ⭐ 2026-10-31 장부형 — 일별 현금 흐름 그래프 + 줄 친 장부(일자·구분·계정·적요·수입·지출·누계 잔액) */}
+        <BookCard en="DAILY CASH FLOW" title={`${ym.replace("-", "년 ")}월 일별 수입 · 지출 · 누계`}>
+          <div className="h-[200px] -ml-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={daily} margin={{ top: 6, right: 6, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke="#EEF2F8" vertical={false} />
+                <XAxis dataKey="d" tick={{ fill: "#9AA9C3", fontSize: 10.5, fontFamily: MONO }} axisLine={false} tickLine={false} interval={2} />
+                <YAxis tickFormatter={(v) => (Math.abs(v) >= 1e4 ? `${Math.round(v / 1e4)}만` : v)} tick={{ fill: "#9AA9C3", fontSize: 10.5, fontFamily: MONO }} axisLine={false} tickLine={false} width={44} />
+                <Tooltip formatter={(v, n) => [`${won(v)}원`, n]} labelFormatter={(l) => `${ym.slice(5)}월 ${l}일`} contentStyle={{ borderRadius: 12, border: "1px solid #E3E8F0", fontSize: 12 }} />
+                <Bar dataKey="in" name="수입" fill="#4B6CB7" radius={[4, 4, 0, 0]} maxBarSize={14} />
+                <Bar dataKey="out" name="지출" fill="#0F1A30" radius={[4, 4, 0, 0]} maxBarSize={14} />
+                <Line dataKey="cum" name="누계 차액" stroke="#B88A2E" strokeWidth={2} dot={false} type="monotone" />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </BookCard>
         <BookCard flush>
           <div className="px-3.5 md:px-4 py-3 border-b border-[#EEF1F6] flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7] mr-1" style={{ fontFamily: MONO }}>LEDGER</span>
             {["전체", "지출", "수입"].map((t) => <Chip key={t} on={type === t} onClick={() => setType(t)}>{t}</Chip>)}
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="내용·거래처·계정 검색" className="order-last md:order-none w-full md:w-auto md:ml-auto md:min-w-[150px] h-9 px-3 rounded-xl border border-[#DCE3EE] bg-[#F8FAFD] text-[13.5px] outline-none focus:border-[#2D4C82]" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="적요·거래처·계정 검색" className="order-last md:order-none w-full md:w-auto md:ml-auto md:min-w-[150px] h-9 px-3 rounded-xl border border-[#DCE3EE] bg-[#F8FAFD] text-[13.5px] outline-none focus:border-[#2D4C82]" />
             {!isViewer && <button type="button" onClick={() => setEdit(blankEntry("지출"))} className="ml-auto md:ml-0 h-9 px-3.5 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black whitespace-nowrap shrink-0">+ 지출</button>}
             {!isViewer && <button type="button" onClick={() => setEdit(blankEntry("수입"))} className="h-9 px-3.5 rounded-xl border border-[#0F1A30] text-[#0F1A30] text-[13px] font-black whitespace-nowrap shrink-0">+ 수입</button>}
           </div>
           {rows === null ? <div className="py-16 text-center text-[13px] font-bold text-[#9AA9C3]">불러오는 중…</div>
-            : !list.length ? <div className="py-16 text-center text-[13.5px] font-bold text-[#9AA9C3]">이 달 내역이 없습니다</div> : groups.map((g) => (
-              <div key={g.d}>
-                <div className="px-4 py-1.5 bg-[#F5F8FD] border-y border-[#EEF1F6] flex items-center gap-2 text-[12px]">
-                  <span className="font-black text-[#1B2B4B] tabular-nums" style={{ fontFamily: MONO }}>{String(g.d).replace(/-/g, ".")}</span>
-                  <span className="ml-auto font-bold text-[#7A879C] tabular-nums whitespace-nowrap">지출 {won(g.l.filter((r) => r.type === "지출").reduce((s, r) => s + toInt(r.amount), 0))} · 수입 {won(g.l.filter((r) => r.type === "수입").reduce((s, r) => s + toInt(r.amount), 0))}</span>
-                </div>
-                {g.l.map((r) => (
-                  <button key={r.id} type="button" onClick={() => !isViewer && setEdit({ ...blankEntry(r.type), ...r, amount: String(r.amount || "") })} className="w-full text-left px-4 py-2.5 border-b border-[#F1F4F9] flex items-center gap-3 hover:bg-[#F8FAFD]">
-                    <span className={`w-9 h-9 rounded-xl shrink-0 grid place-items-center text-[12px] font-black ${r.type === "수입" ? "bg-[#EEF3FC] text-[#2D4C82]" : "bg-[#0F1A30] text-white"}`}>{r.type === "수입" ? "IN" : "OUT"}</span>
-                    <span className="flex-1 min-w-0">
-                      <span className="flex items-center gap-1.5"><span className="text-[14px] font-black text-[#0F1A30] truncate">{r.item || r.vendor || r.account}</span>{r.receipt && <span className="text-[11px]">🧾</span>}</span>
-                      <span className="block text-[11.5px] text-[#7A879C] truncate">{[r.account, r.vendor, r.method].filter(Boolean).join(" · ")}</span>
-                    </span>
-                    <span className={`shrink-0 text-[14px] font-black tabular-nums whitespace-nowrap ${r.type === "수입" ? "text-[#2D4C82]" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO }}>{r.type === "수입" ? "+" : "−"}{won(r.amount)}</span>
+            : !ledgerRows.length ? <div className="py-16 text-center text-[13.5px] font-bold text-[#9AA9C3]">이 달 내역이 없습니다</div> : (
+            <>
+              {/* PC — 줄 친 장부 */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-[13px] border-collapse" style={{ minWidth: 820 }}>
+                  <thead>
+                    <tr className="bg-[#0F1A30] text-white">
+                      {[["일자", 70], ["구분", 54], ["계정과목", 120], ["적요 · 거래처", null], ["수입", 116], ["지출", 116], ["누계 잔액", 124], ["증빙", 64]].map(([h, w]) => <th key={h} className="px-3 py-2.5 text-[12px] font-black text-left whitespace-nowrap" style={w ? { width: w } : undefined}>{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ledgerRows.map((r, i) => {
+                      const newDay = i === 0 || ledgerRows[i - 1].date !== r.date;
+                      return (
+                        <tr key={r.id} onClick={() => !isViewer && setEdit({ ...blankEntry(r.type), ...r, amount: String(r.amount || "") })} className={`cursor-pointer hover:bg-[#F2F6FD] ${newDay && i ? "border-t-2 border-[#DCE3EE]" : "border-t border-[#EEF2F8]"} ${i % 2 ? "bg-[#FBFCFE]" : "bg-white"}`}>
+                          <td className="px-3 py-2 font-black text-[#1B2B4B] tabular-nums" style={{ fontFamily: MONO }}>{newDay ? String(r.date).slice(5).replace("-", ".") : ""}</td>
+                          <td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded-md text-[11px] font-black ${r.type === "수입" ? "bg-[#EEF3FC] text-[#2D4C82]" : "bg-[#0F1A30] text-white"}`}>{r.type}</span></td>
+                          <td className="px-3 py-2 font-bold text-[#3A4A66] truncate max-w-[120px]">{r.account}</td>
+                          <td className="px-3 py-2 min-w-0"><span className="font-black text-[#0F1A30]">{r.item || "-"}</span>{r.vendor && <span className="text-[#7A879C]"> · {r.vendor}</span>}{r.method && <span className="ml-1 text-[11px] text-[#9AA9C3]">{r.method}</span>}</td>
+                          <td className="px-3 py-2 text-right font-black tabular-nums text-[#2D4C82]" style={{ fontFamily: MONO }}>{r.type === "수입" ? won(r.amount) : ""}</td>
+                          <td className="px-3 py-2 text-right font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO }}>{r.type === "지출" ? won(r.amount) : ""}</td>
+                          <td className={`px-3 py-2 text-right font-black tabular-nums ${r.bal < 0 ? "text-[#B42318]" : "text-[#1B2B4B]"}`} style={{ fontFamily: MONO }}>{r.bal < 0 ? "−" : ""}{won(Math.abs(r.bal))}</td>
+                          <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>{r.receipt ? <button type="button" onClick={() => setPhoto(r)} title="증빙 보기·저장" className="w-8 h-8 rounded-lg border border-[#DCE3EE] bg-cover bg-center" style={{ backgroundImage: `url(${r.receipt})` }} /> : r.evidence ? <span className="text-[11px] font-bold text-[#7A879C]">{r.evidence}</span> : r.type === "지출" ? <span className="text-[11px] font-black text-[#B42318]">없음</span> : ""}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-[3px] border-double border-[#0F1A30] bg-[#F5F8FD]">
+                      <td colSpan={4} className="px-3 py-2.5 font-black text-[#0F1A30]">이 달 합계 · {ledgerRows.length}건</td>
+                      <td className="px-3 py-2.5 text-right font-black tabular-nums text-[#2D4C82]" style={{ fontFamily: MONO }}>{won(ledgerRows.filter((r) => r.type === "수입").reduce((s2, r) => s2 + toInt(r.amount), 0))}</td>
+                      <td className="px-3 py-2.5 text-right font-black tabular-nums" style={{ fontFamily: MONO }}>{won(ledgerRows.filter((r) => r.type === "지출").reduce((s2, r) => s2 + toInt(r.amount), 0))}</td>
+                      <td colSpan={2} className="px-3 py-2.5 font-black tabular-nums" style={{ fontFamily: MONO }}>{(() => { const v = ledgerRows.length ? ledgerRows[ledgerRows.length - 1].bal : 0; return `${v < 0 ? "−" : "+"}${won(Math.abs(v))}`; })()}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              {/* 휴대폰 — 장부 줄 카드 */}
+              <div className="md:hidden divide-y divide-[#EEF2F8]">
+                {ledgerRows.map((r) => (
+                  <button key={r.id} type="button" onClick={() => !isViewer && setEdit({ ...blankEntry(r.type), ...r, amount: String(r.amount || "") })} className="w-full text-left px-3.5 py-2.5 flex items-center gap-2.5">
+                    <span className="w-11 text-center shrink-0"><span className="block text-[13px] font-black text-[#1B2B4B] tabular-nums" style={{ fontFamily: MONO }}>{String(r.date).slice(8)}</span><span className={`block text-[10px] font-black ${r.type === "수입" ? "text-[#2D4C82]" : "text-[#7A879C]"}`}>{r.type}</span></span>
+                    <span className="flex-1 min-w-0"><span className="block text-[14px] font-black text-[#0F1A30] truncate">{r.item || r.vendor || r.account}</span><span className="block text-[11.5px] text-[#7A879C] truncate">{r.account}{r.vendor ? ` · ${r.vendor}` : ""}</span></span>
+                    {r.receipt && <span onClick={(e) => { e.stopPropagation(); setPhoto(r); }} className="w-8 h-8 rounded-lg border border-[#DCE3EE] bg-cover bg-center shrink-0" style={{ backgroundImage: `url(${r.receipt})` }} />}
+                    <span className="text-right shrink-0"><span className={`block text-[14px] font-black tabular-nums ${r.type === "수입" ? "text-[#2D4C82]" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO }}>{r.type === "수입" ? "+" : "−"}{won(r.amount)}</span><span className="block text-[10.5px] text-[#9AA9C3] tabular-nums" style={{ fontFamily: MONO }}>잔 {won(r.bal)}</span></span>
                   </button>
                 ))}
               </div>
-            ))}
+            </>
+          )}
         </BookCard>
+        </div>
         <div className="space-y-4">
           <BookCard en="BREAKDOWN" title="계정과목별 지출">
             {!accTop.length ? <div className="py-4 text-[12.5px] text-[#9AA9C3] font-bold">지출 내역이 없습니다</div> : accTop.map(([k, v]) => (
@@ -241,7 +302,7 @@ export function CashBook({ company, isViewer = false }) {
               </div>
             ))}
           </BookCard>
-          <BookCard en="RECURRING" title="고정비(매달 나가는 돈)" right={!isViewer && <button type="button" onClick={() => setRecurOpen(true)} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12px] font-black text-[#1B2B4B] whitespace-nowrap">관리</button>}>
+          <BookCard en="RECURRING" title="고정비" right={!isViewer && <button type="button" onClick={() => setRecurOpen(true)} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12px] font-black text-[#1B2B4B] whitespace-nowrap">관리</button>}>
             {!(recurring || []).length ? <div className="py-2 text-[12.5px] text-[#9AA9C3] font-bold">임대료·통신비·보험료처럼 매달 나가는 돈을 등록해 두면 한 번에 장부에 넣을 수 있습니다</div>
               : (recurring || []).map((r) => (
                 <div key={r.id} className="flex items-center justify-between py-1.5 text-[12.5px] border-b border-[#F1F4F9] last:border-b-0">
@@ -298,12 +359,21 @@ export function CashBook({ company, isViewer = false }) {
           <div><Label>증빙</Label>
             <div className="flex flex-wrap gap-1.5 mb-2">{["세금계산서", "카드전표", "현금영수증", "간이영수증", "증빙 없음"].map((m) => <Chip key={m} on={edit.evidence === m} onClick={() => setEdit((p) => ({ ...p, evidence: m }))}>{m}</Chip>)}</div>
             {edit.receipt ? (
-              <div className="relative rounded-xl overflow-hidden border border-[#E3E8F0] bg-white"><img src={edit.receipt} alt="" className="w-full max-h-56 object-contain" /><button type="button" onClick={() => setEdit((p) => ({ ...p, receipt: "" }))} className="absolute top-2 right-2 h-8 px-3 rounded-lg bg-[#0F1A30]/80 text-white text-[12px] font-bold">사진 빼기</button></div>
+              <div className="relative rounded-xl overflow-hidden border border-[#E3E8F0] bg-white"><img src={edit.receipt} alt="" className="w-full max-h-72 object-contain" /><div className="absolute top-2 right-2 flex gap-1.5"><button type="button" onClick={() => saveImage(edit.receipt, `증빙_${edit.date}_${edit.item || edit.vendor || edit.account}`)} className="h-8 px-3 rounded-lg bg-white/90 text-[#0F1A30] text-[12px] font-black border border-[#DCE3EE]">⬇ 사진 저장</button><button type="button" onClick={() => setEdit((p) => ({ ...p, receipt: "" }))} className="h-8 px-3 rounded-lg bg-[#0F1A30]/80 text-white text-[12px] font-bold">사진 빼기</button></div></div>
             ) : <button type="button" onClick={() => fileRef.current?.click()} className="w-full h-16 rounded-xl border-2 border-dashed border-[#C9D2E0] bg-white text-[13px] font-bold text-[#5B6B85]">🧾 영수증 사진 찍기·올리기</button>}
             <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) { const r = await compressImage(f, 1400, 0.8).catch(() => ""); setEdit((p) => ({ ...p, receipt: r })); } }} />
           </div>
           <div><Label>메모</Label><input value={edit.memo} onChange={(e) => setEdit((p) => ({ ...p, memo: e.target.value }))} className={inp} placeholder="선택" /></div>
         </Sheet>
+      )}
+      {photo && (
+        <div className="fixed inset-0 z-[100001] bg-[#0B1428]/85 flex flex-col items-center justify-center p-4" onClick={() => setPhoto(null)}>
+          <img src={photo.receipt} alt="" className="max-w-full max-h-[78vh] rounded-xl shadow-2xl" onClick={(e) => e.stopPropagation()} />
+          <div className="mt-3 flex gap-2" onClick={(e) => e.stopPropagation()}>
+            <button type="button" onClick={() => saveImage(photo.receipt, `증빙_${photo.date}_${photo.item || photo.vendor || photo.account}`)} className="h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black">⬇ 사진 저장</button>
+            <button type="button" onClick={() => setPhoto(null)} className="h-11 px-5 rounded-xl bg-white/15 text-white text-[14px] font-bold">닫기</button>
+          </div>
+        </div>
       )}
       {recurOpen && <RecurringEditor company={company} rows={recurring || []} ledger={rows || []} onClose={() => setRecurOpen(false)} />}
     </div>

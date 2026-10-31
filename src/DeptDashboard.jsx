@@ -11,7 +11,6 @@ import { useFleetDrivers } from "./FleetPayDocs";
 import { useCompanyDriverDocs, docProblems } from "./driverRequiredDocs";
 import { isTMUser } from "./staffFilter";
 import { ExecDashboard, eventsOf } from "./ExecSuite";
-import { ONBOARD_ITEMS, OFFBOARD_ITEMS } from "./HrTools";
 import { leaveEntitlement, leaveUseOf } from "./approvalForms";
 import { pcLiveWindowStart, pcPrevDay } from "./orderHistory";
 import { useFundsSummary } from "./FundsBoard";
@@ -219,20 +218,20 @@ function AcctDashboard({ company, dispatchData = [], onGo }) {
     ["용차 지급 대기", "지난달~이번 달 · 지입 제외", `${short(apSum)}원`, ap.length, "정산관리:지급관리"],
     ["소모품 재고 부족", "최소 수량 이하", `${lowStock.length}종`, lowStock.length, "비품관리"],
     ["기사 서류 검토 대기", "통장 사본·사업자등록증 등", `${docWait}명`, docWait, "기사서류"],
-    ["직원·기사 가입 승인", "관리자메뉴 › 회원 관리", `${pendingStaff}명`, pendingStaff, "직원관리"],
+    ["직원·기사 가입 승인", "관리자메뉴 › 회원 관리 · 기사관리", `${pendingStaff}명`, pendingStaff, "관리자메뉴"],
   ];
   return (
     <div className="space-y-4">
       <Hero en="ACCOUNTING · FINANCE DESK" title="경리·회계 대시보드" desc={`${today.replace(/-/g, ".")} · 자금 흐름 · 미수 · 미지급 · 세무 일정을 한눈에`}
         kpis={[
-          ["보유 자금", F.has ? `${short(F.cash)}원` : "미입력", F.has ? `이번 달 수입 ${short(inSum)} · 지출 ${short(outSum)}${F.runway != null ? ` · 런웨이 ${F.runway.toFixed(1)}개월` : ""}` : "자금관리에서 처음 자금 상태 입력"],
+          ["보유 자금", F.has ? `${short(F.cash)}원` : "미입력", F.has ? `이번 달 수입 ${short(inSum)} · 지출 ${short(outSum)}${F.runway != null ? ` · 런웨이 ${F.runway.toFixed(1)}개월` : ""}` : "자금관리에서 자금 상태 입력"],
           ["미수금(거래처 미정산)", `${short(arSum)}원`, `${new Set(arList.map((x) => x.c)).size}곳 · 지난 2개월`],
           ["미지급(용차 지급 대기)", `${short(apSum)}원`, `${ap.length}건 · 지난달~이번 달`],
           ["이번 달 매출 / 매입", `${short(cur[0])} / ${short(cur[1])}`, `수수료 ${short(cur[0] - cur[1])}원 · ${cur[2]}건`],
         ]} />
       <Quick onGo={onGo} items={[
         ["정산관리", "거래처 정산", "receipt", `미수 ${arList.length}건`], ["정산관리:지급관리", "용차 지급", "wallet", `대기 ${ap.length}건`],
-        ["회계관리", "회계 장부", "money", "미수·미지급·부가세"], ["자금관리", "자금 현황", "wallet", F.has ? `보유 ${short(F.cash)}원` : "처음 자금 입력"],
+        ["회계관리", "회계 장부", "money", "미수·미지급·부가세"], ["자금관리", "자금 현황", "wallet", F.has ? `보유 ${short(F.cash)}원` : "자금 상태 입력"],
         ["비품관리", "비품·자산", "list", `재고 부족 ${lowStock.length}`], ["전자결재", "지출결의 결재", "stamp", `대기 ${expPending.length}건`],
         ["매출관리", "매출 분석", "chart", "거래처·월별"], ["배차현황", "배차현황", "truck", "운행 내역 확인"],
       ]} />
@@ -327,8 +326,6 @@ function HrDashboard({ company, onGo }) {
   const leavePending = approvals.filter((a) => a.cat === "leave" && a.status === "pending");
   const reportPending = approvals.filter((a) => a.cat === "report" && a.status === "pending");
   const noHire = active.filter((u) => !hireOf(u));
-  const onboardOpen = active.filter((u) => hireOf(u) >= addMonths(today, -3) && ONBOARD_ITEMS.some((it) => !(it.auto ? it.auto(u, pf) : pf[u.id]?.onboarding?.[it.key])));
-  const offboardOpen = staff.filter((u) => u.employmentStatus === "퇴사" && OFFBOARD_ITEMS.some((it) => !pf[u.id]?.offboarding?.[it.key]));
   const docIssueDrivers = drivers.filter((d) => { const p = docProblems(docsBy?.[d.id]); return p.missing || p.bad; }).length;
   // 인사 이벤트 — 수습 종료(입사 3개월) · 입사 기념일 · 연차 사용 촉진
   const probation = active.map((u) => ({ u, d: hireOf(u) ? addMonths(hireOf(u), 3) : "" })).filter((x) => x.d && x.d >= today && x.d <= addMonths(today, 1)).sort((a, b) => a.d.localeCompare(b.d));
@@ -349,9 +346,7 @@ function HrDashboard({ company, onGo }) {
     ["휴가·근태 결재 대기", "전자결재 › 근태·휴가 신청", leavePending.length, "명", "전자결재"],
     ["인사·보고 결재 대기", "전자결재 › 업무 보고·인사", reportPending.length, "건", "전자결재"],
     ["직원 가입 승인", "관리자메뉴 › 회원 관리", pendingStaff.length, "명", "관리자메뉴"],
-    ["기사 가입 승인", "직원관리 › 기사 가입 승인", pendingDrivers.length, "명", "직원관리"],
-    ["입사 처리 미완료", "근로계약서·4대보험 취득 등", onboardOpen.length, "명", "입퇴사관리"],
-    ["퇴사 처리 미완료", "4대보험 상실·퇴직금 정산 등", offboardOpen.length, "명", "입퇴사관리"],
+    ["기사 가입 승인", "기사관리 › 기사 앱 계정", pendingDrivers.length, "명", "기사승인"],
     ["입사일 미등록", "연차 자동 계산이 안 됩니다", noHire.length, "명", "인사관리부"],
     ["기사 서류 미비", "미제출·반려·만료", docIssueDrivers, "명", "기사서류"],
   ];
@@ -367,7 +362,7 @@ function HrDashboard({ company, onGo }) {
         ]} />
       <Quick onGo={onGo} items={[
         ["인사관리부", "인사관리부", "idcard", "이력서·인사발령·근속"], ["출근기록부", "출근기록부", "clock", `오늘 ${inN}명 출근`],
-        ["연차관리", "연차 관리", "flag", `촉진 대상 ${promote.length}명`], ["입퇴사관리", "입·퇴사 관리", "check", `미완료 ${onboardOpen.length + offboardOpen.length}명`],
+        ["인사관리부:leave", "연차 관리", "flag", `촉진 대상 ${promote.length}명`], ["인사관리부:edit", "직원 정보 · 퇴사", "users", `재직 ${active.length}명`],
         ["증명서발급", "증명서 발급", "stamp", "재직·경력증명서"], ["관리자메뉴", "회원 관리", "users", `승인 대기 ${pendingStaff.length}명`],
         ["전자결재", "인사 결재", "stamp", `대기 ${leavePending.length + reportPending.length}건`], ["기사서류", "기사 서류", "file", `미비 ${docIssueDrivers}명`],
       ]} />
@@ -405,7 +400,7 @@ function HrDashboard({ company, onGo }) {
         </Card>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-4">
-        <Card en="TEAM · NEXT 7 DAYS" title="이번 주 부재 일정" right={<button type="button" onClick={() => onGo?.("연차관리")} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12px] font-black text-[#1B2B4B] whitespace-nowrap">연차 관리 ›</button>}>
+        <Card en="TEAM · NEXT 7 DAYS" title="이번 주 부재 일정" right={<button type="button" onClick={() => onGo?.("인사관리부:leave")} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12px] font-black text-[#1B2B4B] whitespace-nowrap">연차 관리 ›</button>}>
           <div className="grid grid-cols-7 gap-1 md:gap-1.5">
             {week.map((d) => {
               const list = weekEvs.filter((e) => e.date === d); const dow = new Date(`${d}T00:00:00Z`).getUTCDay();

@@ -93,58 +93,88 @@ export default function OrgChart({ userCompany }) {
         <div className="py-20 text-center text-[14px] text-[#9AA9C3]">불러오는 중…</div>
       ) : teams.length === 0 ? (
         <div className="py-20 text-center text-[14px] text-[#9AA9C3] rounded-[20px] border border-dashed border-[#DCE3EE] bg-white">표시할 인원이 없습니다</div>
-      ) : (
-        <div>
-          <div className="grid gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
-            {teams.map((t) => {
-              const lead = t.name !== "미배정" ? t.list[0] : null;
-              return (
-                <section key={t.name} className="bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] overflow-hidden flex flex-col">
-                  <div className="px-5 pt-4 pb-3 border-b border-[#EEF1F6] flex items-center justify-between">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="w-2 h-7 rounded-full bg-gradient-to-b from-[#1B2B4B] to-[#4B6CB7]" />
-                      <div className="min-w-0">
-                        <div className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7]">TEAM</div>
-                        <div className="text-[17px] font-black text-[#0F1A30] truncate">{t.name}</div>
-                      </div>
-                    </div>
-                    <span className="h-7 px-2.5 inline-flex items-center rounded-full bg-[#F5F8FD] border border-[#E3E8F0] text-[12px] font-extrabold text-[#1B2B4B] tabular-nums">{t.list.length}명</span>
+      ) : (() => {
+        // ⭐ 2026-10-31 연결선 조직도 — 대표이사 → 임원진 → 부서 → 직원(직급순)
+        const all = teams.flatMap((t) => t.list);
+        const isCeo = (m) => /대표|사장/.test(String(m.position || "")) && !/부사장/.test(String(m.position || ""));
+        const ceos = all.filter(isCeo).sort((x, y) => rankOf(x.position) - rankOf(y.position));
+        const execs = all.filter((m) => !isCeo(m) && (m.team === "임원" || rankOf(m.position) <= 6)).sort((x, y) => rankOf(x.position) - rankOf(y.position));
+        const used = new Set([...ceos, ...execs].map((m) => m.uid));
+        const depts = teams.filter((t) => t.name !== "임원").map((t) => ({ ...t, list: t.list.filter((m) => !used.has(m.uid)) })).filter((t) => t.list.length);
+        const Person = ({ m, big, gold }) => {
+          const phone = fmtPhone(m.phone || m.전화번호);
+          return (
+            <div className={`flex items-center gap-3 rounded-2xl px-3.5 py-2.5 text-left ${gold ? "text-white shadow-[0_14px_30px_rgba(15,26,48,0.3)]" : big ? "bg-gradient-to-r from-[#0F1A30] to-[#2D4C82] text-white shadow-[0_10px_24px_rgba(15,26,48,0.22)]" : "bg-white border border-[#E3E8F0]"}`}
+              style={gold ? { background: "linear-gradient(120deg,#060C1A,#13213F 60%,#2D4C82)", boxShadow: "inset 0 0 0 1px rgba(215,188,130,.55), 0 14px 30px rgba(15,26,48,.3)" } : undefined}>
+              <Avatar name={m.name} photo={photos[m.uid]} size={gold ? 52 : big ? 46 : 38} />
+              <div className="min-w-0">
+                <div className="flex items-baseline gap-1.5"><span className={`font-black truncate ${gold ? "text-[17px]" : big ? "text-[15.5px]" : "text-[14px] text-[#0F1A30]"}`}>{m.name || m.email}</span><span className={`text-[12px] font-bold whitespace-nowrap ${gold ? "text-[#D7BC82]" : big ? "text-white/70" : "text-[#7A879C]"}`}>{m.position || ""}</span></div>
+                {phone ? <button type="button" onClick={() => copy(phone, m.uid)} className={`text-[12px] font-semibold tabular-nums ${gold || big ? "text-white/70" : "text-[#5B6B85]"}`}>{copied === m.uid ? "복사됨 ✓" : phone}</button> : null}
+              </div>
+            </div>
+          );
+        };
+        const Dept = ({ t }) => (
+          <div className="w-[248px] rounded-[20px] bg-[#F7F9FC] border border-[#E3E8F0] p-2.5 text-left">
+            <div className="flex items-center justify-between px-1.5 pb-2">
+              <span className="flex items-center gap-2"><span className="w-1.5 h-5 rounded-full bg-gradient-to-b from-[#1B2B4B] to-[#4B6CB7]" /><span className="text-[15px] font-black text-[#0F1A30]">{t.name}</span></span>
+              <span className="text-[11.5px] font-black text-[#5B6B85] tabular-nums">{t.list.length}명</span>
+            </div>
+            <div className="relative pl-4">
+              <span className="absolute left-[7px] top-3 bottom-5 w-[2px] bg-[#C9D6EE] rounded" />
+              <div className="space-y-1.5">
+                {t.list.map((m, i) => (
+                  <div key={m.uid} className="relative">
+                    <span className="absolute -left-[9px] top-1/2 w-[9px] h-[2px] bg-[#C9D6EE]" />
+                    <Person m={m} big={i === 0 && rankOf(m.position) < 50 && t.name !== "미배정"} />
                   </div>
-                  <div className="p-3 space-y-1.5">
-                    {t.list.map((m) => {
-                      const phone = fmtPhone(m.phone || m.전화번호);
-                      const isLead = lead && m.uid === lead.uid && rankOf(m.position) < 50;
-                      return (
-                        <div key={m.uid} className={`flex items-center gap-3 px-3 py-2.5 rounded-2xl ${isLead ? "bg-gradient-to-r from-[#0F1A30] to-[#2D4C82] text-white" : "hover:bg-[#F5F8FD]"}`}>
-                          <Avatar name={m.name} photo={photos[m.uid]} size={isLead ? 48 : 42} />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
-                              <span className={`text-[15px] font-black truncate ${isLead ? "" : "text-[#0F1A30]"}`}>{m.name || m.email}</span>
-                              <span className={`text-[12px] font-bold ${isLead ? "text-white/70" : "text-[#7A879C]"}`}>{m.position || ""}</span>
-                            </div>
-                            {phone ? (
-                              <button type="button" onClick={() => copy(phone, m.uid)} title="눌러서 번호 복사"
-                                className={`text-[13px] font-semibold tabular-nums ${isLead ? "text-white/85" : "text-[#3A4A66]"}`}>
-                                {copied === m.uid ? "복사됨 ✓" : phone}
-                              </button>
-                            ) : <div className={`text-[12.5px] ${isLead ? "text-white/50" : "text-[#9AA9C3]"}`}>연락처 미등록</div>}
-                          </div>
-                          {phone && (
-                            <a href={`tel:${phone.replace(/\D/g, "")}`} title="전화 걸기"
-                              className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isLead ? "bg-white/10 text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>
-                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z" /></svg>
-                            </a>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              );
-            })}
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+        return (
+          <div className="rounded-[24px] bg-white border border-[#E3E8F0] p-4 md:p-8 overflow-x-auto">
+            <style>{`
+              .oc-tree, .oc-tree ul { margin: 0; padding: 0; }
+              .oc-tree ul { padding-top: 26px; position: relative; display: flex; justify-content: center; }
+              .oc-tree li { list-style: none; position: relative; padding: 26px 10px 0; display: flex; flex-direction: column; align-items: center; }
+              .oc-tree li::before, .oc-tree li::after { content: ""; position: absolute; top: 0; right: 50%; width: 50%; height: 26px; border-top: 2px solid #9FB2D6; }
+              .oc-tree li::after { right: auto; left: 50%; border-left: 2px solid #9FB2D6; }
+              .oc-tree li:only-child::before, .oc-tree li:only-child::after { display: none; }
+              .oc-tree li:only-child { padding-top: 0; }
+              .oc-tree li:first-child::before, .oc-tree li:last-child::after { border: 0 none; }
+              .oc-tree li:last-child::before { border-right: 2px solid #9FB2D6; border-radius: 0 10px 0 0; }
+              .oc-tree li:first-child::after { border-radius: 10px 0 0 0; }
+              .oc-tree ul ul::before { content: ""; position: absolute; top: 0; left: 50%; height: 26px; border-left: 2px solid #9FB2D6; }
+              .oc-tree > ul { padding-top: 0; }
+            `}</style>
+            <div className="oc-tree min-w-max mx-auto">
+              <ul>
+                <li>
+                  {ceos.length ? <div className="flex gap-3">{ceos.map((m) => <Person key={m.uid} m={m} gold />)}</div>
+                    : <div className="rounded-2xl px-6 py-3 text-white text-[17px] font-black" style={{ background: "linear-gradient(120deg,#060C1A,#13213F 60%,#2D4C82)" }}>{userCompany || "대표이사"}<div className="text-[11.5px] font-bold text-[#D7BC82]">대표이사 미지정 — 부서 「임원」·직책 「대표」로 지정</div></div>}
+                  <ul>
+                    <li>
+                      {execs.length ? (
+                        <div className="rounded-[20px] border border-[#D7BC82]/60 bg-[#FFFCF5] p-2.5">
+                          <div className="text-center text-[11px] font-extrabold tracking-[0.24em] text-[#8C7442] pb-2">EXECUTIVES · 임원진</div>
+                          <div className="flex gap-2">{execs.map((m) => <Person key={m.uid} m={m} big />)}</div>
+                        </div>
+                      ) : <div className="rounded-full px-4 py-1.5 bg-[#EEF3FC] text-[12px] font-black text-[#1B2B4B]">부서</div>}
+                      {depts.length > 0 && (
+                        <ul>
+                          {depts.map((t) => <li key={t.name}><Dept t={t} /></li>)}
+                        </ul>
+                      )}
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

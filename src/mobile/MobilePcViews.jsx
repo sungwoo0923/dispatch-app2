@@ -159,7 +159,7 @@ export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], 
   else if (kind === "ratecard") body = <div className="kp-m-pc"><RateCard dispatchData={dispatchData} userCompany={userCompany} clients={clients} /></div>;
   else if (kind === "fleet") body = <FleetView dispatchData={dispatchData} userCompany={userCompany} role={role} onRegisterBack={onRegisterBack} />;
   else if (kind === "approval") body = <ApprovalView company={userCompany} me={me} initialPage={initial || "inbox"} />;
-  else if (kind === "staff") body = <StaffManager company={userCompany} role={role} myUid={me?.uid} initialTab={initial || "pending"} />;
+  else if (kind === "staff") body = <StaffManager company={userCompany} role={role} myUid={me?.uid} initialTab={initial || "pending"} compact={role === "test" || role === "hrManager"} />;
   else if (kind === "notice") body = <NoticeView company={userCompany} me={me} />;
   else if (String(kind).startsWith("dept")) {
     const k = String(kind).slice(5);
