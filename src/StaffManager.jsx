@@ -12,7 +12,7 @@ function Loading() {
   return <div className="py-24 flex flex-col items-center gap-3 text-[#7A879C]"><span className="w-6 h-6 border-[3px] border-[#DCE3EE] border-t-[#1B2B4B] rounded-full animate-spin" /><span className="text-[12.5px] font-bold">불러오는 중…</span></div>;
 }
 // ── 직원 관리(관리자·마스터) — PC 관리자메뉴의 직원 승인·권한을 휴대폰에서 ──
-const ROLE_LABEL = { admin: "관리자", hrManager: "인사관리자", user: "실무자", test: "경리/회계", viewer: "조회전용", totalMaster: "최고관리자" };
+const ROLE_LABEL = { admin: "관리자", hrManager: "인사관리자", hrAcct: "통합인사관리자", user: "실무자", test: "경리/회계", viewer: "조회전용", totalMaster: "최고관리자" };
 // 승인 대기 직원·기사 수(메뉴 숫자)
 export function usePendingSignups(company, enabled = true) {
   const [n, setN] = React.useState({ staff: 0, drivers: 0 });
@@ -152,7 +152,7 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
                 {!isDriverTab && canRole && !u.isMaster && !isExecProfile(u) && (
                   <>
                     <div className="px-2 pt-1 pb-1 text-[10.5px] font-black text-[#9AA9C3]">권한 변경</div>
-                    {["admin", "hrManager", "user", "test", "viewer"].map((rk) => (
+                    {["admin", "hrManager", "hrAcct", "user", "test", "viewer"].map((rk) => (
                       <button key={rk} type="button" onClick={() => { setMenuOpen(null); changeRole(u, rk); }} className={`w-full text-left px-2.5 h-8 rounded-lg text-[12.5px] font-bold ${u.role === rk ? "bg-[#EEF3FC] text-[#1B2B4B]" : "text-[#3A4A66] hover:bg-[#F5F8FD]"}`}>{u.role === rk ? "✓ " : ""}{ROLE_LABEL[rk]}</button>
                     ))}
                     <div className="h-px bg-[#EEF2F8] my-1" />

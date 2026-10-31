@@ -70,6 +70,7 @@ const ROLE_LABELS = {
   totalMaster: "최고관리자",
   admin: "관리자",
   hrManager: "인사관리자",
+  hrAcct: "통합인사관리자",
   user: "실무자",
   viewer: "조회전용",
   driver: "기사",
@@ -156,8 +157,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const customRoles = useCustomRoles();
   const roleLabels = { ...ROLE_LABELS, ...Object.fromEntries(customRoles.map(r => [r.key, r.label])) };
   const ROLES = isTotalMaster
-    ? ["totalMaster", "admin", "hrManager", "user", "viewer", "driver", "shipper", "test", ...customRoles.map(r => r.key)]
-    : ["admin", "hrManager", "user", "viewer", "test", ...customRoles.map(r => r.key)];
+    ? ["totalMaster", "admin", "hrManager", "hrAcct", "user", "viewer", "driver", "shipper", "test", ...customRoles.map(r => r.key).filter((k) => !["admin", "hrManager", "hrAcct", "user", "viewer", "test"].includes(k))]
+    : ["admin", "hrManager", "hrAcct", "user", "viewer", "test", ...customRoles.map(r => r.key).filter((k) => !["admin", "hrManager", "hrAcct", "user", "viewer", "test"].includes(k))];
   const effectiveCompany = myCompany || parentCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY;
   // 휴지통이 다루는 회사 — 최고관리자는 지금 들어가 있는 회사
   const autoCompany = (isTotalMaster && localStorage.getItem("loginCompany")) || effectiveCompany;
@@ -247,8 +248,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const TEAM_OPTIONS = hrOpt.teams;
   // ⭐ 2026-10-31 가입 승인은 관리자·경리·인사관리자부터 — 인사관리자는 인사권(승인 후 정보·권한 변경·퇴사)까지
   const myRoleEff = meDoc?.role || myRole || parentRole;
-  const isHrMgr = !canAdmin && myRoleEff === "hrManager";
-  const canApprove = canAdmin || ["admin", "hrManager", "test"].includes(myRoleEff);
+  const isHrMgr = !canAdmin && (myRoleEff === "hrManager" || myRoleEff === "hrAcct");
+  const canApprove = canAdmin || ["admin", "hrManager", "hrAcct", "test"].includes(myRoleEff);
   const canEditMember = (u) => !!u && (canAdmin || isHrMgr || (canApprove && !u.approved && u.employmentStatus !== "퇴사"));
   const assignableRoles = (cur) => {
     const base = canAdmin ? ROLES : isHrMgr ? ROLES.filter((r) => r !== "totalMaster") : myRoleEff === "admin" ? ["admin", "user", "test", "hrManager", "viewer"] : ["user", "test", "viewer"];

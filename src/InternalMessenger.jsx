@@ -1,3 +1,4 @@
+import { FabButton, SizeButtons, DOCK_BG } from "./FloatDock";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { imeFocusRef } from "./imeFocus";
 import { createPortal } from "react-dom";
@@ -774,16 +775,27 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
 
   // ── 테마 (themeColor prop이 있으면 그 색으로 고정, 없으면 A형=블루/화이트, B형=네이비) ──
   const isThemeA = !themeColor && localStorage.getItem("cardVersionV2") === "A";
-  const themeHdr = themeColor || (isThemeA ? "linear-gradient(135deg, #3b82f6, #1d4ed8)" : "#1B2B4B");
-  const themeMyBubble = themeColor || (isThemeA ? "#2563eb" : "#1B2B4B");
-  const themeChatBg = themeColor ? "#eef1f7" : (isThemeA ? "#eff6ff" : "#f0f4f8");
+  // ⭐ 2026-10-31 프로그램 톤(네이비 디지털)으로 통일
+  const themeHdr = themeColor || DOCK_BG;
+  const themeMyBubble = themeColor || "#1B2B4B";
+  const themeChatBg = themeColor ? "#eef1f7" : (isThemeA ? "#F4F6FA" : "#F0F4F8");
 
   // ── 패널 크기 & 위치 ──
   const PANEL_W = mobileMode ? 360 : 820;
   const PANEL_H = 580;
   const BTN_BOTTOM = 152;
-  const [panelW, setPanelW] = useState(PANEL_W);
-  const [panelH, setPanelH] = useState(PANEL_H);
+  // 창 크기 — 작게·보통·크게 + 왼쪽 위 모서리 드래그(기억)
+  const MSG_PRESETS = { S: [560, 460], M: [820, 600], L: [1120, 820] };
+  const savedWin = (() => { try { return JSON.parse(localStorage.getItem("kpWin:messenger") || "null"); } catch { return null; } })();
+  const [panelW, setPanelW] = useState(mobileMode ? PANEL_W : (savedWin?.w || PANEL_W));
+  const [panelH, setPanelH] = useState(mobileMode ? PANEL_H : (savedWin?.h || PANEL_H));
+  const [winPreset, setWinPreset] = useState(savedWin?.p || "M");
+  const pickWin = (k) => {
+    const [w, h] = MSG_PRESETS[k];
+    const cw = Math.max(500, Math.min(w, window.innerWidth - 120)); const ch = Math.max(400, Math.min(h, window.innerHeight - 60));
+    setPanelW(cw); setPanelH(ch); setWinPreset(k);
+    try { localStorage.setItem("kpWin:messenger", JSON.stringify({ w: cw, h: ch, p: k })); } catch { /* 무시 */ }
+  };
   const resizingRef = useRef(null);
   const startResizePanelDrag = (e) => {
     e.preventDefault();
@@ -796,8 +808,10 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       if (!resizingRef.current) return;
       const dx = startX - ev.clientX;
       const dy = startY - ev.clientY;
-      setPanelW(Math.max(500, Math.min(1200, startW + dx)));
-      setPanelH(Math.max(400, Math.min(900, startH + dy)));
+      const nw = Math.max(500, Math.min(window.innerWidth - 120, startW + dx));
+      const nh = Math.max(400, Math.min(window.innerHeight - 60, startH + dy));
+      setPanelW(nw); setPanelH(nh); setWinPreset("");
+      try { localStorage.setItem("kpWin:messenger", JSON.stringify({ w: nw, h: nh, p: "" })); } catch { /* 무시 */ }
     };
     const onUp = () => {
       resizingRef.current = false;
@@ -984,7 +998,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
             onClick={() => setProfileView(null)}>
             <div style={{ background: "#fff", borderRadius: 20, width: 280, overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
               onClick={e => e.stopPropagation()}>
-              <div style={{ background: "#1B2B4B", padding: "28px 20px 20px", textAlign: "center" }}>
+              <div style={{ background: DOCK_BG, padding: "28px 20px 20px", textAlign: "center" }}>
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
                   <Avatar name={profileView.name} photo={profileView.photo} size={64} />
                 </div>
@@ -1026,7 +1040,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
             onClick={() => setNewGroupModal(false)}>
             <div style={{ background: "#fff", borderRadius: 20, width: "90%", maxWidth: 360, overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
               onClick={e => e.stopPropagation()}>
-              <div style={{ background: "#1B2B4B", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ background: DOCK_BG, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>단체 채팅방 만들기</span>
                 <button onClick={() => setNewGroupModal(false)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.6)", fontSize: 20, cursor: "pointer", lineHeight: 1 }}>✕</button>
               </div>
@@ -1071,7 +1085,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
             onClick={() => setContactPickModal(false)}>
             <div style={{ background: "#fff", borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, overflow: "hidden", maxHeight: "60vh", display: "flex", flexDirection: "column" }}
               onClick={e => e.stopPropagation()}>
-              <div style={{ background: "#1B2B4B", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ background: DOCK_BG, padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>연락처 공유</span>
                 <button onClick={() => setContactPickModal(false)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.6)", fontSize: 20, cursor: "pointer" }}>✕</button>
               </div>
@@ -1121,49 +1135,30 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
 
   return (
     <>
-      {/* 플로팅 버튼 */}
-      <button
-        onClick={() => setOpen(p => !p)}
-        title="메신저"
-        style={{
-          position: "fixed", bottom: BTN_BOTTOM, right: 24, zIndex: 99998,
-          width: 56, height: 56, borderRadius: "50%",
-          background: open ? "#243a60" : "#1B2B4B",
-          color: "white", border: "none", cursor: "pointer",
-          boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          transition: "background 0.2s",
-        }}
-      >
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        </svg>
-        {totalUnread > 0 && !open && (
-          <span style={{
-            position: "absolute", top: -4, right: -4,
-            background: "#ef4444", color: "white", fontSize: 10, fontWeight: 700,
-            borderRadius: "50%", minWidth: 18, height: 18,
-            display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px",
-          }}>
-            {totalUnread > 99 ? "99+" : totalUnread}
-          </span>
-        )}
-      </button>
+      {/* 플로팅 버튼 — 공용 독 디자인 */}
+      <FabButton bottom={BTN_BOTTOM} active={open} title="메신저" badge={totalUnread} onClick={() => setOpen(p => !p)}>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><path d="M8 9h8M8 13h5" /></svg>
+      </FabButton>
 
       {/* 메신저 패널 */}
       {open && (
         <div style={{
-          position: "fixed", bottom: BTN_BOTTOM + 64, right: 24,
-          width: panelW, height: panelH, zIndex: 99997,
+          position: "fixed", bottom: 24, right: 92,
+          width: panelW, height: panelH, zIndex: 99997, borderRadius: 22, boxShadow: "0 24px 60px rgba(15,26,48,0.35)",
         }}>
+          {/* 크기 버튼(작게·보통·크게) — 창 위쪽 오른편 */}
+          <div style={{ position: "absolute", top: -34, right: 0, display: "flex", alignItems: "center", gap: 6, padding: "3px 4px 3px 10px", borderRadius: 12, background: "#0F1A30", boxShadow: "0 8px 20px rgba(15,26,48,0.3)" }}>
+            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.22em", color: "#8FB0F0", fontFamily: "'JetBrains Mono',monospace" }}>SIZE</span>
+            <SizeButtons preset={winPreset} onPick={pickWin} />
+          </div>
           {/* 리사이즈 핸들 (패널 왼쪽 상단 모서리) */}
           <div
             onMouseDown={startResizePanelDrag}
             style={{
               position: "absolute", top: 0, left: 0,
-              width: 18, height: 18, cursor: "nw-resize",
-              zIndex: 10, borderRadius: "8px 0 8px 0",
-              background: "rgba(27,43,75,0.18)",
+              width: 22, height: 22, cursor: "nw-resize",
+              zIndex: 10, borderRadius: "16px 0 10px 0",
+              background: "rgba(143,176,240,0.35)",
               display: "flex", alignItems: "center", justifyContent: "center",
             }}
             title="드래그하여 크기 조정"
@@ -1183,7 +1178,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
           <div style={{ background: "#fff", borderRadius: 20, width: 280, overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
             onClick={e => e.stopPropagation()}>
             {/* 헤더 배경 */}
-            <div style={{ background: "#1B2B4B", padding: "28px 20px 20px", textAlign: "center" }}>
+            <div style={{ background: DOCK_BG, padding: "28px 20px 20px", textAlign: "center" }}>
               <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
                 <Avatar name={profileView.name} photo={profileView.photo} size={64} />
               </div>
@@ -1230,7 +1225,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
           onClick={() => setNewGroupModal(false)}>
           <div style={{ background: "#fff", borderRadius: 20, width: 360, overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
             onClick={e => e.stopPropagation()}>
-            <div style={{ background: "#1B2B4B", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ background: DOCK_BG, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>단체 채팅방 만들기</span>
               <button onClick={() => setNewGroupModal(false)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.6)", fontSize: 20, cursor: "pointer", lineHeight: 1 }}>✕</button>
             </div>
@@ -1275,7 +1270,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
           onClick={() => setContactPickModal(false)}>
           <div style={{ background: "#fff", borderRadius: 20, width: 320, maxHeight: 480, overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
             onClick={e => e.stopPropagation()}>
-            <div style={{ background: "#1B2B4B", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ background: DOCK_BG, padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>연락처 공유</span>
               <button onClick={() => setContactPickModal(false)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.6)", fontSize: 20, cursor: "pointer" }}>✕</button>
             </div>

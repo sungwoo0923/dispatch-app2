@@ -1925,7 +1925,10 @@ const MOBILE_LIVE_DAYS = 1;
 const mobileLiveStart = () => new Date(Date.now() + 9 * 3600e3 - MOBILE_LIVE_DAYS * 86400e3).toISOString().slice(0, 10);
 const prevDayStr = (ymd) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
 
-export default function MobileApp({ role, user, userCompany = "", forceExec = false }) {
+export default function MobileApp({ role: realRole, user, userCompany = "", forceExec = false }) {
+  // 🔀 통합인사관리자(hrAcct) — 메뉴에서 경리 화면 ↔ 인사 화면 전환
+  const [hrAcctView, setHrAcctView] = useState(() => { try { return localStorage.getItem("kpHrAcctView") || "acct"; } catch { return "acct"; } });
+  const role = realRole === "hrAcct" ? (hrAcctView === "hr" ? "hrManager" : "test") : realRole;
   // ⭐ LTE 속도 — 앱을 켜면 오더·기사·거래처·공지·일정 등 10여 개 구독이 한꺼번에 전파를 나눠 써서,
   // 약한 LTE에선 정작 오더가 늦게 들어왔다. 오더가 서버와 맞춰진 뒤에 나머지(기사·거래처·공지 등)를 시작한다.
   const [secondaryReady, setSecondaryReady] = useState(false);
@@ -5956,6 +5959,8 @@ onGoAttendance={() => {
           onGo={(p) => { if (p === "list") deptListOkRef.current = true; setPage(p); setShowMenu(false); }}
           deptMode={deptMode}
           isExec={isExecM}
+          hrAcct={realRole === "hrAcct" ? hrAcctView : null}
+          onToggleHrAcct={() => { const v = hrAcctView === "hr" ? "acct" : "hr"; setHrAcctView(v); try { localStorage.setItem("kpHrAcctView", v); } catch { /* 무시 */ } setPage("dept"); setShowMenu(false); }}
           isCeo={forceExec || ["대표", "대표이사", "사장"].includes(String(myProfM?.position || "").trim())}
           execFull={execFull}
           onToggleExec={() => { toggleExecFull(); setShowMenu(false); }}
@@ -7761,6 +7766,8 @@ function MobileSideMenu({
   unassignedCount = 0,
   deptMode = null,
   isExec = false,
+  hrAcct = null,
+  onToggleHrAcct,
   isCeo = false,
   execFull = false,
   onToggleExec,
@@ -7908,6 +7915,11 @@ function MobileSideMenu({
               {canRevenue && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
               {isAdminRole && <MenuItem label="경영인텔리전스" icon="trend" onClick={onGoIntel} dark={dark} />}
               {isAdminRole && <MenuItem label="직원 관리" icon="users" onClick={() => onGo?.("staff")} badge={(alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) || null} dark={dark} />}
+            </MenuSection>
+          )}
+          {hrAcct && (
+            <MenuSection title="화면 전환" en="HR · ACCOUNTING" dark={dark} alwaysOpen>
+              <MenuItem label={hrAcct === "hr" ? "경리 화면으로 전환" : "인사 화면으로 전환"} icon="refresh" onClick={onToggleHrAcct} dark={dark} />
             </MenuSection>
           )}
           {isExec && isAdminRole && (

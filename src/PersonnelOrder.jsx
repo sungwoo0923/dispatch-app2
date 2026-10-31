@@ -13,7 +13,7 @@ import { suggestRole, isExecProfile, useHrOptions } from "./hrConstants";
 import { sendInternalMail, useCompanyStaff, compressImage } from "./InternalMail";
 
 export const HR_ROLE_OPTIONS = [
-  ["user", "실무자"], ["admin", "관리자"], ["hrManager", "인사관리자"], ["test", "경리/회계"], ["viewer", "조회전용"],
+  ["user", "실무자"], ["admin", "관리자"], ["hrManager", "인사관리자"], ["hrAcct", "통합인사관리자"], ["test", "경리/회계"], ["viewer", "조회전용"],
 ];
 const roleName = (r) => (HR_ROLE_OPTIONS.find(([k]) => k === r) || [r, r || "-"])[1];
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };

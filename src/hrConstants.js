@@ -36,7 +36,7 @@ export function suggestRole({ team = "", position = "" } = {}) {
   if (MANAGER_RANKS.includes(p)) return "admin";
   return "user";
 }
-export const ROLE_NAME = { admin: "관리자", user: "실무자", test: "경리/회계", hrManager: "인사관리자", viewer: "조회전용", totalMaster: "최고관리자" };
+export const ROLE_NAME = { admin: "관리자", user: "실무자", test: "경리/회계", hrManager: "인사관리자", hrAcct: "통합인사관리자", viewer: "조회전용", totalMaster: "최고관리자" };
 
 // 팀 배지는 알록달록한 색 대신 프로그램 톤(네이비/그레이)에 맞춘 단일 톤으로 통일
 export const TEAM_BADGE_CLASS = "bg-[#1B2B4B]/5 text-[#1B2B4B] border-[#1B2B4B]/15";

@@ -16,11 +16,12 @@ import ObituaryWriter from "./ObituaryWriter";
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const inp = "h-11 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
 const Label = ({ children }) => <div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">{children}</div>;
-const ROLE_KEYS = ["admin", "hrManager", "test", "user", "viewer"];
+const ROLE_KEYS = ["admin", "hrManager", "hrAcct", "test", "user", "viewer"];
 const ROLE_DESC = {
   admin: "배차·정산·매출·관리자메뉴 등 전체 업무(임원은 이 권한으로 고정)",
   hrManager: "인사관리부 화면 — 인사 기록·발령·근태·입퇴사·직원 승인",
   test: "경리 화면 — 정산·회계·자금·비품·퇴직 정산",
+  hrAcct: "경리 + 인사 — 상단 버튼으로 경리 화면 ↔ 인사 화면 전환",
   user: "실무자 — 배차·기사·거래처 업무(매출·정산 제외)",
   viewer: "조회전용 — 보기만, 수정 불가",
 };
