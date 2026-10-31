@@ -7,6 +7,7 @@ import { collection, deleteDoc, doc, onSnapshot, updateDoc, arrayUnion } from "f
 import { db } from "./firebase";
 import { ShellIcon } from "./AdminShell";
 import { HandoverWriter, handoverReceivers } from "./HomeWriters";
+import { useUserNames } from "./userNames";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const HERO_BG = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
@@ -32,6 +33,9 @@ export default function HandoverCenter({ company, me, isViewer = false }) {
     setList(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (toMs(b.createdAt) || Date.parse(b.date || 0) || 0) - (toMs(a.createdAt) || Date.parse(a.date || 0) || 0)));
   }, () => setList([])), []);
   const uid = me?.uid;
+  // 예전 글에 계정 아이디로 적힌 작성자도 실제 이름으로
+  const nameOf = useUserNames((list || []).map((h) => h.authorUid));
+  const authorName = (h) => nameOf(h.authorUid) || h.author || "-";
   const admin = ADMIN_ROLES.includes(me?.role);
   const L = list || [];
   const sets = {
@@ -120,7 +124,7 @@ export default function HandoverCenter({ company, me, isViewer = false }) {
                       <span className="text-[14.5px] font-black text-[#0F1A30] truncate">{dateLabel(h)}</span>
                     </div>
                     <div className="text-[12.5px] text-[#5B6B85] truncate mt-0.5">
-                      {h.author || "-"} → {(h.receivers || []).length > 1 ? `${h.receivers[0].name} 외 ${h.receivers.length - 1}명` : h.receiver || "-"}
+                      {authorName(h)} → {(h.receivers || []).length > 1 ? `${h.receivers[0].name} 외 ${h.receivers.length - 1}명` : h.receiver || "-"}
                       <span className="text-[#9AA9C3]" style={{ fontFamily: MONO }}> · {timeLabel(h)}</span>
                     </div>
                   </div>
@@ -146,7 +150,7 @@ export default function HandoverCenter({ company, me, isViewer = false }) {
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3.5">
               <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2"><div className="text-[11.5px] font-bold text-[#7A879C]">보낸 사람</div><div className="text-[14px] font-black text-[#0F1A30] truncate">{cur.author || "-"}</div></div>
+                <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2"><div className="text-[11.5px] font-bold text-[#7A879C]">보낸 사람</div><div className="text-[14px] font-black text-[#0F1A30] truncate">{authorName(cur)}</div></div>
                 <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2"><div className="text-[11.5px] font-bold text-[#7A879C]">등록</div><div className="text-[14px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>{timeLabel(cur) || "-"}</div></div>
               </div>
               <div>

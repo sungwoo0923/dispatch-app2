@@ -21,6 +21,7 @@ import { createPortal } from "react-dom";
 import html2canvas from "html2canvas";
 import { printA4 } from "./a4Export";
 import { TimeSelect } from "./kpInputs";
+import { useMyProfile, useUserNames, personName } from "./userNames";
 import { db, auth } from "./firebase";
 import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, serverTimestamp } from "firebase/firestore";
 import { ShellIcon } from "./AdminShell";
@@ -1048,7 +1049,15 @@ function LinesPage({ company, me, staff }) {
 //  page: inbox | mine | leave | expense | draft | lines
 export default function ApprovalCenter({ company, me, page, setPage, openId, onOpened }) {
   const staff = useCompanyStaff(company);
-  const list = useApprovals(me.uid);
+  const rawList = useApprovals(me.uid);
+  // ⭐ 2026-10-31 기안자·결재자가 계정 아이디로 보이던 문제 — 본인 문서·각 사람 문서에서 실제 이름을 찾아 쓴다
+  const myProfile = useMyProfile(me.uid);
+  const nameOf = useUserNames((rawList || []).flatMap((d) => [d.drafterUid, ...(d.line || []).map((x) => x.uid), ...(d.cancel?.line || []).map((x) => x.uid)]));
+  const list = React.useMemo(() => (rawList ? rawList.map((d) => {
+    const fixLine = (ln) => (Array.isArray(ln) ? ln.map((x) => (nameOf(x.uid) ? { ...x, name: nameOf(x.uid) } : x)) : ln);
+    const dn = nameOf(d.drafterUid);
+    return { ...d, drafter: dn ? { ...(d.drafter || {}), name: dn } : d.drafter, line: fixLine(d.line), ...(d.cancel ? { cancel: { ...d.cancel, line: fixLine(d.cancel.line) } } : {}) };
+  }) : rawList), [rawList, nameOf]);
   const [open, setOpen] = React.useState(null);
   const [preset, setPreset] = React.useState(null);
   const [tab, setTab] = React.useState("todo");
@@ -1060,7 +1069,11 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
     return onSnapshot(query(collection(db, "approvals"), where("company", "==", company)),
       (s) => setCompanyAll(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt))), () => setCompanyAll([]));
   }, [admin, tab, company]);
-  const meFull = React.useMemo(() => ({ ...me, ...((staff || []).find((u) => u.uid === me.uid) ? { team: (staff || []).find((u) => u.uid === me.uid).team || me.team, position: (staff || []).find((u) => u.uid === me.uid).position || me.position } : {}) }), [me, staff]);
+  const meFull = React.useMemo(() => {
+    const st = (staff || []).find((u) => u.uid === me.uid);
+    const pf = myProfile || {};
+    return { ...me, name: personName(pf) || personName(st) || me.name, team: pf.team || st?.team || me.team || "", position: pf.position || st?.position || me.position || "" };
+  }, [me, staff, myProfile]);
   const cur = open ? ([...(list || []), ...(companyAll || [])].find((x) => x.id === open) || null) : null;
   // 배너를 눌러 들어오면 그 문서를 바로 연다
   React.useEffect(() => { if (openId) { setOpen(openId); onOpened?.(); } }, [openId]); // eslint-disable-line react-hooks/exhaustive-deps

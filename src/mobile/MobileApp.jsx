@@ -7728,7 +7728,6 @@ function MobileSideMenu({
   alertCounts,
   unassignedCount = 0,
 }) {
-  const [loginMgrOpen, setLoginMgrOpen] = useState(false); // ⭐ 로그인 관리
   const isAdminRole = ["admin", "totalMaster", "superadmin"].includes(role);
   const canRevenue = ["admin", "totalMaster", "superadmin", "test", "viewer"].includes(role);
   const canAdminMenu = isAdminRole || role === "viewer";
@@ -7922,16 +7921,8 @@ function MobileSideMenu({
             </div>
           </div>
 
-          {/* 로그인 관리 + 로그아웃 */}
+          {/* 로그아웃 — 로그인 관리·비밀번호 변경은 설정 › 계정에서(메뉴에서는 뺐다, 2026-10-31) */}
           <div className={`px-5 py-3 space-y-2 ${dark ? "border-t border-white/10" : "border-t border-blue-100"}`}>
-            <button onClick={() => setLoginMgrOpen(true)}
-              className={`w-full py-2.5 rounded-xl text-[13px] font-semibold active:scale-[0.98] transition ${
-                dark
-                  ? "bg-white/10 text-white/80 border border-white/20 hover:bg-white/20"
-                  : "bg-white text-blue-700 border border-blue-200 hover:bg-blue-50"
-              }`}
-            >로그인 관리 · 비밀번호 변경</button>
-            {loginMgrOpen && <LoginManagerModal onClose={() => setLoginMgrOpen(false)} />}
             <button onClick={logout}
               className={`w-full py-2.5 rounded-xl text-[13px] font-semibold active:scale-[0.98] transition ${
                 dark

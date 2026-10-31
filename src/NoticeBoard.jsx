@@ -57,7 +57,7 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
     const ms = toMs(cur.createdAt);
     return (
       <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
-        <div className="px-6 sm:px-8 py-5 border-b border-[#EEF1F6]">
+        <div className="px-4 sm:px-8 py-5 border-b border-[#EEF1F6]">
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setOpenId(null)} className="h-9 px-3.5 rounded-xl border border-[#DCE3EE] text-[13px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD]">← 목록</button>
             {canManage(cur) && (
@@ -74,7 +74,7 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
             {cur.audience === "shipper" && <span className="px-2 py-0.5 rounded-md border border-[#C9D6EE] text-[#2D4C82] text-[11px] font-black">화주사 공개</span>}
             {(cur.teams || []).length > 0 && <span className="px-2 py-0.5 rounded-md border border-[#C9D6EE] text-[#2D4C82] text-[11px] font-black">{cur.teams.join(" · ")} 대상</span>}
           </div>
-          <h2 className="mt-2 text-[24px] font-black text-[#0F1A30] leading-snug break-words">{cur.title || "공지사항"}</h2>
+          <h2 className="mt-2 text-[20px] sm:text-[24px] font-black text-[#0F1A30] leading-snug break-words">{cur.title || "공지사항"}</h2>
           <div className="mt-3 flex items-center gap-3">
             <span className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-black" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}>{String(cur.author || "?").slice(0, 1)}</span>
             <div className="leading-tight">
@@ -83,7 +83,7 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
             </div>
           </div>
         </div>
-        <div className="px-6 sm:px-8 py-7 space-y-5">
+        <div className="px-4 sm:px-8 py-6 sm:py-7 space-y-5">
           <div className="text-[15.5px] text-[#1F2A44] leading-[1.95] whitespace-pre-wrap break-words">{cur.content}</div>
           {cur.image && <img src={cur.image} alt="" className="max-w-full max-h-[640px] rounded-xl border border-[#E3E8F0]" />}
         </div>
@@ -95,12 +95,13 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
     const unread = me?.uid && !(n.readBy || []).includes(me.uid);
     return (
       <button type="button" onClick={() => setOpenId(n.id)}
-        className={`w-full grid grid-cols-[64px_minmax(0,1fr)_120px_110px] items-center gap-3 px-5 h-[56px] border-b border-[#F1F4F9] text-left transition hover:bg-[#F5F8FD] ${pin ? "bg-[#F3F6FB]" : ""}`}>
+        className={`w-full grid grid-cols-[52px_minmax(0,1fr)_auto] md:grid-cols-[64px_minmax(0,1fr)_120px_110px] items-center gap-2.5 md:gap-3 px-3 md:px-5 h-[60px] md:h-[56px] border-b border-[#F1F4F9] text-left transition hover:bg-[#F5F8FD] ${pin ? "bg-[#F3F6FB]" : ""}`}>
         <span className="text-center">
-          {pin ? <span className="inline-flex items-center justify-center h-6 px-1.5 rounded-md bg-[#0F1A30] text-[#8FB0F0] text-[10.5px] font-black">📌 고정</span>
+          {pin ? <span className="inline-flex items-center justify-center whitespace-nowrap h-6 px-1.5 rounded-md bg-[#0F1A30] text-[#8FB0F0] text-[10.5px] font-black">📌 고정</span>
             : <span className="text-[14px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>{no}</span>}
         </span>
-        <span className="min-w-0 flex items-center gap-1.5">
+        <span className="min-w-0 flex flex-col md:flex-row md:items-center gap-0.5 md:gap-1.5">
+        <span className="min-w-0 flex items-center gap-1.5 whitespace-nowrap">
           {n.category && n.category !== "공지사항" && <span className="shrink-0 px-1.5 py-0.5 rounded bg-[#EEF3FC] text-[#1B2B4B] text-[10.5px] font-black">{n.category}</span>}
           {n.audience === "shipper" && <span className="shrink-0 px-1.5 py-0.5 rounded border border-[#C9D6EE] text-[#2D4C82] text-[10.5px] font-black">화주사</span>}
           {(n.teams || []).length > 0 && <span className="shrink-0 px-1.5 py-0.5 rounded border border-[#C9D6EE] text-[#2D4C82] text-[10.5px] font-black">{n.teams.length === 1 ? n.teams[0] : `${n.teams[0]} 외 ${n.teams.length - 1}`}</span>}
@@ -108,7 +109,10 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
           {n.image && <span className="shrink-0 text-[11px] text-[#9AA9C3]">🖼</span>}
           {isNew(n) && unread && <span className="shrink-0 w-[18px] h-[18px] rounded-full bg-[#1B2B4B] text-white text-[10px] font-black flex items-center justify-center">N</span>}
         </span>
-        <span className="truncate text-[14px] font-bold text-[#1B2B4B]">{n.author || "-"}</span>
+        {/* 휴대폰 — 작성자는 제목 아래 줄로 */}
+        <span className="md:hidden truncate text-[12px] font-bold text-[#7A879C]">{n.author || "-"}</span>
+        </span>
+        <span className="hidden md:block truncate text-[14px] font-bold text-[#1B2B4B]">{n.author || "-"}</span>
         <span className="text-right text-[14px] font-semibold text-[#3A4A66] tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{shortDate(toMs(n.createdAt))}</span>
       </button>
     );
@@ -116,16 +120,16 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
 
   return (
     <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
-      <div className="px-4 py-3 border-b border-[#EEF1F6] flex items-center gap-3">
-        <div className="relative flex-1 max-w-[360px]">
+      <div className="px-3 md:px-4 py-3 border-b border-[#EEF1F6] flex items-center gap-3">
+        <div className="relative flex-1 min-w-0 max-w-[360px]">
           <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="제목·내용·작성자 검색"
             className="w-full h-10 pl-9 pr-3 rounded-xl border border-[#DCE3EE] bg-[#F8FAFD] text-[13.5px] text-[#0F1A30] outline-none focus:border-[#2D4C82]" />
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9AA9C3]" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
         </div>
-        <span className="ml-auto text-[12.5px] font-bold text-[#9AA9C3]">고정 {pinned.length}/{MAX_PINNED} · {visible.length}개의 글</span>
+        <span className="ml-auto shrink-0 whitespace-nowrap text-[12px] md:text-[12.5px] font-bold text-[#9AA9C3]">고정 {pinned.length}/{MAX_PINNED} · {visible.length}개의 글</span>
       </div>
-      <div className="grid grid-cols-[64px_minmax(0,1fr)_120px_110px] gap-3 px-5 h-11 items-center bg-[#F3F6FA] border-b border-[#E3E8F0] text-[14px] font-black text-[#1B2B4B]">
-        <span className="text-center">번호</span><span>제목</span><span>작성자</span><span className="text-right">날짜</span>
+      <div className="grid grid-cols-[52px_minmax(0,1fr)_auto] md:grid-cols-[64px_minmax(0,1fr)_120px_110px] gap-2.5 md:gap-3 px-3 md:px-5 h-11 items-center bg-[#F3F6FA] border-b border-[#E3E8F0] text-[13.5px] md:text-[14px] font-black text-[#1B2B4B] whitespace-nowrap">
+        <span className="text-center">번호</span><span>제목</span><span className="hidden md:block">작성자</span><span className="text-right">날짜</span>
       </div>
       {pinned.map((n) => <Row key={n.id} n={n} pin />)}
       {!shown.length && !pinned.length ? <div className="py-16 text-center text-[13.5px] font-bold text-[#9AA9C3]">{q ? "검색 결과가 없습니다" : "등록된 공지가 없습니다"}</div>
