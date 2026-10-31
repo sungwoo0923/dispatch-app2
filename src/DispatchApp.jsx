@@ -3170,7 +3170,8 @@ const DEPT_MENUS = {
   // 인사: 사람(인사관리부·출근기록부를 회사관리에서 상단으로) — 매출·정산은 빼고
   hr: ["HOME", "전자결재", "인사관리부", "출근기록부", "연차관리", "입퇴사관리", "증명서발급", "직원관리", "기사관리", "기사서류", "관리자메뉴", "회사관리"],
   // 👔 임원(대표·전무·이사) — 보고·결재·매출 중심
-  exec: ["HOME", "결재함", "직원일정", "매출관리", "인사이트", "실시간배차현황", "관리자메뉴", "회사관리"],
+  // 결재는 홈 › 전자결재에 다 있어 상단에서 뺐다(2026-10-31)
+  exec: ["HOME", "직원일정", "매출관리", "인사이트", "관리자메뉴", "회사관리"],
 };
 // 부서 모드 왼쪽 메뉴 묶음
 const DEPT_SIDE_GROUPS = {
@@ -3187,8 +3188,8 @@ const DEPT_SIDE_GROUPS = {
     { label: "관리", items: ["관리자메뉴", "회사관리"] },
   ],
   exec: [
-    { label: "경영", items: ["HOME", "결재함", "매출관리", "인사이트"] },
-    { label: "사람 · 현장", items: ["직원일정", "실시간배차현황"] },
+    { label: "경영", items: ["HOME", "매출관리", "인사이트"] },
+    { label: "직원", items: ["직원일정"] },
     { label: "관리", items: ["관리자메뉴", "회사관리"] },
   ],
 };
@@ -3214,7 +3215,7 @@ function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, compan
         <button
           onClick={onOpen}
           title="메뉴 펼치기"
-          className="fixed left-0 top-1/2 -translate-y-1/2 z-[60] w-6 h-24 rounded-r-xl flex items-center justify-center text-white shadow-[0_8px_20px_rgba(15,26,48,0.3)] hover:w-8 transition-all"
+          className="kp-side-handle fixed left-0 top-1/2 -translate-y-1/2 z-[60] w-6 h-24 rounded-r-xl flex items-center justify-center text-white shadow-[0_8px_20px_rgba(15,26,48,0.3)] hover:w-8 transition-all"
           style={{ background: "linear-gradient(180deg, #16264A 0%, #2D4C82 100%)", opacity: 1 }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6" /></svg>
@@ -3226,7 +3227,7 @@ function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, compan
         onClick={onClose}
       />
       <aside
-        className={`fixed left-0 top-0 bottom-0 z-[9991] w-[256px] flex flex-col text-white shadow-[12px_0_40px_rgba(15,26,48,0.35)] transition-transform duration-200 ease-out ${open ? "translate-x-0" : "-translate-x-full"}`}
+        className={`kp-side-aside fixed left-0 top-0 bottom-0 z-[9991] w-[256px] flex flex-col text-white shadow-[12px_0_40px_rgba(15,26,48,0.35)] transition-transform duration-200 ease-out ${open ? "translate-x-0" : "-translate-x-full"}`}
         style={{ background: "linear-gradient(180deg, #16264A 0%, #1B2B4B 55%, #14213D 100%)" }}
       >
         <div className="px-5 pt-6 pb-5 border-b border-white/10 flex items-center gap-3">
@@ -3255,7 +3256,8 @@ function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, compan
                         key={m}
                         disabled={blocked}
                         onClick={() => { onSelect(m); onClose(); }}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13.5px] font-semibold transition ${
+                        data-on={on ? "1" : "0"}
+                        className={`kp-side-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13.5px] font-semibold transition ${
                           blocked ? "text-white/25 cursor-not-allowed"
                             : on ? "bg-white text-[#1B2B4B] shadow-[0_6px_16px_rgba(0,0,0,0.18)]" : "text-blue-50/80 hover:bg-white/[0.08] hover:text-white"
                         }`}
@@ -7810,7 +7812,7 @@ return (
           </div>
         </div>
       )}
-      <div className={`w-full overflow-x-hidden ${darkMode ? "" : "kp-pc"}`}>
+      <div className={`w-full overflow-x-hidden ${darkMode ? "" : "kp-pc"} ${deptMode === "exec" ? "kp-exec" : ""}`}>
       <KpSideMenu
         open={sideMenuOpen}
         onOpen={() => setSideMenuOpen(true)}
@@ -7829,7 +7831,7 @@ return (
       <PlanLockHost userEmail={user?.email || ""} userName={myRealName || ""} />
       <OnboardingHost role={role} userCompany={userCompany} />
       {/* ===== 통합 헤더 네비 ===== */}
-      <header className="kp-topnav sticky top-0 z-50 mb-6 w-full">
+      <header className={`kp-topnav ${deptMode === "exec" ? "kp-topnav-exec" : ""} sticky top-0 z-50 mb-6 w-full`}>
 
         {/* 상단바: 로고 + 메뉴 + 유저 */}
         <div className="flex items-center gap-3 px-6 h-[60px]">
@@ -7876,7 +7878,7 @@ return (
                      {/* ★ 태블릿/PC 공용 메뉴 — 전체 가로 스크롤 보장 */}
           <nav
             /* ⭐ 가운데 정렬은 justify-center 대신 양끝 auto 여백으로 — justify-center는 화면이 좁으면 맨 앞(HOME)·맨 뒤 메뉴가 잘리고 스크롤로도 안 보였다 */
-            className="flex-1 flex items-center gap-0.5 min-[2050px]:gap-1 overflow-x-auto [&>*:first-child]:ml-auto [&>*:last-child]:mr-auto"
+            className="flex-1 flex items-center overflow-x-auto [&>*:first-child]:ml-auto [&>*:last-child]:mr-auto"
             /* 노트북처럼 메뉴가 다 안 들어가는 화면 — 마우스 휠을 굴리면 메뉴가 옆으로 넘어간다 */
             onWheel={(e) => { const el = e.currentTarget; if (el.scrollWidth > el.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) el.scrollLeft += e.deltaY; }}
             style={{
@@ -7887,6 +7889,7 @@ return (
               minWidth: 0,
             }}
           >
+            <div className="kp-nav-track inline-flex items-center gap-0.5 min-[2050px]:gap-1 p-1 rounded-[14px] shrink-0">
             {(deptMode ? DEPT_MENUS[deptMode] : [
               "HOME",
               "배차관리",
@@ -7913,29 +7916,29 @@ return (
                   key={m}
                   disabled={isBlocked}
                   onClick={() => handleMenuClick(m)}
-                  className={`kp-nav-btn relative px-2.5 h-[34px] rounded-[10px] text-[13.5px] min-[2050px]:text-[14px] min-[2050px]:px-3 whitespace-nowrap transition-all flex-shrink-0
+                  data-on={isActive ? "1" : "0"}
+                  className={`kp-nav-btn relative inline-flex items-center gap-1.5 ${deptMode && DEPT_MENUS[deptMode].length <= 8 ? "px-3" : "px-[7px]"} h-[34px] rounded-[10px] text-[13.5px] min-[2050px]:text-[14px] min-[2050px]:px-3 whitespace-nowrap transition-all flex-shrink-0
                     ${isBlocked
                       ? "text-white/20 cursor-not-allowed"
                       : isActive
-                        ? "bg-white text-[#0F1A30] font-extrabold shadow-[0_4px_14px_rgba(0,0,0,0.25)]"
-                        : "text-white/65 font-semibold hover:text-white hover:bg-white/[0.09]"
+                        ? "kp-nav-on font-extrabold"
+                        : "text-white/70 font-semibold hover:text-white hover:bg-white/[0.08]"
                     }`}
                 >
+                  <ShellIcon name={KP_SIDE_ICONS[m] || "dashboard"} size={14} className={`kp-nav-ico shrink-0 ${isActive ? "" : "opacity-70"} ${deptMode && DEPT_MENUS[deptMode].length <= 8 ? "" : "hidden min-[2050px]:inline-block"}`} />
                   <EditableText id={`nav.${m}`} defaultText={m} />
                   {st === "locked" && <span className="ml-1 opacity-60"><LockIcon /></span>}
                   {m === "인사이트" && st !== "locked" && <span className="ml-1 px-1 py-px rounded bg-[#8FB0F0]/20 text-[#8FB0F0] text-[9px] font-black tracking-wider align-middle">PRO</span>}
-                  {!isBlocked && isActive && (
-                    <span className="absolute left-1/2 -translate-x-1/2 -bottom-[7px] w-5 h-[3px] bg-[#6E95E8] rounded-full" />
-                  )}
                 </button>
               );
             })}
+            </div>
           </nav>
 
 
           {/* 우측 유저 영역 */}
-          <div className="flex items-center gap-2 min-w-[180px] justify-end">
-            <span className="text-white/45 text-[12px] font-medium hidden 2xl:block truncate max-w-[150px]">
+          <div className="flex items-center gap-2 shrink-0 justify-end min-[1800px]:min-w-[180px]">
+            <span className="text-white/45 text-[12px] font-medium hidden min-[1800px]:block truncate max-w-[150px]">
               {user?.email}
             </span>
             <MailHeaderButton company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY) : (userCompany || DEFAULT_COMPANY)} myName={myRealName} />
@@ -8163,7 +8166,7 @@ return (
             dispatchData={dispatchDataFiltered}
             onOrderDoubleClick={(order) => setHomeClickedOrder(order)}
             dept={deptMode}
-            onDeptGo={(k) => { const [m, t] = String(k).split(":"); if (m === "정산관리" && t) set정산관리Tab(t); if (m === "결재함" && t) { try { sessionStorage.setItem("kpExecApOpen", t); } catch { /* 무시 */ } } handleMenuClick(m); }}
+            onDeptGo={(k) => { const [m, t] = String(k).split(":"); if (m === "정산관리" && t) set정산관리Tab(t); if (m === "결재함") { window.__kpOpenApproval = t ? { id: t, page: "inbox" } : { page: "inbox" }; window.dispatchEvent(new Event("kp-open-approval")); return; } handleMenuClick(m); }}
           />
         )}
 

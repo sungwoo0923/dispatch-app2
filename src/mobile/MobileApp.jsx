@@ -6748,7 +6748,7 @@ setOpenMemo={setOpenMemo}
 {(page === "dept" || String(page).startsWith("dept:")) && (
   <React.Suspense fallback={null}>
     <MobilePcView key={page} kind={page} deptMode={deptMode} dispatchData={allOrders} fixedRows={fixedClientRows} clients={clients} places={places} role={role} userCompany={pcViewCompany} me={pcViewMe} loadRange={loadRange} loadFullHistory={loadFullHistory}
-      onGo={(k) => { const [m0, id] = String(k).split(":"); if (k === "배차현황") deptListOkRef.current = true; if (m0 === "결재함" && id) { try { sessionStorage.setItem("kpExecApOpen", id); } catch { /* 무시 */ } } setPage({ 결재함: "dept:approvals", 직원일정: "dept:schedule", 실시간배차현황: "unassigned", 인사이트: "intel", 정산관리: "dept:settle", "정산관리:지급관리": "dept:settle", 회계관리: "dept:acct", 매출관리: "sales", 인사관리부: "dept:hr", 출근기록부: "attendance", 연차관리: "dept:leave", 입퇴사관리: "dept:onboarding", 증명서발급: "dept:cert", 수입지출: "dept:cashbook", 비품관리: "dept:assets", 전자결재: "approval", 배차현황: "list", 관리자메뉴: "staff", 직원관리: "staff", 기사서류: "dept:driverdocs", 기사관리: "dept:driverdocs" }[m0 === "결재함" ? "결재함" : k] || "dept"); }} />
+      onGo={(k) => { const [m0, id] = String(k).split(":"); if (k === "배차현황") deptListOkRef.current = true; if (m0 === "결재함" && id) { try { sessionStorage.setItem("kpExecApOpen", id); } catch { /* 무시 */ } } setPage({ 결재함: "approval", 직원일정: "dept:schedule", 실시간배차현황: "unassigned", 인사이트: "intel", 정산관리: "dept:settle", "정산관리:지급관리": "dept:settle", 회계관리: "dept:acct", 매출관리: "sales", 인사관리부: "dept:hr", 출근기록부: "attendance", 연차관리: "dept:leave", 입퇴사관리: "dept:onboarding", 증명서발급: "dept:cert", 수입지출: "dept:cashbook", 비품관리: "dept:assets", 전자결재: "approval", 배차현황: "list", 관리자메뉴: "staff", 직원관리: "staff", 기사서류: "dept:driverdocs", 기사관리: "dept:driverdocs" }[m0 === "결재함" ? "결재함" : k] || "dept"); }} />
   </React.Suspense>
 )}
 {page === "sales" && (
@@ -7902,7 +7902,6 @@ function MobileSideMenu({
           {deptMode === "exec" && (
             <MenuSection title="경영" en="EXECUTIVE" dark={dark} alwaysOpen>
               <MenuItem label="경영 브리핑" icon="star" onClick={() => onGo?.("dept")} dark={dark} />
-              <MenuItem label="결재함" icon="stamp" onClick={() => onGo?.("dept:approvals")} badge={alertCounts?.approval || null} dark={dark} />
               <MenuItem label="직원 일정" icon="clock" onClick={() => onGo?.("dept:schedule")} dark={dark} />
               {canRevenue && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
               {isAdminRole && <MenuItem label="경영인텔리전스" icon="trend" onClick={onGoIntel} dark={dark} />}

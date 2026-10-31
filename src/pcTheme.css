@@ -163,6 +163,62 @@
 .kp-topnav .kp-chip-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.14); color: #fff; opacity: 1; }
 .kp-topnav .kp-nav-btn { opacity: 1; }
 
+/* ⭐ 2026-10-31 상단 메뉴 리디자인 — 메뉴를 한 줄 "레일"(유리 트랙) 안에, 아이콘 + 글자, 선택 메뉴는 밝은 알약 + 빛 */
+.kp-topnav { height: auto; }
+.kp-topnav::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; pointer-events: none;
+  background: linear-gradient(90deg, transparent 0%, rgba(143,176,240,.55) 30%, rgba(207,224,255,.9) 50%, rgba(143,176,240,.55) 70%, transparent 100%);
+  opacity: .55;
+}
+.kp-topnav .kp-nav-track {
+  background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.08), inset 0 1px 0 rgba(255,255,255,.06), 0 6px 18px rgba(0,0,0,.18);
+}
+.kp-topnav .kp-nav-btn.kp-nav-on {
+  background: linear-gradient(180deg, #FFFFFF 0%, #E9F0FC 100%);
+  color: #0F1A30;
+  box-shadow: 0 6px 16px rgba(0,0,0,.28), 0 0 0 1px rgba(255,255,255,.6) inset, 0 0 18px rgba(143,176,240,.35);
+}
+.kp-topnav .kp-nav-btn.kp-nav-on .kp-nav-ico { color: #2D4C82; }
+.kp-topnav .kp-nav-btn.kp-nav-on::after {
+  content: ""; position: absolute; left: 50%; bottom: -5px; width: 18px; height: 3px; border-radius: 9px; transform: translateX(-50%);
+  background: #8FB0F0; box-shadow: 0 0 10px #8FB0F0;
+}
+
+/* 👔 임원 화면 — 더 깊은 네이비 + 샴페인 골드(상단바·상단 메뉴·펼침 메뉴·홈 왼쪽 메뉴) */
+.kp-topnav.kp-topnav-exec {
+  background: radial-gradient(600px 120px at 50% -40px, rgba(215,188,130,.16), transparent 70%), linear-gradient(120deg, #04070F 0%, #0A1328 45%, #13213F 100%);
+}
+.kp-topnav.kp-topnav-exec::after { background: linear-gradient(90deg, transparent, rgba(215,188,130,.65), transparent); }
+.kp-topnav.kp-topnav-exec::before { background: linear-gradient(90deg, transparent, rgba(215,188,130,.75) 50%, transparent); }
+.kp-topnav.kp-topnav-exec .kp-nav-track { box-shadow: inset 0 0 0 1px rgba(215,188,130,.22), inset 0 1px 0 rgba(255,255,255,.05), 0 6px 18px rgba(0,0,0,.3); }
+.kp-topnav.kp-topnav-exec .kp-nav-btn.kp-nav-on {
+  background: linear-gradient(180deg, #F3E3BC 0%, #D7BC82 100%);
+  color: #1A1405;
+  box-shadow: 0 6px 18px rgba(0,0,0,.35), 0 0 0 1px rgba(255,240,210,.6) inset, 0 0 20px rgba(215,188,130,.35);
+}
+.kp-topnav.kp-topnav-exec .kp-nav-btn.kp-nav-on .kp-nav-ico { color: #5A4517; }
+.kp-topnav.kp-topnav-exec .kp-nav-btn.kp-nav-on::after { background: #D7BC82; box-shadow: 0 0 10px #D7BC82; }
+.kp-topnav.kp-topnav-exec .kp-icon-btn, .kp-topnav.kp-topnav-exec .kp-chip-btn { border-color: rgba(215,188,130,.22); }
+
+.kp-exec .kp-side-aside,
+.kp-exec .kp-subnav-aside {
+  background: radial-gradient(400px 260px at 0% 0%, rgba(215,188,130,.12), transparent 70%), linear-gradient(180deg, #050A16 0%, #0B1530 55%, #0A1226 100%) !important;
+  box-shadow: inset -1px 0 0 rgba(215,188,130,.18);
+}
+.kp-exec .kp-side-handle { background: linear-gradient(180deg, #0B1530 0%, #8C7442 100%) !important; }
+.kp-exec .kp-side-item[data-on="1"],
+.kp-exec .kp-subnav-item[data-on="1"] {
+  background: linear-gradient(180deg, #F3E3BC 0%, #D7BC82 100%) !important;
+  color: #1A1405 !important;
+  box-shadow: 0 8px 20px rgba(0,0,0,.35), 0 0 0 1px rgba(255,240,210,.5) inset !important;
+}
+.kp-exec .kp-side-item[data-on="1"] svg,
+.kp-exec .kp-subnav-item[data-on="1"] svg { color: #5A4517 !important; }
+.kp-exec .kp-subnav-item[data-on="1"] > span:first-child { background: rgba(255,255,255,.45) !important; }
+.kp-exec .kp-side-item[data-on="0"] svg,
+.kp-exec .kp-subnav-item[data-on="0"] svg { color: rgba(215,188,130,.8) !important; }
+
 /* ===================== 배차 목록 표(실시간배차현황·배차현황·미배차현황) =====================
    엑셀 같은 격자 대신 — 세로줄 없음, 넉넉한 줄 높이, 마우스를 올린 줄·선택한 줄에 왼쪽 강조선,
    배차상태는 점이 있는 둥근 배지. 표에 kp-grid 클래스가 붙은 곳에만 적용된다. */

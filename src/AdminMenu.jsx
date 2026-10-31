@@ -23,7 +23,7 @@ import {
 import { setDoc, updateDoc } from "./orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { ref as storageRef, uploadBytes, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
-import { TEAM_OPTIONS, EMPLOYMENT_STATUS_OPTIONS, positionsForTeam, suggestRole, ROLE_NAME } from "./hrConstants";
+import { TEAM_OPTIONS, EMPLOYMENT_STATUS_OPTIONS, positionsForTeam, suggestRole, ROLE_NAME, isExecProfile } from "./hrConstants";
 import { CustomSelect } from "./CustomSelect";
 import RolePermissionsPanel from "./RolePermissionsPanel";
 import { AdminSessionsPanel } from "./LoginManager";
@@ -601,7 +601,10 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
       return;
     }
     if (editRole === "totalMaster" && !isTotalMaster) return alert("totalMaster 권한은 부여할 수 없습니다.");
-    if (editRole !== manageUser.role && !assignableRoles().includes(editRole)) return alert("이 권한은 지정할 수 없습니다. 마스터에게 요청해 주세요.");
+    // 👔 임원(부서 임원 · 대표/전무/이사)은 무조건 관리자
+    const execLock = isExecProfile({ team: editTeam, position: editPosition });
+    if (execLock && editRole !== "admin" && editRole !== "totalMaster") { setEditRole("admin"); }
+    if (!execLock && editRole !== manageUser.role && !assignableRoles().includes(editRole)) return alert("이 권한은 지정할 수 없습니다. 마스터에게 요청해 주세요.");
     if (!isTotalMaster && (manageUser.companyName || DEFAULT_COMPANY) !== effectiveCompany) return alert("우리 회사 직원만 수정할 수 있습니다.");
     const history = [...(manageUser.personnelHistory || [])];
     const prevPosition = manageUser.position || "";
@@ -616,7 +619,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     const payload = {
       name: editName.trim(),
       phone: editPhone.trim(),
-      role: editRole,
+      role: execLock && editRole !== "totalMaster" ? "admin" : editRole,
       companyName: isTotalMaster ? editCompany.trim() : (manageUser.companyName || effectiveCompany),
       position: nextPosition,
       team: editTeam,
@@ -1048,11 +1051,11 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             </div>
                             <div>
                               <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">권한</label>
-                              <CustomSelect value={editRole} onChange={e => setEditRole(e.target.value)} disabled={!canEditMember(u)}
+                              <CustomSelect value={isExecProfile({ team: editTeam, position: editPosition }) && editRole !== "totalMaster" ? "admin" : editRole} onChange={e => setEditRole(e.target.value)} disabled={!canEditMember(u) || isExecProfile({ team: editTeam, position: editPosition })}
                                 className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
                                 {assignableRoles(u.role).map(r => <option key={r} value={r}>{roleLabels[r] || r}</option>)}
                               </CustomSelect>
-                              <p className="mt-1 text-[11px] font-bold text-[#7A879C]">추천: {ROLE_NAME[suggestRole({ team: editTeam, position: editPosition })]} (부서·직책 기준)</p>
+                              <p className="mt-1 text-[11px] font-bold text-[#7A879C]">{isExecProfile({ team: editTeam, position: editPosition }) ? "임원은 관리자 권한으로 고정됩니다" : `추천: ${ROLE_NAME[suggestRole({ team: editTeam, position: editPosition })]} (부서·직책 기준)`}</p>
                             </div>
                           </div>
                           <div className="flex gap-2">
@@ -2026,10 +2029,10 @@ function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose
                   {TEAM_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
                 </CustomSelect></div>
               <div><label className={lab}>권한</label>
-                <CustomSelect value={f.editRole} onChange={(e) => f.setEditRole(e.target.value)} className={inp}>
+                <CustomSelect value={isExecProfile({ team: f.editTeam, position: f.editPosition }) && f.editRole !== "totalMaster" ? "admin" : f.editRole} onChange={(e) => f.setEditRole(e.target.value)} disabled={isExecProfile({ team: f.editTeam, position: f.editPosition })} className={inp}>
                   {roles.map((r) => <option key={r} value={r}>{roleLabels[r] || r}</option>)}
                 </CustomSelect>
-                <p className="mt-1 text-[11px] font-bold text-[#7A879C]">추천: {ROLE_NAME[suggestRole({ team: f.editTeam, position: f.editPosition })]} · 부서·직책 기준</p></div>
+                <p className="mt-1 text-[11px] font-bold text-[#7A879C]">{isExecProfile({ team: f.editTeam, position: f.editPosition }) ? "임원은 관리자 권한으로 고정됩니다" : `추천: ${ROLE_NAME[suggestRole({ team: f.editTeam, position: f.editPosition })]} · 부서·직책 기준`}</p></div>
               <div><label className={lab}>회사명</label><input value={f.editCompany} onChange={(e) => f.setEditCompany(e.target.value)} disabled={!isTotalMaster} className={inp} /></div>
             </div>
             {u.role !== "shipper" && canMaster && (
