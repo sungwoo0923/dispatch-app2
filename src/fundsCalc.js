@@ -31,12 +31,15 @@ export function computeFunds(funds = [], ledger = []) {
   const target = (id) => { const f = byId[id]; return f && isLinkedCheck(f, byId) ? f.linkFundId : id; };
   const sign = (r) => (r.type === "수입" ? 1 : -1) * toInt(r.amount);
   const cardUse = (f) => { const m = ledger.filter((r) => r.fundId === f.id && String(r.date || "").startsWith(thisM)); return { usedMonth: -m.reduce((s, r) => s + sign(r), 0), usesMonth: m.length }; };
-  const baseOf = (f) => { const checks = [...(f.checks || [])].sort((a, b) => String(a.date).localeCompare(String(b.date))); return checks.length ? checks[checks.length - 1] : { date: f.openingDate || "", balance: toInt(f.openingBalance) }; };
+  const baseOf = (f) => { const checks = [...(f.checks || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)) || (a.at || 0) - (b.at || 0)); return checks.length ? checks[checks.length - 1] : { date: f.openingDate || "", balance: toInt(f.openingBalance), opening: true }; };
+  // ⭐ 2026-11-01 기준일 "당일" 입출금도 반영 — 처음 잔액은 그날 시작 잔액, 잔액 맞추기는 맞춘 시각 이후 등록분만
+  const tsOf = (r) => (r.createdAt?.toMillis ? r.createdAt.toMillis() : r.createdAt?.seconds ? r.createdAt.seconds * 1000 : Date.now());
+  const after = (r, base) => { const d = String(r.date || ""); const b = String(base.date || ""); return d > b || (d === b && (base.opening || tsOf(r) > (base.at || 0))); };
   const out = {};
   // 1) 통장·현금·대출·연결 안 된 체크카드
   active.filter((f) => !isCredit(f) && !isLinkedCheck(f, byId)).forEach((f) => {
     const base = baseOf(f);
-    const moves = ledger.filter((r) => r.fundId && target(r.fundId) === f.id && String(r.date || "") > String(base.date || ""));
+    const moves = ledger.filter((r) => r.fundId && target(r.fundId) === f.id && after(r, base));
     const net = moves.reduce((s, r) => s + sign(r), 0);
     out[f.id] = { ...f, base, balance: toInt(base.balance) + (f.kind === "대출" ? 0 : net), moves: moves.length, ...(isCard(f) ? cardUse(f) : {}) };
   });

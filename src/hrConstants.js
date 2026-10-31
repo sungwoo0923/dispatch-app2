@@ -53,9 +53,10 @@ export function useHrOptions(company) {
   }, [company]);
   return React.useMemo(() => {
     const hideT = new Set(cfg.hiddenTeams || []); const hideP = new Set(cfg.hiddenPositions || []);
-    const teams = [...TEAM_OPTIONS, ...(cfg.teams || [])].filter((t, i, a) => a.indexOf(t) === i && (t === EXEC_TEAM || !hideT.has(t)));
-    const exec = [...EXEC_POSITION_OPTIONS, ...(cfg.execPositions || [])].filter((t, i, a) => a.indexOf(t) === i && !hideP.has(t));
-    const normal = [...POSITION_OPTIONS, ...(cfg.positions || [])].filter((t, i, a) => a.indexOf(t) === i && !hideP.has(t));
+    // ⭐ 2026-11-01 기본 부서·직책은 항상 보인다(숨김 불가) — 회사가 추가한 것만 숨김·삭제 대상
+    const teams = [...TEAM_OPTIONS, ...(cfg.teams || [])].filter((t, i, a) => a.indexOf(t) === i && (TEAM_OPTIONS.includes(t) || !hideT.has(t)));
+    const exec = [...EXEC_POSITION_OPTIONS, ...(cfg.execPositions || [])].filter((t, i, a) => a.indexOf(t) === i && (EXEC_POSITION_OPTIONS.includes(t) || !hideP.has(t)));
+    const normal = [...POSITION_OPTIONS, ...(cfg.positions || [])].filter((t, i, a) => a.indexOf(t) === i && (POSITION_OPTIONS.includes(t) || !hideP.has(t)));
     const positionsFor = (team) => (team === EXEC_TEAM ? exec : team ? normal : [...exec, ...normal]);
     return { teams, exec, normal, positionsFor, cfg };
   }, [cfg]);

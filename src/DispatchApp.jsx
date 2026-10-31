@@ -9844,6 +9844,8 @@ const primary =
 
     // 관리자 여부 체크
 const isAdmin = role === "admin" || role === "totalMaster" || isViewer;
+// ⭐ 2026-11-01 운임(청구·기사·수수료)은 배차 실무자(실무자·직접 만든 역할)도 입력 — 경리·인사 화면만 제외
+const canMoney = isAdmin || !["test", "hrManager", "hrAcct", "driver", "shipper", "cafeUser"].includes(role);
 const _viewerBlockDM = () => showAlert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다.");
 const addDispatchSafe = isViewer ? _viewerBlockDM : addDispatch;
 const patchDispatchSafe = isViewer ? _viewerBlockDM : patchDispatch;
@@ -12161,7 +12163,7 @@ function swapPickupDrop() {
         setForm((p) => ({ ...p, 특수운임: value, 특수운임수동: true, 특수운임사유: value ? (p.특수운임사유 || "수동 지정") : "" }));
         return;
       }
-      if (isAdmin && (key === "청구운임" || key === "기사운임")) {
+      if (canMoney && (key === "청구운임" || key === "기사운임")) {
         setForm((p) => {
           const next = { ...p, [key]: value };
           const sale = parseInt(next.청구운임 || 0, 10) || 0;
@@ -13126,7 +13128,7 @@ const status = form.지급방식 === "취소"
     ? "배차완료"
     : "배차중";
 
-  const moneyPatch = isAdmin ? {} : {
+  const moneyPatch = canMoney ? {} : {
     청구운임: "0",
     기사운임: "0",
     수수료: "0"
@@ -13325,7 +13327,7 @@ const reset = {
   ...emptyForm,
   _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
   등록일: _todayStr(),
-  ...(isAdmin ? {} : { 청구운임: "", 기사운임: "", 수수료: "" }),
+  ...(canMoney ? {} : { 청구운임: "", 기사운임: "", 수수료: "" }),
 };
 setForm(reset);
 setVehicleQuery("");
@@ -16372,7 +16374,7 @@ className={`
 </div>
 
   {/* 금액 */}
-{isAdmin && (
+{canMoney && (
   <>
     {/* 청구운임 */}
     <div>

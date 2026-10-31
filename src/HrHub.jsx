@@ -25,7 +25,7 @@ const STATUS_OPTIONS = ["재직", ...LEAVE_STATUSES];
 // 부서·직책으로 권한 추천 — 임원이면 권한 관리의 "임원 화면" 역할(없으면 관리자)
 const suggestFor = (x, execKeys = []) => (isExecProfile(x) && execKeys[0] ? execKeys[0] : suggestRole(x));
 const ROLE_DESC = {
-  admin: "배차·정산·매출·관리자메뉴 등 전체 업무(임원은 이 권한으로 고정)",
+  admin: "운송 업무 전체 — 배차·운임·정산·매출·기사·거래처 관리 + 관리자메뉴(직원 승인 등). 임원 화면은 「임원 화면」 역할에서",
   hrManager: "인사관리부 화면 — 인사 기록·발령·근태·입퇴사·직원 승인",
   test: "경리 화면 — 정산·회계·자금·비품·퇴직 정산",
   hrAcct: "경리 + 인사 — 상단 버튼으로 경리 화면 ↔ 인사 화면 전환",
@@ -293,22 +293,21 @@ export function HrSettingsPanel({ company, canManage }) {
   const addPos = async () => { const v = p.trim(); if (!v) return; const key = pe ? "execPositions" : "positions"; await save({ [key]: [...new Set([...(cfg[key] || []), v])], hiddenPositions: (cfg.hiddenPositions || []).filter((x) => x !== v) }); setP(""); };
   const removeTeam = async (v) => { if (!window.confirm(`부서 「${v}」를 목록에서 뺄까요? (이미 지정된 직원 정보는 그대로)`)) return; if ((cfg.teams || []).includes(v)) await save({ teams: cfg.teams.filter((x) => x !== v) }); else await save({ hiddenTeams: [...new Set([...(cfg.hiddenTeams || []), v])] }); };
   const removePos = async (v) => { if (!window.confirm(`직책 「${v}」를 목록에서 뺄까요?`)) return; const k = (cfg.positions || []).includes(v) ? "positions" : (cfg.execPositions || []).includes(v) ? "execPositions" : null; if (k) await save({ [k]: cfg[k].filter((x) => x !== v) }); else await save({ hiddenPositions: [...new Set([...(cfg.hiddenPositions || []), v])] }); };
-  const restore = async () => { if (window.confirm("숨긴 기본 부서·직책을 모두 되살릴까요?")) await save({ hiddenTeams: [], hiddenPositions: [] }); };
   const Pill = ({ v, onX, base }) => <span className="inline-flex items-center gap-1.5 h-9 pl-3.5 pr-1.5 rounded-full bg-white border border-[#DCE3EE] text-[13.5px] font-black text-[#0F1A30]">{v}{base && <span className="text-[10px] font-bold text-[#9AA9C3]">기본</span>}{canManage && onX && <button type="button" onClick={onX} className="w-6 h-6 rounded-full hover:bg-[#FEF3F2] text-[#9AA9C3] hover:text-[#B42318]">✕</button>}</span>;
   return (
     <div className="space-y-4">
-      <BookHero en="HR · SETTINGS" title="직책 · 부서 · 권한 설정" desc="우리 회사에 맞게 부서와 직책을 추가하거나 뺍니다 — 인사관리자·마스터만 바꿀 수 있습니다" right={canManage && <button type="button" onClick={restore} className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-[13px] font-black">기본값 되살리기</button>} />
+      <BookHero en="HR · SETTINGS" title="직책 · 부서 · 권한 설정" desc="기본 부서·직책은 그대로 두고, 우리 회사에 필요한 부서·직책을 추가합니다(추가한 것만 뺄 수 있음) — 인사관리자·마스터만 바꿀 수 있습니다" />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <BookCard en="DEPARTMENTS" title={`부서 ${hr.teams.length}개`}>
-          <div className="flex flex-wrap gap-1.5">{hr.teams.map((v) => <Pill key={v} v={v} base={TEAM_OPTIONS.includes(v)} onX={v === EXEC_TEAM ? null : () => removeTeam(v)} />)}</div>
+          <div className="flex flex-wrap gap-1.5">{hr.teams.map((v) => <Pill key={v} v={v} base={TEAM_OPTIONS.includes(v)} onX={TEAM_OPTIONS.includes(v) ? null : () => removeTeam(v)} />)}</div>
           {canManage && <div className="mt-3 flex gap-2"><input value={t} onChange={(e) => setT(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addTeam()} className={inp} placeholder="새 부서 (예: 영업팀, 물류센터)" /><button type="button" onClick={addTeam} className="h-11 px-4 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black whitespace-nowrap">+ 추가</button></div>}
-          <div className="mt-2 text-[11.5px] text-[#9AA9C3]">「임원」 부서는 임원 직책·권한 추천과 연결돼 있어 뺄 수 없습니다</div>
+          <div className="mt-2 text-[11.5px] text-[#9AA9C3]">「기본」 표시가 있는 부서·직책은 뺄 수 없고, 직접 추가한 것만 ✕로 뺄 수 있습니다</div>
         </BookCard>
         <BookCard en="POSITIONS" title="직책">
           <div className="text-[12px] font-black text-[#4B6CB7] mb-1.5">임원 직책 (부서 임원 전용)</div>
-          <div className="flex flex-wrap gap-1.5 mb-3">{hr.exec.map((v) => <Pill key={v} v={v} base={EXEC_POSITION_OPTIONS.includes(v)} onX={["대표"].includes(v) ? null : () => removePos(v)} />)}</div>
+          <div className="flex flex-wrap gap-1.5 mb-3">{hr.exec.map((v) => <Pill key={v} v={v} base={EXEC_POSITION_OPTIONS.includes(v)} onX={EXEC_POSITION_OPTIONS.includes(v) ? null : () => removePos(v)} />)}</div>
           <div className="text-[12px] font-black text-[#4B6CB7] mb-1.5">일반 직책</div>
-          <div className="flex flex-wrap gap-1.5">{hr.normal.map((v) => <Pill key={v} v={v} base={POSITION_OPTIONS.includes(v)} onX={() => removePos(v)} />)}</div>
+          <div className="flex flex-wrap gap-1.5">{hr.normal.map((v) => <Pill key={v} v={v} base={POSITION_OPTIONS.includes(v)} onX={POSITION_OPTIONS.includes(v) ? null : () => removePos(v)} />)}</div>
           {canManage && <div className="mt-3 flex gap-2 items-center"><input value={p} onChange={(e) => setP(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addPos()} className={inp} placeholder="새 직책 (예: 실장, 소장)" /><Chip on={pe} onClick={() => setPe(!pe)}>임원 직책</Chip><button type="button" onClick={addPos} className="h-11 px-4 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black whitespace-nowrap">+ 추가</button></div>}
         </BookCard>
       </div>
@@ -359,7 +358,13 @@ export function CompanyRules({ company, canEdit = false }) {
           <button type="button" disabled={busyAll} onClick={registerAll} className="h-10 px-4 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black whitespace-nowrap disabled:opacity-50">{busyAll ? "등록 중…" : "표준안 한 번에 등록"}</button>
         </div>
       )}
-      <div className="flex gap-1.5 overflow-x-auto pb-1">{["전체", ...RULE_CATS].map((c) => <Chip key={c} on={cat === c} onClick={() => setCat(c)}>{c}</Chip>)}</div>
+      <div className="flex gap-1.5 overflow-x-auto pb-1">{["전체", ...RULE_CATS].map((c) => <Chip key={c} on={cat === c} onClick={() => {
+        setCat(c);
+        // ⭐ 2026-11-01 규정을 보고 있다가 위 분류를 누르면 그 분류 규정으로 바로 바뀐다(전체면 목록으로)
+        if (c === "전체") { setOpen(null); return; }
+        const first = [...(rows || []), ...tpls].filter((r) => r.category === c).sort((a, b) => !!a.tpl - !!b.tpl)[0];
+        setOpen(first ? first.id : null);
+      }}>{c}</Chip>)}</div>
       {cur ? (
         <BookCard en={cur.category} title={cur.title} right={<div className="flex gap-1.5"><button type="button" onClick={() => setOpen(null)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B]">← 목록</button>{canEdit && <button type="button" onClick={() => setEdit(cur.tpl ? { title: cur.title, category: cur.category, body: cur.body, effectiveDate: kstDay() } : { ...cur })} className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">{cur.tpl ? "고쳐서 우리 회사 규정으로 등록" : "수정"}</button>}</div>}>
           {cur.tpl ? <div className="mb-3 rounded-xl bg-[#FFFBF2] border border-[#FEDF89] px-3.5 py-2.5 text-[12.5px] text-[#93370D] font-bold">표준안입니다 — 회사가 아직 등록하지 않아 법령 기반 기본안을 보여 드립니다. 시행 전 회사 사정(금액·기간 등)에 맞게 고쳐 주세요.</div>
