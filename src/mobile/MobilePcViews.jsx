@@ -84,6 +84,8 @@ function FleetView({ dispatchData, userCompany, role, onRegisterBack }) {
 // ── 전자결재 — PC 홈 › 전자결재와 같은 화면(신청·결재·내 기안함·결재선) ──
 function ApprovalView({ company, me, initialPage = "inbox" }) {
   const [page, setPage] = React.useState(initialPage);
+  // 임원 브리핑에서 누른 결재 문서를 바로 연다
+  const [openId, setOpenId] = React.useState(() => { try { const v = sessionStorage.getItem("kpExecApOpen"); sessionStorage.removeItem("kpExecApOpen"); return v || null; } catch { return null; } });
   const counts = useApprovalCounts();
   const hoUnread = useHandoverUnread(me?.uid);
   return (
@@ -101,7 +103,7 @@ function ApprovalView({ company, me, initialPage = "inbox" }) {
       <div className="kp-m-pc kp-m-approval">
         {page === "handover"
           ? <HandoverCenter company={company} me={me} isViewer={me?.role === "viewer"} />
-          : <ApprovalCenter company={company} me={me} page={page} setPage={setPage} />}
+          : <ApprovalCenter company={company} me={me} page={page} setPage={setPage} openId={openId} onOpened={() => setOpenId(null)} />}
       </div>
     </KpSubNav>
   );

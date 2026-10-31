@@ -81,7 +81,8 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
       type="button"
       onClick={onClick}
       title={collapsed ? it.label : undefined}
-      className={`w-full flex items-center gap-3 rounded-xl font-semibold transition ${sub ? "text-[13px]" : "text-[14px]"} ${collapsed ? "justify-center px-0 py-2.5" : sub ? "pl-5 pr-3 py-1.5" : "px-3 py-2.5"} ${
+      data-on={on ? "1" : "0"}
+      className={`kp-subnav-item w-full flex items-center gap-3 rounded-xl font-semibold transition ${sub ? "text-[13px]" : "text-[14px]"} ${collapsed ? "justify-center px-0 py-2.5" : sub ? "pl-5 pr-3 py-1.5" : "px-3 py-2.5"} ${
         on ? "bg-white text-[#1B2B4B] shadow-[0_6px_16px_rgba(0,0,0,0.22)]" : "text-blue-50/80 hover:bg-white/[0.08] hover:text-white"
       }`}
     >
@@ -108,7 +109,7 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
   return (
     <div className={`flex bg-[#F4F6FA] overflow-hidden ${noBleed ? "rounded-[20px]" : "-m-4"}`} style={{ height: noBleed ? "calc(100vh - 88px)" : "calc(100vh - 80px)" }}>
       <aside
-        className="shrink-0 h-full flex flex-col text-white transition-[width] duration-200"
+        className="kp-subnav-aside shrink-0 h-full flex flex-col text-white transition-[width] duration-200"
         style={{ width: collapsed ? 72 : 228, background: "linear-gradient(180deg, #16264A 0%, #1B2B4B 55%, #14213D 100%)" }}
       >
         <div className={`pt-5 pb-4 border-b border-white/10 flex items-center gap-3 ${collapsed ? "px-0 justify-center" : "px-4"}`}>

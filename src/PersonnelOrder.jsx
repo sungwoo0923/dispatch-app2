@@ -9,7 +9,7 @@ import { kpConfirm } from "./kpDialog";
 import html2canvas from "html2canvas";
 import { db, auth } from "./firebase";
 import { addDoc, collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
-import { TEAM_OPTIONS, positionsForTeam, suggestRole } from "./hrConstants";
+import { TEAM_OPTIONS, positionsForTeam, suggestRole, isExecProfile } from "./hrConstants";
 import { sendInternalMail, useCompanyStaff, compressImage } from "./InternalMail";
 
 export const HR_ROLE_OPTIONS = [
@@ -99,7 +99,8 @@ export default function PersonnelOrder({ company, target, myName, isSelf }) {
         position: next.position, team: next.team,
         personnelHistory: [...(target.personnelHistory || []), { date, type: fv("type"), detail }],
       };
-      if (next.role !== cur.role && !isSelf) patch.role = next.role;
+      const roleNext = isExecProfile(next) && next.role !== "totalMaster" ? "admin" : next.role; // 👔 임원은 무조건 관리자
+      if (roleNext !== cur.role && !isSelf) patch.role = roleNext;
       await setDoc(doc(db, "users", target.uid), patch, { merge: true });
 
       setBusy("공문 이미지 만드는 중…");
@@ -156,7 +157,7 @@ export default function PersonnelOrder({ company, target, myName, isSelf }) {
             </select>
           </label>
           <label className="block"><span className="text-[12.5px] font-bold text-[#7A879C]">권한</span>
-            <select value={next.role} disabled={isSelf} onChange={(e) => setNext((p) => ({ ...p, role: e.target.value }))} className={`${sel} disabled:bg-[#F5F7FA] disabled:text-[#9AA9C3]`}>
+            <select value={isExecProfile(next) && next.role !== "totalMaster" ? "admin" : next.role} disabled={isSelf || isExecProfile(next)} onChange={(e) => setNext((p) => ({ ...p, role: e.target.value }))} className={`${sel} disabled:bg-[#F5F7FA] disabled:text-[#9AA9C3]`}>
               {[...HR_ROLE_OPTIONS, ...(HR_ROLE_OPTIONS.some(([k]) => k === cur.role) ? [] : [[cur.role, roleName(cur.role)]])].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
             {isSelf && <span className="text-[11.5px] text-[#9AA9C3]">본인 권한은 최고관리자만 바꿀 수 있습니다</span>}
