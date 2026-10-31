@@ -32,6 +32,8 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [employees, setEmployees] = useState([]);
+  // ⭐ 2026-11-01 누구나 전 직원 출근·일정을 보고, [내 것만 보기]로 본인 줄만
+  const [mineOnly, setMineOnly] = useState(false);
   const [recordsAll, setRecords] = useState([]);
   const [tmUids, setTmUids] = useState(() => new Set());
   // ⭐ 최고관리자의 예전 출근 기록도 보이지 않게
@@ -382,10 +384,10 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   }, [changeRequests]);
 
   const visibleEmployees = useMemo(() => {
-    const base = isAdmin ? employees : employees.filter(e => e.uid === user?.uid);
+    const base = mineOnly ? employees.filter(e => e.uid === user?.uid) : employees;
     const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
     return base.filter(e => !hiddenEmpUids.includes(e.uid) && !(e.employmentStatus === "퇴사" && String(e.resignedAt || "0000") < monthStart));
-  }, [employees, isAdmin, user, hiddenEmpUids, year, month]);
+  }, [employees, mineOnly, user, hiddenEmpUids, year, month]);
 
   const resolveStatus = (uid, ds, name) => {
     const rec = recordMap[`${uid}_${ds}`];
@@ -739,7 +741,12 @@ export default function AttendanceBoard({ userCompany, role, user }) {
             {label}
           </div>
         ))}
-        {!canEditAttendance && <span className="ml-auto text-gray-400">최고관리자만 직접 수정 가능합니다.</span>}
+        <button type="button" onClick={() => setMineOnly(v => !v)}
+          className={`ml-auto h-8 px-3.5 rounded-lg text-[12.5px] font-black border transition ${mineOnly ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#1B2B4B] border-[#DCE3EE] hover:border-[#2D4C82]"}`}>
+          {mineOnly ? "전체 직원 보기" : "내 것만 보기"}
+        </button>
+        <span className="inline-flex items-center gap-1.5 text-[#8C6A1F] font-bold"><span className="w-3.5 h-3.5 rounded bg-[#FFF4D6] ring-1 ring-[#D7BC82]" />내 기록</span>
+        {!canEditAttendance && <span className="text-gray-400">최고관리자만 직접 수정 가능합니다.</span>}
         {isAdmin && <span className="ml-auto text-gray-400">이름을 더블클릭하면 월간 요약을 볼 수 있습니다.</span>}
       </div>
 
@@ -766,13 +773,13 @@ export default function AttendanceBoard({ userCompany, role, user }) {
             </tr>
           </thead>
           <tbody>
-            {visibleEmployees.map(emp => (
-              <tr key={emp.uid}>
+            {visibleEmployees.map(emp => { const me = emp.uid === user?.uid; return (
+              <tr key={emp.uid} className={me ? "bg-[#FFFBEF]" : ""}>
                 <td
-                  className={`sticky left-0 bg-white px-3 py-2 text-left font-semibold text-gray-700 border-r border-b border-gray-50 whitespace-nowrap ${isAdmin ? "cursor-pointer hover:text-[#1B2B4B]" : ""}`}
+                  className={`sticky left-0 px-3 py-2 text-left font-semibold border-r border-b border-gray-50 whitespace-nowrap ${me ? "bg-[#FFF4D6] text-[#6B5320] shadow-[inset_4px_0_0_#B88A2E]" : "bg-white text-gray-700"} ${isAdmin ? "cursor-pointer hover:text-[#1B2B4B]" : ""}`}
                   onDoubleClick={() => isAdmin && setSummaryEmp(emp)}
                 >
-                  {emp.name || emp.email}
+                  {emp.name || emp.email}{me && <span className="ml-1.5 text-[10.5px] font-black px-1.5 py-0.5 rounded bg-[#B88A2E] text-white">나</span>}
                 </td>
                 <td className="px-2 py-2 text-center border-b border-gray-50 text-[11px] text-gray-400 whitespace-nowrap">
                   {emp.workStartTime ? `${emp.workStartTime}~${emp.workEndTime || "?"}` : "-"}
@@ -827,7 +834,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                   );
                 })}
               </tr>
-            ))}
+            ); })}
           </tbody>
         </table>
       </div>
