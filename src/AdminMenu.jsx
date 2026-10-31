@@ -23,7 +23,7 @@ import {
 import { setDoc, updateDoc } from "./orderWrite"; // ⭐ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { ref as storageRef, uploadBytes, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
-import { POSITION_OPTIONS, TEAM_OPTIONS, EMPLOYMENT_STATUS_OPTIONS } from "./hrConstants";
+import { TEAM_OPTIONS, EMPLOYMENT_STATUS_OPTIONS, positionsForTeam, suggestRole, ROLE_NAME } from "./hrConstants";
 import { CustomSelect } from "./CustomSelect";
 import RolePermissionsPanel from "./RolePermissionsPanel";
 import { AdminSessionsPanel } from "./LoginManager";
@@ -242,6 +242,15 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const meDoc = users.find((u) => u.id === me?.uid);
   const isCompanyMaster = !isTotalMaster && meDoc?.isMaster === true && meDoc?.role !== "shipper" && meDoc?.role !== "driver";
   const canAdmin = isTotalMaster || isCompanyMaster;
+  // ⭐ 2026-10-31 부서·직책을 바꾸면 직책 드롭다운을 부서에 맞추고(임원 → 대표·전무·이사) 권한을 추천값으로 맞춘다
+  const applySuggest = (team, position) => setEditRole((r) => (r === "totalMaster" ? r : suggestRole({ team, position })));
+  const onTeamChange = (t) => {
+    setEditTeam(t);
+    const pos = positionsForTeam(t).includes(editPosition) ? editPosition : "";
+    if (pos !== editPosition) setEditPosition(pos);
+    applySuggest(t, pos);
+  };
+  const onPositionChange = (p) => { setEditPosition(p); applySuggest(editTeam, p); };
   const toggleMaster = async (u) => {
     if (!canAdmin) return;
     if (u.id === me?.uid && u.isMaster) return alert("본인의 마스터는 해제할 수 없습니다. 다른 직원을 먼저 마스터로 지정해 주세요.");
@@ -995,18 +1004,18 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             </div>
                             <div>
                               <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">직책</label>
-                              <CustomSelect value={editPosition} onChange={e => setEditPosition(e.target.value)} disabled={!canAdmin}
+                              <CustomSelect value={editPosition} onChange={e => onPositionChange(e.target.value)} disabled={!canAdmin}
                                 className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
                                 <option value="">선택 안 함</option>
-                                {(editPosition && !POSITION_OPTIONS.includes(editPosition)) && (
+                                {(editPosition && !positionsForTeam(editTeam).includes(editPosition)) && (
                                   <option value={editPosition}>{editPosition}</option>
                                 )}
-                                {POSITION_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                                {positionsForTeam(editTeam).map(p => <option key={p} value={p}>{p}</option>)}
                               </CustomSelect>
                             </div>
                             <div>
                               <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">부서</label>
-                              <CustomSelect value={editTeam} onChange={e => setEditTeam(e.target.value)} disabled={!canAdmin}
+                              <CustomSelect value={editTeam} onChange={e => onTeamChange(e.target.value)} disabled={!canAdmin}
                                 className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
                                 <option value="">미배정</option>
                                 {TEAM_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
@@ -1029,6 +1038,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                                 className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
                                 {ROLES.map(r => <option key={r} value={r}>{roleLabels[r] || r}</option>)}
                               </CustomSelect>
+                              <p className="mt-1 text-[11px] font-bold text-[#7A879C]">추천: {ROLE_NAME[suggestRole({ team: editTeam, position: editPosition })]} (부서·직책 기준)</p>
                             </div>
                           </div>
                           <div className="flex gap-2">
@@ -1047,7 +1057,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                       {memberModal && canAdmin && canManage && (
                         <MemberManageModal
                           u={u} me={me} isTotalMaster={isTotalMaster} roles={ROLES} roleLabels={roleLabels}
-                          f={{ editName, setEditName, editPhone, setEditPhone, editRole, setEditRole, editCompany, setEditCompany, editPosition, setEditPosition, editTeam, setEditTeam }}
+                          f={{ editName, setEditName, editPhone, setEditPhone, editRole, setEditRole, editCompany, setEditCompany, editPosition, setEditPosition: onPositionChange, editTeam, setEditTeam: onTeamChange }}
                           onClose={() => { setMemberModal(false); setEditMode(false); }}
                           onSave={async () => { await saveEdit(); setMemberModal(false); }}
                           onApprove={async () => {
@@ -1992,8 +2002,8 @@ function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose
               <div><label className={lab}>직책</label>
                 <CustomSelect value={f.editPosition} onChange={(e) => f.setEditPosition(e.target.value)} className={inp}>
                   <option value="">선택 안 함</option>
-                  {(f.editPosition && !POSITION_OPTIONS.includes(f.editPosition)) && <option value={f.editPosition}>{f.editPosition}</option>}
-                  {POSITION_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+                  {(f.editPosition && !positionsForTeam(f.editTeam).includes(f.editPosition)) && <option value={f.editPosition}>{f.editPosition}</option>}
+                  {positionsForTeam(f.editTeam).map((p) => <option key={p} value={p}>{p}</option>)}
                 </CustomSelect></div>
               <div><label className={lab}>부서</label>
                 <CustomSelect value={f.editTeam} onChange={(e) => f.setEditTeam(e.target.value)} className={inp}>
@@ -2003,7 +2013,8 @@ function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose
               <div><label className={lab}>권한</label>
                 <CustomSelect value={f.editRole} onChange={(e) => f.setEditRole(e.target.value)} className={inp}>
                   {roles.map((r) => <option key={r} value={r}>{roleLabels[r] || r}</option>)}
-                </CustomSelect></div>
+                </CustomSelect>
+                <p className="mt-1 text-[11px] font-bold text-[#7A879C]">추천: {ROLE_NAME[suggestRole({ team: f.editTeam, position: f.editPosition })]} · 부서·직책 기준</p></div>
               <div><label className={lab}>회사명</label><input value={f.editCompany} onChange={(e) => f.setEditCompany(e.target.value)} disabled={!isTotalMaster} className={inp} /></div>
             </div>
             {u.role !== "shipper" && (

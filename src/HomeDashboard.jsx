@@ -878,7 +878,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
     <KpSubNav noBleed code="HOME" title="홈" icon="dashboard" active={boardTab}
       onSelect={(k) => { if (String(k).startsWith("lock:")) { openPlanLock(String(k).slice(5)); return; } setBoardTab(k); }} bodyClass="px-5 py-4"
       groups={lockHomeGroups(planId, [
-        { label: dept ? "부서" : "관제", items: [{ key: "대시보드", label: "대시보드", en: dept === "acct" ? "ACCOUNTING" : dept === "hr" ? "HUMAN RESOURCES" : "OPERATIONS", icon: dept === "acct" ? "money" : dept === "hr" ? "idcard" : "pulse" }] },
+        { label: dept === "exec" ? "경영" : dept ? "부서" : "관제", items: [{ key: "대시보드", label: dept === "exec" ? "경영 브리핑" : "대시보드", en: dept === "exec" ? "EXECUTIVE" : dept === "acct" ? "ACCOUNTING" : dept === "hr" ? "HUMAN RESOURCES" : "OPERATIONS", icon: dept === "acct" ? "money" : dept === "hr" ? "idcard" : dept === "exec" ? "star" : "pulse" }] },
         { label: "사내 게시판", items: [
           { key: "공지사항", label: "공지사항", en: "NOTICE", icon: "bell", badge: isBoardNew("공지사항") ? "N" : 0, badgeTitle: "새 글" },
           ...Object.entries(BOARDS).filter(([b]) => canSeeBoard(b, meHome)).map(([b, B]) => ({ key: `board:${b}`, label: B.label, en: B.en, icon: B.icon, badge: isBoardNew(`board:${b}`) ? "N" : 0, badgeTitle: "새 글" })),
@@ -901,9 +901,9 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         ] },
       ])}>
     <div className="space-y-5">
-      {boardTab === "대시보드" && !dept && <MasterChecklist user={user} userCompany={userCompany} />}
+      {boardTab === "대시보드" && (!dept || dept === "exec") && <MasterChecklist user={user} userCompany={userCompany} />}
       {/* 🏢 경리·인사 권한 — 대시보드 내용만 부서 업무로 */}
-      {boardTab === "대시보드" && dept && <DeptDashboard mode={dept} company={getViewCompany()} dispatchData={dispatchData} onGo={onDeptGo} />}
+      {boardTab === "대시보드" && dept && <DeptDashboard mode={dept} company={getViewCompany()} dispatchData={dispatchData} onGo={onDeptGo} pastCache={pastCache} liveStart={liveStartStr} me={meHome} />}
 
       {/* 결재 알림 배너 (큐 방식 - 여러 알림 순차 표시) */}
       {approvalNotifQueue.length > 0 && (() => {
