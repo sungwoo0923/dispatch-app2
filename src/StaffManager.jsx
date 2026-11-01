@@ -1,6 +1,7 @@
 // ======================= src/StaffManager.jsx =======================
 // 👥 직원 관리(관리자·마스터·경리·인사) — 직원 가입 승인·권한, 기사 가입 승인. PC·모바일 공용(KpSubNav: 휴대폰은 위쪽 가로 탭)
 import React from "react";
+import { createPortal } from "react-dom";
 import { doc, setDoc, getDocs, updateDoc, deleteDoc, query, where, collection, serverTimestamp, onSnapshot } from "firebase/firestore";
 import { db, DEFAULT_COMPANY } from "./firebase";
 import KpSubNav from "./KpSubNav";
@@ -148,20 +149,30 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
         ) : (!isViewer && u.id !== myUid && (
           <div className="relative shrink-0">
             <button type="button" onClick={() => setMenuOpen(open ? null : u.id)} className="w-8 h-8 rounded-lg border border-[#DCE3EE] text-[#5B6B85] font-black">⋯</button>
-            {open && (
-              <div className="absolute right-0 top-9 z-20 w-[230px] max-h-[360px] overflow-y-auto rounded-xl bg-white border border-[#E3E8F0] shadow-[0_12px_30px_rgba(15,26,48,0.18)] p-1.5">
-                {!isDriverTab && canRole && !u.isMaster && (
-                  <>
-                    <div className="px-2 pt-1 pb-1 text-[10.5px] font-black text-[#9AA9C3]">권한 변경</div>
-                    {ro.options.map(([rk, rl]) => (
-                      <button key={rk} type="button" onClick={() => { setMenuOpen(null); changeRole(u, rk); }} className={`w-full text-left px-2.5 h-8 rounded-lg text-[12.5px] font-bold ${u.role === rk ? "bg-[#EEF3FC] text-[#1B2B4B]" : "text-[#3A4A66] hover:bg-[#F5F8FD]"}`}>{u.role === rk ? "✓ " : ""}{rl}</button>
-                    ))}
-                    <div className="h-px bg-[#EEF2F8] my-1" />
-                  </>
-                )}
-                <button type="button" onClick={() => { setMenuOpen(null); toggleApprove(u); }} className="w-full text-left px-2.5 h-8 rounded-lg text-[12.5px] font-bold text-[#B42318] hover:bg-[#FEF3F2]">승인 해제(로그인 차단)</button>
-              </div>
-            )}
+            {/* ⭐ 2026-11-02 권한 변경 메뉴가 카드 안에 갇혀 아래가 잘리고 스크롤도 안 되던 문제 — 화면 맨 위(포털)에 아래에서 올라오는 시트로 띄운다 */}
+            {open && createPortal(
+              <div className="fixed inset-0 z-[2147483000] bg-[#0B1428]/45 flex items-end sm:items-center justify-center" onClick={() => setMenuOpen(null)}>
+                <div className="w-full sm:w-[360px] max-h-[80vh] overflow-y-auto rounded-t-[22px] sm:rounded-[20px] bg-white shadow-[0_-12px_40px_rgba(15,26,48,0.25)] p-3 pb-[calc(12px+env(safe-area-inset-bottom))]" onClick={(e) => e.stopPropagation()}>
+                  <div className="mx-auto mb-2 w-10 h-1.5 rounded-full bg-[#DCE3EE] sm:hidden" />
+                  <div className="px-2 pb-2 flex items-center gap-2 border-b border-[#EEF2F8] mb-1.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[15px] font-black text-[#0F1A30] truncate">{u.name || u.email}</div>
+                      <div className="text-[12px] text-[#7A879C] truncate">{[u.team, u.position, ro.label(u.role)].filter(Boolean).join(" · ")}</div>
+                    </div>
+                    <button type="button" onClick={() => setMenuOpen(null)} className="w-9 h-9 rounded-lg text-[#7A879C] hover:bg-[#F5F8FD] font-black shrink-0">✕</button>
+                  </div>
+                  {!isDriverTab && canRole && !u.isMaster && (
+                    <>
+                      <div className="px-2 pt-1 pb-1 text-[11.5px] font-black text-[#9AA9C3]">권한 변경</div>
+                      {ro.options.map(([rk, rl]) => (
+                        <button key={rk} type="button" onClick={() => { setMenuOpen(null); changeRole(u, rk); }} className={`w-full text-left px-3 h-11 rounded-xl text-[14.5px] font-bold ${u.role === rk ? "bg-[#EEF3FC] text-[#1B2B4B]" : "text-[#3A4A66] hover:bg-[#F5F8FD]"}`}>{u.role === rk ? "✓ " : ""}{rl}</button>
+                      ))}
+                      <div className="h-px bg-[#EEF2F8] my-1.5" />
+                    </>
+                  )}
+                  <button type="button" onClick={() => { setMenuOpen(null); toggleApprove(u); }} className="w-full text-left px-3 h-11 rounded-xl text-[14.5px] font-bold text-[#B42318] hover:bg-[#FEF3F2]">승인 해제(로그인 차단)</button>
+                </div>
+              </div>, document.body)}
           </div>
         ))}
       </div>
