@@ -64,6 +64,7 @@ import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare, geocodeAddress, haversineKm, specialSurcharge } from "./tmapFareCalc";
 import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen } from "./customRoles";
 import { useReadOnlyGuard } from "./readOnlyGuard";
+import { confirmLeave } from "./leaveGuard";
 import RouteMapModal from "./RouteMapModal";
 import MonthCompareAnalysis from "./MonthCompareAnalysis";
 import MonthlyReport from "./MonthlyReport";
@@ -7723,7 +7724,9 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   }, [role]);
 
   // ---------------- 메뉴 클릭 제어 ----------------
-  const handleMenuClick = (m) => {
+  const handleMenuClick = async (m) => {
+    // ✋ 작성 중인 문서(전자결재·증명서 등)가 있으면 먼저 저장할지 묻는다
+    if (m !== menu && !(await confirmLeave())) return;
     if (MENU_FEATURE[m] && !planIncludes(planId, MENU_FEATURE[m])) { openPlanLock(MENU_FEATURE[m]); return; }
     if (!deptMode && (role === "user" || role === "test") && blockedMenus.includes(m)) return;
     if (m !== "매출관리") setRevenueUnlocked(false);

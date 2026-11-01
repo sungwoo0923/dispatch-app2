@@ -5,6 +5,7 @@
 //  · 입·퇴사 체크리스트: 근로계약서·4대보험 취득/상실 신고·장비 지급/반납·계정 발급/정지·퇴직금 정산 등
 //    법정 기한(4대보험 다음 달 15일, 퇴직금 14일)을 함께 보여주고, 사람마다 체크 상태를 userProfiles에 저장
 //  · 증명서 발급: 재직증명서·경력증명서 — 회사 정보·직인(회사정보에 등록된 것)으로 바로 인쇄, 발급 대장 남김
+import { useLeaveGuard, draftStore } from "./leaveGuard";
 import React from "react";
 import { collection, doc, onSnapshot, query, setDoc, where, arrayUnion, getDocs, getDoc } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
@@ -430,11 +431,15 @@ export function CertIssuer({ company, isViewer = false }) {
   const { loading, staff, profiles } = useStaff(company);
   const [co, setCo] = React.useState(null);
   const [resumes, setResumes] = React.useState({});
-  const [uid, setUid] = React.useState("");
-  const [kind, setKind] = React.useState("employ");
-  const [purpose, setPurpose] = React.useState("");
-  const [duty, setDuty] = React.useState("");
-  const [mail, setMail] = React.useState(true);
+  // ✋ 2026-11-01 임시저장(이 기기) — 쓰다가 다른 메뉴로 가면 저장할지 묻고, 다시 오면 이어서
+  const draftKey = `cert:${company}`;
+  const [draft] = React.useState(() => draftStore.get(draftKey));
+  const [uid, setUid] = React.useState(draft?.uid || "");
+  const [kind, setKind] = React.useState(draft?.kind || "employ");
+  const [purpose, setPurpose] = React.useState(draft?.purpose || "");
+  const [duty, setDuty] = React.useState(draft?.duty || "");
+  const [mail, setMail] = React.useState(draft?.mail ?? true);
+  useLeaveGuard(!!(purpose.trim() || duty.trim()), { label: "증명서 발급", onSave: () => draftStore.set(draftKey, { uid, kind, purpose, duty, mail }), onDiscard: () => draftStore.del(draftKey) });
   const [busy, setBusy] = React.useState("");
   const [q, setQ] = React.useState("");
   const paperRef = React.useRef(null);
@@ -463,7 +468,7 @@ export function CertIssuer({ company, isViewer = false }) {
       }
       setBusy("인쇄 창 여는 중…");
       await printA4(paperRef.current, `${kind === "career" ? "경력증명서" : "재직증명서"}_${nm(u)}`);
-      setPurpose(""); setDuty("");
+      setPurpose(""); setDuty(""); draftStore.del(draftKey);
     } finally { setBusy(""); }
   };
   if (loading) return <Loading />;
