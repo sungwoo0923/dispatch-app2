@@ -20,6 +20,8 @@ export const MENU_SUBS = {
   자금관리: { code: "FINANCE", items: [["funds", "자금 현황"], ["book", "수입 · 지출 장부"]] },
   인사관리부: { code: "HUMAN RESOURCES", items: [["record", "인사관리"], ["edit", "직원관리"], ["register", "직원 등록"], ["attendance", "출근기록부"], ["leave", "연차 관리"], ["settings", "직책 · 부서 설정"], ["rules", "사내 규정"], ["obit", "부고 알림"]] },
   회사관리: { code: "COMPANY", items: [["회사정보", "회사정보"], ["조직도", "조직도"], ["내정보", "내정보"], ["내 이력서", "내 이력서"], ["출근기록부", "출근기록부"]] },
+  운임조회: { code: "FARE LOOKUP", items: [["전국운임조회", "전국운임조회"], ["자사운임표", "자사운임표"]] },
+  지입차관리: { code: "FLEET CONTROL", items: [["tracking", "관제현황"], ["route", "노선관리"], ["fixed", "고정노선"], ["history", "이력 조회"], ["attendance", "출근기록부"], ["temperature", "온도 관제"], ["cargo-camera", "적재함 카메라"], ["vehicle", "차량 관리"], ["registration", "기사 등록 관리"]] },
   관리자메뉴: { code: "ADMIN", items: [["members", "회원 관리"], ["linked", "연동 화주사"], ["loginSessions", "로그인 관리"], ["billing", "구독 · 결제"], ["setup", "초기 설정 · 튜토리얼"]] },
 };
 
@@ -38,8 +40,6 @@ export function registerSubnav(code, items) {
 function registeredItems(code) {
   try { const k = REG_KEY(code); const j = _reg[k] || localStorage.getItem(k); return j ? JSON.parse(j) : null; } catch { return null; }
 }
-// 팀·권한마다 달라지는 화면 — 한 번 열어 실제 항목을 알기 전엔 세부 메뉴를 띄우지 않는다
-const DYNAMIC = new Set(["ADMIN", "COMPANY", "HUMAN RESOURCES", "HOME", "DRIVERS"]);
 
 // 세부 메뉴 이동 요청 — 화면이 아직 안 열렸으면 열린 뒤(3초 안) 적용
 export function emitSubnav(code, key) {
@@ -72,7 +72,8 @@ export function useSubnavTarget(code, keys, onSelect, labeled = null) {
 export function NavHover({ menu, label, disabled = false, onOpenMenu, children }) {
   const base = MENU_SUBS[menu];
   const reg = base ? registeredItems(base.code) : null;
-  const conf = base && (reg || !DYNAMIC.has(base.code)) ? { code: base.code, items: reg || base.items } : null;
+  // ⭐ 2026-11-01 세부 메뉴가 있는 메뉴는 처음부터 항상 펼친다(한 번 연 화면은 그 사람이 실제로 보는 항목으로)
+  const conf = base ? { code: base.code, items: reg && reg.length ? reg : base.items } : null;
   const anchorRef = React.useRef(null);
   const [open, setOpen] = React.useState(false);
   const [shown, setShown] = React.useState(false);
