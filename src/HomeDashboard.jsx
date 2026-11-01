@@ -1,7 +1,7 @@
 import NoticeBoard from "./NoticeBoard";
 import DeptDashboard from "./DeptDashboard";
 import ObituaryWriter from "./ObituaryWriter";
-import { ExecScheduleBoard, canWriteExecSchedule } from "./ExecSuite";
+import { ExecScheduleBoard, TeamSchedule, canWriteExecSchedule } from "./ExecSuite";
 import { CompanyRules } from "./HrHub";
 import React, { useMemo, useState, useRef, useEffect } from "react";
 import MasterChecklist from "./MasterChecklist";
@@ -889,6 +889,8 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
           ...Object.entries(BOARDS).filter(([b]) => canSeeBoard(b, meHome)).map(([b, B]) => ({ key: `board:${b}`, label: B.label, en: B.en, icon: B.icon, badge: isBoardNew(`board:${b}`) ? "N" : 0, badgeTitle: "새 글" })),
           // ⭐ 2026-10-31 임원 일정(모든 직원 열람) · 사내 규정(취업규칙 등)
           { key: "execsched", label: "임원 일정", en: "EXECUTIVE", icon: "pin" },
+          // ⭐ 2026-11-01 직원 일정(연차·외근 등 부재 달력)은 상단 메뉴에서 빼고 여기로
+          { key: "teamsched", label: "직원 일정", en: "TEAM SCHEDULE", icon: "clock" },
           { key: "rules", label: "사내 규정", en: "RULES", icon: "list" },
         ] },
         { label: "전자결재", items: [
@@ -911,7 +913,8 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
     <div className="space-y-5">
       {boardTab === "대시보드" && (!dept || dept === "exec") && <MasterChecklist user={user} userCompany={userCompany} />}
       {/* 🏢 경리·인사 권한 — 대시보드 내용만 부서 업무로 */}
-      {boardTab === "대시보드" && dept && <DeptDashboard mode={dept} company={getViewCompany()} dispatchData={dispatchData} onGo={onDeptGo} pastCache={pastCache} liveStart={liveStartStr} me={meHome} />}
+      {boardTab === "대시보드" && dept && <DeptDashboard mode={dept} company={getViewCompany()} dispatchData={dispatchData} onGo={onDeptGo} pastCache={pastCache} liveStart={liveStartStr} me={meHome}
+        att={{ company: homeCompany, uid: user?.uid, name: meHome.name, role, email: user?.email }} />}
 
       {/* 결재 알림 배너 (큐 방식 - 여러 알림 순차 표시) */}
       {approvalNotifQueue.length > 0 && (() => {
@@ -959,6 +962,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       {boardTab === "ap:handover" && <HandoverCenter company={getViewCompany()} me={meHome} isViewer={isViewer} />}
       {String(boardTab).startsWith("ap:") && boardTab !== "ap:contract" && boardTab !== "ap:handover" && <ApprovalCenter company={getViewCompany()} me={meHome} page={boardTab.slice(3)} setPage={(p) => setBoardTab(`ap:${p}`)} openId={apOpenId} onOpened={() => setApOpenId(null)} />}
       {String(boardTab).startsWith("board:") && <BoardPage company={getViewCompany()} me={meHome} board={boardTab.slice(6)} />}
+      {boardTab === "teamsched" && <TeamSchedule company={getViewCompany()} />}
       {boardTab === "execsched" && <ExecScheduleBoard company={getViewCompany()} me={meHome} canWrite={canWriteExecSchedule({ dept, role, team: meHome.team })} />}
       {boardTab === "rules" && <CompanyRules company={getViewCompany()} canEdit={role === "hrManager" || role === "totalMaster"} />}
 

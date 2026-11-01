@@ -76,6 +76,7 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
       {msg && <div className="rounded-xl bg-[#0F1A30] text-white px-5 py-3 text-[13.5px] font-black">{msg}</div>}
 
       <Card code="PLANS" title="요금제 비교 · 변경">
+        {!canEdit && <div className="mb-3 rounded-xl bg-[#EEF3FC] border border-[#C9D6EE] px-4 py-2.5 text-[13px] font-bold text-[#1B2B4B]">요금제 변경은 경리팀(경리 담당자)만 요청할 수 있습니다. 변경이 필요하면 경리팀에 말씀해 주세요.</div>}
         <PlanMatrix plans={pricing.plans.length ? pricing.plans : PLAN_DEFAULTS} current={planId} onPick={canEdit ? request : undefined} />
         <div className="mt-3 text-[12px] text-[#7A89A3]">상향은 요청 즉시 적용되고 남은 기간 차액만 청구됩니다. 하향은 다음 결제일부터 적용됩니다.</div>
       </Card>

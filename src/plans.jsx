@@ -178,7 +178,7 @@ export const PLAN_MATRIX_CSS = `
 `;
 
 // ─── 잠긴 기능을 눌렀을 때 뜨는 안내 창(앱 어디서든 openPlanLock 으로 연다) ───
-export function PlanLockHost({ userEmail = "", userName = "" }) {
+export function PlanLockHost({ userEmail = "", userName = "", canRequest = true }) {
   const { planId, company } = usePlan();
   const pricing = usePublicPricing();
   const [feature, setFeature] = React.useState(null);
@@ -192,6 +192,8 @@ export function PlanLockHost({ userEmail = "", userName = "" }) {
   const f = FEATURE_BY_KEY[feature];
   const need = PLAN_DEFAULTS.find((p) => p.id === f?.min);
   const request = async (p) => {
+    // ⭐ 2026-11-01 요금제 변경 요청은 경리팀만
+    if (!canRequest) { setSent("요금제 변경은 경리팀(경리 담당자)만 요청할 수 있습니다. 경리팀에 말씀해 주세요."); return; }
     try {
       await addDoc(collection(db, "planRequests"), { company, from: planId || "", to: p.id, toName: p.name, feature, by: userEmail, byName: userName, status: "요청", createdAt: serverTimestamp() });
       setSent(`${p.name} 요금제로 변경을 요청했습니다. 담당자가 곧 연락드립니다.`);

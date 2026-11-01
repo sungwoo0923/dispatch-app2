@@ -257,7 +257,9 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   //  (승인·권한 지정·마스터 지정은 그대로 — 인사관리자를 지정해야 하므로). 가입 승인 대기자는 마스터도 부서·직책 지정 가능
   const hrHanded = isCompanyMaster && !isTotalMaster && !masterHasHr(meDoc, users.filter((x) => (x.companyName || DEFAULT_COMPANY) === effectiveCompany), me?.uid);
   const hrLocked = (u) => hrHanded && !!u && (u.approved !== false || u.employmentStatus === "퇴사"); // 가입 대기자만 예외
-  const canEditMember = (u) => !!u && (canAdmin || isHrMgr || (canApprove && !u.approved && u.employmentStatus !== "퇴사"));
+  // ⭐ 2026-11-01 회원관리에서는 가입 승인·거절만(승인 권한자) — 재직 직원 정보·권한·계정 처리는 인사관리부에서.
+  //  본인 계정은 이름·핸드폰번호만 고칠 수 있다(아래 saveEdit 본인 경로). 최고관리자만 예외
+  const canEditMember = (u) => !!u && (isTotalMaster || (canApprove && !u.approved && u.employmentStatus !== "퇴사"));
   const assignableRoles = (cur) => {
     const base = canAdmin ? ROLES : isHrMgr ? ROLES.filter((r) => r !== "totalMaster") : myRoleEff === "admin" ? ["admin", "user", "test", "hrManager", "viewer"] : ["user", "test", "viewer"];
     return cur && !base.includes(cur) ? [cur, ...base] : base;
@@ -1088,7 +1090,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                       {memberModal && canEditMember(u) && canManage && (
                         <MemberManageModal
                           u={u} me={me} isTotalMaster={isTotalMaster} roles={assignableRoles(u.role)} roleLabels={roleLabels}
-                          canMaster={canAdmin} canAccount={(canAdmin || isHrMgr) && !hrLocked(u)} canDelete={canAdmin} hrOpt={hrOpt} hrLock={hrLocked(u)}
+                          canMaster={isTotalMaster} canAccount={isTotalMaster} canDelete={isTotalMaster} hrOpt={hrOpt} hrLock={hrLocked(u)}
                           f={{ editName, setEditName, editPhone, setEditPhone, editRole, setEditRole, editCompany, setEditCompany, editPosition, setEditPosition: onPositionChange, editTeam, setEditTeam: onTeamChange, suggestR }}
                           onClose={() => { setMemberModal(false); setEditMode(false); }}
                           onSave={async () => { await saveEdit(); setMemberModal(false); }}
@@ -1505,7 +1507,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
 
           {/* ====== 알림 문구 설정 탭 (최고관리자 전용) ====== */}
           {adminTab === "notifTemplate" && isTotalMaster && <NotifTemplatePanel />}
-          {adminTab === "billing" && <BillingCenter userEmail={me?.email || ""} userName={myDisplayName} canEdit={!isViewer} />}
+          {adminTab === "billing" && <BillingCenter userEmail={me?.email || ""} userName={myDisplayName} canEdit={!isViewer && (isTotalMaster || ["test", "hrAcct"].includes(myRoleEff) || /경리|회계/.test(String(meDoc?.team || "")))} />}
           {adminTab === "copyTemplate" && (
             <div className="bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_10px_28px_rgba(16,24,40,0.06)] p-6">
               <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">COPY · TEMPLATE</div>

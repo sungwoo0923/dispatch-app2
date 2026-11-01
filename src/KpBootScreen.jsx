@@ -6,6 +6,13 @@ import React, { useState, useEffect, useRef } from "react";
 import KpTruck3D from "./KpTruck3D";
 
 export const BOOT_STEPS = ["저장된 오더 불러오기", "서버 확인", "최신 오더 반영", "화면 준비"];
+// ⭐ 2026-11-01 팀별 로딩 문구 — 배차팀 외(경리·인사·임원)는 그 팀 업무에 맞는 말로
+export const BOOT_TEXT = {
+  dispatch: { steps: BOOT_STEPS, first: "이 기기에 오더를 처음 저장하는 중이에요 · 다음부터는 빨라져요", slow: "최신 오더를 빠짐없이 받는 중이에요" },
+  acct: { steps: ["정산 · 매출 자료 불러오기", "서버 확인", "입금 · 지급 최신 반영", "경리 화면 준비"], first: "이 기기에 정산 자료를 처음 저장하는 중이에요 · 다음부터는 빨라져요", slow: "매출 · 지급 자료를 빠짐없이 받는 중이에요" },
+  hr: { steps: ["직원 정보 불러오기", "서버 확인", "근태 · 인사 최신 반영", "인사 화면 준비"], first: "이 기기에 인사 자료를 처음 저장하는 중이에요 · 다음부터는 빨라져요", slow: "직원 · 근태 정보를 빠짐없이 받는 중이에요" },
+  exec: { steps: ["경영 자료 불러오기", "서버 확인", "실적 최신 반영", "경영 브리핑 준비"], first: "이 기기에 경영 자료를 처음 저장하는 중이에요 · 다음부터는 빨라져요", slow: "실적 자료를 빠짐없이 받는 중이에요" },
+};
 
 const SIZE = {
   mobile: {
@@ -20,7 +27,9 @@ const SIZE = {
   },
 };
 
-export default function KpBootScreen({ targets, subs = [], onAllDone, variant = "mobile", steps = BOOT_STEPS, zIndex, onSkip }) {
+export default function KpBootScreen({ targets, subs = [], onAllDone, variant = "mobile", steps: stepsProp, zIndex, onSkip, team = "dispatch" }) {
+  const TXT = BOOT_TEXT[team] || BOOT_TEXT.dispatch;
+  const steps = stepsProp || TXT.steps;
   const Z = SIZE[variant] || SIZE.mobile;
   // ⭐ 끊김 방지 — 예전엔 막대·숫자를 매 프레임(초당 60번) 자바스크립트로 다시 그렸고, 배경 흐림(blur)·점선 이동·
   // 테두리 깜빡임이 매 프레임 화면 전체를 다시 칠하게 만들었다. 데이터를 받느라 바쁜 저사양 폰(특히 LTE)에서
@@ -97,8 +106,8 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
       : phase >= 1
         ? { title: "열심히 가져오고 있어요", desc: "조금만 더 기다려 주세요" }
         : firstVisit
-          ? { title: "처음 접속하면 로딩이 조금 걸릴 수 있어요", desc: "이 기기에 오더를 처음 저장하는 중이에요 · 다음부터는 빨라져요" }
-          : { title: "데이터 환경에 따라 늦어질 수 있어요", desc: "최신 오더를 빠짐없이 받는 중이에요" };
+          ? { title: "처음 접속하면 로딩이 조금 걸릴 수 있어요", desc: TXT.first }
+          : { title: "데이터 환경에 따라 늦어질 수 있어요", desc: TXT.slow };
   const canSkip = !!onSkip && (offline || phase >= 2);
 
   const activeIdx = completed.findIndex((c) => !c);

@@ -6,7 +6,7 @@ import React from "react";
 import { addDoc, arrayUnion, collection, deleteDoc, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import KpSubNav from "./KpSubNav";
-import { BookHero, BookCard, Chip, Sheet, MONO } from "./OfficeBooks";
+import { BookHero, BookCard, Chip, Sheet, MONO, HERO_BG } from "./OfficeBooks";
 import { useHrOptions, isExecProfile, suggestRole, ROLE_NAME, EXEC_TEAM, TEAM_OPTIONS, POSITION_OPTIONS, EXEC_POSITION_OPTIONS } from "./hrConstants";
 import { isTMUser } from "./staffFilter";
 import { RETIRE_REASONS } from "./AcctSuite";
@@ -41,7 +41,6 @@ function useStaff(company) {
   }, [company]);
   return (users || []).filter((u) => (u.companyName || DEFAULT_COMPANY) === company && !["driver", "shipper", "cafeUser", "totalMaster"].includes(u.role) && !isTMUser(u));
 }
-const Avatar = ({ name }) => <span className="w-10 h-10 rounded-xl bg-[#1B2B4B] text-white grid place-items-center text-[14px] font-black shrink-0">{String(name || "?").slice(0, 1)}</span>;
 
 // ═════════════════ 직원 등록(계정 없이) ═════════════════
 export function StaffRegister({ company, onDone }) {
@@ -69,7 +68,7 @@ export function StaffRegister({ company, onDone }) {
   };
   return (
     <div className="space-y-4">
-      <BookHero en="HR · REGISTER" title="직원 등록" desc="프로그램 계정이 없어도 인사 기록을 만들 수 있습니다 — 등록 후 인사 기록에서 이력서를 채우세요" />
+      <BookHero en="HR · REGISTER" title="직원 등록" desc="프로그램 계정이 없어도 인사 기록을 만들 수 있습니다 — 등록 후 인사관리 › 이력서를 채우세요" />
       {done && <div className="rounded-2xl bg-[#ECFDF3] border border-[#ABEFC6] px-4 py-3 flex items-center gap-3"><b className="text-[14px] text-[#067647]">✓ {done.name}님을 등록했습니다</b><button type="button" onClick={() => onDone?.(done.id)} className="ml-auto h-9 px-4 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black">이력서 작성하러 가기 ›</button></div>}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-4">
         <BookCard en="PERSONAL" title="인적 사항">
@@ -110,6 +109,41 @@ export function printResign(company, u, plan) {
 
 // ═════════════════ 직원 정보 · 퇴사(정보 수정 + 퇴사·권고사직 통합, 2026-10-31) ═════════════════
 const tenureOf = (h) => { if (!h) return ""; const m = Math.max(0, Math.floor((new Date(`${kstDay()}T00:00:00Z`) - new Date(`${h}T00:00:00Z`)) / (30.44 * 864e5))); return `${Math.floor(m / 12) ? `${Math.floor(m / 12)}년 ` : ""}${m % 12}개월`; };
+// ⭐ 2026-11-01 직원 정보·퇴사 화면 공용 조각 — 컴포넌트 밖에 둬야 입력 중 포커스가 안 풀린다
+const avBg = (u) => (isExecProfile(u) ? "linear-gradient(135deg,#9A7425,#D7BC82)" : "linear-gradient(135deg,#1B2B4B,#2D4C82)");
+const fi = "h-12 w-full px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[15px] font-semibold text-[#0F1A30] outline-none transition focus:border-[#2D4C82] focus:ring-4 focus:ring-[#2D4C82]/10 disabled:bg-[#F5F7FB] disabled:text-[#8A97AD] disabled:cursor-not-allowed";
+const Eyebrow = ({ children, className = "" }) => <div className={`text-[10.5px] font-extrabold tracking-[0.24em] uppercase ${className}`} style={{ fontFamily: MONO }}>{children}</div>;
+const Field = ({ label, hint, children, wide = false }) => (
+  <label className={`block min-w-0 ${wide ? "col-span-2" : ""}`}>
+    <span className="block text-[13px] font-bold text-[#3A4A66] mb-1.5">{label}</span>
+    {children}
+    {hint && <span className="block text-[12px] leading-snug text-[#7A879C] mt-1.5">{hint}</span>}
+  </label>
+);
+const Section = ({ no, en, title, right, children }) => (
+  <section className="rounded-2xl bg-white border border-[#E6EBF2] p-5">
+    <div className="flex items-center gap-3 mb-4">
+      <span className="text-[11px] font-extrabold text-[#2D4C82] tabular-nums" style={{ fontFamily: MONO }}>{no}</span>
+      <div className="min-w-0">
+        <Eyebrow className="text-[#7A8BAA] !text-[9.5px]">{en}</Eyebrow>
+        <div className="text-[15.5px] font-black text-[#0F1A30] tracking-tight leading-tight">{title}</div>
+      </div>
+      <span className="flex-1 h-px bg-[#EEF1F6]" />
+      {right}
+    </div>
+    {children}
+  </section>
+);
+const Pill = ({ tone = "navy", children }) => {
+  const c = { navy: "bg-[#EEF3FC] text-[#1B2B4B]", gray: "bg-[#F2F4F8] text-[#5B6B85]", sand: "bg-[#F6EEDC] text-[#6B5320]", amber: "bg-[#FFF4E5] text-[#B54708]", mute: "bg-[#F2F4F8] text-[#9AA9C3]" }[tone];
+  return <span className={`inline-flex items-center h-[22px] px-2 rounded-md text-[11.5px] font-bold whitespace-nowrap ${c}`}>{children}</span>;
+};
+const Fact = ({ en, k, v, mono = false }) => (
+  <div className="min-w-0 px-4 py-2.5 rounded-xl bg-white/[0.06] ring-1 ring-white/10">
+    <div className="flex items-center gap-1.5"><Eyebrow className="text-[#8FB0F0] !text-[9.5px]">{en}</Eyebrow><span className="text-[11.5px] font-bold text-white/45">{k}</span></div>
+    <div className={`mt-1 text-[15px] font-black text-white truncate ${mono ? "tabular-nums" : ""}`} style={mono ? { fontFamily: MONO } : undefined}>{v}</div>
+  </div>
+);
 export function StaffInfoBoard({ company, canManage }) {
   const all = useStaff(company);
   const hr = useHrOptions(company);
@@ -121,6 +155,7 @@ export function StaffInfoBoard({ company, canManage }) {
   const [r, setR] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   const [showLeft, setShowLeft] = React.useState(false);
+  const [flt, setFlt] = React.useState("all"); // all | leave | planned
   const active = all.filter((u) => u.employmentStatus !== "퇴사");
   const planned = active.filter((u) => u.resignPlan?.date);
   const left = all.filter((u) => u.employmentStatus === "퇴사").sort((a, b) => String(b.resignedAt || "").localeCompare(String(a.resignedAt || "")));
@@ -179,147 +214,245 @@ export function StaffInfoBoard({ company, canManage }) {
   };
   const cancelPlan = async (u) => { if (window.confirm(`${u.name}님 퇴사 예정을 취소할까요?`)) await updateDoc(doc(db, "users", u.id), { resignPlan: null, personnelHistory: arrayUnion({ date: kstDay(), type: "퇴사 예정 취소", detail: "" }) }); };
   const reinstate = async (u) => { if (window.confirm(`${u.name}님을 복직 처리할까요? (다시 로그인할 수 있게 됩니다)`)) await updateDoc(doc(db, "users", u.id), { employmentStatus: "재직", resignedAt: null, personnelHistory: arrayUnion({ date: kstDay(), type: "복직", detail: "" }) }); };
-  const Card = ({ u }) => (
-    <button type="button" onClick={() => open(u)} className={`relative w-full text-left rounded-2xl border p-3.5 transition min-w-0 ${sel?.id === u.id ? "bg-[#F5F8FD] border-[#1B2B4B] ring-2 ring-[#1B2B4B]/15" : "bg-white border-[#E3E8F0] hover:border-[#2D4C82] hover:shadow-[0_10px_24px_rgba(15,26,48,0.10)]"}`}>
-      {u.resignPlan?.date && <span className="absolute top-2.5 right-2.5 text-[10px] font-black px-1.5 py-0.5 rounded bg-[#FFF4E5] text-[#B54708]">퇴사 예정</span>}
-      <div className="flex items-center gap-3">
-        <span className="w-12 h-12 rounded-2xl grid place-items-center text-[17px] font-black text-white shrink-0" style={{ background: isExecProfile(u) ? "linear-gradient(135deg,#B88A2E,#D7BC82)" : "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}>{String(u.name || "?").slice(0, 1)}</span>
-        <span className="min-w-0">
-          <span className="block text-[15px] font-black text-[#0F1A30] truncate">{u.name || u.email}</span>
-          <span className="block text-[12.5px] font-bold text-[#5B6B85] truncate">{u.position || "직책 없음"}</span>
+  // ⭐ 2026-11-01 리디자인 — 왼쪽 직원 디렉터리(목록) / 오른쪽 상세 패널, 네이비 톤·모노 라벨·큰 글씨
+  const leaveCnt = active.filter((u) => LEAVE_STATUSES.includes(u.employmentStatus)).length;
+  const monthLeft = left.filter((u) => String(u.resignedAt || "").startsWith(kstDay().slice(0, 7))).length;
+  const fltOk = (u) => flt === "all" || (flt === "leave" ? LEAVE_STATUSES.includes(u.employmentStatus) : !!u.resignPlan?.date);
+  const shownGroups = groups.map(([t, us]) => [t, us.filter(fltOk)]).filter(([, us]) => us.length);
+  const Row = ({ u }) => {
+    const on = sel?.id === u.id;
+    return (
+      <button type="button" onClick={() => open(u)} className={`group relative w-full text-left flex items-center gap-3.5 pl-4 pr-4 py-3 transition ${on ? "bg-[#F1F5FC]" : "hover:bg-[#F8FAFD]"}`}>
+        <span className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full transition ${on ? "bg-[#2D4C82]" : "bg-transparent"}`} />
+        <span className="w-11 h-11 rounded-[14px] grid place-items-center text-[16px] font-black text-white shrink-0 shadow-[0_4px_10px_rgba(15,26,48,0.18)]" style={{ background: avBg(u) }}>{String(u.name || "?").slice(0, 1)}</span>
+        <span className="flex-1 min-w-0">
+          <span className="flex items-center gap-2 min-w-0">
+            <span className="text-[15.5px] font-black text-[#0F1A30] truncate">{u.name || u.email}</span>
+            <span className="text-[13px] font-semibold text-[#5B6B85] truncate">{u.position || "직책 없음"}</span>
+          </span>
+          <span className="mt-1 flex items-center gap-1.5 flex-wrap">
+            <Pill>{ro.label(u.role)}</Pill>
+            {u.employType && u.employType !== "정규직" && <Pill tone="gray">{u.employType}</Pill>}
+            {LEAVE_STATUSES.includes(u.employmentStatus) && <Pill tone="sand">{u.employmentStatus}{u.leave?.to ? ` ~${String(u.leave.to).slice(2).replace(/-/g, ".")}` : ""}</Pill>}
+            {u.resignPlan?.date && <Pill tone="amber">퇴사 예정</Pill>}
+            {u.noAccount && <Pill tone="mute">계정 없음</Pill>}
+          </span>
         </span>
-      </div>
-      <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
-        <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded-md bg-[#EEF3FC] text-[#1B2B4B]">{ro.label(u.role)}</span>
-        {u.employType && u.employType !== "정규직" && <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded-md bg-[#F3F6FA] text-[#5B6B85]">{u.employType}</span>}
-        {LEAVE_STATUSES.includes(u.employmentStatus) && <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded-md bg-[#F3E7CC] text-[#6B5320]">{u.employmentStatus}{u.leave?.to ? ` ~${String(u.leave.to).slice(2).replace(/-/g, ".")}` : ""}</span>}
-        {u.noAccount && <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded-md bg-[#F3F6FA] text-[#9AA9C3]">계정 없음</span>}
-        <span className="ml-auto text-[11px] font-bold text-[#9AA9C3] tabular-nums" style={{ fontFamily: MONO }}>{tenureOf(u.hireDate)}</span>
-      </div>
-    </button>
-  );
+        <span className="shrink-0 text-right">
+          <span className="block text-[12.5px] font-bold text-[#3A4A66] tabular-nums" style={{ fontFamily: MONO }}>{tenureOf(u.hireDate) || "—"}</span>
+          <span className="block text-[10px] font-bold tracking-[0.16em] text-[#A3AFC2]" style={{ fontFamily: MONO }}>{u.hireDate ? u.hireDate.replace(/-/g, ".") : "NO DATE"}</span>
+        </span>
+      </button>
+    );
+  };
   return (
-    <div className="space-y-4">
-      <BookHero en="HR · STAFF BOARD" title="직원 정보 · 퇴사" desc="왼쪽 목록에서 직원을 누르면 오른쪽에 정보가 바로 뜹니다 — 정보·입사일 수정(공문 없이 바로)과 퇴사·권고사직 처리"
-        kpis={[["재직", `${active.length}명`, `${groups.length}개 부서`], ["휴직 · 육아휴직", `${active.filter((u) => LEAVE_STATUSES.includes(u.employmentStatus)).length}명`, `육아휴직 ${active.filter((u) => u.employmentStatus === "육아휴직").length}명`], ["퇴사 예정", `${planned.length}명`], ["이번 달 퇴사", `${left.filter((u) => String(u.resignedAt || "").startsWith(kstDay().slice(0, 7))).length}명`]]}
-        right={<input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름·부서·직책 검색" className="h-10 w-[220px] px-3.5 rounded-xl bg-white/95 text-[#0F1A30] text-[13.5px] font-semibold outline-none" />} />
-      {!canManage && <div className="rounded-2xl bg-[#FEF3F2] border border-[#FECDCA] px-4 py-3 text-[13px] font-bold text-[#B42318]">직책·부서·권한 변경과 퇴사 처리는 마스터·인사관리자만 할 수 있습니다</div>}
+    <div className="space-y-5">
+      {/* 상단 — 제목 + 핵심 숫자 */}
+      <div className="relative overflow-hidden rounded-[24px] text-white shadow-[0_18px_40px_rgba(15,26,48,0.22)]" style={{ background: HERO_BG }}>
+        <div className="px-7 pt-5 pb-4 flex items-end justify-between gap-4 flex-wrap">
+          <div className="min-w-0">
+            <Eyebrow className="text-[#8FB0F0]">HR · Staff Board</Eyebrow>
+            <div className="text-[25px] font-black tracking-tight mt-0.5 leading-tight">직원 정보 · 퇴사</div>
+            <div className="text-[14px] text-white/60 mt-0.5">목록에서 직원을 고르면 오른쪽에서 정보·입사일 수정(공문 없이 바로)과 퇴사·권고사직을 처리합니다</div>
+          </div>
+          <div className="relative">
+            <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#7A8BAA]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름 · 부서 · 직책 · 연락처" className="h-11 w-[280px] pl-10 pr-4 rounded-xl bg-white text-[#0F1A30] text-[14.5px] font-semibold outline-none ring-4 ring-white/10 placeholder:text-[#9AA9C3]" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 border-t border-white/10">
+          {[["Active", "재직", active.length, `${groups.length}개 부서`], ["On Leave", "휴직 · 육아휴직", leaveCnt, `육아휴직 ${active.filter((u) => u.employmentStatus === "육아휴직").length}명`], ["Planned", "퇴사 예정", planned.length, planned[0] ? `가장 빠른 날 ${planned.map((u) => u.resignPlan.date).sort()[0]}` : "예정 없음"], ["This Month", "이번 달 퇴사", monthLeft, `누적 퇴사 ${left.length}명`]].map(([en, k, n, sub], i) => (
+            <div key={en} className={`px-7 py-3 ${i ? "md:border-l border-white/10" : ""} ${i % 2 ? "border-l border-white/10 md:border-l" : ""} ${i > 1 ? "border-t md:border-t-0 border-white/10" : ""}`}>
+              <Eyebrow className="text-[#8FB0F0] !text-[9.5px]">{en}</Eyebrow>
+              <div className="mt-1 flex items-baseline gap-1.5"><span className="text-[26px] leading-none font-black tabular-nums" style={{ fontFamily: MONO }}>{n}</span><span className="text-[13px] font-bold text-white/55">명</span><span className="ml-1 text-[13px] font-bold text-white/80">{k}</span></div>
+              <div className="mt-0.5 text-[12.5px] text-white/50 truncate">{sub}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {!canManage && <div className="rounded-xl bg-[#FEF3F2] border border-[#FECDCA] px-4 py-3 text-[13.5px] font-bold text-[#B42318] flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-[#B42318]" />직책·부서·권한 변경과 퇴사 처리는 마스터·인사관리자만 할 수 있습니다</div>}
+
       {planned.length > 0 && (
-        <div className="rounded-2xl border border-[#FEDF89] bg-[#FFFBF2] p-3.5">
-          <div className="text-[12px] font-extrabold tracking-[0.2em] text-[#B54708] mb-2" style={{ fontFamily: MONO }}>PLANNED · 퇴사 예정</div>
+        <div className="rounded-2xl border border-[#F5DDB0] bg-[#FFFBF3] px-5 py-2.5 flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2 shrink-0"><span className="w-2 h-2 rounded-full bg-[#F79009] animate-pulse" /><Eyebrow className="text-[#B54708]">Planned</Eyebrow><span className="text-[13.5px] font-black text-[#B54708]">퇴사 예정</span></div>
           <div className="flex flex-wrap gap-2">
             {planned.map((u) => (
-              <div key={u.id} className="flex items-center gap-2 rounded-xl bg-white border border-[#FEDF89] pl-3 pr-1.5 py-1.5">
-                <span className="text-[13.5px] font-black text-[#0F1A30]">{u.name}</span><span className="text-[12px] text-[#7A879C]">{u.resignPlan.type} · <b style={{ fontFamily: MONO }}>{u.resignPlan.date}</b></span>
-                {canManage && <><button type="button" onClick={() => cancelPlan(u)} className="h-8 px-2.5 rounded-lg text-[12px] font-bold text-[#5B6B85]">취소</button><button type="button" onClick={() => open(u, "resign")} className="h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black">퇴사 확정</button></>}
+              <div key={u.id} className="flex items-center gap-3 rounded-xl bg-white border border-[#F5DDB0] pl-3.5 pr-1.5 py-1.5 shadow-[0_2px_6px_rgba(181,71,8,0.06)]">
+                <span className="text-[14px] font-black text-[#0F1A30]">{u.name}</span>
+                <span className="text-[12.5px] text-[#7A879C]">{u.resignPlan.type}</span>
+                <span className="text-[12.5px] font-bold text-[#B54708] tabular-nums" style={{ fontFamily: MONO }}>{u.resignPlan.date}</span>
+                {canManage && <><button type="button" onClick={() => cancelPlan(u)} className="h-8 px-2.5 rounded-lg text-[12.5px] font-bold text-[#5B6B85] hover:bg-[#F5F7FB]">취소</button><button type="button" onClick={() => open(u, "resign")} className="h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">퇴사 확정</button></>}
               </div>
             ))}
           </div>
         </div>
       )}
-      {/* ⭐ 2026-11-01 반반 화면 — 왼쪽 직원 목록 / 오른쪽 선택한 직원 정보(옆으로 나오던 창 없앰) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-      <div className="space-y-4 min-w-0">
-      {!groups.length && <div className="rounded-2xl bg-white border border-[#E3E8F0] py-10 text-center text-[13px] font-bold text-[#9AA9C3]">{kw ? "검색 결과가 없습니다" : "등록된 직원이 없습니다"}</div>}
-      {groups.map(([t, us]) => (
-        <div key={t}>
-          <div className="flex items-center gap-2 mb-2"><span className="w-1.5 h-4 rounded-full bg-[#1B2B4B]" /><span className="text-[15px] font-black text-[#0F1A30]">{t}</span><span className="text-[12px] font-black text-[#7A879C] tabular-nums" style={{ fontFamily: MONO }}>{us.length}명</span><span className="flex-1 h-px bg-[#E3E8F0]" /></div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">{us.map((u) => <Card key={u.id} u={u} />)}</div>
-        </div>
-      ))}
-      <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
-        <button type="button" onClick={() => setShowLeft(!showLeft)} className="w-full px-4 py-3 flex items-center gap-2 text-left">
-          <span className="text-[14px] font-black text-[#0F1A30]">퇴사자</span><span className="text-[12px] font-black text-[#7A879C]">{left.length}명 · 로그인 차단됨</span><span className="ml-auto text-[#9AA9C3]">{showLeft ? "접기 ▲" : "펼치기 ▼"}</span>
-        </button>
-        {showLeft && <div className="divide-y divide-[#EEF2F8] border-t border-[#EEF1F6]">
-          {!left.length ? <div className="py-8 text-center text-[13px] font-bold text-[#9AA9C3]">퇴사자가 없습니다</div> : left.map((u) => (
-            <div key={u.id} className="px-4 py-2.5 flex items-center gap-3">
-              <Avatar name={u.name} />
-              <span className="flex-1 min-w-0"><span className="block text-[14px] font-black text-[#0F1A30] truncate">{u.name} {u.resignType && <span className="text-[11px] font-black px-1.5 py-0.5 rounded bg-[#F3F6FA] text-[#5B6B85]">{u.resignType}</span>}</span><span className="block text-[12px] text-[#7A879C] truncate" style={{ fontFamily: MONO }}>{u.resignedAt || "-"} · {u.team || ""} · {u.resignReason || ""}</span></span>
-              <button type="button" onClick={() => printResign(company, u, { type: u.resignType || "자진 퇴사", date: u.resignedAt || "", reason: u.resignReason || "" })} className="h-8 px-2.5 rounded-lg border border-[#DCE3EE] text-[12px] font-bold text-[#1B2B4B]">인쇄</button>
-              {canManage && <button type="button" onClick={() => reinstate(u)} className="h-8 px-2.5 rounded-lg border border-[#DCE3EE] text-[12px] font-bold text-[#5B6B85]">복직</button>}
-            </div>
-          ))}
-        </div>}
-      </div>
-      </div>
-      <div className="lg:sticky lg:top-4 min-w-0">
-      {sel && f && r ? (
-        <div className="rounded-[22px] bg-[#F4F6FA] border border-[#E3E8F0] overflow-hidden flex flex-col shadow-[0_18px_40px_rgba(15,26,48,0.10)] lg:max-h-[calc(100vh-120px)]">
-          <div className="px-5 py-4 text-white flex items-center gap-3 shrink-0" style={{ background: "linear-gradient(120deg,#0F1A30 0%,#1B2B4B 55%,#2D4C82 100%)" }}>
-            <span className="w-12 h-12 rounded-2xl grid place-items-center text-[18px] font-black bg-white/10 ring-1 ring-white/20 shrink-0">{String(sel.name || "?").slice(0, 1)}</span>
-            <div className="min-w-0 flex-1">
-              <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{`HR · ${mode === "info" ? "EDIT" : "RESIGNATION"}`}</div>
-              <div className="text-[20px] font-black truncate">{sel.name || sel.email}</div>
-              <div className="text-[12.5px] text-white/70 truncate">{[sel.team || "미배정", sel.position, sel.email].filter(Boolean).join(" · ")}</div>
-            </div>
-            <button type="button" onClick={() => setSel(null)} className="w-9 h-9 rounded-xl bg-white/10 border border-white/15 shrink-0 text-[14px]" title="닫기">✕</button>
-          </div>
-          <fieldset disabled={!canManage} className="flex-1 overflow-y-auto px-5 py-5 space-y-4 min-w-0">
-          <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-white border border-[#E3E8F0]">
-            {[["info", "정보 수정"], ["resign", "퇴사 · 권고사직"]].map(([k, l]) => <button key={k} type="button" onClick={() => setMode(k)} disabled={sel.isMaster && k === "resign"} className={`h-11 rounded-lg text-[14px] font-black disabled:opacity-30 ${mode === k ? (k === "resign" ? "bg-[#B42318] text-white" : "bg-[#0F1A30] text-white") : "text-[#5B6B85]"}`}>{l}</button>)}
-          </div>
-          {mode === "info" ? (
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>이름</Label><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inp} /></div>
-              <div><Label>연락처</Label><input value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} className={inp} /></div>
-              <div><Label>부서</Label><select value={f.team} onChange={(e) => { const team = e.target.value; const position = hr.positionsFor(team).includes(f.position) ? f.position : ""; setF({ ...f, team, position, role: suggestFor({ team, position }, ro.execKeys) }); }} className={inp}><option value="">미배정</option>{hr.teams.map((t) => <option key={t}>{t}</option>)}</select></div>
-              <div><Label>직책</Label><select value={f.position} onChange={(e) => setF({ ...f, position: e.target.value, role: suggestFor({ team: f.team, position: e.target.value }, ro.execKeys) })} className={inp}><option value="">미설정</option>{[...new Set([...hr.positionsFor(f.team), f.position].filter(Boolean))].map((p) => <option key={p}>{p}</option>)}</select></div>
-              <div><Label>권한</Label><select value={f.role} disabled={sel.isMaster} onChange={(e) => setF({ ...f, role: e.target.value })} className={`${inp} disabled:bg-[#F5F8FD] disabled:text-[#9AA9C3]`}>{[...ro.options, ...(ro.options.some(([k]) => k === f.role) ? [] : [[f.role, ro.label(f.role)]])].map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select><div className="text-[11.5px] text-[#7A879C] mt-1">{sel.isMaster ? "마스터 계정은 권한을 바꿀 수 없습니다" : ROLE_DESC[f.role] || (ro.execKeys.includes(f.role) ? "임원 화면(경영 브리핑) — 권한 관리에서 만든 역할" : "권한 관리에서 만든 역할 — 메뉴는 그 설정을 따릅니다")}</div></div>
-              <div><Label>고용 형태</Label><select value={f.employType} onChange={(e) => setF({ ...f, employType: e.target.value })} className={inp}>{["정규직", "계약직", "수습", "파트타임", "일용직"].map((k) => <option key={k}>{k}</option>)}</select></div>
-              <div><Label>입사일</Label><input type="date" value={f.hireDate} max={kstDay()} disabled={!canHire} onChange={(e) => setF({ ...f, hireDate: e.target.value })} className={`${inp} disabled:bg-[#F5F8FD] disabled:text-[#9AA9C3]`} /><div className="text-[11.5px] text-[#7A879C] mt-1">{f.hireDate ? `근속 ${tenureOf(f.hireDate) || "0개월"} · 연차 계산 기준` : "연차·퇴직금 계산 기준일"}</div></div>
-              <div><Label>근속</Label><div className={`${inp} flex items-center bg-[#F5F8FD]`}>{f.hireDate ? tenureOf(f.hireDate) || "1개월 미만" : "-"}</div><div className="text-[11.5px] text-[#7A879C] mt-1">{canHire ? "입사일은 이 화면에서만 바꿀 수 있습니다" : "입사일은 인사팀만 바꿀 수 있습니다"}</div></div>
-              <div className="col-span-2"><Label>재직 상태</Label>
-                <div className="flex flex-wrap gap-1.5">
-                  {STATUS_OPTIONS.map((k) => <Chip key={k} on={f.employmentStatus === k} onClick={() => setF({ ...f, employmentStatus: k })}>{k}</Chip>)}
-                  <span className="w-px h-7 bg-[#DCE3EE] mx-1 self-center" />
-                  {[["퇴사", "자진 퇴사"], ["권고사직", "권고사직"]].map(([l, t]) => <button key={l} type="button" disabled={sel.isMaster} onClick={() => { setR((p) => ({ ...p, type: t })); setMode("resign"); }} className="h-9 px-3.5 rounded-full text-[13px] font-black border border-[#FECDCA] bg-[#FEF3F2] text-[#B42318] disabled:opacity-30 whitespace-nowrap">{l} →</button>)}
-                </div>
-                <div className="text-[11.5px] text-[#7A879C] mt-1">퇴사·권고사직을 누르면 퇴사 처리 화면으로 넘어갑니다(퇴직일·사유·합의서 인쇄 · 확정 시 로그인 차단)</div>
-              </div>
-              {LEAVE_STATUSES.includes(f.employmentStatus) && (
-                <div className="col-span-2 rounded-2xl bg-white border border-[#E3E8F0] p-3.5 space-y-2.5">
-                  <div className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>{f.employmentStatus === "육아휴직" ? "PARENTAL LEAVE" : f.employmentStatus === "출산휴가" ? "MATERNITY LEAVE" : "LEAVE OF ABSENCE"} · 기간</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div><Label>시작일</Label><input type="date" value={f.leaveFrom} onChange={(e) => setF({ ...f, leaveFrom: e.target.value })} className={inp} /></div>
-                    <div><Label>복직 예정일</Label><input type="date" value={f.leaveTo} onChange={(e) => setF({ ...f, leaveTo: e.target.value })} className={inp} /></div>
-                  </div>
-                  {f.leaveFrom && f.leaveTo && <div className="text-[12.5px] font-black text-[#1B2B4B]">총 {Math.max(0, Math.round((new Date(f.leaveTo) - new Date(f.leaveFrom)) / 864e5) + 1)}일 · 약 {(Math.max(0, (new Date(f.leaveTo) - new Date(f.leaveFrom)) / 864e5 + 1) / 30.44).toFixed(1)}개월</div>}
-                  <input value={f.leaveMemo} onChange={(e) => setF({ ...f, leaveMemo: e.target.value })} className={inp} placeholder={f.employmentStatus === "육아휴직" ? "자녀 이름·생년월일, 전자결재 문서번호 등" : "사유·메모"} />
-                  {f.employmentStatus === "육아휴직" && <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2.5 text-[12px] text-[#5B6B85] leading-relaxed">만 8세 이하(초2 이하) 자녀 · 최대 1년(부모 모두 3개월 이상 쓰면 1년 6개월) · 휴직 30일 전 신청 · 휴직 기간도 근속·연차 산정에 포함 · 복귀 시 같은 업무(같은 수준 임금) — 급여는 고용센터에서 지급(회사는 확인서 제출)</div>}
-                  {f.employmentStatus === "출산휴가" && <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2.5 text-[12px] text-[#5B6B85] leading-relaxed">출산 전후 90일(다태아 120일) · 출산 후 45일(다태아 60일) 이상 · 최초 60일(다태아 75일) 유급</div>}
-                </div>
-              )}
-              <div className="col-span-2 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2.5 text-[12.5px] text-[#5B6B85]">변경 내역은 인사 이력에 남습니다. 공문(인사발령)을 남기려면 인사 기록 › 인사발령을 쓰세요.</div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div><Label>구분</Label><div className="flex flex-wrap gap-1.5">{RETIRE_REASONS.map((x) => <Chip key={x} on={r.type === x} onClick={() => setR({ ...r, type: x })}>{x}</Chip>)}</div></div>
-              {r.type === "권고사직" && <div className="rounded-xl bg-[#EEF3FC] border border-[#C9D6EE] px-3 py-2.5 text-[12.5px] text-[#1B2B4B] leading-relaxed">권고사직은 근로자 동의(합의서)가 필요하고 실업급여 대상(비자발적 이직)입니다. 경리에게 이직확인서 제출이 안내됩니다.</div>}
-              {r.type === "해고" && <div className="rounded-xl bg-[#FEF3F2] border border-[#FECDCA] px-3 py-2.5 text-[12.5px] text-[#B42318] leading-relaxed">해고는 정당한 사유와 30일 전 서면 통지가 필요합니다(근로기준법 23·26·27조). 노무 검토 후 진행하세요.</div>}
-              <div className="grid grid-cols-2 gap-3">
-                <div><Label>퇴직일(마지막 근무일)</Label><input type="date" value={r.date} onChange={(e) => setR({ ...r, date: e.target.value })} className={inp} /></div>
-                <div><Label>통보일</Label><input type="date" value={r.noticeDate} onChange={(e) => setR({ ...r, noticeDate: e.target.value })} className={inp} /></div>
-              </div>
-              <div><Label>사유</Label><textarea value={r.reason} onChange={(e) => setR({ ...r, reason: e.target.value })} rows={4} className={`${inp} h-auto py-2`} /></div>
-              <button type="button" onClick={() => printResign(company, sel, r)} className="w-full h-11 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-black text-[#1B2B4B]">{r.type === "권고사직" ? "권고사직 합의서 인쇄" : "퇴직 확인서 인쇄"}</button>
-              <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2.5 text-[12.5px] text-[#5B6B85] leading-relaxed">■ 퇴사 확정 즉시 이 계정은 로그인할 수 없습니다(로그인 시 "퇴사 처리된 계정" 안내 후 차단). 퇴사 예정 상태에서는 그날까지 로그인됩니다.</div>
-            </div>
-          )}
-          </fieldset>
-          {canManage && <div className="shrink-0 px-5 py-4 bg-white border-t border-[#E3E8F0] flex gap-2">{mode === "info"
-            ? <><button type="button" onClick={() => setSel(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button><button type="button" disabled={busy} onClick={saveInfo} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50">{busy ? "저장 중…" : "바로 저장(공문 없음)"}</button></>
-            : <><button type="button" onClick={() => setSel(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button>{r.date > kstDay() && <button type="button" disabled={busy} onClick={() => applyResign(false)} className="h-12 px-4 rounded-xl border border-[#0F1A30] bg-white text-[14px] font-black text-[#0F1A30]">예정 등록</button>}<button type="button" disabled={busy} onClick={() => applyResign(true)} className="flex-1 h-12 rounded-xl bg-[#B42318] text-white text-[15px] font-black disabled:opacity-50">지금 퇴사 확정</button></>}</div>}
-        </div>
-      ) : (
-        <div className="rounded-[22px] border-2 border-dashed border-[#C9D2E0] bg-white/60 py-20 px-6 text-center">
-          <div className="text-[15px] font-black text-[#1B2B4B]">왼쪽 목록에서 직원을 선택하세요</div>
-          <div className="text-[12.5px] text-[#7A879C] mt-1">선택한 직원의 정보 수정 · 입사일 · 휴직 · 퇴사 처리를 여기서 합니다</div>
-        </div>
-      )}
-      </div>
-      </div>
 
+      {/* ⭐ 2026-11-01 왼쪽 직원 목록 / 오른쪽 선택한 직원 정보 */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] gap-5 items-start">
+        {/* ── 디렉터리 ── */}
+        <div className="lg:sticky lg:top-0 min-w-0 rounded-[22px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_28px_rgba(16,24,40,0.06)] overflow-hidden flex flex-col lg:max-h-[calc(100vh-250px)]">
+          <div className="px-5 pt-4 pb-3 border-b border-[#EEF1F6] shrink-0">
+            <div className="flex items-center justify-between">
+              <div><Eyebrow className="text-[#4B6CB7]">Directory</Eyebrow><div className="text-[16px] font-black text-[#0F1A30]">직원 목록 <span className="text-[13px] font-bold text-[#7A879C] tabular-nums" style={{ fontFamily: MONO }}>{shownGroups.reduce((n, [, us]) => n + us.length, 0)}</span></div></div>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-1 p-1 rounded-xl bg-[#F2F5FA]">
+              {[["all", "전체", active.length], ["leave", "휴직", leaveCnt], ["planned", "퇴사 예정", planned.length]].map(([k, l, n]) => (
+                <button key={k} type="button" onClick={() => setFlt(k)} className={`h-9 rounded-lg text-[13px] font-bold transition flex items-center justify-center gap-1.5 ${flt === k ? "bg-white text-[#0F1A30] shadow-[0_1px_2px_rgba(16,24,40,0.08),0_4px_10px_rgba(16,24,40,0.06)]" : "text-[#5B6B85] hover:text-[#0F1A30]"}`}>{l}<span className={`text-[11px] tabular-nums ${flt === k ? "text-[#2D4C82]" : "text-[#9AA9C3]"}`} style={{ fontFamily: MONO }}>{n}</span></button>
+              ))}
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {!shownGroups.length && <div className="py-14 text-center text-[13.5px] font-bold text-[#9AA9C3]">{kw ? "검색 결과가 없습니다" : flt !== "all" ? "해당하는 직원이 없습니다" : "등록된 직원이 없습니다"}</div>}
+            {shownGroups.map(([t, us]) => (
+              <div key={t}>
+                <div className="sticky top-0 z-[1] px-5 py-2 bg-[#F8FAFC]/95 backdrop-blur border-y border-[#EEF1F6] flex items-center gap-2">
+                  <span className="text-[12.5px] font-black text-[#1B2B4B]">{t}</span>
+                  <span className="text-[11px] font-bold text-[#9AA9C3] tabular-nums" style={{ fontFamily: MONO }}>{String(us.length).padStart(2, "0")}</span>
+                </div>
+                <div className="divide-y divide-[#F1F4F8]">{us.map((u) => <Row key={u.id} u={u} />)}</div>
+              </div>
+            ))}
+            {/* 퇴사자 */}
+            <div className="border-t border-[#EEF1F6]">
+              <button type="button" onClick={() => setShowLeft(!showLeft)} className="w-full px-5 py-3.5 flex items-center gap-2 text-left hover:bg-[#F8FAFD]">
+                <Eyebrow className="text-[#7A879C]">Former</Eyebrow>
+                <span className="text-[14px] font-black text-[#0F1A30]">퇴사자</span>
+                <span className="text-[12px] font-bold text-[#9AA9C3] tabular-nums" style={{ fontFamily: MONO }}>{left.length}</span>
+                <span className="text-[12px] text-[#9AA9C3]">· 로그인 차단됨</span>
+                <svg className="ml-auto text-[#9AA9C3]" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: showLeft ? "rotate(180deg)" : "none", transition: "transform .25s" }}><path d="M6 9l6 6 6-6" /></svg>
+              </button>
+              {showLeft && <div className="divide-y divide-[#F1F4F8] border-t border-[#EEF1F6] bg-[#FBFCFE]">
+                {!left.length ? <div className="py-8 text-center text-[13px] font-bold text-[#9AA9C3]">퇴사자가 없습니다</div> : left.map((u) => (
+                  <div key={u.id} className="px-5 py-3 flex items-center gap-3">
+                    <span className="w-10 h-10 rounded-[12px] bg-[#E9EDF4] text-[#5B6B85] grid place-items-center text-[14px] font-black shrink-0">{String(u.name || "?").slice(0, 1)}</span>
+                    <span className="flex-1 min-w-0">
+                      <span className="flex items-center gap-1.5"><span className="text-[14.5px] font-black text-[#3A4A66] truncate">{u.name}</span>{u.resignType && <Pill tone="gray">{u.resignType}</Pill>}</span>
+                      <span className="block text-[12px] text-[#7A879C] truncate"><span style={{ fontFamily: MONO }}>{u.resignedAt || "-"}</span>{u.team ? ` · ${u.team}` : ""}{u.resignReason ? ` · ${u.resignReason}` : ""}</span>
+                    </span>
+                    <button type="button" onClick={() => printResign(company, u, { type: u.resignType || "자진 퇴사", date: u.resignedAt || "", reason: u.resignReason || "" })} className="h-8 px-2.5 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-bold text-[#1B2B4B] hover:border-[#2D4C82]">인쇄</button>
+                    {canManage && <button type="button" onClick={() => reinstate(u)} className="h-8 px-2.5 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-bold text-[#5B6B85] hover:border-[#2D4C82]">복직</button>}
+                  </div>
+                ))}
+              </div>}
+            </div>
+          </div>
+        </div>
+
+        {/* ── 상세 패널 ── */}
+        <div className="min-w-0">
+        {sel && f && r ? (
+          <div className="rounded-[22px] bg-[#F4F6FA] border border-[#E3E8F0] flex flex-col shadow-[0_1px_2px_rgba(16,24,40,0.04),0_18px_40px_rgba(15,26,48,0.10)]">
+            <div className="relative px-6 pt-5 pb-5 text-white shrink-0 rounded-t-[21px]" style={{ background: HERO_BG }}>
+              <div className="flex items-start gap-4">
+                <span className="w-14 h-14 rounded-2xl grid place-items-center text-[22px] font-black shrink-0 ring-1 ring-white/25 shadow-[0_8px_20px_rgba(0,0,0,0.25)]" style={{ background: avBg(sel) }}>{String(sel.name || "?").slice(0, 1)}</span>
+                <div className="min-w-0 flex-1">
+                  <Eyebrow className="text-[#8FB0F0]">{`Employee · ${mode === "info" ? "Profile Edit" : "Resignation"}`}</Eyebrow>
+                  <div className="mt-0.5 flex items-center gap-2 flex-wrap">
+                    <span className="text-[24px] font-black tracking-tight leading-tight truncate">{sel.name || sel.email}</span>
+                    <span className="h-6 px-2 rounded-md bg-white/12 ring-1 ring-white/15 text-[12px] font-bold flex items-center">{ro.label(sel.role)}</span>
+                    {(sel.employmentStatus || "재직") !== "재직" && <span className="h-6 px-2 rounded-md bg-[#F6EEDC] text-[#6B5320] text-[12px] font-bold flex items-center">{sel.employmentStatus}</span>}
+                    {sel.resignPlan?.date && <span className="h-6 px-2 rounded-md bg-[#FFF4E5] text-[#B54708] text-[12px] font-bold flex items-center">퇴사 예정 {sel.resignPlan.date}</span>}
+                  </div>
+                  <div className="mt-0.5 text-[13.5px] text-white/60 truncate">{[sel.email, sel.phone].filter(Boolean).join(" · ") || "연락처 미등록"}</div>
+                </div>
+                <button type="button" onClick={() => setSel(null)} className="w-9 h-9 rounded-xl bg-white/10 ring-1 ring-white/15 hover:bg-white/20 shrink-0 grid place-items-center" title="닫기"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+              </div>
+              <div className="mt-4 grid grid-cols-2 xl:grid-cols-4 gap-2">
+                <Fact en="Team" k="부서" v={sel.team || "미배정"} />
+                <Fact en="Title" k="직책" v={sel.position || "미설정"} />
+                <Fact en="Hired" k="입사일" v={origHire || "미등록"} mono />
+                <Fact en="Tenure" k="근속" v={origHire ? tenureOf(origHire) || "1개월 미만" : "—"} mono />
+              </div>
+            </div>
+            <div className="px-6 pt-4 shrink-0">
+              <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-white border border-[#E3E8F0]">
+                {[["info", "정보 수정", "EDIT"], ["resign", "퇴사 · 권고사직", "RESIGN"]].map(([k, l, en]) => <button key={k} type="button" onClick={() => setMode(k)} disabled={sel.isMaster && k === "resign"} className={`h-11 rounded-lg text-[14.5px] font-black transition flex items-center justify-center gap-2 disabled:opacity-30 ${mode === k ? (k === "resign" ? "bg-[#B42318] text-white shadow-[0_6px_14px_rgba(180,35,24,0.25)]" : "bg-[#0F1A30] text-white shadow-[0_6px_14px_rgba(15,26,48,0.25)]") : "text-[#5B6B85] hover:text-[#0F1A30]"}`}><span className={`text-[9.5px] tracking-[0.2em] ${mode === k ? "text-white/55" : "text-[#A3AFC2]"}`} style={{ fontFamily: MONO }}>{en}</span>{l}</button>)}
+              </div>
+            </div>
+            <fieldset disabled={!canManage} className="px-6 py-4 space-y-3.5 min-w-0">
+            {mode === "info" ? (
+              <>
+                <Section no="01" en="Basic" title="기본 정보">
+                  <div className="grid grid-cols-2 gap-4">
+                    <Field label="이름"><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={fi} /></Field>
+                    <Field label="연락처"><input value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} className={`${fi} tabular-nums`} placeholder="010-0000-0000" /></Field>
+                  </div>
+                </Section>
+                <Section no="02" en="Organization" title="소속 · 권한">
+                  <div className="grid grid-cols-2 gap-4">
+                    <Field label="부서"><select value={f.team} onChange={(e) => { const team = e.target.value; const position = hr.positionsFor(team).includes(f.position) ? f.position : ""; setF({ ...f, team, position, role: suggestFor({ team, position }, ro.execKeys) }); }} className={fi}><option value="">미배정</option>{hr.teams.map((t) => <option key={t}>{t}</option>)}</select></Field>
+                    <Field label="직책"><select value={f.position} onChange={(e) => setF({ ...f, position: e.target.value, role: suggestFor({ team: f.team, position: e.target.value }, ro.execKeys) })} className={fi}><option value="">미설정</option>{[...new Set([...hr.positionsFor(f.team), f.position].filter(Boolean))].map((p) => <option key={p}>{p}</option>)}</select></Field>
+                    <Field label="권한" hint={sel.isMaster ? "마스터 계정은 권한을 바꿀 수 없습니다" : ROLE_DESC[f.role] || (ro.execKeys.includes(f.role) ? "임원 화면(경영 브리핑) — 권한 관리에서 만든 역할" : "권한 관리에서 만든 역할 — 메뉴는 그 설정을 따릅니다")}><select value={f.role} disabled={sel.isMaster} onChange={(e) => setF({ ...f, role: e.target.value })} className={fi}>{[...ro.options, ...(ro.options.some(([k]) => k === f.role) ? [] : [[f.role, ro.label(f.role)]])].map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
+                    <Field label="고용 형태"><select value={f.employType} onChange={(e) => setF({ ...f, employType: e.target.value })} className={fi}>{["정규직", "계약직", "수습", "파트타임", "일용직"].map((k) => <option key={k}>{k}</option>)}</select></Field>
+                  </div>
+                </Section>
+                <Section no="03" en="Tenure" title="입사 · 근속" right={<span className={`inline-flex items-center gap-1 h-6 px-2 rounded-md text-[11.5px] font-bold ${canHire ? "bg-[#EEF3FC] text-[#2D4C82]" : "bg-[#F2F4F8] text-[#7A879C]"}`}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="11" width="14" height="10" rx="2" />{canHire ? <path d="M8 11V7a4 4 0 017.5-2" /> : <path d="M8 11V7a4 4 0 018 0v4" />}</svg>{canHire ? "인사팀 수정 가능" : "인사팀 전용"}</span>}>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Field label="입사일" hint={f.hireDate ? "연차 · 퇴직금 계산 기준일" : "연차·퇴직금 계산 기준일 — 아직 등록되지 않았습니다"}><input type="date" value={f.hireDate} max={kstDay()} disabled={!canHire} onChange={(e) => setF({ ...f, hireDate: e.target.value })} className={`${fi} tabular-nums`} /></Field>
+                    <Field label="근속" hint={canHire ? "입사일은 이 화면에서만 바꿀 수 있습니다" : "입사일은 인사팀만 바꿀 수 있습니다"}>
+                      <div className="h-12 px-3.5 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] flex items-baseline gap-2 pt-3"><span className="text-[17px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>{f.hireDate ? tenureOf(f.hireDate) || "1개월 미만" : "—"}</span>{f.hireDate && f.hireDate !== origHire && <span className="text-[11.5px] font-bold text-[#2D4C82]">변경됨</span>}</div>
+                    </Field>
+                  </div>
+                </Section>
+                <Section no="04" en="Status" title="재직 상태">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {STATUS_OPTIONS.map((k) => <button key={k} type="button" onClick={() => setF({ ...f, employmentStatus: k })} className={`h-10 px-4 rounded-xl text-[14px] font-black border transition ${f.employmentStatus === k ? "bg-[#0F1A30] text-white border-[#0F1A30] shadow-[0_4px_12px_rgba(15,26,48,0.2)]" : "bg-white text-[#3A4A66] border-[#DCE3EE] hover:border-[#2D4C82]"}`}>{k}</button>)}
+                    <span className="w-px h-7 bg-[#E3E8F0] mx-1" />
+                    {[["퇴사", "자진 퇴사"], ["권고사직", "권고사직"]].map(([l, t]) => <button key={l} type="button" disabled={sel.isMaster} onClick={() => { setR((p) => ({ ...p, type: t })); setMode("resign"); }} className="h-10 px-4 rounded-xl text-[14px] font-black border border-[#FECDCA] bg-[#FFF6F5] text-[#B42318] hover:bg-[#FEF3F2] disabled:opacity-30 whitespace-nowrap">{l} →</button>)}
+                  </div>
+                  <div className="text-[12px] text-[#7A879C] mt-2">퇴사·권고사직을 누르면 퇴사 처리 화면으로 넘어갑니다(퇴직일·사유·합의서 인쇄 · 확정 시 로그인 차단)</div>
+                  {LEAVE_STATUSES.includes(f.employmentStatus) && (
+                    <div className="mt-4 rounded-xl bg-[#F7F9FC] border border-[#E3E8F0] p-4 space-y-3">
+                      <div className="flex items-center gap-2"><Eyebrow className="text-[#4B6CB7]">{f.employmentStatus === "육아휴직" ? "Parental Leave" : f.employmentStatus === "출산휴가" ? "Maternity Leave" : "Leave of Absence"}</Eyebrow><span className="text-[13px] font-black text-[#1B2B4B]">{f.employmentStatus} 기간</span></div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field label="시작일"><input type="date" value={f.leaveFrom} onChange={(e) => setF({ ...f, leaveFrom: e.target.value })} className={`${fi} tabular-nums`} /></Field>
+                        <Field label="복직 예정일"><input type="date" value={f.leaveTo} onChange={(e) => setF({ ...f, leaveTo: e.target.value })} className={`${fi} tabular-nums`} /></Field>
+                      </div>
+                      {f.leaveFrom && f.leaveTo && <div className="flex items-baseline gap-2 text-[#1B2B4B]"><span className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO }}>{Math.max(0, Math.round((new Date(f.leaveTo) - new Date(f.leaveFrom)) / 864e5) + 1)}</span><span className="text-[13px] font-bold">일</span><span className="text-[13px] text-[#7A879C]">· 약 {(Math.max(0, (new Date(f.leaveTo) - new Date(f.leaveFrom)) / 864e5 + 1) / 30.44).toFixed(1)}개월</span></div>}
+                      <input value={f.leaveMemo} onChange={(e) => setF({ ...f, leaveMemo: e.target.value })} className={fi} placeholder={f.employmentStatus === "육아휴직" ? "자녀 이름·생년월일, 전자결재 문서번호 등" : "사유·메모"} />
+                      {f.employmentStatus === "육아휴직" && <div className="rounded-lg bg-white border border-[#E3E8F0] px-3.5 py-3 text-[12.5px] text-[#5B6B85] leading-relaxed">만 8세 이하(초2 이하) 자녀 · 최대 1년(부모 모두 3개월 이상 쓰면 1년 6개월) · 휴직 30일 전 신청 · 휴직 기간도 근속·연차 산정에 포함 · 복귀 시 같은 업무(같은 수준 임금) — 급여는 고용센터에서 지급(회사는 확인서 제출)</div>}
+                      {f.employmentStatus === "출산휴가" && <div className="rounded-lg bg-white border border-[#E3E8F0] px-3.5 py-3 text-[12.5px] text-[#5B6B85] leading-relaxed">출산 전후 90일(다태아 120일) · 출산 후 45일(다태아 60일) 이상 · 최초 60일(다태아 75일) 유급</div>}
+                    </div>
+                  )}
+                </Section>
+                <div className="px-1 text-[12.5px] text-[#7A879C]">변경 내역은 인사 이력에 남습니다. 공문(인사발령)을 남기려면 인사관리 › 인사발령을 쓰세요.</div>
+              </>
+            ) : (
+              <>
+                <Section no="01" en="Type" title="퇴사 구분">
+                  <div className="flex flex-wrap gap-2">{RETIRE_REASONS.map((x) => <button key={x} type="button" onClick={() => setR({ ...r, type: x })} className={`h-10 px-4 rounded-xl text-[14px] font-black border transition ${r.type === x ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE] hover:border-[#2D4C82]"}`}>{x}</button>)}</div>
+                  {r.type === "권고사직" && <div className="mt-3 rounded-lg bg-[#EEF3FC] border border-[#C9D6EE] px-3.5 py-3 text-[13px] text-[#1B2B4B] leading-relaxed">권고사직은 근로자 동의(합의서)가 필요하고 실업급여 대상(비자발적 이직)입니다. 경리에게 이직확인서 제출이 안내됩니다.</div>}
+                  {r.type === "해고" && <div className="mt-3 rounded-lg bg-[#FEF3F2] border border-[#FECDCA] px-3.5 py-3 text-[13px] text-[#B42318] leading-relaxed">해고는 정당한 사유와 30일 전 서면 통지가 필요합니다(근로기준법 23·26·27조). 노무 검토 후 진행하세요.</div>}
+                </Section>
+                <Section no="02" en="Schedule" title="일정">
+                  <div className="grid grid-cols-2 gap-4">
+                    <Field label="퇴직일(마지막 근무일)" hint={r.date > kstDay() ? "미래 날짜 — [예정 등록] 후 그날 확정" : "오늘 이전 — 바로 퇴사 확정"}><input type="date" value={r.date} onChange={(e) => setR({ ...r, date: e.target.value })} className={`${fi} tabular-nums`} /></Field>
+                    <Field label="통보일"><input type="date" value={r.noticeDate} onChange={(e) => setR({ ...r, noticeDate: e.target.value })} className={`${fi} tabular-nums`} /></Field>
+                  </div>
+                </Section>
+                <Section no="03" en="Reason" title="사유" right={<button type="button" onClick={() => printResign(company, sel, r)} className="h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B] hover:border-[#2D4C82] flex items-center gap-1.5"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" /><rect x="6" y="14" width="12" height="7" rx="1" /></svg>{r.type === "권고사직" ? "권고사직 합의서 인쇄" : "퇴직 확인서 인쇄"}</button>}>
+                  <textarea value={r.reason} onChange={(e) => setR({ ...r, reason: e.target.value })} rows={4} className={`${fi} h-auto py-3 leading-relaxed`} placeholder="퇴사 사유를 적어 주세요(인사 이력·퇴직 정산에 남습니다)" />
+                </Section>
+                <div className="rounded-xl bg-white border border-[#E6EBF2] px-4 py-3 text-[12.5px] text-[#5B6B85] leading-relaxed flex gap-2.5"><span className="mt-1 w-1.5 h-1.5 rounded-full bg-[#B42318] shrink-0" />퇴사 확정 즉시 이 계정은 로그인할 수 없습니다(로그인 시 "퇴사 처리된 계정" 안내 후 차단). 퇴사 예정 상태에서는 그날까지 로그인됩니다.</div>
+              </>
+            )}
+            </fieldset>
+            {canManage && <div className="sticky bottom-0 z-[2] shrink-0 px-6 py-4 bg-white/95 backdrop-blur border-t border-[#E3E8F0] rounded-b-[21px] flex gap-2 shadow-[0_-8px_20px_rgba(15,26,48,0.06)]">{mode === "info"
+              ? <><button type="button" onClick={() => setSel(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-bold text-[#3A4A66] hover:bg-[#F5F7FB]">취소</button><button type="button" disabled={busy} onClick={saveInfo} className="flex-1 h-12 rounded-xl bg-[#0F1A30] hover:bg-[#1B2B4B] text-white text-[15px] font-black disabled:opacity-50 shadow-[0_8px_18px_rgba(15,26,48,0.22)]">{busy ? "저장 중…" : "바로 저장 (공문 없음)"}</button></>
+              : <><button type="button" onClick={() => setSel(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-bold text-[#3A4A66] hover:bg-[#F5F7FB]">취소</button>{r.date > kstDay() && <button type="button" disabled={busy} onClick={() => applyResign(false)} className="h-12 px-4 rounded-xl border border-[#0F1A30] bg-white text-[14.5px] font-black text-[#0F1A30]">예정 등록</button>}<button type="button" disabled={busy} onClick={() => applyResign(true)} className="flex-1 h-12 rounded-xl bg-[#B42318] hover:bg-[#9A1C13] text-white text-[15px] font-black disabled:opacity-50 shadow-[0_8px_18px_rgba(180,35,24,0.25)]">지금 퇴사 확정</button></>}</div>}
+          </div>
+        ) : (
+          <div className="rounded-[22px] border border-[#E3E8F0] bg-white py-24 px-8 text-center shadow-[0_1px_2px_rgba(16,24,40,0.04)]" style={{ backgroundImage: "radial-gradient(#E3E8F0 1px, transparent 1px)", backgroundSize: "18px 18px" }}>
+            <div className="mx-auto w-16 h-16 rounded-2xl grid place-items-center text-white shadow-[0_12px_28px_rgba(15,26,48,0.25)]" style={{ background: HERO_BG }}><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0113 0" /><path d="M16 4.5a3.5 3.5 0 010 7M21.5 20a6.5 6.5 0 00-4-6" /></svg></div>
+            <Eyebrow className="text-[#4B6CB7] mt-5">Select an employee</Eyebrow>
+            <div className="text-[18px] font-black text-[#0F1A30] mt-1">왼쪽 목록에서 직원을 선택하세요</div>
+            <div className="text-[13.5px] text-[#7A879C] mt-1.5">정보 수정 · 입사일 · 휴직 기간 · 퇴사 처리를 여기서 합니다</div>
+          </div>
+        )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -441,8 +574,18 @@ export function CompanyRules({ company, canEdit = false }) {
 }
 
 // ═════════════════ 인사관리부 허브 ═════════════════
+// ⭐ 2026-11-01 [인사관리] 하위 항목 — HRManagementPage 안쪽 화면(view)과 1:1
+const REC_VIEWS = [
+  { view: "이력서", label: "이력서", en: "RESUME", icon: "file" },
+  { view: "근태/근속", label: "근태 · 근속", en: "ATTENDANCE", icon: "clock" },
+  { view: "인사발령", label: "인사발령", en: "ORDER", icon: "stamp", manage: true },
+  { view: "인사발령 이력", label: "인사발령 이력", en: "HISTORY", icon: "history" },
+];
+const REC_FIRST = `rec:${REC_VIEWS[0].view}`;
 export default function HrHub({ company, canManage, renderRecord, renderAttendance, me = {} }) {
-  const [tab, setTab] = React.useState(() => { try { const v = sessionStorage.getItem("kpHrTab"); sessionStorage.removeItem("kpHrTab"); return v || "record"; } catch { return "record"; } });
+  const [tab, setTabRaw] = React.useState(() => { try { const v = sessionStorage.getItem("kpHrTab"); sessionStorage.removeItem("kpHrTab"); return !v || v === "record" ? REC_FIRST : v; } catch { return REC_FIRST; } });
+  const setTab = (k) => setTabRaw(k === "record" ? REC_FIRST : k);
+  const recView = tab.startsWith("rec:") ? tab.slice(4) : null;
   const [focusUid, setFocusUid] = React.useState(null);
   // ⭐ 2026-11-01 직원이 직접 작성·제출한 이력서 중 인사팀이 아직 안 본 수 → [인사 기록] 숫자
   const [newResumes, setNewResumes] = React.useState(0);
@@ -454,7 +597,8 @@ export default function HrHub({ company, canManage, renderRecord, renderAttendan
     <KpSubNav code="HUMAN RESOURCES" title="인사관리부" icon="idcard" active={tab} onSelect={setTab}
       groups={[
         { label: "인사", items: [
-          { key: "record", label: "인사 기록", en: "RECORDS", icon: "idcard", badge: newResumes },
+          { key: "record", label: "인사관리", en: "PERSONNEL", icon: "idcard", badge: newResumes, badgeTitle: "새로 제출된 이력서",
+            children: REC_VIEWS.filter((x) => !x.manage || canManage).map((x) => ({ key: `rec:${x.view}`, label: x.label, en: x.en, icon: x.icon })) },
           { key: "edit", label: "직원 정보 · 퇴사", en: "STAFF BOARD", icon: "users" },
           { key: "register", label: "직원 등록", en: "REGISTER", icon: "user" },
         ] },
@@ -468,7 +612,7 @@ export default function HrHub({ company, canManage, renderRecord, renderAttendan
           { key: "obit", label: "부고 알림", en: "OBITUARY", icon: "bell" },
         ] },
       ]}>
-      {tab === "record" && renderRecord?.(focusUid)}
+      {recView && (() => { const el = renderRecord?.(focusUid, recView); return React.isValidElement(el) ? React.cloneElement(el, { view: recView }) : el; })()}
       {tab === "register" && <StaffRegister company={company} onDone={(id) => { setFocusUid(id); setTab("record"); }} />}
       {(tab === "edit" || tab === "resign") && <StaffInfoBoard company={company} canManage={canManage} />}
       {tab === "leave" && <LeaveLedger company={company} canManage={canManage} />}

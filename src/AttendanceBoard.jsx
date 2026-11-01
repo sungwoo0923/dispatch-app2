@@ -51,7 +51,9 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   const [officeLocation, setOfficeLocation] = useState(null);
   const [showOfficePanel, setShowOfficePanel] = useState(false);
   const [officeInput, setOfficeInput] = useState({ lat: "", lng: "", address: "" });
-  const [radiusInput, setRadiusInput] = useState({ inM: DEFAULT_IN_RADIUS, outM: DEFAULT_OUT_RADIUS }); // ⭐ 회사별 자동 출퇴근 반경
+  const [radiusInput, setRadiusInputRaw] = useState({ inM: DEFAULT_IN_RADIUS, outM: DEFAULT_OUT_RADIUS }); // ⭐ 회사별 자동 출퇴근 반경
+  const radiusDirtyRef = React.useRef(false);
+  const setRadiusInput = setRadiusInputRaw;
   const [savingOffice, setSavingOffice] = useState(false);
   const [gettingLocation, setGettingLocation] = useState(false);
 
@@ -132,7 +134,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     const unsub = onSnapshot(doc(db, "companySettings", company), snap => {
       const data = snap.data();
       setOfficeLocation(data?.officeLocation || null);
-      setRadiusInput(officeRadii(data?.officeLocation));
+      if (!radiusDirtyRef.current) setRadiusInput(officeRadii(data?.officeLocation)); // 고치는 중엔 덮어쓰지 않음
       setHiddenEmpUids(data?.hiddenEmployees || []);
     }, () => {});
     return () => unsub();
@@ -155,8 +157,10 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     if (!isAdmin || !company || !companyAddr || officeLocation || autoOfficeRef.current === company) return;
     autoOfficeRef.current = company;
     geocodeAddress(companyAddr).then((c) => {
-      if (!c?.lat || !c?.lng) return;
-      setDoc(doc(db, "companySettings", company), { officeLocation: { lat: Number(c.lat), lng: Number(c.lng), address: companyAddr, auto: true } }, { merge: true }).catch(() => {});
+      // ⭐ 2026-11-01 좌표 함수는 경도를 lon으로 준다(예전엔 lng만 읽어 경도가 비고 자동 설정도 안 됐다)
+      const lngV = c?.lng ?? c?.lon;
+      if (!c?.lat || !lngV) return;
+      setDoc(doc(db, "companySettings", company), { officeLocation: { lat: Number(c.lat), lng: Number(lngV), address: companyAddr, auto: true } }, { merge: true }).catch(() => {});
     }).catch(() => {});
   }, [isAdmin, company, companyAddr, officeLocation]);
   const [findingAddr, setFindingAddr] = useState(false);
@@ -167,7 +171,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     try {
       const c = await geocodeAddress(a);
       if (!c?.lat) return alert("주소로 위치를 찾지 못했습니다. 도로명 주소로 다시 입력해 주세요.");
-      setOfficeInput({ lat: String(c.lat), lng: String(c.lng), address: a });
+      setOfficeInput({ lat: String(c.lat), lng: String(c.lng ?? c.lon ?? ""), address: a });
     } finally { setFindingAddr(false); }
   };
 
@@ -181,6 +185,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     await setDoc(doc(db, "companySettings", company), {
       officeLocation: { lat, lng, address: officeInput.address || "", radius: r.inM, outRadius: r.outM }
     }, { merge: true });
+    radiusDirtyRef.current = false;
     setSavingOffice(false);
     setShowOfficePanel(false);
   };
@@ -586,7 +591,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                   className="px-3 py-2 rounded-lg border-2 border-gray-200 text-[13px] font-medium text-[#1B2B4B] outline-none w-full focus:border-[#1B2B4B]" />
               </div>
             </div>
-            <RadiusEditor value={radiusInput} onChange={setRadiusInput} />
+            <RadiusEditor value={radiusInput} onChange={(v) => { radiusDirtyRef.current = true; setRadiusInputRaw(v); }} />
             <div className="text-[11px] text-gray-400">출근지 반경 {officeRadii({ radius: radiusInput.inM, outRadius: radiusInput.outM }).inM}m 이내 도착 시 모바일 자동 출근 · {officeRadii({ radius: radiusInput.inM, outRadius: radiusInput.outM }).outM}m 이탈 시 자동 퇴근 (앱이 켜져 있을 때 · 안 되면 상단 출근/퇴근 버튼)</div>
             <div className="flex gap-2">
               <button onClick={saveOfficeLocation} disabled={savingOffice || (!officeInput.lat && !officeInput.lng)}
