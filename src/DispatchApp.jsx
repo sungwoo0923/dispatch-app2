@@ -59840,7 +59840,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
     if (!company) return;
     const q = query(collection(db, "users"), where("companyName", "==", company));
     const unsub = onSnapshot(q, snap => {
-      setMembers(snap.docs.map(d => ({ uid: d.id, ...d.data() })).filter(u => u.approved !== false && !isTMUser(u))); // ★ 최고관리자는 인사 대상 아님
+      setMembers(snap.docs.map(d => ({ uid: d.id, ...d.data() })).filter(u => u.approved !== false && !isTMUser(u) && !["driver", "shipper", "cafeUser"].includes(u.role))); // ★ 최고관리자·기사·화주는 인사 대상 아님(⭐ 2026-11-02 기사가 미배정 직원으로 보이던 문제)
     }, () => {});
     return () => unsub();
   }, [company]);

@@ -280,7 +280,7 @@ export default function PersonnelOrder({ company, target, myName, isSelf, revise
               ["비고", [["note", "min-h-[2.6em]", "(필요하면 입력)"]]],
             ].map(([label, cols], ri) => (
               <div key={ri} className="flex border-b border-[#0F1A30]/70">
-                <div className="w-[18%] shrink-0 flex items-center justify-center bg-[#EEF1F6] border-r border-[#0F1A30]/70 px-2 py-2.5 font-black">{label}</div>
+                <div className="w-[18%] min-w-[84px] shrink-0 flex items-center justify-center bg-[#EEF1F6] border-r border-[#0F1A30]/70 px-1.5 py-2.5 font-black whitespace-nowrap break-keep">{label}</div>
                 {cols.map(([k, cls, ph], ci) => (
                   <div key={ci} className={`flex-1 min-w-0 border-r border-[#0F1A30]/70 px-3 py-2.5 flex items-center ${k.startsWith("#") ? "bg-[#EEF1F6] justify-center font-black" : ""}`}>
                     {k.startsWith("#") ? k.slice(1) : <Ed capture={capture} value={v(k)} onChange={setV(k)} placeholder={ph} className={`w-full ${cls || ""}`} />}

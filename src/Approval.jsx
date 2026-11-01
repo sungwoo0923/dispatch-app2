@@ -85,7 +85,7 @@ function Stamp({ step }) {
   if (step.status === "approved") {
     return (
       <div className="w-[54px] h-[54px] rounded-full border-[2.5px] border-[#1B2B4B] flex flex-col items-center justify-center text-[#1B2B4B] rotate-[-8deg] leading-none">
-        <span className="text-[14px] font-black">{String(step.name || "").slice(0, 3)}</span>
+        <span className={`${String(step.name || "").length > 3 ? "text-[11.5px] tracking-tight" : "text-[14px]"} font-black whitespace-nowrap`}>{String(step.name || "").slice(0, 4)}</span>
         <span className="text-[9.5px] font-black mt-0.5 tracking-wider">{step.kind === "합의" ? "합의" : "승인"}</span>
       </div>
     );
@@ -94,7 +94,7 @@ function Stamp({ step }) {
     return (
       <div className="w-[54px] h-[54px] rounded-full border-[2.5px] border-[#0F1A30] bg-[#0F1A30] flex flex-col items-center justify-center text-white rotate-[-8deg] leading-none">
         <span className="text-[14px] font-black">반려</span>
-        <span className="text-[9px] font-bold mt-0.5">{String(step.name || "").slice(0, 3)}</span>
+        <span className="text-[9px] font-bold mt-0.5 whitespace-nowrap tracking-tight">{String(step.name || "").slice(0, 4)}</span>
       </div>
     );
   }
@@ -224,7 +224,7 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
               </Cell>
             );
           }
-          return <Cell key={f.k} label={f.label} last={last}><span className={f.type === "money" ? "font-black" : ""}>{fieldText(f, v, staff) || <span className="text-[#B4BFD0]">{f.ph || ""}</span>}</span></Cell>;
+          return <Cell key={f.k} label={f.label} last={last}><span className={f.type === "money" ? "font-black" : ""}>{fieldText(f, v, staff) || <span className="text-[#B4BFD0]">-</span>}</span></Cell>;
         })}
       </div>
       {(() => {
