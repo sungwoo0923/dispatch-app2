@@ -487,6 +487,13 @@ export default function ShipperOrder({ editData, onClose }) {
     if (!form.하차방법) errs.하차방법 = true;
     if (!form.지급방식) errs.지급방식 = true;
     if (!cargoRows.some(r => r.qty)) errs.화물내용 = true;
+    // ⭐ 2026-11-02 점검 — 신규 오더는 운송사명 필수 + 승인된 운송사 목록과 정확히 일치해야 함
+    //   (빈 값이면 기본회사로, 오타면 어느 운송사에도 안 보이는 문제). 목록 로드 실패(빈 목록) 시엔 빈 값만 막음.
+    //   수정 모드는 companyName 을 바꾸지 않으므로 기존 오더 수정을 막지 않도록 신규 등록에만 적용.
+    if (!editId && !editData?.id) {
+      const tName = form.운송사명?.trim() || "";
+      if (!tName || (transportList.length > 0 && !transportList.some(t => t.name === tName))) errs.운송사명 = true;
+    }
 
     const rowErrs = {};
     cargoRows.forEach((r, idx) => {
@@ -554,8 +561,9 @@ export default function ShipperOrder({ editData, onClose }) {
         등록일: todayStr(),
         role: "shipper",
         source: "shipper",
-        company: form.운송사명 || "",
-        companyName: form.운송사명 || "", // ◆ 받는 운송사(운송사 화면이 회사별로 거름)
+        // ⭐ 2026-11-02 점검 — 운송사명 앞뒤 공백 제거 후 저장(운송사 매칭 정확도)
+        company: form.운송사명?.trim() || "",
+        companyName: form.운송사명?.trim() || "", // ◆ 받는 운송사(운송사 화면이 회사별로 거름)
         companyCode: form.운송사코드 || "",
       });
     }
@@ -802,7 +810,7 @@ export default function ShipperOrder({ editData, onClose }) {
                 onChange={e => { onChange("운송사명", e.target.value); searchTransport(e.target.value); }}
                 onFocus={() => setShowDropdown("운송사명")}
                 onBlur={() => setTimeout(() => setShowDropdown(null), 150)}
-                className={inputCls + (fixedTransport ? " bg-gray-100 cursor-not-allowed" : "")}
+                className={inputCls + (fixedTransport ? " bg-gray-100 cursor-not-allowed" : "") + errCls("운송사명") /* ⭐ 2026-11-02 점검 — 운송사명 미선택/불일치 시 빨간 테두리 */}
                 placeholder="운송사명 입력"
               />
               {showDropdown === "운송사명" && suggestions.length > 0 && (

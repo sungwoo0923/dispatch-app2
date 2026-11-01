@@ -5245,13 +5245,22 @@ function AttendanceTab({ drivers }) {
   const [allLogs, setAllLogs] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // ⭐ 2026-11-02 점검 — 전체 운송사 최근 3000건만 받던 것을 보고 있는 달(KST) 범위로 조회 → 지난 날짜·월간 히트맵이 비지 않게.
+  //   끝은 다음 달 1일 + 2일(월말 출근 → 다음날 퇴근 스캔용). 같은 필드 범위+정렬이라 복합 색인 불필요. 달이 바뀌면 다시 구독.
+  const viewMonth = selectedDate.slice(0, 7);
   useEffect(() => {
+    const [vy, vm] = viewMonth.split("-").map(Number);
+    const startMs = faKstMidnight(`${viewMonth}-01`);
+    const nd = new Date(Date.UTC(vy, vm, 1)); // 다음 달 1일
+    const nextYm = `${nd.getUTCFullYear()}-${String(nd.getUTCMonth() + 1).padStart(2, "0")}`;
+    const endMs = faKstMidnight(`${nextYm}-01`) + 2 * 86400000;
+    setLoading(true);
     return onSnapshot(
-      query(collection(db, "driver_logs"), orderBy("timestamp", "desc"), limit(3000)),
+      query(collection(db, "driver_logs"), where("timestamp", ">=", new Date(startMs)), where("timestamp", "<", new Date(endMs)), orderBy("timestamp", "desc")),
       (snap) => { setAllLogs(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setLoading(false); },
       () => setLoading(false)
     );
-  }, []);
+  }, [viewMonth]);
 
   const goDay = (delta) => {
     const d = new Date(selectedDate + "T12:00:00+09:00");

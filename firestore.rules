@@ -29,13 +29,21 @@ service cloud.firestore {
     }
     // 기사앱 로그인 — PC 기사관리에서 미리 등록한 차량(drivers/{차량번호})과 이름·회사명이 같으면
     // 승인 없이 approved:true로 가입시키는 기존 흐름을 서버에서도 똑같이 확인한다.
+    // ⭐ 2026-11-02 점검 — 기본 회사가 아닌 운송사는 PC 선등록 문서 이름이 "회사__차량번호"(coDocKey)라
+    //  예전 이름(차량번호)만 보던 확인이 실패해 기사 첫 로그인이 막히던 문제 — 두 이름 모두 확인
+    function preKeyDoc(data) {
+      return /databases/$(database)/documents/drivers/$(data.get('companyName', '').trim() + '__' + plateId(data.carNo));
+    }
+    function preDocMatches(p, data) {
+      return exists(p) &&
+        get(p).data.get('이름', get(p).data.get('name', '')).trim() == data.get('name', '').trim() &&
+        get(p).data.get('companyName', '').trim() == data.get('companyName', '').trim();
+    }
     function preRegisteredDriverOk(data) {
       return data.get('role', '') == 'driver' &&
         data.get('carNo', '') is string && data.get('carNo', '') != '' &&
-        exists(/databases/$(database)/documents/drivers/$(plateId(data.carNo))) &&
-        get(/databases/$(database)/documents/drivers/$(plateId(data.carNo))).data.get('이름',
-          get(/databases/$(database)/documents/drivers/$(plateId(data.carNo))).data.get('name', '')).trim() == data.get('name', '').trim() &&
-        get(/databases/$(database)/documents/drivers/$(plateId(data.carNo))).data.get('companyName', '').trim() == data.get('companyName', '').trim();
+        (preDocMatches(preKeyDoc(data), data) ||
+         preDocMatches(/databases/$(database)/documents/drivers/$(plateId(data.carNo)), data));
     }
     // 본인 users 문서 쓰기 — 승인 여부/권한(role)을 스스로 올리는 것만 막는다.
     function selfUserWriteOk(userId) {
@@ -164,18 +172,19 @@ service cloud.firestore {
       allow create: if isOfficeStaff() && coCreate();
     }
     // 🔒 회사 데이터(거래처·하차지·정기오더·삭제기록·알림·일정·메일·인사·근태신청·회계·결재선)
+    // ⭐ 2026-11-02 점검 — approvalSettings(결재 설정)는 아래 전자결재 쪽 전용 규칙으로 옮김(누구나 임원 자동 승인을 켜던 문제)
     match /{tcol}/{id} {
       allow read: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
-          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'approvalSettings']
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases']
         && coMatch(resource.data);
       allow create: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
-          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'approvalSettings']
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases']
         && coCreate();
       allow update: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
-          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'approvalSettings']
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases']
         && coMatch(resource.data) && coKeep();
       allow delete: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
-          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'approvalSettings']
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases']
         && coMatch(resource.data);
     }
     // 💰 자금(통장·현금 잔액) — 경리(test)·관리자(대표 등)만. 화면에서는 경리 + 대표 직책만 보이게 한다
@@ -373,10 +382,12 @@ service cloud.firestore {
       allow create: if coCreate() || (isSignedIn() && request.auth.uid == driverId);
       allow update: if (coMatch(resource.data) && coKeep()) || (isSignedIn() && request.auth.uid == driverId);
       // 가입 후 선등록 문서(drivers/{차량번호}) 정리 — 승인 전에는 본인 차량번호 문서만
+      // ⭐ 2026-11-02 점검 — 기본 회사가 아닌 운송사의 선등록 문서(회사__차량번호)도 본인이 정리할 수 있게(중복 기사 문서 방지)
       allow delete: if coMatch(resource.data) || (isSignedIn() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         myUser().get('carNo', '') is string && myUser().get('carNo', '') != '' &&
-        plateId(myUser().carNo) == driverId);
+        (plateId(myUser().carNo) == driverId ||
+         myUser().get('companyName', '').trim() + '__' + plateId(myUser().carNo) == driverId));
     }
     match /transportApplications/{id} {
       allow create: if isSignedIn();
@@ -448,13 +459,19 @@ service cloud.firestore {
         ((myUser().get('role', '') in ['admin', 'hrManager', 'hrAcct'] || isExecRoleUser()) && myUser().get('companyName', '') == company);
     }
     // 👔 2026-10-31 권한 관리에서 "임원 화면"으로 정한 역할(직접 만든 역할) — 이름에 '임원'이 들어가고 화면 설정이 없으면 임원으로 본다
+    // ⭐ 2026-11-02 점검 — 운송사별 권한(companyRoleOverrides/{회사}.roles)에서 만든 역할·"임원 화면" 지정도 임원으로 본다
+    //  (화면의 mergeCompanyRoles + roleScreen과 같은 순서: 회사 설정 값이 공통 역할 값을 덮어쓴다)
     function isExecRoleUser() {
       let r = myUser().get('role', '');
       let p = /databases/$(database)/documents/customRoles/$(r);
+      let ov = /databases/$(database)/documents/companyRoleOverrides/$(myUser().get('companyName', ''));
+      let g = exists(p) ? get(p).data : {};
+      let o = exists(ov) ? get(ov).data.get('roles', {}).get(r, {}) : {};
+      let scr = ('screen' in o) ? o.get('screen', null) : g.get('screen', null);
+      let lbl = o.get('label', '') != '' ? o.get('label', '') : (g.get('label', '') != '' ? g.get('label', '') : r);
       return r != '' && !(r in ['admin', 'hrManager', 'hrAcct', 'user', 'test', 'viewer', 'totalMaster', 'driver', 'shipper'])
-        && exists(p)
-        && (get(p).data.get('screen', '') == 'exec'
-          || (!('screen' in get(p).data) && get(p).data.get('label', '').matches('.*임원.*')));
+        && (exists(p) || o.size() > 0)
+        && (scr is string ? scr == 'exec' : string(lbl).matches('.*임원.*'));
     }
     // 💼 2026-11-01 경리(test)는 회사 결재 중 지출결의·근태(연차)·보고(사직서)만 읽는다 — 장부 가져오기·퇴직 정산·연차 계산
     function isAcctApprovalReader(d) {
@@ -463,6 +480,42 @@ service cloud.firestore {
     }
     function isExecUser() {
       return myUser().get('position', '') in ['이사', '상무', '전무', '부사장', '사장', '대표', '대표이사', '본부장', '임원'];
+    }
+    // ⭐ 2026-11-02 점검 — 결재 문서 수정 규칙 보조 함수(바뀐 필드 / 기안자의 결재 취소 요청 형식 확인)
+    function apAff() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+    // 결재 취소 요청 — 승인된 문서에만, 처음 결재자부터 같은 인원으로 시작해야 한다(기안자가 자기 혼자 취소 결재선을 만드는 것 방지)
+    function apCancelReqOk() {
+      return resource.data.get('status', '') == 'approved'
+        && resource.data.get('cancel', {}).get('status', '') != 'pending'
+        && request.resource.data.cancel.get('status', '') == 'pending'
+        && request.resource.data.cancel.get('step', -1) == 0
+        && request.resource.data.cancel.line.size() == resource.data.line.size()
+        && request.resource.data.cancel.line[0].uid == resource.data.line[0].uid;
+    }
+    // ⭐ 2026-11-02 점검 — 결재 설정(approvalSettings/{회사}) 전용 규칙: 관리자·임원만 설정을 바꾸고,
+    //  일반 직원은 본인 자동 승인 항목만(임원 표시 exec:true·임원 직책은 못 넣음). 일일업무일지 자동 승인은 임원·관리자만
+    function isExecProfileUser() {
+      return isExecUser() || myUser().get('team', '') == '임원' || isExecRoleUser();
+    }
+    function approvalSettingsWriteOk(co) {
+      let before = resource == null ? {} : resource.data;
+      let after = request.resource.data;
+      let entry = after.get('autoApprovers', {}).get(request.auth.uid, {});
+      return isCompanyAdmin(co) || (co == myCo()
+        && after.get('autoApprovers', {}).diff(before.get('autoApprovers', {})).affectedKeys().hasOnly([request.auth.uid])
+        && ((isExecProfileUser()
+              && after.diff(before).affectedKeys().hasOnly(['autoApprovers', 'companyName', 'autoApproveDaily', 'updatedBy', 'updatedAt']))
+          || (after.diff(before).affectedKeys().hasOnly(['autoApprovers', 'companyName'])
+              && entry.get('exec', false) != true
+              && !(entry.get('position', '') is string && entry.get('position', '').trim() in ['이사', '상무', '전무', '부사장', '사장', '대표', '대표이사', '본부장', '임원']))));
+    }
+    match /approvalSettings/{co} {
+      allow read: if coMatch(resource.data);
+      allow create: if coCreate() && approvalSettingsWriteOk(co);
+      allow update: if coMatch(resource.data) && coKeep() && approvalSettingsWriteOk(co);
+      allow delete: if coMatch(resource.data) && isCompanyAdmin(co);
     }
     match /approvals/{id} {
       allow read: if isApproved() && (isTotalMasterUser() || !locked() || resource.data.companyName == myCo())
@@ -476,10 +529,25 @@ service cloud.firestore {
               && get(/databases/$(database)/documents/approvalSettings/$(request.resource.data.get('company', ''))).data.get('autoApproveDaily', false) == true))
         && request.auth.uid in request.resource.data.get('participants', []);
       // 기안자·참여자 수정 — 기안자·참여자 목록과 회사는 못 바꾼다(결재 진행·회수·의견·읽음)
+      // ⭐ 2026-11-02 점검 — 참조자·기안자가 status/line을 직접 바꿔 스스로 최종 승인하던 문제:
+      //  읽음·의견·보관함 표시는 참여자 누구나, 결재선(line/step)·승인은 "지금 내 차례"인 결재자만,
+      //  결재 취소 진행은 취소 결재선의 내 차례만, 기안자는 대기 중 수정·회수·결재 취소 요청만
       allow update: if isApproved() && request.auth.uid in resource.data.get('participants', [])
         && request.resource.data.get('drafterUid', '') == resource.data.get('drafterUid', '')
         && request.resource.data.get('participants', []) == resource.data.get('participants', [])
-        && request.resource.data.get('company', '') == resource.data.get('company', '');
+        && request.resource.data.get('company', '') == resource.data.get('company', '')
+        && (apAff().hasOnly(['ccReadBy', 'seenBy', 'drafterUnread', 'history', 'updatedAt', 'hiddenBy'])
+          || (resource.data.get('status', '') == 'pending' && resource.data.line[resource.data.get('step', 0)].uid == request.auth.uid)
+          || (resource.data.get('cancel', {}).get('status', '') == 'pending'
+              && resource.data.cancel.line[resource.data.cancel.get('step', 0)].uid == request.auth.uid)
+          || (resource.data.drafterUid == request.auth.uid
+              && !apAff().hasAny(['line', 'step'])
+              && (request.resource.data.get('status', '') == resource.data.get('status', '')
+                || (resource.data.get('status', '') == 'pending' && request.resource.data.get('status', '') == 'withdrawn'))
+              // 승인 뒤에는 내용(금액 등)을 못 고친다 — 읽음·의견·결재 취소 요청만
+              && (resource.data.get('status', '') == 'pending'
+                || apAff().hasOnly(['ccReadBy', 'seenBy', 'drafterUnread', 'history', 'updatedAt', 'hiddenBy', 'cancel']))
+              && (!apAff().hasAny(['cancel']) || apCancelReqOk())));
       // 회사 관리자(결재함 › 회사 전체)는 참여자가 아니어도 "내 보관함에서 삭제/되돌리기"(hiddenBy)만 바꿀 수 있다
       allow update: if isApproved() && isCompanyAdmin(resource.data.get('company', ''))
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hiddenBy']);

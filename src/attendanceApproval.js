@@ -25,7 +25,8 @@ export function isExecUser(u, customRoles) {
 
 export const APPROVER_GROUP_LABEL = { hr: "인사팀", exec: "임원", admin: "관리자" };
 
-const activeStaff = (list) => (list || []).filter((e) => e && e.uid && e.approved !== false && e.employmentStatus !== "퇴사" && !["driver", "shipper", "cafeUser"].includes(e.role));
+// ⭐ 2026-11-02 점검 — 계정 없이 등록된 직원(noAccount)은 로그인할 수 없으므로 승인자 후보에서 제외(영원히 대기하는 요청 방지)
+const activeStaff = (list) => (list || []).filter((e) => e && e.uid && !e.noAccount && e.approved !== false && e.employmentStatus !== "퇴사" && !["driver", "shipper", "cafeUser"].includes(e.role));
 
 // 요청자에 맞는 승인자 — 인사팀 본인 요청은 임원에게, 그 밖의 직원은 인사팀에게
 export function resolveApprovers(requester, employees, customRoles) {

@@ -95,6 +95,9 @@ function SetupPanel({ company, onClose }) {
     try {
       for (const r of ok) await addDoc(collection(db, "acctFunds"), { companyName: company, kind: r.kind, name: r.name.trim(), bank: r.bank || "", number: onlyDigits(r.number), holder: (r.holder || "").trim(), payType: isCard(r) ? (r.payType || "신용") : "", linkFundId: "", openingBalance: toInt(r.balance), openingDate: date, checks: [], active: true, createdAt: serverTimestamp(), createdBy: auth.currentUser?.email || "" });
       onClose();
+    } catch (e) {
+      // ⭐ 2026-11-02 점검 — 권한 없음 등으로 저장 실패 시 안내 없이 멈추던 문제: 오류 안내 추가
+      alert(`저장 실패: ${e.message}`);
     } finally { setBusy(false); }
   };
   const total = rows.filter((r) => r.kind !== "대출" && !(isCard(r) && r.payType !== "체크")).reduce((s, r) => s + toInt(r.balance), 0);
@@ -125,9 +128,14 @@ function AccountPanel({ company, acc, funds = [], onClose }) {
   const save = async () => {
     if (!f.name.trim()) return alert("이름을 입력해 주세요.");
     const data = { kind: f.kind, name: f.name.trim(), bank: f.kind === "현금" ? "" : (f.bank || ""), number: f.kind === "현금" ? "" : onlyDigits(f.number), holder: (f.holder || "").trim(), payType: isCard(f) ? (f.payType || "신용") : "", linkFundId: isCard(f) && f.payType === "체크" ? (f.linkFundId || "") : "", useFor: f.kind === "대출" ? [] : (f.useFor || []), memo: (f.memo || "").trim(), openingBalance: toInt(f.openingBalance), openingDate: f.openingDate || kstDay(), companyName: company };
-    if (acc?.id) await updateDoc(doc(db, "acctFunds", acc.id), { ...data, updatedAt: serverTimestamp() });
-    else await addDoc(collection(db, "acctFunds"), { ...data, checks: [], active: true, createdAt: serverTimestamp() });
-    onClose();
+    // ⭐ 2026-11-02 점검 — 저장 실패(권한 없음 등) 시 아무 안내가 없던 문제: try/catch로 오류 안내
+    try {
+      if (acc?.id) await updateDoc(doc(db, "acctFunds", acc.id), { ...data, updatedAt: serverTimestamp() });
+      else await addDoc(collection(db, "acctFunds"), { ...data, checks: [], active: true, createdAt: serverTimestamp() });
+      onClose();
+    } catch (e) {
+      alert(`저장 실패: ${e.message}`);
+    }
   };
   const addCheck = async () => {
     if (!check.balance) return alert("실제 잔액을 입력해 주세요.");

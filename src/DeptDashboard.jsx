@@ -634,7 +634,8 @@ function HrDashboard({ company, onGo, me, att }) {
     const a = attMap[u.id]; const t = hm(a?.checkInTime);
     if (ON_LEAVE.includes(u.employmentStatus)) return { s: u.employmentStatus, t: "", tone: "soft", k: "leave" };
     if (a?.status && a.status !== "출근") return { s: a.status, t, tone: /지각/.test(a.status) ? "bad" : "soft", k: /지각/.test(a.status) ? "late" : "away" };
-    if (a && (a.status === "출근" || a.checkInTime)) return { s: "출근", t, tone: "ok", k: "in" };
+    // ⭐ 2026-11-02 점검 — 지각 상태는 기록되지 않으므로 출근시각(t)과 정규 출근시각(workStartTime)을 비교해 지각 판정
+    if (a && (a.status === "출근" || a.checkInTime)) { const late = !!u.workStartTime && !!t && t > u.workStartTime; return { s: late ? "지각" : "출근", t, tone: late ? "bad" : "ok", k: late ? "late" : "in" }; }
     if (awayMap[u.id]) return { s: awayMap[u.id].label, t: awayMap[u.id].status !== "approved" ? "결재 중" : "", tone: "soft", k: "away" };
     return { s: "미출근", t: "", tone: "none", k: "none" };
   };

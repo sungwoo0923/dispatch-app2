@@ -229,6 +229,25 @@ function attachFileExtMobile(item) {
   if (m) return m[1] === "application/pdf" ? "pdf" : (m[1].split("/")[1] || "jpg");
   return "jpg";
 }
+// ⭐ 2026-11-02 점검 — 첨부 저장을 blob으로 받아 공유시트(아이폰) 또는 blob 다운로드로 저장.
+// 다른 도메인 URL·data URL은 <a download>가 무시돼 저장이 안 되던 문제. 실패하면 throw(호출부에서 'fail' 처리).
+async function saveAttachFileMobile(item, filename) {
+  const src = item.base64 || item.url;
+  const name = filename || item.name || "attachment.jpg";
+  const blob = await (await fetch(src)).blob();
+  let file = null;
+  try { file = new File([blob], name, { type: blob.type }); } catch { file = null; }
+  if (file && navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); return; }
+    catch (e) { if (e?.name === "AbortError") throw e; /* 탭 인정 안 됨 등 → 아래 다운로드로 */ }
+  }
+  const u = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = u; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(u), 4000);
+}
+
 function buildAttachFileNameMobile(order, item, index = 0, total = 1) {
   const dateStr = (order?.상차일 || "").replace(/-/g, "");
   const client = (order?.거래처명 || "").trim();
@@ -2366,8 +2385,21 @@ const quickRange = (days) => {
     role,
     team: (() => { try { return window.__kpMeTeam || ""; } catch { return ""; } })(),
     company: (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim(),
-    onAlert: (msg) => showTopOrderBanner(msg),
+    // ⭐ 2026-11-02 점검 — 결재 요청은 BannerCenter가 이미 띄우므로 위쪽 배너 중복 표시 안 함
+    onAlert: (msg, key) => { if (key === "approval") return; showTopOrderBanner(msg); },
   });
+  // ⭐ 2026-11-02 점검 — BannerCenter 결재 배너 탭(kp-open-approval) → 모바일 결재 화면으로 이동
+  useEffect(() => {
+    const h = () => {
+      const p = window.__kpOpenApproval;
+      if (!p) return;
+      window.__kpOpenApproval = null;
+      if (p.id) { try { sessionStorage.setItem("kpExecApOpen", p.id); } catch { /* 무시 */ } }
+      setPage("approval");
+    };
+    window.addEventListener("kp-open-approval", h);
+    return () => window.removeEventListener("kp-open-approval", h);
+  }, []);
 
   const showToast = (msg) => {
   if (toastMuted) return;   // ▲ 추가
@@ -6199,12 +6231,13 @@ onGoAttendance={() => {
           <div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3 text-gray-700 leading-relaxed">{selectedNotice.content}</div>
         </div>
         {(() => {
-          const isNAuthor = selectedNotice.authorUid ? selectedNotice.authorUid === currentUser?.uid : role !== "viewer";
+          // ⭐ 2026-11-02 점검 — 규칙(isBoardAdmin)과 맞춤: 공지 관리 권한자만 수정·삭제 버튼 표시
+          const isNAuthor = ["admin", "hrManager", "hrAcct", "totalMaster"].includes(role) && (!selectedNotice.authorUid || selectedNotice.authorUid === currentUser?.uid);
           const isSA = role === "superadmin" || role === "totalMaster";
           if (!isNAuthor && !isSA) return null;
           return (
           <div className="flex gap-2 pt-2 border-t border-gray-100">
-            <button onClick={() => setConfirmDialog({ message: "공지사항을 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); } })}
+            <button onClick={() => setConfirmDialog({ message: "공지사항을 삭제하시겠습니까?", onConfirm: async () => { /* ⭐ 2026-11-02 점검 — 삭제 실패 시 알림 */ try { await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); } catch (e) { alert(e?.message || "삭제 실패"); } } })}
               className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold">삭제</button>
             <button onClick={() => { setNoticeForm({ category: selectedNotice.category || "공지사항", author: selectedNotice.author, content: selectedNotice.content, audience: selectedNotice.audience || "internal" }); setNoticeOpen(true); }}
               className={`flex-1 py-2.5 rounded-xl text-white text-sm font-semibold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>수정</button>
@@ -6259,11 +6292,14 @@ onGoAttendance={() => {
             const now = new Date();
             const y = now.getFullYear(), m = String(now.getMonth()+1).padStart(2,"0"), d = String(now.getDate()).padStart(2,"0");
             const autoTitle = `${y}년 ${m}월 ${d}일 ${noticeForm.category}`;
+            // ⭐ 2026-11-02 점검 — 수정 시 원래 제목 유지(자동 제목으로 덮어쓰지 않음) + 저장 실패 알림
+            try {
             if (selectedNotice?.id) {
-              await updateDoc(doc(db, "notices", selectedNotice.id), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content, audience: noticeForm.audience || "internal" });
+              await updateDoc(doc(db, "notices", selectedNotice.id), { category: noticeForm.category, author: noticeForm.author, content: noticeForm.content, audience: noticeForm.audience || "internal" });
             } else {
               await addDoc(collection(db, "notices"), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content, audience: noticeForm.audience || "internal", authorUid: currentUser?.uid || "", createdAt: serverTimestamp(), companyName: getTenant() || localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY });
             }
+            } catch (e) { alert(e?.message || "저장 실패"); return; }
             setNoticeOpen(false);
             setSelectedNotice(null);
             setNoticeForm({ category: "공지사항", author: "", content: "", audience: "internal" });
@@ -6505,7 +6541,7 @@ setOpenMemo={setOpenMemo}
 {(page === "dept" || String(page).startsWith("dept:")) && (
   <React.Suspense fallback={null}>
     <MobilePcView key={page} kind={page} deptMode={deptMode} dispatchData={allOrders} fixedRows={fixedClientRows} clients={clients} places={places} role={role} userCompany={pcViewCompany} me={pcViewMe} loadRange={loadRange} loadFullHistory={loadFullHistory}
-      onGo={(k) => { const [m0, id] = String(k).split(":"); if (k === "배차현황") deptListOkRef.current = true; if (m0 === "결재함" && id) { try { sessionStorage.setItem("kpExecApOpen", id); } catch { /* 무시 */ } } setPage({ 결재함: "approval", 직원일정: "dept:schedule", 자금현황: "dept:funds", 스케줄: "dept:execsched", 실시간배차현황: "unassigned", 인사이트: "intel", 정산관리: "dept:settle", "정산관리:지급관리": "dept:settle", 회계관리: "dept:acct", 매출관리: "sales", 인사관리부: "dept:hr", 출근기록부: "attendance", 연차관리: "dept:leave", 입퇴사관리: "dept:onboarding", 증명서발급: "dept:cert", 수입지출: "dept:cashbook", 비품관리: "dept:assets", 전자결재: "approval", 배차현황: "list", 관리자메뉴: "staff", 직원관리: "staff", 기사서류: "dept:driverdocs", 기사관리: "dept:driverdocs" }[m0 === "결재함" ? "결재함" : k] || "dept"); }} />
+      onGo={(k) => { const [m0, id] = String(k).split(":"); if (k === "배차현황") deptListOkRef.current = true; if (m0 === "결재함" && id) { try { sessionStorage.setItem("kpExecApOpen", id); } catch { /* 무시 */ } } setPage({ 결재함: "approval", 직원일정: "dept:schedule", 자금현황: "dept:funds", 스케줄: "dept:execsched", 실시간배차현황: "unassigned", 인사이트: "intel", 정산관리: "dept:settle", "정산관리:지급관리": "dept:settle", 회계관리: "dept:acct", 매출관리: "sales", 인사관리부: "dept:hr", 출근기록부: "attendance", 연차관리: "dept:leave", 입퇴사관리: "dept:onboarding", 증명서발급: "dept:cert", 수입지출: "dept:cashbook", 비품관리: "dept:assets", 전자결재: "approval", 배차현황: "list", 관리자메뉴: "staff", 직원관리: "staff", 기사서류: "dept:driverdocs", 기사관리: "dept:driverdocs", 자금관리: "dept:cashbook", "자금관리:book": "dept:cashbook", "인사관리부:leave": "dept:leave", 기사승인: "staff" }[m0 === "결재함" ? "결재함" : k] || "dept"); /* ⭐ 2026-11-02 점검 — 경리·인사 홈 바로가기 키(자금관리·연차·기사승인) 추가 */ }} />
   </React.Suspense>
 )}
 {page === "sales" && (
@@ -9825,12 +9861,10 @@ function CardAttachViewer({ order, onClose, showToast, showSuccess }) {
     };
   }, [order]);
 
-  const doSave = (item, filename) => {
+  // ⭐ 2026-11-02 점검 — blob 저장이 실제로 끝난 뒤에만 '저장됨'·확인 처리, 실패 시 'fail'
+  const doSave = async (item, filename) => {
     try {
-      const a = document.createElement("a");
-      a.href = item.base64 || item.url;
-      a.download = filename || item.name || "attachment.jpg";
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      await saveAttachFileMobile(item, filename);
       setSaveStates(prev => {
         const next = { ...prev, [item.id]: "success" };
         try { localStorage.setItem(attachStorageKey, JSON.stringify(next)); } catch {}
@@ -12089,12 +12123,10 @@ const pickupTimeText = order.상차시간
     }
   };
 
-  const doAttachSave = (item, filename) => {
+  // ⭐ 2026-11-02 점검 — blob 저장이 실제로 끝난 뒤에만 '저장됨'·확인 처리, 실패 시 'fail'
+  const doAttachSave = async (item, filename) => {
     try {
-      const a = document.createElement("a");
-      a.href = item.base64 || item.url;
-      a.download = filename || item.name || "attachment.jpg";
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      await saveAttachFileMobile(item, filename);
       setAttachSaveStates(prev => {
         const next = { ...prev, [item.id]: "success" };
         try { localStorage.setItem(detailAttachStorageKey, JSON.stringify(next)); } catch {}
@@ -22223,7 +22255,21 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
         </KpmCard>
 
         <KpmCard en="NOTIFICATION" title="알림" flush>
-          <KpmRow label="푸시 알림" sub={teamKey === "dispatch" ? "신규 오더·배차·결재 알림" : "결재·공지·메일 등 업무 알림"} right={<KpmToggle value={alarmEnabled} onChange={toggleAlarm} />} />
+          {/* ⭐ 2026-11-02 점검 — 이 토글은 앱 안 소리·배너만 끔(휴대폰 푸시는 '알림 종류별 설정') → 이름을 실제 동작에 맞춤 */}
+          <KpmRow label="앱 안 알림(소리·배너)" sub="앱을 켜 둔 동안의 소리·배너 · 휴대폰 푸시는 '알림 종류별 설정'에서" right={<KpmToggle value={alarmEnabled} onChange={toggleAlarm} />} />
+          {/* ⭐ 2026-11-02 점검 — 아이폰 PWA는 탭해야만 알림 권한 요청 가능 → 모든 직원이 누를 수 있는 연결 버튼 */}
+          <KpmRow label="이 기기 알림 받기" sub={typeof Notification !== "undefined" ? `권한: ${Notification.permission}` : "미지원"}
+            onClick={async () => {
+              if (typeof Notification === "undefined") { alert("이 기기는 알림을 지원하지 않습니다."); return; }
+              // 탭 직후 바로 권한 요청(아이폰은 await 뒤로 미루면 사용자 탭으로 인정 안 될 수 있음)
+              try { if (Notification.permission === "default") await Notification.requestPermission(); } catch { /* 무시 */ }
+              try {
+                const { diagnoseFcmToken } = await import("../firebase");
+                const r = await diagnoseFcmToken(currentUser);
+                alert(r.ok ? "알림 연결 완료" : r.reason);
+              } catch (e) { alert(e?.message || "알림 연결 실패"); }
+            }}
+            right={go("연결")} />
           <KpmRow label="알림 종류별 설정" sub={`${PUSH_GROUPS.map((g) => g.title).join("·")} · 지금 ${pushOnCount}/${PUSH_PREF_TYPES.length}종 켜짐`} onClick={() => setPushPrefsOpen(true)} right={go("설정")} />
         </KpmCard>
 
@@ -22238,7 +22284,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
               showSuccess(ok === false ? "새로고침 실패 (네트워크 확인)" : "새로고침 완료 · 최신 상태 반영됨");
             }}
             right={go(manualRefreshing ? "갱신 중…" : "실행")} />
-          <KpmRow label="캐시 초기화" sub="이 기기에 임시 저장된 데이터 삭제" onClick={() => { localStorage.clear(); showSuccess("초기화 완료"); }} right={go("실행")} />
+          <KpmRow label="캐시 초기화" sub="이 기기에 임시 저장된 데이터 삭제" onClick={() => { /* ⭐ 2026-11-02 점검 — 로그인·FCM 토큰 키는 남기고 비움(로그아웃 시 기기 알림 해제 유지) */ const keep = ["kpFcmToken", "loginCompany", "userCompany", "role", "kpHrAcctView", "transportLoginSaved", "driverLoginSaved"]; const saved = keep.map((k) => [k, localStorage.getItem(k)]); localStorage.clear(); saved.forEach(([k, v]) => { if (v != null) { try { localStorage.setItem(k, v); } catch { /* 무시 */ } } }); showSuccess("초기화 완료"); }} right={go("실행")} />
         </KpmCard>
 
         {isTotalMaster && (

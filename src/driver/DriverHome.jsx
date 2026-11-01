@@ -18,6 +18,7 @@ import {
   serverTimestamp,
   increment,
   arrayUnion,
+  arrayRemove, // ⭐ 2026-11-02 점검 — 네이티브(APK) 푸시 토큰 저장 시 fcmTokensOut에서 이 기기 토큰을 빼기 위해 추가
 } from "firebase/firestore";
 import { setDoc, updateDoc } from "../orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -76,6 +77,77 @@ const KpLocation = registerPlugin("KpLocation");
 function withKpLoc(fn) {
   if (!isNative()) return Promise.resolve();
   try { return Promise.resolve(fn(KpLocation)); } catch (e) { return Promise.reject(e); }
+}
+
+// ⭐ 2026-11-02 점검 — APK(안드로이드 앱)는 WebView라 웹 푸시(saveFcmToken)가 동작하지 않아 기사 푸시 토큰이
+//  한 번도 저장되지 않았다(신규 오더·취소·차량관리 알림 전부 미발송). 네이티브에서는 Capacitor
+//  PushNotifications 플러그인으로 토큰을 받아 users/{uid}에 저장한다.
+//  ⚠️ 실제 동작하려면 @capacitor/push-notifications 설치 + android/app/google-services.json + npx cap sync 필요.
+//  플러그인이 아직 없으면 isPluginAvailable 검사로 조용히 건너뛴다(기존 동작과 동일).
+//  (플러그인 객체는 thenable이라 Promise로 넘기지 않고 콜백 안에서만 쓴다 — 위 KpLocation 주석 참고)
+const PushNotifications = registerPlugin("PushNotifications");
+let nativePushRegisteredUid = "";
+function registerNativePush(uid) {
+  if (!uid || nativePushRegisteredUid === uid) return;
+  if (!window.Capacitor?.isPluginAvailable?.("PushNotifications")) {
+    console.warn("[FCM] PushNotifications 플러그인이 APK에 없습니다 — 네이티브 푸시 토큰을 저장할 수 없습니다.");
+    return;
+  }
+  nativePushRegisteredUid = uid;
+  (async () => {
+    try {
+      const perm = await PushNotifications.requestPermissions();
+      if (perm?.receive !== "granted") { console.warn("[FCM] 알림 권한이 허용되지 않았습니다:", perm?.receive); nativePushRegisteredUid = ""; return; }
+      await PushNotifications.addListener("registration", (t) => {
+        const token = t?.value;
+        if (!token) return;
+        updateDoc(doc(db, "users", uid), { fcmToken: token, fcmTokenAt: Date.now(), fcmTokens: arrayUnion(token), fcmTokensOut: arrayRemove(token) })
+          .then(() => { try { localStorage.setItem("kpFcmToken", token); } catch { /* 무시 */ } })
+          .catch((e) => console.error("[FCM] 네이티브 토큰 저장 실패:", e));
+      });
+      await PushNotifications.addListener("registrationError", (e) => console.error("[FCM] 네이티브 푸시 등록 실패:", e));
+      await PushNotifications.register();
+    } catch (e) {
+      nativePushRegisteredUid = "";
+      console.error("[FCM] 네이티브 푸시 등록 오류:", e);
+    }
+  })();
+}
+
+// ⭐ 2026-11-02 점검 — 운행일지 '이미지 저장'이 APK에서 아무것도 저장되지 않던 문제(WebView는 data: URL
+//  다운로드를 무시하고 오류도 없음). 네이티브는 Filesystem+Share 플러그인이 있으면 파일로 저장 후 공유,
+//  없으면 안내 토스트를 띄운다(조용히 실패하지 않게). 모바일 브라우저는 Web Share(파일)를, PC는 기존 <a download>를 쓴다.
+//  ⚠️ APK에서 실제 저장하려면 @capacitor/filesystem, @capacitor/share 설치 + npx cap sync 필요.
+const NativeFilesystem = registerPlugin("Filesystem");
+const NativeShare = registerPlugin("Share");
+async function saveCanvasImage(canvas, name, showToast) {
+  const dataUrl = canvas.toDataURL("image/png");
+  if (isNative()) {
+    const cap = window.Capacitor;
+    if (cap?.isPluginAvailable?.("Filesystem") && cap?.isPluginAvailable?.("Share")) {
+      const res = await NativeFilesystem.writeFile({ path: name, data: dataUrl.split(",")[1], directory: "DOCUMENTS", recursive: true });
+      await NativeShare.share({ title: name, url: res?.uri });
+      return;
+    }
+    showToast("앱에서는 이미지 저장을 아직 지원하지 않습니다 — 화면 캡처를 이용해주세요");
+    return;
+  }
+  try {
+    if (navigator.canShare && typeof File !== "undefined") {
+      const blob = await (await fetch(dataUrl)).blob();
+      const file = new File([blob], name, { type: "image/png" });
+      if (navigator.canShare({ files: [file] }) && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "")) {
+        await navigator.share({ files: [file], title: name });
+        return;
+      }
+    }
+  } catch (e) {
+    if (e?.name === "AbortError") return; // 사용자가 공유 취소
+  }
+  const a = document.createElement("a");
+  a.download = name;
+  a.href = dataUrl;
+  a.click();
 }
 
 function openNativeAppSettings() {
@@ -1090,9 +1162,14 @@ export default function DriverHome() {
       // (FCM)가 필요하다. 운송사 웹앱(MobileApp.jsx)은 이미 saveFcmToken()으로
       // 토큰을 users/{uid}.fcmToken에 저장해 Cloud Functions가 보내는데, 기사 앱은
       // 지금까지 이 등록을 한 번도 호출하지 않아 푸시 대상에서 완전히 빠져있었다.
-      import("../firebase").then(({ saveFcmToken }) => {
-        saveFcmToken(u).catch(() => {});
-      }).catch(() => {});
+      // ⭐ 2026-11-02 점검 — APK(네이티브)는 웹 푸시가 불가하므로 네이티브 푸시 플러그인으로 토큰 등록
+      if (isNative()) {
+        registerNativePush(u.uid);
+      } else {
+        import("../firebase").then(({ saveFcmToken }) => {
+          saveFcmToken(u).catch(() => {});
+        }).catch(() => {});
+      }
     });
   }, []);
 
@@ -3157,10 +3234,8 @@ export default function DriverHome() {
               setLogbookSaving(true);
               try {
                 const canvas = await html2canvas(logbookRef.current, { backgroundColor: "#ffffff", scale: 2 });
-                const a = document.createElement("a");
-                a.download = `운행일지_${driver.carNo || ""}_${appliedRange.from}${appliedRange.from !== appliedRange.to ? `~${appliedRange.to}` : ""}.png`;
-                a.href = canvas.toDataURL("image/png");
-                a.click();
+                // ⭐ 2026-11-02 점검 — APK에서도 저장되도록 공용 저장 함수 사용(네이티브/모바일 공유/PC 다운로드)
+                await saveCanvasImage(canvas, `운행일지_${driver.carNo || ""}_${appliedRange.from}${appliedRange.from !== appliedRange.to ? `~${appliedRange.to}` : ""}.png`, showToast);
               } catch (e) {
                 showToast("이미지 저장에 실패했습니다");
               } finally {
@@ -3266,10 +3341,8 @@ export default function DriverHome() {
               if (!logDetailRef.current) return;
               try {
                 const canvas = await html2canvas(logDetailRef.current, { backgroundColor: "#ffffff", scale: 2 });
-                const a = document.createElement("a");
-                a.download = `운행일지_${driver.carNo || ""}_${o.상차일 || ""}_${o.상차지명 || ""}.png`;
-                a.href = canvas.toDataURL("image/png");
-                a.click();
+                // ⭐ 2026-11-02 점검 — APK에서도 저장되도록 공용 저장 함수 사용(네이티브/모바일 공유/PC 다운로드)
+                await saveCanvasImage(canvas, `운행일지_${driver.carNo || ""}_${o.상차일 || ""}_${o.상차지명 || ""}.png`, showToast);
               } catch (_) { showToast("이미지 저장에 실패했습니다"); }
             };
             return (

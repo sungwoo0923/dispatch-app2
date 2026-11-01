@@ -58,6 +58,8 @@ export function StaffRegister({ company, onDone }) {
       const role = suggestFor({ team: f.team, position: f.position }, ro.execKeys);
       const ref = await addDoc(collection(db, "users"), {
         companyName: company, name: f.name.trim(), phone: f.phone.trim(), email: f.email.trim(), team: f.team, position: f.position, role, approved: true,
+        // ⭐ 2026-11-02 점검 — 생년월일을 users에도 저장(앱 안 생일 3일 전 안내가 users.birthDate만 봄)
+        birthDate: f.birthDate || "",
         employmentStatus: "재직", hireDate: f.hireDate, employType: f.employType, noAccount: true, registeredBy: auth.currentUser?.email || "", createdAt: serverTimestamp(),
         personnelHistory: [{ date: kstDay(), type: "인사 등록", detail: `${f.team || "미배정"} · ${f.position || "-"} · ${f.employType}` }],
       });
@@ -214,7 +216,12 @@ export function StaffInfoBoard({ company, canManage }) {
     } catch (e) { alert(`처리 실패: ${e.message}`); } finally { setBusy(false); }
   };
   const cancelPlan = async (u) => { if (window.confirm(`${u.name}님 퇴사 예정을 취소할까요?`)) await updateDoc(doc(db, "users", u.id), { resignPlan: null, personnelHistory: arrayUnion({ date: kstDay(), type: "퇴사 예정 취소", detail: "" }) }); };
-  const reinstate = async (u) => { if (window.confirm(`${u.name}님을 복직 처리할까요? (다시 로그인할 수 있게 됩니다)`)) await updateDoc(doc(db, "users", u.id), { employmentStatus: "재직", resignedAt: null, personnelHistory: arrayUnion({ date: kstDay(), type: "복직", detail: "" }) }); };
+  // ⭐ 2026-11-02 점검 — 복직 시 퇴사 사유 필드와 retireCases 문서도 정리(경리 › 퇴직 정산에 계속 남던 문제)
+  const reinstate = async (u) => {
+    if (!window.confirm(`${u.name}님을 복직 처리할까요? (다시 로그인할 수 있게 됩니다)`)) return;
+    await updateDoc(doc(db, "users", u.id), { employmentStatus: "재직", resignedAt: null, resignType: null, resignReason: null, personnelHistory: arrayUnion({ date: kstDay(), type: "복직", detail: "" }) });
+    await deleteDoc(doc(db, "retireCases", u.id)).catch(() => {});
+  };
   // ⭐ 2026-11-01 리디자인 — 왼쪽 직원 디렉터리(목록) / 오른쪽 상세 패널, 네이비 톤·모노 라벨·큰 글씨
   const leaveCnt = active.filter((u) => LEAVE_STATUSES.includes(u.employmentStatus)).length;
   const monthLeft = left.filter((u) => String(u.resignedAt || "").startsWith(kstDay().slice(0, 7))).length;

@@ -292,7 +292,8 @@ export function OnboardingBoard({ company, isViewer = false }) {
   const items = mode === "in" ? ONBOARD_ITEMS : OFFBOARD_ITEMS;
   const field = mode === "in" ? "onboarding" : "offboarding";
   const people = staff.filter((u) => (mode === "in" ? u.employmentStatus !== "퇴사" : u.employmentStatus === "퇴사"));
-  const baseDate = (u) => (mode === "in" ? hireOf(u, profiles) : u.resignDate || u.퇴사일 || profiles[u.id]?.resignDate || "");
+  // ⭐ 2026-11-02 점검 — 퇴사 확정 시 users.resignedAt에 저장되므로 우선 읽음 (기존엔 퇴사일 미등록으로 법정기한 계산 안 됨)
+  const baseDate = (u) => (mode === "in" ? hireOf(u, profiles) : u.resignedAt || u.resignDate || u.퇴사일 || profiles[u.id]?.resignDate || "");
   const isDone = (u, it) => (it.auto ? it.auto(u, profiles) : !!profiles[u.id]?.[field]?.[it.key]);
   const progress = (u) => items.filter((it) => isDone(u, it)).length;
   const overdue = (u) => items.filter((it) => !isDone(u, it) && it.due && it.due(baseDate(u)) && it.due(baseDate(u)) < today).length;

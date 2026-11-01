@@ -512,7 +512,8 @@ const [detailModal, setDetailModal] = useState(null);
     const todayStr = new Date().toLocaleDateString("ko-KR");
     const cols = sheet.columns || [];
     const esc = (s) => String(s || "").replace(/</g, "&lt;");
-    const fileBase = `단가표_${(sheet.baseName || "기준지").replace(/[\\/:*?"<>|]/g, "")}`;
+    // ⭐ 2026-11-02 점검 — 기준지 이름의 작은따옴표·백틱·줄바꿈 등이 팝업 <script> 문자열을 깨뜨려 PDF/이미지 저장이 안 되던 문제 → 해당 문자도 제거
+    const fileBase = `단가표_${(sheet.baseName || "기준지").replace(/[\\/:*?"<>|'\x60\u0000-\u001f\u2028\u2029]/g, "")}`;
     const w = window.open("", "_blank");
     w.document.write(`<html><head><title>${esc(sheet.baseName)}</title>
 <style>

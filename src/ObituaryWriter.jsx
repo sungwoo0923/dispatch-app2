@@ -27,7 +27,8 @@ function ObituaryPaper({ f, company }) {
       </div>
       <div className="px-12 py-9 text-center">
         <div className="text-[16px] leading-[2] text-[#2A2A2A]">
-          {who ? <><b className="text-[#111]">{who}</b>님의 {rel}<br /></> : null}
+          {/* ⭐ 2026-11-02 점검 — 관계 '본인'이면 "…님의 / 故 …" 줄을 빼서 직원 이름이 겹치지 않게 */}
+          {who && f.rel !== "본인" ? <><b className="text-[#111]">{who}</b>님의 {rel}<br /></> : null}
           <b className="text-[22px] text-[#111]">故 {f.deceased || "○○○"}</b>{f.age ? <span className="text-[15px]"> (향년 {f.age}세)</span> : null} 께서<br />
           {f.date ? `${krDate(f.date, f.time)}에 ` : ""}별세하셨기에 삼가 알려 드립니다.
         </div>
@@ -61,19 +62,26 @@ export default function ObituaryWriter({ company, me = {}, onCancel, onSaved, in
   const title = f.empName
     ? `[부고] ${[f.team, f.empName, f.position].filter(Boolean).join(" ")}님 ${f.rel === "본인" ? "" : `${f.rel} `}별세`
     : `[부고] 故 ${f.deceased || "○○○"}님 별세`;
-  const text = () => [
-    `${[f.team, f.empName, f.position].filter(Boolean).join(" ")}님의 ${f.rel === "본인" ? "" : `${f.rel} `}故 ${f.deceased}${f.age ? `(향년 ${f.age}세)` : ""}께서 ${f.date ? krDate(f.date, f.time) : ""} 별세하셨기에 삼가 알려 드립니다.`,
-    "",
-    f.hall && `· 빈소: ${[f.hall, f.room].filter(Boolean).join(" ")}`,
-    f.address && `· 주소: ${f.address}`,
-    f.hallTel && `· 연락처: ${f.hallTel}`,
-    f.outDate && `· 발인: ${krDate(f.outDate, f.outTime)}`,
-    f.burial && `· 장지: ${f.burial}`,
-    f.chief && `· 상주: ${f.chief}`,
-    f.account && `· 마음 전하실 곳: ${f.account}`,
-    "",
-    f.message,
-  ].filter((x) => x !== false && x !== undefined && x !== null && x !== "" || x === "").join("\n");
+  // ⭐ 2026-11-02 점검 — 빈 선택항목이 빈 줄로 남던 필터(연산자 우선순위 버그) 수정: 값 있는 항목만 모아서 붙임
+  // ⭐ 2026-11-02 점검 — 관계 '본인'이면 "…님의 故 …께서"처럼 직원 이름이 겹치던 문장 수정
+  const text = () => {
+    const who = [f.team, f.empName, f.position].filter(Boolean).join(" ");
+    const age = f.age ? `(향년 ${f.age}세)` : "";
+    const when = f.date ? krDate(f.date, f.time) : "";
+    const head = f.rel === "본인"
+      ? `${who} 故 ${f.deceased}${age}님께서 ${when} 별세하셨기에 삼가 알려 드립니다.`
+      : `${who}님의 ${f.rel} 故 ${f.deceased}${age}께서 ${when} 별세하셨기에 삼가 알려 드립니다.`;
+    const fields = [
+      f.hall && `· 빈소: ${[f.hall, f.room].filter(Boolean).join(" ")}`,
+      f.address && `· 주소: ${f.address}`,
+      f.hallTel && `· 연락처: ${f.hallTel}`,
+      f.outDate && `· 발인: ${krDate(f.outDate, f.outTime)}`,
+      f.burial && `· 장지: ${f.burial}`,
+      f.chief && `· 상주: ${f.chief}`,
+      f.account && `· 마음 전하실 곳: ${f.account}`,
+    ].filter(Boolean);
+    return [head, "", ...fields, "", f.message].join("\n");
+  };
   const post = async () => {
     if (!f.deceased.trim()) return alert("고인 성함을 입력해 주세요.");
     if (!f.hall.trim()) return alert("빈소(장례식장)를 입력해 주세요.");
@@ -102,6 +110,9 @@ export default function ObituaryWriter({ company, me = {}, onCancel, onSaved, in
         if (to.length) await sendInternalMail({ company, to, subject: editing ? `[정정] ${title}` : title, body: editing ? `앞서 안내한 부고 내용이 아래와 같이 수정되었습니다.\n\n${text()}` : text(), images: [image], kind: "notice", fromName: me.name || "", noticeKey }).catch(() => {});
       }
       onSaved?.();
+    } catch (e) {
+      // ⭐ 2026-11-02 점검 — 권한 부족·1MB 초과·html2canvas 실패 시 조용히 끝나던 문제: 실패를 알림
+      alert(`부고를 올리지 못했습니다: ${e?.message || e}`);
     } finally { setBusy(""); }
   };
   return (

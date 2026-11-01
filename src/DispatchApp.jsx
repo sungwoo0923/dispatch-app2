@@ -7188,7 +7188,13 @@ useEffect(() => {
       // 휴가/외근 결재 승인 여부 확인
       const schedSnap = await getDocs(query(collection(db, "schedules"), where("authorUid", "==", user.uid)));
       const mySchedules = schedSnap.docs.map(d => d.data());
-      const leaveLabel = findApprovedLeaveForDate(mySchedules, user.uid, today);
+      // ⭐ 2026-11-02 점검 — 전자결재(approvals)로 승인된 연차·병가 등도 확인해, 그날 자동 '출근'(지각)으로 찍히지 않게 함. 조회 실패 시엔 기존대로 출근 처리
+      let apr = null;
+      try {
+        const apSnap = await getDocs(query(collection(db, "approvals"), where("participants", "array-contains", user.uid)));
+        apr = approvalLeaveOn(apSnap.docs.map(d => ({ id: d.id, ...d.data() })), user.uid, today);
+      } catch { apr = null; }
+      const leaveLabel = findApprovedLeaveForDate(mySchedules, user.uid, today) || (apr && apr !== "외근" && apr !== "조퇴" ? apr : null);
 
       const userName = user?.displayName || user?.email?.split("@")[0] || "사용자";
 
@@ -7271,9 +7277,12 @@ useEffect(() => {
     if (!user?.uid || myInfoSaving) return;
     setMyInfoSaving(true);
     try {
+      // ⭐ 2026-11-02 점검 — 연락처를 phone·전화번호 두 필드에 함께 저장(회원관리·인사관리는 phone을 읽음)
+      const p = formatPhone(myInfoPhoneDraft.trim());
       await setDoc(doc(db, "users", user.uid), {
         name: myInfoNameDraft.trim(),
-        전화번호: formatPhone(myInfoPhoneDraft.trim()),
+        phone: p,
+        전화번호: p,
       }, { merge: true });
       showAlert("내 정보가 저장되었습니다.");
     } catch (e) {
@@ -21075,18 +21084,21 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, onSaved,
     const mirror = getMirrorTarget();
     for (const file of files) {
       try {
-        const reader = new FileReader();
-        const base64 = await new Promise((res, rej) => {
+        // ⭐ 2026-11-02 점검 — 이미지는 먼저 줄이고, base64는 한 번만 저장(화면은 base64 || url로 읽음), 문서 한도(1MiB) 넘는 파일은 미리 막음
+        const isImg = String(file.type || "").startsWith("image/");
+        const base64 = isImg ? await shrinkImageForDoc(file, { max: 1600, quality: 0.82 }) : await new Promise((res, rej) => {
+          const reader = new FileReader();
           reader.onload = e => res(e.target.result);
           reader.onerror = rej;
           reader.readAsDataURL(file);
         });
+        if (String(base64).length > 1_000_000) { alert(`${file.name}: 파일이 너무 큽니다(약 700KB 이하로 줄여 주세요).`); continue; }
         const payload = {
-          url: base64,
           base64,
           name: file.name,
+          type: (String(base64).match(/^data:([^;,]+)/) || [])[1] || file.type || "",
           size: file.size,
-          sizeKB: Math.round(file.size / 1024),
+          sizeKB: Math.round(String(base64).length * 0.75 / 1024),
           uploadedBy: "dispatch",
           createdAt: serverTimestamp(),
         };
@@ -50994,20 +51006,26 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   // 자동으로 반영해서 화면이 바로 갱신된다. 회사정보 탭의 handleSealUpload와 동일한 방식.
   const sealQuickUploadRef = React.useRef(null);
   const [sealQuickUploading, setSealQuickUploading] = React.useState(false);
+  // ⭐ 2026-11-02 점검 — 직인 바로 변경은 회사정보와 같은 기준(경리·인사)만 허용
+  const canQuickSeal = (() => {
+    try {
+      const r = localStorage.getItem("role") || "";
+      const t = String(window.__kpMeTeam || "");
+      return ["test", "hrAcct", "hrManager", "totalMaster"].includes(r) || /경리|회계|인사/.test(t);
+    } catch { return false; }
+  })();
   const handleSealQuickUpload = async (file) => {
     if (!file) return;
+    if (!canQuickSeal) { showAlert("직인 등록은 경리팀·인사팀만 할 수 있습니다."); return; }
     if (!companyInfoDoc?.id) { showAlert("회사 정보가 아직 등록되지 않아 도장을 저장할 수 없습니다."); return; }
     const allowed = ["image/jpeg", "image/png", "image/webp"];
     if (!allowed.includes(file.type)) { showAlert("JPG, PNG, WEBP 이미지만 업로드 가능합니다."); return; }
-    if (file.size > 1 * 1024 * 1024) { showAlert("도장 이미지는 1MB 이하여야 합니다."); return; }
+    if (file.size > 10 * 1024 * 1024) { showAlert("도장 이미지가 너무 큽니다(10MB 초과)."); return; }
     setSealQuickUploading(true);
     try {
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      // ⭐ 2026-11-02 점검 — 직인 축소(투명 유지) + 사업자등록증과 합친 크기가 문서 한도(1MiB)를 넘으면 저장하지 않음
+      const base64 = await shrinkImageForDoc(file, { max: 600, keepAlpha: true });
+      if (base64.length + (companyInfoDoc?.사업자등록증Base64?.length || 0) > COMPANY_DOC_B64_LIMIT) { showAlert("파일이 너무 큽니다. 약 600KB 이하로 줄여 주세요."); return; }
       await updateDoc(doc(db, "transportApplications", companyInfoDoc.id), { 직인이미지: base64 });
     } catch (err) {
       showAlert("도장 업로드 실패: " + (err.message || "알 수 없는 오류"));
@@ -52616,8 +52634,8 @@ const handleBatchSettle = async (targetStatus) => {
           <div style={{ display: "flex", alignItems: "center" }}>
             <span style={{ flex: 1 }}>{COMPANY_PRINT.ceo}</span>
             <span
-              title="클릭하여 도장 이미지 바로 변경"
-              onClick={() => sealQuickUploadRef.current?.click()}
+              title={canQuickSeal ? "클릭하여 도장 이미지 바로 변경" : undefined}
+              onClick={canQuickSeal ? () => sealQuickUploadRef.current?.click() : undefined}
               style={{
                 position: "relative",
                 display: "inline-flex",
@@ -52626,7 +52644,7 @@ const handleBatchSettle = async (targetStatus) => {
                 width: 52,
                 height: 52,
                 marginRight: 4,
-                cursor: "pointer",
+                cursor: canQuickSeal ? "pointer" : "default", /* ⭐ 2026-11-02 점검 — 경리·인사만 클릭 가능 */
                 opacity: sealQuickUploading ? 0.4 : 1,
               }}
             >
@@ -56063,13 +56081,17 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
           // ⭐ addNew와 동일한 이유로 id를 강제로 새로 만들지 않는다 — 이미 기사앱으로
           // 가입된 차량번호면 그 문서를 그대로 재사용(merge)해야 등급이 실제 위치/상태가
           // 쌓이는 문서에 붙는다.
-          await upsertDriver({
-            차량번호,
-            이름: r.이름||r["기사명"]||"",
-            전화번호: r.전화번호||r["전화"]||r["휴대폰"]||"",
-            메모: r.메모||r["비고"]||"",
-            등급: r.등급||"일반",
-          });
+          // ⭐ 2026-11-02 점검 — 빈 칸은 보내지 않음(기존 이름·전화·메모 유지). 등급 칸이 비면 기존 기사 등급(블랙·지입·직영) 유지, 새 기사만 '일반'
+          const pick = (v) => String(v ?? "").trim();
+          const normP = (s = "") => String(s).replace(/\s+/g, "").toUpperCase();
+          const patch = { 차량번호 };
+          const nm = pick(r.이름 || r["기사명"]); if (nm) patch.이름 = nm;
+          const ph = pick(r.전화번호 || r["전화"] || r["휴대폰"]); if (ph) patch.전화번호 = ph;
+          const mm = pick(r.메모 || r["비고"]); if (mm) patch.메모 = mm;
+          const gr = pick(r.등급);
+          if (gr) patch.등급 = gr;
+          else if (!(driversRaw || []).some((d) => normP(d.차량번호) === normP(차량번호))) patch.등급 = "일반";
+          await upsertDriver(patch);
           ok++;
         }
         showAlert(`총 ${ok}건 반영`);
@@ -57538,9 +57560,13 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
         const validC = json.filter((r) => String(r.거래처명 || r["상호"] || r["회사명"] || "").trim());
         if (!validC.length) { showAlert("등록할 거래처가 없습니다. (거래처명 열을 확인해 주세요)"); return; }
         if (!await kpConfirm(`거래처 ${validC.length}곳을 등록·갱신할까요?${json.length - validC.length ? `\n(거래처명이 없는 ${json.length - validC.length}줄은 건너뜁니다)` : ""}`)) return;
+        // ⭐ 2026-11-02 점검 — 문서 id를 거래처명 그대로 쓰지 않음(회사별 키 coDocKey 사용). 같은 이름의 기존 거래처가 있으면 그 문서를 갱신. 한 줄이 실패해도 나머지는 계속 반영
+        const failC = [];
         for (const r of validC) {
           const 거래처명 = String(r.거래처명 || r["상호"] || r["회사명"] || "").trim();
           if (!거래처명) continue;
+          const existC = (clients || []).find((c) => normalizeCompanyKey(c.거래처명 || "") === normalizeCompanyKey(거래처명));
+          try {
           await upsertClient?.({
             거래처명,
             사업자번호: String(r.사업자번호 || "").trim(),
@@ -57553,11 +57579,12 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             이메일: String(r.이메일 || r["email"] || "").trim(),
             메모: String(r.메모 || r["일반메모"] || "").trim(),
             오더메모: String(r.오더메모 || "").trim(),
-            id: 거래처명,
+            ...(existC?.id ? { id: existC.id } : {}),
           });
           ok++;
+          } catch (rowErr) { failC.push(거래처명); }
         }
-        showAlert(`총 ${ok}건 반영 완료`);
+        showAlert(`총 ${ok}건 반영 완료${failC.length ? `\n반영 실패 ${failC.length}건: ${failC.slice(0, 5).join(", ")}${failC.length > 5 ? " 외" : ""}` : ""}`);
       } catch (err) { showAlert("엑셀 처리 오류"); } finally { e.target.value = ""; }
     };
     reader.readAsArrayBuffer(file);
@@ -59301,7 +59328,10 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
   }, [hireDate]);
 
   // ⭐ 2026-10-22 개편 — 디지털 명함 + 정보 카드 그리드(세로로 길던 화면을 가로 배치로)
-  const ROLE_NAME = { totalMaster: "최고관리자", admin: "관리자", hrManager: "인사관리자", user: "실무자", test: "경리/회계", viewer: "조회전용" };
+  const ROLE_NAME = { totalMaster: "최고관리자", admin: "관리자", hrManager: "인사관리자", user: "실무자", test: "경리/회계", viewer: "조회전용", hrAcct: "통합인사관리자" };
+  // ⭐ 2026-11-02 점검 — 권한 배지에 내부 키(hrAcct·r_xxx) 대신 한글 이름 표시(사용자 정의 역할 이름 포함)
+  const customRolesMP = useCustomRoles();
+  const roleLabel = (customRolesMP || []).find((r) => r.key === role)?.label || ROLE_NAME[role] || "-";
   const displayName = myName || user?.displayName || (user?.email || "").split("@")[0];
   const phone = myInfo.전화번호 || myInfo.phone || "";
   const title = [myInfo.team, myInfo.position].filter(Boolean).join(" · ");
@@ -59321,7 +59351,9 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
     if (!user?.uid) return;
     setSavingInfo(true);
     try {
-      await setDoc(doc(db, "users", user.uid), { name: draftName.trim(), 전화번호: fmtPhone(draftPhone) }, { merge: true });
+      // ⭐ 2026-11-02 점검 — 연락처를 phone·전화번호 두 필드에 함께 저장(회원관리·조직도·인사관리는 phone을 읽음)
+      const p = fmtPhone(draftPhone);
+      await setDoc(doc(db, "users", user.uid), { name: draftName.trim(), phone: p, 전화번호: p }, { merge: true });
       setEditOpen(false);
       showAlert("내 정보가 저장되었습니다.");
     } catch (e) { showAlert("저장 실패: " + (e?.message || e)); } finally { setSavingInfo(false); }
@@ -59433,7 +59465,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
               <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[12.5px]">
                 {co && <span className="px-2 h-6 inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 font-bold">{co}</span>}
                 <span className="px-2 h-6 inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 font-bold">{title || "부서 미지정"}</span>
-                <span className="px-2 h-6 inline-flex items-center rounded-md bg-[#8FB0F0] text-[#0B1428] font-black">{ROLE_NAME[role] || role || "-"}</span>
+                <span className="px-2 h-6 inline-flex items-center rounded-md bg-[#8FB0F0] text-[#0B1428] font-black">{roleLabel /* ⭐ 2026-11-02 점검 — 한글 권한명 */}</span>
               </div>
             </div>
           </div>
@@ -59493,7 +59525,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
                   ["이메일", user?.email || "-", <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>],
                   ["회사", co || "-", <><path d="M3 21h18M5 21V7l7-4 7 4v14" /><path d="M9 9h1M14 9h1M9 13h1M14 13h1" /></>],
                   ["부서 · 직책", title || "미지정 (인사관리부에서 지정)", <><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></>],
-                  ["권한", ROLE_NAME[role] || role || "-", <path d="M12 3 5 6v6c0 4.5 3 7.7 7 9 4-1.3 7-4.5 7-9V6z" />],
+                  ["권한", roleLabel /* ⭐ 2026-11-02 점검 — 한글 권한명 */, <path d="M12 3 5 6v6c0 4.5 3 7.7 7 9 4-1.3 7-4.5 7-9V6z" />],
                 ].map(([k, v, ic]) => (
                   <div key={k} className="flex items-center gap-3 px-3.5 py-3 rounded-2xl bg-[#F5F8FD] border border-[#EDF1F7] min-w-0">
                     <span className="w-9 h-9 rounded-xl bg-white border border-[#E3E8F0] text-[#2D4C82] grid place-items-center shrink-0"><Ico d={ic} /></span>
@@ -59908,7 +59940,9 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
         let status = rec?.status;
         if (!status) {
           if (off) { days.push({ d, ds, status: "휴일" }); continue; }
-          status = findApprovedLeaveForDate(schedules, m.uid, ds, m.name) || approvalLeaveOn(leaveAprs, m.uid, ds) || hrLeaveOn(m, ds) || "출근";
+          // ⭐ 2026-11-02 점검 — 기록 없는 평일을 '출근'으로 세지 않음(출근기록부와 동일하게 빈칸·근무일 제외)
+          status = findApprovedLeaveForDate(schedules, m.uid, ds, m.name) || approvalLeaveOn(leaveAprs, m.uid, ds) || hrLeaveOn(m, ds) || "";
+          if (!status) { days.push({ d, ds, status: "" }); continue; }
         }
         const inHm = hmOf(rec?.checkInTime); const outHm = hmOf(rec?.checkOutTime);
         const late = status === "출근" && !!inHm && toMin(inHm) > toMin(startHm);
@@ -60020,7 +60054,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
         const hrStaffTo = members.filter((m) => m.uid !== userId && isHrStaffUser(m));
         const hrTo = (hrStaffTo.length ? hrStaffTo : members.filter((m) => m.uid !== userId && m.isMaster === true && m.employmentStatus !== "퇴사"))
           .map((m) => ({ uid: m.uid, name: m.name || m.email || "", team: m.team || "", position: m.position || "" }));
-        if (hrTo.length) sendInternalMail({ company, to: hrTo, kind: "hr", fromName: me.name || "", subject: `[이력서 제출] ${me.name || ""}${me.team ? ` · ${me.team}` : ""}`, body: `${me.name || ""}님이 본인 이력서를 작성·저장했습니다.\n\n인사관리부 › 인사 기록에서 확인해 주세요.` }).catch(() => {});
+        if (hrTo.length) sendInternalMail({ company, to: hrTo, kind: "hr", fromName: me.name || "", subject: `[이력서 제출] ${me.name || ""}${me.team ? ` · ${me.team}` : ""}`, body: `${me.name || ""}님이 본인 이력서를 작성·저장했습니다.\n\n인사관리부 › 인사관리 › 이력서에서 확인해 주세요.` }).catch(() => {}); // ⭐ 2026-11-02 점검 — 메일 안내 경로를 실제 메뉴 이름(인사관리 › 이력서)으로
         alert("이력서를 저장했습니다. 인사팀에 알림이 갔습니다.");
       }
       setEditMode(false);
@@ -60765,6 +60799,38 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
   );
 }
 
+// ⭐ 2026-11-02 점검 — 사업자등록증·직인 base64가 한 문서(transportApplications, 한도 1MiB)에 함께 저장되므로 저장 전에 이미지를 줄임(직인은 투명 배경 유지)
+const COMPANY_DOC_B64_LIMIT = 900000;
+function shrinkImageForDoc(file, { max = 1600, quality = 0.8, keepAlpha = false } = {}) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onerror = reject;
+    fr.onload = () => {
+      const src = String(fr.result || "");
+      const img = new Image();
+      img.onerror = () => resolve(src);
+      img.onload = () => {
+        try {
+          const r = Math.min(1, max / Math.max(img.width || 1, img.height || 1));
+          const c = document.createElement("canvas");
+          c.width = Math.max(1, Math.round(img.width * r)); c.height = Math.max(1, Math.round(img.height * r));
+          const g = c.getContext("2d");
+          if (!keepAlpha) { g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); }
+          g.drawImage(img, 0, 0, c.width, c.height);
+          let out = keepAlpha ? c.toDataURL("image/png") : c.toDataURL("image/jpeg", quality);
+          if (keepAlpha && out.length > 300000) {
+            const webp = c.toDataURL("image/webp", 0.85);
+            if (webp.startsWith("data:image/webp") && webp.length < out.length) out = webp;
+          }
+          resolve(out.length < src.length ? out : src);
+        } catch { resolve(src); }
+      };
+      img.src = src;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
 function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
   const companyName = (userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim();
   const currentUserId = userId || auth?.currentUser?.uid || localStorage.getItem("uid") || "";
@@ -60851,27 +60917,33 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
     if (!canEditDocs) { showMsg("사업자등록증 등록은 경리팀·인사팀만 할 수 있습니다."); return; }
     const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
     if (!allowed.includes(file.type)) { showMsg("JPG, PNG, WEBP, PDF 파일만 업로드 가능합니다."); return; }
-    if (file.size > 3 * 1024 * 1024) { showMsg("파일 크기는 3MB 이하여야 합니다. (Firestore 저장 방식)"); return; }
+    // ⭐ 2026-11-02 점검 — PDF는 압축할 수 없어 600KB까지만, 이미지는 아래에서 줄인 뒤 문서 한도로 다시 확인
+    if (file.type === "application/pdf" && file.size > 600 * 1024) { showMsg("PDF는 600KB 이하만 저장할 수 있습니다. 사진(JPG·PNG)으로 올리면 자동으로 줄여 저장합니다."); return; }
+    if (file.size > 20 * 1024 * 1024) { showMsg("파일이 너무 큽니다(20MB 초과)."); return; }
     // ⚠️ 예전엔 회사 정보(appData)를 못 찾았을 때 저장은 건너뛰고 "업로드되었습니다"만 띄웠다
     if (!appData?.id) { showMsg("회사 정보를 찾지 못해 저장할 수 없습니다. 새로고침 후 다시 시도해 주세요."); return; }
     setUploading(true);
     setUploadProgress("업로드 중...");
     try {
       // base64로 변환
-      const base64 = await new Promise((resolve, reject) => {
+      // ⭐ 2026-11-02 점검 — 이미지는 긴 변 1600px JPEG로 줄이고, 직인과 합친 크기가 문서 한도를 넘으면 저장하지 않음
+      const isImg = file.type.startsWith("image/");
+      const base64 = isImg ? await shrinkImageForDoc(file, { max: 1600, quality: 0.8 }) : await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result);
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
+      const saveType = isImg ? ((String(base64).match(/^data:([^;,]+)/) || [])[1] || file.type) : file.type;
+      if (base64.length + (appData?.직인이미지?.length || 0) > COMPANY_DOC_B64_LIMIT) { showMsg("파일이 너무 큽니다. 약 600KB 이하로 줄여 주세요."); return; }
       if (appData?.id) {
         await updateDoc(doc(db, "transportApplications", appData.id), {
           사업자등록증Base64: base64,
           사업자등록증파일명: file.name,
           사업자등록증업로드일: new Date().toISOString(),
-          사업자등록증타입: file.type,
+          사업자등록증타입: saveType,
         });
-        setAppData(prev => ({ ...prev, 사업자등록증Base64: base64, 사업자등록증파일명: file.name, 사업자등록증타입: file.type }));
+        setAppData(prev => ({ ...prev, 사업자등록증Base64: base64, 사업자등록증파일명: file.name, 사업자등록증타입: saveType }));
       }
       showMsg("사업자등록증이 업로드되었습니다.");
     } catch (err) {
@@ -60893,15 +60965,12 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
     if (!appData?.id) { showMsg("회사 정보가 아직 등록되지 않아 도장을 저장할 수 없습니다."); return; }
     const allowed = ["image/jpeg", "image/png", "image/webp"];
     if (!allowed.includes(file.type)) { showMsg("JPG, PNG, WEBP 이미지만 업로드 가능합니다."); return; }
-    if (file.size > 1 * 1024 * 1024) { showMsg("도장 이미지는 1MB 이하여야 합니다."); return; }
+    if (file.size > 10 * 1024 * 1024) { showMsg("도장 이미지가 너무 큽니다(10MB 초과)."); return; }
     setSealUploading(true);
     try {
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      // ⭐ 2026-11-02 점검 — 직인은 긴 변 600px로 줄여(투명 배경 유지) 사업자등록증과 합친 크기가 문서 한도(1MiB)를 넘지 않게 확인
+      const base64 = await shrinkImageForDoc(file, { max: 600, keepAlpha: true });
+      if (base64.length + (appData?.사업자등록증Base64?.length || 0) > COMPANY_DOC_B64_LIMIT) { showMsg("파일이 너무 큽니다. 약 600KB 이하로 줄여 주세요."); return; }
       await updateDoc(doc(db, "transportApplications", appData.id), { 직인이미지: base64 });
       setAppData(prev => ({ ...prev, 직인이미지: base64 }));
       showMsg("도장 이미지가 저장되었습니다. 거래명세서 등에 바로 반영됩니다.");
@@ -61274,7 +61343,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {[
                 {
-                  key: "biz", title: "사업자등록증", done: !!filePreviewSrc, sub: filePreviewSrc ? (appData.사업자등록증파일명 || "등록된 파일") : "JPG·PNG·PDF / 최대 3MB",
+                  key: "biz", title: "사업자등록증", done: !!filePreviewSrc, sub: filePreviewSrc ? (appData.사업자등록증파일명 || "등록된 파일") : "JPG·PNG·PDF / 최대 600KB(사진은 자동 축소)",
                   busy: uploading ? uploadProgress : "", onUpload: () => fileRef.current?.click(),
                   onDrop: (f) => handleFileUpload(f),
                   actions: filePreviewSrc ? [
@@ -61283,7 +61352,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                   ] : [],
                 },
                 {
-                  key: "seal", title: "직인(도장)", done: !!appData?.직인이미지, sub: appData?.직인이미지 ? "거래명세서·보고서에 자동으로 찍힙니다" : "배경이 투명한 PNG 권장 / 최대 1MB",
+                  key: "seal", title: "직인(도장)", done: !!appData?.직인이미지, sub: appData?.직인이미지 ? "거래명세서·보고서에 자동으로 찍힙니다" : "배경이 투명한 PNG 권장 / 최대 600KB(자동 축소)",
                   busy: sealUploading ? "업로드 중..." : "", onUpload: () => sealFileRef.current?.click(),
                   onDrop: (f) => handleSealUpload(f),
                   actions: appData?.직인이미지 ? [

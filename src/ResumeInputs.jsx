@@ -138,7 +138,14 @@ export function BirthSelect({ value, onChange, className = "", selectClass = "" 
   const [y, setY] = React.useState(m ? m[1] : "");
   const [mo, setMo] = React.useState(m ? m[2] : "");
   const [d, setD] = React.useState(m ? m[3] : "");
-  React.useEffect(() => { const x = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/); if (x) { setY(x[1]); setMo(x[2]); setD(x[3]); } }, [value]);
+  // ⭐ 2026-11-02 점검 — 마지막으로 내보낸 값을 기억해, 부모가 값을 ""로 비웠을 때(등록 후 초기화)만 드롭다운도 비운다. 년도만 고른 중간 상태("" 내보냄)는 유지
+  const lastEmitted = React.useRef(String(value || ""));
+  React.useEffect(() => {
+    const v = String(value || "");
+    const x = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (x) { setY(x[1]); setMo(x[2]); setD(x[3]); lastEmitted.current = v; }
+    else if (v === "" && lastEmitted.current !== "") { setY(""); setMo(""); setD(""); lastEmitted.current = ""; }
+  }, [value]);
   const thisYear = new Date().getFullYear();
   const years = Array.from({ length: thisYear - 15 - 1940 + 1 }, (_, i) => String(thisYear - 15 - i));
   const days = y && mo ? new Date(Number(y), Number(mo), 0).getDate() : 31;
@@ -146,7 +153,9 @@ export function BirthSelect({ value, onChange, className = "", selectClass = "" 
     const max = ny && nm ? new Date(Number(ny), Number(nm), 0).getDate() : 31;
     const dd = nd && Number(nd) > max ? String(max).padStart(2, "0") : nd;
     if (dd !== nd) setD(dd);
-    onChange(ny && nm && dd ? `${ny}-${nm}-${dd}` : "");
+    const out = ny && nm && dd ? `${ny}-${nm}-${dd}` : "";
+    lastEmitted.current = out; // ⭐ 2026-11-02 점검 — 내보낸 값 기록(부모 초기화와 구분)
+    onChange(out);
   };
   const sel = selectClass || "w-full h-12 border border-[#DCE3EE] rounded-xl px-3 text-[15px] font-semibold text-[#0F1A30] bg-white focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15";
   const S = ({ v, set, list, ph, unit }) => (
