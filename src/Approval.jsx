@@ -29,6 +29,7 @@ import { ShellIcon } from "./AdminShell";
 import { useCompanyStaff, compressImage, sendInternalMail } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
 import CustomSelect from "./CustomSelect";
+import { useLeaveGuard, draftStore, confirmLeave } from "./leaveGuard";
 import {
   APPROVAL_CATS, APPROVAL_FORMS, formOf, formsOfCat, initialData, missingFields, fieldText, suggestLine,
   itemsTotal, costsTotal, fmtWon, dayDiff, bizDays, leaveEntitlement, leaveUseOf, rankOf,
@@ -674,17 +675,28 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
   const apSettings = useApprovalSettings(company);
   const editId = preset?.editId || null;
   const forms = formsOfCat(cat);
-  const [formKey, setFormKey] = React.useState(preset?.form && formOf(preset.form).cat === cat ? preset.form : forms[0].key);
+  // ✋ 2026-11-01 임시저장(이 기기) — 새 문서 작성일 때만, 다시 오면 이어서
+  const draftKey = `ap:${me.uid}:${cat}`;
+  const [draft] = React.useState(() => (!preset ? draftStore.get(draftKey) : null));
+  const init = draft && formOf(draft.formKey)?.cat === cat ? draft : preset;
+  const [formKey, setFormKey] = React.useState(init?.form && formOf(init.form).cat === cat ? init.form : init?.formKey && formOf(init.formKey).cat === cat ? init.formKey : forms[0].key);
   const form = formOf(formKey);
-  const [data, setData] = React.useState(() => (preset?.data && preset.form === formKey ? preset.data : initialData(form)));
-  const [title, setTitle] = React.useState(preset?.title || "");
-  const [line, setLine] = React.useState(preset?.line || []);
-  const [cc, setCc] = React.useState(preset?.cc || []);
-  const [images, setImages] = React.useState(preset?.images || []);
+  const [data, setData] = React.useState(() => (init?.data && (init.form === formKey || init.formKey === formKey) ? init.data : initialData(form)));
+  const [title, setTitle] = React.useState(init?.title || "");
+  const [line, setLine] = React.useState(init?.line || []);
+  const [cc, setCc] = React.useState(init?.cc || []);
+  const [images, setImages] = React.useState(init?.images || []);
+  const [restored, setRestored] = React.useState(!!draft);
+  const dirty = !editId && JSON.stringify({ data, title, images, cc }) !== JSON.stringify({ data: initialData(form), title: "", images: [], cc: [] });
+  useLeaveGuard(dirty, {
+    label: form.label,
+    onSave: () => { if (!draftStore.set(draftKey, { formKey, data, title, line, cc, images })) draftStore.set(draftKey, { formKey, data, title, line, cc, images: [] }); },
+    onDiscard: () => draftStore.del(draftKey),
+  });
   const [busy, setBusy] = React.useState(false);
   const [msg, setMsg] = React.useState("");
   const fileRef = React.useRef(null);
-  const autoLined = React.useRef(!!preset?.line?.length);
+  const autoLined = React.useRef(!!init?.line?.length);
 
   // 결재선이 비어 있으면 직원 목록이 오는 대로 자동 추천
   React.useEffect(() => { if (!autoLined.current && staff && staff.length) { autoLined.current = true; setLine(suggestLine(staff, me)); } }, [staff, me]);
@@ -692,7 +704,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
   // 입력 초기화 — 같은 양식을 처음 상태로(제목·내용·첨부·결재선 추천값). 저장된 문서에는 영향 없음
   const resetAll = async () => {
     if (!await kpConfirm("입력한 내용을 모두 지우고 처음 상태로 되돌릴까요?")) return;
-    setData(initialData(form)); setTitle(""); setImages([]); setCc([]); setMsg("");
+    setData(initialData(form)); setTitle(""); setImages([]); setCc([]); setMsg(""); draftStore.del(draftKey); setRestored(false);
     setLine(staff && staff.length ? suggestLine(staff, me) : []);
   };
   const [missing, setMissing] = React.useState([]);
@@ -751,6 +763,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
         ...(auto ? { autoApproved: true } : {}),
       };
       const ref = await addDoc(collection(db, "approvals"), payload);
+      draftStore.del(draftKey);
       // 🤖 첫 결재자부터 자동 승인(부재·위임)이 켜져 있으면 바로 처리(상신 직후 한 번 더 저장)
       if (!auto) {
         const r = runAutoApprove({ ...payload, id: ref.id }, apSettings);
@@ -766,6 +779,13 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
   const half = (f) => f.half;
   return (
     <>
+    {restored && !editId && (
+      <div className="mb-3 rounded-xl bg-[#EEF3FC] border border-[#C9D6EE] px-4 py-2.5 flex items-center gap-3 text-[13.5px] font-bold text-[#1B2B4B]">
+        <span className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>DRAFT</span>
+        <span className="flex-1 min-w-0 truncate">임시저장한 내용을 불러왔습니다{draft?.savedAt ? ` · ${new Date(draft.savedAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}</span>
+        <button type="button" onClick={() => { draftStore.del(draftKey); setRestored(false); setData(initialData(form)); setTitle(""); setImages([]); setCc([]); }} className="h-8 px-3 rounded-lg border border-[#C9D6EE] bg-white text-[12.5px] font-black text-[#B42318] shrink-0">지우고 새로 쓰기</button>
+      </div>
+    )}
     {editId && <div className="mb-3 rounded-xl bg-[#0F1A30] text-white px-4 py-2.5 text-[14px] font-bold">문서 수정 중 · {preset.docNo} — 결재자가 열어보기 전까지만 고칠 수 있습니다. 결재선·참조자는 바꿀 수 없습니다(바꾸려면 회수 후 재기안).</div>}
     <div className={`flex flex-wrap gap-2 mb-4 ${editId ? "hidden" : ""}`}>
       {forms.map((f) => (
@@ -1106,7 +1126,7 @@ function DocList({ docs, onOpen, empty, uid, compact = false }) {
           <div className={`shrink-0 w-[150px] ${compact ? "hidden" : "hidden md:flex"} justify-end`}><Progress d={d} /></div>
           {/* ⭐ 2026-11-01 결재 완료 후 취소 요청이 들어오면 상태 칸 자체가 "취소 요청"(내가 검토할 차례면 "취소 검토")으로 바뀐다 */}
           {d.status === "approved" && d.cancel?.status === "pending"
-            ? <span className={`shrink-0 w-[72px] text-center h-7 leading-7 rounded-full text-[13px] font-black ${cancelTurn(d, uid) ? "bg-[#B54708] text-white" : "bg-[#FFF4E5] text-[#B54708] border border-[#FEDF89]"}`}>{cancelTurn(d, uid) ? "취소 검토" : "취소 요청"}</span>
+            ? <span className={`shrink-0 w-[72px] text-center h-7 leading-7 rounded-full text-[13px] font-black ${cancelTurn(d, uid) ? "bg-[#B42318] text-white" : "bg-[#FEF3F2] text-[#B42318] border border-[#FECDCA]"}`}>{cancelTurn(d, uid) ? "취소 검토" : "취소 요청"}</span>
             : <span className={`shrink-0 w-[72px] text-center h-7 leading-7 rounded-full text-[13px] font-black ${d.status === "approved" ? "bg-[#0F1A30] text-white" : d.status === "pending" ? "bg-[#EEF3FB] text-[#1B2B4B]" : "border border-[#DCE3EE] text-[#5B6B85]"}`}>{STATUS[d.status]}</span>}
         </button>
       ))}
@@ -1448,7 +1468,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
           ))}
           {!isCat && page !== "lines" && (
             <div className="grid grid-cols-2 md:flex md:flex-col gap-1.5 w-full md:w-auto">
-              {APPROVAL_CATS.map((c) => <button key={c.key} type="button" onClick={() => { setPreset(null); setPage(c.key); }} className="h-8 px-3 rounded-lg bg-white text-[#0F1A30] text-[13px] font-black inline-flex items-center gap-1.5"><ShellIcon name={c.icon} size={13} />{c.label}</button>)}
+              {APPROVAL_CATS.map((c) => <button key={c.key} type="button" onClick={() => { confirmLeave().then((ok) => { if (ok) { setPreset(null); setPage(c.key); } }); }} className="h-8 px-3 rounded-lg bg-white text-[#0F1A30] text-[13px] font-black inline-flex items-center gap-1.5"><ShellIcon name={c.icon} size={13} />{c.label}</button>)}
             </div>
           )}
         </div>

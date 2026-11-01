@@ -2,6 +2,7 @@
 import { useMyProfile } from "../userNames";
 import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen } from "../customRoles";
 import { useReadOnlyGuard } from "../readOnlyGuard";
+import { confirmLeave } from "../leaveGuard";
 import { hideBlind, isBlindHidden, canSeeBlind, autoBlindNew } from "../blind";
 import { imeFocusRef } from "../imeFocus";
 import { checkHolidayDispatch, findRestConflict, confirmRestDispatch, restAckKey } from "../holidayConfirm";
@@ -7443,7 +7444,7 @@ const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh
           </button>
         ) : (
           onBack && (
-            <button onClick={onBack} className="kp-m-hbtn" aria-label="뒤로">
+            <button onClick={() => { confirmLeave().then((ok) => { if (ok) onBack?.(); }); }} className="kp-m-hbtn" aria-label="뒤로">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
             </button>
           )
@@ -8274,7 +8275,11 @@ function MenuSection({ title, en, children, dark, alwaysOpen = false }) {
   );
 }
 
-function MenuItem({ label, onClick, badge, dark, icon }) {
+// ✋ 작성 중인 문서가 있으면 이동 전에 저장할지 묻는다
+function MenuItem({ onClick, ...rest }) {
+  return <MenuItemBase {...rest} onClick={onClick ? () => { confirmLeave().then((ok) => { if (ok) onClick(); }); } : onClick} />;
+}
+function MenuItemBase({ label, onClick, badge, dark, icon }) {
   if (dark) {
     return (
       <button type="button" onClick={onClick}

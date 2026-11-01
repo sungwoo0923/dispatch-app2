@@ -6,6 +6,9 @@
 //  actions: [{ key, label, icon, onClick }] — 화면 전환 대신 팝업을 여는 버튼(예: 월 비교 분석)
 import React, { useState } from "react";
 import { ShellIcon } from "./AdminShell";
+import { confirmLeave } from "./leaveGuard";
+// ✋ 작성 중인 문서가 있으면 메뉴를 옮기기 전에 저장할지 묻는다(전자결재·증명서 등)
+const goSel = (fn, k, act) => { if (k === act) { fn?.(k); return; } confirmLeave().then((ok) => { if (ok) fn?.(k); }); };
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 
@@ -45,7 +48,7 @@ function PhoneSubNav({ code, title, icon, groups, actions, active, onSelect, chi
           {flat.map((it) => {
             const on = it.key === active;
             return (
-              <button key={it.key} type="button" data-on={on ? "1" : "0"} onClick={() => onSelect?.(it.key)}
+              <button key={it.key} type="button" data-on={on ? "1" : "0"} onClick={() => goSel(onSelect, it.key, active)}
                 className={`relative shrink-0 h-8 px-3 rounded-full text-[12.5px] font-black whitespace-nowrap flex items-center gap-1.5 transition ${on ? "bg-white text-[#0F1A30] shadow-[0_4px_12px_rgba(0,0,0,0.25)]" : "bg-white/[0.08] text-white/75 ring-1 ring-white/10"}`}>
                 <ShellIcon name={it.icon} size={13} className={on ? "text-[#2D4C82]" : "text-[#8FB0F0]"} />
                 {it.label}
@@ -132,17 +135,17 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
                   const inside = it.sub && (it.key === active || it.sub.some((x) => x.key === active));
                   const open = inside && !folded[it.key];
                   const clickParent = () => {
-                    if (!it.sub) { onSelect?.(it.key); return; }
+                    if (!it.sub) { goSel(onSelect, it.key, active); return; }
                     if (inside) { setFolded((f) => ({ ...f, [it.key]: !f[it.key] })); return; }
                     setFolded((f) => ({ ...f, [it.key]: false }));
-                    onSelect?.(it.sub[0].key);
+                    goSel(onSelect, it.sub[0].key, active);
                   };
                   return (
                     <React.Fragment key={it.key}>
                       <Btn it={it} on={it.key === active || (inside && collapsed) || (inside && !open)} caret={it.sub && !collapsed ? (open ? "up" : "down") : null} onClick={clickParent} />
                       {open && !collapsed && (
                         <div className="ml-4 pl-1 border-l border-white/10 space-y-0.5 py-0.5">
-                          {it.sub.map((x) => <Btn key={x.key} it={x} sub on={x.key === active} onClick={() => onSelect?.(x.key)} />)}
+                          {it.sub.map((x) => <Btn key={x.key} it={x} sub on={x.key === active} onClick={() => goSel(onSelect, x.key, active)} />)}
                         </div>
                       )}
                     </React.Fragment>
