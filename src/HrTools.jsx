@@ -467,14 +467,16 @@ export function CertIssuer({ company, isViewer = false }) {
     try {
       const canvas = await html2canvas(paperRef.current, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
       const image = await compressImage(canvas.toDataURL("image/jpeg", 0.92), 1600, 0.88);
-      if (!isViewer) await setDoc(doc(db, "userProfiles", u.id), { certLog: arrayUnion({ no, kind, purpose: purpose.trim(), date: today, by: auth.currentUser?.uid || "", mailed: mail && !u.noAccount }) }, { merge: true });
+      // ⭐ 2026-11-02 점검 — 발급 대장을 저장하면 발급번호가 다음 번호로 다시 계산되므로, 인쇄 캡처를 먼저 하고 저장한다(인쇄본·대장 번호 일치)
+      const issuedNo = no;
+      setBusy("인쇄 창 여는 중…");
+      await printA4(paperRef.current, `${kind === "career" ? "경력증명서" : "재직증명서"}_${nm(u)}`, win);
+      if (!isViewer) await setDoc(doc(db, "userProfiles", u.id), { certLog: arrayUnion({ no: issuedNo, kind, purpose: purpose.trim(), date: today, by: auth.currentUser?.uid || "", mailed: mail && !u.noAccount }) }, { merge: true });
       if (mail && !u.noAccount && u.employmentStatus !== "퇴사") {
         setBusy("사내메일 보내는 중…");
         const label = kind === "career" ? "경력증명서" : "재직증명서";
-        await sendInternalMail({ company, to: [{ uid: u.id, name: nm(u), team: u.team || "", position: u.position || "" }], subject: `[${label} 발급] ${nm(u)} · ${purpose.trim()}`, body: `${nm(u)}님, 요청하신 ${label}를 발급했습니다.\n\n· 발급번호: ${no}\n· 용도: ${purpose.trim()}\n· 발급일: ${today}\n\n첨부 이미지를 저장·인쇄해 제출하세요. 원본(직인) 인쇄본이 필요하면 인사관리부에 말씀해 주세요.`, images: [image], kind: "hr", fromName: "인사관리부" }).catch((e) => alert(`메일 발송 실패: ${e.message}`));
+        await sendInternalMail({ company, to: [{ uid: u.id, name: nm(u), team: u.team || "", position: u.position || "" }], subject: `[${label} 발급] ${nm(u)} · ${purpose.trim()}`, body: `${nm(u)}님, 요청하신 ${label}를 발급했습니다.\n\n· 발급번호: ${issuedNo}\n· 용도: ${purpose.trim()}\n· 발급일: ${today}\n\n첨부 이미지를 저장·인쇄해 제출하세요. 원본(직인) 인쇄본이 필요하면 인사관리부에 말씀해 주세요.`, images: [image], kind: "hr", fromName: "인사관리부" }).catch((e) => alert(`메일 발송 실패: ${e.message}`));
       }
-      setBusy("인쇄 창 여는 중…");
-      await printA4(paperRef.current, `${kind === "career" ? "경력증명서" : "재직증명서"}_${nm(u)}`, win);
       setPurpose(""); setDuty(""); draftStore.del(draftKey);
     } catch (e) {
       // ⭐ 2026-11-02 점검 — 발급 실패가 조용히 끝나던 문제: 미리 연 창을 닫고 이유를 안내

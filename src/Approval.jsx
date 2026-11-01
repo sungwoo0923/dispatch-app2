@@ -723,7 +723,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
   };
   const [missing, setMissing] = React.useState([]);
   const docName = String(form.title || form.label).replace(/\s+/g, "").replace(/·/g, "·");
-  const autoTitle = `${todayDots()} ${docName}_${me.name || ""}${me.position || ""}`;
+  const autoTitle = `${todayDots()} ${docName}_${me.name || ""}${me.position ? ` ${me.position}` : ""}`; // ⭐ 2026-11-02 이름·직책 사이 띄어쓰기
   const finalTitle = (title || autoTitle || form.label).trim();
 
   const submit = async () => {

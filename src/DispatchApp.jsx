@@ -7247,6 +7247,7 @@ useEffect(() => {
 
   const saveMyInfo = async () => {
     if (!user?.uid || myInfoSaving) return;
+    if (!String(myInfoNameDraft || "").trim()) { alert("이름을 입력해 주세요."); return; } // ⭐ 2026-11-02 빈 이름으로 저장되던 문제
     setMyInfoSaving(true);
     try {
       // ⭐ 2026-11-02 점검 — 연락처를 phone·전화번호 두 필드에 함께 저장(회원관리·인사관리는 phone을 읽음)
@@ -60305,7 +60306,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                       <div className="flex-1 grid grid-cols-3 gap-3">
                         {[
                           { k: "성명", v: selected.name || "-", big: true },
-                          { k: "생년월일", v: resume.birthDate || "-", edit: "birthDate", ph: "YYYY-MM-DD" },
+                          { k: "생년월일", v: resume.birthDate || "-", edit: "birthDate", ph: "YYYY-MM-DD", span: editMode ? 2 : 1 },
                           { k: "입사일", v: selected.hireDate || "미등록" },
                           { k: "연락처", v: selected.phone || "-" },
                           { k: "이메일", v: selected.email || "-", span: 2 },
