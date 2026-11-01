@@ -103,7 +103,8 @@ export default function PersonnelOrder({ company, target, myName, isSelf }) {
       ].filter(Boolean).join(" / ") || fv("type");
       const patch = {
         position: next.position, team: next.team,
-        personnelHistory: [...(target.personnelHistory || []), { date, type: fv("type"), detail }],
+        personnelHistory: [...(target.personnelHistory || []), { date, type: fv("type"), detail: `${detail}${target.pendingOrder?.docNo ? ` · 결재 ${target.pendingOrder.docNo}` : ""}` }],
+        ...(target.pendingOrder ? { pendingOrder: null } : {}), // 결재 완료 발령을 공문으로 게시했으면 비운다
       };
       const roleNext = next.role; // ⭐ 2026-10-31 임원도 권한 관리의 역할을 그대로(임원 화면 역할 추천)
       if (roleNext !== cur.role && !isSelf) patch.role = roleNext;
@@ -142,6 +143,21 @@ export default function PersonnelOrder({ company, target, myName, isSelf }) {
     <div className="grid gap-5" style={{ gridTemplateColumns: "minmax(260px, 320px) 1fr" }}>
       {/* 왼쪽 — 바꿀 값 */}
       <div className="space-y-4">
+        {/* 🗂 2026-11-01 전자결재 인사발령 품의가 최종 승인된 발령 — 불러와서 공문 게시 */}
+        {target.pendingOrder && (
+          <div className="rounded-2xl p-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
+            <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#D7BC82]">APPROVED · 결재 완료 발령</div>
+            <div className="text-[15px] font-black mt-0.5">{target.pendingOrder.kind} → {[target.pendingOrder.toTeam, target.pendingOrder.toPosition].filter(Boolean).join(" ")}</div>
+            <div className="text-[12.5px] text-white/60">발령일 {target.pendingOrder.date || "-"} · 결재 {target.pendingOrder.docNo || ""}</div>
+            <button type="button" onClick={() => {
+              const po = target.pendingOrder;
+              const team = TEAM_OPTIONS.includes(po.toTeam) ? po.toTeam : (po.toTeam || next.team);
+              setNext((p) => ({ ...p, team, position: po.toPosition || p.position, role: isSelf || p.role === "totalMaster" ? p.role : suggestR({ team, position: po.toPosition || p.position }) }));
+              if (po.date) setDate(po.date);
+              setDoc_((p) => ({ ...p, note: [po.reason, po.note].filter(Boolean).join(" / ") }));
+            }} className="mt-2.5 w-full h-10 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black">결재 내용 불러오기</button>
+          </div>
+        )}
         <div className="rounded-2xl border border-[#E3E8F0] bg-white p-5 space-y-4">
           <div>
             <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">APPOINTMENT</div>
