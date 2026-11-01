@@ -79,11 +79,13 @@ export function buildMailDoc({ company, to = [], cc = [], subject, body, images 
 }
 
 // 다른 화면(인사발령 등)에서 메일 보내기
-export async function sendInternalMail({ company, to, cc = [], subject, body, images = [], kind = "mail", fromName, important = false, status = "sent", scheduledAt = null, replaceId = null }) {
+// noticeKey — 같은 내용을 공지사항으로도 올렸을 때(인사발령·부고) 그 공지 알림 키. 메일 배너가 뜨면 공지 배너는 다시 안 뜬다
+export async function sendInternalMail({ company, to, cc = [], subject, body, images = [], kind = "mail", fromName, important = false, status = "sent", scheduledAt = null, replaceId = null, noticeKey = "" }) {
   const list = (to || []).filter((u) => u?.uid);
   if (!list.length) throw new Error("받는 사람이 없습니다.");
   const imgs = await fitImages(images);
   const data = buildMailDoc({ company, to: list, cc, subject, body, images: imgs, kind, fromName, important, status, scheduledAt });
+  if (noticeKey) data.noticeKey = String(noticeKey);
   // 임시보관·예약 메일을 고쳐 다시 저장하면 같은 문서를 고친다. 바로 보내면 새 문서로 보내고 원본은 지운다.
   if (replaceId && status !== "sent") { await updateDoc(doc(db, "internalMails", replaceId), data); return { id: replaceId }; }
   const ref = await addDoc(collection(db, "internalMails"), data);

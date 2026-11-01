@@ -3,7 +3,7 @@
 //  올리면 공지사항(분류 "부고")에 부고장 이미지와 함께 게시 → 공지 푸시가 나가고, 선택하면 전 직원 사내메일도.
 import React from "react";
 import html2canvas from "html2canvas";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { addDoc, collection, doc, increment, serverTimestamp, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { compressImage, sendInternalMail, useCompanyStaff } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
@@ -48,9 +48,11 @@ function ObituaryPaper({ f, company }) {
   );
 }
 
-export default function ObituaryWriter({ company, me = {}, onCancel, onSaved }) {
+// initial — 이미 올린 부고(공지 문서). 넘기면 그 내용을 불러와 고치고, 같은 공지가 수정된 내용으로 바뀐다(⭐ 2026-11-01)
+export default function ObituaryWriter({ company, me = {}, onCancel, onSaved, initial = null }) {
   const staff = useCompanyStaff(company) || [];
-  const [f, setF] = React.useState({ empUid: "", empName: "", team: "", position: "", rel: "부친", deceased: "", age: "", date: kstDay(), time: "", hall: "", room: "", address: "", hallTel: "", outDate: "", outTime: "", burial: "", chief: "", account: "", message: "삼가 고인의 명복을 빕니다.\n바쁘시더라도 따뜻한 위로 부탁드립니다." });
+  const editing = !!(initial?.id && initial?.obit);
+  const [f, setF] = React.useState(() => editing ? { ...initial.obit } : { empUid: "", empName: "", team: "", position: "", rel: "부친", deceased: "", age: "", date: kstDay(), time: "", hall: "", room: "", address: "", hallTel: "", outDate: "", outTime: "", burial: "", chief: "", account: "", message: "삼가 고인의 명복을 빕니다.\n바쁘시더라도 따뜻한 위로 부탁드립니다." });
   const [mail, setMail] = React.useState(true);
   const [busy, setBusy] = React.useState("");
   const paperRef = React.useRef(null);
@@ -75,17 +77,29 @@ export default function ObituaryWriter({ company, me = {}, onCancel, onSaved }) 
   const post = async () => {
     if (!f.deceased.trim()) return alert("고인 성함을 입력해 주세요.");
     if (!f.hall.trim()) return alert("빈소(장례식장)를 입력해 주세요.");
-    if (!window.confirm(`「${title}」 부고를 공지사항에 올릴까요?${mail ? "\n전 직원에게 사내메일도 보냅니다." : ""}`)) return;
+    if (!window.confirm(editing
+      ? `「${title}」 부고를 수정할까요?\n같은 공지사항이 고친 내용으로 바뀌고 "수정됨" 표시가 붙습니다.${mail ? "\n전 직원에게 [정정] 사내메일도 보냅니다." : ""}`
+      : `「${title}」 부고를 공지사항에 올릴까요?${mail ? "\n전 직원에게 사내메일도 보냅니다." : ""}`)) return;
     setBusy("부고장 만드는 중…");
     try {
       const canvas = await html2canvas(paperRef.current, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
       const image = await compressImage(canvas.toDataURL("image/jpeg", 0.92), 1400, 0.88);
       setBusy("공지사항에 올리는 중…");
-      await addDoc(collection(db, "notices"), { title, category: "부고", content: text(), audience: "internal", image, teams: [], pinned: false, author: me.name || "", authorUid: me.uid || "", createdAt: serverTimestamp(), companyName: company });
+      let noticeKey = "";
+      if (editing) {
+        await updateDoc(doc(db, "notices", initial.id), {
+          title, content: `※ ${new Date().toLocaleDateString("ko-KR")} 내용이 수정되었습니다. 빈소·발인 등을 다시 확인해 주세요.\n\n${text()}`, image, obit: f,
+          revisedAt: serverTimestamp(), revisedBy: me.name || "", readBy: [], editVer: increment(1),
+        });
+        noticeKey = `notice_${initial.id}_v${(initial.editVer || 0) + 1}`;
+      } else {
+        const r = await addDoc(collection(db, "notices"), { title, category: "부고", content: text(), audience: "internal", image, obit: f, teams: [], pinned: false, author: me.name || "", authorUid: me.uid || "", createdAt: serverTimestamp(), companyName: company });
+        noticeKey = `notice_${r.id}`;
+      }
       if (mail) {
         setBusy("사내메일 보내는 중…");
         const to = staff.filter((u) => u.uid !== me.uid);
-        if (to.length) await sendInternalMail({ company, to, subject: title, body: text(), images: [image], kind: "notice", fromName: me.name || "" }).catch(() => {});
+        if (to.length) await sendInternalMail({ company, to, subject: editing ? `[정정] ${title}` : title, body: editing ? `앞서 안내한 부고 내용이 아래와 같이 수정되었습니다.\n\n${text()}` : text(), images: [image], kind: "notice", fromName: me.name || "", noticeKey }).catch(() => {});
       }
       onSaved?.();
     } finally { setBusy(""); }
@@ -95,11 +109,11 @@ export default function ObituaryWriter({ company, me = {}, onCancel, onSaved }) 
       <div className="rounded-[22px] px-6 py-5 text-white flex items-center gap-4 flex-wrap" style={{ background: "linear-gradient(120deg,#111,#2A2A2A 60%,#3A3A3A)" }}>
         <div className="flex-1 min-w-[220px]">
           <div className="text-[11px] font-extrabold tracking-[0.3em] text-white/50" style={{ fontFamily: MONO }}>NOTICE · OBITUARY</div>
-          <div className="text-[22px] font-black mt-0.5">부고 알림</div>
+          <div className="text-[22px] font-black mt-0.5">{editing ? "부고 수정" : "부고 알림"}</div>
           <div className="text-[13px] text-white/60">왼쪽에 입력하면 오른쪽 부고장에 바로 반영됩니다 · 올리면 공지사항에 게시되고 알림이 갑니다</div>
         </div>
         <button type="button" onClick={onCancel} className="h-11 px-5 rounded-xl bg-white/10 border border-white/20 text-[14px] font-black">취소</button>
-        <button type="button" disabled={!!busy} onClick={post} className="h-11 px-6 rounded-xl bg-white text-[#111] text-[14px] font-black disabled:opacity-50">{busy || "부고 올리기"}</button>
+        <button type="button" disabled={!!busy} onClick={post} className="h-11 px-6 rounded-xl bg-white text-[#111] text-[14px] font-black disabled:opacity-50">{busy || (editing ? "수정 내용 올리기" : "부고 올리기")}</button>
       </div>
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,520px)_minmax(0,1fr)] gap-4 items-start">
         <div className="space-y-3">
