@@ -284,6 +284,10 @@ export default function App() {
       setMfaNag(true);
     } catch { /* 무시 */ }
   }, [user, role, masterPcPhone, isPcDevice]);
+  // ⭐ 2026-11-02 화면 점검 — 중복 로그인 선택창이 떠 있는 동안 튜토리얼(Onboarding)이 자동으로 열리지 않도록 알려준다
+  useEffect(() => {
+    try { window.__kpSessionConflict = !!sessionConflict; window.dispatchEvent(new CustomEvent("kp:sessionConflict", { detail: !!sessionConflict })); } catch { /* 무시 */ }
+  }, [sessionConflict]);
   const cancelSessionConflict = () => {
     setSessionConflict(null);
     signOut(auth).catch(() => {});
@@ -784,8 +788,9 @@ export default function App() {
       <VersionCheck />
 
       {/* ⭐ 중복 로그인 선택창 */}
+      {/* ⭐ 2026-11-02 화면 점검 — 튜토리얼(z 100060)·로딩 화면(z 2147483000)보다 위에 보이도록 최상위 z-index */}
       {sessionConflict && (
-        <div className="fixed inset-0 z-[100000] bg-black/55 flex items-center justify-center p-5">
+        <div className="fixed inset-0 z-[2147483647] bg-black/55 flex items-center justify-center p-5">
           <div className="w-full max-w-[400px] bg-white rounded-2xl shadow-2xl overflow-hidden">
             <div className="bg-[#1B2B4B] px-6 py-4 text-white">
               <div className="text-[17px] font-black">이미 로그인된 {KIND_LABEL[sessionConflict.kind]}가 있습니다</div>

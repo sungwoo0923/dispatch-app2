@@ -321,6 +321,13 @@ export default function OnboardingHost({ role, realRole, userCompany, dept = nul
   const [settings, setSettings] = React.useState(null);
   const [view, setView] = React.useState(null); // "tour" | "wizard" | "done" | null
   const autoShown = React.useRef(false);
+  // ⭐ 2026-11-02 화면 점검 — 중복 로그인 선택창(App.jsx)이 떠 있는 동안에는 튜토리얼을 열지 않는다
+  const [sessionPending, setSessionPending] = React.useState(() => { try { return !!window.__kpSessionConflict; } catch { return false; } });
+  React.useEffect(() => {
+    const h = (e) => setSessionPending(!!e.detail);
+    window.addEventListener("kp:sessionConflict", h);
+    return () => window.removeEventListener("kp:sessionConflict", h);
+  }, []);
 
   React.useEffect(() => {
     if (!company) return undefined;
@@ -334,7 +341,7 @@ export default function OnboardingHost({ role, realRole, userCompany, dept = nul
   const wizardPending = !!ob && !!wizardTeam && (wizardTeam === "dispatch" ? (ob.pending && !ob.done) : newCompany && (wizardTeam === "acct" ? !ob.acctDone : !ob.hrDone));
 
   React.useEffect(() => {
-    if (!settings || autoShown.current || isTM || !myDoc) return;
+    if (!settings || autoShown.current || isTM || !myDoc || sessionPending) return; // ⭐ 2026-11-02 화면 점검 — 선택창 대기 중엔 보류
     let snoozed = false; try { snoozed = sessionStorage.getItem(SNOOZE) === `${company}|${uid}`; } catch { /* 무시 */ }
     if (snoozed) return;
     const created = myDoc.createdAt?.toMillis ? myDoc.createdAt.toMillis() : (myDoc.createdAt?.seconds ? myDoc.createdAt.seconds * 1000 : 0);
@@ -342,7 +349,7 @@ export default function OnboardingHost({ role, realRole, userCompany, dept = nul
     const needTour = !myDoc.tutorialDone && (isNew || wizardPending);
     if (needTour) { autoShown.current = true; setView("tour"); return; }
     if (wizardPending) { autoShown.current = true; setView("wizard"); }
-  }, [settings, isTM, company, uid, myDoc, wizardPending]);
+  }, [settings, isTM, company, uid, myDoc, wizardPending, sessionPending]);
 
   React.useEffect(() => {
     const t = () => setView("tour"); const w = () => setView(wizardTeam ? "wizard" : "tour");
@@ -350,7 +357,7 @@ export default function OnboardingHost({ role, realRole, userCompany, dept = nul
     return () => { window.removeEventListener("kp:tutorialOpen", t); window.removeEventListener("kp:setupWizardOpen", w); };
   }, [wizardTeam]);
 
-  if (!view) return null;
+  if (!view || sessionPending) return null; // ⭐ 2026-11-02 화면 점검 — 선택창 대기 중엔 튜토리얼을 잠시 숨긴다
   const markTour = () => { if (uid && !myDoc?.tutorialDone) setDoc(doc(db, "users", uid), { tutorialDone: true, tutorialDoneAt: serverTimestamp() }, { merge: true }).catch(() => {}); };
   const snooze = () => { try { sessionStorage.setItem(SNOOZE, `${company}|${uid}`); } catch { /* 무시 */ } setView(null); };
   const afterTour = () => { markTour(); setView(wizardPending ? "wizard" : null); };

@@ -7637,6 +7637,26 @@ const closeAlert = () => {
   if (cb) setTimeout(cb, 50);
 };
 const [loginMgrOpen, setLoginMgrOpen] = React.useState(false); // ★ 로그인 관리 창
+// ⭐ 2026-11-02 화면 점검 — 상단 메뉴가 화면보다 길면 좌우 흐림 + ‹ › 버튼으로 "더 있음"을 알린다(넘칠 때만 보임)
+const [navOverflow, setNavOverflow] = React.useState({ l: false, r: false });
+const navScrollRef = React.useRef(null);
+const updateNavOverflow = React.useCallback(() => {
+  const el = navScrollRef.current; if (!el) return;
+  const l = el.scrollLeft > 2;
+  const r = el.scrollLeft + el.clientWidth < el.scrollWidth - 2;
+  setNavOverflow((p) => (p.l === l && p.r === r ? p : { l, r }));
+}, []);
+const navScrollRefCb = React.useCallback((el) => {
+  if (navScrollRef.current && navScrollRef.current._kpNavCleanup) navScrollRef.current._kpNavCleanup();
+  navScrollRef.current = el;
+  if (!el) return;
+  let ro = null;
+  if (typeof ResizeObserver !== "undefined") { ro = new ResizeObserver(() => updateNavOverflow()); ro.observe(el); if (el.firstElementChild) ro.observe(el.firstElementChild); }
+  window.addEventListener("resize", updateNavOverflow);
+  el._kpNavCleanup = () => { if (ro) ro.disconnect(); window.removeEventListener("resize", updateNavOverflow); };
+  updateNavOverflow();
+}, [updateNavOverflow]);
+const scrollNavBy = (dir) => { const el = navScrollRef.current; if (el) el.scrollBy({ left: dir * Math.max(160, el.clientWidth * 0.6), behavior: "smooth" }); };
 // 매출관리 비밀번호 게이트
 const [revenueUnlocked, setRevenueUnlocked] = React.useState(false);
 const [revenuePassInput, setRevenuePassInput] = React.useState("");
@@ -7942,7 +7962,11 @@ return (
 
           {/* 중앙 메뉴 */}
                      {/* ★ 태블릿/PC 공용 메뉴 — 전체 가로 스크롤 보장 */}
+          {/* ⭐ 2026-11-02 화면 점검 — 메뉴가 넘치면 좌우 흐림 + ‹ › 버튼 표시(감싸는 relative 상자) */}
+          <div className="relative flex-1 min-w-0 flex items-center">
           <nav
+            ref={navScrollRefCb}
+            onScroll={updateNavOverflow}
             /* ⭐ 가운데 정렬은 justify-center 대신 양끝 auto 여백으로 — justify-center는 화면이 좁으면 맨 앞(HOME)·맨 뒤 메뉴가 잘리고 스크롤로도 안 보였다 */
             className="flex-1 flex items-center overflow-x-auto [&>*:first-child]:ml-auto [&>*:last-child]:mr-auto"
             /* 노트북처럼 메뉴가 다 안 들어가는 화면 — 마우스 휠을 굴리면 메뉴가 옆으로 넘어간다 */
@@ -8003,7 +8027,7 @@ return (
                   disabled={isBlocked}
                   onClick={() => handleMenuClick(m)}
                   data-on={isActive ? "1" : "0"}
-                  className={`kp-nav-btn relative inline-flex items-center gap-1.5 ${deptMode && DEPT_MENUS[deptMode].length <= 8 ? "px-3" : "px-[7px]"} h-[34px] rounded-[10px] text-[13.5px] min-[2050px]:text-[14px] min-[2050px]:px-3 whitespace-nowrap transition-all flex-shrink-0
+                  className={`kp-nav-btn relative inline-flex items-center gap-1.5 ${deptMode && DEPT_MENUS[deptMode].length <= 8 ? "px-3" : "px-[6px] min-[1700px]:px-[7px]" /* ⭐ 2026-11-02 화면 점검 — 1700 미만은 조금 촘촘하게 */} h-[34px] rounded-[10px] text-[13px] min-[1700px]:text-[13.5px] min-[2050px]:text-[14px] min-[2050px]:px-3 whitespace-nowrap transition-all flex-shrink-0
                     ${isBlocked
                       ? "text-white/20 cursor-not-allowed"
                       : isActive
@@ -8022,6 +8046,18 @@ return (
             })}
             </div>
           </nav>
+          {/* ⭐ 2026-11-02 화면 점검 — 넘칠 때만 보이는 좌우 흐림·스크롤 버튼 */}
+          {navOverflow.l && (<>
+            <div className="pointer-events-none absolute left-0 inset-y-0 w-12 bg-gradient-to-r from-[#14203A] via-[#14203A]/80 to-transparent" />
+            <button type="button" aria-label="이전 메뉴" title="이전 메뉴" onClick={() => scrollNavBy(-1)}
+              className="absolute left-0.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full grid place-items-center bg-white/15 hover:bg-white/30 ring-1 ring-white/25 text-white text-[15px] font-black leading-none shadow">‹</button>
+          </>)}
+          {navOverflow.r && (<>
+            <div className="pointer-events-none absolute right-0 inset-y-0 w-12 bg-gradient-to-l from-[#14203A] via-[#14203A]/80 to-transparent" />
+            <button type="button" aria-label="다음 메뉴" title="다음 메뉴" onClick={() => scrollNavBy(1)}
+              className="absolute right-0.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full grid place-items-center bg-white/15 hover:bg-white/30 ring-1 ring-white/25 text-white text-[15px] font-black leading-none shadow">›</button>
+          </>)}
+          </div>
 
 
           {/* 우측 유저 영역 */}
@@ -15027,9 +15063,10 @@ title="상차지 ↔ 하차지 교체"
     if (e.key === "ArrowLeft" && atStart) { e.preventDefault(); arrowHopFocus(el, -1); }
     else if (e.key === "ArrowRight" && atEnd) { e.preventDefault(); arrowHopFocus(el, 1); }
   }}
+/* ⭐ 2026-11-02 화면 점검 — 1280 노트북에서 8칸이 너무 좁아 버튼·라벨이 깨졌다 → 1280~1499는 6칸, 그보다 좁으면 4칸, 1500 이상은 기존 8칸 그대로 */
 className="
 kp-order-form
-grid grid-cols-8 gap-x-3.5 gap-y-4
+grid grid-cols-4 xl:grid-cols-6 min-[1500px]:grid-cols-8 gap-x-3.5 gap-y-4
 bg-white
 border border-[#E3E8F0]
 rounded-[24px]
@@ -15040,7 +15077,7 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
 >
   
   {/* ================== 오더 정보 (카드 최상단 네이비 헤더) ================== */}
-<div className="col-span-8 -mx-6 -mt-0 mb-2">
+<div className="col-span-full -mx-6 -mt-0 mb-2">{/* ⭐ 2026-11-02 화면 점검 — 칸 수가 바뀌어도 한 줄 전체 */}
   <div className="relative px-6 py-3.5 flex items-center justify-between overflow-hidden" style={{ background: "linear-gradient(120deg,#0B1428 0%,#0F1A30 40%,#1B2B4B 75%,#2D4C82 100%)" }}>
     <span className="absolute inset-0 opacity-[0.08] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
     <span className="relative flex items-baseline gap-2.5">
@@ -15920,7 +15957,7 @@ const similar = placeList.filter(p => {
 {/* 상차지주소 */}
 <div>
   <div className="flex items-center h-[22px] overflow-visible justify-between mb-1">
-    <label className={`${labelCls} mb-0`}>
+    <label className={`${labelCls} mb-0 min-w-0 overflow-hidden`} /* ⭐ 2026-11-02 화면 점검 — 좁아지면 라벨이 버튼을 덮지 않게 */>
       <EditableText id="orderForm.label.상차지주소" defaultText="상차지주소" /> <AutoBadge show={autoPickMatched} />
     </label>
 
@@ -15940,7 +15977,7 @@ const arr = (form.경유상차목록 || []).map(s => cleanStopCargo({ ...s, 상�
   setStopPopupOpen(true);
 }}
 className={`
-  text-[11px] font-bold px-2 py-0.5 rounded-lg border transition
+  text-[11px] font-bold px-2 py-0.5 rounded-lg border transition whitespace-nowrap shrink-0
   ${hasPickupStops
     ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
     : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
@@ -16097,7 +16134,7 @@ className={`
 
   <div className="flex items-center h-[22px] overflow-visible justify-between mb-1">
 
-    <label className={`${labelCls} mb-0`}>
+    <label className={`${labelCls} mb-0 min-w-0 overflow-hidden`} /* ⭐ 2026-11-02 화면 점검 — 좁아지면 라벨이 버튼을 덮지 않게 */>
       <EditableText id="orderForm.label.하차지주소" defaultText="하차지주소" /> <AutoBadge show={autoDropMatched} />
     </label>
 
@@ -16119,7 +16156,7 @@ className={`
   setStopPopupOpen(true);
 }}
 className={`
-  text-[11px] font-bold px-2 py-0.5 rounded-lg border transition
+  text-[11px] font-bold px-2 py-0.5 rounded-lg border transition whitespace-nowrap shrink-0
   ${hasDropStops
     ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
     : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
@@ -16180,7 +16217,8 @@ className={`
 </div>
 
 <div className="relative">
-  <label className={labelCls + " flex items-center gap-1 flex-wrap"}>
+  {/* ⭐ 2026-11-02 화면 점검 — 칩이 줄바꿈되면 아래 입력칸을 덮지 않게 라벨 높이를 늘린다 */}
+  <label className={labelCls + " flex items-center gap-1 flex-wrap !h-auto min-h-[22px]"}>
     <EditableText id="orderForm.label.화물내용" defaultText="화물내용" /> {reqStar}
     <button type="button"
       tabIndex={-1}
@@ -16276,7 +16314,7 @@ className={`
   className="flex items-center h-[22px] overflow-visible justify-between mb-1"
   onClick={(e) => e.stopPropagation()}
 >
-  <label className={`${labelCls} mb-0`}>
+  <label className={`${labelCls} mb-0 min-w-0 overflow-hidden`} /* ⭐ 2026-11-02 화면 점검 — 좁아지면 라벨이 버튼을 덮지 않게 */>
     <EditableText id="orderForm.label.차량종류" defaultText="차량종류" />
   </label>
 
@@ -16289,7 +16327,7 @@ className={`
       setVehicleSpecTab("vehicle");
       setVehicleSpecOpen(true);
     }}
-   className="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white transition"
+   className="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white transition whitespace-nowrap shrink-0" /* ⭐ 2026-11-02 화면 점검 — 한 글자씩 줄바꿈 방지 */
   >
     차량·파렛
   </button>
@@ -17356,7 +17394,7 @@ className={`
 {/* =============================== 
     ✎ 메모 / ◆ 전달사항 (네이비 통일 + 세로 textarea)
    =============================== */}
-<div className="col-span-8 grid grid-cols-2 gap-6 items-start">
+<div className="col-span-full grid grid-cols-2 gap-6 items-start">{/* ⭐ 2026-11-02 화면 점검 — col-span-full */}
 
   {/* ── 메모 ── */}
   <div>
@@ -17657,7 +17695,7 @@ className={`
   );
 })()}
     {/* 버튼 */}
-  <div className="col-span-8 flex justify-end gap-3 mt-4 pt-4 border-t border-gray-200">
+  <div className="col-span-full flex justify-end gap-3 mt-4 pt-4 border-t border-gray-200">{/* ⭐ 2026-11-02 화면 점검 — col-span-full */}
     <button
       type="submit"
       className="
@@ -60213,7 +60251,8 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                       </select>
                     ) : <span>{selected.team || "미배정"}</span>}
                   </div>
-                  <div className="mt-4 grid grid-cols-4 gap-2 max-w-[640px]">
+                  {/* ⭐ 2026-11-02 화면 점검 — 모바일 390px에서 4칸이면 글자가 세로로 깨져 2칸 → sm 이상 4칸 */}
+                  <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2 max-w-[640px]">
                     {[
                       { k: "입사일", v: selected.hireDate || "미등록" },
                       { k: "근속", v: selected.tenureLabel || "-" },
@@ -60221,8 +60260,8 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                       { k: "이달 출근", v: `${selected.workDays || 0}일` },
                     ].map(({ k, v }) => (
                       <div key={k} className="px-3 py-2 rounded-xl bg-white/[0.08] border border-white/10 min-w-0">
-                        <div className="text-[10.5px] font-bold text-white/55">{k}</div>
-                        <div className="text-[14px] font-black truncate">{v}</div>
+                        <div className="text-[10.5px] font-bold text-white/55 whitespace-nowrap break-keep truncate">{k}</div>
+                        <div className="text-[14px] font-black truncate whitespace-nowrap">{v}</div>
                       </div>
                     ))}
                   </div>
