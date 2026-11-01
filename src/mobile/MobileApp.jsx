@@ -10,7 +10,6 @@ import html2canvas from "html2canvas";
 import { LoginManagerModal } from "../LoginManager";
 import { useCompanyInfo } from "../RateCard";
 import MobileFleetView from "./MobileFleetView";
-import MobileEasyMode from "./MobileEasyMode";
 import MobileAttendanceBoard from "./MobileAttendanceBoard";
 import MobileIntelView from "./MobileIntelView";
 import InternalMessenger from "../InternalMessenger";
@@ -96,6 +95,7 @@ import { isWeekend, findApprovedLeaveForDate, isHoliday } from "../attendanceUti
 import MonthCompareAnalysis from "../MonthCompareAnalysis";
 import { MailHeaderButton } from "../InternalMail";
 import BannerCenter from "../BannerCenter";
+import OrderCongratsPopup from "../OrderCongratsPopup";
 import OrderScanModal, { scanDropDate } from "../OrderScanModal";
 
 
@@ -1941,11 +1941,10 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const readyStage4 = useDelayedFlag(secondaryReady, 3600);
   const readyStage5 = useDelayedFlag(secondaryReady, 4800);
   // ⭐ 글자 크기 설정(기본/크게/더 크게) — 아래 zoom 리셋 로직에서 함께 적용되어야
-  // 화면 전체(글자+버튼+아이콘)가 실제로 커진다. 쉬운모드는 자체 화면(MobileEasyMode)이
-  // 이미 큰 글씨/큰 버튼으로 설계되어 있으므로, 여기서 별도로 확대하지 않는다
-  // (쉬운모드 안의 글자크기 조정은 MobileEasyMode 자체 배율로 처리한다).
+  // 화면 전체(글자+버튼+아이콘)가 실제로 커진다.
   const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("fontScale") || "1"));
-  const [easyMode, setEasyMode] = useState(() => localStorage.getItem("easyMode") === "1");
+  // 쉬운모드는 2026-11-01 없앰 — 예전에 켜 둔 기기도 일반 화면으로
+  React.useEffect(() => { try { localStorage.removeItem("easyMode"); } catch { /* 무시 */ } }, []);
   const effectiveScale = fontScale;
 
   // ★ 배차확정자(=이 계정으로 배차완료 처리한 사람) 표시용 실명 — PC(DispatchApp)의
@@ -5122,291 +5121,6 @@ const deleteSingleOrder = async (order) => {
   };
 
 
-  // --------------------------------------------------
-  // 🟢 쉬운모드(easyMode) 전용 핸들러
-  // 기존 "🔹 신규 등록"(handleSave) / handleSaveDriverToOrder 와 동일한 Firestore
-  // 저장 시퀀스를 그대로 재현한다 (로직 이원화 방지를 위해 필드만 단순화).
-  // --------------------------------------------------
-  const easyModeSubmitRegister = async (simple) => {
-    if (role === "viewer") {
-      return { ok: false, error: "조회전용 권한으로는 등록할 수 없습니다." };
-    }
-    if (!simple?.상차지명 || !simple?.하차지명) {
-      return { ok: false, error: "상차지 / 하차지는 필수입니다." };
-    }
-    if (String(simple.차량번호 || "").trim()
-      && !(await checkHolidayDispatch(drivers, simple.차량번호, simple.상차일 || todayKST()))) {
-      return { ok: false, error: "휴차일 배차를 취소했습니다." };
-    }
-
-    const 청구운임 = toNumber(simple.청구운임);
-    const 기사운임 = toNumber(simple.기사운임);
-    const 수수료 = 청구운임 - 기사운임;
-    const today = todayKST();
-    const 상차일 = simple.상차일 || today;
-    const 하차일 = simple.하차일 || 상차일;
-    // 🚫 하차일이 상차일보다 빠른 역순 등록 방지
-    if (isReversedDateOrder(상차일, 하차일)) {
-      return { ok: false, error: REVERSED_DATE_ORDER_MSG };
-    }
-
-    const docData = {
-      거래처명: simple.거래처명 || "",
-      상차지명: simple.상차지명,
-      상차지주소: simple.상차지주소 || "",
-      상차지담당자: simple.상차지담당자 || "",
-      상차지담당자번호: simple.상차지담당자번호 || "",
-      하차지명: simple.하차지명,
-      하차지주소: simple.하차지주소 || "",
-      하차지담당자: simple.하차지담당자 || "",
-      하차지담당자번호: simple.하차지담당자번호 || "",
-      화물내용: simple.화물내용 || "",
-      차량종류: simple.차량종류 || "",
-      차량톤수: toTonUnit(simple.톤수) || "",
-      상차방법: simple.상차방법 || "",
-      하차방법: simple.하차방법 || "",
-      상차일,
-      상차시간: simple.상차시간 || "",
-      상차시간기준: simple.상차시간기준 || null,
-      하차일,
-      하차시간: simple.하차시간 || "",
-      하차시간기준: simple.하차시간기준 || null,
-      지급방식: simple.지급방식 || "",
-      배차방식: simple.배차방식 || "",
-      혼적여부: "독차",
-      혼적: false,
-      적요: "",
-      메모: "",
-      전달사항: "",
-      전달사항고정: false,
-
-      // ⭐ PC(addDispatch)는 항상 companyName을 명시적으로 써넣는데 모바일 등록은
-      // 이 필드 자체가 아예 빠져있었다 — 구글시트 백필/실시간 동기화가
-      // Firestore where("companyName","==","돌캐")로 정확히 매칭하는데,
-      // 이 필드가 없는 문서는 통째로 걸러져 모바일로 등록한 오더가 전부 빠졌음.
-      companyName: userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || DEFAULT_COMPANY,
-
-      차량번호: "",
-      기사명: "",
-      전화번호: "",
-      이름: "",
-      전화: "",
-
-      청구운임,
-      기사운임,
-      수수료,
-
-      배차상태: "배차중",
-      상태: "배차중",
-
-      경유상차목록: [],
-      경유지_상차: [],
-      경유하차목록: [],
-      경유지_하차: [],
-
-      updatedAt: serverTimestamp(),
-      _lastModified: Date.now(),
-    };
-
-    try {
-      // ⭐ 일반모드 handleSave와 동일한 이유로 — addDoc+updateDoc(ID 확정) 2회
-      // 왕복과 syncPlaceFromOrder까지 기다린 뒤에야 결과를 돌려줘서 쉬운모드
-      // 등록도 느리게 느껴졌다. ID를 미리 만들어 setDoc 한 번으로 끝내고,
-      // 나머지는 백그라운드로 돌린다.
-      const newId = crypto.randomUUID();
-      const finalData = {
-        ...docData,
-        _id: newId,
-        id: newId,
-        등록일: today,
-        createdAt: serverTimestamp(),
-        등록기기: "모바일",
-        작성자: auth.currentUser?.email || "",
-        등록자명: dispatcherName || "",
-        ...(autoBlindNew() ? { 블라인드: true } : {}), // ★ 블라인드 모드 → 새 오더 자동 블라인드
-      };
-      const writePromise = setDoc(doc(db, collName, newId), finalData);
-
-      syncPlaceFromOrder(docData).catch(() => {});
-
-      // ★ 연동 승인된 화주사 거래처명이면 즉시 화주사 화면에 자동전송 (일반모드와 동일)
-      (async () => {
-        let matchedShipper = approvedShippers.find(
-          (a) => normalizeCompanyKey(a.companyName) === normalizeCompanyKey(docData.거래처명)
-        );
-        if (!matchedShipper) {
-          const myCompanyName = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
-          matchedShipper = await findApprovedShipperLiveMobile(myCompanyName, docData.거래처명);
-        }
-        if (matchedShipper) {
-          autoTransmitToShipperMobile({ ...docData, _id: newId, __col: collName }, matchedShipper).catch((e) =>
-            console.error("자동 화주사 전송 실패:", e)
-          );
-        }
-      })().catch(() => {});
-
-      writePromise.catch((e) => {
-        console.error("오더 등록 실패(백그라운드):", e);
-        alert("오더 등록 중 오류가 발생했습니다. 목록에서 저장 여부를 확인해주세요.\n" + (e?.message || ""));
-      });
-
-      showSuccess("등록 완료");
-      return { ok: true };
-    } catch (e) {
-      console.error(e);
-      return { ok: false, error: e?.message || "등록 실패" };
-    }
-  };
-
-  const easyModeAssignVehicle = async (order, { 차량번호, 기사명, 전화번호, 청구운임, 기사운임 }) => {
-    if (role === "viewer") {
-      return { ok: false, error: "조회전용 권한으로는 배차할 수 없습니다." };
-    }
-    if (!order) return { ok: false, error: "오더 정보가 없습니다." };
-    if (!String(차량번호 || "").trim()) {
-      return { ok: false, error: "차량번호를 입력해주세요." };
-    }
-    if (!(await checkHolidayDispatch(drivers, 차량번호, order.상차일 || todayKST()))) {
-      return { ok: false, error: "휴차일 배차를 취소했습니다." };
-    }
-    try {
-      const colName = order.__col || collName;
-      const docId = order._id || order.id;
-
-      // ⭐ 배차완료 화면에서 운임도 함께 입력할 수 있게 됨 — 값을 입력했을 때만
-      // 반영하고, 비워두면(기존 등록 시 이미 입력했을 수 있으니) 기존 값을 덮어쓰지 않는다.
-      const 청구 = toNumber(청구운임);
-      const 기사 = toNumber(기사운임);
-      const farePatch = {};
-      if (String(청구운임 || "").trim()) { farePatch.청구운임 = 청구; farePatch.수수료 = 청구 - 기사; }
-      if (String(기사운임 || "").trim()) { farePatch.기사운임 = 기사; farePatch.수수료 = (farePatch.청구운임 ?? Number(order.청구운임) ?? 0) - 기사; }
-
-      // ⭐ 이 updateDoc과 아래 upsertDriver를 순차로 기다린 뒤에야 결과를 돌려줘서
-      // 쉬운모드 "배차완료"도 느리게 느껴졌다 — 실제 저장은 백그라운드로 돌린다.
-      const writePromise = updateDoc(doc(db, colName, docId), {
-        차량번호,
-        기사명: 기사명 || "",
-        이름: 기사명 || "",
-        전화번호: 전화번호 || "",
-        전화: 전화번호 || "",
-        ...farePatch,
-        배차상태: "배차완료",
-        상태: "배차완료",
-        배차완료일시: serverTimestamp(),
-        배차확정일시: serverTimestamp(),
-        배차확정자: dispatcherName,
-        updatedAt: serverTimestamp(),
-        _lastModified: Date.now(),
-      });
-      writePromise.catch((e) => {
-        console.error("배차 저장 실패(백그라운드):", e);
-        alert("배차 저장 중 오류가 발생했습니다. 다시 시도해주세요.\n" + (e?.message || ""));
-      });
-
-      // 신규 기사면 기사관리에 등록 (일반모드 handleSaveDriverToOrder와 동일)
-      const nd = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
-      const existingDriver = drivers.find((d) => nd(d.차량번호) === nd(차량번호));
-      if (!existingDriver) {
-        upsertDriver({ 차량번호, 이름: 기사명 || "", 전화번호: 전화번호 || "" }).catch(() => {});
-      }
-
-      showSuccess("배차 완료");
-      return { ok: true };
-    } catch (e) {
-      console.error("배차 저장 오류:", e);
-      return { ok: false, error: e?.message || "배차 저장 실패" };
-    }
-  };
-
-  // ⭐ 쉬운모드 "배차 수정" — 배차상태/차량번호(기사배정)는 건드리지 않고
-  // 오더 내용(상/하차지, 일시, 화물, 운임 등)만 patch한다.
-  const easyModeUpdateOrder = async (order, simple) => {
-    if (role === "viewer") {
-      return { ok: false, error: "조회전용 권한으로는 수정할 수 없습니다." };
-    }
-    if (!order) return { ok: false, error: "오더 정보가 없습니다." };
-    if (!simple?.상차지명 || !simple?.하차지명) {
-      return { ok: false, error: "상차지 / 하차지는 필수입니다." };
-    }
-    const 상차일 = simple.상차일 || todayKST();
-    const 하차일 = simple.하차일 || 상차일;
-    if (isReversedDateOrder(상차일, 하차일)) {
-      return { ok: false, error: REVERSED_DATE_ORDER_MSG };
-    }
-    const 청구운임 = toNumber(simple.청구운임);
-    const 기사운임 = toNumber(simple.기사운임);
-    try {
-      const colName = order.__col || collName;
-      const docId = order._id || order.id;
-      // ⭐ 이 updateDoc과 아래 syncPlaceFromOrder를 순차로 기다린 뒤에야 결과를
-      // 돌려줘서 쉬운모드 "수정하기"도 느리게 느껴졌다 — 실제 저장은
-      // 백그라운드로 돌린다.
-      const writePromise = updateDoc(doc(db, colName, docId), {
-        거래처명: simple.거래처명 || "",
-        상차지명: simple.상차지명,
-        상차지주소: simple.상차지주소 || "",
-        상차지담당자: simple.상차지담당자 || "",
-        상차지담당자번호: simple.상차지담당자번호 || "",
-        하차지명: simple.하차지명,
-        하차지주소: simple.하차지주소 || "",
-        하차지담당자: simple.하차지담당자 || "",
-        하차지담당자번호: simple.하차지담당자번호 || "",
-        화물내용: simple.화물내용 || "",
-        차량종류: simple.차량종류 || "",
-        차량톤수: toTonUnit(simple.톤수) || "",
-        상차방법: simple.상차방법 || "",
-        하차방법: simple.하차방법 || "",
-        상차일,
-        상차시간: simple.상차시간 || "",
-        상차시간기준: simple.상차시간기준 || null,
-        하차일,
-        하차시간: simple.하차시간 || "",
-        하차시간기준: simple.하차시간기준 || null,
-        지급방식: simple.지급방식 || "",
-        배차방식: simple.배차방식 || "",
-        청구운임,
-        기사운임,
-        수수료: 청구운임 - 기사운임,
-        updatedAt: serverTimestamp(),
-        _lastModified: Date.now(),
-      });
-      writePromise.catch((e) => {
-        console.error("오더 수정 실패(백그라운드):", e);
-        alert("수정 중 오류가 발생했습니다. 다시 시도해주세요.\n" + (e?.message || ""));
-      });
-
-      syncPlaceFromOrder(simple).catch(() => {});
-      showSuccess("수정 완료");
-      return { ok: true };
-    } catch (e) {
-      console.error("배차 수정 오류:", e);
-      return { ok: false, error: e?.message || "수정 실패" };
-    }
-  };
-
-  if (easyMode) {
-    return (
-      <MobileEasyMode
-        orders={allOrders}
-        onNeedHistory={loadFullHistory}
-        unassignedOrders={unassignedOrders}
-        drivers={drivers}
-        clients={clients}
-        places={places}
-        currentUser={currentUser}
-        userCompany={userCompany}
-        role={role}
-        onExitEasyMode={() => { setEasyMode(false); localStorage.setItem("easyMode", "0"); }}
-        onSubmitRegister={easyModeSubmitRegister}
-        onSubmitEdit={easyModeUpdateOrder}
-        onAssignVehicle={easyModeAssignVehicle}
-        showToast={showToast}
-        showSuccess={showSuccess}
-        onLogout={logout}
-      />
-    );
-  }
-
 // 📱 PC와 같은 화면에 넘길 회사·내 정보(최고관리자는 로그인한 운송사 기준)
 const pcViewCompany = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim();
 const pcViewMeDoc = mobileUsers.find((u) => u.id === currentUser?.uid) || {};
@@ -5763,6 +5477,7 @@ const title =
 )}
 
       <BannerCenter bottom={86} />
+      <OrderCongratsPopup uid={user?.uid} profile={myProfM} mobile />
       <MobileHeader
   title={title}
   cardVersionB={cardVersionB}
@@ -6882,15 +6597,14 @@ setOpenMemo={setOpenMemo}
         )}
         {page === "settings" && (
           <MobileSettingsPage
-            onBack={() => setPage("list")}
+            deptMode={deptMode}
+            onBack={() => setPage(deptMode ? "dept" : "list")}
             cardVersionB={cardVersionB}
             setCardVersionB={setCardVersionB}
             alarmEnabled={alarmEnabled}
             toggleAlarm={toggleAlarm}
             fontScale={fontScale}
             setFontScale={setFontScale}
-            easyMode={easyMode}
-            setEasyMode={(v) => { setEasyMode(v); localStorage.setItem("easyMode", v ? "1" : "0"); }}
             appVersion={appVersion}
             showSuccess={showSuccess}
             onLogout={logout}
@@ -22308,7 +22022,7 @@ return (
 );
 }
 
-function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnabled, toggleAlarm, fontScale, setFontScale, easyMode, setEasyMode, appVersion, showSuccess, onLogout, userCompany, role, currentUser, refreshFromServer }) {
+function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnabled, toggleAlarm, fontScale, setFontScale, appVersion, showSuccess, onLogout, userCompany, role, deptMode = null, currentUser, refreshFromServer }) {
   const [loginMgrOpen, setLoginMgrOpen] = useState(false); // ★ 로그인 관리(기기 연결 끊기·비밀번호 변경)
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -22369,7 +22083,9 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
   // 값이 없으면 PUSH_PREF_DEFAULT_ON(긴급배차/미배차)만 기본으로 켜진 것으로
   // 취급한다 — 나머지는 기본 꺼짐, 사용자가 직접 켜야 온다. Cloud Functions 쪽
   // 발송 필터(isPushTypeEnabled)도 동일한 기본값을 쓴다.
-  const PUSH_PREF_TYPES = [
+  // ⭐ 2026-11-01 팀별 알림 — 지금 화면(배차·운송 / 경리 / 인사 / 임원)에 맞는 알림만 보여 준다.
+  //  업무 알림(결재·공지·메일·메신저 등)은 기본 켜짐, 배차 알림은 긴급배차·미배차만 기본 켜짐.
+  const DISPATCH_PUSH = [
     { key: "배차등록", label: "배차등록 알림", sub: "새 오더가 등록되면" },
     { key: "긴급배차", label: "긴급배차 알림", sub: "긴급 오더가 등록되면" },
     { key: "배차완료", label: "배차완료 알림", sub: "기사님이 배정되면" },
@@ -22377,7 +22093,44 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     { key: "미배차", label: "미배차 임박 알림", sub: "상차 1시간 전인데 아직 미배차면" },
     { key: "배차취소", label: "배차취소 알림", sub: "오더가 취소되거나 삭제되면" },
   ];
-  const PUSH_PREF_DEFAULT_ON = ["긴급배차", "미배차"];
+  const isAdminLike = ["admin", "totalMaster", "superadmin", "test", "hrManager", "hrAcct"].includes(role);
+  const W = (key, label, sub) => ({ key, label, sub });
+  const TEAM_PUSH = {
+    acct: [
+      W("결재요청", "결재 요청", "지출결의·경비 등 내가 결재할 차례가 되면"),
+      W("결재결과", "결재 결과", "내가 올린 문서가 승인·반려되면"),
+      W("가입신청", "가입 신청", "새 직원·기사가 가입을 신청하면"),
+    ],
+    hr: [
+      W("결재요청", "결재 요청", "연차·근태·인사 문서를 결재할 차례가 되면"),
+      W("결재결과", "결재 결과", "내가 올린 문서(인사발령 품의 등)가 승인·반려되면"),
+      W("가입신청", "가입 신청", "새 직원·기사가 가입을 신청하면 바로 승인할 수 있게"),
+    ],
+    exec: [
+      W("결재요청", "결재 요청", "대표·임원 결재가 필요한 문서가 오면"),
+      W("결재결과", "결재 결과", "내가 올린 문서가 승인·반려되면"),
+      W("마감보고", "마감 보고", "하루 마감(매출·배차 요약) 보고가 오면"),
+    ],
+    dispatch: [
+      W("결재요청", "결재 요청", "내가 결재할 차례가 되면"),
+      W("결재결과", "결재 결과", "내가 올린 연차·문서가 승인·반려되면"),
+      ...(isAdminLike ? [W("가입신청", "가입 신청", "새 직원·기사가 가입을 신청하면"), W("마감보고", "마감 보고", "하루 마감 보고가 오면")] : []),
+    ],
+  };
+  const COMMON_PUSH = [
+    W("공지사항", "공지사항", "새 공지·공문이 올라오면"),
+    W("사내메일", "사내메일", "새 메일이 오면"),
+    W("메신저", "메신저", "대화방에 새 메시지가 오면"),
+    W("인사발령", "인사발령", "나의 승진·부서 이동 등 발령이 나면"),
+  ];
+  const teamKey = role === "hrAcct" ? "hr" : (deptMode || "dispatch");
+  const PUSH_GROUPS = [
+    ...(teamKey === "dispatch" ? [{ title: "배차 알림", items: DISPATCH_PUSH }] : []),
+    { title: { acct: "경리·회계 알림", hr: "인사 알림", exec: "임원 알림", dispatch: "업무 알림" }[teamKey], items: TEAM_PUSH[teamKey] },
+    { title: "공통 알림", items: COMMON_PUSH },
+  ];
+  const PUSH_PREF_TYPES = PUSH_GROUPS.flatMap((g) => g.items);
+  const PUSH_PREF_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저"];
   const isPushPrefOn = (prefs, key) => {
     const v = prefs?.[key];
     if (v === true || v === false) return v;
@@ -22456,7 +22209,6 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
         </div>
 
         <KpmCard en="DISPLAY" title="화면" flush>
-          <KpmRow label="쉬운모드" sub="글씨·버튼·아이콘이 한 번에 크게 보여요" right={<KpmToggle value={easyMode} onChange={(v) => setEasyMode(v)} />} />
           <KpmRow label="디자인 테마" sub={cardVersionB ? "B형 · 다크 네이비 헤더" : "A형 · 라이트"}
             right={<KpmSeg value={cardVersionB} options={[{ v: false, l: "A형" }, { v: true, l: "B형" }]} onPick={(v) => { setCardVersionB(v); localStorage.setItem("cardVersionV2", v ? "B" : "A"); localStorage.setItem("cardVersion", v ? "B" : "A"); }} />} />
           <KpmRow label="글자 크기" sub="목록·상세 텍스트"
@@ -22464,8 +22216,8 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
         </KpmCard>
 
         <KpmCard en="NOTIFICATION" title="알림" flush>
-          <KpmRow label="푸시 알림" sub="신규 오더·배차 알림" right={<KpmToggle value={alarmEnabled} onChange={toggleAlarm} />} />
-          <KpmRow label="알림 종류별 설정" sub={`배차등록·긴급배차·배차완료 등 · 지금 ${pushOnCount}종 켜짐`} onClick={() => setPushPrefsOpen(true)} right={go("설정")} />
+          <KpmRow label="푸시 알림" sub={teamKey === "dispatch" ? "신규 오더·배차·결재 알림" : "결재·공지·메일 등 업무 알림"} right={<KpmToggle value={alarmEnabled} onChange={toggleAlarm} />} />
+          <KpmRow label="알림 종류별 설정" sub={`${PUSH_GROUPS.map((g) => g.title).join("·")} · 지금 ${pushOnCount}/${PUSH_PREF_TYPES.length}종 켜짐`} onClick={() => setPushPrefsOpen(true)} right={go("설정")} />
         </KpmCard>
 
         <KpmCard en="DATA" title="데이터" flush>
@@ -22573,14 +22325,21 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
                 원하는 알림만 켜두면, 꺼둔 종류는 이 기기로 푸시가 오지 않습니다.
               </div>
             </div>
-            <div className="mx-5 mt-2 rounded-2xl overflow-hidden border border-gray-100">
-              {PUSH_PREF_TYPES.map(({ key, label, sub }) => (
-                <div key={key} className="flex items-center justify-between px-4 py-3.5 bg-white border-b border-gray-50 last:border-b-0">
-                  <div className="text-left">
-                    <div className="text-[13px] font-semibold text-gray-800">{label}</div>
-                    <div className="text-[11px] text-gray-400 mt-0.5">{sub}</div>
+            <div className="max-h-[62vh] overflow-y-auto">
+              {PUSH_GROUPS.map((g) => (
+                <div key={g.title} className="mx-5 mt-3">
+                  <div className="px-1 pb-1.5 text-[11.5px] font-black text-[#3A4A66] tracking-wide">{g.title}</div>
+                  <div className="rounded-2xl overflow-hidden border border-gray-100">
+                    {g.items.map(({ key, label, sub }) => (
+                      <div key={key} className="flex items-center justify-between gap-3 px-4 py-3.5 bg-white border-b border-gray-50 last:border-b-0">
+                        <div className="text-left min-w-0">
+                          <div className="text-[13px] font-semibold text-gray-800">{label}</div>
+                          <div className="text-[11px] text-gray-400 mt-0.5">{sub}</div>
+                        </div>
+                        <KpmToggle value={isPushPrefOn(pushPrefs, key)} onChange={() => togglePushPref(key)} />
+                      </div>
+                    ))}
                   </div>
-                  <KpmToggle value={isPushPrefOn(pushPrefs, key)} onChange={() => togglePushPref(key)} />
                 </div>
               ))}
             </div>

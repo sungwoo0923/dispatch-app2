@@ -36,7 +36,8 @@ async function getAllTokens() {
 // PUSH_TYPES_DEFAULT_ON에 있는 종류(긴급배차/미배차)만 기본으로 켜진 것으로 취급한다 —
 // 나머지(배차등록/배차완료/재배차/배차취소)는 사용자가 모바일에서 직접 켜야 온다.
 const PUSH_TYPES = ["배차등록", "긴급배차", "배차완료", "재배차", "미배차", "배차취소"];
-const PUSH_TYPES_DEFAULT_ON = ["긴급배차", "미배차"];
+// ⭐ 2026-11-01 팀별 알림 — 업무 알림(결재·공지·메일·메신저·가입신청·인사발령·마감보고)은 기본 켜짐, 끈 사람만 안 보낸다
+const PUSH_TYPES_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저"];
 function isPushTypeEnabled(prefs, type) {
   const v = prefs?.[type];
   if (v === true || v === false) return v;
@@ -1138,7 +1139,7 @@ exports.notifyChatMessage = functions.firestore
       try {
         const uSnap = await db.collection("users").doc(uid).get();
         const token = uSnap.data()?.fcmToken;
-        if (token) tokens.push(token);
+        if (token && isPushTypeEnabled(uSnap.data()?.pushPrefs, "메신저")) tokens.push(token);
       } catch (e) {
         console.warn("메신저 알림용 토큰 조회 실패:", uid, e?.message || e);
       }
@@ -4534,7 +4535,8 @@ async function pushInternalMail(m) {
   const tokens = [];
   for (let i = 0; i < to.length; i += 100) {
     const docs = await db.getAll(...to.slice(i, i + 100).map((uid) => db.collection("users").doc(uid)));
-    docs.forEach((d) => { if (d.exists && (d.data().companyName || "돌캐") === (m.company || "돌캐") && d.data().fcmToken) tokens.push(d.data().fcmToken); });
+    const pk = m.kind === "hr" ? "인사발령" : m.kind === "closeReport" ? "마감보고" : "사내메일";
+    docs.forEach((d) => { if (d.exists && (d.data().companyName || "돌캐") === (m.company || "돌캐") && d.data().fcmToken && isPushTypeEnabled(d.data().pushPrefs, pk)) tokens.push(d.data().fcmToken); });
   }
   const head = m.kind === "hr" ? "◆ 인사발령" : m.kind === "closeReport" ? "▸ 마감보고" : m.kind === "approval" ? `✎ 전자결재 · ${m.fromName || ""}` : `▸ ${m.important ? "[중요] " : ""}${m.fromName || "사내메일"}`;
   const body = m.kind === "closeReport" ? String(m.body || "") : `${m.subject || ""}${m.body ? `\n${String(m.body).replace(/\s+/g, " ").slice(0, 80)}` : ""}`;
@@ -4557,8 +4559,8 @@ exports.notifyApproval = functions.firestore.document("approvals/{id}").onWrite(
   const turn = (d) => (d && d.status === "pending" ? d.line?.[d.step]?.uid : null);
   const cTurn = (d) => (d && d.status === "approved" && d.cancel?.status === "pending" ? d.cancel.line?.[d.cancel.step]?.uid : null);
   const msgs = [];
-  if (turn(a) && turn(a) !== turn(b)) msgs.push([turn(a), `✎ 결재 요청 · ${a.drafter?.name || ""}`, `${t}\n${a.summary || ""}`]);
-  if (cTurn(a) && cTurn(a) !== cTurn(b)) msgs.push([cTurn(a), `✎ 결재 취소 요청 · ${a.drafter?.name || ""}`, `${t}\n사유: ${a.cancel?.reason || ""}`]);
+  if (turn(a) && turn(a) !== turn(b)) msgs.push([turn(a), `✎ 결재 요청 · ${a.drafter?.name || ""}`, `${t}\n${a.summary || ""}`, "결재요청"]);
+  if (cTurn(a) && cTurn(a) !== cTurn(b)) msgs.push([cTurn(a), `✎ 결재 취소 요청 · ${a.drafter?.name || ""}`, `${t}\n사유: ${a.cancel?.reason || ""}`, "결재요청"]);
   if (b && a.drafterUid) {
     const newly = (a.line || []).filter((x, i) => x.status === "approved" && b.line?.[i]?.status !== "approved");
     if (a.status === "approved" && b.status !== "approved") msgs.push([a.drafterUid, "✓ 최종 승인", `${t} — 결재가 모두 끝났습니다.`]);
@@ -4567,9 +4569,9 @@ exports.notifyApproval = functions.firestore.document("approvals/{id}").onWrite(
     if (a.status === "cancelled" && b.status !== "cancelled") msgs.push([a.drafterUid, "결재 취소 승인", `${t} 문서가 결재 취소되었습니다.`]);
     if (a.cancel?.status === "rejected" && b.cancel?.status !== "rejected") { const r = (a.cancel.line || []).find((x) => x.status === "rejected"); msgs.push([a.drafterUid, `결재 취소 거부 · ${r?.name || ""}`, `${t}\n${r?.comment || ""}`]); }
   }
-  for (const [uid, title, body] of msgs) {
+  for (const [uid, title, body, pk = "결재결과"] of msgs) {
     const u = await db.collection("users").doc(uid).get();
-    const tok = u.exists ? u.data().fcmToken : null;
+    const tok = u.exists && isPushTypeEnabled(u.data().pushPrefs, pk) ? u.data().fcmToken : null;
     if (tok) await sendPushAndCleanup([tok], { notification: { title, body }, android: { priority: "high" } }, "전자결재").catch((e) => console.error("결재 푸시 실패:", e));
   }
   return null;
@@ -4589,6 +4591,7 @@ exports.notifyNotice = functions.firestore.document("notices/{id}").onCreate(asy
     if (d.id === n.authorUid || !u.fcmToken || u.approved === false || u.employmentStatus === "퇴사") return;
     if (["driver", "shipper", "cafeUser"].includes(u.role)) return;
     if (teams.length && !NOTICE_ADMIN_ROLES.includes(u.role) && !teams.includes(String(u.team || "").trim())) return;
+    if (!isPushTypeEnabled(u.pushPrefs, "공지사항")) return;
     tokens.push(u.fcmToken);
   });
   const title = `◆ ${n.category || "공지사항"} · ${n.author || ""}`;
@@ -4609,7 +4612,7 @@ exports.notifySignup = functions.firestore.document("users/{uid}").onCreate(asyn
     const a = d.data() || {};
     if (d.id === snap.id || !a.fcmToken || a.approved === false || a.employmentStatus === "퇴사") return;
     // ⭐ 2026-10-31 관리자·경리·인사관리자도 가입 승인 가능 → 알림도 같이
-    if ([...NOTICE_ADMIN_ROLES, "test", "hrManager", "hrAcct"].includes(a.role) || a.isMaster === true) tokens.push(a.fcmToken);
+    if (([...NOTICE_ADMIN_ROLES, "test", "hrManager", "hrAcct"].includes(a.role) || a.isMaster === true) && isPushTypeEnabled(a.pushPrefs, "가입신청")) tokens.push(a.fcmToken);
   });
   const isDriver = u.role === "driver";
   const title = isDriver ? "▸ 기사 가입 신청" : "◆ 직원 가입 신청";

@@ -2733,6 +2733,7 @@ import { MailHeaderButton, sendInternalMail } from "./InternalMail";
 import { loadAcctPayments, saveAcctPayments, loadPlManual, savePlManual } from "./acctPayments";
 import { bumpDriverPayout, addClientCollection, removeClientCollections } from "./ledgerAuto";
 import BannerCenter from "./BannerCenter";
+import OrderCongratsPopup from "./OrderCongratsPopup";
 import PersonnelOrder from "./PersonnelOrder";
 import OrderScanModal, { looksLikeOrder, scanDropDate } from "./OrderScanModal";
 import KpSubNav from "./KpSubNav";
@@ -7864,6 +7865,7 @@ return (
         groups={deptMode ? DEPT_SIDE_GROUPS[deptMode] : KP_SIDE_GROUPS}
       />
       <BannerCenter />
+      <OrderCongratsPopup uid={user?.uid} profile={myProfileDoc} />
       <PlatformNoticeBanner audience="carrier" />
       <CopyTemplateHost canEdit={role === "admin" || role === "totalMaster"} />
       <PlanValueSync planId={planId} />
