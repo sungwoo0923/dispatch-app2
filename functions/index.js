@@ -42,13 +42,21 @@ function isPushTypeEnabled(prefs, type) {
   if (v === true || v === false) return v;
   return PUSH_TYPES_DEFAULT_ON.includes(type);
 }
-async function getTokensForType(type) {
+// ⭐ 2026-11-01 운송사별 분리 — 그 오더의 회사 직원에게만(기사·화주 제외). 예전엔 모든 회사 사용자 전원에게 갔다.
+const PUSH_DEFAULT_COMPANY = "돌캐";
+const NON_STAFF_ROLES = new Set(["driver", "shipper", "cafeUser"]);
+async function getTokensForType(type, companyName) {
+  const co = String(companyName || PUSH_DEFAULT_COMPANY).trim();
   const snap = await db.collection("users").get();
   const tokens = [];
   snap.docs.forEach((d) => {
     const u = d.data();
     const token = u.fcmToken;
     if (!token) return;
+    if (NON_STAFF_ROLES.has(u.role)) return;
+    if (u.approved === false || u.employmentStatus === "퇴사") return;
+    if (u.role !== "totalMaster" && String(u.companyName || PUSH_DEFAULT_COMPANY).trim() !== co) return;
+    if (u.role === "totalMaster" && co !== PUSH_DEFAULT_COMPANY) return; // 최고관리자는 기본 회사 알림만
     if (!isPushTypeEnabled(u.pushPrefs, type)) return;
     tokens.push(token);
   });
@@ -277,7 +285,7 @@ exports.notifyNewDispatch =
 
       const isUrgent = data["긴급"] === true;
       const type = isUrgent ? "긴급배차" : "배차등록";
-      const tokens = await getTokensForType(type);
+      const tokens = await getTokensForType(type, data.companyName);
       if (!tokens.length) {
         console.log("⊘ FCM 토큰 없음");
         return;
@@ -318,7 +326,7 @@ exports.notifyDispatchDone =
       const nextCar = String(after["차량번호"] || "").trim();
       if (prevCar || !nextCar) return;
 
-      const tokens = await getTokensForType("배차완료");
+      const tokens = await getTokensForType("배차완료", after.companyName || before.companyName);
       if (!tokens.length) return;
 
       const templateConfig = await getNotificationTemplateConfig();
@@ -360,7 +368,7 @@ exports.notifyRedispatch =
       // notifyDispatchCanceled가 별도로 처리한다.
       if (!prevCar || nextCar || nextStatus !== "배차중") return;
 
-      const tokens = await getTokensForType("재배차");
+      const tokens = await getTokensForType("재배차", after.companyName || before.companyName);
       if (!tokens.length) return;
 
       await sendPushAndCleanup(tokens, {
@@ -429,7 +437,7 @@ exports.notifyDispatchCanceled =
         }
       } catch (e) { console.error("오더취소 기사 푸시 실패:", e?.message || e); }
 
-      const tokens = isBlind ? [] : await getTokensForType("배차취소");
+      const tokens = isBlind ? [] : await getTokensForType("배차취소", after.companyName || before.companyName);
       if (tokens.length) {
         await sendPushAndCleanup(tokens, {
           notification: {
@@ -459,7 +467,7 @@ exports.notifyDispatchDeleted =
       // 이미 알림을 보냈으니 여기서 또 보내지 않는다(중복 방지).
       if (data["배차상태"] === "배차취소") return;
 
-      const tokens = isBlind ? [] : await getTokensForType("배차취소");
+      const tokens = isBlind ? [] : await getTokensForType("배차취소", data.companyName);
       if (tokens.length) {
         await sendPushAndCleanup(tokens, {
           notification: {
@@ -761,7 +769,8 @@ exports.notifyUnassignedUrgent = functions.pubsub
     const todayStr = nowKst.toISOString().slice(0, 10);
     const URGENT_WINDOW_MIN = 60; // 상차 1시간 전부터 임박으로 취급
 
-    const tokens = await getTokensForType("미배차");
+    const tokenCache = {}; // ⭐ 회사별 직원에게만
+    const tokensFor = async (co) => { const k = String(co || "돌캐"); if (!tokenCache[k]) tokenCache[k] = await getTokensForType("미배차", k); return tokenCache[k]; };
     const templateConfig = await getNotificationTemplateConfig();
     const notifFields = getNotifFieldsForType(templateConfig, "미배차");
 
@@ -790,6 +799,7 @@ exports.notifyUnassignedUrgent = functions.pubsub
         const diffMin = (dt.getTime() - nowMs) / 60000;
         if (diffMin <= 0 || diffMin > URGENT_WINDOW_MIN) continue;
 
+        const tokens = await tokensFor(data.companyName);
         if (!tokens.length) continue;
 
         try {
