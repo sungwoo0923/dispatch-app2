@@ -106,6 +106,11 @@ export default function PersonnelOrder({ company, target, myName, isSelf }) {
         personnelHistory: [...(target.personnelHistory || []), { date, type: fv("type"), detail: `${detail}${target.pendingOrder?.docNo ? ` · 결재 ${target.pendingOrder.docNo}` : ""}` }],
         ...(target.pendingOrder ? { pendingOrder: null } : {}), // 결재 완료 발령을 공문으로 게시했으면 비운다
       };
+      // 🎉 발령 받은 사람이 다음 접속 때 한 번 보는 축하·안내 창(OrderCongratsPopup)
+      if (changed) patch.orderNotice = {
+        kind: fv("type"), company, date: fv("effective"), docNo: target.pendingOrder?.docNo || "", at: Date.now(), seen: false,
+        fromTeam: fv("fromTeam"), toTeam: fv("toTeam"), fromPos: fv("fromPos"), toPos: fv("toPos"), fromRole: fv("fromRole"), toRole: fv("toRole"),
+      };
       const roleNext = next.role; // ⭐ 2026-10-31 임원도 권한 관리의 역할을 그대로(임원 화면 역할 추천)
       if (roleNext !== cur.role && !isSelf) patch.role = roleNext;
       await setDoc(doc(db, "users", target.uid), patch, { merge: true });
