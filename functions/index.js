@@ -20,13 +20,19 @@ initializeApp();
 const db = getFirestore();
 const messaging = getMessaging();
 
+// ⭐ 2026-11-02 한 계정 여러 기기 — 예전엔 users.fcmToken 하나만 저장해서, 같은 계정으로 안드로이드·아이폰(·PC)을
+//  같이 쓰면 마지막에 앱을 연 기기만 알림을 받았다(아이폰이 "갑자기" 안 오던 원인). fcmTokens(최근 기기 목록)까지 모두 보낸다.
+function userTokens(u) {
+  if (!u) return [];
+  return [...new Set([u.fcmToken, ...(Array.isArray(u.fcmTokens) ? u.fcmTokens : [])].filter((t) => typeof t === "string" && t))];
+}
+
 // 🔥 users 컬렉션에서 fcmToken 전부 수집
 async function getAllTokens() {
   const snap = await db.collection("users").get();
   const tokens = [];
   snap.docs.forEach((d) => {
-    const token = d.data().fcmToken;
-    if (token) tokens.push(token);
+    tokens.push(...userTokens(d.data()));
   });
   return tokens;
 }
@@ -52,16 +58,16 @@ async function getTokensForType(type, companyName) {
   const tokens = [];
   snap.docs.forEach((d) => {
     const u = d.data();
-    const token = u.fcmToken;
-    if (!token) return;
+    const ts = userTokens(u);
+    if (!ts.length) return;
     if (NON_STAFF_ROLES.has(u.role)) return;
     if (u.approved === false || u.employmentStatus === "퇴사") return;
     if (u.role !== "totalMaster" && String(u.companyName || PUSH_DEFAULT_COMPANY).trim() !== co) return;
     if (u.role === "totalMaster" && co !== PUSH_DEFAULT_COMPANY) return; // 최고관리자는 기본 회사 알림만
     if (!isPushTypeEnabled(u.pushPrefs, type)) return;
-    tokens.push(token);
+    tokens.push(...ts);
   });
-  return tokens;
+  return [...new Set(tokens)];
 }
 
 // ⭐ "알림 설정은 다 켜놨는데 특정 기기(특히 아이폰)에서만 알림이 갑자기 안 뜬다"는
@@ -83,6 +89,7 @@ const STALE_FCM_TOKEN_ERROR_CODES = new Set([
   "messaging/invalid-registration-token",
 ]);
 async function sendPushAndCleanup(tokens, message, label) {
+  tokens = [...new Set((tokens || []).filter((t) => typeof t === "string" && t))]; // 같은 기기 두 번 방지
   if (!tokens.length) return undefined;
   // ⭐ 안드로이드에서 같은 알림이 아이콘만 다르게 두 번(중복) 뜨던 문제의 실제 원인 —
   // FCM 메시지에 notification 필드가 있으면, 앱이 백그라운드일 때 브라우저가 그 내용을
@@ -134,9 +141,19 @@ async function sendPushAndCleanup(tokens, message, label) {
     for (let i = 0; i < staleTokens.length; i += 30) {
       const chunk = staleTokens.slice(i, i + 30);
       const snap = await db.collection("users").where("fcmToken", "in", chunk).get();
-      if (snap.empty) continue;
+      const docs = new Map();
+      snap.docs.forEach((d) => docs.set(d.id, d));
+      for (let j = 0; j < chunk.length; j += 10) {
+        const snap2 = await db.collection("users").where("fcmTokens", "array-contains-any", chunk.slice(j, j + 10)).get().catch(() => null);
+        (snap2?.docs || []).forEach((d) => docs.set(d.id, d));
+      }
+      if (!docs.size) continue;
       const batch = db.batch();
-      snap.docs.forEach((d) => batch.update(d.ref, { fcmToken: FieldValue.delete() }));
+      docs.forEach((d) => {
+        const patch = { fcmTokens: FieldValue.arrayRemove(...chunk) };
+        if (chunk.includes(d.data().fcmToken)) patch.fcmToken = FieldValue.delete();
+        batch.update(d.ref, patch);
+      });
       await batch.commit();
       console.log(`◇ 만료된 FCM 토큰 ${snap.size}개 정리 완료`);
     }
@@ -420,8 +437,8 @@ exports.notifyDispatchCanceled =
         if (driverDoc) {
           const userSnap = await db.collection("users").doc(driverDoc.id).get();
           const userData = userSnap.exists ? userSnap.data() : null;
-          if (userData?.driverPushEnabled !== false && userData?.fcmToken) {
-            await sendPushAndCleanup([userData.fcmToken], {
+          if (userData?.driverPushEnabled !== false && userTokens(userData).length) {
+            await sendPushAndCleanup(userTokens(userData), {
               notification: {
                 title: "배차가 취소되었습니다",
                 body: `담당자가 ${before["거래처명"] || ""} ${before["상차지명"] || "-"} → ${before["하차지명"] || "-"} 오더를 취소했습니다.`,
@@ -501,8 +518,8 @@ exports.notifyDispatchDeleted =
 
           const userSnap = await db.collection("users").doc(driverDoc.id).get();
           const userData = userSnap.exists ? userSnap.data() : null;
-          if (userData?.driverPushEnabled !== false && userData?.fcmToken) {
-            await sendPushAndCleanup([userData.fcmToken], {
+          if (userData?.driverPushEnabled !== false && userTokens(userData).length) {
+            await sendPushAndCleanup(userTokens(userData), {
               notification: { title: "배차가 취소되었습니다", body },
               data: { type: "fleet_order_canceled", orderId: context.params.dispatchId },
               android: { priority: "high" },
@@ -607,8 +624,8 @@ exports.notifyFleetDriverNewOrder =
           // 오더 자체가 "배차취소"로 바뀐 경우엔 notifyDispatchCanceled가 같은 기사에게 이미
           // 푸시를 보내므로 여기선 보내지 않는다(같은 알림이 2번 오는 것 방지).
           const orderCanceledNow = String(after["배차상태"] || "").trim() === "배차취소" && String(before?.["배차상태"] || "").trim() !== "배차취소";
-          if (!orderCanceledNow && cUserData?.driverPushEnabled !== false && cUserData?.fcmToken) {
-            await sendPushAndCleanup([cUserData.fcmToken], {
+          if (!orderCanceledNow && cUserData?.driverPushEnabled !== false && userTokens(cUserData).length) {
+            await sendPushAndCleanup(userTokens(cUserData), {
               notification: { title: "배차가 취소되었습니다", body },
               data: { type: "fleet_order_canceled", orderId: context.params.dispatchId },
               android: { priority: "high" },
@@ -639,10 +656,10 @@ exports.notifyFleetDriverNewOrder =
       // ⭐ 사용자 요청 — 기사 앱 설정에서 알림/푸시를 꺼놨으면(driverPushEnabled===false)
       // 보내지 않는다. 기본값은 켜짐(필드 자체가 없으면 보낸다).
       if (userData?.driverPushEnabled === false) { console.log("○ 지입 기사 알림 꺼둠:", driverDoc.id); return; }
-      const token = userData?.fcmToken || null;
-      if (!token) { console.log("⊘ 지입 기사 FCM 토큰 없음(앱 미접속 또는 알림권한 미허용):", driverDoc.id); return; }
+      const token = userTokens(userData);
+      if (!token.length) { console.log("⊘ 지입 기사 FCM 토큰 없음(앱 미접속 또는 알림권한 미허용):", driverDoc.id); return; }
 
-      await sendPushAndCleanup([token], {
+      await sendPushAndCleanup(token, {
         notification: {
           title: "배차오더가 도착했습니다",
           body: `${after["거래처명"] || ""} ${after["상차지명"] || "-"} → ${after["하차지명"] || "-"}`,
@@ -671,14 +688,14 @@ exports.notifyDispatcherOrderRejected =
       const creatorUid = after["createdByUid"];
       if (!creatorUid) return;
       const userSnap = await db.collection("users").doc(creatorUid).get();
-      const token = userSnap.exists ? userSnap.data().fcmToken : null;
-      if (!token) return;
+      const token = userSnap.exists ? userTokens(userSnap.data()) : [];
+      if (!token.length) return;
 
       // ⭐ 거절 처리와 동시에 차량번호/이름이 비워지므로(배차중으로 되돌림), after가
       // 아니라 거절 직전 상태인 before에서 기사 정보를 가져와야 "기사(-)" 로 비어
       // 보이지 않는다.
       const driverLabel = `${before["이름"] || after["이름"] || "기사"}(${before["차량번호"] || after["차량번호"] || "-"})`;
-      await sendPushAndCleanup([token], {
+      await sendPushAndCleanup(token, {
         notification: {
           title: "오더가 거절되었습니다",
           body: `${driverLabel}님이 오더를 거절했습니다${after["기사거절사유"] ? `: ${after["기사거절사유"]}` : ""}`,
@@ -878,8 +895,8 @@ exports.notifyFleetOrderModified =
 
       const u = await db.collection("users").doc(driverDoc.id).get().catch(() => null);
       const ud = u?.exists ? u.data() : null;
-      if (ud?.fcmToken && ud.driverPushEnabled !== false) {
-        await sendPushAndCleanup([ud.fcmToken], {
+      if (userTokens(ud).length && ud.driverPushEnabled !== false) {
+        await sendPushAndCleanup(userTokens(ud), {
           notification: { title, body },
           data: { type: "fleet_order_modified", orderId: dispatchId },
           android: { priority: "high" },
@@ -951,7 +968,7 @@ async function geocodeServerCached(rawAddr) {
 async function getUserToken(uid) {
   if (!uid) return null;
   const u = await db.collection("users").doc(uid).get().catch(() => null);
-  return u?.exists ? (u.data().fcmToken || null) : null;
+  return u?.exists ? userTokens(u.data()) : [];
 }
 
 exports.notifyFleetLateArrival = functions.pubsub
@@ -1031,8 +1048,7 @@ exports.notifyFleetLateArrival = functions.pubsub
           const mgrUids = [...new Set([drv["담당자"]?.uid, o["createdByUid"]].filter(Boolean))];
           const mgrTokens = [];
           for (const uid of mgrUids) {
-            const t = await getUserToken(uid);
-            if (t && !mgrTokens.includes(t)) mgrTokens.push(t);
+            for (const t of await getUserToken(uid)) if (!mgrTokens.includes(t)) mgrTokens.push(t);
           }
           if (mgrTokens.length) {
             await sendPushAndCleanup(mgrTokens, {
@@ -1048,8 +1064,8 @@ exports.notifyFleetLateArrival = functions.pubsub
 
           const userSnap = await db.collection("users").doc(driverDoc.id).get().catch(() => null);
           const du = userSnap?.exists ? userSnap.data() : null;
-          if (du?.fcmToken && du.driverPushEnabled !== false) {
-            await sendPushAndCleanup([du.fcmToken], {
+          if (userTokens(du).length && du.driverPushEnabled !== false) {
+            await sendPushAndCleanup(userTokens(du), {
               notification: {
                 title: `${c.label}시간 알림 (${t24})`,
                 body: `${c.label}시간이 지났습니다. ${c.label}지 [${place}]까지 ${distKm != null ? `약 ${distKm.toFixed(1)}km 남았습니다` : "위치 확인이 안 됩니다"}. 늦어지면 담당자에게 연락해주세요.`,
@@ -1138,8 +1154,7 @@ exports.notifyChatMessage = functions.firestore
     await Promise.all(members.map(async (uid) => {
       try {
         const uSnap = await db.collection("users").doc(uid).get();
-        const token = uSnap.data()?.fcmToken;
-        if (token && isPushTypeEnabled(uSnap.data()?.pushPrefs, "메신저")) tokens.push(token);
+        if (isPushTypeEnabled(uSnap.data()?.pushPrefs, "메신저")) tokens.push(...userTokens(uSnap.data()));
       } catch (e) {
         console.warn("메신저 알림용 토큰 조회 실패:", uid, e?.message || e);
       }
@@ -1181,8 +1196,7 @@ exports.sendPushNotification = functions.https.onRequest(async (req, res) => {
   try {
     if (body.uid) {
       const uSnap = await db.collection("users").doc(String(body.uid)).get();
-      const t = uSnap.data()?.fcmToken;
-      if (t) tokens = [t];
+      tokens = userTokens(uSnap.data());
     } else {
       tokens = await getAllTokens();
     }
@@ -4623,7 +4637,7 @@ async function pushInternalMail(m) {
   for (let i = 0; i < to.length; i += 100) {
     const docs = await db.getAll(...to.slice(i, i + 100).map((uid) => db.collection("users").doc(uid)));
     const pk = m.kind === "hr" ? "인사발령" : m.kind === "closeReport" ? "마감보고" : "사내메일";
-    docs.forEach((d) => { if (d.exists && (d.data().companyName || "돌캐") === (m.company || "돌캐") && d.data().fcmToken && isPushTypeEnabled(d.data().pushPrefs, pk)) tokens.push(d.data().fcmToken); });
+    docs.forEach((d) => { if (d.exists && (d.data().companyName || "돌캐") === (m.company || "돌캐") && isPushTypeEnabled(d.data().pushPrefs, pk)) tokens.push(...userTokens(d.data())); });
   }
   const head = m.kind === "hr" ? "◆ 인사발령" : m.kind === "closeReport" ? "▸ 마감보고" : m.kind === "approval" ? `✎ 전자결재 · ${m.fromName || ""}` : `▸ ${m.important ? "[중요] " : ""}${m.fromName || "사내메일"}`;
   const body = m.kind === "closeReport" ? String(m.body || "") : `${m.subject || ""}${m.body ? `\n${String(m.body).replace(/\s+/g, " ").slice(0, 80)}` : ""}`;
@@ -4633,6 +4647,8 @@ exports.notifyInternalMail = functions.firestore.document("internalMails/{id}").
   const m = snap.data() || {};
   if (m.status === "draft" || m.status === "scheduled") return null; // 임시보관·예약 메일은 보낼 때 알린다
   if (m.kind === "approval") return null; // 전자결재 결과 기록 메일 — 푸시는 notifyApproval이 이미 보냈다
+  // ⭐ 2026-11-02 부고처럼 공지사항으로도 올린 글의 안내 메일 — 공지 푸시(notifyNotice)가 이미 나가므로 메일 푸시는 생략(2번 방지)
+  if (m.kind === "notice" && m.noticeKey && !/_v\d+$/.test(m.noticeKey)) return null; // 수정(정정) 안내는 공지 푸시가 없으니 메일 푸시로
   await pushInternalMail(m);
   return null;
 });
@@ -4658,8 +4674,8 @@ exports.notifyApproval = functions.firestore.document("approvals/{id}").onWrite(
   }
   for (const [uid, title, body, pk = "결재결과"] of msgs) {
     const u = await db.collection("users").doc(uid).get();
-    const tok = u.exists && isPushTypeEnabled(u.data().pushPrefs, pk) ? u.data().fcmToken : null;
-    if (tok) await sendPushAndCleanup([tok], { notification: { title, body }, android: { priority: "high" } }, "전자결재").catch((e) => console.error("결재 푸시 실패:", e));
+    const tok = u.exists && isPushTypeEnabled(u.data().pushPrefs, pk) ? userTokens(u.data()) : [];
+    if (tok.length) await sendPushAndCleanup(tok, { notification: { title, body }, android: { priority: "high" } }, "전자결재").catch((e) => console.error("결재 푸시 실패:", e));
   }
   return null;
 });
@@ -4669,17 +4685,19 @@ exports.notifyApproval = functions.firestore.document("approvals/{id}").onWrite(
 const NOTICE_ADMIN_ROLES = ["admin", "totalMaster", "superadmin"];
 exports.notifyNotice = functions.firestore.document("notices/{id}").onCreate(async (snap) => {
   const n = snap.data() || {};
+  // ⭐ 2026-11-02 인사발령 공문은 전 직원 사내메일(kind "hr") 푸시가 "인사발령" 알림으로 따로 나간다 — 공지 푸시까지 가면 같은 알림이 2번
+  if (n.category === "인사발령") return null;
   const company = n.companyName || "돌캐";
   const teams = Array.isArray(n.teams) ? n.teams : [];
   const users = await db.collection("users").where("companyName", "==", company).get();
   const tokens = [];
   users.forEach((d) => {
     const u = d.data() || {};
-    if (d.id === n.authorUid || !u.fcmToken || u.approved === false || u.employmentStatus === "퇴사") return;
+    if (d.id === n.authorUid || !userTokens(u).length || u.approved === false || u.employmentStatus === "퇴사") return;
     if (["driver", "shipper", "cafeUser"].includes(u.role)) return;
     if (teams.length && !NOTICE_ADMIN_ROLES.includes(u.role) && !teams.includes(String(u.team || "").trim())) return;
     if (!isPushTypeEnabled(u.pushPrefs, "공지사항")) return;
-    tokens.push(u.fcmToken);
+    tokens.push(...userTokens(u));
   });
   const title = `◆ ${n.category || "공지사항"} · ${n.author || ""}`;
   const body = `${n.title || ""}${n.content ? `\n${String(n.content).replace(/\s+/g, " ").slice(0, 80)}` : ""}`;
@@ -4696,13 +4714,22 @@ exports.dedupeFcmToken = functions.firestore.document("users/{uid}").onWrite(asy
   const token = a?.fcmToken;
   // 토큰이 새로 생겼거나, 앱을 다시 열어 토큰을 다시 저장했을 때(fcmTokenAt 갱신)만 확인
   if (!token || (token === b?.fcmToken && a?.fcmTokenAt === b?.fcmTokenAt)) return null;
-  const snap = await db.collection("users").where("fcmToken", "==", token).get();
-  const others = snap.docs.filter((d) => d.id !== ctx.params.uid);
-  if (!others.length) return null;
+  // ⭐ 2026-11-02 여러 기기 목록(fcmTokens)에 남은 같은 기기도 다른 계정에서 지운다
+  const [s1, s2] = await Promise.all([
+    db.collection("users").where("fcmToken", "==", token).get(),
+    db.collection("users").where("fcmTokens", "array-contains", token).get().catch(() => null),
+  ]);
+  const others = new Map();
+  [...s1.docs, ...(s2?.docs || [])].forEach((d) => { if (d.id !== ctx.params.uid) others.set(d.id, d); });
+  if (!others.size) return null;
   const batch = db.batch();
-  others.forEach((d) => batch.update(d.ref, { fcmToken: FieldValue.delete(), fcmTokenAt: FieldValue.delete() }));
+  others.forEach((d) => {
+    const patch = { fcmTokens: FieldValue.arrayRemove(token) };
+    if (d.data().fcmToken === token) { patch.fcmToken = FieldValue.delete(); patch.fcmTokenAt = FieldValue.delete(); }
+    batch.update(d.ref, patch);
+  });
   await batch.commit();
-  console.log(`◇ 같은 기기 토큰 ${others.length}개 이전 계정에서 정리`);
+  console.log(`◇ 같은 기기 토큰 ${others.size}개 이전 계정에서 정리`);
   return null;
 });
 
@@ -4721,9 +4748,9 @@ exports.notifySignup = functions.firestore.document("users/{uid}").onWrite(async
   const tokens = [];
   admins.forEach((d) => {
     const a = d.data() || {};
-    if (d.id === snap.id || !a.fcmToken || a.approved === false || a.employmentStatus === "퇴사") return;
+    if (d.id === snap.id || !userTokens(a).length || a.approved === false || a.employmentStatus === "퇴사") return;
     // ⭐ 2026-10-31 관리자·경리·인사관리자도 가입 승인 가능 → 알림도 같이
-    if (([...NOTICE_ADMIN_ROLES, "test", "hrManager", "hrAcct"].includes(a.role) || a.isMaster === true) && isPushTypeEnabled(a.pushPrefs, "가입신청")) tokens.push(a.fcmToken);
+    if (([...NOTICE_ADMIN_ROLES, "test", "hrManager", "hrAcct"].includes(a.role) || a.isMaster === true) && isPushTypeEnabled(a.pushPrefs, "가입신청")) tokens.push(...userTokens(a));
   });
   const isDriver = u.role === "driver";
   const title = isDriver ? "▸ 기사 가입 신청" : "◆ 직원 가입 신청";
@@ -4770,9 +4797,9 @@ exports.vehicleCareReminders = functions.runWith({ timeoutSeconds: 300, memory: 
     if (!msgs.length) continue;
     const uid = x.uid || d.id;
     const u = await db.collection("users").doc(uid).get().catch(() => null);
-    const token = u?.exists ? u.data().fcmToken : null;
-    if (token && u.data().driverPushEnabled !== false) {
-      await sendPushAndCleanup([token], {
+    const token = u?.exists ? userTokens(u.data()) : [];
+    if (token.length && u.data().driverPushEnabled !== false) {
+      await sendPushAndCleanup(token, {
         notification: { title: "차량 점검 알림", body: msgs.join(" · ") },
         data: { type: "vehicle_care", driverId: d.id },
         android: { priority: "high" },
@@ -4848,7 +4875,7 @@ exports.automation = functions.runWith({ timeoutSeconds: 300, memory: "512MB" })
         subject: title.replace(/^▸\s*/, ""), body: lines.join("\n"), images: [], kind: "closeReport",
         at: FieldValue.serverTimestamp(), readBy: [], deletedBy: [],
       });
-      const tokens = users.filter((d) => d.id !== me.decoded.uid).map((d) => d.data().fcmToken).filter(Boolean);
+      const tokens = users.filter((d) => d.id !== me.decoded.uid).flatMap((d) => userTokens(d.data()));
       res.json({ recipients: users.length, pushed: tokens.length });
       return;
     }
