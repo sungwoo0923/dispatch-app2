@@ -71,6 +71,31 @@ export function AttendanceQuickButton({ company, uid, name, role, email, variant
     toast("퇴근을 취소했습니다 — 다시 출근 상태입니다");
   });
 
+  if (variant === "deck") {
+    // 홈 관제 데크(남색 디지털) — 시계 왼쪽의 근태 카드
+    const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+    const state = done ? "OFF DUTY" : working ? "ON DUTY" : "CHECK-IN";
+    const color = done ? "#9AA9C3" : working ? "#4ADE80" : "#F7B955";
+    const label = done ? `퇴근 ${hm(rec.checkOutTime)}` : working ? `출근 ${hm(rec.checkInTime)} · 근무 중` : (rec?.status && rec.status !== "출근" ? `오늘 ${rec.status}` : "아직 출근 전입니다");
+    const btnBase = { height: 44, padding: "0 20px", borderRadius: 12, fontSize: 15, fontWeight: 900, whiteSpace: "nowrap", cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1, border: "none" };
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 12px 10px 16px", borderRadius: 16, background: "rgba(143,176,240,0.08)", border: "1px solid rgba(143,176,240,0.28)", boxShadow: working && !done ? "0 0 24px rgba(74,222,128,0.12)" : "none" }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.22em", color }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, boxShadow: `0 0 8px ${color}` }} />{state}
+          </div>
+          <div style={{ marginTop: 4, fontSize: 14, fontWeight: 800, color: "#fff", whiteSpace: "nowrap" }}>{label}</div>
+        </div>
+        {done ? (
+          <button type="button" disabled={busy} onClick={undo} style={{ ...btnBase, background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.25)" }} title="잘못 누른 퇴근을 취소하고 다시 출근 상태로">되돌리기</button>
+        ) : working ? (
+          <button type="button" disabled={busy} onClick={checkOut} style={{ ...btnBase, background: "#fff", color: "#0F1A30" }}>퇴근하기</button>
+        ) : (
+          <button type="button" disabled={busy} onClick={checkIn} style={{ ...btnBase, background: "linear-gradient(135deg,#8FB0F0,#CFE0FF)", color: "#0B1428", boxShadow: "0 8px 22px rgba(143,176,240,0.35)" }}>출근하기</button>
+        )}
+      </div>
+    );
+  }
   if (variant === "mobile") {
     // 모바일 — 머리줄 아래 얇은 한 줄(어느 화면에서든 바로 보이게)
     const wrap = `mx-3 mb-2 flex items-center gap-2 rounded-xl px-3 h-10 ${dark ? "bg-white/10 ring-1 ring-white/15 text-white" : "bg-white ring-1 ring-[#E3E8F0] text-[#0F1A30] shadow-[0_1px_2px_rgba(16,24,40,0.05)]"}`;
