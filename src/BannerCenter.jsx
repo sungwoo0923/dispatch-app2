@@ -6,7 +6,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { db, auth } from "./firebase";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { arrayUnion, collection, doc, onSnapshot, query, setDoc, where } from "firebase/firestore";
 
 const ICONS = {
   mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>,
@@ -106,6 +106,11 @@ export default function BannerCenter({ bottom = 24 }) {
         if (m.kind === "approval") return; // 전자결재 결과 메일은 기록용 — 배너는 결재 변화 감지(아래)에서 한 번만
         const at = m.at?.toMillis ? m.at.toMillis() : Date.now();
         if (at < startedAt) return;
+        // ⭐ 2026-11-01 같은 내용의 공지(인사발령·부고) 배너가 홈에서 또 뜨지 않게 "본 것"으로 남긴다(이 기기 + 내 계정)
+        if (m.noticeKey) {
+          try { const k = JSON.parse(localStorage.getItem("permDismissed") || "[]"); if (!k.includes(m.noticeKey)) localStorage.setItem("permDismissed", JSON.stringify([...k, m.noticeKey].slice(-300))); } catch { /* 무시 */ }
+          setDoc(doc(db, "userSeenNotifs", uid), { keys: arrayUnion(m.noticeKey) }, { merge: true }).catch(() => {});
+        }
         setItems((p) => (p.some((x) => x.id === m.id) ? p : [...p, m].slice(-4)));
       });
     }, () => {});

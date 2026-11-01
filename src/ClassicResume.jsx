@@ -46,7 +46,7 @@ export default function ClassicResume({ company, person = {}, resume = {}, photo
         </tbody>
       </table>
 
-      <Section title="학력사항" en="EDUCATION" head={[["기 간", 190], ["학 교 명"], ["전공 · 졸업 구분"]]} rows={(resume.education || []).map((e) => [e.period, e.school, e.detail])} />
+      <Section title="학력사항" en="EDUCATION" head={[["기 간", 190], ["학 교 명"], ["전공 · 졸업 구분"]]} rows={(resume.education || []).map((e) => [e.period, e.school, [e.detail, e.status].filter(Boolean).join(" · ")])} />
       <Section title="경력사항" en="CAREER" head={[["기 간", 190], ["근 무 처"], ["담당 업무 · 직위"]]} rows={(resume.career || []).map((c) => [c.period, c.company, c.detail])} />
       <Section title="자격 · 면허" en="LICENSE" head={[["취 득 일", 190], ["자 격 명"], ["발 급 기 관"]]} rows={(resume.certificates || []).map((c) => [c.date, c.name, c.issuer])} min={2} />
       <Section title="가족관계" en="FAMILY" head={[["관 계", 110], ["성 명", 160], ["생년월일 · 연령"], ["직 업"]]} rows={(resume.family || []).map((f) => [f.relation, f.name, f.birth, f.job])} min={2} />

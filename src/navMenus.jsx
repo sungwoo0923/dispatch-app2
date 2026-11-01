@@ -43,7 +43,7 @@ function registeredItems(code) {
 
 // 세부 메뉴 이동 요청 — 화면이 아직 안 열렸으면 열린 뒤(3초 안) 적용
 export function emitSubnav(code, key) {
-  try { window.__kpPendingSub = { code, key, at: Date.now() }; } catch { /* 무시 */ }
+  try { window.__kpPendingSub = { code, key, at: Date.now() }; } catch { /* 무시 */ } // 화면이 늦게 열려도(처음 불러오기) 10초 안이면 적용
   try { window.dispatchEvent(new CustomEvent("kp:subnav", { detail: { code, key } })); } catch { /* 무시 */ }
 }
 // KpSubNav · AdminShell에서 — 이 화면(code)의 항목(keys)으로 이동 요청이 오면 onSelect(key)
@@ -61,7 +61,7 @@ export function useSubnavTarget(code, keys, onSelect, labeled = null) {
       return true;
     };
     const p = (() => { try { return window.__kpPendingSub; } catch { return null; } })();
-    if (p && Date.now() - p.at < 3000 && apply(p)) { try { window.__kpPendingSub = null; } catch { /* 무시 */ } }
+    if (p && Date.now() - p.at < 10000 && apply(p)) { try { window.__kpPendingSub = null; } catch { /* 무시 */ } }
     const h = (e) => { if (apply(e.detail)) { try { window.__kpPendingSub = null; } catch { /* 무시 */ } } };
     window.addEventListener("kp:subnav", h);
     return () => window.removeEventListener("kp:subnav", h);
@@ -75,6 +75,7 @@ export function NavHover({ menu, label, disabled = false, onOpenMenu, children }
   // ⭐ 2026-11-01 세부 메뉴가 있는 메뉴는 처음부터 항상 펼친다(한 번 연 화면은 그 사람이 실제로 보는 항목으로)
   const conf = base ? { code: base.code, items: reg && reg.length ? reg : base.items } : null;
   const anchorRef = React.useRef(null);
+  const panelRef = React.useRef(null);
   const [open, setOpen] = React.useState(false);
   const [shown, setShown] = React.useState(false);
   const [pos, setPos] = React.useState({ left: 0, top: 0 });
@@ -97,7 +98,8 @@ export function NavHover({ menu, label, disabled = false, onOpenMenu, children }
   React.useEffect(() => () => clear(), []);
   React.useEffect(() => {
     if (!open) return undefined;
-    const close = () => { setShown(false); setOpen(false); };
+    // ⭐ 세부 메뉴 안을 스크롤(휠·스크롤바)할 땐 닫지 않는다 — 바깥 화면이 스크롤될 때만 닫는다
+    const close = (e) => { if (e && e.type === "scroll" && panelRef.current && e.target instanceof Node && panelRef.current.contains(e.target)) return; setShown(false); setOpen(false); };
     window.addEventListener("scroll", close, true);
     window.addEventListener("resize", close);
     return () => { window.removeEventListener("scroll", close, true); window.removeEventListener("resize", close); };
@@ -105,10 +107,16 @@ export function NavHover({ menu, label, disabled = false, onOpenMenu, children }
   const pick = (key) => { clear(); setShown(false); setOpen(false); onOpenMenu?.(); setTimeout(() => emitSubnav(conf.code, key), 0); };
   return (
     <span ref={anchorRef} className="inline-flex" onMouseEnter={enter} onMouseLeave={leave}
-      onClickCapture={() => { clear(); setShown(false); setOpen(false); /* ⭐ 메뉴를 누르면 펼친 세부 메뉴는 닫힌다 */ }}>
+      onClickCapture={(e) => {
+        // ⭐ 2026-11-01 버그수정 — 세부 메뉴(포털) 안을 눌러도 이 캡처가 먼저 돌아 패널을 지워 버려, 세부 메뉴 버튼의 onClick이 실행되지 않았다(어느 메뉴든 이동 안 됨)
+        if (panelRef.current && e.target instanceof Node && panelRef.current.contains(e.target)) return;
+        clear(); setShown(false); setOpen(false); /* 상단 메뉴 버튼을 누르면 펼친 세부 메뉴는 닫힌다 */
+      }}>
       {children}
       {open && conf && createPortal(
-        <div onMouseEnter={() => clear()} onMouseLeave={leave}
+        <div ref={panelRef} onMouseEnter={() => clear()} onMouseLeave={leave}
+          /* ⭐ 포털이라 휠이 상단 메뉴(nav)까지 올라가 메뉴줄이 옆으로 밀리며 닫혔다 — 여기서 멈춘다 */
+          onWheel={(e) => e.stopPropagation()}
           style={{
             position: "fixed", left: pos.left, top: pos.top, width: 240, zIndex: 2147482000,
             opacity: shown ? 1 : 0, transform: shown ? "translateY(0) scale(1)" : "translateY(-6px) scale(0.98)",
@@ -121,7 +129,7 @@ export function NavHover({ menu, label, disabled = false, onOpenMenu, children }
               <div className="text-[9.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{conf.code}</div>
               <div className="text-[14px] font-black text-white mt-0.5">{label || menu}</div>
             </div>
-            <div className="p-1.5 overflow-y-auto" style={{ maxHeight: "min(70vh, 520px)" }}>
+            <div className="p-1.5 overflow-y-auto" style={{ maxHeight: "min(70vh, 520px)", overscrollBehavior: "contain" }}>
               {conf.items.map(([key, l], i) => (
                 <button key={key} type="button" onClick={() => pick(key)}
                   className="w-full flex items-center gap-2.5 px-3 h-10 rounded-xl text-left text-[13.5px] font-bold text-white/80 hover:text-white hover:bg-white/[0.08] transition"

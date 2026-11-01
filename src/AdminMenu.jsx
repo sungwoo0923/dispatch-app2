@@ -283,6 +283,21 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     if (manageUser?.id === u.id) setManageUser((prev) => ({ ...prev, isMaster: next, ...(next ? { role: "admin" } : {}), personnelHistory: history }));
   };
 
+  // 👑 2026-11-01 마스터 위임 — 마스터(최초 가입자)가 다른 재직 직원에게 마스터를 넘기고 본인은 마스터에서 빠진다
+  const canDelegateMaster = (u) => !!u && (isCompanyMaster || isTotalMaster) && u.id !== me?.uid && !u.isMaster && u.approved !== false
+    && u.employmentStatus !== "퇴사" && !["driver", "shipper", "cafeUser", "totalMaster"].includes(u.role);
+  const delegateMaster = async (u) => {
+    if (!canDelegateMaster(u)) return;
+    const who = u.name || u.email;
+    if (!await kpConfirm(`"${who}"님에게 마스터 권한을 위임할까요?\n\n· ${who}님은 마스터(관리자 권한)가 됩니다\n· 본인은 마스터에서 빠지고 지금 권한(${roleLabels[meDoc?.role] || meDoc?.role || "-"})은 그대로입니다\n· 되돌리려면 새 마스터가 다시 위임해야 합니다`)) return;
+    const day = todayStr(); const by = meDoc?.name || me?.email || "";
+    try {
+      await setDoc(doc(db, "users", u.id), { isMaster: true, role: "admin", personnelHistory: [...(u.personnelHistory || []), { date: day, type: "마스터 위임 받음", detail: by }] }, { merge: true });
+      if (!isTotalMaster && meDoc) await setDoc(doc(db, "users", meDoc.id), { isMaster: false, personnelHistory: [...(meDoc.personnelHistory || []), { date: day, type: "마스터 위임", detail: who }] }, { merge: true });
+      alert(`"${who}"님에게 마스터를 위임했습니다.`);
+    } catch (e) { alert(`위임 실패: ${e.message}`); }
+  };
+
   const visibleUsers = useMemo(() => {
     if (isTotalMaster) return users;
     return users.filter(u =>
@@ -968,10 +983,14 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                           </div>
                           {/* ⭐ 승인·수정·퇴사·삭제는 최고관리자만. 그 외에는 본인 이름·핸드폰번호만 수정 */}
                           {!canEditMember(u) && me?.uid === u.id && !editMode && (
-                            <button onClick={() => setEditMode(true)} className="h-10 px-4 rounded-xl text-[13px] font-extrabold bg-[#0F1A30] text-white hover:bg-[#1B2B4B] transition">내 이름·번호 수정</button>
+                            <button onClick={() => setEditMode(true)} className="h-10 px-4 rounded-xl text-[13px] font-extrabold bg-[#0F1A30] text-white hover:bg-[#1B2B4B] transition">수정</button>
                           )}
                           {!canEditMember(u) && me?.uid !== u.id && !editMode && (
                             <span className="text-[12px] font-bold text-[#9AA9C3]">직책·부서·권한 변경은 인사관리부 › 인사발령</span>
+                          )}
+                          {canDelegateMaster(u) && !editMode && (
+                            <button onClick={() => delegateMaster(u)} title="이 직원에게 마스터를 넘기고 본인은 마스터에서 빠집니다"
+                              className="h-10 px-4 rounded-xl text-[13px] font-extrabold border border-[#0F1A30] text-[#0F1A30] hover:bg-[#F5F8FD] transition whitespace-nowrap">👑 마스터 위임</button>
                           )}
                           {/* ⭐ 버튼은 하나 — 승인 전엔 "승인·거절", 승인 후엔 "정보 수정". 누르면 창 안에서 승인·거절·수정·마스터·퇴사·삭제 */}
                           {canEditMember(u) && canManage && !editMode && (

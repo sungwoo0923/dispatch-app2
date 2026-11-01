@@ -8,7 +8,7 @@ import React from "react";
 import { kpConfirm } from "./kpDialog";
 import html2canvas from "html2canvas";
 import { db, auth } from "./firebase";
-import { addDoc, collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { addDoc, collection, doc, increment, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { suggestRole, isExecProfile, useHrOptions } from "./hrConstants";
 import { useRoleOptions } from "./customRoles";
 import { sendInternalMail, useCompanyStaff, compressImage } from "./InternalMail";
@@ -19,6 +19,7 @@ export const HR_ROLE_OPTIONS = [
 const roleName = (r) => (HR_ROLE_OPTIONS.find(([k]) => k === r) || [r, r || "-"])[1];
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const korDate = (s) => { const [y, m, d] = String(s || "").split("-").map(Number); return y ? `${y}년 ${m}월 ${d}일` : ""; };
+export const JUNIOR_RANKS = ["인턴", "사원", "주임", "대리"];
 const RANK = ["인턴", "사원", "주임", "대리", "과장", "차장", "부장", "팀장", "파트장", "이사", "전무", "대표", "대표이사"];
 
 function autoType(cur, next) {
@@ -48,12 +49,26 @@ function Ed({ value, onChange, capture, className = "", placeholder }) {
 export default function PersonnelOrder({ company, target, myName, isSelf }) {
   const ro = useRoleOptions();
   const roleName = ro.label;
-  const suggestR = (x) => (isExecProfile(x) && ro.execKeys[0] ? ro.execKeys[0] : suggestRole(x));
+  // ⭐ 2026-11-01 대리까지(인턴·사원·주임·대리)는 일반 사무원 — 직책을 고르면 권한이 자동으로 일반 사무원(실무자)으로 바뀐다
+  //   (회사에서 "일반사무원" 이름의 권한을 만들어 두었으면 그 권한). 권한 칸에서 다시 고르면 고른 대로 발령된다
+  const staffRole = (ro.options.find(([, l]) => /사무원/.test(String(l || ""))) || ["user"])[0];
+  const suggestR = (x) => (isExecProfile(x) && ro.execKeys[0] ? ro.execKeys[0] : JUNIOR_RANKS.includes(String(x?.position || "").trim()) ? staffRole : suggestRole(x));
   const hrOpt = useHrOptions(company);
   const positionsForTeam = hrOpt.positionsFor; const TEAM_OPTIONS = hrOpt.teams;
   const staff = useCompanyStaff(company);
-  const cur = { position: target?.position || "", team: target?.team && target.team !== "미배정" ? target.team : "", role: target?.role || "user" };
-  const [next, setNext] = React.useState(cur);
+  const curLive = { position: target?.position || "", team: target?.team && target.team !== "미배정" ? target.team : "", role: target?.role || "user" };
+  // ✏ 2026-11-01 정정 발령 — 잘못 올린 공문을 고칠 때는 "발령 전" 값을 기준으로 다시 만든다(같은 공지를 고쳐 올림)
+  const [revising, setRevising] = React.useState(null);
+  const cur = revising?.hrOrder?.from || curLive;
+  const [next, setNext] = React.useState(curLive);
+  // 이 직원의 인사발령 공지(정정·취소용) — 공지 문서 안에 발령 내용(hrOrder)을 같이 저장해 둔다
+  const [orders, setOrders] = React.useState([]);
+  React.useEffect(() => {
+    if (!company || !target?.uid) { setOrders([]); return undefined; }
+    return onSnapshot(query(collection(db, "notices"), where("companyName", "==", company), where("category", "==", "인사발령")),
+      (sn) => setOrders(sn.docs.map((d) => ({ id: d.id, ...d.data() })).filter((n) => n.hrOrder?.uid === target.uid)
+        .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))), () => setOrders([]));
+  }, [company, target?.uid]);
   const [date, setDate] = React.useState(today());
   const [doc_, setDoc_] = React.useState({});
   const [capture, setCapture] = React.useState(false);
@@ -64,7 +79,7 @@ export default function PersonnelOrder({ company, target, myName, isSelf }) {
   // 대상자가 바뀌면 처음부터
   React.useEffect(() => {
     setNext({ position: target?.position || "", team: target?.team && target.team !== "미배정" ? target.team : "", role: target?.role || "user" });
-    setDoc_({}); setDone(null); setDate(today());
+    setDoc_({}); setDone(null); setDate(today()); setRevising(null);
   }, [target?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const changed = next.position !== cur.position || next.team !== cur.team || next.role !== cur.role;
@@ -89,7 +104,8 @@ export default function PersonnelOrder({ company, target, myName, isSelf }) {
   const send = async () => {
     if (!target) return;
     if (!changed && !await kpConfirm("바뀐 직책·부서·권한이 없습니다. 공문만 발송할까요?")) return;
-    if (changed && !await kpConfirm(`${target.name}님을 ${v("toTeam")} ${v("toPos")}(${v("toRole")})(으)로 발령하고 전 직원에게 공문을 발송할까요?`)) return;
+    if (revising && !await kpConfirm(`「${revising.title}」 공문을 정정할까요?\n\n· 같은 공지사항이 정정된 내용으로 바뀌고 제목 앞에 [정정]이 붙습니다\n· ${target.name}님 정보가 ${v("toTeam")} ${v("toPos")}(${v("toRole")})(으)로 다시 반영됩니다\n· 전 직원에게 정정 안내 메일·푸시가 나갑니다`)) return;
+    if (!revising && changed && !await kpConfirm(`${target.name}님을 ${v("toTeam")} ${v("toPos")}(${v("toRole")})(으)로 발령하고 전 직원에게 공문을 발송할까요?`)) return;
     // 회원 정보가 바뀌면 "현 소속" 자동 문구도 바뀌므로, 지금 보이는 공문 내용을 그대로 고정해 둔다
     const frozen = Object.fromEntries(Object.keys(auto).map((k) => [k, v(k)]));
     setDoc_(frozen);
@@ -103,7 +119,7 @@ export default function PersonnelOrder({ company, target, myName, isSelf }) {
       ].filter(Boolean).join(" / ") || fv("type");
       const patch = {
         position: next.position, team: next.team,
-        personnelHistory: [...(target.personnelHistory || []), { date, type: fv("type"), detail: `${detail}${target.pendingOrder?.docNo ? ` · 결재 ${target.pendingOrder.docNo}` : ""}` }],
+        personnelHistory: [...(target.personnelHistory || []), { date, type: revising ? `발령 정정(${fv("type")})` : fv("type"), detail: `${detail}${target.pendingOrder?.docNo ? ` · 결재 ${target.pendingOrder.docNo}` : ""}` }],
         ...(target.pendingOrder ? { pendingOrder: null } : {}), // 결재 완료 발령을 공문으로 게시했으면 비운다
       };
       // 🎉 발령 받은 사람이 다음 접속 때 한 번 보는 축하·안내 창(OrderCongratsPopup)
@@ -112,7 +128,7 @@ export default function PersonnelOrder({ company, target, myName, isSelf }) {
         fromTeam: fv("fromTeam"), toTeam: fv("toTeam"), fromPos: fv("fromPos"), toPos: fv("toPos"), fromRole: fv("fromRole"), toRole: fv("toRole"),
       };
       const roleNext = next.role; // ⭐ 2026-10-31 임원도 권한 관리의 역할을 그대로(임원 화면 역할 추천)
-      if (roleNext !== cur.role && !isSelf) patch.role = roleNext;
+      if (roleNext !== curLive.role && !isSelf) patch.role = roleNext;
       await setDoc(doc(db, "users", target.uid), patch, { merge: true });
 
       setBusy("공문 이미지 만드는 중…");
@@ -122,23 +138,72 @@ export default function PersonnelOrder({ company, target, myName, isSelf }) {
       setCapture(false);
       const image = await compressImage(canvas.toDataURL("image/jpeg", 0.92), 1800, 0.88); // 공지에 크게 올라가도 선명하게
 
-      const title = `${korDate(date)} 인사발령`;
+      const baseTitle = `${korDate(date)} 인사발령`;
+      const title = revising ? `[정정] ${baseTitle}` : baseTitle;
       const text = `${fv("lead")}\n\n· 발령구분: ${fv("type")}\n· 대상: ${fv("name")}\n· 발령: ${fv("fromTeam")} ${fv("fromPos")} → ${fv("toTeam")} ${fv("toPos")} (${fv("toRole")})\n· 시행일: ${fv("effective")}${fv("note") ? `\n· 비고: ${fv("note")}` : ""}`;
 
-      setBusy("사내게시판 공지 올리는 중…");
-      await addDoc(collection(db, "notices"), {
-        title, category: "인사발령", author: myName || "", content: text, audience: "internal",
-        authorUid: auth.currentUser?.uid || "", createdAt: serverTimestamp(), companyName: company, image,
-      });
+      const hrOrder = { uid: target.uid, name: fv("name"), from: { ...cur }, to: { ...next }, date, type: fv("type"), status: revising ? "revised" : "active", revision: (revising?.hrOrder?.revision || 0) + (revising ? 1 : 0) };
+      let noticeKey = "";
+      setBusy(revising ? "공지사항 정정 중…" : "사내게시판 공지 올리는 중…");
+      if (revising) {
+        // 같은 공지를 고친다 — 목록 순서(작성일)는 그대로, 정정 시각·정정 전 제목을 남긴다
+        await updateDoc(doc(db, "notices", revising.id), {
+          title, content: `※ ${new Date().toLocaleDateString("ko-KR")} 정정된 공문입니다. 이전 공문은 무효입니다.\n\n${text}`, image, hrOrder,
+          revisedAt: serverTimestamp(), revisedBy: myName || "", prevTitle: revising.title || "", readBy: [], editVer: increment(1),
+        });
+        noticeKey = `notice_${revising.id}_v${(revising.editVer || 0) + 1}`;
+      } else {
+        const nref = await addDoc(collection(db, "notices"), {
+          title, category: "인사발령", author: myName || "", content: text, audience: "internal",
+          authorUid: auth.currentUser?.uid || "", createdAt: serverTimestamp(), companyName: company, image, hrOrder,
+        });
+        noticeKey = `notice_${nref.id}`;
+      }
 
       setBusy("전 직원 사내메일 보내는 중…");
       const to = (staff || []).filter((u) => u.uid !== auth.currentUser?.uid);
-      if (to.length) await sendInternalMail({ company, to, subject: `[인사발령] ${title} · ${fv("name")} ${fv("type")}`, body: text, images: [image], kind: "hr", fromName: myName });
-      setDone({ to: to.length, title });
+      if (to.length) await sendInternalMail({ company, to, subject: revising ? `[인사발령 정정] ${baseTitle} · ${fv("name")} — 이전 공문은 무효입니다` : `[인사발령] ${title} · ${fv("name")} ${fv("type")}`, body: revising ? `앞서 안내한 인사발령 공문을 아래와 같이 정정합니다. 이전 공문은 무효입니다.\n\n${text}` : text, images: [image], kind: "hr", fromName: myName, noticeKey });
+      setDone({ to: to.length, title, revised: !!revising });
+      setRevising(null);
     } catch (e) {
       setCapture(false);
       alert(`발송 실패: ${e.message || e}`);
     } finally { setBusy(""); }
+  };
+
+  // ✏ 정정 — 그 공문의 발령 내용을 불러와 고친 뒤 [정정 공문 발송]
+  const startRevise = (n) => {
+    const o = n.hrOrder || {};
+    setRevising(n); setDone(null);
+    setNext({ position: o.to?.position || "", team: o.to?.team || "", role: o.to?.role || curLive.role });
+    if (o.date) setDate(o.date);
+    setDoc_({});
+  };
+  // ↩ 취소 — 발령 전 직책·부서·권한으로 되돌리고, 공지는 [취소]로 바꿔 남긴다(지우지 않음 — 이미 본 직원이 헷갈리지 않게)
+  const cancelOrder = async (n) => {
+    const o = n.hrOrder || {};
+    const reason = window.prompt(`「${n.title}」 발령을 취소합니다.\n취소 사유를 적어 주세요(공지·메일에 함께 나갑니다).`, "공문 오기재");
+    if (reason === null) return;
+    if (!await kpConfirm(`${o.name || target.name}님을 발령 전(${o.from?.team || "미배정"} ${o.from?.position || "-"} · ${roleName(o.from?.role)})으로 되돌리고\n공지사항을 [취소]로 바꾼 뒤 전 직원에게 알릴까요?`)) return;
+    setBusy("발령 취소 중…");
+    try {
+      const patch = {
+        position: o.from?.position || "", team: o.from?.team || "",
+        personnelHistory: [...(target.personnelHistory || []), { date: today(), type: "발령 취소", detail: `${n.title}${reason ? ` · 사유: ${reason}` : ""}` }],
+        orderNotice: null,
+      };
+      if (o.from?.role && o.from.role !== curLive.role && !isSelf) patch.role = o.from.role;
+      await setDoc(doc(db, "users", target.uid), patch, { merge: true });
+      const t = String(n.title || "").replace(/^\[(정정|취소)\]\s*/, "");
+      await updateDoc(doc(db, "notices", n.id), {
+        title: `[취소] ${t}`, content: `※ 본 인사발령은 취소되었습니다.${reason ? ` (사유: ${reason})` : ""}\n발령 전 소속(${o.from?.team || "미배정"} ${o.from?.position || "-"})으로 유지됩니다.\n\n──────── 취소된 공문 ────────\n${String(n.content || "").replace(/^※[^\n]*\n\n/, "")}`,
+        hrOrder: { ...o, status: "cancelled", cancelReason: reason || "" }, cancelledAt: serverTimestamp(), revisedAt: serverTimestamp(), revisedBy: myName || "", readBy: [], editVer: increment(1),
+      });
+      const to = (staff || []).filter((u) => u.uid !== auth.currentUser?.uid);
+      if (to.length) await sendInternalMail({ company, to, subject: `[인사발령 취소] ${t} · ${o.name || target.name}`, body: `앞서 안내한 「${t}」 인사발령을 취소합니다.${reason ? `\n사유: ${reason}` : ""}\n${o.name || target.name}님은 발령 전 소속(${o.from?.team || "미배정"} ${o.from?.position || "-"})으로 유지됩니다.`, kind: "hr", fromName: myName, noticeKey: `notice_${n.id}_v${(n.editVer || 0) + 1}` });
+      if (revising?.id === n.id) setRevising(null);
+      alert("발령을 취소했습니다. 공지사항은 [취소]로 바뀌었습니다.");
+    } catch (e) { alert(`취소 실패: ${e.message || e}`); } finally { setBusy(""); }
   };
 
   if (!target) return <div className="py-16 text-center text-[14px] text-[#9AA9C3]">왼쪽에서 발령할 직원을 골라 주세요</div>;
@@ -194,17 +259,52 @@ export default function PersonnelOrder({ company, target, myName, isSelf }) {
             <span className="text-[14px] font-black text-[#0F1A30]">{type}</span>
           </div>
         </div>
+        {revising && (
+          <div className="rounded-2xl border-2 border-[#B54708]/40 bg-[#FFF8EE] p-4">
+            <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#B54708]">REVISION · 정정 중</div>
+            <div className="text-[14.5px] font-black text-[#0F1A30] mt-0.5 truncate">「{revising.title}」</div>
+            <div className="text-[12px] text-[#7A5A2E] mt-1 leading-relaxed">발령 전 소속({cur.team || "미배정"} {cur.position || "-"}) 기준으로 다시 고릅니다. 발송하면 같은 공지가 [정정]으로 바뀝니다.</div>
+            <button type="button" onClick={() => { setRevising(null); setNext(curLive); setDoc_({}); setDate(today()); }} className="mt-2 h-9 px-3 rounded-lg border border-[#E7C9A0] bg-white text-[12.5px] font-black text-[#7A5A2E]">정정 그만두기</button>
+          </div>
+        )}
         {done ? (
           <div className="rounded-2xl bg-[#0F1A30] text-white p-5">
-            <div className="text-[16px] font-black">발송 완료</div>
+            <div className="text-[16px] font-black">{done.revised ? "정정 발송 완료" : "발송 완료"}</div>
             <div className="text-[13px] text-white/75 mt-1 leading-relaxed">· 공지사항 「{done.title}」 등록<br />· 전 직원 {done.to}명 사내메일(공문 이미지 포함)<br />· 접속 중인 직원 화면 배너 · 휴대폰 푸시</div>
           </div>
         ) : (
           <button onClick={send} disabled={!!busy}
             className="w-full h-14 rounded-2xl text-white text-[15.5px] font-black shadow-[0_12px_26px_rgba(15,26,48,0.28)] disabled:opacity-60"
             style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
-            {busy || "발령 공문 발송"}
+            {busy || (revising ? "정정 공문 발송" : "발령 공문 발송")}
           </button>
+        )}
+        {orders.length > 0 && (
+          <div className="rounded-2xl border border-[#E3E8F0] bg-white p-4">
+            <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">HISTORY</div>
+            <div className="text-[14.5px] font-black text-[#0F1A30]">올린 발령 공문 <span className="text-[12px] font-bold text-[#9AA9C3]">잘못 올렸으면 정정·취소</span></div>
+            <div className="mt-2 space-y-1.5">
+              {orders.slice(0, 6).map((n) => {
+                const st = n.hrOrder?.status;
+                const mine = !n.authorUid || n.authorUid === auth.currentUser?.uid;
+                return (
+                  <div key={n.id} className="px-3 py-2.5 rounded-xl bg-[#F5F8FD] border border-[#EDF1F7]">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className={`shrink-0 px-1.5 h-[18px] rounded text-[10.5px] font-black grid place-items-center ${st === "cancelled" ? "bg-[#FEF3F2] text-[#B42318]" : st === "revised" ? "bg-[#FFF4E5] text-[#B54708]" : "bg-[#ECFDF3] text-[#067647]"}`}>{st === "cancelled" ? "취소" : st === "revised" ? `정정${n.hrOrder?.revision > 1 ? ` ${n.hrOrder.revision}차` : ""}` : "게시"}</span>
+                      <span className="text-[13px] font-black text-[#0F1A30] truncate">{String(n.title || "").replace(/^\[(정정|취소)\]\s*/, "")}</span>
+                    </div>
+                    <div className="text-[11.5px] text-[#7A879C] truncate mt-0.5">{n.hrOrder?.from?.position || "-"} → {n.hrOrder?.to?.team || "미배정"} {n.hrOrder?.to?.position || "-"}</div>
+                    {st !== "cancelled" && (mine ? (
+                      <div className="mt-2 grid grid-cols-2 gap-1.5">
+                        <button type="button" disabled={!!busy} onClick={() => startRevise(n)} className="h-8 rounded-lg border border-[#C9D6EE] bg-white text-[12px] font-black text-[#1B2B4B] hover:bg-[#EEF3FC]">정정 발령</button>
+                        <button type="button" disabled={!!busy} onClick={() => cancelOrder(n)} className="h-8 rounded-lg border border-[#F4C7C3] bg-white text-[12px] font-black text-[#B42318] hover:bg-[#FEF3F2]">발령 취소</button>
+                      </div>
+                    ) : <div className="mt-1.5 text-[11px] text-[#9AA9C3]">정정·취소는 공문을 올린 {n.author || "담당자"}님만</div>)}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
         <div className="text-[12px] text-[#9AA9C3] leading-relaxed px-1">공문 글자는 오른쪽 미리보기에서 눌러서 바로 고칠 수 있습니다. 발송하면 회원 정보가 바뀌고, 공지사항·전 직원 사내메일·푸시가 함께 나갑니다.</div>
       </div>

@@ -80,6 +80,7 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
             <div className="leading-tight">
               <div className="text-[14px] font-black text-[#0F1A30]">{cur.author || "-"}</div>
               <div className="text-[12px] text-[#7A879C] tabular-nums">{fullDate(ms)} · 읽음 {(cur.readBy || []).length}</div>
+              {cur.revisedAt && <div className="text-[12px] font-bold text-[#B54708] tabular-nums">{cur.hrOrder?.status === "cancelled" ? "취소" : "수정"} {fullDate(toMs(cur.revisedAt))}{cur.revisedBy ? ` · ${cur.revisedBy}` : ""}</div>}
             </div>
           </div>
         </div>
@@ -118,6 +119,7 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
           {n.audience === "shipper" && <span className="shrink-0 px-1.5 py-0.5 rounded border border-[#C9D6EE] text-[#2D4C82] text-[10.5px] font-black">화주사</span>}
           {(n.teams || []).length > 0 && <span className="shrink-0 px-1.5 py-0.5 rounded border border-[#C9D6EE] text-[#2D4C82] text-[10.5px] font-black">{n.teams.length === 1 ? n.teams[0] : `${n.teams[0]} 외 ${n.teams.length - 1}`}</span>}
           <span className={`truncate ${pin ? "text-[15.5px] font-black text-[#0B1428]" : unread ? "text-[15px] font-black text-[#0F1A30]" : "text-[15px] font-semibold text-[#3A4A66]"}`}>{n.title || "공지사항"}</span>
+          {n.revisedAt && <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10.5px] font-black ${n.hrOrder?.status === "cancelled" ? "bg-[#FEF3F2] text-[#B42318]" : "bg-[#FFF4E5] text-[#B54708]"}`}>{n.hrOrder?.status === "cancelled" ? "취소" : "수정됨"}</span>}
           {n.image && <span className="shrink-0 text-[11px] text-[#9AA9C3]">▣</span>}
           {isNew(n) && unread && <span className="shrink-0 w-[18px] h-[18px] rounded-full bg-[#1B2B4B] text-white text-[10px] font-black flex items-center justify-center">N</span>}
         </span>

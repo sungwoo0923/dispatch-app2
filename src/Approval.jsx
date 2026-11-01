@@ -29,10 +29,11 @@ import { ShellIcon } from "./AdminShell";
 import { useCompanyStaff, compressImage, sendInternalMail } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
 import CustomSelect from "./CustomSelect";
+import { isExecProfile, isExecPosition } from "./hrConstants";
 import { useLeaveGuard, draftStore, confirmLeave } from "./leaveGuard";
 import {
   APPROVAL_CATS, APPROVAL_FORMS, formOf, formsOfCat, initialData, missingFields, fieldText, suggestLine,
-  itemsTotal, costsTotal, fmtWon, dayDiff, bizDays, leaveEntitlement, leaveUseOf, rankOf,
+  itemsTotal, costsTotal, fmtWon, dayDiff, bizDays, leaveEntitlement, leaveUseOf,
 } from "./approvalForms";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
@@ -640,6 +641,8 @@ const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 
 export function autoApproveOn(cfg, uid, d) {
   const a = cfg?.autoApprovers?.[uid];
   if (!a || a.on !== true) return false;
+  // ⭐ 2026-11-01 임원만 — 예전에 임원이 아닌 직원이 켜 둔 설정은 무시한다
+  if (!(a.exec === true || isExecPosition(a.position))) return false;
   const t = kstToday();
   if (a.from && t < a.from) return false;
   if (a.to && t > a.to) return false;
@@ -1285,7 +1288,7 @@ function LinesPage({ company, me, staff }) {
 
 // ─────────────────────────── 메인 ───────────────────────────
 //  page: inbox | mine | leave | expense | draft | lines
-// 🤖 2026-11-01 자동 승인(부재·위임) 설정 카드 — 임원(이사 이상)·관리자. 켜면 결재 차례가 왔을 때 자동 승인
+// 🤖 2026-11-01 자동 승인(부재·위임) 설정 — 임원만(버튼 → 팝업). 켜면 결재 차례가 왔을 때 자동 승인
 const AUTO_SKIP_FORMS = [["resign", "사직서"], ["parental", "육아휴직"], ["maternity", "출산휴가"], ["accident", "사고처리"], ["rate", "운임 변경"]];
 function AutoApproveCard({ company, me, todo = [] }) {
   const cfg = useApprovalSettings(company);
@@ -1298,7 +1301,7 @@ function AutoApproveCard({ company, me, todo = [] }) {
   const save = async (next) => {
     setBusy(true);
     try {
-      const v = { on: !!next.on, from: next.from || "", to: next.to || "", maxAmount: Number(String(next.maxAmount || "").replace(/[^\d]/g, "")) || 0, skipForms: next.skipForms || [], name: me.name || "", position: me.position || "", updatedAt: Date.now() };
+      const v = { on: !!next.on, from: next.from || "", to: next.to || "", maxAmount: Number(String(next.maxAmount || "").replace(/[^\d]/g, "")) || 0, skipForms: next.skipForms || [], name: me.name || "", position: me.position || "", exec: isExecProfile(me) || me.role === "totalMaster", updatedAt: Date.now() };
       await setDoc(doc(db, "approvalSettings", company), { companyName: company, autoApprovers: { [me.uid]: v } }, { merge: true });
       // 켜면 지금 내 차례인 문서도 바로 처리
       if (v.on) {
@@ -1316,34 +1319,57 @@ function AutoApproveCard({ company, me, todo = [] }) {
       setOpen(false); setF(null);
     } catch (e) { window.alert(`저장 실패: ${e.message}`); } finally { setBusy(false); }
   };
+  const summary = active ? `${cur.from || "오늘"} ~ ${cur.to || "끌 때까지"}${cur.maxAmount ? ` · ${Number(cur.maxAmount).toLocaleString()}원 이하만` : ""}${(cur.skipForms || []).length ? ` · 제외: ${(cur.skipForms || []).map((k) => (AUTO_SKIP_FORMS.find((x) => x[0] === k) || [k, k])[1]).join(", ")}` : ""}` : "";
+  const close = () => { setOpen(false); setF(null); };
+  // ⭐ 2026-11-01 카드 → 버튼 하나("자동 승인") + 팝업에서 설정
   return (
-    <div className="rounded-2xl border overflow-hidden" style={{ borderColor: active ? "#D7BC82" : "#E3E8F0", background: active ? "linear-gradient(120deg,#FFFBF2,#FFF4E5)" : "#fff" }}>
-      <div className="px-4 py-3 flex items-center gap-3 flex-wrap">
-        <span className={`w-10 h-10 rounded-xl grid place-items-center text-[12px] font-black shrink-0 ${active ? "text-[#1A1405]" : "bg-[#EEF3FC] text-[#1B2B4B]"}`} style={active ? { background: "linear-gradient(180deg,#F1DFB4,#D7BC82)" } : undefined}>AUTO</span>
-        <div className="flex-1 min-w-0">
-          <div className="text-[15px] font-black text-[#0F1A30]">자동 승인(부재·위임) {active ? <span className="ml-1 text-[12px] font-black px-2 py-0.5 rounded-full bg-[#B88A2E] text-white">켜짐</span> : <span className="ml-1 text-[12px] font-bold text-[#9AA9C3]">꺼짐</span>}</div>
-          <div className="text-[12.5px] text-[#7A879C] truncate">{active ? `${cur.from || "오늘"} ~ ${cur.to || "끌 때까지"}${cur.maxAmount ? ` · ${Number(cur.maxAmount).toLocaleString()}원 이하만` : ""}${(cur.skipForms || []).length ? ` · 제외: ${(cur.skipForms || []).map((k) => (AUTO_SKIP_FORMS.find((x) => x[0] === k) || [k, k])[1]).join(", ")}` : ""}` : "출장·부재로 결재가 어려울 때 켜 두면, 내 결재 차례가 오는 즉시 자동으로 승인됩니다"}</div>
-        </div>
-        {active && <button type="button" disabled={busy} onClick={() => save({ ...cur, on: false })} className="h-9 px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-black text-[#B42318]">끄기</button>}
-        <button type="button" onClick={() => setOpen((o) => !o)} className="h-9 px-3.5 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black">{open ? "닫기" : "설정"}</button>
+    <>
+      <div className="flex justify-end">
+        <button type="button" onClick={() => setOpen(true)} title={active ? `자동 승인 켜짐 · ${summary}` : "출장·부재로 결재가 어려울 때 켜 두면 내 결재 차례에 자동으로 승인됩니다"}
+          className={`h-10 pl-2 pr-4 rounded-xl inline-flex items-center gap-2 text-[13.5px] font-black border transition ${active ? "text-[#1A1405] border-[#D7BC82]" : "bg-white text-[#0F1A30] border-[#DCE3EE] hover:bg-[#F5F8FD]"}`}
+          style={active ? { background: "linear-gradient(180deg,#FFF6E2,#F6E7C4)" } : undefined}>
+          <span className={`h-7 px-1.5 rounded-lg grid place-items-center text-[10.5px] font-black ${active ? "text-[#1A1405]" : "bg-[#EEF3FC] text-[#1B2B4B]"}`} style={active ? { background: "linear-gradient(180deg,#F1DFB4,#D7BC82)" } : undefined}>AUTO</span>
+          자동 승인
+          <span className={`h-5 px-1.5 rounded-full text-[11px] font-black grid place-items-center ${active ? "bg-[#B88A2E] text-white" : "bg-[#F1F4F9] text-[#9AA9C3]"}`}>{active ? "켜짐" : "꺼짐"}</span>
+        </button>
       </div>
-      {open && f && (
-        <div className="px-4 pb-4 pt-1 border-t border-[#EEE3CC] space-y-3">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            <label className="col-span-2 md:col-span-1 flex items-center gap-2 h-11 px-3 rounded-xl bg-white border border-[#DCE3EE] text-[14px] font-black text-[#0F1A30]"><input type="checkbox" checked={f.on} onChange={(e) => setF({ ...f, on: e.target.checked })} />자동 승인 켜기</label>
-            <div><div className="text-[12px] font-bold text-[#5B6B85] mb-1">시작일(비우면 오늘부터)</div><CustomDatePicker value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} className={inp} showIcon /></div>
-            <div><div className="text-[12px] font-bold text-[#5B6B85] mb-1">종료일(비우면 끌 때까지)</div><CustomDatePicker value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} className={inp} showIcon /></div>
-            <div><div className="text-[12px] font-bold text-[#5B6B85] mb-1">금액 상한(지출결의)</div><input inputMode="numeric" value={f.maxAmount ? Number(f.maxAmount).toLocaleString() : ""} onChange={(e) => setF({ ...f, maxAmount: e.target.value.replace(/[^\d]/g, "") })} className={`${inp} text-right`} placeholder="제한 없음" /></div>
+      {open && f && createPortal(
+        <div className="fixed inset-0 z-[99990] bg-[#0B1428]/45 flex items-center justify-center p-3" onClick={close}>
+          <div className="w-full max-w-[560px] max-h-[92vh] overflow-y-auto rounded-[22px] bg-[#F7F9FC] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-5 text-white flex items-start gap-3" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 65%,#2D4C82 100%)" }}>
+              <div className="flex-1 min-w-0">
+                <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#D7BC82]">AUTO APPROVAL · 임원 전용</div>
+                <div className="text-[20px] font-black">자동 승인(부재·위임)</div>
+                <div className="text-[12.5px] text-white/65 mt-0.5">출장·부재로 결재가 어려울 때 켜 두면, 내 결재 차례가 오는 즉시 자동으로 승인됩니다</div>
+              </div>
+              <button type="button" onClick={close} className="w-8 h-8 rounded-lg text-white/60 hover:text-white hover:bg-white/10 font-black">✕</button>
+            </div>
+            <div className="p-5 space-y-4">
+              <button type="button" onClick={() => setF({ ...f, on: !f.on })}
+                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl border text-left transition ${f.on ? "border-[#D7BC82] bg-[#FFF8EA]" : "border-[#DCE3EE] bg-white"}`}>
+                <span className={`relative w-12 h-7 rounded-full transition shrink-0 ${f.on ? "bg-[#B88A2E]" : "bg-[#CBD3E0]"}`}><span className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all ${f.on ? "left-6" : "left-1"}`} /></span>
+                <span className="flex-1 min-w-0"><span className="block text-[15px] font-black text-[#0F1A30]">자동 승인 {f.on ? "켜기" : "끄기"}</span><span className="block text-[12px] text-[#7A879C]">{f.on ? "저장하면 지금 대기 중인 내 결재도 바로 처리됩니다" : "누르면 켜집니다"}</span></span>
+              </button>
+              <div className={`space-y-3 ${f.on ? "" : "opacity-50 pointer-events-none"}`}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div><div className="text-[12px] font-bold text-[#5B6B85] mb-1">시작일(비우면 오늘부터)</div><CustomDatePicker value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} className={inp} showIcon /></div>
+                  <div><div className="text-[12px] font-bold text-[#5B6B85] mb-1">종료일(비우면 끌 때까지)</div><CustomDatePicker value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} className={inp} showIcon /></div>
+                </div>
+                <div><div className="text-[12px] font-bold text-[#5B6B85] mb-1">금액 상한(지출결의)</div><input inputMode="numeric" value={f.maxAmount ? Number(f.maxAmount).toLocaleString() : ""} onChange={(e) => setF({ ...f, maxAmount: e.target.value.replace(/[^\d]/g, "") })} className={`${inp} text-right`} placeholder="제한 없음" /></div>
+                <div>
+                  <div className="text-[12px] font-bold text-[#5B6B85] mb-1">자동 승인하지 않을 문서(직접 결재)</div>
+                  <div className="flex flex-wrap gap-1.5">{AUTO_SKIP_FORMS.map(([k, l]) => { const on = f.skipForms.includes(k); return <button key={k} type="button" onClick={() => setF({ ...f, skipForms: on ? f.skipForms.filter((x) => x !== k) : [...f.skipForms, k] })} className={`h-8 px-3 rounded-full text-[12.5px] font-black border ${on ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}>{on ? "✓ " : ""}{l}</button>; })}</div>
+                </div>
+              </div>
+              <div className="rounded-xl bg-white border border-[#E3E8F0] px-3 py-2 text-[12px] text-[#5B6B85] leading-relaxed">자동 승인된 결재는 문서에 "자동 승인(부재·위임 설정)"으로 기록되고, 기안자에게 결과가 그대로 통보됩니다. 금액 상한을 넘거나 제외한 문서는 평소처럼 직접 결재합니다.</div>
+            </div>
+            <div className="sticky bottom-0 px-5 py-4 bg-white border-t border-[#E3E8F0] flex gap-2">
+              <button type="button" onClick={close} className="h-11 px-5 rounded-xl border border-[#DCE3EE] text-[13.5px] font-bold text-[#5B6B85]">취소</button>
+              <button type="button" disabled={busy} onClick={() => save(f)} className="flex-1 h-11 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black disabled:opacity-50">{busy ? "저장 중…" : "저장"}</button>
+            </div>
           </div>
-          <div>
-            <div className="text-[12px] font-bold text-[#5B6B85] mb-1">자동 승인하지 않을 문서(직접 결재)</div>
-            <div className="flex flex-wrap gap-1.5">{AUTO_SKIP_FORMS.map(([k, l]) => { const on = f.skipForms.includes(k); return <button key={k} type="button" onClick={() => setF({ ...f, skipForms: on ? f.skipForms.filter((x) => x !== k) : [...f.skipForms, k] })} className={`h-8 px-3 rounded-full text-[12.5px] font-black border ${on ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}>{on ? "✓ " : ""}{l}</button>; })}</div>
-          </div>
-          <div className="rounded-xl bg-white border border-[#E3E8F0] px-3 py-2 text-[12px] text-[#5B6B85] leading-relaxed">자동 승인된 결재는 문서에 "자동 승인(부재·위임 설정)"으로 기록되고, 기안자에게 결과가 그대로 통보됩니다. 금액 상한을 넘거나 제외한 문서는 평소처럼 직접 결재합니다.</div>
-          <div className="flex justify-end gap-2"><button type="button" onClick={() => { setOpen(false); setF(null); }} className="h-10 px-4 rounded-xl border border-[#DCE3EE] text-[13.5px] font-bold text-[#5B6B85]">취소</button><button type="button" disabled={busy} onClick={() => save(f)} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black disabled:opacity-50">{busy ? "저장 중…" : "저장"}</button></div>
-        </div>
-      )}
-    </div>
+        </div>, document.body)}
+    </>
   );
 }
 
@@ -1474,7 +1500,8 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
         </div>
       </div>
 
-      {page === "inbox" && (admin || rankOf(meFull.position) >= rankOf("이사")) && <AutoApproveCard company={company} me={meFull} todo={sets.todo} />}
+      {/* ⭐ 2026-11-01 자동 승인(부재·위임)은 임원(이사 이상·임원 부서)만 — 예전엔 관리자 권한이면 과장·팀장도 보였다 */}
+      {page === "inbox" && (isExecProfile(meFull) || me.role === "totalMaster") && <AutoApproveCard company={company} me={meFull} todo={sets.todo} />}
 
       {isCat && (
         <>

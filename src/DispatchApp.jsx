@@ -36,6 +36,7 @@ import { useCompanyStaff, masterHasHr, isHrStaffUser } from "./hrHandover";
 import { AttendanceQuickButton } from "./attendanceQuick";
 import { usePendingSignups } from "./pendingSignups";
 import { NavHover } from "./navMenus";
+import { PeriodPicker as ResumePeriodPicker, DateField as ResumeDateField, SelectField as ResumeSelectField, AddressField as ResumeAddressField, EDU_STATUS as RESUME_EDU_STATUS, FAMILY_REL as RESUME_FAMILY_REL } from "./ResumeInputs";
 import { useHrOptions } from "./hrConstants";
 import { AssetManager } from "./OfficeBooks";
 import { FundsWorkspace, FundsBoard, isCeoPosition } from "./FundsBoard";
@@ -59209,7 +59210,7 @@ function RevenuePasswordSection({ companyName }) {
 // ⭐ 회사관리(회사정보·내정보) 공용 카드 — 영문 소제목 + 제목 + 설명, 아래 얇은 구분선. 글씨는 크고 진하게.
 const KP_CARD = "bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)]";
 const ProfilePanel = ({ eyebrow, title: t, desc, right, children, className = "" }) => (
-  <section className={`${KP_CARD} p-6 ${className}`}>
+  <section className={`${KP_CARD} p-4 sm:p-6 ${className}`}>
     <div className="flex items-start gap-3 pb-4 mb-5 border-b border-[#EEF1F6]">
       <div className="flex-1 min-w-0">
         {eyebrow && <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">{eyebrow}</div>}
@@ -59377,33 +59378,158 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{d}</svg>
   );
   const usedPct = leave && leave.entitlement ? Math.min(100, Math.round((leave.used / leave.entitlement) * 100)) : 0;
+  const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
+  const btnGhost = "h-11 rounded-xl bg-white border border-[#D9E0EA] text-[13.5px] font-bold text-[#1B2B4B] hover:border-[#1B2B4B] hover:bg-[#F5F8FD] transition";
+  // 잔여 연차 원형 그래프
+  const remPct = leave && leave.entitlement ? Math.max(0, Math.min(100, Math.round((leave.remaining / leave.entitlement) * 100))) : 0;
+  const Ring = ({ pct, size = 64, stroke = 7 }) => { const r = (size - stroke) / 2; const c = 2 * Math.PI * r; return (
+    <svg width={size} height={size} className="-rotate-90 shrink-0"><circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth={stroke} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#8FB0F0" strokeWidth={stroke} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)} style={{ transition: "stroke-dashoffset 600ms ease" }} /></svg>
+  ); };
 
+  // ⭐ 2026-11-01 내정보 개편 — 흩어져 있던 6개 카드를 [요약 머리 → 내 정보 | 명함] 2단으로 정리(모바일은 한 줄씩)
   return (
-    <div className="space-y-6">
-      {/* ── 1줄: 디지털 명함 + 내 프로필 ── */}
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,560px)_minmax(0,1fr)] gap-6">
-        <div>
-          {/* 디지털 명함 */}
+    <div className="space-y-5">
+      {/* ── 요약 머리: 나 + 핵심 숫자 4개 ── */}
+      <section className="relative overflow-hidden rounded-[24px] text-white shadow-[0_18px_40px_rgba(15,26,48,0.25)]" style={{ background: "linear-gradient(125deg,#0B1428 0%,#0F1A30 40%,#1B2B4B 75%,#2D4C82 100%)" }}>
+        <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "32px 32px" }} />
+        <div className="relative p-5 md:p-7 flex flex-col lg:flex-row lg:items-center gap-5 lg:gap-8">
+          <div className="flex items-center gap-4 min-w-0 lg:w-[34%]">
+            <div className="w-16 h-16 md:w-[72px] md:h-[72px] rounded-[20px] grid place-items-center text-[28px] font-black shrink-0 ring-1 ring-white/25" style={{ background: "linear-gradient(160deg,rgba(255,255,255,0.22),rgba(255,255,255,0.06))" }}>{(displayName || "?").slice(0, 1)}</div>
+            <div className="min-w-0">
+              <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]">MY PROFILE</div>
+              <div className="text-[24px] md:text-[28px] font-black tracking-tight leading-tight truncate">{displayName || "이름을 등록하세요"}</div>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[12.5px]">
+                {co && <span className="px-2 h-6 inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 font-bold">{co}</span>}
+                <span className="px-2 h-6 inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 font-bold">{title || "부서 미지정"}</span>
+                <span className="px-2 h-6 inline-flex items-center rounded-md bg-[#8FB0F0] text-[#0B1428] font-black">{ROLE_NAME[role] || role || "-"}</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-2.5">
+            <div className="rounded-2xl bg-white/[0.07] ring-1 ring-white/10 px-4 py-3.5">
+              <div className="text-[11.5px] font-bold text-white/60">근속</div>
+              <div className="mt-1 text-[19px] font-black leading-tight">{yearsOfService ? yearsOfService.replace(" 근속", "") : "-"}</div>
+              <div className="mt-0.5 text-[11.5px] text-white/50 tabular-nums">입사 {hireDate || "미등록"}</div>
+            </div>
+            <div className="rounded-2xl bg-white/[0.07] ring-1 ring-white/10 px-4 py-3 flex items-center gap-3">
+              <div className="relative"><Ring pct={remPct} size={56} stroke={6} /><span className="absolute inset-0 grid place-items-center text-[11px] font-black">{remPct}%</span></div>
+              <div className="min-w-0"><div className="text-[11.5px] font-bold text-white/60">잔여 연차</div><div className="text-[19px] font-black leading-tight">{leave ? `${leave.remaining}일` : "-"}</div><div className="text-[11.5px] text-white/50">{leave ? `총 ${leave.entitlement}일` : "입사일 등록 필요"}</div></div>
+            </div>
+            <div className="rounded-2xl bg-white/[0.07] ring-1 ring-white/10 px-4 py-3.5">
+              <div className="text-[11.5px] font-bold text-white/60">오늘 내 오더</div>
+              <div className="mt-1 text-[19px] font-black leading-tight tabular-nums">{Number(todayStats?.count ?? 0).toLocaleString()}건</div>
+              <div className="mt-0.5 text-[11.5px] text-white/50 tabular-nums truncate">매출 {won(todayStats?.revenue)}</div>
+            </div>
+            <div className="rounded-2xl bg-white/[0.07] ring-1 ring-white/10 px-4 py-3.5">
+              <div className="text-[11.5px] font-bold text-white/60">누적 오더</div>
+              <div className="mt-1 text-[19px] font-black leading-tight tabular-nums">{Number(myStats?.totalOrders ?? 0).toLocaleString()}건</div>
+              <div className="mt-0.5 text-[11.5px] text-white/50 tabular-nums truncate">수익 {won(myStats?.totalProfit)}</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,520px)] gap-5 items-start">
+        {/* ── 왼쪽: 내 정보 · 근무 현황 · 계정 ── */}
+        <div className="space-y-5 min-w-0">
+          <ProfilePanel eyebrow="PROFILE" title="내 정보" desc="명함과 오더·기사앱에 표시되는 정보입니다"
+            right={!editOpen && <button onClick={openEdit} className="h-10 px-4 rounded-xl bg-[#1B2B4B] text-white text-[13.5px] font-bold hover:bg-[#243a60] whitespace-nowrap">수정</button>}>
+            {editOpen ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="block"><span className="text-[12.5px] font-bold text-[#7A879C]">이름</span>
+                  <input value={draftName} onChange={(e) => setDraftName(e.target.value)} className="mt-1 w-full h-11 border border-[#DCE3EE] rounded-xl px-3.5 text-[14.5px] font-semibold outline-none focus:border-[#1B2B4B] focus:ring-4 focus:ring-[#1B2B4B]/10" /></label>
+                <label className="block"><span className="text-[12.5px] font-bold text-[#7A879C]">연락처</span>
+                  <input value={draftPhone} onChange={(e) => setDraftPhone(fmtPhone(e.target.value))} placeholder="010-0000-0000" inputMode="numeric" className="mt-1 w-full h-11 border border-[#DCE3EE] rounded-xl px-3.5 text-[14.5px] font-semibold outline-none focus:border-[#1B2B4B] focus:ring-4 focus:ring-[#1B2B4B]/10" /></label>
+                <div className="sm:col-span-2 flex gap-2 pt-1">
+                  <button onClick={() => setEditOpen(false)} className="h-11 px-5 rounded-xl border border-[#DCE3EE] text-[13.5px] font-bold text-[#5B6B85]">취소</button>
+                  <button onClick={saveInfo} disabled={savingInfo} className="flex-1 h-11 rounded-xl bg-[#1B2B4B] text-white text-[13.5px] font-bold disabled:opacity-60">{savingInfo ? "저장 중…" : "저장"}</button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {[
+                  ["이름", displayName || "-", <><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-7 8-7s8 3 8 7" /></>],
+                  ["연락처", phone || "-", <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z" />],
+                  ["이메일", user?.email || "-", <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>],
+                  ["회사", co || "-", <><path d="M3 21h18M5 21V7l7-4 7 4v14" /><path d="M9 9h1M14 9h1M9 13h1M14 13h1" /></>],
+                  ["부서 · 직책", title || "미지정 (인사관리부에서 지정)", <><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></>],
+                  ["권한", ROLE_NAME[role] || role || "-", <path d="M12 3 5 6v6c0 4.5 3 7.7 7 9 4-1.3 7-4.5 7-9V6z" />],
+                ].map(([k, v, ic]) => (
+                  <div key={k} className="flex items-center gap-3 px-3.5 py-3 rounded-2xl bg-[#F5F8FD] border border-[#EDF1F7] min-w-0">
+                    <span className="w-9 h-9 rounded-xl bg-white border border-[#E3E8F0] text-[#2D4C82] grid place-items-center shrink-0"><Ico d={ic} /></span>
+                    <div className="min-w-0"><div className="text-[11.5px] font-bold text-[#7A879C]">{k}</div><div className="text-[15px] font-extrabold text-[#0F1A30] truncate">{v}</div></div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ProfilePanel>
+
+          <ProfilePanel eyebrow="WORK" title="근무 현황" desc="휴가·외근은 결재 승인 건 기준 · 실적은 내가 등록한 오더 기준">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="min-w-0">
+                <div className="flex items-baseline justify-between text-[13.5px]">
+                  <span className="font-black text-[#0F1A30]">{leave ? leave.leaveLabel : "연차"}</span>
+                  <span className="text-[#7A879C]">{leave ? <>사용 <b className="text-[#0F1A30]">{leave.used}</b> / {leave.entitlement}일</> : "입사일 미등록"}</span>
+                </div>
+                <div className="mt-2 h-3 rounded-full bg-[#EEF2F8] overflow-hidden"><div className="h-full rounded-full" style={{ width: `${usedPct}%`, background: "linear-gradient(90deg,#1B2B4B,#4B6CB7)" }} /></div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  {[["잔여", leave?.remaining, true], ["병가", leave?.sickDays], ["외근", leave?.fieldDays]].map(([k, v, hi]) => (
+                    <div key={k} className={`rounded-2xl px-2 py-2.5 ${hi ? "bg-[#1B2B4B] text-white" : "bg-[#F5F8FD] border border-[#E3E8F0] text-[#0F1A30]"}`}>
+                      <div className={`text-[11.5px] font-bold ${hi ? "text-white/70" : "text-[#7A879C]"}`}>{k}</div>
+                      <div className="text-[18px] font-black">{v ?? "-"}{v != null ? "일" : ""}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 text-[11.5px] text-[#9AA9C3]">입사일 변경은 인사팀(인사관리부)에서 합니다</div>
+              </div>
+              <div className="min-w-0">
+                <div className="rounded-2xl border border-[#E3E8F0] overflow-hidden">
+                  <table className="w-full text-[13px]">
+                    <thead><tr className="bg-[#F5F8FD] text-[#7A879C]"><th className="text-left font-bold px-3 py-2">구분</th><th className="text-right font-bold px-3 py-2">오더</th><th className="text-right font-bold px-3 py-2">매출</th><th className="text-right font-bold px-3 py-2">수익</th></tr></thead>
+                    <tbody className="tabular-nums">
+                      {[["오늘", todayStats?.count, todayStats?.revenue, todayStats?.profit], ["누적", myStats?.totalOrders, myStats?.totalRevenue, myStats?.totalProfit]].map(([k, c, r, pf]) => (
+                        <tr key={k} className="border-t border-[#EEF1F6]"><td className="px-3 py-2.5 font-black text-[#0F1A30]">{k}</td><td className="px-3 py-2.5 text-right font-bold">{Number(c ?? 0).toLocaleString()}건</td><td className="px-3 py-2.5 text-right font-bold whitespace-nowrap">{won(r)}</td><td className="px-3 py-2.5 text-right font-black text-[#2D4C82] whitespace-nowrap">{won(pf)}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </ProfilePanel>
+
+          <section className={`${KP_CARD} px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3`}>
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="w-11 h-11 rounded-xl bg-[#1B2B4B] text-white flex items-center justify-center shrink-0"><Ico d={<><path d="M12 3 5 6v6c0 4.5 3 7.7 7 9 4-1.3 7-4.5 7-9V6z" /><path d="m9 12 2 2 4-4" /></>} /></div>
+              <div className="min-w-0"><div className="text-[15px] font-black text-[#0F1A30]">계정 보안</div><div className="text-[12.5px] text-[#7A879C]">로그인된 기기 확인 · 연결 끊기 · 비밀번호 변경</div></div>
+            </div>
+            <button onClick={() => setLoginMgrOpen(true)} className="h-11 px-5 rounded-xl bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13.5px] font-bold hover:bg-[#1B2B4B] hover:text-white transition whitespace-nowrap">로그인 관리</button>
+            {loginMgrOpen && <LoginManagerModal user={user} onClose={() => setLoginMgrOpen(false)} />}
+          </section>
+        </div>
+
+        {/* ── 오른쪽: 명함(디지털 명함 + 메일 첨부 명함) ── */}
+        <ProfilePanel eyebrow="BUSINESS CARD" title="내 명함" desc="저장·공유하거나 메일 하단 명함으로 쓸 수 있습니다" className="min-w-0">
           <div ref={cardRef} data-kp-card className="relative overflow-hidden rounded-[22px] text-white shadow-[0_18px_40px_rgba(15,26,48,0.35)]"
-            style={{ aspectRatio: "1.75 / 1", background: "linear-gradient(135deg, #0F1A30 0%, #1B2B4B 45%, #2D4C82 100%)" }}>
+            style={{ aspectRatio: "1.75 / 1", background: "linear-gradient(135deg, #0F1A30 0%, #1B2B4B 45%, #2D4C82 100%)"}}>
             <div className="absolute -right-20 -top-24 w-80 h-80 rounded-full" style={{ background: "radial-gradient(circle, rgba(147,197,253,0.22) 0%, rgba(147,197,253,0) 70%)" }} />
             <div className="absolute -left-16 -bottom-24 w-72 h-72 rounded-full" style={{ background: "radial-gradient(circle, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 70%)" }} />
             <div className="absolute inset-0" style={{ backgroundImage: "linear-gradient(115deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0) 60%)" }} />
-            <div className="relative h-full flex flex-col px-7 pt-6 pb-5">
+            <div className="relative h-full flex flex-col px-[5.5%] pt-[4.5%] pb-[4%]">
               {/* ⭐ 운송사마다 쓰는 명함 — 프로그램 로고·이름은 넣지 않고 운송사 이름만 */}
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/12 ring-1 ring-white/25 flex items-center justify-center text-[18px] font-black shrink-0" style={{ background: "rgba(255,255,255,0.12)" }}>{(co || "운").slice(0, 1)}</div>
+                <div className="w-10 h-10 rounded-xl ring-1 ring-white/25 flex items-center justify-center text-[18px] font-black shrink-0" style={{ background: "rgba(255,255,255,0.12)" }}>{(co || "운").slice(0, 1)}</div>
                 <div className="min-w-0 flex-1">
                   <div className="text-[16px] font-black tracking-tight truncate leading-[1.35]">{co || "운송사"}</div>
                   <div className="text-[10px] font-semibold tracking-[0.25em] text-blue-200/70 leading-[1.4]">LOGISTICS</div>
                 </div>
-                <div className="text-[10px] font-bold tracking-[0.2em] text-white/40 leading-[1.4] pt-1">DIGITAL CARD</div>
+                <div className="hidden sm:block text-[10px] font-bold tracking-[0.2em] text-white/40 leading-[1.4] pt-1">DIGITAL CARD</div>
               </div>
               <div className="mt-auto">
-                <div className="text-[32px] font-black tracking-tight leading-[1.15]">{displayName || "이름을 등록하세요"}</div>
-                <div className="mt-1.5 text-[14px] font-semibold text-blue-100/85 leading-[1.4]">{title || ROLE_NAME[role] || ""}</div>
+                <div className="text-[26px] sm:text-[30px] font-black tracking-tight leading-[1.15] truncate" data-cap-fix>{displayName || "이름을 등록하세요"}</div>
+                <div className="mt-1 text-[13.5px] font-semibold text-blue-100/85 leading-[1.4] truncate">{title || ROLE_NAME[role] || ""}</div>
               </div>
-              <div className="mt-4 pt-3.5 border-t border-white/15 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[12.5px] leading-[1.45]">
+              <div className="mt-3 pt-3 border-t border-white/15 grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] leading-[1.45]">
                 {[
                   ["M", phone || "연락처 미등록", true],
                   ["E", user?.email || "-", true],
@@ -59424,128 +59550,42 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
               </div>
             </div>
           </div>
-          <div className="mt-4 grid grid-cols-3 gap-2.5">
-            <button onClick={saveCardAsImage} className="py-3 rounded-xl bg-white border border-[#D9E0EA] text-[13.5px] font-bold text-[#1B2B4B] hover:border-[#1B2B4B] hover:bg-[#F5F8FD] transition shadow-[0_1px_2px_rgba(16,24,40,0.04)]">명함 이미지 저장</button>
-            <button onClick={copyContact} className="py-3 rounded-xl bg-white border border-[#D9E0EA] text-[13.5px] font-bold text-[#1B2B4B] hover:border-[#1B2B4B] hover:bg-[#F5F8FD] transition shadow-[0_1px_2px_rgba(16,24,40,0.04)]">연락처 복사</button>
-            <button onClick={saveVcard} className="py-3 rounded-xl bg-white border border-[#D9E0EA] text-[13.5px] font-bold text-[#1B2B4B] hover:border-[#1B2B4B] hover:bg-[#F5F8FD] transition shadow-[0_1px_2px_rgba(16,24,40,0.04)]">휴대폰 연락처 파일</button>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <button onClick={saveCardAsImage} className={btnGhost}>이미지 저장</button>
+            <button onClick={copyContact} className={btnGhost}>연락처 복사</button>
+            <button onClick={saveVcard} className={btnGhost}>연락처 파일</button>
           </div>
-        </div>
 
-        {/* 내 프로필 */}
-        <ProfilePanel eyebrow="PROFILE" title="내 프로필" desc="명함과 오더·기사앱에 표시되는 정보입니다"
-          right={!editOpen && <button onClick={openEdit} className="px-4 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13.5px] font-bold hover:bg-[#243a60]">정보 수정</button>}>
-          {editOpen ? (
-            <div className="space-y-3 max-w-[420px]">
-              <label className="block"><span className="text-[13px] font-semibold text-gray-500">이름</span>
-                <input value={draftName} onChange={(e) => setDraftName(e.target.value)} className="mt-1 w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-[14px] outline-none focus:border-[#1B2B4B]" /></label>
-              <label className="block"><span className="text-[13px] font-semibold text-gray-500">연락처</span>
-                <input value={draftPhone} onChange={(e) => setDraftPhone(fmtPhone(e.target.value))} placeholder="010-0000-0000" className="mt-1 w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-[14px] outline-none focus:border-[#1B2B4B]" /></label>
-              <div className="flex gap-2 pt-1">
-                <button onClick={() => setEditOpen(false)} className="px-4 py-2.5 rounded-xl border border-gray-300 text-[13px] font-bold text-gray-600">취소</button>
-                <button onClick={saveInfo} disabled={savingInfo} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold disabled:opacity-60">{savingInfo ? "저장 중…" : "저장"}</button>
+          <div className="mt-5 pt-5 border-t border-[#EEF1F6]">
+            <div className="flex items-center justify-between gap-2 mb-2.5">
+              <div><div className="text-[14.5px] font-black text-[#0F1A30]">메일 첨부 명함</div><div className="text-[12px] text-[#7A879C]">이메일 보낼 때 하단에 붙는 이미지</div></div>
+              <span className={`shrink-0 h-6 px-2 inline-flex items-center rounded-md text-[11px] font-black ${cardImage ? "bg-[#ECFDF3] text-[#067647]" : "bg-[#F3F6FA] text-[#7A879C]"}`}>{cardImage ? "등록됨" : "미등록"}</span>
+            </div>
+            <div className="flex gap-3 items-stretch">
+              <div className="w-[42%] shrink-0 rounded-2xl border border-[#E3E8F0] bg-[#F5F8FD] aspect-[1.75/1] flex items-center justify-center overflow-hidden">
+                {cardImage ? <img src={cardImage} alt="명함" className="w-full h-full object-contain" /> : <span className="text-[11.5px] text-[#9AA9C3]">이미지 없음</span>}
+              </div>
+              <div className="flex-1 flex flex-col gap-1.5 min-w-0">
+                <button onClick={async () => {
+                  try {
+                    const canvas = await html2canvas(cardRef.current, cardCaptureOpts(2));
+                    const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+                    setCardImage(dataUrl);
+                    await setDoc(doc(db, "userProfiles", user.uid), { cardImageUrl: dataUrl }, { merge: true });
+                    showAlert("디지털 명함을 메일 첨부 명함으로 등록했습니다.");
+                  } catch (e) { showAlert("등록 실패: " + (e?.message || e)); }
+                }} className="flex-1 min-h-[40px] rounded-xl bg-[#1B2B4B] text-white text-[12.5px] font-bold hover:bg-[#243a60]">위 명함으로 등록</button>
+                <label className={`flex-1 min-h-[40px] rounded-xl grid place-items-center text-[12.5px] font-bold cursor-pointer transition border ${cardImageUploading ? "bg-gray-100 text-gray-500 border-transparent" : "bg-white border-[#D9E0EA] text-[#1B2B4B] hover:bg-[#F5F8FD]"}`}>
+                  {cardImageUploading ? "업로드 중…" : "다른 이미지 선택"}
+                  <input autoComplete="off" type="file" accept="image/*" className="hidden" disabled={cardImageUploading} onChange={(e) => onCardFile(e.target.files[0])} />
+                </label>
+                <button disabled={!cardImage} onClick={async () => {
+                  setCardImage(null);
+                  if (user?.uid) await setDoc(doc(db, "userProfiles", user.uid), { cardImageUrl: null }, { merge: true }).catch(() => {});
+                }} className="min-h-[34px] rounded-xl text-red-500 text-[12px] font-bold hover:bg-red-50 disabled:opacity-40">삭제</button>
               </div>
             </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-x-8 gap-y-5">
-              {[
-                ["이름", displayName || "-"], ["연락처", phone || "-"],
-                ["회사", co || "-"], ["이메일", user?.email || "-"],
-                ["부서 · 직책", title || "미지정 (인사관리부에서 지정)"], ["권한", ROLE_NAME[role] || role || "-"],
-              ].map(([k, v]) => (
-                <div key={k} className="min-w-0">
-                  <div className="text-[13px] font-semibold text-gray-500">{k}</div>
-                  <div className="mt-1 text-[16.5px] font-bold text-[#0F1A30] truncate">{v}</div>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="mt-6 rounded-2xl bg-[#F5F8FD] border border-[#E3E8F0] px-4 py-3.5 flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-[#1B2B4B] text-white flex items-center justify-center shrink-0">
-              <Ico d={<><path d="M12 3 5 6v6c0 4.5 3 7.7 7 9 4-1.3 7-4.5 7-9V6z" /><path d="m9 12 2 2 4-4" /></>} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[15px] font-bold text-[#0F1A30]">계정 보안</div>
-              <div className="text-[13px] text-gray-500">로그인된 기기 확인 · 연결 끊기 · 비밀번호 변경</div>
-            </div>
-            <button onClick={() => setLoginMgrOpen(true)} className="px-4 py-2.5 rounded-xl bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13.5px] font-bold hover:bg-[#1B2B4B] hover:text-white transition">로그인 관리</button>
-            {loginMgrOpen && <LoginManagerModal user={user} onClose={() => setLoginMgrOpen(false)} />}
           </div>
-        </ProfilePanel>
-      </div>
-
-      {/* ── 2줄: 근속·휴가 / 나의 실적 / 메일 명함 ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <ProfilePanel eyebrow="SERVICE" title="근속 · 휴가" desc="휴가·외근 결재 승인 건 기준 (2026년부터 집계)">
-          <div className="flex items-center gap-3">
-            <span className="text-[13.5px] font-semibold text-gray-600 shrink-0">입사일</span>
-            {/* ⭐ 2026-11-01 입사일은 인사팀(인사관리부 › 인사관리 › 직원관리)에서만 바꿀 수 있다 — 여기서는 보기만 */}
-            <span className="px-3 py-1.5 rounded-lg bg-[#F5F8FD] border border-[#E3E8F0] text-[13.5px] font-black text-[#1B2B4B] tabular-nums">{hireDate || "미등록"}</span>
-            <span className="text-[11.5px] text-gray-400">변경은 인사팀에서</span>
-          </div>
-          {yearsOfService && <div className="mt-4 text-[26px] font-black text-[#0F1A30] tracking-tight">{yearsOfService}</div>}
-          {leave ? (
-            <div className="mt-3">
-              <div className="flex items-baseline justify-between text-[13.5px]">
-                <span className="font-bold text-gray-700">{leave.leaveLabel}</span>
-                <span className="text-gray-500">사용 <b className="text-gray-800">{leave.used}</b> / {leave.entitlement}일</span>
-              </div>
-              <div className="mt-1.5 h-2.5 rounded-full bg-gray-100 overflow-hidden"><div className="h-full rounded-full bg-[#1B2B4B]" style={{ width: `${usedPct}%` }} /></div>
-              <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                {[["잔여", leave.remaining, true], ["병가", leave.sickDays], ["외근", leave.fieldDays]].map(([k, v, hi]) => (
-                  <div key={k} className={`rounded-2xl px-2 py-3 ${hi ? "bg-[#1B2B4B] text-white" : "bg-[#F5F8FD] border border-[#E3E8F0] text-[#0F1A30]"}`}>
-                    <div className={`text-[12.5px] font-semibold ${hi ? "text-white/70" : "text-gray-500"}`}>{k}</div>
-                    <div className="text-[20px] font-black mt-0.5">{v}일</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="mt-4 text-[13.5px] text-gray-500">인사팀에서 입사일을 등록하면 연차·월차 잔여일수가 표시됩니다.</div>
-          )}
-        </ProfilePanel>
-
-        <ProfilePanel eyebrow="PERFORMANCE" title="나의 실적" desc="내가 등록한 오더 기준">
-          {[
-            ["오늘", todayStats?.count ?? 0, todayStats?.revenue ?? 0, todayStats?.profit ?? 0],
-            ["누적", myStats?.totalOrders ?? 0, myStats?.totalRevenue ?? 0, myStats?.totalProfit ?? 0],
-          ].map(([k, cnt, rev, pro], i) => (
-            <div key={k} className={`${i ? "mt-4 pt-4 border-t border-[#EEF1F6]" : ""}`}>
-              <div className="text-[13.5px] font-bold text-gray-600 mb-2.5">{k}</div>
-              <div className="grid grid-cols-[0.7fr_1.15fr_1.15fr] gap-2">
-                {[["오더", `${Number(cnt).toLocaleString()}건`], ["매출", `${Math.round(rev).toLocaleString()}원`], ["수익", `${Math.round(pro).toLocaleString()}원`]].map(([a, b]) => (
-                  <div key={a} className="rounded-2xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-3 min-w-0">
-                    <div className="text-[12.5px] font-semibold text-gray-500">{a}</div>
-                    <div className="text-[15px] font-black text-[#0F1A30] tabular-nums mt-0.5 whitespace-nowrap tracking-tight">{b}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </ProfilePanel>
-
-        <ProfilePanel eyebrow="E-MAIL CARD" title="메일 첨부 명함" desc="이메일 발송 시 하단에 붙는 명함 이미지">
-          <div className="rounded-2xl border border-[#E3E8F0] bg-[#F5F8FD] h-[150px] flex items-center justify-center overflow-hidden">
-            {cardImage ? <img src={cardImage} alt="명함" className="max-h-[128px] max-w-full object-contain" /> : <span className="text-[12.5px] text-gray-400">등록된 이미지가 없습니다</span>}
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <label className={`py-3 rounded-xl text-center text-[13.5px] font-bold cursor-pointer transition ${cardImageUploading ? "bg-gray-100 text-gray-500" : "bg-[#1B2B4B] text-white hover:bg-[#243a60]"}`}>
-              {cardImageUploading ? "업로드 중…" : cardImage ? "이미지 바꾸기" : "이미지 선택"}
-              <input autoComplete="off" type="file" accept="image/*" className="hidden" disabled={cardImageUploading} onChange={(e) => onCardFile(e.target.files[0])} />
-            </label>
-            <button disabled={!cardImage} onClick={async () => {
-              setCardImage(null);
-              if (user?.uid) await setDoc(doc(db, "userProfiles", user.uid), { cardImageUrl: null }, { merge: true }).catch(() => {});
-            }} className="py-3 rounded-xl border border-red-200 text-red-500 text-[13.5px] font-bold hover:bg-red-50 disabled:opacity-40">삭제</button>
-          </div>
-          <button onClick={async () => {
-            try {
-              const canvas = await html2canvas(cardRef.current, cardCaptureOpts(2));
-              const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
-              setCardImage(dataUrl);
-              await setDoc(doc(db, "userProfiles", user.uid), { cardImageUrl: dataUrl }, { merge: true });
-              showAlert("디지털 명함을 메일 첨부 명함으로 등록했습니다.");
-            } catch (e) { showAlert("등록 실패: " + (e?.message || e)); }
-          }} className="mt-2.5 w-full py-2.5 rounded-xl border border-dashed border-[#B9C6DA] text-[13px] font-bold text-[#1B2B4B] hover:bg-[#F5F8FD]">디지털 명함을 메일 명함으로 쓰기</button>
         </ProfilePanel>
       </div>
     </div>
@@ -59622,7 +59662,7 @@ function HRResumePrintButton({ row, resume, photo }) {
     const win = window.open("", "_blank", "width=860,height=1000");
     if (!win) return;
     const esc = (s) => (s || "").toString().replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const eduRows = (r.education || []).map(e => `<tr><td>${esc(e.period)}</td><td>${esc(e.school)}</td><td>${esc(e.detail)}</td></tr>`).join("") || `<tr><td colspan="3" style="color:#999;text-align:center;">등록된 학력사항이 없습니다</td></tr>`;
+    const eduRows = (r.education || []).map(e => `<tr><td>${esc(e.period)}</td><td>${esc(e.school)}</td><td>${esc([e.detail, e.status].filter(Boolean).join(" · "))}</td></tr>`).join("") || `<tr><td colspan="3" style="color:#999;text-align:center;">등록된 학력사항이 없습니다</td></tr>`;
     const careerRows = (r.career || []).map(c => `<tr><td>${esc(c.period)}</td><td>${esc(c.company)}</td><td>${esc(c.detail)}</td></tr>`).join("") || `<tr><td colspan="3" style="color:#999;text-align:center;">등록된 경력사항이 없습니다</td></tr>`;
     const certRows = (r.certificates || []).map(c => `<tr><td>${esc(c.date)}</td><td>${esc(c.name)}</td><td>${esc(c.issuer)}</td></tr>`).join("") || `<tr><td colspan="3" style="color:#999;text-align:center;">등록된 자격증이 없습니다</td></tr>`;
     const familyRows = (r.family || []).map(f => `<tr><td>${esc(f.relation)}</td><td>${esc(f.name)}</td><td>${esc(f.birth)}</td><td>${esc(f.job)}</td></tr>`).join("") || `<tr><td colspan="4" style="color:#999;text-align:center;">등록된 가족관계가 없습니다</td></tr>`;
@@ -59977,8 +60017,12 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
     catch (err) { alert("팀 변경 실패: " + err.message); }
   };
 
-  const listField = (key, label, placeholder) => {
+  // ⭐ 2026-11-01 이력서 칸 — 기간은 월 선택(~ 재직/재학중), 날짜는 달력, 구분·관계는 선택(ResumeInputs.jsx)
+  //   spec 값이 글자면 그냥 입력칸, { type: "period" | "date" | "select" } 이면 선택형
+  const listField = (key, label, spec) => {
     const items = draft?.[key] || [];
+    const setF = (i, f, v) => setDraft(d => { const arr = [...(d[key] || [])]; arr[i] = { ...arr[i], [f]: v }; return { ...d, [key]: arr }; });
+    const txt = "w-full h-11 border border-[#DCE3EE] rounded-xl px-3 text-[14.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10";
     return (
       <div>
         <div className="flex items-center justify-between mb-2">
@@ -59987,13 +60031,20 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
         </div>
         {items.length === 0 && <div className="px-4 py-3 rounded-2xl border border-dashed border-[#DCE3EE] text-[13.5px] text-[#9AA9C3]">항목 없음</div>}
         {items.map((it, i) => (
-          <div key={i} className="flex gap-2 mb-2">
-            {Object.keys(placeholder).map(f => (
-              <input autoComplete="off" key={f} value={it[f] || ""} placeholder={placeholder[f]}
-                onChange={e => setDraft(d => { const arr = [...d[key]]; arr[i] = { ...arr[i], [f]: e.target.value }; return { ...d, [key]: arr }; })}
-                className="flex-1 h-11 border border-[#DCE3EE] rounded-xl px-3 text-[14.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10" />
-            ))}
-            <button onClick={() => setDraft(d => ({ ...d, [key]: d[key].filter((_, idx) => idx !== i) }))} className="w-11 h-11 rounded-xl border border-[#E3E8F0] text-[#7A879C] hover:text-[#0F1A30] hover:bg-[#F5F8FD]">✕</button>
+          <div key={i} className="relative mb-2 p-3 pr-14 rounded-2xl border border-[#E3E8F0] bg-[#FAFBFD] flex flex-wrap gap-2 items-start">
+            {Object.entries(spec).map(([f, sp]) => {
+              const o = typeof sp === "string" ? { ph: sp } : sp;
+              return (
+                <div key={f} className={o.type === "period" ? "w-full lg:w-auto" : "flex-1 min-w-[140px]"}>
+                  <div className="text-[11px] font-bold text-[#7A879C] mb-1">{o.ph}</div>
+                  {o.type === "period" ? <ResumePeriodPicker value={it[f]} ongoingLabel={o.ongoing || "재직중"} onChange={v => setF(i, f, v)} />
+                    : o.type === "date" ? <ResumeDateField value={it[f]} placeholder={o.ph} onChange={v => setF(i, f, v)} />
+                    : o.type === "select" ? <ResumeSelectField value={it[f]} options={o.options} placeholder={`${o.ph} 선택`} onChange={v => setF(i, f, v)} />
+                    : <input autoComplete="off" value={it[f] || ""} placeholder={o.hint || o.ph} onChange={e => setF(i, f, e.target.value)} className={txt} />}
+                </div>
+              );
+            })}
+            <button onClick={() => setDraft(d => ({ ...d, [key]: d[key].filter((_, idx) => idx !== i) }))} title="이 줄 삭제" className="absolute top-3 right-3 w-9 h-9 rounded-xl border border-[#E3E8F0] bg-white text-[#7A879C] hover:text-[#0F1A30] hover:bg-[#F5F8FD]">✕</button>
           </div>
         ))}
       </div>
@@ -60195,7 +60246,11 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                         ].map(({ k, v, big, edit, ph, span }) => (
                           <div key={k} className={`px-4 py-3 rounded-2xl bg-[#F5F8FD] border border-[#EDF1F7] min-w-0 ${span === 2 ? "col-span-2" : ""}`}>
                             <div className="text-[12.5px] font-bold text-[#7A879C]">{k}</div>
-                            {editMode && edit ? (
+                            {editMode && edit === "birthDate" ? (
+                              <div className="mt-1"><ResumeDateField value={draft.birthDate} placeholder="생년월일" onChange={v => setDraft(d => ({ ...d, birthDate: v }))} /></div>
+                            ) : editMode && edit === "address" ? (
+                              <div className="mt-1"><ResumeAddressField value={draft.address} onChange={v => setDraft(d => ({ ...d, address: v }))} /></div>
+                            ) : editMode && edit ? (
                               <input autoComplete="off" value={draft[edit] || ""} placeholder={ph || ""} onChange={e => setDraft(d => ({ ...d, [edit]: e.target.value }))}
                                 className="mt-1 w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[15px] font-semibold text-[#0F1A30] bg-white focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10" />
                             ) : (
@@ -60208,10 +60263,10 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
 
                     {editMode ? (
                       <div className="space-y-5">
-                        {listField("education", "학력사항", { period: "기간", school: "학교명", detail: "내용" })}
-                        {listField("career", "경력사항", { period: "기간", company: "근무처", detail: "내용" })}
-                        {listField("certificates", "자격/면허", { date: "취득일", name: "자격명", issuer: "발급기관" })}
-                        {listField("family", "가족관계", { relation: "관계", name: "성명", birth: "생년월일/연령", job: "직업" })}
+                        {listField("education", "학력사항", { period: { type: "period", ph: "기간(입학 ~ 졸업)", ongoing: "재학중" }, school: { ph: "학교명", hint: "예) 한국고등학교" }, detail: { ph: "전공·학과", hint: "예) 물류학과" }, status: { type: "select", ph: "구분", options: RESUME_EDU_STATUS } })}
+                        {listField("career", "경력사항", { period: { type: "period", ph: "기간(입사 ~ 퇴사)", ongoing: "재직중" }, company: { ph: "근무처", hint: "회사명" }, detail: { ph: "담당 업무·직위", hint: "예) 배차 담당 / 대리" } })}
+                        {listField("certificates", "자격/면허", { date: { type: "date", ph: "취득일" }, name: { ph: "자격명", hint: "예) 1종 대형" }, issuer: { ph: "발급기관", hint: "예) 경찰청" } })}
+                        {listField("family", "가족관계", { relation: { type: "select", ph: "관계", options: RESUME_FAMILY_REL }, name: "성명", birth: { type: "date", ph: "생년월일" }, job: "직업" })}
                         <div>
                           <div className="text-[16px] font-black text-[#0F1A30] mb-2">자기소개</div>
                           <textarea value={draft.intro || ""} onChange={e => setDraft(d => ({ ...d, intro: e.target.value }))} rows={6}
@@ -60934,7 +60989,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
       {/* 수정 요청 결과 알림 팝업 */}
       {resolvedNotice && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999999]">
-          <div className="bg-white rounded-2xl w-[440px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl w-[calc(100%-24px)] max-w-[440px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4">
               <h3 className="text-white font-bold text-[15px]"><EditableText id="companyProfile.resultModal.title" defaultText="회사 정보 수정 요청 결과" /></h3>
             </div>
@@ -60963,66 +61018,195 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
         </div>
       )}
 
-      {/* ===== 2026-10-22 개편 — 회사 명패(상단) + 서류·계좌(가운데) + 운영 설정(아래) ===== */}
-      <div className="space-y-6">
-        {/* 회사 명패 */}
-        <div className="relative overflow-hidden rounded-[22px] text-white shadow-[0_18px_40px_rgba(15,26,48,0.28)]" style={{ background: "linear-gradient(120deg, #0F1A30 0%, #1B2B4B 50%, #2D4C82 100%)" }}>
-          <div className="absolute inset-0" style={{ backgroundImage: "linear-gradient(115deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0) 60%)" }} />
-          <div className="absolute -right-16 -top-24 w-80 h-80 rounded-full bg-white/[0.05]" />
-          <div className="relative px-8 pt-7 pb-6">
-            <div className="text-[11px] font-extrabold tracking-[0.25em] text-blue-200/70 mb-3">COMPANY PROFILE</div>
-            <div className="flex flex-wrap items-center gap-5">
-              <div className="w-[72px] h-[72px] rounded-2xl bg-white/10 ring-1 ring-white/25 flex items-center justify-center text-[32px] font-black shrink-0">
-                {(appData?.companyName || companyName || "?").slice(0, 1)}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-[30px] font-black tracking-tight truncate leading-tight">{appData?.companyName || companyName}</div>
-                <div className="mt-1.5 text-[14.5px] text-blue-50/90 font-medium flex flex-wrap gap-x-5 gap-y-1">
-                  <span>대표 {appData?.representative || appData?.대표자 || appData?.ceo || "-"}</span>
-                  <span>사업자번호 {appData?.businessNumber || appData?.사업자번호 || "-"}</span>
-                  {(appData?.approvedAt || appData?.processedAt) && <span>가입 승인 {appData.approvedAt ? new Date(appData.approvedAt).toLocaleDateString("ko-KR") : new Date(appData.processedAt?.seconds * 1000).toLocaleDateString("ko-KR")}</span>}
+      {/* ===== 2026-11-01 개편 — 회사 명패 → 등록 현황 → [기본 정보 | 정산 계좌] → 회사 서류 (모바일은 한 줄씩) ===== */}
+      <div className="space-y-5">
+        {(() => {
+          const v = {
+            ceo: appData?.representative || appData?.대표자 || appData?.ceo || "",
+            biz: appData?.businessNumber || appData?.사업자번호 || "",
+            tel: appData?.phone || appData?.연락처 || "",
+            fax: appData?.fax || appData?.팩스 || appData?.팩스번호 || "",
+            email: appData?.email || "",
+            addr: appData?.address || appData?.주소 || altAddr || "",
+          };
+          const approvedDay = appData?.approvedAt ? new Date(appData.approvedAt).toLocaleDateString("ko-KR") : appData?.processedAt?.seconds ? new Date(appData.processedAt.seconds * 1000).toLocaleDateString("ko-KR") : "";
+          const steps = [
+            { k: "기본 정보", done: !!(v.ceo && v.biz && v.tel && v.addr), sub: "대표·사업자번호·연락처·주소" },
+            { k: "사업자등록증", done: !!filePreviewSrc, sub: "거래처 제출용" },
+            { k: "직인(도장)", done: !!appData?.직인이미지, sub: "명세서 자동 날인" },
+            { k: "정산 계좌", done: !!appData?.계좌은행, sub: "청구서 입금 계좌" },
+          ];
+          const pct = Math.round((steps.filter((x) => x.done).length / steps.length) * 100);
+          const copy = (t, label) => navigator.clipboard?.writeText(t).then(() => showMsg(`${label}을(를) 복사했습니다.`)).catch(() => showMsg("복사에 실패했습니다."));
+          const I = ({ d }) => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{d}</svg>;
+          const rows = [
+            ["대표자", v.ceo, <><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-7 8-7s8 3 8 7" /></>],
+            ["사업자번호", v.biz, <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M7 9h10M7 13h6" /></>],
+            ["대표 연락처", v.tel, <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z" />],
+            ["팩스", v.fax, <><path d="M6 9V3h12v6" /><rect x="3" y="9" width="18" height="9" rx="2" /><path d="M6 14h12v7H6z" /></>],
+            ["이메일", v.email, <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>],
+            ["주소", v.addr, <><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z" /><circle cx="12" cy="10" r="2.5" /></>, true],
+          ];
+          return (<>
+            {/* 회사 명패 */}
+            <section className="relative overflow-hidden rounded-[24px] text-white shadow-[0_18px_40px_rgba(15,26,48,0.25)]" style={{ background: "linear-gradient(125deg,#0B1428 0%,#0F1A30 40%,#1B2B4B 75%,#2D4C82 100%)" }}>
+              <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "32px 32px" }} />
+              <div className="relative p-5 md:p-7 flex flex-col md:flex-row md:items-center gap-4 md:gap-6">
+                <div className="flex items-center gap-4 min-w-0 flex-1">
+                  <div className="w-16 h-16 md:w-[76px] md:h-[76px] rounded-[20px] ring-1 ring-white/25 grid place-items-center text-[30px] font-black shrink-0" style={{ background: "linear-gradient(160deg,rgba(255,255,255,0.22),rgba(255,255,255,0.06))" }}>{(appData?.companyName || companyName || "?").slice(0, 1)}</div>
+                  <div className="min-w-0">
+                    <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]">COMPANY PROFILE</div>
+                    <div className="text-[24px] md:text-[30px] font-black tracking-tight leading-tight truncate">{appData?.companyName || companyName}</div>
+                    <div className="mt-1.5 flex flex-wrap gap-1.5 text-[12.5px]">
+                      {v.ceo && <span className="px-2 h-6 inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 font-bold">대표 {v.ceo}</span>}
+                      {approvedDay && <span className="px-2 h-6 inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 font-bold">가입 {approvedDay}</span>}
+                      <span className={`px-2 h-6 inline-flex items-center rounded-md font-black ${pct === 100 ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-white/10 ring-1 ring-white/15"}`}>등록 {pct}%</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 md:justify-end">
+                  {appData?.companyCode && (
+                    <button onClick={() => copy(appData.companyCode, "회사코드")} className="flex-1 md:flex-none text-left rounded-xl bg-white/10 ring-1 ring-white/20 px-4 py-2.5 hover:bg-white/15 transition" title="눌러서 복사">
+                      <div className="text-[11px] font-bold tracking-[0.12em] text-blue-200/80">회사코드 · 눌러서 복사</div>
+                      <div className="text-[19px] font-black font-mono tracking-wider">{appData.companyCode}</div>
+                    </button>
+                  )}
+                  {isAdmin && appData && (
+                    <button onClick={openEditModal} className="flex-1 md:flex-none h-[58px] px-5 rounded-xl bg-white text-[#1B2B4B] text-[14px] font-black hover:bg-blue-50 transition whitespace-nowrap">정보 수정 요청</button>
+                  )}
                 </div>
               </div>
-              {appData?.companyCode && (
-                <button onClick={() => { navigator.clipboard?.writeText(appData.companyCode).then(() => showMsg("회사코드를 복사했습니다.")).catch(() => {}); }}
-                  className="text-left rounded-xl bg-white/10 ring-1 ring-white/20 px-4 py-2.5 hover:bg-white/15 transition" title="눌러서 복사">
-                  <div className="text-[11.5px] font-bold tracking-[0.12em] text-blue-200/80">회사코드 · 눌러서 복사</div>
-                  <div className="text-[19px] font-black font-mono tracking-wider">{appData.companyCode}</div>
-                </button>
-              )}
-              {isAdmin && appData && (
-                <button onClick={openEditModal} className="px-5 py-3 rounded-xl bg-white text-[#1B2B4B] text-[14px] font-bold hover:bg-blue-50 transition">정보 수정 요청</button>
-              )}
-            </div>
-          </div>
-          <div className="relative grid grid-cols-1 md:grid-cols-[1fr_1fr_1.2fr_2fr] border-t border-white/10 bg-black/15">
-            {[
-              ["연락처", appData?.phone || appData?.연락처],
-              ["팩스", appData?.fax || appData?.팩스 || appData?.팩스번호],
-              ["이메일", appData?.email],
-              ["주소", appData?.address || appData?.주소 || altAddr],
-            ].map(([k, v], idx) => (
-              <div key={k} className={`px-8 py-4 min-w-0 ${idx ? "md:border-l border-white/10" : ""}`}>
-                <div className="text-[12.5px] font-bold text-blue-200/80">{k}</div>
-                <div className="mt-1 text-[15.5px] font-bold truncate" title={v || ""}>{v || "-"}</div>
-              </div>
-            ))}
-          </div>
-          {!appData && <div className="relative px-7 pb-5 text-[13px] text-blue-100/80">가입 승인 후 회사 정보가 표시됩니다.</div>}
-        </div>
+              {!appData && <div className="relative px-7 pb-5 text-[13px] text-blue-100/80">가입 승인 후 회사 정보가 표시됩니다.</div>}
+            </section>
 
-        {/* 서류 + 정산 계좌 */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          <section className={`xl:col-span-2 ${KP_CARD} p-6`}>
-            <div className="pb-4 mb-5 border-b border-[#EEF1F6]">
-              <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">DOCUMENTS</div>
-              <div className="mt-0.5 text-[18px] font-black text-[#0F1A30] tracking-tight">회사 서류</div>
-              <div className="text-[13.5px] text-gray-500 mt-1">사업자등록증과 직인은 거래명세서·보고서 등 필요한 곳에 자동으로 쓰입니다</div>
+            {/* 등록 현황 */}
+            <section className={`${KP_CARD} p-4 sm:p-5`}>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="text-[15px] font-black text-[#0F1A30]">등록 현황</div>
+                <div className="flex-1 h-2.5 rounded-full bg-[#EEF2F8] overflow-hidden"><div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: "linear-gradient(90deg,#1B2B4B,#4B6CB7)" }} /></div>
+                <div className="text-[14px] font-black text-[#1B2B4B] tabular-nums">{pct}%</div>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                {steps.map((st) => (
+                  <div key={st.k} className={`flex items-center gap-2.5 px-3 py-2.5 rounded-2xl border ${st.done ? "bg-[#F5F8FD] border-[#DCE6F7]" : "bg-white border-dashed border-[#C9D2E0]"}`}>
+                    <span className={`w-8 h-8 rounded-xl grid place-items-center shrink-0 ${st.done ? "bg-[#0F1A30] text-white" : "bg-[#F1F4F9] text-[#9AA9C3]"}`}>
+                      {st.done ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5 10 17.5 19 7" /></svg> : <span className="text-[13px] font-black">!</span>}
+                    </span>
+                    <div className="min-w-0"><div className="text-[13.5px] font-black text-[#0F1A30] truncate">{st.k}</div><div className="text-[11.5px] text-[#7A879C] truncate">{st.done ? st.sub : "미등록"}</div></div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* 기본 정보 + 정산 계좌 */}
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,420px)] gap-5 items-start">
+              <section className={`${KP_CARD} p-4 sm:p-6 min-w-0`}>
+                <div className="flex items-start gap-3 pb-4 mb-4 border-b border-[#EEF1F6]">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">INFORMATION</div>
+                    <div className="mt-0.5 text-[18px] font-black text-[#0F1A30] tracking-tight">기본 정보</div>
+                    <div className="text-[13px] text-gray-500 mt-1">거래명세서·명함 등에 쓰이는 회사 정보 · 눌러서 복사</div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {rows.map(([k, val, ic, wide]) => (
+                    <button key={k} type="button" disabled={!val} onClick={() => copy(val, k)} title={val ? "눌러서 복사" : ""}
+                      className={`group text-left flex items-center gap-3 px-3.5 py-3 rounded-2xl bg-[#F5F8FD] border border-[#EDF1F7] min-w-0 hover:border-[#C9D6EE] disabled:hover:border-[#EDF1F7] transition ${wide ? "sm:col-span-2" : ""}`}>
+                      <span className="w-9 h-9 rounded-xl bg-white border border-[#E3E8F0] text-[#2D4C82] grid place-items-center shrink-0"><I d={ic} /></span>
+                      <div className="min-w-0 flex-1"><div className="text-[11.5px] font-bold text-[#7A879C]">{k}</div><div className={`text-[15px] font-extrabold truncate ${val ? "text-[#0F1A30]" : "text-[#B4BFD0]"}`}>{val || "미등록"}</div></div>
+                      {val && <span className="text-[11px] font-black text-[#9AA9C3] opacity-0 group-hover:opacity-100 transition shrink-0">복사</span>}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className={`${KP_CARD} p-4 sm:p-6 min-w-0`}>
+                <div className="flex items-start pb-4 mb-5 border-b border-[#EEF1F6]">
+                  <div>
+                    <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">BANK ACCOUNT</div>
+                    <div className="mt-0.5 text-[18px] font-black text-[#0F1A30] tracking-tight">정산 계좌</div>
+                    <div className="text-[13.5px] text-gray-500 mt-1">청구서·거래명세서에 표시되는 입금 계좌</div>
+                  </div>
+                  {canEditBank && appData?.계좌은행 && !bankEditOpen && <button onClick={() => setBankEditOpen(true)} className="ml-auto px-3.5 py-1.5 rounded-lg border border-[#D9E0EA] text-[13px] font-bold text-gray-700 hover:bg-gray-50">수정</button>}
+                </div>
+                {!canEditBank && !appData?.계좌은행 ? (
+                  <div className="rounded-2xl border border-dashed border-[#C9D2E0] bg-[#F7F9FC] px-5 py-8 text-center">
+                    <div className="text-[14px] font-bold text-[#1B2B4B]">등록된 정산 계좌가 없습니다</div>
+                    <div className="text-[12.5px] text-[#7A879C] mt-1">정산 계좌는 경리팀만 입력·수정할 수 있습니다</div>
+                  </div>
+                ) : (appData?.계좌은행 && (!bankEditOpen || !canEditBank)) ? (
+                  <div className="relative overflow-hidden rounded-2xl text-white px-5 py-5 min-h-[170px]" style={{ aspectRatio: "1.6 / 1", background: "linear-gradient(135deg, #1B2B4B 0%, #2D4C82 100%)" }}>
+                    <div className="absolute -right-10 -bottom-12 w-40 h-40 rounded-full bg-white/[0.07]" />
+                    <div className="relative h-full flex flex-col">
+                      <div className="flex items-center"><div className="text-[16px] font-black">{appData.계좌은행}</div><div className="ml-auto w-9 h-6 rounded-md bg-gradient-to-br from-amber-200 to-amber-400 opacity-90" /></div>
+                      <div className="mt-auto text-[22px] font-black font-mono tracking-wider">{appData.계좌번호}</div>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        <div className="text-[14px] font-semibold text-blue-50/90">예금주 {appData.예금주 || "-"}</div>
+                        <button onClick={() => { const t = `${appData.계좌은행} ${appData.계좌번호} ${appData.예금주 || ""}`.trim(); navigator.clipboard?.writeText(t).then(() => showMsg("계좌번호를 복사했습니다.")).catch(() => showMsg("복사에 실패했습니다.")); }}
+                          className="ml-auto h-8 px-3 rounded-lg bg-white/15 ring-1 ring-white/25 text-[12.5px] font-bold hover:bg-white/25 transition">계좌 복사</button>
+                        <button onClick={() => { navigator.clipboard?.writeText(String(appData.계좌번호 || "").replace(/[^\d]/g, "")).then(() => showMsg("숫자만 복사했습니다.")).catch(() => {}); }}
+                          className="h-8 px-3 rounded-lg bg-white/15 ring-1 ring-white/25 text-[12.5px] font-bold hover:bg-white/25 transition" title="하이픈 없이 숫자만">숫자만</button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1.5"><EditableText id="companyProfile.bankForm.label.은행" defaultText="은행" /></label>
+                    <select
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] bg-white"
+                      value={bankForm.bank}
+                      onChange={e => setBankForm(p => ({ ...p, bank: e.target.value }))}
+                    >
+                      <option value="">은행 선택</option>
+                      {["국민은행","신한은행","우리은행","하나은행","기업은행","농협은행","카카오뱅크","케이뱅크","토스뱅크","SC제일은행","씨티은행","대구은행","부산은행","경남은행","광주은행","전북은행","제주은행","우체국","새마을금고","신협"].map(b => (
+                        <option key={b} value={b}>{b}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-500 mb-1.5"><EditableText id="companyProfile.bankForm.label.예금주" defaultText="예금주" /></label>
+                    <input autoComplete="off"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                      placeholder="예금주 이름"
+                      value={bankForm.accountHolder}
+                      onChange={e => setBankForm(p => ({ ...p, accountHolder: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[12px] font-semibold text-gray-500 mb-1.5"><EditableText id="companyProfile.bankForm.label.계좌번호" defaultText="계좌번호" /></label>
+                  <input autoComplete="off"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                    placeholder="숫자만 입력 (하이픈 제외)"
+                    value={bankForm.accountNumber}
+                    onChange={e => setBankForm(p => ({ ...p, accountNumber: e.target.value.replace(/[^\d-]/g, "") }))}
+                  />
+                </div>
+                    <div className="flex gap-2">
+                      {appData?.계좌은행 && <button onClick={() => setBankEditOpen(false)} className="px-4 py-2.5 rounded-xl border border-gray-300 text-[13px] font-bold text-gray-600">취소</button>}
+                      <button
+                        className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[14px] font-bold transition disabled:opacity-40"
+                        disabled={!bankForm.bank || !bankForm.accountNumber || !bankForm.accountHolder}
+                        onClick={() => { if (!bankForm.bank || !bankForm.accountNumber || !bankForm.accountHolder) return; setBankConfirmOpen(true); }}
+                      >계좌 저장</button>
+                    </div>
+                  </div>
+                )}
+              </section>
             </div>
-            {/* ⭐ 2026-10-27 — 미리보기 없이 "등록됨/미등록"만 간단히. 복사·다운로드·다시 올리기는 그대로 */}
+
+            {/* 회사 서류 */}
+            <section className={`${KP_CARD} p-4 sm:p-6`}>
+              <div className="pb-4 mb-4 border-b border-[#EEF1F6]">
+                <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">DOCUMENTS</div>
+                <div className="mt-0.5 text-[18px] font-black text-[#0F1A30] tracking-tight">회사 서류</div>
+                <div className="text-[13px] text-gray-500 mt-1">사업자등록증과 직인은 거래명세서·보고서 등 필요한 곳에 자동으로 쓰입니다 · 파일을 끌어다 놓아도 됩니다</div>
+              </div>
             <input autoComplete="off" ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={e => handleFileUpload(e.target.files?.[0])} />
             <input autoComplete="off" ref={sealFileRef} type="file" accept="image/*" className="hidden" onChange={e => handleSealUpload(e.target.files?.[0])} />
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {[
                 {
                   key: "biz", title: "사업자등록증", done: !!filePreviewSrc, sub: filePreviewSrc ? (appData.사업자등록증파일명 || "등록된 파일") : "JPG·PNG·PDF / 최대 3MB",
@@ -61077,84 +61261,9 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                 </div>
               ))}
             </div>
-          </section>
-
-          <section className={`${KP_CARD} p-6`}>
-            <div className="flex items-start pb-4 mb-5 border-b border-[#EEF1F6]">
-              <div>
-                <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">BANK ACCOUNT</div>
-                <div className="mt-0.5 text-[18px] font-black text-[#0F1A30] tracking-tight">정산 계좌</div>
-                <div className="text-[13.5px] text-gray-500 mt-1">청구서·거래명세서에 표시되는 입금 계좌</div>
-              </div>
-              {canEditBank && appData?.계좌은행 && !bankEditOpen && <button onClick={() => setBankEditOpen(true)} className="ml-auto px-3.5 py-1.5 rounded-lg border border-[#D9E0EA] text-[13px] font-bold text-gray-700 hover:bg-gray-50">수정</button>}
-            </div>
-            {!canEditBank && !appData?.계좌은행 ? (
-              <div className="rounded-2xl border border-dashed border-[#C9D2E0] bg-[#F7F9FC] px-5 py-8 text-center">
-                <div className="text-[14px] font-bold text-[#1B2B4B]">등록된 정산 계좌가 없습니다</div>
-                <div className="text-[12.5px] text-[#7A879C] mt-1">정산 계좌는 경리팀만 입력·수정할 수 있습니다</div>
-              </div>
-            ) : (appData?.계좌은행 && (!bankEditOpen || !canEditBank)) ? (
-              <div className="relative overflow-hidden rounded-2xl text-white px-5 py-5" style={{ aspectRatio: "1.6 / 1", background: "linear-gradient(135deg, #1B2B4B 0%, #2D4C82 100%)" }}>
-                <div className="absolute -right-10 -bottom-12 w-40 h-40 rounded-full bg-white/[0.07]" />
-                <div className="relative h-full flex flex-col">
-                  <div className="flex items-center"><div className="text-[16px] font-black">{appData.계좌은행}</div><div className="ml-auto w-9 h-6 rounded-md bg-gradient-to-br from-amber-200 to-amber-400 opacity-90" /></div>
-                  <div className="mt-auto text-[22px] font-black font-mono tracking-wider">{appData.계좌번호}</div>
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <div className="text-[14px] font-semibold text-blue-50/90">예금주 {appData.예금주 || "-"}</div>
-                    <button onClick={() => { const t = `${appData.계좌은행} ${appData.계좌번호} ${appData.예금주 || ""}`.trim(); navigator.clipboard?.writeText(t).then(() => showMsg("계좌번호를 복사했습니다.")).catch(() => showMsg("복사에 실패했습니다.")); }}
-                      className="ml-auto h-8 px-3 rounded-lg bg-white/15 ring-1 ring-white/25 text-[12.5px] font-bold hover:bg-white/25 transition">계좌 복사</button>
-                    <button onClick={() => { navigator.clipboard?.writeText(String(appData.계좌번호 || "").replace(/[^\d]/g, "")).then(() => showMsg("숫자만 복사했습니다.")).catch(() => {}); }}
-                      className="h-8 px-3 rounded-lg bg-white/15 ring-1 ring-white/25 text-[12.5px] font-bold hover:bg-white/25 transition" title="하이픈 없이 숫자만">숫자만</button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[12px] font-semibold text-gray-500 mb-1.5"><EditableText id="companyProfile.bankForm.label.은행" defaultText="은행" /></label>
-                <select
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] bg-white"
-                  value={bankForm.bank}
-                  onChange={e => setBankForm(p => ({ ...p, bank: e.target.value }))}
-                >
-                  <option value="">은행 선택</option>
-                  {["국민은행","신한은행","우리은행","하나은행","기업은행","농협은행","카카오뱅크","케이뱅크","토스뱅크","SC제일은행","씨티은행","대구은행","부산은행","경남은행","광주은행","전북은행","제주은행","우체국","새마을금고","신협"].map(b => (
-                    <option key={b} value={b}>{b}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[12px] font-semibold text-gray-500 mb-1.5"><EditableText id="companyProfile.bankForm.label.예금주" defaultText="예금주" /></label>
-                <input autoComplete="off"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
-                  placeholder="예금주 이름"
-                  value={bankForm.accountHolder}
-                  onChange={e => setBankForm(p => ({ ...p, accountHolder: e.target.value }))}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-[12px] font-semibold text-gray-500 mb-1.5"><EditableText id="companyProfile.bankForm.label.계좌번호" defaultText="계좌번호" /></label>
-              <input autoComplete="off"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
-                placeholder="숫자만 입력 (하이픈 제외)"
-                value={bankForm.accountNumber}
-                onChange={e => setBankForm(p => ({ ...p, accountNumber: e.target.value.replace(/[^\d-]/g, "") }))}
-              />
-            </div>
-                <div className="flex gap-2">
-                  {appData?.계좌은행 && <button onClick={() => setBankEditOpen(false)} className="px-4 py-2.5 rounded-xl border border-gray-300 text-[13px] font-bold text-gray-600">취소</button>}
-                  <button
-                    className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[14px] font-bold transition disabled:opacity-40"
-                    disabled={!bankForm.bank || !bankForm.accountNumber || !bankForm.accountHolder}
-                    onClick={() => { if (!bankForm.bank || !bankForm.accountNumber || !bankForm.accountHolder) return; setBankConfirmOpen(true); }}
-                  >계좌 저장</button>
-                </div>
-              </div>
-            )}
-          </section>
-        </div>
+            </section>
+          </>);
+        })()}
 
         {/* ⭐ 2026-10-29 — "운영 설정"(결제일·연간 매출목표)은 업무에 맞는 메뉴로 옮겼다.
             결제일 → 정산관리 › 지급관리 / 연간 매출목표 → 매출관리 › 매출 대시보드. 저장 위치(companySettings)는 그대로. */}
@@ -61163,7 +61272,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
       {/* 계좌 확인 팝업 */}
       {bankConfirmOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999999]">
-          <div className="bg-white rounded-2xl w-[440px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl w-[calc(100%-24px)] max-w-[440px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4">
               <h3 className="text-white font-bold text-[15px]"><EditableText id="companyProfile.bankConfirm.title" defaultText="계좌 정보 확인" /></h3>
               <p className="text-white/55 text-[12px] mt-0.5"><EditableText id="companyProfile.bankConfirm.subtitle" defaultText="입력하신 정보가 맞는지 확인해 주세요" /></p>
@@ -61204,7 +61313,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
       {/* 수정 요청 모달 */}
       {editModalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999999]">
-          <div className="bg-white rounded-2xl w-[520px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl w-[calc(100%-24px)] max-w-[520px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
               <div>
                 <h3 className="text-white font-bold text-[15px]"><EditableText id="companyProfile.editModal.title" defaultText="회사 정보 수정 요청" /></h3>
@@ -61224,11 +61333,15 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
               ].map(({ label, key }) => (
                 <div key={key}>
                   <label className="block text-[12px] font-semibold text-gray-500 mb-1"><EditableText id={`companyProfile.editModal.label.${key}`} defaultText={label} /></label>
+                  {key === "address" ? (
+                    <ResumeAddressField value={editForm.address} onChange={v => setEditForm(p => ({ ...p, address: v }))} />
+                  ) : (
                   <input autoComplete="off"
                     className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
                     value={editForm[key] || ""}
                     onChange={e => setEditForm(p => ({ ...p, [key]: e.target.value }))}
                   />
+                  )}
                 </div>
               ))}
             </div>

@@ -2027,7 +2027,7 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   useEffect(() => {
     if (!["list", "detail", "form"].includes(page)) deptListOkRef.current = false;
     if (deptMode && page === "list" && !(deptMode === "acct" && deptListOkRef.current)) setPage("dept");
-    if (!deptMode && (page === "dept" || (String(page).startsWith("dept:") && page !== "dept:execsched" && page !== "dept:rules" && page !== "dept:myresume" && !(DEPT_PAGE_MENU[page] && deptOkM(DEPT_PAGE_MENU[page]))))) setPage("list");
+    if (!deptMode && (page === "dept" || (String(page).startsWith("dept:") && page !== "dept:execsched" && page !== "dept:schedule" && page !== "dept:rules" && page !== "dept:myresume" && !(DEPT_PAGE_MENU[page] && deptOkM(DEPT_PAGE_MENU[page]))))) setPage("list");
   }, [deptMode, page]);
   const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setPage(v ? "list" : "dept"); };
   const listScrollYRef = useRef(0); // 리스트 스크롤 위치 저장
@@ -2693,13 +2693,18 @@ const handleOpenIssueOrder = (o) => {
 };
 // 🔥 모든 로그인 사용자 FCM 토큰 저장
 useEffect(() => {
+  let unsub = null; let onVis = null;
   import("../firebase").then(({ saveFcmToken }) => {
-    auth.onAuthStateChanged((user) => {
+    unsub = auth.onAuthStateChanged((user) => {
       if (user) {
         saveFcmToken(user);
       }
     });
+    // ⭐ 2026-11-01 앱을 다시 열 때(백그라운드 → 화면)도 토큰을 다시 저장 — 다른 기기 로그인 등으로 토큰이 바뀌어도 알림이 다시 이어진다
+    onVis = () => { if (document.visibilityState === "visible" && auth.currentUser && typeof Notification !== "undefined" && Notification.permission === "granted") saveFcmToken(auth.currentUser); };
+    document.addEventListener("visibilitychange", onVis);
   });
+  return () => { unsub?.(); if (onVis) document.removeEventListener("visibilitychange", onVis); };
 }, []);
 
 // 🔔 앱 켜져 있을 때 알림 표시 (FCM 포그라운드)
@@ -7660,7 +7665,6 @@ function MobileSideMenu({
               <MenuItem label="경영 브리핑" icon="star" onClick={() => onGo?.("dept")} dark={dark} />
               {isCeo && <MenuItem label="자금 현황" icon="wallet" onClick={() => onGo?.("dept:funds")} dark={dark} />}
               <MenuItem label="임원 스케줄" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />
-              {ok("직원일정") && <MenuItem label="직원 일정" icon="clock" onClick={() => onGo?.("dept:schedule")} dark={dark} />}
               {(canRevenue || isExec) && ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
               {(isAdminRole || isExec) && ok("인사이트") && <MenuItem label="경영인텔리전스" icon="trend" onClick={onGoIntel} dark={dark} />}
               {isAdminRole && <MenuItem label="직원 관리" icon="users" onClick={() => onGo?.("staff")} badge={(alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) || null} dark={dark} />}
@@ -7689,18 +7693,19 @@ function MobileSideMenu({
             {ok("배차관리") && <MenuItem label="미배차현황" icon="alert" onClick={onGoUnassigned} badge={unassignedCount > 0 ? unassignedCount : null} dark={dark} />}
           </MenuSection>
           )}
-          {!deptMode && ["인사관리부", "회계관리", "자금관리", "비품관리", "증명서발급", "직원일정"].some(deptOk) && (
+          {!deptMode && ["인사관리부", "회계관리", "자금관리", "비품관리", "증명서발급"].some(deptOk) && (
             <MenuSection title="부서 업무" en="DEPARTMENT" dark={dark} alwaysOpen>
               {deptOk("인사관리부") && <MenuItem label="인사관리부" icon="idcard" onClick={() => onGo?.("dept:hr")} dark={dark} />}
               {deptOk("회계관리") && <MenuItem label="회계관리" icon="money" onClick={() => onGo?.("dept:acct")} dark={dark} />}
               {deptOk("자금관리") && <MenuItem label="자금 관리" icon="wallet" onClick={() => onGo?.("dept:cashbook")} dark={dark} />}
               {deptOk("비품관리") && <MenuItem label="비품·자산" icon="list" onClick={() => onGo?.("dept:assets")} dark={dark} />}
               {deptOk("증명서발급") && <MenuItem label="증명서 발급" icon="stamp" onClick={() => onGo?.("dept:cert")} dark={dark} />}
-              {deptOk("직원일정") && <MenuItem label="직원 일정" icon="clock" onClick={() => onGo?.("dept:schedule")} dark={dark} />}
             </MenuSection>
           )}
           <MenuSection title="사내 업무" en="WORKSPACE" dark={dark} alwaysOpen>
             {deptMode !== "exec" && <MenuItem label="임원 일정" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />}
+            {/* ⭐ 2026-11-01 직원 일정(연차·외근 등 부재 달력)은 모든 직원이 본다 — PC 홈 › 사내 게시판과 같게 */}
+            <MenuItem label="직원 일정" icon="clock" onClick={() => onGo?.("dept:schedule")} dark={dark} />
             <MenuItem label="사내 규정" icon="list" onClick={() => onGo?.("dept:rules")} dark={dark} />
             {ok("전자결재") && <MenuItem label="전자결재" icon="stamp" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.handover || 0) || null} dark={dark} />}
             <MenuItem label="공지사항" icon="bell" onClick={onGoNotice} badge={alertCounts?.notice ? alertCounts.notice : hasNewNotice ? "NEW" : null} dark={dark} />

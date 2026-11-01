@@ -330,6 +330,8 @@ function formatCreatedAtTime(createdAt) {
 
 /* ===== 모듈 레벨: 당일 닫기/읽기 완료된 토스트 ID 관리 ===== */
 const _dismissedToasts = new Set();
+// ⭐ 2026-11-01 배너 키 — 공지를 정정·취소하면(editVer↑) 새 키가 되어 한 번 더 알린다. 같은 판은 기기·계정 통틀어 한 번만
+const toastKeyOf = (type, d) => `${type}_${d?.id}${type === "notice" && d?.editVer ? `_v${d.editVer}` : ""}`;
 // 계정별 Firestore 기반 seen 키 세트 (로드 완료 후 채워짐)
 const _firestoreSeenKeys = new Set();
 let _firestoreSeenLoaded = false;
@@ -577,12 +579,19 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
     return _dismissedToasts.has(key) || getPermDismissed().has(key) || _firestoreSeenKeys.has(key);
   };
 
+  const meUidRef = React.useRef(user?.uid);
+  meUidRef.current = user?.uid;
   const tryShowToast = React.useCallback((type, todayItem) => {
     const seen = getSeenToasts();
-    const shownKey = `${type}_${todayItem.id}`;
+    const shownKey = toastKeyOf(type, todayItem);
     if (seen[shownKey] || isAlreadySeen(shownKey)) return;
+    // 내가 올린 글은 알리지 않는다
+    if (todayItem.authorUid && todayItem.authorUid === meUidRef.current) return;
     markToastSeen(shownKey);
     addPermDismissed(shownKey);
+    // ⭐ 2026-11-01 띄우는 순간 계정에도 "봤음" 저장 — 예전엔 닫기·누르기 때만 저장해서, 다른 창·기기(PC 앱·브라우저·폰)에서 같은 공지가 또 떴다
+    _firestoreSeenKeys.add(shownKey);
+    if (meUidRef.current) setDoc(doc(db, "userSeenNotifs", meUidRef.current), { keys: arrayUnion(shownKey) }, { merge: true }).catch(() => {});
     setTimeout(() => {
       setToast({ type, data: { ...todayItem, date: formatCreatedAt(todayItem.createdAt) } });
     }, type === "notice" ? 500 : type === "schedule" ? 1500 : 2500);
@@ -597,13 +606,9 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
 
   const showTodayToast = React.useCallback((type, items) => {
     const today = todayKST();
-    const todayItem = items.find(item => {
-      const sec = item.createdAt?.seconds;
-      if (!sec) return false;
-      const kst = new Date(new Date(sec * 1000).getTime() + 9 * 60 * 60 * 1000)
-        .toISOString().slice(0, 10);
-      return kst === today;
-    });
+    const isToday = (sec) => !!sec && new Date(new Date(sec * 1000).getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10) === today;
+    // 오늘 올린 글 — 또는 오늘 정정·취소된 글
+    const todayItem = items.find(item => isToday(item.createdAt?.seconds) || isToday(item.revisedAt?.seconds));
     if (!todayItem) return;
 
     if (!_firestoreSeenLoaded) {
@@ -662,9 +667,11 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       if (!added) return;
       const data = { id: added.doc.id, ...added.doc.data(), date: formatCreatedAt(added.doc.data().createdAt) };
       if (data.category === "인사발령") return; // 인사발령은 사내메일 배너로 뜬다
-      const seenKeyN = `notice_${data.id}`;
+      if (data.category === "부고") return; // 부고도 사내메일 배너로 뜬다
+      if (data.authorUid && data.authorUid === user?.uid) return; // 내가 올린 글
+      const seenKeyN = toastKeyOf("notice", data);
       if (getSeenToasts()[seenKeyN] || isAlreadySeen(seenKeyN)) return;
-      markToastSeen(seenKeyN); addPermDismissed(seenKeyN);
+      markToastSeen(seenKeyN); addPermDismissed(seenKeyN); addFirestoreSeenKey(seenKeyN);
       setToast({ type: "notice", data });
     });
     return () => unsub();
@@ -972,7 +979,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       {boardTab === "rules" && <CompanyRules company={getViewCompany()} canEdit={role === "hrManager" || role === "totalMaster"} />}
 
       {/* ===== 사내 게시판(왼쪽 사이드바에서 고름) — 2026-10-28 디지털 리디자인 ===== */}
-      {boardTab === "공지사항" && obitOpen && <ObituaryWriter company={getViewCompany()} me={meHome} onCancel={() => setObitOpen(false)} onSaved={() => setObitOpen(false)} />}
+      {boardTab === "공지사항" && obitOpen && <ObituaryWriter company={getViewCompany()} me={meHome} initial={selectedNotice?.category === "부고" && selectedNotice?.obit ? selectedNotice : null} onCancel={() => { setObitOpen(false); setSelectedNotice(null); }} onSaved={() => { setObitOpen(false); setSelectedNotice(null); }} />}
       {boardTab === "공지사항" && noticeOpen && (
         <NoticeWriter me={meHome} company={getViewCompany()} initial={selectedNotice} onCancel={() => setNoticeOpen(false)} onSaved={() => { setNoticeOpen(false); setSelectedNotice(null); }} />
       )}
@@ -1016,7 +1023,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
               </button>
             )}
             {!isViewer && boardTab === "공지사항" && canWriteNotice && (
-              <button type="button" onClick={() => { setNoticeOpen(false); setObitOpen(true); }}
+              <button type="button" onClick={() => { setNoticeOpen(false); setSelectedNotice(null); setObitOpen(true); }}
                 className="h-12 px-5 rounded-2xl bg-[#111] text-white text-[15px] font-black ring-1 ring-white/25 hover:bg-black transition whitespace-nowrap">부고 알림</button>
             )}
           </div>
@@ -1029,7 +1036,12 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
             <NoticeBoard notices={notices} me={meHome} canWrite={canWriteNotice} isViewer={isViewer}
               openId={selectedNotice?.id || null}
               setOpenId={(id) => setSelectedNotice(id ? (notices.find((x) => x.id === id) || null) : null)}
-              onEdit={(n) => { setSelectedNotice(n); setNoticeOpen(true); }}
+              onEdit={(n) => {
+                // ⭐ 2026-11-01 인사발령 공문은 인사관리부 › 인사발령에서 정정·취소(회원 정보까지 같이 되돌린다), 부고는 부고장 화면으로 다시 고친다
+                if (n.category === "인사발령" && n.hrOrder) { window.alert("인사발령 공문은 인사관리부 › 인사발령에서 대상 직원을 고른 뒤\n[올린 발령 공문] → [정정 발령] 또는 [발령 취소]로 고쳐 주세요.\n(직원 정보까지 함께 바로잡히고, 같은 공지가 [정정]/[취소]로 바뀝니다)"); return; }
+                if (n.category === "부고" && n.obit) { setSelectedNotice(n); setNoticeOpen(false); setObitOpen(true); return; }
+                setSelectedNotice(n); setNoticeOpen(true);
+              }}
               confirm={(message, onConfirm) => setConfirmDialog({ message, onConfirm })} />
           )}
 
@@ -1467,16 +1479,16 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         <div className="fixed bottom-6 right-6 z-[999980] pointer-events-none">
           <BannerStyles />
           <BannerCard
-            id={`${toast.type}_${toast.data?.id}`}
+            id={toastKeyOf(toast.type, toast.data)}
             kind={toast.type}
             title={toast.type === "notice" ? toast.data.title : toast.type === "schedule" ? `[${toast.data.type}] ${toast.data.name || ""}` : toast.data.text}
             body={toast.type === "notice" ? String(toast.data.content || "").slice(0, 120) : toast.type === "handover" ? (toast.data.receiver ? `${toast.data.author || ""} → ${toast.data.receiver}` : "") : (toast.data.date || "")}
             from={toast.type === "notice" ? toast.data.author : ""}
             image={toast.type === "notice" ? toast.data.image : null}
             duration={10000}
-            onClose={() => { const k = `${toast.type}_${toast.data?.id}`; if (toast.data?.id) { markToastSeen(k); _dismissedToasts.add(k); addPermDismissed(k); addFirestoreSeenKey(k); } setToast(null); }}
+            onClose={() => { const k = toastKeyOf(toast.type, toast.data); if (toast.data?.id) { markToastSeen(k); _dismissedToasts.add(k); addPermDismissed(k); addFirestoreSeenKey(k); } setToast(null); }}
             onClick={() => {
-              const k = `${toast.type}_${toast.data?.id}`;
+              const k = toastKeyOf(toast.type, toast.data);
               if (toast.data?.id) { markToastSeen(k); _dismissedToasts.add(k); addPermDismissed(k); addFirestoreSeenKey(k); }
               if (toast.type === "notice") { setSelectedNotice(toast.data); setBoardTab("공지사항"); }
               else if (toast.type === "schedule") setSelectedSchedule(toast.data);
