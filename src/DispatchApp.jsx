@@ -530,7 +530,7 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
   const clockStr = `${pad2(clock.getHours())}:${pad2(clock.getMinutes())}:${pad2(clock.getSeconds())}`;
 
   return (
-    <div className="bg-white border border-[#E3E8F0] rounded-[24px] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] overflow-hidden flex flex-col" style={{ flex: "0 0 calc(38% - 12px)", minWidth: 240 }}>
+    <div className="bg-white border border-[#E3E8F0] rounded-[24px] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] overflow-hidden flex flex-col" style={{ flex: "1 1 0%", minWidth: 240 }}>
       {/* 헤더 — 오늘 날짜 + 디지털 시계 */}
       <div className="px-5 py-3.5 flex items-center justify-between shrink-0" style={{ background: "linear-gradient(120deg,#0B1428,#0F1A30 50%,#1B2B4B)" }}>
         <div>
@@ -4452,6 +4452,20 @@ const patchDispatch = async (_id, patch, knownPrev) => {
       globalShowAlert(REVERSED_DATE_ORDER_MSG);
       return false;
     }
+  }
+
+  // ⭐ 2026-11-01 청구운임·기사운임을 바꾸면 저장된 수수료도 같이 맞춘다 — 오더 수정 패널·표 칸 수정 등이
+  //    운임만 바꾸고 수수료는 예전 값으로 남겨, 정산·매출(저장된 수수료를 먼저 읽음)에서 수익이 틀리게 나왔다.
+  if (("청구운임" in patch || "기사운임" in patch)) {
+    const _n = (v) => Number(String(v ?? "").replace(/[^\d-]/g, "")) || 0;
+    const sale = _n("청구운임" in patch ? patch.청구운임 : prev?.청구운임);
+    const drv = _n("기사운임" in patch ? patch.기사운임 : prev?.기사운임);
+    const prevAuto = _n(prev?.청구운임) - _n(prev?.기사운임);
+    const prevFee = prev?.수수료;
+    // 예전 수수료가 비어 있거나 "청구-기사"와 같았던(자동 계산) 오더만 다시 계산한다 — 직접 넣은 수수료는 그대로
+    const wasAuto = prevFee == null || String(prevFee).trim() === "" || _n(prevFee) === prevAuto;
+    const feeGiven = "수수료" in patch && _n(patch.수수료) !== _n(prevFee);
+    if (wasAuto && !feeGiven) patch.수수료 = String(sale - drv);
   }
 
   // ★ UI 즉시 반영 (optimistic update — Firestore 응답 기다리지 않음)
@@ -18397,7 +18411,8 @@ className={`
            {/* ==================== 상단: 입력폼 + Today 사이드패널 ==================== */}
 <div className="flex items-stretch gap-3 w-full mb-4" style={{ minWidth: 0 }}>
   {/* 왼쪽: 폼 */}
-  <div style={{ flex: "0 0 62%", maxWidth: "62%", minWidth: 0, overflow: "hidden" }}>
+  {/* ⭐ 2026-11-01 화면이 좁으면(노트북·125% 배율 1536px 등) 입력칸이 겹쳐 화물내용 칸을 못 누를 정도였다 — 1800px 미만은 폼을 넓게 */}
+  <div className="basis-[74%] max-w-[74%] min-[1800px]:basis-[62%] min-[1800px]:max-w-[62%]" style={{ flexGrow: 0, flexShrink: 0, minWidth: 0, overflow: "hidden" }}>
     {renderForm()}
   </div>
 
@@ -51043,7 +51058,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
                 <div style="display:flex;align-items:center">
                   <span style="flex:1">${cp.ceo}</span>
                   <span style="position:relative;display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;margin-right:4px">
-                    <img src="${cp.seal}" alt="직인" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:46px;height:46px;opacity:0.9;pointer-events:none;mix-blend-mode:multiply" />
+                    <img src="${cp.seal}" alt="" onerror="this.style.display='none'" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:46px;height:46px;opacity:0.9;pointer-events:none;mix-blend-mode:multiply" />
                     <span style="position:relative;z-index:1;font-size:13px;color:#333">(인)</span>
                   </span>
                 </div>
@@ -52581,7 +52596,9 @@ const handleBatchSettle = async (targetStatus) => {
             >
               <img
                 src={COMPANY_PRINT.seal}
-                alt="직인"
+                alt=""
+                onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}
+                onLoad={(e) => { e.currentTarget.style.visibility = "visible"; }}
                 style={{
                   position: "absolute",
                   top: "50%",
