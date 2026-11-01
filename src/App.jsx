@@ -206,6 +206,8 @@ export default function App() {
   useEffect(() => { installEndOnSignOut(); }, []);
   const startSessionWatch = (id) => {
     const unwatch = watchMySession(id, (reason) => {
+      // ⭐ 2026-11-01 내가 직접 로그아웃한 경우(logout)는 "끊겼습니다" 안내·재로그아웃을 하지 않는다
+      if (reason === "logout") return;
       setKickedReason(reason);
       signOut(auth).catch(() => {});
     });
@@ -612,8 +614,12 @@ export default function App() {
   }, []);
 
   // 인증 + 역할
+  const unsubUserRef = useRef(null);
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
+      // ⭐ 2026-11-01 이전 계정의 users 구독을 끊는다(예전엔 return 값이 무시돼 로그아웃 뒤에도 남아 역할·승인값을 다시 써넣었다)
+      try { unsubUserRef.current?.(); } catch { /* 무시 */ }
+      unsubUserRef.current = null;
       if (!u) {
         try { sessionStorage.removeItem("kpEntry"); } catch { }
         if (sessionLogRef.current.uid && sessionLogRef.current.info) {
@@ -626,6 +632,7 @@ export default function App() {
         sessionLogRef.current = { uid: null, info: null };
         setUser(null);
         setRole(null);
+        setApproved(false);
         setLoading(false);
         return;
       }
@@ -634,6 +641,7 @@ export default function App() {
       // 🔒 운송사 분리 2단계 스위치(관리센터에서 예전 데이터 정리 후 켜짐) — 로그인 때마다 최신 값으로
       getDoc(doc(db, "systemConfig", "tenancy")).then((t) => setServerFilter(t.exists() && t.data()?.serverFilter === true)).catch(() => {});
       const unsubUser = onSnapshot(doc(db, "users", u.uid), (snap) => {
+        if (auth.currentUser?.uid !== u.uid) return;
         if (snap.exists()) {
           const data = snap.data();
           if (data.employmentStatus === "퇴사" && !isMasterEmail) {
@@ -715,10 +723,10 @@ export default function App() {
           setUserCompany("");
         }
         setLoading(false);
-      });
-      return () => unsubUser();
+      }, () => { if (auth.currentUser?.uid === u.uid) setLoading(false); });
+      unsubUserRef.current = unsubUser;
     });
-    return () => unsub();
+    return () => { unsub(); try { unsubUserRef.current?.(); } catch { /* 무시 */ } };
   }, []);
 
   // 공개 라우트는 인증/스플래시 없이 바로 렌더링 (Android PWA start_url 우회)
