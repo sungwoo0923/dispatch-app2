@@ -4706,9 +4706,15 @@ exports.dedupeFcmToken = functions.firestore.document("users/{uid}").onWrite(asy
   return null;
 });
 
-exports.notifySignup = functions.firestore.document("users/{uid}").onCreate(async (snap) => {
+// ⭐ 2026-11-01 onCreate → onWrite — 예전 계정 문서를 다시 쓰는 재가입(같은 uid)도 새 가입 신청으로 알린다
+exports.notifySignup = functions.firestore.document("users/{uid}").onWrite(async (chg) => {
+  if (!chg.after.exists) return null;
+  const snap = chg.after;
   const u = snap.data() || {};
-  if (u.approved !== false) return null;
+  const b = chg.before.exists ? chg.before.data() : null;
+  if (u.approved !== false || u.status === "deleted" || u.status === "withdrawn" || u.employmentStatus === "퇴사") return null;
+  const becamePending = !b || b.approved !== false || ["deleted", "withdrawn"].includes(b.status) || b.employmentStatus === "퇴사";
+  if (!becamePending) return null;
   if (["shipper", "cafeUser", "totalMaster"].includes(u.role)) return null;
   const company = u.companyName || "돌캐";
   const admins = await db.collection("users").where("companyName", "==", company).get();
