@@ -44,7 +44,7 @@ async function getAllTokens() {
 // 나머지(배차등록/배차완료/재배차/배차취소)는 사용자가 모바일에서 직접 켜야 온다.
 const PUSH_TYPES = ["배차등록", "긴급배차", "배차완료", "재배차", "미배차", "배차취소"];
 // ⭐ 2026-11-01 팀별 알림 — 업무 알림(결재·공지·메일·메신저·가입신청·인사발령·마감보고)은 기본 켜짐, 끈 사람만 안 보낸다
-const PUSH_TYPES_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저"];
+const PUSH_TYPES_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저", "생일"];
 function isPushTypeEnabled(prefs, type) {
   const v = prefs?.[type];
   if (v === true || v === false) return v;
@@ -4614,6 +4614,32 @@ async function buildDailySummary(company, date) {
   };
 }
 // ⏰ 매시 5분(한국시간) — 정기오더 생성(정기오더마다 정한 시각) / 휴지통 7일 지난 것 비우기
+// 🎂 생일 3일 전 알림(2026-11-02) — 매일 아침 9시 10분(한국시간), 3일 뒤 생일인 직원을 같은 회사 동료에게 알린다(생일인 본인은 제외)
+//  생년월일: users.birthDate("YYYY-MM-DD"). 알림 설정 키 "생일"(기본 켜짐)
+exports.birthdayReminders = functions.pubsub.schedule("10 9 * * *").timeZone("Asia/Seoul").onRun(async () => {
+  const d3 = new Date(Date.now() + 9 * 3600e3 + 3 * 86400e3);
+  const md = `${String(d3.getUTCMonth() + 1).padStart(2, "0")}-${String(d3.getUTCDate()).padStart(2, "0")}`;
+  const [all, rs] = await Promise.all([db.collection("users").get(), db.collection("hrResumes").get().catch(() => null)]);
+  const rsBirth = new Map((rs?.docs || []).map((d) => [d.id, d.data().birthDate || ""])); // 이력서에만 적힌 생년월일도
+  const staff = all.docs.map((d) => ({ id: d.id, ...d.data() })).map((u) => ({ ...u, birthDate: u.birthDate || rsBirth.get(u.id) || "" }))
+    .filter((u) => !NON_STAFF_ROLES.has(u.role) && u.role !== "totalMaster" && u.approved !== false && u.employmentStatus !== "퇴사");
+  const byCo = new Map();
+  staff.forEach((u) => { const co = String(u.companyName || PUSH_DEFAULT_COMPANY).trim(); if (!byCo.has(co)) byCo.set(co, []); byCo.get(co).push(u); });
+  for (const [co, list] of byCo) {
+    const bd = list.filter((u) => String(u.birthDate || "").slice(5, 10) === md);
+    if (!bd.length) continue;
+    const names = bd.map((u) => `${u.name || ""}${u.position ? ` ${u.position}` : ""}님`);
+    const ids = new Set(bd.map((u) => u.id));
+    const tokens = list.filter((u) => !ids.has(u.id) && isPushTypeEnabled(u.pushPrefs, "생일")).flatMap((u) => userTokens(u));
+    const [mm, dd] = md.split("-").map(Number);
+    await sendPushAndCleanup(tokens, {
+      notification: { title: `🎂 생일 D-3 · ${mm}월 ${dd}일`, body: `${names.slice(0, 3).join(", ")}${names.length > 3 ? ` 외 ${names.length - 3}명` : ""}의 생일이 3일 남았어요` },
+      android: { priority: "high" },
+    }, `생일 알림(${co})`).catch((e) => console.error("생일 알림 실패:", co, e));
+  }
+  return null;
+});
+
 exports.hourlyJobs = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).pubsub.schedule("5 * * * *").timeZone("Asia/Seoul").onRun(async () => {
   const hour = new Date(Date.now() + KST_MS).getUTCHours();
   const today = kstDateStr();

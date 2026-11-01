@@ -131,3 +131,35 @@ export function AddressField({ value, onChange, className = "" }) {
 
 export const EDU_STATUS = ["졸업", "졸업예정", "재학", "휴학", "중퇴", "수료", "검정고시"];
 export const FAMILY_REL = ["부", "모", "배우자", "자녀", "형제", "자매", "조부", "조모", "기타"];
+
+// 🎂 2026-11-02 생년월일 — 년 · 월 · 일 드롭다운(회원가입·이력서 공용). 값은 "YYYY-MM-DD"
+export function BirthSelect({ value, onChange, className = "", selectClass = "" }) {
+  const m = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const [y, setY] = React.useState(m ? m[1] : "");
+  const [mo, setMo] = React.useState(m ? m[2] : "");
+  const [d, setD] = React.useState(m ? m[3] : "");
+  React.useEffect(() => { const x = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/); if (x) { setY(x[1]); setMo(x[2]); setD(x[3]); } }, [value]);
+  const thisYear = new Date().getFullYear();
+  const years = Array.from({ length: thisYear - 15 - 1940 + 1 }, (_, i) => String(thisYear - 15 - i));
+  const days = y && mo ? new Date(Number(y), Number(mo), 0).getDate() : 31;
+  const push = (ny, nm, nd) => {
+    const max = ny && nm ? new Date(Number(ny), Number(nm), 0).getDate() : 31;
+    const dd = nd && Number(nd) > max ? String(max).padStart(2, "0") : nd;
+    if (dd !== nd) setD(dd);
+    onChange(ny && nm && dd ? `${ny}-${nm}-${dd}` : "");
+  };
+  const sel = selectClass || "w-full h-12 border border-[#DCE3EE] rounded-xl px-3 text-[15px] font-semibold text-[#0F1A30] bg-white focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15";
+  const S = ({ v, set, list, ph, unit }) => (
+    <select value={v} onChange={(e) => set(e.target.value)} className={`${sel} ${v ? "" : "text-[#8E9BB2]"}`}>
+      <option value="">{ph}</option>
+      {list.map((o) => <option key={o} value={o}>{Number(o)}{unit}</option>)}
+    </select>
+  );
+  return (
+    <div className={`grid grid-cols-[1.3fr_1fr_1fr] gap-2 ${className}`}>
+      {S({ v: y, set: (v) => { setY(v); push(v, mo, d); }, list: years, ph: "년도", unit: "년" })}
+      {S({ v: mo, set: (v) => { setMo(v); push(y, v, d); }, list: Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0")), ph: "월", unit: "월" })}
+      {S({ v: d, set: (v) => { setD(v); push(y, mo, v); }, list: Array.from({ length: days }, (_, i) => String(i + 1).padStart(2, "0")), ph: "일", unit: "일" })}
+    </div>
+  );
+}

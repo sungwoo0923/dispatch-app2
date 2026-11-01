@@ -3,7 +3,7 @@
 //  인사 기록(이력서·근태·인사발령) · 직원 등록(계정 없이 인사 기록) · 정보 수정(공문 없이 바로) · 출근기록부 ·
 //  퇴사·권고사직 · 직책·부서 설정(회사별 추가·숨김) · 사내 규정(취업규칙 등)
 import React from "react";
-import { AddressField } from "./ResumeInputs";
+import { AddressField, BirthSelect } from "./ResumeInputs";
 import { addDoc, arrayUnion, collection, deleteDoc, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import KpSubNav from "./KpSubNav";
@@ -75,7 +75,7 @@ export function StaffRegister({ company, onDone }) {
         <BookCard en="PERSONAL" title="인적 사항">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div><Label>이름 *</Label><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inp} /></div>
-            <div><Label>생년월일</Label><input type="date" value={f.birthDate} onChange={(e) => setF({ ...f, birthDate: e.target.value })} className={inp} /></div>
+            <div><Label>생년월일</Label><BirthSelect value={f.birthDate} onChange={(v) => setF((p) => ({ ...p, birthDate: v }))} selectClass={inp} /></div>
             <div><Label>연락처</Label><input value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} className={inp} placeholder="010-0000-0000" /></div>
             <div><Label>이메일(선택)</Label><input value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} className={inp} /></div>
             <div className="md:col-span-2"><Label>주소</Label><AddressField value={f.address} onChange={(v) => setF((p) => ({ ...p, address: v }))} /></div>

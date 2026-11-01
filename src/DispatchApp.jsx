@@ -36,7 +36,7 @@ import { useCompanyStaff, masterHasHr, isHrStaffUser } from "./hrHandover";
 import { AttendanceQuickButton } from "./attendanceQuick";
 import { usePendingSignups } from "./pendingSignups";
 import { NavHover } from "./navMenus";
-import { PeriodPicker as ResumePeriodPicker, DateField as ResumeDateField, SelectField as ResumeSelectField, AddressField as ResumeAddressField, EDU_STATUS as RESUME_EDU_STATUS, FAMILY_REL as RESUME_FAMILY_REL } from "./ResumeInputs";
+import { PeriodPicker as ResumePeriodPicker, DateField as ResumeDateField, SelectField as ResumeSelectField, AddressField as ResumeAddressField, BirthSelect as ResumeBirthSelect, EDU_STATUS as RESUME_EDU_STATUS, FAMILY_REL as RESUME_FAMILY_REL } from "./ResumeInputs";
 import { useHrOptions } from "./hrConstants";
 import { AssetManager } from "./OfficeBooks";
 import { FundsWorkspace, FundsBoard, isCeoPosition } from "./FundsBoard";
@@ -2741,6 +2741,7 @@ import { loadAcctPayments, saveAcctPayments, loadPlManual, savePlManual } from "
 import { bumpDriverPayout, addClientCollection, removeClientCollections } from "./ledgerAuto";
 import BannerCenter from "./BannerCenter";
 import OrderCongratsPopup from "./OrderCongratsPopup";
+import BirthdayPopup from "./BirthdayPopup";
 import PersonnelOrder, { OrderNoticeHistory } from "./PersonnelOrder";
 import OrderScanModal, { looksLikeOrder, scanDropDate } from "./OrderScanModal";
 import KpSubNav from "./KpSubNav";
@@ -7907,6 +7908,7 @@ return (
       />
       <BannerCenter />
       <OrderCongratsPopup uid={user?.uid} profile={myProfileDoc} />
+      <BirthdayPopup uid={user?.uid} profile={myProfileDoc} company={deptCompany} />
       <PlatformNoticeBanner audience="carrier" />
       <CopyTemplateHost canEdit={role === "admin" || role === "totalMaster"} />
       <PlanValueSync planId={planId} />
@@ -59399,6 +59401,15 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
   );
   const usedPct = leave && leave.entitlement ? Math.min(100, Math.round((leave.used / leave.entitlement) * 100)) : 0;
   const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
+  // ⭐ 2026-11-02 인사·경리팀은 오더·매출 실적 대신 결재·업무 현황을 보여 준다
+  const teamTxt = String(myInfo.team || "");
+  const officeKind = ["hrManager", "hrAcct"].includes(role) || /인사/.test(teamTxt) ? "hr" : role === "test" || /경리|회계/.test(teamTxt) ? "acct" : null;
+  const apc = useApprovalCounts();
+  const coStaffMy = useCompanyStaff(officeKind === "hr" ? co : "");
+  const workTiles = officeKind ? [
+    ["결재할 차례", `${apc.todo || 0}건`, "지금 내가 결재할 문서"],
+    officeKind === "hr" ? ["재직 직원", `${(coStaffMy || []).length}명`, "우리 회사 재직 인원"] : ["진행 중 내 기안", `${apc.myPending || 0}건`, "결재 진행 중인 내 문서"],
+  ] : null;
   const btnGhost = "h-11 rounded-xl bg-white border border-[#D9E0EA] text-[13.5px] font-bold text-[#1B2B4B] hover:border-[#1B2B4B] hover:bg-[#F5F8FD] transition";
   // 잔여 연차 원형 그래프
   const remPct = leave && leave.entitlement ? Math.max(0, Math.min(100, Math.round((leave.remaining / leave.entitlement) * 100))) : 0;
@@ -59436,6 +59447,13 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
               <div className="relative"><Ring pct={remPct} size={56} stroke={6} /><span className="absolute inset-0 grid place-items-center text-[11px] font-black">{remPct}%</span></div>
               <div className="min-w-0"><div className="text-[11.5px] font-bold text-white/60">잔여 연차</div><div className="text-[19px] font-black leading-tight">{leave ? `${leave.remaining}일` : "-"}</div><div className="text-[11.5px] text-white/50">{leave ? `총 ${leave.entitlement}일` : "입사일 등록 필요"}</div></div>
             </div>
+            {workTiles ? workTiles.map(([k, v, sub]) => (
+              <div key={k} className="rounded-2xl bg-white/[0.07] ring-1 ring-white/10 px-4 py-3.5">
+                <div className="text-[11.5px] font-bold text-white/60">{k}</div>
+                <div className="mt-1 text-[19px] font-black leading-tight tabular-nums">{v}</div>
+                <div className="mt-0.5 text-[11.5px] text-white/50 truncate">{sub}</div>
+              </div>
+            )) : (<>
             <div className="rounded-2xl bg-white/[0.07] ring-1 ring-white/10 px-4 py-3.5">
               <div className="text-[11.5px] font-bold text-white/60">오늘 내 오더</div>
               <div className="mt-1 text-[19px] font-black leading-tight tabular-nums">{Number(todayStats?.count ?? 0).toLocaleString()}건</div>
@@ -59446,6 +59464,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
               <div className="mt-1 text-[19px] font-black leading-tight tabular-nums">{Number(myStats?.totalOrders ?? 0).toLocaleString()}건</div>
               <div className="mt-0.5 text-[11.5px] text-white/50 tabular-nums truncate">수익 {won(myStats?.totalProfit)}</div>
             </div>
+            </>)}
           </div>
         </div>
       </section>
@@ -59485,7 +59504,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
             )}
           </ProfilePanel>
 
-          <ProfilePanel eyebrow="WORK" title="근무 현황" desc="휴가·외근은 결재 승인 건 기준 · 실적은 내가 등록한 오더 기준">
+          <ProfilePanel eyebrow="WORK" title="근무 현황" desc={officeKind ? "휴가·외근은 결재 승인 건 기준 · 결재는 내 전자결재 기준" : "휴가·외근은 결재 승인 건 기준 · 실적은 내가 등록한 오더 기준"}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="min-w-0">
                 <div className="flex items-baseline justify-between text-[13.5px]">
@@ -59503,6 +59522,20 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
                 </div>
                 <div className="mt-2 text-[11.5px] text-[#9AA9C3]">입사일 변경은 인사팀(인사관리부)에서 합니다</div>
               </div>
+              {officeKind ? (
+                <div className="min-w-0">
+                  <div className="text-[13.5px] font-black text-[#0F1A30] mb-2">결재 · 업무 현황</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[["결재할 차례", apc.todo, true], ["진행 중 내 기안", apc.myPending], ["새 결재 결과", apc.mineNew], ["참조 새 문서", apc.ccNew]].map(([k, v, hi]) => (
+                      <div key={k} className={`rounded-2xl px-3 py-3 ${hi ? "bg-[#1B2B4B] text-white" : "bg-[#F5F8FD] border border-[#E3E8F0] text-[#0F1A30]"}`}>
+                        <div className={`text-[11.5px] font-bold ${hi ? "text-white/70" : "text-[#7A879C]"}`}>{k}</div>
+                        <div className="text-[18px] font-black tabular-nums">{v || 0}건</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 text-[11.5px] text-[#9AA9C3]">{officeKind === "hr" ? "인사 업무는 인사관리부, 결재는 전자결재에서 처리합니다" : "정산·회계 업무는 정산관리·회계관리, 결재는 전자결재에서 처리합니다"}</div>
+                </div>
+              ) : (
               <div className="min-w-0">
                 <div className="rounded-2xl border border-[#E3E8F0] overflow-hidden">
                   <table className="w-full text-[13px]">
@@ -59515,6 +59548,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
                   </table>
                 </div>
               </div>
+              )}
             </div>
           </ProfilePanel>
 
@@ -59924,7 +59958,13 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
   React.useEffect(() => { if (focusUid && rows.some((r) => r.uid === focusUid)) setSelectedUid(focusUid); }, [focusUid, rows.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selected = rows.find(r => r.uid === selectedUid) || null;
-  const resume = selectedUid ? (resumes[selectedUid] || {}) : {};
+  // 🎂 2026-11-02 가입할 때 쓴 생년월일·주소가 이력서에 비어 있으면 그 값으로 채워 보여 준다(저장하면 이력서에도 남음)
+  const resume = React.useMemo(() => {
+    if (!selectedUid) return {};
+    const r = resumes[selectedUid] || {};
+    const u = members.find((m) => m.uid === selectedUid) || {};
+    return { ...r, birthDate: r.birthDate || u.birthDate || "", address: r.address || u.address || "" };
+  }, [selectedUid, resumes, members]);
   // 인사팀이 새로 제출된 이력서를 열면 "확인함"
   React.useEffect(() => { if (canManage && selectedUid && resumes[selectedUid]?.hrSeen === false) setDoc(doc(db, "hrResumes", selectedUid), { hrSeen: true, hrSeenAt: Date.now() }, { merge: true }).catch(() => {}); }, [canManage, selectedUid, resumes]);
   const newResumeCount = canManage ? members.filter((m) => resumes[m.uid]?.hrSeen === false).length : 0;
@@ -59972,6 +60012,8 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
       // ⭐ 2026-11-01 본인이 작성·저장하면 인사팀에 "새 이력서"로 표시 + 사내메일 알림
       const bySelf = selectedUid === userId && !canManage;
       await setDoc(doc(db, "hrResumes", selectedUid), { ...draft, companyName: company, ...(bySelf ? { selfSubmittedAt: Date.now(), hrSeen: false } : {}) }, { merge: true });
+      // 🎂 생년월일은 계정에도 맞춰 둔다(생일 축하·3일 전 알림이 이 값을 쓴다)
+      if (draft.birthDate && /^\d{4}-\d{2}-\d{2}$/.test(draft.birthDate)) await setDoc(doc(db, "users", selectedUid), { birthDate: draft.birthDate }, { merge: true }).catch(() => {});
       if (bySelf) {
         const me = members.find((m) => m.uid === userId) || {};
         // 인사 담당자에게 — 없으면(신규 운송사) 임시로 인사 업무를 하는 마스터에게
@@ -60267,7 +60309,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                           <div key={k} className={`px-4 py-3 rounded-2xl bg-[#F5F8FD] border border-[#EDF1F7] min-w-0 ${span === 2 ? "col-span-2" : ""}`}>
                             <div className="text-[12.5px] font-bold text-[#7A879C]">{k}</div>
                             {editMode && edit === "birthDate" ? (
-                              <div className="mt-1"><ResumeDateField value={draft.birthDate} placeholder="생년월일" onChange={v => setDraft(d => ({ ...d, birthDate: v }))} /></div>
+                              <div className="mt-1"><ResumeBirthSelect value={draft.birthDate} onChange={v => setDraft(d => ({ ...d, birthDate: v }))} selectClass="w-full h-10 border border-[#DCE3EE] rounded-xl px-2 text-[14px] font-semibold text-[#0F1A30] bg-white focus:outline-none focus:border-[#4B6CB7]" /></div>
                             ) : editMode && edit === "address" ? (
                               <div className="mt-1"><ResumeAddressField value={draft.address} onChange={v => setDraft(d => ({ ...d, address: v }))} /></div>
                             ) : editMode && edit ? (

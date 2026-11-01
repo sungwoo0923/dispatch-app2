@@ -511,7 +511,7 @@ export function CertIssuer({ company, isViewer = false }) {
           <div className="flex items-center justify-between mb-3"><span className="text-[11px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>LIVE PREVIEW · A4</span><span className="text-[12px] font-bold text-[#7A879C]">입력하는 대로 바로 바뀝니다</span></div>
           {!u ? <div className="py-40 text-center text-[14px] font-bold text-[#9AA9C3]">왼쪽에서 직원을 고르면 양식이 보입니다</div> : (
             <div className="shadow-[0_18px_40px_rgba(15,26,48,0.18)] w-fit mx-auto" ref={paperRef}>
-              <CertPaper kind={kind} no={no} u={u} pf={profiles[u.id]} co={co} purpose={purpose} duty={duty} issueDate={today} birth={rs.birthDate || profiles[u.id]?.birth || ""} address={rs.address || ""} />
+              <CertPaper kind={kind} no={no} u={u} pf={profiles[u.id]} co={co} purpose={purpose} duty={duty} issueDate={today} birth={rs.birthDate || u.birthDate || profiles[u.id]?.birth || ""} address={rs.address || u.address || ""} />
             </div>
           )}
         </div>

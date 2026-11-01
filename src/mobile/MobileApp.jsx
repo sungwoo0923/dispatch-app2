@@ -98,6 +98,7 @@ import MonthCompareAnalysis from "../MonthCompareAnalysis";
 import { MailHeaderButton } from "../InternalMail";
 import BannerCenter from "../BannerCenter";
 import OrderCongratsPopup from "../OrderCongratsPopup";
+import BirthdayPopup from "../BirthdayPopup";
 import OrderScanModal, { scanDropDate } from "../OrderScanModal";
 
 
@@ -5494,6 +5495,7 @@ const title =
 
       <BannerCenter bottom={86} />
       <OrderCongratsPopup uid={user?.uid} profile={myProfM} mobile />
+      <BirthdayPopup uid={user?.uid} profile={myProfM} company={myProfM?.companyName || ""} mobile />
       <MobileHeader
   title={title}
   cardVersionB={cardVersionB}
@@ -22126,6 +22128,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     W("사내메일", "사내메일", "새 메일이 오면"),
     W("메신저", "메신저", "대화방에 새 메시지가 오면"),
     W("인사발령", "인사발령", "회사에 인사발령(승진·부서 이동 등)이 나면 — 전 직원"),
+    W("생일", "생일 알림", "동료 생일 3일 전 아침에 미리 알려 드려요"),
   ];
   const teamKey = role === "hrAcct" ? "hr" : (deptMode || "dispatch");
   const PUSH_GROUPS = [
@@ -22134,7 +22137,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     { title: "공통 알림", items: COMMON_PUSH },
   ];
   const PUSH_PREF_TYPES = PUSH_GROUPS.flatMap((g) => g.items);
-  const PUSH_PREF_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저"];
+  const PUSH_PREF_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저", "생일"];
   const isPushPrefOn = (prefs, key) => {
     const v = prefs?.[key];
     if (v === true || v === false) return v;

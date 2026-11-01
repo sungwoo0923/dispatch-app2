@@ -9,6 +9,7 @@ import { freeDeletedEmail } from "./freeEmail";
 import { readPublicCompanies } from "./publicCompanies";
 import CustomSelect from "./CustomSelect";
 import CustomDatePicker from "./CustomDatePicker";
+import { BirthSelect } from "./ResumeInputs";
 import {
   doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc, updateDoc,
 } from "firebase/firestore";
@@ -175,6 +176,7 @@ function SignupForm({ signupType, onBack }) {
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [birthDate, setBirthDate] = useState(""); // 🎂 2026-11-02 생년월일(이력서·생일 알림과 연동)
   const [position, setPosition] = useState("");
   const [hireDate, setHireDate] = useState("");
   const [address, setAddress] = useState("");
@@ -328,6 +330,7 @@ function SignupForm({ signupType, onBack }) {
     }
     if (!name.trim()) return setError("이름을 입력해주세요.");
     if (!phone.trim()) return setError("핸드폰번호를 입력해주세요.");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) return setError("생년월일(년도·월·일)을 선택해주세요.");
     if (!email.trim()) return setError("이메일을 입력해주세요.");
     if (password.length < 6) return setError("비밀번호는 6자 이상 입력해주세요.");
     if (password !== passwordConfirm) return setError("비밀번호가 일치하지 않습니다.");
@@ -350,6 +353,7 @@ function SignupForm({ signupType, onBack }) {
         companyName: companyName.trim(),
         name: name.trim(),
         phone: phone.trim(),
+        birthDate,
         position: position || "",
         // ⭐ 2026-10-31 대표·전무·이사는 임원 부서로(로그인하면 임원 화면). 기존 회사 합류자는 직책 기준 추천 권한으로 시작
         team: isExecPosition(position) ? EXEC_TEAM : "",
@@ -580,6 +584,11 @@ function SignupForm({ signupType, onBack }) {
               onChange={(e) => setPhone(formatPhone(e.target.value))}
               placeholder="010-0000-0000" maxLength={13}
               className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15" />
+          </Field>
+
+          <Field label="생년월일" required>
+            <BirthSelect value={birthDate} onChange={setBirthDate} />
+            <p className="text-[12.5px] text-[#7A89A3] mt-1.5 pl-1">이력서에 자동으로 들어가고, 생일에 축하 알림이 갑니다.</p>
           </Field>
 
           <Field label="직책">
