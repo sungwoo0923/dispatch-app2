@@ -7800,8 +7800,8 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
     // 💰 자금현황은 대표 직책(대표·대표이사·사장)만
     if (m === "자금현황") return deptMode === "exec" && (forceExec || isCeoPosition(myProfileDoc?.position)) ? "ok" : "hidden";
     // ⚙ 직접 만든 권한(권한 관리 › 새 역할)은 부서 메뉴도 켜고 끌 수 있다
-    const isOwnRole = !!customRole && !["admin", "hrManager", "user", "test", "viewer"].includes(role);
-    const ownOk = (x) => isOwnRole && getMenuAccess(customRoles, role, x) !== "hidden";
+    // ⭐ 2026-11-01 직접 만든 역할 + 운송사별 권한 설정에서 켠 기본 역할(예: A운송사 관리자에게 인사관리부)
+    const ownOk = (x) => !!customRole && getMenuAccess(customRoles, role, x) !== "hidden";
     if (["결재함", "스케줄"].includes(m)) return deptMode === "exec" ? "ok" : "hidden";
     if (m === "직원일정") return deptMode === "exec" || ownOk(m) ? "ok" : "hidden";
     if (m === "전자결재") return ownOk(m) ? "ok" : "hidden"; // 일반 화면은 홈 › 전자결재
@@ -8538,7 +8538,7 @@ return (
         {menu === "자금관리" && menuState("자금관리") === "ok" && <FundsWorkspace company={deptCompany} isViewer={isViewer} />}
         {menu === "비품관리" && menuState("비품관리") === "ok" && <AssetManager company={deptCompany} isViewer={isViewer} />}
         {menu === "인사관리부" && menuState("인사관리부") === "ok" && (
-          <HrHub company={deptCompany} canManage={role === "hrManager" || role === "totalMaster" || myProfileDoc?.isMaster === true} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "" }}
+          <HrHub company={deptCompany} canManage={role === "hrManager" || role === "totalMaster" || myProfileDoc?.isMaster === true || (!!customRole && getMenuAccess(customRoles, role, "인사관리부") === "write")} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "" }}
             renderRecord={(focusUid) => <HRManagementPage userCompany={deptCompany} role={role} userId={auth?.currentUser?.uid || ""} focusUid={focusUid} />}
             renderAttendance={() => <AttendanceBoard userCompany={deptCompany} role={role} user={user} />} />
         )}

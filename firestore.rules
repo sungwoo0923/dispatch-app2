@@ -525,11 +525,21 @@ service cloud.firestore {
     // ⭐ 규칙은 "하나라도 허용하면 허용"이라, 서버 전용 컬렉션(초기화 비밀번호·보관함·기록)은
     // 여기서 빼야 위의 "allow … if false"가 실제로 막힌다.
     // ⭐ 개인 설정(자주 쓰는 계좌 등) — 본인만
+    // 🏢 2026-11-01 운송사별 권한 설정 — 누구나(승인된 직원) 읽고, 최고관리자만 바꾼다
+    match /companyRoleOverrides/{co} {
+      allow read: if isApproved();
+      allow write: if isTotalMasterUser();
+    }
+    // 공통 권한(역할별 메뉴) — 최고관리자만 바꾼다(예전엔 승인된 누구나 쓸 수 있었음)
+    match /customRoles/{key} {
+      allow read: if isApproved();
+      allow write: if isTotalMasterUser();
+    }
     match /userPrefs/{uid} {
       allow read, write: if isSignedIn() && request.auth.uid == uid;
     }
     match /{col}/{rest=**} {
-      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'driverStatements', 'fleetPenalties', 'fixedRoutes', 'publicCompanies', 'companyContracts',
+      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'driverStatements', 'fleetPenalties', 'fixedRoutes', 'publicCompanies', 'companyContracts',
         // 🔒 회사별로 잠근 컬렉션(위에서 따로 정함)
         'orders', 'dispatch', 'dispatch_test', 'fixedClients', 'drivers', 'clients', 'places', 'recurringOrders', 'deletedOrders',
         'driver_completed_archive', 'notifications', 'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests',
