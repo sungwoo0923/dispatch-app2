@@ -4601,6 +4601,24 @@ exports.notifyNotice = functions.firestore.document("notices/{id}").onCreate(asy
 });
 
 // 🙋 가입 신청 푸시(2026-10-31) — 직원·기사가 가입 신청하면(승인 대기) 그 회사 관리자 이상 전원에게
+// 📱 한 기기 = 한 계정(2026-11-01) — 같은 휴대폰으로 다른 회사 계정에 로그인하면, 예전 계정 문서에 남은
+//  같은 기기 토큰을 지운다(안 지우면 지금 쓰지 않는 회사의 공지·발령 알림이 이 기기로 온다).
+exports.dedupeFcmToken = functions.firestore.document("users/{uid}").onWrite(async (chg, ctx) => {
+  const a = chg.after.exists ? chg.after.data() : null;
+  const b = chg.before.exists ? chg.before.data() : null;
+  const token = a?.fcmToken;
+  // 토큰이 새로 생겼거나, 앱을 다시 열어 토큰을 다시 저장했을 때(fcmTokenAt 갱신)만 확인
+  if (!token || (token === b?.fcmToken && a?.fcmTokenAt === b?.fcmTokenAt)) return null;
+  const snap = await db.collection("users").where("fcmToken", "==", token).get();
+  const others = snap.docs.filter((d) => d.id !== ctx.params.uid);
+  if (!others.length) return null;
+  const batch = db.batch();
+  others.forEach((d) => batch.update(d.ref, { fcmToken: FieldValue.delete(), fcmTokenAt: FieldValue.delete() }));
+  await batch.commit();
+  console.log(`◇ 같은 기기 토큰 ${others.length}개 이전 계정에서 정리`);
+  return null;
+});
+
 exports.notifySignup = functions.firestore.document("users/{uid}").onCreate(async (snap) => {
   const u = snap.data() || {};
   if (u.approved !== false) return null;
