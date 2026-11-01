@@ -156,9 +156,13 @@ export async function clearFcmToken(uid) {
     const mine = await getToken(m, { vapidKey, serviceWorkerRegistration: reg }).catch(() => null);
     if (!mine) return;
     const snap = await getDoc(doc(db, "users", uid));
-    if (snap.exists() && snap.data()?.fcmToken === mine) {
-      await updateDoc(doc(db, "users", uid), { fcmToken: deleteField(), fcmTokenAt: deleteField() });
-    }
+    if (!snap.exists()) return;
+    const d = snap.data() || {};
+    const rest = (Array.isArray(d.fcmTokens) ? d.fcmTokens : []).filter((t) => t && t !== mine);
+    const patch = {};
+    if ((d.fcmTokens || []).includes(mine)) patch.fcmTokens = rest;
+    if (d.fcmToken === mine) { if (rest[0]) patch.fcmToken = rest[0]; else { patch.fcmToken = deleteField(); patch.fcmTokenAt = deleteField(); } }
+    if (Object.keys(patch).length) await updateDoc(doc(db, "users", uid), patch);
   } catch { /* 무시 */ }
 }
 
@@ -166,7 +170,8 @@ export async function saveFcmToken(user) {
   if (!user) return;
   const messaging = await messagingPromise;
   if (!messaging) { console.warn("[FCM] 이 브라우저는 푸시 메시징을 지원하지 않습니다."); return; }
-  const permission = await Notification.requestPermission();
+  // ⭐ 아이폰은 버튼을 누를 때만 권한을 물을 수 있다(자동 요청은 무시·거부됨) — 이미 허용이면 바로 진행
+  const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission().catch(() => "default");
   if (permission !== "granted") { console.warn("[FCM] 알림 권한이 허용되지 않았습니다:", permission); return; }
   const vapidKey = import.meta.env.VITE_FCM_VAPID_KEY;
   // ⭐ VAPID 키가 설정 안 돼 있으면 getToken()이 아예 토큰을 발급 못 받는다 — 이러면
@@ -193,7 +198,10 @@ export async function saveFcmToken(user) {
   try {
     const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: swRegistration });
     if (!token) { console.warn("[FCM] 토큰을 발급받지 못했습니다."); return; }
-    await updateDoc(doc(db, "users", user.uid), { fcmToken: token, fcmTokenAt: Date.now() });
+    // ⭐ 2026-11-02 한 계정 여러 기기(안드로이드·아이폰·PC) — 최근 기기 5대까지 fcmTokens에 함께 저장(서버가 모두에게 보낸다)
+    let list = [token];
+    try { const cur = (await getDoc(doc(db, "users", user.uid))).data() || {}; list = [token, ...[cur.fcmToken, ...(Array.isArray(cur.fcmTokens) ? cur.fcmTokens : [])].filter((t) => t && t !== token)]; } catch { /* 무시 */ }
+    await updateDoc(doc(db, "users", user.uid), { fcmToken: token, fcmTokenAt: Date.now(), fcmTokens: [...new Set(list)].slice(0, 5) });
     console.log("[FCM] 토큰 저장 완료");
   } catch (e) {
     console.error("[FCM] 토큰 발급/저장 실패:", e);
@@ -247,7 +255,9 @@ export async function diagnoseFcmToken(user) {
   try {
     const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: swRegistration });
     if (!token) return { ok: false, reason: "getToken()이 토큰 없이 빈 값을 반환했습니다(원인 불명 — iOS Safari 자체 버그일 수 있음)." };
-    await updateDoc(doc(db, "users", user.uid), { fcmToken: token, fcmTokenAt: Date.now() });
+    let list = [token];
+    try { const cur = (await getDoc(doc(db, "users", user.uid))).data() || {}; list = [token, ...[cur.fcmToken, ...(Array.isArray(cur.fcmTokens) ? cur.fcmTokens : [])].filter((t) => t && t !== token)]; } catch { /* 무시 */ }
+    await updateDoc(doc(db, "users", user.uid), { fcmToken: token, fcmTokenAt: Date.now(), fcmTokens: [...new Set(list)].slice(0, 5) });
     return { ok: true, token };
   } catch (e) {
     return { ok: false, reason: `토큰 발급 중 오류: ${e?.name || ""} ${e?.message || e}` };

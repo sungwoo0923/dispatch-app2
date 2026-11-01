@@ -3745,7 +3745,10 @@ useEffect(() => {
 }, [schedules, currentUser, userReadScheduleAt]);
 
 // 공지/일정/인수인계 미확인 팝업 (로그인 후 1회)
+// ⭐ 2026-11-02 사용 안 함 — "확인하지 않은 항목" 팝업은 띄우지 않는다(메뉴 숫자 배지·알림으로 충분)
+const UNREAD_POPUP_ENABLED = false;
 useEffect(() => {
+  if (!UNREAD_POPUP_ENABLED) return;
   if (!currentUser?.uid) return;
   if (unreadPopupShownRef.current) return;
   if (userReadNoticeAt === null || userReadScheduleAt === null) return;
@@ -22119,7 +22122,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     W("공지사항", "공지사항", "새 공지·공문이 올라오면"),
     W("사내메일", "사내메일", "새 메일이 오면"),
     W("메신저", "메신저", "대화방에 새 메시지가 오면"),
-    W("인사발령", "인사발령", "나의 승진·부서 이동 등 발령이 나면"),
+    W("인사발령", "인사발령", "회사에 인사발령(승진·부서 이동 등)이 나면 — 전 직원"),
   ];
   const teamKey = role === "hrAcct" ? "hr" : (deptMode || "dispatch");
   const PUSH_GROUPS = [
