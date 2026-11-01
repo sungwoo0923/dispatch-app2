@@ -79,8 +79,18 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
   const toggle = () => setCollapsed((v) => { try { localStorage.setItem("kpSubNavCollapsed", v ? "0" : "1"); } catch { /* 저장 실패 무시 */ } return !v; });
   const gs = groups || [{ label: "", items: items || [] }];
   // ⭐ 2026-11-01 상단 메뉴에서 고른 세부 메뉴로 바로 이동(navMenus.jsx)
-  useSubnavTarget(code, gs.flatMap((g) => (g.items || []).flatMap((it) => [it.key, ...((it.children || []).map((c) => c.key))])), onSelect,
-    gs.flatMap((g) => (g.items || []).flatMap((it) => (it.children && it.children.length ? it.children.map((c) => [c.key, `${it.label} › ${c.label}`]) : [[it.key, it.label]]))).filter(([k]) => !String(k).startsWith("lock:")));
+  // ⭐ 2026-11-01 버그수정 — 하위메뉴를 sub로 준 화면(기사관리·홈 메일함 등)은 하위 항목이 이동 대상에서 빠져 눌러도 안 움직였다(kidsOf로 sub·children 모두)
+  //   부모 항목(하위메뉴 있는 것)으로 오면 첫 하위 화면으로 연다. 하위가 많으면(메일함 폴더 등) 부모 하나로만 보여 준다
+  //   도구 버튼(actions — 단가표 직접 작성·발행 이력 등)도 상단 세부 메뉴에서 누르면 그 버튼이 실행된다
+  const subnavItems = gs.flatMap((g) => g.items || []);
+  const subnavActs = (actions || []).filter((a) => a?.key && typeof a.onClick === "function");
+  useSubnavTarget(code, [...subnavItems.flatMap((it) => [it.key, ...((kidsOf(it) || []).map((c) => c.key))]), ...subnavActs.map((a) => a.key)],
+    (k) => {
+      const act = subnavActs.find((a) => a.key === k); if (act) { act.onClick(); return; }
+      const p = subnavItems.find((it) => it.key === k); const ks = p && kidsOf(p); onSelect?.(ks ? ks[0].key : k);
+    },
+    [...subnavItems.flatMap((it) => { const ks = kidsOf(it); return ks && ks.length <= 6 ? ks.map((c) => [c.key, `${it.label} › ${c.label}`]) : [[it.key, it.label]]; }),
+      ...subnavActs.filter((a) => !/^a\d+$/.test(a.key)).map((a) => [a.key, a.label])].filter(([k]) => !String(k).startsWith("lock:")));
   // 하위메뉴(사내메일함 등) 접기 — 펼쳐진 부모를 한 번 더 누르면 접히고, 다시 누르면 펼쳐진다(보던 화면은 그대로)
   const [folded, setFolded] = useState({});
 

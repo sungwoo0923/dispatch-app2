@@ -43,7 +43,7 @@ function registeredItems(code) {
 
 // 세부 메뉴 이동 요청 — 화면이 아직 안 열렸으면 열린 뒤(3초 안) 적용
 export function emitSubnav(code, key) {
-  try { window.__kpPendingSub = { code, key, at: Date.now() }; } catch { /* 무시 */ }
+  try { window.__kpPendingSub = { code, key, at: Date.now() }; } catch { /* 무시 */ } // 화면이 늦게 열려도(처음 불러오기) 10초 안이면 적용
   try { window.dispatchEvent(new CustomEvent("kp:subnav", { detail: { code, key } })); } catch { /* 무시 */ }
 }
 // KpSubNav · AdminShell에서 — 이 화면(code)의 항목(keys)으로 이동 요청이 오면 onSelect(key)
@@ -61,7 +61,7 @@ export function useSubnavTarget(code, keys, onSelect, labeled = null) {
       return true;
     };
     const p = (() => { try { return window.__kpPendingSub; } catch { return null; } })();
-    if (p && Date.now() - p.at < 3000 && apply(p)) { try { window.__kpPendingSub = null; } catch { /* 무시 */ } }
+    if (p && Date.now() - p.at < 10000 && apply(p)) { try { window.__kpPendingSub = null; } catch { /* 무시 */ } }
     const h = (e) => { if (apply(e.detail)) { try { window.__kpPendingSub = null; } catch { /* 무시 */ } } };
     window.addEventListener("kp:subnav", h);
     return () => window.removeEventListener("kp:subnav", h);
@@ -107,7 +107,11 @@ export function NavHover({ menu, label, disabled = false, onOpenMenu, children }
   const pick = (key) => { clear(); setShown(false); setOpen(false); onOpenMenu?.(); setTimeout(() => emitSubnav(conf.code, key), 0); };
   return (
     <span ref={anchorRef} className="inline-flex" onMouseEnter={enter} onMouseLeave={leave}
-      onClickCapture={() => { clear(); setShown(false); setOpen(false); /* ⭐ 메뉴를 누르면 펼친 세부 메뉴는 닫힌다 */ }}>
+      onClickCapture={(e) => {
+        // ⭐ 2026-11-01 버그수정 — 세부 메뉴(포털) 안을 눌러도 이 캡처가 먼저 돌아 패널을 지워 버려, 세부 메뉴 버튼의 onClick이 실행되지 않았다(어느 메뉴든 이동 안 됨)
+        if (panelRef.current && e.target instanceof Node && panelRef.current.contains(e.target)) return;
+        clear(); setShown(false); setOpen(false); /* 상단 메뉴 버튼을 누르면 펼친 세부 메뉴는 닫힌다 */
+      }}>
       {children}
       {open && conf && createPortal(
         <div ref={panelRef} onMouseEnter={() => clear()} onMouseLeave={leave}
