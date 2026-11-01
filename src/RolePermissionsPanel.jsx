@@ -9,13 +9,17 @@ import React from "react";
 import { kpConfirm } from "./kpDialog";
 import { imeFocusRef } from "./imeFocus";
 import { db } from "./firebase";
-import { doc, updateDoc } from "firebase/firestore";
+import { collection, doc, getDocs, updateDoc } from "firebase/firestore";
 import {
   CUSTOMIZABLE_MENUS,
   defaultMenuAccess,
   builtinDefaultMenuAccess,
   BUILTIN_EDITABLE_ROLES,
-  useCustomRoles,
+  useGlobalCustomRoles,
+  useCompanyRoleOverride,
+  mergeCompanyRoles,
+  saveCompanyRole,
+  deleteCompanyRole,
   saveCustomRole,
   deleteCustomRole,
   roleScreen,
@@ -98,8 +102,22 @@ const LevelSwitch = ({ value, onChange, size = "md" }) => (
   </div>
 );
 
-export default function RolePermissionsPanel({ users = [], roleLabels = {} }) {
-  const customRoles = useCustomRoles();
+export default function RolePermissionsPanel({ users: allUsers = [], roleLabels = {} }) {
+  // 🏢 2026-11-01 적용 범위 — "" = 전체 운송사(공통), 운송사명 = 그 운송사만(운송사 설정이 공통 설정보다 먼저)
+  const [scope, setScope] = React.useState("");
+  const [scopeQ, setScopeQ] = React.useState("");
+  const [scopeOpen, setScopeOpen] = React.useState(false);
+  const globalRoles = useGlobalCustomRoles();
+  const ov = useCompanyRoleOverride(scope);
+  const customRoles = React.useMemo(() => (scope ? mergeCompanyRoles(globalRoles, ov) : globalRoles), [scope, globalRoles, ov]);
+  const ovRoles = (scope && ov?.roles) || {};
+  // 운송사 목록 — 가입 승인된 운송사(transportApplications) + 직원 목록의 회사명
+  const [appCos, setAppCos] = React.useState([]);
+  React.useEffect(() => {
+    getDocs(collection(db, "transportApplications")).then((sn) => setAppCos(sn.docs.map((d) => d.data()).filter((a) => a.status !== "rejected").map((a) => String(a.companyName || "").trim()).filter(Boolean))).catch(() => setAppCos([]));
+  }, []);
+  const companies = React.useMemo(() => [...new Set([...appCos, ...allUsers.map((u) => String(u.companyName || "").trim())].filter(Boolean))].sort((a, b) => a.localeCompare(b, "ko")), [allUsers, appCos]);
+  const users = scope ? allUsers.filter((u) => String(u.companyName || "").trim() === scope) : allUsers;
   const [view, setView] = React.useState("edit"); // edit | matrix
   const [selectedKey, setSelectedKey] = React.useState("admin");
   const [draft, setDraft] = React.useState(null);
@@ -141,9 +159,23 @@ export default function RolePermissionsPanel({ users = [], roleLabels = {} }) {
   const save = async () => {
     if (!draft || !draft.label.trim()) return alert("역할 이름을 입력하세요.");
     setSaving(true);
-    try { await saveCustomRole(selectedKey, { label: draft.label.trim(), menus: draft.menus, ...(isBuiltin ? {} : { screen: draft.screen || "" }) }); flash("저장했습니다"); } catch (e) { alert(`저장 실패: ${e?.message || e}`); } finally { setSaving(false); }
+    try {
+      if (scope) await saveCompanyRole(scope, selectedKey, { label: draft.label.trim(), menus: draft.menus, ...(isBuiltin ? {} : { screen: draft.screen || "" }) });
+      else await saveCustomRole(selectedKey, { label: draft.label.trim(), menus: draft.menus, ...(isBuiltin ? {} : { screen: draft.screen || "" }) });
+      flash(scope ? `${scope} 전용으로 저장했습니다` : "저장했습니다");
+    } catch (e) { alert(`저장 실패: ${e?.message || e}`); } finally { setSaving(false); }
   };
   const resetOrDelete = async () => {
+    // 운송사 범위: 그 운송사 설정만 지우고 공통 설정으로 되돌린다(공통 역할 자체는 지우지 않음)
+    if (scope && ovRoles[selectedKey]) {
+      const onlyHere = !globalRoles.some((r) => r.key === selectedKey) && !isBuiltin;
+      if (!await kpConfirm(onlyHere ? `"${current?.label}"은 ${scope} 전용 역할입니다. 삭제할까요?` : `${scope}의 "${current?.label}" 설정을 지우고 전체 운송사 공통 설정으로 되돌릴까요?`)) return;
+      await deleteCompanyRole(scope, selectedKey);
+      if (onlyHere) setSelectedKey("admin");
+      flash("운송사 설정을 지웠습니다");
+      return;
+    }
+    if (scope) return alert("이 역할은 이 운송사 전용 설정이 없습니다(공통 설정을 따르는 중). 공통 설정은 위에서 '전체 운송사'를 고른 뒤 바꿔 주세요.");
     const msg = isBuiltin
       ? `"${current?.label}" 역할을 처음 기본값으로 되돌릴까요?`
       : `"${current?.label}" 역할을 삭제할까요? 이 역할을 쓰는 직원 ${members.length}명은 메뉴가 모두 숨겨집니다. 먼저 "소속 직원" 탭에서 다른 역할로 옮기는 것을 권합니다.`;
@@ -157,7 +189,8 @@ export default function RolePermissionsPanel({ users = [], roleLabels = {} }) {
     if (!label) return alert("새 역할 이름을 입력하세요.");
     const key = genRoleKey();
     const menus = copyFrom ? effectiveMenus(copyFrom, customRoles) : defaultMenuAccess();
-    await saveCustomRole(key, { label, menus });
+    if (scope) await saveCompanyRole(scope, key, { label, menus }); // 이 운송사에서만 쓰는 역할
+    else await saveCustomRole(key, { label, menus });
     setCreating(false); setNewLabel(""); setCopyFrom("");
     setSelectedKey(key); setTab("menus");
     flash("새 역할을 만들었습니다");
@@ -174,7 +207,8 @@ export default function RolePermissionsPanel({ users = [], roleLabels = {} }) {
       <button onClick={() => pick(r.key)} className={`w-full text-left rounded-xl border px-3.5 py-3 transition ${on ? "border-[#1B2B4B] bg-[#EEF3FB] shadow-sm" : "border-gray-200 bg-white hover:border-gray-300"}`}>
         <div className="flex items-center gap-2">
           <span className="text-[14px] font-bold text-gray-800 truncate">{r.label}</span>
-          {customized && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">수정됨</span>}
+          {customized && !ovRoles[r.key] && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">수정됨</span>}
+          {ovRoles[r.key] && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#FFF4E5] text-[#B54708] border border-[#FEDF89]">{scope} 전용</span>}
           {!r.builtin && roleScreen(customRoles.find((c) => c.key === r.key)) === "exec" && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ background: "linear-gradient(135deg,#B88A2E,#D7BC82)" }}>임원 화면</span>}
           <span className="ml-auto text-[11.5px] font-bold text-gray-500 shrink-0">{memberCount(r.key)}명</span>
         </div>
@@ -187,6 +221,31 @@ export default function RolePermissionsPanel({ users = [], roleLabels = {} }) {
   return (
     <div className="space-y-4">
       {toast && <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[99999] bg-[#1B2B4B] text-white px-5 py-2.5 rounded-xl shadow-lg text-[13px] font-semibold">{toast}</div>}
+
+      {/* 🏢 적용 범위 — 전체 운송사 공통 / 특정 운송사 전용 */}
+      <div className="rounded-2xl px-5 py-4 text-white flex flex-wrap items-center gap-3" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
+        <div className="min-w-0">
+          <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">SCOPE · 적용 범위</div>
+          <div className="text-[17px] font-black">{scope ? `${scope} 전용 권한` : "전체 운송사 공통 권한"}</div>
+          <div className="text-[12px] text-white/60">{scope ? "여기서 바꾼 내용은 이 운송사에만 적용되고, 바꾸지 않은 역할은 공통 설정을 그대로 따릅니다" : "운송사를 고르면 그 운송사만 따로 권한을 바꿀 수 있습니다(예: A운송사만 관리자에게 인사관리부 열기)"}</div>
+        </div>
+        <div className="ml-auto flex items-center gap-2 relative">
+          {scope && <button onClick={() => { setScope(""); setSelectedKey("admin"); }} className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-[13px] font-bold">전체 운송사로</button>}
+          <div className="relative">
+            <input value={scopeQ} onChange={(e) => { setScopeQ(e.target.value); setScopeOpen(true); }} onFocus={() => setScopeOpen(true)} placeholder="운송사 검색해서 고르기" className="h-10 w-[240px] px-3.5 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-semibold outline-none" />
+            {scopeOpen && (
+              <div className="absolute right-0 top-11 z-50 w-[280px] max-h-[320px] overflow-y-auto rounded-xl bg-white border border-gray-200 shadow-xl p-1" onMouseLeave={() => setScopeOpen(false)}>
+                {companies.filter((c) => !scopeQ.trim() || c.includes(scopeQ.trim())).map((c) => (
+                  <button key={c} onClick={() => { setScope(c); setScopeQ(""); setScopeOpen(false); setSelectedKey("admin"); }} className={`w-full text-left px-3 py-2 rounded-lg text-[13.5px] font-bold ${scope === c ? "bg-[#EEF3FB] text-[#1B2B4B]" : "text-gray-700 hover:bg-gray-50"}`}>
+                    {c}<span className="ml-2 text-[11.5px] font-semibold text-gray-400">{allUsers.filter((u) => String(u.companyName || "").trim() === c).length}명</span>
+                  </button>
+                ))}
+                {!companies.filter((c) => !scopeQ.trim() || c.includes(scopeQ.trim())).length && <div className="px-3 py-4 text-center text-[12.5px] text-gray-400">검색 결과가 없습니다</div>}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* 상단: 보기 전환 + 범례 */}
       <div className="bg-white rounded-2xl border border-gray-200 px-5 py-3.5 flex flex-wrap items-center gap-3">
@@ -299,8 +358,8 @@ export default function RolePermissionsPanel({ users = [], roleLabels = {} }) {
                     className="text-[19px] font-black text-[#1B2B4B] outline-none border-b-2 border-transparent focus:border-[#1B2B4B] bg-transparent w-full max-w-[320px]" />
                   <div className="text-[12px] text-gray-500 mt-0.5">{isBuiltin ? "기본 역할" : "직접 만든 역할"} · 직원 {members.length}명{dirty && <span className="ml-2 text-amber-600 font-bold">● 저장 안 됨</span>}</div>
                 </div>
-                {(saved || !isBuiltin) && (
-                  <button onClick={resetOrDelete} className="text-[12.5px] font-bold text-gray-500 hover:text-red-600">{isBuiltin ? "기본값으로" : "역할 삭제"}</button>
+                {(scope ? true : (saved || !isBuiltin)) && (
+                  <button onClick={resetOrDelete} className="text-[12.5px] font-bold text-gray-500 hover:text-red-600">{scope ? (ovRoles[selectedKey] ? "이 운송사 설정 지우기" : "공통 설정 따르는 중") : isBuiltin ? "기본값으로" : "역할 삭제"}</button>
                 )}
                 <button onClick={() => setDraft(initDraft())} disabled={!dirty} className="px-4 py-2 rounded-xl border border-gray-300 text-[13px] font-bold text-gray-600 disabled:opacity-40">되돌리기</button>
                 <button onClick={save} disabled={!dirty || saving} className="px-5 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] disabled:opacity-40">{saving ? "저장 중…" : "저장"}</button>

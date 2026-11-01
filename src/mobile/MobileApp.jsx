@@ -2008,6 +2008,9 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const customRolesM = useCustomRoles();
   const customRoleM = findCustomRole(customRolesM, role);
   const isExecM = forceExec || roleScreen(customRoleM) === "exec";
+  // 운송사별 권한 설정으로 켠 부서 메뉴(예: A운송사 관리자 → 인사관리부)
+  const DEPT_PAGE_MENU = { "dept:hr": "인사관리부", "dept:acct": "회계관리", "dept:cashbook": "자금관리", "dept:assets": "비품관리", "dept:cert": "증명서발급", "dept:schedule": "직원일정", "dept:leave": "인사관리부" };
+  const deptOkM = (m) => !!customRoleM && getMenuAccess(customRolesM, role, m) !== "hidden";
   const menuOkM = React.useCallback((m) => !customRoleM || getMenuAccess(customRolesM, role, m) !== "hidden", [customRoleM, customRolesM, role]);
   // 🔒 2026-11-01 조회만 허락된 화면에서 수정·저장·삭제를 누르면 바로 "권한 없음"
   const PAGE_MENU_M = { list: "배차현황", detail: "배차현황", canceled: "배차현황", form: "배차관리", unassigned: "배차관리", fleet: "지입차관리", sales: "매출관리", ratecard: "단가표", fare: "운임조회", intel: "인사이트", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:cashbook": "자금관리", "dept:funds": "자금관리", "dept:assets": "비품관리", "dept:hr": "인사관리부", "dept:cert": "증명서발급", "dept:driverdocs": "기사관리", staff: "기사관리" };
@@ -2021,7 +2024,7 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   useEffect(() => {
     if (!["list", "detail", "form"].includes(page)) deptListOkRef.current = false;
     if (deptMode && page === "list" && !(deptMode === "acct" && deptListOkRef.current)) setPage("dept");
-    if (!deptMode && (page === "dept" || (String(page).startsWith("dept:") && page !== "dept:execsched" && page !== "dept:rules" && page !== "dept:myresume"))) setPage("list");
+    if (!deptMode && (page === "dept" || (String(page).startsWith("dept:") && page !== "dept:execsched" && page !== "dept:rules" && page !== "dept:myresume" && !(DEPT_PAGE_MENU[page] && deptOkM(DEPT_PAGE_MENU[page]))))) setPage("list");
   }, [deptMode, page]);
   const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setPage(v ? "list" : "dept"); };
   const listScrollYRef = useRef(0); // 리스트 스크롤 위치 저장
@@ -5969,6 +5972,7 @@ onGoAttendance={() => {
           deptMode={deptMode}
           isExec={isExecM}
           menuOk={menuOkM}
+          deptOk={deptOkM}
           hrAcct={realRole === "hrAcct" ? hrAcctView : null}
           onToggleHrAcct={() => { const v = hrAcctView === "hr" ? "acct" : "hr"; setHrAcctView(v); try { localStorage.setItem("kpHrAcctView", v); } catch { /* 무시 */ } setPage("dept"); setShowMenu(false); }}
           isCeo={forceExec || ["대표", "대표이사", "사장"].includes(String(myProfM?.position || "").trim())}
@@ -7782,6 +7786,7 @@ function MobileSideMenu({
   execFull = false,
   onToggleExec,
   menuOk = () => true,
+  deptOk = () => false,
 }) {
   const isAdminRole = ["admin", "totalMaster", "superadmin"].includes(role);
   const ok = menuOk;
@@ -7951,6 +7956,16 @@ function MobileSideMenu({
             {role !== "test" && ok("배차관리") && <MenuItem label="화물등록" icon="truck" onClick={onGoCreate} dark={dark} />}
             {ok("배차관리") && <MenuItem label="미배차현황" icon="alert" onClick={onGoUnassigned} badge={unassignedCount > 0 ? unassignedCount : null} dark={dark} />}
           </MenuSection>
+          )}
+          {!deptMode && ["인사관리부", "회계관리", "자금관리", "비품관리", "증명서발급", "직원일정"].some(deptOk) && (
+            <MenuSection title="부서 업무" en="DEPARTMENT" dark={dark} alwaysOpen>
+              {deptOk("인사관리부") && <MenuItem label="인사관리부" icon="idcard" onClick={() => onGo?.("dept:hr")} dark={dark} />}
+              {deptOk("회계관리") && <MenuItem label="회계관리" icon="money" onClick={() => onGo?.("dept:acct")} dark={dark} />}
+              {deptOk("자금관리") && <MenuItem label="자금 관리" icon="wallet" onClick={() => onGo?.("dept:cashbook")} dark={dark} />}
+              {deptOk("비품관리") && <MenuItem label="비품·자산" icon="list" onClick={() => onGo?.("dept:assets")} dark={dark} />}
+              {deptOk("증명서발급") && <MenuItem label="증명서 발급" icon="stamp" onClick={() => onGo?.("dept:cert")} dark={dark} />}
+              {deptOk("직원일정") && <MenuItem label="직원 일정" icon="clock" onClick={() => onGo?.("dept:schedule")} dark={dark} />}
+            </MenuSection>
           )}
           <MenuSection title="사내 업무" en="WORKSPACE" dark={dark} alwaysOpen>
             {deptMode !== "exec" && <MenuItem label="임원 일정" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />}

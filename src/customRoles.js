@@ -1,6 +1,7 @@
 import React from "react";
 import { db } from "./firebase";
-import { collection, onSnapshot, setDoc, deleteDoc, doc } from "firebase/firestore";
+import { collection, onSnapshot, setDoc, deleteDoc, doc, deleteField } from "firebase/firestore";
+import { getTenant } from "./fsTenant";
 
 const COLL = "customRoles";
 
@@ -58,15 +59,53 @@ export function builtinDefaultMenuAccess(roleKey) {
   return { ...write, "매출관리": "hidden", "정산관리": "hidden", "인사이트": "hidden" };
 }
 
-export function useCustomRoles() {
+// 전체 운송사 공통 설정(customRoles) — 권한 관리 화면이 직접 편집
+export function useGlobalCustomRoles() {
   const [customRoles, setCustomRoles] = React.useState([]);
   React.useEffect(() => {
     const unsub = onSnapshot(collection(db, COLL), (snap) => {
       setCustomRoles(snap.docs.map(d => ({ key: d.id, ...d.data() })));
-    });
+    }, () => setCustomRoles([]));
     return () => unsub();
   }, []);
   return customRoles;
+}
+
+// 🏢 2026-11-01 운송사별 권한 설정 — companyRoleOverrides/{운송사} = { roles: { [역할키]: { menus, label?, screen? } } }
+//  적용 순서: 그 운송사 설정 → 전체 운송사 설정(customRoles) → 기본값. 최고관리자만 바꿀 수 있다(보안 규칙).
+export const OVR_COLL = "companyRoleOverrides";
+const currentCompany = () => { try { return String(getTenant() || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim(); } catch { return ""; } };
+export function mergeCompanyRoles(globalRoles = [], ov = null) {
+  const roles = ov?.roles || {};
+  const keys = Object.keys(roles);
+  if (!keys.length) return globalRoles;
+  const out = globalRoles.map((r) => (roles[r.key] ? { ...r, ...roles[r.key], label: roles[r.key].label || r.label, companyOverride: true } : r));
+  keys.filter((k) => !globalRoles.some((r) => r.key === k)).forEach((k) => {
+    const b = BUILTIN_EDITABLE_ROLES.find((x) => x.key === k);
+    out.push({ key: k, label: roles[k].label || b?.label || k, ...roles[k], companyOverride: true });
+  });
+  return out;
+}
+export function useCompanyRoleOverride(company) {
+  const [ov, setOv] = React.useState(null);
+  React.useEffect(() => {
+    if (!company) { setOv(null); return undefined; }
+    return onSnapshot(doc(db, OVR_COLL, company), (s) => setOv(s.exists() ? s.data() : null), () => setOv(null));
+  }, [company]);
+  return ov;
+}
+// 화면에서 쓰는 권한 목록(지금 회사의 운송사별 설정이 합쳐진 것)
+export function useCustomRoles(companyArg) {
+  const global = useGlobalCustomRoles();
+  const co = companyArg ?? currentCompany();
+  const ov = useCompanyRoleOverride(co);
+  return React.useMemo(() => mergeCompanyRoles(global, ov), [global, ov]);
+}
+export async function saveCompanyRole(company, key, data) {
+  await setDoc(doc(db, OVR_COLL, company), { companyName: company, roles: { [key]: data } }, { merge: true });
+}
+export async function deleteCompanyRole(company, key) {
+  await setDoc(doc(db, OVR_COLL, company), { roles: { [key]: deleteField() } }, { merge: true });
 }
 
 export async function saveCustomRole(key, data) {
