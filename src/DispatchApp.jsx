@@ -8790,6 +8790,9 @@ return (
 <AiAssistant
   dispatches={dispatchData}
   clients={clients}
+  mode={deptMode}
+  company={deptCompany}
+  uid={user?.uid || ""}
   controlledOpen={activeTool === "ai"}
   onOpenChange={v => setActiveTool(v ? "ai" : "none")}
 />
