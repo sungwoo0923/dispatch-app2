@@ -35,6 +35,7 @@ import { useMyProfile } from "./userNames";
 import { useCompanyStaff, masterHasHr, isHrStaffUser } from "./hrHandover";
 import { AttendanceQuickButton } from "./attendanceQuick";
 import { usePendingSignups } from "./pendingSignups";
+import { NavHover } from "./navMenus";
 import { useHrOptions } from "./hrConstants";
 import { AssetManager } from "./OfficeBooks";
 import { FundsWorkspace, FundsBoard, isCeoPosition } from "./FundsBoard";
@@ -3178,7 +3179,7 @@ const KP_SIDE_GROUPS = [
   { label: "운임", items: ["단가표", "운임조회"] },
   { label: "기사 · 거래처", items: ["기사관리", "거래처관리", "지입차관리"] },
   { label: "매출 · 정산", items: ["매출관리", "정산관리", "인사이트"] },
-  { label: "부서 업무", items: ["전자결재", "회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급", "직원일정"] },
+  { label: "부서 업무", items: ["전자결재", "회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급"] },
   { label: "관리", items: ["회사관리", "관리자메뉴", "관리센터"] },
 ];
 // 🏢 부서 모드 메뉴 — 경리·회계(test) / 인사관리자(hrManager)
@@ -3190,7 +3191,7 @@ const DEPT_MENUS = {
   hr: ["HOME", "전자결재", "인사관리부", "증명서발급", "기사관리", "관리자메뉴", "회사관리"],
   // 👔 임원(대표·전무·이사) — 보고·결재·매출 중심
   // 결재는 홈 › 전자결재에 다 있어 상단에서 뺐다(2026-10-31)
-  exec: ["HOME", "자금현황", "스케줄", "직원일정", "매출관리", "인사이트", "관리자메뉴", "회사관리"],
+  exec: ["HOME", "자금현황", "스케줄", "매출관리", "인사이트", "관리자메뉴", "회사관리"], // 직원일정은 HOME › 사내 게시판으로(2026-11-01)
 };
 // 부서 모드 왼쪽 메뉴 묶음
 const DEPT_SIDE_GROUPS = {
@@ -3207,7 +3208,7 @@ const DEPT_SIDE_GROUPS = {
   ],
   exec: [
     { label: "경영", items: ["HOME", "자금현황", "매출관리", "인사이트"] },
-    { label: "일정", items: ["스케줄", "직원일정"] },
+    { label: "일정", items: ["스케줄"] },
     { label: "관리", items: ["관리자메뉴", "회사관리"] },
   ],
 };
@@ -7013,7 +7014,8 @@ function subscribeLiveWithFallback(col, start, handler, name) {
   return () => unsub();
 }
 
-function PcBootOverlay({ onDone }) {
+function PcBootOverlay({ onDone, dept = null }) {
+  const team = dept === "acct" ? "acct" : dept === "hr" ? "hr" : dept === "exec" ? "exec" : "dispatch";
   const st = useMiniStore(pcBootStore);
   const [skipped, setSkipped] = useState(false);
   const two = (o) => (o.orders ? 50 : 0) + (o.dispatch ? 50 : 0);
@@ -7026,15 +7028,20 @@ function PcBootOverlay({ onDone }) {
   // ⭐ 보여주는 건수 = 오늘(상차일) 오더 — 다른 날짜는 각 화면에서 조회할 때 불러온다
   const total = (st.todayCount?.orders || 0) + (st.todayCount?.dispatch || 0);
   const changed = st.added + st.modified + st.removed;
-  const subs = [
+  const subs = team === "dispatch" ? [
     cachePct === 100 ? `오늘 ${total.toLocaleString()}건` : "",
     "",
     applyPct === 100
       ? (changed ? [st.added ? `신규 ${st.added}` : "", st.modified ? `수정 ${st.modified}` : "", st.removed ? `삭제 ${st.removed}` : ""].filter(Boolean).join(" · ") : "최신 데이터 없음")
       : "",
     readyPct >= 100 ? "기사·거래처 준비 완료" : "",
+  ] : [
+    cachePct === 100 ? (team === "hr" ? "준비 완료" : `오늘 운행 ${total.toLocaleString()}건`) : "",
+    "",
+    applyPct === 100 ? "최신 반영 완료" : "",
+    readyPct >= 100 ? "준비 완료" : "",
   ];
-  return <KpBootScreen targets={targets} subs={subs} onAllDone={onDone} onSkip={() => setSkipped(true)} variant="pc" zIndex={2147483000} />;
+  return <KpBootScreen team={team} targets={targets} subs={subs} onAllDone={onDone} onSkip={() => setSkipped(true)} variant="pc" zIndex={2147483000} />;
 }
 
 export default function DispatchApp({ role: realRole, user, userCompany = "", forceExec = false }) {
@@ -7856,7 +7863,7 @@ return (
     <ToastProvider>
       <CustomAlert message={alertMsg} onClose={closeAlert} />
       {/* ⭐ 첫 진입 로딩 화면 — 뒤에서 홈 화면·데이터가 다 준비되는 동안 덮고 있다가, 전부 100%가 되면 걷힌다 */}
-      {!pcBootDone && <PcBootOverlay onDone={() => setPcBootDone(true)} />}
+      {!pcBootDone && <PcBootOverlay dept={deptMode} onDone={() => setPcBootDone(true)} />}
       {/* ⭐ PC는 실시간으로 계속 반영되므로 상단 중앙 "오더 불러오는 중" 표시는 띄우지 않는다(표시가 뜨고 지며 화면이 끊겼다) */}
       {false && historyLoading > 0 && (
         <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[999998] px-4 py-2 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold shadow-lg flex items-center gap-2 pointer-events-none">
@@ -7895,8 +7902,8 @@ return (
       <PlatformNoticeBanner audience="carrier" />
       <CopyTemplateHost canEdit={role === "admin" || role === "totalMaster"} />
       <PlanValueSync planId={planId} />
-      <PlanLockHost userEmail={user?.email || ""} userName={myRealName || ""} />
-      <OnboardingHost role={role} userCompany={userCompany} />
+      <PlanLockHost userEmail={user?.email || ""} userName={myRealName || ""} canRequest={role === "totalMaster" || ["test", "hrAcct"].includes(realRole) || /경리|회계/.test(String(myProfileDoc?.team || ""))} />
+      <OnboardingHost role={role} realRole={realRole} userCompany={userCompany} dept={deptMode} uid={user?.uid} myDoc={myProfileDoc} />
       {/* ===== 통합 헤더 네비 ===== */}
       <header className={`kp-topnav ${deptMode === "exec" ? "kp-topnav-exec" : ""} sticky top-0 z-50 mb-6 w-full`}>
 
@@ -7977,7 +7984,6 @@ return (
               "비품관리",
               "인사관리부",
               "증명서발급",
-              "직원일정",
               "회사관리",
               "관리자메뉴",
               "관리센터",
@@ -7987,8 +7993,8 @@ return (
               const isBlocked = st === "blocked";
               const isActive = menu === m;
               return (
+                <NavHover key={m} menu={m} disabled={isBlocked || st === "locked"} onOpenMenu={() => handleMenuClick(m)}>
                 <button
-                  key={m}
                   disabled={isBlocked}
                   onClick={() => handleMenuClick(m)}
                   data-on={isActive ? "1" : "0"}
@@ -8006,6 +8012,7 @@ return (
                   {st === "locked" && <span className="ml-1 opacity-60"><LockIcon /></span>}
                   {m === "인사이트" && st !== "locked" && <span className="ml-1 px-1 py-px rounded bg-[#8FB0F0]/20 text-[#8FB0F0] text-[9px] font-black tracking-wider align-middle">PRO</span>}
                 </button>
+                </NavHover>
               );
             })}
             </div>
@@ -8069,8 +8076,7 @@ return (
             )}
 
             {/* ⭐ 2026-11-01 출근·퇴근 버튼 — 일반 화면은 홈 관제 데크(시계 옆)에, 부서 화면(경리·인사·임원)은 홈 데크가 없어 여기 */}
-            {deptMode && <AttendanceQuickButton company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")}
-              uid={user?.uid} name={myProfileDoc?.name || user?.displayName || ""} role={role} email={user?.email} variant="pc" />}
+            {/* 출근·퇴근 버튼은 각 팀 홈 대시보드(시계 옆)에 있다 */}
 
             {/* ⭐ 최적화 버튼 — 새로고침 없이 현재 화면(배차관리/실시간배차현황/배차현황)의
                 누적된 렌더링 상태만 가볍게 초기화한다. */}

@@ -7,6 +7,7 @@
 import React, { useState } from "react";
 import { ShellIcon } from "./AdminShell";
 import { confirmLeave } from "./leaveGuard";
+import { useSubnavTarget } from "./navMenus";
 // ✋ 작성 중인 문서가 있으면 메뉴를 옮기기 전에 저장할지 묻는다(전자결재·증명서 등)
 const goSel = (fn, k, act) => { if (k === act) { fn?.(k); return; } confirmLeave().then((ok) => { if (ok) fn?.(k); }); };
 
@@ -74,6 +75,8 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem("kpSubNavCollapsed") === "1"; } catch { return false; } });
   const toggle = () => setCollapsed((v) => { try { localStorage.setItem("kpSubNavCollapsed", v ? "0" : "1"); } catch { /* 저장 실패 무시 */ } return !v; });
   const gs = groups || [{ label: "", items: items || [] }];
+  // ⭐ 2026-11-01 상단 메뉴에서 고른 세부 메뉴로 바로 이동(navMenus.jsx)
+  useSubnavTarget(code, gs.flatMap((g) => (g.items || []).flatMap((it) => [it.key, ...((it.children || []).map((c) => c.key))])), onSelect);
   // 하위메뉴(사내메일함 등) 접기 — 펼쳐진 부모를 한 번 더 누르면 접히고, 다시 누르면 펼쳐진다(보던 화면은 그대로)
   const [folded, setFolded] = useState({});
 

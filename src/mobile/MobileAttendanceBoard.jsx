@@ -61,7 +61,9 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
   const [officeLocation, setOfficeLocation] = useState(null);
   const [showOfficePanel, setShowOfficePanel] = useState(false);
   const [officeInput, setOfficeInput] = useState({ lat: "", lng: "", address: "" });
-  const [radiusInput, setRadiusInput] = useState({ inM: DEFAULT_IN_RADIUS, outM: DEFAULT_OUT_RADIUS }); // ⭐ 회사별 자동 출퇴근 반경
+  const [radiusInput, setRadiusInputRaw] = useState({ inM: DEFAULT_IN_RADIUS, outM: DEFAULT_OUT_RADIUS }); // ⭐ 회사별 자동 출퇴근 반경
+  const radiusDirtyRef = React.useRef(false);
+  const setRadiusInput = setRadiusInputRaw;
   const [savingOffice, setSavingOffice] = useState(false);
   const [gettingLoc, setGettingLoc] = useState(false);
 
@@ -112,7 +114,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
     const unsub = onSnapshot(doc(db, "companySettings", company), snap => {
       const data = snap.data();
       setOfficeLocation(data?.officeLocation || null);
-      setRadiusInput(officeRadii(data?.officeLocation));
+      if (!radiusDirtyRef.current) setRadiusInput(officeRadii(data?.officeLocation)); // 고치는 중엔 덮어쓰지 않음
       if (data?.officeLocation) {
         setOfficeInput({ lat: String(data.officeLocation.lat), lng: String(data.officeLocation.lng), address: data.officeLocation.address || "" });
       }
@@ -129,6 +131,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
     await setDoc(doc(db, "companySettings", company), {
       officeLocation: { lat, lng, address: officeInput.address || "", radius: r.inM, outRadius: r.outM }
     }, { merge: true });
+    radiusDirtyRef.current = false;
     setSavingOffice(false);
     setShowOfficePanel(false);
   };
@@ -357,7 +360,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
               <input type="text" placeholder="장소명 (예: 본사 사무실)"
                 value={officeInput.address} onChange={e => setOfficeInput(p => ({ ...p, address: e.target.value }))}
                 className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-[12px] text-[var(--attn-accent)] outline-none focus:border-[var(--attn-accent)]" />
-              <RadiusEditor value={radiusInput} onChange={setRadiusInput} compact />
+              <RadiusEditor value={radiusInput} onChange={(v) => { radiusDirtyRef.current = true; setRadiusInputRaw(v); }} compact />
               <div className="text-[10px] text-gray-400">반경 {officeRadii({ radius: radiusInput.inM, outRadius: radiusInput.outM }).inM}m 이내 진입 시 자동 출근 · {officeRadii({ radius: radiusInput.inM, outRadius: radiusInput.outM }).outM}m 이탈 시 자동 퇴근 (앱이 켜져 있을 때)</div>
               <button onClick={saveOfficeLocation} disabled={savingOffice}
                 className="w-full py-2.5 rounded-xl border border-[var(--attn-accent)] text-[var(--attn-accent)] text-[13px] font-bold disabled:opacity-40">

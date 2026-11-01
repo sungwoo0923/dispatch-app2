@@ -321,7 +321,9 @@ service cloud.firestore {
     }
     // 💳 요금제 변경 요청 — 고객사는 자기 회사 이름으로만 만들 수 있고, 처리는 최고관리자
     match /planRequests/{id} {
-      allow create: if isApproved() && request.resource.data.company == myUser().get('companyName', '');
+      // ⭐ 2026-11-01 요금제 변경 요청은 경리팀(경리·경리+인사·경리/회계 부서)만
+      allow create: if isApproved() && request.resource.data.company == myUser().get('companyName', '') &&
+        (myUser().get('role', '') in ['test', 'hrAcct'] || myUser().get('team', '').matches('.*(경리|회계).*'));
       allow read, update, delete: if isTotalMasterUser();
     }
     match /siteConfig/{docId} {

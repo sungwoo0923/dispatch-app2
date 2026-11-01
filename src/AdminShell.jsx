@@ -2,6 +2,7 @@
 // ⭐ 관리 화면 공용 레이아웃(회사관리·관리자메뉴) — 왼쪽 메뉴바 + 상단 인사 카드 + 숫자 카드 + 본문.
 // KP-Flow 네이비 색으로 통일. 각 화면은 메뉴 목록·숫자 카드·버튼만 넘겨주면 된다.
 import React from "react";
+import { useSubnavTarget } from "./navMenus";
 
 const ICONS = {
   dashboard: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
@@ -86,6 +87,8 @@ export default function AdminShell({
   badgeLabel, title, groups = [], active, onSelect,
   heroTitle, heroSubtitle, heroActions = [], stats = [], sidebarFooter, hideHero = false, children,
 }) {
+  // ⭐ 2026-11-01 상단 메뉴에서 고른 세부 메뉴로 바로 이동(회사관리 COMPANY · 관리자메뉴 ADMIN)
+  useSubnavTarget(badgeLabel, groups.flatMap((g) => (g.items || []).map((it) => it.key)), onSelect);
   return (
     // ⭐ 화면 높이에 맞춘 틀 — 왼쪽 메뉴바는 고정, 오른쪽 본문만 스크롤(상단 메뉴줄 56px + 여백 24px 제외)
     <div className="flex bg-[#F4F6FA] -m-4 overflow-hidden" style={{ height: "calc(100vh - 80px)" }}>

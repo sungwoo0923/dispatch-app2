@@ -10,6 +10,8 @@ import { db, doc, onSnapshot, setDoc, DEFAULT_COMPANY } from "./firebase";
 import { serverTimestamp } from "firebase/firestore";
 import { DEFAULT_DROPDOWN_OPTIONS } from "./companyDropdownOptions";
 import { CopyTemplateEditor } from "./CopyTemplateEditor";
+import { RadiusEditor, officeRadii } from "./attendanceQuick";
+import { HrSettingsPanel } from "./HrHub";
 
 const MONO = "'JetBrains Mono','IBM Plex Mono',ui-monospace,monospace";
 const companyKey = (userCompany) => {
@@ -18,13 +20,36 @@ const companyKey = (userCompany) => {
 const SNOOZE = "kpOnboardingSnooze";
 
 // ─── 튜토리얼 슬라이드 ───
-const TOUR = [
-  { code: "01 · WELCOME", title: "KP-Flow에 오신 것을 환영합니다", desc: "배차 등록부터 기사 전달, 서류 회수, 정산·매출까지 한 화면에서 끝내는 운송사 전용 배차 프로그램입니다.\n2분이면 주요 흐름을 둘러볼 수 있어요.", points: ["오더 등록 → 배차 → 기사 전달 → 서류 업로드 → 정산", "모든 데이터는 회사별로 분리 저장", "PC · 모바일 어디서나 같은 데이터"] },
-  { code: "02 · DISPATCH", title: "배차관리 · 실시간 배차현황", desc: "상단 메뉴의 배차관리에서 오더를 등록하고, 실시간 배차현황에서 오늘 오더를 한눈에 관리합니다.", points: ["Tab 키만으로 빠르게 입력 (드롭다운·날짜 자동 열림)", "차량번호 입력 시 기사 자동 매칭", "상태(배차중/배차완료) 즉시 변경"] },
-  { code: "03 · COPY", title: "기사복사 · 업로드 링크", desc: "오더를 선택하고 기사복사를 누르면 카톡용 문구가 복사됩니다. 기사 전달용에는 서류 업로드 링크가 붙어, 기사님이 사진만 찍어 올리면 끝.", points: ["전체 상세 / 기사 전달용 문구는 회사별로 수정 가능", "업로드 링크 포함 여부도 선택", "업로드되면 오더에 자동으로 첨부"] },
-  { code: "04 · SETTLEMENT", title: "정산 · 매출 · 지급관리", desc: "청구·지급 운임과 수수료가 자동 계산되고, 매출 대시보드에서 목표 대비 실적을 확인합니다.", points: ["거래처별 청구 · 기사별 지급 관리", "결제일 규칙에 따라 지급 예정일 자동 계산", "연간 매출목표 대비 진행률"] },
-  { code: "05 · ADMIN", title: "관리자 메뉴 · 직원 관리", desc: "직원 가입 승인, 권한, 접속 이력, 화주사 연동을 관리자 메뉴에서 처리합니다.", points: ["직원별 권한(마스터·경리·운송) 설정", "화주사 연동 시 화주가 직접 오더 등록", "이 안내는 관리자 메뉴 › 환경 설정에서 다시 볼 수 있어요"] },
-];
+// ⭐ 2026-11-01 팀별 튜토리얼 — 공통(환영·전자결재·회사관리·출퇴근) + 팀 업무(배차 / 경리 / 인사 / 임원)
+const SLIDE_WELCOME = { en: "WELCOME", title: "KP-Flow에 오신 것을 환영합니다", desc: "운송사의 배차 · 경리 · 인사 업무를 한 프로그램에서 처리합니다.\n팀마다 필요한 메뉴만 보이도록 화면이 맞춰져 있어요.", points: ["PC · 모바일 어디서나 같은 데이터", "모든 데이터는 회사별로 분리 저장", "메뉴에 마우스를 올리면 세부 메뉴가 펼쳐집니다"] };
+const SLIDE_COMMON = { en: "COMMON", title: "모든 팀이 같이 쓰는 기능", desc: "홈 화면의 시계 옆 [출근하기] 버튼과 전자결재 · 회사관리는 모든 팀이 함께 씁니다.", points: ["출근·퇴근 버튼 — 잘못 누른 퇴근은 [되돌리기]", "전자결재 — 휴가·지출결의·품의·보고", "회사관리 — 회사정보 · 조직도 · 내정보 · 출근기록부", "이 안내는 관리자메뉴 › 환경 설정에서 다시 볼 수 있어요"] };
+const TEAM_SLIDES = {
+  dispatch: [
+    { en: "DISPATCH", title: "배차관리 · 실시간 배차현황", desc: "상단 메뉴의 배차관리에서 오더를 등록하고, 실시간 배차현황에서 오늘 오더를 한눈에 관리합니다.", points: ["Tab 키만으로 빠르게 입력 (드롭다운·날짜 자동 열림)", "차량번호 입력 시 기사 자동 매칭", "상태(배차중/배차완료) 즉시 변경"] },
+    { en: "COPY", title: "기사복사 · 업로드 링크", desc: "오더를 선택하고 기사복사를 누르면 카톡용 문구가 복사됩니다. 기사 전달용에는 서류 업로드 링크가 붙어, 기사님이 사진만 찍어 올리면 끝.", points: ["전체 상세 / 기사 전달용 문구는 회사별로 수정 가능", "업로드되면 오더에 자동으로 첨부", "고정노선은 정해진 요일에 오더가 자동 생성"] },
+    { en: "SETTLEMENT", title: "정산 · 매출", desc: "청구·지급 운임과 수수료가 자동 계산되고, 매출 대시보드에서 목표 대비 실적을 확인합니다.", points: ["거래처별 청구 · 기사별 지급 관리", "결제일 규칙에 따라 지급 예정일 자동 계산", "연간 매출목표 대비 진행률"] },
+  ],
+  acct: [
+    { en: "SETTLEMENT", title: "정산관리 — 청구와 지급", desc: "거래명세서 발송 · 미수금 관리 · 용차 기사운임 지급을 처리합니다.", points: ["거래처별 거래명세서 · 이메일 발송", "미수금 / 입금 확인", "용차지급관리 — 지급완료를 누르면 장부에 자동 기록"] },
+    { en: "ACCOUNTING", title: "회계관리 · 자금관리", desc: "장부 · 부가세 · 원가와 통장 · 카드 잔액, 고정비를 관리합니다.", points: ["지출결의 최종 승인 → 장부 자동 기록", "고정비는 납부일이 지나면 자동 반영", "통장별 자동 연동(기사운임 · 입금 · 지출)"] },
+    { en: "ASSETS", title: "비품관리 · 퇴직 정산 · 요금제", desc: "회사 비품과 퇴직금·연차수당 정산, 요금제 변경 요청은 경리팀이 맡습니다.", points: ["비품 구입가는 장부에 자동 기록", "퇴직 정산 — 퇴직금 · 미사용 연차수당 계산", "사업자등록증 · 직인 · 정산계좌 등록(회사관리)"] },
+  ],
+  hr: [
+    { en: "HR · RECORDS", title: "인사관리부 — 인사관리", desc: "이력서 · 근태/근속 · 인사발령을 한 곳에서 관리합니다.", points: ["인사관리 › 이력서 / 근태·근속 / 인사발령 / 발령 이력", "직원 등록(계정 없는 직원도 기록)", "직책 · 부서 설정은 회사별로 추가 · 숨김"] },
+    { en: "STAFF", title: "직원 정보 · 퇴사 · 입사일", desc: "직원의 부서 · 직책 · 권한 · 재직 상태와 입사일은 인사팀만 바꿀 수 있습니다.", points: ["휴직 · 육아휴직 · 출산휴가 기간 관리", "퇴사 · 권고사직 처리(합의서 인쇄)", "입사일 = 연차 · 퇴직금 계산 기준"] },
+    { en: "ATTENDANCE", title: "출근기록부 · 연차 · 증명서", desc: "출근 · 지각 · 휴가 현황과 연차 사용을 확인하고, 재직·경력 증명서를 발급합니다.", points: ["출근지 · 자동 출근 반경은 회사별로 설정", "연차 조정 이력 · 촉진 대상 확인", "가입 승인은 관리자메뉴 › 회원 관리"] },
+  ],
+  exec: [
+    { en: "BRIEFING", title: "경영 브리핑", desc: "매출 · 수익 · 자금 현황을 한 화면에서 봅니다.", points: ["오늘 · 이번 달 · 올해 실적", "자금현황 — 통장 · 카드 잔액", "인사이트 — 거래처 · 노선 분석"] },
+    { en: "SCHEDULE", title: "스케줄 · 결재", desc: "임원 일정과 전자결재를 처리합니다.", points: ["임원 스케줄 등록", "결재함 — 내 결재 차례", "직원 일정(연차 · 외근)은 홈 › 사내 게시판"] },
+  ],
+};
+const ADMIN_SLIDE = { en: "ADMIN", title: "관리자 메뉴 · 회원 관리", desc: "직원 가입 승인과 화주사 연동, 접속 이력은 관리자 메뉴에서 처리합니다.", points: ["가입 신청은 상단 [관리자메뉴] 숫자로 알려드려요", "승인할 때 부서 · 직책 · 권한 지정", "화주사 연동 시 화주가 직접 오더 등록"] };
+export function tourFor(team, isAdmin) {
+  const mid = TEAM_SLIDES[team] || TEAM_SLIDES.dispatch;
+  const list = [SLIDE_WELCOME, ...mid, ...(isAdmin ? [ADMIN_SLIDE] : []), SLIDE_COMMON];
+  return list.map((x, k) => ({ ...x, code: `${String(k + 1).padStart(2, "0")} · ${x.en}` }));
+}
 
 function Overlay({ children, onClose }) {
   return (
@@ -38,7 +63,8 @@ function Dots({ n, i }) {
   return <div className="flex items-center gap-1.5">{Array.from({ length: n }, (_, k) => <span key={k} className={`h-1.5 rounded-full transition-all ${k === i ? "w-6 bg-[#8FB0F0]" : k < i ? "w-1.5 bg-[#8FB0F0]/60" : "w-1.5 bg-white/20"}`} />)}</div>;
 }
 
-function Tutorial({ onSkip, onDone }) {
+function Tutorial({ slides, onSkip, onDone, doneLabel = "초기 설정 시작 →" }) {
+  const TOUR = slides;
   const [i, setI] = React.useState(0);
   const s = TOUR[i];
   const last = i === TOUR.length - 1;
@@ -77,7 +103,7 @@ function Tutorial({ onSkip, onDone }) {
         <Dots n={TOUR.length} i={i} />
         <div className="flex items-center gap-2">
           {i > 0 && <button type="button" onClick={() => setI(i - 1)} className="h-11 px-5 rounded-xl border border-white/20 text-[13.5px] font-bold hover:bg-white/10">이전</button>}
-          <button type="button" onClick={() => (last ? onDone() : setI(i + 1))} className="h-11 px-6 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black hover:bg-[#EEF2F8]">{last ? "초기 설정 시작 →" : "다음 →"}</button>
+          <button type="button" onClick={() => (last ? onDone() : setI(i + 1))} className="h-11 px-6 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black hover:bg-[#EEF2F8]">{last ? doneLabel : "다음 →"}</button>
         </div>
       </div>
     </div>
@@ -115,7 +141,7 @@ const DD_ROWS = {
   methods: [["상하차방법", "상·하차 방법", "지게차·수작업 등", "예: 호이스트"], ["지급방식", "지급 방식", "계산서·착불·선불 등", "예: 카드"], ["배차방식", "배차 방식", "24시·인성·직접배차 등", "예: 화물맨"]],
 };
 
-function Wizard({ company, settings, onClose, onFinish }) {
+function Wizard({ company, settings, onClose, onFinish, team = "dispatch" }) {
   const [step, setStep] = React.useState(0);
   const [dd, setDd] = React.useState(() => Object.fromEntries(Object.keys(DEFAULT_DROPDOWN_OPTIONS).map((k) => [k, Array.isArray(settings?.dropdownOptions?.[k]) && settings.dropdownOptions[k].length ? settings.dropdownOptions[k] : DEFAULT_DROPDOWN_OPTIONS[k]])));
   const [payDays, setPayDays] = React.useState(String(settings?.결제일규칙?.payDays ?? 30));
@@ -123,29 +149,41 @@ function Wizard({ company, settings, onClose, onFinish }) {
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
 
-  const STEPS = [
-    { en: "UNITS", title: "화물 · 톤수 단위", desc: "오더 등록과 오더복사 수정 창의 단위 드롭다운에 들어갈 목록입니다. 첫 번째 항목이 기본 선택값이 됩니다." },
-    { en: "OPTIONS", title: "상하차 · 지급 · 배차 방식", desc: "등록 화면 곳곳의 선택 목록을 우리 회사 방식대로 맞춥니다." },
-    { en: "PAYMENT", title: "기사 결제일", desc: "계산서 발행 후 며칠 뒤에 기사 운임을 지급하나요? 기사 업로드 링크의 \"결제일 정보\"와 지급관리 예정일 계산에 쓰입니다." },
-    { en: "COPY", title: "기사복사 문구", desc: "카톡으로 보내는 전체 상세 · 기사 전달용 문구와 업로드 링크 포함 여부입니다. 이 단계에서 바로 저장됩니다." },
-    { en: "TARGET", title: "연간 매출목표 (선택)", desc: "매출 대시보드에서 목표 대비 진행률을 보여줍니다. 나중에 정해도 됩니다." },
-  ];
+  // ⭐ 2026-11-01 팀별 초기 설정 — 배차팀: 단위·방식·결제일·복사문구·매출목표 / 경리팀: 지급방식·결제일·매출목표 / 인사팀: 출근 반경·직책·부서
+  const ALL = {
+    units: { en: "UNITS", title: "화물 · 톤수 단위", desc: "오더 등록과 오더복사 수정 창의 단위 드롭다운에 들어갈 목록입니다. 첫 번째 항목이 기본 선택값이 됩니다." },
+    methods: { en: "OPTIONS", title: "상하차 · 지급 · 배차 방식", desc: "등록 화면 곳곳의 선택 목록을 우리 회사 방식대로 맞춥니다." },
+    payopt: { en: "PAY TYPES", title: "지급 방식", desc: "오더·정산에서 쓰는 지급 방식(계산서·착불·선불 등) 목록을 우리 회사 방식대로 맞춥니다." },
+    payment: { en: "PAYMENT", title: "기사 결제일", desc: "계산서 발행 후 며칠 뒤에 기사 운임을 지급하나요? 기사 업로드 링크의 \"결제일 정보\"와 지급관리 예정일 계산에 쓰입니다." },
+    copy: { en: "COPY", title: "기사복사 문구", desc: "카톡으로 보내는 전체 상세 · 기사 전달용 문구와 업로드 링크 포함 여부입니다. 이 단계에서 바로 저장됩니다." },
+    target: { en: "TARGET", title: "연간 매출목표 (선택)", desc: "매출 대시보드에서 목표 대비 진행률을 보여줍니다. 나중에 정해도 됩니다." },
+    attend: { en: "ATTENDANCE", title: "자동 출근 반경", desc: "직원이 출근지에서 이 거리 안으로 들어오면 모바일에서 자동으로 출근 처리됩니다. 출근지 위치는 회사관리 › 출근기록부 › 출근지 설정에서 정합니다." },
+    org: { en: "ORGANIZATION", title: "직책 · 부서", desc: "우리 회사에서 쓰는 부서와 직책을 추가하거나 숨깁니다. 이 단계에서 바로 저장됩니다." },
+  };
+  const ORDER = team === "acct" ? ["payopt", "payment", "target"] : team === "hr" ? ["attend", "org"] : ["units", "methods", "payment", "copy", "target"];
+  const STEPS = ORDER.map((k) => ({ key: k, ...ALL[k] }));
+  const [radius, setRadius] = React.useState(() => officeRadii(settings?.officeLocation));
   const last = step === STEPS.length - 1;
   const s = STEPS[step];
+  const sk = s.key;
 
   const finish = async () => {
     setErr("");
     const n = Math.round(Number(payDays));
-    if (!Number.isFinite(n) || n < 0 || n > 365) { setStep(2); setErr("결제일은 0~365 사이 숫자로 입력해 주세요."); return; }
+    if (ORDER.includes("payment") && (!Number.isFinite(n) || n < 0 || n > 365)) { setStep(ORDER.indexOf("payment")); setErr("결제일은 0~365 사이 숫자로 입력해 주세요."); return; }
     setBusy(true);
     try {
-      const patch = {
-        dropdownOptions: Object.fromEntries(Object.entries(dd).map(([k, v]) => [k, v.length ? v : DEFAULT_DROPDOWN_OPTIONS[k]])),
-        결제일규칙: { payDays: n },
-        onboarding: { pending: false, done: true, doneAt: serverTimestamp() },
-      };
+      const patch = team === "hr"
+        ? { onboarding: { hrDone: true, hrDoneAt: serverTimestamp() }, officeLocation: { radius: radius.inM, outRadius: radius.outM } }
+        : team === "acct"
+          ? { dropdownOptions: { 지급방식: dd.지급방식.length ? dd.지급방식 : DEFAULT_DROPDOWN_OPTIONS.지급방식 }, 결제일규칙: { payDays: n }, onboarding: { acctDone: true, acctDoneAt: serverTimestamp() } }
+          : {
+            dropdownOptions: Object.fromEntries(Object.entries(dd).map(([k, v]) => [k, v.length ? v : DEFAULT_DROPDOWN_OPTIONS[k]])),
+            결제일규칙: { payDays: n },
+            onboarding: { pending: false, done: true, doneAt: serverTimestamp() },
+          };
       const t = Number(String(target).replace(/[^\d]/g, ""));
-      if (t > 0) patch.매출목표 = { 순수매출목표: t, 제외거래처매출성장률: settings?.매출목표?.제외거래처매출성장률 ?? 3 };
+      if (team !== "hr" && t > 0) patch.매출목표 = { 순수매출목표: t, 제외거래처매출성장률: settings?.매출목표?.제외거래처매출성장률 ?? 3 };
       await setDoc(doc(db, "companySettings", company), patch, { merge: true });
       onFinish();
     } catch (e) { setErr(`저장 실패: ${e.message}`); } finally { setBusy(false); }
@@ -178,9 +216,9 @@ function Wizard({ company, settings, onClose, onFinish }) {
         <div className="text-[20px] font-black text-[#0F1A30]">{s.title}</div>
         <p className="text-[13.5px] text-[#5B6B85] mt-1 mb-5">{s.desc}</p>
 
-        {(step === 0 || step === 1) && (
+        {(sk === "units" || sk === "methods" || sk === "payopt") && (
           <div className="grid gap-4 md:grid-cols-2">
-            {DD_ROWS[step === 0 ? "units" : "methods"].map(([k, label, hint, ph]) => (
+            {(sk === "payopt" ? DD_ROWS.methods.filter(([k]) => k === "지급방식") : DD_ROWS[sk]).map(([k, label, hint, ph]) => (
               <div key={k}>
                 <div className="flex items-baseline justify-between mb-1.5"><span className="text-[14px] font-black text-[#1B2B4B]">{label}</span><span className="text-[11.5px] text-[#8A97AD]">{hint}</span></div>
                 <ChipList value={dd[k]} onChange={(v) => setDd((p) => ({ ...p, [k]: v }))} placeholder={ph} />
@@ -190,7 +228,16 @@ function Wizard({ company, settings, onClose, onFinish }) {
           </div>
         )}
 
-        {step === 2 && (
+        {sk === "attend" && (
+          <div className="max-w-[640px]">
+            <RadiusEditor value={radius} onChange={setRadius} />
+            <div className="text-[12px] text-[#8A97AD] mt-3">휴대폰 앱이 켜져 있을 때 자동 출근 · 퇴근됩니다. 안 될 때는 홈 화면의 [출근하기] 버튼을 누르면 됩니다.</div>
+          </div>
+        )}
+
+        {sk === "org" && <HrSettingsPanel company={company} canManage />}
+
+        {sk === "payment" && (
           <div className="max-w-[520px]">
             <div className="rounded-2xl border border-[#DCE3EE] bg-white p-6 flex items-center gap-4">
               <span className="text-[15px] font-black text-[#1B2B4B] shrink-0">계산서 발행 후</span>
@@ -205,9 +252,9 @@ function Wizard({ company, settings, onClose, onFinish }) {
           </div>
         )}
 
-        {step === 3 && <CopyTemplateEditor canEdit />}
+        {sk === "copy" && <CopyTemplateEditor canEdit />}
 
-        {step === 4 && (
+        {sk === "target" && (
           <div className="max-w-[560px]">
             <div className="rounded-2xl border border-[#DCE3EE] bg-white p-6">
               <div className="text-[12px] font-bold text-[#7A879C]">연간 순수 매출목표</div>
@@ -243,21 +290,33 @@ function Wizard({ company, settings, onClose, onFinish }) {
   );
 }
 
-function DoneCard({ onClose }) {
+function DoneCard({ onClose, msg = "" }) {
   return (
     <div className="w-full max-w-[460px] rounded-[28px] overflow-hidden text-white text-center px-8 py-10 shadow-[0_40px_100px_rgba(0,0,0,0.5)]" style={{ background: "linear-gradient(135deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
       <div className="mx-auto w-16 h-16 rounded-2xl border border-[#8FB0F0]/40 bg-white/5 flex items-center justify-center text-[28px] text-[#8FB0F0]">✓</div>
       <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mt-5" style={{ fontFamily: MONO }}>ALL SET</div>
       <div className="text-[22px] font-black mt-1">설정이 완료되었습니다</div>
-      <div className="text-[13.5px] text-white/60 mt-2">이제 배차관리에서 첫 오더를 등록해 보세요.</div>
+      <div className="text-[13.5px] text-white/60 mt-2">{msg || "이제 배차관리에서 첫 오더를 등록해 보세요."}</div>
       <button type="button" onClick={onClose} className="mt-6 h-11 px-7 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black">시작하기</button>
     </div>
   );
 }
 
-export default function OnboardingHost({ role, userCompany }) {
+// ⭐ 2026-11-01 사람별 · 팀별 —
+//  · 튜토리얼: 새로 가입한 직원이 PC에서 처음 들어올 때 한 번(users/{uid}.tutorialDone). 모바일로 먼저 썼어도 PC 첫 실행 때 뜬다.
+//    내용은 공통(환영·출퇴근·전자결재·회사관리) + 내 팀 업무(배차 / 경리 / 인사 / 임원).
+//  · 초기 설정: 회사가 새로 승인됐을 때 팀 책임자에게 그 팀 것만 — 배차(운송관리자) / 경리(test·hrAcct) / 인사(hrManager·hrAcct). 모두 회사별 저장.
+const NEW_USER_DAYS = 30;
+export default function OnboardingHost({ role, realRole, userCompany, dept = null, uid = "", myDoc = null }) {
   const company = companyKey(userCompany);
-  const isAdmin = role === "admin" || role === "totalMaster";
+  const rr = realRole || role;
+  const isTM = rr === "totalMaster";
+  const team = dept === "acct" ? "acct" : dept === "hr" ? "hr" : dept === "exec" ? "exec" : "dispatch";
+  const isDispatchAdmin = rr === "admin" || isTM;
+  const wizardTeam = team === "dispatch" ? (isDispatchAdmin ? "dispatch" : null)
+    : team === "acct" ? (["test", "hrAcct"].includes(rr) || isTM ? "acct" : null)
+      : team === "hr" ? (["hrManager", "hrAcct"].includes(rr) || isTM ? "hr" : null) : null;
+  const isAdminUser = isDispatchAdmin || myDoc?.isMaster === true;
   const [settings, setSettings] = React.useState(null);
   const [view, setView] = React.useState(null); // "tour" | "wizard" | "done" | null
   const autoShown = React.useRef(false);
@@ -267,27 +326,39 @@ export default function OnboardingHost({ role, userCompany }) {
     return onSnapshot(doc(db, "companySettings", company), (s) => setSettings(s.exists() ? s.data() : {}), () => setSettings({}));
   }, [company]);
 
-  // 신규 승인된 회사의 관리자 → 첫 진입 때 자동으로 튜토리얼
-  React.useEffect(() => {
-    if (!settings || autoShown.current || !isAdmin || role === "totalMaster") return;
-    const ob = settings.onboarding;
-    let snoozed = false; try { snoozed = sessionStorage.getItem(SNOOZE) === company; } catch { /* 무시 */ }
-    if (ob?.pending && !ob?.done && !snoozed) { autoShown.current = true; setView("tour"); }
-  }, [settings, isAdmin, role, company]);
+  const ob = settings?.onboarding || null;
+  // 이 팀의 초기 설정이 아직인지(새로 승인된 회사만 — onboarding 기록이 있는 회사)
+  const obMs = ob?.doneAt?.toMillis ? ob.doneAt.toMillis() : (ob?.doneAt?.seconds ? ob.doneAt.seconds * 1000 : 0);
+  const newCompany = !!ob && (ob.pending || (obMs && Date.now() - obMs < 60 * 86400e3)); // 예전부터 쓰던 회사에는 경리·인사 설정을 갑자기 띄우지 않는다
+  const wizardPending = !!ob && !!wizardTeam && (wizardTeam === "dispatch" ? (ob.pending && !ob.done) : newCompany && (wizardTeam === "acct" ? !ob.acctDone : !ob.hrDone));
 
   React.useEffect(() => {
-    const t = () => setView("tour"); const w = () => setView("wizard");
+    if (!settings || autoShown.current || isTM || !myDoc) return;
+    let snoozed = false; try { snoozed = sessionStorage.getItem(SNOOZE) === `${company}|${uid}`; } catch { /* 무시 */ }
+    if (snoozed) return;
+    const created = myDoc.createdAt?.toMillis ? myDoc.createdAt.toMillis() : (myDoc.createdAt?.seconds ? myDoc.createdAt.seconds * 1000 : 0);
+    const isNew = created && Date.now() - created < NEW_USER_DAYS * 86400e3;
+    const needTour = !myDoc.tutorialDone && (isNew || wizardPending);
+    if (needTour) { autoShown.current = true; setView("tour"); return; }
+    if (wizardPending) { autoShown.current = true; setView("wizard"); }
+  }, [settings, isTM, company, uid, myDoc, wizardPending]);
+
+  React.useEffect(() => {
+    const t = () => setView("tour"); const w = () => setView(wizardTeam ? "wizard" : "tour");
     window.addEventListener("kp:tutorialOpen", t); window.addEventListener("kp:setupWizardOpen", w);
     return () => { window.removeEventListener("kp:tutorialOpen", t); window.removeEventListener("kp:setupWizardOpen", w); };
-  }, []);
+  }, [wizardTeam]);
 
   if (!view) return null;
-  const snooze = () => { try { sessionStorage.setItem(SNOOZE, company); } catch { /* 무시 */ } setView(null); };
+  const markTour = () => { if (uid && !myDoc?.tutorialDone) setDoc(doc(db, "users", uid), { tutorialDone: true, tutorialDoneAt: serverTimestamp() }, { merge: true }).catch(() => {}); };
+  const snooze = () => { try { sessionStorage.setItem(SNOOZE, `${company}|${uid}`); } catch { /* 무시 */ } setView(null); };
+  const afterTour = () => { markTour(); setView(wizardPending ? "wizard" : null); };
+  const doneMsg = wizardTeam === "acct" ? "이제 정산관리 · 회계관리에서 업무를 시작해 보세요." : wizardTeam === "hr" ? "이제 인사관리부에서 직원 정보를 확인해 보세요." : "";
   return (
     <Overlay>
-      {view === "tour" && <Tutorial onSkip={() => (isAdmin ? setView("wizard") : setView(null))} onDone={() => (isAdmin ? setView("wizard") : setView(null))} />}
-      {view === "wizard" && <Wizard company={company} settings={settings || {}} onClose={snooze} onFinish={() => setView("done")} />}
-      {view === "done" && <DoneCard onClose={() => setView(null)} />}
+      {view === "tour" && <Tutorial slides={tourFor(team, isAdminUser && team === "dispatch")} onSkip={afterTour} onDone={afterTour} doneLabel={wizardTeam && wizardPending ? "초기 설정 시작 →" : "시작하기 →"} />}
+      {view === "wizard" && <Wizard team={wizardTeam || "dispatch"} company={company} settings={settings || {}} onClose={snooze} onFinish={() => setView("done")} />}
+      {view === "done" && <DoneCard msg={doneMsg} onClose={() => setView(null)} />}
     </Overlay>
   );
 }

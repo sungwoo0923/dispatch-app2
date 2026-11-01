@@ -140,19 +140,26 @@ export function AttendanceQuickButton({ company, uid, name, role, email, variant
 export function RadiusEditor({ value, onChange, compact = false }) {
   const v = value || { inM: DEFAULT_IN_RADIUS, outM: DEFAULT_OUT_RADIUS };
   const chip = (on) => `px-2.5 h-8 rounded-lg text-[12px] font-bold border transition ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-gray-200 text-[#1B2B4B] bg-white"}`;
-  const setIn = (n) => { const inM = Math.max(MIN_RADIUS, Math.round(Number(n) || 0)); onChange({ inM, outM: Math.max(v.outM, inM + 20) }); };
-  const setOut = (n) => onChange({ ...v, outM: Math.round(Number(n) || 0) });
+  // ⭐ 2026-11-01 반경 버튼을 누르면 퇴근 거리도 그에 맞게 같이 바뀐다(직접 고친 퇴근 거리는 유지)
+  const outTouched = React.useRef(false);
+  const recommendOut = (inM) => Math.max(inM * 3, inM + 100);
+  const setIn = (n) => {
+    const inM = Math.max(MIN_RADIUS, Math.round(Number(n) || 0));
+    const outM = outTouched.current ? Math.max(Number(v.outM) || 0, inM + 20) : recommendOut(inM);
+    onChange({ inM, outM });
+  };
+  const setOut = (n) => { outTouched.current = true; onChange({ ...v, outM: n === "" ? "" : Math.round(Number(n) || 0) }); };
   return (
     <div className={`rounded-xl border border-gray-200 bg-gray-50 ${compact ? "p-2.5" : "p-3"} space-y-2`}>
       <div className="text-[12px] font-bold text-[#1B2B4B]">자동 출근 반경 <span className="text-gray-400 font-semibold">(출근지에서 이 거리 안으로 들어오면 출근)</span></div>
       <div className="flex flex-wrap items-center gap-1.5">
         {RADIUS_PRESETS.map((n) => <button key={n} type="button" onClick={() => setIn(n)} className={chip(v.inM === n)}>{n}m</button>)}
-        <input type="number" min={MIN_RADIUS} step="1" value={v.inM} onChange={(e) => onChange({ ...v, inM: e.target.value === "" ? "" : Number(e.target.value) })} onBlur={(e) => setIn(e.target.value)}
+        <input type="number" min={MIN_RADIUS} step="1" value={v.inM} onChange={(e) => onChange({ ...v, inM: e.target.value === "" ? "" : Number(e.target.value) })} onBlur={(e) => { if (Number(e.target.value) !== Number(v.inM) || e.target.value === "") setIn(e.target.value || MIN_RADIUS); else setIn(v.inM); }}
           className="w-20 h-8 px-2 rounded-lg border-2 border-gray-200 text-[12px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" /><span className="text-[12px] text-gray-500">m</span>
       </div>
       <div className="text-[12px] font-bold text-[#1B2B4B]">자동 퇴근 거리 <span className="text-gray-400 font-semibold">(출근지에서 이만큼 멀어지면 퇴근)</span></div>
       <div className="flex items-center gap-1.5">
-        <input type="number" min={(Number(v.inM) || MIN_RADIUS) + 20} step="1" value={v.outM} onChange={(e) => setOut(e.target.value)}
+        <input type="number" min={(Number(v.inM) || MIN_RADIUS) + 20} step="1" value={v.outM} onChange={(e) => setOut(e.target.value)} onBlur={() => { const inM = Number(v.inM) || MIN_RADIUS; if (!(Number(v.outM) >= inM + 20)) onChange({ ...v, outM: inM + 20 }); }}
           className="w-24 h-8 px-2 rounded-lg border-2 border-gray-200 text-[12px] font-bold text-[#1B2B4B] outline-none focus:border-[#1B2B4B]" /><span className="text-[12px] text-gray-500">m (출근 반경보다 20m 이상 크게)</span>
       </div>
       {Number(v.inM) <= 30 && (
