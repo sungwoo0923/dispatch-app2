@@ -33,6 +33,7 @@ import { deptModeOf } from "./DeptDashboard";
 import { ExecApprovals, TeamSchedule, ApprovalWorkspace, ExecScheduleBoard } from "./ExecSuite";
 import { useMyProfile } from "./userNames";
 import { useCompanyStaff, masterHasHr, isHrStaffUser } from "./hrHandover";
+import { AttendanceQuickButton } from "./attendanceQuick";
 import { useHrOptions } from "./hrConstants";
 import { AssetManager } from "./OfficeBooks";
 import { FundsWorkspace, FundsBoard, isCeoPosition } from "./FundsBoard";
@@ -49,7 +50,7 @@ import FleetManagement from "./FleetManagement";
 import { FleetSettlementMenu, useFleetDrivers } from "./FleetPayDocs";
 import HomeDashboard from "./HomeDashboard";
 import { EditModeProvider, EditableText, EditModeToggleButton } from "./EditMode";
-import { useCompanyDropdownOptions, DropdownOptionsManageButton } from "./companyDropdownOptions";
+import { useCompanyDropdownOptions, DropdownOptionsManageButton, useCompanyDropdownSync, dropdownList } from "./companyDropdownOptions";
 import StandardFare from "./StandardFare";
 import RateCard from "./RateCard";
 import DispatchFormNew from "./DispatchFormNew";
@@ -1868,7 +1869,7 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
                       {f.type === "select" ? (
                         <select className="flex-1 border border-gray-300 rounded px-1 py-1 text-[11px]" value={bulkValues[f.key] ?? ""} onChange={(e) => setBulkValues(v => ({ ...v, [f.key]: e.target.value }))}>
                           <option value="">-</option>
-                          {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+                          {(f.key === "배차방식" || f.key === "지급방식" ? dropdownList(f.key, f.options) : f.options).map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                       ) : f.type === "money" ? (
                         <MoneyInput value={bulkValues[f.key]} onChange={(v) => setBulkValues(p => ({ ...p, [f.key]: v }))} />
@@ -1896,7 +1897,7 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
                         {f.type === "select" ? (
                           <select className="w-full border border-gray-300 rounded px-1 py-1 text-[12px]" value={edited[id]?.[f.key] ?? ""} onChange={(e) => setCell(id, f.key, e.target.value)}>
                             <option value="">-</option>
-                            {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+                            {(f.key === "배차방식" || f.key === "지급방식" ? dropdownList(f.key, f.options) : f.options).map(o => <option key={o} value={o}>{o}</option>)}
                           </select>
                         ) : f.type === "money" ? (
                           <MoneyInput value={edited[id]?.[f.key]} onChange={(v) => setCell(id, f.key, v)} />
@@ -7659,6 +7660,7 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   const customRole = findCustomRole(customRoles, role);
   // 👔 2026-10-31 임원(부서 임원 · 대표/전무/이사) — 로그인하면 임원 화면. 관리자 권한 임원은 [전체 메뉴]로 실무 화면도 볼 수 있다
   const myProfileDoc = useMyProfile(user?.uid);
+  useCompanyDropdownSync(role, userCompany); // ⭐ 편집모드 옵션(배차방식 등)을 표·빠른수정에도 회사별로
   // ⭐ 2026-11-01 마스터 인사권 — 인사 담당자가 없을 때만(생기면 자동 인계, hrHandover.js)
   const coStaffMain = useCompanyStaff(myProfileDoc?.isMaster === true ? (userCompany || localStorage.getItem("userCompany") || "") : "");
   const masterHrMain = !!coStaffMain && masterHasHr(myProfileDoc, coStaffMain, user?.uid);
@@ -8060,6 +8062,10 @@ return (
                 {execFull ? "임원 화면" : "전체 메뉴"}
               </button>
             )}
+
+            {/* ⭐ 2026-11-01 출근·퇴근 버튼(자동 출근이 안 됐을 때 직접) — 퇴근 후엔 [되돌리기] */}
+            <AttendanceQuickButton company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")}
+              uid={user?.uid} name={myProfileDoc?.name || user?.displayName || ""} role={role} email={user?.email} variant="pc" />
 
             {/* ⭐ 최적화 버튼 — 새로고침 없이 현재 화면(배차관리/실시간배차현황/배차현황)의
                 누적된 렌더링 상태만 가볍게 초기화한다. */}
@@ -10525,9 +10531,9 @@ const filterPlaces = (q) => {
     const PAY_TYPES = (typeof window !== "undefined" && window.RUN25_PAY_TYPES) || [
       "계산서", "착불", "선불", "손실", "개인", "취소"
     ];
-    const DISPATCH_TYPES = (typeof window !== "undefined" && window.RUN25_DISPATCH_TYPES) || [
+    const DISPATCH_TYPES = (typeof window !== "undefined" && window.RUN25_DISPATCH_TYPES) || dropdownList("배차방식", [
       "24시", "직접배차", "인성", "고정기사"
-    ];
+    ]);
     const StatusBadge = ({ s }) => {
       const map = {
         "배차중": "bg-amber-100 text-amber-800",
@@ -28547,10 +28553,7 @@ const openDailyCloseIssueDetail = (rowId) => {
           }}
         >
           <option value="">선택</option>
-          <option value="24시">24시</option>
-          <option value="직접배차">직접배차</option>
-          <option value="인성">인성</option>
-          <option value="고정기사">24시(고정기사)</option>
+          {dropdownList("배차방식", ["24시", "직접배차", "인성", "고정기사"], dispatchVal).map((v) => <option key={v} value={v}>{v === "고정기사" ? "24시(고정기사)" : v}</option>)}
         </CustomSelect>
       );
     }
@@ -30483,9 +30486,7 @@ value={copyTarget?.화물수량 || ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 배차방식:e.target.value}))}
   >
     <option value="">선택</option>
-    <option value="24시">24시</option>
-    <option value="직접배차">직접배차</option>
-    <option value="인성">인성</option>
+    {dropdownList("배차방식", ["24시", "직접배차", "인성"], copyTarget?.배차방식 === "선택없음" ? "" : copyTarget?.배차방식).map((v) => <option key={v} value={v}>{v}</option>)}
   </CustomSelect>
 </CpField>
           </div>
@@ -34204,7 +34205,7 @@ setConfirmChange(null);
                                       value={closeFileBulkValue[dispKey] || ""}
                                       onChange={e => setCloseFileBulkValue(p => ({ ...p, [dispKey]: e.target.value }))}>
                                       <option value="">선택</option>
-                                      {["24시", "직접배차", "인성", "고정기사"].map(v => <option key={v} value={v}>{v}</option>)}
+                                      {dropdownList("배차방식", ["24시", "직접배차", "인성", "고정기사"]).map(v => <option key={v} value={v}>{v}</option>)}
                                     </select>
                                     <button type="button"
                                       className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"
@@ -34468,7 +34469,7 @@ setConfirmChange(null);
                       {["배차방식","지급방식","배차상태","차량종류"].includes(cond.field)?(
                         <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
                           <option value="">값 선택</option>
-                          {(cond.field==="배차방식"?["24시","직접배차","인성","고정기사"]:cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙/카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
+                          {(cond.field==="배차방식"?dropdownList("배차방식", ["24시","직접배차","인성","고정기사"]):cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙/카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
                         </CustomSelect>
                       ):(
                         <input autoComplete="off" type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
@@ -39658,10 +39659,7 @@ return (
                       }
                     >
                       <option value="">선택없음</option>
-                      <option value="24시">24시</option>
-                      <option value="직접배차">직접배차</option>
-                      <option value="인성">인성</option>
-                      <option value="고정기사">고정기사</option>
+                      {dropdownList("배차방식", ["24시", "직접배차", "인성", "고정기사"], row.배차방식 === "선택없음" ? "" : row.배차방식).map((v) => <option key={v} value={v}>{v}</option>)}
                     </CustomSelect>
                   </td>
 
@@ -42139,9 +42137,7 @@ setCopyPlaceOptions(list);
     onChange={(e)=>setCopyTarget(p=>({...p, 배차방식:e.target.value}))}
   >
     <option value="">선택</option>
-    <option value="24시">24시</option>
-    <option value="직접배차">직접배차</option>
-    <option value="인성">인성</option>
+    {dropdownList("배차방식", ["24시", "직접배차", "인성"], copyTarget?.배차방식 === "선택없음" ? "" : copyTarget?.배차방식).map((v) => <option key={v} value={v}>{v}</option>)}
   </CustomSelect>
 </Field>
           </div>
@@ -43465,7 +43461,7 @@ setCopyPlaceOptions(list);
                       {["배차방식","지급방식","배차상태","차량종류"].includes(cond.field)?(
                         <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
                           <option value="">값 선택</option>
-                          {(cond.field==="배차방식"?["24시","직접배차","인성","고정기사"]:cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙/카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
+                          {(cond.field==="배차방식"?dropdownList("배차방식", ["24시","직접배차","인성","고정기사"]):cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙/카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
                         </CustomSelect>
                       ):(
                         <input autoComplete="off" type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
@@ -43731,7 +43727,7 @@ setCopyPlaceOptions(list);
                                       value={closeFileBulkValue[dispKey] || ""}
                                       onChange={e => setCloseFileBulkValue(p => ({ ...p, [dispKey]: e.target.value }))}>
                                       <option value="">선택</option>
-                                      {["24시", "직접배차", "인성", "고정기사"].map(v => <option key={v} value={v}>{v}</option>)}
+                                      {dropdownList("배차방식", ["24시", "직접배차", "인성", "고정기사"]).map(v => <option key={v} value={v}>{v}</option>)}
                                     </select>
                                     <button type="button"
                                       className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"
@@ -50565,7 +50561,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     </Field>
                     <Field label="배차방식">
                       <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")} onChange={(e) => setCopyTarget(p => ({...p, 배차방식: e.target.value}))}>
-                        <option value="">선택</option><option value="24시">24시</option><option value="직접배차">직접배차</option><option value="인성">인성</option>
+                        <option value="">선택</option>{dropdownList("배차방식", ["24시", "직접배차", "인성"], copyTarget?.배차방식 === "선택없음" ? "" : copyTarget?.배차방식).map((v) => <option key={v} value={v}>{v}</option>)}
                       </CustomSelect>
                     </Field>
                   </div>
@@ -55347,7 +55343,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   };
 
   const PAY_METHODS = ["계산서", "선불", "착불"];
-  const DISPATCH_METHODS = ["24시", "직접배차", "인성"];
+  const DISPATCH_METHODS = dropdownList("배차방식", ["24시", "직접배차", "인성"]);
 
   return (
     <div className="space-y-4">

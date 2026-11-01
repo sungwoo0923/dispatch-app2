@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { collection, doc, onSnapshot, query, setDoc, where, addDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { db, DEFAULT_COMPANY } from "../firebase";
 import { ATTENDANCE_STATUS_COLOR, isWeekend, isHoliday, findApprovedLeaveForDate } from "../attendanceUtils";
+import { RadiusEditor, officeRadii, DEFAULT_IN_RADIUS, DEFAULT_OUT_RADIUS } from "../attendanceQuick";
 
 const ADMIN_ROLES = ["totalMaster", "admin"];
 const APPROVE_ROLES = ["totalMaster", "hrManager"];
@@ -60,6 +61,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
   const [officeLocation, setOfficeLocation] = useState(null);
   const [showOfficePanel, setShowOfficePanel] = useState(false);
   const [officeInput, setOfficeInput] = useState({ lat: "", lng: "", address: "" });
+  const [radiusInput, setRadiusInput] = useState({ inM: DEFAULT_IN_RADIUS, outM: DEFAULT_OUT_RADIUS }); // ⭐ 회사별 자동 출퇴근 반경
   const [savingOffice, setSavingOffice] = useState(false);
   const [gettingLoc, setGettingLoc] = useState(false);
 
@@ -110,6 +112,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
     const unsub = onSnapshot(doc(db, "companySettings", company), snap => {
       const data = snap.data();
       setOfficeLocation(data?.officeLocation || null);
+      setRadiusInput(officeRadii(data?.officeLocation));
       if (data?.officeLocation) {
         setOfficeInput({ lat: String(data.officeLocation.lat), lng: String(data.officeLocation.lng), address: data.officeLocation.address || "" });
       }
@@ -121,9 +124,10 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
     const lat = parseFloat(officeInput.lat);
     const lng = parseFloat(officeInput.lng);
     if (isNaN(lat) || isNaN(lng)) { alert("올바른 위도/경도를 입력해주세요."); return; }
+    const r = officeRadii({ radius: radiusInput.inM, outRadius: radiusInput.outM });
     setSavingOffice(true);
     await setDoc(doc(db, "companySettings", company), {
-      officeLocation: { lat, lng, address: officeInput.address || "" }
+      officeLocation: { lat, lng, address: officeInput.address || "", radius: r.inM, outRadius: r.outM }
     }, { merge: true });
     setSavingOffice(false);
     setShowOfficePanel(false);
@@ -325,7 +329,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
             <div>
               <div className="text-[13px] font-bold text-[var(--attn-accent)]">출근지 설정</div>
               {officeLocation ? (
-                <div className="text-[11px] text-blue-600 mt-0.5">{officeLocation.address || `${officeLocation.lat?.toFixed(5)}, ${officeLocation.lng?.toFixed(5)}`}</div>
+                <div className="text-[11px] text-blue-600 mt-0.5">{officeLocation.address || `${officeLocation.lat?.toFixed(5)}, ${officeLocation.lng?.toFixed(5)}`} · 반경 {officeRadii(officeLocation).inM}m</div>
               ) : (
                 <div className="text-[11px] text-gray-400 mt-0.5">미설정 — 설정 후 GPS 자동 출근 활성화</div>
               )}
@@ -353,7 +357,8 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
               <input type="text" placeholder="장소명 (예: 본사 사무실)"
                 value={officeInput.address} onChange={e => setOfficeInput(p => ({ ...p, address: e.target.value }))}
                 className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-[12px] text-[var(--attn-accent)] outline-none focus:border-[var(--attn-accent)]" />
-              <div className="text-[10px] text-gray-400">반경 100m 이내 진입 시 자동 출근 · 300m 이탈 시 자동 퇴근</div>
+              <RadiusEditor value={radiusInput} onChange={setRadiusInput} compact />
+              <div className="text-[10px] text-gray-400">반경 {officeRadii({ radius: radiusInput.inM, outRadius: radiusInput.outM }).inM}m 이내 진입 시 자동 출근 · {officeRadii({ radius: radiusInput.inM, outRadius: radiusInput.outM }).outM}m 이탈 시 자동 퇴근 (앱이 켜져 있을 때)</div>
               <button onClick={saveOfficeLocation} disabled={savingOffice}
                 className="w-full py-2.5 rounded-xl border border-[var(--attn-accent)] text-[var(--attn-accent)] text-[13px] font-bold disabled:opacity-40">
                 {savingOffice ? "저장 중..." : "저장"}

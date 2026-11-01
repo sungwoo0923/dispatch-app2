@@ -3,6 +3,7 @@ import { collection, deleteDoc, doc, onSnapshot, query, setDoc, where, addDoc, a
 import { geocodeAddress } from "./tmapFareCalc";
 import { db, DEFAULT_COMPANY } from "./firebase";
 import { isTMUser } from "./staffFilter";
+import { RadiusEditor, officeRadii, DEFAULT_IN_RADIUS, DEFAULT_OUT_RADIUS } from "./attendanceQuick";
 import { ATTENDANCE_STATUS_COLOR, LEAVE_TYPE_LABEL, isWeekend, findApprovedLeaveForDate, isHoliday, KR_NATIONAL_HOLIDAYS, approvalLeaveOn, hrLeaveOn } from "./attendanceUtils";
 
 const ADMIN_ROLES = ["totalMaster", "admin"];
@@ -50,6 +51,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   const [officeLocation, setOfficeLocation] = useState(null);
   const [showOfficePanel, setShowOfficePanel] = useState(false);
   const [officeInput, setOfficeInput] = useState({ lat: "", lng: "", address: "" });
+  const [radiusInput, setRadiusInput] = useState({ inM: DEFAULT_IN_RADIUS, outM: DEFAULT_OUT_RADIUS }); // ⭐ 회사별 자동 출퇴근 반경
   const [savingOffice, setSavingOffice] = useState(false);
   const [gettingLocation, setGettingLocation] = useState(false);
 
@@ -130,6 +132,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     const unsub = onSnapshot(doc(db, "companySettings", company), snap => {
       const data = snap.data();
       setOfficeLocation(data?.officeLocation || null);
+      setRadiusInput(officeRadii(data?.officeLocation));
       setHiddenEmpUids(data?.hiddenEmployees || []);
     }, () => {});
     return () => unsub();
@@ -173,9 +176,10 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     const lat = parseFloat(officeInput.lat);
     const lng = parseFloat(officeInput.lng);
     if (isNaN(lat) || isNaN(lng)) { alert("올바른 위도/경도를 입력해주세요."); return; }
+    const r = officeRadii({ radius: radiusInput.inM, outRadius: radiusInput.outM });
     setSavingOffice(true);
     await setDoc(doc(db, "companySettings", company), {
-      officeLocation: { lat, lng, address: officeInput.address || "" }
+      officeLocation: { lat, lng, address: officeInput.address || "", radius: r.inM, outRadius: r.outM }
     }, { merge: true });
     setSavingOffice(false);
     setShowOfficePanel(false);
@@ -513,7 +517,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                   </span>
                 </button>
               )}
-              <button onClick={() => { setShowOfficePanel(v => !v); setShowHolidayPanel(false); }}
+              <button onClick={() => { if (!showOfficePanel && officeLocation && !officeInput.lat) setOfficeInput({ lat: String(officeLocation.lat ?? ""), lng: String(officeLocation.lng ?? ""), address: officeLocation.address || "" }); setShowOfficePanel(v => !v); setShowHolidayPanel(false); }}
                 className={`px-3 py-1.5 rounded-lg border text-[13px] font-bold transition ${showOfficePanel ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-gray-200 text-[#1B2B4B] hover:bg-gray-50"}`}>
                 출근지 설정
               </button>
@@ -582,7 +586,8 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                   className="px-3 py-2 rounded-lg border-2 border-gray-200 text-[13px] font-medium text-[#1B2B4B] outline-none w-full focus:border-[#1B2B4B]" />
               </div>
             </div>
-            <div className="text-[11px] text-gray-400">출근지 반경 100m 이내 도착 시 모바일 자동 출근 · 300m 이탈 시 자동 퇴근</div>
+            <RadiusEditor value={radiusInput} onChange={setRadiusInput} />
+            <div className="text-[11px] text-gray-400">출근지 반경 {officeRadii({ radius: radiusInput.inM, outRadius: radiusInput.outM }).inM}m 이내 도착 시 모바일 자동 출근 · {officeRadii({ radius: radiusInput.inM, outRadius: radiusInput.outM }).outM}m 이탈 시 자동 퇴근 (앱이 켜져 있을 때 · 안 되면 상단 출근/퇴근 버튼)</div>
             <div className="flex gap-2">
               <button onClick={saveOfficeLocation} disabled={savingOffice || (!officeInput.lat && !officeInput.lng)}
                 className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold disabled:opacity-40">

@@ -3546,7 +3546,17 @@ exports.checkEmail = functions.https.onRequest(async (req, res) => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) || e.length > 200) { res.status(400).json({ error: "BAD_EMAIL" }); return; }
   try {
     const snap = await db.collection("users").where("email", "==", e).limit(5).get();
-    const used = snap.docs.some((d) => !["deleted", "withdrawn"].includes(d.data().status));
+    let used = snap.docs.some((d) => !["deleted", "withdrawn"].includes(d.data().status));
+    // ⭐ 2026-11-01 users 문서는 없어도 로그인 계정이 남아 있으면 — 삭제된 계정(정리 가능)이 아니면 "사용 중"
+    //    (예전엔 여기서 "사용 가능"이라 나오고 막상 가입하면 "이미 가입된 이메일"로 막혔다)
+    if (!used) {
+      const u = await getAuth().getUserByEmail(e.toLowerCase()).catch(() => null);
+      if (u && !(await canFreeAuthAccount(u))) {
+        const created = Date.parse(u.metadata?.creationTime || "") || 0;
+        const recent = created && Date.now() - created < 10 * 60000;
+        if (!recent) used = true;
+      }
+    }
     res.status(200).json({ used });
   } catch (err) {
     res.status(500).json({ error: "CHECK_FAILED" });
@@ -3624,6 +3634,23 @@ exports.findCompany = functions.https.onRequest(async (req, res) => {
   const all = req.query.all === "1"; // 가입 화면이 열릴 때 목록을 한 번에 받아 입력 즉시 드롭다운으로 거른다
   if (req.query.ping === "1") { res.status(200).json({ ok: true }); return; }
   if (!all && (!q || q.length > 60)) { res.status(200).json({ results: [] }); return; }
+  // ⭐ 2026-11-01 신규 가입 회사명 중복확인 — 승인된 회사 + 승인 대기 중인 신규 신청까지(띄어쓰기·대소문자 무시). 결과는 있음/없음만
+  if (req.query.dup === "1") {
+    try {
+      const norm = (x) => String(x || "").toLowerCase().replace(/\s+/g, "");
+      const key = norm(q);
+      const [apps, plan] = await Promise.all([
+        db.collection("transportApplications").where("type", "==", "신규").get(),
+        db.collection("companyPlans").get().catch(() => ({ docs: [] })),
+      ]);
+      const hitApp = apps.docs.map((d) => d.data()).find((a) => norm(a.companyName) === key && a.status !== "rejected" && a.status !== "deleted");
+      const hitPlan = plan.docs.some((d) => norm(d.id) === key);
+      res.status(200).json({ used: !!hitApp || hitPlan, pending: !!hitApp && hitApp.status !== "approved" });
+    } catch (err) {
+      res.status(500).json({ error: "CHECK_FAILED" });
+    }
+    return;
+  }
   res.set("Cache-Control", "public, max-age=60");
   try {
     const [apps, plans] = await Promise.all([
