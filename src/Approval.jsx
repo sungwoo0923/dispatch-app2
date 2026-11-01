@@ -855,6 +855,16 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
           companyName: company, createdAt: serverTimestamp(), createdBy: me?.email || "",
         }, { merge: true })).catch(() => {});
       }
+      // 🔗 2026-11-01 사직서 최종 승인 → 인사 정보에 "퇴사 예정"(퇴직 희망일) 자동 등록 — 그날 인사관리부에서 [퇴사 확정]
+      if (patch.status === "approved" && d.form === "resign" && d.drafterUid) {
+        const last = d.data?.last || "";
+        const reason = String(d.data?.reason || "").trim();
+        const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+        updateDoc(doc(db, "users", d.drafterUid), {
+          resignPlan: { type: "자진 퇴사", date: last, reason: reason || "사직서 제출", noticeDate: today, by: "전자결재", docNo: d.docNo || "" },
+          personnelHistory: arrayUnion({ date: today, type: "사직서 승인", detail: `퇴직 희망일 ${last} · 전자결재 ${d.docNo || ""}` }),
+        }).catch(() => {});
+      }
       // 👶 육아휴직·출산휴가 최종 승인 → 인사 정보 재직 상태 반영(권한이 없으면 인사관리부에서 직접 바꾸면 된다)
       if (patch.status === "approved" && ["parental", "maternity"].includes(d.form) && d.drafterUid) {
         const kind = d.data?.kind || "";

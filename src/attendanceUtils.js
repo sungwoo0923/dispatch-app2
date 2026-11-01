@@ -59,6 +59,9 @@ export const ATTENDANCE_STATUS_COLOR = {
   "병가": "bg-[#C2453D] text-white",
   "경조사": "bg-[#2E8B6B] text-white",
   "조퇴": "bg-[#D06A2B] text-white",
+  "휴직": "bg-[#5B6B85] text-white",
+  "육아휴직": "bg-[#3E9C8F] text-white",
+  "출산휴가": "bg-[#C0569A] text-white",
 };
 
 // 대한민국 법정공휴일(자동) — 회사가 별도로 지정하지 않아도 기본 반영됨.
@@ -138,4 +141,36 @@ export function getHolidayLabel(dateStr, holidays) {
   if (national) return national;
   const custom = (holidays || []).find(h => h.date === dateStr);
   return custom ? custom.label : null;
+}
+
+// 🔗 2026-11-01 전자결재 근태(승인분) → 출근기록부·근태 현황 상태
+//  연차휴가·반차·병가·외근·출장·경조사·조퇴 + 육아휴직·출산휴가. 같은 날 여러 건이면 먼저 찾은 것.
+const inRange = (ds, p) => !!p?.start && ds >= p.start && ds <= (p.end || p.start);
+export function approvalLeaveOn(approvals, uid, ds) {
+  for (const a of approvals || []) {
+    if (a.status !== "approved" || a.drafterUid !== uid || a.cat !== "leave") continue;
+    const d = a.data || {};
+    switch (a.form) {
+      case "annual": if (inRange(ds, d.period)) return "연차"; break;
+      case "half": if (d.date === ds) return String(d.ampm || "").includes("오후") ? "오후반차" : "오전반차"; break;
+      case "sick": if (inRange(ds, d.period)) return "병가"; break;
+      case "outside": if (d.date === ds) return "외근"; break;
+      case "trip": if (inRange(ds, d.period)) return "외근"; break;
+      case "family": if (inRange(ds, d.period)) return "경조사"; break;
+      case "early": if (d.date === ds && d.kind === "조퇴") return "조퇴"; break;
+      case "parental": if (d.kind !== "육아기 근로시간 단축" && inRange(ds, d.period)) return "육아휴직"; break;
+      case "maternity": if (inRange(ds, d.period)) return d.kind === "배우자 출산휴가" ? "경조사" : "출산휴가"; break;
+      default: break;
+    }
+  }
+  return null;
+}
+// 인사 정보의 휴직(휴직·육아휴직·출산휴가 + 기간) → 그 날 상태
+export function hrLeaveOn(user, ds) {
+  const st = user?.employmentStatus;
+  if (!["휴직", "육아휴직", "출산휴가"].includes(st)) return null;
+  const lv = user.leave || {};
+  if (lv.from && ds < lv.from) return null;
+  if (lv.to && ds > lv.to) return null;
+  return st;
 }
