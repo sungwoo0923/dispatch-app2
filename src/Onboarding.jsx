@@ -36,7 +36,7 @@ const TEAM_SLIDES = {
   ],
   hr: [
     { en: "HR · RECORDS", title: "인사관리부 — 인사관리", desc: "이력서 · 근태/근속 · 인사발령을 한 곳에서 관리합니다.", points: ["인사관리 › 이력서 / 근태·근속 / 인사발령 / 발령 이력", "직원 등록(계정 없는 직원도 기록)", "직책 · 부서 설정은 회사별로 추가 · 숨김"] },
-    { en: "STAFF", title: "직원 정보 · 퇴사 · 입사일", desc: "직원의 부서 · 직책 · 권한 · 재직 상태와 입사일은 인사팀만 바꿀 수 있습니다.", points: ["휴직 · 육아휴직 · 출산휴가 기간 관리", "퇴사 · 권고사직 처리(합의서 인쇄)", "입사일 = 연차 · 퇴직금 계산 기준"] },
+    { en: "STAFF", title: "직원관리 · 퇴사 · 입사일", desc: "직원의 부서 · 직책 · 권한 · 재직 상태와 입사일은 인사팀만 바꿀 수 있습니다.", points: ["휴직 · 육아휴직 · 출산휴가 기간 관리", "퇴사 · 권고사직 처리(합의서 인쇄)", "입사일 = 연차 · 퇴직금 계산 기준"] },
     { en: "ATTENDANCE", title: "출근기록부 · 연차 · 증명서", desc: "출근 · 지각 · 휴가 현황과 연차 사용을 확인하고, 재직·경력 증명서를 발급합니다.", points: ["출근지 · 자동 출근 반경은 회사별로 설정", "연차 조정 이력 · 촉진 대상 확인", "가입 승인은 관리자메뉴 › 회원 관리"] },
   ],
   exec: [
@@ -149,7 +149,7 @@ function Wizard({ company, settings, onClose, onFinish, team = "dispatch" }) {
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
 
-  // ⭐ 2026-11-01 팀별 초기 설정 — 배차팀: 단위·방식·결제일·복사문구·매출목표 / 경리팀: 지급방식·결제일·매출목표 / 인사팀: 출근 반경·직책·부서
+  // ⭐ 2026-11-01 팀별 초기 설정 — 배차팀: 단위·방식·결제일·복사문구·매출목표 / 경리팀: 기사 결제일 / 인사팀: 출근 반경·직책·부서
   const ALL = {
     units: { en: "UNITS", title: "화물 · 톤수 단위", desc: "오더 등록과 오더복사 수정 창의 단위 드롭다운에 들어갈 목록입니다. 첫 번째 항목이 기본 선택값이 됩니다." },
     methods: { en: "OPTIONS", title: "상하차 · 지급 · 배차 방식", desc: "등록 화면 곳곳의 선택 목록을 우리 회사 방식대로 맞춥니다." },
@@ -160,7 +160,8 @@ function Wizard({ company, settings, onClose, onFinish, team = "dispatch" }) {
     attend: { en: "ATTENDANCE", title: "자동 출근 반경", desc: "직원이 출근지에서 이 거리 안으로 들어오면 모바일에서 자동으로 출근 처리됩니다. 출근지 위치는 회사관리 › 출근기록부 › 출근지 설정에서 정합니다." },
     org: { en: "ORGANIZATION", title: "직책 · 부서", desc: "우리 회사에서 쓰는 부서와 직책을 추가하거나 숨깁니다. 이 단계에서 바로 저장됩니다." },
   };
-  const ORDER = team === "acct" ? ["payopt", "payment", "target"] : team === "hr" ? ["attend", "org"] : ["units", "methods", "payment", "copy", "target"];
+  // 지급방식·매출목표는 배차(운송)팀 몫 — 경리팀 설정에는 넣지 않는다(2026-11-01)
+  const ORDER = team === "acct" ? ["payment"] : team === "hr" ? ["attend", "org"] : ["units", "methods", "payment", "copy", "target"];
   const STEPS = ORDER.map((k) => ({ key: k, ...ALL[k] }));
   const [radius, setRadius] = React.useState(() => officeRadii(settings?.officeLocation));
   const last = step === STEPS.length - 1;
@@ -176,14 +177,14 @@ function Wizard({ company, settings, onClose, onFinish, team = "dispatch" }) {
       const patch = team === "hr"
         ? { onboarding: { hrDone: true, hrDoneAt: serverTimestamp() }, officeLocation: { radius: radius.inM, outRadius: radius.outM } }
         : team === "acct"
-          ? { dropdownOptions: { 지급방식: dd.지급방식.length ? dd.지급방식 : DEFAULT_DROPDOWN_OPTIONS.지급방식 }, 결제일규칙: { payDays: n }, onboarding: { acctDone: true, acctDoneAt: serverTimestamp() } }
+          ? { 결제일규칙: { payDays: n }, onboarding: { acctDone: true, acctDoneAt: serverTimestamp() } }
           : {
             dropdownOptions: Object.fromEntries(Object.entries(dd).map(([k, v]) => [k, v.length ? v : DEFAULT_DROPDOWN_OPTIONS[k]])),
             결제일규칙: { payDays: n },
             onboarding: { pending: false, done: true, doneAt: serverTimestamp() },
           };
       const t = Number(String(target).replace(/[^\d]/g, ""));
-      if (team !== "hr" && t > 0) patch.매출목표 = { 순수매출목표: t, 제외거래처매출성장률: settings?.매출목표?.제외거래처매출성장률 ?? 3 };
+      if (team === "dispatch" && t > 0) patch.매출목표 = { 순수매출목표: t, 제외거래처매출성장률: settings?.매출목표?.제외거래처매출성장률 ?? 3 };
       await setDoc(doc(db, "companySettings", company), patch, { merge: true });
       onFinish();
     } catch (e) { setErr(`저장 실패: ${e.message}`); } finally { setBusy(false); }

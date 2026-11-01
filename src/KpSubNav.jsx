@@ -79,7 +79,8 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
   const toggle = () => setCollapsed((v) => { try { localStorage.setItem("kpSubNavCollapsed", v ? "0" : "1"); } catch { /* 저장 실패 무시 */ } return !v; });
   const gs = groups || [{ label: "", items: items || [] }];
   // ⭐ 2026-11-01 상단 메뉴에서 고른 세부 메뉴로 바로 이동(navMenus.jsx)
-  useSubnavTarget(code, gs.flatMap((g) => (g.items || []).flatMap((it) => [it.key, ...((it.children || []).map((c) => c.key))])), onSelect);
+  useSubnavTarget(code, gs.flatMap((g) => (g.items || []).flatMap((it) => [it.key, ...((it.children || []).map((c) => c.key))])), onSelect,
+    gs.flatMap((g) => (g.items || []).flatMap((it) => (it.children && it.children.length ? it.children.map((c) => [c.key, `${it.label} › ${c.label}`]) : [[it.key, it.label]]))).filter(([k]) => !String(k).startsWith("lock:")));
   // 하위메뉴(사내메일함 등) 접기 — 펼쳐진 부모를 한 번 더 누르면 접히고, 다시 누르면 펼쳐진다(보던 화면은 그대로)
   const [folded, setFolded] = useState({});
 

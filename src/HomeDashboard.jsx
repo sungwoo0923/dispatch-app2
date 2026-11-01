@@ -816,7 +816,12 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         const since = new Date(Date.now() - 7 * 24 * 3600 * 1000);
         if (createdAt && createdAt < since) return;
         let msg, notifStatus;
-        if (data.type === "approval_request") {
+        if (String(data.type || "").startsWith("attendance_")) {
+          // ⭐ 2026-11-01 근태(출근기록부) 알림은 문구를 그대로 — 결과 알림은 한 번 보여 주면 읽음으로 저장(다시 안 뜸)
+          msg = data.msg || "[출근기록부] 새 알림이 있습니다.";
+          notifStatus = data.type === "attendance_result" ? data.status : "request";
+          if (data.type === "attendance_result") updateDoc(doc(db, "notifications", docId), { read: true, readAt: serverTimestamp() }).catch(() => {});
+        } else if (data.type === "approval_request") {
           msg = `[${data.scheduleType || "일정"}] ${data.fromName || "작성자"}님의 결재 요청이 있습니다.`;
           notifStatus = "request";
         } else if (data.type === "re_request") {

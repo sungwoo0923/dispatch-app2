@@ -105,7 +105,7 @@ export function teamAnswer(mode, key, T, dispatches = []) {
     }
     case "resign": {
       const r = active.filter((u) => u.resignPlan?.date);
-      return r.length ? `[퇴사 예정] ${r.length}명\n\n${r.map((u) => `· ${u.name} (${u.team || "-"}) ${u.resignPlan.type} · ${u.resignPlan.date}`).join("\n")}\n\n그날 인사관리부 › 직원 정보·퇴사에서 [퇴사 확정]을 눌러 주세요.` : "퇴사 예정인 직원이 없습니다.";
+      return r.length ? `[퇴사 예정] ${r.length}명\n\n${r.map((u) => `· ${u.name} (${u.team || "-"}) ${u.resignPlan.type} · ${u.resignPlan.date}`).join("\n")}\n\n그날 인사관리부 › 인사관리 › 직원관리에서 [퇴사 확정]을 눌러 주세요.` : "퇴사 예정인 직원이 없습니다.";
     }
     case "inout": {
       const joined = staff.filter((u) => (u.hireDate || tsDay(u.createdAt)).startsWith(ym));

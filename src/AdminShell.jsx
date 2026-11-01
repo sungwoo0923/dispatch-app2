@@ -88,7 +88,7 @@ export default function AdminShell({
   heroTitle, heroSubtitle, heroActions = [], stats = [], sidebarFooter, hideHero = false, children,
 }) {
   // ⭐ 2026-11-01 상단 메뉴에서 고른 세부 메뉴로 바로 이동(회사관리 COMPANY · 관리자메뉴 ADMIN)
-  useSubnavTarget(badgeLabel, groups.flatMap((g) => (g.items || []).map((it) => it.key)), onSelect);
+  useSubnavTarget(badgeLabel, groups.flatMap((g) => (g.items || []).map((it) => it.key)), onSelect, groups.flatMap((g) => (g.items || []).map((it) => [it.key, it.label])));
   return (
     // ⭐ 화면 높이에 맞춘 틀 — 왼쪽 메뉴바는 고정, 오른쪽 본문만 스크롤(상단 메뉴줄 56px + 여백 24px 제외)
     <div className="flex bg-[#F4F6FA] -m-4 overflow-hidden" style={{ height: "calc(100vh - 80px)" }}>

@@ -22,6 +22,8 @@ import { personName } from "./userNames";
 import { useCompanyDriverDocs, docProblems } from "./driverRequiredDocs";
 import { useFundsSummary, isCeoPosition } from "./FundsBoard";
 import { AttendanceQuickButton } from "./attendanceQuick";
+import { getNationalHolidayLabel } from "./attendanceUtils";
+import AttendanceApprovalInbox from "./AttendanceApprovalInbox";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const GOLD = "#D7BC82";
@@ -537,6 +539,8 @@ export function ExecApprovals({ company, me }) {
             </div>
           </div>
         </div>
+        {/* ⭐ 2026-11-01 인사팀 본인의 출근기록 수정·출근 요청은 임원이 여기서 승인(먼저 승인한 1명으로 종결) */}
+        {page === "inbox" && <AttendanceApprovalInbox company={company} me={me} role={me?.role} />}
         {page === "handover"
           ? <HandoverCenter company={company} me={me} isViewer={me?.role === "viewer"} />
           : <ApprovalCenter company={company} me={me} page={page} setPage={setPage} openId={openId} onOpened={() => setOpenId(null)} />}
@@ -609,7 +613,10 @@ export function TeamSchedule({ company }) {
                   className={`text-left min-h-[64px] md:min-h-[104px] p-1 md:p-1.5 border-b border-r border-[#F1F4F9] align-top ${!d ? "bg-[#FAFBFD]" : pick === d ? "bg-[#F2F6FD] ring-2 ring-inset ring-[#2D4C82]" : "hover:bg-[#F8FAFD]"}`}>
                   {d && (
                     <>
-                      <div className={`text-[12px] md:text-[13px] font-black tabular-nums ${d === today ? "w-6 h-6 rounded-full bg-[#0F1A30] text-white grid place-items-center" : i % 7 === 0 ? "text-[#D92D20]" : i % 7 === 6 ? "text-[#2D4C82]" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO }}>{Number(d.slice(8))}</div>
+                      <div className="flex items-center gap-1 min-w-0">
+                        <div className={`text-[12px] md:text-[13px] font-black tabular-nums shrink-0 ${d === today ? "w-6 h-6 rounded-full bg-[#0F1A30] text-white grid place-items-center" : (i % 7 === 0 || getNationalHolidayLabel(d)) ? "text-[#D92D20]" : i % 7 === 6 ? "text-[#2D4C82]" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO }}>{Number(d.slice(8))}</div>
+                        {getNationalHolidayLabel(d) && <span className="hidden md:inline text-[10.5px] font-bold text-[#D92D20] truncate">{getNationalHolidayLabel(d)}</span>}
+                      </div>
                       <div className="hidden md:block mt-1 space-y-0.5">
                         {list.slice(0, 3).map((e) => <div key={`${e.id}${e.date}`} className="rounded-md px-1.5 py-[1px] text-[11px] font-bold truncate" style={KIND_STYLE(e.label, e.status)}>{e.name} {e.label}</div>)}
                         {list.length > 3 && <div className="text-[10.5px] font-bold text-[#7A879C] px-1">+{list.length - 3}명</div>}
@@ -784,7 +791,10 @@ export function ExecScheduleBoard({ company, me = {}, canWrite = false }) {
                     className={`text-left min-h-[70px] md:min-h-[112px] p-1 md:p-2 border-b border-r border-white/[0.06] ${!d ? "bg-black/10" : pick === d ? "bg-[#D7BC82]/[0.10] ring-1 ring-inset ring-[#D7BC82]/60" : "hover:bg-white/[0.04]"}`}>
                     {d && (
                       <>
-                        <div className={`text-[13px] md:text-[14px] font-black tabular-nums ${d === today ? "w-7 h-7 rounded-full grid place-items-center text-[#1A1405]" : i % 7 === 0 ? "text-[#FFB4A8]" : i % 7 === 6 ? "text-[#AFC6F5]" : "text-white/85"}`} style={{ fontFamily: MONO, ...(d === today ? { background: GOLD } : {}) }}>{Number(d.slice(8))}</div>
+                        <div className="flex items-center gap-1 min-w-0">
+                        <div className={`text-[13px] md:text-[14px] font-black tabular-nums shrink-0 ${d === today ? "w-7 h-7 rounded-full grid place-items-center text-[#1A1405]" : (i % 7 === 0 || getNationalHolidayLabel(d)) ? "text-[#FFB4A8]" : i % 7 === 6 ? "text-[#AFC6F5]" : "text-white/85"}`} style={{ fontFamily: MONO, ...(d === today ? { background: GOLD } : {}) }}>{Number(d.slice(8))}</div>
+                        {getNationalHolidayLabel(d) && <span className="hidden md:inline text-[10.5px] font-bold text-[#FFB4A8] truncate">{getNationalHolidayLabel(d)}</span>}
+                      </div>
                         <div className="hidden md:block mt-1 space-y-1">
                           {l.slice(0, 3).map((e) => <div key={`${e.id}${d}`} className="rounded-md px-1.5 py-[2px] text-[11.5px] font-bold truncate bg-white/[0.08] border-l-2" style={{ borderColor: KIND_DOT[e.kind] || GOLD }}>{e.start ? `${e.start} ` : ""}{e.name} · {e.title}</div>)}
                           {l.length > 3 && <div className="text-[11px] text-white/50 px-1">+{l.length - 3}</div>}

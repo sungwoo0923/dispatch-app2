@@ -191,7 +191,7 @@ export function StaffInfoBoard({ company, canManage }) {
       if ((sel.role || "") !== role && !sel.isMaster) ch.push(`권한 ${ro.label(sel.role)}→${ro.label(role)}`);
       const hireChanged = canHire && (origHire || "") !== (f.hireDate || "");
       if (hireChanged) ch.push(`입사일 ${origHire || "미등록"}→${f.hireDate || "미등록"}`);
-      // ⭐ 2026-11-01 입사일은 여기(인사관리부 › 직원 정보·퇴사)에서만 바꾼다 — 연차 계산용(userProfiles)과 인사 기록(users) 둘 다
+      // ⭐ 2026-11-01 입사일은 여기(인사관리부 › 인사관리 › 직원관리)에서만 바꾼다 — 연차 계산용(userProfiles)과 인사 기록(users) 둘 다
       if (hireChanged) await setDoc(doc(db, "userProfiles", sel.id), { hireDate: f.hireDate || "", hireDateBy: auth.currentUser?.email || "", hireDateAt: serverTimestamp() }, { merge: true });
       await updateDoc(doc(db, "users", sel.id), { name: f.name.trim(), phone: f.phone.trim(), team: f.team, position: f.position, ...(sel.isMaster ? {} : { role }), ...(hireChanged ? { hireDate: f.hireDate || "" } : {}), employType: f.employType, employmentStatus: f.employmentStatus, leave: onLeave ? { type: f.employmentStatus, from: f.leaveFrom, to: f.leaveTo || "", memo: (f.leaveMemo || "").trim() } : null, ...(ch.length ? { personnelHistory: arrayUnion({ date: kstDay(), type: "정보 수정", detail: `${ch.join(" · ")} (공문 없음)` }) } : {}) });
       setSel(null);
@@ -252,7 +252,7 @@ export function StaffInfoBoard({ company, canManage }) {
         <div className="px-7 pt-5 pb-4 flex items-end justify-between gap-4 flex-wrap">
           <div className="min-w-0">
             <Eyebrow className="text-[#8FB0F0]">HR · Staff Board</Eyebrow>
-            <div className="text-[25px] font-black tracking-tight mt-0.5 leading-tight">직원 정보 · 퇴사</div>
+            <div className="text-[25px] font-black tracking-tight mt-0.5 leading-tight">직원관리</div>
             <div className="text-[14px] text-white/60 mt-0.5">목록에서 직원을 고르면 오른쪽에서 정보·입사일 수정(공문 없이 바로)과 퇴사·권고사직을 처리합니다</div>
           </div>
           <div className="relative">
@@ -598,8 +598,8 @@ export default function HrHub({ company, canManage, renderRecord, renderAttendan
       groups={[
         { label: "인사", items: [
           { key: "record", label: "인사관리", en: "PERSONNEL", icon: "idcard", badge: newResumes, badgeTitle: "새로 제출된 이력서",
-            children: REC_VIEWS.filter((x) => !x.manage || canManage).map((x) => ({ key: `rec:${x.view}`, label: x.label, en: x.en, icon: x.icon })) },
-          { key: "edit", label: "직원 정보 · 퇴사", en: "STAFF BOARD", icon: "users" },
+            // ⭐ 2026-11-01 직원 정보·퇴사 → "직원관리"로 이름을 바꿔 인사관리 안 맨 앞에
+            children: [{ key: "edit", label: "직원관리", en: "STAFF", icon: "users" }, ...REC_VIEWS.filter((x) => !x.manage || canManage).map((x) => ({ key: `rec:${x.view}`, label: x.label, en: x.en, icon: x.icon }))] },
           { key: "register", label: "직원 등록", en: "REGISTER", icon: "user" },
         ] },
         { label: "근태", items: [
