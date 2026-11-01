@@ -36,6 +36,9 @@ function approvalEvents(b, a, uid) {
     if (a.status === "cancelled" && b.status !== "cancelled") out.push({ title: `결재 취소 승인 · ${t}`, body: "문서가 결재 취소되었습니다.", page: "mine" });
     if (a.cancel?.status === "rejected" && b.cancel?.status !== "rejected") { const r = (a.cancel.line || []).find((x) => x.status === "rejected"); out.push({ title: `결재 취소 거부 · ${t}`, body: `${r?.name || ""} · ${r?.comment || ""}`, page: "mine" }); }
   }
+  // ⭐ 2026-11-02 참조(cc) — 최종 승인되면 참조자에게도
+  if (b && (a.ccUids || []).includes(uid) && a.drafterUid !== uid && !(a.line || []).some((x) => x.uid === uid) && a.status === "approved" && b.status !== "approved")
+    out.push({ title: `참조 · ${t}`, body: `${a.drafter?.name || ""} · 최종 승인된 문서`, page: "inbox" });
   return out;
 }
 

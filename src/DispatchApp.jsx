@@ -2734,12 +2734,14 @@ import "./pcColorRemap.css"; // ★ PC 알록달록 금지(남색 계열)
 import { OrderTimeline, OrderTimelineModal } from "./OrderTimeline";
 import { isTMUser } from "./staffFilter";
 import OrgChart from "./OrgChart";
-import { MailHeaderButton, sendInternalMail } from "./InternalMail";
+import { MailHeaderButton, sendInternalMail, useMailCounts } from "./InternalMail";
+import { useApprovalCounts } from "./Approval";
+import { useMobileAlerts } from "./mobile/mobileAlerts";
 import { loadAcctPayments, saveAcctPayments, loadPlManual, savePlManual } from "./acctPayments";
 import { bumpDriverPayout, addClientCollection, removeClientCollections } from "./ledgerAuto";
 import BannerCenter from "./BannerCenter";
 import OrderCongratsPopup from "./OrderCongratsPopup";
-import PersonnelOrder from "./PersonnelOrder";
+import PersonnelOrder, { OrderNoticeHistory } from "./PersonnelOrder";
 import OrderScanModal, { looksLikeOrder, scanDropDate } from "./OrderScanModal";
 import KpSubNav from "./KpSubNav";
 import RevenueDashboard from "./RevenueDashboard";
@@ -7566,7 +7568,8 @@ useEffect(() => {
 
   // ---------------- 로그아웃 ----------------
   const logout = async () => {
-    await clearFcmToken(auth.currentUser?.uid).catch(() => {});
+    // ⭐ 2026-11-02 로그아웃 지연 방지 — 알림 해제는 최대 1.2초만 기다린다
+    await Promise.race([clearFcmToken(auth.currentUser?.uid).catch(() => {}), new Promise((r) => setTimeout(r, 1200))]);
     await signOut(auth).catch(() => {});
     localStorage.removeItem("role");
     try { sessionStorage.removeItem("skipLoginPopup"); sessionStorage.removeItem("transportValidating"); } catch { /* 무시 */ }
@@ -7682,6 +7685,10 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setMenu("HOME"); };
   const deptMode = deptModeOf(role, customRole) || (isExec && !execFull ? "exec" : null);
   const deptCompany = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
+  // 🔢 2026-11-02 상단 메뉴 숫자 — 새로 온 것(결재 차례·안 읽은 메일·공지·인수인계·가입 신청)을 메뉴와 세부 메뉴에 표시
+  const apCountsNav = useApprovalCounts();
+  const mailCountsNav = useMailCounts();
+  const alertsNav = useMobileAlerts({ uid: user?.uid, role: realRole || role, team: myProfileDoc?.team || "", company: deptCompany });
   // 부서 모드에서 볼 수 없는 메뉴에 머물러 있으면 홈으로
   React.useEffect(() => { if (deptMode && !DEPT_MENUS[deptMode].includes(menu)) setMenu("HOME"); }, [deptMode, menu]);
   // viewer(조회전용): 관리센터 제외 모든 메뉴 조회 가능, 수정/등록 불가
@@ -7993,8 +8000,21 @@ return (
               if (st === "hidden") return null;
               const isBlocked = st === "blocked";
               const isActive = menu === m;
+              // 🔢 메뉴 숫자 — 전자결재가 상단에 따로 없으면(일반 배차 화면) 결재 숫자는 HOME에 더한다
+              const apSep = (deptMode ? DEPT_MENUS[deptMode].includes("전자결재") : true) && menuState("전자결재") !== "hidden";
+              const apN = (apCountsNav.todo || 0) + (apCountsNav.mineNew || 0);
+              const navN = m === "HOME" ? (mailCountsNav.unread || 0) + (alertsNav.handover || 0) + (apSep ? 0 : apN)
+                : m === "전자결재" ? apN + (alertsNav.handover || 0)
+                : m === "기사관리" ? (canApproveSignup ? alertsNav.signupDriver || 0 : 0)
+                : m === "관리자메뉴" ? pendingSignups.length : 0;
+              const subBadges = {
+                HOME: { 공지사항: alertsNav.notice ? "N" : 0, "ap:inbox": apSep ? 0 : apCountsNav.todo, teamsched: 0 },
+                전자결재: { inbox: apCountsNav.todo, mine: apCountsNav.mineNew, handover: alertsNav.handover },
+                기사관리: { "acc:pending": canApproveSignup ? alertsNav.signupDriver : 0 },
+                관리자메뉴: { members: pendingSignups.length },
+              }[m];
               return (
-                <NavHover key={m} menu={m} disabled={isBlocked || st === "locked"} onOpenMenu={() => handleMenuClick(m)}>
+                <NavHover key={m} menu={m} badges={subBadges} disabled={isBlocked || st === "locked"} onOpenMenu={() => handleMenuClick(m)}>
                 <button
                   disabled={isBlocked}
                   onClick={() => handleMenuClick(m)}
@@ -8009,7 +8029,7 @@ return (
                 >
                   <ShellIcon name={KP_SIDE_ICONS[m] || "dashboard"} size={14} className={`kp-nav-ico shrink-0 ${isActive ? "" : "opacity-70"} ${deptMode && DEPT_MENUS[deptMode].length <= 8 ? "" : "hidden min-[2050px]:inline-block"}`} />
                   <EditableText id={`nav.${m}`} defaultText={m} />
-                  {m === "관리자메뉴" && pendingSignups.length > 0 && <span className="ml-1 min-w-[17px] h-[17px] px-1 inline-grid place-items-center rounded-full bg-rose-500 text-white text-[10px] font-black tabular-nums align-middle" title={`가입 승인 대기 ${pendingSignups.length}명`}>{pendingSignups.length > 99 ? "99+" : pendingSignups.length}</span>}
+                  {navN > 0 && st !== "locked" && <span className="ml-1 min-w-[17px] h-[17px] px-1 inline-grid place-items-center rounded-full bg-rose-500 text-white text-[10px] font-black tabular-nums align-middle" title={m === "관리자메뉴" ? `가입 승인 대기 ${navN}명` : `새 소식 ${navN}건`}>{navN > 99 ? "99+" : navN}</span>}
                   {st === "locked" && <span className="ml-1 opacity-60"><LockIcon /></span>}
                   {m === "인사이트" && st !== "locked" && <span className="ml-1 px-1 py-px rounded bg-[#8FB0F0]/20 text-[#8FB0F0] text-[9px] font-black tracking-wider align-middle">PRO</span>}
                 </button>
@@ -8390,7 +8410,7 @@ return (
           <KpSubNav code="DRIVERS" title="기사관리" icon="user" active={기사관리Tab} onSelect={set기사관리Tab}
             groups={[
               { label: "기사", items: [{ key: "drv", label: "기사관리", en: "DRIVERS", icon: "user", sub: ["전체", "일반", "직영", "지입", "임대", "블랙"].map((g) => ({ key: `d:${g}`, label: g === "전체" ? "전체 기사" : g, icon: g === "블랙" ? "alert" : g === "지입" ? "link" : g === "임대" ? "key" : "user", badge: g === "전체" ? 0 : (drivers || []).filter((d) => (d.등급 || "일반") === g && (String(d.이름 || "").trim() || String(d.차량번호 || "").trim())).length, soft: true })) }] },
-              { label: "기사 앱 계정", items: [{ key: "acc", label: "기사 앱 계정", en: "APP ACCOUNTS", icon: "phone", sub: [{ key: "acc:pending", label: "가입 승인", icon: "hourglass" }, { key: "acc:drivers", label: "승인된 기사", icon: "idcard" }] }] },
+              { label: "기사 앱 계정", items: [{ key: "acc", label: "기사 앱 계정", en: "APP ACCOUNTS", icon: "phone", sub: [{ key: "acc:pending", label: "가입 승인", icon: "hourglass", badge: alertsNav.signupDriver || 0, badgeTitle: "기사 가입 승인 대기" }, { key: "acc:drivers", label: "승인된 기사", icon: "idcard" }] }] },
               { label: "서류관리", items: [{ key: "docs", label: "서류관리", en: "DOCUMENTS", icon: "file", sub: [{ key: "docs:driver", label: "기사 제출 서류", icon: "file" }, { key: "docs:penalty", label: "과태료 · 사고 서류", icon: "alert" }] }] },
             ]}>
             {기사관리Tab.startsWith("d:") && (
@@ -60461,6 +60481,9 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                       ))}
                     </div>
                   )}
+                  {/* ⭐ 2026-11-02 올린 발령 공문(정정·취소) — 인사발령 화면에서 이력으로 옮겼다 */}
+                  <OrderNoticeHistory company={company} target={selected} isSelf={selected.uid === userId} canManage={canManage}
+                    myName={members.find(m => m.uid === userId)?.name || auth.currentUser?.email?.split("@")[0] || ""} />
                 </div>
               )}
             </div>

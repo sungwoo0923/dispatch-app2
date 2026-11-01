@@ -24,6 +24,8 @@ import {
   deleteDoc,
   onSnapshot,
   deleteField,
+  arrayRemove,
+  arrayUnion,
 } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import {
@@ -145,25 +147,15 @@ export const messagingPromise = isSupported().then((supported) => {
 //  예전 계정 문서에 같은 기기 토큰이 남아, 지금 쓰지 않는 회사 알림까지 이 기기로 오던 문제
 // ⭐ 2026-11-01 버그수정 — 예전엔 어느 기기에서 로그아웃하든 토큰을 지워서, PC에서 로그아웃만 해도
 //  핸드폰(앱) 알림 연결이 끊겨 인사발령·결재 등 모든 푸시가 안 갔다. 이제 "이 기기 토큰"일 때만 지운다
+// ⭐ 2026-11-02 로그아웃이 느리던 문제 — 예전엔 FCM 서버에 토큰을 다시 묻고(getToken)·계정 문서를 읽은 뒤(getDoc) 고쳐 써서
+//  안드로이드·느린 통신에서 몇 초씩 걸렸다. 이제 이 기기에 기억해 둔 토큰으로 "한 번만" 쓴다(서버는 fcmTokensOut에 든 기기는 안 보낸다)
+const FCM_LOCAL_KEY = "kpFcmToken";
 export async function clearFcmToken(uid) {
   if (!uid) return;
-  try {
-    const m = await messagingPromise;
-    if (!m || typeof Notification === "undefined" || Notification.permission !== "granted") return; // 알림 안 쓰는 기기(PC 등) — 건드리지 않음
-    const vapidKey = import.meta.env.VITE_FCM_VAPID_KEY;
-    if (!vapidKey) return;
-    const reg = ("serviceWorker" in navigator) ? await navigator.serviceWorker.getRegistration() : undefined;
-    const mine = await getToken(m, { vapidKey, serviceWorkerRegistration: reg }).catch(() => null);
-    if (!mine) return;
-    const snap = await getDoc(doc(db, "users", uid));
-    if (!snap.exists()) return;
-    const d = snap.data() || {};
-    const rest = (Array.isArray(d.fcmTokens) ? d.fcmTokens : []).filter((t) => t && t !== mine);
-    const patch = {};
-    if ((d.fcmTokens || []).includes(mine)) patch.fcmTokens = rest;
-    if (d.fcmToken === mine) { if (rest[0]) patch.fcmToken = rest[0]; else { patch.fcmToken = deleteField(); patch.fcmTokenAt = deleteField(); } }
-    if (Object.keys(patch).length) await updateDoc(doc(db, "users", uid), patch);
-  } catch { /* 무시 */ }
+  let mine = "";
+  try { mine = localStorage.getItem(FCM_LOCAL_KEY) || ""; } catch { /* 무시 */ }
+  if (!mine) return; // 이 기기는 알림 등록을 한 적이 없다(PC 등)
+  try { await updateDoc(doc(db, "users", uid), { fcmTokens: arrayRemove(mine), fcmTokensOut: arrayUnion(mine) }); } catch { /* 무시 */ }
 }
 
 export async function saveFcmToken(user) {
@@ -201,7 +193,8 @@ export async function saveFcmToken(user) {
     // ⭐ 2026-11-02 한 계정 여러 기기(안드로이드·아이폰·PC) — 최근 기기 5대까지 fcmTokens에 함께 저장(서버가 모두에게 보낸다)
     let list = [token];
     try { const cur = (await getDoc(doc(db, "users", user.uid))).data() || {}; list = [token, ...[cur.fcmToken, ...(Array.isArray(cur.fcmTokens) ? cur.fcmTokens : [])].filter((t) => t && t !== token)]; } catch { /* 무시 */ }
-    await updateDoc(doc(db, "users", user.uid), { fcmToken: token, fcmTokenAt: Date.now(), fcmTokens: [...new Set(list)].slice(0, 5) });
+    await updateDoc(doc(db, "users", user.uid), { fcmToken: token, fcmTokenAt: Date.now(), fcmTokens: [...new Set(list)].slice(0, 5), fcmTokensOut: arrayRemove(token) });
+    try { localStorage.setItem(FCM_LOCAL_KEY, token); } catch { /* 무시 */ }
     console.log("[FCM] 토큰 저장 완료");
   } catch (e) {
     console.error("[FCM] 토큰 발급/저장 실패:", e);
@@ -257,7 +250,8 @@ export async function diagnoseFcmToken(user) {
     if (!token) return { ok: false, reason: "getToken()이 토큰 없이 빈 값을 반환했습니다(원인 불명 — iOS Safari 자체 버그일 수 있음)." };
     let list = [token];
     try { const cur = (await getDoc(doc(db, "users", user.uid))).data() || {}; list = [token, ...[cur.fcmToken, ...(Array.isArray(cur.fcmTokens) ? cur.fcmTokens : [])].filter((t) => t && t !== token)]; } catch { /* 무시 */ }
-    await updateDoc(doc(db, "users", user.uid), { fcmToken: token, fcmTokenAt: Date.now(), fcmTokens: [...new Set(list)].slice(0, 5) });
+    await updateDoc(doc(db, "users", user.uid), { fcmToken: token, fcmTokenAt: Date.now(), fcmTokens: [...new Set(list)].slice(0, 5), fcmTokensOut: arrayRemove(token) });
+    try { localStorage.setItem(FCM_LOCAL_KEY, token); } catch { /* 무시 */ }
     return { ok: true, token };
   } catch (e) {
     return { ok: false, reason: `토큰 발급 중 오류: ${e?.name || ""} ${e?.message || e}` };

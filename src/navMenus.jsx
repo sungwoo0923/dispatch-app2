@@ -69,7 +69,8 @@ export function useSubnavTarget(code, keys, onSelect, labeled = null) {
 }
 
 // 상단 메뉴 버튼을 감싸서 — 마우스를 올리면 아래로 세부 메뉴 패널이 부드럽게 펼쳐진다
-export function NavHover({ menu, label, disabled = false, onOpenMenu, children }) {
+// badges — 세부 메뉴 항목별 숫자/"N" ({ key: 3 | "N" }) — 2026-11-02
+export function NavHover({ menu, label, disabled = false, onOpenMenu, badges = null, children }) {
   const base = MENU_SUBS[menu];
   const reg = base ? registeredItems(base.code) : null;
   // ⭐ 2026-11-01 세부 메뉴가 있는 메뉴는 처음부터 항상 펼친다(한 번 연 화면은 그 사람이 실제로 보는 항목으로)
@@ -135,7 +136,8 @@ export function NavHover({ menu, label, disabled = false, onOpenMenu, children }
                   className="w-full flex items-center gap-2.5 px-3 h-10 rounded-xl text-left text-[13.5px] font-bold text-white/80 hover:text-white hover:bg-white/[0.08] transition"
                   style={{ transitionDelay: shown ? `${i * 18}ms` : "0ms" }}>
                   <span className="w-1.5 h-1.5 rotate-45 bg-[#8FB0F0]/70 shrink-0" />
-                  <span className="truncate">{l}</span>
+                  <span className="truncate flex-1">{l}</span>
+                  {(() => { const b = badges?.[key]; const on = typeof b === "string" ? !!b : b > 0; return on ? <span className="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-rose-500 text-white text-[11px] font-black grid place-items-center tabular-nums">{typeof b === "number" && b > 99 ? "99+" : b}</span> : null; })()}
                 </button>
               ))}
             </div>

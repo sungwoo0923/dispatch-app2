@@ -24,7 +24,8 @@ const messaging = getMessaging();
 //  같이 쓰면 마지막에 앱을 연 기기만 알림을 받았다(아이폰이 "갑자기" 안 오던 원인). fcmTokens(최근 기기 목록)까지 모두 보낸다.
 function userTokens(u) {
   if (!u) return [];
-  return [...new Set([u.fcmToken, ...(Array.isArray(u.fcmTokens) ? u.fcmTokens : [])].filter((t) => typeof t === "string" && t))];
+  const out = new Set(Array.isArray(u.fcmTokensOut) ? u.fcmTokensOut : []); // 로그아웃한 기기
+  return [...new Set([u.fcmToken, ...(Array.isArray(u.fcmTokens) ? u.fcmTokens : [])].filter((t) => typeof t === "string" && t && !out.has(t)))];
 }
 
 // 🔥 users 컬렉션에서 fcmToken 전부 수집
@@ -4671,6 +4672,11 @@ exports.notifyApproval = functions.firestore.document("approvals/{id}").onWrite(
     if (a.status === "rejected" && b.status !== "rejected") { const r = (a.line || []).find((x) => x.status === "rejected"); msgs.push([a.drafterUid, `↩ 반려 · ${r?.name || ""}`, `${t}\n사유: ${r?.comment || ""}`]); }
     if (a.status === "cancelled" && b.status !== "cancelled") msgs.push([a.drafterUid, "결재 취소 승인", `${t} 문서가 결재 취소되었습니다.`]);
     if (a.cancel?.status === "rejected" && b.cancel?.status !== "rejected") { const r = (a.cancel.line || []).find((x) => x.status === "rejected"); msgs.push([a.drafterUid, `결재 취소 거부 · ${r?.name || ""}`, `${t}\n${r?.comment || ""}`]); }
+  }
+  // ⭐ 2026-11-02 참조(cc) — 최종 승인되면 기안자가 고른 참조자에게도 알린다(화면 안내대로)
+  if (b && a.status === "approved" && b.status !== "approved") {
+    (Array.isArray(a.ccUids) ? a.ccUids : []).filter((c) => c && c !== a.drafterUid && !(a.line || []).some((x) => x.uid === c))
+      .forEach((c) => msgs.push([c, `◇ 참조 · ${a.drafter?.name || ""}`, `${t} — 최종 승인된 문서입니다.`]));
   }
   for (const [uid, title, body, pk = "결재결과"] of msgs) {
     const u = await db.collection("users").doc(uid).get();

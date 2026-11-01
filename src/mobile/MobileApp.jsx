@@ -3814,7 +3814,8 @@ const [detailFrom, setDetailFrom] = useState(null);
   const appVersion = APP_VERSION;
 
   const logout = async () => {
-    await clearFcmToken(auth.currentUser?.uid);
+    // ⭐ 2026-11-02 로그아웃 지연 방지 — 알림 해제는 최대 1.2초만 기다린다(통신이 느려도 바로 로그아웃)
+    await Promise.race([clearFcmToken(auth.currentUser?.uid).catch(() => {}), new Promise((r) => setTimeout(r, 1200))]);
     try {
       await signOut(auth);
     } catch (e) {
@@ -7578,7 +7579,8 @@ function MobileSideMenu({
 
   const logout = async () => {
     if (!window.confirm("로그아웃 하시겠습니까?")) return;
-    await clearFcmToken(auth.currentUser?.uid);
+    // ⭐ 2026-11-02 로그아웃 지연 방지 — 알림 해제는 최대 1.2초만 기다린다(통신이 느려도 바로 로그아웃)
+    await Promise.race([clearFcmToken(auth.currentUser?.uid).catch(() => {}), new Promise((r) => setTimeout(r, 1200))]);
     try {
       await signOut(auth);
     } catch (e) {
@@ -17820,7 +17822,8 @@ function CopySelectModal({ order, onClose, onAfterFullCopy, onAfterDriverCopy, o
   useEffect(() => {
     const cname = localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
     if (!cname) return;
-    const unsub = onSnapshot(collection(db, "transportApplications"), (snap) => {
+    // ⭐ 2026-11-02 안드로이드 끊김 — 예전엔 모든 운송사 신청서(사업자등록증 이미지 포함, 문서당 수 MB)를 통째로 받았다 → 우리 회사만
+    const unsub = onSnapshot(query(collection(db, "transportApplications"), where("companyName", "==", cname.trim())), (snap) => {
       const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       const found = docs.find(d => (d.companyName || "").trim() === cname.trim() && d.type === "신규") ||
                     docs.find(d => (d.companyName || "").trim() === cname.trim());
