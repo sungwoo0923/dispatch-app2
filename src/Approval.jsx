@@ -20,7 +20,7 @@ import { kpConfirm } from "./kpDialog";
 import BankAccountInput, { ReasonTemplates } from "./BankAccountInput";
 import { createPortal } from "react-dom";
 import html2canvas from "html2canvas";
-import { printA4 } from "./a4Export";
+import { printA4, savePdf } from "./a4Export";
 import { TimeSelect } from "./kpInputs";
 import { useMyProfile, useUserNames, personName } from "./userNames";
 import { db, auth } from "./firebase";
@@ -31,7 +31,7 @@ import CustomDatePicker from "./CustomDatePicker";
 import CustomSelect from "./CustomSelect";
 import {
   APPROVAL_CATS, APPROVAL_FORMS, formOf, formsOfCat, initialData, missingFields, fieldText, suggestLine,
-  itemsTotal, costsTotal, fmtWon, dayDiff, bizDays, leaveEntitlement, leaveUseOf,
+  itemsTotal, costsTotal, fmtWon, dayDiff, bizDays, leaveEntitlement, leaveUseOf, rankOf,
 } from "./approvalForms";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
@@ -442,12 +442,17 @@ function useLineTemplates(company, uid) {
 }
 const pickUser = (staff, uid) => { const u = (staff || []).find((x) => x.uid === uid); return u ? { uid: u.uid, name: u.name || u.email || "", position: u.position || "", team: u.team || "" } : null; };
 
+// 👔 대표(대표·대표이사·사장)는 최종 결재자 — 결재자를 추가해도 사용자가 직접 순서를 바꾸지 않았다면 맨 뒤로
+const isCeoPos = (p) => /대표|사장/.test(String(p || "")) && !/부사장/.test(String(p || ""));
+const ceoLast = (list) => [...list.filter((x) => !isCeoPos(x.position)), ...list.filter((x) => isCeoPos(x.position))];
 function LineEditor({ line, setLine, cc, setCc, staff, me, company, cat }) {
   const tpls = useLineTemplates(company, me.uid);
   const used = [me.uid, ...line.map((s) => s.uid)];
-  const move = (i, d) => setLine((p) => { const n = [...p]; const j = i + d; if (j < 0 || j >= n.length) return p; [n[i], n[j]] = [n[j], n[i]]; return n; });
+  const manualOrder = React.useRef(false); // ▲▼로 직접 순서를 바꿨으면 자동 정렬하지 않는다
+  const addTo = (users) => setLine((p) => { const n = [...p, ...users]; return manualOrder.current ? n : ceoLast(n); });
+  const move = (i, d) => setLine((p) => { manualOrder.current = true; const n = [...p]; const j = i + d; if (j < 0 || j >= n.length) return p; [n[i], n[j]] = [n[j], n[i]]; return n; });
   const load = (id) => {
-    if (id === "__auto") { setLine(suggestLine(staff, me)); return; }
+    if (id === "__auto") { manualOrder.current = false; setLine(suggestLine(staff, me)); return; }
     const t = tpls.find((x) => x.id === id);
     if (!t) return;
     setLine((t.steps || []).map((s) => ({ ...(pickUser(staff, s.uid) || s), kind: s.kind || "결재" })).filter((s) => s.uid !== me.uid));
@@ -489,8 +494,8 @@ function LineEditor({ line, setLine, cc, setCc, staff, me, company, cat }) {
           </div>
         ))}
         <div className="flex gap-1.5">
-          <div className="flex-1 min-w-0"><StaffSelect value="" staff={staff} exclude={used} placeholder="+ 결재자 추가" onChange={(uid) => { const u = pickUser(staff, uid); if (u) setLine((p) => [...p, { ...u, kind: "결재" }]); }} /></div>
-          <StaffMultiPick staff={staff} exclude={used} label="결재자 여러 명" onAdd={(uids) => setLine((p) => [...p, ...uids.map((x) => pickUser(staff, x)).filter(Boolean).map((u) => ({ ...u, kind: "결재" }))])} />
+          <div className="flex-1 min-w-0"><StaffSelect value="" staff={staff} exclude={used} placeholder="+ 결재자 추가" onChange={(uid) => { const u = pickUser(staff, uid); if (u) addTo([{ ...u, kind: "결재" }]); }} /></div>
+          <StaffMultiPick staff={staff} exclude={used} label="결재자 여러 명" onAdd={(uids) => addTo(uids.map((x) => pickUser(staff, x)).filter(Boolean).map((u) => ({ ...u, kind: "결재" })))} />
         </div>
       </div>
       <div>
@@ -586,6 +591,73 @@ function LeaveCard({ leave, thisDays }) {
 
 // ─────────────────────────── 작성 화면 ───────────────────────────
 // ⚙ 결재 설정(회사별) — 일일 업무일지 자동 승인(임원이 켜고 끈다)
+// 🔗 최종 승인 후 연동(장부·사직서·육아휴직) — 결재자가 승인할 때와 자동 승인될 때 모두 같은 처리
+function runApprovedHooks(d, company, me) {
+  // 🗂 인사발령 품의 최종 승인 → 대상자 인사 정보에 "결재 완료 발령"(인사기록 › 인사발령에서 [결재 내용 불러오기] → 공문 게시)
+  if (d.form === "personnel" && d.data?.target) {
+    const x = d.data;
+    updateDoc(doc(db, "users", x.target), {
+      pendingOrder: { approvalId: d.id || "", docNo: d.docNo || "", kind: x.kind || "", toTeam: x.toTeam || "", toPosition: x.toPosition || "", date: x.date || "", reason: x.reason || "", note: x.note || "", at: Date.now() },
+    }).catch(() => {});
+  }
+  // 🔗 2026-11-01 비용·지출 결의 최종 승인 → 수입·지출 장부에 자동 기록(경리가 [가져오기] 누를 필요 없음, 같은 문서는 한 줄)
+  if (d.cat === "expense" && Number(d.amount) > 0) {
+    const dd = d.data || {};
+    defaultFundId(db, company, "expense").then((fundId) => setDoc(doc(db, "acctLedger", `appr_${d.id}`), {
+      fundId, date: dd.date || dd.spendDate || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), type: "지출", account: dd.account || "기타",
+      item: d.title || d.formLabel || "지출결의", amount: Number(d.amount) || 0, method: dd.pay || dd.method || "법인카드", vendor: dd.vendor || "",
+      memo: `전자결재 ${d.docNo || ""} · ${d.drafter?.name || ""}`, evidence: "전자결재", receipt: (d.images || [])[0] || "", sourceId: d.id, auto: "approval",
+      companyName: company, createdAt: serverTimestamp(), createdBy: me?.email || "",
+    }, { merge: true })).catch(() => {});
+  }
+  // 🔗 2026-11-01 사직서 최종 승인 → 인사 정보에 "퇴사 예정"(퇴직 희망일) 자동 등록 — 그날 인사관리부에서 [퇴사 확정]
+  if (d.form === "resign" && d.drafterUid) {
+    const last = d.data?.last || "";
+    const reason = String(d.data?.reason || "").trim();
+    const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+    updateDoc(doc(db, "users", d.drafterUid), {
+      resignPlan: { type: "자진 퇴사", date: last, reason: reason || "사직서 제출", noticeDate: today, by: "전자결재", docNo: d.docNo || "" },
+      personnelHistory: arrayUnion({ date: today, type: "사직서 승인", detail: `퇴직 희망일 ${last} · 전자결재 ${d.docNo || ""}` }),
+    }).catch(() => {});
+  }
+  // 👶 육아휴직·출산휴가 최종 승인 → 인사 정보 재직 상태 반영(권한이 없으면 인사관리부에서 직접 바꾸면 된다)
+  if (["parental", "maternity"].includes(d.form) && d.drafterUid) {
+    const kind = d.data?.kind || "";
+    const st = d.form === "parental" ? (kind === "육아기 근로시간 단축" ? "" : "육아휴직") : (kind === "출산전후휴가" ? "출산휴가" : "");
+    const pr = d.data?.period || {};
+    const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+    updateDoc(doc(db, "users", d.drafterUid), {
+      ...(st ? { employmentStatus: st, leave: { type: st, from: pr.start || "", to: pr.end || "", memo: `전자결재 ${d.docNo || ""}` } } : {}),
+      personnelHistory: arrayUnion({ date: today, type: kind || st, detail: `${pr.start || ""}${pr.end ? ` ~ ${pr.end}` : ""} · 전자결재 ${d.docNo || ""}` }),
+    }).catch(() => {});
+  }
+}
+
+// 🤖 2026-11-01 자동 승인(부재·위임) — approvalSettings/{회사}.autoApprovers[uid] = { on, from, to, maxAmount, skipForms[], name }
+//  결재 차례가 켜 둔 사람에게 오면 그 자리에서 승인하고 다음 결재자로 넘긴다(기록: "자동 승인(부재·위임 설정)")
+const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+export function autoApproveOn(cfg, uid, d) {
+  const a = cfg?.autoApprovers?.[uid];
+  if (!a || a.on !== true) return false;
+  const t = kstToday();
+  if (a.from && t < a.from) return false;
+  if (a.to && t > a.to) return false;
+  if (Number(a.maxAmount) > 0 && Number(d.amount || 0) > Number(a.maxAmount)) return false;
+  if ((a.skipForms || []).includes(d.form)) return false;
+  return true;
+}
+export function runAutoApprove(d, cfg) {
+  const line = (d.line || []).map((x) => ({ ...x }));
+  let i = Number(d.step) || 0; let changed = false; const hist = [];
+  while (i < line.length && line[i].status === "pending" && autoApproveOn(cfg, line[i].uid, d)) {
+    line[i] = { ...line[i], status: "approved", at: Date.now(), comment: "자동 승인(부재·위임 설정)", auto: true };
+    hist.push({ at: Date.now(), uid: line[i].uid, name: line[i].name, action: "자동 승인", comment: "부재·위임 설정" });
+    changed = true;
+    if (i + 1 < line.length) { line[i + 1] = { ...line[i + 1], status: "pending" }; i += 1; } else return { changed, line, step: i, status: "approved", hist };
+  }
+  return { changed, line, step: i, status: "pending", hist };
+}
+
 export function useApprovalSettings(company) {
   const [s, setS] = React.useState({});
   React.useEffect(() => {
@@ -678,7 +750,15 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
         history: [{ at: Date.now(), uid: me.uid, name: me.name, action: "상신", comment: "" }, ...(auto ? [{ at: Date.now(), uid: "auto", name: "자동 승인", action: "승인", comment: "임원 설정 — 일일 업무일지 자동 승인" }] : [])], redraftOf: preset?.id || null,
         ...(auto ? { autoApproved: true } : {}),
       };
-      await addDoc(collection(db, "approvals"), payload);
+      const ref = await addDoc(collection(db, "approvals"), payload);
+      // 🤖 첫 결재자부터 자동 승인(부재·위임)이 켜져 있으면 바로 처리(상신 직후 한 번 더 저장)
+      if (!auto) {
+        const r = runAutoApprove({ ...payload, id: ref.id }, apSettings);
+        if (r.changed) {
+          await updateDoc(ref, { line: r.line, step: r.step, status: r.status, drafterUnread: true, history: arrayUnion(...r.hist), updatedAt: serverTimestamp() }).catch(() => {});
+          if (r.status === "approved") runApprovedHooks({ ...payload, id: ref.id }, company, me);
+        }
+      }
       onDone();
     } catch (e) { setMsg(e.message || "상신 실패"); } finally { setBusy(false); }
   };
@@ -786,6 +866,7 @@ function Progress({ d }) {
 }
 
 function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = false }) {
+  const apCfg = useApprovalSettings(company);
   const form = formOf(d.form);
   const [comment, setComment] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -823,6 +904,11 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
           const next = i + 1 < line.length ? i + 1 : -1;
           if (next >= 0) line[next] = { ...line[next], status: "pending" };
           Object.assign(patch, { line, step: next >= 0 ? next : i, status: next >= 0 ? "pending" : "approved", drafterUnread: true });
+          // 🤖 다음 결재자가 자동 승인(부재·위임)을 켜 두었으면 이어서 승인
+          if (next >= 0) {
+            const r = runAutoApprove({ ...d, line, step: next }, apCfg);
+            if (r.changed) { Object.assign(patch, { line: r.line, step: r.step, status: r.status }); patch.history = arrayUnion(h, ...r.hist); }
+          }
         } else {
           line[i] = { ...line[i], status: "rejected", at: now, comment: comment.trim() };
           Object.assign(patch, { line, status: "rejected", drafterUnread: true });
@@ -845,37 +931,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
         patch.cancel = c;
       }
       await updateDoc(doc(db, "approvals", d.id), patch);
-      // 🔗 2026-11-01 비용·지출 결의 최종 승인 → 수입·지출 장부에 자동 기록(경리가 [가져오기] 누를 필요 없음, 같은 문서는 한 줄)
-      if (patch.status === "approved" && d.cat === "expense" && Number(d.amount) > 0) {
-        const dd = d.data || {};
-        defaultFundId(db, company, "expense").then((fundId) => setDoc(doc(db, "acctLedger", `appr_${d.id}`), {
-          fundId, date: dd.date || dd.spendDate || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), type: "지출", account: dd.account || "기타",
-          item: d.title || d.formLabel || "지출결의", amount: Number(d.amount) || 0, method: dd.pay || dd.method || "법인카드", vendor: dd.vendor || "",
-          memo: `전자결재 ${d.docNo || ""} · ${d.drafter?.name || ""}`, evidence: "전자결재", receipt: (d.images || [])[0] || "", sourceId: d.id, auto: "approval",
-          companyName: company, createdAt: serverTimestamp(), createdBy: me?.email || "",
-        }, { merge: true })).catch(() => {});
-      }
-      // 🔗 2026-11-01 사직서 최종 승인 → 인사 정보에 "퇴사 예정"(퇴직 희망일) 자동 등록 — 그날 인사관리부에서 [퇴사 확정]
-      if (patch.status === "approved" && d.form === "resign" && d.drafterUid) {
-        const last = d.data?.last || "";
-        const reason = String(d.data?.reason || "").trim();
-        const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
-        updateDoc(doc(db, "users", d.drafterUid), {
-          resignPlan: { type: "자진 퇴사", date: last, reason: reason || "사직서 제출", noticeDate: today, by: "전자결재", docNo: d.docNo || "" },
-          personnelHistory: arrayUnion({ date: today, type: "사직서 승인", detail: `퇴직 희망일 ${last} · 전자결재 ${d.docNo || ""}` }),
-        }).catch(() => {});
-      }
-      // 👶 육아휴직·출산휴가 최종 승인 → 인사 정보 재직 상태 반영(권한이 없으면 인사관리부에서 직접 바꾸면 된다)
-      if (patch.status === "approved" && ["parental", "maternity"].includes(d.form) && d.drafterUid) {
-        const kind = d.data?.kind || "";
-        const st = d.form === "parental" ? (kind === "육아기 근로시간 단축" ? "" : "육아휴직") : (kind === "출산전후휴가" ? "출산휴가" : "");
-        const pr = d.data?.period || {};
-        const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
-        updateDoc(doc(db, "users", d.drafterUid), {
-          ...(st ? { employmentStatus: st, leave: { type: st, from: pr.start || "", to: pr.end || "", memo: `전자결재 ${d.docNo || ""}` } } : {}),
-          personnelHistory: arrayUnion({ date: today, type: kind || st, detail: `${pr.start || ""}${pr.end ? ` ~ ${pr.end}` : ""} · 전자결재 ${d.docNo || ""}` }),
-        }).catch(() => {});
-      }
+      if (patch.status === "approved") runApprovedHooks(d, company, me);
       // 📧 결과는 기안자 사내메일(공문함)에도 기록 — 푸시·배너는 notifyApproval·BannerCenter가 따로 한 번 보낸다
       const result = patch.status === "approved" ? ["결재 완료", "문서가 최종 승인되었습니다."]
         : patch.status === "rejected" ? ["반려", `${me.name}님이 문서를 반려했습니다.\n반려 사유: ${comment.trim()}`]
@@ -896,6 +952,14 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
     const box = paperRef.current?.closest?.("[data-fitpaper]"); const prev = box?.style.zoom;
     if (box) box.style.zoom = "1";
     try { await printA4(paperRef.current, d.docNo); } finally { if (box) box.style.zoom = prev; }
+  };
+  // ⭐ 2026-11-01 PDF 저장(A4 나눔) — 모든 결재 문서
+  const [pdfBusy, setPdfBusy] = React.useState(false);
+  const pdf = async () => {
+    const box = paperRef.current?.closest?.("[data-fitpaper]"); const prev = box?.style.zoom;
+    if (box) box.style.zoom = "1";
+    setPdfBusy(true);
+    try { await savePdf(paperRef.current, `${d.docNo || "전자결재"}_${String(d.title || d.formLabel || "").replace(/[\\/:*?"<>|]/g, "_")}`); } catch (e) { window.alert(`PDF 저장 실패: ${e.message}`); } finally { if (box) box.style.zoom = prev; setPdfBusy(false); }
   };
 
   // ⭐ 2026-10-31 inline — 넓은 화면에서는 결재함 오른쪽에 바로 미리보기(왼쪽 목록 · 오른쪽 문서)
@@ -975,6 +1039,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
                 return <button type="button" onClick={async () => { if (!await kpConfirm("내 보관함에서 이 문서를 삭제할까요?\n(회사 기록 원본은 남고, 결재함 › 삭제한 문서에서 되돌릴 수 있습니다)")) return; await updateDoc(doc(db, "approvals", d.id), { hiddenBy: arrayUnion(me.uid) }).catch((e) => window.alert(e.message)); onClose(); }} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#5B6B85]">삭제</button>;
               })()}
               <button type="button" onClick={print} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#3A4A66]">인쇄</button>
+              <button type="button" disabled={pdfBusy} onClick={pdf} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13.5px] font-black disabled:opacity-50">{pdfBusy ? "저장 중…" : "PDF 저장"}</button>
             </div>
             {mine && d.status === "pending" && (
               <div className="text-[12.5px] text-[#5B6B85] leading-relaxed">
@@ -1000,7 +1065,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
 }
 
 // ─────────────────────────── 문서 목록 ───────────────────────────
-function DocList({ docs, onOpen, empty, uid }) {
+function DocList({ docs, onOpen, empty, uid, compact = false }) {
   if (docs === null) return <div className="py-16 text-center text-[14.5px] text-[#5B6B85]">불러오는 중…</div>;
   if (!docs.length) return (
     <div className="py-16 text-center">
@@ -1025,22 +1090,24 @@ function DocList({ docs, onOpen, empty, uid }) {
       {g.list.map((d) => (
         <button key={d.id} type="button" onClick={() => onOpen(d)} className="w-full text-left px-3.5 md:px-5 py-3.5 hover:bg-[#F8FAFD] flex items-center gap-2.5 md:gap-4">
           <span className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}><ShellIcon name={catOf(d.cat).icon} size={18} /></span>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
               <span className="text-[12px] font-black px-1.5 py-0.5 rounded border border-[#0F1A30] text-[#0F1A30] shrink-0">{d.formLabel}</span>
-              {myTurn(d, uid) && <span className="text-[12px] font-black px-1.5 py-0.5 rounded bg-[#0F1A30] text-white shrink-0">{cancelTurn(d, uid) ? "취소 검토" : "내 차례"}</span>}
+              {myTurn(d, uid) && !cancelTurn(d, uid) && <span className="text-[12px] font-black px-1.5 py-0.5 rounded bg-[#0F1A30] text-white shrink-0">내 차례</span>}
               {(mineUnread(d, uid) || ccUnread(d, uid)) && <span className="w-[18px] h-[18px] rounded-full bg-rose-500 text-white text-[11px] font-black flex items-center justify-center shrink-0">N</span>}
-              {d.cancel?.status === "pending" && d.status === "approved" && !cancelTurn(d, uid) && <span className="text-[12px] font-black px-1.5 py-0.5 rounded border border-[#9AA9C3] text-[#5B6B85] shrink-0">취소 요청 중</span>}
-              <span className="text-[14.5px] font-black text-[#0F1A30] truncate">{d.title}</span>
+              <span className="text-[14.5px] font-black text-[#0F1A30] truncate min-w-0 max-w-full">{d.title}</span>
             </div>
-            <div className="text-[13.5px] text-[#5B6B85] truncate mt-0.5">{d.summary}</div>
+            <div className="text-[13.5px] text-[#5B6B85] truncate mt-0.5">{compact ? `${d.drafter?.name || ""} ${d.drafter?.position || ""} · ` : ""}{d.summary}</div>
           </div>
-          <div className="hidden xl:block text-right shrink-0 w-[120px]">
+          <div className={`${compact ? "hidden" : "hidden xl:block"} text-right shrink-0 w-[120px]`}>
             <div className="text-[14px] font-bold text-[#3A4A66]">{d.drafter?.name} {d.drafter?.position}</div>
             <div className="text-[12.5px] text-[#5B6B85]" style={{ fontFamily: MONO }}>{ymd(toMs(d.createdAt))}</div>
           </div>
-          <div className="shrink-0 w-[150px] hidden md:flex justify-end"><Progress d={d} /></div>
-          <span className={`shrink-0 w-[72px] text-center h-7 leading-7 rounded-full text-[13px] font-black ${d.status === "approved" ? "bg-[#0F1A30] text-white" : d.status === "pending" ? "bg-[#EEF3FB] text-[#1B2B4B]" : "border border-[#DCE3EE] text-[#5B6B85]"}`}>{STATUS[d.status]}</span>
+          <div className={`shrink-0 w-[150px] ${compact ? "hidden" : "hidden md:flex"} justify-end`}><Progress d={d} /></div>
+          {/* ⭐ 2026-11-01 결재 완료 후 취소 요청이 들어오면 상태 칸 자체가 "취소 요청"(내가 검토할 차례면 "취소 검토")으로 바뀐다 */}
+          {d.status === "approved" && d.cancel?.status === "pending"
+            ? <span className={`shrink-0 w-[72px] text-center h-7 leading-7 rounded-full text-[13px] font-black ${cancelTurn(d, uid) ? "bg-[#B54708] text-white" : "bg-[#FFF4E5] text-[#B54708] border border-[#FEDF89]"}`}>{cancelTurn(d, uid) ? "취소 검토" : "취소 요청"}</span>
+            : <span className={`shrink-0 w-[72px] text-center h-7 leading-7 rounded-full text-[13px] font-black ${d.status === "approved" ? "bg-[#0F1A30] text-white" : d.status === "pending" ? "bg-[#EEF3FB] text-[#1B2B4B]" : "border border-[#DCE3EE] text-[#5B6B85]"}`}>{STATUS[d.status]}</span>}
         </button>
       ))}
       </div>
@@ -1198,6 +1265,68 @@ function LinesPage({ company, me, staff }) {
 
 // ─────────────────────────── 메인 ───────────────────────────
 //  page: inbox | mine | leave | expense | draft | lines
+// 🤖 2026-11-01 자동 승인(부재·위임) 설정 카드 — 임원(이사 이상)·관리자. 켜면 결재 차례가 왔을 때 자동 승인
+const AUTO_SKIP_FORMS = [["resign", "사직서"], ["parental", "육아휴직"], ["maternity", "출산휴가"], ["accident", "사고처리"], ["rate", "운임 변경"]];
+function AutoApproveCard({ company, me, todo = [] }) {
+  const cfg = useApprovalSettings(company);
+  const cur = cfg?.autoApprovers?.[me.uid] || {};
+  const [f, setF] = React.useState(null);
+  const [open, setOpen] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  React.useEffect(() => { if (open && !f) setF({ on: !!cur.on, from: cur.from || "", to: cur.to || "", maxAmount: String(cur.maxAmount || ""), skipForms: cur.skipForms || ["resign"] }); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  const active = autoApproveOn(cfg, me.uid, { amount: 0, form: "" });
+  const save = async (next) => {
+    setBusy(true);
+    try {
+      const v = { on: !!next.on, from: next.from || "", to: next.to || "", maxAmount: Number(String(next.maxAmount || "").replace(/[^\d]/g, "")) || 0, skipForms: next.skipForms || [], name: me.name || "", position: me.position || "", updatedAt: Date.now() };
+      await setDoc(doc(db, "approvalSettings", company), { companyName: company, autoApprovers: { [me.uid]: v } }, { merge: true });
+      // 켜면 지금 내 차례인 문서도 바로 처리
+      if (v.on) {
+        const cfg2 = { autoApprovers: { [me.uid]: v } };
+        let n = 0;
+        for (const d of todo) {
+          const r = runAutoApprove(d, cfg2);
+          if (!r.changed) continue;
+          await updateDoc(doc(db, "approvals", d.id), { line: r.line, step: r.step, status: r.status, drafterUnread: true, history: arrayUnion(...r.hist), updatedAt: serverTimestamp() });
+          if (r.status === "approved") runApprovedHooks(d, company, me);
+          n += 1;
+        }
+        if (n) window.alert(`지금 대기 중이던 문서 ${n}건을 자동 승인했습니다.`);
+      }
+      setOpen(false); setF(null);
+    } catch (e) { window.alert(`저장 실패: ${e.message}`); } finally { setBusy(false); }
+  };
+  return (
+    <div className="rounded-2xl border overflow-hidden" style={{ borderColor: active ? "#D7BC82" : "#E3E8F0", background: active ? "linear-gradient(120deg,#FFFBF2,#FFF4E5)" : "#fff" }}>
+      <div className="px-4 py-3 flex items-center gap-3 flex-wrap">
+        <span className={`w-10 h-10 rounded-xl grid place-items-center text-[12px] font-black shrink-0 ${active ? "text-[#1A1405]" : "bg-[#EEF3FC] text-[#1B2B4B]"}`} style={active ? { background: "linear-gradient(180deg,#F1DFB4,#D7BC82)" } : undefined}>AUTO</span>
+        <div className="flex-1 min-w-0">
+          <div className="text-[15px] font-black text-[#0F1A30]">자동 승인(부재·위임) {active ? <span className="ml-1 text-[12px] font-black px-2 py-0.5 rounded-full bg-[#B88A2E] text-white">켜짐</span> : <span className="ml-1 text-[12px] font-bold text-[#9AA9C3]">꺼짐</span>}</div>
+          <div className="text-[12.5px] text-[#7A879C] truncate">{active ? `${cur.from || "오늘"} ~ ${cur.to || "끌 때까지"}${cur.maxAmount ? ` · ${Number(cur.maxAmount).toLocaleString()}원 이하만` : ""}${(cur.skipForms || []).length ? ` · 제외: ${(cur.skipForms || []).map((k) => (AUTO_SKIP_FORMS.find((x) => x[0] === k) || [k, k])[1]).join(", ")}` : ""}` : "출장·부재로 결재가 어려울 때 켜 두면, 내 결재 차례가 오는 즉시 자동으로 승인됩니다"}</div>
+        </div>
+        {active && <button type="button" disabled={busy} onClick={() => save({ ...cur, on: false })} className="h-9 px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-black text-[#B42318]">끄기</button>}
+        <button type="button" onClick={() => setOpen((o) => !o)} className="h-9 px-3.5 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black">{open ? "닫기" : "설정"}</button>
+      </div>
+      {open && f && (
+        <div className="px-4 pb-4 pt-1 border-t border-[#EEE3CC] space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <label className="col-span-2 md:col-span-1 flex items-center gap-2 h-11 px-3 rounded-xl bg-white border border-[#DCE3EE] text-[14px] font-black text-[#0F1A30]"><input type="checkbox" checked={f.on} onChange={(e) => setF({ ...f, on: e.target.checked })} />자동 승인 켜기</label>
+            <div><div className="text-[12px] font-bold text-[#5B6B85] mb-1">시작일(비우면 오늘부터)</div><CustomDatePicker value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} className={inp} showIcon /></div>
+            <div><div className="text-[12px] font-bold text-[#5B6B85] mb-1">종료일(비우면 끌 때까지)</div><CustomDatePicker value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} className={inp} showIcon /></div>
+            <div><div className="text-[12px] font-bold text-[#5B6B85] mb-1">금액 상한(지출결의)</div><input inputMode="numeric" value={f.maxAmount ? Number(f.maxAmount).toLocaleString() : ""} onChange={(e) => setF({ ...f, maxAmount: e.target.value.replace(/[^\d]/g, "") })} className={`${inp} text-right`} placeholder="제한 없음" /></div>
+          </div>
+          <div>
+            <div className="text-[12px] font-bold text-[#5B6B85] mb-1">자동 승인하지 않을 문서(직접 결재)</div>
+            <div className="flex flex-wrap gap-1.5">{AUTO_SKIP_FORMS.map(([k, l]) => { const on = f.skipForms.includes(k); return <button key={k} type="button" onClick={() => setF({ ...f, skipForms: on ? f.skipForms.filter((x) => x !== k) : [...f.skipForms, k] })} className={`h-8 px-3 rounded-full text-[12.5px] font-black border ${on ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}>{on ? "✓ " : ""}{l}</button>; })}</div>
+          </div>
+          <div className="rounded-xl bg-white border border-[#E3E8F0] px-3 py-2 text-[12px] text-[#5B6B85] leading-relaxed">자동 승인된 결재는 문서에 "자동 승인(부재·위임 설정)"으로 기록되고, 기안자에게 결과가 그대로 통보됩니다. 금액 상한을 넘거나 제외한 문서는 평소처럼 직접 결재합니다.</div>
+          <div className="flex justify-end gap-2"><button type="button" onClick={() => { setOpen(false); setF(null); }} className="h-10 px-4 rounded-xl border border-[#DCE3EE] text-[13.5px] font-bold text-[#5B6B85]">취소</button><button type="button" disabled={busy} onClick={() => save(f)} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black disabled:opacity-50">{busy ? "저장 중…" : "저장"}</button></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ApprovalCenter({ company, me, page, setPage, openId, onOpened }) {
   const staff = useCompanyStaff(company);
   const rawList = useApprovals(me.uid);
@@ -1227,6 +1356,8 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
     return { ...me, name: personName(pf) || personName(st) || me.name, team: pf.team || st?.team || me.team || "", position: pf.position || st?.position || me.position || "" };
   }, [me, staff, myProfile]);
   const cur = open ? ([...(list || []), ...(companyAll || [])].find((x) => x.id === open) || null) : null;
+  // ⭐ 2026-11-01 다른 메뉴(결재함↔근태 신청 등)로 옮기면 열려 있던 문서를 닫는다 — 예전엔 마지막으로 본 문서가 다른 메뉴에서 팝업으로 떴다
+  React.useEffect(() => { setOpen(null); }, [page]);
   // 배너를 눌러 들어오면 그 문서를 바로 연다
   React.useEffect(() => { if (openId) { setOpen(openId); onOpened?.(); } }, [openId]); // eslint-disable-line react-hooks/exhaustive-deps
   const leave = useLeaveStatus(meFull, list);
@@ -1280,7 +1411,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
             return (<>
               <Tabs tab={tab} setTab={setTab} tabs={keys.map((k) => [k, label[k], F(k).length, k === "cc" ? F(k).filter((d) => ccUnread(d, uid)).length : 0])} />
               <ListTools f={lf} setF={setLf} drafters={drafters} />
-              <DocList uid={uid} docs={tab === "company" ? (companyAll === null ? null : F("company")) : (list === null ? null : F(tab))} onOpen={(d) => setOpen(d.id)} empty={lf.q || lf.from || lf.who ? "조건에 맞는 문서가 없습니다" : tab === "todo" ? "결재할 문서가 없습니다" : "문서가 없습니다"} />
+              <DocList compact={wide} uid={uid} docs={tab === "company" ? (companyAll === null ? null : F("company")) : (list === null ? null : F(tab))} onOpen={(d) => setOpen(d.id)} empty={lf.q || lf.from || lf.who ? "조건에 맞는 문서가 없습니다" : tab === "todo" ? "결재할 문서가 없습니다" : "문서가 없습니다"} />
             </>);
           })()}
         </div>
@@ -1294,7 +1425,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
             return (<>
               <Tabs tab={tab} setTab={setTab} tabs={keys.map(([k, l]) => [k, l, M(k).length, unreadIn(M(k))])} />
               <ListTools f={lf} setF={setLf} />
-              <DocList uid={uid} docs={list === null ? null : M(tab)} onOpen={(d) => setOpen(d.id)} empty={lf.q || lf.from ? "조건에 맞는 문서가 없습니다" : "올린 문서가 없습니다. 위 버튼으로 새 문서를 작성하세요."} />
+              <DocList compact={wide} uid={uid} docs={list === null ? null : M(tab)} onOpen={(d) => setOpen(d.id)} empty={lf.q || lf.from ? "조건에 맞는 문서가 없습니다" : "올린 문서가 없습니다. 위 버튼으로 새 문서를 작성하세요."} />
             </>);
           })()}
         </div>
@@ -1322,6 +1453,8 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
           )}
         </div>
       </div>
+
+      {page === "inbox" && (admin || rankOf(meFull.position) >= rankOf("이사")) && <AutoApproveCard company={company} me={meFull} todo={sets.todo} />}
 
       {isCat && (
         <>

@@ -381,6 +381,19 @@ export const APPROVAL_FORMS = [
       { k: "prevent", label: "재발 방지 대책", type: "textarea", rows: 3, required: true },
     ],
     summary: (d) => `${d.kind || "경위서"} · ${d.date || ""}` },
+  // 🗂 2026-11-01 인사발령 품의 — 임원 결재 후 인사관리부에서 공문(인사발령) 게시. 최종 승인되면 대상자 인사 정보에 "결재 완료 발령"이 남는다
+  { key: "personnel", cat: "report", label: "인사발령 품의", title: "인 사 발 령 품 의 서", code: "RP",
+    fields: [
+      { k: "target", label: "발령 대상자", type: "staff", required: true },
+      { k: "kind", label: "발령 구분", type: "select", options: ["승진", "전보(부서 이동)", "직책 변경", "신규 임용", "겸직", "휴직", "복직", "강등", "기타"], def: "승진" },
+      { k: "fromText", label: "현 소속·직책", type: "text", ph: "예) 운송팀 대리" },
+      { k: "toTeam", label: "발령 부서", type: "text", required: true, half: true, ph: "예) 운송팀" },
+      { k: "toPosition", label: "발령 직책", type: "text", required: true, half: true, ph: "예) 과장" },
+      { k: "date", label: "발령일", type: "date", required: true },
+      { k: "reason", label: "발령 사유", templates: ["정기 승진(근무 평가 우수)", "조직 개편에 따른 전보", "결원 충원", "본인 희망 전보", "직무 역량 강화"], type: "textarea", required: true },
+      { k: "note", label: "처우 변경(선택)", type: "text", ph: "예) 직책수당 월 10만원 신설" },
+    ],
+    summary: (d) => `${d.kind || "인사발령"} → ${[d.toTeam, d.toPosition].filter(Boolean).join(" ")} · ${d.date || ""}` },
   { key: "resign", cat: "report", label: "사직서", title: "사 직 서", code: "RR",
     fields: [
       { k: "hire", label: "입사일", type: "date", half: true },

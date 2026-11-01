@@ -5,6 +5,7 @@
 import React from "react";
 import { collection, deleteDoc, doc, onSnapshot, updateDoc, arrayUnion } from "firebase/firestore";
 import { db } from "./firebase";
+import { savePdf } from "./a4Export";
 import { ShellIcon } from "./AdminShell";
 import { HandoverWriter, handoverReceivers } from "./HomeWriters";
 import { useUserNames } from "./userNames";
@@ -25,6 +26,8 @@ export function useHandoverUnread(uid) {
 }
 
 export default function HandoverCenter({ company, me, isViewer = false }) {
+  const pdfRef = React.useRef(null);
+  const [pdfBusy, setPdfBusy] = React.useState(false);
   const [list, setList] = React.useState(null);
   const [tab, setTab] = React.useState("in");
   const [open, setOpen] = React.useState(null);
@@ -146,9 +149,10 @@ export default function HandoverCenter({ company, me, isViewer = false }) {
                 <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>HANDOVER · {cur.date || ""}</div>
                 <div className="text-[17px] font-black truncate">{dateLabel(cur)}</div>
               </div>
+              <button type="button" disabled={pdfBusy} onClick={async () => { setPdfBusy(true); try { await savePdf(pdfRef.current, `인수인계_${cur.date || ""}_${cur.author || ""}`); } catch (e) { window.alert(`PDF 저장 실패: ${e.message}`); } finally { setPdfBusy(false); } }} className="h-9 px-3 rounded-xl bg-white text-[#0F1A30] text-[12.5px] font-black shrink-0 disabled:opacity-50">{pdfBusy ? "저장 중…" : "PDF 저장"}</button>
               <button type="button" onClick={() => setOpen(null)} className="w-9 h-9 rounded-xl bg-white/10 shrink-0">✕</button>
             </div>
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3.5">
+            <div ref={pdfRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-3.5 bg-white">
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2"><div className="text-[11.5px] font-bold text-[#7A879C]">보낸 사람</div><div className="text-[14px] font-black text-[#0F1A30] truncate">{authorName(cur)}</div></div>
                 <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2"><div className="text-[11.5px] font-bold text-[#7A879C]">등록</div><div className="text-[14px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>{timeLabel(cur) || "-"}</div></div>

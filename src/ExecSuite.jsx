@@ -12,6 +12,7 @@ import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, C
 import { db, DEFAULT_COMPANY } from "./firebase";
 import { ShellIcon } from "./AdminShell";
 import KpSubNav from "./KpSubNav";
+import CustomDatePicker from "./CustomDatePicker";
 import ApprovalCenter, { myTurn, useApprovalCounts, useApprovalSettings, setAutoApproveDaily } from "./Approval";
 import HandoverCenter, { useHandoverUnread } from "./HandoverCenter";
 import { buildPastStats } from "./HomeDeck";
@@ -680,6 +681,36 @@ export function useExecSchedules(company) {
 const daysOf = (e) => { const out = []; for (let x = e.date, i = 0; x && x <= (e.endDate || e.date) && i < 40; x = addDay(x, 1), i += 1) out.push(x); return out; };
 // ⭐ 2026-11-01 임원 일정은 임원 + 인사 쪽(인사관리자·통합인사·인사팀 직원) 모두 등록
 export const canWriteExecSchedule = ({ dept, role, team } = {}) => dept === "exec" || dept === "hr" || ["hrManager", "hrAcct", "totalMaster"].includes(role) || team === "인사팀";
+// 🕘 2026-11-01 시간 고르기(임원 일정) — 오전/오후 · 시 · 10분 단위, 어두운 금색 테마
+const addMin = (hm, m) => { const [h, mm] = String(hm || "00:00").split(":").map(Number); const t = Math.min(23 * 60 + 50, h * 60 + mm + m); return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`; };
+const hmLabel = (hm) => { if (!hm) return "시간 선택"; const [h, m] = hm.split(":").map(Number); return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${String(m).padStart(2, "0")}`; };
+function TimePick({ value, onChange }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => { if (!open) return undefined; const f = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }; document.addEventListener("mousedown", f); return () => document.removeEventListener("mousedown", f); }, [open]);
+  const [h, m] = String(value || "09:00").split(":").map(Number);
+  const set = (nh, nm) => onChange(`${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}`);
+  const chip = (on) => `h-9 rounded-lg text-[13.5px] font-black tabular-nums ${on ? "text-[#1A1405]" : "bg-white/[0.06] text-white/80 hover:bg-white/[0.12]"}`;
+  const gold = { background: `linear-gradient(180deg,#F1DFB4,${GOLD})` };
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" onClick={() => setOpen((o) => !o)} className="h-12 w-full px-3.5 rounded-xl bg-white/[0.06] border border-white/15 text-left flex items-center gap-2 hover:border-[#D7BC82]">
+        <span className="text-[15px]" style={{ color: GOLD }}>◷</span>
+        <span className="text-[15px] font-black tabular-nums" style={{ fontFamily: MONO }}>{hmLabel(value)}</span>
+      </button>
+      {open && (
+        <div className="absolute z-[100001] left-0 right-0 mt-1.5 rounded-2xl p-3 shadow-[0_20px_44px_rgba(0,0,0,0.5)] border border-white/15" style={{ background: SHELL_BG, minWidth: 260 }}>
+          <div className="grid grid-cols-2 gap-1 mb-2">{[["오전", 0], ["오후", 12]].map(([l, base]) => <button key={l} type="button" onClick={() => set((h % 12) + base, m)} className={chip((h < 12) === (base === 0))} style={(h < 12) === (base === 0) ? gold : undefined}>{l}</button>)}</div>
+          <div className="text-[11px] font-extrabold tracking-[0.2em] text-white/45 mb-1" style={{ fontFamily: MONO }}>HOUR</div>
+          <div className="grid grid-cols-6 gap-1 mb-2">{Array.from({ length: 12 }, (_, i) => i).map((i) => { const hh = (h < 12 ? 0 : 12) + i; return <button key={i} type="button" onClick={() => set(hh, m)} className={chip(hh === h)} style={hh === h ? gold : undefined}>{i === 0 ? 12 : i}</button>; })}</div>
+          <div className="text-[11px] font-extrabold tracking-[0.2em] text-white/45 mb-1" style={{ fontFamily: MONO }}>MINUTE</div>
+          <div className="grid grid-cols-6 gap-1">{[0, 10, 20, 30, 40, 50].map((mm) => <button key={mm} type="button" onClick={() => { set(h, mm); setOpen(false); }} className={chip(mm === m)} style={mm === m ? gold : undefined}>{String(mm).padStart(2, "0")}</button>)}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ExecScheduleBoard({ company, me = {}, canWrite = false }) {
   const list = useExecSchedules(company);
   const { staff: allStaff } = useStaff(company);
@@ -801,10 +832,10 @@ export function ExecScheduleBoard({ company, me = {}, canWrite = false }) {
               <div><div className="text-[13px] font-black text-white/70 mb-1.5">제목</div><input value={edit.title} onChange={(e) => setEdit((p) => ({ ...p, title: e.target.value }))} className={inpD} placeholder="예: ○○물류 대표 미팅" /></div>
               <div><div className="text-[13px] font-black text-white/70 mb-1.5">구분</div><div className="flex flex-wrap gap-1.5">{EXEC_KINDS.map((k) => <button key={k} type="button" onClick={() => setEdit((p) => ({ ...p, kind: k }))} className={`h-10 px-4 rounded-full text-[14px] font-black border ${edit.kind === k ? "text-[#1A1405] border-transparent" : "text-white/70 border-white/15"}`} style={edit.kind === k ? { background: "linear-gradient(180deg,#F3E3BC,#D7BC82)" } : undefined}>{k}</button>)}</div></div>
               <div className="grid grid-cols-2 gap-2">
-                <div><div className="text-[13px] font-black text-white/70 mb-1.5">시작일</div><input type="date" value={edit.date} onChange={(e) => setEdit((p) => ({ ...p, date: e.target.value, endDate: p.endDate < e.target.value ? e.target.value : p.endDate }))} className={inpD} /></div>
-                <div><div className="text-[13px] font-black text-white/70 mb-1.5">종료일</div><input type="date" value={edit.endDate} onChange={(e) => setEdit((p) => ({ ...p, endDate: e.target.value }))} className={inpD} /></div>
-                <div><div className="text-[13px] font-black text-white/70 mb-1.5">시작 시각</div><input type="time" value={edit.start} onChange={(e) => setEdit((p) => ({ ...p, start: e.target.value }))} className={inpD} /></div>
-                <div><div className="text-[13px] font-black text-white/70 mb-1.5">종료 시각</div><input type="time" value={edit.end} onChange={(e) => setEdit((p) => ({ ...p, end: e.target.value }))} className={inpD} /></div>
+                <div><div className="text-[13px] font-black text-white/70 mb-1.5">시작일</div><CustomDatePicker value={edit.date} onChange={(e) => setEdit((p) => ({ ...p, date: e.target.value, endDate: !p.endDate || p.endDate < e.target.value ? e.target.value : p.endDate }))} className={inpD} showIcon /></div>
+                <div><div className="text-[13px] font-black text-white/70 mb-1.5">종료일</div><CustomDatePicker value={edit.endDate} onChange={(e) => setEdit((p) => ({ ...p, endDate: e.target.value && e.target.value < p.date ? p.date : e.target.value }))} className={inpD} showIcon /></div>
+                <div><div className="text-[13px] font-black text-white/70 mb-1.5">시작 시각</div><TimePick value={edit.start} onChange={(v) => setEdit((p) => ({ ...p, start: v, end: p.end && p.end <= v ? addMin(v, 60) : p.end }))} /></div>
+                <div><div className="text-[13px] font-black text-white/70 mb-1.5">종료 시각</div><TimePick value={edit.end} onChange={(v) => setEdit((p) => ({ ...p, end: v }))} /></div>
               </div>
               <div><div className="text-[13px] font-black text-white/70 mb-1.5">장소</div><input value={edit.place} onChange={(e) => setEdit((p) => ({ ...p, place: e.target.value }))} className={inpD} placeholder="예: 본사 2층 회의실" /></div>
               <div><div className="text-[13px] font-black text-white/70 mb-1.5">메모</div><textarea value={edit.memo} onChange={(e) => setEdit((p) => ({ ...p, memo: e.target.value }))} rows={4} className={`${inpD} h-auto py-3`} placeholder="참석자·준비 사항 등" /></div>
