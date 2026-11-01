@@ -21656,6 +21656,8 @@ function WaypointViewModal({ list = [], type = "drop", orderDate = "", onClose, 
                       {s.구분 && <span className="text-[11px] font-extrabold tracking-[0.12em] text-[#2D4C82]">{s.구분}</span>}
                       <span className="text-[16px] font-black text-[#0F1A30]">{s.업체명 || "-"}</span>
                       <span className="px-2 py-0.5 rounded-md bg-[#EEF2F8] text-[12.5px] font-black text-[#1B2B4B]">{time || "즉시"}</span>
+                      {/* ⭐ 2026-11-01 고정노선 정류지별 지급방식(다른 지급방식은 별도 오더로 정산) */}
+                      {s.지급방식 && <span className="ml-auto px-2 py-0.5 rounded-md bg-[#0F1A30] text-white text-[12px] font-black">{s.지급방식}{s.운임별도오더 ? " · 별도 오더" : ""}</span>}
                     </div>
                     {s.주소 && <div className="text-[13.5px] font-semibold text-[#3A4A66] mt-1 break-words">{s.주소}</div>}
                     {(s.담당자 || s.담당자번호) && <div className="text-[13px] text-[#5B6B85] mt-0.5">담당 {s.담당자 || ""}{s.담당자번호 ? ` · ${s.담당자번호}` : ""}</div>}
