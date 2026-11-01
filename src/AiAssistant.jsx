@@ -1,16 +1,20 @@
 import { FabButton, useWinSize, ResizeGrip, WinHeader } from "./FloatDock";
 import React, { useState, useRef, useEffect } from "react";
+import { AI_MODES, useTeamData, teamButtons, teamAnswer } from "./aiTeamModes";
 
 /**
  * AI 비서 플로팅 챗봇 (무료 버전 - 로컬 데이터만 활용)
  */
-export default function AiAssistant({ dispatches = [], clients = [], controlledOpen, onOpenChange }) {
+export default function AiAssistant({ dispatches = [], clients = [], controlledOpen, onOpenChange, mode = null, company = "", uid = "" }) {
+  // ⭐ 2026-11-01 팀별 비서 — 경리(acct)·인사(hr)·임원(exec)은 그 팀에 맞는 인사말·버튼·답변
+  const M = AI_MODES[mode] || null;
+  const hello = M ? M.hello : "안녕하세요! 배차 AI 비서입니다.\n무엇을 도와드릴까요?";
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
   const setOpen = (v) => { if (onOpenChange) onOpenChange(v); else setInternalOpen(v); };
-  const [messages, setMessages] = useState([
-    { role: "assistant", content: "안녕하세요! 배차 AI 비서입니다.\n무엇을 도와드릴까요?" }
-  ]);
+  const [messages, setMessages] = useState([{ role: "assistant", content: hello }]);
+  // 화면(팀)이 바뀌면 처음 인사부터
+  useEffect(() => { setMessages([{ role: "assistant", content: hello }]); }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
   const [loading, setLoading] = useState(false);
   const chatEndRef = useRef(null);
   const [clientQuery, setClientQuery] = useState("");
@@ -220,7 +224,10 @@ export default function AiAssistant({ dispatches = [], clients = [], controlledO
     }, 300);
   };
 
-  const quickButtons = [
+  const T = useTeamData(mode, company, uid, open);
+  const tb = teamButtons(mode);
+  const askTeam = (k, label) => { setMessages((prev) => [...prev, { role: "user", content: label }]); setLoading(true); setTimeout(() => { setMessages((prev) => [...prev, { role: "assistant", content: teamAnswer(mode, k, T, dispatches) }]); setLoading(false); }, 250); };
+  const quickButtons = tb ? tb.map(([k, label]) => ({ label, action: () => askTeam(k, label) })) : [
     { label: "오늘 배차", action: () => handleQuery("today") },
     { label: "이번달 매출", action: () => handleQuery("month") },
     { label: "최근 배차", action: () => handleQuery("recent") },
@@ -242,8 +249,8 @@ export default function AiAssistant({ dispatches = [], clients = [], controlledO
         <div data-ro-allow style={{ position: "fixed", bottom: 24, right: 92, width: win.w, height: win.h, zIndex: 9999 }}
              className="bg-white rounded-[22px] shadow-[0_24px_60px_rgba(15,26,48,0.35)] border border-[#DCE3EE] flex flex-col overflow-hidden">
           <ResizeGrip onMouseDown={win.startDrag} />
-          <WinHeader code="AI · ASSISTANT" title="배차 AI 비서" sub="배차 현황 조회" preset={win.preset} onPreset={win.setPreset} onClose={() => setOpen(false)}
-            right={<button type="button" onClick={() => setMessages([{ role: "assistant", content: "안녕하세요! 배차 AI 비서입니다.\n무엇을 도와드릴까요?" }])} style={{ height: 26, padding: "0 9px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>초기화</button>} />
+          <WinHeader code="AI · ASSISTANT" title={M ? M.title : "배차 AI 비서"} sub={M ? M.sub : "배차 현황 조회"} preset={win.preset} onPreset={win.setPreset} onClose={() => setOpen(false)}
+            right={<button type="button" onClick={() => setMessages([{ role: "assistant", content: hello }])} style={{ height: 26, padding: "0 9px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>초기화</button>} />
 
           {/* 메시지 영역 */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#F4F6FA] min-h-[160px]">
@@ -288,8 +295,8 @@ export default function AiAssistant({ dispatches = [], clients = [], controlledO
               ))}
             </div>
             
-            {/* 거래처 검색 */}
-            <div className="flex gap-2">
+            {/* 거래처 검색(배차 비서만) */}
+            <div className={`flex gap-2 ${M ? "hidden" : ""}`}>
               <input
                 type="text"
                 value={clientQuery}

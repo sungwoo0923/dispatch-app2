@@ -79,6 +79,19 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     else setInternalOpen(val);
   };
   const [view, setView] = useState("friends"); // friends | chat | profile
+  // ⎋ 2026-11-01 ESC로 메신저 창 닫기(PC) — 입력 중 한글 조합(IME)·다른 팝업이 열려 있을 때는 그것부터
+  const setOpenRef = useRef(setOpen); setOpenRef.current = setOpen;
+  useEffect(() => {
+    if (!open || mobileMode) return undefined;
+    const onKey = (e) => {
+      if (e.key !== "Escape" || e.isComposing) return;
+      if (document.querySelector('[data-kp-dialog="1"]')) return;
+      e.preventDefault(); e.stopPropagation();
+      setOpenRef.current(false);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [open, mobileMode]);
   const [myProfile, setMyProfile] = useState(null);
   const [friends, setFriends] = useState([]); // all users in same company
   const [rooms, setRooms] = useState([]);
@@ -158,6 +171,14 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   }, []);
 
   // ── 내 프로필 로드 & 자동 생성 ──
+  // ⭐ 2026-11-01 내 직급·부서는 인사 정보(users)를 실시간으로 — 채팅 프로필에 남은 옛 직급을 덮어 맞춘다
+  const [myHr, setMyHr] = useState(null);
+  useEffect(() => { if (!myUid) return undefined; return onSnapshot(doc(db, "users", myUid), (s) => setMyHr(s.exists() ? s.data() : null), () => {}); }, [myUid]);
+  useEffect(() => {
+    if (!myUid || !myHr || !myProfile) return;
+    const pos = myHr.position || myHr.직책 || "";
+    if (pos && pos !== myProfile.position) setDoc(doc(db, PROFILES_COLL, myUid), { position: pos }, { merge: true }).catch(() => {});
+  }, [myUid, myHr?.position, myProfile?.position]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!myUid) return;
     const unsub = onSnapshot(doc(db, PROFILES_COLL, myUid), (snap) => {
@@ -205,7 +226,9 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
         name: p.name || u.name || u.displayName || u.email?.split("@")[0] || uid,
         photo: p.photo || u.photo || "",
         statusMsg: p.statusMsg || "",
-        position: p.position || u.position || u.직책 || "",
+        // ⭐ 2026-11-01 직급은 인사 정보(users)가 기준 — 인사발령으로 바뀌면 바로 반영(예전엔 채팅 프로필에 복사된 옛 직급이 우선)
+        position: u.position || u.직책 || p.position || "",
+        team: u.team || "",
         phone: p.phone || u.phone || u.phoneNumber || u.전화번호 || "",
         company: companyName,
         crossCompany,
