@@ -2,10 +2,11 @@
 import { coDocKey } from "../coKey";
 import React, { useState, useEffect } from "react";
 import { auth, db } from "../firebase";
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
+import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import BigCheck from "../components/BigCheck";
+import { legacyDriverEmail, scopedDriverEmail, signInDriver } from "./driverEmail";
 
 // ⭐ 사용자 요청 — 한 번 로그인한 폰에서는 소속회사명/차량번호/이름을 기억하고(정보 저장),
 // "자동 로그인"을 켜두면 로그인 화면에 들어오는 순간 저장된 정보로 바로 로그인한다.
@@ -26,8 +27,6 @@ export default function DriverLogin() {
   const [error, setError] = useState("");
   const [loggingIn, setLoggingIn] = useState(false);
   const navigate = useNavigate();
-
-  const makeEmail = (v) => `${v.replace(/ /g, "")}@driver.run25.kr`;
 
   // 페이지 진입 시 무조건 초기화 → 자동 로그인 설정이면 저장된 정보로 바로 로그인
   useEffect(() => {
@@ -55,15 +54,17 @@ export default function DriverLogin() {
       return;
     }
 
-    const email = makeEmail(carNo.trim());
+    let email = legacyDriverEmail(carNo.trim());
     const password = carNo.trim();
 
     setLoggingIn(true);
     try {
       let uid;
       try {
-        const res = await signInWithEmailAndPassword(auth, email, password);
-        uid = res.user.uid;
+        // ⭐ 2026-11-01 예전 계정 → 회사별 계정 순서로 로그인(다른 운송사 같은 차량번호 대응)
+        const r = await signInDriver(auth, db, companyName, carNo);
+        uid = r.uid;
+        email = r.email;
       } catch (signInErr) {
         // ⭐ 사용자 요청 — 관리자가 PC 기사관리에서 지입차를 미리 등록해두면(차량번호로
         // 문서만 만들어짐, 인증 계정은 아직 없음) 그 기사님이 여기서 바로 로그인하려 해도
@@ -82,14 +83,22 @@ export default function DriverLogin() {
         try {
           res = await createUserWithEmailAndPassword(auth, email, password);
         } catch (createErr) {
-          throw signInErr;
+          // 예전 계정 이름을 다른 운송사 기사가 쓰고 있으면 회사별 계정으로 만든다
+          if (createErr?.code !== "auth/email-already-in-use") throw signInErr;
+          try {
+            email = scopedDriverEmail(companyName.trim(), carNo.trim());
+            res = await createUserWithEmailAndPassword(auth, email, password);
+          } catch { throw signInErr; }
         }
         uid = res.user.uid;
 
         // ⭐ 2026-11-01 PC 선등록 문서 — 회사별 이름(회사__차량번호) 먼저, 없으면 예전 이름(차량번호)
         const preKey = coDocKey(companyName.trim(), normPlate);
         let preSnap = await getDoc(doc(db, "drivers", preKey));
-        if (!preSnap.exists() && preKey !== normPlate) preSnap = await getDoc(doc(db, "drivers", normPlate));
+        if (!preSnap.exists() && preKey !== normPlate) {
+          const legacySnap = await getDoc(doc(db, "drivers", normPlate));
+          if (legacySnap.exists() && (legacySnap.data().companyName || "").trim() === companyName.trim()) preSnap = legacySnap;
+        }
         const preId = preSnap.exists() ? preSnap.id : normPlate;
         if (!preSnap.exists()) {
           await res.user.delete().catch(() => {});
