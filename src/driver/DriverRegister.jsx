@@ -5,6 +5,7 @@ import { readPublicCompanies } from "../publicCompanies";
 import CustomDatePicker from "../CustomDatePicker";
 import { auth, db } from "../firebase";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
+import { legacyDriverEmail, scopedDriverEmail, legacyOwnerCompany } from "./driverEmail";
 import { doc, setDoc, getDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
 import { addDoc, collection } from "firebase/firestore";
@@ -182,7 +183,6 @@ export default function DriverRegister() {
   const [success, setSuccess] = useState(false);
   const navigate = useNavigate();
 
-  const makeEmail = (v) => `${v.replace(/ /g, "")}@driver.run25.kr`;
 
   const formatPhone = (val) => {
     const v = val.replace(/[^0-9]/g, "");
@@ -209,7 +209,7 @@ export default function DriverRegister() {
     if (bizNo && onlyDigits(bizNo).length !== 10) return setError("사업자등록번호는 10자리입니다.");
     if (!termsAgreed || !privacyAgreed || !gpsAgreed) return setError("모든 약관에 동의해주세요.");
 
-    const email = makeEmail(carNo.trim());
+    let email = legacyDriverEmail(carNo.trim());
     const password = carNo.trim();
     const category = vehicleCategory === "직접입력" ? vehicleCategoryCustom.trim() : vehicleCategory;
     const residence = residenceCity ? `${residenceProvince} ${residenceCity}` : residenceProvince;
@@ -240,14 +240,27 @@ export default function DriverRegister() {
 
     try {
       setLoading(true);
-      const res = await createUserWithEmailAndPassword(auth, email, password);
+      let res;
+      try {
+        res = await createUserWithEmailAndPassword(auth, email, password);
+      } catch (e) {
+        // ⭐ 2026-11-01 같은 차량번호가 다른 운송사에 이미 있으면 회사별 계정으로 가입
+        if (e?.code !== "auth/email-already-in-use") throw e;
+        const owner = await legacyOwnerCompany(auth, db, carNo.trim());
+        if (owner === companyName.trim()) throw e;
+        email = scopedDriverEmail(companyName.trim(), carNo.trim());
+        res = await createUserWithEmailAndPassword(auth, email, password);
+      }
       const uid = res.user.uid;
 
       let preRegistered = null;
       // ⭐ 2026-11-01 PC 선등록 문서 — 회사별 이름(회사__차량번호) 먼저, 없으면 예전 이름(차량번호)
         const preKey = coDocKey(companyName.trim(), normPlate);
         let preSnap = await getDoc(doc(db, "drivers", preKey));
-        if (!preSnap.exists() && preKey !== normPlate) preSnap = await getDoc(doc(db, "drivers", normPlate));
+        if (!preSnap.exists() && preKey !== normPlate) {
+          const legacySnap = await getDoc(doc(db, "drivers", normPlate));
+          if (legacySnap.exists() && (legacySnap.data().companyName || "").trim() === companyName.trim()) preSnap = legacySnap;
+        }
         const preId = preSnap.exists() ? preSnap.id : normPlate;
       if (preSnap.exists()) {
         const d = preSnap.data();
