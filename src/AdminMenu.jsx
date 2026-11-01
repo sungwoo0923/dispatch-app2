@@ -6,6 +6,7 @@ import { openSetupWizard, openTutorial } from "./Onboarding";
 import AdminShell from "./AdminShell";
 import React, { useEffect, useState, useMemo } from "react";
 import { auth, db, storage, FUNCTIONS_BASE, DEFAULT_COMPANY } from "./firebase";
+import { masterHasHr } from "./hrHandover";
 import {
   collection,
   addDoc,
@@ -252,6 +253,10 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const myRoleEff = meDoc?.role || myRole || parentRole;
   const isHrMgr = !canAdmin && (myRoleEff === "hrManager" || myRoleEff === "hrAcct");
   const canApprove = canAdmin || ["admin", "hrManager", "hrAcct", "test"].includes(myRoleEff);
+  // ⭐ 2026-11-01 마스터 인사권 자동 인계 — 인사 담당자가 생기면 마스터는 재직 직원의 부서·직책·퇴사를 바꾸지 않는다
+  //  (승인·권한 지정·마스터 지정은 그대로 — 인사관리자를 지정해야 하므로). 가입 승인 대기자는 마스터도 부서·직책 지정 가능
+  const hrHanded = isCompanyMaster && !isTotalMaster && !masterHasHr(meDoc, users.filter((x) => (x.companyName || DEFAULT_COMPANY) === effectiveCompany), me?.uid);
+  const hrLocked = (u) => hrHanded && !!u && (u.approved !== false || u.employmentStatus === "퇴사"); // 가입 대기자만 예외
   const canEditMember = (u) => !!u && (canAdmin || isHrMgr || (canApprove && !u.approved && u.employmentStatus !== "퇴사"));
   const assignableRoles = (cur) => {
     const base = canAdmin ? ROLES : isHrMgr ? ROLES.filter((r) => r !== "totalMaster") : myRoleEff === "admin" ? ["admin", "user", "test", "hrManager", "viewer"] : ["user", "test", "viewer"];
@@ -270,7 +275,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     if (!canAdmin) return;
     if (u.id === me?.uid && u.isMaster) return alert("본인의 마스터는 해제할 수 없습니다. 다른 직원을 먼저 마스터로 지정해 주세요.");
     const next = !u.isMaster;
-    if (!await kpConfirm(next ? `"${u.name || u.email}"님을 마스터로 지정할까요?\n마스터는 직원의 권한·부서·직책을 바꿀 수 있습니다.` : `"${u.name || u.email}"님의 마스터를 해제할까요?`)) return;
+    if (!await kpConfirm(next ? `"${u.name || u.email}"님을 마스터로 지정할까요?\n마스터는 직원 승인·권한을 정하고, 인사 담당자가 없을 때는 부서·직책·퇴사도 처리합니다.` : `"${u.name || u.email}"님의 마스터를 해제할까요?`)) return;
     const history = [...(u.personnelHistory || []), { date: todayStr(), type: next ? "마스터 지정" : "마스터 해제", detail: meDoc?.name || me?.email || "" }];
     await setDoc(doc(db, "users", u.id), { isMaster: next, ...(next ? { role: "admin" } : {}), personnelHistory: history }, { merge: true });
     if (manageUser?.id === u.id) setManageUser((prev) => ({ ...prev, isMaster: next, ...(next ? { role: "admin" } : {}), personnelHistory: history }));
@@ -612,13 +617,15 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     if (!isTotalMaster && (manageUser.companyName || DEFAULT_COMPANY) !== effectiveCompany) return alert("우리 회사 직원만 수정할 수 있습니다.");
     const history = [...(manageUser.personnelHistory || [])];
     const prevPosition = manageUser.position || "";
-    const nextPosition = editPosition.trim();
+    const lockHr = hrLocked(manageUser);
+    const nextPosition = lockHr ? prevPosition : editPosition.trim();
+    const nextTeam = lockHr ? (manageUser.team || "") : editTeam;
     if (prevPosition !== nextPosition && nextPosition) {
       history.push({ date: todayStr(), type: "직책변경", detail: `${prevPosition || "(미지정)"} → ${nextPosition}` });
     }
     const prevTeam = manageUser.team || "";
-    if (prevTeam !== editTeam && editTeam) {
-      history.push({ date: todayStr(), type: "부서변경", detail: `${prevTeam || "미배정"} → ${editTeam}` });
+    if (prevTeam !== nextTeam && nextTeam) {
+      history.push({ date: todayStr(), type: "부서변경", detail: `${prevTeam || "미배정"} → ${nextTeam}` });
     }
     const payload = {
       name: editName.trim(),
@@ -626,7 +633,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
       role: editRole,
       companyName: isTotalMaster ? editCompany.trim() : (manageUser.companyName || effectiveCompany),
       position: nextPosition,
-      team: editTeam,
+      team: nextTeam,
       personnelHistory: history,
     };
     try {
@@ -640,6 +647,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
 
   const setResignStatus = async (u, resign) => {
     if (isViewer) return _viewerAlert();
+    if (hrLocked(u)) return alert("인사 담당자가 있어 퇴사·복직 처리는 인사팀(인사관리부 › 직원 정보·퇴사)에서 합니다.");
     if (resign) {
       if (!await kpConfirm(`"${u.name || u.email}" 계정을 퇴사 처리하시겠습니까?\n퇴사 처리된 계정은 즉시 로그인이 차단됩니다.`)) return;
     }
@@ -1025,7 +1033,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             </div>
                             <div>
                               <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">직책</label>
-                              <CustomSelect value={editPosition} onChange={e => onPositionChange(e.target.value)} disabled={!canEditMember(u)}
+                              <CustomSelect value={editPosition} onChange={e => onPositionChange(e.target.value)} disabled={!canEditMember(u) || hrLocked(u)}
                                 className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
                                 <option value="">선택 안 함</option>
                                 {(editPosition && !positionsForTeam(editTeam).includes(editPosition)) && (
@@ -1036,7 +1044,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             </div>
                             <div>
                               <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">부서</label>
-                              <CustomSelect value={editTeam} onChange={e => onTeamChange(e.target.value)} disabled={!canEditMember(u)}
+                              <CustomSelect value={editTeam} onChange={e => onTeamChange(e.target.value)} disabled={!canEditMember(u) || hrLocked(u)}
                                 className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
                                 <option value="">미배정</option>
                                 {TEAM_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
@@ -1078,7 +1086,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                       {memberModal && canEditMember(u) && canManage && (
                         <MemberManageModal
                           u={u} me={me} isTotalMaster={isTotalMaster} roles={assignableRoles(u.role)} roleLabels={roleLabels}
-                          canMaster={canAdmin} canAccount={canAdmin || isHrMgr} canDelete={canAdmin} hrOpt={hrOpt}
+                          canMaster={canAdmin} canAccount={(canAdmin || isHrMgr) && !hrLocked(u)} canDelete={canAdmin} hrOpt={hrOpt} hrLock={hrLocked(u)}
                           f={{ editName, setEditName, editPhone, setEditPhone, editRole, setEditRole, editCompany, setEditCompany, editPosition, setEditPosition: onPositionChange, editTeam, setEditTeam: onTeamChange, suggestR }}
                           onClose={() => { setMemberModal(false); setEditMode(false); }}
                           onSave={async () => { await saveEdit(); setMemberModal(false); }}
@@ -1991,7 +1999,7 @@ const LANDING_FONT_OPTIONS = [
 ];
 
 // 👤 회원 관리 창 — 버튼 하나로 열고, 그 안에서 승인·거절·정보수정·마스터·퇴사·삭제(모두 확인창)
-function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose, onSave, onApprove, onUnapprove, onReject, onMaster, onResign, onDelete, canMaster = true, canAccount = true, canDelete = true, hrOpt }) {
+function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose, onSave, onApprove, onUnapprove, onReject, onMaster, onResign, onDelete, canMaster = true, canAccount = true, canDelete = true, hrOpt, hrLock = false }) {
   const positionsForTeam = hrOpt.positionsFor; const TEAM_OPTIONS = hrOpt.teams;
   const [busy, setBusy] = useState(false);
   const pending = !u.approved && u.employmentStatus !== "퇴사";
@@ -2015,6 +2023,7 @@ function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose
         <div className="p-5 space-y-4">
           <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4">
             <div className="text-[13px] font-black text-[#0F1A30] mb-3">정보 {pending ? "확인 · 지정" : "수정"} <span className="text-[11.5px] font-bold text-[#9AA9C3]">직책 · 부서 · 권한</span></div>
+            {hrLock && <div className="mb-3 rounded-xl bg-[#EEF3FC] border border-[#C9D6EE] px-3 py-2 text-[12px] font-bold text-[#1B2B4B]">인사 담당자가 있어 부서·직책·퇴사는 인사팀(인사관리부 › 직원 정보·퇴사)에서 바꿉니다. 승인·권한 지정은 그대로 할 수 있습니다.</div>}
             <div className="grid grid-cols-2 gap-3">
               <div><label className={lab}>이름</label><input value={f.editName} onChange={(e) => f.setEditName(e.target.value)} className={inp} /></div>
               <div><label className={lab}>핸드폰번호</label><input value={f.editPhone} onChange={(e) => {
@@ -2023,13 +2032,13 @@ function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose
                 f.setEditPhone(v);
               }} className={inp} /></div>
               <div><label className={lab}>직책</label>
-                <CustomSelect value={f.editPosition} onChange={(e) => f.setEditPosition(e.target.value)} className={inp}>
+                <CustomSelect value={f.editPosition} onChange={(e) => f.setEditPosition(e.target.value)} disabled={hrLock} className={inp}>
                   <option value="">선택 안 함</option>
                   {(f.editPosition && !positionsForTeam(f.editTeam).includes(f.editPosition)) && <option value={f.editPosition}>{f.editPosition}</option>}
                   {positionsForTeam(f.editTeam).map((p) => <option key={p} value={p}>{p}</option>)}
                 </CustomSelect></div>
               <div><label className={lab}>부서</label>
-                <CustomSelect value={f.editTeam} onChange={(e) => f.setEditTeam(e.target.value)} className={inp}>
+                <CustomSelect value={f.editTeam} onChange={(e) => f.setEditTeam(e.target.value)} disabled={hrLock} className={inp}>
                   <option value="">미배정</option>
                   {TEAM_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
                 </CustomSelect></div>
@@ -2044,7 +2053,7 @@ function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose
               <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[#E3E8F0] px-3.5 py-2.5">
                 <div className="min-w-0">
                   <div className="text-[13px] font-black text-[#0F1A30]">마스터 계정 {u.isMaster && <span className="ml-1 px-1.5 rounded bg-[#0F1A30] text-white text-[10.5px]">지정됨</span>}</div>
-                  <div className="text-[11.5px] text-[#7A879C]">직원 승인·권한·부서·직책을 정할 수 있습니다</div>
+                  <div className="text-[11.5px] text-[#7A879C]">직원 승인·권한 지정 · 인사 담당자가 없을 때는 부서·직책·퇴사까지</div>
                 </div>
                 <button type="button" disabled={busy} onClick={run(onMaster)} className={`shrink-0 h-9 px-3.5 rounded-xl text-[12.5px] font-black ${u.isMaster ? "border border-[#0F1A30] text-[#0F1A30]" : "border border-[#DCE3EE] text-[#1B2B4B] hover:bg-[#F5F8FD]"}`}>{u.isMaster ? "마스터 해제" : "마스터 지정"}</button>
               </div>

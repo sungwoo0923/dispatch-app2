@@ -32,6 +32,7 @@ import { useFixedRouteAutoDispatch, FixedRouteEditNotice } from "./FixedRoutes";
 import { deptModeOf } from "./DeptDashboard";
 import { ExecApprovals, TeamSchedule, ApprovalWorkspace, ExecScheduleBoard } from "./ExecSuite";
 import { useMyProfile } from "./userNames";
+import { useCompanyStaff, masterHasHr, isHrStaffUser } from "./hrHandover";
 import { useHrOptions } from "./hrConstants";
 import { AssetManager } from "./OfficeBooks";
 import { FundsWorkspace, FundsBoard, isCeoPosition } from "./FundsBoard";
@@ -7658,6 +7659,9 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   const customRole = findCustomRole(customRoles, role);
   // 👔 2026-10-31 임원(부서 임원 · 대표/전무/이사) — 로그인하면 임원 화면. 관리자 권한 임원은 [전체 메뉴]로 실무 화면도 볼 수 있다
   const myProfileDoc = useMyProfile(user?.uid);
+  // ⭐ 2026-11-01 마스터 인사권 — 인사 담당자가 없을 때만(생기면 자동 인계, hrHandover.js)
+  const coStaffMain = useCompanyStaff(myProfileDoc?.isMaster === true ? (userCompany || localStorage.getItem("userCompany") || "") : "");
+  const masterHrMain = !!coStaffMain && masterHasHr(myProfileDoc, coStaffMain, user?.uid);
   // ⭐ 2026-10-31 임원 화면은 권한 관리에서 "임원 화면"으로 정한 역할(예: 임원관리자)만 — 관리자 권한은 직책과 무관하게 일반 화면
   const isExec = forceExec || roleScreen(customRole) === "exec";
   const [execFull, setExecFull] = React.useState(() => { try { return localStorage.getItem("kpExecFull") === "1"; } catch { return false; } });
@@ -8559,7 +8563,7 @@ return (
         {menu === "자금관리" && menuState("자금관리") === "ok" && <FundsWorkspace company={deptCompany} isViewer={isViewer} />}
         {menu === "비품관리" && menuState("비품관리") === "ok" && <AssetManager company={deptCompany} isViewer={isViewer} />}
         {menu === "인사관리부" && menuState("인사관리부") === "ok" && (
-          <HrHub company={deptCompany} canManage={role === "hrManager" || role === "totalMaster" || myProfileDoc?.isMaster === true || (!!customRole && getMenuAccess(customRoles, role, "인사관리부") === "write")} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "" }}
+          <HrHub company={deptCompany} canManage={role === "hrManager" || role === "totalMaster" || masterHrMain || (!!customRole && getMenuAccess(customRoles, role, "인사관리부") === "write")} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "" }}
             renderRecord={(focusUid) => <HRManagementPage userCompany={deptCompany} role={role} userId={auth?.currentUser?.uid || ""} focusUid={focusUid} />}
             renderAttendance={() => <AttendanceBoard userCompany={deptCompany} role={role} user={user} />} />
         )}
@@ -59544,7 +59548,9 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
   const [tab, setTab] = React.useState("회사정보");
   // ⭐ 2026-10-31 인사관리부는 마스터(회사 첫 가입자)·인사관리자만. 인사관리자는 상단 [인사관리부] 안에 다 있으므로 여기서는 뺀다
   const myDocCM = useMyProfile(user?.uid);
-  const canViewHR = role === "totalMaster" || role === "hrManager" || myDocCM?.isMaster === true;
+  // ⭐ 2026-11-01 마스터는 인사 담당자(인사관리자·경리+인사·인사 부서)가 없을 때만 인사관리부 — 생기면 자동으로 넘어간다
+  const coStaffCM = useCompanyStaff(myDocCM?.isMaster === true ? userCompany : "");
+  const canViewHR = role === "totalMaster" || role === "hrManager" || (!!coStaffCM && masterHasHr(myDocCM, coStaffCM, user?.uid));
   const tabs = role === "hrManager" ? ["회사정보", "조직도", "내정보", "내 이력서"] : canViewHR ? ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부", "인사관리부"] : ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부"];
 
   // ⭐ 디자인 개편 — 관리자메뉴와 같은 왼쪽 메뉴바 + 상단 인사 카드(AdminShell 공용 레이아웃)
@@ -59697,7 +59703,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
   const now = new Date();
   const [members, setMembers] = React.useState([]);
   // ⭐ 인사발령·직책·권한 변경은 마스터(회사 첫 가입자)·인사관리자만
-  const canManage = !selfOnly && (role === "totalMaster" || role === "hrManager" || members.some((m) => m.uid === userId && m.isMaster === true));
+  const canManage = !selfOnly && (role === "totalMaster" || role === "hrManager" || masterHasHr(members.find((m) => m.uid === userId), members, userId));
   const hrOpt = useHrOptions(company);
   const [profiles, setProfiles] = React.useState({}); // uid -> { hireDate }
   const [schedules, setSchedules] = React.useState([]);
@@ -59897,7 +59903,9 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
       await setDoc(doc(db, "hrResumes", selectedUid), { ...draft, companyName: company, ...(bySelf ? { selfSubmittedAt: Date.now(), hrSeen: false } : {}) }, { merge: true });
       if (bySelf) {
         const me = members.find((m) => m.uid === userId) || {};
-        const hrTo = members.filter((m) => m.uid !== userId && (["hrManager", "hrAcct"].includes(m.role) || m.team === "인사팀" || m.isMaster === true) && m.employmentStatus !== "퇴사")
+        // 인사 담당자에게 — 없으면(신규 운송사) 임시로 인사 업무를 하는 마스터에게
+        const hrStaffTo = members.filter((m) => m.uid !== userId && isHrStaffUser(m));
+        const hrTo = (hrStaffTo.length ? hrStaffTo : members.filter((m) => m.uid !== userId && m.isMaster === true && m.employmentStatus !== "퇴사"))
           .map((m) => ({ uid: m.uid, name: m.name || m.email || "", team: m.team || "", position: m.position || "" }));
         if (hrTo.length) sendInternalMail({ company, to: hrTo, kind: "hr", fromName: me.name || "", subject: `[이력서 제출] ${me.name || ""}${me.team ? ` · ${me.team}` : ""}`, body: `${me.name || ""}님이 본인 이력서를 작성·저장했습니다.\n\n인사관리부 › 인사 기록에서 확인해 주세요.` }).catch(() => {});
         alert("이력서를 저장했습니다. 인사팀에 알림이 갔습니다.");
