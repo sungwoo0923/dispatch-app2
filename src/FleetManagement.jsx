@@ -33,7 +33,8 @@ import { ShortAddr, DropEtaText, RemainText, RemainEtaText, FleetStepper, fleetS
 import { LeafletTrack, MapLegend } from "./mapLeaflet";
 import { cleanTrack } from "./mapStyle";
 import { modificationStatus } from "./orderChange";
-import CustomDatePicker from "./CustomDatePicker";
+import CustomDatePicker, { KOREAN_HOLIDAYS } from "./CustomDatePicker";
+import { CustomSelect } from "./CustomSelect"; // ⭐ 2026-11-01 출근기록부·이력조회 공용 드롭다운
 import RouteMapModal from "./RouteMapModal";
 import { ReturnTripSuggest } from "./fleetRecommend";
 import { useLoadOrderRange } from "./orderHistory";
@@ -4273,113 +4274,227 @@ function HistoryTab({ drivers, defaultDriverId }) {
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
   }, [logs]);
 
+  // ⭐ 2026-11-01 이력조회 리디자인 — 빠른 기간 버튼(오늘/어제/7일/30일). 미래 날짜는 오늘로 맞춘다(기존 max={todayStr}).
+  const clampDay = (v) => (v && v > todayStr ? todayStr : v);
+  const shiftDay = (ymd, delta) => kstDateStr(new Date(new Date(`${ymd}T12:00:00+09:00`).getTime() + delta * 86400000));
+  const quickRanges = [
+    ["오늘", todayStr, todayStr],
+    ["어제", shiftDay(todayStr, -1), shiftDay(todayStr, -1)],
+    ["7일", shiftDay(todayStr, -6), todayStr],
+    ["30일", shiftDay(todayStr, -29), todayStr],
+  ];
+  const runQuery = () => {
+    if (!selId) return;
+    const d = drivers.find(x => x.id === selId);
+    setApplied({ driverId: selId, from: fromDate, to: toDate, driverName: d?.이름 || "", carNo: d?.차량번호 || "" });
+  };
+
+  // 날짜별 24시간 상태 띠(분 단위 구간) — 로그 i ~ 로그 i+1 사이를 로그 i 상태 색으로 칠한다
+  const dayBands = useMemo(() => {
+    const out = {};
+    groupedByDate.forEach(([dateKey, dateLogs]) => {
+      const base = new Date(`${dateKey}T00:00:00`).getTime();
+      const isToday = dateKey === todayStr;
+      const segs = [];
+      dateLogs.forEach((log, i) => {
+        const t = resolveTs(log.timestamp);
+        if (!t) return;
+        const s = (t.getTime() - base) / 60000;
+        const nt = resolveTs(dateLogs[i + 1]?.timestamp);
+        let e;
+        if (nt) e = (nt.getTime() - base) / 60000;
+        else if (log.status === "퇴근" || log.status === "최종퇴근") e = s + 8;
+        else e = isToday ? Math.max(s + 8, (Date.now() - base) / 60000) : 1440;
+        segs.push({ s: Math.max(0, s), e: Math.min(1440, Math.max(e, s + 4)), status: log.status, color: STATUS_COLORS[log.status] || "#9ca3af" });
+      });
+      out[dateKey] = segs;
+    });
+    return out;
+  }, [groupedByDate, todayStr]);
+
+  // 기간 활동 히트맵 — 조회 기간의 날짜별 기록 수
+  const rangeDays = useMemo(() => {
+    if (!applied) return [];
+    const days = [];
+    let cur = applied.from;
+    for (let i = 0; i < 62 && cur <= applied.to; i++) { days.push(cur); cur = shiftDay(cur, 1); }
+    return days;
+  }, [applied]); // eslint-disable-line react-hooks/exhaustive-deps
+  const countByDay = useMemo(() => Object.fromEntries(groupedByDate.map(([k, v]) => [k, v.length])), [groupedByDate]);
+  const maxCnt = Math.max(1, ...Object.values(countByDay));
+  const statusUsed = useMemo(() => [...new Set(logs.map(l => l.status).filter(Boolean))], [logs]);
+  const jumpToDay = (k) => { const el = document.getElementById(`fa-hist-${k}`); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); };
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {/* 검색 패널 */}
-      <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "14px 18px" }}>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontSize: 16, fontWeight: 800, color: NAVY, whiteSpace: "nowrap" }}>기사 이력 조회</span>
-          <select
-            value={selId}
-            onChange={e => setSelId(e.target.value)}
-            style={{ flex: "0 0 auto", width: 180, maxWidth: 200, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: 7, fontSize: 15, color: "#374151", background: "#fafafa", outline: "none" }}
-          >
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <style>{FA_CSS}</style>
+
+      {/* ═══ 머리줄 + 검색 ═══ */}
+      <FaHero code="FLEET · HISTORY LOG" title="이력 조회" sub="기사별 상태 변경·운행·사진 기록을 기간으로 조회합니다"
+        icon={<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>}>
+        {quickRanges.map(([label, f, t]) => {
+          const on = fromDate === f && toDate === t;
+          return (
+            <button key={label} className={on ? "" : "fa-chip"} onClick={() => { setFromDate(f); setToDate(t); }}
+              style={{ ...FA_HBTN, height: 34, padding: "0 12px", fontSize: 13, background: on ? "#fff" : "rgba(255,255,255,.08)", color: on ? "#0F1A30" : "#fff" }}>
+              {label}
+            </button>
+          );
+        })}
+      </FaHero>
+
+      <div style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 16, padding: "14px 16px", boxShadow: "0 1px 2px rgba(16,24,40,.04), 0 6px 16px rgba(16,24,40,.04)", display: "flex", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 5, flex: "1 1 220px", maxWidth: 320, minWidth: 0 }}>
+          <span style={{ fontFamily: FC_MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: ".18em", color: "#94A3B8" }}>DRIVER · 기사</span>
+          <CustomSelect value={selId} onChange={e => setSelId(e.target.value)} className={`${FA_LIGHT_FIELD} w-full`}>
             <option value="">기사 선택</option>
             {drivers.map(d => <option key={d.id} value={d.id}>{d.이름} ({d.차량번호})</option>)}
-          </select>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <input type="date" value={fromDate} max={todayStr} onChange={e => setFromDate(e.target.value)}
-              style={{ padding: "7px 8px", border: "1px solid #e5e7eb", borderRadius: 7, fontSize: 15, color: "#374151", background: "#fafafa", outline: "none" }} />
-            <span style={{ color: "#9ca3af", fontSize: 15 }}>~</span>
-            <input type="date" value={toDate} max={todayStr} onChange={e => setToDate(e.target.value)}
-              style={{ padding: "7px 8px", border: "1px solid #e5e7eb", borderRadius: 7, fontSize: 15, color: "#374151", background: "#fafafa", outline: "none" }} />
+          </CustomSelect>
+        </label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+          <span style={{ fontFamily: FC_MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: ".18em", color: "#94A3B8" }}>PERIOD · 기간</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <CustomDatePicker value={fromDate} onChange={e => { const v = clampDay(e.target.value); setFromDate(v); if (v > toDate) setToDate(v); }} className={`${FA_LIGHT_FIELD} min-w-[150px] font-mono`} showIcon placeholder="시작일" />
+            <span style={{ color: "#94A3B8", fontWeight: 800 }}>~</span>
+            <CustomDatePicker value={toDate} onChange={e => { const v = clampDay(e.target.value); setToDate(v); if (v < fromDate) setFromDate(v); }} className={`${FA_LIGHT_FIELD} min-w-[150px] font-mono`} showIcon placeholder="종료일" />
           </div>
-          <button
-            onClick={() => {
-              if (!selId) return;
-              const d = drivers.find(x => x.id === selId);
-              setApplied({ driverId: selId, from: fromDate, to: toDate, driverName: d?.이름 || "", carNo: d?.차량번호 || "" });
-            }}
-            disabled={!selId}
-            style={{ padding: "8px 20px", borderRadius: 7, border: "none", background: selId ? NAVY : "#e5e7eb", color: selId ? "white" : "#9ca3af", fontSize: 15, fontWeight: 700, cursor: selId ? "pointer" : "not-allowed", whiteSpace: "nowrap" }}
-          >
-            조회
-          </button>
         </div>
+        <button onClick={runQuery} disabled={!selId}
+          style={{ height: 40, padding: "0 22px", borderRadius: 10, border: "none", background: selId ? "linear-gradient(135deg,#1B2B4B,#2D4C82)" : "#E5E9F0", color: selId ? "#fff" : "#94A3B8", fontSize: 14.5, fontWeight: 800, cursor: selId ? "pointer" : "not-allowed", whiteSpace: "nowrap", boxShadow: selId ? "0 6px 14px rgba(27,43,75,.25)" : "none", display: "inline-flex", alignItems: "center", gap: 7 }}>
+          <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+          조회
+        </button>
       </div>
+
+      {/* 조회 전 안내 */}
+      {!applied && (
+        <div style={{ background: "#fff", border: "1px dashed #D5DDEA", borderRadius: 16, padding: "52px 20px", textAlign: "center" }}>
+          <div style={{ fontFamily: FC_MONO, fontSize: 11, fontWeight: 800, letterSpacing: ".24em", color: "#C0CADB" }}>READY</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: "#64748B", marginTop: 6 }}>기사와 기간을 고른 뒤 [조회]를 누르세요</div>
+        </div>
+      )}
 
       {/* 결과 */}
       {applied && (loading ? (
-        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "48px", textAlign: "center", color: "#9ca3af", fontSize: 16 }}>조회 중...</div>
+        <div style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 16, padding: "48px", textAlign: "center", color: "#94A3B8", fontSize: 15 }}>
+          <div style={{ fontFamily: FC_MONO, fontSize: 11, fontWeight: 800, letterSpacing: ".24em", color: "#8FB0F0" }}>LOADING</div>
+          <div style={{ marginTop: 6, fontWeight: 700 }}>조회 중...</div>
+        </div>
       ) : logs.length === 0 ? (
-        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "48px", textAlign: "center" }}>
-          <div style={{ fontSize: 16, color: "#6b7280", fontWeight: 700 }}>해당 기간의 기록이 없습니다</div>
-          <div style={{ fontSize: 15, color: "#9ca3af", marginTop: 6 }}>{applied.from === applied.to ? applied.from : `${applied.from} ~ ${applied.to}`}</div>
+        <div style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 16, padding: "48px", textAlign: "center" }}>
+          <div style={{ fontFamily: FC_MONO, fontSize: 11, fontWeight: 800, letterSpacing: ".24em", color: "#C0CADB" }}>NO RECORD</div>
+          <div style={{ fontSize: 16, color: "#64748B", fontWeight: 800, marginTop: 6 }}>해당 기간의 기록이 없습니다</div>
+          <div style={{ fontSize: 14, color: "#94A3B8", marginTop: 6, fontFamily: FC_MONO }}>{applied.driverName} · {applied.from === applied.to ? applied.from : `${applied.from} ~ ${applied.to}`}</div>
         </div>
       ) : (
         <>
           {/* 기사 헤더 */}
-          <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px 24px", display: "flex", alignItems: "center", gap: 16 }}>
-            <div style={{ width: 46, height: 46, borderRadius: 12, background: NAVY, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <svg width="22" height="22" fill="none" stroke="white" strokeWidth="1.7" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" strokeLinecap="round"/></svg>
+          <div style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 16, padding: "14px 20px", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", boxShadow: "0 1px 2px rgba(16,24,40,.04), 0 6px 16px rgba(16,24,40,.04)" }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <svg width="21" height="21" fill="none" stroke="white" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" strokeLinecap="round"/></svg>
             </div>
-            <div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: NAVY }}>{applied.driverName}</div>
-              <div style={{ fontSize: 15, color: "#6b7280", marginTop: 2 }}>{applied.carNo} · {applied.from === applied.to ? applied.from : `${applied.from} ~ ${applied.to}`}</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 19, fontWeight: 900, color: "#0F1A30" }}>{applied.driverName}</div>
+              <div style={{ fontSize: 13.5, color: "#64748B", marginTop: 2, fontWeight: 600 }}>
+                <span style={{ color: NAVY, fontWeight: 800 }}>{applied.carNo}</span>
+                <span style={{ fontFamily: FC_MONO, marginLeft: 8 }}>{applied.from === applied.to ? applied.from : `${applied.from} ~ ${applied.to}`}</span>
+              </div>
+            </div>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {statusUsed.map(s => (
+                <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 700, color: "#64748B" }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 3, background: STATUS_COLORS[s] || "#9ca3af" }} />{s}
+                </span>
+              ))}
             </div>
           </div>
 
-          {/* 요약 카드 */}
+          {/* 요약 KPI */}
           {summary && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
-              {[
-                { label: "출근 시각", val: summary.checkInTime ? formatTime(summary.checkInTime) : "--" },
-                { label: "퇴근 시각", val: summary.checkOutTime ? formatTime(summary.checkOutTime) : "--" },
-                { label: "총 근무시간", val: summary.workMs > 0 ? formatMs(summary.workMs) : "--" },
-                { label: "운행 횟수", val: `${summary.tripCount}회` },
-                { label: "이동거리", val: gpsDist != null ? `${gpsDist.toFixed(1)} km` : "--" },
-                { label: "상태 변경", val: `${logs.length}건` },
-              ].map(({ label, val }) => (
-                <div key={label} style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: "14px 18px" }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 7 }}>{label}</div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: NAVY }}>{val}</div>
-                </div>
-              ))}
+            <div className="fa-kpis six">
+              <KpiCard primary label="출근 시각" code="IN" icon={<><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /><path d="m10 17 5-5-5-5M15 12H3" /></>} value={summary.checkInTime ? formatTime(summary.checkInTime) : "--"} />
+              <KpiCard label="퇴근 시각" code="OUT" icon={<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5M21 12H9" /></>} value={summary.checkOutTime ? formatTime(summary.checkOutTime) : "--"} />
+              <KpiCard label="총 근무시간" code="WORK" icon={<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>} value={summary.workMs > 0 ? (summary.workMs >= 3600000 ? Math.floor(summary.workMs / 3600000) : Math.floor(summary.workMs / 60000)) : "--"} sub={summary.workMs > 0 ? (summary.workMs >= 3600000 ? `시간 ${Math.floor(summary.workMs % 3600000 / 60000)}분` : "분") : ""} />
+              <KpiCard label="운행 횟수" code="TRIPS" icon={KPI_ICONS.truck} value={summary.tripCount} sub="회" />
+              <KpiCard label="이동거리" code="DIST" icon={KPI_ICONS.route} value={gpsDist != null ? gpsDist.toFixed(1) : "--"} sub={gpsDist != null ? "km" : ""} />
+              <KpiCard label="상태 변경" code="EVENTS" icon={KPI_ICONS.check} value={logs.length} sub="건" />
             </div>
           )}
 
-          {/* 날짜별 타임라인 */}
-          {groupedByDate.map(([dateKey, dateLogs]) => (
-            <div key={dateKey} style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden" }}>
-              <div style={{ padding: "12px 22px", background: "#f8f9fb", borderBottom: "1px solid #eaecf0", display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 16, fontWeight: 800, color: NAVY }}>{dateKey}</span>
-                <span style={{ fontSize: 15, color: "#9ca3af" }}>{dateLogs.length}건</span>
+          {/* 기간 활동 히트맵(2일 이상 조회 시) */}
+          {rangeDays.length > 1 && (
+            <FaPanel code="ACTIVITY" title="기간 활동" right={<span style={{ fontSize: 12.5, fontWeight: 700, color: "#94A3B8" }}>칸을 누르면 그 날짜로 이동</span>} bodyStyle={{ padding: "14px 16px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(46px, 1fr))", gap: 6 }}>
+                {rangeDays.map(k => {
+                  const n = countByDay[k] || 0;
+                  const r = n / maxCnt;
+                  const bg = !n ? "#F3F6FA" : r >= 0.75 ? "#1B2B4B" : r >= 0.5 ? "#2D4C82" : r >= 0.25 ? "#6F8FC8" : "#C9D7EF";
+                  const fg = !n ? "#94A3B8" : r >= 0.25 ? "#fff" : "#1B2B4B";
+                  const dow = new Date(`${k}T12:00:00+09:00`).getDay();
+                  return (
+                    <button key={k} className="fa-cell" disabled={!n} onClick={() => jumpToDay(k)} title={`${k} · ${n}건`}
+                      style={{ height: 48, borderRadius: 9, border: "1px solid #E8EDF4", background: bg, color: fg, cursor: n ? "pointer" : "default", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1 }}>
+                      <span style={{ fontSize: 10.5, fontWeight: 800, opacity: 0.8, color: !n && (dow === 0 || KOREAN_HOLIDAYS[k]) ? "#DC2626" : undefined }}>{Number(k.slice(5, 7))}/{Number(k.slice(8))}</span>
+                      <span style={{ fontFamily: FC_MONO, fontSize: 13, fontWeight: 800 }}>{n || "·"}</span>
+                    </button>
+                  );
+                })}
               </div>
-              <div style={{ padding: "8px 0" }}>
+            </FaPanel>
+          )}
+
+          {/* 날짜별 타임라인 */}
+          {groupedByDate.map(([dateKey, dateLogs]) => {
+            const dw = ["일","월","화","수","목","금","토"][new Date(`${dateKey}T12:00:00+09:00`).getDay()];
+            const segs = dayBands[dateKey] || [];
+            return (
+            <div key={dateKey} id={`fa-hist-${dateKey}`} style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 16, overflow: "hidden", scrollMarginTop: 12, boxShadow: "0 1px 2px rgba(16,24,40,.04), 0 6px 16px rgba(16,24,40,.04)" }}>
+              <div style={{ padding: "11px 18px", background: "linear-gradient(90deg,#0F1A30,#1B2B4B)", display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ width: 7, height: 7, borderRadius: 2, background: "#8FB0F0", transform: "rotate(45deg)" }} />
+                <span style={{ fontFamily: FC_MONO, fontSize: 15, fontWeight: 800, color: "#fff", letterSpacing: ".04em" }}>{dateKey}</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: "rgba(207,224,255,.7)" }}>({dw})</span>
+                <span style={{ marginLeft: "auto", fontFamily: FC_MONO, fontSize: 12, fontWeight: 800, color: "#CFE0FF", letterSpacing: ".1em" }}>{dateLogs.length} EVENTS</span>
+              </div>
+              {/* 24시간 상태 띠 */}
+              <div style={{ padding: "14px 18px 6px" }}>
+                <div style={{ position: "relative", height: 18, borderRadius: 6, background: "#F3F6FA", border: "1px solid #EEF1F6", overflow: "hidden" }}>
+                  {[6, 12, 18].map(h => <span key={h} style={{ position: "absolute", left: `${h / 24 * 100}%`, top: 0, bottom: 0, width: 1, background: "#E3E8F0" }} />)}
+                  {segs.map((g, i) => (
+                    <span key={i} title={`${g.status} ${String(Math.floor(g.s / 60)).padStart(2, "0")}:${String(Math.floor(g.s % 60)).padStart(2, "0")}`}
+                      style={{ position: "absolute", top: 2, bottom: 2, left: `${g.s / 1440 * 100}%`, width: `${Math.max(0.3, (g.e - g.s) / 1440 * 100)}%`, background: g.color, borderRadius: 3 }} />
+                  ))}
+                </div>
+                <div style={{ position: "relative", height: 16, marginTop: 3 }}>
+                  {[0, 6, 12, 18, 24].map(h => (
+                    <span key={h} style={{ position: "absolute", left: `${h / 24 * 100}%`, transform: h === 0 ? "none" : h === 24 ? "translateX(-100%)" : "translateX(-50%)", fontFamily: FC_MONO, fontSize: 10.5, fontWeight: 700, color: "#94A3B8" }}>{String(h).padStart(2, "0")}:00</span>
+                  ))}
+                </div>
+              </div>
+              <div style={{ padding: "4px 0 8px" }}>
                 {dateLogs.map((log, i) => {
                   const t = resolveTs(log.timestamp);
                   const nextT = resolveTs(dateLogs[i + 1]?.timestamp);
                   const durMs = t && nextT ? nextT.getTime() - t.getTime() : null;
                   const color = STATUS_COLORS[log.status] || "#9ca3af";
                   return (
-                    <div key={log.id} style={{ display: "flex", alignItems: "flex-start", padding: "0 22px" }}>
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 24, flexShrink: 0 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: "50%", background: color, border: "2px solid #fff", boxShadow: `0 0 0 2px ${color}50`, flexShrink: 0, marginTop: 13 }} />
-                        {i < dateLogs.length - 1 && <div style={{ width: 1, background: "#e5e7eb", flex: 1, minHeight: 18 }} />}
+                    <div key={log.id} style={{ display: "flex", alignItems: "flex-start", padding: "0 18px" }}>
+                      <div style={{ width: 54, flexShrink: 0, paddingTop: 10, fontFamily: FC_MONO, fontSize: 14, fontWeight: 800, color: "#0F1A30" }}>{t ? formatTime(t) : "--"}</div>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 22, flexShrink: 0 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: "50%", background: color, border: "2px solid #fff", boxShadow: `0 0 0 2px ${color}55`, flexShrink: 0, marginTop: 14 }} />
+                        {i < dateLogs.length - 1 && <div style={{ width: 2, background: "#EEF1F6", flex: 1, minHeight: 18 }} />}
                       </div>
-                      <div style={{ flex: 1, paddingLeft: 12, paddingTop: 9, paddingBottom: i < dateLogs.length - 1 ? 4 : 14 }}>
+                      <div style={{ flex: 1, minWidth: 0, paddingLeft: 10, paddingTop: 8, paddingBottom: i < dateLogs.length - 1 ? 4 : 10 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                          <span style={{ fontSize: 16, fontWeight: 800, color, background: `${color}15`, padding: "2px 10px", borderRadius: 99 }}>{log.status}</span>
-                          <span style={{ fontSize: 15, fontWeight: 700, color: "#374151", fontVariantNumeric: "tabular-nums" }}>{t ? formatTime(t) : "--"}</span>
+                          <span style={{ fontSize: 14, fontWeight: 800, color, background: `${color}14`, border: `1px solid ${color}30`, padding: "2px 10px", borderRadius: 99 }}>{log.status}</span>
                           {durMs != null && durMs > 60000 && (
-                            <span style={{ fontSize: 14, color: "#9ca3af" }}>{formatMs(durMs)} 체류</span>
+                            <span style={{ fontSize: 12.5, fontWeight: 700, color: "#64748B", background: "#F3F6FA", padding: "2px 8px", borderRadius: 6 }}>{formatMs(durMs)} 체류</span>
+                          )}
+                          {log.location?.lat != null && (
+                            <span style={{ fontSize: 12, color: "#94A3B8", fontFamily: FC_MONO }}>
+                              {log.location.lat.toFixed(5)}, {log.location.lng.toFixed(5)}
+                            </span>
                           )}
                         </div>
-                        {log.location?.lat != null && (
-                          <div style={{ fontSize: 14, color: "#9ca3af", marginTop: 3, fontVariantNumeric: "tabular-nums" }}>
-                            {log.location.lat.toFixed(5)}, {log.location.lng.toFixed(5)}
-                          </div>
-                        )}
                       </div>
                     </div>
                   );
@@ -4390,22 +4505,22 @@ function HistoryTab({ drivers, defaultDriverId }) {
                 const dayPhotos = driverPhotos.filter(p => p.logDate === dateKey);
                 if (!dayPhotos.length) return null;
                 return (
-                  <div style={{ marginTop: 14 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#9ca3af", marginBottom: 10, letterSpacing: "0.05em" }}>첨부 사진 · 클릭하면 크게 봅니다</div>
+                  <div style={{ padding: "12px 18px 18px", borderTop: "1px solid #EEF1F6" }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: "#94A3B8", marginBottom: 10 }}><span style={{ fontFamily: FC_MONO, letterSpacing: ".18em", marginRight: 8 }}>PHOTOS</span>첨부 사진 · 클릭하면 크게 봅니다</div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 10 }}>
                       {dayPhotos.map((p, photoIdx) => {
                         const t = resolveTs(p.timestamp);
                         return (
-                          <div key={p.id} style={{ borderRadius: 10, overflow: "hidden", border: "1px solid #e5e7eb", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", cursor: "pointer" }}
+                          <div key={p.id} style={{ borderRadius: 10, overflow: "hidden", border: "1px solid #E3E8F0", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", cursor: "pointer" }}
                             onClick={() => setHistPhotoLightbox({ photos: dayPhotos, index: photoIdx, rotation: 0 })}>
                             <div style={{ position: "relative", overflow: "hidden" }}>
                               <img src={p.imageBase64} alt={p.actionType} style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", display: "block", transition: "transform .2s" }}
                                 onMouseEnter={e => e.currentTarget.style.transform = "scale(1.05)"}
                                 onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"} />
                             </div>
-                            <div style={{ padding: "6px 10px", background: "#f9fafb" }}>
+                            <div style={{ padding: "6px 10px", background: "#F7F9FC" }}>
                               <div style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>{p.actionType}</div>
-                              <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 1 }}>{t ? `${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")}` : "-"}</div>
+                              <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 1, fontFamily: FC_MONO }}>{t ? `${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")}` : "-"}</div>
                             </div>
                           </div>
                         );
@@ -4415,7 +4530,8 @@ function HistoryTab({ drivers, defaultDriverId }) {
                 );
               })()}
             </div>
-          ))}
+            );
+          })}
         </>
       ))}
 
@@ -5047,6 +5163,80 @@ function CheckInLocModal({ title, initialLoc, onSave, onCancel }) {
 }
 
 // ─── AttendanceTab ────────────────────────────────────────────────────────────
+// ⭐ 2026-11-01 출근기록부·이력조회 리디자인 — 관제센터와 같은 네이비 그리드 머리줄 + 고정폭(mono) 영문 라벨 +
+//    KPI 타일 + 월간 히트맵/근무 타임라인. 네이티브 <select>/<input type="date">는 프로그램 공용
+//    CustomSelect/CustomDatePicker로 바꿨다(데이터 흐름·조회 로직은 그대로).
+
+// 상태 색 — 근무중(초록)·퇴근(슬레이트)·최종퇴근(네이비)·미출근(빨강)만 색을 쓰고 나머지는 네이비 톤
+const FA_STATE = {
+  working: { label: "근무중", color: "#10B981", bg: "#E7F8F1" },
+  final:   { label: "최종퇴근", color: "#1B2B4B", bg: "#E6ECF6" },
+  out:     { label: "퇴근", color: "#64748B", bg: "#F1F4F8" },
+  absent:  { label: "미출근", color: "#DC2626", bg: "#FDECEC" },
+};
+
+// 화면 공용 CSS — 반응형 그리드(넓은 화면 2단 → 좁은 화면 1단)
+const FA_CSS = `
+  .fa-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+  .fa-kpis.six { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .fa-split { display: grid; grid-template-columns: minmax(340px, 400px) minmax(0, 1fr); gap: 14px; align-items: stretch; }
+  .fa-cell { transition: transform .12s, box-shadow .12s; }
+  .fa-cell:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 6px 14px rgba(27,43,75,.18); }
+  .fa-row:hover td { background: #F5F8FD !important; }
+  .fa-chip:hover { background: rgba(255,255,255,.16) !important; }
+  @media (max-width: 1500px) { .fa-kpis.six { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 1280px) { .fa-split { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 1100px) { .fa-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 640px)  { .fa-kpis, .fa-kpis.six { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+`;
+
+// 네이비 그리드 머리줄(영문 코드 + 제목 + 보조문구 + 오른쪽 조작부)
+function FaHero({ code, title, sub, icon, children }) {
+  return (
+    <div className="fc-grid-bg" style={{ position: "relative", overflow: "hidden", borderRadius: 18, border: "1px solid #0F1A30", boxShadow: "0 12px 30px rgba(15,26,48,.24)", padding: "18px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 14 }}>
+      <div className="fc-scanline" />
+      <div style={{ display: "flex", alignItems: "center", gap: 14, position: "relative", minWidth: 0 }}>
+        <div style={{ width: 46, height: 46, borderRadius: 14, flexShrink: 0, background: "linear-gradient(135deg,#2D4C82 0%,#0B1428 100%)", border: "1px solid rgba(207,224,255,.35)", boxShadow: "0 0 0 4px rgba(143,176,240,.08)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <svg width="22" height="22" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">{icon}</svg>
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontFamily: FC_MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>{code}</div>
+          <div style={{ fontSize: 22, fontWeight: 900, color: "#fff", letterSpacing: "-0.02em", marginTop: 1 }}>{title}</div>
+          {sub && <div style={{ fontSize: 13.5, color: "rgba(207,224,255,.68)", marginTop: 2 }}>{sub}</div>}
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative", flexWrap: "wrap" }}>{children}</div>
+    </div>
+  );
+}
+
+// 흰 패널(관제 패널 머리줄 포함)
+function FaPanel({ code, title, right, children, bodyStyle }) {
+  return (
+    <div style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 16, overflow: "hidden", boxShadow: "0 1px 2px rgba(16,24,40,.04), 0 6px 16px rgba(16,24,40,.04)", display: "flex", flexDirection: "column", minWidth: 0 }}>
+      <FcPanelHead code={code} title={title} right={right} />
+      <div style={{ flex: 1, minWidth: 0, ...bodyStyle }}>{children}</div>
+    </div>
+  );
+}
+
+const FA_HBTN = { height: 40, minWidth: 40, padding: "0 12px", borderRadius: 10, border: "1px solid rgba(207,224,255,.25)", background: "rgba(255,255,255,.08)", color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, whiteSpace: "nowrap" };
+// CustomDatePicker/CustomSelect용 클래스(어두운 머리줄 / 흰 바탕)
+const FA_DARK_FIELD = "h-10 px-3 rounded-[10px] border border-[rgba(207,224,255,.35)] bg-white/10 text-white text-[14px] font-extrabold font-mono tracking-wide min-w-[148px] hover:bg-white/15";
+const FA_LIGHT_FIELD = "h-10 px-3 rounded-[10px] border border-[#DCE3EE] bg-white text-[#0F1A30] text-[14px] font-bold hover:border-[#9FB3D6]";
+
+function faStatePill(key, small) {
+  const s = FA_STATE[key];
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: small ? "2px 8px" : "3px 10px", borderRadius: 99, background: s.bg, color: s.color, fontSize: small ? 12 : 13, fontWeight: 800, whiteSpace: "nowrap" }}>
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: s.color, boxShadow: key === "working" ? `0 0 0 3px ${s.color}33` : "none" }} />
+      {s.label}
+    </span>
+  );
+}
+
+// KST 기준 "YYYY-MM-DD" 00:00의 ms
+const faKstMidnight = (ymd) => new Date(`${ymd}T00:00:00+09:00`).getTime();
 
 function AttendanceTab({ drivers }) {
   const todayStr = kstDateStr();
@@ -5067,6 +5257,8 @@ function AttendanceTab({ drivers }) {
     d.setDate(d.getDate() + delta);
     setSelectedDate(kstDateStr(d));
   };
+  // 달력에서 미래 날짜를 골라도 오늘로 맞춘다(기존 max={todayStr}와 같은 규칙)
+  const pickDate = (v) => { if (!v) return; setSelectedDate(v > todayStr ? todayStr : v); };
 
   const { attendance, noShow } = useMemo(() => {
     // Sort logs oldest-first for forward-scan session tracking
@@ -5105,130 +5297,317 @@ function AttendanceTab({ drivers }) {
     };
   }, [allLogs, selectedDate, drivers, todayStr]);
 
-  const fmtT = (d) => d ? `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` : "--";
-  const fmtWork = (i, o) => {
+  // ⭐ 2026-11-01 월간 히트맵 — 날짜(KST)별 출근한 기사 수(같은 기사 중복 출근은 1명)
+  const dayCounts = useMemo(() => {
+    const m = {};
+    allLogs.forEach(log => {
+      if (log.status !== "출근" || !log.uid) return;
+      const k = toKSTDate(log.timestamp);
+      if (!k) return;
+      (m[k] = m[k] || new Set()).add(log.uid);
+    });
+    const out = {};
+    Object.entries(m).forEach(([k, s]) => { out[k] = s.size; });
+    return out;
+  }, [allLogs]);
+
+  // ⭐ 2026-11-01 시각은 KST로 고정 표시(브라우저 시간대와 무관)
+  const fmtT = (d) => { if (!d) return "--"; const k = new Date(d.getTime() + 9 * 3600000); return `${String(k.getUTCHours()).padStart(2,"0")}:${String(k.getUTCMinutes()).padStart(2,"0")}`; };
+  const workTxt = (i, o) => {
     if (!i) return "--";
     const ms = (o || new Date()).getTime() - i.getTime();
     const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
-    const txt = h > 0 ? `${h}시간 ${m}분` : `${m}분`;
-    if (!o) return <span style={{ color: "#10b981", fontWeight: 700 }}>{txt} (근무중)</span>;
-    return txt;
+    return h > 0 ? `${h}시간 ${m}분` : `${m}분`;
+  };
+  const rowState = (r) => (!r.checkOut ? "working" : r.isFinal ? "final" : "out");
+  const liveOf = (uid) => drivers.find(d => d.id === uid);
+  const kmOf = (row) => {
+    const live = liveOf(row.uid);
+    return row.distance != null ? row.distance : (live ? live.총거리 || 0 : null);
+  };
+  const fuelOf = (row) => {
+    const live = liveOf(row.uid);
+    const km = kmOf(row);
+    if (km == null || km <= 0) return null;
+    const vt = String(live?.vehicleType || "").replace(/\s/g,"");
+    const eff = /25|28/.test(vt)?3.0:/11|15|18/.test(vt)?3.5:/1[^0-9]|2\.5|소형/.test(vt)?5.5:4.0;
+    return Math.round(km/eff*1750);
   };
 
   const dateLabel = (() => {
-    const d = new Date(selectedDate);
+    const d = new Date(selectedDate + "T12:00:00+09:00");
     return `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${["일","월","화","수","목","금","토"][d.getDay()]})`;
   })();
 
+  const workingCnt = attendance.filter(r => !r.checkOut).length;
+  const doneCnt = attendance.filter(r => r.checkOut).length;
+  const absentCnt = Math.max(0, drivers.length - attendance.length);
+  const rate = drivers.length ? Math.min(100, Math.round(attendance.length / drivers.length * 100)) : 0;
+  const totalKm = attendance.reduce((s, r) => s + (kmOf(r) || 0), 0);
+
+  // 월간 달력 셀(일요일 시작)
+  const ym = selectedDate.slice(0, 7);
+  const [cy, cm] = ym.split("-").map(Number);
+  const firstDow = new Date(Date.UTC(cy, cm - 1, 1)).getUTCDay();
+  const daysInMonth = new Date(Date.UTC(cy, cm, 0)).getUTCDate();
+  const cells = [...Array(firstDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => `${ym}-${String(i + 1).padStart(2, "0")}`)];
+  const maxDay = Math.max(drivers.length, ...Object.entries(dayCounts).filter(([k]) => k.startsWith(ym)).map(([, v]) => v), 1);
+  const monthDays = cells.filter(Boolean).filter(k => k <= todayStr);
+  const monthAvg = monthDays.length ? (monthDays.reduce((s, k) => s + (dayCounts[k] || 0), 0) / monthDays.length) : 0;
+  const goMonth = (delta) => {
+    const d = new Date(Date.UTC(cy, cm - 1 + delta, 1));
+    const nym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    const day = Math.min(Number(selectedDate.slice(8)), new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate());
+    pickDate(`${nym}-${String(day).padStart(2, "0")}`);
+  };
+  const heat = (n) => {
+    if (!n) return { bg: "#F3F6FA", fg: "#94A3B8", border: "#E8EDF4" };
+    const r = n / maxDay;
+    if (r >= 0.85) return { bg: "#1B2B4B", fg: "#fff", border: "#1B2B4B" };
+    if (r >= 0.6) return { bg: "#2D4C82", fg: "#fff", border: "#2D4C82" };
+    if (r >= 0.35) return { bg: "#6F8FC8", fg: "#fff", border: "#6F8FC8" };
+    return { bg: "#C9D7EF", fg: "#1B2B4B", border: "#C9D7EF" };
+  };
+
+  // 근무 타임라인 축(선택일 KST 00:00 기준 분) — 출근 최솟값~퇴근(또는 지금) 최댓값, 최소 10시간
+  const dayStart = faKstMidnight(selectedDate);
+  const nowMs = Date.now();
+  const spans = attendance.map(r => {
+    const s = (r.checkIn.getTime() - dayStart) / 60000;
+    const e = ((r.checkOut ? r.checkOut.getTime() : Math.min(nowMs, dayStart + 36 * 3600000)) - dayStart) / 60000;
+    return { r, s, e: Math.max(e, s + 5) };
+  });
+  let axS = spans.length ? Math.floor(Math.min(...spans.map(x => x.s)) / 60) : 6;
+  let axE = spans.length ? Math.ceil(Math.max(...spans.map(x => x.e)) / 60) : 20;
+  axS = Math.max(0, Math.min(axS, 23)); axE = Math.min(36, Math.max(axE, axS + 10));
+  const axSpan = (axE - axS) * 60;
+  const tickStep = axE - axS > 18 ? 3 : 2;
+  const ticks = []; for (let h = Math.ceil(axS / tickStep) * tickStep; h <= axE; h += tickStep) ticks.push(h);
+  const pct = (min) => `${Math.max(0, Math.min(100, ((min - axS * 60) / axSpan) * 100))}%`;
+  const nowMin = (nowMs - dayStart) / 60000;
+
+  const th = { padding: "11px 14px", fontSize: 12.5, fontWeight: 800, color: "#CFE0FF", whiteSpace: "nowrap", textAlign: "left", letterSpacing: ".02em" };
+  const td = { padding: "12px 14px", fontSize: 14.5, fontWeight: 600, color: "#0F1A30", whiteSpace: "nowrap", borderTop: "1px solid #EEF1F6", background: "#fff" };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      {/* 날짜 네비게이션 */}
-      <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "18px 24px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 18, fontWeight: 800, color: NAVY }}>출근기록부</span>
-          <span style={{ fontSize: 16, color: "#6b7280", fontWeight: 600 }}>{dateLabel}</span>
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 7 }}>
-            <button onClick={() => goDay(-1)} style={{ padding: "6px 13px", border: "1px solid #e5e7eb", borderRadius: 7, background: "#fff", cursor: "pointer", fontSize: 15, fontWeight: 600, color: "#374151" }}>이전일</button>
-            <input type="date" value={selectedDate} max={todayStr} onChange={e => setSelectedDate(e.target.value)}
-              style={{ padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: 7, fontSize: 16, color: "#374151", outline: "none" }} />
-            <button onClick={() => goDay(1)} disabled={selectedDate >= todayStr}
-              style={{ padding: "6px 13px", border: "1px solid #e5e7eb", borderRadius: 7, background: "#fff", cursor: selectedDate >= todayStr ? "default" : "pointer", fontSize: 15, fontWeight: 600, color: selectedDate >= todayStr ? "#d1d5db" : "#374151" }}>다음일</button>
-            {selectedDate !== todayStr && (
-              <button onClick={() => setSelectedDate(todayStr)} style={{ padding: "6px 13px", border: "none", borderRadius: 7, background: NAVY, color: "#fff", cursor: "pointer", fontSize: 15, fontWeight: 700 }}>오늘</button>
-            )}
+      <style>{FA_CSS}</style>
+
+      {/* ═══ 머리줄 — 날짜 이동 ═══ */}
+      <FaHero code="FLEET · ATTENDANCE" title="출근기록부" sub={<>{dateLabel}<span style={{ fontFamily: FC_MONO, marginLeft: 8, color: "rgba(207,224,255,.45)" }}>{loading ? "· SYNCING…" : "· LIVE"}</span></>}
+        icon={<><rect x="4" y="4" width="16" height="17" rx="2" /><path d="M8 2v4M16 2v4M4 10h16M8 14h3M8 17h6" /></>}>
+        <button className="fa-chip" style={FA_HBTN} onClick={() => goDay(-1)} title="이전일" aria-label="이전일">
+          <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></svg>
+        </button>
+        <CustomDatePicker value={selectedDate} onChange={e => pickDate(e.target.value)} className={FA_DARK_FIELD} showIcon />
+        <button className="fa-chip" style={{ ...FA_HBTN, opacity: selectedDate >= todayStr ? 0.35 : 1, cursor: selectedDate >= todayStr ? "default" : "pointer" }} onClick={() => goDay(1)} disabled={selectedDate >= todayStr} title="다음일" aria-label="다음일">
+          <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></svg>
+        </button>
+        <button onClick={() => setSelectedDate(todayStr)} disabled={selectedDate === todayStr}
+          style={{ ...FA_HBTN, background: selectedDate === todayStr ? "rgba(255,255,255,.08)" : "#fff", color: selectedDate === todayStr ? "rgba(255,255,255,.5)" : "#0F1A30", border: "1px solid rgba(207,224,255,.35)", cursor: selectedDate === todayStr ? "default" : "pointer" }}>
+          오늘
+        </button>
+      </FaHero>
+
+      {/* ═══ KPI 타일 ═══ */}
+      <div className="fa-kpis">
+        <KpiCard primary label="출근" code="ON DUTY" icon={KPI_ICONS.user} value={attendance.length} sub={`/ ${drivers.length}명`} />
+        <KpiCard label="근무중" code="ACTIVE" icon={<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>} value={workingCnt} sub="명" />
+        <KpiCard label="퇴근 완료" code="DONE" icon={KPI_ICONS.check} value={doneCnt} sub="명" />
+        <KpiCard label="미출근" code="ABSENT" icon={<><circle cx="12" cy="12" r="9" /><path d="m9 9 6 6M15 9l-6 6" /></>} value={absentCnt} sub={selectedDate === todayStr ? "명" : "명 (추정)"} />
+        <div style={{ position: "relative", overflow: "hidden", borderRadius: 14, padding: "16px 18px 14px", background: "#fff", border: "1px solid #E3E8F0", boxShadow: "0 1px 2px rgba(16,24,40,.04), 0 6px 16px rgba(16,24,40,.05)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 14, fontWeight: 800, color: "#4b5563" }}>출근율</span>
+            <span style={{ fontFamily: FC_MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.16em", color: "#94A3B8" }}>RATE</span>
           </div>
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "10px 22px", marginTop: 12, paddingTop: 12, borderTop: "1px solid #f0f2f5" }}>
-          {[
-            { label: "출근", val: attendance.length, color: NAVY },
-            { label: "미출근", val: Math.max(0, drivers.length - attendance.length), color: attendance.length < drivers.length ? "#dc2626" : "#374151" },
-            { label: "근무중", val: attendance.filter(r => !r.checkOut).length, color: "#10b981" },
-            { label: "퇴근 완료", val: attendance.filter(r => r.checkOut).length, color: "#374151" },
-            { label: "전체 등록", val: drivers.length, color: "#6b7280" },
-          ].map(({ label, val, color }) => (
-            <div key={label}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "#9ca3af", letterSpacing: ".06em", marginBottom: 3, whiteSpace: "nowrap" }}>{label}</div>
-              <div style={{ fontSize: 28, fontWeight: 900, color }}>{val}</div>
-            </div>
-          ))}
+          <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginTop: 12 }}>
+            <span style={{ fontFamily: FC_MONO, fontSize: 34, fontWeight: 800, lineHeight: 1, color: "#0F1A30", letterSpacing: "-0.02em" }}>{rate}</span>
+            <span style={{ fontFamily: FC_MONO, fontSize: 16, fontWeight: 800, color: "#94A3B8" }}>%</span>
+            <span style={{ marginLeft: "auto", fontFamily: FC_MONO, fontSize: 12, fontWeight: 700, color: "#94A3B8" }}>{totalKm > 0 ? `${totalKm.toFixed(0)} km` : ""}</span>
+          </div>
+          <div style={{ marginTop: 10, height: 6, borderRadius: 99, background: "#EEF2F9", overflow: "hidden" }}>
+            <div style={{ width: `${rate}%`, height: "100%", borderRadius: 99, background: "linear-gradient(90deg,#1B2B4B,#2D4C82)", transition: "width .3s" }} />
+          </div>
         </div>
       </div>
 
-      {/* 출근 기록 테이블 */}
-      <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden" }}>
-        <div style={{ padding: "13px 20px", borderBottom: "1px solid #f0f2f5", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontSize: 18, fontWeight: 700, color: NAVY }}>출근 현황</span>
-          <span style={{ fontSize: 16, color: "#6b7280" }}>{attendance.length}명 출근</span>
-        </div>
-        {loading ? (
-          <div style={{ padding: "40px", textAlign: "center", color: "#9ca3af", fontSize: 17 }}>불러오는 중...</div>
-        ) : attendance.length === 0 ? (
-          <div style={{ padding: "44px", textAlign: "center", color: "#9ca3af", fontSize: 17 }}>해당 날짜에 출근 기록이 없습니다</div>
-        ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 17 }}>
-            <thead>
-              <tr style={{ background: "#f4f6fa", borderBottom: "2px solid #e5e7eb", position: "sticky", top: 0, zIndex: 1 }}>
-                {["#", "기사명", "차량번호", "출근시각", "퇴근시각", "근무시간", "이동거리", "연료비", "상태"].map(col => (
-                  <th key={col} style={{ padding: "12px 16px", textAlign: "left", color: "#374151", fontWeight: 700, fontSize: 16, whiteSpace: "nowrap" }}>{col}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {attendance.map((row, i) => (
-                <tr key={row.uid} style={{ borderBottom: "1px solid #f0f2f5", background: i % 2 === 0 ? "#fff" : "#fafbfc" }}>
-                  <td style={{ padding: "12px 16px", color: "#9ca3af", fontWeight: 600, fontSize: 16 }}>{i + 1}</td>
-                  <td style={{ padding: "12px 16px", fontWeight: 700, color: "#111827", fontSize: 17 }}>{row.name}</td>
-                  <td style={{ padding: "12px 16px", color: NAVY, fontWeight: 700, fontSize: 16, letterSpacing: "0.04em", fontVariantNumeric: "tabular-nums" }}>{row.carNo}</td>
-                  <td style={{ padding: "12px 16px", color: "#1B2B4B", fontWeight: 700, fontVariantNumeric: "tabular-nums", fontSize: 16 }}>{fmtT(row.checkIn)}</td>
-                  <td style={{ padding: "12px 16px", color: row.checkOut ? "#374151" : "#9ca3af", fontVariantNumeric: "tabular-nums", fontSize: 16 }}>
-                    {fmtT(row.checkOut)}
-                    {row.isFinal && <span style={{ marginLeft: 7, fontSize: 13, color: "#6b7280", background: "#f3f4f6", padding: "1px 6px", borderRadius: 4, fontWeight: 600 }}>최종</span>}
-                  </td>
-                  <td style={{ padding: "12px 16px", fontSize: 16 }}>{fmtWork(row.checkIn, row.checkOut)}</td>
-                  <td style={{ padding: "12px 16px", color: "#374151", fontVariantNumeric: "tabular-nums", fontSize: 16 }}>
-                    {row.distance != null
-                      ? `${row.distance.toFixed(1)} km`
-                      : (() => { const live = drivers.find(d => d.id === row.uid); return live ? `${(live.총거리 || 0).toFixed(1)} km` : "--"; })()}
-                  </td>
-                  <td style={{ padding: "12px 16px", color: "#374151", fontVariantNumeric: "tabular-nums", fontSize: 16 }}>
-                    {(() => {
-                      const live = drivers.find(d => d.id === row.uid);
-                      const km = row.distance != null ? row.distance : (live ? live.총거리 || 0 : null);
-                      if (km == null || km <= 0) return "--";
-                      const vt = String(live?.vehicleType || "").replace(/\s/g,"");
-                      const eff = /25|28/.test(vt)?3.0:/11|15|18/.test(vt)?3.5:/1[^0-9]|2\.5|소형/.test(vt)?5.5:4.0;
-                      return `${Math.round(km/eff*1750).toLocaleString()}원`;
-                    })()}
-                  </td>
-                  <td style={{ padding: "12px 16px" }}>
-                    {!row.checkOut
-                      ? <span style={{ fontSize: 15, color: "#10b981", fontWeight: 700, background: "#d1fae5", padding: "3px 10px", borderRadius: 99 }}>근무중</span>
-                      : row.isFinal
-                        ? <span style={{ fontSize: 15, color: "#374151", background: "#f3f4f6", padding: "3px 10px", borderRadius: 99 }}>최종퇴근</span>
-                        : <span style={{ fontSize: 15, color: "#6b7280", background: "#f3f4f6", padding: "3px 10px", borderRadius: 99 }}>퇴근</span>
-                    }
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+      {/* ═══ 월간 히트맵 + 근무 타임라인 ═══ */}
+      <div className="fa-split">
+        <FaPanel code="HEATMAP" title={`${cy}년 ${cm}월 출근 현황`}
+          right={
+            <span style={{ display: "inline-flex", gap: 4 }}>
+              {[[-1, "m15 18-6-6 6-6", "이전 달"], [1, "m9 18 6-6-6-6", "다음 달"]].map(([dl, p, t]) => {
+                const dis = dl > 0 && ym >= todayStr.slice(0, 7);
+                return (
+                  <button key={dl} onClick={() => !dis && goMonth(dl)} disabled={dis} title={t} aria-label={t}
+                    style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid #DCE3EE", background: "#fff", color: dis ? "#CBD5E1" : NAVY, cursor: dis ? "default" : "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                    <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.6" viewBox="0 0 24 24"><path d={p} /></svg>
+                  </button>
+                );
+              })}
+            </span>
+          }
+          bodyStyle={{ padding: "14px 16px 16px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 6 }}>
+            {["일", "월", "화", "수", "목", "금", "토"].map((w, i) => (
+              <div key={w} style={{ textAlign: "center", fontSize: 12, fontWeight: 800, color: i === 0 ? "#DC2626" : i === 6 ? "#2D4C82" : "#94A3B8", paddingBottom: 2 }}>{w}</div>
+            ))}
+            {cells.map((k, i) => {
+              if (!k) return <div key={`e${i}`} />;
+              const n = dayCounts[k] || 0;
+              const future = k > todayStr;
+              const sel = k === selectedDate;
+              const isToday = k === todayStr;
+              const hol = KOREAN_HOLIDAYS[k];
+              const dow = (firstDow + Number(k.slice(8)) - 1) % 7;
+              const c = future ? { bg: "#fff", fg: "#CBD5E1", border: "#F0F3F7" } : heat(n);
+              return (
+                <button key={k} className="fa-cell" disabled={future} onClick={() => pickDate(k)} title={`${k}${hol ? ` · ${hol}` : ""} · 출근 ${n}명`}
+                  style={{ position: "relative", aspectRatio: "1 / 0.92", minHeight: 40, borderRadius: 9, border: `1px solid ${c.border}`, background: c.bg, color: c.fg, cursor: future ? "default" : "pointer", padding: "4px 6px", display: "flex", flexDirection: "column", justifyContent: "space-between", alignItems: "flex-start", outline: sel ? "2px solid #0F1A30" : "none", outlineOffset: 2 }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 800, color: !future && n && c.fg === "#fff" ? "rgba(255,255,255,.75)" : (hol || dow === 0) ? "#DC2626" : future ? "#CBD5E1" : "#64748B" }}>{Number(k.slice(8))}</span>
+                  <span style={{ alignSelf: "flex-end", fontFamily: FC_MONO, fontSize: 14, fontWeight: 800, lineHeight: 1 }}>{future ? "" : n || "·"}</span>
+                  {isToday && <span style={{ position: "absolute", top: 5, right: 5, width: 6, height: 6, borderRadius: "50%", background: "#10B981", boxShadow: "0 0 0 2px #fff" }} />}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: "#64748B" }}>
+              일 평균 <b style={{ fontFamily: FC_MONO, color: "#0F1A30" }}>{monthAvg.toFixed(1)}</b>명 출근
+            </span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: FC_MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: ".12em", color: "#94A3B8" }}>
+              LOW
+              {["#F3F6FA", "#C9D7EF", "#6F8FC8", "#2D4C82", "#1B2B4B"].map(b => <span key={b} style={{ width: 14, height: 14, borderRadius: 4, background: b, border: "1px solid #E3E8F0" }} />)}
+              HIGH
+            </span>
+          </div>
+        </FaPanel>
+
+        <FaPanel code="SHIFT TIMELINE" title="근무 타임라인"
+          right={<span style={{ display: "inline-flex", gap: 10, flexWrap: "wrap" }}>{["working", "out", "final"].map(k => (
+            <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 700, color: "#64748B" }}>
+              <span style={{ width: 10, height: 10, borderRadius: 3, background: FA_STATE[k].color }} />{FA_STATE[k].label}
+            </span>
+          ))}</span>}
+          bodyStyle={{ padding: "12px 16px 16px", display: "flex", flexDirection: "column" }}>
+          {loading ? (
+            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#94A3B8", fontSize: 15, minHeight: 200 }}>불러오는 중...</div>
+          ) : attendance.length === 0 ? (
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 220 }}>
+              <span style={{ fontFamily: FC_MONO, fontSize: 11, fontWeight: 800, letterSpacing: ".22em", color: "#C0CADB" }}>NO RECORD</span>
+              <span style={{ color: "#94A3B8", fontSize: 15, fontWeight: 700 }}>해당 날짜에 출근 기록이 없습니다</span>
+            </div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <div style={{ minWidth: 520 }}>
+                {/* 시간 눈금 */}
+                <div style={{ display: "flex", alignItems: "flex-end", height: 22 }}>
+                  <div style={{ width: 128, flexShrink: 0 }} />
+                  <div style={{ position: "relative", flex: 1, height: "100%" }}>
+                    {ticks.map(h => (
+                      <span key={h} style={{ position: "absolute", left: pct(h * 60), transform: h === axE ? "translateX(-100%)" : h === axS ? "none" : "translateX(-50%)", bottom: 2, fontFamily: FC_MONO, fontSize: 10.5, fontWeight: 700, color: "#94A3B8" }}>
+                        {h > 24 ? `+${String(h - 24).padStart(2, "0")}` : String(h).padStart(2, "0")}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ maxHeight: 360, overflowY: "auto" }}>
+                  {spans.map(({ r, s, e }) => {
+                    const st = FA_STATE[rowState(r)];
+                    return (
+                      <div key={r.uid} style={{ display: "flex", alignItems: "center", height: 34 }}>
+                        <div style={{ width: 128, flexShrink: 0, paddingRight: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <span style={{ fontSize: 13.5, fontWeight: 800, color: "#0F1A30" }}>{r.name}</span>
+                          <span style={{ marginLeft: 6, fontFamily: FC_MONO, fontSize: 11, color: "#94A3B8" }}>{String(r.carNo).slice(-4)}</span>
+                        </div>
+                        <div style={{ position: "relative", flex: 1, height: 22, borderRadius: 6, background: "repeating-linear-gradient(90deg,#F3F6FA 0 1px,transparent 1px 100%)", backgroundColor: "#FAFBFD", border: "1px solid #EEF1F6" }}>
+                          {ticks.map(h => <span key={h} style={{ position: "absolute", left: pct(h * 60), top: 0, bottom: 0, width: 1, background: "#EEF1F6" }} />)}
+                          {selectedDate === todayStr && nowMin > axS * 60 && nowMin < axE * 60 && <span style={{ position: "absolute", left: pct(nowMin), top: -3, bottom: -3, width: 0, borderLeft: "1.5px dashed #10B981", zIndex: 1 }} />}
+                          <div title={`${fmtT(r.checkIn)} → ${r.checkOut ? fmtT(r.checkOut) : "근무중"} · ${workTxt(r.checkIn, r.checkOut)}`}
+                            style={{ position: "absolute", top: 3, bottom: 3, left: pct(s), width: `calc(${pct(e)} - ${pct(s)})`, minWidth: 6, borderRadius: 5, background: rowState(r) === "working" ? `linear-gradient(90deg,${st.color},#34D399)` : st.color, boxShadow: `0 2px 6px ${st.color}40`, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 6px", overflow: "hidden" }}>
+                            <span style={{ fontFamily: FC_MONO, fontSize: 10.5, fontWeight: 800, color: "#fff", whiteSpace: "nowrap" }}>{fmtT(r.checkIn)}</span>
+                            <span style={{ fontFamily: FC_MONO, fontSize: 10.5, fontWeight: 800, color: "rgba(255,255,255,.85)", whiteSpace: "nowrap" }}>{r.checkOut ? fmtT(r.checkOut) : "▶"}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* 지금 시각 표시(오늘만) */}
+                {selectedDate === todayStr && nowMin > axS * 60 && nowMin < axE * 60 && (
+                  <div style={{ display: "flex", marginTop: 4 }}>
+                    <div style={{ width: 128, flexShrink: 0 }} />
+                    <div style={{ position: "relative", flex: 1, height: 16 }}>
+                      <span style={{ position: "absolute", left: pct(nowMin), transform: (nowMin - axS * 60) / axSpan > 0.85 ? "translateX(calc(-100% + 6px))" : "translateX(-50%)", whiteSpace: "nowrap", fontFamily: FC_MONO, fontSize: 10, fontWeight: 800, color: "#059669", letterSpacing: ".1em" }}>▲ NOW {fmtT(new Date(nowMs))}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </FaPanel>
       </div>
+
+      {/* ═══ 출근 기록 테이블 ═══ */}
+      <FaPanel code="ROSTER" title="출근 현황" right={<span style={{ fontSize: 13.5, fontWeight: 700, color: "#64748B" }}><b style={{ fontFamily: FC_MONO, color: "#0F1A30" }}>{attendance.length}</b>명 출근</span>}>
+        {loading ? (
+          <div style={{ padding: "40px", textAlign: "center", color: "#9ca3af", fontSize: 16 }}>불러오는 중...</div>
+        ) : attendance.length === 0 ? (
+          <div style={{ padding: "44px", textAlign: "center", color: "#9ca3af", fontSize: 16 }}>해당 날짜에 출근 기록이 없습니다</div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 960 }}>
+              <thead>
+                <tr style={{ background: "linear-gradient(90deg,#0F1A30,#1B2B4B)" }}>
+                  {["#", "기사명", "차량번호", "출근시각", "퇴근시각", "근무시간", "이동거리", "연료비", "상태"].map(col => (
+                    <th key={col} style={th}>{col}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {attendance.map((row, i) => {
+                  const st = rowState(row);
+                  const km = kmOf(row);
+                  const fuel = fuelOf(row);
+                  return (
+                    <tr key={row.uid} className="fa-row">
+                      <td style={{ ...td, fontFamily: FC_MONO, color: "#94A3B8", fontSize: 13 }}>{String(i + 1).padStart(2, "0")}</td>
+                      <td style={{ ...td, fontWeight: 800, fontSize: 15 }}>
+                        <span style={{ display: "inline-block", width: 3, height: 16, borderRadius: 2, background: FA_STATE[st].color, marginRight: 9, verticalAlign: "-3px" }} />
+                        {row.name}
+                      </td>
+                      <td style={{ ...td, color: NAVY, fontWeight: 800, letterSpacing: "0.03em" }}>{row.carNo}</td>
+                      <td style={{ ...td, fontFamily: FC_MONO, fontWeight: 800 }}>{fmtT(row.checkIn)}</td>
+                      <td style={{ ...td, fontFamily: FC_MONO, fontWeight: 800, color: row.checkOut ? "#0F1A30" : "#C0CADB" }}>
+                        {fmtT(row.checkOut)}
+                        {row.isFinal && <span style={{ marginLeft: 7, fontFamily: "inherit", fontSize: 11, color: NAVY, background: "#E6ECF6", padding: "1px 6px", borderRadius: 4, fontWeight: 800 }}>최종</span>}
+                      </td>
+                      <td style={{ ...td, fontWeight: 700, color: st === "working" ? "#059669" : "#0F1A30" }}>{workTxt(row.checkIn, row.checkOut)}{st === "working" && <span style={{ fontSize: 12, marginLeft: 4 }}>(근무중)</span>}</td>
+                      <td style={{ ...td, fontFamily: FC_MONO }}>{km != null ? `${km.toFixed(1)} km` : "--"}</td>
+                      <td style={{ ...td, fontFamily: FC_MONO }}>{fuel != null ? `${fuel.toLocaleString()}원` : "--"}</td>
+                      <td style={td}>{faStatePill(st)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </FaPanel>
 
       {/* 미출근 기사 (오늘만 표시) */}
       {selectedDate === todayStr && noShow.length > 0 && (
-        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "18px 24px" }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: NAVY, marginBottom: 12 }}>미출근 기사 ({noShow.length}명)</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <FaPanel code="ABSENT" title={`미출근 기사 (${noShow.length}명)`} right={faStatePill("absent", true)} bodyStyle={{ padding: "14px 16px 16px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 8 }}>
             {noShow.map(d => (
-              <div key={d.id} style={{ padding: "7px 16px", border: "1px solid #e5e7eb", borderRadius: 8, background: "#fafafa", fontSize: 16, color: "#374151", fontWeight: 600, display: "flex", alignItems: "center", gap: 7 }}>
-                <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#d1d5db", display: "inline-block" }} />
-                {d.이름}
-                <span style={{ color: "#9ca3af", fontWeight: 500, fontSize: 15 }}>{d.차량번호}</span>
+              <div key={d.id} style={{ padding: "10px 12px", border: "1px solid #F3D6D6", borderRadius: 10, background: "#FFFBFB", display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: FA_STATE.absent.color, flexShrink: 0 }} />
+                <span style={{ fontSize: 14.5, fontWeight: 800, color: "#0F1A30", whiteSpace: "nowrap" }}>{d.이름}</span>
+                <span style={{ marginLeft: "auto", fontFamily: FC_MONO, fontSize: 12, fontWeight: 700, color: "#94A3B8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.차량번호}</span>
               </div>
             ))}
           </div>
-        </div>
+        </FaPanel>
       )}
     </div>
   );
