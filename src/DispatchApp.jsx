@@ -8063,9 +8063,9 @@ return (
               </button>
             )}
 
-            {/* ⭐ 2026-11-01 출근·퇴근 버튼(자동 출근이 안 됐을 때 직접) — 퇴근 후엔 [되돌리기] */}
-            <AttendanceQuickButton company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")}
-              uid={user?.uid} name={myProfileDoc?.name || user?.displayName || ""} role={role} email={user?.email} variant="pc" />
+            {/* ⭐ 2026-11-01 출근·퇴근 버튼 — 일반 화면은 홈 관제 데크(시계 옆)에, 부서 화면(경리·인사·임원)은 홈 데크가 없어 여기 */}
+            {deptMode && <AttendanceQuickButton company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")}
+              uid={user?.uid} name={myProfileDoc?.name || user?.displayName || ""} role={role} email={user?.email} variant="pc" />}
 
             {/* ⭐ 최적화 버튼 — 새로고침 없이 현재 화면(배차관리/실시간배차현황/배차현황)의
                 누적된 렌더링 상태만 가볍게 초기화한다. */}

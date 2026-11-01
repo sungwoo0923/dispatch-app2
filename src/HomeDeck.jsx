@@ -7,6 +7,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Line, ComposedChart, Bar, BarChart, Cell, PieChart, Pie } from "recharts";
 import { creatorOf } from "./monthCompare";
+import { AttendanceQuickButton } from "./attendanceQuick";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const C = { ink: "#E8EEF9", sub: "rgba(207,224,255,.62)", dim: "rgba(207,224,255,.38)", line: "rgba(143,176,240,.14)", glow: "#8FB0F0", hi: "#CFE0FF", accent: "#6E95E8" };
@@ -175,7 +176,7 @@ function Seg({ value, onChange, items }) {
 }
 
 // ─── 본체 ──────────────────────────────────────────────────────────────────────
-export default function HomeDeck({ dispatchData = [], pastCache, liveStart, users = [], myName = "", isMaster = false }) {
+export default function HomeDeck({ dispatchData = [], pastCache, liveStart, users = [], myName = "", isMaster = false, att = null }) {
   const today = kstToday();
   const thisMonth = today.slice(0, 7);
   const [range, setRange] = useState("30d");
@@ -342,9 +343,13 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
             오늘 접수 <b style={{ color: "#fff", fontFamily: MONO }}>{t0[2].toLocaleString()}</b>건 · 배차완료 <b style={{ color: "#fff", fontFamily: MONO }}>{doneToday.toLocaleString()}</b>건 · 오늘 매출 <b style={{ color: "#fff", fontFamily: MONO }}>{won(t0[0])}</b>원
           </p>
         </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 22, flexWrap: "wrap", justifyContent: "flex-end" }}>
+        {/* ⭐ 2026-11-01 출근·퇴근 — 홈 첫 화면에서 바로 보이게(시계 옆) */}
+        {att && <AttendanceQuickButton {...att} variant="deck" />}
         <div style={{ textAlign: "right" }}>
           <Clock />
           <div style={{ marginTop: 6, fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.16em", color: C.dim }}>{dateText} · KST</div>
+        </div>
         </div>
       </div>
 

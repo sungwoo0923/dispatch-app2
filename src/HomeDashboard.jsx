@@ -946,6 +946,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         users={users}
         isMaster={role === "totalMaster"}
         myName={users.find((u) => u.id === user?.uid)?.name || user?.displayName || (user?.email || "").split("@")[0] || ""}
+        att={{ company: homeCompany, uid: user?.uid, name: users.find((u) => u.id === user?.uid)?.name || user?.displayName || "", role, email: user?.email }}
       />}
 
       {/* ===== 커뮤니케이션 센터 · 사내메일함(왼쪽 사이드바의 하위 메일함) — 2026-10-28 ===== */}
