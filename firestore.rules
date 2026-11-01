@@ -332,6 +332,17 @@ service cloud.firestore {
     // ────────────────────────────────────────────────────────────
     // 가입 진행 중(승인 전) 계정에 필요한 최소 권한 — 승인된 계정은 기존과 동일
     // ────────────────────────────────────────────────────────────
+    // ⭐ 2026-11-01 입사일은 인사팀만 바꾼다(인사관리부 › 직원 정보·퇴사). 가입 때 처음 넣는 것은 허용
+    function isHrStaff() {
+      return isSignedIn() && (
+        request.auth.token.get('email', '') == "tjddnqkf@naver.com" ||
+        myUser().get('role', '') in ['hrManager', 'hrAcct', 'totalMaster'] ||
+        myUser().get('team', '').matches('.*인사.*'));
+    }
+    function hireDateSame() {
+      return resource == null ||
+        request.resource.data.get('hireDate', '') == resource.data.get('hireDate', '');
+    }
     match /users/{userId} {
       allow get: if isApproved() || (isSignedIn() && request.auth.uid == userId);
       allow list: if isApproved();
@@ -339,11 +350,13 @@ service cloud.firestore {
         (isApproved() && request.auth.uid != userId) ||
         isTotalMasterUser() ||
         selfUserWriteOk(userId)
-      );
+      ) && (hireDateSame() || isHrStaff());
       allow delete: if isApproved();
     }
     match /userProfiles/{userId} {
-      allow read, write: if isApproved() || (isSignedIn() && request.auth.uid == userId);
+      allow read, delete: if isApproved() || (isSignedIn() && request.auth.uid == userId);
+      allow create, update: if (isApproved() || (isSignedIn() && request.auth.uid == userId)) &&
+        (hireDateSame() || isHrStaff());
     }
     // 기사 본인 서류(가입 때 사업자등록증 등) — 본인이 올리고 본인이 본다(직원은 아래 공용 규칙)
     match /driver_documents/{id} {

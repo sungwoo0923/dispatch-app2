@@ -530,7 +530,7 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
   const clockStr = `${pad2(clock.getHours())}:${pad2(clock.getMinutes())}:${pad2(clock.getSeconds())}`;
 
   return (
-    <div className="bg-white border border-[#E3E8F0] rounded-[24px] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] overflow-hidden flex flex-col" style={{ flex: "0 0 calc(38% - 12px)", minWidth: 240 }}>
+    <div className="bg-white border border-[#E3E8F0] rounded-[24px] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] overflow-hidden flex flex-col" style={{ flex: "1 1 0%", minWidth: 240 }}>
       {/* 헤더 — 오늘 날짜 + 디지털 시계 */}
       <div className="px-5 py-3.5 flex items-center justify-between shrink-0" style={{ background: "linear-gradient(120deg,#0B1428,#0F1A30 50%,#1B2B4B)" }}>
         <div>
@@ -4454,6 +4454,20 @@ const patchDispatch = async (_id, patch, knownPrev) => {
     }
   }
 
+  // ⭐ 2026-11-01 청구운임·기사운임을 바꾸면 저장된 수수료도 같이 맞춘다 — 오더 수정 패널·표 칸 수정 등이
+  //    운임만 바꾸고 수수료는 예전 값으로 남겨, 정산·매출(저장된 수수료를 먼저 읽음)에서 수익이 틀리게 나왔다.
+  if (("청구운임" in patch || "기사운임" in patch)) {
+    const _n = (v) => Number(String(v ?? "").replace(/[^\d-]/g, "")) || 0;
+    const sale = _n("청구운임" in patch ? patch.청구운임 : prev?.청구운임);
+    const drv = _n("기사운임" in patch ? patch.기사운임 : prev?.기사운임);
+    const prevAuto = _n(prev?.청구운임) - _n(prev?.기사운임);
+    const prevFee = prev?.수수료;
+    // 예전 수수료가 비어 있거나 "청구-기사"와 같았던(자동 계산) 오더만 다시 계산한다 — 직접 넣은 수수료는 그대로
+    const wasAuto = prevFee == null || String(prevFee).trim() === "" || _n(prevFee) === prevAuto;
+    const feeGiven = "수수료" in patch && _n(patch.수수료) !== _n(prevFee);
+    if (wasAuto && !feeGiven) patch.수수료 = String(sale - drv);
+  }
+
   // ★ UI 즉시 반영 (optimistic update — Firestore 응답 기다리지 않음)
   React.startTransition(() => {
     setDispatchData(current => current.map(d =>
@@ -7541,11 +7555,12 @@ useEffect(() => {
 
   // ---------------- 로그아웃 ----------------
   const logout = async () => {
-    await clearFcmToken(auth.currentUser?.uid);
-    await signOut(auth);
+    await clearFcmToken(auth.currentUser?.uid).catch(() => {});
+    await signOut(auth).catch(() => {});
     localStorage.removeItem("role");
-    showAlert("로그아웃되었습니다.");
-    navigate("/login");
+    try { sessionStorage.removeItem("skipLoginPopup"); sessionStorage.removeItem("transportValidating"); } catch { /* 무시 */ }
+    // ⭐ 2026-11-01 로그아웃 뒤 운송사를 누르면 선택 화면이 한 번 더 뜨던 문제 — 기록을 덮어써서(/login 중복 방지) 이동
+    navigate("/login", { replace: true });
   };
 
   // ---------------- 옵션 리스트 ----------------
@@ -18396,7 +18411,8 @@ className={`
            {/* ==================== 상단: 입력폼 + Today 사이드패널 ==================== */}
 <div className="flex items-stretch gap-3 w-full mb-4" style={{ minWidth: 0 }}>
   {/* 왼쪽: 폼 */}
-  <div style={{ flex: "0 0 62%", maxWidth: "62%", minWidth: 0, overflow: "hidden" }}>
+  {/* ⭐ 2026-11-01 화면이 좁으면(노트북·125% 배율 1536px 등) 입력칸이 겹쳐 화물내용 칸을 못 누를 정도였다 — 1800px 미만은 폼을 넓게 */}
+  <div className="basis-[74%] max-w-[74%] min-[1800px]:basis-[62%] min-[1800px]:max-w-[62%]" style={{ flexGrow: 0, flexShrink: 0, minWidth: 0, overflow: "hidden" }}>
     {renderForm()}
   </div>
 
@@ -23966,6 +23982,11 @@ async function fetchCompanyPrintInfo(companyName) {
     let found = docs.find(d => (d.companyName || "").trim() === co && d.type === "신규" && d.status === "approved");
     if (!found) found = docs.find(d => (d.companyName || "").trim() === co && d.type === "신규");
     if (!found) found = docs.find(d => (d.companyName || "").trim() === co && d.status === "approved");
+    // ⭐ 2026-11-01 주소가 비어 있으면 같은 회사 다른 신청서의 주소로 보완
+    if (found && !String(found.address || found.주소 || "").trim()) {
+      const withAddr = docs.find(d => (d.companyName || "").trim() === co && String(d.address || d.주소 || "").trim());
+      if (withAddr) found = { ...found, address: withAddr.address || withAddr.주소 };
+    }
     return found || null;
   } catch { return null; }
 }
@@ -51037,7 +51058,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
                 <div style="display:flex;align-items:center">
                   <span style="flex:1">${cp.ceo}</span>
                   <span style="position:relative;display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;margin-right:4px">
-                    <img src="${cp.seal}" alt="직인" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:46px;height:46px;opacity:0.9;pointer-events:none;mix-blend-mode:multiply" />
+                    <img src="${cp.seal}" alt="" onerror="this.style.display='none'" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:46px;height:46px;opacity:0.9;pointer-events:none;mix-blend-mode:multiply" />
                     <span style="position:relative;z-index:1;font-size:13px;color:#333">(인)</span>
                   </span>
                 </div>
@@ -52575,7 +52596,9 @@ const handleBatchSettle = async (targetStatus) => {
             >
               <img
                 src={COMPANY_PRINT.seal}
-                alt="직인"
+                alt=""
+                onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}
+                onLoad={(e) => { e.currentTarget.style.visibility = "visible"; }}
                 style={{
                   position: "absolute",
                   top: "50%",
@@ -59201,9 +59224,13 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
   const [myInfo, setMyInfo] = useState({});
   // ⭐ 명함에 넣을 운송사 주소(회사정보)
   const [companyAddr, setCompanyAddr] = useState("");
+  const [companyTel, setCompanyTel] = useState({ tel: "", fax: "" });
   useEffect(() => {
     if (!co) return;
-    fetchCompanyPrintInfo(co).then((ci) => setCompanyAddr(ci?.address || ci?.주소 || "")).catch(() => {});
+    fetchCompanyPrintInfo(co).then((ci) => {
+      setCompanyAddr(ci?.address || ci?.주소 || "");
+      setCompanyTel({ tel: ci?.companyPhone || ci?.대표번호 || ci?.연락처 || ci?.phone || "", fax: ci?.fax || ci?.팩스 || ci?.팩스번호 || "" });
+    }).catch(() => {});
   }, [co]);
 
   useEffect(() => {
@@ -59220,18 +59247,6 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
     return () => { unsubProfile(); unsubUser(); unsub(); };
   }, [user?.uid, co]);
 
-  const saveHireDate = async (val) => {
-    setHireDate(val);
-    if (!user?.uid) return;
-    setHireDateSaving(true);
-    try {
-      await setDoc(doc(db, "userProfiles", user.uid), { hireDate: val }, { merge: true });
-    } catch (err) {
-      showAlert("입사일 저장 실패: " + err.message);
-    } finally {
-      setHireDateSaving(false);
-    }
-  };
 
   const leave = calcLeaveBalance(hireDate, mySchedules, user?.uid, myName || user?.displayName, []);
 
@@ -59275,10 +59290,27 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
       showAlert("내 정보가 저장되었습니다.");
     } catch (e) { showAlert("저장 실패: " + (e?.message || e)); } finally { setSavingInfo(false); }
   };
+  // ⭐ 2026-11-01 명함 이미지가 잘려 보이던 문제 — html2canvas는 글자를 브라우저보다 살짝 아래에 그려서
+  //    "한 줄 말줄임(truncate)" 칸의 아래쪽이 잘렸다. 캡처용 복제본에서만 잘림을 풀고 크기를 고정한다.
+  const cardCaptureOpts = (scale) => {
+    const r = cardRef.current?.getBoundingClientRect();
+    return {
+      scale, backgroundColor: null, useCORS: true, logging: false,
+      onclone: (docC) => {
+        const el = docC.querySelector("[data-kp-card]");
+        if (!el) return;
+        if (r) { el.style.width = `${r.width}px`; el.style.height = `${r.height}px`; }
+        el.style.boxShadow = "none";
+        el.querySelectorAll(".truncate, [data-cap-fix]").forEach((n) => {
+          n.style.overflow = "visible"; n.style.textOverflow = "clip"; n.style.lineHeight = "1.5"; n.style.paddingBottom = "1px";
+        });
+      },
+    };
+  };
   const saveCardAsImage = async () => {
     if (!cardRef.current) return;
     try {
-      const canvas = await html2canvas(cardRef.current, { scale: 3, backgroundColor: null, useCORS: true, logging: false });
+      const canvas = await html2canvas(cardRef.current, cardCaptureOpts(3));
       const a = document.createElement("a");
       a.href = canvas.toDataURL("image/png");
       a.download = `${displayName || "명함"}_디지털명함.png`;
@@ -59286,12 +59318,13 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
     } catch (e) { showAlert("이미지 저장 실패: " + (e?.message || e)); }
   };
   const copyContact = async () => {
-    const text = [`${co} ${displayName}${title ? ` (${title})` : ""}`, phone && `휴대폰 ${phone}`, user?.email && `이메일 ${user.email}`].filter(Boolean).join("\n");
+    const text = [`${co} ${displayName}${title ? ` (${title})` : ""}`, phone && `휴대폰 ${phone}`, companyTel.tel && `대표번호 ${companyTel.tel}`, companyTel.fax && `팩스 ${companyTel.fax}`, user?.email && `이메일 ${user.email}`, companyAddr && `주소 ${companyAddr}`].filter(Boolean).join("\n");
     try { await navigator.clipboard.writeText(text); showAlert("연락처를 복사했습니다. 카톡·문자에 붙여넣기 하세요."); } catch { showAlert("복사에 실패했습니다."); }
   };
   const saveVcard = () => {
     const vcf = ["BEGIN:VCARD", "VERSION:3.0", `FN:${displayName}`, `N:${displayName};;;;`, co && `ORG:${co}${myInfo.team ? `;${myInfo.team}` : ""}`,
-      myInfo.position && `TITLE:${myInfo.position}`, phone && `TEL;TYPE=CELL:${phone}`, user?.email && `EMAIL:${user.email}`, "END:VCARD"].filter(Boolean).join("\r\n");
+      myInfo.position && `TITLE:${myInfo.position}`, phone && `TEL;TYPE=CELL:${phone}`, companyTel.tel && `TEL;TYPE=WORK:${companyTel.tel}`, companyTel.fax && `TEL;TYPE=FAX:${companyTel.fax}`,
+      user?.email && `EMAIL:${user.email}`, companyAddr && `ADR;TYPE=WORK:;;${companyAddr};;;;`, "END:VCARD"].filter(Boolean).join("\r\n");
     const url = URL.createObjectURL(new Blob([vcf], { type: "text/vcard;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url; a.download = `${displayName || "연락처"}.vcf`; a.click();
@@ -59338,28 +59371,43 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,560px)_minmax(0,1fr)] gap-6">
         <div>
           {/* 디지털 명함 */}
-          <div ref={cardRef} className="relative overflow-hidden rounded-[22px] text-white shadow-[0_18px_40px_rgba(15,26,48,0.35)]"
+          <div ref={cardRef} data-kp-card className="relative overflow-hidden rounded-[22px] text-white shadow-[0_18px_40px_rgba(15,26,48,0.35)]"
             style={{ aspectRatio: "1.75 / 1", background: "linear-gradient(135deg, #0F1A30 0%, #1B2B4B 45%, #2D4C82 100%)" }}>
             <div className="absolute -right-20 -top-24 w-80 h-80 rounded-full" style={{ background: "radial-gradient(circle, rgba(147,197,253,0.22) 0%, rgba(147,197,253,0) 70%)" }} />
             <div className="absolute -left-16 -bottom-24 w-72 h-72 rounded-full" style={{ background: "radial-gradient(circle, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 70%)" }} />
             <div className="absolute inset-0" style={{ backgroundImage: "linear-gradient(115deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0) 60%)" }} />
-            <div className="relative h-full flex flex-col px-8 py-7">
+            <div className="relative h-full flex flex-col px-7 pt-6 pb-5">
               {/* ⭐ 운송사마다 쓰는 명함 — 프로그램 로고·이름은 넣지 않고 운송사 이름만 */}
-              <div className="flex items-center gap-2.5">
-                <div className="min-w-0">
-                  <div className="text-[15px] font-black tracking-tight truncate">{co || "운송사"}</div>
-                  <div className="text-[10px] font-semibold tracking-[0.25em] text-blue-200/70">LOGISTICS</div>
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/12 ring-1 ring-white/25 flex items-center justify-center text-[18px] font-black shrink-0" style={{ background: "rgba(255,255,255,0.12)" }}>{(co || "운").slice(0, 1)}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[16px] font-black tracking-tight truncate leading-[1.35]">{co || "운송사"}</div>
+                  <div className="text-[10px] font-semibold tracking-[0.25em] text-blue-200/70 leading-[1.4]">LOGISTICS</div>
                 </div>
-                <div className="ml-auto text-[10px] font-bold tracking-[0.2em] text-white/40">DIGITAL CARD</div>
+                <div className="text-[10px] font-bold tracking-[0.2em] text-white/40 leading-[1.4] pt-1">DIGITAL CARD</div>
               </div>
               <div className="mt-auto">
-                <div className="text-[34px] font-black tracking-tight leading-none">{displayName || "이름을 등록하세요"}</div>
-                <div className="mt-2 text-[14px] font-semibold text-blue-100/85">{title || ROLE_NAME[role] || ""}</div>
+                <div className="text-[32px] font-black tracking-tight leading-[1.15]">{displayName || "이름을 등록하세요"}</div>
+                <div className="mt-1.5 text-[14px] font-semibold text-blue-100/85 leading-[1.4]">{title || ROLE_NAME[role] || ""}</div>
               </div>
-              <div className="mt-5 pt-4 border-t border-white/15 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[13px]">
-                <div className="flex items-center gap-2 text-white/90 min-w-0"><Ico className="shrink-0 text-blue-200" d={<><rect x="7" y="2" width="10" height="20" rx="2.5" /><path d="M11 18h2" /></>} /><span className="truncate">{phone || "연락처 미등록"}</span></div>
-                <div className="flex items-center gap-2 text-white/90 min-w-0"><Ico className="shrink-0 text-blue-200" d={<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>} /><span className="truncate">{user?.email || "-"}</span></div>
-                {companyAddr && <div className="col-span-2 flex items-center gap-2 text-white/80 min-w-0"><Ico className="shrink-0 text-blue-200" d={<><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></>} /><span className="truncate">{companyAddr}</span></div>}
+              <div className="mt-4 pt-3.5 border-t border-white/15 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[12.5px] leading-[1.45]">
+                {[
+                  ["M", phone || "연락처 미등록", true],
+                  ["E", user?.email || "-", true],
+                  ["T", companyTel.tel, !!companyTel.tel && companyTel.tel.replace(/\D/g, "") !== String(phone).replace(/\D/g, "")],
+                  ["F", companyTel.fax, !!companyTel.fax],
+                ].filter((x) => x[2]).map(([k, v]) => (
+                  <div key={k} className="flex items-center gap-2 text-white/90 min-w-0">
+                    <span className="w-4 shrink-0 text-[10.5px] font-black text-blue-200">{k}</span>
+                    <span className="truncate">{v}</span>
+                  </div>
+                ))}
+                {companyAddr && (
+                  <div className="col-span-2 flex items-center gap-2 text-white/80 min-w-0">
+                    <span className="w-4 shrink-0 text-[10.5px] font-black text-blue-200">A</span>
+                    <span className="truncate">{companyAddr}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -59417,9 +59465,9 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
         <ProfilePanel eyebrow="SERVICE" title="근속 · 휴가" desc="휴가·외근 결재 승인 건 기준 (2026년부터 집계)">
           <div className="flex items-center gap-3">
             <span className="text-[13.5px] font-semibold text-gray-600 shrink-0">입사일</span>
-            <CustomDatePicker value={hireDate} onChange={e => saveHireDate(e.target.value)}
-              className="px-3 py-1.5 rounded-lg border border-gray-300 text-[13px] font-semibold text-[#1B2B4B] focus:border-[#1B2B4B] outline-none" />
-            {hireDateSaving && <span className="text-[11px] text-gray-500">저장 중…</span>}
+            {/* ⭐ 2026-11-01 입사일은 인사팀(인사관리부 › 직원 정보·퇴사)에서만 바꿀 수 있다 — 여기서는 보기만 */}
+            <span className="px-3 py-1.5 rounded-lg bg-[#F5F8FD] border border-[#E3E8F0] text-[13.5px] font-black text-[#1B2B4B] tabular-nums">{hireDate || "미등록"}</span>
+            <span className="text-[11.5px] text-gray-400">변경은 인사팀에서</span>
           </div>
           {yearsOfService && <div className="mt-4 text-[26px] font-black text-[#0F1A30] tracking-tight">{yearsOfService}</div>}
           {leave ? (
@@ -59439,7 +59487,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
               </div>
             </div>
           ) : (
-            <div className="mt-4 text-[13.5px] text-gray-500">입사일을 설정하면 연차·월차 잔여일수가 표시됩니다.</div>
+            <div className="mt-4 text-[13.5px] text-gray-500">인사팀에서 입사일을 등록하면 연차·월차 잔여일수가 표시됩니다.</div>
           )}
         </ProfilePanel>
 
@@ -59478,7 +59526,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
           </div>
           <button onClick={async () => {
             try {
-              const canvas = await html2canvas(cardRef.current, { scale: 2, backgroundColor: null, useCORS: true, logging: false });
+              const canvas = await html2canvas(cardRef.current, cardCaptureOpts(2));
               const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
               setCardImage(dataUrl);
               await setDoc(doc(db, "userProfiles", user.uid), { cardImageUrl: dataUrl }, { merge: true });
@@ -60582,8 +60630,14 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
   const companyName = (userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim();
   const currentUserId = userId || auth?.currentUser?.uid || localStorage.getItem("uid") || "";
   const isAdmin = role === "admin" || role === "totalMaster";
+  // ⭐ 2026-11-01 사업자등록증·직인 등록은 경리·인사만, 정산계좌 입력·수정은 경리만(다운로드·복사는 누구나)
+  const myTeamCP = (() => { try { return String(window.__kpMeTeam || ""); } catch { return ""; } })();
+  const isAcctTeam = ["test", "hrAcct", "totalMaster"].includes(role) || /경리|회계/.test(myTeamCP);
+  const canEditDocs = isAcctTeam || role === "hrManager" || /인사/.test(myTeamCP);
+  const canEditBank = isAcctTeam;
 
   const [appData, setAppData] = React.useState(null);
+  const [altAddr, setAltAddr] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [uploading, setUploading] = React.useState(false);
   const [uploadProgress, setUploadProgress] = React.useState("");
@@ -60623,7 +60677,10 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
     if (!companyName) { setLoading(false); return; }
     let fallbackTried = false;
     const unsub = onSnapshot(query(collection(db, "transportApplications"), where("companyName", "==", companyName)), (snap) => {
-      const found = pickCompanyDoc(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const found = pickCompanyDoc(all);
+      // ⭐ 2026-11-01 회사 문서에 주소가 비어 있으면 같은 회사 다른 신청서의 주소로 보완(표시만)
+      setAltAddr((all.find(d => String(d.address || d.주소 || "").trim()) || {}).address || "");
       if (found || fallbackTried) { setAppData(found); setLoading(false); return; }
       fallbackTried = true;
       getDocs(collection(db, "transportApplications"))
@@ -60652,6 +60709,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
   // 파일을 base64로 변환 후 Firestore 저장 (Storage quota 우회)
   const handleFileUpload = async (file) => {
     if (!file) return;
+    if (!canEditDocs) { showMsg("사업자등록증 등록은 경리팀·인사팀만 할 수 있습니다."); return; }
     const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
     if (!allowed.includes(file.type)) { showMsg("JPG, PNG, WEBP, PDF 파일만 업로드 가능합니다."); return; }
     if (file.size > 3 * 1024 * 1024) { showMsg("파일 크기는 3MB 이하여야 합니다. (Firestore 저장 방식)"); return; }
@@ -60692,6 +60750,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
   const sealFileRef = React.useRef(null);
   const handleSealUpload = async (file) => {
     if (!file) return;
+    if (!canEditDocs) { showMsg("직인 등록은 경리팀·인사팀만 할 수 있습니다."); return; }
     if (!appData?.id) { showMsg("회사 정보가 아직 등록되지 않아 도장을 저장할 수 없습니다."); return; }
     const allowed = ["image/jpeg", "image/png", "image/webp"];
     if (!allowed.includes(file.type)) { showMsg("JPG, PNG, WEBP 이미지만 업로드 가능합니다."); return; }
@@ -60720,7 +60779,11 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
     try {
       if (src.startsWith("data:image/")) {
         const res = await fetch(src);
-        const blob = await res.blob();
+        let blob = await res.blob();
+        // 클립보드는 PNG만 받는 브라우저가 많아 JPG·WEBP는 PNG로 바꿔서 복사
+        if (blob.type !== "image/png") {
+          blob = await new Promise((ok, no) => { const im = new Image(); im.onload = () => { const cv = document.createElement("canvas"); cv.width = im.width; cv.height = im.height; cv.getContext("2d").drawImage(im, 0, 0); cv.toBlob((b) => (b ? ok(b) : no(new Error("png"))), "image/png"); }; im.onerror = no; im.src = src; });
+        }
         await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
         showMsg("이미지가 클립보드에 복사되었습니다.");
       } else {
@@ -60799,6 +60862,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
 
   const saveBank = async () => {
     if (!appData?.id) return;
+    if (!canEditBank) { showMsg("정산계좌는 경리팀만 입력·수정할 수 있습니다."); return; }
     setBankSaving(true);
     try {
       await updateDoc(doc(db, "transportApplications", appData.id), {
@@ -60917,7 +60981,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
               ["연락처", appData?.phone || appData?.연락처],
               ["팩스", appData?.fax || appData?.팩스 || appData?.팩스번호],
               ["이메일", appData?.email],
-              ["주소", appData?.address || appData?.주소],
+              ["주소", appData?.address || appData?.주소 || altAddr],
             ].map(([k, v], idx) => (
               <div key={k} className={`px-8 py-4 min-w-0 ${idx ? "md:border-l border-white/10" : ""}`}>
                 <div className="text-[12.5px] font-bold text-blue-200/80">{k}</div>
@@ -60954,13 +61018,16 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                   key: "seal", title: "직인(도장)", done: !!appData?.직인이미지, sub: appData?.직인이미지 ? "거래명세서·보고서에 자동으로 찍힙니다" : "배경이 투명한 PNG 권장 / 최대 1MB",
                   busy: sealUploading ? "업로드 중..." : "", onUpload: () => sealFileRef.current?.click(),
                   onDrop: (f) => handleSealUpload(f),
-                  actions: appData?.직인이미지 ? [{ label: "다운로드", primary: true, on: () => { const a = document.createElement("a"); a.href = appData.직인이미지; a.download = `${companyName || "직인"}_직인.png`; a.click(); } }] : [],
+                  actions: appData?.직인이미지 ? [
+                    { label: "이미지 복사", on: async () => { try { const b = await (await fetch(appData.직인이미지)).blob(); const png = b.type === "image/png" ? b : await new Promise((res) => { const im = new Image(); im.onload = () => { const cv = document.createElement("canvas"); cv.width = im.width; cv.height = im.height; cv.getContext("2d").drawImage(im, 0, 0); cv.toBlob(res, "image/png"); }; im.src = appData.직인이미지; }); await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]); showMsg("직인 이미지를 복사했습니다."); } catch { showMsg("복사에 실패했습니다. 다운로드를 이용하세요."); } } },
+                    { label: "다운로드", primary: true, on: () => { const a = document.createElement("a"); a.href = appData.직인이미지; const ext = (appData.직인이미지.match(/^data:image\/(\w+)/)?.[1] || "png").replace("jpeg", "jpg"); a.download = `${companyName || "직인"}_직인.${ext}`; a.click(); } },
+                  ] : [],
                 },
               ].map((d) => (
                 <div key={d.key}
                   onDragOver={(e) => { e.preventDefault(); setDragOver(d.key); }}
                   onDragLeave={() => setDragOver(false)}
-                  onDrop={(e) => { e.preventDefault(); setDragOver(false); d.onDrop(e.dataTransfer.files?.[0]); }}
+                  onDrop={(e) => { e.preventDefault(); setDragOver(false); if (canEditDocs) d.onDrop(e.dataTransfer.files?.[0]); }}
                   className={`flex flex-wrap items-center gap-4 px-5 py-4 rounded-2xl border transition ${dragOver === d.key ? "border-[#1B2B4B] bg-[#F5F8FD]" : "border-[#E3E8F0] bg-white"}`}>
                   <span className={`w-11 h-11 rounded-[14px] flex items-center justify-center shrink-0 ${d.done ? "bg-[#0F1A30] text-white" : "bg-[#F1F4F9] text-[#9AA9C3]"}`}>
                     {d.done
@@ -60979,10 +61046,14 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                       <button key={a.label} onClick={a.on}
                         className={`h-9 px-3.5 rounded-lg text-[12.5px] font-bold transition ${a.primary ? "bg-[#1B2B4B] text-white hover:bg-[#243a60]" : "border border-[#D9E0EA] text-[#1B2B4B] hover:bg-[#F5F8FD]"}`}>{a.label}</button>
                     ))}
-                    <button onClick={d.onUpload} disabled={!!d.busy}
-                      className="h-9 px-3.5 rounded-lg text-[12.5px] font-bold border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/5 disabled:opacity-40">
-                      {d.busy || (d.done ? "다시 올리기" : "등록하기")}
-                    </button>
+                    {canEditDocs ? (
+                      <button onClick={d.onUpload} disabled={!!d.busy}
+                        className="h-9 px-3.5 rounded-lg text-[12.5px] font-bold border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/5 disabled:opacity-40">
+                        {d.busy || (d.done ? "다시 올리기" : "등록하기")}
+                      </button>
+                    ) : !d.done ? (
+                      <span className="h-9 px-3 inline-flex items-center rounded-lg text-[12px] font-bold text-[#7A879C] bg-[#F1F4F9]">경리·인사팀 등록</span>
+                    ) : null}
                   </div>
                 </div>
               ))}
@@ -60996,15 +61067,26 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                 <div className="mt-0.5 text-[18px] font-black text-[#0F1A30] tracking-tight">정산 계좌</div>
                 <div className="text-[13.5px] text-gray-500 mt-1">청구서·거래명세서에 표시되는 입금 계좌</div>
               </div>
-              {appData?.계좌은행 && !bankEditOpen && <button onClick={() => setBankEditOpen(true)} className="ml-auto px-3.5 py-1.5 rounded-lg border border-[#D9E0EA] text-[13px] font-bold text-gray-700 hover:bg-gray-50">변경</button>}
+              {canEditBank && appData?.계좌은행 && !bankEditOpen && <button onClick={() => setBankEditOpen(true)} className="ml-auto px-3.5 py-1.5 rounded-lg border border-[#D9E0EA] text-[13px] font-bold text-gray-700 hover:bg-gray-50">수정</button>}
             </div>
-            {appData?.계좌은행 && !bankEditOpen ? (
+            {!canEditBank && !appData?.계좌은행 ? (
+              <div className="rounded-2xl border border-dashed border-[#C9D2E0] bg-[#F7F9FC] px-5 py-8 text-center">
+                <div className="text-[14px] font-bold text-[#1B2B4B]">등록된 정산 계좌가 없습니다</div>
+                <div className="text-[12.5px] text-[#7A879C] mt-1">정산 계좌는 경리팀만 입력·수정할 수 있습니다</div>
+              </div>
+            ) : (appData?.계좌은행 && (!bankEditOpen || !canEditBank)) ? (
               <div className="relative overflow-hidden rounded-2xl text-white px-5 py-5" style={{ aspectRatio: "1.6 / 1", background: "linear-gradient(135deg, #1B2B4B 0%, #2D4C82 100%)" }}>
                 <div className="absolute -right-10 -bottom-12 w-40 h-40 rounded-full bg-white/[0.07]" />
                 <div className="relative h-full flex flex-col">
                   <div className="flex items-center"><div className="text-[16px] font-black">{appData.계좌은행}</div><div className="ml-auto w-9 h-6 rounded-md bg-gradient-to-br from-amber-200 to-amber-400 opacity-90" /></div>
                   <div className="mt-auto text-[22px] font-black font-mono tracking-wider">{appData.계좌번호}</div>
-                  <div className="mt-1.5 text-[14px] font-semibold text-blue-50/90">예금주 {appData.예금주 || "-"}</div>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <div className="text-[14px] font-semibold text-blue-50/90">예금주 {appData.예금주 || "-"}</div>
+                    <button onClick={() => { const t = `${appData.계좌은행} ${appData.계좌번호} ${appData.예금주 || ""}`.trim(); navigator.clipboard?.writeText(t).then(() => showMsg("계좌번호를 복사했습니다.")).catch(() => showMsg("복사에 실패했습니다.")); }}
+                      className="ml-auto h-8 px-3 rounded-lg bg-white/15 ring-1 ring-white/25 text-[12.5px] font-bold hover:bg-white/25 transition">계좌 복사</button>
+                    <button onClick={() => { navigator.clipboard?.writeText(String(appData.계좌번호 || "").replace(/[^\d]/g, "")).then(() => showMsg("숫자만 복사했습니다.")).catch(() => {}); }}
+                      className="h-8 px-3 rounded-lg bg-white/15 ring-1 ring-white/25 text-[12.5px] font-bold hover:bg-white/25 transition" title="하이픈 없이 숫자만">숫자만</button>
+                  </div>
                 </div>
               </div>
             ) : (
