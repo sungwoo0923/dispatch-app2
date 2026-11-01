@@ -649,7 +649,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
 
   const setResignStatus = async (u, resign) => {
     if (isViewer) return _viewerAlert();
-    if (hrLocked(u)) return alert("인사 담당자가 있어 퇴사·복직 처리는 인사팀(인사관리부 › 직원 정보·퇴사)에서 합니다.");
+    if (hrLocked(u)) return alert("인사 담당자가 있어 퇴사·복직 처리는 인사팀(인사관리부 › 인사관리 › 직원관리)에서 합니다.");
     if (resign) {
       if (!await kpConfirm(`"${u.name || u.email}" 계정을 퇴사 처리하시겠습니까?\n퇴사 처리된 계정은 즉시 로그인이 차단됩니다.`)) return;
     }
@@ -750,7 +750,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   // 관련 있는 것끼리 묶어 "그룹(1단 탭) 안에 하위 탭(2단 탭)" 구조로 재구성했다.
   // REQUIRES_MASTER에 있는 하위 탭은 최고관리자에게만 보인다(기존 isTotalMaster
   // 게이팅과 동일한 기준을 그대로 옮긴 것 — 권한 자체는 안 바뀜).
-  const DEPT_ADMIN_TABS = { acct: ["members", "billing"], hr: ["members", "loginSessions"] };
+  const DEPT_ADMIN_TABS = { acct: ["members", "billing", "setup"], hr: ["members", "loginSessions", "setup"] }; // ⭐ 2026-11-01 경리·인사도 초기 설정(그 팀 것만)
   const REQUIRES_MASTER_TABS = new Set([
     "landingInquiries", "sessionLogs", "forceUpdate", "permissions",
     "landingEdit", "notifTemplate", "companyReset", "sheetImport", "gsheetMine", "blindMine",
@@ -1517,13 +1517,14 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
           )}
           {adminTab === "setup" && (
             <div className="grid gap-4 md:grid-cols-3">
-              {[["TUTORIAL", "튜토리얼 다시 보기", "프로그램 주요 흐름을 5장으로 둘러봅니다.", openTutorial], ["SETUP WIZARD", "초기 설정 마법사", "단위 · 선택 목록 · 결제일 · 복사 문구 · 매출목표를 한 번에 정합니다.", openSetupWizard],
-                ["CHECKLIST", "시작 체크리스트 다시 보기", "숨긴 시작 체크리스트(회사정보·직원 초대·권한·기사·거래처·첫 오더·요금제)를 홈 맨 위에 다시 띄웁니다.", async () => {
+              {[["TUTORIAL", "튜토리얼 다시 보기", deptMode === "hr" ? "인사팀 주요 흐름을 둘러봅니다." : deptMode === "acct" ? "경리팀 주요 흐름을 둘러봅니다." : "프로그램 주요 흐름을 둘러봅니다.", openTutorial],
+                ["SETUP WIZARD", "초기 설정 마법사", deptMode === "hr" ? "자동 출근 반경 · 직책 · 부서를 정합니다." : deptMode === "acct" ? "기사 결제일을 정합니다." : "단위 · 선택 목록 · 결제일 · 복사 문구 · 매출목표를 한 번에 정합니다.", openSetupWizard],
+                ...(deptMode ? [] : [["CHECKLIST", "시작 체크리스트 다시 보기", "숨긴 시작 체크리스트(회사정보·직원 초대·권한·기사·거래처·첫 오더·요금제)를 홈 맨 위에 다시 띄웁니다.", async () => {
                   try {
                     await setDoc(doc(db, "companySettings", effectiveCompany), { masterChecklistDone: false }, { merge: true });
                     window.__setMainTab?.("HOME");
                   } catch (e) { alert("다시 띄우기 실패: " + (e?.message || e)); }
-                }]].map(([en, t, d, fn]) => (
+                }]])].map(([en, t, d, fn]) => (
                 <button key={en} type="button" onClick={fn} className="text-left rounded-[20px] p-6 text-white shadow-[0_14px_34px_rgba(15,26,48,0.22)] hover:-translate-y-0.5 transition" style={{ background: "linear-gradient(135deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
                   <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]">{en}</div>
                   <div className="text-[19px] font-black mt-1">{t}</div>
@@ -2027,7 +2028,7 @@ function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose
         <div className="p-5 space-y-4">
           <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4">
             <div className="text-[13px] font-black text-[#0F1A30] mb-3">정보 {pending ? "확인 · 지정" : "수정"} <span className="text-[11.5px] font-bold text-[#9AA9C3]">직책 · 부서 · 권한</span></div>
-            {hrLock && <div className="mb-3 rounded-xl bg-[#EEF3FC] border border-[#C9D6EE] px-3 py-2 text-[12px] font-bold text-[#1B2B4B]">인사 담당자가 있어 부서·직책·퇴사는 인사팀(인사관리부 › 직원 정보·퇴사)에서 바꿉니다. 승인·권한 지정은 그대로 할 수 있습니다.</div>}
+            {hrLock && <div className="mb-3 rounded-xl bg-[#EEF3FC] border border-[#C9D6EE] px-3 py-2 text-[12px] font-bold text-[#1B2B4B]">인사 담당자가 있어 부서·직책·퇴사는 인사팀(인사관리부 › 인사관리 › 직원관리)에서 바꿉니다. 승인·권한 지정은 그대로 할 수 있습니다.</div>}
             <div className="grid grid-cols-2 gap-3">
               <div><label className={lab}>이름</label><input value={f.editName} onChange={(e) => f.setEditName(e.target.value)} className={inp} /></div>
               <div><label className={lab}>핸드폰번호</label><input value={f.editPhone} onChange={(e) => {

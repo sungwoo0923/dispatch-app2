@@ -18,10 +18,28 @@ export const MENU_SUBS = {
   전자결재: { code: "E-APPROVAL", items: [["inbox", "결재함"], ["leave", "근태 · 휴가 신청"], ["expense", "비용 · 지출 결의"], ["draft", "업무 기안 · 품의"], ["report", "업무 보고 · 인사"], ["handover", "인수인계"], ["mine", "내 기안함"], ["lines", "결재선 관리"]] },
   회계관리: { code: "ACCOUNTING", items: [["overview", "회계 개요"], ["book", "회계 장부"], ["retire", "퇴직 정산"]] },
   자금관리: { code: "FINANCE", items: [["funds", "자금 현황"], ["book", "수입 · 지출 장부"]] },
-  인사관리부: { code: "HUMAN RESOURCES", items: [["record", "인사관리"], ["edit", "직원 정보 · 퇴사"], ["register", "직원 등록"], ["attendance", "출근기록부"], ["leave", "연차 관리"], ["settings", "직책 · 부서 설정"], ["rules", "사내 규정"], ["obit", "부고 알림"]] },
+  인사관리부: { code: "HUMAN RESOURCES", items: [["record", "인사관리"], ["edit", "직원관리"], ["register", "직원 등록"], ["attendance", "출근기록부"], ["leave", "연차 관리"], ["settings", "직책 · 부서 설정"], ["rules", "사내 규정"], ["obit", "부고 알림"]] },
   회사관리: { code: "COMPANY", items: [["회사정보", "회사정보"], ["조직도", "조직도"], ["내정보", "내정보"], ["내 이력서", "내 이력서"], ["출근기록부", "출근기록부"]] },
   관리자메뉴: { code: "ADMIN", items: [["members", "회원 관리"], ["linked", "연동 화주사"], ["loginSessions", "로그인 관리"], ["billing", "구독 · 결제"], ["setup", "초기 설정 · 튜토리얼"]] },
 };
+
+// ⭐ 실제 화면의 왼쪽 메뉴를 기억 — 팀·권한마다 보이는 항목이 달라서, 한 번이라도 연 화면은 그 사람이 실제로 보는 항목만 펼친다
+const REG_KEY = (code) => { let r = ""; try { r = (localStorage.getItem("role") || "") + (localStorage.getItem("role") === "hrAcct" ? `-${localStorage.getItem("kpHrAcctView") || "acct"}` : ""); } catch { /* 무시 */ } return `kpSubnavReg:${r}:${code}`; };
+const _reg = {};
+export function registerSubnav(code, items) {
+  if (!code || !Array.isArray(items) || !items.length) return;
+  const clean = items.filter((x) => x && x[0] && x[1]).map((x) => [String(x[0]), String(x[1])]);
+  const j = JSON.stringify(clean);
+  const k = REG_KEY(code);
+  if (_reg[k] === j) return;
+  _reg[k] = j;
+  try { localStorage.setItem(k, j); } catch { /* 무시 */ }
+}
+function registeredItems(code) {
+  try { const k = REG_KEY(code); const j = _reg[k] || localStorage.getItem(k); return j ? JSON.parse(j) : null; } catch { return null; }
+}
+// 팀·권한마다 달라지는 화면 — 한 번 열어 실제 항목을 알기 전엔 세부 메뉴를 띄우지 않는다
+const DYNAMIC = new Set(["ADMIN", "COMPANY", "HUMAN RESOURCES", "HOME", "DRIVERS"]);
 
 // 세부 메뉴 이동 요청 — 화면이 아직 안 열렸으면 열린 뒤(3초 안) 적용
 export function emitSubnav(code, key) {
@@ -29,9 +47,11 @@ export function emitSubnav(code, key) {
   try { window.dispatchEvent(new CustomEvent("kp:subnav", { detail: { code, key } })); } catch { /* 무시 */ }
 }
 // KpSubNav · AdminShell에서 — 이 화면(code)의 항목(keys)으로 이동 요청이 오면 onSelect(key)
-export function useSubnavTarget(code, keys, onSelect) {
+export function useSubnavTarget(code, keys, onSelect, labeled = null) {
   const ref = React.useRef({ keys, onSelect });
   ref.current = { keys, onSelect };
+  const regJson = labeled ? JSON.stringify(labeled) : "";
+  React.useEffect(() => { if (labeled) registerSubnav(code, labeled); }, [code, regJson]); // eslint-disable-line react-hooks/exhaustive-deps
   React.useEffect(() => {
     const apply = (d) => {
       if (!d || d.code !== code) return false;
@@ -50,7 +70,9 @@ export function useSubnavTarget(code, keys, onSelect) {
 
 // 상단 메뉴 버튼을 감싸서 — 마우스를 올리면 아래로 세부 메뉴 패널이 부드럽게 펼쳐진다
 export function NavHover({ menu, label, disabled = false, onOpenMenu, children }) {
-  const conf = MENU_SUBS[menu];
+  const base = MENU_SUBS[menu];
+  const reg = base ? registeredItems(base.code) : null;
+  const conf = base && (reg || !DYNAMIC.has(base.code)) ? { code: base.code, items: reg || base.items } : null;
   const anchorRef = React.useRef(null);
   const [open, setOpen] = React.useState(false);
   const [shown, setShown] = React.useState(false);
@@ -81,7 +103,8 @@ export function NavHover({ menu, label, disabled = false, onOpenMenu, children }
   }, [open]);
   const pick = (key) => { clear(); setShown(false); setOpen(false); onOpenMenu?.(); setTimeout(() => emitSubnav(conf.code, key), 0); };
   return (
-    <span ref={anchorRef} className="inline-flex" onMouseEnter={enter} onMouseLeave={leave}>
+    <span ref={anchorRef} className="inline-flex" onMouseEnter={enter} onMouseLeave={leave}
+      onClickCapture={() => { clear(); setShown(false); setOpen(false); /* ⭐ 메뉴를 누르면 펼친 세부 메뉴는 닫힌다 */ }}>
       {children}
       {open && conf && createPortal(
         <div onMouseEnter={() => clear()} onMouseLeave={leave}
@@ -97,7 +120,7 @@ export function NavHover({ menu, label, disabled = false, onOpenMenu, children }
               <div className="text-[9.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{conf.code}</div>
               <div className="text-[14px] font-black text-white mt-0.5">{label || menu}</div>
             </div>
-            <div className="p-1.5">
+            <div className="p-1.5 overflow-y-auto" style={{ maxHeight: "min(70vh, 520px)" }}>
               {conf.items.map(([key, l], i) => (
                 <button key={key} type="button" onClick={() => pick(key)}
                   className="w-full flex items-center gap-2.5 px-3 h-10 rounded-xl text-left text-[13.5px] font-bold text-white/80 hover:text-white hover:bg-white/[0.08] transition"

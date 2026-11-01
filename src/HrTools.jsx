@@ -171,7 +171,7 @@ export function LeaveLedger({ company, isViewer = false, canManage = false }) {
                 ))}
               </div>
             </div>
-            {!cur.hire && <div className="rounded-2xl bg-[#FEF3F2] border border-[#FECDCA] px-4 py-3 flex items-center gap-3"><span className="text-[13.5px] font-bold text-[#B42318]">입사일이 없어 연차를 계산할 수 없습니다</span><span className="ml-auto text-[12px] font-bold text-[#B42318]/80">인사관리부 › 직원 정보·퇴사에서 등록</span></div>}
+            {!cur.hire && <div className="rounded-2xl bg-[#FEF3F2] border border-[#FECDCA] px-4 py-3 flex items-center gap-3"><span className="text-[13.5px] font-bold text-[#B42318]">입사일이 없어 연차를 계산할 수 없습니다</span><span className="ml-auto text-[12px] font-bold text-[#B42318]/80">인사관리부 › 인사관리 › 직원관리에서 등록</span></div>}
             {cur.promote && <div className="rounded-2xl bg-[#FFF4E5] border border-[#FEDF89] px-4 py-3 flex items-center gap-3 flex-wrap"><span className="text-[13.5px] font-bold text-[#B54708]">연차 사용 촉진 대상 — 회기 종료 {cur.left}일 전, 잔여 {cur.remain}일 (근로기준법 61조)</span>{!isViewer && <button type="button" onClick={() => sendPromote(cur)} className="ml-auto h-9 px-3.5 rounded-lg bg-[#B54708] text-white text-[12.5px] font-black">촉진 안내 메일</button>}</div>}
             {cur.ent && (
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
@@ -228,8 +228,8 @@ export function LeaveLedger({ company, isViewer = false, canManage = false }) {
                 </div>
               </BookCard>
             )}
-            {/* ⭐ 2026-11-01 입사일 변경은 인사관리부 › 직원 정보·퇴사에서만 */}
-            {cur.hire && <div className="text-right text-[12px] font-bold text-[#7A879C]">입사일 변경은 인사관리부 › 직원 정보·퇴사에서 합니다</div>}
+            {/* ⭐ 2026-11-01 입사일 변경은 인사관리부 › 인사관리 › 직원관리에서만 */}
+            {cur.hire && <div className="text-right text-[12px] font-bold text-[#7A879C]">입사일 변경은 인사관리부 › 인사관리 › 직원관리에서 합니다</div>}
           </div>
         )}
       </div>

@@ -59478,7 +59478,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
         <ProfilePanel eyebrow="SERVICE" title="근속 · 휴가" desc="휴가·외근 결재 승인 건 기준 (2026년부터 집계)">
           <div className="flex items-center gap-3">
             <span className="text-[13.5px] font-semibold text-gray-600 shrink-0">입사일</span>
-            {/* ⭐ 2026-11-01 입사일은 인사팀(인사관리부 › 직원 정보·퇴사)에서만 바꿀 수 있다 — 여기서는 보기만 */}
+            {/* ⭐ 2026-11-01 입사일은 인사팀(인사관리부 › 인사관리 › 직원관리)에서만 바꿀 수 있다 — 여기서는 보기만 */}
             <span className="px-3 py-1.5 rounded-lg bg-[#F5F8FD] border border-[#E3E8F0] text-[13.5px] font-black text-[#1B2B4B] tabular-nums">{hireDate || "미등록"}</span>
             <span className="text-[11.5px] text-gray-400">변경은 인사팀에서</span>
           </div>

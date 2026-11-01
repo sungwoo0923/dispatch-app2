@@ -18669,7 +18669,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
 
       {/* 입사일 · 연차 */}
       <KpmCard en="LEAVE" title="입사일 · 연차" right={hireDateSaving ? <span className="text-[11px] font-bold text-[#7A879C]">저장 중…</span> : yearsOfService ? <span className="text-[12px] font-black text-[#2D4C82]">{yearsOfService}</span> : null}>
-        {/* ⭐ 2026-11-01 입사일은 인사팀(인사관리부 › 직원 정보·퇴사)에서만 바꿀 수 있다 — 여기서는 보기만 */}
+        {/* ⭐ 2026-11-01 입사일은 인사팀(인사관리부 › 인사관리 › 직원관리)에서만 바꿀 수 있다 — 여기서는 보기만 */}
         <div className="flex items-center gap-2 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 h-11">
           <span className="text-[12px] font-bold text-[#7A879C]">입사일</span>
           <span className="text-[14.5px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: KPM_MONO }}>{hireDate || "미등록"}</span>
