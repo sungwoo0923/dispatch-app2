@@ -111,7 +111,7 @@ function NewClientModal({ data, setData, busy, onClose, onSave }) {
     </div>
   );
 }
-const blankStop = (type = "하차") => ({ type, name: "", addr: "", time: "", contact: "", memo: "", cargo: "", cargoType: "", tonVal: "", tonType: "", fareClient: "", fareDriver: "", payMethod: "" });
+const blankStop = (type = "하차") => ({ type, name: "", addr: "", time: "", contact: "", memo: "", cargo: "", cargoType: "", tonVal: "", tonType: "", fareClient: "", fareDriver: "", payMethod: "", client: "" });
 export const VEHICLE_TYPES_FR = ["라보", "다마스", "오토바이", "윙바디", "탑", "카고", "윙/카고", "냉장윙", "냉동윙", "냉장탑", "냉동탑", "냉장/냉동탑", "냉장/냉동윙", "리프트"];
 const cargoText = (s) => (s.cargo ? `${s.cargo}${s.cargoType || ""}` : "");
 const tonText = (s) => (s.tonVal ? `${s.tonVal}${s.tonType || "톤"}` : "");
@@ -121,10 +121,16 @@ const tonText = (s) => (s.tonVal ? `${s.tonVal}${s.tonType || "톤"}` : "");
 //  · "단일 운임"   : 정류지 운임이 하나도 없으면 기본 청구·기사운임 + 노선 지급방식(payMethod) 한 가지
 //  · 정류지마다 지급방식(payMethod)을 고른다(운임이 있는 곳은 필수) — 정산·거래명세서가 오더의 지급방식으로 묶이므로
 //    지급방식이 서로 다르면 배차를 "지급방식별로" 나눠 만든다(같은 차·같은 날, 대표 오더 + 분리 오더)
+//  · ⭐ 2026-11-01 정류지마다 거래처(청구처, stops[i].client)도 — 비우면 노선 거래처. 착불 경유지는 다른 회사가 낼 수 있다
+//    → 오더는 (거래처명, 지급방식) 묶음마다 한 건(거래처정산·거래명세서가 거래처명+지급방식으로 묶이므로)
 //  · 예전 노선(fareMode 없음)에 기본 운임과 정류지 운임이 같이 있으면 예전처럼 "기본 + 정류지" 합계(대표 오더에 기본 운임)
 const namedStops = (r) => (r.stops || []).filter((s) => s.name || s.addr);
 const stopPaid = (s) => !!(toInt(s.fareClient) || toInt(s.fareDriver));
-export const routeSegments = (r) => namedStops(r).map((s, i) => ({ s, i })).filter(({ s, i }) => i > 0 && stopPaid(s)).map(({ s, i }) => ({ name: s.name || s.addr, 구분: s.type, 청구: toInt(s.fareClient), 기사: toInt(s.fareDriver), 지급방식: s.payMethod || "", 순번: i + 1 }));
+export const routeSegments = (r) => namedStops(r).map((s, i) => ({ s, i })).filter(({ s, i }) => i > 0 && stopPaid(s)).map(({ s, i }) => ({ name: s.name || s.addr, 구분: s.type, 청구: toInt(s.fareClient), 기사: toInt(s.fareDriver), 지급방식: s.payMethod || "", 거래처: String(s.client || "").trim(), 순번: i + 1 }));
+// 정류지 거래처(청구처) — 비우면 노선 거래처
+export const routeClient = (r) => String(r.client || r.name || "").trim();
+// 노선 거래처와 띄어쓰기·(주)만 다르면 같은 거래처로 본다
+const payerOf = (r, g) => (g.거래처 && norm(g.거래처) !== norm(routeClient(r)) ? g.거래처 : routeClient(r));
 export const routeTotals = (r) => {
   const seg = routeSegments(r);
   const perStop = seg.length > 0;
@@ -135,25 +141,34 @@ export const routeTotals = (r) => {
   const driver = perStop ? legacyDriver + seg.reduce((a, g) => a + g.기사, 0) : toInt(r.fareDriver);
   return { seg, client, driver, perStop, legacyClient, legacyDriver };
 };
-// 지급방식별로 묶기 — 대표 그룹 = 마지막 운임 정류지(보통 하차지)가 속한 지급방식
+// (거래처명, 지급방식)별로 묶기 — 대표 그룹 = 마지막 운임 정류지(보통 하차지)가 속한 묶음
+//  ⭐ 2026-11-01 거래처까지 — 묶음의 payer = 오더 거래처명, client/driver = 그 묶음 금액 합계
 export const routePayGroups = (r) => {
   const { seg, perStop, client, driver, legacyClient, legacyDriver } = routeTotals(r);
   const fallback = r.payMethod || "계산서"; // 예전 노선(지급방식 없음)은 예전처럼 계산서
-  if (!perStop) return [{ pay: fallback, segs: [], client, driver }];
+  if (!perStop) return [{ pay: fallback, payer: routeClient(r), segs: [], client, driver }];
   const map = new Map();
-  seg.forEach((g) => { const k = g.지급방식 || fallback; if (!map.has(k)) map.set(k, []); map.get(k).push(g); });
-  const mainPay = seg[seg.length - 1].지급방식 || fallback;
-  const keys = [mainPay, ...[...map.keys()].filter((k) => k !== mainPay)];
-  return keys.map((pay, gi) => {
-    const segs = map.get(pay);
-    return { pay, segs, client: segs.reduce((a, g) => a + g.청구, 0) + (gi === 0 ? legacyClient : 0), driver: segs.reduce((a, g) => a + g.기사, 0) + (gi === 0 ? legacyDriver : 0) };
+  const keyOf = (g) => `${payerOf(r, g)}\u0001${g.지급방식 || fallback}`;
+  seg.forEach((g) => { const k = keyOf(g); if (!map.has(k)) map.set(k, []); map.get(k).push(g); });
+  const mainKey = keyOf(seg[seg.length - 1]);
+  const keys = [mainKey, ...[...map.keys()].filter((k) => k !== mainKey)];
+  return keys.map((k, gi) => {
+    const segs = map.get(k);
+    const [payer, pay] = k.split("\u0001");
+    return { pay, payer, segs, client: segs.reduce((a, g) => a + g.청구, 0) + (gi === 0 ? legacyClient : 0), driver: segs.reduce((a, g) => a + g.기사, 0) + (gi === 0 ? legacyDriver : 0) };
   });
 };
 const payKey = (p) => String(p || "").replace(/[\s/\\.#$[\]]/g, "_");
+// 분리 오더 문서 번호 꼬리 — 노선 거래처면 예전처럼 지급방식만(이미 만든 분리 오더 번호 유지), 다른 거래처면 거래처까지
+const groupSuffix = (r, G) => (G.payer === routeClient(r) ? payKey(G.pay) : `${payKey(G.pay)}_${payKey(G.payer).slice(0, 60)}`);
+// 묶음 이름(화면 표시용) — 거래처가 노선 거래처와 다르면 거래처도 같이
+export const groupLabel = (r, G) => (G.payer && G.payer !== routeClient(r) ? `${G.payer} ${G.pay}` : G.pay);
 const blankRoute = () => ({ name: "", client: "", color: COLORS[2], stops: [blankStop("상차"), blankStop("하차")], days: ["월", "화", "수", "목", "금"], startTime: "", tonnage: "", vehicleType: "", fareClient: "", fareDriver: "", payMethod: "", driverKey: "", driverName: "", carNo: "", phone: "", startDate: kst(), endDate: "", skipDates: [], autoDispatch: true, autoAccept: true, active: true, memo: "" });
 
 // ─── 배차 자동 생성 — 오늘부터 N일 앞까지, 노선·날짜마다 한 건(문서 번호 고정이라 여러 명이 동시에 열어도 중복 없음) ───
 // ⭐ 2026-11-01 지급방식이 서로 다른 정류지가 있으면 지급방식별로 나눠 여러 건 — [0]이 대표 오더(fr_노선_날짜, 전체 경로)
+//  ⭐ 2026-11-01 거래처(청구처)가 다른 정류지도 — (거래처명, 지급방식) 묶음마다 한 건, 오더 거래처명 = 그 묶음 거래처
+//    분리 오더 번호: 노선 거래처면 fr_노선_날짜_지급방식(예전 그대로), 다른 거래처면 fr_노선_날짜_지급방식_거래처
 //  · 대표 오더: 전체 경로 + 대표 지급방식(보통 하차지) 정류지 운임만
 //  · 분리 오더(fr_노선_날짜_지급방식): 상차지 + 그 지급방식 정류지만, 그 운임만 — 정산·거래명세서가 지급방식별로 정확히 잡힌다
 export function routeOrdersFor(r, date) {
@@ -168,8 +183,9 @@ export function routeOrdersFor(r, date) {
   const auto = hasDriver && r.autoAccept !== false;
   const payOfSeg = (g) => g.지급방식 || r.payMethod || "계산서";
   const segOf = new Map(); // 정류지 순번 → 지급방식
-  seg.forEach((g) => segOf.set(g.순번, payOfSeg(g)));
-  const fareRow = (g) => ({ 이름: g.name, 구분: g.구분, 청구운임: g.청구, 기사운임: g.기사, 수수료: g.청구 - g.기사, 지급방식: payOfSeg(g) });
+  const payerOfN = new Map(); // 정류지 순번 → 거래처명
+  seg.forEach((g) => { segOf.set(g.순번, payOfSeg(g)); payerOfN.set(g.순번, payerOf(r, g)); });
+  const fareRow = (g) => ({ 이름: g.name, 구분: g.구분, 거래처명: payerOf(r, g), 청구운임: g.청구, 기사운임: g.기사, 수수료: g.청구 - g.기사, 지급방식: payOfSeg(g) });
   return groups.map((G, gi) => {
     const isMain = gi === 0;
     const inG = new Set(G.segs.map((g) => g.순번));
@@ -186,8 +202,8 @@ export function routeOrdersFor(r, date) {
         상차일: dateKey === "상차일" ? date : "", 상차시간: timeKey === "상차시간" ? korTime(s.time) : "", 하차일: dateKey === "하차일" ? date : "", 하차시간: timeKey === "하차시간" ? korTime(s.time) : "", 방법: "",
         구분: s.type,
         // 이 오더에서 받는 운임만 금액을 싣고, 다른 지급방식(분리 오더) 정류지는 표시만
-        ...(pay && inG.has(n) ? { 청구운임: toInt(s.fareClient), 기사운임: toInt(s.fareDriver), 지급방식: pay } : {}),
-        ...(pay && !inG.has(n) ? { 지급방식: pay, 운임별도오더: `${pay} 분리 오더` } : {}),
+        ...(pay && inG.has(n) ? { 청구운임: toInt(s.fareClient), 기사운임: toInt(s.fareDriver), 지급방식: pay, 거래처명: payerOfN.get(n) } : {}),
+        ...(pay && !inG.has(n) ? { 지급방식: pay, 거래처명: payerOfN.get(n), 운임별도오더: `${payerOfN.get(n) !== routeClient(r) ? `${payerOfN.get(n)} ` : ""}${pay} 분리 오더` } : {}),
       };
     };
     const pickVia = mid.filter((s) => s.type === "상차").map((s) => wp(s, "상차일", "상차시간"));
@@ -195,13 +211,13 @@ export function routeOrdersFor(r, date) {
     const mainCargo = own.find((s) => s.cargo) || {};
     const rows = G.segs.map(fareRow);
     const memoFare = seg.length
-      ? `정류지별 운임 ${seg.length}곳${split ? ` · 지급방식별 ${groups.length}건 중 ${gi + 1}(${G.pay}${rows.length ? `: ${rows.map((x) => x.이름).join(", ")}` : ""})` : ""}`
+      ? `정류지별 운임 ${seg.length}곳${split ? ` · 거래처·지급방식별 ${groups.length}건 중 ${gi + 1}(${groupLabel(r, G)}${rows.length ? `: ${rows.map((x) => x.이름).join(", ")}` : ""})` : ""}`
       : "";
     return {
-      _id: isMain ? mainId : `${mainId}_${payKey(G.pay)}`,
+      _id: isMain ? mainId : `${mainId}_${groupSuffix(r, G)}`,
       등록일: kst(), 상차일: date, 하차일: date,
       상차시간: korTime(first.time || r.startTime), 하차시간: korTime(last.time),
-      거래처명: r.client || r.name || "",
+      거래처명: G.payer || routeClient(r), // ⭐ 2026-11-01 그 묶음의 거래처(청구처)
       상차지명: first.name || "", 상차지주소: first.addr || "", 상차지담당자: "담당자", 상차지담당자번호: first.contact || "",
       하차지명: last.name || "", 하차지주소: last.addr || "", 하차지담당자: "담당자", 하차지담당자번호: last.contact || "",
       // 배차관리 등록폼과 같은 모양(목록 화면이 늘 배열이 있다고 본다)
@@ -210,11 +226,11 @@ export function routeOrdersFor(r, date) {
       화물내용: cargoText(mainCargo), 화물타입: mainCargo.cargoType || "",
       청구운임: G.client, 기사운임: G.driver, 수수료: String(G.client - G.driver),
       // 정류지별 금액 — 구간운임(기사앱이 읽는 예전 모양)과 정류지운임(이름·구분·청구·기사·수수료·지급방식)
-      구간운임: G.segs.map((g) => ({ name: g.name, 구분: g.구분, 청구: g.청구, 기사: g.기사, 지급방식: payOfSeg(g) })),
+      구간운임: G.segs.map((g) => ({ name: g.name, 구분: g.구분, 청구: g.청구, 기사: g.기사, 지급방식: payOfSeg(g), 거래처명: payerOf(r, g) })),
       정류지운임: rows,
       정류지별운임: seg.length, // 0이면 단일 운임 — 배차현황에서 "정류지별 운임" 표시에 쓴다
       정류지운임전체: split ? seg.map(fareRow) : [],
-      지급방식분리: split ? { 순번: gi + 1, 전체: groups.length, 대표오더Id: mainId, 대표: isMain } : null,
+      지급방식분리: split ? { 순번: gi + 1, 전체: groups.length, 대표오더Id: mainId, 대표: isMain, 거래처명: G.payer, 지급방식: G.pay } : null,
       차량번호: r.carNo || "", 이름: r.driverName || "", 전화번호: r.phone || "",
       배차상태: hasDriver ? "배차완료" : "배차중",
       ...(hasDriver ? { 배차완료일시: Date.now(), 배차확정일시: serverTimestamp(), 배차확정자: "고정노선" } : {}),
@@ -374,6 +390,7 @@ function FareTable({ r, dark = false }) {
   const groups = routePayGroups(r);
   if (!seg.length) return null;
   const pay = (g) => g.지급방식 || r.payMethod || "";
+  const rc = routeClient(r);
   const sub = dark ? "text-white/55" : "text-[#7A89A3]";
   const line = dark ? "border-white/10" : "border-[#EEF1F6]";
   const strong = dark ? "text-white" : "text-[#0F1A30]";
@@ -384,7 +401,8 @@ function FareTable({ r, dark = false }) {
       </div>
       {seg.map((g, i) => (
         <div key={i} className={`grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)] gap-2 px-3 py-2 border-t ${line} text-[12.5px] items-center`}>
-          <span className={`truncate font-black ${strong}`} title={g.name}><span className={`text-[10.5px] font-extrabold mr-1 ${dark ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`}>{String(g.순번).padStart(2, "0")} {g.구분}</span>{g.name}</span>
+          <span className={`truncate font-black ${strong}`} title={g.name}><span className={`text-[10.5px] font-extrabold mr-1 ${dark ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`}>{String(g.순번).padStart(2, "0")} {g.구분}</span>{g.name}
+            <span className={`block truncate text-[11px] font-bold ${payerOf(r, g) !== rc ? (dark ? "text-[#FFD48A]" : "text-[#9A5B00]") : sub}`} title="거래처(청구처)">{payerOf(r, g) || "거래처 미입력"}{payerOf(r, g) !== rc ? " · 다른 거래처" : ""}</span></span>
           <span>{pay(g) ? <span className={`inline-flex h-6 px-2 items-center rounded-md text-[11.5px] font-black ${dark ? "bg-white/15 text-white" : "bg-[#0F1A30] text-white"}`}>{pay(g)}</span> : <span className="text-[11.5px] font-black text-[#E5484D]">미선택</span>}</span>
           <span className={`text-right tabular-nums font-bold ${strong}`} style={{ fontFamily: MONO }}>{won(g.청구)}</span>
           <span className={`text-right tabular-nums font-bold ${strong}`} style={{ fontFamily: MONO }}>{won(g.기사)}</span>
@@ -407,21 +425,21 @@ function FareTable({ r, dark = false }) {
       </div>
       {groups.length > 1 && (
         <div className={`px-3 py-2.5 border-t ${line} text-[12px] leading-relaxed ${dark ? "text-white/75" : "text-[#3A4A66]"}`}>
-          <b className={strong}>지급방식이 달라 배차가 {groups.length}건으로 나뉘어 만들어집니다</b> — {groups.map((G) => `${G.pay} ${won(G.client)}원`).join(" / ")} · 같은 차량·같은 날 운행, 정산·거래명세서에서 지급방식별로 따로 잡힙니다
+          <b className={strong}>거래처·지급방식이 달라 배차가 {groups.length}건으로 나뉘어 만들어집니다</b> — {groups.map((G) => `${G.payer || "-"} ${G.pay} ${won(G.client)}원`).join(" / ")} · 같은 차량·같은 날 운행, 거래처정산·거래명세서에서 거래처·지급방식별로 따로 잡힙니다
         </div>
       )}
     </div>
   );
 }
 // 목록·현황 배지 — "정류지별 운임 N곳" (마우스를 올리면 정류지별 금액·지급방식)
-const fareTip = (r) => { const { seg, client, driver } = routeTotals(r); return [...seg.map((g) => `${g.구분} ${g.name} · ${g.지급방식 || r.payMethod || "지급방식 미선택"} · 청구 ${won(g.청구)} / 기사 ${won(g.기사)}`), `1회 합계 청구 ${won(client)} / 기사 ${won(driver)}`].join("\n"); };
+const fareTip = (r) => { const { seg, client, driver } = routeTotals(r); return [...seg.map((g) => `${g.구분} ${g.name} · ${payerOf(r, g) || "거래처 미입력"} · ${g.지급방식 || r.payMethod || "지급방식 미선택"} · 청구 ${won(g.청구)} / 기사 ${won(g.기사)}`), `1회 합계 청구 ${won(client)} / 기사 ${won(driver)}`].join("\n"); };
 function StopFareBadge({ r, on = false }) {
   const { seg } = routeTotals(r);
   if (!seg.length) return null;
   const split = routePayGroups(r).length > 1;
   return (
     <span title={fareTip(r)} className={`inline-flex items-center gap-1 h-5 px-1.5 rounded-md text-[10.5px] font-black whitespace-nowrap ${on ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-[#EEF3FC] text-[#1B2B4B] border border-[#C9D6EE]"}`}>
-      <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />정류지별 운임 {seg.length}곳{split ? " · 지급방식 분리" : ""}
+      <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />정류지별 운임 {seg.length}곳{split ? ` · 분리 ${routePayGroups(r).length}건` : ""}{seg.some((g) => payerOf(r, g) !== routeClient(r)) ? " · 다른 거래처" : ""}
     </span>
   );
 }
@@ -622,6 +640,21 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                               <input inputMode="numeric" value={s.fareDriver ? won(s.fareDriver) : ""} onChange={(e) => setStop(i, { fareDriver: e.target.value.replace(/[^\d]/g, "") })} placeholder="기사운임" className={`${inp} !h-10 text-right tabular-nums`} style={{ fontFamily: MONO }} />
                               <div className="col-span-2 md:col-span-1"><PaySelect id={`fr-pay-${i}`} compact value={s.payMethod} onChange={(v) => setStop(i, { payMethod: v })} options={payTypes} error={err} /></div>
                             </div>
+                            {/* ⭐ 2026-11-01 이 곳 거래처(청구처) — 비우면 노선 거래처 · 착불 경유지는 다른 회사가 낼 수 있다 */}
+                            {(() => {
+                              const sc = String(s.client || "").trim();
+                              const scNew = sc && !clients.some((c) => norm(c.거래처명 || c.id) === norm(sc));
+                              const other = sc && norm(sc) !== norm(form.client || form.name);
+                              return (
+                                <div className="mt-2 flex items-center gap-2">
+                                  <span className="shrink-0 text-[12px] font-black text-[#3A4A66] w-[64px]">거래처</span>
+                                  <Suggest value={s.client || ""} onChange={(v) => setStop(i, { client: v })} items={clients} k="거래처명" sub={(c) => c.주소 || c.담당자 || ""}
+                                    placeholder={`비우면 노선 거래처${form.client ? ` (${form.client})` : ""}`} onPick={(c) => setStop(i, { client: c.거래처명 || c.id })} />
+                                  {scNew && <NewTag />}
+                                  {other && <span className="shrink-0 h-5 px-1.5 inline-flex items-center rounded-md bg-[#FFF3D6] text-[#7A5300] text-[10.5px] font-black">다른 거래처</span>}
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       })()}
@@ -777,7 +810,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                             <span className="text-[11px] font-extrabold tracking-[0.14em] text-[#4B6CB7]">{x.type}</span>
                             <span className="text-[15.5px] font-black text-[#0F1A30]">{x.name || "-"}</span>
                             <span className="px-2 py-0.5 rounded-md bg-[#EEF2F8] text-[12px] font-black text-[#1B2B4B]">{korTimeLabel(x.time || (i === 0 ? form.startTime : ""))}</span>
-                            {(i > 0 && stopPaid(x)) ? <span className="ml-auto flex items-center gap-1.5"><span className="h-6 px-2 inline-flex items-center rounded-md bg-[#0F1A30] text-white text-[11.5px] font-black">{x.payMethod || "-"}</span><span className="text-[12.5px] font-black text-[#0B1428] tabular-nums" style={{ fontFamily: MONO }}>청구 {won(x.fareClient)} · 기사 {won(x.fareDriver)}</span></span> : null}
+                            {(i > 0 && stopPaid(x)) ? <span className="ml-auto flex items-center gap-1.5">{(() => { const pc = payerOf(form, { 거래처: String(x.client || "").trim() }); const other = pc !== routeClient(form); return <span className={`h-6 px-2 inline-flex items-center rounded-md text-[11.5px] font-black ${other ? "bg-[#FFF3D6] text-[#7A5300]" : "bg-[#EEF2F8] text-[#1B2B4B]"}`} title="거래처(청구처)">{pc || "-"}</span>; })()}<span className="h-6 px-2 inline-flex items-center rounded-md bg-[#0F1A30] text-white text-[11.5px] font-black">{x.payMethod || "-"}</span><span className="text-[12.5px] font-black text-[#0B1428] tabular-nums" style={{ fontFamily: MONO }}>청구 {won(x.fareClient)} · 기사 {won(x.fareDriver)}</span></span> : null}
                           </div>
                           <div className="text-[13px] font-semibold text-[#3A4A66] mt-0.5">{x.addr || "-"}</div>
                           {(cargoText(x) || tonText(x) || x.contact || x.memo) && <div className="text-[12.5px] text-[#7A89A3] mt-0.5">{[cargoText(x) && `화물 ${cargoText(x)}`, tonText(x) && `톤수 ${tonText(x)}`, x.contact, x.memo].filter(Boolean).join(" · ")}</div>}
@@ -798,8 +831,8 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                         <>
                           <div>· <b className="text-[#0F1A30]">정류지별 운임 {t.seg.length}곳</b> — 청구·기사운임·수수료는 합계로, 정류지별 금액·지급방식은 오더의 정류지운임·경유지·기사앱에 따로 들어갑니다</div>
                           {gs.length > 1
-                            ? <div>· 지급방식이 달라 <b className="text-[#0F1A30]">하루 {gs.length}건</b>으로 나눠 만듭니다: {gs.map((G) => `${G.pay} 청구 ${won(G.client)}·기사 ${won(G.driver)}`).join(" / ")} (같은 차량·같은 운행)</div>
-                            : <div>· 지급방식 <b className="text-[#0F1A30]">{gs[0].pay}</b></div>}
+                            ? <div>· 거래처·지급방식이 달라 <b className="text-[#0F1A30]">하루 {gs.length}건</b>으로 나눠 만듭니다: {gs.map((G) => `${G.payer || "-"} ${G.pay} 청구 ${won(G.client)}·기사 ${won(G.driver)}`).join(" / ")} (같은 차량·같은 운행)</div>
+                            : <div>· 거래처 <b className="text-[#0F1A30]">{gs[0].payer || "-"}</b> · 지급방식 <b className="text-[#0F1A30]">{gs[0].pay}</b></div>}
                         </>
                       ); })() : <div>· 단일 운임 · 지급방식 <b className="text-[#0F1A30]">{form.payMethod || "계산서"}</b></div>}
                       <div>· {form.autoDispatch !== false ? "정해진 요일마다 오늘부터 7일 앞까지 배차가 자동으로 생깁니다" : "자동 등록 꺼짐 — [배차 미리 만들기]로 만들 수 있습니다"}{(form.skipDates || []).length ? ` · 쉬는 날 ${form.skipDates.length}일 제외` : ""}</div>
@@ -901,13 +934,13 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                         <div className="text-[13.5px] font-black text-[#0F1A30]">{s.name || "-"} <span className="text-[11px] font-black px-1.5 py-0.5 rounded bg-[#EEF3FC] text-[#1B2B4B] ml-1">{s.type}</span><span className="ml-1 text-[11.5px] font-bold text-[#5B6B85]">{korTimeLabel(s.time)}</span></div>
                         <div className="text-[12px] text-[#5B6B85]">{s.addr}</div>
                         {s.memo && <div className="text-[11.5px] text-[#7A89A3]">{s.memo}</div>}
-                        {i > 0 && stopPaid(s) && <div className="mt-0.5 flex items-center gap-1.5 text-[11.5px]"><span className="h-5 px-1.5 inline-flex items-center rounded bg-[#0F1A30] text-white font-black">{s.payMethod || sel.payMethod || "계산서"}</span><span className="font-bold text-[#1B2B4B] tabular-nums" style={{ fontFamily: MONO }}>청구 {won(s.fareClient)} · 기사 {won(s.fareDriver)}</span></div>}
+                        {i > 0 && stopPaid(s) && <div className="mt-0.5 flex items-center gap-1.5 text-[11.5px] flex-wrap">{(() => { const pc = payerOf(sel, { 거래처: String(s.client || "").trim() }); const other = pc !== routeClient(sel); return <span className={`h-5 px-1.5 inline-flex items-center rounded font-black ${other ? "bg-[#FFF3D6] text-[#7A5300]" : "bg-[#EEF2F8] text-[#1B2B4B]"}`} title="거래처(청구처)">{pc || "-"}</span>; })()}<span className="h-5 px-1.5 inline-flex items-center rounded bg-[#0F1A30] text-white font-black">{s.payMethod || sel.payMethod || "계산서"}</span><span className="font-bold text-[#1B2B4B] tabular-nums" style={{ fontFamily: MONO }}>청구 {won(s.fareClient)} · 기사 {won(s.fareDriver)}</span></div>}
                       </div>
                     ))}
                   </div>
                 </div>
                 <div className="space-y-2">
-                  {[["요일", (sel.days || []).join(" ") || "-"], ["출발", korTimeLabel(sel.startTime)], ["기간", `${sel.startDate || "-"} ~ ${sel.endDate || "계속"}`], ["기사", sel.driverName ? `${sel.driverName} · ${sel.carNo}` : "미배정"], ["차량", [sel.tonnage, sel.vehicleType].filter(Boolean).join(" ") || "-"], ["운임", (() => { const t = routeTotals(sel); return `${t.perStop ? "정류지별 합계 · " : ""}청구 ${won(t.client)} · 기사 ${won(t.driver)}`; })()], ["지급방식", (() => { const gs = routePayGroups(sel); return gs.length > 1 ? `${gs.map((G) => G.pay).join(" · ")} (분리 ${gs.length}건)` : gs[0].pay; })()], ["자동 배차", sel.autoDispatch ? "켜짐" : "꺼짐"], ["기사님 수락", sel.autoAccept === false ? "매번 수락" : "자동 수락"]].map(([k, v]) => (
+                  {[["요일", (sel.days || []).join(" ") || "-"], ["출발", korTimeLabel(sel.startTime)], ["기간", `${sel.startDate || "-"} ~ ${sel.endDate || "계속"}`], ["기사", sel.driverName ? `${sel.driverName} · ${sel.carNo}` : "미배정"], ["차량", [sel.tonnage, sel.vehicleType].filter(Boolean).join(" ") || "-"], ["운임", (() => { const t = routeTotals(sel); return `${t.perStop ? "정류지별 합계 · " : ""}청구 ${won(t.client)} · 기사 ${won(t.driver)}`; })()], ["지급방식", (() => { const gs = routePayGroups(sel); return gs.length > 1 ? `${gs.map((G) => groupLabel(sel, G)).join(" · ")} (분리 ${gs.length}건)` : gs[0].pay; })()], ["자동 배차", sel.autoDispatch ? "켜짐" : "꺼짐"], ["기사님 수락", sel.autoAccept === false ? "매번 수락" : "자동 수락"]].map(([k, v]) => (
                     <div key={k} className="flex justify-between gap-2 rounded-lg bg-[#F5F8FD] px-3 py-2"><span className="text-[12px] font-bold text-[#7A89A3]">{k}</span><span className="text-[13px] font-black text-[#0F1A30] text-right">{v}</span></div>
                   ))}
                 </div>
@@ -926,6 +959,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                       {/* ⭐ 2026-11-01 오더별 지급방식·청구운임(지급방식 분리 오더도 한눈에) */}
                       <span className="hidden sm:inline-flex items-center gap-1 shrink-0">
                         {o.지급방식분리 && <span className="px-1.5 py-0.5 rounded bg-[#FFF3D6] text-[#7A5300] text-[10.5px] font-black">분리 {o.지급방식분리.순번}/{o.지급방식분리.전체}</span>}
+                        <span className={`max-w-[120px] truncate px-1.5 py-0.5 rounded text-[10.5px] font-black ${o.거래처명 && norm(o.거래처명) !== norm(routeClient(sel)) ? "bg-[#FFF3D6] text-[#7A5300]" : "bg-[#EEF2F8] text-[#1B2B4B]"}`} title="거래처(청구처)">{o.거래처명 || "-"}</span>
                         <span className="px-1.5 py-0.5 rounded bg-[#0F1A30] text-white text-[10.5px] font-black">{o.지급방식 || "-"}</span>
                         <span className="tabular-nums font-bold text-[#1B2B4B]" style={{ fontFamily: MONO }}>{won(o.청구운임)}</span>
                       </span>
