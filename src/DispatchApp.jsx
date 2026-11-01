@@ -36,6 +36,7 @@ import { useCompanyStaff, masterHasHr, isHrStaffUser } from "./hrHandover";
 import { AttendanceQuickButton } from "./attendanceQuick";
 import { usePendingSignups } from "./pendingSignups";
 import { NavHover } from "./navMenus";
+import { PeriodPicker as ResumePeriodPicker, DateField as ResumeDateField, SelectField as ResumeSelectField, AddressField as ResumeAddressField, EDU_STATUS as RESUME_EDU_STATUS, FAMILY_REL as RESUME_FAMILY_REL } from "./ResumeInputs";
 import { useHrOptions } from "./hrConstants";
 import { AssetManager } from "./OfficeBooks";
 import { FundsWorkspace, FundsBoard, isCeoPosition } from "./FundsBoard";
@@ -59622,7 +59623,7 @@ function HRResumePrintButton({ row, resume, photo }) {
     const win = window.open("", "_blank", "width=860,height=1000");
     if (!win) return;
     const esc = (s) => (s || "").toString().replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const eduRows = (r.education || []).map(e => `<tr><td>${esc(e.period)}</td><td>${esc(e.school)}</td><td>${esc(e.detail)}</td></tr>`).join("") || `<tr><td colspan="3" style="color:#999;text-align:center;">등록된 학력사항이 없습니다</td></tr>`;
+    const eduRows = (r.education || []).map(e => `<tr><td>${esc(e.period)}</td><td>${esc(e.school)}</td><td>${esc([e.detail, e.status].filter(Boolean).join(" · "))}</td></tr>`).join("") || `<tr><td colspan="3" style="color:#999;text-align:center;">등록된 학력사항이 없습니다</td></tr>`;
     const careerRows = (r.career || []).map(c => `<tr><td>${esc(c.period)}</td><td>${esc(c.company)}</td><td>${esc(c.detail)}</td></tr>`).join("") || `<tr><td colspan="3" style="color:#999;text-align:center;">등록된 경력사항이 없습니다</td></tr>`;
     const certRows = (r.certificates || []).map(c => `<tr><td>${esc(c.date)}</td><td>${esc(c.name)}</td><td>${esc(c.issuer)}</td></tr>`).join("") || `<tr><td colspan="3" style="color:#999;text-align:center;">등록된 자격증이 없습니다</td></tr>`;
     const familyRows = (r.family || []).map(f => `<tr><td>${esc(f.relation)}</td><td>${esc(f.name)}</td><td>${esc(f.birth)}</td><td>${esc(f.job)}</td></tr>`).join("") || `<tr><td colspan="4" style="color:#999;text-align:center;">등록된 가족관계가 없습니다</td></tr>`;
@@ -59977,8 +59978,12 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
     catch (err) { alert("팀 변경 실패: " + err.message); }
   };
 
-  const listField = (key, label, placeholder) => {
+  // ⭐ 2026-11-01 이력서 칸 — 기간은 월 선택(~ 재직/재학중), 날짜는 달력, 구분·관계는 선택(ResumeInputs.jsx)
+  //   spec 값이 글자면 그냥 입력칸, { type: "period" | "date" | "select" } 이면 선택형
+  const listField = (key, label, spec) => {
     const items = draft?.[key] || [];
+    const setF = (i, f, v) => setDraft(d => { const arr = [...(d[key] || [])]; arr[i] = { ...arr[i], [f]: v }; return { ...d, [key]: arr }; });
+    const txt = "w-full h-11 border border-[#DCE3EE] rounded-xl px-3 text-[14.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10";
     return (
       <div>
         <div className="flex items-center justify-between mb-2">
@@ -59987,13 +59992,20 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
         </div>
         {items.length === 0 && <div className="px-4 py-3 rounded-2xl border border-dashed border-[#DCE3EE] text-[13.5px] text-[#9AA9C3]">항목 없음</div>}
         {items.map((it, i) => (
-          <div key={i} className="flex gap-2 mb-2">
-            {Object.keys(placeholder).map(f => (
-              <input autoComplete="off" key={f} value={it[f] || ""} placeholder={placeholder[f]}
-                onChange={e => setDraft(d => { const arr = [...d[key]]; arr[i] = { ...arr[i], [f]: e.target.value }; return { ...d, [key]: arr }; })}
-                className="flex-1 h-11 border border-[#DCE3EE] rounded-xl px-3 text-[14.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10" />
-            ))}
-            <button onClick={() => setDraft(d => ({ ...d, [key]: d[key].filter((_, idx) => idx !== i) }))} className="w-11 h-11 rounded-xl border border-[#E3E8F0] text-[#7A879C] hover:text-[#0F1A30] hover:bg-[#F5F8FD]">✕</button>
+          <div key={i} className="relative mb-2 p-3 pr-14 rounded-2xl border border-[#E3E8F0] bg-[#FAFBFD] flex flex-wrap gap-2 items-start">
+            {Object.entries(spec).map(([f, sp]) => {
+              const o = typeof sp === "string" ? { ph: sp } : sp;
+              return (
+                <div key={f} className={o.type === "period" ? "w-full lg:w-auto" : "flex-1 min-w-[140px]"}>
+                  <div className="text-[11px] font-bold text-[#7A879C] mb-1">{o.ph}</div>
+                  {o.type === "period" ? <ResumePeriodPicker value={it[f]} ongoingLabel={o.ongoing || "재직중"} onChange={v => setF(i, f, v)} />
+                    : o.type === "date" ? <ResumeDateField value={it[f]} placeholder={o.ph} onChange={v => setF(i, f, v)} />
+                    : o.type === "select" ? <ResumeSelectField value={it[f]} options={o.options} placeholder={`${o.ph} 선택`} onChange={v => setF(i, f, v)} />
+                    : <input autoComplete="off" value={it[f] || ""} placeholder={o.hint || o.ph} onChange={e => setF(i, f, e.target.value)} className={txt} />}
+                </div>
+              );
+            })}
+            <button onClick={() => setDraft(d => ({ ...d, [key]: d[key].filter((_, idx) => idx !== i) }))} title="이 줄 삭제" className="absolute top-3 right-3 w-9 h-9 rounded-xl border border-[#E3E8F0] bg-white text-[#7A879C] hover:text-[#0F1A30] hover:bg-[#F5F8FD]">✕</button>
           </div>
         ))}
       </div>
@@ -60195,7 +60207,11 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                         ].map(({ k, v, big, edit, ph, span }) => (
                           <div key={k} className={`px-4 py-3 rounded-2xl bg-[#F5F8FD] border border-[#EDF1F7] min-w-0 ${span === 2 ? "col-span-2" : ""}`}>
                             <div className="text-[12.5px] font-bold text-[#7A879C]">{k}</div>
-                            {editMode && edit ? (
+                            {editMode && edit === "birthDate" ? (
+                              <div className="mt-1"><ResumeDateField value={draft.birthDate} placeholder="생년월일" onChange={v => setDraft(d => ({ ...d, birthDate: v }))} /></div>
+                            ) : editMode && edit === "address" ? (
+                              <div className="mt-1"><ResumeAddressField value={draft.address} onChange={v => setDraft(d => ({ ...d, address: v }))} /></div>
+                            ) : editMode && edit ? (
                               <input autoComplete="off" value={draft[edit] || ""} placeholder={ph || ""} onChange={e => setDraft(d => ({ ...d, [edit]: e.target.value }))}
                                 className="mt-1 w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[15px] font-semibold text-[#0F1A30] bg-white focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10" />
                             ) : (
@@ -60208,10 +60224,10 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
 
                     {editMode ? (
                       <div className="space-y-5">
-                        {listField("education", "학력사항", { period: "기간", school: "학교명", detail: "내용" })}
-                        {listField("career", "경력사항", { period: "기간", company: "근무처", detail: "내용" })}
-                        {listField("certificates", "자격/면허", { date: "취득일", name: "자격명", issuer: "발급기관" })}
-                        {listField("family", "가족관계", { relation: "관계", name: "성명", birth: "생년월일/연령", job: "직업" })}
+                        {listField("education", "학력사항", { period: { type: "period", ph: "기간(입학 ~ 졸업)", ongoing: "재학중" }, school: { ph: "학교명", hint: "예) 한국고등학교" }, detail: { ph: "전공·학과", hint: "예) 물류학과" }, status: { type: "select", ph: "구분", options: RESUME_EDU_STATUS } })}
+                        {listField("career", "경력사항", { period: { type: "period", ph: "기간(입사 ~ 퇴사)", ongoing: "재직중" }, company: { ph: "근무처", hint: "회사명" }, detail: { ph: "담당 업무·직위", hint: "예) 배차 담당 / 대리" } })}
+                        {listField("certificates", "자격/면허", { date: { type: "date", ph: "취득일" }, name: { ph: "자격명", hint: "예) 1종 대형" }, issuer: { ph: "발급기관", hint: "예) 경찰청" } })}
+                        {listField("family", "가족관계", { relation: { type: "select", ph: "관계", options: RESUME_FAMILY_REL }, name: "성명", birth: { type: "date", ph: "생년월일" }, job: "직업" })}
                         <div>
                           <div className="text-[16px] font-black text-[#0F1A30] mb-2">자기소개</div>
                           <textarea value={draft.intro || ""} onChange={e => setDraft(d => ({ ...d, intro: e.target.value }))} rows={6}

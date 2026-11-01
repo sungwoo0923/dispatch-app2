@@ -143,9 +143,23 @@ export const messagingPromise = isSupported().then((supported) => {
 
 // ⭐ 2026-11-01 로그아웃할 때 이 기기 알림 연결을 끊는다 — 한 휴대폰으로 A회사 → B회사 계정을 바꿔 쓰면
 //  예전 계정 문서에 같은 기기 토큰이 남아, 지금 쓰지 않는 회사 알림까지 이 기기로 오던 문제
+// ⭐ 2026-11-01 버그수정 — 예전엔 어느 기기에서 로그아웃하든 토큰을 지워서, PC에서 로그아웃만 해도
+//  핸드폰(앱) 알림 연결이 끊겨 인사발령·결재 등 모든 푸시가 안 갔다. 이제 "이 기기 토큰"일 때만 지운다
 export async function clearFcmToken(uid) {
   if (!uid) return;
-  try { await updateDoc(doc(db, "users", uid), { fcmToken: deleteField(), fcmTokenAt: deleteField() }); } catch { /* 무시 */ }
+  try {
+    const m = await messagingPromise;
+    if (!m || typeof Notification === "undefined" || Notification.permission !== "granted") return; // 알림 안 쓰는 기기(PC 등) — 건드리지 않음
+    const vapidKey = import.meta.env.VITE_FCM_VAPID_KEY;
+    if (!vapidKey) return;
+    const reg = ("serviceWorker" in navigator) ? await navigator.serviceWorker.getRegistration() : undefined;
+    const mine = await getToken(m, { vapidKey, serviceWorkerRegistration: reg }).catch(() => null);
+    if (!mine) return;
+    const snap = await getDoc(doc(db, "users", uid));
+    if (snap.exists() && snap.data()?.fcmToken === mine) {
+      await updateDoc(doc(db, "users", uid), { fcmToken: deleteField(), fcmTokenAt: deleteField() });
+    }
+  } catch { /* 무시 */ }
 }
 
 export async function saveFcmToken(user) {
