@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { checkEmailAvailable, warmSignupFunctions } from "./emailCheck";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "firebase/auth";
 import { auth, db, FUNCTIONS_BASE } from "./firebase";
+import { freeDeletedEmail } from "./freeEmail";
 import { readPublicCompanies } from "./publicCompanies";
 import CustomSelect from "./CustomSelect";
 import CustomDatePicker from "./CustomDatePicker";
@@ -364,7 +365,14 @@ function SignupForm({ signupType, onBack }) {
     };
 
     try {
-      const res = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      let res;
+      try {
+        res = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      } catch (e1) {
+        // ⭐ 2026-11-01 삭제된 계정의 이메일이면 서버가 정리해 준 뒤 다시 가입
+        if (e1?.code !== "auth/email-already-in-use" || !(await freeDeletedEmail(email))) throw e1;
+        res = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      }
       await writeUserDocs(res.user.uid);
       await signOut(auth);
       setSuccess(true);

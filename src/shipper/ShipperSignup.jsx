@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { checkEmailAvailable } from "../emailCheck";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, deleteUser } from "firebase/auth";
 import { auth, db } from "../firebase";
+import { freeDeletedEmail } from "../freeEmail";
 import { readPublicCompanies } from "../publicCompanies";
 import CustomSelect from "../CustomSelect";
 import CustomDatePicker from "../CustomDatePicker";
@@ -385,7 +386,11 @@ function SignupForm({ signupType, onBack }) {
         const res = await createUserWithEmailAndPassword(auth, email.trim(), password);
         uid = res.user.uid;
       } catch (authErr) {
-        if (authErr.code === "auth/email-already-in-use") {
+        if (authErr.code === "auth/email-already-in-use" && (await freeDeletedEmail(email))) {
+          // ⭐ 2026-11-01 삭제된 계정의 이메일 — 서버가 정리해 줬으면 바로 다시 가입
+          const res = await createUserWithEmailAndPassword(auth, email.trim(), password);
+          uid = res.user.uid;
+        } else if (authErr.code === "auth/email-already-in-use") {
           // 기존 Firestore 활성 계정 여부 확인
           const snap = await getDocs(query(collection(db, "users"), where("email", "==", email.trim())));
           if (!snap.empty) {
