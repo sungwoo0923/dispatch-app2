@@ -34,6 +34,7 @@ import { ExecApprovals, TeamSchedule, ApprovalWorkspace, ExecScheduleBoard } fro
 import { useMyProfile } from "./userNames";
 import { useCompanyStaff, masterHasHr, isHrStaffUser } from "./hrHandover";
 import { AttendanceQuickButton } from "./attendanceQuick";
+import { usePendingSignups } from "./pendingSignups";
 import { useHrOptions } from "./hrConstants";
 import { AssetManager } from "./OfficeBooks";
 import { FundsWorkspace, FundsBoard, isCeoPosition } from "./FundsBoard";
@@ -7661,6 +7662,9 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   // 👔 2026-10-31 임원(부서 임원 · 대표/전무/이사) — 로그인하면 임원 화면. 관리자 권한 임원은 [전체 메뉴]로 실무 화면도 볼 수 있다
   const myProfileDoc = useMyProfile(user?.uid);
   useCompanyDropdownSync(role, userCompany); // ⭐ 편집모드 옵션(배차방식 등)을 표·빠른수정에도 회사별로
+  // ⭐ 2026-11-01 가입 승인 대기 — 승인할 수 있는 사람(관리자·경리·인사·마스터)에게 상단 [관리자메뉴] 숫자 + 새 신청 알림
+  const canApproveSignup = ["admin", "totalMaster", "superadmin", "test", "hrManager", "hrAcct"].includes(realRole || role) || myProfileDoc?.isMaster === true;
+  const pendingSignups = usePendingSignups(canApproveSignup ? (role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")) : "");
   // ⭐ 2026-11-01 마스터 인사권 — 인사 담당자가 없을 때만(생기면 자동 인계, hrHandover.js)
   const coStaffMain = useCompanyStaff(myProfileDoc?.isMaster === true ? (userCompany || localStorage.getItem("userCompany") || "") : "");
   const masterHrMain = !!coStaffMain && masterHasHr(myProfileDoc, coStaffMain, user?.uid);
@@ -7998,6 +8002,7 @@ return (
                 >
                   <ShellIcon name={KP_SIDE_ICONS[m] || "dashboard"} size={14} className={`kp-nav-ico shrink-0 ${isActive ? "" : "opacity-70"} ${deptMode && DEPT_MENUS[deptMode].length <= 8 ? "" : "hidden min-[2050px]:inline-block"}`} />
                   <EditableText id={`nav.${m}`} defaultText={m} />
+                  {m === "관리자메뉴" && pendingSignups.length > 0 && <span className="ml-1 min-w-[17px] h-[17px] px-1 inline-grid place-items-center rounded-full bg-rose-500 text-white text-[10px] font-black tabular-nums align-middle" title={`가입 승인 대기 ${pendingSignups.length}명`}>{pendingSignups.length > 99 ? "99+" : pendingSignups.length}</span>}
                   {st === "locked" && <span className="ml-1 opacity-60"><LockIcon /></span>}
                   {m === "인사이트" && st !== "locked" && <span className="ml-1 px-1 py-px rounded bg-[#8FB0F0]/20 text-[#8FB0F0] text-[9px] font-black tracking-wider align-middle">PRO</span>}
                 </button>

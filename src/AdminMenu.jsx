@@ -785,7 +785,9 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     .map((g) => (deptMode ? { ...g, tabs: g.tabs.filter((t) => (DEPT_ADMIN_TABS[deptMode] || []).includes(t)) } : g))
     .filter((g) => g.tabs.length > 0);
   const activeGroup = tabGroups.find((g) => g.tabs.includes(adminTab)) || tabGroups[0];
-  const tabBadgeCounts = { linked: linkedPendingCount, inquiries: unansweredInquiryCount, landingInquiries: newLandingInquiryCount };
+  // ⭐ 2026-11-01 회원 관리 탭에도 가입 승인 대기 숫자
+  const membersPendingCount = visibleUsers.filter((u) => u.approved === false && u.employmentStatus !== "퇴사" && !["deleted", "withdrawn"].includes(u.status)).length;
+  const tabBadgeCounts = { members: membersPendingCount, linked: linkedPendingCount, inquiries: unansweredInquiryCount, landingInquiries: newLandingInquiryCount };
   const groupBadgeTotal = (g) => g.tabs.reduce((sum, t) => sum + (tabBadgeCounts[t] || 0), 0);
 
   // ⭐ 디자인 개편 — 왼쪽 메뉴바(그룹별) + 상단 인사 카드 + 숫자 카드(AdminShell 공용 레이아웃)
