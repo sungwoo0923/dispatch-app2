@@ -3,7 +3,7 @@
 //  인사 기록(이력서·근태·인사발령) · 직원 등록(계정 없이 인사 기록) · 정보 수정(공문 없이 바로) · 출근기록부 ·
 //  퇴사·권고사직 · 직책·부서 설정(회사별 추가·숨김) · 사내 규정(취업규칙 등)
 import React from "react";
-import { addDoc, arrayUnion, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
+import { addDoc, arrayUnion, collection, deleteDoc, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import KpSubNav from "./KpSubNav";
 import { BookHero, BookCard, Chip, Sheet, MONO } from "./OfficeBooks";
@@ -129,9 +129,20 @@ export function StaffInfoBoard({ company, canManage }) {
   const groups = (() => { const g = {}; active.filter(match).forEach((u) => { const t = u.team || "미배정"; (g[t] = g[t] || []).push(u); }); return hr.teams.concat(["미배정"]).filter((t) => g[t]).map((t) => [t, g[t].sort((a, b) => hr.positionsFor(t).indexOf(b.position) - hr.positionsFor(t).indexOf(a.position) || String(a.name || "").localeCompare(String(b.name || ""), "ko"))]).concat(Object.keys(g).filter((t) => !hr.teams.includes(t) && t !== "미배정").map((t) => [t, g[t]])); })();
   const open = (u, m = "info") => {
     setSel(u); setMode(m);
-    setF({ name: u.name || "", phone: u.phone || "", team: u.team || "", position: u.position || "", role: u.role || "user", employType: u.employType || "정규직", employmentStatus: u.employmentStatus || "재직", leaveFrom: u.leave?.from || kstDay(), leaveTo: u.leave?.to || "", leaveMemo: u.leave?.memo || "" });
+    setF({ name: u.name || "", phone: u.phone || "", team: u.team || "", position: u.position || "", role: u.role || "user", employType: u.employType || "정규직", employmentStatus: u.employmentStatus || "재직", leaveFrom: u.leave?.from || kstDay(), leaveTo: u.leave?.to || "", leaveMemo: u.leave?.memo || "", hireDate: u.hireDate || "" });
     setR({ type: u.resignPlan?.type || "자진 퇴사", date: u.resignPlan?.date || kstDay(), reason: u.resignPlan?.reason || "", noticeDate: kstDay() });
+    // ⭐ 2026-11-01 연차 계산은 userProfiles.hireDate를 쓰므로 그 값을 우선으로 보여준다
+    setOrigHire(u.hireDate || "");
+    getDoc(doc(db, "userProfiles", u.id)).then((ps) => {
+      const h = ps.exists() ? ps.data().hireDate || "" : "";
+      if (h) { setOrigHire(h); setF((p) => (p && p.hireDate === (u.hireDate || "") ? { ...p, hireDate: h } : p)); }
+    }).catch(() => {});
   };
+  const [origHire, setOrigHire] = React.useState("");
+  // 입사일은 인사팀(인사관리자·경리+인사·인사 부서·최고관리자)만 — 보안 규칙(isHrStaff)과 같은 기준
+  const meUid = auth.currentUser?.uid;
+  const meDoc = all.find((u) => u.id === meUid) || {};
+  const canHire = auth.currentUser?.email === "tjddnqkf@naver.com" || ["hrManager", "hrAcct", "totalMaster"].includes(meDoc.role || (typeof localStorage !== "undefined" ? localStorage.getItem("role") : "")) || /인사/.test(meDoc.team || "");
   const saveInfo = async () => {
     const onLeave = LEAVE_STATUSES.includes(f.employmentStatus);
     if (onLeave && !f.leaveFrom) return alert("휴직 시작일을 입력해 주세요.");
@@ -143,7 +154,11 @@ export function StaffInfoBoard({ company, canManage }) {
       if ((sel.team || "") !== f.team) ch.push(`부서 ${sel.team || "미배정"}→${f.team || "미배정"}`);
       if ((sel.position || "") !== f.position) ch.push(`직책 ${sel.position || "-"}→${f.position || "-"}`);
       if ((sel.role || "") !== role && !sel.isMaster) ch.push(`권한 ${ro.label(sel.role)}→${ro.label(role)}`);
-      await updateDoc(doc(db, "users", sel.id), { name: f.name.trim(), phone: f.phone.trim(), team: f.team, position: f.position, ...(sel.isMaster ? {} : { role }), employType: f.employType, employmentStatus: f.employmentStatus, leave: onLeave ? { type: f.employmentStatus, from: f.leaveFrom, to: f.leaveTo || "", memo: (f.leaveMemo || "").trim() } : null, ...(ch.length ? { personnelHistory: arrayUnion({ date: kstDay(), type: "정보 수정", detail: `${ch.join(" · ")} (공문 없음)` }) } : {}) });
+      const hireChanged = canHire && (origHire || "") !== (f.hireDate || "");
+      if (hireChanged) ch.push(`입사일 ${origHire || "미등록"}→${f.hireDate || "미등록"}`);
+      // ⭐ 2026-11-01 입사일은 여기(인사관리부 › 직원 정보·퇴사)에서만 바꾼다 — 연차 계산용(userProfiles)과 인사 기록(users) 둘 다
+      if (hireChanged) await setDoc(doc(db, "userProfiles", sel.id), { hireDate: f.hireDate || "", hireDateBy: auth.currentUser?.email || "", hireDateAt: serverTimestamp() }, { merge: true });
+      await updateDoc(doc(db, "users", sel.id), { name: f.name.trim(), phone: f.phone.trim(), team: f.team, position: f.position, ...(sel.isMaster ? {} : { role }), ...(hireChanged ? { hireDate: f.hireDate || "" } : {}), employType: f.employType, employmentStatus: f.employmentStatus, leave: onLeave ? { type: f.employmentStatus, from: f.leaveFrom, to: f.leaveTo || "", memo: (f.leaveMemo || "").trim() } : null, ...(ch.length ? { personnelHistory: arrayUnion({ date: kstDay(), type: "정보 수정", detail: `${ch.join(" · ")} (공문 없음)` }) } : {}) });
       setSel(null);
     } catch (e) { alert(`저장 실패: ${e.message}`); } finally { setBusy(false); }
   };
@@ -165,7 +180,7 @@ export function StaffInfoBoard({ company, canManage }) {
   const cancelPlan = async (u) => { if (window.confirm(`${u.name}님 퇴사 예정을 취소할까요?`)) await updateDoc(doc(db, "users", u.id), { resignPlan: null, personnelHistory: arrayUnion({ date: kstDay(), type: "퇴사 예정 취소", detail: "" }) }); };
   const reinstate = async (u) => { if (window.confirm(`${u.name}님을 복직 처리할까요? (다시 로그인할 수 있게 됩니다)`)) await updateDoc(doc(db, "users", u.id), { employmentStatus: "재직", resignedAt: null, personnelHistory: arrayUnion({ date: kstDay(), type: "복직", detail: "" }) }); };
   const Card = ({ u }) => (
-    <button type="button" disabled={!canManage} onClick={() => open(u)} className="relative text-left rounded-2xl bg-white border border-[#E3E8F0] p-3.5 enabled:hover:border-[#2D4C82] enabled:hover:shadow-[0_10px_24px_rgba(15,26,48,0.10)] transition min-w-0">
+    <button type="button" onClick={() => open(u)} className={`relative w-full text-left rounded-2xl border p-3.5 transition min-w-0 ${sel?.id === u.id ? "bg-[#F5F8FD] border-[#1B2B4B] ring-2 ring-[#1B2B4B]/15" : "bg-white border-[#E3E8F0] hover:border-[#2D4C82] hover:shadow-[0_10px_24px_rgba(15,26,48,0.10)]"}`}>
       {u.resignPlan?.date && <span className="absolute top-2.5 right-2.5 text-[10px] font-black px-1.5 py-0.5 rounded bg-[#FFF4E5] text-[#B54708]">퇴사 예정</span>}
       <div className="flex items-center gap-3">
         <span className="w-12 h-12 rounded-2xl grid place-items-center text-[17px] font-black text-white shrink-0" style={{ background: isExecProfile(u) ? "linear-gradient(135deg,#B88A2E,#D7BC82)" : "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}>{String(u.name || "?").slice(0, 1)}</span>
@@ -185,7 +200,7 @@ export function StaffInfoBoard({ company, canManage }) {
   );
   return (
     <div className="space-y-4">
-      <BookHero en="HR · STAFF BOARD" title="직원 정보 · 퇴사" desc="카드를 누르면 정보 수정(공문 없이 바로)과 퇴사·권고사직 처리를 한 곳에서 합니다"
+      <BookHero en="HR · STAFF BOARD" title="직원 정보 · 퇴사" desc="왼쪽 목록에서 직원을 누르면 오른쪽에 정보가 바로 뜹니다 — 정보·입사일 수정(공문 없이 바로)과 퇴사·권고사직 처리"
         kpis={[["재직", `${active.length}명`, `${groups.length}개 부서`], ["휴직 · 육아휴직", `${active.filter((u) => LEAVE_STATUSES.includes(u.employmentStatus)).length}명`, `육아휴직 ${active.filter((u) => u.employmentStatus === "육아휴직").length}명`], ["퇴사 예정", `${planned.length}명`], ["이번 달 퇴사", `${left.filter((u) => String(u.resignedAt || "").startsWith(kstDay().slice(0, 7))).length}명`]]}
         right={<input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름·부서·직책 검색" className="h-10 w-[220px] px-3.5 rounded-xl bg-white/95 text-[#0F1A30] text-[13.5px] font-semibold outline-none" />} />
       {!canManage && <div className="rounded-2xl bg-[#FEF3F2] border border-[#FECDCA] px-4 py-3 text-[13px] font-bold text-[#B42318]">직책·부서·권한 변경과 퇴사 처리는 마스터·인사관리자만 할 수 있습니다</div>}
@@ -202,10 +217,14 @@ export function StaffInfoBoard({ company, canManage }) {
           </div>
         </div>
       )}
+      {/* ⭐ 2026-11-01 반반 화면 — 왼쪽 직원 목록 / 오른쪽 선택한 직원 정보(옆으로 나오던 창 없앰) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+      <div className="space-y-4 min-w-0">
+      {!groups.length && <div className="rounded-2xl bg-white border border-[#E3E8F0] py-10 text-center text-[13px] font-bold text-[#9AA9C3]">{kw ? "검색 결과가 없습니다" : "등록된 직원이 없습니다"}</div>}
       {groups.map(([t, us]) => (
         <div key={t}>
           <div className="flex items-center gap-2 mb-2"><span className="w-1.5 h-4 rounded-full bg-[#1B2B4B]" /><span className="text-[15px] font-black text-[#0F1A30]">{t}</span><span className="text-[12px] font-black text-[#7A879C] tabular-nums" style={{ fontFamily: MONO }}>{us.length}명</span><span className="flex-1 h-px bg-[#E3E8F0]" /></div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2.5">{us.map((u) => <Card key={u.id} u={u} />)}</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">{us.map((u) => <Card key={u.id} u={u} />)}</div>
         </div>
       ))}
       <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
@@ -223,11 +242,20 @@ export function StaffInfoBoard({ company, canManage }) {
           ))}
         </div>}
       </div>
-      {sel && f && r && (
-        <Sheet side en={`HR · ${mode === "info" ? "EDIT" : "RESIGNATION"}`} title={`${sel.name || sel.email}`} onClose={() => setSel(null)}
-          footer={mode === "info"
-            ? <><button type="button" onClick={() => setSel(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button><button type="button" disabled={busy} onClick={saveInfo} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50">{busy ? "저장 중…" : "바로 저장(공문 없음)"}</button></>
-            : <><button type="button" onClick={() => setSel(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button>{r.date > kstDay() && <button type="button" disabled={busy} onClick={() => applyResign(false)} className="h-12 px-4 rounded-xl border border-[#0F1A30] bg-white text-[14px] font-black text-[#0F1A30]">예정 등록</button>}<button type="button" disabled={busy} onClick={() => applyResign(true)} className="flex-1 h-12 rounded-xl bg-[#B42318] text-white text-[15px] font-black disabled:opacity-50">지금 퇴사 확정</button></>}>
+      </div>
+      <div className="lg:sticky lg:top-4 min-w-0">
+      {sel && f && r ? (
+        <div className="rounded-[22px] bg-[#F4F6FA] border border-[#E3E8F0] overflow-hidden flex flex-col shadow-[0_18px_40px_rgba(15,26,48,0.10)] lg:max-h-[calc(100vh-120px)]">
+          <div className="px-5 py-4 text-white flex items-center gap-3 shrink-0" style={{ background: "linear-gradient(120deg,#0F1A30 0%,#1B2B4B 55%,#2D4C82 100%)" }}>
+            <span className="w-12 h-12 rounded-2xl grid place-items-center text-[18px] font-black bg-white/10 ring-1 ring-white/20 shrink-0">{String(sel.name || "?").slice(0, 1)}</span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{`HR · ${mode === "info" ? "EDIT" : "RESIGNATION"}`}</div>
+              <div className="text-[20px] font-black truncate">{sel.name || sel.email}</div>
+              <div className="text-[12.5px] text-white/70 truncate">{[sel.team || "미배정", sel.position, sel.email].filter(Boolean).join(" · ")}</div>
+            </div>
+            <button type="button" onClick={() => setSel(null)} className="w-9 h-9 rounded-xl bg-white/10 border border-white/15 shrink-0 text-[14px]" title="닫기">✕</button>
+          </div>
+          <fieldset disabled={!canManage} className="flex-1 overflow-y-auto px-5 py-5 space-y-4 min-w-0">
           <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-white border border-[#E3E8F0]">
             {[["info", "정보 수정"], ["resign", "퇴사 · 권고사직"]].map(([k, l]) => <button key={k} type="button" onClick={() => setMode(k)} disabled={sel.isMaster && k === "resign"} className={`h-11 rounded-lg text-[14px] font-black disabled:opacity-30 ${mode === k ? (k === "resign" ? "bg-[#B42318] text-white" : "bg-[#0F1A30] text-white") : "text-[#5B6B85]"}`}>{l}</button>)}
           </div>
@@ -239,6 +267,8 @@ export function StaffInfoBoard({ company, canManage }) {
               <div><Label>직책</Label><select value={f.position} onChange={(e) => setF({ ...f, position: e.target.value, role: suggestFor({ team: f.team, position: e.target.value }, ro.execKeys) })} className={inp}><option value="">미설정</option>{[...new Set([...hr.positionsFor(f.team), f.position].filter(Boolean))].map((p) => <option key={p}>{p}</option>)}</select></div>
               <div><Label>권한</Label><select value={f.role} disabled={sel.isMaster} onChange={(e) => setF({ ...f, role: e.target.value })} className={`${inp} disabled:bg-[#F5F8FD] disabled:text-[#9AA9C3]`}>{[...ro.options, ...(ro.options.some(([k]) => k === f.role) ? [] : [[f.role, ro.label(f.role)]])].map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select><div className="text-[11.5px] text-[#7A879C] mt-1">{sel.isMaster ? "마스터 계정은 권한을 바꿀 수 없습니다" : ROLE_DESC[f.role] || (ro.execKeys.includes(f.role) ? "임원 화면(경영 브리핑) — 권한 관리에서 만든 역할" : "권한 관리에서 만든 역할 — 메뉴는 그 설정을 따릅니다")}</div></div>
               <div><Label>고용 형태</Label><select value={f.employType} onChange={(e) => setF({ ...f, employType: e.target.value })} className={inp}>{["정규직", "계약직", "수습", "파트타임", "일용직"].map((k) => <option key={k}>{k}</option>)}</select></div>
+              <div><Label>입사일</Label><input type="date" value={f.hireDate} max={kstDay()} disabled={!canHire} onChange={(e) => setF({ ...f, hireDate: e.target.value })} className={`${inp} disabled:bg-[#F5F8FD] disabled:text-[#9AA9C3]`} /><div className="text-[11.5px] text-[#7A879C] mt-1">{f.hireDate ? `근속 ${tenureOf(f.hireDate) || "0개월"} · 연차 계산 기준` : "연차·퇴직금 계산 기준일"}</div></div>
+              <div><Label>근속</Label><div className={`${inp} flex items-center bg-[#F5F8FD]`}>{f.hireDate ? tenureOf(f.hireDate) || "1개월 미만" : "-"}</div><div className="text-[11.5px] text-[#7A879C] mt-1">{canHire ? "입사일은 이 화면에서만 바꿀 수 있습니다" : "입사일은 인사팀만 바꿀 수 있습니다"}</div></div>
               <div className="col-span-2"><Label>재직 상태</Label>
                 <div className="flex flex-wrap gap-1.5">
                   {STATUS_OPTIONS.map((k) => <Chip key={k} on={f.employmentStatus === k} onClick={() => setF({ ...f, employmentStatus: k })}>{k}</Chip>)}
@@ -276,8 +306,20 @@ export function StaffInfoBoard({ company, canManage }) {
               <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2.5 text-[12.5px] text-[#5B6B85] leading-relaxed">■ 퇴사 확정 즉시 이 계정은 로그인할 수 없습니다(로그인 시 "퇴사 처리된 계정" 안내 후 차단). 퇴사 예정 상태에서는 그날까지 로그인됩니다.</div>
             </div>
           )}
-        </Sheet>
+          </fieldset>
+          {canManage && <div className="shrink-0 px-5 py-4 bg-white border-t border-[#E3E8F0] flex gap-2">{mode === "info"
+            ? <><button type="button" onClick={() => setSel(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button><button type="button" disabled={busy} onClick={saveInfo} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50">{busy ? "저장 중…" : "바로 저장(공문 없음)"}</button></>
+            : <><button type="button" onClick={() => setSel(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button>{r.date > kstDay() && <button type="button" disabled={busy} onClick={() => applyResign(false)} className="h-12 px-4 rounded-xl border border-[#0F1A30] bg-white text-[14px] font-black text-[#0F1A30]">예정 등록</button>}<button type="button" disabled={busy} onClick={() => applyResign(true)} className="flex-1 h-12 rounded-xl bg-[#B42318] text-white text-[15px] font-black disabled:opacity-50">지금 퇴사 확정</button></>}</div>}
+        </div>
+      ) : (
+        <div className="rounded-[22px] border-2 border-dashed border-[#C9D2E0] bg-white/60 py-20 px-6 text-center">
+          <div className="text-[15px] font-black text-[#1B2B4B]">왼쪽 목록에서 직원을 선택하세요</div>
+          <div className="text-[12.5px] text-[#7A879C] mt-1">선택한 직원의 정보 수정 · 입사일 · 휴직 · 퇴사 처리를 여기서 합니다</div>
+        </div>
       )}
+      </div>
+      </div>
+
     </div>
   );
 }

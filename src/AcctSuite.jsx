@@ -220,7 +220,8 @@ export function RetireDesk({ company, isViewer = false }) {
   );
 }
 function RetireCaseSheet({ company, u, c, profile, resign, approvals, isViewer, onClose }) {
-  const hire = c.hireDate || profile.hireDate || u.hireDate || "";
+  // ⭐ 2026-11-01 입사일은 인사팀이 정한 값(userProfiles → users)만 쓴다 — 퇴직 정산에서 고칠 수 없음
+  const hire = profile.hireDate || u.hireDate || c.hireDate || "";
   const ent = leaveEntitlement(hire);
   const usedLeave = ent ? approvals.filter((a) => a.drafterUid === u.id && a.status === "approved").map(leaveUseOf).filter((x) => x && x.date >= ent.from && x.date <= ent.to).reduce((s, x) => s + x.days, 0) : 0;
   const [f, setF] = React.useState({
@@ -260,7 +261,7 @@ function RetireCaseSheet({ company, u, c, profile, resign, approvals, isViewer, 
       <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4 space-y-3">
         <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">퇴직 사유</div><div className="flex flex-wrap gap-1.5">{RETIRE_REASONS.map((r) => <Chip key={r} on={f.reason === r} onClick={() => setF((p) => ({ ...p, reason: r }))}>{r}</Chip>)}</div></div>
         <div className="grid grid-cols-2 gap-2">
-          <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">입사일</div><input type="date" value={f.hireDate} onChange={(e) => setF((p) => ({ ...p, hireDate: e.target.value }))} className={inp} /></div>
+          <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">입사일</div><div className={`${inp} flex items-center bg-[#F5F8FD] tabular-nums`} title="입사일 변경은 인사관리부 › 직원 정보·퇴사에서">{f.hireDate || "미등록 (인사팀 등록 필요)"}</div></div>
           <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">퇴직일(마지막 근무일)</div><input type="date" value={f.lastDay} onChange={(e) => setF((p) => ({ ...p, lastDay: e.target.value }))} className={inp} /></div>
           <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">최근 3개월 월평균 임금</div><input inputMode="numeric" value={f.avgMonthly ? won(f.avgMonthly) : ""} onChange={(e) => setF((p) => ({ ...p, avgMonthly: e.target.value.replace(/[^\d]/g, "") }))} className={`${inp} text-right tabular-nums`} style={{ fontFamily: MONO }} placeholder="세전 · 상여 포함" /></div>
           <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">미사용 연차(일)</div><input inputMode="decimal" value={f.unusedLeave} onChange={(e) => setF((p) => ({ ...p, unusedLeave: e.target.value.replace(/[^\d.]/g, "") }))} className={`${inp} text-right`} /></div>

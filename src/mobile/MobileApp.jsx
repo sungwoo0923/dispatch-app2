@@ -18582,18 +18582,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
     return () => { unsubProfile(); unsub(); };
   }, [currentUser?.uid, myCompany]);
 
-  const saveHireDate = async (val) => {
-    setHireDate(val);
-    if (!currentUser?.uid) return;
-    setHireDateSaving(true);
-    try {
-      await setDoc(doc(db, "userProfiles", currentUser.uid), { hireDate: val }, { merge: true });
-    } catch (err) {
-      // no-op: 저장 실패는 다음 진입 시 재시도
-    } finally {
-      setHireDateSaving(false);
-    }
-  };
+  // ⭐ 2026-11-01 입사일 직접 수정 막음(인사팀 전용) — 저장 함수 없음
 
   const leave = calcLeaveBalance(hireDate, mySchedules, currentUser?.uid, myName, []);
 
@@ -18604,11 +18593,6 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
   const monthOptions = Array.from({length: 12}, (_, i) => i + 1);
   const dayOptions = Array.from({length: 31}, (_, i) => i + 1);
 
-  const handleHireDateChange = (y, m, d) => {
-    if (!y || !m || !d) return;
-    const dateStr = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    saveHireDate(dateStr);
-  };
 
   const yearsOfService = useMemo(() => {
     if (!hireDate) return null;
@@ -18672,17 +18656,11 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
 
       {/* 입사일 · 연차 */}
       <KpmCard en="LEAVE" title="입사일 · 연차" right={hireDateSaving ? <span className="text-[11px] font-bold text-[#7A879C]">저장 중…</span> : yearsOfService ? <span className="text-[12px] font-black text-[#2D4C82]">{yearsOfService}</span> : null}>
-        <div className="grid grid-cols-3 gap-1.5">
-          {[[hireY, (v) => handleHireDateChange(v, hireM, hireD), "년", yearOptions, "년"], [hireM, (v) => handleHireDateChange(hireY, v, hireD), "월", monthOptions, "월"], [hireD, (v) => handleHireDateChange(hireY, hireM, v), "일", dayOptions, "일"]].map(([val, on, ph, opts, suf]) => (
-            <div key={ph} className="relative">
-              <select value={val || ""} onChange={(e) => on(Number(e.target.value))}
-                className="w-full h-11 pl-3 pr-7 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-black text-[#0F1A30] appearance-none outline-none focus:border-[#2D4C82]">
-                <option value="">{ph}</option>
-                {opts.map((o) => <option key={o} value={o}>{o}{suf}</option>)}
-              </select>
-              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-[#9AA9C3] pointer-events-none">▼</span>
-            </div>
-          ))}
+        {/* ⭐ 2026-11-01 입사일은 인사팀(인사관리부 › 직원 정보·퇴사)에서만 바꿀 수 있다 — 여기서는 보기만 */}
+        <div className="flex items-center gap-2 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 h-11">
+          <span className="text-[12px] font-bold text-[#7A879C]">입사일</span>
+          <span className="text-[14.5px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: KPM_MONO }}>{hireDate || "미등록"}</span>
+          <span className="ml-auto text-[10.5px] font-bold text-[#9AA9C3]">변경은 인사팀</span>
         </div>
         {leave ? (
           <>
@@ -18697,7 +18675,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
             <div className="mt-1.5 text-[10.5px] text-[#9AA9C3]">2026년부터 사용 내역 집계 · 전자결재 › 근태·휴가 신청과 연동</div>
           </>
         ) : (
-          <div className="mt-2 text-[11.5px] text-[#7A879C]">입사일을 설정하면 연차/월차 잔여일수가 표시됩니다.</div>
+          <div className="mt-2 text-[11.5px] text-[#7A879C]">인사팀에서 입사일을 등록하면 연차/월차 잔여일수가 표시됩니다.</div>
         )}
       </KpmCard>
 
