@@ -144,7 +144,7 @@ function PreviewApp() {
   const co = (qs.get("co") || "").trim() || "우리 회사";
   const plan = PREVIEW_PLAN_NAME[qs.get("plan")] ? qs.get("plan") : "standard";
   // 개발 중에만 — 부서 화면(경리 test · 인사 hrManager) 미리보기
-  const pvRole = import.meta.env.DEV && ["test", "hrManager", "hrAcct"].includes(qs.get("role")) ? qs.get("role") : "admin";
+  const pvRole = import.meta.env.DEV && ["test", "hrManager", "hrAcct", "user", "viewer"].includes(qs.get("role")) ? qs.get("role") : "admin";
   const pvExec = import.meta.env.DEV && qs.get("role") === "exec";
   setPreviewMode(true); setPreviewPlan(plan); setTenant(co);
   const fakeUser = React.useMemo(() => ({ uid: "preview", email: "preview@kp-flow.app", displayName: "둘러보기" }), []);
