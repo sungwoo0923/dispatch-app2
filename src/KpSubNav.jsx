@@ -3,11 +3,14 @@
 //  속메뉴를 왼쪽 메뉴바로 보여준다. 접기(아이콘만)를 누르면 본문이 넓어진다(PC에 기억).
 //  items: [{ key, label, icon, badge, en, sub }]  /  groups: [{ label, items }]  (둘 중 하나)
 //   - badge: 숫자(카톡처럼 개수) 또는 "N"(새 글), soft: true면 빨간 대신 옅은 배지(예약·임시보관 개수 등) / sub: 하위메뉴 [{ key, label, icon, badge }] — 부모나 하위가 열려 있으면 펼친다
+//   - children: sub와 같은 뜻(⭐ 2026-11-01 접이식 하위메뉴) — 부모를 누르면 아래로 부드럽게 펼쳐지고(첫 하위 화면으로), 한 번 더 누르면 접힌다
 //  actions: [{ key, label, icon, onClick }] — 화면 전환 대신 팝업을 여는 버튼(예: 월 비교 분석)
 import React, { useState } from "react";
 import { ShellIcon } from "./AdminShell";
 import { confirmLeave } from "./leaveGuard";
 // ✋ 작성 중인 문서가 있으면 메뉴를 옮기기 전에 저장할지 묻는다(전자결재·증명서 등)
+// ⭐ 2026-11-01 하위메뉴는 sub 또는 children 어느 쪽으로 줘도 된다
+const kidsOf = (it) => (Array.isArray(it.children) && it.children.length ? it.children : Array.isArray(it.sub) && it.sub.length ? it.sub : null);
 const goSel = (fn, k, act) => { if (k === act) { fn?.(k); return; } confirmLeave().then((ok) => { if (ok) fn?.(k); }); };
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
@@ -26,7 +29,7 @@ export function useIsPhone() {
 
 function PhoneSubNav({ code, title, icon, groups, actions, active, onSelect, children }) {
   const flat = [];
-  groups.forEach((g) => g.items.forEach((it) => { if (it.sub) it.sub.forEach((x) => flat.push({ ...x, en: x.en || it.en })); else flat.push(it); }));
+  groups.forEach((g) => g.items.forEach((it) => { const ks = kidsOf(it); if (ks) ks.forEach((x) => flat.push({ ...x, en: x.en || it.en })); else flat.push(it); }));
   const cur = flat.find((it) => it.key === active);
   const barRef = React.useRef(null);
   React.useEffect(() => {
@@ -79,14 +82,14 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
 
   const hasBadge = (b) => (typeof b === "string" ? !!b : b > 0);
   const badgeTxt = (b) => (typeof b === "number" && b > 99 ? "99+" : b);
-  const Btn = ({ it, on, onClick, sub = false, caret = null }) => (
+  const Btn = ({ it, on, onClick, sub = false, caret = null, inside = false }) => (
     <button
       type="button"
       onClick={onClick}
       title={collapsed ? it.label : undefined}
       data-on={on ? "1" : "0"}
-      className={`kp-subnav-item w-full flex items-center gap-3 rounded-xl font-semibold transition ${sub ? "text-[13px]" : "text-[14px]"} ${collapsed ? "justify-center px-0 py-2.5" : sub ? "pl-5 pr-3 py-1.5" : "px-3 py-2.5"} ${
-        on ? "bg-white text-[#1B2B4B] shadow-[0_6px_16px_rgba(0,0,0,0.22)]" : "text-blue-50/80 hover:bg-white/[0.08] hover:text-white"
+      className={`kp-subnav-item w-full flex items-center gap-3 rounded-xl font-semibold transition ${sub ? "text-[13px]" : "text-[14px]"} ${collapsed ? "justify-center px-0 py-2.5" : sub ? "pl-2.5 pr-3 py-1.5" : "px-3 py-2.5"} ${
+        on ? "bg-white text-[#1B2B4B] shadow-[0_6px_16px_rgba(0,0,0,0.22)]" : inside ? "bg-white/[0.07] text-white" : "text-blue-50/80 hover:bg-white/[0.08] hover:text-white"
       }`}
     >
       <span className={`relative rounded-lg flex items-center justify-center shrink-0 ${sub ? "w-6 h-6" : "w-8 h-8"} ${on ? "bg-[#EEF3FB]" : "bg-white/[0.06]"}`}>
@@ -102,7 +105,7 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
           {hasBadge(it.badge) && (
             <span title={it.badgeTitle} className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-extrabold flex items-center justify-center tabular-nums ${typeof it.badge === "string" ? "tracking-wider " : ""}${on ? "bg-[#1B2B4B] text-white" : it.soft ? "bg-white/15 text-white" : "bg-rose-500 text-white"}`}>{badgeTxt(it.badge)}</span>
           )}
-          {caret && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-60" style={{ transform: caret === "up" ? "rotate(180deg)" : "none", transition: "transform .15s" }}><path d="M6 9l6 6 6-6" /></svg>}
+          {caret && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-60" style={{ transform: caret === "up" ? "rotate(180deg)" : "none", transition: "transform .28s cubic-bezier(.2,.8,.2,1)" }}><path d="M6 9l6 6 6-6" /></svg>}
         </>
       )}
     </button>
@@ -132,23 +135,29 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
               {g.label && !collapsed && <div className="px-3 mb-1.5 text-[11px] font-bold text-blue-200/45">{g.label}</div>}
               <div className="space-y-1">
                 {g.items.map((it) => {
-                  const inside = it.sub && (it.key === active || it.sub.some((x) => x.key === active));
+                  const kids = kidsOf(it);
+                  const inside = !!kids && (it.key === active || kids.some((x) => x.key === active));
                   const open = inside && !folded[it.key];
                   const clickParent = () => {
-                    if (!it.sub) { goSel(onSelect, it.key, active); return; }
+                    if (!kids) { goSel(onSelect, it.key, active); return; }
                     if (inside) { setFolded((f) => ({ ...f, [it.key]: !f[it.key] })); return; }
                     setFolded((f) => ({ ...f, [it.key]: false }));
-                    goSel(onSelect, it.sub[0].key, active);
+                    goSel(onSelect, kids[0].key, active);
                   };
                   return (
-                    <React.Fragment key={it.key}>
-                      <Btn it={it} on={it.key === active || (inside && collapsed) || (inside && !open)} caret={it.sub && !collapsed ? (open ? "up" : "down") : null} onClick={clickParent} />
-                      {open && !collapsed && (
-                        <div className="ml-4 pl-1 border-l border-white/10 space-y-0.5 py-0.5">
-                          {it.sub.map((x) => <Btn key={x.key} it={x} sub on={x.key === active} onClick={() => goSel(onSelect, x.key, active)} />)}
+                    <div key={it.key}>
+                      <Btn it={it} on={it.key === active || (inside && collapsed) || (inside && !open)} inside={inside && open && !collapsed} caret={kids && !collapsed ? (open ? "up" : "down") : null} onClick={clickParent} />
+                      {/* ⭐ 2026-11-01 하위메뉴 펼침·접힘 — 높이를 부드럽게(grid 0fr↔1fr) */}
+                      {kids && !collapsed && (
+                        <div aria-hidden={!open} style={{ display: "grid", gridTemplateRows: open ? "1fr" : "0fr", opacity: open ? 1 : 0, visibility: open ? "visible" : "hidden", transition: `grid-template-rows .3s cubic-bezier(.2,.8,.2,1), opacity .22s ease, visibility 0s linear ${open ? "0s" : ".3s"}` }}>
+                          <div className="min-h-0 overflow-hidden">
+                            <div className="ml-[26px] mt-1 mb-1.5 pl-2 border-l border-white/15 space-y-0.5">
+                              {kids.map((x) => <Btn key={x.key} it={x} sub on={x.key === active} onClick={() => goSel(onSelect, x.key, active)} />)}
+                            </div>
+                          </div>
                         </div>
                       )}
-                    </React.Fragment>
+                    </div>
                   );
                 })}
               </div>

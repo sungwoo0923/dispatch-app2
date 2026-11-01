@@ -59694,7 +59694,7 @@ function HRAttendancePrintButton({ row }) {
   );
 }
 
-function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly = false }) {
+function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly = false, view = null }) {
   const company = userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
   const now = new Date();
   const [members, setMembers] = React.useState([]);
@@ -59714,7 +59714,9 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
     const q = selfOnly ? query(collection(db, "approvals"), where("participants", "array-contains", userId)) : query(collection(db, "approvals"), where("company", "==", company), where("cat", "==", "leave"));
     return onSnapshot(q, (sn) => setLeaveAprs(sn.docs.map((d) => ({ id: d.id, ...d.data() })).filter((a) => a.cat === "leave" && a.status === "approved")), () => setLeaveAprs([]));
   }, [company, userId, selfOnly]);
-  const [activeTab, setActiveTab] = React.useState("이력서");
+  // ⭐ 2026-11-01 view를 주면(인사관리부 왼쪽 메뉴 › 인사관리 하위 항목) 그 화면만 보여주고 안쪽 탭 줄은 숨긴다
+  const [activeTab, setActiveTab] = React.useState(view || "이력서");
+  React.useEffect(() => { if (view) { setActiveTab(view); setDraft(null); setEditMode(false); } }, [view]);
   const [teamFilter, setTeamFilter] = React.useState("전체");
   const [search, setSearch] = React.useState("");
   const [editMode, setEditMode] = React.useState(false);
@@ -60096,8 +60098,8 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
             </div>
 
             <div className={`flex-1 flex flex-col min-w-0 ${hrCard}`}>
-            <div className="px-5 py-3 border-b border-[#EEF1F6] flex items-center justify-between gap-3">
-              <div className="inline-flex items-center gap-1 p-1 rounded-[14px] bg-[#EEF2F8] border border-[#E3E8F0]">
+            <div className={`px-5 py-3 border-b border-[#EEF1F6] flex items-center justify-between gap-3 ${view && !(selected.pendingApprovals > 0) ? "hidden" : ""}`}>
+              <div className={`inline-flex items-center gap-1 p-1 rounded-[14px] bg-[#EEF2F8] border border-[#E3E8F0] ${view ? "!hidden" : ""}`}>
                 {(selfOnly ? ["이력서", "근태/근속"] : ["이력서", "근태/근속", ...(canManage ? ["인사발령"] : []), "인사발령 이력"]).map(t => (
                   <button key={t} onClick={() => { setActiveTab(t); cancelEdit(); }}
                     className={`px-4 h-9 rounded-[10px] text-[13.5px] transition whitespace-nowrap ${activeTab === t ? "bg-white text-[#0F1A30] font-extrabold shadow-[0_1px_2px_rgba(16,24,40,0.08),0_4px_10px_rgba(16,24,40,0.08)]" : "text-[#5B6B85] font-bold hover:text-[#0F1A30]"}`}>{t}</button>
