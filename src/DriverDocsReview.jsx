@@ -81,7 +81,9 @@ export default function DriverDocsReview({ company, isViewer = false }) {
     let reason = "";
     if (status === "반려") { reason = window.prompt("반려 사유를 적어 주세요(기사앱에 보입니다)", "글씨가 잘 안 보입니다. 다시 찍어 주세요") || ""; if (!reason) return; }
     setBusy(docu.id);
-    try { await updateDoc(doc(db, "driver_documents", docu.id), { status, reviewedAt: serverTimestamp(), reviewedBy: auth.currentUser?.email || "", ...(status === "반려" ? { rejectReason: reason } : { rejectReason: "" }) }); } finally { setBusy(""); }
+    try { await updateDoc(doc(db, "driver_documents", docu.id), { status, reviewedAt: serverTimestamp(), reviewedBy: auth.currentUser?.email || "", ...(status === "반려" ? { rejectReason: reason } : { rejectReason: "" }) }); }
+    // ⭐ 2026-11-02 점검 — 확인/반려 저장 실패 시 안내 없이 끝나던 문제: catch 추가
+    catch (err) { alert("처리 실패: " + (err?.message || err)); } finally { setBusy(""); }
   };
   const uploadFor = async (e) => {
     const f = e.target.files?.[0]; e.target.value = "";
@@ -89,10 +91,17 @@ export default function DriverDocsReview({ company, isViewer = false }) {
     setBusy(t.def.key);
     try {
       const dataUrl = f.type.startsWith("image/") ? await compressImage(f, 1600, 0.82) : await new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(f); });
+      // ⭐ 2026-11-02 점검 — Firestore 1MiB 한도 초과(큰 PDF 등) 시 조용히 실패하던 문제: 크기 확인 후 안내
+      if (dataUrl.length > 900_000) { alert("파일이 너무 큽니다(PDF는 약 650KB 이하로 올려 주세요)."); return; }
       const exp = t.def.expiry ? (window.prompt(`${t.def.label} 만료일(YYYY-MM-DD, 없으면 비움)`, "") || "") : "";
       await addDoc(collection(db, "driver_documents"), { driverId: t.uid, companyName: company, docType: t.def.key, docLabel: t.def.label, fileName: `${t.def.label}.jpg`, fileType: f.type.includes("pdf") ? "application/pdf" : "image/jpeg", dataUrl, ...(exp ? { 만료일: exp } : {}), status: "확인", uploadedAt: { seconds: Math.floor(Date.now() / 1000) }, by: `${auth.currentUser?.email || ""}(대신 등록)`, reviewedAt: serverTimestamp() });
+    } catch (err) {
+      // ⭐ 2026-11-02 점검 — 업로드 실패 시 안내 없이 버튼만 원래대로 돌아오던 문제: 오류 안내
+      alert("업로드 실패: " + (err?.message || err));
     } finally { setBusy(""); }
   };
+  // ⭐ 2026-11-02 점검 — Chrome·Edge가 data: URL 최상위 이동을 막아 빈 탭이 열리던 문제: Blob URL로 열기
+  const openPdf = (u) => { const b = atob(String(u || "").split(",")[1] || ""); const url = URL.createObjectURL(new Blob([Uint8Array.from(b, (c) => c.charCodeAt(0))], { type: "application/pdf" })); window.open(url, "_blank"); setTimeout(() => URL.revokeObjectURL(url), 60000); };
   const saveAll = (r) => { DRIVER_REQUIRED_DOCS.forEach((def, i) => { const x = r.byType[def.key]; if (x) setTimeout(() => saveDocFile(x, r.d.name, def.label), i * 350); }); };
 
   const statusOf = (r) => (r.p.bad ? ["반려·만료", "#B42318", "#FEF3F2"] : r.p.wait ? ["검토 대기", "#2D4C82", "#EEF3FC"] : r.p.missing ? ["미제출", "#7A879C", "#F3F6FA"] : r.p.warn ? ["만료 임박", "#B54708", "#FFF4E5"] : ["완비", "#067647", "#ECFDF3"]);
@@ -150,7 +159,8 @@ export default function DriverDocsReview({ company, isViewer = false }) {
             return (
               <div key={def.key} className={`flex items-center gap-3 px-3 md:px-4 py-2.5 ${idx % 2 ? "bg-[#FBFCFE]" : "bg-white"}`}>
                 <span className="w-6 text-[11px] font-black text-[#9AA9C3] tabular-nums shrink-0" style={{ fontFamily: MONO }}>{String(idx + 1).padStart(2, "0")}</span>
-                <button type="button" disabled={!x && isViewer} title={x ? "크게 보기" : "직접 올리기"} onClick={() => (!x ? (upTarget.current = { uid: cur.d.uid, def }, fileRef.current?.click()) : isImg ? setViewer({ images: [x.dataUrl], name: def.label }) : window.open(x.dataUrl))}
+                {/* ⭐ 2026-11-02 점검 — PDF 크게 보기는 openPdf(Blob URL)로 열기 */}
+                <button type="button" disabled={!x && isViewer} title={x ? "크게 보기" : "직접 올리기"} onClick={() => (!x ? (upTarget.current = { uid: cur.d.uid, def }, fileRef.current?.click()) : isImg ? setViewer({ images: [x.dataUrl], name: def.label }) : openPdf(x.dataUrl))}
                   className="w-12 h-12 rounded-xl shrink-0 border border-[#E3E8F0] bg-[#F3F6FA] bg-cover bg-center grid place-items-center text-[10px] font-black text-[#9AA9C3]"
                   style={x && isImg ? { backgroundImage: `url(${x.dataUrl})` } : undefined}>{x ? (isImg ? "" : "PDF") : <span className="text-[18px] text-[#2D4C82]">＋</span>}</button>
                 <div className="flex-1 min-w-0">

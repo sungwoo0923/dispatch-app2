@@ -71,10 +71,13 @@ export async function savePdf(el, name) {
   pdf.save(`${name}.pdf`);
 }
 
-export async function printA4(el, title = "인쇄") {
-  const pages = await pagesOf(el);
-  const w = window.open("", "_blank");
-  if (!w) return;
+// ⭐ 2026-11-02 점검 — 팝업 차단 방지: 창을 await 전에 먼저 연다. 호출부가 클릭 직후 미리 연 창(pre)을 넘길 수 있고, 차단되면 조용히 끝내지 않고 안내한다
+export async function printA4(el, title = "인쇄", pre = null) {
+  const w = pre || window.open("", "_blank");
+  if (!w) { alert("팝업이 차단되어 인쇄 창을 열 수 없습니다. 팝업을 허용한 뒤 다시 시도해 주세요."); return; }
+  let pages;
+  try { pages = await pagesOf(el); } catch (e) { try { w.close(); } catch { /* 무시 */ } throw e; } // ⭐ 2026-11-02 점검 — 캡처 실패 시 빈 창을 닫고 오류는 호출부로
+
   const imgs = pages.map((c) => `<div class="pg"><img src="${c.toDataURL("image/png")}"></div>`).join("");
   w.document.write(`<html><head><title>${title}</title><style>@page{size:A4;margin:8mm}body{margin:0}.pg{page-break-after:always;break-after:page}.pg:last-child{page-break-after:auto;break-after:auto}img{width:100%;display:block}</style></head><body>${imgs}<script>window.onload=function(){setTimeout(function(){window.print()},350)}<\/script></body></html>`);
   w.document.close();

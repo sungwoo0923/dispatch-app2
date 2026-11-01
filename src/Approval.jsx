@@ -85,7 +85,7 @@ function Stamp({ step }) {
   if (step.status === "approved") {
     return (
       <div className="w-[54px] h-[54px] rounded-full border-[2.5px] border-[#1B2B4B] flex flex-col items-center justify-center text-[#1B2B4B] rotate-[-8deg] leading-none">
-        <span className="text-[14px] font-black">{String(step.name || "").slice(0, 3)}</span>
+        <span className={`${String(step.name || "").length > 3 ? "text-[11.5px] tracking-tight" : "text-[14px]"} font-black whitespace-nowrap`}>{String(step.name || "").slice(0, 4)}</span>
         <span className="text-[9.5px] font-black mt-0.5 tracking-wider">{step.kind === "합의" ? "합의" : "승인"}</span>
       </div>
     );
@@ -94,7 +94,7 @@ function Stamp({ step }) {
     return (
       <div className="w-[54px] h-[54px] rounded-full border-[2.5px] border-[#0F1A30] bg-[#0F1A30] flex flex-col items-center justify-center text-white rotate-[-8deg] leading-none">
         <span className="text-[14px] font-black">반려</span>
-        <span className="text-[9px] font-bold mt-0.5">{String(step.name || "").slice(0, 3)}</span>
+        <span className="text-[9px] font-bold mt-0.5 whitespace-nowrap tracking-tight">{String(step.name || "").slice(0, 4)}</span>
       </div>
     );
   }
@@ -163,7 +163,8 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
       <div className={c ? "flex flex-col gap-4" : "flex items-start justify-between gap-6"}>
         <div className={`${c ? "" : "pt-4"} min-w-0`}>
           <div className="text-[12.5px] font-extrabold tracking-[0.3em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>{catOf(form.cat).en} · {form.code}</div>
-          <div className={`${c ? "text-[24px]" : "text-[30px]"} font-black tracking-[0.12em] text-[#0F1A30] mt-1 whitespace-nowrap`}>{form.title}</div>
+          {/* ⭐ 2026-11-02 점검 — 휴대폰(compact)에서는 제목을 줄이고 줄바꿈 허용(긴 양식 제목이 용지 밖으로 넘치던 문제) */}
+          <div className={`${c ? "text-[19px] tracking-[0.04em] break-keep" : "text-[30px] tracking-[0.12em] whitespace-nowrap"} font-black text-[#0F1A30] mt-1`}>{form.title}</div>
           <div className="text-[13.5px] text-[#5A6A85] mt-1 flex items-center gap-2" style={{ fontFamily: MONO }}>{docNo || "문서번호는 상신할 때 자동 부여"}
             {status && status !== "pending" && <span className="px-2 py-0.5 rounded border-2 border-[#0F1A30] text-[13px] font-black text-[#0F1A30] tracking-widest" style={{ fontFamily: "inherit" }}>{STATUS[status]}</span>}
           </div>
@@ -223,7 +224,7 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
               </Cell>
             );
           }
-          return <Cell key={f.k} label={f.label} last={last}><span className={f.type === "money" ? "font-black" : ""}>{fieldText(f, v, staff) || <span className="text-[#B4BFD0]">{f.ph || ""}</span>}</span></Cell>;
+          return <Cell key={f.k} label={f.label} last={last}><span className={f.type === "money" ? "font-black" : ""}>{fieldText(f, v, staff) || <span className="text-[#B4BFD0]">-</span>}</span></Cell>;
         })}
       </div>
       {(() => {
@@ -674,6 +675,16 @@ export async function setAutoApproveDaily(company, on, who = "") {
   const { setDoc } = await import("firebase/firestore");
   await setDoc(doc(db, "approvalSettings", company), { companyName: company, autoApproveDaily: !!on, updatedBy: who, updatedAt: serverTimestamp() }, { merge: true });
 }
+// ⭐ 2026-11-02 점검 — 첨부 이미지 합계를 문서 1MB 한도 안(700KB)으로 줄인다(사내메일 fitImages와 같은 방식, 결재 기록이 더 붙을 여유를 둠)
+async function fitApprovalImages(images, limit = 700000) {
+  let imgs = (images || []).slice(0, 3);
+  for (let i = 0; i < 4 && imgs.join("").length > limit; i += 1) {
+    const max = [1200, 1000, 820, 680][i];
+    imgs = await Promise.all(imgs.map((src) => compressImage(src, max, 0.72)));
+  }
+  if (imgs.join("").length > limit) throw new Error("첨부 이미지가 너무 큽니다. 장수를 줄여 주세요.");
+  return imgs;
+}
 function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myDocs = [] }) {
   const apSettings = useApprovalSettings(company);
   const editId = preset?.editId || null;
@@ -712,7 +723,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
   };
   const [missing, setMissing] = React.useState([]);
   const docName = String(form.title || form.label).replace(/\s+/g, "").replace(/·/g, "·");
-  const autoTitle = `${todayDots()} ${docName}_${me.name || ""}${me.position || ""}`;
+  const autoTitle = `${todayDots()} ${docName}_${me.name || ""}${me.position ? ` ${me.position}` : ""}`; // ⭐ 2026-11-02 이름·직책 사이 띄어쓰기
   const finalTitle = (title || autoTitle || form.label).trim();
 
   const submit = async () => {
@@ -738,8 +749,9 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
       if (!await kpConfirm("수정한 내용으로 문서를 바꿀까요?")) return;
       setBusy(true); setMsg("");
       try {
+        const imgs = await fitApprovalImages(images); // ⭐ 2026-11-02 점검 — 첨부 이미지 크기 맞춤
         await updateDoc(doc(db, "approvals", editId), {
-          title: finalTitle, data, images, summary: form.summary ? form.summary(data) : "", amount: form.amount ? form.amount(data) : 0, days: form.days ? form.days(data) : 0,
+          title: finalTitle, data, images: imgs, summary: form.summary ? form.summary(data) : "", amount: form.amount ? form.amount(data) : 0, days: form.days ? form.days(data) : 0,
           updatedAt: serverTimestamp(), history: arrayUnion({ at: Date.now(), uid: me.uid, name: me.name, action: "수정", comment: "" }),
         });
         onDone();
@@ -749,6 +761,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
     if (!await kpConfirm(`「${finalTitle}」 문서를 ${line.map((s) => s.name).join(" → ")} 순서로 결재 상신할까요?`)) return;
     setBusy(true); setMsg("");
     try {
+      const imgs = await fitApprovalImages(images); // ⭐ 2026-11-02 점검 — 첨부 이미지 합계가 1MB 문서 한도를 넘지 않게 줄임
       const now = new Date();
       const docNo = `${form.code}-${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
       // 🤖 일일 업무일지 자동 승인(임원 설정) — 켜져 있으면 상신과 동시에 결재선 전원 승인 처리
@@ -759,16 +772,22 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
       const payload = {
         company, docNo, cat, form: form.key, formLabel: form.label, title: finalTitle,
         summary: form.summary ? form.summary(data) : "", amount: form.amount ? form.amount(data) : 0, days: form.days ? form.days(data) : 0,
-        data, images, drafterUid: me.uid, drafter: { uid: me.uid, name: me.name, team: me.team || "", position: me.position || "" },
+        data, images: imgs, drafterUid: me.uid, drafter: { uid: me.uid, name: me.name, team: me.team || "", position: me.position || "" },
         line: L, cc, ccUids: cc.map((c) => c.uid), participants: [...new Set([me.uid, ...L.map((s) => s.uid), ...cc.map((c) => c.uid)])],
         step: auto ? L.length : 0, status: auto ? "approved" : "pending", createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
         history: [{ at: Date.now(), uid: me.uid, name: me.name, action: "상신", comment: "" }, ...(auto ? [{ at: Date.now(), uid: "auto", name: "자동 승인", action: "승인", comment: "임원 설정 — 일일 업무일지 자동 승인" }] : [])], redraftOf: preset?.id || null,
         ...(auto ? { autoApproved: true } : {}),
       };
+      // ⭐ 2026-11-02 점검 — 자동 승인 후에도 진행 중이면 상신 전에 미리 반영(자동 승인한 첫 결재자에게 '결재 요청' 푸시가 가지 않게). 최종 승인까지 가는 경우만 상신 후 저장
+      let pre = null;
+      if (!auto) {
+        pre = runAutoApprove(payload, apSettings);
+        if (pre.changed && pre.status === "pending") Object.assign(payload, { line: pre.line, step: pre.step, history: [...payload.history, ...pre.hist] });
+      }
       const ref = await addDoc(collection(db, "approvals"), payload);
       draftStore.del(draftKey);
       // 🤖 첫 결재자부터 자동 승인(부재·위임)이 켜져 있으면 바로 처리(상신 직후 한 번 더 저장)
-      if (!auto) {
+      if (!auto && pre?.status === "approved") {
         const r = runAutoApprove({ ...payload, id: ref.id }, apSettings);
         if (r.changed) {
           await updateDoc(ref, { line: r.line, step: r.step, status: r.status, drafterUnread: true, history: arrayUnion(...r.hist), updatedAt: serverTimestamp() }).catch(() => {});
@@ -955,6 +974,12 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
       }
       await updateDoc(doc(db, "approvals", d.id), patch);
       if (patch.status === "approved") runApprovedHooks(d, company, me);
+      // ⭐ 2026-11-02 점검 — 결재 취소가 최종 승인되면 승인 때 자동 연동한 것을 되돌린다(지출 장부 줄 삭제·사직 퇴사예정·인사발령 대기 해제). 육아휴직·출산휴가 재직 상태는 이전 값을 몰라 인사관리부에서 직접 바꿔야 함
+      if (patch.status === "cancelled") {
+        if (d.cat === "expense") deleteDoc(doc(db, "acctLedger", `appr_${d.id}`)).catch(() => {});
+        if (d.form === "resign" && d.drafterUid) updateDoc(doc(db, "users", d.drafterUid), { resignPlan: null }).catch(() => {});
+        if (d.form === "personnel" && d.data?.target) updateDoc(doc(db, "users", d.data.target), { pendingOrder: null }).catch(() => {});
+      }
       // 📧 결과는 기안자 사내메일(공문함)에도 기록 — 푸시·배너는 notifyApproval·BannerCenter가 따로 한 번 보낸다
       const result = patch.status === "approved" ? ["결재 완료", "문서가 최종 승인되었습니다."]
         : patch.status === "rejected" ? ["반려", `${me.name}님이 문서를 반려했습니다.\n반려 사유: ${comment.trim()}`]
@@ -1042,7 +1067,8 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
                 </div>
               </div>
             )}
-            {!turn && !cancelAsk && d.status === "pending" && (
+            {/* ⭐ 2026-11-02 점검 — 의견 등록은 참여자만(참여자가 아닌 관리자는 규칙상 저장이 막혀 권한 오류가 났음) */}
+            {!turn && !cancelAsk && d.status === "pending" && (d.participants || []).includes(me.uid) && (
               <div className="space-y-2">
                 <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="의견 남기기" className={`${inp} h-auto py-2`} />
                 <button type="button" disabled={busy || !comment.trim()} onClick={() => act("comment")} className="w-full h-10 rounded-xl border border-[#DCE3EE] text-[14px] font-bold text-[#3A4A66] disabled:opacity-40">의견 등록</button>
@@ -1439,7 +1465,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   const heroEn = isCat ? cat.en : page === "inbox" ? "INBOX" : page === "mine" ? "MY DOCUMENTS" : "APPROVAL LINES";
   const heroDesc = isCat ? cat.desc : page === "inbox" ? "결재 대기 문서를 처리하고 진행·완료 현황을 확인합니다." : page === "mine" ? "내가 올린 문서의 결재 진행 상황을 봅니다" : "자주 쓰는 결재 순서를 저장해 두고 문서 작성 때 불러옵니다";
   const kpis = isCat
-    ? (page === "leave" ? [[leave?.ent ? `잔여 ${leave.ent.label}` : "잔여 연차", leave?.ent ? `${leave.remain}일` : "-"], ["진행 중", mineSets.pending.filter((d) => d.cat === "leave").length]] : page === "expense" ? [["이번 달 승인 금액", fmtWon(spentMonth)], ["진행 중", mineSets.pending.filter((d) => d.cat === "expense").length]] : [["진행 중", mineSets.pending.filter((d) => d.cat === "draft").length], ["완료", mineSets.approved.filter((d) => d.cat === "draft").length]])
+    ? (page === "leave" ? [[leave?.ent ? `잔여 ${leave.ent.label}` : "잔여 연차", leave?.ent ? `${leave.remain}일` : "-"], ["진행 중", mineSets.pending.filter((d) => d.cat === "leave").length]] : page === "expense" ? [["이번 달 승인 금액", fmtWon(spentMonth)], ["진행 중", mineSets.pending.filter((d) => d.cat === "expense").length]] : [["진행 중", mineSets.pending.filter((d) => d.cat === page).length], ["완료", mineSets.approved.filter((d) => d.cat === page).length]]) /* ⭐ 2026-11-02 점검 — 기안·품의/보고·인사 화면이 각자 자기 분류 문서 수를 세도록(page 기준) */
     : [["결재 대기", sets.todo.length], ["내 진행 문서", mineSets.pending.length], ["반려", mineSets.rejected.length]];
 
   // ⭐ 2026-10-31 넓은 화면(1280px+)은 왼쪽 목록 · 오른쪽 문서 미리보기

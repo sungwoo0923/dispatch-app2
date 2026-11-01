@@ -714,7 +714,13 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
     if (!form.driverName) return kpAlert("대상 기사님을 먼저 선택해 주세요.");
     setBusy(true);
     try {
-      const data = { ...form, companyName: co, amount: toInt(form.amount), summary: penaltySummary(form), published: true, updatedAt: serverTimestamp() };
+      // ⭐ 2026-11-02 점검 — 사진·고지서 스캔 합계가 문서 한도(1MiB)를 넘지 않게 850KB 이하로 단계적으로 다시 줄임 (사내메일 fitImages와 같은 방식)
+      let photos = (form.photos || []).slice(0, 4);
+      for (const max of [1200, 1000, 820, 680]) {
+        if (photos.join("").length <= 850000) break;
+        photos = await Promise.all(photos.map((p) => compressImage(p, max, 0.72).catch(() => p)));
+      }
+      const data = { ...form, photos, companyName: co, amount: toInt(form.amount), summary: penaltySummary(form), published: true, updatedAt: serverTimestamp() };
       delete data.id;
       if (form.id) await updateDoc(doc(db, "fleetPenalties", form.id), data);
       else await addDoc(collection(db, "fleetPenalties"), { ...data, createdAt: serverTimestamp(), by: me(), readAt: null });

@@ -223,5 +223,8 @@ table tbody tr:nth-child(odd) td {
 @media (hover: none) {
   /* ⚠ body는 제외 — 메뉴를 열 때 스크롤 잠금으로 body가 position:fixed가 되는데, 여기에 will-change가 붙으면
      body가 화면 대신 "기준 틀"이 되어 메뉴 서랍이 페이지 길이만큼 길어지고 맨 아래(로그아웃·업데이트)가 화면 밖으로 밀렸다. */
-  .fixed:not(body), [style*="position: fixed"]:not(body), [style*="position:fixed"]:not(body) { will-change: transform; }
+  /* ⭐ 2026-11-02 아이폰에만 — 안드로이드는 고정 요소마다 GPU 레이어가 따로 생겨 화면 전체가 끊겼다(아이폰 전용 문제 해결용) */
+  @supports (-webkit-touch-callout: none) {
+    .fixed:not(body), [style*="position: fixed"]:not(body), [style*="position:fixed"]:not(body) { will-change: transform; }
+  }
 }

@@ -36,7 +36,7 @@ import { useCompanyStaff, masterHasHr, isHrStaffUser } from "./hrHandover";
 import { AttendanceQuickButton } from "./attendanceQuick";
 import { usePendingSignups } from "./pendingSignups";
 import { NavHover } from "./navMenus";
-import { PeriodPicker as ResumePeriodPicker, DateField as ResumeDateField, SelectField as ResumeSelectField, AddressField as ResumeAddressField, EDU_STATUS as RESUME_EDU_STATUS, FAMILY_REL as RESUME_FAMILY_REL } from "./ResumeInputs";
+import { PeriodPicker as ResumePeriodPicker, DateField as ResumeDateField, SelectField as ResumeSelectField, AddressField as ResumeAddressField, BirthSelect as ResumeBirthSelect, EDU_STATUS as RESUME_EDU_STATUS, FAMILY_REL as RESUME_FAMILY_REL } from "./ResumeInputs";
 import { useHrOptions } from "./hrConstants";
 import { AssetManager } from "./OfficeBooks";
 import { FundsWorkspace, FundsBoard, isCeoPosition } from "./FundsBoard";
@@ -2734,12 +2734,16 @@ import "./pcColorRemap.css"; // ★ PC 알록달록 금지(남색 계열)
 import { OrderTimeline, OrderTimelineModal } from "./OrderTimeline";
 import { isTMUser } from "./staffFilter";
 import OrgChart from "./OrgChart";
-import { MailHeaderButton, sendInternalMail } from "./InternalMail";
+import { MailHeaderButton, sendInternalMail, useMailCounts } from "./InternalMail";
+import { useApprovalCounts } from "./Approval";
+import { useMobileAlerts } from "./mobile/mobileAlerts";
 import { loadAcctPayments, saveAcctPayments, loadPlManual, savePlManual } from "./acctPayments";
 import { bumpDriverPayout, addClientCollection, removeClientCollections } from "./ledgerAuto";
 import BannerCenter from "./BannerCenter";
 import OrderCongratsPopup from "./OrderCongratsPopup";
-import PersonnelOrder from "./PersonnelOrder";
+import BirthdayPopup from "./BirthdayPopup";
+import { tryAutoCheckIn } from "./autoAttendance";
+import PersonnelOrder, { OrderNoticeHistory } from "./PersonnelOrder";
 import OrderScanModal, { looksLikeOrder, scanDropDate } from "./OrderScanModal";
 import KpSubNav from "./KpSubNav";
 import RevenueDashboard from "./RevenueDashboard";
@@ -7171,46 +7175,23 @@ useEffect(() => {
       ? (localStorage.getItem("loginCompany") || userCompany || "")
       : (userCompany || localStorage.getItem("userCompany") || "");
     if (!company) return; // 회사 정보 로딩 전에는 실행하지 않음 (잘못된 companyName 저장 방지)
-    const today = attendanceTodayStr();
-    const attDocRef = doc(db, "attendance", `${today}_${user.uid}`);
-
-    (async () => {
-      const existing = await getDoc(attDocRef);
-      if (existing.exists()) {
-        const d = existing.data();
-        // companyName이 올바르게 설정된 유효 기록이면 건너뜀, 비어있으면 갱신
-        if (d.companyName && d.companyName === company) return;
-      }
-
-      // 휴가/외근 결재 승인 여부 확인
-      const schedSnap = await getDocs(query(collection(db, "schedules"), where("authorUid", "==", user.uid)));
-      const mySchedules = schedSnap.docs.map(d => d.data());
-      const leaveLabel = findApprovedLeaveForDate(mySchedules, user.uid, today);
-
-      const userName = user?.displayName || user?.email?.split("@")[0] || "사용자";
-
-      if (leaveLabel) {
-        await setDoc(attDocRef, {
-          uid: user.uid, name: userName, date: today, month: today.slice(0, 7),
-          status: leaveLabel, checkInTime: null, source: "leave", companyName: company,
-        });
+    // ⭐ 2026-11-02 자동 출근 — 각자 출근시간 3시간 전 ~ 퇴근시간 사이에만(자정·새벽에 열면 출근으로 찍히던 문제), 반차 반영.
+    //  PC는 위치 대신 시간으로만 판단(회사 PC를 켜는 것 = 출근). 너무 이르면 5분마다 다시 확인한다(공통 규칙: src/autoAttendance.js)
+    let stop = false; let timer = null;
+    const userName = user?.displayName || user?.email?.split("@")[0] || "사용자";
+    const attempt = async () => {
+      if (stop) return;
+      const r = await tryAutoCheckIn({ uid: user.uid, name: userName, company, source: "auto" }).catch(() => ({ ok: false }));
+      if (stop) return;
+      if (r.ok) {
+        if (window.__sflowShowToast) window.__sflowShowToast(`${r.leave ? `${r.leave} · ` : ""}출근 처리되었습니다 (${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})`, "success");
         return;
       }
-
-      const holidaySnap = await getDocs(query(collection(db, "holidays"), where("companyName", "==", company)));
-      const myHolidays = holidaySnap.docs.map(d => d.data());
-
-      if (isWeekend(today) || isHoliday(today, myHolidays)) {
-        setWeekendCheckPopup(true);
-        return;
-      }
-
-      await setDoc(attDocRef, {
-        uid: user.uid, name: userName, date: today, month: today.slice(0, 7),
-        status: "출근", checkInTime: new Date().toISOString(), source: "auto", companyName: company,
-      });
-      if (window.__sflowShowToast) window.__sflowShowToast(`출근 처리되었습니다 (${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})`, "success");
-    })();
+      if (r.weekend) { setWeekendCheckPopup(true); return; }
+      if (r.reason === "early") timer = setTimeout(attempt, 5 * 60 * 1000);
+    };
+    attempt();
+    return () => { stop = true; clearTimeout(timer); };
   }, [user?.uid, userCompany, role]);
 
   const handleWeekendCheckIn = async (checkIn) => {
@@ -7266,11 +7247,15 @@ useEffect(() => {
 
   const saveMyInfo = async () => {
     if (!user?.uid || myInfoSaving) return;
+    if (!String(myInfoNameDraft || "").trim()) { alert("이름을 입력해 주세요."); return; } // ⭐ 2026-11-02 빈 이름으로 저장되던 문제
     setMyInfoSaving(true);
     try {
+      // ⭐ 2026-11-02 점검 — 연락처를 phone·전화번호 두 필드에 함께 저장(회원관리·인사관리는 phone을 읽음)
+      const p = formatPhone(myInfoPhoneDraft.trim());
       await setDoc(doc(db, "users", user.uid), {
         name: myInfoNameDraft.trim(),
-        전화번호: formatPhone(myInfoPhoneDraft.trim()),
+        phone: p,
+        전화번호: p,
       }, { merge: true });
       showAlert("내 정보가 저장되었습니다.");
     } catch (e) {
@@ -7566,7 +7551,8 @@ useEffect(() => {
 
   // ---------------- 로그아웃 ----------------
   const logout = async () => {
-    await clearFcmToken(auth.currentUser?.uid).catch(() => {});
+    // ⭐ 2026-11-02 로그아웃 지연 방지 — 알림 해제는 최대 1.2초만 기다린다
+    await Promise.race([clearFcmToken(auth.currentUser?.uid).catch(() => {}), new Promise((r) => setTimeout(r, 1200))]);
     await signOut(auth).catch(() => {});
     localStorage.removeItem("role");
     try { sessionStorage.removeItem("skipLoginPopup"); sessionStorage.removeItem("transportValidating"); } catch { /* 무시 */ }
@@ -7651,6 +7637,26 @@ const closeAlert = () => {
   if (cb) setTimeout(cb, 50);
 };
 const [loginMgrOpen, setLoginMgrOpen] = React.useState(false); // ★ 로그인 관리 창
+// ⭐ 2026-11-02 화면 점검 — 상단 메뉴가 화면보다 길면 좌우 흐림 + ‹ › 버튼으로 "더 있음"을 알린다(넘칠 때만 보임)
+const [navOverflow, setNavOverflow] = React.useState({ l: false, r: false });
+const navScrollRef = React.useRef(null);
+const updateNavOverflow = React.useCallback(() => {
+  const el = navScrollRef.current; if (!el) return;
+  const l = el.scrollLeft > 2;
+  const r = el.scrollLeft + el.clientWidth < el.scrollWidth - 2;
+  setNavOverflow((p) => (p.l === l && p.r === r ? p : { l, r }));
+}, []);
+const navScrollRefCb = React.useCallback((el) => {
+  if (navScrollRef.current && navScrollRef.current._kpNavCleanup) navScrollRef.current._kpNavCleanup();
+  navScrollRef.current = el;
+  if (!el) return;
+  let ro = null;
+  if (typeof ResizeObserver !== "undefined") { ro = new ResizeObserver(() => updateNavOverflow()); ro.observe(el); if (el.firstElementChild) ro.observe(el.firstElementChild); }
+  window.addEventListener("resize", updateNavOverflow);
+  el._kpNavCleanup = () => { if (ro) ro.disconnect(); window.removeEventListener("resize", updateNavOverflow); };
+  updateNavOverflow();
+}, [updateNavOverflow]);
+const scrollNavBy = (dir) => { const el = navScrollRef.current; if (el) el.scrollBy({ left: dir * Math.max(160, el.clientWidth * 0.6), behavior: "smooth" }); };
 // 매출관리 비밀번호 게이트
 const [revenueUnlocked, setRevenueUnlocked] = React.useState(false);
 const [revenuePassInput, setRevenuePassInput] = React.useState("");
@@ -7682,6 +7688,10 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setMenu("HOME"); };
   const deptMode = deptModeOf(role, customRole) || (isExec && !execFull ? "exec" : null);
   const deptCompany = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
+  // 🔢 2026-11-02 상단 메뉴 숫자 — 새로 온 것(결재 차례·안 읽은 메일·공지·인수인계·가입 신청)을 메뉴와 세부 메뉴에 표시
+  const apCountsNav = useApprovalCounts();
+  const mailCountsNav = useMailCounts();
+  const alertsNav = useMobileAlerts({ uid: user?.uid, role: realRole || role, team: myProfileDoc?.team || "", company: deptCompany });
   // 부서 모드에서 볼 수 없는 메뉴에 머물러 있으면 홈으로
   React.useEffect(() => { if (deptMode && !DEPT_MENUS[deptMode].includes(menu)) setMenu("HOME"); }, [deptMode, menu]);
   // viewer(조회전용): 관리센터 제외 모든 메뉴 조회 가능, 수정/등록 불가
@@ -7900,6 +7910,7 @@ return (
       />
       <BannerCenter />
       <OrderCongratsPopup uid={user?.uid} profile={myProfileDoc} />
+      <BirthdayPopup uid={user?.uid} profile={myProfileDoc} company={deptCompany} />
       <PlatformNoticeBanner audience="carrier" />
       <CopyTemplateHost canEdit={role === "admin" || role === "totalMaster"} />
       <PlanValueSync planId={planId} />
@@ -7951,7 +7962,11 @@ return (
 
           {/* 중앙 메뉴 */}
                      {/* ★ 태블릿/PC 공용 메뉴 — 전체 가로 스크롤 보장 */}
+          {/* ⭐ 2026-11-02 화면 점검 — 메뉴가 넘치면 좌우 흐림 + ‹ › 버튼 표시(감싸는 relative 상자) */}
+          <div className="relative flex-1 min-w-0 flex items-center">
           <nav
+            ref={navScrollRefCb}
+            onScroll={updateNavOverflow}
             /* ⭐ 가운데 정렬은 justify-center 대신 양끝 auto 여백으로 — justify-center는 화면이 좁으면 맨 앞(HOME)·맨 뒤 메뉴가 잘리고 스크롤로도 안 보였다 */
             className="flex-1 flex items-center overflow-x-auto [&>*:first-child]:ml-auto [&>*:last-child]:mr-auto"
             /* 노트북처럼 메뉴가 다 안 들어가는 화면 — 마우스 휠을 굴리면 메뉴가 옆으로 넘어간다 */
@@ -7993,13 +8008,26 @@ return (
               if (st === "hidden") return null;
               const isBlocked = st === "blocked";
               const isActive = menu === m;
+              // 🔢 메뉴 숫자 — 전자결재가 상단에 따로 없으면(일반 배차 화면) 결재 숫자는 HOME에 더한다
+              const apSep = (deptMode ? DEPT_MENUS[deptMode].includes("전자결재") : true) && menuState("전자결재") !== "hidden";
+              const apN = (apCountsNav.todo || 0) + (apCountsNav.mineNew || 0);
+              const navN = m === "HOME" ? (mailCountsNav.unread || 0) + (alertsNav.handover || 0) + (apSep ? 0 : apN)
+                : m === "전자결재" ? apN + (alertsNav.handover || 0)
+                : m === "기사관리" ? (canApproveSignup ? alertsNav.signupDriver || 0 : 0)
+                : m === "관리자메뉴" ? pendingSignups.length : 0;
+              const subBadges = {
+                HOME: { 공지사항: alertsNav.notice ? "N" : 0, "ap:inbox": apSep ? 0 : apCountsNav.todo, teamsched: 0 },
+                전자결재: { inbox: apCountsNav.todo, mine: apCountsNav.mineNew, handover: alertsNav.handover },
+                기사관리: { "acc:pending": canApproveSignup ? alertsNav.signupDriver : 0 },
+                관리자메뉴: { members: pendingSignups.length },
+              }[m];
               return (
-                <NavHover key={m} menu={m} disabled={isBlocked || st === "locked"} onOpenMenu={() => handleMenuClick(m)}>
+                <NavHover key={m} menu={m} badges={subBadges} disabled={isBlocked || st === "locked"} onOpenMenu={() => handleMenuClick(m)}>
                 <button
                   disabled={isBlocked}
                   onClick={() => handleMenuClick(m)}
                   data-on={isActive ? "1" : "0"}
-                  className={`kp-nav-btn relative inline-flex items-center gap-1.5 ${deptMode && DEPT_MENUS[deptMode].length <= 8 ? "px-3" : "px-[7px]"} h-[34px] rounded-[10px] text-[13.5px] min-[2050px]:text-[14px] min-[2050px]:px-3 whitespace-nowrap transition-all flex-shrink-0
+                  className={`kp-nav-btn relative inline-flex items-center gap-1.5 ${deptMode && DEPT_MENUS[deptMode].length <= 8 ? "px-3" : "px-[6px] min-[1700px]:px-[7px]" /* ⭐ 2026-11-02 화면 점검 — 1700 미만은 조금 촘촘하게(text-[13px]은 index.css에서 15px로 바뀌므로 12.75px 사용) */} h-[34px] rounded-[10px] text-[12.75px] min-[1700px]:text-[13.5px] min-[2050px]:text-[14px] min-[2050px]:px-3 whitespace-nowrap transition-all flex-shrink-0
                     ${isBlocked
                       ? "text-white/20 cursor-not-allowed"
                       : isActive
@@ -8009,7 +8037,7 @@ return (
                 >
                   <ShellIcon name={KP_SIDE_ICONS[m] || "dashboard"} size={14} className={`kp-nav-ico shrink-0 ${isActive ? "" : "opacity-70"} ${deptMode && DEPT_MENUS[deptMode].length <= 8 ? "" : "hidden min-[2050px]:inline-block"}`} />
                   <EditableText id={`nav.${m}`} defaultText={m} />
-                  {m === "관리자메뉴" && pendingSignups.length > 0 && <span className="ml-1 min-w-[17px] h-[17px] px-1 inline-grid place-items-center rounded-full bg-rose-500 text-white text-[10px] font-black tabular-nums align-middle" title={`가입 승인 대기 ${pendingSignups.length}명`}>{pendingSignups.length > 99 ? "99+" : pendingSignups.length}</span>}
+                  {navN > 0 && st !== "locked" && <span className="ml-1 min-w-[17px] h-[17px] px-1 inline-grid place-items-center rounded-full bg-rose-500 text-white text-[10px] font-black tabular-nums align-middle" title={m === "관리자메뉴" ? `가입 승인 대기 ${navN}명` : `새 소식 ${navN}건`}>{navN > 99 ? "99+" : navN}</span>}
                   {st === "locked" && <span className="ml-1 opacity-60"><LockIcon /></span>}
                   {m === "인사이트" && st !== "locked" && <span className="ml-1 px-1 py-px rounded bg-[#8FB0F0]/20 text-[#8FB0F0] text-[9px] font-black tracking-wider align-middle">PRO</span>}
                 </button>
@@ -8018,6 +8046,18 @@ return (
             })}
             </div>
           </nav>
+          {/* ⭐ 2026-11-02 화면 점검 — 넘칠 때만 보이는 좌우 흐림·스크롤 버튼 */}
+          {navOverflow.l && (<>
+            <div className="pointer-events-none absolute left-0 inset-y-0 w-12 bg-gradient-to-r from-[#14203A] via-[#14203A]/80 to-transparent" />
+            <button type="button" aria-label="이전 메뉴" title="이전 메뉴" onClick={() => scrollNavBy(-1)}
+              className="absolute left-0.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full grid place-items-center bg-white/15 hover:bg-white/30 ring-1 ring-white/25 text-white text-[15px] font-black leading-none shadow">‹</button>
+          </>)}
+          {navOverflow.r && (<>
+            <div className="pointer-events-none absolute right-0 inset-y-0 w-12 bg-gradient-to-l from-[#14203A] via-[#14203A]/80 to-transparent" />
+            <button type="button" aria-label="다음 메뉴" title="다음 메뉴" onClick={() => scrollNavBy(1)}
+              className="absolute right-0.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full grid place-items-center bg-white/15 hover:bg-white/30 ring-1 ring-white/25 text-white text-[15px] font-black leading-none shadow">›</button>
+          </>)}
+          </div>
 
 
           {/* 우측 유저 영역 */}
@@ -8390,7 +8430,7 @@ return (
           <KpSubNav code="DRIVERS" title="기사관리" icon="user" active={기사관리Tab} onSelect={set기사관리Tab}
             groups={[
               { label: "기사", items: [{ key: "drv", label: "기사관리", en: "DRIVERS", icon: "user", sub: ["전체", "일반", "직영", "지입", "임대", "블랙"].map((g) => ({ key: `d:${g}`, label: g === "전체" ? "전체 기사" : g, icon: g === "블랙" ? "alert" : g === "지입" ? "link" : g === "임대" ? "key" : "user", badge: g === "전체" ? 0 : (drivers || []).filter((d) => (d.등급 || "일반") === g && (String(d.이름 || "").trim() || String(d.차량번호 || "").trim())).length, soft: true })) }] },
-              { label: "기사 앱 계정", items: [{ key: "acc", label: "기사 앱 계정", en: "APP ACCOUNTS", icon: "phone", sub: [{ key: "acc:pending", label: "가입 승인", icon: "hourglass" }, { key: "acc:drivers", label: "승인된 기사", icon: "idcard" }] }] },
+              { label: "기사 앱 계정", items: [{ key: "acc", label: "기사 앱 계정", en: "APP ACCOUNTS", icon: "phone", sub: [{ key: "acc:pending", label: "가입 승인", icon: "hourglass", badge: alertsNav.signupDriver || 0, badgeTitle: "기사 가입 승인 대기" }, { key: "acc:drivers", label: "승인된 기사", icon: "idcard" }] }] },
               { label: "서류관리", items: [{ key: "docs", label: "서류관리", en: "DOCUMENTS", icon: "file", sub: [{ key: "docs:driver", label: "기사 제출 서류", icon: "file" }, { key: "docs:penalty", label: "과태료 · 사고 서류", icon: "alert" }] }] },
             ]}>
             {기사관리Tab.startsWith("d:") && (
@@ -8581,7 +8621,7 @@ return (
         {menu === "자금관리" && menuState("자금관리") === "ok" && <FundsWorkspace company={deptCompany} isViewer={isViewer} />}
         {menu === "비품관리" && menuState("비품관리") === "ok" && <AssetManager company={deptCompany} isViewer={isViewer} />}
         {menu === "인사관리부" && menuState("인사관리부") === "ok" && (
-          <HrHub company={deptCompany} canManage={role === "hrManager" || role === "totalMaster" || masterHrMain || (!!customRole && getMenuAccess(customRoles, role, "인사관리부") === "write")} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "" }}
+          <HrHub company={deptCompany} canManage={role === "hrManager" || role === "totalMaster" || realRole === "hrAcct" || (/인사/.test(String(myProfileDoc?.team || "")) && role !== "viewer") || masterHrMain || (!!customRole && getMenuAccess(customRoles, role, "인사관리부") === "write")} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "" }}
             renderRecord={(focusUid) => <HRManagementPage userCompany={deptCompany} role={role} userId={auth?.currentUser?.uid || ""} focusUid={focusUid} />}
             renderAttendance={() => <AttendanceBoard userCompany={deptCompany} role={role} user={user} />} />
         )}
@@ -15023,9 +15063,10 @@ title="상차지 ↔ 하차지 교체"
     if (e.key === "ArrowLeft" && atStart) { e.preventDefault(); arrowHopFocus(el, -1); }
     else if (e.key === "ArrowRight" && atEnd) { e.preventDefault(); arrowHopFocus(el, 1); }
   }}
+/* ⭐ 2026-11-02 화면 점검 — 1280 노트북에서 8칸이 너무 좁아 버튼·라벨이 깨졌다 → 1280~1499는 6칸, 그보다 좁으면 4칸, 1500 이상은 기존 8칸 그대로 */
 className="
 kp-order-form
-grid grid-cols-8 gap-x-3.5 gap-y-4
+grid grid-cols-4 xl:grid-cols-6 min-[1500px]:grid-cols-8 gap-x-3.5 gap-y-4
 bg-white
 border border-[#E3E8F0]
 rounded-[24px]
@@ -15036,7 +15077,7 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
 >
   
   {/* ================== 오더 정보 (카드 최상단 네이비 헤더) ================== */}
-<div className="col-span-8 -mx-6 -mt-0 mb-2">
+<div className="col-span-full -mx-6 -mt-0 mb-2">{/* ⭐ 2026-11-02 화면 점검 — 칸 수가 바뀌어도 한 줄 전체 */}
   <div className="relative px-6 py-3.5 flex items-center justify-between overflow-hidden" style={{ background: "linear-gradient(120deg,#0B1428 0%,#0F1A30 40%,#1B2B4B 75%,#2D4C82 100%)" }}>
     <span className="absolute inset-0 opacity-[0.08] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
     <span className="relative flex items-baseline gap-2.5">
@@ -15916,7 +15957,7 @@ const similar = placeList.filter(p => {
 {/* 상차지주소 */}
 <div>
   <div className="flex items-center h-[22px] overflow-visible justify-between mb-1">
-    <label className={`${labelCls} mb-0`}>
+    <label className={`${labelCls} mb-0 min-w-0 overflow-hidden`} /* ⭐ 2026-11-02 화면 점검 — 좁아지면 라벨이 버튼을 덮지 않게 */>
       <EditableText id="orderForm.label.상차지주소" defaultText="상차지주소" /> <AutoBadge show={autoPickMatched} />
     </label>
 
@@ -15936,7 +15977,7 @@ const arr = (form.경유상차목록 || []).map(s => cleanStopCargo({ ...s, 상�
   setStopPopupOpen(true);
 }}
 className={`
-  text-[11px] font-bold px-2 py-0.5 rounded-lg border transition
+  text-[11px] font-bold px-2 py-0.5 rounded-lg border transition whitespace-nowrap shrink-0
   ${hasPickupStops
     ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
     : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
@@ -16093,7 +16134,7 @@ className={`
 
   <div className="flex items-center h-[22px] overflow-visible justify-between mb-1">
 
-    <label className={`${labelCls} mb-0`}>
+    <label className={`${labelCls} mb-0 min-w-0 overflow-hidden`} /* ⭐ 2026-11-02 화면 점검 — 좁아지면 라벨이 버튼을 덮지 않게 */>
       <EditableText id="orderForm.label.하차지주소" defaultText="하차지주소" /> <AutoBadge show={autoDropMatched} />
     </label>
 
@@ -16115,7 +16156,7 @@ className={`
   setStopPopupOpen(true);
 }}
 className={`
-  text-[11px] font-bold px-2 py-0.5 rounded-lg border transition
+  text-[11px] font-bold px-2 py-0.5 rounded-lg border transition whitespace-nowrap shrink-0
   ${hasDropStops
     ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
     : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
@@ -16176,7 +16217,8 @@ className={`
 </div>
 
 <div className="relative">
-  <label className={labelCls + " flex items-center gap-1 flex-wrap"}>
+  {/* ⭐ 2026-11-02 화면 점검 — 칩이 줄바꿈되면 아래 입력칸을 덮지 않게 라벨 높이를 늘린다 */}
+  <label className={labelCls + " flex items-center gap-1 flex-wrap !h-auto min-h-[22px]"}>
     <EditableText id="orderForm.label.화물내용" defaultText="화물내용" /> {reqStar}
     <button type="button"
       tabIndex={-1}
@@ -16272,7 +16314,7 @@ className={`
   className="flex items-center h-[22px] overflow-visible justify-between mb-1"
   onClick={(e) => e.stopPropagation()}
 >
-  <label className={`${labelCls} mb-0`}>
+  <label className={`${labelCls} mb-0 min-w-0 overflow-hidden`} /* ⭐ 2026-11-02 화면 점검 — 좁아지면 라벨이 버튼을 덮지 않게 */>
     <EditableText id="orderForm.label.차량종류" defaultText="차량종류" />
   </label>
 
@@ -16285,7 +16327,7 @@ className={`
       setVehicleSpecTab("vehicle");
       setVehicleSpecOpen(true);
     }}
-   className="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white transition"
+   className="text-[11px] font-bold px-1.5 py-0.5 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white transition whitespace-nowrap shrink-0" /* ⭐ 2026-11-02 화면 점검 — 한 글자씩 줄바꿈 방지 */
   >
     차량·파렛
   </button>
@@ -17352,7 +17394,7 @@ className={`
 {/* =============================== 
     ✎ 메모 / ◆ 전달사항 (네이비 통일 + 세로 textarea)
    =============================== */}
-<div className="col-span-8 grid grid-cols-2 gap-6 items-start">
+<div className="col-span-full grid grid-cols-2 gap-6 items-start">{/* ⭐ 2026-11-02 화면 점검 — col-span-full */}
 
   {/* ── 메모 ── */}
   <div>
@@ -17653,7 +17695,7 @@ className={`
   );
 })()}
     {/* 버튼 */}
-  <div className="col-span-8 flex justify-end gap-3 mt-4 pt-4 border-t border-gray-200">
+  <div className="col-span-full flex justify-end gap-3 mt-4 pt-4 border-t border-gray-200">{/* ⭐ 2026-11-02 화면 점검 — col-span-full */}
     <button
       type="submit"
       className="
@@ -21053,18 +21095,21 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, onSaved,
     const mirror = getMirrorTarget();
     for (const file of files) {
       try {
-        const reader = new FileReader();
-        const base64 = await new Promise((res, rej) => {
+        // ⭐ 2026-11-02 점검 — 이미지는 먼저 줄이고, base64는 한 번만 저장(화면은 base64 || url로 읽음), 문서 한도(1MiB) 넘는 파일은 미리 막음
+        const isImg = String(file.type || "").startsWith("image/");
+        const base64 = isImg ? await shrinkImageForDoc(file, { max: 1600, quality: 0.82 }) : await new Promise((res, rej) => {
+          const reader = new FileReader();
           reader.onload = e => res(e.target.result);
           reader.onerror = rej;
           reader.readAsDataURL(file);
         });
+        if (String(base64).length > 1_000_000) { alert(`${file.name}: 파일이 너무 큽니다(약 700KB 이하로 줄여 주세요).`); continue; }
         const payload = {
-          url: base64,
           base64,
           name: file.name,
+          type: (String(base64).match(/^data:([^;,]+)/) || [])[1] || file.type || "",
           size: file.size,
-          sizeKB: Math.round(file.size / 1024),
+          sizeKB: Math.round(String(base64).length * 0.75 / 1024),
           uploadedBy: "dispatch",
           createdAt: serverTimestamp(),
         };
@@ -46046,9 +46091,9 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
   };
 
   const KpiCard = ({ label, value, sub, highlight }) => (
-    <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: "16px 20px" }}>
+    <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: "14px 14px", minWidth: 0 }}>
       <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1"><EditableText id={`settlement.accounting.kpi.${label}`} defaultText={label} /></div>
-      <div className={`text-[20px] font-bold ${highlight === "danger" ? "text-red-600" : highlight === "ok" ? "text-emerald-700" : "text-[#1B2B4B]"}`}>
+      <div className={`text-[17px] sm:text-[20px] font-bold whitespace-nowrap tabular-nums ${highlight === "danger" ? "text-red-600" : highlight === "ok" ? "text-emerald-700" : "text-[#1B2B4B]"}`}>
         {value}
       </div>
       {sub && <div className="text-[11px] text-gray-500 mt-1">{sub}</div>}
@@ -46056,7 +46101,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
   );
 
   const thStyle = { padding: "8px 12px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6b7280", letterSpacing: ".06em", textTransform: "uppercase", borderBottom: "1px solid #e5e7eb", whiteSpace: "nowrap", background: "#f8f9fb" };
-  const tdStyle = { padding: "9px 12px", fontSize: 13, color: "#374151", borderBottom: "1px solid #f0f2f5" };
+  const tdStyle = { padding: "9px 12px", fontSize: 13, color: "#374151", borderBottom: "1px solid #f0f2f5", whiteSpace: "nowrap" }; // ⭐ 2026-11-02 화면 점검 — 금액 "원"이 다음 줄로 떨어지던 문제
   const tdR = { ...tdStyle, textAlign: "right" };
 
   const currentQData = vatData.quarters[vatQuarter] || { sales: 0, costs: 0, months: [] };
@@ -46065,9 +46110,9 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
   const vatNet = vatOutput - vatInput;
 
   return (
-    <div className="px-8 py-6">
-      <div className="flex items-center justify-between mb-5">
-        <div>
+    <div className="px-4 sm:px-8 py-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+        <div className="min-w-0">
           <h2 className="text-[16px] font-bold text-[#1B2B4B]"><EditableText id="settlement.accounting.title" defaultText="회계자료" /></h2>
           <p className="text-[12px] text-gray-500 mt-0.5">미수금·지급현황·부가세·원가분석을 한 곳에서 관리하세요</p>
         </div>
@@ -46082,10 +46127,10 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
       </div>
 
       {/* 서브탭 */}
-      <div className="flex gap-0 border-b border-gray-200 mb-6">
+      <div className="flex gap-0 border-b border-gray-200 mb-6 overflow-x-auto">
         {[["ar","미수금 현황"],["ap","지급 현황"],["vat","부가세 자료"],["cost","원가 분석"]].map(([k, label]) => (
           <button key={k} onClick={() => setSubTab(k)}
-            className={`px-5 py-2.5 text-[13px] font-semibold border-b-2 transition-colors ${subTab === k ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-transparent text-gray-500 hover:text-gray-600"}`}>
+            className={`shrink-0 whitespace-nowrap px-3 sm:px-5 py-2.5 text-[13px] font-semibold border-b-2 transition-colors ${subTab === k ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-transparent text-gray-500 hover:text-gray-600"}`}>
             <EditableText id={`settlement.accounting.subtab.${k}`} defaultText={label} />
           </button>
         ))}
@@ -50972,20 +51017,26 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   // 자동으로 반영해서 화면이 바로 갱신된다. 회사정보 탭의 handleSealUpload와 동일한 방식.
   const sealQuickUploadRef = React.useRef(null);
   const [sealQuickUploading, setSealQuickUploading] = React.useState(false);
+  // ⭐ 2026-11-02 점검 — 직인 바로 변경은 회사정보와 같은 기준(경리·인사)만 허용
+  const canQuickSeal = (() => {
+    try {
+      const r = localStorage.getItem("role") || "";
+      const t = String(window.__kpMeTeam || "");
+      return ["test", "hrAcct", "hrManager", "totalMaster"].includes(r) || /경리|회계|인사/.test(t);
+    } catch { return false; }
+  })();
   const handleSealQuickUpload = async (file) => {
     if (!file) return;
+    if (!canQuickSeal) { showAlert("직인 등록은 경리팀·인사팀만 할 수 있습니다."); return; }
     if (!companyInfoDoc?.id) { showAlert("회사 정보가 아직 등록되지 않아 도장을 저장할 수 없습니다."); return; }
     const allowed = ["image/jpeg", "image/png", "image/webp"];
     if (!allowed.includes(file.type)) { showAlert("JPG, PNG, WEBP 이미지만 업로드 가능합니다."); return; }
-    if (file.size > 1 * 1024 * 1024) { showAlert("도장 이미지는 1MB 이하여야 합니다."); return; }
+    if (file.size > 10 * 1024 * 1024) { showAlert("도장 이미지가 너무 큽니다(10MB 초과)."); return; }
     setSealQuickUploading(true);
     try {
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      // ⭐ 2026-11-02 점검 — 직인 축소(투명 유지) + 사업자등록증과 합친 크기가 문서 한도(1MiB)를 넘으면 저장하지 않음
+      const base64 = await shrinkImageForDoc(file, { max: 600, keepAlpha: true });
+      if (base64.length + (companyInfoDoc?.사업자등록증Base64?.length || 0) > COMPANY_DOC_B64_LIMIT) { showAlert("파일이 너무 큽니다. 약 600KB 이하로 줄여 주세요."); return; }
       await updateDoc(doc(db, "transportApplications", companyInfoDoc.id), { 직인이미지: base64 });
     } catch (err) {
       showAlert("도장 업로드 실패: " + (err.message || "알 수 없는 오류"));
@@ -52594,8 +52645,8 @@ const handleBatchSettle = async (targetStatus) => {
           <div style={{ display: "flex", alignItems: "center" }}>
             <span style={{ flex: 1 }}>{COMPANY_PRINT.ceo}</span>
             <span
-              title="클릭하여 도장 이미지 바로 변경"
-              onClick={() => sealQuickUploadRef.current?.click()}
+              title={canQuickSeal ? "클릭하여 도장 이미지 바로 변경" : undefined}
+              onClick={canQuickSeal ? () => sealQuickUploadRef.current?.click() : undefined}
               style={{
                 position: "relative",
                 display: "inline-flex",
@@ -52604,7 +52655,7 @@ const handleBatchSettle = async (targetStatus) => {
                 width: 52,
                 height: 52,
                 marginRight: 4,
-                cursor: "pointer",
+                cursor: canQuickSeal ? "pointer" : "default", /* ⭐ 2026-11-02 점검 — 경리·인사만 클릭 가능 */
                 opacity: sealQuickUploading ? 0.4 : 1,
               }}
             >
@@ -56041,13 +56092,17 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
           // ⭐ addNew와 동일한 이유로 id를 강제로 새로 만들지 않는다 — 이미 기사앱으로
           // 가입된 차량번호면 그 문서를 그대로 재사용(merge)해야 등급이 실제 위치/상태가
           // 쌓이는 문서에 붙는다.
-          await upsertDriver({
-            차량번호,
-            이름: r.이름||r["기사명"]||"",
-            전화번호: r.전화번호||r["전화"]||r["휴대폰"]||"",
-            메모: r.메모||r["비고"]||"",
-            등급: r.등급||"일반",
-          });
+          // ⭐ 2026-11-02 점검 — 빈 칸은 보내지 않음(기존 이름·전화·메모 유지). 등급 칸이 비면 기존 기사 등급(블랙·지입·직영) 유지, 새 기사만 '일반'
+          const pick = (v) => String(v ?? "").trim();
+          const normP = (s = "") => String(s).replace(/\s+/g, "").toUpperCase();
+          const patch = { 차량번호 };
+          const nm = pick(r.이름 || r["기사명"]); if (nm) patch.이름 = nm;
+          const ph = pick(r.전화번호 || r["전화"] || r["휴대폰"]); if (ph) patch.전화번호 = ph;
+          const mm = pick(r.메모 || r["비고"]); if (mm) patch.메모 = mm;
+          const gr = pick(r.등급);
+          if (gr) patch.등급 = gr;
+          else if (!(driversRaw || []).some((d) => normP(d.차량번호) === normP(차량번호))) patch.등급 = "일반";
+          await upsertDriver(patch);
           ok++;
         }
         showAlert(`총 ${ok}건 반영`);
@@ -57516,9 +57571,13 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
         const validC = json.filter((r) => String(r.거래처명 || r["상호"] || r["회사명"] || "").trim());
         if (!validC.length) { showAlert("등록할 거래처가 없습니다. (거래처명 열을 확인해 주세요)"); return; }
         if (!await kpConfirm(`거래처 ${validC.length}곳을 등록·갱신할까요?${json.length - validC.length ? `\n(거래처명이 없는 ${json.length - validC.length}줄은 건너뜁니다)` : ""}`)) return;
+        // ⭐ 2026-11-02 점검 — 문서 id를 거래처명 그대로 쓰지 않음(회사별 키 coDocKey 사용). 같은 이름의 기존 거래처가 있으면 그 문서를 갱신. 한 줄이 실패해도 나머지는 계속 반영
+        const failC = [];
         for (const r of validC) {
           const 거래처명 = String(r.거래처명 || r["상호"] || r["회사명"] || "").trim();
           if (!거래처명) continue;
+          const existC = (clients || []).find((c) => normalizeCompanyKey(c.거래처명 || "") === normalizeCompanyKey(거래처명));
+          try {
           await upsertClient?.({
             거래처명,
             사업자번호: String(r.사업자번호 || "").trim(),
@@ -57531,11 +57590,12 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             이메일: String(r.이메일 || r["email"] || "").trim(),
             메모: String(r.메모 || r["일반메모"] || "").trim(),
             오더메모: String(r.오더메모 || "").trim(),
-            id: 거래처명,
+            ...(existC?.id ? { id: existC.id } : {}),
           });
           ok++;
+          } catch (rowErr) { failC.push(거래처명); }
         }
-        showAlert(`총 ${ok}건 반영 완료`);
+        showAlert(`총 ${ok}건 반영 완료${failC.length ? `\n반영 실패 ${failC.length}건: ${failC.slice(0, 5).join(", ")}${failC.length > 5 ? " 외" : ""}` : ""}`);
       } catch (err) { showAlert("엑셀 처리 오류"); } finally { e.target.value = ""; }
     };
     reader.readAsArrayBuffer(file);
@@ -59279,7 +59339,10 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
   }, [hireDate]);
 
   // ⭐ 2026-10-22 개편 — 디지털 명함 + 정보 카드 그리드(세로로 길던 화면을 가로 배치로)
-  const ROLE_NAME = { totalMaster: "최고관리자", admin: "관리자", hrManager: "인사관리자", user: "실무자", test: "경리/회계", viewer: "조회전용" };
+  const ROLE_NAME = { totalMaster: "최고관리자", admin: "관리자", hrManager: "인사관리자", user: "실무자", test: "경리/회계", viewer: "조회전용", hrAcct: "통합인사관리자" };
+  // ⭐ 2026-11-02 점검 — 권한 배지에 내부 키(hrAcct·r_xxx) 대신 한글 이름 표시(사용자 정의 역할 이름 포함)
+  const customRolesMP = useCustomRoles();
+  const roleLabel = (customRolesMP || []).find((r) => r.key === role)?.label || ROLE_NAME[role] || "-";
   const displayName = myName || user?.displayName || (user?.email || "").split("@")[0];
   const phone = myInfo.전화번호 || myInfo.phone || "";
   const title = [myInfo.team, myInfo.position].filter(Boolean).join(" · ");
@@ -59299,7 +59362,9 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
     if (!user?.uid) return;
     setSavingInfo(true);
     try {
-      await setDoc(doc(db, "users", user.uid), { name: draftName.trim(), 전화번호: fmtPhone(draftPhone) }, { merge: true });
+      // ⭐ 2026-11-02 점검 — 연락처를 phone·전화번호 두 필드에 함께 저장(회원관리·조직도·인사관리는 phone을 읽음)
+      const p = fmtPhone(draftPhone);
+      await setDoc(doc(db, "users", user.uid), { name: draftName.trim(), phone: p, 전화번호: p }, { merge: true });
       setEditOpen(false);
       showAlert("내 정보가 저장되었습니다.");
     } catch (e) { showAlert("저장 실패: " + (e?.message || e)); } finally { setSavingInfo(false); }
@@ -59379,6 +59444,15 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
   );
   const usedPct = leave && leave.entitlement ? Math.min(100, Math.round((leave.used / leave.entitlement) * 100)) : 0;
   const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
+  // ⭐ 2026-11-02 인사·경리팀은 오더·매출 실적 대신 결재·업무 현황을 보여 준다
+  const teamTxt = String(myInfo.team || "");
+  const officeKind = ["hrManager", "hrAcct"].includes(role) || /인사/.test(teamTxt) ? "hr" : role === "test" || /경리|회계/.test(teamTxt) ? "acct" : null;
+  const apc = useApprovalCounts();
+  const coStaffMy = useCompanyStaff(officeKind === "hr" ? co : "");
+  const workTiles = officeKind ? [
+    ["결재할 차례", `${apc.todo || 0}건`, "지금 내가 결재할 문서"],
+    officeKind === "hr" ? ["재직 직원", `${(coStaffMy || []).length}명`, "우리 회사 재직 인원"] : ["진행 중 내 기안", `${apc.myPending || 0}건`, "결재 진행 중인 내 문서"],
+  ] : null;
   const btnGhost = "h-11 rounded-xl bg-white border border-[#D9E0EA] text-[13.5px] font-bold text-[#1B2B4B] hover:border-[#1B2B4B] hover:bg-[#F5F8FD] transition";
   // 잔여 연차 원형 그래프
   const remPct = leave && leave.entitlement ? Math.max(0, Math.min(100, Math.round((leave.remaining / leave.entitlement) * 100))) : 0;
@@ -59402,7 +59476,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
               <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[12.5px]">
                 {co && <span className="px-2 h-6 inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 font-bold">{co}</span>}
                 <span className="px-2 h-6 inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 font-bold">{title || "부서 미지정"}</span>
-                <span className="px-2 h-6 inline-flex items-center rounded-md bg-[#8FB0F0] text-[#0B1428] font-black">{ROLE_NAME[role] || role || "-"}</span>
+                <span className="px-2 h-6 inline-flex items-center rounded-md bg-[#8FB0F0] text-[#0B1428] font-black">{roleLabel /* ⭐ 2026-11-02 점검 — 한글 권한명 */}</span>
               </div>
             </div>
           </div>
@@ -59416,6 +59490,13 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
               <div className="relative"><Ring pct={remPct} size={56} stroke={6} /><span className="absolute inset-0 grid place-items-center text-[11px] font-black">{remPct}%</span></div>
               <div className="min-w-0"><div className="text-[11.5px] font-bold text-white/60">잔여 연차</div><div className="text-[19px] font-black leading-tight">{leave ? `${leave.remaining}일` : "-"}</div><div className="text-[11.5px] text-white/50">{leave ? `총 ${leave.entitlement}일` : "입사일 등록 필요"}</div></div>
             </div>
+            {workTiles ? workTiles.map(([k, v, sub]) => (
+              <div key={k} className="rounded-2xl bg-white/[0.07] ring-1 ring-white/10 px-4 py-3.5">
+                <div className="text-[11.5px] font-bold text-white/60">{k}</div>
+                <div className="mt-1 text-[19px] font-black leading-tight tabular-nums">{v}</div>
+                <div className="mt-0.5 text-[11.5px] text-white/50 truncate">{sub}</div>
+              </div>
+            )) : (<>
             <div className="rounded-2xl bg-white/[0.07] ring-1 ring-white/10 px-4 py-3.5">
               <div className="text-[11.5px] font-bold text-white/60">오늘 내 오더</div>
               <div className="mt-1 text-[19px] font-black leading-tight tabular-nums">{Number(todayStats?.count ?? 0).toLocaleString()}건</div>
@@ -59426,6 +59507,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
               <div className="mt-1 text-[19px] font-black leading-tight tabular-nums">{Number(myStats?.totalOrders ?? 0).toLocaleString()}건</div>
               <div className="mt-0.5 text-[11.5px] text-white/50 tabular-nums truncate">수익 {won(myStats?.totalProfit)}</div>
             </div>
+            </>)}
           </div>
         </div>
       </section>
@@ -59454,7 +59536,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
                   ["이메일", user?.email || "-", <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>],
                   ["회사", co || "-", <><path d="M3 21h18M5 21V7l7-4 7 4v14" /><path d="M9 9h1M14 9h1M9 13h1M14 13h1" /></>],
                   ["부서 · 직책", title || "미지정 (인사관리부에서 지정)", <><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></>],
-                  ["권한", ROLE_NAME[role] || role || "-", <path d="M12 3 5 6v6c0 4.5 3 7.7 7 9 4-1.3 7-4.5 7-9V6z" />],
+                  ["권한", roleLabel /* ⭐ 2026-11-02 점검 — 한글 권한명 */, <path d="M12 3 5 6v6c0 4.5 3 7.7 7 9 4-1.3 7-4.5 7-9V6z" />],
                 ].map(([k, v, ic]) => (
                   <div key={k} className="flex items-center gap-3 px-3.5 py-3 rounded-2xl bg-[#F5F8FD] border border-[#EDF1F7] min-w-0">
                     <span className="w-9 h-9 rounded-xl bg-white border border-[#E3E8F0] text-[#2D4C82] grid place-items-center shrink-0"><Ico d={ic} /></span>
@@ -59465,7 +59547,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
             )}
           </ProfilePanel>
 
-          <ProfilePanel eyebrow="WORK" title="근무 현황" desc="휴가·외근은 결재 승인 건 기준 · 실적은 내가 등록한 오더 기준">
+          <ProfilePanel eyebrow="WORK" title="근무 현황" desc={officeKind ? "휴가·외근은 결재 승인 건 기준 · 결재는 내 전자결재 기준" : "휴가·외근은 결재 승인 건 기준 · 실적은 내가 등록한 오더 기준"}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="min-w-0">
                 <div className="flex items-baseline justify-between text-[13.5px]">
@@ -59483,6 +59565,20 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
                 </div>
                 <div className="mt-2 text-[11.5px] text-[#9AA9C3]">입사일 변경은 인사팀(인사관리부)에서 합니다</div>
               </div>
+              {officeKind ? (
+                <div className="min-w-0">
+                  <div className="text-[13.5px] font-black text-[#0F1A30] mb-2">결재 · 업무 현황</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[["결재할 차례", apc.todo, true], ["진행 중 내 기안", apc.myPending], ["새 결재 결과", apc.mineNew], ["참조 새 문서", apc.ccNew]].map(([k, v, hi]) => (
+                      <div key={k} className={`rounded-2xl px-3 py-3 ${hi ? "bg-[#1B2B4B] text-white" : "bg-[#F5F8FD] border border-[#E3E8F0] text-[#0F1A30]"}`}>
+                        <div className={`text-[11.5px] font-bold ${hi ? "text-white/70" : "text-[#7A879C]"}`}>{k}</div>
+                        <div className="text-[18px] font-black tabular-nums">{v || 0}건</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 text-[11.5px] text-[#9AA9C3]">{officeKind === "hr" ? "인사 업무는 인사관리부, 결재는 전자결재에서 처리합니다" : "정산·회계 업무는 정산관리·회계관리, 결재는 전자결재에서 처리합니다"}</div>
+                </div>
+              ) : (
               <div className="min-w-0">
                 <div className="rounded-2xl border border-[#E3E8F0] overflow-hidden">
                   <table className="w-full text-[13px]">
@@ -59495,6 +59591,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
                   </table>
                 </div>
               </div>
+              )}
             </div>
           </ProfilePanel>
 
@@ -59781,7 +59878,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
     if (!company) return;
     const q = query(collection(db, "users"), where("companyName", "==", company));
     const unsub = onSnapshot(q, snap => {
-      setMembers(snap.docs.map(d => ({ uid: d.id, ...d.data() })).filter(u => u.approved !== false && !isTMUser(u))); // ★ 최고관리자는 인사 대상 아님
+      setMembers(snap.docs.map(d => ({ uid: d.id, ...d.data() })).filter(u => u.approved !== false && !isTMUser(u) && !["driver", "shipper", "cafeUser"].includes(u.role))); // ★ 최고관리자·기사·화주는 인사 대상 아님(⭐ 2026-11-02 기사가 미배정 직원으로 보이던 문제)
     }, () => {});
     return () => unsub();
   }, [company]);
@@ -59854,7 +59951,9 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
         let status = rec?.status;
         if (!status) {
           if (off) { days.push({ d, ds, status: "휴일" }); continue; }
-          status = findApprovedLeaveForDate(schedules, m.uid, ds, m.name) || approvalLeaveOn(leaveAprs, m.uid, ds) || hrLeaveOn(m, ds) || "출근";
+          // ⭐ 2026-11-02 점검 — 기록 없는 평일을 '출근'으로 세지 않음(출근기록부와 동일하게 빈칸·근무일 제외)
+          status = findApprovedLeaveForDate(schedules, m.uid, ds, m.name) || approvalLeaveOn(leaveAprs, m.uid, ds) || hrLeaveOn(m, ds) || "";
+          if (!status) { days.push({ d, ds, status: "" }); continue; }
         }
         const inHm = hmOf(rec?.checkInTime); const outHm = hmOf(rec?.checkOutTime);
         const late = status === "출근" && !!inHm && toMin(inHm) > toMin(startHm);
@@ -59904,7 +60003,13 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
   React.useEffect(() => { if (focusUid && rows.some((r) => r.uid === focusUid)) setSelectedUid(focusUid); }, [focusUid, rows.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selected = rows.find(r => r.uid === selectedUid) || null;
-  const resume = selectedUid ? (resumes[selectedUid] || {}) : {};
+  // 🎂 2026-11-02 가입할 때 쓴 생년월일·주소가 이력서에 비어 있으면 그 값으로 채워 보여 준다(저장하면 이력서에도 남음)
+  const resume = React.useMemo(() => {
+    if (!selectedUid) return {};
+    const r = resumes[selectedUid] || {};
+    const u = members.find((m) => m.uid === selectedUid) || {};
+    return { ...r, birthDate: r.birthDate || u.birthDate || "", address: r.address || u.address || "" };
+  }, [selectedUid, resumes, members]);
   // 인사팀이 새로 제출된 이력서를 열면 "확인함"
   React.useEffect(() => { if (canManage && selectedUid && resumes[selectedUid]?.hrSeen === false) setDoc(doc(db, "hrResumes", selectedUid), { hrSeen: true, hrSeenAt: Date.now() }, { merge: true }).catch(() => {}); }, [canManage, selectedUid, resumes]);
   const newResumeCount = canManage ? members.filter((m) => resumes[m.uid]?.hrSeen === false).length : 0;
@@ -59952,13 +60057,15 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
       // ⭐ 2026-11-01 본인이 작성·저장하면 인사팀에 "새 이력서"로 표시 + 사내메일 알림
       const bySelf = selectedUid === userId && !canManage;
       await setDoc(doc(db, "hrResumes", selectedUid), { ...draft, companyName: company, ...(bySelf ? { selfSubmittedAt: Date.now(), hrSeen: false } : {}) }, { merge: true });
+      // 🎂 생년월일은 계정에도 맞춰 둔다(생일 축하·3일 전 알림이 이 값을 쓴다)
+      if (draft.birthDate && /^\d{4}-\d{2}-\d{2}$/.test(draft.birthDate)) await setDoc(doc(db, "users", selectedUid), { birthDate: draft.birthDate }, { merge: true }).catch(() => {});
       if (bySelf) {
         const me = members.find((m) => m.uid === userId) || {};
         // 인사 담당자에게 — 없으면(신규 운송사) 임시로 인사 업무를 하는 마스터에게
         const hrStaffTo = members.filter((m) => m.uid !== userId && isHrStaffUser(m));
         const hrTo = (hrStaffTo.length ? hrStaffTo : members.filter((m) => m.uid !== userId && m.isMaster === true && m.employmentStatus !== "퇴사"))
           .map((m) => ({ uid: m.uid, name: m.name || m.email || "", team: m.team || "", position: m.position || "" }));
-        if (hrTo.length) sendInternalMail({ company, to: hrTo, kind: "hr", fromName: me.name || "", subject: `[이력서 제출] ${me.name || ""}${me.team ? ` · ${me.team}` : ""}`, body: `${me.name || ""}님이 본인 이력서를 작성·저장했습니다.\n\n인사관리부 › 인사 기록에서 확인해 주세요.` }).catch(() => {});
+        if (hrTo.length) sendInternalMail({ company, to: hrTo, kind: "hr", fromName: me.name || "", subject: `[이력서 제출] ${me.name || ""}${me.team ? ` · ${me.team}` : ""}`, body: `${me.name || ""}님이 본인 이력서를 작성·저장했습니다.\n\n인사관리부 › 인사관리 › 이력서에서 확인해 주세요.` }).catch(() => {}); // ⭐ 2026-11-02 점검 — 메일 안내 경로를 실제 메뉴 이름(인사관리 › 이력서)으로
         alert("이력서를 저장했습니다. 인사팀에 알림이 갔습니다.");
       }
       setEditMode(false);
@@ -60116,12 +60223,12 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
         ) : (
           <>
             {/* 사원증(디지털 명함) */}
-            <div className="relative overflow-hidden rounded-[24px] px-7 py-6 text-white shadow-[0_18px_40px_rgba(15,26,48,0.28)]"
+            <div className="relative overflow-hidden rounded-[24px] px-4 sm:px-7 py-6 text-white shadow-[0_18px_40px_rgba(15,26,48,0.28)]" /* ⭐ 2026-11-02 화면 점검 — 모바일은 여백·사진을 줄여 통계칸 폭 확보 */
               style={{ background: "linear-gradient(125deg, #0F1A30 0%, #1B2B4B 52%, #2D4C82 100%)" }}>
               <div className="absolute -right-16 -top-20 w-72 h-72 rounded-full bg-white/[0.05]" />
               <div className="absolute right-28 -bottom-28 w-60 h-60 rounded-full bg-white/[0.04]" />
-              <div className="relative flex items-start gap-5">
-                <div className="w-[84px] h-[104px] rounded-[18px] bg-white overflow-hidden flex items-center justify-center text-[30px] font-black text-[#0F1A30] shadow-[0_10px_24px_rgba(0,0,0,0.25)] shrink-0">
+              <div className="relative flex items-start gap-3 sm:gap-5">
+                <div className="w-[64px] h-[80px] sm:w-[84px] sm:h-[104px] rounded-[18px] bg-white overflow-hidden flex items-center justify-center text-[26px] sm:text-[30px] font-black text-[#0F1A30] shadow-[0_10px_24px_rgba(0,0,0,0.25)] shrink-0">
                   {resume.photoUrl ? <img src={resume.photoUrl} className="w-full h-full object-cover" /> : (selected.name || "?").slice(0, 1)}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -60144,16 +60251,17 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                       </select>
                     ) : <span>{selected.team || "미배정"}</span>}
                   </div>
-                  <div className="mt-4 grid grid-cols-4 gap-2 max-w-[640px]">
+                  {/* ⭐ 2026-11-02 화면 점검 — 모바일 390px에서 4칸이면 글자가 세로로 깨져 2칸 → sm 이상 4칸 */}
+                  <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2 max-w-[640px]">
                     {[
                       { k: "입사일", v: selected.hireDate || "미등록" },
                       { k: "근속", v: selected.tenureLabel || "-" },
                       { k: "잔여 휴가", v: selected.leave ? `${selected.leave.remaining}일` : "-" },
                       { k: "이달 출근", v: `${selected.workDays || 0}일` },
                     ].map(({ k, v }) => (
-                      <div key={k} className="px-3 py-2 rounded-xl bg-white/[0.08] border border-white/10 min-w-0">
-                        <div className="text-[10.5px] font-bold text-white/55">{k}</div>
-                        <div className="text-[14px] font-black truncate">{v}</div>
+                      <div key={k} className="px-2.5 sm:px-3 py-2 rounded-xl bg-white/[0.08] border border-white/10 min-w-0">
+                        <div className="text-[10.5px] font-bold text-white/55 whitespace-nowrap break-keep truncate">{k}</div>
+                        <div className="text-[14px] font-black truncate whitespace-nowrap">{v}</div>
                       </div>
                     ))}
                   </div>
@@ -60237,7 +60345,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                       <div className="flex-1 grid grid-cols-3 gap-3">
                         {[
                           { k: "성명", v: selected.name || "-", big: true },
-                          { k: "생년월일", v: resume.birthDate || "-", edit: "birthDate", ph: "YYYY-MM-DD" },
+                          { k: "생년월일", v: resume.birthDate || "-", edit: "birthDate", ph: "YYYY-MM-DD", span: editMode ? 2 : 1 },
                           { k: "입사일", v: selected.hireDate || "미등록" },
                           { k: "연락처", v: selected.phone || "-" },
                           { k: "이메일", v: selected.email || "-", span: 2 },
@@ -60247,7 +60355,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                           <div key={k} className={`px-4 py-3 rounded-2xl bg-[#F5F8FD] border border-[#EDF1F7] min-w-0 ${span === 2 ? "col-span-2" : ""}`}>
                             <div className="text-[12.5px] font-bold text-[#7A879C]">{k}</div>
                             {editMode && edit === "birthDate" ? (
-                              <div className="mt-1"><ResumeDateField value={draft.birthDate} placeholder="생년월일" onChange={v => setDraft(d => ({ ...d, birthDate: v }))} /></div>
+                              <div className="mt-1"><ResumeBirthSelect value={draft.birthDate} onChange={v => setDraft(d => ({ ...d, birthDate: v }))} selectClass="w-full h-10 border border-[#DCE3EE] rounded-xl px-2 text-[14px] font-semibold text-[#0F1A30] bg-white focus:outline-none focus:border-[#4B6CB7]" /></div>
                             ) : editMode && edit === "address" ? (
                               <div className="mt-1"><ResumeAddressField value={draft.address} onChange={v => setDraft(d => ({ ...d, address: v }))} /></div>
                             ) : editMode && edit ? (
@@ -60461,6 +60569,9 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                       ))}
                     </div>
                   )}
+                  {/* ⭐ 2026-11-02 올린 발령 공문(정정·취소) — 인사발령 화면에서 이력으로 옮겼다 */}
+                  <OrderNoticeHistory company={company} target={selected} isSelf={selected.uid === userId} canManage={canManage}
+                    myName={members.find(m => m.uid === userId)?.name || auth.currentUser?.email?.split("@")[0] || ""} />
                 </div>
               )}
             </div>
@@ -60700,6 +60811,38 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
   );
 }
 
+// ⭐ 2026-11-02 점검 — 사업자등록증·직인 base64가 한 문서(transportApplications, 한도 1MiB)에 함께 저장되므로 저장 전에 이미지를 줄임(직인은 투명 배경 유지)
+const COMPANY_DOC_B64_LIMIT = 900000;
+function shrinkImageForDoc(file, { max = 1600, quality = 0.8, keepAlpha = false } = {}) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onerror = reject;
+    fr.onload = () => {
+      const src = String(fr.result || "");
+      const img = new Image();
+      img.onerror = () => resolve(src);
+      img.onload = () => {
+        try {
+          const r = Math.min(1, max / Math.max(img.width || 1, img.height || 1));
+          const c = document.createElement("canvas");
+          c.width = Math.max(1, Math.round(img.width * r)); c.height = Math.max(1, Math.round(img.height * r));
+          const g = c.getContext("2d");
+          if (!keepAlpha) { g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); }
+          g.drawImage(img, 0, 0, c.width, c.height);
+          let out = keepAlpha ? c.toDataURL("image/png") : c.toDataURL("image/jpeg", quality);
+          if (keepAlpha && out.length > 300000) {
+            const webp = c.toDataURL("image/webp", 0.85);
+            if (webp.startsWith("data:image/webp") && webp.length < out.length) out = webp;
+          }
+          resolve(out.length < src.length ? out : src);
+        } catch { resolve(src); }
+      };
+      img.src = src;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
 function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
   const companyName = (userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim();
   const currentUserId = userId || auth?.currentUser?.uid || localStorage.getItem("uid") || "";
@@ -60786,27 +60929,33 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
     if (!canEditDocs) { showMsg("사업자등록증 등록은 경리팀·인사팀만 할 수 있습니다."); return; }
     const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
     if (!allowed.includes(file.type)) { showMsg("JPG, PNG, WEBP, PDF 파일만 업로드 가능합니다."); return; }
-    if (file.size > 3 * 1024 * 1024) { showMsg("파일 크기는 3MB 이하여야 합니다. (Firestore 저장 방식)"); return; }
+    // ⭐ 2026-11-02 점검 — PDF는 압축할 수 없어 600KB까지만, 이미지는 아래에서 줄인 뒤 문서 한도로 다시 확인
+    if (file.type === "application/pdf" && file.size > 600 * 1024) { showMsg("PDF는 600KB 이하만 저장할 수 있습니다. 사진(JPG·PNG)으로 올리면 자동으로 줄여 저장합니다."); return; }
+    if (file.size > 20 * 1024 * 1024) { showMsg("파일이 너무 큽니다(20MB 초과)."); return; }
     // ⚠️ 예전엔 회사 정보(appData)를 못 찾았을 때 저장은 건너뛰고 "업로드되었습니다"만 띄웠다
     if (!appData?.id) { showMsg("회사 정보를 찾지 못해 저장할 수 없습니다. 새로고침 후 다시 시도해 주세요."); return; }
     setUploading(true);
     setUploadProgress("업로드 중...");
     try {
       // base64로 변환
-      const base64 = await new Promise((resolve, reject) => {
+      // ⭐ 2026-11-02 점검 — 이미지는 긴 변 1600px JPEG로 줄이고, 직인과 합친 크기가 문서 한도를 넘으면 저장하지 않음
+      const isImg = file.type.startsWith("image/");
+      const base64 = isImg ? await shrinkImageForDoc(file, { max: 1600, quality: 0.8 }) : await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result);
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
+      const saveType = isImg ? ((String(base64).match(/^data:([^;,]+)/) || [])[1] || file.type) : file.type;
+      if (base64.length + (appData?.직인이미지?.length || 0) > COMPANY_DOC_B64_LIMIT) { showMsg("파일이 너무 큽니다. 약 600KB 이하로 줄여 주세요."); return; }
       if (appData?.id) {
         await updateDoc(doc(db, "transportApplications", appData.id), {
           사업자등록증Base64: base64,
           사업자등록증파일명: file.name,
           사업자등록증업로드일: new Date().toISOString(),
-          사업자등록증타입: file.type,
+          사업자등록증타입: saveType,
         });
-        setAppData(prev => ({ ...prev, 사업자등록증Base64: base64, 사업자등록증파일명: file.name, 사업자등록증타입: file.type }));
+        setAppData(prev => ({ ...prev, 사업자등록증Base64: base64, 사업자등록증파일명: file.name, 사업자등록증타입: saveType }));
       }
       showMsg("사업자등록증이 업로드되었습니다.");
     } catch (err) {
@@ -60828,15 +60977,12 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
     if (!appData?.id) { showMsg("회사 정보가 아직 등록되지 않아 도장을 저장할 수 없습니다."); return; }
     const allowed = ["image/jpeg", "image/png", "image/webp"];
     if (!allowed.includes(file.type)) { showMsg("JPG, PNG, WEBP 이미지만 업로드 가능합니다."); return; }
-    if (file.size > 1 * 1024 * 1024) { showMsg("도장 이미지는 1MB 이하여야 합니다."); return; }
+    if (file.size > 10 * 1024 * 1024) { showMsg("도장 이미지가 너무 큽니다(10MB 초과)."); return; }
     setSealUploading(true);
     try {
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      // ⭐ 2026-11-02 점검 — 직인은 긴 변 600px로 줄여(투명 배경 유지) 사업자등록증과 합친 크기가 문서 한도(1MiB)를 넘지 않게 확인
+      const base64 = await shrinkImageForDoc(file, { max: 600, keepAlpha: true });
+      if (base64.length + (appData?.사업자등록증Base64?.length || 0) > COMPANY_DOC_B64_LIMIT) { showMsg("파일이 너무 큽니다. 약 600KB 이하로 줄여 주세요."); return; }
       await updateDoc(doc(db, "transportApplications", appData.id), { 직인이미지: base64 });
       setAppData(prev => ({ ...prev, 직인이미지: base64 }));
       showMsg("도장 이미지가 저장되었습니다. 거래명세서 등에 바로 반영됩니다.");
@@ -61209,7 +61355,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {[
                 {
-                  key: "biz", title: "사업자등록증", done: !!filePreviewSrc, sub: filePreviewSrc ? (appData.사업자등록증파일명 || "등록된 파일") : "JPG·PNG·PDF / 최대 3MB",
+                  key: "biz", title: "사업자등록증", done: !!filePreviewSrc, sub: filePreviewSrc ? (appData.사업자등록증파일명 || "등록된 파일") : "JPG·PNG·PDF / 최대 600KB(사진은 자동 축소)",
                   busy: uploading ? uploadProgress : "", onUpload: () => fileRef.current?.click(),
                   onDrop: (f) => handleFileUpload(f),
                   actions: filePreviewSrc ? [
@@ -61218,7 +61364,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                   ] : [],
                 },
                 {
-                  key: "seal", title: "직인(도장)", done: !!appData?.직인이미지, sub: appData?.직인이미지 ? "거래명세서·보고서에 자동으로 찍힙니다" : "배경이 투명한 PNG 권장 / 최대 1MB",
+                  key: "seal", title: "직인(도장)", done: !!appData?.직인이미지, sub: appData?.직인이미지 ? "거래명세서·보고서에 자동으로 찍힙니다" : "배경이 투명한 PNG 권장 / 최대 600KB(자동 축소)",
                   busy: sealUploading ? "업로드 중..." : "", onUpload: () => sealFileRef.current?.click(),
                   onDrop: (f) => handleSealUpload(f),
                   actions: appData?.직인이미지 ? [

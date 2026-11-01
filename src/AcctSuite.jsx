@@ -65,17 +65,20 @@ export function AccountingOverview({ company, orders }) {
   const months = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0"));
   const mon = Object.fromEntries(months.map((m) => [m, { sale: 0, buy: 0 }]));
   const ar = {}; const ap = {};
+  const settled = {}; // ⭐ 2026-11-02 점검 — 지급관리 [지급완료] 오더 기사운임 합계(미지급 탭 apByDriver와 동일 기준)
   orders.forEach((r) => {
     const m = String(r.상차일 || "").slice(5, 7); const s = toInt(r.청구운임); const b = toInt(r.기사운임);
     if (mon[m]) { mon[m].sale += s; mon[m].buy += b; }
     const c = r.거래처명 || r.상차지명 || "미분류"; ar[c] = ar[c] || { inv: 0, oldest: r.상차일 }; ar[c].inv += s; if (r.상차일 < ar[c].oldest) ar[c].oldest = r.상차일;
     const d = r.이름 || "미지정"; ap[d] = (ap[d] || 0) + b;
+    if ((r.지급상태 || "") === "지급완료") settled[d] = (settled[d] || 0) + b; // ⭐ 2026-11-02 점검 — [지급완료] 처리분을 지급액으로 반영
   });
   const sale = Object.values(mon).reduce((a, x) => a + x.sale, 0);
   const buy = Object.values(mon).reduce((a, x) => a + x.buy, 0);
   const arList = Object.entries(ar).map(([c, v]) => ({ c, out: Math.max(0, v.inv - toInt(pay.ar[c])), age: dayGap(v.oldest || today, today) })).filter((x) => x.out > 0).sort((a, b) => b.out - a.out);
   const arSum = arList.reduce((a, x) => a + x.out, 0);
-  const apSum = Object.entries(ap).reduce((a, [d, v]) => a + Math.max(0, v - toInt(pay.ap[d])), 0);
+  // ⭐ 2026-11-02 점검 — 미지급 = 운임 − max(지급등록액, [지급완료] 합계) : 회계관리 미지급 탭과 숫자 일치
+  const apSum = Object.entries(ap).reduce((a, [d, v]) => a + Math.max(0, v - Math.max(toInt(pay.ap[d]), settled[d] || 0)), 0);
   const vat = Math.round((sale - buy) * 0.1);
   const curM = today.slice(5, 7);
   const chart = months.filter((m) => m <= curM).map((m) => ({ k: `${Number(m)}월`, sale: mon[m].sale, buy: mon[m].buy, margin: mon[m].sale ? ((mon[m].sale - mon[m].buy) / mon[m].sale) * 100 : 0 }));

@@ -119,7 +119,8 @@ function NoticeView({ company, me }) {
   const [writer, setWriter] = React.useState(null); // { initial }
   const [obit, setObit] = React.useState(false);
   const [openId, setOpenId] = React.useState(null);
-  React.useEffect(() => onSnapshot(collection(db, "notices"), (s) => setNotices(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setNotices([])), []);
+  // ⭐ 2026-11-02 최신 글이 위로(PC 홈과 같게)
+  React.useEffect(() => onSnapshot(collection(db, "notices"), (s) => setNotices(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => ((b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)))), () => setNotices([])), []);
   const isViewer = me?.role === "viewer";
   const canWrite = NOTICE_WRITER_ROLES.includes(me?.role) && !isViewer;
   const thisMonth = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
@@ -182,7 +183,8 @@ export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], 
     else if (k === "schedule") body = wrap(<TeamSchedule company={userCompany} />);
     else if (k === "settle") body = lazy(<PcSettleMobile dispatchData={dispatchData} companyName={userCompany} role={role} isViewer={isViewer} />);
     else if (k === "acct") body = lazy(<PcAccounting company={userCompany} fixedRows={fixedRows} clients={clients} isViewer={isViewer} />);
-    else if (k === "hr") body = <div className="kp-m-pc"><HrHub company={userCompany} canManage={role === "hrManager" || role === "totalMaster"}
+    // ⭐ 2026-11-02 점검 — 모바일 인사관리부에도 me 전달(부고 알림 작성자 이름·uid 누락으로 본인 푸시/메일·타인 수정 가능 문제 수정, PC 와 동일)
+    else if (k === "hr") body = <div className="kp-m-pc"><HrHub company={userCompany} me={{ uid: me?.uid, name: me?.name || me?.displayName || "" }} canManage={role === "hrManager" || role === "totalMaster" || role === "hrAcct" || (/인사/.test(String(me?.team || "")) && role !== "viewer")}
       renderRecord={(focusUid) => <React.Suspense fallback={<Loading />}><PcHrPage userCompany={userCompany} role={role} userId={me?.uid || ""} focusUid={focusUid} /></React.Suspense>}
       renderAttendance={() => <AttendanceBoard userCompany={userCompany} role={role} user={me} />} /></div>;
     else if (k === "cashbook") body = <div className="kp-m-pc"><FundsWorkspace company={userCompany} isViewer={isViewer} /></div>;

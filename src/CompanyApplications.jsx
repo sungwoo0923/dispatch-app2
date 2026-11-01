@@ -240,7 +240,10 @@ export default function CompanyApplications() {
       const d = req.requestedData || {};
       if (req.transportApplicationId) {
         const updatePayload = {};
-        if (d.companyName) updatePayload.companyName = d.companyName;
+        // ⭐ 2026-11-02 점검 — 회사명은 users/companyPlans/테넌트 문서 키라 여기서만 바꾸면 회사정보 페이지가 레코드를 잃음 → 회사명 변경은 적용하지 않고 안내만
+        if (d.companyName && d.companyName.trim() !== (req.companyName || "").trim()) {
+          alert("회사명 변경은 별도 이전 작업이 필요합니다. 회사명을 제외한 나머지 항목만 반영합니다.");
+        }
         if (d.representative) { updatePayload.representative = d.representative; updatePayload.대표자 = d.representative; }
         if (d.address) { updatePayload.address = d.address; updatePayload.주소 = d.address; }
         if (d.businessNumber) { updatePayload.businessNumber = d.businessNumber; updatePayload.사업자번호 = d.businessNumber; }

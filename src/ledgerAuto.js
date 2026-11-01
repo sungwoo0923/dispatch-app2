@@ -31,6 +31,9 @@ export async function bumpDriverPayout(db, { date, amount, count = 1, company })
   const ref = doc(db, "acctLedger", `auto_drvpay_${safeId(co)}_${d}`);
   let fresh = false;
   try { fresh = !(await getDoc(ref)).exists(); } catch { fresh = false; }
+  // ⭐ 2026-11-02 점검 — 자동 장부 기능 이전에 지급완료된 오더를 '지급 취소'하면 그날 줄이 없어서
+  //  음수 금액 "기사운임 지급" 지출 줄이 새로 생기던 문제: 없는 줄을 빼는 경우(취소)는 기록하지 않는다
+  if (fresh && amt < 0) return;
   const fundId = fresh ? await defaultFundId(db, co, "drvpay") : undefined;
   await setDoc(ref, {
     companyName: co, date: d, type: "지출", account: "운반비", item: "기사운임 지급(정산관리 자동)", method: "계좌이체", vendor: "기사",

@@ -7,19 +7,21 @@ import { createPortal } from "react-dom";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 
+// ⭐ 2026-11-02 화면 점검 — 기본 세부 메뉴 이름을 실제 화면 왼쪽 메뉴 이름과 똑같이 맞춤(매출관리·전자결재·자금관리·인사관리부의 "A · B" → "A·B").
+//   과태료·사고 서류는 지입차관리가 아니라 기사관리 › 서류관리로 옮겨졌으므로 지입차관리에는 넣지 않는다(FleetManagement.jsx 왼쪽 메뉴에 없음).
 export const MENU_SUBS = {
   HOME: { code: "HOME", items: [["대시보드", "대시보드"], ["공지사항", "공지사항"], ["execsched", "임원 일정"], ["teamsched", "직원 일정"], ["rules", "사내 규정"], ["ap:inbox", "결재함"]] },
   배차현황: { code: "DISPATCH", items: [["배차현황", "배차현황"], ["미배차현황", "미배차현황"]] },
   단가표: { code: "RATE CARD", items: [["노선별", "노선별 단가표"], ["다목적지", "다목적지 단가표"], ["manual", "직접 작성"], ["history", "발행 이력"]] },
   기사관리: { code: "DRIVERS", items: [["drv", "기사관리"], ["acc:pending", "가입 승인"], ["acc:drivers", "승인된 기사"], ["docs:driver", "기사 제출 서류"], ["docs:penalty", "과태료 · 사고 서류"]] },
   거래처관리: { code: "CLIENTS", items: [["하차지거래처", "하차지거래처"], ["기본거래처", "기본거래처"], ["고정거래처관리", "고정거래처관리"]] },
-  매출관리: { code: "REVENUE", items: [["dashboard", "매출 대시보드"], ["target", "목표 · 전망"], ["clients", "거래처 순위 · 신규"], ["trend", "거래처 동향 분석"], ["yearly", "연간 요약"], ["query", "거래처 기간 조회"]] },
+  매출관리: { code: "REVENUE", items: [["dashboard", "매출 대시보드"], ["target", "목표·전망"], ["clients", "거래처 순위·신규"], ["trend", "거래처 동향 분석"], ["yearly", "연간 요약"], ["query", "거래처 기간 조회"]] },
   정산관리: { code: "SETTLEMENT", items: [["거래처정산", "거래처정산"], ["지급관리", "용차지급관리"], ["지입정산관리", "지입정산관리"]] },
-  전자결재: { code: "E-APPROVAL", items: [["inbox", "결재함"], ["leave", "근태 · 휴가 신청"], ["expense", "비용 · 지출 결의"], ["draft", "업무 기안 · 품의"], ["report", "업무 보고 · 인사"], ["handover", "인수인계"], ["mine", "내 기안함"], ["lines", "결재선 관리"]] },
+  전자결재: { code: "E-APPROVAL", items: [["inbox", "결재함"], ["leave", "근태·휴가 신청"], ["expense", "비용·지출 결의"], ["draft", "업무 기안·품의"], ["report", "업무 보고·인사"], ["handover", "인수인계"], ["mine", "내 기안함"], ["lines", "결재선 관리"]] },
   회계관리: { code: "ACCOUNTING", items: [["overview", "회계 개요"], ["book", "회계 장부"], ["retire", "퇴직 정산"]] },
-  자금관리: { code: "FINANCE", items: [["funds", "자금 현황"], ["book", "수입 · 지출 장부"]] },
-  인사관리부: { code: "HUMAN RESOURCES", items: [["record", "인사관리"], ["edit", "직원관리"], ["register", "직원 등록"], ["attendance", "출근기록부"], ["leave", "연차 관리"], ["settings", "직책 · 부서 설정"], ["rules", "사내 규정"], ["obit", "부고 알림"]] },
-  회사관리: { code: "COMPANY", items: [["회사정보", "회사정보"], ["조직도", "조직도"], ["내정보", "내정보"], ["내 이력서", "내 이력서"], ["출근기록부", "출근기록부"]] },
+  자금관리: { code: "FINANCE", items: [["funds", "자금 현황"], ["book", "수입·지출 장부"]] },
+  인사관리부: { code: "HUMAN RESOURCES", items: [["record", "인사관리"], ["edit", "직원관리"], ["register", "직원 등록"], ["attendance", "출근기록부"], ["leave", "연차 관리"], ["settings", "직책·부서 설정"], ["rules", "사내 규정"], ["obit", "부고 알림"]] },
+  회사관리: { code: "COMPANY", items: [["회사정보", "회사정보"], ["조직도", "조직도"], ["내정보", "내정보"], ["내 이력서", "내 이력서"]] }, // ⭐ 2026-11-02 점검 — 기본 목록에서 '출근기록부' 제거(인사관리자 등 그 탭이 없는 사람에게 눌러도 이동 안 되는 메뉴가 보였음). 탭이 있는 사람은 화면을 열면 registerSubnav로 다시 보인다
   운임조회: { code: "FARE LOOKUP", items: [["전국운임조회", "전국운임조회"], ["자사운임표", "자사운임표"]] },
   지입차관리: { code: "FLEET CONTROL", items: [["tracking", "관제현황"], ["route", "노선관리"], ["fixed", "고정노선"], ["history", "이력 조회"], ["attendance", "출근기록부"], ["temperature", "온도 관제"], ["cargo-camera", "적재함 카메라"], ["vehicle", "차량 관리"], ["registration", "기사 등록 관리"]] },
   관리자메뉴: { code: "ADMIN", items: [["members", "회원 관리"], ["linked", "연동 화주사"], ["loginSessions", "로그인 관리"], ["billing", "구독 · 결제"], ["setup", "초기 설정 · 튜토리얼"]] },
@@ -69,7 +71,8 @@ export function useSubnavTarget(code, keys, onSelect, labeled = null) {
 }
 
 // 상단 메뉴 버튼을 감싸서 — 마우스를 올리면 아래로 세부 메뉴 패널이 부드럽게 펼쳐진다
-export function NavHover({ menu, label, disabled = false, onOpenMenu, children }) {
+// badges — 세부 메뉴 항목별 숫자/"N" ({ key: 3 | "N" }) — 2026-11-02
+export function NavHover({ menu, label, disabled = false, onOpenMenu, badges = null, children }) {
   const base = MENU_SUBS[menu];
   const reg = base ? registeredItems(base.code) : null;
   // ⭐ 2026-11-01 세부 메뉴가 있는 메뉴는 처음부터 항상 펼친다(한 번 연 화면은 그 사람이 실제로 보는 항목으로)
@@ -135,7 +138,8 @@ export function NavHover({ menu, label, disabled = false, onOpenMenu, children }
                   className="w-full flex items-center gap-2.5 px-3 h-10 rounded-xl text-left text-[13.5px] font-bold text-white/80 hover:text-white hover:bg-white/[0.08] transition"
                   style={{ transitionDelay: shown ? `${i * 18}ms` : "0ms" }}>
                   <span className="w-1.5 h-1.5 rotate-45 bg-[#8FB0F0]/70 shrink-0" />
-                  <span className="truncate">{l}</span>
+                  <span className="truncate flex-1">{l}</span>
+                  {(() => { const b = badges?.[key]; const on = typeof b === "string" ? !!b : b > 0; return on ? <span className="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-rose-500 text-white text-[11px] font-black grid place-items-center tabular-nums">{typeof b === "number" && b > 99 ? "99+" : b}</span> : null; })()}
                 </button>
               ))}
             </div>

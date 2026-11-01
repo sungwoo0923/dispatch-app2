@@ -24,7 +24,8 @@ const messaging = getMessaging();
 //  같이 쓰면 마지막에 앱을 연 기기만 알림을 받았다(아이폰이 "갑자기" 안 오던 원인). fcmTokens(최근 기기 목록)까지 모두 보낸다.
 function userTokens(u) {
   if (!u) return [];
-  return [...new Set([u.fcmToken, ...(Array.isArray(u.fcmTokens) ? u.fcmTokens : [])].filter((t) => typeof t === "string" && t))];
+  const out = new Set(Array.isArray(u.fcmTokensOut) ? u.fcmTokensOut : []); // 로그아웃한 기기
+  return [...new Set([u.fcmToken, ...(Array.isArray(u.fcmTokens) ? u.fcmTokens : [])].filter((t) => typeof t === "string" && t && !out.has(t)))];
 }
 
 // 🔥 users 컬렉션에서 fcmToken 전부 수집
@@ -43,7 +44,7 @@ async function getAllTokens() {
 // 나머지(배차등록/배차완료/재배차/배차취소)는 사용자가 모바일에서 직접 켜야 온다.
 const PUSH_TYPES = ["배차등록", "긴급배차", "배차완료", "재배차", "미배차", "배차취소"];
 // ⭐ 2026-11-01 팀별 알림 — 업무 알림(결재·공지·메일·메신저·가입신청·인사발령·마감보고)은 기본 켜짐, 끈 사람만 안 보낸다
-const PUSH_TYPES_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저"];
+const PUSH_TYPES_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저", "생일"];
 function isPushTypeEnabled(prefs, type) {
   const v = prefs?.[type];
   if (v === true || v === false) return v;
@@ -91,6 +92,8 @@ const STALE_FCM_TOKEN_ERROR_CODES = new Set([
 async function sendPushAndCleanup(tokens, message, label) {
   tokens = [...new Set((tokens || []).filter((t) => typeof t === "string" && t))]; // 같은 기기 두 번 방지
   if (!tokens.length) return undefined;
+  // 🧪 테스트(에뮬레이터)에서만 — 누구에게 보내는지 기록(실제 서버에서는 실행 안 됨)
+  if (process.env.FUNCTIONS_EMULATOR === "true") console.log(`[PUSH-TEST] ${label} → ${tokens.join(",")} :: ${message?.notification?.title || ""}`);
   // ⭐ 안드로이드에서 같은 알림이 아이콘만 다르게 두 번(중복) 뜨던 문제의 실제 원인 —
   // FCM 메시지에 notification 필드가 있으면, 앱이 백그라운드일 때 브라우저가 그 내용을
   // "자기 마음대로"(기본 파비콘/알파벳 아이콘 등으로) 알아서 한 번 띄우고, 그와는 별개로
@@ -432,8 +435,8 @@ exports.notifyDispatchCanceled =
       const checkState = before["기사확인상태"];
       if (checkState !== "거절" && before["차량번호"]) try {
         const plate = normalizePlateServer(before["차량번호"]);
-        const driverSnap = await db.collection("drivers").where("차량번호", "==", before["차량번호"]).limit(5).get();
-        const driverDoc = driverSnap.docs.find((d) => normalizePlateServer(d.data()["차량번호"]) === plate && (checkState || d.data()["등급"] === "지입"));
+        // ⭐ 2026-11-02 점검 — 회사 구분 없이 차량번호로만 찾던 것을 이 오더 회사의 기사로 한정
+        const driverDoc = await findDriverByPlate(before["차량번호"], before.companyName || after.companyName, (d) => normalizePlateServer(d.data()["차량번호"]) === plate && (checkState || d.data()["등급"] === "지입"));
         if (driverDoc) {
           const userSnap = await db.collection("users").doc(driverDoc.id).get();
           const userData = userSnap.exists ? userSnap.data() : null;
@@ -502,8 +505,8 @@ exports.notifyDispatchDeleted =
       // 푸시)을 남긴다. 거절 상태였던 오더는 이미 그 기사와 무관해진 것이라 제외.
       if (data["기사확인상태"] && data["기사확인상태"] !== "거절" && data["차량번호"]) {
         const plate = normalizePlateServer(data["차량번호"]);
-        const driverSnap = await db.collection("drivers").where("차량번호", "==", data["차량번호"]).limit(5).get();
-        const driverDoc = driverSnap.docs.find((d) => normalizePlateServer(d.data()["차량번호"]) === plate);
+        // ⭐ 2026-11-02 점검 — 삭제된 오더 회사의 기사로 한정
+        const driverDoc = plate ? await findDriverByPlate(data["차량번호"], data.companyName) : null;
         if (driverDoc) {
           const body = `담당자가 ${data["거래처명"] || ""} ${data["상차지명"] || "-"} → ${data["하차지명"] || "-"} 오더를 삭제했습니다.`;
           await db.collection("driver_notifications").add({
@@ -532,6 +535,17 @@ exports.notifyDispatchDeleted =
 
 function normalizePlateServer(v = "") {
   return String(v).replace(/\s+/g, "").toUpperCase();
+}
+// ⭐ 2026-11-02 점검 — 같은 차량번호가 다른 운송사에도 있을 수 있어(coDocKey/scopedDriverEmail) 오더의 회사 기사만 찾는다.
+// companyName이 없는 예전 기사 문서는 "돌캐"로 본다 — Firestore where로 거르면 필드 없는 문서가 빠지므로 메모리에서 거른다.
+async function findDriverByPlate(rawPlate, companyName, extraFilter) {
+  const plate = normalizePlateServer(rawPlate || "");
+  if (!plate) return null;
+  const co = String(companyName || "돌캐").trim();
+  const snap = await db.collection("drivers").where("차량번호", "==", rawPlate).limit(20).get();
+  return snap.docs.find((d) => normalizePlateServer(d.data()["차량번호"]) === plate
+    && String(d.data().companyName || "돌캐").trim() === co
+    && (!extraFilter || extraFilter(d))) || null;
 }
 
 /* ==============================
@@ -575,8 +589,8 @@ exports.notifyFleetDriverNewOrder =
       const nextPlateW = normalizePlateServer(after["차량번호"] || "");
       // ⭐ 고정노선 "기사님 수락 생략(자동 수락)" 오더는 이미 수락 상태로 만들어진다 — 승인대기로 되돌리지 않는다
       if (nextPlateW && nextPlateW !== prevPlateW && after["기사확인상태"] !== "대기" && !(after["자동수락"] && after["기사확인상태"] === "수락")) {
-        const wDriverSnap = await db.collection("drivers").where("차량번호", "==", after["차량번호"]).limit(5).get();
-        const wDriverDoc = wDriverSnap.docs.find((d) => normalizePlateServer(d.data()["차량번호"]) === nextPlateW);
+        // ⭐ 2026-11-02 점검 — 다른 회사 같은 번호 기사의 등급으로 승인대기를 잘못 거는 것 방지
+        const wDriverDoc = await findDriverByPlate(after["차량번호"], after.companyName);
         if (wDriverDoc?.data()?.["등급"] === "지입") {
           await change.after.ref.update({
             기사확인상태: "대기",
@@ -600,10 +614,12 @@ exports.notifyFleetDriverNewOrder =
       // 영영 안 가고 있었다. 필드 정리/driver_notifications 기록은 클라이언트가 이미
       // 했으면 중복 방지로 건너뛰되, 실제 푸시 발송은 이 서버 함수만 할 수 있으므로
       // 취소가 감지되면 항상(stillHasTrace와 무관하게) 시도한다.
-      if (!nextPlateW && prevPlateW && before?.["기사확인상태"] && before["기사확인상태"] !== "거절") {
+      // ⭐ 2026-11-02 점검 — 기사 본인이 거절(기사확인상태:"거절" + 차량번호 비움)한 저장은 담당자 취소가 아니다 —
+      // 예전엔 여기로 들어와 거절 상태·사유를 지우고 거절한 기사에게 "배차가 취소되었습니다" 푸시까지 보냈다.
+      if (!nextPlateW && prevPlateW && before?.["기사확인상태"] && before["기사확인상태"] !== "거절" && after["기사확인상태"] !== "거절") {
         const stillHasTrace = after["기사확인상태"] !== null && after["기사확인상태"] !== undefined;
-        const cDriverSnap = await db.collection("drivers").where("차량번호", "==", before["차량번호"]).limit(5).get();
-        const cDriverDoc = cDriverSnap.docs.find((d) => normalizePlateServer(d.data()["차량번호"]) === prevPlateW);
+        // ⭐ 2026-11-02 점검 — 취소 전 오더 회사의 기사로 한정
+        const cDriverDoc = await findDriverByPlate(before["차량번호"], before?.companyName || after.companyName);
         if (stillHasTrace) {
           await change.after.ref.update({
             기사확인상태: null, 기사거절사유: null, 기사확인일시: null, 기사완료일시: null,
@@ -642,13 +658,8 @@ exports.notifyFleetDriverNewOrder =
       const plate = normalizePlateServer(after["차량번호"] || "");
       if (!plate) return;
 
-      const driverSnap = await db.collection("drivers")
-        .where("차량번호", "==", after["차량번호"])
-        .limit(5)
-        .get();
-      const driverDoc = driverSnap.docs.find(
-        (d) => normalizePlateServer(d.data()["차량번호"]) === plate
-      );
+      // ⭐ 2026-11-02 점검 — 다른 회사 같은 번호 기사에게 이 회사 오더 푸시가 가던 것 방지(회사로 한정)
+      const driverDoc = await findDriverByPlate(after["차량번호"], after.companyName);
       if (!driverDoc) { console.log("⊘ 배정 기사 문서를 찾을 수 없음:", after["차량번호"]); return; }
 
       const userSnap = await db.collection("users").doc(driverDoc.id).get();
@@ -685,10 +696,24 @@ exports.notifyDispatcherOrderRejected =
       if (!before || !after) return;
       if (after["기사확인상태"] !== "거절" || before["기사확인상태"] === "거절") return;
 
-      const creatorUid = after["createdByUid"];
-      if (!creatorUid) return;
-      const userSnap = await db.collection("users").doc(creatorUid).get();
-      const token = userSnap.exists ? userTokens(userSnap.data()) : [];
+      // ⭐ 2026-11-02 점검 — 예전엔 createdByUid(등록자)에게만 보내서, 화주앱에서 요청한 오더(createdByUid 없음)는
+      // 아무 담당자도 거절을 몰랐다. 등록자·배차확정자·기사 담당자를 모으고, 없으면 회사 '재배차' 알림 대상에게 보낸다.
+      const co = after.companyName || before.companyName;
+      const uids = [after["createdByUid"], after["배차확정자Uid"]];
+      try {
+        const rDriverDoc = before["차량번호"] ? await findDriverByPlate(before["차량번호"], co) : null;
+        const mgr = rDriverDoc?.data()?.["담당자"];
+        if (mgr && typeof mgr === "object" && mgr.uid) uids.push(mgr.uid);
+      } catch (e) { console.warn("거절 알림 기사 담당자 조회 실패:", e?.message || e); }
+      const recipUids = [...new Set(uids.filter((x) => typeof x === "string" && x))];
+      let token = [];
+      if (recipUids.length) {
+        const uSnaps = await db.getAll(...recipUids.map((uid) => db.collection("users").doc(uid)));
+        uSnaps.forEach((d) => { if (d.exists) token.push(...userTokens(d.data())); });
+        token = [...new Set(token)];
+      } else {
+        token = await getTokensForType("재배차", co);
+      }
       if (!token.length) return;
 
       // ⭐ 거절 처리와 동시에 차량번호/이름이 비워지므로(배차중으로 되돌림), after가
@@ -880,8 +905,8 @@ exports.notifyFleetOrderModified =
         .map(([label]) => label);
       if (!labels.length) return;
 
-      const driverSnap = await db.collection("drivers").where("차량번호", "==", after["차량번호"]).limit(5).get();
-      const driverDoc = driverSnap.docs.find((d) => normalizePlateServer(d.data()["차량번호"]) === plate);
+      // ⭐ 2026-11-02 점검 — 오더 회사의 기사로 한정
+      const driverDoc = await findDriverByPlate(after["차량번호"], after.companyName);
       if (!driverDoc) return;
 
       const route = `${after["상차지명"] || "-"} → ${after["하차지명"] || "-"}`;
@@ -1011,8 +1036,8 @@ exports.notifyFleetLateArrival = functions.pubsub
           const mark = await markRef.get().catch(() => null);
           if (mark?.exists) continue;
 
-          const driverSnap = await db.collection("drivers").where("차량번호", "==", o["차량번호"]).limit(5).get();
-          const driverDoc = driverSnap.docs.find((d) => normalizePlateServer(d.data()["차량번호"]) === plate);
+          // ⭐ 2026-11-02 점검 — 오더 회사의 기사로 한정
+          const driverDoc = await findDriverByPlate(o["차량번호"], o.companyName);
           if (!driverDoc) continue;
           const drv = driverDoc.data();
 
@@ -4613,6 +4638,32 @@ async function buildDailySummary(company, date) {
   };
 }
 // ⏰ 매시 5분(한국시간) — 정기오더 생성(정기오더마다 정한 시각) / 휴지통 7일 지난 것 비우기
+// 🎂 생일 3일 전 알림(2026-11-02) — 매일 아침 9시 10분(한국시간), 3일 뒤 생일인 직원을 같은 회사 동료에게 알린다(생일인 본인은 제외)
+//  생년월일: users.birthDate("YYYY-MM-DD"). 알림 설정 키 "생일"(기본 켜짐)
+exports.birthdayReminders = functions.pubsub.schedule("10 9 * * *").timeZone("Asia/Seoul").onRun(async () => {
+  const d3 = new Date(Date.now() + 9 * 3600e3 + 3 * 86400e3);
+  const md = `${String(d3.getUTCMonth() + 1).padStart(2, "0")}-${String(d3.getUTCDate()).padStart(2, "0")}`;
+  const [all, rs] = await Promise.all([db.collection("users").get(), db.collection("hrResumes").get().catch(() => null)]);
+  const rsBirth = new Map((rs?.docs || []).map((d) => [d.id, d.data().birthDate || ""])); // 이력서에만 적힌 생년월일도
+  const staff = all.docs.map((d) => ({ id: d.id, ...d.data() })).map((u) => ({ ...u, birthDate: u.birthDate || rsBirth.get(u.id) || "" }))
+    .filter((u) => !NON_STAFF_ROLES.has(u.role) && u.role !== "totalMaster" && u.approved !== false && u.employmentStatus !== "퇴사");
+  const byCo = new Map();
+  staff.forEach((u) => { const co = String(u.companyName || PUSH_DEFAULT_COMPANY).trim(); if (!byCo.has(co)) byCo.set(co, []); byCo.get(co).push(u); });
+  for (const [co, list] of byCo) {
+    const bd = list.filter((u) => String(u.birthDate || "").slice(5, 10) === md);
+    if (!bd.length) continue;
+    const names = bd.map((u) => `${u.name || ""}${u.position ? ` ${u.position}` : ""}님`);
+    const ids = new Set(bd.map((u) => u.id));
+    const tokens = list.filter((u) => !ids.has(u.id) && isPushTypeEnabled(u.pushPrefs, "생일")).flatMap((u) => userTokens(u));
+    const [mm, dd] = md.split("-").map(Number);
+    await sendPushAndCleanup(tokens, {
+      notification: { title: `🎂 생일 D-3 · ${mm}월 ${dd}일`, body: `${names.slice(0, 3).join(", ")}${names.length > 3 ? ` 외 ${names.length - 3}명` : ""}의 생일이 3일 남았어요` },
+      android: { priority: "high" },
+    }, `생일 알림(${co})`).catch((e) => console.error("생일 알림 실패:", co, e));
+  }
+  return null;
+});
+
 exports.hourlyJobs = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).pubsub.schedule("5 * * * *").timeZone("Asia/Seoul").onRun(async () => {
   const hour = new Date(Date.now() + KST_MS).getUTCHours();
   const today = kstDateStr();
@@ -4634,12 +4685,14 @@ async function pushInternalMail(m) {
   const to = (Array.isArray(m.to) ? m.to : []).filter((u) => u && u !== m.fromUid).slice(0, 500);
   if (!to.length) return;
   const tokens = [];
+  // ⭐ 2026-11-02 점검 — kind:"hr"에는 이력서 제출·연차 촉진·증명서 발급도 섞여 있다 — 제목이 [인사발령…]인 것만 '인사발령' 설정·제목으로
+  const isOrder = m.kind === "hr" && /^\[인사발령/.test(String(m.subject || ""));
   for (let i = 0; i < to.length; i += 100) {
     const docs = await db.getAll(...to.slice(i, i + 100).map((uid) => db.collection("users").doc(uid)));
-    const pk = m.kind === "hr" ? "인사발령" : m.kind === "closeReport" ? "마감보고" : "사내메일";
+    const pk = isOrder ? "인사발령" : m.kind === "closeReport" ? "마감보고" : "사내메일";
     docs.forEach((d) => { if (d.exists && (d.data().companyName || "돌캐") === (m.company || "돌캐") && isPushTypeEnabled(d.data().pushPrefs, pk)) tokens.push(...userTokens(d.data())); });
   }
-  const head = m.kind === "hr" ? "◆ 인사발령" : m.kind === "closeReport" ? "▸ 마감보고" : m.kind === "approval" ? `✎ 전자결재 · ${m.fromName || ""}` : `▸ ${m.important ? "[중요] " : ""}${m.fromName || "사내메일"}`;
+  const head = isOrder ? "◆ 인사발령" : m.kind === "hr" ? "◆ 인사관리부" : m.kind === "closeReport" ? "▸ 마감보고" : m.kind === "approval" ? `✎ 전자결재 · ${m.fromName || ""}` : `▸ ${m.important ? "[중요] " : ""}${m.fromName || "사내메일"}`;
   const body = m.kind === "closeReport" ? String(m.body || "") : `${m.subject || ""}${m.body ? `\n${String(m.body).replace(/\s+/g, " ").slice(0, 80)}` : ""}`;
   await sendPushAndCleanup([...new Set(tokens)], { notification: { title: m.kind === "closeReport" ? `▸ ${m.subject || "마감보고"}` : head, body }, android: { priority: "high" } }, "사내메일");
 }
@@ -4671,6 +4724,11 @@ exports.notifyApproval = functions.firestore.document("approvals/{id}").onWrite(
     if (a.status === "rejected" && b.status !== "rejected") { const r = (a.line || []).find((x) => x.status === "rejected"); msgs.push([a.drafterUid, `↩ 반려 · ${r?.name || ""}`, `${t}\n사유: ${r?.comment || ""}`]); }
     if (a.status === "cancelled" && b.status !== "cancelled") msgs.push([a.drafterUid, "결재 취소 승인", `${t} 문서가 결재 취소되었습니다.`]);
     if (a.cancel?.status === "rejected" && b.cancel?.status !== "rejected") { const r = (a.cancel.line || []).find((x) => x.status === "rejected"); msgs.push([a.drafterUid, `결재 취소 거부 · ${r?.name || ""}`, `${t}\n${r?.comment || ""}`]); }
+  }
+  // ⭐ 2026-11-02 참조(cc) — 최종 승인되면 기안자가 고른 참조자에게도 알린다(화면 안내대로)
+  if (b && a.status === "approved" && b.status !== "approved") {
+    (Array.isArray(a.ccUids) ? a.ccUids : []).filter((c) => c && c !== a.drafterUid && !(a.line || []).some((x) => x.uid === c))
+      .forEach((c) => msgs.push([c, `◇ 참조 · ${a.drafter?.name || ""}`, `${t} — 최종 승인된 문서입니다.`]));
   }
   for (const [uid, title, body, pk = "결재결과"] of msgs) {
     const u = await db.collection("users").doc(uid).get();
@@ -4754,7 +4812,8 @@ exports.notifySignup = functions.firestore.document("users/{uid}").onWrite(async
   });
   const isDriver = u.role === "driver";
   const title = isDriver ? "▸ 기사 가입 신청" : "◆ 직원 가입 신청";
-  const body = isDriver ? `${u.name || ""} · ${u.carNo || ""} ${u.vehicleType || ""}\n앱 › 관리자 전용 메뉴 › 직원 관리에서 승인해 주세요` : `${u.name || u.email || ""}\n앱 › 관리자 전용 메뉴 › 직원 관리에서 승인해 주세요`;
+  // ⭐ 2026-11-02 점검 — 경리·인사 화면엔 '관리자 전용 메뉴'가 없다(직원 · 기사 › 가입 승인) → 역할 무관 안내 문구로
+  const body = isDriver ? `${u.name || ""} · ${u.carNo || ""} ${u.vehicleType || ""}\n앱 메뉴 › 직원 관리 또는 직원 · 기사 › 가입 승인에서 승인해 주세요` : `${u.name || u.email || ""}\n앱 메뉴 › 직원 관리 또는 직원 · 기사 › 가입 승인에서 승인해 주세요`;
   await sendPushAndCleanup([...new Set(tokens)], { notification: { title, body }, android: { priority: "high" } }, "가입신청").catch((e) => console.error("가입 신청 푸시 실패:", e));
   return null;
 });
@@ -4806,8 +4865,9 @@ exports.vehicleCareReminders = functions.runWith({ timeoutSeconds: 300, memory: 
         apns: { payload: { aps: { sound: "default" } } },
       }, "차량 정비 알림").catch(() => {});
       sent += 1;
+      // ⭐ 2026-11-02 점검 — 푸시를 실제로 보낸 경우에만 발송 표시(토큰 없음/알림 끔이면 나중에 토큰이 생겼을 때 다시 보내도록)
+      await d.ref.set({ careRemind: { ...remind, ...mark, lastAt: today } }, { merge: true }).catch(() => {});
     }
-    await d.ref.set({ careRemind: { ...remind, ...mark, lastAt: today } }, { merge: true }).catch(() => {});
   }
   console.log(`◆ 차량 정비 알림 ${sent}명`);
   return null;

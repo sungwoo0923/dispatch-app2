@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { workWindow } from "./autoAttendance";
 import { collection, deleteDoc, doc, onSnapshot, query, setDoc, where, addDoc, arrayUnion, getDocs } from "firebase/firestore";
 import { geocodeAddress } from "./tmapFareCalc";
 import { db, DEFAULT_COMPANY } from "./firebase";
@@ -357,7 +358,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     if (!user?.uid) return;
     const checkOutTime = new Date().toISOString();
     await setDoc(doc(db, "attendance", `${todayDateStr}_${user.uid}`), {
-      checkOutTime,
+      checkOutTime, checkOutSource: "manual",
       uid: user.uid, name: myName, date: todayDateStr,
       month: todayDateStr.slice(0, 7), companyName: company,
     }, { merge: true });
@@ -411,7 +412,8 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   const isLate = (rec, emp) => {
     if (!rec?.checkInTime || !emp?.workStartTime) return false;
     const checkInMin = timeToMinutes(fmtTime(rec.checkInTime));
-    const startMin = timeToMinutes(emp.workStartTime);
+    // ⭐ 2026-11-02 오전반차는 출근시간 +4시간이 출근 기준
+    const startMin = (rec.status === "오전반차" || rec.halfDay === "오전반차") ? workWindow(emp, "오전반차").start : timeToMinutes(emp.workStartTime);
     if (checkInMin == null || startMin == null) return false;
     return checkInMin > startMin;
   };
@@ -752,7 +754,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                 {myEmp?.workStartTime && <div className="text-[12.5px] text-[#8A97AD] font-semibold">정규 {myEmp.workStartTime} ~ {myEmp.workEndTime || "-"}</div>}
               </div>
               <div className="ml-auto flex items-center gap-2">
-                {myTodayRec?.status === "출근" && !myTodayRec?.checkOutTime && (
+                {(myTodayRec?.status === "출근" || myTodayRec?.checkInTime) && !myTodayRec?.checkOutTime && (
                   <button onClick={handleCheckOut} className="h-10 px-5 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-black hover:bg-[#243a60] transition">퇴근</button>
                 )}
                 {!myTodayRec?.status && !todayOff && (() => {

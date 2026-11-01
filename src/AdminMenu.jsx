@@ -7,6 +7,7 @@ import AdminShell from "./AdminShell";
 import React, { useEffect, useState, useMemo } from "react";
 import { auth, db, storage, FUNCTIONS_BASE, DEFAULT_COMPANY } from "./firebase";
 import { masterHasHr } from "./hrHandover";
+import { WORK_TIME_OPTIONS } from "./autoAttendance";
 import {
   collection,
   addDoc,
@@ -116,6 +117,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const [editCompany, setEditCompany] = useState("");
   const [editPosition, setEditPosition] = useState("");
   const [editTeam, setEditTeam] = useState("");
+  const [editWorkStart, setEditWorkStart] = useState("09:00"); // ⭐ 2026-11-02 출근·퇴근 시간(가입 승인 때 지정)
+  const [editWorkEnd, setEditWorkEnd] = useState("18:00");
   const [editMode, setEditMode] = useState(false);
   const [memberModal, setMemberModal] = useState(false); // 회원 관리 창(승인·거절·정보수정·마스터·퇴사·삭제)
   const [showMobilePreview, setShowMobilePreview] = useState(false);
@@ -259,7 +262,10 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const hrLocked = (u) => hrHanded && !!u && (u.approved !== false || u.employmentStatus === "퇴사"); // 가입 대기자만 예외
   // ⭐ 2026-11-01 회원관리에서는 가입 승인·거절만(승인 권한자) — 재직 직원 정보·권한·계정 처리는 인사관리부에서.
   //  본인 계정은 이름·핸드폰번호만 고칠 수 있다(아래 saveEdit 본인 경로). 최고관리자만 예외
-  const canEditMember = (u) => !!u && (isTotalMaster || (canApprove && !u.approved && u.employmentStatus !== "퇴사"));
+  // ⭐ 2026-11-02 점검 — approved 필드가 없는 예전 계정은 승인으로 본다(App.jsx·규칙과 동일). 대기 = approved===false 이고 퇴사·삭제·탈퇴 아님
+  const isPending = (u) => !!u && u.approved === false && u.employmentStatus !== "퇴사" && !["deleted", "withdrawn"].includes(u.status);
+  // ⭐ 2026-11-02 점검 — !u.approved 대신 isPending — 예전 승인 계정에 승인·거절 창이 열려 거절로 잠기던 문제
+  const canEditMember = (u) => !!u && (isTotalMaster || (canApprove && isPending(u)));
   const assignableRoles = (cur) => {
     const base = canAdmin ? ROLES : isHrMgr ? ROLES.filter((r) => r !== "totalMaster") : myRoleEff === "admin" ? ["admin", "user", "test", "hrManager", "viewer"] : ["user", "test", "viewer"];
     return cur && !base.includes(cur) ? [cur, ...base] : base;
@@ -611,6 +617,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     setEditCompany(u.companyName || "");
     setEditPosition(u.position || "");
     setEditTeam(u.team || "");
+    setEditWorkStart(u.workStartTime || "09:00");
+    setEditWorkEnd(u.workEndTime || "18:00");
     setEditMode(false);
   };
 
@@ -651,6 +659,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
       companyName: isTotalMaster ? editCompany.trim() : (manageUser.companyName || effectiveCompany),
       position: nextPosition,
       team: nextTeam,
+      workStartTime: editWorkStart || "09:00",
+      workEndTime: editWorkEnd || "18:00",
       personnelHistory: history,
     };
     try {
@@ -818,7 +828,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     items: g.tabs.map((t) => ({ key: t, label: TAB_LABELS[t], icon: TAB_ICONS[t], badge: tabBadgeCounts[t] || 0 })),
   }));
   const myDisplayName = users.find((u) => u.id === me?.uid)?.name || me?.email || "관리자";
-  const pendingUserCount = visibleUsers.filter((u) => !u.approved).length;
+  // ⭐ 2026-11-02 점검 — 예전 승인 계정·퇴사·삭제 계정을 승인 대기로 세던 문제(사이드바 배지와 같은 기준)
+  const pendingUserCount = visibleUsers.filter(isPending).length;
   const todoCount = pendingUserCount + (linkedPendingCount || 0) + (unansweredInquiryCount || 0);
 
   return (
@@ -833,7 +844,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
       heroActions={[{ label: showMobilePreview ? "모바일 미리보기 닫기" : "모바일 미리보기", icon: "phone", active: showMobilePreview, onClick: () => setShowMobilePreview((v) => !v) }]}
       stats={[
         { label: "전체 사용자", value: visibleUsers.length, icon: "users", tone: "navy" },
-        { label: "승인 완료", value: visibleUsers.filter((u) => u.approved).length, icon: "check", tone: "green" },
+        { label: "승인 완료", value: visibleUsers.filter((u) => u.approved !== false).length /* ⭐ 2026-11-02 점검 — approved 필드 없는 예전 계정도 승인 완료로 */, icon: "check", tone: "green" },
         { label: "승인 대기", value: pendingUserCount, icon: "hourglass", tone: "amber" },
         deptMode
           ? { label: "퇴사", value: visibleUsers.filter((u) => u.employmentStatus === "퇴사").length, icon: "user", tone: "violet" }
@@ -910,9 +921,9 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                         </span>
                         <span className={`shrink-0 text-[10.5px] font-extrabold px-2 py-0.5 rounded-full ${
                           resigned ? (on ? "bg-white/10 text-white/70" : "bg-[#F1F4F9] text-[#7A879C]")
-                            : u.approved ? (on ? "bg-white text-[#0F1A30]" : "bg-[#0F1A30] text-white")
+                            : u.approved !== false ? (on ? "bg-white text-[#0F1A30]" : "bg-[#0F1A30] text-white") /* ⭐ 2026-11-02 점검 — 예전 계정(approved 없음)은 승인 */
                             : (on ? "border border-white/40 text-white" : "border border-[#9AA9C3] text-[#3A4A66]")
-                        }`}>{resigned ? "퇴사" : u.approved ? "승인" : "대기"}</span>
+                        }`}>{resigned ? "퇴사" : u.approved !== false ? "승인" : "대기"}</span>
                       </button>
                     );
                   })}
@@ -965,9 +976,10 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             </div>
                           </div>
                           <div className="shrink-0 text-right">
-                            <span className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[12.5px] font-extrabold ${u.approved && !resigned ? "bg-white text-[#0F1A30]" : "bg-white/10 text-white border border-white/25"}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${u.approved && !resigned ? "bg-[#0F1A30]" : "bg-white/70"}`} />
-                              {resigned ? "퇴사" : u.approved ? "승인 완료" : "승인 대기"}
+                            <span className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[12.5px] font-extrabold ${u.approved !== false && !resigned ? "bg-white text-[#0F1A30]" : "bg-white/10 text-white border border-white/25"}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${u.approved !== false && !resigned ? "bg-[#0F1A30]" : "bg-white/70"}`} />
+                              {/* ⭐ 2026-11-02 점검 — 예전 계정(approved 없음)을 승인 대기로 표시하던 문제 */}
+                              {resigned ? "퇴사" : u.approved !== false ? "승인 완료" : "승인 대기"}
                             </span>
                             <div className="mt-2 text-[12px] font-bold text-white/60">{roleLabels[u.role] || u.role || "-"}</div>
                           </div>
@@ -995,8 +1007,9 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                           {/* ⭐ 버튼은 하나 — 승인 전엔 "승인·거절", 승인 후엔 "정보 수정". 누르면 창 안에서 승인·거절·수정·마스터·퇴사·삭제 */}
                           {canEditMember(u) && canManage && !editMode && (
                             <button onClick={() => { openManage(u); setMemberModal(true); }}
-                              className={`h-10 px-5 rounded-xl text-[13px] font-extrabold transition whitespace-nowrap ${!u.approved && !resigned ? "bg-[#2D4C82] text-white hover:bg-[#1B2B4B]" : "bg-[#0F1A30] text-white hover:bg-[#1B2B4B]"}`}>
-                              {!u.approved && !resigned ? "승인 · 거절" : "정보 수정"}
+                              className={`h-10 px-5 rounded-xl text-[13px] font-extrabold transition whitespace-nowrap ${u.approved === false && !resigned ? "bg-[#2D4C82] text-white hover:bg-[#1B2B4B]" : "bg-[#0F1A30] text-white hover:bg-[#1B2B4B]"}`}>
+                              {/* ⭐ 2026-11-02 점검 — 예전 승인 계정에 "승인 · 거절"이 뜨던 문제 */}
+                              {u.approved === false && !resigned ? "승인 · 거절" : "정보 수정"}
                             </button>
                           )}
                         </div>
@@ -1110,7 +1123,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                         <MemberManageModal
                           u={u} me={me} isTotalMaster={isTotalMaster} roles={assignableRoles(u.role)} roleLabels={roleLabels}
                           canMaster={isTotalMaster} canAccount={isTotalMaster} canDelete={isTotalMaster} hrOpt={hrOpt} hrLock={hrLocked(u)}
-                          f={{ editName, setEditName, editPhone, setEditPhone, editRole, setEditRole, editCompany, setEditCompany, editPosition, setEditPosition: onPositionChange, editTeam, setEditTeam: onTeamChange, suggestR }}
+                          f={{ editName, setEditName, editPhone, setEditPhone, editRole, setEditRole, editCompany, setEditCompany, editWorkStart, setEditWorkStart, editWorkEnd, setEditWorkEnd, editPosition, setEditPosition: onPositionChange, editTeam, setEditTeam: onTeamChange, suggestR }}
                           onClose={() => { setMemberModal(false); setEditMode(false); }}
                           onSave={async () => { await saveEdit(); setMemberModal(false); }}
                           onApprove={async () => {
@@ -2026,7 +2039,7 @@ const LANDING_FONT_OPTIONS = [
 function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose, onSave, onApprove, onUnapprove, onReject, onMaster, onResign, onDelete, canMaster = true, canAccount = true, canDelete = true, hrOpt, hrLock = false }) {
   const positionsForTeam = hrOpt.positionsFor; const TEAM_OPTIONS = hrOpt.teams;
   const [busy, setBusy] = useState(false);
-  const pending = !u.approved && u.employmentStatus !== "퇴사";
+  const pending = u.approved === false && u.employmentStatus !== "퇴사"; // ⭐ 2026-11-02 점검 — 예전 계정(approved 없음)은 승인으로 보고 거절 버튼을 띄우지 않음
   const resigned = u.employmentStatus === "퇴사";
   const isMe = me?.uid === u.id;
   const run = (fn) => async () => { if (busy) return; setBusy(true); try { await fn(); } finally { setBusy(false); } };
@@ -2072,6 +2085,11 @@ function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose
                 </CustomSelect>
                 <p className="mt-1 text-[11px] font-bold text-[#7A879C]">{`추천: ${roleLabels[f.suggestR({ team: f.editTeam, position: f.editPosition })] || ROLE_NAME[f.suggestR({ team: f.editTeam, position: f.editPosition })]} · 부서·직책 기준`}</p></div>
               <div><label className={lab}>회사명</label><input value={f.editCompany} onChange={(e) => f.setEditCompany(e.target.value)} disabled={!isTotalMaster} className={inp} /></div>
+              {/* ⭐ 2026-11-02 출근·퇴근 시간 — 자동 출근 시간대·지각·반차 기준(직원마다 다르게) */}
+              <div><label className={lab}>출근 시간</label>
+                <select value={f.editWorkStart} onChange={(e) => f.setEditWorkStart(e.target.value)} className={`${inp} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
+              <div><label className={lab}>퇴근 시간</label>
+                <select value={f.editWorkEnd} onChange={(e) => f.setEditWorkEnd(e.target.value)} className={`${inp} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
             </div>
             {u.role !== "shipper" && canMaster && (
               <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[#E3E8F0] px-3.5 py-2.5">

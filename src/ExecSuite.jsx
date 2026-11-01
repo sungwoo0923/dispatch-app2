@@ -96,6 +96,8 @@ function useCompanyQuery(name, company, field = "companyName", extra = null) {
   return rows;
 }
 const useApprovalsOf = (company) => useCompanyQuery("approvals", company, "company") || [];
+// ⭐ 2026-11-02 점검 — 직원 일정용: cat==leave 조건을 붙여야 일반 직원·경리·조회전용도 보안 규칙상 조회 가능(전체 approvals 조회는 거부되어 빈 달력)
+const useLeaveApprovalsOf = (company) => useCompanyQuery("approvals", company, "company", { cat: "leave" }) || [];
 function useStaff(company) {
   const users = useCompanyQuery("users", company) || [];
   return React.useMemo(() => {
@@ -556,7 +558,8 @@ const KIND_STYLE = (label, status) => {
   return pend ? { background: "transparent", color: "#5B6B85", border: "1px dashed #9AA9C3" } : { background: base[0], color: base[1], border: `1px solid ${base[0]}` };
 };
 export function TeamSchedule({ company }) {
-  const approvals = useApprovalsOf(company);
+  // ⭐ 2026-11-02 점검 — 회사 전체 approvals 조회 대신 연차(leave)만 조회(eventsOf도 leave만 사용)
+  const approvals = useLeaveApprovalsOf(company);
   const { staff } = useStaff(company);
   const today = kstToday();
   const [ym, setYm] = React.useState(today.slice(0, 7));

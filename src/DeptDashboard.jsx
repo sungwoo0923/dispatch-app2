@@ -150,9 +150,10 @@ function Spark({ data = [], h = 38 }) {
 function KTile({ code, label, value, unit, foot, spark, bar, primary, warn }) {
   return (
     <div className={primary ? "hd-tile hd-tile-on" : "hd-tile"} style={{ borderRadius: 16, padding: "16px 18px 12px", position: "relative", overflow: "hidden", minWidth: 0, display: "flex", flexDirection: "column" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 15, fontWeight: 800, color: C.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
-        <span style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.18em", color: warn ? WARN : C.dim, whiteSpace: "nowrap" }}>{code}</span>
+      {/* ⭐ 2026-11-02 화면 점검 — 모바일(좁은 폭)에서 영문 코드가 한글 라벨을 잘라먹던 문제: 영문 코드는 sm 이상에서만 표시, 한글 라벨은 말줄임 대신 단어 단위 줄바꿈 */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, minWidth: 0 }}>
+        <span className="break-keep" style={{ fontSize: 15, fontWeight: 800, color: C.sub, minWidth: 0, lineHeight: 1.3 }}>{label}</span>
+        <span className="hidden sm:inline" style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.18em", color: warn ? WARN : C.dim, whiteSpace: "nowrap", flexShrink: 0 }}>{code}</span>
       </div>
       <div style={{ marginTop: 10, display: "flex", alignItems: "baseline", gap: 5, minWidth: 0 }}>
         <span style={{ fontFamily: MONO, fontSize: "clamp(24px, 2.2cqi, 34px)", fontWeight: 800, color: "#fff", letterSpacing: "-0.02em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textShadow: primary ? `0 0 18px rgba(143,176,240,.45)` : "none" }}>{value}</span>
@@ -445,7 +446,7 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
     <Deck>
       <DeckHead code="KP-FLOW · FINANCE DECK" att={att}
         title={myName ? `${myName}님, 오늘의 자금 흐름입니다` : "오늘의 자금 흐름입니다"}
-        sub={<>이번 달 매출 <b style={{ color: "#fff", fontFamily: MONO }}>{won(cur[0])}</b>원 · 수익 <b style={{ color: "#fff", fontFamily: MONO }}>{won(cur[0] - cur[1])}</b>원 · 미수 <b style={{ color: "#fff", fontFamily: MONO }}>{short(arSum)}</b>원 · 지급 대기 <b style={{ color: "#fff", fontFamily: MONO }}>{short(apSum)}</b>원</>} />
+        sub={/* ⭐ 2026-11-02 화면 점검 — 항목(라벨+금액) 단위로 묶어 "지급 대기 / 0원"처럼 중간에서 줄바뀜 방지 */ <><span className="whitespace-nowrap">이번 달 매출 <b style={{ color: "#fff", fontFamily: MONO }}>{won(cur[0])}</b>원</span> · <span className="whitespace-nowrap">수익 <b style={{ color: "#fff", fontFamily: MONO }}>{won(cur[0] - cur[1])}</b>원</span> · <span className="whitespace-nowrap">미수 <b style={{ color: "#fff", fontFamily: MONO }}>{short(arSum)}</b>원</span> · <span className="whitespace-nowrap">지급 대기 <b style={{ color: "#fff", fontFamily: MONO }}>{short(apSum)}</b>원</span></>} />
 
       <div className="dd-kpi">
         <KTile primary code="CASH" label="보유 자금" value={F.has ? short(F.cash) : "미입력"} unit={F.has ? "원" : ""}
@@ -634,7 +635,8 @@ function HrDashboard({ company, onGo, me, att }) {
     const a = attMap[u.id]; const t = hm(a?.checkInTime);
     if (ON_LEAVE.includes(u.employmentStatus)) return { s: u.employmentStatus, t: "", tone: "soft", k: "leave" };
     if (a?.status && a.status !== "출근") return { s: a.status, t, tone: /지각/.test(a.status) ? "bad" : "soft", k: /지각/.test(a.status) ? "late" : "away" };
-    if (a && (a.status === "출근" || a.checkInTime)) return { s: "출근", t, tone: "ok", k: "in" };
+    // ⭐ 2026-11-02 점검 — 지각 상태는 기록되지 않으므로 출근시각(t)과 정규 출근시각(workStartTime)을 비교해 지각 판정
+    if (a && (a.status === "출근" || a.checkInTime)) { const late = !!u.workStartTime && !!t && t > u.workStartTime; return { s: late ? "지각" : "출근", t, tone: late ? "bad" : "ok", k: late ? "late" : "in" }; }
     if (awayMap[u.id]) return { s: awayMap[u.id].label, t: awayMap[u.id].status !== "approved" ? "결재 중" : "", tone: "soft", k: "away" };
     return { s: "미출근", t: "", tone: "none", k: "none" };
   };

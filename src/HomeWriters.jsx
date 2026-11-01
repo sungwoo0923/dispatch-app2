@@ -9,7 +9,7 @@ import { addDoc, collection, doc, serverTimestamp, updateDoc } from "firebase/fi
 import { ShellIcon } from "./AdminShell";
 import { RecipientPicker, useCompanyStaff, compressImage } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
-import { TEAM_OPTIONS } from "./hrConstants";
+import { useHrOptions } from "./hrConstants"; // ⭐ 2026-11-02 점검 — 고정 TEAM_OPTIONS 대신 회사별 부서 목록 사용
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const inp = "w-full px-4 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] text-[#0F1A30] outline-none focus:border-[#4B6CB7]";
@@ -43,6 +43,8 @@ export function NoticeWriter({ me, company, initial, onCancel, onSaved }) {
   const [pinned, setPinned] = React.useState(!!initial?.pinned);
   const [busy, setBusy] = React.useState(false);
   const fileRef = React.useRef(null);
+  // ⭐ 2026-11-02 점검 — 직책·부서 설정에서 회사가 추가한 부서도 공개 대상으로 고를 수 있게 useHrOptions 사용
+  const { teams: teamOptions } = useHrOptions(company);
   const d = new Date();
   const autoTitle = `${d.getFullYear()}년 ${String(d.getMonth() + 1).padStart(2, "0")}월 ${String(d.getDate()).padStart(2, "0")}일 ${category}`;
   const save = async () => {
@@ -97,7 +99,8 @@ export function NoticeWriter({ me, company, initial, onCancel, onSaved }) {
             <Label hint="(팀을 고르면 그 팀에만 보입니다 · 아무것도 안 고르면 전체 직원)">세부 공개 대상</Label>
             <div className="flex flex-wrap gap-1.5">
               <button type="button" onClick={() => setTeams([])} className={`h-10 px-4 rounded-xl text-[13px] font-black border ${!teams.length ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`}>전체 직원</button>
-              {TEAM_OPTIONS.map((t) => {
+              {/* ⭐ 2026-11-02 점검 — 회사별 부서 목록 + (숨김 처리된 등) 이미 선택돼 있던 팀도 표시해 해제할 수 있게 */}
+              {[...teamOptions, ...teams.filter((t) => !teamOptions.includes(t))].map((t) => {
                 const on = teams.includes(t);
                 return <button key={t} type="button" onClick={() => setTeams((p) => (on ? p.filter((x) => x !== t) : [...p, t]))} className={`h-10 px-4 rounded-xl text-[13px] font-black border ${on ? "bg-[#2D4C82] text-white border-[#2D4C82]" : "bg-white text-[#3A4A66] border-[#DCE3EE] hover:border-[#2D4C82]"}`}>{on ? "✓ " : ""}{t}</button>;
               })}

@@ -7,6 +7,7 @@ import React from "react";
 import { doc, onSnapshot, setDoc, deleteField } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import { kpConfirm } from "./kpDialog";
+import { checkInsideOffice, HALF_LEAVES } from "./autoAttendance";
 
 export const DEFAULT_IN_RADIUS = 100;
 export const DEFAULT_OUT_RADIUS = 300;
@@ -38,28 +39,43 @@ function useTodayAttendance(uid) {
 export function AttendanceQuickButton({ company, uid, name, role, email, variant = "pc", dark = false }) {
   const { rec, today } = useTodayAttendance(uid);
   const [busy, setBusy] = React.useState(false);
+  // ⭐ 2026-11-02 휴대폰은 출근지 반경 안에서만 출근·퇴근(PC는 시간 기준이라 반경 검사 없음)
+  const [office, setOffice] = React.useState(null);
+  React.useEffect(() => { if (!company) return undefined; return onSnapshot(doc(db, "companySettings", company), (d) => setOffice(d.data()?.officeLocation || null), () => setOffice(null)); }, [company]);
   const isTM = role === "totalMaster" || email === "tjddnqkf@naver.com";
   if (!uid || !company || isTM || rec === undefined) return null;
-  const working = rec?.status === "출근" && !!rec?.checkInTime;
+  const isPhone = typeof navigator !== "undefined" && /iphone|ipod|android/i.test(navigator.userAgent || "");
+  const inside = async (what) => {
+    if (!isPhone || !office?.lat) return true;
+    const r = await checkInsideOffice(office, officeRadii(office).inM);
+    if (r.ok) return true;
+    alert(r.error ? `위치를 확인하지 못했습니다. 휴대폰 위치 권한을 켜고 다시 눌러 주세요.\n(${what}는 출근지 반경 안에서만 할 수 있습니다)` : `출근지 반경 밖입니다(현재 약 ${r.dist}m · 반경 ${r.inM}m).\n${what}는 출근지 반경 안에서만 할 수 있습니다.`);
+    return false;
+  };
+  // ⭐ 2026-11-02 반차로 출근한 날도 근무 중으로 본다(예전엔 "출근하기"가 떠서 누르면 반차 기록을 출근으로 덮어썼다)
+  const half = HALF_LEAVES.includes(rec?.status);
+  const working = (rec?.status === "출근" || half) && !!rec?.checkInTime;
   const done = working && !!rec?.checkOutTime;
   const ref = doc(db, "attendance", `${today}_${uid}`);
   const toast = (m) => { try { if (window.__sflowShowToast) window.__sflowShowToast(m, "success"); } catch { /* 무시 */ } };
   const run = (fn) => async () => { if (busy) return; setBusy(true); try { await fn(); } catch (e) { alert(`처리하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); } };
 
   const checkIn = run(async () => {
-    if (rec?.status && rec.status !== "출근" && rec.status !== "결근") {
+    if (!(await inside("출근"))) return;
+    if (rec?.status && rec.status !== "출근" && rec.status !== "결근" && !HALF_LEAVES.includes(rec.status)) {
       if (!(await kpConfirm(`오늘은 "${rec.status}"(으)로 기록되어 있습니다.\n출근으로 바꿀까요?`))) return;
     }
     const now = new Date().toISOString();
     await setDoc(ref, {
       uid, name: name || auth.currentUser?.displayName || "", date: today, month: today.slice(0, 7),
-      status: "출근", checkInTime: rec?.status === "출근" && rec?.checkInTime ? rec.checkInTime : now,
+      status: HALF_LEAVES.includes(rec?.status) ? rec.status : "출근", checkInTime: (rec?.status === "출근" || HALF_LEAVES.includes(rec?.status)) && rec?.checkInTime ? rec.checkInTime : now,
       source: rec?.source && rec?.status === "출근" ? rec.source : "manual", companyName: company,
       checkOutTime: deleteField(),
     }, { merge: true });
     toast(`출근 처리되었습니다 (${hm(now)})`);
   });
   const checkOut = run(async () => {
+    if (!(await inside("퇴근"))) return;
     if (!(await kpConfirm(`지금 퇴근 처리할까요?\n(잘못 눌렀으면 '되돌리기'로 다시 출근 상태로 돌릴 수 있습니다)`))) return;
     const now = new Date().toISOString();
     await setDoc(ref, { checkOutTime: now, checkOutSource: "manual" }, { merge: true });

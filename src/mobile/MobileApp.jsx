@@ -98,6 +98,8 @@ import MonthCompareAnalysis from "../MonthCompareAnalysis";
 import { MailHeaderButton } from "../InternalMail";
 import BannerCenter from "../BannerCenter";
 import OrderCongratsPopup from "../OrderCongratsPopup";
+import BirthdayPopup from "../BirthdayPopup";
+import { tryAutoCheckIn, tryAutoCheckOut, undoAutoCheckOut } from "../autoAttendance";
 import OrderScanModal, { scanDropDate } from "../OrderScanModal";
 
 
@@ -228,6 +230,25 @@ function attachFileExtMobile(item) {
   if (m) return m[1] === "application/pdf" ? "pdf" : (m[1].split("/")[1] || "jpg");
   return "jpg";
 }
+// ⭐ 2026-11-02 점검 — 첨부 저장을 blob으로 받아 공유시트(아이폰) 또는 blob 다운로드로 저장.
+// 다른 도메인 URL·data URL은 <a download>가 무시돼 저장이 안 되던 문제. 실패하면 throw(호출부에서 'fail' 처리).
+async function saveAttachFileMobile(item, filename) {
+  const src = item.base64 || item.url;
+  const name = filename || item.name || "attachment.jpg";
+  const blob = await (await fetch(src)).blob();
+  let file = null;
+  try { file = new File([blob], name, { type: blob.type }); } catch { file = null; }
+  if (file && navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); return; }
+    catch (e) { if (e?.name === "AbortError") throw e; /* 탭 인정 안 됨 등 → 아래 다운로드로 */ }
+  }
+  const u = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = u; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(u), 4000);
+}
+
 function buildAttachFileNameMobile(order, item, index = 0, total = 1) {
   const dateStr = (order?.상차일 || "").replace(/-/g, "");
   const client = (order?.거래처명 || "").trim();
@@ -2365,8 +2386,21 @@ const quickRange = (days) => {
     role,
     team: (() => { try { return window.__kpMeTeam || ""; } catch { return ""; } })(),
     company: (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim(),
-    onAlert: (msg) => showTopOrderBanner(msg),
+    // ⭐ 2026-11-02 점검 — 결재 요청은 BannerCenter가 이미 띄우므로 위쪽 배너 중복 표시 안 함
+    onAlert: (msg, key) => { if (key === "approval") return; showTopOrderBanner(msg); },
   });
+  // ⭐ 2026-11-02 점검 — BannerCenter 결재 배너 탭(kp-open-approval) → 모바일 결재 화면으로 이동
+  useEffect(() => {
+    const h = () => {
+      const p = window.__kpOpenApproval;
+      if (!p) return;
+      window.__kpOpenApproval = null;
+      if (p.id) { try { sessionStorage.setItem("kpExecApOpen", p.id); } catch { /* 무시 */ } }
+      setPage("approval");
+    };
+    window.addEventListener("kp-open-approval", h);
+    return () => window.removeEventListener("kp-open-approval", h);
+  }, []);
 
   const showToast = (msg) => {
   if (toastMuted) return;   // ▲ 추가
@@ -3596,47 +3630,22 @@ function _todayKSTStr() {
 }
 
 // 자동 출근 처리
+// ⭐ 2026-11-02 자동 출퇴근은 PC와 같은 규칙(src/autoAttendance.js) — 출근시간 3시간 전~퇴근시간에만 출근, 반차 반영,
+//  자동 퇴근은 퇴근시간 1시간 전부터만(외근·점심은 퇴근 아님), 자동 퇴근 뒤 다시 들어오면 퇴근 기록 취소
 async function _autoCheckIn(co, uid, name, onSuccess) {
   // ⭐ 최고관리자는 출근하는 직원이 아니라 프로그램 관리 계정 — 출근 기록을 남기지 않는다
-  if (localStorage.getItem("role") === "totalMaster" || auth.currentUser?.email === "tjddnqkf@naver.com") return;
-  const today = _todayKSTStr();
-  const attRef = doc(db, "attendance", `${today}_${uid}`);
-  const existing = await getDoc(attRef);
-  if (existing.exists()) {
-    const d = existing.data();
-    // companyName이 올바르게 설정된 유효 기록이면 건너뜀, 비어있으면 갱신
-    if (d.companyName && d.companyName === co) return;
-  }
-
-  const schedSnap = await getDocs(query(collection(db, "schedules"), where("authorUid", "==", uid)));
-  const mySchedules = schedSnap.docs.map(d => d.data());
-  const leaveLabel = findApprovedLeaveForDate(mySchedules, uid, today, name);
-  if (leaveLabel) {
-    await setDoc(attRef, { uid, name, date: today, month: today.slice(0, 7), status: leaveLabel, checkInTime: null, source: "leave", companyName: co }, { merge: true });
-    return;
-  }
-  const holSnap = await getDocs(query(collection(db, "holidays"), where("companyName", "==", co)));
-  const myHols = holSnap.docs.map(d => d.data());
-  if (isWeekend(today) || isHoliday(today, myHols)) return;
-
-  await setDoc(attRef, {
-    uid, name, date: today, month: today.slice(0, 7),
-    status: "출근", checkInTime: new Date().toISOString(),
-    source: "auto_mobile_location", companyName: co,
-  }, { merge: true });
-  if (onSuccess) onSuccess(`출근 처리되었습니다 (${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})`);
+  if (localStorage.getItem("role") === "totalMaster" || auth.currentUser?.email === "tjddnqkf@naver.com") return false;
+  await undoAutoCheckOut({ uid }).catch(() => false);
+  const r = await tryAutoCheckIn({ uid, name, company: co, source: "auto_mobile_location" });
+  if (r.ok && onSuccess) onSuccess(`${r.leave ? `${r.leave} · ` : ""}출근 처리되었습니다 (${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})`);
+  return r.ok || r.reason === "exists" || r.reason === "leave";
 }
 
 // 자동 퇴근 처리
 async function _autoCheckOut(co, uid, name, onSuccess) {
-  const today = _todayKSTStr();
-  const attRef = doc(db, "attendance", `${today}_${uid}`);
-  const existing = await getDoc(attRef);
-  if (!existing.exists()) return;
-  const data = existing.data();
-  if (data.status !== "출근" || data.checkOutTime) return;
-  await setDoc(attRef, { checkOutTime: new Date().toISOString() }, { merge: true });
-  if (onSuccess) onSuccess(`퇴근 처리되었습니다 (${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})`);
+  const r = await tryAutoCheckOut({ uid });
+  if (r.ok && onSuccess) onSuccess(`퇴근 처리되었습니다 (${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})`);
+  return r.ok;
 }
 
 // officeLocation이 설정되면 GPS 감지 시작
@@ -3645,21 +3654,22 @@ useEffect(() => {
   const co = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
   const uid = currentUser.uid;
   const name = currentUser.displayName || currentUser.email?.split("@")[0] || "";
-  let checkedIn = false;
+  let checkedIn = false; let busy = false;
 
   // ⭐ 2026-11-01 회사별 반경(출근지 설정) — 값이 없으면 예전처럼 100m / 300m
   const { inM, outM } = officeRadii(mobileOfficeLocation);
   const judge = (pos) => {
     const acc = Number(pos.coords.accuracy) || 0;
     const dist = _calcDistM(pos.coords.latitude, pos.coords.longitude, mobileOfficeLocation.lat, mobileOfficeLocation.lng);
-    if (dist <= inM && !checkedIn) {
-      checkedIn = true;
-      _autoCheckIn(co, uid, name, showSuccess).catch(() => {});
+    // ⭐ 2026-11-02 반경 안 — 출근(시간대 안일 때만, 이르면 다음 확인 때 다시) · 자동 퇴근 뒤 돌아왔으면 퇴근 취소
+    if (dist <= inM && !checkedIn && !busy) {
+      busy = true;
+      _autoCheckIn(co, uid, name, showSuccess).then((ok) => { checkedIn = !!ok; }).catch(() => {}).finally(() => { busy = false; });
     }
-    // 오차가 너무 큰 위치(200m 이상)로는 자동 퇴근하지 않는다(엉뚱한 퇴근 방지)
-    if (dist > outM && checkedIn && acc < 200) {
-      checkedIn = false;
-      _autoCheckOut(co, uid, name, showSuccess).catch(() => {});
+    // 오차가 너무 큰 위치(200m 이상)로는 자동 퇴근하지 않는다(엉뚱한 퇴근 방지) · 퇴근시간 1시간 전부터만
+    if (dist > outM && checkedIn && acc < 200 && !busy) {
+      busy = true;
+      _autoCheckOut(co, uid, name, showSuccess).then((ok) => { if (ok) checkedIn = false; }).catch(() => {}).finally(() => { busy = false; });
     }
   };
   // 위치 변화 감지(앱이 화면에 켜져 있는 동안)
@@ -3814,7 +3824,8 @@ const [detailFrom, setDetailFrom] = useState(null);
   const appVersion = APP_VERSION;
 
   const logout = async () => {
-    await clearFcmToken(auth.currentUser?.uid);
+    // ⭐ 2026-11-02 로그아웃 지연 방지 — 알림 해제는 최대 1.2초만 기다린다(통신이 느려도 바로 로그아웃)
+    await Promise.race([clearFcmToken(auth.currentUser?.uid).catch(() => {}), new Promise((r) => setTimeout(r, 1200))]);
     try {
       await signOut(auth);
     } catch (e) {
@@ -5493,6 +5504,7 @@ const title =
 
       <BannerCenter bottom={86} />
       <OrderCongratsPopup uid={user?.uid} profile={myProfM} mobile />
+      <BirthdayPopup uid={user?.uid} profile={myProfM} company={myProfM?.companyName || ""} mobile />
       <MobileHeader
   title={title}
   cardVersionB={cardVersionB}
@@ -6196,12 +6208,13 @@ onGoAttendance={() => {
           <div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3 text-gray-700 leading-relaxed">{selectedNotice.content}</div>
         </div>
         {(() => {
-          const isNAuthor = selectedNotice.authorUid ? selectedNotice.authorUid === currentUser?.uid : role !== "viewer";
+          // ⭐ 2026-11-02 점검 — 규칙(isBoardAdmin)과 맞춤: 공지 관리 권한자만 수정·삭제 버튼 표시
+          const isNAuthor = ["admin", "hrManager", "hrAcct", "totalMaster"].includes(role) && (!selectedNotice.authorUid || selectedNotice.authorUid === currentUser?.uid);
           const isSA = role === "superadmin" || role === "totalMaster";
           if (!isNAuthor && !isSA) return null;
           return (
           <div className="flex gap-2 pt-2 border-t border-gray-100">
-            <button onClick={() => setConfirmDialog({ message: "공지사항을 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); } })}
+            <button onClick={() => setConfirmDialog({ message: "공지사항을 삭제하시겠습니까?", onConfirm: async () => { /* ⭐ 2026-11-02 점검 — 삭제 실패 시 알림 */ try { await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); } catch (e) { alert(e?.message || "삭제 실패"); } } })}
               className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold">삭제</button>
             <button onClick={() => { setNoticeForm({ category: selectedNotice.category || "공지사항", author: selectedNotice.author, content: selectedNotice.content, audience: selectedNotice.audience || "internal" }); setNoticeOpen(true); }}
               className={`flex-1 py-2.5 rounded-xl text-white text-sm font-semibold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>수정</button>
@@ -6256,11 +6269,14 @@ onGoAttendance={() => {
             const now = new Date();
             const y = now.getFullYear(), m = String(now.getMonth()+1).padStart(2,"0"), d = String(now.getDate()).padStart(2,"0");
             const autoTitle = `${y}년 ${m}월 ${d}일 ${noticeForm.category}`;
+            // ⭐ 2026-11-02 점검 — 수정 시 원래 제목 유지(자동 제목으로 덮어쓰지 않음) + 저장 실패 알림
+            try {
             if (selectedNotice?.id) {
-              await updateDoc(doc(db, "notices", selectedNotice.id), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content, audience: noticeForm.audience || "internal" });
+              await updateDoc(doc(db, "notices", selectedNotice.id), { category: noticeForm.category, author: noticeForm.author, content: noticeForm.content, audience: noticeForm.audience || "internal" });
             } else {
               await addDoc(collection(db, "notices"), { title: autoTitle, category: noticeForm.category, author: noticeForm.author, content: noticeForm.content, audience: noticeForm.audience || "internal", authorUid: currentUser?.uid || "", createdAt: serverTimestamp(), companyName: getTenant() || localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY });
             }
+            } catch (e) { alert(e?.message || "저장 실패"); return; }
             setNoticeOpen(false);
             setSelectedNotice(null);
             setNoticeForm({ category: "공지사항", author: "", content: "", audience: "internal" });
@@ -6502,7 +6518,7 @@ setOpenMemo={setOpenMemo}
 {(page === "dept" || String(page).startsWith("dept:")) && (
   <React.Suspense fallback={null}>
     <MobilePcView key={page} kind={page} deptMode={deptMode} dispatchData={allOrders} fixedRows={fixedClientRows} clients={clients} places={places} role={role} userCompany={pcViewCompany} me={pcViewMe} loadRange={loadRange} loadFullHistory={loadFullHistory}
-      onGo={(k) => { const [m0, id] = String(k).split(":"); if (k === "배차현황") deptListOkRef.current = true; if (m0 === "결재함" && id) { try { sessionStorage.setItem("kpExecApOpen", id); } catch { /* 무시 */ } } setPage({ 결재함: "approval", 직원일정: "dept:schedule", 자금현황: "dept:funds", 스케줄: "dept:execsched", 실시간배차현황: "unassigned", 인사이트: "intel", 정산관리: "dept:settle", "정산관리:지급관리": "dept:settle", 회계관리: "dept:acct", 매출관리: "sales", 인사관리부: "dept:hr", 출근기록부: "attendance", 연차관리: "dept:leave", 입퇴사관리: "dept:onboarding", 증명서발급: "dept:cert", 수입지출: "dept:cashbook", 비품관리: "dept:assets", 전자결재: "approval", 배차현황: "list", 관리자메뉴: "staff", 직원관리: "staff", 기사서류: "dept:driverdocs", 기사관리: "dept:driverdocs" }[m0 === "결재함" ? "결재함" : k] || "dept"); }} />
+      onGo={(k) => { const [m0, id] = String(k).split(":"); if (k === "배차현황") deptListOkRef.current = true; if (m0 === "결재함" && id) { try { sessionStorage.setItem("kpExecApOpen", id); } catch { /* 무시 */ } } setPage({ 결재함: "approval", 직원일정: "dept:schedule", 자금현황: "dept:funds", 스케줄: "dept:execsched", 실시간배차현황: "unassigned", 인사이트: "intel", 정산관리: "dept:settle", "정산관리:지급관리": "dept:settle", 회계관리: "dept:acct", 매출관리: "sales", 인사관리부: "dept:hr", 출근기록부: "attendance", 연차관리: "dept:leave", 입퇴사관리: "dept:onboarding", 증명서발급: "dept:cert", 수입지출: "dept:cashbook", 비품관리: "dept:assets", 전자결재: "approval", 배차현황: "list", 관리자메뉴: "staff", 직원관리: "staff", 기사서류: "dept:driverdocs", 기사관리: "dept:driverdocs", 자금관리: "dept:cashbook", "자금관리:book": "dept:cashbook", "인사관리부:leave": "dept:leave", 기사승인: "staff" }[m0 === "결재함" ? "결재함" : k] || "dept"); /* ⭐ 2026-11-02 점검 — 경리·인사 홈 바로가기 키(자금관리·연차·기사승인) 추가 */ }} />
   </React.Suspense>
 )}
 {page === "sales" && (
@@ -7578,7 +7594,8 @@ function MobileSideMenu({
 
   const logout = async () => {
     if (!window.confirm("로그아웃 하시겠습니까?")) return;
-    await clearFcmToken(auth.currentUser?.uid);
+    // ⭐ 2026-11-02 로그아웃 지연 방지 — 알림 해제는 최대 1.2초만 기다린다(통신이 느려도 바로 로그아웃)
+    await Promise.race([clearFcmToken(auth.currentUser?.uid).catch(() => {}), new Promise((r) => setTimeout(r, 1200))]);
     try {
       await signOut(auth);
     } catch (e) {
@@ -9821,12 +9838,10 @@ function CardAttachViewer({ order, onClose, showToast, showSuccess }) {
     };
   }, [order]);
 
-  const doSave = (item, filename) => {
+  // ⭐ 2026-11-02 점검 — blob 저장이 실제로 끝난 뒤에만 '저장됨'·확인 처리, 실패 시 'fail'
+  const doSave = async (item, filename) => {
     try {
-      const a = document.createElement("a");
-      a.href = item.base64 || item.url;
-      a.download = filename || item.name || "attachment.jpg";
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      await saveAttachFileMobile(item, filename);
       setSaveStates(prev => {
         const next = { ...prev, [item.id]: "success" };
         try { localStorage.setItem(attachStorageKey, JSON.stringify(next)); } catch {}
@@ -12085,12 +12100,10 @@ const pickupTimeText = order.상차시간
     }
   };
 
-  const doAttachSave = (item, filename) => {
+  // ⭐ 2026-11-02 점검 — blob 저장이 실제로 끝난 뒤에만 '저장됨'·확인 처리, 실패 시 'fail'
+  const doAttachSave = async (item, filename) => {
     try {
-      const a = document.createElement("a");
-      a.href = item.base64 || item.url;
-      a.download = filename || item.name || "attachment.jpg";
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      await saveAttachFileMobile(item, filename);
       setAttachSaveStates(prev => {
         const next = { ...prev, [item.id]: "success" };
         try { localStorage.setItem(detailAttachStorageKey, JSON.stringify(next)); } catch {}
@@ -17820,7 +17833,8 @@ function CopySelectModal({ order, onClose, onAfterFullCopy, onAfterDriverCopy, o
   useEffect(() => {
     const cname = localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
     if (!cname) return;
-    const unsub = onSnapshot(collection(db, "transportApplications"), (snap) => {
+    // ⭐ 2026-11-02 안드로이드 끊김 — 예전엔 모든 운송사 신청서(사업자등록증 이미지 포함, 문서당 수 MB)를 통째로 받았다 → 우리 회사만
+    const unsub = onSnapshot(query(collection(db, "transportApplications"), where("companyName", "==", cname.trim())), (snap) => {
       const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       const found = docs.find(d => (d.companyName || "").trim() === cname.trim() && d.type === "신규") ||
                     docs.find(d => (d.companyName || "").trim() === cname.trim());
@@ -18660,7 +18674,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
           </div>
           <div className="rounded-xl bg-white/[0.07] ring-1 ring-white/10 px-3 py-2">
             <div className="text-[10px] font-bold text-white/50">로그인</div>
-            <div className="text-[14px] font-black tabular-nums truncate" style={{ fontFamily: KPM_MONO }}>{fmtTime(loginTime)}</div>
+            <div className="text-[13px] font-black tabular-nums whitespace-normal break-keep leading-snug" style={{ fontFamily: KPM_MONO }}>{fmtTime(loginTime)}</div>
           </div>
         </div>
       </div>
@@ -22123,6 +22137,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     W("사내메일", "사내메일", "새 메일이 오면"),
     W("메신저", "메신저", "대화방에 새 메시지가 오면"),
     W("인사발령", "인사발령", "회사에 인사발령(승진·부서 이동 등)이 나면 — 전 직원"),
+    W("생일", "생일 알림", "동료 생일 3일 전 아침에 미리 알려 드려요"),
   ];
   const teamKey = role === "hrAcct" ? "hr" : (deptMode || "dispatch");
   const PUSH_GROUPS = [
@@ -22131,7 +22146,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     { title: "공통 알림", items: COMMON_PUSH },
   ];
   const PUSH_PREF_TYPES = PUSH_GROUPS.flatMap((g) => g.items);
-  const PUSH_PREF_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저"];
+  const PUSH_PREF_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저", "생일"];
   const isPushPrefOn = (prefs, key) => {
     const v = prefs?.[key];
     if (v === true || v === false) return v;
@@ -22217,7 +22232,22 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
         </KpmCard>
 
         <KpmCard en="NOTIFICATION" title="알림" flush>
-          <KpmRow label="푸시 알림" sub={teamKey === "dispatch" ? "신규 오더·배차·결재 알림" : "결재·공지·메일 등 업무 알림"} right={<KpmToggle value={alarmEnabled} onChange={toggleAlarm} />} />
+          {/* ⭐ 2026-11-02 점검 — 이 토글은 앱 안 소리·배너만 끔(휴대폰 푸시는 '알림 종류별 설정') → 이름을 실제 동작에 맞춤 */}
+          <KpmRow label="앱 안 알림(소리·배너)" sub="앱을 켜 둔 동안의 소리·배너 · 휴대폰 푸시는 '알림 종류별 설정'에서" right={<KpmToggle value={alarmEnabled} onChange={toggleAlarm} />} />
+          {/* ⭐ 2026-11-02 점검 — 아이폰 PWA는 탭해야만 알림 권한 요청 가능 → 모든 직원이 누를 수 있는 연결 버튼 */}
+          {/* ⭐ 2026-11-02 화면 점검 — 영어 그대로("권한: denied") 보이던 권한 상태를 한글로 */}
+          <KpmRow label="이 기기 알림 받기" sub={typeof Notification !== "undefined" ? `권한: ${({ granted: "허용됨", denied: "차단됨 — 기기 설정에서 허용해 주세요", default: "아직 묻지 않음" })[Notification.permission] || Notification.permission}` : "미지원"}
+            onClick={async () => {
+              if (typeof Notification === "undefined") { alert("이 기기는 알림을 지원하지 않습니다."); return; }
+              // 탭 직후 바로 권한 요청(아이폰은 await 뒤로 미루면 사용자 탭으로 인정 안 될 수 있음)
+              try { if (Notification.permission === "default") await Notification.requestPermission(); } catch { /* 무시 */ }
+              try {
+                const { diagnoseFcmToken } = await import("../firebase");
+                const r = await diagnoseFcmToken(currentUser);
+                alert(r.ok ? "알림 연결 완료" : r.reason);
+              } catch (e) { alert(e?.message || "알림 연결 실패"); }
+            }}
+            right={go("연결")} />
           <KpmRow label="알림 종류별 설정" sub={`${PUSH_GROUPS.map((g) => g.title).join("·")} · 지금 ${pushOnCount}/${PUSH_PREF_TYPES.length}종 켜짐`} onClick={() => setPushPrefsOpen(true)} right={go("설정")} />
         </KpmCard>
 
@@ -22232,7 +22262,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
               showSuccess(ok === false ? "새로고침 실패 (네트워크 확인)" : "새로고침 완료 · 최신 상태 반영됨");
             }}
             right={go(manualRefreshing ? "갱신 중…" : "실행")} />
-          <KpmRow label="캐시 초기화" sub="이 기기에 임시 저장된 데이터 삭제" onClick={() => { localStorage.clear(); showSuccess("초기화 완료"); }} right={go("실행")} />
+          <KpmRow label="캐시 초기화" sub="이 기기에 임시 저장된 데이터 삭제" onClick={() => { /* ⭐ 2026-11-02 점검 — 로그인·FCM 토큰 키는 남기고 비움(로그아웃 시 기기 알림 해제 유지) */ const keep = ["kpFcmToken", "loginCompany", "userCompany", "role", "kpHrAcctView", "transportLoginSaved", "driverLoginSaved"]; const saved = keep.map((k) => [k, localStorage.getItem(k)]); localStorage.clear(); saved.forEach(([k, v]) => { if (v != null) { try { localStorage.setItem(k, v); } catch { /* 무시 */ } } }); showSuccess("초기화 완료"); }} right={go("실행")} />
         </KpmCard>
 
         {isTotalMaster && (

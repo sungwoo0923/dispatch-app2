@@ -512,7 +512,8 @@ const [detailModal, setDetailModal] = useState(null);
     const todayStr = new Date().toLocaleDateString("ko-KR");
     const cols = sheet.columns || [];
     const esc = (s) => String(s || "").replace(/</g, "&lt;");
-    const fileBase = `단가표_${(sheet.baseName || "기준지").replace(/[\\/:*?"<>|]/g, "")}`;
+    // ⭐ 2026-11-02 점검 — 기준지 이름의 작은따옴표·백틱·줄바꿈 등이 팝업 <script> 문자열을 깨뜨려 PDF/이미지 저장이 안 되던 문제 → 해당 문자도 제거
+    const fileBase = `단가표_${(sheet.baseName || "기준지").replace(/[\\/:*?"<>|'\x60\u0000-\u001f\u2028\u2029]/g, "")}`;
     const w = window.open("", "_blank");
     w.document.write(`<html><head><title>${esc(sheet.baseName)}</title>
 <style>
@@ -883,7 +884,8 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
         <div>
           <Eyebrow>RATE CARD · {pageMode === "노선별" ? "ROUTE" : "MULTI DESTINATION"}</Eyebrow>
           <h1 className="text-[22px] font-black text-[#0F1A30] tracking-tight mt-0.5">{pageMode === "노선별" ? "노선별 단가표" : "다목적지 단가표"}</h1>
-          <p className="text-[13px] text-[#5B6B85] mt-0.5">
+          {/* ⭐ 2026-11-02 화면 점검 — 모바일에서 마지막 글자만 다음 줄로 떨어지지 않게 break-keep + text-balance */}
+          <p className="text-[13px] text-[#5B6B85] mt-0.5 break-keep [text-wrap:balance]">
             {pageMode === "노선별" ? "과거 배차 실적으로 노선·톤수별 권장 단가를 자동 계산합니다" : "기준지 1곳 → 하차지 여러 곳의 톤수·구간별 단가를 한 표로 관리합니다"}
           </p>
         </div>
@@ -1428,49 +1430,51 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                 <datalist id="manual-vehicle-types">
                   {VEHICLE_GROUPS.map(g => <option key={g.value} value={g.label} />)}
                 </datalist>
-                <div className="grid grid-cols-4 gap-3 mb-3">
+                {/* ⭐ 2026-11-02 화면 점검 — 모바일은 2열, sm 이상 4열(PC 동일) */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-500 mb-1">거래처명</label>
+                    <label className="block text-[11px] font-semibold text-gray-500 mb-1 whitespace-nowrap">거래처명</label>
                     <input autoComplete="off" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:outline-none" placeholder="예: (주)홍길동물류" value={manualInfo.client} onChange={e => setManualInfo(p => ({ ...p, client: e.target.value }))} />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-500 mb-1">상차지역 <span className="text-[#4B6CB7]">*</span></label>
+                    <label className="block text-[11px] font-semibold text-gray-500 mb-1 whitespace-nowrap">상차지역 <span className="text-[#4B6CB7]">*</span></label>
                     <input autoComplete="off" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:outline-none" placeholder="예: 인천" value={manualInfo.pickup} onChange={e => setManualInfo(p => ({ ...p, pickup: e.target.value }))} />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-500 mb-1">하차지역 <span className="text-[#4B6CB7]">*</span></label>
+                    <label className="block text-[11px] font-semibold text-gray-500 mb-1 whitespace-nowrap">하차지역 <span className="text-[#4B6CB7]">*</span></label>
                     <input autoComplete="off" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:outline-none" placeholder="예: 부산" value={manualInfo.drop} onChange={e => setManualInfo(p => ({ ...p, drop: e.target.value }))} />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-500 mb-1">차량종류</label>
+                    <label className="block text-[11px] font-semibold text-gray-500 mb-1 whitespace-nowrap">차량종류</label>
                     <input autoComplete="off" list="manual-vehicle-types" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:outline-none" placeholder="선택 또는 직접 입력" value={manualInfo.vehicle} onChange={e => setManualInfo(p => ({ ...p, vehicle: e.target.value }))} />
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                {/* ⭐ 2026-11-02 화면 점검 — 모바일은 2열(메모는 한 줄 전체), sm 이상 3열 · 버튼 글자 줄바꿈 방지 */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-500 mb-1">혼적 여부</label>
+                    <label className="block text-[11px] font-semibold text-gray-500 mb-1 whitespace-nowrap">혼적 여부</label>
                     <div className="flex gap-1">
                       {["전체", "독차", "혼적"].map(opt => (
                         <button key={opt} type="button" onClick={() => setManualInfo(p => ({ ...p, mixedFilter: opt }))}
-                          className={`flex-1 py-2 text-[12px] font-semibold rounded-lg border transition-all ${manualInfo.mixedFilter === opt ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
+                          className={`flex-1 py-2 text-[12px] font-semibold rounded-lg border transition-all whitespace-nowrap ${manualInfo.mixedFilter === opt ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
                           {opt}
                         </button>
                       ))}
                     </div>
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-500 mb-1">단가 기준</label>
+                    <label className="block text-[11px] font-semibold text-gray-500 mb-1 whitespace-nowrap">단가 기준</label>
                     <div className="flex gap-1">
                       {[["청구운임", "청구가"], ["기사운임", "기사운임"]].map(([val, label]) => (
                         <button key={val} type="button" onClick={() => setManualInfo(p => ({ ...p, fareField: val }))}
-                          className={`flex-1 py-2 text-[12px] font-semibold rounded-lg border transition-all ${manualInfo.fareField === val ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
+                          className={`flex-1 py-2 text-[12px] font-semibold rounded-lg border transition-all whitespace-nowrap ${manualInfo.fareField === val ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
                           {label}
                         </button>
                       ))}
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-gray-500 mb-1">특이사항 / 메모</label>
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className="block text-[11px] font-semibold text-gray-500 mb-1 whitespace-nowrap">특이사항 / 메모</label>
                     <input autoComplete="off" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:outline-none" placeholder="단가표 하단에 추가될 메모 (선택)" value={manualInfo.note} onChange={e => setManualInfo(p => ({ ...p, note: e.target.value }))} />
                   </div>
                 </div>
@@ -1478,9 +1482,10 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
 
               {/* 단가 행 입력 */}
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-[13px] font-bold text-[#1B2B4B]">단가 행 입력</div>
-                  <div className="flex items-center gap-1.5">
+                {/* ⭐ 2026-11-02 화면 점검 — 툴바 줄바꿈 허용 + 제목 nowrap */}
+                <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+                  <div className="text-[13px] font-bold text-[#1B2B4B] whitespace-nowrap">단가 행 입력</div>
+                  <div className="flex items-center flex-wrap gap-1.5">
                     <button onClick={autoTonRows} title="1톤~25톤까지 톤수별 줄을 자동으로 깝니다" className="px-3 py-1.5 bg-[#2D4C82] text-white text-[12px] font-bold rounded-lg hover:bg-[#1B2B4B] transition whitespace-nowrap">톤수 자동셋팅</button>
                     <button onClick={downloadManualTemplate} className="px-3 py-1.5 border border-[#1B2B4B]/30 text-[#1B2B4B] text-[12px] font-bold rounded-lg hover:bg-[#F3F6FA] transition whitespace-nowrap">엑셀 양식 받기</button>
                     <button onClick={() => manualFileRef.current?.click()} className="px-3 py-1.5 border border-[#1B2B4B]/30 text-[#1B2B4B] text-[12px] font-bold rounded-lg hover:bg-[#F3F6FA] transition whitespace-nowrap">엑셀 업로드</button>
@@ -1493,8 +1498,9 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                 <datalist id="manual-ton-options">
                   {STANDARD_TON_LABELS.map(t => <option key={t} value={t} />)}
                 </datalist>
-              <div className="rounded-xl border border-gray-200 overflow-hidden">
-                  <table className="w-full text-[12px]">
+              {/* ⭐ 2026-11-02 화면 점검 — 좁은 화면에서는 표를 눌러 담지 않고 가로 스크롤 */}
+              <div className="rounded-xl border border-gray-200 overflow-x-auto">
+                  <table className="w-full !min-w-[720px] text-[12px]">
                     <thead>
                       <tr className="bg-[#1B2B4B]">
                         {["차량 톤수 / 구분", "권장 단가 (원)", "최소 운임 (원)", "최대 운임 (원)", "변동성", "신뢰도", ""].map(h => (

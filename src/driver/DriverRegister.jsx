@@ -342,8 +342,9 @@ export default function DriverRegister() {
         await deleteDoc(doc(db, "drivers", preId)).catch(() => {});
       }
       if (bizImg) {
+        // ⭐ 2026-11-02 점검 — 필수서류 키(bizReg)로 저장해야 기사 제출 서류/서류 관리에 표시됨
         await addDoc(collection(db, "driver_documents"), {
-          driverId: uid, companyName: companyName.trim(), docType: "사업자등록증", fileName: "사업자등록증.jpg", fileType: "image/jpeg", dataUrl: bizImg,
+          driverId: uid, companyName: companyName.trim(), docType: "bizReg", docLabel: "사업자등록증", status: "제출", fileName: "사업자등록증.jpg", fileType: "image/jpeg", dataUrl: bizImg,
           uploadedAt: { seconds: Math.floor(Date.now() / 1000) }, by: "기사 가입",
         }).catch(() => {});
       }
