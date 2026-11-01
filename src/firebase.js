@@ -1,6 +1,8 @@
 
 // ======================= src/firebase.js (FINAL FIXED) =======================
 import * as FS from "firebase/firestore";
+import * as AUTH from "firebase/auth";
+import * as STG from "firebase/storage";
 import { initializeApp } from "firebase/app";
 import {
   getAuth,
@@ -49,13 +51,18 @@ const firebaseConfig = {
   appId: "1:273115387263:web:8ae6946cb01e265e55764a",
   measurementId: "G-1NVFMVHQ28",
 };
+// 🧪 2026-11-02 테스트 전용 — VITE_USE_EMULATOR=1로 띄울 때만 로컬 가상 서버(Firebase 에뮬레이터)에 붙는다.
+//  실제 배포(Vercel)에는 이 값이 없으므로 아무 영향 없다. 가상 회사로 권한별 실제 동작을 시험할 때 쓴다.
+const USE_EMU = import.meta.env.VITE_USE_EMULATOR === "1";
+if (USE_EMU) firebaseConfig.projectId = "demo-kpflow";
 // 회사명이 비어있는 옛 문서를 어느 회사 소속으로 볼지
 export const DEFAULT_COMPANY = "돌캐";
-export const FUNCTIONS_BASE = `https://us-central1-${firebaseConfig.projectId}.cloudfunctions.net`;
+export const FUNCTIONS_BASE = USE_EMU ? "http://127.0.0.1:5001/demo-kpflow/us-central1" : `https://us-central1-${firebaseConfig.projectId}.cloudfunctions.net`;
 
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
+if (USE_EMU) { try { AUTH.connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true }); } catch { /* 무시 */ } }
 
 // IndexedDB 영구 캐시 시도 → 실패 시 기본 메모리 캐시로 폴백.
 // ⭐ 한 라운드 persistentMultipleTabManager로 바꿔봤었는데(관리자 화면 "모바일
@@ -74,6 +81,7 @@ export const auth = getAuth(app);
 // (PC는 탭·관리자 화면의 모바일 미리보기 등 여러 창이 같이 쓰므로 지금처럼 둔다)
 const IS_PHONE = typeof navigator !== "undefined" && /iphone|ipod|android(?!.*tablet)/i.test(navigator.userAgent || "") && !/ipad|tablet/i.test(navigator.userAgent || "");
 function createDb() {
+  if (USE_EMU) { const d = getFirestore(app); try { FS.connectFirestoreEmulator(d, "127.0.0.1", 8080); } catch { /* 무시 */ } return d; }
   try {
     return initializeFirestore(app, {
       localCache: persistentLocalCache({
@@ -92,6 +100,7 @@ try {
   if (mgr) FS.enablePersistentCacheIndexAutoCreation?.(mgr);
 } catch { /* 지원 안 하는 환경 — 그대로 */ }
 export const storage = getStorage(app);
+if (USE_EMU) { try { STG.connectStorageEmulator(storage, "127.0.0.1", 9199); } catch { /* 무시 */ } }
 
 // ====================================================
 // Firebase Export
