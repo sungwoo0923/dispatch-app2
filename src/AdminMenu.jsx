@@ -613,7 +613,9 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     setManageUser(u);
     setEditName(u.name || "");
     setEditPhone(formatPhone(u.phone || ""));
-    setEditRole(u.role || "user");
+    // ⭐ 2026-11-02 가입 승인 대기자는 부서·직책 기준 추천 권한으로 시작 — 임원(대표·전무·이사)이 가입하면 "관리자"로 들어와
+    //  권한 필터 "임원관리자"에 안 잡히던 문제(가입 화면은 회사별 권한 목록을 몰라 관리자로 저장됨)
+    setEditRole(u.approved === false && u.employmentStatus !== "퇴사" && u.role !== "totalMaster" ? suggestR(u) : (u.role || "user"));
     setEditCompany(u.companyName || "");
     setEditPosition(u.position || "");
     setEditTeam(u.team || "");
