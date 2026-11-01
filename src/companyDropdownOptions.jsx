@@ -60,6 +60,30 @@ export function useCompanyDropdownOptions(key, role, userCompany) {
   return options;
 }
 
+// ⭐ 2026-11-01 표 칸·빠른수정·모바일 등 "훅을 못 쓰는 자리"용 — 앱 맨 위(PC DispatchApp·모바일 MobileApp)에서
+//  useCompanyDropdownSync()로 회사 설정을 한 번 구독해 두고, 각 자리는 dropdownList()로 읽는다.
+//  회사가 편집모드에서 옵션을 바꾼 적이 없으면 그 자리의 원래 목록(fallback)을 그대로 쓴다(화면 변화 없음).
+const _ddCache = {};
+export function useCompanyDropdownSync(role, userCompany) {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const companyKey = resolveCompanyKey(role, userCompany);
+    const unsub = onSnapshot(doc(db, "companySettings", companyKey), (snap) => {
+      const d = (snap.exists() && snap.data()?.dropdownOptions) || {};
+      Object.keys(_ddCache).forEach((k) => { delete _ddCache[k]; });
+      Object.assign(_ddCache, d);
+      force((x) => x + 1);
+    }, () => {});
+    return () => unsub();
+  }, [role, userCompany]);
+}
+export function dropdownList(key, fallback = [], current) {
+  const stored = _ddCache[key];
+  let list = Array.isArray(stored) && stored.length > 0 ? stored : fallback;
+  if (current && !list.includes(current)) list = [...list, current]; // 예전에 저장된 값도 보이게
+  return list;
+}
+
 // 관리자 편집용 — 저장(merge)으로 다른 키의 옵션은 건드리지 않음
 export async function saveCompanyDropdownOptions(key, list, role, userCompany) {
   const companyKey = resolveCompanyKey(role, userCompany);

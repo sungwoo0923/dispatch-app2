@@ -281,6 +281,29 @@ function SignupForm({ signupType, onBack }) {
     }).embed(addressBoxRef.current);
   }, [addressPopupOpen]);
 
+  // ⭐ 2026-11-01 신규 가입 회사명 중복확인 — 승인된 회사·승인 대기 신청과 같은 이름(띄어쓰기·대소문자 무시)이면 막는다
+  const [coDupMsg, setCoDupMsg] = useState(null); // { text, type, name }
+  const [coDupChecking, setCoDupChecking] = useState(false);
+  const checkCompanyDup = async (silent = false) => {
+    const n = companyName.trim();
+    if (!n) { if (!silent) setCoDupMsg({ text: "회사명을 입력해주세요.", type: "error", name: n }); return "empty"; }
+    setCoDupChecking(true);
+    try {
+      const r = await fetch(`${FUNCTIONS_BASE}/findCompany?dup=1&q=${encodeURIComponent(n)}`);
+      const j = r.ok ? await r.json() : null;
+      if (!j || typeof j.used !== "boolean") { if (!silent) setCoDupMsg({ text: "지금은 확인할 수 없습니다. 그대로 신청하면 관리자가 확인합니다.", type: "ok", name: n }); return "unknown"; }
+      if (j.used) {
+        setCoDupMsg({ text: j.pending ? "같은 이름으로 가입 신청이 이미 들어와 있습니다(승인 대기). 같은 회사라면 승인 후 '기존 회사'로 가입해 주세요." : "이미 등록된 회사명입니다. 같은 회사라면 '기존 회사'로 가입해 주세요. 다른 회사라면 지점명 등을 붙여 구분해 주세요.", type: "error", name: n });
+        return "used";
+      }
+      setCoDupMsg({ text: "사용 가능한 회사명입니다.", type: "ok", name: n });
+      return "free";
+    } catch {
+      if (!silent) setCoDupMsg({ text: "지금은 확인할 수 없습니다. 그대로 신청하면 관리자가 확인합니다.", type: "ok", name: n });
+      return "unknown";
+    } finally { setCoDupChecking(false); }
+  };
+
   const validateExistingCompany = async () => {
     const n = companyName.trim();
     if (selectedCompanyApp && selectedCompanyApp.companyName === n) return true;
@@ -299,6 +322,10 @@ function SignupForm({ signupType, onBack }) {
 
     if (!companyName.trim()) return setError("회사명을 입력해주세요.");
     if (signupType === "신규" && !businessNumber.trim()) return setError("사업자번호를 입력해주세요.");
+    if (signupType === "신규") {
+      const st = await checkCompanyDup(true);
+      if (st === "used") return setError("이미 등록(또는 신청)된 회사명입니다. 회사명 중복확인 안내를 확인해 주세요.");
+    }
     if (!name.trim()) return setError("이름을 입력해주세요.");
     if (!phone.trim()) return setError("핸드폰번호를 입력해주세요.");
     if (!email.trim()) return setError("이메일을 입력해주세요.");
@@ -394,8 +421,10 @@ function SignupForm({ signupType, onBack }) {
             await signOut(auth);
             setError("이미 가입된 이메일입니다. 로그인 화면에서 로그인해 주세요.");
           }
-        } catch (_) {
-          setError("이미 가입된 이메일입니다. 예전에 쓰던 계정이면 그때 비밀번호를 입력하거나, 로그인 화면의 비밀번호 재설정을 이용해 주세요.");
+        } catch (e2) {
+          setError(e2?.code === "auth/user-disabled"
+            ? "삭제(정리) 중인 예전 계정의 이메일입니다. 잠시 후 다시 가입 신청해 주세요. 계속 안 되면 관리자에게 알려 주세요."
+            : "이미 가입된 이메일입니다. 예전에 쓰던 계정이면 그때 비밀번호를 입력하거나, 로그인 화면의 비밀번호 재설정을 이용해 주세요.");
         }
       } else if (code === "auth/invalid-email") {
         setError("올바른 이메일 형식을 입력해주세요.");
@@ -479,9 +508,20 @@ function SignupForm({ signupType, onBack }) {
                 )}
               </div>
             ) : (
-              <input value={companyName} onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="회사명 입력"
-                className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15" />
+              <div>
+                <div className="flex gap-2">
+                  <input value={companyName} onChange={(e) => { setCompanyName(e.target.value); setCoDupMsg(null); }}
+                    placeholder="회사명 입력"
+                    className="flex-1 min-w-0 h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15" />
+                  <button type="button" onClick={() => checkCompanyDup(false)} disabled={coDupChecking}
+                    className="h-12 px-4 shrink-0 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black hover:bg-[#1B2B4B] transition whitespace-nowrap disabled:opacity-50">
+                    {coDupChecking ? "확인 중..." : "중복확인"}
+                  </button>
+                </div>
+                {coDupMsg && coDupMsg.name === companyName.trim() && (
+                  <p className={`text-[12.5px] mt-1.5 pl-1 font-semibold ${coDupMsg.type === "ok" ? "text-[#2D4C82]" : "text-red-500"}`}>{coDupMsg.text}</p>
+                )}
+              </div>
             )}
           </Field>
 

@@ -7,6 +7,17 @@
 // 내용은 콘솔에 그대로 남겨 나중에 원인 파악에 쓸 수 있게 한다.
 import React from "react";
 
+export const isChunkLoadError = (e) => /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|ChunkLoadError|Loading chunk [\w-]+ failed|Unable to preload CSS/i.test(String(e?.message || e || ""));
+export function reloadOnce() {
+  try {
+    const last = Number(sessionStorage.getItem("kpChunkReloadAt") || 0);
+    if (Date.now() - last < 30000) return false; // 30초 안에 또 실패하면 무한 새로고침 방지 — 안내 화면 그대로
+    sessionStorage.setItem("kpChunkReloadAt", String(Date.now()));
+  } catch { /* 저장 실패해도 진행 */ }
+  window.location.reload();
+  return true;
+}
+
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -19,6 +30,9 @@ export default class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, info) {
     console.error("[ErrorBoundary] 화면 오류:", error, info?.componentStack);
+    // ⭐ 2026-11-01 새 버전 배포 직후 — 열려 있던 화면이 예전 파일(지금은 서버에 없는 조각 파일)을 불러오다 실패하면
+    //    이 안내가 떴다(새로고침하면 해결). 이런 "화면 파일 불러오기 실패"는 자동으로 한 번 새로고침한다.
+    if (isChunkLoadError(error)) reloadOnce();
   }
 
   render() {

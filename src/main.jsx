@@ -2,7 +2,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
-import ErrorBoundary from "./ErrorBoundary.jsx";
+import ErrorBoundary, { isChunkLoadError, reloadOnce } from "./ErrorBoundary.jsx";
 import "./index.css";
 import { preloadTmapWhenIdle } from "./tmapLoader";
 import { trimLocalStorage } from "./safeStorage";
@@ -62,6 +62,10 @@ preloadTmapWhenIdle();
     if (isQuotaOrFirestoreCorruption(msg)) recoverAndReload();
   });
 })();
+
+// ⭐ 2026-11-01 새 버전 배포 직후 예전 화면 조각 파일을 못 불러오면(로그인 직후 /choose 등) 자동으로 한 번 새로고침
+window.addEventListener("vite:preloadError", (e) => { if (reloadOnce()) e.preventDefault?.(); });
+window.addEventListener("unhandledrejection", (event) => { if (isChunkLoadError(event?.reason)) reloadOnce(); });
 
 // --------------------------------------------------
 // React Render

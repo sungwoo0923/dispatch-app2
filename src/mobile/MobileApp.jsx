@@ -1,5 +1,7 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
 import { useMyProfile } from "../userNames";
+import { useCompanyDropdownSync, dropdownList } from "../companyDropdownOptions";
+import { AttendanceQuickButton, officeRadii } from "../attendanceQuick";
 import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen } from "../customRoles";
 import { useReadOnlyGuard } from "../readOnlyGuard";
 import { confirmLeave } from "../leaveGuard";
@@ -1931,6 +1933,7 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   // 🔀 통합인사관리자(hrAcct) — 메뉴에서 경리 화면 ↔ 인사 화면 전환
   const [hrAcctView, setHrAcctView] = useState(() => { try { return localStorage.getItem("kpHrAcctView") || "acct"; } catch { return "acct"; } });
   const role = realRole === "hrAcct" ? (hrAcctView === "hr" ? "hrManager" : "test") : realRole;
+  useCompanyDropdownSync(realRole, userCompany); // ⭐ PC 편집모드에서 바꾼 회사별 배차방식 옵션을 모바일에도
   // ⭐ LTE 속도 — 앱을 켜면 오더·기사·거래처·공지·일정 등 10여 개 구독이 한꺼번에 전파를 나눠 써서,
   // 약한 LTE에선 정작 오더가 늦게 들어왔다. 오더가 서버와 맞춰진 뒤에 나머지(기사·거래처·공지 등)를 시작한다.
   const [secondaryReady, setSecondaryReady] = useState(false);
@@ -3639,36 +3642,37 @@ useEffect(() => {
   const name = currentUser.displayName || currentUser.email?.split("@")[0] || "";
   let checkedIn = false;
 
-  // 위치 변화 감지
-  const watchId = navigator.geolocation.watchPosition(pos => {
-    const dist = _calcDistM(
-      pos.coords.latitude, pos.coords.longitude,
-      mobileOfficeLocation.lat, mobileOfficeLocation.lng
-    );
-    if (dist <= 100 && !checkedIn) {
+  // ⭐ 2026-11-01 회사별 반경(출근지 설정) — 값이 없으면 예전처럼 100m / 300m
+  const { inM, outM } = officeRadii(mobileOfficeLocation);
+  const judge = (pos) => {
+    const acc = Number(pos.coords.accuracy) || 0;
+    const dist = _calcDistM(pos.coords.latitude, pos.coords.longitude, mobileOfficeLocation.lat, mobileOfficeLocation.lng);
+    if (dist <= inM && !checkedIn) {
       checkedIn = true;
       _autoCheckIn(co, uid, name, showSuccess).catch(() => {});
     }
-    if (dist > 300 && checkedIn) {
+    // 오차가 너무 큰 위치(200m 이상)로는 자동 퇴근하지 않는다(엉뚱한 퇴근 방지)
+    if (dist > outM && checkedIn && acc < 200) {
       checkedIn = false;
       _autoCheckOut(co, uid, name, showSuccess).catch(() => {});
     }
-  }, () => {}, { enableHighAccuracy: true, maximumAge: 30000, timeout: 20000 });
+  };
+  // 위치 변화 감지(앱이 화면에 켜져 있는 동안)
+  const watchId = navigator.geolocation.watchPosition(judge, () => {}, { enableHighAccuracy: true, maximumAge: 30000, timeout: 20000 });
 
   geoWatchIdRef.current = watchId;
   // 앱 시작 시 1회 즉시 위치 체크
-  navigator.geolocation.getCurrentPosition(pos => {
-    const dist = _calcDistM(
-      pos.coords.latitude, pos.coords.longitude,
-      mobileOfficeLocation.lat, mobileOfficeLocation.lng
-    );
-    if (dist <= 100) {
-      checkedIn = true;
-      _autoCheckIn(co, uid, name, showSuccess).catch(() => {});
-    }
-  }, () => {}, { enableHighAccuracy: true, timeout: 15000 });
+  const checkNow = () => navigator.geolocation.getCurrentPosition(judge, () => {}, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+  checkNow();
+  // ⭐ 백그라운드에 있다가 다시 앱을 열면(화면 켜기·앱 전환) 바로 위치를 다시 확인한다 —
+  //    휴대폰 웹앱은 백그라운드에서 위치를 받지 못해, 다시 열 때 확인해야 출근이 빠지지 않는다
+  const onVis = () => { if (document.visibilityState === "visible") checkNow(); };
+  document.addEventListener("visibilitychange", onVis);
+  window.addEventListener("focus", onVis);
 
   return () => {
+    document.removeEventListener("visibilitychange", onVis);
+    window.removeEventListener("focus", onVis);
     if (geoWatchIdRef.current != null) {
       navigator.geolocation.clearWatch(geoWatchIdRef.current);
       geoWatchIdRef.current = null;
@@ -5484,6 +5488,9 @@ const title =
   cardVersionB={cardVersionB}
   mailCompany={["driver", "shipper"].includes(role) ? "" : (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY)}
   mailName={mobileUsers.find(u => (u.uid || u.id) === user?.uid)?.name || ""}
+  attUid={["driver", "shipper"].includes(role) ? "" : (user?.uid || "")}
+  attRole={realRole}
+  attEmail={user?.email || ""}
   onBack={
     page === "form"
       ? () => {
@@ -7129,7 +7136,7 @@ function MobileVersionChip({ dark = false }) {
   );
 }
 
-const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh, onValidateOrders, onMenu, menuBadge = 0, notifCount = 0, onNotifClick, cardVersionB = false, messengerUnread = 0, onMessengerClick, mailCompany = "", mailName = "" }) {
+const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh, onValidateOrders, onMenu, menuBadge = 0, notifCount = 0, onNotifClick, cardVersionB = false, messengerUnread = 0, onMessengerClick, mailCompany = "", mailName = "", attUid = "", attRole = "", attEmail = "" }) {
   const newVer = useNewVersion(); // ★ 새 버전 배포 시 메뉴 버튼에 점 표시
   // ⭐ 2026-10-22 디자인 개선 — A형: 반투명 흰 머리줄 / B형: 남색 그라데이션 머리줄. 버튼은 둥근 네모 타일.
   const isListPage = title === "등록내역" || (!!onMenu && !onBack); // 부서 홈(경리·인사)도 메뉴 버튼
@@ -7199,6 +7206,12 @@ const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh
           {notifCount > 0 && <span className={countCls}>{notifCount > 99 ? "99+" : notifCount}</span>}
         </button>
       </div>
+      {/* ⭐ 2026-11-01 출근·퇴근 버튼 — 첫 화면(등록내역·부서 홈)에서 바로 보이게. 퇴근 후엔 되돌리기 */}
+      {isListPage && attUid && mailCompany && (
+        <div style={{ gridColumn: "1 / -1" }} className="-mx-3 -mb-2.5 pt-1">
+          <AttendanceQuickButton company={mailCompany} uid={attUid} name={mailName} role={attRole} email={attEmail} variant="mobile" dark={cardVersionB} />
+        </div>
+      )}
     </div>
   );
 });
@@ -8627,7 +8640,7 @@ function MobileOrderList({
     if (/냉장|냉동/.test(t)) return "냉장냉동";
     return "일반";
   };
-  const ASSIGN_METHOD_KEYS = ["24시", "직접배차", "인성", "고정기사", "미지정"];
+  const ASSIGN_METHOD_KEYS = [...dropdownList("배차방식", ["24시", "직접배차", "인성", "고정기사"]), "미지정"];
   const PAY_TYPE_KEYS = ["계산서", "착불", "선불", "손실", "개인", "취소", "미지정"];
   const classifyAssignMethod = (o) => ASSIGN_METHOD_KEYS.includes(o?.배차방식) ? o.배차방식 : "미지정";
   const classifyPayType = (o) => PAY_TYPE_KEYS.includes(o?.지급방식) ? o.지급방식 : "미지정";
@@ -10484,7 +10497,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
             <label className={labelCls}>배차방식</label>
             <select className={inputCls} value={dispType} onChange={e => setDispType(e.target.value)}>
               <option value="">선택</option>
-              {["24시","직접배차","인성","고정기사"].map(v => <option key={v}>{v}</option>)}
+              {dropdownList("배차방식", ["24시","직접배차","인성","고정기사"], dispType).map(v => <option key={v}>{v}</option>)}
             </select>
           </div>
         </div>
@@ -11497,7 +11510,7 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
             <QuickField label="배차방식">
               <select className={inp} value={f.배차방식} onChange={set("배차방식")}>
                 <option value="">선택없음</option>
-                {QUICK_EDIT_ASSIGN.map(v => <option key={v}>{v}</option>)}
+                {dropdownList("배차방식", QUICK_EDIT_ASSIGN, f.배차방식).map(v => <option key={v}>{v}</option>)}
               </select>
             </QuickField>
             <QuickField label="지급방식">
@@ -15852,10 +15865,8 @@ const pickDrop = (c) => {
                 onChange={(e) => update("배차방식", e.target.value)}
               >
                 <option value="">배차방식</option>
-                <option value="24시">24시</option>
-                <option value="직접배차">직접배차</option>
-                <option value="인성">인성</option>
-                <option value="고정기사">고정기사</option>
+                {/* ⭐ 2026-11-01 PC 편집모드에서 바꾼 회사별 배차방식 옵션을 모바일도 그대로 */}
+                {dropdownList("배차방식", ["24시", "직접배차", "인성", "고정기사"], form.배차방식).map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
           }
