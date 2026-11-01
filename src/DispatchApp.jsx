@@ -2722,7 +2722,7 @@ import KpBootScreen from "./KpBootScreen";
 import AdminShell, { ShellIcon } from "./AdminShell";
 import { FabButton, SizeButtons, DOCK_BG } from "./FloatDock";
 import { pcBootStore, useMiniStore, makeBootTracker, markBootBase } from "./bootProgress";
-import { auth, db, storage, DEFAULT_COMPANY } from "./firebase";
+import { auth, db, storage, DEFAULT_COMPANY, clearFcmToken } from "./firebase";
 import { LoginManagerModal } from "./LoginManager";
 import "./pcTheme.css";
 import "./pcColorRemap.css"; // ★ PC 알록달록 금지(남색 계열)
@@ -7541,6 +7541,7 @@ useEffect(() => {
 
   // ---------------- 로그아웃 ----------------
   const logout = async () => {
+    await clearFcmToken(auth.currentUser?.uid);
     await signOut(auth);
     localStorage.removeItem("role");
     showAlert("로그아웃되었습니다.");

@@ -85,7 +85,7 @@ import {
   enableNetwork,
 } from "firebase/firestore";
 import { updateDoc, setDoc } from "../orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
-import { db, auth, FUNCTIONS_BASE, DEFAULT_COMPANY } from "../firebase";
+import { db, auth, FUNCTIONS_BASE, DEFAULT_COMPANY, clearFcmToken } from "../firebase";
 import { signOut } from "firebase/auth";
 import { version as APP_VERSION } from "../../package.json";
 import { useNewVersion, openUpdatePopup } from "../VersionCheck";
@@ -3800,6 +3800,7 @@ const [detailFrom, setDetailFrom] = useState(null);
   const appVersion = APP_VERSION;
 
   const logout = async () => {
+    await clearFcmToken(auth.currentUser?.uid);
     try {
       await signOut(auth);
     } catch (e) {
@@ -7554,6 +7555,7 @@ function MobileSideMenu({
 
   const logout = async () => {
     if (!window.confirm("로그아웃 하시겠습니까?")) return;
+    await clearFcmToken(auth.currentUser?.uid);
     try {
       await signOut(auth);
     } catch (e) {

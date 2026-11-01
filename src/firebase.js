@@ -23,6 +23,7 @@ import {
   serverTimestamp,
   deleteDoc,
   onSnapshot,
+  deleteField,
 } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import {
@@ -140,6 +141,13 @@ export const messagingPromise = isSupported().then((supported) => {
   try { return getMessaging(app); } catch { return null; }
 });
 
+// ⭐ 2026-11-01 로그아웃할 때 이 기기 알림 연결을 끊는다 — 한 휴대폰으로 A회사 → B회사 계정을 바꿔 쓰면
+//  예전 계정 문서에 같은 기기 토큰이 남아, 지금 쓰지 않는 회사 알림까지 이 기기로 오던 문제
+export async function clearFcmToken(uid) {
+  if (!uid) return;
+  try { await updateDoc(doc(db, "users", uid), { fcmToken: deleteField(), fcmTokenAt: deleteField() }); } catch { /* 무시 */ }
+}
+
 export async function saveFcmToken(user) {
   if (!user) return;
   const messaging = await messagingPromise;
@@ -171,7 +179,7 @@ export async function saveFcmToken(user) {
   try {
     const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: swRegistration });
     if (!token) { console.warn("[FCM] 토큰을 발급받지 못했습니다."); return; }
-    await updateDoc(doc(db, "users", user.uid), { fcmToken: token });
+    await updateDoc(doc(db, "users", user.uid), { fcmToken: token, fcmTokenAt: Date.now() });
     console.log("[FCM] 토큰 저장 완료");
   } catch (e) {
     console.error("[FCM] 토큰 발급/저장 실패:", e);
@@ -225,7 +233,7 @@ export async function diagnoseFcmToken(user) {
   try {
     const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: swRegistration });
     if (!token) return { ok: false, reason: "getToken()이 토큰 없이 빈 값을 반환했습니다(원인 불명 — iOS Safari 자체 버그일 수 있음)." };
-    await updateDoc(doc(db, "users", user.uid), { fcmToken: token });
+    await updateDoc(doc(db, "users", user.uid), { fcmToken: token, fcmTokenAt: Date.now() });
     return { ok: true, token };
   } catch (e) {
     return { ok: false, reason: `토큰 발급 중 오류: ${e?.name || ""} ${e?.message || e}` };
