@@ -142,8 +142,11 @@ export default function BannerCenter({ bottom = 24 }) {
   return createPortal(
     <>
       <BannerStyles />
-      <div className="fixed right-3 sm:right-6 z-[999990] flex flex-col gap-2.5 items-end pointer-events-none" style={{ bottom }}>
-        {items.map((m) => (
+      {/* ⭐ 2026-11-02 화면 점검 — 배너가 쌓여도 위쪽 머리말(메뉴 버튼)까지 올라가지 않게 높이 상한(화면 - bottom - 머리말 84px)
+          · 넘치면 오래된(위쪽) 배너부터 잘려 보이지 않음 · 휴대폰(640px 미만)은 최근 2개만 · 바깥 틀은 누름 통과(pointer-events-none), 카드만 누름 */}
+      <div className="fixed right-3 sm:right-6 z-[999990] flex flex-col justify-end gap-2.5 items-end pointer-events-none overflow-hidden px-3 -mx-3 pt-3 pb-4 -mb-4"
+        style={{ bottom, maxHeight: `calc(100dvh - ${typeof bottom === "number" ? `${bottom}px` : bottom} - 84px)` }}>
+        {items.slice(typeof window !== "undefined" && window.innerWidth < 640 ? -2 : -4).map((m) => (
           <BannerCard key={m.id} id={m.id} kind={m.kind === "hr" || m.kind === "closeReport" || m.kind === "approval" ? m.kind : "mail"}
             from={m.fromName} title={m.subject || "(제목 없음)"} body={String(m.body || "").replace(/\n{2,}/g, "\n").slice(0, 160)}
             image={(m.images || [])[0]} duration={m.kind === "hr" ? 15000 : 10000}

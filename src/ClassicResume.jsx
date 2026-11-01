@@ -4,6 +4,10 @@ import React from "react";
 
 const th = "border border-[#2A3550] bg-[#EEF2F8] text-[#0F1A30] font-black text-[13.5px] px-3 py-2.5 text-center whitespace-nowrap";
 const td = "border border-[#2A3550] text-[#0F1A30] text-[14px] px-3 py-2.5";
+// ⭐ 2026-11-02 화면 점검 — 인적사항 표 전용: 좌우 여백 축소 + 값 칸 줄바꿈(min-w-0·break-words)으로 옆 칸 침범 방지
+const ith = th.replace("px-3", "px-1.5");
+// (전역 CSS가 table td 에 nowrap·15px 를 !important 로 걸어서 여기서는 ! 접두어로 덮어씀)
+const itd = "border border-[#2A3550] !text-[#0F1A30] !text-[13.5px] md:!text-[14px] px-2 py-2.5 min-w-0 !whitespace-normal break-words leading-snug";
 function Section({ title, en, head, rows, min = 3 }) {
   const body = [...(rows || [])];
   while (body.length < min) body.push(null);
@@ -21,13 +25,16 @@ function Section({ title, en, head, rows, min = 3 }) {
 export default function ClassicResume({ company, person = {}, resume = {}, photoSlot = null }) {
   const today = new Date();
   return (
-    <div className="w-full bg-white rounded-[18px] border border-[#E3E8F0] shadow-[0_10px_30px_rgba(15,26,48,0.06)] px-6 md:px-12 py-10" style={{ fontFamily: "'Pretendard','Noto Sans KR','Malgun Gothic',sans-serif" }}>
+    // ⭐ 2026-11-02 화면 점검 — 카드 좌우 여백 md:px-12 → md:px-8 (좁은 2단 화면에서 표 공간 확보)
+    <div className="w-full bg-white rounded-[18px] border border-[#E3E8F0] shadow-[0_10px_30px_rgba(15,26,48,0.06)] px-5 md:px-8 py-10" style={{ fontFamily: "'Pretendard','Noto Sans KR','Malgun Gothic',sans-serif" }}>
       <div className="flex items-center justify-between text-[11px] font-extrabold tracking-[0.28em] text-[#9AA9C3]"><span>RESUME</span><span>{company}</span></div>
       <h1 className="mt-3 text-center text-[38px] font-black text-[#0F1A30] tracking-[0.6em] pl-[0.6em]">이 력 서</h1>
       <div className="mx-auto mt-2 w-[180px] h-[3px] bg-[#0F1A30]" /><div className="mx-auto mt-[3px] w-[180px] h-px bg-[#0F1A30]" />
 
-      <table className="w-full border-collapse table-fixed mt-8">
-        <colgroup><col style={{ width: 150 }} /><col style={{ width: 110 }} /><col /><col style={{ width: 110 }} /><col /></colgroup>
+      {/* ⭐ 2026-11-02 화면 점검 — 인적사항 표: 좁은 화면(모바일·PC 2단 레이아웃)에서 값이 옆 라벨을 덮던 문제 → 칸 너비 축소 + 줄바꿈 + 가로 스크롤 */}
+      <div className="mt-8 w-full overflow-x-auto">
+      <table className="w-full !min-w-[460px] border-collapse table-fixed">
+        <colgroup><col style={{ width: 110 }} /><col style={{ width: 82 }} /><col /><col style={{ width: 82 }} /><col /></colgroup>
         <tbody>
           <tr>
             <td rowSpan={5} className="border border-[#2A3550] p-2 align-middle">
@@ -36,15 +43,16 @@ export default function ClassicResume({ company, person = {}, resume = {}, photo
                 {photoSlot}
               </div>
             </td>
-            <th className={th}>성 명</th><td className={`${td} text-[19px] font-black tracking-[0.2em]`}>{person.name || ""}</td>
-            <th className={th}>생년월일</th><td className={`${td} tabular-nums`}>{resume.birthDate || ""}</td>
+            <th className={ith}>성 명</th><td className={`${itd} !text-[16px] md:!text-[17px] !font-black tracking-[0.06em] break-keep`}>{person.name || ""}</td>
+            <th className={ith}>생년월일</th><td className={`${itd} tabular-nums`}>{resume.birthDate || ""}</td>
           </tr>
-          <tr><th className={th}>연 락 처</th><td className={`${td} tabular-nums`}>{person.phone || ""}</td><th className={th}>이 메 일</th><td className={`${td} break-all`}>{person.email || ""}</td></tr>
-          <tr><th className={th}>주 소</th><td className={td} colSpan={3}>{resume.address || ""}</td></tr>
-          <tr><th className={th}>소 속</th><td className={td}>{[person.team, person.position].filter(Boolean).join(" / ")}</td><th className={th}>입 사 일</th><td className={`${td} tabular-nums`}>{person.hireDate || ""}</td></tr>
-          <tr><th className={th}>고용 형태</th><td className={td}>{person.employType || "정규직"}</td><th className={th}>재직 상태</th><td className={td}>{person.employmentStatus || "재직"}</td></tr>
+          <tr><th className={ith}>연 락 처</th><td className={`${itd} tabular-nums`}>{person.phone || ""}</td><th className={ith}>이 메 일</th><td className={`${itd} break-all`}>{person.email || ""}</td></tr>
+          <tr><th className={ith}>주 소</th><td className={itd} colSpan={3}>{resume.address || ""}</td></tr>
+          <tr><th className={ith}>소 속</th><td className={itd}>{[person.team, person.position].filter(Boolean).join(" / ")}</td><th className={ith}>입 사 일</th><td className={`${itd} tabular-nums`}>{person.hireDate || ""}</td></tr>
+          <tr><th className={ith}>고용 형태</th><td className={itd}>{person.employType || "정규직"}</td><th className={ith}>재직 상태</th><td className={itd}>{person.employmentStatus || "재직"}</td></tr>
         </tbody>
       </table>
+      </div>
 
       <Section title="학력사항" en="EDUCATION" head={[["기 간", 190], ["학 교 명"], ["전공 · 졸업 구분"]]} rows={(resume.education || []).map((e) => [e.period, e.school, [e.detail, e.status].filter(Boolean).join(" · ")])} />
       <Section title="경력사항" en="CAREER" head={[["기 간", 190], ["근 무 처"], ["담당 업무 · 직위"]]} rows={(resume.career || []).map((c) => [c.period, c.company, c.detail])} />

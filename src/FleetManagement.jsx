@@ -5701,8 +5701,9 @@ function TemperatureTab({ drivers }) {
       </div>
 
       {/* 테이블 */}
-      <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 15 }}>
+      {/* ⭐ 2026-11-02 화면 점검 — 모바일에서 표가 잘리지 않게 가로 스크롤 */}
+      <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 10, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 15, minWidth: 640 }}>
           <thead>
             <tr style={{ background: "#f4f6fa", borderBottom: "2px solid #e5e7eb" }}>
               {["ID", "차량정보", "알림명", "온도A (℃)", "온도B (℃)", "업데이트", "상태"].map(h => (
@@ -5836,16 +5837,13 @@ function TemperatureTab({ drivers }) {
         </div>
       )}
 
-      {/* IoT 연동 안내 */}
-      <div style={{ background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 10, padding: "12px 16px", marginTop: 12 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "#92400e", marginBottom: 4 }}>센서 데이터 경로</div>
-        <div style={{ fontSize: 13, color: "#78350f", lineHeight: 1.7 }}>
-          Firestore <code style={{ background: "rgba(0,0,0,0.06)", padding: "1px 4px", borderRadius: 3 }}>cargo_temp / {"{driverId}"}</code> 에
-          <code style={{ background: "rgba(0,0,0,0.06)", padding: "1px 4px", borderRadius: 3, marginLeft: 4 }}>temperature</code>
-          <code style={{ background: "rgba(0,0,0,0.06)", padding: "1px 4px", borderRadius: 3, marginLeft: 4 }}>temperatureB</code>
-          <code style={{ background: "rgba(0,0,0,0.06)", padding: "1px 4px", borderRadius: 3, marginLeft: 4 }}>updatedAt</code> 필드 기록 시 즉시 반영됩니다.
+      {/* ⭐ 2026-11-02 화면 점검 — 개발자용 "Firestore cargo_temp/{driverId} …" 안내문을 사용자용 빈 상태 문구로 바꿈(온도 기록이 있으면 숨김) */}
+      {!drivers.some(d => tempData[d.id]?.temperature != null) && (
+        <div style={{ background: "#F4F7FC", border: "1px solid #DCE6F7", borderRadius: 10, padding: "12px 16px", marginTop: 12 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: NAVY, marginBottom: 4, wordBreak: "keep-all" }}>온도 센서가 연결된 차량이 없습니다</div>
+          <div style={{ fontSize: 13, color: "#5B6B85", lineHeight: 1.7, wordBreak: "keep-all" }}>기사앱에서 온도 기록이 들어오면 여기에 표시됩니다.</div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -6023,9 +6021,10 @@ function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
           <div style={{ fontSize: 23, fontWeight: 900, marginTop: 2 }}>차량 관리</div>
           <div style={{ fontSize: 13.5, color: "rgba(255,255,255,.65)", marginTop: 2 }}>기사님이 기사앱에서 입력한 주행거리·정비·만기·제원을 보고 함께 고칩니다. 차종(톤급)별 정비 주기가 자동 적용됩니다.</div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        {/* ⭐ 2026-11-02 화면 점검 — 모바일 390px에서 4번째 카드(미설정)가 화면 밖으로 나가 → 줄바꿈 허용 + 카드 폭 축소 */}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", maxWidth: "100%" }}>
           {[["all", "전체"], ["over", "교체 지남"], ["soon", "점검 필요"], ["none", "미설정"]].map(([k, l]) => (
-            <button key={k} type="button" onClick={() => setFilter(k)} style={{ minWidth: 86, padding: "8px 12px", borderRadius: 12, border: "1px solid rgba(143,176,240,.3)", background: filter === k ? "#fff" : "rgba(255,255,255,.06)", color: filter === k ? "#0F1A30" : "#fff", cursor: "pointer", textAlign: "left" }}>
+            <button key={k} type="button" onClick={() => setFilter(k)} style={{ flex: "1 0 auto", minWidth: 72, padding: "8px 10px", borderRadius: 12, border: "1px solid rgba(143,176,240,.3)", background: filter === k ? "#fff" : "rgba(255,255,255,.06)", color: filter === k ? "#0F1A30" : "#fff", cursor: "pointer", textAlign: "left" }}>
               <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.7, whiteSpace: "nowrap" }}>{l}</div>
               <div style={{ fontFamily: FC_MONO, fontSize: 20, fontWeight: 800 }}>{cnt[k]}</div>
             </button>
@@ -6034,11 +6033,13 @@ function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: 14, alignItems: "start", paddingRight: cur ? 700 : 0, transition: "padding .2s" }}>
         <div style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 16, overflow: "hidden" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "#F7F9FC", borderBottom: "1px solid #E8EDF4" }}>
-            <span style={{ fontSize: 16, fontWeight: 900, color: "#0F1A30" }}>차량 {shown.length}대 <span style={{ fontSize: 12.5, fontWeight: 700, color: "#9AA9C3", marginLeft: 6 }}>두 번 누르면 오른쪽에 상세가 열립니다</span></span>
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="기사명·차량번호" style={{ height: 34, width: 200, padding: "0 12px", borderRadius: 9, border: "1px solid #DCE3EF", fontSize: 14 }} />
+          {/* ⭐ 2026-11-02 화면 점검 — 좁은 화면에서 제목·검색창 줄바꿈 */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "12px 16px", background: "#F7F9FC", borderBottom: "1px solid #E8EDF4" }}>
+            <span style={{ fontSize: 16, fontWeight: 900, color: "#0F1A30", wordBreak: "keep-all" }}>차량 {shown.length}대 <span style={{ fontSize: 12.5, fontWeight: 700, color: "#9AA9C3", marginLeft: 6 }}>두 번 누르면 오른쪽에 상세가 열립니다</span></span>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="기사명·차량번호" style={{ height: 34, width: 200, maxWidth: "100%", padding: "0 12px", borderRadius: 9, border: "1px solid #DCE3EF", fontSize: 14 }} />
           </div>
-          <div style={{ overflowX: "auto" }}>
+          {/* ⭐ 2026-11-02 화면 점검 — 표는 가로 스크롤(터치 관성) */}
+          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", maxWidth: "100%" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
               <thead><tr style={{ background: "linear-gradient(90deg,#0F1A30,#1B2B4B)" }}>{["차량번호", "기사", "차종", "모델·연식", "주행거리", "엔진오일", "점검 알림", "설정"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
               <tbody>

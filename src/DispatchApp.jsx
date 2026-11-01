@@ -8027,7 +8027,7 @@ return (
                   disabled={isBlocked}
                   onClick={() => handleMenuClick(m)}
                   data-on={isActive ? "1" : "0"}
-                  className={`kp-nav-btn relative inline-flex items-center gap-1.5 ${deptMode && DEPT_MENUS[deptMode].length <= 8 ? "px-3" : "px-[6px] min-[1700px]:px-[7px]" /* ⭐ 2026-11-02 화면 점검 — 1700 미만은 조금 촘촘하게 */} h-[34px] rounded-[10px] text-[13px] min-[1700px]:text-[13.5px] min-[2050px]:text-[14px] min-[2050px]:px-3 whitespace-nowrap transition-all flex-shrink-0
+                  className={`kp-nav-btn relative inline-flex items-center gap-1.5 ${deptMode && DEPT_MENUS[deptMode].length <= 8 ? "px-3" : "px-[6px] min-[1700px]:px-[7px]" /* ⭐ 2026-11-02 화면 점검 — 1700 미만은 조금 촘촘하게(text-[13px]은 index.css에서 15px로 바뀌므로 12.75px 사용) */} h-[34px] rounded-[10px] text-[12.75px] min-[1700px]:text-[13.5px] min-[2050px]:text-[14px] min-[2050px]:px-3 whitespace-nowrap transition-all flex-shrink-0
                     ${isBlocked
                       ? "text-white/20 cursor-not-allowed"
                       : isActive
@@ -16327,7 +16327,7 @@ className={`
       setVehicleSpecTab("vehicle");
       setVehicleSpecOpen(true);
     }}
-   className="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white transition whitespace-nowrap shrink-0" /* ⭐ 2026-11-02 화면 점검 — 한 글자씩 줄바꿈 방지 */
+   className="text-[11px] font-bold px-1.5 py-0.5 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white transition whitespace-nowrap shrink-0" /* ⭐ 2026-11-02 화면 점검 — 한 글자씩 줄바꿈 방지 */
   >
     차량·파렛
   </button>
@@ -46091,9 +46091,9 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
   };
 
   const KpiCard = ({ label, value, sub, highlight }) => (
-    <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: "16px 20px" }}>
+    <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: "14px 14px", minWidth: 0 }}>
       <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1"><EditableText id={`settlement.accounting.kpi.${label}`} defaultText={label} /></div>
-      <div className={`text-[20px] font-bold ${highlight === "danger" ? "text-red-600" : highlight === "ok" ? "text-emerald-700" : "text-[#1B2B4B]"}`}>
+      <div className={`text-[17px] sm:text-[20px] font-bold whitespace-nowrap tabular-nums ${highlight === "danger" ? "text-red-600" : highlight === "ok" ? "text-emerald-700" : "text-[#1B2B4B]"}`}>
         {value}
       </div>
       {sub && <div className="text-[11px] text-gray-500 mt-1">{sub}</div>}
@@ -46101,7 +46101,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
   );
 
   const thStyle = { padding: "8px 12px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6b7280", letterSpacing: ".06em", textTransform: "uppercase", borderBottom: "1px solid #e5e7eb", whiteSpace: "nowrap", background: "#f8f9fb" };
-  const tdStyle = { padding: "9px 12px", fontSize: 13, color: "#374151", borderBottom: "1px solid #f0f2f5" };
+  const tdStyle = { padding: "9px 12px", fontSize: 13, color: "#374151", borderBottom: "1px solid #f0f2f5", whiteSpace: "nowrap" }; // ⭐ 2026-11-02 화면 점검 — 금액 "원"이 다음 줄로 떨어지던 문제
   const tdR = { ...tdStyle, textAlign: "right" };
 
   const currentQData = vatData.quarters[vatQuarter] || { sales: 0, costs: 0, months: [] };
@@ -46110,9 +46110,9 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
   const vatNet = vatOutput - vatInput;
 
   return (
-    <div className="px-8 py-6">
-      <div className="flex items-center justify-between mb-5">
-        <div>
+    <div className="px-4 sm:px-8 py-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+        <div className="min-w-0">
           <h2 className="text-[16px] font-bold text-[#1B2B4B]"><EditableText id="settlement.accounting.title" defaultText="회계자료" /></h2>
           <p className="text-[12px] text-gray-500 mt-0.5">미수금·지급현황·부가세·원가분석을 한 곳에서 관리하세요</p>
         </div>
@@ -46127,10 +46127,10 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
       </div>
 
       {/* 서브탭 */}
-      <div className="flex gap-0 border-b border-gray-200 mb-6">
+      <div className="flex gap-0 border-b border-gray-200 mb-6 overflow-x-auto">
         {[["ar","미수금 현황"],["ap","지급 현황"],["vat","부가세 자료"],["cost","원가 분석"]].map(([k, label]) => (
           <button key={k} onClick={() => setSubTab(k)}
-            className={`px-5 py-2.5 text-[13px] font-semibold border-b-2 transition-colors ${subTab === k ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-transparent text-gray-500 hover:text-gray-600"}`}>
+            className={`shrink-0 whitespace-nowrap px-3 sm:px-5 py-2.5 text-[13px] font-semibold border-b-2 transition-colors ${subTab === k ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-transparent text-gray-500 hover:text-gray-600"}`}>
             <EditableText id={`settlement.accounting.subtab.${k}`} defaultText={label} />
           </button>
         ))}
@@ -60223,12 +60223,12 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
         ) : (
           <>
             {/* 사원증(디지털 명함) */}
-            <div className="relative overflow-hidden rounded-[24px] px-7 py-6 text-white shadow-[0_18px_40px_rgba(15,26,48,0.28)]"
+            <div className="relative overflow-hidden rounded-[24px] px-4 sm:px-7 py-6 text-white shadow-[0_18px_40px_rgba(15,26,48,0.28)]" /* ⭐ 2026-11-02 화면 점검 — 모바일은 여백·사진을 줄여 통계칸 폭 확보 */
               style={{ background: "linear-gradient(125deg, #0F1A30 0%, #1B2B4B 52%, #2D4C82 100%)" }}>
               <div className="absolute -right-16 -top-20 w-72 h-72 rounded-full bg-white/[0.05]" />
               <div className="absolute right-28 -bottom-28 w-60 h-60 rounded-full bg-white/[0.04]" />
-              <div className="relative flex items-start gap-5">
-                <div className="w-[84px] h-[104px] rounded-[18px] bg-white overflow-hidden flex items-center justify-center text-[30px] font-black text-[#0F1A30] shadow-[0_10px_24px_rgba(0,0,0,0.25)] shrink-0">
+              <div className="relative flex items-start gap-3 sm:gap-5">
+                <div className="w-[64px] h-[80px] sm:w-[84px] sm:h-[104px] rounded-[18px] bg-white overflow-hidden flex items-center justify-center text-[26px] sm:text-[30px] font-black text-[#0F1A30] shadow-[0_10px_24px_rgba(0,0,0,0.25)] shrink-0">
                   {resume.photoUrl ? <img src={resume.photoUrl} className="w-full h-full object-cover" /> : (selected.name || "?").slice(0, 1)}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -60259,7 +60259,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                       { k: "잔여 휴가", v: selected.leave ? `${selected.leave.remaining}일` : "-" },
                       { k: "이달 출근", v: `${selected.workDays || 0}일` },
                     ].map(({ k, v }) => (
-                      <div key={k} className="px-3 py-2 rounded-xl bg-white/[0.08] border border-white/10 min-w-0">
+                      <div key={k} className="px-2.5 sm:px-3 py-2 rounded-xl bg-white/[0.08] border border-white/10 min-w-0">
                         <div className="text-[10.5px] font-bold text-white/55 whitespace-nowrap break-keep truncate">{k}</div>
                         <div className="text-[14px] font-black truncate whitespace-nowrap">{v}</div>
                       </div>

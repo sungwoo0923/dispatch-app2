@@ -18674,7 +18674,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
           </div>
           <div className="rounded-xl bg-white/[0.07] ring-1 ring-white/10 px-3 py-2">
             <div className="text-[10px] font-bold text-white/50">로그인</div>
-            <div className="text-[14px] font-black tabular-nums truncate" style={{ fontFamily: KPM_MONO }}>{fmtTime(loginTime)}</div>
+            <div className="text-[13px] font-black tabular-nums whitespace-normal break-keep leading-snug" style={{ fontFamily: KPM_MONO }}>{fmtTime(loginTime)}</div>
           </div>
         </div>
       </div>
@@ -22235,7 +22235,8 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
           {/* ⭐ 2026-11-02 점검 — 이 토글은 앱 안 소리·배너만 끔(휴대폰 푸시는 '알림 종류별 설정') → 이름을 실제 동작에 맞춤 */}
           <KpmRow label="앱 안 알림(소리·배너)" sub="앱을 켜 둔 동안의 소리·배너 · 휴대폰 푸시는 '알림 종류별 설정'에서" right={<KpmToggle value={alarmEnabled} onChange={toggleAlarm} />} />
           {/* ⭐ 2026-11-02 점검 — 아이폰 PWA는 탭해야만 알림 권한 요청 가능 → 모든 직원이 누를 수 있는 연결 버튼 */}
-          <KpmRow label="이 기기 알림 받기" sub={typeof Notification !== "undefined" ? `권한: ${Notification.permission}` : "미지원"}
+          {/* ⭐ 2026-11-02 화면 점검 — 영어 그대로("권한: denied") 보이던 권한 상태를 한글로 */}
+          <KpmRow label="이 기기 알림 받기" sub={typeof Notification !== "undefined" ? `권한: ${({ granted: "허용됨", denied: "차단됨 — 기기 설정에서 허용해 주세요", default: "아직 묻지 않음" })[Notification.permission] || Notification.permission}` : "미지원"}
             onClick={async () => {
               if (typeof Notification === "undefined") { alert("이 기기는 알림을 지원하지 않습니다."); return; }
               // 탭 직후 바로 권한 요청(아이폰은 await 뒤로 미루면 사용자 탭으로 인정 안 될 수 있음)

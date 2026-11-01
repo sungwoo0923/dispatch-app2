@@ -44,8 +44,15 @@ const isNative = () => typeof window !== "undefined" && !!(window.Capacitor?.isN
 // 전화번호 하이픈 자동 포맷 (PC/모바일 formatPhone과 동일 규칙)
 function formatPhone(phone) {
   const p = String(phone ?? "").replace(/[^\d]/g, "");
-  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
-  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  // ⭐ 2026-11-02 화면 점검 — 서울 02 번호(9·10자리)가 "020000000"처럼 하이픈 없이 보였다
+  if (p.startsWith("02")) {
+    if (p.length === 9) return `02-${p.slice(2, 5)}-${p.slice(5)}`;
+    if (p.length === 10) return `02-${p.slice(2, 6)}-${p.slice(6)}`;
+    return p;
+  }
+  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`; // 010-XXXX-XXXX · 지역번호 3-4-4
+  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`; // 지역번호 3-3-4
+  if (p.length === 8 && /^1[5-9]/.test(p)) return `${p.slice(0, 4)}-${p.slice(4)}`; // 대표번호 1588-XXXX
   return p;
 }
 

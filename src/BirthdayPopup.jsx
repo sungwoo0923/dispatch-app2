@@ -93,7 +93,9 @@ export default function BirthdayPopup({ uid, profile, company, mobile = false })
   if (showRemind) {
     const [, mm, dd] = [0, ...d3.split("-")];
     return (
-      <div style={{ position: "fixed", left: mobile ? 12 : "auto", right: mobile ? 12 : 24, bottom: mobile ? 96 : 24, zIndex: 999970, width: mobile ? "auto" : 340, fontFamily: "'Noto Sans KR',sans-serif" }}>
+      // ⭐ 2026-11-02 화면 점검 — 모바일: 메뉴 서랍(z-40)·바텀시트(z-9999 이상)보다 아래(z 30)로 내려 열린 메뉴를 가리지 않게
+      //   PC: 오른쪽 아래 떠 있는 버튼(메신저·계산기·AI, 오른쪽 16px·폭 44px) 왼쪽으로 비켜서 버튼을 가리지 않게
+      <div style={{ position: "fixed", left: mobile ? 12 : "auto", right: mobile ? 12 : 72, bottom: mobile ? 96 : 24, zIndex: mobile ? 30 : 999970, width: mobile ? "auto" : 340, maxWidth: mobile ? "none" : "calc(100vw - 96px)", fontFamily: "'Noto Sans KR',sans-serif" }}>
         <div style={{ borderRadius: 18, overflow: "hidden", background: "#fff", boxShadow: "0 18px 44px rgba(15,26,48,0.28)", border: "1px solid rgba(15,26,48,0.08)" }}>
           <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "14px 16px 12px" }}>
             <span style={{ width: 40, height: 40, borderRadius: 13, flexShrink: 0, display: "grid", placeItems: "center", background: "linear-gradient(135deg,#0F1A30,#2D4C82)" }}>
