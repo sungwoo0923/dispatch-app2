@@ -3,6 +3,7 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import { kpConfirm } from "./kpDialog";
 import { createPortal } from "react-dom";
 import { imeFocusRef } from "./imeFocus";
+import { useSubnavTarget } from "./navMenus";
 import "leaflet/dist/leaflet.css";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import { getTenant } from "./fsTenant";
@@ -6083,6 +6084,8 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
   // 보여야 하므로, 기본 진입 탭을 실시간관제가 아닌 노선관리로 바꾼다.
   const [mainTab, setMainTab] = useState(() => { if (forceTab) return forceTab; const t = sfGet("fm_tab", "route"); return t === "settlement" ? "route" : t; });
   useEffect(() => { if (forceTab) setMainTab(forceTab); }, [forceTab]);
+  // ⭐ 상단 메뉴 › 지입차관리 세부 메뉴에서 고른 모듈로 바로 이동
+  useSubnavTarget(hideChrome ? "" : "FLEET CONTROL", ["tracking", "route", "fixed", "history", "attendance", "temperature", "cargo-camera", "vehicle", "registration"], setMainTab);
 
   // Data — init from sessionStorage so page appears populated immediately on re-mount
   const [driversRaw, setDriversRaw] = useState(() => sfGet("fm_drivers_raw", []));

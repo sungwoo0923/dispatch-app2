@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { imeFocusRef } from "./imeFocus";
+import { useSubnavTarget } from "./navMenus";
 import southKorea from "@svg-maps/south-korea";
 import StandardFare from "./StandardFare";
 import { db } from "./firebase";
@@ -1340,6 +1341,8 @@ const FARE_TABS=[
 export default function FreightRateInquiry({ forceTab = "", hideHeader = false } = {}){
   const [tabState,setActiveTab]=useState("전국운임조회");
   const activeTab=forceTab||tabState;
+  // ⭐ 상단 메뉴 › 운임조회 세부 메뉴에서 고른 탭으로 바로 이동
+  useSubnavTarget(forceTab ? "" : "FARE LOOKUP", ["전국운임조회","자사운임표"], setActiveTab, [["전국운임조회","전국운임조회"],["자사운임표","자사운임표"]]);
   const MONO="'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
   return(
     <div className="w-full">
