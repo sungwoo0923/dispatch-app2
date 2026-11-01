@@ -3553,6 +3553,66 @@ exports.checkEmail = functions.https.onRequest(async (req, res) => {
   }
 });
 
+// ⭐ 2026-11-01 삭제된 계정의 이메일로 다른 사람도 다시 가입할 수 있게 —
+//  예전엔 직원 삭제·운송사 삭제가 users 문서만 지우고 로그인 계정(Firebase 인증)은 남겨서,
+//  같은 이메일로 가입하면 "이미 가입된 이메일"로 막혔다(예전 비밀번호를 아는 본인만 재가입 가능).
+//  users 문서가 없거나(삭제됨) 탈퇴·삭제 상태인 로그인 계정은 지워 준다. 최고관리자 계정·방금 만든 계정은 제외.
+const SUPER_EMAIL_FREE = "tjddnqkf@naver.com";
+async function canFreeAuthAccount(u) {
+  if (!u || !u.uid) return false;
+  if (String(u.email || "").toLowerCase() === SUPER_EMAIL_FREE) return false;
+  const created = Date.parse(u.metadata?.creationTime || "") || 0;
+  if (created && Date.now() - created < 10 * 60000) return false; // 가입 진행 중인 계정 보호
+  const snap = await db.collection("users").doc(u.uid).get();
+  if (snap.exists) {
+    const st = snap.data().status;
+    return st === "deleted" || st === "withdrawn";
+  }
+  // users 문서가 없는 계정은 "운송사 삭제(초기화)로 사용 중지된 계정"일 때만 — 다른 서비스(KP-Planner 등) 전용 계정은 건드리지 않는다
+  if (!u.disabled) return false;
+  const bk = await db.collection("resetBackups").where("accountUids", "array-contains", u.uid).limit(1).get().catch(() => ({ empty: true }));
+  return !bk.empty;
+}
+async function freeAuthAccount(u) {
+  // 운송사 초기화 보관함(7일 복원용)에 들어 있으면 목록에서 빼고 지운다(복원해도 이 계정은 새로 가입한 사람 것이 됨)
+  const bk = await db.collection("resetBackups").where("accountUids", "array-contains", u.uid).get().catch(() => ({ docs: [] }));
+  for (const d of bk.docs) await d.ref.set({ accountUids: FieldValue.arrayRemove(u.uid), releasedUids: FieldValue.arrayUnion(u.uid) }, { merge: true }).catch(() => {});
+  await getAuth().deleteUser(u.uid);
+}
+exports.freeDeletedEmail = functions.https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  const e = String(req.query.e || req.body?.e || "").trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) || e.length > 200) { res.status(400).json({ error: "BAD_EMAIL" }); return; }
+  try {
+    const u = await getAuth().getUserByEmail(e).catch(() => null);
+    if (!u) { res.status(200).json({ freed: false, exists: false }); return; }
+    if (!(await canFreeAuthAccount(u))) { res.status(200).json({ freed: false, exists: true }); return; }
+    await freeAuthAccount(u);
+    console.log(`♻ 삭제된 계정 이메일 해제: ${e}`);
+    res.status(200).json({ freed: true });
+  } catch (err) {
+    res.status(500).json({ error: "FREE_FAILED" });
+  }
+});
+// 직원 삭제(users 문서 삭제) → 로그인 계정도 바로 삭제. 단, 운송사 초기화 보관 중(7일 복원 대기)인 계정은 사용 중지 상태로 둔다
+exports.onUserDocDeleted = functions.firestore.document("users/{uid}").onDelete(async (snap, ctx) => {
+  const uid = ctx.params.uid;
+  const data = snap.data() || {};
+  if (String(data.email || "").toLowerCase() === SUPER_EMAIL_FREE || data.role === "totalMaster") return null;
+  const bk = await db.collection("resetBackups").where("accountUids", "array-contains", uid).get().catch(() => ({ docs: [] }));
+  if (bk.docs.some((d) => ["saving", "kept", "restoring"].includes(d.data().status))) return null;
+  const u = await getAuth().getUser(uid).catch(() => null);
+  if (!u) return null;
+  // 같은 uid로 바로 다시 가입한 경우(문서를 다시 만든 경우)는 건드리지 않는다
+  const again = await db.collection("users").doc(uid).get();
+  if (again.exists) return null;
+  await getAuth().deleteUser(uid).catch((e) => console.warn("로그인 계정 삭제 실패", uid, e?.message));
+  console.log(`✕ 삭제된 직원 로그인 계정 정리: ${data.email || uid}`);
+  return null;
+});
+
 // 🏢 가입 화면 "기존 회사" 검색 — 로그인 전에는 규칙상 transportApplications 를 읽을 수 없어
 //  항상 "등록된 운송사가 없습니다"가 떴다. 승인된 운송사의 회사명·주소만 내려준다(다른 정보 없음).
 exports.findCompany = functions.https.onRequest(async (req, res) => {
