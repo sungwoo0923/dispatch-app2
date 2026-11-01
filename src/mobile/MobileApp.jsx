@@ -3719,6 +3719,8 @@ useEffect(() => {
         const statusLabel = data.status === "approved" ? "승인" : "거절";
         msg = data.msg || `[출근수정] 요청이 ${statusLabel}되었습니다.`;
         notifStatus = data.status;
+        // ⭐ 2026-11-01 승인·거절 결과는 한 번 보여 주면 읽음으로 저장 — 화면을 옮겼다 와도 다시 뜨지 않게
+        updateDoc(doc(db, "notifications", change.doc.id), { read: true }).catch(() => {});
       } else {
         const statusLabel = data.status === "approved" ? "승인" : data.status === "rejected" ? "반려" : "보류";
         msg = `[${data.scheduleType || "일정"}] ${data.approverName || "결재자"}님이 ${statusLabel}하였습니다.`;

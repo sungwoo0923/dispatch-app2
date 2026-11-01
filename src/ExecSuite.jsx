@@ -22,6 +22,7 @@ import { personName } from "./userNames";
 import { useCompanyDriverDocs, docProblems } from "./driverRequiredDocs";
 import { useFundsSummary, isCeoPosition } from "./FundsBoard";
 import { AttendanceQuickButton } from "./attendanceQuick";
+import AttendanceApprovalInbox from "./AttendanceApprovalInbox";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const GOLD = "#D7BC82";
@@ -537,6 +538,8 @@ export function ExecApprovals({ company, me }) {
             </div>
           </div>
         </div>
+        {/* ⭐ 2026-11-01 인사팀 본인의 출근기록 수정·출근 요청은 임원이 여기서 승인(먼저 승인한 1명으로 종결) */}
+        {page === "inbox" && <AttendanceApprovalInbox company={company} me={me} role={me?.role} />}
         {page === "handover"
           ? <HandoverCenter company={company} me={me} isViewer={me?.role === "viewer"} />
           : <ApprovalCenter company={company} me={me} page={page} setPage={setPage} openId={openId} onOpened={() => setOpenId(null)} />}
