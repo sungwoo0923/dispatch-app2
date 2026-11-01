@@ -1,11 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { collection, doc, onSnapshot, query, setDoc, where, addDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, setDoc, where } from "firebase/firestore";
 import { db, DEFAULT_COMPANY } from "../firebase";
 import { ATTENDANCE_STATUS_COLOR, isWeekend, isHoliday, findApprovedLeaveForDate } from "../attendanceUtils";
 import { RadiusEditor, officeRadii, DEFAULT_IN_RADIUS, DEFAULT_OUT_RADIUS } from "../attendanceQuick";
+import { useCustomRoles } from "../customRoles";
+import {
+  APPROVER_GROUP_LABEL, isHrStaffUser, isExecUser, canApproveAttendanceReq, canEditAttendanceOf,
+  approveChangeReq, rejectChangeReq, approveCheckInReq, rejectCheckInReq, submitChangeReq, submitCheckInReq,
+} from "../attendanceApproval";
 
+// ⭐ 2026-11-01 권한·결재는 PC 출근기록부와 같은 규칙(attendanceApproval.js)
+//  · 직접 수정: 인사팀(본인 기록 제외)·최고관리자 — 모바일은 본인 달력만 보여서 사실상 최고관리자만
+//  · 본인 기록 수정·출근 요청 → 일반 직원은 인사팀, 인사팀 본인은 임원에게(임원 1명 승인으로 종결)
 const ADMIN_ROLES = ["totalMaster", "admin"];
-const APPROVE_ROLES = ["totalMaster", "hrManager"];
 
 function daysInMonth(year, month) {
   return new Date(year, month, 0).getDate();
@@ -18,7 +25,6 @@ function fmtTime(iso) {
 }
 
 export default function MobileAttendanceBoard({ userCompany, role, currentUser, cardVersionB = false }) {
-  const isAdmin = ADMIN_ROLES.includes(role);
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -30,7 +36,9 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
   const [checkInRequests, setCheckInRequests] = useState([]);
   const [requestingCheckIn, setRequestingCheckIn] = useState(false);
   const [showRequestPanel, setShowRequestPanel] = useState(false);
-  const [changeRequests, setChangeRequests] = useState([]);
+  const [pendingCompanyChangeReqs, setPendingCompanyChangeReqs] = useState([]);
+  const [myChangeReqs, setMyChangeReqs] = useState([]);
+  const [staff, setStaff] = useState([]);
   const [showChangeReqPanel, setShowChangeReqPanel] = useState(false);
 
   // 수정 요청 모달 (비관리자)
@@ -72,6 +80,19 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
   const myName = myUserDoc?.name || currentUser?.displayName || currentUser?.name || currentUser?.email?.split("@")[0] || "";
 
   const todayDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+  // ─── 권한(인사팀·임원) ───
+  const customRoles = useCustomRoles(company);
+  useEffect(() => {
+    if (!company) return undefined;
+    return onSnapshot(query(collection(db, "users"), where("companyName", "==", company)), snap => setStaff(snap.docs.map(d => ({ uid: d.id, ...d.data() }))), () => {});
+  }, [company]);
+  const meProfile = useMemo(() => ({ ...(myUserDoc || {}), uid, name: myName, role }), [myUserDoc, uid, myName, role]);
+  const isHrStaff = role === "totalMaster" || isHrStaffUser(myUserDoc || {}, role);
+  const isAdmin = ADMIN_ROLES.includes(role) || isHrStaff;
+  const mayApprove = isHrStaff || isExecUser(meProfile, customRoles) || role === "admin";
+  const canApprove = (req) => canApproveAttendanceReq(req, meProfile, role, customRoles, staff);
+  const myApproverLabel = APPROVER_GROUP_LABEL[isHrStaffUser(myUserDoc || {}, role) ? "exec" : "hr"];
 
   useEffect(() => {
     if (!uid) return;
@@ -146,10 +167,10 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
     );
   };
 
-  // 출근 요청 구독 (관리자: 회사 전체, 직원: 내 요청)
+  // 출근 요청 구독 (승인 가능자: 회사 전체, 직원: 내 요청)
   useEffect(() => {
     if (!company) return;
-    const q = isAdmin
+    const q = mayApprove
       ? query(collection(db, "attendanceRequests"), where("companyName", "==", company), where("status", "==", "pending"))
       : (uid ? query(collection(db, "attendanceRequests"), where("uid", "==", uid), where("status", "==", "pending")) : null);
     if (!q) return;
@@ -157,69 +178,36 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
       setCheckInRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, () => {});
     return () => unsub();
-  }, [company, uid, isAdmin]);
+  }, [company, uid, mayApprove]);
 
-  // 수정 요청 구독
+  // 수정 요청 구독 — 승인할 것(회사 대기건) + 내가 올린 것
   useEffect(() => {
-    if (!company || !uid) return;
-    const q = canApproveRequests
-      ? query(collection(db, "attendanceChangeRequests"), where("companyName", "==", company), where("status", "==", "pending"))
-      : query(collection(db, "attendanceChangeRequests"), where("uid", "==", uid));
-    const unsub = onSnapshot(q, snap => {
-      setChangeRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, () => {});
-    return () => unsub();
-  }, [company, uid, role]);
-
-  const handleApproveRequest = async (req) => {
-    await setDoc(doc(db, "attendance", `${req.date}_${req.uid}`), {
-      uid: req.uid, name: req.name, date: req.date,
-      month: req.date.slice(0, 7), companyName: company,
-      status: "출근", checkInTime: req.requestedAt,
-      source: "request_approved",
-    }, { merge: true });
-    await deleteDoc(doc(db, "attendanceRequests", req.id));
-    await addDoc(collection(db, "notifications"), {
-      toUid: req.uid, type: "attendance_result", status: "approved",
-      msg: `[출근요청] ${req.date} 출근 요청이 승인되었습니다.`,
-      read: false, createdAt: serverTimestamp(), companyName: company,
-    });
+    if (!company || !uid || !mayApprove) { setPendingCompanyChangeReqs([]); return undefined; }
+    return onSnapshot(query(collection(db, "attendanceChangeRequests"), where("companyName", "==", company), where("status", "==", "pending")),
+      snap => setPendingCompanyChangeReqs(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
+  }, [company, uid, mayApprove]);
+  useEffect(() => {
+    if (!company || !uid) return undefined;
+    return onSnapshot(query(collection(db, "attendanceChangeRequests"), where("uid", "==", uid)),
+      snap => setMyChangeReqs(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
+  }, [company, uid]);
+  const approvableChange = pendingCompanyChangeReqs.filter(canApprove);
+  const approvableCheckIn = checkInRequests.filter(canApprove);
+  const approver = { uid, name: myName };
+  const decide = async (fn) => {
+    try { const ok = await fn(); if (ok === false) alert("이미 다른 승인자가 처리한 요청입니다."); }
+    catch (e) { alert(`처리하지 못했습니다: ${e?.message || e}`); }
   };
 
-  const handleRejectRequest = async (req) => {
-    await deleteDoc(doc(db, "attendanceRequests", req.id));
-    await addDoc(collection(db, "notifications"), {
-      toUid: req.uid, type: "attendance_result", status: "rejected",
-      msg: `[출근요청] ${req.date} 출근 요청이 거절되었습니다.`,
-      read: false, createdAt: serverTimestamp(), companyName: company,
-    });
+  const handleApproveRequest = (req) => decide(() => approveCheckInReq(req, approver, company));
+  const handleRejectRequest = async (req, reason) => {
+    await decide(() => rejectCheckInReq(req, approver, company, reason));
+    setChangeReqRejectId(null);
+    setChangeReqRejectReason("");
   };
-
-  const approveMobileChangeRequest = async (req) => {
-    await setDoc(doc(db, "attendance", `${req.date}_${req.uid}`), {
-      uid: req.uid, name: req.name, date: req.date,
-      month: req.date.slice(0, 7), companyName: company,
-      status: req.requestedStatus,
-      checkInTime: req.requestedCheckIn || null,
-      checkOutTime: req.requestedCheckOut || null,
-      source: "change_request_approved",
-    }, { merge: true });
-    await setDoc(doc(db, "attendanceChangeRequests", req.id), { status: "approved" }, { merge: true });
-    await addDoc(collection(db, "notifications"), {
-      toUid: req.uid, type: "attendance_result", status: "approved",
-      msg: `[출근수정] ${req.date} 수정 요청이 승인되었습니다.`,
-      read: false, createdAt: serverTimestamp(), companyName: company,
-    });
-  };
-
+  const approveMobileChangeRequest = (req) => decide(() => approveChangeReq(req, approver, company));
   const rejectMobileChangeRequest = async (req, reason) => {
-    await setDoc(doc(db, "attendanceChangeRequests", req.id), { status: "rejected", rejectionReason: reason }, { merge: true });
-    await addDoc(collection(db, "notifications"), {
-      toUid: req.uid, type: "attendance_result", status: "rejected",
-      rejectionReason: reason,
-      msg: `[출근수정] ${req.date} 수정 요청이 거절되었습니다.`,
-      read: false, createdAt: serverTimestamp(), companyName: company,
-    });
+    await decide(() => rejectChangeReq(req, approver, company, reason));
     setChangeReqRejectId(null);
     setChangeReqRejectReason("");
   };
@@ -231,17 +219,16 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
       const { date } = mobileChangeReqCell;
       const checkInIso = mobileChangeReqStatus === "출근" && mobileChangeReqTime ? `${date}T${mobileChangeReqTime}:00` : null;
       const checkOutIso = mobileChangeReqStatus === "출근" && mobileChangeReqCheckOut ? `${date}T${mobileChangeReqCheckOut}:00` : null;
-      await addDoc(collection(db, "attendanceChangeRequests"), {
-        uid, name: myName, date,
-        requestedStatus: mobileChangeReqStatus,
-        requestedCheckIn: checkInIso,
-        requestedCheckOut: checkOutIso,
-        reason: mobileChangeReqReason,
-        companyName: company, status: "pending",
-        createdAt: serverTimestamp(),
+      // ⭐ 2026-11-01 승인자 지정 + 알림(예전 모바일 요청은 알림이 아무에게도 가지 않았다)
+      const r = await submitChangeReq({
+        requester: meProfile, date, status: mobileChangeReqStatus, checkIn: checkInIso, checkOut: checkOutIso,
+        reason: mobileChangeReqReason, company, employees: staff, customRoles,
       });
+      if (!r.count) alert("승인할 담당자가 없어 요청만 저장했습니다.");
       setMobileChangeReqCell(null);
       setMobileChangeReqReason("");
+    } catch (e) {
+      alert(`요청하지 못했습니다: ${e?.message || e}`);
     } finally {
       setSubmittingMobileChangeReq(false);
     }
@@ -255,9 +242,9 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
 
   const rejectedChangeMap = useMemo(() => {
     const m = {};
-    changeRequests.filter(r => r.status === "rejected").forEach(r => { m[r.date] = r.rejectionReason || "사유 없음"; });
+    myChangeReqs.filter(r => r.status === "rejected").forEach(r => { m[r.date] = r.rejectionReason || "사유 없음"; });
     return m;
-  }, [changeRequests]);
+  }, [myChangeReqs]);
 
   const numDays = daysInMonth(year, month);
   const todayRec = recordMap[todayDateStr];
@@ -301,6 +288,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
 
   const saveMobileEdit = async () => {
     if (!mobileEditCell || !uid) return;
+    if (!canEditAttendanceOf(uid, meProfile, role)) { alert("본인 기록은 직접 수정할 수 없습니다. 수정 요청을 올려 주세요."); return; }
     setSavingMobileEdit(true);
     try {
       const { date } = mobileEditCell;
@@ -320,8 +308,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
     }
   };
 
-  const canApproveRequests = role === "totalMaster" || role === "hrManager";
-  const canEditAttendance = role === "totalMaster";
+  const canEditAttendance = canEditAttendanceOf(uid, meProfile, role);
 
   return (
     <div className="px-3 py-3 space-y-3 pb-24" style={{ "--attn-accent": cardVersionB ? "#1B2B4B" : "#2563eb" }}>
@@ -372,19 +359,19 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
       )}
 
       {/* 관리자: 출근 요청 처리 패널 */}
-      {canApproveRequests && checkInRequests.length > 0 && (
+      {approvableCheckIn.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-3">
           <button onClick={() => setShowRequestPanel(v => !v)}
             className="w-full flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-[13px] font-bold text-[var(--attn-accent)]">출근 요청</span>
-              <span className="px-2 py-0.5 rounded-full bg-[var(--attn-accent)] text-white text-[11px] font-bold">{checkInRequests.length}건</span>
+              <span className="px-2 py-0.5 rounded-full bg-[var(--attn-accent)] text-white text-[11px] font-bold">{approvableCheckIn.length}건</span>
             </div>
             <span className="text-gray-400 text-[12px]">{showRequestPanel ? "접기" : "펼치기"}</span>
           </button>
           {showRequestPanel && (
             <div className="border-t border-gray-100 mt-3 pt-3 space-y-2">
-              {checkInRequests.map(req => (
+              {approvableCheckIn.map(req => (
                 <div key={req.id} className="bg-gray-50 rounded-xl px-3 py-2.5">
                   <div className="flex items-center justify-between">
                     <div>
@@ -414,19 +401,19 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
       )}
 
       {/* 관리자: 수정 요청 처리 패널 */}
-      {canApproveRequests && changeRequests.filter(r => r.status === "pending").length > 0 && (
+      {approvableChange.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-3">
           <button onClick={() => setShowChangeReqPanel(v => !v)}
             className="w-full flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-[13px] font-bold text-[var(--attn-accent)]">수정 요청</span>
-              <span className="px-2 py-0.5 rounded-full bg-[var(--attn-accent)] text-white text-[11px] font-bold">{changeRequests.filter(r => r.status === "pending").length}건</span>
+              <span className="px-2 py-0.5 rounded-full bg-[var(--attn-accent)] text-white text-[11px] font-bold">{approvableChange.length}건</span>
             </div>
             <span className="text-gray-400 text-[12px]">{showChangeReqPanel ? "접기" : "펼치기"}</span>
           </button>
           {showChangeReqPanel && (
             <div className="border-t border-gray-100 mt-3 pt-3 space-y-2">
-              {changeRequests.filter(r => r.status === "pending").map(req => (
+              {approvableChange.map(req => (
                 <div key={req.id} className="bg-gray-50 rounded-xl px-3 py-2.5">
                   <div className="flex items-start justify-between gap-2">
                     <div>
@@ -545,7 +532,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
                 title={tooltip}
                 onClick={() => {
                   if (!isPastOrToday) return;
-                  if (role === "totalMaster") {
+                  if (canEditAttendance) {
                     setMobileEditCell({ date: ds, status, rec });
                     setMobileEditStatus(status || "출근");
                     setMobileEditTime(rec?.checkInTime ? fmtTime(rec.checkInTime) : "09:00");
@@ -588,7 +575,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
         <div className="fixed inset-0 z-[9999] bg-black/40 flex items-center justify-center px-4">
           <div className="bg-white rounded-2xl p-5 w-full max-w-sm max-h-[90vh] overflow-y-auto">
             <div className="text-[15px] font-bold text-[var(--attn-accent)] mb-1">출근 요청</div>
-            <div className="text-[12px] text-gray-500 mb-4">실제 출근한 시간을 입력하세요. 관리자 승인 후 출근 처리됩니다.</div>
+            <div className="text-[12px] text-gray-500 mb-4">실제 출근한 시간을 입력하세요. {myApproverLabel} 승인 후 출근 처리됩니다.</div>
             <div className="mb-4">
               <div className="text-[12px] font-semibold text-gray-600 mb-1">출근 시간</div>
               <input type="time" value={requestCheckInTime} onChange={e => setRequestCheckInTime(e.target.value)}
@@ -604,13 +591,11 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
                   const [h, m] = requestCheckInTime.split(":").map(Number);
                   const dt = new Date(todayDateStr + "T00:00:00");
                   dt.setHours(h, m, 0, 0);
-                  await addDoc(collection(db, "attendanceRequests"), {
-                    uid, name: myName, date: todayDateStr,
-                    requestedAt: dt.toISOString(),
-                    companyName: company, status: "pending",
-                    createdAt: serverTimestamp(),
-                  });
+                  const r = await submitCheckInReq({ requester: meProfile, date: todayDateStr, requestedAt: dt.toISOString(), company, employees: staff, customRoles });
+                  if (!r.count) alert("승인할 담당자가 없어 요청만 저장했습니다.");
                   setShowCheckInRequestModal(false);
+                } catch (e) {
+                  alert(`요청하지 못했습니다: ${e?.message || e}`);
                 } finally {
                   setRequestingCheckIn(false);
                 }
@@ -630,7 +615,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-[15px] font-bold text-[var(--attn-accent)]">수정 요청</div>
-                <div className="text-[12px] text-gray-500">{mobileChangeReqCell.date}</div>
+                <div className="text-[12px] text-gray-500">{mobileChangeReqCell.date} · {myApproverLabel} 승인 후 반영</div>
               </div>
               <button onClick={() => setMobileChangeReqCell(null)} className="text-gray-400 text-[20px] font-bold">×</button>
             </div>
