@@ -913,7 +913,8 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
     <div className="space-y-5">
       {boardTab === "대시보드" && (!dept || dept === "exec") && <MasterChecklist user={user} userCompany={userCompany} />}
       {/* 🏢 경리·인사 권한 — 대시보드 내용만 부서 업무로 */}
-      {boardTab === "대시보드" && dept && <DeptDashboard mode={dept} company={getViewCompany()} dispatchData={dispatchData} onGo={onDeptGo} pastCache={pastCache} liveStart={liveStartStr} me={meHome} />}
+      {boardTab === "대시보드" && dept && <DeptDashboard mode={dept} company={getViewCompany()} dispatchData={dispatchData} onGo={onDeptGo} pastCache={pastCache} liveStart={liveStartStr} me={meHome}
+        att={{ company: homeCompany, uid: user?.uid, name: meHome.name, role, email: user?.email }} />}
 
       {/* 결재 알림 배너 (큐 방식 - 여러 알림 순차 표시) */}
       {approvalNotifQueue.length > 0 && (() => {

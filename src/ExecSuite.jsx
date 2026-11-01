@@ -21,6 +21,7 @@ import { isTMUser } from "./staffFilter";
 import { personName } from "./userNames";
 import { useCompanyDriverDocs, docProblems } from "./driverRequiredDocs";
 import { useFundsSummary, isCeoPosition } from "./FundsBoard";
+import { AttendanceQuickButton } from "./attendanceQuick";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const GOLD = "#D7BC82";
@@ -186,7 +187,7 @@ function Ring({ value, size = 64, label }) {
 }
 
 // ─────────────────────────── 경영 브리핑 ───────────────────────────
-export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liveStart, me = {} }) {
+export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liveStart, me = {}, att = null }) {
   const { days, clients, ready } = useYearDays({ company, dispatchData, pastCache, liveStart });
   const isCeo = isCeoPosition(me?.position);
   const apSet = useApprovalSettings(company);
@@ -283,7 +284,9 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
             </div>
             <p className="mt-2 text-[15px] md:text-[16.5px] leading-relaxed text-white/75 max-w-[880px]">{ready ? brief : "오늘의 경영 지표를 정리하고 있습니다…"}</p>
           </div>
-          <div className="flex items-center gap-4 shrink-0">
+          <div className="flex items-center gap-4 lg:gap-6 shrink-0 flex-wrap">
+            {/* ⭐ 2026-11-01 출근·퇴근 — 홈 데크처럼 시계 옆에서 바로 */}
+            {att && <AttendanceQuickButton {...att} variant="deck" />}
             <div className="text-left lg:text-right">
               <Clock />
               <div className="mt-1.5 text-[13px] font-bold text-white/45 tracking-[0.12em]" style={{ fontFamily: MONO }}>{dstr} · KST</div>
