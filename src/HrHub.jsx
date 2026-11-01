@@ -13,6 +13,7 @@ import { isTMUser } from "./staffFilter";
 import { RETIRE_REASONS } from "./AcctSuite";
 import { LeaveLedger } from "./HrTools";
 import ObituaryWriter from "./ObituaryWriter";
+import { WORK_TIME_OPTIONS } from "./autoAttendance";
 import { useRoleOptions } from "./customRoles";
 import { RULE_CATS, RULE_TEMPLATES, fillCompany } from "./companyRuleTemplates";
 
@@ -167,7 +168,7 @@ export function StaffInfoBoard({ company, canManage }) {
   const groups = (() => { const g = {}; active.filter(match).forEach((u) => { const t = u.team || "미배정"; (g[t] = g[t] || []).push(u); }); return hr.teams.concat(["미배정"]).filter((t) => g[t]).map((t) => [t, g[t].sort((a, b) => hr.positionsFor(t).indexOf(b.position) - hr.positionsFor(t).indexOf(a.position) || String(a.name || "").localeCompare(String(b.name || ""), "ko"))]).concat(Object.keys(g).filter((t) => !hr.teams.includes(t) && t !== "미배정").map((t) => [t, g[t]])); })();
   const open = (u, m = "info") => {
     setSel(u); setMode(m);
-    setF({ name: u.name || "", phone: u.phone || "", team: u.team || "", position: u.position || "", role: u.role || "user", employType: u.employType || "정규직", employmentStatus: u.employmentStatus || "재직", leaveFrom: u.leave?.from || kstDay(), leaveTo: u.leave?.to || "", leaveMemo: u.leave?.memo || "", hireDate: u.hireDate || "" });
+    setF({ name: u.name || "", phone: u.phone || "", team: u.team || "", position: u.position || "", role: u.role || "user", employType: u.employType || "정규직", employmentStatus: u.employmentStatus || "재직", leaveFrom: u.leave?.from || kstDay(), leaveTo: u.leave?.to || "", leaveMemo: u.leave?.memo || "", hireDate: u.hireDate || "", workStartTime: u.workStartTime || "09:00", workEndTime: u.workEndTime || "18:00" });
     setR({ type: u.resignPlan?.type || "자진 퇴사", date: u.resignPlan?.date || kstDay(), reason: u.resignPlan?.reason || "", noticeDate: kstDay() });
     // ⭐ 2026-11-01 연차 계산은 userProfiles.hireDate를 쓰므로 그 값을 우선으로 보여준다
     setOrigHire(u.hireDate || "");
@@ -196,7 +197,9 @@ export function StaffInfoBoard({ company, canManage }) {
       if (hireChanged) ch.push(`입사일 ${origHire || "미등록"}→${f.hireDate || "미등록"}`);
       // ⭐ 2026-11-01 입사일은 여기(인사관리부 › 인사관리 › 직원관리)에서만 바꾼다 — 연차 계산용(userProfiles)과 인사 기록(users) 둘 다
       if (hireChanged) await setDoc(doc(db, "userProfiles", sel.id), { hireDate: f.hireDate || "", hireDateBy: auth.currentUser?.email || "", hireDateAt: serverTimestamp() }, { merge: true });
-      await updateDoc(doc(db, "users", sel.id), { name: f.name.trim(), phone: f.phone.trim(), team: f.team, position: f.position, ...(sel.isMaster ? {} : { role }), ...(hireChanged ? { hireDate: f.hireDate || "" } : {}), employType: f.employType, employmentStatus: f.employmentStatus, leave: onLeave ? { type: f.employmentStatus, from: f.leaveFrom, to: f.leaveTo || "", memo: (f.leaveMemo || "").trim() } : null, ...(ch.length ? { personnelHistory: arrayUnion({ date: kstDay(), type: "정보 수정", detail: `${ch.join(" · ")} (공문 없음)` }) } : {}) });
+      // ⭐ 2026-11-02 출근·퇴근 시간(자동 출근 시간대·지각·반차 기준) — 저장 버튼을 눌러야 반영
+      if ((sel.workStartTime || "09:00") !== f.workStartTime || (sel.workEndTime || "18:00") !== f.workEndTime) ch.push(`근무시간 ${sel.workStartTime || "09:00"}~${sel.workEndTime || "18:00"}→${f.workStartTime}~${f.workEndTime}`);
+      await updateDoc(doc(db, "users", sel.id), { workStartTime: f.workStartTime, workEndTime: f.workEndTime, name: f.name.trim(), phone: f.phone.trim(), team: f.team, position: f.position, ...(sel.isMaster ? {} : { role }), ...(hireChanged ? { hireDate: f.hireDate || "" } : {}), employType: f.employType, employmentStatus: f.employmentStatus, leave: onLeave ? { type: f.employmentStatus, from: f.leaveFrom, to: f.leaveTo || "", memo: (f.leaveMemo || "").trim() } : null, ...(ch.length ? { personnelHistory: arrayUnion({ date: kstDay(), type: "정보 수정", detail: `${ch.join(" · ")} (공문 없음)` }) } : {}) });
       setSel(null);
     } catch (e) { alert(`저장 실패: ${e.message}`); } finally { setBusy(false); }
   };
@@ -396,7 +399,14 @@ export function StaffInfoBoard({ company, canManage }) {
                     <Field label="고용 형태"><select value={f.employType} onChange={(e) => setF({ ...f, employType: e.target.value })} className={fi}>{["정규직", "계약직", "수습", "파트타임", "일용직"].map((k) => <option key={k}>{k}</option>)}</select></Field>
                   </div>
                 </Section>
-                <Section no="03" en="Tenure" title="입사 · 근속" right={<span className={`inline-flex items-center gap-1 h-6 px-2 rounded-md text-[11.5px] font-bold ${canHire ? "bg-[#EEF3FC] text-[#2D4C82]" : "bg-[#F2F4F8] text-[#7A879C]"}`}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="11" width="14" height="10" rx="2" />{canHire ? <path d="M8 11V7a4 4 0 017.5-2" /> : <path d="M8 11V7a4 4 0 018 0v4" />}</svg>{canHire ? "인사팀 수정 가능" : "인사팀 전용"}</span>}>
+                <Section no="03" en="Work Time" title="출근 · 퇴근 시간">
+                  <div className="grid grid-cols-2 gap-4">
+                    <Field label="출근 시간" hint="이 시간 3시간 전부터 자동 출근 · 지각 기준"><select value={f.workStartTime} onChange={(e) => setF({ ...f, workStartTime: e.target.value })} className={`${fi} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</select></Field>
+                    <Field label="퇴근 시간" hint="이 시간 1시간 전부터 자동 퇴근(출근지 반경 밖)"><select value={f.workEndTime} onChange={(e) => setF({ ...f, workEndTime: e.target.value })} className={`${fi} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</select></Field>
+                  </div>
+                  <div className="text-[12px] text-[#7A879C] mt-2">반차는 이 시간 기준으로 계산돼요 — 오전반차 출근 {(() => { const [h, m] = String(f.workStartTime || "09:00").split(":").map(Number); return `${String(Math.min(23, h + 4)).padStart(2, "0")}:${String(m).padStart(2, "0")}`; })()} · 오후반차 퇴근 같은 시각. 아래 [저장]을 눌러야 반영됩니다.</div>
+                </Section>
+                <Section no="04" en="Tenure" title="입사 · 근속" right={<span className={`inline-flex items-center gap-1 h-6 px-2 rounded-md text-[11.5px] font-bold ${canHire ? "bg-[#EEF3FC] text-[#2D4C82]" : "bg-[#F2F4F8] text-[#7A879C]"}`}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="11" width="14" height="10" rx="2" />{canHire ? <path d="M8 11V7a4 4 0 017.5-2" /> : <path d="M8 11V7a4 4 0 018 0v4" />}</svg>{canHire ? "인사팀 수정 가능" : "인사팀 전용"}</span>}>
                   <div className="grid grid-cols-2 gap-4">
                     <Field label="입사일" hint={f.hireDate ? "연차 · 퇴직금 계산 기준일" : "연차·퇴직금 계산 기준일 — 아직 등록되지 않았습니다"}><input type="date" value={f.hireDate} max={kstDay()} disabled={!canHire} onChange={(e) => setF({ ...f, hireDate: e.target.value })} className={`${fi} tabular-nums`} /></Field>
                     <Field label="근속" hint={canHire ? "입사일은 이 화면에서만 바꿀 수 있습니다" : "입사일은 인사팀만 바꿀 수 있습니다"}>
@@ -404,7 +414,7 @@ export function StaffInfoBoard({ company, canManage }) {
                     </Field>
                   </div>
                 </Section>
-                <Section no="04" en="Status" title="재직 상태">
+                <Section no="05" en="Status" title="재직 상태">
                   <div className="flex flex-wrap items-center gap-2">
                     {STATUS_OPTIONS.map((k) => <button key={k} type="button" onClick={() => setF({ ...f, employmentStatus: k })} className={`h-10 px-4 rounded-xl text-[14px] font-black border transition ${f.employmentStatus === k ? "bg-[#0F1A30] text-white border-[#0F1A30] shadow-[0_4px_12px_rgba(15,26,48,0.2)]" : "bg-white text-[#3A4A66] border-[#DCE3EE] hover:border-[#2D4C82]"}`}>{k}</button>)}
                     <span className="w-px h-7 bg-[#E3E8F0] mx-1" />

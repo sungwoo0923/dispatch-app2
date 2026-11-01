@@ -99,6 +99,7 @@ import { MailHeaderButton } from "../InternalMail";
 import BannerCenter from "../BannerCenter";
 import OrderCongratsPopup from "../OrderCongratsPopup";
 import BirthdayPopup from "../BirthdayPopup";
+import { tryAutoCheckIn, tryAutoCheckOut, undoAutoCheckOut } from "../autoAttendance";
 import OrderScanModal, { scanDropDate } from "../OrderScanModal";
 
 
@@ -3629,47 +3630,22 @@ function _todayKSTStr() {
 }
 
 // 자동 출근 처리
+// ⭐ 2026-11-02 자동 출퇴근은 PC와 같은 규칙(src/autoAttendance.js) — 출근시간 3시간 전~퇴근시간에만 출근, 반차 반영,
+//  자동 퇴근은 퇴근시간 1시간 전부터만(외근·점심은 퇴근 아님), 자동 퇴근 뒤 다시 들어오면 퇴근 기록 취소
 async function _autoCheckIn(co, uid, name, onSuccess) {
   // ⭐ 최고관리자는 출근하는 직원이 아니라 프로그램 관리 계정 — 출근 기록을 남기지 않는다
-  if (localStorage.getItem("role") === "totalMaster" || auth.currentUser?.email === "tjddnqkf@naver.com") return;
-  const today = _todayKSTStr();
-  const attRef = doc(db, "attendance", `${today}_${uid}`);
-  const existing = await getDoc(attRef);
-  if (existing.exists()) {
-    const d = existing.data();
-    // companyName이 올바르게 설정된 유효 기록이면 건너뜀, 비어있으면 갱신
-    if (d.companyName && d.companyName === co) return;
-  }
-
-  const schedSnap = await getDocs(query(collection(db, "schedules"), where("authorUid", "==", uid)));
-  const mySchedules = schedSnap.docs.map(d => d.data());
-  const leaveLabel = findApprovedLeaveForDate(mySchedules, uid, today, name);
-  if (leaveLabel) {
-    await setDoc(attRef, { uid, name, date: today, month: today.slice(0, 7), status: leaveLabel, checkInTime: null, source: "leave", companyName: co }, { merge: true });
-    return;
-  }
-  const holSnap = await getDocs(query(collection(db, "holidays"), where("companyName", "==", co)));
-  const myHols = holSnap.docs.map(d => d.data());
-  if (isWeekend(today) || isHoliday(today, myHols)) return;
-
-  await setDoc(attRef, {
-    uid, name, date: today, month: today.slice(0, 7),
-    status: "출근", checkInTime: new Date().toISOString(),
-    source: "auto_mobile_location", companyName: co,
-  }, { merge: true });
-  if (onSuccess) onSuccess(`출근 처리되었습니다 (${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})`);
+  if (localStorage.getItem("role") === "totalMaster" || auth.currentUser?.email === "tjddnqkf@naver.com") return false;
+  await undoAutoCheckOut({ uid }).catch(() => false);
+  const r = await tryAutoCheckIn({ uid, name, company: co, source: "auto_mobile_location" });
+  if (r.ok && onSuccess) onSuccess(`${r.leave ? `${r.leave} · ` : ""}출근 처리되었습니다 (${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})`);
+  return r.ok || r.reason === "exists" || r.reason === "leave";
 }
 
 // 자동 퇴근 처리
 async function _autoCheckOut(co, uid, name, onSuccess) {
-  const today = _todayKSTStr();
-  const attRef = doc(db, "attendance", `${today}_${uid}`);
-  const existing = await getDoc(attRef);
-  if (!existing.exists()) return;
-  const data = existing.data();
-  if (data.status !== "출근" || data.checkOutTime) return;
-  await setDoc(attRef, { checkOutTime: new Date().toISOString() }, { merge: true });
-  if (onSuccess) onSuccess(`퇴근 처리되었습니다 (${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})`);
+  const r = await tryAutoCheckOut({ uid });
+  if (r.ok && onSuccess) onSuccess(`퇴근 처리되었습니다 (${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})`);
+  return r.ok;
 }
 
 // officeLocation이 설정되면 GPS 감지 시작
@@ -3678,21 +3654,22 @@ useEffect(() => {
   const co = localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "";
   const uid = currentUser.uid;
   const name = currentUser.displayName || currentUser.email?.split("@")[0] || "";
-  let checkedIn = false;
+  let checkedIn = false; let busy = false;
 
   // ⭐ 2026-11-01 회사별 반경(출근지 설정) — 값이 없으면 예전처럼 100m / 300m
   const { inM, outM } = officeRadii(mobileOfficeLocation);
   const judge = (pos) => {
     const acc = Number(pos.coords.accuracy) || 0;
     const dist = _calcDistM(pos.coords.latitude, pos.coords.longitude, mobileOfficeLocation.lat, mobileOfficeLocation.lng);
-    if (dist <= inM && !checkedIn) {
-      checkedIn = true;
-      _autoCheckIn(co, uid, name, showSuccess).catch(() => {});
+    // ⭐ 2026-11-02 반경 안 — 출근(시간대 안일 때만, 이르면 다음 확인 때 다시) · 자동 퇴근 뒤 돌아왔으면 퇴근 취소
+    if (dist <= inM && !checkedIn && !busy) {
+      busy = true;
+      _autoCheckIn(co, uid, name, showSuccess).then((ok) => { checkedIn = !!ok; }).catch(() => {}).finally(() => { busy = false; });
     }
-    // 오차가 너무 큰 위치(200m 이상)로는 자동 퇴근하지 않는다(엉뚱한 퇴근 방지)
-    if (dist > outM && checkedIn && acc < 200) {
-      checkedIn = false;
-      _autoCheckOut(co, uid, name, showSuccess).catch(() => {});
+    // 오차가 너무 큰 위치(200m 이상)로는 자동 퇴근하지 않는다(엉뚱한 퇴근 방지) · 퇴근시간 1시간 전부터만
+    if (dist > outM && checkedIn && acc < 200 && !busy) {
+      busy = true;
+      _autoCheckOut(co, uid, name, showSuccess).then((ok) => { if (ok) checkedIn = false; }).catch(() => {}).finally(() => { busy = false; });
     }
   };
   // 위치 변화 감지(앱이 화면에 켜져 있는 동안)

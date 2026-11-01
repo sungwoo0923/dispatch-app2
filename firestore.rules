@@ -109,9 +109,13 @@ service cloud.firestore {
     // 비로그인 상태(기사)가 업로드 페이지에서 건드릴 수 있는 필드는 이 3개뿐이다.
     // 업로드토큰은 절대 포함하지 않는다 — 그건 로그인한 운송사 앱만 발급할 수 있어야
     // 링크 잠금/재발급 로직이 실제로 의미가 있다.
+    // ⭐ 2026-11-02 점검 — 업로드 페이지(UploadPage.jsx)가 잠글 때 함께 쓰는 '업로드잠금해제만료'(비우기만)와
+    //  '재업로드완료알림'(true만)도 허용 — 예전엔 이 두 칸 때문에 링크 잠금·재업로드 완료 알림 저장 전체가 거부됐다
     function isPublicOrderUpdate() {
-      return request.resource.data.diff(resource.data).affectedKeys()
-        .hasOnly(['attachCount', '위치공유중', '업로드잠금']);
+      let aff = request.resource.data.diff(resource.data).affectedKeys();
+      return aff.hasOnly(['attachCount', '위치공유중', '업로드잠금', '업로드잠금해제만료', '재업로드완료알림'])
+        && (!aff.hasAny(['업로드잠금해제만료']) || request.resource.data.get('업로드잠금해제만료', null) == null)
+        && (!aff.hasAny(['재업로드완료알림']) || request.resource.data.get('재업로드완료알림', false) == true);
     }
 
     // ────────────────────────────────────────────────────────────
@@ -176,7 +180,9 @@ service cloud.firestore {
     match /{tcol}/{id} {
       allow read: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
           'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases']
-        && coMatch(resource.data);
+        // ⭐ 2026-11-02 점검 — 없는 문서를 getDoc하면 resource가 null이라 coMatch(resource.data)가 오류 → 거부되던 문제
+        //  (ledgerAuto.js 자동 장부의 "새 줄인지" 확인). 없는 문서는 승인된 계정이면 "없음"만 알 수 있게 허용
+        && ((resource == null && isApproved()) || coMatch(resource.data));
       allow create: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
           'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases']
         && coCreate();
@@ -188,11 +194,23 @@ service cloud.firestore {
         && coMatch(resource.data);
     }
     // 💰 자금(통장·현금 잔액) — 경리(test)·관리자(대표 등)만. 화면에서는 경리 + 대표 직책만 보이게 한다
+    // ⭐ 2026-11-02 점검 — 권한 관리에서 직접 만든 역할에 '자금관리' 메뉴를 켜면(읽기 → 조회, 쓰기 → 등록·수정·삭제) 자금 데이터도 허용
+    //  (화면의 mergeCompanyRoles + getMenuAccess와 같은 순서: 운송사별 설정의 menus가 있으면 공통 역할 menus 대신 쓴다. 내장 역할은 제외)
+    function fundsMenuLevel() {
+      let r = myUser().get('role', '');
+      let p = /databases/$(database)/documents/customRoles/$(r);
+      let ov = /databases/$(database)/documents/companyRoleOverrides/$(myUser().get('companyName', ''));
+      let g = exists(p) ? get(p).data : {};
+      let o = exists(ov) ? get(ov).data.get('roles', {}).get(r, {}) : {};
+      let menus = ('menus' in o) ? o.get('menus', {}) : g.get('menus', {});
+      return (r != '' && !(r in ['admin', 'hrManager', 'hrAcct', 'user', 'test', 'viewer', 'totalMaster', 'driver', 'shipper'])
+        && (exists(p) || o.size() > 0)) ? menus.get('자금관리', 'hidden') : 'hidden';
+    }
     match /acctFunds/{id} {
-      allow read: if coMatch(resource.data) && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct'] || isExecRoleUser());
-      allow create: if coCreate() && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct']);
-      allow update: if coMatch(resource.data) && coKeep() && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct']);
-      allow delete: if coMatch(resource.data) && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct']);
+      allow read: if coMatch(resource.data) && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct'] || isExecRoleUser() || fundsMenuLevel() in ['read', 'write']);
+      allow create: if coCreate() && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct'] || fundsMenuLevel() == 'write');
+      allow update: if coMatch(resource.data) && coKeep() && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct'] || fundsMenuLevel() == 'write');
+      allow delete: if coMatch(resource.data) && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct'] || fundsMenuLevel() == 'write');
     }
     // 화주사 주소록(places) — 화주 본인이 등록한 주소만
     match /places/{id} {
@@ -520,6 +538,9 @@ service cloud.firestore {
     match /approvals/{id} {
       allow read: if isApproved() && (isTotalMasterUser() || !locked() || resource.data.companyName == myCo())
         && (request.auth.uid in resource.data.get('participants', []) || isCompanyAdmin(resource.data.get('company', '')) || isAcctApprovalReader(resource.data));
+      // ⭐ 2026-11-02 점검 — HOME › 직원 일정(ExecSuite TeamSchedule)은 회사의 연차(cat=="leave") 결재만 조회 → 같은 회사 직원(기사·화주 제외)은 읽기 허용
+      //  (조회는 company == 우리 회사 + cat == "leave" 조건으로 보내야 한다)
+      allow read: if isOfficeStaff() && resource.data.get('cat', '') == 'leave' && resource.data.get('company', '') == myCo();
       allow create: if coCreate() && request.resource.data.get('drafterUid', '') == request.auth.uid
         && (request.resource.data.get('status', '') == 'pending'
           // 일일 업무일지 자동 승인 — 회사 결재 설정(approvalSettings/{회사}.autoApproveDaily)이 켜져 있을 때만

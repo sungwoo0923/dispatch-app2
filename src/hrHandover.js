@@ -7,8 +7,10 @@ import React from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db, DEFAULT_COMPANY } from "./firebase";
 
+// ⭐ 2026-11-02 점검 — 계정 없는 직원(noAccount: 인사 기록용으로만 등록)은 로그인할 수 없으므로 인사 담당자로 보지 않는다
+//  (이 사람만 인사팀에 있으면 마스터의 인사권이 사라져 아무도 인사 업무를 못 하던 문제)
 export const isHrStaffUser = (u) =>
-  !!u && u.approved !== false && u.employmentStatus !== "퇴사" &&
+  !!u && !u.noAccount && u.approved !== false && u.employmentStatus !== "퇴사" &&
   !["driver", "shipper", "cafeUser", "totalMaster"].includes(u.role) &&
   (["hrManager", "hrAcct"].includes(u.role) || /인사/.test(String(u.team || "")));
 

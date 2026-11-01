@@ -3,6 +3,7 @@ import { collection, doc, onSnapshot, query, setDoc, where } from "firebase/fire
 import { db, DEFAULT_COMPANY } from "../firebase";
 import { ATTENDANCE_STATUS_COLOR, isWeekend, isHoliday, findApprovedLeaveForDate } from "../attendanceUtils";
 import { RadiusEditor, officeRadii, DEFAULT_IN_RADIUS, DEFAULT_OUT_RADIUS } from "../attendanceQuick";
+import { checkInsideOffice, workWindow } from "../autoAttendance";
 import { useCustomRoles } from "../customRoles";
 import {
   APPROVER_GROUP_LABEL, isHrStaffUser, isExecUser, canApproveAttendanceReq, canEditAttendanceOf,
@@ -269,15 +270,26 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
     if (!rec?.checkInTime || !myUserDoc?.workStartTime) return false;
     const [ch, cm] = fmtTime(rec.checkInTime).split(":").map(Number);
     const [sh, sm] = myUserDoc.workStartTime.split(":").map(Number);
+    // ⭐ 2026-11-02 오전반차는 출근시간 +4시간이 출근 기준
+    if (rec.status === "오전반차" || rec.halfDay === "오전반차") return ch * 60 + cm > workWindow(myUserDoc, "오전반차").start;
     return ch * 60 + cm > sh * 60 + sm;
   };
 
+  // ⭐ 2026-11-02 직접 누르는 출근 요청·퇴근은 출근지 반경 안에서만(출근지가 설정된 회사)
+  const insideOrWarn = async (what) => {
+    if (!officeLocation?.lat) return true;
+    const r = await checkInsideOffice(officeLocation, officeRadii(officeLocation).inM);
+    if (r.ok) return true;
+    alert(r.error ? `위치를 확인하지 못했습니다. 휴대폰 위치 권한을 켜고 다시 눌러 주세요.\n(${what}은 출근지 반경 안에서만 할 수 있습니다)` : `출근지 반경 밖입니다(현재 약 ${r.dist}m · 반경 ${r.inM}m).\n${what}은 출근지 반경 안에서만 할 수 있습니다.`);
+    return false;
+  };
   const handleCheckOut = async () => {
     if (!uid || !todayRec) return;
+    if (!(await insideOrWarn("퇴근"))) return;
     setCheckingOut(true);
     try {
       await setDoc(doc(db, "attendance", `${todayDateStr}_${uid}`), {
-        checkOutTime: new Date().toISOString(),
+        checkOutTime: new Date().toISOString(), checkOutSource: "manual",
         uid, name: myName, date: todayDateStr,
         month: todayDateStr.slice(0, 7), companyName: company,
       }, { merge: true });
@@ -468,7 +480,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
               )}
             </div>
             <div className="flex flex-col gap-2 items-end">
-              {todayRec?.status === "출근" && !todayRec?.checkOutTime && (
+              {(todayRec?.status === "출근" || todayRec?.checkInTime) && !todayRec?.checkOutTime && (
                 <button onClick={handleCheckOut} disabled={checkingOut}
                   className="px-5 py-2.5 rounded-xl bg-[var(--attn-accent)] text-white text-[13px] font-bold disabled:opacity-50">
                   {checkingOut ? "처리 중..." : "퇴근"}
@@ -480,7 +492,8 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
                   return myPendingReq ? (
                     <div className="text-[12px] text-gray-600 font-bold px-3 py-2 bg-gray-100 rounded-xl">요청 대기 중...</div>
                   ) : (
-                    <button onClick={() => {
+                    <button onClick={async () => {
+                      if (!(await insideOrWarn("출근 요청"))) return;
                       const n = new Date();
                       setRequestCheckInTime(String(n.getHours()).padStart(2, "0") + ":" + String(n.getMinutes()).padStart(2, "0"));
                       setShowCheckInRequestModal(true);

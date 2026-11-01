@@ -58,7 +58,9 @@ export function useDriverDocs(driverId) {
 export function latestByType(list) {
   const m = {};
   (list || []).forEach((d) => {
-    const k = d.docType && docDef(d.docType) ? d.docType : null;
+    // ⭐ 2026-11-02 점검 — 예전 가입/정산정보 업로드는 docType을 "사업자등록증"(한글)으로 저장해서 필수서류(bizReg)에 '미제출'로 나오던 문제: 옛 값도 bizReg로 읽는다
+    const t = d.docType === "사업자등록증" ? "bizReg" : d.docType;
+    const k = t && docDef(t) ? t : null;
     if (!k) return;
     if (!m[k] || tsMs(d.uploadedAt) > tsMs(m[k].uploadedAt)) m[k] = d;
   });

@@ -183,7 +183,7 @@ export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], 
     else if (k === "settle") body = lazy(<PcSettleMobile dispatchData={dispatchData} companyName={userCompany} role={role} isViewer={isViewer} />);
     else if (k === "acct") body = lazy(<PcAccounting company={userCompany} fixedRows={fixedRows} clients={clients} isViewer={isViewer} />);
     // ⭐ 2026-11-02 점검 — 모바일 인사관리부에도 me 전달(부고 알림 작성자 이름·uid 누락으로 본인 푸시/메일·타인 수정 가능 문제 수정, PC 와 동일)
-    else if (k === "hr") body = <div className="kp-m-pc"><HrHub company={userCompany} me={{ uid: me?.uid, name: me?.name || me?.displayName || "" }} canManage={role === "hrManager" || role === "totalMaster"}
+    else if (k === "hr") body = <div className="kp-m-pc"><HrHub company={userCompany} me={{ uid: me?.uid, name: me?.name || me?.displayName || "" }} canManage={role === "hrManager" || role === "totalMaster" || role === "hrAcct" || (/인사/.test(String(me?.team || "")) && role !== "viewer")}
       renderRecord={(focusUid) => <React.Suspense fallback={<Loading />}><PcHrPage userCompany={userCompany} role={role} userId={me?.uid || ""} focusUid={focusUid} /></React.Suspense>}
       renderAttendance={() => <AttendanceBoard userCompany={userCompany} role={role} user={me} />} /></div>;
     else if (k === "cashbook") body = <div className="kp-m-pc"><FundsWorkspace company={userCompany} isViewer={isViewer} /></div>;

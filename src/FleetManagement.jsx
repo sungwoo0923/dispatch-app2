@@ -6314,8 +6314,11 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
     ));
 
     // 4. Activity feed
+    // ⭐ 2026-11-02 점검 — 전체 운송사 기록 중 최근 50건만 받아 우리 회사 기사 기록이 거의 안 보이던 문제:
+    //  넉넉히 300건을 받아 아래 filteredActivityLogs에서 우리 회사 기사만 거른 뒤 50건만 보여 준다.
+    //  (근본 해결은 driver_logs.companyName(DriverHome에서 새로 기록) + 복합 인덱스(companyName, timestamp) 추가 후 회사 조건 조회)
     subs.push(onSnapshot(
-      query(collection(db, "driver_logs"), orderBy("timestamp", "desc"), limit(50)),
+      query(collection(db, "driver_logs"), orderBy("timestamp", "desc"), limit(300)),
       (snap) => {
         const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setActivityLogs(arr);
@@ -6663,8 +6666,9 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
   }, [drivers, searchQuery, statusFilter, phaseById]);
 
   // 활동 피드: 승인된 기사의 로그만 표시
+  // ⭐ 2026-11-02 점검 — 300건을 받아 우리 회사 기사 기록만 거른 뒤 최근 50건만(화면·전체 삭제 대상은 예전처럼 최대 50건)
   const filteredActivityLogs = useMemo(() =>
-    activityLogs.filter(log => driversMap[log.uid]),
+    activityLogs.filter(log => driversMap[log.uid]).slice(0, 50),
     [activityLogs, driversMap]
   );
 

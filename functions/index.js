@@ -92,6 +92,8 @@ const STALE_FCM_TOKEN_ERROR_CODES = new Set([
 async function sendPushAndCleanup(tokens, message, label) {
   tokens = [...new Set((tokens || []).filter((t) => typeof t === "string" && t))]; // 같은 기기 두 번 방지
   if (!tokens.length) return undefined;
+  // 🧪 테스트(에뮬레이터)에서만 — 누구에게 보내는지 기록(실제 서버에서는 실행 안 됨)
+  if (process.env.FUNCTIONS_EMULATOR === "true") console.log(`[PUSH-TEST] ${label} → ${tokens.join(",")} :: ${message?.notification?.title || ""}`);
   // ⭐ 안드로이드에서 같은 알림이 아이콘만 다르게 두 번(중복) 뜨던 문제의 실제 원인 —
   // FCM 메시지에 notification 필드가 있으면, 앱이 백그라운드일 때 브라우저가 그 내용을
   // "자기 마음대로"(기본 파비콘/알파벳 아이콘 등으로) 알아서 한 번 띄우고, 그와는 별개로

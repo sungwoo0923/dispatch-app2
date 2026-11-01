@@ -1420,6 +1420,8 @@ export default function DriverHome() {
         uid,
         driverName: driver?.name || "",
         carNo: driver?.carNo || "",
+        // ⭐ 2026-11-02 점검 — 운송사별로 기록을 조회할 수 있게 회사명도 남긴다(지입차관리 활동 피드·출근기록부 회사 조건 조회 준비)
+        companyName: driver?.companyName || "",
         status: newStatus,        // 로그에는 "최종퇴근" 그대로 기록
         mainStatus: firestoreStatus,
         timestamp: serverTimestamp(),

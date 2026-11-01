@@ -458,6 +458,11 @@ export function CertIssuer({ company, isViewer = false }) {
     if (!u) return alert("직원을 골라 주세요.");
     if (!purpose.trim()) return alert("용도를 적어 주세요. (예: 금융기관 제출용)");
     if (kind === "employ" && u.employmentStatus === "퇴사") return alert("퇴사자는 경력증명서로 발급해 주세요.");
+    // ⭐ 2026-11-02 점검 — 인쇄 창을 클릭 직후(await 전에) 미리 연다: 캡처·저장·메일 발송을 기다린 뒤 window.open하면
+    //  브라우저가 팝업으로 막아 인쇄 창이 안 뜨던 문제. 열린 창은 printA4에 넘기고, 실패하면 닫는다
+    const win = window.open("", "_blank");
+    if (!win) return alert("팝업이 차단되어 인쇄 창을 열 수 없습니다. 팝업을 허용한 뒤 다시 시도해 주세요.");
+    try { win.document.write("<p style='font-family:sans-serif;padding:24px'>증명서를 준비하는 중입니다…</p>"); win.document.close(); } catch { /* 무시 */ }
     setBusy("발급 중…");
     try {
       const canvas = await html2canvas(paperRef.current, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
@@ -469,8 +474,12 @@ export function CertIssuer({ company, isViewer = false }) {
         await sendInternalMail({ company, to: [{ uid: u.id, name: nm(u), team: u.team || "", position: u.position || "" }], subject: `[${label} 발급] ${nm(u)} · ${purpose.trim()}`, body: `${nm(u)}님, 요청하신 ${label}를 발급했습니다.\n\n· 발급번호: ${no}\n· 용도: ${purpose.trim()}\n· 발급일: ${today}\n\n첨부 이미지를 저장·인쇄해 제출하세요. 원본(직인) 인쇄본이 필요하면 인사관리부에 말씀해 주세요.`, images: [image], kind: "hr", fromName: "인사관리부" }).catch((e) => alert(`메일 발송 실패: ${e.message}`));
       }
       setBusy("인쇄 창 여는 중…");
-      await printA4(paperRef.current, `${kind === "career" ? "경력증명서" : "재직증명서"}_${nm(u)}`);
+      await printA4(paperRef.current, `${kind === "career" ? "경력증명서" : "재직증명서"}_${nm(u)}`, win);
       setPurpose(""); setDuty(""); draftStore.del(draftKey);
+    } catch (e) {
+      // ⭐ 2026-11-02 점검 — 발급 실패가 조용히 끝나던 문제: 미리 연 창을 닫고 이유를 안내
+      try { win.close(); } catch { /* 무시 */ }
+      alert(`증명서를 발급하지 못했습니다: ${e?.message || e}`);
     } finally { setBusy(""); }
   };
   if (loading) return <Loading />;

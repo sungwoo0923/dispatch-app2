@@ -7,6 +7,7 @@ import AdminShell from "./AdminShell";
 import React, { useEffect, useState, useMemo } from "react";
 import { auth, db, storage, FUNCTIONS_BASE, DEFAULT_COMPANY } from "./firebase";
 import { masterHasHr } from "./hrHandover";
+import { WORK_TIME_OPTIONS } from "./autoAttendance";
 import {
   collection,
   addDoc,
@@ -116,6 +117,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const [editCompany, setEditCompany] = useState("");
   const [editPosition, setEditPosition] = useState("");
   const [editTeam, setEditTeam] = useState("");
+  const [editWorkStart, setEditWorkStart] = useState("09:00"); // ⭐ 2026-11-02 출근·퇴근 시간(가입 승인 때 지정)
+  const [editWorkEnd, setEditWorkEnd] = useState("18:00");
   const [editMode, setEditMode] = useState(false);
   const [memberModal, setMemberModal] = useState(false); // 회원 관리 창(승인·거절·정보수정·마스터·퇴사·삭제)
   const [showMobilePreview, setShowMobilePreview] = useState(false);
@@ -614,6 +617,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     setEditCompany(u.companyName || "");
     setEditPosition(u.position || "");
     setEditTeam(u.team || "");
+    setEditWorkStart(u.workStartTime || "09:00");
+    setEditWorkEnd(u.workEndTime || "18:00");
     setEditMode(false);
   };
 
@@ -654,6 +659,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
       companyName: isTotalMaster ? editCompany.trim() : (manageUser.companyName || effectiveCompany),
       position: nextPosition,
       team: nextTeam,
+      workStartTime: editWorkStart || "09:00",
+      workEndTime: editWorkEnd || "18:00",
       personnelHistory: history,
     };
     try {
@@ -1116,7 +1123,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                         <MemberManageModal
                           u={u} me={me} isTotalMaster={isTotalMaster} roles={assignableRoles(u.role)} roleLabels={roleLabels}
                           canMaster={isTotalMaster} canAccount={isTotalMaster} canDelete={isTotalMaster} hrOpt={hrOpt} hrLock={hrLocked(u)}
-                          f={{ editName, setEditName, editPhone, setEditPhone, editRole, setEditRole, editCompany, setEditCompany, editPosition, setEditPosition: onPositionChange, editTeam, setEditTeam: onTeamChange, suggestR }}
+                          f={{ editName, setEditName, editPhone, setEditPhone, editRole, setEditRole, editCompany, setEditCompany, editWorkStart, setEditWorkStart, editWorkEnd, setEditWorkEnd, editPosition, setEditPosition: onPositionChange, editTeam, setEditTeam: onTeamChange, suggestR }}
                           onClose={() => { setMemberModal(false); setEditMode(false); }}
                           onSave={async () => { await saveEdit(); setMemberModal(false); }}
                           onApprove={async () => {
@@ -2078,6 +2085,11 @@ function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose
                 </CustomSelect>
                 <p className="mt-1 text-[11px] font-bold text-[#7A879C]">{`추천: ${roleLabels[f.suggestR({ team: f.editTeam, position: f.editPosition })] || ROLE_NAME[f.suggestR({ team: f.editTeam, position: f.editPosition })]} · 부서·직책 기준`}</p></div>
               <div><label className={lab}>회사명</label><input value={f.editCompany} onChange={(e) => f.setEditCompany(e.target.value)} disabled={!isTotalMaster} className={inp} /></div>
+              {/* ⭐ 2026-11-02 출근·퇴근 시간 — 자동 출근 시간대·지각·반차 기준(직원마다 다르게) */}
+              <div><label className={lab}>출근 시간</label>
+                <select value={f.editWorkStart} onChange={(e) => f.setEditWorkStart(e.target.value)} className={`${inp} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
+              <div><label className={lab}>퇴근 시간</label>
+                <select value={f.editWorkEnd} onChange={(e) => f.setEditWorkEnd(e.target.value)} className={`${inp} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
             </div>
             {u.role !== "shipper" && canMaster && (
               <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[#E3E8F0] px-3.5 py-2.5">

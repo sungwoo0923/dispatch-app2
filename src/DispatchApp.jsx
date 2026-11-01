@@ -2742,6 +2742,7 @@ import { bumpDriverPayout, addClientCollection, removeClientCollections } from "
 import BannerCenter from "./BannerCenter";
 import OrderCongratsPopup from "./OrderCongratsPopup";
 import BirthdayPopup from "./BirthdayPopup";
+import { tryAutoCheckIn } from "./autoAttendance";
 import PersonnelOrder, { OrderNoticeHistory } from "./PersonnelOrder";
 import OrderScanModal, { looksLikeOrder, scanDropDate } from "./OrderScanModal";
 import KpSubNav from "./KpSubNav";
@@ -7174,52 +7175,23 @@ useEffect(() => {
       ? (localStorage.getItem("loginCompany") || userCompany || "")
       : (userCompany || localStorage.getItem("userCompany") || "");
     if (!company) return; // 회사 정보 로딩 전에는 실행하지 않음 (잘못된 companyName 저장 방지)
-    const today = attendanceTodayStr();
-    const attDocRef = doc(db, "attendance", `${today}_${user.uid}`);
-
-    (async () => {
-      const existing = await getDoc(attDocRef);
-      if (existing.exists()) {
-        const d = existing.data();
-        // companyName이 올바르게 설정된 유효 기록이면 건너뜀, 비어있으면 갱신
-        if (d.companyName && d.companyName === company) return;
-      }
-
-      // 휴가/외근 결재 승인 여부 확인
-      const schedSnap = await getDocs(query(collection(db, "schedules"), where("authorUid", "==", user.uid)));
-      const mySchedules = schedSnap.docs.map(d => d.data());
-      // ⭐ 2026-11-02 점검 — 전자결재(approvals)로 승인된 연차·병가 등도 확인해, 그날 자동 '출근'(지각)으로 찍히지 않게 함. 조회 실패 시엔 기존대로 출근 처리
-      let apr = null;
-      try {
-        const apSnap = await getDocs(query(collection(db, "approvals"), where("participants", "array-contains", user.uid)));
-        apr = approvalLeaveOn(apSnap.docs.map(d => ({ id: d.id, ...d.data() })), user.uid, today);
-      } catch { apr = null; }
-      const leaveLabel = findApprovedLeaveForDate(mySchedules, user.uid, today) || (apr && apr !== "외근" && apr !== "조퇴" ? apr : null);
-
-      const userName = user?.displayName || user?.email?.split("@")[0] || "사용자";
-
-      if (leaveLabel) {
-        await setDoc(attDocRef, {
-          uid: user.uid, name: userName, date: today, month: today.slice(0, 7),
-          status: leaveLabel, checkInTime: null, source: "leave", companyName: company,
-        });
+    // ⭐ 2026-11-02 자동 출근 — 각자 출근시간 3시간 전 ~ 퇴근시간 사이에만(자정·새벽에 열면 출근으로 찍히던 문제), 반차 반영.
+    //  PC는 위치 대신 시간으로만 판단(회사 PC를 켜는 것 = 출근). 너무 이르면 5분마다 다시 확인한다(공통 규칙: src/autoAttendance.js)
+    let stop = false; let timer = null;
+    const userName = user?.displayName || user?.email?.split("@")[0] || "사용자";
+    const attempt = async () => {
+      if (stop) return;
+      const r = await tryAutoCheckIn({ uid: user.uid, name: userName, company, source: "auto" }).catch(() => ({ ok: false }));
+      if (stop) return;
+      if (r.ok) {
+        if (window.__sflowShowToast) window.__sflowShowToast(`${r.leave ? `${r.leave} · ` : ""}출근 처리되었습니다 (${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})`, "success");
         return;
       }
-
-      const holidaySnap = await getDocs(query(collection(db, "holidays"), where("companyName", "==", company)));
-      const myHolidays = holidaySnap.docs.map(d => d.data());
-
-      if (isWeekend(today) || isHoliday(today, myHolidays)) {
-        setWeekendCheckPopup(true);
-        return;
-      }
-
-      await setDoc(attDocRef, {
-        uid: user.uid, name: userName, date: today, month: today.slice(0, 7),
-        status: "출근", checkInTime: new Date().toISOString(), source: "auto", companyName: company,
-      });
-      if (window.__sflowShowToast) window.__sflowShowToast(`출근 처리되었습니다 (${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})`, "success");
-    })();
+      if (r.weekend) { setWeekendCheckPopup(true); return; }
+      if (r.reason === "early") timer = setTimeout(attempt, 5 * 60 * 1000);
+    };
+    attempt();
+    return () => { stop = true; clearTimeout(timer); };
   }, [user?.uid, userCompany, role]);
 
   const handleWeekendCheckIn = async (checkIn) => {
@@ -8612,7 +8584,7 @@ return (
         {menu === "자금관리" && menuState("자금관리") === "ok" && <FundsWorkspace company={deptCompany} isViewer={isViewer} />}
         {menu === "비품관리" && menuState("비품관리") === "ok" && <AssetManager company={deptCompany} isViewer={isViewer} />}
         {menu === "인사관리부" && menuState("인사관리부") === "ok" && (
-          <HrHub company={deptCompany} canManage={role === "hrManager" || role === "totalMaster" || masterHrMain || (!!customRole && getMenuAccess(customRoles, role, "인사관리부") === "write")} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "" }}
+          <HrHub company={deptCompany} canManage={role === "hrManager" || role === "totalMaster" || realRole === "hrAcct" || (/인사/.test(String(myProfileDoc?.team || "")) && role !== "viewer") || masterHrMain || (!!customRole && getMenuAccess(customRoles, role, "인사관리부") === "write")} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "" }}
             renderRecord={(focusUid) => <HRManagementPage userCompany={deptCompany} role={role} userId={auth?.currentUser?.uid || ""} focusUid={focusUid} />}
             renderAttendance={() => <AttendanceBoard userCompany={deptCompany} role={role} user={user} />} />
         )}
