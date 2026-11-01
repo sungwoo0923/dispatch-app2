@@ -57,7 +57,7 @@ import InternalMessenger from "./InternalMessenger";
 import { calcLeaveBalance } from "./leaveUtils";
 import { TEAM_OPTIONS, POSITION_OPTIONS, TEAM_BADGE_CLASS, TEAM_BADGE_CLASS_UNASSIGNED } from "./hrConstants";
 import AttendanceBoard from "./AttendanceBoard";
-import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate, isHoliday, isScheduleApproved, LEAVE_TYPE_LABEL, ATTENDANCE_STATUS_COLOR } from "./attendanceUtils";
+import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate, isHoliday, isScheduleApproved, LEAVE_TYPE_LABEL, ATTENDANCE_STATUS_COLOR, approvalLeaveOn, hrLeaveOn } from "./attendanceUtils";
 import FreightRateInquiry from "./FreightRateInquiry";
 import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnabled } from "./notificationSettings";
 import { CustomSelect } from "./CustomSelect";
@@ -8543,7 +8543,7 @@ return (
             renderAttendance={() => <AttendanceBoard userCompany={deptCompany} role={role} user={user} />} />
         )}
         {menu === "출근기록부" && menuState("출근기록부") === "ok" && <AttendanceBoard userCompany={deptCompany} role={role} user={user} />}
-        {menu === "연차관리" && menuState("연차관리") === "ok" && <LeaveLedger company={deptCompany} isViewer={isViewer} />}
+        {menu === "연차관리" && menuState("연차관리") === "ok" && <LeaveLedger company={deptCompany} isViewer={isViewer} canManage={role === "hrManager" || role === "totalMaster"} />}
         {menu === "입퇴사관리" && menuState("입퇴사관리") === "ok" && <OnboardingBoard company={deptCompany} isViewer={isViewer} />}
         {menu === "증명서발급" && menuState("증명서발급") === "ok" && <CertIssuer company={deptCompany} isViewer={isViewer} />}
         {menu === "기사서류" && menuState("기사서류") === "ok" && <DriverDocsReview company={deptCompany} isViewer={isViewer} />}
@@ -59648,6 +59648,13 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
   const [records, setRecords] = React.useState([]);
   const [resumes, setResumes] = React.useState({}); // uid -> resume data
   const [selectedUid, setSelectedUid] = React.useState(null);
+  // 🔗 2026-11-01 전자결재 근태 승인분(연차·반차·병가·외근·육아휴직 등) → 근태/근속 현황
+  const [leaveAprs, setLeaveAprs] = React.useState([]);
+  React.useEffect(() => {
+    if (!company || !userId) return undefined;
+    const q = selfOnly ? query(collection(db, "approvals"), where("participants", "array-contains", userId)) : query(collection(db, "approvals"), where("company", "==", company), where("cat", "==", "leave"));
+    return onSnapshot(q, (sn) => setLeaveAprs(sn.docs.map((d) => ({ id: d.id, ...d.data() })).filter((a) => a.cat === "leave" && a.status === "approved")), () => setLeaveAprs([]));
+  }, [company, userId, selfOnly]);
   const [activeTab, setActiveTab] = React.useState("이력서");
   const [teamFilter, setTeamFilter] = React.useState("전체");
   const [search, setSearch] = React.useState("");
@@ -59733,7 +59740,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
         let status = rec?.status;
         if (!status) {
           if (off) { days.push({ d, ds, status: "휴일" }); continue; }
-          status = findApprovedLeaveForDate(schedules, m.uid, ds, m.name) || "출근";
+          status = findApprovedLeaveForDate(schedules, m.uid, ds, m.name) || approvalLeaveOn(leaveAprs, m.uid, ds) || hrLeaveOn(m, ds) || "출근";
         }
         const inHm = hmOf(rec?.checkInTime); const outHm = hmOf(rec?.checkOutTime);
         const late = status === "출근" && !!inHm && toMin(inHm) > toMin(startHm);
@@ -59756,7 +59763,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
       }
       return { ...m, hireDate, tenureLabel, leave, workDays, leaveDays, sickDays, lateDays, fieldM, days, lates, startHm, pendingApprovals, team: m.team || "미배정" };
     }).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  }, [members, profiles, schedules, holidays, records, monthStr, numDaysSoFar, selfOnly, userId]);
+  }, [members, profiles, schedules, holidays, records, monthStr, numDaysSoFar, selfOnly, userId, leaveAprs]);
 
   const filteredRows = React.useMemo(() => {
     return rows.filter(r => {

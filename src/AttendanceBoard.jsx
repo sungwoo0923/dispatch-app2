@@ -3,7 +3,7 @@ import { collection, deleteDoc, doc, onSnapshot, query, setDoc, where, addDoc, a
 import { geocodeAddress } from "./tmapFareCalc";
 import { db, DEFAULT_COMPANY } from "./firebase";
 import { isTMUser } from "./staffFilter";
-import { ATTENDANCE_STATUS_COLOR, LEAVE_TYPE_LABEL, isWeekend, findApprovedLeaveForDate, isHoliday, KR_NATIONAL_HOLIDAYS } from "./attendanceUtils";
+import { ATTENDANCE_STATUS_COLOR, LEAVE_TYPE_LABEL, isWeekend, findApprovedLeaveForDate, isHoliday, KR_NATIONAL_HOLIDAYS, approvalLeaveOn, hrLeaveOn } from "./attendanceUtils";
 
 const ADMIN_ROLES = ["totalMaster", "admin"];
 
@@ -208,6 +208,17 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   };
 
 
+  // ─── 🔗 2026-11-01 전자결재 근태(승인) — 연차·반차·병가·외근·출장·경조사·육아휴직 등을 출근기록부에 표시 ───
+  //  관리자·인사는 회사 전체, 그 밖의 직원은 보안 규칙상 본인이 참여한 결재만 읽을 수 있어 본인 것만
+  const [leaveAprs, setLeaveAprs] = useState([]);
+  useEffect(() => {
+    if (!company || !user?.uid) return undefined;
+    const q = isAdmin
+      ? query(collection(db, "approvals"), where("company", "==", company), where("cat", "==", "leave"))
+      : query(collection(db, "approvals"), where("participants", "array-contains", user.uid));
+    return onSnapshot(q, (snap) => setLeaveAprs(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((a) => a.cat === "leave" && a.status === "approved")), () => setLeaveAprs([]));
+  }, [company, user?.uid, isAdmin]);
+
   // ─── 출근 요청 구독 ──────────────────────────────────────────
   useEffect(() => {
     if (!company) return;
@@ -395,7 +406,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     if (ds > todayDateStr) return { status: null, rec: null };
     if (isHoliday(ds, holidays)) return { status: "공휴일", rec: null };
     if (isWeekend(ds)) return { status: "휴무", rec: null };
-    const leave = findApprovedLeaveForDate(schedules, uid, ds, name);
+    const leave = findApprovedLeaveForDate(schedules, uid, ds, name) || approvalLeaveOn(leaveAprs, uid, ds) || hrLeaveOn(employees.find((e) => e.uid === uid), ds);
     if (leave) return { status: leave, rec: null };
     return { status: null, rec: null };
   };

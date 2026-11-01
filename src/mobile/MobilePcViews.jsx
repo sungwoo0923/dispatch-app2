@@ -186,7 +186,7 @@ export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], 
     else if (k === "funds") body = wrap(<FundsBoard company={userCompany} canEdit={false} />);
     else if (k === "execsched") body = <div className="px-2 py-2"><ExecScheduleBoard company={userCompany} me={me} canWrite={canWriteExecSchedule({ dept: deptMode, role, team: me?.team })} /></div>;
     else if (k === "assets") body = wrap(<AssetManager company={userCompany} isViewer={isViewer} />);
-    else if (k === "leave") body = wrap(<LeaveLedger company={userCompany} isViewer={isViewer} />);
+    else if (k === "leave") body = wrap(<LeaveLedger company={userCompany} isViewer={isViewer} canManage={role === "hrManager" || role === "totalMaster"} />);
     else if (k === "onboarding") body = wrap(<OnboardingBoard company={userCompany} isViewer={isViewer} />);
     else if (k === "cert") body = wrap(<CertIssuer company={userCompany} isViewer={isViewer} />);
     else if (k === "driverdocs") body = wrap(<DriverDocsReview company={userCompany} isViewer={isViewer} />);
