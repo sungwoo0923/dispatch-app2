@@ -162,7 +162,7 @@ export default function FareRulesSettings({ company, canEdit = true, myName = ""
           </div>
         </div>
         {!canEdit && <div className="relative mt-3 text-[14px] font-bold text-amber-200">조회전용 권한 — 보기만 할 수 있습니다.</div>}
-        <div className="relative mt-3 flex items-center gap-2 text-[13px] font-bold text-[#B9C7E3] min-h-[20px]" aria-live="polite">
+        <div className="relative mt-3 flex items-center gap-2 text-[14px] font-semibold text-[#B9C7E3] min-h-[20px]" aria-live="polite">
           {!fr.loaded ? <span>불러오는 중…</span> : busy ? <span className="inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#8FB0F0] animate-pulse" />저장 중…</span>
             : saved ? <span className="inline-flex items-center gap-1.5 text-[#CFE0FF]"><span className="w-1.5 h-1.5 rounded-full bg-emerald-300" />{saved}</span>
             : fr.data?.updatedBy ? <span>마지막 변경 · {fr.data.updatedBy}</span> : null}
