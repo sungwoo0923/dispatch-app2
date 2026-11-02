@@ -13,6 +13,7 @@ import {
   collection, doc, getDoc, getDocs, query, where, writeBatch, setDoc, onSnapshot, orderBy, limit, serverTimestamp,
 } from "firebase/firestore";
 import { CustomSelect } from "./CustomSelect";
+import SheetPlaceDriverImport from "./SheetPlaceDriverImport"; // ⭐ 2026-11-02 상하차지·기사 가져오기
 
 const SERVICE_EMAIL = "dispatch-app-9b92f@appspot.gserviceaccount.com";
 const ORDER_COLL = "orders";
@@ -153,6 +154,7 @@ export default function SheetImportPanel() {
   const [progress, setProgress] = React.useState(null); // { pct, step, done, result, error }
   const [batches, setBatches] = React.useState([]);
   const excelRef = React.useRef(null);
+  const [mode, setMode] = React.useState("orders"); // ⭐ 2026-11-02 orders | placesDrivers
 
   React.useEffect(() => {
     callApi("companyReset", { action: "companies" }).then((d) => setCompanies(d.companies || [])).catch(() => {});
@@ -372,8 +374,19 @@ export default function SheetImportPanel() {
   const dups = checked ? checked.rows.filter((r) => r.__dup && inRange(r)) : [];
   const outOfRange = checked ? checked.rows.filter((r) => !inRange(r)).length : 0;
 
+  // ⭐ 2026-11-02 가져오기 종류 고르기(오더 / 상하차지·기사)
+  const modeTabs = (
+    <div className="inline-flex rounded-xl bg-gray-100 p-1">
+      {[["orders", "오더 가져오기"], ["placesDrivers", "상하차지 · 기사 가져오기"]].map(([k, l]) => (
+        <button key={k} onClick={() => setMode(k)} className={`px-5 py-2 rounded-lg text-[14px] font-bold ${mode === k ? "bg-white text-[#1B2B4B] shadow-sm" : "text-gray-500"}`}>{l}</button>
+      ))}
+    </div>
+  );
+  if (mode === "placesDrivers") return <div className="space-y-6">{modeTabs}<SheetPlaceDriverImport companies={companies} url={url} /></div>;
+
   return (
     <div className="space-y-6">
+      {modeTabs}
       {/* STEP 1 */}
       <section className={`${CARD} p-6`}>
         <Head eyebrow="STEP 1" title="가져올 곳" desc="새 운송사가 쓰던 배차일지(구글시트 또는 엑셀)를 이 프로그램 오더로 옮깁니다." />
