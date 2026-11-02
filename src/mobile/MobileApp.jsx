@@ -5,7 +5,7 @@ import { isMasterKey } from "../monthCompare"; // ⭐ 2026-11-03 최고관리자
 import { useMyProfile } from "../userNames";
 import { useCompanyDropdownSync, dropdownList } from "../companyDropdownOptions";
 import { CompanyOptionPicker } from "../companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
-import { AttendanceQuickButton, officeRadii } from "../attendanceQuick";
+import { AttendanceQuickButton, officeRadii, CheckoutReminderHost } from "../attendanceQuick";
 import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen } from "../customRoles";
 import { useReadOnlyGuard } from "../readOnlyGuard";
 import { confirmLeave } from "../leaveGuard";
@@ -5553,6 +5553,7 @@ const title =
 )}
 
       <BannerCenter bottom={86} />
+      <CheckoutReminderHost uid={user?.uid} role={realRole} email={user?.email} />{/* ⭐ 2026-11-03 퇴근 10분 전 알림 */}
       {/* ⭐ 2026-11-02 원격지원 — 요청 상태 막대 · 승인 배너 · 포인터 */}
       <RemoteSupportHost user={user} profile={myProfM} company={userCompany || localStorage.getItem("userCompany") || ""} mobile />
       <OrderCongratsPopup uid={user?.uid} profile={myProfM} mobile />

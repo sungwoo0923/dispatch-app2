@@ -38,7 +38,7 @@ import { deptModeOf } from "./DeptDashboard";
 import { ExecApprovals, TeamSchedule, ApprovalWorkspace, ExecScheduleBoard } from "./ExecSuite";
 import { useMyProfile } from "./userNames";
 import { useCompanyStaff, masterHasHr, isHrStaffUser } from "./hrHandover";
-import { AttendanceQuickButton } from "./attendanceQuick";
+import { AttendanceQuickButton, CheckoutReminderHost } from "./attendanceQuick";
 import { usePendingSignups } from "./pendingSignups";
 import { NavHover } from "./navMenus";
 import { PeriodPicker as ResumePeriodPicker, DateField as ResumeDateField, SelectField as ResumeSelectField, AddressField as ResumeAddressField, BirthSelect as ResumeBirthSelect, EDU_STATUS as RESUME_EDU_STATUS, FAMILY_REL as RESUME_FAMILY_REL } from "./ResumeInputs";
@@ -8176,6 +8176,7 @@ return (
         groups={deptMode ? DEPT_SIDE_GROUPS[deptMode] : KP_SIDE_GROUPS}
       />
       <BannerCenter />
+      <CheckoutReminderHost uid={user?.uid} role={role} email={user?.email} />{/* ⭐ 2026-11-03 퇴근 10분 전 알림 */}
       {/* ⭐ 2026-11-02 원격지원 — 요청 상태 막대 · 승인 배너 · 화면 공유 · 포인터(앱 전체에 한 번) */}
       <RemoteSupportHost user={user} profile={myProfileDoc} company={userCompany || localStorage.getItem("userCompany") || ""} />
       <OrderCongratsPopup uid={user?.uid} profile={myProfileDoc} />

@@ -31,8 +31,8 @@ export function workWindow(emp, leave) {
   return { start, end, inFrom: Math.max(0, start - 180), inUntil: end, outFrom: Math.max(start, end - 60) };
 }
 
-// 오늘 승인된 휴가(구 일정 + 전자결재) — "오전반차" | "오후반차" | "연차" ... | null(외근·조퇴는 출근하는 날이라 null)
-export async function todayLeaveOf(uid, name, today = kstToday()) {
+// 오늘 승인된 휴가·외근(구 일정 + 전자결재) 그대로 — "외근"·"조퇴"도 돌려준다
+export async function todayLeaveRaw(uid, name, today = kstToday()) {
   let label = null;
   try {
     const s = await getDocs(query(collection(db, "schedules"), where("authorUid", "==", uid)));
@@ -44,6 +44,11 @@ export async function todayLeaveOf(uid, name, today = kstToday()) {
       label = approvalLeaveOn(a.docs.map((d) => ({ id: d.id, ...d.data() })), uid, today) || null;
     } catch { /* 무시 */ }
   }
+  return label || null;
+}
+// 오늘 승인된 휴가(구 일정 + 전자결재) — "오전반차" | "오후반차" | "연차" ... | null(외근·조퇴는 출근하는 날이라 null)
+export async function todayLeaveOf(uid, name, today = kstToday()) {
+  const label = await todayLeaveRaw(uid, name, today);
   return label && !NOT_LEAVE.includes(label) ? label : null;
 }
 
@@ -87,6 +92,8 @@ export async function tryAutoCheckOut({ uid }) {
   const me = (await getDoc(doc(db, "users", uid)).catch(() => null))?.data() || {};
   const w = workWindow(me, HALF_LEAVES.includes(d.status) ? d.status : d.halfDay);
   if (kstNowMin() < w.outFrom) return { ok: false, reason: "too-early" };
+  // ⭐ 2026-11-03 외근(출장 포함) 승인된 날은 사무실 밖에 있는 게 당연하니 자동 퇴근하지 않는다(직접 퇴근 버튼으로)
+  if ((await todayLeaveRaw(uid, me.name || d.name, today).catch(() => null)) === "외근") return { ok: false, reason: "outside" };
   await setDoc(ref, { checkOutTime: new Date().toISOString(), checkOutSource: "auto_location" }, { merge: true });
   return { ok: true };
 }

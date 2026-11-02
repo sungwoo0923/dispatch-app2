@@ -7,7 +7,7 @@ import React from "react";
 import { doc, onSnapshot, setDoc, deleteField } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import { kpConfirm } from "./kpDialog";
-import { checkInsideOffice, HALF_LEAVES } from "./autoAttendance";
+import { checkInsideOffice, HALF_LEAVES, workWindow, kstNowMin } from "./autoAttendance";
 
 export const DEFAULT_IN_RADIUS = 100;
 export const DEFAULT_OUT_RADIUS = 300;
@@ -35,9 +35,45 @@ function useTodayAttendance(uid) {
   return { rec, today };
 }
 
+// ⏰ 2026-11-03 퇴근 시간 다가옴 — 근무 중(출근O·퇴근X)일 때 퇴근시간(직원별 workEndTime, 반차 반영)까지 남은 분
+//  phase: "none" | "soon"(10분 전~) | "now"(1분 전~ — 퇴근 버튼 깜빡임, 퇴근 누를 때까지)
+export function useCheckoutPhase(uid, rec) {
+  const [me, setMe] = React.useState(null);
+  const [nowMin, setNowMin] = React.useState(kstNowMin());
+  React.useEffect(() => { if (!uid) return undefined; return onSnapshot(doc(db, "users", uid), (s) => setMe(s.data() || {}), () => setMe({})); }, [uid]);
+  React.useEffect(() => { const t = setInterval(() => setNowMin(kstNowMin()), 15000); return () => clearInterval(t); }, []);
+  const half = HALF_LEAVES.includes(rec?.status) ? rec.status : rec?.halfDay;
+  const working = !!rec?.checkInTime && !rec?.checkOutTime && (rec?.status === "출근" || HALF_LEAVES.includes(rec?.status));
+  if (!working || !me) return { phase: "none", left: null, endHm: "" };
+  const { end } = workWindow(me, half);
+  const left = end - nowMin;
+  const endHm = `${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}`;
+  return { phase: left <= 1 ? "now" : left <= 10 ? "soon" : "none", left, endHm };
+}
+// 화면 어디에 있든(홈이 아니어도) 퇴근 10분 전에 한 번 알림 배너 — 푸시는 보내지 않는다(매일이라 번거로움)
+//  PC·모바일 모두 BannerCenter("kp-banner")로 띄운다 · 하루 한 번(이 기기)
+export function CheckoutReminderHost({ uid, role, email }) {
+  const { rec, today } = useTodayAttendance(uid);
+  const { phase, endHm } = useCheckoutPhase(uid, rec);
+  const isTM = role === "totalMaster" || email === "tjddnqkf@naver.com";
+  React.useEffect(() => {
+    if (isTM || !uid || phase === "none") return;
+    const key = `kpCheckoutRemind:${uid}:${today}`;
+    try { if (localStorage.getItem(key)) return; localStorage.setItem(key, "1"); } catch { /* 무시 */ }
+    window.dispatchEvent(new CustomEvent("kp-banner", { detail: {
+      id: `checkout-${today}`, kind: "attendance", label: "퇴근 알림",
+      title: phase === "now" ? `퇴근 시간(${endHm})입니다` : `퇴근 10분 전입니다 (${endHm} 퇴근)`,
+      body: "퇴근하실 때 [퇴근하기] 버튼을 꼭 눌러 주세요.", duration: 20000,
+    } }));
+  }, [phase, uid, today, isTM, endHm]);
+  return null;
+}
+
 // 출근/퇴근 버튼 — variant: "pc"(상단 칩) | "mobile"(상단 작은 버튼)
 export function AttendanceQuickButton({ company, uid, name, role, email, variant = "pc", dark = false }) {
   const { rec, today } = useTodayAttendance(uid);
+  const { phase } = useCheckoutPhase(uid, rec);
+  const blink = phase === "now"; // ⭐ 2026-11-03 퇴근 1분 전부터 퇴근 버튼 깜빡임(누를 때까지)
   const [busy, setBusy] = React.useState(false);
   // ⭐ 2026-11-02 휴대폰은 출근지 반경 안에서만 출근·퇴근(PC는 시간 기준이라 반경 검사 없음)
   const [office, setOffice] = React.useState(null);
@@ -105,7 +141,7 @@ export function AttendanceQuickButton({ company, uid, name, role, email, variant
         {done ? (
           <button type="button" disabled={busy} onClick={undo} style={{ ...btnBase, background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.25)" }} title="잘못 누른 퇴근을 취소하고 다시 출근 상태로">되돌리기</button>
         ) : working ? (
-          <button type="button" disabled={busy} onClick={checkOut} style={{ ...btnBase, background: "#fff", color: "#0F1A30" }}>퇴근하기</button>
+          <button type="button" disabled={busy} onClick={checkOut} className={blink ? "kp-blink" : ""} style={{ ...btnBase, background: "#fff", color: "#0F1A30" }}>퇴근하기</button>
         ) : (
           <button type="button" disabled={busy} onClick={checkIn} style={{ ...btnBase, background: "linear-gradient(135deg,#8FB0F0,#CFE0FF)", color: "#0B1428", boxShadow: "0 8px 22px rgba(143,176,240,0.35)" }}>출근하기</button>
         )}
@@ -126,7 +162,7 @@ export function AttendanceQuickButton({ company, uid, name, role, email, variant
     if (working) return (
       <div className={wrap}>
         {dot("#12B76A")}<span className="text-[12.5px] font-bold truncate">근무 중 <span className="opacity-60">· 출근 {hm(rec.checkInTime)}</span></span>
-        <button type="button" disabled={busy} onClick={checkOut} className={btn(true)}>퇴근하기</button>
+        <button type="button" disabled={busy} onClick={checkOut} className={`${btn(true)} ${blink ? "kp-blink" : ""}`}>퇴근하기</button>
       </div>
     );
     return (
@@ -145,7 +181,7 @@ export function AttendanceQuickButton({ company, uid, name, role, email, variant
   );
   return (
     <button type="button" disabled={busy} onClick={working ? checkOut : checkIn}
-      className={`kp-chip-btn text-[12px] transition disabled:opacity-50 ${working ? "" : "!bg-[#8FB0F0] !text-[#0B1428]"}`}
+      className={`kp-chip-btn text-[12px] transition disabled:opacity-50 ${working ? (blink ? "kp-blink" : "") : "!bg-[#8FB0F0] !text-[#0B1428]"}`}
       title={working ? `출근 ${hm(rec?.checkInTime)} — 누르면 퇴근 처리` : "누르면 출근 처리"}>
       {working ? `퇴근하기 · ${hm(rec?.checkInTime)} 출근` : "출근하기"}
     </button>

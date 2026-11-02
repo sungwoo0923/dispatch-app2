@@ -16,8 +16,9 @@ const ICONS = {
   schedule: <><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></>,
   handover: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></>,
   approval: <><path d="M9 3h6l-1 7h4l1 4H5l1-4h4z" /><path d="M5 18h14M7 21h10" /></>,
+  attendance: <><circle cx="12" cy="13" r="8" /><path d="M12 9v4l2.5 2.5M9 2h6" /></>, // ⭐ 2026-11-03 퇴근 알림
 };
-export const BANNER_LABEL = { mail: "사내메일", hr: "인사발령", closeReport: "마감보고", notice: "공지사항", schedule: "일정", handover: "인수인계", approval: "전자결재" };
+export const BANNER_LABEL = { mail: "사내메일", hr: "인사발령", closeReport: "마감보고", notice: "공지사항", schedule: "일정", handover: "인수인계", approval: "전자결재", attendance: "근태" };
 
 // 📝 전자결재 변화 중 "나"에게 알릴 것만 골라낸다(서버 푸시 notifyApproval과 같은 기준)
 //  - 내가 결재할 차례가 됨(결재 요청 / 결재 취소 요청) / 내가 올린 문서가 승인·반려·최종 승인·취소 결과를 받음
@@ -137,6 +138,18 @@ export default function BannerCenter({ bottom = 24 }) {
       first = false;
     }, () => {});
   }, [uid]);
+  // ⭐ 2026-11-03 다른 화면이 띄우는 배너(퇴근 10분 전 · 오늘 개인일정 등) — window.dispatchEvent(new CustomEvent("kp-banner", { detail }))
+  //  detail = { id, kind: "schedule"|..., label, title, body, duration, open }  · open: 누르면 보낼 창 이벤트 이름(예: "kp-open-personal-schedule")
+  React.useEffect(() => {
+    const h = (e) => {
+      const d = e.detail || {};
+      if (!d.title) return;
+      const id = d.id || `cb-${Date.now()}`;
+      setItems((p) => (p.some((x) => x.id === id) ? p : [...p, { ...d, id, custom: true }].slice(-4)));
+    };
+    window.addEventListener("kp-banner", h);
+    return () => window.removeEventListener("kp-banner", h);
+  }, []);
   const close = React.useCallback((id) => setItems((p) => p.filter((x) => x.id !== id)), []);
   if (!items.length) return <BannerStyles />;
   return createPortal(
@@ -146,7 +159,10 @@ export default function BannerCenter({ bottom = 24 }) {
           · 넘치면 오래된(위쪽) 배너부터 잘려 보이지 않음 · 휴대폰(640px 미만)은 최근 2개만 · 바깥 틀은 누름 통과(pointer-events-none), 카드만 누름 */}
       <div className="fixed right-3 sm:right-6 z-[999990] flex flex-col justify-end gap-2.5 items-end pointer-events-none overflow-hidden px-3 -mx-3 pt-3 pb-4 -mb-4"
         style={{ bottom, maxHeight: `calc(100dvh - ${typeof bottom === "number" ? `${bottom}px` : bottom} - 84px)` }}>
-        {items.slice(typeof window !== "undefined" && window.innerWidth < 640 ? -2 : -4).map((m) => (
+        {items.slice(typeof window !== "undefined" && window.innerWidth < 640 ? -2 : -4).map((m) => m.custom ? (
+          <BannerCard key={m.id} id={m.id} kind={m.kind || "schedule"} label={m.label} title={m.title} body={m.body} duration={m.duration ?? 15000} onClose={close}
+            onClick={() => { if (m.open) window.dispatchEvent(new CustomEvent(m.open, { detail: m.openDetail || null })); close(m.id); }} />
+        ) : (
           <BannerCard key={m.id} id={m.id} kind={m.kind === "hr" || m.kind === "closeReport" || m.kind === "approval" ? m.kind : "mail"}
             from={m.fromName} title={m.subject || "(제목 없음)"} body={String(m.body || "").replace(/\n{2,}/g, "\n").slice(0, 160)}
             image={(m.images || [])[0]} duration={m.kind === "hr" ? 15000 : 10000}
