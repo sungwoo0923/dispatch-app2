@@ -2,7 +2,8 @@
   "git": {
     "deploymentEnabled": {
       "claude/*": false,
-      "claude/exciting-euler-0juj68": true
+      "claude/exciting-euler-0juj68": true,
+      "claude/happy-lamport-aoo8kl": true
     }
   },
   "functions": {
