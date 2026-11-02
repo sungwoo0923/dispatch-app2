@@ -11,7 +11,7 @@ import { getTenant } from "./fsTenant";
 export const COMPANY_FEATURES = [
   { key: "fareRules", label: "운임 규칙", desc: "운임구분(일대·월대 등)별 수수료 자동 계산" },
   { key: "vehicleLedger", label: "차량 관리대장", desc: "차량별 정비·변경·기사 탑승 이력, 장비(유류카드·하이패스·GPS·덮개·박스) 관리" },
-  { key: "orderManagerCol", label: "배차표 담당자 칸", desc: "실시간·배차현황·미배차 표에 차량 담당자 이름 표시" },
+  { key: "orderManagerCol", label: "배차표 배차담당자 칸", desc: "실시간·배차현황·미배차 표에 오더 등록 직원 이름 표시" },
 ];
 
 const resolveCompany = (company) => {
