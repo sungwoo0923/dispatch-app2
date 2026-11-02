@@ -316,11 +316,15 @@ function StaffMultiPick({ staff, exclude = [], label = "여러 명 한 번에", 
 function ReasonSelect({ f, value, onChange }) {
   const v = String(value || "");
   const first = v.split("\n")[0];
-  const sel = f.templates.includes(first) ? first : v ? "__direct" : "";
+  // ⭐ 2026-11-02 버그수정 — "직접 입력"을 고른 뒤 글자를 다 지우면 값이 비어 "사유 선택"으로 되돌아가던 문제:
+  //  직접 입력 상태를 따로 기억한다(다른 항목을 고르기 전까지 유지)
+  const [direct, setDirect] = React.useState(() => !!v && !f.templates.includes(first));
+  React.useEffect(() => { if (v && f.templates.includes(first)) setDirect(false); else if (v) setDirect(true); }, [v]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sel = f.templates.includes(first) ? first : (direct || v) ? "__direct" : "";
   const rest = sel && sel !== "__direct" ? v.split("\n").slice(1).join("\n") : v;
   return (
     <div className="space-y-1.5">
-      <CustomSelect openOnFocus value={sel} onChange={(e) => { const t = e.target.value; if (t === "__direct") onChange(rest || " "); else onChange(t ? [t, rest].filter((x) => x && x.trim()).join("\n") : rest); }} className={inp}>
+      <CustomSelect openOnFocus value={sel} onChange={(e) => { const t = e.target.value; if (t === "__direct") { setDirect(true); onChange(rest); } else { setDirect(false); onChange(t ? [t, rest].filter((x) => x && x.trim()).join("\n") : rest); } }} className={inp}>
         <option value="">{f.label} 선택</option>
         {f.templates.map((t) => <option key={t} value={t}>{t}</option>)}
         <option value="__direct">✎ 직접 입력</option>
