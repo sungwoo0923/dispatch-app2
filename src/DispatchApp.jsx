@@ -3505,6 +3505,30 @@ const _sortInt = (v) => { const n = Number(String(v ?? "").replace(/[^\d.-]/g, "
 //   (오더 복사·수정 패널의 등록자/변경 이력과 같은 방식). 고정노선이 만든 오더는 "고정노선", 못 찾으면 "미지정".
 //   이름은 오더(줄 객체)마다 한 번만 계산해 WeakMap에 담아 두고 다시 그릴 땐 꺼내기만 한다(직원 목록이 바뀔 때만 새로).
 //   기능이 꺼진 회사는 null(칸 자체가 없음).
+// 🔎 2026-11-03 상/하차지 검색 공용 — 업체명이 같고 주소·담당자만 다른 곳이 많을 때(예: (도외)위탁 55곳)
+//  "도외 목포"처럼 띄어 쓰면 첫 낱말은 업체명, 나머지 낱말은 주소·담당자·전화번호에서 찾아 바로 좁힌다.
+//  점수: 업체명 완전일치 > 앞글자 일치 > 포함, 같은 점수는 업체명 → 주소 순.
+const _pqN = (s) => String(s || "").toLowerCase().replace(/[\s()（）\-]/g, "");
+function placeSearch(list, q) {
+  const toks = String(q || "").trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!toks.length) return [];
+  const first = _pqN(toks[0]); const rest = toks.slice(1).map(_pqN).filter(Boolean);
+  const out = [];
+  (list || []).forEach((p) => {
+    if (!p) return;
+    const name = _pqN(p.업체명 || p.name || p.거래처명);
+    if (!name) return;
+    let sc = name === first ? 100 : name.startsWith(first) ? 80 : name.includes(first) ? 50 : 0;
+    // 낱말이 하나뿐이면 예전처럼 업체명만, 여러 개면 전체(업체명+주소+담당자)에서도 첫 낱말을 찾는다
+    if (rest.length) {
+      const hay = name + _pqN([p.주소, p.담당자, p.담당자번호, p.연락처, ...(Array.isArray(p.contacts) ? p.contacts.flatMap((c) => [c?.name, c?.phone]) : [])].join(" "));
+      if (!sc && hay.includes(first)) sc = 30;
+      if (!sc || !rest.every((t) => hay.includes(t))) return;
+    }
+    if (sc) out.push({ ...p, __score: sc });
+  });
+  return out.sort((a, b) => b.__score - a.__score || String(a.업체명 || "").localeCompare(String(b.업체명 || ""), "ko") || String(a.주소 || "").localeCompare(String(b.주소 || ""), "ko"));
+}
 const ORDER_MGR_EMPTY = "미지정";
 const ORDER_MGR_FIXED = "고정노선";
 const _ORDER_CREATOR_KEYS = ["작성자", "createdByEmail", "createdByUid", "createdBy", "등록자", "등록자명", "createdByName", "등록자이메일", "authorEmail", "author"];
@@ -10241,7 +10265,9 @@ const primary =
   // ✅ Firestore 데이터만 사용
   fromFirestore.forEach(raw => {
     const row = toRow(raw);
-    const key = normalizeKey(row.업체명);
+    // ⭐ 2026-11-03 업체명+주소로 — 이름만으로 잡으면 같은 이름·다른 주소(예: (도외)위탁 55곳)가 1곳만 남아 자동완성에 1~2개만 떴다
+    const nk = normalizeKey(row.업체명);
+    const key = nk ? `${nk}|${String(row.주소 || "").toLowerCase().replace(/\s+/g, "")}` : "";
     if (key) map.set(key, row);
   });
 
@@ -10834,33 +10860,10 @@ const filterVehicles = (q) => {
 };
     // 🔍 하차지 / 상차지 자동완성 필터 함수 (정답)
 const filterPlaces = (q) => {
-  const query = String(q || "").trim();
-  if (!query) return [];
-
-  const nq = normalizeKey(query);
-  const nLower = query.toLowerCase();
-
   // 하차지거래처(placeList)뿐 아니라 기본거래처로 옮겨온 업체도 상/하차지명
   // 자동완성에 나오고 주소/담당자/연락처가 그대로 채워지도록 mergedClients를 사용한다
-  return mergedClients
-    .map((p) => {
-      const name = p.업체명 || "";
-      const nName = name.toLowerCase();
-      const nk = normalizeKey(name);
-
-      let score = 0;
-
-      if (name === query) score = 100;
-      else if (nk === nq) score = 90;
-      else if (nName.startsWith(nLower)) score = 80;
-      else if (nk.startsWith(nq)) score = 70;
-      else if (nName.includes(nLower)) score = 60;
-      else if (nk.includes(nq)) score = 50;
-
-      return score > 0 ? { ...p, __score: score } : null;
-    })
-    .filter(Boolean)
-    .sort((a, b) => b.__score - a.__score);
+  // ⭐ 2026-11-03 공용 검색(placeSearch) — "업체명 주소낱말"로 바로 좁히기
+  return placeSearch(mergedClients, q);
 };
 
     const _tomorrowStr = (typeof tomorrowStr === "function")
@@ -22151,7 +22154,7 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
   function filterPlaces(q) {
     if (!q.trim()) return [];
     const lq = q.toLowerCase();
-    return (placeRows || []).filter(p => (p.업체명||"").toLowerCase().includes(lq)).slice(0, 8);
+    void lq; return placeSearch(placeRows, q).slice(0, 30); // ⭐ 2026-11-03 공용 검색
   }
 
   function handleSave() {
@@ -24999,35 +25002,16 @@ return [...map.values()];
 
   const filterEditPlaces = (q) => {
     if (!q) return [];
-
-    const nq = normalizeKey(q);
-
     // 하차지거래처(placeRows)뿐 아니라 기본거래처로만 등록된 업체도 이 패널의
     // 상/하차지명 자동완성에 나오도록 mergedClients(기본거래처+하차지거래처 통합)를 쓴다.
-    return (mergedClients || [])
-      .map((p) => {
-        const nk = normalizeKey(p.업체명);
-        let score = 0;
-
-        if (nk === nq) score = 100;
-        else if (nk.startsWith(nq)) score = 80;
-        else if (nk.includes(nq)) score = 50;
-
-        // contacts 배열에서 담당자/번호 추출
-        const primary = Array.isArray(p.contacts) && p.contacts.length
-          ? p.contacts.find(c => c.isPrimary) || p.contacts[0]
-          : null;
-
-        return {
-          ...p,
-          담당자: primary?.name || p.담당자 || "",
-          담당자번호: primary?.phone || p.담당자번호 || "",
-          score,
-        };
-      })
-      .filter((p) => p.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 8);
+    // ⭐ 2026-11-03 공용 검색(placeSearch, "업체명 주소낱말") + 8개 → 60개(목록은 스크롤)
+    return placeSearch(mergedClients, q).slice(0, 60).map((p) => {
+      // contacts 배열에서 담당자/번호 추출
+      const primary = Array.isArray(p.contacts) && p.contacts.length
+        ? p.contacts.find(c => c.isPrimary) || p.contacts[0]
+        : null;
+      return { ...p, 담당자: primary?.name || p.담당자 || "", 담당자번호: primary?.phone || p.담당자번호 || "", score: p.__score };
+    });
   };
 const lastWarnedRef = React.useRef(null);
 const checkWarningStatus = (name, type) => {
@@ -36728,15 +36712,8 @@ const [clientOptions, setClientOptions] = React.useState([]);
   // 🔵 자동완성 검색 함수 (FIX)
   // 하차지거래처(places)뿐 아니라 기본거래처로 옮겨온 업체도 나오도록 mergedClients 사용
   const filterPlaces = (text) => {
-    const q = String(text || "").trim().toLowerCase();
-    if (!q) return [];
-
-    return (mergedClients || [])
-      .filter((p) =>
-        String(p.업체명 || p.name || "")
-          .toLowerCase()
-          .includes(q)
-      )
+    // ⭐ 2026-11-03 공용 검색(placeSearch) — "업체명 주소낱말"로 바로 좁히기
+    return placeSearch(mergedClients, text)
       .map((p) => {
         const primary = Array.isArray(p.contacts) && p.contacts.length
           ? p.contacts.find(c => c.isPrimary) || p.contacts[0]
@@ -36751,22 +36728,9 @@ const [clientOptions, setClientOptions] = React.useState([]);
   // 🔥 입력값과 가장 유사한 항목을 위로 정렬
   // 완전일치 > 시작일치 > 포함일치
   const rankPlaces = (list, query) => {
-    const q = String(query || "").trim().toLowerCase();
+    const q = String(query || "").trim();
     if (!q) return list;
-
-    return list
-      .map((p) => {
-        const name = String(p.업체명 || "").toLowerCase();
-
-        let score = 0;
-        if (name === q) score = 100;            // 완전일치 (반찬단지)
-        else if (name.startsWith(q)) score = 80; // 앞글자 일치
-        else if (name.includes(q)) score = 50;   // 포함
-
-        return score > 0 ? { ...p, __score: score } : null;
-      })
-      .filter(Boolean)
-      .sort((a, b) => b.__score - a.__score);
+    return placeSearch(list, q); // ⭐ 2026-11-03 공용 검색(이미 정렬됨)
   };
 
 
@@ -40255,7 +40219,7 @@ return (
                   ref={placeListRef}
                   className="absolute left-0 top-full z-50 bg-white border rounded shadow-lg w-full max-h-40 overflow-y-auto"
                 >
-                  {placeOptions.slice(0, 12).map((p, idx) => (
+                  {placeOptions.slice(0, 60).map((p, idx) => (
                     <div
                       key={idx}
                       className={
@@ -40416,7 +40380,7 @@ return (
                   ref={placeListRef}
                   className="absolute left-0 top-full z-50 bg-white border rounded shadow-lg w-full max-h-40 overflow-y-auto"
                 >
-                  {placeOptions.slice(0, 12).map((p, idx) => (
+                  {placeOptions.slice(0, 60).map((p, idx) => (
                     <div
                       key={idx}
                       className={
@@ -49200,10 +49164,7 @@ function UnassignedStatus({ dispatchData, setDispatchData = () => {}, drivers = 
     return (clients || []).filter(c => String(c.거래처명 || "").toLowerCase().includes(v));
   };
 
-  const filterEditPlaces = (value) => {
-    const v = value.toLowerCase();
-    return (places || []).filter(p => String(p.업체명 || "").toLowerCase().includes(v));
-  };
+  const filterEditPlaces = (value) => placeSearch(places, value); // ⭐ 2026-11-03 공용 검색
 
   const filterClients = (value) => {
     const v = (value || "").toLowerCase();
@@ -49215,28 +49176,22 @@ function UnassignedStatus({ dispatchData, setDispatchData = () => {}, drivers = 
     const v = (value || "").toLowerCase();
     if (!v) return [];
     // 하차지거래처(places)뿐 아니라 기본거래처로 옮겨온 업체도 나오도록 병합해서 검색
+    // ⭐ 2026-11-03 업체명+주소로(같은 이름·다른 주소도 모두) + 공용 검색(placeSearch)
     const map = new Map();
-    (places || []).forEach(p => { const k = (p.업체명 || "").toLowerCase().replace(/\s+/g, ""); if (k) map.set(k, p); });
+    const nk = (n, a) => `${String(n || "").toLowerCase().replace(/\s+/g, "")}|${String(a || "").toLowerCase().replace(/\s+/g, "")}`;
+    (places || []).forEach(p => { if (String(p.업체명 || "").trim()) map.set(nk(p.업체명, p.주소), p); });
+    const placeNames = new Set((places || []).map(p => String(p.업체명 || "").toLowerCase().replace(/\s+/g, "")).filter(Boolean));
     (clients || []).forEach(c => {
       const name = c.업체명 || c.거래처명 || "";
-      const k = name.toLowerCase().replace(/\s+/g, "");
-      if (k && !map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
+      const n0 = name.toLowerCase().replace(/\s+/g, "");
+      if (!n0 || placeNames.has(n0)) return;
+      const k = nk(name, c.주소);
+      if (!map.has(k)) map.set(k, { 업체명: name, 주소: c.주소 || "", 담당자: c.담당자 || "", 담당자번호: c.연락처 || c.담당자번호 || "", 메모: c.메모 || "", contacts: Array.isArray(c.contacts) ? c.contacts : undefined });
     });
-    return Array.from(map.values()).filter(p => String(p.업체명 || "").toLowerCase().includes(v));
+    return placeSearch(Array.from(map.values()), value);
   };
 
-  const rankPlaces = (list, keyword) => {
-    const k = (keyword || "").toLowerCase();
-    return [...list].sort((a, b) => {
-      const aName = String(a.업체명 || "").toLowerCase();
-      const bName = String(b.업체명 || "").toLowerCase();
-      const aStarts = aName.startsWith(k);
-      const bStarts = bName.startsWith(k);
-      if (aStarts && !bStarts) return -1;
-      if (!aStarts && bStarts) return 1;
-      return aName.localeCompare(bName);
-    }).slice(0, 10);
-  };
+  const rankPlaces = (list, keyword) => placeSearch(list, keyword).slice(0, 60); // ⭐ 2026-11-03 10개 → 60개(목록은 스크롤) + 공용 검색
 
   const normalizePlate = (v = "") => {
     return String(v).toUpperCase().replace(/[\s\-]/g, "").replace(/[^0-9A-Z가-힣]/g, "");
