@@ -50,7 +50,8 @@ export function fmtPhone(p) {
 // 날짜 — 엑셀 날짜(Date·일련번호)·"24.3.1"·"2024년 3월 1일" → "2024-03-01"
 export function normDate(v) {
   if (v == null || v === "") return "";
-  if (v instanceof Date && !isNaN(v)) return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, "0")}-${String(v.getDate()).padStart(2, "0")}`;
+  // 엑셀 날짜는 자정 몇 초 전(전날 23:59:xx)으로 읽히는 경우가 있어 반나절 더해 날짜만 취한다
+  if (v instanceof Date && !isNaN(v)) { const t = new Date(v.getTime() + 12 * 3600e3); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; }
   if (typeof v === "number" && v > 20000 && v < 80000) return normDate(new Date(Math.round((v - 25569) * 86400000) + new Date().getTimezoneOffset() * 60000));
   const s = String(v).trim();
   const m = s.match(/(\d{2,4})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})/);
